@@ -15,7 +15,7 @@
  *     （Authorization: Bearer / X-Pipeline-Token，缺/错 → 401）；(3) 强制 application/json（借同源策略）。
  *   token 启动生成、写 0600 握手文件、同源注入前端；较老仓「仅靠同源 + 无 token」是净收紧。
  */
-import { existsSync, statSync } from 'node:fs'
+import { existsSync, readFileSync, statSync } from 'node:fs'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { join, resolve as resolvePath } from 'node:path'
@@ -203,9 +203,51 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
     })
   }
 
+  // ── SPA 静态供给（BACKLOG #26c）：webRoot 存在则服务 dashboard-app 产物 ──
+  const webRoot = options.webRoot
+  const STATIC_TYPES: Record<string, string> = {
+    '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
+    '.html': 'text/html; charset=utf-8', '.json': 'application/json; charset=utf-8',
+    '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.woff2': 'font/woff2',
+  }
+  function serveIndexWithToken(res: ServerResponse): boolean {
+    if (!webRoot) return false
+    try {
+      let html = readFileSync(join(webRoot, 'index.html'), 'utf8')
+      const jsToken = JSON.stringify(token).replace(/</g, '\\u003c')
+      const inject = `<script>window.__PIPELINE_DASHBOARD_TOKEN__ = ${jsToken};</script>`
+      html = html.includes('</head>') ? html.replace('</head>', `${inject}</head>`) : `${inject}${html}`
+      sendHtml(res, 200, html)
+      return true
+    } catch { return false }
+  }
+  /** /assets/* 静态供给：限 webRoot/assets 子树（防路径穿越），命中返回 true。 */
+  function serveAsset(res: ServerResponse, path: string): boolean {
+    if (!webRoot || !path.startsWith('/assets/')) return false
+    const rel = path.slice(1) // 去前导 /
+    if (rel.includes('..')) return false
+    const abs = join(webRoot, rel)
+    if (!abs.startsWith(join(webRoot, 'assets'))) return false
+    try {
+      const body = readFileSync(abs)
+      const ext = abs.slice(abs.lastIndexOf('.'))
+      res.writeHead(200, {
+        'Content-Type': STATIC_TYPES[ext] ?? 'application/octet-stream',
+        'Content-Length': body.length,
+        'Cache-Control': 'public, max-age=31536000, immutable',
+      })
+      res.end(body)
+      return true
+    } catch { return false }
+  }
+
   // ── 路由 ──
   async function handleGet(req: IncomingMessage, res: ServerResponse, path: string): Promise<void> {
-    if (path === '/' || path === '/index.html') return sendHtml(res, 200, indexHtml(token))
+    if (path === '/' || path === '/index.html') {
+      if (serveIndexWithToken(res)) return // SPA 产物存在 → 服务真前端
+      return sendHtml(res, 200, indexHtml(token)) // 回退最小落地页
+    }
+    if (serveAsset(res, path)) return
     if (path === '/api/health') {
       return sendJson(res, 200, { ok: true, scope: 'global', version, pid: process.pid })
     }

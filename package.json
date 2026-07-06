@@ -14,6 +14,9 @@
     "build:server": "esbuild packages/server/src/main.ts --bundle --platform=node --format=esm --target=node22 --banner:js=\"import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);\" --outfile=packages/server/dist/dashboard.mjs && chmod +x packages/server/dist/dashboard.mjs",
     "bundle": "esbuild packages/cli/src/main.ts --bundle --platform=node --format=esm --target=node22 --banner:js=\"import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);\" --outfile=packages/cli/dist/pipeline.mjs && chmod +x packages/cli/dist/pipeline.mjs",
     "test": "vitest run",
+    "test:web": "vitest run --config packages/dashboard-app/vitest.config.ts",
+    "test:all": "npm run test && npm run test:web",
+    "build:web": "npm run build -w @pipeline-lite/dashboard-app",
     "oracle": "bash tools/oracle/run.sh"
   },
   "devDependencies": {

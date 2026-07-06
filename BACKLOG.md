@@ -6,16 +6,9 @@
 
 | # | 项 | 对应 plan 任务 | 预算 |
 |---|---|---|---|
-| **M1** 内核深度 | | | |
-| 12 | guard 全量校验面：老仓 pipeline-guard.sh 逐相位出口规则全移植（lite 子集 → 全集，oracle 对齐 check） | M1 | 2d |
-| **M2** hooks/插件全保真 | | | |
-| 20 | SessionStart 三注入：workflow 宪法 / pipeline-context / openspec | M2 | 1d |
-| 22 | 7 相位 SKILL.md + 主编排 Decision Core + openspec 四命令 + learn-record | M2 | 3d |
-| 23 | 4 agents（builder/researcher/reviewer/design-reviewer）定义移植 | M2 | 1d |
 | **M3** dashboard | | | |
-| 26 | 前端信息架构重构：收件箱默认视图 / Kanban / Settings 分离 / debug 降级（UI 病灶 1-4 完整解法） | M3 | 3d |
-| 26b | `pipeline doctor` 统一健康面：fail-open 降级可见、保障生效清单（GOAL B8，对标 comet doctor） | M3 | 1d |
 | 25b | 【技术债/单源】把「transition 事件→边表 + 前置校验 + 副作用」上提进 kernel 收成单源——当前 cli events.ts/transition.ts 与 server transition.ts 逐条镜像（#25 发现），消除重复真相源 | M3 | 1d |
+| 26c | server 服务 SPA：GET / 返回 dashboard-app dist/index.html + 注入 token + 静态路由 assets/*（#26 前端就绪，本项让 server 真上线前端） | M3 | 0.5d |
 | **M4** channel + mem | | | |
 | 27b | channel 进程管理层：supervisor 三循环 + 真 spawn 子进程 + inbox_watcher live-tail + OS-liveness guard + SIGTERM cleanup（#27 事件模型已就绪，本项补进程层） | M4 | 3d |
 | **M5** automation / AFK Sandcastle（2026-07-07 用户确认全量迁移，human gate 已解） | | | |
@@ -30,7 +23,6 @@
 | 32 | Cursor 适配器转正（老仓 spike → 可发布） | M6 | 3d |
 | 33 | Trellis parity 收尾：8 partial + 1 missing（spec-template-scaffold、冲突 AskUserQuestion、workflow-template-resolution、KNOWN_UNTRACKED_ALLOWLIST） | M6 | 3d |
 | **M-loop** loop-engineering 内建（GOAL B18–B21 / D16） | | | |
-| 35 | loops 治理子系统：registry schema + enforce 裁决（老仓 R1-R11 起步）+ `pipeline loops` 命令 + 流水审计 | M-loop | 3d |
 | 36 | token 预算与熔断：loop 级 budget 声明 + circuit breaker + 成本估算 | M-loop | 2d |
 | 37 | 漂移检测 + loop-ready 审计：LOOP 声明 vs STATE 流水对账、就绪评分 | M-loop | 2d |
 | 38 | 分级放权 L1→L3：AFK 自动化毕业制（report → 人工门 → allowlist 自动合并），M5 的前置件 | M-loop | 2d |
@@ -80,3 +72,6 @@
 | 2026-07-07 | #25 dashboard server（iteration-18） | 收编：版本抢占 + token 鉴权两欠账修复 + 17 真 HTTP，@pipeline-lite/server |
 | 2026-07-07 | #27 channel 事件模型（iteration-18） | 收编：event-sourced 核心 + 143 测试 + barrier 隔离三重自证；进程层 →#27b |
 | 2026-07-07 | **M2 hooks/插件全保真里程碑收官** | 六项全收编（#19/#20/#21/#22/#23/#24），vitest 741，hooks 180，oracle 0 不一致 |
+| 2026-07-07 | #26 前端重构（iteration-19） | 收编：四病灶解法 + 71 真 render 测试（收件箱默认/导航≤3/Settings/Advanced） |
+| 2026-07-07 | #26c server 服务 SPA（iteration-19） | 收编：GET / 真返 SPA+token 注入 + /assets/* + 穿越防护 |
+| 2026-07-07 | #35 loop 治理（iteration-19） | 收编：registry schema + R1-R11 裁决 + L1-L3 分级放权 + 15 真 fs 例，vitest 994 |

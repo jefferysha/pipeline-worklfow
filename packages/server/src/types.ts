@@ -84,6 +84,11 @@ export interface DashboardServerOptions {
   manifestPath?: string
   /** `git rev-parse HEAD` 注入（build-complete 冻结 SHA 用；缺省跳过 SHA 面）。 */
   gitHeadSha?: (cwd: string) => Promise<string>
+  /**
+   * dashboard-app 构建产物目录（含 index.html + assets/）。设了则 GET / 服务真 SPA
+   * （token 注入进 index.html）+ GET /assets/* 静态供给；未设则回退最小落地页（BACKLOG #26c）。
+   */
+  webRoot?: string
 }
 
 export interface DashboardServer {

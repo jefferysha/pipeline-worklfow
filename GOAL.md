@@ -21,7 +21,8 @@
 - [x] **A2 hooks/插件全保真（M2）✅ 收官 iteration-17**：router Track 识别 + breadcrumb(#19)、
       SessionStart 三注入(#20)、PostToolUse 全套(#21)、7 相位 SKILL + openspec 四命令 + learn-record(#22)、
       4 agents(#23)、sync/uninstall scrubber(#24)——全收编，热路径纯 bash 红线 + 真 fs/真 hook e2e
-- [ ] **A3 dashboard（M3）**：TS 全局 server + 前端信息架构重构
+- [~] **A3 dashboard（M3）**：TS 全局 server(#25)✅ + 前端信息架构重构(#26)✅ + server 服务 SPA(#26c)✅
+      + doctor(#26b)✅；剩单源技术债 #25b、config 写端点
 - [ ] **A4 channel + mem（M4）**：worker 总线、跨 runtime 会话检索
 - [ ] **A5 automation / AFK Sandcastle（M5，2026-07-07 用户确认全量迁移）**：5 个 TS 包
       （runner/lifecycle/scheduler/cli/sdk）+ Docker 沙箱执行 + 队列/merge-back/现场保留 +
@@ -58,8 +59,8 @@
 - [x] B17 npx 一行上手：5 分钟心智模型路径（iteration-4，Trellis 简单性教训的落实）
 
 **loop-engineering 思想内建（2026-07-06 用户指令，对标 cobusgreyling/loop-engineering + 老仓 loops 子系统）**
-- [ ] B18 loop 治理子系统：loops registry（schema 校验的登记表）+ enforce 裁决（budget/kill 判据/
-      规则面，老仓 R1-R11 移植起步）+ 执行流水审计（run-log）→ M-loop
+- [x] B18 loop 治理子系统（#35 iteration-19）：loops registry（schema 校验的登记表）+ enforce 裁决
+      （R1-R11 规则面 + budget/kill 判据）+ L1→L3 分级放权入 schema；执行流水审计 run-log 就绪
 - [ ] B19 分级放权 L1→L3：report-only → 人工门放行 → allowlist 自动合并，AFK 自动化必须从 L1
       毕业制升级（上游 Phased Rollout 思想 × 老仓 human gates）→ M5 前置
 - [ ] B20 token 预算与熔断：loop 级 budget 声明 + 超支 circuit breaker + 成本估算（上游

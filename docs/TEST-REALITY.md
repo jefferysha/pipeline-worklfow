@@ -44,6 +44,9 @@
 | mem 跨 runtime | ✅ mem.integration.test.ts 12 例（真建 Claude/Codex/Pi fixture session → nodeMemFs 真读真解析 → 真检索评分排序/cwd 作用域/聚合） | ✅ OpenCode 降级 no-op（诚实待补） | — |
 | dashboard server | ✅ packages/server 38 例（17 真 node:http 请求 + 真 crypto token + 真 SIGTERM 版本抢占 + 2 bin 级真进程 smoke） | ✅ POST 无 token 真 401 / Host 守卫 403 | — |
 | channel worker 总线 | ✅ channel.integration.test.ts 12 例（真 append events.jsonl + 真重建 registry/forum + seq 无空洞 + **barrier 隔离红线**：跑完 cwd 零 openspec/门 marker mtime 不变） | ✅ send 三态 | ✅ create→send→messages |
+| 前端 dashboard-app | ✅ 71 真 render 测试（jsdom 真 render DOM + 真拖拽 fireEvent + SSE 真 EventSource stub emit→组件更新）+ 3 真 server HTTP 集成 | ✅ transition 失败呈现/非法 no-op | ✅ 收件箱默认→看板→设置 |
+| server 服务 SPA | ✅ server.test.ts +1（真起 server webRoot → GET / 真返 SPA index.html+token 注入 + /assets/* 真供给 + 路径穿越防护） | ✅ 穿越 !=200 | — |
+| loops 治理 | ✅ loops.integration.test.ts 15 例（真建 loops.yaml/progress.md → 真裁决 R1-R11 verdict + L1 report-only/L3 unattended + schema 拒非法 exit3） | ✅ budget 超限 kill | ✅ list→enforce→status |
 | check | ✅ guard 全量面真跑：不满足 exit 2 / 建 design doc 后 exit 0 | ✅ | ✅ |
 | inbox | ✅ --json 复核相位 | — | ✅ |
 | status/list | ✅ 真枚举 | — | ✅ |

@@ -1,0 +1,218 @@
+/**
+ * loops 子命令 —— loop 治理子系统 CLI 薄壳（BACKLOG #35 / GOAL B18 / D16 —— loop-engineering 内建）。
+ * 老仓真相源：skills/pipeline/scripts/loops_registry.py（load_registry）+ loops_enforce.py（build_report / main CLI）。
+ *   list [--json]              登记表（老 /api/loops 数据面回显；缺文件→提示 exit 0，校验错→定位错误 exit 1）
+ *   enforce [--loop id][--json] 跑 R1-R11 裁决出 verdict（老 loops_enforce main；exit 0 ok / 1 warn / 2 kill / 3 错误）
+ *   status                     概览：逐 loop status + verdict + 分级放权 enforcement
+ * stdout/exit 对齐老仓：数据/裁决走 stdout，error/定位错误走 stderr。--json 对齐老仓信封（+本轮 autonomy 字段）。
+ *
+ * 分级放权 L1→L3：schema 已纳入 autonomy_level（缺省 L1 report-only），enforce 认级别并在信封回显
+ * enforcement/report_only。verdict×level→具体 gate/halt 动作面是 #38；budget 熔断 #36 / 漂移审计 #37 留后续。
+ *
+ * 接线备注（收编前的临时桥）：kernel 根 barrel 尚未 re-export loops/（barrel 归主会话），故此处用相对桥
+ * 直取 kernel loops 源（../../../kernel/src/loops/index.js，tsc -b/vitest/esbuild 三路已验证）。主会话收编时：
+ * ① kernel src/index.ts 追加 `export * from './loops/index.js'`；② 本文件相对桥换 '@pipeline-lite/kernel'；
+ * ③ program.ts 注册 `loops` 命令（见报告接线清单）。loops 只读——不写 progress.md / 不改 loops.yaml status。
+ */
+import { readFileSync, readdirSync } from 'node:fs'
+import { isAbsolute, join } from 'node:path'
+import {
+  buildReport,
+  enforcementFor,
+  loadRegistry as kernelLoadRegistry,
+  type EnforceFs,
+  type EnforceReport,
+  type LoopEntry,
+  type LoopRegistry,
+} from '@pipeline-lite/kernel'
+import type { CliDeps } from '../deps.js'
+
+// 供 mock/集成测试构造 fake fs / 类型断言
+export type { LoopEntry, LoopRegistry } from '@pipeline-lite/kernel'
+/** cli 层的 loops fs 注入面（= kernel EnforceFs：登记载入 + progress/在途/沙箱读）。 */
+export type LoopsFs = EnforceFs
+
+// ── 真 node fs 实现（默认；integration 走此真路径）─────────────────────────────
+
+/** 读 .pipeline.yaml 顶层标量 `key: value` → Record（缺文件 → null；只取顶层，无缩进）。 */
+function readTopLevelScalars(absPath: string): Record<string, string> | null {
+  let text: string
+  try {
+    text = readFileSync(absPath, 'utf8')
+  } catch {
+    return null
+  }
+  const out: Record<string, string> = {}
+  for (const rawLine of text.split('\n')) {
+    const line = rawLine.replace(/\r$/, '')
+    if (line === '' || /^\s/.test(line) || line.trimStart().startsWith('#')) continue
+    const m = line.match(/^([A-Za-z_][\w.-]*):\s*(.*)$/)
+    if (!m) continue
+    let v = m[2]!.trim()
+    if (!(v.startsWith('"') || v.startsWith("'"))) {
+      const cm = v.match(/^(.*?)\s+#.*$/)
+      if (cm) v = cm[1]!.trimEnd()
+    } else if (v.length >= 2 && (v[0] === v[v.length - 1])) {
+      v = v.slice(1, -1)
+    }
+    out[m[1]!] = v
+  }
+  return out
+}
+
+/** 沙箱副本定位（老 _resolve_sandbox_pipeline_yaml 247-256）：automation_worktree 优先，否则命名约定。 */
+function sandboxPipelineYaml(repoRoot: string, name: string, worktree: string | null): string {
+  let base: string
+  if (worktree && worktree.trim() !== '') {
+    const w = worktree.trim()
+    base = isAbsolute(w) ? w : join(repoRoot, w)
+  } else {
+    base = join(repoRoot, '.sandcastle', 'worktrees', `sandcastle-pipeline-${name}`)
+  }
+  return join(base, 'openspec', 'changes', name, '.pipeline.yaml')
+}
+
+export const REAL_LOOPS_FS: LoopsFs = {
+  loadRegistry: (repoRoot) => kernelLoadRegistry(repoRoot),
+  readProgress: (repoRoot) => {
+    try {
+      return readFileSync(join(repoRoot, '.superpowers', 'loops', 'progress.md'), 'utf8')
+    } catch {
+      return null
+    }
+  },
+  listChanges: (repoRoot, changePrefix) => {
+    try {
+      return readdirSync(join(repoRoot, 'openspec', 'changes'), { withFileTypes: true })
+        .filter((e) => e.isDirectory() && e.name !== 'archive' && e.name.startsWith(changePrefix))
+        .map((e) => e.name)
+        .sort()
+    } catch {
+      return []
+    }
+  },
+  readChangeFields: (repoRoot, name) => readTopLevelScalars(join(repoRoot, 'openspec', 'changes', name, '.pipeline.yaml')),
+  readSandboxFields: (repoRoot, name, worktree) => readTopLevelScalars(sandboxPipelineYaml(repoRoot, name, worktree)),
+}
+
+// ── arg 解析 ──────────────────────────────────────────────────────────────────
+
+interface ParsedArgs {
+  json: boolean
+  loop: string | null
+}
+
+function parseArgs(args: string[]): ParsedArgs {
+  let json = false
+  let loop: string | null = null
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i]!
+    if (a === '--json') json = true
+    else if (a === '--loop') loop = args[++i] ?? null
+  }
+  return { json, loop }
+}
+
+// ── 渲染 ──────────────────────────────────────────────────────────────────────
+
+const pad = (s: string, n: number): string => (s.length >= n ? s : s + ' '.repeat(n - s.length))
+
+function loopSummaryLine(l: LoopEntry): string {
+  const prefix = l.change_prefix === null ? '(none)' : l.change_prefix
+  return `  ${pad(l.id, 16)} ${pad(l.kind, 13)} ${pad(l.cadence, 11)} status=${pad(l.status, 8)} ` +
+    `${l.autonomy_level}/${enforcementFor(l.autonomy_level)}  budget=${l.budget.max_runs_per_day}/${l.budget.max_in_flight}  prefix=${prefix}`
+}
+
+function printRegistryTable(deps: CliDeps, reg: LoopRegistry): void {
+  deps.io.out(`[LOOPS] ${reg.loops.length} registered`)
+  for (const l of reg.loops) deps.io.out(loopSummaryLine(l))
+}
+
+function printReportTable(deps: CliDeps, report: EnforceReport): void {
+  deps.io.out(`${pad('id', 20)} ${pad('verdict', 6)} ${pad('enforce', 13)} rules`)
+  for (const v of report.verdicts) {
+    const rules = v.reasons.map((r) => r.rule).join(',') || '-'
+    deps.io.out(`${pad(v.id, 20)} ${pad(v.verdict, 6)} ${pad(v.enforcement, 13)} ${rules}`)
+  }
+  for (const s of report.skipped) deps.io.out(`${pad(s.id, 20)} ${pad('skip', 6)} ${pad('-', 13)} ${s.reason}`)
+  if (report.notes.length > 0) {
+    deps.io.out('notes:')
+    for (const n of report.notes) deps.io.out(`  ${n}`)
+  }
+}
+
+// ── 子命令 ────────────────────────────────────────────────────────────────────
+
+function cmdList(deps: CliDeps, p: ParsedArgs, fs: LoopsFs): number {
+  const { data, errors } = fs.loadRegistry(deps.cwd)
+  if (errors.length > 0) {
+    for (const e of errors) deps.io.err(`ERROR: ${e}`)
+    return 1
+  }
+  if (data === null) {
+    deps.io.out('(no loops registry) .pipeline/loops.yaml 未找到——本项目无登记 loop（常态，非错误）')
+    return 0
+  }
+  if (p.json) {
+    deps.io.out(JSON.stringify(data, null, 2))
+    return 0
+  }
+  printRegistryTable(deps, data)
+  return 0
+}
+
+function cmdEnforce(deps: CliDeps, p: ParsedArgs, fs: LoopsFs): number {
+  const now = new Date(deps.clock())
+  const { report, errors, exitCode } = buildReport(deps.cwd, { onlyLoop: p.loop, now }, fs)
+  if (errors.length > 0 || report === null) {
+    for (const e of errors) deps.io.err(`ERROR: ${e}`)
+    return exitCode
+  }
+  if (p.json) {
+    deps.io.out(JSON.stringify(report, null, 2))
+    return exitCode
+  }
+  printReportTable(deps, report)
+  return exitCode
+}
+
+function cmdStatus(deps: CliDeps, fs: LoopsFs): number {
+  const { data, errors } = fs.loadRegistry(deps.cwd)
+  if (errors.length > 0) {
+    for (const e of errors) deps.io.err(`ERROR: ${e}`)
+    return 1
+  }
+  if (data === null) {
+    deps.io.out('(no loops registry) .pipeline/loops.yaml 未找到')
+    return 0
+  }
+  const now = new Date(deps.clock())
+  const { report } = buildReport(deps.cwd, { now }, fs)
+  const verdictById = new Map((report?.verdicts ?? []).map((v) => [v.id, v.verdict]))
+  deps.io.out('[LOOPS status]')
+  for (const l of data.loops) {
+    const verdict = verdictById.get(l.id) ?? '-(skip)'
+    deps.io.out(`  ${pad(l.id, 16)} status=${pad(l.status, 8)} verdict=${pad(verdict, 8)} ${l.autonomy_level}/${enforcementFor(l.autonomy_level)}`)
+  }
+  return 0
+}
+
+/**
+ * loops 子命令分派（纯函数 + deps 注入 + fs 注入面）。
+ * fs 缺省真 node fs（REAL_LOOPS_FS，读真 .pipeline/loops.yaml + progress + 在途 + 沙箱）；
+ * mock 层注入 fake LoopsFs 快速回归，integration 走真 fs。
+ */
+export async function cmdLoops(deps: CliDeps, sub: string, args: string[], fs: LoopsFs = REAL_LOOPS_FS): Promise<number> {
+  const p = parseArgs(args)
+  switch (sub || 'list') {
+    case 'list':
+      return cmdList(deps, p, fs)
+    case 'enforce':
+      return cmdEnforce(deps, p, fs)
+    case 'status':
+      return cmdStatus(deps, fs)
+    default:
+      deps.io.err(`ERROR: 未知 loops 子命令: ${sub}（支持: list enforce status）`)
+      return 1
+  }
+}

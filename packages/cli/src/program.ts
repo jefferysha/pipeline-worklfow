@@ -13,6 +13,7 @@ import { cmdInbox } from './commands/inbox.js'
 import { cmdChannel } from './commands/channel.js'
 import { cmdGenRouterSh } from './commands/gen-router.js'
 import { cmdInit, type InitCmdOpts } from './commands/init.js'
+import { cmdLoops } from './commands/loops.js'
 import { cmdMem } from './commands/mem.js'
 import { cmdSession } from './commands/session.js'
 import { cmdSpec } from './commands/spec.js'
@@ -160,6 +161,12 @@ export function buildProgram(deps: CliDeps): Command {
     .option('--dry-run', '只打印计划不落盘')
     .action(async (opts: { yes?: boolean; dryRun?: boolean }) =>
       bail(await cmdUninstall(deps, { yes: opts.yes, dryRun: opts.dryRun })))
+
+  program
+    .command('loops <sub> [args...]')
+    .description('loop 治理：list 登记表 · enforce R1-R11 裁决 · status（B18/D16，L1→L3 分级放权）')
+    .allowUnknownOption()
+    .action(async (sub: string, args: string[]) => bail(await cmdLoops(deps, sub, args)))
 
   program
     .command('channel <sub> [args...]')

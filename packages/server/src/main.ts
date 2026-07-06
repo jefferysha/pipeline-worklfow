@@ -67,6 +67,8 @@ async function main(): Promise<void> {
     token,
     manifestPath: manifestPath(),
     gitHeadSha,
+    // dashboard-app 构建产物（BACKLOG #26c）：存在则服务真 SPA，否则回退最小落地页
+    webRoot: join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'dashboard-app', 'dist'),
   })
 
   try {

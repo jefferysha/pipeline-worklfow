@@ -111,6 +111,40 @@ describe('GET / —— 前端落地页 + 同源 token 注入（B5 交付）', ()
   })
 })
 
+describe('GET / + /assets/* —— webRoot 存在时服务真 SPA（BACKLOG #26c）', () => {
+  it('GET / 返回 SPA index.html 且注入 token；/assets/* 真供给静态资源', async () => {
+    const { mkdtemp, mkdir, writeFile } = await import('node:fs/promises')
+    const { tmpdir } = await import('node:os')
+    const web = await mkdtemp(join(tmpdir(), 'spa-'))
+    await writeFile(join(web, 'index.html'), '<!doctype html><head><title>SPA</title></head><body><div id=app></div></body>', 'utf8')
+    await mkdir(join(web, 'assets'), { recursive: true })
+    await writeFile(join(web, 'assets', 'app.js'), 'console.log("real bundle")', 'utf8')
+    const store = newStore()
+    const root = await makeProject()
+    await initChange(store, root, 'c1')
+    const srv = createDashboardServer({
+      token: 'spa-token', registry: () => [root], store, flow: testFlow(),
+      clock: () => '2026-07-07T00:00:00Z', webRoot: web,
+    })
+    openServers.push(srv)
+    const { port } = await srv.listen(0, '127.0.0.1')
+    // GET / → 真 SPA index.html（含 <div id=app>）+ token 注入进 </head> 前
+    const idx = await reqGet(port, '/')
+    expect(idx.status).toBe(200)
+    expect(idx.body).toContain('<div id=app>')
+    expect(idx.body).toContain('window.__PIPELINE_DASHBOARD_TOKEN__')
+    expect(idx.body).toContain('spa-token')
+    // GET /assets/app.js → 真静态供给 + js content-type
+    const asset = await reqGet(port, '/assets/app.js')
+    expect(asset.status).toBe(200)
+    expect(String(asset.headers['content-type'])).toContain('javascript')
+    expect(asset.body).toContain('real bundle')
+    // 路径穿越防护：/assets/../server.ts 不泄露
+    const evil = await reqGet(port, '/assets/../package.json')
+    expect(evil.status).not.toBe(200)
+  })
+})
+
 describe('POST /api/change/<name>/transition —— B5 token 鉴权', () => {
   it('无 token → 401', async () => {
     const h = await start()
