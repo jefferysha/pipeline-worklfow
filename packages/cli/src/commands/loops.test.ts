@@ -5,7 +5,7 @@
  */
 import { describe, expect, test } from 'vitest'
 import { makeDeps } from '../test-support.js'
-import { cmdLoops, type LoopsFs } from './loops.js'
+import { cmdLoops, type DriftFs, type LoopsFs } from './loops.js'
 import type { LoopEntry } from './loops.js'
 
 function loop(over: Partial<LoopEntry> = {}): LoopEntry {
@@ -212,5 +212,100 @@ describe('cost —— 成本估算（cadence×pattern）', () => {
     const rep = JSON.parse(deps.outLines.join('\n'))
     expect(rep.estimates[0].estimatedTokensPerDay).toBe(192000)
     expect(rep.estimates[0].runsPerDay).toBe(24)
+  })
+})
+
+// ── #37 drift/audit 子命令（漂移检测 + loop-ready 就绪评分）──────────────────────
+
+const DRIFT_HEADER = '| ts | loop | action | inflight | note |\n|----|------|--------|----------|------|'
+
+/** 满配 loop（loop-ready 100）：goal≥30 / kill≥2 / gates≥2 / token 预算 / 有限 cadence / prefix / 全 doc。 */
+function richLoop(over: Partial<LoopEntry> = {}): LoopEntry {
+  return loop({
+    goal: 'x'.repeat(40), kill_criteria: ['k1', 'k2'], human_gates: ['g1', 'g2'],
+    budget: { max_runs_per_day: 24, max_in_flight: 1, on_exceed: 'skip', max_tokens_per_day: 100000 },
+    cadence: '1h', change_prefix: 'loop-be-', design_doc: 'docs/loops/loop-be.md',
+    state: '.superpowers/loops/progress.md', ...over,
+  })
+}
+
+/** fake DriftFs（第 5 参注入）：registry + run-log + LOOP.md 镜像。makeDeps clock=2026-07-06T00:00Z。 */
+function fakeDriftFs(over: Partial<DriftFs> = {}): DriftFs {
+  return {
+    loadRegistry: () => ({ data: { version: 1, loops: [richLoop()] }, errors: [] }),
+    readRunLog: () => `${DRIFT_HEADER}\n| 2026-07-05T23:30 | loop-be | run | 0 | result=ok |`,
+    readLoopDoc: () => '### `loop-be` — BE loop',
+    ...over,
+  }
+}
+
+describe('drift —— 漂移检测（loop-sync）', () => {
+  test('对齐 → CLEAN、exit 0', async () => {
+    const deps = makeDeps()
+    const code = await cmdLoops(deps, 'drift', [], fakeFs(), fakeDriftFs())
+    expect(code).toBe(0)
+    expect(deps.outLines.join('\n')).toMatch(/CLEAN|无漂移/)
+  })
+
+  test('mirror-missing：LOOP.md 未提及 → warn、exit 1', async () => {
+    const deps = makeDeps()
+    const code = await cmdLoops(deps, 'drift', [], fakeFs(), fakeDriftFs({ readLoopDoc: () => '(无提及)' }))
+    expect(code).toBe(1)
+    expect(deps.outLines.join('\n')).toContain('mirror-missing')
+  })
+
+  test('--json：报告含 items + dimension', async () => {
+    const deps = makeDeps()
+    await cmdLoops(deps, 'drift', ['--json'], fakeFs(), fakeDriftFs({ readLoopDoc: () => '(无提及)' }))
+    const rep = JSON.parse(deps.outLines.join('\n'))
+    expect(rep.items[0].dimension).toBe('mirror-missing')
+    expect(rep.checked).toContain('loop-be')
+  })
+
+  test('未知 --loop → exit 3', async () => {
+    const deps = makeDeps()
+    expect(await cmdLoops(deps, 'drift', ['ghost'], fakeFs(), fakeDriftFs())).toBe(3)
+  })
+
+  test('registry 错误 → stderr + exit 3', async () => {
+    const deps = makeDeps()
+    expect(await cmdLoops(deps, 'drift', [], fakeFs(), fakeDriftFs({ loadRegistry: () => ({ data: null, errors: ['boom'] }) }))).toBe(3)
+    expect(deps.errLines.join('\n')).toContain('boom')
+  })
+})
+
+describe('audit —— loop-ready 就绪评分（loop-audit）', () => {
+  test('满配 loop → ready、exit 0', async () => {
+    const deps = makeDeps()
+    const code = await cmdLoops(deps, 'audit', [], fakeFs(), fakeDriftFs())
+    expect(code).toBe(0)
+    const out = deps.outLines.join('\n')
+    expect(out).toContain('loop-be')
+    expect(out).toMatch(/score=/)
+  })
+
+  test('极简 loop（not-ready）→ exit 1 + 建议', async () => {
+    const deps = makeDeps()
+    const weak = loop({
+      goal: 'x'.repeat(10), human_gates: ['g'], kill_criteria: ['k'], change_prefix: null,
+      budget: { max_runs_per_day: 24, max_in_flight: 1, on_exceed: 'skip' },
+    })
+    const code = await cmdLoops(deps, 'audit', [], fakeFs(), fakeDriftFs({ loadRegistry: () => ({ data: { version: 1, loops: [weak] }, errors: [] }) }))
+    expect(code).toBe(1)
+    expect(deps.outLines.join('\n')).toMatch(/not-ready/)
+  })
+
+  test('--json：报告含 scores + band + dimensions', async () => {
+    const deps = makeDeps()
+    await cmdLoops(deps, 'audit', ['--json'], fakeFs(), fakeDriftFs())
+    const rep = JSON.parse(deps.outLines.join('\n'))
+    expect(rep.scores[0].id).toBe('loop-be')
+    expect(rep.scores[0].score).toBe(100)
+    expect(rep.scores[0].band).toBe('ready')
+  })
+
+  test('未知 --loop → exit 3', async () => {
+    const deps = makeDeps()
+    expect(await cmdLoops(deps, 'audit', ['ghost'], fakeFs(), fakeDriftFs())).toBe(3)
   })
 })

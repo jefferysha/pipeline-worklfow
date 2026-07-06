@@ -51,7 +51,7 @@
 - [x] B13 上下文压缩（#30 iteration-21）：phase handoff 确定性压缩（实测 45.4% > Comet 25-30%），零 LLM 可 oracle
 - [x] B14 auto-transition 中间档（#31 iteration-21）：`pipeline advance` guard 全绿自动推进、复核相位+三门必停（HITL 红线三重证明，> Comet AUTO-TRANSITION）
 - [x] B15 Cursor 适配器转正（#39 iteration-22）：spike→可发布，veto/track native + inject 降级 .cursor/rules，修「声明 track 却不写 history」病灶
-- [ ] B16 Trellis parity 收尾：8 partial + 1 missing → M6
+- [x] B16 Trellis parity 收尾（#33 iteration-23）：8 partial + 1 missing 全处置（3 实现 + 1 忠实占位 + 5 诚实 N-A）
 - [x] B17 npx 一行上手：5 分钟心智模型路径（iteration-4，Trellis 简单性教训的落实）
 
 **loop-engineering 思想内建（2026-07-06 用户指令，对标 cobusgreyling/loop-engineering + 老仓 loops 子系统）**
@@ -86,7 +86,7 @@
 - [~] D14 平台广度（#39）：可移植内核 + 填表式扩展策略就绪；铺到 ≥Comet 30 平台待 #40
 **vs 两者皆无（差异化护城河）**
 - [x] D15 golden-oracle 行为等价迁移法（双跑逐字 diff——两家都没有的质量证据链）
-- [~] D16 loop-engineering 治理（#35/#36）：registry+enforce R1-R11+L1→L3+budget/circuit-breaker；drift/graduation 待 #37/#38（两竞品都无此面）
+- [~] D16 loop-engineering 治理（#35/#36/#37）：registry+enforce R1-R11+L1→L3+budget/circuit-breaker+drift/loop-ready 审计；graduation 执行面待 #38（两竞品都无此面）
 
 ## 清单 C · 质量保障（过程约束——任何一轮违反即不收编，没有例外）
 

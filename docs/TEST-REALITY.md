@@ -53,6 +53,8 @@
 | auto-transition advance | ✅ advance.integration.test.ts 6 例（真推进到复核相位即停 + guard 不过不推进 + dry-run 不改盘）；**HITL 红线**：verify/ship guard 预备仍停 verify、硬门 --through-gates 也不跨 | ✅ guard-fail exit2 | ✅ 多步推进 |
 | 适配器 conformance | ✅ tools/test-adapters.sh 58 断言（真跑各适配器归一 canonical 决策 + 反例哨兵 + **真适配器变异测试**：改坏 codex veto 立即抓红、还原回绿）；claude/codex(A)/cursor(B) active | ✅ 判别力自证 | — |
 | loop 预算/熔断 | ✅ loops-budget.integration.test.ts 16 例（真建 run-log → 真熔断 ok/warn/tripped + 成本估算 within/over）+ 真 bundle e2e | ✅ 超阈值 tripped exit2 | ✅ budget→cost |
+| loop 漂移/审计 | ✅ loops-drift.integration.test.ts 20 例（7 维漂移各一 + loop-ready 评分 ready/not-ready + --json/--loop）| ✅ 漂移 warn exit1 | ✅ list→drift→audit |
+| Trellis scaffold | ✅ scaffold.integration.test.ts 14 例（真铺分层空文档集 + 三态 skip/overwrite/append 真删真补真保留 + resolve-workflow 真读源 + removeHash 真改 .pipeline-owned.json）| ✅ spec-dir 冲突 exit2 | ✅ scaffold web/cli/lib |
 | check | ✅ guard 全量面真跑：不满足 exit 2 / 建 design doc 后 exit 0 | ✅ | ✅ |
 | inbox | ✅ --json 复核相位 | — | ✅ |
 | status/list | ✅ 真枚举 | — | ✅ |

@@ -9,3 +9,5 @@ export * from './channel/index.js'
 export * from './loops/index.js'
 // 上下文压缩（BACKLOG #30，对标 Comet CONTEXT-COMPRESSION）
 export * from './compress/index.js'
+// Trellis parity 收尾：spec-scaffold / workflow-resolution / allowlist（BACKLOG #33）
+export * from './scaffold/index.js'

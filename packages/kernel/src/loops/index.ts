@@ -23,6 +23,15 @@ export {
   sumRunLogTokens, computeBudgetStatus, estimateCost, buildBudgetReport, buildCostReport, PATTERN_TOKENS_PER_RUN,
 } from './budget.js'
 export type { BreakerState, BudgetStatus, CostEstimate, BudgetFs, BudgetReport, CostReport } from './budget.js'
+// #37 漂移检测（loop-sync）+ loop-ready 就绪评分（loop-audit）（GOAL B21 / D16）
+export {
+  detectDrift, computeReadiness, extractDocLoopIds, buildDriftReport, buildAuditReport,
+  DRIFT_CADENCE_MULTIPLIER, READY_STRONG, READY_THRESHOLD,
+} from './drift.js'
+export type {
+  DriftDimension, DriftSeverity, DriftItem, DriftReport, DriftReportEnvelope,
+  ReadinessBand, ReadinessDimension, ReadinessScore, DriftFs, AuditReport, AuditReportEnvelope,
+} from './drift.js'
 export type {
   LoopKind, LoopStatus, LoopRisk, AutonomyLevel, LoopBudget, LoopEntry, LoopRegistry,
   Verdict, Enforcement, VerdictReason, VerdictMetrics, LoopVerdict, RunFacts,

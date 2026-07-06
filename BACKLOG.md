@@ -16,9 +16,7 @@
 | 29d | 调度器 doctor 灯 + dashboard AFK 指挥面数据端（M3 的 server 承接） | M5 | 1d |
 | 29e | 与 L1→L3 分级放权（#38）合体：AFK 默认 L1 report-only，毕业制升 L2/L3 | M5 | 1d |
 | **M6** 竞品缺口收尾 | | | |
-| 33 | Trellis parity 收尾：8 partial + 1 missing（spec-template-scaffold、冲突 AskUserQuestion、workflow-template-resolution、KNOWN_UNTRACKED_ALLOWLIST） | M6 | 3d |
 | **M-loop** loop-engineering 内建（GOAL B18–B21 / D16） | | | |
-| 37 | 漂移检测 + loop-ready 审计：LOOP 声明 vs STATE 流水对账、就绪评分 | M-loop | 2d |
 | 38 | 分级放权 L1→L3：AFK 自动化毕业制（report → 人工门 → allowlist 自动合并），M5 的前置件 | M-loop | 2d |
 | **M7** 平台矩阵（GOAL D7/D14） | | | |
 | 40 | 平台铺开：Codex/Cursor 先行，矩阵逐平台扩展至 ≥ 两竞品覆盖面 | M7 | 5d+ |
@@ -73,3 +71,5 @@
 | 2026-07-07 | #39 适配器框架+Cursor 转正（iteration-22） | 收编：58 conformance 断言+变异测试，claude/codex/cursor active，D7 |
 | 2026-07-07 | #36 loop 预算与熔断（iteration-22） | 收编：token budget+circuit breaker+成本估算 + 16 真 fs 例，D16 |
 | 2026-07-07 | #41 超越矩阵 + #32 Cursor（iteration-22） | 收编：docs/superiority-matrix.md D1-D16 证据表；#32 已由 #39 完成 |
+| 2026-07-07 | #33 Trellis parity 收尾（iteration-23） | 收编：8 partial+1 missing 全处置 + 14 真 fs 例，B16 |
+| 2026-07-07 | #37 漂移检测+审计（iteration-23） | 收编：7 维 drift + loop-ready 评分 + 20 真 fs 例，B21 |

@@ -1,0 +1,264 @@
+/**
+ * scaffold 命令 —— Trellis parity 收尾（BACKLOG #33 / GOAL B16）。三/四子命令：
+ *   scaffold <type> [--strategy skip|overwrite|append] [--spec-dir <dir>]
+ *       按项目类型（web/cli/lib）铺分层空 spec 文档集（Trellis spec-template-scaffold ①）。
+ *       三态写盘对标老仓 registry-source.sh apply_strategy（②的三态半边）。
+ *   resolve-workflow <id> [--source-index <path>] [--marker] [--apply-hash] [--fallback-native]
+ *       解析 workflow id（多 id + native offline-first，③）+ 可选写来源 marker + removeHash 更新契约。
+ *
+ * ★template-strategy-and-spec-conflict 的 AskUserQuestion 交互（②的交互半边）——lite 无交互 picker：
+ *   缺省冲突（spec 目录已有文件且未显式传 strategy）→ 不弹 picker，改「信号 + 三选一指引」：
+ *   读 PIPELINE_SPEC_STRATEGY 信号（上层 AskUserQuestion 决策后注入）或 --strategy；两者皆缺且有冲突
+ *   → 呈现 skip/overwrite/append 三选一指引到 stderr 后 return exit 2（对齐 reinit-fast-path 的
+ *   PIPELINE_REINIT 信号风格：shell/子-agent 语境不弹无可靠 TTY 的 picker）。
+ *
+ * stdout/exit 对齐仓内风格（session.ts）：数据（写入清单/解析结果）走 stdout；状态/指引/错误走 stderr。
+ *   exit：成功=0；非法参数/未知 id（无 --fallback-native）/未知子命令=1；缺省冲突需决策=2（信号）。
+ *
+ * 接线备注（收编前的临时桥，需主会话收编，见报告接线清单）：kernel barrel（src/index.ts）尚未导出
+ *   scaffold/，故 scaffold 纯逻辑用相对 import 直取 kernel 源（tsc -b/vitest/esbuild 三路已验证的模式，
+ *   同 loops.ts/handoff.ts 原始桥）；ownership 已在 barrel，其 helper 走 '@pipeline-lite/kernel'。
+ *   主会话收编：① src/index.ts 加 `export * from './scaffold/index.js'`；② 换相对 import 为包名；
+ *   ③ program.ts 注册 `scaffold` 命令。KNOWN_UNTRACKED_ALLOWLIST 接进 ownership/#24 的方式见报告。
+ */
+import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { dirname, join } from 'node:path'
+import { OWNED_MANIFEST, parseOwnedManifest, serializeOwnedManifest } from '@pipeline-lite/kernel'
+import {
+  DEFAULT_SPEC_DIR,
+  DOC_STRATEGIES,
+  PROJECT_TYPES,
+  WORKFLOW_MD_REL,
+  WORKFLOW_SOURCE_MARKER,
+  applyWorkflowHashContract,
+  buildSpecScaffold,
+  isDocStrategy,
+  isProjectType,
+  parseWorkflowIds,
+  planDocScaffold,
+  resolveWorkflow,
+  workflowHashAction,
+  workflowSourceMarkerContent,
+  type DocStrategy,
+} from '@pipeline-lite/kernel'
+import { errMsg, type CliDeps } from '../deps.js'
+
+/**
+ * scaffold fs 注入面（默认真 fs；mock 层注入 fake，见 scaffold.test.ts）。
+ * env 读信号（PIPELINE_SPEC_STRATEGY）；exists/readText/writeText/rmrf 真副作用。
+ */
+export interface ScaffoldFs {
+  exists: (abs: string) => Promise<boolean>
+  readText: (abs: string) => Promise<string | undefined>
+  writeText: (abs: string, content: string) => Promise<void>
+  rmrf: (abs: string) => Promise<void>
+  env: (name: string) => string | undefined
+}
+
+export const REAL_FS: ScaffoldFs = {
+  exists: async (abs) => {
+    try {
+      await stat(abs)
+      return true
+    } catch {
+      return false
+    }
+  },
+  readText: async (abs) => {
+    try {
+      return await readFile(abs, 'utf8')
+    } catch {
+      return undefined
+    }
+  },
+  writeText: async (abs, content) => {
+    await mkdir(dirname(abs), { recursive: true })
+    await writeFile(abs, content, 'utf8')
+  },
+  rmrf: async (abs) => {
+    await rm(abs, { recursive: true, force: true }).catch(() => {})
+  },
+  env: (name) => process.env[name],
+}
+
+/** 简易 flag 解析：--k v → { k: v }；裸 --flag → { flag: '' }（存在即真）。 */
+function parseFlags(args: readonly string[]): { positionals: string[]; flags: Record<string, string> } {
+  const positionals: string[] = []
+  const flags: Record<string, string> = {}
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i] ?? ''
+    if (a.startsWith('--')) {
+      const key = a.slice(2)
+      const next = args[i + 1]
+      if (next !== undefined && !next.startsWith('--')) {
+        flags[key] = next
+        i++
+      } else {
+        flags[key] = ''
+      }
+    } else {
+      positionals.push(a)
+    }
+  }
+  return { positionals, flags }
+}
+
+const SPEC_STRATEGY_SIGNAL = 'PIPELINE_SPEC_STRATEGY'
+
+/** 三选一指引（对标 reinit-fast-path 的三选一指引，替代 AskUserQuestion picker）。 */
+function conflictGuidance(deps: CliDeps, specDir: string): void {
+  deps.io.err(`[SPEC-CONFLICT] ${specDir} 已存在文件——需选择模板策略（缺省冲突，未弹交互 picker）：`)
+  deps.io.err('  skip      —— 存在则整体不动，保留你的既有文档')
+  deps.io.err('  overwrite —— 先删现存再全量重铺（丢弃既有）')
+  deps.io.err('  append    —— 只补缺失文件，保留既有')
+  deps.io.err(`  传参决策：--strategy <skip|overwrite|append>  或  ${SPEC_STRATEGY_SIGNAL}=<...>（上层 AskUserQuestion 后注入）`)
+}
+
+/** scaffold <type>：按类型铺分层空文档集，三态写盘。 */
+async function cmdScaffoldSpec(deps: CliDeps, args: string[], fs: ScaffoldFs): Promise<number> {
+  const { positionals, flags } = parseFlags(args)
+  const type = positionals[0]
+  if (type === undefined || !isProjectType(type)) {
+    deps.io.err(`ERROR: 非法 project type '${type ?? ''}'，允许: ${PROJECT_TYPES.join(' | ')}`)
+    return 1
+  }
+  const specDir = flags['spec-dir'] || DEFAULT_SPEC_DIR
+  // 策略信号：--strategy > PIPELINE_SPEC_STRATEGY env > 未定
+  const rawStrategy = flags['strategy'] || fs.env(SPEC_STRATEGY_SIGNAL) || ''
+  const files = buildSpecScaffold(type, specDir)
+  const abs = (rel: string) => join(deps.cwd, rel)
+
+  // 探测冲突（哪些目标已存在）
+  const existing = new Set<string>()
+  for (const f of files) {
+    if (await fs.exists(abs(f.rel))) existing.add(f.rel)
+  }
+
+  let strategy: DocStrategy
+  if (rawStrategy === '') {
+    if (existing.size > 0) {
+      // 缺省冲突 + 无策略信号 → 三选一指引 + exit 2（AskUserQuestion 替代信号）
+      conflictGuidance(deps, specDir)
+      return 2
+    }
+    strategy = 'skip' // 无冲突 → 任意策略等价，取 skip（全量写）
+  } else {
+    if (!isDocStrategy(rawStrategy)) {
+      deps.io.err(`ERROR: 非法 strategy '${rawStrategy}'，允许: ${DOC_STRATEGIES.join(' | ')}`)
+      return 1
+    }
+    strategy = rawStrategy
+  }
+
+  const plan = planDocScaffold(files, existing, strategy)
+  try {
+    for (const rel of plan.removes) await fs.rmrf(abs(rel))
+    for (const f of plan.writes) await fs.writeText(abs(f.rel), f.content)
+  } catch (e) {
+    deps.io.err(`ERROR: scaffold 写盘失败: ${errMsg(e)}`)
+    return 1
+  }
+
+  if (plan.skippedAll) {
+    deps.io.err(`[SCAFFOLD] skip：${specDir} 已有文档，保留 ${plan.skipped.length} 项、未写入（strategy=skip）`)
+    return 0
+  }
+  for (const f of plan.writes) deps.io.out(f.rel)
+  deps.io.err(
+    `[SCAFFOLD] ${type}：写入 ${plan.writes.length} 项` +
+      (plan.removes.length ? `（覆盖删 ${plan.removes.length}）` : '') +
+      (plan.skipped.length ? `，保留既有 ${plan.skipped.length}` : '') +
+      `（strategy=${strategy}, spec-dir=${specDir}）`,
+  )
+  return 0
+}
+
+/** resolve-workflow <id>：多 id 解析 + 可选 marker + removeHash 契约。 */
+async function cmdResolveWorkflow(deps: CliDeps, args: string[], fs: ScaffoldFs): Promise<number> {
+  const { positionals, flags } = parseFlags(args)
+  const requested = positionals[0]
+  const abs = (rel: string) => join(deps.cwd, rel)
+
+  // 源索引（本地文件，无网络）→ 多 workflow id
+  let available: string[] = []
+  const sourceIdx = flags['source-index']
+  if (sourceIdx) {
+    const text = await fs.readText(abs(sourceIdx))
+    if (text === undefined) {
+      deps.io.err(`ERROR: source index 不存在: ${sourceIdx}`)
+      return 1
+    }
+    available = parseWorkflowIds(text)
+  }
+
+  let res = resolveWorkflow(requested, available)
+  if (!res.ok) {
+    if ('fallback-native' in flags) {
+      deps.io.err(`[WORKFLOW] ${res.error} → 降级 native（--fallback-native）`)
+      res = resolveWorkflow('native', available)
+    } else {
+      deps.io.err(`ERROR: ${res.error}`)
+      return 1
+    }
+  }
+  if (!res.ok) {
+    // 理论不可达（native 恒解析成功）；防御
+    deps.io.err(`ERROR: ${res.error}`)
+    return 1
+  }
+
+  // 数据 → stdout：解析结果 + hash 契约动作
+  const action = workflowHashAction(res.isNative)
+  deps.io.out(`id=${res.id}`)
+  deps.io.out(`native=${res.isNative}`)
+  deps.io.out(`source=${res.source}`)
+  deps.io.out(`hash-contract=${action}`)
+
+  // 可选：写来源 marker（升级不还原 native 的可见信号）
+  if ('marker' in flags && !res.isNative) {
+    try {
+      await fs.writeText(abs(WORKFLOW_SOURCE_MARKER), workflowSourceMarkerContent(res.id, sourceIdx, deps.clock()))
+      deps.io.err(`[WORKFLOW] 写来源 marker ${WORKFLOW_SOURCE_MARKER}（id=${res.id}）`)
+    } catch (e) {
+      deps.io.err(`[WORKFLOW] marker 写入失败（degraded）: ${errMsg(e)}`)
+    }
+  }
+
+  // 可选：removeHash 更新契约落到 .pipeline-owned.json（native 记 hash / 非 native 删条目）
+  if ('apply-hash' in flags) {
+    try {
+      const manifestAbs = abs(OWNED_MANIFEST)
+      const text = await fs.readText(manifestAbs)
+      const map = text === undefined ? {} : parseOwnedManifest(text)
+      const workflowContent = res.isNative ? await fs.readText(abs(WORKFLOW_MD_REL)) : undefined
+      const next = applyWorkflowHashContract(map, WORKFLOW_MD_REL, res.isNative, workflowContent)
+      await fs.writeText(manifestAbs, serializeOwnedManifest(next))
+      deps.io.err(`[WORKFLOW] hash 契约已落盘（${action} ${WORKFLOW_MD_REL} in ${OWNED_MANIFEST}）`)
+    } catch (e) {
+      deps.io.err(`[WORKFLOW] hash 契约落盘失败（degraded）: ${errMsg(e)}`)
+    }
+  }
+  return 0
+}
+
+/**
+ * scaffold 子命令分派（纯函数 + deps 注入，风格同 session.ts）。
+ * fs 缺省真 fs（integration 走真路径）；mock 层注入 fake ScaffoldFs 快速回归。
+ */
+export async function cmdScaffold(
+  deps: CliDeps,
+  sub: string,
+  args: string[],
+  fs: ScaffoldFs = REAL_FS,
+): Promise<number> {
+  switch (sub) {
+    case 'scaffold':
+    case 'spec': // 别名（更可读的顶层命名）
+      return cmdScaffoldSpec(deps, args, fs)
+    case 'resolve-workflow':
+      return cmdResolveWorkflow(deps, args, fs)
+    default:
+      deps.io.err(`ERROR: 未知 scaffold 子命令: ${sub}（支持: scaffold resolve-workflow）`)
+      return 1
+  }
+}

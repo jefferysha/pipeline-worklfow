@@ -17,6 +17,7 @@ import { cmdHandoff } from './commands/handoff.js'
 import { cmdInit, type InitCmdOpts } from './commands/init.js'
 import { cmdLoops } from './commands/loops.js'
 import { cmdMem } from './commands/mem.js'
+import { cmdScaffold } from './commands/scaffold.js'
 import { cmdSession } from './commands/session.js'
 import { cmdSpec } from './commands/spec.js'
 import { cmdSync } from './commands/sync.js'
@@ -122,6 +123,12 @@ export function buildProgram(deps: CliDeps): Command {
     .option('--json', 'JSON 输出（children / canonical）')
     .action(async (sub: string, args: string[], opts: { json?: boolean }) =>
       bail(await cmdTask(deps, sub, opts.json ? [...args, '--json'] : args)))
+
+  program
+    .command('scaffold <sub> [args...]')
+    .description('Trellis parity：scaffold 按类型铺分层空文档集 · resolve-workflow 多 id 解析（D2/B16）')
+    .allowUnknownOption()
+    .action(async (sub: string, args: string[]) => bail(await cmdScaffold(deps, sub, args)))
 
   program
     .command('spec <sub> [args...]')

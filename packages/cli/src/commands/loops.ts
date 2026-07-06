@@ -20,14 +20,19 @@
 import { readFileSync, readdirSync } from 'node:fs'
 import { isAbsolute, join } from 'node:path'
 import {
+  buildAuditReport,
   buildBudgetReport,
   buildCostReport,
+  buildDriftReport,
   buildReport,
   enforcementFor,
   loadRegistry as kernelLoadRegistry,
+  type AuditReport,
   type BudgetFs,
   type BudgetReport,
   type CostReport,
+  type DriftFs,
+  type DriftReport,
   type EnforceFs,
   type EnforceReport,
   type LoopEntry,
@@ -36,7 +41,7 @@ import {
 import type { CliDeps } from '../deps.js'
 
 // 供 mock/集成测试构造 fake fs / 类型断言
-export type { LoopEntry, LoopRegistry } from '@pipeline-lite/kernel'
+export type { LoopEntry, LoopRegistry, DriftFs } from '@pipeline-lite/kernel'
 /** cli 层的 loops fs 注入面（= kernel EnforceFs：登记载入 + progress/在途/沙箱读）。 */
 export type LoopsFs = EnforceFs
 
@@ -101,6 +106,19 @@ export const REAL_LOOPS_FS: LoopsFs = {
   },
   readChangeFields: (repoRoot, name) => readTopLevelScalars(join(repoRoot, 'openspec', 'changes', name, '.pipeline.yaml')),
   readSandboxFields: (repoRoot, name, worktree) => readTopLevelScalars(sandboxPipelineYaml(repoRoot, name, worktree)),
+}
+
+// ── #37 drift/audit 真 node fs（登记 + run-log + LOOP.md 镜像）─────────────────
+export const REAL_DRIFT_FS: DriftFs = {
+  loadRegistry: (repoRoot) => kernelLoadRegistry(repoRoot),
+  readRunLog: (repoRoot) => REAL_LOOPS_FS.readProgress(repoRoot),
+  readLoopDoc: (repoRoot) => {
+    try {
+      return readFileSync(join(repoRoot, 'LOOP.md'), 'utf8')
+    } catch {
+      return null
+    }
+  },
 }
 
 // ── arg 解析 ──────────────────────────────────────────────────────────────────
@@ -286,12 +304,74 @@ function cmdCost(deps: CliDeps, args: string[], fs: LoopsFs): number {
   return exitCode
 }
 
+// ── #37 drift / audit 子命令（漂移检测 loop-sync + loop-ready 就绪评分 loop-audit）────
+
+function printDriftTable(deps: CliDeps, report: DriftReport): void {
+  deps.io.out('[LOOPS drift · loop-sync（声明 vs 实际对账）]')
+  deps.io.out(`  checked=[${report.checked.join(', ')}]  ${report.clean ? 'CLEAN（无漂移）' : `${report.items.length} 漂移项`}`)
+  for (const it of report.items) {
+    deps.io.out(`  ${pad(it.severity, 4)} ${pad(it.dimension, 17)} ${pad(it.loop, 16)} ${it.detail}`)
+    deps.io.out(`       → ${it.suggestion}`)
+  }
+}
+
+function printAuditTable(deps: CliDeps, report: AuditReport): void {
+  deps.io.out('[LOOPS audit · loop-ready score 0-100]')
+  for (const s of report.scores) {
+    deps.io.out(`  ${pad(s.id, 16)} score=${pad(String(s.score), 4)}/100 band=${pad(s.band, 12)}`)
+    const dimline = s.dimensions.map((d) => `${d.name}=${d.score}/${d.max}`).join('  ')
+    deps.io.out(`    ${dimline}`)
+    for (const sug of s.suggestions) deps.io.out(`    · ${sug}`)
+  }
+}
+
+function cmdDrift(deps: CliDeps, args: string[], fs: DriftFs): number {
+  const p = parseArgs(args)
+  const onlyLoop = p.loop ?? positionalLoop(args)
+  const now = new Date(deps.clock())
+  const { report, errors, exitCode } = buildDriftReport(deps.cwd, onlyLoop, now, fs)
+  if (errors.length > 0 || report === null) {
+    for (const e of errors) deps.io.err(`ERROR: ${e}`)
+    return exitCode
+  }
+  if (p.json) {
+    deps.io.out(JSON.stringify(report, null, 2))
+    return exitCode
+  }
+  printDriftTable(deps, report)
+  return exitCode
+}
+
+function cmdAudit(deps: CliDeps, args: string[], fs: DriftFs): number {
+  const p = parseArgs(args)
+  const onlyLoop = p.loop ?? positionalLoop(args)
+  const now = new Date(deps.clock())
+  const { report, errors, exitCode } = buildAuditReport(deps.cwd, onlyLoop, now, fs)
+  if (errors.length > 0 || report === null) {
+    for (const e of errors) deps.io.err(`ERROR: ${e}`)
+    return exitCode
+  }
+  if (p.json) {
+    deps.io.out(JSON.stringify(report, null, 2))
+    return exitCode
+  }
+  printAuditTable(deps, report)
+  return exitCode
+}
+
 /**
  * loops 子命令分派（纯函数 + deps 注入 + fs 注入面）。
  * fs 缺省真 node fs（REAL_LOOPS_FS，读真 .pipeline/loops.yaml + progress + 在途 + 沙箱）；
- * mock 层注入 fake LoopsFs 快速回归，integration 走真 fs。
+ * driftFs 缺省 REAL_DRIFT_FS（#37 drift/audit：登记 + run-log + LOOP.md 镜像）。
+ * mock 层注入 fake LoopsFs/DriftFs 快速回归，integration 走真 fs。
  */
-export async function cmdLoops(deps: CliDeps, sub: string, args: string[], fs: LoopsFs = REAL_LOOPS_FS): Promise<number> {
+export async function cmdLoops(
+  deps: CliDeps,
+  sub: string,
+  args: string[],
+  fs: LoopsFs = REAL_LOOPS_FS,
+  driftFs: DriftFs = REAL_DRIFT_FS,
+): Promise<number> {
   const p = parseArgs(args)
   switch (sub || 'list') {
     case 'list':
@@ -304,8 +384,12 @@ export async function cmdLoops(deps: CliDeps, sub: string, args: string[], fs: L
       return cmdBudget(deps, args, fs)
     case 'cost':
       return cmdCost(deps, args, fs)
+    case 'drift':
+      return cmdDrift(deps, args, driftFs)
+    case 'audit':
+      return cmdAudit(deps, args, driftFs)
     default:
-      deps.io.err(`ERROR: 未知 loops 子命令: ${sub}（支持: list enforce status budget cost）`)
+      deps.io.err(`ERROR: 未知 loops 子命令: ${sub}（支持: list enforce status budget cost drift audit）`)
       return 1
   }
 }
