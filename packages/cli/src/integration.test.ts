@@ -116,11 +116,22 @@ describe('真实 e2e —— 全命令驱动真 kernel + 真 fs（GOAL C9）', ()
     expect(await h.read('demo')).toMatch(/^phase: open$/m)
   })
 
-  test('build-complete 真冻结 build_sha（gitHeadSha 注入）', async () => {
+  test('build-complete 真冻结 build_sha（喂足真实前置，忠实老内核 case 块）', async () => {
     await h.run(['init', 'demo', '--track', 'backend', '--preset', 'full'])
-    for (const ev of ['open-complete', 'explore-complete', 'spec-complete', 'build-complete']) {
-      await h.run(['transition', 'demo', ev])
-    }
+    // explore 出口：真建 design doc 并指向它（老仓 L120-126 要求非空+存在）
+    await writeFile(join(h.cwd, 'openspec/changes/demo/design.md'), '# design\n覆盖矩阵齐全\n', 'utf8')
+    await h.run(['set', 'demo', 'design_doc', 'openspec/changes/demo/design.md'])
+    await h.run(['transition', 'demo', 'open-complete'])
+    await rm(join(h.cwd, '.pipeline-pending-review'), { force: true })
+    await h.run(['transition', 'demo', 'explore-complete'])
+    await rm(join(h.cwd, '.pipeline-pending-review'), { force: true })
+    // spec 出口（backend）：真建 plan 并指向它（老仓 L127-138）
+    await writeFile(join(h.cwd, 'openspec/changes/demo/plan.md'), '# plan\n', 'utf8')
+    await h.run(['set', 'demo', 'plan', 'openspec/changes/demo/plan.md'])
+    await h.run(['transition', 'demo', 'spec-complete'])
+    // build 出口：build_mode + isolation 必设；full+direct 须显式 direct_override=true（老仓 L144-151）
+    await h.run(['set-many', 'demo', 'build_mode=direct', 'isolation=worktree', 'direct_override=true'])
+    expect(await h.run(['transition', 'demo', 'build-complete'])).toBe(0)
     expect(await h.read('demo')).toMatch(/^phase: verify$/m)
     expect(await h.read('demo')).toMatch(/^build_sha: DEADBEEF$/m)
   })
@@ -150,22 +161,40 @@ describe('真实 e2e —— 全命令驱动真 kernel + 真 fs（GOAL C9）', ()
     expect(payload.checks.length).toBeGreaterThan(0)
   })
 
-  test('全程 init→archive 七相位真跑通，落盘 archived=true', async () => {
+  test('全程 init→archive 七相位真跑通（喂足每相位真实前置，忠实老内核）', async () => {
+    const cd = join(h.cwd, 'openspec/changes/e2e')
     await h.run(['init', 'e2e', '--track', 'backend', '--preset', 'full', '--user', 'conv'])
-    const events = ['open-complete', 'explore-complete', 'spec-complete', 'build-complete', 'verify-pass', 'ship-complete', 'archived']
-    for (const ev of events) {
-      const code = await h.run(['transition', 'e2e', ev])
-      expect(code, `事件 ${ev} 应成功`).toBe(0)
-      // 每步清门 marker，模拟人工放行（真删真文件）
-      for (const k of ['confirm', 'review', 'interaction']) {
-        await rm(join(h.cwd, `.pipeline-pending-${k}`), { force: true })
-      }
+    const clearGates = async () => {
+      for (const k of ['confirm', 'review', 'interaction']) await rm(join(h.cwd, `.pipeline-pending-${k}`), { force: true })
     }
+    const step = async (ev: string) => {
+      const code = await h.run(['transition', 'e2e', ev])
+      expect(code, `事件 ${ev} 应成功；stderr=${h.err.join('|')}`).toBe(0)
+      await clearGates()
+    }
+    // 每相位出口前喂真实前置（老仓 state-transition.sh case 块要求）
+    await h.run(['transition', 'e2e', 'open-complete']); await clearGates()
+    await writeFile(join(cd, 'design.md'), '# design\n覆盖矩阵齐全\n', 'utf8')
+    await h.run(['set', 'e2e', 'design_doc', 'openspec/changes/e2e/design.md'])
+    await step('explore-complete')
+    await writeFile(join(cd, 'plan.md'), '# plan\n', 'utf8')
+    await h.run(['set', 'e2e', 'plan', 'openspec/changes/e2e/plan.md'])
+    await step('spec-complete')
+    await h.run(['set-many', 'e2e', 'build_mode=direct', 'isolation=worktree', 'direct_override=true'])
+    await step('build-complete')
+    // verify 出口：报告 + branch_status + 双 review pass + barrier（build_sha 已=DEADBEEF）
+    await writeFile(join(cd, 'verify.md'), '# verify\n', 'utf8')
+    await h.run(['set-many', 'e2e', 'verification_report=openspec/changes/e2e/verify.md', 'branch_status=handled', 'agent_review_result=pass', 'codex_review_result=pass'])
+    await step('verify-pass')
+    await step('ship-complete')
+    await step('archived')
     expect(await h.read('e2e')).toMatch(/^phase: archive$/m)
     expect(await h.read('e2e')).toMatch(/^archived: true$/m)
-    // 历史 JSONL 真记满 7 条 transition
-    const hist = await readFile(join(h.cwd, 'openspec/changes/e2e/.pipeline-history.jsonl'), 'utf8')
-    expect(hist.split('\n').filter((l) => l.includes('"kind":"transition"'))).toHaveLength(7)
+    // 历史 JSONL 真记满 7 条 transition，raw=事件名（#14 补）
+    const hist = await readFile(join(cd, '.pipeline-history.jsonl'), 'utf8')
+    const trans = hist.split('\n').filter((l) => l.includes('"kind":"transition"'))
+    expect(trans).toHaveLength(7)
+    expect(trans.some((l) => l.includes('"raw":"verify-pass"'))).toBe(true)
   })
 
   test('import 真迁移 base64 历史区（老仓 fixture）+ --strip 真清 YAML', async () => {

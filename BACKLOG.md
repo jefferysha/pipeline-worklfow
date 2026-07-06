@@ -8,8 +8,6 @@
 |---|---|---|---|
 | **M1** 内核深度 | | | |
 | 12 | guard 全量校验面：老仓 pipeline-guard.sh 逐相位出口规则全移植（lite 子集 → 全集，oracle 对齐 check） | M1 | 2d |
-| 13 | 门 TTL 分级恢复：confirm 300s / review·interaction 1800s（gate.sh + statusline + inbox 三处同步，退 15min 统一简化） | M1 | 0.5d |
-| 14 | transition 全副作用面：state-transition.sh case 块逐字盘点补齐（现仅 4 事件） | M1 | 1d |
 | 15 | task lifecycle：add-dep/children/cascade/canonical | M1 | 2d |
 | 16 | living-spec：specs/set-spec-scope/inject-jsonl | M1 | 2d |
 | 17 | session：activate/route-context | M1 | 1d |
@@ -73,3 +71,8 @@
 | 2026-07-06 | #9b `inbox --html` 静态单页（iteration-6） | 收编：自足零依赖单页 + 注入转义，vitest 223/223 |
 | 2026-07-06 | #10 statusline（iteration-7） | 收编：纯 bash 零解释器，hooks 55/55 |
 | 2026-07-06 | #11 老仓导入工具（iteration-8） | 收编：43 条真实历史迁移 + --strip 清理 + 幂等哨兵，vitest 232/232 |
+| 2026-07-06 | #12 guard 全量校验面（iteration-10） | 收编：46 规则盘点 + 老 guard verdict 逐字一致，vitest 274/274 |
+| 2026-07-07 | #20/#22/#23/#26b 批次1（iteration-11） | 收编：SessionStart 三注入 + 14 skills/4 agents + doctor 健康面，vitest 292/292 |
+| 2026-07-07 | 真实测试层 C9/C10（iteration-12） | 收编：integration.test.ts 零 mock 真 fs，抓出 3 真实问题，vitest 311/311 |
+| 2026-07-07 | #14 transition 全副作用（iteration-13） | 收编：老仓 case 块逐字 + 17 真 fs 例，oracle 0 不一致 |
+| 2026-07-07 | #13 门 TTL 分级（iteration-13） | 收编：confirm 300/review·interaction 1800，5 处同步 + 7 真 fs 例 |

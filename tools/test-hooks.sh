@@ -64,12 +64,55 @@ mkdir -p "$proj"
 touch "$proj/.pipeline-pending-review"
 touch -t 202001010000 "$proj/.pipeline-pending-review"
 run_gate "{\"cwd\":\"$proj\",\"tool_name\":\"Edit\"}"
-assert_exit "gate: 陈旧 marker（mtime≥15min）→ exit 0" 0 "$RC"
+assert_exit "gate: 远古陈旧 marker → exit 0" 0 "$RC"
 
 proj="$TMP/gate-none"
 mkdir -p "$proj"
 run_gate "{\"cwd\":\"$proj\",\"tool_name\":\"Bash\"}"
 assert_exit "gate: 无 marker → exit 0" 0 "$RC"
+
+# ───── 1a. 门 TTL 分级（BACKLOG #13，对齐老内核 pipeline-gate.sh：confirm 300s / review·interaction 1800s） ─────
+touch_age() { # $1=文件 $2=秒龄：把 mtime 设为 now-$2（BSD/GNU date 双兼容）
+  local ts
+  ts="$(date -v-"$2"S +%Y%m%d%H%M.%S 2>/dev/null || date -d "@$(( $(date +%s) - $2 ))" +%Y%m%d%H%M.%S 2>/dev/null)"
+  touch -t "$ts" "$1"
+}
+
+proj="$TMP/gate-ttl"
+mkdir -p "$proj"
+# confirm：TTL 300s——301s 陈旧（退掉 15min 统一简化的核心断言）
+touch "$proj/.pipeline-pending-confirm"; touch_age "$proj/.pipeline-pending-confirm" 301
+run_gate "{\"cwd\":\"$proj\",\"tool_name\":\"Write\"}"
+assert_exit "gate: confirm marker 301s → 陈旧 exit 0（TTL 300s）" 0 "$RC"
+[ ! -f "$proj/.pipeline-pending-confirm" ] \
+  && ok "gate: 陈旧 confirm marker 被顺手清掉" \
+  || bad "gate: 陈旧 confirm marker 被顺手清掉" "marker 仍存在"
+# confirm：250s 仍新鲜
+touch "$proj/.pipeline-pending-confirm"; touch_age "$proj/.pipeline-pending-confirm" 250
+run_gate "{\"cwd\":\"$proj\",\"tool_name\":\"Write\"}"
+assert_exit "gate: confirm marker 250s → 新鲜 exit 2" 2 "$RC"
+rm -f "$proj/.pipeline-pending-confirm"
+# review：TTL 1800s——301s 仍新鲜（决策 phase 常 >5min，不许被 300s 误清）
+touch "$proj/.pipeline-pending-review"; touch_age "$proj/.pipeline-pending-review" 301
+run_gate "{\"cwd\":\"$proj\",\"tool_name\":\"Edit\"}"
+assert_exit "gate: review marker 301s → 仍新鲜 exit 2（TTL 1800s）" 2 "$RC"
+# review：1000s（900<age<1800，直接证明 15min 统一简化已退场）仍新鲜
+touch_age "$proj/.pipeline-pending-review" 1000
+run_gate "{\"cwd\":\"$proj\",\"tool_name\":\"Edit\"}"
+assert_exit "gate: review marker 1000s → 仍新鲜 exit 2（>15min 也不失效）" 2 "$RC"
+# review：1801s 陈旧
+touch_age "$proj/.pipeline-pending-review" 1801
+run_gate "{\"cwd\":\"$proj\",\"tool_name\":\"Edit\"}"
+assert_exit "gate: review marker 1801s → 陈旧 exit 0" 0 "$RC"
+rm -f "$proj/.pipeline-pending-review"
+# interaction：TTL 1800s——301s 新鲜、1801s 陈旧
+touch "$proj/.pipeline-pending-interaction"; touch_age "$proj/.pipeline-pending-interaction" 301
+run_gate "{\"cwd\":\"$proj\",\"tool_name\":\"Write\"}"
+assert_exit "gate: interaction marker 301s → 仍新鲜 exit 2（TTL 1800s）" 2 "$RC"
+touch_age "$proj/.pipeline-pending-interaction" 1801
+run_gate "{\"cwd\":\"$proj\",\"tool_name\":\"Write\"}"
+assert_exit "gate: interaction marker 1801s → 陈旧 exit 0" 0 "$RC"
+rm -f "$proj/.pipeline-pending-interaction"
 
 # ─────────── 1b. PIPELINE_AFK=1 逃生门（BACKLOG #7b，老内核沙箱放行语义） ───────────
 proj="$TMP/gate-afk"
@@ -100,9 +143,21 @@ if [ -f "$SL" ]; then
   touch "$proj/.pipeline-pending-confirm"
   out="$(printf '{"cwd":"%s"}' "$proj" | bash "$SL" 2>/dev/null)"
   case "$out" in *等:confirm*) ok "statusline: 新鲜 marker 显示 等:confirm" ;; *) bad "statusline: 新鲜 marker 显示 等:confirm" "得到 '$out'" ;; esac
+  # 门 TTL 分级（BACKLOG #13）：confirm 301s 不显示；review 1000s（>15min 统一简化区间）仍显示；review 1801s 不显示
+  rm -f "$proj/.pipeline-pending-confirm"
+  touch "$proj/.pipeline-pending-confirm"; touch_age "$proj/.pipeline-pending-confirm" 301
+  out="$(printf '{"cwd":"%s"}' "$proj" | bash "$SL" 2>/dev/null)"
+  case "$out" in *等:confirm*) bad "statusline: confirm marker 301s 不显示（TTL 300s）" "得到 '$out'" ;; *) ok "statusline: confirm marker 301s 不显示（TTL 300s）" ;; esac
+  rm -f "$proj/.pipeline-pending-confirm"
+  touch "$proj/.pipeline-pending-review"; touch_age "$proj/.pipeline-pending-review" 1000
+  out="$(printf '{"cwd":"%s"}' "$proj" | bash "$SL" 2>/dev/null)"
+  case "$out" in *等:review*) ok "statusline: review marker 1000s 仍显示 等:review（TTL 1800s）" ;; *) bad "statusline: review marker 1000s 仍显示 等:review（TTL 1800s）" "得到 '$out'" ;; esac
+  touch_age "$proj/.pipeline-pending-review" 1801
+  out="$(printf '{"cwd":"%s"}' "$proj" | bash "$SL" 2>/dev/null)"
+  case "$out" in *等:review*) bad "statusline: review marker 1801s 不显示（陈旧）" "得到 '$out'" ;; *) ok "statusline: review marker 1801s 不显示（陈旧）" ;; esac
+  rm -f "$proj/.pipeline-pending-review"
   # archived change 不显示
   printf 'track: backend\nphase: archive\narchived: true\n' > "$proj/openspec/changes/demo/.pipeline.yaml"
-  rm -f "$proj/.pipeline-pending-confirm"
   out="$(printf '{"cwd":"%s"}' "$proj" | bash "$SL" 2>/dev/null)"
   [ -z "$out" ] && ok "statusline: archived change 不显示" || bad "statusline: archived change 不显示" "得到 '$out'"
 else

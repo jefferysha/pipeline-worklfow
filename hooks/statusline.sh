@@ -74,15 +74,16 @@ for f in "$ROOT"/openspec/changes/*/.pipeline.yaml; do
 done
 [ -n "$NAME" ] || exit 0
 
-# 新鲜（< 15min，同 gate.sh TTL）门 marker → 等:<kind>
-TTL=900
+# 新鲜门 marker → 等:<kind>。TTL 分级同 gate.sh / types.ts GATE_TTL_MS（BACKLOG #13，
+# 对齐老内核：confirm 300s / review·interaction 1800s；边界 age ≤ TTL 仍新鲜）。
 GATES=""
 now="$(date +%s)"
 for kind in confirm review interaction; do
   m="$ROOT/.pipeline-pending-$kind"
   [ -f "$m" ] || continue
+  case "$kind" in confirm) ttl=300 ;; *) ttl=1800 ;; esac
   mt="$(stat -f %m "$m" 2>/dev/null || stat -c %Y "$m" 2>/dev/null || echo "$now")"
-  [ $((now - mt)) -lt "$TTL" ] && GATES="$GATES · 等:$kind"
+  [ $((now - mt)) -le "$ttl" ] && GATES="$GATES · 等:$kind"
 done
 
 printf '%s · %s%s\n' "$NAME" "${PHASE:-?}" "$GATES"

@@ -3,14 +3,15 @@
  * 回答的唯一问题：「现在哪个 change 在等我做什么决定」（老仓 UI 病灶 2 的 lite 解法）。
  *
  * 两类来源，按等待时长降序：
- *   1. 项目根新鲜（< GATE_FRESH_MS，同 gate.sh TTL）三门 marker → gate:<kind>
+ *   1. 项目根新鲜（age ≤ GATE_TTL_MS[kind]，分级 TTL 同 gate.sh，BACKLOG #13
+ *      对齐老内核：confirm 300s / review·interaction 1800s）三门 marker → gate:<kind>
  *      （marker 三行格式：相位\n指引\nchange 名，transition 落、老内核同款）
  *   2. 复核相位（manifest.reviewPhases 单一真相源）且 phase_status ≠ done 的活跃
  *      change → phase-review（同名已有 marker 时 marker 优先，不重复列）
  * 坏 change 跳过 + WARN（fail-open）；exit 恒 0。
  */
 import { join } from 'node:path'
-import { GATE_FRESH_MS } from '@pipeline-lite/kernel'
+import { GATE_TTL_MS } from '@pipeline-lite/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
 import { str } from '../render.js'
 
@@ -77,10 +78,10 @@ export async function cmdInbox(deps: CliDeps, opts: { json?: boolean; html?: boo
   const items: InboxItem[] = []
   const seen = new Set<string>()
 
-  // 1. 三门 marker（新鲜判定同 gate.sh）
+  // 1. 三门 marker（分级新鲜判定同 gate.sh：age > GATE_TTL_MS[kind] 才陈旧，边界仍新鲜）
   const markers = (await deps.readGateMarkers?.()) ?? []
   for (const m of markers) {
-    if (m.ageMs >= GATE_FRESH_MS) continue
+    if (m.ageMs > GATE_TTL_MS[m.kind]) continue
     const [phase = '?', hint = '', name = '?'] = m.raw.split('\n')
     items.push({
       name,

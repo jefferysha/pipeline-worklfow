@@ -25,7 +25,11 @@
 - 合法转换与 `review_phases` 由 `templates/manifest.yaml` 派生（**引擎侧真读该字段**——
   这是对老内核 state-transition.sh 硬编码欠账的构造性修复）。
 - 门 marker 文件（项目根）：`.pipeline-pending-confirm` / `-review` / `-interaction`，
-  存在且 mtime < 15min 视为新鲜 → hook 拦截。语义与老内核一致。
+  存在且 age ≤ 分级 TTL 视为新鲜 → hook 拦截；陈旧 marker 由 gate.sh 顺手清除。
+  TTL 分级（BACKLOG #13，对齐老内核 pipeline-gate.sh；TS 侧单一数值真相源
+  `types.ts GATE_TTL_MS`，bash 侧 gate.sh/statusline.sh/session-start.sh 镜像）：
+  **confirm 300s**（漏确认安全网，爆炸半径 5min）；**review / interaction 1800s**（跨整个
+  决策 phase，缩短会中途误清 → 绕过强制复核）。边界同老内核：age > TTL 才陈旧。
 
 ## 3. CLI 面（`pipeline <cmd>`）与输出契约
 
@@ -46,9 +50,10 @@ get/set/transition 的 stdout 与 exit code 以 **golden-oracle 双跑逐字一�
 > 2026-07-06 oracle 实测回写（iteration-1，plan 风险条款授权）：init/get/transition 三行已按老内核
 > 实测行为修订（原表为文档口径，实测 init stdout 为空、get 缺失字段=空行+0、transition 走 stderr
 > 且非法=1）。**有意差异白名单**（oracle 比对时豁免并在报告标注）：① `check <name>` 单参签名
-> （老内核 `check <name> <phase>`，lite 委托 guardCheck 查当前相位）；② 门 marker TTL 统一 15min
-> （老内核 confirm=300s / review·interaction=1800s）；③ transition stderr 无 ANSI 颜色；
-> ④ build⇄verify 的自动副作用改显式 set（见 flow 模块头注）。
+> （老内核 `check <name> <phase>`，lite 委托 guardCheck 查当前相位）；② transition stderr 无 ANSI 颜色。
+> （已消除的旧白名单：门 marker TTL —— iteration-13 #13 恢复分级 confirm 300s / review·interaction
+> 1800s，与老内核一致，不再是差异；build⇄verify 自动副作用 —— iteration-10/13 #14 已逐字实现老仓
+> 事件体副作用，不再靠出口补偿。）
 
 ## 4. 目录所有权（并行 agent 只写自己的格子）
 

@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 # gate.sh — PreToolUse 统一交互门（lite 版，语义对齐老内核 pipeline-gate.sh）。
 #
-# 机制：项目根存在新鲜（mtime < 15min，CONTRACT §2 / types.ts GATE_FRESH_MS）的
+# 机制：项目根存在新鲜（TTL 分级，CONTRACT §2 / types.ts GATE_TTL_MS）的
 #   .pipeline-pending-{confirm,review,interaction} 任一 marker → exit 2 + stderr 中文指引；
 #   无 marker / 陈旧（顺手清掉）→ exit 0。
+# TTL 分级（BACKLOG #13，对齐老内核 pipeline-gate.sh，勿改回统一值）：
+#   - confirm 300s：正常流程同轮 AskUserQuestion 即清（秒级），300s 只是「漏确认」安全网。
+#   - review / interaction 1800s：跨整个决策 phase（常 >5min），缩短会中途误清 → 绕过强制复核。
 # marker 从 stdin JSON 的 cwd 起上溯至多 5 层查找——marker 写在项目根，
 #   而工具 cwd 可能是子目录（老内核同款不对称 bug 的修复，勿删）。
 # 纯 bash 热路径（CONTRACT §5.4）：不 spawn 任何解释器/外部 JSON 解析器，
@@ -48,15 +51,14 @@ CWD="$(json_get cwd || true)"
 TOOL="$(json_get tool_name || true)"
 [ -z "$TOOL" ] && TOOL="?"
 
-TTL=900   # 15min，同 types.ts GATE_FRESH_MS
-
-# marker 新鲜？存在且 mtime 距今 < TTL → 0；陈旧 → 清掉并 1；不存在 → 1。
+# marker 新鲜？存在且 age ≤ TTL（第 2 参，秒；缺省 1800）→ 0；陈旧（age > TTL）→ 清掉并 1；不存在 → 1。
+# 边界与老内核 fresh() 一致：-gt 才陈旧（age == TTL 仍新鲜）。TTL 值同 types.ts GATE_TTL_MS。
 fresh() {
-  local m="$1" now mt
+  local m="$1" ttl="${2:-1800}" now mt
   [ -f "$m" ] || return 1
   now="$(date +%s)"
   mt="$(stat -f %m "$m" 2>/dev/null || stat -c %Y "$m" 2>/dev/null || echo "$now")"
-  if [ $((now - mt)) -ge "$TTL" ]; then
+  if [ $((now - mt)) -gt "$ttl" ]; then
     rm -f "$m" 2>/dev/null
     return 1
   fi
@@ -78,7 +80,8 @@ for kind in confirm review interaction; do
   base=".pipeline-pending-$kind"
   m="$(resolve_marker "$base" || true)"
   [ -n "$m" ] || continue
-  if fresh "$m"; then
+  case "$kind" in confirm) ttl=300 ;; *) ttl=1800 ;; esac
+  if fresh "$m" "$ttl"; then
     printf '【pipeline 门】检测到待处理交互标记 %s（%s 已被拦截）：请先用 AskUserQuestion 把当前决策/产出交用户确认，用户答复后自动解封再重发本次操作；若用户已明示无需确认，删除 %s 即可放行。\n' "$base" "$TOOL" "$m" >&2
     exit 2
   fi

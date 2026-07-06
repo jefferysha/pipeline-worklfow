@@ -24,8 +24,26 @@ export type Phase = (typeof PHASES)[number]
 export const TRACKS = ['chat', 'pm', 'frontend', 'backend'] as const
 export type Track = (typeof TRACKS)[number]
 
-/** 门 marker 文件名（项目根），mtime < GATE_FRESH_MS 视为新鲜 */
+/** 门 marker 文件名（项目根），age ≤ GATE_TTL_MS[kind] 视为新鲜（age > TTL 才陈旧，同老内核 fresh()） */
 export const GATE_MARKERS = ['.pipeline-pending-confirm', '.pipeline-pending-review', '.pipeline-pending-interaction'] as const
+
+/**
+ * 门 marker TTL 分级（BACKLOG #13，对齐老内核 pipeline-gate.sh，勿改回统一值）：
+ *   - confirm 300s：正常流程同轮 AskUserQuestion 即清（秒级），300s 只是「漏确认」安全网，
+ *     把残留误判的爆炸半径从 30 分钟降到 5 分钟。
+ *   - review / interaction 1800s：要跨整个决策 phase（explore/spec/verify 常 >5min），
+ *     若缩到 300s 会在 phase 中途被 fresh 判定清掉 → 绕过强制复核。
+ * bash 侧镜像：hooks/gate.sh、hooks/statusline.sh（纯 bash 红线，无法 import——改这里必须同步改那边）。
+ */
+export const GATE_TTL_MS = {
+  confirm: 300_000,
+  review: 1_800_000,
+  interaction: 1_800_000,
+} as const satisfies Record<GateKind, number>
+
+export type GateKind = 'confirm' | 'review' | 'interaction'
+
+/** @deprecated BACKLOG #13 起门 TTL 分级（见 GATE_TTL_MS），统一 15min 仅为旧调用面向后兼容保留 */
 export const GATE_FRESH_MS = 15 * 60 * 1000
 
 export interface PipelineState {

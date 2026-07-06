@@ -12,7 +12,7 @@
  * 探针自身异常 → 该项折算 red（doctor 是降级的观测者，自己不许静默降级）。
  */
 import { join } from 'node:path'
-import { GATE_FRESH_MS } from '@pipeline-lite/kernel'
+import { GATE_TTL_MS } from '@pipeline-lite/kernel'
 import { errMsg, type CliDeps, type DoctorProbes } from '../deps.js'
 import { changesRoot } from '../paths.js'
 
@@ -149,12 +149,13 @@ async function checkChanges(deps: CliDeps): Promise<DoctorCheck> {
 
 async function checkMarkers(deps: CliDeps): Promise<DoctorCheck> {
   const markers = (await deps.readGateMarkers?.()) ?? []
-  const stale = markers.filter((m) => m.ageMs >= GATE_FRESH_MS)
+  // 分级 TTL（BACKLOG #13，同 gate.sh / GATE_TTL_MS）：confirm 300s / review·interaction 1800s
+  const stale = markers.filter((m) => m.ageMs > GATE_TTL_MS[m.kind])
   if (stale.length > 0) {
     return yellow(
       'project:markers',
-      `陈旧门 marker（已过 ${GATE_FRESH_MS / 60_000}min TTL，不再拦截）: ${stale
-        .map((m) => `.pipeline-pending-${m.kind}`)
+      `陈旧门 marker（已过各自分级 TTL，不再拦截）: ${stale
+        .map((m) => `.pipeline-pending-${m.kind}（${Math.round(GATE_TTL_MS[m.kind] / 60_000)}min）`)
         .join('、')}`,
       'rm 对应 marker 即可（下次工具调用 gate.sh 也会顺手清掉）',
     )

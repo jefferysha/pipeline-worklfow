@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { GATE_FRESH_MS } from '@pipeline-lite/kernel'
+import { GATE_TTL_MS } from '@pipeline-lite/kernel'
 import { cmdInbox } from './inbox.js'
 import { makeDeps, mockState } from '../test-support.js'
 
@@ -29,12 +29,44 @@ describe('inbox —— 等待人工决策的 change 清单（BACKLOG #9a）', ()
     ])
   })
 
-  test('陈旧 marker（≥ GATE_FRESH_MS）不进收件箱', async () => {
+  test('陈旧 marker（age > 各自 TTL）不进收件箱', async () => {
     const deps = makeDeps({
-      gateMarkers: [{ kind: 'review', ageMs: GATE_FRESH_MS, raw: 'spec\nx\ndemo\n' }],
+      gateMarkers: [
+        { kind: 'confirm', ageMs: GATE_TTL_MS.confirm + 1, raw: 'open\nx\nc1\n' },
+        { kind: 'review', ageMs: GATE_TTL_MS.review + 1, raw: 'spec\nx\ndemo\n' },
+        { kind: 'interaction', ageMs: GATE_TTL_MS.interaction + 1, raw: 'build\nx\ni1\n' },
+      ],
     })
     await cmdInbox(deps, { json: true })
     expect(JSON.parse(deps.outLines.join('\n'))).toEqual({ inbox: [] })
+  })
+
+  test('门 TTL 分级（BACKLOG #13，对齐老内核）：GATE_TTL_MS = confirm 300s / review·interaction 1800s', () => {
+    expect(GATE_TTL_MS).toEqual({ confirm: 300_000, review: 1_800_000, interaction: 1_800_000 })
+  })
+
+  test('分级新鲜判定：confirm 301s 陈旧，review/interaction 301s 仍新鲜（含 >15min 区间）', async () => {
+    const deps = makeDeps({
+      gateMarkers: [
+        { kind: 'confirm', ageMs: 301_000, raw: 'open\n请确认\nc1\n' },
+        { kind: 'review', ageMs: 301_000, raw: 'spec\n复核\nr1\n' },
+        { kind: 'interaction', ageMs: 1_000_000, raw: 'build\n交互\ni1\n' }, // 1000s > 老 15min 统一 TTL
+      ],
+    })
+    expect(await cmdInbox(deps, { json: true })).toBe(0)
+    const payload = JSON.parse(deps.outLines.join('\n')) as { inbox: Array<{ name: string; waiting_on: string }> }
+    expect(payload.inbox.map((i) => i.waiting_on).sort()).toEqual(['gate:interaction', 'gate:review'])
+    expect(payload.inbox.map((i) => i.name).sort()).toEqual(['i1', 'r1'])
+  })
+
+  test('TTL 边界：age === TTL 仍新鲜（老内核 fresh 判定为 age > ttl 才陈旧）', async () => {
+    const deps = makeDeps({
+      gateMarkers: [{ kind: 'confirm', ageMs: GATE_TTL_MS.confirm, raw: 'open\n请确认\nc1\n' }],
+    })
+    await cmdInbox(deps, { json: true })
+    const payload = JSON.parse(deps.outLines.join('\n')) as { inbox: Array<{ waiting_s: number }> }
+    expect(payload.inbox).toHaveLength(1)
+    expect(payload.inbox[0]?.waiting_s).toBe(300)
   })
 
   test('复核相位（manifest.reviewPhases 单一真相源）且未 done 的 change 列为 phase-review', async () => {

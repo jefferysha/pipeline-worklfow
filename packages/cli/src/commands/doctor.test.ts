@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { GATE_FRESH_MS } from '@pipeline-lite/kernel'
+import { GATE_TTL_MS } from '@pipeline-lite/kernel'
 import { cmdDoctor, type DoctorCheck } from './doctor.js'
 import { buildProgram, CliExit } from '../program.js'
 import { makeDeps, mockState, type TestDeps } from '../test-support.js'
@@ -166,9 +166,10 @@ describe('doctor —— 统一健康面（BACKLOG #26b，GOAL B8 降级可见 / 
     expect(c.detail).not.toContain('ok-change')
   })
 
-  test('project:markers 黄灯：陈旧门 marker（≥ TTL）→ 清理指引；新鲜 marker → 绿灯', async () => {
+  test('project:markers 黄灯：陈旧门 marker（age > 分级 TTL）→ 清理指引；新鲜 marker → 绿灯', async () => {
     const stale = makeDeps({
-      gateMarkers: [{ kind: 'review', ageMs: GATE_FRESH_MS, raw: 'spec\nx\ndemo\n' }],
+      // review 分级 TTL=1800s；超一点即陈旧（#13 分级，非旧统一 15min）
+      gateMarkers: [{ kind: 'review', ageMs: GATE_TTL_MS.review + 1, raw: 'spec\nx\ndemo\n' }],
     })
     const { code, payload } = await runJson(stale)
     expect(code).toBe(0)

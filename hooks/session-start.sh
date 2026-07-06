@@ -85,14 +85,16 @@ if [ -n "$OS_ROOT" ] && [ -d "$OS_ROOT/openspec/changes" ]; then
     CTX="${CTX}  - ${name}（track=${track:-?}, phase=${phase:-?}）
 "
   done
-  # 新鲜（< 15min，同 gate.sh TTL）门 marker → 等:<kind>
+  # 新鲜门 marker → 等:<kind>。TTL 分级同 gate.sh / types.ts GATE_TTL_MS（BACKLOG #13，
+  # 对齐老内核：confirm 300s / review·interaction 1800s；边界 age ≤ TTL 仍新鲜）。
   GATES=""
   now="$(date +%s)"
   for kind in confirm review interaction; do
     m="$OS_ROOT/.pipeline-pending-$kind"
     [ -f "$m" ] || continue
+    case "$kind" in confirm) ttl=300 ;; *) ttl=1800 ;; esac
     mt="$(stat -f %m "$m" 2>/dev/null || stat -c %Y "$m" 2>/dev/null || echo "$now")"
-    [ $((now - mt)) -lt 900 ] && GATES="$GATES 等:$kind"
+    [ $((now - mt)) -le "$ttl" ] && GATES="$GATES 等:$kind"
   done
   if [ -n "$CTX" ]; then
     printf '\n[pipeline 上下文 — %s] 活跃 change：\n%s' "$OS_ROOT" "$CTX"

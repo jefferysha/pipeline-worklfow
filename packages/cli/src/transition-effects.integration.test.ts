@@ -1,0 +1,313 @@
+/**
+ * 真实 e2e —— transition 全副作用面（BACKLOG #14，GOAL C9 无伪测试）。
+ * 零 mock：freshHarness 真临时项目，真跑 init/set/transition，断言真实落盘的
+ * .pipeline.yaml 字段值 + .pipeline-history.jsonl。真相源 = 老仓
+ * skills/pipeline/scripts/state-transition.sh cmd_transition 的 case 块（行号见
+ * commands/transition.ts 顶部盘点表）：
+ *   explore-complete   校验 design_doc 非空/非 null/文件存在（老仓 L120-126）
+ *   spec-complete      track≠pm 校验 plan（L127-138）
+ *   build-complete     build_mode/isolation 已设 + isolation 枚举 + full·direct→
+ *                      direct_override=true + build_sha 冻结（L139-162）
+ *   verify-pass        verification_report / branch_status=handled / 非 pm 双 review=pass /
+ *                      barrier HEAD==build_sha + verify_result=pass + verified_at（L163-205）
+ *   verify-fail        verify_result=fail + build_sha=null + phase_status=in_progress（L206-211）
+ *   archived           archived=true + archived_at + phase_status=done（L212-218）
+ * 校验失败 = exit 1 + ERROR 走 stderr + .pipeline.yaml 字节不变（老仓 case 校验先于任何写）。
+ */
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { dirname, join } from 'node:path'
+import { afterEach, beforeEach, describe, expect, test } from 'vitest'
+import { FIXED_CLOCK, freshHarness, rm, type Harness } from './integration-harness.js'
+
+let h: Harness
+
+beforeEach(async () => {
+  h = await freshHarness()
+})
+
+afterEach(async () => {
+  await rm(h.cwd, { recursive: true, force: true })
+})
+
+/** 在临时项目里真建一个文件（字段指向的 design/plan/report 产物） */
+async function seed(rel: string, content = '# doc\n'): Promise<void> {
+  const p = join(h.cwd, rel)
+  await mkdir(dirname(p), { recursive: true })
+  await writeFile(p, content, 'utf8')
+}
+
+/** 直改落盘 yaml 的单行字段（绕过 set 闸，构造 transition 防线的脏输入） */
+async function corruptField(name: string, field: string, value: string): Promise<void> {
+  const p = join(h.cwd, 'openspec', 'changes', name, '.pipeline.yaml')
+  const yaml = await readFile(p, 'utf8')
+  const next = yaml.replace(new RegExp(`^${field}: .*$`, 'm'), `${field}: ${value}`)
+  expect(next).not.toBe(yaml) // 保证真的改到了
+  await writeFile(p, next, 'utf8')
+}
+
+/** 按老仓 case 块前置，把 change 从 open 推进到目标相位（步骤对齐 oracle backend-full fixture） */
+async function advanceTo(name: string, phase: 'explore' | 'spec' | 'build' | 'verify' | 'ship'): Promise<void> {
+  expect(await h.run(['transition', name, 'open-complete'])).toBe(0)
+  if (phase === 'explore') return
+  await seed('docs/design.md')
+  await h.run(['set', name, 'design_doc', 'docs/design.md'])
+  expect(await h.run(['transition', name, 'explore-complete'])).toBe(0)
+  if (phase === 'spec') return
+  await seed('docs/plan.md')
+  await h.run(['set', name, 'plan', 'docs/plan.md'])
+  expect(await h.run(['transition', name, 'spec-complete'])).toBe(0)
+  if (phase === 'build') return
+  await h.run(['set', name, 'build_mode', 'direct'])
+  await h.run(['set', name, 'isolation', 'worktree'])
+  await h.run(['set', name, 'direct_override', 'true'])
+  expect(await h.run(['transition', name, 'build-complete'])).toBe(0)
+  if (phase === 'verify') return
+  await seed('docs/verify.md')
+  await h.run(['set', name, 'verification_report', 'docs/verify.md'])
+  await h.run(['set', name, 'branch_status', 'handled'])
+  await h.run(['set', name, 'agent_review_result', 'pass'])
+  await h.run(['set', name, 'codex_review_result', 'pass'])
+  expect(await h.run(['transition', name, 'verify-pass'])).toBe(0)
+}
+
+describe('真实 e2e —— explore-complete 校验（老仓 L120-126）', () => {
+  test('design_doc 未设（字面 null）真拒：exit 1、ERROR 对齐老仓、yaml 字节不变', async () => {
+    await h.run(['init', 'demo', '--track', 'backend', '--preset', 'full'])
+    await h.run(['transition', 'demo', 'open-complete'])
+    const before = await h.read('demo')
+    expect(await h.run(['transition', 'demo', 'explore-complete'])).toBe(1)
+    expect(h.err).toContain('ERROR: explore-complete 要求 design_doc 字段非空且文件存在 (当前=null)')
+    expect(h.out).toEqual([])
+    expect(await h.read('demo')).toBe(before) // 校验先于任何写：字节不变
+  })
+
+  test('design_doc 指向不存在文件真拒：exit 1，相位停在 explore', async () => {
+    await h.run(['init', 'demo', '--track', 'backend', '--preset', 'full'])
+    await h.run(['transition', 'demo', 'open-complete'])
+    await h.run(['set', 'demo', 'design_doc', 'docs/nope.md']) // 不建文件
+    expect(await h.run(['transition', 'demo', 'explore-complete'])).toBe(1)
+    expect(h.err).toContain('ERROR: explore-complete 要求 design_doc 字段非空且文件存在 (当前=docs/nope.md)')
+    expect(await h.read('demo')).toMatch(/^phase: explore$/m)
+  })
+
+  test('design_doc 真文件满足 → exit 0，phase=spec + phase_status=pending 落盘', async () => {
+    await h.run(['init', 'demo', '--track', 'backend', '--preset', 'full'])
+    await h.run(['transition', 'demo', 'open-complete'])
+    await seed('docs/design.md')
+    await h.run(['set', 'demo', 'design_doc', 'docs/design.md'])
+    expect(await h.run(['transition', 'demo', 'explore-complete'])).toBe(0)
+    const yaml = await h.read('demo')
+    expect(yaml).toMatch(/^phase: spec$/m)
+    expect(yaml).toMatch(/^phase_status: pending$/m)
+  })
+})
+
+describe('真实 e2e —— spec-complete 校验（老仓 L127-138）', () => {
+  test('backend track 无 plan 真拒：exit 1，ERROR 带 track 名', async () => {
+    await h.run(['init', 'demo', '--track', 'backend', '--preset', 'full'])
+    await advanceTo('demo', 'spec')
+    expect(await h.run(['transition', 'demo', 'spec-complete'])).toBe(1)
+    expect(h.err).toContain('ERROR: backend track spec-complete 要求 plan 字段非空且文件存在 (当前=null)')
+    expect(await h.read('demo')).toMatch(/^phase: spec$/m)
+  })
+
+  test('pm track 豁免 plan：无 plan 也 exit 0（老仓 L132 分支 + oracle pm-history 同款）', async () => {
+    await h.run(['init', 'pmx', '--track', 'pm', '--preset', 'full'])
+    await advanceTo('pmx', 'spec')
+    expect(await h.run(['transition', 'pmx', 'spec-complete'])).toBe(0)
+    expect(await h.read('pmx')).toMatch(/^phase: build$/m)
+  })
+})
+
+describe('真实 e2e —— build-complete 校验 + build_sha 冻结（老仓 L139-162）', () => {
+  test('缺 build_mode → 缺 isolation → 逐个解锁（首错优先序对齐老仓）', async () => {
+    await h.run(['init', 'demo', '--track', 'backend', '--preset', 'full'])
+    await advanceTo('demo', 'build')
+    expect(await h.run(['transition', 'demo', 'build-complete'])).toBe(1)
+    expect(h.err).toContain('ERROR: build_mode 必须设置')
+    await h.run(['set', 'demo', 'build_mode', 'direct'])
+    expect(await h.run(['transition', 'demo', 'build-complete'])).toBe(1)
+    expect(h.err).toContain('ERROR: isolation 必须设置')
+    expect(await h.read('demo')).toMatch(/^phase: build$/m)
+  })
+
+  test('isolation 非法枚举（绕过 set 闸直改 yaml）→ transition 防线仍拒：exit 1', async () => {
+    await h.run(['init', 'demo', '--track', 'backend', '--preset', 'full'])
+    await advanceTo('demo', 'build')
+    await h.run(['set', 'demo', 'build_mode', 'direct'])
+    await h.run(['set', 'demo', 'isolation', 'branch'])
+    await h.run(['set', 'demo', 'direct_override', 'true'])
+    await corruptField('demo', 'isolation', 'bogus')
+    expect(await h.run(['transition', 'demo', 'build-complete'])).toBe(1)
+    expect(h.err).toContain("ERROR: 非法值 'bogus'，允许: branch worktree")
+  })
+
+  test('full preset + build_mode=direct 必须显式 direct_override=true，补设后冻结 build_sha', async () => {
+    await h.run(['init', 'demo', '--track', 'backend', '--preset', 'full'])
+    await advanceTo('demo', 'build')
+    await h.run(['set', 'demo', 'build_mode', 'direct'])
+    await h.run(['set', 'demo', 'isolation', 'worktree'])
+    expect(await h.run(['transition', 'demo', 'build-complete'])).toBe(1)
+    expect(h.err).toContain('ERROR: full workflow 使用 build_mode=direct 必须显式设 direct_override=true')
+    expect(await h.read('demo')).toMatch(/^build_sha: null$/m) // 拒绝时不冻结
+    await h.run(['set', 'demo', 'direct_override', 'true'])
+    expect(await h.run(['transition', 'demo', 'build-complete'])).toBe(0)
+    const yaml = await h.read('demo')
+    expect(yaml).toMatch(/^phase: verify$/m)
+    expect(yaml).toMatch(/^build_sha: DEADBEEF$/m) // harness gitHeadSha 定桩
+  })
+
+  test('hotfix preset + direct 不要求 direct_override（规则只锁 full）', async () => {
+    await h.run(['init', 'demo', '--track', 'backend', '--preset', 'hotfix'])
+    await advanceTo('demo', 'build')
+    await h.run(['set', 'demo', 'build_mode', 'direct'])
+    await h.run(['set', 'demo', 'isolation', 'branch'])
+    expect(await h.run(['transition', 'demo', 'build-complete'])).toBe(0)
+    expect(await h.read('demo')).toMatch(/^phase: verify$/m)
+  })
+})
+
+describe('真实 e2e —— verify-pass 校验 + 副作用（老仓 L163-205）', () => {
+  test('四前置逐个解锁：report → branch_status → agent → codex（首错优先序对齐老仓）', async () => {
+    await h.run(['init', 'demo', '--track', 'backend', '--preset', 'full'])
+    await advanceTo('demo', 'verify')
+    expect(await h.run(['transition', 'demo', 'verify-pass'])).toBe(1)
+    expect(h.err).toContain('ERROR: verify-pass 要求 verification_report 字段非空且文件存在 (当前=null)')
+    await seed('docs/verify.md')
+    await h.run(['set', 'demo', 'verification_report', 'docs/verify.md'])
+    expect(await h.run(['transition', 'demo', 'verify-pass'])).toBe(1)
+    expect(h.err).toContain('ERROR: verify-pass 要求 branch_status=handled (当前=pending)')
+    await h.run(['set', 'demo', 'branch_status', 'handled'])
+    expect(await h.run(['transition', 'demo', 'verify-pass'])).toBe(1)
+    expect(h.err).toContain('ERROR: backend track 要求 agent_review_result=pass (当前=pending)')
+    await h.run(['set', 'demo', 'agent_review_result', 'pass'])
+    expect(await h.run(['transition', 'demo', 'verify-pass'])).toBe(1)
+    expect(h.err).toContain('ERROR: backend track 要求 codex_review_result=pass (当前=pending)')
+    await h.run(['set', 'demo', 'codex_review_result', 'pass'])
+    expect(await h.run(['transition', 'demo', 'verify-pass'])).toBe(0)
+    const yaml = await h.read('demo')
+    expect(yaml).toMatch(/^phase: ship$/m)
+    expect(yaml).toMatch(/^verify_result: pass$/m)
+    expect(yaml).toMatch(new RegExp(`^verified_at: ${FIXED_CLOCK}$`, 'm'))
+  })
+
+  test('barrier：build_sha≠HEAD 真拒（双行 ERROR），yaml 字节不变', async () => {
+    await h.run(['init', 'demo', '--track', 'backend', '--preset', 'full'])
+    await advanceTo('demo', 'verify') // build_sha 已冻结 DEADBEEF
+    await seed('docs/verify.md')
+    await h.run(['set', 'demo', 'verification_report', 'docs/verify.md'])
+    await h.run(['set', 'demo', 'branch_status', 'handled'])
+    await h.run(['set', 'demo', 'agent_review_result', 'pass'])
+    await h.run(['set', 'demo', 'codex_review_result', 'pass'])
+    await corruptField('demo', 'build_sha', 'CAFEBABE') // 模拟 build 后偷改未复验
+    const before = await h.read('demo')
+    expect(await h.run(['transition', 'demo', 'verify-pass'])).toBe(1)
+    expect(h.err).toContain(
+      'ERROR: verify-pass 要求 HEAD==build_sha（build 后产物被改未复验）build_sha=CAFEBABE HEAD=DEADBEEF',
+    )
+    expect(h.err).toContain('  修复：要么把改动并入复验（重跑 build→verify），要么 verify-fail 回退后重新 build-complete 冻结新 SHA')
+    expect(await h.read('demo')).toBe(before)
+  })
+
+  test('barrier 退化：build_sha=null（非 git 仓语义）→ 跳过 SHA 校验，exit 0', async () => {
+    await h.run(['init', 'demo', '--track', 'backend', '--preset', 'full'])
+    await advanceTo('demo', 'verify')
+    await seed('docs/verify.md')
+    await h.run(['set', 'demo', 'verification_report', 'docs/verify.md'])
+    await h.run(['set', 'demo', 'branch_status', 'handled'])
+    await h.run(['set', 'demo', 'agent_review_result', 'pass'])
+    await h.run(['set', 'demo', 'codex_review_result', 'pass'])
+    await corruptField('demo', 'build_sha', 'null')
+    expect(await h.run(['transition', 'demo', 'verify-pass'])).toBe(0)
+    expect(await h.read('demo')).toMatch(/^phase: ship$/m)
+  })
+
+  test('pm track 豁免双 review（init 种 skipped 原样通过）', async () => {
+    await h.run(['init', 'pmx', '--track', 'pm', '--preset', 'full'])
+    expect(await h.run(['transition', 'pmx', 'open-complete'])).toBe(0)
+    await seed('docs/design.md')
+    await h.run(['set', 'pmx', 'design_doc', 'docs/design.md'])
+    expect(await h.run(['transition', 'pmx', 'explore-complete'])).toBe(0)
+    expect(await h.run(['transition', 'pmx', 'spec-complete'])).toBe(0) // pm 免 plan
+    await h.run(['set', 'pmx', 'build_mode', 'direct'])
+    await h.run(['set', 'pmx', 'isolation', 'branch'])
+    await h.run(['set', 'pmx', 'direct_override', 'true']) // full+direct 规则不分 track
+    expect(await h.run(['transition', 'pmx', 'build-complete'])).toBe(0)
+    await seed('docs/verify.md')
+    await h.run(['set', 'pmx', 'verification_report', 'docs/verify.md'])
+    await h.run(['set', 'pmx', 'branch_status', 'handled'])
+    // agent/codex 保持 init 的 skipped —— pm 不要求 pass
+    expect(await h.run(['transition', 'pmx', 'verify-pass'])).toBe(0)
+    const yaml = await h.read('pmx')
+    expect(yaml).toMatch(/^phase: ship$/m)
+    expect(yaml).toMatch(/^agent_review_result: skipped$/m)
+    expect(yaml).toMatch(/^verify_result: pass$/m)
+  })
+})
+
+describe('真实 e2e —— verify-fail / archived 副作用（老仓 L206-218）', () => {
+  test('verify-fail：verify_result=fail + build_sha=null + phase_status=in_progress + phase=build', async () => {
+    await h.run(['init', 'demo', '--track', 'backend', '--preset', 'full'])
+    await advanceTo('demo', 'verify')
+    expect(await h.read('demo')).toMatch(/^build_sha: DEADBEEF$/m) // 冻结在案
+    expect(await h.run(['transition', 'demo', 'verify-fail'])).toBe(0)
+    const yaml = await h.read('demo')
+    expect(yaml).toMatch(/^phase: build$/m)
+    expect(yaml).toMatch(/^phase_status: in_progress$/m)
+    expect(yaml).toMatch(/^verify_result: fail$/m)
+    expect(yaml).toMatch(/^build_sha: null$/m) // barrier 回退清空（ADR 0005）
+  })
+
+  test('archived：archived=true + archived_at=now + phase_status=done', async () => {
+    await h.run(['init', 'demo', '--track', 'backend', '--preset', 'full'])
+    await advanceTo('demo', 'ship')
+    expect(await h.run(['transition', 'demo', 'ship-complete'])).toBe(0)
+    expect(await h.run(['transition', 'demo', 'archived'])).toBe(0)
+    const yaml = await h.read('demo')
+    expect(yaml).toMatch(/^phase: archive$/m)
+    expect(yaml).toMatch(/^phase_status: done$/m)
+    expect(yaml).toMatch(/^archived: true$/m)
+    expect(yaml).toMatch(new RegExp(`^archived_at: ${FIXED_CLOCK}$`, 'm'))
+  })
+})
+
+describe('真实 e2e —— 跨命令串联 + 历史 JSONL（GOAL C10）', () => {
+  test('七相位全程（前置全喂足）：每条 transition 历史带事件名 raw（对齐老仓 transitions_history.event）', async () => {
+    await h.run(['init', 'e2e', '--track', 'backend', '--preset', 'full'])
+    await advanceTo('e2e', 'ship')
+    expect(await h.run(['transition', 'e2e', 'ship-complete'])).toBe(0)
+    expect(await h.run(['transition', 'e2e', 'archived'])).toBe(0)
+    const yaml = await h.read('e2e')
+    expect(yaml).toMatch(/^phase: archive$/m)
+    expect(yaml).toMatch(/^archived: true$/m)
+    const hist = await h.readIn('e2e', '.pipeline-history.jsonl')
+    const events = hist
+      .split('\n')
+      .filter((l) => l.includes('"kind":"transition"'))
+      .map((l) => (JSON.parse(l) as { raw?: string }).raw)
+    expect(events).toEqual([
+      'open-complete',
+      'explore-complete',
+      'spec-complete',
+      'build-complete',
+      'verify-pass',
+      'ship-complete',
+      'archived',
+    ])
+  })
+
+  test('verify-fail 回炉重跑：build-complete 重新冻结新 SHA 后 verify-pass 通过（老仓 barrier 修复路径）', async () => {
+    await h.run(['init', 'demo', '--track', 'backend', '--preset', 'full'])
+    await advanceTo('demo', 'verify')
+    expect(await h.run(['transition', 'demo', 'verify-fail'])).toBe(0) // → build，build_sha=null
+    expect(await h.run(['transition', 'demo', 'build-complete'])).toBe(0) // 前置字段仍在，重新冻结
+    expect(await h.read('demo')).toMatch(/^build_sha: DEADBEEF$/m)
+    await seed('docs/verify.md')
+    await h.run(['set', 'demo', 'verification_report', 'docs/verify.md'])
+    await h.run(['set', 'demo', 'branch_status', 'handled'])
+    await h.run(['set', 'demo', 'agent_review_result', 'pass'])
+    await h.run(['set', 'demo', 'codex_review_result', 'pass'])
+    expect(await h.run(['transition', 'demo', 'verify-pass'])).toBe(0)
+    expect(await h.read('demo')).toMatch(/^verify_result: pass$/m)
+  })
+})

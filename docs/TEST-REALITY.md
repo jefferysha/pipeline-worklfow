@@ -32,7 +32,8 @@
 | set | ✅ 写+history | ✅ 四闸拒写字节不变 | ✅ |
 | set-many | ✅ 真原子写+字段序 | — | — |
 | cas | ✅ 匹配写入 | ✅ 不匹配 exit 3 | ✅ |
-| transition | ✅ 改相位+marker+history | ✅ 非法 exit 1 | ✅ build_sha 冻结 / 七相位全程 |
+| transition | ✅ 改相位+marker+history+全副作用（#14，见 transition-effects.integration.test.ts 17 例） | ✅ 非法 exit 1 + 12 条前置校验路径 | ✅ 喂足真实前置的七相位全程 |
+| inbox TTL 分级 | ✅ inbox-ttl.integration.test.ts 7 例（真 mtime + 分级 300/1800s） | ✅ 边界 age>TTL | — |
 | check | ✅ guard 全量面真跑：不满足 exit 2 / 建 design doc 后 exit 0 | ✅ | ✅ |
 | inbox | ✅ --json 复核相位 | — | ✅ |
 | status/list | ✅ 真枚举 | — | ✅ |
