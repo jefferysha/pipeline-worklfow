@@ -125,3 +125,92 @@ describe('status —— 概览', () => {
     expect(out).toContain('report-only')
   })
 })
+
+// ── #36 budget/cost 子命令（token 预算 + circuit breaker + 成本估算）─────────────
+
+/** 一条 run-log 行（progress.md 5 列；note 内含 tokens=）。 */
+function tokenRow(ts: string, id: string, tokens: number): string {
+  return `| ${ts} | ${id} | run | 0 | result=ok tokens=${tokens} |`
+}
+
+/** 带 token 预算的 loop（LoopEntry.budget 追加可选 max_tokens_per_day/tokens_per_run）。 */
+function budgetLoop(maxTokens?: number, over: Partial<LoopEntry> = {}): LoopEntry {
+  return loop({ budget: { max_runs_per_day: 24, max_in_flight: 1, on_exceed: 'skip', max_tokens_per_day: maxTokens }, ...over })
+}
+
+describe('budget —— circuit breaker 状态（预算/花费/剩余）', () => {
+  test('未熔断（花费 < 80%）→ exit 0、输出含 breaker/ok + 花费数', async () => {
+    const deps = makeDeps()
+    const code = await cmdLoops(deps, 'budget', ['loop-be'], fakeFs({
+      loadRegistry: () => ({ data: { version: 1, loops: [budgetLoop(100000)] }, errors: [] }),
+      readProgress: () => [tokenRow('2026-07-06T09:00', 'loop-be', 50000)].join('\n'),
+    }))
+    expect(code).toBe(0)
+    const out = deps.outLines.join('\n')
+    expect(out).toContain('loop-be')
+    expect(out).toMatch(/ok/)
+    expect(out).toContain('50000')
+  })
+
+  test('花费超阈值 → 熔断 tripped → exit 2', async () => {
+    const deps = makeDeps()
+    const code = await cmdLoops(deps, 'budget', ['loop-be'], fakeFs({
+      loadRegistry: () => ({ data: { version: 1, loops: [budgetLoop(10000)] }, errors: [] }),
+      readProgress: () => [tokenRow('2026-07-06T09:00', 'loop-be', 12000)].join('\n'),
+    }))
+    expect(code).toBe(2)
+    expect(deps.outLines.join('\n')).toMatch(/tripped|熔断/)
+  })
+
+  test('--json：报告含 statuses + breaker + remaining', async () => {
+    const deps = makeDeps()
+    await cmdLoops(deps, 'budget', ['--json'], fakeFs({
+      loadRegistry: () => ({ data: { version: 1, loops: [budgetLoop(100000)] }, errors: [] }),
+      readProgress: () => [tokenRow('2026-07-06T09:00', 'loop-be', 50000)].join('\n'),
+    }))
+    const rep = JSON.parse(deps.outLines.join('\n'))
+    expect(rep.statuses[0].id).toBe('loop-be')
+    expect(rep.statuses[0].breaker).toBe('ok')
+    expect(rep.statuses[0].remaining).toBe(50000)
+  })
+
+  test('未知 --loop id → exit 3', async () => {
+    const deps = makeDeps()
+    expect(await cmdLoops(deps, 'budget', ['ghost'], fakeFs())).toBe(3)
+  })
+
+  test('registry 错误 → stderr + exit 3', async () => {
+    const deps = makeDeps()
+    expect(await cmdLoops(deps, 'budget', [], fakeFs({ loadRegistry: () => ({ data: null, errors: ['boom'] }) }))).toBe(3)
+    expect(deps.errLines.join('\n')).toContain('boom')
+  })
+})
+
+describe('cost —— 成本估算（cadence×pattern）', () => {
+  test('估算在预算内 → exit 0、输出含预估 token/日', async () => {
+    const deps = makeDeps()
+    const code = await cmdLoops(deps, 'cost', ['loop-be'], fakeFs({
+      loadRegistry: () => ({ data: { version: 1, loops: [budgetLoop(300000, { cadence: '1h', risk: 'medium' })] }, errors: [] }),
+    }))
+    expect(code).toBe(0)
+    expect(deps.outLines.join('\n')).toContain('192000') // 24×8000
+  })
+
+  test('估算超预算 → exit 1', async () => {
+    const deps = makeDeps()
+    const code = await cmdLoops(deps, 'cost', [], fakeFs({
+      loadRegistry: () => ({ data: { version: 1, loops: [budgetLoop(100000, { cadence: '1h', risk: 'high' })] }, errors: [] }),
+    }))
+    expect(code).toBe(1)
+  })
+
+  test('--json：报告含 estimates + estimatedTokensPerDay', async () => {
+    const deps = makeDeps()
+    await cmdLoops(deps, 'cost', ['--json'], fakeFs({
+      loadRegistry: () => ({ data: { version: 1, loops: [budgetLoop(300000, { cadence: '1h', risk: 'medium' })] }, errors: [] }),
+    }))
+    const rep = JSON.parse(deps.outLines.join('\n'))
+    expect(rep.estimates[0].estimatedTokensPerDay).toBe(192000)
+    expect(rep.estimates[0].runsPerDay).toBe(24)
+  })
+})

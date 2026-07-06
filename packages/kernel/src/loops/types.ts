@@ -19,11 +19,19 @@ export type LoopRisk = 'low' | 'medium' | 'high'
 /** 分级放权级别（loop-engineering 核心思想；缺省 L1）。 */
 export type AutonomyLevel = 'L1' | 'L2' | 'L3'
 
-/** 预算声明（老 loops.schema.json budget 76-93；#36 熔断执行面留后续）。 */
+/** 预算声明（老 loops.schema.json budget 76-93）。
+ * #36 追加可选 token 级预算（向后兼容，旧登记表无需改）：
+ *   · max_tokens_per_day —— token 预算/circuit breaker 硬阈值（累计今日花费达/超即熔断）。
+ *   · tokens_per_run     —— 成本估算 pattern 覆盖（每轮 token 足迹；缺省按 risk 预设）。
+ * 追踪/熔断/估算纯逻辑在 loops/budget.ts；本处仅声明字段类型。 */
 export interface LoopBudget {
   max_runs_per_day: number
   max_in_flight: number
   on_exceed: string
+  /** #36：token 预算硬阈值（circuit breaker）；缺省 = 无 token 预算（仅追踪花费）。 */
+  max_tokens_per_day?: number
+  /** #36：每轮 token 足迹（成本估算 pattern 覆盖）；缺省按 risk 预设。 */
+  tokens_per_run?: number
 }
 
 /** 登记表单条 loop（老 loops.schema.json loops.items 14-100 + 本轮 autonomy_level）。 */

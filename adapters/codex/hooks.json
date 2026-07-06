@@ -1,0 +1,26 @@
+{
+  "_comment": "Codex pipeline 适配器 hook 注册（档 A/B 全保真用）。结构 = Codex/CC 同构：顶层 hooks map → 事件名 → group 数组 → hooks:[{type:command,command}]。Codex 把 hook JSON 作为 argv 传给命令（命令行已带事件名占位 $1，JSON 落 $2），wrapper argv+stdin 双吃。__ADAPTER_DIR__ 由 install.sh 替换为绝对路径（Codex hooks.json 不保证展开 env，故装机时定死路径）。三 wrapper 薄包 lite baseline hooks/session-start.sh · gate.sh · skill-tracker.sh。",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          { "type": "command", "command": "bash \"__ADAPTER_DIR__/hooks/inject.sh\" SessionStart" }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          { "type": "command", "command": "bash \"__ADAPTER_DIR__/hooks/veto.sh\" PreToolUse" }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          { "type": "command", "command": "bash \"__ADAPTER_DIR__/hooks/track.sh\" PostToolUse" }
+        ]
+      }
+    ]
+  }
+}

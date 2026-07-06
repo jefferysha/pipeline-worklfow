@@ -54,7 +54,7 @@
 **竞品缺口（Comet / Trellis 对标分析的全部遗留）**
 - [x] B13 上下文压缩（#30 iteration-21）：phase handoff 确定性压缩（实测 45.4% > Comet 25-30%），零 LLM 可 oracle
 - [x] B14 auto-transition 中间档（#31 iteration-21）：`pipeline advance` guard 全绿自动推进、复核相位+三门必停（HITL 红线三重证明，> Comet AUTO-TRANSITION）
-- [ ] B15 Cursor 适配器转正 → M6
+- [x] B15 Cursor 适配器转正（#39 iteration-22）：spike→可发布，veto/track native + inject 降级 .cursor/rules，修「声明 track 却不写 history」病灶
 - [ ] B16 Trellis parity 收尾：8 partial + 1 missing → M6
 - [x] B17 npx 一行上手：5 分钟心智模型路径（iteration-4，Trellis 简单性教训的落实）
 
@@ -63,8 +63,8 @@
       （R1-R11 规则面 + budget/kill 判据）+ L1→L3 分级放权入 schema；执行流水审计 run-log 就绪
 - [ ] B19 分级放权 L1→L3：report-only → 人工门放行 → allowlist 自动合并，AFK 自动化必须从 L1
       毕业制升级（上游 Phased Rollout 思想 × 老仓 human gates）→ M5 前置
-- [ ] B20 token 预算与熔断：loop 级 budget 声明 + 超支 circuit breaker + 成本估算（上游
-      loop-cost/loop-context 思想）→ M-loop
+- [x] B20 token 预算与熔断（#36 iteration-22）：loop 级 token budget + circuit breaker（超阈值 tripped）
+      + 成本估算（cadence×pattern），扩展 #35 loops、enforce 零改动
 - [ ] B21 漂移检测与就绪审计：声明意图（LOOP 定义）vs 实际状态（STATE/流水）自动对账 +
       loop-ready 评分（上游 loop-sync/loop-audit 思想；老仓 TestLoopMdMirror 的推广）→ M-loop
 

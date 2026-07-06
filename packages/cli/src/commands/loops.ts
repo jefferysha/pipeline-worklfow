@@ -4,6 +4,9 @@
  *   list [--json]              登记表（老 /api/loops 数据面回显；缺文件→提示 exit 0，校验错→定位错误 exit 1）
  *   enforce [--loop id][--json] 跑 R1-R11 裁决出 verdict（老 loops_enforce main；exit 0 ok / 1 warn / 2 kill / 3 错误）
  *   status                     概览：逐 loop status + verdict + 分级放权 enforcement
+ *   budget [loop][--json]      #36 circuit breaker：run-log 今日累计 token 花费 vs max_tokens_per_day
+ *                              （exit 0 ok / 1 warn 减速线 / 2 tripped 熔断 / 3 错误；GOAL B20/D16）
+ *   cost [loop][--json]        #36 成本估算：cadence×pattern → 预估 token/日 vs 预算（超预算 exit 1）
  * stdout/exit 对齐老仓：数据/裁决走 stdout，error/定位错误走 stderr。--json 对齐老仓信封（+本轮 autonomy 字段）。
  *
  * 分级放权 L1→L3：schema 已纳入 autonomy_level（缺省 L1 report-only），enforce 认级别并在信封回显
@@ -17,9 +20,14 @@
 import { readFileSync, readdirSync } from 'node:fs'
 import { isAbsolute, join } from 'node:path'
 import {
+  buildBudgetReport,
+  buildCostReport,
   buildReport,
   enforcementFor,
   loadRegistry as kernelLoadRegistry,
+  type BudgetFs,
+  type BudgetReport,
+  type CostReport,
   type EnforceFs,
   type EnforceReport,
   type LoopEntry,
@@ -197,6 +205,87 @@ function cmdStatus(deps: CliDeps, fs: LoopsFs): number {
   return 0
 }
 
+// ── #36 budget / cost 子命令（token 预算 + circuit breaker + 成本估算）──────────────
+
+/** budget/cost 的 loop id：--loop 优先，否则第一个位置参数（不改共享 parseArgs，enforce 不受影响）。 */
+function positionalLoop(args: string[]): string | null {
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i]!
+    if (a === '--loop') { i++; continue } // 跳过其值
+    if (a.startsWith('--')) continue
+    return a
+  }
+  return null
+}
+
+/** BudgetFs 由 LoopsFs（=EnforceFs）适配：登记载入复用，run-log 读取复用 readProgress（progress.md）。 */
+function toBudgetFs(fs: LoopsFs): BudgetFs {
+  return { loadRegistry: fs.loadRegistry, readRunLog: fs.readProgress }
+}
+
+function printBudgetTable(deps: CliDeps, report: BudgetReport): void {
+  deps.io.out('[LOOPS budget · circuit breaker]')
+  for (const s of report.statuses) {
+    const max = s.maxTokensPerDay === null ? '(none)' : String(s.maxTokensPerDay)
+    const remaining = s.remaining === null ? '-' : String(s.remaining)
+    const enf = s.reportOnly ? 'report-only' : s.autonomyLevel === 'L2' ? 'assisted' : 'unattended'
+    deps.io.out(
+      `  ${pad(s.id, 16)} breaker=${pad(s.breaker, 8)} spent=${s.spentToday}/${max} ` +
+      `remaining=${pad(remaining, 8)} ${s.autonomyLevel}/${enf}  on_exceed=${s.onExceed}`,
+    )
+    deps.io.out(`    ${s.reason}`)
+  }
+}
+
+function printCostTable(deps: CliDeps, report: CostReport): void {
+  deps.io.out('[LOOPS cost · estimate]')
+  for (const e of report.estimates) {
+    const runs = e.runsPerDay === null ? '(continuous)' : String(e.runsPerDay)
+    const est = e.estimatedTokensPerDay === null ? '-' : `${e.estimatedTokensPerDay}/day`
+    const max = e.maxTokensPerDay === null ? '(none)' : String(e.maxTokensPerDay)
+    const within = e.withinBudget === null ? '-' : e.withinBudget ? 'yes' : 'NO'
+    const headroom = e.headroom === null ? '-' : String(e.headroom)
+    deps.io.out(
+      `  ${pad(e.id, 16)} cadence=${pad(e.cadence, 11)} runs/day=${pad(runs, 12)} pattern=${pad(e.pattern, 12)} ` +
+      `tokens/run=${e.tokensPerRun}  est=${pad(est, 12)} budget=${pad(max, 8)} within=${pad(within, 4)} headroom=${headroom}`,
+    )
+  }
+}
+
+function cmdBudget(deps: CliDeps, args: string[], fs: LoopsFs): number {
+  const p = parseArgs(args)
+  const onlyLoop = p.loop ?? positionalLoop(args)
+  const now = new Date(deps.clock())
+  const { report, errors, exitCode } = buildBudgetReport(deps.cwd, onlyLoop, now, toBudgetFs(fs))
+  if (errors.length > 0 || report === null) {
+    for (const e of errors) deps.io.err(`ERROR: ${e}`)
+    return exitCode
+  }
+  if (p.json) {
+    deps.io.out(JSON.stringify(report, null, 2))
+    return exitCode
+  }
+  printBudgetTable(deps, report)
+  return exitCode
+}
+
+function cmdCost(deps: CliDeps, args: string[], fs: LoopsFs): number {
+  const p = parseArgs(args)
+  const onlyLoop = p.loop ?? positionalLoop(args)
+  const now = new Date(deps.clock())
+  const { report, errors, exitCode } = buildCostReport(deps.cwd, onlyLoop, now, toBudgetFs(fs))
+  if (errors.length > 0 || report === null) {
+    for (const e of errors) deps.io.err(`ERROR: ${e}`)
+    return exitCode
+  }
+  if (p.json) {
+    deps.io.out(JSON.stringify(report, null, 2))
+    return exitCode
+  }
+  printCostTable(deps, report)
+  return exitCode
+}
+
 /**
  * loops 子命令分派（纯函数 + deps 注入 + fs 注入面）。
  * fs 缺省真 node fs（REAL_LOOPS_FS，读真 .pipeline/loops.yaml + progress + 在途 + 沙箱）；
@@ -211,8 +300,12 @@ export async function cmdLoops(deps: CliDeps, sub: string, args: string[], fs: L
       return cmdEnforce(deps, p, fs)
     case 'status':
       return cmdStatus(deps, fs)
+    case 'budget':
+      return cmdBudget(deps, args, fs)
+    case 'cost':
+      return cmdCost(deps, args, fs)
     default:
-      deps.io.err(`ERROR: 未知 loops 子命令: ${sub}（支持: list enforce status）`)
+      deps.io.err(`ERROR: 未知 loops 子命令: ${sub}（支持: list enforce status budget cost）`)
       return 1
   }
 }

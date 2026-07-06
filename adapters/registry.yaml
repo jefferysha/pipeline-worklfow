@@ -1,0 +1,113 @@
+# adapters/registry.yaml — 适配器登记表（单一真源，BACKLOG #39）。
+#
+# 老仓 registry.yaml 是「install 派发 + skill 源」表；本表在 lite 里聚焦 **能力矩阵**：
+# 每个目标工具对 inject/veto/track 三能力的档位（native/degraded）与产出格式。这是把
+# contract.md 变机器约束的数据源——tools/test-adapters.sh 从本表派生 conformance 断言，
+# adapters/lint-adapter.sh 从本表校验「加平台是填表非重写」（GOAL D7/D14 平台矩阵策略面）。
+#
+# 三能力（= Claude Code baseline 三 hook；适配器要在其它工具上等价实现或降级）：
+#   inject  ← hooks/session-start.sh  （SessionStart 会话级上下文注入）
+#   veto    ← hooks/gate.sh           （PreToolUse 硬拦：新鲜 .pipeline-pending-* marker → 拒）
+#   track   ← hooks/skill-tracker.sh  （PostToolUse Skill → append .pipeline-history.jsonl）
+#
+# 分档（tier，contract.md §1）：
+#   A 全保真  三能力全 native 等价（codex：与 CC 同构 hook 协议）
+#   B 部分降级 部分 native、部分如实降级（cursor：veto/track native、inject 降 .cursor/rules）
+#   C 静态降级 无 enforcement hook，三能力靠静态注入 + 手动 Unlock sentinel（codex --static / workflow-only 平台）
+#
+# 每平台扁平字段（缺任一 lint-adapter.sh 报错）：
+#   tier            A|B|C
+#   configDir       检测/托管路径锚
+#   cliFlag         顶层 install.sh 的 --<flag> 派发键
+#   configure       install 入口脚本（相对仓库根；baseline claude-code 为内建插件，留空）
+#   agentCapable    true → 过滤 user-facing start
+#   hasHooks        true → 要求 hookContainer 非空
+#   hookContainer   hook 安装目标容器
+#   <cap>_status    native|degraded|none（cap ∈ inject/veto/track）
+#   <cap>_format    该能力在目标工具的 stdout/exit 格式（不串格式，见 contract.md §3）
+#   inject_fallback inject_status=degraded 时必填：降级落点（如 static-rules）
+#   veto_failclosed cursor 专用：veto hook 默认 fail-open，必须 true 才与硬拦语义一致
+
+platforms:
+  - id: claude-code
+    tier: A
+    role: baseline
+    configDir: .claude
+    cliFlag: claude
+    defaultChecked: true
+    agentCapable: true
+    hasHooks: true
+    hookContainer: .claude/settings.json#hooks
+    configure: ""
+    inject_status: native
+    inject_event: SessionStart
+    inject_format: json-additionalContext
+    veto_status: native
+    veto_event: PreToolUse
+    veto_format: exit2-stderr
+    track_status: native
+    track_event: PostToolUse
+    track_format: history-append
+
+  # codex：与 CC 同构 hook 协议（spike 实证）——三能力全 native，wrapper 薄包 baseline 三 hook。
+  #   inject 走 hookSpecificOutput.additionalContext；veto 走 exit 2 + stderr；track append history。
+  #   受 hook trust 卡（档 A manual-trust / 档 B managed-免trust / 档 C static-无hook），见 codex/README.md。
+  - id: codex
+    tier: A
+    configDir: .codex
+    cliFlag: codex
+    defaultChecked: false
+    agentCapable: true
+    hasHooks: true
+    hookContainer: .codex/hooks.json
+    configure: adapters/codex/install.sh
+    inject_status: native
+    inject_event: SessionStart
+    inject_format: json-additionalContext
+    veto_status: native
+    veto_event: PreToolUse
+    veto_format: exit2-stderr
+    track_status: native
+    track_event: PostToolUse
+    track_format: history-append
+
+  # cursor：veto/track native（beforeShellExecution/preToolUse 硬拦、postToolUse 留痕），
+  #   inject 无 SessionStart 级原语 → 降级 .cursor/rules 静态层 + postToolUse.additional_context 动态补。
+  #   veto 默认 fail-open，hooks.json 必 failClosed:true（否则 hook 崩了放行，与硬拦冲突）。无 trust 机制。
+  - id: cursor
+    tier: B
+    configDir: .cursor
+    cliFlag: cursor
+    defaultChecked: true
+    agentCapable: true
+    hasHooks: true
+    hookContainer: .cursor/hooks.json
+    configure: adapters/cursor/install.sh
+    inject_status: degraded
+    inject_fallback: static-rules
+    inject_event: postToolUse
+    inject_format: postToolUse-additional_context
+    veto_status: native
+    veto_event: preToolUse
+    veto_format: permission-json
+    veto_failclosed: true
+    track_status: native
+    track_event: postToolUse
+    track_format: history-append
+
+# ─── 后续平台（D7/D14 矩阵铺开：本框架下加平台 = 在此填表 + 写 configure，非重写）───
+# 尚未建 configure（留后续里程碑），故不进 platforms:（lint 只校验 active 平台），
+# 但目标档位/降级点已登记，证明矩阵可填充（Trellis 16 平台 / Comet 30 平台的策略面）。
+planned:
+  - id: gemini
+    tier: A
+    note: "settings.json#hooks 内嵌；三能力目标 native（与 CC 同构 JSON），sharedHooks 无 inject-subagent-context(#18128)"
+  - id: copilot
+    tier: B
+    note: "dual hookContainer(.github/copilot/hooks.json|.github/hooks/trellis.json，漏一份不生效)；inject 走平台私有 session-start"
+  - id: pi
+    tier: B
+    note: "私有 .pi/skills 根 + .pi/extensions TS 运行时；settings.json#hooks 内嵌"
+  - id: devin
+    tier: C
+    note: "workflow-only（hasHooks=false）；无 hook → 三能力全静态降级 + 手动 Unlock sentinel；aliases=[windsurf]"

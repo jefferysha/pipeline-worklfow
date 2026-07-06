@@ -1,0 +1,15 @@
+{
+  "_comment": "Cursor pipeline 适配器 hook 注册（spike NOTES 实证）。schema version:1。Cursor 输入走 stdin，事件名由 command 行 argv 传。无 trust 机制、落盘即生效。veto 类 hook 必须 failClosed:true（默认 fail-open，与 pipeline 硬拦冲突）。Cursor 无 SessionStart 级 inject 原语——inject 降级为 .cursor/rules 静态层 + postToolUse.additional_context 动态补。track wrapper 真 append history（转正）。__ADAPTER_DIR__ 由 install.sh 替换为绝对路径。",
+  "version": 1,
+  "hooks": {
+    "beforeShellExecution": [
+      { "command": "bash \"__ADAPTER_DIR__/hooks/veto.sh\" beforeShellExecution", "failClosed": true }
+    ],
+    "preToolUse": [
+      { "command": "bash \"__ADAPTER_DIR__/hooks/veto.sh\" preToolUse", "failClosed": true }
+    ],
+    "postToolUse": [
+      { "command": "bash \"__ADAPTER_DIR__/hooks/track.sh\" postToolUse" }
+    ]
+  }
+}

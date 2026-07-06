@@ -19,11 +19,9 @@
 | 32 | Cursor 适配器转正（老仓 spike → 可发布） | M6 | 3d |
 | 33 | Trellis parity 收尾：8 partial + 1 missing（spec-template-scaffold、冲突 AskUserQuestion、workflow-template-resolution、KNOWN_UNTRACKED_ALLOWLIST） | M6 | 3d |
 | **M-loop** loop-engineering 内建（GOAL B18–B21 / D16） | | | |
-| 36 | token 预算与熔断：loop 级 budget 声明 + circuit breaker + 成本估算 | M-loop | 2d |
 | 37 | 漂移检测 + loop-ready 审计：LOOP 声明 vs STATE 流水对账、就绪评分 | M-loop | 2d |
 | 38 | 分级放权 L1→L3：AFK 自动化毕业制（report → 人工门 → allowlist 自动合并），M5 的前置件 | M-loop | 2d |
 | **M7** 平台矩阵（GOAL D7/D14） | | | |
-| 39 | 适配器框架 + 分档降级契约（老仓 adapters/contract.md 移植）+ conformance 测试 | M7 | 3d |
 | 40 | 平台铺开：Codex/Cursor 先行，矩阵逐平台扩展至 ≥ 两竞品覆盖面 | M7 | 5d+ |
 | 41 | docs/superiority-matrix.md：D1–D16 逐维对比证据表（随里程碑更新，收敛检查对照物） | 持续 | 0.5d |
 | **M8** tap 流量代理（2026-07-07 用户确认进正式队列，human gate 解除） | | | |
@@ -74,3 +72,5 @@
 | 2026-07-07 | #29 AFK Sandcastle（iteration-20） | 收编：队列状态机+scheduler+L1→L3 + 72 例 + docker honest-skip |
 | 2026-07-07 | #30 上下文压缩（iteration-21） | 收编：确定性压缩 45.4%>Comet + 7 真 fs 例，D11 |
 | 2026-07-07 | #31 auto-transition 中间档（iteration-21） | 收编：advance guard 自动推进+HITL 三重证明，D12 |
+| 2026-07-07 | #39 适配器框架+Cursor 转正（iteration-22） | 收编：58 conformance 断言+变异测试，claude/codex/cursor active，D7 |
+| 2026-07-07 | #36 loop 预算与熔断（iteration-22） | 收编：token budget+circuit breaker+成本估算 + 16 真 fs 例，D16 |

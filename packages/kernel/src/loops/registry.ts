@@ -314,6 +314,9 @@ export const LOOPS_SCHEMA: SchemaNode = {
               max_runs_per_day: { type: 'integer', minimum: 1 },
               max_in_flight: { type: 'integer', minimum: 0 },
               on_exceed: { type: 'string', minLength: 2 },
+              // #36 token 级预算（可选，向后兼容——旧登记表不含即无 token 预算/熔断）：
+              max_tokens_per_day: { type: 'integer', minimum: 1 },
+              tokens_per_run: { type: 'integer', minimum: 1 },
             },
           },
           kill_criteria: { type: 'array', minItems: 1, items: { type: 'string' } },

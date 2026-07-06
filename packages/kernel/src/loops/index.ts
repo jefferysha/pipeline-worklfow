@@ -18,6 +18,11 @@ export {
   FAIL_STREAK_KILL, FAIL_STREAK_WARN, DRY_ROUNDS_KILL, DRY_ROUNDS_WARN, BUDGET_WARN_RATIO, STRIKE_MULTIPLIER,
 } from './enforce.js'
 export type { ParsedLoop, EnforceFs, EnforceReport } from './enforce.js'
+// #36 token 预算 + circuit breaker + 成本估算（GOAL B20 / D16）
+export {
+  sumRunLogTokens, computeBudgetStatus, estimateCost, buildBudgetReport, buildCostReport, PATTERN_TOKENS_PER_RUN,
+} from './budget.js'
+export type { BreakerState, BudgetStatus, CostEstimate, BudgetFs, BudgetReport, CostReport } from './budget.js'
 export type {
   LoopKind, LoopStatus, LoopRisk, AutonomyLevel, LoopBudget, LoopEntry, LoopRegistry,
   Verdict, Enforcement, VerdictReason, VerdictMetrics, LoopVerdict, RunFacts,
