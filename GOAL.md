@@ -32,8 +32,23 @@
 **v0.2（backlog，见 BACKLOG.md）**：收件箱 UI（等待三门决策的 change 清单）、statusline、
 esbuild 单文件分发、老仓库 history 导入工具。
 
-**明确不做（non-goals）**：channel / mem / tap / automation-Sandcastle / 多平台 adapters
-（老内核继续服务这些场景；本仓是轻量前锋，不是全量替代）。
+**v1.0（2026-07-06 用户指令：全部核心功能迁移，不做部分切片）**
+原 non-goals 作废。范围 = 老仓全部核心功能 + 本次重构启动前分析出的全部缺口，按
+BACKLOG.md 六个里程碑推进：
+- **M1 内核深度**：guard 全量校验面、task lifecycle、living-spec、session、manifest 全派生面、
+  transition 全副作用、门 TTL 分级（confirm 300s / review·interaction 1800s 恢复老内核口径）
+- **M2 hooks/插件全保真**：router（Track 识别 + breadcrumb 注入）、context/openspec/宪法注入、
+  PostToolUse 全套（confirm-clear/decision-recorder/skill-tracker/interactive-skill-gate）、
+  7 相位 SKILL + openspec 四命令 + learn-record + 4 agents + sync/uninstall（所有权 scrubber）
+- **M3 dashboard**：TS 全局 server（版本抢占 + 写端点 token 鉴权——修老仓架构欠账 #3/#4）+
+  前端信息架构按 UI 诊断重构（收件箱默认视图 / Kanban / Settings 分离 / debug 降级）
+- **M4 channel + mem**：event-sourced worker 总线与跨 runtime 会话检索（TS 重写）
+- **M5 automation**：AFK 调度（老仓 5 个 TS 包本就是 TS，评估直接移植 vs 重写）
+- **M6 竞品缺口收尾**：上下文压缩（Comet）、auto-transition 中间档、Cursor 适配器转正、
+  Trellis parity 的 8 partial + 1 missing
+（tap 流量代理暂列 M6 之后待定项——与工作流内核正交，迁移前与用户确认优先级。）
+
+**v0.1 成功判据 → 2026-07-06 iteration-9 收敛检查全部达成 ✅（见 progress.md）**
 
 ## 成功判据（v0.1 收敛即验收）
 

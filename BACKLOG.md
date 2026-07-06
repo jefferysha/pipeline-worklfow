@@ -6,7 +6,35 @@
 
 | # | 项 | 对应 plan 任务 | 预算 |
 |---|---|---|---|
-|（空——iteration-8 后队列清空，进收敛检查）| | | |
+| **M1** 内核深度 | | | |
+| 12 | guard 全量校验面：老仓 pipeline-guard.sh 逐相位出口规则全移植（lite 子集 → 全集，oracle 对齐 check） | M1 | 2d |
+| 13 | 门 TTL 分级恢复：confirm 300s / review·interaction 1800s（gate.sh + statusline + inbox 三处同步，退 15min 统一简化） | M1 | 0.5d |
+| 14 | transition 全副作用面：state-transition.sh case 块逐字盘点补齐（现仅 4 事件） | M1 | 1d |
+| 15 | task lifecycle：add-dep/children/cascade/canonical | M1 | 2d |
+| 16 | living-spec：specs/set-spec-scope/inject-jsonl | M1 | 2d |
+| 17 | session：activate/route-context | M1 | 1d |
+| 18 | manifest 全派生面：mandatory/recommended skills、router patterns、gen-router、breadcrumb prose | M1 | 2d |
+| **M2** hooks/插件全保真 | | | |
+| 19 | router hook：Track 识别评分正则（读 manifest 派生缓存）+ 每轮 breadcrumb 注入 | M2 | 2d |
+| 20 | SessionStart 三注入：workflow 宪法 / pipeline-context / openspec | M2 | 1d |
+| 21 | PostToolUse 全套：confirm-clear、decision-recorder（AskUserQuestion）、skill-tracker、interactive-skill-gate | M2 | 2d |
+| 22 | 7 相位 SKILL.md + 主编排 Decision Core + openspec 四命令 + learn-record | M2 | 3d |
+| 23 | 4 agents（builder/researcher/reviewer/design-reviewer）定义移植 | M2 | 1d |
+| 24 | /pipeline-sync + /pipeline-uninstall（所有权 hash 追踪 scrubber，对标老仓 .pipeline-owned.json） | M2 | 2d |
+| **M3** dashboard | | | |
+| 25 | TS 全局 server：snapshot/SSE + **版本抢占**（老仓架构欠账 #3）+ **写端点 token 鉴权**（欠账 #4） | M3 | 3d |
+| 26 | 前端信息架构重构：收件箱默认视图 / Kanban / Settings 分离 / debug 降级（UI 病灶 1-4 完整解法） | M3 | 3d |
+| **M4** channel + mem | | | |
+| 27 | channel：event-sourced worker 总线 TS 重写（supervisor/events/inbox/turns/guard） | M4 | 5d |
+| 28 | mem：跨 runtime 会话检索（list/search/context/extract/projects） | M4 | 3d |
+| **M5** automation | | | |
+| 29 | AFK 调度评估：老仓 5 个 TS 包直接移植 vs 适配重写（评估报告先行，human gate 后动手） | M5 | 1d+ |
+| **M6** 竞品缺口收尾 | | | |
+| 30 | 上下文压缩（Comet CONTEXT-COMPRESSION 对标）：handoff 时压缩 | M6 | 2d |
+| 31 | auto-transition 中间档：guard 全绿自动推进、仅三门处停（HITL 与 AFK 之间） | M6 | 1d |
+| 32 | Cursor 适配器转正（老仓 spike → 可发布） | M6 | 3d |
+| 33 | Trellis parity 收尾：8 partial + 1 missing（spec-template-scaffold、冲突 AskUserQuestion、workflow-template-resolution、KNOWN_UNTRACKED_ALLOWLIST） | M6 | 3d |
+| 34 | tap 流量代理：暂缓——迁移前与用户确认优先级（human gate） | 待定 | 5d+ |
 
 ## 已收编
 

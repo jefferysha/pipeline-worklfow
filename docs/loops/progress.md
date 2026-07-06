@@ -3,6 +3,7 @@
 | 日期 | 轮 | 项 | 结果 |
 |---|---|---|---|
 | 2026-07-06 | iteration-0 | T1 契约与骨架 | 收编：GOAL/LOOP/BACKLOG/CONTRACT/plan + workspaces + types.ts |
+| 2026-07-06 | iteration-9 | 收敛检查（v0.1 kill 判据第 1 轮） | **v0.1 四项成功判据全部达成 ✅**：①oracle 双跑 0 不一致 ②交叉验证过——lite 连写（set/cas/import --strip）后老内核 get/status 正常读取 ③vitest 232/232 + kernel 零运行时依赖 ④bundle 全程 open→archive 七相位一遍跑通（archived=true）。**同轮收到用户范围升级指令：全部核心功能迁移 + 历史缺口全解决 → 不收官，转 v1.0**。GOAL 增 v1.0 六里程碑（M1 内核深度→M6 竞品缺口），BACKLOG 编入 #12–#34 共 23 项，LOOP budget 修正允许轮内并行 agent。队首：#12 guard 全量校验面。 |
 | 2026-07-06 | iteration-8 | BACKLOG #11 老仓导入工具 | 收编：TDD 先红后绿。kernel `parseLegacyHistory/stripLegacyHistory`（tools/prompts/transitions 三节、b64 正则预校验、坏行 fail-open）+ CLI `pipeline import <name> [--strip]`（import 哨兵幂等、append fail-loud）。JSONL kind 加法扩展 tool/prompt/import + raw（CONTRACT §1 已注）。真跑老仓 fixture：43 条导入、YAML 历史节清空、状态仍可读、重跑安全。五门全绿：vitest 232/232（+9）、hooks 55/55、bundle 7/7、verify-skills OK、oracle 0 不一致。**队列清空** → 下轮进收敛检查（kill 判据第 1 条计数开始）。 |
 | 2026-07-06 | iteration-7 | BACKLOG #10 statusline | 收编：TDD 先红 1 后绿。hooks/statusline.sh 纯 bash（json_get 同 gate、grep 提顶层键、mtime 取最新活跃 change、新鲜门 marker 显示 等:<kind>、archived 隐藏、fail-open 空输出）；纳入零解释器红线自证名单；README 接入说明。四门全绿：hooks 55/55、vitest 223/223、verify-skills OK、oracle 0 不一致。队首：#11 老仓导入工具（队列最后一项）。 |
 | 2026-07-06 | iteration-6 | BACKLOG #9b `inbox --html` 静态单页 | 收编：TDD 先红 2 后绿。自足单页（零外部资源断言、深浅色、HTML 注入转义、空态、生成时间快照标注）。五门全绿：vitest 223/223（+3）、hooks 47/47、bundle 7/7、verify-skills OK、oracle 0 不一致。队首：#10 statusline。 |

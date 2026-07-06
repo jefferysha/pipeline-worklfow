@@ -25,7 +25,9 @@
   - `git push` 到 GitHub → 人工触发（本机无 gh 认证）；
   - hook 热路径引入 node 进程 → 直接拒绝（红线，不是问人）。
 - **state**：`docs/loops/progress.md`（append-only 流水）
-- **budget**：同时在途 ≤1 个 backlog 项；单项预算 ≤1 天；一轮内 oracle 修复尝试 ≤3 次。
+- **budget**：同时在途 ≤1 个 backlog 项；单项预算 ≤1 天（超预算项先切片）；一轮内 oracle
+  修复尝试 ≤3 次。**v1.0 修正（2026-07-06 范围升级）**：≥1d 的项允许在轮内以并行 agent
+  批量执行（用户已明示并行授权），轮的原子性以"该项四门全绿收编"为准。
 - **kill criteria**：
   - BACKLOG 连续 **2 轮空**且收敛检查无新缺口 → 宣告 v0.1 收敛，出收官报告进 progress，loop 终止；
   - 同一项 golden-diff 连续 **3 次红** → 暂停 loop，写坑单进 progress 等人工裁决；
