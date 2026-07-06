@@ -6,6 +6,7 @@
   "engines": { "node": ">=22" },
   "dependencies": {
     "@pipeline-lite/kernel": "*",
+    "@pipeline-lite/tap": "*",
     "commander": "^12.1.0"
   }
 }

@@ -15,6 +15,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { CommanderError } from 'commander'
 import { createFlowEngine, createHistoryWriter, createStateStore, loadManifest } from '@pipeline-lite/kernel'
+import { tapStatus } from '@pipeline-lite/tap'
 import type { GuardContext } from '@pipeline-lite/kernel'
 import type { CliDeps, DoctorProbes, GateMarkerInfo } from './deps.js'
 import { buildProgram, CliExit } from './program.js'
@@ -178,6 +179,11 @@ function makeDoctorProbes(): DoctorProbes {
           },
         )
       }),
+    // BACKLOG #34e：tap 敏感能力状态供 doctor 明示（读 tap 本地状态，无副作用）
+    tapStatus: () => {
+      const s = tapStatus()
+      return { intercepting: s.intercepting, captureEnabled: s.captureEnabled, message: s.message }
+    },
   }
 }
 

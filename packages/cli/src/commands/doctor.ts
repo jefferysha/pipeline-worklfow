@@ -116,6 +116,16 @@ function checkStatusline(p: DoctorProbes): DoctorCheck {
   )
 }
 
+/** tap 流量代理状态（BACKLOG #34e：敏感能力必须对用户明示——正在拦截=黄灯提醒） */
+function checkTap(p: DoctorProbes): DoctorCheck {
+  if (!p.tapStatus) return green('security:tap', 'tap 流量代理未装（无 MITM 面）')
+  const s = p.tapStatus()
+  if (s.intercepting) {
+    return yellow('security:tap', s.message, 'tap 正在拦截 LLM 流量——确认是你有意开启；捕获数据仅落本地不外发')
+  }
+  return green('security:tap', s.message)
+}
+
 function checkCwd(deps: CliDeps, p: DoctorProbes): DoctorCheck {
   const root = changesRoot(deps.cwd)
   if (p.dirExists(root)) return green('project:cwd', `当前目录是 pipeline 项目（${root} 存在）`)
@@ -193,6 +203,7 @@ export async function cmdDoctor(deps: CliDeps, opts: { json?: boolean }): Promis
     ['asset:hooks', () => checkHookAssets(p)],
     ['guard:gate', () => checkGateEffective(p)],
     ['guard:statusline', () => checkStatusline(p)],
+    ['security:tap', () => checkTap(p)],
     ['project:cwd', () => checkCwd(deps, p)],
     ['project:changes', () => checkChanges(deps)],
     ['project:markers', () => checkMarkers(deps)],

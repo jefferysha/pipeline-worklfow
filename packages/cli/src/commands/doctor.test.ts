@@ -18,6 +18,7 @@ const EXPECTED_IDS = [
   'asset:hooks',
   'guard:gate',
   'guard:statusline',
+  'security:tap',
   'project:cwd',
   'project:changes',
   'project:markers',
@@ -36,13 +37,13 @@ function byId(payload: DoctorJson, id: string): DoctorCheck {
 }
 
 describe('doctor —— 统一健康面（BACKLOG #26b，GOAL B8 降级可见 / D10 > comet doctor）', () => {
-  test('全绿基线：10 项检查全 green，exit 0，人读输出含汇总行、无 WARN/FAIL', async () => {
+  test('全绿基线：11 项检查全 green，exit 0，人读输出含汇总行、无 WARN/FAIL', async () => {
     const deps = makeDeps()
     const code = await cmdDoctor(deps, {})
     expect(code).toBe(0)
     const text = deps.outLines.join('\n')
     expect(text).toContain('[DOCTOR]')
-    expect(text).toContain('绿 10')
+    expect(text).toContain('绿 11')
     expect(text).not.toContain('[WARN]')
     expect(text).not.toContain('[FAIL]')
     expect(text).not.toContain('fix:')
@@ -59,7 +60,7 @@ describe('doctor —— 统一健康面（BACKLOG #26b，GOAL B8 降级可见 / 
       expect(typeof c.detail).toBe('string')
       expect(typeof c.hint).toBe('string')
     }
-    expect(payload.summary).toEqual({ green: 10, yellow: 0, red: 0 })
+    expect(payload.summary).toEqual({ green: 11, yellow: 0, red: 0 })
   })
 
   test('env:node 红灯：node < 22 → red + 升级指引，exit 1', async () => {
@@ -134,6 +135,26 @@ describe('doctor —— 统一健康面（BACKLOG #26b，GOAL B8 降级可见 / 
     expect(c.status).toBe('yellow')
     expect(c.hint).toContain('statusLine')
     expect(c.hint).toContain('statusline.sh')
+  })
+
+  test('security:tap 黄灯：tap 正在拦截 → 明示提醒（#34e 敏感能力可见）', async () => {
+    const deps = makeDeps({
+      doctor: { tapStatus: () => ({ intercepting: true, captureEnabled: true, message: 'tap 正在拦截流量：2 个端口' }) },
+    })
+    const { code, payload } = await runJson(deps)
+    expect(code).toBe(0)
+    const c = byId(payload, 'security:tap')
+    expect(c.status).toBe('yellow')
+    expect(c.detail).toContain('正在拦截')
+    expect(c.hint).toContain('不外发')
+  })
+
+  test('security:tap 绿灯：未拦截（默认 OFF）', async () => {
+    const deps = makeDeps({
+      doctor: { tapStatus: () => ({ intercepting: false, captureEnabled: false, message: 'tap 未拦截（默认 OFF）' }) },
+    })
+    const { payload } = await runJson(deps)
+    expect(byId(payload, 'security:tap').status).toBe('green')
   })
 
   test('project:cwd 黄灯：cwd 不是 pipeline 项目（openspec/changes 不存在）', async () => {
@@ -252,6 +273,6 @@ describe('doctor —— 统一健康面（BACKLOG #26b，GOAL B8 降级可见 / 
     }
     expect(code).toBe(0)
     const payload = JSON.parse(deps.outLines.join('\n')) as DoctorJson
-    expect(payload.summary).toEqual({ green: 10, yellow: 0, red: 0 })
+    expect(payload.summary).toEqual({ green: 11, yellow: 0, red: 0 })
   })
 })

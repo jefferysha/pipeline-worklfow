@@ -12,8 +12,6 @@
 | **M4** channel + mem | | | |
 | 27b | channel 进程管理层：supervisor 三循环 + 真 spawn 子进程 + inbox_watcher live-tail + OS-liveness guard + SIGTERM cleanup（#27 事件模型已就绪，本项补进程层） | M4 | 3d |
 | **M5** automation / AFK Sandcastle（2026-07-07 用户确认全量迁移，human gate 已解） | | | |
-| 29 | Sandcastle 5 包移植：runner/lifecycle/scheduler/cli/sdk（老仓本就是 TS——主要工作是把对老 bash `pipeline-state.sh` 的调用替换为 lite kernel API/CLI，Node ≥22 对齐） | M5 | 3d |
-| 29b | 队列语义全迁：automation 字段生命周期（off→queued→running→merged/failed/conflict/paused）+ cas 并发闸 + PIPELINE_AFK 门联动（gate 侧 #7b 已备） | M5 | 1d |
 | 29c | Docker 沙箱执行 + merge-back + 现场保留（automation_worktree/preserved_path）；**诚实门**：无 docker → IT skip 绝不伪绿（老仓纪律延续） | M5 | 3d |
 | 29d | 调度器 doctor 灯 + dashboard AFK 指挥面数据端（M3 的 server 承接） | M5 | 1d |
 | 29e | 与 L1→L3 分级放权（#38）合体：AFK 默认 L1 report-only，毕业制升 L2/L3 | M5 | 1d |
@@ -31,7 +29,6 @@
 | 40 | 平台铺开：Codex/Cursor 先行，矩阵逐平台扩展至 ≥ 两竞品覆盖面 | M7 | 5d+ |
 | 41 | docs/superiority-matrix.md：D1–D16 逐维对比证据表（随里程碑更新，收敛检查对照物） | 持续 | 0.5d |
 | **M8** tap 流量代理（2026-07-07 用户确认进正式队列，human gate 解除） | | | |
-| 34 | tap 核心：单进程多端口 MITM 守护（tap_daemon）+ capture/forward proxy + trace_store（TS 重写，与 claude 生命线端口隔离） | M8 | 5d |
 | 34b | 协议面：ws_reconstruct（WebSocket 重组）+ bedrock 适配 + certs（本地 CA 生成/信任链） | M8 | 3d |
 | 34c | 多 runtime 抓流：codex/kimi/openclaw/codebuddy/gemini 各端口绑定与转发 | M8 | 2d |
 | 34d | dashboard traffic 查看器数据端（M3 server 承接：TraceRow/TraceDetail 消费 trace_store） | M8 | 1d |
@@ -75,3 +72,5 @@
 | 2026-07-07 | #26 前端重构（iteration-19） | 收编：四病灶解法 + 71 真 render 测试（收件箱默认/导航≤3/Settings/Advanced） |
 | 2026-07-07 | #26c server 服务 SPA（iteration-19） | 收编：GET / 真返 SPA+token 注入 + /assets/* + 穿越防护 |
 | 2026-07-07 | #35 loop 治理（iteration-19） | 收编：registry schema + R1-R11 裁决 + L1-L3 分级放权 + 15 真 fs 例，vitest 994 |
+| 2026-07-07 | #34 tap 核心+护栏（iteration-20） | 收编：MITM 守护+trace_store+安全护栏三条 + 13 真 socket |
+| 2026-07-07 | #29 AFK Sandcastle（iteration-20） | 收编：队列状态机+scheduler+L1→L3 + 72 例 + docker honest-skip |

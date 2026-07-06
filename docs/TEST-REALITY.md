@@ -47,6 +47,8 @@
 | 前端 dashboard-app | ✅ 71 真 render 测试（jsdom 真 render DOM + 真拖拽 fireEvent + SSE 真 EventSource stub emit→组件更新）+ 3 真 server HTTP 集成 | ✅ transition 失败呈现/非法 no-op | ✅ 收件箱默认→看板→设置 |
 | server 服务 SPA | ✅ server.test.ts +1（真起 server webRoot → GET / 真返 SPA index.html+token 注入 + /assets/* 真供给 + 路径穿越防护） | ✅ 穿越 !=200 | — |
 | loops 治理 | ✅ loops.integration.test.ts 15 例（真建 loops.yaml/progress.md → 真裁决 R1-R11 verdict + L1 report-only/L3 unattended + schema 拒非法 exit3） | ✅ budget 超限 kill | ✅ list→enforce→status |
+| tap 流量代理 | ✅ packages/tap 49 例（13 真 socket：真 fake upstream + 真 proxy + 真 CONNECT + trace_store 真落盘；源码级扫描断言零 outbound）+ doctor tap 灯真跑 | ✅ 默认 OFF 真不监听 / 8766 生命线隔离 | — |
+| automation AFK | ✅ packages/automation 72 例（57 纯逻辑真状态机 + 14 真 kernel fs/git 集成）；docker IT 2 honest-skip（无 docker 不伪绿）| ✅ L1→paused/L3→merged/conflict 保留 | ✅ enqueue→scan→run |
 | check | ✅ guard 全量面真跑：不满足 exit 2 / 建 design doc 后 exit 0 | ✅ | ✅ |
 | inbox | ✅ --json 复核相位 | — | ✅ |
 | status/list | ✅ 真枚举 | — | ✅ |

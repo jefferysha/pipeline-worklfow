@@ -34,6 +34,8 @@ export interface DoctorProbes {
   statuslineConfigured: () => boolean
   /** 子进程跑 tools/verify-skills.sh；spawn 失败也折算为非 0 code */
   runVerifySkills: () => Promise<{ code: number; output: string }>
+  /** tap 流量代理状态（BACKLOG #34e：敏感能力 doctor 明示）。main.ts 注入 @pipeline-lite/tap tapStatus */
+  tapStatus?: () => { intercepting: boolean; captureEnabled: boolean; message: string }
 }
 
 export interface CliIO {
