@@ -11,6 +11,7 @@ import { cmdCas, cmdGet, cmdSet, cmdSetMany } from './commands/fields.js'
 import { cmdImport } from './commands/import.js'
 import { cmdInbox } from './commands/inbox.js'
 import { cmdAdvance } from './commands/advance.js'
+import { cmdAfk } from './commands/afk.js'
 import { cmdChannel } from './commands/channel.js'
 import { cmdGenRouterSh } from './commands/gen-router.js'
 import { cmdHandoff } from './commands/handoff.js'
@@ -187,6 +188,13 @@ export function buildProgram(deps: CliDeps): Command {
     .option('--dry-run', '只打印计划不落盘')
     .action(async (opts: { yes?: boolean; dryRun?: boolean }) =>
       bail(await cmdUninstall(deps, { yes: opts.yes, dryRun: opts.dryRun })))
+
+  program
+    .command('afk <sub> [name]')
+    .description('AFK 自动化：enqueue <name> 挂队 / scan 就绪队列 / status [name] 泳道 / run（需部署接线 #29-wire）')
+    .option('--json', 'JSON 输出')
+    .action(async (sub: string, name: string | undefined, opts: { json?: boolean }) =>
+      bail(await cmdAfk(deps, sub, name, opts)))
 
   program
     .command('loops <sub> [args...]')

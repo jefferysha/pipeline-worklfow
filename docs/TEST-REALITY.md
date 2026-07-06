@@ -59,6 +59,8 @@
 | loop 毕业制 | ✅ loops-graduation.integration.test.ts 16 例（真建不同就绪/漂移/熔断态 → 真升降档裁决 + 跨级拒 + --confirm 真改 autonomy_level）| ✅ 跨级 exit2 | ✅ graduate→level set |
 | channel 进程层 | ✅ channel-process.integration.test.ts 11 例（真 fork cat 桥接 + 真 spawn 预算 + 真 SIGTERM kill + 真 OS-liveness 判活判死 + 真 prune）+ process.test.ts 4 真 fork node；**架构红线**：跑完零 openspec/门 marker 不变 | ✅ | ✅ spawn→run→kill→prune |
 | server afk/traffic 数据端 | ✅ server 14 真 HTTP（afk 泳道+调度器灯 / traces sessions/records）+ 前端 13 真 render（AfkPanel/TrafficPanel/AdvancedPanel capabilities 驱动）| ✅ 缺 session 400 / 未装占位 | — |
+| afk CLI 命令 | ✅ afk.integration.test.ts 6 例（真 automation SDK：enqueue 真落 automation=queued + queued_at / PM 轨真拒 exit3 / scan 真判就绪 / run 诚实指向 #29-wire 不伪装 docker）| ✅ PM 拒 / 未知子命令 exit1 | ✅ enqueue→status→scan |
+| transition 单源守卫（dashboard） | ✅ transition-mirror.test.ts 2 例（node 侧真 import kernel TRANSITION_EVENTS + dashboard 镜像，逐边/逐事件字节相等——跨 node/浏览器边界的单源守卫，镜像漂移即抓红）| ✅ | — |
 | check | ✅ guard 全量面真跑：不满足 exit 2 / 建 design doc 后 exit 0 | ✅ | ✅ |
 | inbox | ✅ --json 复核相位 | — | ✅ |
 | status/list | ✅ 真枚举 | — | ✅ |

@@ -1,0 +1,56 @@
+/**
+ * afk 命令 —— 真实 e2e（GOAL C9）：零 mock，真 kernel createStateStore + 真临时 fs +
+ * 真 @pipeline-lite/automation SDK。断言真实落盘的 automation_* 字段变化。
+ */
+import { afterEach, beforeEach, describe, expect, test } from 'vitest'
+import { freshHarness, rm, type Harness } from './integration-harness.js'
+
+describe('afk 真 e2e —— automation 子系统 CLI 可达性（iteration-29 收敛复查）', () => {
+  let h: Harness
+  beforeEach(async () => { h = await freshHarness() })
+  afterEach(async () => { await rm(h.cwd, { recursive: true, force: true }) })
+
+  test('enqueue 真落盘 automation=queued（backend 轨），status 真读回泳道', async () => {
+    await h.run(['init', 'a1', '--track', 'backend', '--preset', 'full'])
+    expect(await h.run(['afk', 'enqueue', 'a1'])).toBe(0)
+    // 真落盘：automation 字段变 queued
+    expect(await h.read('a1')).toMatch(/^automation: queued$/m)
+    // status 真读回泳道
+    expect(await h.run(['afk', 'status', '--json'])).toBe(0)
+    const payload = JSON.parse(h.out.join('\n')) as { lanes: Record<string, string[]> }
+    expect(payload.lanes.queued).toContain('a1')
+  })
+
+  test('enqueue PM 轨真拒（PM 永不闸）exit 3，automation 不变', async () => {
+    await h.run(['init', 'pm1', '--track', 'pm', '--preset', 'full'])
+    const before = await h.read('pm1')
+    expect(await h.run(['afk', 'enqueue', 'pm1'])).toBe(3) // 未入队
+    expect(await h.read('pm1')).toBe(before) // 字节不变
+  })
+
+  test('scan 真扫就绪队列（build+queued+deps 满足才就绪）', async () => {
+    await h.run(['init', 'b1', '--track', 'backend', '--preset', 'full'])
+    await h.run(['afk', 'enqueue', 'b1']) // queued 但相位 open，非 build → 不就绪
+    expect(await h.run(['afk', 'scan', '--json'])).toBe(0)
+    expect(JSON.parse(h.out.join('\n'))).toEqual({ ready: [] })
+  })
+
+  test('run 诚实指向部署接线 #29-wire（不伪装 docker），exit 0', async () => {
+    await h.run(['init', 'c1', '--track', 'backend', '--preset', 'full'])
+    expect(await h.run(['afk', 'run'])).toBe(0)
+    expect(h.err.join('\n')).toContain('#29-wire')
+    expect(h.err.join('\n')).toContain('不伪装 docker')
+  })
+
+  test('未知子命令 exit 1', async () => {
+    expect(await h.run(['afk', 'bogus'])).toBe(1)
+  })
+
+  test('enqueue 真记 automation_queued_at 时间戳', async () => {
+    await h.run(['init', 'd1', '--track', 'frontend', '--preset', 'full'])
+    await h.run(['afk', 'enqueue', 'd1'])
+    const yaml = await h.read('d1')
+    expect(yaml).toMatch(/^automation: queued$/m)
+    expect(yaml).toMatch(/^automation_queued_at: 2026-07-07T00:00:00Z$/m)
+  })
+})

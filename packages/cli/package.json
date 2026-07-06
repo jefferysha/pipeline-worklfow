@@ -5,6 +5,7 @@
   "bin": { "pipeline": "dist/pipeline.mjs" },
   "engines": { "node": ">=22" },
   "dependencies": {
+    "@pipeline-lite/automation": "*",
     "@pipeline-lite/kernel": "*",
     "@pipeline-lite/tap": "*",
     "commander": "^12.1.0"
