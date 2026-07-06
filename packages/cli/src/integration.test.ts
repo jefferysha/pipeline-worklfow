@@ -10,131 +10,17 @@
  * 命中「伪测试」判据即不算数：断言 mock 返回 / 真实路径未执行 / 伪造 pass。本文件全程摸真盘。
  */
 import { execFileSync } from 'node:child_process'
-import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
-import { readdirSync, readFileSync, statSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { statSync } from 'node:fs'
+import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
-import {
-  createFlowEngine,
-  createHistoryWriter,
-  createStateStore,
-  loadManifest,
-  type GuardContext,
-} from '@pipeline-lite/kernel'
-import type { CliDeps } from './deps.js'
 import { buildProgram, CliExit } from './program.js'
-
-const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..')
-const MANIFEST = join(REPO_ROOT, 'templates', 'manifest.yaml')
-const FIXED_CLOCK = '2026-07-07T00:00:00Z'
-
-interface Harness {
-  cwd: string
-  out: string[]
-  err: string[]
-  run: (args: string[]) => Promise<number>
-  read: (name: string) => Promise<string>
-}
-
-/** 真实 deps：与 main.ts 同款 fs 副作用，只把 io 收进数组、clock 固定，其余全真。 */
-function realDeps(cwd: string, out: string[], err: string[]): CliDeps {
-  const manifest = loadManifest(MANIFEST)
-  const abs = (p: string) => join(cwd, p)
-  const guardCtx = (name: string): GuardContext => ({
-    changeDirRel: `openspec/changes/${name}`,
-    fileExists: (p) => { try { return statSync(abs(p)).isFile() } catch { return false } },
-    fileNonempty: (p) => { try { const s = statSync(abs(p)); return s.isFile() && s.size > 0 } catch { return false } },
-    readFile: (p) => { try { return readFileSync(abs(p), 'utf8') } catch { return undefined } },
-    dirExists: (p) => { try { return statSync(abs(p)).isDirectory() } catch { return false } },
-    changeArchived: (dep) => {
-      try {
-        return readdirSync(abs('openspec/changes/archive'), { withFileTypes: true })
-          .some((e) => e.isDirectory() && e.name.endsWith(`-${dep}`))
-      } catch { return false }
-    },
-    automationRunner: false,
-  })
-  return {
-    store: createStateStore(),
-    flow: createFlowEngine(manifest),
-    cwd,
-    io: { out: (l) => out.push(l), err: (l) => err.push(l) },
-    clock: () => FIXED_CLOCK,
-    listChanges: async (root) => {
-      try {
-        return readdirSync(root, { withFileTypes: true })
-          .filter((e) => e.isDirectory() && e.name !== 'archive')
-          .filter((e) => { try { return statSync(join(root, e.name, '.pipeline.yaml')).isFile() } catch { return false } })
-          .map((e) => e.name).sort()
-      } catch { return [] }
-    },
-    guardCtx,
-    readGateMarkers: async () => {
-      const res = []
-      for (const kind of ['confirm', 'review', 'interaction'] as const) {
-        try {
-          const p = join(cwd, `.pipeline-pending-${kind}`)
-          const st = await stat(p)
-          res.push({ kind, ageMs: 0, raw: await readFile(p, 'utf8') })
-        } catch { /* 缺失 */ }
-      }
-      return res
-    },
-    readHistoryRaw: async (dir) => { try { return await readFile(join(dir, '.pipeline-history.jsonl'), 'utf8') } catch { return '' } },
-    writeBreadcrumb: (dir, content) => writeFile(join(dir, '.breadcrumb'), content, 'utf8'),
-    history: createHistoryWriter(),
-    gitHeadSha: async () => 'DEADBEEF',
-    writeReviewMarker: (content) => writeFile(join(cwd, '.pipeline-pending-review'), content, 'utf8'),
-    // 真探针束：pluginRoot 指真仓，manifest/verify-skills 真跑（doctor 的真实生效面）
-    doctor: {
-      nodeVersion: () => process.version,
-      gitAvailable: async () => { try { execFileSync('git', ['--version'], { stdio: 'ignore' }); return true } catch { return false } },
-      pluginRoot: REPO_ROOT,
-      manifestError: () => { try { loadManifest(MANIFEST); return null } catch (e) { return e instanceof Error ? e.message : String(e) } },
-      fileExists: (p) => { try { return statSync(p).isFile() } catch { return false } },
-      fileExecutable: (p) => { try { return (statSync(p).mode & 0o111) !== 0 } catch { return false } },
-      dirExists: (p) => { try { return statSync(p).isDirectory() } catch { return false } },
-      env: (name) => process.env[name],
-      statuslineConfigured: () => false,
-      runVerifySkills: async () => {
-        try {
-          const output = execFileSync('bash', [join(REPO_ROOT, 'tools', 'verify-skills.sh')], { encoding: 'utf8' })
-          return { code: 0, output }
-        } catch (e) {
-          const err = e as { status?: number; stdout?: string; stderr?: string }
-          return { code: err.status ?? 1, output: `${err.stdout ?? ''}${err.stderr ?? ''}` }
-        }
-      },
-    },
-  }
-}
-
-function makeHarness(cwd: string): Harness {
-  const out: string[] = []
-  const err: string[] = []
-  return {
-    cwd, out, err,
-    run: async (args) => {
-      out.length = 0
-      err.length = 0
-      try {
-        await buildProgram(realDeps(cwd, out, err)).parseAsync(args, { from: 'user' })
-        return 0
-      } catch (e) {
-        if (e instanceof CliExit) return e.code
-        throw e
-      }
-    },
-    read: (name) => readFile(join(cwd, 'openspec', 'changes', name, '.pipeline.yaml'), 'utf8'),
-  }
-}
+import { freshHarness, realDeps, REPO_ROOT, type Harness } from './integration-harness.js'
 
 describe('真实 e2e —— 全命令驱动真 kernel + 真 fs（GOAL C9）', () => {
   let h: Harness
   beforeEach(async () => {
-    h = makeHarness(await mkdtemp(join(tmpdir(), 'lite-e2e-')))
+    h = await freshHarness()
   })
   afterEach(async () => {
     await rm(h.cwd, { recursive: true, force: true })
