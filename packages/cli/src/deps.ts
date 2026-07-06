@@ -62,6 +62,10 @@ export interface CliDeps {
   history?: HistoryWriter
   /** 读 .pipeline-history.jsonl 原文（缺失 → 空串）。import 幂等哨兵检查用 */
   readHistoryRaw?: (changeDir: string) => Promise<string>
+  /** 插件版本（= .claude-plugin/plugin.json 版本；sync 的 cliVersion 真相源）。main.ts 注入 */
+  pluginVersion?: string
+  /** 读 installed_plugins.json 文本（缺失 → undefined）。sync upgrade-channel 用；kernel 不碰真文件 */
+  readInstalledPlugins?: () => Promise<string | undefined>
   /**
    * 读项目根的三门 marker（缺失 → 不出现在数组里）。main.ts 用 fs 实现；
    * 新鲜判定（GATE_FRESH_MS）是 inbox 命令的职责，这里只报原始年龄。

@@ -10,10 +10,13 @@ import { cmdDoctor } from './commands/doctor.js'
 import { cmdCas, cmdGet, cmdSet, cmdSetMany } from './commands/fields.js'
 import { cmdImport } from './commands/import.js'
 import { cmdInbox } from './commands/inbox.js'
+import { cmdGenRouterSh } from './commands/gen-router.js'
 import { cmdInit, type InitCmdOpts } from './commands/init.js'
 import { cmdSession } from './commands/session.js'
 import { cmdSpec } from './commands/spec.js'
+import { cmdSync } from './commands/sync.js'
 import { cmdTask } from './commands/task.js'
+import { cmdUninstall } from './commands/uninstall.js'
 import { cmdList, cmdStatus } from './commands/status.js'
 import { cmdTransition } from './commands/transition.js'
 
@@ -131,6 +134,35 @@ export function buildProgram(deps: CliDeps): Command {
     .description('活跃 change 表')
     .option('--json', 'JSON 输出（schema 稳定）')
     .action(async (opts: { json?: boolean }) => bail(await cmdList(deps, opts)))
+
+  program
+    .command('sync [sub]')
+    .description('项目内资产同步（downgrade-guard / prune / config 门 / --migrate 硬闸）')
+    .option('--migrate', '执行迁移（缺省只报告不改盘）')
+    .option('--allow-downgrade', '放行降级同步')
+    .action(async (sub: string | undefined, opts: { migrate?: boolean; allowDowngrade?: boolean }) => {
+      const installedJson = await deps.readInstalledPlugins?.()
+      bail(await cmdSync(deps, {
+        sub: sub as 'sync' | 'banner' | 'upgrade-channel' | undefined,
+        cliVersion: deps.pluginVersion ?? 'unknown',
+        migrate: opts.migrate,
+        allowDowngrade: opts.allowDowngrade,
+        installedJson,
+      }))
+    })
+
+  program
+    .command('uninstall')
+    .description('卸载 + 所有权 scrubber（只删自己装的、用户改过的保留）')
+    .option('-y, --yes', '非交互确认')
+    .option('--dry-run', '只打印计划不落盘')
+    .action(async (opts: { yes?: boolean; dryRun?: boolean }) =>
+      bail(await cmdUninstall(deps, { yes: opts.yes, dryRun: opts.dryRun })))
+
+  program
+    .command('_gen-router-sh <manifest>')
+    .description('[内部] 从 manifest 派生 router 缓存 bash（router.sh 调用）')
+    .action(async (manifest: string) => bail(await cmdGenRouterSh(deps, manifest)))
 
   return program
 }

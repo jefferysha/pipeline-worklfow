@@ -25,3 +25,5 @@ export {
   pathInSubtree, packageForPath, routeContext, routeBucketsToObject, renderRouteContextText,
 } from './session.js'
 export type { ValidName, InvalidName, PackageDecl, RouteBucket } from './session.js'
+// 所有权 hash 追踪 + sync/uninstall 决策（BACKLOG #24）
+export * from './ownership.js'

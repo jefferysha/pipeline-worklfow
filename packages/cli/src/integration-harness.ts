@@ -88,6 +88,8 @@ export function realDeps(cwd: string, out: string[], err: string[]): CliDeps {
     history: createHistoryWriter(),
     gitHeadSha: async () => 'DEADBEEF',
     writeReviewMarker: (content) => writeFile(join(cwd, '.pipeline-pending-review'), content, 'utf8'),
+    pluginVersion: '0.1.0',
+    readInstalledPlugins: async () => undefined,
     doctor: {
       nodeVersion: () => process.version,
       gitAvailable: async () => { try { execFileSync('git', ['--version'], { stdio: 'ignore' }); return true } catch { return false } },

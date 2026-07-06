@@ -116,6 +116,16 @@ function manifestPath(): string {
   return join(pluginRoot(), 'templates', 'manifest.yaml')
 }
 
+/** 读 .claude-plugin/plugin.json 的版本（sync cliVersion 真相源；失败 → 'unknown'） */
+function readPluginVersion(): string {
+  try {
+    const raw = readFileSync(join(pluginRoot(), '.claude-plugin', 'plugin.json'), 'utf8')
+    return (JSON.parse(raw) as { version?: string }).version ?? 'unknown'
+  } catch {
+    return 'unknown'
+  }
+}
+
 /**
  * doctor 探针（BACKLOG #26b）：环境/fs 事实采集的 node 落地，裁决归 cmdDoctor。
  * 各探针独立 fail-safe（fs 异常按「不存在/不可执行」处理）——doctor 要能在坏环境里跑完。
@@ -197,6 +207,13 @@ async function main(): Promise<void> {
     },
     gitHeadSha: () => gitHeadSha(process.cwd()),
     writeReviewMarker: (content) => writeFile(join(process.cwd(), '.pipeline-pending-review'), content, 'utf8'),
+    pluginVersion: readPluginVersion(),
+    readInstalledPlugins: async () => {
+      for (const p of [join(pluginRoot(), '..', 'installed_plugins.json'), join(process.env.HOME ?? '', '.claude', 'installed_plugins.json')]) {
+        try { return await readFile(p, 'utf8') } catch { /* 试下一个 */ }
+      }
+      return undefined
+    },
   }
 
   try {

@@ -199,6 +199,23 @@ describe('真实 e2e —— 全命令驱动真 kernel + 真 fs（GOAL C9）', ()
     expect(payload.checks.length).toBeGreaterThan(0)
   })
 
+  test('sync 真跑（走 buildProgram，--json 决策信封 cli_version 来自注入）', async () => {
+    await h.run(['init', 'x', '--track', 'backend', '--preset', 'full'])
+    expect(await h.run(['sync'])).toBe(0)
+    const env = JSON.parse(h.out.join('\n')) as { stage: string; cli_version: string; report_only: boolean }
+    expect(env.stage).toBe('sync')
+    expect(env.cli_version).toBe('0.1.0') // deps.pluginVersion 注入
+    expect(env.report_only).toBe(true) // 无 --migrate 只报告
+  })
+
+  test('uninstall --dry-run 真跑（只打印计划不删文件）', async () => {
+    await h.run(['init', 'x', '--track', 'backend', '--preset', 'full'])
+    const before = await h.read('x')
+    expect(await h.run(['uninstall', '--dry-run', '--yes'])).toBe(0)
+    // dry-run 不动 change 文件
+    expect(await h.read('x')).toBe(before)
+  })
+
   test('全程 init→archive 七相位真跑通（喂足每相位真实前置，忠实老内核）', async () => {
     const cd = join(h.cwd, 'openspec/changes/e2e')
     await h.run(['init', 'e2e', '--track', 'backend', '--preset', 'full', '--user', 'conv'])

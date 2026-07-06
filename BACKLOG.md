@@ -9,12 +9,10 @@
 | **M1** 内核深度 | | | |
 | 12 | guard 全量校验面：老仓 pipeline-guard.sh 逐相位出口规则全移植（lite 子集 → 全集，oracle 对齐 check） | M1 | 2d |
 | **M2** hooks/插件全保真 | | | |
-| 19 | router hook：Track 识别评分正则（读 manifest 派生缓存）+ 每轮 breadcrumb 注入 | M2 | 2d |
 | 20 | SessionStart 三注入：workflow 宪法 / pipeline-context / openspec | M2 | 1d |
 | 21 | PostToolUse 全套：confirm-clear、decision-recorder（AskUserQuestion）、skill-tracker、interactive-skill-gate | M2 | 2d |
 | 22 | 7 相位 SKILL.md + 主编排 Decision Core + openspec 四命令 + learn-record | M2 | 3d |
 | 23 | 4 agents（builder/researcher/reviewer/design-reviewer）定义移植 | M2 | 1d |
-| 24 | /pipeline-sync + /pipeline-uninstall（所有权 hash 追踪 scrubber，对标老仓 .pipeline-owned.json） | M2 | 2d |
 | **M3** dashboard | | | |
 | 25 | TS 全局 server：snapshot/SSE + **版本抢占**（老仓架构欠账 #3）+ **写端点 token 鉴权**（欠账 #4） | M3 | 3d |
 | 26 | 前端信息架构重构：收件箱默认视图 / Kanban / Settings 分离 / debug 降级（UI 病灶 1-4 完整解法） | M3 | 3d |
@@ -77,3 +75,5 @@
 | 2026-07-07 | #16 living-spec（iteration-15） | 收编：specs/set-spec-scope/inject-jsonl + 14 真 fs 例 |
 | 2026-07-07 | #17 session（iteration-15） | 收编：activate/route-context + 9 真 fs 例，占位诚实标注 |
 | 2026-07-07 | **M1 内核深度里程碑收官** | 七项全收编（#12/#13/#14/#15/#16/#17/#18），vitest 541，oracle 0 不一致 |
+| 2026-07-07 | #19 router hook（iteration-16） | 收编：Track 评分 + breadcrumb 注入 + 缓存零 spawn，test-hooks 116 |
+| 2026-07-07 | #24 sync/uninstall（iteration-16） | 收编：所有权 hash scrubber + 16 真 fs 例，vitest 646 |

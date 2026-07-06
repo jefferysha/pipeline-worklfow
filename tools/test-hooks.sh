@@ -357,6 +357,105 @@ chmod 644 "$SB2/proj/openspec/changes/broken/.pipeline.yaml" 2>/dev/null || true
 assert_exit "三注入: 缺模板+烂 yaml → 全 fail-open exit 0" 0 "$rc"
 assert_contains "三注入: fail-open 时基础引导仍输出" "$out" "pipeline"
 
+# ═══════════════ 9. router.sh（BACKLOG #19：UserPromptSubmit Track 评分 + breadcrumb 注入） ═══════════════
+# 真实 e2e（C9）：真跑 router.sh 喂真 stdin JSON + 真 manifest 派生缓存（router-gen.mjs → kernel
+# genRouterSh/breadcrumbs/skillsFor），断言真输出。缓存机制 mtime-gated：命中缓存零 node spawn（红线自证）。
+R="$ROOT/hooks/router.sh"
+RGEN="$ROOT/hooks/router-gen.mjs"
+[ -f "$R" ]    && ok "router: hooks/router.sh 存在"          || bad "router: hooks/router.sh 存在" "缺文件"
+[ -x "$R" ]    && ok "router: hooks/router.sh 可执行"        || bad "router: hooks/router.sh 可执行" "无 x 位"
+[ -f "$RGEN" ] && ok "router: hooks/router-gen.mjs 存在（派生缓存生成器）" || bad "router: hooks/router-gen.mjs 存在（派生缓存生成器）" "缺文件"
+
+# run_router：喂 stdin JSON，隔离缓存路径，用真实 plugin root（含 templates/manifest.yaml）
+RCACHE="$TMP/router-cache.generated.sh"
+run_router() { # $1=stdin-json [$2=cache-override] → 设 ROUT / RRC
+  local cache="${2:-$RCACHE}"
+  ROUT="$(printf '%s' "$1" | PIPELINE_ROUTER_CACHE="$cache" CLAUDE_PLUGIN_ROOT="$ROOT" bash "$R" 2>/dev/null)"
+  RRC=$?
+}
+
+# ── 9a. 红线自证（无条件跑）：HOT PATH 标记以下的**可执行**行（剥注释）零 node/python spawn ──
+below_exec="$(awk '/HOT PATH（每轮命中缓存/{f=1} f' "$R" | grep -vE '^[[:space:]]*#')"
+n="$(printf '%s' "$below_exec" | grep -c 'node' || true)"
+[ "$n" = "0" ] && ok "router 红线: HOT PATH 打分/source 段可执行行 grep node 为 0" || bad "router 红线: HOT PATH 打分/source 段可执行行 grep node 为 0" "实得 ${n} 行"
+n="$(printf '%s' "$below_exec" | grep -c 'python' || true)"
+[ "$n" = "0" ] && ok "router 红线: HOT PATH 段无 python" || bad "router 红线: HOT PATH 段无 python" "实得 ${n} 行"
+# 打分段（score_track 起至 EOF）——评分逻辑本体绝无解释器 spawn
+score_seg="$(awk '/^score_track\(\)/{f=1} f' "$R")"
+n="$(printf '%s' "$score_seg" | grep -c 'node' || true)"
+[ "$n" = "0" ] && ok "router 红线: score_track 打分段 grep node 为 0" || bad "router 红线: score_track 打分段 grep node 为 0" "实得 ${n} 行"
+n="$(printf '%s' "$below_exec" | grep -c 'jq' || true)"
+[ "$n" = "0" ] && ok "router 红线: HOT PATH 段不依赖 jq" || bad "router 红线: HOT PATH 段不依赖 jq" "实得 ${n} 行"
+
+# ── 9b. 跳过规则（无条件；不触达 cache/node）：/命令 / L5 override / 讨论 / 自身回显 → exit 0 空输出 ──
+rproj="$TMP/router-skip"; mkdir -p "$rproj"
+run_router "{\"prompt\":\"/pipeline status\",\"cwd\":\"$rproj\"}"
+assert_exit "router: /命令 → exit 0" 0 "$RRC"; assert_empty "router: /命令 不注入" "$ROUT"
+run_router "{\"prompt\":\"快速修复一下这个 React 组件的样式\",\"cwd\":\"$rproj\"}"
+assert_empty "router: L5 override（快速修复）即便含 track 词也不注入" "$ROUT"
+run_router "{\"prompt\":\"我觉得这个 React 页面原型太廉价了\",\"cwd\":\"$rproj\"}"
+assert_empty "router: 讨论类（我觉得…）不注入" "$ROUT"
+run_router "{\"prompt\":\"<workflow-state>\nchange=x\n</workflow-state>\",\"cwd\":\"$rproj\"}"
+assert_empty "router: 自身回显 <workflow-state> 不再触发" "$ROUT"
+run_router "{\"prompt\":\"\",\"cwd\":\"$rproj\"}"
+assert_exit "router: 空 prompt → fail-safe exit 0" 0 "$RRC"; assert_empty "router: 空 prompt 无输出" "$ROUT"
+( cd "$rproj" && printf 'not json at all' | PIPELINE_ROUTER_CACHE="$RCACHE" CLAUDE_PLUGIN_ROOT="$ROOT" bash "$R" >/dev/null 2>&1 )
+assert_exit "router: 非 JSON stdin → fail-open exit 0" 0 "$?"
+
+# ── 9c. fail-safe：patterns 未载入（缓存无 FE_PATTERN 且 fresh、不重生成）→ 不路由、非阻断 exit 0 ──
+EMPTY_CACHE="$TMP/router-empty.generated.sh"
+printf '# no patterns generated（模拟 manifest/node 坏）\n' > "$EMPTY_CACHE"
+touch "$EMPTY_CACHE"  # fresh：晚于 templates/manifest.yaml → router 不触发重生成，直接 source 空缓存
+run_router "{\"prompt\":\"帮我写个 React 组件响应式页面 UI\",\"cwd\":\"$rproj\"}" "$EMPTY_CACHE"
+assert_exit "router: patterns 未载入 → fail-safe exit 0（非阻断）" 0 "$RRC"
+assert_empty "router: patterns 未载入 → 不路由（无 workflow-state）" "$ROUT"
+
+# ── 9d. 需 node 的真实派生 + 评分 + 注入 + 缓存红线（node 不可用则跳过，语义同 section 6） ──
+if command -v node >/dev/null 2>&1; then
+  rm -f "$RCACHE"
+  # 首轮：无缓存 → router 经 router-gen.mjs 真派生缓存（消费 kernel genRouterSh/breadcrumbs/skillsFor）
+  run_router "{\"prompt\":\"帮我实现一个 React 组件，做个响应式页面 UI\",\"cwd\":\"$rproj\"}"
+  assert_exit "router: FE prompt → exit 0" 0 "$RRC"
+  assert_contains "router: FE 特征 prompt → 选 frontend Track" "$ROUT" "track=frontend"
+  [ -f "$RCACHE" ] && ok "router: 首轮无缓存 → 派生缓存已生成" || bad "router: 首轮无缓存 → 派生缓存已生成" "缓存未生成"
+  # 单一真相源实证：缓存 FE_PATTERN 逐字来自 manifest（非硬编码兜底）——含 manifest 独有 token「响应式」
+  assert_contains "router: 缓存派生自真实 manifest（含独有 token 响应式）" "$(cat "$RCACHE" 2>/dev/null)" "响应式"
+  # BE / PM 特征 prompt
+  run_router "{\"prompt\":\"设计一个后端 API 接口，接 Postgres 数据库，写 service 层\",\"cwd\":\"$rproj\"}"
+  assert_contains "router: BE 特征 prompt → 选 backend Track" "$ROUT" "track=backend"
+  run_router "{\"prompt\":\"帮我做竞品调研，写 PRD 需求文档，梳理用户旅程\",\"cwd\":\"$rproj\"}"
+  assert_contains "router: PM 特征 prompt → 选 pm Track" "$ROUT" "track=pm"
+
+  # breadcrumb 注入含相位 + 该 phase×track 推荐/强制 skill（活跃 change phase=build, track=frontend）
+  rc2="$TMP/router-active"; mkdir -p "$rc2/openspec/changes/demo"
+  printf 'track: frontend\nphase: build\narchived: \n' > "$rc2/openspec/changes/demo/.pipeline.yaml"
+  run_router "{\"prompt\":\"继续实现登录页面的 React 组件\",\"cwd\":\"$rc2\"}"
+  assert_contains "router: 注入含当前相位（phase=build）" "$ROUT" "phase=build"
+  assert_contains "router: 注入含 change 名" "$ROUT" "demo"
+  assert_contains "router: 注入含 <workflow-state> 标签" "$ROUT" "<workflow-state>"
+  assert_contains "router: 注入含该相位 breadcrumb 行动提示（build 含 TDD）" "$ROUT" "TDD"
+  assert_contains "router: 注入含推荐 skill（build.frontend）" "$ROUT" "推荐 skill"
+  assert_contains "router: 注入含 build.frontend 推荐 skill token（react-patterns）" "$ROUT" "react-patterns"
+
+  # mtime 缓存：manifest 比缓存新 → 重生成（缓存 mtime 被刷新到晚于 manifest）
+  MAN="$ROOT/templates/manifest.yaml"
+  touch -t 200001010000 "$RCACHE"  # 人为把缓存打旧（早于 manifest）
+  run_router "{\"prompt\":\"帮我写个 React 页面 UI\",\"cwd\":\"$rproj\"}"
+  if [ "$RCACHE" -nt "$MAN" ] || [ ! "$MAN" -nt "$RCACHE" ]; then ok "router: 缓存陈旧（早于 manifest）→ 触发重生成刷新缓存"; else bad "router: 缓存陈旧（早于 manifest）→ 触发重生成刷新缓存" "缓存未被刷新"; fi
+
+  # 缓存命中零 spawn（红线实证）：缓存 fresh 时，shadow 一个「被调用即落 sentinel」的假 node，
+  # router 若走 cache-hit 纯 bash 则永不 spawn node → sentinel 不存在，且仍正确评分 frontend。
+  touch "$RCACHE"  # 确保 fresh（晚于 manifest）→ 不重生成
+  FB="$TMP/router-fakebin"; mkdir -p "$FB"
+  printf '#!/bin/sh\ntouch "%s/NODE_CALLED"\nexit 1\n' "$TMP" > "$FB/node"; chmod +x "$FB/node"
+  rm -f "$TMP/NODE_CALLED"
+  ROUT="$(printf '{"prompt":"帮我写个 React 组件页面 UI","cwd":"%s"}' "$rproj" | PATH="$FB:$PATH" PIPELINE_ROUTER_CACHE="$RCACHE" CLAUDE_PLUGIN_ROOT="$ROOT" bash "$R" 2>/dev/null)"
+  [ ! -f "$TMP/NODE_CALLED" ] && ok "router 红线: 命中缓存时零 node spawn（假 node sentinel 未落）" || bad "router 红线: 命中缓存时零 node spawn（假 node sentinel 未落）" "cache-hit 竟 spawn 了 node"
+  assert_contains "router: 命中缓存（无 node）仍纯 bash 正确评分 frontend" "$ROUT" "track=frontend"
+else
+  printf 'skip - node 不可用，跳过 router 真实派生/评分/缓存红线（同 section 6 语义）\n'
+fi
+
 # ───────────────────────── 汇总 ─────────────────────────
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" = 0 ]
