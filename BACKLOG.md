@@ -48,7 +48,12 @@
 | 39 | 适配器框架 + 分档降级契约（老仓 adapters/contract.md 移植）+ conformance 测试 | M7 | 3d |
 | 40 | 平台铺开：Codex/Cursor 先行，矩阵逐平台扩展至 ≥ 两竞品覆盖面 | M7 | 5d+ |
 | 41 | docs/superiority-matrix.md：D1–D16 逐维对比证据表（随里程碑更新，收敛检查对照物） | 持续 | 0.5d |
-| 34 | tap 流量代理：暂缓——迁移前与用户确认优先级（human gate） | 待定 | 5d+ |
+| **M8** tap 流量代理（2026-07-07 用户确认进正式队列，human gate 解除） | | | |
+| 34 | tap 核心：单进程多端口 MITM 守护（tap_daemon）+ capture/forward proxy + trace_store（TS 重写，与 claude 生命线端口隔离） | M8 | 5d |
+| 34b | 协议面：ws_reconstruct（WebSocket 重组）+ bedrock 适配 + certs（本地 CA 生成/信任链） | M8 | 3d |
+| 34c | 多 runtime 抓流：codex/kimi/openclaw/codebuddy/gemini 各端口绑定与转发 | M8 | 2d |
+| 34d | dashboard traffic 查看器数据端（M3 server 承接：TraceRow/TraceDetail 消费 trace_store） | M8 | 1d |
+| 34e | 安全护栏：默认 OFF；证书/抓包是敏感能力，doctor 明示「tap 正在拦截流量」红/黄灯；捕获数据本地不外发 | M8 | 1d |
 
 ## 已收编
 

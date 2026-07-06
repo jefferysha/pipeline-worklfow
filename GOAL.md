@@ -25,6 +25,9 @@
       （runner/lifecycle/scheduler/cli/sdk）+ Docker 沙箱执行 + 队列/merge-back/现场保留 +
       调度器 doctor 灯；与 B19 的 L1→L3 分级放权合体（默认 report-only，毕业制升档）
 - [ ] **A6 竞品缺口（M6）**：见清单 B 的 B13–B17
+- [ ] **A7 tap 流量代理（M8，2026-07-07 用户确认全量迁移）**：MITM 守护（多端口/多 runtime）+
+      capture/forward proxy + ws 重组 + bedrock + 本地 CA + trace_store + dashboard 查看器；
+      默认 OFF、敏感能力 doctor 明示、捕获数据本地不外发（安全护栏是收编前置）
 - [x] **A0 7-phase 状态机 + 三门 + CLI + 单文件分发 + 导入工具**（v0.1，iteration-0~9，oracle 0 不一致）
 
 ## 清单 B · 修改与优化点（迁移 ≠ 平移——每条都是对老仓的改进承诺）
