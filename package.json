@@ -3,15 +3,21 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "engines": { "node": ">=22" },
-  "workspaces": ["packages/*"],
+  "engines": {
+    "node": ">=22"
+  },
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
-    "build": "tsc -b packages/kernel packages/cli",
+    "build": "tsc -b packages/kernel packages/cli && npm run bundle",
+    "bundle": "esbuild packages/cli/src/main.ts --bundle --platform=node --format=esm --target=node22 --banner:js=\"import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);\" --outfile=packages/cli/dist/pipeline.mjs && chmod +x packages/cli/dist/pipeline.mjs",
     "test": "vitest run",
     "oracle": "bash tools/oracle/run.sh"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
+    "esbuild": "^0.28.1",
     "typescript": "^5.6.0",
     "vitest": "^2.1.0"
   }

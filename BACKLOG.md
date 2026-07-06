@@ -6,7 +6,6 @@
 
 | # | 项 | 对应 plan 任务 | 预算 |
 |---|---|---|---|
-| 8 | esbuild 单文件 bundle + `npx pipeline init` 上手路径 | v0.2 | 0.5d |
 | 9 | 收件箱 UI：等三门决策的 change 一屏清单（老仓 UI 病灶 2 的解法） | v0.2 | 2d |
 | 10 | statusline：当前 change \| 相位 \| 门状态 | v0.2 | 0.5d |
 | 11 | 老仓库 change 导入工具（含 history 迁移） | v0.2 | 1d |
@@ -24,3 +23,4 @@
 | 2026-07-06 | T7 集成回归门（iteration-1） | 收编：四门全绿、双跑 0 不一致 |
 | 2026-07-06 | #7 history JSONL 收尾（iteration-2） | 收编：createHistoryWriter 进 kernel + set/cas/init 记账，vitest 214/214 |
 | 2026-07-06 | #7b PIPELINE_AFK 逃生门（iteration-3） | 收编：hooks 47/47，仅字面 "1" 放行、不清 marker |
+| 2026-07-06 | #8 esbuild 单文件分发（iteration-4） | 收编：pipeline.mjs 147KB 自足 bundle + npx 上手路径 + 冒烟 7/7 |

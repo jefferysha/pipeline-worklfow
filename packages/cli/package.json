@@ -2,7 +2,7 @@
   "name": "@pipeline-lite/cli",
   "version": "0.1.0",
   "type": "module",
-  "bin": { "pipeline": "dist/main.js" },
+  "bin": { "pipeline": "dist/pipeline.mjs" },
   "engines": { "node": ">=22" },
   "dependencies": {
     "@pipeline-lite/kernel": "*",

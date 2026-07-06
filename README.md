@@ -20,10 +20,24 @@ tools/oracle/     golden-oracle 双跑校验（老内核 vs 本仓，逐字 diff
 templates/        manifest.yaml（相位/转换/review_phases 单一真相源）
 ```
 
+## 上手（5 分钟）
+
+```bash
+npm i && npm run build          # 产出单文件 packages/cli/dist/pipeline.mjs（零 node_modules 运行时）
+npx pipeline init demo --track backend --preset full
+npx pipeline get demo phase     # open
+npx pipeline transition demo open-complete
+npx pipeline status
+```
+
 ## 开发
 
 ```bash
-npm i && npm run build && npm test
+npm test                        # vitest 全量
+bash tools/test-hooks.sh        # hook shim 断言
+bash tools/verify-skills.sh     # 插件资产零悬空引用（CONTRACT §5.7）
+bash tools/test-bundle.sh       # 单文件分发冒烟
+npm run oracle                  # golden-oracle 双跑（vs 老内核）
 ```
 
 MIT
