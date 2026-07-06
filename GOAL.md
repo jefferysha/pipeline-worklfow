@@ -1,58 +1,77 @@
-# GOAL — pipeline-worklfow（轻量重构）
+# GOAL — pipeline-worklfow
 
-## 北极星
+## 终态（v1.0 的唯一定义，2026-07-06 用户指令定稿）
 
-以 **TypeScript 单语言**重建 [workflow-plugin](https://gitlab.chuangzhen-sh.net)（本机路径
-`/Users/a1234/Documents/code-manager/projects/workflow-plugin`，下称「老内核」）的
-7-phase 开发流水线内核为一个**轻量、开箱即用**的 Claude Code 插件：
+**不是"把老仓代码搬过来"，而是交付一个行为等价、结构更优、质量有证据的完整替代品**：
+老仓（workflow-plugin，本机 `/Users/a1234/Documents/code-manager/projects/workflow-plugin`）
+全部核心功能在 TS 单语言内核上重建，且本次重构启动前诊断出的**每一个架构欠账、UI 病灶、
+竞品缺口都在新仓被修复或实现**，每项收编都有机器可验证的质量门证据。
 
-> 保留老内核最值钱的硬保障（状态机 + 三门 + guard），砍掉全部正交子系统，
-> 数据格式向后兼容（能直接读写既有项目的 `.pipeline.yaml`），
-> 运行时依赖只有 node ≥22 + 几百行 bash shim。
+**达成判定 = 下方三张清单全部勾满。** loop-lite 的收敛检查（kill 判据）以本文件为唯一
+对照物：任何一项未勾即存在缺口、循环不许收官；勾一项必须给出证据（测试名/oracle
+报告/commit）。清单只增不删——发现新缺口就补进清单，绝不为收官降低标准。
 
-## 为什么（动机，来自 2026-07-06 架构评审）
+---
 
-1. 老内核 bash 7.2 万行已过维护经济性拐点，且 python3 已是关键路径硬依赖——「纯 bash 可移植」前提不再成立。
-2. 三读取器契约（bash/python/manifest.py）靠纪律防漂移，单语言可构造性消灭。
-3. 竞品对照（comet 2k★ / Trellis 11.8k★）证明：赢用户靠的是「5 分钟建立心智模型」，不是功能面。
-4. base64 历史塞 YAML 的存储变形 → 本仓一开始就用 JSONL 侧文件。
+## 清单 A · 功能完备（迁移面 → BACKLOG M1–M6）
 
-## 范围
+- [ ] **A1 内核深度（M1）**：guard 全量校验面、transition 全副作用、task lifecycle、
+      living-spec、session、manifest 全派生面、门 TTL 分级（confirm 300s / review·interaction 1800s）
+- [ ] **A2 hooks/插件全保真（M2）**：router Track 识别 + breadcrumb、SessionStart 三注入、
+      PostToolUse 全套、7 相位 SKILL + openspec 四命令 + learn-record、4 agents、sync/uninstall scrubber
+- [ ] **A3 dashboard（M3）**：TS 全局 server + 前端信息架构重构
+- [ ] **A4 channel + mem（M4）**：worker 总线、跨 runtime 会话检索
+- [ ] **A5 automation（M5）**：AFK 调度（评估先行，human gate）
+- [ ] **A6 竞品缺口（M6）**：见清单 B 的 B13–B17
+- [x] **A0 7-phase 状态机 + 三门 + CLI + 单文件分发 + 导入工具**（v0.1，iteration-0~9，oracle 0 不一致）
 
-**v0.1（当前 loop 收敛目标）**
-- `packages/kernel`：`.pipeline.yaml` 读写（字段序/引号契约兼容老内核）、mkdir 原子锁、CAS、
-  7-phase 转换合法性、guard-lite、manifest 单一真相源（引擎侧真读 `review_phases`——
-  老内核的半接线欠账在本仓构造性修复）。
-- `packages/cli`：`pipeline` 命令（init/get/set/set-many/cas/transition/check/status/list，`--json`）。
-- `hooks/`：纯 bash 薄 shim（PreToolUse 三门 exit-2 拦截、UserPromptSubmit breadcrumb 注入、
-  SessionStart 引导）——**热路径永不 spawn node**。
-- `tools/oracle/`：golden-oracle 双跑校验（老 `pipeline-state.sh` vs 新 CLI，同 fixture 逐字 diff）。
-- `.claude-plugin/`：CC 插件打包。
+## 清单 B · 修改与优化点（迁移 ≠ 平移——每条都是对老仓的改进承诺）
 
-**v0.2（backlog，见 BACKLOG.md）**：收件箱 UI（等待三门决策的 change 清单）、statusline、
-esbuild 单文件分发、老仓库 history 导入工具。
+**架构**
+- [x] B1 单语言 TS 内核：三读取器契约构造性消灭（iteration-1）
+- [x] B2 manifest 单一真相源：引擎真读 review_phases，修老仓半接线欠账（flow.test 回归锚）
+- [x] B3 历史存储去变形：JSONL 侧文件替代 base64 塞 YAML + `pipeline import` 迁移（iteration-2/8）
+- [ ] B4 全局 server 版本抢占：多项目多版本共存时新版本接管（老仓欠账 #3）→ M3
+- [ ] B5 dashboard 写端点 token 鉴权：localhost 裸写回面封死（老仓欠账 #4）→ M3
+- [ ] B6 构造级模块化：channel/mem/automation 独立可选包 + snapshot capability 声明、前端按声明渲染 → M3/M4
+- [x] B7 hook 热路径纯 bash 红线：制度化为测试自证（grep -c node = 0，iteration-1/7）
+- [ ] B8 降级可见：fail-open 不再静默——统一 `pipeline doctor` 健康面，列明"哪些保障此刻真的在生效/已降级"（对标 comet doctor + 老仓六灯，老仓 _pipeline_health 无统一面的补全）→ M3
+- [x] B9 注释考古不入代码：历史入 docs/进度流水，代码只留当前约束（全仓执行中）
 
-**v1.0（2026-07-06 用户指令：全部核心功能迁移，不做部分切片）**
-原 non-goals 作废。范围 = 老仓全部核心功能 + 本次重构启动前分析出的全部缺口，按
-BACKLOG.md 六个里程碑推进：
-- **M1 内核深度**：guard 全量校验面、task lifecycle、living-spec、session、manifest 全派生面、
-  transition 全副作用、门 TTL 分级（confirm 300s / review·interaction 1800s 恢复老内核口径）
-- **M2 hooks/插件全保真**：router（Track 识别 + breadcrumb 注入）、context/openspec/宪法注入、
-  PostToolUse 全套（confirm-clear/decision-recorder/skill-tracker/interactive-skill-gate）、
-  7 相位 SKILL + openspec 四命令 + learn-record + 4 agents + sync/uninstall（所有权 scrubber）
-- **M3 dashboard**：TS 全局 server（版本抢占 + 写端点 token 鉴权——修老仓架构欠账 #3/#4）+
-  前端信息架构按 UI 诊断重构（收件箱默认视图 / Kanban / Settings 分离 / debug 降级）
-- **M4 channel + mem**：event-sourced worker 总线与跨 runtime 会话检索（TS 重写）
-- **M5 automation**：AFK 调度（老仓 5 个 TS 包本就是 TS，评估直接移植 vs 重写）
-- **M6 竞品缺口收尾**：上下文压缩（Comet）、auto-transition 中间档、Cursor 适配器转正、
-  Trellis parity 的 8 partial + 1 missing
-（tap 流量代理暂列 M6 之后待定项——与工作流内核正交，迁移前与用户确认优先级。）
+**UI（老仓四病灶的解法）**
+- [x] B10 收件箱：`pipeline inbox`/`--html`——默认回答"在等我什么决定"（iteration-5/6）；M3 里升级为 dashboard 默认落地页
+- [x] B11 statusline：终端内零开销状态（iteration-7）
+- [ ] B12 操作与配置分离 + debug 降级：Kanban/Settings/Advanced 三层，一级导航 ≤3 项 → M3
 
-**v0.1 成功判据 → 2026-07-06 iteration-9 收敛检查全部达成 ✅（见 progress.md）**
+**竞品缺口（Comet / Trellis 对标分析的全部遗留）**
+- [ ] B13 上下文压缩：phase handoff 压缩（Comet CONTEXT-COMPRESSION 对标）→ M6
+- [ ] B14 auto-transition 中间档：guard 全绿自动推进、仅三门停（HITL 与 AFK 之间）→ M6
+- [ ] B15 Cursor 适配器转正 → M6
+- [ ] B16 Trellis parity 收尾：8 partial + 1 missing → M6
+- [x] B17 npx 一行上手：5 分钟心智模型路径（iteration-4，Trellis 简单性教训的落实）
 
-## 成功判据（v0.1 收敛即验收）
+## 清单 C · 质量保障（过程约束——任何一轮违反即不收编，没有例外）
 
-1. golden-oracle parity：init/get/set/transition/check 五个子命令面与老内核逐字等价（差异白名单仅时间戳）。
-2. 老仓库任一真实 change 的 `.pipeline.yaml` 可被 lite CLI 读取、合法转换、写回，且老内核仍能读（含 base64 历史区原样保留）。
-3. `npm test` 全绿；kernel 零第三方运行时依赖。
-4. 新用户路径：clone → `npm i` → `npx pipeline init` → 5 分钟内跑通 open→archive 一轮。
+- [x] C1 **五门全绿**方可收编：build / vitest / test-hooks / verify-skills / oracle 双跑
+- [x] C2 **golden-oracle 行为等价**：与老内核逐字对齐，差异必须白名单化并文档说明（CONTRACT §3）
+- [x] C3 **TDD 先红**：先红测试后实现（iteration-5 的瑕疵已记录在案，此后每轮流水注明先红证据）
+- [x] C4 **skill/资产零悬空引用**：verify-skills 安装期硬校验（用户硬要求，CONTRACT §5.7）
+- [x] C5 **热路径性能预算**：PreToolUse/statusline 纯 bash、零解释器 spawn（测试自证）
+- [ ] C6 **复杂度预算**：核心插件保持"5 分钟心智模型"——新增子系统必须可选装；每里程碑收编时复查上手路径仍 ≤5 分钟
+- [x] C7 **契约实测回写**：文档口径与实测冲突时以实测为准并回写 CONTRACT，留审计记录
+- [x] C8 **流水可审计**：每轮 progress.md 记录证据（测试计数/oracle 结果/commit hash），诚实记录瑕疵
+
+---
+
+## 历史
+
+**v0.1（轻量内核切片）**：四项判据 2026-07-06 iteration-9 收敛检查全部达成 ✅——
+oracle 双跑 0 不一致；lite 写 → 老内核读交叉验证通过；vitest 232/232 + kernel 零运行时
+依赖；单文件 bundle 全程 open→archive 七相位跑通。原范围定义见 git 历史（`0820771` 前）。
+
+## 为什么（动机，2026-07-06 架构评审结论，保留）
+
+1. 老内核 bash 7.2 万行已过维护经济性拐点，python3 已是关键路径硬依赖——"纯 bash 可移植"前提不再成立。
+2. 三读取器契约靠纪律防漂移，单语言构造性消灭。
+3. 竞品对照（comet 2k★ / Trellis 11.8k★）：赢用户靠"5 分钟建立心智模型"，不是功能面。
+4. base64 历史塞 YAML 的存储变形 → JSONL 侧文件。
