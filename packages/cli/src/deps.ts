@@ -12,6 +12,30 @@ export interface GateMarkerInfo {
   raw: string
 }
 
+/**
+ * doctor 命令的环境/fs 探针面（BACKLOG #26b，全部由 main.ts 落地、测试全 mock）。
+ * 探针只回答事实（存在/可执行/版本），绿黄红裁决是 cmdDoctor 的职责。
+ */
+export interface DoctorProbes {
+  /** process.version 形如 'v22.1.0' */
+  nodeVersion: () => string
+  /** `git --version` 能跑通（gitHeadSha / build_sha 记录的前提） */
+  gitAvailable: () => Promise<boolean>
+  /** 插件仓根（hooks/、templates/、tools/ 的定位锚） */
+  pluginRoot: string
+  /** templates/manifest.yaml 定位+解析试跑：成功 → null，失败 → 错误消息 */
+  manifestError: () => string | null
+  fileExists: (absPath: string) => boolean
+  fileExecutable: (absPath: string) => boolean
+  dirExists: (absPath: string) => boolean
+  /** 环境变量读取（PIPELINE_AFK 旁路检测用） */
+  env: (name: string) => string | undefined
+  /** 用户 settings 是否已把 statusline.sh 接入 statusLine */
+  statuslineConfigured: () => boolean
+  /** 子进程跑 tools/verify-skills.sh；spawn 失败也折算为非 0 code */
+  runVerifySkills: () => Promise<{ code: number; output: string }>
+}
+
 export interface CliIO {
   /** 写一行到 stdout（实现负责补 '\n'） */
   out(line: string): void
@@ -61,6 +85,11 @@ export interface CliDeps {
    * 缺省 undefined = guardCheck 纯字段 lite 面（文件类检查静默跳过，见 kernel GUARD-RULES.md §7.2）。
    */
   guardCtx?: (name: string) => GuardContext
+  /**
+   * `pipeline doctor` 健康面探针（BACKLOG #26b）。缺省 undefined = 未装配，
+   * doctor 命令直接报错 exit 1（doctor 本身不允许静默降级——它就是降级的观测者）。
+   */
+  doctor?: DoctorProbes
 }
 
 /** 统一错误消息提取（避免各命令散落 String(e) 口径） */

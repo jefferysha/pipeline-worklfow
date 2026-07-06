@@ -20,7 +20,7 @@ import type {
   PipelineState,
   TransitionResult,
 } from '@pipeline-lite/kernel'
-import type { CliDeps, GateMarkerInfo } from './deps.js'
+import type { CliDeps, DoctorProbes, GateMarkerInfo } from './deps.js'
 
 // === 调用记录 spy（不引 vitest，纯手写） ===
 
@@ -129,6 +129,24 @@ export function mockFlow(manifest: ManifestData = TEST_MANIFEST) {
 
 export type MockFlow = ReturnType<typeof mockFlow>
 
+// === DoctorProbes mock：缺省全健康（全绿基线），单测按检查面逐项覆写 ===
+
+export function mockDoctorProbes(overrides: Partial<DoctorProbes> = {}): DoctorProbes {
+  return {
+    nodeVersion: () => 'v22.5.0',
+    gitAvailable: async () => true,
+    pluginRoot: '/plugin',
+    manifestError: () => null,
+    fileExists: () => true,
+    fileExecutable: () => true,
+    dirExists: () => true,
+    env: () => undefined,
+    statuslineConfigured: () => true,
+    runVerifySkills: async () => ({ code: 0, output: '[verify-skills] OK' }),
+    ...overrides,
+  }
+}
+
 // === 依赖装配 ===
 
 export interface TestDeps extends CliDeps {
@@ -153,6 +171,8 @@ export interface MakeDepsOpts {
   historyRaw?: string
   /** check 命令 guard 文件面注入（BACKLOG #12），缺省 undefined = lite 纯字段面 */
   guardCtx?: (name: string) => GuardContext
+  /** doctor 探针覆写（BACKLOG #26b）；缺省全健康 = 全绿基线 */
+  doctor?: Partial<DoctorProbes>
 }
 
 export const FIXED_CLOCK = '2026-07-06T00:00:00Z'
@@ -174,6 +194,7 @@ export function makeDeps(o: MakeDepsOpts = {}): TestDeps {
     clock: () => FIXED_CLOCK,
     listChanges: spy(async (_root: string): Promise<string[]> => changes),
     guardCtx: o.guardCtx,
+    doctor: mockDoctorProbes(o.doctor),
     readGateMarkers: async () => o.gateMarkers ?? [],
     readHistoryRaw: async (_dir: string) => o.historyRaw ?? '',
     writeBreadcrumb: async (changeDir: string, content: string) => {

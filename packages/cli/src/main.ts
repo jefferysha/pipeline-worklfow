@@ -8,14 +8,15 @@
  * 命令模块与测试不受影响。
  */
 import { execFile } from 'node:child_process'
-import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { accessSync, constants as fsConstants, readdirSync, readFileSync, statSync } from 'node:fs'
 import { access, readdir, readFile, stat, writeFile } from 'node:fs/promises'
+import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { CommanderError } from 'commander'
 import { createFlowEngine, createHistoryWriter, createStateStore, loadManifest } from '@pipeline-lite/kernel'
 import type { GuardContext } from '@pipeline-lite/kernel'
-import type { CliDeps, GateMarkerInfo } from './deps.js'
+import type { CliDeps, DoctorProbes, GateMarkerInfo } from './deps.js'
 import { buildProgram, CliExit } from './program.js'
 
 /** ISO8601 UTC 秒级（对齐老内核 date -u +%Y-%m-%dT%H:%M:%SZ 口径） */
@@ -104,11 +105,70 @@ function makeGuardCtx(cwd: string): (name: string) => GuardContext {
 }
 
 /**
- * 运行期定位 templates/manifest.yaml：编译产物在 packages/cli/dist/main.js，
- * 插件仓根 = 其上三级（dist → cli → packages → 根）。loadManifest 不猜仓库根（T3 约定）。
+ * 运行期定位插件仓根：编译产物在 packages/cli/dist/main.js，
+ * 根 = 其上三级（dist → cli → packages → 根）。loadManifest 不猜仓库根（T3 约定）。
  */
+function pluginRoot(): string {
+  return join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..')
+}
+
 function manifestPath(): string {
-  return join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'templates', 'manifest.yaml')
+  return join(pluginRoot(), 'templates', 'manifest.yaml')
+}
+
+/**
+ * doctor 探针（BACKLOG #26b）：环境/fs 事实采集的 node 落地，裁决归 cmdDoctor。
+ * 各探针独立 fail-safe（fs 异常按「不存在/不可执行」处理）——doctor 要能在坏环境里跑完。
+ */
+function makeDoctorProbes(): DoctorProbes {
+  const root = pluginRoot()
+  return {
+    nodeVersion: () => process.version,
+    gitAvailable: () =>
+      new Promise((resolve) => {
+        execFile('git', ['--version'], (err) => resolve(!err))
+      }),
+    pluginRoot: root,
+    manifestError: () => {
+      try {
+        loadManifest(manifestPath())
+        return null
+      } catch (e) {
+        return e instanceof Error ? e.message : String(e)
+      }
+    },
+    fileExists: (p) => {
+      try { return statSync(p).isFile() } catch { return false }
+    },
+    fileExecutable: (p) => {
+      try { accessSync(p, fsConstants.X_OK); return true } catch { return false }
+    },
+    dirExists: (p) => {
+      try { return statSync(p).isDirectory() } catch { return false }
+    },
+    env: (name) => process.env[name],
+    // 接入判定与 statusline.sh 头注释的接入方式同口径：settings.json 里引用了该脚本即算接入
+    statuslineConfigured: () => {
+      try {
+        return readFileSync(join(homedir(), '.claude', 'settings.json'), 'utf8').includes('statusline.sh')
+      } catch {
+        return false
+      }
+    },
+    runVerifySkills: () =>
+      new Promise((resolve) => {
+        execFile(
+          'bash',
+          [join(root, 'tools', 'verify-skills.sh'), '--quiet'],
+          { timeout: 30_000 },
+          (err, stdout, stderr) => {
+            const errCode = (err as { code?: unknown } | null)?.code
+            const code = err ? (typeof errCode === 'number' ? errCode : 1) : 0
+            resolve({ code, output: `${stdout ?? ''}${stderr ?? ''}` })
+          },
+        )
+      }),
+  }
 }
 
 async function main(): Promise<void> {
@@ -124,6 +184,7 @@ async function main(): Promise<void> {
     clock: isoNow,
     listChanges,
     guardCtx: makeGuardCtx(process.cwd()),
+    doctor: makeDoctorProbes(),
     readGateMarkers: () => readGateMarkers(process.cwd()),
     writeBreadcrumb: (dir, content) => writeFile(join(dir, '.breadcrumb'), content, 'utf8'),
     history: createHistoryWriter(),

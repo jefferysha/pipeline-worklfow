@@ -1,0 +1,281 @@
+---
+name: pipeline-verify
+description: "Pipeline Phase 5: Verify · 三轨并行验证。PM Track 做原型走查（无 review agent），frontend/backend Track 跑 reviewer agent + codex + e2e 三轨并行，同读冻结的 build_sha 固定靶。"
+---
+
+# /pipeline-verify — Phase 5: Verify
+
+> 移植来源：老仓 `skills/pipeline-verify/SKILL.md`；脚本面已改写为 `pipeline` CLI。
+
+## 输入
+
+- `$PIPELINE_TRACK` / `$PIPELINE_CHANGE_NAME`
+
+## 前置条件
+
+- `phase=verify`
+- `build_mode` / `isolation` 已设
+- `tasks.md` 全勾选
+- `build_sha` 已由 `build-complete` 冻结（`pipeline get <name> build_sha`）
+
+## 步骤
+
+### Step 0: 入口定位
+
+```bash
+pipeline status "$PIPELINE_CHANGE_NAME"
+```
+
+> **review 门提示**：verify 是 review 相位，进入时 CLI 已落 `.pipeline-pending-review` marker。
+> `pipeline check` 是出口校验，放在 Step 4 跑。
+
+### Step 1: Track 分支调用
+
+#### 📋 Track = pm（原型走查 / 人工 verify）
+
+**强制 Skill**（禁止跳过）：
+
+1. 使用 Skill 工具加载 `browser-qa`。**禁止跳过此步骤**。
+   - 在浏览器走查原型可点击性
+
+2. 使用 Skill 工具加载 `web-design-guidelines`。**禁止跳过此步骤**。
+   - 对照 UI 设计规范
+
+3. 使用 Skill 工具加载 `taste-skill`。**禁止跳过此步骤**。
+   - 设计 review 二次把关
+
+4. 使用 Skill 工具加载 `superpowers:verification-before-completion`。**禁止跳过此步骤**。
+   - 验收 checklist
+
+**PM Track 没有 reviewer agent。** 验证完成后由用户**手动**确认，然后设置：
+
+```bash
+pipeline set "$PIPELINE_CHANGE_NAME" verify_result pass
+pipeline set "$PIPELINE_CHANGE_NAME" verification_report "docs/superpowers/reports/$(date +%Y-%m-%d)-<name>-prototype-review.md"
+pipeline set "$PIPELINE_CHANGE_NAME" branch_status handled
+```
+
+跳到 Step 4。
+
+#### 🎨 Track = frontend（三轨并行）
+
+⚡ **HARD RULE**：以下 3 轨**必须在同一条 Agent 消息**内并行 dispatch。
+
+> **三轨同读冻结的 `build_sha`（barrier）**：verify 审的是 build-complete 时冻结的固定靶，不是漂移中的 working tree。先取定 SHA 供三轨复用：
+> ```bash
+> BUILD_SHA="$(pipeline get "$PIPELINE_CHANGE_NAME" build_sha)"
+> # 基线（区间起点）= 该 change 的基线分支（按项目填，常见 test/main/develop）
+> ```
+> reviewer agent / e2e 审 `BUILD_SHA` 处的代码状态；codex 轨审提交区间 diff（见轨道 3）。
+
+**并发实现指南**：
+- 主 agent 一次性发起 3 个 tool 调用（2 个 Agent + 1 个 Bash）；含 UI 改动时再加第四轨 `pipeline-design-reviewer` agent（视觉），同消息一并发起
+- 不要等任一返回再发下一个
+- 每个 reviewer agent 独立 context，彼此不知道对方
+- Codex CLI 通过 Bash 工具独立进程执行
+- 完成后聚合到 verification_report
+
+> ⏳ **待迁移（M2 #21）**：老仓 skill-tracker hook 自动写 tools_history（三轨留痕 → 看板可视化
+> + guard V9 留痕硬卡）尚未迁移；当前证据落 `verification_report` 文件本体 +
+> `.pipeline-history.jsonl`。
+
+**强制 Skill**（禁止跳过）：
+
+1. 使用 Skill 工具加载 `superpowers:verification-before-completion`。**禁止跳过此步骤**。
+
+2. 使用 Skill 工具加载 `e2e-testing`。**禁止跳过此步骤**。
+   - Playwright E2E 模式
+
+3. 使用 Skill 工具加载 `browser-qa`。**禁止跳过此步骤**。
+   - 可视化 QA 验证
+
+4. 使用 Skill 工具加载 `verify`。**禁止跳过此步骤**。
+   - 运行 app 实际验证行为
+
+**含 UI 改动时强制（视觉轨；下面三轨全是代码/行为验证、不覆盖视觉）**：
+
+5. **含 UI 改动时禁止跳过**：把视觉审作为**第四并行轨**——与上面三轨**同消息** dispatch 一个 **`pipeline-design-reviewer` agent**（本仓 agents/pipeline-design-reviewer.md，隔离上下文，读冻结的 `build_sha` 固定靶），让它加载 `web-design-guidelines` + `taste-skill`，对**跑起来的 app**做视觉审查（截图关键屏 + 主要状态、查交互态/材质/反模板红线/无 emoji）。
+   - 它回传 REVIEW.md 路径 + 「已无 high/critical」结论；主线把视觉结论并入 verification_report，有 high/critical 则 verify-fail 回 build。主线**不内联**跑视觉审。
+
+**可选 Skill**：
+- 使用 Skill 工具加载 `run` — 启动 dev server
+- 使用 Skill 工具加载 `security-review`（builtin）
+
+**【轨道 1】Reviewer Agent（并行）**：
+- Agent 工具调用 `pipeline-reviewer`（本仓 agents/pipeline-reviewer.md）— 读冻结 build_sha、审提交区间 diff、按改动语言套评审视角（TS/JS 专项 + 通用），回传 severity 发现 + PASS/FAIL。固定靶 brief 已收进 agent，无需在此重述。
+
+**【轨道 2】E2E（并行）**：
+- dispatch 一个通用子 agent（Agent 工具），brief：checkout/read 冻结 `BUILD_SHA` 的代码状态、加载 `e2e-testing` skill 跑 Playwright E2E、回传通过/失败清单。（老仓专职 `e2e-runner` agent 未迁移，若本机装有可直接用。）
+
+**【轨道 3】Codex CLI（并行，审冻结 SHA 的提交区间；缺失优雅降级）**：
+
+```bash
+# codex 缺失 → 第三轨跳过（reviewer+e2e 两轨仍审固定靶），不算 FAIL。
+if command -v codex >/dev/null 2>&1; then
+  git diff "$BUILD_SHA"^.."$BUILD_SHA" | codex exec "review this diff: correctness/security/error-handling; 输出带 severity 的发现清单 + PASS/FAIL 结论" || echo "[WARN] codex 轨异常，降级两轨"
+else
+  echo "[WARN] codex CLI 未装，第三轨跳过（两轨仍有效）"
+fi
+# 多提交区间（verify-fail 回环产生多个 build commit）：git diff <基线分支>..."$BUILD_SHA"
+```
+
+> ⏳ **待迁移（M2 verify 全量面）**：老仓 `pipeline-codex-review.sh`（commit-scoped /
+> 绕 #17160 / --commit-vs-stdin / xhigh 全部 nuance 已收敛进脚本）未迁移，上面是直接调
+> codex CLI 的等价降级写法。
+
+**可选 Agent**：
+- `database-reviewer`（外部，若装有）— 若涉及 DB schema
+
+#### ⚙️ Track = backend（多语言 reviewer 并行）
+
+> **三轨同读冻结的 `build_sha`（barrier）**：同 frontend——先 `BUILD_SHA="$(pipeline get "$PIPELINE_CHANGE_NAME" build_sha)"`，三轨审这个固定靶；codex 轨审提交区间 diff（见上方轨道 3 写法）。
+
+**强制 Skill**：
+1. 使用 Skill 工具加载 `superpowers:verification-before-completion`。**禁止跳过此步骤**。
+
+**推荐 Skill**：
+- 使用 Skill 工具加载 `e2e-testing` — API E2E 测试
+- 使用 Skill 工具加载 `verify` — 运行服务实际验证
+- 使用 Skill 工具加载 `security-review`（builtin） — 后端安全专项
+
+**可选 Skill**：
+- 使用 Skill 工具加载 `run`
+- 使用 Skill 工具加载 `code-review`（builtin）
+- 使用 Skill 工具加载 `python-testing`（若 Python）
+
+**【轨道 1】强制 Reviewer Agent（并行）**：
+- Agent 工具调用 `pipeline-reviewer` — 读冻结 build_sha、审提交区间 diff，**按改动语言自动套视角**（Python/Go/Rust/Java/TS 后端），回传 severity 发现 + PASS/FAIL。多语言路由已收进 agent，**无需逐语言列 reviewer**。
+- `database-reviewer`（外部，若装有）— 涉及 DB schema/查询时（专项，pipeline-reviewer 不覆盖）
+
+**【轨道 2】E2E（并行）**：
+- dispatch 通用子 agent 加载 `e2e-testing` 跑 API E2E（同 frontend 轨道 2 写法）。
+
+**【轨道 3】Codex CLI（并行）**：同 frontend 轨道 3 的降级写法。
+
+### Step 1.5: Quality Check — git diff 逐文件回读规范（HARD RULE · 硬门）
+
+⚡ **HARD RULE**：spec/stack 规范的注入是**软的**；本步用 `git diff --name-only` 把改动
+**逐文件**对照对应 capability `spec.md` **回读勾选**，作为 verify 通过的**硬门**——未逐项勾选
+不得 verify-pass。对标 Trellis check agent 强制 `git diff --name-only` + `git diff` 逐条对 spec。
+
+```bash
+# 1) 列出本次 build 冻结靶引入的改动文件（区间 = 基线..BUILD_SHA；无基线时退 working tree diff）
+git diff --name-only "${BUILD_SHA:-HEAD}" 2>/dev/null || git diff --name-only
+
+# 2) 逐文件：找对应 capability 的主 spec 回读比对
+find openspec/specs -name spec.md 2>/dev/null    # 每 capability → spec.md 路径
+```
+
+> ⏳ **待迁移（M1 #16 living-spec / #18 manifest 派生）**：老仓 `pipeline-state.sh specs`
+> 的逐 capability 细粒度路由表与 L4 Pre-Dev Checklist 映射未迁移——当前用上面 `find` 全列 +
+> 人工匹配，语义等价但无自动路由。
+
+**逐文件回读勾选**（每个改动文件至少勾一行，否则 HARD STOP，不得进 Step 4 verify-pass）：
+
+| 改动文件 | 命中的 capability spec | 已回读规范并比对 diff |
+|---------|------------------------|----------------------|
+| （git diff --name-only 逐行填）| openspec/specs/<cap>/spec.md | ☐ |
+
+### Step 1.6: Spec 即时回灌 — delta → main 增量合并（HARD RULE · 硬门，frontend/backend）
+
+⚡ **HARD RULE（update-spec-on-change 闭环）**：spec 回灌**不再推迟到 archive**——本 change
+一旦在开发中改了 spec，verify 通过**前**必须把 delta 即时增量合并进 main spec（archive 仍做
+最终兜底，操作幂等、两处不冲突）。对标 Trellis 的 `[required · once]` spec-update 必经步。
+
+**三触发条件**（映射 OpenSpec delta 三操作；命中任一即必须回灌）：① 新增 capability
+（`## ADDED Requirements`）② 改既有 requirement（`## MODIFIED Requirements`）③ 删 scenario
+（`## REMOVED Requirements`）。判定：本 change 的 `openspec/changes/<name>/specs/**/spec.md`
+存在/有改动即触发。
+
+回灌操作（用 Read + Edit 工具逐 capability 做增量合并，**只读 delta + 写 main spec**）：
+
+```bash
+# 列出全部 delta spec
+find "openspec/changes/$PIPELINE_CHANGE_NAME/specs" -type f -name spec.md 2>/dev/null
+```
+
+对每个 delta：`openspec/changes/<name>/specs/<cap>/spec.md` → 合并进 `openspec/specs/<cap>/spec.md`
+（ADDED=追加 requirement 段；MODIFIED=替换同名 requirement 段；REMOVED=删除对应 scenario；
+目标不存在则整建）。**不动代码、不重新 build**——符合 verify「审固定靶」语义（`BUILD_SHA` 冻结靶不受影响）。
+
+> 命中三触发但未回灌 / 回灌失败 → **HARD STOP**，不得 verify-pass。
+> ⏳ **待迁移（M1 #16）**：老仓 `spec_merge.py` 幂等合并器未迁移，上面是 Edit 工具的等价
+> 手工合并流程；#16 落地后改回脚本化。
+
+### Step 2: 聚合 review 结果
+
+完成后必须显式写入状态（防止下一阶段误判）：
+
+```bash
+# 若所有 reviewer agent 都 pass
+pipeline set "$PIPELINE_CHANGE_NAME" agent_review_result pass
+
+# 若 codex pass（codex 缺失跳过时同样置 pass 并在报告注明"第三轨降级"）
+pipeline set "$PIPELINE_CHANGE_NAME" codex_review_result pass
+
+# 生成聚合报告
+REPORT_PATH="docs/superpowers/reports/$(date +%Y-%m-%d)-${PIPELINE_CHANGE_NAME}-verify.md"
+# ... 写报告（含三/四轨结论 + Step 1.5 勾选表 + Step 1.6 回灌记录）...
+pipeline set "$PIPELINE_CHANGE_NAME" verification_report "$REPORT_PATH"
+```
+
+### Step 3: 处理分支
+
+**立即执行**：使用 Skill 工具加载 `superpowers:finishing-a-development-branch`（推荐，按需）。
+
+完成后：
+```bash
+pipeline set "$PIPELINE_CHANGE_NAME" branch_status handled
+```
+
+### Step 4: 验证（不自动推进）
+
+```bash
+pipeline check "$PIPELINE_CHANGE_NAME"     # verify 出口：0 过 / 2 不过
+```
+
+guard 通过条件（GUARD-RULES §5，按 Track 不同）：
+
+**PM Track**:
+- `verify_result=pass`（人工设）
+
+**frontend/backend Track**:
+- `agent_review_result=pass`
+- `codex_review_result=pass`
+- `verification_report` 字段非空且文件存在
+- `branch_status=handled`
+
+guard **只校验、不自动 transition**。
+- 通过 → 把 verification_report 交用户过目、确认后手动推进：
+  `pipeline transition "$PIPELINE_CHANGE_NAME" verify-pass`
+  （CLI 副作用自动落 `verify_result=pass` + `verified_at`；verify→ship 是复核节点——
+  `.pipeline-pending-review` 门会挡住未经 AskUserQuestion 复核的推进）
+- 失败 → 用户确认后手动回退 build：
+  `pipeline transition "$PIPELINE_CHANGE_NAME" verify-fail`
+  （CLI 副作用自动落 `verify_result=fail` 并清空 `build_sha`——barrier 回退）
+
+## 出口
+
+- 事件：`verify-pass` 或 `verify-fail`
+- pass 下一 phase：`ship`；fail 下一 phase：`build`（回退）
+- 均**用户确认后手动进入**，不自动 chaining
+
+## 决策节点（暂停等用户）
+
+verify-fail 时**必须暂停**询问用户：
+- 修复（回到 build）
+- 接受偏差并强制通过（需说明原因，写入 verification_report）
+
+## 外部 skill 依赖（CONTRACT §5.7 显式声明）
+
+- external-skill: superpowers:verification-before-completion · 强制
+- external-skill: superpowers:finishing-a-development-branch · 推荐
+- external-skill: browser-qa · 强制（pm/frontend）
+- external-skill: web-design-guidelines · 强制（pm；视觉轨）
+- external-skill: taste-skill · 强制（pm；视觉轨）
+- external-skill: e2e-testing · 强制（frontend）/ 推荐（backend）
+- external-skill: verify · 强制（frontend）/ 推荐（backend）
+- external-skill: run · 可选
+- external-skill: security-review · 可选（builtin）
+- external-skill: code-review · 可选（builtin）
+- external-skill: python-testing · 可选（Python）

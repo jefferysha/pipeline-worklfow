@@ -245,6 +245,63 @@ assert_exit "session-start: verify 失败 → 仍 exit 0（fail-open）" 0 "$rc"
 err="$(cat "$TMP/ss2.err")"
 assert_contains "session-start: verify 失败 → stderr 有警告" "$err" "警告"
 
+# ─────────────── 8. SessionStart 三注入（BACKLOG #20：宪法 / pipeline 上下文 / openspec 提示） ───────────────
+assert_not_contains() { # desc haystack needle
+  case "$2" in *"$3"*) bad "$1" "输出不应包含「${3}」；实际输出：${2}" ;; *) ok "$1" ;; esac
+}
+
+# 8a. 宪法注入：templates/workflow.md 存在，且任意 cwd 下 stdout 都含 7 相位/三门/HITL/breadcrumb 关键词
+WF="$ROOT/templates/workflow.md"
+[ -f "$WF" ] && ok "三注入: templates/workflow.md 存在" || bad "三注入: templates/workflow.md 存在" "缺文件"
+proj="$TMP/ss-plain"; mkdir -p "$proj"
+out="$(printf '{"cwd":"%s"}' "$proj" | bash "$SS" 2>/dev/null)"
+rc=$?
+assert_exit "三注入: 普通目录 → exit 0" 0 "$rc"
+assert_contains "三注入: 宪法含 7 相位链" "$out" "open → explore → spec → build ⇄ verify → ship → archive"
+assert_contains "三注入: 宪法含三门语义" "$out" "三门"
+assert_contains "三注入: 宪法含 HITL（AskUserQuestion）" "$out" "AskUserQuestion"
+assert_contains "三注入: 宪法含 breadcrumb 约定" "$out" "breadcrumb"
+assert_contains "三注入: 宪法引用新 CLI（pipeline transition）" "$out" "pipeline transition"
+
+# 8b. pipeline 上下文注入：有活跃 change → 输出含 change 名 + 相位；archived 不列；新鲜门 marker 列出
+proj="$TMP/ss-ctx"; mkdir -p "$proj/openspec/changes/demo-ss" "$proj/openspec/changes/done-ss"
+printf 'track: backend\nphase: build\narchived: \n' > "$proj/openspec/changes/demo-ss/.pipeline.yaml"
+printf 'track: pm\nphase: archive\narchived: true\n' > "$proj/openspec/changes/done-ss/.pipeline.yaml"
+touch "$proj/.pipeline-pending-review"
+out="$(printf '{"cwd":"%s"}' "$proj" | bash "$SS" 2>/dev/null)"
+rc=$?
+assert_exit "三注入: 活跃 change 项目 → exit 0" 0 "$rc"
+assert_contains "三注入: 上下文含活跃 change 名" "$out" "demo-ss"
+assert_contains "三注入: 上下文含相位" "$out" "phase=build"
+assert_not_contains "三注入: archived change 不列出" "$out" "done-ss"
+assert_contains "三注入: 新鲜门 marker 列出（review）" "$out" "等:review"
+rm -f "$proj/.pipeline-pending-review"
+
+# 8b'. 上下文注入从子目录 cwd 也能上溯到项目根（与 gate/breadcrumb 上溯对称）
+mkdir -p "$proj/sub/deep"
+out="$(printf '{"cwd":"%s/sub/deep"}' "$proj" | bash "$SS" 2>/dev/null)"
+assert_contains "三注入: 子目录 cwd 上溯注入上下文" "$out" "demo-ss"
+
+# 8c. openspec 提示：openspec 目录存在 → 输出使用提示；无 pipeline 项目 → 无上下文/提示但宪法照常
+assert_contains "三注入: openspec 目录存在 → 使用提示" "$out" "openspec/changes/"
+out="$(printf '{"cwd":"%s"}' "$TMP/ss-plain" | bash "$SS" 2>/dev/null)"
+assert_not_contains "三注入: 无 pipeline 项目 → 不注入上下文" "$out" "demo-ss"
+assert_contains "三注入: 无 pipeline 项目 → 宪法照常" "$out" "三门"
+
+# 8d. 三步全 fail-open：sandbox 无 templates/ + 烂 .pipeline.yaml（不可读）→ 仍 exit 0、有基础引导
+SB2="$TMP/ss-sandbox"
+mkdir -p "$SB2/hooks" "$SB2/tools" "$SB2/proj/openspec/changes/broken"
+cp "$SS" "$SB2/hooks/session-start.sh"
+cp "$VS" "$SB2/tools/verify-skills.sh"
+chmod +x "$SB2/hooks/session-start.sh" "$SB2/tools/verify-skills.sh"
+printf 'phase: build\n' > "$SB2/proj/openspec/changes/broken/.pipeline.yaml"
+chmod 000 "$SB2/proj/openspec/changes/broken/.pipeline.yaml" 2>/dev/null || true
+out="$(printf '{"cwd":"%s/proj"}' "$SB2" | CLAUDE_PLUGIN_ROOT="$SB2" bash "$SB2/hooks/session-start.sh" 2>/dev/null)"
+rc=$?
+chmod 644 "$SB2/proj/openspec/changes/broken/.pipeline.yaml" 2>/dev/null || true
+assert_exit "三注入: 缺模板+烂 yaml → 全 fail-open exit 0" 0 "$rc"
+assert_contains "三注入: fail-open 时基础引导仍输出" "$out" "pipeline"
+
 # ───────────────────────── 汇总 ─────────────────────────
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" = 0 ]

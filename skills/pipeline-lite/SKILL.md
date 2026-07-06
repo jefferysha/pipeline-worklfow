@@ -21,10 +21,10 @@ open → explore → spec → build ⇄ verify → ship → archive
 | 命令 | 作用 | exit |
 |---|---|---|
 | `pipeline init <name> --track <t> --preset <p>` | 建 change | 0/1 |
-| `pipeline get <name> <field>` | 读字段（裸值） | 0；字段不存在=1 |
+| `pipeline get <name> <field>` | 读字段（裸值；字段缺失/未知 → 空行） | 0；change 缺失=1 |
 | `pipeline set <name> <field> <value>` | 写字段 | 0；四闸拒写=1 |
 | `pipeline cas <name> <field> <expect> <new>` | 比较后写 | 0；不匹配=3 |
-| `pipeline transition <name> <event>` | 推进相位（输出 `old -> new`） | 0；非法=2 |
+| `pipeline transition <name> <event>` | 推进相位（`old -> new` 走 stderr） | 0；非法/未知事件=1 |
 | `pipeline check <name>` | 相位出口 guard 报告 | 0 过 / 2 不过 |
 | `pipeline status [name] [--json]` | 单 change 摘要 | 0 |
 | `pipeline list [--json]` | 活跃 change 表 | 0 |

@@ -6,6 +6,7 @@
 import { Command } from 'commander'
 import type { CliDeps } from './deps.js'
 import { cmdCheck } from './commands/check.js'
+import { cmdDoctor } from './commands/doctor.js'
 import { cmdCas, cmdGet, cmdSet, cmdSetMany } from './commands/fields.js'
 import { cmdImport } from './commands/import.js'
 import { cmdInbox } from './commands/inbox.js'
@@ -80,6 +81,12 @@ export function buildProgram(deps: CliDeps): Command {
     .description('老仓 change 历史区 → .pipeline-history.jsonl（--strip 同时清理 YAML 历史节）')
     .option('--strip', '导入后从 .pipeline.yaml 移除历史节（其余尾内容保留）')
     .action(async (name: string, opts: { strip?: boolean }) => bail(await cmdImport(deps, name, opts)))
+
+  program
+    .command('doctor')
+    .description('统一健康面：哪些保障此刻真的在生效/已静默降级（exit 1=有红灯）')
+    .option('--json', 'JSON 输出（schema 稳定）')
+    .action(async (opts: { json?: boolean }) => bail(await cmdDoctor(deps, opts)))
 
   program
     .command('inbox')
