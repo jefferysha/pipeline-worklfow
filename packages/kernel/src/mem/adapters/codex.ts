@@ -1,0 +1,178 @@
+/**
+ * mem/adapters/codex —— 持久化 Codex 会话读取器（注入 fs）。
+ * 对位老仓 skills/pipeline/scripts/mem/adapters/codex.py。
+ *
+ * 布局：~/.codex/sessions/**\/rollout-<ts>-<id>.jsonl。元数据读首事件 payload；文件名时间戳作 created 兜底。
+ */
+import { basename } from 'node:path'
+import type { DialogueTurn, MemFilter, MemSession, PhaseEvent, SearchHit } from '../types.js'
+import type { MemFs } from '../fs.js'
+import { mtimeIso } from '../fs.js'
+import { isBootstrapTurn, stripInjectionTags } from '../dialogue.js'
+import { inRangeOverlap, sameProject } from '../filter.js'
+import { parseTaskPyCommandsAll } from '../phase.js'
+import { searchInDialogue } from '../search.js'
+import { parseJsonlLines, readJsonlFirst } from '../jsonl.js'
+import { codexSessionsRoot, walkDir } from '../paths.js'
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+type Json = any
+
+const ROLLOUT_RE = /^rollout-(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2})-(.+)$/
+const TS_FIX_RE = /T(\d{2})-(\d{2})-(\d{2})/
+
+function parseDialogueRole(v: unknown): 'user' | 'assistant' | null {
+  return v === 'user' || v === 'assistant' ? v : null
+}
+
+/**
+ * 从 Codex function_call 的 arguments 恢复 shell 命令串。三形态：
+ * ① raw shell str（JSON.parse 失败原样返）；② stringified JSON obj；③ raw object 同形。
+ */
+export function commandFromCodexArguments(argsRaw: unknown): string | null {
+  const fromObject = (obj: Json): string | null => {
+    if (typeof obj.cmd === 'string') return obj.cmd
+    if (typeof obj.command === 'string') return obj.command
+    if (Array.isArray(obj.argv)) {
+      const parts = obj.argv.filter((a: unknown) => typeof a === 'string')
+      if (parts.length) return parts.join(' ')
+    }
+    return null
+  }
+  if (typeof argsRaw === 'string') {
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(argsRaw)
+    } catch {
+      return argsRaw // 非 JSON——某些 Codex 版本内联 raw shell 串
+    }
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return fromObject(parsed as Json)
+    return null
+  }
+  if (argsRaw && typeof argsRaw === 'object') return fromObject(argsRaw as Json)
+  return null
+}
+
+function normalizeIso(s: string): string {
+  const t = Date.parse(s)
+  return Number.isNaN(t) ? '' : new Date(t).toISOString()
+}
+
+export function codexListSessions(fs: MemFs, f: MemFilter): MemSession[] {
+  const root = codexSessionsRoot(fs)
+  if (!fs.exists(root)) return []
+  const out: MemSession[] = []
+  for (const file of walkDir(fs, root)) {
+    if (!file.endsWith('.jsonl')) continue
+    const base = basename(file).slice(0, -'.jsonl'.length)
+    const m = ROLLOUT_RE.exec(base)
+    let tsFromName: string | null = null
+    if (m) {
+      const fixed = m[1]!.replace(TS_FIX_RE, 'T$1:$2:$3') + 'Z'
+      tsFromName = normalizeIso(fixed)
+    }
+
+    const first = readJsonlFirst(fs.readText(file)) as Json
+    const meta = first?.payload ?? null
+    const sid: string = (meta?.id ?? null) || (m ? m[2]! : null) || base
+    const cwd: string | null = meta?.cwd ?? null
+    const created: string = (first?.timestamp ?? null) || tsFromName || ''
+
+    if (f.cwd && !sameProject(cwd, f.cwd)) continue
+    const updated = mtimeIso(fs, file)
+    if (updated === undefined) continue
+    if (!inRangeOverlap(created, updated, f)) continue
+
+    out.push({ platform: 'codex', id: sid, cwd, created, updated, filePath: file })
+  }
+  return out
+}
+
+function buildTurnFromMessage(role: 'user' | 'assistant', parts: Json): DialogueTurn | null {
+  const collected: string[] = []
+  let totalRaw = 0
+  for (const c of parts ?? []) {
+    const txt = c?.text
+    if (typeof txt !== 'string') continue
+    if (c?.type !== 'input_text' && c?.type !== 'output_text') continue
+    totalRaw += txt.length
+    const cleaned = stripInjectionTags(txt)
+    if (cleaned) collected.push(cleaned)
+  }
+  if (!collected.length) return null
+  const merged = collected.join('\n\n')
+  if (isBootstrapTurn(merged, totalRaw)) return null
+  return { role, text: merged }
+}
+
+export function codexExtractDialogue(fs: MemFs, s: MemSession): DialogueTurn[] {
+  let turns: DialogueTurn[] = []
+  for (const obj of parseJsonlLines(fs.readText(s.filePath))) {
+    const o = obj as Json
+    if (o?.type === 'compacted') {
+      const rh = o?.payload?.replacement_history
+      turns = []
+      if (!Array.isArray(rh)) continue
+      for (const item of rh) {
+        if (item?.type !== 'message') continue
+        const role = parseDialogueRole(item?.role)
+        if (!role) continue
+        const turn = buildTurnFromMessage(role, item?.content)
+        if (turn) turns.push({ role: turn.role, text: `[compact]\n${turn.text}` })
+      }
+      continue
+    }
+    const p = o?.payload
+    if (!p || p.type !== 'message') continue
+    const role = parseDialogueRole(p.role)
+    if (!role) continue
+    const turn = buildTurnFromMessage(role, p.content)
+    if (turn) turns.push(turn)
+  }
+  return turns
+}
+
+export function codexSearch(fs: MemFs, s: MemSession, kw: string): SearchHit {
+  return searchInDialogue(codexExtractDialogue(fs, s), kw)
+}
+
+export function collectCodexTurnsAndEvents(fs: MemFs, s: MemSession): { turns: DialogueTurn[]; events: PhaseEvent[] } {
+  const state = { turns: [] as DialogueTurn[], events: [] as PhaseEvent[] }
+  for (const obj of parseJsonlLines(fs.readText(s.filePath))) {
+    const o = obj as Json
+    if (o?.type === 'compacted') {
+      const rh = o?.payload?.replacement_history
+      state.turns = []
+      state.events = []
+      if (!Array.isArray(rh)) continue
+      for (const item of rh) {
+        if (item?.type !== 'message') continue
+        const role = parseDialogueRole(item?.role)
+        if (!role) continue
+        const turn = buildTurnFromMessage(role, item?.content)
+        if (turn) state.turns.push({ role: turn.role, text: `[compact]\n${turn.text}` })
+      }
+      continue
+    }
+    const p = o?.payload
+    if (!p) continue
+    if (p.type === 'function_call') {
+      if (p.name !== 'exec_command' && p.name !== 'shell') continue
+      const cmd = commandFromCodexArguments(p.arguments)
+      if (!cmd) continue
+      for (const parsed of parseTaskPyCommandsAll(cmd)) {
+        const ev: PhaseEvent = { action: parsed.action, timestamp: o?.timestamp || '', turnIndex: state.turns.length }
+        if (parsed.action === 'create') ev.slug = parsed.slug
+        else ev.taskDir = parsed.taskDir
+        state.events.push(ev)
+      }
+      continue
+    }
+    if (p.type !== 'message') continue
+    const role = parseDialogueRole(p.role)
+    if (!role) continue
+    const turn = buildTurnFromMessage(role, p.content)
+    if (turn) state.turns.push(turn)
+  }
+  return state
+}

@@ -40,6 +40,8 @@
 | session | ✅ session.integration.test.ts 9 例（真落 .pipeline-active + monorepo 真路由）+ 走 buildProgram 1 例 | ✅ 缺 change exit1 / degraded 不炸 | — |
 | router hook | ✅ test-hooks.sh section9 32 断言（真跑 router.sh：三 Track 选对 + breadcrumb 注入 + 缓存单源实证 + 命中缓存零 node spawn shadow 证明） | ✅ patterns 缺 exit0 不阻断 | — |
 | sync / uninstall | ✅ sync-uninstall.integration.test.ts 16 例（真装文件/真写 .pipeline-owned.json/真删自己装的/真保留 user-modified/真 scrub 写回）+ 走 buildProgram 2 例 | ✅ dry-run 不动盘 | — |
+| PostToolUse 四 hook | ✅ test-hooks.sh section10 64 断言（真跑：confirm-clear 真清 marker + decision/skill 真 append JSONL + 转义硬测 + interactive-gate 真注入姿态+硬门） | ✅ 无 change 不写/归档跳过/fail-open | — |
+| mem 跨 runtime | ✅ mem.integration.test.ts 12 例（真建 Claude/Codex/Pi fixture session → nodeMemFs 真读真解析 → 真检索评分排序/cwd 作用域/聚合） | ✅ OpenCode 降级 no-op（诚实待补） | — |
 | check | ✅ guard 全量面真跑：不满足 exit 2 / 建 design doc 后 exit 0 | ✅ | ✅ |
 | inbox | ✅ --json 复核相位 | — | ✅ |
 | status/list | ✅ 真枚举 | — | ✅ |
@@ -52,7 +54,10 @@
 - ✅ G1 已闭（iteration-12）：`get` 未设字段忠实 null + 未知字段空行，真 fs 用例
 - ✅ G2 已闭（iteration-12）：`set-many` 真原子写 + 落盘字段序
 - ✅ G3 已闭（iteration-12）：`check` 真跑 guard 全量面（不满足 exit 2 / 建 design doc 后 exit 0）
-- ⚠️ G4：M2+ 移植的 skills/agents 是 markdown 定义——真实性由 verify-skills 零悬空 + 未来 e2e「真跑一次 workflow」覆盖，登记待 M2 收尾补「skill 真调用」e2e
+- ⚠️ G4：M2 移植的 skills/agents 是 markdown 定义——真实性由 verify-skills 零悬空 + PostToolUse
+  skill-tracker/interactive-gate 真跑（section10）间接覆盖 skill 触发链；「真跑一次完整 workflow skill
+  编排」的 e2e 待 M3 dashboard/M5 automation 有编排驱动面后补（登记不清零）
+- ⚠️ G5：mem OpenCode runtime（SQLite）降级 no-op——与老仓一致，待原生依赖问题解决（诚实登记）
 
 **真实发现（真测试的产出，mock 从未暴露）**：① doctor 需 `deps.doctor` 探针束装配——集成层漏装即 exit 1（realDeps 已补真探针）；② init 对可选字段落盘字面 `null` 而非空串（忠实老内核 heredoc，oracle 双跑据此过）；③ import `--strip` 后再 import 返回 exit 0「无历史区」而非幂等哨兵 exit 1（两条路径语义不同，已各自钉死）。
 

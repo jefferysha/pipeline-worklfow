@@ -12,6 +12,7 @@ import { cmdImport } from './commands/import.js'
 import { cmdInbox } from './commands/inbox.js'
 import { cmdGenRouterSh } from './commands/gen-router.js'
 import { cmdInit, type InitCmdOpts } from './commands/init.js'
+import { cmdMem } from './commands/mem.js'
 import { cmdSession } from './commands/session.js'
 import { cmdSpec } from './commands/spec.js'
 import { cmdSync } from './commands/sync.js'
@@ -158,6 +159,12 @@ export function buildProgram(deps: CliDeps): Command {
     .option('--dry-run', '只打印计划不落盘')
     .action(async (opts: { yes?: boolean; dryRun?: boolean }) =>
       bail(await cmdUninstall(deps, { yes: opts.yes, dryRun: opts.dryRun })))
+
+  program
+    .command('mem <sub> [args...]')
+    .description('跨 runtime 会话检索：list · search <kw> · context <id> · extract <id> · projects')
+    .allowUnknownOption() // --json/--limit/--phase 等 flag 由 cmdMem 自解析
+    .action(async (sub: string, args: string[]) => bail(await cmdMem(deps, sub, args)))
 
   program
     .command('_gen-router-sh <manifest>')

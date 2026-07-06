@@ -18,8 +18,9 @@
 - [x] **A1 内核深度（M1）✅ 收官 iteration-15**：guard 全量校验面(#12)、transition 全副作用(#14)、
       task lifecycle(#15)、living-spec(#16)、session(#17)、manifest 全派生面(#18)、门 TTL 分级(#13)——
       七项全收编，均带真 fs e2e + oracle 双跑 0 不一致
-- [ ] **A2 hooks/插件全保真（M2）**：router Track 识别 + breadcrumb、SessionStart 三注入、
-      PostToolUse 全套、7 相位 SKILL + openspec 四命令 + learn-record、4 agents、sync/uninstall scrubber
+- [x] **A2 hooks/插件全保真（M2）✅ 收官 iteration-17**：router Track 识别 + breadcrumb(#19)、
+      SessionStart 三注入(#20)、PostToolUse 全套(#21)、7 相位 SKILL + openspec 四命令 + learn-record(#22)、
+      4 agents(#23)、sync/uninstall scrubber(#24)——全收编，热路径纯 bash 红线 + 真 fs/真 hook e2e
 - [ ] **A3 dashboard（M3）**：TS 全局 server + 前端信息架构重构
 - [ ] **A4 channel + mem（M4）**：worker 总线、跨 runtime 会话检索
 - [ ] **A5 automation / AFK Sandcastle（M5，2026-07-07 用户确认全量迁移）**：5 个 TS 包

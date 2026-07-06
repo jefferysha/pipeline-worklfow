@@ -10,7 +10,6 @@
 | 12 | guard 全量校验面：老仓 pipeline-guard.sh 逐相位出口规则全移植（lite 子集 → 全集，oracle 对齐 check） | M1 | 2d |
 | **M2** hooks/插件全保真 | | | |
 | 20 | SessionStart 三注入：workflow 宪法 / pipeline-context / openspec | M2 | 1d |
-| 21 | PostToolUse 全套：confirm-clear、decision-recorder（AskUserQuestion）、skill-tracker、interactive-skill-gate | M2 | 2d |
 | 22 | 7 相位 SKILL.md + 主编排 Decision Core + openspec 四命令 + learn-record | M2 | 3d |
 | 23 | 4 agents（builder/researcher/reviewer/design-reviewer）定义移植 | M2 | 1d |
 | **M3** dashboard | | | |
@@ -19,7 +18,6 @@
 | 26b | `pipeline doctor` 统一健康面：fail-open 降级可见、保障生效清单（GOAL B8，对标 comet doctor） | M3 | 1d |
 | **M4** channel + mem | | | |
 | 27 | channel：event-sourced worker 总线 TS 重写（supervisor/events/inbox/turns/guard） | M4 | 5d |
-| 28 | mem：跨 runtime 会话检索（list/search/context/extract/projects） | M4 | 3d |
 | **M5** automation / AFK Sandcastle（2026-07-07 用户确认全量迁移，human gate 已解） | | | |
 | 29 | Sandcastle 5 包移植：runner/lifecycle/scheduler/cli/sdk（老仓本就是 TS——主要工作是把对老 bash `pipeline-state.sh` 的调用替换为 lite kernel API/CLI，Node ≥22 对齐） | M5 | 3d |
 | 29b | 队列语义全迁：automation 字段生命周期（off→queued→running→merged/failed/conflict/paused）+ cas 并发闸 + PIPELINE_AFK 门联动（gate 侧 #7b 已备） | M5 | 1d |
@@ -77,3 +75,6 @@
 | 2026-07-07 | **M1 内核深度里程碑收官** | 七项全收编（#12/#13/#14/#15/#16/#17/#18），vitest 541，oracle 0 不一致 |
 | 2026-07-07 | #19 router hook（iteration-16） | 收编：Track 评分 + breadcrumb 注入 + 缓存零 spawn，test-hooks 116 |
 | 2026-07-07 | #24 sync/uninstall（iteration-16） | 收编：所有权 hash scrubber + 16 真 fs 例，vitest 646 |
+| 2026-07-07 | #21 PostToolUse 全套（iteration-17） | 收编：四 hook 纯 bash + JSON 转义硬测，test-hooks 180 |
+| 2026-07-07 | #28 mem 会话检索（iteration-17） | 收编：Claude/Codex/Pi 三 runtime + 12 真 fs 例，vitest 741 |
+| 2026-07-07 | **M2 hooks/插件全保真里程碑收官** | 六项全收编（#19/#20/#21/#22/#23/#24），vitest 741，hooks 180，oracle 0 不一致 |

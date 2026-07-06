@@ -456,6 +456,156 @@ else
   printf 'skip - node 不可用，跳过 router 真实派生/评分/缓存红线（同 section 6 语义）\n'
 fi
 
+# ═══════════════ 10. PostToolUse 全套（BACKLOG #21：confirm-clear / decision-recorder / skill-tracker / interactive-skill-gate） ═══════════════
+# 真实 e2e（C9）：真跑每个 hook 喂真 stdin JSON，断言真副作用（marker 真被清 / JSONL 真 append 一行
+# 合法 JSON / interactive-gate 真输出姿态）。四脚本是 PostToolUse 热路径（每次工具后触发）→ 纯 bash 红线自证。
+CC="$ROOT/hooks/confirm-clear.sh"
+DR="$ROOT/hooks/decision-recorder.sh"
+ST="$ROOT/hooks/skill-tracker.sh"
+IG="$ROOT/hooks/interactive-skill-gate.sh"
+
+# 存在 + 可执行（TDD 红阶段在此直接倒）
+for f in "$CC" "$DR" "$ST" "$IG"; do
+  base="$(basename "$f")"
+  [ -f "$f" ] && ok "PostToolUse: $base 存在" || bad "PostToolUse: $base 存在" "缺文件"
+  [ -x "$f" ] && ok "PostToolUse: $base 可执行" || bad "PostToolUse: $base 可执行" "无 x 位"
+done
+
+# JSONL 合法性校验（测试脚本可用 node，同 section 6；每行必须 JSON.parse 通过）
+jsonl_valid() { # $1=file → 0 合法 / 1 非法 / 2 无 node（跳过）
+  command -v node >/dev/null 2>&1 || return 2
+  node -e 'const fs=require("fs");const ls=fs.readFileSync(process.argv[1],"utf8").split("\n").filter(Boolean);for(const l of ls){JSON.parse(l)}' "$1" 2>/dev/null
+}
+count_lines() { [ -f "$1" ] && grep -c '' "$1" 2>/dev/null || echo 0; }
+
+# ── 10a. confirm-clear：AskUserQuestion 后清「待处理交互标记族」（confirm/review/interaction，faithful 老仓）──
+proj="$TMP/ptu-cc"; mkdir -p "$proj"
+touch "$proj/.pipeline-pending-confirm" "$proj/.pipeline-pending-review" "$proj/.pipeline-pending-interaction"
+RC="$(printf '%s' "{\"cwd\":\"$proj\",\"tool_name\":\"AskUserQuestion\"}" | bash "$CC" >/dev/null 2>&1; echo $?)"
+assert_exit "confirm-clear: exit 0" 0 "$RC"
+[ ! -f "$proj/.pipeline-pending-confirm" ] && ok "confirm-clear: 清 .pipeline-pending-confirm（任务硬要求）" || bad "confirm-clear: 清 .pipeline-pending-confirm（任务硬要求）" "marker 仍在"
+[ ! -f "$proj/.pipeline-pending-review" ] && ok "confirm-clear: 同清 review marker（faithful）" || bad "confirm-clear: 同清 review marker（faithful）" "marker 仍在"
+[ ! -f "$proj/.pipeline-pending-interaction" ] && ok "confirm-clear: 同清 interaction marker（解封交互门）" || bad "confirm-clear: 同清 interaction marker（解封交互门）" "marker 仍在"
+# 上溯：marker 在父目录（项目根），AskUserQuestion 的 cwd 是子目录 → 也清（治跨目录 desync，老仓语义）
+mkdir -p "$proj/sub/deep"; touch "$proj/.pipeline-pending-confirm"
+printf '%s' "{\"cwd\":\"$proj/sub/deep\",\"tool_name\":\"AskUserQuestion\"}" | bash "$CC" >/dev/null 2>&1
+[ ! -f "$proj/.pipeline-pending-confirm" ] && ok "confirm-clear: 子目录 cwd 上溯清父目录 marker" || bad "confirm-clear: 子目录 cwd 上溯清父目录 marker" "父 marker 残留"
+# fail-open：非 JSON stdin / 空 stdin → 静默 exit 0
+( printf 'not json at all' | bash "$CC" >/dev/null 2>&1 ); assert_exit "confirm-clear: 非 JSON → exit 0" 0 "$?"
+( printf '' | bash "$CC" >/dev/null 2>&1 ); assert_exit "confirm-clear: 空 stdin → exit 0" 0 "$?"
+
+# ── 10b. decision-recorder：AskUserQuestion 决策 append 进活跃 change 的 .pipeline-history.jsonl（kind=prompt）──
+proj="$TMP/ptu-dr"; mkdir -p "$proj/openspec/changes/demo"
+printf 'track: backend\nphase: build\narchived: \n' > "$proj/openspec/changes/demo/.pipeline.yaml"
+JL="$proj/openspec/changes/demo/.pipeline-history.jsonl"
+before="$(count_lines "$JL")"
+DRIN="{\"cwd\":\"$proj\",\"tool_name\":\"AskUserQuestion\",\"tool_input\":{\"questions\":[{\"question\":\"走 pipeline 还是直接改？\",\"header\":\"路由\"}]},\"tool_response\":{\"answers\":{\"路由\":\"pipeline\"}}}"
+RC="$(printf '%s' "$DRIN" | bash "$DR" >/dev/null 2>&1; echo $?)"
+assert_exit "decision-recorder: exit 0" 0 "$RC"
+after="$(count_lines "$JL")"
+[ "$after" = "$((before + 1))" ] && ok "decision-recorder: JSONL 真 append 恰一行" || bad "decision-recorder: JSONL 真 append 恰一行" "before=$before after=$after"
+line="$(tail -1 "$JL" 2>/dev/null)"
+assert_contains "decision-recorder: kind=prompt" "$line" '"kind":"prompt"'
+assert_contains "decision-recorder: raw 含问题文本" "$line" "走 pipeline"
+assert_contains "decision-recorder: raw 含答案文本" "$line" "pipeline"
+assert_contains "decision-recorder: raw 含 Q/A 结构（对齐 import）" "$line" "Q: "
+jsonl_valid "$JL"; vrc=$?
+case "$vrc" in 0) ok "decision-recorder: JSONL 全行合法 JSON（node 校验）" ;; 2) printf 'skip - node 不可用，跳过 decision-recorder JSONL 合法性\n' ;; *) bad "decision-recorder: JSONL 全行合法 JSON（node 校验）" "解析失败：$line" ;; esac
+# 转义硬测（别写坏 JSONL）：问题/答案含 换行 + 反斜杠 + 双引号 → 仍恰一行 + 合法 JSON
+proj2="$TMP/ptu-dr-esc"; mkdir -p "$proj2/openspec/changes/x"
+printf 'phase: build\narchived: \n' > "$proj2/openspec/changes/x/.pipeline.yaml"
+JL2="$proj2/openspec/changes/x/.pipeline-history.jsonl"
+cat > "$TMP/dr-esc.json" <<EOF
+{"cwd":"$proj2","tool_name":"AskUserQuestion","tool_input":{"questions":[{"question":"第一行反斜杠\\路径
+第二行含引号收尾"}]},"tool_response":{"answers":{"h":"答复也带反斜杠\\end"}}}
+EOF
+bash "$DR" < "$TMP/dr-esc.json" >/dev/null 2>&1
+[ "$(count_lines "$JL2")" = "1" ] && ok "decision-recorder: 换行/反斜杠/引号输入 → 仍恰一行（不撑破 JSONL）" || bad "decision-recorder: 换行/反斜杠/引号输入 → 仍恰一行（不撑破 JSONL）" "行数=$(count_lines "$JL2")"
+jsonl_valid "$JL2"; vrc=$?
+case "$vrc" in 0) ok "decision-recorder: 特殊字符输入 → 输出仍合法 JSON（转义正确）" ;; 2) printf 'skip - node 不可用\n' ;; *) bad "decision-recorder: 特殊字符输入 → 输出仍合法 JSON（转义正确）" "解析失败：$(cat "$JL2")" ;; esac
+# 无活跃 change → 不写、exit 0
+proj3="$TMP/ptu-dr-nochange"; mkdir -p "$proj3"
+RC="$(printf '%s' "$DRIN" | bash "$DR" >/dev/null 2>&1; echo $?)"
+assert_exit "decision-recorder: 无 openspec/changes → exit 0" 0 "$RC"
+[ ! -f "$proj3/.pipeline-history.jsonl" ] && ok "decision-recorder: 无活跃 change → 不写 JSONL" || bad "decision-recorder: 无活跃 change → 不写 JSONL" "误写"
+# 仅 archived change → 跳过不写
+proj4="$TMP/ptu-dr-arch"; mkdir -p "$proj4/openspec/changes/done"
+printf 'phase: archive\narchived: true\n' > "$proj4/openspec/changes/done/.pipeline.yaml"
+printf '%s' "{\"cwd\":\"$proj4\",\"tool_name\":\"AskUserQuestion\",\"tool_input\":{\"questions\":[{\"question\":\"q\"}]},\"tool_response\":{\"answers\":{\"h\":\"a\"}}}" | bash "$DR" >/dev/null 2>&1
+[ ! -f "$proj4/openspec/changes/done/.pipeline-history.jsonl" ] && ok "decision-recorder: 仅 archived change → 不写" || bad "decision-recorder: 仅 archived change → 不写" "误写归档 change"
+
+# ── 10c. skill-tracker：Skill 调用 append 进 .pipeline-history.jsonl（kind=tool，raw=skill 名）──
+proj="$TMP/ptu-st"; mkdir -p "$proj/openspec/changes/demo"
+printf 'phase: build\narchived: \n' > "$proj/openspec/changes/demo/.pipeline.yaml"
+JL="$proj/openspec/changes/demo/.pipeline-history.jsonl"
+before="$(count_lines "$JL")"
+RC="$(printf '%s' "{\"cwd\":\"$proj\",\"tool_name\":\"Skill\",\"tool_input\":{\"skill\":\"superpowers:brainstorming\"}}" | bash "$ST" >/dev/null 2>&1; echo $?)"
+assert_exit "skill-tracker: exit 0" 0 "$RC"
+[ "$(count_lines "$JL")" = "$((before + 1))" ] && ok "skill-tracker: JSONL 真 append 恰一行" || bad "skill-tracker: JSONL 真 append 恰一行" "行数=$(count_lines "$JL")"
+line="$(tail -1 "$JL" 2>/dev/null)"
+assert_contains "skill-tracker: kind=tool" "$line" '"kind":"tool"'
+assert_contains "skill-tracker: raw 含 skill 名" "$line" "brainstorming"
+jsonl_valid "$JL"; vrc=$?
+case "$vrc" in 0) ok "skill-tracker: JSONL 合法 JSON" ;; 2) printf 'skip - node 不可用\n' ;; *) bad "skill-tracker: JSONL 合法 JSON" "解析失败：$line" ;; esac
+# 非 Skill 工具（如 Read）→ 不写、exit 0
+before="$(count_lines "$JL")"
+printf '%s' "{\"cwd\":\"$proj\",\"tool_name\":\"Read\",\"tool_input\":{\"file_path\":\"/x\"}}" | bash "$ST" >/dev/null 2>&1
+[ "$(count_lines "$JL")" = "$before" ] && ok "skill-tracker: 非 Skill 工具 → 不写" || bad "skill-tracker: 非 Skill 工具 → 不写" "误写"
+# 无活跃 change → exit 0 不写
+proj2="$TMP/ptu-st-nochange"; mkdir -p "$proj2"
+RC="$(printf '%s' "{\"cwd\":\"$proj2\",\"tool_name\":\"Skill\",\"tool_input\":{\"skill\":\"pipeline-build\"}}" | bash "$ST" >/dev/null 2>&1; echo $?)"
+assert_exit "skill-tracker: 无活跃 change → exit 0" 0 "$RC"
+
+# ── 10d. interactive-skill-gate：交互式 skill 加载后注入交互硬姿态 + 落 interaction 硬门 ──
+proj="$TMP/ptu-ig"; mkdir -p "$proj"
+OUT="$(printf '%s' "{\"cwd\":\"$proj\",\"tool_name\":\"Skill\",\"tool_input\":{\"skill\":\"superpowers:brainstorming\"}}" | bash "$IG" 2>/dev/null)"
+RC=$?
+assert_exit "interactive-skill-gate: exit 0" 0 "$RC"
+assert_contains "interactive-skill-gate: 输出交互硬姿态（提 AskUserQuestion）" "$OUT" "AskUserQuestion"
+assert_contains "interactive-skill-gate: 姿态点名交互式 skill" "$OUT" "交互式 skill"
+assert_contains "interactive-skill-gate: 姿态含被加载 skill 名" "$OUT" "brainstorming"
+# 输出为合法 JSON（additionalContext 注入）——测试用 node 校验（同 section 6）
+if command -v node >/dev/null 2>&1; then
+  printf '%s' "$OUT" | node -e 'const s=require("fs").readFileSync(0,"utf8").trim();const j=JSON.parse(s);if(!j.additionalContext)process.exit(1)' 2>/dev/null
+  assert_exit "interactive-skill-gate: 输出合法 JSON 且含 additionalContext" 0 "$?"
+fi
+[ -f "$proj/.pipeline-pending-interaction" ] && ok "interactive-skill-gate: 落 .pipeline-pending-interaction 硬门" || bad "interactive-skill-gate: 落 .pipeline-pending-interaction 硬门" "marker 未落"
+# 裸名（无 plugin 前缀）也命中
+proj2="$TMP/ptu-ig-bare"; mkdir -p "$proj2"
+OUT="$(printf '%s' "{\"cwd\":\"$proj2\",\"tool_name\":\"Skill\",\"tool_input\":{\"skill\":\"brainstorming\"}}" | bash "$IG" 2>/dev/null)"
+assert_contains "interactive-skill-gate: 裸名 brainstorming 也命中" "$OUT" "AskUserQuestion"
+# 非交互式 skill（pipeline-build）→ 不注入、不落门
+proj3="$TMP/ptu-ig-noninteractive"; mkdir -p "$proj3"
+OUT="$(printf '%s' "{\"cwd\":\"$proj3\",\"tool_name\":\"Skill\",\"tool_input\":{\"skill\":\"pipeline-build\"}}" | bash "$IG" 2>/dev/null)"
+RC=$?
+assert_exit "interactive-skill-gate: 非交互式 skill → exit 0" 0 "$RC"
+assert_empty "interactive-skill-gate: 非交互式 skill → 不注入姿态" "$OUT"
+[ ! -f "$proj3/.pipeline-pending-interaction" ] && ok "interactive-skill-gate: 非交互式 skill → 不落门" || bad "interactive-skill-gate: 非交互式 skill → 不落门" "误落门"
+# 非 Skill 工具 → exit 0 空输出
+proj4="$TMP/ptu-ig-nontool"; mkdir -p "$proj4"
+OUT="$(printf '%s' "{\"cwd\":\"$proj4\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"ls\"}}" | bash "$IG" 2>/dev/null)"
+RC=$?
+assert_exit "interactive-skill-gate: 非 Skill 工具 → exit 0" 0 "$RC"
+assert_empty "interactive-skill-gate: 非 Skill 工具 → 空输出" "$OUT"
+
+# ── 10e. 红线自证：四个 PostToolUse hook 是热路径（每次工具后触发）→ 纯 bash，零 node/python/jq ──
+for f in "$CC" "$DR" "$ST" "$IG"; do
+  base="$(basename "$f")"
+  n="$(grep -c "node" "$f" 2>/dev/null || true)";   [ "$n" = "0" ] && ok "红线: $base 内无 node" || bad "红线: $base 内无 node" "实得 ${n} 行"
+  n="$(grep -c "python" "$f" 2>/dev/null || true)"; [ "$n" = "0" ] && ok "红线: $base 内无 python" || bad "红线: $base 内无 python" "实得 ${n} 行"
+  n="$(grep -c '\bjq\b' "$f" 2>/dev/null || true)"; [ "$n" = "0" ] && ok "红线: $base 不依赖 jq" || bad "红线: $base 不依赖 jq" "实得 ${n} 行"
+done
+
+# ── 10f. hooks.json 注册这四个 PostToolUse（各自 matcher）──
+HJ="$ROOT/hooks/hooks.json"
+hjson="$(cat "$HJ" 2>/dev/null)"
+assert_contains "hooks.json: 注册 confirm-clear.sh" "$hjson" "confirm-clear.sh"
+assert_contains "hooks.json: 注册 decision-recorder.sh" "$hjson" "decision-recorder.sh"
+assert_contains "hooks.json: 注册 skill-tracker.sh" "$hjson" "skill-tracker.sh"
+assert_contains "hooks.json: 注册 interactive-skill-gate.sh" "$hjson" "interactive-skill-gate.sh"
+assert_contains "hooks.json: 含 PostToolUse 段" "$hjson" "PostToolUse"
+assert_contains "hooks.json: PostToolUse 挂 AskUserQuestion matcher" "$hjson" "AskUserQuestion"
+
 # ───────────────────────── 汇总 ─────────────────────────
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" = 0 ]
