@@ -11,6 +11,7 @@ import { cmdCas, cmdGet, cmdSet, cmdSetMany } from './commands/fields.js'
 import { cmdImport } from './commands/import.js'
 import { cmdInbox } from './commands/inbox.js'
 import { cmdInit, type InitCmdOpts } from './commands/init.js'
+import { cmdTask } from './commands/task.js'
 import { cmdList, cmdStatus } from './commands/status.js'
 import { cmdTransition } from './commands/transition.js'
 
@@ -87,6 +88,13 @@ export function buildProgram(deps: CliDeps): Command {
     .description('统一健康面：哪些保障此刻真的在生效/已静默降级（exit 1=有红灯）')
     .option('--json', 'JSON 输出（schema 稳定）')
     .action(async (opts: { json?: boolean }) => bail(await cmdDoctor(deps, opts)))
+
+  program
+    .command('task <sub> [args...]')
+    .description('task lifecycle：add-dep / remove-dep <name> <dep> · children / cascade / canonical <name>')
+    .option('--json', 'JSON 输出（children / canonical）')
+    .action(async (sub: string, args: string[], opts: { json?: boolean }) =>
+      bail(await cmdTask(deps, sub, opts.json ? [...args, '--json'] : args)))
 
   program
     .command('inbox')

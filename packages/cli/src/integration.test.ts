@@ -144,6 +144,22 @@ describe('真实 e2e —— 全命令驱动真 kernel + 真 fs（GOAL C9）', ()
     expect(payload.inbox.some((i) => i.name === 'demo')).toBe(true)
   })
 
+  test('task add-dep + children 真跑通（走 buildProgram 注册，真落盘 depends_on）', async () => {
+    await h.run(['init', 'a', '--track', 'backend', '--preset', 'full'])
+    await h.run(['init', 'b', '--track', 'backend', '--preset', 'full'])
+    expect(await h.run(['task', 'add-dep', 'a', 'b'])).toBe(0)
+    // a 真落盘 depends_on 块序列含 b
+    expect(await h.read('a')).toMatch(/depends_on:\n\s*-\s*b/)
+    // children of b 真反查到 a（--json 经 program 的 --json 选项透传进 args）
+    expect(await h.run(['task', 'children', 'b', '--json'])).toBe(0)
+    const payload = JSON.parse(h.out.join('\n')) as Array<{ name: string; archived: boolean }>
+    expect(payload).toEqual([{ name: 'a', archived: false }])
+    // remove-dep 真清空回 []
+    expect(await h.run(['task', 'remove-dep', 'a', 'b'])).toBe(0)
+    expect(await h.run(['get', 'a', 'depends_on'])).toBe(0)
+    expect(h.out).toEqual([''])
+  })
+
   test('status/list 真枚举活跃 change', async () => {
     await h.run(['init', 'a1', '--track', 'backend', '--preset', 'full'])
     await h.run(['init', 'b2', '--track', 'pm', '--preset', 'full'])

@@ -7,3 +7,10 @@ export { parsePipeline, serializePipeline, quoteGate, unquoteScalar, emptyFields
 export { withLock, LOCK_DIR_NAME, STALE_LOCK_MS } from './lock.js'
 export { createHistoryWriter, HISTORY_FILE } from './history.js'
 export { parseLegacyHistory, stripLegacyHistory } from './legacy.js'
+// task lifecycle（BACKLOG #15）——依赖图 / children / cascade / canonical
+export {
+  normalizeDeps, addDependency, removeDependency, taskNameMatches, directChildren,
+  cascadeDependents, projectCanonical, loadTaskTree, resolveChangeDir,
+  canonicalChildNames, stateSubtasks, stateRelatedFiles,
+} from './tasks.js'
+export type { AddDepResult, ChangeNode, ChildRef, CanonicalTask, CanonicalInput } from './tasks.js'

@@ -1,10 +1,29 @@
 /**
- * loadManifest —— templates/manifest.yaml 的手写窄解析器。
+ * loadManifest —— templates/manifest.yaml 的手写窄解析器 + 全派生面（BACKLOG #18 / GOAL A1）。
  *
- * 只支持 templates/manifest.yaml 用到的子集（CONTRACT §1 禁 yaml npm 包）：
+ * 单一真相源护城河（GOAL B2/D8）：所有派生字段都从 yaml 数据真解析而来，零硬编码——
+ * 改 yaml 即改派生，正是老仓 review_phases「半接线」欠账（manifest.py 能派生但消费方
+ * state-transition.sh:159-161 硬编码未读）的构造性反面。回归锚见 manifest-derive.test.ts。
+ *
+ * 派生函数盘点（× = 派生什么 → 消费方；括号内为老仓 skills/pipeline/scripts/manifest.py 行号）：
+ *   · phases/transitions/reviewPhases  ← 老 sorted_phases 212 / get_transitions 372 / review_phases。
+ *       消费方：createFlowEngine（引擎真读，iteration-1 已接线）。
+ *   · mandatorySkills / recommendedSkills（本轮新增）← 老 evidence 346-355（per phase×track，`_all` 兜底）。
+ *       老消费方：pipeline-guard.sh（经 gen_sh 563 派生的 manifest_mandatory/_recommended）。
+ *       新仓消费方：guard 强制 skill 校验面 / SessionStart 注入（待 A1 后续）——**派生就绪待消费**。
+ *   · routerPatterns（本轮新增）← 老 gen_router_sh 890-898（FE/BE/PM_PATTERN）。
+ *       老消费方：pipeline-router.sh score_track。新仓消费方：router hook #19——**派生就绪待消费**。
+ *   · breadcrumbs（本轮新增）← 老 breadcrumb 子命令 1031-1037（phases.<phase>.breadcrumb block scalar）。
+ *       老消费方：pipeline-router.sh breadcrumb_body（每轮被动注入）。新仓消费方：router hook #19——**待消费**。
+ *   · genRouterSh（本轮新增，纯派生 helper）← 老 gen_router_sh 890-898。消费方：router hook #19——**待消费**。
+ *   · skillsFor（本轮新增，纯 helper）← 老 evidence 346-355 的三级回退（per-track → `_all` → 空）。
+ *
+ * 窄解析子集（CONTRACT §1 禁 yaml npm 包）：
  *   · 顶层键 `key:` / `key: [inline, list]`
  *   · 块序列（两空格缩进 `- item`）
- *   · transitions 小节的 `from: [to1, to2]` 条目
+ *   · transitions / *_skills 小节的 `from: [to1, to2]` 条目（skill token 逐字保留，含 a|b 备选与 : 前缀）
+ *   · router_patterns 小节：`track: 'regex'`（单/双引号标量，保内部空格）
+ *   · breadcrumb 小节：`phase: |` 字面块标量（缩进决定块界，末尾换行 rstrip，对齐老 CLI）
  *   · `#` 整行注释、行尾注释（前置空白 + #）、空行
  * 其余 YAML 特性一律不支持；结构错误 fail-loud（ManifestError），
  * 对齐老内核 state-transition.sh「manifest 不可用 → HARD STOP，绝不静默丢 review-gate」。
@@ -22,6 +41,66 @@ export class ManifestError extends Error {
 
 const PHASE_SET: ReadonlySet<string> = new Set(PHASES)
 
+/** skill 表的 track 键：三真 track + `_all` 全 track 兜底哨兵（对齐老 evidence 的 _VALID_TRACKS） */
+export type SkillTrackKey = 'pm' | 'frontend' | 'backend' | '_all'
+const SKILL_TRACK_SET: ReadonlySet<string> = new Set<SkillTrackKey>(['pm', 'frontend', 'backend', '_all'])
+
+/** phase → track → skill token 列表（a|b 备选逐字保留，消费方自择其一） */
+export type SkillTable = Readonly<Record<Phase, Readonly<Partial<Record<SkillTrackKey, readonly string[]>>>>>
+
+/** router Track 评分正则（老 gen_router_sh 的 FE/BE/PM_PATTERN 三值） */
+export interface RouterPatterns {
+  frontend: string
+  backend: string
+  pm: string
+}
+const ROUTER_TRACK_SET: ReadonlySet<string> = new Set(['frontend', 'backend', 'pm'])
+
+/**
+ * 全派生面 ManifestData（types.ts::ManifestData 的扩展；本轮先在此定义并 export，
+ * 报告请主会话把新增字段提升进 types.ts::ManifestData + 由 flow/index.ts + kernel index.ts re-export）。
+ */
+export interface ExtendedManifestData extends ManifestData {
+  /** phase×track 强制 skill 表（缺 = [HARD] 阻断；派生就绪待消费：guard 强制面 / SessionStart） */
+  mandatorySkills: SkillTable
+  /** phase×track 推荐 skill 表（缺只 WARN；派生就绪待消费） */
+  recommendedSkills: SkillTable
+  /** router Track 评分正则（派生就绪待消费：router hook #19） */
+  routerPatterns: RouterPatterns
+  /** phase → breadcrumb prose（派生就绪待消费：router hook #19 每轮注入）。缺相位则键缺省。 */
+  breadcrumbs: Readonly<Partial<Record<Phase, string>>>
+}
+
+/**
+ * skill 三级回退查询（对齐老 evidence 346-355：per-track → `_all` → 空）。
+ * 纯 helper；未来消费方（guard 强制面 / router hook）调用之，回退逻辑单源于此、不重抄。
+ */
+export function skillsFor(table: SkillTable, phase: Phase, track: string): readonly string[] {
+  const row = table[phase]
+  if (!row) return []
+  if (track in row) return row[track as SkillTrackKey] ?? []
+  if ('_all' in row) return row._all ?? []
+  return []
+}
+
+/** bash 单引号安全包裹（对齐老 manifest.py::_bash_squote 613-614，防 token 逃逸成命令注入） */
+function bashSquote(s: string): string {
+  return "'" + s.replace(/'/g, "'\\''") + "'"
+}
+
+/**
+ * 生成 router 评分正则的 bash 赋值（对齐老 gen_router_sh 890-898）。
+ * 纯派生 helper；消费方 = router hook #19（source 后避免 per-prompt fork）——派生就绪待消费。
+ */
+export function genRouterSh(patterns: RouterPatterns): string {
+  return [
+    '# AUTO-GENERATED from manifest.yaml (kernel loadManifest) — 不要手改',
+    `FE_PATTERN=${bashSquote(patterns.frontend)}`,
+    `BE_PATTERN=${bashSquote(patterns.backend)}`,
+    `PM_PATTERN=${bashSquote(patterns.pm)}`,
+  ].join('\n')
+}
+
 function assertPhase(name: string, ctx: string): Phase {
   if (!PHASE_SET.has(name)) {
     throw new ManifestError(`${ctx} 含未知相位 '${name}'（合法：${PHASES.join('/')}）`)
@@ -38,6 +117,13 @@ function stripComment(line: string): string {
   return (m ? m[1]! : line).trimEnd()
 }
 
+/** 前导空格数（缩进量）；块标量缩进判界用。全空/空行由调用方先以 trim()==='' 排除 */
+function indentOf(line: string): number {
+  let n = 0
+  while (n < line.length && line[n] === ' ') n++
+  return n
+}
+
 /** 解析单行流式列表 `[a, b, c]`；`[]` → []。非法格式 → throw */
 function parseFlowList(raw: string, ctx: string): string[] {
   const s = raw.trim()
@@ -48,13 +134,112 @@ function parseFlowList(raw: string, ctx: string): string[] {
   return inner.split(',').map((x) => x.trim()).filter((x) => x !== '')
 }
 
+/** 解析单/双引号标量或裸标量（router_patterns 值）；引号内内容逐字保真（含空格），裸值裁行尾注释 */
+function parseScalarValue(rest: string, ctx: string): string {
+  const s = rest.trim()
+  if (s.startsWith("'")) {
+    const end = s.indexOf("'", 1)
+    if (end < 0) throw new ManifestError(`${ctx} 单引号未闭合: '${rest}'`)
+    return s.slice(1, end)
+  }
+  if (s.startsWith('"')) {
+    const end = s.indexOf('"', 1)
+    if (end < 0) throw new ManifestError(`${ctx} 双引号未闭合: '${rest}'`)
+    return s.slice(1, end)
+  }
+  const m = s.match(/^(.*?)\s#/)
+  return (m ? m[1]! : s).trimEnd()
+}
+
 interface RawSections {
   phases?: string[]
   transitions?: Map<string, string[]>
   review_phases?: string[]
+  mandatory_skills?: Map<string, string[]>
+  recommended_skills?: Map<string, string[]>
+  router_patterns?: Map<string, string>
+  breadcrumb?: Map<string, string>
 }
 
-/** 逐行扫描：识别三个已知顶层小节；未知顶层键连同其缩进块整体跳过（前向兼容） */
+/** 块小节 `key: [flowlist]`（*_skills 用；key 允许含 `.` 与 `_all`）；返回 {map, next} */
+function parseSkillBlock(lines: string[], start: number, path: string, section: string): { map: Map<string, string[]>; next: number } {
+  const map = new Map<string, string[]>()
+  let i = start
+  while (i < lines.length) {
+    const l = stripComment(lines[i]!)
+    if (l.trim() === '') { i++; continue }
+    if (!/^\s/.test(l)) break // 回到顶层
+    const entry = l.match(/^\s+([A-Za-z_][A-Za-z0-9_.-]*):\s*(\[.*\])\s*$/)
+    if (!entry) {
+      throw new ManifestError(`${path}:${i + 1} ${section} 条目须为 'phase.track: [skill, ...]'，得到 '${lines[i]}'`)
+    }
+    map.set(entry[1]!, parseFlowList(entry[2]!, `${section}.${entry[1]}`))
+    i++
+  }
+  return { map, next: i }
+}
+
+/** 块小节 `key: 'scalar'`（router_patterns 用）；返回 {map, next} */
+function parseScalarBlock(lines: string[], start: number, path: string, section: string): { map: Map<string, string>; next: number } {
+  const map = new Map<string, string>()
+  let i = start
+  while (i < lines.length) {
+    const raw = lines[i]!
+    if (raw.trim() === '') { i++; continue }
+    if (raw.trimStart().startsWith('#')) { i++; continue }
+    if (!/^\s/.test(raw)) break // 回到顶层
+    const entry = raw.match(/^\s+([A-Za-z_][A-Za-z0-9_-]*):\s*(.*)$/)
+    if (!entry) {
+      throw new ManifestError(`${path}:${i + 1} ${section} 条目须为 'key: value'，得到 '${lines[i]}'`)
+    }
+    map.set(entry[1]!, parseScalarValue(entry[2]!, `${section}.${entry[1]}`))
+    i++
+  }
+  return { map, next: i }
+}
+
+/** 块小节 `phase: |`（breadcrumb block scalar）；缩进决定块界，末尾换行 rstrip；返回 {map, next} */
+function parseBreadcrumbBlock(lines: string[], start: number, path: string): { map: Map<string, string>; next: number } {
+  const map = new Map<string, string>()
+  let i = start
+  while (i < lines.length) {
+    const raw = lines[i]!
+    if (raw.trim() === '') { i++; continue }
+    const ind = indentOf(raw)
+    if (ind === 0) break // 回到顶层（含顶层注释：交回主循环 stripComment 处理）
+    if (raw.trimStart().startsWith('#')) { i++; continue } // 小节内注释
+    const entry = raw.match(/^(\s+)([A-Za-z_][A-Za-z0-9_-]*):\s*(.*)$/)
+    if (!entry) {
+      throw new ManifestError(`${path}:${i + 1} breadcrumb 条目须为 'phase: |' 或 'phase: value'，得到 '${lines[i]}'`)
+    }
+    const keyIndent = entry[1]!.length
+    const key = entry[2]!
+    const rest = entry[3]!.trim()
+    i++
+    if (rest === '|' || rest === '|-' || rest === '|+') {
+      const blk: string[] = []
+      while (i < lines.length) {
+        const bl = lines[i]!
+        if (bl.trim() === '') { blk.push(''); i++; continue }
+        if (indentOf(bl) <= keyIndent) break // 缩进回退 = 块结束
+        blk.push(bl)
+        i++
+      }
+      const firstContent = blk.find((x) => x !== '')
+      let value = ''
+      if (firstContent !== undefined) {
+        const blockIndent = indentOf(firstContent)
+        value = blk.map((x) => (x === '' ? '' : x.slice(blockIndent))).join('\n').replace(/\n+$/, '')
+      }
+      map.set(key, value)
+    } else {
+      map.set(key, parseScalarValue(rest, `breadcrumb.${key}`))
+    }
+  }
+  return { map, next: i }
+}
+
+/** 逐行扫描：识别已知顶层小节；未知顶层键连同其缩进块整体跳过（前向兼容） */
 function scanSections(text: string, path: string): RawSections {
   const lines = text.split('\n')
   const out: RawSections = {}
@@ -102,6 +287,22 @@ function scanSections(text: string, path: string): RawSections {
         i++
       }
       out.transitions = map
+    } else if (key === 'mandatory_skills' || key === 'recommended_skills') {
+      if (rest !== '') throw new ManifestError(`${path}:${i + 1} ${key} 必须是块小节`)
+      const r = parseSkillBlock(lines, i + 1, path, key)
+      if (key === 'mandatory_skills') out.mandatory_skills = r.map
+      else out.recommended_skills = r.map
+      i = r.next
+    } else if (key === 'router_patterns') {
+      if (rest !== '') throw new ManifestError(`${path}:${i + 1} router_patterns 必须是块小节`)
+      const r = parseScalarBlock(lines, i + 1, path, 'router_patterns')
+      out.router_patterns = r.map
+      i = r.next
+    } else if (key === 'breadcrumb') {
+      if (rest !== '') throw new ManifestError(`${path}:${i + 1} breadcrumb 必须是块小节`)
+      const r = parseBreadcrumbBlock(lines, i + 1, path)
+      out.breadcrumb = r.map
+      i = r.next
     } else {
       // 未知顶层键：跳过它与其整个缩进块（允许 manifest 未来加节而不破 kernel）
       i++
@@ -116,7 +317,39 @@ function scanSections(text: string, path: string): RawSections {
   return out
 }
 
-export function loadManifest(path: string): ManifestData {
+/** 建空 skill 表（全相位 → {}），供缺节 / 增量填充的基座 */
+function emptySkillTable(): Record<Phase, Partial<Record<SkillTrackKey, readonly string[]>>> {
+  const t = {} as Record<Phase, Partial<Record<SkillTrackKey, readonly string[]>>>
+  for (const p of PHASES) t[p] = {}
+  return t
+}
+
+/** 派生 skill 表：校验 phase 已声明、track 合法（fail-loud，老 evidence fail-open 的改进），逐条填入 */
+function deriveSkillTable(
+  raw: Map<string, string[]> | undefined,
+  declared: ReadonlySet<Phase>,
+  section: string,
+): SkillTable {
+  const table = emptySkillTable()
+  if (!raw) return table
+  for (const [pt, list] of raw) {
+    const dot = pt.indexOf('.')
+    if (dot <= 0 || dot === pt.length - 1) {
+      throw new ManifestError(`${section} 键 '${pt}' 须为 'phase.track' 形式`)
+    }
+    const phaseName = pt.slice(0, dot)
+    const track = pt.slice(dot + 1)
+    const phase = assertPhase(phaseName, section)
+    if (!declared.has(phase)) throw new ManifestError(`${section}.${pt} 相位 '${phaseName}' 未在 phases 声明`)
+    if (!SKILL_TRACK_SET.has(track)) {
+      throw new ManifestError(`${section}.${pt} 含未知 track '${track}'（合法：pm/frontend/backend/_all）`)
+    }
+    table[phase][track as SkillTrackKey] = list
+  }
+  return table
+}
+
+export function loadManifest(path: string): ExtendedManifestData {
   const text = readFileSync(path, 'utf8')
   const raw = scanSections(text, path)
 
@@ -155,5 +388,28 @@ export function loadManifest(path: string): ManifestData {
     return ph
   })
 
-  return { phases, transitions, reviewPhases }
+  // —— 全派生面（本轮新增，全部从 yaml 数据真派生，缺节安全降级为空，零硬编码）——
+  const mandatorySkills = deriveSkillTable(raw.mandatory_skills, declared, 'mandatory_skills')
+  const recommendedSkills = deriveSkillTable(raw.recommended_skills, declared, 'recommended_skills')
+
+  const routerPatterns: RouterPatterns = { frontend: '', backend: '', pm: '' }
+  if (raw.router_patterns) {
+    for (const [track, pat] of raw.router_patterns) {
+      if (!ROUTER_TRACK_SET.has(track)) {
+        throw new ManifestError(`router_patterns 含未知 track '${track}'（合法：frontend/backend/pm）`)
+      }
+      routerPatterns[track as keyof RouterPatterns] = pat
+    }
+  }
+
+  const breadcrumbs: Partial<Record<Phase, string>> = {}
+  if (raw.breadcrumb) {
+    for (const [phaseName, prose] of raw.breadcrumb) {
+      const ph = assertPhase(phaseName, 'breadcrumb')
+      if (!declared.has(ph)) throw new ManifestError(`breadcrumb 含未声明相位 '${phaseName}'`)
+      breadcrumbs[ph] = prose
+    }
+  }
+
+  return { phases, transitions, reviewPhases, mandatorySkills, recommendedSkills, routerPatterns, breadcrumbs }
 }
