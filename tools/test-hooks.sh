@@ -71,6 +71,18 @@ mkdir -p "$proj"
 run_gate "{\"cwd\":\"$proj\",\"tool_name\":\"Bash\"}"
 assert_exit "gate: 无 marker → exit 0" 0 "$RC"
 
+# ─────────── 1b. PIPELINE_AFK=1 逃生门（BACKLOG #7b，老内核沙箱放行语义） ───────────
+proj="$TMP/gate-afk"
+mkdir -p "$proj"
+touch "$proj/.pipeline-pending-confirm"
+printf '%s' "{\"cwd\":\"$proj\",\"tool_name\":\"Write\"}" | PIPELINE_AFK=1 bash "$GATE" >/dev/null 2>&1
+assert_exit "gate: PIPELINE_AFK=1 + 新鲜 marker → 放行 exit 0" 0 "$?"
+[ -f "$proj/.pipeline-pending-confirm" ] \
+  && ok "gate: AFK 放行不清 marker（人回来门还在）" \
+  || bad "gate: AFK 放行不清 marker（人回来门还在）" "marker 被误删"
+printf '%s' "{\"cwd\":\"$proj\",\"tool_name\":\"Write\"}" | PIPELINE_AFK=true bash "$GATE" >/dev/null 2>&1
+assert_exit "gate: PIPELINE_AFK=true（非 \"1\"）不放行 → exit 2" 2 "$?"
+
 # ─────────────── 2. gate.sh fail-open + 上溯找 marker ───────────────
 proj="$TMP/gate-badjson"
 mkdir -p "$proj"

@@ -11,6 +11,11 @@
 # fail-open（绝不死锁）：stdin 解析失败 / cwd 不存在 / 任何异常 → 放行 exit 0。
 set -uo pipefail
 
+# AFK 逃生门（BACKLOG #7b，对齐老内核沙箱放行语义）：headless 自动化（Docker/CI）里
+# 无人应答 AskUserQuestion，三门必死锁——显式 PIPELINE_AFK=1 时整门放行；
+# 不清 marker（人回来时门还在）。仅字面 "1" 生效，其它值一律不放行。
+[ "${PIPELINE_AFK:-}" = "1" ] && exit 0
+
 INPUT="$(cat 2>/dev/null || printf '{}')"
 
 # 从 $INPUT 提取顶层字符串键（仅支持 "key" : "value" 形态；值含转义引号等奇形 → 返回 1 → fail-open）
