@@ -67,6 +67,38 @@ describe('inbox —— 等待人工决策的 change 清单（BACKLOG #9a）', ()
     expect(payload.inbox[0]?.waiting_on).toBe('gate:review')
   })
 
+  test('--html：自足单页（doctype/深浅色/条目/生成时间），零外部资源', async () => {
+    const deps = makeDeps({
+      states: { demo: mockState({ phase: 'build' }) },
+      gateMarkers: [{ kind: 'confirm', ageMs: 120_000, raw: 'build\n请确认原型方向\ndemo\n' }],
+    })
+    expect(await cmdInbox(deps, { html: true })).toBe(0)
+    const html = deps.outLines.join('\n')
+    expect(html).toContain('<!doctype html>')
+    expect(html).toContain('prefers-color-scheme')
+    expect(html).toContain('demo')
+    expect(html).toContain('gate:confirm')
+    expect(html).toContain('请确认原型方向')
+    expect(html).toContain('2026-07-06T00:00:00Z')
+    expect(html).not.toMatch(/src=|href=|@import|fetch\(/)
+  })
+
+  test('--html：内容经 HTML 转义（marker 注入不破页面）', async () => {
+    const deps = makeDeps({
+      gateMarkers: [{ kind: 'review', ageMs: 1000, raw: 'spec\n<script>alert(1)</script>\nx\n' }],
+    })
+    await cmdInbox(deps, { html: true })
+    const html = deps.outLines.join('\n')
+    expect(html).not.toContain('<script>alert')
+    expect(html).toContain('&lt;script&gt;')
+  })
+
+  test('--html 空收件箱：页面含空态文案', async () => {
+    const deps = makeDeps()
+    await cmdInbox(deps, { html: true })
+    expect(deps.outLines.join('\n')).toContain('没有在等你的事')
+  })
+
   test('archived change 不进收件箱；人读输出含 change 名与等待时长', async () => {
     const deps = makeDeps({
       states: {

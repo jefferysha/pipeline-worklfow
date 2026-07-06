@@ -78,7 +78,8 @@ export function buildProgram(deps: CliDeps): Command {
     .command('inbox')
     .description('收件箱：等待人工决策的 change（三门 marker + 复核相位）')
     .option('--json', 'JSON 输出（schema 稳定）')
-    .action(async (opts: { json?: boolean }) => bail(await cmdInbox(deps, opts)))
+    .option('--html', '自足静态单页（重定向到文件用浏览器打开）')
+    .action(async (opts: { json?: boolean; html?: boolean }) => bail(await cmdInbox(deps, opts)))
 
   program
     .command('status [name]')
