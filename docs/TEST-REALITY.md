@@ -55,6 +55,8 @@
 | loop 预算/熔断 | ✅ loops-budget.integration.test.ts 16 例（真建 run-log → 真熔断 ok/warn/tripped + 成本估算 within/over）+ 真 bundle e2e | ✅ 超阈值 tripped exit2 | ✅ budget→cost |
 | loop 漂移/审计 | ✅ loops-drift.integration.test.ts 20 例（7 维漂移各一 + loop-ready 评分 ready/not-ready + --json/--loop）| ✅ 漂移 warn exit1 | ✅ list→drift→audit |
 | Trellis scaffold | ✅ scaffold.integration.test.ts 14 例（真铺分层空文档集 + 三态 skip/overwrite/append 真删真补真保留 + resolve-workflow 真读源 + removeHash 真改 .pipeline-owned.json）| ✅ spec-dir 冲突 exit2 | ✅ scaffold web/cli/lib |
+| transition 单源 | ✅ transition-table.test.ts 40 例（kernel 单源事件表/前置/副作用全量）+ cli/server 接线断言（引用同一对象）；**oracle 双跑 0 不一致=行为逐字保持铁证** | ✅ | ✅ cli+server 共消费 |
+| loop 毕业制 | ✅ loops-graduation.integration.test.ts 16 例（真建不同就绪/漂移/熔断态 → 真升降档裁决 + 跨级拒 + --confirm 真改 autonomy_level）| ✅ 跨级 exit2 | ✅ graduate→level set |
 | check | ✅ guard 全量面真跑：不满足 exit 2 / 建 design doc 后 exit 0 | ✅ | ✅ |
 | inbox | ✅ --json 复核相位 | — | ✅ |
 | status/list | ✅ 真枚举 | — | ✅ |

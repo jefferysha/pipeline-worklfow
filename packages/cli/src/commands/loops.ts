@@ -7,23 +7,26 @@
  *   budget [loop][--json]      #36 circuit breaker：run-log 今日累计 token 花费 vs max_tokens_per_day
  *                              （exit 0 ok / 1 warn 减速线 / 2 tripped 熔断 / 3 错误；GOAL B20/D16）
  *   cost [loop][--json]        #36 成本估算：cadence×pattern → 预估 token/日 vs 预算（超预算 exit 1）
+ *   graduate [loop][--json]    #38 分级放权毕业制：消费 #37 audit/drift + #36 breaker 出升降档裁决
+ *                              （exit 0 稳态 / 1 可升档待人工门 / 2 降档信号 / 3 错误；GOAL B19/D16）
+ *   level <loop> [set <L>][--confirm]  #38 查看/建议档位；`set <L1|L2|L3> --confirm` 逐级毕业改档
+ *                              （安全默认：无 --confirm = dry-run 不落盘；升档须准入；跨级/未过准入拒 exit 2）
  * stdout/exit 对齐老仓：数据/裁决走 stdout，error/定位错误走 stderr。--json 对齐老仓信封（+本轮 autonomy 字段）。
  *
- * 分级放权 L1→L3：schema 已纳入 autonomy_level（缺省 L1 report-only），enforce 认级别并在信封回显
- * enforcement/report_only。verdict×level→具体 gate/halt 动作面是 #38；budget 熔断 #36 / 漂移审计 #37 留后续。
- *
- * 接线备注（收编前的临时桥）：kernel 根 barrel 尚未 re-export loops/（barrel 归主会话），故此处用相对桥
- * 直取 kernel loops 源（../../../kernel/src/loops/index.js，tsc -b/vitest/esbuild 三路已验证）。主会话收编时：
- * ① kernel src/index.ts 追加 `export * from './loops/index.js'`；② 本文件相对桥换 '@pipeline-lite/kernel'；
- * ③ program.ts 注册 `loops` 命令（见报告接线清单）。loops 只读——不写 progress.md / 不改 loops.yaml status。
+ * 分级放权 L1→L3：schema 纳入 autonomy_level（缺省 L1 report-only），enforce 认级别并回显 enforcement/report_only；
+ * #38 graduate/level 把 verdict×level 落成毕业制执行面（report → 人工门放行 → allowlist 自动合并）。
+ * loops 读为主——list/enforce/status/budget/cost/drift/audit/graduate + level view 全只读；**唯一 mutation** =
+ * `level set --confirm` 的 autonomy_level surgical 单行改写（不重排/不丢注释，且过准入门 + 显式确认）。
  */
-import { readFileSync, readdirSync } from 'node:fs'
+import { readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { isAbsolute, join } from 'node:path'
 import {
+  applyLevelChange,
   buildAuditReport,
   buildBudgetReport,
   buildCostReport,
   buildDriftReport,
+  buildGraduationReport,
   buildReport,
   enforcementFor,
   loadRegistry as kernelLoadRegistry,
@@ -35,13 +38,16 @@ import {
   type DriftReport,
   type EnforceFs,
   type EnforceReport,
+  type GraduationFs,
+  type GraduationReport,
+  type GraduationVerdict,
   type LoopEntry,
   type LoopRegistry,
 } from '@pipeline-lite/kernel'
 import type { CliDeps } from '../deps.js'
 
 // 供 mock/集成测试构造 fake fs / 类型断言
-export type { LoopEntry, LoopRegistry, DriftFs } from '@pipeline-lite/kernel'
+export type { LoopEntry, LoopRegistry, DriftFs, GraduationFs } from '@pipeline-lite/kernel'
 /** cli 层的 loops fs 注入面（= kernel EnforceFs：登记载入 + progress/在途/沙箱读）。 */
 export type LoopsFs = EnforceFs
 
@@ -119,6 +125,21 @@ export const REAL_DRIFT_FS: DriftFs = {
       return null
     }
   },
+}
+
+// ── #38 graduation 真 node fs（登记 + run-log + LOOP.md 镜像 + loops.yaml 原文读写）──
+export const REAL_GRADUATION_FS: GraduationFs = {
+  loadRegistry: (repoRoot) => kernelLoadRegistry(repoRoot),
+  readRunLog: (repoRoot) => REAL_LOOPS_FS.readProgress(repoRoot),
+  readLoopDoc: (repoRoot) => REAL_DRIFT_FS.readLoopDoc(repoRoot),
+  readRegistryText: (repoRoot) => {
+    try {
+      return readFileSync(join(repoRoot, '.pipeline', 'loops.yaml'), 'utf8')
+    } catch {
+      return null
+    }
+  },
+  writeRegistryText: (repoRoot, text) => writeFileSync(join(repoRoot, '.pipeline', 'loops.yaml'), text, 'utf8'),
 }
 
 // ── arg 解析 ──────────────────────────────────────────────────────────────────
@@ -359,11 +380,131 @@ function cmdAudit(deps: CliDeps, args: string[], fs: DriftFs): number {
   return exitCode
 }
 
+// ── #38 graduate / level 子命令（分级放权 L1→L3 毕业制）──────────────────────────
+
+/** args 中的全部位置参数（跳过 --flag 及 --loop 的值）。 */
+function positionals(args: string[]): string[] {
+  const out: string[] = []
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i]!
+    if (a === '--loop') { i++; continue }
+    if (a.startsWith('--')) continue
+    out.push(a)
+  }
+  return out
+}
+
+function printGraduationTable(deps: CliDeps, report: GraduationReport): void {
+  deps.io.out('[LOOPS graduate · 分级放权毕业制 L1→L3]')
+  for (const v of report.verdicts) {
+    deps.io.out(
+      `  ${pad(v.id, 16)} current=${v.current}/${enforcementFor(v.current)} → recommended=${v.recommended}/${enforcementFor(v.recommended)}  ` +
+      `can-graduate=${v.canGraduate ? 'yes' : 'no'}`,
+    )
+    deps.io.out(`    loop-ready=${v.readinessScore}/${v.readinessBand}  drift=${v.driftCount}  breaker=${v.breaker}  fail_streak=${v.failStreak}  runs=${v.runs}`)
+    if (v.demotionReason !== null) deps.io.out(`    ⚠ 降档信号：${v.demotionReason}`)
+    for (const b of v.blockers) deps.io.out(`    · blocker: ${b}`)
+    if (v.canGraduate) deps.io.out(`    → 可升 ${v.recommended}：pipeline loops level ${v.id} set ${v.recommended} --confirm`)
+  }
+}
+
+function cmdGraduate(deps: CliDeps, args: string[], fs: GraduationFs): number {
+  const p = parseArgs(args)
+  const onlyLoop = p.loop ?? positionalLoop(args)
+  const now = new Date(deps.clock())
+  const { report, errors, exitCode } = buildGraduationReport(deps.cwd, onlyLoop, now, fs)
+  if (errors.length > 0 || report === null) {
+    for (const e of errors) deps.io.err(`ERROR: ${e}`)
+    return exitCode
+  }
+  if (p.json) {
+    deps.io.out(JSON.stringify(report, null, 2))
+    return exitCode
+  }
+  printGraduationTable(deps, report)
+  return exitCode
+}
+
+function printLevelView(deps: CliDeps, v: GraduationVerdict): void {
+  deps.io.out(`[LOOPS level · ${v.id}]`)
+  deps.io.out(
+    `  current=${v.current}/${enforcementFor(v.current)}  recommended=${v.recommended}/${enforcementFor(v.recommended)}  ` +
+    `can-graduate=${v.canGraduate ? 'yes' : 'no'}`,
+  )
+  deps.io.out(`  loop-ready=${v.readinessScore}/${v.readinessBand}  drift=${v.driftCount}  breaker=${v.breaker}  fail_streak=${v.failStreak}  runs=${v.runs}`)
+  if (v.demotionReason !== null) deps.io.out(`  ⚠ 降档信号：${v.demotionReason} → 建议降 ${v.recommended}`)
+  for (const b of v.blockers) deps.io.out(`  · blocker: ${b}`)
+  if (v.canGraduate) deps.io.out(`  → 可升 ${v.recommended}：pipeline loops level ${v.id} set ${v.recommended} --confirm`)
+}
+
+/** level <loop> [set <L1|L2|L3>] [--confirm|--yes] [--json]：查看/建议档位 or 显式确认改档。 */
+function cmdLevel(deps: CliDeps, args: string[], fs: GraduationFs): number {
+  const p = parseArgs(args)
+  const confirm = args.includes('--confirm') || args.includes('--yes')
+  const pos = positionals(args)
+  const setPos = pos.indexOf('set')
+  const isSet = setPos !== -1
+  const target = isSet ? pos[setPos + 1] : undefined
+  const loopId = p.loop ?? (pos[0] === 'set' ? null : pos[0] ?? null)
+  const now = new Date(deps.clock())
+
+  if (loopId === null) {
+    deps.io.err('ERROR: 用法: loops level <loop> [set <L1|L2|L3>] [--confirm]')
+    return 2
+  }
+
+  // 查看/建议档位（只读）
+  if (!isSet) {
+    const { report, errors, exitCode } = buildGraduationReport(deps.cwd, loopId, now, fs)
+    if (errors.length > 0 || report === null) {
+      for (const e of errors) deps.io.err(`ERROR: ${e}`)
+      return exitCode
+    }
+    const v = report.verdicts[0]!
+    if (p.json) {
+      deps.io.out(JSON.stringify(v, null, 2))
+      return 0
+    }
+    printLevelView(deps, v)
+    return 0
+  }
+
+  // set <L>：改档（显式确认门）
+  if (target === undefined) {
+    deps.io.err('ERROR: set 需指定目标档（L1/L2/L3）')
+    return 2
+  }
+  const res = applyLevelChange(deps.cwd, loopId, target, { now, confirm }, fs)
+  if (res.exitCode === 3) {
+    for (const e of res.errors) deps.io.err(`ERROR: ${e}`)
+    return 3
+  }
+  const plan = res.plan!
+  if (res.exitCode === 2) {
+    for (const e of res.errors) deps.io.err(`ERROR: ${e}`)
+    return 2
+  }
+  if (plan.kind === 'noop') {
+    deps.io.out(`[LOOPS level set] ${plan.id} 已在 ${plan.from}，无需改档`)
+    return 0
+  }
+  if (res.applied) {
+    deps.io.out(`[LOOPS level set] ${plan.id} ${plan.from} → ${plan.to}（${plan.kind}）已落盘 .pipeline/loops.yaml`)
+    return 0
+  }
+  // allowed 但未 --confirm = dry-run（默认不自动改档）
+  deps.io.out(
+    `[LOOPS level set] ${plan.id} ${plan.from} → ${plan.to}（${plan.kind}）准入通过 —— dry-run（未落盘）。` +
+    `加 --confirm 落盘：pipeline loops level ${plan.id} set ${plan.to} --confirm`,
+  )
+  return 0
+}
+
 /**
  * loops 子命令分派（纯函数 + deps 注入 + fs 注入面）。
  * fs 缺省真 node fs（REAL_LOOPS_FS，读真 .pipeline/loops.yaml + progress + 在途 + 沙箱）；
- * driftFs 缺省 REAL_DRIFT_FS（#37 drift/audit：登记 + run-log + LOOP.md 镜像）。
- * mock 层注入 fake LoopsFs/DriftFs 快速回归，integration 走真 fs。
+ * driftFs 缺省 REAL_DRIFT_FS（#37 drift/audit）；graduationFs 缺省 REAL_GRADUATION_FS（#38：+ loops.yaml 读写）。
+ * mock 层注入 fake fs 快速回归，integration 走真 fs。
  */
 export async function cmdLoops(
   deps: CliDeps,
@@ -371,6 +512,7 @@ export async function cmdLoops(
   args: string[],
   fs: LoopsFs = REAL_LOOPS_FS,
   driftFs: DriftFs = REAL_DRIFT_FS,
+  graduationFs: GraduationFs = REAL_GRADUATION_FS,
 ): Promise<number> {
   const p = parseArgs(args)
   switch (sub || 'list') {
@@ -388,8 +530,12 @@ export async function cmdLoops(
       return cmdDrift(deps, args, driftFs)
     case 'audit':
       return cmdAudit(deps, args, driftFs)
+    case 'graduate':
+      return cmdGraduate(deps, args, graduationFs)
+    case 'level':
+      return cmdLevel(deps, args, graduationFs)
     default:
-      deps.io.err(`ERROR: 未知 loops 子命令: ${sub}（支持: list enforce status budget cost drift audit）`)
+      deps.io.err(`ERROR: 未知 loops 子命令: ${sub}（支持: list enforce status budget cost drift audit graduate level）`)
       return 1
   }
 }

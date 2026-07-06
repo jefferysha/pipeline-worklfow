@@ -1,8 +1,20 @@
 import { describe, expect, test } from 'vitest'
-import { IllegalTransitionError } from '@pipeline-lite/kernel'
+import { IllegalTransitionError, TRANSITION_EVENTS, eventEdge as kernelEventEdge } from '@pipeline-lite/kernel'
 import type { Phase, PipelineState, TransitionResult } from '@pipeline-lite/kernel'
 import { cmdTransition } from './transition.js'
+import { EVENTS, eventEdge } from '../events.js'
 import { FIXED_CLOCK, makeDeps, mockState, spy } from '../test-support.js'
+
+/** 接线级：cli 真消费 kernel 单一真相源（BACKLOG #25b / GOAL B2）——events.ts 已无本地镜像，
+ * 只是 kernel TRANSITION_EVENTS/eventEdge 的稳定别名（引用同一对象=同一真相源）。 */
+describe('接线 —— cli 事件表 = kernel 单源（无本地镜像）', () => {
+  test('EVENTS 就是 kernel TRANSITION_EVENTS（引用同一对象）', () => {
+    expect(EVENTS).toBe(TRANSITION_EVENTS)
+  })
+  test('eventEdge 就是 kernel eventEdge（同一函数）', () => {
+    expect(eventEdge).toBe(kernelEventEdge)
+  })
+})
 
 describe('transition —— [TRANSITION] 走 stderr / 非法 exit 1（oracle 实测回写）', () => {
   test('合法转换：stdout 无输出，[TRANSITION] 走 stderr，exit 0', async () => {

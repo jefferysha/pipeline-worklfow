@@ -10,6 +10,19 @@ import {
   initChange, makeProject, newStore, openSSE, reqGet, reqPost, testFlow,
 } from './test-support.js'
 import type { StateStore } from '@pipeline-lite/kernel'
+import { TRANSITION_EVENTS as KERNEL_EVENTS, eventEdge as kernelEventEdge } from '@pipeline-lite/kernel'
+import { TRANSITION_EVENTS, eventEdge } from './transition.js'
+
+/** 接线级：server 真消费 kernel 单一真相源（BACKLOG #25b / GOAL B2）——transition.ts 已删本地镜像，
+ * TRANSITION_EVENTS/eventEdge 只是 kernel 的 re-export（引用同一对象=同一真相源）。 */
+describe('接线 —— server 事件表 = kernel 单源（无本地镜像）', () => {
+  it('TRANSITION_EVENTS 就是 kernel 的（引用同一对象）', () => {
+    expect(TRANSITION_EVENTS).toBe(KERNEL_EVENTS)
+  })
+  it('eventEdge 就是 kernel eventEdge（同一函数）', () => {
+    expect(eventEdge).toBe(kernelEventEdge)
+  })
+})
 
 const openServers: DashboardServer[] = []
 afterEach(async () => {

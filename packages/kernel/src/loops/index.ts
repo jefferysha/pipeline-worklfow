@@ -36,3 +36,12 @@ export type {
   LoopKind, LoopStatus, LoopRisk, AutonomyLevel, LoopBudget, LoopEntry, LoopRegistry,
   Verdict, Enforcement, VerdictReason, VerdictMetrics, LoopVerdict, RunFacts,
 } from './types.js'
+// #38 分级放权 L1→L3 毕业制升降档裁决（GOAL B19 / D16）
+export {
+  decideGraduation, planLevelChange, parseRunHistory, setAutonomyLevelInYaml,
+  buildGraduationReport, applyLevelChange, MIN_L2_RUNS_FOR_L3,
+} from './graduation.js'
+export type {
+  GraduationHistory, GraduationInputs, GraduationVerdict, LevelChangeKind, LevelChangePlan,
+  GraduationFs, GraduationReport, GraduationReportEnvelope, ApplyLevelResult,
+} from './graduation.js'

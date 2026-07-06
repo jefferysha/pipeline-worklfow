@@ -7,7 +7,6 @@
 | # | 项 | 对应 plan 任务 | 预算 |
 |---|---|---|---|
 | **M3** dashboard | | | |
-| 25b | 【技术债/单源】把「transition 事件→边表 + 前置校验 + 副作用」上提进 kernel 收成单源——当前 cli events.ts/transition.ts 与 server transition.ts 逐条镜像（#25 发现），消除重复真相源 | M3 | 1d |
 | 26c | server 服务 SPA：GET / 返回 dashboard-app dist/index.html + 注入 token + 静态路由 assets/*（#26 前端就绪，本项让 server 真上线前端） | M3 | 0.5d |
 | **M4** channel + mem | | | |
 | 27b | channel 进程管理层：supervisor 三循环 + 真 spawn 子进程 + inbox_watcher live-tail + OS-liveness guard + SIGTERM cleanup（#27 事件模型已就绪，本项补进程层） | M4 | 3d |
@@ -17,7 +16,6 @@
 | 29e | 与 L1→L3 分级放权（#38）合体：AFK 默认 L1 report-only，毕业制升 L2/L3 | M5 | 1d |
 | **M6** 竞品缺口收尾 | | | |
 | **M-loop** loop-engineering 内建（GOAL B18–B21 / D16） | | | |
-| 38 | 分级放权 L1→L3：AFK 自动化毕业制（report → 人工门 → allowlist 自动合并），M5 的前置件 | M-loop | 2d |
 | **M7** 平台矩阵（GOAL D7/D14） | | | |
 | 40 | 平台铺开：Codex/Cursor 先行，矩阵逐平台扩展至 ≥ 两竞品覆盖面 | M7 | 5d+ |
 | **M8** tap 流量代理（2026-07-07 用户确认进正式队列，human gate 解除） | | | |
@@ -73,3 +71,5 @@
 | 2026-07-07 | #41 超越矩阵 + #32 Cursor（iteration-22） | 收编：docs/superiority-matrix.md D1-D16 证据表；#32 已由 #39 完成 |
 | 2026-07-07 | #33 Trellis parity 收尾（iteration-23） | 收编：8 partial+1 missing 全处置 + 14 真 fs 例，B16 |
 | 2026-07-07 | #37 漂移检测+审计（iteration-23） | 收编：7 维 drift + loop-ready 评分 + 20 真 fs 例，B21 |
+| 2026-07-07 | #25b transition 单源（iteration-24） | 收编：事件表上提 kernel，cli+server 删 303 行镜像，oracle 0 不一致 |
+| 2026-07-07 | #38 L1→L3 毕业制（iteration-24） | 收编：升降档裁决+consume #36/#37 + 16 真 fs 例，D16 闭环 |

@@ -1,33 +1,9 @@
 /**
- * 事件 → 转移边表。语义参考老内核 manifest.py::_DEFAULT_TRANSITIONS（逐边一致）：
- * 前向 7 边 + verify-fail 回退边 + archive 终态自环。
+ * 事件 → 转移边表 —— re-export kernel 单一真相源（BACKLOG #25b / GOAL B2 单一真相源原则）。
  *
- * 注意（集成接缝）：types.ts 的 ManifestData 不含事件名，FlowEngine.transition 只收目标
- * Phase，故事件名→目标相位的映射由 cli 持有；转移「合法性」仍以 flow 引擎（manifest 单一
- * 真相源）为准——本表只做命名翻译 + 事件声明的 from 相位前置校验。
+ * 事件表 + 前置校验 + 副作用已上提到 @pipeline-lite/kernel（packages/kernel/src/flow/transition-table.ts），
+ * cli 不再自持镜像（#25 报告点名的 cli/server 重复真相源已消除）。本文件仅为既有消费者
+ * （commands/advance.ts 的 EVENTS 边遍历）保留稳定别名 —— EVENTS = kernel 的 TRANSITION_EVENTS。
  */
-import type { Phase } from '@pipeline-lite/kernel'
-
-export interface EventEdge {
-  from: Phase
-  to: Phase
-}
-
-export const EVENTS = {
-  'open-complete': { from: 'open', to: 'explore' },
-  'explore-complete': { from: 'explore', to: 'spec' },
-  'spec-complete': { from: 'spec', to: 'build' },
-  'build-complete': { from: 'build', to: 'verify' },
-  'verify-pass': { from: 'verify', to: 'ship' },
-  'verify-fail': { from: 'verify', to: 'build' },
-  'ship-complete': { from: 'ship', to: 'archive' },
-  archived: { from: 'archive', to: 'archive' },
-} as const satisfies Record<string, EventEdge>
-
-export type EventName = keyof typeof EVENTS
-
-export function eventEdge(event: string): EventEdge | undefined {
-  return Object.prototype.hasOwnProperty.call(EVENTS, event)
-    ? EVENTS[event as EventName]
-    : undefined
-}
+export { TRANSITION_EVENTS as EVENTS, eventEdge } from '@pipeline-lite/kernel'
+export type { EventEdge, EventName } from '@pipeline-lite/kernel'

@@ -5,7 +5,7 @@
  */
 import { describe, expect, test } from 'vitest'
 import { makeDeps } from '../test-support.js'
-import { cmdLoops, type DriftFs, type LoopsFs } from './loops.js'
+import { cmdLoops, type DriftFs, type GraduationFs, type LoopsFs } from './loops.js'
 import type { LoopEntry } from './loops.js'
 
 function loop(over: Partial<LoopEntry> = {}): LoopEntry {
@@ -307,5 +307,94 @@ describe('audit —— loop-ready 就绪评分（loop-audit）', () => {
   test('未知 --loop → exit 3', async () => {
     const deps = makeDeps()
     expect(await cmdLoops(deps, 'audit', ['ghost'], fakeFs(), fakeDriftFs())).toBe(3)
+  })
+})
+
+// ── #38 graduate / level 子命令（分级放权 L1→L3 毕业制）──────────────────────────
+// makeDeps clock = 2026-07-06T00:00Z；richLoop 满配（score 100），run-log 近期（不 idle），LOOP.md 同步。
+
+/** fake GraduationFs（第 6 参注入）：registry + run-log + LOOP.md + loops.yaml 原文读写。 */
+function fakeGradFs(over: Partial<GraduationFs> = {}): GraduationFs {
+  return {
+    loadRegistry: () => ({ data: { version: 1, loops: [richLoop()] }, errors: [] }),
+    readRunLog: () => `${DRIFT_HEADER}\n| 2026-07-05T23:00 | loop-be | run | 0 | result=ok |`,
+    readLoopDoc: () => '### `loop-be` — BE loop',
+    readRegistryText: () => 'version: 1\nloops:\n  - id: loop-be\n    name: BE loop\n    autonomy_level: L1\n',
+    writeRegistryText: () => {},
+    ...over,
+  }
+}
+
+describe('graduate —— 升档准入裁决', () => {
+  test('L1 满配 + 镜像同步 + 熔断 ok → canGraduate=true 荐升 L2、exit 1', async () => {
+    const deps = makeDeps()
+    const code = await cmdLoops(deps, 'graduate', ['--json'], fakeFs(), fakeDriftFs(), fakeGradFs())
+    expect(code).toBe(1)
+    const v = JSON.parse(deps.outLines.join('\n')).verdicts[0]
+    expect(v.current).toBe('L1')
+    expect(v.canGraduate).toBe(true)
+    expect(v.recommended).toBe('L2')
+  })
+
+  test('text 输出含 current/recommended', async () => {
+    const deps = makeDeps()
+    await cmdLoops(deps, 'graduate', [], fakeFs(), fakeDriftFs(), fakeGradFs())
+    expect(deps.outLines.join('\n')).toContain('loop-be')
+  })
+
+  test('未知 --loop → exit 3', async () => {
+    const deps = makeDeps()
+    expect(await cmdLoops(deps, 'graduate', ['ghost'], fakeFs(), fakeDriftFs(), fakeGradFs())).toBe(3)
+  })
+
+  test('registry 错误 → stderr + exit 3', async () => {
+    const deps = makeDeps()
+    const code = await cmdLoops(deps, 'graduate', [], fakeFs(), fakeDriftFs(),
+      fakeGradFs({ loadRegistry: () => ({ data: null, errors: ['boom'] }) }))
+    expect(code).toBe(3)
+    expect(deps.errLines.join('\n')).toContain('boom')
+  })
+})
+
+describe('level —— 查看 + set 逐级毕业写回', () => {
+  test('view：打印 current + recommended', async () => {
+    const deps = makeDeps()
+    const code = await cmdLoops(deps, 'level', ['loop-be'], fakeFs(), fakeDriftFs(), fakeGradFs())
+    expect(code).toBe(0)
+    expect(deps.outLines.join('\n')).toMatch(/current=L1/)
+  })
+
+  test('set L2 --confirm（准入通过）→ writeRegistryText 落盘含 L2、exit 0', async () => {
+    const deps = makeDeps()
+    const writes: string[] = []
+    const code = await cmdLoops(deps, 'level', ['loop-be', 'set', 'L2', '--confirm'], fakeFs(), fakeDriftFs(),
+      fakeGradFs({ writeRegistryText: (_r, t) => { writes.push(t) } }))
+    expect(code).toBe(0)
+    expect(writes).toHaveLength(1)
+    expect(writes[0]).toContain('autonomy_level: L2')
+  })
+
+  test('set L2 无 --confirm → dry-run 不写', async () => {
+    const deps = makeDeps()
+    const writes: string[] = []
+    const code = await cmdLoops(deps, 'level', ['loop-be', 'set', 'L2'], fakeFs(), fakeDriftFs(),
+      fakeGradFs({ writeRegistryText: (_r, t) => { writes.push(t) } }))
+    expect(code).toBe(0)
+    expect(writes).toHaveLength(0)
+  })
+
+  test('L1 set L3（跨级）→ 拒绝、exit≠0、不写', async () => {
+    const deps = makeDeps()
+    const writes: string[] = []
+    const code = await cmdLoops(deps, 'level', ['loop-be', 'set', 'L3', '--confirm'], fakeFs(), fakeDriftFs(),
+      fakeGradFs({ writeRegistryText: (_r, t) => { writes.push(t) } }))
+    expect(code).not.toBe(0)
+    expect(writes).toHaveLength(0)
+    expect(deps.errLines.join('\n')).toMatch(/跨级|逐级/)
+  })
+
+  test('未知 loop → exit 3', async () => {
+    const deps = makeDeps()
+    expect(await cmdLoops(deps, 'level', ['ghost'], fakeFs(), fakeDriftFs(), fakeGradFs())).toBe(3)
   })
 })

@@ -21,8 +21,7 @@
 - [x] **A2 hooks/插件全保真（M2）✅ 收官 iteration-17**：router Track 识别 + breadcrumb(#19)、
       SessionStart 三注入(#20)、PostToolUse 全套(#21)、7 相位 SKILL + openspec 四命令 + learn-record(#22)、
       4 agents(#23)、sync/uninstall scrubber(#24)——全收编，热路径纯 bash 红线 + 真 fs/真 hook e2e
-- [~] **A3 dashboard（M3）**：TS 全局 server(#25)✅ + 前端信息架构重构(#26)✅ + server 服务 SPA(#26c)✅
-      + doctor(#26b)✅；剩单源技术债 #25b、config 写端点
+- [x] **A3 dashboard（M3）**：server(#25) + 前端(#26) + SPA 服务(#26c) + doctor(#26b) + transition 单源(#25b)——全收编；config 写端点为可选增量
 - [~] **A4 channel + mem（M4）**：mem 跨 runtime 检索(#28)✅ + channel 事件模型(#27)✅；channel 进程层 #27b 待补
 - [~] **A5 automation / AFK Sandcastle（M5）**：队列状态机+scheduler+lifecycle+L1→L3(#29)✅；docker 全链 #29c / server afk 数据端 #29d / 毕业制 #29e 待补
 - [ ] **A6 竞品缺口（M6）**：见清单 B 的 B13–B17
@@ -57,8 +56,7 @@
 **loop-engineering 思想内建（2026-07-06 用户指令，对标 cobusgreyling/loop-engineering + 老仓 loops 子系统）**
 - [x] B18 loop 治理子系统（#35 iteration-19）：loops registry（schema 校验的登记表）+ enforce 裁决
       （R1-R11 规则面 + budget/kill 判据）+ L1→L3 分级放权入 schema；执行流水审计 run-log 就绪
-- [ ] B19 分级放权 L1→L3：report-only → 人工门放行 → allowlist 自动合并，AFK 自动化必须从 L1
-      毕业制升级（上游 Phased Rollout 思想 × 老仓 human gates）→ M5 前置
+- [x] B19 分级放权 L1→L3（#38 iteration-24）：毕业制 report→人工门→allowlist，逐级升(准入=就绪分)不跨级、降档安全优先，消费 #36/#37 零改核心
 - [x] B20 token 预算与熔断（#36 iteration-22）：loop 级 token budget + circuit breaker（超阈值 tripped）
       + 成本估算（cadence×pattern），扩展 #35 loops、enforce 零改动
 - [~] B21 漂移检测与就绪审计：drift + loop-ready 评分 → 进行中 #37
@@ -86,7 +84,7 @@
 - [~] D14 平台广度（#39）：可移植内核 + 填表式扩展策略就绪；铺到 ≥Comet 30 平台待 #40
 **vs 两者皆无（差异化护城河）**
 - [x] D15 golden-oracle 行为等价迁移法（双跑逐字 diff——两家都没有的质量证据链）
-- [~] D16 loop-engineering 治理（#35/#36/#37）：registry+enforce R1-R11+L1→L3+budget/circuit-breaker+drift/loop-ready 审计；graduation 执行面待 #38（两竞品都无此面）
+- [x] D16 loop-engineering 治理（#35/#36/#37/#38）✅闭环：registry+enforce R1-R11+L1→L3 毕业制+budget/circuit-breaker+drift/loop-ready 审计+graduation 执行面——两竞品都无此面（独有护城河）
 
 ## 清单 C · 质量保障（过程约束——任何一轮违反即不收编，没有例外）
 

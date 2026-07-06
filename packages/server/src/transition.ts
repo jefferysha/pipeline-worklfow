@@ -1,41 +1,27 @@
 /**
  * transition 域 —— 看板写回端点 POST /api/change/<name>/transition 的转换执行。
  *
- * server 只依赖 kernel（不能 import cli），故本模块自持事件表 + 前置校验 + 副作用，逐条镜像
- * packages/cli/src/commands/transition.ts（BACKLOG #14 盘点表）与 packages/cli/src/events.ts：
- *   · 事件表 = events.ts 逐边；
- *   · 前置校验 = checkEventPreconditions 的 lite 镜像（文件面经注入 fileExists 谓词，缺省降级跳过）；
- *   · 副作用 = applyEventEffects（build_sha 冻结 / verify 结果 / archived）；
- *   · 合法性以 flow 引擎（manifest 单一真相源）为准；全程 store.withLock 闭 TOCTOU。
+ * 事件表 + 前置校验 + 副作用是 **kernel 单一真相源**（BACKLOG #25b / GOAL B2 单一真相源原则）——
+ * 上提到 @pipeline-lite/kernel（flow/transition-table.ts），cli 与 server 共消费、不再各持镜像
+ * （#25 报告点名的 cli/server 重复真相源已消除）。本模块是 kernel 单源的 server 接线壳：
+ *   · 事件表 / eventEdge —— re-export kernel（server/index.ts 对外沿用同名）；
+ *   · 前置校验 / 副作用 —— 把 TransitionDeps 的 fs/git 原语绑成 TransitionContext 注入 kernel 纯逻辑，
+ *     再映射成看板写回端点的 HTTP code + JSON body；全程 store.withLock 闭 TOCTOU。
  * 老仓 dashboard 写回 run_transition 是 subprocess 跑 guard+state.sh；lite 走 kernel 直调（真改盘）。
  */
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
-import { IllegalTransitionError } from '@pipeline-lite/kernel'
-import type { FieldName, FlowEngine, Phase, PipelineState, StateStore } from '@pipeline-lite/kernel'
+import {
+  applyTransitionEffects,
+  checkTransitionPreconditions,
+  eventEdge,
+  IllegalTransitionError,
+} from '@pipeline-lite/kernel'
+import type { FieldName, FlowEngine, PipelineState, StateStore, TransitionContext } from '@pipeline-lite/kernel'
 
-export interface EventEdge {
-  from: Phase
-  to: Phase
-}
-
-/** 事件 → 转移边表（逐边镜像 cli/src/events.ts）。 */
-export const TRANSITION_EVENTS: Record<string, EventEdge> = {
-  'open-complete': { from: 'open', to: 'explore' },
-  'explore-complete': { from: 'explore', to: 'spec' },
-  'spec-complete': { from: 'spec', to: 'build' },
-  'build-complete': { from: 'build', to: 'verify' },
-  'verify-pass': { from: 'verify', to: 'ship' },
-  'verify-fail': { from: 'verify', to: 'build' },
-  'ship-complete': { from: 'ship', to: 'archive' },
-  archived: { from: 'archive', to: 'archive' },
-}
-
-export function eventEdge(event: string): EventEdge | undefined {
-  return Object.prototype.hasOwnProperty.call(TRANSITION_EVENTS, event)
-    ? TRANSITION_EVENTS[event]
-    : undefined
-}
+// 事件 → 转移边表：re-export kernel 单一真相源（server/index.ts 对外沿用同名）。
+export { TRANSITION_EVENTS, eventEdge } from '@pipeline-lite/kernel'
+export type { EventEdge } from '@pipeline-lite/kernel'
 
 export interface TransitionDeps {
   store: StateStore
@@ -59,11 +45,6 @@ function fstr(state: PipelineState, k: FieldName): string {
   return Array.isArray(v) ? v.join(',') : (v ?? '')
 }
 
-/** 老内核 cmd_get 口径：字面 'null'（init heredoc）或空串都算未设。 */
-function isUnset(v: string): boolean {
-  return v === '' || v === 'null'
-}
-
 class PreconditionError extends Error {
   constructor(public readonly lines: string[]) {
     super(lines[0] ?? 'transition 前置校验不满足')
@@ -71,103 +52,6 @@ class PreconditionError extends Error {
 }
 class NotFoundError extends Error {}
 class ConflictError extends Error {}
-
-/** 事件前置校验（cli checkEventPreconditions 的 lite 镜像，文案逐字对齐老仓）。 */
-async function checkPreconditions(
-  deps: TransitionDeps,
-  root: string,
-  event: string,
-  state: PipelineState,
-): Promise<void> {
-  const f = (k: FieldName): string => fstr(state, k)
-  const fileExists = (p: string): boolean => (deps.fileExists ? deps.fileExists(root, p) : true)
-
-  switch (event) {
-    case 'explore-complete': {
-      const dd = f('design_doc')
-      if (isUnset(dd) || !fileExists(dd)) {
-        throw new PreconditionError([`ERROR: explore-complete 要求 design_doc 字段非空且文件存在 (当前=${dd})`])
-      }
-      break
-    }
-    case 'spec-complete': {
-      const tr = f('track')
-      if (tr !== 'pm') {
-        const pl = f('plan')
-        if (isUnset(pl) || !fileExists(pl)) {
-          throw new PreconditionError([`ERROR: ${tr} track spec-complete 要求 plan 字段非空且文件存在 (当前=${pl})`])
-        }
-      }
-      break
-    }
-    case 'build-complete': {
-      const bm = f('build_mode')
-      const iso = f('isolation')
-      if (isUnset(bm)) throw new PreconditionError(['ERROR: build_mode 必须设置'])
-      if (isUnset(iso)) throw new PreconditionError(['ERROR: isolation 必须设置'])
-      if (iso !== 'branch' && iso !== 'worktree') {
-        throw new PreconditionError([`ERROR: 非法值 '${iso}'，允许: branch worktree`])
-      }
-      if (f('preset') === 'full' && bm === 'direct' && f('direct_override') !== 'true') {
-        throw new PreconditionError(['ERROR: full workflow 使用 build_mode=direct 必须显式设 direct_override=true'])
-      }
-      break
-    }
-    case 'verify-pass': {
-      const vr = f('verification_report')
-      if (isUnset(vr) || !fileExists(vr)) {
-        throw new PreconditionError([`ERROR: verify-pass 要求 verification_report 字段非空且文件存在 (当前=${vr})`])
-      }
-      const bs = f('branch_status')
-      if (bs !== 'handled') {
-        throw new PreconditionError([`ERROR: verify-pass 要求 branch_status=handled (当前=${bs})`])
-      }
-      const tr = f('track')
-      if (tr !== 'pm') {
-        const ar = f('agent_review_result')
-        if (ar !== 'pass') throw new PreconditionError([`ERROR: ${tr} track 要求 agent_review_result=pass (当前=${ar})`])
-        const cr = f('codex_review_result')
-        if (cr !== 'pass') throw new PreconditionError([`ERROR: ${tr} track 要求 codex_review_result=pass (当前=${cr})`])
-      }
-      const bsha = f('build_sha')
-      const head = (await deps.gitHeadSha?.(root))?.trim() ?? ''
-      if (bsha !== '' && bsha !== 'null' && head !== '' && bsha !== head) {
-        throw new PreconditionError([
-          `ERROR: verify-pass 要求 HEAD==build_sha（build 后产物被改未复验）build_sha=${bsha} HEAD=${head}`,
-          '  修复：要么把改动并入复验（重跑 build→verify），要么 verify-fail 回退后重新 build-complete 冻结新 SHA',
-        ])
-      }
-      break
-    }
-    default:
-      break
-  }
-}
-
-/** 事件专属副作用（cli applyEventEffects 镜像）。 */
-async function applyEffects(deps: TransitionDeps, root: string, event: string, state: PipelineState): Promise<void> {
-  switch (event) {
-    case 'build-complete': {
-      const sha = (await deps.gitHeadSha?.(root))?.trim() ?? ''
-      if (sha) state.fields.build_sha = sha
-      break
-    }
-    case 'verify-pass':
-      state.fields.verify_result = 'pass'
-      state.fields.verified_at = deps.clock()
-      break
-    case 'verify-fail':
-      state.fields.verify_result = 'fail'
-      state.fields.build_sha = 'null'
-      break
-    case 'archived':
-      state.fields.archived = 'true'
-      state.fields.archived_at = deps.clock()
-      break
-    default:
-      break
-  }
-}
 
 export async function performTransition(
   deps: TransitionDeps,
@@ -186,6 +70,11 @@ export async function performTransition(
   if (!existsSync(join(dir, '.pipeline.yaml'))) {
     return { code: 404, body: { ok: false, error: '找不到该 change（无 .pipeline.yaml）' } }
   }
+  // kernel 单源注入面：把 server 的 (root,path)/(cwd) 签名绑成已锚定项目根的 TransitionContext。
+  const ctx: TransitionContext = {
+    fileExists: deps.fileExists ? (p: string): boolean => deps.fileExists!(root, p) : undefined,
+    gitHeadSha: deps.gitHeadSha ? (): Promise<string> => deps.gitHeadSha!(root) : undefined,
+  }
   try {
     const result = await deps.store.withLock(dir, async () => {
       const state = await deps.store.read(dir)
@@ -193,9 +82,10 @@ export async function performTransition(
       if (current !== edge.from) {
         throw new ConflictError(`event '${event}' 与当前 phase '${current}' 不匹配（期望来自 '${edge.from}'）`)
       }
-      await checkPreconditions(deps, root, event, state)
+      const violations = await checkTransitionPreconditions(event, state, ctx)
+      if (violations) throw new PreconditionError(violations)
       const r = deps.flow.transition(state, edge.to, deps.clock)
-      await applyEffects(deps, root, event, r.state)
+      await applyTransitionEffects(event, r.state, deps.clock, ctx)
       await deps.store.write(dir, r.state)
       return r
     })
