@@ -47,7 +47,10 @@ stdin JSON 用纯 bash 提取所需两键）、`breadcrumb.sh`（UserPromptSubmi
 `session-start.sh`；`hooks.json` + `.claude-plugin/plugin.json`。
 
 **验收**：① `tools/test-hooks.sh`：marker 新鲜/陈旧/缺失三态 exit 断言；② shim 内
-`grep -c node` 为 0（红线自证）；③ 插件清单可被 CC marketplace 语法校验通过（结构对齐老仓）。
+`grep -c node` 为 0（红线自证）；③ 插件清单可被 CC marketplace 语法校验通过（结构对齐老仓）；
+④ **`tools/verify-skills.sh`（CONTRACT §5.7）**：对 plugin.json/hooks.json 的全部路径与 skill
+引用做存在性 + 可执行 + SKILL.md 校验，测试中人为埋一个悬空引用必须被抓红；外部 skill
+依赖显式清单化，安装文档写明校验命令。
 
 ### T6 · oracle：golden 双跑 harness
 

@@ -64,3 +64,8 @@ get/set/transition 的 stdout 与 exit code 以 **golden-oracle 双跑逐字一�
    breadcrumb 缓存由 CLI 在 transition 时写 `openspec/changes/<name>/.breadcrumb`，shim 只 cat。
 5. 老仓（`/Users/a1234/Documents/code-manager/projects/workflow-plugin`）只读，作 oracle 与语义参考。
 6. 时间戳统一 ISO8601 UTC；测试中注入 clock，不直接 `new Date()` 散落业务码。
+7. **插件资产零悬空引用（安装期验证，2026-07-06 用户硬要求）**：`plugin.json` / `hooks.json` /
+   manifest / 任何 skill 清单引用的每个路径与 skill 名，必须被 `tools/verify-skills.sh`
+   在安装/CI 时证实存在（路径存在 + 脚本可执行 + skill 目录含 SKILL.md），缺失即**硬失败并
+   逐条列出**。外部 skill 依赖（如 superpowers 系）必须显式清单化声明 + 安装校验，
+   **不允许运行时才发现「skill 找不到」**。老内核靠 manifest 选装外部 skills 曾出现此坑，本仓封死。
