@@ -35,6 +35,15 @@
 | 31 | auto-transition 中间档：guard 全绿自动推进、仅三门处停（HITL 与 AFK 之间） | M6 | 1d |
 | 32 | Cursor 适配器转正（老仓 spike → 可发布） | M6 | 3d |
 | 33 | Trellis parity 收尾：8 partial + 1 missing（spec-template-scaffold、冲突 AskUserQuestion、workflow-template-resolution、KNOWN_UNTRACKED_ALLOWLIST） | M6 | 3d |
+| **M-loop** loop-engineering 内建（GOAL B18–B21 / D16） | | | |
+| 35 | loops 治理子系统：registry schema + enforce 裁决（老仓 R1-R11 起步）+ `pipeline loops` 命令 + 流水审计 | M-loop | 3d |
+| 36 | token 预算与熔断：loop 级 budget 声明 + circuit breaker + 成本估算 | M-loop | 2d |
+| 37 | 漂移检测 + loop-ready 审计：LOOP 声明 vs STATE 流水对账、就绪评分 | M-loop | 2d |
+| 38 | 分级放权 L1→L3：AFK 自动化毕业制（report → 人工门 → allowlist 自动合并），M5 的前置件 | M-loop | 2d |
+| **M7** 平台矩阵（GOAL D7/D14） | | | |
+| 39 | 适配器框架 + 分档降级契约（老仓 adapters/contract.md 移植）+ conformance 测试 | M7 | 3d |
+| 40 | 平台铺开：Codex/Cursor 先行，矩阵逐平台扩展至 ≥ 两竞品覆盖面 | M7 | 5d+ |
+| 41 | docs/superiority-matrix.md：D1–D16 逐维对比证据表（随里程碑更新，收敛检查对照物） | 持续 | 0.5d |
 | 34 | tap 流量代理：暂缓——迁移前与用户确认优先级（human gate） | 待定 | 5d+ |
 
 ## 已收编

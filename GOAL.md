@@ -50,6 +50,41 @@
 - [ ] B16 Trellis parity 收尾：8 partial + 1 missing → M6
 - [x] B17 npx 一行上手：5 分钟心智模型路径（iteration-4，Trellis 简单性教训的落实）
 
+**loop-engineering 思想内建（2026-07-06 用户指令，对标 cobusgreyling/loop-engineering + 老仓 loops 子系统）**
+- [ ] B18 loop 治理子系统：loops registry（schema 校验的登记表）+ enforce 裁决（budget/kill 判据/
+      规则面，老仓 R1-R11 移植起步）+ 执行流水审计（run-log）→ M-loop
+- [ ] B19 分级放权 L1→L3：report-only → 人工门放行 → allowlist 自动合并，AFK 自动化必须从 L1
+      毕业制升级（上游 Phased Rollout 思想 × 老仓 human gates）→ M5 前置
+- [ ] B20 token 预算与熔断：loop 级 budget 声明 + 超支 circuit breaker + 成本估算（上游
+      loop-cost/loop-context 思想）→ M-loop
+- [ ] B21 漂移检测与就绪审计：声明意图（LOOP 定义）vs 实际状态（STATE/流水）自动对账 +
+      loop-ready 评分（上游 loop-sync/loop-audit 思想；老仓 TestLoopMdMirror 的推广）→ M-loop
+
+## 清单 D · 竞争超越判据（2026-07-06 用户指令：任何方面都超过 Trellis 与 Comet）
+
+对两个对标项目的每个核心维度，本仓必须做到"≥ 且核心维度 >"。勾选需给出逐维对比证据
+（docs/superiority-matrix.md，随里程碑更新）：
+
+**vs Trellis（11.8k★）**
+- [ ] D1 规范持久化与自动注入：spec 注入面 ≥ Trellis（SessionStart 三注入 + manifest 单源）→ M2
+- [x] D2 任务/状态结构化：`.pipeline.yaml` 37 字段 + 7 相位 > Trellis task PRD 三态（v0.1）
+- [ ] D3 会话记忆/journal：mem 检索 + history JSONL ≥ Trellis workspace journal → M4
+- [ ] D4 真实工具链验证：check/guard 全量面 + 三轨 verify > trellis-check（#12 已过半）→ M1/M2
+- [ ] D5 学习回写闭环：learn-record ≥ trellis-update-spec → M2
+- [x] D6 简单性：npx 一行上手 + 5 分钟心智模型 ≥ trellis init（iteration-4）
+- [ ] D7 多平台：适配器矩阵 ≥ Trellis 16 平台（可移植内核 + 分档降级策略）→ M7
+**vs Comet（2k★）**
+- [x] D8 脚本守门状态机：三门 hook 硬拦 + guard 46 规则 + CAS/锁 > comet-guard（#12）
+- [ ] D9 dashboard：全局 server + 收件箱默认视图 + 鉴权 > comet 只读面板 → M3
+- [ ] D10 doctor 健康面：降级可见 + 保障生效清单 > comet doctor 安装诊断 → M3
+- [ ] D11 上下文压缩：handoff 压缩 ≥ Comet CONTEXT-COMPRESSION（beta）→ M6
+- [ ] D12 auto-transition：中间档 + L1→L3 分级 > Comet AUTO-TRANSITION → M6
+- [x] D13 可恢复工作流：断点恢复不依赖对话历史（.pipeline.yaml 真相源，v0.1 oracle 验证）
+- [ ] D14 平台广度：≥ Comet 30 平台的策略面（内核可移植性已具备，矩阵铺开）→ M7
+**vs 两者皆无（差异化护城河）**
+- [x] D15 golden-oracle 行为等价迁移法（双跑逐字 diff——两家都没有的质量证据链）
+- [ ] D16 loop-engineering 治理内建（B18–B21——两家都没有的 loop 安全面）
+
 ## 清单 C · 质量保障（过程约束——任何一轮违反即不收编，没有例外）
 
 - [x] C1 **五门全绿**方可收编：build / vitest / test-hooks / verify-skills / oracle 双跑
