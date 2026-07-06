@@ -7,6 +7,7 @@ import { Command } from 'commander'
 import type { CliDeps } from './deps.js'
 import { cmdCheck } from './commands/check.js'
 import { cmdCas, cmdGet, cmdSet, cmdSetMany } from './commands/fields.js'
+import { cmdImport } from './commands/import.js'
 import { cmdInbox } from './commands/inbox.js'
 import { cmdInit, type InitCmdOpts } from './commands/init.js'
 import { cmdList, cmdStatus } from './commands/status.js'
@@ -73,6 +74,12 @@ export function buildProgram(deps: CliDeps): Command {
     .command('check <name>')
     .description('guard 前置校验（人读报告；不过 exit 2）')
     .action(async (name: string) => bail(await cmdCheck(deps, name)))
+
+  program
+    .command('import <name>')
+    .description('老仓 change 历史区 → .pipeline-history.jsonl（--strip 同时清理 YAML 历史节）')
+    .option('--strip', '导入后从 .pipeline.yaml 移除历史节（其余尾内容保留）')
+    .action(async (name: string, opts: { strip?: boolean }) => bail(await cmdImport(deps, name, opts)))
 
   program
     .command('inbox')

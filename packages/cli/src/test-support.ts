@@ -148,6 +148,8 @@ export interface MakeDepsOpts {
   cwd?: string
   /** readGateMarkers 返回值（inbox 用），缺省空 */
   gateMarkers?: GateMarkerInfo[]
+  /** readHistoryRaw 返回值（import 幂等检查用），缺省空串 */
+  historyRaw?: string
 }
 
 export const FIXED_CLOCK = '2026-07-06T00:00:00Z'
@@ -169,6 +171,7 @@ export function makeDeps(o: MakeDepsOpts = {}): TestDeps {
     clock: () => FIXED_CLOCK,
     listChanges: spy(async (_root: string): Promise<string[]> => changes),
     readGateMarkers: async () => o.gateMarkers ?? [],
+    readHistoryRaw: async (_dir: string) => o.historyRaw ?? '',
     writeBreadcrumb: async (changeDir: string, content: string) => {
       breadcrumbs.push([changeDir, content])
     },

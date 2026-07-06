@@ -36,6 +36,8 @@ export interface CliDeps {
   writeBreadcrumb?: (changeDir: string, content: string) => Promise<void>
   /** lite 历史 .pipeline-history.jsonl appender（CONTRACT §1）。best-effort。 */
   history?: HistoryWriter
+  /** 读 .pipeline-history.jsonl 原文（缺失 → 空串）。import 幂等哨兵检查用 */
+  readHistoryRaw?: (changeDir: string) => Promise<string>
   /**
    * 读项目根的三门 marker（缺失 → 不出现在数组里）。main.ts 用 fs 实现；
    * 新鲜判定（GATE_FRESH_MS）是 inbox 命令的职责，这里只报原始年龄。

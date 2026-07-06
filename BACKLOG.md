@@ -6,7 +6,7 @@
 
 | # | 项 | 对应 plan 任务 | 预算 |
 |---|---|---|---|
-| 11 | 老仓库 change 导入工具（含 history 迁移） | v0.2 | 1d |
+|（空——iteration-8 后队列清空，进收敛检查）| | | |
 
 ## 已收编
 
@@ -25,3 +25,4 @@
 | 2026-07-06 | #9a `pipeline inbox` 数据端+人读表（iteration-5） | 收编：vitest 220/220，端到端真跑一屏 |
 | 2026-07-06 | #9b `inbox --html` 静态单页（iteration-6） | 收编：自足零依赖单页 + 注入转义，vitest 223/223 |
 | 2026-07-06 | #10 statusline（iteration-7） | 收编：纯 bash 零解释器，hooks 55/55 |
+| 2026-07-06 | #11 老仓导入工具（iteration-8） | 收编：43 条真实历史迁移 + --strip 清理 + 幂等哨兵，vitest 232/232 |

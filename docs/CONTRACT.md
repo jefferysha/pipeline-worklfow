@@ -13,7 +13,9 @@
 - **历史区容忍**：文件尾部可能出现老内核的 `tools_history:` / `prompts_history:` /
   `transitions_history:` base64 区块。lite **读时跳过、写回时原样逐字保留**（当不透明块处理）。
   lite 自己的历史写 `openspec/changes/<name>/.pipeline-history.jsonl`
-  （每行 `{"ts":ISO8601,"kind":"transition|set|init","field"?,"from"?,"to"?,"by"?}`）。
+  （每行 `{"ts":ISO8601,"kind":"transition|set|init|tool|prompt|import","field"?,"from"?,"to"?,"by"?,"raw"?}`；
+  tool/prompt/import 三种 kind 与 raw 字段是 `pipeline import` 老仓历史迁移的加法扩展，
+  iteration-8，不影响 .pipeline.yaml 兼容）。
 - **解析器**：kernel 手写窄解析器（仅支持上述子集），**禁止引入 yaml npm 包**——
   通用解析器的引号/锚点语义会悄悄偏离老内核三读取器契约。
 

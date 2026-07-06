@@ -88,11 +88,14 @@ export interface FlowEngine {
 
 export interface HistoryEntry {
   ts: string
-  kind: 'transition' | 'set' | 'init'
+  /** tool/prompt/import 为老仓历史导入扩展（BACKLOG #11，加法、不影响 .pipeline.yaml 兼容） */
+  kind: 'transition' | 'set' | 'init' | 'tool' | 'prompt' | 'import'
   field?: string
   from?: string
   to?: string
   by?: string
+  /** 导入的原始载荷（工具名+详情 / Q|A / 事件名） */
+  raw?: string
 }
 
 export interface HistoryWriter {

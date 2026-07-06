@@ -3,6 +3,7 @@
 | 日期 | 轮 | 项 | 结果 |
 |---|---|---|---|
 | 2026-07-06 | iteration-0 | T1 契约与骨架 | 收编：GOAL/LOOP/BACKLOG/CONTRACT/plan + workspaces + types.ts |
+| 2026-07-06 | iteration-8 | BACKLOG #11 老仓导入工具 | 收编：TDD 先红后绿。kernel `parseLegacyHistory/stripLegacyHistory`（tools/prompts/transitions 三节、b64 正则预校验、坏行 fail-open）+ CLI `pipeline import <name> [--strip]`（import 哨兵幂等、append fail-loud）。JSONL kind 加法扩展 tool/prompt/import + raw（CONTRACT §1 已注）。真跑老仓 fixture：43 条导入、YAML 历史节清空、状态仍可读、重跑安全。五门全绿：vitest 232/232（+9）、hooks 55/55、bundle 7/7、verify-skills OK、oracle 0 不一致。**队列清空** → 下轮进收敛检查（kill 判据第 1 条计数开始）。 |
 | 2026-07-06 | iteration-7 | BACKLOG #10 statusline | 收编：TDD 先红 1 后绿。hooks/statusline.sh 纯 bash（json_get 同 gate、grep 提顶层键、mtime 取最新活跃 change、新鲜门 marker 显示 等:<kind>、archived 隐藏、fail-open 空输出）；纳入零解释器红线自证名单；README 接入说明。四门全绿：hooks 55/55、vitest 223/223、verify-skills OK、oracle 0 不一致。队首：#11 老仓导入工具（队列最后一项）。 |
 | 2026-07-06 | iteration-6 | BACKLOG #9b `inbox --html` 静态单页 | 收编：TDD 先红 2 后绿。自足单页（零外部资源断言、深浅色、HTML 注入转义、空态、生成时间快照标注）。五门全绿：vitest 223/223（+3）、hooks 47/47、bundle 7/7、verify-skills OK、oracle 0 不一致。队首：#10 statusline。 |
 | 2026-07-06 | iteration-5 | BACKLOG #9 切片 + #9a `pipeline inbox` | 收编：#9（2d）按 budget 切为 9a/9b。9a 落地：三门 marker（新鲜判定同 gate TTL）+ 复核相位停留 change 双源合并、等待时长降序、`--json` schema 稳定、同名去重 marker 优先；端到端真跑（init→transition→inbox 一屏）。五门全绿：vitest 220/220（+6）、hooks 47/47、bundle 7/7、verify-skills OK、oracle 0 不一致。诚实记录：本轮测试与实现同批落盘、未跑显式红（协议瑕疵，下轮回归先红纪律）。队首：#9b 静态 HTML 单页。 |

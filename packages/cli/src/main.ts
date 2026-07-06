@@ -91,6 +91,13 @@ async function main(): Promise<void> {
     readGateMarkers: () => readGateMarkers(process.cwd()),
     writeBreadcrumb: (dir, content) => writeFile(join(dir, '.breadcrumb'), content, 'utf8'),
     history: createHistoryWriter(),
+    readHistoryRaw: async (dir) => {
+      try {
+        return await readFile(join(dir, '.pipeline-history.jsonl'), 'utf8')
+      } catch {
+        return ''
+      }
+    },
     gitHeadSha: () => gitHeadSha(process.cwd()),
     writeReviewMarker: (content) => writeFile(join(process.cwd(), '.pipeline-pending-review'), content, 'utf8'),
   }
