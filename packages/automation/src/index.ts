@@ -20,3 +20,14 @@ export * from './runner/runner.js'
 export * from './runner/docker.js'
 // sdk：对外编排 API
 export * from './sdk/sdk.js'
+// ─── BACKLOG #29c：docker 全链执行（真 docker / 真 git worktree / 真 merge-back）───
+// runner：exec 注入面 / boundedTail 64KiB / git 双挂载 / 三路 race / docker 容器全链
+export * from './runner/exec.js'
+export * from './runner/boundedTail.js'
+export * from './runner/gitMounts.js'
+export * from './runner/race.js'
+export * from './runner/container.js'
+// lifecycle：真 git worktree / 真 merge-back 守卫 / 生产 LifecyclePorts 装配
+export * from './lifecycle/worktree.js'
+export * from './lifecycle/mergeback.js'
+export * from './lifecycle/ports.js'

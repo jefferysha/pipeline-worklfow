@@ -23,9 +23,9 @@
       4 agents(#23)、sync/uninstall scrubber(#24)——全收编，热路径纯 bash 红线 + 真 fs/真 hook e2e
 - [x] **A3 dashboard（M3）**：server(#25) + 前端(#26) + SPA 服务(#26c) + doctor(#26b) + transition 单源(#25b)——全收编；config 写端点为可选增量
 - [x] **A4 channel + mem（M4）✅**：mem 跨 runtime 检索(#28) + channel 事件模型(#27) + channel 进程层 supervisor/真fork/SIGTERM/OS-liveness(#27b)
-- [~] **A5 automation / AFK Sandcastle（M5）**：队列状态机+scheduler+lifecycle+L1→L3(#29) + server afk 数据端+调度器灯(#29d)✅；docker 全链 #29c 待补（需 docker 环境）
+- [x] **A5 automation / AFK Sandcastle（M5）✅代码达标**：队列+scheduler+lifecycle+L1→L3(#29) + server afk 数据端(#29d) + docker 全链真实现+真 git worktree/merge-back 冲突留现场(#29c，docker IT honest-skip 无 docker)；仅缺 live 容器镜像部署接线
 - [ ] **A6 竞品缺口（M6）**：见清单 B 的 B13–B17
-- [~] **A7 tap 流量代理（M8）**：daemon+capture/forward proxy+trace_store+安全护栏(#34) + traffic 查看器数据端(#34d)✅；ws/CA #34b / 多 runtime #34c 待补
+- [x] **A7 tap 流量代理（M8）✅代码达标**：daemon+proxy+trace_store+护栏(#34) + traffic 数据端(#34d) + ws 重组/bedrock/本地 CA·TLS MITM(#34b，node v24 真跑) + 13 runtime clients(#34c)；仅缺 daemon TLS 绑定部署接线
 - [x] **A0 7-phase 状态机 + 三门 + CLI + 单文件分发 + 导入工具**（v0.1，iteration-0~9，oracle 0 不一致）
 
 ## 清单 B · 修改与优化点（迁移 ≠ 平移——每条都是对老仓的改进承诺）

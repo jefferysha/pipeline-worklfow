@@ -9,7 +9,8 @@
  *   · tapStatus() 让 doctor 明示「正在拦截」。见 security.ts。
  *
  * 本批范围（#34 核心）: daemon 多端口 + capture/forward proxy + trace_store（JSONL）+ 安全护栏。
- * 后续: ws_reconstruct/bedrock/certs(#34b) · 多 runtime clients(#34c) · dashboard 数据端(#34d)。
+ * 协议面（#34b/#34c）: ws 帧重组 + bedrock eventstream + 本地 CA/TLS MITM + 多 runtime clients。
+ * 后续: dashboard 数据端(#34d)。
  */
 export * from './paths.js'
 export * from './record.js'
@@ -18,3 +19,8 @@ export * from './security.js'
 export * from './capture-proxy.js'
 export * from './forward-proxy.js'
 export * from './daemon.js'
+// ── #34b/#34c 协议面（只加，不改上方 #34 既有 export）──
+export * from './ws-reconstruct.js'
+export * from './bedrock.js'
+export * from './certs.js'
+export * from './clients.js'

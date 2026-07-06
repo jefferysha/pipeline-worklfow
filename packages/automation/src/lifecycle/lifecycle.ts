@@ -78,6 +78,17 @@ export class AbortedRunError extends Error {
   }
 }
 
+/**
+ * 冲突/漂移类错误的 tag（BACKLOG #29c 现场保留补强）：merge-back 冲突（SyncError）/ merge 超时
+ * （MergeToHostTimeoutError）/ build_sha 漂移（BarrierDriftError）/ worktree 失败（WorktreeError）
+ * → **保留 worktree 现场**（不 remove），供人工在 dashboard 接管（DESIGN §7-item4「失败/冲突绝不清沙箱」）。
+ * #29 仅在 abort 时保留现场；真 merge-back 引入真冲突后，conflict 类错误也必须保留（否则 preserved_path
+ * 指向已删目录）。retry 类错误（瞬态/verify-fail）仍照清 worktree（下轮重建，不误留现场）。
+ */
+const PRESERVE_ERROR_TAGS = new Set(['SyncError', 'MergeToHostTimeoutError', 'BarrierDriftError', 'WorktreeError'])
+const isPreserveError = (err: unknown): boolean =>
+  typeof err === 'object' && err !== null && PRESERVE_ERROR_TAGS.has((err as { _tag?: string })._tag ?? '')
+
 /** 给 RunOutcome 打诚实化标志：buildSha 缺失（零 commit / 跑空）→ noop:true，即便 verify pass。 */
 const finalizeRunOutcome = (o: Omit<RunOutcome, 'noop'>): RunOutcome => ({ ...o, noop: !o.buildSha })
 
@@ -90,6 +101,8 @@ export const runChangeInSandbox = async (ports: LifecyclePorts, cfg: RunChangeCo
   const worktreePath = wt.path
 
   let handle: SandboxHandle | undefined
+  // #29c：conflict 类错误保留现场（不清 worktree）；见 PRESERVE_ERROR_TAGS。
+  let preserve = false
   try {
     // 沙箱 env 注入 PIPELINE_AFK=1（headless 放行三门）。真实现还会叠 .sandcastle/.env 白名单（#29c）。
     const env: Record<string, string> = { [PIPELINE_AFK_ENV]: '1' }
@@ -129,11 +142,13 @@ export const runChangeInSandbox = async (ports: LifecyclePorts, cfg: RunChangeCo
       handle = undefined // 让 finally 跳过二次 close
       throw new AbortedRunError(signal.reason, worktreePath)
     }
+    // conflict 类（merge 冲突 / barrier drift / worktree 失败）→ 保留现场，不清 worktree。
+    if (isPreserveError(err)) preserve = true
     throw err
   } finally {
     if (handle) await handle.close().catch(() => {})
-    // 非 abort 路径 teardown worktree（错误吞掉）；abort 早退不清（保留现场）。
-    if (!signal.aborted) {
+    // 非 abort、非 conflict 路径才 teardown worktree（错误吞掉）；abort/conflict 保留现场。
+    if (!signal.aborted && !preserve) {
       await ports.worktree.remove(worktreePath).catch(() => {})
     }
   }

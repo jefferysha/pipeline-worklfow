@@ -47,8 +47,8 @@
 | 前端 dashboard-app | ✅ 71 真 render 测试（jsdom 真 render DOM + 真拖拽 fireEvent + SSE 真 EventSource stub emit→组件更新）+ 3 真 server HTTP 集成 | ✅ transition 失败呈现/非法 no-op | ✅ 收件箱默认→看板→设置 |
 | server 服务 SPA | ✅ server.test.ts +1（真起 server webRoot → GET / 真返 SPA index.html+token 注入 + /assets/* 真供给 + 路径穿越防护） | ✅ 穿越 !=200 | — |
 | loops 治理 | ✅ loops.integration.test.ts 15 例（真建 loops.yaml/progress.md → 真裁决 R1-R11 verdict + L1 report-only/L3 unattended + schema 拒非法 exit3） | ✅ budget 超限 kill | ✅ list→enforce→status |
-| tap 流量代理 | ✅ packages/tap 49 例（13 真 socket：真 fake upstream + 真 proxy + 真 CONNECT + trace_store 真落盘；源码级扫描断言零 outbound）+ doctor tap 灯真跑 | ✅ 默认 OFF 真不监听 / 8766 生命线隔离 | — |
-| automation AFK | ✅ packages/automation 72 例（57 纯逻辑真状态机 + 14 真 kernel fs/git 集成）；docker IT 2 honest-skip（无 docker 不伪绿）| ✅ L1→paused/L3→merged/conflict 保留 | ✅ enqueue→scan→run |
+| tap 流量代理 | ✅ packages/tap 109 例（13 真 socket + ws 帧真重组 + bedrock CRC32 交叉校验 + **真 crypto 本地 CA 真自签真 X509 验签 + 真 TLS MITM 终结解密**(node v24 真跑 0 skip) + 13 runtime clients；源码级扫描断言 certs 零 outbound + CA 私钥 0600）+ doctor tap 灯真跑 | ✅ 默认 OFF 真不监听 / capture OFF 不解密 / 8766 隔离 | — |
+| automation AFK | ✅ packages/automation 111 例（纯逻辑真状态机/race idle·grace·abort/boundedTail 64KiB/git 双挂载/merge-back 冲突判定 + 真 kernel fs 集成 + **真 git 集成**：worktree add/remove、merge-back 干净交付+冲突留现场、barrier 派生+drift）；**docker 全链 IT 4 honest-skip**（无 docker→真起容器/exec/rm 跳过；无 CLAUDE_CODE_OAUTH_TOKEN→full CC-in-sandbox 跳过；绝不伪绿，#29c）| ✅ L1→paused/L3→merged/conflict 留现场（真 SyncError→worktree 不清+preserved_path） | ✅ enqueue→scan→run |
 | 上下文压缩 | ✅ handoff.integration.test.ts 7 例（真建长文档 → 真压缩 → 断言压缩率≥25% + 决策/约束保留 + 样板去除）；确定性零 LLM 可 oracle | ✅ 无文档/缺 change | ✅ 达 build 相位 handoff |
 | auto-transition advance | ✅ advance.integration.test.ts 6 例（真推进到复核相位即停 + guard 不过不推进 + dry-run 不改盘）；**HITL 红线**：verify/ship guard 预备仍停 verify、硬门 --through-gates 也不跨 | ✅ guard-fail exit2 | ✅ 多步推进 |
 | 适配器 conformance | ✅ tools/test-adapters.sh 58 断言（真跑各适配器归一 canonical 决策 + 反例哨兵 + **真适配器变异测试**：改坏 codex veto 立即抓红、还原回绿）；claude/codex(A)/cursor(B) active | ✅ 判别力自证 | — |
