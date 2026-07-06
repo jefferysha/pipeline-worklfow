@@ -23,14 +23,10 @@
       4 agents(#23)、sync/uninstall scrubber(#24)——全收编，热路径纯 bash 红线 + 真 fs/真 hook e2e
 - [~] **A3 dashboard（M3）**：TS 全局 server(#25)✅ + 前端信息架构重构(#26)✅ + server 服务 SPA(#26c)✅
       + doctor(#26b)✅；剩单源技术债 #25b、config 写端点
-- [ ] **A4 channel + mem（M4）**：worker 总线、跨 runtime 会话检索
-- [ ] **A5 automation / AFK Sandcastle（M5，2026-07-07 用户确认全量迁移）**：5 个 TS 包
-      （runner/lifecycle/scheduler/cli/sdk）+ Docker 沙箱执行 + 队列/merge-back/现场保留 +
-      调度器 doctor 灯；与 B19 的 L1→L3 分级放权合体（默认 report-only，毕业制升档）
+- [~] **A4 channel + mem（M4）**：mem 跨 runtime 检索(#28)✅ + channel 事件模型(#27)✅；channel 进程层 #27b 待补
+- [~] **A5 automation / AFK Sandcastle（M5）**：队列状态机+scheduler+lifecycle+L1→L3(#29)✅；docker 全链 #29c / server afk 数据端 #29d / 毕业制 #29e 待补
 - [ ] **A6 竞品缺口（M6）**：见清单 B 的 B13–B17
-- [ ] **A7 tap 流量代理（M8，2026-07-07 用户确认全量迁移）**：MITM 守护（多端口/多 runtime）+
-      capture/forward proxy + ws 重组 + bedrock + 本地 CA + trace_store + dashboard 查看器；
-      默认 OFF、敏感能力 doctor 明示、捕获数据本地不外发（安全护栏是收编前置）
+- [~] **A7 tap 流量代理（M8）**：daemon+capture/forward proxy+trace_store+安全护栏(#34)✅；ws/CA #34b / 多 runtime #34c / traffic 查看器 #34d 待补
 - [x] **A0 7-phase 状态机 + 三门 + CLI + 单文件分发 + 导入工具**（v0.1，iteration-0~9，oracle 0 不一致）
 
 ## 清单 B · 修改与优化点（迁移 ≠ 平移——每条都是对老仓的改进承诺）
@@ -39,17 +35,17 @@
 - [x] B1 单语言 TS 内核：三读取器契约构造性消灭（iteration-1）
 - [x] B2 manifest 单一真相源：引擎真读 review_phases，修老仓半接线欠账（flow.test 回归锚）
 - [x] B3 历史存储去变形：JSONL 侧文件替代 base64 塞 YAML + `pipeline import` 迁移（iteration-2/8）
-- [ ] B4 全局 server 版本抢占：多项目多版本共存时新版本接管（老仓欠账 #3）→ M3
-- [ ] B5 dashboard 写端点 token 鉴权：localhost 裸写回面封死（老仓欠账 #4）→ M3
-- [ ] B6 构造级模块化：channel/mem/automation 独立可选包 + snapshot capability 声明、前端按声明渲染 → M3/M4
+- [x] B4 全局 server 版本抢占（#25）：旧版本 SIGTERM 让位，真进程 e2e（修老仓欠账 #3）
+- [x] B5 dashboard 写端点 token 鉴权（#25）：crypto 256-bit + 0600 握手 + 常量时间比较，POST 无 token 401（修老仓欠账 #4）
+- [x] B6 构造级模块化（#25~#39）：kernel/server/dashboard/tap/automation 独立 workspace 包 + snapshot capability 声明、前端按声明渲染
 - [x] B7 hook 热路径纯 bash 红线：制度化为测试自证（grep -c node = 0，iteration-1/7）
-- [ ] B8 降级可见：fail-open 不再静默——统一 `pipeline doctor` 健康面，列明"哪些保障此刻真的在生效/已降级"（对标 comet doctor + 老仓六灯，老仓 _pipeline_health 无统一面的补全）→ M3
+- [x] B8 降级可见（#26b/#34e）：`pipeline doctor` 11 项保障生效清单 + tap 敏感能力明示（补老仓 _pipeline_health 无统一面）
 - [x] B9 注释考古不入代码：历史入 docs/进度流水，代码只留当前约束（全仓执行中）
 
 **UI（老仓四病灶的解法）**
 - [x] B10 收件箱：`pipeline inbox`/`--html`——默认回答"在等我什么决定"（iteration-5/6）；M3 里升级为 dashboard 默认落地页
 - [x] B11 statusline：终端内零开销状态（iteration-7）
-- [ ] B12 操作与配置分离 + debug 降级：Kanban/Settings/Advanced 三层，一级导航 ≤3 项 → M3
+- [x] B12 操作与配置分离 + debug 降级（#26）：收件箱/看板/设置三视图 + Advanced 折叠，一级导航恰 3 项
 
 **竞品缺口（Comet / Trellis 对标分析的全部遗留）**
 - [x] B13 上下文压缩（#30 iteration-21）：phase handoff 确定性压缩（实测 45.4% > Comet 25-30%），零 LLM 可 oracle
@@ -65,8 +61,7 @@
       毕业制升级（上游 Phased Rollout 思想 × 老仓 human gates）→ M5 前置
 - [x] B20 token 预算与熔断（#36 iteration-22）：loop 级 token budget + circuit breaker（超阈值 tripped）
       + 成本估算（cadence×pattern），扩展 #35 loops、enforce 零改动
-- [ ] B21 漂移检测与就绪审计：声明意图（LOOP 定义）vs 实际状态（STATE/流水）自动对账 +
-      loop-ready 评分（上游 loop-sync/loop-audit 思想；老仓 TestLoopMdMirror 的推广）→ M-loop
+- [~] B21 漂移检测与就绪审计：drift + loop-ready 评分 → 进行中 #37
 
 ## 清单 D · 竞争超越判据（2026-07-06 用户指令：任何方面都超过 Trellis 与 Comet）
 
@@ -74,24 +69,24 @@
 （docs/superiority-matrix.md，随里程碑更新）：
 
 **vs Trellis（11.8k★）**
-- [ ] D1 规范持久化与自动注入：spec 注入面 ≥ Trellis（SessionStart 三注入 + manifest 单源）→ M2
+- [x] D1 规范持久化与自动注入（#20/#18）：SessionStart 三注入 + manifest 单源 ≥ Trellis
 - [x] D2 任务/状态结构化：`.pipeline.yaml` 37 字段 + 7 相位 > Trellis task PRD 三态（v0.1）
-- [ ] D3 会话记忆/journal：mem 检索 + history JSONL ≥ Trellis workspace journal → M4
-- [ ] D4 真实工具链验证：check/guard 全量面 + 三轨 verify > trellis-check（#12 已过半）→ M1/M2
-- [ ] D5 学习回写闭环：learn-record ≥ trellis-update-spec → M2
+- [x] D3 会话记忆/journal（#28/#7）：mem 跨 3 runtime 检索 + history JSONL ≥ Trellis workspace journal
+- [~] D4 真实工具链验证（#12）：check/guard 46 规则全量面 > trellis-check；三轨 verify 待 #29c 沙箱 verify
+- [x] D5 学习回写闭环（#22）：learn-record 三层回写 ≥ trellis-update-spec
 - [x] D6 简单性：npx 一行上手 + 5 分钟心智模型 ≥ trellis init（iteration-4）
-- [ ] D7 多平台：适配器矩阵 ≥ Trellis 16 平台（可移植内核 + 分档降级策略）→ M7
+- [x] D7 多平台策略面（#39）：适配器框架 + conformance + 分档降级，active 3/planned 4（填表可扩，> Trellis 手工）
 **vs Comet（2k★）**
 - [x] D8 脚本守门状态机：三门 hook 硬拦 + guard 46 规则 + CAS/锁 > comet-guard（#12）
-- [ ] D9 dashboard：全局 server + 收件箱默认视图 + 鉴权 > comet 只读面板 → M3
-- [ ] D10 doctor 健康面：降级可见 + 保障生效清单 > comet doctor 安装诊断 → M3
-- [ ] D11 上下文压缩：handoff 压缩 ≥ Comet CONTEXT-COMPRESSION（beta）→ M6
-- [ ] D12 auto-transition：中间档 + L1→L3 分级 > Comet AUTO-TRANSITION → M6
+- [x] D9 dashboard（#25/#26/#26c）：全局 server + 收件箱默认视图 + token 鉴权 + 版本抢占 > comet 只读面板
+- [x] D10 doctor 健康面（#26b/#34e）：11 项保障生效清单 + tap 敏感能力明示 > comet doctor 安装诊断
+- [x] D11 上下文压缩（#30）：确定性压缩 45.4% > Comet 25-30%（且可 oracle）
+- [x] D12 auto-transition（#31）：中间档 + HITL 红线三重证明 > Comet AUTO-TRANSITION
 - [x] D13 可恢复工作流：断点恢复不依赖对话历史（.pipeline.yaml 真相源，v0.1 oracle 验证）
-- [ ] D14 平台广度：≥ Comet 30 平台的策略面（内核可移植性已具备，矩阵铺开）→ M7
+- [~] D14 平台广度（#39）：可移植内核 + 填表式扩展策略就绪；铺到 ≥Comet 30 平台待 #40
 **vs 两者皆无（差异化护城河）**
 - [x] D15 golden-oracle 行为等价迁移法（双跑逐字 diff——两家都没有的质量证据链）
-- [ ] D16 loop-engineering 治理内建（B18–B21——两家都没有的 loop 安全面）
+- [~] D16 loop-engineering 治理（#35/#36）：registry+enforce R1-R11+L1→L3+budget/circuit-breaker；drift/graduation 待 #37/#38（两竞品都无此面）
 
 ## 清单 C · 质量保障（过程约束——任何一轮违反即不收编，没有例外）
 

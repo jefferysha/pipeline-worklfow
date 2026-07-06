@@ -16,14 +16,12 @@
 | 29d | 调度器 doctor 灯 + dashboard AFK 指挥面数据端（M3 的 server 承接） | M5 | 1d |
 | 29e | 与 L1→L3 分级放权（#38）合体：AFK 默认 L1 report-only，毕业制升 L2/L3 | M5 | 1d |
 | **M6** 竞品缺口收尾 | | | |
-| 32 | Cursor 适配器转正（老仓 spike → 可发布） | M6 | 3d |
 | 33 | Trellis parity 收尾：8 partial + 1 missing（spec-template-scaffold、冲突 AskUserQuestion、workflow-template-resolution、KNOWN_UNTRACKED_ALLOWLIST） | M6 | 3d |
 | **M-loop** loop-engineering 内建（GOAL B18–B21 / D16） | | | |
 | 37 | 漂移检测 + loop-ready 审计：LOOP 声明 vs STATE 流水对账、就绪评分 | M-loop | 2d |
 | 38 | 分级放权 L1→L3：AFK 自动化毕业制（report → 人工门 → allowlist 自动合并），M5 的前置件 | M-loop | 2d |
 | **M7** 平台矩阵（GOAL D7/D14） | | | |
 | 40 | 平台铺开：Codex/Cursor 先行，矩阵逐平台扩展至 ≥ 两竞品覆盖面 | M7 | 5d+ |
-| 41 | docs/superiority-matrix.md：D1–D16 逐维对比证据表（随里程碑更新，收敛检查对照物） | 持续 | 0.5d |
 | **M8** tap 流量代理（2026-07-07 用户确认进正式队列，human gate 解除） | | | |
 | 34b | 协议面：ws_reconstruct（WebSocket 重组）+ bedrock 适配 + certs（本地 CA 生成/信任链） | M8 | 3d |
 | 34c | 多 runtime 抓流：codex/kimi/openclaw/codebuddy/gemini 各端口绑定与转发 | M8 | 2d |
@@ -74,3 +72,4 @@
 | 2026-07-07 | #31 auto-transition 中间档（iteration-21） | 收编：advance guard 自动推进+HITL 三重证明，D12 |
 | 2026-07-07 | #39 适配器框架+Cursor 转正（iteration-22） | 收编：58 conformance 断言+变异测试，claude/codex/cursor active，D7 |
 | 2026-07-07 | #36 loop 预算与熔断（iteration-22） | 收编：token budget+circuit breaker+成本估算 + 16 真 fs 例，D16 |
+| 2026-07-07 | #41 超越矩阵 + #32 Cursor（iteration-22） | 收编：docs/superiority-matrix.md D1-D16 证据表；#32 已由 #39 完成 |
