@@ -29,18 +29,24 @@
 
 | cmd | 参数 | stdout 契约 | exit |
 |---|---|---|---|
-| init | `<name> --track --preset [--user]` | 创建路径一行 | 0/1 |
-| get | `<name> <field>` | 裸值（去引号后），无尾空格 | 0；字段不存在=1 |
-| set | `<name> <field> <value>` | 无输出 | 0；四闸拒写=1 |
+| init | `<name> --track --preset [--user]` | 无（`[INIT] 路径` 走 stderr） | 0/1 |
+| get | `<name> <field>` | 裸值一行；字段缺失/未知 → 空行 | 0；change 缺失/名非法=1 |
+| set | `<name> <field> <value>` | 无输出 | 0；四闸/枚举/未知字段拒写=1 |
 | set-many | `<name> k=v...` | 无输出 | 同上 |
-| cas | `<name> <field> <expect> <new>` | 无输出 | 0；不匹配=3 |
-| transition | `<name> <event>` | `old -> new` 一行 | 0；非法=2 |
-| check | `<name>` | guard 报告（人读） | 0 过 / 2 不过 |
+| cas | `<name> <field> <expect> <new>` | 无输出 | 0；不匹配=3；错误=1 |
+| transition | `<name> <event>` | 无（`[TRANSITION] name: old -> new` 走 stderr） | 0；非法/未知事件=1 |
+| check | `<name>` | guard 报告（人读） | 0 过 / 2 不过 / 1 错误 |
 | status | `[name] [--json]` | 单 change 摘要 | 0 |
 | list | `[--json]` | 活跃 change 表 | 0 |
 
 get/set/transition 的 stdout 与 exit code 以 **golden-oracle 双跑逐字一致**为准
 （oracle=老内核 `skills/pipeline/scripts/pipeline-state.sh`，diff 白名单仅时间戳字段值）。
+> 2026-07-06 oracle 实测回写（iteration-1，plan 风险条款授权）：init/get/transition 三行已按老内核
+> 实测行为修订（原表为文档口径，实测 init stdout 为空、get 缺失字段=空行+0、transition 走 stderr
+> 且非法=1）。**有意差异白名单**（oracle 比对时豁免并在报告标注）：① `check <name>` 单参签名
+> （老内核 `check <name> <phase>`，lite 委托 guardCheck 查当前相位）；② 门 marker TTL 统一 15min
+> （老内核 confirm=300s / review·interaction=1800s）；③ transition stderr 无 ANSI 颜色；
+> ④ build⇄verify 的自动副作用改显式 set（见 flow 模块头注）。
 
 ## 4. 目录所有权（并行 agent 只写自己的格子）
 

@@ -1,0 +1,48 @@
+# templates/manifest.yaml — lite 内核流程规则的单一真相源
+#
+# 蒸馏来源（老仓 workflow-plugin，严格只读参考）：
+#   · phases        ← skills/pipeline/manifest.yaml:phases（order 1..7 的 7 个相位）
+#   · transitions   ← skills/pipeline/scripts/manifest.py:_DEFAULT_TRANSITIONS
+#                     （event 边折叠为 from→to 相位边：build-complete=build→verify、
+#                      verify-fail=verify→build 构成 build⇄verify 双向；
+#                      archived=archive→archive 终态自环）
+#   · review_phases ← skills/pipeline/manifest.yaml:review_phases。
+#                     ⚠️ 老内核欠账：state-transition.sh 的 review-gate 块曾硬编码
+#                     explore/spec/verify、未读该字段（manifest.yaml:78-80 自己注明"仅半接线"）。
+#                     本仓引擎（packages/kernel/src/flow）**真读本字段**——改这里即改行为，
+#                     回归锚见 flow.test.ts「review_phases 单一真相源回归锚」。
+#
+# 解析器 = kernel 手写窄解析（packages/kernel/src/flow/manifest.ts，CONTRACT §1 禁 yaml npm 包），
+# 仅支持本文件用到的子集：
+#   · 顶层键 `key:` / `key: [inline, list]`
+#   · 块序列：两空格缩进 `- item`
+#   · transitions 小节：两空格缩进 `from: [to1, to2]`
+#   · `#` 整行注释、行尾注释（空白 + #）、空行
+# 其余 YAML 特性（引号/锚点/多行标量/嵌套 map）一律不支持，遇到即 fail-loud。
+
+# —— 7 相位，声明顺序即相位顺序（回退边判定 = 目标序号 < 当前序号）——
+phases:
+  - open
+  - explore
+  - spec
+  - build
+  - verify
+  - ship
+  - archive
+
+# —— 转换图：from: [合法目标...] ——
+# verify 双出口：verify-pass → ship / verify-fail → build（回退边，phase_status=in_progress）。
+# archive: [archive] = 终态自环（老内核 archived 事件，phase_status=done、archived=true 由 CLI 层落）。
+# 每个已声明相位必须在此有条目（可为 []），缺条目 = 结构错误，loadManifest fail-loud。
+transitions:
+  open: [explore]
+  explore: [spec]
+  spec: [build]
+  build: [verify]
+  verify: [ship, build]
+  ship: [archive]
+  archive: [archive]
+
+# —— review-gate 相位：进入这些相位时 CLI 落 .pipeline-pending-review 门 marker（CONTRACT §2）——
+# 引擎经 isReviewPhase() 暴露判定；此列表是唯一真相源，引擎/CLI 零硬编码。
+review_phases: [explore, spec, verify]

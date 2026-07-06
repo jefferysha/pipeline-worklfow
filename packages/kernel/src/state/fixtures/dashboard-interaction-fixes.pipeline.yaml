@@ -1,0 +1,85 @@
+track: frontend
+preset: full
+created_by: Host Dev
+assignee: null
+phase: ship
+phase_status: pending
+design_doc: docs/superpowers/specs/2026-06-30-dashboard-interaction-fixes-design.md
+plan: docs/superpowers/plans/2026-06-30-dashboard-interaction-fixes.md
+verification_report: openspec/changes/dashboard-interaction-fixes/verification_report.md
+build_mode: direct
+isolation: branch
+build_sha: 7f9a941b6b02b2858ccd3240fdcb0ee234ea2af4
+agent_review_result: pass
+codex_review_result: pass
+verify_result: pass
+branch_status: handled
+direct_override: true
+prd_path: null
+pr_url: draft（未推送，留 afk-full-pipeline-autodrive 分支待整体确认；草稿见 pr-draft.md）
+automation: off
+automation_queued_at: ""
+automation_sandbox: ""
+automation_worktree: ""
+automation_attempts: 0
+automation_last_error: ""
+automation_preserved_path: ""
+branch: null
+base_branch: afk-full-pipeline-autodrive
+scope: null
+related_files: null
+spec_scope: null
+depends_on: null
+created_at: 2026-06-30T08:13:41Z
+updated_at: 2026-06-30T13:47:37Z
+verified_at: 2026-06-30T13:30:57Z
+archived_at: null
+archived: false
+pipeline_mode: human
+tools_history:
+  - { at: 2026-06-30T13:52:46Z, tool: Skill, detail_b64: "aGFuZG9mZg==" }
+  - { at: 2026-06-30T13:50:19Z, tool: Skill, detail: "commit-push-pr" }
+  - { at: 2026-06-30T13:50:19Z, tool: Skill, detail: "finishing-a-development-branch" }
+  - { at: 2026-06-30T13:50:19Z, tool: Skill, detail: "openspec-archive-change" }
+  - { at: 2026-06-30T13:35:39Z, tool: Skill, detail_b64: "cGlwZWxpbmUtd29ya2Zsb3c6b3BlbnNwZWMtYXBwbHktY2hhbmdl" }
+  - { at: 2026-06-30T13:33:04Z, tool: Skill, detail_b64: "cGlwZWxpbmUtd29ya2Zsb3c6cGlwZWxpbmUtc2hpcA==" }
+  - { at: 2026-06-30T13:04:39Z, tool: Agent, detail_b64: "cGlwZWxpbmUtd29ya2Zsb3c6cGlwZWxpbmUtcmV2aWV3ZXI=" }
+  - { at: 2026-06-30T12:36:46Z, tool: Agent, detail_b64: "cGlwZWxpbmUtd29ya2Zsb3c6cGlwZWxpbmUtcmV2aWV3ZXI=" }
+  - { at: 2026-06-30T11:47:44Z, tool: Agent, detail_b64: "cGlwZWxpbmUtd29ya2Zsb3c6cGlwZWxpbmUtcmV2aWV3ZXI=" }
+  - { at: 2026-06-30T11:08:04Z, tool: Agent, detail_b64: "cGlwZWxpbmUtd29ya2Zsb3c6cGlwZWxpbmUtcmV2aWV3ZXI=" }
+  - { at: 2026-06-30T10:06:11Z, tool: Agent, detail_b64: "ZTJlLXJ1bm5lcg==" }
+  - { at: 2026-06-30T10:05:55Z, tool: Agent, detail_b64: "cGlwZWxpbmUtd29ya2Zsb3c6cGlwZWxpbmUtcmV2aWV3ZXI=" }
+  - { at: 2026-06-30T09:59:52Z, tool: Skill, detail: "react-patterns" }
+  - { at: 2026-06-30T09:59:52Z, tool: Skill, detail: "taste-skill" }
+  - { at: 2026-06-30T09:59:52Z, tool: Skill, detail: "web-design-guidelines" }
+  - { at: 2026-06-30T09:59:52Z, tool: Skill, detail: "frontend-design" }
+  - { at: 2026-06-30T09:59:52Z, tool: Skill, detail: "test-driven-development" }
+  - { at: 2026-06-30T08:25:16Z, tool: Skill, detail_b64: "cGlwZWxpbmUtd29ya2Zsb3c6cGlwZWxpbmUtYnVpbGQ=" }
+  - { at: 2026-06-30T08:22:22Z, tool: Skill, detail: "writing-plans" }
+  - { at: 2026-06-30T08:22:22Z, tool: Skill, detail: "openspec-propose" }
+  - { at: 2026-06-30T08:20:06Z, tool: Skill, detail_b64: "cGlwZWxpbmUtd29ya2Zsb3c6cGlwZWxpbmUtc3BlYw==" }
+  - { at: 2026-06-30T08:17:18Z, tool: Skill, detail: "search-first" }
+  - { at: 2026-06-30T08:17:18Z, tool: Skill, detail: "grill-with-docs" }
+  - { at: 2026-06-30T08:17:18Z, tool: Skill, detail: "brainstorming" }
+  - { at: 2026-06-30T08:17:18Z, tool: Skill, detail: "openspec-explore" }
+  - { at: 2026-06-30T08:14:44Z, tool: Skill, detail_b64: "cGlwZWxpbmUtd29ya2Zsb3c6cGlwZWxpbmUtZXhwbG9yZQ==" }
+  - { at: 2026-06-30T08:14:05Z, tool: Skill, detail: "openspec-propose" }
+transitions_history:
+  - { at: 2026-06-30T13:30:57Z, from: verify, to: ship, event: verify-pass }
+  - { at: 2026-06-30T13:01:48Z, from: build, to: verify, event: build-complete }
+  - { at: 2026-06-30T12:44:34Z, from: verify, to: build, event: verify-fail }
+  - { at: 2026-06-30T12:33:52Z, from: build, to: verify, event: build-complete }
+  - { at: 2026-06-30T12:00:22Z, from: verify, to: build, event: verify-fail }
+  - { at: 2026-06-30T11:45:47Z, from: build, to: verify, event: build-complete }
+  - { at: 2026-06-30T11:20:17Z, from: verify, to: build, event: verify-fail }
+  - { at: 2026-06-30T11:06:10Z, from: build, to: verify, event: build-complete }
+  - { at: 2026-06-30T10:18:10Z, from: verify, to: build, event: verify-fail }
+  - { at: 2026-06-30T10:00:48Z, from: build, to: verify, event: build-complete }
+  - { at: 2026-06-30T08:25:03Z, from: spec, to: build, event: spec-complete }
+  - { at: 2026-06-30T08:19:55Z, from: explore, to: spec, event: explore-complete }
+  - { at: 2026-06-30T08:14:31Z, from: open, to: explore, event: open-complete }
+prompts_history:
+  - { at: 2026-06-30T13:23:59Z, phase: verify, track: frontend, kind: decision, q_b64: "dmVyaWZ5IOS4iei9qOWFqOi/h++8iHJldmlld2VyIFBBU1MgLyBjb2RleCBDTEVBTiAvIGUyZSAxNi8xNu+8ie+8jGRhc2hib2FyZC1pbnRlcmFjdGlvbi1maXhlcyDkv67liLDpm7YgYnVn44CC5LiL5LiA5q2l77yf77yIc2hpcC9hcmNoaXZlL1BSIOWdh+S4jeiHquWKqOaOqOi/m++8jOaMieS9oOeahOWGs+Wumu+8iQ==", a_b64: "5o6o6L+bIHNoaXDvvIjlkIzmraUgc3BlYyArIFBSIOiNieeov++8jOS4jeWQiCBtYXN0ZXLvvIk=" }
+  - { at: 2026-06-30T08:24:52Z, phase: spec, track: frontend, kind: decision, q_b64: "c3BlYyDlpI3moLjvvJpkZWx0YSBzcGVj77yIMTAgTU9ESUZJRUQgKyAxIEFEREVEIOmcgOaxgu+8iSsgUGxhbu+8iDYg5a2Q6Zi25q6177yJKyBjb3ZlcmFnZSDlnZfvvIjlpoLkuIrvvInmmK/lkKborqTlj6/vvIzov5sgYnVpbGTvvJ8=", a_b64: "6K6k5Y+v77yM6L+bIGJ1aWxk" }
+  - { at: 2026-06-30T08:19:33Z, phase: explore, track: frontend, kind: decision, q_b64: "b2JzLTEzIOiuqSBydW5DaGFuZ2Ugb3V0Y29tZSDor5rlrp7ljJbvvIhgdmVyaWZ5UmVzdWx0OnBhc3NgIOS9hiBgYnVpbGRTaGE9bnVsbGAg6Zu25Lqn5Ye677yJ55qE57yW56CB5pa55byP77yf5b2x5ZON5omA5pyJIG91dGNvbWUg5raI6LS56ICF77yIZHJpdmVyL+acquadpeiwg+eUqOaWue+8ieOAgiB8IEhJR0gtNSDmi5bljaHmjqjov5vnmoTkuqTkupLojIPlm7TvvJ/vvIjlkI7nq68gZ3VhcmQg5Lya5oum6Z2e5rOVIHRyYW5zaXRpb27vvIzkvYbliY3nq6/kuI3or6Xlj5HotbfvvIk=", a_b64: "5Yqg5pi+5byPIG5vb3Ag5qCH5b+X77yI5o6o6I2Q77yJIHwg6YK75YiXIGFkdmFuY2UgKyB2ZXJpZnnihpJidWlsZCByZXZlcnTvvIjmjqjojZDvvIk=" }
+coverage_confirmed_by: Host Dev

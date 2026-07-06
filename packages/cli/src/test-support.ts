@@ -1,0 +1,182 @@
+/**
+ * 测试基座：StateStore / FlowEngine 的 mock 工厂 + 依赖装配 helper。
+ * 只依赖 types 契约（@pipeline-lite/kernel 目前仅 re-export types），零 vitest 依赖，
+ * 因此可被 tsc 正常编译（不进任何运行时路径）。
+ */
+import {
+  FIELD_ORDER,
+  IllegalTransitionError,
+  LIST_FIELDS,
+  PHASES,
+} from '@pipeline-lite/kernel'
+import type {
+  FieldName,
+  GuardResult,
+  HistoryEntry,
+  InitOptions,
+  ManifestData,
+  Phase,
+  PipelineState,
+  TransitionResult,
+} from '@pipeline-lite/kernel'
+import type { CliDeps } from './deps.js'
+
+// === 调用记录 spy（不引 vitest，纯手写） ===
+
+export interface Recorded<A extends unknown[], R> {
+  (...args: A): R
+  calls: A[]
+}
+
+export function spy<A extends unknown[], R>(impl: (...args: A) => R): Recorded<A, R> {
+  const calls: A[] = []
+  const fn = (...args: A): R => {
+    calls.push(args)
+    return impl(...args)
+  }
+  return Object.assign(fn, { calls })
+}
+
+// === PipelineState 工厂：37 字段全量、缺省空串 / 空列表 ===
+
+export function mockState(fields: Partial<Record<FieldName, string | string[]>> = {}): PipelineState {
+  const all = {} as Record<FieldName, string | string[]>
+  for (const f of FIELD_ORDER) {
+    all[f] = (LIST_FIELDS as readonly string[]).includes(f) ? [] : ''
+  }
+  return { fields: { ...all, ...fields }, opaqueTail: '' }
+}
+
+// === StateStore mock：支持单 state 或 name→state 映射（status/list 多 change 场景） ===
+
+type StateInput = PipelineState | Record<string, PipelineState>
+
+function isSingleState(s: StateInput): s is PipelineState {
+  return 'fields' in s && 'opaqueTail' in s
+}
+
+export function mockStore(states: StateInput = mockState()) {
+  const lookup = (changeDir: string): PipelineState => {
+    if (isSingleState(states)) return states
+    const name = changeDir.split('/').pop() ?? ''
+    const s = states[name]
+    if (!s) throw new Error(`ENOENT: 状态文件不存在: ${changeDir}/.pipeline.yaml`)
+    return s
+  }
+  return {
+    read: spy(async (changeDir: string): Promise<PipelineState> => lookup(changeDir)),
+    write: spy(async (_changeDir: string, _state: PipelineState): Promise<void> => {}),
+    get: spy(
+      async (changeDir: string, field: FieldName): Promise<string | string[] | undefined> =>
+        lookup(changeDir).fields[field],
+    ),
+    set: spy(async (_changeDir: string, _field: FieldName, _value: string | string[]): Promise<void> => {}),
+    setMany: spy(
+      async (_changeDir: string, _kv: Partial<Record<FieldName, string | string[]>>): Promise<void> => {},
+    ),
+    cas: spy(
+      async (_changeDir: string, _field: FieldName, _expect: string, _next: string): Promise<boolean> => true,
+    ),
+    init: spy(
+      async (opts: InitOptions): Promise<string> => `${opts.repoRoot}/openspec/changes/${opts.name}`,
+    ),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    withLock: spy(async (_changeDir: string, fn: () => Promise<any>): Promise<any> => fn()),
+  }
+}
+
+export type MockStore = ReturnType<typeof mockStore>
+
+// === FlowEngine mock：契约相位图（open→…→archive，build⇄verify，archive 自环） ===
+
+export const TEST_MANIFEST: ManifestData = {
+  phases: PHASES,
+  transitions: {
+    open: ['explore'],
+    explore: ['spec'],
+    spec: ['build'],
+    build: ['verify'],
+    verify: ['ship', 'build'],
+    ship: ['archive'],
+    archive: ['archive'],
+  },
+  reviewPhases: ['explore', 'spec', 'verify'],
+}
+
+function phaseOf(state: PipelineState): Phase {
+  const v = state.fields.phase
+  return (Array.isArray(v) ? v.join(',') : v) as Phase
+}
+
+export function mockFlow(manifest: ManifestData = TEST_MANIFEST) {
+  return {
+    manifest,
+    legalTransitions: spy((phase: Phase): readonly Phase[] => manifest.transitions[phase] ?? []),
+    transition: spy((state: PipelineState, to: Phase, clock?: () => string): TransitionResult => {
+      const from = phaseOf(state)
+      const legal = manifest.transitions[from] ?? []
+      if (!legal.includes(to)) throw new IllegalTransitionError(from, to)
+      const next: PipelineState = {
+        ...state,
+        fields: { ...state.fields, phase: to, phase_status: 'pending', updated_at: clock?.() ?? '' },
+      }
+      return { from, to, state: next }
+    }),
+    guardCheck: spy((_state: PipelineState): GuardResult => ({ pass: true, failures: [] })),
+  }
+}
+
+export type MockFlow = ReturnType<typeof mockFlow>
+
+// === 依赖装配 ===
+
+export interface TestDeps extends CliDeps {
+  store: MockStore
+  flow: MockFlow
+  listChanges: Recorded<[string], Promise<string[]>>
+  outLines: string[]
+  errLines: string[]
+  breadcrumbs: Array<[string, string]>
+  historyEntries: Array<[string, HistoryEntry]>
+}
+
+export interface MakeDepsOpts {
+  state?: PipelineState
+  states?: Record<string, PipelineState>
+  /** listChanges 返回值；缺省 = states 的 key 集合（无 states 则空） */
+  changes?: string[]
+  cwd?: string
+}
+
+export const FIXED_CLOCK = '2026-07-06T00:00:00Z'
+
+export function makeDeps(o: MakeDepsOpts = {}): TestDeps {
+  const outLines: string[] = []
+  const errLines: string[] = []
+  const breadcrumbs: Array<[string, string]> = []
+  const historyEntries: Array<[string, HistoryEntry]> = []
+  const changes = o.changes ?? (o.states ? Object.keys(o.states) : [])
+  return {
+    store: mockStore(o.states ?? o.state ?? mockState()),
+    flow: mockFlow(),
+    cwd: o.cwd ?? '/repo',
+    io: {
+      out: (line: string) => outLines.push(line),
+      err: (line: string) => errLines.push(line),
+    },
+    clock: () => FIXED_CLOCK,
+    listChanges: spy(async (_root: string): Promise<string[]> => changes),
+    writeBreadcrumb: async (changeDir: string, content: string) => {
+      breadcrumbs.push([changeDir, content])
+    },
+    history: {
+      append: async (changeDir: string, entry: HistoryEntry) => {
+        historyEntries.push([changeDir, entry])
+      },
+    },
+    outLines,
+    errLines,
+    breadcrumbs,
+    historyEntries,
+  }
+}

@@ -1,0 +1,41 @@
+track: backend
+preset: tweak
+created_by: Host Dev
+assignee: null
+phase: build
+phase_status: pending
+design_doc: null
+plan: null
+verification_report: docs/superpowers/reports/2026-07-03-zz-container-e2e-verify.md
+build_mode: direct
+isolation: branch
+build_sha: 0302d7a6cdb640de4855454907be36254c13ded6
+agent_review_result: pending
+codex_review_result: pending
+verify_result: pending
+branch_status: pending
+direct_override: false
+prd_path: null
+pr_url: null
+automation: failed
+automation_queued_at: 2026-07-03T06:40:54Z
+automation_sandbox: ""
+automation_worktree: ""
+automation_attempts: 2
+automation_last_error: Worktree creation timed out after 30000ms (timeout 30000ms; raise via idle_timeout_ms)
+automation_preserved_path: ""
+branch: null
+base_branch: afk-scaffold-wave1
+scope: null
+related_files: null
+spec_scope: null
+depends_on: null
+created_at: 2026-07-03T04:09:56Z
+updated_at: 2026-07-03T07:57:27Z
+verified_at: 2026-07-03T05:06:56Z
+archived_at: null
+archived: false
+pipeline_mode: afk
+transitions_history:
+  - { at: 2026-07-03T05:06:56Z, from: verify, to: ship, event: verify-pass }
+  - { at: 2026-07-03T04:59:14Z, from: build, to: verify, event: build-complete }
