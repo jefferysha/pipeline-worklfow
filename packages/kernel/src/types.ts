@@ -76,6 +76,35 @@ export interface TransitionResult {
 export interface GuardResult {
   pass: boolean
   failures: string[]
+  /**
+   * 非阻断告警（BACKLOG #12 加法扩展）：老 guard 的 yellow 提示面
+   * （coverage 豁免 / 覆盖阻塞层明细等）。无告警时省略本键（lite 调用面 toEqual 兼容）。
+   */
+  warnings?: string[]
+}
+
+/**
+ * guardCheck 的注入依赖（BACKLOG #12 加法扩展，全部可选）。
+ * 老 guard 在项目根以 bash 直接摸文件系统；kernel 纯函数化后由 CLI 注入等价原语。
+ * 未注入某能力时，依赖该能力的检查静默跳过（guardCheck(state) 退化为 lite 纯字段面，
+ * 语义盘点见 packages/kernel/src/flow/GUARD-RULES.md §7.2）。
+ * 所有路径参数均为**相对项目根**的相对路径（老 guard 运行于项目根，字段值直接 `[ -f ]`）。
+ */
+export interface GuardContext {
+  /** 文件存在（老 guard `[ -f ]`：file_exists / yaml_file_exists 谓词） */
+  fileExists?: (relPath: string) => boolean
+  /** 文件存在且非空（老 guard file_nonempty：`[ -f ] && [ -s ]`） */
+  fileNonempty?: (relPath: string) => boolean
+  /** 读文件文本，不存在 → undefined（tasks.md 勾选统计 / design_doc coverage 块解析） */
+  readFile?: (relPath: string) => string | undefined
+  /** 目录存在（depends_on 活跃 change 判定：openspec/changes/<dep>） */
+  dirExists?: (relPath: string) => boolean
+  /** dep 已归档：openspec/changes/archive/*-<dep> 目录存在（老 guard find -name "*-$dep"） */
+  changeArchived?: (dep: string) => boolean
+  /** 当前 change 目录相对项目根（openspec/changes/<name>）；change 内产物检查的路径锚点 */
+  changeDirRel?: string
+  /** PIPELINE_AUTOMATION_RUNNER=1 调度器旁路（build 相位 automation=queued 闸的逃生口） */
+  automationRunner?: boolean
 }
 
 export interface FlowEngine {
@@ -83,7 +112,8 @@ export interface FlowEngine {
   legalTransitions(phase: Phase): readonly Phase[]
   /** 非法转换 → throw IllegalTransitionError（cli 层映射 exit 2） */
   transition(state: PipelineState, to: Phase, clock?: () => string): TransitionResult
-  guardCheck(state: PipelineState): GuardResult
+  /** ctx 缺省 = lite 纯字段面；注入 GuardContext 后为老 guard 全量校验面（BACKLOG #12 加法） */
+  guardCheck(state: PipelineState, ctx?: GuardContext): GuardResult
 }
 
 export interface HistoryEntry {

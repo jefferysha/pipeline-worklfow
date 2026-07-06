@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import type { GuardResult, PipelineState } from '@pipeline-lite/kernel'
+import type { GuardContext, GuardResult, PipelineState } from '@pipeline-lite/kernel'
 import { cmdCheck } from './check.js'
 import { makeDeps, mockState, spy } from '../test-support.js'
 
@@ -31,6 +31,63 @@ describe('check —— guard 报告（人读）；0 过 / 2 不过（CONTRACT §
     const deps = makeDeps({ state })
     await cmdCheck(deps, 'demo')
     expect(deps.flow.guardCheck.calls[0]?.[0]).toBe(state)
+  })
+
+  test('注入 deps.guardCtx：按 change 名构造 GuardContext 并传给 guardCheck（全量文件面）', async () => {
+    const seen: string[] = []
+    const deps = makeDeps({
+      state: mockState({ phase: 'open' }),
+      guardCtx: (name: string): GuardContext => {
+        seen.push(name)
+        return { changeDirRel: `openspec/changes/${name}` }
+      },
+    })
+    await cmdCheck(deps, 'demo')
+    expect(seen).toEqual(['demo'])
+    expect(deps.flow.guardCheck.calls[0]?.[1]?.changeDirRel).toBe('openspec/changes/demo')
+  })
+
+  test('未注入 guardCtx：guardCheck 第二参 undefined（lite 纯字段面，向后兼容）', async () => {
+    const deps = makeDeps({ state: mockState({ phase: 'open' }) })
+    await cmdCheck(deps, 'demo')
+    expect(deps.flow.guardCheck.calls[0]?.[1]).toBeUndefined()
+  })
+
+  test('warnings 渲染为 [WARN] 行（老 guard yellow 面），不影响 exit 0', async () => {
+    const deps = makeDeps({ state: mockState({ phase: 'spec' }) })
+    deps.flow.guardCheck = spy(
+      (_s: PipelineState): GuardResult => ({
+        pass: true,
+        failures: [],
+        warnings: ['hotfix：2 层覆盖留空（已豁免，建议补；🔒 锁不豁免）'],
+      }),
+    )
+    const code = await cmdCheck(deps, 'demo')
+    expect(code).toBe(0)
+    expect(deps.outLines).toEqual([
+      '[CHECK] demo (phase=spec)',
+      '  [WARN] hotfix：2 层覆盖留空（已豁免，建议补；🔒 锁不豁免）',
+      '  [PASS] 所有检查通过',
+    ])
+  })
+
+  test('不过且带 warnings：先 WARN 后 FAIL 明细，exit 2', async () => {
+    const deps = makeDeps({ state: mockState({ phase: 'spec' }) })
+    deps.flow.guardCheck = spy(
+      (_s: PipelineState): GuardResult => ({
+        pass: false,
+        failures: ['spec 出口：全栈 Spec 覆盖（1 层阻塞）'],
+        warnings: ['覆盖阻塞: L6_security required blank BLOCKED LOCKVIOLATION'],
+      }),
+    )
+    const code = await cmdCheck(deps, 'demo')
+    expect(code).toBe(2)
+    expect(deps.outLines).toEqual([
+      '[CHECK] demo (phase=spec)',
+      '  [WARN] 覆盖阻塞: L6_security required blank BLOCKED LOCKVIOLATION',
+      '  [FAIL] spec 出口：全栈 Spec 覆盖（1 层阻塞）',
+      '  [FAIL] 共 1 项未通过',
+    ])
   })
 
   test('状态文件缺失：exit 1', async () => {

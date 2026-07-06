@@ -22,7 +22,25 @@ printf '# proposal\n\nT6 oracle fixture: backend 全生命周期。\n' > "$targe
 printf '# design\n\nfixture design doc.\n' > "$target/openspec/changes/t6-be/design.md"
 # check explore 要求存在未勾任务；check build 要求任务数 >= 3
 printf -- '- [ ] t1\n- [x] t2\n- [x] t3\n' > "$target/openspec/changes/t6-be/tasks.md"
-printf '# design\n' > "$target/docs/design.md"
+# docs/design.md 携带 coverage 块（backend full 的 required 层全 filled）：
+# 新 CLI check = guard 出口全语义（BACKLOG #12），spec 出口有 M1 覆盖 gate；
+# 老 cmd_check 是入相位前置面、不读该块——两侧文件一致，exit 面保持可比。
+cat > "$target/docs/design.md" <<'DESIGN'
+# design
+
+```coverage
+touches:
+L1_api: filled
+L2_data: filled
+L3_rules: filled
+L4_state: filled
+L5_errors: filled
+L6_security: filled
+L7_perf: filled
+L8_deps: filled
+L10_terms: filled
+```
+DESIGN
 printf '# plan\n' > "$target/docs/plan.md"
 printf '# verification report\n' > "$target/docs/verify.md"
 

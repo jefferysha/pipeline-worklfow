@@ -207,17 +207,15 @@ describe('FlowEngine · guardCheck（lite 相位出口必填字段表）', () =>
     ).toBe(true)
   })
 
-  it('build 出口：build_mode + isolation + build_sha 三者必非空（barrier：冻结 SHA 后才进 verify）', () => {
+  it('build 出口：build_mode + isolation 必非空；build_sha 不查（老仓由 build-complete 事件冻结，BACKLOG #12 回对齐）', () => {
     const base = { phase: 'build' as const, track: 'backend' }
     const r = engine.guardCheck(makeState(base))
     expect(r.pass).toBe(false)
     expect(r.failures.some((f) => f.includes('build_mode'))).toBe(true)
     expect(r.failures.some((f) => f.includes('isolation'))).toBe(true)
-    expect(r.failures.some((f) => f.includes('build_sha'))).toBe(true)
+    // build_sha 为空不阻断（老 guard 出口无此条，SHA 由 transition build-complete 自动冻结）
     expect(
-      engine.guardCheck(
-        makeState({ ...base, build_mode: 'direct', isolation: 'branch', build_sha: 'abc123' }),
-      ),
+      engine.guardCheck(makeState({ ...base, build_mode: 'worktree', isolation: 'branch' })),
     ).toEqual({ pass: true, failures: [] })
   })
 

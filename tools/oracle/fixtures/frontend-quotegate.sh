@@ -14,6 +14,14 @@ target="${1:?usage: frontend-quotegate.sh <target-dir>}"
 mkdir -p "$target/openspec/changes"
 (cd "$target" && git init -q -b main 2>/dev/null || git init -q 2>/dev/null || true)
 
+# open 出口产物预置（与 backend-full 同款先建目录再 init 的模式；双侧 init 均不覆盖已有文件）：
+# 新 CLI check = guard 出口全语义（BACKLOG #12），open 出口要 proposal/tasks/design.md（frontend）；
+# 老 cmd_check open 只看 openspec/ 目录——两侧文件一致，exit 面保持可比。
+mkdir -p "$target/openspec/changes/t6-fe"
+printf '# proposal\n\nT6 oracle fixture: frontend quote-gate 探针。\n' > "$target/openspec/changes/t6-fe/proposal.md"
+printf -- '- [ ] q1\n' > "$target/openspec/changes/t6-fe/tasks.md"
+printf '# design\n\nfixture design doc.\n' > "$target/openspec/changes/t6-fe/design.md"
+
 tr '|' '\t' > "$target/.oracle-plan" <<'PLAN'
 0|init|t6-fe|frontend|hotfix
 0|get|t6-fe|preset

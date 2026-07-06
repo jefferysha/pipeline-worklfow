@@ -10,7 +10,7 @@
  *     曾硬编码 explore/spec/verify 的欠账（老 manifest.yaml:78-80 自注「仅半接线」）。
  */
 import { IllegalTransitionError } from '../types.js'
-import type { FieldName, FlowEngine, GuardResult, ManifestData, Phase, PipelineState, TransitionResult } from '../types.js'
+import type { FieldName, FlowEngine, GuardContext, GuardResult, ManifestData, Phase, PipelineState, TransitionResult } from '../types.js'
 import { evaluateGuard } from './guard.js'
 
 /** review-gate 判定面：CLI 据此决定进相位时是否落 .pipeline-pending-review（CONTRACT §2） */
@@ -55,8 +55,8 @@ export function createFlowEngine(manifest: ManifestData): FlowEngine & ReviewGat
     return { from, to, state: { fields, opaqueTail: state.opaqueTail } }
   }
 
-  function guardCheck(state: PipelineState): GuardResult {
-    return evaluateGuard(state)
+  function guardCheck(state: PipelineState, ctx?: GuardContext): GuardResult {
+    return evaluateGuard(state, ctx)
   }
 
   function isReviewPhase(phase: Phase): boolean {

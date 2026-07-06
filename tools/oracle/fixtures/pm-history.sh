@@ -20,7 +20,16 @@ mkdir -p "$chdir" "$target/docs"
 printf '# proposal\n\nT6 oracle fixture: pm + history region.\n' > "$chdir/proposal.md"
 # check build 要求 tasks.md 任务数 >= 3（pm 不要求 plan）
 printf -- '- [ ] a\n- [x] b\n- [x] c\n' > "$chdir/tasks.md"
-printf '# design\n' > "$target/docs/design.md"
+# coverage 块：pm required 仅 L3_rules（新 CLI check=guard 出口全语义的 spec 覆盖 gate；
+# 老 cmd_check 不读该块——两侧文件一致，exit 面保持可比）
+cat > "$target/docs/design.md" <<'DESIGN'
+# design
+
+```coverage
+touches:
+L3_rules: filled
+```
+DESIGN
 
 # 历史区块（写入 yaml 尾部 + 同内容作 PRESERVE 基线）
 history_block='prompts_history:

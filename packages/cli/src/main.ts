@@ -8,11 +8,13 @@
  * 命令模块与测试不受影响。
  */
 import { execFile } from 'node:child_process'
+import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { access, readdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { CommanderError } from 'commander'
 import { createFlowEngine, createHistoryWriter, createStateStore, loadManifest } from '@pipeline-lite/kernel'
+import type { GuardContext } from '@pipeline-lite/kernel'
 import type { CliDeps, GateMarkerInfo } from './deps.js'
 import { buildProgram, CliExit } from './program.js'
 
@@ -69,6 +71,39 @@ async function readGateMarkers(cwd: string): Promise<GateMarkerInfo[]> {
 }
 
 /**
+ * check 命令的 guard 文件面（BACKLOG #12）：GuardContext 的 node:fs 落地。
+ * 老 guard 在项目根跑 bash `[ -f ]` 等谓词——此处以 cwd 为根做同义解析；
+ * 谓词为同步纯读（guardCheck 是纯函数签名），任何 fs 异常一律按「不存在」处理。
+ */
+function makeGuardCtx(cwd: string): (name: string) => GuardContext {
+  const abs = (relPath: string) => join(cwd, relPath)
+  return (name: string): GuardContext => ({
+    changeDirRel: `openspec/changes/${name}`,
+    fileExists: (p) => {
+      try { return statSync(abs(p)).isFile() } catch { return false }
+    },
+    fileNonempty: (p) => {
+      try { const st = statSync(abs(p)); return st.isFile() && st.size > 0 } catch { return false }
+    },
+    readFile: (p) => {
+      try { return readFileSync(abs(p), 'utf8') } catch { return undefined }
+    },
+    dirExists: (p) => {
+      try { return statSync(abs(p)).isDirectory() } catch { return false }
+    },
+    // 老 guard：find openspec/changes/archive -mindepth 1 -maxdepth 1 -type d -name "*-<dep>"
+    changeArchived: (dep) => {
+      try {
+        return readdirSync(abs('openspec/changes/archive'), { withFileTypes: true })
+          .some((e) => e.isDirectory() && e.name.endsWith(`-${dep}`))
+      } catch { return false }
+    },
+    // 调度器执行路径旁路（老 guard PIPELINE_AUTOMATION_RUNNER=1 语义）
+    automationRunner: process.env.PIPELINE_AUTOMATION_RUNNER === '1',
+  })
+}
+
+/**
  * 运行期定位 templates/manifest.yaml：编译产物在 packages/cli/dist/main.js，
  * 插件仓根 = 其上三级（dist → cli → packages → 根）。loadManifest 不猜仓库根（T3 约定）。
  */
@@ -88,6 +123,7 @@ async function main(): Promise<void> {
     },
     clock: isoNow,
     listChanges,
+    guardCtx: makeGuardCtx(process.cwd()),
     readGateMarkers: () => readGateMarkers(process.cwd()),
     writeBreadcrumb: (dir, content) => writeFile(join(dir, '.breadcrumb'), content, 'utf8'),
     history: createHistoryWriter(),

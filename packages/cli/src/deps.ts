@@ -2,7 +2,7 @@
  * cli 依赖注入面 —— 命令逻辑全部是接受 CliDeps 的纯函数（CONTRACT §4 agent:cli）。
  * store/flow 按 types.ts 契约注入；测试全 mock，绝不 import kernel 实现。
  */
-import type { FlowEngine, HistoryWriter, StateStore } from '@pipeline-lite/kernel'
+import type { FlowEngine, GuardContext, HistoryWriter, StateStore } from '@pipeline-lite/kernel'
 
 export interface GateMarkerInfo {
   kind: 'confirm' | 'review' | 'interaction'
@@ -54,6 +54,13 @@ export interface CliDeps {
    * （老内核 state-transition.sh 语义：三行 = 相位\n指引\nchange 名）。best-effort。
    */
   writeReviewMarker?: (content: string) => Promise<void>
+  /**
+   * check 命令的 guard 文件面注入（BACKLOG #12 guard 全量校验面）：按 change 名构造
+   * GuardContext——fileExists/fileNonempty/readFile/dirExists/changeArchived 相对 cwd 解析，
+   * changeDirRel=openspec/changes/<name>，automationRunner 读 PIPELINE_AUTOMATION_RUNNER。
+   * 缺省 undefined = guardCheck 纯字段 lite 面（文件类检查静默跳过，见 kernel GUARD-RULES.md §7.2）。
+   */
+  guardCtx?: (name: string) => GuardContext
 }
 
 /** 统一错误消息提取（避免各命令散落 String(e) 口径） */

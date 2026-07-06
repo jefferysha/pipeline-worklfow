@@ -11,6 +11,7 @@ import {
 } from '@pipeline-lite/kernel'
 import type {
   FieldName,
+  GuardContext,
   GuardResult,
   HistoryEntry,
   InitOptions,
@@ -122,7 +123,7 @@ export function mockFlow(manifest: ManifestData = TEST_MANIFEST) {
       }
       return { from, to, state: next }
     }),
-    guardCheck: spy((_state: PipelineState): GuardResult => ({ pass: true, failures: [] })),
+    guardCheck: spy((_state: PipelineState, _ctx?: GuardContext): GuardResult => ({ pass: true, failures: [] })),
   }
 }
 
@@ -150,6 +151,8 @@ export interface MakeDepsOpts {
   gateMarkers?: GateMarkerInfo[]
   /** readHistoryRaw 返回值（import 幂等检查用），缺省空串 */
   historyRaw?: string
+  /** check 命令 guard 文件面注入（BACKLOG #12），缺省 undefined = lite 纯字段面 */
+  guardCtx?: (name: string) => GuardContext
 }
 
 export const FIXED_CLOCK = '2026-07-06T00:00:00Z'
@@ -170,6 +173,7 @@ export function makeDeps(o: MakeDepsOpts = {}): TestDeps {
     },
     clock: () => FIXED_CLOCK,
     listChanges: spy(async (_root: string): Promise<string[]> => changes),
+    guardCtx: o.guardCtx,
     readGateMarkers: async () => o.gateMarkers ?? [],
     readHistoryRaw: async (_dir: string) => o.historyRaw ?? '',
     writeBreadcrumb: async (changeDir: string, content: string) => {
