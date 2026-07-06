@@ -1,0 +1,11 @@
+{
+  "name": "@pipeline-lite/cli",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": { "pipeline": "dist/main.js" },
+  "engines": { "node": ">=22" },
+  "dependencies": {
+    "@pipeline-lite/kernel": "*",
+    "commander": "^12.1.0"
+  }
+}
