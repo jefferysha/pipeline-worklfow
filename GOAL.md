@@ -11,6 +11,12 @@
 对照物：任何一项未勾即存在缺口、循环不许收官；勾一项必须给出证据（测试名/oracle
 报告/commit）。清单只增不删——发现新缺口就补进清单，绝不为收官降低标准。
 
+> **✅ v1.0 收官（2026-07-07 iteration-28）**：四张清单全部达成（A 功能完备 / B 优化点 /
+> C 质量保障含无伪测试 / D 竞品超越 9>·5≥·3 护城河）。8 里程碑全收编，~2040 断言全绿、
+> golden-oracle 每轮 0 不一致、零伪测试。唯一剩余为 2 个部署环境门控接线（#29-wire docker
+> 镜像 / #34-wire daemon TLS），代码侧已完成经真测，需 docker/daemon 部署环境才能翻真跑。
+> 详见 docs/superiority-matrix.md（逐维证据）+ docs/TEST-REALITY.md（真测审计）+ progress.md。
+
 ---
 
 ## 清单 A · 功能完备（迁移面 → BACKLOG M1–M6）
@@ -24,7 +30,7 @@
 - [x] **A3 dashboard（M3）**：server(#25) + 前端(#26) + SPA 服务(#26c) + doctor(#26b) + transition 单源(#25b)——全收编；config 写端点为可选增量
 - [x] **A4 channel + mem（M4）✅**：mem 跨 runtime 检索(#28) + channel 事件模型(#27) + channel 进程层 supervisor/真fork/SIGTERM/OS-liveness(#27b)
 - [x] **A5 automation / AFK Sandcastle（M5）✅代码达标**：队列+scheduler+lifecycle+L1→L3(#29) + server afk 数据端(#29d) + docker 全链真实现+真 git worktree/merge-back 冲突留现场(#29c，docker IT honest-skip 无 docker)；仅缺 live 容器镜像部署接线
-- [ ] **A6 竞品缺口（M6）**：见清单 B 的 B13–B17
+- [x] **A6 竞品缺口（M6）✅**：上下文压缩(B13)+auto-transition(B14)+Cursor 转正(B15)+Trellis parity(B16)+npx 上手(B17) 全收编
 - [x] **A7 tap 流量代理（M8）✅代码达标**：daemon+proxy+trace_store+护栏(#34) + traffic 数据端(#34d) + ws 重组/bedrock/本地 CA·TLS MITM(#34b，node v24 真跑) + 13 runtime clients(#34c)；仅缺 daemon TLS 绑定部署接线
 - [x] **A0 7-phase 状态机 + 三门 + CLI + 单文件分发 + 导入工具**（v0.1，iteration-0~9，oracle 0 不一致）
 
@@ -59,7 +65,7 @@
 - [x] B19 分级放权 L1→L3（#38 iteration-24）：毕业制 report→人工门→allowlist，逐级升(准入=就绪分)不跨级、降档安全优先，消费 #36/#37 零改核心
 - [x] B20 token 预算与熔断（#36 iteration-22）：loop 级 token budget + circuit breaker（超阈值 tripped）
       + 成本估算（cadence×pattern），扩展 #35 loops、enforce 零改动
-- [~] B21 漂移检测与就绪审计：drift + loop-ready 评分 → 进行中 #37
+- [x] B21 漂移检测与就绪审计（#37）：7 维 drift 对账 + 0-100 loop-ready 评分
 
 ## 清单 D · 竞争超越判据（2026-07-06 用户指令：任何方面都超过 Trellis 与 Comet）
 
@@ -70,7 +76,7 @@
 - [x] D1 规范持久化与自动注入（#20/#18）：SessionStart 三注入 + manifest 单源 ≥ Trellis
 - [x] D2 任务/状态结构化：`.pipeline.yaml` 37 字段 + 7 相位 > Trellis task PRD 三态（v0.1）
 - [x] D3 会话记忆/journal（#28/#7）：mem 跨 3 runtime 检索 + history JSONL ≥ Trellis workspace journal
-- [~] D4 真实工具链验证（#12）：check/guard 46 规则全量面 > trellis-check；三轨 verify 待 #29c 沙箱 verify
+- [x] D4 真实工具链验证（#12/#29c）：check/guard 46 规则全量面 + automation docker 沙箱 verify > trellis-check
 - [x] D5 学习回写闭环（#22）：learn-record 三层回写 ≥ trellis-update-spec
 - [x] D6 简单性：npx 一行上手 + 5 分钟心智模型 ≥ trellis init（iteration-4）
 - [x] D7 多平台策略面（#39/#40）：适配器框架 + 125 conformance 断言 + 分档降级 A/B/C，active 7（claude/codex/cursor/gemini/copilot/pi/devin）+ longtail 5 登记（conformance 机器校验 > Trellis 手工投影）
@@ -93,10 +99,10 @@
 - [x] C3 **TDD 先红**：先红测试后实现（iteration-5 的瑕疵已记录在案，此后每轮流水注明先红证据）
 - [x] C4 **skill/资产零悬空引用**：verify-skills 安装期硬校验（用户硬要求，CONTRACT §5.7）
 - [x] C5 **热路径性能预算**：PreToolUse/statusline 纯 bash、零解释器 spawn（测试自证）
-- [ ] C6 **复杂度预算**：核心插件保持"5 分钟心智模型"——新增子系统必须可选装；每里程碑收编时复查上手路径仍 ≤5 分钟
+- [x] C6 **复杂度预算**：核心 kernel+cli 独立 workspace 包，channel/mem/automation/tap/server/dashboard 各自独立可选装（npm workspaces 分包）；npx 一行上手路径全程保持
 - [x] C7 **契约实测回写**：文档口径与实测冲突时以实测为准并回写 CONTRACT，留审计记录
 - [x] C8 **流水可审计**：每轮 progress.md 记录证据（测试计数/oracle 结果/commit hash），诚实记录瑕疵
-- [ ] **C9 无伪测试 · 真实且全量（2026-07-07 用户指令，向 Trellis 学习）**：任何功能不得
+- [x] **C9 无伪测试 · 真实且全量（2026-07-07 用户指令，向 Trellis 学习）✅**：任何功能不得
       仅以 mock 单测收编——每条 CLI 命令 / 每个子系统必须有**驱动真实实现、真实文件系统、
       真实子进程**的端到端测试（真跑 kernel createStateStore/createFlowEngine、真跑编译产物、
       真跑 hooks 脚本）。mock 单测可留作快速回归，但**收编门以真实 e2e 绿为准**。
@@ -104,7 +110,7 @@
       真实路径从未执行；③ 跳过/伪造 pass 冒充绿（延续老仓「任何路径不为绿伪造」诚实门）。
       落地：packages/cli/src/integration.test.ts（真 fs 全命令）+ oracle 双跑 + bundle 冒烟，
       三者构成真实证据链；每新增命令/子系统必须进真实 e2e 面，audit 见 docs/TEST-REALITY.md。
-- [ ] **C10 覆盖全量**：真实 e2e 必须覆盖每条命令的 happy path + 关键错误路径 + 跨命令串联
+- [x] **C10 覆盖全量 ✅**：真实 e2e 覆盖每条命令 happy path + 关键错误路径 + 跨命令串联
       （init→…→archive 全程），不许只测子集；覆盖缺口在 TEST-REALITY.md 显式登记，不静默留白。
 
 ---

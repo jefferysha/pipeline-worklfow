@@ -7,15 +7,12 @@
 | # | 项 | 对应 plan 任务 | 预算 |
 |---|---|---|---|
 | **M3** dashboard | | | |
-| 26c | server 服务 SPA：GET / 返回 dashboard-app dist/index.html + 注入 token + 静态路由 assets/*（#26 前端就绪，本项让 server 真上线前端） | M3 | 0.5d |
 | **M4** channel + mem | | | |
 | **M5** automation / AFK Sandcastle（2026-07-07 用户确认全量迁移，human gate 已解） | | | |
-| 29e | 与 L1→L3 分级放权（#38）合体：AFK 默认 L1 report-only，毕业制升 L2/L3 | M5 | 1d |
 | **M6** 竞品缺口收尾 | | | |
 | **M-loop** loop-engineering 内建（GOAL B18–B21 / D16） | | | |
 | **M7** 平台矩阵（GOAL D7/D14） | | | |
 | **M8** tap 流量代理（2026-07-07 用户确认进正式队列，human gate 解除） | | | |
-| 34e | 安全护栏：默认 OFF；证书/抓包是敏感能力，doctor 明示「tap 正在拦截流量」红/黄灯；捕获数据本地不外发 | M8 | 1d |
 
 | 29-wire | 【部署接线】cli/server 装配 runChangeInSandbox（需预构建 sandcastle docker 镜像 + CLAUDE_CODE_OAUTH_TOKEN 白名单），把 docker honest-skip 翻真跑 | 部署 | env-gated |
 | 34-wire | 【部署接线】daemon TLS 绑定（fromDir CA + detectTarget 多 runtime env 注入）+ record 路径接 ws/bedrock 装配 + doctor CA/TLS 解密披露 | 部署 | env-gated |
