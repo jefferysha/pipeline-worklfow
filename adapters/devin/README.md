@@ -1,0 +1,47 @@
+# Devin（前 Windsurf）pipeline 适配器（lite，档 C 静态降级）
+
+> 契约：`adapters/contract.md`。Devin 是 **workflow-only 平台**（`hasHooks=false`，无任何 enforcement
+> hook）——三能力**全静态降级**。诚实：devin 确实只能到 C 档，本目录**无 `hooks/`**（不伪装 hook 强制）。
+
+## 为什么是档 C（而非 A/B）
+
+档 A/B 要求至少一项能力在原生 hook 上等价实现。Devin 无 hook 系统（只有 `.devin/workflows/*.md`
+声明式工作流），故三能力全靠**静态注入 + 手动 Unlock sentinel**——这正是 contract §1 的档 C 定义。
+如实标注为 C，不为对齐其它平台而伪装原生（GOAL C9/C10 无伪测试 + contract §1 红线）。
+
+## 三能力（全静态降级，档 C）
+
+```yaml
+inject:
+  status: degraded
+  fallback: static-workflow          # .devin/workflows/pipeline.md（无会话级注入原语）
+veto:
+  status: degraded
+  fallback: unlock-sentinel          # 无硬拦；手动 rm .pipeline-pending-<kind> 放行
+track:
+  status: degraded
+  fallback: manual-note              # 无自动留痕（无 hook 触发点）——如实标注
+```
+
+## 安装
+
+```bash
+adapters/devin/install.sh --target <项目目录>   # 默认 $PWD
+```
+
+或经顶层派发器：`adapters/install.sh --devin --target <dir>`。
+
+## windsurf 别名
+
+Cognition 2026-06 把 Windsurf 改名 Devin（`.windsurf/` → `.devin/`）。windsurf 用户用 `--devin` 派发；
+install 检测到旧 `.windsurf/workflows/` 只提示、不迁移（旧目录保留不动）。
+
+## Unlock sentinel（唯一 HITL 解封路径）
+
+Devin 无 hook、无 `AskUserQuestion`——review 门唯一放行 = 手动删项目根 marker：
+
+```bash
+rm .pipeline-pending-review     # 或 .pipeline-pending-confirm / .pipeline-pending-interaction
+```
+
+与 CC `AskUserQuestion` 语义等价（contract §2）。

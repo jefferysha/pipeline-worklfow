@@ -1,0 +1,26 @@
+{
+  "_comment": "Gemini CLI pipeline 适配器 settings（BACKLOG #40，档 A 全保真）。hooks 内嵌（hookContainer=.gemini/settings.json#hooks），结构与 CC/Codex 同构：事件名 → group 数组 → hooks:[{type:command,command}]。三 wrapper 薄包 lite baseline hooks/session-start.sh · gate.sh · skill-tracker.sh。命令行已带事件名占位 $1，JSON 走 stdin（wrapper argv+stdin 双吃）。__ADAPTER_DIR__ 由 install.sh 替换为绝对路径。已知 caveat：sub-agent 层无 inject-subagent-context（Gemini #18128），仅限 sub-agent，不降主档。",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          { "type": "command", "command": "bash \"__ADAPTER_DIR__/hooks/inject.sh\" SessionStart" }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          { "type": "command", "command": "bash \"__ADAPTER_DIR__/hooks/veto.sh\" PreToolUse" }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          { "type": "command", "command": "bash \"__ADAPTER_DIR__/hooks/track.sh\" PostToolUse" }
+        ]
+      }
+    ]
+  }
+}

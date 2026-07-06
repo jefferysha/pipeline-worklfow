@@ -95,19 +95,120 @@ platforms:
     track_event: postToolUse
     track_format: history-append
 
-# ─── 后续平台（D7/D14 矩阵铺开：本框架下加平台 = 在此填表 + 写 configure，非重写）───
-# 尚未建 configure（留后续里程碑），故不进 platforms:（lint 只校验 active 平台），
-# 但目标档位/降级点已登记，证明矩阵可填充（Trellis 16 平台 / Comet 30 平台的策略面）。
-planned:
+  # ─── #40 铺量：#39 planned 四平台转 active（填表式扩展，D7/D14 平台矩阵）───
+  # gemini：Gemini CLI hook 与 CC 同构（settings.json#hooks 内嵌）——三能力全 native，档 A。
+  #   三 wrapper 薄包 baseline hooks/session-start.sh · gate.sh · skill-tracker.sh（同 codex 做法）。
+  #   已知 caveat：sub-agent 层无 inject-subagent-context（#18128），仅限 sub-agent，不降主档。
   - id: gemini
     tier: A
-    note: "settings.json#hooks 内嵌；三能力目标 native（与 CC 同构 JSON），sharedHooks 无 inject-subagent-context(#18128)"
+    configDir: .gemini
+    cliFlag: gemini
+    defaultChecked: false
+    agentCapable: true
+    hasHooks: true
+    hookContainer: .gemini/settings.json#hooks
+    configure: adapters/gemini/install.sh
+    inject_status: native
+    inject_event: SessionStart
+    inject_format: json-additionalContext
+    veto_status: native
+    veto_event: PreToolUse
+    veto_format: exit2-stderr
+    track_status: native
+    track_event: PostToolUse
+    track_format: history-append
+
+  # copilot：GitHub Copilot coding agent。veto/track native（dual hookContainer——两份都写，漏一份不生效）；
+  #   inject **降级**：copilot session-start 为平台私有、不可控 → 落 .github/copilot-instructions.md 静态层
+  #   （平台文档级上下文文件）+ userPromptSubmitted 动态补。档 B（不伪装会话级 inject）。
   - id: copilot
     tier: B
-    note: "dual hookContainer(.github/copilot/hooks.json|.github/hooks/trellis.json，漏一份不生效)；inject 走平台私有 session-start"
+    configDir: .github/copilot
+    cliFlag: copilot
+    defaultChecked: false
+    agentCapable: true
+    hasHooks: true
+    hookContainer: .github/copilot/hooks.json|.github/hooks/trellis.json
+    configure: adapters/copilot/install.sh
+    inject_status: degraded
+    inject_fallback: copilot-instructions
+    inject_event: userPromptSubmitted
+    inject_format: static-instructions
+    veto_status: native
+    veto_event: preToolUse
+    veto_format: exit2-stderr
+    track_status: native
+    track_event: postToolUse
+    track_format: history-append
+
+  # pi：Pi Agent（settings.json#hooks 内嵌 + 私有 .pi/skills 根 + .pi/extensions TS 运行时）。
+  #   inject/track native（SessionStart 注入 + PostToolUse 留痕，wrapper 薄包 baseline）；
+  #   veto **降级**：pi 无原生 pre-tool 硬拦 hook——enforcement 走 .pi/extensions 运行时 advisory
+  #   + 手动 Unlock sentinel（不伪装原生硬拦）。档 B。
   - id: pi
     tier: B
-    note: "私有 .pi/skills 根 + .pi/extensions TS 运行时；settings.json#hooks 内嵌"
+    configDir: .pi
+    cliFlag: pi
+    defaultChecked: false
+    agentCapable: true
+    hasHooks: true
+    hookContainer: .pi/settings.json#hooks
+    configure: adapters/pi/install.sh
+    inject_status: native
+    inject_event: SessionStart
+    inject_format: json-additionalContext
+    veto_status: degraded
+    veto_fallback: extension-advisory
+    veto_event: none
+    veto_format: static-advisory
+    track_status: native
+    track_event: PostToolUse
+    track_format: history-append
+
+  # devin（前 Windsurf）：workflow-only 平台（hasHooks=false，无任何 enforcement hook）。
+  #   三能力**全静态降级**：inject 落 .devin/workflows 静态层、veto 靠手动 Unlock sentinel、
+  #   track 无自动留痕（如实标注不伪装）。档 C——诚实：devin 确实只能到 C 档。
+  #   windsurf 用户经 --devin 派发（Cognition 2026-06 改名，见 adapters/devin/README.md）。
   - id: devin
     tier: C
-    note: "workflow-only（hasHooks=false）；无 hook → 三能力全静态降级 + 手动 Unlock sentinel；aliases=[windsurf]"
+    configDir: .devin/workflows
+    cliFlag: devin
+    defaultChecked: false
+    agentCapable: false
+    hasHooks: false
+    hookContainer: ""
+    configure: adapters/devin/install.sh
+    inject_status: degraded
+    inject_fallback: static-workflow
+    inject_event: none
+    inject_format: static-workflow-md
+    veto_status: degraded
+    veto_fallback: unlock-sentinel
+    veto_event: none
+    veto_format: manual-rm-marker
+    track_status: degraded
+    track_fallback: manual-note
+    track_event: none
+    track_format: none
+
+# ─── 长尾平台（D14 平台广度：证明"填表即可扩"，策略证明 > 穷举 padding）───
+# 以下平台**尚未建 configure**（不硬凑实现——避免 padding；策略面比穷举更重要）。目标档位/降级点
+# 已登记，证明本框架下加平台 = 在此填一行 + 写 configure + 三 wrapper（薄包 baseline）+ 进 conformance。
+# 活跃 6（claude-code/codex/cursor/gemini/copilot/pi/devin 中的 non-baseline 实现）+ 长尾登记，
+# 策略面对标 Trellis 16 平台 / Comet 30 平台——加平台成本 = 填表，不是重写内核。
+longtail:
+  - id: aider
+    tier: B
+    note: "目标档 B：aider 无 pre-tool hook 原语 → veto 降级（commit-gate 静态约定）；inject/track 走 .aider.conf.yml + 会话钩子。待建 configure。"
+  - id: continue
+    tier: B
+    note: "目标档 B：Continue.dev config.yaml 有 hooks/rules → inject native、track native；veto 无硬拦原语 → 降级。待建 configure。"
+  - id: cline
+    tier: B
+    note: "目标档 B（含 roo-code 同族）：.clinerules 静态注入 + MCP 事件 → inject native、track native；veto 降级为审批流。待建 configure。"
+  - id: amp
+    tier: A
+    note: "目标档 A：Amp（Sourcegraph）hook 协议若与 CC 同构则三能力 native（同 gemini/codex 填表）。待 spike 实证 + configure。"
+  - id: zed
+    tier: C
+    note: "目标档 C：Zed AI 无自定义 enforcement hook → 三能力静态降级（.rules 上下文 + 手动 Unlock sentinel），同 devin 形。待建 configure。"

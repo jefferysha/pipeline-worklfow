@@ -1,0 +1,53 @@
+# Gemini CLI pipeline 适配器（lite，档 A 全保真）
+
+> 契约：`adapters/contract.md`。本 adapter 把 Gemini CLI hook 能力映射到 pipeline 三能力。
+> Gemini CLI 与 Claude Code **hook 协议同构**（`settings.json#hooks`，`type:command`）：三 wrapper
+> 薄包 lite baseline `hooks/session-start.sh` · `hooks/gate.sh` · `hooks/skill-tracker.sh`（同 codex 做法）。
+
+## 安装
+
+```bash
+adapters/gemini/install.sh --target <项目目录>            # 档 A 全保真（默认）
+adapters/gemini/install.sh --gemini-home <dir>            # 自定义 GEMINI_HOME
+adapters/gemini/install.sh --no-hooks                     # 只提示（无 hook；靠 Unlock sentinel）
+```
+
+或经顶层派发器：`adapters/install.sh --gemini --target <dir>`。
+
+## 三能力（全 native，档 A）
+
+```yaml
+inject:
+  status: native
+  event: SessionStart
+  format: json-additionalContext   # {"hookSpecificOutput":{"hookEventName","additionalContext"}}
+  impl: hooks/inject.sh 薄包 hooks/session-start.sh（纯 bash json_escape，不引 jq）
+veto:
+  status: native
+  event: PreToolUse
+  format: exit2-stderr             # 命中新鲜 .pipeline-pending-* marker → exit 2 + stderr 指引
+  impl: hooks/veto.sh 透传 hooks/gate.sh 退出码与 stderr
+track:
+  status: native
+  event: PostToolUse
+  format: history-append           # append openspec/changes/<name>/.pipeline-history.jsonl
+  impl: hooks/track.sh 透传 hooks/skill-tracker.sh
+```
+
+## 已知 caveat（诚实登记，不降主档）
+
+sub-agent 层无 `inject-subagent-context`（Gemini #18128：BeforeTool 链路受限）——仅影响 sub-agent
+的上下文注入，主会话三能力全 native，故 tier 仍为 A。sub-agent 上下文改 pull-based prelude 补偿。
+
+## Unlock sentinel（HITL 解封）
+
+review 门放行 = 删项目根 marker（与 CC `AskUserQuestion` 语义等价，contract §2）：
+
+```bash
+rm .pipeline-pending-review     # 或 .pipeline-pending-confirm / .pipeline-pending-interaction
+```
+
+## stdout 格式（不串格式）
+
+- 输入 JSON 走 **stdin**；事件名由 settings.json command 行 **argv `$1`** 传（wrapper argv+stdin 双吃）。
+- **无 trust 机制**、落盘即生效（部署优势 vs Codex 的一次性 trust）。

@@ -1,0 +1,12 @@
+{
+  "_comment": "GitHub Copilot pipeline 适配器 hook 注册（BACKLOG #40，档 B）。dual hookContainer：install.sh 同源写两份（.github/copilot/hooks.json + .github/hooks/trellis.json）——漏一份则 copilot 引擎读不到 hook、不生效。veto/track native（preToolUse 硬拦 exit2 + postToolUse 真 append history）；inject **降级**（copilot session-start 平台私有不可控 → 落 .github/copilot-instructions.md 静态层，无本文件内 inject 项，不伪装会话级 inject）。输入 JSON 走 stdin，事件名由 command 行 argv 传。__ADAPTER_DIR__ 由 install.sh 替换为绝对路径。",
+  "version": 1,
+  "hooks": {
+    "preToolUse": [
+      { "command": "bash \"__ADAPTER_DIR__/hooks/veto.sh\" preToolUse" }
+    ],
+    "postToolUse": [
+      { "command": "bash \"__ADAPTER_DIR__/hooks/track.sh\" postToolUse" }
+    ]
+  }
+}

@@ -285,6 +285,162 @@ out="$(printf '{"cwd":"%s"}' "$p" | CLAUDE_PLUGIN_ROOT="$ROOT" bash "$TMP/broken
 case "$out" in *additionalContext*) bad "哨兵: 改坏的 inject（空产出）被抓红" "竟产出了 context" ;; *) ok "哨兵: 声明 native 却空产出的 inject 被判别为红（无 additionalContext）" ;; esac
 
 # ════════════════════════════════════════════════════════════════════════════
+# ⑧ 新平台铺量 conformance（BACKLOG #40：#39 planned → active，填表式扩展 D7/D14）
+#    gemini(A 全 native) · copilot(B veto/track native·inject 降级) ·
+#    pi(B inject/track native·veto 降级) · devin(C workflow-only 三能力全静态降级)
+#    同一组输入场景喂新平台 → 归一 canonical 决策 → native 断言等价 baseline / degraded 断言落声明 fallback。
+#    诚实：真做不到 native 的能力如实标降级档（不伪装硬门/原生，contract §1 红线）。
+# ════════════════════════════════════════════════════════════════════════════
+NEW_IDS="gemini copilot pi devin"
+
+# ⑧.0 lint 全绿（4 新平台进 platforms: 后各自填表完整——加平台是填表非重写，缺字段被抓红）
+for id in $NEW_IDS; do
+  if [ -x "$LINT" ]; then
+    if bash "$LINT" "$id" >/dev/null 2>&1; then ok "lint/$id: 填表完整（registry 字段齐全）"
+    else bad "lint/$id: 填表完整（registry 字段齐全）" "见 bash $LINT $id"; fi
+  else
+    bad "lint/$id: lint-adapter.sh 可执行" "缺失或不可执行：$LINT"
+  fi
+done
+
+# ⑧.1 零悬空：每新平台 configure 脚本存在；hook 模板引用的 wrapper 落地可执行（devin 无 hook 如实无目录）
+for id in $NEW_IDS; do
+  conf="$(reg_field "$id" configure)"
+  if [ -n "$conf" ]; then assert_file "$id: configure 脚本存在（零悬空）：$conf" "$ROOT/$conf"
+  else bad "$id: configure 字段非空" "registry 未登记 $id.configure"; fi
+  # hook 模板：codex/cursor/copilot = hooks.json；gemini/pi = settings.json#hooks；devin 无 hook 模板
+  htmpl=""
+  for cand in "$ADAPTERS/$id/hooks.json" "$ADAPTERS/$id/settings.json"; do
+    [ -f "$cand" ] && { htmpl="$cand"; break; }
+  done
+  if [ "$(reg_field "$id" hasHooks)" = "true" ]; then
+    if [ -n "$htmpl" ]; then
+      for rel in $(grep -oE '__ADAPTER_DIR__/[^"]*\.sh' "$htmpl" 2>/dev/null | sed 's#__ADAPTER_DIR__/##' | sort -u); do
+        assert_exec "$id hook 模板引用可执行（零悬空）：$rel" "$ADAPTERS/$id/$rel"
+      done
+    else
+      bad "$id hasHooks=true → hook 模板存在（hooks.json/settings.json）" "缺：$ADAPTERS/$id/"
+    fi
+  else
+    assert_absent "$id hasHooks=false → 无 hooks/ 目录（workflow-only，不伪装 hook 强制）" "$ADAPTERS/$id/hooks"
+  fi
+done
+
+# ⑧.2 veto conformance — 新平台 native veto（gemini/copilot）与 baseline 逐场景等价（同 §③ 输入）
+run_veto_new() { # <名> <json> <expect> <ids...>
+  local name="$1" json="$2" expect="$3"; shift 3
+  local id d
+  for id in "$@"; do
+    d="$(drive_veto_at "$ADAPTERS/$id/hooks/veto.sh" "$(reg_field "$id" veto_format)" "$json")"
+    assert_eq "veto/$name: $id native 与 baseline 等价 (${expect})" "$expect" "$d"
+  done
+}
+NV="gemini copilot"
+p="$(mk_proj nv-deny)"; touch "$p/.pipeline-pending-review"
+run_veto_new "V1-fresh-review" "{\"cwd\":\"$p\",\"tool_name\":\"Write\"}" DENY $NV
+p="$(mk_proj nv-none)"
+run_veto_new "V2-no-marker"    "{\"cwd\":\"$p\",\"tool_name\":\"Bash\"}"  ALLOW $NV
+p="$(mk_proj nv-stale)"; touch "$p/.pipeline-pending-review"; touch_age "$p/.pipeline-pending-review" 4000
+run_veto_new "V3-stale"        "{\"cwd\":\"$p\",\"tool_name\":\"Edit\"}"  ALLOW $NV
+p="$(mk_proj nv-nested)"; mkdir -p "$p/sub/deep"; touch "$p/.pipeline-pending-interaction"
+run_veto_new "V4-nested-cwd"   "{\"cwd\":\"$p/sub/deep\",\"tool_name\":\"Write\"}" DENY $NV
+
+# ⑧.3 inject conformance — native（gemini/pi 包 baseline 上下文）/ degraded（copilot/devin 落 fallback 不伪装）
+for id in gemini pi; do
+  assert_eq "inject/$id: registry 声明 native" native "$(reg_field "$id" inject_status)"
+  w="$ADAPTERS/$id/hooks/inject.sh"
+  if [ -f "$w" ]; then
+    p="$(mk_change_proj "$id-inject")"
+    out="$(printf '{"cwd":"%s"}' "$p" | CLAUDE_PLUGIN_ROOT="$ROOT" bash "$w" SessionStart 2>/dev/null)"
+    assert_contains "inject/$id: 产出 hookSpecificOutput（CC 同构 JSON）" "$out" "hookSpecificOutput"
+    assert_contains "inject/$id: 含 additionalContext 字段" "$out" "additionalContext"
+    assert_contains "inject/$id: additionalContext 真包 baseline 宪法（pipeline-lite）" "$out" "pipeline-lite"
+  else
+    bad "inject/$id: wrapper 存在" "缺失：$w"
+  fi
+done
+# copilot inject degraded：无 hooks/inject.sh（不伪装会话级 inject），install 落 .github/copilot-instructions.md 静态层
+assert_eq "inject/copilot: registry 声明 degraded" degraded "$(reg_field copilot inject_status)"
+assert_ne "inject/copilot: inject_fallback 非空（声明降级须给落点）" "" "$(reg_field copilot inject_fallback)"
+assert_absent "inject/copilot: 无 hooks/inject.sh（如实降级，不伪装会话级 inject）" "$ADAPTERS/copilot/hooks/inject.sh"
+if [ -f "$ADAPTERS/copilot/install.sh" ]; then
+  cp="$TMP/copilot-install"; mkdir -p "$cp"
+  bash "$ADAPTERS/copilot/install.sh" --target "$cp" --no-hooks --yes >/dev/null 2>&1 || true
+  assert_file "inject/copilot: install 落静态层 .github/copilot-instructions.md（降级真产出）" "$cp/.github/copilot-instructions.md"
+else
+  bad "inject/copilot: install.sh 存在" "缺失：$ADAPTERS/copilot/install.sh"
+fi
+# devin inject degraded（tier C 静态）：无 hook，install 落 .devin/workflows 静态层
+assert_eq "inject/devin: registry 声明 degraded（tier C 静态）" degraded "$(reg_field devin inject_status)"
+assert_ne "inject/devin: inject_fallback 非空" "" "$(reg_field devin inject_fallback)"
+if [ -f "$ADAPTERS/devin/install.sh" ]; then
+  cp="$TMP/devin-install"; mkdir -p "$cp"
+  bash "$ADAPTERS/devin/install.sh" --target "$cp" --yes >/dev/null 2>&1 || true
+  assert_file "inject/devin: install 落静态 workflow 层 .devin/workflows/pipeline.md（降级真产出）" "$cp/.devin/workflows/pipeline.md"
+else
+  bad "inject/devin: install.sh 存在" "缺失：$ADAPTERS/devin/install.sh"
+fi
+
+# ⑧.4 track conformance — native（gemini/copilot/pi 真 append history）/ degraded（devin 无自动留痕不伪装）
+for id in gemini copilot pi; do
+  line="$(drive_track "$id")"
+  assert_contains "track/$id: 真 append history（与 baseline 记录等价）" "$line" '"raw":"Skill: pipeline-explore"'
+done
+assert_eq "track/devin: registry 声明 degraded（tier C 无 hook 自动留痕）" degraded "$(reg_field devin track_status)"
+assert_ne "track/devin: track_fallback 非空" "" "$(reg_field devin track_fallback)"
+assert_absent "track/devin: 无 hooks/track.sh（不伪装自动留痕）" "$ADAPTERS/devin/hooks/track.sh"
+
+# ⑧.5 分档降级如实（tier 与三能力 status 与实际行为一致——诚实标降级档）
+# gemini = 档 A 全保真：三能力全 native
+assert_eq "tier/gemini: registry tier=A" A "$(reg_field gemini tier)"
+assert_eq "tier/gemini: inject native" native "$(reg_field gemini inject_status)"
+assert_eq "tier/gemini: veto native"  native "$(reg_field gemini veto_status)"
+assert_eq "tier/gemini: track native" native "$(reg_field gemini track_status)"
+# copilot = 档 B：veto/track native、inject degraded
+assert_eq "tier/copilot: registry tier=B" B "$(reg_field copilot tier)"
+assert_eq "tier/copilot: veto native"  native "$(reg_field copilot veto_status)"
+assert_eq "tier/copilot: track native" native "$(reg_field copilot track_status)"
+assert_eq "tier/copilot: inject degraded" degraded "$(reg_field copilot inject_status)"
+# pi = 档 B：inject/track native、veto degraded（enforcement 走 .pi/extensions 运行时 + Unlock sentinel，无原生 pre-tool 硬拦）
+assert_eq "tier/pi: registry tier=B" B "$(reg_field pi tier)"
+assert_eq "tier/pi: inject native" native "$(reg_field pi inject_status)"
+assert_eq "tier/pi: track native"  native "$(reg_field pi track_status)"
+assert_eq "tier/pi: veto degraded"  degraded "$(reg_field pi veto_status)"
+assert_ne "tier/pi: veto_fallback 非空（声明降级须给落点）" "" "$(reg_field pi veto_fallback)"
+assert_absent "tier/pi: 无 hooks/veto.sh（veto 降级，不伪装原生硬拦）" "$ADAPTERS/pi/hooks/veto.sh"
+# devin = 档 C 静态降级：hasHooks=false、三能力全 degraded
+assert_eq "tier/devin: registry tier=C" C "$(reg_field devin tier)"
+assert_eq "tier/devin: hasHooks=false" false "$(reg_field devin hasHooks)"
+assert_eq "tier/devin: inject degraded" degraded "$(reg_field devin inject_status)"
+assert_eq "tier/devin: veto degraded"  degraded "$(reg_field devin veto_status)"
+assert_eq "tier/devin: track degraded" degraded "$(reg_field devin track_status)"
+
+# ⑧.6 变异测试（反例哨兵）：改坏新平台的能力必被判别为红（证明新平台也进真判别路径，非空跑）
+# 变异 D：改坏 gemini(A) 的 veto（放行）→ 判别器须报 ≠ baseline（= 会被 ⑧.2 抓红）
+mkdir -p "$TMP/broken-gemini/hooks"
+cat > "$TMP/broken-gemini/hooks/veto.sh" <<'BROKEN'
+#!/usr/bin/env bash
+exit 0
+BROKEN
+chmod +x "$TMP/broken-gemini/hooks/veto.sh"
+p="$(mk_proj mut-gemini)"; touch "$p/.pipeline-pending-review"
+b="$(baseline_veto "{\"cwd\":\"$p\",\"tool_name\":\"Write\"}")"
+d="$(drive_veto_at "$TMP/broken-gemini/hooks/veto.sh" exit2-stderr "{\"cwd\":\"$p\",\"tool_name\":\"Write\"}")"
+assert_eq "变异/gemini: baseline 对新鲜 marker = DENY" DENY "$b"
+assert_ne "变异/gemini: 改坏的 veto（放行）被判别为 ≠ baseline → 抓红" "$b" "$d"
+# 变异 E：改坏 copilot(B) 的 track（不写）→ 判别器须发现 history 未增（= 会被 ⑧.4 抓红）
+mkdir -p "$TMP/broken-copilot/hooks"
+cat > "$TMP/broken-copilot/hooks/track.sh" <<'BROKEN'
+#!/usr/bin/env bash
+exit 0
+BROKEN
+chmod +x "$TMP/broken-copilot/hooks/track.sh"
+p="$(mk_change_proj mut-copilot)"
+printf "$TRACK_JSON_TMPL" "$p" | CLAUDE_PLUGIN_ROOT="$ROOT" bash "$TMP/broken-copilot/hooks/track.sh" postToolUse >/dev/null 2>&1 || true
+if [ -f "$p/$HIST" ]; then bad "变异/copilot: 改坏的 track（不写）被抓红" "history 竟被写了：$(cat "$p/$HIST")"
+else ok "变异/copilot: 改坏的 track（不写 history）被判别为红（history 未生成）"; fi
+
+# ════════════════════════════════════════════════════════════════════════════
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ] || exit 1
 exit 0

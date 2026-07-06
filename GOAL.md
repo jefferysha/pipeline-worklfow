@@ -73,7 +73,7 @@
 - [~] D4 真实工具链验证（#12）：check/guard 46 规则全量面 > trellis-check；三轨 verify 待 #29c 沙箱 verify
 - [x] D5 学习回写闭环（#22）：learn-record 三层回写 ≥ trellis-update-spec
 - [x] D6 简单性：npx 一行上手 + 5 分钟心智模型 ≥ trellis init（iteration-4）
-- [x] D7 多平台策略面（#39）：适配器框架 + conformance + 分档降级，active 3/planned 4（填表可扩，> Trellis 手工）
+- [x] D7 多平台策略面（#39/#40）：适配器框架 + 125 conformance 断言 + 分档降级 A/B/C，active 7（claude/codex/cursor/gemini/copilot/pi/devin）+ longtail 5 登记（conformance 机器校验 > Trellis 手工投影）
 **vs Comet（2k★）**
 - [x] D8 脚本守门状态机：三门 hook 硬拦 + guard 46 规则 + CAS/锁 > comet-guard（#12）
 - [x] D9 dashboard（#25/#26/#26c）：全局 server + 收件箱默认视图 + token 鉴权 + 版本抢占 > comet 只读面板
@@ -81,7 +81,7 @@
 - [x] D11 上下文压缩（#30）：确定性压缩 45.4% > Comet 25-30%（且可 oracle）
 - [x] D12 auto-transition（#31）：中间档 + HITL 红线三重证明 > Comet AUTO-TRANSITION
 - [x] D13 可恢复工作流：断点恢复不依赖对话历史（.pipeline.yaml 真相源，v0.1 oracle 验证）
-- [~] D14 平台广度（#39）：可移植内核 + 填表式扩展策略就绪；铺到 ≥Comet 30 平台待 #40
+- [x] D14 平台广度（#39/#40）：可移植内核 + 填表式扩展经 4 平台实证（一次转 active 跨 A/B/C 档）；策略面 > Comet 手工 30（本仓 conformance 保证等价性，长尾填表即扩）
 **vs 两者皆无（差异化护城河）**
 - [x] D15 golden-oracle 行为等价迁移法（双跑逐字 diff——两家都没有的质量证据链）
 - [x] D16 loop-engineering 治理（#35/#36/#37/#38）✅闭环：registry+enforce R1-R11+L1→L3 毕业制+budget/circuit-breaker+drift/loop-ready 审计+graduation 执行面——两竞品都无此面（独有护城河）

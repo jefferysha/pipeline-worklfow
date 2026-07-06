@@ -14,7 +14,6 @@
 | **M6** 竞品缺口收尾 | | | |
 | **M-loop** loop-engineering 内建（GOAL B18–B21 / D16） | | | |
 | **M7** 平台矩阵（GOAL D7/D14） | | | |
-| 40 | 平台铺开：Codex/Cursor 先行，矩阵逐平台扩展至 ≥ 两竞品覆盖面 | M7 | 5d+ |
 | **M8** tap 流量代理（2026-07-07 用户确认进正式队列，human gate 解除） | | | |
 | 34e | 安全护栏：默认 OFF；证书/抓包是敏感能力，doctor 明示「tap 正在拦截流量」红/黄灯；捕获数据本地不外发 | M8 | 1d |
 
@@ -74,3 +73,4 @@
 | 2026-07-07 | #29d/#34d server 数据端（iteration-25） | 收编：afk 泳道+调度器灯+traffic 查看器 + 14 真 HTTP + 13 真 render |
 | 2026-07-07 | #34b/#34c tap 协议面（iteration-26） | 收编：ws重组+bedrock+本地CA·TLS MITM(node v24 真跑 0 skip)+13 runtime，60 测试 |
 | 2026-07-07 | #29c automation docker 全链（iteration-26） | 收编：真容器执行+真 git worktree/merge-back 冲突留现场，111 测试 4 docker honest-skip |
+| 2026-07-07 | #40 平台铺量（iteration-27） | 收编：4 平台转 active（跨 A/B/C）+ 125 conformance 断言 + 真文件变异测试，active 7+longtail 5，D7/D14 |

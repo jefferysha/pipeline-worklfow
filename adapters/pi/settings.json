@@ -1,0 +1,20 @@
+{
+  "_comment": "Pi Agent pipeline 适配器 settings（BACKLOG #40，档 B）。hooks 内嵌（hookContainer=.pi/settings.json#hooks）。inject/track native：SessionStart 注入 + PostToolUse 真 append history（wrapper 薄包 lite baseline）。veto **降级**：pi 无原生 pre-tool 硬拦 hook——故本文件不注册 PreToolUse veto（不伪装原生硬拦），enforcement 走 .pi/extensions 运行时 advisory（.pi/rules/pipeline.md）+ 手动 Unlock sentinel。__ADAPTER_DIR__ 由 install.sh 替换为绝对路径。",
+  "enableSkillCommands": true,
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          { "type": "command", "command": "bash \"__ADAPTER_DIR__/hooks/inject.sh\" SessionStart" }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          { "type": "command", "command": "bash \"__ADAPTER_DIR__/hooks/track.sh\" PostToolUse" }
+        ]
+      }
+    ]
+  }
+}
