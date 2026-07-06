@@ -1,0 +1,83 @@
+import { describe, expect, test } from 'vitest'
+import { GATE_FRESH_MS } from '@pipeline-lite/kernel'
+import { cmdInbox } from './inbox.js'
+import { makeDeps, mockState } from '../test-support.js'
+
+describe('inbox —— 等待人工决策的 change 清单（BACKLOG #9a）', () => {
+  test('空收件箱：友好空态一行，exit 0；--json 输出 {"inbox":[]}', async () => {
+    const deps = makeDeps()
+    const code = await cmdInbox(deps, {})
+    expect(code).toBe(0)
+    expect(deps.outLines.join('\n')).toContain('没有在等你的事')
+
+    const deps2 = makeDeps()
+    expect(await cmdInbox(deps2, { json: true })).toBe(0)
+    expect(JSON.parse(deps2.outLines.join('\n'))).toEqual({ inbox: [] })
+  })
+
+  test('新鲜门 marker：解析三行格式（相位/指引/change 名），列为 gate:<kind>', async () => {
+    const deps = makeDeps({
+      states: { demo: mockState({ phase: 'build', track: 'backend' }) },
+      gateMarkers: [{ kind: 'confirm', ageMs: 120_000, raw: 'build\n请确认原型方向\ndemo\n' }],
+    })
+    expect(await cmdInbox(deps, { json: true })).toBe(0)
+    const payload = JSON.parse(deps.outLines.join('\n')) as {
+      inbox: Array<Record<string, unknown>>
+    }
+    expect(payload.inbox).toEqual([
+      { name: 'demo', phase: 'build', waiting_on: 'gate:confirm', waiting_s: 120, hint: '请确认原型方向' },
+    ])
+  })
+
+  test('陈旧 marker（≥ GATE_FRESH_MS）不进收件箱', async () => {
+    const deps = makeDeps({
+      gateMarkers: [{ kind: 'review', ageMs: GATE_FRESH_MS, raw: 'spec\nx\ndemo\n' }],
+    })
+    await cmdInbox(deps, { json: true })
+    expect(JSON.parse(deps.outLines.join('\n'))).toEqual({ inbox: [] })
+  })
+
+  test('复核相位（manifest.reviewPhases 单一真相源）且未 done 的 change 列为 phase-review', async () => {
+    const deps = makeDeps({
+      states: {
+        r1: mockState({
+          phase: 'explore',
+          phase_status: 'pending',
+          updated_at: '2026-07-05T23:58:00Z', // FIXED_CLOCK 前 2min
+        }),
+        b1: mockState({ phase: 'build', phase_status: 'pending' }), // build 非复核相位 → 不列
+      },
+    })
+    expect(await cmdInbox(deps, { json: true })).toBe(0)
+    const payload = JSON.parse(deps.outLines.join('\n')) as {
+      inbox: Array<Record<string, unknown>>
+    }
+    expect(payload.inbox).toHaveLength(1)
+    expect(payload.inbox[0]).toMatchObject({ name: 'r1', phase: 'explore', waiting_on: 'phase-review', waiting_s: 120 })
+  })
+
+  test('同名 change 的 marker 与复核相位不重复列（marker 优先）', async () => {
+    const deps = makeDeps({
+      states: { r1: mockState({ phase: 'explore', phase_status: 'pending' }) },
+      gateMarkers: [{ kind: 'review', ageMs: 60_000, raw: 'explore\n复核 design_doc\nr1\n' }],
+    })
+    await cmdInbox(deps, { json: true })
+    const payload = JSON.parse(deps.outLines.join('\n')) as { inbox: Array<{ waiting_on: string }> }
+    expect(payload.inbox).toHaveLength(1)
+    expect(payload.inbox[0]?.waiting_on).toBe('gate:review')
+  })
+
+  test('archived change 不进收件箱；人读输出含 change 名与等待时长', async () => {
+    const deps = makeDeps({
+      states: {
+        gone: mockState({ phase: 'explore', phase_status: 'pending', archived: 'true' }),
+        r1: mockState({ phase: 'verify', phase_status: 'pending', updated_at: '2026-07-05T23:00:00Z' }),
+      },
+    })
+    expect(await cmdInbox(deps, {})).toBe(0)
+    const text = deps.outLines.join('\n')
+    expect(text).toContain('r1')
+    expect(text).not.toContain('gone')
+    expect(text).toContain('1h')
+  })
+})

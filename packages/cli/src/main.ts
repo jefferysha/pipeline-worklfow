@@ -8,12 +8,12 @@
  * 命令模块与测试不受影响。
  */
 import { execFile } from 'node:child_process'
-import { access, readdir, writeFile } from 'node:fs/promises'
+import { access, readdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { CommanderError } from 'commander'
 import { createFlowEngine, createHistoryWriter, createStateStore, loadManifest } from '@pipeline-lite/kernel'
-import type { CliDeps } from './deps.js'
+import type { CliDeps, GateMarkerInfo } from './deps.js'
 import { buildProgram, CliExit } from './program.js'
 
 /** ISO8601 UTC 秒级（对齐老内核 date -u +%Y-%m-%dT%H:%M:%SZ 口径） */
@@ -53,6 +53,21 @@ async function listChanges(changesRoot: string): Promise<string[]> {
   return names.sort()
 }
 
+/** 项目根三门 marker（缺失即不在收件箱；新鲜判定归 inbox 命令） */
+async function readGateMarkers(cwd: string): Promise<GateMarkerInfo[]> {
+  const out: GateMarkerInfo[] = []
+  for (const kind of ['confirm', 'review', 'interaction'] as const) {
+    try {
+      const p = join(cwd, `.pipeline-pending-${kind}`)
+      const st = await stat(p)
+      out.push({ kind, ageMs: Date.now() - st.mtimeMs, raw: await readFile(p, 'utf8') })
+    } catch {
+      // 缺失 = 无该门等待
+    }
+  }
+  return out
+}
+
 /**
  * 运行期定位 templates/manifest.yaml：编译产物在 packages/cli/dist/main.js，
  * 插件仓根 = 其上三级（dist → cli → packages → 根）。loadManifest 不猜仓库根（T3 约定）。
@@ -73,6 +88,7 @@ async function main(): Promise<void> {
     },
     clock: isoNow,
     listChanges,
+    readGateMarkers: () => readGateMarkers(process.cwd()),
     writeBreadcrumb: (dir, content) => writeFile(join(dir, '.breadcrumb'), content, 'utf8'),
     history: createHistoryWriter(),
     gitHeadSha: () => gitHeadSha(process.cwd()),

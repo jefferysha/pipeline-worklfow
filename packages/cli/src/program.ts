@@ -7,6 +7,7 @@ import { Command } from 'commander'
 import type { CliDeps } from './deps.js'
 import { cmdCheck } from './commands/check.js'
 import { cmdCas, cmdGet, cmdSet, cmdSetMany } from './commands/fields.js'
+import { cmdInbox } from './commands/inbox.js'
 import { cmdInit, type InitCmdOpts } from './commands/init.js'
 import { cmdList, cmdStatus } from './commands/status.js'
 import { cmdTransition } from './commands/transition.js'
@@ -72,6 +73,12 @@ export function buildProgram(deps: CliDeps): Command {
     .command('check <name>')
     .description('guard 前置校验（人读报告；不过 exit 2）')
     .action(async (name: string) => bail(await cmdCheck(deps, name)))
+
+  program
+    .command('inbox')
+    .description('收件箱：等待人工决策的 change（三门 marker + 复核相位）')
+    .option('--json', 'JSON 输出（schema 稳定）')
+    .action(async (opts: { json?: boolean }) => bail(await cmdInbox(deps, opts)))
 
   program
     .command('status [name]')

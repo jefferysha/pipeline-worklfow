@@ -19,7 +19,7 @@ import type {
   PipelineState,
   TransitionResult,
 } from '@pipeline-lite/kernel'
-import type { CliDeps } from './deps.js'
+import type { CliDeps, GateMarkerInfo } from './deps.js'
 
 // === 调用记录 spy（不引 vitest，纯手写） ===
 
@@ -146,6 +146,8 @@ export interface MakeDepsOpts {
   /** listChanges 返回值；缺省 = states 的 key 集合（无 states 则空） */
   changes?: string[]
   cwd?: string
+  /** readGateMarkers 返回值（inbox 用），缺省空 */
+  gateMarkers?: GateMarkerInfo[]
 }
 
 export const FIXED_CLOCK = '2026-07-06T00:00:00Z'
@@ -166,6 +168,7 @@ export function makeDeps(o: MakeDepsOpts = {}): TestDeps {
     },
     clock: () => FIXED_CLOCK,
     listChanges: spy(async (_root: string): Promise<string[]> => changes),
+    readGateMarkers: async () => o.gateMarkers ?? [],
     writeBreadcrumb: async (changeDir: string, content: string) => {
       breadcrumbs.push([changeDir, content])
     },

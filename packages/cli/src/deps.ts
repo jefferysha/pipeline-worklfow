@@ -4,6 +4,14 @@
  */
 import type { FlowEngine, HistoryWriter, StateStore } from '@pipeline-lite/kernel'
 
+export interface GateMarkerInfo {
+  kind: 'confirm' | 'review' | 'interaction'
+  /** marker 年龄毫秒（now - mtime） */
+  ageMs: number
+  /** marker 原文（transition 落的三行格式：相位\n指引\nchange 名，老内核同款） */
+  raw: string
+}
+
 export interface CliIO {
   /** 写一行到 stdout（实现负责补 '\n'） */
   out(line: string): void
@@ -28,6 +36,11 @@ export interface CliDeps {
   writeBreadcrumb?: (changeDir: string, content: string) => Promise<void>
   /** lite 历史 .pipeline-history.jsonl appender（CONTRACT §1）。best-effort。 */
   history?: HistoryWriter
+  /**
+   * 读项目根的三门 marker（缺失 → 不出现在数组里）。main.ts 用 fs 实现；
+   * 新鲜判定（GATE_FRESH_MS）是 inbox 命令的职责，这里只报原始年龄。
+   */
+  readGateMarkers?: () => Promise<GateMarkerInfo[]>
   /**
    * `git rev-parse HEAD` 的 stdout（trim 后；非 git 仓 → 空串）。
    * 对齐老内核 build-complete 的 `$(git rev-parse HEAD 2>/dev/null || echo "")` 口径：
