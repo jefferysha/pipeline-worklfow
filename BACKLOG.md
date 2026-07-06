@@ -16,8 +16,6 @@
 | 29d | 调度器 doctor 灯 + dashboard AFK 指挥面数据端（M3 的 server 承接） | M5 | 1d |
 | 29e | 与 L1→L3 分级放权（#38）合体：AFK 默认 L1 report-only，毕业制升 L2/L3 | M5 | 1d |
 | **M6** 竞品缺口收尾 | | | |
-| 30 | 上下文压缩（Comet CONTEXT-COMPRESSION 对标）：handoff 时压缩 | M6 | 2d |
-| 31 | auto-transition 中间档：guard 全绿自动推进、仅三门处停（HITL 与 AFK 之间） | M6 | 1d |
 | 32 | Cursor 适配器转正（老仓 spike → 可发布） | M6 | 3d |
 | 33 | Trellis parity 收尾：8 partial + 1 missing（spec-template-scaffold、冲突 AskUserQuestion、workflow-template-resolution、KNOWN_UNTRACKED_ALLOWLIST） | M6 | 3d |
 | **M-loop** loop-engineering 内建（GOAL B18–B21 / D16） | | | |
@@ -74,3 +72,5 @@
 | 2026-07-07 | #35 loop 治理（iteration-19） | 收编：registry schema + R1-R11 裁决 + L1-L3 分级放权 + 15 真 fs 例，vitest 994 |
 | 2026-07-07 | #34 tap 核心+护栏（iteration-20） | 收编：MITM 守护+trace_store+安全护栏三条 + 13 真 socket |
 | 2026-07-07 | #29 AFK Sandcastle（iteration-20） | 收编：队列状态机+scheduler+L1→L3 + 72 例 + docker honest-skip |
+| 2026-07-07 | #30 上下文压缩（iteration-21） | 收编：确定性压缩 45.4%>Comet + 7 真 fs 例，D11 |
+| 2026-07-07 | #31 auto-transition 中间档（iteration-21） | 收编：advance guard 自动推进+HITL 三重证明，D12 |

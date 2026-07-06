@@ -52,8 +52,8 @@
 - [ ] B12 操作与配置分离 + debug 降级：Kanban/Settings/Advanced 三层，一级导航 ≤3 项 → M3
 
 **竞品缺口（Comet / Trellis 对标分析的全部遗留）**
-- [ ] B13 上下文压缩：phase handoff 压缩（Comet CONTEXT-COMPRESSION 对标）→ M6
-- [ ] B14 auto-transition 中间档：guard 全绿自动推进、仅三门停（HITL 与 AFK 之间）→ M6
+- [x] B13 上下文压缩（#30 iteration-21）：phase handoff 确定性压缩（实测 45.4% > Comet 25-30%），零 LLM 可 oracle
+- [x] B14 auto-transition 中间档（#31 iteration-21）：`pipeline advance` guard 全绿自动推进、复核相位+三门必停（HITL 红线三重证明，> Comet AUTO-TRANSITION）
 - [ ] B15 Cursor 适配器转正 → M6
 - [ ] B16 Trellis parity 收尾：8 partial + 1 missing → M6
 - [x] B17 npx 一行上手：5 分钟心智模型路径（iteration-4，Trellis 简单性教训的落实）

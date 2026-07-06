@@ -7,3 +7,5 @@ export * from './mem/index.js'
 export * from './channel/index.js'
 // loop 治理子系统（BACKLOG #35，loop-engineering 内建）
 export * from './loops/index.js'
+// 上下文压缩（BACKLOG #30，对标 Comet CONTEXT-COMPRESSION）
+export * from './compress/index.js'

@@ -49,6 +49,8 @@
 | loops 治理 | ✅ loops.integration.test.ts 15 例（真建 loops.yaml/progress.md → 真裁决 R1-R11 verdict + L1 report-only/L3 unattended + schema 拒非法 exit3） | ✅ budget 超限 kill | ✅ list→enforce→status |
 | tap 流量代理 | ✅ packages/tap 49 例（13 真 socket：真 fake upstream + 真 proxy + 真 CONNECT + trace_store 真落盘；源码级扫描断言零 outbound）+ doctor tap 灯真跑 | ✅ 默认 OFF 真不监听 / 8766 生命线隔离 | — |
 | automation AFK | ✅ packages/automation 72 例（57 纯逻辑真状态机 + 14 真 kernel fs/git 集成）；docker IT 2 honest-skip（无 docker 不伪绿）| ✅ L1→paused/L3→merged/conflict 保留 | ✅ enqueue→scan→run |
+| 上下文压缩 | ✅ handoff.integration.test.ts 7 例（真建长文档 → 真压缩 → 断言压缩率≥25% + 决策/约束保留 + 样板去除）；确定性零 LLM 可 oracle | ✅ 无文档/缺 change | ✅ 达 build 相位 handoff |
+| auto-transition advance | ✅ advance.integration.test.ts 6 例（真推进到复核相位即停 + guard 不过不推进 + dry-run 不改盘）；**HITL 红线**：verify/ship guard 预备仍停 verify、硬门 --through-gates 也不跨 | ✅ guard-fail exit2 | ✅ 多步推进 |
 | check | ✅ guard 全量面真跑：不满足 exit 2 / 建 design doc 后 exit 0 | ✅ | ✅ |
 | inbox | ✅ --json 复核相位 | — | ✅ |
 | status/list | ✅ 真枚举 | — | ✅ |
