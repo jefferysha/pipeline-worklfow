@@ -11,6 +11,8 @@ import { cmdCas, cmdGet, cmdSet, cmdSetMany } from './commands/fields.js'
 import { cmdImport } from './commands/import.js'
 import { cmdInbox } from './commands/inbox.js'
 import { cmdInit, type InitCmdOpts } from './commands/init.js'
+import { cmdSession } from './commands/session.js'
+import { cmdSpec } from './commands/spec.js'
 import { cmdTask } from './commands/task.js'
 import { cmdList, cmdStatus } from './commands/status.js'
 import { cmdTransition } from './commands/transition.js'
@@ -95,6 +97,20 @@ export function buildProgram(deps: CliDeps): Command {
     .option('--json', 'JSON 输出（children / canonical）')
     .action(async (sub: string, args: string[], opts: { json?: boolean }) =>
       bail(await cmdTask(deps, sub, opts.json ? [...args, '--json'] : args)))
+
+  program
+    .command('spec <sub> [args...]')
+    .description('living-spec：specs · set-spec-scope <cap> [scope] · inject-jsonl <cap> [agent]')
+    .option('--json', 'JSON 输出（specs）')
+    .action(async (sub: string, args: string[], opts: { json?: boolean }) =>
+      bail(await cmdSpec(deps, sub, opts.json ? [...args, '--json'] : args)))
+
+  program
+    .command('session <sub> [args...]')
+    .description('session：activate <name> · route-context <name> [--json]')
+    .option('--json', 'JSON 输出（route-context）')
+    .action(async (sub: string, args: string[], opts: { json?: boolean }) =>
+      bail(await cmdSession(deps, sub, opts.json ? [...args, '--json'] : args)))
 
   program
     .command('inbox')

@@ -160,6 +160,28 @@ describe('真实 e2e —— 全命令驱动真 kernel + 真 fs（GOAL C9）', ()
     expect(h.out).toEqual([''])
   })
 
+  test('spec：specs 真枚举 + set-spec-scope 真落盘标量（走 buildProgram）', async () => {
+    await h.run(['init', 'auth', '--track', 'backend', '--preset', 'full'])
+    await import('node:fs/promises').then((fs) => fs.mkdir(join(h.cwd, 'openspec/specs/login'), { recursive: true }))
+    await writeFile(join(h.cwd, 'openspec/specs/login/spec.md'), '# login\n', 'utf8')
+    expect(await h.run(['spec', 'specs', '--json'])).toBe(0)
+    const specs = JSON.parse(h.out.join('\n')) as Array<{ name: string; has_spec: boolean }>
+    expect(specs).toEqual([{ name: 'login', spec_path: 'openspec/specs/login/spec.md', has_spec: true }])
+    expect(await h.run(['spec', 'set-spec-scope', 'auth', 'login,billing'])).toBe(0)
+    // 老仓字节：spec_scope 落标量 CSV（非 list 块序列）
+    expect(await h.read('auth')).toMatch(/^spec_scope: login,billing$/m)
+  })
+
+  test('session：activate 真落 .pipeline-active（走 buildProgram，不动 phase）', async () => {
+    await h.run(['init', 'demo', '--track', 'backend', '--preset', 'full'])
+    const before = await h.read('demo')
+    expect(await h.run(['session', 'activate', 'demo'])).toBe(0)
+    expect(await readFile(join(h.cwd, '.pipeline-active'), 'utf8')).toContain('demo')
+    expect(await h.read('demo')).toBe(before) // activate 不碰 .pipeline.yaml
+    // 缺 change → exit 1
+    expect(await h.run(['session', 'activate', 'nonesuch'])).toBe(1)
+  })
+
   test('status/list 真枚举活跃 change', async () => {
     await h.run(['init', 'a1', '--track', 'backend', '--preset', 'full'])
     await h.run(['init', 'b2', '--track', 'pm', '--preset', 'full'])

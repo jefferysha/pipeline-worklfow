@@ -14,3 +14,14 @@ export {
   canonicalChildNames, stateSubtasks, stateRelatedFiles,
 } from './tasks.js'
 export type { AddDepResult, ChangeNode, ChildRef, CanonicalTask, CanonicalInput } from './tasks.js'
+// living-spec（BACKLOG #16）——specs / set-spec-scope / inject-jsonl
+export {
+  listSpecEntries, injectJsonl, jsonlRelPath, resolveSpecsDir, specScopeWriteValue, parseJsonlLine,
+} from './spec.js'
+export type { SpecEntry, SpecListing, JsonlEntry, InjectOutcome, InjectChunk, InjectKind } from './spec.js'
+// session（BACKLOG #17）——activate / route-context
+export {
+  validateChangeName, relatedFilesFromField, parseProjectPackages, normalizeRelPath,
+  pathInSubtree, packageForPath, routeContext, routeBucketsToObject, renderRouteContextText,
+} from './session.js'
+export type { ValidName, InvalidName, PackageDecl, RouteBucket } from './session.js'

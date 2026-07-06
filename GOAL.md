@@ -15,8 +15,9 @@
 
 ## 清单 A · 功能完备（迁移面 → BACKLOG M1–M6）
 
-- [ ] **A1 内核深度（M1）**：guard 全量校验面、transition 全副作用、task lifecycle、
-      living-spec、session、manifest 全派生面、门 TTL 分级（confirm 300s / review·interaction 1800s）
+- [x] **A1 内核深度（M1）✅ 收官 iteration-15**：guard 全量校验面(#12)、transition 全副作用(#14)、
+      task lifecycle(#15)、living-spec(#16)、session(#17)、manifest 全派生面(#18)、门 TTL 分级(#13)——
+      七项全收编，均带真 fs e2e + oracle 双跑 0 不一致
 - [ ] **A2 hooks/插件全保真（M2）**：router Track 识别 + breadcrumb、SessionStart 三注入、
       PostToolUse 全套、7 相位 SKILL + openspec 四命令 + learn-record、4 agents、sync/uninstall scrubber
 - [ ] **A3 dashboard（M3）**：TS 全局 server + 前端信息架构重构

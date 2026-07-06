@@ -8,8 +8,6 @@
 |---|---|---|---|
 | **M1** 内核深度 | | | |
 | 12 | guard 全量校验面：老仓 pipeline-guard.sh 逐相位出口规则全移植（lite 子集 → 全集，oracle 对齐 check） | M1 | 2d |
-| 16 | living-spec：specs/set-spec-scope/inject-jsonl | M1 | 2d |
-| 17 | session：activate/route-context | M1 | 1d |
 | **M2** hooks/插件全保真 | | | |
 | 19 | router hook：Track 识别评分正则（读 manifest 派生缓存）+ 每轮 breadcrumb 注入 | M2 | 2d |
 | 20 | SessionStart 三注入：workflow 宪法 / pipeline-context / openspec | M2 | 1d |
@@ -76,3 +74,6 @@
 | 2026-07-07 | #13 门 TTL 分级（iteration-13） | 收编：confirm 300/review·interaction 1800，5 处同步 + 7 真 fs 例 |
 | 2026-07-07 | #15 task lifecycle（iteration-14） | 收编：依赖图/级联/canonical + 14 真 fs 例，vitest 432/432 |
 | 2026-07-07 | #18 manifest 全派生面（iteration-14） | 收编：4 派生字段引擎真读 + 18 真派生例，就绪待 #19 消费 |
+| 2026-07-07 | #16 living-spec（iteration-15） | 收编：specs/set-spec-scope/inject-jsonl + 14 真 fs 例 |
+| 2026-07-07 | #17 session（iteration-15） | 收编：activate/route-context + 9 真 fs 例，占位诚实标注 |
+| 2026-07-07 | **M1 内核深度里程碑收官** | 七项全收编（#12/#13/#14/#15/#16/#17/#18），vitest 541，oracle 0 不一致 |

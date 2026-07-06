@@ -3,3 +3,8 @@ dist/
 coverage/
 *.tsbuildinfo
 .DS_Store
+# 运行时产物（session 指针 / 项目包声明 / 门 marker / 历史）
+.pipeline-active
+.pipeline-project.yaml
+.pipeline-pending-*
+.breadcrumb

@@ -36,6 +36,8 @@
 | inbox TTL 分级 | ✅ inbox-ttl.integration.test.ts 7 例（真 mtime + 分级 300/1800s） | ✅ 边界 age>TTL | — |
 | task lifecycle | ✅ task.integration.test.ts 14 例（真依赖图/级联/canonical，含物理归档节点反查）+ 走 buildProgram 1 例 | ✅ | ✅ add-dep→children→remove |
 | manifest 全派生 | ✅ manifest-derive.test.ts 18 例（真读 templates/manifest.yaml → 真派生，改 yaml 即变） | ✅ 未知 track fail-loud | — |
+| living-spec | ✅ spec.integration.test.ts 14 例（真枚举 openspec/specs + 真落 spec_scope 标量 + 真 inject-jsonl cat/目录展开）+ 走 buildProgram 1 例 | ✅ | — |
+| session | ✅ session.integration.test.ts 9 例（真落 .pipeline-active + monorepo 真路由）+ 走 buildProgram 1 例 | ✅ 缺 change exit1 / degraded 不炸 | — |
 | check | ✅ guard 全量面真跑：不满足 exit 2 / 建 design doc 后 exit 0 | ✅ | ✅ |
 | inbox | ✅ --json 复核相位 | — | ✅ |
 | status/list | ✅ 真枚举 | — | ✅ |
