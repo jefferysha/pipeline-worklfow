@@ -13,11 +13,11 @@
 | 22 | 7 相位 SKILL.md + 主编排 Decision Core + openspec 四命令 + learn-record | M2 | 3d |
 | 23 | 4 agents（builder/researcher/reviewer/design-reviewer）定义移植 | M2 | 1d |
 | **M3** dashboard | | | |
-| 25 | TS 全局 server：snapshot/SSE + **版本抢占**（老仓架构欠账 #3）+ **写端点 token 鉴权**（欠账 #4） | M3 | 3d |
 | 26 | 前端信息架构重构：收件箱默认视图 / Kanban / Settings 分离 / debug 降级（UI 病灶 1-4 完整解法） | M3 | 3d |
 | 26b | `pipeline doctor` 统一健康面：fail-open 降级可见、保障生效清单（GOAL B8，对标 comet doctor） | M3 | 1d |
+| 25b | 【技术债/单源】把「transition 事件→边表 + 前置校验 + 副作用」上提进 kernel 收成单源——当前 cli events.ts/transition.ts 与 server transition.ts 逐条镜像（#25 发现），消除重复真相源 | M3 | 1d |
 | **M4** channel + mem | | | |
-| 27 | channel：event-sourced worker 总线 TS 重写（supervisor/events/inbox/turns/guard） | M4 | 5d |
+| 27b | channel 进程管理层：supervisor 三循环 + 真 spawn 子进程 + inbox_watcher live-tail + OS-liveness guard + SIGTERM cleanup（#27 事件模型已就绪，本项补进程层） | M4 | 3d |
 | **M5** automation / AFK Sandcastle（2026-07-07 用户确认全量迁移，human gate 已解） | | | |
 | 29 | Sandcastle 5 包移植：runner/lifecycle/scheduler/cli/sdk（老仓本就是 TS——主要工作是把对老 bash `pipeline-state.sh` 的调用替换为 lite kernel API/CLI，Node ≥22 对齐） | M5 | 3d |
 | 29b | 队列语义全迁：automation 字段生命周期（off→queued→running→merged/failed/conflict/paused）+ cas 并发闸 + PIPELINE_AFK 门联动（gate 侧 #7b 已备） | M5 | 1d |
@@ -77,4 +77,6 @@
 | 2026-07-07 | #24 sync/uninstall（iteration-16） | 收编：所有权 hash scrubber + 16 真 fs 例，vitest 646 |
 | 2026-07-07 | #21 PostToolUse 全套（iteration-17） | 收编：四 hook 纯 bash + JSON 转义硬测，test-hooks 180 |
 | 2026-07-07 | #28 mem 会话检索（iteration-17） | 收编：Claude/Codex/Pi 三 runtime + 12 真 fs 例，vitest 741 |
+| 2026-07-07 | #25 dashboard server（iteration-18） | 收编：版本抢占 + token 鉴权两欠账修复 + 17 真 HTTP，@pipeline-lite/server |
+| 2026-07-07 | #27 channel 事件模型（iteration-18） | 收编：event-sourced 核心 + 143 测试 + barrier 隔离三重自证；进程层 →#27b |
 | 2026-07-07 | **M2 hooks/插件全保真里程碑收官** | 六项全收编（#19/#20/#21/#22/#23/#24），vitest 741，hooks 180，oracle 0 不一致 |

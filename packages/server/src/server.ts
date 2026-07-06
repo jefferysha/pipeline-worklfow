@@ -1,0 +1,302 @@
+/**
+ * TS 全局 dashboard server —— 全机唯一 Global server（对位老仓 dashboard-server.py）。
+ * Node stdlib http，零第三方运行时依赖；只依赖 @pipeline-lite/kernel（消费方，只 import 不改）。
+ *
+ * 端点：
+ *   GET  /                          前端落地页（同源注入本 server token，B5 交付；#26 前端重构承接）
+ *   GET  /api/health                存活探针 + 本 server 版本（B4）
+ *   GET  /api/snapshot              聚合本机所有注册 Project 的 .pipeline.yaml → JSON
+ *   GET  /api/stream                SSE：.pipeline.yaml 变化即推新快照 + 心跳
+ *   POST /api/change/<name>/transition   写回转换（B5 token 鉴权 + Host 守卫 + application/json）
+ *
+ * 安全模型（B5，修老仓「写端点无鉴权，已接受风险」CONTEXT.md L33 / 欠账 #4）：
+ *   · GET 只读端点：绑 127.0.0.1，不鉴权（本机回环）。
+ *   · 所有 POST 写端点：三道纵深——(1) Host 头 DNS 重绑定守卫；(2) **一次性 token 强制校验**
+ *     （Authorization: Bearer / X-Pipeline-Token，缺/错 → 401）；(3) 强制 application/json（借同源策略）。
+ *   token 启动生成、写 0600 握手文件、同源注入前端；较老仓「仅靠同源 + 无 token」是净收紧。
+ */
+import { existsSync, statSync } from 'node:fs'
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
+import type { AddressInfo } from 'node:net'
+import { join, resolve as resolvePath } from 'node:path'
+import { createFlowEngine, createStateStore, loadManifest } from '@pipeline-lite/kernel'
+import type { FlowEngine, StateStore } from '@pipeline-lite/kernel'
+import { resolveServerPaths } from './paths.js'
+import { readRegistry } from './registry.js'
+import { buildSnapshot, computeFingerprint } from './snapshot.js'
+import { generateToken, tokenFromHeaders, tokensMatch } from './token.js'
+import { performTransition } from './transition.js'
+import type { DashboardServer, DashboardServerOptions } from './types.js'
+import { SERVER_VERSION } from './version.js'
+
+const MAX_POST_BODY = 64 * 1024
+
+function isoNow(): string {
+  return new Date().toISOString().replace(/\.\d{3}Z$/, 'Z')
+}
+
+function errMsg(e: unknown): string {
+  return e instanceof Error ? e.message : String(e)
+}
+
+/** DNS-rebinding guard（老仓 core._host_is_local 逐条对位）：仅 loopback（± :port）放行。 */
+export function isLocalHost(host: string | undefined, port: number): boolean {
+  if (!host) return false
+  const h = host.trim().toLowerCase()
+  const allowed = new Set([
+    '127.0.0.1', 'localhost', '[::1]',
+    `127.0.0.1:${port}`, `localhost:${port}`, `[::1]:${port}`,
+  ])
+  return allowed.has(h)
+}
+
+function indexHtml(token: string): string {
+  // 最小落地页 —— 同源前端读取注入的 token 后带 header 调写端点（B5）。信息架构重构见 BACKLOG #26。
+  // token 作 JS 字符串注入；转义 `<` 防 `</script>` 断出（纵深防护，token 本就 server 生成可信）。
+  const jsToken = JSON.stringify(token).replace(/</g, '\\u003c')
+  return `<!doctype html><meta charset="utf-8"><title>Pipeline Dashboard</title>
+<h1>Pipeline Global Dashboard</h1>
+<p>TS 全局 server 已就绪。只读数据见 <code>/api/snapshot</code> / <code>/api/stream</code>；健康探针 <code>/api/health</code>。</p>
+<p>写端点需带一次性 token（B5）。前端信息架构重构：BACKLOG #26。</p>
+<script>window.__PIPELINE_DASHBOARD_TOKEN__ = ${jsToken};</script>`
+}
+
+export function createDashboardServer(options: DashboardServerOptions = {}): DashboardServer {
+  const version = options.version ?? SERVER_VERSION
+  const token = options.token ?? generateToken()
+  const clock = options.clock ?? isoNow
+  const paths = resolveServerPaths({ home: options.home })
+  const registry: () => string[] = options.registry ?? (() => readRegistry(paths.registryPath))
+  const store: StateStore = options.store ?? createStateStore()
+  const flow: FlowEngine = options.flow
+    ?? (options.manifestPath
+      ? createFlowEngine(loadManifest(options.manifestPath))
+      : (() => { throw new Error('createDashboardServer: 需注入 flow 或 manifestPath') })())
+  const pollIntervalMs = options.pollIntervalMs ?? 1000
+  const heartbeatMs = options.heartbeatMs ?? 15000
+  const gitHeadSha = options.gitHeadSha
+
+  const fileExists = (root: string, relPath: string): boolean => {
+    try {
+      return statSync(join(root, relPath)).isFile()
+    } catch {
+      return false
+    }
+  }
+
+  let boundPort = 0
+
+  // ── SSE 推送引擎 ──
+  const clients = new Set<ServerResponse>()
+  let lastFp = ''
+  let lastBeat = Date.now()
+  let pollTimer: ReturnType<typeof setInterval> | null = null
+
+  function broadcast(event: string, data: string): void {
+    lastBeat = Date.now()
+    const frame = `event: ${event}\ndata: ${data}\n\n`
+    for (const res of clients) {
+      try { res.write(frame) } catch { /* 断开的连接会在 close 事件里清理 */ }
+    }
+  }
+
+  function stopPoll(): void {
+    if (pollTimer) {
+      clearInterval(pollTimer)
+      pollTimer = null
+    }
+  }
+
+  async function pollTick(): Promise<void> {
+    if (clients.size === 0) {
+      stopPoll() // 零客户端不空转
+      return
+    }
+    let fp: string
+    try {
+      fp = await computeFingerprint(registry())
+    } catch {
+      return
+    }
+    if (fp !== lastFp) {
+      lastFp = fp
+      try {
+        broadcast('snapshot', JSON.stringify(await buildSnapshot({ registry, store, version, clock })))
+      } catch {
+        /* 一次失败下轮再试 */
+      }
+    } else if (Date.now() - lastBeat > heartbeatMs) {
+      lastBeat = Date.now()
+      for (const res of clients) {
+        try { res.write(': ping\n\n') } catch { /* ignore */ }
+      }
+    }
+  }
+
+  function startPoll(): void {
+    if (pollTimer) return
+    pollTimer = setInterval(() => { void pollTick() }, pollIntervalMs)
+    pollTimer.unref?.()
+  }
+
+  // ── 响应工具 ──
+  function sendJson(res: ServerResponse, code: number, obj: unknown): void {
+    const body = Buffer.from(JSON.stringify(obj), 'utf8')
+    res.writeHead(code, {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Content-Length': body.length,
+      'Cache-Control': 'no-store',
+    })
+    res.end(body)
+  }
+
+  function sendHtml(res: ServerResponse, code: number, html: string): void {
+    const body = Buffer.from(html, 'utf8')
+    res.writeHead(code, {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Content-Length': body.length,
+      'Cache-Control': 'no-store',
+    })
+    res.end(body)
+  }
+
+  function readJsonBody(req: IncomingMessage): Promise<unknown> {
+    return new Promise((resolve) => {
+      let done = false
+      const finish = (v: unknown): void => { if (!done) { done = true; resolve(v) } }
+      const len = Number.parseInt(String(req.headers['content-length'] ?? ''), 10)
+      if (Number.isFinite(len) && len > MAX_POST_BODY) return finish(undefined)
+      let data = ''
+      let size = 0
+      req.setEncoding('utf8')
+      req.on('data', (c: string) => {
+        size += Buffer.byteLength(c)
+        if (size > MAX_POST_BODY) { finish(undefined); req.destroy(); return }
+        data += c
+      })
+      req.on('end', () => {
+        try { finish(JSON.parse(data)) } catch { finish(undefined) }
+      })
+      req.on('error', () => finish(undefined))
+    })
+  }
+
+  // ── SSE 端点 ──
+  async function handleStream(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache, no-store',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    })
+    clients.add(res)
+    try {
+      lastFp = await computeFingerprint(registry())
+      res.write(`event: snapshot\ndata: ${JSON.stringify(await buildSnapshot({ registry, store, version, clock }))}\n\n`)
+    } catch {
+      /* 初始快照失败不影响后续推送 */
+    }
+    startPoll()
+    req.on('close', () => {
+      clients.delete(res)
+      if (clients.size === 0) stopPoll()
+    })
+  }
+
+  // ── 路由 ──
+  async function handleGet(req: IncomingMessage, res: ServerResponse, path: string): Promise<void> {
+    if (path === '/' || path === '/index.html') return sendHtml(res, 200, indexHtml(token))
+    if (path === '/api/health') {
+      return sendJson(res, 200, { ok: true, scope: 'global', version, pid: process.pid })
+    }
+    if (path === '/api/snapshot') {
+      try {
+        return sendJson(res, 200, await buildSnapshot({ registry, store, version, clock }))
+      } catch (e) {
+        return sendJson(res, 500, { ok: false, error: errMsg(e) })
+      }
+    }
+    if (path === '/api/stream') return handleStream(req, res)
+    return sendJson(res, 404, { ok: false, error: '未知端点' })
+  }
+
+  async function handlePost(req: IncomingMessage, res: ServerResponse, path: string): Promise<void> {
+    // (1) DNS-rebinding 守卫
+    if (!isLocalHost(req.headers.host, boundPort)) {
+      return sendJson(res, 403, { ok: false, error: 'Host header 不合法（疑似 DNS 重绑定攻击）' })
+    }
+    // (2) B5：所有写端点强制 token 鉴权
+    const provided = tokenFromHeaders(req.headers)
+    if (!provided || !tokensMatch(provided, token)) {
+      return sendJson(res, 401, { ok: false, error: '缺少或无效 token（写端点需鉴权）' })
+    }
+    // (3) 强制 application/json（借同源策略：跨源 JSON POST 触发预检，本 server 零 CORS 头 → 被阻断）
+    const ctype = String(req.headers['content-type'] ?? '').split(';', 1)[0]!.trim().toLowerCase()
+    if (ctype !== 'application/json') {
+      return sendJson(res, 400, { ok: false, error: '写回端点要求 Content-Type: application/json' })
+    }
+
+    const mTr = /^\/api\/change\/([^/]+)\/transition$/.exec(path)
+    if (!mTr) return sendJson(res, 404, { ok: false, error: '未知写回端点' })
+
+    const body = await readJsonBody(req)
+    if (typeof body !== 'object' || body === null) {
+      return sendJson(res, 400, { ok: false, error: '请求体须为 JSON 对象' })
+    }
+    const b = body as Record<string, unknown>
+    const root = b.root
+    const event = b.event
+    if (typeof root !== 'string' || typeof event !== 'string') {
+      return sendJson(res, 400, { ok: false, error: 'root / event 须为字符串' })
+    }
+    // 信任锚：root 必须是已注册 Project（挡路径穿越到任意目录）——对位老仓 resolve_change_worktree。
+    const trusted = new Set(registry().map((r) => resolvePath(r)))
+    if (!trusted.has(resolvePath(root))) {
+      return sendJson(res, 404, { ok: false, error: 'root 非已知 Project（未注册或不可信）' })
+    }
+    const name = decodeURIComponent(mTr[1]!)
+    const outcome = await performTransition({ store, flow, clock, fileExists, gitHeadSha }, root, name, event)
+    return sendJson(res, outcome.code, outcome.body)
+  }
+
+  const httpServer: Server = createServer((req, res) => {
+    const path = (req.url ?? '/').split('?', 1)[0]!
+    const method = req.method ?? 'GET'
+    const handler = method === 'GET'
+      ? handleGet(req, res, path)
+      : method === 'POST'
+        ? handlePost(req, res, path)
+        : Promise.resolve(sendJson(res, 405, { ok: false, error: 'method not allowed' }))
+    handler.catch((e) => {
+      try { sendJson(res, 500, { ok: false, error: errMsg(e) }) } catch { /* 已写头 */ }
+    })
+  })
+
+  return {
+    token,
+    version,
+    httpServer,
+    listen(port = 0, host = '127.0.0.1'): Promise<{ port: number; host: string }> {
+      return new Promise((resolve, reject) => {
+        const onError = (e: Error): void => reject(e)
+        httpServer.once('error', onError)
+        httpServer.listen(port, host, () => {
+          httpServer.removeListener('error', onError)
+          boundPort = (httpServer.address() as AddressInfo).port
+          resolve({ port: boundPort, host })
+        })
+      })
+    },
+    close(): Promise<void> {
+      return new Promise((resolve) => {
+        stopPoll()
+        for (const res of clients) {
+          try { res.end() } catch { /* ignore */ }
+        }
+        clients.clear()
+        httpServer.close(() => resolve())
+        ;(httpServer as unknown as { closeAllConnections?: () => void }).closeAllConnections?.()
+      })
+    },
+  }
+}

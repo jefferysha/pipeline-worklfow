@@ -1,0 +1,102 @@
+#!/usr/bin/env node
+/**
+ * bin 入口：全机唯一 Global dashboard server 的启动装配（B4 版本抢占 + B5 token 握手）。
+ *
+ * 启动序（对位老仓 dashboard-server.py main，但补上版本抢占与 token）：
+ *   1. 解析机器级路径（~/.claude/...，可经 PIPELINE_DASHBOARD_HOME 覆盖）。
+ *   2. 探测既有 :port 的 /api/health（含 version）→ decidePreemption：
+ *        bind → 直接监听；reuse → 让位退出 0；preempt → SIGTERM 旧实例后监听。
+ *   3. listen 固定端口（PIPELINE_DASHBOARD_PORT ?? 8765，绑 127.0.0.1）。
+ *   4. 写 0600 token 握手文件（B5）+ pidfile（pid/port/version，供后来者抢占判定）。
+ *   5. SIGTERM/SIGINT 优雅停：关 server + 清 pidfile。
+ */
+import { execFile } from 'node:child_process'
+import { unlinkSync, writeFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { createDashboardServer } from './server.js'
+import { resolveServerPaths } from './paths.js'
+import { decidePreemption, preemptOldServer, probeHealth } from './preempt.js'
+import { generateToken, writeTokenHandshake } from './token.js'
+import { SERVER_VERSION } from './version.js'
+
+const GLOBAL_PORT = 8765
+
+function serverPort(): number {
+  const raw = Number.parseInt(process.env.PIPELINE_DASHBOARD_PORT ?? '', 10)
+  return Number.isFinite(raw) && raw > 0 ? raw : GLOBAL_PORT
+}
+
+/** dist/main.js → 插件仓根（dist → server → packages → 根）→ templates/manifest.yaml。 */
+function manifestPath(): string {
+  return join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'templates', 'manifest.yaml')
+}
+
+function gitHeadSha(cwd: string): Promise<string> {
+  return new Promise((resolve) => {
+    execFile('git', ['rev-parse', 'HEAD'], { cwd }, (_err, stdout) => resolve((stdout ?? '').trim()))
+  })
+}
+
+async function main(): Promise<void> {
+  const paths = resolveServerPaths()
+  const host = '127.0.0.1'
+  const port = serverPort()
+  const version = SERVER_VERSION
+
+  // ── B4 版本抢占 ──
+  const existing = await probeHealth(port, host, 400)
+  const decision = decidePreemption(existing, version)
+  if (decision === 'reuse') {
+    process.stdout.write(`[dashboard-server] 复用既有 Global server :${port}（版本 ${existing?.version} ≥ ${version}）\n`)
+    return
+  }
+  if (decision === 'preempt') {
+    process.stdout.write(`[dashboard-server] 抢占旧版本 ${existing?.version} → 本版本 ${version}\n`)
+    const freed = await preemptOldServer(paths.pidfilePath, port, host, { waitMs: 4000 })
+    if (!freed) {
+      process.stderr.write('[dashboard-server] 旧实例未在期限内让出端口，启动失败\n')
+      process.exitCode = 1
+      return
+    }
+  }
+
+  const token = generateToken()
+  const srv = createDashboardServer({
+    version,
+    token,
+    manifestPath: manifestPath(),
+    gitHeadSha,
+  })
+
+  try {
+    await srv.listen(port, host)
+  } catch (e) {
+    process.stderr.write(`[dashboard-server] 监听 :${port} 失败：${e instanceof Error ? e.message : String(e)}\n`)
+    process.exitCode = 1
+    return
+  }
+
+  // B5：写 0600 token 握手文件（同源前端 / 本机可信工具读取）
+  try {
+    await writeTokenHandshake(paths.tokenPath, token, { pid: process.pid, port, version, created: Date.now() })
+  } catch { /* best-effort */ }
+
+  // pidfile（供后来者版本抢占读旧 pid）
+  try {
+    writeFileSync(paths.pidfilePath, JSON.stringify({ pid: process.pid, port, version, started: Date.now() }), 'utf8')
+  } catch { /* best-effort */ }
+
+  process.stdout.write(`[dashboard-server] Global server http://${host}:${port}  version=${version}\n`)
+
+  const shutdown = (): void => {
+    void srv.close().finally(() => {
+      try { unlinkSync(paths.pidfilePath) } catch { /* 已清 */ }
+      process.exit(0)
+    })
+  }
+  process.on('SIGTERM', shutdown)
+  process.on('SIGINT', shutdown)
+}
+
+void main()

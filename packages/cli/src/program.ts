@@ -10,6 +10,7 @@ import { cmdDoctor } from './commands/doctor.js'
 import { cmdCas, cmdGet, cmdSet, cmdSetMany } from './commands/fields.js'
 import { cmdImport } from './commands/import.js'
 import { cmdInbox } from './commands/inbox.js'
+import { cmdChannel } from './commands/channel.js'
 import { cmdGenRouterSh } from './commands/gen-router.js'
 import { cmdInit, type InitCmdOpts } from './commands/init.js'
 import { cmdMem } from './commands/mem.js'
@@ -159,6 +160,12 @@ export function buildProgram(deps: CliDeps): Command {
     .option('--dry-run', '只打印计划不落盘')
     .action(async (opts: { yes?: boolean; dryRun?: boolean }) =>
       bail(await cmdUninstall(deps, { yes: opts.yes, dryRun: opts.dryRun })))
+
+  program
+    .command('channel <sub> [args...]')
+    .description('正交 worker 层（event-sourced）：create/send/wait/messages/thread/forum/registry …')
+    .allowUnknownOption() // flag 由 cmdChannel 自解析
+    .action(async (sub: string, args: string[]) => bail(await cmdChannel(deps, sub, args)))
 
   program
     .command('mem <sub> [args...]')

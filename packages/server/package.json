@@ -1,0 +1,13 @@
+{
+  "name": "@pipeline-lite/server",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": { ".": "./dist/index.js" },
+  "bin": { "pipeline-dashboard": "dist/main.js" },
+  "engines": { "node": ">=22" },
+  "dependencies": {
+    "@pipeline-lite/kernel": "*"
+  }
+}
