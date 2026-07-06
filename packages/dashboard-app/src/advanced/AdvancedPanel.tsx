@@ -1,5 +1,7 @@
 import { useT } from '../i18n'
 import type { Snapshot } from '../types'
+import { AfkPanel } from './AfkPanel'
+import { TrafficPanel } from './TrafficPanel'
 
 interface AdvancedPanelProps {
   snapshot: Snapshot | null
@@ -12,9 +14,17 @@ const TOOLS = [
   { key: 'afk', cap: 'afk', when: 'afk_when' },
 ] as const
 
+/** 已接线数据端的工具 → 真面板组件（capabilities 声明为 true 时渲染，取代占位）。 */
+const PANELS: Partial<Record<(typeof TOOLS)[number]['key'], () => JSX.Element>> = {
+  afk: AfkPanel,
+  traffic: TrafficPanel,
+}
+
 /**
- * 高级 / 调试工具 —— 病灶③解法：traffic/runtime/loops/afk 从一级导航降级为默认折叠入口。
- * 当前均为占位（server 能力声明里这些域未接线，capabilities 不报 true）——诚实标注"待对应里程碑数据端"。
+ * 高级 / 调试工具（病灶③解法）——traffic/runtime/loops/afk 从一级导航降级为默认折叠入口。
+ * 能力声明驱动（GOAL B6，不谎报）：
+ *   · server 声明 capabilities.<cap>=true 且有真面板（afk #29d / traffic #34d）→ 渲染真数据面板；
+ *   · 未声明（runtime/loops 数据端未接线，或 server 未装该域）→ 保持占位 + 待对应里程碑标注。
  */
 export function AdvancedPanel({ snapshot }: AdvancedPanelProps): JSX.Element {
   const { t } = useT()
@@ -29,13 +39,21 @@ export function AdvancedPanel({ snapshot }: AdvancedPanelProps): JSX.Element {
         <ul className="advanced__list" data-testid="advanced-list">
           {TOOLS.map((tool) => {
             const wired = caps[tool.cap] === true
+            const Panel = wired ? PANELS[tool.key] : undefined
             return (
               <li key={tool.key} className="advanced__item" data-testid={`advanced-${tool.key}`}>
                 <span className="advanced__name">{t(`advanced.${tool.key}`)}</span>
-                <span className="badge badge--pending" data-testid={`advanced-status-${tool.key}`}>
-                  {wired ? 'ready' : t('advanced.placeholder')}
-                </span>
-                {!wired && <span className="advanced__when">{t(`advanced.${tool.when}`)}</span>}
+                {Panel ? (
+                  // 已接线数据端：真消费面板取代占位徽标
+                  <Panel />
+                ) : (
+                  <>
+                    <span className="badge badge--pending" data-testid={`advanced-status-${tool.key}`}>
+                      {wired ? 'ready' : t('advanced.placeholder')}
+                    </span>
+                    {!wired && <span className="advanced__when">{t(`advanced.${tool.when}`)}</span>}
+                  </>
+                )}
               </li>
             )
           })}

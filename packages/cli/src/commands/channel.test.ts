@@ -6,9 +6,11 @@
 import { describe, expect, test } from 'vitest'
 import {
   createChannelStore,
+  workerFile,
   type ChannelDirent,
   type ChannelEnv,
   type ChannelFs,
+  type ProcessFace,
 } from '@pipeline-lite/kernel'
 import type { CliDeps } from '../deps.js'
 import { cmdChannel, type ChannelHost } from './channel.js'
@@ -258,16 +260,172 @@ describe('list / dir / usage / 留后续', () => {
     expect(c.out.join('\n')).toContain('event-sourced worker 总线')
   })
 
-  test('spawn/kill/run/prune 明确留后续 exit 2', async () => {
-    const c = ctx()
-    for (const s of ['spawn', 'kill', 'run', 'prune']) {
-      expect(await c.run(s, ['ch'])).toBe(2)
-    }
-    expect(c.err.join('\n')).toContain('留后续')
-  })
-
   test('未知子命令 exit 2', async () => {
     const c = ctx()
     expect(await c.run('bogus', [])).toBe(2)
+  })
+})
+
+// ── 进程层 mock 快速回归（真 fork/真信号/真 liveness 在 channel-process.integration.test.ts）──
+interface ProcCtx {
+  run: (sub: string, args: string[]) => Promise<number>
+  out: string[]
+  err: string[]
+  host: ChannelHost
+  fs: ChannelFs
+  env: ChannelEnv
+  killed: [number, string][]
+  rmDirs: string[]
+  alive: Set<number>
+}
+
+function procCtx(): ProcCtx {
+  const out: string[] = []
+  const err: string[] = []
+  const fs = makeMemFs()
+  const env: ChannelEnv = { root: '/mem/root', cwd: '/proj/x' }
+  const store = createChannelStore(env, fs, () => '2026-07-07T00:00:00Z')
+  const alive = new Set<number>()
+  const killed: [number, string][] = []
+  const rmDirs: string[] = []
+  const proc: ProcessFace = {
+    selfPid: 777,
+    spawn: () => { throw new Error('no spawn in mock') },
+    spawnDetached: () => 1000,
+    pidAlive: (pid) => alive.has(pid),
+    kill: (pid, sig = 'SIGTERM') => { killed.push([pid, sig]); alive.delete(pid); return true },
+    isSupervisorProcess: () => true,
+  }
+  const host: ChannelHost = {
+    store,
+    env,
+    fs,
+    proc,
+    now: () => Date.parse('2026-07-07T00:00:00Z'),
+    sleep: async () => {},
+    envVar: () => undefined,
+    rmrf: (p) => rmDirs.push(p),
+    // 注入 launcher：真复刻 supervisor 步骤 2/12（写 pid + append spawned），标 pid 活。
+    launchSupervisor: async (ch, wk) => {
+      const pid = 2000 + alive.size
+      alive.add(pid)
+      fs.writeText(workerFile(env, ch, wk, 'pid', 'project'), String(pid))
+      store.append(ch, { kind: 'spawned', by: 'main', as: wk, provider: 'echo' })
+      return { pid }
+    },
+  }
+  const forbidden = new Proxy({}, { get: () => { throw new Error('channel 触碰了 barrier 侧 deps') } })
+  const deps = {
+    store: forbidden,
+    flow: forbidden,
+    cwd: '/proj/x',
+    io: { out: (l: string) => out.push(l), err: (l: string) => err.push(l) },
+    clock: () => '2026-07-07T00:00:00Z',
+    listChanges: async () => [],
+  } as unknown as CliDeps
+  return {
+    out, err, host, fs, env, killed, rmDirs, alive,
+    run: (sub, args) => { out.length = 0; err.length = 0; return cmdChannel(deps, sub, args, host) },
+  }
+}
+
+describe('spawn 预算执行 + reservation（mock 进程面）', () => {
+  test('spawn --provider echo → fork + 打印 pid + 写 reservation', async () => {
+    const c = procCtx()
+    await c.run('create', ['c', '--task', 't'])
+    expect(await c.run('spawn', ['c', '--as', 'w1', '--provider', 'echo'])).toBe(0)
+    expect(c.out[0]).toBe('2000')
+    expect(c.fs.readText(workerFile(c.env, 'c', 'w1', 'reservation', 'project'))).toBe('w1\n')
+  })
+
+  test('max-live-workers=1 第二个 → overflow reject exit 2（列活跃 + 三提示）', async () => {
+    const c = procCtx()
+    await c.run('create', ['c', '--task', 't'])
+    expect(await c.run('spawn', ['c', '--as', 'w1', '--provider', 'echo', '--max-live-workers', '1'])).toBe(0)
+    expect(await c.run('spawn', ['c', '--as', 'w2', '--provider', 'echo', '--max-live-workers', '1'])).toBe(2)
+    expect(c.err.join('\n')).toContain('budget exhausted')
+    expect(c.err.join('\n')).toContain("worker='w1'")
+    expect(c.err.join('\n')).toContain('Free a slot')
+  })
+
+  test('spawn 缺 --as → exit 2；缺 provider/config → exit 2', async () => {
+    const c = procCtx()
+    expect(await c.run('spawn', ['c'])).toBe(2)
+    expect(await c.run('spawn', ['c', '--as', 'w1'])).toBe(2)
+  })
+})
+
+describe('kill（mock 进程面）', () => {
+  test('kill 活 supervisor → SIGTERM + cleanup pid 文件', async () => {
+    const c = procCtx()
+    await c.run('create', ['c', '--task', 't'])
+    await c.run('spawn', ['c', '--as', 'w1', '--provider', 'echo'])
+    // spawn 后 pid 活；kill 发 SIGTERM，poll 见死（fake kill 删 alive）后 cleanup
+    expect(await c.run('kill', ['c', '--as', 'w1'])).toBe(0)
+    expect(c.killed.some(([, sig]) => sig === 'SIGTERM')).toBe(true)
+    expect(c.fs.readText(workerFile(c.env, 'c', 'w1', 'pid', 'project'))).toBeUndefined()
+  })
+
+  test('kill 无 pid 文件 → exit 2', async () => {
+    const c = procCtx()
+    await c.run('create', ['c', '--task', 't'])
+    expect(await c.run('kill', ['c', '--as', 'ghost'])).toBe(2)
+  })
+
+  test('kill supervisor 已死 → error(cli:kill) + exit 0', async () => {
+    const c = procCtx()
+    await c.run('create', ['c', '--task', 't'])
+    c.fs.writeText(workerFile(c.env, 'c', 'w1', 'pid', 'project'), '9999') // 不在 alive → 死
+    expect(await c.run('kill', ['c', '--as', 'w1'])).toBe(0)
+    const evs = c.host.store.read('c')
+    expect(evs.some((e) => e.kind === 'error' && e.by === 'cli:kill')).toBe(true)
+  })
+})
+
+describe('prune（mock 进程面）', () => {
+  test('selector 缺失/互斥 → exit 2', async () => {
+    const c = procCtx()
+    expect(await c.run('prune', [])).toBe(2)
+    expect(await c.run('prune', ['--all', '--empty'])).toBe(2)
+  })
+
+  test('--all --dry-run 列死 worker channel，跳活 worker channel', async () => {
+    const c = procCtx()
+    await c.run('create', ['dead', '--task', 't'])
+    await c.run('create', ['live', '--task', 't'])
+    await c.run('spawn', ['live', '--as', 'w1', '--provider', 'echo']) // live 有活 worker
+    const r = await c.run('prune', ['--all', '--dry-run'])
+    expect(r).toBe(0)
+    expect(c.out.join('\n')).toContain('would remove: dead')
+    expect(c.out.join('\n')).not.toContain('would remove: live')
+  })
+
+  test('--all 无 --yes → 拒删 exit 2；--yes → rmrf 记录', async () => {
+    const c = procCtx()
+    await c.run('create', ['dead', '--task', 't'])
+    expect(await c.run('prune', ['--all'])).toBe(2)
+    expect(await c.run('prune', ['--all', '--yes'])).toBe(0)
+    expect(c.rmDirs.some((d) => d.endsWith('/dead'))).toBe(true)
+  })
+})
+
+describe('run ephemeral 控制流（mock 进程面）', () => {
+  test('run --provider echo --message → done → rm + exit 0', async () => {
+    const c = procCtx()
+    // launcher 复刻 echo：spawned + 一条 done(by=runner) 让 run 的 wait 命中
+    c.host.launchSupervisor = async (ch, wk) => {
+      c.host.store.append(ch, { kind: 'spawned', by: 'main', as: wk, provider: 'echo' })
+      c.host.store.append(ch, { kind: 'done', by: wk, text: 'echoed-body' })
+      return { pid: 3000, shutdown: async () => {}, done: Promise.resolve(0) }
+    }
+    const r = await c.run('run', ['--name', 'rx', '--as', 'main', '--provider', 'echo', '--message', 'hi', '--timeout', '5s'])
+    expect(r).toBe(0)
+    expect(c.out.join('\n')).toContain('echoed-body')
+    expect(c.rmDirs.some((d) => d.endsWith('/rx'))).toBe(true)
+  })
+
+  test('run 缺 --message → exit 2', async () => {
+    const c = procCtx()
+    expect(await c.run('run', ['--as', 'main', '--provider', 'echo'])).toBe(2)
   })
 })

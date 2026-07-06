@@ -9,10 +9,8 @@
 | **M3** dashboard | | | |
 | 26c | server 服务 SPA：GET / 返回 dashboard-app dist/index.html + 注入 token + 静态路由 assets/*（#26 前端就绪，本项让 server 真上线前端） | M3 | 0.5d |
 | **M4** channel + mem | | | |
-| 27b | channel 进程管理层：supervisor 三循环 + 真 spawn 子进程 + inbox_watcher live-tail + OS-liveness guard + SIGTERM cleanup（#27 事件模型已就绪，本项补进程层） | M4 | 3d |
 | **M5** automation / AFK Sandcastle（2026-07-07 用户确认全量迁移，human gate 已解） | | | |
 | 29c | Docker 沙箱执行 + merge-back + 现场保留（automation_worktree/preserved_path）；**诚实门**：无 docker → IT skip 绝不伪绿（老仓纪律延续） | M5 | 3d |
-| 29d | 调度器 doctor 灯 + dashboard AFK 指挥面数据端（M3 的 server 承接） | M5 | 1d |
 | 29e | 与 L1→L3 分级放权（#38）合体：AFK 默认 L1 report-only，毕业制升 L2/L3 | M5 | 1d |
 | **M6** 竞品缺口收尾 | | | |
 | **M-loop** loop-engineering 内建（GOAL B18–B21 / D16） | | | |
@@ -21,7 +19,6 @@
 | **M8** tap 流量代理（2026-07-07 用户确认进正式队列，human gate 解除） | | | |
 | 34b | 协议面：ws_reconstruct（WebSocket 重组）+ bedrock 适配 + certs（本地 CA 生成/信任链） | M8 | 3d |
 | 34c | 多 runtime 抓流：codex/kimi/openclaw/codebuddy/gemini 各端口绑定与转发 | M8 | 2d |
-| 34d | dashboard traffic 查看器数据端（M3 server 承接：TraceRow/TraceDetail 消费 trace_store） | M8 | 1d |
 | 34e | 安全护栏：默认 OFF；证书/抓包是敏感能力，doctor 明示「tap 正在拦截流量」红/黄灯；捕获数据本地不外发 | M8 | 1d |
 
 ## 已收编
@@ -73,3 +70,5 @@
 | 2026-07-07 | #37 漂移检测+审计（iteration-23） | 收编：7 维 drift + loop-ready 评分 + 20 真 fs 例，B21 |
 | 2026-07-07 | #25b transition 单源（iteration-24） | 收编：事件表上提 kernel，cli+server 删 303 行镜像，oracle 0 不一致 |
 | 2026-07-07 | #38 L1→L3 毕业制（iteration-24） | 收编：升降档裁决+consume #36/#37 + 16 真 fs 例，D16 闭环 |
+| 2026-07-07 | #27b channel 进程层（iteration-25） | 收编：supervisor+真fork+SIGTERM+OS-liveness + 11 真进程例，M4 完成 |
+| 2026-07-07 | #29d/#34d server 数据端（iteration-25） | 收编：afk 泳道+调度器灯+traffic 查看器 + 14 真 HTTP + 13 真 render |

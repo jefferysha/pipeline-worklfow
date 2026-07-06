@@ -57,6 +57,8 @@
 | Trellis scaffold | ✅ scaffold.integration.test.ts 14 例（真铺分层空文档集 + 三态 skip/overwrite/append 真删真补真保留 + resolve-workflow 真读源 + removeHash 真改 .pipeline-owned.json）| ✅ spec-dir 冲突 exit2 | ✅ scaffold web/cli/lib |
 | transition 单源 | ✅ transition-table.test.ts 40 例（kernel 单源事件表/前置/副作用全量）+ cli/server 接线断言（引用同一对象）；**oracle 双跑 0 不一致=行为逐字保持铁证** | ✅ | ✅ cli+server 共消费 |
 | loop 毕业制 | ✅ loops-graduation.integration.test.ts 16 例（真建不同就绪/漂移/熔断态 → 真升降档裁决 + 跨级拒 + --confirm 真改 autonomy_level）| ✅ 跨级 exit2 | ✅ graduate→level set |
+| channel 进程层 | ✅ channel-process.integration.test.ts 11 例（真 fork cat 桥接 + 真 spawn 预算 + 真 SIGTERM kill + 真 OS-liveness 判活判死 + 真 prune）+ process.test.ts 4 真 fork node；**架构红线**：跑完零 openspec/门 marker 不变 | ✅ | ✅ spawn→run→kill→prune |
+| server afk/traffic 数据端 | ✅ server 14 真 HTTP（afk 泳道+调度器灯 / traces sessions/records）+ 前端 13 真 render（AfkPanel/TrafficPanel/AdvancedPanel capabilities 驱动）| ✅ 缺 session 400 / 未装占位 | — |
 | check | ✅ guard 全量面真跑：不满足 exit 2 / 建 design doc 后 exit 0 | ✅ | ✅ |
 | inbox | ✅ --json 复核相位 | — | ✅ |
 | status/list | ✅ 真枚举 | — | ✅ |

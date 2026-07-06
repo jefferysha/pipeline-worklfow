@@ -1,0 +1,148 @@
+/**
+ * afk.test —— #29d AFK 指挥面数据端真 HTTP 端到端（GOAL C9 / A5）。
+ * 真起 http server（listen(0)）+ 真建带 automation_* 字段的 change（kernel StateStore 真落盘）
+ * → 真 node:http GET /api/afk/snapshot、/api/afk/log → 断言真实泳道 / 调度器灯 / 流水。零 mock。
+ */
+import { afterEach, describe, expect, it } from 'vitest'
+import { join } from 'node:path'
+import { createDashboardServer } from './server.js'
+import type { DashboardServer } from './types.js'
+import { initChange, makeProject, newStore, reqGet, testFlow } from './test-support.js'
+import type { StateStore } from '@pipeline-lite/kernel'
+
+const openServers: DashboardServer[] = []
+afterEach(async () => {
+  while (openServers.length) await openServers.pop()!.close()
+})
+
+interface Harness {
+  srv: DashboardServer
+  port: number
+  root: string
+  store: StateStore
+}
+
+/** 键约定：'state' → automation 字段本体；其余 <k> → automation_<k>。 */
+function buildAutomationKv(fields: Partial<Record<string, string>>): Record<string, string> {
+  const kv: Record<string, string> = {}
+  for (const [k, v] of Object.entries(fields)) {
+    if (v === undefined) continue
+    kv[k === 'state' ? 'automation' : `automation_${k}`] = v
+  }
+  return kv
+}
+
+/** 真建一批 change，各自 setMany 到指定 automation 态（真落盘 .pipeline.yaml）。 */
+async function startWith(states: Record<string, Partial<Record<string, string>>>): Promise<Harness> {
+  const store = newStore()
+  const root = await makeProject()
+  for (const [name, fields] of Object.entries(states)) {
+    await initChange(store, root, name)
+    const dir = join(root, 'openspec', 'changes', name)
+    await store.setMany(dir, buildAutomationKv(fields) as never)
+  }
+  const srv = createDashboardServer({
+    version: '9.9.9', token: 't', registry: () => [root], store, flow: testFlow(),
+    clock: () => '2026-07-07T00:00:00Z',
+  })
+  openServers.push(srv)
+  const { port } = await srv.listen(0, '127.0.0.1')
+  return { srv, port, root, store }
+}
+
+describe('#29d capabilities.afk —— 数据端已接线（不谎报）', () => {
+  it('/api/snapshot 声明 capabilities.afk = true', async () => {
+    const h = await startWith({ a: { state: 'queued' } })
+    const s = (await reqGet(h.port, '/api/snapshot')).json<any>()
+    expect(s.capabilities.afk).toBe(true)
+  })
+})
+
+describe('GET /api/afk/snapshot —— 聚合 automation_* → 泳道 + 调度器灯', () => {
+  it('各 change 按 automation 态落对应泳道；off 不入板', async () => {
+    const h = await startWith({
+      q1: { state: 'queued' },
+      r1: { state: 'running' },
+      m1: { state: 'merged' },
+      f1: { state: 'failed' },
+      c1: { state: 'conflict' },
+      p1: { state: 'paused' },
+      idle: { state: 'off' },
+    })
+    const r = await reqGet(h.port, '/api/afk/snapshot')
+    expect(r.status).toBe(200)
+    const a = r.json<any>()
+    expect(a.lanes.queued.map((c: any) => c.name)).toEqual(['q1'])
+    expect(a.lanes.running.map((c: any) => c.name)).toEqual(['r1'])
+    expect(a.lanes.merged.map((c: any) => c.name)).toEqual(['m1'])
+    expect(a.lanes.failed.map((c: any) => c.name)).toEqual(['f1'])
+    expect(a.lanes.conflict.map((c: any) => c.name)).toEqual(['c1'])
+    expect(a.lanes.paused.map((c: any) => c.name)).toEqual(['p1'])
+    // off 的 change 绝不出现在任一泳道或 cards
+    const allNames = a.cards.map((c: any) => c.name)
+    expect(allNames).not.toContain('idle')
+    expect(a.cards.length).toBe(6)
+  })
+
+  it('scheduled（已认领在飞）归并进 running 泳道', async () => {
+    const h = await startWith({ sc: { state: 'scheduled' } })
+    const a = (await reqGet(h.port, '/api/afk/snapshot')).json<any>()
+    expect(a.lanes.running.map((c: any) => c.name)).toEqual(['sc'])
+  })
+
+  it('card 携带真 automation_* 明细（attempts/queued_at/last_error/root/path）', async () => {
+    const h = await startWith({
+      boom: { state: 'failed', attempts: '2', queued_at: '2026-07-07T01:02:03Z', last_error: 'verify exploded' },
+    })
+    const a = (await reqGet(h.port, '/api/afk/snapshot')).json<any>()
+    const card = a.cards.find((c: any) => c.name === 'boom')
+    expect(card.attempts).toBe(2)
+    expect(card.queued_at).toBe('2026-07-07T01:02:03Z')
+    expect(card.last_error).toBe('verify exploded')
+    expect(card.root).toBe(h.root)
+    expect(card.path).toBe(join(h.root, 'openspec', 'changes', 'boom'))
+    expect(card.lane).toBe('failed')
+  })
+
+  it('调度器 doctor 灯：有 conflict/failed → attention；纯排队/在跑 → busy；空 → ok', async () => {
+    const attn = await startWith({ c1: { state: 'conflict' }, q1: { state: 'queued' } })
+    const sa = (await reqGet(attn.port, '/api/afk/snapshot')).json<any>()
+    expect(sa.scheduler.status).toBe('attention')
+    expect(sa.scheduler.conflict).toBe(1)
+    expect(sa.scheduler.queued).toBe(1)
+    expect(sa.scheduler.total).toBe(2)
+    expect(sa.scheduler.message).toContain('conflict')
+
+    const busy = await startWith({ r1: { state: 'running' }, q1: { state: 'queued' } })
+    const sb = (await reqGet(busy.port, '/api/afk/snapshot')).json<any>()
+    expect(sb.scheduler.status).toBe('busy')
+
+    const idle = await startWith({ off1: { state: 'off' } })
+    const si = (await reqGet(idle.port, '/api/afk/snapshot')).json<any>()
+    expect(si.scheduler.status).toBe('ok')
+    expect(si.scheduler.total).toBe(0)
+  })
+})
+
+describe('GET /api/afk/log —— 调度器流水（从 automation_* 派生）', () => {
+  it('failed change 产出 error 流水（含 last_error）+ queued 流水', async () => {
+    const h = await startWith({
+      boom: { state: 'failed', queued_at: '2026-07-07T01:00:00Z', last_error: 'kaboom' },
+    })
+    const r = await reqGet(h.port, '/api/afk/log')
+    expect(r.status).toBe(200)
+    const log = r.json<any>()
+    const kinds = log.entries.map((e: any) => e.kind)
+    expect(kinds).toContain('error')
+    expect(kinds).toContain('queued')
+    const err = log.entries.find((e: any) => e.kind === 'error')
+    expect(err.detail).toContain('kaboom')
+    expect(err.name).toBe('boom')
+  })
+
+  it('off change 不产流水', async () => {
+    const h = await startWith({ idle: { state: 'off' } })
+    const log = (await reqGet(h.port, '/api/afk/log')).json<any>()
+    expect(log.entries).toEqual([])
+  })
+})

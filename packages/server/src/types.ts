@@ -3,6 +3,7 @@
  * server 是 @pipeline-lite/kernel 的消费方（只 import 不改）+ node stdlib http，零第三方运行时依赖。
  */
 import type { FieldName, FlowEngine, Phase, StateStore } from '@pipeline-lite/kernel'
+import type { TraceStoreReader } from './traces.js'
 
 /** 机器级路径锚（可经 PIPELINE_DASHBOARD_HOME 覆盖——仅供 hermetic 测试隔离）。 */
 export interface ServerPaths {
@@ -89,6 +90,12 @@ export interface DashboardServerOptions {
    * （token 注入进 index.html）+ GET /assets/* 静态供给；未设则回退最小落地页（BACKLOG #26c）。
    */
   webRoot?: string
+  /**
+   * tap 流量查看器数据源（BACKLOG #34d）：注入 @pipeline-lite/tap 的 TraceStore（只读 listSessions/
+   * readRecords）则 GET /api/traces/* 供给本地捕获 + capabilities.traffic=true；未注入则占位（不谎报）。
+   * 结构化注入面（不 import tap，守 server 零第三方 + 构建不耦合）；bin 装配见主会话接线清单。
+   */
+  traceStore?: TraceStoreReader
 }
 
 export interface DashboardServer {

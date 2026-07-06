@@ -14,6 +14,7 @@ import { execFile } from 'node:child_process'
 import { unlinkSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { createTraceStore } from '@pipeline-lite/tap'
 import { createDashboardServer } from './server.js'
 import { resolveServerPaths } from './paths.js'
 import { decidePreemption, preemptOldServer, probeHealth } from './preempt.js'
@@ -69,6 +70,9 @@ async function main(): Promise<void> {
     gitHeadSha,
     // dashboard-app 构建产物（BACKLOG #26c）：存在则服务真 SPA，否则回退最小落地页
     webRoot: join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'dashboard-app', 'dist'),
+    // tap 流量查看器数据源（BACKLOG #34d）：只读 listSessions/readRecords，capabilities.traffic=true。
+    // tap capture 默认 OFF，无捕获时返回空会话——数据端仍在线（#34e：只读本地、不外发）
+    traceStore: createTraceStore(),
   })
 
   try {

@@ -21,10 +21,12 @@ import type { AddressInfo } from 'node:net'
 import { join, resolve as resolvePath } from 'node:path'
 import { createFlowEngine, createStateStore, loadManifest } from '@pipeline-lite/kernel'
 import type { FlowEngine, StateStore } from '@pipeline-lite/kernel'
+import { buildAfkLog, buildAfkSnapshot } from './afk.js'
 import { resolveServerPaths } from './paths.js'
 import { readRegistry } from './registry.js'
-import { buildSnapshot, computeFingerprint } from './snapshot.js'
+import { buildSnapshot, computeFingerprint, type SnapshotDeps } from './snapshot.js'
 import { generateToken, tokenFromHeaders, tokensMatch } from './token.js'
+import { listTraceSessions, readTraceRecords } from './traces.js'
 import { performTransition } from './transition.js'
 import type { DashboardServer, DashboardServerOptions } from './types.js'
 import { SERVER_VERSION } from './version.js'
@@ -75,6 +77,12 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
   const pollIntervalMs = options.pollIntervalMs ?? 1000
   const heartbeatMs = options.heartbeatMs ?? 15000
   const gitHeadSha = options.gitHeadSha
+  const traceStore = options.traceStore
+
+  // 能力声明（GOAL B6）：afk 数据端始终已接线（读同一 registry+store 的 automation_* 字段）；
+  // traffic 仅注入 traceStore 时为真（未装 → 前端 Advanced 仍占位，不谎报）。#29d / #34d。
+  const capabilities: Record<string, boolean> = { afk: true, traffic: Boolean(traceStore) }
+  const snapshotDeps = (): SnapshotDeps => ({ registry, store, version, clock, capabilities })
 
   const fileExists = (root: string, relPath: string): boolean => {
     try {
@@ -121,7 +129,7 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
     if (fp !== lastFp) {
       lastFp = fp
       try {
-        broadcast('snapshot', JSON.stringify(await buildSnapshot({ registry, store, version, clock })))
+        broadcast('snapshot', JSON.stringify(await buildSnapshot(snapshotDeps())))
       } catch {
         /* 一次失败下轮再试 */
       }
@@ -192,7 +200,7 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
     clients.add(res)
     try {
       lastFp = await computeFingerprint(registry())
-      res.write(`event: snapshot\ndata: ${JSON.stringify(await buildSnapshot({ registry, store, version, clock }))}\n\n`)
+      res.write(`event: snapshot\ndata: ${JSON.stringify(await buildSnapshot(snapshotDeps()))}\n\n`)
     } catch {
       /* 初始快照失败不影响后续推送 */
     }
@@ -253,12 +261,46 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
     }
     if (path === '/api/snapshot') {
       try {
-        return sendJson(res, 200, await buildSnapshot({ registry, store, version, clock }))
+        return sendJson(res, 200, await buildSnapshot(snapshotDeps()))
       } catch (e) {
         return sendJson(res, 500, { ok: false, error: errMsg(e) })
       }
     }
     if (path === '/api/stream') return handleStream(req, res)
+    // ── #29d AFK 指挥面数据端：聚合 automation_* → 泳道 + 调度器 doctor 灯 + 流水 ──
+    if (path === '/api/afk/snapshot') {
+      try {
+        return sendJson(res, 200, buildAfkSnapshot(await buildSnapshot(snapshotDeps()), clock))
+      } catch (e) {
+        return sendJson(res, 500, { ok: false, error: errMsg(e) })
+      }
+    }
+    if (path === '/api/afk/log') {
+      try {
+        return sendJson(res, 200, buildAfkLog(await buildSnapshot(snapshotDeps()), clock))
+      } catch (e) {
+        return sendJson(res, 500, { ok: false, error: errMsg(e) })
+      }
+    }
+    // ── #34d traffic 查看器数据端：TraceStore.listSessions / readRecords（#34e 只读本地、不外发）──
+    if (path === '/api/traces/sessions') {
+      if (!traceStore) return sendJson(res, 404, { ok: false, error: 'traces 数据端未装（capabilities.traffic=false）' })
+      try {
+        return sendJson(res, 200, listTraceSessions(traceStore, clock))
+      } catch (e) {
+        return sendJson(res, 500, { ok: false, error: errMsg(e) })
+      }
+    }
+    if (path === '/api/traces/records') {
+      if (!traceStore) return sendJson(res, 404, { ok: false, error: 'traces 数据端未装（capabilities.traffic=false）' })
+      const session = new URL(req.url ?? '/', 'http://localhost').searchParams.get('session')
+      if (!session) return sendJson(res, 400, { ok: false, error: '缺 session 查询参数' })
+      try {
+        return sendJson(res, 200, readTraceRecords(traceStore, session, clock))
+      } catch (e) {
+        return sendJson(res, 500, { ok: false, error: errMsg(e) })
+      }
+    }
     return sendJson(res, 404, { ok: false, error: '未知端点' })
   }
 

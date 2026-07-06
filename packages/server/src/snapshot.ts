@@ -13,6 +13,11 @@ export interface SnapshotDeps {
   store: StateStore
   version: string
   clock: () => string
+  /**
+   * 额外能力声明（GOAL B6）：与基线能力合并后写入 snapshot.capabilities。
+   * 由 server 按真实接线情况注入（afk 数据端始终 true；traffic 仅注入 traceStore 时 true）。
+   */
+  capabilities?: Record<string, boolean>
 }
 
 function str(v: string | string[] | undefined): string {
@@ -85,8 +90,8 @@ export async function buildSnapshot(deps: SnapshotDeps): Promise<Snapshot> {
   return {
     version: deps.version,
     generated_at: deps.clock(),
-    // 能力声明（GOAL B6 起步）：本 server 真实已接线的域才报 true；未接线域（channel/tap/afk…）不谎报。
-    capabilities: { snapshot: true, health: true, stream: true, transition: true },
+    // 能力声明（GOAL B6）：基线 4 域恒 true；afk/traffic 等由 server 按真实接线注入合并（未接线不谎报）。
+    capabilities: { snapshot: true, health: true, stream: true, transition: true, ...(deps.capabilities ?? {}) },
     project_count: projects.length,
     change_count,
     projects,

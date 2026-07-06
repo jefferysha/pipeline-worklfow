@@ -112,3 +112,48 @@ export { nodeChannelFs, withChannelLock } from './fs.js'
 export type { ChannelDirent, ChannelFs } from './fs.js'
 export { createChannelStore } from './store.js'
 export type { ChannelListRow, ChannelStore, Clock, ListOptions } from './store.js'
+
+// ── 进程层（BACKLOG #27b / GOAL A4 M4）：真 fork / live-tail / OS-liveness / SIGTERM cleanup ──
+// process —— 真进程注入面（fork/kill/liveness 探针/ps cmdline 验证）
+export { isSupervisorCmdline, makeLineBuffer, nodeProcessFace } from './process.js'
+export type { ProcessFace, SpawnFaceOptions, WorkerProcess } from './process.js'
+// watcher —— events.jsonl 增量 live-tailer（carry/截断/三起始模式/200ms 轮询）
+export { initialOffset, nodeTailFs, readNewEvents, tailEvents } from './watcher.js'
+export type { StartMode, TailFs, TailOptions, TailState } from './watcher.js'
+// liveness —— OS-liveness 四重判定 + SIGTERM cleanup + spawn 预算执行 + prune 助手
+export {
+  cleanupExpiredIdleWorkers,
+  enforceSpawnBudget,
+  hasLiveWorker,
+  scanLiveWorkers,
+  toOverflowFacts,
+} from './liveness.js'
+export type {
+  CleanupResult,
+  EnforceResult,
+  LivenessDeps,
+  LiveWorker,
+  WorkerGuardPolicy,
+} from './liveness.js'
+// supervisor —— worker 生命周期编排 + adapter + shutdown 幂等漏斗 + inbox-watcher 桥接
+export {
+  applyParseResult,
+  EchoAdapter,
+  echoOnlyAdapters,
+  IdleTimer,
+  inboxEventEligible,
+  SHUTDOWN_REASONS,
+  ShutdownController,
+  startSupervisor,
+} from './supervisor.js'
+export type {
+  AdapterView,
+  ParseResult,
+  Scheduler,
+  ShutdownDeps,
+  ShutdownReason,
+  SupervisorConfig,
+  SupervisorDeps,
+  SupervisorHandle,
+  WorkerAdapter,
+} from './supervisor.js'
