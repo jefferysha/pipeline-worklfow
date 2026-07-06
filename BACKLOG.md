@@ -28,8 +28,12 @@
 | **M4** channel + mem | | | |
 | 27 | channel：event-sourced worker 总线 TS 重写（supervisor/events/inbox/turns/guard） | M4 | 5d |
 | 28 | mem：跨 runtime 会话检索（list/search/context/extract/projects） | M4 | 3d |
-| **M5** automation | | | |
-| 29 | AFK 调度评估：老仓 5 个 TS 包直接移植 vs 适配重写（评估报告先行，human gate 后动手） | M5 | 1d+ |
+| **M5** automation / AFK Sandcastle（2026-07-07 用户确认全量迁移，human gate 已解） | | | |
+| 29 | Sandcastle 5 包移植：runner/lifecycle/scheduler/cli/sdk（老仓本就是 TS——主要工作是把对老 bash `pipeline-state.sh` 的调用替换为 lite kernel API/CLI，Node ≥22 对齐） | M5 | 3d |
+| 29b | 队列语义全迁：automation 字段生命周期（off→queued→running→merged/failed/conflict/paused）+ cas 并发闸 + PIPELINE_AFK 门联动（gate 侧 #7b 已备） | M5 | 1d |
+| 29c | Docker 沙箱执行 + merge-back + 现场保留（automation_worktree/preserved_path）；**诚实门**：无 docker → IT skip 绝不伪绿（老仓纪律延续） | M5 | 3d |
+| 29d | 调度器 doctor 灯 + dashboard AFK 指挥面数据端（M3 的 server 承接） | M5 | 1d |
+| 29e | 与 L1→L3 分级放权（#38）合体：AFK 默认 L1 report-only，毕业制升 L2/L3 | M5 | 1d |
 | **M6** 竞品缺口收尾 | | | |
 | 30 | 上下文压缩（Comet CONTEXT-COMPRESSION 对标）：handoff 时压缩 | M6 | 2d |
 | 31 | auto-transition 中间档：guard 全绿自动推进、仅三门处停（HITL 与 AFK 之间） | M6 | 1d |

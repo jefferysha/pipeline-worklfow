@@ -21,7 +21,9 @@
       PostToolUse 全套、7 相位 SKILL + openspec 四命令 + learn-record、4 agents、sync/uninstall scrubber
 - [ ] **A3 dashboard（M3）**：TS 全局 server + 前端信息架构重构
 - [ ] **A4 channel + mem（M4）**：worker 总线、跨 runtime 会话检索
-- [ ] **A5 automation（M5）**：AFK 调度（评估先行，human gate）
+- [ ] **A5 automation / AFK Sandcastle（M5，2026-07-07 用户确认全量迁移）**：5 个 TS 包
+      （runner/lifecycle/scheduler/cli/sdk）+ Docker 沙箱执行 + 队列/merge-back/现场保留 +
+      调度器 doctor 灯；与 B19 的 L1→L3 分级放权合体（默认 report-only，毕业制升档）
 - [ ] **A6 竞品缺口（M6）**：见清单 B 的 B13–B17
 - [x] **A0 7-phase 状态机 + 三门 + CLI + 单文件分发 + 导入工具**（v0.1，iteration-0~9，oracle 0 不一致）
 
