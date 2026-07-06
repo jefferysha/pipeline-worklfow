@@ -6,7 +6,6 @@
 
 | # | 项 | 对应 plan 任务 | 预算 |
 |---|---|---|---|
-| 10 | statusline：当前 change \| 相位 \| 门状态 | v0.2 | 0.5d |
 | 11 | 老仓库 change 导入工具（含 history 迁移） | v0.2 | 1d |
 
 ## 已收编
@@ -25,3 +24,4 @@
 | 2026-07-06 | #8 esbuild 单文件分发（iteration-4） | 收编：pipeline.mjs 147KB 自足 bundle + npx 上手路径 + 冒烟 7/7 |
 | 2026-07-06 | #9a `pipeline inbox` 数据端+人读表（iteration-5） | 收编：vitest 220/220，端到端真跑一屏 |
 | 2026-07-06 | #9b `inbox --html` 静态单页（iteration-6） | 收编：自足零依赖单页 + 注入转义，vitest 223/223 |
+| 2026-07-06 | #10 statusline（iteration-7） | 收编：纯 bash 零解释器，hooks 55/55 |

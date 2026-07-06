@@ -83,6 +83,32 @@ assert_exit "gate: PIPELINE_AFK=1 + 新鲜 marker → 放行 exit 0" 0 "$?"
 printf '%s' "{\"cwd\":\"$proj\",\"tool_name\":\"Write\"}" | PIPELINE_AFK=true bash "$GATE" >/dev/null 2>&1
 assert_exit "gate: PIPELINE_AFK=true（非 \"1\"）不放行 → exit 2" 2 "$?"
 
+# ─────────────── 1c. statusline.sh（BACKLOG #10，热路径纯 bash） ───────────────
+SL="$ROOT/hooks/statusline.sh"
+if [ -f "$SL" ]; then
+  # 非 pipeline 项目 → 输出空、exit 0
+  proj="$TMP/sl-none"; mkdir -p "$proj"
+  out="$(printf '{"cwd":"%s"}' "$proj" | bash "$SL" 2>/dev/null)"
+  assert_exit "statusline: 非 pipeline 项目 exit 0" 0 "$?"
+  [ -z "$out" ] && ok "statusline: 非 pipeline 项目输出空" || bad "statusline: 非 pipeline 项目输出空" "得到 '$out'"
+  # 活跃 change → 一行含 名字 + 相位
+  proj="$TMP/sl-active"; mkdir -p "$proj/openspec/changes/demo"
+  printf 'track: backend\nphase: explore\narchived: \n' > "$proj/openspec/changes/demo/.pipeline.yaml"
+  out="$(printf '{"cwd":"%s"}' "$proj" | bash "$SL" 2>/dev/null)"
+  case "$out" in *demo*explore*) ok "statusline: 含 change 名与相位" ;; *) bad "statusline: 含 change 名与相位" "得到 '$out'" ;; esac
+  # 新鲜门 marker → 含 等:<kind>
+  touch "$proj/.pipeline-pending-confirm"
+  out="$(printf '{"cwd":"%s"}' "$proj" | bash "$SL" 2>/dev/null)"
+  case "$out" in *等:confirm*) ok "statusline: 新鲜 marker 显示 等:confirm" ;; *) bad "statusline: 新鲜 marker 显示 等:confirm" "得到 '$out'" ;; esac
+  # archived change 不显示
+  printf 'track: backend\nphase: archive\narchived: true\n' > "$proj/openspec/changes/demo/.pipeline.yaml"
+  rm -f "$proj/.pipeline-pending-confirm"
+  out="$(printf '{"cwd":"%s"}' "$proj" | bash "$SL" 2>/dev/null)"
+  [ -z "$out" ] && ok "statusline: archived change 不显示" || bad "statusline: archived change 不显示" "得到 '$out'"
+else
+  bad "statusline: hooks/statusline.sh 存在" "缺文件"
+fi
+
 # ─────────────── 2. gate.sh fail-open + 上溯找 marker ───────────────
 proj="$TMP/gate-badjson"
 mkdir -p "$proj"
@@ -99,14 +125,14 @@ run_gate "{\"cwd\":\"$proj/sub/deep\",\"tool_name\":\"Write\"}"
 assert_exit "gate: marker 在 cwd 上层（项目根）也拦 → exit 2" 2 "$RC"
 
 # ───────────────────────── 3. 红线自证：热路径纯 bash ─────────────────────────
-for f in "$GATE" "$BC" "$SS"; do
+for f in "$GATE" "$BC" "$SS" "$SL"; do
   base="$(basename "$f")"
   n="$(grep -c "node" "$f" || true)"
   [ "$n" = "0" ] && ok "红线: $base 内 grep -c \"node\" 为 0" || bad "红线: $base 内 grep -c \"node\" 为 0" "实得 ${n} 行"
   n="$(grep -c "python" "$f" || true)"
   [ "$n" = "0" ] && ok "红线: $base 内无 python" || bad "红线: $base 内无 python" "实得 ${n} 行"
 done
-for f in "$GATE" "$BC"; do
+for f in "$GATE" "$BC" "$SL"; do
   base="$(basename "$f")"
   n="$(grep -c "jq" "$f" || true)"
   [ "$n" = "0" ] && ok "红线: $base 不依赖 jq" || bad "红线: $base 不依赖 jq" "实得 ${n} 行"

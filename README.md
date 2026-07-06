@@ -27,7 +27,14 @@ npm i && npm run build          # 产出单文件 packages/cli/dist/pipeline.mjs
 npx pipeline init demo --track backend --preset full
 npx pipeline get demo phase     # open
 npx pipeline transition demo open-complete
+npx pipeline inbox                     # 收件箱：在等你决策的 change（--html 出静态单页）
 npx pipeline status
+```
+
+终端 statusline（`当前change · 相位 · 等:门`，纯 bash 零开销）——在 `~/.claude/settings.json` 加：
+
+```json
+"statusLine": { "type": "command", "command": "bash <本仓路径>/hooks/statusline.sh" }
 ```
 
 ## 开发
