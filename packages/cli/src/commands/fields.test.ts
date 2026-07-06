@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest'
 import { QuoteGateError } from '@pipeline-lite/kernel'
 import type { FieldName, PipelineState } from '@pipeline-lite/kernel'
 import { cmdCas, cmdGet, cmdSet, cmdSetMany } from './fields.js'
-import { makeDeps, mockState, spy } from '../test-support.js'
+import { FIXED_CLOCK, makeDeps, mockState, spy } from '../test-support.js'
 
 describe('get —— stdout 裸值 / exit 契约（CONTRACT §3）', () => {
   test('输出裸值一行、无尾空格，exit 0', async () => {
@@ -153,6 +153,55 @@ describe('set-many —— k=v 批量原子写', () => {
     )
     const code = await cmdSetMany(deps, 'demo', ['plan=x #y'])
     expect(code).toBe(1)
+  })
+})
+
+describe('history 记账 —— set/set-many/cas 成功后 best-effort 记 JSONL（BACKLOG #7）', () => {
+  test('set 成功记一条 kind=set（field/to），失败路径不记', async () => {
+    const deps = makeDeps()
+    await cmdSet(deps, 'demo', 'plan', 'docs/plans/p.md')
+    expect(deps.historyEntries).toEqual([
+      ['/repo/openspec/changes/demo', { ts: FIXED_CLOCK, kind: 'set', field: 'plan', to: 'docs/plans/p.md' }],
+    ])
+    const deps2 = makeDeps()
+    await cmdSet(deps2, 'demo', 'nope', 'v')
+    expect(deps2.historyEntries).toEqual([])
+  })
+
+  test('set-many 每字段各记一条', async () => {
+    const deps = makeDeps()
+    await cmdSetMany(deps, 'demo', ['build_mode=direct', 'isolation=branch'])
+    expect(deps.historyEntries.map(([, e]) => e)).toEqual([
+      { ts: FIXED_CLOCK, kind: 'set', field: 'build_mode', to: 'direct' },
+      { ts: FIXED_CLOCK, kind: 'set', field: 'isolation', to: 'branch' },
+    ])
+  })
+
+  test('cas 成功记 from/to；不匹配（exit 3）不记', async () => {
+    const deps = makeDeps()
+    await cmdCas(deps, 'demo', 'automation', 'queued', 'scheduled')
+    expect(deps.historyEntries).toEqual([
+      [
+        '/repo/openspec/changes/demo',
+        { ts: FIXED_CLOCK, kind: 'set', field: 'automation', from: 'queued', to: 'scheduled' },
+      ],
+    ])
+    const deps2 = makeDeps()
+    deps2.store.cas = spy(async (_d: string, _f: FieldName, _e: string, _n: string) => false)
+    await cmdCas(deps2, 'demo', 'automation', 'queued', 'scheduled')
+    expect(deps2.historyEntries).toEqual([])
+  })
+
+  test('history 写失败仅 WARN，exit 仍 0', async () => {
+    const deps = makeDeps()
+    deps.history = {
+      append: async () => {
+        throw new Error('EACCES')
+      },
+    }
+    const code = await cmdSet(deps, 'demo', 'plan', 'x')
+    expect(code).toBe(0)
+    expect(deps.errLines.join('\n')).toContain('WARN')
   })
 })
 

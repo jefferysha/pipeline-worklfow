@@ -8,11 +8,11 @@
  * 命令模块与测试不受影响。
  */
 import { execFile } from 'node:child_process'
-import { access, appendFile, readdir, writeFile } from 'node:fs/promises'
+import { access, readdir, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { CommanderError } from 'commander'
-import { createFlowEngine, createStateStore, loadManifest } from '@pipeline-lite/kernel'
+import { createFlowEngine, createHistoryWriter, createStateStore, loadManifest } from '@pipeline-lite/kernel'
 import type { CliDeps } from './deps.js'
 import { buildProgram, CliExit } from './program.js'
 
@@ -74,11 +74,7 @@ async function main(): Promise<void> {
     clock: isoNow,
     listChanges,
     writeBreadcrumb: (dir, content) => writeFile(join(dir, '.breadcrumb'), content, 'utf8'),
-    history: {
-      append: async (dir, entry) => {
-        await appendFile(join(dir, '.pipeline-history.jsonl'), `${JSON.stringify(entry)}\n`, 'utf8')
-      },
-    },
+    history: createHistoryWriter(),
     gitHeadSha: () => gitHeadSha(process.cwd()),
     writeReviewMarker: (content) => writeFile(join(process.cwd(), '.pipeline-pending-review'), content, 'utf8'),
   }

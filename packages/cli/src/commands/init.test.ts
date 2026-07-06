@@ -12,6 +12,17 @@ describe('init —— stdout 空 / [INIT] 走 stderr；0/1（oracle 实测回写
     expect(deps.errLines).toEqual(['[INIT] /repo/openspec/changes/demo'])
   })
 
+  test('成功记一条 kind=init 历史（by=user，未传则省略）', async () => {
+    const deps = makeDeps()
+    await cmdInit(deps, 'demo', { track: 'backend', preset: 'full', user: 'jeff' })
+    expect(deps.historyEntries).toEqual([
+      ['/repo/openspec/changes/demo', { ts: '2026-07-06T00:00:00Z', kind: 'init', by: 'jeff' }],
+    ])
+    const deps2 = makeDeps()
+    await cmdInit(deps2, 'demo', { track: 'backend', preset: 'full' })
+    expect(deps2.historyEntries[0]?.[1]).toEqual({ ts: '2026-07-06T00:00:00Z', kind: 'init' })
+  })
+
   test('InitOptions 装配：repoRoot=cwd、track/preset/user/clock 透传', async () => {
     const deps = makeDeps()
     await cmdInit(deps, 'demo', { track: 'pm', preset: 'hotfix', user: 'jeff' })

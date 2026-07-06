@@ -6,6 +6,7 @@
 import { TRACKS } from '@pipeline-lite/kernel'
 import type { Track } from '@pipeline-lite/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
+import { recordHistory } from './fields.js'
 import { isValidChangeName } from '../paths.js'
 
 export interface InitCmdOpts {
@@ -35,6 +36,11 @@ export async function cmdInit(deps: CliDeps, name: string, opts: InitCmdOpts): P
       preset: opts.preset,
       user: opts.user,
       clock: deps.clock,
+    })
+    await recordHistory(deps, created, {
+      ts: deps.clock(),
+      kind: 'init',
+      ...(opts.user ? { by: opts.user } : {}),
     })
     deps.io.err(`[INIT] ${created}`)
     return 0

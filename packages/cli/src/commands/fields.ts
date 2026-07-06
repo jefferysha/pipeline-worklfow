@@ -8,9 +8,19 @@
  *   cas      无输出，0；不匹配=3；错误=1
  */
 import { FIELD_ORDER, LIST_FIELDS, TRACKS } from '@pipeline-lite/kernel'
-import type { FieldName } from '@pipeline-lite/kernel'
+import type { FieldName, HistoryEntry } from '@pipeline-lite/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
 import { changeDir, isValidChangeName } from '../paths.js'
+
+/** history 记账 best-effort（CONTRACT §1：失败仅 WARN，绝不影响主写已成功的 exit） */
+export async function recordHistory(deps: CliDeps, dir: string, entry: HistoryEntry): Promise<void> {
+  if (!deps.history) return
+  try {
+    await deps.history.append(dir, entry)
+  } catch (e) {
+    deps.io.err(`WARN: history 写入失败: ${errMsg(e)}`)
+  }
+}
 
 /**
  * 枚举字段校验表 —— 逐字对齐老内核 state-fields.sh cmd_set 的 case 块
@@ -91,13 +101,20 @@ export async function cmdSet(deps: CliDeps, name: string, field: string, value: 
   if (!f) return 1
   const v = coerceValue(f, value)
   if (!enumOk(deps, f, v)) return 1
+  const dir = changeDir(deps.cwd, name)
   try {
-    await deps.store.set(changeDir(deps.cwd, name), f, v)
-    return 0
+    await deps.store.set(dir, f, v)
   } catch (e) {
     deps.io.err(`ERROR: ${errMsg(e)}`)
     return 1
   }
+  await recordHistory(deps, dir, {
+    ts: deps.clock(),
+    kind: 'set',
+    field: f,
+    to: Array.isArray(v) ? v.join(',') : v,
+  })
+  return 0
 }
 
 export async function cmdSetMany(deps: CliDeps, name: string, pairs: string[]): Promise<number> {
@@ -119,13 +136,22 @@ export async function cmdSetMany(deps: CliDeps, name: string, pairs: string[]): 
     deps.io.err('ERROR: set-many 至少需要 1 个 key=value')
     return 1
   }
+  const dir = changeDir(deps.cwd, name)
   try {
-    await deps.store.setMany(changeDir(deps.cwd, name), kv)
-    return 0
+    await deps.store.setMany(dir, kv)
   } catch (e) {
     deps.io.err(`ERROR: ${errMsg(e)}`)
     return 1
   }
+  for (const [f, v] of Object.entries(kv) as Array<[FieldName, string | string[]]>) {
+    await recordHistory(deps, dir, {
+      ts: deps.clock(),
+      kind: 'set',
+      field: f,
+      to: Array.isArray(v) ? v.join(',') : v,
+    })
+  }
+  return 0
 }
 
 export async function cmdCas(
@@ -140,12 +166,15 @@ export async function cmdCas(
   if (!f) return 1
   // 老内核 cmd_cas 仅对 automation 复用枚举校验（state-fields.sh）
   if (f === 'automation' && !enumOk(deps, f, next)) return 1
+  const dir = changeDir(deps.cwd, name)
+  let ok: boolean
   try {
-    const ok = await deps.store.cas(changeDir(deps.cwd, name), f, expect, next)
-    if (!ok) return 3
-    return 0
+    ok = await deps.store.cas(dir, f, expect, next)
   } catch (e) {
     deps.io.err(`ERROR: ${errMsg(e)}`)
     return 1
   }
+  if (!ok) return 3
+  await recordHistory(deps, dir, { ts: deps.clock(), kind: 'set', field: f, from: expect, to: next })
+  return 0
 }

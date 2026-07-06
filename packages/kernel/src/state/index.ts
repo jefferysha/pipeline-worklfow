@@ -5,3 +5,4 @@
 export { createStateStore, STATE_FILE_NAME } from './store.js'
 export { parsePipeline, serializePipeline, quoteGate, unquoteScalar, emptyFields } from './parse.js'
 export { withLock, LOCK_DIR_NAME, STALE_LOCK_MS } from './lock.js'
+export { createHistoryWriter, HISTORY_FILE } from './history.js'
