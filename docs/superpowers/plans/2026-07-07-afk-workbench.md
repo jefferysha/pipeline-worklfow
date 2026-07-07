@@ -456,7 +456,7 @@ git commit -m "feat(server): POST /api/afk/:name/retry 重试端点"
 - Produces: `{ log: string | null }`，`log` 为 `null` 表示该 change 还没有产生过日志文件
   （尚未运行过，或 Task 2 尚未部署前创建的旧 change）。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```ts
 describe('GET /api/afk/:name/log', () => {
@@ -477,12 +477,12 @@ describe('GET /api/afk/:name/log', () => {
 })
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `npx vitest run packages/server/src/server.test.ts -t "afk.*log"`
 Expected: FAIL — 404 或匹配到了错误的现有 `/api/afk/log` 路由
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 `afk.ts` 新增（不再需要 `store`/`automation_worktree`，只需要 `changeDir`）：
 ```ts
@@ -508,12 +508,12 @@ if (logMatch) {
 }
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `npx vitest run packages/server/src/server.test.ts -t "afk.*log"`
 Expected: PASS
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add packages/server/src/afk.ts packages/server/src/server.ts packages/server/src/server.test.ts
