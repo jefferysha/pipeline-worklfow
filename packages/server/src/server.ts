@@ -21,13 +21,15 @@
 import { existsSync, readFileSync, statSync } from 'node:fs'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import type { AddressInfo } from 'node:net'
-import { join, resolve as resolvePath } from 'node:path'
+import { dirname, join, resolve as resolvePath } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { createFlowEngine, createStateStore, loadManifest } from '@pipeline-lite/kernel'
 import type { FlowEngine, StateStore } from '@pipeline-lite/kernel'
 import { buildAfkLog, buildAfkSnapshot } from './afk.js'
 import { readMandatorySkills, validateMandatorySkillsBody, writeMandatorySkills } from './config.js'
 import { resolveServerPaths } from './paths.js'
 import { readRegistry } from './registry.js'
+import { listAllSkills } from './skillsRegistry.js'
 import { buildSnapshot, computeFingerprint, type SnapshotDeps } from './snapshot.js'
 import { generateToken, tokenFromHeaders, tokensMatch } from './token.js'
 import { listTraceSessions, readTraceRecords } from './traces.js'
@@ -39,6 +41,11 @@ const MAX_POST_BODY = 64 * 1024
 
 function isoNow(): string {
   return new Date().toISOString().replace(/\.\d{3}Z$/, 'Z')
+}
+
+/** 从 packages/server/dist/server.js 位置往上定位到仓库根（对位 main.ts 的 manifestPath 写法）。 */
+function repoRootForSkills(): string {
+  return join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..')
 }
 
 function errMsg(e: unknown): string {
@@ -313,6 +320,14 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
       if (!manifestPath) return sendJson(res, 404, { ok: false, error: 'config 数据端未装（capabilities.config=false）' })
       try {
         return sendJson(res, 200, { ok: true, generated_at: clock(), mandatory_skills: readMandatorySkills(manifestPath) })
+      } catch (e) {
+        return sendJson(res, 500, { ok: false, error: errMsg(e) })
+      }
+    }
+    // ── skills registry 数据端：本仓 skills 目录 + EXTERNAL-SKILLS.md 合并列表（GET 只读，本机回环不鉴权）──
+    if (path === '/api/skills/registry') {
+      try {
+        return sendJson(res, 200, { skills: listAllSkills(repoRootForSkills()) })
       } catch (e) {
         return sendJson(res, 500, { ok: false, error: errMsg(e) })
       }
