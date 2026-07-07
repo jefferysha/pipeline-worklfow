@@ -55,9 +55,15 @@ export const createLifecyclePorts = (deps: LifecyclePortsDeps): LifecyclePorts =
     worktree: realWorktreePort(exec),
 
     async createSandbox({ env, worktreePath }) {
-      // git 双挂载：worktree 的 .git 是 gitdir: 指针 → 同时挂 .git 文件 + 父 .git 目录。
+      // git 双挂载：worktree 的 .git 是 gitdir: 指针 → 需父 .git 目录在同一绝对路径可解析。
       const gitMounts = await resolveGitMounts(join(worktreePath, '.git')).catch(() => [])
-      return createDockerSandbox(exec, { image, worktreePath, env, gitMounts, uid, gid, cpus: deps.cpus })
+      // 沙箱内工具（pipeline-afk-run 的 git commit / pipeline get）要看得见 worktree 的**工作文件**，
+      // 故挂 worktree 目录本身（host==sandbox）；它已含 .git 指针文件，故丢掉 resolveGitMounts 里那条
+      // 冗余的 .git 文件挂载，只保留父 .git 目录挂载（gitdir: 绝对路径经它解析）。
+      const dotGit = join(worktreePath, '.git')
+      const parentGitMounts = gitMounts.filter((m) => m.hostPath !== dotGit)
+      const mounts = [{ hostPath: worktreePath, sandboxPath: worktreePath }, ...parentGitMounts]
+      return createDockerSandbox(exec, { image, worktreePath, env, gitMounts: mounts, uid, gid, cpus: deps.cpus })
     },
 
     async runWork(sandboxExec, name, signal) {

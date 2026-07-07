@@ -1,22 +1,53 @@
 /**
  * afk <sub> —— AFK 自动化 CLI 入口（BACKLOG 收敛复查 iteration-29：#29 automation 包此前
- * 无 CLI 可达性，本命令补上）。enqueue/scan/status 操作 kernel 状态、**不需 docker**；
- * 真容器执行（run 的落地面）需部署接线 #29-wire（预构建 sandcastle 镜像），本命令的 run
- * 只做 report（列就绪队列 + 明示需部署接线），绝不伪装 docker 已就绪。
+ * 无 CLI 可达性，本命令补上；#29-wire 收敛：run 真接 docker 执行，不再只 report）。
  *
- * 默认 L1 report-only（#29/#38）：enqueue 只挂队不自动跑；升档走 loops graduation。
+ * run 的真容器执行需要：① docker daemon 可用 ② 预构建的 sandcastle 镜像（--image 覆盖，缺省
+ * sandcastle:local）。无 docker → 诚实报告就绪队列 + 明示原因，绝不伪装已执行（诚实门）。
+ * 有 docker → 真调 automation.runRound(createDockerRunChange(...))：真 git worktree、真容器、
+ * 真 pipeline-afk-run 握手回读、真 barrier build_sha 派生、L3 真 merge-back（L1/L2 report-only
+ * 安全默认，成功也只停 paused）。
+ *
+ * 默认 L1 report-only（#29/#38）：enqueue 只挂队不自动跑；--level 覆盖仅影响本次 run 的分级
+ * （升档的持久化决策仍走 loops graduation，本命令不改 .pipeline.yaml 之外的任何 level 状态）。
  */
-import { createAutomation } from '@pipeline-lite/automation'
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
+import {
+  createAutomation, createDockerRunChange, dockerAvailable, nodeExec,
+  AUTOMATION_LEVELS, type AutomationLevel,
+} from '@pipeline-lite/automation'
 import { errMsg, type CliDeps } from '../deps.js'
 import { changeDir, changesRoot, isValidChangeName } from '../paths.js'
 import { str } from '../render.js'
 
 const AUTOMATION_STATES = ['off', 'queued', 'scheduled', 'running', 'merged', 'failed', 'conflict', 'paused'] as const
+const DEFAULT_SANDCASTLE_IMAGE = 'sandcastle:local'
+const execFileAsync = promisify(execFile)
 
-interface AfkOpts { json?: boolean }
+interface AfkOpts { json?: boolean; level?: string; image?: string }
+
+function isAutomationLevel(v: string): v is AutomationLevel {
+  return (AUTOMATION_LEVELS as readonly string[]).includes(v)
+}
+
+/** 当前 checkout 分支（`git branch --show-current`，非 git 仓/detached HEAD → 空串）。 */
+async function currentBranch(cwd: string): Promise<string> {
+  try {
+    const { stdout } = await execFileAsync('git', ['branch', '--show-current'], { cwd })
+    return stdout.trim()
+  } catch {
+    return ''
+  }
+}
 
 export async function cmdAfk(deps: CliDeps, sub: string, name: string | undefined, opts: AfkOpts): Promise<number> {
-  const auto = createAutomation({ repoRoot: deps.cwd, store: deps.store, clock: deps.clock })
+  const level: AutomationLevel = opts.level && isAutomationLevel(opts.level) ? opts.level : 'L1'
+  if (opts.level && !isAutomationLevel(opts.level)) {
+    deps.io.err(`ERROR: --level 需 L1|L2|L3，收到 '${opts.level}'`)
+    return 1
+  }
+  const auto = createAutomation({ repoRoot: deps.cwd, store: deps.store, clock: deps.clock, config: { level } })
 
   switch (sub) {
     case 'enqueue': {
@@ -68,13 +99,29 @@ export async function cmdAfk(deps: CliDeps, sub: string, name: string | undefine
       return 0
     }
     case 'run': {
-      // 真容器执行需部署接线 #29-wire（docker 镜像）——不伪装，只 report 就绪队列 + 明示
       const ready = await auto.scanReady().catch(() => [] as string[])
-      deps.io.err(`[AFK] run 需部署接线 #29-wire（预构建 sandcastle docker 镜像 + CLAUDE_CODE_OAUTH_TOKEN）。就绪队列 ${ready.length} 项${ready.length ? '：' + ready.join(', ') : ''}。当前环境不执行容器（诚实门：不伪装 docker 就绪）。`)
+      if (ready.length === 0) {
+        deps.io.out('AFK run: 就绪队列空——无 queued 且依赖满足的 change')
+        return 0
+      }
+      const hasDocker = await dockerAvailable((file, args) => nodeExec(file, args))
+      if (!hasDocker) {
+        deps.io.err(`[AFK] run 需 docker daemon（未检测到）。就绪队列 ${ready.length} 项：${ready.join(', ')}。当前环境不执行容器（诚实门：不伪装 docker 就绪）。`)
+        return 0
+      }
+      const base = await currentBranch(deps.cwd)
+      if (!base) {
+        deps.io.err('[AFK] run 需在 git 仓库内、非 detached HEAD（取不到当前分支名，命名分支/merge-back 无锚点）')
+        return 1
+      }
+      const image = opts.image ?? DEFAULT_SANDCASTLE_IMAGE
+      const runChange = createDockerRunChange({ hostRepoDir: deps.cwd, base, level, image })
+      await auto.runRound(runChange)
+      deps.io.out(`AFK run: 跑完一轮（${ready.length} 项候选，level=${level}，image=${image}）`)
       return 0
     }
     default:
-      deps.io.err(`ERROR: 未知 afk 子命令: ${sub}（支持: enqueue <name> / scan / status [name] / run）`)
+      deps.io.err(`ERROR: 未知 afk 子命令: ${sub}（支持: enqueue <name> / scan / status [name] / run [--level] [--image]）`)
       return 1
   }
 }

@@ -22,6 +22,7 @@ import { cmdScaffold } from './commands/scaffold.js'
 import { cmdSession } from './commands/session.js'
 import { cmdSpec } from './commands/spec.js'
 import { cmdSync } from './commands/sync.js'
+import { cmdTap } from './commands/tap.js'
 import { cmdTask } from './commands/task.js'
 import { cmdUninstall } from './commands/uninstall.js'
 import { cmdList, cmdStatus } from './commands/status.js'
@@ -191,9 +192,11 @@ export function buildProgram(deps: CliDeps): Command {
 
   program
     .command('afk <sub> [name]')
-    .description('AFK 自动化：enqueue <name> 挂队 / scan 就绪队列 / status [name] 泳道 / run（需部署接线 #29-wire）')
+    .description('AFK 自动化：enqueue <name> 挂队 / scan 就绪队列 / status [name] 泳道 / run 真跑 docker 沙箱（#29-wire）')
     .option('--json', 'JSON 输出')
-    .action(async (sub: string, name: string | undefined, opts: { json?: boolean }) =>
+    .option('--level <level>', 'run：分级放权档位覆盖（L1|L2|L3，缺省 L1 report-only 安全默认）')
+    .option('--image <image>', 'run：sandcastle 镜像名（缺省 sandcastle:local）')
+    .action(async (sub: string, name: string | undefined, opts: { json?: boolean; level?: string; image?: string }) =>
       bail(await cmdAfk(deps, sub, name, opts)))
 
   program
@@ -213,6 +216,12 @@ export function buildProgram(deps: CliDeps): Command {
     .description('跨 runtime 会话检索：list · search <kw> · context <id> · extract <id> · projects')
     .allowUnknownOption() // --json/--limit/--phase 等 flag 由 cmdMem 自解析
     .action(async (sub: string, args: string[]) => bail(await cmdMem(deps, sub, args)))
+
+  program
+    .command('tap <sub> [args...]')
+    .description('tap 流量代理：start <client...> [--ca [dir]] [--json] [-- <command> ...]（daemon 启动器，#34-wire）')
+    .allowUnknownOption() // --ca/--json/-- <command> 由 cmdTap 自解析（-- 之后原样透传，不可用 commander 解析）
+    .action(async (sub: string, args: string[]) => bail(await cmdTap(deps, sub, args)))
 
   program
     .command('_gen-router-sh <manifest>')

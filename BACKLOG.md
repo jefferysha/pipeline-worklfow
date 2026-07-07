@@ -14,8 +14,9 @@
 | **M7** 平台矩阵（GOAL D7/D14） | | | |
 | **M8** tap 流量代理（2026-07-07 用户确认进正式队列，human gate 解除） | | | |
 
-| 29-wire | 【部署接线】cli/server 装配 runChangeInSandbox（需预构建 sandcastle docker 镜像 + CLAUDE_CODE_OAUTH_TOKEN 白名单），把 docker honest-skip 翻真跑 | 部署 | env-gated |
-| 34-wire | 【部署接线】daemon TLS 绑定（fromDir CA + detectTarget 多 runtime env 注入）+ record 路径接 ws/bedrock 装配 + doctor CA/TLS 解密披露 | 部署 | env-gated |
+队列空——#29-wire / #34-wire 已双双翻真跑收编（见下）。剩余唯一诚实缺口：CLAUDE_CODE_OAUTH_TOKEN
+门控的 full Claude-Code-in-sandbox agent 编码路径（4 处 honest-skip，需真实部署环境的 agent 凭证，
+非代码/非 docker 环境缺口）。
 
 ## 已收编
 
@@ -71,3 +72,5 @@
 | 2026-07-07 | #34b/#34c tap 协议面（iteration-26） | 收编：ws重组+bedrock+本地CA·TLS MITM(node v24 真跑 0 skip)+13 runtime，60 测试 |
 | 2026-07-07 | #29c automation docker 全链（iteration-26） | 收编：真容器执行+真 git worktree/merge-back 冲突留现场，111 测试 4 docker honest-skip |
 | 2026-07-07 | #40 平台铺量（iteration-27） | 收编：4 平台转 active（跨 A/B/C）+ 125 conformance 断言 + 真文件变异测试，active 7+longtail 5，D7/D14 |
+| 2026-07-07 | #29-wire docker 执行接线（iteration-30） | 收编：tools/sandcastle/ 真镜像（精简至仅需 git，apk 巨慢的 python3/jq/bash 全裁）+ createDockerRunChange 接 runChangeInSandbox + `pipeline afk run` 真调 automation.runRound（真容器/真 git worktree/真 barrier build_sha/真 L3 merge-back）；docker.integration.test.ts + container.integration.test.ts 的 2 处非 token 门控 honest-skip 翻真跑；新增 dockerRunChange.integration.test.ts(3) + afk-run.integration.test.ts(4，自足建镜像不依赖跨文件执行序) |
+| 2026-07-07 | #34-wire tap daemon 启动器 + TLS 绑定（iteration-30） | 收编：daemon.ts 接 CertificateAuthority.fromDir→serveForward({ca})；launch.ts 用 detectTarget+reverseEnvMap/forwardEnvMap 真装配（forward 缺 ca 拒绝而非静默盲隧道）；record 路径真接 decodeBedrockEventstreamEvents（forward-proxy 响应解码）+ ws-proxy.ts 全新 wss:// 真中继（RFC6455 帧累加器+CONNECT/TLS-MITM 之后的 upgrade 透传+reconstructWsRequestBody/ResponseBody 首次接活路径）；security.ts InterceptEntry.tls 供 doctor「正在解密」披露；`pipeline tap start` 全新 CLI bin 入口（daemon 模式前台常驻+SIGINT 收尾 / `-- <command>` 模式真 spawn 注入 env）。副产品：发现并修复 commander 真 bug（variadic `[args...]` 里裸 `--` 若前一 token 是普通位置参数会被静默吞掉——main.ts 改为从原始 argv 手工切出 passthrough 段，绕开 commander 内部状态机缺陷）。38 新测试（daemon ca 2 + launch 7 + forward-proxy bedrock 1 + ws-proxy 7 + security tls 2 + tap CLI e2e 7 + afk-run e2e 3-4） |

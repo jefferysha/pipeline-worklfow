@@ -187,8 +187,20 @@ function makeDoctorProbes(): DoctorProbes {
   }
 }
 
+/**
+ * 从原始 argv 里手工切出 `-- <passthrough...>` 段，绕开 commander 一个真实 bug（见 deps.ts
+ * passthroughArgv 顶注）：交给 commander 解析的数组**不含** `--` 本身，故它自己的内部状态机
+ * 不会有机会误吞；passthrough 段整体经 CliDeps 单独传递，`--` 之前的部分才走 commander。
+ */
+function splitPassthroughArgv(argv: readonly string[]): { toParse: string[]; passthrough?: string[] } {
+  const idx = argv.indexOf('--', 2) // 跳过 argv[0]=node、argv[1]=脚本路径，只在真实参数区找
+  if (idx === -1) return { toParse: [...argv] }
+  return { toParse: argv.slice(0, idx), passthrough: argv.slice(idx + 1) }
+}
+
 async function main(): Promise<void> {
   const manifest = loadManifest(manifestPath())
+  const { toParse, passthrough } = splitPassthroughArgv(process.argv)
   const deps: CliDeps = {
     store: createStateStore(),
     flow: createFlowEngine(manifest),
@@ -220,10 +232,11 @@ async function main(): Promise<void> {
       }
       return undefined
     },
+    passthroughArgv: passthrough,
   }
 
   try {
-    await buildProgram(deps).parseAsync(process.argv)
+    await buildProgram(deps).parseAsync(toParse)
   } catch (e) {
     if (e instanceof CliExit) {
       process.exitCode = e.code

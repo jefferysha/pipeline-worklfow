@@ -60,7 +60,19 @@ export function setCaptureEnabled(enabled: boolean, opts: TapDirOptions = {}): v
 export function resetCaptureCache(): void { cache.clear() }
 
 // ── 拦截状态登记（doctor 明示「正在拦截」）──
-export interface InterceptEntry { kind: 'reverse' | 'forward'; port: number; client?: string; target?: string }
+export interface InterceptEntry {
+  kind: 'reverse' | 'forward'
+  port: number
+  client?: string
+  target?: string
+  /**
+   * BACKLOG #34-wire：该绑定是否装了本地 CA（forward 绑定 capture ON 时会真做 TLS MITM 解密）。
+   * 静态能力标记（装了 ca 就为 true），与"此刻 capture 是否 ON"是两个独立轴——两者叠加才是
+   * 真解密（forward-proxy.ts 双护栏），但装了 ca 本身就是比普通拦截更敏感的能力，doctor 必须
+   * 单独披露，不能等 capture 恰好 ON 时才提醒用户。
+   */
+  tls?: boolean
+}
 const intercepts: InterceptEntry[] = []
 
 /** proxy listen 时登记，返回注销函数（close 时调用）。 */
@@ -90,8 +102,10 @@ export function tapStatus(opts: TapDirOptions = {}): TapStatus {
   const captureEnabled = isCaptureEnabled(opts)
   const intercepting = active.length > 0
   const ports = active.map((e) => e.port).join(', ')
+  const tlsCount = active.filter((e) => e.tls).length
+  const tlsNote = tlsCount > 0 ? `；${tlsCount} 个绑定装了本地 CA，capture=ON 时会对 CONNECT 流量做 TLS MITM 解密` : ''
   const message = intercepting
-    ? `tap 正在拦截流量：${active.length} 个端口 [${ports}]（capture=${captureEnabled ? 'ON' : 'OFF'}，数据仅落本地）`
+    ? `tap 正在拦截流量：${active.length} 个端口 [${ports}]（capture=${captureEnabled ? 'ON' : 'OFF'}，数据仅落本地）${tlsNote}`
     : `tap 未拦截（默认 OFF；capture=${captureEnabled ? 'ON' : 'OFF'}）`
   return {
     captureEnabled,

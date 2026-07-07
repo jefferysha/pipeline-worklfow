@@ -15,6 +15,7 @@
 import { serve, type CaptureProxyHandle } from './capture-proxy.js'
 import { serveForward, type ForwardProxyHandle } from './forward-proxy.js'
 import { getTraceStore, type TraceStore } from './trace-store.js'
+import type { CertificateAuthority } from './certs.js'
 
 /** claude 生命线端口——本 daemon 绝不绑（隔离契约）。tap_daemon.py:24。 */
 export const CLAUDE_LIFELINE_PORT = 8766
@@ -39,6 +40,12 @@ export interface StartDaemonOptions {
   bindings: DaemonBinding[]
   store?: TraceStore
   host?: string
+  /**
+   * 本地 CA（BACKLOG #34-wire）：提供则透传给每个 forward 绑定的 serveForward({ca})，令其在
+   * capture ON 时对 CONNECT 隧道做 TLS MITM 终结；缺省 undefined = 全部 forward 绑定盲隧道
+   * （安全默认，同 forward-proxy.ts 双护栏：ca 提供 **且** capture ON 才解密）。
+   */
+  ca?: CertificateAuthority
 }
 
 export async function startDaemon(opts: StartDaemonOptions): Promise<DaemonHandles> {
@@ -51,7 +58,7 @@ export async function startDaemon(opts: StartDaemonOptions): Promise<DaemonHandl
         throw new Error(`拒绑 claude 生命线端口 ${CLAUDE_LIFELINE_PORT}（lifeline isolation：本 daemon 从 8767 起）`)
       }
       if (b.mode === 'forward') {
-        handles[b.name] = await serveForward({ port: b.port ?? 0, host, store, client: b.name })
+        handles[b.name] = await serveForward({ port: b.port ?? 0, host, store, client: b.name, ca: opts.ca })
       } else {
         if (!b.target) throw new Error(`reverse 绑定 '${b.name}' 缺 target`)
         handles[b.name] = await serve({

@@ -6,12 +6,19 @@
  *   ④ stop() 真关全部。零 mock。
  * 老仓真相源：tap_daemon.py start_daemon / stop_daemon（DEFAULT_PORTS 从 8767 起，8766 留给 claude）。
  */
+import * as net from 'node:net'
+import * as tls from 'node:tls'
+import * as http from 'node:http'
+import * as https from 'node:https'
+import type { AddressInfo } from 'node:net'
 import { afterEach, describe, expect, it } from 'vitest'
 import { CLAUDE_LIFELINE_PORT, startDaemon, type DaemonHandles } from './daemon.js'
 import { createTraceStore } from './trace-store.js'
 import { resetCaptureCache, setCaptureEnabled, tapStatus } from './security.js'
 import { httpReq, rmDir, startFakeUpstream, tempTapDir, type FakeUpstream } from './test-support.js'
 import type { CaptureProxyHandle } from './capture-proxy.js'
+import type { ForwardProxyHandle } from './forward-proxy.js'
+import { createCa, issueHostCert, CertificateAuthority, tlsMitmSupported } from './certs.js'
 
 const daemons: DaemonHandles[] = []
 const ups: FakeUpstream[] = []
@@ -97,5 +104,108 @@ describe('stop() —— 真关全部端口', () => {
     const port = (d.handles.a as CaptureProxyHandle).port
     await d.stop()
     await expect(httpReq({ port, path: '/v1/messages', method: 'GET' })).rejects.toThrow()
+  })
+})
+
+// ── #34-wire：daemon 装配层真透传 ca 到 forward 绑定（非直调 serveForward，证明装配线路真通）──
+const supported = tlsMitmSupported()
+if (!supported) {
+  // eslint-disable-next-line no-console
+  console.warn('[honest-skip] daemon ca 装配 TLS MITM e2e：环境不支持本地 CA 证书生成/握手 —— 不伪绿')
+}
+
+async function startHttpsUpstream(ca: ReturnType<typeof createCa>): Promise<{ server: https.Server; port: number }> {
+  const cert = issueHostCert(ca, 'localhost')
+  const server = https.createServer({ key: cert.keyPem, cert: cert.certPem }, (req, res) => {
+    const payload = Buffer.from(JSON.stringify({ ok: true, seen: req.url }), 'utf8')
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Content-Length': payload.length })
+    res.end(payload)
+  })
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r))
+  return { server, port: (server.address() as AddressInfo).port }
+}
+
+function mitmRequest(proxyPort: number, upstreamPort: number, caPem: string): Promise<{ status: number; authorized: boolean }> {
+  return new Promise((resolve, reject) => {
+    const raw = net.connect(proxyPort, '127.0.0.1', () => {
+      raw.write(`CONNECT localhost:${upstreamPort} HTTP/1.1\r\nHost: localhost:${upstreamPort}\r\n\r\n`)
+    })
+    let buf = ''
+    const onData = (d: Buffer): void => {
+      buf += d.toString('latin1')
+      if (buf.includes('\r\n\r\n')) {
+        raw.removeListener('data', onData)
+        if (!/^HTTP\/1\.1 200/.test(buf)) { raw.destroy(); reject(new Error('CONNECT 未 200: ' + buf.split('\r\n')[0])); return }
+        const tlsSock = tls.connect({ socket: raw, servername: 'localhost', ca: [caPem] }, () => {
+          const authorized = tlsSock.authorized
+          const body = '{}'
+          const req = http.request(
+            { createConnection: () => tlsSock as unknown as net.Socket, method: 'POST', path: '/v1/x', headers: { Host: 'localhost', 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) } },
+            (res) => { res.on('data', () => {}); res.on('end', () => { tlsSock.destroy(); resolve({ status: res.statusCode ?? 0, authorized }) }) },
+          )
+          req.on('error', reject)
+          req.write(body)
+          req.end()
+        })
+        tlsSock.on('error', reject)
+      }
+    }
+    raw.on('data', onData)
+    raw.on('error', reject)
+  })
+}
+
+describe.skipIf(!supported)('startDaemon ca 装配（#34-wire：daemon 把 CertificateAuthority.fromDir/fromCa 透传给 forward 绑定）', () => {
+  it('forward 绑定 + opts.ca + capture ON → 经 daemon 装配真 TLS MITM 终结（非直调 serveForward）', async () => {
+    const s = await store()
+    const ca = createCa()
+    const upstream = await startHttpsUpstream(ca)
+    setCaptureEnabled(true, { dir: s.dir })
+    const authority = CertificateAuthority.fromCa(ca)
+
+    const d = await startDaemon({
+      store: s.store,
+      ca: authority,
+      bindings: [{ name: 'fwd', mode: 'forward', port: 0 }],
+    })
+    daemons.push(d)
+    const port = (d.handles.fwd as ForwardProxyHandle).port
+
+    const res = await mitmRequest(port, upstream.port, ca.certPem)
+    expect(res.authorized).toBe(true) // 客户端信任本地 CA → daemon 装配的 ca 真被 forward-proxy 用来终结 TLS
+    expect(res.status).toBe(200)
+
+    const recorded = s.store.listSessions().map((row) => s.store.readRecords(row.id)).flat()
+    expect(recorded.length).toBe(1)
+    expect(recorded[0]!.transport).toBe('forward-tls')
+    upstream.server.close()
+  })
+
+  it('forward 绑定缺 opts.ca → 退回盲隧道（daemon 未装 ca 时不会意外解密）', async () => {
+    const s = await store()
+    const ca = createCa()
+    const upstream = await startHttpsUpstream(ca)
+    setCaptureEnabled(true, { dir: s.dir })
+
+    const d = await startDaemon({ store: s.store, bindings: [{ name: 'fwd', mode: 'forward', port: 0 }] })
+    daemons.push(d)
+    const port = (d.handles.fwd as ForwardProxyHandle).port
+
+    // 无 ca：mitmRequest 期望信任本地 CA 会失败（真上游证书链不含我们伪造的 CA 且代理未终结）—— 用真上游证书校验会失败，
+    // 改用 rejectUnauthorized:false 等价的直连校验：能连通但不是我们终结的（trace_store 必为空，因为没有 MITM）。
+    await new Promise<void>((resolve, reject) => {
+      const raw = net.connect(port, '127.0.0.1', () => {
+        raw.write(`CONNECT localhost:${upstream.port} HTTP/1.1\r\nHost: localhost:${upstream.port}\r\n\r\n`)
+      })
+      let buf = ''
+      raw.on('data', (d2: Buffer) => {
+        buf += d2.toString('latin1')
+        if (buf.includes('\r\n\r\n')) { raw.destroy(); resolve() }
+      })
+      raw.on('error', reject)
+    })
+    const recorded = s.store.listSessions().map((row) => s.store.readRecords(row.id)).flat()
+    expect(recorded.length).toBe(0) // 盲隧道：daemon 没有 ca 可用，绝不解密
+    upstream.server.close()
   })
 })

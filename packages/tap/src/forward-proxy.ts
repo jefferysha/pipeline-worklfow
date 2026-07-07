@@ -24,6 +24,26 @@ import { HOP_BY_HOP, TurnCounter, buildRecord, safeJson, shouldSkipTraceRecord }
 import { isCaptureEnabled, registerIntercept } from './security.js'
 import { getTraceStore, type TraceStore } from './trace-store.js'
 import type { CertificateAuthority } from './certs.js'
+import { assembleBedrockConverseBody, attachBedrockErrors, decodeBedrockEventstreamEvents, isBedrockEventstreamPath } from './bedrock.js'
+import { attachWsRelay } from './ws-proxy.js'
+
+/**
+ * 响应体构建（BACKLOG #34-wire：record 路径接 decodeBedrockEventstreamEvents）—— Bedrock
+ * SigV4 端点强制走 forward（clients.ts requiresForwardForUrl），其流式响应是 AWS EventStream
+ * 二进制帧，safeJson 只会读出乱码字符串。命中 isBedrockEventstreamPath 时真解码 + 装配成
+ * 非流式 converse body（+ 挂 bedrock_events 全量事件供审计），解码空/异常 → 回退 safeJson
+ * （fail-open，不因解码失败阻断录制）。
+ */
+function buildRespBody(path: string, raw: Buffer): unknown {
+  if (isBedrockEventstreamPath(path)) {
+    const events = decodeBedrockEventstreamEvents(raw)
+    if (events.length > 0) {
+      const assembled = assembleBedrockConverseBody(events)
+      return attachBedrockErrors({ ...assembled, bedrock_events: events }, events)
+    }
+  }
+  return safeJson(raw)
+}
 
 export interface ForwardProxyOptions {
   port?: number
@@ -116,7 +136,7 @@ export function serveForward(opts: ForwardProxyOptions = {}): Promise<ForwardPro
                   reqId: reqId(), turn, durationMs: Date.now() - t0, method, path,
                   reqHeaders: req.headers, reqBody, status,
                   respHeaders: upstream.headers as Record<string, string | string[] | undefined>,
-                  respBody: safeJson(raw), upstreamBaseUrl, transport: 'forward',
+                  respBody: buildRespBody(path, raw), upstreamBaseUrl, transport: 'forward',
                 }))
               } catch { /* best-effort */ }
             }
@@ -145,10 +165,18 @@ export function serveForward(opts: ForwardProxyOptions = {}): Promise<ForwardPro
   const ca = opts.ca
   let mitmServer: Server | null = null
   interface MitmTarget { hostname: string; port: number }
+  const resolveMitmTarget = (req: IncomingMessage): MitmTarget =>
+    (req.socket as unknown as { __mitmTarget?: MitmTarget }).__mitmTarget ?? { hostname: String(req.headers.host ?? '').split(':')[0] || '', port: 443 }
+
   function getMitmServer(): Server {
     if (mitmServer) return mitmServer
     mitmServer = createServer((req: IncomingMessage, res: ServerResponse) => handleMitmRequest(req, res))
     mitmServer.on('clientError', () => { /* 单连接错误不影响 daemon */ })
+    // #34-wire：wss:// 升级请求（TLS 已被上面终结）真中继 + 帧重组入录（ws-reconstruct 工具首次接活路径）。
+    attachWsRelay(mitmServer, {
+      store, sessionId, nextTurn: () => counter.next(),
+      resolveTarget: (req) => { const t = resolveMitmTarget(req); return { hostname: t.hostname, port: t.port, useTls: true } },
+    })
     return mitmServer
   }
 
@@ -172,7 +200,7 @@ export function serveForward(opts: ForwardProxyOptions = {}): Promise<ForwardPro
   }
 
   function handleMitmRequest(req: IncomingMessage, res: ServerResponse): void {
-    const target = (req.socket as unknown as { __mitmTarget?: MitmTarget }).__mitmTarget ?? { hostname: String(req.headers.host ?? '').split(':')[0] || '', port: 443 }
+    const target = resolveMitmTarget(req)
     const chunks: Buffer[] = []
     req.on('data', (c: Buffer) => chunks.push(c))
     req.on('end', () => forwardMitm(Buffer.concat(chunks)))
@@ -216,7 +244,7 @@ export function serveForward(opts: ForwardProxyOptions = {}): Promise<ForwardPro
                   reqId: reqId(), turn, durationMs: Date.now() - t0, method, path,
                   reqHeaders: req.headers, reqBody, status,
                   respHeaders: upstream.headers as Record<string, string | string[] | undefined>,
-                  respBody: safeJson(raw), upstreamBaseUrl, transport: 'forward-tls',
+                  respBody: buildRespBody(path, raw), upstreamBaseUrl, transport: 'forward-tls',
                 }))
               } catch { /* best-effort */ }
             }
@@ -279,7 +307,7 @@ export function serveForward(opts: ForwardProxyOptions = {}): Promise<ForwardPro
     server.listen(opts.port ?? 0, host, () => {
       server.removeAllListeners('error')
       const boundPort = (server.address() as AddressInfo).port
-      const unregister = registerIntercept({ kind: 'forward', port: boundPort, client })
+      const unregister = registerIntercept({ kind: 'forward', port: boundPort, client, tls: !!ca })
       resolve({
         port: boundPort,
         host,

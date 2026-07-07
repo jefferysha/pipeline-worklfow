@@ -24,3 +24,7 @@ export * from './ws-reconstruct.js'
 export * from './bedrock.js'
 export * from './certs.js'
 export * from './clients.js'
+// #34-wire：daemon 启动器编排（detectTarget + reverseEnvMap/forwardEnvMap + CertificateAuthority.fromDir）
+export * from './launch.js'
+// #34-wire：wss:// 升级请求真中继 + ws-reconstruct 帧重组入录（forward-proxy.ts mitmServer 消费）
+export * from './ws-proxy.js'

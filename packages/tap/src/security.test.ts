@@ -71,6 +71,32 @@ describe('tapStatus intercept 登记 —— doctor 明示「正在拦截」', ()
   })
 })
 
+describe('tapStatus CA/TLS 披露 —— #34-wire：forward 绑定装了 ca 时明示「正在解密」', () => {
+  it('intercept 标 tls:true → message 含解密披露（区别于普通拦截，敏感度更高）', async () => {
+    const d = await dir()
+    const un = registerIntercept({ kind: 'forward', port: 8888, client: 'gemini', tls: true })
+    try {
+      const s = tapStatus({ dir: d })
+      expect(s.intercepts[0]!.tls).toBe(true)
+      expect(s.message).toMatch(/解密|TLS MITM/)
+    } finally {
+      un()
+    }
+  })
+
+  it('intercept 未标 tls（默认/盲隧道）→ message 不含解密披露', async () => {
+    const d = await dir()
+    const un = registerIntercept({ kind: 'reverse', port: 7777, client: 'claude' })
+    try {
+      const s = tapStatus({ dir: d })
+      expect(s.intercepts[0]!.tls).toBeFalsy()
+      expect(s.message).not.toMatch(/解密|TLS MITM/)
+    } finally {
+      un()
+    }
+  })
+})
+
 describe('捕获数据不外发 —— 代码级证据（源零 outbound 网络 import）', () => {
   const here = dirname(fileURLToPath(import.meta.url))
   const NET_IMPORT = /from\s+['"]node:(https?|net|tls|dgram|dns|http2)['"]|require\(['"]node:(https?|net|tls|dgram|dns|http2)['"]\)|\bfetch\s*\(/

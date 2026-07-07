@@ -11,6 +11,7 @@ import { serveForward, type ForwardProxyHandle } from './forward-proxy.js'
 import { createTraceStore } from './trace-store.js'
 import { resetCaptureCache, setCaptureEnabled } from './security.js'
 import { connectThroughProxy, forwardHttpReq, rmDir, startFakeUpstream, startTcpEcho, tempTapDir, type FakeUpstream, type TcpEcho } from './test-support.js'
+import { crc32 } from './bedrock.js'
 
 const handles: ForwardProxyHandle[] = []
 const ups: FakeUpstream[] = []
@@ -58,6 +59,66 @@ describe('forward proxy —— 明文绝对 URI 转发 + 捕获', () => {
     expect(upstream.requests.length).toBe(1)
     const recorded = s.store.listSessions().map((row) => s.store.readRecords(row.id)).flat()
     expect(recorded.length).toBe(0)
+  })
+})
+
+/** 真构一条 AWS EventStream 帧（同 bedrock.test.ts 手法，真 CRC32）。 */
+function encodeBedrockFrame(headers: Record<string, string>, payload: unknown): Buffer {
+  const headerParts: Buffer[] = []
+  for (const [name, value] of Object.entries(headers)) {
+    const nameBuf = Buffer.from(name, 'utf8')
+    const valBuf = Buffer.from(value, 'utf8')
+    const lenBuf = Buffer.alloc(2)
+    lenBuf.writeUInt16BE(valBuf.length)
+    headerParts.push(Buffer.concat([Buffer.from([nameBuf.length]), nameBuf, Buffer.from([7]), lenBuf, valBuf]))
+  }
+  const headerBlob = Buffer.concat(headerParts)
+  const payloadBuf = payload === undefined ? Buffer.alloc(0) : Buffer.from(JSON.stringify(payload), 'utf8')
+  const totalLen = 4 + 4 + 4 + headerBlob.length + payloadBuf.length + 4
+  const prelude = Buffer.alloc(8)
+  prelude.writeUInt32BE(totalLen, 0)
+  prelude.writeUInt32BE(headerBlob.length, 4)
+  const preludeCrc = Buffer.alloc(4)
+  preludeCrc.writeUInt32BE(crc32(prelude), 0)
+  const beforeMsgCrc = Buffer.concat([prelude, preludeCrc, headerBlob, payloadBuf])
+  const msgCrc = Buffer.alloc(4)
+  msgCrc.writeUInt32BE(crc32(beforeMsgCrc), 0)
+  return Buffer.concat([beforeMsgCrc, msgCrc])
+}
+
+describe('forward proxy —— Bedrock EventStream 响应真解码入录（#34-wire：record 路径接 decodeBedrockEventstreamEvents）', () => {
+  it('/model/.../converse-stream 真 EventStream 响应 → trace_store 落结构化 bedrock_events + 装配 converse body（非原始二进制）', async () => {
+    const s = await store()
+    const frame1 = encodeBedrockFrame({ ':event-type': 'messageStart' }, { role: 'assistant' })
+    const frame2 = encodeBedrockFrame(
+      { ':event-type': 'contentBlockDelta' },
+      { contentBlockIndex: 0, delta: { text: 'hi' } },
+    )
+    const eventStreamBody = Buffer.concat([frame1, frame2])
+    const upstream = await startFakeUpstream({
+      respond: (_req, res) => {
+        res.writeHead(200, { 'Content-Type': 'application/vnd.amazon.eventstream', 'Content-Length': eventStreamBody.length })
+        res.end(eventStreamBody)
+      },
+    })
+    ups.push(upstream)
+    setCaptureEnabled(true, { dir: s.dir })
+    const proxy = await serveForward({ port: 0, store: s.store, client: 'forward' })
+    handles.push(proxy)
+
+    const res = await forwardHttpReq(
+      proxy.port,
+      { host: '127.0.0.1', port: upstream.port, path: '/model/anthropic.claude-3-sonnet/converse-stream' },
+      { method: 'POST', body: '{}', headers: { 'Content-Type': 'application/json' } },
+    )
+    expect(res.status).toBe(200)
+
+    const recorded = s.store.listSessions().map((row) => s.store.readRecords(row.id)).flat()
+    expect(recorded.length).toBe(1)
+    const respBody = (recorded[0]!.response as { body: { bedrock_events: unknown[]; output: { message: { content: unknown[] } } } }).body
+    // 真解码：不是原始 base64/乱码字节，是结构化事件 + 装配后的 converse body
+    expect(respBody.bedrock_events).toHaveLength(2)
+    expect(respBody.output.message.content.length).toBeGreaterThan(0)
   })
 })
 

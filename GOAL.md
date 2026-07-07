@@ -13,9 +13,15 @@
 
 > **✅ v1.0 收官（2026-07-07 iteration-28）**：四张清单全部达成（A 功能完备 / B 优化点 /
 > C 质量保障含无伪测试 / D 竞品超越 9>·5≥·3 护城河）。8 里程碑全收编，~2040 断言全绿、
-> golden-oracle 每轮 0 不一致、零伪测试。唯一剩余为 2 个部署环境门控接线（#29-wire docker
-> 镜像 / #34-wire daemon TLS），代码侧已完成经真测，需 docker/daemon 部署环境才能翻真跑。
-> 详见 docs/superiority-matrix.md（逐维证据）+ docs/TEST-REALITY.md（真测审计）+ progress.md。
+> golden-oracle 每轮 0 不一致、零伪测试。
+>
+> **✅ #29-wire / #34-wire 部署接线双双翻真跑（2026-07-07 iteration-30）**：拿到 docker 环境后，
+> AFK docker 执行（`pipeline afk run` 真调 automation.runRound + 真容器 + 真 git worktree/merge-back
+> + 真 barrier build_sha）与 tap daemon 启动器（`pipeline tap start` 真绑端口 + CA/TLS MITM +
+> bedrock/ws 记录路径真接活）均已真跑验证，不再是 report-only 占位。唯一剩余诚实缺口收窄为
+> CLAUDE_CODE_OAUTH_TOKEN 门控的 full agent-in-sandbox 编码路径（4 处 honest-skip，需真实部署
+> 凭证，非代码/非环境缺口）。详见 docs/superiority-matrix.md（逐维证据）+ docs/TEST-REALITY.md
+> （真测审计）+ progress.md。
 
 ---
 
@@ -29,9 +35,9 @@
       4 agents(#23)、sync/uninstall scrubber(#24)——全收编，热路径纯 bash 红线 + 真 fs/真 hook e2e
 - [x] **A3 dashboard（M3）**：server(#25) + 前端(#26) + SPA 服务(#26c) + doctor(#26b) + transition 单源(#25b)——全收编；config 写端点为可选增量
 - [x] **A4 channel + mem（M4）✅**：mem 跨 runtime 检索(#28) + channel 事件模型(#27) + channel 进程层 supervisor/真fork/SIGTERM/OS-liveness(#27b)
-- [x] **A5 automation / AFK Sandcastle（M5）✅代码达标**：队列+scheduler+lifecycle+L1→L3(#29) + server afk 数据端(#29d) + docker 全链真实现+真 git worktree/merge-back 冲突留现场(#29c，docker IT honest-skip 无 docker)；仅缺 live 容器镜像部署接线
+- [x] **A5 automation / AFK Sandcastle（M5）✅**：队列+scheduler+lifecycle+L1→L3(#29) + server afk 数据端(#29d) + docker 全链真实现+真 git worktree/merge-back 冲突留现场(#29c) + **#29-wire 部署接线真跑**（iteration-30：`pipeline afk run` 真调 automation.runRound(createDockerRunChange) + 真容器 + 真 merge-back，sandcastle:test 镜像 e2e 验证）；仅剩 CLAUDE_CODE_OAUTH_TOKEN 门控的 full agent-in-sandbox 支线 honest-skip（需真部署凭证）
 - [x] **A6 竞品缺口（M6）✅**：上下文压缩(B13)+auto-transition(B14)+Cursor 转正(B15)+Trellis parity(B16)+npx 上手(B17) 全收编
-- [x] **A7 tap 流量代理（M8）✅代码达标**：daemon+proxy+trace_store+护栏(#34) + traffic 数据端(#34d) + ws 重组/bedrock/本地 CA·TLS MITM(#34b，node v24 真跑) + 13 runtime clients(#34c)；仅缺 daemon TLS 绑定部署接线
+- [x] **A7 tap 流量代理（M8）✅**：daemon+proxy+trace_store+护栏(#34) + traffic 数据端(#34d) + ws 重组/bedrock/本地 CA·TLS MITM(#34b，node v24 真跑) + 13 runtime clients(#34c) + **#34-wire 部署接线真跑**（iteration-30：daemon 接 CertificateAuthority.fromDir、launch.ts 真装配 detectTarget+env 注入、record 路径真接 bedrock 解码 + 全新 ws-proxy.ts 中继首次接活 ws-reconstruct、`pipeline tap start` 全新 CLI 入口）
 - [x] **A0 7-phase 状态机 + 三门 + CLI + 单文件分发 + 导入工具**（v0.1，iteration-0~9，oracle 0 不一致）
 
 ## 清单 B · 修改与优化点（迁移 ≠ 平移——每条都是对老仓的改进承诺）

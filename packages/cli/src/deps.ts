@@ -96,6 +96,15 @@ export interface CliDeps {
    * doctor 命令直接报错 exit 1（doctor 本身不允许静默降级——它就是降级的观测者）。
    */
   doctor?: DoctorProbes
+  /**
+   * `-- <command...>` 透传参数（BACKLOG #34-wire，`pipeline tap start`用）。main.ts 在调用
+   * commander 之前从原始 process.argv 里手工切出，绕开 commander 自身的一个真实 bug：
+   * variadic `[args...]` 捕获里的裸 `--`，若前一个 token 是普通位置参数（不以 - 开头），会被
+   * commander 静默吞掉；若前一个 token 是形如 `--foo` 的选项样 token 则保留——这是 commander
+   * 内部状态机的真实缺陷（已用受控 argv 数组穷举验证），不是本项目误用。缺省 undefined = 无
+   * `--` 透传段。
+   */
+  passthroughArgv?: string[]
 }
 
 /** 统一错误消息提取（避免各命令散落 String(e) 口径） */

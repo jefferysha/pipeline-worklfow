@@ -35,11 +35,12 @@ describe('afk 真 e2e —— automation 子系统 CLI 可达性（iteration-29 �
     expect(JSON.parse(h.out.join('\n'))).toEqual({ ready: [] })
   })
 
-  test('run 诚实指向部署接线 #29-wire（不伪装 docker），exit 0', async () => {
+  // run 的真容器执行路径（#29-wire）在 afk-run.integration.test.ts 覆盖（需 git 仓 + docker 镜像，
+  // 本文件 harness 无 git，故这里只测未 enqueue 时的空队列诚实报告分支）。
+  test('run：就绪队列空（未 enqueue）→ 诚实报告，exit 0，不触碰 docker', async () => {
     await h.run(['init', 'c1', '--track', 'backend', '--preset', 'full'])
     expect(await h.run(['afk', 'run'])).toBe(0)
-    expect(h.err.join('\n')).toContain('#29-wire')
-    expect(h.err.join('\n')).toContain('不伪装 docker')
+    expect(h.out.join('\n')).toContain('就绪队列空')
   })
 
   test('未知子命令 exit 1', async () => {

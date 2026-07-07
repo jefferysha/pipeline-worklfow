@@ -20,6 +20,8 @@ export * from './runner/runner.js'
 export * from './runner/docker.js'
 // sdk：对外编排 API
 export * from './sdk/sdk.js'
+// #29-wire：真 docker 执行接线（createLifecyclePorts + runChangeInSandbox → RunChange）
+export * from './sdk/dockerRunChange.js'
 // ─── BACKLOG #29c：docker 全链执行（真 docker / 真 git worktree / 真 merge-back）───
 // runner：exec 注入面 / boundedTail 64KiB / git 双挂载 / 三路 race / docker 容器全链
 export * from './runner/exec.js'
