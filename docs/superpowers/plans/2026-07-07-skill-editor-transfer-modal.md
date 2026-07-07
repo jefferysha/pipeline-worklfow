@@ -214,7 +214,7 @@ git commit -m "feat(server): GET /api/skills/registry 路由"
 - Produces: `<SkillTransferModal selected={string[]} onSave={(skills: string[]) => Promise<void>} onCancel={() => void} />`，
   供 Task 4 接线进 `SettingsView.tsx`。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```tsx
 // packages/dashboard-app/src/settings/SkillTransferModal.test.tsx
@@ -266,12 +266,12 @@ describe('SkillTransferModal', () => {
 })
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `cd /Users/a1234/Documents/code-manager/projects/pipeline-worklfow && npm run test:web -- SkillTransferModal`
 Expected: FAIL — `Cannot find module './SkillTransferModal'`
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 ```tsx
 // packages/dashboard-app/src/settings/SkillTransferModal.tsx
@@ -335,12 +335,12 @@ export function SkillTransferModal({ selected, onSave, onCancel }: SkillTransfer
 }
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `npm run test:web -- SkillTransferModal`
 Expected: PASS（2 例）
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add packages/dashboard-app/src/settings/SkillTransferModal.tsx packages/dashboard-app/src/settings/SkillTransferModal.test.tsx
