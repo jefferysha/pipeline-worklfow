@@ -282,7 +282,7 @@ git commit -m "feat(server): GET /api/loops/snapshot 路由 + capabilities.loops
 - Produces: `POST /api/loops/level` body `{ root: string; id: string; target: 'L1'|'L2'|'L3' }`，
   成功 200 返回 `ApplyLevelResult`（含 `written: boolean`），失败按校验类型 400/404/401/403。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```ts
 describe('POST /api/loops/level —— 升降档写回', () => {
@@ -328,12 +328,12 @@ describe('POST /api/loops/level —— 升降档写回', () => {
 满足 L1→L2——参照 `packages/kernel/src/loops/graduation.test.ts` 里 `readiness(80)` 的构造
 方式反推需要哪些字段饱满，例如 `goal`/`kill_criteria`/`human_gates` 都非空。）
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `npx vitest run packages/server/src/server.test.ts -t "loops/level"`
 Expected: FAIL — 404 路由不存在
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 `server.ts` import 区加：
 ```ts
@@ -376,12 +376,12 @@ if (path === '/api/loops/level') {
 分支已在用它，直接复用，不新写解析逻辑。三层鉴权守卫已经在 `handlePost` 顶部统一做过，
 这个分支不需要重复写。）
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `npx vitest run packages/server/src/server.test.ts -t "loops"`
 Expected: PASS（全部 loops 相关用例）
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add packages/server/src/server.ts packages/server/src/server.test.ts
