@@ -43,7 +43,7 @@
   供 Task 2 的路由处理函数调用；`LoopRow`/`LoopsSnapshot` 类型供 Task 4 前端消费（前端会
   重新声明一份镜像类型，不跨包 import 类型，同现有 `Snapshot` 类型的做法）。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```ts
 // packages/server/src/loops.test.ts
@@ -107,12 +107,12 @@ describe('buildLoopsSnapshot', () => {
 })
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `cd /Users/a1234/Documents/code-manager/projects/pipeline-worklfow && npx vitest run packages/server/src/loops.test.ts`
 Expected: FAIL —`Cannot find module './loops.js'`（文件还不存在）
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 ```ts
 // packages/server/src/loops.ts
@@ -184,12 +184,12 @@ export async function buildLoopsSnapshot(deps: LoopsSnapshotDeps): Promise<Loops
 }
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `npx vitest run packages/server/src/loops.test.ts`
 Expected: PASS（2 例）
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add packages/server/src/loops.ts packages/server/src/loops.test.ts
