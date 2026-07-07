@@ -9,3 +9,6 @@ coverage/
 .pipeline-pending-*
 .breadcrumb
 .superpowers/
+
+# git worktrees (isolated workstreams, per superpowers:using-git-worktrees)
+.worktrees/
