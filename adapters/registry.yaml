@@ -191,24 +191,151 @@ platforms:
     track_event: none
     track_format: none
 
-# ─── 长尾平台（D14 平台广度：证明"填表即可扩"，策略证明 > 穷举 padding）───
-# 以下平台**尚未建 configure**（不硬凑实现——避免 padding；策略面比穷举更重要）。目标档位/降级点
-# 已登记，证明本框架下加平台 = 在此填一行 + 写 configure + 三 wrapper（薄包 baseline）+ 进 conformance。
-# 活跃 6（claude-code/codex/cursor/gemini/copilot/pi/devin 中的 non-baseline 实现）+ 长尾登记，
-# 策略面对标 Trellis 16 平台 / Comet 30 平台——加平台成本 = 填表，不是重写内核。
-longtail:
-  - id: aider
-    tier: B
-    note: "目标档 B：aider 无 pre-tool hook 原语 → veto 降级（commit-gate 静态约定）；inject/track 走 .aider.conf.yml + 会话钩子。待建 configure。"
-  - id: continue
-    tier: B
-    note: "目标档 B：Continue.dev config.yaml 有 hooks/rules → inject native、track native；veto 无硬拦原语 → 降级。待建 configure。"
-  - id: cline
-    tier: B
-    note: "目标档 B（含 roo-code 同族）：.clinerules 静态注入 + MCP 事件 → inject native、track native；veto 降级为审批流。待建 configure。"
-  - id: amp
-    tier: A
-    note: "目标档 A：Amp（Sourcegraph）hook 协议若与 CC 同构则三能力 native（同 gemini/codex 填表）。待 spike 实证 + configure。"
+  # ─── #41 长尾铺量批次 1/5：zed（研究结论，档 C，与 longtail 原目标档一致）───
+  # zed：Zed Agent Panel 无自定义 enforcement hook（官方 rules 文档只是静态 system-prompt 拼接；
+  #   zed-industries/zed#57890/#57943「lifecycle hooks」提案尚未实现，2026-07-07 spike 实证）。
+  #   三能力全静态降级（同 devin 形），本目录无 hooks/（不伪装强制）。
   - id: zed
     tier: C
-    note: "目标档 C：Zed AI 无自定义 enforcement hook → 三能力静态降级（.rules 上下文 + 手动 Unlock sentinel），同 devin 形。待建 configure。"
+    configDir: .rules
+    cliFlag: zed
+    defaultChecked: false
+    agentCapable: false
+    hasHooks: false
+    hookContainer: ""
+    configure: adapters/zed/install.sh
+    inject_status: degraded
+    inject_fallback: static-rules
+    inject_event: none
+    inject_format: static-rules-md
+    veto_status: degraded
+    veto_fallback: unlock-sentinel
+    veto_event: none
+    veto_format: manual-rm-marker
+    track_status: degraded
+    track_fallback: manual-note
+    track_event: none
+    track_format: none
+
+  # ─── #41 长尾铺量批次 2/5：aider（研究结论，档 B，与 longtail 原目标档一致）───
+  # aider：无 pre-tool hook 原语（lint-cmd/test-cmd 只在编辑*后*跑，挡不住写入本身，2026-07-07
+  #   spike 实证 aider.chat 官方文档）——veto 降级为 commit-gate（.git/hooks/pre-commit，只挡
+  #   commit 不挡写盘，如实标降级）。inject/track 走 aider 自身"始终自动生效"的真实原语：
+  #   .aider.conf.yml 的 read: 静态只读文件（每次启动重新读盘，非缓存，视为 native）+
+  #   git post-commit 留痕（把 commit 当工作单元，track 语义诚实再解释）。
+  - id: aider
+    tier: B
+    configDir: .aider.conf.yml
+    cliFlag: aider
+    defaultChecked: false
+    agentCapable: true
+    hasHooks: true
+    hookContainer: ".git/hooks/pre-commit|.git/hooks/post-commit"
+    configure: adapters/aider/install.sh
+    inject_status: native
+    inject_event: process-start
+    inject_format: conf-read-file
+    veto_status: degraded
+    veto_fallback: commit-gate
+    veto_event: pre-commit
+    veto_format: git-hook-exit-nonzero
+    track_status: native
+    track_event: post-commit
+    track_format: history-append
+
+  # ─── #41 长尾铺量批次 3/5：continue（研究结论，档由原目标 B **上修为 A**，见下方纠偏说明）───
+  # continue：面向 Continue **CLI**（`cn`），非 IDE 插件 config.yaml/rules（该面 spike 实测无任何
+  #   hook，只是静态文本）。Continue CLI 源码（extensions/cli/src/hooks/types.ts 头注）明确自称
+  #   与 Claude Code hook 协议逐字同构——三能力全 native，与 codex/gemini 同一填表模式。
+  - id: continue
+    tier: A
+    configDir: .continue
+    cliFlag: continue
+    defaultChecked: false
+    agentCapable: true
+    hasHooks: true
+    hookContainer: .continue/settings.json#hooks
+    configure: adapters/continue/install.sh
+    inject_status: native
+    inject_event: SessionStart
+    inject_format: json-additionalContext
+    veto_status: native
+    veto_event: PreToolUse
+    veto_format: exit2-stderr
+    track_status: native
+    track_event: PostToolUse
+    track_format: history-append
+
+  # ─── #41 长尾铺量批次 4/5：cline（研究结论，档由原目标 B **上修为 A**，见 README 纠偏说明）───
+  # cline：直读 cline/cline 开源仓库源码（.clinerules/hooks/README.md + hooks.proto +
+  #   sdk/examples/hooks/PreToolUse_BlockDestructive.sh）确认 PreToolUse 真硬拦
+  #   （{"cancel":true} 阻止工具执行，非审批流）+ PostToolUse 真留痕 + TaskStart/TaskResume 真注入
+  #   ——三能力全 native。schema 与 CC 不同构（stdin-only、workspaceRoots 数组、恒 JSON 输出，
+  #   不串格式）；hookContainer 是物理文件目录而非单一 JSON manifest，故 install.sh 生成薄 shim
+  #   文件转发到本仓库 hooks/ 实体（见 README）。track 强制 tool_name="Skill" 映射真实工具名进
+  #   skill 字段，避免"声明 native 却对真实工具调用恒不触发"。
+  - id: cline
+    tier: A
+    configDir: .clinerules/hooks
+    cliFlag: cline
+    defaultChecked: false
+    agentCapable: true
+    hasHooks: true
+    hookContainer: .clinerules/hooks/
+    configure: adapters/cline/install.sh
+    inject_status: native
+    inject_event: TaskStart
+    inject_format: contextModification-json
+    veto_status: native
+    veto_event: PreToolUse
+    veto_format: cancel-json
+    track_status: native
+    track_event: PostToolUse
+    track_format: history-append
+
+  # ─── #41 长尾铺量批次 5/5：amp（研究结论，档 A，与 longtail 原目标档一致——但载体不同构，见下）───
+  # amp：Amp 没有"外部命令 + stdin JSON + exit code"式 hook 协议（与 codex/gemini/continue 不
+  #   同构，spike 实证：反编译已发布 npm 包 @ampcode/cli-darwin-arm64 真实二进制字符串，逐字确认
+  #   事件分发表 event:{sessionStart,toolCall,toolResult,agentStart,agentEnd} + tool.call 可返回
+  #   "reject-and-continue"真硬拦 + session.start 每 thread 仅一次去重逻辑）。原生扩展机制是进程内
+  #   JS/TS 插件（.amp/plugins/<name>.js，Bun 加载，amp.on(event,handler) 注册）——传输层与其余
+  #   A 档平台不同构，但三能力保真度不打折（真硬拦/真会话级注入/真留痕），contract §1 档 A 判据
+  #   是能力保真而非传输协议一致，故仍归类 A，非新档位。诚实边界（未经真实 Amp 会话端到端实测，
+  #   event payload 具体字段名为防御性推断）见 adapters/amp/README.md §5。
+  - id: amp
+    tier: A
+    configDir: .amp/plugins
+    cliFlag: amp
+    defaultChecked: false
+    agentCapable: true
+    hasHooks: true
+    hookContainer: .amp/plugins/pipeline.js
+    configure: adapters/amp/install.sh
+    inject_status: native
+    inject_event: agent.start
+    inject_format: contextModification-messages
+    veto_status: native
+    veto_event: tool.call
+    veto_format: reject-and-continue
+    track_status: native
+    track_event: tool.result
+    track_format: history-append
+
+# ─── 长尾平台（D14 平台广度：证明"填表即可扩"，策略证明 > 穷举 padding）───
+# 全部 5 项长尾平台（aider/continue/cline/amp/zed）已于 2026-07-07 #41 批次转 active——本表当前
+# 无剩余 longtail 条目。活跃 12（claude-code/codex/cursor/gemini/copilot/pi/devin/zed/aider/
+# continue/cline/amp），策略面对标 Trellis 16 平台 / Comet 30 平台（加平台成本 = 填表，不是重写内核）。
+#
+# 2026-07-07 #41 长尾铺量批次逐项处置（如实纠偏记录，非全盘照抄原表）：
+#   - zed（档 C）/ aider（档 B）：与原目标档一致。
+#   - continue（目标档 B → **上修为 A**）：面向 Continue **CLI**（`cn`，非 IDE 插件 config.yaml/
+#     rules），源码自证与 CC hook 协议逐字同构。
+#   - cline（目标档 B → **上修为 A**）：.clinerules/hooks/README.md + hooks.proto +
+#     sdk/examples/hooks/ 证实 PreToolUse 真硬拦（{"cancel":true} 阻止工具执行）+ PostToolUse
+#     真留痕 + TaskStart/TaskResume 真注入。
+#   - amp（档 A，与原目标一致）：spike 证实与 CC **不同构**（进程内插件而非 exit-code 子进程），
+#     但三能力保真度不打折，按 contract §1"能力保真"判据仍归 A（非"传输协议同构才给 A"）；
+#     诚实边界（未经真实 Amp 会话端到端实测）见 adapters/amp/README.md §5。
+#
+# 长尾表结构保留（当前为空），供未来新增平台继续在此登记目标档位/降级点（"待建 configure"）。
+longtail: []

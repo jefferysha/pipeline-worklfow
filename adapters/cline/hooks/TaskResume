@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# adapters/cline/hooks/TaskResume — Cline TaskResume inject 薄包装（档 A 全保真）。
+#
+# 与 TaskStart 使用**同一份** inject 逻辑：CC 的 SessionStart 对 source ∈ {startup, resume} 都会
+# 触发一次；Cline 把这两种情形拆成 TaskStart（新任务）/ TaskResume（恢复既有任务）两个独立 hook
+# 文件名——本文件只是委托给同目录 TaskStart（stdin 原样透传，未被本文件消费），避免重复逻辑。
+set -uo pipefail
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+exec bash "$DIR/TaskStart"

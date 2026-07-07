@@ -3,14 +3,15 @@
  * node:http 真发请求、断言真实响应与真实落盘副作用。零 mock。
  */
 import { afterEach, describe, expect, it } from 'vitest'
+import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { createDashboardServer } from './server.js'
 import type { DashboardServer } from './types.js'
 import {
-  initChange, makeProject, newStore, openSSE, reqGet, reqPost, testFlow,
+  initChange, makeProject, makeTempManifest, newStore, openSSE, reqGet, reqPost, testFlow,
 } from './test-support.js'
 import type { StateStore } from '@pipeline-lite/kernel'
-import { TRANSITION_EVENTS as KERNEL_EVENTS, eventEdge as kernelEventEdge } from '@pipeline-lite/kernel'
+import { loadManifest, TRANSITION_EVENTS as KERNEL_EVENTS, eventEdge as kernelEventEdge } from '@pipeline-lite/kernel'
 import { TRANSITION_EVENTS, eventEdge } from './transition.js'
 
 /** 接线级：server 真消费 kernel 单一真相源（BACKLOG #25b / GOAL B2）——transition.ts 已删本地镜像，
@@ -36,9 +37,15 @@ interface Harness {
   root: string
   store: StateStore
   name: string
+  manifestPath?: string
 }
 
-async function start(opts?: { version?: string; token?: string; pollIntervalMs?: number }): Promise<Harness> {
+async function start(opts?: {
+  version?: string
+  token?: string
+  pollIntervalMs?: number
+  manifestPath?: string
+}): Promise<Harness> {
   const store = newStore()
   const root = await makeProject()
   const name = 'my-change'
@@ -51,10 +58,18 @@ async function start(opts?: { version?: string; token?: string; pollIntervalMs?:
     flow: testFlow(),
     clock: () => '2026-07-07T00:00:00Z',
     pollIntervalMs: opts?.pollIntervalMs ?? 20,
+    manifestPath: opts?.manifestPath,
   })
   openServers.push(srv)
   const { port } = await srv.listen(0, '127.0.0.1')
-  return { srv, port, token: srv.token, root, store, name }
+  return { srv, port, token: srv.token, root, store, name, manifestPath: opts?.manifestPath }
+}
+
+/** 同 start()，但额外真拷贝仓库 manifest.yaml 到临时文件并注入，供 config 端点测试使用。 */
+async function startWithConfig(opts?: { version?: string; token?: string }): Promise<Harness & { manifestPath: string }> {
+  const manifestPath = await makeTempManifest()
+  const h = await start({ ...opts, manifestPath })
+  return { ...h, manifestPath }
 }
 
 describe('GET /api/health —— 存活探针 + 本 server 版本（B4）', () => {
@@ -268,5 +283,148 @@ describe('GET /api/stream —— SSE 真推送（.pipeline.yaml 变化即推）'
     }, 4000)
     expect(JSON.parse(next.data).projects[0].changes[0].phase).toBe('explore')
     sse.close()
+  })
+})
+
+describe('GET /api/config —— M3 config 数据端（Settings 矩阵 tab，本机回环只读不鉴权）', () => {
+  it('capabilities.config=false 的实例（未注入 manifestPath）→ 404，snapshot 亦如实标 config:false', async () => {
+    const h = await start() // 默认不带 manifestPath（同现有全部既存测试）
+    const snap = (await reqGet(h.port, '/api/snapshot')).json<{ capabilities: Record<string, boolean> }>()
+    expect(snap.capabilities.config).toBe(false)
+    const r = await reqGet(h.port, '/api/config')
+    expect(r.status).toBe(404)
+  })
+
+  it('capabilities.config=true（注入真 manifestPath）→ 200 且回真 mandatory_skills 扁平映射', async () => {
+    const h = await startWithConfig()
+    const snap = (await reqGet(h.port, '/api/snapshot')).json<{ capabilities: Record<string, boolean> }>()
+    expect(snap.capabilities.config).toBe(true)
+
+    const r = await reqGet(h.port, '/api/config')
+    expect(r.status).toBe(200)
+    const body = r.json<{ ok: boolean; mandatory_skills: Record<string, string[]> }>()
+    expect(body.ok).toBe(true)
+    expect(body.mandatory_skills['build.backend']).toContain('superpowers:test-driven-development')
+    expect(body.mandatory_skills['open._all']).toContain('opsx:propose|openspec-propose')
+  })
+})
+
+describe('POST /api/config/mandatory-skills —— M3 config 写端点（同 B5 token 鉴权模式）', () => {
+  it('无 token → 401（与 transition 端点同一鉴权模式）', async () => {
+    const h = await startWithConfig()
+    const r = await reqPost(h.port, '/api/config/mandatory-skills', { phase: 'build', track: 'backend', skills: ['x'] })
+    expect(r.status).toBe(401)
+  })
+
+  it('错 token → 401', async () => {
+    const h = await startWithConfig()
+    const r = await reqPost(h.port, '/api/config/mandatory-skills', { phase: 'build', track: 'backend', skills: ['x'] }, {
+      headers: { Authorization: 'Bearer wrong-token' },
+    })
+    expect(r.status).toBe(401)
+  })
+
+  it('对 token → 200 且真改盘 manifest.yaml（build.backend 真变，其余条目不变）', async () => {
+    const h = await startWithConfig()
+    const r = await reqPost(h.port, '/api/config/mandatory-skills', { phase: 'build', track: 'backend', skills: ['new-a', 'new-b'] }, {
+      headers: { Authorization: `Bearer ${h.token}` },
+    })
+    expect(r.status).toBe(200)
+    const body = r.json<{ ok: boolean; phase: string; track: string; skills: string[] }>()
+    expect(body).toEqual({ ok: true, phase: 'build', track: 'backend', skills: ['new-a', 'new-b'] })
+
+    // 真副作用：磁盘上的 manifest.yaml 已改，且真过 kernel loadManifest 重解析
+    const reparsed = loadManifest(h.manifestPath!)
+    expect(reparsed.mandatorySkills.build.backend).toEqual(['new-a', 'new-b'])
+    expect(reparsed.mandatorySkills.explore.pm).toEqual(['superpowers:brainstorming', 'grill-with-docs'])
+
+    // 且 GET /api/config 立刻回显新值（读写一致，非缓存旧值）
+    const after = (await reqGet(h.port, '/api/config')).json<{ mandatory_skills: Record<string, string[]> }>()
+    expect(after.mandatory_skills['build.backend']).toEqual(['new-a', 'new-b'])
+  })
+
+  it('X-Pipeline-Token header 亦被接受（对 token → 200，同 transition 端点）', async () => {
+    const h = await startWithConfig()
+    const r = await reqPost(h.port, '/api/config/mandatory-skills', { phase: 'spec', track: 'pm', skills: ['ok'] }, {
+      headers: { 'X-Pipeline-Token': h.token },
+    })
+    expect(r.status).toBe(200)
+  })
+
+  it('非本地 Host header → 403（同 transition 端点共用的 DNS 重绑定守卫）', async () => {
+    const h = await startWithConfig()
+    const r = await reqPost(h.port, '/api/config/mandatory-skills', { phase: 'build', track: 'backend', skills: ['x'] }, {
+      headers: { Host: 'evil.example:1234', Authorization: `Bearer ${h.token}` },
+    })
+    expect(r.status).toBe(403)
+  })
+
+  it('非 application/json → 400（同 transition 端点共用的同源策略防线）', async () => {
+    const h = await startWithConfig()
+    const r = await reqPost(h.port, '/api/config/mandatory-skills', null, {
+      rawBody: 'phase=build&track=backend',
+      headers: { 'Content-Type': 'text/plain', Authorization: `Bearer ${h.token}` },
+    })
+    expect(r.status).toBe(400)
+  })
+
+  it('capabilities.config=false（未注入 manifestPath）→ 404，即便带对 token', async () => {
+    const h = await start()
+    const r = await reqPost(h.port, '/api/config/mandatory-skills', { phase: 'build', track: 'backend', skills: ['x'] }, {
+      headers: { Authorization: `Bearer ${h.token}` },
+    })
+    expect(r.status).toBe(404)
+  })
+
+  it('archive 相位 → 400，原文件不改动', async () => {
+    const h = await startWithConfig()
+    const before = await readFile(h.manifestPath!, 'utf8')
+    const r = await reqPost(h.port, '/api/config/mandatory-skills', { phase: 'archive', track: 'backend', skills: ['x'] }, {
+      headers: { Authorization: `Bearer ${h.token}` },
+    })
+    expect(r.status).toBe(400)
+    expect(await readFile(h.manifestPath!, 'utf8')).toBe(before)
+  })
+
+  it('未知 track（如 _all）→ 400，原文件不改动', async () => {
+    const h = await startWithConfig()
+    const before = await readFile(h.manifestPath!, 'utf8')
+    const r = await reqPost(h.port, '/api/config/mandatory-skills', { phase: 'build', track: '_all', skills: ['x'] }, {
+      headers: { Authorization: `Bearer ${h.token}` },
+    })
+    expect(r.status).toBe(400)
+    expect(await readFile(h.manifestPath!, 'utf8')).toBe(before)
+  })
+
+  it('含非法字符的 skill token（注入尝试：逗号 + 方括号 + 伪 key）→ 400，原文件逐字节不改动', async () => {
+    const h = await startWithConfig()
+    const before = await readFile(h.manifestPath!, 'utf8')
+    const r = await reqPost(
+      h.port,
+      '/api/config/mandatory-skills',
+      { phase: 'build', track: 'backend', skills: ['legit', 'evil], injected.key: [pwn'] },
+      { headers: { Authorization: `Bearer ${h.token}` } },
+    )
+    expect(r.status).toBe(400)
+    const body = r.json<{ ok: boolean; error: string }>()
+    expect(body.ok).toBe(false)
+    expect(await readFile(h.manifestPath!, 'utf8')).toBe(before) // 字节级不变——无注入生效
+  })
+
+  it('并发提交两个不同 phase.track（多标签页同时编辑）→ 都真生效、互不覆盖丢失', async () => {
+    const h = await startWithConfig()
+    const [r1, r2] = await Promise.all([
+      reqPost(h.port, '/api/config/mandatory-skills', { phase: 'spec', track: 'frontend', skills: ['tab-1'] }, {
+        headers: { Authorization: `Bearer ${h.token}` },
+      }),
+      reqPost(h.port, '/api/config/mandatory-skills', { phase: 'verify', track: 'backend', skills: ['tab-2'] }, {
+        headers: { Authorization: `Bearer ${h.token}` },
+      }),
+    ])
+    expect(r1.status).toBe(200)
+    expect(r2.status).toBe(200)
+    const reparsed = loadManifest(h.manifestPath!)
+    expect(reparsed.mandatorySkills.spec.frontend).toEqual(['tab-1'])
+    expect(reparsed.mandatorySkills.verify.backend).toEqual(['tab-2'])
   })
 })

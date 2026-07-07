@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# adapters/cline/hooks/TaskStart — Cline TaskStart inject 薄包装（档 A 全保真）。
+#
+# Cline hooks 契约（spike 实证）：TaskStart 在**新**任务开始时触发（非 resume，那是 TaskResume——
+# 两者合起来对应 CC SessionStart 的 source ∈ {startup, resume} 两种触发面，故本 adapter 同时
+# 装 TaskStart 与 TaskResume，逐字复用同一份 inject 逻辑）。输入 stdin JSON 含
+#   {"hookName":"TaskStart","workspaceRoots":["<cwd>"],"taskStart":{"taskMetadata":{...}}}
+# 输出**必须**是合法 JSON {"cancel":false,"contextModification":"<pipeline 上下文>"}——
+# contextModification 是 Cline 的会话级上下文注入通道，对应 CC additionalContext。
+#
+# 复用 lite baseline hooks/session-start.sh（宪法 + 活跃 change 上下文 → stdout），纯 bash
+# json_escape 包 JSON（不引 jq）。fail-safe：任何异常都仍输出合法 JSON（cancel:false，
+# contextModification 缺省不含——不产出伪上下文；Cline 协议要求任何时候都要合法 JSON）。
+set -uo pipefail
+
+INPUT="$(cat 2>/dev/null || printf '{}')"
+[ -z "$INPUT" ] && INPUT='{}'
+
+first_workspace_root() {
+  case "$INPUT" in *'"workspaceRoots"'*) ;; *) return 1 ;; esac
+  local rest="${INPUT#*\"workspaceRoots\"}"
+  rest="${rest#*[}"
+  case "$rest" in
+    *'"'*) rest="${rest#*\"}"; printf '%s' "${rest%%\"*}"; return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+json_escape() {
+  local s="$1"
+  s="${s//\\/\\\\}"; s="${s//\"/\\\"}"
+  s="${s//$'\t'/\\t}"; s="${s//$'\r'/\\r}"; s="${s//$'\n'/\\n}"
+  printf '%s' "$s"
+}
+
+CWD="$(first_workspace_root || true)"
+[ -z "$CWD" ] && { printf '{"cancel":false}\n'; exit 0; }
+
+_ROOT="${CLAUDE_PLUGIN_ROOT:-}"
+if [ -z "$_ROOT" ] || [ ! -d "$_ROOT/hooks" ]; then
+  _ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../../.." 2>/dev/null && pwd || printf '%s' "$HOME/.claude")"
+fi
+export CLAUDE_PLUGIN_ROOT="$_ROOT"
+
+CC_INJECTOR="${PIPELINE_CC_INJECTOR:-$_ROOT/hooks/session-start.sh}"
+[ -f "$CC_INJECTOR" ] || { printf '{"cancel":false}\n'; exit 0; }
+
+CONTEXT="$(printf '{"cwd":"%s"}' "$CWD" | bash "$CC_INJECTOR" 2>/dev/null || true)"
+if [ -n "$CONTEXT" ]; then
+  printf '{"cancel":false,"contextModification":"%s"}\n' "$(json_escape "$CONTEXT")"
+else
+  printf '{"cancel":false}\n'
+fi
+exit 0

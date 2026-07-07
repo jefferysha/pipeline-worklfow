@@ -3,6 +3,7 @@
  * fake MemFs 仅替换磁盘字节源，dispatch/格式/flag 解析/错误路径穷举；真解析真检索走 kernel。
  */
 import { basename, dirname } from 'node:path'
+import { opencodeSqliteAvailable } from '@pipeline-lite/kernel'
 import { describe, expect, test } from 'vitest'
 import { makeDeps } from '../test-support.js'
 import { cmdMem, type MemDirent, type MemFs } from './mem.js'
@@ -193,9 +194,14 @@ describe('dispatch / help / opencode warning', () => {
     expect(deps.errLines.join('\n')).toContain('unknown command')
   })
 
-  test('platform=all → OpenCode 降级 warning 走 stderr', async () => {
+  test('platform=all → OpenCode warning 仅当 node:sqlite 不可用时走 stderr（G5 闭：真检测而非硬编码）', async () => {
     const deps = makeDeps()
     await cmdMem(deps, 'list', ['--global'], tree())
-    expect(deps.errLines.join('\n')).toContain('OpenCode')
+    const stderr = deps.errLines.join('\n')
+    if (opencodeSqliteAvailable()) {
+      expect(stderr).not.toContain('OpenCode')
+    } else {
+      expect(stderr).toContain('OpenCode')
+    }
   })
 })

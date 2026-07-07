@@ -1,10 +1,60 @@
-import { describe, it, expect, beforeEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { I18nProvider } from '../i18n'
 import { SettingsView } from './SettingsView'
 
+/**
+ * M3 config 写端点前端测试基座：真 fetch stub 喂 GET /api/config + POST /api/config/mandatory-skills
+ * （形状逐字对齐 packages/server/src/server.ts 的真实响应），真 render + 真 fireEvent 驱动交互
+ * （GOAL C9 真实渲染测试风格：非 shallow render，断言真实 DOM）。默认 capable:false，保持既存
+ * 只读断言（本文件顶部既有测试）在新 useEffect 接入后行为不变——组件把「未探测/探测失败」都
+ * 折叠为同一只读渲染路径，同步断言不受 fetch 异步时序影响。
+ */
+interface ConfigFetchOpts {
+  capable?: boolean
+  mandatorySkills?: Record<string, string[]>
+  postResponse?: (body: { phase: string; track: string; skills: string[] }) => { status: number; body: unknown }
+}
+
+function stubConfigFetch(opts: ConfigFetchOpts = {}): ReturnType<typeof vi.fn> {
+  const capable = opts.capable ?? false
+  const mandatorySkills = opts.mandatorySkills ?? {}
+  const fetchMock = vi.fn(async (url: unknown, init?: RequestInit) => {
+    const u = String(url)
+    const method = (init?.method ?? 'GET').toUpperCase()
+    if (u === '/api/config' && method === 'GET') {
+      if (!capable) {
+        return { ok: false, status: 404, json: async () => ({ ok: false, error: 'config 数据端未装' }) } as unknown as Response
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ ok: true, generated_at: '2026-07-07T00:00:00Z', mandatory_skills: mandatorySkills }),
+      } as unknown as Response
+    }
+    if (u === '/api/config/mandatory-skills' && method === 'POST') {
+      const parsed = JSON.parse(String(init?.body ?? '{}')) as { phase: string; track: string; skills: string[] }
+      const custom = opts.postResponse?.(parsed)
+      if (custom) {
+        const ok = custom.status >= 200 && custom.status < 300
+        return { ok, status: custom.status, json: async () => custom.body } as unknown as Response
+      }
+      return { ok: true, status: 200, json: async () => ({ ok: true, ...parsed }) } as unknown as Response
+    }
+    throw new Error(`unexpected fetch ${method} ${u}`)
+  })
+  vi.stubGlobal('fetch', fetchMock)
+  return fetchMock
+}
+
 beforeEach(() => {
   localStorage.clear()
+  stubConfigFetch() // 默认 capability off（同旧 server 行为），既存只读测试据此保持通过
+  ;(window as unknown as { __PIPELINE_DASHBOARD_TOKEN__?: string }).__PIPELINE_DASHBOARD_TOKEN__ = 'tok-settings'
+})
+
+afterEach(() => {
+  vi.unstubAllGlobals()
 })
 
 function renderSettings() {
@@ -15,49 +65,164 @@ function renderSettings() {
   )
 }
 
+/**
+ * 沖掉 SettingsView 挂载即触发的后台 GET /api/config 探测效应（真 Promise 链，非 fake timer）。
+ * 既存的同步断言测试不关心探测结果，但若不等它落定就结束测试/卸载组件，React 会报 act() 警告
+ * （state 更新发生在测试收尾之外）。真 setTimeout(0) 让出一个宏任务，此前排队的微任务链
+ * （fetch → .then → res.json() → setState）保证已跑完——不改变这些测试的同步断言语义，只是
+ * 让它们干净收尾。
+ */
+async function flushEffects(): Promise<void> {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0))
+  })
+}
+
 describe('SettingsView 相位轴（病灶①：配置从看板搬进设置）', () => {
-  it('相位轴列出全部 7 相位', () => {
+  it('相位轴列出全部 7 相位', async () => {
     renderSettings()
     for (const phase of ['open', 'explore', 'spec', 'build', 'verify', 'ship', 'archive']) {
       expect(screen.getByTestId(`axis-${phase}`)).toBeInTheDocument()
     }
+    await flushEffects()
   })
 
-  it('复核门相位（explore/spec/verify）标复核门徽标，build 不标', () => {
+  it('复核门相位（explore/spec/verify）标复核门徽标，build 不标', async () => {
     renderSettings()
     expect(screen.getByTestId('axis-gate-explore')).toBeInTheDocument()
     expect(screen.getByTestId('axis-gate-spec')).toBeInTheDocument()
     expect(screen.getByTestId('axis-gate-verify')).toBeInTheDocument()
     expect(screen.queryByTestId('axis-gate-build')).toBeNull()
     expect(screen.queryByTestId('axis-gate-open')).toBeNull()
+    await flushEffects()
   })
 
-  it('verify 行显示双出口目标（交付 / 实现）', () => {
+  it('verify 行显示双出口目标（交付 / 实现）', async () => {
     renderSettings()
     const row = screen.getByTestId('axis-verify')
     expect(row.textContent).toContain('交付')
     expect(row.textContent).toContain('实现')
+    await flushEffects()
   })
 })
 
 describe('SettingsView 技能矩阵', () => {
-  it('切到矩阵 tab 渲染 phase×track 表 + 只读提示', () => {
+  it('切到矩阵 tab 渲染 phase×track 表 + 只读提示', async () => {
     renderSettings()
     fireEvent.click(screen.getByTestId('settings-tab-matrix'))
     expect(screen.getByTestId('matrix-table')).toBeInTheDocument()
     expect(screen.getByTestId('matrix-readonly-note')).toBeInTheDocument()
+    await flushEffects()
   })
 
-  it('矩阵单元含 manifest 镜像的强制 skill（build.backend → TDD）', () => {
+  it('矩阵单元含 manifest 镜像的强制 skill（build.backend → TDD）', async () => {
     renderSettings()
     fireEvent.click(screen.getByTestId('settings-tab-matrix'))
     const cell = screen.getByTestId('matrix-cell-build-backend')
     expect(cell.textContent).toContain('superpowers:test-driven-development')
+    await flushEffects()
   })
 
-  it('open 行经 _all 兜底显示 propose skill', () => {
+  it('open 行经 _all 兜底显示 propose skill', async () => {
     renderSettings()
     fireEvent.click(screen.getByTestId('settings-tab-matrix'))
     expect(screen.getByTestId('matrix-cell-open-backend').textContent).toContain('propose')
+    await flushEffects()
+  })
+})
+
+describe('SettingsView 矩阵 —— M3 config 写端点真接线（真 fetch + 真 fireEvent，非 mock 浅渲染）', () => {
+  it('capabilities.config=false（旧 server / 探测失败）→ 保持只读提示，矩阵内无任何编辑按钮', async () => {
+    stubConfigFetch({ capable: false })
+    renderSettings()
+    fireEvent.click(screen.getByTestId('settings-tab-matrix'))
+    await waitFor(() => expect(screen.getByTestId('matrix-readonly-note')).toBeInTheDocument())
+    expect(screen.queryByTestId('matrix-edit-build-backend')).toBeNull()
+    expect(screen.queryByTestId('matrix-editable-note')).toBeNull()
+  })
+
+  it('capabilities.config=true → 真 fetch /api/config 渲染服务端实时数据（非静态镜像）+ 编辑按钮出现', async () => {
+    stubConfigFetch({ capable: true, mandatorySkills: { 'build.backend': ['live-a', 'live-b'] } })
+    renderSettings()
+    fireEvent.click(screen.getByTestId('settings-tab-matrix'))
+    expect(await screen.findByTestId('matrix-edit-build-backend')).toBeInTheDocument()
+    const cell = screen.getByTestId('matrix-cell-build-backend')
+    expect(cell.textContent).toContain('live-a')
+    expect(cell.textContent).toContain('live-b')
+    // 静态镜像的默认值（TDD skill）不应残留——证明确实切到了服务端实时值而非仍显示 data.ts 静态兜底
+    expect(cell.textContent).not.toContain('superpowers:test-driven-development')
+    expect(screen.getByTestId('matrix-editable-note')).toBeInTheDocument()
+    expect(screen.queryByTestId('matrix-readonly-note')).toBeNull()
+  })
+
+  it('点击编辑 → 输入框预填当前值；取消 → 恢复只读且不发 POST', async () => {
+    const fetchMock = stubConfigFetch({ capable: true, mandatorySkills: { 'spec.pm': ['a', 'b'] } })
+    renderSettings()
+    fireEvent.click(screen.getByTestId('settings-tab-matrix'))
+    fireEvent.click(await screen.findByTestId('matrix-edit-spec-pm'))
+
+    const input = screen.getByTestId('matrix-input-spec-pm') as HTMLInputElement
+    expect(input.value).toBe('a, b')
+
+    fireEvent.click(screen.getByTestId('matrix-cancel-spec-pm'))
+    expect(screen.queryByTestId('matrix-input-spec-pm')).toBeNull()
+    expect(screen.getByTestId('matrix-edit-spec-pm')).toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledTimes(1) // 只有初始 GET，取消不应触发任何 POST
+  })
+
+  it('编辑 + 保存 → 真 POST 请求 url/method/Authorization Bearer/body 正确，成功后回显新值并退出编辑态', async () => {
+    const fetchMock = stubConfigFetch({ capable: true, mandatorySkills: { 'build.backend': ['old'] } })
+    renderSettings()
+    fireEvent.click(screen.getByTestId('settings-tab-matrix'))
+    fireEvent.click(await screen.findByTestId('matrix-edit-build-backend'))
+
+    fireEvent.change(screen.getByTestId('matrix-input-build-backend'), { target: { value: 'x, y, z' } })
+    fireEvent.click(screen.getByTestId('matrix-save-build-backend'))
+
+    await waitFor(() => expect(screen.queryByTestId('matrix-input-build-backend')).toBeNull())
+    const cell = screen.getByTestId('matrix-cell-build-backend')
+    expect(cell.textContent).toContain('x')
+    expect(cell.textContent).toContain('y')
+    expect(cell.textContent).toContain('z')
+    expect(cell.textContent).not.toContain('old')
+
+    const postCall = fetchMock.mock.calls.find((args: unknown[]) => String(args[0]) === '/api/config/mandatory-skills')
+    expect(postCall).toBeDefined()
+    const [, init] = postCall as [string, RequestInit]
+    expect(init.method).toBe('POST')
+    const headers = init.headers as Record<string, string>
+    expect(headers.Authorization).toBe('Bearer tok-settings')
+    expect(headers['Content-Type']).toBe('application/json')
+    expect(JSON.parse(init.body as string)).toEqual({ phase: 'build', track: 'backend', skills: ['x', 'y', 'z'] })
+  })
+
+  it('保存失败（服务端 400）→ 显示错误文案且保留编辑态（不丢弃草稿）', async () => {
+    stubConfigFetch({
+      capable: true,
+      mandatorySkills: { 'spec.pm': ['a'] },
+      postResponse: () => ({ status: 400, body: { ok: false, error: '非法 skill token' } }),
+    })
+    renderSettings()
+    fireEvent.click(screen.getByTestId('settings-tab-matrix'))
+    fireEvent.click(await screen.findByTestId('matrix-edit-spec-pm'))
+    fireEvent.change(screen.getByTestId('matrix-input-spec-pm'), { target: { value: 'a,b bad token' } })
+    fireEvent.click(screen.getByTestId('matrix-save-spec-pm'))
+
+    expect(await screen.findByTestId('matrix-save-error-spec-pm')).toHaveTextContent('非法 skill token')
+    // 仍在编辑态（草稿保留，用户可修正后重试，不因失败被踢回只读视图）
+    expect(screen.getByTestId('matrix-input-spec-pm')).toBeInTheDocument()
+  })
+
+  it('网络异常（fetch 抛错）→ 呈现错误态而非崩溃，且保持编辑态', async () => {
+    stubConfigFetch({ capable: true, mandatorySkills: { 'ship.backend': ['a'] } })
+    renderSettings()
+    fireEvent.click(screen.getByTestId('settings-tab-matrix'))
+    fireEvent.click(await screen.findByTestId('matrix-edit-ship-backend'))
+
+    // 保存阶段临时切换 fetch 为抛错版本（模拟断网），组件必须 catch 住、不让测试崩溃
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('network down')))
+    fireEvent.click(screen.getByTestId('matrix-save-ship-backend'))
+
+    expect(await screen.findByTestId('matrix-save-error-ship-backend')).toBeInTheDocument()
   })
 })

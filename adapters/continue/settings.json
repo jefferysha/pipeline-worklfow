@@ -1,0 +1,26 @@
+{
+  "_comment": "Continue CLI（`cn`）pipeline 适配器 hook 注册（长尾铺量 #41，档 A 全保真）。Continue CLI 的 hooks 系统与 Claude Code **逐字同构**（continuedev/continue 仓库 extensions/cli/src/hooks/types.ts 头注：'Claude Code-compatible hooks system for Continue CLI. These types match the exact schemas from Claude Code so that any hook written for `claude` works with `cn` out of the box.'）——三 wrapper 薄包 lite baseline hooks/session-start.sh · gate.sh · skill-tracker.sh，与 codex/gemini 做法相同。输入 JSON 走 stdin（含 cwd 顶层字段，与 baseline 直接兼容）；PreToolUse 阻断走 exit code 2（同 CC）；SessionStart 走 hookSpecificOutput.additionalContext（同 CC）。__ADAPTER_DIR__ 由 install.sh 替换为绝对路径。",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          { "type": "command", "command": "bash \"__ADAPTER_DIR__/hooks/inject.sh\" SessionStart" }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          { "type": "command", "command": "bash \"__ADAPTER_DIR__/hooks/veto.sh\" PreToolUse" }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          { "type": "command", "command": "bash \"__ADAPTER_DIR__/hooks/track.sh\" PostToolUse" }
+        ]
+      }
+    ]
+  }
+}

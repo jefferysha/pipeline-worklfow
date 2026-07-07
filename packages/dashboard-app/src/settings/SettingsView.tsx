@@ -1,18 +1,113 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useT } from '../i18n'
+import { getToken } from '../api/client'
 import { PHASES, TRANSITIONS } from '../types'
-import { MATRIX_TRACKS, isReviewGate, mandatoryFor } from './data'
+import { MANDATORY_SKILLS, MATRIX_TRACKS, isReviewGate } from './data'
 
 type Tab = 'axis' | 'matrix'
 
+/** POST /api/config/mandatory-skills 的成功响应体形状（server/src/server.ts 镜像）。 */
+interface MandatorySkillsPostResponse {
+  ok?: boolean
+  error?: string
+  skills?: string[]
+}
+
 /**
  * 设置 —— 病灶①解法：配置矩阵 + 相位轴编辑器从看板搬到独立视图。
- * 相位轴：7 相位 + 转换边 + 复核门标记（manifest 单源镜像，只读）。
- * 技能矩阵：相位 × 轨道强制 skill（manifest 镜像，只读预览；写回待 M3 config 端点）。
+ * 相位轴：7 相位 + 转换边 + 复核门标记（manifest 单源镜像，只读——状态机图不经本端点改）。
+ * 技能矩阵：相位 × 轨道强制 skill。M3 config 写端点收编：真 fetch GET /api/config 探测能力
+ * （capabilities.config，同 B6/B8 能力声明驱动渲染的既定模式）——探测到真数据端则矩阵单元
+ * 可编辑（真 POST /api/config/mandatory-skills，同 B5 token 鉴权模式）；未探测到（旧 server /
+ * 网络失败）则保持既有只读预览，不谎报能力。
+ *
+ * 注：本文件按任务的文件所有权边界自包含（未引入 packages/dashboard-app/src/i18n/translations.ts
+ * 新键、未新增旁置文件），因此新增的编辑态文案（编辑/保存/取消/错误提示）是直接字面量，暂未接入
+ * useT() 的 en/zh 切换——与本视图既有的 t() 驱动文案共存，是本轮收编的已知取舍。
  */
 export function SettingsView(): JSX.Element {
   const { t } = useT()
   const [tab, setTab] = useState<Tab>('axis')
+
+  // ── M3 config 写端点接线 ──
+  const [liveSkills, setLiveSkills] = useState<Record<string, string[]> | null>(null)
+  const [configCapable, setConfigCapable] = useState(false)
+  const [editingKey, setEditingKey] = useState<string | null>(null)
+  const [draft, setDraft] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const fetchedConfigRef = useRef(false)
+
+  // 懒加载：只在用户真正切到矩阵 tab 时才探测/拉取 config（而非每次挂载 SettingsView 就打一发
+  // 请求）——用户可能整场只看相位轴，没必要为没打开过的 tab 发请求；fetchedConfigRef 保证只探测一次。
+  useEffect(() => {
+    if (tab !== 'matrix' || fetchedConfigRef.current) return
+    fetchedConfigRef.current = true
+    let cancelled = false
+    fetch('/api/config', { headers: { Accept: 'application/json' } })
+      .then(async (res) => {
+        if (cancelled) return
+        if (!res.ok) {
+          setConfigCapable(false)
+          return
+        }
+        const body = (await res.json()) as { mandatory_skills?: Record<string, string[]> }
+        if (cancelled) return
+        setLiveSkills(body.mandatory_skills ?? {})
+        setConfigCapable(true)
+      })
+      .catch(() => {
+        if (!cancelled) setConfigCapable(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [tab])
+
+  function effectiveSkills(phase: string, track: string): string[] {
+    const table = liveSkills ?? MANDATORY_SKILLS
+    return table[`${phase}.${track}`] ?? table[`${phase}._all`] ?? []
+  }
+
+  function startEdit(phase: string, track: string): void {
+    setEditingKey(`${phase}.${track}`)
+    setDraft(effectiveSkills(phase, track).join(', '))
+    setSaveError(null)
+  }
+
+  function cancelEdit(): void {
+    setEditingKey(null)
+    setSaveError(null)
+  }
+
+  async function saveCell(phase: string, track: string): Promise<void> {
+    const tokens = draft.split(',').map((s) => s.trim()).filter((s) => s !== '')
+    setSaving(true)
+    setSaveError(null)
+    try {
+      const res = await fetch('/api/config/mandatory-skills', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
+        body: JSON.stringify({ phase, track, skills: tokens }),
+      })
+      let body: MandatorySkillsPostResponse = {}
+      try {
+        body = (await res.json()) as MandatorySkillsPostResponse
+      } catch {
+        /* 无 JSON 体：保留空对象，走下方通用错误文案 */
+      }
+      if (!res.ok) {
+        throw new Error(body.error || `保存失败（${res.status}）`)
+      }
+      const saved = Array.isArray(body.skills) ? body.skills : tokens
+      setLiveSkills((prev) => ({ ...(prev ?? {}), [`${phase}.${track}`]: saved }))
+      setEditingKey(null)
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setSaving(false)
+    }
+  }
 
   return (
     <section className="view settings" data-testid="settings-view">
@@ -71,7 +166,13 @@ export function SettingsView(): JSX.Element {
         <div className="settings__panel" data-testid="settings-matrix">
           <h2 className="settings__h2">{t('settings.matrix_title')}</h2>
           <p className="settings__desc">{t('settings.matrix_desc')}</p>
-          <p className="settings__note" data-testid="matrix-readonly-note">{t('settings.no_config_endpoint')}</p>
+          {configCapable ? (
+            <p className="settings__note" data-testid="matrix-editable-note">
+              （可编辑：改动经 token 鉴权真写入本机 templates/manifest.yaml；逗号分隔多个 skill）
+            </p>
+          ) : (
+            <p className="settings__note" data-testid="matrix-readonly-note">{t('settings.no_config_endpoint')}</p>
+          )}
           <div className="matrix__scroll">
             <table className="matrix" data-testid="matrix-table">
               <thead>
@@ -87,17 +188,69 @@ export function SettingsView(): JSX.Element {
                   <tr key={phase} data-testid={`matrix-row-${phase}`}>
                     <td className="matrix__phase">{t(`phases.${phase}`)}</td>
                     {MATRIX_TRACKS.map((track) => {
-                      const skills = mandatoryFor(phase, track)
+                      const skills = effectiveSkills(phase, track)
+                      const cellKey = `${phase}.${track}`
+                      const isEditing = editingKey === cellKey
                       return (
                         <td key={track} data-testid={`matrix-cell-${phase}-${track}`}>
-                          {skills.length === 0 ? (
-                            <span className="matrix__none">—</span>
+                          {isEditing ? (
+                            <div className="matrix__edit">
+                              <input
+                                type="text"
+                                className="matrix__input"
+                                data-testid={`matrix-input-${phase}-${track}`}
+                                value={draft}
+                                disabled={saving}
+                                onChange={(e) => setDraft(e.target.value)}
+                              />
+                              <div className="matrix__edit-actions">
+                                <button
+                                  type="button"
+                                  className="btn btn--primary"
+                                  data-testid={`matrix-save-${phase}-${track}`}
+                                  disabled={saving}
+                                  onClick={() => void saveCell(phase, track)}
+                                >
+                                  保存
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn btn--ghost"
+                                  data-testid={`matrix-cancel-${phase}-${track}`}
+                                  disabled={saving}
+                                  onClick={cancelEdit}
+                                >
+                                  取消
+                                </button>
+                              </div>
+                              {saveError && (
+                                <p className="matrix__save-error" data-testid={`matrix-save-error-${phase}-${track}`}>
+                                  {saveError}
+                                </p>
+                              )}
+                            </div>
                           ) : (
-                            <ul className="matrix__skills">
-                              {skills.map((s) => (
-                                <li key={s}>{s}</li>
-                              ))}
-                            </ul>
+                            <>
+                              {skills.length === 0 ? (
+                                <span className="matrix__none">—</span>
+                              ) : (
+                                <ul className="matrix__skills">
+                                  {skills.map((s) => (
+                                    <li key={s}>{s}</li>
+                                  ))}
+                                </ul>
+                              )}
+                              {configCapable && (
+                                <button
+                                  type="button"
+                                  className="btn btn--ghost matrix__edit-btn"
+                                  data-testid={`matrix-edit-${phase}-${track}`}
+                                  onClick={() => startEdit(phase, track)}
+                                >
+                                  编辑
+                                </button>
+                              )}
+                            </>
                           )}
                         </td>
                       )

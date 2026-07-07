@@ -7,7 +7,10 @@
  *   GET  /api/health                存活探针 + 本 server 版本（B4）
  *   GET  /api/snapshot              聚合本机所有注册 Project 的 .pipeline.yaml → JSON
  *   GET  /api/stream                SSE：.pipeline.yaml 变化即推新快照 + 心跳
- *   POST /api/change/<name>/transition   写回转换（B5 token 鉴权 + Host 守卫 + application/json）
+ *   GET  /api/config                Settings 矩阵 tab 数据源：manifest.yaml mandatory_skills 扁平映射（M3）
+ *   POST /api/change/<name>/transition        写回转换（B5 token 鉴权 + Host 守卫 + application/json）
+ *   POST /api/config/mandatory-skills         写回一条 phase.track 强制 skill（同 B5 鉴权；M3 可选增量收编，
+ *                                              全机唯一 manifest.yaml、无 root/name，见 config.ts 头注释）
  *
  * 安全模型（B5，修老仓「写端点无鉴权，已接受风险」CONTEXT.md L33 / 欠账 #4）：
  *   · GET 只读端点：绑 127.0.0.1，不鉴权（本机回环）。
@@ -22,6 +25,7 @@ import { join, resolve as resolvePath } from 'node:path'
 import { createFlowEngine, createStateStore, loadManifest } from '@pipeline-lite/kernel'
 import type { FlowEngine, StateStore } from '@pipeline-lite/kernel'
 import { buildAfkLog, buildAfkSnapshot } from './afk.js'
+import { readMandatorySkills, validateMandatorySkillsBody, writeMandatorySkills } from './config.js'
 import { resolveServerPaths } from './paths.js'
 import { readRegistry } from './registry.js'
 import { buildSnapshot, computeFingerprint, type SnapshotDeps } from './snapshot.js'
@@ -78,10 +82,13 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
   const heartbeatMs = options.heartbeatMs ?? 15000
   const gitHeadSha = options.gitHeadSha
   const traceStore = options.traceStore
+  // config 写端点（M3 可选增量）数据源：manifest.yaml 路径。未注入（如测试只传 flow 而非
+  // manifestPath）→ capabilities.config=false，GET/POST config 端点降级 404（不谎报，同 traffic 手法）。
+  const manifestPath = options.manifestPath
 
   // 能力声明（GOAL B6）：afk 数据端始终已接线（读同一 registry+store 的 automation_* 字段）；
   // traffic 仅注入 traceStore 时为真（未装 → 前端 Advanced 仍占位，不谎报）。#29d / #34d。
-  const capabilities: Record<string, boolean> = { afk: true, traffic: Boolean(traceStore) }
+  const capabilities: Record<string, boolean> = { afk: true, traffic: Boolean(traceStore), config: Boolean(manifestPath) }
   const snapshotDeps = (): SnapshotDeps => ({ registry, store, version, clock, capabilities })
 
   const fileExists = (root: string, relPath: string): boolean => {
@@ -301,6 +308,15 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
         return sendJson(res, 500, { ok: false, error: errMsg(e) })
       }
     }
+    // ── M3 config 数据端：Settings 矩阵 tab 的 phase×track 强制 skill 表（GET 只读，本机回环不鉴权）──
+    if (path === '/api/config') {
+      if (!manifestPath) return sendJson(res, 404, { ok: false, error: 'config 数据端未装（capabilities.config=false）' })
+      try {
+        return sendJson(res, 200, { ok: true, generated_at: clock(), mandatory_skills: readMandatorySkills(manifestPath) })
+      } catch (e) {
+        return sendJson(res, 500, { ok: false, error: errMsg(e) })
+      }
+    }
     return sendJson(res, 404, { ok: false, error: '未知端点' })
   }
 
@@ -318,6 +334,21 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
     const ctype = String(req.headers['content-type'] ?? '').split(';', 1)[0]!.trim().toLowerCase()
     if (ctype !== 'application/json') {
       return sendJson(res, 400, { ok: false, error: '写回端点要求 Content-Type: application/json' })
+    }
+
+    // ── M3 config 写端点：全机唯一 manifest.yaml，无 root/name（不是按 Project 分立的资源）──
+    if (path === '/api/config/mandatory-skills') {
+      if (!manifestPath) return sendJson(res, 404, { ok: false, error: 'config 数据端未装（capabilities.config=false）' })
+      const body = await readJsonBody(req)
+      const validated = validateMandatorySkillsBody(body)
+      if (!validated.ok) return sendJson(res, 400, { ok: false, error: validated.error })
+      const { phase, track, skills } = validated.value
+      try {
+        await writeMandatorySkills(manifestPath, phase, track, skills)
+      } catch (e) {
+        return sendJson(res, 500, { ok: false, error: errMsg(e) })
+      }
+      return sendJson(res, 200, { ok: true, phase, track, skills })
     }
 
     const mTr = /^\/api\/change\/([^/]+)\/transition$/.exec(path)

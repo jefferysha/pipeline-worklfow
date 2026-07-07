@@ -14,7 +14,7 @@
 | D4 | 真实工具链验证 | check/guard 46 规则全量面（老 guard verdict 逐字一致）+ oracle 双跑 + automation docker 沙箱 verify(#29c) | trellis-check（lint/type/test） | **>** | guard.test + oracle 0 不一致；#12/#29c |
 | D5 | 学习回写闭环 | learn-record 三层回写（含闭环判定） | trellis-update-spec | ≥ | skills/learn-record；#22 |
 | D6 | 简单性/上手 | `npx pipeline init` 一行 + 5 分钟心智模型 + 单文件 bundle | `trellis init` | ≥ | test-bundle 7 例；#4 |
-| D7 | 多平台策略面 | 适配器框架 + registry 单源 + conformance 机器校验 + 变异测试 + 分档降级 A/B/C（**active 7** + longtail 5） | 16 平台手工投影、无 conformance | **>**（填表非重写；conformance+变异 > contract 约定） | test-adapters 125 断言；#39/#40 |
+| D7 | 多平台策略面 | 适配器框架 + registry 单源 + conformance 机器校验 + 变异测试 + 分档降级 A/B/C（**active 12**，longtail 已清零） | 16 平台手工投影、无 conformance | **>**（填表非重写；conformance+变异 > contract 约定） | test-adapters 224 断言；#39/#40/iteration-33 |
 
 ## vs Comet（2k★，OpenSpec + Superpowers 五阶段管线）
 
@@ -26,7 +26,7 @@
 | D11 | 上下文压缩 | 确定性压缩 45.4%（可 oracle、结构化分桶） | CONTEXT-COMPRESSION 25-30%（beta） | **>** | handoff.integration 7 例；#30 |
 | D12 | auto-transition | 中间档 `advance` + HITL 红线三重证明（复核相位/三门必停） | AUTO-TRANSITION（guard 绿即推进） | **>**（结构性禁止跨三门，Comet 无此约束） | advance.integration 6 例；#31 |
 | D13 | 可恢复工作流 | 断点恢复不依赖对话历史（.pipeline.yaml 真相源） | .comet.yaml 可恢复 | ≥ | oracle 交叉验证；v0.1 |
-| D14 | 平台广度 | 可移植内核 + 填表式扩展经 4 平台实证（跨 A/B/C）+ conformance 保等价 | 30 平台（手工，无等价保证） | **>**（策略面：质量证据 > 原始数量；长尾填表即扩） | 125 conformance；#39/#40 |
+| D14 | 平台广度 | 可移植内核 + 填表式扩展经 9 平台实证（跨 A/B/C，含长尾 5 平台真实现）+ conformance 保等价 | 30 平台（手工，无等价保证） | **>**（策略面：质量证据 > 原始数量） | 224 conformance；#39/#40/iteration-33 |
 
 ## vs 两者皆无（差异化护城河）
 

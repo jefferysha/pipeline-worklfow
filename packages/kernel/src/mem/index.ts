@@ -18,12 +18,13 @@
  *             cwd sanitize：[/\\:_.] → -（claude.py / paths.py:41）
  *   codex     ~/.codex/sessions/**\/rollout-<ISO->-<id>.jsonl；首行 payload=meta(id/cwd)，
  *             message payload content=input_text/output_text；compacted.replacement_history 重置（codex.py）
- *   opencode  1.2+ SQLite —— 降级 no-op（原生依赖 better-sqlite3 install 炸），CLI 出 warning（opencode.py）
+ *   opencode  1.2+ SQLite —— node:sqlite 内建模块真读（零第三方依赖，G5 已闭，iteration-32 批次）；
+ *             node 22.5–22.12 需 --experimental-sqlite 标志，探测不到时诚实降级空结果（不抛不假绿）
  *   pi        ~/.pi/agent/sessions/--<enc-cwd>--/<ts>_<id>.jsonl（+ env/settings 自定义根）；
  *             entry 经 id/parentId 成树，extract 沿末 leaf 回溯活跃分支 + compaction firstKeptEntryId 重建（pi.py）
  *
- * 覆盖状态：claude/codex/pi 全量移植（list/search/context/extract/projects + phase 切片 + compaction）；
- *          opencode 降级 no-op（对齐老仓，SQLite 读取器待原生依赖问题解决后补）。
+ * 覆盖状态：claude/codex/pi/opencode 全量移植（list/search/context/extract/projects + phase 切片 +
+ *          compaction）；opencode 在不支持 node:sqlite 的运行时诚实降级空结果（见 opencodeSqliteAvailable）。
  */
 
 // 类型契约
@@ -52,6 +53,9 @@ export type {
 // fs 注入面
 export type { MemDirent, MemFs } from './fs.js'
 export { mtimeIso, nodeMemFs } from './fs.js'
+
+// 平台可用性探测（CLI 降级提示据此判断是否要出警告，而非无条件印，见 mem.ts maybeWarnOpencode）
+export { opencodeSqliteAvailable } from './adapters/opencode.js'
 
 // 纯逻辑原语
 export { INJECTION_TAGS, isBootstrapTurn, stripInjectionTags } from './dialogue.js'

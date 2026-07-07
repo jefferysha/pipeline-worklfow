@@ -14,9 +14,10 @@
 | **M7** 平台矩阵（GOAL D7/D14） | | | |
 | **M8** tap 流量代理（2026-07-07 用户确认进正式队列，human gate 解除） | | | |
 
-队列空——#29-wire / #34-wire 已双双翻真跑收编（见下）。剩余唯一诚实缺口：CLAUDE_CODE_OAUTH_TOKEN
-门控的 full Claude-Code-in-sandbox agent 编码路径（4 处 honest-skip，需真实部署环境的 agent 凭证，
-非代码/非 docker 环境缺口）。
+队列空。#29-wire/#34-wire（iteration-30）+ G6 full agent-in-sandbox（iteration-32）+ G4/G5/长尾适配器/
+dashboard config 端点（iteration-33）均已收编——**无任何登记在册的诚实缺口**。CI（`.github/workflows/ci.yml`）
+已补齐；sandcastle 镜像发布仅停留在 `tools/sandcastle/build.sh`+README 记录手动步骤，实际推送到某
+registry 待仓库所有者决定（非代码缺口，是运维决策）。
 
 ## 已收编
 
@@ -74,3 +75,6 @@
 | 2026-07-07 | #40 平台铺量（iteration-27） | 收编：4 平台转 active（跨 A/B/C）+ 125 conformance 断言 + 真文件变异测试，active 7+longtail 5，D7/D14 |
 | 2026-07-07 | #29-wire docker 执行接线（iteration-30） | 收编：tools/sandcastle/ 真镜像（精简至仅需 git，apk 巨慢的 python3/jq/bash 全裁）+ createDockerRunChange 接 runChangeInSandbox + `pipeline afk run` 真调 automation.runRound（真容器/真 git worktree/真 barrier build_sha/真 L3 merge-back）；docker.integration.test.ts + container.integration.test.ts 的 2 处非 token 门控 honest-skip 翻真跑；新增 dockerRunChange.integration.test.ts(3) + afk-run.integration.test.ts(4，自足建镜像不依赖跨文件执行序) |
 | 2026-07-07 | #34-wire tap daemon 启动器 + TLS 绑定（iteration-30） | 收编：daemon.ts 接 CertificateAuthority.fromDir→serveForward({ca})；launch.ts 用 detectTarget+reverseEnvMap/forwardEnvMap 真装配（forward 缺 ca 拒绝而非静默盲隧道）；record 路径真接 decodeBedrockEventstreamEvents（forward-proxy 响应解码）+ ws-proxy.ts 全新 wss:// 真中继（RFC6455 帧累加器+CONNECT/TLS-MITM 之后的 upgrade 透传+reconstructWsRequestBody/ResponseBody 首次接活路径）；security.ts InterceptEntry.tls 供 doctor「正在解密」披露；`pipeline tap start` 全新 CLI bin 入口（daemon 模式前台常驻+SIGINT 收尾 / `-- <command>` 模式真 spawn 注入 env）。副产品：发现并修复 commander 真 bug（variadic `[args...]` 里裸 `--` 若前一 token 是普通位置参数会被静默吞掉——main.ts 改为从原始 argv 手工切出 passthrough 段，绕开 commander 内部状态机缺陷）。38 新测试（daemon ca 2 + launch 7 + forward-proxy bedrock 1 + ws-proxy 7 + security tls 2 + tap CLI e2e 7 + afk-run e2e 3-4） |
+| 2026-07-07 | 真 token 验证 full CC-in-sandbox，抓出 3 真缺口（iteration-31） | 收编：extraEnv 通道补齐 + 容器内自起 tap（host.docker.internal 静默丢包）+ `--dangerously-skip-permissions` 补齐；tap 真录 4 条含真 Bearer 头请求，token 被 Anthropic 判 401（非本仓问题）——agent 编码本身仍待验证 |
+| 2026-07-07 | G6 闭环：有效 token 真跑 full CC-in-sandbox（iteration-32） | 收编：agent 真读 design_doc、真建文件、真 commit，`git show` 独立核验；tap 8 条真请求确认走代理；真跑抓出并修复 2 个沙箱环境真缺口（alpine 缺 bash/SHELL、容器任意 uid 无 passwd 条目致 HOME 解析成 `/`）——**无遗留诚实缺口** |
+| 2026-07-07 | G4/G5 + 5 长尾适配器 + dashboard config 端点 + CI + 镜像发布文档（iteration-33） | 收编：4 agent 并行 fan-out（文件互不相交）+ 主会话集成。G4 真 e2e 驱动完整 7 相位 skill 编排；G5 `node:sqlite` 真读 OpenCode（零第三方依赖）；aider/continue/cline/amp/zed 全部真实现（continue/cline 经查证升档 B→A），conformance 125→224；dashboard config 写端点复用 B5 鉴权；`.github/workflows/ci.yml` + `tools/sandcastle/build.sh`/README。八门全绿 |

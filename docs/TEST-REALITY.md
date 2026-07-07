@@ -74,10 +74,20 @@
 - ✅ G1 已闭（iteration-12）：`get` 未设字段忠实 null + 未知字段空行，真 fs 用例
 - ✅ G2 已闭（iteration-12）：`set-many` 真原子写 + 落盘字段序
 - ✅ G3 已闭（iteration-12）：`check` 真跑 guard 全量面（不满足 exit 2 / 建 design doc 后 exit 0）
-- ⚠️ G4：M2 移植的 skills/agents 是 markdown 定义——真实性由 verify-skills 零悬空 + PostToolUse
-  skill-tracker/interactive-gate 真跑（section10）间接覆盖 skill 触发链；「真跑一次完整 workflow skill
-  编排」的 e2e 待 M3 dashboard/M5 automation 有编排驱动面后补（登记不清零）
-- ⚠️ G5：mem OpenCode runtime（SQLite）降级 no-op——与老仓一致，待原生依赖问题解决（诚实登记）
+- ✅ G4 已闭（iteration-33）：新增 `packages/cli/src/workflow-skill-orchestration.integration.test.ts`
+  （4 例，零 mock）——真跑一个项目走完整 7 相位（open→explore→spec→build→verify→ship→archive），
+  每相位内驱动真 `hooks/*.sh` 子进程（`gate.sh` 硬拦 → 真 `AskUserQuestion` 解锁流程 → `skill-tracker.sh`
+  +`interactive-skill-gate.sh` 真记账），mandatory_skills 从 `templates/manifest.yaml` 真读而非手选；
+  单一 `.pipeline-history.jsonl` 里 kernel 写入（transition/set）与 hook 写入（tool/prompt）**按因果顺序**
+  逐条核验（非仅计数）；另覆盖 TTL 自愈 + 与 `verify-skills.sh` 的零悬空联动。真跑当场用变异测试自证
+  非空转绿（强制 gate 恒放行 → 抓出真实specific 失败 → 复原回绿）。
+- ✅ G5 已闭（iteration-33）：`packages/kernel/src/mem/adapters/opencode.ts` 改真 `node:sqlite`
+  内建模块读取（零第三方依赖，替换 no-op 桩）——schema 非凭源码猜测，真跑 `opencode-ai@1.17.14`
+  建库+真会话+`sqlite3 .schema` 逐字核对；19 例真 fixture（真建 SQLite 文件）。**node:sqlite 在
+  node 22.5–22.12 需 `--experimental-sqlite` 标志**（本仓 `engines.node` 仅要求 >=22），故用
+  `try/catch` 每次调用探测而非缓存"不可用"，探测失败诚实降级空结果（不抛不假绿）；`opencodeSqliteAvailable()`
+  导出供 CLI 降级提示按需警告（原无条件警告已改按真检测结果）。已知诚实缺口：compaction 边界摘要暂未
+  折叠（OpenCode 摘要落在独立 message 而非可复用同条 part，无真实压缩会话可核对前不猜规则）。
 - ✅ G6 已闭（iteration-32）：full Claude-Code-in-sandbox「agent 真编码成功」用有效
   `CLAUDE_CODE_OAUTH_TOKEN` 真跑验证通过——一次性诊断脚本（未保留在仓库里）seed 一个带真实
   `design_doc` 的 change → `createAutomation`+`createDockerRunChange`（L1，extraEnv 注入 token）
@@ -102,6 +112,27 @@
     环境、绕开 docker/tap/repo 代码）逐层排除后才定位到这是弄混了 OAuth 流程的两个产物而非本仓
     代码/环境问题；真正的 `sk-ant-oat01-...` token 全程只作临时环境变量传递，未写入任何文件/
     commit/memory，一次性诊断脚本与所有临时 host 仓库（含 tap 捕获的凭证痕迹）验证后已清理。
+
+**iteration-33 新增收编（非缺口登记，操作性记录）**：
+- **5 个长尾适配器全部实现**（aider/continue/cline/amp/zed）——非照抄 registry.yaml 已登记的目标档位：
+  逐个查证主要来源后，continue（真实 CLI `cn`，非旧 IDE 插件 config.yaml）与 cline 的 hook 协议均
+  比原假设更强，**由目标档 B 升级为档 A**（continue：`extensions/cli/src/hooks/types.ts` 头注自陈
+  "沿用 Claude Code 同款 schema"；cline：`.clinerules/hooks/` + `hooks.proto` 证实真 `PreToolUse`
+  硬拦，非审批流）；amp 经真下载 `@ampcode/cli` 二进制 `strings` 分析验证机制不同构但能力等价，
+  仍判档 A；zed 经其真实 GitHub issue 确认无 hook 原语，档 C 不变。`tools/test-adapters.sh` 断言
+  125→224；变异测试覆盖 cline/amp/aider 三项（"至少一项"高标完成）；顺带修复 `tools/test-adapters.sh`
+  一个真实预置 bug（`drive_track()` 里 `local id=... w="...$id..."` 单语句内变量展开顺序错误，仅因
+  过去调用点都在同变量名 for 循环里才恰好"能用"，新增的非循环调用点当场暴露）。
+- **Dashboard 配置写端点已实现**：`GET /api/config` + `POST /api/config/mandatory-skills`（`packages/server/src/config.ts`），
+  精确复用既有 B5 token 鉴权（同一 `handlePost` 派发链，零新鉴权代码）；写入对 `templates/manifest.yaml`
+  的 `mandatory_skills:` 块做行级手术式替换（其余行含注释逐字保留），写临时文件后**真过一遍 kernel
+  `loadManifest` 回读校验**才 `rename()` 覆盖，失败不落地；phase/track/skill token 全部白名单校验
+  （拒绝会打破单行 flow-list 语法的字符）。`SettingsView.tsx` 按 `capabilities.config` 决定是否启用
+  编辑（旧 server/无此能力时优雅降级回原只读预览）。server 89/89、dashboard-app 86/86。
+- **CI 已补齐**：`.github/workflows/ci.yml`（ubuntu-latest 自带 docker，八门验证全部真跑，非仅子集）。
+- **sandcastle 镜像发布现状诚实登记**：`tools/sandcastle/build.sh` + `tools/sandcastle/README.md` 新增，
+  文档手动构建步骤 + 发布到某 registry 的示例命令；**未代为选择 registry 或实际推送**（需仓库所有者
+  账号/凭证决定），镜像仍只在本机 docker 缓存。
 
 **真实发现（真测试的产出，mock 从未暴露）**：① doctor 需 `deps.doctor` 探针束装配——集成层漏装即 exit 1（realDeps 已补真探针）；② init 对可选字段落盘字面 `null` 而非空串（忠实老内核 heredoc，oracle 双跑据此过）；③ import `--strip` 后再 import 返回 exit 0「无历史区」而非幂等哨兵 exit 1（两条路径语义不同，已各自钉死）；④（iteration-30，#34-wire）commander（^12.1.0）variadic `[args...]` 捕获里的裸 `--`：若前一个 token 是普通位置参数（不以 `-` 开头）会被静默吞掉，若前一个 token 是 `--foo` 形态的选项样 token 则保留——穷举受控 argv 数组验证过，是 commander 内部状态机的真实缺陷。真子进程 e2e（tap.integration.test.ts 最初用 in-process harness 跑）当场抓出：`pipeline tap start claude -- <command>`（无前置 flag）时 `--` 消失，wrapped command 的 argv 被误吞进 client 列表。修复：main.ts 在调用 commander 前从原始 `process.argv` 手工切出 `--` 之后的段（`passthroughArgv`），commander 自始至终看不到裸 `--`，绕开该缺陷；mock 测试（不走真 argv/真 commander）绝不会暴露这类第三方库边界情况。
 

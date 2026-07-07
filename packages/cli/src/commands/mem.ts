@@ -20,6 +20,7 @@ import {
   listMemSessions,
   MemSessionNotFoundError,
   nodeMemFs,
+  opencodeSqliteAvailable,
   readMemContext,
   searchMemSessions,
   type ContextResult,
@@ -125,9 +126,9 @@ function parsePhaseFlag(raw: string | boolean | undefined): MemPhase {
 // ---------- OpenCode reader notice ----------
 
 function maybeWarnOpencode(deps: CliDeps, f: MemFilter): void {
-  if (f.platform === 'all' || f.platform === 'opencode') {
-    deps.io.err('⚠️  tl mem: OpenCode platform reader is temporarily unavailable in this build.')
-    deps.io.err('    OpenCode 1.2+ moved to SQLite; the native dependency was reverted due to install failures.')
+  if ((f.platform === 'all' || f.platform === 'opencode') && !opencodeSqliteAvailable()) {
+    deps.io.err('⚠️  tl mem: OpenCode platform reader is unavailable on this Node runtime.')
+    deps.io.err('    OpenCode reads require node:sqlite (Node >=22.13, or >=22.5 with --experimental-sqlite).')
   }
 }
 

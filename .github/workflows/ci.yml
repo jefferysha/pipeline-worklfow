@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  verify:
+    # ubuntu-latest ships docker preinstalled — required for the automation/tap docker-backed
+    # integration tests (they honest-skip without it; running here means they run for real).
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build (tsc -b + esbuild bundle)
+        run: npm run build
+
+      - name: vitest (kernel/cli/server/automation/tap)
+        run: npm test
+
+      - name: dashboard-app tests
+        run: npm run test:web
+
+      - name: hook scripts
+        run: bash tools/test-hooks.sh
+
+      - name: adapter conformance
+        run: bash tools/test-adapters.sh
+
+      - name: verify-skills (dangling-reference check)
+        run: bash tools/verify-skills.sh
+
+      - name: bundle smoke test
+        run: bash tools/test-bundle.sh
+
+      - name: golden-oracle dual-run
+        run: npm run oracle

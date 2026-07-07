@@ -36,6 +36,15 @@
 > 真跑过程中抓出并修复 2 个此前从未被有效凭证触发过的沙箱环境真缺口（alpine 缺 bash/SHELL 未设
 > 导致 Bash 工具报错、容器任意 host-uid 无 passwd 条目导致 HOME 解析成不可写的 `/`）——**唯一
 > 剩余诚实缺口彻底清零**。详见 docs/TEST-REALITY.md G6 条目 + progress.md iteration-32。
+>
+> **✅ iteration-33（长尾挂账清零：G4/G5 + 5 长尾适配器 + dashboard config 端点 + CI + 镜像发布文档）**：
+> 4 项并行 fan-out（文件互不相交）+ 主会话 CI/发布脚本收编。G4：新增真 e2e 驱动完整 7 相位 skill
+> 编排（含变异测试自证非空转绿）。G5：`node:sqlite` 内建模块真读 OpenCode（零第三方依赖，19 真例，
+> schema 经真跑官方包核对而非猜测）。5 长尾适配器（aider/continue/cline/amp/zed）全部真实现，
+> continue/cline 经查证由目标档 B 升级为 A；conformance 125→224。Dashboard 配置写端点复用 B5
+> 鉴权 + 手术式 manifest 写回 + kernel 回读校验。`.github/workflows/ci.yml` 补齐八门自动化；
+> `tools/sandcastle/build.sh`+README 记录手动构建/发布步骤（registry 选择留给仓库所有者）。
+> 八门全绿，无新增诚实缺口。详见 docs/TEST-REALITY.md 对应条目 + progress.md iteration-33。
 
 ---
 
@@ -47,7 +56,7 @@
 - [x] **A2 hooks/插件全保真（M2）✅ 收官 iteration-17**：router Track 识别 + breadcrumb(#19)、
       SessionStart 三注入(#20)、PostToolUse 全套(#21)、7 相位 SKILL + openspec 四命令 + learn-record(#22)、
       4 agents(#23)、sync/uninstall scrubber(#24)——全收编，热路径纯 bash 红线 + 真 fs/真 hook e2e
-- [x] **A3 dashboard（M3）**：server(#25) + 前端(#26) + SPA 服务(#26c) + doctor(#26b) + transition 单源(#25b)——全收编；config 写端点为可选增量
+- [x] **A3 dashboard（M3）**：server(#25) + 前端(#26) + SPA 服务(#26c) + doctor(#26b) + transition 单源(#25b) + config 写端点（iteration-33，复用 B5 token 鉴权）——全收编
 - [x] **A4 channel + mem（M4）✅**：mem 跨 runtime 检索(#28) + channel 事件模型(#27) + channel 进程层 supervisor/真fork/SIGTERM/OS-liveness(#27b)
 - [x] **A5 automation / AFK Sandcastle（M5）✅**：队列+scheduler+lifecycle+L1→L3(#29) + server afk 数据端(#29d) + docker 全链真实现+真 git worktree/merge-back 冲突留现场(#29c) + **#29-wire 部署接线真跑**（iteration-30：`pipeline afk run` 真调 automation.runRound(createDockerRunChange) + 真容器 + 真 merge-back，sandcastle:test 镜像 e2e 验证）；full agent-in-sandbox 支线（含 CLAUDE_CODE_OAUTH_TOKEN 门控）已用有效凭证真跑验证通过（iteration-32）
 - [x] **A6 竞品缺口（M6）✅**：上下文压缩(B13)+auto-transition(B14)+Cursor 转正(B15)+Trellis parity(B16)+npx 上手(B17) 全收编
@@ -99,7 +108,7 @@
 - [x] D4 真实工具链验证（#12/#29c）：check/guard 46 规则全量面 + automation docker 沙箱 verify > trellis-check
 - [x] D5 学习回写闭环（#22）：learn-record 三层回写 ≥ trellis-update-spec
 - [x] D6 简单性：npx 一行上手 + 5 分钟心智模型 ≥ trellis init（iteration-4）
-- [x] D7 多平台策略面（#39/#40）：适配器框架 + 125 conformance 断言 + 分档降级 A/B/C，active 7（claude/codex/cursor/gemini/copilot/pi/devin）+ longtail 5 登记（conformance 机器校验 > Trellis 手工投影）
+- [x] D7 多平台策略面（#39/#40/iteration-33）：适配器框架 + 224 conformance 断言 + 分档降级 A/B/C，active 12（claude/codex/cursor/gemini/copilot/pi/devin/aider/continue/cline/amp/zed，longtail 已清零）（conformance 机器校验 > Trellis 手工投影）
 **vs Comet（2k★）**
 - [x] D8 脚本守门状态机：三门 hook 硬拦 + guard 46 规则 + CAS/锁 > comet-guard（#12）
 - [x] D9 dashboard（#25/#26/#26c）：全局 server + 收件箱默认视图 + token 鉴权 + 版本抢占 > comet 只读面板
@@ -107,7 +116,7 @@
 - [x] D11 上下文压缩（#30）：确定性压缩 45.4% > Comet 25-30%（且可 oracle）
 - [x] D12 auto-transition（#31）：中间档 + HITL 红线三重证明 > Comet AUTO-TRANSITION
 - [x] D13 可恢复工作流：断点恢复不依赖对话历史（.pipeline.yaml 真相源，v0.1 oracle 验证）
-- [x] D14 平台广度（#39/#40）：可移植内核 + 填表式扩展经 4 平台实证（一次转 active 跨 A/B/C 档）；策略面 > Comet 手工 30（本仓 conformance 保证等价性，长尾填表即扩）
+- [x] D14 平台广度（#39/#40/iteration-33）：可移植内核 + 填表式扩展经 9 平台实证（一次转 active 跨 A/B/C 档，含长尾 5 平台真实现，2 项经查证由目标档升级）；策略面 > Comet 手工 30（本仓 conformance 保证等价性）
 **vs 两者皆无（差异化护城河）**
 - [x] D15 golden-oracle 行为等价迁移法（双跑逐字 diff——两家都没有的质量证据链）
 - [x] D16 loop-engineering 治理（#35/#36/#37/#38）✅闭环：registry+enforce R1-R11+L1→L3 毕业制+budget/circuit-breaker+drift/loop-ready 审计+graduation 执行面——两竞品都无此面（独有护城河）

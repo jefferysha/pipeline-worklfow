@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+# adapters/cline/hooks/PreToolUse — Cline PreToolUse veto 薄包装（档 A 全保真）。
+#
+# Cline hooks 契约（spike 实证：cline/cline 仓库 .clinerules/hooks/README.md + hooks.proto +
+# sdk/examples/hooks/PreToolUse_BlockDestructive.sh 真实源码，非猜测）：
+#   - 文件必须**无扩展名**、精确命名 PreToolUse，首行 shebang，chmod +x（git-hook 风格）。
+#   - 输入：stdin JSON，形如
+#     {"hookName":"PreToolUse","workspaceRoots":["<cwd>"],"preToolUse":{"toolName":"...","parameters":{}},...}
+#     ——事件名嵌在 payload 的 hookName 字段里（不是 argv），cwd 是 workspaceRoots 数组首项
+#     （不是扁平 cwd 键，与 CC/codex/gemini/continue 的输入形状不同，需要归一转换）。
+#   - 输出：**必须**是合法 JSON `{"cancel":bool,"contextModification"?:str,"errorMessage"?:str}`——
+#     cancel=true 才真正阻止工具执行（"the AI has already decided...the hook cannot modify those
+#     parameters"——即只能整体放行/拦截，不能改参数，与本项目 veto 需求恰好吻合）。
+#   - 必须显式在 VSCode「Enable Hooks」勾选启用（一次性手动步骤，同 Codex 的 trust 步骤，不降主档）。
+#
+# 复用 lite baseline hooks/gate.sh 的 marker 扫描决策：命中新鲜 marker → 转 {"cancel":true,...}；
+# 否则 → {"cancel":false}。fail-safe：任何异常都必须仍输出合法 JSON（cancel:false，不因 wrapper
+# 自身故障把工具卡死；contract §1 不伪装硬门，也不能对 Cline 吐出非法 JSON）。
+set -uo pipefail
+
+INPUT="$(cat 2>/dev/null || printf '{}')"
+[ -z "$INPUT" ] && INPUT='{}'
+
+json_leaf() { # $1=key -> 首个 "key":"value" 的 value（不递归，扁平扫描，同 baseline json_get 契约）
+  local key="$1" rest
+  case "$INPUT" in *"\"$key\""*) ;; *) return 1 ;; esac
+  rest="${INPUT#*\"$key\"}"
+  while true; do
+    case "$rest" in
+      [$' \t\r\n']*) rest="${rest#?}" ;;
+      ':'*) rest="${rest#:}"; break ;;
+      *) return 1 ;;
+    esac
+  done
+  while true; do
+    case "$rest" in
+      [$' \t\r\n']*) rest="${rest#?}" ;;
+      *) break ;;
+    esac
+  done
+  case "$rest" in
+    '"'*) rest="${rest#\"}"; printf '%s' "${rest%%\"*}"; return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+first_workspace_root() {
+  case "$INPUT" in *'"workspaceRoots"'*) ;; *) return 1 ;; esac
+  local rest="${INPUT#*\"workspaceRoots\"}"
+  rest="${rest#*[}"
+  case "$rest" in
+    *'"'*) rest="${rest#*\"}"; printf '%s' "${rest%%\"*}"; return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+json_escape() {
+  local s="$1"
+  s="${s//\\/\\\\}"; s="${s//\"/\\\"}"
+  s="${s//$'\t'/\\t}"; s="${s//$'\r'/\\r}"; s="${s//$'\n'/\\n}"
+  printf '%s' "$s"
+}
+
+fail_open() { printf '{"cancel":false}\n'; exit 0; }
+
+CWD="$(first_workspace_root || true)"
+[ -z "$CWD" ] && fail_open
+TOOL="$(json_leaf toolName || true)"
+[ -z "$TOOL" ] && TOOL="?"
+
+_ROOT="${CLAUDE_PLUGIN_ROOT:-}"
+if [ -z "$_ROOT" ] || [ ! -d "$_ROOT/hooks" ]; then
+  _ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../../.." 2>/dev/null && pwd || printf '%s' "$HOME/.claude")"
+fi
+export CLAUDE_PLUGIN_ROOT="$_ROOT"
+
+CC_GATE="${PIPELINE_CC_GATE:-$_ROOT/hooks/gate.sh}"
+[ -f "$CC_GATE" ] || fail_open
+
+reason="$(printf '{"cwd":"%s","tool_name":"%s"}' "$CWD" "$TOOL" | bash "$CC_GATE" 2>&1 1>/dev/null)"; rc=$?
+if [ "$rc" -ne 0 ]; then
+  printf '{"cancel":true,"errorMessage":"%s"}\n' "$(json_escape "$reason")"
+else
+  printf '{"cancel":false}\n'
+fi
+exit 0

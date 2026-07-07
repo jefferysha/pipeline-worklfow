@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+# adapters/cline/hooks/PostToolUse — Cline PostToolUse track 薄包装（档 A 全保真）。
+#
+# Cline hooks 契约（spike 实证，见 PreToolUse 同目录文件头注引用的源码）：输入 stdin JSON 形如
+#   {"hookName":"PostToolUse","workspaceRoots":["<cwd>"],
+#    "postToolUse":{"toolName":"...","parameters":{},"result":"...","success":bool,"executionTimeMs":n}}
+# 输出**必须**是合法 JSON {"cancel":false,"contextModification"?:str}（track 永不阻止，cancel 恒 false）。
+#
+# 复用 lite baseline hooks/skill-tracker.sh：把 workspaceRoots[0]/postToolUse.toolName 归一成
+# baseline 期望的 {"cwd":...,"tool_name":...,"skill":...} 后透传，真 append
+# openspec/changes/<name>/.pipeline-history.jsonl（与 codex/cursor/gemini/copilot/pi 同构记录）。
+# fire & forget：失败不回滚，仍必须输出合法 JSON（contract §1 track fail-safe，也是 Cline 协议要求）。
+set -uo pipefail
+
+INPUT="$(cat 2>/dev/null || printf '{}')"
+[ -z "$INPUT" ] && INPUT='{}'
+
+json_leaf() {
+  local key="$1" rest
+  case "$INPUT" in *"\"$key\""*) ;; *) return 1 ;; esac
+  rest="${INPUT#*\"$key\"}"
+  while true; do
+    case "$rest" in
+      [$' \t\r\n']*) rest="${rest#?}" ;;
+      ':'*) rest="${rest#:}"; break ;;
+      *) return 1 ;;
+    esac
+  done
+  while true; do
+    case "$rest" in
+      [$' \t\r\n']*) rest="${rest#?}" ;;
+      *) break ;;
+    esac
+  done
+  case "$rest" in
+    '"'*) rest="${rest#\"}"; printf '%s' "${rest%%\"*}"; return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+first_workspace_root() {
+  case "$INPUT" in *'"workspaceRoots"'*) ;; *) return 1 ;; esac
+  local rest="${INPUT#*\"workspaceRoots\"}"
+  rest="${rest#*[}"
+  case "$rest" in
+    *'"'*) rest="${rest#*\"}"; printf '%s' "${rest%%\"*}"; return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+CWD="$(first_workspace_root || true)"
+TOOL="$(json_leaf toolName || true)"
+
+if [ -n "$CWD" ] && [ -n "$TOOL" ]; then
+  _ROOT="${CLAUDE_PLUGIN_ROOT:-}"
+  if [ -z "$_ROOT" ] || [ ! -d "$_ROOT/hooks" ]; then
+    _ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../../.." 2>/dev/null && pwd || printf '%s' "$HOME/.claude")"
+  fi
+  export CLAUDE_PLUGIN_ROOT="$_ROOT"
+  CC_TRACKER="${PIPELINE_CC_TRACKER:-$_ROOT/hooks/skill-tracker.sh}"
+  if [ -f "$CC_TRACKER" ]; then
+    # 强制 tool_name="Skill"、真实 cline 工具名放进 skill 字段——baseline skill-tracker.sh
+    # 只在 tool_name ∈ {Skill,Agent,Task} 时才记账；Cline 自身工具名（write_to_file/
+    # execute_command/...）永远不会字面等于 "Skill"，若直传会导致 track 恒不触发（"声明
+    # native 却从不真写"的病灶，同 aider 的处理手法，保证真实工具调用也能被记账）。
+    printf '{"cwd":"%s","tool_name":"Skill","skill":"%s"}' "$CWD" "$TOOL" \
+      | bash "$CC_TRACKER" >/dev/null 2>&1 || true
+  fi
+fi
+
+printf '{"cancel":false}\n'
+exit 0

@@ -103,7 +103,7 @@ function searchSession(fs: MemFs, s: MemSession, kw: string): SearchHit {
     case 'codex':
       return codexSearch(fs, s, kw)
     case 'opencode':
-      return opencodeSearch(kw)
+      return opencodeSearch(fs, s, kw)
     case 'pi':
       return piSearch(fs, s, kw)
     default:

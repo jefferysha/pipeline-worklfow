@@ -3,7 +3,7 @@
  * 非 *.test.ts（会被 tsc 编入 dist），但仅测试引用；生产 index.ts 不导出。
  */
 import { request as httpRequest, get as httpGet, type IncomingHttpHeaders } from 'node:http'
-import { mkdtemp } from 'node:fs/promises'
+import { copyFile, mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -13,6 +13,17 @@ import type { FlowEngine, StateStore } from '@pipeline-lite/kernel'
 /** 新仓根 templates/manifest.yaml（src 下运行时：src → server → packages → 根）。 */
 export function repoManifestPath(): string {
   return join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'templates', 'manifest.yaml')
+}
+
+/**
+ * config 写端点测试用：把仓库真 templates/manifest.yaml 拷贝到独立临时文件，返回其路径。
+ * 绝不让测试直接写仓库真文件（config.test.ts / server.test.ts 的写端点用例都经此隔离）。
+ */
+export async function makeTempManifest(): Promise<string> {
+  const dir = await mkdtemp(join(tmpdir(), 'pl-dash-manifest-'))
+  const dest = join(dir, 'manifest.yaml')
+  await copyFile(repoManifestPath(), dest)
+  return dest
 }
 
 export function testFlow(): FlowEngine {
