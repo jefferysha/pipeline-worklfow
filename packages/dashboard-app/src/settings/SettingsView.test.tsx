@@ -68,6 +68,21 @@ function dragAndDrop(source: Element, target: Element): void {
   fireEvent.drop(target, { dataTransfer: transfer })
 }
 
+/**
+ * 手动控制的 Promise：用于「保存请求挂起在途」类竞态测试——测试代码持有 resolve/reject，
+ * 在断言完"取消/重复保存在途时的行为"之后，再手动让 POST 结算（成功或失败），而不是让
+ * mock fetch 立即自动结算（那样就没有"在途窗口"可测）。
+ */
+function deferred<T>(): { promise: Promise<T>; resolve: (v: T) => void; reject: (e: unknown) => void } {
+  let resolve!: (v: T) => void
+  let reject!: (e: unknown) => void
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res
+    reject = rej
+  })
+  return { promise, resolve, reject }
+}
+
 beforeEach(() => {
   localStorage.clear()
   stubConfigFetch() // 默认 capability off（同旧 server 行为），既存只读测试据此保持通过
@@ -264,5 +279,79 @@ describe('SettingsView 矩阵 —— M3 config 写端点真接线（真 fetch + 
     fireEvent.click(screen.getByRole('button', { name: '保存' }))
 
     expect(await screen.findByTestId('matrix-save-error-ship-backend')).toBeInTheDocument()
+  })
+
+  it('保存在途时点击取消 → no-op（不退出编辑态）；随后保存失败结算 → 错误仍可见，不被静默吞掉', async () => {
+    // POST 挂起在 postGate 上，直到测试手动 resolve——制造出"取消发生在请求仍在途"的窗口。
+    const postGate = deferred<Response>()
+    const fetchMock = vi.fn(async (url: unknown, init?: RequestInit) => {
+      const u = String(url)
+      const method = (init?.method ?? 'GET').toUpperCase()
+      if (u === '/api/config' && method === 'GET') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ ok: true, mandatory_skills: { 'spec.pm': ['a'] } }),
+        } as unknown as Response
+      }
+      if (u === '/api/skills/registry' && method === 'GET') {
+        return { ok: true, status: 200, json: async () => ({ skills: [] }) } as unknown as Response
+      }
+      if (u === '/api/config/mandatory-skills' && method === 'POST') {
+        return postGate.promise
+      }
+      throw new Error(`unexpected fetch ${method} ${u}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderSettings()
+    fireEvent.click(screen.getByTestId('settings-tab-matrix'))
+    fireEvent.click(await screen.findByTestId('matrix-edit-spec-pm'))
+    await screen.findByTestId('skill-chosen')
+
+    fireEvent.click(screen.getByRole('button', { name: '保存' })) // 保存发出，POST 挂起未结算
+    fireEvent.click(screen.getByRole('button', { name: '取消' })) // 在途时点取消：必须 no-op
+
+    // 取消必须 no-op：弹窗（编辑态）必须仍在，不能被踢回只读视图（等价于旧 disabled={saving}）
+    expect(screen.getByTestId('skill-chosen')).toBeInTheDocument()
+    expect(screen.queryByTestId('matrix-edit-spec-pm')).toBeNull()
+
+    // 让挂起的保存以 400 失败结算
+    await act(async () => {
+      postGate.resolve({
+        ok: false,
+        status: 400,
+        json: async () => ({ ok: false, error: '非法 skill token' }),
+      } as unknown as Response)
+    })
+
+    // 核心断言：错误不能被静默吞掉。修复前，取消已经把 editingKey 清空、isEditing 分支不再
+    // 渲染，error <p> 无处安放（state 设置了但 DOM 里找不到）；修复后取消是 no-op，仍在
+    // isEditing 分支，错误与弹窗同级可见。
+    expect(await screen.findByTestId('matrix-save-error-spec-pm')).toHaveTextContent('非法 skill token')
+    // 仍保持编辑态（可直接重试，不必重新点"编辑"）
+    expect(screen.getByTestId('skill-chosen')).toBeInTheDocument()
+  })
+
+  it('保存在途时重复点击"保存" → 不触发第二个并发 POST 请求', async () => {
+    const fetchMock = stubConfigFetch({
+      capable: true,
+      mandatorySkills: { 'build.backend': ['old'] },
+      registrySkills: ['old'],
+    })
+    renderSettings()
+    fireEvent.click(screen.getByTestId('settings-tab-matrix'))
+    fireEvent.click(await screen.findByTestId('matrix-edit-build-backend'))
+    await screen.findByTestId('skill-chosen')
+
+    // 连续两次点击"保存"，中间不 await 任何东西——模拟"第一个请求的 microtask 还没跑完
+    // 就又点了一次"，正是重复点击在途保存被吞掉竞态发生的窗口。
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+
+    await waitFor(() => expect(screen.queryByTestId('skill-chosen')).toBeNull())
+
+    const postCalls = fetchMock.mock.calls.filter((args: unknown[]) => String(args[0]) === '/api/config/mandatory-skills')
+    expect(postCalls).toHaveLength(1)
   })
 })

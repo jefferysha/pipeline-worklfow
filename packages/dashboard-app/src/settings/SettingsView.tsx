@@ -31,6 +31,12 @@ interface MandatorySkillsPostResponse {
  * SkillTransferModal（真 fetch GET /api/skills/registry 取全部已注册 skill 供左栏搜索/拖拽，
  * 右栏为当前已选、可拖拽增删）。保存仍归口同一个 POST /api/config/mandatory-skills（见
  * saveCellWith），契约不变，只是调用来源从"解析 draft 文本框"变成"直接收 modal 传回的数组"。
+ *
+ * 评审修复：换成弹窗后一度丢失了原 input/Save/Cancel 共用的 `disabled={saving}` 在途保护
+ * （SkillTransferModal 不支持外部 disable，且已冻结不改）。改在调用点用 savingKeyRef +
+ * requestSave/requestCancel 补回等价守卫：同一 cell 保存在途时，重复"保存"整体 no-op（不
+ * 并发发第二个请求），"取消"也整体 no-op（不会把仍在等结果的 cell 提前踢回只读态、导致
+ * 之后到达的错误无处渲染）。
  */
 export function SettingsView(): JSX.Element {
   const { t } = useT()
@@ -42,6 +48,11 @@ export function SettingsView(): JSX.Element {
   const [editingKey, setEditingKey] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
   const fetchedConfigRef = useRef(false)
+  // M4 评审修复（见 task-4-report.md「Fix: in-flight save guard」）：同一 cell 在途保存时的
+  // 守卫，等价于本任务重构前 input/Save/Cancel 三者共用的 `disabled={saving}`。用 ref 而非
+  // state——守卫只在 onSave/onCancel 回调里同步读取判断，不参与渲染，ref 保证判断即时生效，
+  // 不依赖父组件重渲染的时序。
+  const savingKeyRef = useRef<string | null>(null)
 
   // 懒加载：只在用户真正切到矩阵 tab 时才探测/拉取 config（而非每次挂载 SettingsView 就打一发
   // 请求）——用户可能整场只看相位轴，没必要为没打开过的 tab 发请求；fetchedConfigRef 保证只探测一次。
@@ -83,8 +94,13 @@ export function SettingsView(): JSX.Element {
    * M4：镜像原 saveCell 的 POST 逻辑一比一（url/method/headers/body 形状/响应处理/错误处理
    * 全部不变）——唯一区别是 skills 直接由 SkillTransferModal 的 onSave 传回数组，不必再从
    * draft 文本框 split(',') 解析。
+   *
+   * 评审修复：函数首尾维护 savingKeyRef，供 requestSave/requestCancel 判断"这个 cell 现在是否
+   * 有一个在途保存"。
    */
   async function saveCellWith(phase: string, track: string, skills: string[]): Promise<void> {
+    const cellKey = `${phase}.${track}`
+    savingKeyRef.current = cellKey
     setSaveError(null)
     try {
       const res = await fetch('/api/config/mandatory-skills', {
@@ -106,7 +122,32 @@ export function SettingsView(): JSX.Element {
       setEditingKey(null)
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : String(e))
+    } finally {
+      // 只清自己写入的标记——避免清掉"取消时又切到另一 cell 编辑、那个 cell 也开始保存"这种
+      // 边界场景下别的 cell 刚写入的 savingKeyRef（该场景本身是 M3 起就有的"单 editingKey/
+      // 单 saveError 全局态"既有限制，非本次修复范围，见 task-4-report.md 的关注点说明）。
+      if (savingKeyRef.current === cellKey) savingKeyRef.current = null
     }
+  }
+
+  /**
+   * 评审修复：cell 在途保存时，重复触发"保存"必须 no-op——本任务重构前 Save 按钮的
+   * `disabled={saving}` 本来就阻止了这种并发重复请求；SkillTransferModal（Task 3 已冻结）
+   * 不支持外部 disable，故在这一层（调用点）拦截，而非改 SkillTransferModal.tsx。
+   */
+  function requestSave(phase: string, track: string, skills: string[]): void {
+    if (savingKeyRef.current === `${phase}.${track}`) return
+    void saveCellWith(phase, track, skills)
+  }
+
+  /**
+   * 评审修复：cell 在途保存时，点击"取消"必须 no-op（同旧 `disabled={saving}` 行为一致）。
+   * 若不守卫，cancelEdit() 会先把 editingKey 清空，该 cell 立刻切回只读分支；随后在途请求
+   * 结算失败时 setSaveError(...) 无处渲染（错误 <p> 只挂在 isEditing 分支里），被静默吞掉。
+   */
+  function requestCancel(phase: string, track: string): void {
+    if (savingKeyRef.current === `${phase}.${track}`) return
+    cancelEdit()
   }
 
   return (
@@ -197,8 +238,8 @@ export function SettingsView(): JSX.Element {
                             <div className="matrix__edit">
                               <SkillTransferModal
                                 selected={skills}
-                                onSave={(chosen) => void saveCellWith(phase, track, chosen)}
-                                onCancel={cancelEdit}
+                                onSave={(chosen) => requestSave(phase, track, chosen)}
+                                onCancel={() => requestCancel(phase, track)}
                               />
                               {saveError && (
                                 <p className="matrix__save-error" data-testid={`matrix-save-error-${phase}-${track}`}>
