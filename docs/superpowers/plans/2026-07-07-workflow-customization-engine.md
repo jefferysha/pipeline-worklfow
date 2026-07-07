@@ -181,7 +181,7 @@ git commit -m "feat(kernel): workflow 自定义引擎类型定义"
 - Produces: `parseWorkflow(content: string): WorkflowDef`（解析失败 throw，不静默返回空——
   这是配置文件，格式错误必须 fail-loud，同 `manifest.ts` 现有策略）。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```ts
 // packages/kernel/src/workflow/parse.test.ts
@@ -257,12 +257,12 @@ describe('parseWorkflow', () => {
 })
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `npx vitest run packages/kernel/src/workflow/parse.test.ts`
 Expected: FAIL — `Cannot find module './parse.js'`
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 ```ts
 // packages/kernel/src/workflow/parse.ts
@@ -413,12 +413,12 @@ export function parseWorkflow(content: string): WorkflowDef {
 }
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `npx vitest run packages/kernel/src/workflow/parse.test.ts`
 Expected: PASS（4 例）
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add packages/kernel/src/workflow/parse.ts packages/kernel/src/workflow/parse.test.ts
