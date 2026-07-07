@@ -25,7 +25,7 @@ import { dirname, join, resolve as resolvePath } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { applyLevelChange, createFlowEngine, createStateStore, loadManifest, loadRegistry } from '@pipeline-lite/kernel'
 import type { FlowEngine, GraduationFs, StateStore } from '@pipeline-lite/kernel'
-import { buildAfkLog, buildAfkSnapshot, cancelAfkRun, retryAfkRun } from './afk.js'
+import { buildAfkLog, buildAfkSnapshot, cancelAfkRun, readAfkRunLog, retryAfkRun } from './afk.js'
 import { buildLoopsSnapshot } from './loops.js'
 import { readMandatorySkills, validateMandatorySkillsBody, writeMandatorySkills } from './config.js'
 import { resolveServerPaths } from './paths.js'
@@ -324,6 +324,33 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
       } catch (e) {
         return sendJson(res, 500, { ok: false, error: errMsg(e) })
       }
+    }
+    // ── afk-workbench Task 6：GET /api/afk/:name/log —— 单个 change 的原始运行日志文本
+    //    （.sandcastle-run.log 原样读取，见 afk.ts::readAfkRunLog）。与上面字面量路由
+    //    /api/afk/log（聚合时间线）语义、路径结构均不同，正则要求 /log 前必有 change 名段，
+    //    故不会误吞不带名字的旧路由——仍把参数化路由放在字面量判断之后，减少认知负担。
+    //    校验顺序同 /api/afk/<name>/cancel、/api/afk/<name>/retry：先 change 名格式、
+    //    再 root 信任锚（两侧 resolvePath 规范化再比对注册表）、最后 changeDir 存在性
+    //    （ENOENT 前置校验，避免把「change 真不存在」误报成「还没日志」的 200 null）。
+    //    读端点本身对齐 /api/config、/api/skills/registry：本机回环 GET 不鉴权。
+    const logMatch = /^\/api\/afk\/([^/]+)\/log$/.exec(path)
+    if (logMatch) {
+      const name = decodeURIComponent(logMatch[1]!)
+      if (!name || !/^[a-zA-Z0-9_-]+$/.test(name) || name.includes('..')) {
+        return sendJson(res, 400, { ok: false, error: '非法 change 名（仅允许 a-z A-Z 0-9 - _）' })
+      }
+      const root = new URL(req.url ?? '/', 'http://localhost').searchParams.get('root') ?? ''
+      // 信任锚：同 /api/afk/<name>/cancel、/api/afk/<name>/retry 共用的「两侧规范化再比较」模式。
+      if (!dedupeRoots(registry()).includes(resolvePath(root))) {
+        return sendJson(res, 404, { ok: false, error: 'root 未在机器级项目注册表中' })
+      }
+      const dir = join(root, 'openspec', 'changes', name)
+      // ENOENT 前置校验（同 cancelAfkRun/retryAfkRun 的存在性前置）：change 真不存在时给可辨识的
+      // 404，不与「change 存在但还没日志」的 200 { log: null } 混为一谈。
+      if (!existsSync(join(dir, '.pipeline.yaml'))) {
+        return sendJson(res, 404, { ok: false, error: '找不到该 change（无 .pipeline.yaml）' })
+      }
+      return sendJson(res, 200, { log: await readAfkRunLog(dir) })
     }
     // ── loops 治理面数据端：跨项目聚合 loops.yaml ──
     if (path === '/api/loops/snapshot') {

@@ -701,3 +701,43 @@ describe('POST /api/afk/:name/retry —— 重试 failed/conflict/paused 任务�
     expect(r.status).toBe(400)
   })
 })
+
+describe('GET /api/afk/:name/log —— 单个 change 的原始运行日志文本（afk-workbench Task 6）', () => {
+  it('change 目录内有 .sandcastle-run.log → 原样返回内容', async () => {
+    const h = await start()
+    const { writeFile } = await import('node:fs/promises')
+    await writeFile(join(h.changeDir, '.sandcastle-run.log'), 'line1\nline2\n', 'utf8')
+    const r = await reqGet(h.port, `/api/afk/${h.name}/log?root=${encodeURIComponent(h.root)}`)
+    expect(r.status).toBe(200)
+    expect(r.json<{ log: string }>().log).toBe('line1\nline2\n')
+  })
+
+  it('没有日志文件 → { log: null }，不是 404', async () => {
+    const h = await start()
+    const r = await reqGet(h.port, `/api/afk/${h.name}/log?root=${encodeURIComponent(h.root)}`)
+    expect(r.status).toBe(200)
+    expect(r.json<{ log: string | null }>().log).toBeNull()
+  })
+
+  it('root 不在注册表（不可信项目）→ 404，同 cancel/retry 端点共用的信任锚模式', async () => {
+    const h = await start()
+    const r = await reqGet(h.port, `/api/afk/${h.name}/log?root=${encodeURIComponent('/tmp/not-registered')}`)
+    expect(r.status).toBe(404)
+    // 精确匹配信任锚校验的错误文案（而非落到路由表尾部「未知端点」兜底 404）——证明真走了本端点的 root 校验分支。
+    expect(r.json<{ error: string }>().error).toBe('root 未在机器级项目注册表中')
+  })
+
+  it('非法 change 名（.. 路径穿越尝试）→ 400，同 cancel/retry 端点的 change 名校验', async () => {
+    const h = await start()
+    const r = await reqGet(h.port, `/api/afk/${encodeURIComponent('..')}/log?root=${encodeURIComponent(h.root)}`)
+    expect(r.status).toBe(400)
+  })
+
+  it('change 名合法但该 change 实际不存在（无 .pipeline.yaml）→ 404，不与「还没日志」的 200 混淆', async () => {
+    const h = await start()
+    const r = await reqGet(h.port, `/api/afk/does-not-exist/log?root=${encodeURIComponent(h.root)}`)
+    expect(r.status).toBe(404)
+    // 精确匹配 ENOENT 前置校验的错误文案（而非落到路由表尾部「未知端点」兜底 404）——证明真走了 changeDir 存在性校验分支。
+    expect(r.json<{ error: string }>().error).toBe('找不到该 change（无 .pipeline.yaml）')
+  })
+})

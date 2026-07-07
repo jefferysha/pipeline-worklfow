@@ -8,7 +8,9 @@
  *   ④ cancelAfkRun（afk-workbench Task 4）：POST /api/afk/:name/cancel 的写回逻辑——落取消标记
  *     文件 + docker kill 容器，见该函数头注释；
  *   ⑤ retryAfkRun（afk-workbench Task 5）：POST /api/afk/:name/retry 的写回逻辑——CAS
- *     automation→queued + 清零 automation_attempts，见该函数头注释。
+ *     automation→queued + 清零 automation_attempts，见该函数头注释；
+ *   ⑥ readAfkRunLog（afk-workbench Task 6）：GET /api/afk/:name/log 的读取逻辑——原样读出
+ *     宿主侧持久化的 .sandcastle-run.log 原始文本，见该函数头注释。
  *
  * server 零第三方依赖：本模块只消费已构造的 Snapshot（kernel 读出的字段），**不 import
  * @pipeline-lite/automation 运行时**——automation 的 AUTOMATION_STATES 是语义真相源，此处以
@@ -18,7 +20,7 @@
  */
 import { execFile } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { writeFile } from 'node:fs/promises'
+import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { StateStore } from '@pipeline-lite/kernel'
 import type { Snapshot } from './types.js'
@@ -273,4 +275,26 @@ export async function retryAfkRun(store: StateStore, changeDir: string): Promise
   if (!ok) return { ok: false, error: 'CAS 失败，状态在此期间被并发修改' }
   await store.set(changeDir, 'automation_attempts', '0')
   return { ok: true }
+}
+
+/**
+ * afk-workbench Task 6：GET /api/afk/:name/log 的读取逻辑。
+ * 日志落盘位置见 Task 2（2026-07-08 勘误修正后的真实落点）：宿主仓库侧、随 change 本身持久的
+ * `join(changeDir, '.sandcastle-run.log')`——**不在** automation_worktree 指向的临时 worktree
+ * 内（worktree 成功跑完/普通失败后会在结算时被 teardown 删除，只有 conflict/aborted 保留现场
+ * 的少数情况 worktree 才还活着）。定位这个文件只需要 root+name（即 changeDir），不需要读
+ * automation_worktree 字段——该字段仍是 Task 3/4（取消标记 + docker kill 目标）要用的东西，
+ * 只是跟"日志在哪"解耦了。故本函数签名只收 changeDir，不收 store：与 cancelAfkRun/retryAfkRun
+ * 需要 store 读/写 automation 字段的写回场景不同，本端点是纯读文件，没有状态机前置校验。
+ * 找不到文件（该 change 尚未跑过 automation，或是 Task 2 部署前创建的旧 change）→ 回 null，
+ * 不视为错误（不 throw）——changeDir 本身是否存在的 ENOENT 前置校验由 server.ts 路由层做
+ * （同 cancelAfkRun/retryAfkRun 的 existsSync(.pipeline.yaml) 前置校验模式一致），本函数只管
+ * "有没有这份日志"，不关心 change 本身合不合法。
+ */
+export async function readAfkRunLog(changeDir: string): Promise<string | null> {
+  try {
+    return await readFile(join(changeDir, '.sandcastle-run.log'), 'utf8')
+  } catch {
+    return null
+  }
 }
