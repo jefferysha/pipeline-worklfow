@@ -6,7 +6,10 @@
  * sandcastle:local）。无 docker → 诚实报告就绪队列 + 明示原因，绝不伪装已执行（诚实门）。
  * 有 docker → 真调 automation.runRound(createDockerRunChange(...))：真 git worktree、真容器、
  * 真 pipeline-afk-run 握手回读、真 barrier build_sha 派生、L3 真 merge-back（L1/L2 report-only
- * 安全默认，成功也只停 paused）。
+ * 安全默认，成功也只停 paused）。createDockerRunChange 传 deps.store，运行期真写回
+ * automation_sandbox/automation_worktree（Task 1 收尾缺口修复：此前只有 lifecycle 编排层写这
+ * 两个字段的能力，没有一条真调用链把真 StateStore 接进来，见
+ * .superpowers/sdd/task-1-report.md「Concerns」）。
  *
  * 默认 L1 report-only（#29/#38）：enqueue 只挂队不自动跑；--level 覆盖仅影响本次 run 的分级
  * （升档的持久化决策仍走 loops graduation，本命令不改 .pipeline.yaml 之外的任何 level 状态）。
@@ -115,7 +118,11 @@ export async function cmdAfk(deps: CliDeps, sub: string, name: string | undefine
         return 1
       }
       const image = opts.image ?? DEFAULT_SANDCASTLE_IMAGE
-      const runChange = createDockerRunChange({ hostRepoDir: deps.cwd, base, level, image })
+      // store 真接线（Task 1 收尾缺口修复）：runChangeInSandbox 运行期真写回 automation_sandbox/
+      // automation_worktree 靠 createDockerRunChange 把 deps.store 转发给 createLifecyclePorts 的
+      // setStateField；此前一直没传，字段在真 CLI 路径里永远停在 init 时的 ""（见
+      // .superpowers/sdd/task-1-report.md「Concerns」）。
+      const runChange = createDockerRunChange({ hostRepoDir: deps.cwd, base, level, image, store: deps.store })
       await auto.runRound(runChange)
       deps.io.out(`AFK run: 跑完一轮（${ready.length} 项候选，level=${level}，image=${image}）`)
       return 0

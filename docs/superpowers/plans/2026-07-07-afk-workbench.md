@@ -42,7 +42,7 @@
   `createDockerSandbox()` 生成的 `sandcastle-<random>` 名字)，`automation_worktree` 字段
   真被写成真实 worktree 绝对路径——这两个字段下游 Task 4/5（取消/详情）都要用。
 
-- [ ] **Step 1: 读现状**
+- [x] **Step 1: 读现状**
 
 先用 Read 工具读一遍 `packages/automation/src/lifecycle/lifecycle.ts` 全文和
 `packages/automation/src/lifecycle/ports.ts` 全文，确认：① `runChangeInSandbox` 里
@@ -52,7 +52,7 @@
 `automation_last_error`/`automation_preserved_path` 是怎么写回的——研究已确认这两个字段
 `scheduler.ts:121,136-137` 有真写入，抄它的写法）。
 
-- [ ] **Step 2: 写失败测试**
+- [x] **Step 2: 写失败测试**
 
 对照 Step 1 读到的真实结构，在 `lifecycle.test.ts`（或既有同名测试文件）里加一例：真调
 `runChangeInSandbox`（用现有测试里已经在用的 fake ports），断言 sandbox/worktree 创建成功
@@ -70,12 +70,12 @@ it('容器/worktree 创建成功后，真写回 automation_sandbox / automation_
 })
 ```
 
-- [ ] **Step 2b: 跑测试确认失败**
+- [x] **Step 2b: 跑测试确认失败**
 
 Run: `cd /Users/a1234/Documents/code-manager/projects/pipeline-worklfow && npx vitest run packages/automation/src/lifecycle/ -t "automation_sandbox"`
 Expected: FAIL（字段仍是空串，因为当前没有写回逻辑）
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 在 `runChangeInSandbox` 里，`ports.worktree.create(...)` 和 `ports.createSandbox(...)` 都
 成功返回之后（Step 1 读到的具体位置）、`ports.runWork(...)` 调用之前，加两次写回（复用
@@ -89,17 +89,27 @@ await stateWrite(cfg.hostRepoDir_或_changeDir, 'automation_worktree', worktreeP
 `SandboxHandle` 类型现在没有暴露容器名，需要先给它加一个字段，`container.ts` 的
 `createDockerSandbox()` 内部已经生成了这个名字，只是没往上传，补一路透传即可。）
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `npx vitest run packages/automation/src/lifecycle/ -t "automation_sandbox"`
 Expected: PASS
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add packages/automation/src/lifecycle/
 git commit -m "feat(automation): 真持久化 sandbox 容器名 + worktree 路径"
 ```
+
+**收尾说明（生产接线缺口修复）**：Task 1 提交（`e275f87`）把 `setStateField` 做成了
+`createLifecyclePorts` 的**可选**依赖——因为当时真实生产调用链
+（`dockerRunChange.ts::createDockerRunChange` → `afk.ts::cmdAfk`）都还没有任何一环把真
+`StateStore` 传进来，缺省 no-op 让编译期行为不变但运行期静默跳过写回（细节见
+`.superpowers/sdd/task-1-report.md` 的「Concerns」章节）。该缺口已在独立的收尾提交里补上：
+`createDockerRunChange` 新增可选 `store` 选项（同 `sdk.ts::storeWriter` 同款
+`join(hostRepoDir, 'openspec', 'changes', name)` 解析），`afk.ts` 的 `cmdAfk` `'run'`
+分支把已有的 `deps.store` 传了进去。真 CLI + 真 docker 端到端验证见
+`packages/cli/src/afk-run.integration.test.ts`。
 
 ---
 

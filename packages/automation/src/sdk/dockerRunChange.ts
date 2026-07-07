@@ -12,7 +12,17 @@
  * 不会出现「settle 说 merged 但 lifecycle 没 merge」的口径漂移。
  *
  * exec 缺省 nodeExec（真 docker/git 子进程）；测试可注入 fake exec 断言 argv 而不起容器。
+ *
+ * store（可选，Task 1 收尾缺口修复——见 .superpowers/sdd/task-1-report.md「Concerns」）：注入真
+ * kernel StateStore 后，把 createLifecyclePorts 的 setStateField 适配到
+ * store.set(join(hostRepoDir, 'openspec', 'changes', name), field, value)——changeDir 解析同
+ * sdk.ts::storeWriter 同款约定，供 lifecycle.ts::runChangeInSandbox 运行期真写回
+ * automation_sandbox/automation_worktree（下游取消/详情靠这两个字段定位容器/worktree）。真部署
+ * 接线：packages/cli/src/commands/afk.ts 的 cmdAfk 传 deps.store。未注入 → ports.ts 既有 no-op
+ * 缺省接管（不 throw、不阻断 run，静默跳过写回）。
  */
+import { join } from 'node:path'
+import type { StateStore } from '@pipeline-lite/kernel'
 import { runChangeInSandbox } from '../lifecycle/lifecycle.js'
 import { createLifecyclePorts } from '../lifecycle/ports.js'
 import { nodeExec, type ExecFn } from '../runner/exec.js'
@@ -37,11 +47,19 @@ export interface DockerRunChangeOptions {
   readonly graceMs?: number
   /** 额外注入沙箱的 env（真部署接线：CLAUDE_CODE_OAUTH_TOKEN / ANTHROPIC_BASE_URL 等）。 */
   readonly extraEnv?: Readonly<Record<string, string>>
+  /**
+   * 真 kernel StateStore（可选）：注入后运行期真写回 automation_sandbox/automation_worktree
+   * （changeDir 解析 = join(hostRepoDir, 'openspec', 'changes', name)，同 sdk.ts::storeWriter
+   * 同款约定）。未注入 → createLifecyclePorts 走既有 no-op 缺省，不 throw、不阻断 run。
+   */
+  readonly store?: StateStore
 }
 
 /** 构造绑真 docker/git 的 RunChange（喂给 automation.runRound）。 */
 export const createDockerRunChange = (opts: DockerRunChangeOptions): RunChange => {
   const exec = opts.exec ?? nodeExec
+  const { store, hostRepoDir } = opts
+  const changeDir = (name: string): string => join(hostRepoDir, 'openspec', 'changes', name)
   const ports = createLifecyclePorts({
     exec,
     hostRepoDir: opts.hostRepoDir,
@@ -51,6 +69,9 @@ export const createDockerRunChange = (opts: DockerRunChangeOptions): RunChange =
     cpus: opts.cpus,
     idleMs: opts.idleMs,
     graceMs: opts.graceMs,
+    setStateField: store
+      ? (name, field, value) => store.set(changeDir(name), field as never, value)
+      : undefined,
   })
   const autoMerge = opts.level === 'L3'
   return (name, signal) =>

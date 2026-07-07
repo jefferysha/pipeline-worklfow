@@ -95,10 +95,18 @@ describe('afk run —— 真调 docker 执行接线（#29-wire 落地到 CLI）'
     await h.run(['afk', 'enqueue', 'y'])
     expect(await h.run(['afk', 'run', '--image', IMAGE])).toBe(0)
 
-    expect(await h.read('y')).toMatch(/^automation: paused$/m)
+    const yaml = await h.read('y')
+    expect(yaml).toMatch(/^automation: paused$/m)
     let leaked = false
     try { await access(join(h.cwd, '.sandcastle-build', 'y.done')); leaked = true } catch { /* 期望不存在 */ }
     expect(leaked).toBe(false)
+
+    // Task 1 收尾缺口修复验证（.superpowers/sdd/task-1-report.md「Concerns」）：真 cmdAfk('run')
+    // 全链（非 fake ports——这里是真 docker 容器 + 真 CLI argv 解析）应该把 automation_sandbox/
+    // automation_worktree 真写回磁盘。此前 afk.ts 没把 deps.store 传进 createDockerRunChange，
+    // ports.ts 的 setStateField 缺省 no-op，两个字段永远停在 init 时的 ""。
+    expect(yaml).toMatch(/^automation_sandbox: sandcastle-/m)
+    expect(yaml).not.toMatch(/^automation_worktree: ""$/m)
   }, 120_000)
 
   it('就绪队列为空 → 诚实报告，不起容器', async (ctx) => {

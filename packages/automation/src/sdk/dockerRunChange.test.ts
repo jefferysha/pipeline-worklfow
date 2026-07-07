@@ -1,6 +1,7 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { createStateStore } from '@pipeline-lite/kernel'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { ExecFn, ExecResult } from '../runner/exec.js'
 import { createDockerRunChange } from './dockerRunChange.js'
@@ -57,5 +58,45 @@ describe('createDockerRunChange · extraEnv 真流到 docker run argv', () => {
     await runChange('x', new AbortController().signal)
     const dockerRun = calls.find((c) => c[0] === 'docker' && c[1] === 'run')
     expect(dockerRun!.join(' ')).toContain('PIPELINE_AFK=1')
+  })
+})
+
+/**
+ * Task 1 收尾缺口修复（真相源：.superpowers/sdd/task-1-report.md「Concerns」）：Task 1 让
+ * runChangeInSandbox 真写 automation_sandbox/automation_worktree，但 createDockerRunChange
+ * 从未把 setStateField 接进 createLifecyclePorts——即便调用方想接线真 StateStore 也没有入口。
+ * 本组测试用**真 kernel StateStore**（非 fake ports）+ 真 createDockerRunChange 装配链路
+ * （fake exec 只是省掉真 docker/git 子进程，不碰状态写回这条断言链），证明 opts.store 一旦注入，
+ * 两个字段真的落盘非空——而不是仅在 lifecycle.ts 的注入面测试里用 fake setStateField 验证过。
+ */
+describe('createDockerRunChange · opts.store 真接线（Task 1 收尾缺口）', () => {
+  let repo: string
+  beforeEach(async () => { repo = await mkdtemp(join(tmpdir(), 'dockerrc-store-')) })
+  afterEach(async () => { await rm(repo, { recursive: true, force: true }) })
+
+  it('注入真 StateStore 后，runChange 结束前把 automation_sandbox/automation_worktree 真写回该 store（非空）', async () => {
+    const { exec } = makeFakeExec()
+    const store = createStateStore()
+    const dir = await store.init({ repoRoot: repo, name: 'w', track: 'backend', preset: 'full' })
+    // 起点：init 缺省两字段都是空串（CONTRACT §1 emptyFields()）——这是 gap 存在时测试会卡住不动的初值。
+    expect(await store.get(dir, 'automation_sandbox')).toBe('')
+    expect(await store.get(dir, 'automation_worktree')).toBe('')
+
+    const runChange = createDockerRunChange({
+      hostRepoDir: repo, base: 'main', level: 'L1', image: 'sandcastle:local', exec, store,
+    })
+    await runChange('w', new AbortController().signal)
+
+    const sandbox = await store.get(dir, 'automation_sandbox')
+    const worktree = await store.get(dir, 'automation_worktree')
+    expect(sandbox).not.toBe('')
+    expect(sandbox).toMatch(/^sandcastle-/)
+    expect(worktree).not.toBe('')
+  })
+
+  it('未传 opts.store 时行为不变（缺省 no-op，不 throw、不阻断 run）', async () => {
+    const { exec } = makeFakeExec()
+    const runChange = createDockerRunChange({ hostRepoDir: repo, base: 'main', level: 'L1', image: 'sandcastle:local', exec })
+    await expect(runChange('x', new AbortController().signal)).resolves.toBeDefined()
   })
 })
