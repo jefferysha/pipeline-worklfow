@@ -696,7 +696,7 @@ git commit -m "feat(kernel): .pipeline.yaml 新增 workflow 字段（缺省 defa
 - Produces: `loadWorkflow(repoRoot: string, name: string): WorkflowDef | null`（找不到对应
   文件返回 `null`，不 throw——"这个 workflow 不存在"是调用方要处理的正常分支，不是异常）。
 
-- [ ] **Step 1: 写 `templates/workflows/default.yaml`**
+- [x] **Step 1: 写 `templates/workflows/default.yaml`**
 
 transitions 字段逐字对齐现有 `packages/kernel/src/flow/transition-table.ts` 的
 `TRANSITION_EVENTS` 表（8 条边，event 名完全复用，不重新发明）——这份镜像文件因此天然是
@@ -801,7 +801,7 @@ steps:
 应该怎么响应"的边界处理，不是这份数据镜像现阶段要复现的行为，等 default 真正切到统一路径
 的后续演进里再处理。）
 
-- [ ] **Step 2: 写失败测试**
+- [x] **Step 2: 写失败测试**
 
 ```ts
 // packages/kernel/src/workflow/loadWorkflow.test.ts
@@ -827,12 +827,12 @@ describe('loadWorkflow', () => {
 })
 ```
 
-- [ ] **Step 3: 跑测试确认失败**
+- [x] **Step 3: 跑测试确认失败**
 
 Run: `npx vitest run packages/kernel/src/workflow/loadWorkflow.test.ts`
 Expected: FAIL
 
-- [ ] **Step 4: 实现**
+- [x] **Step 4: 实现**
 
 ```ts
 // packages/kernel/src/workflow/loadWorkflow.ts
@@ -848,12 +848,12 @@ export function loadWorkflow(repoRoot: string, name: string): WorkflowDef | null
 }
 ```
 
-- [ ] **Step 5: 跑测试确认通过**
+- [x] **Step 5: 跑测试确认通过**
 
 Run: `npx vitest run packages/kernel/src/workflow/loadWorkflow.test.ts`
 Expected: PASS
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add templates/workflows/default.yaml packages/kernel/src/workflow/loadWorkflow.ts packages/kernel/src/workflow/loadWorkflow.test.ts
