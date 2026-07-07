@@ -25,8 +25,49 @@ git config --global user.name 'pipeline-afk' >/dev/null 2>&1 || true
 phase="$(pipeline get "$name" phase 2>/dev/null || echo unknown)"
 
 if [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ] && command -v claude >/dev/null 2>&1; then
-  # 真部署路径：agent 驱动 build（本 wire 的 host 侧全链 e2e 不覆盖此支，需 token）。
-  claude -p "Run the pipeline build phase for change ${name}, then stop." >/tmp/afk-agent.log 2>&1 || true
+  # 真部署路径：agent 驱动 build。
+  #   走代理而非直连：容器内自起 `pipeline tap` reverse proxy（同容器网络命名空间，不依赖
+  #   docker↔host 反向连通性——host.docker.internal 在部分沙箱化环境里对宿主监听端口只会
+  #   silently drop，实测过），claude 经它转发到真 api.anthropic.com。capture.enabled 手写
+  #   1（同 setCaptureEnabled(true) 效果，纯文件协议，容器内无需引 tap 库）；trace 落
+  #   worktree 内目录，随 git commit 一起可从 host 侧读到，验证真走了代理而非直连。
+  #   --dangerously-skip-permissions：headless 容器没有 TTY 能应答权限确认，不加这个每个
+  #   工具调用都会挂死等一个永远不会到来的交互——沙箱本身（一次性容器 + 独立 worktree）就是
+  #   隔离边界，这也是 AFK「无人监管」这个功能定位本身要求的（有人盯着批权限就不叫 AFK 了）。
+  #   timeout 300：busybox 自带 applet，防 agent 真挂死拖爆 host 侧 idle 超时（20min）。
+  #   日志/trace 落进 worktree（而非容器内 /tmp）——teardown 后仍可从 host 侧 worktree/命名分支读到。
+  tap_dir="$PWD/.sandcastle-tap"
+  mkdir -p "$tap_dir"
+  printf '1' > "${tap_dir}/capture.enabled"
+  PIPELINE_TAP_DIR="$tap_dir" pipeline tap start claude --json >/tmp/tap-start.json 2>/tmp/tap-start.err &
+  tap_pid=$!
+  tap_port=""
+  i=0
+  while [ $i -lt 25 ]; do
+    if [ -s /tmp/tap-start.json ]; then
+      tap_port="$(grep -o '"port":[0-9]*' /tmp/tap-start.json | head -1 | cut -d: -f2)"
+      [ -n "$tap_port" ] && break
+    fi
+    sleep 0.4
+    i=$((i + 1))
+  done
+
+  agent_exit=0
+  if [ -n "$tap_port" ]; then
+    ANTHROPIC_BASE_URL="http://127.0.0.1:${tap_port}" \
+      timeout 300 claude -p "Run the pipeline build phase for change ${name}, then stop." \
+      --dangerously-skip-permissions \
+      >".sandcastle-build.agent.log" 2>&1 || agent_exit=$?
+  else
+    printf 'tap proxy 未能在 10s 内绑定端口，agent 未运行（诚实门：不绕过代理直连）\n' >".sandcastle-build.agent.log"
+    agent_exit=97
+  fi
+  printf 'agent exit=%s\n' "$agent_exit" >>".sandcastle-build.agent.log"
+
+  if [ -n "$tap_port" ]; then
+    kill "$tap_pid" 2>/dev/null || true
+    wait "$tap_pid" 2>/dev/null || true
+  fi
 fi
 
 # build 产物落地（确定性站位 agent 编码；agent 模式下 agent 已改工作树，这里补记账不冲突）。

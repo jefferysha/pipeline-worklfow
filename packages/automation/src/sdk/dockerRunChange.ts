@@ -35,6 +35,8 @@ export interface DockerRunChangeOptions {
   readonly cpus?: number
   readonly idleMs?: number
   readonly graceMs?: number
+  /** 额外注入沙箱的 env（真部署接线：CLAUDE_CODE_OAUTH_TOKEN / ANTHROPIC_BASE_URL 等）。 */
+  readonly extraEnv?: Readonly<Record<string, string>>
 }
 
 /** 构造绑真 docker/git 的 RunChange（喂给 automation.runRound）。 */
@@ -54,7 +56,7 @@ export const createDockerRunChange = (opts: DockerRunChangeOptions): RunChange =
   return (name, signal) =>
     runChangeInSandbox(
       ports,
-      { hostRepoDir: opts.hostRepoDir, name, base: opts.base, autoMerge },
+      { hostRepoDir: opts.hostRepoDir, name, base: opts.base, autoMerge, extraEnv: opts.extraEnv },
       signal,
     )
 }

@@ -60,6 +60,13 @@ export interface RunChangeConfig {
   readonly base: string
   /** L3 → true（自动 merge 回主线）；L1/L2 report-only → false（不自动合并，安全默认）。 */
   readonly autoMerge: boolean
+  /**
+   * 额外注入沙箱的 env（真部署接线用：CLAUDE_CODE_OAUTH_TOKEN 供沙箱内 agent 认证、
+   * ANTHROPIC_BASE_URL 供路由走 tap 代理而非直连——此前实现只硬编码了 PIPELINE_AFK=1，
+   * 从未有通道能把凭证/路由配置真正传进容器，是先前收编遗漏的真缺口）。与
+   * PIPELINE_AFK_ENV 合并，不覆盖后者（extraEnv 尝试设同名键也不生效，硬护栏优先）。
+   */
+  readonly extraEnv?: Readonly<Record<string, string>>
 }
 
 /**
@@ -104,8 +111,9 @@ export const runChangeInSandbox = async (ports: LifecyclePorts, cfg: RunChangeCo
   // #29c：conflict 类错误保留现场（不清 worktree）；见 PRESERVE_ERROR_TAGS。
   let preserve = false
   try {
-    // 沙箱 env 注入 PIPELINE_AFK=1（headless 放行三门）。真实现还会叠 .sandcastle/.env 白名单（#29c）。
-    const env: Record<string, string> = { [PIPELINE_AFK_ENV]: '1' }
+    // 沙箱 env 注入 PIPELINE_AFK=1（headless 放行三门）+ 调用方 extraEnv（token/代理地址等）；
+    // PIPELINE_AFK_ENV 放最后展开，extraEnv 若尝试同名覆盖也不生效（硬护栏优先）。
+    const env: Record<string, string> = { ...cfg.extraEnv, [PIPELINE_AFK_ENV]: '1' }
     handle = await ports.createSandbox({ env, worktreePath })
     const sandbox = handle
 

@@ -18,10 +18,16 @@
 > **✅ #29-wire / #34-wire 部署接线双双翻真跑（2026-07-07 iteration-30）**：拿到 docker 环境后，
 > AFK docker 执行（`pipeline afk run` 真调 automation.runRound + 真容器 + 真 git worktree/merge-back
 > + 真 barrier build_sha）与 tap daemon 启动器（`pipeline tap start` 真绑端口 + CA/TLS MITM +
-> bedrock/ws 记录路径真接活）均已真跑验证，不再是 report-only 占位。唯一剩余诚实缺口收窄为
-> CLAUDE_CODE_OAUTH_TOKEN 门控的 full agent-in-sandbox 编码路径（4 处 honest-skip，需真实部署
-> 凭证，非代码/非环境缺口）。详见 docs/superiority-matrix.md（逐维证据）+ docs/TEST-REALITY.md
-> （真测审计）+ progress.md。
+> bedrock/ws 记录路径真接活）均已真跑验证，不再是 report-only 占位。
+>
+> **iteration-31（真 token 验证 full CC-in-sandbox）**：用户提供真 CLAUDE_CODE_OAUTH_TOKEN 并要求
+> 必须走代理不直连，真跑全链路抓出并修复 3 个此前从未被真凭证触发过的死角（extraEnv 通道缺失、
+> host.docker.internal 在本环境对宿主端口静默丢包故改容器内自起 tap、agent 分支缺
+> `--dangerously-skip-permissions` 会挂死）。**tap 代理真实拦截+记录+转发了 4 条完整请求到真
+> `api.anthropic.com`**（含真实 claude-cli User-Agent/系统提示词/Bearer 头，证明"走代理不直连"
+> 约束真实成立）；该 token 被 Anthropic 真服务端拒绝（401，非本仓代码问题，未耗真实额度）——
+> **agent 编码这一步本身仍待有效凭证验证**，如实登记不虚报为通过。详见 docs/superiority-matrix.md
+> （逐维证据）+ docs/TEST-REALITY.md（真测审计）+ progress.md。
 
 ---
 

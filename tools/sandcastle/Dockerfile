@@ -15,6 +15,12 @@ ARG WITH_CLAUDE_CODE=true
 
 RUN apk add --no-cache git
 
+# agent 层：真部署装 Claude Code CLI（沙箱内真编码）；确定性测试用 false 跳过（无 token 也无从验证）。
+# 层顺序刻意把这步排在 pipeline.mjs/afk-run 脚本的 COPY **之前**——npm install -g 在本环境实测
+# 要 8 分钟，而 pipeline.mjs/脚本在开发迭代中几乎每次都变，若排在后面每次改都得重装一遍 npm 包，
+# Docker 层缓存就形同虚设。
+RUN if [ "$WITH_CLAUDE_CODE" = "true" ]; then npm install -g @anthropic-ai/claude-code; fi
+
 # pipeline 插件：目录布局复刻 host（bundle 的 pluginRoot=dist/../../.. 需 templates/ 在同源相对位置）
 WORKDIR /opt/pipeline
 COPY packages/cli/dist/pipeline.mjs /opt/pipeline/packages/cli/dist/pipeline.mjs
@@ -25,8 +31,5 @@ RUN printf '#!/bin/sh\nexec node /opt/pipeline/packages/cli/dist/pipeline.mjs "$
 # 沙箱内 afk 驱动（build→verify→ship + 末行 <output> 结构化握手）
 COPY tools/sandcastle/pipeline-afk-run.sh /usr/local/bin/pipeline-afk-run
 RUN chmod +x /usr/local/bin/pipeline-afk-run
-
-# agent 层：真部署装 Claude Code CLI（沙箱内真编码）；确定性测试用 false 跳过（无 token 也无从验证）
-RUN if [ "$WITH_CLAUDE_CODE" = "true" ]; then npm install -g @anthropic-ai/claude-code; fi
 
 # 默认 workdir 由容器启动时 -w <worktreePath> 覆盖（createDockerSandbox）

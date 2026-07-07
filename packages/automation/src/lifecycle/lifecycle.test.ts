@@ -55,6 +55,18 @@ describe('runChangeInSandbox（沙箱生命周期纯编排 + 注入面）', () =
     expect(env()[PIPELINE_AFK_ENV]).toBe('1')
   })
 
+  it('cfg.extraEnv 真透传进沙箱 env（真部署接线：token/代理地址等），不覆盖 PIPELINE_AFK=1', async () => {
+    const { ports, env } = makePorts()
+    await runChangeInSandbox(
+      ports,
+      { hostRepoDir: '/repo', name: 'x', base: 'main', autoMerge: false, extraEnv: { ANTHROPIC_BASE_URL: 'http://host.docker.internal:9', CLAUDE_CODE_OAUTH_TOKEN: 'tok' } },
+      new AbortController().signal,
+    )
+    expect(env().ANTHROPIC_BASE_URL).toBe('http://host.docker.internal:9')
+    expect(env().CLAUDE_CODE_OAUTH_TOKEN).toBe('tok')
+    expect(env()[PIPELINE_AFK_ENV]).toBe('1') // extraEnv 不挤掉既有硬护栏 env
+  })
+
   it('happy L3（autoMerge）：跑 → 收集 commits → merge-back → barrier → 清 worktree', async () => {
     const { ports, log } = makePorts()
     const out = await runChangeInSandbox(
