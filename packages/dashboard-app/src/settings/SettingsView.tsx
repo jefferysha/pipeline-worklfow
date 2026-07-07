@@ -3,6 +3,7 @@ import { useT } from '../i18n'
 import { getToken } from '../api/client'
 import { PHASES, TRANSITIONS } from '../types'
 import { MANDATORY_SKILLS, MATRIX_TRACKS, isReviewGate } from './data'
+import { SkillTransferModal } from './SkillTransferModal'
 
 type Tab = 'axis' | 'matrix'
 
@@ -22,8 +23,14 @@ interface MandatorySkillsPostResponse {
  * 网络失败）则保持既有只读预览，不谎报能力。
  *
  * 注：本文件按任务的文件所有权边界自包含（未引入 packages/dashboard-app/src/i18n/translations.ts
- * 新键、未新增旁置文件），因此新增的编辑态文案（编辑/保存/取消/错误提示）是直接字面量，暂未接入
- * useT() 的 en/zh 切换——与本视图既有的 t() 驱动文案共存，是本轮收编的已知取舍。
+ * 新键、未新增旁置文件），因此新增的编辑态文案（编辑/错误提示，以及 SkillTransferModal 内部的
+ * 保存/取消）是直接字面量，暂未接入 useT() 的 en/zh 切换——与本视图既有的 t() 驱动文案共存，
+ * 是本轮收编的已知取舍。
+ *
+ * M4：矩阵单元的编辑交互从"原地文本框（逗号分隔 skill token）"换成弹窗双栏穿梭框——见
+ * SkillTransferModal（真 fetch GET /api/skills/registry 取全部已注册 skill 供左栏搜索/拖拽，
+ * 右栏为当前已选、可拖拽增删）。保存仍归口同一个 POST /api/config/mandatory-skills（见
+ * saveCellWith），契约不变，只是调用来源从"解析 draft 文本框"变成"直接收 modal 传回的数组"。
  */
 export function SettingsView(): JSX.Element {
   const { t } = useT()
@@ -33,8 +40,6 @@ export function SettingsView(): JSX.Element {
   const [liveSkills, setLiveSkills] = useState<Record<string, string[]> | null>(null)
   const [configCapable, setConfigCapable] = useState(false)
   const [editingKey, setEditingKey] = useState<string | null>(null)
-  const [draft, setDraft] = useState('')
-  const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const fetchedConfigRef = useRef(false)
 
@@ -69,26 +74,23 @@ export function SettingsView(): JSX.Element {
     return table[`${phase}.${track}`] ?? table[`${phase}._all`] ?? []
   }
 
-  function startEdit(phase: string, track: string): void {
-    setEditingKey(`${phase}.${track}`)
-    setDraft(effectiveSkills(phase, track).join(', '))
-    setSaveError(null)
-  }
-
   function cancelEdit(): void {
     setEditingKey(null)
     setSaveError(null)
   }
 
-  async function saveCell(phase: string, track: string): Promise<void> {
-    const tokens = draft.split(',').map((s) => s.trim()).filter((s) => s !== '')
-    setSaving(true)
+  /**
+   * M4：镜像原 saveCell 的 POST 逻辑一比一（url/method/headers/body 形状/响应处理/错误处理
+   * 全部不变）——唯一区别是 skills 直接由 SkillTransferModal 的 onSave 传回数组，不必再从
+   * draft 文本框 split(',') 解析。
+   */
+  async function saveCellWith(phase: string, track: string, skills: string[]): Promise<void> {
     setSaveError(null)
     try {
       const res = await fetch('/api/config/mandatory-skills', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
-        body: JSON.stringify({ phase, track, skills: tokens }),
+        body: JSON.stringify({ phase, track, skills }),
       })
       let body: MandatorySkillsPostResponse = {}
       try {
@@ -99,13 +101,11 @@ export function SettingsView(): JSX.Element {
       if (!res.ok) {
         throw new Error(body.error || `保存失败（${res.status}）`)
       }
-      const saved = Array.isArray(body.skills) ? body.skills : tokens
+      const saved = Array.isArray(body.skills) ? body.skills : skills
       setLiveSkills((prev) => ({ ...(prev ?? {}), [`${phase}.${track}`]: saved }))
       setEditingKey(null)
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : String(e))
-    } finally {
-      setSaving(false)
     }
   }
 
@@ -195,34 +195,11 @@ export function SettingsView(): JSX.Element {
                         <td key={track} data-testid={`matrix-cell-${phase}-${track}`}>
                           {isEditing ? (
                             <div className="matrix__edit">
-                              <input
-                                type="text"
-                                className="matrix__input"
-                                data-testid={`matrix-input-${phase}-${track}`}
-                                value={draft}
-                                disabled={saving}
-                                onChange={(e) => setDraft(e.target.value)}
+                              <SkillTransferModal
+                                selected={skills}
+                                onSave={(chosen) => void saveCellWith(phase, track, chosen)}
+                                onCancel={cancelEdit}
                               />
-                              <div className="matrix__edit-actions">
-                                <button
-                                  type="button"
-                                  className="btn btn--primary"
-                                  data-testid={`matrix-save-${phase}-${track}`}
-                                  disabled={saving}
-                                  onClick={() => void saveCell(phase, track)}
-                                >
-                                  保存
-                                </button>
-                                <button
-                                  type="button"
-                                  className="btn btn--ghost"
-                                  data-testid={`matrix-cancel-${phase}-${track}`}
-                                  disabled={saving}
-                                  onClick={cancelEdit}
-                                >
-                                  取消
-                                </button>
-                              </div>
                               {saveError && (
                                 <p className="matrix__save-error" data-testid={`matrix-save-error-${phase}-${track}`}>
                                   {saveError}
@@ -245,7 +222,10 @@ export function SettingsView(): JSX.Element {
                                   type="button"
                                   className="btn btn--ghost matrix__edit-btn"
                                   data-testid={`matrix-edit-${phase}-${track}`}
-                                  onClick={() => startEdit(phase, track)}
+                                  onClick={() => {
+                                    setEditingKey(cellKey)
+                                    setSaveError(null)
+                                  }}
                                 >
                                   编辑
                                 </button>

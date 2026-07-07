@@ -13,12 +13,14 @@ import { SettingsView } from './SettingsView'
 interface ConfigFetchOpts {
   capable?: boolean
   mandatorySkills?: Record<string, string[]>
+  registrySkills?: string[]
   postResponse?: (body: { phase: string; track: string; skills: string[] }) => { status: number; body: unknown }
 }
 
 function stubConfigFetch(opts: ConfigFetchOpts = {}): ReturnType<typeof vi.fn> {
   const capable = opts.capable ?? false
   const mandatorySkills = opts.mandatorySkills ?? {}
+  const registrySkills = opts.registrySkills ?? []
   const fetchMock = vi.fn(async (url: unknown, init?: RequestInit) => {
     const u = String(url)
     const method = (init?.method ?? 'GET').toUpperCase()
@@ -31,6 +33,11 @@ function stubConfigFetch(opts: ConfigFetchOpts = {}): ReturnType<typeof vi.fn> {
         status: 200,
         json: async () => ({ ok: true, generated_at: '2026-07-07T00:00:00Z', mandatory_skills: mandatorySkills }),
       } as unknown as Response
+    }
+    // SkillTransferModal 挂载即真 fetch 全部已注册 skill（Task 2 只读端点）——默认给空列表，
+    // 需要左栏有具体候选项的用例（拖拽穿梭）经 registrySkills 显式指定。
+    if (u === '/api/skills/registry' && method === 'GET') {
+      return { ok: true, status: 200, json: async () => ({ skills: registrySkills }) } as unknown as Response
     }
     if (u === '/api/config/mandatory-skills' && method === 'POST') {
       const parsed = JSON.parse(String(init?.body ?? '{}')) as { phase: string; track: string; skills: string[] }
@@ -45,6 +52,20 @@ function stubConfigFetch(opts: ConfigFetchOpts = {}): ReturnType<typeof vi.fn> {
   })
   vi.stubGlobal('fetch', fetchMock)
   return fetchMock
+}
+
+/** 真 HTML5 DnD 交互 stub（同 BoardView.test.tsx / SkillTransferModal.test.tsx 既有模式）。 */
+function dragAndDrop(source: Element, target: Element): void {
+  const data: Record<string, string> = {}
+  const transfer = {
+    setData: (k: string, v: string) => {
+      data[k] = v
+    },
+    getData: (k: string) => data[k] ?? '',
+  } as unknown as DataTransfer
+  fireEvent.dragStart(source, { dataTransfer: transfer })
+  fireEvent.dragOver(target, { dataTransfer: transfer })
+  fireEvent.drop(target, { dataTransfer: transfer })
 }
 
 beforeEach(() => {
@@ -155,31 +176,49 @@ describe('SettingsView 矩阵 —— M3 config 写端点真接线（真 fetch + 
     expect(screen.queryByTestId('matrix-readonly-note')).toBeNull()
   })
 
-  it('点击编辑 → 输入框预填当前值；取消 → 恢复只读且不发 POST', async () => {
+  it('点编辑 → 弹窗双栏穿梭框出现（不再是文本框）；取消 → 恢复只读且不发 POST', async () => {
     const fetchMock = stubConfigFetch({ capable: true, mandatorySkills: { 'spec.pm': ['a', 'b'] } })
     renderSettings()
     fireEvent.click(screen.getByTestId('settings-tab-matrix'))
     fireEvent.click(await screen.findByTestId('matrix-edit-spec-pm'))
 
-    const input = screen.getByTestId('matrix-input-spec-pm') as HTMLInputElement
-    expect(input.value).toBe('a, b')
+    expect(await screen.findByTestId('skill-available')).toBeInTheDocument()
+    const chosen = screen.getByTestId('skill-chosen')
+    expect(chosen).toBeInTheDocument()
+    expect(chosen.textContent).toContain('a')
+    expect(chosen.textContent).toContain('b')
 
-    fireEvent.click(screen.getByTestId('matrix-cancel-spec-pm'))
-    expect(screen.queryByTestId('matrix-input-spec-pm')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: '取消' }))
+    expect(screen.queryByTestId('skill-chosen')).toBeNull()
     expect(screen.getByTestId('matrix-edit-spec-pm')).toBeInTheDocument()
-    expect(fetchMock).toHaveBeenCalledTimes(1) // 只有初始 GET，取消不应触发任何 POST
+    // 只有初始 GET /api/config + modal 挂载时的 GET /api/skills/registry，取消不应触发任何 POST
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(fetchMock.mock.calls.some((args: unknown[]) => String(args[0]) === '/api/config/mandatory-skills')).toBe(false)
   })
 
   it('编辑 + 保存 → 真 POST 请求 url/method/Authorization Bearer/body 正确，成功后回显新值并退出编辑态', async () => {
-    const fetchMock = stubConfigFetch({ capable: true, mandatorySkills: { 'build.backend': ['old'] } })
+    const fetchMock = stubConfigFetch({
+      capable: true,
+      mandatorySkills: { 'build.backend': ['old'] },
+      registrySkills: ['old', 'x', 'y', 'z'],
+    })
     renderSettings()
     fireEvent.click(screen.getByTestId('settings-tab-matrix'))
     fireEvent.click(await screen.findByTestId('matrix-edit-build-backend'))
 
-    fireEvent.change(screen.getByTestId('matrix-input-build-backend'), { target: { value: 'x, y, z' } })
-    fireEvent.click(screen.getByTestId('matrix-save-build-backend'))
+    const chosen = await screen.findByTestId('skill-chosen')
+    expect(chosen.textContent).toContain('old')
 
-    await waitFor(() => expect(screen.queryByTestId('matrix-input-build-backend')).toBeNull())
+    // 弹窗双栏穿梭：把 old 拖回左栏移除，再依次把 x/y/z 从左栏拖进右栏（顺序即最终 skills 顺序）
+    const available = screen.getByTestId('skill-available')
+    dragAndDrop(screen.getByText('old'), available)
+    dragAndDrop(await screen.findByText('x'), chosen)
+    dragAndDrop(screen.getByText('y'), chosen)
+    dragAndDrop(screen.getByText('z'), chosen)
+
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+
+    await waitFor(() => expect(screen.queryByTestId('skill-chosen')).toBeNull())
     const cell = screen.getByTestId('matrix-cell-build-backend')
     expect(cell.textContent).toContain('x')
     expect(cell.textContent).toContain('y')
@@ -196,7 +235,7 @@ describe('SettingsView 矩阵 —— M3 config 写端点真接线（真 fetch + 
     expect(JSON.parse(init.body as string)).toEqual({ phase: 'build', track: 'backend', skills: ['x', 'y', 'z'] })
   })
 
-  it('保存失败（服务端 400）→ 显示错误文案且保留编辑态（不丢弃草稿）', async () => {
+  it('保存失败（服务端 400）→ 显示错误文案且保留编辑态（弹窗不关闭，可重试）', async () => {
     stubConfigFetch({
       capable: true,
       mandatorySkills: { 'spec.pm': ['a'] },
@@ -205,12 +244,12 @@ describe('SettingsView 矩阵 —— M3 config 写端点真接线（真 fetch + 
     renderSettings()
     fireEvent.click(screen.getByTestId('settings-tab-matrix'))
     fireEvent.click(await screen.findByTestId('matrix-edit-spec-pm'))
-    fireEvent.change(screen.getByTestId('matrix-input-spec-pm'), { target: { value: 'a,b bad token' } })
-    fireEvent.click(screen.getByTestId('matrix-save-spec-pm'))
+    await screen.findByTestId('skill-chosen')
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
 
     expect(await screen.findByTestId('matrix-save-error-spec-pm')).toHaveTextContent('非法 skill token')
-    // 仍在编辑态（草稿保留，用户可修正后重试，不因失败被踢回只读视图）
-    expect(screen.getByTestId('matrix-input-spec-pm')).toBeInTheDocument()
+    // 仍在编辑态（弹窗仍展示，用户可重试，不因失败被踢回只读视图）
+    expect(screen.getByTestId('skill-chosen')).toBeInTheDocument()
   })
 
   it('网络异常（fetch 抛错）→ 呈现错误态而非崩溃，且保持编辑态', async () => {
@@ -218,10 +257,11 @@ describe('SettingsView 矩阵 —— M3 config 写端点真接线（真 fetch + 
     renderSettings()
     fireEvent.click(screen.getByTestId('settings-tab-matrix'))
     fireEvent.click(await screen.findByTestId('matrix-edit-ship-backend'))
+    await screen.findByTestId('skill-chosen')
 
     // 保存阶段临时切换 fetch 为抛错版本（模拟断网），组件必须 catch 住、不让测试崩溃
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('network down')))
-    fireEvent.click(screen.getByTestId('matrix-save-ship-backend'))
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
 
     expect(await screen.findByTestId('matrix-save-error-ship-backend')).toBeInTheDocument()
   })
