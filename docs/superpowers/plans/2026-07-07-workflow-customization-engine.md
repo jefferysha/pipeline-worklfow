@@ -439,7 +439,7 @@ git commit -m "feat(kernel): workflow YAML 手写窄解析器（零第三方依�
   通过；不 throw，因为调用方——Task 8 的写端点——需要把所有错误一次性回给用户，而不是
   只报第一个）。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```ts
 // packages/kernel/src/workflow/validate.test.ts
@@ -520,12 +520,12 @@ describe('validateWorkflow', () => {
 })
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `npx vitest run packages/kernel/src/workflow/validate.test.ts`
 Expected: FAIL — 模块不存在
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 ```ts
 // packages/kernel/src/workflow/validate.ts
@@ -600,12 +600,12 @@ export function validateWorkflow(wf: WorkflowDef): string[] {
 }
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `npx vitest run packages/kernel/src/workflow/validate.test.ts`
 Expected: PASS（6 例）
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add packages/kernel/src/workflow/validate.ts packages/kernel/src/workflow/validate.test.ts
