@@ -6,6 +6,7 @@ import { AdvancedPanel } from './advanced/AdvancedPanel'
 import { BoardView } from './board/BoardView'
 import { InboxView } from './inbox/InboxView'
 import { selectInbox } from './inbox/inbox'
+import { LoopsPanel } from './loops/LoopsPanel'
 import { SettingsView } from './settings/SettingsView'
 import { Nav, type View } from './shell/Nav'
 import { useSnapshot } from './state/useSnapshot'
@@ -112,6 +113,7 @@ function AppShell(): JSX.Element {
           />
         )}
         {view === 'settings' && <SettingsView />}
+        {view === 'loops' && <LoopsPanel />}
       </main>
 
       <footer className="footer">

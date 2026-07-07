@@ -26,11 +26,11 @@ describe('App 默认落地 = 收件箱（病灶②解法）', () => {
     expect(screen.queryByTestId('board-view')).toBeNull()
   })
 
-  it('一级导航恰好 3 项', async () => {
+  it('一级导航恰好 4 项（含 loop 设置，本计划刻意接入，见 GOAL.md F1 收尾说明）', async () => {
     render(<App />)
     await screen.findByTestId('inbox-view')
     const nav = screen.getByTestId('primary-nav')
-    expect(within(nav).getAllByRole('button')).toHaveLength(3)
+    expect(within(nav).getAllByRole('button')).toHaveLength(4)
   })
 })
 

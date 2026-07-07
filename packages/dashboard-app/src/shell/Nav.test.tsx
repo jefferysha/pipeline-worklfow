@@ -27,21 +27,27 @@ function renderNav(over: Partial<Parameters<typeof Nav>[0]> = {}) {
   return props
 }
 
-describe('Nav 一级导航 ≤3 项（病灶③解法）', () => {
-  it('一级导航恰好 3 个按钮：收件箱 / 看板 / 设置', () => {
+describe('Nav 一级导航（病灶③解法：显式枚举白名单 + loop 设置接入）', () => {
+  it('一级导航 4 个按钮：收件箱 / 看板 / 设置 / loop 设置', () => {
     renderNav()
     const nav = screen.getByTestId('primary-nav')
     const buttons = within(nav).getAllByRole('button')
-    expect(buttons).toHaveLength(3)
+    expect(buttons).toHaveLength(4)
     expect(nav.textContent).toContain('收件箱')
     expect(nav.textContent).toContain('看板')
     expect(nav.textContent).toContain('设置')
+    expect(nav.textContent).toMatch(/loop/i)
   })
 
-  it('debug 工具（流量/运行时/loops/afk）不在一级导航', () => {
+  it('导航包含 Loop 设置入口', () => {
+    renderNav()
+    expect(screen.getByText(/loop/i)).toBeInTheDocument()
+  })
+
+  it('debug 工具（流量/运行时/afk）仍不在一级导航；loops 已从白名单里移出（本计划刻意接入）', () => {
     renderNav()
     const nav = screen.getByTestId('primary-nav')
-    expect(nav.textContent).not.toMatch(/流量|运行时|loops|afk|traffic|runtime/i)
+    expect(nav.textContent).not.toMatch(/流量|运行时|afk|traffic|runtime/i)
   })
 
   it('当前视图标 aria-current=page', () => {
@@ -56,6 +62,12 @@ describe('Nav 交互 + 徽标', () => {
     const props = renderNav()
     fireEvent.click(screen.getByTestId('nav-board'))
     expect(props.onView).toHaveBeenCalledWith('board')
+  })
+
+  it('点 loop 设置触发 onView(loops)', () => {
+    const props = renderNav()
+    fireEvent.click(screen.getByTestId('nav-loops'))
+    expect(props.onView).toHaveBeenCalledWith('loops')
   })
 
   it('语言切换 zh→en', () => {
