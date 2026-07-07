@@ -20,6 +20,11 @@ const makePorts = (over: Partial<LifecyclePorts>): { ports: LifecyclePorts; log:
       async remove(path) {
         log.push(`wt.remove:${path}`)
       },
+      // 本文件专测 merge-back 冲突类保留现场，不涉及取消；固定无标记（afk-workbench Task 3
+      // 的 CancelledRunError 专测在 lifecycle.test.ts）。
+      async hasCancelMarker() {
+        return false
+      },
     },
     async createSandbox(opts) {
       log.push('sandbox.create')

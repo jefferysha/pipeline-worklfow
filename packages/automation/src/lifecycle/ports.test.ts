@@ -6,6 +6,7 @@ import type { ExecFn, ExecResult } from '../runner/exec.js'
 import { runChangeInSandbox, type LifecyclePorts } from './lifecycle.js'
 import { SyncError } from './mergeback.js'
 import { createLifecyclePorts } from './ports.js'
+import { CANCEL_MARKER_FILE } from './worktree.js'
 
 const SHA = 'a'.repeat(40)
 
@@ -30,6 +31,7 @@ describe('createLifecyclePorts', () => {
     const ports = createLifecyclePorts({ exec, hostRepoDir: '/repo', image: 'sandcastle:local' })
     expect(typeof ports.worktree.create).toBe('function')
     expect(typeof ports.worktree.remove).toBe('function')
+    expect(typeof ports.worktree.hasCancelMarker).toBe('function') // afk-workbench Task 3
     expect(typeof ports.createSandbox).toBe('function')
     expect(typeof ports.runWork).toBe('function')
     expect(typeof ports.collectCommits).toBe('function')
@@ -187,6 +189,13 @@ describe('runChangeInSandbox × createLifecyclePorts 全链：日志跨三类结
         },
         async remove(path) {
           await rm(path, { recursive: true, force: true })
+        },
+        // 真磁盘探测（同 create/remove 一样真实，不是无差别 stub——afk-workbench Task 3）。
+        async hasCancelMarker(path) {
+          return access(join(path, CANCEL_MARKER_FILE)).then(
+            () => true,
+            () => false,
+          )
         },
       },
     }

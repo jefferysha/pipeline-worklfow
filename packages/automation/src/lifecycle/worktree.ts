@@ -9,8 +9,11 @@
  *
  * 真 execFn（IT 真跑 `git worktree add/remove`）；argv 组装可 fake 单测。WorktreeError（_tag）→
  * classify 归 conflict（worktree 失败留现场，不重试撞同一错）。
+ *
+ * afk-workbench Task 3：另加 `hasCancelMarker`——dashboard 取消（Task 4：docker kill 容器前，先在
+ * worktree 根落 CANCEL_MARKER_FILE）的真探测，纯 node:fs（无 git/docker 依赖）。
  */
-import { mkdir } from 'node:fs/promises'
+import { access, mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { ExecFn } from '../runner/exec.js'
 import type { WorktreePort } from './lifecycle.js'
@@ -75,8 +78,29 @@ export const removeWorktree = async (exec: ExecFn, path: string): Promise<void> 
   }
 }
 
-/** 装配 #29 WorktreePort（create/remove 真 git）。 */
+/**
+ * dashboard 取消标记文件名（afk-workbench Task 3）：Task 4 里 dashboard 在 `docker kill <容器>`
+ * 之前，往这个 change 当前的 worktree 根（`automation_worktree` 字段指向的路径）写这个文件；
+ * `runChangeInSandbox`（lifecycle.ts）结算时探测到它就抛 CancelledRunError，而不是把外部 kill
+ * 造成的 exec 非零退出误判成瞬态失败走 classify 的 retry 分支自动重排。唯一常量导出——Task 4
+ * 写标记文件名时必须复用它，不允许分叉出第二份硬编码字符串。
+ */
+export const CANCEL_MARKER_FILE = '.cancel-requested'
+
+/**
+ * 真取消标记探测：worktree 根目录下 CANCEL_MARKER_FILE 是否存在。任何失败（标记不存在、worktree
+ * 已被清等）都当"没有标记"处理、不 throw——这只是一次结算路径上的旁路探测，不该自己成为新的
+ * 失败源掩盖真正的结算结果。
+ */
+export const hasCancelMarker = async (worktreePath: string): Promise<boolean> =>
+  access(join(worktreePath, CANCEL_MARKER_FILE)).then(
+    () => true,
+    () => false,
+  )
+
+/** 装配 #29 WorktreePort（create/remove 真 git，hasCancelMarker 真 fs.access）。 */
 export const realWorktreePort = (exec: ExecFn): WorktreePort => ({
   create: (repoDir, branch) => addWorktree(exec, repoDir, branch),
   remove: (path) => removeWorktree(exec, path),
+  hasCancelMarker: (path) => hasCancelMarker(path),
 })

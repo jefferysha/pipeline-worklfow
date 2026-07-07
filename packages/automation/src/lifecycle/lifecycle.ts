@@ -30,10 +30,17 @@ export interface SandboxHandle {
   close(): Promise<void>
 }
 
-/** worktree 注入面（per-change 命名分支 worktree 的 create/remove）。 */
+/** worktree 注入面（per-change 命名分支 worktree 的 create/remove/取消标记探测）。 */
 export interface WorktreePort {
   create(repoDir: string, branch: string): Promise<{ path: string; branch: string }>
   remove(path: string): Promise<void>
+  /**
+   * worktree 根目录下是否有 dashboard 落的取消标记（afk-workbench Task 3；真实现 + 文件名常量见
+   * worktree.ts::hasCancelMarker / CANCEL_MARKER_FILE）。runChangeInSandbox 结算时用它探测
+   * "这次 runWork 的返回/非零退出是不是被 Task 4 的 docker kill 造成的"，从而抛 CancelledRunError
+   * 而不是让普通 Error 落进 classify 的 retry 分支被自动重新排队。
+   */
+  hasCancelMarker(path: string): Promise<boolean>
 }
 
 /**
@@ -108,13 +115,41 @@ export class AbortedRunError extends Error {
 }
 
 /**
+ * dashboard 取消（afk-workbench Task 3；Task 4：docker kill 容器前，dashboard 往 worktree 根落
+ * CANCEL_MARKER_FILE）结算时抛：本进程里跑这次 run 的 AbortController 从未被 abort 过——触发 kill
+ * 的是另一个常驻 dashboard server 进程，两者没有 IPC（研究已确认），`runWork` 结算后只能看到 exec
+ * 非零退出这一个信号。若不主动识别，会被普通 Error 兜底，走 classify 的 retry 分支自动重新排队——
+ * "用户点了取消，几秒后它自己又开始跑了"这种违反直觉的行为。
+ *
+ * 语义上与 AbortedRunError 同类（人为主动停止，绝不当瞬态失败重试），抄它的形状：preservedPath
+ * 结构化直传（PRESERVE_ERROR_TAGS 必须同步收录这个 tag，否则下面 finally 块仍会清掉 worktree，
+ * "保留现场"就是一句空话）。
+ */
+export class CancelledRunError extends Error {
+  override readonly name = 'CancelledRunError'
+  readonly _tag = 'CancelledRunError'
+  readonly preservedPath: string
+  constructor(reason: string, preservedPath: string) {
+    super(reason)
+    this.preservedPath = preservedPath
+  }
+}
+
+/**
  * 冲突/漂移类错误的 tag（BACKLOG #29c 现场保留补强）：merge-back 冲突（SyncError）/ merge 超时
- * （MergeToHostTimeoutError）/ build_sha 漂移（BarrierDriftError）/ worktree 失败（WorktreeError）
+ * （MergeToHostTimeoutError）/ build_sha 漂移（BarrierDriftError）/ worktree 失败（WorktreeError）/
+ * dashboard 取消（CancelledRunError，afk-workbench Task 3）
  * → **保留 worktree 现场**（不 remove），供人工在 dashboard 接管（DESIGN §7-item4「失败/冲突绝不清沙箱」）。
  * #29 仅在 abort 时保留现场；真 merge-back 引入真冲突后，conflict 类错误也必须保留（否则 preserved_path
  * 指向已删目录）。retry 类错误（瞬态/verify-fail）仍照清 worktree（下轮重建，不误留现场）。
  */
-const PRESERVE_ERROR_TAGS = new Set(['SyncError', 'MergeToHostTimeoutError', 'BarrierDriftError', 'WorktreeError'])
+const PRESERVE_ERROR_TAGS = new Set([
+  'SyncError',
+  'MergeToHostTimeoutError',
+  'BarrierDriftError',
+  'WorktreeError',
+  'CancelledRunError',
+])
 const isPreserveError = (err: unknown): boolean =>
   typeof err === 'object' && err !== null && PRESERVE_ERROR_TAGS.has((err as { _tag?: string })._tag ?? '')
 
@@ -145,6 +180,14 @@ export const runChangeInSandbox = async (ports: LifecyclePorts, cfg: RunChangeCo
     await ports.setStateField(cfg.name, 'automation_worktree', worktreePath)
 
     const report = await ports.runWork((cmd, options) => sandbox.exec(cmd, options), cfg.name, signal)
+
+    // dashboard 取消（afk-workbench Task 3）：本进程的 signal 从没被 abort 过（触发 kill 的是另一个
+    // 常驻进程），只能靠标记文件判断——必须先于下面的 signal.aborted 检查（这条路径上 signal.aborted
+    // 永远是 false，顺序反了就永远走不到这里）。
+    if (await ports.worktree.hasCancelMarker(worktreePath)) {
+      throw new CancelledRunError('cancel requested via dashboard', worktreePath)
+    }
+
     // abort 检查（老仓在每轮前后查 signal.aborted）：转 catch 走 preserve 现场。
     if (signal.aborted) throw new AbortedRunError(signal.reason, worktreePath)
 
@@ -177,9 +220,21 @@ export const runChangeInSandbox = async (ports: LifecyclePorts, cfg: RunChangeCo
       handle = undefined // 让 finally 跳过二次 close
       throw new AbortedRunError(signal.reason, worktreePath)
     }
-    // conflict 类（merge 冲突 / barrier drift / worktree 失败）→ 保留现场，不清 worktree。
-    if (isPreserveError(err)) preserve = true
-    throw err
+
+    // dashboard 取消（afk-workbench Task 3）：docker kill 容器后，runWork 的真实现（ports.ts）对
+    // exec 非零退出直接 throw 一个普通 Error——从不把"非零退出"当一个正常返回值交回这里（见
+    // ports.ts `if (res.exitCode !== 0) throw new Error(...)`）。这才是 kill 后的真实主路径；
+    // try 块里 runWork resolve 之后那一次取消检测只覆盖"run 碰巧抢在 kill 生效前正常跑完"的窄
+    // 竞态，覆盖不到这里——取消检测必须在 catch 里也做一次。err 若已经是那次检测抛出的
+    // CancelledRunError 则跳过重复探测，直接按它走下面统一的 isPreserveError 归类。
+    let settled = err
+    if (!(err instanceof CancelledRunError) && (await ports.worktree.hasCancelMarker(worktreePath))) {
+      settled = new CancelledRunError('cancel requested via dashboard', worktreePath)
+    }
+
+    // conflict 类（merge 冲突 / barrier drift / worktree 失败 / dashboard 取消）→ 保留现场，不清 worktree。
+    if (isPreserveError(settled)) preserve = true
+    throw settled
   } finally {
     if (handle) await handle.close().catch(() => {})
     // 非 abort、非 conflict 路径才 teardown worktree（错误吞掉）；abort/conflict 保留现场。

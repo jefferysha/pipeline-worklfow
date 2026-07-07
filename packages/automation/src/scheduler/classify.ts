@@ -3,7 +3,9 @@
  *
  * 决定失败 run 回 queued（retry）还是直接 conflict（绝不重试、留现场）。分类**按 error 的 tag /
  * 类型，绝不按 message 字符串**（spec 硬规则：message 会漂，tag 不会）。
- *   - conflict 类：AbortedRunError（操作员 abort，人为停的绝不自动重试）、SyncError /
+ *   - conflict 类：AbortedRunError（操作员 abort，人为停的绝不自动重试）、CancelledRunError
+ *     （dashboard 取消，docker kill 容器前落标记，runWork 结算转的 tagged error，语义同
+ *     AbortedRunError，见 afk-workbench Task 3 / lifecycle.ts）、SyncError /
  *     MergeToHostTimeoutError / WorktreeError（merge-back 失败）、BarrierDriftError（build_sha
  *     drift，verify 目标偏离 reviewed commit——重试只会再撞同一移动靶）。
  *   - retry 类：verify-fail sentinel、AgentIdleTimeoutError（瞬态挂起）、ExecError（含瞬态
@@ -45,8 +47,10 @@ export const classifyFailure = (err: unknown): Classification => {
   const tagged = (typeof err === 'object' && err !== null ? err : {}) as Tagged
   const tag = tagged._tag
 
-  // 操作员 abort → conflict，绝不重试，留现场。preservedPath 直取 AbortedRunError 字段。
-  if (tag === 'AbortedRunError') {
+  // 操作员 abort / dashboard 取消（CancelledRunError，afk-workbench Task 3：docker kill 前落标记，
+  // runWork 结算探测到后转的 tagged error）→ conflict，绝不重试，留现场。preservedPath 直取结构化
+  // 字段——两者都在 runChangeInSandbox 同一处构造，构造时早已知道 worktreePath，抄同一个模式。
+  if (tag === 'AbortedRunError' || tag === 'CancelledRunError') {
     return {
       kind: 'conflict',
       message: tagged.message ?? 'aborted',

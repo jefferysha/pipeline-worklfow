@@ -13,6 +13,12 @@ describe('classifyFailure', () => {
     expect(c.preservedPath).toBe('/wt/x')
   })
 
+  it('dashboard 取消（CancelledRunError，见 lifecycle.ts）→ conflict，不重试，带 preservedPath（afk-workbench Task 3）', () => {
+    const c = classifyFailure({ _tag: 'CancelledRunError', message: 'cancel requested via dashboard', preservedPath: '/wt/z' })
+    expect(c.kind).toBe('conflict')
+    expect(c.preservedPath).toBe('/wt/z')
+  })
+
   it('merge 冲突 / barrier drift → conflict（不重试）', () => {
     expect(classifyFailure({ _tag: 'SyncError', message: 'conflict' }).kind).toBe('conflict')
     expect(classifyFailure({ _tag: 'BarrierDriftError', message: 'drift' }).kind).toBe('conflict')

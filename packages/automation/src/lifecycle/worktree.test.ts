@@ -1,9 +1,9 @@
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { ExecFn, ExecResult } from '../runner/exec.js'
-import { NO_CONFIG_LOCK_FLAGS, addWorktree, worktreePathFor } from './worktree.js'
+import { CANCEL_MARKER_FILE, NO_CONFIG_LOCK_FLAGS, addWorktree, hasCancelMarker, worktreePathFor } from './worktree.js'
 
 /**
  * git worktree 管理 argv（老仓 WorktreeManager.ts:210-313 + git.ts NO_CONFIG_LOCK_FLAGS，DESIGN §7-item12）。
@@ -51,5 +51,35 @@ describe('addWorktree argv（fake ExecFn，真临时 repoDir 供 mkdir）', () =
     expect(gitCall!.join(' ')).toContain('branch.autoSetupMerge=false')
     expect(gitCall!).toContain('-b')
     expect(gitCall!).toContain('sandcastle-pipeline/x')
+  })
+})
+
+/**
+ * dashboard 取消标记探测（afk-workbench Task 3）：真 fs.access，无 git/docker 依赖——不属于
+ * worktree.integration.test.ts 的"需要真 git 二进制"范畴，纯 node:fs 真磁盘即可覆盖真行为
+ * （同 ports.test.ts 的 realDeleteWorktreePort 先例：真磁盘不等于需要 .integration 后缀）。
+ */
+describe('hasCancelMarker（真 fs.access 探测 dashboard 取消标记）', () => {
+  let dir: string
+
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'afk-wt-cancel-'))
+  })
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true })
+  })
+
+  it('标记文件不存在 → false', async () => {
+    expect(await hasCancelMarker(dir)).toBe(false)
+  })
+
+  it(`标记文件（${CANCEL_MARKER_FILE}）存在 → true`, async () => {
+    await writeFile(join(dir, CANCEL_MARKER_FILE), '1', 'utf8')
+    expect(await hasCancelMarker(dir)).toBe(true)
+  })
+
+  it('worktree 目录本身已不存在（已被清）→ false，不 throw（探测本身不该成为结算路径上的新失败源）', async () => {
+    await rm(dir, { recursive: true, force: true })
+    await expect(hasCancelMarker(dir)).resolves.toBe(false)
   })
 })
