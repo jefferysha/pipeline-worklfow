@@ -279,7 +279,7 @@ git commit -m "feat(automation): 新增 CancelledRunError，取消不再被误�
 - Produces: `POST /api/afk/:name/cancel` body `{ root: string }`，成功 200，找不到运行中的
   job 或容器名为空 → 400。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```ts
 describe('POST /api/afk/:name/cancel', () => {
@@ -302,12 +302,12 @@ describe('POST /api/afk/:name/cancel', () => {
 })
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `npx vitest run packages/server/src/server.test.ts -t "afk.*cancel"`
 Expected: FAIL — 404
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 `afk.ts` 新增：
 ```ts
@@ -341,12 +341,12 @@ if (cancelMatch) {
 }
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `npx vitest run packages/server/src/server.test.ts -t "afk.*cancel"`
 Expected: PASS
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add packages/server/src/afk.ts packages/server/src/server.ts packages/server/src/server.test.ts
