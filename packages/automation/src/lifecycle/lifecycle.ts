@@ -36,10 +36,18 @@ export interface WorktreePort {
   remove(path: string): Promise<void>
 }
 
-/** 沙箱内 pipeline 驱动（production 绑 runner.ts::runPipeline，返回结构化握手）。 */
+/**
+ * 沙箱内 pipeline 驱动（production 绑 ports.ts::createLifecyclePorts 的真实现，返回结构化握手）。
+ * worktreePath：真实现结算（成功/失败）时落盘完整 stdout+stderr 到 worktree 内
+ * `.sandcastle-run.log`（afk-workbench Task 2）要用——此前签名没有它，真实现（ports.ts）拿不到
+ * 该写去哪；纯编排层本身已经在 `runChangeInSandbox` 的 `worktreePath` 局部变量里持有这个值，
+ * 这里只是显式递进注入面，不新增状态、不影响并发安全（createLifecyclePorts 单实例被多个并发
+ * change 复用，worktreePath 必须按调用显式传入，不能塞进 deps 闭包共享）。
+ */
 export type RunWork = (
   exec: SandboxHandle['exec'],
   name: string,
+  worktreePath: string,
   signal: AbortSignal,
 ) => Promise<SandboxReport>
 
@@ -131,7 +139,7 @@ export const runChangeInSandbox = async (ports: LifecyclePorts, cfg: RunChangeCo
     await ports.setStateField(cfg.name, 'automation_sandbox', sandbox.containerName)
     await ports.setStateField(cfg.name, 'automation_worktree', worktreePath)
 
-    const report = await ports.runWork((cmd, options) => sandbox.exec(cmd, options), cfg.name, signal)
+    const report = await ports.runWork((cmd, options) => sandbox.exec(cmd, options), cfg.name, worktreePath, signal)
     // abort 检查（老仓在每轮前后查 signal.aborted）：转 catch 走 preserve 现场。
     if (signal.aborted) throw new AbortedRunError(signal.reason, worktreePath)
 

@@ -5,6 +5,8 @@
  *   worktree      → 真 git worktree add/remove（worktree.ts）
  *   createSandbox → 真 docker 容器 + git 双挂载（container.ts + gitMounts.ts）
  *   runWork       → 沙箱内 pipeline-afk-run + 三路 race（idle/grace/abort）+ 结构化握手解析（race.ts + runner.ts）
+ *                   + 结算（成功/失败）落盘完整 stdout+stderr 到 worktree 内 .sandcastle-run.log
+ *                   （afk-workbench Task 2；不是 automation_last_error 里那 200 字符截断片段）
  *   collectCommits→ 真 git rev-list 命名分支（mergeback.ts）
  *   mergeToBase   → 真 git merge DELIVERY + 冲突留现场（mergeback.ts）—— 仅 L3 调
  *   git           → 真 git rev-parse（barrier build_sha 派生）
@@ -12,9 +14,11 @@
  * 主会话在 packages/cli / server 侧把它接进 sdk.runRound（见报告接线清单）。默认 L1 report-only
  * （autoMerge=false → 不调 mergeToBase）。
  */
+import { writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import type { ExecFn } from '../runner/exec.js'
+import { BoundedTail, MAX_TAIL_CHARS } from '../runner/boundedTail.js'
 import { createDockerSandbox } from '../runner/container.js'
+import type { ExecFn, ExecResult } from '../runner/exec.js'
 import { resolveGitMounts } from '../runner/gitMounts.js'
 import {
   DEFAULT_COMPLETION_SIGNAL,
@@ -73,15 +77,44 @@ export const createLifecyclePorts = (deps: LifecyclePortsDeps): LifecyclePorts =
       return createDockerSandbox(exec, { image, worktreePath, env, gitMounts: mounts, uid, gid, cpus: deps.cpus })
     },
 
-    async runWork(sandboxExec, name, signal) {
+    async runWork(sandboxExec, name, worktreePath, signal) {
       const cmd = buildAfkRunCommand(name)
-      // 三路 race：沙箱内 pipeline-afk-run 跑 build→verify→ship，idle/grace/abort 收口。
-      const res = await invokeWithRace((onLine) => sandboxExec(cmd, { onLine }), {
-        idleMs,
-        graceMs,
-        completionSignals,
-        signal,
-      })
+      const logPath = join(worktreePath, '.sandcastle-run.log')
+      // afk-workbench Task 2：结算（成功/失败）落盘完整 stdout+stderr（不是 automation_last_error
+      // 里那 200 字符截断片段）。invokeWithRace 有两种质地不同的"结算"：resolve（含 exitCode!==0
+      // 的沙箱内命令真失败，此时有完整 res 可读）和 reject（idle-timeout/abort/sandboxExec 自己
+      // 抛错——invokeWithRace 直接 reject，压根没有 res）。若只在 resolve 之后才读 res.stdout 落盘，
+      // reject 这条路径的日志会整个丢失——BoundedTail 的生命周期得提到 invokeWithRace 外面自己用
+      // onLine 攒一份兜底尾部，catch 分支才拿得到东西（64KiB 上限，复用现成 BoundedTail，不新造
+      // 一套累积机制）。
+      const fallbackTail = new BoundedTail(MAX_TAIL_CHARS, '\n')
+
+      let res: ExecResult
+      try {
+        // 三路 race：沙箱内 pipeline-afk-run 跑 build→verify→ship，idle/grace/abort 收口。
+        res = await invokeWithRace(
+          (onLine) =>
+            sandboxExec(cmd, {
+              onLine: (line) => {
+                fallbackTail.push(line)
+                onLine(line)
+              },
+            }),
+          { idleMs, graceMs, completionSignals, signal },
+        )
+      } catch (err) {
+        // reject 路径唯一能拿到的内容：onLine 逐行攒的尾部（stderr 不走 onLine，这条路径上确实
+        // 拿不到，天然限制，不伪造）。落盘失败不掩盖真错误——best-effort，同 setStateField/
+        // worktree.remove 既有的 .catch(() => {}) 风格。
+        await writeFile(logPath, fallbackTail.toString(), 'utf8').catch(() => {})
+        throw err
+      }
+
+      // resolve 路径：res.stdout/res.stderr 已经是权威全量（真 sandboxExec 走 exec.ts 自己的
+      // 64KiB BoundedTail），直接落盘，不再从 fallbackTail 拼凑。
+      const fullLog = [res.stdout, res.stderr].filter((s) => s.length > 0).join('\n')
+      await writeFile(logPath, fullLog, 'utf8').catch(() => {})
+
       if (res.exitCode !== 0) {
         throw new Error(`pipeline afk-run failed (exit ${res.exitCode}): ${res.stderr.slice(0, 200)}`)
       }

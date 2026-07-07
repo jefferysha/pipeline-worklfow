@@ -129,14 +129,14 @@ git commit -m "feat(automation): 真持久化 sandbox 容器名 + worktree 路�
   截断片段）。因为这个文件落在 worktree 内，会随 worktree 的 git commit 一起进命名分支，
   teardown 后仍可读（同 G6 验证过的 `.sandcastle-tap` 落盘+可读模式）。
 
-- [ ] **Step 1: 读现状**
+- [x] **Step 1: 读现状**
 
 Read `packages/automation/src/lifecycle/ports.ts` 全文，确认 `runWork` 结算的确切代码
 （研究已知大致在 lines 69-82，`invokeWithRace(...)` 调用 + 失败分支
 `throw new Error(...res.stderr.slice(0, 200))`），找到成功路径和失败路径分别在哪里返回/抛错，
 两条路径都要加日志落盘。
 
-- [ ] **Step 2: 写失败测试**
+- [x] **Step 2: 写失败测试**
 
 ```ts
 it('run 结算后（无论成功失败），worktree 内真落一份完整日志文件（非 200 字符截断）', async () => {
@@ -152,12 +152,12 @@ it('run 结算后（无论成功失败），worktree 内真落一份完整日志
 })
 ```
 
-- [ ] **Step 2b: 跑测试确认失败**
+- [x] **Step 2b: 跑测试确认失败**
 
 Run: `npx vitest run packages/automation/src/lifecycle/ -t "完整日志文件"`
 Expected: FAIL（文件不存在）
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 在 Step 1 确认的成功/失败两条结算路径上，各加一次
 `await fs.writeFile(join(worktreePath, '.sandcastle-run.log'), accumulatedOutput, 'utf8')`
@@ -166,12 +166,12 @@ Step 1 读现状时确认这个累积值在结算时刻是否还能拿到；如�
 异常路径提前丢弃，需要把 `BoundedTail` 实例的生命周期往外提一层，确保 catch 分支也能访问到
 它，而不是新造一套独立的日志累积机制）。
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `npx vitest run packages/automation/src/lifecycle/ -t "完整日志文件"`
 Expected: PASS
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add packages/automation/src/lifecycle/
