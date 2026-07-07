@@ -201,14 +201,14 @@ server 是另一个常驻进程，两者没有 IPC）。真正可行的取消方
 开始跑了"这种违反直觉的行为。必须让 kill 前的动作在 worktree 里落一个标记文件，`runWork`
 结算时检测到这个标记就主动抛 `CancelledRunError`，才能让 `classifyFailure` 正确分类。
 
-- [ ] **Step 1: 读现状**
+- [x] **Step 1: 读现状**
 
 Read `packages/automation/src/scheduler/classify.ts` 全文（研究已知 lines 40-79 是
 `classifyFailure` 主体，按 `err._tag` 分派）和 `packages/automation/src/lifecycle/
 lifecycle.ts` 里 `AbortedRunError`/`isPreserveError`/`PRESERVE_ERROR_TAGS` 的现有定义
 （这是 `conflict` 分类已经在用的机制，抄它的模式而不是新发明一套）。
 
-- [ ] **Step 2: 写失败测试**
+- [x] **Step 2: 写失败测试**
 
 ```ts
 it('worktree 内有 .cancel-requested 标记时，runWork 结算应抛 CancelledRunError 而非普通 Error', async () => {
@@ -226,12 +226,12 @@ it('classifyFailure 对 CancelledRunError 归类 conflict（不自动重试）',
 })
 ```
 
-- [ ] **Step 2b: 跑测试确认失败**
+- [x] **Step 2b: 跑测试确认失败**
 
 Run: `npx vitest run packages/automation/src/scheduler/ -t "Cancelled"`
 Expected: FAIL（`CancelledRunError` 不存在）
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 在 `lifecycle.ts` 里仿照现有 `AbortedRunError` 定义新增：
 ```ts
@@ -252,12 +252,12 @@ if (await fileExists(join(worktreePath, '.cancel-requested'))) {
 的现状为准）里把 `'CancelledRunError'` 加进"归类 conflict、保留 worktree"那一组，和现有
 `'SyncError'`/`'MergeToHostTimeoutError'` 等并列。
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `npx vitest run packages/automation/src/scheduler/ -t "Cancelled"`
 Expected: PASS
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add packages/automation/src/lifecycle/ packages/automation/src/scheduler/
