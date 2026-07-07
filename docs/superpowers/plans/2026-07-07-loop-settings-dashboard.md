@@ -401,7 +401,7 @@ git commit -m "feat(server): POST /api/loops/level 升降档写端点"
 - Consumes: `GET /api/loops/snapshot`（Task 2）、`POST /api/loops/level`（Task 3）。
 - Produces: `<LoopsPanel />` 组件，供 Task 5 接线到导航。
 
-- [ ] **Step 1: 在 `api/client.ts` 加 fetch 辅助（先写用到它的失败测试）**
+- [x] **Step 1: 在 `api/client.ts` 加 fetch 辅助（先写用到它的失败测试）**
 
 ```tsx
 // packages/dashboard-app/src/loops/LoopsPanel.test.tsx
@@ -457,12 +457,12 @@ describe('LoopsPanel', () => {
 })
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `cd /Users/a1234/Documents/code-manager/projects/pipeline-worklfow && npm run test:web -- LoopsPanel`
 Expected: FAIL — `Cannot find module './LoopsPanel'`
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 ```tsx
 // packages/dashboard-app/src/loops/LoopsPanel.tsx
@@ -535,12 +535,12 @@ export function LoopsPanel(): JSX.Element {
 }
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `npm run test:web -- LoopsPanel`
 Expected: PASS（2 例）
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add packages/dashboard-app/src/loops/
