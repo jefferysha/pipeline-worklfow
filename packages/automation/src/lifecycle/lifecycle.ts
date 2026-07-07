@@ -38,16 +38,21 @@ export interface WorktreePort {
 
 /**
  * 沙箱内 pipeline 驱动（production 绑 ports.ts::createLifecyclePorts 的真实现，返回结构化握手）。
- * worktreePath：真实现结算（成功/失败）时落盘完整 stdout+stderr 到 worktree 内
- * `.sandcastle-run.log`（afk-workbench Task 2）要用——此前签名没有它，真实现（ports.ts）拿不到
- * 该写去哪；纯编排层本身已经在 `runChangeInSandbox` 的 `worktreePath` 局部变量里持有这个值，
- * 这里只是显式递进注入面，不新增状态、不影响并发安全（createLifecyclePorts 单实例被多个并发
- * change 复用，worktreePath 必须按调用显式传入，不能塞进 deps 闭包共享）。
+ *
+ * 历史注记（afk-workbench Task 2 → teardown 现场缺口修复，见
+ * `.superpowers/sdd/task-2-report.md` "Fix: log survives teardown"）：Task 2 曾在这里加过第 3 个
+ * `worktreePath` 参数，为了让真实现（ports.ts）把结算日志落盘到 worktree 内
+ * `.sandcastle-run.log`。Task 2 自己的实测（真 docker 跑通一个成功 run）随后发现：这个位置在
+ * **成功**和**普通（非 tagged）失败**这两类最常见结算下，会在 `runWork` 返回后、
+ * `runChangeInSandbox` 的 finally 块里被 `worktree.remove` 立即删掉——日志刚写完就随 worktree
+ * 一起消失，只有 abort/conflict 保留现场那一类才读得到。真实现现已改写到 host 侧
+ * `openspec/changes/<name>/.sandcastle-run.log`（由 hostRepoDir + name 派生，
+ * createLifecyclePorts 的 hostRepoDir 闭包已有，每次调用都传 name，不需要额外状态），故不再
+ * 需要 worktreePath，这个参数原样撤回——不留一个真实现不再使用的死参数。
  */
 export type RunWork = (
   exec: SandboxHandle['exec'],
   name: string,
-  worktreePath: string,
   signal: AbortSignal,
 ) => Promise<SandboxReport>
 
@@ -139,7 +144,7 @@ export const runChangeInSandbox = async (ports: LifecyclePorts, cfg: RunChangeCo
     await ports.setStateField(cfg.name, 'automation_sandbox', sandbox.containerName)
     await ports.setStateField(cfg.name, 'automation_worktree', worktreePath)
 
-    const report = await ports.runWork((cmd, options) => sandbox.exec(cmd, options), cfg.name, worktreePath, signal)
+    const report = await ports.runWork((cmd, options) => sandbox.exec(cmd, options), cfg.name, signal)
     // abort 检查（老仓在每轮前后查 signal.aborted）：转 catch 走 preserve 现场。
     if (signal.aborted) throw new AbortedRunError(signal.reason, worktreePath)
 

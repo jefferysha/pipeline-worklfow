@@ -5,8 +5,13 @@
  *   worktree      → 真 git worktree add/remove（worktree.ts）
  *   createSandbox → 真 docker 容器 + git 双挂载（container.ts + gitMounts.ts）
  *   runWork       → 沙箱内 pipeline-afk-run + 三路 race（idle/grace/abort）+ 结构化握手解析（race.ts + runner.ts）
- *                   + 结算（成功/失败）落盘完整 stdout+stderr 到 worktree 内 .sandcastle-run.log
- *                   （afk-workbench Task 2；不是 automation_last_error 里那 200 字符截断片段）
+ *                   + 结算（成功/失败）落盘完整 stdout+stderr 到 host 侧
+ *                   openspec/changes/<name>/.sandcastle-run.log（afk-workbench Task 2；不是
+ *                   automation_last_error 里那 200 字符截断片段——teardown 现场缺口修复见
+ *                   `.superpowers/sdd/task-2-report.md` "Fix: log survives teardown"：早期版本
+ *                   落在 worktree 内，成功/普通失败两类结算会被 runChangeInSandbox 的 finally 块
+ *                   随 worktree 一起删掉，只有 abort/conflict 保留现场才读得到；host 侧目录只随
+ *                   change 本身存在，不随某次 run 的 worktree 一起 teardown）
  *   collectCommits→ 真 git rev-list 命名分支（mergeback.ts）
  *   mergeToBase   → 真 git merge DELIVERY + 冲突留现场（mergeback.ts）—— 仅 L3 调
  *   git           → 真 git rev-parse（barrier build_sha 派生）
@@ -14,7 +19,7 @@
  * 主会话在 packages/cli / server 侧把它接进 sdk.runRound（见报告接线清单）。默认 L1 report-only
  * （autoMerge=false → 不调 mergeToBase）。
  */
-import { writeFile } from 'node:fs/promises'
+import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { BoundedTail, MAX_TAIL_CHARS } from '../runner/boundedTail.js'
 import { createDockerSandbox } from '../runner/container.js'
@@ -77,9 +82,25 @@ export const createLifecyclePorts = (deps: LifecyclePortsDeps): LifecyclePorts =
       return createDockerSandbox(exec, { image, worktreePath, env, gitMounts: mounts, uid, gid, cpus: deps.cpus })
     },
 
-    async runWork(sandboxExec, name, worktreePath, signal) {
+    async runWork(sandboxExec, name, signal) {
       const cmd = buildAfkRunCommand(name)
-      const logPath = join(worktreePath, '.sandcastle-run.log')
+      // afk-workbench Task 2 teardown 修复：落盘位置是 host 侧 openspec/changes/<name>/，不是
+      // worktree 内——那个目录只随 change 本身存在（.pipeline.yaml/.pipeline-history.jsonl 的
+      // 落地目录），从不随某次 run 的 worktree 一起被 runChangeInSandbox 的 finally 块 teardown。
+      // hostRepoDir 是 createLifecyclePorts 的工厂级闭包依赖，name 每次调用都传，两者拼出的
+      // changeDir 和真 kernel StateStore 存 automation_sandbox/automation_worktree 的
+      // .pipeline.yaml 是同一个目录（同 sdk.ts::storeWriter / dockerRunChange.ts 的
+      // join(hostRepoDir, 'openspec', 'changes', name) 约定，不分叉出第二份路径拼接逻辑）。
+      const changeDir = join(hostRepoDir, 'openspec', 'changes', name)
+      const logPath = join(changeDir, '.sandcastle-run.log')
+      // best-effort（同 setStateField/worktree.remove 既有 .catch(() => {}) 风格）：磁盘异常不
+      // 掩盖真正的结算结果/错误。mkdir recursive 幂等——changeDir 正常应已因 change init 存在，
+      // 这里只是防御。
+      const persistLog = async (content: string): Promise<void> => {
+        await mkdir(changeDir, { recursive: true }).catch(() => {})
+        await writeFile(logPath, content, 'utf8').catch(() => {})
+      }
+
       // afk-workbench Task 2：结算（成功/失败）落盘完整 stdout+stderr（不是 automation_last_error
       // 里那 200 字符截断片段）。invokeWithRace 有两种质地不同的"结算"：resolve（含 exitCode!==0
       // 的沙箱内命令真失败，此时有完整 res 可读）和 reject（idle-timeout/abort/sandboxExec 自己
@@ -104,16 +125,15 @@ export const createLifecyclePorts = (deps: LifecyclePortsDeps): LifecyclePorts =
         )
       } catch (err) {
         // reject 路径唯一能拿到的内容：onLine 逐行攒的尾部（stderr 不走 onLine，这条路径上确实
-        // 拿不到，天然限制，不伪造）。落盘失败不掩盖真错误——best-effort，同 setStateField/
-        // worktree.remove 既有的 .catch(() => {}) 风格。
-        await writeFile(logPath, fallbackTail.toString(), 'utf8').catch(() => {})
+        // 拿不到，天然限制，不伪造）。
+        await persistLog(fallbackTail.toString())
         throw err
       }
 
       // resolve 路径：res.stdout/res.stderr 已经是权威全量（真 sandboxExec 走 exec.ts 自己的
       // 64KiB BoundedTail），直接落盘，不再从 fallbackTail 拼凑。
       const fullLog = [res.stdout, res.stderr].filter((s) => s.length > 0).join('\n')
-      await writeFile(logPath, fullLog, 'utf8').catch(() => {})
+      await persistLog(fullLog)
 
       if (res.exitCode !== 0) {
         throw new Error(`pipeline afk-run failed (exit ${res.exitCode}): ${res.stderr.slice(0, 200)}`)

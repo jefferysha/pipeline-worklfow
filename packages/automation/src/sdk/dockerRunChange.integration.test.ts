@@ -4,6 +4,7 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createStateStore } from '@pipeline-lite/kernel'
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { worktreePathFor } from '../lifecycle/worktree.js'
 import { dockerAvailable } from '../runner/docker.js'
 import { nodeExec } from '../runner/exec.js'
 import { createAutomation } from './sdk.js'
@@ -112,6 +113,21 @@ describe('createDockerRunChange · 真 docker 全链执行（#29-wire）', () =>
     // 命名分支真存在且带真 commit（barrier build_sha 锚点）
     const branches = (await nodeExec('git', ['branch', '--list', 'sandcastle-pipeline/x'], { cwd: repo })).stdout
     expect(branches).toContain('sandcastle-pipeline/x')
+
+    // afk-workbench Task 2 teardown 修复（见 task-2-report.md "Fix: log survives teardown"）：
+    // L3 也走同一条结算落盘路径——worktree 真被 runChangeInSandbox 的 finally 块清掉之后，完整
+    // 日志仍要能从 host 侧 openspec/changes/<name>/.sandcastle-run.log 读到。
+    let worktreeLeaked = false
+    try {
+      await access(worktreePathFor(repo, 'sandcastle-pipeline/x'))
+      worktreeLeaked = true
+    } catch {
+      /* 期望：真被 teardown 删除 */
+    }
+    expect(worktreeLeaked).toBe(false)
+    const runLog = await readFile(join(dir, '.sandcastle-run.log'), 'utf8')
+    expect(runLog).toContain('<output>')
+    expect(runLog).toContain('verify_result')
   }, 300_000)
 
   it('L1 report-only：真容器跑成功但**不自动 merge**（automation=paused，host base 不含产物）', async (ctx) => {
@@ -135,6 +151,23 @@ describe('createDockerRunChange · 真 docker 全链执行（#29-wire）', () =>
     let leaked = false
     try { await access(join(repo, '.sandcastle-build', 'y.done')); leaked = true } catch { /* 期望不存在 */ }
     expect(leaked).toBe(false)
+
+    // afk-workbench Task 2 teardown 修复（见 task-2-report.md "Fix: log survives teardown"）：
+    // 早期版本把完整日志落在 worktree 内——但成功结算这一类，runChangeInSandbox 的 finally 块
+    // 会真删 worktree（下方断言先钉死这一点：worktree 目录真的从磁盘消失，不是编排层偷懒没删），
+    // 日志刚写完就随之消失。真容器跑完这个最常见的"成功"结局后，完整日志现在应仍可从 host 侧
+    // openspec/changes/<name>/.sandcastle-run.log 读到。
+    let worktreeLeaked = false
+    try {
+      await access(worktreePathFor(repo, 'sandcastle-pipeline/y'))
+      worktreeLeaked = true
+    } catch {
+      /* 期望：真被 teardown 删除——这正是缺口曾经发生的地方 */
+    }
+    expect(worktreeLeaked).toBe(false)
+    const runLog = await readFile(join(dir, '.sandcastle-run.log'), 'utf8')
+    expect(runLog).toContain('<output>')
+    expect(runLog).toContain('verify_result')
   }, 300_000)
 
   it('full CC-in-sandbox（真 agent 编码）需 CLAUDE_CODE_OAUTH_TOKEN + WITH_CLAUDE_CODE 镜像 → honest skip', (ctx) => {

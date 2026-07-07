@@ -8,6 +8,10 @@ coverage/
 .pipeline-project.yaml
 .pipeline-pending-*
 .breadcrumb
+# afk run 结算日志（packages/automation/src/lifecycle/ports.ts::runWork 落盘，openspec/changes/
+# <name>/ 内，同 .breadcrumb 同一类：单次运行的操作性产物，会被下一次 run 整体覆盖，不是要保留的
+# 项目语义历史——不同于同目录内会被提交、构成审计轨迹的 .pipeline.yaml/.pipeline-history.jsonl）。
+.sandcastle-run.log
 .superpowers/
 
 # git worktrees (isolated workstreams, per superpowers:using-git-worktrees)
