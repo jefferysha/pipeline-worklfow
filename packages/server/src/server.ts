@@ -25,10 +25,11 @@ import { join, resolve as resolvePath } from 'node:path'
 import { createFlowEngine, createStateStore, loadManifest } from '@pipeline-lite/kernel'
 import type { FlowEngine, StateStore } from '@pipeline-lite/kernel'
 import { buildAfkLog, buildAfkSnapshot } from './afk.js'
+import { buildLoopsSnapshot } from './loops.js'
 import { readMandatorySkills, validateMandatorySkillsBody, writeMandatorySkills } from './config.js'
 import { resolveServerPaths } from './paths.js'
 import { readRegistry } from './registry.js'
-import { buildSnapshot, computeFingerprint, type SnapshotDeps } from './snapshot.js'
+import { buildSnapshot, computeFingerprint, dedupeRoots, type SnapshotDeps } from './snapshot.js'
 import { generateToken, tokenFromHeaders, tokensMatch } from './token.js'
 import { listTraceSessions, readTraceRecords } from './traces.js'
 import { performTransition } from './transition.js'
@@ -87,8 +88,9 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
   const manifestPath = options.manifestPath
 
   // 能力声明（GOAL B6）：afk 数据端始终已接线（读同一 registry+store 的 automation_* 字段）；
-  // traffic 仅注入 traceStore 时为真（未装 → 前端 Advanced 仍占位，不谎报）。#29d / #34d。
-  const capabilities: Record<string, boolean> = { afk: true, traffic: Boolean(traceStore), config: Boolean(manifestPath) }
+  // traffic 仅注入 traceStore 时为真（未装 → 前端 Advanced 仍占位，不谎报）；
+  // loops 数据端始终已接线（无可选运行时依赖）。#29d / #34d。
+  const capabilities: Record<string, boolean> = { afk: true, loops: true, traffic: Boolean(traceStore), config: Boolean(manifestPath) }
   const snapshotDeps = (): SnapshotDeps => ({ registry, store, version, clock, capabilities })
 
   const fileExists = (root: string, relPath: string): boolean => {
@@ -285,6 +287,15 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
     if (path === '/api/afk/log') {
       try {
         return sendJson(res, 200, buildAfkLog(await buildSnapshot(snapshotDeps()), clock))
+      } catch (e) {
+        return sendJson(res, 500, { ok: false, error: errMsg(e) })
+      }
+    }
+    // ── loops 治理面数据端：跨项目聚合 loops.yaml ──
+    if (path === '/api/loops/snapshot') {
+      try {
+        const snap = await buildLoopsSnapshot({ registry: () => dedupeRoots(registry()), now: () => new Date(clock()) })
+        return sendJson(res, 200, snap)
       } catch (e) {
         return sendJson(res, 500, { ok: false, error: errMsg(e) })
       }

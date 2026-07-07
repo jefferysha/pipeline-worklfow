@@ -428,3 +428,15 @@ describe('POST /api/config/mandatory-skills —— M3 config 写端点（同 B5 
     expect(reparsed.mandatorySkills.verify.backend).toEqual(['tab-2'])
   })
 })
+
+describe('GET /api/loops/snapshot —— 跨项目聚合 loops.yaml', () => {
+  it('capabilities.loops=true；无 loops.yaml 时返回空 rows 而非报错', async () => {
+    const h = await start()
+    const capRes = await reqGet(h.port, '/api/snapshot')
+    expect(capRes.json<any>().capabilities.loops).toBe(true)
+
+    const r = await reqGet(h.port, '/api/loops/snapshot')
+    expect(r.status).toBe(200)
+    expect(r.json<{ rows: unknown[] }>().rows).toEqual([])
+  })
+})
