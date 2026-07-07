@@ -1,6 +1,49 @@
 # GOAL — pipeline-worklfow
 
-## 终态（v1.0 的唯一定义，2026-07-06 用户指令定稿）
+## 终态 v2.0（工作流自定义引擎 + dashboard 工作台，2026-07-07 brainstorming 定稿）
+
+**v1.0（下方"终态 v1.0"章节）已达成收官——完整 TS 重写 + 与老仓 workflow-plugin 字节级行为
+等价，那是上一阶段的目的。从这里开始是新阶段，`与老仓行为等价`不再是新功能的验收约束**
+（golden-oracle 作为历史证据链保留，但只覆盖"默认 workflow 预设"，不覆盖本阶段新增的自定义
+能力）。详细技术设计见
+`docs/superpowers/specs/2026-07-07-workflow-customization-and-dashboard-workbench-design.md`。
+
+**达成判定 = 下方清单 E/F 全部勾满。** 与 v1.0 相同的纪律延续：证据先于勾选、清单只增不删、
+八门验证全绿才收编。
+
+## 清单 E · Workflow 自定义引擎
+
+- [ ] E1 workflow 定义文件格式：`.pipeline/workflows/<name>.yaml`，7 相位变成内置 `default`
+      workflow（数据，非写死类型）；state 文件（`.pipeline.yaml`）新增 `workflow` +
+      `current_step` 字段取代写死 `phase` 枚举
+- [ ] E2 skill DAG 依赖：`depends_on` 声明（同 step 内），取代已否决的 parallel/serial
+      分组方案；无依赖 skill 天然并行，多依赖精确表达交叉依赖关系
+- [ ] E3 inputs/outputs：step 级别持久字段契约，取代 kernel 硬编码字段表，驱动现有相位
+      handoff 压缩机制（`packages/kernel/src/compress/handoff.ts`）
+- [ ] E4 guards 参数化：现有 guard 规则类型（tasks-at-least/coverage/automation-queued
+      等）保留为代码实现的可选用类型，"用在哪个 step、参数多少"变成数据
+- [ ] E5 保存时校验：无循环依赖 + inputs 必须对应更早 step 的 outputs，拒绝非法 workflow
+      不等运行时报错
+- [ ] E6 gate.sh 动态解锁：读 workflow 定义 + 扫描"进入当前 step 以来"的历史记录判定
+      skill 解锁状态，仍是纯 bash 热路径（CONTRACT §5.4 红线不破）
+- [ ] E7 旧格式迁移工具：类比现有 `pipeline import`，一次性迁移，不做运行时双格式兼容
+- [ ] E8 workflow 编辑器 UI：真画布节点连线图（step/skill 为可拖拽节点，`depends_on` 用
+      拖线表达）
+
+## 清单 F · Dashboard 工作台
+
+- [ ] F1 导航：新增"工作台"分组（顶部 3 项不变），下辖 workflow 编辑器/skill 编辑器/AFK
+      工作台/loop 设置
+- [ ] F2 Skill 编辑器升级：弹窗双栏穿梭框（左栏全部已注册 skill 可搜索，右栏当前已选可
+      拖拽排序），复用现有 `POST /api/config/mandatory-skills` 契约
+- [ ] F3 AFK 工作台：列表+详情侧栏（左列表右详情：日志 tail/sandbox·worktree 路径/取消·
+      重试·合并操作），新增日志读取端点 + 操作写端点
+- [ ] F4 Loop 设置：单表视图（loop/分级/就绪分/预算/状态一行一个，点开详情含 7 维 drift +
+      enforce 历史 + 升降档操作），新增聚合读端点 + 升降档写端点
+
+---
+
+## 终态 v1.0（2026-07-06 用户指令定稿，已达成收官——历史参照，不再是验收约束）
 
 **不是"把老仓代码搬过来"，而是交付一个行为等价、结构更优、质量有证据的完整替代品**：
 老仓（workflow-plugin，本机 `/Users/a1234/Documents/code-manager/projects/workflow-plugin`）

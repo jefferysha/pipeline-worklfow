@@ -8,3 +8,4 @@ coverage/
 .pipeline-project.yaml
 .pipeline-pending-*
 .breadcrumb
+.superpowers/
