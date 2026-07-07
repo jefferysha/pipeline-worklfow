@@ -631,7 +631,7 @@ git commit -m "feat(kernel): workflow 保存时校验（无环 + inputs/outputs 
 state/fixtures/*.pipeline.yaml`）和 oracle 双跑逐字比对都依赖当前顺序。新增字段必须加在
 **列表末尾**（`archived` 之后），不能插入中间，否则会让所有既有 fixture 的序列化输出错位。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```ts
 // packages/kernel/src/types.test.ts（如果不存在就新建；如果已有同名测试文件则追加到其中）
@@ -649,12 +649,12 @@ describe('workflow 字段', () => {
 })
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `npx vitest run packages/kernel/src/types.test.ts`
 Expected: FAIL
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 `types.ts` 的 `FIELD_ORDER` 数组末尾（`'archived',` 之后）加一行 `'workflow',`。
 `state/parse.ts` 的 `emptyFields()` 函数体里（具体写法先 Read 该文件确认现有实现——研究
@@ -663,7 +663,7 @@ Expected: FAIL
 `workflow` 字段的代码都要能直接判断"是不是 default"，不应该还要处理"空字符串等价于
 default"这种隐式约定）。
 
-- [ ] **Step 4: 跑测试确认通过 + 确认现有全部 kernel 测试无回归**
+- [x] **Step 4: 跑测试确认通过 + 确认现有全部 kernel 测试无回归**
 
 Run: `npx vitest run packages/kernel/src/types.test.ts`
 Expected: PASS
@@ -672,7 +672,7 @@ Run: `npx vitest run packages/kernel`
 Expected: 全部现存用例仍然 PASS（新增字段不该改变任何现有断言的结果——如果有 fixture
 测试因为字段顺序变化而失败，检查是不是不小心把 `workflow` 插到了列表中间而不是末尾）。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add packages/kernel/src/types.ts packages/kernel/src/state/parse.ts packages/kernel/src/types.test.ts
