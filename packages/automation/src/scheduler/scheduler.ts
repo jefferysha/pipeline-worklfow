@@ -68,8 +68,13 @@ export interface Scheduler {
 /**
  * yaml_set 拒 换行 / ": " / 首引号（kernel 四闸）。把错误 message 压成单行安全 token，
  * 让字段写永不弹（老仓 scheduler/scheduler.ts:232-239）。
+ *
+ * export：任何直接把值转发给真 StateStore.set 的 automation_* 字段写回都必须复用这唯一实现
+ * （文化硬规则：ONE sanitization，不许分叉出第二份）。见 sdk/dockerRunChange.ts::setStateField
+ * 对 automation_worktree 的复用（Task 1 复查 Fix 2——worktreePath 由 hostRepoDir 真机器路径拼出，
+ * 同样可能撞四闸，与这里的 last_error/preserved_path 同类风险）。
  */
-const sanitize = (s: string): string =>
+export const sanitize = (s: string): string =>
   s
     .replace(/[\r\n]+/g, ' ')
     .replace(/:\s/g, '; ')

@@ -100,3 +100,41 @@ describe('createDockerRunChange · opts.store 真接线（Task 1 收尾缺口）
     await expect(runChange('x', new AbortController().signal)).resolves.toBeDefined()
   })
 })
+
+/**
+ * Task 1 复查发现（第二轮，真相源：.superpowers/sdd/task-1-fix-report.md「Fix 2」）：上面「opts.store
+ * 真接线」那组测试只证明了字段**非空落盘**，没断言过值本身对 kernel 四闸（parse.ts::quoteGate——禁
+ * 换行/回车、「: 」、「 #」、首引号）安全。setStateField 闭包把 automation_worktree 原样转发给真
+ * store.set，未经 scheduler.ts::sanitize() 那样的清洗——而 worktreePath = join(hostRepoDir,
+ * '.sandcastle', 'worktrees', <branch 折斜杠>)（worktree.ts::worktreePathFor），hostRepoDir 是真机器
+ * 路径、可含任意子串（如去重目录名 "repo #2"）。真部署下这类 host 仓库会让 store.set 在写
+ * automation_worktree 时同步 throw QuoteGateError——不属于 PRESERVE_ERROR_TAGS、也无 _tag，
+ * classifyFailure 只会当瞬态 retry 处理，同一 hostRepoDir 每轮都撞同一路径、永不可能好转，直到
+ * attempts 耗尽 failed（对该仓库而言 afk run 名存实亡）。
+ *
+ * automation_sandbox 不需要同等处理：containerName = `sandcastle-${Date.now().toString(36)}-
+ * ${Math.random().toString(16).slice(2,8)}`（container.ts::createDockerSandbox/randomName），
+ * 定长安全字符集（[0-9a-z-]），不可能含四闸任何一种禁串，故本组只测 automation_worktree。
+ */
+describe('createDockerRunChange · automation_worktree 写回前 sanitize（四闸防炸，Fix 2）', () => {
+  let repo: string
+  // 目录名嵌 " #"（四闸禁串之一）：真实世界常见（如手动去重产生的 "repo #2" 这类文件夹名）。
+  beforeEach(async () => { repo = await mkdtemp(join(tmpdir(), 'dockerrc-worktree #evil-')) })
+  afterEach(async () => { await rm(repo, { recursive: true, force: true }) })
+
+  it('hostRepoDir 含 " #" 时，真 StateStore 写 automation_worktree 不炸、且已消毒（不再含 " #"）', async () => {
+    const { exec } = makeFakeExec()
+    const store = createStateStore()
+    const dir = await store.init({ repoRoot: repo, name: 'w', track: 'backend', preset: 'full' })
+
+    const runChange = createDockerRunChange({
+      hostRepoDir: repo, base: 'main', level: 'L1', image: 'sandcastle:local', exec, store,
+    })
+    // 消毒前：这一行会 reject QuoteGateError（RED）。消毒后：正常 resolve RunOutcome（GREEN）。
+    await expect(runChange('w', new AbortController().signal)).resolves.toBeDefined()
+
+    const worktree = await store.get(dir, 'automation_worktree')
+    expect(worktree).not.toBe('')
+    expect(worktree).not.toContain(' #')
+  })
+})

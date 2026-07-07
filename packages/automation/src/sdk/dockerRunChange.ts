@@ -26,7 +26,7 @@ import type { StateStore } from '@pipeline-lite/kernel'
 import { runChangeInSandbox } from '../lifecycle/lifecycle.js'
 import { createLifecyclePorts } from '../lifecycle/ports.js'
 import { nodeExec, type ExecFn } from '../runner/exec.js'
-import type { RunChange } from '../scheduler/scheduler.js'
+import { sanitize, type RunChange } from '../scheduler/scheduler.js'
 import type { AutomationLevel } from '../types.js'
 
 export interface DockerRunChangeOptions {
@@ -51,6 +51,16 @@ export interface DockerRunChangeOptions {
    * 真 kernel StateStore（可选）：注入后运行期真写回 automation_sandbox/automation_worktree
    * （changeDir 解析 = join(hostRepoDir, 'openspec', 'changes', name)，同 sdk.ts::storeWriter
    * 同款约定）。未注入 → createLifecyclePorts 走既有 no-op 缺省，不 throw、不阻断 run。
+   *
+   * 四闸安全（Task 1 复查 Fix 2）：automation_worktree 的值 = join(hostRepoDir, '.sandcastle',
+   * 'worktrees', <branch>)（worktree.ts::worktreePathFor）——hostRepoDir 是真机器路径，可含任意
+   * 子串（如 "repo #2" 这类去重目录名），直写会撞 kernel 四闸（parse.ts::quoteGate 禁换行/
+   * ": "/" #"/首引号）同步 throw QuoteGateError，且该错误无 _tag，classifyFailure 只当瞬态
+   * retry 处理——同一 hostRepoDir 永不可能好转，直到 attempts 耗尽 failed。故写前复用
+   * scheduler.ts::sanitize()（与 automation_last_error/automation_preserved_path 同一份实现，
+   * 不分叉出第二份）。automation_sandbox 不需要：containerName 由 container.ts::createDockerSandbox
+   * 生成，定长安全字符集 [0-9a-z-]（sandcastle-<base36 时间戳>-<6 位 hex 随机>），不可能含
+   * 四闸任何一种禁串。
    */
   readonly store?: StateStore
 }
@@ -60,6 +70,12 @@ export const createDockerRunChange = (opts: DockerRunChangeOptions): RunChange =
   const exec = opts.exec ?? nodeExec
   const { store, hostRepoDir } = opts
   const changeDir = (name: string): string => join(hostRepoDir, 'openspec', 'changes', name)
+  // 仅 automation_worktree 需要四闸消毒（见上方 store 字段注释）；automation_sandbox 值域天然安全，
+  // 不误消毒不该消毒的字段。
+  const setStateField = store
+    ? (name: string, field: string, value: string): Promise<void> =>
+        store.set(changeDir(name), field as never, field === 'automation_worktree' ? sanitize(value) : value)
+    : undefined
   const ports = createLifecyclePorts({
     exec,
     hostRepoDir: opts.hostRepoDir,
@@ -69,9 +85,7 @@ export const createDockerRunChange = (opts: DockerRunChangeOptions): RunChange =
     cpus: opts.cpus,
     idleMs: opts.idleMs,
     graceMs: opts.graceMs,
-    setStateField: store
-      ? (name, field, value) => store.set(changeDir(name), field as never, value)
-      : undefined,
+    setStateField,
   })
   const autoMerge = opts.level === 'L3'
   return (name, signal) =>
