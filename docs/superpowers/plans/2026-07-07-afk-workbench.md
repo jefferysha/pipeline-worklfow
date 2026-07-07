@@ -534,7 +534,7 @@ git commit -m "feat(server): GET /api/afk/:name/log 日志读取端点"
   （Task 4）、`POST /api/afk/:name/retry`（Task 5）。
 - Produces: `<AfkWorkbench />`，供 Task 8 接线进导航。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```tsx
 // packages/dashboard-app/src/afk/AfkWorkbench.test.tsx
@@ -585,12 +585,12 @@ describe('AfkWorkbench', () => {
 })
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `cd /Users/a1234/Documents/code-manager/projects/pipeline-worklfow && npm run test:web -- AfkWorkbench`
 Expected: FAIL — `Cannot find module './AfkWorkbench'`
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 ```tsx
 // packages/dashboard-app/src/afk/AfkWorkbench.tsx
@@ -658,12 +658,12 @@ export function AfkWorkbench(): JSX.Element {
 }
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `npm run test:web -- AfkWorkbench`
 Expected: PASS（2 例）
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add packages/dashboard-app/src/afk/
