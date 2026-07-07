@@ -47,4 +47,33 @@ describe('LoopsPanel', () => {
       expect(JSON.parse(postCall![1].body as string)).toEqual({ root: '/tmp/proj-a', id: 'build-loop', target: 'L2' })
     })
   })
+
+  it('快照 fetch 失败时显示错误信息而不是永远显示加载中', async () => {
+    global.fetch = vi.fn(async (url: string) => {
+      if (url === '/api/loops/snapshot') {
+        return new Response('Server error', { status: 500 })
+      }
+      throw new Error(`unexpected fetch ${url}`)
+    }) as unknown as typeof fetch
+    render(<LoopsPanel />)
+    await waitFor(() => expect(screen.getByText(/加载失败|加载出错|error|Error/i)).toBeInTheDocument())
+  })
+
+  it('升档 POST 失败时显示错误信息', async () => {
+    global.fetch = vi.fn(async (url: string, opts?: RequestInit) => {
+      if (url === '/api/loops/snapshot') {
+        return new Response(JSON.stringify(SNAPSHOT), { status: 200 })
+      }
+      if (url === '/api/loops/level' && opts?.method === 'POST') {
+        return new Response('Failed to promote', { status: 500 })
+      }
+      throw new Error(`unexpected fetch ${url}`)
+    }) as unknown as typeof fetch
+    render(<LoopsPanel />)
+    await waitFor(() => expect(screen.getByText('build-loop')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('build-loop'))
+    const upgradeBtn = await screen.findByRole('button', { name: /升档|Promote/i })
+    fireEvent.click(upgradeBtn)
+    await waitFor(() => expect(screen.getByText(/升档失败|操作失败|error|Error/i)).toBeInTheDocument())
+  })
 })

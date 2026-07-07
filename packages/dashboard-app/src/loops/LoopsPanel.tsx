@@ -13,24 +13,36 @@ const NEXT_LEVEL: Record<LoopRow['autonomy_level'], 'L2' | 'L3' | null> = { L1: 
 
 export function LoopsPanel(): JSX.Element {
   const [snapshot, setSnapshot] = useState<LoopsSnapshot | null>(null)
+  const [error, setError] = useState<string | null>(null)
   const [expanded, setExpanded] = useState<string | null>(null)
+  const [promoteError, setPromoteError] = useState<string | null>(null)
 
   useEffect(() => {
     fetch('/api/loops/snapshot', { headers: { Accept: 'application/json' } })
       .then((r) => r.json() as Promise<LoopsSnapshot>)
       .then(setSnapshot)
+      .catch((err) => setError(`加载失败: ${err instanceof Error ? err.message : '网络错误'}`))
   }, [])
 
   async function promote(row: LoopRow): Promise<void> {
     const target = NEXT_LEVEL[row.autonomy_level]
     if (!target) return
-    await fetch('/api/loops/level', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
-      body: JSON.stringify({ root: row.root, id: row.id, target }),
-    })
+    setPromoteError(null)
+    try {
+      const res = await fetch('/api/loops/level', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
+        body: JSON.stringify({ root: row.root, id: row.id, target }),
+      })
+      if (!res.ok) {
+        setPromoteError('升档失败')
+      }
+    } catch (err) {
+      setPromoteError(`升档失败: ${err instanceof Error ? err.message : '网络错误'}`)
+    }
   }
 
+  if (error) return <p className="subtitle">{error}</p>
   if (!snapshot) return <p className="subtitle">加载中…</p>
   if (snapshot.rows.length === 0) return <p className="subtitle">没有已注册的 loop</p>
 
@@ -54,6 +66,7 @@ export function LoopsPanel(): JSX.Element {
             <tr key={`${row.root}:${row.id}:detail`}>
               <td colSpan={5}>
                 <p>就绪分带：{row.readiness.band}</p>
+                {promoteError && <p style={{ color: 'red' }}>{promoteError}</p>}
                 {NEXT_LEVEL[row.autonomy_level] && (
                   <button onClick={() => promote(row)}>升档 → {NEXT_LEVEL[row.autonomy_level]}</button>
                 )}
