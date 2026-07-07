@@ -35,6 +35,7 @@ updated_at: 2026-07-03T07:57:27Z
 verified_at: 2026-07-03T05:06:56Z
 archived_at: null
 archived: false
+workflow: default
 pipeline_mode: afk
 transitions_history:
   - { at: 2026-07-03T05:06:56Z, from: verify, to: ship, event: verify-pass }
