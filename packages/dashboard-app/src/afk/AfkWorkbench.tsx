@@ -121,7 +121,7 @@ export function AfkWorkbench(): JSX.Element {
             <b>{selected.name}</b> · {selected.automation}
             {logError ? <p className="subtitle">{logError}</p> : <pre>{log ?? '（无日志）'}</pre>}
             {actionError && <p className="subtitle">{actionError}</p>}
-            {selected.lane === 'running' && <button onClick={() => doAction('cancel')}>取消</button>}
+            {selected.automation === 'running' && <button onClick={() => doAction('cancel')}>取消</button>}
             {RETRYABLE.has(selected.lane) && <button onClick={() => doAction('retry')}>重试</button>}
           </>
         ) : (

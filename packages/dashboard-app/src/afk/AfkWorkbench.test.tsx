@@ -81,6 +81,30 @@ describe('AfkWorkbench', () => {
     await waitFor(() => expect(screen.getByText(/取消失败|操作失败|error|Error/i)).toBeInTheDocument())
   })
 
+  it('lane=running 但 automation=scheduled（已认领未起跑）时，详情区不应显示"取消"按钮', async () => {
+    // 对应 server laneOf()：scheduled 和 running 都折叠进 running 泳道，但 cancelAfkRun 只认
+    // automation==='running'，scheduled 传进去必 400。Cancel 门禁须用 automation 而非 lane 判断。
+    const SCHEDULED_SNAPSHOT = {
+      generated_at: '2026-07-07T00:00:00Z',
+      scheduler: { status: 'busy', queued: 0, running: 1, merged: 0, failed: 0, conflict: 0, paused: 0, total: 1, message: '' },
+      lanes: {
+        queued: [], merged: [], failed: [], conflict: [], paused: [],
+        running: [{ name: 'demo-scheduled', root: '/tmp/a', path: '/tmp/a/openspec/changes/demo-scheduled', phase: 'build', automation: 'scheduled', lane: 'running', attempts: 0, queued_at: '', last_error: '', sandbox: 'sandcastle-xyz', worktree: '/tmp/wt-3' }],
+      },
+      cards: [],
+    }
+    global.fetch = vi.fn(async (url: string) => {
+      if (url === '/api/afk/snapshot') return new Response(JSON.stringify(SCHEDULED_SNAPSHOT), { status: 200 })
+      if (url.startsWith('/api/afk/demo-scheduled/log')) return new Response(JSON.stringify({ log: null }), { status: 200 })
+      throw new Error(`unexpected ${url}`)
+    }) as unknown as typeof fetch
+    render(<AfkWorkbench />)
+    await waitFor(() => expect(screen.getByText('demo-scheduled')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('demo-scheduled'))
+    await waitFor(() => expect(screen.getByText(/（无日志）/)).toBeInTheDocument())
+    expect(screen.queryByRole('button', { name: /取消|Cancel/i })).not.toBeInTheDocument()
+  })
+
   it('重试操作失败（非 2xx）时显示错误信息', async () => {
     global.fetch = vi.fn(async (url: string, opts?: RequestInit) => {
       if (url === '/api/afk/snapshot') return new Response(JSON.stringify(SNAPSHOT), { status: 200 })
