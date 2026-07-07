@@ -25,6 +25,7 @@ const makePorts = (over: Partial<LifecyclePorts>): { ports: LifecyclePorts; log:
       log.push('sandbox.create')
       return {
         env: opts.env,
+        containerName: 'sandcastle-preservetest',
         async exec() {
           return { stdout: '', stderr: '', exitCode: 0 }
         },
@@ -44,6 +45,7 @@ const makePorts = (over: Partial<LifecyclePorts>): { ports: LifecyclePorts; log:
       log.push('mergeToBase')
     },
     git: { revParse: async () => SHA },
+    async setStateField() {},
     ...over,
   }
   return { ports, log }

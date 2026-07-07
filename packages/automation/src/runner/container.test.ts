@@ -84,6 +84,7 @@ describe('createDockerSandbox（fake ExecFn 驱动 create→exec→close 全链�
       gitMounts: [{ hostPath: '/wt/.git', sandboxPath: '/wt/.git' }],
     })
     expect(handle.env.PIPELINE_AFK).toBe('1')
+    expect(handle.containerName).toMatch(/^sandcastle-/) // 真容器名透传（供 lifecycle 写回 automation_sandbox）
     expect(calls[0][1]).toBe('run') // docker run -d ...
 
     const r = await handle.exec('echo hi')

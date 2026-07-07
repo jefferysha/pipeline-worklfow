@@ -21,9 +21,11 @@ import { type GitFace, deriveBarrierSha } from './barrier.js'
 /** per-change 命名分支前缀（老仓 sandcastle-pipeline/<name>）。 */
 export const NAMED_BRANCH_PREFIX = 'sandcastle-pipeline/'
 
-/** 沙箱句柄注入面（exec + env 可见 + close 杀容器）。 */
+/** 沙箱句柄注入面（exec + env 可见 + close 杀容器 + containerName 供运行期写回 automation_sandbox）。 */
 export interface SandboxHandle {
   readonly env: Record<string, string>
+  /** 真容器名（container.ts::createDockerSandbox 生成的 sandcastle-<random>），供写回 automation_sandbox 字段。 */
+  readonly containerName: string
   exec(cmd: string, options?: { onLine?: (line: string) => void }): Promise<{ stdout: string; stderr: string; exitCode: number }>
   close(): Promise<void>
 }
@@ -51,6 +53,13 @@ export interface LifecyclePorts {
   /** 把命名分支 merge 回 host base（仅 autoMerge=L3 时调）。 */
   mergeToBase(input: { worktreePath: string; branch: string; base: string }): Promise<void>
   readonly git: GitFace
+  /**
+   * 运行期写回单个 automation_* 字段（name=change 名，非路径；同 scheduler.ts::StateWriter.setField
+   * 同款签名/语义——沿用既有约定，非新发明。真实现由 ports.ts 生产装配层适配注入的写入依赖，
+   * 未注入时 no-op）。容器/worktree 创建成功后写 automation_sandbox/automation_worktree（下游
+   * 取消/详情要用这两个字段定位容器/worktree）。
+   */
+  setStateField(name: string, field: string, value: string): Promise<void>
 }
 
 export interface RunChangeConfig {
@@ -116,6 +125,11 @@ export const runChangeInSandbox = async (ports: LifecyclePorts, cfg: RunChangeCo
     const env: Record<string, string> = { ...cfg.extraEnv, [PIPELINE_AFK_ENV]: '1' }
     handle = await ports.createSandbox({ env, worktreePath })
     const sandbox = handle
+
+    // 容器/worktree 都真创建成功 → 真写回 automation_sandbox/automation_worktree（runWork 前，
+    // 抄 scheduler.ts 写 automation_last_error/automation_preserved_path 的既有模式）。
+    await ports.setStateField(cfg.name, 'automation_sandbox', sandbox.containerName)
+    await ports.setStateField(cfg.name, 'automation_worktree', worktreePath)
 
     const report = await ports.runWork((cmd, options) => sandbox.exec(cmd, options), cfg.name, signal)
     // abort 检查（老仓在每轮前后查 signal.aborted）：转 catch 走 preserve 现场。

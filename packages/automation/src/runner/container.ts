@@ -115,6 +115,7 @@ export const createDockerSandbox = async (exec: ExecFn, opts: CreateSandboxOptio
   })
   return {
     env: opts.env,
+    containerName: name,
     exec: (cmd, options) => execInContainer(exec, name, cmd, { cwd: opts.worktreePath, onLine: options?.onLine }),
     close: () => removeContainer(exec, name),
   }

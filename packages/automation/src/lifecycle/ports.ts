@@ -40,6 +40,13 @@ export interface LifecyclePortsDeps {
   readonly idleMs?: number
   readonly graceMs?: number
   readonly completionSignals?: readonly string[]
+  /**
+   * 运行期状态字段写回注入（automation_sandbox/automation_worktree 等）。真接线 = kernel
+   * StateStore.set 经 changeDir(name) 适配（同 sdk.ts::storeWriter 同款模式，由调用方按需接线，
+   * 例如把 name 解析成 join(hostRepoDir, 'openspec', 'changes', name) 再转发给真 StateStore）。
+   * 缺省 no-op：调用方尚未接线真 store 时写回静默跳过，不 throw、不阻断 run。
+   */
+  readonly setStateField?: (name: string, field: string, value: string) => Promise<void>
 }
 
 export const createLifecyclePorts = (deps: LifecyclePortsDeps): LifecyclePorts => {
@@ -88,5 +95,7 @@ export const createLifecyclePorts = (deps: LifecyclePortsDeps): LifecyclePorts =
       mergeBackToBase(exec, { hostRepoDir, worktreePath: input.worktreePath, branch: input.branch, base: input.base }),
 
     git: realGitFace(exec, hostRepoDir),
+
+    setStateField: deps.setStateField ?? (async () => {}),
   }
 }

@@ -3,11 +3,16 @@ import { PIPELINE_AFK_ENV } from '../queue/gate.js'
 import { AbortedRunError, type LifecyclePorts, runChangeInSandbox } from './lifecycle.js'
 
 const SHA = 'a'.repeat(40)
+/** fake 沙箱句柄的容器名（对应真 container.ts::createDockerSandbox 生成的 sandcastle-<random>）。 */
+const FAKE_CONTAINER_NAME = 'sandcastle-faketest'
 
 /** 全 fake 面：驱动 change 沙箱生命周期的纯编排（挂队→沙箱→跑→merge-back→teardown）。 */
 const makePorts = (over: Partial<LifecyclePorts> = {}) => {
   const log: string[] = []
   let sandboxEnv: Record<string, string> = {}
+  // automation_sandbox/automation_worktree 的 fake 落态（真 kernel StateStore 未写入字段前的
+  // 默认值语义同为空串——同一断言风格 `.not.toBe('')` 在写回前后都有意义）。
+  const stateFields: Record<string, string> = { automation_sandbox: '', automation_worktree: '' }
   const ports: LifecyclePorts = {
     worktree: {
       async create(_repoDir, branch) {
@@ -23,6 +28,7 @@ const makePorts = (over: Partial<LifecyclePorts> = {}) => {
       sandboxEnv = opts.env
       return {
         env: opts.env,
+        containerName: FAKE_CONTAINER_NAME,
         async exec() {
           return { stdout: '', stderr: '', exitCode: 0 }
         },
@@ -43,9 +49,13 @@ const makePorts = (over: Partial<LifecyclePorts> = {}) => {
       log.push('mergeToBase')
     },
     git: { revParse: async () => SHA },
+    async setStateField(_name, field, value) {
+      log.push(`setStateField:${field}`)
+      stateFields[field] = value
+    },
     ...over,
   }
-  return { ports, log, env: () => sandboxEnv }
+  return { ports, log, env: () => sandboxEnv, state: () => stateFields }
 }
 
 describe('runChangeInSandbox（沙箱生命周期纯编排 + 注入面）', () => {
@@ -65,6 +75,18 @@ describe('runChangeInSandbox（沙箱生命周期纯编排 + 注入面）', () =
     expect(env().ANTHROPIC_BASE_URL).toBe('http://host.docker.internal:9')
     expect(env().CLAUDE_CODE_OAUTH_TOKEN).toBe('tok')
     expect(env()[PIPELINE_AFK_ENV]).toBe('1') // extraEnv 不挤掉既有硬护栏 env
+  })
+
+  it('容器/worktree 创建成功后，真写回 automation_sandbox / automation_worktree 字段', async () => {
+    const { ports, log, state } = makePorts()
+    await runChangeInSandbox(ports, { hostRepoDir: '/repo', name: 'x', base: 'main', autoMerge: false }, new AbortController().signal)
+    expect(state().automation_sandbox).not.toBe('')
+    expect(state().automation_sandbox).toBe(FAKE_CONTAINER_NAME)
+    expect(state().automation_worktree).not.toBe('')
+    expect(state().automation_worktree).toBe('/wt/sandcastle-pipeline/x')
+    // 写回时机：sandbox 创建成功之后、runWork 执行之前（不是结算时才补写）。
+    expect(log.indexOf('setStateField:automation_sandbox')).toBeGreaterThan(log.indexOf('sandbox.create'))
+    expect(log.indexOf('setStateField:automation_worktree')).toBeLessThan(log.indexOf('runWork'))
   })
 
   it('happy L3（autoMerge）：跑 → 收集 commits → merge-back → barrier → 清 worktree', async () => {
