@@ -395,10 +395,13 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
       const root = typeof body === 'object' && body !== null ? (body as Record<string, unknown>).root : undefined
       const id = typeof body === 'object' && body !== null ? (body as Record<string, unknown>).id : undefined
       const target = typeof body === 'object' && body !== null ? (body as Record<string, unknown>).target : undefined
-      if (typeof root !== 'string' || typeof id !== 'string' || typeof target !== 'string') {
+      if (typeof root !== 'string' || typeof id !== 'string' || typeof target !== 'string' || !root || !id || !target) {
         return sendJson(res, 400, { ok: false, error: 'root/id/target 必填' })
       }
-      if (!dedupeRoots(registry()).includes(root)) {
+      // 信任锚：与 /api/change/<name>/transition 同一「两侧规范化再比较」模式——注册表条目
+      // （dedupeRoots 已 resolve）与提交的 root（此处同样 resolvePath）都规范化后再比较，
+      // 防止「同一路径的非规范写法（如结尾多一个斜杠）」被误判为未注册。
+      if (!dedupeRoots(registry()).includes(resolvePath(root))) {
         return sendJson(res, 404, { ok: false, error: 'root 未在机器级项目注册表中' })
       }
       const result = applyLevelChange(root, id, target, { now: new Date(clock()), confirm: true }, REAL_GRADUATION_FS)

@@ -517,4 +517,44 @@ describe('POST /api/loops/level —— 升降档写回', () => {
     const r = await reqPost(h.port, '/api/loops/level', { root: h.root, id: 'build-loop', target: 'L2' })
     expect(r.status).toBe(401)
   })
+
+  it('root 以非规范但等价形式提交（结尾多一个斜杠）→ 仍视为已注册（200），两侧规范化后比较（同 transition 端点模式）', async () => {
+    const { mkdir, writeFile } = await import('node:fs/promises')
+    const h = await start()
+    await mkdir(join(h.root, '.pipeline'), { recursive: true })
+    await writeFile(join(h.root, '.pipeline', 'loops.yaml'), SEED_LOOP_YAML_READY_FOR_L2, 'utf8')
+    await writeFile(join(h.root, 'LOOP.md'), '# LOOP.md\n\n### `build-loop` — build-loop 协议\n\n- goal：见 registry\n', 'utf8')
+    await mkdir(join(h.root, '.superpowers', 'loops'), { recursive: true })
+    await writeFile(
+      join(h.root, '.superpowers', 'loops', 'progress.md'),
+      '| ts | loop | action | inflight | note |\n|----|------|--------|----------|------|\n| 2026-07-06T23:30 | build-loop | run | 0 | result=ok change=build-loop-3 |\n',
+      'utf8',
+    )
+
+    const r = await reqPost(
+      h.port,
+      '/api/loops/level',
+      { root: `${h.root}/`, id: 'build-loop', target: 'L2' },
+      { headers: { Authorization: `Bearer ${h.token}` } },
+    )
+    expect(r.status).toBe(200)
+    const body = r.json<{ applied: boolean }>()
+    expect(body.applied).toBe(true)
+  })
+
+  it('root/id/target 为空字符串 → 400（不该落入 404 registry-miss 或 200 内核错误信封）', async () => {
+    const h = await start()
+    const base = { root: h.root, id: 'build-loop', target: 'L2' }
+    const cases = [
+      { ...base, root: '' },
+      { ...base, id: '' },
+      { ...base, target: '' },
+    ]
+    for (const body of cases) {
+      const r = await reqPost(h.port, '/api/loops/level', body, {
+        headers: { Authorization: `Bearer ${h.token}` },
+      })
+      expect(r.status).toBe(400)
+    }
+  })
 })
