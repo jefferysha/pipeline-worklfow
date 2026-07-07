@@ -12,6 +12,7 @@ export const FIELD_ORDER = [
   'automation_attempts', 'automation_last_error', 'automation_preserved_path',
   'branch', 'base_branch', 'scope', 'related_files', 'spec_scope', 'depends_on',
   'created_at', 'updated_at', 'verified_at', 'archived_at', 'archived',
+  'workflow',
 ] as const
 
 export type FieldName = (typeof FIELD_ORDER)[number]
