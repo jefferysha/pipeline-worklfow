@@ -428,3 +428,133 @@ describe('POST /api/config/mandatory-skills —— M3 config 写端点（同 B5 
     expect(reparsed.mandatorySkills.verify.backend).toEqual(['tab-2'])
   })
 })
+
+describe('GET /api/loops/snapshot —— 跨项目聚合 loops.yaml', () => {
+  it('capabilities.loops=true；无 loops.yaml 时返回空 rows 而非报错', async () => {
+    const h = await start()
+    const capRes = await reqGet(h.port, '/api/snapshot')
+    expect(capRes.json<any>().capabilities.loops).toBe(true)
+
+    const r = await reqGet(h.port, '/api/loops/snapshot')
+    expect(r.status).toBe(200)
+    expect(r.json<{ rows: unknown[] }>().rows).toEqual([])
+  })
+})
+
+// ── loops 升降档写端点 ──
+const SEED_LOOP_YAML_READY_FOR_L2 = `version: 1
+loops:
+  - id: build-loop
+    name: build-loop 编排 loop
+    kind: orchestrator
+    goal: 每小时从队列发现立项跑通四门收编收敛到架构报告的单写者目标架构直至全部成功判据勾满
+    cadence: 1h
+    risk: medium
+    runner: cron-session
+    change_prefix: build-loop-
+    phases:
+      - decide
+      - record
+    human_gates:
+      - P2 战略项只写提案
+      - push/合并到远端
+    state: .superpowers/loops/progress.md
+    design_doc: docs/loops/build-loop.md
+    status: active
+    budget:
+      max_runs_per_day: 24
+      max_in_flight: 1
+      on_exceed: skip
+      max_tokens_per_day: 100000
+    kill_criteria:
+      - backlog 连续 2 轮空
+      - 同项连败 3 次
+    autonomy_level: L1
+`
+
+describe('POST /api/loops/level —— 升降档写回', () => {
+  it('对 token + root 在注册表里 → 200 且真改盘 loops.yaml', async () => {
+    const { mkdir, writeFile } = await import('node:fs/promises')
+    const h = await start()
+    // seed 一个已就绪的 loop（readiness 会满足 L1→L2）到 h.root
+    // 需要：registry + LOOP.md（防镜像漂移）+ progress.md（运行流水）
+    await mkdir(join(h.root, '.pipeline'), { recursive: true })
+    await writeFile(join(h.root, '.pipeline', 'loops.yaml'), SEED_LOOP_YAML_READY_FOR_L2, 'utf8')
+    await writeFile(join(h.root, 'LOOP.md'), '# LOOP.md\n\n### `build-loop` — build-loop 协议\n\n- goal：见 registry\n', 'utf8')
+    await mkdir(join(h.root, '.superpowers', 'loops'), { recursive: true })
+    await writeFile(
+      join(h.root, '.superpowers', 'loops', 'progress.md'),
+      '| ts | loop | action | inflight | note |\n|----|------|--------|----------|------|\n| 2026-07-06T23:30 | build-loop | run | 0 | result=ok change=build-loop-3 |\n',
+      'utf8',
+    )
+
+    const r = await reqPost(
+      h.port,
+      '/api/loops/level',
+      { root: h.root, id: 'build-loop', target: 'L2' },
+      { headers: { Authorization: `Bearer ${h.token}` } },
+    )
+    expect(r.status).toBe(200)
+    const body = r.json<{ applied: boolean }>()
+    expect(body.applied).toBe(true)
+    const text = readFile(join(h.root, '.pipeline', 'loops.yaml'), 'utf8')
+    expect(await text).toContain('autonomy_level: L2')
+  })
+
+  it('root 不在机器级注册表里 → 404，不改盘', async () => {
+    const h = await start()
+    const r = await reqPost(
+      h.port,
+      '/api/loops/level',
+      { root: '/tmp/not-registered', id: 'x', target: 'L2' },
+      { headers: { Authorization: `Bearer ${h.token}` } },
+    )
+    expect(r.status).toBe(404)
+  })
+
+  it('无 token → 401', async () => {
+    const h = await start()
+    const r = await reqPost(h.port, '/api/loops/level', { root: h.root, id: 'build-loop', target: 'L2' })
+    expect(r.status).toBe(401)
+  })
+
+  it('root 以非规范但等价形式提交（结尾多一个斜杠）→ 仍视为已注册（200），两侧规范化后比较（同 transition 端点模式）', async () => {
+    const { mkdir, writeFile } = await import('node:fs/promises')
+    const h = await start()
+    await mkdir(join(h.root, '.pipeline'), { recursive: true })
+    await writeFile(join(h.root, '.pipeline', 'loops.yaml'), SEED_LOOP_YAML_READY_FOR_L2, 'utf8')
+    await writeFile(join(h.root, 'LOOP.md'), '# LOOP.md\n\n### `build-loop` — build-loop 协议\n\n- goal：见 registry\n', 'utf8')
+    await mkdir(join(h.root, '.superpowers', 'loops'), { recursive: true })
+    await writeFile(
+      join(h.root, '.superpowers', 'loops', 'progress.md'),
+      '| ts | loop | action | inflight | note |\n|----|------|--------|----------|------|\n| 2026-07-06T23:30 | build-loop | run | 0 | result=ok change=build-loop-3 |\n',
+      'utf8',
+    )
+
+    const r = await reqPost(
+      h.port,
+      '/api/loops/level',
+      { root: `${h.root}/`, id: 'build-loop', target: 'L2' },
+      { headers: { Authorization: `Bearer ${h.token}` } },
+    )
+    expect(r.status).toBe(200)
+    const body = r.json<{ applied: boolean }>()
+    expect(body.applied).toBe(true)
+  })
+
+  it('root/id/target 为空字符串 → 400（不该落入 404 registry-miss 或 200 内核错误信封）', async () => {
+    const h = await start()
+    const base = { root: h.root, id: 'build-loop', target: 'L2' }
+    const cases = [
+      { ...base, root: '' },
+      { ...base, id: '' },
+      { ...base, target: '' },
+    ]
+    for (const body of cases) {
+      const r = await reqPost(h.port, '/api/loops/level', body, {
+        headers: { Authorization: `Bearer ${h.token}` },
+      })
+      expect(r.status).toBe(400)
+    }
+  })
+})

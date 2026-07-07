@@ -26,7 +26,7 @@ function str(v: string | string[] | undefined): string {
 }
 
 /** 去重（按规范化路径，保序）。 */
-function dedupeRoots(roots: string[]): string[] {
+export function dedupeRoots(roots: string[]): string[] {
   const seen = new Set<string>()
   const out: string[] = []
   for (const r of roots) {

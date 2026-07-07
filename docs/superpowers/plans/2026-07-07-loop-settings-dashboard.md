@@ -43,7 +43,7 @@
   供 Task 2 的路由处理函数调用；`LoopRow`/`LoopsSnapshot` 类型供 Task 4 前端消费（前端会
   重新声明一份镜像类型，不跨包 import 类型，同现有 `Snapshot` 类型的做法）。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```ts
 // packages/server/src/loops.test.ts
@@ -107,12 +107,12 @@ describe('buildLoopsSnapshot', () => {
 })
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `cd /Users/a1234/Documents/code-manager/projects/pipeline-worklfow && npx vitest run packages/server/src/loops.test.ts`
 Expected: FAIL —`Cannot find module './loops.js'`（文件还不存在）
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 ```ts
 // packages/server/src/loops.ts
@@ -184,12 +184,12 @@ export async function buildLoopsSnapshot(deps: LoopsSnapshotDeps): Promise<Loops
 }
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `npx vitest run packages/server/src/loops.test.ts`
 Expected: PASS（2 例）
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add packages/server/src/loops.ts packages/server/src/loops.test.ts
@@ -209,7 +209,7 @@ git commit -m "feat(server): loops 跨项目聚合读 buildLoopsSnapshot"
 - Produces: 路由 `GET /api/loops/snapshot` 返回 `LoopsSnapshot` JSON；`capabilities.loops: true`
   常量（loops 功能不依赖任何可选运行时，始终声明 true，同 `capabilities.afk` 现状）。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 在 `server.test.ts` 里找到 `describe('GET /api/afk/snapshot'`（已存在的相邻测试）附近新增：
 
@@ -227,12 +227,12 @@ describe('GET /api/loops/snapshot —— 跨项目聚合 loops.yaml', () => {
 })
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `npx vitest run packages/server/src/server.test.ts -t "loops/snapshot"`
 Expected: FAIL — 404（路由不存在）或 `capabilities.loops` 为 `undefined`
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 在 `server.ts` 顶部 import 区加：
 ```ts
@@ -254,12 +254,12 @@ if (path === '/api/loops/snapshot') {
 `deps.clock()` 是现有注入的时钟函数，`new Date(deps.clock())` 与 `buildAfkSnapshot`同款
 用法一致。）
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `npx vitest run packages/server/src/server.test.ts -t "loops/snapshot"`
 Expected: PASS
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add packages/server/src/server.ts packages/server/src/server.test.ts
@@ -282,7 +282,7 @@ git commit -m "feat(server): GET /api/loops/snapshot 路由 + capabilities.loops
 - Produces: `POST /api/loops/level` body `{ root: string; id: string; target: 'L1'|'L2'|'L3' }`，
   成功 200 返回 `ApplyLevelResult`（含 `written: boolean`），失败按校验类型 400/404/401/403。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```ts
 describe('POST /api/loops/level —— 升降档写回', () => {
@@ -328,12 +328,12 @@ describe('POST /api/loops/level —— 升降档写回', () => {
 满足 L1→L2——参照 `packages/kernel/src/loops/graduation.test.ts` 里 `readiness(80)` 的构造
 方式反推需要哪些字段饱满，例如 `goal`/`kill_criteria`/`human_gates` 都非空。）
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `npx vitest run packages/server/src/server.test.ts -t "loops/level"`
 Expected: FAIL — 404 路由不存在
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 `server.ts` import 区加：
 ```ts
@@ -376,12 +376,12 @@ if (path === '/api/loops/level') {
 分支已在用它，直接复用，不新写解析逻辑。三层鉴权守卫已经在 `handlePost` 顶部统一做过，
 这个分支不需要重复写。）
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `npx vitest run packages/server/src/server.test.ts -t "loops"`
 Expected: PASS（全部 loops 相关用例）
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add packages/server/src/server.ts packages/server/src/server.test.ts
@@ -401,7 +401,7 @@ git commit -m "feat(server): POST /api/loops/level 升降档写端点"
 - Consumes: `GET /api/loops/snapshot`（Task 2）、`POST /api/loops/level`（Task 3）。
 - Produces: `<LoopsPanel />` 组件，供 Task 5 接线到导航。
 
-- [ ] **Step 1: 在 `api/client.ts` 加 fetch 辅助（先写用到它的失败测试）**
+- [x] **Step 1: 在 `api/client.ts` 加 fetch 辅助（先写用到它的失败测试）**
 
 ```tsx
 // packages/dashboard-app/src/loops/LoopsPanel.test.tsx
@@ -457,12 +457,12 @@ describe('LoopsPanel', () => {
 })
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `cd /Users/a1234/Documents/code-manager/projects/pipeline-worklfow && npm run test:web -- LoopsPanel`
 Expected: FAIL — `Cannot find module './LoopsPanel'`
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 ```tsx
 // packages/dashboard-app/src/loops/LoopsPanel.tsx
@@ -535,12 +535,12 @@ export function LoopsPanel(): JSX.Element {
 }
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `npm run test:web -- LoopsPanel`
 Expected: PASS（2 例）
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add packages/dashboard-app/src/loops/
@@ -561,7 +561,7 @@ git commit -m "feat(dashboard): LoopsPanel 单表视图 + 升档交互"
 - Consumes: Task 4 的 `<LoopsPanel />`。
 - Produces: 无（叶子任务）。
 
-- [ ] **Step 1: 更新失败测试**
+- [x] **Step 1: 更新失败测试**
 
 `Nav.test.tsx:41,44` 现在断言 loops 不出现在一级导航（形如
 `expect(screen.queryByText(/loops/i)).not.toBeInTheDocument()`）——本计划刻意让 loop 设置
@@ -574,24 +574,24 @@ it('导航包含 Loop 设置入口', () => {
 })
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `npm run test:web -- Nav.test`
 Expected: FAIL（旧断言和新断言至少一个不通过，视具体改法而定；先跑确认红）
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 读 `packages/dashboard-app/src/shell/Nav.tsx` 现有 3 项写法（收件箱/看板/设置），照同样的
 `<button>`/`onNavigate('...')` 模式加第 4 项 `loops`；`App.tsx` 里现有 `activeView` 的
 switch/if 链加 `loops` 分支渲染 `<LoopsPanel />`。（具体 JSX 结构需实现者先读这两个文件的
 当前内容——本计划不假设确切代码形态，因为这是纯粹跟随既有模式的机械改动，不是新设计。）
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `npm run test:web`
 Expected: PASS 全量（含更新后的 Nav.test.tsx）
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add packages/dashboard-app/src/shell/ packages/dashboard-app/src/App.tsx

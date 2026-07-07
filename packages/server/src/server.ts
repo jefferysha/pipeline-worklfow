@@ -18,17 +18,18 @@
  *     （Authorization: Bearer / X-Pipeline-Token，缺/错 → 401）；(3) 强制 application/json（借同源策略）。
  *   token 启动生成、写 0600 握手文件、同源注入前端；较老仓「仅靠同源 + 无 token」是净收紧。
  */
-import { existsSync, readFileSync, statSync } from 'node:fs'
+import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { join, resolve as resolvePath } from 'node:path'
-import { createFlowEngine, createStateStore, loadManifest } from '@pipeline-lite/kernel'
-import type { FlowEngine, StateStore } from '@pipeline-lite/kernel'
+import { applyLevelChange, createFlowEngine, createStateStore, loadManifest, loadRegistry } from '@pipeline-lite/kernel'
+import type { FlowEngine, GraduationFs, StateStore } from '@pipeline-lite/kernel'
 import { buildAfkLog, buildAfkSnapshot } from './afk.js'
+import { buildLoopsSnapshot } from './loops.js'
 import { readMandatorySkills, validateMandatorySkillsBody, writeMandatorySkills } from './config.js'
 import { resolveServerPaths } from './paths.js'
 import { readRegistry } from './registry.js'
-import { buildSnapshot, computeFingerprint, type SnapshotDeps } from './snapshot.js'
+import { buildSnapshot, computeFingerprint, dedupeRoots, type SnapshotDeps } from './snapshot.js'
 import { generateToken, tokenFromHeaders, tokensMatch } from './token.js'
 import { listTraceSessions, readTraceRecords } from './traces.js'
 import { performTransition } from './transition.js'
@@ -39,6 +40,33 @@ const MAX_POST_BODY = 64 * 1024
 
 function isoNow(): string {
   return new Date().toISOString().replace(/\.\d{3}Z$/, 'Z')
+}
+
+// ── #38 graduation 真 node fs（登记 + run-log + LOOP.md 镜像 + loops.yaml 原文读写）──
+const REAL_GRADUATION_FS: GraduationFs = {
+  loadRegistry: (repoRoot) => loadRegistry(repoRoot),
+  readRunLog: (repoRoot) => {
+    try {
+      return readFileSync(join(repoRoot, '.superpowers', 'loops', 'progress.md'), 'utf8')
+    } catch {
+      return null
+    }
+  },
+  readLoopDoc: (repoRoot) => {
+    try {
+      return readFileSync(join(repoRoot, 'LOOP.md'), 'utf8')
+    } catch {
+      return null
+    }
+  },
+  readRegistryText: (repoRoot) => {
+    try {
+      return readFileSync(join(repoRoot, '.pipeline', 'loops.yaml'), 'utf8')
+    } catch {
+      return null
+    }
+  },
+  writeRegistryText: (repoRoot, text) => writeFileSync(join(repoRoot, '.pipeline', 'loops.yaml'), text, 'utf8'),
 }
 
 function errMsg(e: unknown): string {
@@ -87,8 +115,9 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
   const manifestPath = options.manifestPath
 
   // 能力声明（GOAL B6）：afk 数据端始终已接线（读同一 registry+store 的 automation_* 字段）；
-  // traffic 仅注入 traceStore 时为真（未装 → 前端 Advanced 仍占位，不谎报）。#29d / #34d。
-  const capabilities: Record<string, boolean> = { afk: true, traffic: Boolean(traceStore), config: Boolean(manifestPath) }
+  // traffic 仅注入 traceStore 时为真（未装 → 前端 Advanced 仍占位，不谎报）；
+  // loops 数据端始终已接线（无可选运行时依赖）。#29d / #34d。
+  const capabilities: Record<string, boolean> = { afk: true, loops: true, traffic: Boolean(traceStore), config: Boolean(manifestPath) }
   const snapshotDeps = (): SnapshotDeps => ({ registry, store, version, clock, capabilities })
 
   const fileExists = (root: string, relPath: string): boolean => {
@@ -289,6 +318,15 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
         return sendJson(res, 500, { ok: false, error: errMsg(e) })
       }
     }
+    // ── loops 治理面数据端：跨项目聚合 loops.yaml ──
+    if (path === '/api/loops/snapshot') {
+      try {
+        const snap = await buildLoopsSnapshot({ registry: () => dedupeRoots(registry()), now: () => new Date(clock()) })
+        return sendJson(res, 200, snap)
+      } catch (e) {
+        return sendJson(res, 500, { ok: false, error: errMsg(e) })
+      }
+    }
     // ── #34d traffic 查看器数据端：TraceStore.listSessions / readRecords（#34e 只读本地、不外发）──
     if (path === '/api/traces/sessions') {
       if (!traceStore) return sendJson(res, 404, { ok: false, error: 'traces 数据端未装（capabilities.traffic=false）' })
@@ -349,6 +387,25 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
         return sendJson(res, 500, { ok: false, error: errMsg(e) })
       }
       return sendJson(res, 200, { ok: true, phase, track, skills })
+    }
+
+    // ── loops 升降档写端点：POST /api/loops/level ──
+    if (path === '/api/loops/level') {
+      const body = await readJsonBody(req)
+      const root = typeof body === 'object' && body !== null ? (body as Record<string, unknown>).root : undefined
+      const id = typeof body === 'object' && body !== null ? (body as Record<string, unknown>).id : undefined
+      const target = typeof body === 'object' && body !== null ? (body as Record<string, unknown>).target : undefined
+      if (typeof root !== 'string' || typeof id !== 'string' || typeof target !== 'string' || !root || !id || !target) {
+        return sendJson(res, 400, { ok: false, error: 'root/id/target 必填' })
+      }
+      // 信任锚：与 /api/change/<name>/transition 同一「两侧规范化再比较」模式——注册表条目
+      // （dedupeRoots 已 resolve）与提交的 root（此处同样 resolvePath）都规范化后再比较，
+      // 防止「同一路径的非规范写法（如结尾多一个斜杠）」被误判为未注册。
+      if (!dedupeRoots(registry()).includes(resolvePath(root))) {
+        return sendJson(res, 404, { ok: false, error: 'root 未在机器级项目注册表中' })
+      }
+      const result = applyLevelChange(root, id, target, { now: new Date(clock()), confirm: true }, REAL_GRADUATION_FS)
+      return sendJson(res, 200, result)
     }
 
     const mTr = /^\/api\/change\/([^/]+)\/transition$/.exec(path)
