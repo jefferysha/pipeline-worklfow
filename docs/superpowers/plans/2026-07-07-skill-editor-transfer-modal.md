@@ -46,7 +46,7 @@
 - Produces: `listAllSkills(repoRoot: string): string[]`（去重、排序后的 token 列表），
   供 server.ts 路由和 Task 2 前端消费。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```ts
 // packages/server/src/skillsRegistry.test.ts
@@ -86,12 +86,12 @@ describe('listAllSkills', () => {
 })
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `cd /Users/a1234/Documents/code-manager/projects/pipeline-worklfow && npx vitest run packages/server/src/skillsRegistry.test.ts`
 Expected: FAIL — `Cannot find module './skillsRegistry.js'`
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 ```ts
 // packages/server/src/skillsRegistry.ts
@@ -131,12 +131,12 @@ export function listAllSkills(repoRoot: string): string[] {
 }
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `npx vitest run packages/server/src/skillsRegistry.test.ts`
 Expected: PASS（2 例）
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add packages/server/src/skillsRegistry.ts packages/server/src/skillsRegistry.test.ts
