@@ -3,6 +3,7 @@ import { postTransition } from './api/client'
 import { I18nProvider, useT } from './i18n'
 import type { Lang } from './i18n/translations'
 import { AdvancedPanel } from './advanced/AdvancedPanel'
+import { AfkWorkbench } from './afk/AfkWorkbench'
 import { BoardView } from './board/BoardView'
 import { InboxView } from './inbox/InboxView'
 import { selectInbox } from './inbox/inbox'
@@ -114,6 +115,7 @@ function AppShell(): JSX.Element {
         )}
         {view === 'settings' && <SettingsView />}
         {view === 'loops' && <LoopsPanel />}
+        {view === 'afk' && <AfkWorkbench />}
       </main>
 
       <footer className="footer">

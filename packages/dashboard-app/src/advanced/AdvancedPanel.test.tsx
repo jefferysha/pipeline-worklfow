@@ -4,15 +4,14 @@ import { I18nProvider } from '../i18n'
 import { AdvancedPanel } from './AdvancedPanel'
 import { makeSnapshot } from '../testkit'
 
-// afk/traffic 面板挂载即 fetch 数据端——stub 全局 fetch 喂空形状，隔离网络（能力驱动渲染判据不依赖内容）。
+// traffic 面板挂载即 fetch 数据端——stub 全局 fetch 喂空形状，隔离网络（能力驱动渲染判据不依赖内容）。
+// afk 已升格为一级导航 <AfkWorkbench/>（Task 8），Advanced 折叠面不再挂载它，故不再需要 stub
+// /api/afk/snapshot。
 function stubFetch(): void {
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: string) => {
       const u = String(url)
-      if (u.includes('/api/afk/snapshot')) {
-        return { ok: true, status: 200, json: async () => ({ generated_at: '', scheduler: { status: 'ok', queued: 0, running: 0, merged: 0, failed: 0, conflict: 0, paused: 0, total: 0, message: '空闲' }, lanes: { queued: [], running: [], merged: [], failed: [], conflict: [], paused: [] }, cards: [] }) } as unknown as Response
-      }
       if (u.includes('/api/traces/sessions')) {
         return { ok: true, status: 200, json: async () => ({ generated_at: '', outbound: 'local-only', count: 0, sessions: [] }) } as unknown as Response
       }
@@ -43,28 +42,29 @@ describe('AdvancedPanel（病灶③：debug 工具降级为折叠占位）', () 
     expect(panel).not.toHaveAttribute('open')
   })
 
-  it('列出 4 个降级工具：流量 / 运行时 / loops / afk', () => {
+  it('列出 3 个降级工具：流量 / 运行时 / loops（afk 已升格为一级导航，见 Task 8）', () => {
     renderAdv(makeSnapshot([]))
-    for (const key of ['traffic', 'runtime', 'loops', 'afk']) {
+    for (const key of ['traffic', 'runtime', 'loops']) {
       expect(screen.getByTestId(`advanced-${key}`)).toBeInTheDocument()
     }
+    expect(screen.queryByTestId('advanced-afk')).toBeNull()
   })
 
   it('server 未声明能力时全标占位（待对应里程碑数据端）', () => {
     renderAdv(makeSnapshot([], { capabilities: { snapshot: true } }))
-    for (const key of ['traffic', 'runtime', 'loops', 'afk']) {
+    for (const key of ['traffic', 'runtime', 'loops']) {
       expect(screen.getByTestId(`advanced-status-${key}`).textContent).toContain('占位')
     }
     expect(screen.getByTestId('advanced-traffic').textContent).toMatch(/M8/)
-    expect(screen.getByTestId('advanced-afk').textContent).toMatch(/M5/)
+    expect(screen.getByTestId('advanced-loops').textContent).toMatch(/M-loop/)
   })
 
-  it('#29d：server 声明 afk=true → 真渲染 AFK 面板（非占位）', async () => {
+  it('Task 8：afk 已升格为一级导航 <AfkWorkbench/>，即便 server 声明 afk=true，Advanced 折叠面也不再渲染 afk 摘要/占位（避免两份视图打架）', () => {
     renderAdv(makeSnapshot([], { capabilities: { afk: true } }))
-    expect(await screen.findByTestId('afk-panel')).toBeInTheDocument()
-    // afk 已接线：不再是占位徽标
+    expect(screen.queryByTestId('advanced-afk')).toBeNull()
+    expect(screen.queryByTestId('afk-panel')).toBeNull()
     expect(screen.queryByTestId('advanced-status-afk')).toBeNull()
-    // 未接线的 loops 仍占位
+    // 未接线的 loops 仍占位（其余工具不受影响）
     expect(screen.getByTestId('advanced-status-loops').textContent).toContain('占位')
   })
 
