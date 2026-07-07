@@ -72,11 +72,28 @@ describe('WorkflowDef 类型形状', () => {
           inputs: [],
           outputs: [{ field: 'design_doc', type: 'file_path' }],
           guards: [],
+          transitions: [{ event: 'complete', to: 'spec' }],
+        },
+        {
+          id: 'verify',
+          label: '验证',
+          gate: 'review',
+          skills: [],
+          inputs: [],
+          outputs: [],
+          guards: [],
+          // 分支：同一个 step 按不同 event 名走向不同的下一个 step（对齐现有 default workflow
+          // verify-pass→ship / verify-fail→build 这种真实分支需求，不是纯线性链）。
+          transitions: [
+            { event: 'pass', to: 'ship' },
+            { event: 'fail', to: 'build' },
+          ],
         },
       ],
     }
     expect(wf.steps[0]?.id).toBe('explore')
     expect(wf.steps[0]?.skills[1]?.depends_on).toEqual(['superpowers:brainstorming'])
+    expect(wf.steps[1]?.transitions).toHaveLength(2)
   })
 })
 ```
@@ -113,6 +130,15 @@ export type GuardConfig =
   | { readonly type: 'tasks-at-least'; readonly n: number }
   | { readonly type: 'nonempty-output' }
 
+/** step 间转换边——每个 step 自己声明"按哪个 event 名走向哪个下一个 step"，取代
+ *  default workflow 依赖的全局 TRANSITION_EVENTS 表（那张表是 Record<Phase,...>，天然
+ *  不适用任意自定义 step）。同一个 step 可以有多条边（不同 event 名指向不同下一个 step，
+ *  对齐现有 verify-pass→ship / verify-fail→build 这种真实分支需求）。 */
+export interface StepTransition {
+  readonly event: string
+  readonly to: string
+}
+
 export interface StepDef {
   readonly id: string
   readonly label: string
@@ -121,6 +147,7 @@ export interface StepDef {
   readonly inputs: readonly FieldRef[]
   readonly outputs: readonly FieldRef[]
   readonly guards: readonly GuardConfig[]
+  readonly transitions: readonly StepTransition[]
 }
 
 export interface WorkflowDef {
@@ -170,6 +197,9 @@ steps:
     inputs: []
     outputs: []
     guards: []
+    transitions:
+      - event: complete
+        to: explore
   - id: explore
     label: 调研
     gate: review
@@ -182,17 +212,43 @@ steps:
       - field: design_doc
         type: file_path
     guards: []
+    transitions: []
+  - id: verify
+    label: 验证
+    gate: review
+    skills: []
+    inputs: []
+    outputs: []
+    guards: []
+    transitions:
+      - event: pass
+        to: ship
+      - event: fail
+        to: build
 `
 
 describe('parseWorkflow', () => {
-  it('解析出 2 个 step，第二个 step 的第二个 skill 带 depends_on', () => {
+  it('解析出 3 个 step，第二个 step 的第二个 skill 带 depends_on', () => {
     const wf = parseWorkflow(SAMPLE)
     expect(wf.name).toBe('default')
-    expect(wf.steps).toHaveLength(2)
+    expect(wf.steps).toHaveLength(3)
     expect(wf.steps[1]?.id).toBe('explore')
     expect(wf.steps[1]?.gate).toBe('review')
     expect(wf.steps[1]?.skills[1]).toEqual({ id: 'opsx:explore', depends_on: ['superpowers:brainstorming'] })
     expect(wf.steps[1]?.outputs[0]).toEqual({ field: 'design_doc', type: 'file_path' })
+  })
+
+  it('第一个 step 的 transitions 解析出单条边', () => {
+    const wf = parseWorkflow(SAMPLE)
+    expect(wf.steps[0]?.transitions).toEqual([{ event: 'complete', to: 'explore' }])
+  })
+
+  it('verify step 的 transitions 解析出两条分支边（同一 step 不同 event 走向不同 to）', () => {
+    const wf = parseWorkflow(SAMPLE)
+    expect(wf.steps[2]?.transitions).toEqual([
+      { event: 'pass', to: 'ship' },
+      { event: 'fail', to: 'build' },
+    ])
   })
 
   it('格式错误（steps 不是数组）→ 真抛错，不静默返回空', () => {
@@ -216,7 +272,7 @@ Expected: FAIL — `Cannot find module './parse.js'`
  * `[a, b]` 单行 flow-list），禁引入 yaml 包（kernel 零第三方依赖硬规则）。格式错误
  * fail-loud（throw），不吞错静默返回残缺结构。
  */
-import type { FieldRef, FieldType, GateKind, GuardConfig, SkillRef, StepDef, WorkflowDef } from './types.js'
+import type { FieldRef, FieldType, GateKind, GuardConfig, SkillRef, StepDef, StepTransition, WorkflowDef } from './types.js'
 
 function parseInlineList(raw: string): string[] {
   const trimmed = raw.trim()
@@ -279,6 +335,24 @@ function parseFieldRefBlock(cur: Cursor, baseIndent: number): FieldRef[] {
   return refs
 }
 
+function parseTransitionsBlock(cur: Cursor, baseIndent: number): StepTransition[] {
+  const transitions: StepTransition[] = []
+  while (cur.i < cur.lines.length) {
+    const line = cur.lines[cur.i] ?? ''
+    if (line.trim() === '') { cur.i++; continue }
+    if (indentOf(line) < baseIndent) break
+    const eventMatch = /^\s*-\s+event:\s*(\S+)\s*$/.exec(line)
+    if (!eventMatch) break
+    cur.i++
+    const toLine = cur.lines[cur.i] ?? ''
+    const toMatch = /^\s*to:\s*(\S+)\s*$/.exec(toLine)
+    if (!toMatch) throw new Error(`workflow 解析错误：transitions 里 event '${eventMatch[1]}' 缺 to`)
+    cur.i++
+    transitions.push({ event: eventMatch[1]!, to: toMatch[1]! })
+  }
+  return transitions
+}
+
 function parseStep(cur: Cursor): StepDef {
   const idLine = cur.lines[cur.i] ?? ''
   const idMatch = /^\s*-\s+id:\s*(\S+)\s*$/.exec(idLine)
@@ -292,6 +366,7 @@ function parseStep(cur: Cursor): StepDef {
   let inputs: FieldRef[] = []
   let outputs: FieldRef[] = []
   const guards: GuardConfig[] = []
+  let transitions: StepTransition[] = []
 
   while (cur.i < cur.lines.length) {
     const line = cur.lines[cur.i] ?? ''
@@ -311,10 +386,12 @@ function parseStep(cur: Cursor): StepDef {
     if (/^\s*outputs:\s*\[\]\s*$/.test(line)) { outputs = []; cur.i++; continue }
     if (/^\s*outputs:\s*$/.test(line)) { cur.i++; outputs = parseFieldRefBlock(cur, baseIndent); continue }
     if (/^\s*guards:\s*\[\]\s*$/.test(line)) { cur.i++; continue }
+    if (/^\s*transitions:\s*\[\]\s*$/.test(line)) { transitions = []; cur.i++; continue }
+    if (/^\s*transitions:\s*$/.test(line)) { cur.i++; transitions = parseTransitionsBlock(cur, baseIndent); continue }
     break
   }
 
-  return { id: idMatch[1]!, label, gate, skills, inputs, outputs, guards }
+  return { id: idMatch[1]!, label, gate, skills, inputs, outputs, guards, transitions }
 }
 
 export function parseWorkflow(content: string): WorkflowDef {
@@ -339,7 +416,7 @@ export function parseWorkflow(content: string): WorkflowDef {
 - [ ] **Step 4: 跑测试确认通过**
 
 Run: `npx vitest run packages/kernel/src/workflow/parse.test.ts`
-Expected: PASS（2 例）
+Expected: PASS（4 例）
 
 - [ ] **Step 5: 提交**
 
@@ -378,7 +455,7 @@ describe('validateWorkflow', () => {
   it('skill 依赖成环 → 报错', () => {
     const result = validateWorkflow(wf({
       steps: [{
-        id: 's1', label: 'x', gate: null, inputs: [], outputs: [], guards: [],
+        id: 's1', label: 'x', gate: null, inputs: [], outputs: [], guards: [], transitions: [],
         skills: [
           { id: 'a', depends_on: ['b'] },
           { id: 'b', depends_on: ['a'] },
@@ -391,7 +468,7 @@ describe('validateWorkflow', () => {
   it('depends_on 引用跨 step 不存在的 skill id → 报错', () => {
     const result = validateWorkflow(wf({
       steps: [{
-        id: 's1', label: 'x', gate: null, inputs: [], outputs: [], guards: [],
+        id: 's1', label: 'x', gate: null, inputs: [], outputs: [], guards: [], transitions: [],
         skills: [{ id: 'a', depends_on: ['does-not-exist'] }],
       }],
     }))
@@ -401,18 +478,41 @@ describe('validateWorkflow', () => {
   it('inputs 引用的字段不是任何更早 step 的 outputs → 报错', () => {
     const result = validateWorkflow(wf({
       steps: [
-        { id: 's1', label: 'a', gate: null, skills: [], inputs: [], outputs: [], guards: [] },
-        { id: 's2', label: 'b', gate: null, skills: [], inputs: [{ field: 'design_doc', type: 'file_path' }], outputs: [], guards: [] },
+        { id: 's1', label: 'a', gate: null, skills: [], inputs: [], outputs: [], guards: [], transitions: [{ event: 'complete', to: 's2' }] },
+        { id: 's2', label: 'b', gate: null, skills: [], inputs: [{ field: 'design_doc', type: 'file_path' }], outputs: [], guards: [], transitions: [] },
       ],
     }))
     expect(result.some((e) => e.includes('design_doc'))).toBe(true)
   })
 
-  it('合法 workflow → 空数组', () => {
+  it('transitions 的 to 引用不存在的 step id → 报错', () => {
     const result = validateWorkflow(wf({
       steps: [
-        { id: 's1', label: 'a', gate: null, skills: [], inputs: [], outputs: [{ field: 'design_doc', type: 'file_path' }], guards: [] },
-        { id: 's2', label: 'b', gate: null, skills: [], inputs: [{ field: 'design_doc', type: 'file_path' }], outputs: [], guards: [] },
+        { id: 's1', label: 'a', gate: null, skills: [], inputs: [], outputs: [], guards: [], transitions: [{ event: 'complete', to: 'does-not-exist' }] },
+      ],
+    }))
+    expect(result.some((e) => e.includes("'does-not-exist'") && e.includes('不存在'))).toBe(true)
+  })
+
+  it('非终止 step（没有任何后续 transitions 声明）→ 报错，防止用户漏配走进死路', () => {
+    const result = validateWorkflow(wf({
+      steps: [
+        { id: 's1', label: 'a', gate: null, skills: [], inputs: [], outputs: [], guards: [], transitions: [] },
+        { id: 's2', label: 'b', gate: null, skills: [], inputs: [], outputs: [], guards: [], transitions: [] },
+      ],
+    }))
+    // s1 前面还有 s2 这个后续 step 存在，s1 自己却没声明任何 transition 能走到它或任何地方——
+    // 只有"数组里最后一个 step"允许零 transitions（终态，如 archive），中间的 step 零
+    // transitions 视为配置错误。
+    expect(result.some((e) => e.includes("step 's1'") && e.includes('没有声明任何 transitions'))).toBe(true)
+  })
+
+  it('合法 workflow（含分支 transitions）→ 空数组', () => {
+    const result = validateWorkflow(wf({
+      steps: [
+        { id: 's1', label: 'a', gate: null, skills: [], inputs: [], outputs: [{ field: 'design_doc', type: 'file_path' }], guards: [], transitions: [{ event: 'complete', to: 's2' }] },
+        { id: 's2', label: 'b', gate: null, skills: [], inputs: [{ field: 'design_doc', type: 'file_path' }], outputs: [], guards: [], transitions: [{ event: 'pass', to: 's3' }, { event: 'fail', to: 's1' }] },
+        { id: 's3', label: 'c', gate: null, skills: [], inputs: [], outputs: [], guards: [], transitions: [] },
       ],
     }))
     expect(result).toEqual([])
@@ -457,8 +557,9 @@ function detectCycle(skillIds: string[], dependsOn: Map<string, string[]>): stri
 export function validateWorkflow(wf: WorkflowDef): string[] {
   const errors: string[] = []
   const producedByEarlierStep = new Set<string>()
+  const allStepIds = new Set(wf.steps.map((s) => s.id))
 
-  for (const step of wf.steps) {
+  wf.steps.forEach((step, index) => {
     const skillIds = step.skills.map((s) => s.id)
     const dependsOn = new Map(step.skills.map((s) => [s.id, [...(s.depends_on ?? [])]]))
 
@@ -477,7 +578,23 @@ export function validateWorkflow(wf: WorkflowDef): string[] {
       }
     }
     for (const output of step.outputs) producedByEarlierStep.add(output.field)
-  }
+
+    // 每条 transition 的 to 必须指向同一 workflow 里真实存在的 step id——否则
+    // pipeline transition 在真运行时才会发现走不到，属于本该在保存时就拦下的错误。
+    for (const t of step.transitions) {
+      if (!allStepIds.has(t.to)) {
+        errors.push(`step '${step.id}' 的 transitions 里 event '${t.event}' 的 to '${t.to}' 不存在`)
+      }
+    }
+
+    // 只有数组里最后一个 step 允许零 transitions（视为终态，如 archive）；中间任何一个
+    // step 零 transitions 意味着一旦真运行到这一步就再也走不出去，是配置错误而非合法终态，
+    // 保存时就该拦，不能留到用户真跑 transition 命令时才发现卡死。
+    const isLastStep = index === wf.steps.length - 1
+    if (!isLastStep && step.transitions.length === 0) {
+      errors.push(`step '${step.id}' 没有声明任何 transitions（不是最后一个 step，会导致走进死路）`)
+    }
+  })
 
   return errors
 }
@@ -486,7 +603,7 @@ export function validateWorkflow(wf: WorkflowDef): string[] {
 - [ ] **Step 4: 跑测试确认通过**
 
 Run: `npx vitest run packages/kernel/src/workflow/validate.test.ts`
-Expected: PASS（4 例）
+Expected: PASS（6 例）
 
 - [ ] **Step 5: 提交**
 
@@ -581,6 +698,10 @@ git commit -m "feat(kernel): .pipeline.yaml 新增 workflow 字段（缺省 defa
 
 - [ ] **Step 1: 写 `templates/workflows/default.yaml`**
 
+transitions 字段逐字对齐现有 `packages/kernel/src/flow/transition-table.ts` 的
+`TRANSITION_EVENTS` 表（8 条边，event 名完全复用，不重新发明）——这份镜像文件因此天然是
+对既有事件表的忠实转录，不是凭空设计：
+
 ```yaml
 name: default
 steps:
@@ -591,6 +712,9 @@ steps:
     inputs: []
     outputs: []
     guards: []
+    transitions:
+      - event: open-complete
+        to: explore
   - id: explore
     label: 调研
     gate: review
@@ -600,6 +724,9 @@ steps:
       - field: design_doc
         type: file_path
     guards: []
+    transitions:
+      - event: explore-complete
+        to: spec
   - id: spec
     label: 规格
     gate: review
@@ -613,6 +740,9 @@ steps:
     guards:
       - type: tasks-at-least
         n: 3
+    transitions:
+      - event: spec-complete
+        to: build
   - id: build
     label: 实现
     gate: null
@@ -626,6 +756,9 @@ steps:
       - field: build_sha
         type: string
     guards: []
+    transitions:
+      - event: build-complete
+        to: verify
   - id: verify
     label: 验证
     gate: review
@@ -637,6 +770,11 @@ steps:
       - field: verification_report
         type: file_path
     guards: []
+    transitions:
+      - event: verify-pass
+        to: ship
+      - event: verify-fail
+        to: build
   - id: ship
     label: 交付
     gate: null
@@ -644,6 +782,9 @@ steps:
     inputs: []
     outputs: []
     guards: []
+    transitions:
+      - event: ship-complete
+        to: archive
   - id: archive
     label: 归档
     gate: null
@@ -651,7 +792,14 @@ steps:
     inputs: []
     outputs: []
     guards: []
+    transitions: []
 ```
+
+（`archive` 是数组最后一个 step，零 `transitions` 合法——对齐 Task 3 校验规则"只有最后
+一个 step 允许零 transitions"。真实的 `archived` 自循环事件——archive→archive，见现有
+`TRANSITION_EVENTS.archived`——这里刻意不转录：它在现有代码里是"重复调用同一个终态事件
+应该怎么响应"的边界处理，不是这份数据镜像现阶段要复现的行为，等 default 真正切到统一路径
+的后续演进里再处理。）
 
 - [ ] **Step 2: 写失败测试**
 
@@ -797,7 +945,259 @@ git commit -m "feat(kernel): skill DAG 解锁判定纯函数"
 
 ---
 
-### Task 7: `pipeline internal-skill-gate` 隐藏 CLI 命令（非 default workflow 的 gate.sh 委托目标）
+### Task 7: Step 级 guard 求值（纯函数，判定能否离开当前 step）
+
+**Files:**
+- Create: `packages/kernel/src/workflow/stepGuard.ts`
+- Create: `packages/kernel/src/workflow/stepGuard.test.ts`
+
+**Interfaces:**
+- Consumes: Task 1 的 `StepDef`/`GuardConfig`；`PipelineState`（`@pipeline-lite/kernel` 已有）。
+- Produces: `evaluateStepGuards(state: PipelineState, step: StepDef, ctx: StepGuardContext): GuardResult`——
+  `GuardResult` 复用 kernel 已有的 `{ pass: boolean; failures: string[] }` 形状（同
+  `evaluateGuard` 的返回类型，default workflow 那条路径已经在用），供 Task 8（transition
+  命令）调用判定"能不能离开这个 step"。
+
+**为什么只做 `nonempty-output`，`tasks-at-least` 留一个明确的 TODO 而不是假装实现**：
+`tasks-at-least` 需要真读 `tasks.md` 数出未勾选任务数——这个计数逻辑现在活在
+`packages/kernel/src/flow/guard.ts` 内部（`evaluateGuard` 处理 `{kind:'tasks-at-least'}`
+分支时用的那段代码），研究阶段没有拿到这段代码的确切实现细节。本任务只对
+`nonempty-output` 给出完整实现（覆盖 default workflow 迁移过来的 `spec`/`explore`/`build`
+等大部分 step 最常用的退出条件），`tasks-at-least` 分支实现时需要先 Read
+`packages/kernel/src/flow/guard.ts` 全文找到这段计数逻辑并抽成一个可复用的纯函数
+（导出它，而不是复制一份——两处保持单一实现，避免"什么算已完成任务"这条规则出现两个
+不同答案）。
+
+- [ ] **Step 1: 写失败测试**
+
+```ts
+// packages/kernel/src/workflow/stepGuard.test.ts
+import { describe, expect, it } from 'vitest'
+import { evaluateStepGuards } from './stepGuard.js'
+import type { StepDef } from './types.js'
+import { emptyFields } from '../state/parse.js'
+import type { PipelineState } from '../types.js'
+
+function state(fields: Partial<Record<string, string>>): PipelineState {
+  return { fields: { ...emptyFields(), ...fields } as PipelineState['fields'], opaqueTail: '' }
+}
+
+function step(overrides: Partial<StepDef>): StepDef {
+  return { id: 's1', label: 'x', gate: null, skills: [], inputs: [], outputs: [], guards: [], transitions: [], ...overrides }
+}
+
+describe('evaluateStepGuards', () => {
+  it('outputs 声明的字段已设置（非 null 哨兵）→ pass', () => {
+    const s = step({ outputs: [{ field: 'design_doc', type: 'file_path' }], guards: [{ type: 'nonempty-output' }] })
+    const result = evaluateStepGuards(state({ design_doc: '/tmp/x/design.md' }), s, { changeDirAbs: '/tmp/x' })
+    expect(result.pass).toBe(true)
+  })
+
+  it('outputs 声明的字段仍是 null 哨兵 → fail，failures 里点名具体字段', () => {
+    const s = step({ outputs: [{ field: 'design_doc', type: 'file_path' }], guards: [{ type: 'nonempty-output' }] })
+    const result = evaluateStepGuards(state({ design_doc: 'null' }), s, { changeDirAbs: '/tmp/x' })
+    expect(result.pass).toBe(false)
+    expect(result.failures.some((f) => f.includes('design_doc'))).toBe(true)
+  })
+
+  it('没有 nonempty-output guard 时，字段是否设置不影响结果（guards 列表说了算，不是隐式全查）', () => {
+    const s = step({ outputs: [{ field: 'design_doc', type: 'file_path' }], guards: [] })
+    const result = evaluateStepGuards(state({ design_doc: 'null' }), s, { changeDirAbs: '/tmp/x' })
+    expect(result.pass).toBe(true)
+  })
+})
+```
+
+- [ ] **Step 2: 跑测试确认失败**
+
+Run: `cd /Users/a1234/Documents/code-manager/projects/pipeline-worklfow && npx vitest run packages/kernel/src/workflow/stepGuard.test.ts`
+Expected: FAIL
+
+- [ ] **Step 3: 实现**
+
+```ts
+// packages/kernel/src/workflow/stepGuard.ts
+import type { StepDef } from './types.js'
+import type { PipelineState, FieldName } from '../types.js'
+
+export interface StepGuardContext {
+  readonly changeDirAbs: string
+}
+
+export interface GuardResult {
+  readonly pass: boolean
+  readonly failures: string[]
+}
+
+function scalar(v: string | string[] | undefined): string {
+  return typeof v === 'string' ? v : ''
+}
+
+export function evaluateStepGuards(state: PipelineState, step: StepDef, _ctx: StepGuardContext): GuardResult {
+  const failures: string[] = []
+
+  for (const guard of step.guards) {
+    if (guard.type === 'nonempty-output') {
+      for (const output of step.outputs) {
+        const v = scalar(state.fields[output.field as FieldName])
+        if (!v || v === 'null') {
+          failures.push(`字段 '${output.field}' 未设置（step '${step.id}' 声明为必须产出）`)
+        }
+      }
+    }
+    if (guard.type === 'tasks-at-least') {
+      // TODO（实现时先读 packages/kernel/src/flow/guard.ts 抽出任务计数纯函数并在此复用，
+      // 不要重新实现一份不同的计数逻辑）：
+      failures.push(`guard 'tasks-at-least' 暂未实现（需复用 packages/kernel/src/flow/guard.ts 的任务计数逻辑）`)
+    }
+  }
+
+  return { pass: failures.length === 0, failures }
+}
+```
+
+- [ ] **Step 4: 跑测试确认通过**
+
+Run: `npx vitest run packages/kernel/src/workflow/stepGuard.test.ts`
+Expected: PASS（3 例）
+
+- [ ] **Step 5: 提交**
+
+```bash
+git add packages/kernel/src/workflow/stepGuard.ts packages/kernel/src/workflow/stepGuard.test.ts
+git commit -m "feat(kernel): step 级 guard 求值（nonempty-output 完整实现，tasks-at-least 待补）"
+```
+
+---
+
+### Task 8: `pipeline transition` 支持非 default workflow 的真实 step 间转换
+
+**Files:**
+- Modify: `packages/cli/src/commands/transition.ts`
+- Modify: `packages/cli/src/commands/transition.test.ts`（或对应集成测试文件，先读现状确认
+  真实文件名）
+
+**Interfaces:**
+- Consumes: Task 5 的 `loadWorkflow`；Task 7 的 `evaluateStepGuards`；`StepDef.transitions`
+  （Task 1）。
+- Produces: `cmdTransition` 对 `workflow!=='default'` 的 change，接受**任意 event 名**
+  （不再局限于 `TRANSITION_EVENTS` 的 8 个固定值），按当前 step 自己声明的
+  `transitions` 列表查找目标 step，真的把 `phase` 字段改写成目标 step id。
+
+**这是本计划里唯一需要真正读懂并小心修改 `cmdTransition` 现有控制流的一步**——研究已知
+它的现状顺序是：`withLock` → 读 state → 校验当前 phase == `event.from` → `checkTransition
+Preconditions` → `deps.flow.transition(...)` → `applyTransitionEffects` → `store.write` →
+`writeBreadcrumb` → `history.append` → `writeReviewMarker`。新分支必须在**最前面**分岔
+（读完 state 立刻判断 `workflow` 字段），default workflow 完全走原有这一整条链路，一行
+不改；非 default workflow 走全新、更简单的链路，两条链路除了共用"读 state"和"写 history"
+两个动作外不共享任何中间步骤，避免为了"复用"而把两套语义绞在一起。
+
+- [ ] **Step 1: 读现状**
+
+Read `packages/cli/src/commands/transition.ts` 全文，确认：① `withLock` 包裹的具体范围
+（新分支要在同一个锁的保护下写 state，不能在锁外写）；② `history.append` 调用的确切参数
+形状（复用同一个 `HistoryEntry`，`kind: 'transition'`，`raw` 字段现在存 event 名，非
+default workflow 分支也应该照样存 event 名，保持 history 文件里 "transition kind 的 raw
+= 触发它的 event 名" 这条不变式，不要为非 default workflow 换一套语义）；③ 现有函数签名
+和依赖注入方式（`deps: CliDeps`、`name: string`、`event: string` 大概率不变，只是内部多一
+个分支）。
+
+- [ ] **Step 2: 写失败测试**
+
+```ts
+it('非 default workflow：按 event 名查当前 step 的 transitions，真改写 phase 到目标 step', async () => {
+  // 用真实 harness（同 workflow-skill-orchestration.integration.test.ts 的 h.run 模式）：
+  // 1. 真建一个 change，真写 workflow 字段为某个自定义值
+  // 2. 真在 .pipeline/workflows/<name>.yaml 落一个两个 step 的合法 workflow（s1 --complete--> s2）
+  // 3. 真跑 `pipeline transition <name> complete`
+  // 4. 断言 phase 真的变成了 s2，且 .pipeline-history.jsonl 真 append 了一条 transition 记录
+  expect(await h.run(['transition', CHANGE, 'complete'])).toBe(0)
+  expect(await h.read(CHANGE)).toMatch(/^phase: s2$/m)
+})
+
+it('非 default workflow：step 的 guards 不满足 → transition 真拒绝（exit 非 0），phase 不变', async () => {
+  // 同上但 s1 声明了 nonempty-output guard 且对应字段仍是 null，断言 exit !== 0 且 phase 仍是 s1
+})
+
+it('非 default workflow：event 名在当前 step 的 transitions 里找不到 → 真拒绝，报错信息里点名当前
+    step 实际支持哪些 event（帮用户定位输错了 event 名还是走错了 step）', async () => {
+})
+```
+
+- [ ] **Step 3: 跑测试确认失败**
+
+Run: `npx vitest run packages/cli/src/commands/transition.test.ts -t "非 default workflow"`
+Expected: FAIL（现有代码对未知 event 名统一按 `eventEdge()` 返回 `undefined` 处理，不会
+走到任何新逻辑）
+
+- [ ] **Step 4: 实现**
+
+在 Step 1 读到的"读 state 之后、`checkTransitionPreconditions` 之前"这个位置插入分岔：
+
+```ts
+const state = await deps.store.read(dir) // 沿用现状已有的这一行，不新增
+const workflowName = String(state.fields.workflow ?? 'default')
+
+if (workflowName !== 'default') {
+  const wf = loadWorkflow(deps.cwd, workflowName)
+  if (!wf) { deps.io.err(`ERROR: workflow '${workflowName}' 未找到`); return 1 }
+  const currentStepId = String(state.fields.phase)
+  const step = wf.steps.find((s) => s.id === currentStepId)
+  if (!step) { deps.io.err(`ERROR: step '${currentStepId}' 不在 workflow '${workflowName}' 里`); return 1 }
+
+  const edge = step.transitions.find((t) => t.event === event)
+  if (!edge) {
+    const available = step.transitions.map((t) => t.event).join(', ') || '(无)'
+    deps.io.err(`ERROR: step '${currentStepId}' 不支持 event '${event}'；该 step 支持：${available}`)
+    return 1
+  }
+
+  const guardResult = evaluateStepGuards(state, step, { changeDirAbs: dir })
+  if (!guardResult.pass) {
+    deps.io.err(`ERROR: step '${currentStepId}' guard 未通过：\n${guardResult.failures.join('\n')}`)
+    return 2
+  }
+
+  await deps.store.withLock(dir, async () => {
+    const next = { ...state, fields: { ...state.fields, phase: edge.to, updated_at: deps.clock() } }
+    await deps.store.write(dir, next)
+  })
+  await deps.history?.append(dir, { ts: deps.clock(), kind: 'transition', from: currentStepId, to: edge.to, raw: event })
+  return 0
+}
+
+// workflow === 'default' 时，以下是现有代码，一行不改：
+// （Step 1 读到的原有 checkTransitionPreconditions → deps.flow.transition → ... 全部保留）
+```
+
+（`deps.store.read` 这一行如果现状代码里在 `withLock` **内部**才第一次读 state，上面这段
+新分支的位置要相应调整到锁内——具体以 Step 1 读到的真实代码结构为准，不要在锁外读锁内写
+制造竞态。`writeReviewMarker`/`writeBreadcrumb` 这两个 default workflow 专属的收尾动作，
+非 default workflow 分支这一版**不做**——诚实登记：自定义 workflow 目前没有 review
+marker/breadcrumb，这两个能力如果自定义 workflow 也需要，是本任务之外的后续小任务，不在
+这里顺手实现以免测试范围失控。）
+
+- [ ] **Step 5: 跑测试确认通过**
+
+Run: `npx vitest run packages/cli/src/commands/transition.test.ts`
+Expected: PASS 全量（含新增的 3 例 + 全部既有 default workflow 用例零回归）
+
+- [ ] **Step 6: 确认 default workflow 全仓零回归**
+
+Run: `npx vitest run packages/kernel packages/cli && bash tools/test-hooks.sh && npm run oracle`
+Expected: 与本计划开始前的基线完全一致（vitest 全绿、hooks 180/180、oracle 0 不一致）——
+这是检验"双轨策略没有互相污染"的最终证据，不是可选步骤。
+
+- [ ] **Step 7: 提交**
+
+```bash
+git add packages/cli/src/commands/transition.ts packages/cli/src/commands/transition.test.ts
+git commit -m "feat: pipeline transition 支持非 default workflow 的真实 step 间转换"
+```
+
+---
+
+### Task 9: `pipeline internal-skill-gate` 隐藏 CLI 命令（非 default workflow 的 gate.sh 委托目标）
 
 **Files:**
 - Create: `packages/cli/src/commands/internalSkillGate.ts`
@@ -928,7 +1328,7 @@ git commit -m "feat: 非 default workflow 的 skill DAG 解锁判定接入 gate.
 
 ---
 
-### Task 8: 旧格式迁移工具 `pipeline migrate-workflow`
+### Task 10: 旧格式迁移工具 `pipeline migrate-workflow`
 
 **Files:**
 - Create: `packages/cli/src/commands/migrateWorkflow.ts`
@@ -1027,7 +1427,7 @@ git commit -m "feat: pipeline migrate-workflow 一次性迁移工具"
 
 ---
 
-### Task 9: `hooks/router.sh` 白名单修复（自定义 step id 会被静默重置成 open）
+### Task 11: `hooks/router.sh` 白名单修复（自定义 step id 会被静默重置成 open）
 
 **Files:**
 - Modify: `hooks/router.sh`
@@ -1081,18 +1481,14 @@ git commit -m "fix(hooks): router.sh 白名单放行自定义 workflow 的任意
 
 ## 收尾说明
 
-**范围边界（诚实登记，不是遗漏）**：本计划交付的是"workflow 定义格式 + 解析 + 校验 +
-skill DAG 解锁判定"这条数据/逻辑地基，**不包含**自定义 workflow 下 `pipeline transition`
-命令本身怎么在 step 之间转换、以及 step 级 `guards`（`tasks-at-least`/`nonempty-output`）
-怎么在退出一个 step 时真正生效判定。原因：现有 `cmdTransition`（`packages/cli/src/
-commands/transition.ts`）的事件模型是 `eventEdge(event)` 查 `TRANSITION_EVENTS`（固定
-`from`/`to`）+ `manifest.transitions` 邻接表，两者都是 `Record<Phase, ...>` 形状——要让
-非 default workflow 也能真正转换 step，需要给 `cmdTransition` 设计一套新的"给 step id
-而不是给固定事件名"的调用方式，这本身是一份不小的后续计划，值得等这条地基先跑通、
-真有人开始用自定义 workflow 写 skill 编排之后再回头设计，而不是现在凭空猜测接口形状。
-**这意味着本计划落地后，自定义 workflow 能做到"定义 step + 定义每个 step 的 skill
-DAG + skill 调用被正确拦截/放行"，但还不能真正"转换"到下一个 step**——下一份计划要补
-这一块。
+本计划现在完整交付"workflow 定义格式 + 解析 + 校验 + skill DAG 解锁判定 + step 间真实
+转换（含分支事件 + step 级 guard 判定）"这一整条主线——Task 8 让 `pipeline transition`
+对非 default workflow 真的能把 `phase` 字段从当前 step 改写到目标 step（按当前 step 自己
+声明的 `transitions` 列表查 event 名，guard 不过真拒绝），不再是"只能挂 skill、挂不动"的
+半成品。仍然明确不做的只有：`tasks-at-least` guard 的真实计数逻辑（Task 7 里标了 TODO，
+需要复用 `guard.ts` 现有计数代码，不是设计问题，是需要先读一遍现有实现的接线细节）；以及
+自定义 workflow 的 review marker/breadcrumb（Task 8 明确诚实登记为"这一版不做"，如果需要
+可以是很小的后续任务，不影响主线可用）。
 
 `hooks/session-start.sh:43` 的硬编码"7-phase 流水线已加载"横幅是纯文案、不影响任何逻辑，
 本计划不处理——留给实现阶段顺手改一句话即可，不值得单列任务。
