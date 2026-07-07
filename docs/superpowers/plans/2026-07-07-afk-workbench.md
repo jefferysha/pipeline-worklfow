@@ -369,7 +369,7 @@ git commit -m "feat(server): POST /api/afk/:name/cancel 取消端点"
   不是 `failed`/`conflict`/`paused` 之一 → 400（这三个是 `LEGAL_AUTOMATION_TRANSITIONS` 里
   已经允许转回 `queued` 的合法源状态，本任务不改状态机，只是补一个触发它的入口）。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```ts
 describe('POST /api/afk/:name/retry', () => {
@@ -392,12 +392,12 @@ describe('POST /api/afk/:name/retry', () => {
 })
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `npx vitest run packages/server/src/server.test.ts -t "afk.*retry"`
 Expected: FAIL — 404
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 `afk.ts` 新增：
 ```ts
@@ -416,12 +416,12 @@ export async function retryAfkRun(store: StateStore, changeDir: string): Promise
 ```
 `server.ts` 加对应路由（同 Task 4 的路径参数解析模式，正则换成 `/retry$/`）。
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `npx vitest run packages/server/src/server.test.ts -t "afk.*retry"`
 Expected: PASS
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add packages/server/src/afk.ts packages/server/src/server.ts packages/server/src/server.test.ts
