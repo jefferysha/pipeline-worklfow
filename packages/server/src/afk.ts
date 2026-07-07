@@ -15,6 +15,7 @@
  * 同一零依赖原则延伸到 cancelAfkRun 的取消标记文件名——见下方 CANCEL_MARKER_FILE 常量注释。
  */
 import { execFile } from 'node:child_process'
+import { existsSync } from 'node:fs'
 import { writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { StateStore } from '@pipeline-lite/kernel'
@@ -211,8 +212,11 @@ const CANCEL_MARKER_FILE = '.cancel-requested'
 
 /**
  * afk-workbench Task 4：POST /api/afk/:name/cancel 的写回逻辑。
- * 前置：automation 字段须为 'running'（否则视为找不到运行中的 job）；automation_worktree /
- * automation_sandbox 须非空（Task 1 已确保二者在 running 态下非空，此处仍防御性校验）。
+ * 前置：changeDir 须真存在（有 .pipeline.yaml，同 transition.ts 的存在性前置校验——kernel
+ * StateStore.get/read 对不存在的 changeDir 是真 throw ENOENT，不判在此拦，会在 handlePost
+ * 顶层兜底 catch 里变成走味的 500，而非本端点该给的 400）；automation 字段须为 'running'
+ * （否则视为找不到运行中的 job）；automation_worktree/automation_sandbox 须非空（Task 1
+ * 已确保二者在 running 态下非空，此处仍防御性校验）。
  * 顺序：先落取消标记文件（worktree 根），再 docker kill 容器——与 automation 侧
  * `runChangeInSandbox` 结算时"先探测标记、再判定是否 CancelledRunError"的读取顺序对应，
  * 保证标记先于 kill 造成的非零退出到场，不会被误判成瞬态失败走 classify 的 retry 分支。
@@ -220,6 +224,9 @@ const CANCEL_MARKER_FILE = '.cancel-requested'
  * 真正的结算判定权在 automation 侧的 hasCancelMarker 探测，不在这次 kill 的 exec 退出码。
  */
 export async function cancelAfkRun(store: StateStore, changeDir: string): Promise<{ ok: boolean; error?: string }> {
+  if (!existsSync(join(changeDir, '.pipeline.yaml'))) {
+    return { ok: false, error: '找不到该 change（无 .pipeline.yaml），找不到运行中的 job' }
+  }
   const automation = str(await store.get(changeDir, 'automation'))
   if (automation !== 'running') {
     return { ok: false, error: `automation 状态是 '${automation || '(空)'}'，不是 running，找不到运行中的 job` }

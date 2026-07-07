@@ -610,6 +610,14 @@ describe('POST /api/afk/:name/cancel —— 取消运行中的 automation 任务
     expect(existsSync(join(h.worktreeDir, '.cancel-requested'))).toBe(false)
   })
 
+  it('change 名合法但该 change 实际不存在（无 .pipeline.yaml）→ 400，而非 500（kernel store.get 会 ENOENT）', async () => {
+    const h = await start()
+    const r = await reqPost(h.port, '/api/afk/does-not-exist/cancel', { root: h.root }, {
+      headers: { Authorization: `Bearer ${h.token}` },
+    })
+    expect(r.status).toBe(400)
+  })
+
   it('root 不在注册表（不可信项目）→ 404，同 transition 端点共用的信任锚模式', async () => {
     const h = await start()
     await h.store.set(h.changeDir, 'automation', 'running')
