@@ -561,7 +561,7 @@ git commit -m "feat(dashboard): LoopsPanel 单表视图 + 升档交互"
 - Consumes: Task 4 的 `<LoopsPanel />`。
 - Produces: 无（叶子任务）。
 
-- [ ] **Step 1: 更新失败测试**
+- [x] **Step 1: 更新失败测试**
 
 `Nav.test.tsx:41,44` 现在断言 loops 不出现在一级导航（形如
 `expect(screen.queryByText(/loops/i)).not.toBeInTheDocument()`）——本计划刻意让 loop 设置
@@ -574,24 +574,24 @@ it('导航包含 Loop 设置入口', () => {
 })
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `npm run test:web -- Nav.test`
 Expected: FAIL（旧断言和新断言至少一个不通过，视具体改法而定；先跑确认红）
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 读 `packages/dashboard-app/src/shell/Nav.tsx` 现有 3 项写法（收件箱/看板/设置），照同样的
 `<button>`/`onNavigate('...')` 模式加第 4 项 `loops`；`App.tsx` 里现有 `activeView` 的
 switch/if 链加 `loops` 分支渲染 `<LoopsPanel />`。（具体 JSX 结构需实现者先读这两个文件的
 当前内容——本计划不假设确切代码形态，因为这是纯粹跟随既有模式的机械改动，不是新设计。）
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `npm run test:web`
 Expected: PASS 全量（含更新后的 Nav.test.tsx）
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add packages/dashboard-app/src/shell/ packages/dashboard-app/src/App.tsx
