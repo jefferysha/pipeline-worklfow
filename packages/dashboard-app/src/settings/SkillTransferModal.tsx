@@ -12,11 +12,13 @@ export function SkillTransferModal({ selected, onSave, onCancel }: SkillTransfer
   const [all, setAll] = useState<string[]>([])
   const [chosen, setChosen] = useState<string[]>(selected)
   const [query, setQuery] = useState('')
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     fetch('/api/skills/registry', { headers: { Accept: 'application/json' } })
       .then((r) => r.json() as Promise<{ skills: string[] }>)
       .then((body) => setAll(body.skills))
+      .catch(() => setError('Failed to load skills'))
   }, [])
 
   const available = all.filter((s) => !chosen.includes(s) && s.toLowerCase().includes(query.toLowerCase()))
@@ -37,7 +39,8 @@ export function SkillTransferModal({ selected, onSave, onCancel }: SkillTransfer
       <input placeholder="搜索…" value={query} onChange={(e) => setQuery(e.target.value)} />
       <div className="split">
         <div data-testid="skill-available" onDragOver={(e) => e.preventDefault()} onDrop={onDropToAvailable}>
-          {available.map((s) => (
+          {error && <div data-testid="skill-error" style={{ color: 'red' }}>{error}</div>}
+          {!error && available.map((s) => (
             <div key={s} draggable onDragStart={(e) => e.dataTransfer.setData(DND_MIME, s)}>
               {s}
             </div>

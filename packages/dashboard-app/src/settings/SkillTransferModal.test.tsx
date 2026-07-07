@@ -43,4 +43,14 @@ describe('SkillTransferModal', () => {
     fireEvent.click(screen.getByRole('button', { name: /保存|Save/i }))
     await waitFor(() => expect(onSave).toHaveBeenCalledWith(expect.arrayContaining(['grill-with-docs', 'browser-qa'])))
   })
+
+  it('fetch 失败时显示错误消息', async () => {
+    global.fetch = vi.fn(async () => {
+      throw new Error('Network error')
+    }) as unknown as typeof fetch
+
+    render(<SkillTransferModal selected={[]} onSave={vi.fn()} onCancel={vi.fn()} />)
+    await waitFor(() => expect(screen.getByTestId('skill-error')).toBeInTheDocument())
+    expect(screen.getByTestId('skill-error')).toHaveTextContent(/failed|error/i)
+  })
 })
