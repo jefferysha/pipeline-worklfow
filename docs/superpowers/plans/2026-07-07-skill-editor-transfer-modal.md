@@ -359,7 +359,7 @@ git commit -m "feat(dashboard): SkillTransferModal 双栏穿梭框组件"
 - Consumes: Task 3 的 `<SkillTransferModal />`；现有 `saveCell`（`SettingsView.tsx:83`）的
   POST 逻辑不变，只改它的调用来源（从"解析 draft 文本框"改成"接收 modal 传回的数组"）。
 
-- [ ] **Step 1: 更新测试**
+- [x] **Step 1: 更新测试**
 
 `SettingsView.test.tsx` 里原本断言"点编辑出现文本框"的用例（约第 173-197 行附近）改成
 断言"点编辑出现弹窗、弹窗内有 skill-available/skill-chosen"：
@@ -379,12 +379,12 @@ it('点编辑 → 弹窗双栏穿梭框出现', async () => {
 不变（因为 `POST /api/config/mandatory-skills` 契约没变），只是触发保存的交互从"改文本框
 再点保存"换成"走 modal 再点保存"。
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `npm run test:web -- SettingsView`
 Expected: FAIL（旧的"文本框"断言找不到元素）
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 在 `SettingsView.tsx` 里 import `SkillTransferModal`；把 192-254 行的
 `isEditing ? (<input .../>) : (<ul>...<button>编辑</button></ul>)` 三元分支，改成
@@ -394,12 +394,12 @@ Expected: FAIL（旧的"文本框"断言找不到元素）
 从 `draft` 字符串 `split(',')` 解析——`draft`/`startEdit`/相关 state 可以删除（不再需要文本框
 草稿状态）。
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `npm run test:web -- SettingsView`
 Expected: PASS
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add packages/dashboard-app/src/settings/SettingsView.tsx packages/dashboard-app/src/settings/SettingsView.test.tsx
