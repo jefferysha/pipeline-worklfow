@@ -155,7 +155,7 @@ git commit -m "feat(server): listAllSkills 合并本地+外部 skill 登记"
 - Consumes: Task 1 的 `listAllSkills(repoRoot: string): string[]`。
 - Produces: `GET /api/skills/registry` 返回 `{ skills: string[] }`，供 Task 3 前端消费。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```ts
 describe('GET /api/skills/registry —— 全部已注册 skill 列表', () => {
@@ -170,12 +170,12 @@ describe('GET /api/skills/registry —— 全部已注册 skill 列表', () => {
 })
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `npx vitest run packages/server/src/server.test.ts -t "skills/registry"`
 Expected: FAIL — 404
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 `server.ts` import 加 `import { listAllSkills } from './skillsRegistry.js'`。`handleGet` 分派
 表里（`/api/config` 分支附近）加：
@@ -189,12 +189,12 @@ if (path === '/api/skills/registry') {
 因为 skill 登记是全局的、不属于任何单个 project。这个只读端点不需要鉴权，同 `/api/config`
 现状。）
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `npx vitest run packages/server/src/server.test.ts -t "skills/registry"`
 Expected: PASS
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add packages/server/src/server.ts packages/server/src/server.test.ts
