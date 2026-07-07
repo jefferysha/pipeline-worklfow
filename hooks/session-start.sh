@@ -93,7 +93,11 @@ if [ -n "$OS_ROOT" ] && [ -d "$OS_ROOT/openspec/changes" ]; then
     m="$OS_ROOT/.pipeline-pending-$kind"
     [ -f "$m" ] || continue
     case "$kind" in confirm) ttl=300 ;; *) ttl=1800 ;; esac
-    mt="$(stat -f %m "$m" 2>/dev/null || stat -c %Y "$m" 2>/dev/null || echo "$now")"
+    # GNU `stat -f` 是文件系统状态模式（非 mtime），在 Linux 上会"成功"吐非数字，兜底永不触发
+    # ——先试 GNU 语法（-c）+ 数字校验，而非只靠退出码判断。
+    mt="$(stat -c %Y "$m" 2>/dev/null)"
+    case "$mt" in ''|*[!0-9]*) mt="$(stat -f %m "$m" 2>/dev/null)" ;; esac
+    case "$mt" in ''|*[!0-9]*) mt="$now" ;; esac
     [ $((now - mt)) -le "$ttl" ] && GATES="$GATES 等:$kind"
   done
   if [ -n "$CTX" ]; then

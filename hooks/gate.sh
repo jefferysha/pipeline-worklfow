@@ -57,7 +57,12 @@ fresh() {
   local m="$1" ttl="${2:-1800}" now mt
   [ -f "$m" ] || return 1
   now="$(date +%s)"
-  mt="$(stat -f %m "$m" 2>/dev/null || stat -c %Y "$m" 2>/dev/null || echo "$now")"
+  # GNU `stat -f` 是「文件系统状态」模式（%m=挂载点字符串），非文件 mtime——在 Linux 上会
+  # "成功"但吐非数字，导致 || 兜底永不触发。先试 GNU 语法（-c，BSD stat 不识别该 flag 会真
+  # 报错退出）+ 数字校验兜底，而非只靠退出码判断（真机 Linux CI 抓出，本机 macOS 测不出）。
+  mt="$(stat -c %Y "$m" 2>/dev/null)"
+  case "$mt" in ''|*[!0-9]*) mt="$(stat -f %m "$m" 2>/dev/null)" ;; esac
+  case "$mt" in ''|*[!0-9]*) mt="$now" ;; esac
   if [ $((now - mt)) -gt "$ttl" ]; then
     rm -f "$m" 2>/dev/null
     return 1

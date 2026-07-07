@@ -91,7 +91,11 @@ if [ -n "$PROOT" ]; then
   for f in "$PROOT"/openspec/changes/*/.pipeline.yaml; do
     [ -f "$f" ] || continue
     [ "$(yget "$f" archived)" = "true" ] && continue
-    mt="$(stat -f %m "$f" 2>/dev/null || stat -c %Y "$f" 2>/dev/null || echo 0)"
+    # GNU `stat -f` 是文件系统状态模式（非 mtime），在 Linux 上会"成功"吐非数字，兜底永不触发
+    # ——先试 GNU 语法（-c）+ 数字校验，而非只靠退出码判断。
+    mt="$(stat -c %Y "$f" 2>/dev/null)"
+    case "$mt" in ''|*[!0-9]*) mt="$(stat -f %m "$f" 2>/dev/null)" ;; esac
+    case "$mt" in ''|*[!0-9]*) mt=0 ;; esac
     [[ "$mt" =~ ^[0-9]+$ ]] || mt=0
     if [ "$mt" -ge "$BEST" ]; then
       BEST="$mt"
