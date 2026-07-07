@@ -6,7 +6,9 @@
  *   ② 调度器 doctor 灯：健康摘要（ok / busy / attention）；
  *   ③ 调度器流水 log：从 automation_queued_at / automation_last_error 派生的活动流；
  *   ④ cancelAfkRun（afk-workbench Task 4）：POST /api/afk/:name/cancel 的写回逻辑——落取消标记
- *     文件 + docker kill 容器，见该函数头注释。
+ *     文件 + docker kill 容器，见该函数头注释；
+ *   ⑤ retryAfkRun（afk-workbench Task 5）：POST /api/afk/:name/retry 的写回逻辑——CAS
+ *     automation→queued + 清零 automation_attempts，见该函数头注释。
  *
  * server 零第三方依赖：本模块只消费已构造的 Snapshot（kernel 读出的字段），**不 import
  * @pipeline-lite/automation 运行时**——automation 的 AUTOMATION_STATES 是语义真相源，此处以
@@ -240,5 +242,35 @@ export async function cancelAfkRun(store: StateStore, changeDir: string): Promis
   await new Promise<void>((resolve) => {
     execFile('docker', ['kill', sandbox], () => resolve()) // kill 失败（容器已退出）不视为错误
   })
+  return { ok: true }
+}
+
+/** 可重试的合法源态——对位 automation `LEGAL_AUTOMATION_TRANSITIONS` 里已允许转回 queued 的三个终态。 */
+const RETRYABLE_FROM = ['failed', 'conflict', 'paused'] as const
+
+/**
+ * afk-workbench Task 5：POST /api/afk/:name/retry 的写回逻辑。
+ * 前置：changeDir 须真存在（同 cancelAfkRun 的存在性前置校验——kernel StateStore.get 对不存在
+ * 的 changeDir 是真 throw ENOENT，不判在此拦，会在 handlePost 顶层兜底 catch 里变成走味的 500，
+ * 而非本端点该给的 400）；automation 字段须是 failed/conflict/paused 之一（这三个是 automation
+ * `LEGAL_AUTOMATION_TRANSITIONS` 里已允许转回 queued 的合法源态——本函数不改状态机，只是补一个
+ * 触发它的入口；running/scheduled 等其余态一律拒绝，运行中的任务应先 cancel，而非直接重试）。
+ * 写回走 CAS（同 packages/automation/src/queue/claim.ts::claim 的 queued→scheduled 同一原语，
+ * 方向相反：X→queued）：CAS 落空说明状态在读-判-写之间被并发改动过（例如另一请求已把它 cancel
+ * 或调度器已重新认领），如实回 400，不误判成"状态不可重试"（判断已在上一步做过，此处只是并发
+ * 兜底）。CAS 成功后清零 automation_attempts——重试即重开失败预算，同老仓人工重跑语义
+ * （incrAttempts 的预算判定见 queue/claim.ts）。
+ */
+export async function retryAfkRun(store: StateStore, changeDir: string): Promise<{ ok: boolean; error?: string }> {
+  if (!existsSync(join(changeDir, '.pipeline.yaml'))) {
+    return { ok: false, error: '找不到该 change（无 .pipeline.yaml），找不到可重试的任务' }
+  }
+  const current = str(await store.get(changeDir, 'automation'))
+  if (!RETRYABLE_FROM.includes(current as (typeof RETRYABLE_FROM)[number])) {
+    return { ok: false, error: `automation 状态是 '${current || '(空)'}'，不可重试（仅 failed/conflict/paused 可重试，running 请先 cancel）` }
+  }
+  const ok = await store.cas(changeDir, 'automation', current, 'queued')
+  if (!ok) return { ok: false, error: 'CAS 失败，状态在此期间被并发修改' }
+  await store.set(changeDir, 'automation_attempts', '0')
   return { ok: true }
 }

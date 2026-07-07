@@ -648,3 +648,56 @@ describe('POST /api/afk/:name/cancel —— 取消运行中的 automation 任务
     expect(r.status).toBe(400)
   })
 })
+
+describe('POST /api/afk/:name/retry —— 重试 failed/conflict/paused 任务（afk-workbench Task 5）', () => {
+  it.each(['failed', 'conflict', 'paused'])('automation=%s → CAS 回 queued + 200，automation_attempts 清零', async (from) => {
+    const h = await start()
+    await h.store.set(h.changeDir, 'automation', from)
+    await h.store.set(h.changeDir, 'automation_attempts', '3')
+    const r = await reqPost(h.port, `/api/afk/${h.name}/retry`, { root: h.root }, { headers: { Authorization: `Bearer ${h.token}` } })
+    expect(r.status).toBe(200)
+    expect(await h.store.get(h.changeDir, 'automation')).toBe('queued')
+    expect(await h.store.get(h.changeDir, 'automation_attempts')).toBe('0')
+  })
+
+  it('automation=running → 400（运行中不可重试，应先取消）', async () => {
+    const h = await start()
+    await h.store.set(h.changeDir, 'automation', 'running')
+    const r = await reqPost(h.port, `/api/afk/${h.name}/retry`, { root: h.root }, { headers: { Authorization: `Bearer ${h.token}` } })
+    expect(r.status).toBe(400)
+  })
+
+  it('change 名合法但该 change 实际不存在（无 .pipeline.yaml）→ 400，而非 500（同 cancel 端点已修的同类 ENOENT 坑）', async () => {
+    const h = await start()
+    const r = await reqPost(h.port, '/api/afk/does-not-exist/retry', { root: h.root }, {
+      headers: { Authorization: `Bearer ${h.token}` },
+    })
+    expect(r.status).toBe(400)
+  })
+
+  it('root 不在注册表（不可信项目）→ 404，同 transition/cancel 端点共用的信任锚模式，且不改盘', async () => {
+    const h = await start()
+    await h.store.set(h.changeDir, 'automation', 'failed')
+    const r = await reqPost(h.port, `/api/afk/${h.name}/retry`, { root: '/tmp/not-registered' }, {
+      headers: { Authorization: `Bearer ${h.token}` },
+    })
+    expect(r.status).toBe(404)
+    expect(await h.store.get(h.changeDir, 'automation')).toBe('failed')
+  })
+
+  it('无 token → 401（确认新路由确实接在 handlePost 统一鉴权守卫之后，而非绕过），且不改盘', async () => {
+    const h = await start()
+    await h.store.set(h.changeDir, 'automation', 'failed')
+    const r = await reqPost(h.port, `/api/afk/${h.name}/retry`, { root: h.root })
+    expect(r.status).toBe(401)
+    expect(await h.store.get(h.changeDir, 'automation')).toBe('failed')
+  })
+
+  it('非法 change 名（.. 路径穿越尝试）→ 400，同 transition/cancel 端点的 change 名校验', async () => {
+    const h = await start()
+    const r = await reqPost(h.port, `/api/afk/${encodeURIComponent('..')}/retry`, { root: h.root }, {
+      headers: { Authorization: `Bearer ${h.token}` },
+    })
+    expect(r.status).toBe(400)
+  })
+})

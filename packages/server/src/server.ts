@@ -25,7 +25,7 @@ import { dirname, join, resolve as resolvePath } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { applyLevelChange, createFlowEngine, createStateStore, loadManifest, loadRegistry } from '@pipeline-lite/kernel'
 import type { FlowEngine, GraduationFs, StateStore } from '@pipeline-lite/kernel'
-import { buildAfkLog, buildAfkSnapshot, cancelAfkRun } from './afk.js'
+import { buildAfkLog, buildAfkSnapshot, cancelAfkRun, retryAfkRun } from './afk.js'
 import { buildLoopsSnapshot } from './loops.js'
 import { readMandatorySkills, validateMandatorySkillsBody, writeMandatorySkills } from './config.js'
 import { resolveServerPaths } from './paths.js'
@@ -443,6 +443,29 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
       }
       const dir = join(root, 'openspec', 'changes', name)
       const result = await cancelAfkRun(store, dir)
+      return sendJson(res, result.ok ? 200 : 400, result)
+    }
+
+    // ── afk-workbench Task 5：POST /api/afk/:name/retry —— 重试 failed/conflict/paused 任务
+    //    （CAS automation→queued + automation_attempts 清零，见 afk.ts::retryAfkRun）──
+    const retryMatch = /^\/api\/afk\/([^/]+)\/retry$/.exec(path)
+    if (retryMatch) {
+      const name = decodeURIComponent(retryMatch[1]!)
+      // 同 /api/change/<name>/transition、/api/afk/<name>/cancel 的 change 名校验（防路径穿越：拒 '..' 等非法段落入 join）。
+      if (!name || !/^[a-zA-Z0-9_-]+$/.test(name) || name.includes('..')) {
+        return sendJson(res, 400, { ok: false, error: '非法 change 名（仅允许 a-z A-Z 0-9 - _）' })
+      }
+      const body = await readJsonBody(req)
+      const root = typeof body === 'object' && body !== null ? (body as Record<string, unknown>).root : undefined
+      if (typeof root !== 'string' || !root) {
+        return sendJson(res, 400, { ok: false, error: 'root 须为非空字符串' })
+      }
+      // 信任锚：同 /api/loops/level、/api/change/<name>/transition、/api/afk/<name>/cancel 共用的「两侧规范化再比较」模式。
+      if (!dedupeRoots(registry()).includes(resolvePath(root))) {
+        return sendJson(res, 404, { ok: false, error: 'root 未在机器级项目注册表中' })
+      }
+      const dir = join(root, 'openspec', 'changes', name)
+      const result = await retryAfkRun(store, dir)
       return sendJson(res, result.ok ? 200 : 400, result)
     }
 
