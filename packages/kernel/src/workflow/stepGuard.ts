@@ -1,14 +1,11 @@
 import type { StepDef } from './types.js'
-import type { PipelineState, FieldName } from '../types.js'
+import type { PipelineState, FieldName, GuardResult } from '../types.js'
 
 export interface StepGuardContext {
   readonly changeDirAbs: string
 }
 
-export interface GuardResult {
-  readonly pass: boolean
-  readonly failures: string[]
-}
+export type { GuardResult } from '../types.js'
 
 function scalar(v: string | string[] | undefined): string {
   return typeof v === 'string' ? v : ''
