@@ -438,11 +438,21 @@ git commit -m "feat(server): POST /api/afk/:name/retry 重试端点"
 - Modify: `packages/server/src/server.test.ts`
 
 **Interfaces:**
-- Consumes: Task 2 落盘的 `.sandcastle-run.log`（路径 = `automation_worktree` 字段值 + 该
-  文件名）。**注意**：现有 `GET /api/afk/log` 路由已存在但语义完全不同（`buildAfkLog`，
-  聚合的是"哪些 change 发生过 queued/error/state 事件"的结构化时间线，不是某一个 change 的
-  原始日志文本）——本任务是新增 `GET /api/afk/:name/log`（带 change 名的路径参数），
-  不是修改现有的 `/api/afk/log`，两者并存，命名上容易混淆需要实现者注意区分。
+- Consumes: Task 2 落盘的 `.sandcastle-run.log`。**2026-07-08 勘误（Task 2 实现阶段发现计划
+  原premise有误，已用真 docker 跑验证并修正，详见 `docs/loops/progress.md` 与
+  `.superpowers/sdd/task-2-report.md` 的历史记录）**：日志文件**不在** worktree 内（worktree
+  是临时的，成功跑完/普通失败都会在结算后被 teardown 删除，`automation_worktree` 字段此时
+  往往已经指向一个不存在的路径——只有 conflict/aborted 保留现场的少数情况 worktree 才会活着）。
+  真实落盘位置是**宿主仓库侧**、随 change 本身持久的目录：
+  `join(root, 'openspec', 'changes', name, '.sandcastle-run.log')`——与 `.pipeline.yaml`
+  同一个目录，已加入 `.gitignore`（比照该目录下 `.breadcrumb` 的先例：这是运行期产物，不是
+  该目录里需要提交进版本库的审计轨迹如 `.pipeline.yaml`/`.pipeline-history.jsonl`）。定位这
+  个文件只需要 `root` + `name`（即 `changeDir`），**不需要**读 `automation_worktree` 字段——
+  该字段仍然真实存在、仍然是 Task 3/4（取消标记 + `docker kill` 目标）要用的东西，只是跟
+  "日志在哪"这件事解耦了。**注意**：现有 `GET /api/afk/log` 路由已存在但语义完全不同
+  （`buildAfkLog`，聚合的是"哪些 change 发生过 queued/error/state 事件"的结构化时间线，不是
+  某一个 change 的原始日志文本）——本任务是新增 `GET /api/afk/:name/log`（带 change 名的路径
+  参数），不是修改现有的 `/api/afk/log`，两者并存，命名上容易混淆需要实现者注意区分。
 - Produces: `{ log: string | null }`，`log` 为 `null` 表示该 change 还没有产生过日志文件
   （尚未运行过，或 Task 2 尚未部署前创建的旧 change）。
 
@@ -450,11 +460,9 @@ git commit -m "feat(server): POST /api/afk/:name/retry 重试端点"
 
 ```ts
 describe('GET /api/afk/:name/log', () => {
-  it('worktree 内有 .sandcastle-run.log → 原样返回内容', async () => {
+  it('change 目录内有 .sandcastle-run.log → 原样返回内容', async () => {
     const h = await start()
-    await h.store.set(h.changeDir, 'automation_worktree', h.worktreeDir)
-    await mkdir(h.worktreeDir, { recursive: true })
-    await writeFile(join(h.worktreeDir, '.sandcastle-run.log'), 'line1\nline2\n', 'utf8')
+    await writeFile(join(h.changeDir, '.sandcastle-run.log'), 'line1\nline2\n', 'utf8')
     const r = await reqGet(h.port, `/api/afk/${h.name}/log?root=${encodeURIComponent(h.root)}`)
     expect(r.status).toBe(200)
     expect(r.json<{ log: string }>().log).toBe('line1\nline2\n')
@@ -476,13 +484,11 @@ Expected: FAIL — 404 或匹配到了错误的现有 `/api/afk/log` 路由
 
 - [ ] **Step 3: 实现**
 
-`afk.ts` 新增：
+`afk.ts` 新增（不再需要 `store`/`automation_worktree`，只需要 `changeDir`）：
 ```ts
-export async function readAfkRunLog(store: StateStore, changeDir: string): Promise<string | null> {
-  const worktree = await store.get(changeDir, 'automation_worktree')
-  if (!worktree) return null
+export async function readAfkRunLog(changeDir: string): Promise<string | null> {
   try {
-    return await readFile(join(String(worktree), '.sandcastle-run.log'), 'utf8')
+    return await readFile(join(changeDir, '.sandcastle-run.log'), 'utf8')
   } catch {
     return null
   }
@@ -498,7 +504,7 @@ if (logMatch) {
   const root = new URL(req.url ?? '', 'http://x').searchParams.get('root') ?? ''
   if (!dedupeRoots(deps.registry()).includes(root)) return sendJson(res, 404, { ok: false, error: 'root 未注册' })
   const dir = join(root, 'openspec', 'changes', name)
-  return sendJson(res, 200, { log: await readAfkRunLog(deps.store, dir) })
+  return sendJson(res, 200, { log: await readAfkRunLog(dir) })
 }
 ```
 
