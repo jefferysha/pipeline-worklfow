@@ -18,12 +18,12 @@
  *     （Authorization: Bearer / X-Pipeline-Token，缺/错 → 401）；(3) 强制 application/json（借同源策略）。
  *   token 启动生成、写 0600 握手文件、同源注入前端；较老仓「仅靠同源 + 无 token」是净收紧。
  */
-import { existsSync, readFileSync, statSync } from 'node:fs'
+import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { join, resolve as resolvePath } from 'node:path'
-import { createFlowEngine, createStateStore, loadManifest } from '@pipeline-lite/kernel'
-import type { FlowEngine, StateStore } from '@pipeline-lite/kernel'
+import { applyLevelChange, createFlowEngine, createStateStore, loadManifest, loadRegistry } from '@pipeline-lite/kernel'
+import type { FlowEngine, GraduationFs, StateStore } from '@pipeline-lite/kernel'
 import { buildAfkLog, buildAfkSnapshot } from './afk.js'
 import { buildLoopsSnapshot } from './loops.js'
 import { readMandatorySkills, validateMandatorySkillsBody, writeMandatorySkills } from './config.js'
@@ -40,6 +40,33 @@ const MAX_POST_BODY = 64 * 1024
 
 function isoNow(): string {
   return new Date().toISOString().replace(/\.\d{3}Z$/, 'Z')
+}
+
+// ── #38 graduation 真 node fs（登记 + run-log + LOOP.md 镜像 + loops.yaml 原文读写）──
+const REAL_GRADUATION_FS: GraduationFs = {
+  loadRegistry: (repoRoot) => loadRegistry(repoRoot),
+  readRunLog: (repoRoot) => {
+    try {
+      return readFileSync(join(repoRoot, '.superpowers', 'loops', 'progress.md'), 'utf8')
+    } catch {
+      return null
+    }
+  },
+  readLoopDoc: (repoRoot) => {
+    try {
+      return readFileSync(join(repoRoot, 'LOOP.md'), 'utf8')
+    } catch {
+      return null
+    }
+  },
+  readRegistryText: (repoRoot) => {
+    try {
+      return readFileSync(join(repoRoot, '.pipeline', 'loops.yaml'), 'utf8')
+    } catch {
+      return null
+    }
+  },
+  writeRegistryText: (repoRoot, text) => writeFileSync(join(repoRoot, '.pipeline', 'loops.yaml'), text, 'utf8'),
 }
 
 function errMsg(e: unknown): string {
@@ -360,6 +387,22 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
         return sendJson(res, 500, { ok: false, error: errMsg(e) })
       }
       return sendJson(res, 200, { ok: true, phase, track, skills })
+    }
+
+    // ── loops 升降档写端点：POST /api/loops/level ──
+    if (path === '/api/loops/level') {
+      const body = await readJsonBody(req)
+      const root = typeof body === 'object' && body !== null ? (body as Record<string, unknown>).root : undefined
+      const id = typeof body === 'object' && body !== null ? (body as Record<string, unknown>).id : undefined
+      const target = typeof body === 'object' && body !== null ? (body as Record<string, unknown>).target : undefined
+      if (typeof root !== 'string' || typeof id !== 'string' || typeof target !== 'string') {
+        return sendJson(res, 400, { ok: false, error: 'root/id/target 必填' })
+      }
+      if (!dedupeRoots(registry()).includes(root)) {
+        return sendJson(res, 404, { ok: false, error: 'root 未在机器级项目注册表中' })
+      }
+      const result = applyLevelChange(root, id, target, { now: new Date(clock()), confirm: true }, REAL_GRADUATION_FS)
+      return sendJson(res, 200, result)
     }
 
     const mTr = /^\/api\/change\/([^/]+)\/transition$/.exec(path)
