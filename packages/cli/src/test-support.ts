@@ -43,7 +43,9 @@ export function spy<A extends unknown[], R>(impl: (...args: A) => R): Recorded<A
 export function mockState(fields: Partial<Record<FieldName, string | string[]>> = {}): PipelineState {
   const all = {} as Record<FieldName, string | string[]>
   for (const f of FIELD_ORDER) {
-    all[f] = (LIST_FIELDS as readonly string[]).includes(f) ? [] : ''
+    // workflow 缺省 'default'——镜像 kernel emptyFields()（Task 4）；否则 mockState 会产出
+    // workflow==='' 让每个默认路径单测误入自定义 workflow 分支（'' !== 'default'）。
+    all[f] = f === 'workflow' ? 'default' : (LIST_FIELDS as readonly string[]).includes(f) ? [] : ''
   }
   return { fields: { ...all, ...fields }, opaqueTail: '' }
 }
