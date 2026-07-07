@@ -26,15 +26,22 @@ describe('loadWorkflow', () => {
     const repoRoot = dirname(dirname(dirname(dirname(__dirname))))
     const defaultYamlPath = join(repoRoot, 'templates', 'workflows', 'default.yaml')
     const content = await readFile(defaultYamlPath, 'utf8')
-    const wf = parseWorkflow(content)
+
+    // Create a temp directory with .pipeline/workflows structure and write the content
+    const tempRoot = await mkdtemp(join(tmpdir(), 'wf-load-real-'))
+    await mkdir(join(tempRoot, '.pipeline', 'workflows'), { recursive: true })
+    await writeFile(join(tempRoot, '.pipeline', 'workflows', 'default.yaml'), content, 'utf8')
+
+    // Call loadWorkflow to exercise the actual function under test (not just parseWorkflow)
+    const wf = loadWorkflow(tempRoot, 'default')
 
     expect(wf).not.toBeNull()
-    expect(wf.name).toBe('default')
-    expect(wf.steps).toHaveLength(7)
-    expect(wf.steps.map((s) => s.id)).toEqual(['open', 'explore', 'spec', 'build', 'verify', 'ship', 'archive'])
+    expect(wf?.name).toBe('default')
+    expect(wf?.steps).toHaveLength(7)
+    expect(wf?.steps.map((s) => s.id)).toEqual(['open', 'explore', 'spec', 'build', 'verify', 'ship', 'archive'])
 
     // Verify the spec step has the tasks-at-least guard
-    const specStep = wf.steps.find((s) => s.id === 'spec')
+    const specStep = wf?.steps.find((s) => s.id === 'spec')
     expect(specStep?.guards).toHaveLength(1)
     expect(specStep?.guards[0]).toEqual({ type: 'tasks-at-least', n: 3 })
   })
