@@ -345,10 +345,16 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
         return sendJson(res, 404, { ok: false, error: 'root 未在机器级项目注册表中' })
       }
       const dir = join(root, 'openspec', 'changes', name)
-      // ENOENT 前置校验（同 cancelAfkRun/retryAfkRun 的存在性前置）：change 真不存在时给可辨识的
-      // 404，不与「change 存在但还没日志」的 200 { log: null } 混为一谈。
+      // ENOENT 前置校验（同 cancelAfkRun/retryAfkRun 的存在性前置）：change 真不存在时给 400，
+      // 不与「change 存在但还没日志」的 200 { log: null } 混为一谈。这里刻意用 400 而非看似更
+      // "RESTful" 的 404——三个同由 root+name 寻址的兄弟端点（cancel/retry/log）在这条完全相同
+      // 的 !existsSync(.pipeline.yaml) 判断上必须给同一状态码：cancel/retry 经
+      // `sendJson(res, result.ok ? 200 : 400, result)` 把这个条件统一收敛成 400（见下方两个
+      // handlePost 分支），log 若单独选 404 会让共享这三个端点错误处理逻辑的前端踩坑（review
+      // finding）。root 未注册（上面那个分支）仍是 404，因为那是三端点另一个真正统一使用 404
+      // 的既有约定，与此处无关。
       if (!existsSync(join(dir, '.pipeline.yaml'))) {
-        return sendJson(res, 404, { ok: false, error: '找不到该 change（无 .pipeline.yaml）' })
+        return sendJson(res, 400, { ok: false, error: '找不到该 change（无 .pipeline.yaml）' })
       }
       return sendJson(res, 200, { log: await readAfkRunLog(dir) })
     }

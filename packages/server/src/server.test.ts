@@ -733,10 +733,10 @@ describe('GET /api/afk/:name/log —— 单个 change 的原始运行日志文�
     expect(r.status).toBe(400)
   })
 
-  it('change 名合法但该 change 实际不存在（无 .pipeline.yaml）→ 404，不与「还没日志」的 200 混淆', async () => {
+  it('change 名合法但该 change 实际不存在（无 .pipeline.yaml）→ 400，同 cancel/retry 端点对同一存在性前置校验的约定，不与「还没日志」的 200 混淆', async () => {
     const h = await start()
     const r = await reqGet(h.port, `/api/afk/does-not-exist/log?root=${encodeURIComponent(h.root)}`)
-    expect(r.status).toBe(404)
+    expect(r.status).toBe(400)
     // 精确匹配 ENOENT 前置校验的错误文案（而非落到路由表尾部「未知端点」兜底 404）——证明真走了 changeDir 存在性校验分支。
     expect(r.json<{ error: string }>().error).toBe('找不到该 change（无 .pipeline.yaml）')
   })
