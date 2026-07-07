@@ -685,27 +685,27 @@ git commit -m "feat(dashboard): AfkWorkbench 列表+详情侧栏（日志/取消
 **Interfaces:**
 - Consumes: Task 7 的 `<AfkWorkbench />`。
 
-- [ ] **Step 1: 更新测试**
+- [x] **Step 1: 更新测试**
 
 `AdvancedPanel.test.tsx` 里如果有断言"Advanced 面板含 afk 摘要"的用例，改成断言"Advanced
 面板不再含 afk（因为已升格为独立导航项）"；`Nav.test.tsx` 加一条"导航含 AFK 工作台入口"。
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `npm run test:web`
 Expected: FAIL（部分用例，视具体改法而定）
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 同 loop 设置计划 Task 5 的模式：`Nav.tsx` 加一个新入口，`App.tsx` 加对应视图分支渲染
 `<AfkWorkbench />`；`AdvancedPanel.tsx` 的 `TOOLS`/`PANELS` 移除 `afk` 项。
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `npm run test:web`
 Expected: PASS 全量
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add packages/dashboard-app/src/shell/ packages/dashboard-app/src/App.tsx packages/dashboard-app/src/advanced/
