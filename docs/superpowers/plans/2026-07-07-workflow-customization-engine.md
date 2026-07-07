@@ -968,7 +968,7 @@ git commit -m "feat(kernel): skill DAG 解锁判定纯函数"
 （导出它，而不是复制一份——两处保持单一实现，避免"什么算已完成任务"这条规则出现两个
 不同答案）。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```ts
 // packages/kernel/src/workflow/stepGuard.test.ts
@@ -1008,12 +1008,12 @@ describe('evaluateStepGuards', () => {
 })
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `cd /Users/a1234/Documents/code-manager/projects/pipeline-worklfow && npx vitest run packages/kernel/src/workflow/stepGuard.test.ts`
 Expected: FAIL
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 ```ts
 // packages/kernel/src/workflow/stepGuard.ts
@@ -1056,12 +1056,12 @@ export function evaluateStepGuards(state: PipelineState, step: StepDef, _ctx: St
 }
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `npx vitest run packages/kernel/src/workflow/stepGuard.test.ts`
 Expected: PASS（3 例）
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add packages/kernel/src/workflow/stepGuard.ts packages/kernel/src/workflow/stepGuard.test.ts
