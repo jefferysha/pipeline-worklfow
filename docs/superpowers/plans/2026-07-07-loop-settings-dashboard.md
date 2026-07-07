@@ -209,7 +209,7 @@ git commit -m "feat(server): loops 跨项目聚合读 buildLoopsSnapshot"
 - Produces: 路由 `GET /api/loops/snapshot` 返回 `LoopsSnapshot` JSON；`capabilities.loops: true`
   常量（loops 功能不依赖任何可选运行时，始终声明 true，同 `capabilities.afk` 现状）。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 在 `server.test.ts` 里找到 `describe('GET /api/afk/snapshot'`（已存在的相邻测试）附近新增：
 
@@ -227,12 +227,12 @@ describe('GET /api/loops/snapshot —— 跨项目聚合 loops.yaml', () => {
 })
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `npx vitest run packages/server/src/server.test.ts -t "loops/snapshot"`
 Expected: FAIL — 404（路由不存在）或 `capabilities.loops` 为 `undefined`
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 在 `server.ts` 顶部 import 区加：
 ```ts
@@ -254,12 +254,12 @@ if (path === '/api/loops/snapshot') {
 `deps.clock()` 是现有注入的时钟函数，`new Date(deps.clock())` 与 `buildAfkSnapshot`同款
 用法一致。）
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `npx vitest run packages/server/src/server.test.ts -t "loops/snapshot"`
 Expected: PASS
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add packages/server/src/server.ts packages/server/src/server.test.ts
