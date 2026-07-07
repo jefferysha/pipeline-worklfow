@@ -874,7 +874,7 @@ git commit -m "feat(kernel): 内置默认 workflow 数据镜像 + loadWorkflow �
 - Produces: `isSkillUnlocked(skillId: string, skills: readonly SkillRef[], completedSinceStepEntry: ReadonlySet<string>): boolean`——
   纯函数，供 Task 7（CLI 命令）调用。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```ts
 // packages/kernel/src/workflow/skillDag.test.ts
@@ -909,12 +909,12 @@ describe('isSkillUnlocked', () => {
 })
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `npx vitest run packages/kernel/src/workflow/skillDag.test.ts`
 Expected: FAIL
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 ```ts
 // packages/kernel/src/workflow/skillDag.ts
@@ -931,12 +931,12 @@ export function isSkillUnlocked(
 }
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `npx vitest run packages/kernel/src/workflow/skillDag.test.ts`
 Expected: PASS（4 例）
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add packages/kernel/src/workflow/skillDag.ts packages/kernel/src/workflow/skillDag.test.ts
