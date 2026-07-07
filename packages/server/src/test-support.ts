@@ -43,6 +43,14 @@ export async function makeProject(): Promise<string> {
   return mkdtemp(join(tmpdir(), 'pl-dash-proj-'))
 }
 
+/**
+ * 真建一个临时目录，代表某 change 当前的 automation worktree 根（afk-workbench Task 4：
+ * cancelAfkRun 往这个目录真落 .cancel-requested 标记文件，目录必须真实存在于磁盘）。
+ */
+export async function makeWorktreeDir(): Promise<string> {
+  return mkdtemp(join(tmpdir(), 'pl-dash-worktree-'))
+}
+
 /** 真 init 一个 change → 落 openspec/changes/<name>/.pipeline.yaml（phase=open）。 */
 export async function initChange(
   store: StateStore,

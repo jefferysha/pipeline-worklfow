@@ -1,16 +1,23 @@
 /**
- * afk 域 —— AFK Sandcastle 指挥面数据端（BACKLOG #29d / GOAL A5）。
+ * afk 域 —— AFK Sandcastle 指挥面数据端 + 写回（BACKLOG #29d / GOAL A5，afk-workbench Task 4 起加写）。
  *
  * 聚合各 change 的 automation_* 字段（kernel StateStore 已随 snapshot 读进 change.fields）→
  *   ① AFK 泳道数据：queued / running / merged / failed / conflict / paused；
  *   ② 调度器 doctor 灯：健康摘要（ok / busy / attention）；
- *   ③ 调度器流水 log：从 automation_queued_at / automation_last_error 派生的活动流。
+ *   ③ 调度器流水 log：从 automation_queued_at / automation_last_error 派生的活动流；
+ *   ④ cancelAfkRun（afk-workbench Task 4）：POST /api/afk/:name/cancel 的写回逻辑——落取消标记
+ *     文件 + docker kill 容器，见该函数头注释。
  *
  * server 零第三方依赖：本模块只消费已构造的 Snapshot（kernel 读出的字段），**不 import
  * @pipeline-lite/automation 运行时**——automation 的 AUTOMATION_STATES 是语义真相源，此处以
  * 字面量对位并注释指明，避免把 server 的 tsc 构建耦合到 automation 包（只读语义，不建依赖）。
  * automation 字段生命周期与 8 态枚举见 packages/automation/src/types.ts（AUTOMATION_STATES）。
+ * 同一零依赖原则延伸到 cancelAfkRun 的取消标记文件名——见下方 CANCEL_MARKER_FILE 常量注释。
  */
+import { execFile } from 'node:child_process'
+import { writeFile } from 'node:fs/promises'
+import { join } from 'node:path'
+import type { StateStore } from '@pipeline-lite/kernel'
 import type { Snapshot } from './types.js'
 
 /** AFK 泳道（对位 automation AUTOMATION_STATES 的活跃子集；off 不入板，scheduled 归 running，见 laneOf）。 */
@@ -187,4 +194,44 @@ export function buildAfkLog(snapshot: Snapshot, clock: () => string): AfkLog {
   }
   entries.sort((a, b) => (a.ts < b.ts ? 1 : a.ts > b.ts ? -1 : 0))
   return { generated_at: now, entries }
+}
+
+/**
+ * 取消标记文件名——**必须**与 packages/automation/src/lifecycle/worktree.ts 导出的
+ * `CANCEL_MARKER_FILE` 字面量保持一致（`runChangeInSandbox` 结算时探测的正是这个文件名）。
+ * 本应直接 import 该常量，但 server 对 automation 包坚持零运行时依赖（同上方模块头注释 /
+ * AUTOMATION_STATES 的既有先例）：packages/server/package.json 未把 @pipeline-lite/automation
+ * 列为 dependency，packages/server/tsconfig.json 的 `references` 也未包含 `../automation`——
+ * 即便 npm workspace 会把 automation hoist 进根 node_modules 使得 import 在运行时"能用"，
+ * 那也是绕开声明依赖图的隐式耦合，且会让 server 的 `tsc -b` 构建顺序悄悄依赖一个未声明的
+ * project reference。故沿用文件头已定的字面量对位模式，而非在此开一个例外。
+ * 两侧字面量的漂移风险由 automation 侧 worktree.test.ts 断言 CANCEL_MARKER_FILE 的字面量值兜底。
+ */
+const CANCEL_MARKER_FILE = '.cancel-requested'
+
+/**
+ * afk-workbench Task 4：POST /api/afk/:name/cancel 的写回逻辑。
+ * 前置：automation 字段须为 'running'（否则视为找不到运行中的 job）；automation_worktree /
+ * automation_sandbox 须非空（Task 1 已确保二者在 running 态下非空，此处仍防御性校验）。
+ * 顺序：先落取消标记文件（worktree 根），再 docker kill 容器——与 automation 侧
+ * `runChangeInSandbox` 结算时"先探测标记、再判定是否 CancelledRunError"的读取顺序对应，
+ * 保证标记先于 kill 造成的非零退出到场，不会被误判成瞬态失败走 classify 的 retry 分支。
+ * docker kill 失败（容器已退出/已不存在等）不视为本端点的错误——标记已落即达成取消意图，
+ * 真正的结算判定权在 automation 侧的 hasCancelMarker 探测，不在这次 kill 的 exec 退出码。
+ */
+export async function cancelAfkRun(store: StateStore, changeDir: string): Promise<{ ok: boolean; error?: string }> {
+  const automation = str(await store.get(changeDir, 'automation'))
+  if (automation !== 'running') {
+    return { ok: false, error: `automation 状态是 '${automation || '(空)'}'，不是 running，找不到运行中的 job` }
+  }
+  const worktree = str(await store.get(changeDir, 'automation_worktree'))
+  const sandbox = str(await store.get(changeDir, 'automation_sandbox'))
+  if (!worktree || !sandbox) {
+    return { ok: false, error: '缺 automation_worktree/automation_sandbox，无法定位容器' }
+  }
+  await writeFile(join(worktree, CANCEL_MARKER_FILE), '1', 'utf8')
+  await new Promise<void>((resolve) => {
+    execFile('docker', ['kill', sandbox], () => resolve()) // kill 失败（容器已退出）不视为错误
+  })
+  return { ok: true }
 }

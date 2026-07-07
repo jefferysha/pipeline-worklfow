@@ -3,12 +3,13 @@
  * node:http 真发请求、断言真实响应与真实落盘副作用。零 mock。
  */
 import { afterEach, describe, expect, it } from 'vitest'
+import { existsSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { createDashboardServer } from './server.js'
 import type { DashboardServer } from './types.js'
 import {
-  initChange, makeProject, makeTempManifest, newStore, openSSE, reqGet, reqPost, testFlow,
+  initChange, makeProject, makeTempManifest, makeWorktreeDir, newStore, openSSE, reqGet, reqPost, testFlow,
 } from './test-support.js'
 import type { StateStore } from '@pipeline-lite/kernel'
 import { loadManifest, TRANSITION_EVENTS as KERNEL_EVENTS, eventEdge as kernelEventEdge } from '@pipeline-lite/kernel'
@@ -37,6 +38,10 @@ interface Harness {
   root: string
   store: StateStore
   name: string
+  /** openspec/changes/<name> 绝对路径（afk cancel 等按 changeDir 读写 automation_* 字段的测试用）。 */
+  changeDir: string
+  /** 真实存在的临时目录，代表本 change 的 automation worktree 根（afk cancel 落标记文件测试用）。 */
+  worktreeDir: string
   manifestPath?: string
 }
 
@@ -50,6 +55,7 @@ async function start(opts?: {
   const root = await makeProject()
   const name = 'my-change'
   await initChange(store, root, name)
+  const worktreeDir = await makeWorktreeDir()
   const srv = createDashboardServer({
     version: opts?.version ?? '9.9.9',
     token: opts?.token ?? 'secret-token-abc',
@@ -62,7 +68,12 @@ async function start(opts?: {
   })
   openServers.push(srv)
   const { port } = await srv.listen(0, '127.0.0.1')
-  return { srv, port, token: srv.token, root, store, name, manifestPath: opts?.manifestPath }
+  return {
+    srv, port, token: srv.token, root, store, name,
+    changeDir: join(root, 'openspec', 'changes', name),
+    worktreeDir,
+    manifestPath: opts?.manifestPath,
+  }
 }
 
 /** 同 start()，但额外真拷贝仓库 manifest.yaml 到临时文件并注入，供 config 端点测试使用。 */
@@ -567,5 +578,65 @@ describe('POST /api/loops/level —— 升降档写回', () => {
       })
       expect(r.status).toBe(400)
     }
+  })
+})
+
+describe('POST /api/afk/:name/cancel —— 取消运行中的 automation 任务（afk-workbench Task 4）', () => {
+  it('running 状态且 automation_sandbox 非空 → 落 .cancel-requested 标记 + docker kill + 200', async () => {
+    const h = await start()
+    await h.store.set(h.changeDir, 'automation', 'running')
+    await h.store.set(h.changeDir, 'automation_sandbox', 'sandcastle-test-container-not-real')
+    await h.store.set(h.changeDir, 'automation_worktree', h.worktreeDir) // 测试 fixture 需真建这个目录
+    const r = await reqPost(h.port, `/api/afk/${h.name}/cancel`, { root: h.root }, { headers: { Authorization: `Bearer ${h.token}` } })
+    expect(r.status).toBe(200)
+    expect(existsSync(join(h.worktreeDir, '.cancel-requested'))).toBe(true)
+  })
+
+  it('automation 状态不是 running → 400，且不落标记文件（早退，无副作用）', async () => {
+    const h = await start()
+    await h.store.set(h.changeDir, 'automation', 'paused')
+    const r = await reqPost(h.port, `/api/afk/${h.name}/cancel`, { root: h.root }, { headers: { Authorization: `Bearer ${h.token}` } })
+    expect(r.status).toBe(400)
+    expect(existsSync(join(h.worktreeDir, '.cancel-requested'))).toBe(false)
+  })
+
+  it('running 但 automation_sandbox 为空（容器名缺失，无法定位要 kill 的容器）→ 400，不落标记文件', async () => {
+    const h = await start()
+    await h.store.set(h.changeDir, 'automation', 'running')
+    await h.store.set(h.changeDir, 'automation_worktree', h.worktreeDir)
+    // 故意不设 automation_sandbox
+    const r = await reqPost(h.port, `/api/afk/${h.name}/cancel`, { root: h.root }, { headers: { Authorization: `Bearer ${h.token}` } })
+    expect(r.status).toBe(400)
+    expect(existsSync(join(h.worktreeDir, '.cancel-requested'))).toBe(false)
+  })
+
+  it('root 不在注册表（不可信项目）→ 404，同 transition 端点共用的信任锚模式', async () => {
+    const h = await start()
+    await h.store.set(h.changeDir, 'automation', 'running')
+    await h.store.set(h.changeDir, 'automation_sandbox', 'sandcastle-test-container-not-real')
+    await h.store.set(h.changeDir, 'automation_worktree', h.worktreeDir)
+    const r = await reqPost(h.port, `/api/afk/${h.name}/cancel`, { root: '/tmp/not-registered' }, {
+      headers: { Authorization: `Bearer ${h.token}` },
+    })
+    expect(r.status).toBe(404)
+    expect(existsSync(join(h.worktreeDir, '.cancel-requested'))).toBe(false)
+  })
+
+  it('无 token → 401（确认新路由确实接在 handlePost 统一鉴权守卫之后，而非绕过）', async () => {
+    const h = await start()
+    await h.store.set(h.changeDir, 'automation', 'running')
+    await h.store.set(h.changeDir, 'automation_sandbox', 'sandcastle-test-container-not-real')
+    await h.store.set(h.changeDir, 'automation_worktree', h.worktreeDir)
+    const r = await reqPost(h.port, `/api/afk/${h.name}/cancel`, { root: h.root })
+    expect(r.status).toBe(401)
+    expect(existsSync(join(h.worktreeDir, '.cancel-requested'))).toBe(false)
+  })
+
+  it('非法 change 名（.. 路径穿越尝试）→ 400，同 transition 端点的 change 名校验', async () => {
+    const h = await start()
+    const r = await reqPost(h.port, `/api/afk/${encodeURIComponent('..')}/cancel`, { root: h.root }, {
+      headers: { Authorization: `Bearer ${h.token}` },
+    })
+    expect(r.status).toBe(400)
   })
 })
