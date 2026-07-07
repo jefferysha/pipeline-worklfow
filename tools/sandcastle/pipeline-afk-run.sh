@@ -13,8 +13,19 @@ set -eu
 
 name="${1:?usage: pipeline-afk-run <change>}"
 export PIPELINE_AFK=1
-# --user uid:gid 无 passwd 条目时 HOME 可能未设；落到 tmpfs 可写目录，供 git --global config 落盘。
-export HOME="${HOME:-/tmp}"
+# --user uid:gid 无 passwd 条目时容器默认把 HOME 解析成 `/`（非空、非未设——`${HOME:-x}` 式兜底
+# 不会触发，真跑实测确认），且 `/` 对非 root uid 不可写。无条件强制指到 tmpfs 可写目录，供
+# git --global config 落盘、也供 Claude Code 的 .claude 状态目录落盘（真跑抓出 EACCES mkdir
+# '/.claude' 才发现默认 HOME 是 `/` 而非"未设"，iteration-32）。
+export HOME=/tmp
+
+# 任意 host uid 对齐（--user host-uid:host-gid）在 alpine 里大概率没有 /etc/passwd 条目——Claude
+# Code Bash 工具/login shell 按 uid 查 passwd 找不到条目同样可能异常初始化。自助注册一条，幂等
+# （已有条目——如 root——则跳过）。
+current_uid="$(id -u)"
+if ! grep -q "^[^:]*:[^:]*:${current_uid}:" /etc/passwd 2>/dev/null; then
+  echo "sandbox:x:${current_uid}:$(id -g)::${HOME}:/bin/sh" >> /etc/passwd 2>/dev/null || true
+fi
 
 # 挂载进来的 .git 属主 uid 与容器 --user 对齐，但 git 仍可能报 dubious ownership → 显式放行。
 git config --global --add safe.directory '*' >/dev/null 2>&1 || true

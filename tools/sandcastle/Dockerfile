@@ -15,11 +15,25 @@ ARG WITH_CLAUDE_CODE=true
 
 RUN apk add --no-cache git
 
+# 支持任意运行时 uid（container.ts --user host-uid:host-gid，对齐 host worktree 属主，DESIGN
+# §7-item5）：alpine /etc/passwd 只登记内置系统用户，任意 host uid 大概率查不到条目——Claude
+# Code Bash 工具/login shell 初始化按 uid 查 passwd 取 HOME，查不到会解析出异常 HOME（G6 真跑，
+# iteration-32，抓出 "EACCES mkdir '/.claude'"，HOME 被解析成了根目录）。放宽权限供
+# pipeline-afk-run 运行时自助注册当前 uid 的 passwd 条目（幂等，已有条目如 root 则跳过）。
+RUN chmod o+w /etc/passwd /etc/group
+
 # agent 层：真部署装 Claude Code CLI（沙箱内真编码）；确定性测试用 false 跳过（无 token 也无从验证）。
 # 层顺序刻意把这步排在 pipeline.mjs/afk-run 脚本的 COPY **之前**——npm install -g 在本环境实测
 # 要 8 分钟，而 pipeline.mjs/脚本在开发迭代中几乎每次都变，若排在后面每次改都得重装一遍 npm 包，
 # Docker 层缓存就形同虚设。
 RUN if [ "$WITH_CLAUDE_CODE" = "true" ]; then npm install -g @anthropic-ai/claude-code; fi
+
+# Claude Code 的 Bash 工具要求 SHELL 指向真实 shell 二进制，alpine 默认两者皆无（SHELL 未设、
+# 也无 bash，仅 busybox ash）——G6 真跑（iteration-32，首次用有效 token 真跑到 agent 调用这一步）
+# 当场抓出 "No suitable shell found"，agent 因此完全无法执行任何命令，只能诚实报告卡住。
+# 放在 npm install 层之后（新增层不影响其缓存）、仅随 WITH_CLAUDE_CODE 分流（确定性镜像不受影响）。
+RUN if [ "$WITH_CLAUDE_CODE" = "true" ]; then apk add --no-cache bash; fi
+ENV SHELL=/bin/bash
 
 # pipeline 插件：目录布局复刻 host（bundle 的 pluginRoot=dist/../../.. 需 templates/ 在同源相对位置）
 WORKDIR /opt/pipeline

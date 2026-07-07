@@ -28,6 +28,14 @@
 > 约束真实成立）；该 token 被 Anthropic 真服务端拒绝（401，非本仓代码问题，未耗真实额度）——
 > **agent 编码这一步本身仍待有效凭证验证**，如实登记不虚报为通过。详见 docs/superiority-matrix.md
 > （逐维证据）+ docs/TEST-REALITY.md（真测审计）+ progress.md。
+>
+> **✅ iteration-32（G6 闭环：full CC-in-sandbox「agent 真编码成功」真跑验证通过）**：拿到有效
+> `sk-ant-oat01-...` token 后真跑到底——agent 真读 design_doc、真建文件、真 git commit，`git show`
+> 独立核验（非只信 agent 自报）；tap 记录 8 条真请求逐字确认 `upstream_base_url:
+> https://api.anthropic.com` + 真 `anthropic-beta: oauth-2025-04-20` + `response.status: 200`。
+> 真跑过程中抓出并修复 2 个此前从未被有效凭证触发过的沙箱环境真缺口（alpine 缺 bash/SHELL 未设
+> 导致 Bash 工具报错、容器任意 host-uid 无 passwd 条目导致 HOME 解析成不可写的 `/`）——**唯一
+> 剩余诚实缺口彻底清零**。详见 docs/TEST-REALITY.md G6 条目 + progress.md iteration-32。
 
 ---
 
@@ -41,7 +49,7 @@
       4 agents(#23)、sync/uninstall scrubber(#24)——全收编，热路径纯 bash 红线 + 真 fs/真 hook e2e
 - [x] **A3 dashboard（M3）**：server(#25) + 前端(#26) + SPA 服务(#26c) + doctor(#26b) + transition 单源(#25b)——全收编；config 写端点为可选增量
 - [x] **A4 channel + mem（M4）✅**：mem 跨 runtime 检索(#28) + channel 事件模型(#27) + channel 进程层 supervisor/真fork/SIGTERM/OS-liveness(#27b)
-- [x] **A5 automation / AFK Sandcastle（M5）✅**：队列+scheduler+lifecycle+L1→L3(#29) + server afk 数据端(#29d) + docker 全链真实现+真 git worktree/merge-back 冲突留现场(#29c) + **#29-wire 部署接线真跑**（iteration-30：`pipeline afk run` 真调 automation.runRound(createDockerRunChange) + 真容器 + 真 merge-back，sandcastle:test 镜像 e2e 验证）；仅剩 CLAUDE_CODE_OAUTH_TOKEN 门控的 full agent-in-sandbox 支线 honest-skip（需真部署凭证）
+- [x] **A5 automation / AFK Sandcastle（M5）✅**：队列+scheduler+lifecycle+L1→L3(#29) + server afk 数据端(#29d) + docker 全链真实现+真 git worktree/merge-back 冲突留现场(#29c) + **#29-wire 部署接线真跑**（iteration-30：`pipeline afk run` 真调 automation.runRound(createDockerRunChange) + 真容器 + 真 merge-back，sandcastle:test 镜像 e2e 验证）；full agent-in-sandbox 支线（含 CLAUDE_CODE_OAUTH_TOKEN 门控）已用有效凭证真跑验证通过（iteration-32）
 - [x] **A6 竞品缺口（M6）✅**：上下文压缩(B13)+auto-transition(B14)+Cursor 转正(B15)+Trellis parity(B16)+npx 上手(B17) 全收编
 - [x] **A7 tap 流量代理（M8）✅**：daemon+proxy+trace_store+护栏(#34) + traffic 数据端(#34d) + ws 重组/bedrock/本地 CA·TLS MITM(#34b，node v24 真跑) + 13 runtime clients(#34c) + **#34-wire 部署接线真跑**（iteration-30：daemon 接 CertificateAuthority.fromDir、launch.ts 真装配 detectTarget+env 注入、record 路径真接 bedrock 解码 + 全新 ws-proxy.ts 中继首次接活 ws-reconstruct、`pipeline tap start` 全新 CLI 入口）
 - [x] **A0 7-phase 状态机 + 三门 + CLI + 单文件分发 + 导入工具**（v0.1，iteration-0~9，oracle 0 不一致）

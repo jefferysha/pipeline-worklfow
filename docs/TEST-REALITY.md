@@ -78,10 +78,30 @@
   skill-tracker/interactive-gate 真跑（section10）间接覆盖 skill 触发链；「真跑一次完整 workflow skill
   编排」的 e2e 待 M3 dashboard/M5 automation 有编排驱动面后补（登记不清零）
 - ⚠️ G5：mem OpenCode runtime（SQLite）降级 no-op——与老仓一致，待原生依赖问题解决（诚实登记）
-- ⚠️ G6（iteration-31 登记）：full Claude-Code-in-sandbox 的「agent 真编码成功」这一步仍未验证——
-  代理路由/凭证注入/容器执行/tap 拦截录制这条链路已全部真跑证实（见 automation AFK 行），唯独
-  agent 拿到的具体 token 被 Anthropic 真服务端判无效（401），故 agent 侧真实产出正确 build 的
-  端到端验证仍待一个有效 CLAUDE_CODE_OAUTH_TOKEN 才能闭环，不静默算作已过
+- ✅ G6 已闭（iteration-32）：full Claude-Code-in-sandbox「agent 真编码成功」用有效
+  `CLAUDE_CODE_OAUTH_TOKEN` 真跑验证通过——一次性诊断脚本（未保留在仓库里）seed 一个带真实
+  `design_doc` 的 change → `createAutomation`+`createDockerRunChange`（L1，extraEnv 注入 token）
+  → agent 真读设计文档、真建 `HELLO.md`（内容逐字比对）、真 git commit `edf75df`，`git show` 独立
+  核验（不只信 agent 自报）；tap 记录 8 条真请求，`upstream_base_url: https://api.anthropic.com`
+  + 真 `claude-cli/2.1.202` UA + 真 `anthropic-beta: oauth-2025-04-20` + `response.status: 200`
+  逐字确认走代理不直连。**真跑过程中抓出 2 个此前从未被有效凭证触发过的沙箱环境真缺口**（均已修复，
+  见下）。
+  - **缺口 A**：alpine 镜像默认无 `bash`、`SHELL` 未设——Claude Code 的 Bash 工具报
+    `No suitable shell found`，agent 完全无法执行任何命令（诚实报告卡住，未伪造结果）。修复：
+    `tools/sandcastle/Dockerfile` agent 层追加 `apk add --no-cache bash` + `ENV SHELL=/bin/bash`
+    （置于 npm install 层之后，新增层不影响其 docker 缓存）。
+  - **缺口 B**：容器 `--user host-uid:host-gid`（对齐 host worktree 属主，DESIGN §7-item5）在
+    alpine `/etc/passwd` 里查不到条目时，`HOME` 默认解析成 `/`（**非空、非未设**——原
+    `export HOME="${HOME:-/tmp}"` 兜底判断的是"未设或空"，捕不到这种"设了但设错"的情况，真跑
+    实测才发现）；agent 建 `~/.claude` 时因此 `EACCES: mkdir '/.claude'`。修复：
+    `pipeline-afk-run.sh` 改为无条件 `export HOME=/tmp` + 按当前 uid 自助注册一条 `/etc/passwd`
+    条目（幂等，root 等已有条目则跳过；Dockerfile 配合 `chmod o+w /etc/passwd /etc/group` 放行
+    非 root uid 写入）。
+  - **凭证处理**：用户先给的字符串其实是 OAuth 登录流程的 authorization code（`code#state`
+    格式），非最终 token，直接当 bearer 用必然 401——用最简化对照实验（host 直跑、`env -i` 清空
+    环境、绕开 docker/tap/repo 代码）逐层排除后才定位到这是弄混了 OAuth 流程的两个产物而非本仓
+    代码/环境问题；真正的 `sk-ant-oat01-...` token 全程只作临时环境变量传递，未写入任何文件/
+    commit/memory，一次性诊断脚本与所有临时 host 仓库（含 tap 捕获的凭证痕迹）验证后已清理。
 
 **真实发现（真测试的产出，mock 从未暴露）**：① doctor 需 `deps.doctor` 探针束装配——集成层漏装即 exit 1（realDeps 已补真探针）；② init 对可选字段落盘字面 `null` 而非空串（忠实老内核 heredoc，oracle 双跑据此过）；③ import `--strip` 后再 import 返回 exit 0「无历史区」而非幂等哨兵 exit 1（两条路径语义不同，已各自钉死）；④（iteration-30，#34-wire）commander（^12.1.0）variadic `[args...]` 捕获里的裸 `--`：若前一个 token 是普通位置参数（不以 `-` 开头）会被静默吞掉，若前一个 token 是 `--foo` 形态的选项样 token 则保留——穷举受控 argv 数组验证过，是 commander 内部状态机的真实缺陷。真子进程 e2e（tap.integration.test.ts 最初用 in-process harness 跑）当场抓出：`pipeline tap start claude -- <command>`（无前置 flag）时 `--` 消失，wrapped command 的 argv 被误吞进 client 列表。修复：main.ts 在调用 commander 前从原始 `process.argv` 手工切出 `--` 之后的段（`passthroughArgv`），commander 自始至终看不到裸 `--`，绕开该缺陷；mock 测试（不走真 argv/真 commander）绝不会暴露这类第三方库边界情况。
 
