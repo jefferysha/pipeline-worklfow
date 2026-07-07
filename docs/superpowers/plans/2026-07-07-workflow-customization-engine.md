@@ -49,7 +49,7 @@ CLI 命令实现（spawn node 一次），不强行用纯 bash 手写 DAG 遍历
 - Produces: `WorkflowDef`/`StepDef`/`SkillRef`/`FieldRef`/`GuardConfig` 类型，供 Task 2
   （解析器）、Task 4（校验）、Task 6（guard 求值）消费。
 
-- [ ] **Step 1: 写失败测试（类型层面的编译期测试，用一个真构造的对象校验类型形状）**
+- [x] **Step 1: 写失败测试（类型层面的编译期测试，用一个真构造的对象校验类型形状）**
 
 ```ts
 // packages/kernel/src/workflow/types.test.ts
@@ -98,12 +98,12 @@ describe('WorkflowDef 类型形状', () => {
 })
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `cd /Users/a1234/Documents/code-manager/projects/pipeline-worklfow && npx vitest run packages/kernel/src/workflow/types.test.ts`
 Expected: FAIL — `Cannot find module './types.js'`
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 ```ts
 // packages/kernel/src/workflow/types.ts
@@ -156,12 +156,12 @@ export interface WorkflowDef {
 }
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `npx vitest run packages/kernel/src/workflow/types.test.ts`
 Expected: PASS
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add packages/kernel/src/workflow/types.ts packages/kernel/src/workflow/types.test.ts
