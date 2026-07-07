@@ -309,6 +309,17 @@ describe('GET /api/config —— M3 config 数据端（Settings 矩阵 tab，本
   })
 })
 
+describe('GET /api/skills/registry —— 全部已注册 skill 列表', () => {
+  it('返回本仓真实 skills 目录 + EXTERNAL-SKILLS.md 合并列表', async () => {
+    const h = await start()
+    const r = await reqGet(h.port, '/api/skills/registry')
+    expect(r.status).toBe(200)
+    const body = r.json<{ skills: string[] }>()
+    expect(body.skills).toContain('pipeline-open') // 本仓真实存在的本地 skill 目录
+    expect(body.skills.length).toBeGreaterThan(14) // 必须包含外部登记，不能只有本地 14 个
+  })
+})
+
 describe('POST /api/config/mandatory-skills —— M3 config 写端点（同 B5 token 鉴权模式）', () => {
   it('无 token → 401（与 transition 端点同一鉴权模式）', async () => {
     const h = await startWithConfig()

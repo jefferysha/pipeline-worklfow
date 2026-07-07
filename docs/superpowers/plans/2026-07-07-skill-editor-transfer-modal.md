@@ -46,7 +46,7 @@
 - Produces: `listAllSkills(repoRoot: string): string[]`（去重、排序后的 token 列表），
   供 server.ts 路由和 Task 2 前端消费。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```ts
 // packages/server/src/skillsRegistry.test.ts
@@ -86,12 +86,12 @@ describe('listAllSkills', () => {
 })
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `cd /Users/a1234/Documents/code-manager/projects/pipeline-worklfow && npx vitest run packages/server/src/skillsRegistry.test.ts`
 Expected: FAIL — `Cannot find module './skillsRegistry.js'`
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 ```ts
 // packages/server/src/skillsRegistry.ts
@@ -131,12 +131,12 @@ export function listAllSkills(repoRoot: string): string[] {
 }
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `npx vitest run packages/server/src/skillsRegistry.test.ts`
 Expected: PASS（2 例）
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add packages/server/src/skillsRegistry.ts packages/server/src/skillsRegistry.test.ts
@@ -155,7 +155,7 @@ git commit -m "feat(server): listAllSkills 合并本地+外部 skill 登记"
 - Consumes: Task 1 的 `listAllSkills(repoRoot: string): string[]`。
 - Produces: `GET /api/skills/registry` 返回 `{ skills: string[] }`，供 Task 3 前端消费。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```ts
 describe('GET /api/skills/registry —— 全部已注册 skill 列表', () => {
@@ -170,12 +170,12 @@ describe('GET /api/skills/registry —— 全部已注册 skill 列表', () => {
 })
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `npx vitest run packages/server/src/server.test.ts -t "skills/registry"`
 Expected: FAIL — 404
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 `server.ts` import 加 `import { listAllSkills } from './skillsRegistry.js'`。`handleGet` 分派
 表里（`/api/config` 分支附近）加：
@@ -189,12 +189,12 @@ if (path === '/api/skills/registry') {
 因为 skill 登记是全局的、不属于任何单个 project。这个只读端点不需要鉴权，同 `/api/config`
 现状。）
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `npx vitest run packages/server/src/server.test.ts -t "skills/registry"`
 Expected: PASS
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add packages/server/src/server.ts packages/server/src/server.test.ts
@@ -214,7 +214,7 @@ git commit -m "feat(server): GET /api/skills/registry 路由"
 - Produces: `<SkillTransferModal selected={string[]} onSave={(skills: string[]) => Promise<void>} onCancel={() => void} />`，
   供 Task 4 接线进 `SettingsView.tsx`。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```tsx
 // packages/dashboard-app/src/settings/SkillTransferModal.test.tsx
@@ -266,12 +266,12 @@ describe('SkillTransferModal', () => {
 })
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `cd /Users/a1234/Documents/code-manager/projects/pipeline-worklfow && npm run test:web -- SkillTransferModal`
 Expected: FAIL — `Cannot find module './SkillTransferModal'`
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 ```tsx
 // packages/dashboard-app/src/settings/SkillTransferModal.tsx
@@ -335,12 +335,12 @@ export function SkillTransferModal({ selected, onSave, onCancel }: SkillTransfer
 }
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `npm run test:web -- SkillTransferModal`
 Expected: PASS（2 例）
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add packages/dashboard-app/src/settings/SkillTransferModal.tsx packages/dashboard-app/src/settings/SkillTransferModal.test.tsx
@@ -359,7 +359,7 @@ git commit -m "feat(dashboard): SkillTransferModal 双栏穿梭框组件"
 - Consumes: Task 3 的 `<SkillTransferModal />`；现有 `saveCell`（`SettingsView.tsx:83`）的
   POST 逻辑不变，只改它的调用来源（从"解析 draft 文本框"改成"接收 modal 传回的数组"）。
 
-- [ ] **Step 1: 更新测试**
+- [x] **Step 1: 更新测试**
 
 `SettingsView.test.tsx` 里原本断言"点编辑出现文本框"的用例（约第 173-197 行附近）改成
 断言"点编辑出现弹窗、弹窗内有 skill-available/skill-chosen"：
@@ -379,12 +379,12 @@ it('点编辑 → 弹窗双栏穿梭框出现', async () => {
 不变（因为 `POST /api/config/mandatory-skills` 契约没变），只是触发保存的交互从"改文本框
 再点保存"换成"走 modal 再点保存"。
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `npm run test:web -- SettingsView`
 Expected: FAIL（旧的"文本框"断言找不到元素）
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 在 `SettingsView.tsx` 里 import `SkillTransferModal`；把 192-254 行的
 `isEditing ? (<input .../>) : (<ul>...<button>编辑</button></ul>)` 三元分支，改成
@@ -394,12 +394,12 @@ Expected: FAIL（旧的"文本框"断言找不到元素）
 从 `draft` 字符串 `split(',')` 解析——`draft`/`startEdit`/相关 state 可以删除（不再需要文本框
 草稿状态）。
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `npm run test:web -- SettingsView`
 Expected: PASS
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add packages/dashboard-app/src/settings/SettingsView.tsx packages/dashboard-app/src/settings/SettingsView.test.tsx
