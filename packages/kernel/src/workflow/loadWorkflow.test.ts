@@ -20,6 +20,54 @@ describe('loadWorkflow', () => {
     expect(loadWorkflow(root, 'does-not-exist')).toBeNull()
   })
 
+  it('GOAL E5：非法 workflow（skill 依赖成环）→ 保存时校验的第二消费点，loadWorkflow fail-loud 抛错而非静默返回', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'wf-load-invalid-'))
+    await mkdir(join(root, '.pipeline', 'workflows'), { recursive: true })
+    await writeFile(
+      join(root, '.pipeline', 'workflows', 'cyclic.yaml'),
+      `name: cyclic
+steps:
+  - id: s1
+    label: x
+    gate: null
+    skills:
+      - id: a
+        depends_on: [b]
+      - id: b
+        depends_on: [a]
+    inputs: []
+    outputs: []
+    guards: []
+    transitions: []
+`,
+      'utf8',
+    )
+    expect(() => loadWorkflow(root, 'cyclic')).toThrow(/循环依赖/)
+  })
+
+  it('GOAL E5：非法 workflow（transitions.to 指向不存在的 step）→ loadWorkflow 抛错', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'wf-load-invalid2-'))
+    await mkdir(join(root, '.pipeline', 'workflows'), { recursive: true })
+    await writeFile(
+      join(root, '.pipeline', 'workflows', 'dangling.yaml'),
+      `name: dangling
+steps:
+  - id: s1
+    label: x
+    gate: null
+    skills: []
+    inputs: []
+    outputs: []
+    guards: []
+    transitions:
+      - event: complete
+        to: does-not-exist
+`,
+      'utf8',
+    )
+    expect(() => loadWorkflow(root, 'dangling')).toThrow(/does-not-exist/)
+  })
+
   it('真实 templates/workflows/default.yaml 文件 → 解析成功，7 个步骤，包括 tasks-at-least guard', async () => {
     // Find the repo root and read the real default.yaml template file
     const __dirname = dirname(fileURLToPath(import.meta.url))

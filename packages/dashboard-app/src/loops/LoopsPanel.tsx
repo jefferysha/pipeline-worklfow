@@ -1,6 +1,15 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { getToken } from '../api/client'
+import { useT } from '../i18n'
 
+/**
+ * 错误可见性 + i18n（whole-branch review 抓出的两个真实回归，一并修复）：
+ * 1. 初始快照 fetch 此前没有 `r.ok` 检查——server 对错误统一返回 JSON 信封（`{ok:false,error}`），
+ *    502/500 时 `r.json()` 会成功 resolve 而不是 reject，`.catch` 永远不触发，`snapshot.rows`
+ *    在 undefined 快照上取值直接抛错、无 ErrorBoundary 兜底会把整个 App 白屏。同 AfkWorkbench.tsx
+ *    的 readErrorDetail 模式。
+ * 2. 本文件此前完全不走 `t()`，切到英文后一级导航是英文、本视图内容仍是中文——现在全部经 i18n。
+ */
 interface ReadinessScore { score: number; band: string }
 interface BudgetStatus { breaker: 'ok' | 'warn' | 'tripped'; remaining: number | null }
 interface LoopRow {
@@ -8,21 +17,46 @@ interface LoopRow {
   readiness: ReadinessScore; budget: BudgetStatus
 }
 interface LoopsSnapshot { generated_at: string; rows: LoopRow[] }
+interface ErrorBody {
+  error?: string
+  errors?: string[]
+}
 
 const NEXT_LEVEL: Record<LoopRow['autonomy_level'], 'L2' | 'L3' | null> = { L1: 'L2', L2: 'L3', L3: null }
 
+/** 非 2xx 响应尽量读出 server 的 { error } 或 { errors } 文案；没有 JSON 体就吞掉，回落调用方的通用文案。 */
+async function readErrorDetail(res: Response): Promise<string> {
+  try {
+    const body = (await res.json()) as ErrorBody
+    if (typeof body?.error === 'string') return body.error
+    if (Array.isArray(body?.errors) && body.errors.length > 0) return body.errors.join('; ')
+  } catch {
+    /* 无 JSON 体 */
+  }
+  return ''
+}
+
 export function LoopsPanel(): JSX.Element {
+  const { t } = useT()
   const [snapshot, setSnapshot] = useState<LoopsSnapshot | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [expanded, setExpanded] = useState<string | null>(null)
   const [promoteError, setPromoteError] = useState<string | null>(null)
 
-  useEffect(() => {
+  const loadSnapshot = useCallback(() => {
     fetch('/api/loops/snapshot', { headers: { Accept: 'application/json' } })
-      .then((r) => r.json() as Promise<LoopsSnapshot>)
-      .then(setSnapshot)
-      .catch((err) => setError(`加载失败: ${err instanceof Error ? err.message : '网络错误'}`))
-  }, [])
+      .then(async (r) => {
+        if (!r.ok) throw new Error((await readErrorDetail(r)) || `(${r.status})`)
+        return r.json() as Promise<LoopsSnapshot>
+      })
+      .then((body) => {
+        setSnapshot(body)
+        setError(null)
+      })
+      .catch((err: unknown) => setError(t('loops.load_error', { msg: err instanceof Error ? err.message : t('loops.network_error') })))
+  }, [t])
+
+  useEffect(() => loadSnapshot(), [loadSnapshot])
 
   async function promote(row: LoopRow): Promise<void> {
     const target = NEXT_LEVEL[row.autonomy_level]
@@ -35,21 +69,33 @@ export function LoopsPanel(): JSX.Element {
         body: JSON.stringify({ root: row.root, id: row.id, target }),
       })
       if (!res.ok) {
-        setPromoteError('升档失败')
+        const detail = await readErrorDetail(res)
+        setPromoteError(detail ? t('loops.promote_fail', { msg: detail }) : t('loops.promote_fail_status', { status: res.status }))
+        return
       }
+      loadSnapshot()
     } catch (err) {
-      setPromoteError(`升档失败: ${err instanceof Error ? err.message : '网络错误'}`)
+      setPromoteError(t('loops.promote_fail', { msg: err instanceof Error ? err.message : t('loops.network_error') }))
     }
   }
 
   if (error) return <p className="subtitle">{error}</p>
-  if (!snapshot) return <p className="subtitle">加载中…</p>
-  if (snapshot.rows.length === 0) return <p className="subtitle">没有已注册的 loop</p>
+  if (!snapshot) return <p className="subtitle">{t('common.loading')}</p>
+  if (snapshot.rows.length === 0) return <p className="subtitle">{t('loops.empty')}</p>
+
+  const breakerLabel = (breaker: BudgetStatus['breaker']): string =>
+    breaker === 'ok' ? t('loops.breaker_ok') : breaker === 'warn' ? t('loops.breaker_warn') : t('loops.breaker_tripped')
 
   return (
     <table className="loops-table">
       <thead>
-        <tr><th>loop</th><th>档位</th><th>就绪分</th><th>预算</th><th>状态</th></tr>
+        <tr>
+          <th>{t('loops.col_loop')}</th>
+          <th>{t('loops.col_level')}</th>
+          <th>{t('loops.col_readiness')}</th>
+          <th>{t('loops.col_budget')}</th>
+          <th>{t('loops.col_status')}</th>
+        </tr>
       </thead>
       <tbody>
         {snapshot.rows.flatMap((row) => {
@@ -59,16 +105,16 @@ export function LoopsPanel(): JSX.Element {
               <td>{row.autonomy_level}</td>
               <td>{row.readiness.score}</td>
               <td>{row.budget.remaining ?? '—'}</td>
-              <td>{row.budget.breaker === 'ok' ? '🟢 OK' : row.budget.breaker === 'warn' ? '🟡 预警' : '🔴 熔断'}</td>
+              <td>{breakerLabel(row.budget.breaker)}</td>
             </tr>
           )
           const detailRow = expanded === row.id ? (
             <tr key={`${row.root}:${row.id}:detail`}>
               <td colSpan={5}>
-                <p>就绪分带：{row.readiness.band}</p>
+                <p>{t('loops.readiness_band', { band: row.readiness.band })}</p>
                 {promoteError && <p style={{ color: 'red' }}>{promoteError}</p>}
                 {NEXT_LEVEL[row.autonomy_level] && (
-                  <button onClick={() => promote(row)}>升档 → {NEXT_LEVEL[row.autonomy_level]}</button>
+                  <button onClick={() => promote(row)}>{t('loops.promote_to', { level: NEXT_LEVEL[row.autonomy_level] })}</button>
                 )}
               </td>
             </tr>

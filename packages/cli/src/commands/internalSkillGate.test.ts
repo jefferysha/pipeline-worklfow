@@ -45,6 +45,10 @@ describe('cmdInternalSkillGate', () => {
   describe('真实 workflow 定义文件（临时目录，同 loadWorkflow.test.ts 手法）', () => {
     let root: string
 
+    // s1 声明一条到 s2 的 transition，仅为满足 validateWorkflow（Task 3，GOAL E5：非终止 step
+    // 必须声明 transitions，否则视为走进死路的配置错误）——本文件里没有一条测试调用
+    // cmdTransition 或读取 step.transitions，纯粹是 loadWorkflow 现在会在读入时校验整份
+    // workflow，故 fixture 本身必须整体合法，与本文件测的 skill-DAG 判定逻辑无关。
     const WF = `name: custom1
 steps:
   - id: s1
@@ -60,7 +64,9 @@ steps:
     inputs: []
     outputs: []
     guards: []
-    transitions: []
+    transitions:
+      - event: complete
+        to: s2
   - id: s2
     label: step-two
     gate: null

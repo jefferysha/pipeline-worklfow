@@ -40,13 +40,21 @@ function runHook(script: string, payload: unknown, extraEnv: Record<string, stri
   return { code: res.status ?? -1, stdout: res.stdout ?? '', stderr: res.stderr ?? '' }
 }
 
-/** 一个最小单 step workflow：s1 声明一个依赖 'a' 的 skill 'needs-a'（无出边，本文件不测 transition）。 */
+/** 一个最小单 step workflow：s1 声明一个依赖同 step 内 'a' 的 skill 'needs-a'（无出边，本文件
+ *  不测 transition）。'a' 必须作为 s1 自己的 skills 列表里的独立条目声明（即便它自己没有
+ *  depends_on）——`validateWorkflow`（Task 3，GOAL E5）硬性要求 depends_on 只能引用同一个
+ *  step 内已声明的 skill id，此前这里省略了 'a' 的独立声明，`loadWorkflow` 尚未接入校验时
+ *  这个 fixture 能"恰好跑通"（isSkillUnlocked 只关心 completedSinceStepEntry 集合里有没有
+ *  'a'，从不检查 'a' 是否被声明），接入校验后会被真实拒绝为悬空引用——修正为同
+ *  parse.test.ts 的合法写法，不改变本文件任何一条断言（都只查询 'needs-a'，从不查询 'a'
+ *  自身是否解锁）。 */
 const WF = `name: skgwf
 steps:
   - id: s1
     label: step-one
     gate: null
     skills:
+      - id: a
       - id: needs-a
         depends_on: [a]
     inputs: []
@@ -66,18 +74,15 @@ describe('真实 e2e —— hooks/gate.sh 委托 internal-skill-gate（Task 9）
     await rm(h.cwd, { recursive: true, force: true })
   })
 
-  /** 真建 change + 真落 workflow 定义文件 + 真设 workflow 字段 + 把 phase 摆到自定义起始 step
-   *  （同 transition-custom-workflow.integration.test.ts 的 setupCustomChange 手法：CLI set phase
-   *  会被默认相位枚举挡下，故用直接改写 .pipeline.yaml 的 phase 行来摆放自定义 step）。 */
+  /** 真落 workflow 定义文件 + 真跑 `init --workflow` 把 change 直接摆到自定义 workflow 的
+   *  首个 step 上（whole-branch review 补的 init --workflow，见
+   *  init-workflow.integration.test.ts——此前这里手改 .pipeline.yaml 的 phase 行，因为
+   *  `set phase` 被默认 7 相位枚举挡下，现在有了一条不必绕开它的路）。 */
   async function setupCustomChange(): Promise<void> {
-    expect(await h.run(['init', CHANGE, '--track', 'backend', '--preset', 'full'])).toBe(0)
     const wfDir = join(h.cwd, '.pipeline', 'workflows')
     await mkdir(wfDir, { recursive: true })
     await writeFile(join(wfDir, 'skgwf.yaml'), WF, 'utf8')
-    expect(await h.run(['set', CHANGE, 'workflow', 'skgwf'])).toBe(0)
-    const statePath = join(h.cwd, 'openspec', 'changes', CHANGE, '.pipeline.yaml')
-    const content = await readFile(statePath, 'utf8')
-    await writeFile(statePath, content.replace(/^phase: .*$/m, 'phase: s1'), 'utf8')
+    expect(await h.run(['init', CHANGE, '--track', 'backend', '--preset', 'full', '--workflow', 'skgwf'])).toBe(0)
   }
 
   test('init 落地的 change 缺省 workflow: default（回归锚，防 gate.sh 的 yget 解析假设漂移）', async () => {

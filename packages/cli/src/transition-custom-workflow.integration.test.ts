@@ -11,11 +11,12 @@
  *   2. 非 default workflow：当前 step 的 nonempty-output guard 不满足 → 真拒绝（exit 非 0），phase 不变。
  *   3. 非 default workflow：event 名不在当前 step 的 transitions 里 → 真拒绝，报错点名该 step 实际支持的 event。
  *
- * 说明：自定义 workflow 的起始 step id（如 `s1`）不是 manifest.phases 里的合法 phase，`pipeline set
- * phase s1` 会被 phase 枚举挡下（set 只认默认 7 相位）——这正是「自定义 workflow 目前如何进入其首个
- * step」尚缺的接线（本计划之外的后续任务，见 task-8 brief）。因此本测试用直接改写 .pipeline.yaml 的
- * phase 行来把 change 摆到自定义 step 上（合法的测试夹具搭建手法，同 harness 直接写 fs 的既有做法），
- * 而被验证的转换本身（transition 真改写 phase）全程走真 CLI。
+ * 起始 step 的落点（whole-branch review 补的 `init --workflow`，见
+ * init-workflow.integration.test.ts）：本文件改用真 `pipeline init --workflow` 把 change 摆到
+ * 自定义 workflow 的首个 step 上（此前这里手改 .pipeline.yaml 的 phase 行来绕开 `set phase`
+ * 只认 manifest 7 相位枚举这道坎——那道坎本身没变，只是现在有了一条不必绕开它的路：init 直接
+ * 调 kernel StateStore.setMany 落 phase，不经过 CLI `set` 子命令那层枚举校验），本文件从起点
+ * 到被验证的转换全程走真 CLI，不再有任何手工改写状态文件的步骤。
  */
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
@@ -86,20 +87,13 @@ describe('真实 e2e —— transition 非 default workflow 的真实 step 间�
     await rm(h.cwd, { recursive: true, force: true })
   })
 
-  /** 真建 change + 真落 workflow 定义文件 + 真设 workflow 字段 + 把 phase 摆到自定义起始 step。 */
-  async function setupCustomChange(workflowName: string, workflowYaml: string, startStep: string): Promise<void> {
-    // 1. 真跑 init 建 change（phase=open, workflow=default）
-    expect(await h.run(['init', CHANGE, '--track', 'backend', '--preset', 'full'])).toBe(0)
-    // 2. 真在仓库根 .pipeline/workflows/<name>.yaml 落一个合法 workflow 定义
+  /** 真在仓库根落一份 workflow 定义文件，再真跑 `init --workflow` 把 change 直接摆到该
+   *  workflow 的首个 step 上——一步到位，不再需要 set workflow + 手改 phase 行两步。 */
+  async function setupCustomChange(workflowName: string, workflowYaml: string): Promise<void> {
     const wfDir = join(h.cwd, '.pipeline', 'workflows')
     await mkdir(wfDir, { recursive: true })
     await writeFile(join(wfDir, `${workflowName}.yaml`), workflowYaml, 'utf8')
-    // 3. 真跑 set 把 change 的 workflow 字段指到这个自定义 workflow
-    expect(await h.run(['set', CHANGE, 'workflow', workflowName])).toBe(0)
-    // 4. 把 phase 摆到自定义起始 step（CLI set phase 被默认相位枚举挡下，见文件头说明）
-    const statePath = join(h.cwd, 'openspec', 'changes', CHANGE, '.pipeline.yaml')
-    const content = await readFile(statePath, 'utf8')
-    await writeFile(statePath, content.replace(/^phase: .*$/m, `phase: ${startStep}`), 'utf8')
+    expect(await h.run(['init', CHANGE, '--track', 'backend', '--preset', 'full', '--workflow', workflowName])).toBe(0)
   }
 
   async function historyLines(): Promise<HistLine[]> {
@@ -109,7 +103,7 @@ describe('真实 e2e —— transition 非 default workflow 的真实 step 间�
   }
 
   test('按 event 名查当前 step 的 transitions，真改写 phase 到目标 step + 真 append transition 历史', async () => {
-    await setupCustomChange('twostep', TWO_STEP_WF, 's1')
+    await setupCustomChange('twostep', TWO_STEP_WF)
     // 起点核验：phase 确在 s1
     expect(await h.read(CHANGE)).toMatch(/^phase: s1$/m)
 
@@ -128,7 +122,7 @@ describe('真实 e2e —— transition 非 default workflow 的真实 step 间�
   })
 
   test('当前 step 的 nonempty-output guard 不满足 → 真拒绝（exit 非 0），phase 不变', async () => {
-    await setupCustomChange('guarded', GUARDED_WF, 's1')
+    await setupCustomChange('guarded', GUARDED_WF)
     expect(await h.read(CHANGE)).toMatch(/^phase: s1$/m)
 
     // design_doc 初始未设 → s1 的 nonempty-output guard 应挡下这次转换
@@ -142,7 +136,7 @@ describe('真实 e2e —— transition 非 default workflow 的真实 step 间�
   })
 
   test('event 名不在当前 step 的 transitions 里 → 真拒绝，报错点名该 step 实际支持哪些 event', async () => {
-    await setupCustomChange('twostep', TWO_STEP_WF, 's1')
+    await setupCustomChange('twostep', TWO_STEP_WF)
 
     const code = await h.run(['transition', CHANGE, 'bogus-event'])
     expect(code, `未支持的 event 应非 0 退出，err=${h.err.join('\n')}`).not.toBe(0)

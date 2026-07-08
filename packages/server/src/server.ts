@@ -453,7 +453,11 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
         return sendJson(res, 404, { ok: false, error: 'root 未在机器级项目注册表中' })
       }
       const result = applyLevelChange(root, id, target, { now: new Date(clock()), confirm: true }, REAL_GRADUATION_FS)
-      return sendJson(res, 200, result)
+      // exitCode 0 = 已应用 或 合法 noop（如目标档已达到，dry-run 语义）；2 = 逻辑拒绝（跨级/
+      // 就绪未达标）；3 = 载入/未知 loop/写回错误——只有前者是「请求本身处理成功」，非 0 必须
+      // 映射非 2xx，否则前端只看 res.ok 会把一次真实拒绝误当成功（同 cancel/retry 两个兄弟
+      // 端点的 `result.ok ? 200 : 400` 处置一致，这里字段名是 exitCode 不是 ok，语义对齐）。
+      return sendJson(res, result.exitCode === 0 ? 200 : 400, result)
     }
 
     // ── afk-workbench Task 4：POST /api/afk/:name/cancel —— 取消运行中的 automation 任务
@@ -516,8 +520,11 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
       return sendJson(res, 400, { ok: false, error: 'root / event 须为字符串' })
     }
     // 信任锚：root 必须是已注册 Project（挡路径穿越到任意目录）——对位老仓 resolve_change_worktree。
-    const trusted = new Set(registry().map((r) => resolvePath(r)))
-    if (!trusted.has(resolvePath(root))) {
+    // 统一用 dedupeRoots 规范化（同下面四个写端点），而不是本地重新拼一遍 Set——inline 版本
+    // 对注册表里的空字符串条目会解析成 resolvePath('')=cwd 当一个"可信"条目，dedupeRoots 已
+    // 显式过滤掉空条目（whole-branch review 抓出的真实不一致，两者对合法注册表行为等价，
+    // 仅在这个边界输入上有差异）。
+    if (!dedupeRoots(registry()).includes(resolvePath(root))) {
       return sendJson(res, 404, { ok: false, error: 'root 非已知 Project（未注册或不可信）' })
     }
     const name = decodeURIComponent(mTr[1]!)

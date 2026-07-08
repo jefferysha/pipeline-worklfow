@@ -579,6 +579,36 @@ describe('POST /api/loops/level —— 升降档写回', () => {
       expect(r.status).toBe(400)
     }
   })
+
+  it('graduation 逻辑拒绝（跨级 L1→L3）→ 400 而非 200，body.applied=false（whole-branch review 抓出的真实回归：此前不管 applyLevelChange 是否真的应用了改档，一律 200，前端只看 res.ok 会把一次真实拒绝误当成功）', async () => {
+    const { mkdir, writeFile, readFile: rf } = await import('node:fs/promises')
+    const h = await start()
+    await mkdir(join(h.root, '.pipeline'), { recursive: true })
+    await writeFile(join(h.root, '.pipeline', 'loops.yaml'), SEED_LOOP_YAML_READY_FOR_L2, 'utf8')
+    await writeFile(join(h.root, 'LOOP.md'), '# LOOP.md\n\n### `build-loop` — build-loop 协议\n\n- goal：见 registry\n', 'utf8')
+    await mkdir(join(h.root, '.superpowers', 'loops'), { recursive: true })
+    await writeFile(
+      join(h.root, '.superpowers', 'loops', 'progress.md'),
+      '| ts | loop | action | inflight | note |\n|----|------|--------|----------|------|\n| 2026-07-06T23:30 | build-loop | run | 0 | result=ok change=build-loop-3 |\n',
+      'utf8',
+    )
+
+    // L1 直接跳 L3（合法目标档字符串，但 planLevelChange 判定 reject-cross-level，绝不允许一步跨级）
+    const r = await reqPost(
+      h.port,
+      '/api/loops/level',
+      { root: h.root, id: 'build-loop', target: 'L3' },
+      { headers: { Authorization: `Bearer ${h.token}` } },
+    )
+    expect(r.status).toBe(400)
+    const body = r.json<{ applied: boolean; exitCode: number; errors: string[] }>()
+    expect(body.applied).toBe(false)
+    expect(body.exitCode).toBe(2)
+    expect(body.errors.length).toBeGreaterThan(0)
+    // 真没改盘：loops.yaml 仍是原始 L1，不是误应用后的 L3
+    const text = await rf(join(h.root, '.pipeline', 'loops.yaml'), 'utf8')
+    expect(text).toContain('autonomy_level: L1')
+  })
 })
 
 describe('POST /api/afk/:name/cancel —— 取消运行中的 automation 任务（afk-workbench Task 4）', () => {

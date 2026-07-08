@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useT } from '../i18n'
 
 export interface SkillTransferModalProps {
   selected: string[]
@@ -8,7 +9,23 @@ export interface SkillTransferModalProps {
 
 const DND_MIME = 'application/x-pipeline-skill'
 
+interface ErrorBody {
+  error?: string
+}
+
+/** 非 2xx 响应尽量读出 server 的 { error } 文案；没有 JSON 体就吞掉，回落调用方的通用文案。 */
+async function readErrorDetail(res: Response): Promise<string> {
+  try {
+    const body = (await res.json()) as ErrorBody
+    if (typeof body?.error === 'string') return body.error
+  } catch {
+    /* 无 JSON 体 */
+  }
+  return ''
+}
+
 export function SkillTransferModal({ selected, onSave, onCancel }: SkillTransferModalProps): JSX.Element {
+  const { t } = useT()
   const [all, setAll] = useState<string[]>([])
   const [chosen, setChosen] = useState<string[]>(selected)
   const [query, setQuery] = useState('')
@@ -16,10 +33,19 @@ export function SkillTransferModal({ selected, onSave, onCancel }: SkillTransfer
 
   useEffect(() => {
     fetch('/api/skills/registry', { headers: { Accept: 'application/json' } })
-      .then((r) => r.json() as Promise<{ skills: string[] }>)
+      .then(async (r) => {
+        // r.ok 检查必须在 r.json() 之前（whole-branch review 抓出的真实回归）：server 对错误
+        // 统一返回 JSON 信封（{ok:false,error}），非 2xx 时 r.json() 依然会成功 resolve 而不是
+        // reject，若不先查 r.ok，.catch() 永远不会触发，本组件会静默拿到 undefined 的 skills
+        // 字段，随后 `all.filter(...)` 在下一次 render 直接抛错——无 ErrorBoundary 兜底会白屏。
+        if (!r.ok) throw new Error((await readErrorDetail(r)) || t('skill_transfer.load_error_status', { status: r.status }))
+        return r.json() as Promise<{ skills: string[] }>
+      })
       .then((body) => setAll(body.skills))
-      .catch(() => setError('Failed to load skills'))
-  }, [])
+      .catch((err: unknown) =>
+        setError(t('skill_transfer.load_error', { msg: err instanceof Error ? err.message : t('skill_transfer.network_error') })),
+      )
+  }, [t])
 
   const available = all.filter((s) => !chosen.includes(s) && s.toLowerCase().includes(query.toLowerCase()))
 
@@ -36,7 +62,7 @@ export function SkillTransferModal({ selected, onSave, onCancel }: SkillTransfer
 
   return (
     <div className="modal" role="dialog">
-      <input placeholder="搜索…" value={query} onChange={(e) => setQuery(e.target.value)} />
+      <input placeholder={t('skill_transfer.search_placeholder')} value={query} onChange={(e) => setQuery(e.target.value)} />
       <div className="split">
         <div data-testid="skill-available" onDragOver={(e) => e.preventDefault()} onDrop={onDropToAvailable}>
           {error && <div data-testid="skill-error" style={{ color: 'red' }}>{error}</div>}
@@ -54,8 +80,8 @@ export function SkillTransferModal({ selected, onSave, onCancel }: SkillTransfer
           ))}
         </div>
       </div>
-      <button onClick={() => onSave(chosen)}>保存</button>
-      <button onClick={onCancel}>取消</button>
+      <button onClick={() => onSave(chosen)}>{t('skill_transfer.save')}</button>
+      <button onClick={onCancel}>{t('skill_transfer.cancel')}</button>
     </div>
   )
 }

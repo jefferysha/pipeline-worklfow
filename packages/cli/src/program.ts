@@ -58,6 +58,7 @@ export function buildProgram(deps: CliDeps): Command {
     .requiredOption('--track <track>', 'chat | pm | frontend | backend')
     .requiredOption('--preset <preset>', 'full | hotfix | tweak')
     .option('--user <user>', 'created_by')
+    .option('--workflow <workflow>', '自定义 workflow 名（.pipeline/workflows/<name>.yaml），缺省 default')
     .action(async (name: string, opts: InitCmdOpts) => bail(await cmdInit(deps, name, opts)))
 
   program

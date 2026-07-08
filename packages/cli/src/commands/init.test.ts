@@ -67,3 +67,33 @@ describe('init —— stdout 空 / [INIT] 走 stderr；0/1（oracle 实测回写
     expect(deps.store.init.calls).toHaveLength(0)
   })
 })
+
+/**
+ * --workflow（whole-branch review 补：此前没有支持的命令能把 change 摆到自定义 workflow 的
+ * 首个 step 上）。真实 fs 全链路（workflow 文件真存在 + steps[0] 真读出）在
+ * init-workflow.integration.test.ts；这里 mock 层只覆盖不需要真文件系统的分支：省略/default
+ * 零回归、找不到 workflow fail-loud 且不落盘。
+ */
+describe('init --workflow（GOAL E，自定义 workflow 首个 step 落点）', () => {
+  test('省略 --workflow：不触发任何 setMany 调用（零回归，同此前行为逐字一致）', async () => {
+    const deps = makeDeps()
+    const code = await cmdInit(deps, 'demo', { track: 'backend', preset: 'full' })
+    expect(code).toBe(0)
+    expect(deps.store.setMany.calls).toHaveLength(0)
+  })
+
+  test('显式 --workflow default：等同省略，不触发 setMany（default 走 store.init 自身的老路径）', async () => {
+    const deps = makeDeps()
+    const code = await cmdInit(deps, 'demo', { track: 'backend', preset: 'full', workflow: 'default' })
+    expect(code).toBe(0)
+    expect(deps.store.setMany.calls).toHaveLength(0)
+  })
+
+  test('--workflow 指向不存在的文件：exit 1，store.init 完全不被调用（先校验后落盘，不留半成品 change）', async () => {
+    const deps = makeDeps()
+    const code = await cmdInit(deps, 'demo', { track: 'backend', preset: 'full', workflow: 'ghost' })
+    expect(code).toBe(1)
+    expect(deps.store.init.calls).toHaveLength(0)
+    expect(deps.errLines.join('\n')).toContain("workflow 'ghost' 未找到")
+  })
+})
