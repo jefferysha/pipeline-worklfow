@@ -166,9 +166,15 @@ MAX=0 TRACK=""
 [ -z "$TRACK" ] && exit 0
 
 # ── 组装注入体：相位 + Track + 推荐/强制 skill + breadcrumb 行动提示 ──
-# EFF_PHASE：有活跃 change 用其相位，否则视作待立项 open；白名单化以安全用于间接变量名
+# EFF_PHASE：有活跃 change 用其相位，否则视作待立项 open；安全字符集校验以安全用于间接变量名
+# BREADCRUMB_${EFF_PHASE} 等——不再局限于 7 个固定值（自定义 workflow 的 step id 需放行），
+# 只拒绝含非标识符字符（空格/$/反引号/斜杠/尖括号等）的值，防间接变量名注入 + breadcrumb 注入文本被跳出
 EFF_PHASE="${CHANGE_PHASE:-open}"
-case "$EFF_PHASE" in open|explore|spec|build|verify|ship|archive) ;; *) EFF_PHASE=open ;; esac
+case "$EFF_PHASE" in
+  *[!a-zA-Z0-9_-]*) EFF_PHASE=open ;;  # 非法字符（防间接变量名注入）→ 兜底 open
+  '') EFF_PHASE=open ;;
+  *) ;;  # 合法标识符字符集，任意长度/名字都放行，不再局限 7 个固定值
+esac
 _bcv="BREADCRUMB_${EFF_PHASE}"; BC="${!_bcv:-}"
 _rsv="RECSKILL_${EFF_PHASE}_${TRACK}"; REC="${!_rsv:-}"
 _msv="MANDSKILL_${EFF_PHASE}_${TRACK}"; MAND="${!_msv:-}"

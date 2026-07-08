@@ -452,6 +452,24 @@ if command -v node >/dev/null 2>&1; then
   assert_contains "router: 注入含推荐 skill（build.frontend）" "$ROUT" "推荐 skill"
   assert_contains "router: 注入含 build.frontend 推荐 skill token（react-patterns）" "$ROUT" "react-patterns"
 
+  # ── 9d'. 自定义 workflow step id（Task 11 修复目标）：phase 不在 7 个固定值内 → 不许被白名单
+  # case 静默吞成 open，HDR 的 phase= 字段必须真是该自定义值（否则自定义 workflow 的
+  # breadcrumb/skill 注入对应关系全部对不上号）
+  rc3="$TMP/router-custom-phase"; mkdir -p "$rc3/openspec/changes/demo"
+  printf 'track: frontend\nphase: custom-step-1\narchived: \n' > "$rc3/openspec/changes/demo/.pipeline.yaml"
+  run_router "{\"prompt\":\"继续实现登录页面的 React 组件\",\"cwd\":\"$rc3\"}"
+  assert_contains "router: 自定义 phase（custom-step-1）保真透传" "$ROUT" "phase=custom-step-1"
+  assert_not_contains "router: 自定义 phase 不被白名单静默重置为 open" "$ROUT" "phase=open"
+
+  # ── 9d''. 安全兜底（间接变量名注入防护）：真正危险的 phase 值（空格/$()/分号/尖括号）
+  # 仍必须兜底 open，且危险原文不得原样透传进注入文本（防 <workflow-state> 块被跳出/伪造）
+  rc4="$TMP/router-dangerous-phase"; mkdir -p "$rc4/openspec/changes/demo"
+  printf 'track: frontend\nphase: evil; $(whoami) <tag>\narchived: \n' > "$rc4/openspec/changes/demo/.pipeline.yaml"
+  run_router "{\"prompt\":\"继续实现登录页面的 React 组件\",\"cwd\":\"$rc4\"}"
+  assert_contains "router: 危险字符 phase（空格/\$()/分号/尖括号）安全兜底 open" "$ROUT" "phase=open"
+  assert_not_contains "router: 危险 phase 原文不原样透传进输出" "$ROUT" "whoami"
+  assert_not_contains "router: 危险 phase 不能注入伪造标签" "$ROUT" "<tag>"
+
   # mtime 缓存：manifest 比缓存新 → 重生成（缓存 mtime 被刷新到晚于 manifest）
   MAN="$ROOT/templates/manifest.yaml"
   touch -t 200001010000 "$RCACHE"  # 人为把缓存打旧（早于 manifest）
