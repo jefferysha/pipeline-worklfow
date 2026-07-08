@@ -170,6 +170,16 @@ MAX=0 TRACK=""
 # BREADCRUMB_${EFF_PHASE} 等——不再局限于 7 个固定值（自定义 workflow 的 step id 需放行），
 # 只拒绝含非标识符字符（空格/$/反引号/斜杠/尖括号等）的值，防间接变量名注入 + breadcrumb 注入文本被跳出
 EFF_PHASE="${CHANGE_PHASE:-open}"
+# LC_ALL=C（不用 LC_COLLATE=C）：钉死下面这个 case 的 collation 为字节序。[!a-zA-Z0-9_-]
+# 这个 bracket range 在非 C locale（如本机 ambient zh_CN.UTF-8）下会把重音拉丁字符（如 é，
+# custom phase "café"）的 collation 权重判成落在 a-z 区间内，白名单被绕过、原文放行——实测
+# 复现；且 LC_COLLATE=C 不够：调用方环境若已显式设了非空 LC_ALL，LC_ALL 优先级更高会盖掉
+# LC_COLLATE 使其失效，唯有重设 LC_ALL 本身才保证兜住。纯本进程内变量赋值（不 export、不开
+# 子 shell，本行也验证过不能内联加在 case 前——`LC_ALL=C case ... esac` 是语法错误，env
+# 前缀只对 simple command 生效，compound command 不行）；router.sh 每次调用都是独立子进程
+# （bash "$R"，非 source），随 exit 0 一起结束，不影响调用方 shell；此行到 exit 0 之间再无
+# 别的 locale 敏感操作（纯变量插值 + printf %s），无需回滚。
+LC_ALL=C
 case "$EFF_PHASE" in
   *[!a-zA-Z0-9_-]*) EFF_PHASE=open ;;  # 非法字符（防间接变量名注入）→ 兜底 open
   '') EFF_PHASE=open ;;

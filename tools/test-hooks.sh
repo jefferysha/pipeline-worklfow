@@ -470,6 +470,30 @@ if command -v node >/dev/null 2>&1; then
   assert_not_contains "router: 危险 phase 原文不原样透传进输出" "$ROUT" "whoami"
   assert_not_contains "router: 危险 phase 不能注入伪造标签" "$ROUT" "<tag>"
 
+  # ── 9d'''. locale collation gap（review finding）：[!a-zA-Z0-9_-] 这个 bracket 表达式的
+  # range 匹配受 LC_COLLATE 影响——在非 C locale（如 zh_CN.UTF-8）下，重音拉丁字符（如 é）
+  # 可能被 collation 判定为落在 a-z 区间内而躲过白名单，phase: café 会原样透传成
+  # phase=café 而非兜底 open（本机 ambient 正是 zh_CN.UTF-8，已实测复现）。显式钉 LC_ALL 到
+  # 一个真实非 C locale 复现 + 验证修复；locale 不可用时跳过真实复现，但结构性断言无条件跑。
+  rc5="$TMP/router-locale-phase"; mkdir -p "$rc5/openspec/changes/demo"
+  printf 'track: frontend\nphase: café\narchived: \n' > "$rc5/openspec/changes/demo/.pipeline.yaml"
+  if locale -a 2>/dev/null | grep -qi '^zh_CN\.UTF-8$'; then
+    LC_ALL=zh_CN.UTF-8 run_router "{\"prompt\":\"继续实现登录页面的 React 组件\",\"cwd\":\"$rc5\"}"
+    assert_contains "router: 重音字符 phase（café）在 zh_CN.UTF-8 locale 下仍安全兜底 open（collation gap 修复）" "$ROUT" "phase=open"
+    assert_not_contains "router: café 不应原样透传成 phase=café（locale-sensitive bracket 匹配）" "$ROUT" "phase=café"
+  else
+    printf 'skip - 本机未装 zh_CN.UTF-8 locale，跳过 locale-collation 真实复现（结构性断言见下，无条件跑）\n'
+  fi
+  # 结构性断言（无条件跑，不依赖本机是否装了 zh_CN.UTF-8）：确认修复机制本身在位
+  # ——LC_ALL=C 真钉在 EFF_PHASE case 语句之前，而不仅是改动说明里提了一嘴。
+  lc_all_line="$(grep -n '^LC_ALL=C$' "$R" | head -1 | cut -d: -f1)"
+  case_line="$(grep -n 'case "\$EFF_PHASE" in' "$R" | head -1 | cut -d: -f1)"
+  if [ -n "$lc_all_line" ] && [ -n "$case_line" ] && [ "$lc_all_line" -lt "$case_line" ]; then
+    ok "router 红线: LC_ALL=C 钉在 EFF_PHASE case 语句之前（locale-collation 修复机制在位）"
+  else
+    bad "router 红线: LC_ALL=C 钉在 EFF_PHASE case 语句之前（locale-collation 修复机制在位）" "lc_all 行=${lc_all_line:-无}，case 行=${case_line:-无}"
+  fi
+
   # mtime 缓存：manifest 比缓存新 → 重生成（缓存 mtime 被刷新到晚于 manifest）
   MAN="$ROOT/templates/manifest.yaml"
   touch -t 200001010000 "$RCACHE"  # 人为把缓存打旧（早于 manifest）
