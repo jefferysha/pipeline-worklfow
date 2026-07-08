@@ -49,7 +49,7 @@ CLI 命令实现（spawn node 一次），不强行用纯 bash 手写 DAG 遍历
 - Produces: `WorkflowDef`/`StepDef`/`SkillRef`/`FieldRef`/`GuardConfig` 类型，供 Task 2
   （解析器）、Task 4（校验）、Task 6（guard 求值）消费。
 
-- [ ] **Step 1: 写失败测试（类型层面的编译期测试，用一个真构造的对象校验类型形状）**
+- [x] **Step 1: 写失败测试（类型层面的编译期测试，用一个真构造的对象校验类型形状）**
 
 ```ts
 // packages/kernel/src/workflow/types.test.ts
@@ -98,12 +98,12 @@ describe('WorkflowDef 类型形状', () => {
 })
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `cd /Users/a1234/Documents/code-manager/projects/pipeline-worklfow && npx vitest run packages/kernel/src/workflow/types.test.ts`
 Expected: FAIL — `Cannot find module './types.js'`
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 ```ts
 // packages/kernel/src/workflow/types.ts
@@ -156,12 +156,12 @@ export interface WorkflowDef {
 }
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `npx vitest run packages/kernel/src/workflow/types.test.ts`
 Expected: PASS
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add packages/kernel/src/workflow/types.ts packages/kernel/src/workflow/types.test.ts
@@ -181,7 +181,7 @@ git commit -m "feat(kernel): workflow 自定义引擎类型定义"
 - Produces: `parseWorkflow(content: string): WorkflowDef`（解析失败 throw，不静默返回空——
   这是配置文件，格式错误必须 fail-loud，同 `manifest.ts` 现有策略）。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```ts
 // packages/kernel/src/workflow/parse.test.ts
@@ -257,12 +257,12 @@ describe('parseWorkflow', () => {
 })
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `npx vitest run packages/kernel/src/workflow/parse.test.ts`
 Expected: FAIL — `Cannot find module './parse.js'`
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 ```ts
 // packages/kernel/src/workflow/parse.ts
@@ -413,12 +413,12 @@ export function parseWorkflow(content: string): WorkflowDef {
 }
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `npx vitest run packages/kernel/src/workflow/parse.test.ts`
 Expected: PASS（4 例）
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add packages/kernel/src/workflow/parse.ts packages/kernel/src/workflow/parse.test.ts
@@ -439,7 +439,7 @@ git commit -m "feat(kernel): workflow YAML 手写窄解析器（零第三方依�
   通过；不 throw，因为调用方——Task 8 的写端点——需要把所有错误一次性回给用户，而不是
   只报第一个）。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```ts
 // packages/kernel/src/workflow/validate.test.ts
@@ -520,12 +520,12 @@ describe('validateWorkflow', () => {
 })
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `npx vitest run packages/kernel/src/workflow/validate.test.ts`
 Expected: FAIL — 模块不存在
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 ```ts
 // packages/kernel/src/workflow/validate.ts
@@ -600,12 +600,12 @@ export function validateWorkflow(wf: WorkflowDef): string[] {
 }
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `npx vitest run packages/kernel/src/workflow/validate.test.ts`
 Expected: PASS（6 例）
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add packages/kernel/src/workflow/validate.ts packages/kernel/src/workflow/validate.test.ts
@@ -631,7 +631,7 @@ git commit -m "feat(kernel): workflow 保存时校验（无环 + inputs/outputs 
 state/fixtures/*.pipeline.yaml`）和 oracle 双跑逐字比对都依赖当前顺序。新增字段必须加在
 **列表末尾**（`archived` 之后），不能插入中间，否则会让所有既有 fixture 的序列化输出错位。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```ts
 // packages/kernel/src/types.test.ts（如果不存在就新建；如果已有同名测试文件则追加到其中）
@@ -649,12 +649,12 @@ describe('workflow 字段', () => {
 })
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `npx vitest run packages/kernel/src/types.test.ts`
 Expected: FAIL
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 `types.ts` 的 `FIELD_ORDER` 数组末尾（`'archived',` 之后）加一行 `'workflow',`。
 `state/parse.ts` 的 `emptyFields()` 函数体里（具体写法先 Read 该文件确认现有实现——研究
@@ -663,7 +663,7 @@ Expected: FAIL
 `workflow` 字段的代码都要能直接判断"是不是 default"，不应该还要处理"空字符串等价于
 default"这种隐式约定）。
 
-- [ ] **Step 4: 跑测试确认通过 + 确认现有全部 kernel 测试无回归**
+- [x] **Step 4: 跑测试确认通过 + 确认现有全部 kernel 测试无回归**
 
 Run: `npx vitest run packages/kernel/src/types.test.ts`
 Expected: PASS
@@ -672,7 +672,7 @@ Run: `npx vitest run packages/kernel`
 Expected: 全部现存用例仍然 PASS（新增字段不该改变任何现有断言的结果——如果有 fixture
 测试因为字段顺序变化而失败，检查是不是不小心把 `workflow` 插到了列表中间而不是末尾）。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add packages/kernel/src/types.ts packages/kernel/src/state/parse.ts packages/kernel/src/types.test.ts
@@ -696,7 +696,7 @@ git commit -m "feat(kernel): .pipeline.yaml 新增 workflow 字段（缺省 defa
 - Produces: `loadWorkflow(repoRoot: string, name: string): WorkflowDef | null`（找不到对应
   文件返回 `null`，不 throw——"这个 workflow 不存在"是调用方要处理的正常分支，不是异常）。
 
-- [ ] **Step 1: 写 `templates/workflows/default.yaml`**
+- [x] **Step 1: 写 `templates/workflows/default.yaml`**
 
 transitions 字段逐字对齐现有 `packages/kernel/src/flow/transition-table.ts` 的
 `TRANSITION_EVENTS` 表（8 条边，event 名完全复用，不重新发明）——这份镜像文件因此天然是
@@ -801,7 +801,7 @@ steps:
 应该怎么响应"的边界处理，不是这份数据镜像现阶段要复现的行为，等 default 真正切到统一路径
 的后续演进里再处理。）
 
-- [ ] **Step 2: 写失败测试**
+- [x] **Step 2: 写失败测试**
 
 ```ts
 // packages/kernel/src/workflow/loadWorkflow.test.ts
@@ -827,12 +827,12 @@ describe('loadWorkflow', () => {
 })
 ```
 
-- [ ] **Step 3: 跑测试确认失败**
+- [x] **Step 3: 跑测试确认失败**
 
 Run: `npx vitest run packages/kernel/src/workflow/loadWorkflow.test.ts`
 Expected: FAIL
 
-- [ ] **Step 4: 实现**
+- [x] **Step 4: 实现**
 
 ```ts
 // packages/kernel/src/workflow/loadWorkflow.ts
@@ -848,12 +848,12 @@ export function loadWorkflow(repoRoot: string, name: string): WorkflowDef | null
 }
 ```
 
-- [ ] **Step 5: 跑测试确认通过**
+- [x] **Step 5: 跑测试确认通过**
 
 Run: `npx vitest run packages/kernel/src/workflow/loadWorkflow.test.ts`
 Expected: PASS
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add templates/workflows/default.yaml packages/kernel/src/workflow/loadWorkflow.ts packages/kernel/src/workflow/loadWorkflow.test.ts
@@ -874,7 +874,7 @@ git commit -m "feat(kernel): 内置默认 workflow 数据镜像 + loadWorkflow �
 - Produces: `isSkillUnlocked(skillId: string, skills: readonly SkillRef[], completedSinceStepEntry: ReadonlySet<string>): boolean`——
   纯函数，供 Task 7（CLI 命令）调用。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```ts
 // packages/kernel/src/workflow/skillDag.test.ts
@@ -909,12 +909,12 @@ describe('isSkillUnlocked', () => {
 })
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `npx vitest run packages/kernel/src/workflow/skillDag.test.ts`
 Expected: FAIL
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 ```ts
 // packages/kernel/src/workflow/skillDag.ts
@@ -931,12 +931,12 @@ export function isSkillUnlocked(
 }
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `npx vitest run packages/kernel/src/workflow/skillDag.test.ts`
 Expected: PASS（4 例）
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add packages/kernel/src/workflow/skillDag.ts packages/kernel/src/workflow/skillDag.test.ts
@@ -968,7 +968,7 @@ git commit -m "feat(kernel): skill DAG 解锁判定纯函数"
 （导出它，而不是复制一份——两处保持单一实现，避免"什么算已完成任务"这条规则出现两个
 不同答案）。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```ts
 // packages/kernel/src/workflow/stepGuard.test.ts
@@ -1008,12 +1008,12 @@ describe('evaluateStepGuards', () => {
 })
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `cd /Users/a1234/Documents/code-manager/projects/pipeline-worklfow && npx vitest run packages/kernel/src/workflow/stepGuard.test.ts`
 Expected: FAIL
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 ```ts
 // packages/kernel/src/workflow/stepGuard.ts
@@ -1056,12 +1056,12 @@ export function evaluateStepGuards(state: PipelineState, step: StepDef, _ctx: St
 }
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `npx vitest run packages/kernel/src/workflow/stepGuard.test.ts`
 Expected: PASS（3 例）
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add packages/kernel/src/workflow/stepGuard.ts packages/kernel/src/workflow/stepGuard.test.ts
@@ -1092,7 +1092,7 @@ Preconditions` → `deps.flow.transition(...)` → `applyTransitionEffects` → 
 不改；非 default workflow 走全新、更简单的链路，两条链路除了共用"读 state"和"写 history"
 两个动作外不共享任何中间步骤，避免为了"复用"而把两套语义绞在一起。
 
-- [ ] **Step 1: 读现状**
+- [x] **Step 1: 读现状**
 
 Read `packages/cli/src/commands/transition.ts` 全文，确认：① `withLock` 包裹的具体范围
 （新分支要在同一个锁的保护下写 state，不能在锁外写）；② `history.append` 调用的确切参数
@@ -1102,7 +1102,7 @@ default workflow 分支也应该照样存 event 名，保持 history 文件里 "
 和依赖注入方式（`deps: CliDeps`、`name: string`、`event: string` 大概率不变，只是内部多一
 个分支）。
 
-- [ ] **Step 2: 写失败测试**
+- [x] **Step 2: 写失败测试**
 
 ```ts
 it('非 default workflow：按 event 名查当前 step 的 transitions，真改写 phase 到目标 step', async () => {
@@ -1124,13 +1124,13 @@ it('非 default workflow：event 名在当前 step 的 transitions 里找不到 
 })
 ```
 
-- [ ] **Step 3: 跑测试确认失败**
+- [x] **Step 3: 跑测试确认失败**
 
 Run: `npx vitest run packages/cli/src/commands/transition.test.ts -t "非 default workflow"`
 Expected: FAIL（现有代码对未知 event 名统一按 `eventEdge()` 返回 `undefined` 处理，不会
 走到任何新逻辑）
 
-- [ ] **Step 4: 实现**
+- [x] **Step 4: 实现**
 
 在 Step 1 读到的"读 state 之后、`checkTransitionPreconditions` 之前"这个位置插入分岔：
 
@@ -1177,18 +1177,18 @@ if (workflowName !== 'default') {
 marker/breadcrumb，这两个能力如果自定义 workflow 也需要，是本任务之外的后续小任务，不在
 这里顺手实现以免测试范围失控。）
 
-- [ ] **Step 5: 跑测试确认通过**
+- [x] **Step 5: 跑测试确认通过**
 
 Run: `npx vitest run packages/cli/src/commands/transition.test.ts`
 Expected: PASS 全量（含新增的 3 例 + 全部既有 default workflow 用例零回归）
 
-- [ ] **Step 6: 确认 default workflow 全仓零回归**
+- [x] **Step 6: 确认 default workflow 全仓零回归**
 
 Run: `npx vitest run packages/kernel packages/cli && bash tools/test-hooks.sh && npm run oracle`
 Expected: 与本计划开始前的基线完全一致（vitest 全绿、hooks 180/180、oracle 0 不一致）——
 这是检验"双轨策略没有互相污染"的最终证据，不是可选步骤。
 
-- [ ] **Step 7: 提交**
+- [x] **Step 7: 提交**
 
 ```bash
 git add packages/cli/src/commands/transition.ts packages/cli/src/commands/transition.test.ts
@@ -1214,7 +1214,7 @@ git commit -m "feat: pipeline transition 支持非 default workflow 的真实 st
 - Produces: `cmdInternalSkillGate(deps, changeName, toolSkillId): Promise<number>`（0=放行，
   2=拦截，同 `gate.sh` 的 exit code 约定）。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```ts
 // packages/cli/src/commands/internalSkillGate.test.ts
@@ -1242,12 +1242,12 @@ describe('cmdInternalSkillGate', () => {
 一个"带 workflow 字段 + 带历史记录"的 fake change，本计划不假设这些辅助函数当前的确切
 签名。）
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `cd /Users/a1234/Documents/code-manager/projects/pipeline-worklfow && npx vitest run packages/cli/src/commands/internalSkillGate.test.ts`
 Expected: FAIL
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 ```ts
 // packages/cli/src/commands/internalSkillGate.ts
@@ -1308,18 +1308,18 @@ fi
 带哪些键、`CHANGE_NAME` 变量当前是否存在，按现状调整；核心约束不变：只有非 default
 workflow 才走到这里，spawn node 只发生在这条分支。）
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `npx vitest run packages/cli/src/commands/internalSkillGate.test.ts`
 Expected: PASS
 
-- [ ] **Step 5: 确认 default workflow 场景零回归**
+- [x] **Step 5: 确认 default workflow 场景零回归**
 
 Run: `bash tools/test-hooks.sh`
 Expected: 180 passed, 0 failed（现有 hook 测试全部针对 default workflow 的 change，
 必须和改动前完全一致）
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add packages/cli/src/commands/internalSkillGate.ts packages/cli/src/commands/internalSkillGate.test.ts packages/cli/src/program.ts hooks/gate.sh
@@ -1344,7 +1344,7 @@ git commit -m "feat: 非 default workflow 的 skill DAG 解锁判定接入 gate.
   未知字段的处理方式决定了老文件读出来 `workflow` 会是什么——需要实现者先确认这一点，
   再决定迁移判定条件用"字段缺失"还是"值为某个旧哨兵"）。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```ts
 // packages/cli/src/commands/migrateWorkflow.test.ts
@@ -1370,12 +1370,12 @@ describe('cmdMigrateWorkflow', () => {
 })
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `cd /Users/a1234/Documents/code-manager/projects/pipeline-worklfow && npx vitest run packages/cli/src/commands/migrateWorkflow.test.ts`
 Expected: FAIL
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 ```ts
 // packages/cli/src/commands/migrateWorkflow.ts
@@ -1413,12 +1413,12 @@ export async function cmdMigrateWorkflow(deps: CliDeps, name: string): Promise<n
 之前创建的 fixture `.pipeline.yaml`，读一遍确认 `workflow` 字段读出来是什么，再决定这个
 命令是否需要做更多事情。）
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `npx vitest run packages/cli/src/commands/migrateWorkflow.test.ts`
 Expected: PASS
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add packages/cli/src/commands/migrateWorkflow.ts packages/cli/src/commands/migrateWorkflow.test.ts packages/cli/src/program.ts
@@ -1440,19 +1440,19 @@ breadcrumb/skill 注入对自定义 workflow 完全失效。
 - Consumes: 无新依赖。
 - Produces: 白名单放行任意合法 step id（不再局限于 7 个固定值）。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 在 `tools/test-hooks.sh` 里加一例（具体加在哪个位置、用什么断言辅助函数，先读该文件现有
 写法照抄）：真建一个 `phase` 是自定义值（如 `custom-step-1`）的 `.pipeline.yaml`，真跑
 `router.sh`，断言输出里 `EFF_PHASE`（或它驱动的 breadcrumb 变量）真的是 `custom-step-1`
 而不是被吞成 `open`。
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `bash tools/test-hooks.sh`
 Expected: 新增用例 FAIL（现状会被吞成 open）
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 把 `router.sh:171` 的白名单 `case` 改成宽松校验（只拒绝明显不合法的值，比如包含空格/
 特殊字符——因为 `EFF_PHASE` 会被用作间接变量名的一部分 `BREADCRUMB_${EFF_PHASE}`，必须
@@ -1465,12 +1465,12 @@ case "$EFF_PHASE" in
 esac
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `bash tools/test-hooks.sh`
 Expected: 180+1 passed, 0 failed
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add hooks/router.sh

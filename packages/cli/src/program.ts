@@ -27,6 +27,8 @@ import { cmdTask } from './commands/task.js'
 import { cmdUninstall } from './commands/uninstall.js'
 import { cmdList, cmdStatus } from './commands/status.js'
 import { cmdTransition } from './commands/transition.js'
+import { cmdInternalSkillGate } from './commands/internalSkillGate.js'
+import { cmdMigrateWorkflow } from './commands/migrateWorkflow.js'
 
 export class CliExit extends Error {
   constructor(public readonly code: number) {
@@ -227,6 +229,16 @@ export function buildProgram(deps: CliDeps): Command {
     .command('_gen-router-sh <manifest>')
     .description('[内部] 从 manifest 派生 router 缓存 bash（router.sh 调用）')
     .action(async (manifest: string) => bail(await cmdGenRouterSh(deps, manifest)))
+
+  program
+    .command('internal-skill-gate <name> <skillId>')
+    .description('[内部] 非 default workflow 的 skill DAG 解锁判定（hooks/gate.sh 委托目标；0=放行 2=拦截）')
+    .action(async (name: string, skillId: string) => bail(await cmdInternalSkillGate(deps, name, skillId)))
+
+  program
+    .command('migrate-workflow <name>')
+    .description('[一次性] 老格式 change 补齐/确认 workflow 字段为 default（真实自定义 workflow 不覆盖）')
+    .action(async (name: string) => bail(await cmdMigrateWorkflow(deps, name)))
 
   return program
 }

@@ -11,3 +11,10 @@ export * from './loops/index.js'
 export * from './compress/index.js'
 // Trellis parity 收尾：spec-scaffold / workflow-resolution / allowlist（BACKLOG #33）
 export * from './scaffold/index.js'
+// workflow 自定义引擎（GOAL 清单 E）——loadWorkflow（Task 5）+ evaluateStepGuards（Task 7）+
+// isSkillUnlocked（Task 6）供 cli transition / internal-skill-gate 消费自定义 workflow 的真实
+// step 间转换与 skill DAG 解锁判定（Task 8/9）。仅具名导出这三个函数，不整体 re-export
+// ./workflow/types.js（其 GateKind 会与既有 barrel 导出撞名）。
+export { loadWorkflow } from './workflow/loadWorkflow.js'
+export { evaluateStepGuards } from './workflow/stepGuard.js'
+export { isSkillUnlocked } from './workflow/skillDag.js'

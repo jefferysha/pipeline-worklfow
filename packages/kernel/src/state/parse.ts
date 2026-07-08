@@ -30,10 +30,14 @@ export function unquoteScalar(s: string): string {
   return s
 }
 
-/** 全量 37 字段骨架，缺省空串（CONTRACT §1：写回时缺省字段写空串）。 */
+/**
+ * 全量 38 字段骨架，缺省空串（CONTRACT §1：写回时缺省字段写空串）；
+ * `workflow` 例外，缺省 `'default'`——下游需能直接判断"是否为默认 workflow"，
+ * 不应该还要处理"空串等价于 default"这种隐式约定。
+ */
 export function emptyFields(): Record<FieldName, string | string[]> {
   const fields = {} as Record<FieldName, string | string[]>
-  for (const f of FIELD_ORDER) fields[f] = ''
+  for (const f of FIELD_ORDER) fields[f] = f === 'workflow' ? 'default' : ''
   return fields
 }
 

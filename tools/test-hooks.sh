@@ -180,10 +180,25 @@ run_gate "{\"cwd\":\"$proj/sub/deep\",\"tool_name\":\"Write\"}"
 assert_exit "gate: marker 在 cwd 上层（项目根）也拦 → exit 2" 2 "$RC"
 
 # ───────────────────────── 3. 红线自证：热路径纯 bash ─────────────────────────
-for f in "$GATE" "$BC" "$SS" "$SL"; do
+# gate.sh 例外（Task 9，GOAL 清单 E）：非 default workflow 的 skill DAG 判定合法委托 CLI（spawn
+# node），但**只**在该分支——workflow==='default' 这条最高频路径的零 spawn 承诺不变。文本 grep
+# 只能证明"提到了 node"，证明不了"只在该分支才真 spawn"；后者由
+# internal-skill-gate-hook.integration.test.ts 用真 bash 子进程 + 真 fixture 黑盒验证
+# （default workflow / 无活跃 change / 非 Skill 调用 → 断言真实行为不受影响且真不 spawn），
+# 比在这里 grep 源码文本更可靠，故 gate.sh 从下面的"零 node"红线里摘出、单独断言。
+for f in "$BC" "$SS" "$SL"; do
   base="$(basename "$f")"
   n="$(grep -c "node" "$f" || true)"
   [ "$n" = "0" ] && ok "红线: $base 内 grep -c \"node\" 为 0" || bad "红线: $base 内 grep -c \"node\" 为 0" "实得 ${n} 行"
+done
+gate_node_n="$(grep -c "node" "$GATE" || true)"
+if [ "$gate_node_n" -gt 0 ] 2>/dev/null; then
+  ok "gate.sh 合法引用 node（仅非 default workflow 的 skill DAG 委托分支，Task 9；零 spawn 承诺见 internal-skill-gate-hook.integration.test.ts）"
+else
+  bad "gate.sh 合法引用 node（仅非 default workflow 的 skill DAG 委托分支，Task 9）" "实得 0 行——是否误删了 Task 9 分支？"
+fi
+for f in "$GATE" "$BC" "$SS" "$SL"; do
+  base="$(basename "$f")"
   n="$(grep -c "python" "$f" || true)"
   [ "$n" = "0" ] && ok "红线: $base 内无 python" || bad "红线: $base 内无 python" "实得 ${n} 行"
 done
@@ -436,6 +451,48 @@ if command -v node >/dev/null 2>&1; then
   assert_contains "router: 注入含该相位 breadcrumb 行动提示（build 含 TDD）" "$ROUT" "TDD"
   assert_contains "router: 注入含推荐 skill（build.frontend）" "$ROUT" "推荐 skill"
   assert_contains "router: 注入含 build.frontend 推荐 skill token（react-patterns）" "$ROUT" "react-patterns"
+
+  # ── 9d'. 自定义 workflow step id（Task 11 修复目标）：phase 不在 7 个固定值内 → 不许被白名单
+  # case 静默吞成 open，HDR 的 phase= 字段必须真是该自定义值（否则自定义 workflow 的
+  # breadcrumb/skill 注入对应关系全部对不上号）
+  rc3="$TMP/router-custom-phase"; mkdir -p "$rc3/openspec/changes/demo"
+  printf 'track: frontend\nphase: custom-step-1\narchived: \n' > "$rc3/openspec/changes/demo/.pipeline.yaml"
+  run_router "{\"prompt\":\"继续实现登录页面的 React 组件\",\"cwd\":\"$rc3\"}"
+  assert_contains "router: 自定义 phase（custom-step-1）保真透传" "$ROUT" "phase=custom-step-1"
+  assert_not_contains "router: 自定义 phase 不被白名单静默重置为 open" "$ROUT" "phase=open"
+
+  # ── 9d''. 安全兜底（间接变量名注入防护）：真正危险的 phase 值（空格/$()/分号/尖括号）
+  # 仍必须兜底 open，且危险原文不得原样透传进注入文本（防 <workflow-state> 块被跳出/伪造）
+  rc4="$TMP/router-dangerous-phase"; mkdir -p "$rc4/openspec/changes/demo"
+  printf 'track: frontend\nphase: evil; $(whoami) <tag>\narchived: \n' > "$rc4/openspec/changes/demo/.pipeline.yaml"
+  run_router "{\"prompt\":\"继续实现登录页面的 React 组件\",\"cwd\":\"$rc4\"}"
+  assert_contains "router: 危险字符 phase（空格/\$()/分号/尖括号）安全兜底 open" "$ROUT" "phase=open"
+  assert_not_contains "router: 危险 phase 原文不原样透传进输出" "$ROUT" "whoami"
+  assert_not_contains "router: 危险 phase 不能注入伪造标签" "$ROUT" "<tag>"
+
+  # ── 9d'''. locale collation gap（review finding）：[!a-zA-Z0-9_-] 这个 bracket 表达式的
+  # range 匹配受 LC_COLLATE 影响——在非 C locale（如 zh_CN.UTF-8）下，重音拉丁字符（如 é）
+  # 可能被 collation 判定为落在 a-z 区间内而躲过白名单，phase: café 会原样透传成
+  # phase=café 而非兜底 open（本机 ambient 正是 zh_CN.UTF-8，已实测复现）。显式钉 LC_ALL 到
+  # 一个真实非 C locale 复现 + 验证修复；locale 不可用时跳过真实复现，但结构性断言无条件跑。
+  rc5="$TMP/router-locale-phase"; mkdir -p "$rc5/openspec/changes/demo"
+  printf 'track: frontend\nphase: café\narchived: \n' > "$rc5/openspec/changes/demo/.pipeline.yaml"
+  if locale -a 2>/dev/null | grep -qi '^zh_CN\.UTF-8$'; then
+    LC_ALL=zh_CN.UTF-8 run_router "{\"prompt\":\"继续实现登录页面的 React 组件\",\"cwd\":\"$rc5\"}"
+    assert_contains "router: 重音字符 phase（café）在 zh_CN.UTF-8 locale 下仍安全兜底 open（collation gap 修复）" "$ROUT" "phase=open"
+    assert_not_contains "router: café 不应原样透传成 phase=café（locale-sensitive bracket 匹配）" "$ROUT" "phase=café"
+  else
+    printf 'skip - 本机未装 zh_CN.UTF-8 locale，跳过 locale-collation 真实复现（结构性断言见下，无条件跑）\n'
+  fi
+  # 结构性断言（无条件跑，不依赖本机是否装了 zh_CN.UTF-8）：确认修复机制本身在位
+  # ——LC_ALL=C 真钉在 EFF_PHASE case 语句之前，而不仅是改动说明里提了一嘴。
+  lc_all_line="$(grep -n '^LC_ALL=C$' "$R" | head -1 | cut -d: -f1)"
+  case_line="$(grep -n 'case "\$EFF_PHASE" in' "$R" | head -1 | cut -d: -f1)"
+  if [ -n "$lc_all_line" ] && [ -n "$case_line" ] && [ "$lc_all_line" -lt "$case_line" ]; then
+    ok "router 红线: LC_ALL=C 钉在 EFF_PHASE case 语句之前（locale-collation 修复机制在位）"
+  else
+    bad "router 红线: LC_ALL=C 钉在 EFF_PHASE case 语句之前（locale-collation 修复机制在位）" "lc_all 行=${lc_all_line:-无}，case 行=${case_line:-无}"
+  fi
 
   # mtime 缓存：manifest 比缓存新 → 重生成（缓存 mtime 被刷新到晚于 manifest）
   MAN="$ROOT/templates/manifest.yaml"

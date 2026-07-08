@@ -45,9 +45,11 @@ import {
   applyTransitionEffects,
   checkTransitionPreconditions,
   eventEdge,
+  evaluateStepGuards,
   IllegalTransitionError,
+  loadWorkflow,
 } from '@pipeline-lite/kernel'
-import type { Phase, TransitionContext, TransitionResult } from '@pipeline-lite/kernel'
+import type { Phase, PipelineState, TransitionContext, TransitionResult } from '@pipeline-lite/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
 import { changeDir, isValidChangeName } from '../paths.js'
 import { str } from '../render.js'
@@ -69,14 +71,42 @@ class EventPreconditionError extends Error {
   }
 }
 
+/**
+ * 未知 event（default workflow 专属，非固定 8 事件表成员）：exit 1，stderr 文案对齐老内核。
+ * Task 8 前此判定在锁外、读 state 前就早退；Task 8 后必须先读 state 判定 workflow（'' / 'default'
+ * → 走这条固定 8 事件表校验），故此判定内移进锁、改为 throw 由现有 catch 统一落 stderr——default
+ * workflow 未知 event 的可观测行为（exit 1 + 同一句 "ERROR: 未知 event: X" + 零写盘）逐字不变。
+ */
+class UnknownEventError extends Error {
+  constructor(public readonly event: string) {
+    super(`未知 event: ${event}`)
+  }
+}
+
+/**
+ * 非 default workflow 的配置/查找类错误（workflow 未找到 / 当前 step 不在图里 / event 不在当前 step
+ * 的出边里）：exit 1。message 已是完整 stderr 行（含 `ERROR:` 前缀）。
+ */
+class WorkflowError extends Error {}
+
+/** 非 default workflow 的 step guard 未通过：exit 2，lines 逐行走 stderr（phase 不变、零写盘）。 */
+class StepGuardError extends Error {
+  constructor(public readonly lines: string[]) {
+    super(lines[0] ?? 'step guard 未通过')
+  }
+}
+
+/**
+ * 锁内转换结果的判别联合：default 携带 kernel flow 的 TransitionResult（供收尾复用原有整条链路），
+ * 自定义 workflow 只携带 from/to step id（收尾只写 history + [TRANSITION]，无 breadcrumb/review-marker）。
+ */
+type TxnOutcome =
+  | { readonly workflow: 'default'; readonly result: TransitionResult }
+  | { readonly workflow: 'custom'; readonly from: string; readonly to: string }
+
 export async function cmdTransition(deps: CliDeps, name: string, event: string): Promise<number> {
   if (!isValidChangeName(name)) {
     deps.io.err(`ERROR: change-name 非法: '${name}' (仅允许 a-z A-Z 0-9 - _)`)
-    return 1
-  }
-  const edge = eventEdge(event)
-  if (!edge) {
-    deps.io.err(`ERROR: 未知 event: ${event}`)
     return 1
   }
 
@@ -86,23 +116,61 @@ export async function cmdTransition(deps: CliDeps, name: string, event: string):
     fileExists: deps.guardCtx?.(name)?.fileExists,
     gitHeadSha: deps.gitHeadSha,
   }
-  let result: TransitionResult
+  let outcome: TxnOutcome
   try {
-    result = await deps.store.withLock(dir, async () => {
+    outcome = await deps.store.withLock(dir, async (): Promise<TxnOutcome> => {
       const state = await deps.store.read(dir)
-      const current = str(state.fields.phase)
-      if (current !== edge.from) {
-        throw new IllegalTransitionError(current as Phase, edge.to)
+      // 双轨分岔（读完 state 立刻按 workflow 字段分流；'' 是历史遗留非自定义名，故 `|| 'default'`
+      // 兜底——`??` 不兜空串）：default 走原有整条固定 8 事件表链路一行不改；非 default 走全新、
+      // 更简单的 step-transitions 链路，两条链路除共用「读 state」「写 history」外不共享任何中间步骤。
+      const workflowName = str(state.fields.workflow) || 'default'
+      if (workflowName === 'default') {
+        const edge = eventEdge(event)
+        if (!edge) throw new UnknownEventError(event)
+        const current = str(state.fields.phase)
+        if (current !== edge.from) {
+          throw new IllegalTransitionError(current as Phase, edge.to)
+        }
+        const violations = await checkTransitionPreconditions(event, state, txnCtx)
+        if (violations) throw new EventPreconditionError(violations)
+        const r = deps.flow.transition(state, edge.to, deps.clock)
+        const eff = await applyTransitionEffects(event, r.state, deps.clock, txnCtx)
+        if (eff.buildShaMissing) {
+          deps.io.err('WARN: build-complete 未取到 git HEAD（非 git 仓？）build_sha 留空，verify 不做 SHA 校验')
+        }
+        await deps.store.write(dir, r.state)
+        return { workflow: 'default', result: r }
       }
-      const violations = await checkTransitionPreconditions(event, state, txnCtx)
-      if (violations) throw new EventPreconditionError(violations)
-      const r = deps.flow.transition(state, edge.to, deps.clock)
-      const eff = await applyTransitionEffects(event, r.state, deps.clock, txnCtx)
-      if (eff.buildShaMissing) {
-        deps.io.err('WARN: build-complete 未取到 git HEAD（非 git 仓？）build_sha 留空，verify 不做 SHA 校验')
+
+      // ── 非 default workflow：接受任意 event 名，按当前 step 自己声明的 transitions 查目标 step ──
+      const wf = loadWorkflow(deps.cwd, workflowName)
+      if (!wf) {
+        throw new WorkflowError(`ERROR: workflow '${workflowName}' 未找到（期望 .pipeline/workflows/${workflowName}.yaml）`)
       }
-      await deps.store.write(dir, r.state)
-      return r
+      const currentStepId = str(state.fields.phase)
+      const step = wf.steps.find((s) => s.id === currentStepId)
+      if (!step) {
+        throw new WorkflowError(`ERROR: step '${currentStepId}' 不在 workflow '${workflowName}' 里`)
+      }
+      const edge = step.transitions.find((t) => t.event === event)
+      if (!edge) {
+        const available = step.transitions.map((t) => t.event).join(', ') || '(无)'
+        throw new WorkflowError(
+          `ERROR: step '${currentStepId}' 不支持 event '${event}'；该 step 支持：${available}`,
+        )
+      }
+      // guard 求值针对「正在退出的」当前 step（对齐 default 的「先校验再改相位」次序）
+      const guardResult = evaluateStepGuards(state, step, { changeDirAbs: dir })
+      if (!guardResult.pass) {
+        throw new StepGuardError([`ERROR: step '${currentStepId}' guard 未通过：`, ...guardResult.failures])
+      }
+      // 同一把锁内改写 phase 到目标 step id 并落盘（无 kernel flow：自定义 phase 序不在硬编码相位图里）
+      const next: PipelineState = {
+        ...state,
+        fields: { ...state.fields, phase: edge.to, updated_at: deps.clock() },
+      }
+      await deps.store.write(dir, next)
+      return { workflow: 'custom', from: currentStepId, to: edge.to }
     })
   } catch (e) {
     if (e instanceof EventPreconditionError) {
@@ -113,10 +181,45 @@ export async function cmdTransition(deps: CliDeps, name: string, event: string):
       deps.io.err(`ERROR: ${e.message}`)
       return 1
     }
+    if (e instanceof UnknownEventError) {
+      deps.io.err(`ERROR: 未知 event: ${event}`)
+      return 1
+    }
+    if (e instanceof WorkflowError) {
+      deps.io.err(e.message)
+      return 1
+    }
+    if (e instanceof StepGuardError) {
+      for (const line of e.lines) deps.io.err(line)
+      return 2
+    }
     deps.io.err(`ERROR: ${errMsg(e)}`)
     return 1
   }
 
+  // ── 非 default workflow 收尾：只写 history（raw=event，保持「transition-kind 的 raw = 触发它的
+  //    event 名」这条不变式）+ 一行 [TRANSITION] stderr 成功信号。breadcrumb / review-marker 是
+  //    default workflow 专属收尾，自定义 workflow 本轮不做（诚实登记的 scope cut，见 task-8 brief）。──
+  if (outcome.workflow === 'custom') {
+    if (deps.history) {
+      try {
+        await deps.history.append(dir, {
+          ts: deps.clock(),
+          kind: 'transition',
+          from: outcome.from,
+          to: outcome.to,
+          raw: event,
+        })
+      } catch (e) {
+        deps.io.err(`WARN: history 写入失败: ${errMsg(e)}`)
+      }
+    }
+    deps.io.err(`[TRANSITION] ${name}: ${outcome.from} -> ${outcome.to}`)
+    return 0
+  }
+
+  // ── default workflow 收尾：与改动前逐字一致（breadcrumb → history → review-marker → [TRANSITION]）──
+  const result = outcome.result
   if (deps.writeBreadcrumb) {
     try {
       await deps.writeBreadcrumb(dir, `pipeline:${name} phase=${result.to}\n`)

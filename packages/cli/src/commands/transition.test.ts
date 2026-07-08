@@ -79,11 +79,16 @@ describe('transition —— [TRANSITION] 走 stderr / 非法 exit 1（oracle 实
     expect(deps.store.write.calls).toHaveLength(0)
   })
 
-  test('未知 event：exit 1（老内核口径），store 不被触碰', async () => {
+  test('未知 event（default workflow）：exit 1（老内核口径）+ 同一句 stderr + 零写盘', async () => {
     const deps = makeDeps()
     const code = await cmdTransition(deps, 'demo', 'warp-speed')
     expect(code).toBe(1)
-    expect(deps.store.read.calls).toHaveLength(0)
+    // Task 8：判定 default vs 自定义 workflow 必须先读一次 state（未知 event 才能被断定为「对
+    // default workflow 非法」——对自定义 workflow 任意 event 名都可能合法），故 read 计数 0→1。
+    // 真实可观测行为不变：exit 1 + 逐字同一句 "ERROR: 未知 event" + 绝不写盘（下面两条守住）。
+    expect(deps.store.read.calls).toHaveLength(1)
+    expect(deps.store.write.calls).toHaveLength(0)
+    expect(deps.errLines).toContain('ERROR: 未知 event: warp-speed')
   })
 
   test('状态文件缺失（read 抛错）：exit 1', async () => {
@@ -297,5 +302,24 @@ describe('transition —— 事件前置校验（老仓 case 块，exit 1 + ERRO
     const written = deps.store.write.calls[0]?.[1] as PipelineState
     expect(written.fields.archived).toBe('true')
     expect(written.fields.archived_at).toBe(FIXED_CLOCK)
+  })
+})
+
+/** Task 8 —— mockState 默认 workflow + 非 default workflow 的分支路由（mock 快测；真 step 间转换的
+ *  端到端证据在 transition-custom-workflow.integration.test.ts 用真 harness 落实）。 */
+describe('transition —— Task 8 双轨分支路由（mock 快测）', () => {
+  test('mockState() 缺省 workflow=default（镜像 kernel emptyFields，守住 28 例默认路径不误入自定义分支）', () => {
+    expect(mockState().fields.workflow).toBe('default')
+    expect(mockState({ phase: 'open' }).fields.workflow).toBe('default')
+  })
+
+  test('workflow!=default 且 workflow 文件缺失：真路由到自定义分支并报 "未找到"（exit 1，不写盘）', async () => {
+    // workflow=ghost 使 str(workflow)||'default' === 'ghost' → 走自定义分支；cwd=/repo 下无
+    // .pipeline/workflows/ghost.yaml → loadWorkflow 返回 null → WorkflowError（真代码路径，非 mock 桩返回值）。
+    const deps = makeDeps({ state: mockState({ phase: 's1', workflow: 'ghost' }) })
+    const code = await cmdTransition(deps, 'demo', 'complete')
+    expect(code).toBe(1)
+    expect(deps.errLines.join('\n')).toContain("workflow 'ghost' 未找到")
+    expect(deps.store.write.calls).toHaveLength(0)
   })
 })

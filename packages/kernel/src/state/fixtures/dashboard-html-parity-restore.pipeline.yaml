@@ -35,6 +35,7 @@ updated_at: 2026-07-02T17:19:38Z
 verified_at: 2026-07-02T17:17:17Z
 archived_at: null
 archived: false
+workflow: default
 pipeline_mode: human
 tools_history:
   - { at: 2026-07-02T17:19:55Z, tool: Skill, detail_b64: "Y29tbWl0LWNvbW1hbmRzOmNvbW1pdC1wdXNoLXBy" }

@@ -56,8 +56,8 @@ ROWS="$WORKDIR/rows.tsv"
 say() { printf '%s\n' "$*" | tee -a "$REPORT"; }
 row() { printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4" "$5" "$6" >> "$ROWS"; }
 
-# types.ts::FIELD_ORDER 的 37 字段（降级模式 yaml 面 = 契约 §1 字段序校验）
-FIELD_ORDER_STR="track preset created_by assignee phase phase_status design_doc plan verification_report build_mode isolation build_sha agent_review_result codex_review_result verify_result branch_status direct_override prd_path pr_url automation automation_queued_at automation_sandbox automation_worktree automation_attempts automation_last_error automation_preserved_path branch base_branch scope related_files spec_scope depends_on created_at updated_at verified_at archived_at archived"
+# types.ts::FIELD_ORDER 的 38 字段（降级模式 yaml 面 = 契约 §1 字段序校验）
+FIELD_ORDER_STR="track preset created_by assignee phase phase_status design_doc plan verification_report build_mode isolation build_sha agent_review_result codex_review_result verify_result branch_status direct_override prd_path pr_url automation automation_queued_at automation_sandbox automation_worktree automation_attempts automation_last_error automation_preserved_path branch base_branch scope related_files spec_scope depends_on created_at updated_at verified_at archived_at archived workflow"
 
 FAILS=0
 DEGRADED_REASON=""
@@ -67,7 +67,9 @@ count_fail() { [ "$1" = FAIL ] && FAILS=$((FAILS + 1)); return 0; }
 
 is_ts_field() { case "${1:-}" in *_at) return 0 ;; *) return 1 ;; esac; }
 
-# 三面白名单归一：剥历史区块 + *_at 值归一
+# 三面白名单归一：剥历史区块 + *_at 值归一 + workflow 字段整行剥除
+# （workflow 是新 CLI 专属字段——BACKLOG 工作流定制引擎新增，老脚本 oracle 只读、永远不会
+#  产出这个字段，逐字 diff 会永久不一致；同 history 区块一样整行不计入比较，而非只归一值）。
 normalize_yaml() {
   awk '
     /^(tools_history|prompts_history|transitions_history):/ { inhist = 1; next }
@@ -76,13 +78,14 @@ normalize_yaml() {
         if ($0 ~ /^[[:space:]]+- /) next
         inhist = 0
       }
+      if ($0 ~ /^workflow:/) next
       if ($0 ~ /^[a-z_]+_at:/) { sub(/:.*$/, ": <WHITELISTED>"); print; next }
       print
     }
   ' "$1"
 }
 
-# 契约 §1：37 字段按 FIELD_ORDER 全量在序（未知行/历史区不计）
+# 契约 §1：38 字段按 FIELD_ORDER 全量在序（未知行/历史区不计）
 keyorder_ok() {
   local got
   got=$(awk -v list="$FIELD_ORDER_STR" '

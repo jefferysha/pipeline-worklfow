@@ -1,0 +1,90 @@
+name: default
+steps:
+  - id: open
+    label: 立项
+    gate: null
+    skills: []
+    inputs: []
+    outputs: []
+    guards: []
+    transitions:
+      - event: open-complete
+        to: explore
+  - id: explore
+    label: 调研
+    gate: review
+    skills: []
+    inputs: []
+    outputs:
+      - field: design_doc
+        type: file_path
+    guards: []
+    transitions:
+      - event: explore-complete
+        to: spec
+  - id: spec
+    label: 规格
+    gate: review
+    skills: []
+    inputs:
+      - field: design_doc
+        type: file_path
+    outputs:
+      - field: plan
+        type: file_path
+    guards:
+      - type: tasks-at-least
+        n: 3
+    transitions:
+      - event: spec-complete
+        to: build
+  - id: build
+    label: 实现
+    gate: null
+    skills: []
+    inputs:
+      - field: design_doc
+        type: file_path
+      - field: plan
+        type: file_path
+    outputs:
+      - field: build_sha
+        type: string
+    guards: []
+    transitions:
+      - event: build-complete
+        to: verify
+  - id: verify
+    label: 验证
+    gate: review
+    skills: []
+    inputs:
+      - field: build_sha
+        type: string
+    outputs:
+      - field: verification_report
+        type: file_path
+    guards: []
+    transitions:
+      - event: verify-pass
+        to: ship
+      - event: verify-fail
+        to: build
+  - id: ship
+    label: 交付
+    gate: null
+    skills: []
+    inputs: []
+    outputs: []
+    guards: []
+    transitions:
+      - event: ship-complete
+        to: archive
+  - id: archive
+    label: 归档
+    gate: null
+    skills: []
+    inputs: []
+    outputs: []
+    guards: []
+    transitions: []
