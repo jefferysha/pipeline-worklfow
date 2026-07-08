@@ -121,6 +121,24 @@ export function reqPost(
   })
 }
 
+export function reqDelete(
+  port: number,
+  path: string,
+  opts?: { host?: string; headers?: Record<string, string> },
+): Promise<HttpResult> {
+  const host = opts?.host ?? '127.0.0.1'
+  return new Promise((resolve, reject) => {
+    const r = httpRequest({ host, port, path, method: 'DELETE', headers: opts?.headers }, (res) => {
+      let b = ''
+      res.setEncoding('utf8')
+      res.on('data', (c) => (b += c))
+      res.on('end', () => resolve(toResult(res.statusCode ?? 0, res.headers, b)))
+    })
+    r.on('error', reject)
+    r.end()
+  })
+}
+
 /** 真开一条 SSE 连接，累积事件；waitFor 轮询直到命中或超时。 */
 export interface SSEConn {
   events: Array<{ event: string; data: string }>

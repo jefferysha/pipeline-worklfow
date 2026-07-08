@@ -9,7 +9,7 @@ import { join } from 'node:path'
 import { createDashboardServer } from './server.js'
 import type { DashboardServer } from './types.js'
 import {
-  initChange, makeProject, makeTempManifest, makeWorktreeDir, newStore, openSSE, reqGet, reqPost, testFlow,
+  initChange, makeProject, makeTempManifest, makeWorktreeDir, newStore, openSSE, reqDelete, reqGet, reqPost, testFlow,
 } from './test-support.js'
 import type { StateStore } from '@pipeline-lite/kernel'
 import { loadManifest, TRANSITION_EVENTS as KERNEL_EVENTS, eventEdge as kernelEventEdge } from '@pipeline-lite/kernel'
@@ -870,5 +870,168 @@ describe('GET /api/workflows/:name —— 读单个 workflow（GOAL E8）', () =
     const h = await start()
     const r = await reqGet(h.port, `/api/workflows/${encodeURIComponent('../../etc/passwd')}?root=${encodeURIComponent(h.root)}`)
     expect(r.status).toBe(400)
+  })
+})
+
+describe('POST /api/workflows/:name —— 新建/覆盖自定义 workflow（GOAL E8）', () => {
+  const VALID_BODY = {
+    name: 'onboarding',
+    steps: [
+      { id: 'intake', label: '', gate: null, skills: [], inputs: [], outputs: [], guards: [], transitions: [{ event: 'complete', to: 'done' }] },
+      { id: 'done', label: '', gate: null, skills: [], inputs: [], outputs: [], guards: [], transitions: [] },
+    ],
+  }
+
+  it('无 token → 401', async () => {
+    const h = await start()
+    const r = await reqPost(h.port, '/api/workflows/onboarding', { ...VALID_BODY, root: h.root })
+    expect(r.status).toBe(401)
+  })
+
+  it('请求体不是 JSON 对象（如空 body）→ 400，同 /api/change/<name>/transition 共用的 body 形状校验（而非落到属性访问抛错的 500）', async () => {
+    const h = await start()
+    const r = await reqPost(h.port, '/api/workflows/onboarding', null, {
+      rawBody: '',
+      headers: { Authorization: `Bearer ${h.token}` },
+    })
+    expect(r.status).toBe(400)
+  })
+
+  it('root 未注册 → 404', async () => {
+    const h = await start()
+    const r = await reqPost(
+      h.port, '/api/workflows/onboarding', { ...VALID_BODY, root: '/tmp/not-registered' },
+      { headers: { Authorization: `Bearer ${h.token}` } },
+    )
+    expect(r.status).toBe(404)
+  })
+
+  it('name === default → 400（即便 body 合法）', async () => {
+    const h = await start()
+    const r = await reqPost(
+      h.port, '/api/workflows/default', { ...VALID_BODY, name: 'default', root: h.root },
+      { headers: { Authorization: `Bearer ${h.token}` } },
+    )
+    expect(r.status).toBe(400)
+  })
+
+  it('合法 body → 200，真落盘', async () => {
+    const { readFile } = await import('node:fs/promises')
+    const h = await start()
+    const r = await reqPost(
+      h.port, '/api/workflows/onboarding', { ...VALID_BODY, root: h.root },
+      { headers: { Authorization: `Bearer ${h.token}` } },
+    )
+    expect(r.status).toBe(200)
+    const content = await readFile(join(h.root, '.pipeline', 'workflows', 'onboarding.yaml'), 'utf8')
+    expect(content).toContain('name: onboarding')
+  })
+
+  it('非法 body（validateWorkflow 拒绝）→ 400 + errors 数组，不落盘', async () => {
+    const h = await start()
+    const invalidBody = {
+      name: 'broken',
+      steps: [{ id: 's1', label: '', gate: null, skills: [], inputs: [], outputs: [], guards: [], transitions: [{ event: 'go', to: 'does-not-exist' }] }],
+      root: h.root,
+    }
+    const r = await reqPost(
+      h.port, '/api/workflows/broken', invalidBody,
+      { headers: { Authorization: `Bearer ${h.token}` } },
+    )
+    expect(r.status).toBe(400)
+    expect(r.json<{ errors: string[] }>().errors.some((e) => e.includes('does-not-exist'))).toBe(true)
+    expect(existsSync(join(h.root, '.pipeline', 'workflows', 'broken.yaml'))).toBe(false)
+  })
+
+  it('非法 workflow 名（.. 路径穿越尝试）→ 400，同 GET /api/workflows/:name 共用的 name 防护，且先于落盘发生（.pipeline/workflows 目录都不会被创建）', async () => {
+    const h = await start()
+    const r = await reqPost(
+      h.port, `/api/workflows/${encodeURIComponent('..')}`, { ...VALID_BODY, root: h.root },
+      { headers: { Authorization: `Bearer ${h.token}` } },
+    )
+    expect(r.status).toBe(400)
+    expect(existsSync(join(h.root, '.pipeline', 'workflows'))).toBe(false)
+  })
+
+  it('非法 workflow 名（编码后内含 / 的路径穿越尝试）→ 400，不会被当成合法文件名写入', async () => {
+    const h = await start()
+    const r = await reqPost(
+      h.port, `/api/workflows/${encodeURIComponent('../../etc/passwd')}`, { ...VALID_BODY, root: h.root },
+      { headers: { Authorization: `Bearer ${h.token}` } },
+    )
+    expect(r.status).toBe(400)
+  })
+})
+
+describe('DELETE /api/workflows/:name —— 删除自定义 workflow（GOAL E8）', () => {
+  it('无 token → 401', async () => {
+    const h = await start()
+    const r = await reqDelete(h.port, `/api/workflows/onboarding?root=${encodeURIComponent(h.root)}`)
+    expect(r.status).toBe(401)
+  })
+
+  it('name === default → 400', async () => {
+    const h = await start()
+    const r = await reqDelete(
+      h.port, `/api/workflows/default?root=${encodeURIComponent(h.root)}`,
+      { headers: { Authorization: `Bearer ${h.token}` } },
+    )
+    expect(r.status).toBe(400)
+  })
+
+  it('真删存在的 workflow → 200，真从磁盘消失', async () => {
+    const { mkdir, writeFile } = await import('node:fs/promises')
+    const h = await start()
+    const dir = join(h.root, '.pipeline', 'workflows')
+    await mkdir(dir, { recursive: true })
+    await writeFile(join(dir, 'onboarding.yaml'), 'name: onboarding\nsteps: []\n', 'utf8')
+    const r = await reqDelete(
+      h.port, `/api/workflows/onboarding?root=${encodeURIComponent(h.root)}`,
+      { headers: { Authorization: `Bearer ${h.token}` } },
+    )
+    expect(r.status).toBe(200)
+    expect(existsSync(join(dir, 'onboarding.yaml'))).toBe(false)
+  })
+
+  it('不存在的 workflow → 404', async () => {
+    const h = await start()
+    const r = await reqDelete(
+      h.port, `/api/workflows/ghost?root=${encodeURIComponent(h.root)}`,
+      { headers: { Authorization: `Bearer ${h.token}` } },
+    )
+    expect(r.status).toBe(404)
+  })
+
+  it('非法 workflow 名（.. 路径穿越尝试）→ 400，同 GET/POST /api/workflows/:name 共用的 name 防护，且先于删除发生', async () => {
+    const h = await start()
+    const r = await reqDelete(
+      h.port, `/api/workflows/${encodeURIComponent('..')}?root=${encodeURIComponent(h.root)}`,
+      { headers: { Authorization: `Bearer ${h.token}` } },
+    )
+    expect(r.status).toBe(400)
+  })
+
+  it('非法 workflow 名（编码后内含 / 的路径穿越尝试）→ 400，不会被当成合法文件名删除', async () => {
+    const h = await start()
+    const r = await reqDelete(
+      h.port, `/api/workflows/${encodeURIComponent('../../etc/passwd')}?root=${encodeURIComponent(h.root)}`,
+      { headers: { Authorization: `Bearer ${h.token}` } },
+    )
+    expect(r.status).toBe(400)
+  })
+})
+
+describe('未知 HTTP 方法（非 GET/POST/DELETE）仍 405（既有兜底不因新增 DELETE 分支而失效）', () => {
+  it('PUT → 405', async () => {
+    const h = await start()
+    const r = await new Promise<{ status: number }>((resolve, reject) => {
+      const req = (require('node:http') as typeof import('node:http')).request(
+        { host: '127.0.0.1', port: h.port, path: '/api/workflows/x', method: 'PUT' },
+        (res) => resolve({ status: res.statusCode ?? 0 }),
+      )
+      req.on('error', reject)
+      req.end()
+    })
+    expect(r.status).toBe(405)
   })
 })

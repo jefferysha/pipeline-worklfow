@@ -24,12 +24,12 @@ import type { AddressInfo } from 'node:net'
 import { dirname, join, resolve as resolvePath } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { applyLevelChange, createFlowEngine, createStateStore, loadManifest, loadRegistry } from '@pipeline-lite/kernel'
-import type { FlowEngine, GraduationFs, StateStore } from '@pipeline-lite/kernel'
+import type { FlowEngine, GraduationFs, StateStore, WorkflowDef } from '@pipeline-lite/kernel'
 import { buildAfkLog, buildAfkSnapshot, cancelAfkRun, readAfkRunLog, retryAfkRun } from './afk.js'
 import { buildLoopsSnapshot } from './loops.js'
 import { readMandatorySkills, validateMandatorySkillsBody, writeMandatorySkills } from './config.js'
 import { resolveServerPaths } from './paths.js'
-import { listWorkflowNames, readWorkflowForApi, WorkflowNotFoundError } from './workflows.js'
+import { deleteWorkflowForApi, listWorkflowNames, readWorkflowForApi, writeWorkflowForApi, WorkflowNotFoundError } from './workflows.js'
 import { readRegistry } from './registry.js'
 import { listAllSkills } from './skillsRegistry.js'
 import { buildSnapshot, computeFingerprint, dedupeRoots, type SnapshotDeps } from './snapshot.js'
@@ -498,6 +498,42 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
       return sendJson(res, result.exitCode === 0 ? 200 : 400, result)
     }
 
+    // ── workflow 编辑器（GOAL E8）：POST /api/workflows/:name —— 新建/覆盖 ──
+    const mWfPost = /^\/api\/workflows\/([^/]+)$/.exec(path)
+    if (mWfPost) {
+      const wfName = decodeURIComponent(mWfPost[1]!)
+      // 防路径穿越（同 GET /api/workflows/:name、/api/afk/<name>/log、/api/afk/<name>/cancel、
+      // /api/afk/<name>/retry 共用的 name 校验模式）：写端点比读端点更需要这道门——不挡住的话，
+      // 恶意 name 能让 writeWorkflowForApi 内部的 join(dir, `${name}.yaml`) 写到
+      // .pipeline/workflows/ 之外的任意文件。必须先于下面的 'default' 检查执行。
+      if (!wfName || !/^[a-zA-Z0-9_-]+$/.test(wfName) || wfName.includes('..')) {
+        return sendJson(res, 400, { ok: false, error: '非法 workflow 名（仅允许 a-z A-Z 0-9 - _）' })
+      }
+      if (wfName === 'default') {
+        return sendJson(res, 400, { ok: false, error: 'default workflow 不可通过编辑器创建/覆盖（运行时不读这个文件）' })
+      }
+      const rawBody = await readJsonBody(req)
+      // 同 /api/change/<name>/transition 共用的 body 形状校验：空/非对象 body（如空字符串
+      // JSON.parse 失败后 readJsonBody 回落的 undefined）若不提前拦，下面的属性访问会直接
+      // 抛 TypeError，被最外层 handler.catch 兜成 500——本文件其余写端点（/api/loops/level、
+      // /api/afk/<name>/cancel、/api/afk/<name>/retry、/api/change/<name>/transition）都对此
+      // 有前置校验，这里补齐保持一致（清晰的 400 而非属性访问抛错的 500）。
+      if (typeof rawBody !== 'object' || rawBody === null) {
+        return sendJson(res, 400, { ok: false, error: '请求体须为 JSON 对象' })
+      }
+      const body = rawBody as Record<string, unknown>
+      const root = typeof body.root === 'string' ? body.root : ''
+      if (!dedupeRoots(registry()).includes(resolvePath(root))) {
+        return sendJson(res, 404, { ok: false, error: 'root 未在机器级项目注册表中' })
+      }
+      try {
+        const result = writeWorkflowForApi(root, wfName, body as unknown as WorkflowDef)
+        return sendJson(res, result.ok ? 200 : 400, result)
+      } catch (e) {
+        return sendJson(res, 500, { ok: false, error: errMsg(e) })
+      }
+    }
+
     // ── afk-workbench Task 4：POST /api/afk/:name/cancel —— 取消运行中的 automation 任务
     //    （落 .cancel-requested 标记 + docker kill 容器，见 afk.ts::cancelAfkRun）──
     const cancelMatch = /^\/api\/afk\/([^/]+)\/cancel$/.exec(path)
@@ -570,6 +606,45 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
     return sendJson(res, outcome.code, outcome.body)
   }
 
+  async function handleDelete(req: IncomingMessage, res: ServerResponse, path: string): Promise<void> {
+    // (1)(2) 同 handlePost 的 Host 守卫 + token 鉴权，DELETE 无请求体不需要 Content-Type 校验。
+    if (!isLocalHost(req.headers.host, boundPort)) {
+      return sendJson(res, 403, { ok: false, error: 'Host header 不合法（疑似 DNS 重绑定攻击）' })
+    }
+    const provided = tokenFromHeaders(req.headers)
+    if (!provided || !tokensMatch(provided, token)) {
+      return sendJson(res, 401, { ok: false, error: '缺少或无效 token（写端点需鉴权）' })
+    }
+
+    // ── workflow 编辑器（GOAL E8）：DELETE /api/workflows/:name ──
+    const mWfDelete = /^\/api\/workflows\/([^/]+)$/.exec(path)
+    if (mWfDelete) {
+      const wfName = decodeURIComponent(mWfDelete[1]!)
+      // 防路径穿越（同 POST /api/workflows/:name、GET /api/workflows/:name 共用的 name 校验
+      // 模式）：必须先于下面的 'default' 检查执行——不挡住的话，恶意 name 能让
+      // deleteWorkflowForApi 内部的 join(dir, `${name}.yaml`) 删到 .pipeline/workflows/ 之外
+      // 的任意文件（DELETE 比 POST 更危险：一次成功调用即不可逆地抹掉目标文件）。
+      if (!wfName || !/^[a-zA-Z0-9_-]+$/.test(wfName) || wfName.includes('..')) {
+        return sendJson(res, 400, { ok: false, error: '非法 workflow 名（仅允许 a-z A-Z 0-9 - _）' })
+      }
+      if (wfName === 'default') {
+        return sendJson(res, 400, { ok: false, error: 'default workflow 不可通过编辑器删除' })
+      }
+      const root = new URL(req.url ?? '/', 'http://localhost').searchParams.get('root') ?? ''
+      if (!dedupeRoots(registry()).includes(resolvePath(root))) {
+        return sendJson(res, 404, { ok: false, error: 'root 未在机器级项目注册表中' })
+      }
+      try {
+        const deleted = deleteWorkflowForApi(root, wfName)
+        return sendJson(res, deleted ? 200 : 404, deleted ? { ok: true } : { ok: false, error: `workflow '${wfName}' 不存在` })
+      } catch (e) {
+        return sendJson(res, 500, { ok: false, error: errMsg(e) })
+      }
+    }
+
+    return sendJson(res, 404, { ok: false, error: '未知端点' })
+  }
+
   const httpServer: Server = createServer((req, res) => {
     const path = (req.url ?? '/').split('?', 1)[0]!
     const method = req.method ?? 'GET'
@@ -577,7 +652,9 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
       ? handleGet(req, res, path)
       : method === 'POST'
         ? handlePost(req, res, path)
-        : Promise.resolve(sendJson(res, 405, { ok: false, error: 'method not allowed' }))
+        : method === 'DELETE'
+          ? handleDelete(req, res, path)
+          : Promise.resolve(sendJson(res, 405, { ok: false, error: 'method not allowed' }))
     handler.catch((e) => {
       try { sendJson(res, 500, { ok: false, error: errMsg(e) }) } catch { /* 已写头 */ }
     })
