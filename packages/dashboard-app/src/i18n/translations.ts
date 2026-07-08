@@ -142,6 +142,10 @@ export const zh: Dict = {
     duplicate_id: 'id 重复，换一个',
     duplicate_event: '同一 step 内 event 名不能重复',
     confirm: '确认',
+    breadcrumb_top: '‹ 返回顶层',
+    breadcrumb_current: '当前：{stepId} 的 skill 依赖图',
+    add_skill: '+ skill',
+    add_skill_prompt: 'skill id',
   },
 }
 
@@ -282,6 +286,10 @@ export const en: Dict = {
     duplicate_id: 'Duplicate id, pick another',
     duplicate_event: 'Event name must be unique within a step',
     confirm: 'Confirm',
+    breadcrumb_top: '‹ Back to top',
+    breadcrumb_current: 'Viewing: skill DAG of {stepId}',
+    add_skill: '+ skill',
+    add_skill_prompt: 'skill id',
   },
 }
 

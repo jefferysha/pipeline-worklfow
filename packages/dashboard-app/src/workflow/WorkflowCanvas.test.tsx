@@ -304,3 +304,179 @@ describe('WorkflowCanvas —— 顶层 step 拓扑', () => {
     expect(screen.getByText(/intake/i)).toBeInTheDocument()
   })
 })
+
+// Task 7：钻入 skill DAG 层（双击 step 节点 → 该 step 内部的 skill/depends_on 拓扑；面包屑返回顶层）。
+// intake 带 2 个 skill：a、b，其中 b depends_on a——用来断言"钻入后渲染的是 skill 节点 + depends_on
+// 连线，不是顶层 step 图"。
+const WITH_SKILLS = {
+  name: NAME,
+  steps: [
+    {
+      id: 'intake', label: 'Intake', gate: null,
+      skills: [{ id: 'a' }, { id: 'b', depends_on: ['a'] }],
+      inputs: [], outputs: [], guards: [],
+      transitions: [{ event: 'complete', to: 'done' }],
+    },
+    { id: 'done', label: 'Done', gate: null, skills: [], inputs: [], outputs: [], guards: [], transitions: [] },
+  ],
+}
+
+describe('WorkflowCanvas —— 钻入 skill DAG 层', () => {
+  beforeEach(() => {
+    global.fetch = vi.fn(async (url: string, opts?: RequestInit) => {
+      if (url === `/api/workflows/${NAME}?root=${encodeURIComponent(ROOT)}`) {
+        return new Response(JSON.stringify(WITH_SKILLS), { status: 200 })
+      }
+      if (url === `/api/workflows/${NAME}` && opts?.method === 'POST') {
+        return new Response(JSON.stringify({ ok: true }), { status: 200 })
+      }
+      throw new Error(`unexpected fetch ${url}`)
+    }) as unknown as typeof fetch
+  })
+
+  it('双击 step 节点 → 画布切换成该 step 的 skill 节点（a、b）+ depends_on 连线，面包屑显示当前 step', async () => {
+    renderCanvas()
+    await waitFor(() => expect(screen.getByText(/intake/i)).toBeInTheDocument())
+    fireEvent.doubleClick(screen.getByText(/intake/i))
+    await waitFor(() => expect(screen.getByText('a')).toBeInTheDocument())
+    expect(screen.getByText('b')).toBeInTheDocument()
+    expect(screen.getByText(/当前：intake/)).toBeInTheDocument()
+    // 顶层的 done 节点这时候不应该出现（数据源已切换，不是叠加渲染）
+    expect(screen.queryByText(/done/i)).not.toBeInTheDocument()
+  })
+
+  it('钻入后点面包屑"返回顶层" → 切回顶层图（intake/done 重新出现，skill 节点消失）', async () => {
+    renderCanvas()
+    await waitFor(() => expect(screen.getByText(/intake/i)).toBeInTheDocument())
+    fireEvent.doubleClick(screen.getByText(/intake/i))
+    await waitFor(() => expect(screen.getByText('a')).toBeInTheDocument())
+    fireEvent.click(screen.getByText(/返回顶层/))
+    await waitFor(() => expect(screen.getByText(/done/i)).toBeInTheDocument())
+    expect(screen.queryByText('a')).not.toBeInTheDocument()
+  })
+
+  it('skill 层"+ skill"新增一个 skill 节点', async () => {
+    renderCanvas()
+    await waitFor(() => expect(screen.getByText(/intake/i)).toBeInTheDocument())
+    fireEvent.doubleClick(screen.getByText(/intake/i))
+    await waitFor(() => expect(screen.getByText('a')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: '+ skill' }))
+    fireEvent.change(screen.getByPlaceholderText(/skill id/), { target: { value: 'c' } })
+    fireEvent.click(screen.getByRole('button', { name: '确认' }))
+    await waitFor(() => expect(screen.getByText('c')).toBeInTheDocument())
+  })
+
+  it('skill 层触发 onConnect（depends_on 无标签）不弹 event 名输入框，直接连上；保存后新连线正确落在 depends_on', async () => {
+    renderCanvas()
+    await waitFor(() => expect(screen.getByText(/intake/i)).toBeInTheDocument())
+    fireEvent.doubleClick(screen.getByText(/intake/i))
+    await waitFor(() => expect(screen.getByText('a')).toBeInTheDocument())
+    // 先加一个新 skill c（初始没有 depends_on）：如果直接对 fixture 里已经 depends_on: ['a']
+    // 的 b 重连 a→b，即使 onConnect 在钻入态完全不生效，保存后 b.depends_on 也会"恰好"仍包含
+    // 'a'（fixture 本来就有），测试分辨不出真假——用一个初始无依赖的新 skill 才能证明这条
+    // depends_on 是 onConnect 真正新增的，不是 fixture 原有数据残留。
+    fireEvent.click(screen.getByRole('button', { name: '+ skill' }))
+    fireEvent.change(screen.getByPlaceholderText(/skill id/), { target: { value: 'c' } })
+    fireEvent.click(screen.getByRole('button', { name: '确认' }))
+    await waitFor(() => expect(screen.getByText('c')).toBeInTheDocument())
+
+    const connectTrigger = screen.getByTestId('debug-trigger-connect')
+    fireDebugConnect(connectTrigger, { source: 'a', target: 'c' })
+    // skill 层不应该弹出 event 名输入框（那是顶层 transition 专属，depends_on 无标签直接落地）
+    expect(screen.queryByPlaceholderText(/event 名/)).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByText(/返回顶层/))
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    await waitFor(() => {
+      const calls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls
+      const postCall = calls.find((c) => c[0] === `/api/workflows/${NAME}` && c[1]?.method === 'POST')
+      const body = JSON.parse(postCall![1].body as string)
+      const intake = body.steps.find((s: { id: string }) => s.id === 'intake')
+      const cSkill = intake.skills.find((s: { id: string }) => s.id === 'c')
+      expect(cSkill.depends_on).toContain('a')
+    })
+  })
+
+  it('钻入后真触发 onNodesDelete（删除 skill 节点 a）→ a 从 skills 移除，且 b 指向 a 的 depends_on 一并清理', async () => {
+    renderCanvas()
+    await waitFor(() => expect(screen.getByText(/intake/i)).toBeInTheDocument())
+    fireEvent.doubleClick(screen.getByText(/intake/i))
+    await waitFor(() => expect(screen.getByText('a')).toBeInTheDocument())
+    const deleteNodesTrigger = screen.getByTestId('debug-trigger-delete-nodes')
+    fireDebugDeleteNodes(deleteNodesTrigger, [{ id: 'a' }])
+    fireEvent.click(screen.getByText(/返回顶层/))
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    await waitFor(() => expect(screen.getByText('已保存')).toBeInTheDocument())
+    const calls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls
+    const postCall = calls.find((c) => c[0] === `/api/workflows/${NAME}` && c[1]?.method === 'POST')
+    const body = JSON.parse(postCall![1].body as string)
+    const intake = body.steps.find((s: { id: string }) => s.id === 'intake')
+    expect(intake.skills.map((s: { id: string }) => s.id)).toEqual(['b'])
+    const bSkill = intake.skills.find((s: { id: string }) => s.id === 'b')
+    expect(bSkill.depends_on ?? []).not.toContain('a')
+  })
+
+  // 已知坑（brief 明确标注"容易漏改、最容易只测新增不测删除"的场景）：钻入后删除一条 depends_on
+  // 连线。已知坑 2（选中一条边再按 Delete 键这条真实交互路径在 jsdom 下能否真触发
+  // onEdgesDelete）已经用独立 spike 实测验证过——结论见 WorkflowCanvas.tsx 顶部本任务小节的
+  // 文件头注释：真实 click(边 DOM 节点) + document keyDown Backspace 确实能在本文件已有的
+  // ResizeObserver/DOMMatrixReadOnly/offsetWidth/offsetHeight stub 组合下真实触发 onEdgesDelete
+  // （对顶层 intake->done:complete 这条既有边验证过：点击后 className 出现 "selected"，
+  // 按 Backspace 并保存后该 transition 消失）。但 brief 自带的占位选择器
+  // `screen.getByText('a').closest('[data-id]')` 本身选择的元素是错的：depends_on 边没有可查询的
+  // label 文字，'a' 只会命中 skill 节点 a 自己的文字，而 xyflow 的节点/边都各自带独立的
+  // `data-id` 属性且分处两棵不同的 DOM 子树（.react-flow__nodes vs .react-flow__edges）——从节点
+  // 'a' 的文字向上 `.closest('[data-id]')` 只可能先摸到节点 a 自己的 data-id="a"，永远摸不到边的
+  // data-id="a->b"，实际会删除错节点（触发 onNodesDelete 删 a 本身）而不是删边（触发
+  // onEdgesDelete 删 a→b 依赖）。因此这里改用与本文件其余全部 onNodesDelete/onEdgesDelete
+  // 测试完全一致的既有约定——复用 debug-trigger-delete-edges（同一个隐藏节点、同一个
+  // CustomEvent 直接调用真实回调的机制，不额外发明 debug-trigger-delete-edge 单数版本），
+  // 保持全文件测试风格统一（不真半假：不混用"DOM 事件模拟"和"直接调用"两种手法）。
+  it('钻入后删除一条 depends_on 连线（b 不再依赖 a）→ 保存后 depends_on 只精确移除这一条，不清空整个数组', async () => {
+    // 本用例专用 fixture：让 b 同时 depends_on ['a', 'z']（两个依赖），只删 a→b 这一条边，
+    // 断言剩下 z 还在——如果只给 b 一个依赖，删除后 depends_on 变成 []，没法分辨"精确按边 id
+    // 过滤"（真实实现）和"只要该 skill 任意一条依赖边被删就清空整个 depends_on 数组"
+    // （假设中的错误实现），这两者在"删除前只有 1 个依赖"的前提下结果完全一样——同 Task 6
+    // 那条 onEdgesDelete 回归测试（reviewer 指出过的同一类缺口）补强的理由完全一致。
+    const WITH_SIBLING_DEPENDS_ON = {
+      name: NAME,
+      steps: [
+        {
+          id: 'intake', label: 'Intake', gate: null,
+          skills: [{ id: 'a' }, { id: 'z' }, { id: 'b', depends_on: ['a', 'z'] }],
+          inputs: [], outputs: [], guards: [],
+          transitions: [{ event: 'complete', to: 'done' }],
+        },
+        { id: 'done', label: 'Done', gate: null, skills: [], inputs: [], outputs: [], guards: [], transitions: [] },
+      ],
+    }
+    global.fetch = vi.fn(async (url: string, opts?: RequestInit) => {
+      if (url === `/api/workflows/${NAME}?root=${encodeURIComponent(ROOT)}`) {
+        return new Response(JSON.stringify(WITH_SIBLING_DEPENDS_ON), { status: 200 })
+      }
+      if (url === `/api/workflows/${NAME}` && opts?.method === 'POST') {
+        return new Response(JSON.stringify({ ok: true }), { status: 200 })
+      }
+      throw new Error(`unexpected fetch ${url}`)
+    }) as unknown as typeof fetch
+
+    renderCanvas()
+    await waitFor(() => expect(screen.getByText(/intake/i)).toBeInTheDocument())
+    fireEvent.doubleClick(screen.getByText(/intake/i))
+    await waitFor(() => expect(screen.getByText('b')).toBeInTheDocument())
+
+    // skill 层边 id 约定：`${dep}->${skillId}`（无 event 名后缀，depends_on 本身无标签）。
+    const deleteEdgesTrigger = screen.getByTestId('debug-trigger-delete-edges')
+    fireDebugDeleteEdges(deleteEdgesTrigger, [{ id: 'a->b' }])
+
+    fireEvent.click(screen.getByText(/返回顶层/))
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    await waitFor(() => expect(screen.getByText('已保存')).toBeInTheDocument())
+    const calls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls
+    const postCall = calls.find((c) => c[0] === `/api/workflows/${NAME}` && c[1]?.method === 'POST')
+    const body = JSON.parse(postCall![1].body as string)
+    const bSkill = body.steps.find((s: { id: string }) => s.id === 'intake').skills.find((s: { id: string }) => s.id === 'b')
+    // 精确移除 a：z 这一条兄弟依赖必须还在（不是整个数组被清空）。
+    expect(bSkill.depends_on).toEqual(['z'])
+  })
+})
