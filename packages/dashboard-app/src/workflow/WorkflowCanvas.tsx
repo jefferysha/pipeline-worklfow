@@ -8,6 +8,7 @@ import '@xyflow/react/dist/style.css'
 import { getToken } from '../api/client'
 import { useT } from '../i18n'
 import { layoutNodes } from './layout'
+import { StepDetailPanel, type SkillRef, type StepDef } from './StepDetailPanel'
 
 /**
  * WorkflowCanvas（GOAL E8 workflow 编辑器画布 Task 6 + Task 7）—— 顶层 step 拓扑图 + 钻入
@@ -121,15 +122,10 @@ import { layoutNodes } from './layout'
  *    交互测试统一走 debug-trigger 直接调用真实回调，不走 DOM 事件模拟，两种手法不在同一文件里
  *    混用。测试细节见 WorkflowCanvas.test.tsx 对应用例的注释。
  */
-interface FieldRef { field: string; type: 'string' | 'file_path' | 'boolean' }
-interface SkillRef { id: string; depends_on?: string[] }
-type GuardConfig = { type: 'tasks-at-least'; n: number } | { type: 'nonempty-output' }
-interface StepTransition { event: string; to: string }
-interface StepDef {
-  id: string; label: string; gate: 'review' | 'confirm' | null
-  skills: SkillRef[]; inputs: FieldRef[]; outputs: FieldRef[]
-  guards: GuardConfig[]; transitions: StepTransition[]
-}
+// FieldRef/SkillRef/GuardConfig/StepTransition/StepDef 五个本地类型（Task 6 起草）Task 8 起
+// 收拢进 StepDetailPanel.tsx 单一声明（上面 import 一行），本文件不再重复声明——同一份形状
+// 只留一份真相源。WorkflowDef 不在这五个之列（StepDetailPanel 不需要它），继续留在本地，只是
+// 引用的 StepDef 现在来自 import。
 interface WorkflowDef { name: string; steps: StepDef[] }
 
 export interface WorkflowCanvasProps {
@@ -205,6 +201,9 @@ function WorkflowCanvasInner({ root, name, onBack }: WorkflowCanvasProps): JSX.E
   const [saveStatus, setSaveStatus] = useState<{ kind: 'idle' | 'ok' | 'error'; msg?: string }>({ kind: 'idle' })
   // Task 7：非 null = 正在钻入看该 step 的 skill DAG（值是该 step 的 id）。
   const [drillStepId, setDrillStepId] = useState<string | null>(null)
+  // Task 8：顶层单击选中打开详情侧栏的 step id。只在非钻入态下由 onNodeClick 设置——钻入态下
+  // 单击 skill 节点不做任何事（onNodeClick 函数体首行即 return），两层的节点点击语义不冲突。
+  const [selectedStepId, setSelectedStepId] = useState<string | null>(null)
   // onConnect/onNodesDelete/onEdgesDelete 要读"最新 drillStepId"但自身必须保持稳定引用
   // （不能把 drillStepId 放进它们的 useCallback 依赖数组）——原因见文件头注释第 3 点：这三个
   // 回调的 debug-trigger 测试钩子是靠 callback ref 手动 addEventListener 挂的，那段代码没有配对
@@ -237,6 +236,13 @@ function WorkflowCanvasInner({ root, name, onBack }: WorkflowCanvasProps): JSX.E
     [wf, drillStepId],
   )
 
+  // Task 8：当前单击选中（非钻入）的 step 本身——同 currentStep 一样的 useMemo 派生模式，
+  // 避免在下面 JSX 里对 wf.steps 重复 .find() 两次（一次判断是否渲染、一次取 step prop）。
+  const selectedStep = useMemo(
+    () => (selectedStepId ? wf?.steps.find((s) => s.id === selectedStepId) ?? null : null),
+    [wf, selectedStepId],
+  )
+
   // 数据源切换的唯一权威来源：drillStepId 非空且能在 wf 里找到对应 step 时渲染该 step 的
   // skills/depends_on（Task 7 新增），否则渲染顶层 steps/transitions（Task 6 原有行为）。
   // wf 或 drillStepId 任一变化都会重新从 wf 派生一遍——见文件头注释关于"唯一权威来源"的说明。
@@ -251,8 +257,36 @@ function WorkflowCanvasInner({ root, name, onBack }: WorkflowCanvasProps): JSX.E
     }
   }, [wf, drillStepId, currentStep, setNodes, setEdges])
 
+  // Task 8：真实浏览器双击一个元素会先触发两次 click、再触发一次 dblclick
+  // （mousedown→mouseup→click→mousedown→mouseup→click→dblclick）——如果单击不经任何延迟就
+  // 直接 setSelectedStepId 打开详情侧栏，双击 step 节点时会先把详情侧栏闪一下打开（两次
+  // click 各触发一次），紧接着才钻入 skill 层，两个交互互相打架、用户体验是"闪一下详情面板
+  // 又切进钻入视图"。`@testing-library` 的 fireEvent.doubleClick 只派发一个 dblclick 事件，
+  // 不模拟这个真实序列，所以 Task 7 已有的双击测试测不出这个问题——这是只看测试绿灯会漏掉的
+  // 真实交互 bug，必须显式处理，不能假设"测试过了就没问题"。标准解法：单击不立即生效，延迟
+  // 250ms（业界对"双击窗口"的常见经验值）等第二次点击；如果延迟内来了双击，
+  // onNodeDoubleClick 函数体最前面清掉这个待生效的定时器。回归测试见
+  // WorkflowCanvas.test.tsx"真实双击时序"用例（用 vi.useFakeTimers() 验证，不只是主观相信
+  // 这段代码"看起来对"）。
+  const clickTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const onNodeClick: NodeMouseHandler = useCallback((_e, node) => {
+    if (drillStepId) return
+    if (clickTimer.current) clearTimeout(clickTimer.current)
+    clickTimer.current = setTimeout(() => {
+      setSelectedStepId(node.id)
+      clickTimer.current = null
+    }, 250)
+  }, [drillStepId])
+
   // 双击顶层 step 节点钻入其 skill DAG；已经钻入时双击 skill 节点不做任何事（没有第三层）。
+  // 函数体第一行清掉 onNodeClick 可能正在等待的延迟单击定时器——不是新增函数，是在 Task 7
+  // 原有函数体最前面插入这一行，其余逻辑不变。
   const onNodeDoubleClick: NodeMouseHandler = useCallback((_e, node) => {
+    if (clickTimer.current) {
+      clearTimeout(clickTimer.current)
+      clickTimer.current = null
+    }
     if (!drillStepId) setDrillStepId(node.id)
   }, [drillStepId])
 
@@ -495,6 +529,13 @@ function WorkflowCanvasInner({ root, name, onBack }: WorkflowCanvasProps): JSX.E
       <div data-testid="debug-trigger-connect" ref={debugTriggerRef} style={{ display: 'none' }} />
       <div data-testid="debug-trigger-delete-nodes" ref={debugDeleteNodesRef} style={{ display: 'none' }} />
       <div data-testid="debug-trigger-delete-edges" ref={debugDeleteEdgesRef} style={{ display: 'none' }} />
+      {!drillStepId && selectedStep && (
+        <StepDetailPanel
+          step={selectedStep}
+          onChange={(next) => setWf((prev) => (prev ? { ...prev, steps: prev.steps.map((s) => (s.id === next.id ? next : s)) } : prev))}
+          onClose={() => setSelectedStepId(null)}
+        />
+      )}
       <div style={{ height: 480 }}>
         <ReactFlow
           nodes={nodes}
@@ -504,6 +545,7 @@ function WorkflowCanvasInner({ root, name, onBack }: WorkflowCanvasProps): JSX.E
           onConnect={onConnect}
           onNodesDelete={onNodesDelete}
           onEdgesDelete={onEdgesDelete}
+          onNodeClick={onNodeClick}
           onNodeDoubleClick={onNodeDoubleClick}
         >
           <Background />

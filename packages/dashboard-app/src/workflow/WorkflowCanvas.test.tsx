@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '../i18n'
 import { WorkflowCanvas } from './WorkflowCanvas'
@@ -478,5 +478,53 @@ describe('WorkflowCanvas —— 钻入 skill DAG 层', () => {
     const bSkill = body.steps.find((s: { id: string }) => s.id === 'intake').skills.find((s: { id: string }) => s.id === 'b')
     // 精确移除 a：z 这一条兄弟依赖必须还在（不是整个数组被清空）。
     expect(bSkill.depends_on).toEqual(['z'])
+  })
+})
+
+// Task 8：单击顶层 step 节点打开 StepDetailPanel 详情侧栏（selectedStepId，非钻入）；双击仍
+// 钻入 skill DAG（Task 7 原有行为，onNodeDoubleClick 不变）。两个交互必须不冲突——真实浏览器
+// 双击一个元素会先触发两次 click、再触发一次 dblclick，如果单击不经延迟就立即生效，会在双击的
+// 前两次 click 上各开一次详情侧栏，紧接着才钻入，体验是"闪一下详情面板又切进钻入视图"。
+describe('WorkflowCanvas —— Task 8：单击打开详情侧栏 / 双击仍钻入 skill 层', () => {
+  it('真实双击时序：双击 step 节点只钻入 skill 层，不会同时打开详情侧栏（先 click 再 dblclick 的真实浏览器序列，用假计时器验证 250ms 内的单击被真正取消，而不是被 drillStepId 渲染条件恰好掩盖）', async () => {
+    vi.useFakeTimers()
+    try {
+      renderCanvas()
+      await vi.waitFor(() => expect(screen.getByText(/intake/i)).toBeInTheDocument())
+      const node = screen.getByText(/intake/i)
+      fireEvent.click(node)
+      fireEvent.click(node)
+      fireEvent.doubleClick(node)
+      // 定时器回调（若真的触发）会调用 setSelectedStepId 这个 React state 更新，发生在
+      // fireEvent 的 act() 包裹之外——用 act() 包一下推进时间这一步，避免 "state update not
+      // wrapped in act" 警告，且确保断言执行前状态更新已经落定（不依赖时序侥幸）。
+      act(() => { vi.advanceTimersByTime(300) })
+      expect(screen.queryByDisplayValue('Intake')).not.toBeInTheDocument() // 详情侧栏没开
+
+      // 光凭上面这条断言还不能证明"待生效的单击真的被取消"——此刻 drillStepId 已经非空，
+      // StepDetailPanel 的渲染条件本身就要求 !drillStepId；即使 onNodeDoubleClick 完全没清
+      // 定时器、遗留的 setSelectedStepId('intake') 在 advanceTimersByTime 期间真的执行了，
+      // 面板也会被这条独立的 drillStepId 判断挡住——那样测试会"看起来通过"但根本没验证到
+      // 取消逻辑本身。已实测反向验证过这个区分点确实成立：把 onNodeDoubleClick 函数体的
+      // clearTimeout 那三行临时删掉、只保留 `if (!drillStepId) setDrillStepId(node.id)`
+      // 重跑本用例——上面这条"退出钻入态之前"的断言依然 PASS（如预期，被 !drillStepId
+      // 掩盖），但下面这条"退出钻入态之后"的断言真的 FAIL 了：
+      // `expect(element).not.toBeInTheDocument() / found <input value="Intake" />`，
+      // 证明"待生效单击泄漏成打开面板"这件事真实发生了，只是被上面那条断言看不出来。补一步：
+      // 退出钻入态后再断言一次——如果单击真的被取消，selectedStepId 应仍是 null，退出钻入态
+      // 后面板依然不出现；如果没被真正取消（只是被 drillStepId 掩盖），退出钻入态的一瞬间
+      // 面板就会冒出来——这一步才是本用例名字里"真正取消"这个断言的直接证据。
+      fireEvent.click(screen.getByText(/返回顶层/))
+      expect(screen.queryByDisplayValue('Intake')).not.toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('单击顶层 step 节点 → 打开详情侧栏；双击仍然是钻入 skill 层（两种交互不冲突）', async () => {
+    renderCanvas()
+    await waitFor(() => expect(screen.getByText(/intake/i)).toBeInTheDocument())
+    fireEvent.click(screen.getByText(/intake/i))
+    await waitFor(() => expect(screen.getByDisplayValue('Intake')).toBeInTheDocument())
   })
 })
