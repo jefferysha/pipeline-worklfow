@@ -108,13 +108,19 @@ export function LoopsPanel(): JSX.Element {
               <td>{breakerLabel(row.budget.breaker)}</td>
             </tr>
           )
+          // nextLevel 提出成局部变量而不是在下面重复索引 NEXT_LEVEL[row.autonomy_level]——
+          // TS 的控制流窄化不跨越两次独立的下标访问表达式生效（即使值确定性相同），重复写会在
+          // `t()` 调用处把 'L2' | 'L3' | null 原样传给期望 string | number 的 vars 参数，
+          // 类型检查报错（tsc --noEmit 目前不被 CI 门禁覆盖——见 TEST-REALITY.md G15——但
+          // 本轮需要真跑 `npm run build:web` 验证 workflow 编辑器等真机流程，顺手修正）。
+          const nextLevel = NEXT_LEVEL[row.autonomy_level]
           const detailRow = expanded === row.id ? (
             <tr key={`${row.root}:${row.id}:detail`}>
               <td colSpan={5}>
                 <p>{t('loops.readiness_band', { band: row.readiness.band })}</p>
                 {promoteError && <p style={{ color: 'red' }}>{promoteError}</p>}
-                {NEXT_LEVEL[row.autonomy_level] && (
-                  <button onClick={() => promote(row)}>{t('loops.promote_to', { level: NEXT_LEVEL[row.autonomy_level] })}</button>
+                {nextLevel && (
+                  <button onClick={() => promote(row)}>{t('loops.promote_to', { level: nextLevel })}</button>
                 )}
               </td>
             </tr>
