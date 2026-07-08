@@ -280,13 +280,23 @@ function WorkflowCanvasInner({ root, name, onBack }: WorkflowCanvasProps): JSX.E
   }, [drillStepId])
 
   // 双击顶层 step 节点钻入其 skill DAG；已经钻入时双击 skill 节点不做任何事（没有第三层）。
-  // 函数体第一行清掉 onNodeClick 可能正在等待的延迟单击定时器——不是新增函数，是在 Task 7
-  // 原有函数体最前面插入这一行，其余逻辑不变。
+  // 函数体前两行清理"单击"相关的残留状态——不是新增函数，是在 Task 7 原有函数体最前面插入，
+  // 其余逻辑不变：
+  //   1) 清掉 onNodeClick 可能正在等待的延迟单击定时器（250ms 窗口内的双击场景）。
+  //   2) 清空 selectedStepId 本身——这是一个相邻但不同的坑：如果用户先单击 A 让详情侧栏真的
+  //      打开（selectedStepId 已经落定为 'A'，不是待生效的定时器，第 1 点管不到它），之后再
+  //      双击任意 step 钻入，详情侧栏当下会消失，但只是因为渲染条件 `!drillStepId &&
+  //      selectedStep` 里 drillStepId 变真而被挡住——selectedStepId 本身仍是 'A'。退出钻入态
+  //      （返回顶层，drillStepId 变回 null）的一瞬间，同一条渲染条件又重新成立，详情侧栏会
+  //      在用户没有对 A 做任何新点击的情况下无声重开——同一类"被掩盖而不是被清除"的问题，
+  //      只是这次触发点是钻入而不是待生效定时器。回归测试见 WorkflowCanvas.test.tsx
+  //      "双击钻入后清空 selectedStepId"用例。
   const onNodeDoubleClick: NodeMouseHandler = useCallback((_e, node) => {
     if (clickTimer.current) {
       clearTimeout(clickTimer.current)
       clickTimer.current = null
     }
+    setSelectedStepId(null)
     if (!drillStepId) setDrillStepId(node.id)
   }, [drillStepId])
 

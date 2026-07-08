@@ -527,4 +527,31 @@ describe('WorkflowCanvas —— Task 8：单击打开详情侧栏 / 双击仍钻
     fireEvent.click(screen.getByText(/intake/i))
     await waitFor(() => expect(screen.getByDisplayValue('Intake')).toBeInTheDocument())
   })
+
+  // 相邻但不同的一个坑（review 发现）：上面两条用例只覆盖了"待生效的定时器"被 onNodeDoubleClick
+  // 清掉这件事，没覆盖"已经落定的 selectedStepId"——单击 intake、等 250ms 真正生效后，
+  // selectedStepId 已经是 'intake'（不是待生效定时器，clickTimer 那步清不到它）。此时双击任意
+  // step 钻入，详情侧栏当下确实会消失，但只是因为渲染条件 `!drillStepId && selectedStep` 里
+  // drillStepId 变真而被挡住——如果 onNodeDoubleClick 不显式清 selectedStepId，退出钻入态
+  // （返回顶层）的一瞬间同一条渲染条件又重新成立，详情侧栏会在用户没有对 intake 做任何新点击的
+  // 情况下无声重开。同本文件"真实双击时序"那条用例用 bug-injection 验证过的是同一类"被掩盖
+  // 而不是被清除"问题，只是这次的触发点是钻入本身，不是待生效定时器。
+  it('单击选中 A 打开详情侧栏 → 双击钻入 → 返回顶层后详情侧栏不应无声重开（selectedStepId 需要在钻入时真正清空，不能只被 drillStepId 渲染条件掩盖）', async () => {
+    renderCanvas()
+    await waitFor(() => expect(screen.getByText(/intake/i)).toBeInTheDocument())
+    // 1) 真单击 intake，等 250ms 延迟真正生效——详情侧栏打开，selectedStepId 落定为
+    //    'intake'（不是待生效定时器）。
+    fireEvent.click(screen.getByText(/intake/i))
+    await waitFor(() => expect(screen.getByDisplayValue('Intake')).toBeInTheDocument())
+    // 2) 双击 done（另一个 step）钻入其 skill 层——done 本身没有 skill，钻入后是空画布 +
+    //    面包屑，不影响本用例断言。详情侧栏此刻应该消失。
+    fireEvent.doubleClick(screen.getByText(/done/i))
+    await waitFor(() => expect(screen.getByText(/当前：done/)).toBeInTheDocument())
+    expect(screen.queryByDisplayValue('Intake')).not.toBeInTheDocument()
+    // 3) 退出钻入态——如果 selectedStepId 真的被清空，详情侧栏应保持关闭；如果只是被
+    //    drillStepId 掩盖（未修复的 bug），这一步会让详情侧栏在没有任何新点击的情况下无声重开。
+    fireEvent.click(screen.getByText(/返回顶层/))
+    await waitFor(() => expect(screen.getByText(/done/i)).toBeInTheDocument())
+    expect(screen.queryByDisplayValue('Intake')).not.toBeInTheDocument()
+  })
 })
