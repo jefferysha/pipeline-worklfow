@@ -5,10 +5,15 @@ import {
   type Node, type Edge, type Connection, type NodeMouseHandler,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
+import gsap from 'gsap'
+import { useGSAP } from '@gsap/react'
 import { getToken } from '../api/client'
 import { useT } from '../i18n'
 import { layoutNodes } from './layout'
 import { StepDetailPanel, type SkillRef, type StepDef } from './StepDetailPanel'
+import { crossfadeStage, revealDialog } from './motion'
+
+gsap.registerPlugin(useGSAP)
 
 /**
  * WorkflowCanvas（GOAL E8 workflow 编辑器画布 Task 6 + Task 7）—— 顶层 step 拓扑图 + 钻入
@@ -486,6 +491,35 @@ function WorkflowCanvasInner({ root, name, onBack }: WorkflowCanvasProps): JSX.E
     el?.addEventListener('debug-delete-edges', onDebugDeleteEdges)
   }, [onDebugDeleteEdges])
 
+  // UI 重构（impeccable + gsap）：三个组件共用的 motion.ts 工具，用法同已完成的
+  // WorkflowEditorView.tsx/StepDetailPanel.tsx——必须在 useGSAP(() => {...}, { scope }) 回调内
+  // 同步调用，GSAP 的 context 追踪按调用栈生效。rootRef 挂在最外层 .workflow-canvas，
+  // stageRef 挂在 .workflow-canvas__stage（承载 crossfadeStage 的数据源切换提示），
+  // 两个 dialogRef 分别挂在 add-step/add-skill 共用弹窗、add-transition 弹窗的 backdrop 上。
+  const rootRef = useRef<HTMLDivElement>(null)
+  const stageRef = useRef<HTMLDivElement>(null)
+  const addStepDialogRef = useRef<HTMLDivElement>(null)
+  const addTransitionDialogRef = useRef<HTMLDivElement>(null)
+
+  useGSAP(() => {
+    if (addStepOpen && addStepDialogRef.current) {
+      revealDialog(addStepDialogRef.current, addStepDialogRef.current.querySelector('.dialog'))
+    }
+  }, { scope: rootRef, dependencies: [addStepOpen] })
+
+  useGSAP(() => {
+    if (pendingConnection && addTransitionDialogRef.current) {
+      revealDialog(addTransitionDialogRef.current, addTransitionDialogRef.current.querySelector('.dialog'))
+    }
+  }, { scope: rootRef, dependencies: [Boolean(pendingConnection)] })
+
+  // 数据源切换（顶层 ⇄ 钻入）提示："内容已切换"而非资产突变的错觉——drillStepId 变化时（含
+  // 首次挂载画布本身）触发一次短暂淡入，product register 原话："motion conveys state, not
+  // decoration"，两层图数据源切换正是一次真实的状态变化。
+  useGSAP(() => {
+    if (stageRef.current) crossfadeStage(stageRef.current)
+  }, { scope: rootRef, dependencies: [drillStepId] })
+
   async function save(): Promise<void> {
     if (!wf) return
     setSaveStatus({ kind: 'idle' })
@@ -505,59 +539,73 @@ function WorkflowCanvasInner({ root, name, onBack }: WorkflowCanvasProps): JSX.E
     }
   }
 
-  if (loadError) return <p className="subtitle">{loadError}</p>
-  if (!wf) return <p className="subtitle">{t('common.loading')}</p>
+  if (loadError) return <p className="view__note view__note--error">{loadError}</p>
+  if (!wf) return <p className="view__note">{t('common.loading')}</p>
 
   return (
-    <div className="workflow-canvas">
+    <div className="workflow-canvas" ref={rootRef}>
       <div className="workflow-canvas__toolbar">
         {drillStepId ? (
           <>
-            <button onClick={() => setDrillStepId(null)}>{t('workflow_editor.breadcrumb_top')}</button>
-            <span>{t('workflow_editor.breadcrumb_current', { stepId: drillStepId })}</span>
-            <button onClick={openAddStep}>{t('workflow_editor.add_skill')}</button>
+            <div className="workflow-canvas__crumb">
+              <button className="btn--icon" onClick={() => setDrillStepId(null)}>{t('workflow_editor.breadcrumb_top')}</button>
+              <span className="workflow-canvas__crumb-current">{t('workflow_editor.breadcrumb_current', { stepId: drillStepId })}</span>
+            </div>
+            <span className="workflow-canvas__spacer" />
+            <button className="btn" onClick={openAddStep}>{t('workflow_editor.add_skill')}</button>
           </>
         ) : (
           <>
-            <button onClick={onBack}>{t('workflow_editor.back')}</button>
-            <button onClick={openAddStep}>{t('workflow_editor.add_step')}</button>
+            <button className="btn--icon" onClick={onBack}>{t('workflow_editor.back')}</button>
+            <span className="workflow-canvas__spacer" />
+            <button className="btn" onClick={openAddStep}>{t('workflow_editor.add_step')}</button>
           </>
         )}
-        <button onClick={save}>{t('workflow_editor.save')}</button>
-        {saveStatus.kind === 'ok' && <span>{t('workflow_editor.save_success')}</span>}
-        {saveStatus.kind === 'error' && <span>{t('workflow_editor.save_error')}{saveStatus.msg}</span>}
+        <button className="btn" onClick={save}>{t('workflow_editor.save')}</button>
+        {saveStatus.kind === 'ok' && <span className="workflow-canvas__status workflow-canvas__status--ok">{t('workflow_editor.save_success')}</span>}
+        {saveStatus.kind === 'error' && <span className="workflow-canvas__status workflow-canvas__status--error">{t('workflow_editor.save_error')}{saveStatus.msg}</span>}
       </div>
+
       {addStepOpen && (
-        <div role="dialog">
-          <input
-            placeholder={t(drillStepId ? 'workflow_editor.add_skill_prompt' : 'workflow_editor.add_step_prompt')}
-            value={newStepId}
-            onChange={(e) => setNewStepId(e.target.value)}
-          />
-          <button onClick={confirmAddStep}>{t('workflow_editor.confirm')}</button>
-          <button onClick={() => setAddStepOpen(false)}>{t('workflow_editor.cancel')}</button>
-          {addStepError && <p>{addStepError}</p>}
+        <div className="dialog__backdrop" ref={addStepDialogRef}>
+          <div role="dialog" className="dialog">
+            <h3 className="dialog__title">{t(drillStepId ? 'workflow_editor.add_skill' : 'workflow_editor.add_step')}</h3>
+            <input
+              className="input"
+              placeholder={t(drillStepId ? 'workflow_editor.add_skill_prompt' : 'workflow_editor.add_step_prompt')}
+              value={newStepId}
+              onChange={(e) => setNewStepId(e.target.value)}
+            />
+            {addStepError && <p className="view__note view__note--error">{addStepError}</p>}
+            <div className="dialog__actions">
+              <button className="btn btn--ghost" onClick={() => setAddStepOpen(false)}>{t('workflow_editor.cancel')}</button>
+              <button className="btn" onClick={confirmAddStep}>{t('workflow_editor.confirm')}</button>
+            </div>
+          </div>
         </div>
       )}
       {pendingConnection && (
-        <div role="dialog">
-          <input placeholder={t('workflow_editor.add_transition_prompt')} value={eventName} onChange={(e) => setEventName(e.target.value)} />
-          <button onClick={confirmConnect}>{t('workflow_editor.confirm')}</button>
-          <button onClick={() => setPendingConnection(null)}>{t('workflow_editor.cancel')}</button>
-          {connectError && <p>{connectError}</p>}
+        <div className="dialog__backdrop" ref={addTransitionDialogRef}>
+          <div role="dialog" className="dialog">
+            <input
+              className="input"
+              placeholder={t('workflow_editor.add_transition_prompt')}
+              value={eventName}
+              onChange={(e) => setEventName(e.target.value)}
+            />
+            {connectError && <p className="view__note view__note--error">{connectError}</p>}
+            <div className="dialog__actions">
+              <button className="btn btn--ghost" onClick={() => setPendingConnection(null)}>{t('workflow_editor.cancel')}</button>
+              <button className="btn" onClick={confirmConnect}>{t('workflow_editor.confirm')}</button>
+            </div>
+          </div>
         </div>
       )}
-      <div data-testid="debug-trigger-connect" ref={debugTriggerRef} style={{ display: 'none' }} />
-      <div data-testid="debug-trigger-delete-nodes" ref={debugDeleteNodesRef} style={{ display: 'none' }} />
-      <div data-testid="debug-trigger-delete-edges" ref={debugDeleteEdgesRef} style={{ display: 'none' }} />
-      {!drillStepId && selectedStep && (
-        <StepDetailPanel
-          step={selectedStep}
-          onChange={(next) => setWf((prev) => (prev ? { ...prev, steps: prev.steps.map((s) => (s.id === next.id ? next : s)) } : prev))}
-          onClose={() => setSelectedStepId(null)}
-        />
-      )}
-      <div style={{ height: 480 }}>
+
+      <div className="workflow-canvas__stage" ref={stageRef}>
+        <div data-testid="debug-trigger-connect" ref={debugTriggerRef} style={{ display: 'none' }} />
+        <div data-testid="debug-trigger-delete-nodes" ref={debugDeleteNodesRef} style={{ display: 'none' }} />
+        <div data-testid="debug-trigger-delete-edges" ref={debugDeleteEdgesRef} style={{ display: 'none' }} />
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -572,6 +620,13 @@ function WorkflowCanvasInner({ root, name, onBack }: WorkflowCanvasProps): JSX.E
           <Background />
           <Controls />
         </ReactFlow>
+        {!drillStepId && selectedStep && (
+          <StepDetailPanel
+            step={selectedStep}
+            onChange={(next) => setWf((prev) => (prev ? { ...prev, steps: prev.steps.map((s) => (s.id === next.id ? next : s)) } : prev))}
+            onClose={() => setSelectedStepId(null)}
+          />
+        )}
       </div>
     </div>
   )

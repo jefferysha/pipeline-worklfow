@@ -1,6 +1,11 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import gsap from 'gsap'
+import { useGSAP } from '@gsap/react'
 import { getToken } from '../api/client'
 import { useT } from '../i18n'
+import { revealDialog, revealList } from './motion'
+
+gsap.registerPlugin(useGSAP)
 
 /**
  * WorkflowEditorView（GOAL E8 workflow 编辑器画布 Task 5）—— 自定义 workflow 列表页：
@@ -47,6 +52,22 @@ export function WorkflowEditorView({ root, onOpen }: WorkflowEditorViewProps): J
   // 整个页面。用独立、非致命的 deleteError，就近渲染在列表旁边（同 formError 之于新建表单
   // 的既有模式一致），不吞掉其余 UI。
   const [deleteError, setDeleteError] = useState<string | null>(null)
+  const rootRef = useRef<HTMLElement>(null)
+  const deleteDialogRef = useRef<HTMLDivElement>(null)
+
+  // 列表入场：只在"从加载态首次拿到数据"这一刻触发一次（依赖 Boolean(names)，不是 names
+  // 本身）——如果依赖整个 names 数组，之后每次新建/删除导致的数组引用变化都会让已经在屏幕上
+  // 的其余行重新播放一遍入场动效，观感是"随便动一下列表其它行就跟着抖一下"的装饰性噪音，
+  // 而不是"这是一次真实的状态变化"（product register：motion conveys state, not decoration）。
+  useGSAP(() => {
+    if (names && names.length > 0) revealList('.workflow-editor__item')
+  }, { scope: rootRef, dependencies: [Boolean(names && names.length > 0)] })
+
+  useGSAP(() => {
+    if (pendingDelete && deleteDialogRef.current) {
+      revealDialog(deleteDialogRef.current, deleteDialogRef.current.querySelector('.dialog'))
+    }
+  }, { scope: rootRef, dependencies: [pendingDelete] })
 
   const load = useCallback(() => {
     fetch(`/api/workflows?root=${encodeURIComponent(root)}`)
@@ -107,38 +128,64 @@ export function WorkflowEditorView({ root, onOpen }: WorkflowEditorViewProps): J
     }
   }
 
-  if (error) return <p className="subtitle">{error}</p>
-  if (!names) return <p className="subtitle">{t('common.loading')}</p>
+  if (error) return <p className="view__note view__note--error">{error}</p>
+  if (!names) return <p className="view__note">{t('common.loading')}</p>
 
   return (
-    <div className="workflow-editor-list">
-      <h2>{t('workflow_editor.title')}</h2>
-      {names.length === 0 && <p className="subtitle">{t('workflow_editor.empty')}</p>}
-      <ul>
-        {names.map((name) => (
-          <li key={name}>
-            <button onClick={() => onOpen(name)}>{name}</button>
-            <button onClick={() => setPendingDelete(name)}>{t('workflow_editor.delete')}</button>
-          </li>
-        ))}
-      </ul>
-      {deleteError && <p className="subtitle">{deleteError}</p>}
+    <section className="view workflow-editor" data-testid="workflow-editor-view" ref={rootRef}>
+      <header className="view__head">
+        <div>
+          <h1 className="view__title">{t('workflow_editor.title')}</h1>
+          <p className="view__subtitle">{t('workflow_editor.subtitle')}</p>
+        </div>
+        {names.length > 0 && <span className="view__count">{names.length}</span>}
+      </header>
+
+      {names.length === 0 ? (
+        <div className="empty">
+          <div className="empty__mark" aria-hidden="true">⎔</div>
+          <h2 className="empty__title">{t('workflow_editor.empty')}</h2>
+          <p className="empty__desc">{t('workflow_editor.empty_desc')}</p>
+        </div>
+      ) : (
+        <ul className="workflow-editor__list">
+          {names.map((name) => (
+            <li key={name} className="card workflow-editor__item">
+              <button className="workflow-editor__open" onClick={() => onOpen(name)}>
+                <span className="workflow-editor__open-mark" aria-hidden="true">⎔</span>
+                {name}
+              </button>
+              <button className="btn--icon" onClick={() => setPendingDelete(name)}>{t('workflow_editor.delete')}</button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {deleteError && <p className="view__note view__note--error">{deleteError}</p>}
+
       {pendingDelete && (
-        <div role="dialog" className="workflow-delete-confirm">
-          <p>{t('workflow_editor.delete_confirm', { name: pendingDelete })}</p>
-          <button onClick={() => confirmDelete(pendingDelete)}>{t('workflow_editor.confirm_delete')}</button>
-          <button onClick={() => setPendingDelete(null)}>{t('workflow_editor.cancel')}</button>
+        <div className="dialog__backdrop" ref={deleteDialogRef}>
+          <div role="dialog" className="dialog dialog--danger">
+            <h3 className="dialog__title">{t('workflow_editor.delete')} "{pendingDelete}"</h3>
+            <p className="dialog__desc">{t('workflow_editor.delete_confirm', { name: pendingDelete })}</p>
+            <div className="dialog__actions">
+              <button className="btn btn--ghost" onClick={() => setPendingDelete(null)}>{t('workflow_editor.cancel')}</button>
+              <button className="btn btn--danger" onClick={() => confirmDelete(pendingDelete)}>{t('workflow_editor.confirm_delete')}</button>
+            </div>
+          </div>
         </div>
       )}
-      <div className="workflow-editor-new">
+
+      <div className="workflow-editor__new">
         <input
+          className="input"
           placeholder={t('workflow_editor.new_placeholder')}
           value={newName}
           onChange={(e) => { setNewName(e.target.value); setFormError(null) }}
         />
-        <button onClick={createWorkflow}>{t('workflow_editor.create')}</button>
-        {formError && <p className="subtitle">{formError}</p>}
+        <button className="btn" onClick={createWorkflow}>{t('workflow_editor.create')}</button>
       </div>
-    </div>
+      {formError && <p className="view__note view__note--error">{formError}</p>}
+    </section>
   )
 }

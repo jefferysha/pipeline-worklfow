@@ -8,8 +8,8 @@ export const GLOBAL_CSS = `
   --bg: #f7f7f8; --surface: #ffffff; --sunken: #f0f0f2;
   --ink: #17171a; --ink-soft: #3a3a40; --ink-mute: #74747c;
   --line: #e2e2e6; --accent: #2f6feb; --accent-soft: #e7f0ff;
-  --danger: #c0392b; --gate: #b8860b; --gate-soft: #fdf3d7;
-  --ok: #2e7d32; --radius: 10px; --shadow: 0 1px 2px rgba(0,0,0,.06);
+  --danger: #c0392b; --danger-soft: #fdecea; --gate: #b8860b; --gate-soft: #fdf3d7;
+  --ok: #2e7d32; --ok-soft: #e8f5e9; --radius: 10px; --radius-sm: 6px; --shadow: 0 1px 2px rgba(0,0,0,.06);
   --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
@@ -18,22 +18,24 @@ export const GLOBAL_CSS = `
     --bg: #0f0f11; --surface: #1a1a1e; --sunken: #141417;
     --ink: #f2f2f4; --ink-soft: #c9c9cf; --ink-mute: #8a8a93;
     --line: #2b2b31; --accent: #5b8def; --accent-soft: #1c2a44;
-    --danger: #e07b6f; --gate: #e0b34c; --gate-soft: #3a2f12;
-    --ok: #6fbf73; --shadow: 0 1px 2px rgba(0,0,0,.4);
+    --danger: #e07b6f; --danger-soft: #3a1f1c; --gate: #e0b34c; --gate-soft: #3a2f12;
+    --ok: #6fbf73; --ok-soft: #17301c; --shadow: 0 1px 2px rgba(0,0,0,.4);
   }
 }
 :root[data-theme="light"] {
   --bg: #f7f7f8; --surface: #ffffff; --sunken: #f0f0f2;
   --ink: #17171a; --ink-soft: #3a3a40; --ink-mute: #74747c;
   --line: #e2e2e6; --accent: #2f6feb; --accent-soft: #e7f0ff;
-  --danger: #c0392b; --gate: #b8860b; --gate-soft: #fdf3d7; --ok: #2e7d32;
+  --danger: #c0392b; --danger-soft: #fdecea; --gate: #b8860b; --gate-soft: #fdf3d7;
+  --ok: #2e7d32; --ok-soft: #e8f5e9;
   --shadow: 0 1px 2px rgba(0,0,0,.06);
 }
 :root[data-theme="dark"] {
   --bg: #0f0f11; --surface: #1a1a1e; --sunken: #141417;
   --ink: #f2f2f4; --ink-soft: #c9c9cf; --ink-mute: #8a8a93;
   --line: #2b2b31; --accent: #5b8def; --accent-soft: #1c2a44;
-  --danger: #e07b6f; --gate: #e0b34c; --gate-soft: #3a2f12; --ok: #6fbf73;
+  --danger: #e07b6f; --danger-soft: #3a1f1c; --gate: #e0b34c; --gate-soft: #3a2f12;
+  --ok: #6fbf73; --ok-soft: #17301c;
   --shadow: 0 1px 2px rgba(0,0,0,.4);
 }
 * { box-sizing: border-box; }
@@ -137,7 +139,84 @@ body { margin: 0; }
 .flash--toast { background: var(--accent-soft); color: var(--accent); }
 .flash--error { background: var(--gate-soft); color: var(--danger); }
 
+/* ── 表单控件（此前全仓库零样式，raw browser default）── */
+.input, .select {
+  font: inherit; font-size: 14px; color: var(--ink); background: var(--surface);
+  border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 8px 12px;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.input::placeholder { color: var(--ink-mute); }
+.input:focus-visible, .select:focus-visible { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.select { cursor: pointer; }
+.field { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--ink-soft); font-weight: 600; }
+.field .input, .field .select { font-weight: 400; }
+
+/* ── workflow 编辑器 —— 列表页（GOAL E8）── */
+.workflow-editor__list { list-style: none; margin: 0 0 20px; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.workflow-editor__item { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; transition: border-color .15s ease, transform .15s ease; }
+.workflow-editor__item:hover { border-color: var(--accent); }
+.workflow-editor__open { border: 0; background: transparent; padding: 0; font: inherit; font-size: 15px; font-weight: 600; color: var(--ink); cursor: pointer; text-align: left; display: flex; align-items: center; gap: 10px; }
+.workflow-editor__open-mark { color: var(--accent); font-size: 15px; line-height: 1; }
+.workflow-editor__new { display: flex; gap: 8px; margin-top: 4px; }
+.workflow-editor__new .input { flex: 1; }
+
+/* ── workflow 编辑器 —— 顶层/钻入画布（GOAL E8）── */
+.workflow-canvas { display: flex; flex-direction: column; gap: 12px; }
+.workflow-canvas__toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-height: 34px; }
+.workflow-canvas__crumb { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-mute); padding: 4px 4px 4px 0; }
+.workflow-canvas__crumb-current { font-weight: 600; color: var(--ink); }
+.workflow-canvas__spacer { flex: 1; }
+.workflow-canvas__status { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 5px 10px; border-radius: 999px; }
+.workflow-canvas__status--ok { background: var(--ok-soft); color: var(--ok); }
+.workflow-canvas__status--error { background: var(--danger-soft); color: var(--danger); }
+.workflow-canvas__stage { position: relative; height: 520px; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: var(--sunken); }
+.workflow-canvas__stage .react-flow__renderer,
+.workflow-canvas__stage .react-flow { background: transparent; }
+
+/* xyflow 主题化（仅覆盖视觉属性，不碰 xyflow 自身的定位/拖拽/命中测试逻辑） */
+.workflow-canvas__stage .react-flow__node {
+  padding: 8px 14px; border-radius: var(--radius-sm); border: 1.5px solid var(--line);
+  background: var(--surface); color: var(--ink); font: inherit; font-size: 13px; font-weight: 600;
+  box-shadow: var(--shadow); width: auto; transition: border-color .15s ease, box-shadow .15s ease;
+}
+.workflow-canvas__stage .react-flow__node.selected,
+.workflow-canvas__stage .react-flow__node:focus-visible {
+  border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.workflow-canvas__stage .react-flow__handle { width: 8px; height: 8px; background: var(--ink-mute); border: 2px solid var(--surface); }
+.workflow-canvas__stage .react-flow__handle:hover { background: var(--accent); }
+.workflow-canvas__stage .react-flow__edge-path { stroke: var(--ink-mute); stroke-width: 1.5; }
+.workflow-canvas__stage .react-flow__edge.selected .react-flow__edge-path,
+.workflow-canvas__stage .react-flow__edge:hover .react-flow__edge-path { stroke: var(--accent); stroke-width: 2; }
+.workflow-canvas__stage .react-flow__edge-text { font: inherit; font-size: 11px; fill: var(--ink-soft); }
+.workflow-canvas__stage .react-flow__edge-textbg { fill: var(--sunken); }
+.workflow-canvas__stage .react-flow__controls { box-shadow: var(--shadow); border-radius: var(--radius-sm); overflow: hidden; }
+.workflow-canvas__stage .react-flow__controls-button { background: var(--surface); border-bottom: 1px solid var(--line); fill: var(--ink-soft); }
+.workflow-canvas__stage .react-flow__controls-button:hover { background: var(--sunken); }
+.workflow-canvas__stage .react-flow__attribution { display: none; }
+
+/* 详情侧栏——画布舞台内右侧滑出的检查器面板（GSAP 负责滑入/滑出，见 WorkflowCanvas.tsx） */
+.step-detail-panel {
+  position: absolute; top: 0; right: 0; bottom: 0; width: min(320px, 86%); z-index: 5;
+  display: flex; flex-direction: column; gap: 16px; padding: 18px; overflow-y: auto;
+  background: var(--surface); border-left: 1px solid var(--line); box-shadow: -8px 0 24px rgba(0,0,0,.08);
+}
+.step-detail-panel__head { display: flex; align-items: center; justify-content: space-between; }
+.step-detail-panel__title { margin: 0; font-size: 15px; color: var(--ink); }
+.step-detail-panel__section { display: flex; flex-direction: column; gap: 8px; }
+.step-detail-panel__section h4 { margin: 0; font-size: 12px; font-weight: 700; color: var(--ink-mute); text-transform: uppercase; letter-spacing: .04em; }
+.step-detail-panel__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.step-detail-panel__row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 10px; background: var(--sunken); border-radius: var(--radius-sm); font-size: 13px; color: var(--ink-soft); }
+.step-detail-panel__row-name { font-family: var(--mono); color: var(--ink); }
+
+/* 图标按钮（列表行的次级操作，如"删除"/"移除"——常驻但弱化，避免每行都摆一个满宽按钮） */
+.btn--icon { background: transparent; border: 1px solid transparent; color: var(--ink-mute); border-radius: var(--radius-sm); padding: 5px 10px; font: inherit; font-size: 12px; cursor: pointer; transition: color .15s ease, border-color .15s ease, background .15s ease; }
+.btn--icon:hover { color: var(--danger); border-color: var(--line); background: var(--sunken); }
+
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { * { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
-@media (max-width: 720px) { .board__grid { grid-template-columns: repeat(7, minmax(140px, 1fr)); } .main { padding: 14px; } }
+@media (max-width: 720px) {
+  .board__grid { grid-template-columns: repeat(7, minmax(140px, 1fr)); } .main { padding: 14px; }
+  .step-detail-panel { width: 100%; }
+}
 `

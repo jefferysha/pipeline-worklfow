@@ -16,3 +16,7 @@ coverage/
 
 # git worktrees (isolated workstreams, per superpowers:using-git-worktrees)
 .worktrees/
+
+# Playwright 真机驱动脚本的临时落脚点（需要在仓内才能解析根 node_modules 的 playwright 包，
+# 内容本身是一次性驱动脚本，不是要保留的项目资产）。
+.playwright-tmp/

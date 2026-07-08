@@ -119,7 +119,9 @@ export const zh: Dict = {
   },
   workflow_editor: {
     title: '自定义 workflow',
+    subtitle: '真读写 .pipeline/workflows/ 下的 workflow 定义',
     empty: '还没有自定义 workflow',
+    empty_desc: '在下方输入名字新建一个，进入两层拖线画布编辑 step 拓扑与 skill 依赖',
     new_placeholder: '新 workflow 名（a-z A-Z 0-9 - _）',
     create: '新建',
     delete: '删除',
@@ -277,7 +279,9 @@ export const en: Dict = {
   },
   workflow_editor: {
     title: 'Custom workflows',
+    subtitle: 'Read and write workflow definitions under .pipeline/workflows/',
     empty: 'No custom workflows yet',
+    empty_desc: 'Create one below, then edit its step topology and skill dependencies on a two-layer canvas',
     new_placeholder: 'New workflow name (a-z A-Z 0-9 - _)',
     create: 'Create',
     delete: 'Delete',

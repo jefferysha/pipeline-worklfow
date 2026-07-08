@@ -1,5 +1,10 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
+import gsap from 'gsap'
+import { useGSAP } from '@gsap/react'
 import { useT } from '../i18n'
+import { revealDialog, slideInPanel } from './motion'
+
+gsap.registerPlugin(useGSAP)
 
 /**
  * StepDetailPanel（GOAL E8 workflow 编辑器画布 Task 8）—— 单个 step 的 label/gate/guards/
@@ -42,6 +47,21 @@ export function StepDetailPanel({ step, onChange, onClose }: StepDetailPanelProp
   // 顶层抛出解析错误（同 WorkflowCanvas.tsx confirmConnect 的等价场景，见其注释）。字符集同
   // WorkflowCanvas.tsx confirmAddStep 已有的 step/skill id 校验一致（`^[a-zA-Z0-9_-]+$`）。
   const [fieldNameError, setFieldNameError] = useState<string | null>(null)
+  const rootRef = useRef<HTMLDivElement>(null)
+  const addFieldDialogRef = useRef<HTMLDivElement>(null)
+
+  // 面板每次挂载（选中一个 step）滑入一次——dependencies: [] 只在挂载时播放一次；若用户
+  // 不关闭面板直接点另一个 step 节点，父组件只换 `step` prop、面板不会被卸载重挂，因此不会
+  // 重放滑入（内容瞬时更新，避免"来回切换 step 时面板反复抖动"这种装饰性噪音）。
+  useGSAP(() => {
+    slideInPanel(rootRef.current)
+  }, { scope: rootRef, dependencies: [] })
+
+  useGSAP(() => {
+    if (addingField && addFieldDialogRef.current) {
+      revealDialog(addFieldDialogRef.current, addFieldDialogRef.current.querySelector('.dialog'))
+    }
+  }, { scope: rootRef, dependencies: [addingField] })
 
   function removeGuard(index: number): void {
     onChange({ ...step, guards: step.guards.filter((_, i) => i !== index) })
@@ -66,61 +86,78 @@ export function StepDetailPanel({ step, onChange, onClose }: StepDetailPanelProp
 
   function renderFieldList(kind: 'inputs' | 'outputs', title: string): JSX.Element {
     return (
-      <div>
+      <div className="step-detail-panel__section">
         <h4>{title}</h4>
-        <ul>
+        <ul className="step-detail-panel__list">
           {step[kind].map((f, i) => (
-            <li key={f.field}>
+            <li key={f.field} className="step-detail-panel__row">
               {/* 字段名单独包一层元素——testing-library 的 getByText 精确匹配只看元素自身直接
                   子 Text 节点的拼接结果，不看后代元素；字段名和" (type)"字面量若同处一个 <li>
                   的直接子节点，getByText('design_doc') 会因为拼接成"design_doc (file_path)"
                   而找不到精确匹配（已实测确认，不是纸面推演）。 */}
-              <span>{f.field}</span> ({f.type})
-              <button onClick={() => removeField(kind, i)}>{t('workflow_editor.detail_field_remove')}</button>
+              <span><span className="step-detail-panel__row-name">{f.field}</span> ({f.type})</span>
+              <button className="btn--icon" onClick={() => removeField(kind, i)}>{t('workflow_editor.detail_field_remove')}</button>
             </li>
           ))}
         </ul>
-        <button onClick={() => { setAddingField(kind); setFieldName(''); setFieldNameError(null) }}>{t('workflow_editor.detail_field_add')}</button>
+        <button className="btn btn--ghost" onClick={() => { setAddingField(kind); setFieldName(''); setFieldNameError(null) }}>{t('workflow_editor.detail_field_add')}</button>
       </div>
     )
   }
 
   return (
-    <div className="step-detail-panel" role="complementary">
-      <label>
+    <div className="step-detail-panel" role="complementary" ref={rootRef}>
+      <div className="step-detail-panel__head">
+        <h3 className="step-detail-panel__title">{step.label ? `${step.id} (${step.label})` : step.id}</h3>
+        <button className="btn--icon" onClick={onClose}>{t('workflow_editor.detail_close')}</button>
+      </div>
+
+      <label className="field">
         {t('workflow_editor.detail_label')}
-        <input value={step.label} onChange={(e) => onChange({ ...step, label: e.target.value })} />
+        <input className="input" value={step.label} onChange={(e) => onChange({ ...step, label: e.target.value })} />
       </label>
-      <label>
+      <label className="field">
         {t('workflow_editor.detail_gate')}
-        <select value={step.gate ?? ''} onChange={(e) => onChange({ ...step, gate: (e.target.value || null) as StepDef['gate'] })}>
+        <select className="select" value={step.gate ?? ''} onChange={(e) => onChange({ ...step, gate: (e.target.value || null) as StepDef['gate'] })}>
           <option value="">{t('workflow_editor.detail_gate_none')}</option>
           <option value="review">review</option>
           <option value="confirm">confirm</option>
         </select>
       </label>
-      <div>
+
+      <div className="step-detail-panel__section">
         <h4>{t('workflow_editor.detail_guards')}</h4>
-        <ul>
+        <ul className="step-detail-panel__list">
           {step.guards.map((g, i) => (
-            <li key={i}>
-              {g.type}{g.type === 'tasks-at-least' ? ` (n=${g.n})` : ''}
-              <button onClick={() => removeGuard(i)}>{t('workflow_editor.detail_guard_remove')}</button>
+            <li key={i} className="step-detail-panel__row">
+              <span>{g.type}{g.type === 'tasks-at-least' ? ` (n=${g.n})` : ''}</span>
+              <button className="btn--icon" onClick={() => removeGuard(i)}>{t('workflow_editor.detail_guard_remove')}</button>
             </li>
           ))}
         </ul>
       </div>
+
       {renderFieldList('inputs', t('workflow_editor.detail_inputs'))}
       {renderFieldList('outputs', t('workflow_editor.detail_outputs'))}
+
       {addingField && (
-        <div role="dialog">
-          <input placeholder={t('workflow_editor.detail_field_name_prompt')} value={fieldName} onChange={(e) => setFieldName(e.target.value)} />
-          <button onClick={confirmAddField}>{t('workflow_editor.confirm')}</button>
-          <button onClick={() => setAddingField(null)}>{t('workflow_editor.cancel')}</button>
-          {fieldNameError && <p>{fieldNameError}</p>}
+        <div className="dialog__backdrop" ref={addFieldDialogRef}>
+          <div role="dialog" className="dialog">
+            <h3 className="dialog__title">{t('workflow_editor.detail_field_add')}</h3>
+            <input
+              className="input"
+              placeholder={t('workflow_editor.detail_field_name_prompt')}
+              value={fieldName}
+              onChange={(e) => setFieldName(e.target.value)}
+            />
+            {fieldNameError && <p className="view__note view__note--error">{fieldNameError}</p>}
+            <div className="dialog__actions">
+              <button className="btn btn--ghost" onClick={() => setAddingField(null)}>{t('workflow_editor.cancel')}</button>
+              <button className="btn" onClick={confirmAddField}>{t('workflow_editor.confirm')}</button>
+            </div>
+          </div>
         </div>
       )}
-      <button onClick={onClose}>{t('workflow_editor.detail_close')}</button>
     </div>
   )
 }
