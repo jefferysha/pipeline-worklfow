@@ -98,14 +98,9 @@ export async function cmdInternalSkillGate(deps: CliDeps, name: string, skillId:
       return 0
     }
 
-    // step 没声明任何 skill（skills: []）：视为该 step 不使用 DAG 这个能力（opt-in 语义），
-    // 不受本机制管辖，直接放行。isSkillUnlocked 对"未声明的 skill id"统一判定为锁定（Task 6
-    // 的 allowlist 语义，供"声明了 skills 但这个不在列表里"的场景使用）——但空列表不该被读成
-    // "锁死这个 step 的一切 skill 调用"，那会让"不想为某个 step 操心 DAG 顺序"的最常见写法
-    // （skills: []，Task 8 两个 fixture 工作流的 s2 都这么写）意外变成完全无法用任何 skill。
-    // 只有当 step 主动声明了至少一个 skill，才真正进入 isSkillUnlocked 的 allowlist 判定。
-    if (step.skills.length === 0) return 0
-
+    // step 声明了 skills: []（未声明任何 skill）时的"视为不使用 DAG，任意 skillId 放行"这条
+    // opt-in 语义现在是 isSkillUnlocked 自己契约的一部分（见该函数上方注释），本层不再需要
+    // 重复这条判断——统一交给下面的 isSkillUnlocked 调用处理，避免同一条契约在两处漂移。
     const historyRaw = (await deps.readHistoryRaw?.(dir)) ?? ''
     const lines = parseHistoryLines(historyRaw)
     const completedSinceEntry = completedSkillsSinceStepEntry(lines, currentStepId)

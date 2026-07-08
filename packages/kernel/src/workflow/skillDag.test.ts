@@ -26,4 +26,9 @@ describe('isSkillUnlocked', () => {
   it('交叉依赖场景：d 只依赖 a，不需要等 b（验证不会被过度串行化）', () => {
     expect(isSkillUnlocked('d', skills, new Set(['a']))).toBe(true)
   })
+
+  it('skills 为空数组（step 未声明任何 skill）→ 视为不使用 DAG 能力，任意 skillId 都解锁（同 guards: []/transitions: [] 的"空数组=不受约束"惯例）', () => {
+    expect(isSkillUnlocked('anything', [], new Set())).toBe(true)
+    expect(isSkillUnlocked('anything', [], new Set(['x', 'y']))).toBe(true)
+  })
 })
