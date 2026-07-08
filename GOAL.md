@@ -73,8 +73,11 @@
 > （均 PLAN COMPLETE、任务逐一审核通过），见 `docs/loops/progress.md` iteration-35。
 
 - [x] F1 导航：新增"工作台"下拉分组（`Nav.tsx` `WORKBENCH_VIEWS`），下辖 AFK 工作台 + loop
-      设置，顶部恢复到 3 项（收件箱/看板/设置）+ 1 个分组触发按钮。workflow 编辑器（E8 画布
-      UI）本轮未建、skill 编辑器本就是设置页内弹窗（非独立导航目的地），故两者不占此分组
+      设置，顶部恢复到 3 项（收件箱/看板/设置）+ 1 个分组触发按钮。**F1 收尾当时**workflow
+      编辑器（E8 画布 UI）本轮未建、skill 编辑器本就是设置页内弹窗（非独立导航目的地），
+      故两者都不占此分组；workflow 编辑器已于 Task 9（GOAL E8 收编）追加为该分组第三项
+      （`WORKBENCH_VIEWS` 现为 `['loops', 'afk', 'workflows']` 三项），skill 编辑器仍不
+      占用（原因不变，仍是设置页内弹窗、非独立导航目的地）
 - [x] F2 Skill 编辑器升级：`SkillTransferModal.tsx` 弹窗双栏穿梭框（左栏全部已注册 skill
       可搜索，右栏当前已选可拖拽排序），复用现有 `POST /api/config/mandatory-skills` 契约
       （skill-editor-transfer-modal 计划，4/4 任务）
