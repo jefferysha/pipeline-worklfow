@@ -1440,19 +1440,19 @@ breadcrumb/skill 注入对自定义 workflow 完全失效。
 - Consumes: 无新依赖。
 - Produces: 白名单放行任意合法 step id（不再局限于 7 个固定值）。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 在 `tools/test-hooks.sh` 里加一例（具体加在哪个位置、用什么断言辅助函数，先读该文件现有
 写法照抄）：真建一个 `phase` 是自定义值（如 `custom-step-1`）的 `.pipeline.yaml`，真跑
 `router.sh`，断言输出里 `EFF_PHASE`（或它驱动的 breadcrumb 变量）真的是 `custom-step-1`
 而不是被吞成 `open`。
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `bash tools/test-hooks.sh`
 Expected: 新增用例 FAIL（现状会被吞成 open）
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 把 `router.sh:171` 的白名单 `case` 改成宽松校验（只拒绝明显不合法的值，比如包含空格/
 特殊字符——因为 `EFF_PHASE` 会被用作间接变量名的一部分 `BREADCRUMB_${EFF_PHASE}`，必须
@@ -1465,12 +1465,12 @@ case "$EFF_PHASE" in
 esac
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `bash tools/test-hooks.sh`
 Expected: 180+1 passed, 0 failed
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add hooks/router.sh
