@@ -844,4 +844,31 @@ describe('GET /api/workflows/:name —— 读单个 workflow（GOAL E8）', () =
     expect(r.status).toBe(500)
     expect(r.json<{ error: string }>().error).toContain('does-not-exist')
   })
+
+  it('非法 workflow 文件，且校验错误信息里恰好含"未找到"字样（用户自起的 transition 目标名）→ 仍是 500，不会被误判成 404（round 2 review fix：证明分类不靠错误文本子串匹配）', async () => {
+    const { mkdir, writeFile } = await import('node:fs/promises')
+    const h = await start()
+    const dir = join(h.root, '.pipeline', 'workflows')
+    await mkdir(dir, { recursive: true })
+    await writeFile(
+      join(dir, 'broken2.yaml'),
+      'name: broken2\nsteps:\n  - id: s1\n    label: x\n    gate: null\n    skills: []\n    inputs: []\n    outputs: []\n    guards: []\n    transitions:\n      - event: go\n        to: 未找到\n',
+      'utf8',
+    )
+    const r = await reqGet(h.port, `/api/workflows/broken2?root=${encodeURIComponent(h.root)}`)
+    expect(r.status).toBe(500)
+    expect(r.json<{ error: string }>().error).toContain('未找到')
+  })
+
+  it('非法 workflow 名（.. 路径穿越尝试）→ 400，同 afk 系列端点共用的 name 校验模式，且先于 root 校验被拦（root 未注册也命中这个 400，不是 root 校验的 404）', async () => {
+    const h = await start()
+    const r = await reqGet(h.port, `/api/workflows/${encodeURIComponent('..')}?root=${encodeURIComponent(h.root)}`)
+    expect(r.status).toBe(400)
+  })
+
+  it('非法 workflow 名（编码后内含 / 的路径穿越尝试）→ 400，不会被当成合法文件名读取', async () => {
+    const h = await start()
+    const r = await reqGet(h.port, `/api/workflows/${encodeURIComponent('../../etc/passwd')}?root=${encodeURIComponent(h.root)}`)
+    expect(r.status).toBe(400)
+  })
 })

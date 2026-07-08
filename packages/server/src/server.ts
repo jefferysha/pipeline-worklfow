@@ -29,7 +29,7 @@ import { buildAfkLog, buildAfkSnapshot, cancelAfkRun, readAfkRunLog, retryAfkRun
 import { buildLoopsSnapshot } from './loops.js'
 import { readMandatorySkills, validateMandatorySkillsBody, writeMandatorySkills } from './config.js'
 import { resolveServerPaths } from './paths.js'
-import { listWorkflowNames, readWorkflowForApi } from './workflows.js'
+import { listWorkflowNames, readWorkflowForApi, WorkflowNotFoundError } from './workflows.js'
 import { readRegistry } from './registry.js'
 import { listAllSkills } from './skillsRegistry.js'
 import { buildSnapshot, computeFingerprint, dedupeRoots, type SnapshotDeps } from './snapshot.js'
@@ -418,9 +418,15 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
     }
 
     // ── workflow 编辑器（GOAL E8）：GET /api/workflows/:name —— 读单个 workflow ──
+    // 校验顺序同 /api/afk/<name>/log、/api/afk/<name>/cancel、/api/afk/<name>/retry：
+    // 先 name 格式（防路径穿越：拒 '..' 等非法段落入 loadWorkflow 内部的 join），
+    // 再 root 信任锚，最后真读+解析。
     const mWfGet = /^\/api\/workflows\/([^/]+)$/.exec(path)
     if (mWfGet) {
       const wfName = decodeURIComponent(mWfGet[1]!)
+      if (!wfName || !/^[a-zA-Z0-9_-]+$/.test(wfName) || wfName.includes('..')) {
+        return sendJson(res, 400, { ok: false, error: '非法 workflow 名（仅允许 a-z A-Z 0-9 - _）' })
+      }
       const root = new URL(req.url ?? '/', 'http://localhost').searchParams.get('root') ?? ''
       if (!dedupeRoots(registry()).includes(resolvePath(root))) {
         return sendJson(res, 404, { ok: false, error: 'root 未在机器级项目注册表中' })
@@ -428,8 +434,11 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
       try {
         return sendJson(res, 200, readWorkflowForApi(root, wfName))
       } catch (e) {
-        const msg = errMsg(e)
-        return sendJson(res, msg.includes('未找到') ? 404 : 500, { ok: false, error: msg })
+        // 结构化判断（round 2 review fix）：不再对错误信息做子串匹配（loadWorkflow 的校验/
+        // 解析错误会把用户自起的 step id / event 名等任意文本原样拼进消息，子串匹配会被
+        // 这些文本误导），改用 WorkflowNotFoundError 的类型区分「真不存在」（404）与
+        // 「存在但校验/解析失败」（500）。
+        return sendJson(res, e instanceof WorkflowNotFoundError ? 404 : 500, { ok: false, error: errMsg(e) })
       }
     }
     return sendJson(res, 404, { ok: false, error: '未知端点' })
