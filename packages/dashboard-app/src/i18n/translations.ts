@@ -117,6 +117,21 @@ export const zh: Dict = {
     action_error_status: '{label}失败（{status}）',
     network_error: '网络错误',
   },
+  workflow_editor: {
+    title: '自定义 workflow',
+    empty: '还没有自定义 workflow',
+    new_placeholder: '新 workflow 名（a-z A-Z 0-9 - _）',
+    create: '新建',
+    delete: '删除',
+    delete_confirm: '确定删除 workflow "{name}"？如果有 change 正引用它，删除后其 transition/internal-skill-gate 会报"workflow 未找到"。',
+    invalid_name: '非法名字（仅允许 a-z A-Z 0-9 - _），或与 default 冲突',
+    load_error: '加载失败：{msg}',
+    network_error: '网络错误',
+    create_error: '新建失败：{msg}',
+    delete_error: '删除失败：{msg}',
+    cancel: '取消',
+    confirm_delete: '确认删除',
+  },
 }
 
 export const en: Dict = {
@@ -230,6 +245,21 @@ export const en: Dict = {
     action_error: '{label} failed: {msg}',
     action_error_status: '{label} failed ({status})',
     network_error: 'Network error',
+  },
+  workflow_editor: {
+    title: 'Custom workflows',
+    empty: 'No custom workflows yet',
+    new_placeholder: 'New workflow name (a-z A-Z 0-9 - _)',
+    create: 'Create',
+    delete: 'Delete',
+    delete_confirm: 'Delete workflow "{name}"? If any change still references it, its transition/internal-skill-gate calls will report "workflow not found" afterward.',
+    invalid_name: 'Invalid name (only a-z A-Z 0-9 - _ allowed), or conflicts with default',
+    load_error: 'Load failed: {msg}',
+    network_error: 'Network error',
+    create_error: 'Create failed: {msg}',
+    delete_error: 'Delete failed: {msg}',
+    cancel: 'Cancel',
+    confirm_delete: 'Confirm delete',
   },
 }
 
