@@ -362,6 +362,17 @@ function WorkflowCanvasInner({ root, name, onBack }: WorkflowCanvasProps): JSX.E
   function confirmConnect(): void {
     if (!pendingConnection || !wf) return
     const { source, target } = pendingConnection
+    // whole-feature review Finding 1：event 名最终写入 `- event: <name>` 单行 YAML，kernel
+    // parse.ts 的 parseTransitionsBlock 用 `\S+` 匹配该值——含空白字符会让整行匹配失败，最终
+    // 在 parseWorkflow 顶层抛出"steps 下每项必须以 '- id:' 开头"（本文件"Finding 1 闭环回归"
+    // describe 块用真 loadWorkflow 验证过这条链路，不是猜测）。字符集同 confirmAddStep 已有的
+    // step/skill id 校验一致，且必须先于"是否重复"判断生效。钻入态的 depends_on 连线不经过
+    // 本函数（见文件头注释：onConnect 钻入分支直接落地，从不设置 pendingConnection），且引用
+    // 的是已存在、已校验过字符集的 skill id，不是自由文本，故不需要在这里额外处理。
+    if (!/^[a-zA-Z0-9_-]+$/.test(eventName)) {
+      setConnectError(t('workflow_editor.invalid_event_name'))
+      return
+    }
     const sourceStep = wf.steps.find((s) => s.id === source)
     if (sourceStep?.transitions.some((tr) => tr.event === eventName)) {
       setConnectError(t('workflow_editor.duplicate_event'))

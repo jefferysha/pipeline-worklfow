@@ -37,6 +37,11 @@ export function StepDetailPanel({ step, onChange, onClose }: StepDetailPanelProp
   const { t } = useT()
   const [addingField, setAddingField] = useState<'inputs' | 'outputs' | null>(null)
   const [fieldName, setFieldName] = useState('')
+  // whole-feature review Finding 1：字段名同 event 名一样最终写入 kernel parse.ts 用 `\S+`
+  // 匹配的单行 YAML（`- field: <name>`），含空白字符会让该行匹配失败、最终在 parseWorkflow
+  // 顶层抛出解析错误（同 WorkflowCanvas.tsx confirmConnect 的等价场景，见其注释）。字符集同
+  // WorkflowCanvas.tsx confirmAddStep 已有的 step/skill id 校验一致（`^[a-zA-Z0-9_-]+$`）。
+  const [fieldNameError, setFieldNameError] = useState<string | null>(null)
 
   function removeGuard(index: number): void {
     onChange({ ...step, guards: step.guards.filter((_, i) => i !== index) })
@@ -48,10 +53,15 @@ export function StepDetailPanel({ step, onChange, onClose }: StepDetailPanelProp
 
   function confirmAddField(): void {
     if (!addingField || !fieldName) return
+    if (!/^[a-zA-Z0-9_-]+$/.test(fieldName)) {
+      setFieldNameError(t('workflow_editor.invalid_field_name'))
+      return
+    }
     const ref: FieldRef = { field: fieldName, type: 'string' }
     onChange({ ...step, [addingField]: [...step[addingField], ref] })
     setAddingField(null)
     setFieldName('')
+    setFieldNameError(null)
   }
 
   function renderFieldList(kind: 'inputs' | 'outputs', title: string): JSX.Element {
@@ -70,7 +80,7 @@ export function StepDetailPanel({ step, onChange, onClose }: StepDetailPanelProp
             </li>
           ))}
         </ul>
-        <button onClick={() => { setAddingField(kind); setFieldName('') }}>{t('workflow_editor.detail_field_add')}</button>
+        <button onClick={() => { setAddingField(kind); setFieldName(''); setFieldNameError(null) }}>{t('workflow_editor.detail_field_add')}</button>
       </div>
     )
   }
@@ -107,6 +117,7 @@ export function StepDetailPanel({ step, onChange, onClose }: StepDetailPanelProp
           <input placeholder={t('workflow_editor.detail_field_name_prompt')} value={fieldName} onChange={(e) => setFieldName(e.target.value)} />
           <button onClick={confirmAddField}>{t('workflow_editor.confirm')}</button>
           <button onClick={() => setAddingField(null)}>{t('workflow_editor.cancel')}</button>
+          {fieldNameError && <p>{fieldNameError}</p>}
         </div>
       )}
       <button onClick={onClose}>{t('workflow_editor.detail_close')}</button>

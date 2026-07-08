@@ -1,5 +1,9 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { loadWorkflow, serializeWorkflow, type WorkflowDef as KernelWorkflowDef } from '@pipeline-lite/kernel'
 import { I18nProvider } from '../i18n'
 import { WorkflowCanvas } from './WorkflowCanvas'
 
@@ -194,6 +198,33 @@ describe('WorkflowCanvas —— 顶层 step 拓扑', () => {
     fireEvent.change(screen.getByPlaceholderText(/event 名/), { target: { value: 'complete' } })
     fireEvent.click(screen.getByRole('button', { name: '确认' }))
     expect(screen.getByText(/event 名不能重复/)).toBeInTheDocument()
+  })
+
+  // whole-feature review Finding 1：kernel parse.ts 的 parseTransitionsBlock 用 `event:\s*(\S+)\s*$`
+  // 匹配 event 值——只要求非空白，不校验字符集。含空格的 event 名（如这里的 'go back'）此前
+  // 能被这个对话框直接接受、写进 wf 状态、POST 保存成功，但下次任何人 GET 这个 workflow 时
+  // parseWorkflow 会在这一行匹配失败、最终整体抛错（见本文件下方"Finding 1 闭环回归"
+  // describe 块的往返证据）。字符集校验必须同 confirmAddStep 的 step/skill id 校验一致
+  // （`^[a-zA-Z0-9_-]+$`），且必须在"是否重复"判断之前生效。
+  it('event 名含空格 → 拒绝创建连线，不新增 transition/edge', async () => {
+    renderCanvas()
+    await waitFor(() => expect(screen.getByText(/intake/i)).toBeInTheDocument())
+    const connectTrigger = screen.getByTestId('debug-trigger-connect')
+    fireDebugConnect(connectTrigger, { source: 'done', target: 'intake' })
+    fireEvent.change(screen.getByPlaceholderText(/event 名/), { target: { value: 'go back' } })
+    fireEvent.click(screen.getByRole('button', { name: '确认' }))
+    expect(screen.getByText(/非法 event 名/)).toBeInTheDocument()
+    // 对话框仍在（没有被当成提交成功而关闭）——输入框依然可见。
+    expect(screen.getByPlaceholderText(/event 名/)).toBeInTheDocument()
+    // 关掉对话框、保存，确认 wf 状态里从未真正落地过这条坏 transition。
+    fireEvent.click(screen.getByRole('button', { name: '取消' }))
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    await waitFor(() => expect(screen.getByText('已保存')).toBeInTheDocument())
+    const calls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls
+    const postCall = calls.find((c) => c[0] === `/api/workflows/${NAME}` && c[1]?.method === 'POST')
+    const body = JSON.parse(postCall![1].body as string)
+    const doneStep = body.steps.find((s: { id: string }) => s.id === 'done')
+    expect(doneStep.transitions).toEqual([])
   })
 
   it('真触发 onNodesDelete（删除 done 节点）→ wf.steps 移除该节点，且清理指向它的 transition', async () => {
@@ -553,5 +584,53 @@ describe('WorkflowCanvas —— Task 8：单击打开详情侧栏 / 双击仍钻
     fireEvent.click(screen.getByText(/返回顶层/))
     await waitFor(() => expect(screen.getByText(/done/i)).toBeInTheDocument())
     expect(screen.queryByDisplayValue('Intake')).not.toBeInTheDocument()
+  })
+})
+
+// whole-feature review Finding 1 闭环回归：证明"含空格 event 名"不是假设中的风险,
+// 而是真的会把 kernel parser 写挂的可达 bug，且本次修复在 confirmConnect 的状态变更分支
+// （setWf/setEdges）执行之前就把它挡住——两件事在同一条用例里各自给出独立证据，不是互相
+// 假设对方成立。
+describe('WorkflowCanvas —— Finding 1 闭环回归（event 名字符集）', () => {
+  it('含空格 event 名：Part A 证明它真的会让 kernel loadWorkflow 抛错（往返证据，非假设）；Part B 证明同一个值经画布 UI 提交时，在 setWf 生效前就被挡下（从未真正落地）', async () => {
+    // Part A —— kernel 侧真实性证据：不经过任何 UI，直接构造一个 event 名带空格的
+    // WorkflowDef，走 serializeWorkflow（既有反向操作）写盘，再走 loadWorkflow（parseWorkflow
+    // 的唯一导出入口，见 kernel/src/index.ts）读回。parse.ts 的 parseTransitionsBlock 用
+    // `event:\s*(\S+)\s*$` 匹配这一行——"go back" 只有 "go" 落进 `\S+`，剩下的 " back" 让
+    // `\s*$` 匹配失败，整行匹配失败、transitions block 提前 break；游标停在这一行，
+    // parseStep 的字段扫描循环同样对不上任何前缀、也 break；回到 parseWorkflow 主循环时这一行
+    // 仍不匹配 '- id:' 前缀，最终 throw——这条链路是本文件用真文件系统 + 真 loadWorkflow
+        // 验证过的真实行为，不是纸面推演。
+    const badWf: KernelWorkflowDef = {
+      name: 'bad-event',
+      steps: [
+        { id: 'intake', label: '', gate: null, skills: [], inputs: [], outputs: [], guards: [], transitions: [{ event: 'go back', to: 'done' }] },
+        { id: 'done', label: '', gate: null, skills: [], inputs: [], outputs: [], guards: [], transitions: [] },
+      ],
+    }
+    const repoRoot = await mkdtemp(join(tmpdir(), 'wf-charset-bug-'))
+    await mkdir(join(repoRoot, '.pipeline', 'workflows'), { recursive: true })
+    await writeFile(join(repoRoot, '.pipeline', 'workflows', 'bad-event.yaml'), serializeWorkflow(badWf), 'utf8')
+    expect(() => loadWorkflow(repoRoot, 'bad-event')).toThrow(/steps 下每项必须以/)
+
+    // Part B —— 同一个值（'go back'）这次经画布"添加 transition"对话框提交：客户端字符集
+    // 校验必须在 confirmConnect 真正调用 setWf/setEdges（状态变更分支）之前就拒绝，因此
+    // Part A 里那种会让 kernel parser 炸掉的 WorkflowDef 永远不会被这条 UI 路径构造出来。
+    renderCanvas()
+    await waitFor(() => expect(screen.getByText(/intake/i)).toBeInTheDocument())
+    const connectTrigger = screen.getByTestId('debug-trigger-connect')
+    fireDebugConnect(connectTrigger, { source: 'done', target: 'intake' })
+    fireEvent.change(screen.getByPlaceholderText(/event 名/), { target: { value: 'go back' } })
+    fireEvent.click(screen.getByRole('button', { name: '确认' }))
+    expect(screen.getByText(/非法 event 名/)).toBeInTheDocument()
+
+    // 保存后的请求体必须完全不含 'go back'——证明那条非法输入从未触发过 setWf 的状态变更分支。
+    fireEvent.click(screen.getByRole('button', { name: '取消' }))
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    await waitFor(() => expect(screen.getByText('已保存')).toBeInTheDocument())
+    const calls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls
+    const postCall = calls.find((c) => c[0] === `/api/workflows/${NAME}` && c[1]?.method === 'POST')
+    const body = JSON.parse(postCall![1].body as string)
+    expect(JSON.stringify(body)).not.toContain('go back')
   })
 })

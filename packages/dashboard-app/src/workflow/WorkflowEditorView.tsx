@@ -41,6 +41,12 @@ export function WorkflowEditorView({ root, onOpen }: WorkflowEditorViewProps): J
   const [newName, setNewName] = useState('')
   const [formError, setFormError] = useState<string | null>(null)
   const [pendingDelete, setPendingDelete] = useState<string | null>(null)
+  // whole-feature review Finding 2：DELETE 失败此前复用了"加载失败"专用的致命 `error`
+  // state——下面的顶层 `if (error) return <p>...</p>` 会把整个列表 + 新建表单替换成一行错误
+  // 文案，用户没有任何办法恢复（不能重试删除、不能新建、不能打开其它 workflow），除非刷新
+  // 整个页面。用独立、非致命的 deleteError，就近渲染在列表旁边（同 formError 之于新建表单
+  // 的既有模式一致），不吞掉其余 UI。
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   const load = useCallback(() => {
     fetch(`/api/workflows?root=${encodeURIComponent(root)}`)
@@ -80,13 +86,14 @@ export function WorkflowEditorView({ root, onOpen }: WorkflowEditorViewProps): J
   }
 
   async function confirmDelete(name: string): Promise<void> {
+    setDeleteError(null)
     try {
       const res = await fetch(`/api/workflows/${encodeURIComponent(name)}?root=${encodeURIComponent(root)}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${getToken()}` },
       })
       if (!res.ok) {
-        setError(t('workflow_editor.delete_error', { msg: (await readErrorDetail(res)) || `(${res.status})` }))
+        setDeleteError(t('workflow_editor.delete_error', { msg: (await readErrorDetail(res)) || `(${res.status})` }))
         setPendingDelete(null)
         return
       }
@@ -95,7 +102,7 @@ export function WorkflowEditorView({ root, onOpen }: WorkflowEditorViewProps): J
       // 往返，且不依赖“重拉一定能反映刚才的写入”这一时序假设。
       setNames((prev) => (prev ?? []).filter((n) => n !== name))
     } catch (err) {
-      setError(t('workflow_editor.delete_error', { msg: err instanceof Error ? err.message : t('workflow_editor.network_error') }))
+      setDeleteError(t('workflow_editor.delete_error', { msg: err instanceof Error ? err.message : t('workflow_editor.network_error') }))
       setPendingDelete(null)
     }
   }
@@ -115,6 +122,7 @@ export function WorkflowEditorView({ root, onOpen }: WorkflowEditorViewProps): J
           </li>
         ))}
       </ul>
+      {deleteError && <p className="subtitle">{deleteError}</p>}
       {pendingDelete && (
         <div role="dialog" className="workflow-delete-confirm">
           <p>{t('workflow_editor.delete_confirm', { name: pendingDelete })}</p>

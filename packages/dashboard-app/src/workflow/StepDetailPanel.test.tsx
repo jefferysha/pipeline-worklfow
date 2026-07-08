@@ -62,6 +62,24 @@ describe('StepDetailPanel', () => {
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ outputs: [{ field: 'build_sha', type: 'string' }] }))
   })
 
+  // whole-feature review Finding 1：kernel parse.ts 的 parseFieldRefBlock 用
+  // `field:\s*(\S+)\s*$` 匹配字段名——只要求非空白，不校验字符集。含空格的字段名（如这里的
+  // 'design doc'）此前能被这个对话框直接接受、写进 step.outputs，POST 保存成功，但下次任何人
+  // GET 这个 workflow 时 parseWorkflow 会在这一行匹配失败、最终整体抛错（同 event 名那条
+  // 回归——见 WorkflowCanvas.test.tsx"Finding 1 闭环回归"describe 块的往返证据，字段名会走
+  // 同一条 parseStep 主循环 break→顶层 '- id:' 前缀不匹配→throw 的链路）。字符集校验同
+  // WorkflowCanvas.tsx confirmAddStep 已有的 step/skill id 校验一致（`^[a-zA-Z0-9_-]+$`）。
+  it('字段名含空格 → 拒绝新增，不触发 onChange', () => {
+    const { onChange } = renderPanel()
+    fireEvent.click(screen.getAllByRole('button', { name: '+ 字段' })[1]!) // outputs
+    fireEvent.change(screen.getByPlaceholderText('字段名'), { target: { value: 'design doc' } })
+    fireEvent.click(screen.getByRole('button', { name: '确认' }))
+    expect(screen.getByText(/非法字段名/)).toBeInTheDocument()
+    expect(onChange).not.toHaveBeenCalled()
+    // 对话框仍在（没有被当成提交成功而关闭）——输入框依然可见，且仍是刚才输入的值。
+    expect(screen.getByPlaceholderText('字段名')).toHaveValue('design doc')
+  })
+
   it('点关闭 → 调用 onClose', () => {
     const { onClose } = renderPanel()
     fireEvent.click(screen.getByRole('button', { name: '关闭' }))

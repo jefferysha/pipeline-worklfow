@@ -88,4 +88,37 @@ describe('WorkflowEditorView', () => {
     await waitFor(() => expect(screen.queryByText('onboarding')).not.toBeInTheDocument())
     expect(screen.getByText('release')).toBeInTheDocument()
   })
+
+  // whole-feature review Finding 2：confirmDelete 此前在非 2xx 响应时复用了"加载失败"专用的
+  // 致命 `error` state——组件顶部 `if (error) return <p>...</p>` 会把整个列表 + 新建表单替换成
+  // 一行错误文案，用户没有任何办法恢复（不能重试删除、不能新建、不能点开其它 workflow），除非
+  // 刷新整个页面。本用例证明修复后：非 2xx DELETE 只产生一个就近展示、非致命的错误提示，
+  // 列表（含删除失败的那一项）和新建表单必须仍然可见、可交互。
+  it('DELETE 失败（非 2xx）→ 行内错误提示，列表（含删除失败的那一项）与新建表单仍可见可交互', async () => {
+    global.fetch = vi.fn(async (url: string, opts?: RequestInit) => {
+      if (url === `/api/workflows?root=${encodeURIComponent(ROOT)}`) {
+        return new Response(JSON.stringify({ names: ['onboarding', 'release'] }), { status: 200 })
+      }
+      if (url === `/api/workflows/onboarding?root=${encodeURIComponent(ROOT)}` && opts?.method === 'DELETE') {
+        return new Response(JSON.stringify({ error: '仍被 change 引用' }), { status: 409 })
+      }
+      throw new Error(`unexpected fetch ${url}`)
+    }) as unknown as typeof fetch
+    renderView()
+    await waitFor(() => expect(screen.getByText('onboarding')).toBeInTheDocument())
+    fireEvent.click(screen.getAllByRole('button', { name: '删除' })[0]!)
+    fireEvent.click(screen.getByRole('button', { name: /^确认/ }))
+    await waitFor(() => expect(screen.getByText(/删除失败/)).toBeInTheDocument())
+
+    // 不是致命错误：列表（含删除失败的 onboarding 本身）和另一个未受影响的 workflow 仍可见。
+    expect(screen.getByText('onboarding')).toBeInTheDocument()
+    expect(screen.getByText('release')).toBeInTheDocument()
+    // 新建表单仍可交互（不是被整段替换成一行文案）。
+    const input = screen.getByPlaceholderText(/新 workflow 名/)
+    expect(input).toBeInTheDocument()
+    fireEvent.change(input, { target: { value: 'newone' } })
+    expect(input).toHaveValue('newone')
+    // 删除按钮本身也还在、可再次点击（不是一次性挡死后再也点不到）。
+    expect(screen.getAllByRole('button', { name: '删除' }).length).toBeGreaterThan(0)
+  })
 })
