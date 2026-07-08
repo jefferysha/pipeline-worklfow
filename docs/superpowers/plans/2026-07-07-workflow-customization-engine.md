@@ -1344,7 +1344,7 @@ git commit -m "feat: 非 default workflow 的 skill DAG 解锁判定接入 gate.
   未知字段的处理方式决定了老文件读出来 `workflow` 会是什么——需要实现者先确认这一点，
   再决定迁移判定条件用"字段缺失"还是"值为某个旧哨兵"）。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```ts
 // packages/cli/src/commands/migrateWorkflow.test.ts
@@ -1370,12 +1370,12 @@ describe('cmdMigrateWorkflow', () => {
 })
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `cd /Users/a1234/Documents/code-manager/projects/pipeline-worklfow && npx vitest run packages/cli/src/commands/migrateWorkflow.test.ts`
 Expected: FAIL
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 ```ts
 // packages/cli/src/commands/migrateWorkflow.ts
@@ -1413,12 +1413,12 @@ export async function cmdMigrateWorkflow(deps: CliDeps, name: string): Promise<n
 之前创建的 fixture `.pipeline.yaml`，读一遍确认 `workflow` 字段读出来是什么，再决定这个
 命令是否需要做更多事情。）
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `npx vitest run packages/cli/src/commands/migrateWorkflow.test.ts`
 Expected: PASS
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add packages/cli/src/commands/migrateWorkflow.ts packages/cli/src/commands/migrateWorkflow.test.ts packages/cli/src/program.ts
