@@ -278,6 +278,39 @@ export async function retryAfkRun(store: StateStore, changeDir: string): Promise
 }
 
 /**
+ * afk-workbench 缺口修复（2026-07-09，本轮真机验证发现）：AfkWorkbench.tsx 此前只有
+ * 查看快照/取消/重试三个入口，没有"挂队"——`pipeline afk enqueue <name>` 是唯一能把一个
+ * change 摆进 AFK 队列的路径，dashboard 侧没有对应端点/按钮，用户点不到。
+ *
+ * 镜像 `@pipeline-lite/automation` sdk.ts::enqueue 消费的判定逻辑（server 对 automation 包
+ * 坚持零运行时依赖，同本文件 CANCEL_MARKER_FILE 的字面量对位先例，不 import）：
+ *   · PM track 永不入队（queue/gate.ts::optedIn 的硬规则）。
+ *   · 非 PM track：SDK 默认构造 `defaultOptIn=true` 且 CLI 走的正是这条默认路径（未暴露
+ *     per-change opt-in 覆盖的 UI/CLI 入口），故这里同样按"默认已 opt-in"处理，不额外建一套
+ *     配置面——与 CLI 默认行为等价，不是引入新语义。
+ *   · automation 已经处于非 off 态（已挂队/在跑/终态）→ 拒绝重复 enqueue。SDK 侧对
+ *     automation==='queued' 是幂等返回 true（视为"已经如愿"），但这里改成显式报错而非静默
+ *     成功——按钮场景下用户点两下应该被告知"已经在队了"，不是假装又成功了一次。
+ * 写回同 automation 包 queue/claim.ts::markQueued 逐字对齐：automation=queued +
+ * automation_queued_at=now。
+ */
+export async function enqueueAfkRun(store: StateStore, changeDir: string, clock: () => string): Promise<{ ok: boolean; error?: string }> {
+  if (!existsSync(join(changeDir, '.pipeline.yaml'))) {
+    return { ok: false, error: '找不到该 change（无 .pipeline.yaml）' }
+  }
+  const track = str(await store.get(changeDir, 'track'))
+  if (track === 'pm') {
+    return { ok: false, error: 'PM track 不支持 AFK 自动化挂队' }
+  }
+  const current = str(await store.get(changeDir, 'automation'))
+  if (current && current !== 'off') {
+    return { ok: false, error: `automation 状态已是 '${current}'，无需重复挂队` }
+  }
+  await store.setMany(changeDir, { automation: 'queued', automation_queued_at: clock() })
+  return { ok: true }
+}
+
+/**
  * afk-workbench Task 6：GET /api/afk/:name/log 的读取逻辑。
  * 日志落盘位置见 Task 2（2026-07-08 勘误修正后的真实落点）：宿主仓库侧、随 change 本身持久的
  * `join(changeDir, '.sandcastle-run.log')`——**不在** automation_worktree 指向的临时 worktree

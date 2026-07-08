@@ -25,7 +25,7 @@ import { dirname, join, resolve as resolvePath } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { applyLevelChange, createFlowEngine, createStateStore, loadManifest, loadRegistry } from '@pipeline-lite/kernel'
 import type { FlowEngine, GraduationFs, StateStore, WorkflowDef } from '@pipeline-lite/kernel'
-import { buildAfkLog, buildAfkSnapshot, cancelAfkRun, readAfkRunLog, retryAfkRun } from './afk.js'
+import { buildAfkLog, buildAfkSnapshot, cancelAfkRun, enqueueAfkRun, readAfkRunLog, retryAfkRun } from './afk.js'
 import { buildLoopsSnapshot } from './loops.js'
 import { readMandatorySkills, validateMandatorySkillsBody, writeMandatorySkills } from './config.js'
 import { resolveServerPaths } from './paths.js'
@@ -577,6 +577,29 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
       }
       const dir = join(root, 'openspec', 'changes', name)
       const result = await retryAfkRun(store, dir)
+      return sendJson(res, result.ok ? 200 : 400, result)
+    }
+
+    // ── afk-workbench 缺口修复：POST /api/afk/:name/enqueue —— 挂入 AFK 队列
+    //    （automation=off/未设 → queued，见 afk.ts::enqueueAfkRun）──
+    const enqueueMatch = /^\/api\/afk\/([^/]+)\/enqueue$/.exec(path)
+    if (enqueueMatch) {
+      const name = decodeURIComponent(enqueueMatch[1]!)
+      // 同 /api/afk/<name>/cancel、/api/afk/<name>/retry 的 change 名校验（防路径穿越）。
+      if (!name || !/^[a-zA-Z0-9_-]+$/.test(name) || name.includes('..')) {
+        return sendJson(res, 400, { ok: false, error: '非法 change 名（仅允许 a-z A-Z 0-9 - _）' })
+      }
+      const body = await readJsonBody(req)
+      const root = typeof body === 'object' && body !== null ? (body as Record<string, unknown>).root : undefined
+      if (typeof root !== 'string' || !root) {
+        return sendJson(res, 400, { ok: false, error: 'root 须为非空字符串' })
+      }
+      // 信任锚：同 /api/afk/<name>/cancel、/api/afk/<name>/retry 共用的「两侧规范化再比较」模式。
+      if (!dedupeRoots(registry()).includes(resolvePath(root))) {
+        return sendJson(res, 404, { ok: false, error: 'root 未在机器级项目注册表中' })
+      }
+      const dir = join(root, 'openspec', 'changes', name)
+      const result = await enqueueAfkRun(store, dir, clock)
       return sendJson(res, result.ok ? 200 : 400, result)
     }
 

@@ -123,7 +123,7 @@ function AppShell(): JSX.Element {
         )}
         {view === 'settings' && <SettingsView />}
         {view === 'loops' && <LoopsPanel />}
-        {view === 'afk' && <AfkWorkbench />}
+        {view === 'afk' && <AfkWorkbench root={currentRoot} />}
         {view === 'workflows' && (
           openWorkflowName
             ? <WorkflowCanvas root={currentRoot} name={openWorkflowName} onBack={() => setOpenWorkflowName(null)} />

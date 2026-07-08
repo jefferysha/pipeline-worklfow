@@ -48,7 +48,16 @@ async function readErrorDetail(res: Response): Promise<string> {
   return ''
 }
 
-export function AfkWorkbench(): JSX.Element {
+export interface AfkWorkbenchProps {
+  /**
+   * 挂队目标 project root——同 App.tsx 传给 WorkflowCanvas/WorkflowEditorView 的
+   * `currentRoot` 同一份值（`snapshot.projects[0]?.root`）。已知简化点同 G14：没有
+   * "选哪个已注册项目挂队"的显式切换，多项目场景固定挂到第一个。
+   */
+  root?: string
+}
+
+export function AfkWorkbench({ root = '' }: AfkWorkbenchProps): JSX.Element {
   const { t } = useT()
   const [snapshot, setSnapshot] = useState<AfkSnapshot | null>(null)
   const [snapshotError, setSnapshotError] = useState<string | null>(null)
@@ -56,6 +65,8 @@ export function AfkWorkbench(): JSX.Element {
   const [log, setLog] = useState<string | null>(null)
   const [logError, setLogError] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [enqueueName, setEnqueueName] = useState('')
+  const [enqueueError, setEnqueueError] = useState<string | null>(null)
 
   const loadSnapshot = useCallback((): Promise<AfkSnapshot | null> => {
     return fetch('/api/afk/snapshot')
@@ -126,6 +137,33 @@ export function AfkWorkbench(): JSX.Element {
     }
   }
 
+  // 挂队缺口修复（2026-07-09，真机验证发现）：此前面板只有查看/取消/重试，没有把一个 change
+  // 摆进 AFK 队列的入口——`pipeline afk enqueue <name>` 是唯一路径，dashboard 点不到。同
+  // doAction 的错误可见性纪律（非 2xx 与网络层 throw 都要落到行内提示，不静默失败）；成功后
+  // 同样 refetch 快照（新挂队的 change 需要出现在 queued 泳道），并清空输入框（不清空的话，
+  // 已提交的 change 名还留在框里,用户分不清是"已提交"还是"忘了填"）。
+  async function doEnqueue(): Promise<void> {
+    const name = enqueueName.trim()
+    if (!name) return
+    setEnqueueError(null)
+    try {
+      const res = await fetch(`/api/afk/${encodeURIComponent(name)}/enqueue`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
+        body: JSON.stringify({ root }),
+      })
+      if (!res.ok) {
+        const detail = await readErrorDetail(res)
+        setEnqueueError(detail ? t('afk.action_error', { label: t('afk.enqueue'), msg: detail }) : t('afk.action_error_status', { label: t('afk.enqueue'), status: res.status }))
+        return
+      }
+      setEnqueueName('')
+      await loadSnapshot()
+    } catch (err) {
+      setEnqueueError(t('afk.action_error', { label: t('afk.enqueue'), msg: err instanceof Error ? err.message : t('afk.network_error') }))
+    }
+  }
+
   if (snapshotError) {
     return <p className="subtitle">{snapshotError}</p>
   }
@@ -133,6 +171,15 @@ export function AfkWorkbench(): JSX.Element {
   return (
     <div className="split">
       <div className="mock-sidebar">
+        <div>
+          <input
+            value={enqueueName}
+            placeholder={t('afk.enqueue_placeholder')}
+            onChange={(e) => { setEnqueueName(e.target.value); setEnqueueError(null) }}
+          />
+          <button onClick={() => void doEnqueue()}>{t('afk.enqueue')}</button>
+        </div>
+        {enqueueError && <p className="subtitle">{enqueueError}</p>}
         {allCards.map((c) => (
           <div key={`${c.root}:${c.name}`} onClick={() => setSelected(c)} style={{ cursor: 'pointer' }}>
             {c.lane === 'running' ? '●' : '○'} <span>{c.name}</span> · {c.lane}

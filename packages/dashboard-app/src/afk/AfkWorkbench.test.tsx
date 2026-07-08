@@ -160,6 +160,61 @@ describe('AfkWorkbench', () => {
     await waitFor(() => expect(screen.getByText(/重试失败|操作失败|error|Error/i)).toBeInTheDocument())
   })
 
+  it('挂队表单：填 change 名点"挂队" → 真 POST /enqueue，成功后真 refetch 快照且清空输入框', async () => {
+    let snapshotCalls = 0
+    let enqueueBody: unknown = null
+    global.fetch = vi.fn(async (url: string, opts?: RequestInit) => {
+      if (url === '/api/afk/snapshot') {
+        snapshotCalls += 1
+        return new Response(JSON.stringify(SNAPSHOT), { status: 200 })
+      }
+      if (url === '/api/afk/new-change/enqueue' && opts?.method === 'POST') {
+        enqueueBody = JSON.parse(opts.body as string)
+        return new Response(JSON.stringify({ ok: true }), { status: 200 })
+      }
+      throw new Error(`unexpected ${url}`)
+    }) as unknown as typeof fetch
+    renderAfk()
+    await waitFor(() => expect(screen.getByText('demo-2')).toBeInTheDocument())
+    expect(snapshotCalls).toBe(1)
+    const input = screen.getByPlaceholderText(/change 名|change name/i)
+    fireEvent.change(input, { target: { value: 'new-change' } })
+    fireEvent.click(screen.getByRole('button', { name: /挂队|Enqueue/i }))
+    await waitFor(() => expect(enqueueBody).toEqual({ root: expect.any(String) }))
+    await waitFor(() => expect(snapshotCalls).toBe(2))
+    expect((input as HTMLInputElement).value).toBe('')
+  })
+
+  it('挂队失败（非 2xx）→ 显示错误信息，不清空输入框', async () => {
+    global.fetch = vi.fn(async (url: string, opts?: RequestInit) => {
+      if (url === '/api/afk/snapshot') return new Response(JSON.stringify(SNAPSHOT), { status: 200 })
+      if (url === '/api/afk/dup/enqueue' && opts?.method === 'POST') {
+        return new Response(JSON.stringify({ ok: false, error: "automation 状态已是 'running'，无需重复挂队" }), { status: 400 })
+      }
+      throw new Error(`unexpected ${url}`)
+    }) as unknown as typeof fetch
+    renderAfk()
+    await waitFor(() => expect(screen.getByText('demo-2')).toBeInTheDocument())
+    const input = screen.getByPlaceholderText(/change 名|change name/i)
+    fireEvent.change(input, { target: { value: 'dup' } })
+    fireEvent.click(screen.getByRole('button', { name: /挂队|Enqueue/i }))
+    await waitFor(() => expect(screen.getByText(/无需重复挂队|挂队失败|Enqueue failed/i)).toBeInTheDocument())
+    expect((input as HTMLInputElement).value).toBe('dup')
+  })
+
+  it('输入框为空时点"挂队" → 不发请求（前端最基本的非空校验，不靠 server 兜底一个空字符串 name）', async () => {
+    const calls: string[] = []
+    global.fetch = vi.fn(async (url: string) => {
+      calls.push(url)
+      if (url === '/api/afk/snapshot') return new Response(JSON.stringify(SNAPSHOT), { status: 200 })
+      throw new Error(`unexpected ${url}`)
+    }) as unknown as typeof fetch
+    renderAfk()
+    await waitFor(() => expect(screen.getByText('demo-2')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: /挂队|Enqueue/i }))
+    await waitFor(() => expect(calls).toEqual(['/api/afk/snapshot']))
+  })
+
   it('中英切换：英文下渲染英文空态提示（此前面板完全不走 t()）', async () => {
     localStorage.setItem('pipeline-dashboard-lang', 'en')
     global.fetch = vi.fn(async (url: string) => {
