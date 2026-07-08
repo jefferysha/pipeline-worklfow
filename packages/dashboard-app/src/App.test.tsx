@@ -12,8 +12,22 @@ beforeEach(() => {
   } catch {
     /* ignore */
   }
-  // 初始 GET /api/snapshot → 空快照（无待办）
-  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => makeSnapshot([]) }))
+  // 初始 GET /api/snapshot → 空快照（无待办）；新增 /api/workflows?root= 分支（GOAL E8
+  // 接线，Task 9）——WorkflowEditorView 挂载时真 fetch 这个端点，桩子按 URL 分派而不是像此前
+  // 那样对任意 fetch 调用都无差别返回同一个快照，否则这条新端点会因为拿到快照形状的 body
+  // （而非 `{ names: [] }`）而在 `.json()` 之后解析出不匹配的字段。
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (url: string) => {
+      if (url === '/api/snapshot') {
+        return { ok: true, json: async () => makeSnapshot([]) }
+      }
+      if (url.startsWith('/api/workflows?root=')) {
+        return { ok: true, json: async () => ({ names: [] }) }
+      }
+      throw new Error(`unexpected fetch ${url}`)
+    }),
+  )
 })
 afterEach(() => {
   vi.restoreAllMocks()
@@ -42,6 +56,21 @@ describe('App 视图切换', () => {
     expect(screen.getByTestId('board-view')).toBeInTheDocument()
     fireEvent.click(screen.getByTestId('nav-settings'))
     expect(screen.getByTestId('settings-view')).toBeInTheDocument()
+  })
+})
+
+describe('App workflow 编辑器接线（GOAL.md E8 收编，Task 9）', () => {
+  it('点工作台下拉里的 workflow 编辑器 → 渲染 WorkflowEditorView（列表页）', async () => {
+    render(<App />)
+    await screen.findByTestId('inbox-view')
+    fireEvent.click(screen.getByTestId('nav-workbench'))
+    fireEvent.click(screen.getByTestId('nav-workflows'))
+    // getByText（单一匹配）在这里会因为“找到多个元素”报错：names 为空数组时
+    // WorkflowEditorView 同时渲染标题 `<h2>自定义 workflow</h2>` 和空态文案
+    // `还没有自定义 workflow`（后者字面包含前者作为子串），两者都命中这个正则。改用
+    // `getAllByText` 断言"至少渲染出一处"——同 RTL 在这种歧义报错里自己建议的修法一致，
+    // 断言意图不变（确认 WorkflowEditorView 列表页真的渲染了），不是放松验证强度。
+    await waitFor(() => expect(screen.getAllByText(/自定义 workflow|Custom workflows/).length).toBeGreaterThan(0))
   })
 })
 

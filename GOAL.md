@@ -11,10 +11,10 @@
 **达成判定 = 下方清单 E/F 全部勾满。** 与 v1.0 相同的纪律延续：证据先于勾选、清单只增不删、
 八门验证全绿才收编。
 
-> **当前状态（2026-07-08）**：F 全绿（F1-F4 全勾）；E 尚未全绿——E1-E7 全勾，**E8（workflow
-> 编辑器画布 UI）故意不做**（`workflow-customization-engine.md` 收尾说明的范围切分，需等这条
-> 主线落地后再设计画布怎么读写它，见下方 E8 脚注）。**v2.0 尚未达成收官**，E8 是唯一剩余项，
-> 留给后续一份独立计划；届时补上才满足本文件自己定义的"E/F 全部勾满"收官判据。
+> **当前状态（2026-07-08）**：E 全绿（E1-E8 全勾）+ F 全绿（F1-F4 全勾）。E8（workflow 编辑器
+> 画布 UI）由独立后续计划补上——`docs/superpowers/plans/2026-07-08-workflow-editor-canvas.md`
+> （9 个任务，`.superpowers/sdd/progress.md`），已知简化点见下方 E8 行脚注 +
+> `docs/TEST-REALITY.md` G14。**v2.0 已达成本文件自己定义的"E/F 全部勾满"收官判据**。
 
 ## 清单 E · Workflow 自定义引擎
 
@@ -61,10 +61,11 @@
       单独摘出并改断言"仅此一处合法引用"，非静默破例
 - [x] E7 旧格式迁移工具：`pipeline migrate-workflow`（Task 10），类比现有 `pipeline import`，
       一次性迁移，不做运行时双格式兼容
-- [ ] E8 workflow 编辑器 UI：真画布节点连线图（step/skill 为可拖拽节点，`depends_on` 用
-      拖线表达）——**完全不在本轮范围**，`workflow-customization-engine.md` 收尾说明明确写
-      "画布 UI 不在本计划内……等这条主线落地、真有一个可读写的 workflow 文件格式之后再设计
-      画布怎么读写它"，是故意的范围切分，不是遗漏；本轮不勾、留待后续独立计划
+- [x] E8 workflow 编辑器 UI：真画布节点连线图（`@xyflow/react`，两层：顶层 step 拓扑 +
+      钥入某 step 看 skill DAG，同画布切数据源）。已知简化点（非阻塞，登记见
+      docs/TEST-REALITY.md）：多项目场景下画布固定编辑 `snapshot.projects[0]` 这个
+      project 的 workflow，未做"选哪个项目"的显式切换；guard 新增（只做了移除）；
+      画布不支持撤销/重做/多选/minimap；节点/workflow 改名需删除重建。
 
 ## 清单 F · Dashboard 工作台
 

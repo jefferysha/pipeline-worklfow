@@ -57,6 +57,13 @@ describe('Nav 一级导航（GOAL.md F1 收尾：顶部 3 项 + "工作台" 下�
     expect(menu.textContent).toMatch(/afk/i)
   })
 
+  it('工作台下拉含第三项 workflow 编辑器', () => {
+    renderNav()
+    fireEvent.click(screen.getByTestId('nav-workbench'))
+    const menu = screen.getByTestId('workbench-menu')
+    expect(within(menu).getByTestId('nav-workflows')).toBeInTheDocument()
+  })
+
   it('再点工作台触发按钮收起下拉', () => {
     renderNav()
     fireEvent.click(screen.getByTestId('nav-workbench'))

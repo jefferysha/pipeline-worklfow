@@ -7,7 +7,7 @@ export interface Dict {
 
 export const zh: Dict = {
   app: { title: 'Pipeline 控制台', subtitle: '全局工作流看板' },
-  nav: { inbox: '收件箱', board: '看板', settings: '设置', workbench: '工作台', loops: 'Loop 设置', afk: 'AFK 工作台' },
+  nav: { inbox: '收件箱', board: '看板', settings: '设置', workbench: '工作台', loops: 'Loop 设置', afk: 'AFK 工作台', workflows: 'Workflow 编辑器' },
   common: {
     lang: '语言',
     theme_toggle: '主题',
@@ -163,7 +163,7 @@ export const zh: Dict = {
 
 export const en: Dict = {
   app: { title: 'Pipeline Console', subtitle: 'Global workflow board' },
-  nav: { inbox: 'Inbox', board: 'Board', settings: 'Settings', workbench: 'Workbench', loops: 'Loop Settings', afk: 'AFK Workbench' },
+  nav: { inbox: 'Inbox', board: 'Board', settings: 'Settings', workbench: 'Workbench', loops: 'Loop Settings', afk: 'AFK Workbench', workflows: 'Workflow Editor' },
   common: {
     lang: 'Language',
     theme_toggle: 'Theme',

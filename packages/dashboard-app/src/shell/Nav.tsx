@@ -2,17 +2,19 @@ import { useState } from 'react'
 import { useT } from '../i18n'
 import type { Lang } from '../i18n/translations'
 
-export type View = 'inbox' | 'board' | 'settings' | 'loops' | 'afk'
+export type View = 'inbox' | 'board' | 'settings' | 'loops' | 'afk' | 'workflows'
 
 /** 一级导航项 —— 病灶③解法的显式枚举白名单，顶部恰 3 项。 */
 export const PRIMARY_VIEWS: View[] = ['inbox', 'board', 'settings']
 
 /**
  * GOAL.md F1 收尾：loop 设置 + AFK 工作台原本各自的一级导航入口收进一个"工作台"下拉分组，
- * 顶部导航因此恢复到 3 项（+1 个分组触发按钮）。skill 编辑器已经是设置页内的弹窗、workflow
- * 编辑器（E8 画布 UI）本轮范围外，两者都不占导航项，故此分组目前只辖这两个视图。
+ * 顶部导航因此恢复到 3 项（+1 个分组触发按钮）。skill 编辑器已经是设置页内的弹窗，不占导航项。
+ * workflow 编辑器（E8 画布 UI，GOAL.md 2026-07-08 收编）是本分组第三项——`WorkflowEditorView`
+ * 列表页 + `WorkflowCanvas` 画布页两者共用这一个入口，具体渲染哪个由 App.tsx 内部的
+ * "当前打开的 workflow 名字"状态决定，本文件不关心。
  */
-export const WORKBENCH_VIEWS: View[] = ['loops', 'afk']
+export const WORKBENCH_VIEWS: View[] = ['loops', 'afk', 'workflows']
 
 interface NavProps {
   view: View

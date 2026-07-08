@@ -12,6 +12,8 @@ import { SettingsView } from './settings/SettingsView'
 import { Nav, type View } from './shell/Nav'
 import { useSnapshot } from './state/useSnapshot'
 import { GLOBAL_CSS } from './styles'
+import { WorkflowCanvas } from './workflow/WorkflowCanvas'
+import { WorkflowEditorView } from './workflow/WorkflowEditorView'
 
 type Theme = 'light' | 'dark'
 const THEME_KEY = 'pipeline-dashboard-theme'
@@ -42,6 +44,12 @@ function AppShell(): JSX.Element {
   const [theme, setThemeState] = useState<Theme>(initialTheme)
   const [flash, setFlash] = useState<Flash | null>(null)
   const { snapshot, loading, error, connected, refresh } = useSnapshot()
+  // GOAL.md E8 收编（Task 9）：null = workflow 列表页，非 null = 正打开该名字的画布页。
+  const [openWorkflowName, setOpenWorkflowName] = useState<string | null>(null)
+  // 已知简化点（登记见 docs/TEST-REALITY.md G14）：App 层目前没有"当前选中 project root"
+  // 这个概念（snapshot 聚合全部已注册 project），固定取第一个 project 的 root——真实多项目
+  // 场景下选哪个 root 编辑 workflow 是本任务范围外的更大问题。
+  const currentRoot = snapshot?.projects[0]?.root ?? ''
 
   useEffect(() => {
     try {
@@ -116,6 +124,11 @@ function AppShell(): JSX.Element {
         {view === 'settings' && <SettingsView />}
         {view === 'loops' && <LoopsPanel />}
         {view === 'afk' && <AfkWorkbench />}
+        {view === 'workflows' && (
+          openWorkflowName
+            ? <WorkflowCanvas root={currentRoot} name={openWorkflowName} onBack={() => setOpenWorkflowName(null)} />
+            : <WorkflowEditorView root={currentRoot} onOpen={setOpenWorkflowName} />
+        )}
       </main>
 
       <footer className="footer">

@@ -147,10 +147,13 @@ iteration-35）**：
 - **G8**：自定义 workflow 下 `pipeline transition` 不写 review marker/breadcrumb（Task 8
   明确的范围收缩）——只影响自定义 workflow；`default` workflow 的 review marker/breadcrumb
   机制完全不受影响。
-- **G9**：E8（workflow 编辑器节点连线画布 UI）完全不在本轮四份计划范围内——
-  `workflow-customization-engine.md` 收尾说明明确写"画布 UI 不在本计划内……等这条主线
-  落地、真有一个可读写的 workflow 文件格式之后再设计画布怎么读写它"，是故意的范围切分，
-  见 GOAL.md E8。
+- **✅ G9 已闭**：登记时（2026-07-08 集成收尾）E8（workflow 编辑器节点连线画布 UI）完全
+  不在当时四份计划范围内——`workflow-customization-engine.md` 收尾说明明确写"画布 UI 不在
+  本计划内……等这条主线落地、真有一个可读写的 workflow 文件格式之后再设计画布怎么读写
+  它"，是故意的范围切分，非遗漏。**已于同日由第五份独立计划补上**：
+  `docs/superpowers/plans/2026-07-08-workflow-editor-canvas.md`（9 个任务）落地真画布
+  （`@xyflow/react`，两层：顶层 step 拓扑 + 钻入 skill DAG），GOAL.md E8 已勾选。该实现
+  自身的已知简化点不是本条的延续缺口，另行登记见下方 G14。
 - **G10**：Task 8 一个非阻塞边缘情况——不存在的 change 名 + 未知 event 名同时出现时，
   `pipeline transition` 会泄漏一条原始 `ENOENT` 报错而不是干净的"未知 event"错误；
   exit code/stdout/文件写入均无变化（CONTRACT §3 oracle 承诺覆盖的维度不受影响），没有测试
@@ -172,5 +175,23 @@ iteration-35）**：
   step id，与 `PHASE_DOCS` 键值不匹配，`phaseHandoffDocs()` 静默返回空列表——即自定义
   workflow 目前拿不到 handoff 压缩优化，非崩溃、非误报（fail-open 静默降级，与本仓其余
   未接线能力的处置风格一致）。已在 GOAL.md E3 脚注同步登记，见 GOAL.md。
+- **G14**：workflow 编辑器画布（E8，2026-07-08，`docs/superpowers/plans/2026-07-08-
+  workflow-editor-canvas.md` 9 个任务，G9 已闭见上）已知简化点——均已对照实际落地代码逐条
+  核实，非照抄计划草稿：
+  - 多项目场景下画布固定编辑 `snapshot.projects[0]` 这个 project 的 workflow（`App.tsx`
+    的 `currentRoot`，Task 9）——App 层没有"当前选中 project"概念，`snapshot` 本身聚合
+    全部已注册 project；真实多项目场景下选哪个 root 编辑 workflow 是留给后续的更大问题，
+    未做显式切换 UI，单项目场景下可正常跑通。
+  - guard 只支持移除、不支持新增（`StepDetailPanel.tsx`，Task 8 范围收窄）——i18n 已预留
+    `detail_guard_add` key，当前未被任何 JSX 使用。**对计划草稿的修正**：新增不是简单照抄
+    既有 `renderFieldList`（inputs/outputs 的名字+固定 string 类型列表）套一个 `<select>`
+    就能补齐——guard 需要"选类型 + 按类型条件渲染参数"（如 `tasks-at-least` 还需要额外的
+    `n` 数值输入，`nonempty-output` 则不需要任何参数），复杂度比 inputs/outputs 的新增表单
+    高一档；列表+移除按钮+新增表单这个整体模式仍是通用的，只是新增表单本身要另起一份，
+    未在本轮做。
+  - 不支持撤销/重做/多选/复制粘贴/minimap；workflow 改名 / 节点（step、skill）改名需删除
+    重建（不做级联更新其它地方对旧名字/旧 id 的引用）——以上均是设计文档
+    `docs/superpowers/specs/2026-07-08-workflow-editor-canvas-design.md` §3 明确列出的
+    范围外项（"范围外（本轮不做，留作后续小任务）"），不是本轮遗漏。
 
 > 缺口在对应里程碑收编时清零；新缺口发现即追加，绝不删除未解决项。
