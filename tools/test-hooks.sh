@@ -180,10 +180,25 @@ run_gate "{\"cwd\":\"$proj/sub/deep\",\"tool_name\":\"Write\"}"
 assert_exit "gate: marker 在 cwd 上层（项目根）也拦 → exit 2" 2 "$RC"
 
 # ───────────────────────── 3. 红线自证：热路径纯 bash ─────────────────────────
-for f in "$GATE" "$BC" "$SS" "$SL"; do
+# gate.sh 例外（Task 9，GOAL 清单 E）：非 default workflow 的 skill DAG 判定合法委托 CLI（spawn
+# node），但**只**在该分支——workflow==='default' 这条最高频路径的零 spawn 承诺不变。文本 grep
+# 只能证明"提到了 node"，证明不了"只在该分支才真 spawn"；后者由
+# internal-skill-gate-hook.integration.test.ts 用真 bash 子进程 + 真 fixture 黑盒验证
+# （default workflow / 无活跃 change / 非 Skill 调用 → 断言真实行为不受影响且真不 spawn），
+# 比在这里 grep 源码文本更可靠，故 gate.sh 从下面的"零 node"红线里摘出、单独断言。
+for f in "$BC" "$SS" "$SL"; do
   base="$(basename "$f")"
   n="$(grep -c "node" "$f" || true)"
   [ "$n" = "0" ] && ok "红线: $base 内 grep -c \"node\" 为 0" || bad "红线: $base 内 grep -c \"node\" 为 0" "实得 ${n} 行"
+done
+gate_node_n="$(grep -c "node" "$GATE" || true)"
+if [ "$gate_node_n" -gt 0 ] 2>/dev/null; then
+  ok "gate.sh 合法引用 node（仅非 default workflow 的 skill DAG 委托分支，Task 9；零 spawn 承诺见 internal-skill-gate-hook.integration.test.ts）"
+else
+  bad "gate.sh 合法引用 node（仅非 default workflow 的 skill DAG 委托分支，Task 9）" "实得 0 行——是否误删了 Task 9 分支？"
+fi
+for f in "$GATE" "$BC" "$SS" "$SL"; do
+  base="$(basename "$f")"
   n="$(grep -c "python" "$f" || true)"
   [ "$n" = "0" ] && ok "红线: $base 内无 python" || bad "红线: $base 内无 python" "实得 ${n} 行"
 done
