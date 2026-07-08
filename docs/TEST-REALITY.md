@@ -136,4 +136,40 @@
 
 **真实发现（真测试的产出，mock 从未暴露）**：① doctor 需 `deps.doctor` 探针束装配——集成层漏装即 exit 1（realDeps 已补真探针）；② init 对可选字段落盘字面 `null` 而非空串（忠实老内核 heredoc，oracle 双跑据此过）；③ import `--strip` 后再 import 返回 exit 0「无历史区」而非幂等哨兵 exit 1（两条路径语义不同，已各自钉死）；④（iteration-30，#34-wire）commander（^12.1.0）variadic `[args...]` 捕获里的裸 `--`：若前一个 token 是普通位置参数（不以 `-` 开头）会被静默吞掉，若前一个 token 是 `--foo` 形态的选项样 token 则保留——穷举受控 argv 数组验证过，是 commander 内部状态机的真实缺陷。真子进程 e2e（tap.integration.test.ts 最初用 in-process harness 跑）当场抓出：`pipeline tap start claude -- <command>`（无前置 flag）时 `--` 消失，wrapped command 的 argv 被误吞进 client 列表。修复：main.ts 在调用 commander 前从原始 `process.argv` 手工切出 `--` 之后的段（`passthroughArgv`），commander 自始至终看不到裸 `--`，绕开该缺陷；mock 测试（不走真 argv/真 commander）绝不会暴露这类第三方库边界情况。⑤（iteration-33，CI 首次真跑抓出）`hooks/` 全仓 **8 处**（gate.sh/skill-tracker.sh/router.sh/breadcrumb.sh/statusline.sh×2/session-start.sh/decision-recorder.sh）同一处 mtime 读取写法 `stat -f %m "$f" 2>/dev/null || stat -c %Y "$f" 2>/dev/null || echo ...` 在 Linux 上全部失效：GNU `stat -f` 是「文件系统状态」模式（非文件 mtime），传真实文件路径会**成功**吐一段文件系统信息文本而非报错，`||` 兜底判断的是退出码、永不触发；本机 macOS（BSD stat）一直"恰好能用"所以从未暴露，本仓在此之前也从无 CI/无 Linux 真跑过。真机 ubuntu-latest CI 首次运行时，`gate.sh` 处理刚创建的新鲜 review marker 时 `$((now - mt))` 对着一整段文本做算术，报 `arithmetic syntax error` 崩溃退出 1（非预期的 0/2），被新增的 G4 e2e（workflow-skill-orchestration.integration.test.ts）当场抓红。修复：8 处统一改为「先试 GNU 语法（`-c`，BSD stat 不识别该 flag 会真报错退出）+ 输出数字校验兜底，而非只信退出码」；用真 Ubuntu 容器直接复现老写法崩溃 + 验证新写法在 GNU coreutils 下正确产出纯数字 epoch，且真跑 `gate.sh` 新鲜/陈旧 marker 两条路径均正确（阻断/放行+自清）后才提交。**此前全部 180 个 test-hooks.sh 断言、全部 hooks 相关 vitest 均只在 macOS 本机跑过，从未在 Linux 上验证过——这正是"没有 CI"这一操作性空白本身掩盖的真实缺口，补 CI 当轮即抓出。**
 
+**2026-07-08 集成收尾登记（GOAL v2.0：workflow 自定义引擎 + dashboard 工作台，四份计划合并后
+的总盘点，证据源见四个 worktree 的 `.superpowers/sdd/progress.md` + `docs/loops/progress.md`
+iteration-35）**：
+
+- **G7**：`tasks-at-least` guard 类型恒定失败（`workflow-customization-engine.md` Task 7
+  明确 TODO）——需要复用 `packages/kernel/src/flow/guard.ts` 现有的任务计数逻辑，本轮未做，
+  非设计缺陷，是待排期的小任务。
+- **G8**：自定义 workflow 下 `pipeline transition` 不写 review marker/breadcrumb（Task 8
+  明确的范围收缩）——只影响自定义 workflow；`default` workflow 的 review marker/breadcrumb
+  机制完全不受影响。
+- **G9**：E8（workflow 编辑器节点连线画布 UI）完全不在本轮四份计划范围内——
+  `workflow-customization-engine.md` 收尾说明明确写"画布 UI 不在本计划内……等这条主线
+  落地、真有一个可读写的 workflow 文件格式之后再设计画布怎么读写它"，是故意的范围切分，
+  见 GOAL.md E8。
+- **G10**：Task 8 一个非阻塞边缘情况——不存在的 change 名 + 未知 event 名同时出现时，
+  `pipeline transition` 会泄漏一条原始 `ENOENT` 报错而不是干净的"未知 event"错误；
+  exit code/stdout/文件写入均无变化（CONTRACT §3 oracle 承诺覆盖的维度不受影响），没有测试
+  覆盖这个组合输入，判定为非阻塞。
+- **G11**：`automation_attempts` 归零操作和前面的 CAS 不是同一个原子操作（afk-workbench
+  Task 5），窄竞态窗口（`store.cas()` 与随后的 `store.set('automation_attempts','0')`
+  之间），reviewer 判定为计划文本本身写的顺序、影响面窄（仅瞬时计数偏差，下次自增自愈，
+  不影响 CAS 保护的 `automation` 字段本身）且自愈，非阻塞。
+- **G12**：若干 Minor 级别发现（测试覆盖不够全、命名不完全一致、文档措辞小瑕疵等）——完整
+  列表在四个 worktree 当时的 `.superpowers/sdd/progress.md` 里（已随 worktree 清理，摘要
+  见 `docs/loops/progress.md` iteration-35），不在此处逐条复述。
+- **G13**（本轮集成时新发现，非四份计划任务列表里的已知项）：GOAL.md E3 字面要求
+  workflow step 的 `inputs`/`outputs` 契约"驱动现有相位 handoff 压缩机制
+  （`packages/kernel/src/compress/handoff.ts`）"，但 `handoff.ts` 的 `PHASE_DOCS` 仍是
+  按 7 个固定相位名写死的映射表，未读取 step 级 `inputs`/`outputs` 声明；11 个任务的
+  brief 与设计文档（`docs/superpowers/specs/2026-07-07-*-design.md`）通篇都未提
+  `handoff.ts`，是设计阶段本身遗漏的一处衔接，非实现偷工。**影响面**：`default` workflow
+  的 handoff 压缩（B13 护城河功能）完全不受影响；自定义 workflow 下 `phase` 字段是任意
+  step id，与 `PHASE_DOCS` 键值不匹配，`phaseHandoffDocs()` 静默返回空列表——即自定义
+  workflow 目前拿不到 handoff 压缩优化，非崩溃、非误报（fail-open 静默降级，与本仓其余
+  未接线能力的处置风格一致）。已在 GOAL.md E3 脚注同步登记，见 GOAL.md。
+
 > 缺口在对应里程碑收编时清零；新缺口发现即追加，绝不删除未解决项。

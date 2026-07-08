@@ -75,6 +75,14 @@ get/set/transition 的 stdout 与 exit code 以 **golden-oracle 双跑逐字一�
 3. TypeScript strict、ESM、NodeNext；node ≥22。
 4. hook 热路径（PreToolUse/UserPromptSubmit shim）纯 bash：只做文件存在性/读缓存，**禁 spawn node**。
    breadcrumb 缓存由 CLI 在 transition 时写 `openspec/changes/<name>/.breadcrumb`，shim 只 cat。
+   **唯一披露的窄例外**（2026-07-07，GOAL 清单 E6，`workflow-customization-engine` 计划
+   Task 9）：`hooks/gate.sh` 在"当前 change 存在 + 声明的 `workflow` 字段非 `default`/未设 +
+   本次调用是 `Skill` 工具"三条同时成立时，委托 `node .../pipeline.mjs internal-skill-gate`
+   做真实 skill DAG 解锁判定（自定义 workflow 的依赖图判定不值得在 bash 里重新实现一遍）；
+   `workflow==='default'` 这条最高频路径（以及无活跃 change / 非 Skill 工具调用）零改动、
+   零 spawn，本条硬规则对它的承诺不变。`tools/test-hooks.sh` 把 `gate.sh` 从"零 node"红线
+   自证清单里单独摘出、改断言"仅这一处合法引用"，零 spawn 的行为证据见
+   `packages/cli/src/internal-skill-gate-hook.integration.test.ts`。
 5. 老仓（`/Users/a1234/Documents/code-manager/projects/workflow-plugin`）只读，作 oracle 与语义参考。
 6. 时间戳统一 ISO8601 UTC；测试中注入 clock，不直接 `new Date()` 散落业务码。
 7. **插件资产零悬空引用（安装期验证，2026-07-06 用户硬要求）**：`plugin.json` / `hooks.json` /

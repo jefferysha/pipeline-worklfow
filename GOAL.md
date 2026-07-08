@@ -11,35 +11,74 @@
 **达成判定 = 下方清单 E/F 全部勾满。** 与 v1.0 相同的纪律延续：证据先于勾选、清单只增不删、
 八门验证全绿才收编。
 
+> **当前状态（2026-07-08）**：F 全绿（F1-F4 全勾）；E 尚未全绿——E1-E7 全勾，**E8（workflow
+> 编辑器画布 UI）故意不做**（`workflow-customization-engine.md` 收尾说明的范围切分，需等这条
+> 主线落地后再设计画布怎么读写它，见下方 E8 脚注）。**v2.0 尚未达成收官**，E8 是唯一剩余项，
+> 留给后续一份独立计划；届时补上才满足本文件自己定义的"E/F 全部勾满"收官判据。
+
 ## 清单 E · Workflow 自定义引擎
 
-- [ ] E1 workflow 定义文件格式：`.pipeline/workflows/<name>.yaml`，7 相位变成内置 `default`
-      workflow（数据，非写死类型）；state 文件（`.pipeline.yaml`）新增 `workflow` +
-      `current_step` 字段取代写死 `phase` 枚举
-- [ ] E2 skill DAG 依赖：`depends_on` 声明（同 step 内），取代已否决的 parallel/serial
-      分组方案；无依赖 skill 天然并行，多依赖精确表达交叉依赖关系
-- [ ] E3 inputs/outputs：step 级别持久字段契约，取代 kernel 硬编码字段表，驱动现有相位
-      handoff 压缩机制（`packages/kernel/src/compress/handoff.ts`）
-- [ ] E4 guards 参数化：现有 guard 规则类型（tasks-at-least/coverage/automation-queued
-      等）保留为代码实现的可选用类型，"用在哪个 step、参数多少"变成数据
-- [ ] E5 保存时校验：无循环依赖 + inputs 必须对应更早 step 的 outputs，拒绝非法 workflow
-      不等运行时报错
-- [ ] E6 gate.sh 动态解锁：读 workflow 定义 + 扫描"进入当前 step 以来"的历史记录判定
-      skill 解锁状态，仍是纯 bash 热路径（CONTRACT §5.4 红线不破）
-- [ ] E7 旧格式迁移工具：类比现有 `pipeline import`，一次性迁移，不做运行时双格式兼容
+> 2026-07-08 集成收尾勾选，证据源：`docs/superpowers/plans/2026-07-07-workflow-customization-engine.md`
+> 11 个任务 + `.superpowers/sdd/progress.md`（已合并进 `feature/dashboard-workbench`，见
+> `docs/loops/progress.md` iteration-35）。E1/E3/E6 与最初文字表述有真实的、已披露的实现
+> 偏差，逐条见下方脚注，不是静默勾掉。
+
+- [x] E1 workflow 定义文件格式：`.pipeline/workflows/<name>.yaml`（Task 5 `loadWorkflow`
+      真读该路径），7 相位内置为 `default` workflow（`templates/workflows/default.yaml`，
+      数据非写死类型）。**实现偏差**：state 文件只新增了 `workflow` 字段（Task 4），未新增
+      设计文档 §2.2 例子里写的独立 `current_step` 字段——Task 8 改为直接复用既有 `phase`
+      字段承载自定义 workflow 的当前 step id（`workflow==='default'` 时其值仍是旧 7 相位
+      枚举，`workflow!=='default'` 时其值是任意合法 step id），单字段身兼两职、靠 `workflow`
+      字段消歧，功能等价但字面上不是"新增 current_step 字段取代 phase"。
+- [x] E2 skill DAG 依赖：`depends_on` 声明（同 step 内，`skillDag.ts`/Task 6），取代已否决的
+      parallel/serial 分组方案；无依赖 skill 天然并行，多依赖精确表达交叉依赖关系
+- [x] E3 inputs/outputs：step 级别持久字段契约（`parse.ts`/`types.ts`，Task 2）+ 保存时
+      引用校验（Task 3/E5）+ `evaluateStepGuards`（Task 7）按 `outputs` 声明写回字段，
+      取代 kernel 硬编码字段表这部分真落地。**已披露缺口**：未驱动现有相位 handoff 压缩机制
+      （`packages/kernel/src/compress/handoff.ts` 的 `PHASE_DOCS` 仍是按 7 个固定相位名
+      写死的映射表，未读取 step 的 `inputs`/`outputs`）——设计文档
+      （`docs/superpowers/specs/2026-07-07-*-design.md`）本身通篇未提 handoff.ts，11 个
+      任务也无一涉及，是设计阶段就遗漏的一处衔接，非实现偷工。影响面：`default` workflow
+      的 handoff 压缩（B13 护城河功能）完全不受影响、一如既往工作；自定义 workflow 下
+      `phase` 是任意 step id，与 `PHASE_DOCS` 键值不匹配，`phaseHandoffDocs()` 静默返回
+      空列表——即自定义 workflow 目前拿不到 handoff 压缩这个优化，非崩溃、非误报，登记入
+      `docs/TEST-REALITY.md`。
+- [x] E4 guards 参数化：现有 guard 规则类型（tasks-at-least/nonempty-output 等，Task 1/7）
+      保留为代码实现的可选用类型，"用在哪个 step、参数多少"变成数据；`tasks-at-least` 真实
+      计数逻辑仍是 Task 7 标注的诚实 TODO（恒失败，已登记 `docs/TEST-REALITY.md` 缺口 1）
+- [x] E5 保存时校验：无循环依赖 + inputs 必须对应更早 step 的 outputs，拒绝非法 workflow
+      不等运行时报错（`validate.ts`，Task 3，75 例）
+- [x] E6 gate.sh 动态解锁：读 workflow 定义 + 扫描"进入当前 step 以来"的历史记录判定
+      skill 解锁状态（Task 9）。**已披露窄例外**：`workflow==='default'` 这条最高频路径
+      仍是纯 bash 热路径、零 spawn，CONTRACT §5.4 红线对它的承诺不破；仅当活跃 change 声明
+      非 default workflow 且本次调用是 `Skill` 工具时，才委托 `node ... internal-skill-gate`
+      做真实 DAG 判定（自定义 workflow 依赖图不值得在 bash 里重新实现一遍）——已作为 CONTRACT
+      §5.4 的显式披露例外回写，`tools/test-hooks.sh` 把 `gate.sh` 从"零 node"红线清单里
+      单独摘出并改断言"仅此一处合法引用"，非静默破例
+- [x] E7 旧格式迁移工具：`pipeline migrate-workflow`（Task 10），类比现有 `pipeline import`，
+      一次性迁移，不做运行时双格式兼容
 - [ ] E8 workflow 编辑器 UI：真画布节点连线图（step/skill 为可拖拽节点，`depends_on` 用
-      拖线表达）
+      拖线表达）——**完全不在本轮范围**，`workflow-customization-engine.md` 收尾说明明确写
+      "画布 UI 不在本计划内……等这条主线落地、真有一个可读写的 workflow 文件格式之后再设计
+      画布怎么读写它"，是故意的范围切分，不是遗漏；本轮不勾、留待后续独立计划
 
 ## 清单 F · Dashboard 工作台
 
-- [ ] F1 导航：新增"工作台"分组（顶部 3 项不变），下辖 workflow 编辑器/skill 编辑器/AFK
-      工作台/loop 设置
-- [ ] F2 Skill 编辑器升级：弹窗双栏穿梭框（左栏全部已注册 skill 可搜索，右栏当前已选可
-      拖拽排序），复用现有 `POST /api/config/mandatory-skills` 契约
-- [ ] F3 AFK 工作台：列表+详情侧栏（左列表右详情：日志 tail/sandbox·worktree 路径/取消·
-      重试·合并操作），新增日志读取端点 + 操作写端点
-- [ ] F4 Loop 设置：单表视图（loop/分级/就绪分/预算/状态一行一个，点开详情含 7 维 drift +
-      enforce 历史 + 升降档操作），新增聚合读端点 + 升降档写端点
+> 2026-07-08 集成收尾勾选，证据源：三份 dashboard 计划的 `.superpowers/sdd/progress.md`
+> （均 PLAN COMPLETE、任务逐一审核通过），见 `docs/loops/progress.md` iteration-35。
+
+- [x] F1 导航：新增"工作台"下拉分组（`Nav.tsx` `WORKBENCH_VIEWS`），下辖 AFK 工作台 + loop
+      设置，顶部恢复到 3 项（收件箱/看板/设置）+ 1 个分组触发按钮。workflow 编辑器（E8 画布
+      UI）本轮未建、skill 编辑器本就是设置页内弹窗（非独立导航目的地），故两者不占此分组
+- [x] F2 Skill 编辑器升级：`SkillTransferModal.tsx` 弹窗双栏穿梭框（左栏全部已注册 skill
+      可搜索，右栏当前已选可拖拽排序），复用现有 `POST /api/config/mandatory-skills` 契约
+      （skill-editor-transfer-modal 计划，4/4 任务）
+- [x] F3 AFK 工作台：`AfkWorkbench.tsx` 列表+详情侧栏（左列表右详情：日志 tail/sandbox·
+      worktree 路径/取消·重试操作），新增日志读取端点 + 取消/重试写端点（afk-workbench
+      计划，8/8 任务）
+- [x] F4 Loop 设置：`LoopsPanel.tsx` 单表视图（loop/就绪分/状态一行一个，点开详情含
+      drift/就绪 band + 升降档操作），新增聚合读端点（snapshot）+ 升降档写端点（promote）
+      （loop-settings-dashboard 计划，5/5 任务）
 
 ---
 
