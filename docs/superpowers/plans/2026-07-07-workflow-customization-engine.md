@@ -1214,7 +1214,7 @@ git commit -m "feat: pipeline transition 支持非 default workflow 的真实 st
 - Produces: `cmdInternalSkillGate(deps, changeName, toolSkillId): Promise<number>`（0=放行，
   2=拦截，同 `gate.sh` 的 exit code 约定）。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```ts
 // packages/cli/src/commands/internalSkillGate.test.ts
@@ -1242,12 +1242,12 @@ describe('cmdInternalSkillGate', () => {
 一个"带 workflow 字段 + 带历史记录"的 fake change，本计划不假设这些辅助函数当前的确切
 签名。）
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `cd /Users/a1234/Documents/code-manager/projects/pipeline-worklfow && npx vitest run packages/cli/src/commands/internalSkillGate.test.ts`
 Expected: FAIL
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 ```ts
 // packages/cli/src/commands/internalSkillGate.ts
@@ -1308,18 +1308,18 @@ fi
 带哪些键、`CHANGE_NAME` 变量当前是否存在，按现状调整；核心约束不变：只有非 default
 workflow 才走到这里，spawn node 只发生在这条分支。）
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `npx vitest run packages/cli/src/commands/internalSkillGate.test.ts`
 Expected: PASS
 
-- [ ] **Step 5: 确认 default workflow 场景零回归**
+- [x] **Step 5: 确认 default workflow 场景零回归**
 
 Run: `bash tools/test-hooks.sh`
 Expected: 180 passed, 0 failed（现有 hook 测试全部针对 default workflow 的 change，
 必须和改动前完全一致）
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add packages/cli/src/commands/internalSkillGate.ts packages/cli/src/commands/internalSkillGate.test.ts packages/cli/src/program.ts hooks/gate.sh
