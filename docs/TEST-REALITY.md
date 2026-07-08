@@ -227,4 +227,59 @@ iteration-35）**：
   这条路径已被证实"今天就可通过一次已鉴权的直接 HTTP 调用触发"（不是纯假设性的
   未来风险），建议排进较近期的后续处理，而非无限期搁置。
 
+**2026-07-09 全功能真机验证登记（用户追加任务：UI 重构收尾 + Playwright 真实点击驱动
+正常 pipeline/AFK 两条全流程 + 自定义 workflow 创建与切换 + loop 面板联动，见
+`docs/loops/progress.md` 对应轮次）**：
+
+- **G17（本轮最大发现，真机验证过程中确认，非猜测）**：**自定义 workflow 的 change 一旦
+  使用非标准 step 名，在看板（BoardView）和收件箱（InboxView）里完全不可见，也就无法
+  通过 dashboard 推进它的任何相位转换**——这不是"某个按钮点不动"这种局部小毛病，而是
+  E1-E8（workflow 自定义引擎）交付时，dashboard 两个最核心的操作视图从未被同步更新到
+  能感知自定义 workflow 的地步，两者都还是 v1.0 时代"phase 只可能是 7 个固定值之一"的
+  假设。
+  - **复现（真实操作，非代码走读）**：用 workflow 编辑器（真实点击）建了一个不叫
+    `default`、step 名真正自定义（`draft`→`review`→`ship`，不是给 7 相位换皮）的
+    workflow `release-train`；`pipeline init release-demo --track backend --preset
+    full --workflow release-train` 建一个用它的 change（`phase=draft`）。真开浏览器：
+    `GET /api/snapshot` 确认 server 端聚合完全正确（`release-demo(phase=draft)` 真的
+    在返回体里）；但 Inbox 和 Board 的 UI 上都找不到这张卡——`BoardView` 的看板 7 列
+    一张都不显示它，`board-card-release-demo` 这个 testid 在 DOM 里根本不存在。
+  - **根因**（读代码 + 真机双重确认）：`packages/dashboard-app/src/types.ts` 的
+    `PHASES`/`TRANSITIONS`/`EVENT_BY_EDGE`/`REVIEW_PHASES` 四个常量都是**只镜像
+    default.yaml 七相位的静态表**，`BoardView.tsx` 的 `byPhase`
+    （`m.get(fc.change.phase as Phase)`，命中不了就是 `undefined`，`if (bucket)`
+    直接跳过不 push）与 `InboxView.tsx` 消费的 `isAwaitingDecision`
+    （`REVIEW_PHASES.includes(c.phase)`）都基于这四个常量；`events.ts` 的
+    `plannedTransition` 也一样，`isPhase(fromPhase)` 对任何自定义 step 名恒 false，
+    直接 `return null`——即便侥幸能在看板上看到卡片，拖拽也算不出合法转换事件。
+  - **影响面**：只影响**使用非默认、且 step 命名不复用标准 7 相位名字**的自定义
+    workflow；`default` workflow 的 change（本仓绝大多数真实用法）完全不受影响；如果
+    自定义 workflow 的 step 恰好也叫 `open`/`explore`/…（用标准骨架、只是内部
+    guards/skills/gate 不同），看板能显示、能拖，只是转换边表仍然用的是 default 的
+    固定边表，若自定义 workflow 的转换图和 default 不完全一致（比如多了一条 default
+    没有的边、或者事件名不同），拖拽算出来的 event 依然会是错的。
+  - **为什么本轮不修**：真做对需要 BoardView 按每个 change 实际使用的 workflow
+    （`change.fields.workflow`）动态取它自己的 step 列表 + 转换图（`GET
+    /api/workflows/:name` 这个端点数据已经现成，E8 已经在消费），而不是复用一套写死
+    的 7 列/7 条边——但一块看板上可能同时有用 `default` 和多个不同自定义 workflow 的
+    change，"不同 change 该显示成不同的列集合"这件事本身是一个需要先想清楚交互设计
+    的产品问题（每个 workflow 一块独立迷你看板？取所有活跃 workflow 的 step 并集做
+    列？换个完全不是"列"的呈现方式？），不是照抄 inputs/outputs 现成模式就能补的
+    表单级小活，贸然改动核心看板逻辑还有把 `default` workflow 这条最主要使用路径
+    改出回归的风险。判定为需要先设计再实现的独立后续任务，本轮如实记录，不假装
+    绕过去。
+  - **本轮如何完成验证目标**：`release-demo` 后续的相位推进改用 `pipeline transition`
+    CLI 真跑（kernel 状态机本身对自定义 workflow 的处理——`internal-skill-gate`
+    动态 DAG 判定、guard 校验等——不受这个 dashboard 层缺口影响，真跑验证通过，
+    见 progress.md）；AFK 工作台（不依赖 `phase` 值，只看 `automation` 字段）与
+    Loop 设置面板（loops registry 有自己独立的 `phases` 声明，不复用 dashboard 的
+    固定 `PHASES` 常量）经真机验证不受此缺口影响，可以正常通过 dashboard 点击驱动。
+- **G18**：项目要出现在 dashboard 里，目前没有任何 CLI 命令或界面入口可以把一个
+  项目根目录注册进 `~/.claude/pipeline-projects.json`（机器级注册表，
+  `packages/server/src/registry.ts` 只有 `readRegistry`，全仓找不到任何写入它的代码
+  路径）——唯一方法是手改这个 JSON 文件。已在 README.md「Dashboard 工作台」一节如实
+  写明操作步骤，不算阻断性 bug（本机单用户场景下手改一次 JSON 成本很低），但确实是
+  当前唯一入口，值得后续补一个 `pipeline project register [--root]` 之类的命令或者
+  dashboard 设置页里的一个小表单。
+
 > 缺口在对应里程碑收编时清零；新缺口发现即追加，绝不删除未解决项。
