@@ -213,17 +213,49 @@ describe('WorkflowCanvas —— 顶层 step 拓扑', () => {
     expect(intakeStep.transitions).toEqual([])
   })
 
-  it('真触发 onEdgesDelete（删除一条 transition）→ 只移除这一条，同 workflow 其它 transition 不受影响', async () => {
+  it('真触发 onEdgesDelete（删除一条 transition）→ 只移除这一条，同 step 兄弟 transition 与其它 step 均不受影响', async () => {
+    // 本用例专用的三 step fixture（不改共享的 TWO_STEP——那个常量被其余 9 个用例复用，改了
+    // 会连带破坏它们对 steps 数组长度/内容的断言）。第三个 step 'closed' 只是给 done 提供一个
+    // "会保留"的第二条 transition 的落点：如果只让 done 在删除前恰好只有 1 条 transition，
+    // `doneStep.transitions` 删除后变成 `[]` 这件事本身没法分辨"精确按 edge id 过滤"（真实、
+    // 正确实现）和"只要 done 的任意一条边被删就清空 done 整个 transitions 数组"（假设中的错误
+    // 实现）——两者在"删除前只有 1 条"的前提下产出的结果完全一样，测试分辨不出来
+    // （reviewer 指出的缺口）。这里让 done 删除前持有两条 transition，删掉一条后断言剩下
+    // 那条还在、且内容精确匹配，才能真正把"精确删一条"和"整段清空"这两种实现区分开。
+    const THREE_STEP = {
+      name: NAME,
+      steps: [
+        { id: 'intake', label: 'Intake', gate: null, skills: [], inputs: [], outputs: [], guards: [], transitions: [{ event: 'complete', to: 'done' }] },
+        { id: 'done', label: 'Done', gate: null, skills: [], inputs: [], outputs: [], guards: [], transitions: [] },
+        { id: 'closed', label: 'Closed', gate: null, skills: [], inputs: [], outputs: [], guards: [], transitions: [] },
+      ],
+    }
+    global.fetch = vi.fn(async (url: string, opts?: RequestInit) => {
+      if (url === `/api/workflows/${NAME}?root=${encodeURIComponent(ROOT)}`) {
+        return new Response(JSON.stringify(THREE_STEP), { status: 200 })
+      }
+      if (url === `/api/workflows/${NAME}` && opts?.method === 'POST') {
+        return new Response(JSON.stringify({ ok: true }), { status: 200 })
+      }
+      throw new Error(`unexpected fetch ${url}`)
+    }) as unknown as typeof fetch
+
     renderCanvas()
     await waitFor(() => expect(screen.getByText(/intake/i)).toBeInTheDocument())
-    // 复用既有的 onConnect 调试通道，先新增一条 done→intake:restart，制造"同一 workflow 里
-    // 有两条不同 transition"的前提（不额外搭新的测试基建）。
+
+    // 给 done 造两条 transition：done→intake:restart（待删除）+ done→closed:archive（应保留）。
     const connectTrigger = screen.getByTestId('debug-trigger-connect')
     fireDebugConnect(connectTrigger, { source: 'done', target: 'intake' })
     fireEvent.change(screen.getByPlaceholderText(/event 名/), { target: { value: 'restart' } })
     fireEvent.click(screen.getByRole('button', { name: '确认' }))
     await waitFor(() => expect(screen.getByText(/restart/)).toBeInTheDocument())
 
+    fireDebugConnect(connectTrigger, { source: 'done', target: 'closed' })
+    fireEvent.change(screen.getByPlaceholderText(/event 名/), { target: { value: 'archive' } })
+    fireEvent.click(screen.getByRole('button', { name: '确认' }))
+    await waitFor(() => expect(screen.getByText(/archive/)).toBeInTheDocument())
+
+    // 只删 restart 这一条。
     const deleteEdgesTrigger = screen.getByTestId('debug-trigger-delete-edges')
     fireDebugDeleteEdges(deleteEdgesTrigger, [{ id: 'done->intake:restart' }])
 
@@ -234,9 +266,10 @@ describe('WorkflowCanvas —— 顶层 step 拓扑', () => {
     const body = JSON.parse(postCall![1].body as string)
     const doneStep = body.steps.find((s: { id: string }) => s.id === 'done')
     const intakeStep = body.steps.find((s: { id: string }) => s.id === 'intake')
-    // 只有 done 新增的那条 'restart' transition 被删掉；intake 原有的 'complete' transition
-    // （另一个 step 的另一条边）完全不受影响。
-    expect(doneStep.transitions).toEqual([])
+    // done 剩下 archive 这一条（不是空数组！证明删除精确命中 restart 一条，不是把 done 整个
+    // transitions 数组清空——这才是本用例要补的区分点）；intake 的 complete transition（另一个
+    // step 的另一条边）完全不受影响。
+    expect(doneStep.transitions).toEqual([{ event: 'archive', to: 'closed' }])
     expect(intakeStep.transitions).toEqual([{ event: 'complete', to: 'done' }])
   })
 
