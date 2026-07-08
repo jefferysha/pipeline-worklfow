@@ -193,5 +193,22 @@ iteration-35）**：
     重建（不做级联更新其它地方对旧名字/旧 id 的引用）——以上均是设计文档
     `docs/superpowers/specs/2026-07-08-workflow-editor-canvas-design.md` §3 明确列出的
     范围外项（"范围外（本轮不做，留作后续小任务）"），不是本轮遗漏。
+- **G15**（E8 whole-feature review 时发现，**系统性缺口、非 E8 引入**）：
+  `packages/dashboard-app` 自己的 `build` 脚本是 `tsc --noEmit && vite build`，真含类型
+  检查；但根 `npm run build`（八门验证第①门、CI "Build" 步骤实际跑的命令）字面是
+  `tsc -b packages/kernel packages/tap packages/automation packages/cli packages/server
+  && npm run bundle`——**不含 `dashboard-app`**；`.github/workflows/ci.yml` 其余步骤
+  （`npm run test:web` 只是 `vitest run`，不做类型检查）同样未单独跑它。即
+  `dashboard-app` 的 TypeScript 从这个仓库有 CI 以来大概率从未被真正类型检查门禁过——
+  实据：`src/loops/LoopsPanel.tsx:117`（F4 范围代码，与 E8 无关）现存一个真实
+  `tsc --noEmit` 类型错误（`NEXT_LEVEL[row.autonomy_level]` 类型是 `string | null`，
+  用在要求 `string | number` 的位置），此错误活生生地未被任何现有门拦截，是这个缺口
+  确实存在的直接证据。**对 E8 本身的影响是中性的**：whole-feature review 时单独真跑
+  `cd packages/dashboard-app && npx tsc --noEmit`，除上述那一条已存在的 `LoopsPanel.tsx`
+  错误外，E8 新增的四个组件（`WorkflowCanvas.tsx`/`WorkflowEditorView.tsx`/
+  `StepDetailPanel.tsx`/`layout.ts`）本身类型干净，未新增任何类型错误。**本轮不处理**：
+  修复 `LoopsPanel.tsx` 那一行、或者把 `dashboard-app` 接入 build 门禁/CI，都超出了
+  E8"workflow 编辑器画布"这一个功能本身的范围（前者是 F4 相关代码，后者是项目级
+  CI/build 配置决策），留给后续单独处理，不在本轮顺手做。
 
 > 缺口在对应里程碑收编时清零；新缺口发现即追加，绝不删除未解决项。
