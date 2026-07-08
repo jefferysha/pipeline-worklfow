@@ -1092,7 +1092,7 @@ Preconditions` → `deps.flow.transition(...)` → `applyTransitionEffects` → 
 不改；非 default workflow 走全新、更简单的链路，两条链路除了共用"读 state"和"写 history"
 两个动作外不共享任何中间步骤，避免为了"复用"而把两套语义绞在一起。
 
-- [ ] **Step 1: 读现状**
+- [x] **Step 1: 读现状**
 
 Read `packages/cli/src/commands/transition.ts` 全文，确认：① `withLock` 包裹的具体范围
 （新分支要在同一个锁的保护下写 state，不能在锁外写）；② `history.append` 调用的确切参数
@@ -1102,7 +1102,7 @@ default workflow 分支也应该照样存 event 名，保持 history 文件里 "
 和依赖注入方式（`deps: CliDeps`、`name: string`、`event: string` 大概率不变，只是内部多一
 个分支）。
 
-- [ ] **Step 2: 写失败测试**
+- [x] **Step 2: 写失败测试**
 
 ```ts
 it('非 default workflow：按 event 名查当前 step 的 transitions，真改写 phase 到目标 step', async () => {
@@ -1124,13 +1124,13 @@ it('非 default workflow：event 名在当前 step 的 transitions 里找不到 
 })
 ```
 
-- [ ] **Step 3: 跑测试确认失败**
+- [x] **Step 3: 跑测试确认失败**
 
 Run: `npx vitest run packages/cli/src/commands/transition.test.ts -t "非 default workflow"`
 Expected: FAIL（现有代码对未知 event 名统一按 `eventEdge()` 返回 `undefined` 处理，不会
 走到任何新逻辑）
 
-- [ ] **Step 4: 实现**
+- [x] **Step 4: 实现**
 
 在 Step 1 读到的"读 state 之后、`checkTransitionPreconditions` 之前"这个位置插入分岔：
 
@@ -1177,18 +1177,18 @@ if (workflowName !== 'default') {
 marker/breadcrumb，这两个能力如果自定义 workflow 也需要，是本任务之外的后续小任务，不在
 这里顺手实现以免测试范围失控。）
 
-- [ ] **Step 5: 跑测试确认通过**
+- [x] **Step 5: 跑测试确认通过**
 
 Run: `npx vitest run packages/cli/src/commands/transition.test.ts`
 Expected: PASS 全量（含新增的 3 例 + 全部既有 default workflow 用例零回归）
 
-- [ ] **Step 6: 确认 default workflow 全仓零回归**
+- [x] **Step 6: 确认 default workflow 全仓零回归**
 
 Run: `npx vitest run packages/kernel packages/cli && bash tools/test-hooks.sh && npm run oracle`
 Expected: 与本计划开始前的基线完全一致（vitest 全绿、hooks 180/180、oracle 0 不一致）——
 这是检验"双轨策略没有互相污染"的最终证据，不是可选步骤。
 
-- [ ] **Step 7: 提交**
+- [x] **Step 7: 提交**
 
 ```bash
 git add packages/cli/src/commands/transition.ts packages/cli/src/commands/transition.test.ts
