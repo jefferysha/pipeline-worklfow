@@ -69,6 +69,14 @@ class MockEventSource {
 }
 vi.stubGlobal('EventSource', MockEventSource)
 
+// ── ResizeObserver stub（jsdom 未实现，@xyflow/react 内部用它测量画布容器尺寸）──
+class MockResizeObserver {
+  observe(): void {}
+  unobserve(): void {}
+  disconnect(): void {}
+}
+vi.stubGlobal('ResizeObserver', MockResizeObserver)
+
 export function lastEventSource(): FakeEventSource | undefined {
   return created[created.length - 1]
 }
