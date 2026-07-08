@@ -210,5 +210,21 @@ iteration-35）**：
   修复 `LoopsPanel.tsx` 那一行、或者把 `dashboard-app` 接入 build 门禁/CI，都超出了
   E8"workflow 编辑器画布"这一个功能本身的范围（前者是 F4 相关代码，后者是项目级
   CI/build 配置决策），留给后续单独处理，不在本轮顺手做。
+- **G16**（E8 whole-feature review 的 fix 轮次里，实现方自查披露，非隐瞒）：
+  kernel `validateWorkflow`（`packages/kernel/src/workflow/validate.ts`）对 workflow
+  的 transition `event` 名 / field-ref `field` 名没有字符集规则（跟 step/skill id 用的
+  `^[a-zA-Z0-9_-]+$` 不同）——而 `parse.ts` 读这两处只认 `\S+`（不含空白）。whole-feature
+  review 发现"用户通过画布 UI 输入含空格的名字会导致往返损坏（保存成功但下次打不开）"
+  已在 dashboard-app 客户端（`WorkflowCanvas.tsx` `confirmConnect` + `StepDetailPanel.tsx`
+  `confirmAddField`）堵住，且经复审独立验证为真实、完整的修复（唯二的两处构造点均已
+  加同款字符集校验，全仓搜索确认没有第三处遗漏）。**残留的、本轮未处理的窄口子**：
+  任何绕开浏览器直接调用已鉴权 `POST /api/workflows/:name` 的调用方（curl/脚本/未来
+  客户端）仍可写入一个之后会让 `loadWorkflow` 解析失败的 workflow——因为服务端
+  `validateWorkflow` 本身没有这条规则做纵深防御后盾，只挡住了"通过正常 UI"这一条路径
+  （原始审核发现的复现场景本身就限定在这条路径，服务端加固在审核建议里明确标注为
+  "可选"，不属于本轮须做的修复范围）。**建议后续单独一个小任务**：给
+  `validateWorkflow` 补一条 event/field 名的字符集规则，作为服务端纵深防御层；因为
+  这条路径已被证实"今天就可通过一次已鉴权的直接 HTTP 调用触发"（不是纯假设性的
+  未来风险），建议排进较近期的后续处理，而非无限期搁置。
 
 > 缺口在对应里程碑收编时清零；新缺口发现即追加，绝不删除未解决项。
