@@ -27,12 +27,13 @@
 
 | 命令 | happy path | 关键错误路径 | 跨命令串联 |
 |---|---|---|---|
-| init | ✅ 落盘字段序 | — | ✅ 全程起点 |
+| init | ✅ 落盘字段序 + `--workflow <name>` 真加载校验后种 phase=steps[0].id（init-workflow.integration.test.ts 6 例，2026-07-08 whole-branch review 补：此前无支持命令能把 change 摆到自定义 workflow 首个 step 上） | ✅ workflow 未找到/非法（校验失败）均 exit 1 且不落盘半成品 change | ✅ 全程起点；`--workflow` 落地的 change 可直接被 internal-skill-gate/transition 消费，链式验证见同文件 |
 | get | ✅ 读回 init 值 + 未设字段忠实 null + 未知字段空行 | ✅ grep-miss | ✅ |
 | set | ✅ 写+history | ✅ 四闸拒写字节不变 | ✅ |
 | set-many | ✅ 真原子写+字段序 | — | — |
 | cas | ✅ 匹配写入 | ✅ 不匹配 exit 3 | ✅ |
 | transition | ✅ 改相位+marker+history+全副作用（#14，见 transition-effects.integration.test.ts 17 例） | ✅ 非法 exit 1 + 12 条前置校验路径 | ✅ 喂足真实前置的七相位全程 |
+| workflow 自定义引擎（GOAL 清单 E） | ✅ 解析/校验/DAG/guard 各自单测（parse.test.ts/validate.test.ts/skillDag.test.ts/stepGuard.test.ts）+ loadWorkflow 真 fs 5 例（含 E5 校验 fail-loud 2 例）+ 真实 step 间转换（transition-custom-workflow.integration.test.ts 3 例）+ gate.sh 委托真 bash 子进程（internal-skill-gate-hook.integration.test.ts 6 例）+ migrate-workflow（migrateWorkflow.test.ts）+ init --workflow 首个 step 落点全链路（init-workflow.integration.test.ts 6 例） | ✅ 循环依赖/悬空引用/死路 step 保存时拒绝（E5）+ 非法 event/guard 不满足运行时拒绝 | ✅ init --workflow → internal-skill-gate → transition 全程走真实支持命令，无需手改状态文件（2026-07-08 whole-branch review 补，见 G13 及 init 行） |
 | inbox TTL 分级 | ✅ inbox-ttl.integration.test.ts 7 例（真 mtime + 分级 300/1800s） | ✅ 边界 age>TTL | — |
 | task lifecycle | ✅ task.integration.test.ts 14 例（真依赖图/级联/canonical，含物理归档节点反查）+ 走 buildProgram 1 例 | ✅ | ✅ add-dep→children→remove |
 | manifest 全派生 | ✅ manifest-derive.test.ts 18 例（真读 templates/manifest.yaml → 真派生，改 yaml 即变） | ✅ 未知 track fail-loud | — |

@@ -29,7 +29,11 @@
       设计文档 §2.2 例子里写的独立 `current_step` 字段——Task 8 改为直接复用既有 `phase`
       字段承载自定义 workflow 的当前 step id（`workflow==='default'` 时其值仍是旧 7 相位
       枚举，`workflow!=='default'` 时其值是任意合法 step id），单字段身兼两职、靠 `workflow`
-      字段消歧，功能等价但字面上不是"新增 current_step 字段取代 phase"。
+      字段消歧，功能等价但字面上不是"新增 current_step 字段取代 phase"。**2026-07-08
+      whole-branch review 补**：11 个任务原本没有留下任何支持的命令把一个 change 摆到自定义
+      workflow 的首个 step 上（`set phase` 被 manifest 枚举挡下、`migrate-workflow` 只处理
+      已存在的 change）——已补 `pipeline init --workflow <name>`（真加载校验后种
+      `phase=steps[0].id`），见 `docs/TEST-REALITY.md` init 行。
 - [x] E2 skill DAG 依赖：`depends_on` 声明（同 step 内，`skillDag.ts`/Task 6），取代已否决的
       parallel/serial 分组方案；无依赖 skill 天然并行，多依赖精确表达交叉依赖关系
 - [x] E3 inputs/outputs：step 级别持久字段契约（`parse.ts`/`types.ts`，Task 2）+ 保存时
