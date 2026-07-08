@@ -23,16 +23,19 @@ describe('migrate-workflow —— 老格式 workflow 字段一次性迁移（Tas
     const deps = makeDeps({ state: mockState({ phase: 'build' }) })
     const code = await cmdMigrateWorkflow(deps, 'legacy-change')
     expect(code).toBe(0)
-    expect(deps.store.set.calls).toEqual([
-      ['/repo/openspec/changes/legacy-change', 'workflow', 'default'],
+    // TOCTOU 修复：落盘走 store.cas（expect=刚读到的 current，next='default'），不再是无条件 set
+    expect(deps.store.cas.calls).toEqual([
+      ['/repo/openspec/changes/legacy-change', 'workflow', 'default', 'default'],
     ])
+    expect(deps.store.set.calls).toHaveLength(0)
   })
 
-  test('真实自定义 workflow（非 default）→ 禁止覆盖，零写入', async () => {
+  test('真实自定义 workflow（非 default）→ 禁止覆盖，零写入，且不尝试 cas', async () => {
     const deps = makeDeps({ state: mockState({ workflow: 'ship-fast' }) })
     const code = await cmdMigrateWorkflow(deps, 'custom-change')
     expect(code).toBe(0)
     expect(deps.store.set.calls).toHaveLength(0)
+    expect(deps.store.cas.calls).toHaveLength(0)
     expect(deps.errLines.join('\n')).toContain('ship-fast')
   })
 
@@ -48,6 +51,7 @@ describe('migrate-workflow —— 老格式 workflow 字段一次性迁移（Tas
     expect(code).toBe(1)
     expect(deps.store.get.calls).toHaveLength(0)
     expect(deps.store.set.calls).toHaveLength(0)
+    expect(deps.store.cas.calls).toHaveLength(0)
   })
 
   test('store 读取失败 → exit 1，stderr 带错误信息', async () => {
@@ -58,5 +62,21 @@ describe('migrate-workflow —— 老格式 workflow 字段一次性迁移（Tas
     const code = await cmdMigrateWorkflow(deps, 'demo')
     expect(code).toBe(1)
     expect(deps.errLines.join('\n')).toContain('ENOENT')
+  })
+
+  test('TOCTOU 防护：cas 落败（get 之后、写入之前被并发改写）→ 优雅跳过，绝不无条件覆写', async () => {
+    const deps = makeDeps({ state: mockState({ phase: 'build' }) })
+    // 模拟并发：本命令 get 读到 'default' 之后、真正落盘之前，另一个合法 `pipeline set` 已把
+    // workflow 改成了真实自定义值——store.cas 的 expect 比对在锁内失败，返回 false。
+    deps.store.cas = spy(async (_d: string, _f: FieldName, _e: string, _n: string) => false)
+    const code = await cmdMigrateWorkflow(deps, 'legacy-change')
+    expect(code).toBe(0)
+    // 必须走 cas（而非无条件 set）尝试写入，且 expect 参数是本命令刚读到的值
+    expect(deps.store.cas.calls).toEqual([
+      ['/repo/openspec/changes/legacy-change', 'workflow', 'default', 'default'],
+    ])
+    // cas 落败后绝不回退成无条件 set——这正是本测试要锁死的行为
+    expect(deps.store.set.calls).toHaveLength(0)
+    expect(deps.errLines.join('\n')).toMatch(/并发/)
   })
 })

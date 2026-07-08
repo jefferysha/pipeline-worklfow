@@ -23,6 +23,16 @@
  * （confirm + 落盘，为未来解析器兜底行为变化兜底——如 emptyFields() 的特判被移除，老文件
  * 不会再悄悯读成 default）；已迁移文件则是无害的同值重写。store 层不暴露"字段是否物理
  * 存在于文件"这一信号，两种子情况在 store.get 面前本就不可区分，收敛到同一个安全写入即可。
+ *
+ * TOCTOU 修复（task review Important finding）：上面这次"无条件写一次"原先是 store.get 读一次
+ * 、判定完再 store.set 落盘——check-then-act 两步之间隔着锁获取的窄窗口，若一个真实合法的
+ * 并发写手（例如某个正在执行的 `pipeline set <name> workflow <custom>`）恰好落在这个窗口里，
+ * 会被本命令的无条件 set 悄悄冲回 default，等价于本文件开头详述的"覆写真实定制"数据损坏
+ * bug——只是触发条件从"静态已是自定义值"变成了"落盘瞬间被并发改成自定义值"，本质是同一类问题
+ * 换了个时序面。修复：把落盘那一步换成 store.cas(dir,'workflow',current,'default')——expect
+ * 用刚读到的 current，锁内比对+条件写原子完成。cas 返回 false 说明落盘前值已被并发改动，
+ * 一律当"真实定制，不覆写"处理（不重试、不循环 —— 重试仍可能再次撞见新一轮并发写，且重试前
+ * 必须重新 get 才能拿到新的 expect，那已经是另一次独立尝试而非"重试同一次决定"），只诚实上报。
  */
 import { errMsg, type CliDeps } from '../deps.js'
 import { changeDir, isValidChangeName } from '../paths.js'
@@ -39,7 +49,18 @@ export async function cmdMigrateWorkflow(deps: CliDeps, name: string): Promise<n
       deps.io.err(`[MIGRATE] ${name}: workflow='${current}'（非 default，视为真实定制，跳过，不覆写）`)
       return 0
     }
-    await deps.store.set(dir, 'workflow', 'default')
+    // current 此刻只可能是 'default' | undefined（emptyFields() 兜底下二者物理不可区分，
+    // 见文件头）；cas 的 expect 就用这个刚读到的观测值——undefined 时按同一桶归一成 'default'
+    // 字面量（两者本就是同一个"待补齐"信号，cas 层需要一个具体字符串去比对锁内重读的当前值）。
+    const expect = current ?? 'default'
+    const ok = await deps.store.cas(dir, 'workflow', expect, 'default')
+    if (!ok) {
+      deps.io.err(
+        `[MIGRATE] ${name}: workflow 字段在读取后、落盘前被并发修改（cas 未命中），` +
+          `视为出现真实并发写入，跳过本次迁移写入，不覆写`,
+      )
+      return 0
+    }
     deps.io.err(`[MIGRATE] ${name}: workflow 字段已确认/补齐为 default（phase 等其余字段值不变）`)
     return 0
   } catch (e) {
