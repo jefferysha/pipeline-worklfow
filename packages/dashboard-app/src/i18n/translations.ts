@@ -7,7 +7,7 @@ export interface Dict {
 
 export const zh: Dict = {
   app: { title: 'Pipeline 控制台', subtitle: '全局工作流看板' },
-  nav: { inbox: '收件箱', board: '看板', settings: '设置', loops: 'Loop 设置', afk: 'AFK 工作台' },
+  nav: { inbox: '收件箱', board: '看板', settings: '设置', workbench: '工作台', loops: 'Loop 设置', afk: 'AFK 工作台' },
   common: {
     lang: '语言',
     theme_toggle: '主题',
@@ -69,20 +69,18 @@ export const zh: Dict = {
   },
   advanced: {
     title: '高级 / 调试工具',
-    desc: '流量 / 运行时 / loops 观测。默认折叠——非日常路径，最高频场景在终端（inbox/statusline）。',
+    desc: '流量 / 运行时观测。默认折叠——非日常路径，最高频场景在终端（inbox/statusline）。',
     traffic: '流量代理（tap）',
     runtime: '运行时会话',
-    loops: 'loops 治理',
     placeholder: '占位：待对应里程碑数据端接线',
     traffic_when: '待 M8（A7 tap 流量代理）',
     runtime_when: '待 M4（A4 channel + runtime 会话）',
-    loops_when: '待 M-loop（B18 loops 治理子系统）',
   },
 }
 
 export const en: Dict = {
   app: { title: 'Pipeline Console', subtitle: 'Global workflow board' },
-  nav: { inbox: 'Inbox', board: 'Board', settings: 'Settings', loops: 'Loop Settings', afk: 'AFK Workbench' },
+  nav: { inbox: 'Inbox', board: 'Board', settings: 'Settings', workbench: 'Workbench', loops: 'Loop Settings', afk: 'AFK Workbench' },
   common: {
     lang: 'Language',
     theme_toggle: 'Theme',
@@ -144,14 +142,12 @@ export const en: Dict = {
   },
   advanced: {
     title: 'Advanced / debug tools',
-    desc: 'Traffic / runtime / loops observability. Collapsed by default — not a daily path; the hottest flows live in the terminal (inbox/statusline).',
+    desc: 'Traffic / runtime observability. Collapsed by default — not a daily path; the hottest flows live in the terminal (inbox/statusline).',
     traffic: 'Traffic proxy (tap)',
     runtime: 'Runtime sessions',
-    loops: 'Loops governance',
     placeholder: 'Placeholder: pending the data backend of its milestone',
     traffic_when: 'pending M8 (A7 tap traffic proxy)',
     runtime_when: 'pending M4 (A4 channel + runtime sessions)',
-    loops_when: 'pending M-loop (B18 loops governance)',
   },
 }
 

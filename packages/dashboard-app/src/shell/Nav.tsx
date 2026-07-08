@@ -1,16 +1,18 @@
+import { useState } from 'react'
 import { useT } from '../i18n'
 import type { Lang } from '../i18n/translations'
 
 export type View = 'inbox' | 'board' | 'settings' | 'loops' | 'afk'
 
+/** 一级导航项 —— 病灶③解法的显式枚举白名单，顶部恰 3 项。 */
+export const PRIMARY_VIEWS: View[] = ['inbox', 'board', 'settings']
+
 /**
- * 一级导航项 —— 病灶③解法的显式枚举白名单，当前 5 项：收件箱 / 看板 / 设置 / loops / afk。
- * loop 设置治理计划与 AFK 工作台计划（本计划 Task 8）各自加了独立入口（工程简单、可独立
- * 验收）；GOAL.md F1 要求最终把 loops/afk 等工作台功能归并进一个"工作台"下拉分组（顶部仍
- * 收敛回 3 项）——那是后续一个很小的收尾任务，这里先允许 5 项。流量代理/运行时会话等其余
- * debug 工具仍不在此列。
+ * GOAL.md F1 收尾：loop 设置 + AFK 工作台原本各自的一级导航入口收进一个"工作台"下拉分组，
+ * 顶部导航因此恢复到 3 项（+1 个分组触发按钮）。skill 编辑器已经是设置页内的弹窗、workflow
+ * 编辑器（E8 画布 UI）本轮范围外，两者都不占导航项，故此分组目前只辖这两个视图。
  */
-export const PRIMARY_VIEWS: View[] = ['inbox', 'board', 'settings', 'loops', 'afk']
+export const WORKBENCH_VIEWS: View[] = ['loops', 'afk']
 
 interface NavProps {
   view: View
@@ -26,6 +28,14 @@ interface NavProps {
 
 export function Nav({ view, onView, lang, onLang, theme, onTheme, connected, inboxCount }: NavProps): JSX.Element {
   const { t } = useT()
+  const [workbenchOpen, setWorkbenchOpen] = useState(false)
+  const workbenchActive = WORKBENCH_VIEWS.includes(view)
+
+  const selectWorkbenchView = (v: View) => {
+    onView(v)
+    setWorkbenchOpen(false)
+  }
+
   return (
     <header className="nav" role="banner">
       <div className="nav__brand">{t('app.title')}</div>
@@ -47,6 +57,43 @@ export function Nav({ view, onView, lang, onLang, theme, onTheme, connected, inb
             )}
           </button>
         ))}
+        <div
+          className="nav__group"
+          onBlur={(e) => {
+            if (!e.currentTarget.contains(e.relatedTarget as Node)) setWorkbenchOpen(false)
+          }}
+        >
+          <button
+            type="button"
+            data-testid="nav-workbench"
+            aria-haspopup="menu"
+            aria-expanded={workbenchOpen}
+            aria-current={workbenchActive ? 'page' : undefined}
+            className={workbenchActive ? 'nav__item nav__item--active' : 'nav__item'}
+            onClick={() => setWorkbenchOpen((open) => !open)}
+          >
+            {t('nav.workbench')}
+          </button>
+          {workbenchOpen && (
+            <div className="nav__dropdown" role="menu" data-testid="workbench-menu">
+              {WORKBENCH_VIEWS.map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  role="menuitem"
+                  data-testid={`nav-${v}`}
+                  aria-current={view === v ? 'page' : undefined}
+                  className={
+                    view === v ? 'nav__dropdown-item nav__dropdown-item--active' : 'nav__dropdown-item'
+                  }
+                  onClick={() => selectWorkbenchView(v)}
+                >
+                  {t(`nav.${v}`)}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </nav>
       <div className="nav__tools">
         <span

@@ -47,6 +47,10 @@ body { margin: 0; }
 .nav__item { position: relative; border: 0; background: transparent; color: var(--ink-mute); font: inherit; font-size: 14px; padding: 6px 12px; border-radius: 8px; cursor: pointer; }
 .nav__item--active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 .nav__badge { display: inline-block; margin-left: 6px; min-width: 18px; padding: 0 5px; height: 18px; line-height: 18px; text-align: center; font-size: 11px; font-weight: 700; color: #fff; background: var(--accent); border-radius: 9px; }
+.nav__group { position: relative; }
+.nav__dropdown { position: absolute; top: calc(100% + 4px); left: 0; display: flex; flex-direction: column; min-width: 140px; padding: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 6px 16px rgba(0,0,0,0.12); z-index: 20; }
+.nav__dropdown-item { border: 0; background: transparent; color: var(--ink-mute); font: inherit; font-size: 14px; text-align: left; padding: 6px 10px; border-radius: 6px; cursor: pointer; }
+.nav__dropdown-item--active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 .nav__tools { margin-left: auto; display: flex; align-items: center; gap: 8px; }
 .nav__tool { border: 1px solid var(--line); background: var(--surface); color: var(--ink-soft); border-radius: 8px; padding: 4px 9px; cursor: pointer; font: inherit; font-size: 13px; }
 .nav__conn { color: var(--ink-mute); font-size: 10px; }

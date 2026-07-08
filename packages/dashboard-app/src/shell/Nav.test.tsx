@@ -27,40 +27,64 @@ function renderNav(over: Partial<Parameters<typeof Nav>[0]> = {}) {
   return props
 }
 
-describe('Nav 一级导航（病灶③解法：显式枚举白名单 + loop 设置 + AFK 工作台接入）', () => {
-  it('一级导航 5 个按钮：收件箱 / 看板 / 设置 / loop 设置 / AFK 工作台', () => {
+describe('Nav 一级导航（GOAL.md F1 收尾：顶部 3 项 + "工作台" 下拉分组）', () => {
+  it('一级导航折叠态恰 4 个按钮：收件箱 / 看板 / 设置 / 工作台（下拉触发）', () => {
     renderNav()
     const nav = screen.getByTestId('primary-nav')
     const buttons = within(nav).getAllByRole('button')
-    expect(buttons).toHaveLength(5)
+    expect(buttons).toHaveLength(4)
     expect(nav.textContent).toContain('收件箱')
     expect(nav.textContent).toContain('看板')
     expect(nav.textContent).toContain('设置')
-    expect(nav.textContent).toMatch(/loop/i)
-    expect(nav.textContent).toMatch(/afk/i)
+    expect(nav.textContent).toContain('工作台')
   })
 
-  it('导航包含 Loop 设置入口', () => {
+  it('工作台下拉默认收起，不含 loop 设置 / AFK 工作台按钮', () => {
     renderNav()
-    expect(screen.getByText(/loop/i)).toBeInTheDocument()
+    expect(screen.queryByTestId('nav-loops')).toBeNull()
+    expect(screen.queryByTestId('nav-afk')).toBeNull()
+    expect(screen.getByTestId('nav-workbench')).toHaveAttribute('aria-expanded', 'false')
   })
 
-  it('导航包含 AFK 工作台入口', () => {
+  it('点工作台展开下拉，内含 loop 设置 + AFK 工作台两项', () => {
     renderNav()
-    expect(screen.getByTestId('nav-afk')).toBeInTheDocument()
-    expect(screen.getByTestId('nav-afk').textContent).toMatch(/afk/i)
+    fireEvent.click(screen.getByTestId('nav-workbench'))
+    expect(screen.getByTestId('nav-workbench')).toHaveAttribute('aria-expanded', 'true')
+    const menu = screen.getByTestId('workbench-menu')
+    expect(within(menu).getByTestId('nav-loops')).toBeInTheDocument()
+    expect(within(menu).getByTestId('nav-afk')).toBeInTheDocument()
+    expect(menu.textContent).toMatch(/loop/i)
+    expect(menu.textContent).toMatch(/afk/i)
   })
 
-  it('debug 工具（流量/运行时）仍不在一级导航；loops/afk 已从白名单里移出（本计划刻意接入）', () => {
+  it('再点工作台触发按钮收起下拉', () => {
     renderNav()
+    fireEvent.click(screen.getByTestId('nav-workbench'))
+    fireEvent.click(screen.getByTestId('nav-workbench'))
+    expect(screen.queryByTestId('workbench-menu')).toBeNull()
+  })
+
+  it('debug 工具（流量/运行时）仍不在一级导航', () => {
+    renderNav()
+    fireEvent.click(screen.getByTestId('nav-workbench'))
     const nav = screen.getByTestId('primary-nav')
     expect(nav.textContent).not.toMatch(/流量|运行时|traffic|runtime/i)
   })
 
-  it('当前视图标 aria-current=page', () => {
+  it('当前视图标 aria-current=page（顶层项）', () => {
     renderNav({ view: 'board' })
     expect(screen.getByTestId('nav-board')).toHaveAttribute('aria-current', 'page')
     expect(screen.getByTestId('nav-inbox')).not.toHaveAttribute('aria-current')
+  })
+
+  it('view=loops/afk 时工作台触发按钮自身标 aria-current=page（子项活跃即分组活跃）', () => {
+    renderNav({ view: 'loops' })
+    expect(screen.getByTestId('nav-workbench')).toHaveAttribute('aria-current', 'page')
+  })
+
+  it('view=board 时工作台触发按钮不标 aria-current', () => {
+    renderNav({ view: 'board' })
+    expect(screen.getByTestId('nav-workbench')).not.toHaveAttribute('aria-current')
   })
 })
 
@@ -71,16 +95,20 @@ describe('Nav 交互 + 徽标', () => {
     expect(props.onView).toHaveBeenCalledWith('board')
   })
 
-  it('点 loop 设置触发 onView(loops)', () => {
+  it('展开工作台后点 loop 设置触发 onView(loops) 并收起下拉', () => {
     const props = renderNav()
+    fireEvent.click(screen.getByTestId('nav-workbench'))
     fireEvent.click(screen.getByTestId('nav-loops'))
     expect(props.onView).toHaveBeenCalledWith('loops')
+    expect(screen.queryByTestId('workbench-menu')).toBeNull()
   })
 
-  it('点 AFK 工作台触发 onView(afk)', () => {
+  it('展开工作台后点 AFK 工作台触发 onView(afk) 并收起下拉', () => {
     const props = renderNav()
+    fireEvent.click(screen.getByTestId('nav-workbench'))
     fireEvent.click(screen.getByTestId('nav-afk'))
     expect(props.onView).toHaveBeenCalledWith('afk')
+    expect(screen.queryByTestId('workbench-menu')).toBeNull()
   })
 
   it('语言切换 zh→en', () => {
