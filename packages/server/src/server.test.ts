@@ -771,3 +771,77 @@ describe('GET /api/afk/:name/log —— 单个 change 的原始运行日志文�
     expect(r.json<{ error: string }>().error).toBe('找不到该 change（无 .pipeline.yaml）')
   })
 })
+
+describe('GET /api/workflows —— 列出自定义 workflow（GOAL E8）', () => {
+  it('root 未在注册表 → 404', async () => {
+    const h = await start()
+    const r = await reqGet(h.port, `/api/workflows?root=${encodeURIComponent('/tmp/not-registered')}`)
+    expect(r.status).toBe(404)
+  })
+
+  it('真扫 .pipeline/workflows/*.yaml，排除 default，200 返回 names', async () => {
+    const { mkdir, writeFile } = await import('node:fs/promises')
+    const h = await start()
+    const dir = join(h.root, '.pipeline', 'workflows')
+    await mkdir(dir, { recursive: true })
+    const wf = 'name: onboarding\nsteps:\n  - id: s1\n    label: x\n    gate: null\n    skills: []\n    inputs: []\n    outputs: []\n    guards: []\n    transitions: []\n'
+    await writeFile(join(dir, 'onboarding.yaml'), wf, 'utf8')
+    await writeFile(join(dir, 'default.yaml'), wf.replace('onboarding', 'default'), 'utf8')
+    const r = await reqGet(h.port, `/api/workflows?root=${encodeURIComponent(h.root)}`)
+    expect(r.status).toBe(200)
+    expect(r.json<{ names: string[] }>().names).toEqual(['onboarding'])
+  })
+
+  it('无 .pipeline/workflows 目录 → 200 + 空数组（不是错误）', async () => {
+    const h = await start()
+    const r = await reqGet(h.port, `/api/workflows?root=${encodeURIComponent(h.root)}`)
+    expect(r.status).toBe(200)
+    expect(r.json<{ names: string[] }>().names).toEqual([])
+  })
+})
+
+describe('GET /api/workflows/:name —— 读单个 workflow（GOAL E8）', () => {
+  it('真读 + 解析，200 返回 WorkflowDef', async () => {
+    const { mkdir, writeFile } = await import('node:fs/promises')
+    const h = await start()
+    const dir = join(h.root, '.pipeline', 'workflows')
+    await mkdir(dir, { recursive: true })
+    await writeFile(
+      join(dir, 'onboarding.yaml'),
+      'name: onboarding\nsteps:\n  - id: s1\n    label: x\n    gate: null\n    skills: []\n    inputs: []\n    outputs: []\n    guards: []\n    transitions: []\n',
+      'utf8',
+    )
+    const r = await reqGet(h.port, `/api/workflows/onboarding?root=${encodeURIComponent(h.root)}`)
+    expect(r.status).toBe(200)
+    const body = r.json<{ name: string; steps: Array<{ id: string }> }>()
+    expect(body.name).toBe('onboarding')
+    expect(body.steps.map((s) => s.id)).toEqual(['s1'])
+  })
+
+  it('workflow 不存在 → 404', async () => {
+    const h = await start()
+    const r = await reqGet(h.port, `/api/workflows/ghost?root=${encodeURIComponent(h.root)}`)
+    expect(r.status).toBe(404)
+  })
+
+  it('root 未注册 → 404（信任锚）', async () => {
+    const h = await start()
+    const r = await reqGet(h.port, `/api/workflows/onboarding?root=${encodeURIComponent('/tmp/not-registered')}`)
+    expect(r.status).toBe(404)
+  })
+
+  it('非法 workflow 文件 → 500 + 错误详情（loadWorkflow 的 validateWorkflow 拒绝原因透传）', async () => {
+    const { mkdir, writeFile } = await import('node:fs/promises')
+    const h = await start()
+    const dir = join(h.root, '.pipeline', 'workflows')
+    await mkdir(dir, { recursive: true })
+    await writeFile(
+      join(dir, 'broken.yaml'),
+      'name: broken\nsteps:\n  - id: s1\n    label: x\n    gate: null\n    skills: []\n    inputs: []\n    outputs: []\n    guards: []\n    transitions:\n      - event: go\n        to: does-not-exist\n',
+      'utf8',
+    )
+    const r = await reqGet(h.port, `/api/workflows/broken?root=${encodeURIComponent(h.root)}`)
+    expect(r.status).toBe(500)
+    expect(r.json<{ error: string }>().error).toContain('does-not-exist')
+  })
+})

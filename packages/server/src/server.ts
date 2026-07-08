@@ -29,6 +29,7 @@ import { buildAfkLog, buildAfkSnapshot, cancelAfkRun, readAfkRunLog, retryAfkRun
 import { buildLoopsSnapshot } from './loops.js'
 import { readMandatorySkills, validateMandatorySkillsBody, writeMandatorySkills } from './config.js'
 import { resolveServerPaths } from './paths.js'
+import { listWorkflowNames, readWorkflowForApi } from './workflows.js'
 import { readRegistry } from './registry.js'
 import { listAllSkills } from './skillsRegistry.js'
 import { buildSnapshot, computeFingerprint, dedupeRoots, type SnapshotDeps } from './snapshot.js'
@@ -401,6 +402,34 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
         return sendJson(res, 200, { skills: listAllSkills(repoRootForSkills()) })
       } catch (e) {
         return sendJson(res, 500, { ok: false, error: errMsg(e) })
+      }
+    }
+    // ── workflow 编辑器（GOAL E8）：GET /api/workflows —— 列出自定义 workflow（排除 default）──
+    if (path === '/api/workflows') {
+      const root = new URL(req.url ?? '/', 'http://localhost').searchParams.get('root') ?? ''
+      if (!dedupeRoots(registry()).includes(resolvePath(root))) {
+        return sendJson(res, 404, { ok: false, error: 'root 未在机器级项目注册表中' })
+      }
+      try {
+        return sendJson(res, 200, { names: listWorkflowNames(root) })
+      } catch (e) {
+        return sendJson(res, 500, { ok: false, error: errMsg(e) })
+      }
+    }
+
+    // ── workflow 编辑器（GOAL E8）：GET /api/workflows/:name —— 读单个 workflow ──
+    const mWfGet = /^\/api\/workflows\/([^/]+)$/.exec(path)
+    if (mWfGet) {
+      const wfName = decodeURIComponent(mWfGet[1]!)
+      const root = new URL(req.url ?? '/', 'http://localhost').searchParams.get('root') ?? ''
+      if (!dedupeRoots(registry()).includes(resolvePath(root))) {
+        return sendJson(res, 404, { ok: false, error: 'root 未在机器级项目注册表中' })
+      }
+      try {
+        return sendJson(res, 200, readWorkflowForApi(root, wfName))
+      } catch (e) {
+        const msg = errMsg(e)
+        return sendJson(res, msg.includes('未找到') ? 404 : 500, { ok: false, error: msg })
       }
     }
     return sendJson(res, 404, { ok: false, error: '未知端点' })
