@@ -212,6 +212,27 @@ function WorkflowCanvasInner({ root, name, onBack }: WorkflowCanvasProps): JSX.E
     el?.addEventListener('debug-connect', onDebugConnect)
   }, [onDebugConnect])
 
+  // 同一套 debug-trigger 惯例，覆盖 onNodesDelete/onEdgesDelete——两个回调本身早已真实接在
+  // <ReactFlow> 上（真实用户走选中+Delete 键触发的就是它们），但此前没有任何测试真正调用过；
+  // Task 7 即将在这同一个文件上把它们改成按 drillStepId 分支的版本，改之前这段状态变更逻辑
+  // 完全没有回归保护是真实风险（whole-branch review 指出）。触发/清理方式与上面 onConnect
+  // 保持一致，不引入新模式。
+  const onDebugDeleteNodes = useCallback((e: Event): void => {
+    const detail = (e as CustomEvent<Node[]>).detail
+    if (detail) onNodesDelete(detail)
+  }, [onNodesDelete])
+  const debugDeleteNodesRef = useCallback((el: HTMLDivElement | null) => {
+    el?.addEventListener('debug-delete-nodes', onDebugDeleteNodes)
+  }, [onDebugDeleteNodes])
+
+  const onDebugDeleteEdges = useCallback((e: Event): void => {
+    const detail = (e as CustomEvent<Edge[]>).detail
+    if (detail) onEdgesDelete(detail)
+  }, [onEdgesDelete])
+  const debugDeleteEdgesRef = useCallback((el: HTMLDivElement | null) => {
+    el?.addEventListener('debug-delete-edges', onDebugDeleteEdges)
+  }, [onDebugDeleteEdges])
+
   async function save(): Promise<void> {
     if (!wf) return
     setSaveStatus({ kind: 'idle' })
@@ -260,6 +281,8 @@ function WorkflowCanvasInner({ root, name, onBack }: WorkflowCanvasProps): JSX.E
         </div>
       )}
       <div data-testid="debug-trigger-connect" ref={debugTriggerRef} style={{ display: 'none' }} />
+      <div data-testid="debug-trigger-delete-nodes" ref={debugDeleteNodesRef} style={{ display: 'none' }} />
+      <div data-testid="debug-trigger-delete-edges" ref={debugDeleteEdgesRef} style={{ display: 'none' }} />
       <div style={{ height: 480 }}>
         <ReactFlow
           nodes={nodes}

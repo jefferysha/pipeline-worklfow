@@ -34,6 +34,16 @@ function fireDebugConnect(el: Element, detail: { source: string; target: string 
   fireEvent(el, new CustomEvent('debug-connect', { detail }))
 }
 
+// 同一惯例，覆盖 onNodesDelete/onEdgesDelete 的调试触发——两个回调是真实接在 <ReactFlow> 上的
+// 回调（真实用户选中节点/边按 Delete 键触发的就是它们），detail 只需要包含回调内部实际读取的
+// 字段（.id），不需要构造完整的 xyflow Node/Edge 形状。
+function fireDebugDeleteNodes(el: Element, nodes: Array<{ id: string }>): void {
+  fireEvent(el, new CustomEvent('debug-delete-nodes', { detail: nodes }))
+}
+function fireDebugDeleteEdges(el: Element, edges: Array<{ id: string }>): void {
+  fireEvent(el, new CustomEvent('debug-delete-edges', { detail: edges }))
+}
+
 // test-setup.ts 全局的 ResizeObserver stub 是纯 no-op（observe/unobserve/disconnect 都不做事），
 // 够用于"不让 @xyflow/react 因为 ResizeObserver undefined 而报错"，但不够用于真正渲染连线：
 // xyflow 内部一个节点在"被 ResizeObserver 通知过一次"之前，internals.handleBounds 是
@@ -184,6 +194,50 @@ describe('WorkflowCanvas —— 顶层 step 拓扑', () => {
     fireEvent.change(screen.getByPlaceholderText(/event 名/), { target: { value: 'complete' } })
     fireEvent.click(screen.getByRole('button', { name: '确认' }))
     expect(screen.getByText(/event 名不能重复/)).toBeInTheDocument()
+  })
+
+  it('真触发 onNodesDelete（删除 done 节点）→ wf.steps 移除该节点，且清理指向它的 transition', async () => {
+    renderCanvas()
+    await waitFor(() => expect(screen.getByText(/intake/i)).toBeInTheDocument())
+    const deleteNodesTrigger = screen.getByTestId('debug-trigger-delete-nodes')
+    fireDebugDeleteNodes(deleteNodesTrigger, [{ id: 'done' }])
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    await waitFor(() => expect(screen.getByText('已保存')).toBeInTheDocument())
+    const calls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls
+    const postCall = calls.find((c) => c[0] === `/api/workflows/${NAME}` && c[1]?.method === 'POST')
+    const body = JSON.parse(postCall![1].body as string)
+    // done 节点本身被移除；intake 原本指向 done 的 'complete' transition 也被一并清理，
+    // 不留下指向已删节点的悬空 transition。
+    expect(body.steps.map((s: { id: string }) => s.id)).toEqual(['intake'])
+    const intakeStep = body.steps.find((s: { id: string }) => s.id === 'intake')
+    expect(intakeStep.transitions).toEqual([])
+  })
+
+  it('真触发 onEdgesDelete（删除一条 transition）→ 只移除这一条，同 workflow 其它 transition 不受影响', async () => {
+    renderCanvas()
+    await waitFor(() => expect(screen.getByText(/intake/i)).toBeInTheDocument())
+    // 复用既有的 onConnect 调试通道，先新增一条 done→intake:restart，制造"同一 workflow 里
+    // 有两条不同 transition"的前提（不额外搭新的测试基建）。
+    const connectTrigger = screen.getByTestId('debug-trigger-connect')
+    fireDebugConnect(connectTrigger, { source: 'done', target: 'intake' })
+    fireEvent.change(screen.getByPlaceholderText(/event 名/), { target: { value: 'restart' } })
+    fireEvent.click(screen.getByRole('button', { name: '确认' }))
+    await waitFor(() => expect(screen.getByText(/restart/)).toBeInTheDocument())
+
+    const deleteEdgesTrigger = screen.getByTestId('debug-trigger-delete-edges')
+    fireDebugDeleteEdges(deleteEdgesTrigger, [{ id: 'done->intake:restart' }])
+
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    await waitFor(() => expect(screen.getByText('已保存')).toBeInTheDocument())
+    const calls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls
+    const postCall = calls.find((c) => c[0] === `/api/workflows/${NAME}` && c[1]?.method === 'POST')
+    const body = JSON.parse(postCall![1].body as string)
+    const doneStep = body.steps.find((s: { id: string }) => s.id === 'done')
+    const intakeStep = body.steps.find((s: { id: string }) => s.id === 'intake')
+    // 只有 done 新增的那条 'restart' transition 被删掉；intake 原有的 'complete' transition
+    // （另一个 step 的另一条边）完全不受影响。
+    expect(doneStep.transitions).toEqual([])
+    expect(intakeStep.transitions).toEqual([{ event: 'complete', to: 'done' }])
   })
 
   it('点保存 → 真 POST 当前 WorkflowDef，成功后显示"已保存"', async () => {
