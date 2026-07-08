@@ -71,4 +71,24 @@ describe('serializeWorkflow —— parse 的反向操作，往返等价是唯一
     const roundTripped = parseWorkflow(serializeWorkflow(original))
     expect(roundTripped).toEqual(original)
   })
+
+  it('skill.depends_on 存在但为空数组（[]）与缺省（undefined）是两种合法且不同的状态：往返必须保留 depends_on: []，不能被静默丢弃', () => {
+    const wf: WorkflowDef = {
+      name: 'depends-on-empty',
+      steps: [
+        {
+          id: 's1', label: '', gate: null,
+          skills: [
+            { id: 'a' },
+            { id: 'b', depends_on: [] },
+          ],
+          inputs: [], outputs: [], guards: [], transitions: [],
+        },
+      ],
+    }
+    const round = parseWorkflow(serializeWorkflow(wf))
+    expect(round).toEqual(wf)
+    expect(round.steps[0]!.skills[1]!.depends_on).toEqual([])
+    expect(round.steps[0]!.skills[0]!.depends_on).toBeUndefined()
+  })
 })

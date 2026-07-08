@@ -8,7 +8,7 @@ import type { FieldRef, GuardConfig, SkillRef, StepDef, StepTransition, Workflow
 
 function serializeSkill(s: SkillRef): string[] {
   const lines = [`      - id: ${s.id}`]
-  if (s.depends_on && s.depends_on.length > 0) {
+  if (s.depends_on !== undefined) {
     lines.push(`        depends_on: [${s.depends_on.join(', ')}]`)
   }
   return lines
