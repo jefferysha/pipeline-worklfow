@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { I18nProvider } from '../i18n'
 import { NewChangeDialog } from './NewChangeDialog'
@@ -27,6 +27,18 @@ function stubFetch(over: { createStatus?: number; createError?: string } = {}) {
     }
     throw new Error(`unexpected fetch ${url}`)
   })
+}
+
+/**
+ * 手动控制的 Promise：制造"创建请求在途"窗口（busy=true 期间不会自动结算），
+ * 用于验证 Esc 不绕过 busy 锁（评审修复轮）。做法对齐 SettingsView.test.tsx 的 deferred()。
+ */
+function deferred<T>(): { promise: Promise<T>; resolve: (v: T) => void } {
+  let resolve!: (v: T) => void
+  const promise = new Promise<T>((res) => {
+    resolve = res
+  })
+  return { promise, resolve }
 }
 
 function renderDialog(over: Partial<Parameters<typeof NewChangeDialog>[0]> = {}) {
@@ -127,5 +139,38 @@ describe('NewChangeDialog（G18 主入口）', () => {
     await waitFor(() => expect(props.onCreated).toHaveBeenCalledOnce())
     const postCalls = fetchMock.mock.calls.filter(([u]) => String(u) === '/api/changes')
     expect(postCalls).toHaveLength(1)
+  })
+})
+
+describe('NewChangeDialog busy 守卫（评审修复：迁移到共享 Dialog 后 Esc 不得绕过在途提交）', () => {
+  it('提交 busy 在途时按 Esc → 对话框仍在、onClose 未被触发；结算后正常收尾', async () => {
+    const gate = deferred<Response>()
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (String(url).startsWith('/api/workflows?root=')) {
+        return { ok: true, status: 200, json: async () => ({ names: [] }) } as unknown as Response
+      }
+      if (String(url) === '/api/changes' && init?.method === 'POST') {
+        return gate.promise
+      }
+      throw new Error(`unexpected fetch ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const props = renderDialog()
+    fireEvent.change(screen.getByTestId('newchange-name'), { target: { value: 'fix-login' } })
+    fireEvent.click(screen.getByTestId('newchange-submit')) // busy=true，POST 挂起在 gate 上
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+    // 修复前：Esc 无条件调用传入的 onClose，本断言会失败——这就是红。
+    expect(screen.getByTestId('newchange-dialog')).toBeInTheDocument()
+    expect(props.onClose).not.toHaveBeenCalled()
+
+    await act(async () => {
+      gate.resolve({
+        ok: true,
+        status: 200,
+        json: async () => ({ ok: true, name: 'fix-login', path: '/p' }),
+      } as unknown as Response)
+    })
+    await waitFor(() => expect(props.onCreated).toHaveBeenCalledOnce())
   })
 })

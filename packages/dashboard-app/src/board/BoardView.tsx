@@ -129,6 +129,13 @@ export function BoardView({ snapshot, loading, error, currentRoot, rulesByWf, ru
     }
   }
 
+  // busy 守卫（评审修复）：迁移到共享 Dialog 后 Esc/backdrop 都会调 onClose，
+  // 迁移前的手写 backdrop 是死 div、busy 期间点它没有任何效果——这里补回等价语义。
+  // 取消钮也复用同一个函数（本来就该和 Esc/backdrop 一致，不必各写一份）。
+  function closePending(): void {
+    if (!busy) setPending(null)
+  }
+
   function onDrop(group: WfGroup, toStep: string, raw: string): void {
     setDragOver(null)
     if (!group.rules) return
@@ -341,11 +348,11 @@ export function BoardView({ snapshot, loading, error, currentRoot, rulesByWf, ru
       {pending && (
         <Dialog
           title={t('board.confirm_backward_title')}
-          onClose={() => setPending(null)}
+          onClose={closePending}
           testid="board-confirm"
           actions={
             <>
-              <button type="button" className="btn btn--ghost" disabled={busy} onClick={() => setPending(null)}>
+              <button type="button" className="btn btn--ghost" disabled={busy} onClick={closePending}>
                 {t('board.confirm_no')}
               </button>
               <button

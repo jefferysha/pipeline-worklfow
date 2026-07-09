@@ -45,6 +45,14 @@ export function NewChangeDialog({ root, onClose, onCreated }: NewChangeDialogPro
   const nameInvalid = name.length > 0 && !NAME_RE.test(name)
   const canSubmit = name.length > 0 && !nameInvalid && !busy
 
+  // busy 守卫（评审修复）：迁移到共享 Dialog 后 Esc/backdrop 都会调传入的 onClose，
+  // 迁移前的手写 backdrop 是死 div、busy 期间点它没有任何效果——这里补回等价语义。
+  // busy 态是本组件内部状态，App 拿不到，故守卫包在这里而非调用方。取消钮也复用
+  // 同一个函数（本来就该和 Esc/backdrop 一致，不必各写一份）。
+  function guardedClose(): void {
+    if (!busy) onClose()
+  }
+
   async function submit(): Promise<void> {
     if (!canSubmit) return
     setBusy(true)
@@ -60,7 +68,7 @@ export function NewChangeDialog({ root, onClose, onCreated }: NewChangeDialogPro
   }
 
   return (
-    <Dialog title={t('newchange.title')} onClose={onClose} testid="newchange-dialog" initialFocusRef={nameInputRef}>
+    <Dialog title={t('newchange.title')} onClose={guardedClose} testid="newchange-dialog" initialFocusRef={nameInputRef}>
       <p className="dialog__desc">{t('newchange.desc', { project: root.split('/').filter(Boolean).pop() ?? root })}</p>
       {/* <form>+onSubmit：名字输入框回车即提交（评审 P0-5 随迁 P3-16），提交按钮用
           type="submit" 而非手写 onClick，避免"Enter 走 user-event 的隐式提交"和"点击按钮"
@@ -113,7 +121,7 @@ export function NewChangeDialog({ root, onClose, onCreated }: NewChangeDialogPro
           {serverError && <p className="field__error" data-testid="newchange-server-error">{serverError}</p>}
         </div>
         <div className="dialog__actions">
-          <button type="button" className="btn btn--ghost" disabled={busy} onClick={onClose}>
+          <button type="button" className="btn btn--ghost" disabled={busy} onClick={guardedClose}>
             {t('newchange.cancel')}
           </button>
           <button type="submit" className="btn" data-testid="newchange-submit" disabled={!canSubmit}>
