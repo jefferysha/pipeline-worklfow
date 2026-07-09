@@ -72,6 +72,79 @@ export async function postTransition(name: string, root: string, event: string):
   }
 }
 
+/** 非 2xx 响应统一读 server 的 { error } 信封抛 ApiError（G18 写函数共用）。 */
+async function throwApiError(res: Response, fallback: string): Promise<never> {
+  let detail = ''
+  try {
+    const body = (await res.json()) as { error?: string }
+    if (body && typeof body.error === 'string') detail = body.error
+  } catch {
+    /* 无 JSON 体 */
+  }
+  throw new ApiError(detail || `${fallback}（${res.status}）`, res.status)
+}
+
+function wrapNetwork(err: unknown): never {
+  throw new ApiError(`网络错误：${err instanceof Error ? err.message : String(err)}`)
+}
+
+/** G18：注册项目进机器级注册表（POST /api/projects）。返回 server 规范化后的 root。 */
+export async function registerProject(root: string): Promise<{ root: string }> {
+  let res: Response
+  try {
+    res = await fetch('/api/projects', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
+      body: JSON.stringify({ root }),
+    })
+  } catch (err) {
+    wrapNetwork(err)
+  }
+  if (!res.ok) await throwApiError(res, '注册项目失败')
+  return (await res.json()) as { root: string }
+}
+
+/** G18：注销项目（DELETE /api/projects?root=）。DELETE 无请求体，不带 Content-Type。 */
+export async function unregisterProject(root: string): Promise<void> {
+  let res: Response
+  try {
+    res = await fetch(`/api/projects?root=${encodeURIComponent(root)}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${getToken()}` },
+    })
+  } catch (err) {
+    wrapNetwork(err)
+  }
+  if (!res.ok) await throwApiError(res, '注销项目失败')
+}
+
+/** G18：新建 change（POST /api/changes，pipeline init 的 HTTP 化）。 */
+export async function createChange(input: { root: string; name: string; workflow?: string; track?: string }): Promise<void> {
+  let res: Response
+  try {
+    res = await fetch('/api/changes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
+      body: JSON.stringify(input),
+    })
+  } catch (err) {
+    wrapNetwork(err)
+  }
+  if (!res.ok) await throwApiError(res, '新建 change 失败')
+}
+
+/** 自定义 workflow 名列表（GET /api/workflows?root=，排除 default——server 语义）。 */
+export async function fetchWorkflowNames(root: string): Promise<string[]> {
+  let res: Response
+  try {
+    res = await fetch(`/api/workflows?root=${encodeURIComponent(root)}`, { headers: { Accept: 'application/json' } })
+  } catch (err) {
+    wrapNetwork(err)
+  }
+  if (!res.ok) await throwApiError(res, 'workflow 列表获取失败')
+  return ((await res.json()) as { names: string[] }).names
+}
+
 /**
  * 订阅 SSE 快照流。返回退订函数。onSnapshot 每收到一帧 'snapshot' 事件即回调解析后的 Snapshot。
  * 走真 EventSource（测试用 test-setup 的可驱动 stub，组件真注册监听 + 真更新）。

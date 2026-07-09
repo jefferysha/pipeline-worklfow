@@ -77,3 +77,59 @@ describe('subscribeSnapshot（真 EventSource stub，组件真收帧）', () => 
     expect(received).toHaveLength(0)
   })
 })
+
+describe('G18 api 四函数（registerProject/unregisterProject/createChange/fetchWorkflowNames）', () => {
+  it('registerProject：POST /api/projects 带 token + body {root}，返回规范化 root', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ok: true, root: '/repo-a' }) })
+    vi.stubGlobal('fetch', fetchMock)
+    const { registerProject } = await import('./client')
+    const got = await registerProject('/repo-a/')
+    expect(got.root).toBe('/repo-a')
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe('/api/projects')
+    expect(init.method).toBe('POST')
+    expect((init.headers as Record<string, string>).Authorization).toBe('Bearer tok-abc')
+    expect(JSON.parse(init.body as string)).toEqual({ root: '/repo-a/' })
+  })
+
+  it('registerProject：!ok 抛 ApiError 带 server 文案（409 已注册）', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 409, json: async () => ({ ok: false, error: '项目已注册' }) }))
+    const { registerProject } = await import('./client')
+    await expect(registerProject('/repo-a')).rejects.toThrow('项目已注册')
+  })
+
+  it('unregisterProject：DELETE /api/projects?root= 带 token、无 Content-Type', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ok: true }) })
+    vi.stubGlobal('fetch', fetchMock)
+    const { unregisterProject } = await import('./client')
+    await unregisterProject('/repo a')
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe('/api/projects?root=%2Frepo%20a')
+    expect(init.method).toBe('DELETE')
+    const headers = init.headers as Record<string, string>
+    expect(headers.Authorization).toBe('Bearer tok-abc')
+    expect(headers['Content-Type']).toBeUndefined()
+  })
+
+  it('createChange：POST /api/changes 全字段 body；错误文案透传', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ok: true, name: 'x', path: '/p' }) })
+    vi.stubGlobal('fetch', fetchMock)
+    const { createChange } = await import('./client')
+    await createChange({ root: '/repo', name: 'fix-login', workflow: 'rel', track: 'frontend' })
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe('/api/changes')
+    expect(JSON.parse(init.body as string)).toEqual({ root: '/repo', name: 'fix-login', workflow: 'rel', track: 'frontend' })
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 400, json: async () => ({ ok: false, error: '非法 change 名' }) }))
+    await expect(createChange({ root: '/repo', name: 'bad name' })).rejects.toThrow('非法 change 名')
+  })
+
+  it('fetchWorkflowNames：GET /api/workflows?root= 返回 names', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ names: ['rel', 'hotfix'] }) })
+    vi.stubGlobal('fetch', fetchMock)
+    const { fetchWorkflowNames } = await import('./client')
+    const names = await fetchWorkflowNames('/repo')
+    expect(names).toEqual(['rel', 'hotfix'])
+    expect(String(fetchMock.mock.calls[0]![0])).toBe('/api/workflows?root=%2Frepo')
+  })
+})
