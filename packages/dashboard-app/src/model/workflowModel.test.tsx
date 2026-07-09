@@ -3,7 +3,9 @@ import { renderHook, waitFor } from '@testing-library/react'
 import {
   DEFAULT_RULES,
   rulesFromDef,
+  rulesKey,
   useWorkflowRules,
+  useWorkflowRulesMulti,
   invalidateWorkflowRules,
 } from './workflowModel'
 import type { StepDef } from '../workflow/StepDetailPanel'
@@ -112,5 +114,85 @@ describe('useWorkflowRules —— default 零网络 / 自定义 fetch+缓存 / �
     const second = renderHook(() => useWorkflowRules('/repo', ['release-train']))
     await waitFor(() => expect(second.result.current.rules.get('release-train')).toBeDefined())
     expect(fetchSpy).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('useWorkflowRulesMulti —— (root,wf) 聚合语境：Task 11 看板聚合的消费契约（Task 8 新增，G19③ 前半）', () => {
+  it("两个 root 都只要 'default' → 零 fetch，且两个键都指向同一个 DEFAULT_RULES 引用", () => {
+    const fetchSpy = vi.fn()
+    vi.stubGlobal('fetch', fetchSpy)
+    const { result } = renderHook(() =>
+      useWorkflowRulesMulti([
+        { root: '/a', names: ['default'] },
+        { root: '/b', names: ['default'] },
+      ]),
+    )
+    expect(result.current.rules.get(rulesKey('/a', 'default'))).toBe(DEFAULT_RULES)
+    expect(result.current.rules.get(rulesKey('/b', 'default'))).toBe(DEFAULT_RULES)
+    expect(result.current.loading).toBe(false)
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it('两个 root 都声明同名自定义 workflow：各自独立 fetch 一次（URL 各带正确 root），互不串缓存', async () => {
+    const defA = relDef() // draft: gate=null
+    const defB: { name: string; steps: StepDef[] } = {
+      name: 'release-train',
+      steps: [
+        { id: 'draft', label: '', gate: 'review', skills: [], inputs: [], outputs: [], guards: [], transitions: [] },
+      ],
+    }
+    const fetchSpy = vi.fn(async (url: string) => {
+      if (url.includes('root=%2Fa')) return okJson(defA)
+      if (url.includes('root=%2Fb')) return okJson(defB)
+      throw new Error(`unexpected ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchSpy)
+    const { result } = renderHook(() =>
+      useWorkflowRulesMulti([
+        { root: '/a', names: ['release-train'] },
+        { root: '/b', names: ['release-train'] },
+      ]),
+    )
+    await waitFor(() => expect(result.current.rules.get(rulesKey('/a', 'release-train'))).toBeDefined())
+    await waitFor(() => expect(result.current.rules.get(rulesKey('/b', 'release-train'))).toBeDefined())
+    expect(fetchSpy).toHaveBeenCalledTimes(2)
+    // 互不串缓存的直接证据：同名 wf 在两个 root 下解出不同的 gate 语义
+    expect(result.current.rules.get(rulesKey('/a', 'release-train'))!.gateByStep['draft']).toBeNull()
+    expect(result.current.rules.get(rulesKey('/b', 'release-train'))!.gateByStep['draft']).toBe('review')
+  })
+
+  it('一个 root 的自定义 wf fetch 失败 → 只有对应键进 errors，另一 root 不受牵连', async () => {
+    const defB = relDef()
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.includes('root=%2Fa')) return errJson(404, "workflow 'release-train' 不存在")
+        if (url.includes('root=%2Fb')) return okJson(defB)
+        throw new Error(`unexpected ${url}`)
+      }),
+    )
+    const { result } = renderHook(() =>
+      useWorkflowRulesMulti([
+        { root: '/a', names: ['release-train'] },
+        { root: '/b', names: ['release-train'] },
+      ]),
+    )
+    await waitFor(() => expect(result.current.errors.get(rulesKey('/a', 'release-train'))).toBeDefined())
+    await waitFor(() => expect(result.current.rules.get(rulesKey('/b', 'release-train'))).toBeDefined())
+    expect(result.current.errors.get(rulesKey('/a', 'release-train'))).toContain('不存在')
+    expect(result.current.rules.has(rulesKey('/a', 'release-train'))).toBe(false)
+    expect(result.current.errors.has(rulesKey('/b', 'release-train'))).toBe(false)
+  })
+
+  it('内部复用同一套模块级缓存/fetchRules：useWorkflowRules 先拉过的 (root,name)，useWorkflowRulesMulti 命中缓存零新请求', async () => {
+    const fetchSpy = vi.fn().mockResolvedValue(okJson(relDef()))
+    vi.stubGlobal('fetch', fetchSpy)
+    const single = renderHook(() => useWorkflowRules('/repo', ['release-train']))
+    await waitFor(() => expect(single.result.current.rules.get('release-train')).toBeDefined())
+    expect(fetchSpy).toHaveBeenCalledTimes(1)
+
+    const multi = renderHook(() => useWorkflowRulesMulti([{ root: '/repo', names: ['release-train'] }]))
+    await waitFor(() => expect(multi.result.current.rules.get(rulesKey('/repo', 'release-train'))).toBeDefined())
+    expect(fetchSpy).toHaveBeenCalledTimes(1) // 缓存命中，零新请求——证明复用同一套 fetchRules/cache，不是各自维护一份
   })
 })

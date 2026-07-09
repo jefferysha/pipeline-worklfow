@@ -13,10 +13,8 @@ import { fileURLToPath } from 'node:url'
 import { createDashboardServer } from '@pipeline-lite/server'
 import { createFlowEngine, createStateStore, loadManifest } from '@pipeline-lite/kernel'
 import { selectInbox } from '../inbox/inbox'
-import { DEFAULT_RULES } from '../model/workflowModel'
+import { DEFAULT_RULES, rulesKey } from '../model/workflowModel'
 import type { Snapshot } from '../types'
-
-const RULES = new Map([['default', DEFAULT_RULES]])
 
 const manifestPath = fileURLToPath(new URL('../../../../templates/manifest.yaml', import.meta.url))
 const clock = (): string => '2026-07-07T00:00:00Z'
@@ -47,6 +45,11 @@ async function startRealServer(): Promise<Started> {
 
 const started = await startRealServer()
 afterAll(() => started.close())
+
+// Task 8（G19③）：selectInbox 第三参键升级为 rulesKey(root,wf)——真 server 分配的 root 是
+// 每次跑测试都不同的 mkdtemp 临时目录，必须等 started 可用之后才能现拼这个 key，因此这条声明
+// 从模块顶部挪到这里（原先的裸 'default' 键写法在新契约下会导致 selectInbox 恒查不到 rules）。
+const RULES = new Map([[rulesKey(started.root, 'default'), DEFAULT_RULES]])
 
 function url(path: string): string {
   return `http://127.0.0.1:${started.port}${path}`

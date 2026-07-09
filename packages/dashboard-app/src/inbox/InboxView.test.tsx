@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { act, render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { I18nProvider } from '../i18n'
 import { InboxView } from './InboxView'
-import { DEFAULT_RULES, rulesFromDef, type WorkflowRules } from '../model/workflowModel'
+import { DEFAULT_RULES, rulesFromDef, rulesKey, type WorkflowRules } from '../model/workflowModel'
 import { makeChange, makeProject, makeSnapshot } from '../testkit'
 
 beforeEach(() => {
@@ -17,7 +17,13 @@ const REL_RULES = rulesFromDef({
     { id: 'ship', label: '', gate: null, skills: [], inputs: [], outputs: [], guards: [], transitions: [] },
   ],
 })
-const RULES = new Map<string, WorkflowRules>([['default', DEFAULT_RULES], ['release-train', REL_RULES]])
+// Task 8（G19③）：InboxView 的 rules prop 改名 rulesByWf → rulesByKey，键从裸 wf 名升级为
+// rulesKey(root,wf)。本文件既有测试全部固定用 root='/repo'，迁移只需把 key 换成
+// rulesKey('/repo', wf)，断言逐字不变。
+const RULES = new Map<string, WorkflowRules>([
+  [rulesKey('/repo', 'default'), DEFAULT_RULES],
+  [rulesKey('/repo', 'release-train'), REL_RULES],
+])
 
 /**
  * 手动控制的 Promise：制造"转换请求在途"窗口（busy=true 期间不会自动结算），
@@ -38,7 +44,7 @@ function renderInbox(over: Partial<Parameters<typeof InboxView>[0]> = {}) {
     loading: false,
     error: null,
     currentRoot: '/repo',
-    rulesByWf: RULES,
+    rulesByKey: RULES,
     onOpenBoard: vi.fn(),
     onTransition: vi.fn().mockResolvedValue(undefined),
     onToast: vi.fn(),
@@ -250,5 +256,43 @@ describe('InboxView 行内快捷钮 vs 详情卡动作条（评审 Minor-5：卡
     expect(screen.queryByTestId('change-detail')).toBeNull()
     expect(screen.getByTestId('inbox-quick-verify-pass')).toBeInTheDocument()
     expect(screen.getByTestId('inbox-quick-verify-fail')).toBeInTheDocument()
+  })
+})
+
+/**
+ * 聚合语境渲染（Task 8，G19③ 前半）：currentRoot='' 时 InboxView 直接消费 App 传入的聚合
+ * snapshot + rulesByKey（键=rulesKey(root,wf)）。遍历多项目/按各自 rules 判定的逻辑属于
+ * selectInbox（inbox.test.tsx 已覆盖），本测试只需证明组件消费面：两行都出现、各自项目名
+ * 可见、各自 rules 在行内快捷钮上生效（自定义 workflow 不会误用另一个项目的 default）。
+ */
+describe('InboxView 聚合语境（currentRoot=""，Task 8/G19③ 前半）', () => {
+  const snap = makeSnapshot([
+    makeProject('/repo-a', [makeChange('a-verify', 'verify', { updated_at: '2026-07-02T00:00:00Z' })]),
+    makeProject('/repo-b', [
+      makeChange('b-review', 'review', { updated_at: '2026-07-01T00:00:00Z', fields: { workflow: 'release-train' } }),
+    ]),
+  ])
+  const AGG_RULES = new Map<string, WorkflowRules>([
+    [rulesKey('/repo-a', 'default'), DEFAULT_RULES],
+    [rulesKey('/repo-b', 'default'), DEFAULT_RULES],
+    [rulesKey('/repo-b', 'release-train'), REL_RULES],
+  ])
+
+  it('两项目快照 + 聚合语境 → 两行各带项目名、各自 rules 生效（自定义 workflow 不误用 default）', () => {
+    renderInbox({ snapshot: snap, currentRoot: '', rulesByKey: AGG_RULES })
+
+    const cards = screen.getAllByTestId('inbox-card')
+    expect(cards).toHaveLength(2)
+    // updated_at 倒序：a-verify（07-02）排第一，b-review（07-01）排第二
+    expect(cards[0]!.textContent).toContain('a-verify')
+    expect(cards[0]!.textContent).toContain('repo-a')
+    expect(cards[1]!.textContent).toContain('b-review')
+    expect(cards[1]!.textContent).toContain('repo-b')
+    // 各自 rules 生效：a-verify 走 default 双出口；b-review 走 release-train 的 shipped
+    // （若 b-review 误查到 default 规则，release-train 的 review 步不存在于 DEFAULT_RULES.gateByStep，
+    // legalTargets 会返回空，inbox-quick-shipped 不会渲染——这条断言同时锁住"没有串用另一项目 rules"）
+    expect(screen.getByTestId('inbox-quick-verify-pass')).toBeInTheDocument()
+    expect(screen.getByTestId('inbox-quick-verify-fail')).toBeInTheDocument()
+    expect(screen.getByTestId('inbox-quick-shipped')).toBeInTheDocument()
   })
 })

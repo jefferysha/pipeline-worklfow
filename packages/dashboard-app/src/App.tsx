@@ -7,7 +7,7 @@ import { AfkWorkbench } from './afk/AfkWorkbench'
 import { BoardView } from './board/BoardView'
 import { InboxView } from './inbox/InboxView'
 import { changeWorkflow, selectInbox } from './inbox/inbox'
-import { useWorkflowRules } from './model/workflowModel'
+import { useWorkflowRules, useWorkflowRulesMulti } from './model/workflowModel'
 import { LoopsPanel } from './loops/LoopsPanel'
 import { SettingsView } from './settings/SettingsView'
 import { Dialog } from './shell/Dialog'
@@ -16,6 +16,7 @@ import { NewChangeDialog } from './shell/NewChangeDialog'
 import { Onboarding } from './shell/Onboarding'
 import { useSnapshot } from './state/useSnapshot'
 import { GLOBAL_CSS } from './styles'
+import type { ChangeSnapshot } from './types'
 import { toastIn } from './workflow/motion'
 import { WorkflowCanvas } from './workflow/WorkflowCanvas'
 import { WorkflowEditorView } from './workflow/WorkflowEditorView'
@@ -42,6 +43,14 @@ function initialTheme(): Theme {
 interface Flash {
   kind: 'toast' | 'error'
   msg: string
+}
+
+/** 一批 change 涉及的全部 workflow 名（'default' 恒在集合内）。单项目/聚合两条路径共用，
+ *  避免各自平行维护同一段收集逻辑（Task 8，G19③）。 */
+function wfNamesFor(changes: readonly ChangeSnapshot[]): string[] {
+  const names = new Set<string>(['default'])
+  for (const c of changes) names.add(changeWorkflow(c))
+  return [...names]
 }
 
 function AppShell(): JSX.Element {
@@ -86,12 +95,24 @@ function AppShell(): JSX.Element {
   }, [])
   // G17：当前项目涉及的全部 workflow 规则（default 零网络；自定义走 API+缓存）
   const currentProject = snapshot?.projects.find((p) => p.root === currentRoot)
-  const wfNames = useMemo(() => {
-    const names = new Set<string>(['default'])
-    for (const c of currentProject?.changes ?? []) names.add(changeWorkflow(c))
-    return [...names]
-  }, [currentProject])
+  const wfNames = useMemo(() => wfNamesFor(currentProject?.changes ?? []), [currentProject])
   const { rules: rulesByWf, errors: rulesErrors } = useWorkflowRules(currentRoot, wfNames)
+
+  // G19③（Task 8）：收件箱聚合语境（currentRoot===''）要看全部 ok 项目，selectInbox 第三参
+  // 键升级为 rulesKey(root,wf)（见 workflowModel.ts）——同名自定义 workflow 跨项目不再共享
+  // 同一把 key。React hook 不能条件调用：不能"聚合时调 Multi、非聚合时不调"两条路径切换。
+  // 这里选"两个 hook 都恒调、各自服务不同视图"（而不是统一只调 Multi 再反推 BoardView 的
+  // rulesByWf/rulesErrors）：上面这行 useWorkflowRules 调用逐字不动，继续单独喂 BoardView
+  // （Board 聚合是 Task 11 的范围，本任务不碰它的消费管线，这样改动面最小、对 BoardView 零
+  // 行为风险）；新增的这条 Multi 调用只喂 InboxView。单项目语境下两条调用会请求同一批
+  // (root,wf)，靠 fetchRules 模块级 cache/inflight 去重（workflowModel.ts 已有机制，这里不
+  // 重复实现/不产生重复网络请求），代价只是同一份数据被两套 tick/errors/pendingCount 状态
+  // 各记一份（可接受的小冗余，换单项目路径零回归风险）。
+  const rulesPairs = useMemo(() => {
+    if (currentRoot !== '') return [{ root: currentRoot, names: wfNames }]
+    return (snapshot?.projects ?? []).filter((p) => p.ok).map((p) => ({ root: p.root, names: wfNamesFor(p.changes) }))
+  }, [currentRoot, wfNames, snapshot])
+  const { rules: rulesByKey } = useWorkflowRulesMulti(rulesPairs)
 
   useEffect(() => {
     try {
@@ -111,8 +132,8 @@ function AppShell(): JSX.Element {
   }, [])
 
   const inboxCount = useMemo(
-    () => selectInbox(snapshot, currentRoot, rulesByWf).length,
-    [snapshot, currentRoot, rulesByWf],
+    () => selectInbox(snapshot, currentRoot, rulesByKey).length,
+    [snapshot, currentRoot, rulesByKey],
   )
 
   // Nav 项目切换器数据（name=root 尾段目录名；count=活跃 change 数；ok 供聚合计数过滤用）
@@ -210,7 +231,7 @@ function AppShell(): JSX.Element {
             loading={loading}
             error={error}
             currentRoot={currentRoot}
-            rulesByWf={rulesByWf}
+            rulesByKey={rulesByKey}
             onOpenBoard={() => setView('board')}
             onTransition={onTransition}
             onToast={(m) => showFlash('toast', m)}

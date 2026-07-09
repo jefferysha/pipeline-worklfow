@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useT } from '../i18n'
 import type { Snapshot } from '../types'
-import type { WorkflowRules } from '../model/workflowModel'
+import { rulesKey, type WorkflowRules } from '../model/workflowModel'
 import { legalTargets, plannedTransition, type PlannedTransition } from '../board/events'
 import { shortTime } from '../model/time'
 import { Dialog } from '../shell/Dialog'
@@ -15,10 +15,11 @@ interface InboxViewProps {
   snapshot: Snapshot | null
   loading: boolean
   error: string | null
-  /** D5 项目切换器语义：收件箱只看当前项目。 */
+  /** D5 项目切换器语义：非空=只看该项目；空串=全部项目聚合（Task 5 契约）。 */
   currentRoot: string
-  /** App 统一拉取的 workflow 规则集（wf 名 → rules）。 */
-  rulesByWf: ReadonlyMap<string, WorkflowRules>
+  /** App 统一拉取的 workflow 规则集，键=rulesKey(root,wf)（Task 8/G19③：聚合语境下同名
+   *  自定义 workflow 跨项目不串缓存，键必须带 root 才能唯一定位）。 */
+  rulesByKey: ReadonlyMap<string, WorkflowRules>
   onOpenBoard: () => void
   /** 快捷转换（App 注入 = api/client.postTransition + 成功后 refresh）。 */
   onTransition: (name: string, root: string, event: string) => Promise<void>
@@ -70,7 +71,7 @@ function renderEvidenceChip(chip: EvidenceChip, onCopy: (value: string) => void)
  * 设计变更登记：原"决定类型文案行"（awaiting.<kind>）退役——紧凑行里徽章已表达"在等"，
  * 细分语义由相位胶囊承担；awaiting.* i18n key 保留供空态副本等复用。
  */
-export function InboxView({ snapshot, loading, error, currentRoot, rulesByWf, onOpenBoard, onTransition, onToast, onError, onNewChange }: InboxViewProps): JSX.Element {
+export function InboxView({ snapshot, loading, error, currentRoot, rulesByKey, onOpenBoard, onTransition, onToast, onError, onNewChange }: InboxViewProps): JSX.Element {
   const { t } = useT()
   const [pending, setPending] = useState<Pending | null>(null)
   const [busy, setBusy] = useState(false)
@@ -82,7 +83,7 @@ export function InboxView({ snapshot, loading, error, currentRoot, rulesByWf, on
   const [kbdFocus, setKbdFocus] = useState(0)
   const listRef = useRef<HTMLUListElement>(null)
   const revealedRef = useRef(false)
-  const items = useMemo(() => selectInbox(snapshot, currentRoot, rulesByWf), [snapshot, currentRoot, rulesByWf])
+  const items = useMemo(() => selectInbox(snapshot, currentRoot, rulesByKey), [snapshot, currentRoot, rulesByKey])
   // 视图进场 stagger（只播首次数据到达，SSE 后续刷新瞬时——product register：不重播编排）
   useEffect(() => {
     if (items.length > 0 && listRef.current && !revealedRef.current) {
@@ -207,7 +208,7 @@ export function InboxView({ snapshot, loading, error, currentRoot, rulesByWf, on
       <ul className="inbox__list" data-testid="inbox-list" ref={listRef}>
         {items.map(({ root, change }, index) => {
           const wf = changeWorkflow(change)
-          const rules = rulesByWf.get(wf)
+          const rules = rulesByKey.get(rulesKey(root, wf))
           const targets = rules ? legalTargets(rules, change.phase) : []
           const key = `${root}/${change.name}`
           const isSelected = selected === key
@@ -276,7 +277,7 @@ export function InboxView({ snapshot, loading, error, currentRoot, rulesByWf, on
         <ChangeDetailCard
           root={selectedItem.root}
           change={selectedItem.change}
-          rules={rulesByWf.get(changeWorkflow(selectedItem.change))}
+          rules={rulesByKey.get(rulesKey(selectedItem.root, changeWorkflow(selectedItem.change)))}
           onTransition={onTransition}
           onClose={() => setSelected(null)}
           onToast={onToast}
