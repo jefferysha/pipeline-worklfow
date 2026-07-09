@@ -191,6 +191,18 @@ describe('SettingsView 矩阵 —— M3 config 写端点真接线（真 fetch + 
     expect(screen.queryByTestId('matrix-readonly-note')).toBeNull()
   })
 
+  // 评审 P1-10：两处说明文字描述的是已不存在的交互/已完成的接线——「逗号分隔多个 skill」
+  // 是 M4 已退役的原地文本框、「写回待 M3 后续接线」而 M3 早已接线。说明必须讲当前真相。
+  it('矩阵说明文字与真实交互一致：不再提「逗号分隔」与「待 M3 接线」，可编辑提示描述穿梭框', async () => {
+    stubConfigFetch({ capable: true, mandatorySkills: {} })
+    renderSettings()
+    fireEvent.click(screen.getByTestId('settings-tab-matrix'))
+    const note = await screen.findByTestId('matrix-editable-note')
+    expect(note.textContent).not.toContain('逗号分隔')
+    expect(note.textContent).toContain('穿梭框')
+    expect(screen.getByTestId('settings-matrix').textContent).not.toContain('待 M3')
+  })
+
   it('点编辑 → 弹窗双栏穿梭框出现（不再是文本框）；取消 → 恢复只读且不发 POST', async () => {
     const fetchMock = stubConfigFetch({ capable: true, mandatorySkills: { 'spec.pm': ['a', 'b'] } })
     renderSettings()

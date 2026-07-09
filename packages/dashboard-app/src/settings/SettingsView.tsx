@@ -209,7 +209,7 @@ export function SettingsView(): JSX.Element {
           <p className="settings__desc">{t('settings.matrix_desc')}</p>
           {configCapable ? (
             <p className="settings__note" data-testid="matrix-editable-note">
-              （可编辑：改动经 token 鉴权真写入本机 templates/manifest.yaml；逗号分隔多个 skill）
+              （可编辑：点「编辑」在穿梭框中挑选 skill，改动经 token 鉴权真写入本机 templates/manifest.yaml）
             </p>
           ) : (
             <p className="settings__note" data-testid="matrix-readonly-note">{t('settings.no_config_endpoint')}</p>
