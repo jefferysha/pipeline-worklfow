@@ -634,3 +634,30 @@ describe('WorkflowCanvas —— Finding 1 闭环回归（event 名字符集）',
     expect(JSON.stringify(body)).not.toContain('go back')
   })
 })
+
+describe('gate 节点徽章（工票车间：编辑器侧的 gate 可视化）', () => {
+  it('gate=review / gate=confirm 的 step 节点内分别渲染朱红"复核门"/中性"确认门"徽章', async () => {
+    const GATED = {
+      name: NAME,
+      steps: [
+        { id: 'draft', label: '', gate: null, skills: [], inputs: [], outputs: [], guards: [], transitions: [{ event: 'approved', to: 'check' }] },
+        { id: 'check', label: '', gate: 'review', skills: [], inputs: [], outputs: [], guards: [], transitions: [{ event: 'go', to: 'ship' }] },
+        { id: 'ship', label: '', gate: 'confirm', skills: [], inputs: [], outputs: [], guards: [], transitions: [] },
+      ],
+    }
+    global.fetch = vi.fn(async (url: string) => {
+      if (url === `/api/workflows/${NAME}?root=${encodeURIComponent(ROOT)}`) {
+        return new Response(JSON.stringify(GATED), { status: 200 })
+      }
+      throw new Error(`unexpected fetch ${url}`)
+    }) as unknown as typeof fetch
+    renderCanvas()
+    await waitFor(() => expect(screen.getByText('check')).toBeInTheDocument())
+    const gateBadge = screen.getByText('复核门')
+    expect(gateBadge).toBeInTheDocument()
+    expect(gateBadge.className).toContain('badge--gate')
+    expect(screen.getByText('确认门').className).toContain('badge--phase')
+    // 无 gate 的节点不带徽章（按节点框自身的文本判断，不受兄弟节点影响）
+    expect(screen.getByText('draft').closest('.react-flow__node')?.textContent).toBe('draft')
+  })
+})

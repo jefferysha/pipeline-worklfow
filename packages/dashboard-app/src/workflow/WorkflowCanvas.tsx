@@ -152,12 +152,22 @@ async function readErrorDetail(res: Response): Promise<string> {
   return ''
 }
 
-function stepsToNodes(steps: StepDef[]): Node[] {
+function stepsToNodes(steps: StepDef[], gateLabel: (g: 'review' | 'confirm') => string): Node[] {
   const positions = layoutNodes(steps, steps.flatMap((s) => s.transitions.map((t) => ({ from: s.id, to: t.to }))))
   return steps.map((s) => ({
     id: s.id,
     position: positions.get(s.id) ?? { x: 0, y: 0 },
-    data: { label: s.label ? `${s.id} (${s.label})` : s.id },
+    data: {
+      // gate step 在节点内直接亮徽章（G17 语义在编辑器侧的可视化）：review=朱红实底、confirm=中性胶囊
+      label: (
+        <>
+          {s.label ? `${s.id} (${s.label})` : s.id}
+          {s.gate && (
+            <span className={s.gate === 'review' ? 'badge badge--gate' : 'badge badge--phase'}>{gateLabel(s.gate)}</span>
+          )}
+        </>
+      ),
+    },
   }))
 }
 
@@ -193,6 +203,10 @@ function skillsToEdges(skills: SkillRef[]): Edge[] {
 
 function WorkflowCanvasInner({ root, name, onBack }: WorkflowCanvasProps): JSX.Element {
   const { t } = useT()
+  const gateLabel = useCallback(
+    (g: 'review' | 'confirm') => t(g === 'review' ? 'workflow_editor.gate_badge' : 'workflow_editor.gate_badge_confirm'),
+    [t],
+  )
   const [wf, setWf] = useState<WorkflowDef | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([])
@@ -227,7 +241,7 @@ function WorkflowCanvasInner({ root, name, onBack }: WorkflowCanvasProps): JSX.E
       })
       .then((body) => {
         setWf(body)
-        setNodes(stepsToNodes(body.steps))
+        setNodes(stepsToNodes(body.steps, gateLabel))
         setEdges(stepsToEdges(body.steps))
       })
       .catch((err: unknown) => setLoadError(t('workflow_editor.load_error_wf', { msg: err instanceof Error ? err.message : t('workflow_editor.network_error') })))
@@ -257,10 +271,10 @@ function WorkflowCanvasInner({ root, name, onBack }: WorkflowCanvasProps): JSX.E
       setNodes(skillsToNodes(currentStep.skills))
       setEdges(skillsToEdges(currentStep.skills))
     } else {
-      setNodes(stepsToNodes(wf.steps))
+      setNodes(stepsToNodes(wf.steps, gateLabel))
       setEdges(stepsToEdges(wf.steps))
     }
-  }, [wf, drillStepId, currentStep, setNodes, setEdges])
+  }, [wf, drillStepId, currentStep, setNodes, setEdges, gateLabel])
 
   // Task 8：真实浏览器双击一个元素会先触发两次 click、再触发一次 dblclick
   // （mousedown→mouseup→click→mousedown→mouseup→click→dblclick）——如果单击不经任何延迟就

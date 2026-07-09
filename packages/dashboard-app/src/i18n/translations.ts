@@ -197,6 +197,8 @@ export const zh: Dict = {
     detail_field_remove: '移除',
     detail_field_name_prompt: '字段名',
     detail_close: '关闭',
+    gate_badge: '复核门',
+    gate_badge_confirm: '确认门',
   },
 }
 
@@ -392,6 +394,8 @@ export const en: Dict = {
     detail_field_remove: 'Remove',
     detail_field_name_prompt: 'Field name',
     detail_close: 'Close',
+    gate_badge: 'review gate',
+    gate_badge_confirm: 'confirm gate',
   },
 }
 
