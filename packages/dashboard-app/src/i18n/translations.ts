@@ -33,6 +33,7 @@ export const zh: Dict = {
     empty_desc: '当前没有 change 停在需要你决定的复核门。可去看板查看全部进度。',
     count: '{n} 个在等你',
     open_board: '去看板',
+    badge_waiting: '等你复核',
     awaiting: {
       explore: '调研完成，等你逐项确认设计',
       spec: '规格 / 计划完成，等你确认',
@@ -195,6 +196,7 @@ export const en: Dict = {
     empty_desc: 'No change is parked at a review gate right now. Head to the board to see all progress.',
     count: '{n} waiting on you',
     open_board: 'Open board',
+    badge_waiting: 'Awaiting review',
     awaiting: {
       explore: 'Exploration done — confirm the design',
       spec: 'Spec / plan done — confirm to proceed',

@@ -13,7 +13,10 @@ import { fileURLToPath } from 'node:url'
 import { createDashboardServer } from '@pipeline-lite/server'
 import { createFlowEngine, createStateStore, loadManifest } from '@pipeline-lite/kernel'
 import { selectInbox } from '../inbox/inbox'
+import { DEFAULT_RULES } from '../model/workflowModel'
 import type { Snapshot } from '../types'
+
+const RULES = new Map([['default', DEFAULT_RULES]])
 
 const manifestPath = fileURLToPath(new URL('../../../../templates/manifest.yaml', import.meta.url))
 const clock = (): string => '2026-07-07T00:00:00Z'
@@ -59,7 +62,7 @@ describe('真 server /api/snapshot → 前端 selectInbox', () => {
     const demo = snap.projects[0]!.changes.find((c) => c.name === 'demo')
     expect(demo?.phase).toBe('open')
     // open 非复核相位 → 收件箱空
-    expect(selectInbox(snap)).toEqual([])
+    expect(selectInbox(snap, started.root, RULES)).toEqual([])
   })
 
   it('POST transition 带 token 真改盘 → change 进 explore（复核相位）→ 收件箱真出现该卡', async () => {
@@ -73,7 +76,7 @@ describe('真 server /api/snapshot → 前端 selectInbox', () => {
     const snap = (await (await fetch(url('/api/snapshot'))).json()) as Snapshot
     const demo = snap.projects[0]!.changes.find((c) => c.name === 'demo')
     expect(demo?.phase).toBe('explore')
-    const inbox = selectInbox(snap)
+    const inbox = selectInbox(snap, started.root, RULES)
     expect(inbox.map((i) => i.change.name)).toContain('demo')
   })
 

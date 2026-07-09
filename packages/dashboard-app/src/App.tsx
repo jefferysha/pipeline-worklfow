@@ -6,7 +6,8 @@ import { AdvancedPanel } from './advanced/AdvancedPanel'
 import { AfkWorkbench } from './afk/AfkWorkbench'
 import { BoardView } from './board/BoardView'
 import { InboxView } from './inbox/InboxView'
-import { selectInbox } from './inbox/inbox'
+import { changeWorkflow, selectInbox } from './inbox/inbox'
+import { useWorkflowRules } from './model/workflowModel'
 import { LoopsPanel } from './loops/LoopsPanel'
 import { SettingsView } from './settings/SettingsView'
 import { Nav, type View } from './shell/Nav'
@@ -17,6 +18,7 @@ import { WorkflowEditorView } from './workflow/WorkflowEditorView'
 
 type Theme = 'light' | 'dark'
 const THEME_KEY = 'pipeline-dashboard-theme'
+const ROOT_KEY = 'pipeline-dashboard-root'
 
 function initialTheme(): Theme {
   try {
@@ -46,10 +48,38 @@ function AppShell(): JSX.Element {
   const { snapshot, loading, error, connected, refresh } = useSnapshot()
   // GOAL.md E8 收编（Task 9）：null = workflow 列表页，非 null = 正打开该名字的画布页。
   const [openWorkflowName, setOpenWorkflowName] = useState<string | null>(null)
-  // 已知简化点（登记见 docs/TEST-REALITY.md G14）：App 层目前没有"当前选中 project root"
-  // 这个概念（snapshot 聚合全部已注册 project），固定取第一个 project 的 root——真实多项目
-  // 场景下选哪个 root 编辑 workflow 是本任务范围外的更大问题。
-  const currentRoot = snapshot?.projects[0]?.root ?? ''
+  // D5（吃掉 G14）：currentRoot 是显式概念——localStorage 记忆的偏好在 snapshot 里仍存在
+  // 则用之，否则回退第一个已注册项目；切换器 UI 在 Nav（Task 11 接线 setCurrentRoot）。
+  const [rootPref, setRootPref] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem(ROOT_KEY)
+    } catch {
+      return null
+    }
+  })
+  const currentRoot = useMemo(() => {
+    const roots = snapshot?.projects.map((p) => p.root) ?? []
+    if (rootPref && roots.includes(rootPref)) return rootPref
+    return roots[0] ?? ''
+  }, [snapshot, rootPref])
+  const setCurrentRoot = useCallback((root: string) => {
+    setRootPref(root)
+    try {
+      localStorage.setItem(ROOT_KEY, root)
+    } catch {
+      /* ignore */
+    }
+  }, [])
+  void setCurrentRoot // Task 11 Nav 项目切换器接线时消费
+
+  // G17：当前项目涉及的全部 workflow 规则（default 零网络；自定义走 API+缓存）
+  const currentProject = snapshot?.projects.find((p) => p.root === currentRoot)
+  const wfNames = useMemo(() => {
+    const names = new Set<string>(['default'])
+    for (const c of currentProject?.changes ?? []) names.add(changeWorkflow(c))
+    return [...names]
+  }, [currentProject])
+  const { rules: rulesByWf } = useWorkflowRules(currentRoot, wfNames)
 
   useEffect(() => {
     try {
@@ -68,7 +98,10 @@ function AppShell(): JSX.Element {
     }
   }, [])
 
-  const inboxCount = useMemo(() => selectInbox(snapshot).length, [snapshot])
+  const inboxCount = useMemo(
+    () => selectInbox(snapshot, currentRoot, rulesByWf).length,
+    [snapshot, currentRoot, rulesByWf],
+  )
 
   const showFlash = useCallback((kind: Flash['kind'], msg: string) => {
     setFlash({ kind, msg })
@@ -109,7 +142,17 @@ function AppShell(): JSX.Element {
 
       <main className="main">
         {view === 'inbox' && (
-          <InboxView snapshot={snapshot} loading={loading} error={error} onOpenBoard={() => setView('board')} />
+          <InboxView
+            snapshot={snapshot}
+            loading={loading}
+            error={error}
+            currentRoot={currentRoot}
+            rulesByWf={rulesByWf}
+            onOpenBoard={() => setView('board')}
+            onTransition={onTransition}
+            onToast={(m) => showFlash('toast', m)}
+            onError={(m) => showFlash('error', m)}
+          />
         )}
         {view === 'board' && (
           <BoardView
