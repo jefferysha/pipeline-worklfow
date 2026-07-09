@@ -312,4 +312,16 @@ iteration-35）**：
   （awaiting.*）退役——紧凑工票行里徽章+相位胶囊承担语义，i18n key 保留；⑥ 相位显示一律
   原始 step id（mono），default 的中文相位名退役出看板/收件箱（settings 相位轴仍用）。
 
+### 2026-07-09 · G15 收编追记（iteration-38 后续会话）
+
+- **G15 已闭**：根 `npm run build` 接入 `typecheck:web`（`tsc --noEmit -p packages/dashboard-app`），
+  排在 `tsc -b` 之后（dashboard 类型依赖 kernel/server 的 `dist/*.d.ts`，全新 clone 的 CI 里
+  顺序不可反）、`npm run bundle` 之前；CI "Build" 步骤跑的就是 `npm run build`，自动继承，
+  八门数目不变。**红绿实证**：故意类型错误探针（`__g15-red-probe.ts`）——旧门 `npm run build`
+  全放行（缺口复证）→ 接线后同一探针被 TS2322 拦截 → 删探针回绿 + `npm test`（1931 pass）
+  `npm run test:web`（217 pass）三连全绿。G15 登记时引用的实证错误 `LoopsPanel.tsx:117`
+  已在 iteration-38 工票化重写中消亡（接线前基线 `tsc --noEmit` 即全绿，无需修码）。
+  **已知残留**：`vite build`（build:web 的后半）仍不在 CI 内——类型之外的纯打包破坏
+  （如资源 import 路径错误）CI 依旧不拦，是否补一步由后续拍板。
+
 > 缺口在对应里程碑收编时清零；新缺口发现即追加，绝不删除未解决项。

@@ -23,7 +23,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build (tsc -b + esbuild bundle)
+      - name: Build (tsc -b + dashboard tsc --noEmit + esbuild bundle)
         run: npm run build
 
       - name: vitest (kernel/cli/server/automation/tap)

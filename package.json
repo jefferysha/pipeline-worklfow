@@ -10,7 +10,8 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "tsc -b packages/kernel packages/tap packages/automation packages/cli packages/server && npm run bundle",
+    "build": "tsc -b packages/kernel packages/tap packages/automation packages/cli packages/server && npm run typecheck:web && npm run bundle",
+    "typecheck:web": "tsc --noEmit -p packages/dashboard-app",
     "build:server": "esbuild packages/server/src/main.ts --bundle --platform=node --format=esm --target=node22 --banner:js=\"import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);\" --outfile=packages/server/dist/dashboard.mjs && chmod +x packages/server/dist/dashboard.mjs",
     "bundle": "esbuild packages/cli/src/main.ts --bundle --platform=node --format=esm --target=node22 --banner:js=\"import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);\" --outfile=packages/cli/dist/pipeline.mjs && chmod +x packages/cli/dist/pipeline.mjs",
     "test": "vitest run",
