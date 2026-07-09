@@ -307,6 +307,23 @@ body { margin: 0; }
 .gd-form .select { flex: 1; }
 .gd-form .gd-n { width: 64px; }
 
+/* ── tap 流量查看器（Advanced 折叠面板内）── */
+.traffic { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.traffic__note { margin: 0; font-size: 11px; color: var(--ink-mute); font-family: var(--mono); }
+.traffic__loading { margin: 0; font-size: 12px; color: var(--ink-mute); }
+.traffic__empty { margin: 0; font-size: 12px; color: var(--ink-mute); opacity: .75; }
+.traffic__error { margin: 0; font-size: 11.5px; color: var(--verm); font-weight: 600; }
+.traffic__sessions { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.traffic__session-btn { display: flex; align-items: center; gap: 10px; width: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 7px 10px; font: inherit; color: inherit; text-align: left; cursor: pointer; transition: border-color .14s ease; }
+.traffic__session-btn:hover { border-color: var(--green); }
+.traffic__session-btn.is-selected { border: 1.5px solid var(--green); box-shadow: 0 0 0 3px var(--green-soft); }
+.traffic__client { font-family: var(--mono); font-weight: 600; color: var(--ink); font-size: 12px; }
+.traffic__count { font-size: 11px; color: var(--ink-mute); font-family: var(--mono); }
+.traffic__status { margin-left: auto; font-size: 10.5px; font-weight: 700; padding: 2px 7px; border-radius: 999px; background: var(--well); color: var(--ink-mute); }
+.traffic__status--active { background: var(--green-soft); color: var(--green); }
+.traffic__records { margin: 0; padding: 10px 12px 10px 32px; background: var(--well); border: 1px dashed var(--line); border-radius: var(--radius-sm); font-family: var(--mono); font-size: 11px; line-height: 1.7; color: var(--ink-soft); overflow-x: auto; }
+.traffic__record { white-space: nowrap; }
+
 /* ── AFK 工作台 ── */
 .afk-split { display: flex; gap: 14px; align-items: stretch; }
 .afk-list { flex: 0 0 280px; display: flex; flex-direction: column; gap: 7px; min-width: 0; }
