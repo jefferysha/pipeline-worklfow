@@ -135,7 +135,7 @@ export interface EvidenceChip {
 /** 按 change 当前 gate 相位返回应展示的证据 chips（值为空/'null' 的路径类字段产出 pending 条目或剔除，见测试） */
 export function gateEvidence(c: ChangeSnapshot, rules: WorkflowRules | undefined): EvidenceChip[]
 ```
-- 映射规则（default workflow）：phase∈{verify}→`verify_result/agent_review_result/codex_review_result`（值 pass→tone pass、fail→fail、pending/空→pending）+ `verification_report`（非空→neutral copyable，空→剔除）+ `build_sha`（非空 copyable）；phase∈{explore,spec}→`design_doc/plan`（非空 copyable / 空→`key=未产出` pending）。自定义 workflow（rules 存在且非 default 或相位不在上表）→ 返回全部**非空**的路径型字段（design_doc/plan/verification_report/pr_url）neutral copyable。archived/非 gate 相位调用方自行不渲染（函数不判 gate）。
+- 映射规则（default workflow）：phase∈{verify}→`verify_result/agent_review_result/codex_review_result`（值 pass→tone pass、fail→fail、pending/空→pending）+ `verification_report`/`build_sha`（非空→neutral copyable，**未设→`未产出` pending 占位**——评审修正：verify 门证据缺失本身是决策信号，kernel 显式建模了 buildShaMissing fail-open 态〔verify 相位 + build_sha='null' 真实可达〕，静默剔除会把缺口藏起来；与 explore/spec 门口径统一）；phase∈{explore,spec}→`design_doc/plan`（非空 copyable / 空→`value=未产出` pending，key 仍是字段名）。**表驱动分支仅当 `rules === DEFAULT_RULES` 且相位在表内**（评审修正：原「或」公式在 rules===undefined〔自定义定义拉取失败〕且 step 恰好叫 verify/explore/spec 时会伪造三轨 chips——拉取失败一律走兜底，对齐 G17 不误报底线）；其余情形 → 返回全部**非空**的路径型字段（design_doc/plan/verification_report/pr_url）neutral copyable。archived/非 gate 相位调用方自行不渲染（函数不判 gate）。
 
 - [ ] **Step 1（红）:** 6 条测试：verify 门三轨+report+sha 齐全；fail 染 fail；空 report 剔除；explore 门 design_doc 有值+plan 未产出；自定义 workflow 只出非空路径字段；全空返回 []。
 - [ ] **Step 2:** 跑红。 
