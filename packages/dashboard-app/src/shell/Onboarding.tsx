@@ -82,10 +82,10 @@ export function Onboarding({ kind, root, onRegistered, onNewChange }: Onboarding
           </button>
         </>
       )}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: 'var(--ink-mute)', fontSize: 11, marginBottom: 10 }}>
-        <span style={{ flex: 1, height: 1, background: 'var(--line)' }} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: 'var(--text-3)', fontSize: 11, marginBottom: 10 }}>
+        <span style={{ flex: 1, height: 1, background: 'var(--border)' }} />
         {t('onboard.or_cli')}
-        <span style={{ flex: 1, height: 1, background: 'var(--line)' }} />
+        <span style={{ flex: 1, height: 1, background: 'var(--border)' }} />
       </div>
       <div className="dlg-cli" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, textAlign: 'left' }}>
         <span data-testid="onboard-cli" style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{cli}</span>
