@@ -63,8 +63,14 @@ export async function postTransition(name: string, root: string, event: string):
   if (!res.ok) {
     let detail = ''
     try {
-      const body = (await res.json()) as { error?: string }
-      if (body && typeof body.error === 'string') detail = body.error
+      const body = (await res.json()) as { error?: string; detail?: unknown }
+      // guard 前置失败时 server 给 { error: lines[0], detail: lines }——全量透传，只显示
+      // 第一条会让用户「修一条→再撞下一条」（评审 P1-5）。单条时两者等价，仍走 error。
+      if (body && Array.isArray(body.detail) && body.detail.length > 1) {
+        detail = body.detail.filter((l): l is string => typeof l === 'string').join('；')
+      } else if (body && typeof body.error === 'string') {
+        detail = body.error
+      }
     } catch {
       /* 无 JSON 体 */
     }

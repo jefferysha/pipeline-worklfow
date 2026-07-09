@@ -40,6 +40,24 @@ describe('postTransition（B5 token 写回，契约 { root, event }）', () => {
     await expect(postTransition('c', '/r', 'verify-pass')).rejects.toThrow('phase 不匹配')
     await expect(postTransition('c', '/r', 'verify-pass')).rejects.toBeInstanceOf(ApiError)
   })
+
+  // 评审 P1-5：server PreconditionError 返回 { error: lines[0], detail: lines }——此前只读
+  // error，多条 guard 违规只显示第一条，用户「修一条→再撞下一条」。detail 全量透传。
+  it('409 带 detail[] 多行 → ApiError 文案包含全部违规行，不只第一条', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false, status: 409,
+        json: async () => ({ ok: false, error: '缺 design_doc', detail: ['缺 design_doc', '缺 verification_report', 'branch_status 未处理'] }),
+      }),
+    )
+    const err = await postTransition('c', '/r', 'verify-pass').catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(ApiError)
+    const msg = (err as ApiError).message
+    expect(msg).toContain('缺 design_doc')
+    expect(msg).toContain('缺 verification_report')
+    expect(msg).toContain('branch_status 未处理')
+  })
 })
 
 describe('fetchSnapshot', () => {
