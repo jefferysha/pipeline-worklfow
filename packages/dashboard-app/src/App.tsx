@@ -12,6 +12,7 @@ import { LoopsPanel } from './loops/LoopsPanel'
 import { SettingsView } from './settings/SettingsView'
 import { Nav, type View } from './shell/Nav'
 import { NewChangeDialog } from './shell/NewChangeDialog'
+import { Onboarding } from './shell/Onboarding'
 import { useSnapshot } from './state/useSnapshot'
 import { GLOBAL_CSS } from './styles'
 import { WorkflowCanvas } from './workflow/WorkflowCanvas'
@@ -47,6 +48,7 @@ function AppShell(): JSX.Element {
   const [theme, setThemeState] = useState<Theme>(initialTheme)
   const [flash, setFlash] = useState<Flash | null>(null)
   const [newChangeOpen, setNewChangeOpen] = useState(false)
+  const [registerOpen, setRegisterOpen] = useState(false)
   const { snapshot, loading, error, connected, refresh } = useSnapshot()
   // GOAL.md E8 收编（Task 9）：null = workflow 列表页，非 null = 正打开该名字的画布页。
   const [openWorkflowName, setOpenWorkflowName] = useState<string | null>(null)
@@ -142,6 +144,7 @@ function AppShell(): JSX.Element {
         projects={navProjects}
         currentRoot={currentRoot}
         onRoot={setCurrentRoot}
+        onRegisterProject={() => setRegisterOpen(true)}
       />
 
       {flash && (
@@ -155,6 +158,13 @@ function AppShell(): JSX.Element {
       )}
 
       <main className="main">
+        {/* G18 教学空状态：零项目 → 全视图 onboarding；有项目零 change → 收件箱/看板替换为新建引导 */}
+        {snapshot && snapshot.project_count === 0 ? (
+          <Onboarding kind="no-project" onRegistered={refresh} />
+        ) : snapshot && currentProject && currentProject.changes.length === 0 && (view === 'inbox' || view === 'board') ? (
+          <Onboarding kind="no-change" root={currentRoot} onNewChange={() => setNewChangeOpen(true)} />
+        ) : (
+          <>
         {view === 'inbox' && (
           <InboxView
             snapshot={snapshot}
@@ -191,7 +201,23 @@ function AppShell(): JSX.Element {
             ? <WorkflowCanvas root={currentRoot} name={openWorkflowName} onBack={() => setOpenWorkflowName(null)} />
             : <WorkflowEditorView root={currentRoot} onOpen={setOpenWorkflowName} />
         )}
+          </>
+        )}
       </main>
+
+      {registerOpen && (
+        <div className="dialog__backdrop" data-testid="register-dialog">
+          <div style={{ width: 'min(460px, 92%)' }}>
+            <Onboarding
+              kind="no-project"
+              onRegistered={() => {
+                setRegisterOpen(false)
+                refresh()
+              }}
+            />
+          </div>
+        </div>
+      )}
 
       {newChangeOpen && currentRoot && (
         <NewChangeDialog

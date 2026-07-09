@@ -16,11 +16,14 @@ beforeEach(() => {
   // 接线，Task 9）——WorkflowEditorView 挂载时真 fetch 这个端点，桩子按 URL 分派而不是像此前
   // 那样对任意 fetch 调用都无差别返回同一个快照，否则这条新端点会因为拿到快照形状的 body
   // （而非 `{ names: [] }`）而在 `.json()` 之后解析出不匹配的字段。
+  // G18 后语义：零项目快照会渲染教学 onboarding 而非收件箱——默认桩子给一个带
+  // 非 gate change 的项目，让"默认落地=收件箱（空态）"这批既有断言的语境继续成立；
+  // 零项目路径由下方专门的 onboarding 用例覆盖。
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: string) => {
       if (url === '/api/snapshot') {
-        return { ok: true, json: async () => makeSnapshot([]) }
+        return { ok: true, json: async () => makeSnapshot([makeProject('/repo', [makeChange('seed-c', 'build')])]) }
       }
       if (url.startsWith('/api/workflows?root=')) {
         return { ok: true, json: async () => ({ names: [] }) }
@@ -113,6 +116,38 @@ describe('App 深浅色自适应 + i18n', () => {
     fireEvent.click(screen.getByTestId('lang-toggle'))
     expect(nav.textContent).toContain('Inbox')
     expect(nav.textContent).not.toContain('收件箱')
+  })
+})
+
+describe('App G18 教学空状态', () => {
+  it('零项目快照 → 全视图替换为注册 onboarding（而非收件箱空态）', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url === '/api/snapshot') return { ok: true, json: async () => makeSnapshot([]) }
+        if (url.startsWith('/api/workflows?root=')) return { ok: true, json: async () => ({ names: [] }) }
+        throw new Error(`unexpected fetch ${url}`)
+      }),
+    )
+    render(<App />)
+    expect(await screen.findByTestId('onboard-no-project')).toBeInTheDocument()
+    expect(screen.queryByTestId('inbox-view')).toBeNull()
+  })
+
+  it('有项目零 change → 收件箱替换为新建引导 onboarding', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url === '/api/snapshot') return { ok: true, json: async () => makeSnapshot([makeProject('/repo', [])]) }
+        if (url.startsWith('/api/workflows?root=')) return { ok: true, json: async () => ({ names: [] }) }
+        throw new Error(`unexpected fetch ${url}`)
+      }),
+    )
+    render(<App />)
+    expect(await screen.findByTestId('onboard-no-change')).toBeInTheDocument()
+    // 打开新建对话框入口真的接线
+    fireEvent.click(screen.getByTestId('onboard-new-change'))
+    expect(await screen.findByTestId('newchange-dialog')).toBeInTheDocument()
   })
 })
 
