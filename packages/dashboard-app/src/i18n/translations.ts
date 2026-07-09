@@ -57,6 +57,7 @@ export const zh: Dict = {
     group_meta_nocol: '{cards} 张',
     group_error: 'workflow 定义加载失败：{msg}',
     archived_fold: '{n} 张已归档',
+    stamp: '已推进 → {to}',
   },
   settings: {
     title: '设置',
@@ -255,6 +256,7 @@ export const en: Dict = {
     group_meta_nocol: '{cards} cards',
     group_error: 'Failed to load workflow definition: {msg}',
     archived_fold: '{n} archived',
+    stamp: 'Advanced → {to}',
   },
   settings: {
     title: 'Settings',

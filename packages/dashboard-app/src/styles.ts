@@ -148,7 +148,7 @@ body { margin: 0; }
 .board__col-name { font-family: var(--mono); font-weight: 600; color: var(--ink); font-size: 11.5px; }
 .board__col-count { font-family: var(--mono); font-size: 11px; color: var(--ink-mute); min-width: 18px; text-align: center; }
 .board__col-body { display: flex; flex-direction: column; gap: 7px; }
-.board__card { padding: 8px 10px; cursor: grab; display: flex; flex-direction: column; gap: 0; }
+.board__card { position: relative; padding: 8px 10px; cursor: grab; display: flex; flex-direction: column; gap: 0; }
 .board__card:hover { border-color: var(--green); }
 .board__card--gate { border: 1.5px solid var(--verm); }
 .board__card--gate:hover { border-color: var(--verm); box-shadow: 0 0 0 3px var(--verm-soft); }

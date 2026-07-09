@@ -245,3 +245,14 @@ describe('BoardView loading / error', () => {
     expect(screen.getByTestId('board-error').textContent).toContain('500')
   })
 })
+
+describe('BoardView 盖章确认（动效词汇：转换成功的状态反馈）', () => {
+  it('快捷推进成功 → 卡片上出现绿章「已推进 → ship」', async () => {
+    renderBoard({
+      snapshot: makeSnapshot([makeProject('/repo', [makeChange('c2', 'verify')])]),
+    })
+    fireEvent.click(screen.getByTestId('board-quick-c2-verify-pass'))
+    expect(await screen.findByTestId('board-stamp-c2')).toBeInTheDocument()
+    expect(screen.getByTestId('board-stamp-c2').textContent).toContain('ship')
+  })
+})

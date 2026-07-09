@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { postTransition } from './api/client'
 import { I18nProvider, useT } from './i18n'
 import type { Lang } from './i18n/translations'
@@ -15,6 +15,7 @@ import { NewChangeDialog } from './shell/NewChangeDialog'
 import { Onboarding } from './shell/Onboarding'
 import { useSnapshot } from './state/useSnapshot'
 import { GLOBAL_CSS } from './styles'
+import { toastIn } from './workflow/motion'
 import { WorkflowCanvas } from './workflow/WorkflowCanvas'
 import { WorkflowEditorView } from './workflow/WorkflowEditorView'
 
@@ -49,6 +50,11 @@ function AppShell(): JSX.Element {
   const [flash, setFlash] = useState<Flash | null>(null)
   const [newChangeOpen, setNewChangeOpen] = useState(false)
   const [registerOpen, setRegisterOpen] = useState(false)
+  const flashRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (flash && flashRef.current) toastIn(flashRef.current)
+  }, [flash])
   const { snapshot, loading, error, connected, refresh } = useSnapshot()
   // GOAL.md E8 收编（Task 9）：null = workflow 列表页，非 null = 正打开该名字的画布页。
   const [openWorkflowName, setOpenWorkflowName] = useState<string | null>(null)
@@ -149,6 +155,7 @@ function AppShell(): JSX.Element {
 
       {flash && (
         <div
+          ref={flashRef}
           className={flash.kind === 'error' ? 'flash flash--error' : 'flash flash--toast'}
           role="status"
           data-testid={`flash-${flash.kind}`}

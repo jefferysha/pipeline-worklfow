@@ -44,3 +44,36 @@ export function crossfadeStage(el: gsap.TweenTarget): void {
   if (prefersReducedMotion()) return
   gsap.fromTo(el, { opacity: 0.4 }, { opacity: 1, duration: 0.18, ease: 'power1.out' })
 }
+
+// ── 工票车间新增词汇（spec §5）：全部 150-250ms、ease-out 族、只传达状态变化 ──
+
+/** 盖章确认：转换成功的绿章从上方压下（scale 1.6→1 + fade），200ms power4.out。 */
+export function stampConfirm(el: gsap.TweenTarget): void {
+  if (prefersReducedMotion()) {
+    gsap.set(el, { opacity: 1, scale: 1 })
+    return
+  }
+  gsap.fromTo(el, { opacity: 0, scale: 1.6 }, { opacity: 1, scale: 1, duration: 0.2, ease: 'power4.out' })
+}
+
+/** toast 底部滑入：y 14→0 + fade，200ms power2.out。 */
+export function toastIn(el: gsap.TweenTarget): void {
+  if (prefersReducedMotion()) {
+    gsap.set(el, { opacity: 1, y: 0 })
+    return
+  }
+  gsap.fromTo(el, { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.2, ease: 'power2.out' })
+}
+
+/**
+ * 分组展开：body 挂载时 height 0→auto + fade，210ms power3.out。
+ * 折叠方向刻意瞬时（条件渲染直接卸载）——展开是"内容到达"的状态变化值得强调，
+ * 收起是用户主动收纳，等待动画只会碍事（product register：不让用户等编排）。
+ */
+export function foldOpen(el: Element): void {
+  if (prefersReducedMotion()) return
+  gsap.fromTo(el, { height: 0, opacity: 0.3 }, {
+    height: 'auto', opacity: 1, duration: 0.21, ease: 'power3.out',
+    clearProps: 'height', // 动画后交还文档流，避免锁死后续内容变化的自然高度
+  })
+}

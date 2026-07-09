@@ -1,9 +1,10 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useT } from '../i18n'
 import type { ChangeSnapshot, Snapshot } from '../types'
 import type { WorkflowRules } from '../model/workflowModel'
 import { changeWorkflow } from '../inbox/inbox'
 import { shortTime } from '../model/time'
+import { foldOpen, stampConfirm } from '../workflow/motion'
 import { legalTargets, plannedTransition, type PlannedTransition } from './events'
 
 interface BoardViewProps {
@@ -60,6 +61,10 @@ export function BoardView({ snapshot, loading, error, currentRoot, rulesByWf, ru
   const [pending, setPending] = useState<Pending | null>(null)
   const [busy, setBusy] = useState(false)
   const [collapseTick, setCollapseTick] = useState(0)
+  /** 转换成功盖章（1.6s 后自动消失，仅状态信息非装饰）。 */
+  const [stamped, setStamped] = useState<{ name: string; to: string } | null>(null)
+  /** 刚被用户展开的组名——body 挂载时播 foldOpen（首屏挂载不播）。 */
+  const expandingRef = useRef<string | null>(null)
 
   const groups = useMemo<WfGroup[]>(() => {
     const project = snapshot?.projects.find((p) => p.ok && p.root === currentRoot)
@@ -88,8 +93,12 @@ export function BoardView({ snapshot, loading, error, currentRoot, rulesByWf, ru
   function toggleCollapsed(wf: string): void {
     try {
       const key = collapseKey(currentRoot, wf)
-      if (localStorage.getItem(key) === '1') localStorage.removeItem(key)
-      else localStorage.setItem(key, '1')
+      if (localStorage.getItem(key) === '1') {
+        localStorage.removeItem(key)
+        expandingRef.current = wf // 展开方向：body 挂载时播 foldOpen
+      } else {
+        localStorage.setItem(key, '1')
+      }
     } catch {
       /* ignore */
     }
@@ -101,6 +110,8 @@ export function BoardView({ snapshot, loading, error, currentRoot, rulesByWf, ru
     try {
       await onTransition(name, root, planned.event)
       onToast?.(t('board.transition_ok', { name, event: planned.event }))
+      setStamped({ name, to: planned.to })
+      window.setTimeout(() => setStamped((s) => (s?.name === name ? null : s)), 1600)
     } catch (e) {
       onError?.(t('board.transition_fail', { msg: e instanceof Error ? e.message : String(e) }))
     } finally {
@@ -190,7 +201,15 @@ export function BoardView({ snapshot, loading, error, currentRoot, rulesByWf, ru
             )}
 
             {!collapsed && group.rules && (
-              <div className="board__scroll">
+              <div
+                className="board__scroll"
+                ref={(el) => {
+                  if (el && expandingRef.current === group.wf) {
+                    expandingRef.current = null
+                    foldOpen(el)
+                  }
+                }}
+              >
                 <div
                   className="board__grid"
                   data-testid={`board-grid-${group.wf}`}
@@ -247,6 +266,17 @@ export function BoardView({ snapshot, loading, error, currentRoot, rulesByWf, ru
                                       e.dataTransfer.effectAllowed = 'move'
                                     }}
                                   >
+                                    {stamped?.name === change.name && (
+                                      <span
+                                        className="stamp"
+                                        data-testid={`board-stamp-${change.name}`}
+                                        ref={(el) => {
+                                          if (el) stampConfirm(el)
+                                        }}
+                                      >
+                                        ✓ {t('board.stamp', { to: stamped.to })}
+                                      </span>
+                                    )}
                                     <div className="board__card-top">
                                       <span className="card__name">{change.name}</span>
                                       {change.track && <span className="card__track">{change.track}</span>}

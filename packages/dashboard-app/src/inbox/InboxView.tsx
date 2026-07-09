@@ -1,9 +1,10 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useT } from '../i18n'
 import type { Snapshot } from '../types'
 import type { WorkflowRules } from '../model/workflowModel'
 import { legalTargets, plannedTransition, type PlannedTransition } from '../board/events'
 import { shortTime } from '../model/time'
+import { revealList } from '../workflow/motion'
 import { changeWorkflow, projectName, selectInbox } from './inbox'
 
 interface InboxViewProps {
@@ -40,7 +41,17 @@ export function InboxView({ snapshot, loading, error, currentRoot, rulesByWf, on
   const { t } = useT()
   const [pending, setPending] = useState<Pending | null>(null)
   const [busy, setBusy] = useState(false)
+  const listRef = useRef<HTMLUListElement>(null)
+  const revealedRef = useRef(false)
   const items = useMemo(() => selectInbox(snapshot, currentRoot, rulesByWf), [snapshot, currentRoot, rulesByWf])
+  // 视图进场 stagger（只播首次数据到达，SSE 后续刷新瞬时——product register：不重播编排）
+  useEffect(() => {
+    if (items.length > 0 && listRef.current && !revealedRef.current) {
+      revealedRef.current = true
+      revealList(listRef.current.children)
+    }
+  }, [items.length])
+
   const rootToName = useMemo(() => {
     const m = new Map<string, string>()
     for (const p of snapshot?.projects ?? []) m.set(p.root, projectName(p))
@@ -102,7 +113,7 @@ export function InboxView({ snapshot, loading, error, currentRoot, rulesByWf, on
           </button>
         )}
       </header>
-      <ul className="inbox__list" data-testid="inbox-list">
+      <ul className="inbox__list" data-testid="inbox-list" ref={listRef}>
         {items.map(({ root, change }) => {
           const wf = changeWorkflow(change)
           const rules = rulesByWf.get(wf)
