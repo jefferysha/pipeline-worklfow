@@ -58,7 +58,7 @@ describe('gateEvidence（gate 证据映射纯函数）', () => {
     expect(gateEvidence(c, DEFAULT_RULES)).toEqual(expected)
   })
 
-  it('verify 门：report 字面 null → 剔除；空字符串 tri-state 字段 → pending', () => {
+  it('verify 门：report 字面 null → pending 占位（不再剔除）；空字符串 tri-state 字段 → pending', () => {
     const c = makeChange('c', 'verify', {
       fields: {
         verify_result: 'pass',
@@ -72,12 +72,13 @@ describe('gateEvidence（gate 证据映射纯函数）', () => {
       { key: 'verify_result', value: 'pass', tone: 'pass' },
       { key: 'agent_review_result', value: 'pass', tone: 'pass' },
       { key: 'codex_review_result', value: '', tone: 'pending' },
+      { key: 'verification_report', value: '未产出', tone: 'pending' },
       { key: 'build_sha', value: 'sha123', tone: 'neutral', copyable: true },
     ]
     expect(gateEvidence(c, DEFAULT_RULES)).toEqual(expected)
   })
 
-  it('explore 门：design_doc 有值 copyable；plan 未产出 → key 替换为「未产出」+ pending', () => {
+  it('explore 门：design_doc 有值 copyable；plan 未产出 → value 替换为「未产出」+ pending（key 仍是字段名）', () => {
     const c = makeChange('c', 'explore', {
       fields: {
         design_doc: '/repo/openspec/changes/c/design.md',
@@ -86,7 +87,7 @@ describe('gateEvidence（gate 证据映射纯函数）', () => {
     })
     const expected: EvidenceChip[] = [
       { key: 'design_doc', value: '/repo/openspec/changes/c/design.md', tone: 'neutral', copyable: true },
-      { key: '未产出', value: '', tone: 'pending' },
+      { key: 'plan', value: '未产出', tone: 'pending' },
     ]
     expect(gateEvidence(c, DEFAULT_RULES)).toEqual(expected)
   })
@@ -110,5 +111,27 @@ describe('gateEvidence（gate 证据映射纯函数）', () => {
   it('相位不在映射表 + rules 缺失 + 字段全空 → 返回 []', () => {
     const c = makeChange('c', 'open', { fields: {} })
     expect(gateEvidence(c, undefined)).toEqual([])
+  })
+
+  it('rules 缺失（undefined）+ phase=verify → 判据收紧后走兜底，不伪造三轨 chips（字段全非路径型 → []）', () => {
+    const c = makeChange('c', 'verify', {
+      fields: {
+        verify_result: 'pending',
+        agent_review_result: 'pending',
+        codex_review_result: 'pending',
+      },
+    })
+    expect(gateEvidence(c, undefined)).toEqual([])
+  })
+
+  it('自定义 rules（新引用，非 DEFAULT_RULES）+ phase=verify → 同样走兜底，不伪造三轨 chips', () => {
+    const c = makeChange('c', 'verify', {
+      fields: {
+        verify_result: 'pending',
+        agent_review_result: 'pending',
+        codex_review_result: 'pending',
+      },
+    })
+    expect(gateEvidence(c, CUSTOM_RULES)).toEqual([])
   })
 })

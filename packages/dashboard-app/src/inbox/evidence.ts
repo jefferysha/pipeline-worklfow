@@ -21,7 +21,7 @@ const VERIFY_STATUS_FIELDS = ['verify_result', 'agent_review_result', 'codex_rev
 /** 自定义 workflow / 相位不在映射表时兜底展示的路径型字段（顺序即 chip 出现顺序）。 */
 const PATH_FIELDS = ['design_doc', 'plan', 'verification_report', 'pr_url'] as const
 
-/** 老内核 cmd_get 口径：字面 'null'（init heredoc）或空串都算未设（同 inbox.ts truthy 注释）。 */
+/** 老内核 cmd_get 口径：字面 'null'（init heredoc）或空串都算未设（同 packages/kernel/src/flow/transition-table.ts 的 isUnset）。 */
 function isUnset(v: string): boolean {
   return v === '' || v === 'null'
 }
@@ -38,43 +38,43 @@ function statusTone(v: string): 'pass' | 'fail' | 'pending' {
   return 'pending' // 空/'null'/'pending'/其它未识别值一律 pending（gate 语义：非 pass 即未过）
 }
 
-/** 非空则产出 neutral+copyable 的路径型 chip；空/'null' 返回 null（调用方决定剔除还是替换）。 */
+/** 非空则产出 neutral+copyable 的路径型 chip；空/'null' 返回 null（调用方决定剔除还是替换占位）。 */
 function pathChip(c: ChangeSnapshot, key: string): EvidenceChip | null {
   const value = fieldStr(c, key)
   if (isUnset(value)) return null
   return { key, value, tone: 'neutral', copyable: true }
 }
 
+/** 路径型字段未设时的统一占位：key=字段名（不剔除、不替换 key），value='未产出'，tone pending。 */
+function unsetPlaceholder(key: string): EvidenceChip {
+  return { key, value: '未产出', tone: 'pending' }
+}
+
 /**
  * 按 change 当前 gate 相位返回应展示的证据 chips。
- * 分支判据（brief 字面）：rules 存在且非 DEFAULT_RULES，或 phase 不在 {verify, explore, spec}
- * 映射表内 → 走"自定义 workflow"兜底分支（只出非空路径字段）；否则按 phase 走对应的表驱动规则。
+ * 分支判据（评审收紧后）：rules === DEFAULT_RULES（严格引用相等）且 phase ∈ {verify, explore,
+ * spec} 映射表内 → 按 phase 走对应的表驱动规则；其余情况（自定义 rules / rules 未提供
+ * / phase 不在表内）一律走"自定义 workflow"兜底分支（只出非空路径字段，空的剔除）——
+ * rules===undefined 不再被误判为"非自定义"从而误入表驱动分支。
  */
 export function gateEvidence(c: ChangeSnapshot, rules: WorkflowRules | undefined): EvidenceChip[] {
-  const isCustomWorkflow = rules !== undefined && rules !== DEFAULT_RULES
   const inMappingTable = c.phase === 'verify' || c.phase === 'explore' || c.phase === 'spec'
 
-  if (!isCustomWorkflow && inMappingTable) {
+  if (rules === DEFAULT_RULES && inMappingTable) {
     if (c.phase === 'verify') {
       const chips: EvidenceChip[] = VERIFY_STATUS_FIELDS.map((key) => {
         const value = fieldStr(c, key)
         return { key, value, tone: statusTone(value) }
       })
-      const report = pathChip(c, 'verification_report')
-      if (report) chips.push(report)
-      const sha = pathChip(c, 'build_sha')
-      if (sha) chips.push(sha)
+      chips.push(pathChip(c, 'verification_report') ?? unsetPlaceholder('verification_report'))
+      chips.push(pathChip(c, 'build_sha') ?? unsetPlaceholder('build_sha'))
       return chips
     }
     // phase ∈ {explore, spec}：design_doc/plan 齐查，空的一个不剔除而是替换成"未产出" pending 条目。
-    return ['design_doc', 'plan'].map((key) => {
-      const value = fieldStr(c, key)
-      if (isUnset(value)) return { key: '未产出', value, tone: 'pending' as const }
-      return { key, value, tone: 'neutral' as const, copyable: true }
-    })
+    return ['design_doc', 'plan'].map((key) => pathChip(c, key) ?? unsetPlaceholder(key))
   }
 
-  // 自定义 workflow 或相位不在映射表：全部路径型字段里非空的才出 chip，空的直接剔除。
+  // 自定义 workflow / rules 缺失 / 相位不在映射表：全部路径型字段里非空的才出 chip，空的直接剔除。
   const chips: EvidenceChip[] = []
   for (const key of PATH_FIELDS) {
     const chip = pathChip(c, key)
