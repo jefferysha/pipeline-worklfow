@@ -3,6 +3,7 @@ import gsap from 'gsap'
 import { useGSAP } from '@gsap/react'
 import { getToken } from '../api/client'
 import { useT } from '../i18n'
+import { Dialog } from '../shell/Dialog'
 import { revealDialog, revealList } from './motion'
 
 gsap.registerPlugin(useGSAP)
@@ -53,7 +54,6 @@ export function WorkflowEditorView({ root, onOpen }: WorkflowEditorViewProps): J
   // 的既有模式一致），不吞掉其余 UI。
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const rootRef = useRef<HTMLElement>(null)
-  const deleteDialogRef = useRef<HTMLDivElement>(null)
 
   // 列表入场：只在"从加载态首次拿到数据"这一刻触发一次（依赖 Boolean(names)，不是 names
   // 本身）——如果依赖整个 names 数组，之后每次新建/删除导致的数组引用变化都会让已经在屏幕上
@@ -63,9 +63,19 @@ export function WorkflowEditorView({ root, onOpen }: WorkflowEditorViewProps): J
     if (names && names.length > 0) revealList('.workflow-editor__item')
   }, { scope: rootRef, dependencies: [Boolean(names && names.length > 0)] })
 
+  // 迁移到共享 <Dialog>（Task 4，评审 P0-5）后不再有 backdrop 的 ref 可拿——Dialog 组件不对外
+  // 暴露内部 DOM 节点。改用 useGSAP 的 scope 选择器文本寻址（同本文件上面 revealList 已有的
+  // '.workflow-editor__item' 字符串选择器一致的既有写法，非本次新发明）：useGSAP 内部用
+  // gsap.context(fn, scope) 包裹回调，回调体内的选择器文本会自动限定在 rootRef 子树内查找，
+  // 不需要真实 DOM ref。用 data-testid 属性选择器而非裸 `.dialog__backdrop` 类名，是为了不与
+  // 同一文件里可能共存的其它未迁移 dialog__backdrop 元素混选（本文件当前只有这一处，属防御性
+  // 写法）。
   useGSAP(() => {
-    if (pendingDelete && deleteDialogRef.current) {
-      revealDialog(deleteDialogRef.current, deleteDialogRef.current.querySelector('.dialog'))
+    if (pendingDelete) {
+      revealDialog(
+        '[data-testid="workflow-delete-confirm"]',
+        '[data-testid="workflow-delete-confirm"] .dialog',
+      )
     }
   }, { scope: rootRef, dependencies: [pendingDelete] })
 
@@ -164,16 +174,19 @@ export function WorkflowEditorView({ root, onOpen }: WorkflowEditorViewProps): J
       {deleteError && <p className="view__note view__note--error">{deleteError}</p>}
 
       {pendingDelete && (
-        <div className="dialog__backdrop" ref={deleteDialogRef}>
-          <div role="dialog" className="dialog dialog--danger">
-            <h3 className="dialog__title">{t('workflow_editor.delete')} "{pendingDelete}"</h3>
-            <p className="dialog__desc">{t('workflow_editor.delete_confirm', { name: pendingDelete })}</p>
-            <div className="dialog__actions">
+        <Dialog
+          title={`${t('workflow_editor.delete')} "${pendingDelete}"`}
+          onClose={() => setPendingDelete(null)}
+          testid="workflow-delete-confirm"
+          actions={
+            <>
               <button className="btn btn--ghost" onClick={() => setPendingDelete(null)}>{t('workflow_editor.cancel')}</button>
               <button className="btn btn--danger" onClick={() => confirmDelete(pendingDelete)}>{t('workflow_editor.confirm_delete')}</button>
-            </div>
-          </div>
-        </div>
+            </>
+          }
+        >
+          <p className="dialog__desc">{t('workflow_editor.delete_confirm', { name: pendingDelete })}</p>
+        </Dialog>
       )}
 
       <div className="workflow-editor__new">

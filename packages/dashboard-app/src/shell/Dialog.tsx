@@ -17,7 +17,16 @@ import { useEffect, useRef } from 'react'
  * 改用模块级 LIFO 栈 `dialogStack`：每个实例 mount 时 push 自己的 symbol、unmount 时
  * 精确移除；keydown handler 只在自己是栈顶（`dialogStack[dialogStack.length - 1] ===
  * 自己`）时响应 Esc 与 Tab 困笼，与焦点具体落在哪个元素（乃至是否落在 DOM 里）无关，
- * 多层叠加时也只有最后 mount 的实例（=视觉最上层）响应。
+ * 多层叠加时通常也只有最后 mount 的实例（=视觉最上层）响应。
+ *
+ * 已知边界（Task 3 重审发现，非无条件成立）：上一句的"最后 mount = 栈顶 = 视觉最上层"
+ * 依赖"挂载顺序"这个前提，而挂载顺序在一种结构下会反过来——同一 React commit 内父子
+ * Dialog 同时首次挂载时，子组件的 effect 先于父组件跑（React 18 提交阶段的既定顺序是
+ * 子先父后），子 Dialog 反而比父 Dialog 更早 push 进 dialogStack，栈序与视觉层序（父在
+ * 下、子在上）就对不上了。当前 7 个调用方彼此都不嵌套，这个前提天然不触发；因此迁移/
+ * 新增调用方时禁止出现"同一 commit 内父子 Dialog 同时首次挂载"的结构（即：不要让一个
+ * Dialog 的 children 在它自己首次挂载的那一刻就已经渲染出另一个 Dialog——先挂载外层、
+ * 等外层已挂载后再由用户交互触发内层挂载，这种分两个 commit 的时序不受影响）。
  */
 export interface DialogProps {
   title: string
@@ -42,6 +51,12 @@ const dialogStack: symbol[] = []
 // 故意不用 offsetParent 做可见性过滤——jsdom 没有布局引擎，offsetParent 恒为 null，
 // 会把所有元素误判不可见，测试全灭；CSS 隐藏（display:none/visibility:hidden）但未加
 // disabled/hidden 的元素仍会被计入边界，是已知未处理边界，登记于此。
+// 另一处已知未处理边界：FOCUSABLE_SELECTOR 是多条选择器的并集（逗号分隔，or 语义，
+// 不是 and）——`button:not(:disabled)` 这一支排除了 disabled 按钮，但同一个元素若还
+// 显式带了非负 tabindex（如 `<button disabled tabIndex={0}>`，本身就是自相矛盾的标记：
+// disabled 元素不应该再声明非负 tabindex），会被并集里的 `[tabindex]:not([tabindex="-1"])`
+// 这一支重新捞回边界内——两支选择器各自独立判断，互不知晓对方已经排除过什么。同上，
+// 登记于此、不处理。
 const FOCUSABLE_SELECTOR =
   'button:not(:disabled), [href], input:not(:disabled):not([type="hidden"]), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])'
 

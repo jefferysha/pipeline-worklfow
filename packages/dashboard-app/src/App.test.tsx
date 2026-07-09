@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, act, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { App } from './App'
 import { lastEventSource, resetEventSources } from './test-setup'
 import { makeChange, makeProject, makeSnapshot } from './testkit'
@@ -59,6 +60,39 @@ describe('App 视图切换', () => {
     expect(screen.getByTestId('board-view')).toBeInTheDocument()
     fireEvent.click(screen.getByTestId('nav-settings'))
     expect(screen.getByTestId('settings-view')).toBeInTheDocument()
+  })
+})
+
+describe('App 注册对话框（评审 P0-5：陷阱修复——迁移前无 role/无取消/Esc 与 backdrop 点击都不关）', () => {
+  it('打开注册对话框 → 有「取消」按钮、按 Esc 对话框消失、焦点回到「＋」钮', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await screen.findByTestId('inbox-view')
+
+    const plusBtn = screen.getByTestId('project-register')
+    await user.click(plusBtn)
+    expect(await screen.findByTestId('register-dialog')).toBeInTheDocument()
+
+    // 取消按钮存在（迁移前这个对话框没有任何取消入口——无路可退陷阱）
+    expect(screen.getByRole('button', { name: '取消' })).toBeInTheDocument()
+
+    // Esc 关闭
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.queryByTestId('register-dialog')).toBeNull()
+
+    // 焦点归位到打开前的触发元素（Dialog 卸载归位契约）
+    expect(document.activeElement).toBe(plusBtn)
+  })
+
+  it('点「取消」按钮同样能关闭注册对话框', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await screen.findByTestId('inbox-view')
+    await user.click(screen.getByTestId('project-register'))
+    await screen.findByTestId('register-dialog')
+
+    fireEvent.click(screen.getByRole('button', { name: '取消' }))
+    expect(screen.queryByTestId('register-dialog')).toBeNull()
   })
 })
 

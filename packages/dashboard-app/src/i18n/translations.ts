@@ -105,6 +105,7 @@ export const zh: Dict = {
     demote_fail_status: '降档失败（{status}）',
   },
   skill_transfer: {
+    title: '编辑技能',
     search_placeholder: '搜索…',
     load_error: '加载失败：{msg}',
     load_error_status: '加载失败（{status}）',
@@ -144,6 +145,7 @@ export const zh: Dict = {
     no_change_title: '这个项目还没有 change',
     no_change_desc: '新建一个 change 开始跑流水线；也可以用 CLI 初始化。',
     new_change: '新建 change',
+    cancel: '取消',
   },
   newchange: {
     title: '新建 change',
@@ -176,6 +178,7 @@ export const zh: Dict = {
     back: '‹ 返回列表',
     add_step: '+ step',
     add_step_prompt: 'step id（a-z A-Z 0-9 - _）',
+    add_transition_title: '新连线的 event 名',
     add_transition_prompt: 'event 名',
     save: '保存',
     save_success: '已保存',
@@ -307,6 +310,7 @@ export const en: Dict = {
     demote_fail_status: 'Demote failed ({status})',
   },
   skill_transfer: {
+    title: 'Edit skills',
     search_placeholder: 'Search…',
     load_error: 'Load failed: {msg}',
     load_error_status: 'Load failed ({status})',
@@ -346,6 +350,7 @@ export const en: Dict = {
     no_change_title: 'No changes in this project yet',
     no_change_desc: 'Create a change to start the pipeline; the CLI works too.',
     new_change: 'New change',
+    cancel: 'Cancel',
   },
   newchange: {
     title: 'New change',
@@ -378,6 +383,7 @@ export const en: Dict = {
     back: '‹ Back to list',
     add_step: '+ step',
     add_step_prompt: 'step id (a-z A-Z 0-9 - _)',
+    add_transition_title: 'Event name for the new connection',
     add_transition_prompt: 'event name',
     save: 'Save',
     save_success: 'Saved',

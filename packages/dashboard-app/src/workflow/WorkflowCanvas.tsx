@@ -10,6 +10,7 @@ import { useGSAP } from '@gsap/react'
 import { getToken } from '../api/client'
 import { useT } from '../i18n'
 import { invalidateWorkflowRules } from '../model/workflowModel'
+import { Dialog } from '../shell/Dialog'
 import { layoutNodes } from './layout'
 import { StepDetailPanel, type SkillRef, type StepDef } from './StepDetailPanel'
 import { crossfadeStage, revealDialog } from './motion'
@@ -509,12 +510,15 @@ function WorkflowCanvasInner({ root, name, onBack }: WorkflowCanvasProps): JSX.E
   // UI 重构（impeccable + gsap）：三个组件共用的 motion.ts 工具，用法同已完成的
   // WorkflowEditorView.tsx/StepDetailPanel.tsx——必须在 useGSAP(() => {...}, { scope }) 回调内
   // 同步调用，GSAP 的 context 追踪按调用栈生效。rootRef 挂在最外层 .workflow-canvas，
-  // stageRef 挂在 .workflow-canvas__stage（承载 crossfadeStage 的数据源切换提示），
-  // 两个 dialogRef 分别挂在 add-step/add-skill 共用弹窗、add-transition 弹窗的 backdrop 上。
+  // stageRef 挂在 .workflow-canvas__stage（承载 crossfadeStage 的数据源切换提示）；
+  // addStepDialogRef 挂在 add-step/add-skill 共用弹窗的 backdrop 上（这一个仍是手写
+  // dialog__backdrop，不在本轮 Task 4 迁移范围内——brief 明确只迁 event 名输入弹窗一处）。
+  // event 名输入弹窗（pendingConnection）Task 4 起改用共享 <Dialog>，不再暴露 backdrop ref；
+  // 下面它自己的 useGSAP 改用 scope 选择器文本寻址（同 WorkflowEditorView.tsx 迁移时的写法
+  // 一致，详见其注释），不再需要 addTransitionDialogRef。
   const rootRef = useRef<HTMLDivElement>(null)
   const stageRef = useRef<HTMLDivElement>(null)
   const addStepDialogRef = useRef<HTMLDivElement>(null)
-  const addTransitionDialogRef = useRef<HTMLDivElement>(null)
 
   useGSAP(() => {
     if (addStepOpen && addStepDialogRef.current) {
@@ -523,8 +527,11 @@ function WorkflowCanvasInner({ root, name, onBack }: WorkflowCanvasProps): JSX.E
   }, { scope: rootRef, dependencies: [addStepOpen] })
 
   useGSAP(() => {
-    if (pendingConnection && addTransitionDialogRef.current) {
-      revealDialog(addTransitionDialogRef.current, addTransitionDialogRef.current.querySelector('.dialog'))
+    if (pendingConnection) {
+      revealDialog(
+        '[data-testid="workflow-add-transition"]',
+        '[data-testid="workflow-add-transition"] .dialog',
+      )
     }
   }, { scope: rootRef, dependencies: [Boolean(pendingConnection)] })
 
@@ -603,21 +610,25 @@ function WorkflowCanvasInner({ root, name, onBack }: WorkflowCanvasProps): JSX.E
         </div>
       )}
       {pendingConnection && (
-        <div className="dialog__backdrop" ref={addTransitionDialogRef}>
-          <div role="dialog" className="dialog">
-            <input
-              className="input"
-              placeholder={t('workflow_editor.add_transition_prompt')}
-              value={eventName}
-              onChange={(e) => setEventName(e.target.value)}
-            />
-            {connectError && <p className="view__note view__note--error">{connectError}</p>}
-            <div className="dialog__actions">
+        <Dialog
+          title={t('workflow_editor.add_transition_title')}
+          onClose={() => setPendingConnection(null)}
+          testid="workflow-add-transition"
+          actions={
+            <>
               <button className="btn btn--ghost" onClick={() => setPendingConnection(null)}>{t('workflow_editor.cancel')}</button>
               <button className="btn" onClick={confirmConnect}>{t('workflow_editor.confirm')}</button>
-            </div>
-          </div>
-        </div>
+            </>
+          }
+        >
+          <input
+            className="input"
+            placeholder={t('workflow_editor.add_transition_prompt')}
+            value={eventName}
+            onChange={(e) => setEventName(e.target.value)}
+          />
+          {connectError && <p className="view__note view__note--error">{connectError}</p>}
+        </Dialog>
       )}
 
       <div className="workflow-canvas__stage" ref={stageRef}>

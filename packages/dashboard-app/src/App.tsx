@@ -10,6 +10,7 @@ import { changeWorkflow, selectInbox } from './inbox/inbox'
 import { useWorkflowRules } from './model/workflowModel'
 import { LoopsPanel } from './loops/LoopsPanel'
 import { SettingsView } from './settings/SettingsView'
+import { Dialog } from './shell/Dialog'
 import { Nav, type View } from './shell/Nav'
 import { NewChangeDialog } from './shell/NewChangeDialog'
 import { Onboarding } from './shell/Onboarding'
@@ -213,17 +214,24 @@ function AppShell(): JSX.Element {
       </main>
 
       {registerOpen && (
-        <div className="dialog__backdrop" data-testid="register-dialog">
-          <div style={{ width: 'min(460px, 92%)' }}>
-            <Onboarding
-              kind="no-project"
-              onRegistered={() => {
-                setRegisterOpen(false)
-                refresh()
-              }}
-            />
-          </div>
-        </div>
+        <Dialog
+          title={t('onboard.no_project_title')}
+          onClose={() => setRegisterOpen(false)}
+          testid="register-dialog"
+          actions={
+            <button type="button" className="btn btn--ghost" onClick={() => setRegisterOpen(false)}>
+              {t('onboard.cancel')}
+            </button>
+          }
+        >
+          <Onboarding
+            kind="no-project"
+            onRegistered={() => {
+              setRegisterOpen(false)
+              refresh()
+            }}
+          />
+        </Dialog>
       )}
 
       {newChangeOpen && currentRoot && (

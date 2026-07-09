@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useT } from '../i18n'
+import { Dialog } from '../shell/Dialog'
 
 export interface SkillTransferModalProps {
   selected: string[]
@@ -61,7 +62,20 @@ export function SkillTransferModal({ selected, onSave, onCancel }: SkillTransfer
   }
 
   return (
-    <div className="modal" role="dialog">
+    // Task 4（评审 P0-5）：只做壳迁移——外层手写 `<div className="modal" role="dialog">` 换成
+    // 共享 <Dialog>（Esc/焦点管理/backdrop 点击关随之补齐）。`.modal`/`.split` 此前就没有任何
+    // CSS 规则（真实样式是评审 P1-10 后半，留给 Task 16），内部条目的拖拽/搜索/保存/取消交互
+    // 逐字不动——"点击即移动"是 Task 16 的范围，这里不碰。
+    <Dialog
+      title={t('skill_transfer.title')}
+      onClose={onCancel}
+      actions={
+        <>
+          <button onClick={() => onSave(chosen)}>{t('skill_transfer.save')}</button>
+          <button onClick={onCancel}>{t('skill_transfer.cancel')}</button>
+        </>
+      }
+    >
       <input placeholder={t('skill_transfer.search_placeholder')} value={query} onChange={(e) => setQuery(e.target.value)} />
       <div className="split">
         <div data-testid="skill-available" onDragOver={(e) => e.preventDefault()} onDrop={onDropToAvailable}>
@@ -80,8 +94,6 @@ export function SkillTransferModal({ selected, onSave, onCancel }: SkillTransfer
           ))}
         </div>
       </div>
-      <button onClick={() => onSave(chosen)}>{t('skill_transfer.save')}</button>
-      <button onClick={onCancel}>{t('skill_transfer.cancel')}</button>
-    </div>
+    </Dialog>
   )
 }

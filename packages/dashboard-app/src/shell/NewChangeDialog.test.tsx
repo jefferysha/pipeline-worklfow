@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { I18nProvider } from '../i18n'
 import { NewChangeDialog } from './NewChangeDialog'
 
@@ -102,5 +103,29 @@ describe('NewChangeDialog（G18 主入口）', () => {
     const props = renderDialog()
     fireEvent.click(screen.getByText('取消'))
     expect(props.onClose).toHaveBeenCalledOnce()
+  })
+
+  // 评审 P0-5 随迁（P3-16）：迁移到共享 Dialog 前，名字输入框不会自动聚焦，且整个表单不在
+  // 任何 <form> 里——回车键在纯 <div> 结构里没有隐式提交语义，什么都不会发生。
+  it('挂载后名字输入框自动聚焦（initialFocusRef）', async () => {
+    vi.stubGlobal('fetch', stubFetch())
+    renderDialog()
+    expect(document.activeElement).toBe(screen.getByTestId('newchange-name'))
+  })
+
+  it('包裹在 <form> 内：名字输入框回车提交一次（不重复提交）', async () => {
+    const fetchMock = stubFetch()
+    vi.stubGlobal('fetch', fetchMock)
+    const props = renderDialog()
+    const user = userEvent.setup()
+
+    const nameInput = screen.getByTestId('newchange-name')
+    expect(document.activeElement).toBe(nameInput) // 前提：本用例复用挂载即聚焦这件事
+    await user.type(nameInput, 'fix-login')
+    await user.keyboard('{Enter}')
+
+    await waitFor(() => expect(props.onCreated).toHaveBeenCalledOnce())
+    const postCalls = fetchMock.mock.calls.filter(([u]) => String(u) === '/api/changes')
+    expect(postCalls).toHaveLength(1)
   })
 })

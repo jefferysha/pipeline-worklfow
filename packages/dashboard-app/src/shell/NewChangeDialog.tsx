@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ApiError, createChange, fetchWorkflowNames } from '../api/client'
 import { useT } from '../i18n'
 import { TRACKS } from '../types'
+import { Dialog } from './Dialog'
 
 export interface NewChangeDialogProps {
   root: string
@@ -25,6 +26,7 @@ export function NewChangeDialog({ root, onClose, onCreated }: NewChangeDialogPro
   const [wfNames, setWfNames] = useState<string[]>([])
   const [serverError, setServerError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const nameInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -58,14 +60,22 @@ export function NewChangeDialog({ root, onClose, onCreated }: NewChangeDialogPro
   }
 
   return (
-    <div className="dialog__backdrop" data-testid="newchange-dialog">
-      <div className="dialog" role="dialog" aria-modal="true" aria-label={t('newchange.title')}>
-        <h2 className="dialog__title">{t('newchange.title')}</h2>
-        <p className="dialog__desc">{t('newchange.desc', { project: root.split('/').filter(Boolean).pop() ?? root })}</p>
+    <Dialog title={t('newchange.title')} onClose={onClose} testid="newchange-dialog" initialFocusRef={nameInputRef}>
+      <p className="dialog__desc">{t('newchange.desc', { project: root.split('/').filter(Boolean).pop() ?? root })}</p>
+      {/* <form>+onSubmit：名字输入框回车即提交（评审 P0-5 随迁 P3-16），提交按钮用
+          type="submit" 而非手写 onClick，避免"Enter 走 user-event 的隐式提交"和"点击按钮"
+          两条路径各自触发一次 submit() 而重复提交——两条路径现在都收敛到同一个 onSubmit。 */}
+      <form
+        onSubmit={(e) => {
+          e.preventDefault()
+          void submit()
+        }}
+      >
         <div className="dialog__body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <label className="field">
             <span className="field__label">{t('newchange.name_label')}</span>
             <input
+              ref={nameInputRef}
               className={nameInvalid ? 'input input--error' : 'input'}
               style={{ fontFamily: 'var(--mono)' }}
               data-testid="newchange-name"
@@ -106,11 +116,11 @@ export function NewChangeDialog({ root, onClose, onCreated }: NewChangeDialogPro
           <button type="button" className="btn btn--ghost" disabled={busy} onClick={onClose}>
             {t('newchange.cancel')}
           </button>
-          <button type="button" className="btn" data-testid="newchange-submit" disabled={!canSubmit} onClick={() => void submit()}>
+          <button type="submit" className="btn" data-testid="newchange-submit" disabled={!canSubmit}>
             {t('newchange.create')}
           </button>
         </div>
-      </div>
-    </div>
+      </form>
+    </Dialog>
   )
 }

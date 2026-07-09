@@ -4,6 +4,7 @@ import type { Snapshot } from '../types'
 import type { WorkflowRules } from '../model/workflowModel'
 import { legalTargets, plannedTransition, type PlannedTransition } from '../board/events'
 import { shortTime } from '../model/time'
+import { Dialog } from '../shell/Dialog'
 import { revealList } from '../workflow/motion'
 import { changeWorkflow, projectName, selectInbox } from './inbox'
 
@@ -151,18 +152,12 @@ export function InboxView({ snapshot, loading, error, currentRoot, rulesByWf, on
       </ul>
 
       {pending && (
-        <div className="dialog__backdrop" data-testid="inbox-confirm">
-          <div className="dialog" role="dialog" aria-modal="true" aria-label={t('board.confirm_backward_title')}>
-            <h2 className="dialog__title">{t('board.confirm_backward_title')}</h2>
-            <p className="dialog__desc">
-              {t('board.confirm_backward_desc', {
-                name: pending.name,
-                from: pending.planned.from,
-                to: pending.planned.to,
-                event: pending.planned.event,
-              })}
-            </p>
-            <div className="dialog__actions">
+        <Dialog
+          title={t('board.confirm_backward_title')}
+          onClose={() => setPending(null)}
+          testid="inbox-confirm"
+          actions={
+            <>
               <button type="button" className="btn btn--ghost" disabled={busy} onClick={() => setPending(null)}>
                 {t('board.confirm_no')}
               </button>
@@ -175,9 +170,18 @@ export function InboxView({ snapshot, loading, error, currentRoot, rulesByWf, on
               >
                 {t('board.confirm_yes')}
               </button>
-            </div>
-          </div>
-        </div>
+            </>
+          }
+        >
+          <p className="dialog__desc">
+            {t('board.confirm_backward_desc', {
+              name: pending.name,
+              from: pending.planned.from,
+              to: pending.planned.to,
+              event: pending.planned.event,
+            })}
+          </p>
+        </Dialog>
       )}
     </section>
   )
