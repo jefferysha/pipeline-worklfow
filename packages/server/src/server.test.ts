@@ -1296,3 +1296,79 @@ steps:
     expect(existsSync(join(proj, 'openspec', 'changes', 'x3'))).toBe(false)
   })
 })
+
+describe('POST /api/change/:name/transition —— 自定义 workflow 双轨（G17 端到端补全）', () => {
+  async function startWithCustomChange(): Promise<Harness & { relDir: string }> {
+    const h = await start()
+    const { mkdir, writeFile } = await import('node:fs/promises')
+    await mkdir(join(h.root, '.pipeline', 'workflows'), { recursive: true })
+    await writeFile(join(h.root, '.pipeline', 'workflows', 'rel.yaml'), `name: rel
+steps:
+  - id: draft
+    label: x
+    gate: null
+    skills: []
+    inputs: []
+    outputs: []
+    guards: []
+    transitions:
+      - event: approved
+        to: review
+  - id: review
+    label: y
+    gate: review
+    skills: []
+    inputs: []
+    outputs: []
+    guards:
+      - type: tasks-at-least
+        n: 1
+    transitions:
+      - event: shipped
+        to: ship
+  - id: ship
+    label: z
+    gate: null
+    skills: []
+    inputs: []
+    outputs: []
+    guards: []
+    transitions: []
+`, 'utf8')
+    const relDir = await initChange(h.store, h.root, 'rel-x')
+    await h.store.setMany(relDir, { workflow: 'rel', phase: 'draft' })
+    return { ...h, relDir }
+  }
+
+  it('200：自定义 event（approved）按 step transitions 推进，phase 真改盘', async () => {
+    const h = await startWithCustomChange()
+    const r = await reqPost(h.port, '/api/change/rel-x/transition', { root: h.root, event: 'approved' }, { headers: { Authorization: `Bearer ${h.token}` } })
+    expect(r.status).toBe(200)
+    const body = r.json<{ ok: boolean; from: string; to: string }>()
+    expect(body.from).toBe('draft')
+    expect(body.to).toBe('review')
+    expect(await h.store.get(h.relDir, 'phase')).toBe('review')
+  })
+
+  it('409：当前 step 不支持的 event（文案列出可用 event），零写盘', async () => {
+    const h = await startWithCustomChange()
+    const r = await reqPost(h.port, '/api/change/rel-x/transition', { root: h.root, event: 'shipped' }, { headers: { Authorization: `Bearer ${h.token}` } })
+    expect(r.status).toBe(409)
+    expect(r.json<{ error: string }>().error).toContain('approved')
+    expect(await h.store.get(h.relDir, 'phase')).toBe('draft')
+  })
+
+  it('409：step guard 未通过（review 的 tasks-at-least n=1，tasks 为空）→ 拒绝且零写盘', async () => {
+    const h = await startWithCustomChange()
+    await h.store.setMany(h.relDir, { phase: 'review' })
+    const r = await reqPost(h.port, '/api/change/rel-x/transition', { root: h.root, event: 'shipped' }, { headers: { Authorization: `Bearer ${h.token}` } })
+    expect(r.status).toBe(409)
+    expect(await h.store.get(h.relDir, 'phase')).toBe('review')
+  })
+
+  it('default workflow 的行为零回归：未知 event 仍 400', async () => {
+    const h = await startWithCustomChange()
+    const r = await reqPost(h.port, `/api/change/${h.name}/transition`, { root: h.root, event: 'approved' }, { headers: { Authorization: `Bearer ${h.token}` } })
+    expect(r.status).toBe(400)
+  })
+})
