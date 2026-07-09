@@ -19,6 +19,8 @@ interface InboxViewProps {
   onTransition: (name: string, root: string, event: string) => Promise<void>
   onToast?: (msg: string) => void
   onError?: (msg: string) => void
+  /** G18 新建 change 入口（App 提供；无项目语境时缺省不渲染）。 */
+  onNewChange?: () => void
 }
 
 interface Pending {
@@ -34,7 +36,7 @@ interface Pending {
  * 设计变更登记：原"决定类型文案行"（awaiting.<kind>）退役——紧凑行里徽章已表达"在等"，
  * 细分语义由相位胶囊承担；awaiting.* i18n key 保留供空态副本等复用。
  */
-export function InboxView({ snapshot, loading, error, currentRoot, rulesByWf, onOpenBoard, onTransition, onToast, onError }: InboxViewProps): JSX.Element {
+export function InboxView({ snapshot, loading, error, currentRoot, rulesByWf, onOpenBoard, onTransition, onToast, onError, onNewChange }: InboxViewProps): JSX.Element {
   const { t } = useT()
   const [pending, setPending] = useState<Pending | null>(null)
   const [busy, setBusy] = useState(false)
@@ -94,6 +96,11 @@ export function InboxView({ snapshot, loading, error, currentRoot, rulesByWf, on
           <p className="view__subtitle">{t('inbox.subtitle')}</p>
         </div>
         <span className="view__count" data-testid="inbox-count">{t('inbox.count', { n: items.length })}</span>
+        {onNewChange && (
+          <button type="button" className="btn" data-testid="new-change-open" onClick={onNewChange}>
+            ＋ {t('newchange.title')}
+          </button>
+        )}
       </header>
       <ul className="inbox__list" data-testid="inbox-list">
         {items.map(({ root, change }) => {

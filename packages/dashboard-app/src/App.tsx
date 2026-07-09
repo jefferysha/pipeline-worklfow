@@ -11,6 +11,7 @@ import { useWorkflowRules } from './model/workflowModel'
 import { LoopsPanel } from './loops/LoopsPanel'
 import { SettingsView } from './settings/SettingsView'
 import { Nav, type View } from './shell/Nav'
+import { NewChangeDialog } from './shell/NewChangeDialog'
 import { useSnapshot } from './state/useSnapshot'
 import { GLOBAL_CSS } from './styles'
 import { WorkflowCanvas } from './workflow/WorkflowCanvas'
@@ -45,6 +46,7 @@ function AppShell(): JSX.Element {
   const [view, setView] = useState<View>('inbox')
   const [theme, setThemeState] = useState<Theme>(initialTheme)
   const [flash, setFlash] = useState<Flash | null>(null)
+  const [newChangeOpen, setNewChangeOpen] = useState(false)
   const { snapshot, loading, error, connected, refresh } = useSnapshot()
   // GOAL.md E8 收编（Task 9）：null = workflow 列表页，非 null = 正打开该名字的画布页。
   const [openWorkflowName, setOpenWorkflowName] = useState<string | null>(null)
@@ -164,6 +166,7 @@ function AppShell(): JSX.Element {
             onTransition={onTransition}
             onToast={(m) => showFlash('toast', m)}
             onError={(m) => showFlash('error', m)}
+            onNewChange={currentRoot ? () => setNewChangeOpen(true) : undefined}
           />
         )}
         {view === 'board' && (
@@ -177,6 +180,7 @@ function AppShell(): JSX.Element {
             onTransition={onTransition}
             onToast={(m) => showFlash('toast', m)}
             onError={(m) => showFlash('error', m)}
+            onNewChange={currentRoot ? () => setNewChangeOpen(true) : undefined}
           />
         )}
         {view === 'settings' && <SettingsView />}
@@ -188,6 +192,18 @@ function AppShell(): JSX.Element {
             : <WorkflowEditorView root={currentRoot} onOpen={setOpenWorkflowName} />
         )}
       </main>
+
+      {newChangeOpen && currentRoot && (
+        <NewChangeDialog
+          root={currentRoot}
+          onClose={() => setNewChangeOpen(false)}
+          onCreated={(name) => {
+            setNewChangeOpen(false)
+            showFlash('toast', t('newchange.created_toast', { name }))
+            refresh()
+          }}
+        />
+      )}
 
       <footer className="footer">
         <AdvancedPanel snapshot={snapshot} />

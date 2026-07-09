@@ -20,6 +20,8 @@ interface BoardViewProps {
   onTransition: (name: string, root: string, event: string) => Promise<void>
   onToast?: (msg: string) => void
   onError?: (msg: string) => void
+  /** G18 新建 change 入口（App 提供）。 */
+  onNewChange?: () => void
 }
 
 interface Pending {
@@ -52,7 +54,7 @@ function collapseKey(root: string, wf: string): string {
  * 按钮与拖拽并存（吸收 brainstorm 方案 3 的优点）；回退边共用二次确认。
  * 规则拉取失败的组只读降级——G17 的底线：任何情况下卡不消失。
  */
-export function BoardView({ snapshot, loading, error, currentRoot, rulesByWf, rulesErrors, onTransition, onToast, onError }: BoardViewProps): JSX.Element {
+export function BoardView({ snapshot, loading, error, currentRoot, rulesByWf, rulesErrors, onTransition, onToast, onError, onNewChange }: BoardViewProps): JSX.Element {
   const { t } = useT()
   const [dragOver, setDragOver] = useState<string | null>(null) // `${wf}:${step}`
   const [pending, setPending] = useState<Pending | null>(null)
@@ -152,6 +154,11 @@ export function BoardView({ snapshot, loading, error, currentRoot, rulesByWf, ru
           <h1 className="view__title">{t('board.title')}</h1>
           <p className="view__subtitle">{t('board.subtitle')}</p>
         </div>
+        {onNewChange && (
+          <button type="button" className="btn" data-testid="new-change-open" onClick={onNewChange}>
+            ＋ {t('newchange.title')}
+          </button>
+        )}
       </header>
 
       {groups.map((group) => {
