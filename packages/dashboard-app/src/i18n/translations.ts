@@ -7,7 +7,18 @@ export interface Dict {
 
 export const zh: Dict = {
   app: { title: 'Pipeline 控制台', subtitle: '全局工作流看板' },
-  nav: { inbox: '收件箱', board: '看板', settings: '设置', workbench: '工作台', loops: 'Loop 设置', afk: 'AFK 工作台', workflows: 'Workflow 编辑器', project_register: '＋ 注册项目…' },
+  nav: {
+    inbox: '收件箱', board: '看板', settings: '设置', workbench: '工作台', loops: 'Loop 设置', afk: 'AFK 工作台', workflows: 'Workflow 编辑器',
+    project_register: '＋ 注册项目…',
+    // D5/G19③ 聚合入口收编（Task 5）：切换器下拉首项，root='' 是全应用聚合语境的唯一表示。
+    project_all: '全部项目',
+    // 项目项 hover 区的注销入口（评审 P2-13）；确认走 Dialog，见下方 unregister_* 四项。
+    project_unregister: '注销…',
+    unregister_title: '注销项目 "{name}"？',
+    unregister_desc: '只会从本机 dashboard 注册表移除 "{name}"，不会删除任何文件或 change 数据，随时可以重新注册。',
+    unregister_confirm: '确认注销',
+    unregister_cancel: '取消',
+  },
   common: {
     lang: '语言',
     theme_toggle: '主题',
@@ -20,7 +31,10 @@ export const zh: Dict = {
     track: '轨道',
     updated: '更新于',
     connected: '实时已连接',
-    offline: '离线（轮询）',
+    // 意图迁移（评审 P2-13，Task 5）：旧「离线（轮询）」暗示仍在悄悄轮询兜底，与实况不符
+    // （SSE 断线后并无轮询兜底）；新文案只陈述真相 + 提示数据可能过期，配断线横幅的「重连」钮。
+    offline: '连接断开——数据可能过期',
+    reconnect: '重连',
   },
   phases: {
     open: '立项', explore: '调研', spec: '规格', build: '实现',
@@ -212,7 +226,16 @@ export const zh: Dict = {
 
 export const en: Dict = {
   app: { title: 'Pipeline Console', subtitle: 'Global workflow board' },
-  nav: { inbox: 'Inbox', board: 'Board', settings: 'Settings', workbench: 'Workbench', loops: 'Loop Settings', afk: 'AFK Workbench', workflows: 'Workflow Editor', project_register: '+ Register project…' },
+  nav: {
+    inbox: 'Inbox', board: 'Board', settings: 'Settings', workbench: 'Workbench', loops: 'Loop Settings', afk: 'AFK Workbench', workflows: 'Workflow Editor',
+    project_register: '+ Register project…',
+    project_all: 'All projects',
+    project_unregister: 'Unregister…',
+    unregister_title: 'Unregister project "{name}"?',
+    unregister_desc: 'This only removes "{name}" from the local dashboard registry on this machine. No files or changes are deleted, and it can be re-registered anytime.',
+    unregister_confirm: 'Confirm unregister',
+    unregister_cancel: 'Cancel',
+  },
   common: {
     lang: 'Language',
     theme_toggle: 'Theme',
@@ -225,7 +248,8 @@ export const en: Dict = {
     track: 'Track',
     updated: 'Updated',
     connected: 'Live connected',
-    offline: 'Offline (polling)',
+    offline: 'Disconnected — data may be stale',
+    reconnect: 'Reconnect',
   },
   phases: {
     open: 'Open', explore: 'Explore', spec: 'Spec', build: 'Build',

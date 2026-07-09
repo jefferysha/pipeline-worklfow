@@ -212,3 +212,153 @@ describe('App 高级折叠入口（debug 降级）', () => {
     expect(nav.textContent).not.toMatch(/流量|traffic|高级/i)
   })
 })
+
+describe('App 断线横幅 + 重连（评审 P2-13，Task 5）', () => {
+  it('connected=true（默认）时不渲染 offline-banner', async () => {
+    render(<App />)
+    await screen.findByTestId('inbox-view')
+    expect(screen.queryByTestId('offline-banner')).toBeNull()
+  })
+
+  it('SSE onerror → connected=false → 渲染 offline-banner（role=status，文案含"连接断开"）', async () => {
+    render(<App />)
+    await screen.findByTestId('inbox-view')
+    const es = lastEventSource()
+    expect(es).toBeDefined()
+    act(() => {
+      es!.emit('error', '')
+    })
+    const banner = await screen.findByTestId('offline-banner')
+    expect(banner).toHaveAttribute('role', 'status')
+    expect(banner.textContent).toContain('连接断开')
+  })
+
+  it('点「重连」：新发起一次 GET /api/snapshot + 重建一条新 SSE 订阅（不复用失效的旧连接）', async () => {
+    render(<App />)
+    await screen.findByTestId('inbox-view')
+    const es = lastEventSource()
+    act(() => {
+      es!.emit('error', '')
+    })
+    await screen.findByTestId('offline-banner')
+
+    const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>
+    const before = fetchMock.mock.calls.filter((c: unknown[]) => c[0] === '/api/snapshot').length
+
+    fireEvent.click(screen.getByTestId('offline-reconnect'))
+
+    await waitFor(() => {
+      const after = fetchMock.mock.calls.filter((c: unknown[]) => c[0] === '/api/snapshot').length
+      expect(after).toBe(before + 1)
+    })
+    expect(lastEventSource()).not.toBe(es)
+  })
+})
+
+describe('App currentRoot 聚合选择（D5/G19③：currentRoot 空串是全应用聚合的唯一表示，Task 5）', () => {
+  it('点切换器「全部项目」→ currentRoot 变为空串并保持（不被 roots[0] 兜底逻辑吃回去）', async () => {
+    render(<App />)
+    await screen.findByTestId('inbox-view')
+    const es = lastEventSource()
+    const next = makeSnapshot([
+      makeProject('/repo-a', [makeChange('a1', 'build')]),
+      makeProject('/repo-b', [makeChange('b1', 'build')]),
+    ])
+    act(() => {
+      es!.emit('snapshot', JSON.stringify(next))
+    })
+    await waitFor(() => expect(screen.getByTestId('project-switcher').textContent).toContain('repo-a'))
+
+    fireEvent.click(screen.getByTestId('project-switcher'))
+    fireEvent.click(screen.getByTestId('project-item-all'))
+    expect(screen.getByTestId('project-switcher').textContent).toContain('全部项目')
+
+    // 再来一帧快照（模拟后台刷新）：聚合选择必须继续保持，不能被"空串当没设置"的旧兜底吃回去。
+    act(() => {
+      es!.emit('snapshot', JSON.stringify(next))
+    })
+    expect(screen.getByTestId('project-switcher').textContent).toContain('全部项目')
+  })
+
+  it('localStorage 记忆的聚合偏好（空串）跨刷新保持', async () => {
+    localStorage.setItem('pipeline-dashboard-root', '')
+    render(<App />)
+    await screen.findByTestId('inbox-view')
+    const es = lastEventSource()
+    const next = makeSnapshot([
+      makeProject('/repo-a', [makeChange('a1', 'build')]),
+      makeProject('/repo-b', [makeChange('b1', 'build')]),
+    ])
+    act(() => {
+      es!.emit('snapshot', JSON.stringify(next))
+    })
+    await waitFor(() => expect(screen.getByTestId('project-switcher')).toBeInTheDocument())
+    expect(screen.getByTestId('project-switcher').textContent).toContain('全部项目')
+  })
+})
+
+describe('App 注销项目（评审 P2-13，Task 5）', () => {
+  function stubTwoProjects() {
+    return vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === '/api/snapshot') {
+        return {
+          ok: true,
+          json: async () =>
+            makeSnapshot([
+              makeProject('/repo-a', [makeChange('a1', 'build')]),
+              makeProject('/repo-b', [makeChange('b1', 'build')]),
+            ]),
+        }
+      }
+      if (url.startsWith('/api/workflows?root=')) return { ok: true, json: async () => ({ names: [] }) }
+      if (url.startsWith('/api/projects?root=') && init?.method === 'DELETE') {
+        return { ok: true, json: async () => ({}) }
+      }
+      throw new Error(`unexpected fetch ${url}`)
+    })
+  }
+
+  it('注销当前项目成功 → DELETE 命中正确 root + currentRoot 切到聚合（切换器显示"全部项目"）', async () => {
+    const fetchMock = stubTwoProjects()
+    vi.stubGlobal('fetch', fetchMock)
+    render(<App />)
+    await screen.findByTestId('inbox-view')
+    // D5：无 localStorage 记忆时取第一个已注册项目
+    expect(screen.getByTestId('project-switcher').textContent).toContain('repo-a')
+
+    fireEvent.click(screen.getByTestId('project-switcher'))
+    fireEvent.click(screen.getByTestId('project-unregister-repo-a'))
+    const dialog = await screen.findByTestId('unregister-confirm')
+    fireEvent.click(within(dialog).getByRole('button', { name: '确认注销' }))
+
+    await waitFor(() => {
+      const delCall = fetchMock.mock.calls.find(
+        ([u, i]) => String(u).startsWith('/api/projects?root=') && i?.method === 'DELETE',
+      )
+      expect(delCall).toBeDefined()
+      expect(String(delCall![0])).toContain(encodeURIComponent('/repo-a'))
+    })
+    await waitFor(() => expect(screen.getByTestId('project-switcher').textContent).toContain('全部项目'))
+  })
+
+  it('注销非当前项目成功 → currentRoot 不变', async () => {
+    const fetchMock = stubTwoProjects()
+    vi.stubGlobal('fetch', fetchMock)
+    render(<App />)
+    await screen.findByTestId('inbox-view')
+    expect(screen.getByTestId('project-switcher').textContent).toContain('repo-a')
+
+    fireEvent.click(screen.getByTestId('project-switcher'))
+    fireEvent.click(screen.getByTestId('project-unregister-repo-b'))
+    const dialog = await screen.findByTestId('unregister-confirm')
+    fireEvent.click(within(dialog).getByRole('button', { name: '确认注销' }))
+
+    await waitFor(() => {
+      const delCall = fetchMock.mock.calls.find(
+        ([u, i]) => String(u).startsWith('/api/projects?root=') && i?.method === 'DELETE',
+      )
+      expect(delCall).toBeDefined()
+    })
+    expect(screen.getByTestId('project-switcher').textContent).toContain('repo-a')
+  })
+})

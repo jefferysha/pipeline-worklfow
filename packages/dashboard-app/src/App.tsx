@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { postTransition } from './api/client'
+import { ApiError, fetchSnapshot, postTransition, subscribeSnapshot, unregisterProject } from './api/client'
 import { I18nProvider, useT } from './i18n'
 import type { Lang } from './i18n/translations'
 import { AdvancedPanel } from './advanced/AdvancedPanel'
@@ -70,7 +70,10 @@ function AppShell(): JSX.Element {
   })
   const currentRoot = useMemo(() => {
     const roots = snapshot?.projects.map((p) => p.root) ?? []
-    if (rootPref && roots.includes(rootPref)) return rootPref
+    // ''（聚合选择）是合法偏好，不是"未设置"——不能用朴素 truthy 检查（'' 也是 falsy），
+    // 否则选中聚合后下一次重算会被这里悄悄吃回第一个项目（Task 5 起 rootPref 才会取到 ''，
+    // 此前老值只会是 null 或真实 root，这条分支因此不影响任何既有行为）。
+    if (rootPref !== null && (rootPref === '' || roots.includes(rootPref))) return rootPref
     return roots[0] ?? ''
   }, [snapshot, rootPref])
   const setCurrentRoot = useCallback((root: string) => {
@@ -112,13 +115,14 @@ function AppShell(): JSX.Element {
     [snapshot, currentRoot, rulesByWf],
   )
 
-  // Nav 项目切换器数据（name=root 尾段目录名；count=活跃 change 数）
+  // Nav 项目切换器数据（name=root 尾段目录名；count=活跃 change 数；ok 供聚合计数过滤用）
   const navProjects = useMemo(
     () =>
       (snapshot?.projects ?? []).map((p) => ({
         root: p.root,
         name: p.root.split('/').filter(Boolean).pop() ?? p.root,
         count: p.changes.length,
+        ok: p.ok,
       })),
     [snapshot],
   )
@@ -134,6 +138,39 @@ function AppShell(): JSX.Element {
       refresh()
     },
     [refresh],
+  )
+
+  // 断线横幅「重连」钮（评审 P2-13）：重建一条新 SSE 订阅 + 手动补一次快照 GET。
+  // useSnapshot 内部的订阅/connected/snapshot state 是它自己的私产，本任务不碰这个 hook
+  // （文件改动范围之外）——新订阅收到帧时只转调 refresh()，走 hook 已有的 GET 通路落地，
+  // 不越权直写内部 state；旧的手动订阅在下一次点击/卸载时显式关闭，不叠加成泄漏。
+  const reconnectUnsubRef = useRef<(() => void) | null>(null)
+  useEffect(() => {
+    return () => reconnectUnsubRef.current?.()
+  }, [])
+  const handleReconnect = useCallback(() => {
+    reconnectUnsubRef.current?.()
+    reconnectUnsubRef.current = subscribeSnapshot(() => refresh())
+    void fetchSnapshot().catch(() => {
+      /* 静默：手动探测失败——hook 自身的 error/connected 状态已如实反映离线，这里不重复报错 */
+    })
+  }, [refresh])
+
+  // 注销项目（G18 API + 评审 P2-13 入口，Task 5）：Nav 拿到用户确认后调用，这里做真正的
+  // 网络调用 + 收尾——成功则 refresh（快照重新拉取，注销的项目从列表消失）；若注销的正是
+  // 当前语境，切回聚合（''），避免停留在一个已经不存在的 root 上。
+  const onUnregister = useCallback(
+    (root: string) => {
+      void unregisterProject(root)
+        .then(() => {
+          if (root === currentRoot) setCurrentRoot('')
+          refresh()
+        })
+        .catch((err: unknown) => {
+          showFlash('error', err instanceof ApiError ? err.message : String(err))
+        })
+    },
+    [currentRoot, setCurrentRoot, refresh, showFlash],
   )
 
   return (
@@ -152,7 +189,17 @@ function AppShell(): JSX.Element {
         currentRoot={currentRoot}
         onRoot={setCurrentRoot}
         onRegisterProject={() => setRegisterOpen(true)}
+        onUnregister={onUnregister}
       />
+
+      {!connected && (
+        <div className="offline-banner" role="status" data-testid="offline-banner">
+          <span className="offline-banner__msg">{t('common.offline')}</span>
+          <button type="button" className="offline-banner__btn" data-testid="offline-reconnect" onClick={handleReconnect}>
+            {t('common.reconnect')}
+          </button>
+        </div>
+      )}
 
       {flash && (
         <div

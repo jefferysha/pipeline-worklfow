@@ -177,3 +177,78 @@ describe('Nav 项目切换器（D5：吃掉 G14）', () => {
     expect(screen.queryByTestId('project-label')).toBeNull()
   })
 })
+
+describe('Nav 聚合入口「全部项目」（D5/G19③ 收编，Task 5：currentRoot 空串 = 全应用聚合的唯一表示）', () => {
+  const projects = [
+    { root: '/code/repo-a', name: 'repo-a', count: 3, ok: true },
+    { root: '/code/repo-b', name: 'repo-b', count: 5, ok: false },
+  ]
+
+  it('下拉首项为「全部项目」，点击回调 onRoot(\'\')', () => {
+    const onRoot = vi.fn()
+    renderNav({ projects, currentRoot: '/code/repo-a', onRoot })
+    fireEvent.click(screen.getByTestId('project-switcher'))
+    const menu = screen.getByTestId('project-menu')
+    const items = within(menu).getAllByRole('menuitem')
+    expect(items[0]).toHaveAttribute('data-testid', 'project-item-all')
+    expect(items[0]!.textContent).toContain('全部项目')
+    fireEvent.click(items[0]!)
+    expect(onRoot).toHaveBeenCalledWith('')
+  })
+
+  it('聚合计数 = 各 ok 项目 change 总和，ok=false 的项目不计入', () => {
+    renderNav({ projects, currentRoot: '/code/repo-a', onRoot: vi.fn() })
+    fireEvent.click(screen.getByTestId('project-switcher'))
+    const agg = screen.getByTestId('project-item-all')
+    // repo-a(ok, 3) + repo-b(!ok, 5) → 只计 3，不是 8
+    expect(agg.textContent).toContain('3')
+    expect(agg.textContent).not.toContain('8')
+  })
+
+  it('currentRoot 为空串时，切换器按钮本身显示「全部项目」', () => {
+    renderNav({ projects, currentRoot: '', onRoot: vi.fn() })
+    expect(screen.getByTestId('project-switcher').textContent).toContain('全部项目')
+  })
+})
+
+describe('Nav 注销项目入口（评审 P2-13）', () => {
+  const projects = [
+    { root: '/code/repo-a', name: 'repo-a', count: 3 },
+    { root: '/code/repo-b', name: 'repo-b', count: 1 },
+  ]
+
+  it('项目项含「注销…」入口，点击弹确认 Dialog（标题含项目名）', () => {
+    renderNav({ projects, currentRoot: '/code/repo-a', onRoot: vi.fn(), onUnregister: vi.fn() })
+    fireEvent.click(screen.getByTestId('project-switcher'))
+    fireEvent.click(screen.getByTestId('project-unregister-repo-a'))
+    const dialog = screen.getByTestId('unregister-confirm')
+    expect(dialog).toBeInTheDocument()
+    expect(dialog.textContent).toContain('repo-a')
+  })
+
+  it('确认注销 → 调 onUnregister(root)，Dialog 关闭', () => {
+    const onUnregister = vi.fn()
+    renderNav({ projects, currentRoot: '/code/repo-a', onRoot: vi.fn(), onUnregister })
+    fireEvent.click(screen.getByTestId('project-switcher'))
+    fireEvent.click(screen.getByTestId('project-unregister-repo-a'))
+    fireEvent.click(screen.getByRole('button', { name: '确认注销' }))
+    expect(onUnregister).toHaveBeenCalledWith('/code/repo-a')
+    expect(screen.queryByTestId('unregister-confirm')).toBeNull()
+  })
+
+  it('取消 → 不调 onUnregister，Dialog 关闭', () => {
+    const onUnregister = vi.fn()
+    renderNav({ projects, currentRoot: '/code/repo-a', onRoot: vi.fn(), onUnregister })
+    fireEvent.click(screen.getByTestId('project-switcher'))
+    fireEvent.click(screen.getByTestId('project-unregister-repo-a'))
+    fireEvent.click(screen.getByRole('button', { name: '取消' }))
+    expect(onUnregister).not.toHaveBeenCalled()
+    expect(screen.queryByTestId('unregister-confirm')).toBeNull()
+  })
+
+  it('未传 onUnregister：不渲染注销入口', () => {
+    renderNav({ projects, currentRoot: '/code/repo-a', onRoot: vi.fn() })
+    fireEvent.click(screen.getByTestId('project-switcher'))
+    expect(screen.queryByTestId('project-unregister-repo-a')).toBeNull()
+  })
+})

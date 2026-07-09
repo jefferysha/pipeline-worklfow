@@ -76,17 +76,27 @@ body { margin: 0; }
 
 /* ── 导航 ── */
 .nav { display: flex; align-items: center; gap: 18px; padding: 10px 20px; background: var(--card); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 10; }
-.nav__brand { font-weight: 700; color: var(--text); font-size: 14px; white-space: nowrap; }
+.nav__brand { display: flex; align-items: center; gap: 9px; font-weight: 700; color: var(--text); font-size: 14px; white-space: nowrap; }
+.nav__brand-mark { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 26px; height: 26px; border-radius: 8px; background: var(--ink); color: var(--ink-fg); }
 .nav__primary { display: flex; gap: 2px; }
 .nav__item { position: relative; border: 0; background: transparent; color: var(--text-3); font: inherit; font-size: 13px; padding: 6px 12px; border-radius: 7px; cursor: pointer; transition: color .14s ease, background .14s ease; }
 .nav__item:hover { color: var(--text); }
 .nav__item--active { background: var(--green-t); color: var(--green); font-weight: 700; }
 .nav__badge { display: inline-block; margin-left: 6px; min-width: 17px; padding: 0 5px; height: 17px; line-height: 17px; text-align: center; font-size: 10.5px; font-weight: 700; font-family: var(--mono); color: var(--red-d); background: var(--red-t); border-radius: 9px; }
 .nav__group { position: relative; }
-.nav__dropdown { position: absolute; top: calc(100% + 4px); left: 0; display: flex; flex-direction: column; min-width: 150px; padding: 4px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-sm); box-shadow: 0 6px 16px rgba(10,22,14,.14); z-index: 20; }
+.nav__dropdown { position: absolute; top: calc(100% + 4px); left: 0; display: flex; flex-direction: column; min-width: 190px; padding: 4px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-sm); box-shadow: 0 6px 16px rgba(10,22,14,.14); z-index: 20; }
 .nav__dropdown-item { border: 0; background: transparent; color: var(--text-3); font: inherit; font-size: 13px; text-align: left; padding: 6px 10px; border-radius: 6px; cursor: pointer; }
 .nav__dropdown-item:hover { color: var(--text); background: var(--fill); }
 .nav__dropdown-item--active { background: var(--green-t); color: var(--green); font-weight: 700; }
+.nav__dropdown-dia { color: var(--text-3); }
+.nav__dropdown-count { margin-left: 6px; font-family: var(--mono); font-weight: 700; color: var(--accent-d); }
+/* 项目项 + 「注销…」入口同一行（评审 P2-13）：注销钮常态透明，行 hover/自身 focus 才现身。 */
+.nav__dropdown-row { display: flex; align-items: stretch; }
+.nav__dropdown-row .nav__dropdown-item { flex: 1; }
+.nav__dropdown-unreg { flex: none; border: 0; background: transparent; color: var(--text-3); font: inherit; font-size: 11px; padding: 6px 8px; margin: 0 2px; border-radius: 6px; cursor: pointer; opacity: 0; transition: opacity .14s ease, color .14s ease, background .14s ease; }
+.nav__dropdown-row:hover .nav__dropdown-unreg,
+.nav__dropdown-unreg:focus-visible { opacity: 1; }
+.nav__dropdown-unreg:hover { color: var(--red-d); background: var(--red-t); }
 .nav__project { position: relative; }
 .nav__project-btn { border: 1px solid var(--border); background: transparent; color: var(--text-2); font: inherit; font-size: 12.5px; font-family: var(--mono); padding: 4px 10px; border-radius: 7px; cursor: pointer; transition: border-color .14s ease; }
 .nav__project-btn:hover { border-color: var(--text-3); }
@@ -94,8 +104,16 @@ body { margin: 0; }
 .nav__tools { margin-left: auto; display: flex; align-items: center; gap: 10px; }
 .nav__tool { border: 1px solid var(--border); background: transparent; color: var(--text-2); border-radius: 7px; padding: 4px 9px; cursor: pointer; font: inherit; font-size: 12.5px; transition: border-color .14s ease, color .14s ease; }
 .nav__tool:hover { border-color: var(--text-3); color: var(--text); }
+.nav__tool--icon { width: 30px; height: 30px; padding: 0; display: inline-flex; align-items: center; justify-content: center; font-size: 14px; background: var(--card); box-shadow: var(--shadow); border-radius: var(--radius-sm); }
+.nav__tool--icon:hover { background: var(--fill); border-color: var(--border); color: var(--text); }
 .nav__conn { color: var(--text-3); font-size: 10px; }
 .nav__conn--on { color: var(--green); }
+
+/* ── 断线横幅（App 层，视图无关；评审 P2-13）── */
+.offline-banner { display: flex; align-items: center; gap: 10px; padding: 8px 20px; background: var(--red-t); color: var(--red-d); font-size: 12.5px; font-weight: 600; border-bottom: 1px solid var(--red-b); }
+.offline-banner__msg { flex: 1; }
+.offline-banner__btn { border: 1px solid var(--red-b); background: transparent; color: var(--red-d); border-radius: 7px; padding: 4px 11px; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; transition: background .14s ease; }
+.offline-banner__btn:hover { background: var(--red-t); }
 
 /* ── 视图头 / 提示 ── */
 .view__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
