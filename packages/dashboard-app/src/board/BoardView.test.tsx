@@ -292,3 +292,45 @@ describe('BoardView busy 守卫（评审修复：迁移到共享 Dialog 后 Esc/
     expect(props.onToast).toHaveBeenCalled()
   })
 })
+
+describe('BoardView 卡片点开详情（评审 P0-2：ARIA 谎言复活为真行为，Task 9）', () => {
+  it('点卡 → detail 卡打开，内容与该卡对应', () => {
+    renderBoard()
+    expect(screen.queryByTestId('change-detail')).toBeNull()
+    fireEvent.click(screen.getByTestId('board-card-c1'))
+    const detail = screen.getByTestId('change-detail')
+    expect(within(detail).getByText('c1')).toBeInTheDocument()
+  })
+
+  it('聚焦卡后按 Enter → 与 click 同效，打开 detail', () => {
+    renderBoard()
+    const card = screen.getByTestId('board-card-c1')
+    card.focus()
+    fireEvent.keyDown(card, { key: 'Enter' })
+    expect(screen.getByTestId('change-detail')).toBeInTheDocument()
+  })
+
+  it('detail 打开时按 Esc → 关闭', () => {
+    renderBoard()
+    fireEvent.click(screen.getByTestId('board-card-c1'))
+    expect(screen.getByTestId('change-detail')).toBeInTheDocument()
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.queryByTestId('change-detail')).toBeNull()
+  })
+
+  it('detail 卡放行按钮走 onTransition（Task 7 组件真行为，非假动作条）', async () => {
+    const props = renderBoard()
+    fireEvent.click(screen.getByTestId('board-card-c1'))
+    fireEvent.click(screen.getByTestId('detail-approve'))
+    await waitFor(() => expect(props.onTransition).toHaveBeenCalledWith('c1', '/repo', 'build-complete'))
+  })
+
+  it('拖拽起手（dragstart）后紧随的 click 不打开 detail（防拖拽误触，非新增交互）', () => {
+    renderBoard()
+    const card = screen.getByTestId('board-card-c1')
+    const dt = makeDataTransfer()
+    fireEvent.dragStart(card, { dataTransfer: dt })
+    fireEvent.click(card)
+    expect(screen.queryByTestId('change-detail')).toBeNull()
+  })
+})

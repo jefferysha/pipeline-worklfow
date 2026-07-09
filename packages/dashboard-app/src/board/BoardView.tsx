@@ -1,8 +1,9 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useT } from '../i18n'
 import type { ChangeSnapshot, Snapshot } from '../types'
 import type { WorkflowRules } from '../model/workflowModel'
 import { changeWorkflow } from '../inbox/inbox'
+import { ChangeDetailCard } from '../inbox/ChangeDetailCard'
 import { shortTime } from '../model/time'
 import { Dialog } from '../shell/Dialog'
 import { foldOpen, stampConfirm } from '../workflow/motion'
@@ -50,6 +51,30 @@ function collapseKey(root: string, wf: string): string {
   return `board.collapsed.${root}.${wf}`
 }
 
+interface DetailTarget {
+  root: string
+  name: string
+}
+
+interface DetailEntry {
+  change: ChangeSnapshot
+  rules: WorkflowRules | undefined
+}
+
+/**
+ * detail 状态只存 {root,name}（Task 9 brief 契约），渲染时经本函数反查所属组拿到 change 与
+ * 该组已经算好的 rules——brief 交接注意事项：BoardView 的 rulesByWf 是按裸 wf 名键的旧 Map
+ * （非 rulesKey(root,wf) 格式），detail 卡的 rules 不查它，直接用同组卡片共享的 group.rules。
+ */
+function findDetailEntry(groups: readonly WfGroup[], target: DetailTarget | null): DetailEntry | undefined {
+  if (!target) return undefined
+  for (const g of groups) {
+    const change = g.cards.find((c) => c.name === target.name)
+    if (change) return { change, rules: g.rules }
+  }
+  return undefined
+}
+
 /**
  * 看板 Kanban —— G17 根治版（spec §2.2 分组看板）：按 change 实际所属 workflow 分组，
  * 每组渲染它自己的列集与转换图；default 组行为与旧七列看板一致。卡片 hover 快捷转换
@@ -66,6 +91,27 @@ export function BoardView({ snapshot, loading, error, currentRoot, rulesByWf, ru
   const [stamped, setStamped] = useState<{ name: string; to: string } | null>(null)
   /** 刚被用户展开的组名——body 挂载时播 foldOpen（首屏挂载不播）。 */
   const expandingRef = useRef<string | null>(null)
+  /** 详情卡开关（评审 P0-2 死卡片复活，Task 9）：只存 {root,name}，渲染时经 findDetailEntry
+   *  反查 change/rules。「置 detail」不是 toggle（brief 原话，故意区别于 InboxView 的
+   *  toggleRow）——点已打开的卡或换点别的卡都是直接覆盖，不是开关切换。 */
+  const [detail, setDetail] = useState<DetailTarget | null>(null)
+  /** dragstart→dragend 期间为 true：原生拖拽手势结束后浏览器通常不会再派发 click，但为防御
+   *  "拖拽落点后紧跟一次 click"（含测试环境显式派发的场景），click handler 据此旁路，不误当
+   *  成"点开详情"（brief Step 1 明确要求的第 5 条测试）。 */
+  const draggingRef = useRef(false)
+
+  // Esc 关 detail（评审 P0-2 键盘契约的一部分）。让位打开中的 Dialog（board 自己的回退确认框，
+  // 或 detail 卡自己的回退确认框）——同 InboxView.tsx 的既有写法：document 上还有
+  // [role="dialog"] 时整体不处理，避免"关掉确认框的同一次 Esc 顺带把详情卡也关了"的双重反应。
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent): void {
+      if (e.key !== 'Escape') return
+      if (document.querySelector('[role="dialog"]')) return
+      setDetail(null)
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [])
 
   const groups = useMemo<WfGroup[]>(() => {
     const project = snapshot?.projects.find((p) => p.ok && p.root === currentRoot)
@@ -81,6 +127,7 @@ export function BoardView({ snapshot, loading, error, currentRoot, rulesByWf, ru
   }, [snapshot, currentRoot, rulesByWf, rulesErrors])
 
   const totalCards = groups.reduce((n, g) => n + g.cards.length, 0)
+  const detailEntry = findDetailEntry(groups, detail)
 
   function isCollapsed(wf: string): boolean {
     void collapseTick
@@ -268,10 +315,25 @@ export function BoardView({ snapshot, loading, error, currentRoot, rulesByWf, ru
                                     aria-label={`change ${change.name}`}
                                     data-testid={`board-card-${change.name}`}
                                     draggable
+                                    onClick={() => {
+                                      if (draggingRef.current) return // 拖拽落点触发的 click 旁路，见 draggingRef 声明处注释
+                                      setDetail({ root: currentRoot, name: change.name })
+                                    }}
+                                    onKeyDown={(e) => {
+                                      // 评审 P0-2：role="button" tabIndex={0} 此前 click/Enter/Space 三路无反应——接上真行为。
+                                      if (e.key === 'Enter' || e.key === ' ') {
+                                        e.preventDefault() // 阻止 Space 的原生页面滚动，呼应 role="button" 的键盘契约
+                                        setDetail({ root: currentRoot, name: change.name })
+                                      }
+                                    }}
                                     onDragStart={(e) => {
+                                      draggingRef.current = true
                                       const payload: DragPayload = { name: change.name, root: currentRoot, phase: change.phase, workflow: group.wf }
                                       e.dataTransfer.setData('application/json', JSON.stringify(payload))
                                       e.dataTransfer.effectAllowed = 'move'
+                                    }}
+                                    onDragEnd={() => {
+                                      draggingRef.current = false
                                     }}
                                   >
                                     {stamped?.name === change.name && (
@@ -307,7 +369,12 @@ export function BoardView({ snapshot, loading, error, currentRoot, rulesByWf, ru
                                               className={planned.backward ? 'qk__btn qk__btn--back' : 'qk__btn'}
                                               data-testid={`board-quick-${change.name}-${planned.event}`}
                                               disabled={busy}
-                                              onClick={() => requestTransition(change.name, currentRoot, planned)}
+                                              onClick={(e) => {
+                                                // 卡片新增 onClick 开详情后，快捷钮点击不该冒泡触发同一次 click 顺带打开详情
+                                                // （同 InboxView.tsx 行内快捷钮的既有 stopPropagation 先例）。
+                                                e.stopPropagation()
+                                                requestTransition(change.name, currentRoot, planned)
+                                              }}
                                             >
                                               {planned.backward ? `↩ ${to}` : `→ ${to}`}
                                             </button>
@@ -344,6 +411,18 @@ export function BoardView({ snapshot, loading, error, currentRoot, rulesByWf, ru
           </section>
         )
       })}
+
+      {detail && detailEntry && (
+        <ChangeDetailCard
+          root={detail.root}
+          change={detailEntry.change}
+          rules={detailEntry.rules}
+          onTransition={onTransition}
+          onClose={() => setDetail(null)}
+          onToast={onToast}
+          onError={onError}
+        />
+      )}
 
       {pending && (
         <Dialog
