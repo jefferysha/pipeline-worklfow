@@ -337,4 +337,17 @@ iteration-35）**：
   两测试环境）全部合规，规则零误杀。writeWorkflowForApi/loadWorkflow 都以 validateWorkflow
   为闸，一处加规则双向（写入/读取）闭合。
 
+### 2026-07-09 · G19① 升级收编 + G20 新登记（同日后续会话）
+
+- **G19① 已闭**：`POST /api/changes` 落盘成功后写 history 记账（`kind=init` 单行 JSONL，
+  形状对齐 `cli/commands/init.ts`）；best-effort 语义同 CONTRACT §1——失败仅 WARN 到 stderr
+  （server 全源无 console，这是首个 best-effort 写操作，通道选择已注释在端点内），绝不影响
+  主写已成功的 200。红绿：先加「history 文件存在且单行 kind=init」用例见 ENOENT 红，再接线绿。
+- **G20（G19① 实施中发现，同类未登记缺口，如实追加）**：`server/src/transition.ts::
+  performTransition` 完全不写 history——CLI `pipeline transition` 有 `kind=transition` 记账，
+  dashboard 驱动的相位推进（含 iteration-38 新增的自定义 workflow 双轨）在 history 里不留
+  痕迹。change 的历史账本因此**按操作入口分裂**：同一个 change 的推进，CLI 走的有账、
+  dashboard 走的无账。修法与 G19① 同模式（transition 成功后 best-effort append），
+  未动手——待用户勾选。
+
 > 缺口在对应里程碑收编时清零；新缺口发现即追加，绝不删除未解决项。

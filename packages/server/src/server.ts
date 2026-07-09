@@ -23,7 +23,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { AddressInfo } from 'node:net'
 import { dirname, join, resolve as resolvePath } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { applyLevelChange, createFlowEngine, createStateStore, loadManifest, loadRegistry, loadWorkflow, TRACKS } from '@pipeline-lite/kernel'
+import { applyLevelChange, createFlowEngine, createHistoryWriter, createStateStore, loadManifest, loadRegistry, loadWorkflow, TRACKS } from '@pipeline-lite/kernel'
 import type { FlowEngine, GraduationFs, StateStore, Track, WorkflowDef } from '@pipeline-lite/kernel'
 import { buildAfkLog, buildAfkSnapshot, cancelAfkRun, enqueueAfkRun, readAfkRunLog, retryAfkRun } from './afk.js'
 import { buildLoopsSnapshot } from './loops.js'
@@ -111,6 +111,7 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
   const paths = resolveServerPaths({ home: options.home })
   const registry: () => string[] = options.registry ?? (() => readRegistry(paths.registryPath))
   const store: StateStore = options.store ?? createStateStore()
+  const history = createHistoryWriter()
   const flow: FlowEngine = options.flow
     ?? (options.manifestPath
       ? createFlowEngine(loadManifest(options.manifestPath))
@@ -476,9 +477,9 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
     // ── G18：POST /api/changes —— pipeline init 的 HTTP 化 ──
     //    校验序全部先于任何落盘（同 cli/commands/init.ts 的"先校验后写"纪律）：body 形状 →
     //    root 信任锚（本端点要求已注册）→ name 字符集 → track 枚举 → workflow 真加载校验。
-    //    preset 固定 'full'（dashboard 语境无 preset 选择需求，YAGNI）；history 记账是 CLI 侧
-    //    best-effort 职责（deps.history 注入），server 端点不写 history——已知差异，登记于
-    //    TEST-REALITY（阶段 7 文档任务）。
+    //    preset 固定 'full'（dashboard 语境无 preset 选择需求，YAGNI）；history 记账对齐
+    //    cli/commands/init.ts（G19① 升级收编）：kind=init 单行，best-effort——失败仅 WARN，
+    //    绝不影响主写已成功的 200。
     if (path === '/api/changes') {
       const rawBody = await readJsonBody(req)
       if (typeof rawBody !== 'object' || rawBody === null) {
@@ -523,6 +524,13 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
       }
       if (customStart) {
         await store.setMany(created, { workflow: customStart.workflow, phase: customStart.phase })
+      }
+      // best-effort（CONTRACT §1 语义同 CLI recordHistory）：server 全源无 console，WARN 走
+      // stderr——daemon 日志可见且不污染任何 HTTP 响应。
+      try {
+        await history.append(created, { ts: clock(), kind: 'init' })
+      } catch (e) {
+        process.stderr.write(`WARN: history 写入失败: ${errMsg(e)}\n`)
       }
       return sendJson(res, 200, { ok: true, name, path: created })
     }

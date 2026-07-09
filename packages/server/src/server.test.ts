@@ -1248,6 +1248,19 @@ describe('POST /api/changes —— pipeline init 的 HTTP 化（G18）', () => {
     expect(JSON.stringify(snap.json())).toContain('demo-a')
   })
 
+  it('G19①：200 后真写 history 记账（kind=init 单行 JSONL，对齐 cli init 的 best-effort 记账）', async () => {
+    const h = await startWithHome()
+    const proj = await withRegisteredProject(h)
+    const r = await reqPost(h.port, '/api/changes', { root: proj, name: 'hist-a' }, { headers: { Authorization: `Bearer ${h.token}` } })
+    expect(r.status).toBe(200)
+    const { readFile } = await import('node:fs/promises')
+    const raw = await readFile(join(proj, 'openspec', 'changes', 'hist-a', '.pipeline-history.jsonl'), 'utf8')
+    const lines = raw.trim().split('\n').map((l) => JSON.parse(l) as { kind: string; ts: string })
+    expect(lines).toHaveLength(1)
+    expect(lines[0]!.kind).toBe('init')
+    expect(typeof lines[0]!.ts).toBe('string')
+  })
+
   it('200 显式 track=frontend', async () => {
     const h = await startWithHome()
     const proj = await withRegisteredProject(h)
