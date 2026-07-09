@@ -62,8 +62,13 @@ export const zh: Dict = {
     why_gate_allpass: '三轨全过，等你最终放行',
     artifacts_heading: '产物',
     context_heading: '语境',
-    approve: '放行',
-    reject: '打回',
+    // 评审 Important-2 修复：动作条按相位感知文案（review 门缀"· 放行"/"· 打回"，其余通用
+    // "→ {to}"/"↩ {to}"）——取代旧的固定 approve/reject 两键（已在 ChangeDetailCard.tsx 里
+    // 无引用，见 evidence 修复轮报告）。
+    approve_to: '→ {to} · 放行',
+    reject_to: '↩ {to} · 打回',
+    forward_to: '→ {to}',
+    backward_to: '↩ {to}',
     copied: '已复制：{value}',
     copy_field: '拷贝 {field}',
   },
@@ -289,8 +294,10 @@ export const en: Dict = {
     why_gate_allpass: 'All three checks passed — ready for your final approval',
     artifacts_heading: 'Artifacts',
     context_heading: 'Context',
-    approve: 'Approve',
-    reject: 'Send back',
+    approve_to: '→ {to} · Approve',
+    reject_to: '↩ {to} · Send back',
+    forward_to: '→ {to}',
+    backward_to: '↩ {to}',
     copied: 'Copied: {value}',
     copy_field: 'Copy {field}',
   },

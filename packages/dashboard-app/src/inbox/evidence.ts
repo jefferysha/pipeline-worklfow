@@ -15,8 +15,15 @@ export interface EvidenceChip {
   copyable?: boolean // 路径/sha 类
 }
 
-/** verify 门三轨状态字段（顺序即 chip 出现顺序）。 */
-const VERIFY_STATUS_FIELDS = ['verify_result', 'agent_review_result', 'codex_review_result'] as const
+/**
+ * verify 门三轨状态字段（顺序即 chip 出现顺序）。评审修复轮导出：ChangeDetailCard 的 whyText
+ * 未过项判据直接消费这份白名单（key ∈ 三轨字段 且 tone !== 'pass'），不再借用 chip.copyable
+ * 缺省当"是不是三轨字段"的替身信号——那个替身信号在 verification_report/build_sha 未设时
+ * 同样会落在 unsetPlaceholder()（无 copyable、tone pending），会被误判成"未过项"混进三轨
+ * 列表（如「build_sha 未过」的假警报，评审 Important-1），而这两个字段根本不属于三轨判定，
+ * 产物没产出不等于验证没过。
+ */
+export const VERIFY_STATUS_FIELDS = ['verify_result', 'agent_review_result', 'codex_review_result'] as const
 
 /** 自定义 workflow / 相位不在映射表时兜底展示的路径型字段（顺序即 chip 出现顺序）。 */
 const PATH_FIELDS = ['design_doc', 'plan', 'verification_report', 'pr_url'] as const
@@ -51,6 +58,24 @@ function unsetPlaceholder(key: string): EvidenceChip {
 }
 
 /**
+ * 产物正门（评审 Important-1 + Minor-3 同根修复导出）——返回全部非空路径型字段
+ * （design_doc/plan/verification_report/pr_url）的 chip，统一 neutral + copyable。
+ * gateEvidence 的"自定义 workflow / rules 缺失 / 相位不在映射表"兜底分支就是本函数本身
+ * （内部共享实现，不是各自维护一份"遍历 PATH_FIELDS 挑非空"的重复逻辑）。ChangeDetailCard
+ * 的「产物」区改从这里直接拿候选集，不再靠"传 gateEvidence(c, undefined) 强制走兜底分支"
+ * 这种隐式技巧反推同一份结果——那个技巧的副作用是连带把 whyText 的"未过项"判据也带偏了
+ * （见 VERIFY_STATUS_FIELDS 的文档注释）。
+ */
+export function artifactChips(c: ChangeSnapshot): EvidenceChip[] {
+  const chips: EvidenceChip[] = []
+  for (const key of PATH_FIELDS) {
+    const chip = pathChip(c, key)
+    if (chip) chips.push(chip)
+  }
+  return chips
+}
+
+/**
  * 按 change 当前 gate 相位返回应展示的证据 chips。
  * 分支判据（评审收紧后）：rules === DEFAULT_RULES（严格引用相等）且 phase ∈ {verify, explore,
  * spec} 映射表内 → 按 phase 走对应的表驱动规则；其余情况（自定义 rules / rules 未提供
@@ -74,11 +99,6 @@ export function gateEvidence(c: ChangeSnapshot, rules: WorkflowRules | undefined
     return ['design_doc', 'plan'].map((key) => pathChip(c, key) ?? unsetPlaceholder(key))
   }
 
-  // 自定义 workflow / rules 缺失 / 相位不在映射表：全部路径型字段里非空的才出 chip，空的直接剔除。
-  const chips: EvidenceChip[] = []
-  for (const key of PATH_FIELDS) {
-    const chip = pathChip(c, key)
-    if (chip) chips.push(chip)
-  }
-  return chips
+  // 自定义 workflow / rules 缺失 / 相位不在映射表：兜底就是「产物正门」本身——见 artifactChips。
+  return artifactChips(c)
 }

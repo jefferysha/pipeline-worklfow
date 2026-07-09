@@ -198,7 +198,7 @@ button.ev__chip--neutral:hover { border-color: var(--border-2); color: var(--tex
 .detail__field--pending .detail__field-value { color: var(--text-3); font-weight: 400; }
 .detail__copy { flex: none; margin-left: auto; border: 0; background: transparent; color: var(--text-3); cursor: pointer; display: inline-flex; padding: 3px; border-radius: 5px; }
 .detail__copy:hover { color: var(--text); background: var(--card); }
-.detail__foot { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 13px 0; }
+.detail__foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; padding: 13px 0; }
 
 /* ── 看板：分组（--ink 铭牌）+ 列井 ── */
 .board__group { margin-bottom: 22px; }

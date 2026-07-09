@@ -237,27 +237,31 @@ export function InboxView({ snapshot, loading, error, currentRoot, rulesByWf, on
               <span className="badge badge--gate">{t('inbox.badge_waiting')}</span>
               <span className="ticket-row__time">{rootToName.get(root) ?? root}{change.updated_at ? ` · ${shortTime(change.updated_at)}` : ''}</span>
               <span className="ticket-row__spacer" />
-              <span className="qk">
-                {targets.map((to) => {
-                  const planned = rules ? plannedTransition(rules, change.phase, to) : null
-                  if (!planned) return null
-                  return (
-                    <button
-                      key={planned.event}
-                      type="button"
-                      className={planned.backward ? 'qk__btn qk__btn--back' : 'qk__btn'}
-                      data-testid={`inbox-quick-${planned.event}`}
-                      disabled={busy}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        onQuick(change.name, root, planned)
-                      }}
-                    >
-                      {planned.backward ? `↩ ${to}` : `→ ${to}`}
-                    </button>
-                  )
-                })}
-              </span>
+              {/* 评审 Minor-5 修复：卡打开时该行快捷钮组隐藏——详情卡动作条是唯一动作面，
+                  避免同一条转换在行内快捷钮与详情卡两处都能触发（双提交风险）。 */}
+              {!isSelected && (
+                <span className="qk">
+                  {targets.map((to) => {
+                    const planned = rules ? plannedTransition(rules, change.phase, to) : null
+                    if (!planned) return null
+                    return (
+                      <button
+                        key={planned.event}
+                        type="button"
+                        className={planned.backward ? 'qk__btn qk__btn--back' : 'qk__btn'}
+                        data-testid={`inbox-quick-${planned.event}`}
+                        disabled={busy}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          onQuick(change.name, root, planned)
+                        }}
+                      >
+                        {planned.backward ? `↩ ${to}` : `→ ${to}`}
+                      </button>
+                    )
+                  })}
+                </span>
+              )}
               {evidence.length > 0 && (
                 <div className="ev" onClick={(e) => e.stopPropagation()}>
                   {evidence.map((chip) => renderEvidenceChip(chip, copyEvidence))}

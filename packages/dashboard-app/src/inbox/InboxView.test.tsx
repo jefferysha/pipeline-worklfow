@@ -224,3 +224,31 @@ describe('InboxView 详情卡点开 + 证据 chips + j/k 键盘（Task 7，评�
     expect(screen.queryByTestId('change-detail')).toBeNull()
   })
 })
+
+/**
+ * 行内快捷钮 vs 详情卡动作条（评审 Minor-5 修复）—— 卡打开后该行的 `.qk` 快捷钮组与详情卡
+ * 底部动作条会同时存在，同一条转换在两处都能触发，构成双提交风险（例如误触行内快捷钮时
+ * 详情卡还开着，两处状态可能不同步）。修复后：详情卡是该行唯一的动作面，`.qk` 打开时隐藏、
+ * 关闭后恢复。
+ */
+describe('InboxView 行内快捷钮 vs 详情卡动作条（评审 Minor-5：卡打开时行内快捷钮组隐藏，动作面唯一）', () => {
+  const snap = makeSnapshot([
+    makeProject('/repo', [makeChange('login-flow', 'verify', { track: 'frontend', updated_at: '2026-07-08T00:00:00Z' })]),
+  ])
+
+  it('点开行 → 该行 inbox-quick-* 从 DOM 消失；关卡后恢复', () => {
+    renderInbox({ snapshot: snap })
+    expect(screen.getByTestId('inbox-quick-verify-pass')).toBeInTheDocument()
+    expect(screen.getByTestId('inbox-quick-verify-fail')).toBeInTheDocument()
+
+    fireEvent.click(screen.getAllByTestId('inbox-card')[0]!)
+    expect(screen.getByTestId('change-detail')).toBeInTheDocument()
+    expect(screen.queryByTestId('inbox-quick-verify-pass')).toBeNull()
+    expect(screen.queryByTestId('inbox-quick-verify-fail')).toBeNull()
+
+    fireEvent.click(screen.getAllByTestId('inbox-card')[0]!)
+    expect(screen.queryByTestId('change-detail')).toBeNull()
+    expect(screen.getByTestId('inbox-quick-verify-pass')).toBeInTheDocument()
+    expect(screen.getByTestId('inbox-quick-verify-fail')).toBeInTheDocument()
+  })
+})

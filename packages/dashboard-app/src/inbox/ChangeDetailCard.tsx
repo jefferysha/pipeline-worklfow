@@ -6,15 +6,18 @@ import { legalTargets, plannedTransition, type PlannedTransition } from '../boar
 import { shortTime } from '../model/time'
 import { Dialog } from '../shell/Dialog'
 import { Icon, type IconName } from '../shell/Icon'
-import { gateEvidence, type EvidenceChip } from './evidence'
+import { artifactChips, gateEvidence, VERIFY_STATUS_FIELDS, type EvidenceChip } from './evidence'
 import { decisionKind } from './inbox'
 
 /**
  * ChangeDetailCard（评审 P0-1 核心交付件，Task 7）—— 收件箱行点开后的详情卡：
  * 头（名字/相位/等你复核徽章/关闭）→「为什么在等你」一句话 + 证据格（gateEvidence 复用）
- * → 产物（非空路径字段+拷贝钮）→ 语境（workflow/track/preset/automation/created→updated）
- * → 底部动作条（放行/打回）。视觉基准 design-demos/v4-openai-trellis.html 的「change 详情」
- * 卡段（信息架构照抄，历史区除外——spec §5 登记：待 history 读端点，本轮不做）。
+ * → 产物（非空路径字段+拷贝钮，evidence.ts 导出的 artifactChips 正门）→ 语境
+ * （workflow/track/preset/automation/created→updated）→ 底部动作条（legalTargets+
+ * plannedTransition 逐出边渲染全部前进/回退边，评审 Important-2 修复；review 门文案带
+ * "· 放行"/"· 打回"，其余相位通用"→ {to}"/"↩ {to}"）。视觉基准
+ * design-demos/v4-openai-trellis.html 的「change 详情」卡段（信息架构照抄，历史区除外
+ * ——spec §5 登记：待 history 读端点，本轮不做）。
  *
  * Props 故意不含任何 InboxView 私有状态（无 pending/busy 之类的回调）——Task 9 看板要逐字
  * 复用同一组件，接口必须对"谁在渲染我"零假设。回退边二次确认因此是组件自己的本地
@@ -94,21 +97,24 @@ export function ChangeDetailCard({ root, change, rules, onTransition, onClose, o
 
   const kind = decisionKind(change)
   const evidenceChips = gateEvidence(change, rules)
-  // 产物：故意传 rules=undefined——gateEvidence 的判据 `rules === DEFAULT_RULES && phase 在表内`
-  // 恒为 false，必定命中兜底分支（全部非空 PATH_FIELDS：design_doc/plan/verification_report/
-  // pr_url），不需要 evidence.ts 额外导出私有字段表。与「证据格」去重：verify 门已在证据格
-  // 展示过 verification_report/build_sha 时不在产物区重复出现（对齐视觉基准 demo 的信息架构——
-  // 产物区只展示证据区没覆盖到的路径字段）。
+  // 产物（评审 Important-1 + Minor-3 修复）：改走 evidence.ts 导出的语义化正门 artifactChips()——
+  // 不再靠"故意传 rules=undefined 强制 gateEvidence 走兜底分支"这个隐式技巧倒推同一份候选集。
+  // 与「证据格」去重逻辑不变：verify 门已在证据格展示过 verification_report/build_sha 时不在
+  // 产物区重复出现（对齐视觉基准 demo 的信息架构——产物区只展示证据区没覆盖到的路径字段）。
   const evidenceKeys = new Set(evidenceChips.map((c) => c.key))
-  const artifactChips = gateEvidence(change, undefined).filter((c) => !evidenceKeys.has(c.key))
+  const artifacts = artifactChips(change).filter((c) => !evidenceKeys.has(c.key))
 
   const whyText =
     kind === 'verify'
       ? (() => {
-          // 三轨状态字段在 gateEvidence 里恒定 copyable 缺省（只有 verification_report/build_sha
-          // 路径型字段才 copyable:true）——用这个信号取"未过项"，不需要 evidence.ts 额外导出
-          // VERIFY_STATUS_FIELDS 私有常量。
-          const failed = evidenceChips.filter((c) => !c.copyable && c.tone !== 'pass')
+          // 评审 Important-1 修复：未过项判据改用 evidence.ts 导出的 VERIFY_STATUS_FIELDS 白名单
+          // （key ∈ 三轨字段名 且 tone !== 'pass'），不再用 `!c.copyable` 当替身信号——旧判据的
+          // 漏洞是 verification_report/build_sha 未设时同样落在 unsetPlaceholder()（无 copyable、
+          // tone pending），会被误判成"未过项"混进三轨列表（如「build_sha 未过」的假警报），
+          // 而这两个字段根本不是三轨判定字段，产物没产出不等于验证没过。
+          const failed = evidenceChips.filter(
+            (c) => (VERIFY_STATUS_FIELDS as readonly string[]).includes(c.key) && c.tone !== 'pass',
+          )
           return failed.length === 0
             ? t('detail.why_gate_allpass')
             : t('detail.why_gate', { names: failed.map((c) => c.key.replace(/_result$/, '')).join('、') })
@@ -119,11 +125,17 @@ export function ChangeDetailCard({ root, change, rules, onTransition, onClose, o
   const planned = targets
     .map((to) => (rules ? plannedTransition(rules, change.phase, to) : null))
     .filter((p): p is PlannedTransition => p !== null)
-  // 出边按钮只取"第一个前进边"+"第一个回退边"（review-gate 语义上是二元决策：放行或打回）；
-  // default workflow 的 verify/explore/spec 门恒好落在这个形状（至多 1 进 + 1 退），自定义
-  // workflow 若声明了 2+ 条同向出边，本卡只呈现第一条——已知简化，见任务报告"担忧"一节。
-  const forward = planned.find((p) => !p.backward)
-  const backward = planned.find((p) => p.backward)
+  // 评审 Important-2 修复：全部出边逐条渲染（不再只取"第一个前进边"+"第一个回退边"）——
+  // 自定义 workflow 若声明了 2+ 条同向出边，此前只有第一条可达，其余边彻底不可点（Task 7
+  // 报告"担忧"一节已明确标记的已知缺口），本轮补齐。第一条前进/回退边仍挂既有
+  // detail-approve/detail-reject testid（向后兼容既有测试与 Task 9 看板复用契约），额外的边
+  // 用 detail-forward-{event}/detail-backward-{event}。
+  const forwardEdges = planned.filter((p) => !p.backward)
+  const backwardEdges = planned.filter((p) => p.backward)
+  // 文案相位感知：只有 review 门（放行/打回二元决策语义）才缀"· 放行"/"· 打回"；confirm 门
+  // 或非 gate 相位一律用通用的"→ {to}"/"↩ {to}"——review 是唯一带"审批"语义的 gate 类型
+  // （见 workflowModel.ts WorkflowRules.gateByStep 的三态定义）。
+  const isGatePhase = rules?.gateByStep[change.phase] === 'review'
 
   async function apply(p: PlannedTransition): Promise<void> {
     setBusy(true)
@@ -186,14 +198,14 @@ export function ChangeDetailCard({ root, change, rules, onTransition, onClose, o
         )}
       </div>
 
-      {artifactChips.length > 0 && (
+      {artifacts.length > 0 && (
         <div className="detail__sec">
           <div className="detail__sec-h">
             <Icon name="folder" size={13} />
             <b>{t('detail.artifacts_heading')}</b>
           </div>
           <div className="detail__grid">
-            {artifactChips.map((chip) => (
+            {artifacts.map((chip) => (
               <FieldBox
                 key={chip.key}
                 fieldKey={chip.key}
@@ -223,28 +235,30 @@ export function ChangeDetailCard({ root, change, rules, onTransition, onClose, o
       </div>
 
       <div className="detail__foot">
-        {backward && (
+        {backwardEdges.map((p, i) => (
           <button
+            key={p.event}
             type="button"
             className="btn btn--verm-ghost"
-            data-testid="detail-reject"
+            data-testid={i === 0 ? 'detail-reject' : `detail-backward-${p.event}`}
             disabled={busy}
-            onClick={() => setPending({ planned: backward })}
+            onClick={() => setPending({ planned: p })}
           >
-            ↩ {t('detail.reject')}
+            {isGatePhase ? t('detail.reject_to', { to: p.to }) : t('detail.backward_to', { to: p.to })}
           </button>
-        )}
-        {forward && (
+        ))}
+        {forwardEdges.map((p, i) => (
           <button
+            key={p.event}
             type="button"
             className="btn"
-            data-testid="detail-approve"
+            data-testid={i === 0 ? 'detail-approve' : `detail-forward-${p.event}`}
             disabled={busy}
-            onClick={() => void apply(forward)}
+            onClick={() => void apply(p)}
           >
-            → {t('detail.approve')}
+            {isGatePhase ? t('detail.approve_to', { to: p.to }) : t('detail.forward_to', { to: p.to })}
           </button>
-        )}
+        ))}
       </div>
 
       {pending && (
