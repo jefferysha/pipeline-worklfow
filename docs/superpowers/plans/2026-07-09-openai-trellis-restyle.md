@@ -106,7 +106,7 @@ export function Dialog(props: DialogProps): JSX.Element
 - Test: `packages/dashboard-app/src/shell/Nav.test.tsx`、`App.test.tsx`
 
 **Interfaces:**
-- Produces: `Nav` 新 props：`onRoot(root: string)` 语义扩展——`root === ''` 表示「全部项目」聚合语境（App 状态 `currentRoot: string`，空串=聚合，**这是全应用聚合语境的唯一表示**，后续任务都消费它）；`onUnregister?: (root: string) => void`；`connected: boolean` 已有，断线时 App 渲染 `data-testid="offline-banner"` 横幅（红 tint，含「重连」钮=调 `subscribeSnapshot` 重建 + 手动 `fetchSnapshot`）。
+- Produces: `Nav` 新 props：`onRoot(root: string)` 语义扩展——`root === ''` 表示「全部项目」聚合语境（App 状态 `currentRoot: string`，空串=聚合，**这是全应用聚合语境的唯一表示**，后续任务都消费它）；`onUnregister?: (root: string) => void`；`connected: boolean` 已有，断线时 App 渲染 `data-testid="offline-banner"` 横幅（红 tint，含「重连」钮——评审修正：重连必须下沉到 `state/useSnapshot.ts` 本体暴露 `reconnect()`（关旧 EventSource + 重建订阅 + 补一次 fetchSnapshot），App 层另开订阅会造成双连接且横幅不自愈）。
 - 意图迁移表：`nav__conn--on` 圆点保留；`common.offline` 文案「离线（轮询）」→「连接断开——数据可能过期」（zh/en 同步）。
 
 - [ ] **Step 1（红）:** Nav.test 新增：切换器下拉首项「◈ 全部项目」、点击后 `onRoot('')`；项目项 hover 区有「注销…」入口，点击弹 Dialog 确认后调 `onUnregister(root)`。App.test 新增：`connected=false` 时 offline-banner 出现、点「重连」发起一次 `GET /api/snapshot`。
