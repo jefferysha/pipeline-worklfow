@@ -47,6 +47,10 @@ export function StepDetailPanel({ step, onChange, onClose }: StepDetailPanelProp
   // 顶层抛出解析错误（同 WorkflowCanvas.tsx confirmConnect 的等价场景，见其注释）。字符集同
   // WorkflowCanvas.tsx confirmAddStep 已有的 step/skill id 校验一致（`^[a-zA-Z0-9_-]+$`）。
   const [fieldNameError, setFieldNameError] = useState<string | null>(null)
+  // guard 新增表单（补齐历史缺口：Step 2 时代只做了移除；i18n detail_guard_add 预留至今终于接线）
+  const [guardType, setGuardType] = useState<GuardConfig['type']>('tasks-at-least')
+  const [guardN, setGuardN] = useState('1')
+  const [guardNError, setGuardNError] = useState<string | null>(null)
   const rootRef = useRef<HTMLDivElement>(null)
   const addFieldDialogRef = useRef<HTMLDivElement>(null)
 
@@ -65,6 +69,21 @@ export function StepDetailPanel({ step, onChange, onClose }: StepDetailPanelProp
 
   function removeGuard(index: number): void {
     onChange({ ...step, guards: step.guards.filter((_, i) => i !== index) })
+  }
+
+  function confirmAddGuard(): void {
+    if (guardType === 'tasks-at-least') {
+      const n = Number(guardN)
+      if (!Number.isInteger(n) || n < 1) {
+        setGuardNError(t('workflow_editor.invalid_guard_n'))
+        return
+      }
+      setGuardNError(null)
+      onChange({ ...step, guards: [...step.guards, { type: 'tasks-at-least', n }] })
+      setGuardN('1')
+      return
+    }
+    onChange({ ...step, guards: [...step.guards, { type: 'nonempty-output' }] })
   }
 
   function removeField(kind: 'inputs' | 'outputs', index: number): void {
@@ -135,6 +154,39 @@ export function StepDetailPanel({ step, onChange, onClose }: StepDetailPanelProp
             </li>
           ))}
         </ul>
+        <div className="gd-form">
+          <select
+            className="select"
+            data-testid="guard-type"
+            aria-label={t('workflow_editor.detail_guards')}
+            value={guardType}
+            onChange={(e) => {
+              setGuardType(e.target.value as GuardConfig['type'])
+              setGuardNError(null)
+            }}
+          >
+            <option value="tasks-at-least">tasks-at-least</option>
+            <option value="nonempty-output">nonempty-output</option>
+          </select>
+          {guardType === 'tasks-at-least' && (
+            <input
+              className={guardNError ? 'input input--error gd-n' : 'input gd-n'}
+              data-testid="guard-n"
+              type="number"
+              min={1}
+              aria-label="n"
+              value={guardN}
+              onChange={(e) => {
+                setGuardN(e.target.value)
+                setGuardNError(null)
+              }}
+            />
+          )}
+          <button type="button" className="btn" data-testid="guard-add" onClick={confirmAddGuard}>
+            {t('workflow_editor.detail_guard_add')}
+          </button>
+        </div>
+        {guardNError && <p className="field__error" data-testid="guard-n-error">{guardNError}</p>}
       </div>
 
       {renderFieldList('inputs', t('workflow_editor.detail_inputs'))}

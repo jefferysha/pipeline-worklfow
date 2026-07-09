@@ -23,7 +23,8 @@ describe('StepDetailPanel', () => {
     renderPanel()
     expect(screen.getByDisplayValue('规格')).toBeInTheDocument()
     expect(screen.getByDisplayValue('review')).toBeInTheDocument()
-    expect(screen.getByText(/tasks-at-least/)).toBeInTheDocument()
+    // (n=3) 后缀把查询锚定在 guards 列表项上（新增的 guard 类型下拉里也有裸的 tasks-at-least option）
+    expect(screen.getByText(/tasks-at-least \(n=3\)/)).toBeInTheDocument()
     expect(screen.getByText('design_doc')).toBeInTheDocument()
   })
 
@@ -84,5 +85,35 @@ describe('StepDetailPanel', () => {
     const { onClose } = renderPanel()
     fireEvent.click(screen.getByRole('button', { name: '关闭' }))
     expect(onClose).toHaveBeenCalled()
+  })
+})
+
+describe('guard 新增表单（补齐历史缺口：此前只有移除没有新增）', () => {
+  it('默认类型 tasks-at-least 显示 n 输入；添加 n=5 → onChange 追加 guard', () => {
+    const { onChange } = renderPanel()
+    expect(screen.getByTestId('guard-type')).toBeInTheDocument()
+    fireEvent.change(screen.getByTestId('guard-n'), { target: { value: '5' } })
+    fireEvent.click(screen.getByTestId('guard-add'))
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({ guards: [{ type: 'tasks-at-least', n: 3 }, { type: 'tasks-at-least', n: 5 }] }),
+    )
+  })
+
+  it('非法 n（0 / 非整数）→ 行内错误 + 不触发 onChange', () => {
+    const { onChange } = renderPanel()
+    fireEvent.change(screen.getByTestId('guard-n'), { target: { value: '0' } })
+    fireEvent.click(screen.getByTestId('guard-add'))
+    expect(screen.getByTestId('guard-n-error')).toBeInTheDocument()
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('切到 nonempty-output → n 输入隐藏；添加 → 无参 guard 追加', () => {
+    const { onChange } = renderPanel()
+    fireEvent.change(screen.getByTestId('guard-type'), { target: { value: 'nonempty-output' } })
+    expect(screen.queryByTestId('guard-n')).toBeNull()
+    fireEvent.click(screen.getByTestId('guard-add'))
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({ guards: [{ type: 'tasks-at-least', n: 3 }, { type: 'nonempty-output' }] }),
+    )
   })
 })

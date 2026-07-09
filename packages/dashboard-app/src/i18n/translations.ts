@@ -199,6 +199,7 @@ export const zh: Dict = {
     detail_close: '关闭',
     gate_badge: '复核门',
     gate_badge_confirm: '确认门',
+    invalid_guard_n: 'n 须为 ≥1 的整数',
   },
 }
 
@@ -396,6 +397,7 @@ export const en: Dict = {
     detail_close: 'Close',
     gate_badge: 'review gate',
     gate_badge_confirm: 'confirm gate',
+    invalid_guard_n: 'n must be an integer ≥ 1',
   },
 }
 

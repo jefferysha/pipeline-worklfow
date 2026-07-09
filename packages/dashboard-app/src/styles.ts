@@ -21,9 +21,6 @@ export const GLOBAL_CSS = `
   --shadow: none; --shadow-dialog: 0 14px 40px rgba(10,22,14,.25);
   --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
   --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
-  /* 兼容别名（阶段 6 末删除）：尚未换装的组件在阶段间隙不裸奔 */
-  --accent: var(--green); --accent-soft: var(--green-soft);
-  --gate: var(--verm); --gate-soft: var(--verm-soft); --sunken: var(--well);
 }
 @media (prefers-color-scheme: dark) {
   :root {
