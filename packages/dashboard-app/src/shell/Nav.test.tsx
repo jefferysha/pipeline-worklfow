@@ -140,3 +140,40 @@ describe('Nav 交互 + 徽标', () => {
     expect(screen.queryByTestId('inbox-badge')).toBeNull()
   })
 })
+
+describe('Nav 项目切换器（D5：吃掉 G14）', () => {
+  const projects = [
+    { root: '/code/repo-a', name: 'repo-a', count: 3 },
+    { root: '/code/repo-b', name: 'repo-b', count: 1 },
+  ]
+
+  it('双项目：渲染下拉按钮（显示当前项目名），点开列出两项，点选回调 onRoot', () => {
+    const onRoot = vi.fn()
+    renderNav({ projects, currentRoot: '/code/repo-a', onRoot })
+    const btn = screen.getByTestId('project-switcher')
+    expect(btn.textContent).toContain('repo-a')
+    fireEvent.click(btn)
+    fireEvent.click(screen.getByTestId('project-item-repo-b'))
+    expect(onRoot).toHaveBeenCalledWith('/code/repo-b')
+  })
+
+  it('单项目：静态标签不可点，无下拉', () => {
+    renderNav({ projects: [projects[0]!], currentRoot: '/code/repo-a', onRoot: vi.fn() })
+    expect(screen.queryByTestId('project-switcher')).toBeNull()
+    expect(screen.getByTestId('project-label').textContent).toContain('repo-a')
+  })
+
+  it('注册入口：下拉末项触发 onRegisterProject；单项目时为独立 ＋ 按钮', () => {
+    const onRegisterProject = vi.fn()
+    renderNav({ projects, currentRoot: '/code/repo-a', onRoot: vi.fn(), onRegisterProject })
+    fireEvent.click(screen.getByTestId('project-switcher'))
+    fireEvent.click(screen.getByTestId('project-register'))
+    expect(onRegisterProject).toHaveBeenCalledOnce()
+  })
+
+  it('未传 projects（如加载首帧）：不渲染切换器区域', () => {
+    renderNav()
+    expect(screen.queryByTestId('project-switcher')).toBeNull()
+    expect(screen.queryByTestId('project-label')).toBeNull()
+  })
+})

@@ -16,6 +16,12 @@ export const PRIMARY_VIEWS: View[] = ['inbox', 'board', 'settings']
  */
 export const WORKBENCH_VIEWS: View[] = ['loops', 'afk', 'workflows']
 
+export interface NavProject {
+  root: string
+  name: string
+  count: number
+}
+
 interface NavProps {
   view: View
   onView: (v: View) => void
@@ -24,14 +30,22 @@ interface NavProps {
   theme: 'light' | 'dark'
   onTheme: (t: 'light' | 'dark') => void
   connected: boolean
-  /** 收件箱徽标数（在等你决定的 change 数）。 */
+  /** 收件箱徽标数（在等你决定的 change 数，currentRoot 语境）。 */
   inboxCount: number
+  /** D5 项目切换器：已注册项目列表（缺省/空 = 不渲染切换区，如加载首帧）。 */
+  projects?: NavProject[]
+  currentRoot?: string
+  onRoot?: (root: string) => void
+  /** 注册新项目入口（G18）；缺省则不渲染入口。 */
+  onRegisterProject?: () => void
 }
 
-export function Nav({ view, onView, lang, onLang, theme, onTheme, connected, inboxCount }: NavProps): JSX.Element {
+export function Nav({ view, onView, lang, onLang, theme, onTheme, connected, inboxCount, projects, currentRoot, onRoot, onRegisterProject }: NavProps): JSX.Element {
   const { t } = useT()
   const [workbenchOpen, setWorkbenchOpen] = useState(false)
+  const [projectOpen, setProjectOpen] = useState(false)
   const workbenchActive = WORKBENCH_VIEWS.includes(view)
+  const currentProject = projects?.find((p) => p.root === currentRoot)
 
   const selectWorkbenchView = (v: View) => {
     onView(v)
@@ -41,6 +55,68 @@ export function Nav({ view, onView, lang, onLang, theme, onTheme, connected, inb
   return (
     <header className="nav" role="banner">
       <div className="nav__brand">{t('app.title')}</div>
+      {projects && projects.length > 1 && (
+        <div
+          className="nav__project"
+          onBlur={(e) => {
+            if (!e.currentTarget.contains(e.relatedTarget as Node)) setProjectOpen(false)
+          }}
+        >
+          <button
+            type="button"
+            className="nav__project-btn"
+            data-testid="project-switcher"
+            aria-haspopup="menu"
+            aria-expanded={projectOpen}
+            onClick={() => setProjectOpen((open) => !open)}
+          >
+            {currentProject?.name ?? currentRoot} ▾
+          </button>
+          {projectOpen && (
+            <div className="nav__dropdown" role="menu" data-testid="project-menu">
+              {projects.map((p) => (
+                <button
+                  key={p.root}
+                  type="button"
+                  role="menuitem"
+                  data-testid={`project-item-${p.name}`}
+                  className={p.root === currentRoot ? 'nav__dropdown-item nav__dropdown-item--active' : 'nav__dropdown-item'}
+                  onClick={() => {
+                    onRoot?.(p.root)
+                    setProjectOpen(false)
+                  }}
+                >
+                  {p.name}{p.count > 0 ? ` · ${p.count}` : ''}
+                </button>
+              ))}
+              {onRegisterProject && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  data-testid="project-register"
+                  className="nav__dropdown-item"
+                  onClick={() => {
+                    onRegisterProject()
+                    setProjectOpen(false)
+                  }}
+                >
+                  {t('nav.project_register')}
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+      {projects && projects.length === 1 && (
+        <>
+          <span className="nav__project-label" data-testid="project-label">{projects[0]!.name}</span>
+          {onRegisterProject && (
+            <button type="button" className="nav__tool" data-testid="project-register" onClick={onRegisterProject}>
+              ＋
+            </button>
+          )}
+        </>
+      )}
       <nav className="nav__primary" aria-label="primary" data-testid="primary-nav">
         {PRIMARY_VIEWS.map((v) => (
           <button

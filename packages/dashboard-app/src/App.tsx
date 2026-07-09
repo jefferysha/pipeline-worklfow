@@ -70,8 +70,6 @@ function AppShell(): JSX.Element {
       /* ignore */
     }
   }, [])
-  void setCurrentRoot // Task 11 Nav 项目切换器接线时消费
-
   // G17：当前项目涉及的全部 workflow 规则（default 零网络；自定义走 API+缓存）
   const currentProject = snapshot?.projects.find((p) => p.root === currentRoot)
   const wfNames = useMemo(() => {
@@ -103,6 +101,17 @@ function AppShell(): JSX.Element {
     [snapshot, currentRoot, rulesByWf],
   )
 
+  // Nav 项目切换器数据（name=root 尾段目录名；count=活跃 change 数）
+  const navProjects = useMemo(
+    () =>
+      (snapshot?.projects ?? []).map((p) => ({
+        root: p.root,
+        name: p.root.split('/').filter(Boolean).pop() ?? p.root,
+        count: p.changes.length,
+      })),
+    [snapshot],
+  )
+
   const showFlash = useCallback((kind: Flash['kind'], msg: string) => {
     setFlash({ kind, msg })
     window.setTimeout(() => setFlash(null), 4000)
@@ -128,6 +137,9 @@ function AppShell(): JSX.Element {
         onTheme={setTheme}
         connected={connected}
         inboxCount={inboxCount}
+        projects={navProjects}
+        currentRoot={currentRoot}
+        onRoot={setCurrentRoot}
       />
 
       {flash && (
