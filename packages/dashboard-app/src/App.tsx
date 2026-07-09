@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ApiError, fetchSnapshot, postTransition, subscribeSnapshot, unregisterProject } from './api/client'
+import { ApiError, postTransition, unregisterProject } from './api/client'
 import { I18nProvider, useT } from './i18n'
 import type { Lang } from './i18n/translations'
 import { AdvancedPanel } from './advanced/AdvancedPanel'
@@ -56,7 +56,7 @@ function AppShell(): JSX.Element {
   useEffect(() => {
     if (flash && flashRef.current) toastIn(flashRef.current)
   }, [flash])
-  const { snapshot, loading, error, connected, refresh } = useSnapshot()
+  const { snapshot, loading, error, connected, refresh, reconnect } = useSnapshot()
   // GOAL.md E8 收编（Task 9）：null = workflow 列表页，非 null = 正打开该名字的画布页。
   const [openWorkflowName, setOpenWorkflowName] = useState<string | null>(null)
   // D5（吃掉 G14）：currentRoot 是显式概念——localStorage 记忆的偏好在 snapshot 里仍存在
@@ -140,22 +140,6 @@ function AppShell(): JSX.Element {
     [refresh],
   )
 
-  // 断线横幅「重连」钮（评审 P2-13）：重建一条新 SSE 订阅 + 手动补一次快照 GET。
-  // useSnapshot 内部的订阅/connected/snapshot state 是它自己的私产，本任务不碰这个 hook
-  // （文件改动范围之外）——新订阅收到帧时只转调 refresh()，走 hook 已有的 GET 通路落地，
-  // 不越权直写内部 state；旧的手动订阅在下一次点击/卸载时显式关闭，不叠加成泄漏。
-  const reconnectUnsubRef = useRef<(() => void) | null>(null)
-  useEffect(() => {
-    return () => reconnectUnsubRef.current?.()
-  }, [])
-  const handleReconnect = useCallback(() => {
-    reconnectUnsubRef.current?.()
-    reconnectUnsubRef.current = subscribeSnapshot(() => refresh())
-    void fetchSnapshot().catch(() => {
-      /* 静默：手动探测失败——hook 自身的 error/connected 状态已如实反映离线，这里不重复报错 */
-    })
-  }, [refresh])
-
   // 注销项目（G18 API + 评审 P2-13 入口，Task 5）：Nav 拿到用户确认后调用，这里做真正的
   // 网络调用 + 收尾——成功则 refresh（快照重新拉取，注销的项目从列表消失）；若注销的正是
   // 当前语境，切回聚合（''），避免停留在一个已经不存在的 root 上。
@@ -195,7 +179,7 @@ function AppShell(): JSX.Element {
       {!connected && (
         <div className="offline-banner" role="status" data-testid="offline-banner">
           <span className="offline-banner__msg">{t('common.offline')}</span>
-          <button type="button" className="offline-banner__btn" data-testid="offline-reconnect" onClick={handleReconnect}>
+          <button type="button" className="offline-banner__btn" data-testid="offline-reconnect" onClick={reconnect}>
             {t('common.reconnect')}
           </button>
         </div>

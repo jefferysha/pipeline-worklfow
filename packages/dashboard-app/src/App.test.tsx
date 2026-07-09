@@ -253,6 +253,30 @@ describe('App 断线横幅 + 重连（评审 P2-13，Task 5）', () => {
     })
     expect(lastEventSource()).not.toBe(es)
   })
+
+  // 评审修复（担忧①）：重连此前另开一条独立订阅，不碰 useSnapshot 内部真正持有 connected
+  // 的那条订阅——点了重连横幅不会自愈。下沉到 hook 本体后，新连接收到帧时 connected 走 hook
+  // 既有的置位逻辑自然翻正，横幅必须从 DOM 消失（而不是像修复前那样常驻，直到原订阅自己恢复）。
+  it('点「重连」→ 新连接送帧后，offline-banner 从 DOM 消失（重连下沉 useSnapshot 本体）', async () => {
+    render(<App />)
+    await screen.findByTestId('inbox-view')
+    const es = lastEventSource()
+    act(() => {
+      es!.emit('error', '')
+    })
+    await screen.findByTestId('offline-banner')
+
+    fireEvent.click(screen.getByTestId('offline-reconnect'))
+
+    const next = lastEventSource()
+    expect(next).not.toBe(es)
+
+    act(() => {
+      next!.emit('snapshot', JSON.stringify(makeSnapshot([makeProject('/repo', [makeChange('seed-c', 'build')])])))
+    })
+
+    await waitFor(() => expect(screen.queryByTestId('offline-banner')).toBeNull())
+  })
 })
 
 describe('App currentRoot 聚合选择（D5/G19③：currentRoot 空串是全应用聚合的唯一表示，Task 5）', () => {
