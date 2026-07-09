@@ -1012,6 +1012,25 @@ describe('POST /api/workflows/:name —— 新建/覆盖自定义 workflow（GOA
     expect(existsSync(join(h.root, '.pipeline', 'workflows', 'broken.yaml'))).toBe(false)
   })
 
+  it('G16 纵深防御：event 名含空格（绕过浏览器直调已鉴权 HTTP）→ 400 + errors，不落盘', async () => {
+    const h = await start()
+    const bodyWithBadEvent = {
+      name: 'sneaky',
+      steps: [
+        { id: 's1', label: '', gate: null, skills: [], inputs: [], outputs: [], guards: [], transitions: [{ event: 'bad event', to: 's2' }] },
+        { id: 's2', label: '', gate: null, skills: [], inputs: [], outputs: [], guards: [], transitions: [] },
+      ],
+      root: h.root,
+    }
+    const r = await reqPost(
+      h.port, '/api/workflows/sneaky', bodyWithBadEvent,
+      { headers: { Authorization: `Bearer ${h.token}` } },
+    )
+    expect(r.status).toBe(400)
+    expect(r.json<{ errors: string[] }>().errors.some((e) => e.includes("'bad event'"))).toBe(true)
+    expect(existsSync(join(h.root, '.pipeline', 'workflows', 'sneaky.yaml'))).toBe(false)
+  })
+
   it('非法 workflow 名（.. 路径穿越尝试）→ 400，同 GET /api/workflows/:name 共用的 name 防护，且先于落盘发生（.pipeline/workflows 目录都不会被创建）', async () => {
     const h = await start()
     const r = await reqPost(

@@ -324,4 +324,16 @@ iteration-35）**：
   **已知残留**：`vite build`（build:web 的后半）仍不在 CI 内——类型之外的纯打包破坏
   （如资源 import 路径错误）CI 依旧不拦，是否补一步由后续拍板。
 
+### 2026-07-09 · G16 收编追记（同日后续会话）
+
+- **G16 已闭（范围较登记扩大）**：`validateWorkflow` 新增统一字符集后盾 `^[a-zA-Z0-9_-]+$`——
+  不止登记的 event/field 两处，**wf.name / step.id / skill.id 一并锁死**：parse.ts 对这五类
+  标识符全部 `(\S+)` 读取，同属「serialize 写得出、parse 读不回」破坏类；且 POST body 的
+  `name` 不被强制等于路由 name（serialize 第一行原样写它），是登记时未列出的同类活口。
+  `to` 由既有「必须指向真实 step id」规则间接覆盖。**红绿实证**：server.test.ts 新增直调
+  已鉴权 HTTP 含空格 event 用例——修复前真实 200 + 落盘（漏洞活体复证），修复后 400 +
+  errors + 不落盘；kernel 五例先红后绿。存量扫描（templates/default.yaml + .playwright-tmp
+  两测试环境）全部合规，规则零误杀。writeWorkflowForApi/loadWorkflow 都以 validateWorkflow
+  为闸，一处加规则双向（写入/读取）闭合。
+
 > 缺口在对应里程碑收编时清零；新缺口发现即追加，绝不删除未解决项。

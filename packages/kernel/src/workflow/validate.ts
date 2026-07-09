@@ -23,12 +23,39 @@ function detectCycle(skillIds: string[], dependsOn: Map<string, string[]>): stri
   return errors
 }
 
+// G16：serialize 原样写出、parse 用 (\S+) 读回的每一类标识符，字符集越出这个范围就可能
+// 「保存成功、下次打不开」（如含空格）。与 dashboard 客户端表单、server 路由层 name 校验
+// 同一条规则；此处是绕过 UI 直调已鉴权 HTTP 时的唯一服务端后盾。
+const IDENT_RE = /^[a-zA-Z0-9_-]+$/
+
 export function validateWorkflow(wf: WorkflowDef): string[] {
   const errors: string[] = []
   const producedByEarlierStep = new Set<string>()
   const allStepIds = new Set(wf.steps.map((s) => s.id))
 
+  if (!IDENT_RE.test(wf.name)) {
+    errors.push(`workflow name '${wf.name}' 含非法字符（仅允许 a-zA-Z0-9_-）`)
+  }
+
   wf.steps.forEach((step, index) => {
+    if (!IDENT_RE.test(step.id)) {
+      errors.push(`step id '${step.id}' 含非法字符（仅允许 a-zA-Z0-9_-）`)
+    }
+    for (const skill of step.skills) {
+      if (!IDENT_RE.test(skill.id)) {
+        errors.push(`step '${step.id}' 的 skill id '${skill.id}' 含非法字符（仅允许 a-zA-Z0-9_-）`)
+      }
+    }
+    for (const ref of [...step.inputs, ...step.outputs]) {
+      if (!IDENT_RE.test(ref.field)) {
+        errors.push(`step '${step.id}' 的字段 '${ref.field}' 含非法字符（仅允许 a-zA-Z0-9_-）`)
+      }
+    }
+    for (const t of step.transitions) {
+      if (!IDENT_RE.test(t.event)) {
+        errors.push(`step '${step.id}' 的 transitions 里 event '${t.event}' 含非法字符（仅允许 a-zA-Z0-9_-）`)
+      }
+    }
     const skillIds = step.skills.map((s) => s.id)
     const dependsOn = new Map(step.skills.map((s) => [s.id, [...(s.depends_on ?? [])]]))
 
