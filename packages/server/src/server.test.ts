@@ -1203,3 +1203,96 @@ describe('DELETE /api/projects —— 注销项目（G18 对称操作）', () =>
     expect(r3.status).toBe(401)
   })
 })
+
+describe('POST /api/changes —— pipeline init 的 HTTP 化（G18）', () => {
+  /** 先经真端点注册项目（G18 闭环语义），返回可用的 proj root。 */
+  async function withRegisteredProject(h: Awaited<ReturnType<typeof startWithHome>>): Promise<string> {
+    const proj = await makeProject()
+    const r = await reqPost(h.port, '/api/projects', { root: proj }, { headers: { Authorization: `Bearer ${h.token}` } })
+    expect(r.status).toBe(200)
+    return proj
+  }
+
+  it('200 默认：.pipeline.yaml 真落盘（phase=open / track=chat / preset=full）+ snapshot 出现', async () => {
+    const h = await startWithHome()
+    const proj = await withRegisteredProject(h)
+    const r = await reqPost(h.port, '/api/changes', { root: proj, name: 'demo-a' }, { headers: { Authorization: `Bearer ${h.token}` } })
+    expect(r.status).toBe(200)
+    const body = r.json<{ ok: boolean; name: string; path: string }>()
+    expect(body.name).toBe('demo-a')
+    const dir = join(proj, 'openspec', 'changes', 'demo-a')
+    expect(existsSync(join(dir, '.pipeline.yaml'))).toBe(true)
+    expect(await h.store.get(dir, 'phase')).toBe('open')
+    expect(await h.store.get(dir, 'track')).toBe('chat')
+    expect(await h.store.get(dir, 'preset')).toBe('full')
+    const snap = await reqGet(h.port, '/api/snapshot')
+    expect(JSON.stringify(snap.json())).toContain('demo-a')
+  })
+
+  it('200 显式 track=frontend', async () => {
+    const h = await startWithHome()
+    const proj = await withRegisteredProject(h)
+    const r = await reqPost(h.port, '/api/changes', { root: proj, name: 'fe-x', track: 'frontend' }, { headers: { Authorization: `Bearer ${h.token}` } })
+    expect(r.status).toBe(200)
+    expect(await h.store.get(join(proj, 'openspec', 'changes', 'fe-x'), 'track')).toBe('frontend')
+  })
+
+  it('200 自定义 workflow：phase 种到首 step、workflow 字段写入（对齐 cli init --workflow 语义）', async () => {
+    const h = await startWithHome()
+    const proj = await withRegisteredProject(h)
+    const { mkdir, writeFile } = await import('node:fs/promises')
+    await mkdir(join(proj, '.pipeline', 'workflows'), { recursive: true })
+    await writeFile(join(proj, '.pipeline', 'workflows', 'rel.yaml'), `name: rel
+steps:
+  - id: draft
+    label: x
+    gate: null
+    skills: []
+    inputs: []
+    outputs: []
+    guards: []
+    transitions:
+      - event: approved
+        to: review
+  - id: review
+    label: y
+    gate: review
+    skills: []
+    inputs: []
+    outputs: []
+    guards: []
+    transitions: []
+`, 'utf8')
+    const r = await reqPost(h.port, '/api/changes', { root: proj, name: 'rel-x', workflow: 'rel' }, { headers: { Authorization: `Bearer ${h.token}` } })
+    expect(r.status).toBe(200)
+    const dir = join(proj, 'openspec', 'changes', 'rel-x')
+    expect(await h.store.get(dir, 'phase')).toBe('draft')
+    expect(await h.store.get(dir, 'workflow')).toBe('rel')
+  })
+
+  it('400：name 非法 / track 非法 / 重复 name', async () => {
+    const h = await startWithHome()
+    const proj = await withRegisteredProject(h)
+    const bad1 = await reqPost(h.port, '/api/changes', { root: proj, name: 'bad name' }, { headers: { Authorization: `Bearer ${h.token}` } })
+    expect(bad1.status).toBe(400)
+    const bad2 = await reqPost(h.port, '/api/changes', { root: proj, name: 'ok-name', track: 'designer' }, { headers: { Authorization: `Bearer ${h.token}` } })
+    expect(bad2.status).toBe(400)
+    const first = await reqPost(h.port, '/api/changes', { root: proj, name: 'dup-x' }, { headers: { Authorization: `Bearer ${h.token}` } })
+    expect(first.status).toBe(200)
+    const dup = await reqPost(h.port, '/api/changes', { root: proj, name: 'dup-x' }, { headers: { Authorization: `Bearer ${h.token}` } })
+    expect(dup.status).toBe(400)
+  })
+
+  it('404：workflow 不存在；404：root 未注册（信任锚在本端点生效）；401 无 token', async () => {
+    const h = await startWithHome()
+    const proj = await withRegisteredProject(h)
+    const r1 = await reqPost(h.port, '/api/changes', { root: proj, name: 'x1', workflow: 'ghost' }, { headers: { Authorization: `Bearer ${h.token}` } })
+    expect(r1.status).toBe(404)
+    const outsider = await makeProject()
+    const r2 = await reqPost(h.port, '/api/changes', { root: outsider, name: 'x2' }, { headers: { Authorization: `Bearer ${h.token}` } })
+    expect(r2.status).toBe(404)
+    const r3 = await reqPost(h.port, '/api/changes', { root: proj, name: 'x3' })
+    expect(r3.status).toBe(401)
+    expect(existsSync(join(proj, 'openspec', 'changes', 'x3'))).toBe(false)
+  })
+})

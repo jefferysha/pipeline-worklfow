@@ -23,8 +23,8 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { AddressInfo } from 'node:net'
 import { dirname, join, resolve as resolvePath } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { applyLevelChange, createFlowEngine, createStateStore, loadManifest, loadRegistry } from '@pipeline-lite/kernel'
-import type { FlowEngine, GraduationFs, StateStore, WorkflowDef } from '@pipeline-lite/kernel'
+import { applyLevelChange, createFlowEngine, createStateStore, loadManifest, loadRegistry, loadWorkflow, TRACKS } from '@pipeline-lite/kernel'
+import type { FlowEngine, GraduationFs, StateStore, Track, WorkflowDef } from '@pipeline-lite/kernel'
 import { buildAfkLog, buildAfkSnapshot, cancelAfkRun, enqueueAfkRun, readAfkRunLog, retryAfkRun } from './afk.js'
 import { buildLoopsSnapshot } from './loops.js'
 import { readMandatorySkills, validateMandatorySkillsBody, writeMandatorySkills } from './config.js'
@@ -471,6 +471,60 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
       return result.ok
         ? sendJson(res, 200, { ok: true, root: result.root })
         : sendJson(res, result.code, { ok: false, error: result.error })
+    }
+
+    // ── G18：POST /api/changes —— pipeline init 的 HTTP 化 ──
+    //    校验序全部先于任何落盘（同 cli/commands/init.ts 的"先校验后写"纪律）：body 形状 →
+    //    root 信任锚（本端点要求已注册）→ name 字符集 → track 枚举 → workflow 真加载校验。
+    //    preset 固定 'full'（dashboard 语境无 preset 选择需求，YAGNI）；history 记账是 CLI 侧
+    //    best-effort 职责（deps.history 注入），server 端点不写 history——已知差异，登记于
+    //    TEST-REALITY（阶段 7 文档任务）。
+    if (path === '/api/changes') {
+      const rawBody = await readJsonBody(req)
+      if (typeof rawBody !== 'object' || rawBody === null) {
+        return sendJson(res, 400, { ok: false, error: '请求体须为 JSON 对象' })
+      }
+      const b = rawBody as Record<string, unknown>
+      const root = typeof b.root === 'string' ? b.root : ''
+      if (!dedupeRoots(registry()).includes(resolvePath(root))) {
+        return sendJson(res, 404, { ok: false, error: 'root 未在机器级项目注册表中' })
+      }
+      const name = typeof b.name === 'string' ? b.name : ''
+      if (!name || !/^[a-zA-Z0-9_-]+$/.test(name)) {
+        return sendJson(res, 400, { ok: false, error: '非法 change 名（仅允许 a-z A-Z 0-9 - _）' })
+      }
+      const track = typeof b.track === 'string' && b.track ? b.track : 'chat'
+      if (!(TRACKS as readonly string[]).includes(track)) {
+        return sendJson(res, 400, { ok: false, error: `非法 track '${track}'，允许: ${TRACKS.join(' | ')}` })
+      }
+      const workflow = typeof b.workflow === 'string' && b.workflow ? b.workflow : 'default'
+      let customStart: { workflow: string; phase: string } | undefined
+      if (workflow !== 'default') {
+        let wf: ReturnType<typeof loadWorkflow>
+        try {
+          wf = loadWorkflow(root, workflow)
+        } catch (e) {
+          return sendJson(res, 400, { ok: false, error: errMsg(e) })
+        }
+        if (!wf) {
+          return sendJson(res, 404, { ok: false, error: `workflow '${workflow}' 未找到（期望 .pipeline/workflows/${workflow}.yaml）` })
+        }
+        const first = wf.steps[0]
+        if (!first) {
+          return sendJson(res, 400, { ok: false, error: `workflow '${workflow}' 未声明任何 step` })
+        }
+        customStart = { workflow, phase: first.id }
+      }
+      let created: string
+      try {
+        created = await store.init({ repoRoot: root, name, track: track as Track, preset: 'full', clock })
+      } catch (e) {
+        return sendJson(res, 400, { ok: false, error: errMsg(e) })
+      }
+      if (customStart) {
+        await store.setMany(created, { workflow: customStart.workflow, phase: customStart.phase })
+      }
+      return sendJson(res, 200, { ok: true, name, path: created })
     }
 
     // ── M3 config 写端点：全机唯一 manifest.yaml，无 root/name（不是按 Project 分立的资源）──
