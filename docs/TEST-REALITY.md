@@ -322,7 +322,8 @@ iteration-35）**：
   `npm run test:web`（217 pass）三连全绿。G15 登记时引用的实证错误 `LoopsPanel.tsx:117`
   已在 iteration-38 工票化重写中消亡（接线前基线 `tsc --noEmit` 即全绿，无需修码）。
   **已知残留**：`vite build`（build:web 的后半）仍不在 CI 内——类型之外的纯打包破坏
-  （如资源 import 路径错误）CI 依旧不拦，是否补一步由后续拍板。
+  （如资源 import 路径错误）CI 依旧不拦，是否补一步由后续拍板。→ **同日拍板补入**：
+  CI 新增第九步 `dashboard-app build (vite)`（`npm run build:web`），本地真跑绿后接线，残留清零。
 
 ### 2026-07-09 · G16 收编追记（同日后续会话）
 

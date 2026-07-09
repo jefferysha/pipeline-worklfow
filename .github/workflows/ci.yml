@@ -26,6 +26,11 @@ jobs:
       - name: Build (tsc -b + dashboard tsc --noEmit + esbuild bundle)
         run: npm run build
 
+      # 类型之外的纯打包破坏（资源 import、vite 插件配置）只有真跑 vite build 才拦得住；
+      # build:web 内含的 tsc --noEmit 与上一步 typecheck:web 重复约数秒，换脚本单一真相源。
+      - name: dashboard-app build (vite)
+        run: npm run build:web
+
       - name: vitest (kernel/cli/server/automation/tap)
         run: npm test
 
