@@ -164,7 +164,7 @@ export interface ChangeDetailCardProps {
 }
 export function ChangeDetailCard(props: ChangeDetailCardProps): JSX.Element  // data-testid="change-detail"
 ```
-- 区块（v4 形态）：头（名字/相位/等你复核徽章/关闭✕）→「为什么在等你」一句话（`detail.why_gate` i18n：verify 门列出未过项）+ 证据格（gateEvidence 复用，格状排布）→ 产物（非空路径字段行+拷贝钮）→ 语境（workflow/track/preset/automation/created→updated）→ 底部动作条（出边按钮：前进=蓝实底「→ 放行」语义、回退=ghost 红「↩ 打回」走既有二次确认管线）。**无历史区**（spec §5 登记：待 history 读端点）。
+- 区块（v4 形态）：头（名字/相位/等你复核徽章/关闭✕）→「为什么在等你」一句话（`detail.why_gate` i18n：verify 门列出未过项）+ 证据格（gateEvidence 复用，格状排布）→ 产物（非空路径字段行+拷贝钮）→ 语境（workflow/track/preset/automation/created→updated）→ 底部动作条（**评审修正：用 legalTargets/plannedTransition 渲染全部出边**——前进边逐条蓝实底、回退边逐条 ghost 红走二次确认；首边只取一条会让多前进边的自定义 gate 丢边。文案相位感知：gate 相位用「放行/打回」词汇、非 gate 相位用通用「→/↩」——Task 9 看板复用非 gate 卡的前置）。产物区走 evidence.ts 正门 `artifactChips()`（评审修正：借 `gateEvidence(c, undefined)` 兜底当正门会耦合实现细节）。**无历史区**（spec §5 登记：待 history 读端点）。
 - InboxView 变化：行 `onClick`/`Enter` 切换选中（`selected: string | null` state），选中行下方渲染 `<ChangeDetailCard>`；行本体加 `aria-expanded`；j/k 移动选中焦点环、Esc 关卡。行内追加 `<div class="ev">` 渲染 `gateEvidence` chips（copyable chip 点击 `navigator.clipboard.writeText` + toast，测试 stub clipboard）。
 - 意图迁移表：`inbox-card` testid 不变；快捷钮 testid 不变；新 testid：`inbox-evidence-<name>`、`change-detail`、`detail-approve`、`detail-reject`。
 
