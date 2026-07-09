@@ -80,7 +80,7 @@ export function Dialog(props: DialogProps): JSX.Element
 
 - [ ] **Step 1（红）:** 写上述 6 条行为测试（用一个带按钮的宿主组件真实开合，`fireEvent.keyDown(document, {key:'Escape'})`、`fireEvent.click(backdrop)`、Tab 循环用 `userEvent.tab()`）。
 - [ ] **Step 2:** 跑测试确认 6 条全 FAIL。
-- [ ] **Step 3（绿）:** 实现：`useEffect` 记录 `document.activeElement` → 聚焦 initialFocus/首个可聚焦；`keydown` 监听 Escape 与 Tab 困笼（查询 `button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])`）；卸载归位。样式复用现有 `.dialog__backdrop/.dialog`（已在 Task 1 换过 token）。
+- [ ] **Step 3（绿）:** 实现：`useEffect` 记录 `document.activeElement` → 聚焦 initialFocus/首个可聚焦；`keydown` 监听 Escape 与 Tab 困笼（查询 `button:not(:disabled), [href], input:not(:disabled):not([type="hidden"]), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])`——评审修正：原字面串不排 disabled/hidden 会在「确认键 disabled」形态下困笼逃逸）；Esc/Tab 响应按模块级 LIFO 栈只归栈顶实例（评审修正：activeElement 归属检查在焦点落 body 时会让 Esc 静默失效）；卸载归位。样式复用现有 `.dialog__backdrop/.dialog`（已在 Task 1 换过 token）。
 - [ ] **Step 4:** 6 条全绿 + typecheck。
 - [ ] **Step 5:** Commit：`feat(dashboard): 统一 Dialog 组件——Esc/初焦点/困笼/归位（Task 3，评审 P1-9）`
 
