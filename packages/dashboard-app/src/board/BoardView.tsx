@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { useT } from '../i18n'
 import { PHASES, type ChangeSnapshot, type Phase, type Snapshot } from '../types'
 import { plannedTransition, type PlannedTransition } from './events'
+import { DEFAULT_RULES } from '../model/workflowModel'
 
 interface BoardViewProps {
   snapshot: Snapshot | null
@@ -80,7 +81,8 @@ export function BoardView({ snapshot, loading, error, onTransition, onToast, onE
       return
     }
     if (!payload || typeof payload !== 'object' || !payload.name || !payload.phase) return
-    const planned = plannedTransition(payload.phase, toPhase)
+    // 临时桥（Task 6 分组看板重写时移除）：本视图当前仍只渲染 default 七列
+    const planned = plannedTransition(DEFAULT_RULES, payload.phase, toPhase)
     if (!planned) return // 非法落点：no-op（视觉回弹）
     if (planned.backward) {
       setPending({ name: payload.name, root: payload.root ?? '', planned })

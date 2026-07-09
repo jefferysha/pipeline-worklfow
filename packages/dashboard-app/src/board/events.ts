@@ -1,36 +1,31 @@
 /**
- * 看板拖拽换列 → 转换 event 的规划（纯函数）。
- * 拖一张卡从其当前 phase 列到目标 phase 列 → 计算合法 event；非法边 → null（视觉回弹）。
- * 边表逐字镜像 server/src/transition.ts；合法性以 types.ts TRANSITIONS 为准（manifest 单源镜像）。
+ * 看板拖拽换列 → 转换 event 的规划（纯函数，G17 泛化版）。
+ * 规则来源不再写死 default 七相位常量，改为注入 WorkflowRules（default 走
+ * workflowModel.DEFAULT_RULES，自定义 workflow 走 API 拉取的映射）——每张卡按
+ * 它自己所属 workflow 的转换图判定合法性与 event 名。
+ * 回退语义：目标 step 在 rules.steps 里的序号 < 当前 step 序号 = 回退边（UI 需二次确认）。
  */
-import type { ChangeSnapshot, Phase } from '../types'
-import { EVENT_BY_EDGE, TRANSITIONS, isPhase } from '../types'
+import type { WorkflowRules } from '../model/workflowModel'
 
 export interface PlannedTransition {
   event: string
-  from: Phase
-  to: Phase
-  /** 回退边（verify→build 的 verify-fail）—— 语义上是"打回重做"，UI 需二次确认。 */
+  from: string
+  to: string
+  /** 回退边（如 default 的 verify→build verify-fail）——语义上是"打回重做"，UI 需二次确认。 */
   backward: boolean
 }
 
-/** 目标序号 < 当前序号 = 回退边。 */
-const ORDER: Record<Phase, number> = {
-  open: 0, explore: 1, spec: 2, build: 3, verify: 4, ship: 5, archive: 6,
+export function plannedTransition(rules: WorkflowRules, fromStep: string, toStep: string): PlannedTransition | null {
+  if (fromStep === toStep) return null
+  const fromIdx = rules.steps.indexOf(fromStep)
+  const toIdx = rules.steps.indexOf(toStep)
+  if (fromIdx === -1 || toIdx === -1) return null
+  const edge = (rules.transitions[fromStep] ?? []).find((t) => t.to === toStep)
+  if (!edge) return null
+  return { event: edge.event, from: fromStep, to: toStep, backward: toIdx < fromIdx }
 }
 
-export function plannedTransition(fromPhase: string, toPhase: string): PlannedTransition | null {
-  if (!isPhase(fromPhase) || !isPhase(toPhase)) return null
-  if (fromPhase === toPhase) return null
-  const legal = TRANSITIONS[fromPhase]
-  if (!legal.includes(toPhase)) return null
-  const event = EVENT_BY_EDGE[`${fromPhase}->${toPhase}`]
-  if (!event) return null
-  return { event, from: fromPhase, to: toPhase, backward: ORDER[toPhase] < ORDER[fromPhase] }
-}
-
-/** 该 change 从当前相位可拖去的合法目标相位（供列高亮/可落判定）。 */
-export function legalTargets(c: ChangeSnapshot): readonly Phase[] {
-  if (!isPhase(c.phase)) return []
-  return TRANSITIONS[c.phase].filter((p) => p !== c.phase)
+/** 该 step 此刻声明的合法目标（供列高亮/快捷按钮渲染），顺序保持 workflow 定义里的出边序。 */
+export function legalTargets(rules: WorkflowRules, step: string): readonly string[] {
+  return (rules.transitions[step] ?? []).map((t) => t.to).filter((to) => to !== step)
 }
