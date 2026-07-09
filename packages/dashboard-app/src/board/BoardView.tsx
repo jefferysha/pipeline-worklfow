@@ -3,6 +3,7 @@ import { useT } from '../i18n'
 import type { ChangeSnapshot, Snapshot } from '../types'
 import type { WorkflowRules } from '../model/workflowModel'
 import { changeWorkflow } from '../inbox/inbox'
+import { shortTime } from '../model/time'
 import { legalTargets, plannedTransition, type PlannedTransition } from './events'
 
 interface BoardViewProps {
@@ -246,7 +247,7 @@ export function BoardView({ snapshot, loading, error, currentRoot, rulesByWf, ru
                                     {(gate || change.updated_at) && (
                                       <div className="board__card-meta">
                                         {gate ? <span className="badge badge--gate">{t('inbox.badge_waiting')}</span> : <span />}
-                                        {change.updated_at && <span>{change.updated_at}</span>}
+                                        {change.updated_at && <span>{shortTime(change.updated_at)}</span>}
                                       </div>
                                     )}
                                     {targets.length > 0 && (
@@ -290,7 +291,7 @@ export function BoardView({ snapshot, loading, error, currentRoot, rulesByWf, ru
                     <span className="card__name">{change.name}</span>
                     {change.track && <span className="card__track">{change.track}</span>}
                     <span className="g-phase">{change.phase}</span>
-                    <span className="ticket-row__time">{change.updated_at}</span>
+                    <span className="ticket-row__time">{change.updated_at ? shortTime(change.updated_at) : ''}</span>
                   </li>
                 ))}
               </ul>

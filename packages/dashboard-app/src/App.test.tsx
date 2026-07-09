@@ -116,6 +116,24 @@ describe('App 深浅色自适应 + i18n', () => {
   })
 })
 
+describe('App currentRoot 语义（D5：吃掉 G14，多项目默认取第一个）', () => {
+  it('双项目快照：收件箱徽章只计第一个项目的 gate 卡', async () => {
+    render(<App />)
+    await screen.findByTestId('inbox-view')
+    const es = lastEventSource()
+    const next = makeSnapshot([
+      makeProject('/repo-a', [makeChange('a-verify', 'verify')]),
+      makeProject('/repo-b', [makeChange('b-verify', 'verify'), makeChange('b-spec', 'spec')]),
+    ])
+    act(() => {
+      es!.emit('snapshot', JSON.stringify(next))
+    })
+    await waitFor(() => expect(screen.getByTestId('inbox-badge').textContent).toBe('1'))
+    expect(screen.getByText('a-verify')).toBeInTheDocument()
+    expect(screen.queryByText('b-verify')).toBeNull()
+  })
+})
+
 describe('App 高级折叠入口（debug 降级）', () => {
   it('Advanced 折叠面在页脚、不在一级导航', async () => {
     render(<App />)

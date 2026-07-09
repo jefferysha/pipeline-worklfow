@@ -3,6 +3,7 @@ import { useT } from '../i18n'
 import type { Snapshot } from '../types'
 import type { WorkflowRules } from '../model/workflowModel'
 import { legalTargets, plannedTransition, type PlannedTransition } from '../board/events'
+import { shortTime } from '../model/time'
 import { changeWorkflow, projectName, selectInbox } from './inbox'
 
 interface InboxViewProps {
@@ -106,7 +107,7 @@ export function InboxView({ snapshot, loading, error, currentRoot, rulesByWf, on
               <span className="wf-label" data-testid="inbox-card-wf">{wf}</span>
               <span className="g-phase" data-testid="inbox-card-phase">{change.phase}</span>
               <span className="badge badge--gate">{t('inbox.badge_waiting')}</span>
-              <span className="ticket-row__time">{rootToName.get(root) ?? root}{change.updated_at ? ` · ${change.updated_at}` : ''}</span>
+              <span className="ticket-row__time">{rootToName.get(root) ?? root}{change.updated_at ? ` · ${shortTime(change.updated_at)}` : ''}</span>
               <span className="ticket-row__spacer" />
               <span className="qk">
                 {targets.map((to) => {
