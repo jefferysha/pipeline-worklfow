@@ -65,9 +65,17 @@ interface DetailEntry {
  * detail 状态只存 {root,name}（Task 9 brief 契约），渲染时经本函数反查所属组拿到 change 与
  * 该组已经算好的 rules——brief 交接注意事项：BoardView 的 rulesByWf 是按裸 wf 名键的旧 Map
  * （非 rulesKey(root,wf) 格式），detail 卡的 rules 不查它，直接用同组卡片共享的 group.rules。
+ *
+ * 评审修复轮 Important-3：新增 currentRoot 参数与核对。BoardView 切换项目（D5 项目切换器）
+ * 不会卸载重挂组件，若 detail 里存的 root 是切换前的旧项目、而新项目恰好有同名 change，
+ * 仅按 name 匹配会把"旧项目的详情卡"错配成"新项目同名 change 的数据"（root 对不上，内容却
+ * 照样渲染出来）。groups 已经是按 currentRoot 过滤过的当前项目分组，这里只需要求
+ * target.root === currentRoot 才继续按 name 找；不相等直接判定"查无此卡"，与组件里
+ * [currentRoot] 依赖的 detail 重置 effect 构成双保险。
  */
-function findDetailEntry(groups: readonly WfGroup[], target: DetailTarget | null): DetailEntry | undefined {
+function findDetailEntry(groups: readonly WfGroup[], target: DetailTarget | null, currentRoot: string): DetailEntry | undefined {
   if (!target) return undefined
+  if (target.root !== currentRoot) return undefined
   for (const g of groups) {
     const change = g.cards.find((c) => c.name === target.name)
     if (change) return { change, rules: g.rules }
@@ -97,21 +105,53 @@ export function BoardView({ snapshot, loading, error, currentRoot, rulesByWf, ru
   const [detail, setDetail] = useState<DetailTarget | null>(null)
   /** dragstart→dragend 期间为 true：原生拖拽手势结束后浏览器通常不会再派发 click，但为防御
    *  "拖拽落点后紧跟一次 click"（含测试环境显式派发的场景），click handler 据此旁路，不误当
-   *  成"点开详情"（brief Step 1 明确要求的第 5 条测试）。 */
+   *  成"点开详情"（brief Step 1 明确要求的第 5 条测试）。
+   *  评审修复轮 Important-2：复位不能只靠 onDragEnd——若拖拽中源卡因某种原因（如 SSE 快照
+   *  刷新把这张卡从列表里移除）被卸载，dragend 不会派发，这个全板共享的 ref 会永久卡在
+   *  true，之后所有卡片的 click 都会被短路失效。下方 Esc 监听所在的 effect 里另加了
+   *  document 级 mouseup 兜底复位（见该处注释），mouseup 无论 DOM 结构怎么变都会派发到
+   *  document，是比 onDragEnd 更可靠的复位时机。 */
   const draggingRef = useRef(false)
 
   // Esc 关 detail（评审 P0-2 键盘契约的一部分）。让位打开中的 Dialog（board 自己的回退确认框，
   // 或 detail 卡自己的回退确认框）——同 InboxView.tsx 的既有写法：document 上还有
   // [role="dialog"] 时整体不处理，避免"关掉确认框的同一次 Esc 顺带把详情卡也关了"的双重反应。
+  //
+  // 同一个 effect 里另挂 document 级 mouseup（评审修复轮 Important-2）：draggingRef 的复位
+  // 此前完全依赖 React onDragEnd，若拖拽过程中源卡被卸载（如 SSE 刷新把这张卡从快照里移走）
+  // dragend 就不会派发，ref 永久卡 true、全板卡片 click 从此失效。mouseup 是比 dragend 更
+  // 可靠的复位信号——无论 DOM 在拖拽中怎么变，鼠标释放都会派发到 document。用
+  // setTimeout(0) 把复位挪到下一个宏任务而非立即同步复位：拖拽落点后浏览器/测试环境紧跟
+  // 派发的那次 click 与这次 mouseup 属于同一次用户交互，在同一个同步任务里派发，
+  // setTimeout(0) 保证那次 click 读到的 draggingRef.current 仍是 true（继续被抑制，不误开
+  // 详情），复位在这次交互结束之后才生效，不破坏 draggingRef 声明处注释描述的既有防误触
+  // 语义。
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent): void {
       if (e.key !== 'Escape') return
       if (document.querySelector('[role="dialog"]')) return
       setDetail(null)
     }
+    function onMouseUp(): void {
+      window.setTimeout(() => {
+        draggingRef.current = false
+      }, 0)
+    }
     document.addEventListener('keydown', onKeyDown)
-    return () => document.removeEventListener('keydown', onKeyDown)
+    document.addEventListener('mouseup', onMouseUp)
+    return () => {
+      document.removeEventListener('keydown', onKeyDown)
+      document.removeEventListener('mouseup', onMouseUp)
+    }
   }, [])
+
+  // 切项目即关详情卡（评审修复轮 Important-3，双保险的一半）：BoardView 不会因为切换
+  // currentRoot 而卸载重挂，detail 状态若跨项目残留，配合 findDetailEntry 新增的 root
+  // 核对——两处任一生效都能防止"旧项目详情 + 新项目同名 change"错配渲染，这里负责主动
+  // 清空 state（另一半见 findDetailEntry 的 target.root !== currentRoot 早退）。
+  useEffect(() => {
+    setDetail(null)
+  }, [currentRoot])
 
   const groups = useMemo<WfGroup[]>(() => {
     const project = snapshot?.projects.find((p) => p.ok && p.root === currentRoot)
@@ -127,7 +167,7 @@ export function BoardView({ snapshot, loading, error, currentRoot, rulesByWf, ru
   }, [snapshot, currentRoot, rulesByWf, rulesErrors])
 
   const totalCards = groups.reduce((n, g) => n + g.cards.length, 0)
-  const detailEntry = findDetailEntry(groups, detail)
+  const detailEntry = findDetailEntry(groups, detail, currentRoot)
 
   function isCollapsed(wf: string): boolean {
     void collapseTick
@@ -306,6 +346,11 @@ export function BoardView({ snapshot, loading, error, currentRoot, rulesByWf, ru
                               {cards.map((change) => {
                                 const gate = rules.gateByStep[change.phase] === 'review'
                                 const targets = legalTargets(rules, change.phase)
+                                // 评审修复轮 Important-1：detail 打开时，该卡（root+name 与当前 detail 匹配）的
+                                // 行内快捷钮组隐藏——详情卡动作条是唯一动作面，同 InboxView.tsx Minor-5 先例
+                                // （避免同一条转换在看板卡快捷钮与详情卡动作条两处都能触发）。只隐藏"正在被
+                                // 详情卡展示的那一张"，其余卡片的快捷钮不受影响。
+                                const isCardDetailOpen = detail !== null && detail.root === currentRoot && detail.name === change.name
                                 return (
                                   <article
                                     key={`${currentRoot}/${change.name}`}
@@ -357,7 +402,7 @@ export function BoardView({ snapshot, loading, error, currentRoot, rulesByWf, ru
                                         {change.updated_at && <span>{shortTime(change.updated_at)}</span>}
                                       </div>
                                     )}
-                                    {targets.length > 0 && (
+                                    {targets.length > 0 && !isCardDetailOpen && (
                                       <span className="qk">
                                         {targets.map((to) => {
                                           const planned = plannedTransition(rules, change.phase, to)

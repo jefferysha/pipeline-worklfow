@@ -334,3 +334,109 @@ describe('BoardView 卡片点开详情（评审 P0-2：ARIA 谎言复活为真�
     expect(screen.queryByTestId('change-detail')).toBeNull()
   })
 })
+
+/**
+ * 评审修复轮 Important-1：detail 打开时，该卡（root+name 与当前 detail 匹配）的行内
+ * 快捷钮组隐藏——详情卡动作条是唯一动作面，同 InboxView.tsx Minor-5 先例（评审修复见
+ * InboxView.test.tsx「行内快捷钮 vs 详情卡动作条」一节），避免同一条转换在看板卡快捷钮与
+ * 详情卡动作条两处都能触发。用两张卡（c2/c3 同落 verify 列）证明"只隐藏正在展示的那一张，
+ * 其余卡不受影响"。
+ */
+describe('BoardView 详情打开时该卡快捷钮组隐藏（评审修复轮 Important-1：动作面唯一）', () => {
+  it('开卡后该卡 board-quick-* 从 DOM 消失，其他卡不受影响；关卡后恢复', () => {
+    renderBoard({
+      snapshot: makeSnapshot([makeProject('/repo', [makeChange('c2', 'verify'), makeChange('c3', 'verify')])]),
+    })
+    expect(screen.getByTestId('board-quick-c2-verify-pass')).toBeInTheDocument()
+    expect(screen.getByTestId('board-quick-c3-verify-pass')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByTestId('board-card-c2'))
+    expect(screen.getByTestId('change-detail')).toBeInTheDocument()
+    expect(screen.queryByTestId('board-quick-c2-verify-pass')).toBeNull()
+    expect(screen.queryByTestId('board-quick-c2-verify-fail')).toBeNull()
+    // 其他卡（c3）不受影响：快捷钮组仍在
+    expect(screen.getByTestId('board-quick-c3-verify-pass')).toBeInTheDocument()
+    expect(screen.getByTestId('board-quick-c3-verify-fail')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByTestId('detail-close'))
+    expect(screen.queryByTestId('change-detail')).toBeNull()
+    expect(screen.getByTestId('board-quick-c2-verify-pass')).toBeInTheDocument()
+    expect(screen.getByTestId('board-quick-c2-verify-fail')).toBeInTheDocument()
+  })
+})
+
+/**
+ * 评审修复轮 Important-2：draggingRef 复位此前完全依赖 React onDragEnd——若拖拽过程中
+ * 源卡因某种原因（如 SSE 快照刷新把这张卡从列表里移除）被卸载，dragend 不会派发，这个
+ * 全板共享的 ref 会永久卡在 true，此后所有卡片的 click 都会被短路失效。修法：document 级
+ * mouseup 兜底复位（无论 DOM 怎么变都会派发），配 setTimeout(0) 避免破坏"拖拽落点后紧跟
+ * 一次 click 仍应被抑制"的既有语义。第一条测试模拟"dragend 丢失"，必须在旧代码上真红
+ * （旧代码里没有任何兜底，ref 永久卡 true，点击永远打不开 detail）；第二条是正向对称覆盖
+ * （dragstart→dragend 正常路径），验证新增的 mouseup 兜底不会破坏既有 onDragEnd 复位路径。
+ */
+describe('BoardView draggingRef mouseup 兜底复位（评审修复轮 Important-2：防拖拽中途 dragend 丢失导致点击永久失效）', () => {
+  it('dragstart 后 dragend 丢失：document mouseup 兜底复位，flush 后点卡能正常开 detail（旧代码红）', async () => {
+    renderBoard()
+    const card = screen.getByTestId('board-card-c1')
+    const dt = makeDataTransfer()
+    fireEvent.dragStart(card, { dataTransfer: dt })
+    // dragend 丢失（如源卡在拖拽中被卸载）：不派发 fireEvent.dragEnd，只派发 document mouseup 兜底。
+    fireEvent.mouseUp(document)
+    await new Promise((r) => setTimeout(r, 0)) // flush mouseup 兜底里的 setTimeout(0)
+    fireEvent.click(card)
+    expect(screen.getByTestId('change-detail')).toBeInTheDocument()
+  })
+
+  it('正向：dragstart→dragend 正常路径后 click 恢复打开 detail（与 mouseup 兜底对称共存）', () => {
+    renderBoard()
+    const card = screen.getByTestId('board-card-c1')
+    const dt = makeDataTransfer()
+    fireEvent.dragStart(card, { dataTransfer: dt })
+    fireEvent.dragEnd(card)
+    fireEvent.click(card)
+    expect(screen.getByTestId('change-detail')).toBeInTheDocument()
+  })
+})
+
+/**
+ * 评审修复轮 Important-3：BoardView 切换 currentRoot（项目切换器）不会卸载重挂组件，
+ * detail 状态若跨项目残留、且新项目恰好有同名 change，仅按 name 反查会把"旧项目详情"
+ * 错配成"新项目同名 change 的数据"（root 对不上，内容却照样渲染）。双保险修法：
+ * (a) currentRoot 变化时主动清空 detail；(b) findDetailEntry 反查前核对 target.root===
+ * currentRoot。用同一个 render 实例的 rerender（不卸载）模拟真实的项目切换。
+ */
+describe('BoardView 详情卡跨项目错配防护（评审修复轮 Important-3：切项目不卸载 + 同名 change 不误配）', () => {
+  it('打开 detail 后切换 currentRoot（新项目里有同名 change）→ change-detail 不在 DOM（旧代码红：仍渲染且内容错配）', () => {
+    const base = {
+      snapshot: makeSnapshot([makeProject('/repo-a', [makeChange('shared', 'build')])]),
+      loading: false,
+      error: null,
+      currentRoot: '/repo-a',
+      rulesByWf: RULES,
+      rulesErrors: new Map<string, string>(),
+      onTransition: vi.fn().mockResolvedValue(undefined),
+      onToast: vi.fn(),
+      onError: vi.fn(),
+    }
+    const { rerender } = render(
+      <I18nProvider>
+        <BoardView {...base} />
+      </I18nProvider>,
+    )
+    fireEvent.click(screen.getByTestId('board-card-shared'))
+    expect(screen.getByTestId('change-detail')).toBeInTheDocument()
+
+    rerender(
+      <I18nProvider>
+        <BoardView
+          {...base}
+          currentRoot="/repo-b"
+          snapshot={makeSnapshot([makeProject('/repo-b', [makeChange('shared', 'verify')])])}
+        />
+      </I18nProvider>,
+    )
+    expect(screen.queryByTestId('change-detail')).toBeNull()
+    // 板本身对新项目仍正常渲染（修复只掐掉错配的详情卡，不影响看板主体）
+    expect(screen.getByTestId('board-card-shared')).toBeInTheDocument()
+  })
+})
