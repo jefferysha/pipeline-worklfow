@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { I18nProvider } from '../i18n'
 import { BoardView } from './BoardView'
-import { DEFAULT_RULES, rulesFromDef, type WorkflowRules } from '../model/workflowModel'
+import { DEFAULT_RULES, rulesFromDef, rulesKey, type WorkflowRules } from '../model/workflowModel'
 import { makeChange, makeProject, makeSnapshot } from '../testkit'
 
 beforeEach(() => {
@@ -18,6 +18,36 @@ const REL_RULES = rulesFromDef({
   ],
 })
 const RULES = new Map<string, WorkflowRules>([['default', DEFAULT_RULES], ['release-train', REL_RULES]])
+
+/**
+ * Task 11（G19③ 收官）：聚合看板测试专用——两个项目各自定义一个同名（'release-train'）但
+ * 列集完全不同的 workflow，证明 rules 查找按 rulesKey(root,wf) 精确到项目，不会互相覆盖或
+ * 混用（若查找退化成裸 wf 名，两者会在同一个 Map 条目上打架，后写覆盖先写）。
+ */
+const REL_RULES_A = rulesFromDef({
+  name: 'release-train',
+  steps: [
+    { id: 'draft', label: '', gate: null, skills: [], inputs: [], outputs: [], guards: [], transitions: [{ event: 'approved', to: 'review' }] },
+    { id: 'review', label: '', gate: 'review', skills: [], inputs: [], outputs: [], guards: [], transitions: [{ event: 'shipped', to: 'ship' }] },
+    { id: 'ship', label: '', gate: null, skills: [], inputs: [], outputs: [], guards: [], transitions: [] },
+  ],
+})
+const REL_RULES_B = rulesFromDef({
+  name: 'release-train',
+  steps: [
+    { id: 'intake', label: '', gate: null, skills: [], inputs: [], outputs: [], guards: [], transitions: [{ event: 'triaged', to: 'qa' }] },
+    { id: 'qa', label: '', gate: 'review', skills: [], inputs: [], outputs: [], guards: [], transitions: [{ event: 'passed', to: 'done' }] },
+    { id: 'done', label: '', gate: null, skills: [], inputs: [], outputs: [], guards: [], transitions: [] },
+  ],
+})
+/** 聚合语境下 App.tsx 实际会传的形状：rulesByWf 已经按 rulesKey(root,wf) 索引（Task 11 的
+ *  BoardViewProps.rulesByWf JSDoc 记录了这个语境相关的键格式约定）。 */
+const AGG_RULES = new Map<string, WorkflowRules>([
+  [rulesKey('/repo-a', 'default'), DEFAULT_RULES],
+  [rulesKey('/repo-a', 'release-train'), REL_RULES_A],
+  [rulesKey('/repo-b', 'default'), DEFAULT_RULES],
+  [rulesKey('/repo-b', 'release-train'), REL_RULES_B],
+])
 
 /**
  * 手动控制的 Promise：制造"转换请求在途"窗口（busy=true 期间不会自动结算），
@@ -510,5 +540,209 @@ describe('BoardView 拖拽合法性前示（评审 P1-11：任何列都亮 targe
       expect(col.className).toContain('board__col--illegal')
       expect(col.className).not.toContain('board__col--legal')
     }
+  })
+})
+
+/**
+ * Task 11（G19③/④ 收官）：看板聚合分组——currentRoot===''（D5 聚合语境，Task 5）此前是
+ * BoardView 的死路（Task 8 报告 §8 担忧 3 登记的已知缺口：聚合下 BoardView 恒空态）。遍历
+ * 全部 ok 项目各自分组，组键 `${root}:${wf}`（仅 React key/testid/collapse 展示用途，与
+ * rulesKey 无关）；组头「<root 尾段> · <wf>」；rules 查找一律走 rulesKey(root,wf)——AGG_RULES
+ * 的构造方式模拟 App.tsx 在聚合语境下实际会传的 Map 形状（BoardView.tsx 的 BoardViewProps.
+ * rulesByWf JSDoc 记录了这个语境相关的键格式约定，Option B：prop 名不变，键格式随语境变化）。
+ */
+describe('BoardView 聚合看板分组（Task 11，G19③：currentRoot==="" 遍历全部 ok 项目）', () => {
+  it('两项目组独立渲染，组头带「root 尾段 · wf」前缀，卡片各自归位不串项目', () => {
+    renderBoard({
+      currentRoot: '',
+      snapshot: makeSnapshot([
+        makeProject('/repo-a', [makeChange('a1', 'build')]),
+        makeProject('/repo-b', [makeChange('b1', 'build')]),
+      ]),
+      rulesByWf: AGG_RULES,
+    })
+    const groupA = screen.getByTestId('board-group-/repo-a:default')
+    const groupB = screen.getByTestId('board-group-/repo-b:default')
+    expect(groupA.textContent).toContain('repo-a')
+    expect(groupA.textContent).toContain('default')
+    expect(groupB.textContent).toContain('repo-b')
+    expect(groupB.textContent).toContain('default')
+
+    expect(screen.getByTestId('board-col-/repo-a:default-build').textContent).toContain('a1')
+    expect(screen.getByTestId('board-col-/repo-a:default-build').textContent).not.toContain('b1')
+    expect(screen.getByTestId('board-col-/repo-b:default-build').textContent).toContain('b1')
+    expect(screen.getByTestId('board-col-/repo-b:default-build').textContent).not.toContain('a1')
+  })
+
+  it('同名自定义 workflow 跨项目各用各的列集（用 rulesKey 造两套不同定义，证明不互相覆盖）', () => {
+    renderBoard({
+      currentRoot: '',
+      snapshot: makeSnapshot([
+        makeProject('/repo-a', [makeChange('rel-a', 'draft', { fields: { workflow: 'release-train' } })]),
+        makeProject('/repo-b', [makeChange('rel-b', 'intake', { fields: { workflow: 'release-train' } })]),
+      ]),
+      rulesByWf: AGG_RULES,
+    })
+    // /repo-a 组：REL_RULES_A 的 draft/review/ship 列集
+    expect(screen.getByTestId('board-col-/repo-a:release-train-draft')).toBeInTheDocument()
+    expect(screen.queryByTestId('board-col-/repo-a:release-train-intake')).toBeNull()
+    expect(screen.getByTestId('board-col-/repo-a:release-train-draft').textContent).toContain('rel-a')
+    // /repo-b 组：REL_RULES_B 的 intake/qa/done 列集——与 A 完全不同，未被 A 的定义污染
+    expect(screen.getByTestId('board-col-/repo-b:release-train-intake')).toBeInTheDocument()
+    expect(screen.queryByTestId('board-col-/repo-b:release-train-draft')).toBeNull()
+    expect(screen.getByTestId('board-col-/repo-b:release-train-intake').textContent).toContain('rel-b')
+  })
+
+  it('聚合空态：0 个 ok 项目（或全部零 change）时仍显示看板空态，不崩溃', () => {
+    renderBoard({
+      currentRoot: '',
+      snapshot: makeSnapshot([makeProject('/repo-a', []), makeProject('/repo-b', [], { ok: false })]),
+    })
+    expect(screen.getByTestId('board-empty')).toBeInTheDocument()
+  })
+})
+
+/**
+ * Task 11（关键交接③，上游评审交办）：聚合下 DragPayload 带的是卡片自己项目的 root（见
+ * BoardView.tsx 卡片 onDragStart）——onDrop 必须校验 payload.root === 组的 root，不同项目
+ * 即使 workflow 同名也语义不通。判断：跨项目落点不是静默 no-op，走 P1-11 既有的非法反馈
+ * 机制（shake + onError），但换一句专门文案（不复用 illegal_drop 的"没有到 {to} 的转换边"
+ * ——跨项目场景下这句话可能说谎：边也许真的存在，只是存在于另一个项目）。
+ */
+describe('BoardView 聚合下跨项目拖拽校验（Task 11，关键交接③：payload.root === 组 root）', () => {
+  it('从 /repo-a 拖到 /repo-b 同名 workflow 列 → 非法反馈，不触发 onTransition', async () => {
+    const props = renderBoard({
+      currentRoot: '',
+      snapshot: makeSnapshot([
+        makeProject('/repo-a', [makeChange('rel-a', 'draft', { fields: { workflow: 'release-train' } })]),
+        makeProject('/repo-b', [makeChange('rel-b', 'intake', { fields: { workflow: 'release-train' } })]),
+      ]),
+      rulesByWf: AGG_RULES,
+    })
+    const dt = makeDataTransfer()
+    fireEvent.dragStart(screen.getByTestId('board-card-rel-a'), { dataTransfer: dt })
+    const targetCol = screen.getByTestId('board-col-/repo-b:release-train-intake')
+    fireEvent.drop(targetCol, { dataTransfer: dt })
+    await new Promise((r) => setTimeout(r, 0))
+    expect(props.onTransition).not.toHaveBeenCalled()
+    expect(targetCol.className).toContain('board__col--shake')
+    expect(props.onError).toHaveBeenCalledWith('不同项目之间不可直接拖拽')
+  })
+
+  it('拖拽前示：跨项目同名 workflow + 同名 step 不误亮 legal（仅比 workflow 名会被此场景戳穿）', () => {
+    const REL_RULES_A2 = rulesFromDef({
+      name: 'release-train',
+      steps: [
+        { id: 'draft', label: '', gate: null, skills: [], inputs: [], outputs: [], guards: [], transitions: [{ event: 'a-approved', to: 'review' }] },
+        { id: 'review', label: '', gate: 'review', skills: [], inputs: [], outputs: [], guards: [], transitions: [] },
+      ],
+    })
+    const REL_RULES_B2 = rulesFromDef({
+      name: 'release-train',
+      steps: [
+        { id: 'draft', label: '', gate: null, skills: [], inputs: [], outputs: [], guards: [], transitions: [{ event: 'b-approved', to: 'review' }] },
+        { id: 'review', label: '', gate: 'review', skills: [], inputs: [], outputs: [], guards: [], transitions: [] },
+      ],
+    })
+    renderBoard({
+      currentRoot: '',
+      snapshot: makeSnapshot([
+        makeProject('/repo-a', [makeChange('rel-a', 'draft', { fields: { workflow: 'release-train' } })]),
+        makeProject('/repo-b', [makeChange('rel-b', 'draft', { fields: { workflow: 'release-train' } })]),
+      ]),
+      rulesByWf: new Map<string, WorkflowRules>([
+        [rulesKey('/repo-a', 'release-train'), REL_RULES_A2],
+        [rulesKey('/repo-b', 'release-train'), REL_RULES_B2],
+      ]),
+    })
+    const dt = makeDataTransfer()
+    fireEvent.dragStart(screen.getByTestId('board-card-rel-a'), { dataTransfer: dt }) // /repo-a:release-train，phase=draft
+    // /repo-b 组同样有一条 draft→review（event 名不同）——若判定只看 workflow 名不看 root，
+    // 这里会被误判 legal；两个项目各自的 review 列必须各自独立判定。
+    const crossCol = screen.getByTestId('board-col-/repo-b:release-train-review')
+    expect(crossCol.className).not.toContain('board__col--legal')
+    expect(crossCol.className).toContain('board__col--illegal')
+    // 对照组：本项目自己的 review 列应该正常判定为合法（证明不是"整个判定坏了"，只是跨项目要拦）。
+    const ownCol = screen.getByTestId('board-col-/repo-a:release-train-review')
+    expect(ownCol.className).toContain('board__col--legal')
+  })
+})
+
+/**
+ * Task 11（上游评审交办的关键交接②）：聚合下点卡开详情——detail.root 必须记卡片自己所属
+ * 项目的真实 root（WfGroup.root），不是语境层面的 currentRoot（聚合时恒为 ''）。同时验证
+ * 转换/放行参数（onTransition 第二个参数）也用对了 root，不是误传空字符串或另一个项目的 root。
+ */
+describe('BoardView 聚合下开详情卡（Task 11：detail.root 记卡片项目 root，转换参数用对 root）', () => {
+  it('点 /repo-b 的卡 → detail 内容对应，放行按钮 onTransition 用 /repo-b 的 root（非 "" 非 /repo-a）', async () => {
+    const props = renderBoard({
+      currentRoot: '',
+      snapshot: makeSnapshot([
+        makeProject('/repo-a', [makeChange('a1', 'build')]),
+        makeProject('/repo-b', [makeChange('b1', 'verify')]),
+      ]),
+      rulesByWf: AGG_RULES,
+    })
+    fireEvent.click(screen.getByTestId('board-card-b1'))
+    const detail = screen.getByTestId('change-detail')
+    expect(within(detail).getByText('b1')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByTestId('detail-approve'))
+    await waitFor(() => expect(props.onTransition).toHaveBeenCalledWith('b1', '/repo-b', 'verify-pass'))
+  })
+
+  it('聚合下快捷钮转换同样用对 root（不是 currentRoot 空字符串）', async () => {
+    const props = renderBoard({
+      currentRoot: '',
+      snapshot: makeSnapshot([
+        makeProject('/repo-a', [makeChange('a1', 'build')]),
+        makeProject('/repo-b', [makeChange('b1', 'verify')]),
+      ]),
+      rulesByWf: AGG_RULES,
+    })
+    fireEvent.click(screen.getByTestId('board-quick-b1-verify-pass'))
+    await waitFor(() => expect(props.onTransition).toHaveBeenCalledWith('b1', '/repo-b', 'verify-pass'))
+  })
+})
+
+/**
+ * G19④（Task 11）：archive 折叠条从纯展示 div 升格为 <button aria-expanded>，点击展开只读
+ * 名单（名字 + archived_at，未设则退化 updated_at）；再点收起。非聚合语境（单项目）即可
+ * 覆盖——archive 展开本身与聚合分组是两个正交的改动点，不需要合流测试。
+ */
+describe('BoardView archive 折叠条点开只读名单（G19④，Task 11）', () => {
+  it('点击折叠条展开 4 张已归档卡片名单（含 archived_at 兜底 updated_at），再点收起', () => {
+    renderBoard({
+      snapshot: makeSnapshot([
+        makeProject('/repo', [
+          makeChange('done-1', 'archive', { updated_at: '2026-07-01T00:00:00Z', fields: { archived_at: '2026-07-02T09:30:00Z' } }),
+          makeChange('done-2', 'archive', { updated_at: '2026-07-03T00:00:00Z' }), // 无 archived_at，兜底 updated_at
+          makeChange('done-3', 'archive', { updated_at: '2026-07-04T00:00:00Z', fields: { archived_at: 'null' } }), // 字面 'null' 同样兜底（老内核 cmd_get 口径）
+          makeChange('done-4', 'archive', { updated_at: '2026-07-05T00:00:00Z' }),
+          makeChange('c1', 'build'),
+        ]),
+      ]),
+    })
+    const foldBtn = screen.getByTestId('board-fold-archive')
+    expect(foldBtn.tagName).toBe('BUTTON')
+    expect(foldBtn).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByTestId('board-archive-list')).toBeNull()
+
+    fireEvent.click(foldBtn)
+    expect(foldBtn).toHaveAttribute('aria-expanded', 'true')
+    const list = screen.getByTestId('board-archive-list')
+    expect(within(list).getByText('done-1')).toBeInTheDocument()
+    expect(within(list).getByText('done-2')).toBeInTheDocument()
+    expect(within(list).getByText('done-3')).toBeInTheDocument()
+    expect(within(list).getByText('done-4')).toBeInTheDocument()
+    expect(list.textContent).toContain('07-02 09:30') // done-1 用 archived_at
+    expect(list.textContent).toContain('07-03 00:00') // done-2 兜底 updated_at
+    expect(list.textContent).toContain('07-04 00:00') // done-3 字面 'null' 同样兜底 updated_at
+    // 非归档卡不混入名单
+    expect(within(list).queryByText('c1')).toBeNull()
+
+    fireEvent.click(foldBtn)
+    expect(foldBtn).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByTestId('board-archive-list')).toBeNull()
   })
 })

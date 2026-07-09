@@ -206,6 +206,9 @@ button.ev__chip--neutral:hover { border-color: var(--border-2); color: var(--tex
 .board__group-head { display: flex; align-items: center; gap: 9px; margin-bottom: 10px; background: var(--ink); color: var(--ink-fg); border-radius: var(--radius-sm); padding: 7px 12px; }
 .board__group-caret { border: 0; background: transparent; color: var(--ink-fg); padding: 0 2px; font-size: 11px; cursor: pointer; }
 .board__group-name { font-weight: 700; font-family: var(--mono); font-size: 13px; }
+/* 聚合看板组头「<root 尾段> · <wf>」（Task 11，G19③）：root 段沿用父级 --ink-fg mono，
+   降不透明度做次级信息层次（同 .board__group-meta 的 opacity 惯例），wf 段保持满不透明度主标签。 */
+.board__group-root { opacity: .7; }
 .board__group-meta { font-size: 12px; opacity: .75; }
 .board__group-error { margin: 0 0 10px; padding: 8px 11px; border-radius: 7px; background: var(--red-t); color: var(--red); font-size: 11.5px; font-weight: 600; }
 .board__scroll { overflow-x: auto; padding-bottom: 4px; }
@@ -235,7 +238,16 @@ button.ev__chip--neutral:hover { border-color: var(--border-2); color: var(--tex
 .board__card-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 7px; padding-top: 7px; border-top: 1px dashed var(--border); font-size: 11px; color: var(--text-3); }
 .board__card .qk { margin-top: 7px; }
 .board__col-empty { text-align: center; color: var(--text-3); font-size: 11.5px; opacity: .55; padding: 10px 0; }
-.board__fold { text-align: center; color: var(--text-3); font-size: 11.5px; padding: 10px 6px; border-radius: var(--radius-sm); border: 1px dashed var(--border); }
+/* G19④：折叠条从纯展示 div 升格为 <button aria-expanded>（点击展开只读归档名单）——
+   补齐浏览器按钮默认样式的复位（背景/字体/宽度/指针），视觉逐字保留原 div 观感。 */
+.board__fold { width: 100%; background: transparent; font: inherit; cursor: pointer; text-align: center; color: var(--text-3); font-size: 11.5px; padding: 10px 6px; border-radius: var(--radius-sm); border: 1px dashed var(--border); }
+.board__fold:hover { color: var(--text-2); border-color: var(--border-2); }
+.board__fold-wrap { display: flex; flex-direction: column; }
+/* 名单挂载时播 motion.ts foldOpen（同 .board__scroll 既有套路，"沿用既有 foldOpen 词汇"）——
+   这层本身不做 CSS 动画，只是 foldOpen 的 GSAP height 补间需要一个稳定的挂载目标。 */
+.fold-body { margin-top: 6px; }
+.board__archive-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
+.board__archive-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 9px; border-radius: var(--radius-sm); background: var(--fill); }
 
 /* ── 盖章确认（转换成功，motion.ts stampConfirm 驱动）── */
 .stamp { position: absolute; right: 8px; top: -9px; background: var(--green); color: #ffffff; font-size: 10.5px; font-weight: 800; border-radius: 999px; padding: 3px 9px; transform: rotate(-7deg); box-shadow: 0 2px 8px rgba(20,90,50,.35); pointer-events: none; white-space: nowrap; }

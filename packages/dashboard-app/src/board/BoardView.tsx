@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useT } from '../i18n'
 import type { ChangeSnapshot, Snapshot } from '../types'
-import type { WorkflowRules } from '../model/workflowModel'
+import { rulesKey, type WorkflowRules } from '../model/workflowModel'
 import { changeWorkflow } from '../inbox/inbox'
 import { ChangeDetailCard } from '../inbox/ChangeDetailCard'
 import { shortTime } from '../model/time'
@@ -13,17 +13,27 @@ interface BoardViewProps {
   snapshot: Snapshot | null
   loading: boolean
   error: string | null
-  /** D5 项目切换器语义：看板只看当前项目。 */
+  /** D5 项目切换器语义：''=全部项目聚合（Task 11，G19③/④），非空=只看该项目。 */
   currentRoot: string
-  /** App 统一拉取的 workflow 规则集（wf 名 → rules）。 */
+  /**
+   * App 拉取的 workflow 规则集。**键格式随语境变化**（Task 11 权衡：为了让非聚合路径的
+   * App.tsx 接线与既有 34 条测试逐字零改动，没有像 InboxView 那样整体升级成恒定
+   * rulesKey(root,wf) 索引的新 prop 名——细节见下）：
+   *   · currentRoot !== ''（非聚合）：裸 wf 名索引（沿用 useWorkflowRules 的既有产出，Task 8
+   *     起就是这个形状，App.tsx 这一侧零改动）。
+   *   · currentRoot === ''（聚合）：App 改传 useWorkflowRulesMulti 的产出，索引变成
+   *     rulesKey(root,wf)——因为聚合时同名自定义 workflow 可能出自不同项目、定义不同，裸 wf
+   *     名不足以区分。本组件内部任何 rules 查找一律经下面的 lookupRules/lookupRulesError
+   *     两个小函数完成，不手拼分隔符、不绕过 rulesKey()。
+   */
   rulesByWf: ReadonlyMap<string, WorkflowRules>
-  /** 拉取失败的 workflow（wf 名 → server 文案）——对应组渲染为只读降级（卡不消失）。 */
+  /** 拉取失败的 workflow——对应组渲染为只读降级（卡不消失）。键格式同 rulesByWf 的语境规则。 */
   rulesErrors: ReadonlyMap<string, string>
   /** 写回一次转换（App 注入 = api/client.postTransition + 成功后 refresh）。 */
   onTransition: (name: string, root: string, event: string) => Promise<void>
   onToast?: (msg: string) => void
   onError?: (msg: string) => void
-  /** G18 新建 change 入口（App 提供）。 */
+  /** G18 新建 change 入口（App 提供）。聚合语境下 App 恒传 undefined——新建需要明确的目标项目。 */
   onNewChange?: () => void
 }
 
@@ -43,17 +53,27 @@ interface DragPayload {
 /**
  * 评审 P1-11：拖拽中驱动列前示的状态（与 draggingRef 并存——ref 只管 click 抑制，这个 state
  * 管视觉：每列按 plannedTransition(group.rules, dragging.phase, step) 判定 legal/illegal）。
- * 刻意不含 root——列前示只需要 phase/workflow 就能判定合法性，name 只是留作调试/未来扩展的
- * identity，不参与任何判定逻辑。
+ * Task 11：新增 root——聚合语境下两个不同项目可能各自有一个同名 workflow（如都叫
+ * release-train，但定义不同），仅凭 workflow 名判定合法性会把"跨项目、名字碰巧相同"误判成
+ * 合法（P1-11 原注释"列前示只需要 phase/workflow 就能判定合法性"这个假设在聚合语境下不再
+ * 成立，一并更正）。name 仍只是调试/未来扩展的 identity，不参与判定。
  */
 interface DraggingState {
   name: string
+  root: string
   phase: string
   workflow: string
 }
 
 interface WfGroup {
+  /** 该组实际所属项目 root（非聚合时恒等于 currentRoot；聚合时是该组真正所属的项目路径，
+   *  Task 11 新增——detail/拖拽/转换全部据此取"卡片自己的项目"而非语境层面的 currentRoot）。 */
+  root: string
   wf: string
+  /** React key / DOM testid / collapse-localStorage / 拖拽前示列 key 等纯 UI 用途的展示键：
+   *  非聚合 = 裸 wf 名（与既有测试逐字一致）；聚合 = `${root}:${wf}`（避免同名 wf 跨项目撞
+   *  key）。**与 rulesKey(root,wf) 无关**——rules 查找一律走 rulesKey()，两套键各管各的。 */
+  groupKey: string
   rules: WorkflowRules | undefined
   error: string | undefined
   cards: ChangeSnapshot[]
@@ -75,24 +95,39 @@ interface DetailEntry {
 
 /**
  * detail 状态只存 {root,name}（Task 9 brief 契约），渲染时经本函数反查所属组拿到 change 与
- * 该组已经算好的 rules——brief 交接注意事项：BoardView 的 rulesByWf 是按裸 wf 名键的旧 Map
- * （非 rulesKey(root,wf) 格式），detail 卡的 rules 不查它，直接用同组卡片共享的 group.rules。
+ * 该组已经算好的 rules。
  *
- * 评审修复轮 Important-3：新增 currentRoot 参数与核对。BoardView 切换项目（D5 项目切换器）
- * 不会卸载重挂组件，若 detail 里存的 root 是切换前的旧项目、而新项目恰好有同名 change，
- * 仅按 name 匹配会把"旧项目的详情卡"错配成"新项目同名 change 的数据"（root 对不上，内容却
- * 照样渲染出来）。groups 已经是按 currentRoot 过滤过的当前项目分组，这里只需要求
- * target.root === currentRoot 才继续按 name 找；不相等直接判定"查无此卡"，与组件里
- * [currentRoot] 依赖的 detail 重置 effect 构成双保险。
+ * Task 11 改法（上游评审交办的前向兼容修复）：不再拿 target.root 与 currentRoot 比较——聚合
+ * 语境下 currentRoot 恒为 ''，而 target.root 现在记的是卡片自己所属项目的真实 root（见
+ * WfGroup.root/卡片 onClick 的 setDetail），两者压根不是同一个量纲，继续比较只会让聚合下的
+ * detail 全部误判"查无此卡"。改为直接按"组的 root === target.root 且 name 匹配"反查——
+ * groups 本身已经带着每组真实的 root（非聚合时等于 currentRoot，聚合时是各自项目的 root），
+ * 这一条判据在两种语境下都成立，不必再单独传 currentRoot 参数。
+ * 评审修复轮 Important-3 的"切项目即清空 detail" effect（见组件内 useEffect([currentRoot])）
+ * 仍然保留，是同一个防错配问题的另一半保险（主动清空 + 反查兜底）。
  */
-function findDetailEntry(groups: readonly WfGroup[], target: DetailTarget | null, currentRoot: string): DetailEntry | undefined {
+function findDetailEntry(groups: readonly WfGroup[], target: DetailTarget | null): DetailEntry | undefined {
   if (!target) return undefined
-  if (target.root !== currentRoot) return undefined
   for (const g of groups) {
+    if (g.root !== target.root) continue
     const change = g.cards.find((c) => c.name === target.name)
     if (change) return { change, rules: g.rules }
   }
   return undefined
+}
+
+/** root 尾段（同 inbox.ts projectName()/App.tsx navProjects 同款一行逻辑的第三份局部拷贝——
+ *  三处都只是这一行，不值得为此新增跨模块依赖）：聚合语境组头展示「<root 尾段> · <wf>」用。 */
+function rootTail(root: string): string {
+  const parts = root.split('/').filter(Boolean)
+  return parts[parts.length - 1] ?? root
+}
+
+/** 归档时间：archived_at 未设（老内核 cmd_get 口径：空串/字面 'null'，同 evidence.ts/
+ *  ChangeDetailCard.tsx 私有 helper 的既有口径）时退化 updated_at（G19④ archive 展开名单用）。 */
+function archivedAt(c: ChangeSnapshot): string {
+  const v = c.fields['archived_at']
+  return typeof v === 'string' && v !== '' && v !== 'null' ? v : c.updated_at
 }
 
 /**
@@ -132,6 +167,13 @@ export function BoardView({ snapshot, loading, error, currentRoot, rulesByWf, ru
   /** 非法 drop 落点列——300ms 后自动清（CSS shake 动效窗口），配合 onError 一句解释取代旧的
    *  静默 no-op（评审 P1-11）。 */
   const [shakeCol, setShakeCol] = useState<string | null>(null)
+  /** archive 折叠条点开的只读名单（G19④）：按 groupKey 记住哪些组的 archive 列表当前展开——
+   *  聚合语境下可能同时存在多个 default 组，各自独立展开/收起，互不影响。纯 UI 态，不落
+   *  localStorage（不是"偏好"，每次进入看板都重新收起，同 InboxView 行内展开的既有先例）。 */
+  const [archiveOpen, setArchiveOpen] = useState<ReadonlySet<string>>(new Set())
+  /** 刚被用户展开的 archive 组 key——名单 body 挂载时播 foldOpen（同 expandingRef 的既有套路，
+   *  独立一份 ref 因为这是另一块可折叠区域，不能共用 expandingRef 否则互相踩键）。 */
+  const archiveExpandingRef = useRef<string | null>(null)
 
   // Esc 关 detail（评审 P0-2 键盘契约的一部分）。让位打开中的 Dialog（board 自己的回退确认框，
   // 或 detail 卡自己的回退确认框）——同 InboxView.tsx 的既有写法：document 上还有
@@ -169,44 +211,90 @@ export function BoardView({ snapshot, loading, error, currentRoot, rulesByWf, ru
   }, [])
 
   // 切项目即关详情卡（评审修复轮 Important-3，双保险的一半）：BoardView 不会因为切换
-  // currentRoot 而卸载重挂，detail 状态若跨项目残留，配合 findDetailEntry 新增的 root
+  // currentRoot 而卸载重挂，detail 状态若跨项目残留，配合 findDetailEntry 新增的按组 root
   // 核对——两处任一生效都能防止"旧项目详情 + 新项目同名 change"错配渲染，这里负责主动
-  // 清空 state（另一半见 findDetailEntry 的 target.root !== currentRoot 早退）。
+  // 清空 state（另一半见 findDetailEntry 的 g.root !== target.root 早退）。聚合语境下同样
+  // 适用：currentRoot 在聚合内部不变（恒为 ''），只有真正切换语境（聚合⇄单项目、或两个
+  // 单项目之间切换）才会触发。
   useEffect(() => {
     setDetail(null)
   }, [currentRoot])
 
+  /**
+   * Task 11（G19③/④ 收官）：currentRoot===''（聚合）时不再只认 currentRoot 精确匹配的单个
+   * 项目，遍历全部 ok 项目各自分组；每组携带自己真实的 root（WfGroup.root），供 detail/
+   * 拖拽/转换全部取用"卡片自己的项目"而非语境层面的 currentRoot（后者聚合时是空字符串
+   * 哨兵，不是任何一个真实项目）。非聚合分支逐字保留原实现（单项目 find + 分组），只是
+   * 套进同一个"每项目一轮分组"的循环里，产出的 groups 与改动前逐字相同（多一个 root 字段，
+   * 值恒等于 currentRoot）。
+   * rules 查找（lookupRules/lookupRulesError，见下）按 currentRoot==='' 分支：非聚合沿用 App.tsx
+   * 既有 useWorkflowRules 产出的裸 wf 名 Map（rulesByWf 这个 prop 名/格式对非聚合路径完全
+   * 不变）；聚合时 App.tsx 改传 useWorkflowRulesMulti 的产出（同一个 prop 名，但已经是按
+   * rulesKey(root,wf) 索引的 Map——见 BoardViewProps.rulesByWf 的 JSDoc）。
+   */
+  function lookupRules(root: string, wf: string): WorkflowRules | undefined {
+    return currentRoot === '' ? rulesByWf.get(rulesKey(root, wf)) : rulesByWf.get(wf)
+  }
+  function lookupRulesError(root: string, wf: string): string | undefined {
+    return currentRoot === '' ? rulesErrors.get(rulesKey(root, wf)) : rulesErrors.get(wf)
+  }
+  /** 展示键（React key/testid/collapse/拖拽列 key 用）：非聚合裸 wf 名（既有测试逐字不变）；
+   *  聚合 `${root}:${wf}`（同名 wf 跨项目不再撞 key）。与 rulesKey() 是两套互不相关的键。 */
+  function makeGroupKey(root: string, wf: string): string {
+    return currentRoot === '' ? `${root}:${wf}` : wf
+  }
+
   const groups = useMemo<WfGroup[]>(() => {
-    const project = snapshot?.projects.find((p) => p.ok && p.root === currentRoot)
-    const byWf = new Map<string, ChangeSnapshot[]>()
-    for (const c of project?.changes ?? []) {
-      const wf = changeWorkflow(c)
-      const bucket = byWf.get(wf) ?? []
-      bucket.push(c)
-      byWf.set(wf, bucket)
+    const scopeProjects =
+      currentRoot === ''
+        ? (snapshot?.projects.filter((p) => p.ok) ?? [])
+        : (() => {
+            const project = snapshot?.projects.find((p) => p.ok && p.root === currentRoot)
+            return project ? [project] : []
+          })()
+    const out: WfGroup[] = []
+    for (const project of scopeProjects) {
+      const byWf = new Map<string, ChangeSnapshot[]>()
+      for (const c of project.changes) {
+        const wf = changeWorkflow(c)
+        const bucket = byWf.get(wf) ?? []
+        bucket.push(c)
+        byWf.set(wf, bucket)
+      }
+      const names = [...byWf.keys()].sort((a, b) => (a === 'default' ? -1 : b === 'default' ? 1 : a < b ? -1 : 1))
+      for (const wf of names) {
+        out.push({
+          root: project.root,
+          wf,
+          groupKey: makeGroupKey(project.root, wf),
+          rules: lookupRules(project.root, wf),
+          error: lookupRulesError(project.root, wf),
+          cards: byWf.get(wf)!,
+        })
+      }
     }
-    const names = [...byWf.keys()].sort((a, b) => (a === 'default' ? -1 : b === 'default' ? 1 : a < b ? -1 : 1))
-    return names.map((wf) => ({ wf, rules: rulesByWf.get(wf), error: rulesErrors.get(wf), cards: byWf.get(wf)! }))
+    return out
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- lookupRules/lookupRulesError/makeGroupKey 都是闭包在同一渲染里定义的纯函数，依赖已经通过 currentRoot/rulesByWf/rulesErrors 覆盖
   }, [snapshot, currentRoot, rulesByWf, rulesErrors])
 
   const totalCards = groups.reduce((n, g) => n + g.cards.length, 0)
-  const detailEntry = findDetailEntry(groups, detail, currentRoot)
+  const detailEntry = findDetailEntry(groups, detail)
 
-  function isCollapsed(wf: string): boolean {
+  function isCollapsed(g: WfGroup): boolean {
     void collapseTick
     try {
-      return localStorage.getItem(collapseKey(currentRoot, wf)) === '1'
+      return localStorage.getItem(collapseKey(g.root, g.wf)) === '1'
     } catch {
       return false
     }
   }
 
-  function toggleCollapsed(wf: string): void {
+  function toggleCollapsed(g: WfGroup): void {
     try {
-      const key = collapseKey(currentRoot, wf)
+      const key = collapseKey(g.root, g.wf)
       if (localStorage.getItem(key) === '1') {
         localStorage.removeItem(key)
-        expandingRef.current = wf // 展开方向：body 挂载时播 foldOpen
+        expandingRef.current = g.groupKey // 展开方向：body 挂载时播 foldOpen
       } else {
         localStorage.setItem(key, '1')
       }
@@ -247,14 +335,18 @@ export function BoardView({ snapshot, loading, error, currentRoot, rulesByWf, ru
   }
 
   /**
-   * 评审 P1-11：非法落点不再静默 no-op——该列 shake 300ms + onError 一句解释（"{from} 没有到
-   * {to} 的转换边"）。key 与列渲染时用于 shakeCol 比对的 colKey 同构（`${wf}:${step}`）。
+   * 评审 P1-11：非法落点不再静默 no-op——该列 shake 300ms + onError 一句解释。key 与列渲染时
+   * 用于 shakeCol 比对的 colKey 同构（`${group.groupKey}:${step}`，Task 11 起 groupKey 取代
+   * 裸 wf 名——聚合语境下两个不同项目的同名 wf 分组要落在各自独立的 shake key 上）。
+   * reason='cross_project'（Task 11 新增）：聚合语境下跨项目拖拽——即使目标组恰好同名 wf，
+   * "没有到 {to} 的转换边"这句话会说谎（边可能真的存在，只是存在于另一个项目），改用专门的
+   * 跨项目文案，不复用可能误导的既有 illegal_drop 措辞。
    */
-  function triggerIllegalDrop(wf: string, toStep: string, fromStep: string): void {
-    const key = `${wf}:${toStep}`
+  function triggerIllegalDrop(groupKey: string, toStep: string, fromStep: string, reason: 'edge' | 'cross_project' = 'edge'): void {
+    const key = `${groupKey}:${toStep}`
     setShakeCol(key)
     window.setTimeout(() => setShakeCol((k) => (k === key ? null : k)), 300)
-    onError?.(t('board.illegal_drop', { from: fromStep, to: toStep }))
+    onError?.(reason === 'cross_project' ? t('board.illegal_drop_cross_project') : t('board.illegal_drop', { from: fromStep, to: toStep }))
   }
 
   function onDrop(group: WfGroup, toStep: string, raw: string): void {
@@ -268,16 +360,38 @@ export function BoardView({ snapshot, loading, error, currentRoot, rulesByWf, ru
       return
     }
     if (!payload || typeof payload !== 'object' || !payload.name || !payload.phase) return
+    // Task 11（关键交接③）：聚合语境下 DragPayload 带的是卡片自己项目的 root（见卡片
+    // onDragStart），不同项目即使 workflow 同名，列语义也不通——校验 payload.root ===
+    // 组的 root，不相等一律非法反馈（不是静默 no-op，呼应 P1-11 的既有取舍：任何拖拽结果
+    // 都要给用户看得见的反应，不能悄悄什么也不做）。非聚合语境下 payload.root 恒等于
+    // group.root（两者都等于 currentRoot），这条判断永远为 false，不影响既有行为。
+    if (payload.root !== group.root) {
+      triggerIllegalDrop(group.groupKey, toStep, payload.phase, 'cross_project')
+      return
+    }
     if (payload.workflow !== group.wf) {
-      triggerIllegalDrop(group.wf, toStep, payload.phase) // 跨组落点：不同 workflow 的列语义不通
+      triggerIllegalDrop(group.groupKey, toStep, payload.phase) // 跨组落点：不同 workflow 的列语义不通
       return
     }
     const planned = plannedTransition(group.rules, payload.phase, toStep)
     if (!planned) {
-      triggerIllegalDrop(group.wf, toStep, payload.phase) // 非法落点（评审 P1-11）
+      triggerIllegalDrop(group.groupKey, toStep, payload.phase) // 非法落点（评审 P1-11）
       return
     }
     requestTransition(payload.name, payload.root ?? '', planned)
+  }
+
+  function toggleArchiveOpen(key: string): void {
+    setArchiveOpen((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) {
+        next.delete(key)
+      } else {
+        next.add(key)
+        archiveExpandingRef.current = key // 展开方向：名单挂载时播 foldOpen（同 expandingRef 套路）
+      }
+      return next
+    })
   }
 
   if (loading && !snapshot) {
@@ -309,20 +423,30 @@ export function BoardView({ snapshot, loading, error, currentRoot, rulesByWf, ru
       </header>
 
       {groups.map((group) => {
-        const collapsed = isCollapsed(group.wf)
+        const collapsed = isCollapsed(group)
         return (
-          <section key={group.wf} className="board__group" data-testid={`board-group-${group.wf}`}>
+          <section key={group.groupKey} className="board__group" data-testid={`board-group-${group.groupKey}`}>
             <header className="board__group-head">
               <button
                 type="button"
                 className="board__group-caret"
-                data-testid={`board-fold-${group.wf}`}
+                data-testid={`board-fold-${group.groupKey}`}
                 aria-expanded={!collapsed}
-                onClick={() => toggleCollapsed(group.wf)}
+                onClick={() => toggleCollapsed(group)}
               >
                 {collapsed ? '▸' : '▾'}
               </button>
-              <span className="board__group-name">{group.wf}</span>
+              <span className="board__group-name">
+                {currentRoot === '' ? (
+                  <>
+                    <span className="board__group-root">{rootTail(group.root)}</span>
+                    {' · '}
+                    {group.wf}
+                  </>
+                ) : (
+                  group.wf
+                )}
+              </span>
               <span className="board__group-meta">
                 {group.rules
                   ? t('board.group_meta', { steps: group.rules.steps.length, cards: group.cards.length })
@@ -331,7 +455,7 @@ export function BoardView({ snapshot, loading, error, currentRoot, rulesByWf, ru
             </header>
 
             {group.error && (
-              <p className="board__group-error" data-testid={`board-group-error-${group.wf}`}>
+              <p className="board__group-error" data-testid={`board-group-error-${group.groupKey}`}>
                 {t('board.group_error', { msg: group.error })}
               </p>
             )}
@@ -340,7 +464,7 @@ export function BoardView({ snapshot, loading, error, currentRoot, rulesByWf, ru
               <div
                 className="board__scroll"
                 ref={(el) => {
-                  if (el && expandingRef.current === group.wf) {
+                  if (el && expandingRef.current === group.groupKey) {
                     expandingRef.current = null
                     foldOpen(el)
                   }
@@ -348,31 +472,34 @@ export function BoardView({ snapshot, loading, error, currentRoot, rulesByWf, ru
               >
                 <div
                   className="board__grid"
-                  data-testid={`board-grid-${group.wf}`}
+                  data-testid={`board-grid-${group.groupKey}`}
                   style={{ gridTemplateColumns: `repeat(${group.rules.steps.length}, minmax(126px, 1fr))` }}
                 >
                   {group.rules.steps.map((step) => {
                     const rules = group.rules!
                     const foldArchive = group.wf === 'default' && step === 'archive'
                     const cards = group.cards.filter((c) => c.phase === step)
-                    const colKey = `${group.wf}:${step}`
+                    const colKey = `${group.groupKey}:${step}`
                     const isTarget = dragOver === colKey
                     // 评审 P1-11：拖拽中逐列判定合法性——跨组（workflow 不同）不信任 step 名巧合
                     // 相等，整组直接非法；同组按 plannedTransition 是否有出边判定（含起点列本身：
                     // fromStep===toStep 恒 null，同样落 illegal，不特殊豁免）。不在拖拽中为 null，
-                    // 不渲染 legal/illegal 任一类。
+                    // 不渲染 legal/illegal 任一类。Task 11：先核对 dragging.root === group.root——
+                    // 聚合语境下两个不同项目可能各自有一个同名 workflow，仅比 workflow 名会把
+                    // "跨项目、名字碰巧相同"误判成合法（与 onDrop 的 payload.root 校验对称）。
                     const legal = dragging
-                      ? dragging.workflow === group.wf && plannedTransition(rules, dragging.phase, step) !== null
+                      ? dragging.root === group.root && dragging.workflow === group.wf && plannedTransition(rules, dragging.phase, step) !== null
                       : null
                     const colClass = ['board__col']
                     if (legal === true) colClass.push('board__col--legal')
                     else if (legal === false) colClass.push('board__col--illegal')
                     if (isTarget && legal === true) colClass.push('board__col--target') // hover 高亮仅合法列生效
                     if (shakeCol === colKey) colClass.push('board__col--shake')
+                    const isArchiveOpen = archiveOpen.has(group.groupKey)
                     return (
                       <div
                         key={step}
-                        data-testid={`board-col-${group.wf}-${step}`}
+                        data-testid={`board-col-${group.groupKey}-${step}`}
                         className={colClass.join(' ')}
                         onDragOver={(e) => {
                           e.preventDefault()
@@ -388,12 +515,40 @@ export function BoardView({ snapshot, loading, error, currentRoot, rulesByWf, ru
                       >
                         <div className="board__col-head">
                           <span className="board__col-name">{step}</span>
-                          <span className="board__col-count" data-testid={`board-col-count-${group.wf}-${step}`}>{cards.length}</span>
+                          <span className="board__col-count" data-testid={`board-col-count-${group.groupKey}-${step}`}>{cards.length}</span>
                         </div>
                         <div className="board__col-body">
                           {foldArchive ? (
-                            <div className="board__fold" data-testid="board-fold-archive">
-                              {t('board.archived_fold', { n: cards.length })}
+                            <div className="board__fold-wrap">
+                              <button
+                                type="button"
+                                className="board__fold"
+                                data-testid="board-fold-archive"
+                                aria-expanded={isArchiveOpen}
+                                onClick={() => toggleArchiveOpen(group.groupKey)}
+                              >
+                                {t('board.archived_fold', { n: cards.length })}
+                              </button>
+                              {isArchiveOpen && (
+                                <div
+                                  className="fold-body"
+                                  ref={(el) => {
+                                    if (el && archiveExpandingRef.current === group.groupKey) {
+                                      archiveExpandingRef.current = null
+                                      foldOpen(el)
+                                    }
+                                  }}
+                                >
+                                  <ul className="board__archive-list" data-testid="board-archive-list">
+                                    {cards.map((c) => (
+                                      <li key={`${group.root}/${c.name}`} className="board__archive-row">
+                                        <span className="card__name">{c.name}</span>
+                                        <span className="ticket-row__time">{shortTime(archivedAt(c))}</span>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
                             </div>
                           ) : (
                             <>
@@ -403,11 +558,13 @@ export function BoardView({ snapshot, loading, error, currentRoot, rulesByWf, ru
                                 // 评审修复轮 Important-1：detail 打开时，该卡（root+name 与当前 detail 匹配）的
                                 // 行内快捷钮组隐藏——详情卡动作条是唯一动作面，同 InboxView.tsx Minor-5 先例
                                 // （避免同一条转换在看板卡快捷钮与详情卡动作条两处都能触发）。只隐藏"正在被
-                                // 详情卡展示的那一张"，其余卡片的快捷钮不受影响。
-                                const isCardDetailOpen = detail !== null && detail.root === currentRoot && detail.name === change.name
+                                // 详情卡展示的那一张"，其余卡片的快捷钮不受影响。Task 11：比对 group.root（卡片
+                                // 自己所属的项目）而非 currentRoot——聚合语境下 currentRoot 恒为 ''，永远不会等于
+                                // 任何真实 detail.root，继续比 currentRoot 会让这条隐藏逻辑在聚合下失效。
+                                const isCardDetailOpen = detail !== null && detail.root === group.root && detail.name === change.name
                                 return (
                                   <article
-                                    key={`${currentRoot}/${change.name}`}
+                                    key={`${group.root}/${change.name}`}
                                     className={gate ? 'card board__card board__card--gate' : 'card board__card'}
                                     role="button"
                                     tabIndex={0}
@@ -416,21 +573,23 @@ export function BoardView({ snapshot, loading, error, currentRoot, rulesByWf, ru
                                     draggable
                                     onClick={() => {
                                       if (draggingRef.current) return // 拖拽落点触发的 click 旁路，见 draggingRef 声明处注释
-                                      setDetail({ root: currentRoot, name: change.name })
+                                      setDetail({ root: group.root, name: change.name }) // Task 11：记卡片自己的项目 root，不是 currentRoot
                                     }}
                                     onKeyDown={(e) => {
                                       // 评审 P0-2：role="button" tabIndex={0} 此前 click/Enter/Space 三路无反应——接上真行为。
                                       if (e.key === 'Enter' || e.key === ' ') {
                                         e.preventDefault() // 阻止 Space 的原生页面滚动，呼应 role="button" 的键盘契约
-                                        setDetail({ root: currentRoot, name: change.name })
+                                        setDetail({ root: group.root, name: change.name })
                                       }
                                     }}
                                     onDragStart={(e) => {
                                       draggingRef.current = true
-                                      const payload: DragPayload = { name: change.name, root: currentRoot, phase: change.phase, workflow: group.wf }
+                                      // Task 11：payload.root 记卡片自己的项目 root（聚合语境下 currentRoot 是空字符串
+                                      // 哨兵，不是任何真实项目；非聚合语境下 group.root 恒等于 currentRoot，行为不变）。
+                                      const payload: DragPayload = { name: change.name, root: group.root, phase: change.phase, workflow: group.wf }
                                       e.dataTransfer.setData('application/json', JSON.stringify(payload))
                                       e.dataTransfer.effectAllowed = 'move'
-                                      setDragging({ name: change.name, phase: change.phase, workflow: group.wf }) // 评审 P1-11：驱动列前示
+                                      setDragging({ name: change.name, root: group.root, phase: change.phase, workflow: group.wf }) // 评审 P1-11 + Task 11：驱动列前示
                                     }}
                                     onDragEnd={() => {
                                       draggingRef.current = false
@@ -474,7 +633,7 @@ export function BoardView({ snapshot, loading, error, currentRoot, rulesByWf, ru
                                                 // 卡片新增 onClick 开详情后，快捷钮点击不该冒泡触发同一次 click 顺带打开详情
                                                 // （同 InboxView.tsx 行内快捷钮的既有 stopPropagation 先例）。
                                                 e.stopPropagation()
-                                                requestTransition(change.name, currentRoot, planned)
+                                                requestTransition(change.name, group.root, planned) // Task 11：用卡片自己的项目 root，不是 currentRoot
                                               }}
                                             >
                                               {planned.backward ? `↩ ${to}` : `→ ${to}`}
@@ -500,7 +659,7 @@ export function BoardView({ snapshot, loading, error, currentRoot, rulesByWf, ru
             {!collapsed && !group.rules && (
               <ul className="inbox__list">
                 {group.cards.map((change) => (
-                  <li key={change.name} className="ticket-row" data-testid={`board-card-${change.name}`}>
+                  <li key={`${group.root}/${change.name}`} className="ticket-row" data-testid={`board-card-${change.name}`}>
                     <span className="card__name">{change.name}</span>
                     {change.track && <span className="card__track">{change.track}</span>}
                     <span className="g-phase">{change.phase}</span>

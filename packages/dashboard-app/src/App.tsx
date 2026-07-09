@@ -102,17 +102,20 @@ function AppShell(): JSX.Element {
   // 键升级为 rulesKey(root,wf)（见 workflowModel.ts）——同名自定义 workflow 跨项目不再共享
   // 同一把 key。React hook 不能条件调用：不能"聚合时调 Multi、非聚合时不调"两条路径切换。
   // 这里选"两个 hook 都恒调、各自服务不同视图"（而不是统一只调 Multi 再反推 BoardView 的
-  // rulesByWf/rulesErrors）：上面这行 useWorkflowRules 调用逐字不动，继续单独喂 BoardView
-  // （Board 聚合是 Task 11 的范围，本任务不碰它的消费管线，这样改动面最小、对 BoardView 零
-  // 行为风险）；新增的这条 Multi 调用只喂 InboxView。单项目语境下两条调用会请求同一批
-  // (root,wf)，靠 fetchRules 模块级 cache/inflight 去重（workflowModel.ts 已有机制，这里不
-  // 重复实现/不产生重复网络请求），代价只是同一份数据被两套 tick/errors/pendingCount 状态
-  // 各记一份（可接受的小冗余，换单项目路径零回归风险）。
+  // rulesByWf/rulesErrors）：上面这行 useWorkflowRules 调用逐字不动，继续单独喂 BoardView 的
+  // 非聚合路径；新增的这条 Multi 调用喂 InboxView（恒）+ BoardView 的聚合路径（Task 11：
+  // BoardView 的 rulesByWf/rulesErrors 这两个 prop 名没有改，但下面 JSX 调用点在
+  // currentRoot===''时改传这里的 rulesByKey/rulesErrorsByKey——BoardView 内部按 currentRoot
+  // 是否为空自己决定拿到的 Map 是裸 wf 名索引还是 rulesKey(root,wf) 索引，见 BoardView.tsx
+  // 的 BoardViewProps.rulesByWf JSDoc）。单项目语境下两条调用会请求同一批 (root,wf)，靠
+  // fetchRules 模块级 cache/inflight 去重（workflowModel.ts 已有机制，这里不重复实现/不产生
+  // 重复网络请求），代价只是同一份数据被两套 tick/errors/pendingCount 状态各记一份（可接受
+  // 的小冗余，换非聚合路径 App.tsx 接线 + BoardView.test.tsx 既有 34 条测试零改动）。
   const rulesPairs = useMemo(() => {
     if (currentRoot !== '') return [{ root: currentRoot, names: wfNames }]
     return (snapshot?.projects ?? []).filter((p) => p.ok).map((p) => ({ root: p.root, names: wfNamesFor(p.changes) }))
   }, [currentRoot, wfNames, snapshot])
-  const { rules: rulesByKey } = useWorkflowRulesMulti(rulesPairs)
+  const { rules: rulesByKey, errors: rulesErrorsByKey } = useWorkflowRulesMulti(rulesPairs)
 
   useEffect(() => {
     try {
@@ -245,8 +248,12 @@ function AppShell(): JSX.Element {
             loading={loading}
             error={error}
             currentRoot={currentRoot}
-            rulesByWf={rulesByWf}
-            rulesErrors={rulesErrors}
+            // Task 11（G19③/④）：聚合语境（currentRoot===''）改传 useWorkflowRulesMulti 的产出
+            // （已经是按 rulesKey(root,wf) 索引），非聚合语境逐字沿用 Task 8 起就未变的
+            // useWorkflowRules 单项目产出（裸 wf 名索引）——prop 名不变，BoardView 内部按
+            // currentRoot 自己判断该用哪种键格式查（见 BoardView.tsx 的 lookupRules）。
+            rulesByWf={currentRoot === '' ? rulesByKey : rulesByWf}
+            rulesErrors={currentRoot === '' ? rulesErrorsByKey : rulesErrors}
             onTransition={onTransition}
             onToast={(m) => showFlash('toast', m)}
             onError={(m) => showFlash('error', m)}

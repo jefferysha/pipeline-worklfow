@@ -91,6 +91,9 @@ export const zh: Dict = {
     stamp: '已推进 → {to}',
     // 评审 P1-11：非法落点不再静默 no-op，该列 shake + 这句解释（取代旧的无声回弹）。
     illegal_drop: '{from} 没有到 {to} 的转换边',
+    // Task 11（G19③）：聚合看板跨项目拖拽——不复用 illegal_drop（那句话在这个场景下会说谎：
+    // 边可能真的存在，只是存在于另一个项目）。
+    illegal_drop_cross_project: '不同项目之间不可直接拖拽',
   },
   settings: {
     title: '设置',
@@ -321,6 +324,7 @@ export const en: Dict = {
     archived_fold: '{n} archived',
     stamp: 'Advanced → {to}',
     illegal_drop: 'No transition edge from {from} to {to}',
+    illegal_drop_cross_project: 'Cannot drag across projects',
   },
   settings: {
     title: 'Settings',
