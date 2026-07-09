@@ -96,9 +96,9 @@
 
 **Steps:**
 
-- [ ] **Step 1**: 写截图脚本：`npm run build:web && npm run build:server`，`PIPELINE_DASHBOARD_HOME=<临时目录> PIPELINE_DASHBOARD_PORT=8799 node packages/server/dist/dashboard.mjs` 起真 server（临时 home 里预写 `~/.claude/pipeline-projects.json` 指向一个 `pipeline init` 出来的 demo 项目），对 收件箱/看板/设置/loops/afk/workflows 六视图 × 深浅色截图到 `.playwright-tmp/shots/`，`collectPageErrors` 断言零 page error。
-- [ ] **Step 2**: 跑脚本，人工核对截图与 demo 观感一致（token 生效、无裸奔区）。
-- [ ] **Step 3**: commit：`chore(dashboard): 重构期截图基线脚本`。
+- [x] **Step 1**: 写截图脚本：`npm run build:web && npm run build:server`，`PIPELINE_DASHBOARD_HOME=<临时目录> PIPELINE_DASHBOARD_PORT=8799 node packages/server/dist/dashboard.mjs` 起真 server（临时 home 里预写 `~/.claude/pipeline-projects.json` 指向一个 `pipeline init` 出来的 demo 项目），对 收件箱/看板/设置/loops/afk/workflows 六视图 × 深浅色截图到 `.playwright-tmp/shots/`，`collectPageErrors` 断言零 page error。
+- [x] **Step 2**: 跑脚本，人工核对截图与 demo 观感一致（token 生效、无裸奔区）。
+- [x] **Step 3**: commit：`chore(dashboard): 重构期截图基线脚本`。
 
 ---
 
@@ -135,11 +135,11 @@ export function invalidateWorkflowRules(root?: string, name?: string): void
 
 **Steps:**
 
-- [ ] **Step 1**: 写失败测试（≥6 例）：DEFAULT_RULES 形状（7 steps/verify 双出口/gate 三相位）；rulesFromDef 映射（含 gate:'confirm'/null）；useWorkflowRules 对 default 零 fetch；自定义名触发 fetch 且缓存命中第二次零 fetch；fetch 404 → errors 有 entry、rules 无 entry；invalidate 后重新 fetch。
-- [ ] **Step 2**: `npm run test:web -- src/model/workflowModel.test.tsx` → 预期 FAIL（模块不存在）。
-- [ ] **Step 3**: 实现模块。
-- [ ] **Step 4**: 同命令 → PASS；`npm run test:web` 全量 → PASS。
-- [ ] **Step 5**: commit：`feat(dashboard): workflowModel——default 常量/自定义 API 的混合相位模型（G17 核心，spec §2.1）`。
+- [x] **Step 1**: 写失败测试（≥6 例）：DEFAULT_RULES 形状（7 steps/verify 双出口/gate 三相位）；rulesFromDef 映射（含 gate:'confirm'/null）；useWorkflowRules 对 default 零 fetch；自定义名触发 fetch 且缓存命中第二次零 fetch；fetch 404 → errors 有 entry、rules 无 entry；invalidate 后重新 fetch。
+- [x] **Step 2**: `npm run test:web -- src/model/workflowModel.test.tsx` → 预期 FAIL（模块不存在）。
+- [x] **Step 3**: 实现模块。
+- [x] **Step 4**: 同命令 → PASS；`npm run test:web` 全量 → PASS。
+- [x] **Step 5**: commit：`feat(dashboard): workflowModel——default 常量/自定义 API 的混合相位模型（G17 核心，spec §2.1）`。
 
 ### Task 4: events.ts 泛化
 
@@ -152,11 +152,11 @@ export function invalidateWorkflowRules(root?: string, name?: string): void
 
 **Steps:**
 
-- [ ] **Step 1**: 迁移现有 events 测试为 rules 注入式（default 用 DEFAULT_RULES 断言行为逐字不变：build→verify=build-complete、verify→build=backward、open→verify=null）+ 新增自定义 rules 用例（draft→review→ship，review→draft 为 backward）。
-- [ ] **Step 2**: 跑 → FAIL（签名不符）。
-- [ ] **Step 3**: 改实现（删除 isPhase/ORDER 依赖，全部从 rules 推导）。
-- [ ] **Step 4**: `npm run test:web -- src/board/events.test.tsx` → PASS。
-- [ ] **Step 5**: commit：`feat(dashboard): plannedTransition/legalTargets 按 WorkflowRules 泛化（G17）`。
+- [x] **Step 1**: 迁移现有 events 测试为 rules 注入式（default 用 DEFAULT_RULES 断言行为逐字不变：build→verify=build-complete、verify→build=backward、open→verify=null）+ 新增自定义 rules 用例（draft→review→ship，review→draft 为 backward）。
+- [x] **Step 2**: 跑 → FAIL（签名不符）。
+- [x] **Step 3**: 改实现（删除 isPhase/ORDER 依赖，全部从 rules 推导）。
+- [x] **Step 4**: `npm run test:web -- src/board/events.test.tsx` → PASS。
+- [x] **Step 5**: commit：`feat(dashboard): plannedTransition/legalTargets 按 WorkflowRules 泛化（G17）`。
 
 ### Task 5: inbox 谓词泛化 + InboxView 工票行重写
 
@@ -173,11 +173,11 @@ export function invalidateWorkflowRules(root?: string, name?: string): void
 
 **Steps:**
 
-- [ ] **Step 1**: 重写两个测试文件：迁移原 8 个意图（空态/去看板/只渲染 gate 卡/计数/决定文案/相位徽章/loading/error）到 currentRoot + rules 注入语境；新增：自定义 workflow gate 卡进收件箱（fields.workflow='release-train'、phase='review'、rules gate=review）；快捷按钮点击 → onTransition(name, root, event)；verify 卡双按钮且回退需确认。
-- [ ] **Step 2**: 跑 → FAIL。
-- [ ] **Step 3**: 实现 inbox.ts + InboxView + i18n key。
-- [ ] **Step 4**: `npm run test:web -- src/inbox` → PASS。
-- [ ] **Step 5**: commit：`feat(dashboard): 收件箱 gate 泛化 + 工票行重写（G17，spec §2.3）`。
+- [x] **Step 1**: 重写两个测试文件：迁移原 8 个意图（空态/去看板/只渲染 gate 卡/计数/决定文案/相位徽章/loading/error）到 currentRoot + rules 注入语境；新增：自定义 workflow gate 卡进收件箱（fields.workflow='release-train'、phase='review'、rules gate=review）；快捷按钮点击 → onTransition(name, root, event)；verify 卡双按钮且回退需确认。
+- [x] **Step 2**: 跑 → FAIL。
+- [x] **Step 3**: 实现 inbox.ts + InboxView + i18n key。
+- [x] **Step 4**: `npm run test:web -- src/inbox` → PASS。
+- [x] **Step 5**: commit：`feat(dashboard): 收件箱 gate 泛化 + 工票行重写（G17，spec §2.3）`。
 
 ### Task 6: BoardView 分组看板重写
 
@@ -195,11 +195,11 @@ export function invalidateWorkflowRules(root?: string, name?: string): void
 
 **Steps:**
 
-- [ ] **Step 1**: 重写 BoardView.test.tsx：迁移原 9 个意图（7 列渲染→default 组 7 列；卡落对应列；无矩阵泄漏；空态；拖拽正向=build-complete；跨项目重名→改为同项目内行为（currentRoot 语义）；回退确认→verify-fail；非法落点 no-op；失败→onError）+ 新增：自定义 workflow 独立分组渲染自己的列集；自定义组内拖拽用自己的 event 名；快捷按钮推进；折叠隐藏组 body；rules 失败组只读降级；archive 折叠计数。fetch stub：`vi.stubGlobal('fetch', …)` 返回 release-train WorkflowDef（gate step 齐全）。
-- [ ] **Step 2**: 跑 → FAIL。
-- [ ] **Step 3**: 实现 BoardView 重写 + i18n key + styles.ts 追加 `.board__group*` 等（Task 1 已放核心件，此处补齐缺口）。
-- [ ] **Step 4**: `npm run test:web -- src/board` → PASS。
-- [ ] **Step 5**: commit：`feat(dashboard): 分组看板落地——每个 workflow 独立列集 + 快捷转换 + 折叠（G17，spec §2.2）`。
+- [x] **Step 1**: 重写 BoardView.test.tsx：迁移原 9 个意图（7 列渲染→default 组 7 列；卡落对应列；无矩阵泄漏；空态；拖拽正向=build-complete；跨项目重名→改为同项目内行为（currentRoot 语义）；回退确认→verify-fail；非法落点 no-op；失败→onError）+ 新增：自定义 workflow 独立分组渲染自己的列集；自定义组内拖拽用自己的 event 名；快捷按钮推进；折叠隐藏组 body；rules 失败组只读降级；archive 折叠计数。fetch stub：`vi.stubGlobal('fetch', …)` 返回 release-train WorkflowDef（gate step 齐全）。
+- [x] **Step 2**: 跑 → FAIL。
+- [x] **Step 3**: 实现 BoardView 重写 + i18n key + styles.ts 追加 `.board__group*` 等（Task 1 已放核心件，此处补齐缺口）。
+- [x] **Step 4**: `npm run test:web -- src/board` → PASS。
+- [x] **Step 5**: commit：`feat(dashboard): 分组看板落地——每个 workflow 独立列集 + 快捷转换 + 折叠（G17，spec §2.2）`。
 
 ### Task 7: App/Nav 接线 currentRoot + 阶段门
 
@@ -210,11 +210,11 @@ export function invalidateWorkflowRules(root?: string, name?: string): void
 
 **Steps:**
 
-- [ ] **Step 1**: App 测试补 currentRoot 语义用例（双项目 snapshot：默认第一个；G14 注释块删除）。
-- [ ] **Step 2**: 实现接线；删除 App.tsx:49-52 的 G14 注释。
-- [ ] **Step 3**: 阶段门全跑：`npm test` && `npm run test:web` && `npx tsc --noEmit -p packages/dashboard-app` → 全 PASS。
-- [ ] **Step 4**: 更新 Task 2 截图脚本跑一遍深浅色（含一个自定义 workflow change 的分组看板证据截图）。
-- [ ] **Step 5**: commit：`feat(dashboard): App currentRoot 状态化接线 G17 视图（阶段 2 收口）`。
+- [x] **Step 1**: App 测试补 currentRoot 语义用例（双项目 snapshot：默认第一个；G14 注释块删除）。
+- [x] **Step 2**: 实现接线；删除 App.tsx:49-52 的 G14 注释。
+- [x] **Step 3**: 阶段门全跑：`npm test` && `npm run test:web` && `npx tsc --noEmit -p packages/dashboard-app` → 全 PASS。
+- [x] **Step 4**: 更新 Task 2 截图脚本跑一遍深浅色（含一个自定义 workflow change 的分组看板证据截图）。
+- [x] **Step 5**: commit：`feat(dashboard): App currentRoot 状态化接线 G17 视图（阶段 2 收口）`。
 
 ---
 
@@ -247,11 +247,11 @@ server.ts 接线：handlePost `if (path === '/api/projects')`（**豁免信任�
 
 **Steps:**
 
-- [ ] **Step 1**: server.test.ts 新增 describe（harness：`start()` 不注入 registry 时需走真文件——现 harness 固定注入 `registry: () => [root]`；为本组测试写局部 `startWithHome()`：`makeTempHome()` + `createDashboardServer({ home, store, flow: testFlow(), token, clock })`，registry 走真 `<home>/.claude/pipeline-projects.json`）。用例（POST）：200 注册成功且文件真落盘含规范化路径 + `GET /api/snapshot` 立即可见该项目；400 body 非对象/root 非串；404 路径不存在；404 是文件非目录；409 重复注册（含"尾斜杠不同写法"归一化判重）；401 无 token；403 假 Host；400 非 JSON Content-Type。（DELETE）：200 注销且文件更新；404 未注册；400 缺 root query；401 无 token。
-- [ ] **Step 2**: `npm test -- packages/server/src/server.test.ts` → 新用例 FAIL（404 未知端点）。
-- [ ] **Step 3**: 实现 projects.ts + server.ts 两分支。
-- [ ] **Step 4**: 同命令 → PASS；`npm test` 全量 → PASS。
-- [ ] **Step 5**: commit：`feat(server): POST/DELETE /api/projects——dashboard 注册/注销项目（G18，spec §3.1）`。
+- [x] **Step 1**: server.test.ts 新增 describe（harness：`start()` 不注入 registry 时需走真文件——现 harness 固定注入 `registry: () => [root]`；为本组测试写局部 `startWithHome()`：`makeTempHome()` + `createDashboardServer({ home, store, flow: testFlow(), token, clock })`，registry 走真 `<home>/.claude/pipeline-projects.json`）。用例（POST）：200 注册成功且文件真落盘含规范化路径 + `GET /api/snapshot` 立即可见该项目；400 body 非对象/root 非串；404 路径不存在；404 是文件非目录；409 重复注册（含"尾斜杠不同写法"归一化判重）；401 无 token；403 假 Host；400 非 JSON Content-Type。（DELETE）：200 注销且文件更新；404 未注册；400 缺 root query；401 无 token。
+- [x] **Step 2**: `npm test -- packages/server/src/server.test.ts` → 新用例 FAIL（404 未知端点）。
+- [x] **Step 3**: 实现 projects.ts + server.ts 两分支。
+- [x] **Step 4**: 同命令 → PASS；`npm test` 全量 → PASS。
+- [x] **Step 5**: commit：`feat(server): POST/DELETE /api/projects——dashboard 注册/注销项目（G18，spec §3.1）`。
 
 ### Task 9: POST /api/changes
 
@@ -266,11 +266,11 @@ server.ts 接线：handlePost `if (path === '/api/projects')`（**豁免信任�
 
 **Steps:**
 
-- [ ] **Step 1**: 新 describe 用例：200 默认（走 startWithHome + 先经 POST /api/projects 注册，断言 `openspec/changes/<name>/.pipeline.yaml` 真落盘、snapshot 出现该 change、phase='open'、track='chat'）；200 显式 track=frontend；200 自定义 workflow（真写 `.pipeline/workflows/rel.yaml` 极简两 step 定义→断言 phase=首 step id、fields.workflow='rel'）；400 name 非法；400 track 非法；400 重复 name；404 workflow 不存在；404 root 未注册；401/403/Content-Type 三连。
-- [ ] **Step 2**: 跑 → FAIL。
-- [ ] **Step 3**: 实现分支。
-- [ ] **Step 4**: `npm test` 全量 → PASS。
-- [ ] **Step 5**: commit：`feat(server): POST /api/changes——pipeline init 的 HTTP 化（G18，spec §3.1）`。
+- [x] **Step 1**: 新 describe 用例：200 默认（走 startWithHome + 先经 POST /api/projects 注册，断言 `openspec/changes/<name>/.pipeline.yaml` 真落盘、snapshot 出现该 change、phase='open'、track='chat'）；200 显式 track=frontend；200 自定义 workflow（真写 `.pipeline/workflows/rel.yaml` 极简两 step 定义→断言 phase=首 step id、fields.workflow='rel'）；400 name 非法；400 track 非法；400 重复 name；404 workflow 不存在；404 root 未注册；401/403/Content-Type 三连。
+- [x] **Step 2**: 跑 → FAIL。
+- [x] **Step 3**: 实现分支。
+- [x] **Step 4**: `npm test` 全量 → PASS。
+- [x] **Step 5**: commit：`feat(server): POST /api/changes——pipeline init 的 HTTP 化（G18，spec §3.1）`。
 
 ### Task 10: 前端 client.ts 扩展
 
@@ -291,9 +291,9 @@ export async function fetchWorkflowNames(root: string): Promise<string[]>   // G
 
 **Steps:**
 
-- [ ] **Step 1**: client.test.tsx 补四函数用例（stub fetch：断言 method/headers/body 形状 + 错误文案透传）。
-- [ ] **Step 2**: FAIL → 实现 → PASS。
-- [ ] **Step 3**: 阶段门三连跑 → 全 PASS。commit：`feat(dashboard): api client 补 G18 四函数`。
+- [x] **Step 1**: client.test.tsx 补四函数用例（stub fetch：断言 method/headers/body 形状 + 错误文案透传）。
+- [x] **Step 2**: FAIL → 实现 → PASS。
+- [x] **Step 3**: 阶段门三连跑 → 全 PASS。commit：`feat(dashboard): api client 补 G18 四函数`。
 
 ---
 
@@ -313,9 +313,9 @@ export async function fetchWorkflowNames(root: string): Promise<string[]>   // G
 
 **Steps:**
 
-- [ ] **Step 1**: Nav.test 补用例（双项目渲染下拉/点击切换回调/单项目静态/注册入口回调）。FAIL → 实现 → PASS。
-- [ ] **Step 2**: App 接线（onRoot 更新 state + localStorage）。`npm run test:web` → PASS。
-- [ ] **Step 3**: commit：`feat(dashboard): 导航项目切换器（吃掉 G14，spec §3.2/D5）`。
+- [x] **Step 1**: Nav.test 补用例（双项目渲染下拉/点击切换回调/单项目静态/注册入口回调）。FAIL → 实现 → PASS。
+- [x] **Step 2**: App 接线（onRoot 更新 state + localStorage）。`npm run test:web` → PASS。
+- [x] **Step 3**: commit：`feat(dashboard): 导航项目切换器（吃掉 G14，spec §3.2/D5）`。
 
 ### Task 12: NewChangeDialog + 入口接线
 
@@ -339,9 +339,9 @@ export interface NewChangeDialogProps {
 
 **Steps:**
 
-- [ ] **Step 1**: 测试（渲染/名字校验实时错误+禁用/CLI 教学行实时更新/提交调 createChange 正确 body/成功回调/server 错误行内呈现/取消关闭）。FAIL。
-- [ ] **Step 2**: 实现组件 + App 接线 + styles.ts 追加 `.newchange-*`/`.dlg-cli`。
-- [ ] **Step 3**: `npm run test:web` → PASS。commit：`feat(dashboard): 新建 change 对话框 + 全局入口（G18，spec §3.2）`。
+- [x] **Step 1**: 测试（渲染/名字校验实时错误+禁用/CLI 教学行实时更新/提交调 createChange 正确 body/成功回调/server 错误行内呈现/取消关闭）。FAIL。
+- [x] **Step 2**: 实现组件 + App 接线 + styles.ts 追加 `.newchange-*`/`.dlg-cli`。
+- [x] **Step 3**: `npm run test:web` → PASS。commit：`feat(dashboard): 新建 change 对话框 + 全局入口（G18，spec §3.2）`。
 
 ### Task 13: 教学空状态（onboarding）
 
@@ -366,10 +366,10 @@ export function Onboarding(props: {
 
 **Steps:**
 
-- [ ] **Step 1**: 测试（两形态渲染/注册提交调 registerProject/成功回调/错误呈现/复制按钮文案切换/no-change 主按钮回调）。FAIL → 实现 → PASS。
-- [ ] **Step 2**: App/Inbox/Board 空态接线；`npm run test:web` 全量 + `npm test` + tsc 三连 → PASS。
-- [ ] **Step 3**: Task 2 截图脚本补零项目/零 change 两形态截图（深浅色）。
-- [ ] **Step 4**: commit：`feat(dashboard): 教学式空状态——注册/新建双路径 onboarding（G18 收口，spec §3.2）`。
+- [x] **Step 1**: 测试（两形态渲染/注册提交调 registerProject/成功回调/错误呈现/复制按钮文案切换/no-change 主按钮回调）。FAIL → 实现 → PASS。
+- [x] **Step 2**: App/Inbox/Board 空态接线；`npm run test:web` 全量 + `npm test` + tsc 三连 → PASS。
+- [x] **Step 3**: Task 2 截图脚本补零项目/零 change 两形态截图（深浅色）。
+- [x] **Step 4**: commit：`feat(dashboard): 教学式空状态——注册/新建双路径 onboarding（G18 收口，spec §3.2）`。
 
 ---
 
@@ -386,9 +386,9 @@ export function Onboarding(props: {
 
 **Steps:**
 
-- [ ] **Step 1**: 读现测试 → 重写测试（意图表全覆盖 + 新 testid）。FAIL。
-- [ ] **Step 2**: 重写组件 + styles + i18n（`loops.level_l1: '提案制'` 等 zh/en）。
-- [ ] **Step 3**: `npm run test:web -- src/loops` → PASS。commit：`feat(dashboard): Loop 治理面板工票化重写（spec §4）`。
+- [x] **Step 1**: 读现测试 → 重写测试（意图表全覆盖 + 新 testid）。FAIL。
+- [x] **Step 2**: 重写组件 + styles + i18n（`loops.level_l1: '提案制'` 等 zh/en）。
+- [x] **Step 3**: `npm run test:web -- src/loops` → PASS。commit：`feat(dashboard): Loop 治理面板工票化重写（spec §4）`。
 
 ### Task 15: AfkWorkbench 重写
 
@@ -401,9 +401,9 @@ export function Onboarding(props: {
 
 **Steps:**
 
-- [ ] **Step 1**: 读现 AfkWorkbench.test.tsx → 重写（意图全迁移 + 新结构 testid）。FAIL。
-- [ ] **Step 2**: 重写组件 + styles + i18n key（`afk.title/scheduler_meta/queue_pos/started_ago` 等按 demo 文案补齐 zh/en）。
-- [ ] **Step 3**: `npm run test:web -- src/afk` → PASS。commit：`feat(dashboard): AFK 工作台双栏工票化重写（spec §4）`。
+- [x] **Step 1**: 读现 AfkWorkbench.test.tsx → 重写（意图全迁移 + 新结构 testid）。FAIL。
+- [x] **Step 2**: 重写组件 + styles + i18n key（`afk.title/scheduler_meta/queue_pos/started_ago` 等按 demo 文案补齐 zh/en）。
+- [x] **Step 3**: `npm run test:web -- src/afk` → PASS。commit：`feat(dashboard): AFK 工作台双栏工票化重写（spec §4）`。
 
 ### Task 16: TrafficPanel + AdvancedPanel 样式化
 
@@ -413,8 +413,8 @@ export function Onboarding(props: {
 
 **Steps:**
 
-- [ ] **Step 1**: styles 追加 + markup 微调。跑 advanced 测试 → PASS（有破随改，意图不丢）。
-- [ ] **Step 2**: 阶段门三连 + 截图脚本跑 loops/afk/traffic 深浅色。commit：`feat(dashboard): Traffic/Advanced 面板套用工票语言（零样式三件套收口）`。
+- [x] **Step 1**: styles 追加 + markup 微调。跑 advanced 测试 → PASS（有破随改，意图不丢）。
+- [x] **Step 2**: 阶段门三连 + 截图脚本跑 loops/afk/traffic 深浅色。commit：`feat(dashboard): Traffic/Advanced 面板套用工票语言（零样式三件套收口）`。
 
 ---
 
@@ -429,8 +429,8 @@ export function Onboarding(props: {
 
 **Steps:**
 
-- [ ] **Step 1**: 补测试 → FAIL → 实现 → `npm run test:web -- src/workflow` 全量 PASS（既有 636 行测试是回归网，重点确认 label 断言仍过——原断言若 getByText('draft') 精确匹配，JSX 化后文字节点拆分需核对，破了按意图修查询）。
-- [ ] **Step 2**: 截图核对画布深浅色（点阵底/绿边/徽章/侧栏）。commit：`feat(dashboard): 画布 gate 节点徽章 + 工票化视觉核对（spec §4）`。
+- [x] **Step 1**: 补测试 → FAIL → 实现 → `npm run test:web -- src/workflow` 全量 PASS（既有 636 行测试是回归网，重点确认 label 断言仍过——原断言若 getByText('draft') 精确匹配，JSX 化后文字节点拆分需核对，破了按意图修查询）。
+- [x] **Step 2**: 截图核对画布深浅色（点阵底/绿边/徽章/侧栏）。commit：`feat(dashboard): 画布 gate 节点徽章 + 工票化视觉核对（spec §4）`。
 
 ### Task 18: StepDetailPanel guard 新增表单
 
@@ -465,9 +465,9 @@ i18n：`workflow_editor.detail_guard_add` 已存在（预留 key 终于接线）
 
 **Steps:**
 
-- [ ] **Step 1**: 测试：默认类型渲染 n 输入/切 nonempty-output 隐藏 n/添加 tasks-at-least(n=3) 调 onChange 正确 guards/非法 n 行内错误且不调 onChange/添加 nonempty-output 无参直加。FAIL。
-- [ ] **Step 2**: 实现 + `npm run test:web -- src/workflow` → PASS。
-- [ ] **Step 3**: 阶段门三连 → PASS。**删除 styles.ts 兼容别名**（--accent/--gate/--sunken 等），`grep -rn "var(--accent\|var(--gate\b\|var(--sunken" packages/dashboard-app/src` → 零命中。commit：`feat(dashboard): guard 新增表单补全 + token 别名退役（阶段 6 收口）`。
+- [x] **Step 1**: 测试：默认类型渲染 n 输入/切 nonempty-output 隐藏 n/添加 tasks-at-least(n=3) 调 onChange 正确 guards/非法 n 行内错误且不调 onChange/添加 nonempty-output 无参直加。FAIL。
+- [x] **Step 2**: 实现 + `npm run test:web -- src/workflow` → PASS。
+- [x] **Step 3**: 阶段门三连 → PASS。**删除 styles.ts 兼容别名**（--accent/--gate/--sunken 等），`grep -rn "var(--accent\|var(--gate\b\|var(--sunken" packages/dashboard-app/src` → 零命中。commit：`feat(dashboard): guard 新增表单补全 + token 别名退役（阶段 6 收口）`。
 
 ---
 
@@ -495,9 +495,9 @@ export function foldToggle(el: Element, open: boolean): void
 
 **Steps:**
 
-- [ ] **Step 1**: 实现三函数 + 接线 + i18n（`board.stamp`）。
-- [ ] **Step 2**: `npm run test:web` 全量 → PASS（Board 测试补一例：转换成功后 stamp 元素出现）。
-- [ ] **Step 3**: commit：`feat(dashboard): 动效词汇落地——盖章确认/toast/折叠（spec §5）`。
+- [x] **Step 1**: 实现三函数 + 接线 + i18n（`board.stamp`）。
+- [x] **Step 2**: `npm run test:web` 全量 → PASS（Board 测试补一例：转换成功后 stamp 元素出现）。
+- [x] **Step 3**: commit：`feat(dashboard): 动效词汇落地——盖章确认/toast/折叠（spec §5）`。
 
 ### Task 20: Playwright 全量验收
 
@@ -506,25 +506,25 @@ export function foldToggle(el: Element, open: boolean): void
 
 **验收场景（spec §6 逐条，真 build + 真 server + 真点击）：**
 
-- [ ] 环境：`npm run build && npm run build:web && npm run build:server`；`PIPELINE_DASHBOARD_HOME=<空临时 home>` 起 server（**注册表从空开始**）。
-- [ ] **G18 闭环**：零项目 onboarding 可见 → 表单注册临时项目（真目录）→ 零 change onboarding → 新建 change 对话框建 `demo-a`（错误态先输 `bad name` 断言行内错误）→ 看板出现。
-- [ ] **全 7 相位**：拖拽 open→…→ship（verify→build 回退确认对话框出现后取消，再走 verify-pass），quick 按钮至少推进一次，盖章元素出现。
-- [ ] **workflow 编辑器**：新建 `rel`（draft→review→ship，review 设 gate=review + guard tasks-at-least n=1，dragConnect 连线）→ 保存。
-- [ ] **G17 验收**：`POST /api/changes` 建 `rel-change` (workflow=rel) → 看板出现 `board-group-rel` 独立分组三列 → 拖 draft→review 成功 → 收件箱出现该卡（gate 泛化证据）→ quick 按钮 ship。
-- [ ] **AFK**：挂队 `demo-a` → queued 徽章可见（不真跑 automation，仅入队证据）。
-- [ ] **Loops**：面板渲染（demo 项目无 loop → 空态文案即过）。
-- [ ] 全程 `collectPageErrors` 零 error；六视图 × 深浅色终版截图存 `.playwright-tmp/shots/final/`。
-- [ ] commit：`test(dashboard): 重构全量真机验收脚本 + 通过证据`。
+- [x] 环境：`npm run build && npm run build:web && npm run build:server`；`PIPELINE_DASHBOARD_HOME=<空临时 home>` 起 server（**注册表从空开始**）。
+- [x] **G18 闭环**：零项目 onboarding 可见 → 表单注册临时项目（真目录）→ 零 change onboarding → 新建 change 对话框建 `demo-a`（错误态先输 `bad name` 断言行内错误）→ 看板出现。
+- [x] **全 7 相位**：拖拽 open→…→ship（verify→build 回退确认对话框出现后取消，再走 verify-pass），quick 按钮至少推进一次，盖章元素出现。
+- [x] **workflow 编辑器**：新建 `rel`（draft→review→ship，review 设 gate=review + guard tasks-at-least n=1，dragConnect 连线）→ 保存。
+- [x] **G17 验收**：`POST /api/changes` 建 `rel-change` (workflow=rel) → 看板出现 `board-group-rel` 独立分组三列 → 拖 draft→review 成功 → 收件箱出现该卡（gate 泛化证据）→ quick 按钮 ship。
+- [x] **AFK**：挂队 `demo-a` → queued 徽章可见（不真跑 automation，仅入队证据）。
+- [x] **Loops**：面板渲染（demo 项目无 loop → 空态文案即过）。
+- [x] 全程 `collectPageErrors` 零 error；六视图 × 深浅色终版截图存 `.playwright-tmp/shots/final/`。
+- [x] commit：`test(dashboard): 重构全量真机验收脚本 + 通过证据`。
 
 ### Task 21: 文档收尾 + 八门
 
 **Steps:**
 
-- [ ] **Step 1**: `docs/loops/progress.md` 追加 iteration-38（本轮全记录：spec/plan 链接、四决策、验收证据）。
-- [ ] **Step 2**: `docs/TEST-REALITY.md`：G14/G17 改判已修（附验收场景引用）、G18 改判已交付；登记本轮新增已知简化（server 端 init 不写 history、Loops 无降档端点、Board 按 currentRoot 过滤的语义变更）。
-- [ ] **Step 3**: `README.md` 功能面补：项目注册/新建 change/分组看板/自定义 workflow 可视化。
-- [ ] **Step 4**: 八门全跑：`npm run build`+`build:web`、`npm test`、`npm run test:web`、`tools/test-hooks.sh`、`tools/verify-skills.sh`、`tools/test-bundle.sh`、`npm run oracle`、`tools/test-adapters.sh` → 全绿。
-- [ ] **Step 5**: commit：`docs: dashboard 重构收官——progress iteration-38 + TEST-REALITY 改判 + README`。
+- [x] **Step 1**: `docs/loops/progress.md` 追加 iteration-38（本轮全记录：spec/plan 链接、四决策、验收证据）。
+- [x] **Step 2**: `docs/TEST-REALITY.md`：G14/G17 改判已修（附验收场景引用）、G18 改判已交付；登记本轮新增已知简化（server 端 init 不写 history、Loops 无降档端点、Board 按 currentRoot 过滤的语义变更）。
+- [x] **Step 3**: `README.md` 功能面补：项目注册/新建 change/分组看板/自定义 workflow 可视化。
+- [x] **Step 4**: 八门全跑：`npm run build`+`build:web`、`npm test`、`npm run test:web`、`tools/test-hooks.sh`、`tools/verify-skills.sh`、`tools/test-bundle.sh`、`npm run oracle`、`tools/test-adapters.sh` → 全绿。
+- [x] **Step 5**: commit：`docs: dashboard 重构收官——progress iteration-38 + TEST-REALITY 改判 + README`。
 
 ---
 
