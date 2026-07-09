@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { loadWorkflow, serializeWorkflow, type WorkflowDef as KernelWorkflowDef } from '@pipeline-lite/kernel'
 import { I18nProvider } from '../i18n'
+import { invalidateWorkflowRules, useWorkflowRules } from '../model/workflowModel'
 import { WorkflowCanvas } from './WorkflowCanvas'
 
 const ROOT = '/tmp/proj-a'
@@ -659,5 +660,49 @@ describe('gate 节点徽章（工票车间：编辑器侧的 gate 可视化）',
     expect(screen.getByText('确认门').className).toContain('badge--phase')
     // 无 gate 的节点不带徽章（按节点框自身的文本判断，不受兄弟节点影响）
     expect(screen.getByText('draft').closest('.react-flow__node')?.textContent).toBe('draft')
+  })
+})
+
+// ── 评审 P0-4：保存成功后 (root,name) 规则缓存必须失效（spec §2.1 明确要求）──
+// 缺陷形态：save() 只 setSaveStatus('ok')，invalidateWorkflowRules 全 src 零调用点——
+// 用户在编辑器给 step 加了 review gate、保存成功、切到收件箱/看板，workflowModel 的
+// 模块级缓存还在供旧规则，新 gate 直到整页刷新才出现。
+function RulesProbe(): JSX.Element {
+  const { rules } = useWorkflowRules(ROOT, [NAME])
+  return <div data-testid="rules-probe">{rules.get(NAME)?.steps.length ?? 0}</div>
+}
+
+describe('保存后规则缓存失效（评审 P0-4）', () => {
+  it('保存成功 → 下一个 useWorkflowRules 消费方看到保存后的新定义，而非旧缓存', async () => {
+    invalidateWorkflowRules() // 清场：模块级缓存跨测试存活
+    // 计数断言会被画布自身的加载 GET 污染（同一 URL 两个消费方），改用内容断言：
+    // POST 保存后 mock 切到 v2（3 个 step）——探针若真重拉看到 3，命中旧缓存只能是 2。
+    const V2 = { ...TWO_STEP, steps: [...TWO_STEP.steps, { id: 'extra', label: '', gate: null, skills: [], inputs: [], outputs: [], guards: [], transitions: [] }] }
+    let saved = false
+    global.fetch = vi.fn(async (url: string, opts?: RequestInit) => {
+      if (url === `/api/workflows/${NAME}?root=${encodeURIComponent(ROOT)}`) {
+        return new Response(JSON.stringify(saved ? V2 : TWO_STEP), { status: 200 })
+      }
+      if (url === `/api/workflows/${NAME}` && opts?.method === 'POST') {
+        saved = true
+        return new Response(JSON.stringify({ ok: true }), { status: 200 })
+      }
+      throw new Error(`unexpected fetch ${url}`)
+    }) as unknown as typeof fetch
+
+    // 1. 探针灌缓存（模拟看板/收件箱已消费过 v1 规则）
+    const probe1 = render(<RulesProbe />)
+    await waitFor(() => expect(screen.getByTestId('rules-probe').textContent).toBe('2'))
+    probe1.unmount()
+
+    // 2. 画布保存成功（此后 server 端已是 v2）
+    renderCanvas()
+    await waitFor(() => expect(screen.getByText(/intake/i)).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    await waitFor(() => expect(screen.getByText('已保存')).toBeInTheDocument())
+
+    // 3. 消费方再次挂载：缓存已失效 → 真重拉 → 看到 v2 的 3 个 step
+    render(<RulesProbe />)
+    await waitFor(() => expect(screen.getByTestId('rules-probe').textContent).toBe('3'))
   })
 })

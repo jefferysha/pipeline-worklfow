@@ -9,6 +9,7 @@ import gsap from 'gsap'
 import { useGSAP } from '@gsap/react'
 import { getToken } from '../api/client'
 import { useT } from '../i18n'
+import { invalidateWorkflowRules } from '../model/workflowModel'
 import { layoutNodes } from './layout'
 import { StepDetailPanel, type SkillRef, type StepDef } from './StepDetailPanel'
 import { crossfadeStage, revealDialog } from './motion'
@@ -547,6 +548,9 @@ function WorkflowCanvasInner({ root, name, onBack }: WorkflowCanvasProps): JSX.E
         setSaveStatus({ kind: 'error', msg: (await readErrorDetail(res)) || `(${res.status})` })
         return
       }
+      // spec §2.1：保存成功必须失效 (root,name) 规则缓存，否则看板/收件箱用旧规则直到整页刷新
+      // （评审 P0-4——invalidateWorkflowRules 为此而写却从未接线）。
+      invalidateWorkflowRules(root, name)
       setSaveStatus({ kind: 'ok' })
     } catch (err) {
       setSaveStatus({ kind: 'error', msg: err instanceof Error ? err.message : t('workflow_editor.network_error') })
