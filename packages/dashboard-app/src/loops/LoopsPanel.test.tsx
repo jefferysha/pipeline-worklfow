@@ -150,3 +150,31 @@ describe('LoopsPanel', () => {
     await waitFor(() => expect(screen.getByText('No loops registered')).toBeInTheDocument())
   })
 })
+
+describe('LoopsPanel 工票化新增行为', () => {
+  it('L3 行展开后无升档按钮（已到顶）', async () => {
+    global.fetch = vi.fn(async (url: string) => {
+      if (url === '/api/loops/snapshot') {
+        return new Response(JSON.stringify({
+          generated_at: '', rows: [{
+            root: '/tmp/p', id: 'top-loop', name: 'Top', autonomy_level: 'L3', status: 'active',
+            readiness: { score: 99, band: 'ready' }, budget: { breaker: 'ok', remaining: 1 },
+          }],
+        }), { status: 200 })
+      }
+      throw new Error(`unexpected fetch ${url}`)
+    }) as unknown as typeof fetch
+    renderLoops()
+    await waitFor(() => expect(screen.getByText('top-loop')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('top-loop'))
+    expect(screen.queryByRole('button', { name: /升档|Promote/i })).toBeNull()
+  })
+
+  it('档位徽章带人话副标签（L1 · 提案制）+ breaker 徽章无 emoji', async () => {
+    renderLoops()
+    await waitFor(() => expect(screen.getByText('build-loop')).toBeInTheDocument())
+    expect(screen.getByText(/提案制/)).toBeInTheDocument()
+    expect(screen.getByText(/正常/)).toBeInTheDocument()
+    expect(screen.queryByText(/🟢/)).toBeNull()
+  })
+})

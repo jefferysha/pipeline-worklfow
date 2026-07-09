@@ -307,6 +307,19 @@ body { margin: 0; }
 .gd-form .select { flex: 1; }
 .gd-form .gd-n { width: 64px; }
 
+/* ── Loop 治理面板 ── */
+.loop-row { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 4px 6px; }
+.loop-line { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; width: 100%; border: 0; background: transparent; font: inherit; color: inherit; text-align: left; cursor: pointer; padding: 6px; border-radius: 6px; }
+.loop-line:hover { background: var(--well); }
+.loop-caret { color: var(--ink-mute); font-size: 11px; }
+.loop-level { font-family: var(--mono); font-size: 11px; font-weight: 700; padding: 2px 9px; border-radius: 999px; background: var(--plate); color: var(--plate-fg); white-space: nowrap; }
+.loop-level__tag { font-weight: 400; opacity: .8; }
+.loop-ready { font-size: 11.5px; color: var(--ink-mute); }
+.loop-ready b { color: var(--green); font-family: var(--mono); }
+.loop-detail { padding: 4px 8px 10px 28px; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.loop-band { margin: 0; font-size: 11.5px; color: var(--ink-mute); }
+.loop-reject { margin: 0; padding: 8px 11px; border-radius: 7px; background: var(--verm-soft); color: var(--verm); font-size: 11.5px; font-weight: 600; }
+
 :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { * { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
 @media (max-width: 720px) {

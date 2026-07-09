@@ -3,12 +3,13 @@ import { getToken } from '../api/client'
 import { useT } from '../i18n'
 
 /**
- * 错误可见性 + i18n（whole-branch review 抓出的两个真实回归，一并修复）：
- * 1. 初始快照 fetch 此前没有 `r.ok` 检查——server 对错误统一返回 JSON 信封（`{ok:false,error}`），
- *    502/500 时 `r.json()` 会成功 resolve 而不是 reject，`.catch` 永远不触发，`snapshot.rows`
- *    在 undefined 快照上取值直接抛错、无 ErrorBoundary 兜底会把整个 App 白屏。同 AfkWorkbench.tsx
- *    的 readErrorDetail 模式。
- * 2. 本文件此前完全不走 `t()`，切到英文后一级导航是英文、本视图内容仍是中文——现在全部经 i18n。
+ * Loop 治理面板 —— 工票车间重写（spec §4；视觉真相源 demo all-views §3）。
+ * 数据/行为层保留自零样式版的三条纪律（whole-branch review 教训，一条不丢）：
+ *  1. 快照/升档两处网络错误全部行内可见（先 r.ok 再 json，读 {error}/{errors} 信封）；
+ *  2. graduation 逻辑拒绝（400 + errors[]）显示具体拒绝理由（朱红提示条），非泛化文案；
+ *  3. 升档成功后 refetch 快照（不让界面停在旧档位）。
+ * 设计变更登记：表格退役 → 工票行 + 展开详情；breaker 徽章去 emoji 改语义色；
+ * 档位徽章带人话副标签（L1 提案制 / L2 半自动 / L3 全自动）。
  */
 interface ReadinessScore { score: number; band: string }
 interface BudgetStatus { breaker: 'ok' | 'warn' | 'tripped'; remaining: number | null }
@@ -79,55 +80,68 @@ export function LoopsPanel(): JSX.Element {
     }
   }
 
-  if (error) return <p className="subtitle">{error}</p>
-  if (!snapshot) return <p className="subtitle">{t('common.loading')}</p>
-  if (snapshot.rows.length === 0) return <p className="subtitle">{t('loops.empty')}</p>
+  if (error) return <p className="view__note view__note--error" data-testid="loops-error">{error}</p>
+  if (!snapshot) return <p className="view__note" data-testid="loops-loading">{t('common.loading')}</p>
 
-  const breakerLabel = (breaker: BudgetStatus['breaker']): string =>
-    breaker === 'ok' ? t('loops.breaker_ok') : breaker === 'warn' ? t('loops.breaker_warn') : t('loops.breaker_tripped')
+  const breakerBadge = (breaker: BudgetStatus['breaker']): JSX.Element =>
+    breaker === 'ok' ? (
+      <span className="badge badge--run">● {t('loops.breaker_ok')}</span>
+    ) : breaker === 'warn' ? (
+      <span className="badge badge--pending">{t('loops.breaker_warn')}</span>
+    ) : (
+      <span className="badge badge--gate">{t('loops.breaker_tripped')}</span>
+    )
 
   return (
-    <table className="loops-table">
-      <thead>
-        <tr>
-          <th>{t('loops.col_loop')}</th>
-          <th>{t('loops.col_level')}</th>
-          <th>{t('loops.col_readiness')}</th>
-          <th>{t('loops.col_budget')}</th>
-          <th>{t('loops.col_status')}</th>
-        </tr>
-      </thead>
-      <tbody>
-        {snapshot.rows.flatMap((row) => {
-          const mainRow = (
-            <tr key={`${row.root}:${row.id}`} onClick={() => setExpanded(expanded === row.id ? null : row.id)} style={{ cursor: 'pointer' }}>
-              <td>{row.id}</td>
-              <td>{row.autonomy_level}</td>
-              <td>{row.readiness.score}</td>
-              <td>{row.budget.remaining ?? '—'}</td>
-              <td>{breakerLabel(row.budget.breaker)}</td>
-            </tr>
-          )
-          // nextLevel 提出成局部变量而不是在下面重复索引 NEXT_LEVEL[row.autonomy_level]——
-          // TS 的控制流窄化不跨越两次独立的下标访问表达式生效（即使值确定性相同），重复写会在
-          // `t()` 调用处把 'L2' | 'L3' | null 原样传给期望 string | number 的 vars 参数，
-          // 类型检查报错（tsc --noEmit 目前不被 CI 门禁覆盖——见 TEST-REALITY.md G15——但
-          // 本轮需要真跑 `npm run build:web` 验证 workflow 编辑器等真机流程，顺手修正）。
-          const nextLevel = NEXT_LEVEL[row.autonomy_level]
-          const detailRow = expanded === row.id ? (
-            <tr key={`${row.root}:${row.id}:detail`}>
-              <td colSpan={5}>
-                <p>{t('loops.readiness_band', { band: row.readiness.band })}</p>
-                {promoteError && <p style={{ color: 'red' }}>{promoteError}</p>}
-                {nextLevel && (
-                  <button onClick={() => promote(row)}>{t('loops.promote_to', { level: nextLevel })}</button>
+    <section className="view loops" data-testid="loops-view">
+      <header className="view__head">
+        <div>
+          <h1 className="view__title">{t('loops.title')}</h1>
+          <p className="view__subtitle">{t('loops.subtitle')}</p>
+        </div>
+        <span className="view__count">{t('loops.count', { n: snapshot.rows.length })}</span>
+      </header>
+      {snapshot.rows.length === 0 ? (
+        <p className="view__note" data-testid="loops-empty">{t('loops.empty')}</p>
+      ) : (
+        <div className="g-list">
+          {snapshot.rows.map((row) => {
+            const nextLevel = NEXT_LEVEL[row.autonomy_level]
+            const isOpen = expanded === row.id
+            return (
+              <div key={`${row.root}:${row.id}`} className="loop-row" data-testid={`loop-row-${row.id}`}>
+                <button
+                  type="button"
+                  className="loop-line"
+                  aria-expanded={isOpen}
+                  onClick={() => {
+                    setExpanded(isOpen ? null : row.id)
+                    setPromoteError(null)
+                  }}
+                >
+                  <span className="loop-caret">{isOpen ? '▾' : '▸'}</span>
+                  <span className="card__name">{row.id}</span>
+                  <span className="loop-level"><b>{row.autonomy_level}</b><span className="loop-level__tag"> · {t(`loops.level_${row.autonomy_level.toLowerCase()}`)}</span></span>
+                  <span className="loop-ready">{t('loops.readiness')} <b>{row.readiness.score}</b></span>
+                  {breakerBadge(row.budget.breaker)}
+                  <span className="ticket-row__spacer" />
+                </button>
+                {isOpen && (
+                  <div className="loop-detail">
+                    <p className="loop-band">{t('loops.readiness_band', { band: row.readiness.band })}</p>
+                    {promoteError && <p className="loop-reject" data-testid="loop-reject">⛔ {promoteError}</p>}
+                    {nextLevel && (
+                      <button type="button" className="qk__btn" data-testid={`loop-promote-${row.id}`} onClick={() => void promote(row)}>
+                        ↑ {t('loops.promote_to', { level: nextLevel })}
+                      </button>
+                    )}
+                  </div>
                 )}
-              </td>
-            </tr>
-          ) : null
-          return detailRow ? [mainRow, detailRow] : [mainRow]
-        })}
-      </tbody>
-    </table>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </section>
   )
 }
