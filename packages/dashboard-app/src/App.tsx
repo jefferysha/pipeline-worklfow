@@ -79,7 +79,7 @@ function AppShell(): JSX.Element {
     for (const c of currentProject?.changes ?? []) names.add(changeWorkflow(c))
     return [...names]
   }, [currentProject])
-  const { rules: rulesByWf } = useWorkflowRules(currentRoot, wfNames)
+  const { rules: rulesByWf, errors: rulesErrors } = useWorkflowRules(currentRoot, wfNames)
 
   useEffect(() => {
     try {
@@ -159,6 +159,9 @@ function AppShell(): JSX.Element {
             snapshot={snapshot}
             loading={loading}
             error={error}
+            currentRoot={currentRoot}
+            rulesByWf={rulesByWf}
+            rulesErrors={rulesErrors}
             onTransition={onTransition}
             onToast={(m) => showFlash('toast', m)}
             onError={(m) => showFlash('error', m)}

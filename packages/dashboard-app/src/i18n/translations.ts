@@ -53,6 +53,10 @@ export const zh: Dict = {
     confirm_backward_desc: '{name} 将从 {from} 回退到 {to}（{event}）。这是回退边，确认继续？',
     confirm_yes: '确认',
     confirm_no: '取消',
+    group_meta: '{steps} 相位 · {cards} 张',
+    group_meta_nocol: '{cards} 张',
+    group_error: 'workflow 定义加载失败：{msg}',
+    archived_fold: '{n} 张已归档',
   },
   settings: {
     title: '设置',
@@ -216,6 +220,10 @@ export const en: Dict = {
     confirm_backward_desc: '{name} will move back from {from} to {to} ({event}). This is a backward edge — proceed?',
     confirm_yes: 'Confirm',
     confirm_no: 'Cancel',
+    group_meta: '{steps} phases · {cards} cards',
+    group_meta_nocol: '{cards} cards',
+    group_error: 'Failed to load workflow definition: {msg}',
+    archived_fold: '{n} archived',
   },
   settings: {
     title: 'Settings',
