@@ -8,15 +8,20 @@ import { useEffect, useRef } from 'react'
  * Task 4 起逐个迁移调用方。样式复用既有 `.dialog__backdrop/.dialog/.dialog__title/
  * .dialog__actions`（Task 1 已换新 token），不新发明样式类。
  *
- * 多层 Dialog 叠加时 Esc/Tab 的归属（brief 未覆盖，按最简正确方案登记于此）：
- * keydown 监听挂在 `document`（唯一能截获「焦点当前不在任何对话框控件上」按键的
- * 层级，也匹配测试用 `fireEvent.keyDown(document, ...)` 的写法），但处理前先查
- * `document.activeElement` 是否落在本实例容器内。由于焦点被困笼锁在最上层对话框
- * 内，背景对话框的监听器在该检查下天然是 no-op——不会出现「一次 Esc 关两层」。
+ * 多层 Dialog 叠加时 Esc/Tab 的归属（评审修复轮）：初版用
+ * `containerRef.current.contains(document.activeElement)` 判断"是不是我"，看似够用，
+ * 实则两处会破：① 焦点落到 body 时（子节点被卸载、或显式 `.blur()`）guard 恒为
+ * false，Esc 对"退路"组件静默失效；② 对话框真嵌套渲染（内层是外层 children 的一部分，
+ * 现实中"确认框叠在表单对话框上"就是这种结构）时，内层容器是外层容器的 DOM 后代，
+ * 外层的 contains 检查对内层的 activeElement 也会为 true，一次 Esc 两层一起关。
+ * 改用模块级 LIFO 栈 `dialogStack`：每个实例 mount 时 push 自己的 symbol、unmount 时
+ * 精确移除；keydown handler 只在自己是栈顶（`dialogStack[dialogStack.length - 1] ===
+ * 自己`）时响应 Esc 与 Tab 困笼，与焦点具体落在哪个元素（乃至是否落在 DOM 里）无关，
+ * 多层叠加时也只有最后 mount 的实例（=视觉最上层）响应。
  */
 export interface DialogProps {
   title: string
-  onClose: () => void            // Esc / backdrop / ✕ 都走它
+  onClose: () => void            // Esc / backdrop 都走它（✕ 由调用方按需放入 actions）
   children: React.ReactNode
   actions?: React.ReactNode      // 底部动作条（调用方放确认/取消按钮）
   testid?: string
@@ -24,7 +29,21 @@ export interface DialogProps {
   initialFocusRef?: React.RefObject<HTMLElement>
 }
 
-const FOCUSABLE_SELECTOR = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+// 当前挂载的 Dialog 实例栈，栈顶（数组末尾）= 最后 mount = 视觉最上层。
+// 模块级、跨组件实例共享，故意不用 React state/context——Esc/Tab 响应资格判断
+// 不需要触发渲染，一个纯数组够用也更省心。
+const dialogStack: symbol[] = []
+
+// 困笼边界只应计入"真正能被 Tab 到达"的元素。disabled 表单控件与 input[type=hidden]
+// 虽然匹配朴素的标签选择器，但原生 Tab 顺序根本不会经过它们——若仍把它们计入
+// first/last 边界，会出现"边界元素永远不可能等于 document.activeElement"的死锁：
+// 真正的末个可聚焦元素 Tab 出去时，困笼逻辑判定"这不是 last"，于是放行，焦点直接
+// 逃出对话框（评审 Task 3 修复的具体触发场景：确认按钮 disabled 的表单对话框）。
+// 故意不用 offsetParent 做可见性过滤——jsdom 没有布局引擎，offsetParent 恒为 null，
+// 会把所有元素误判不可见，测试全灭；CSS 隐藏（display:none/visibility:hidden）但未加
+// disabled/hidden 的元素仍会被计入边界，是已知未处理边界，登记于此。
+const FOCUSABLE_SELECTOR =
+  'button:not(:disabled), [href], input:not(:disabled):not([type="hidden"]), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])'
 
 function getFocusableElements(container: HTMLElement): HTMLElement[] {
   return Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR))
@@ -33,6 +52,10 @@ function getFocusableElements(container: HTMLElement): HTMLElement[] {
 export function Dialog({ title, onClose, children, actions, testid, initialFocusRef }: DialogProps): JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null)
   const previousFocusRef = useRef<HTMLElement | null>(null)
+  // 本实例在 dialogStack 里的身份令牌。用 useRef 惰性初始化一次即可——初始化表达式
+  // 每次 render 都会被求值，但 useRef 只在首次挂载采用它，后续 render 里新建的
+  // Symbol 会被直接丢弃，instanceIdRef.current 全生命周期指向同一个 symbol。
+  const instanceIdRef = useRef<symbol>(Symbol('dialog'))
 
   // 挂载：记录打开前的焦点 → 聚焦 initialFocusRef 或容器内首个可聚焦元素。
   // 卸载：焦点归位到打开前记录的元素。故意用 [] 依赖只跑一次——
@@ -49,11 +72,25 @@ export function Dialog({ title, onClose, children, actions, testid, initialFocus
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 蓄意 mount-once，见上注释
   }, [])
 
-  // Esc 关闭 + Tab 困笼共用一个 document 级 keydown 监听（原因见组件头注释）。
+  // dialogStack 登记：mount 时 push、unmount 时按值精确移除（indexOf + splice，
+  // 不用 pop——万一未来出现非严格 LIFO 的卸载顺序，pop 会错删栈顶的别的实例）。
+  // 依赖 [] 只跑一次，与下面 keydown 监听（依赖 [onClose]）解耦成两个独立 effect：
+  // onClose identity 变化只重挂监听器，不会误触发重复 push/pop。
   useEffect(() => {
+    const id = instanceIdRef.current
+    dialogStack.push(id)
+    return () => {
+      const idx = dialogStack.indexOf(id)
+      if (idx !== -1) dialogStack.splice(idx, 1)
+    }
+  }, [])
+
+  // Esc 关闭 + Tab 困笼共用一个 document 级 keydown 监听（原因见组件头注释）。
+  // 响应资格只看"我是不是栈顶"，与 document.activeElement 具体落在哪无关。
+  useEffect(() => {
+    const id = instanceIdRef.current
     function handleKeyDown(e: KeyboardEvent): void {
-      const container = containerRef.current
-      if (!container?.contains(document.activeElement)) return
+      if (dialogStack[dialogStack.length - 1] !== id) return
 
       if (e.key === 'Escape') {
         onClose()
@@ -61,6 +98,8 @@ export function Dialog({ title, onClose, children, actions, testid, initialFocus
       }
 
       if (e.key === 'Tab') {
+        const container = containerRef.current
+        if (!container) return
         const focusable = getFocusableElements(container)
         if (focusable.length === 0) {
           e.preventDefault()

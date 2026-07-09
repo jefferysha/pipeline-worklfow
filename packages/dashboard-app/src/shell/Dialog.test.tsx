@@ -35,6 +35,51 @@ function Host({ testid, initialFocusRef }: { testid?: string; initialFocusRef?: 
   )
 }
 
+/** 困笼边界测试专用宿主：「确认」按钮 disabled，验证困笼边界不把它算作末个可聚焦元素。 */
+function HostWithDisabledConfirm() {
+  const [open, setOpen] = useState(false)
+  return (
+    <div>
+      <button onClick={() => setOpen(true)}>打开</button>
+      {open && (
+        <Dialog
+          title="标题"
+          onClose={() => setOpen(false)}
+          actions={
+            <>
+              <button>取消</button>
+              <button disabled>确认</button>
+            </>
+          }
+        >
+          <input data-testid="dlg-input" placeholder="姓名" />
+        </Dialog>
+      )}
+    </div>
+  )
+}
+
+/** 两层叠加测试专用宿主：外层 Dialog 内嵌一个「打开内层」按钮，点击后在 children 里再挂一层 Dialog。 */
+function HostTwoLayers() {
+  const [outerOpen, setOuterOpen] = useState(false)
+  const [innerOpen, setInnerOpen] = useState(false)
+  return (
+    <div>
+      <button onClick={() => setOuterOpen(true)}>打开外层</button>
+      {outerOpen && (
+        <Dialog title="外层" onClose={() => setOuterOpen(false)} testid="outer">
+          <button onClick={() => setInnerOpen(true)}>打开内层</button>
+          {innerOpen && (
+            <Dialog title="内层" onClose={() => setInnerOpen(false)} testid="inner">
+              内层内容
+            </Dialog>
+          )}
+        </Dialog>
+      )}
+    </div>
+  )
+}
+
 /** initialFocusRef 场景专用宿主：ref 指向「确认」按钮，验证优先级高于默认首个可聚焦元素。 */
 function HostWithInitialFocus() {
   const [open, setOpen] = useState(false)
@@ -135,5 +180,63 @@ describe('Dialog（共享组件，Task 3）', () => {
     const dialog = screen.getByRole('dialog')
     expect(dialog).toHaveAttribute('aria-modal', 'true')
     expect(dialog).toHaveAttribute('aria-label', '标题')
+  })
+
+  it('Tab 在对话框内循环困笼（反向）：首元素 Shift+Tab → 跳到末元素', async () => {
+    const user = userEvent.setup()
+    render(<Host />)
+    await user.click(screen.getByText('打开'))
+
+    const input = screen.getByTestId('dlg-input')
+    const confirmBtn = screen.getByText('确认')
+    expect(document.activeElement).toBe(input)
+
+    await user.tab({ shift: true })
+    expect(document.activeElement).toBe(confirmBtn)
+  })
+
+  it('困笼边界排除 disabled 元素：确认按钮 disabled 时，从取消 Tab 应困笼回到首个可聚焦元素而非逃逸', async () => {
+    const user = userEvent.setup()
+    render(<HostWithDisabledConfirm />)
+    await user.click(screen.getByText('打开'))
+
+    const input = screen.getByTestId('dlg-input')
+    const cancelBtn = screen.getByText('取消')
+    expect(document.activeElement).toBe(input)
+
+    await user.tab()
+    expect(document.activeElement).toBe(cancelBtn)
+    // 「确认」disabled，边界计算应把它排除在外——真正的末个可聚焦元素是「取消」，
+    // 从这里 Tab 应该困笼回到首个可聚焦元素，而不是逃逸出对话框。
+    await user.tab()
+    expect(document.activeElement).toBe(input)
+  })
+
+  it('焦点落到 body（如子节点被卸载 / 调用 blur）时，Esc 仍能触发 onClose', async () => {
+    const user = userEvent.setup()
+    render(<Host />)
+    await user.click(screen.getByText('打开'))
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+
+    ;(document.activeElement as HTMLElement).blur()
+    expect(document.activeElement).toBe(document.body)
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('两层 Dialog 叠加：按一次 Esc 只关最上层，外层 onClose 不被调用', async () => {
+    const user = userEvent.setup()
+    render(<HostTwoLayers />)
+    await user.click(screen.getByText('打开外层'))
+    expect(screen.getByTestId('outer')).toBeInTheDocument()
+
+    await user.click(screen.getByText('打开内层'))
+    expect(screen.getByTestId('inner')).toBeInTheDocument()
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+
+    expect(screen.queryByTestId('inner')).toBeNull()
+    expect(screen.getByTestId('outer')).toBeInTheDocument()
   })
 })
