@@ -210,8 +210,19 @@ button.ev__chip--neutral:hover { border-color: var(--border-2); color: var(--tex
 .board__group-error { margin: 0 0 10px; padding: 8px 11px; border-radius: 7px; background: var(--red-t); color: var(--red); font-size: 11.5px; font-weight: 600; }
 .board__scroll { overflow-x: auto; padding-bottom: 4px; }
 .board__grid { display: grid; grid-template-columns: repeat(7, minmax(126px, 1fr)); gap: 9px; align-items: start; }
-.board__col { background: var(--fill); border-radius: var(--radius); padding: 8px; display: flex; flex-direction: column; min-height: 108px; }
+.board__col { background: var(--fill); border-radius: var(--radius); padding: 8px; display: flex; flex-direction: column; min-height: 108px; transition: opacity .15s ease, box-shadow .15s ease; }
 .board__col--target { outline: 2px solid var(--green); outline-offset: -2px; background: var(--green-t); }
+/* 拖拽合法性前示（评审 P1-11）：合法列蓝 ring（--accent 是唯一 emotive 签名色，语义=可推进目标），
+   非法列降透明度——不再"任何列都亮 target"，落点前就能分清能不能放。 */
+.board__col--legal { box-shadow: inset 0 0 0 2px var(--accent); }
+.board__col--illegal { opacity: .38; }
+.board__col--shake { animation: board-col-shake .3s; }
+@keyframes board-col-shake {
+  20% { transform: translateX(-4px); }
+  40% { transform: translateX(4px); }
+  60% { transform: translateX(-3px); }
+  80% { transform: translateX(2px); }
+}
 .board__col-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 2px 2px 9px; }
 .board__col-name { font-family: var(--mono); font-weight: 600; color: var(--text); font-size: 11.5px; }
 .board__col-count { font-family: var(--mono); font-size: 11px; color: var(--text-3); min-width: 18px; text-align: center; }
@@ -433,6 +444,9 @@ button.ev__chip--neutral:hover { border-color: var(--border-2); color: var(--tex
 
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { * { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
+/* 非法 drop 的 shake 是状态反馈（"这条边不存在"）不是装饰，评审 P1-11 要求从上面的降动效豁免——
+   类选择器优先级天然高于 *，同为 !important 时这条规则仍会赢。 */
+@media (prefers-reduced-motion: reduce) { .board__col--shake { animation-duration: .3s !important; } }
 @media (max-width: 720px) {
   .board__grid { grid-template-columns: repeat(7, minmax(140px, 1fr)); } .main { padding: 14px; }
   .step-detail-panel { width: 100%; }

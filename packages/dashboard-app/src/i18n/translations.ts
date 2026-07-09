@@ -89,6 +89,8 @@ export const zh: Dict = {
     group_error: 'workflow 定义加载失败：{msg}',
     archived_fold: '{n} 张已归档',
     stamp: '已推进 → {to}',
+    // 评审 P1-11：非法落点不再静默 no-op，该列 shake + 这句解释（取代旧的无声回弹）。
+    illegal_drop: '{from} 没有到 {to} 的转换边',
   },
   settings: {
     title: '设置',
@@ -318,6 +320,7 @@ export const en: Dict = {
     group_error: 'Failed to load workflow definition: {msg}',
     archived_fold: '{n} archived',
     stamp: 'Advanced → {to}',
+    illegal_drop: 'No transition edge from {from} to {to}',
   },
   settings: {
     title: 'Settings',

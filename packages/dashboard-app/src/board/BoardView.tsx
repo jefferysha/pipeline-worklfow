@@ -40,6 +40,18 @@ interface DragPayload {
   workflow: string
 }
 
+/**
+ * 评审 P1-11：拖拽中驱动列前示的状态（与 draggingRef 并存——ref 只管 click 抑制，这个 state
+ * 管视觉：每列按 plannedTransition(group.rules, dragging.phase, step) 判定 legal/illegal）。
+ * 刻意不含 root——列前示只需要 phase/workflow 就能判定合法性，name 只是留作调试/未来扩展的
+ * identity，不参与任何判定逻辑。
+ */
+interface DraggingState {
+  name: string
+  phase: string
+  workflow: string
+}
+
 interface WfGroup {
   wf: string
   rules: WorkflowRules | undefined
@@ -112,6 +124,14 @@ export function BoardView({ snapshot, loading, error, currentRoot, rulesByWf, ru
    *  document 级 mouseup 兜底复位（见该处注释），mouseup 无论 DOM 结构怎么变都会派发到
    *  document，是比 onDragEnd 更可靠的复位时机。 */
   const draggingRef = useRef(false)
+  /** 评审 P1-11：拖拽中的 {name,phase,workflow}，驱动每列 legal/illegal 前示；onDragStart 置、
+   *  onDragEnd/onDrop/document-mouseup 兜底清（与 draggingRef 复位时机对称，但这个 state 只管
+   *  视觉，没有 draggingRef 那种"抑制紧跟的 click"的顾虑，mouseup 分支可以同步清，不必等
+   *  setTimeout(0)）。 */
+  const [dragging, setDragging] = useState<DraggingState | null>(null)
+  /** 非法 drop 落点列——300ms 后自动清（CSS shake 动效窗口），配合 onError 一句解释取代旧的
+   *  静默 no-op（评审 P1-11）。 */
+  const [shakeCol, setShakeCol] = useState<string | null>(null)
 
   // Esc 关 detail（评审 P0-2 键盘契约的一部分）。让位打开中的 Dialog（board 自己的回退确认框，
   // 或 detail 卡自己的回退确认框）——同 InboxView.tsx 的既有写法：document 上还有
@@ -133,6 +153,9 @@ export function BoardView({ snapshot, loading, error, currentRoot, rulesByWf, ru
       setDetail(null)
     }
     function onMouseUp(): void {
+      // 评审 P1-11：dragging state 没有 draggingRef 那种"抑制紧跟 click"的顾虑（它只管列的
+      // legal/illegal 视觉前示，不参与 click 短路判断），可以直接同步清，不必等 setTimeout(0)。
+      setDragging(null)
       window.setTimeout(() => {
         draggingRef.current = false
       }, 0)
@@ -223,8 +246,20 @@ export function BoardView({ snapshot, loading, error, currentRoot, rulesByWf, ru
     if (!busy) setPending(null)
   }
 
+  /**
+   * 评审 P1-11：非法落点不再静默 no-op——该列 shake 300ms + onError 一句解释（"{from} 没有到
+   * {to} 的转换边"）。key 与列渲染时用于 shakeCol 比对的 colKey 同构（`${wf}:${step}`）。
+   */
+  function triggerIllegalDrop(wf: string, toStep: string, fromStep: string): void {
+    const key = `${wf}:${toStep}`
+    setShakeCol(key)
+    window.setTimeout(() => setShakeCol((k) => (k === key ? null : k)), 300)
+    onError?.(t('board.illegal_drop', { from: fromStep, to: toStep }))
+  }
+
   function onDrop(group: WfGroup, toStep: string, raw: string): void {
     setDragOver(null)
+    setDragging(null)
     if (!group.rules) return
     let payload: DragPayload
     try {
@@ -233,9 +268,15 @@ export function BoardView({ snapshot, loading, error, currentRoot, rulesByWf, ru
       return
     }
     if (!payload || typeof payload !== 'object' || !payload.name || !payload.phase) return
-    if (payload.workflow !== group.wf) return // 跨组落点：不同 workflow 的列语义不通，no-op
+    if (payload.workflow !== group.wf) {
+      triggerIllegalDrop(group.wf, toStep, payload.phase) // 跨组落点：不同 workflow 的列语义不通
+      return
+    }
     const planned = plannedTransition(group.rules, payload.phase, toStep)
-    if (!planned) return // 非法落点：no-op（视觉回弹）
+    if (!planned) {
+      triggerIllegalDrop(group.wf, toStep, payload.phase) // 非法落点（评审 P1-11）
+      return
+    }
     requestTransition(payload.name, payload.root ?? '', planned)
   }
 
@@ -314,18 +355,31 @@ export function BoardView({ snapshot, loading, error, currentRoot, rulesByWf, ru
                     const rules = group.rules!
                     const foldArchive = group.wf === 'default' && step === 'archive'
                     const cards = group.cards.filter((c) => c.phase === step)
-                    const isTarget = dragOver === `${group.wf}:${step}`
+                    const colKey = `${group.wf}:${step}`
+                    const isTarget = dragOver === colKey
+                    // 评审 P1-11：拖拽中逐列判定合法性——跨组（workflow 不同）不信任 step 名巧合
+                    // 相等，整组直接非法；同组按 plannedTransition 是否有出边判定（含起点列本身：
+                    // fromStep===toStep 恒 null，同样落 illegal，不特殊豁免）。不在拖拽中为 null，
+                    // 不渲染 legal/illegal 任一类。
+                    const legal = dragging
+                      ? dragging.workflow === group.wf && plannedTransition(rules, dragging.phase, step) !== null
+                      : null
+                    const colClass = ['board__col']
+                    if (legal === true) colClass.push('board__col--legal')
+                    else if (legal === false) colClass.push('board__col--illegal')
+                    if (isTarget && legal === true) colClass.push('board__col--target') // hover 高亮仅合法列生效
+                    if (shakeCol === colKey) colClass.push('board__col--shake')
                     return (
                       <div
                         key={step}
                         data-testid={`board-col-${group.wf}-${step}`}
-                        className={isTarget ? 'board__col board__col--target' : 'board__col'}
+                        className={colClass.join(' ')}
                         onDragOver={(e) => {
                           e.preventDefault()
-                          if (dragOver !== `${group.wf}:${step}`) setDragOver(`${group.wf}:${step}`)
+                          if (dragOver !== colKey) setDragOver(colKey)
                         }}
                         onDragLeave={() => {
-                          if (dragOver === `${group.wf}:${step}`) setDragOver(null)
+                          if (dragOver === colKey) setDragOver(null)
                         }}
                         onDrop={(e) => {
                           e.preventDefault()
@@ -376,9 +430,11 @@ export function BoardView({ snapshot, loading, error, currentRoot, rulesByWf, ru
                                       const payload: DragPayload = { name: change.name, root: currentRoot, phase: change.phase, workflow: group.wf }
                                       e.dataTransfer.setData('application/json', JSON.stringify(payload))
                                       e.dataTransfer.effectAllowed = 'move'
+                                      setDragging({ name: change.name, phase: change.phase, workflow: group.wf }) // 评审 P1-11：驱动列前示
                                     }}
                                     onDragEnd={() => {
                                       draggingRef.current = false
+                                      setDragging(null)
                                     }}
                                   >
                                     {stamped?.name === change.name && (

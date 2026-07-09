@@ -197,15 +197,18 @@ describe('BoardView 拖拽换列 → 转换（真触发 onTransition）', () => 
     await waitFor(() => expect(props.onTransition).toHaveBeenCalledWith('c2', '/repo', 'verify-fail'))
   })
 
-  it('非法落点（open→verify 跳跃）no-op', async () => {
+  it('非法落点（open→verify 跳跃）：不触发 onTransition，改为该列 shake + onError 一句解释（评审 P1-11，不再静默 no-op）', async () => {
     const props = renderBoard({
       snapshot: makeSnapshot([makeProject('/repo', [makeChange('c3', 'open')])]),
     })
     const dt = makeDataTransfer()
     fireEvent.dragStart(screen.getByTestId('board-card-c3'), { dataTransfer: dt })
-    fireEvent.drop(screen.getByTestId('board-col-default-verify'), { dataTransfer: dt })
+    const target = screen.getByTestId('board-col-default-verify')
+    fireEvent.drop(target, { dataTransfer: dt })
     await new Promise((r) => setTimeout(r, 0))
     expect(props.onTransition).not.toHaveBeenCalled()
+    expect(target.className).toContain('board__col--shake')
+    expect(props.onError).toHaveBeenCalledWith('open 没有到 verify 的转换边')
   })
 
   it('转换失败 → onError 呈现 server 文案', async () => {
@@ -438,5 +441,74 @@ describe('BoardView 详情卡跨项目错配防护（评审修复轮 Important-3
     expect(screen.queryByTestId('change-detail')).toBeNull()
     // 板本身对新项目仍正常渲染（修复只掐掉错配的详情卡，不影响看板主体）
     expect(screen.getByTestId('board-card-shared')).toBeInTheDocument()
+  })
+})
+
+/**
+ * 评审 P1-11：真机评审证实 onDragOver 对任何列都亮 board__col--target、非法落点松手静默
+ * no-op——用户分不清"不合法"和"坏了"。修法：dragStart 时把 {name,phase,workflow} 存进
+ * dragging state，每列按 plannedTransition(group.rules, dragging.phase, step) 判定合法性——
+ * 合法列 board__col--legal（蓝 ring），非法列 board__col--illegal（降透明度）；既有的
+ * board__col--target hover 高亮收紧为"仅合法列生效"；跨组（workflow 不同）不按 step 名巧合
+ * 判定，整组直接非法。上面"非法落点（open→verify 跳跃）"一条已经覆盖"非法 drop → shake +
+ * onError + 不调 onTransition"，这里补的是它没覆盖的三块：dragStart 时的逐列 legal/illegal
+ * 类、dragEnd 复位、跨组全非法、target 收紧。
+ */
+describe('BoardView 拖拽合法性前示（评审 P1-11：任何列都亮 target 的修复）', () => {
+  it('dragStart 后合法列亮 board__col--legal、非法列降 board__col--illegal（不再任何列都亮 target）', () => {
+    renderBoard() // c1 落在 build 相位，default rules 下 build 唯一合法出边是 verify
+    const dt = makeDataTransfer()
+    fireEvent.dragStart(screen.getByTestId('board-card-c1'), { dataTransfer: dt })
+    const legalCol = screen.getByTestId('board-col-default-verify')
+    expect(legalCol.className).toContain('board__col--legal')
+    expect(legalCol.className).not.toContain('board__col--illegal')
+    // open/explore/spec/ship/archive 都没有到 build 唯一合法出边 verify 之外的边；build 自己
+    // （拖拽起点列）plannedTransition(fromStep===toStep) 恒 null，同样按公式判非法。
+    for (const step of ['open', 'explore', 'spec', 'build', 'ship', 'archive']) {
+      const col = screen.getByTestId(`board-col-default-${step}`)
+      expect(col.className).toContain('board__col--illegal')
+      expect(col.className).not.toContain('board__col--legal')
+    }
+  })
+
+  it('dragEnd 清除 legal/illegal 类', () => {
+    renderBoard()
+    const card = screen.getByTestId('board-card-c1')
+    const dt = makeDataTransfer()
+    fireEvent.dragStart(card, { dataTransfer: dt })
+    expect(screen.getByTestId('board-col-default-verify').className).toContain('board__col--legal')
+    fireEvent.dragEnd(card)
+    expect(screen.getByTestId('board-col-default-verify').className).not.toContain('board__col--legal')
+    expect(screen.getByTestId('board-col-default-open').className).not.toContain('board__col--illegal')
+  })
+
+  it('既有 --target hover 高亮仅在合法列上生效，非法列 hover 不亮 target', () => {
+    renderBoard()
+    const dt = makeDataTransfer()
+    fireEvent.dragStart(screen.getByTestId('board-card-c1'), { dataTransfer: dt })
+    const legalCol = screen.getByTestId('board-col-default-verify')
+    fireEvent.dragOver(legalCol, { dataTransfer: dt })
+    expect(legalCol.className).toContain('board__col--target')
+    const illegalCol = screen.getByTestId('board-col-default-open')
+    fireEvent.dragOver(illegalCol, { dataTransfer: dt })
+    expect(illegalCol.className).not.toContain('board__col--target')
+  })
+
+  it('跨组拖拽：workflow 不同则目标组全列非法（不按 step 名巧合判定合法）', () => {
+    renderBoard({
+      snapshot: makeSnapshot([
+        makeProject('/repo', [
+          makeChange('c1', 'build'),
+          makeChange('rel-x', 'draft', { fields: { workflow: 'release-train' } }),
+        ]),
+      ]),
+    })
+    const dt = makeDataTransfer()
+    fireEvent.dragStart(screen.getByTestId('board-card-c1'), { dataTransfer: dt }) // default:build
+    for (const step of ['draft', 'review', 'ship']) {
+      const col = screen.getByTestId(`board-col-release-train-${step}`)
+      expect(col.className).toContain('board__col--illegal')
+      expect(col.className).not.toContain('board__col--legal')
+    }
   })
 })
