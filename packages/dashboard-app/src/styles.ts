@@ -130,6 +130,8 @@ body { margin: 0; }
 .qk__btn:hover { background: var(--green-soft); }
 .qk__btn--back { border-color: var(--verm); color: var(--verm); }
 .qk__btn--back:hover { background: var(--verm-soft); }
+.qk__btn--ghost { border-color: var(--line); color: var(--ink-soft); }
+.qk__btn--ghost:hover { background: transparent; border-color: var(--ink-mute); color: var(--ink); }
 .qk__btn:disabled { opacity: .45; cursor: not-allowed; }
 
 /* ── 看板：分组（深绿铭牌）+ 列井 ── */

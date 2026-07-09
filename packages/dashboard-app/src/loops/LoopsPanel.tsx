@@ -24,6 +24,8 @@ interface ErrorBody {
 }
 
 const NEXT_LEVEL: Record<LoopRow['autonomy_level'], 'L2' | 'L3' | null> = { L1: 'L2', L2: 'L3', L3: null }
+// G19② 升级收编：kernel applyLevelChange「降档总允许」、POST /api/loops/level 本就双向，缺的只是这个入口。
+const PREV_LEVEL: Record<LoopRow['autonomy_level'], 'L1' | 'L2' | null> = { L1: null, L2: 'L1', L3: 'L2' }
 
 /** 非 2xx 响应尽量读出 server 的 { error } 或 { errors } 文案；没有 JSON 体就吞掉，回落调用方的通用文案。 */
 async function readErrorDetail(res: Response): Promise<string> {
@@ -59,9 +61,7 @@ export function LoopsPanel(): JSX.Element {
 
   useEffect(() => loadSnapshot(), [loadSnapshot])
 
-  async function promote(row: LoopRow): Promise<void> {
-    const target = NEXT_LEVEL[row.autonomy_level]
-    if (!target) return
+  async function setLevel(row: LoopRow, target: string, kind: 'promote' | 'demote'): Promise<void> {
     setPromoteError(null)
     try {
       const res = await fetch('/api/loops/level', {
@@ -71,12 +71,12 @@ export function LoopsPanel(): JSX.Element {
       })
       if (!res.ok) {
         const detail = await readErrorDetail(res)
-        setPromoteError(detail ? t('loops.promote_fail', { msg: detail }) : t('loops.promote_fail_status', { status: res.status }))
+        setPromoteError(detail ? t(`loops.${kind}_fail`, { msg: detail }) : t(`loops.${kind}_fail_status`, { status: res.status }))
         return
       }
       loadSnapshot()
     } catch (err) {
-      setPromoteError(t('loops.promote_fail', { msg: err instanceof Error ? err.message : t('loops.network_error') }))
+      setPromoteError(t(`loops.${kind}_fail`, { msg: err instanceof Error ? err.message : t('loops.network_error') }))
     }
   }
 
@@ -107,6 +107,7 @@ export function LoopsPanel(): JSX.Element {
         <div className="g-list">
           {snapshot.rows.map((row) => {
             const nextLevel = NEXT_LEVEL[row.autonomy_level]
+            const prevLevel = PREV_LEVEL[row.autonomy_level]
             const isOpen = expanded === row.id
             return (
               <div key={`${row.root}:${row.id}`} className="loop-row" data-testid={`loop-row-${row.id}`}>
@@ -130,10 +131,19 @@ export function LoopsPanel(): JSX.Element {
                   <div className="loop-detail">
                     <p className="loop-band">{t('loops.readiness_band', { band: row.readiness.band })}</p>
                     {promoteError && <p className="loop-reject" data-testid="loop-reject">⛔ {promoteError}</p>}
-                    {nextLevel && (
-                      <button type="button" className="qk__btn" data-testid={`loop-promote-${row.id}`} onClick={() => void promote(row)}>
-                        ↑ {t('loops.promote_to', { level: nextLevel })}
-                      </button>
+                    {(nextLevel || prevLevel) && (
+                      <div className="qk">
+                        {nextLevel && (
+                          <button type="button" className="qk__btn" data-testid={`loop-promote-${row.id}`} onClick={() => void setLevel(row, nextLevel, 'promote')}>
+                            ↑ {t('loops.promote_to', { level: nextLevel })}
+                          </button>
+                        )}
+                        {prevLevel && (
+                          <button type="button" className="qk__btn qk__btn--ghost" data-testid={`loop-demote-${row.id}`} onClick={() => void setLevel(row, prevLevel, 'demote')}>
+                            ↓ {t('loops.demote_to', { level: prevLevel })}
+                          </button>
+                        )}
+                      </div>
                     )}
                   </div>
                 )}

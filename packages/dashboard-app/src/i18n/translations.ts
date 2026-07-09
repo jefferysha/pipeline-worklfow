@@ -100,6 +100,9 @@ export const zh: Dict = {
     promote_to: '升档 → {level}',
     promote_fail: '升档失败：{msg}',
     promote_fail_status: '升档失败（{status}）',
+    demote_to: '降档 → {level}',
+    demote_fail: '降档失败：{msg}',
+    demote_fail_status: '降档失败（{status}）',
   },
   skill_transfer: {
     search_placeholder: '搜索…',
@@ -299,6 +302,9 @@ export const en: Dict = {
     promote_to: 'Promote → {level}',
     promote_fail: 'Promote failed: {msg}',
     promote_fail_status: 'Promote failed ({status})',
+    demote_to: 'Demote → {level}',
+    demote_fail: 'Demote failed: {msg}',
+    demote_fail_status: 'Demote failed ({status})',
   },
   skill_transfer: {
     search_placeholder: 'Search…',

@@ -350,4 +350,17 @@ iteration-35）**：
   dashboard 走的无账。修法与 G19① 同模式（transition 成功后 best-effort append），
   未动手——待用户勾选。
 
+### 2026-07-09 · G19② 升级收编（同日后续会话）
+
+- **G19② 已闭（登记文本有一处过时）**：登记称「server 无降档端点」，实查 `POST
+  /api/loops/level` 本就是双向升降档端点（kernel `applyLevelChange` 语义：升档须准入、
+  跨级拒、**降档总允许**）——真正缺的只是面板入口。落地：`LoopsPanel` 新增 `PREV_LEVEL`
+  + 降档幽灵钮（`qk__btn--ghost` 新变体，视觉对齐设计 demo all-views §3 的 btn-ghost
+  并排配对），`promote` 泛化为 `setLevel(row, target, kind)`，失败文案分 `demote_fail*`
+  i18n 键（中英）。TDD 四例先红后绿（POST target 正确 / L1 无降档钮边界 / 失败行内
+  可见 / 成功 refetch）。真机验证（`.playwright-tmp/shot-loops-demote.mjs`，深浅色
+  截图人工核对）：点降档 → loops.yaml 真被 surgical 改写 → 徽章 L2→L1 → 降档钮消失
+  （到底），零 page error。**过程教训**：真机脚本第一版断言 `row.textContent.includes('L1')`
+  假阳性——「降档 → L1」按钮文案本身含 L1，改为查 `.loop-level b` 徽章真值。
+
 > 缺口在对应里程碑收编时清零；新缺口发现即追加，绝不删除未解决项。

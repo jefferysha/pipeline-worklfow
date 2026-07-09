@@ -170,6 +170,89 @@ describe('LoopsPanel 工票化新增行为', () => {
     expect(screen.queryByRole('button', { name: /升档|Promote/i })).toBeNull()
   })
 
+  it('G19②：L2 行展开有降档按钮，点击 → 真 POST /api/loops/level target=L1（kernel「降档总允许」，端点现成）', async () => {
+    global.fetch = vi.fn(async (url: string, opts?: RequestInit) => {
+      if (url === '/api/loops/snapshot') {
+        return new Response(JSON.stringify({
+          generated_at: '', rows: [{
+            root: '/tmp/p', id: 'mid-loop', name: 'Mid', autonomy_level: 'L2', status: 'active',
+            readiness: { score: 70, band: 'mostly-ready' }, budget: { breaker: 'ok', remaining: 1 },
+          }],
+        }), { status: 200 })
+      }
+      if (url === '/api/loops/level' && opts?.method === 'POST') {
+        return new Response(JSON.stringify({ applied: true, errors: [], exitCode: 0 }), { status: 200 })
+      }
+      throw new Error(`unexpected fetch ${url}`)
+    }) as unknown as typeof fetch
+    renderLoops()
+    await waitFor(() => expect(screen.getByText('mid-loop')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('mid-loop'))
+    const demoteBtn = await screen.findByTestId('loop-demote-mid-loop')
+    fireEvent.click(demoteBtn)
+    await waitFor(() => {
+      const calls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls
+      const postCall = calls.find((c) => c[0] === '/api/loops/level')
+      expect(postCall).toBeTruthy()
+      expect(JSON.parse(postCall![1].body as string)).toEqual({ root: '/tmp/p', id: 'mid-loop', target: 'L1' })
+    })
+  })
+
+  it('G19②：L1 行展开无降档按钮（已到底），L3 行有（降档钮与升档钮独立判定）', async () => {
+    renderLoops() // 默认 SNAPSHOT 是 L1 的 build-loop
+    await waitFor(() => expect(screen.getByText('build-loop')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('build-loop'))
+    await screen.findByRole('button', { name: /升档|Promote/i })
+    expect(screen.queryByTestId('loop-demote-build-loop')).toBeNull()
+  })
+
+  it('G19②：降档 POST 失败（400 + errors 信封）→ 行内显示具体拒绝文案（复用 loop-reject 位）', async () => {
+    global.fetch = vi.fn(async (url: string, opts?: RequestInit) => {
+      if (url === '/api/loops/snapshot') {
+        return new Response(JSON.stringify({
+          generated_at: '', rows: [{
+            root: '/tmp/p', id: 'mid-loop', name: 'Mid', autonomy_level: 'L2', status: 'active',
+            readiness: { score: 70, band: 'mostly-ready' }, budget: { breaker: 'ok', remaining: 1 },
+          }],
+        }), { status: 200 })
+      }
+      if (url === '/api/loops/level' && opts?.method === 'POST') {
+        return new Response(JSON.stringify({ applied: false, errors: ['loops.yaml 写回失败'], exitCode: 3 }), { status: 400 })
+      }
+      throw new Error(`unexpected fetch ${url}`)
+    }) as unknown as typeof fetch
+    renderLoops()
+    await waitFor(() => expect(screen.getByText('mid-loop')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('mid-loop'))
+    fireEvent.click(await screen.findByTestId('loop-demote-mid-loop'))
+    await waitFor(() => expect(screen.getByText(/loops\.yaml 写回失败/)).toBeInTheDocument())
+  })
+
+  it('G19②：降档成功后真重新拉快照（同升档的 refetch 纪律）', async () => {
+    let snapshotCalls = 0
+    global.fetch = vi.fn(async (url: string, opts?: RequestInit) => {
+      if (url === '/api/loops/snapshot') {
+        snapshotCalls += 1
+        return new Response(JSON.stringify({
+          generated_at: '', rows: [{
+            root: '/tmp/p', id: 'mid-loop', name: 'Mid', autonomy_level: 'L2', status: 'active',
+            readiness: { score: 70, band: 'mostly-ready' }, budget: { breaker: 'ok', remaining: 1 },
+          }],
+        }), { status: 200 })
+      }
+      if (url === '/api/loops/level' && opts?.method === 'POST') {
+        return new Response(JSON.stringify({ applied: true, errors: [], exitCode: 0 }), { status: 200 })
+      }
+      throw new Error(`unexpected fetch ${url}`)
+    }) as unknown as typeof fetch
+    renderLoops()
+    await waitFor(() => expect(screen.getByText('mid-loop')).toBeInTheDocument())
+    expect(snapshotCalls).toBe(1)
+    fireEvent.click(screen.getByText('mid-loop'))
+    fireEvent.click(await screen.findByTestId('loop-demote-mid-loop'))
+    await waitFor(() => expect(snapshotCalls).toBe(2))
+  })
+
   it('档位徽章带人话副标签（L1 · 提案制）+ breaker 徽章无 emoji', async () => {
     renderLoops()
     await waitFor(() => expect(screen.getByText('build-loop')).toBeInTheDocument())
