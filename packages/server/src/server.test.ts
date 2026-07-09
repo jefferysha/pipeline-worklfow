@@ -9,7 +9,7 @@ import { join } from 'node:path'
 import { createDashboardServer } from './server.js'
 import type { DashboardServer } from './types.js'
 import {
-  initChange, makeProject, makeTempManifest, makeWorktreeDir, newStore, openSSE, reqDelete, reqGet, reqPost, testFlow,
+  initChange, makeProject, makeTempHome, makeTempManifest, makeWorktreeDir, newStore, openSSE, reqDelete, reqGet, reqPost, testFlow,
 } from './test-support.js'
 import type { StateStore } from '@pipeline-lite/kernel'
 import { loadManifest, TRANSITION_EVENTS as KERNEL_EVENTS, eventEdge as kernelEventEdge } from '@pipeline-lite/kernel'
@@ -1102,5 +1102,104 @@ describe('未知 HTTP 方法（非 GET/POST/DELETE）仍 405（既有兜底不�
       req.end()
     })
     expect(r.status).toBe(405)
+  })
+})
+
+// ═══════════ G18：项目注册端点（spec §3.1，dashboard 闭环第一环）═══════════
+
+/** G18 端点专用 harness：不注入 registry（走真 <home>/.claude/pipeline-projects.json 文件读写）。 */
+async function startWithHome(): Promise<{ srv: DashboardServer; port: number; token: string; home: string; store: StateStore; registryPath: string }> {
+  const home = await makeTempHome()
+  const store = newStore()
+  const srv = createDashboardServer({
+    version: '9.9.9',
+    token: 'secret-token-abc',
+    home,
+    store,
+    flow: testFlow(),
+    clock: () => '2026-07-09T00:00:00Z',
+    pollIntervalMs: 20,
+  })
+  openServers.push(srv)
+  const { port } = await srv.listen(0, '127.0.0.1')
+  return { srv, port, token: srv.token, home, store, registryPath: join(home, '.claude', 'pipeline-projects.json') }
+}
+
+describe('POST /api/projects —— 注册项目进机器级注册表（G18）', () => {
+  it('200：真目录注册成功 → 文件落盘规范化路径 + snapshot 立即可见', async () => {
+    const h = await startWithHome()
+    const proj = await makeProject()
+    const r = await reqPost(h.port, '/api/projects', { root: proj }, { headers: { Authorization: `Bearer ${h.token}` } })
+    expect(r.status).toBe(200)
+    expect(r.json<{ ok: boolean; root: string }>().root).toBe(proj)
+    const onDisk = JSON.parse(await readFile(h.registryPath, 'utf8')) as string[]
+    expect(onDisk).toContain(proj)
+    const snap = await reqGet(h.port, '/api/snapshot')
+    expect(snap.json<{ project_count: number }>().project_count).toBe(1)
+  })
+
+  it('409：重复注册（含尾斜杠等非规范写法，两侧规范化后判重）', async () => {
+    const h = await startWithHome()
+    const proj = await makeProject()
+    await reqPost(h.port, '/api/projects', { root: proj }, { headers: { Authorization: `Bearer ${h.token}` } })
+    const dup = await reqPost(h.port, '/api/projects', { root: `${proj}/` }, { headers: { Authorization: `Bearer ${h.token}` } })
+    expect(dup.status).toBe(409)
+    const onDisk = JSON.parse(await readFile(h.registryPath, 'utf8')) as string[]
+    expect(onDisk).toHaveLength(1)
+  })
+
+  it('400：body 非对象 / root 非字符串', async () => {
+    const h = await startWithHome()
+    const r1 = await reqPost(h.port, '/api/projects', 'just-a-string', { headers: { Authorization: `Bearer ${h.token}` } })
+    expect(r1.status).toBe(400)
+    const r2 = await reqPost(h.port, '/api/projects', { root: 5 }, { headers: { Authorization: `Bearer ${h.token}` } })
+    expect(r2.status).toBe(400)
+  })
+
+  it('404：路径不存在；404：路径是文件非目录', async () => {
+    const h = await startWithHome()
+    const r1 = await reqPost(h.port, '/api/projects', { root: '/tmp/definitely-not-exist-g18-xyz' }, { headers: { Authorization: `Bearer ${h.token}` } })
+    expect(r1.status).toBe(404)
+    const proj = await makeProject()
+    const filePath = join(proj, 'a-file.txt')
+    await (await import('node:fs/promises')).writeFile(filePath, 'x', 'utf8')
+    const r2 = await reqPost(h.port, '/api/projects', { root: filePath }, { headers: { Authorization: `Bearer ${h.token}` } })
+    expect(r2.status).toBe(404)
+  })
+
+  it('401 无 token / 403 假 Host / 400 非 JSON Content-Type（三层鉴权在新路由同样生效），且不改盘', async () => {
+    const h = await startWithHome()
+    const proj = await makeProject()
+    const r1 = await reqPost(h.port, '/api/projects', { root: proj })
+    expect(r1.status).toBe(401)
+    const r2 = await reqPost(h.port, '/api/projects', { root: proj }, { headers: { Authorization: `Bearer ${h.token}`, Host: 'evil.com' } })
+    expect(r2.status).toBe(403)
+    const r3 = await reqPost(h.port, '/api/projects', { root: proj }, { headers: { Authorization: `Bearer ${h.token}`, 'Content-Type': 'text/plain' } })
+    expect(r3.status).toBe(400)
+    expect(existsSync(h.registryPath)).toBe(false)
+  })
+})
+
+describe('DELETE /api/projects —— 注销项目（G18 对称操作）', () => {
+  it('200：注销后文件更新 + snapshot 不再包含', async () => {
+    const h = await startWithHome()
+    const proj = await makeProject()
+    await reqPost(h.port, '/api/projects', { root: proj }, { headers: { Authorization: `Bearer ${h.token}` } })
+    const r = await reqDelete(h.port, `/api/projects?root=${encodeURIComponent(proj)}`, { headers: { Authorization: `Bearer ${h.token}` } })
+    expect(r.status).toBe(200)
+    const onDisk = JSON.parse(await readFile(h.registryPath, 'utf8')) as string[]
+    expect(onDisk).toHaveLength(0)
+    const snap = await reqGet(h.port, '/api/snapshot')
+    expect(snap.json<{ project_count: number }>().project_count).toBe(0)
+  })
+
+  it('404 未注册；400 缺 root query；401 无 token', async () => {
+    const h = await startWithHome()
+    const r1 = await reqDelete(h.port, `/api/projects?root=${encodeURIComponent('/tmp/never-registered')}`, { headers: { Authorization: `Bearer ${h.token}` } })
+    expect(r1.status).toBe(404)
+    const r2 = await reqDelete(h.port, '/api/projects', { headers: { Authorization: `Bearer ${h.token}` } })
+    expect(r2.status).toBe(400)
+    const r3 = await reqDelete(h.port, '/api/projects?root=%2Ftmp%2Fx')
+    expect(r3.status).toBe(401)
   })
 })

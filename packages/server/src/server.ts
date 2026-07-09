@@ -29,6 +29,7 @@ import { buildAfkLog, buildAfkSnapshot, cancelAfkRun, enqueueAfkRun, readAfkRunL
 import { buildLoopsSnapshot } from './loops.js'
 import { readMandatorySkills, validateMandatorySkillsBody, writeMandatorySkills } from './config.js'
 import { resolveServerPaths } from './paths.js'
+import { addProjectToRegistry, removeProjectFromRegistry } from './projects.js'
 import { deleteWorkflowForApi, listWorkflowNames, readWorkflowForApi, writeWorkflowForApi, WorkflowNotFoundError } from './workflows.js'
 import { readRegistry } from './registry.js'
 import { listAllSkills } from './skillsRegistry.js'
@@ -460,6 +461,18 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
       return sendJson(res, 400, { ok: false, error: '写回端点要求 Content-Type: application/json' })
     }
 
+    // ── G18：POST /api/projects —— 注册项目进机器级注册表 ──
+    //    全仓唯一豁免第四层信任锚的写端点（职责就是把 root 放进注册表，"必须已注册"逻辑
+    //    不成立）；补偿校验（路径存在/是目录/规范化判重）在 projects.ts 内完成。
+    if (path === '/api/projects') {
+      const body = await readJsonBody(req)
+      const rawRoot = typeof body === 'object' && body !== null ? (body as Record<string, unknown>).root : undefined
+      const result = addProjectToRegistry(paths.registryPath, rawRoot)
+      return result.ok
+        ? sendJson(res, 200, { ok: true, root: result.root })
+        : sendJson(res, result.code, { ok: false, error: result.error })
+    }
+
     // ── M3 config 写端点：全机唯一 manifest.yaml，无 root/name（不是按 Project 分立的资源）──
     if (path === '/api/config/mandatory-skills') {
       if (!manifestPath) return sendJson(res, 404, { ok: false, error: 'config 数据端未装（capabilities.config=false）' })
@@ -637,6 +650,15 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
     const provided = tokenFromHeaders(req.headers)
     if (!provided || !tokensMatch(provided, token)) {
       return sendJson(res, 401, { ok: false, error: '缺少或无效 token（写端点需鉴权）' })
+    }
+
+    // ── G18：DELETE /api/projects?root= —— 注销项目（注册的对称操作）──
+    if (path === '/api/projects') {
+      const root = new URL(req.url ?? '/', 'http://localhost').searchParams.get('root')
+      const result = removeProjectFromRegistry(paths.registryPath, root)
+      return result.ok
+        ? sendJson(res, 200, { ok: true })
+        : sendJson(res, result.code, { ok: false, error: result.error })
     }
 
     // ── workflow 编辑器（GOAL E8）：DELETE /api/workflows/:name ──
