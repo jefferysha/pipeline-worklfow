@@ -109,6 +109,9 @@ export const zh: Dict = {
     cancel: '取消',
   },
   afk: {
+    title: 'AFK 工作台',
+    subtitle: '自动化队列与运行详情',
+    scheduler_meta: '调度器 {status} · {running} 跑 · {queued} 排队',
     empty_log: '（无日志）',
     select_hint: '选一个 change 查看详情',
     cancel: '取消',
@@ -301,6 +304,9 @@ export const en: Dict = {
     cancel: 'Cancel',
   },
   afk: {
+    title: 'AFK Workbench',
+    subtitle: 'Automation queue & run details',
+    scheduler_meta: 'scheduler {status} · {running} running · {queued} queued',
     empty_log: '(no log)',
     select_hint: 'Select a change to see details',
     cancel: 'Cancel',

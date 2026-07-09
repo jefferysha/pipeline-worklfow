@@ -3,20 +3,15 @@ import { getToken } from '../api/client'
 import { useT } from '../i18n'
 
 /**
- * AfkWorkbench（afk-workbench Task 7）—— 列表 + 详情侧栏工作台，取代 advanced/AfkPanel 的只读摘要
- * （Task 8 接线进导航后移除后者）。消费 GET /api/afk/snapshot（已存在）、GET /api/afk/:name/log
- * （Task 6）、POST /api/afk/:name/cancel（Task 4）、POST /api/afk/:name/retry（Task 5）。
+ * AfkWorkbench —— 工票车间重写（spec §4；视觉真相源 demo all-views §2）：
+ * 左=挂队表单+队列卡（lane 语义徽章），右=详情（元信息/终端风日志块/操作按钮语义归位：
+ * 取消=朱红 ghost，重试=绿）。
  *
- * 错误可见性（本效力两次修复循环——SkillTransferModal.tsx / LoopsPanel.tsx——都在首次评审后
- * 补的教训，这里从一开始就写进去）：挂载拉快照、选中后拉日志、点取消/重试三处网络调用都不能
- * 静默失败——非 2xx（三个新端点对"change 不存在"统一返回 400 {ok:false,error}）和网络层
- * throw（fetch 本身 reject）都要落到可见的行内提示，不是永远停在空白/加载态。刻意不做的事：
- * 不重试、不上 toast 库，只是 state + 一段文字，同 LoopsPanel.tsx 的既有模式。
- *
- * whole-branch review（GOAL v2.0 集成收尾）追加两处修复：① 取消/重试成功后 refetch 一次快照
- * （此前成功只清错误、不刷新，列表/lane 停在操作前的旧状态，要手动刷新页面才看得到真实结果）；
- * ② 详情区补渲染 sandbox/worktree 路径（F3/design §4 明确要求，此前 AfkCard 已经声明并 fetch
- * 了这两个字段但从未渲染，是 UI 遗漏非数据缺口）。
+ * 行为层三条纪律自零样式版逐字保留（whole-branch review 教训，一条不丢）：
+ *  1. 快照/日志/取消/重试/挂队五处网络调用错误全部行内可见（先 r.ok 再 json）；
+ *  2. 取消门禁用 automation==='running' 而非 lane（scheduled 折叠进 running 泳道但 cancel 必 400）；
+ *     重试门禁用 RETRYABLE lane；操作成功后 refetch 快照并把 selected 按 root+name 重对齐；
+ *  3. 挂队成功清空输入并 refetch；失败保留输入 + 行内错误；空名 no-op。
  */
 
 interface AfkCard {
@@ -27,8 +22,16 @@ interface AfkCard {
   sandbox: string
   worktree: string
   last_error: string
+  phase?: string
+}
+interface AfkScheduler {
+  status: string
+  queued: number
+  running: number
+  paused: number
 }
 interface AfkSnapshot {
+  scheduler?: AfkScheduler
   lanes: Record<string, AfkCard[]>
 }
 interface ErrorBody {
@@ -48,12 +51,15 @@ async function readErrorDetail(res: Response): Promise<string> {
   return ''
 }
 
+function laneBadgeClass(lane: string): string {
+  if (lane === 'running') return 'afk-state afk-state--run'
+  if (lane === 'failed' || lane === 'conflict') return 'afk-state afk-state--fail'
+  if (lane === 'paused') return 'afk-state afk-state--pause'
+  return 'afk-state afk-state--queue'
+}
+
 export interface AfkWorkbenchProps {
-  /**
-   * 挂队目标 project root——同 App.tsx 传给 WorkflowCanvas/WorkflowEditorView 的
-   * `currentRoot` 同一份值（`snapshot.projects[0]?.root`）。已知简化点同 G14：没有
-   * "选哪个已注册项目挂队"的显式切换，多项目场景固定挂到第一个。
-   */
+  /** 挂队目标 project root —— App 的 currentRoot（D5 项目切换器语义）。 */
   root?: string
 }
 
@@ -108,6 +114,7 @@ export function AfkWorkbench({ root = '' }: AfkWorkbenchProps): JSX.Element {
   }, [selected, t])
 
   const allCards = snapshot ? Object.values(snapshot.lanes).flat() : []
+  const scheduler = snapshot?.scheduler
 
   async function doAction(action: 'cancel' | 'retry'): Promise<void> {
     if (!selected) return
@@ -124,9 +131,6 @@ export function AfkWorkbench({ root = '' }: AfkWorkbenchProps): JSX.Element {
         setActionError(detail ? t('afk.action_error', { label, msg: detail }) : t('afk.action_error_status', { label, status: res.status }))
         return
       }
-      // 成功后 refetch 一次快照并把 selected 对齐到刷新后的同一张卡（按 root+name 匹配）——
-      // 否则详情区仍读旧的 selected 对象，取消/重试按钮的门禁（automation/lane）会显示操作前
-      // 的陈旧状态，用户看不出操作是否真的生效，只能手动刷新整个页面才能看到真实结果。
       const fresh = await loadSnapshot()
       if (fresh) {
         const freshCards = Object.values(fresh.lanes).flat()
@@ -137,11 +141,6 @@ export function AfkWorkbench({ root = '' }: AfkWorkbenchProps): JSX.Element {
     }
   }
 
-  // 挂队缺口修复（2026-07-09，真机验证发现）：此前面板只有查看/取消/重试，没有把一个 change
-  // 摆进 AFK 队列的入口——`pipeline afk enqueue <name>` 是唯一路径，dashboard 点不到。同
-  // doAction 的错误可见性纪律（非 2xx 与网络层 throw 都要落到行内提示，不静默失败）；成功后
-  // 同样 refetch 快照（新挂队的 change 需要出现在 queued 泳道），并清空输入框（不清空的话，
-  // 已提交的 change 名还留在框里,用户分不清是"已提交"还是"忘了填"）。
   async function doEnqueue(): Promise<void> {
     const name = enqueueName.trim()
     if (!name) return
@@ -165,43 +164,99 @@ export function AfkWorkbench({ root = '' }: AfkWorkbenchProps): JSX.Element {
   }
 
   if (snapshotError) {
-    return <p className="subtitle">{snapshotError}</p>
+    return <p className="view__note view__note--error" data-testid="afk-error">{snapshotError}</p>
   }
 
   return (
-    <div className="split">
-      <div className="mock-sidebar">
+    <section className="view afk" data-testid="afk-view">
+      <header className="view__head">
         <div>
-          <input
-            value={enqueueName}
-            placeholder={t('afk.enqueue_placeholder')}
-            onChange={(e) => { setEnqueueName(e.target.value); setEnqueueError(null) }}
-          />
-          <button onClick={() => void doEnqueue()}>{t('afk.enqueue')}</button>
+          <h1 className="view__title">{t('afk.title')}</h1>
+          <p className="view__subtitle">
+            {scheduler
+              ? t('afk.scheduler_meta', { status: scheduler.status, running: scheduler.running, queued: scheduler.queued })
+              : t('afk.subtitle')}
+          </p>
         </div>
-        {enqueueError && <p className="subtitle">{enqueueError}</p>}
-        {allCards.map((c) => (
-          <div key={`${c.root}:${c.name}`} onClick={() => setSelected(c)} style={{ cursor: 'pointer' }}>
-            {c.lane === 'running' ? '●' : '○'} <span>{c.name}</span> · {c.lane}
+      </header>
+      <div className="afk-split">
+        <div className="afk-list">
+          <div className="afk-enq">
+            <input
+              className="input"
+              value={enqueueName}
+              placeholder={t('afk.enqueue_placeholder')}
+              onChange={(e) => { setEnqueueName(e.target.value); setEnqueueError(null) }}
+            />
+            <button type="button" className="btn" onClick={() => void doEnqueue()}>{t('afk.enqueue')}</button>
           </div>
-        ))}
+          {enqueueError && <p className="field__error" data-testid="afk-enqueue-error">{enqueueError}</p>}
+          {allCards.map((c) => {
+            const active = selected && selected.root === c.root && selected.name === c.name
+            return (
+              <button
+                type="button"
+                key={`${c.root}:${c.name}`}
+                data-testid={`afk-item-${c.name}`}
+                className={[
+                  'afk-item',
+                  active ? 'is-active' : '',
+                  c.lane === 'failed' || c.lane === 'conflict' ? 'is-failed' : '',
+                ].filter(Boolean).join(' ')}
+                onClick={() => setSelected(c)}
+              >
+                <span className="afk-itemtop">
+                  <span className="card__name">{c.name}</span>
+                  <span className={laneBadgeClass(c.lane)}>{c.lane}</span>
+                </span>
+                <span className="afk-itemmeta">{[c.phase, c.automation].filter(Boolean).join(' · ')}</span>
+              </button>
+            )
+          })}
+        </div>
+        <div className="afk-detail">
+          {selected ? (
+            <>
+              <div className="afk-dhead">
+                <h2 className="afk-dtitle">{selected.name}</h2>
+                <span className={laneBadgeClass(selected.lane)}>{selected.lane}</span>
+                <span className="ticket-row__spacer" />
+                <span className="afk-dactions">
+                  {selected.automation === 'running' && (
+                    <button type="button" className="btn--verm-ghost" data-testid="afk-cancel" onClick={() => doAction('cancel')}>
+                      {t('afk.cancel')}
+                    </button>
+                  )}
+                  {RETRYABLE.has(selected.lane) && (
+                    <button type="button" className="qk__btn" data-testid="afk-retry" onClick={() => doAction('retry')}>
+                      {t('afk.retry')}
+                    </button>
+                  )}
+                </span>
+              </div>
+              <div className="afk-dmeta">
+                <span>automation <b>{selected.automation}</b></span>
+                {selected.sandbox && <span>{t('afk.sandbox_label')} <b>{selected.sandbox}</b></span>}
+                {selected.worktree && <span>{t('afk.worktree_label')} <b>{selected.worktree}</b></span>}
+              </div>
+              {selected.last_error && (
+                <p className="loop-reject" data-testid="afk-last-error">{t('afk.last_error_label')}：{selected.last_error}</p>
+              )}
+              {actionError && <p className="field__error" data-testid="afk-action-error">{actionError}</p>}
+              {logError ? (
+                <p className="field__error" data-testid="afk-log-error">{logError}</p>
+              ) : (
+                <>
+                  <div className="afk-loghead">.sandcastle-run.log</div>
+                  <pre className="afk-log" data-testid="afk-log">{log ?? t('afk.empty_log')}</pre>
+                </>
+              )}
+            </>
+          ) : (
+            <p className="view__note" data-testid="afk-select-hint">{t('afk.select_hint')}</p>
+          )}
+        </div>
       </div>
-      <div className="mock-content">
-        {selected ? (
-          <>
-            <b>{selected.name}</b> · {selected.automation}
-            {selected.sandbox && <p className="subtitle">{t('afk.sandbox_label')}：{selected.sandbox}</p>}
-            {selected.worktree && <p className="subtitle">{t('afk.worktree_label')}：{selected.worktree}</p>}
-            {selected.last_error && <p className="subtitle">{t('afk.last_error_label')}：{selected.last_error}</p>}
-            {logError ? <p className="subtitle">{logError}</p> : <pre>{log ?? t('afk.empty_log')}</pre>}
-            {actionError && <p className="subtitle">{actionError}</p>}
-            {selected.automation === 'running' && <button onClick={() => doAction('cancel')}>{t('afk.cancel')}</button>}
-            {RETRYABLE.has(selected.lane) && <button onClick={() => doAction('retry')}>{t('afk.retry')}</button>}
-          </>
-        ) : (
-          <p className="subtitle">{t('afk.select_hint')}</p>
-        )}
-      </div>
-    </div>
+    </section>
   )
 }
