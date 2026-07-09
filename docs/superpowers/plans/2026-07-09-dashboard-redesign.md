@@ -84,10 +84,10 @@
 
 **Steps:**
 
-- [ ] **Step 1**: 重写 `styles.ts`（上述 token + 全部既有选择器按 demo 语言重样式 + 新增核心通用件）。
-- [ ] **Step 2**: `npm run test:web` → 预期 PASS（纯 CSS 不碰 markup/testid；若有测试查了 class 名，逐条核对该测试意图后同步）。
-- [ ] **Step 3**: `npx tsc --noEmit -p packages/dashboard-app` → 预期 0 错误。
-- [ ] **Step 4**: `git add … && git commit -m "feat(dashboard): 工票车间 token 体系落地，styles.ts 全量重写（spec §1）"`。
+- [x] **Step 1**: 重写 `styles.ts`（上述 token + 全部既有选择器按 demo 语言重样式 + 新增核心通用件）。
+- [x] **Step 2**: `npm run test:web` → 预期 PASS（纯 CSS 不碰 markup/testid；若有测试查了 class 名，逐条核对该测试意图后同步）。
+- [x] **Step 3**: `npx tsc --noEmit -p packages/dashboard-app` → 预期 0 错误。
+- [x] **Step 4**: `git add … && git commit -m "feat(dashboard): 工票车间 token 体系落地，styles.ts 全量重写（spec §1）"`。
 
 ### Task 2: 深浅色截图基线
 

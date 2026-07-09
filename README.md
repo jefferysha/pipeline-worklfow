@@ -58,22 +58,27 @@ npm run build:web && npm run build:server   # 产出 dashboard-app/dist + server
 npx pipeline-dashboard                      # 监听 127.0.0.1:8765（已跑同/旧版本会自动让位/被接管）
 ```
 
-项目要出现在 dashboard 里，需先把项目根目录写进机器级注册表（目前**没有**命令行/界面入口，
-只能手改这个 JSON 文件——已知的操作性缺口，见 [docs/TEST-REALITY.md](docs/TEST-REALITY.md)）：
-
-```bash
-echo '["/绝对路径/到/你的项目"]' > ~/.claude/pipeline-projects.json
-```
+项目注册直接在 dashboard 里完成：首次打开（零项目）会看到**教学式引导页**——填项目根目录
+点「注册项目」即可（等价 CLI：页面上有可复制的命令）；多项目时导航栏有**项目切换器**，
+末项「＋ 注册项目…」随时可加。注册表本体仍是 `~/.claude/pipeline-projects.json`，手改也行。
 
 打开 `http://127.0.0.1:8765/` 后：
 
-- **收件箱**（默认页）/ **看板**：在等你决策的 change、七相位拖拽看板，点按钮推进相位、
-  确认门（gate confirm/review），不用记事件名。
+- **收件箱**（默认页）/ **看板**：在等你决策的 change、**按 workflow 分组的看板**
+  （default 七相位 + 每个自定义 workflow 各自的独立分组与列集），拖拽或卡片上的
+  快捷转换按钮推进相位、回退边二次确认，不用记事件名。**自定义 workflow 的复核门
+  （gate=review 的 step）同样进收件箱**。右上角「＋ 新建 change」对话框等价
+  `pipeline init`（名字/workflow/track，实时校验 + CLI 教学行）。
 - **设置**：相位 × 轨道强制技能矩阵、skill 双栏穿梭编辑器。
 - **工作台**下拉分组：
-  - **Loop 设置**：loop-engineering 治理面（就绪分/drift、L1→L3 分级放权升降档、budget 熔断状态）。
-  - **AFK 工作台**：无人值守跑批队列（enqueue/查看快照/取消/重试），docker sandcastle 执行。
-  - **自定义 workflow**：见下节。
+  - **Loop 治理**：loop-engineering 治理面（就绪分/drift、L1→L3 分级放权升档、budget 熔断状态；
+    drift 门拒绝升档时给出具体理由）。
+  - **AFK 工作台**：无人值守跑批队列（挂队/查看快照与实时日志/取消/重试），docker sandcastle 执行。
+  - **自定义 workflow**：见下节（画布上 gate step 直接亮「复核门/确认门」徽章，
+    详情侧栏支持 guard 的新增与移除）。
+
+设计语言「工票车间」：白纸双色功能语义——**绿=流水线在跑，朱红=需要人出面**（复核门、
+回退、删除、错误共用一个语义）；深浅色双主题；零外部字体/CDN（CSP 自足）。
 
 写端点（相位转换/保存 workflow/AFK 操作等）需要 server 启动时生成的一次性 token，
 **只有 `npx pipeline-dashboard` 真正提供页面时才会同源注入**——单独跑 `vite dev`

@@ -282,4 +282,34 @@ iteration-35）**：
   当前唯一入口，值得后续补一个 `pipeline project register [--root]` 之类的命令或者
   dashboard 设置页里的一个小表单。
 
+### 2026-07-09 · iteration-38 dashboard 全量重构 —— 改判追记
+
+- **G14 已闭（部分）**：① 多项目「当前选中 project」概念已落地——App `currentRoot` 状态化 +
+  Nav 项目切换器（localStorage 记忆，`App.tsx`/`shell/Nav.tsx`），收件箱/看板/AFK/workflow
+  编辑器统一 currentRoot 语境；② guard「只有移除没有新增」已补齐——`StepDetailPanel.tsx`
+  新增内嵌表单（类型下拉 + tasks-at-least 条件参数 n + 行内校验），`detail_guard_add`
+  预留 key 接线。撤销重做/多选/minimap/改名等其余 E8 已知简化维持原状（本轮范围外）。
+- **G17 已闭（前端 + server 双侧）**：前端——新模块 `dashboard-app/src/model/workflowModel.ts`
+  混合相位模型（default 走 types.ts 常量镜像零网络、单源守卫测试零改动；自定义按
+  `fields.workflow` 走既有 `GET /api/workflows/:name` + 缓存），BoardView 分组看板（每个
+  workflow 独立分组/列集/转换图，rules 拉取失败组只读降级——任何情况下卡不消失）、
+  InboxView 判据泛化为 `gateByStep[phase]==='review'`、events.ts 按 WorkflowRules 泛化。
+  server——**本轮验收真机新发现 G17 其实有个 iteration-37 未触达的 server 侧半边**：
+  `server/src/transition.ts::performTransition` 锁死 kernel 固定事件表，dashboard 发出的
+  自定义 event 一律 400；已镜像 `cli/commands/transition.ts` 双轨分岔修复（default 原链路
+  一行不改，响应形状两轨一致）。验收证据：`.playwright-tmp/acceptance-redesign.mjs`
+  真机四连证（独立分组可见/组内拖拽推进/收件箱现卡/快捷转换清徽章），ACCEPTANCE_ALL_PASS。
+- **G18 已闭**：`POST /api/projects`（注册，豁免第四层信任锚的唯一写端点，补偿校验=路径
+  存在+目录+两侧规范化判重 409）/ `DELETE /api/projects`（注销）/ `POST /api/changes`
+  （init 的 HTTP 化）三端点 + Nav 注册入口 + `NewChangeDialog` + 教学式空状态
+  （注册表单 + CLI 等价命令双路径）。验收证据：空注册表起步 → onboarding 注册 →
+  新建 change → 推进 → 归档全闭环真机通过。
+- **G19（本轮新增已知简化，如实登记）**：① `POST /api/changes` 不写 history 记账
+  （CLI 侧 best-effort 职责，server 端点不注入 history deps）；② Loops 面板不设降档按钮
+  （server 无降档端点，YAGNI——demo 里的降档钮是视觉示意未实现）；③ 看板/收件箱从
+  「全项目聚合」改为「currentRoot 单项目」语境（D5 拍板的语义变更，与 AFK/编辑器对齐）；
+  ④ default 组 archive 列渲染折叠计数不逐卡列出（有意简化）；⑤ 收件箱「决定类型文案行」
+  （awaiting.*）退役——紧凑工票行里徽章+相位胶囊承担语义，i18n key 保留；⑥ 相位显示一律
+  原始 step id（mono），default 的中文相位名退役出看板/收件箱（settings 相位轴仍用）。
+
 > 缺口在对应里程碑收编时清零；新缺口发现即追加，绝不删除未解决项。
