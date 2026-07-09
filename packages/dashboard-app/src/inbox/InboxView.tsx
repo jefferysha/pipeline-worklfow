@@ -5,7 +5,10 @@ import type { WorkflowRules } from '../model/workflowModel'
 import { legalTargets, plannedTransition, type PlannedTransition } from '../board/events'
 import { shortTime } from '../model/time'
 import { Dialog } from '../shell/Dialog'
+import { Icon } from '../shell/Icon'
 import { revealList } from '../workflow/motion'
+import { ChangeDetailCard } from './ChangeDetailCard'
+import { gateEvidence, type EvidenceChip } from './evidence'
 import { changeWorkflow, projectName, selectInbox } from './inbox'
 
 interface InboxViewProps {
@@ -32,6 +35,35 @@ interface Pending {
 }
 
 /**
+ * 行内证据 chip（Task 7，评审 P0-1：gateEvidence 复用，行内即时可见，不必点开详情卡才看得到）。
+ * copyable 字段（路径/sha 类）渲染成可点的 button（拷贝值），其余 tone 语义字段渲染成只读 span
+ * ——同视觉基准 demo 的 `.chip`/`button.chip` 区分（非 button 的 chip 不该看起来可点）。
+ */
+function renderEvidenceChip(chip: EvidenceChip, onCopy: (value: string) => void): JSX.Element {
+  if (chip.copyable) {
+    return (
+      <button
+        key={chip.key}
+        type="button"
+        className="ev__chip ev__chip--neutral"
+        data-testid={`inbox-evidence-${chip.key}`}
+        onClick={() => onCopy(chip.value)}
+      >
+        <Icon name="copy" size={11} />
+        {chip.key}={chip.value}
+      </button>
+    )
+  }
+  return (
+    <span key={chip.key} className={`ev__chip ev__chip--${chip.tone}`} data-testid={`inbox-evidence-${chip.key}`}>
+      {chip.tone === 'pass' && <Icon name="check" size={11} />}
+      {chip.tone === 'fail' && <Icon name="x" size={11} />}
+      {chip.key}={chip.value}
+    </span>
+  )
+}
+
+/**
  * 收件箱 —— 默认落地视图（病灶②的解法）。只答一个问题："现在哪个 change 在等我决定"。
  * 工票车间语言（spec §2.3）：朱红工票行 + 实底"等你复核"徽章 + 行尾快捷转换按钮
  * （与看板同一 legalTargets/plannedTransition 管线，回退边共用二次确认语义）。
@@ -42,6 +74,12 @@ export function InboxView({ snapshot, loading, error, currentRoot, rulesByWf, on
   const { t } = useT()
   const [pending, setPending] = useState<Pending | null>(null)
   const [busy, setBusy] = useState(false)
+  // 详情卡点开（Task 7，评审 P0-1）：selected 是被点开那行的 `${root}/${change.name}` 复合键
+  // （单项目语境下 root 恒定，仍取复合键是为了防御未来聚合视图；见 selectInbox 的 currentRoot
+  // 过滤注释）。kbdFocus 是独立的"键盘焦点环"索引——j/k 移动它，不联动 selected（哪行展开
+  // 详情只由点击/Enter 决定），两者语义分离对齐 brief"焦点环"与"选中"是两件事的措辞。
+  const [selected, setSelected] = useState<string | null>(null)
+  const [kbdFocus, setKbdFocus] = useState(0)
   const listRef = useRef<HTMLUListElement>(null)
   const revealedRef = useRef(false)
   const items = useMemo(() => selectInbox(snapshot, currentRoot, rulesByWf), [snapshot, currentRoot, rulesByWf])
@@ -52,6 +90,38 @@ export function InboxView({ snapshot, loading, error, currentRoot, rulesByWf, on
       revealList(listRef.current.children)
     }
   }, [items.length])
+
+  // j/k 移动焦点环、Enter 开/关 kbdFocus 所在行的详情卡、Esc 关详情——单个 document keydown
+  // 监听（brief 明确要求合一，不是三个监听器）。两条旁路：① e.target 是 INPUT/TEXTAREA 时整体
+  // 不处理——NewChangeDialog/Onboarding 的文本输入与本视图同时挂载（对话框是覆盖层，不卸载
+  // 背后的 InboxView），敲字符 'j'/'k' 或提交时的 Enter 不该拨动收件箱的隐藏状态；
+  // ② Esc 时若 document 上还有打开的 [role="dialog"]（本视图的回退确认框，或详情卡自己的回退
+  // 确认框）则整体不处理，让位给 Dialog 自己的 LIFO 栈 Esc 逻辑——避免"关掉确认框的同一次 Esc
+  // 顺带把详情卡也关了"的双重反应。Dialog 组件的状态更新在这次事件派发的同步阶段还没有落到
+  // DOM 上（React 18 批处理），这里的 document.querySelector 读到的仍是"事件发生时"的 DOM，
+  // 与 Dialog 自己监听器的注册/执行顺序无关，两边独立判断都成立。
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent): void {
+      const target = e.target
+      if (target instanceof HTMLElement && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return
+      if (e.key === 'j') {
+        setKbdFocus((i) => Math.min(i + 1, items.length - 1))
+      } else if (e.key === 'k') {
+        setKbdFocus((i) => Math.max(i - 1, 0))
+      } else if (e.key === 'Enter') {
+        const item = items[kbdFocus]
+        if (item) {
+          const key = `${item.root}/${item.change.name}`
+          setSelected((prev) => (prev === key ? null : key))
+        }
+      } else if (e.key === 'Escape') {
+        if (document.querySelector('[role="dialog"]')) return
+        setSelected(null)
+      }
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [items, kbdFocus])
 
   const rootToName = useMemo(() => {
     const m = new Map<string, string>()
@@ -87,6 +157,17 @@ export function InboxView({ snapshot, loading, error, currentRoot, rulesByWf, on
     if (!busy) setPending(null)
   }
 
+  function toggleRow(key: string, index: number): void {
+    setKbdFocus(index)
+    setSelected((prev) => (prev === key ? null : key))
+  }
+
+  function copyEvidence(value: string): void {
+    void navigator.clipboard?.writeText(value).then(() => {
+      onToast?.(t('detail.copied', { value }))
+    })
+  }
+
   if (loading && !snapshot) {
     return <p className="view__note" data-testid="inbox-loading">{t('common.loading')}</p>
   }
@@ -107,6 +188,8 @@ export function InboxView({ snapshot, loading, error, currentRoot, rulesByWf, on
     )
   }
 
+  const selectedItem = selected ? items.find((it) => `${it.root}/${it.change.name}` === selected) : undefined
+
   return (
     <section className="view inbox" data-testid="inbox-view">
       <header className="view__head">
@@ -122,12 +205,31 @@ export function InboxView({ snapshot, loading, error, currentRoot, rulesByWf, on
         )}
       </header>
       <ul className="inbox__list" data-testid="inbox-list" ref={listRef}>
-        {items.map(({ root, change }) => {
+        {items.map(({ root, change }, index) => {
           const wf = changeWorkflow(change)
           const rules = rulesByWf.get(wf)
           const targets = rules ? legalTargets(rules, change.phase) : []
+          const key = `${root}/${change.name}`
+          const isSelected = selected === key
+          const evidence = gateEvidence(change, rules)
+          const rowClass = [
+            'ticket-row',
+            'ticket-row--gate',
+            isSelected && 'ticket-row--open',
+            kbdFocus === index && 'kbd-focus',
+          ]
+            .filter(Boolean)
+            .join(' ')
           return (
-            <li key={`${root}/${change.name}`} className="ticket-row ticket-row--gate" data-testid="inbox-card">
+            <li
+              key={key}
+              className={rowClass}
+              data-testid="inbox-card"
+              tabIndex={0}
+              aria-expanded={isSelected}
+              onClick={() => toggleRow(key, index)}
+              onFocus={() => setKbdFocus(index)}
+            >
               <span className="card__name">{change.name}</span>
               {change.track && <span className="card__track">{change.track}</span>}
               <span className="wf-label" data-testid="inbox-card-wf">{wf}</span>
@@ -146,17 +248,37 @@ export function InboxView({ snapshot, loading, error, currentRoot, rulesByWf, on
                       className={planned.backward ? 'qk__btn qk__btn--back' : 'qk__btn'}
                       data-testid={`inbox-quick-${planned.event}`}
                       disabled={busy}
-                      onClick={() => onQuick(change.name, root, planned)}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onQuick(change.name, root, planned)
+                      }}
                     >
                       {planned.backward ? `↩ ${to}` : `→ ${to}`}
                     </button>
                   )
                 })}
               </span>
+              {evidence.length > 0 && (
+                <div className="ev" onClick={(e) => e.stopPropagation()}>
+                  {evidence.map((chip) => renderEvidenceChip(chip, copyEvidence))}
+                </div>
+              )}
             </li>
           )
         })}
       </ul>
+
+      {selectedItem && (
+        <ChangeDetailCard
+          root={selectedItem.root}
+          change={selectedItem.change}
+          rules={rulesByWf.get(changeWorkflow(selectedItem.change))}
+          onTransition={onTransition}
+          onClose={() => setSelected(null)}
+          onToast={onToast}
+          onError={onError}
+        />
+      )}
 
       {pending && (
         <Dialog

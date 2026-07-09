@@ -157,3 +157,70 @@ describe('InboxView loading / error', () => {
     expect(screen.getByTestId('inbox-error').textContent).toContain('500')
   })
 })
+
+/**
+ * 详情卡点开 + j/k 键盘（Task 7，评审 P0-1：让用户不离开 dashboard 就能完成一次有理有据
+ * 的放行）。login-flow 故意给比 data-model 更新的 updated_at，让它在 selectInbox 的排序
+ * （updated_at 倒序）里稳定排第一——4 条测试都不依赖"点开的具体是哪张卡"，但排序确定
+ * 能让断言意图更直白（第一条测试同时核对"点第一行开的卡确实是证据 chips 所在那张卡"）。
+ */
+describe('InboxView 详情卡点开 + 证据 chips + j/k 键盘（Task 7，评审 P0-1）', () => {
+  const snap = makeSnapshot([
+    makeProject('/repo', [
+      makeChange('login-flow', 'verify', {
+        track: 'frontend',
+        updated_at: '2026-07-08T00:00:00Z',
+        fields: {
+          verify_result: 'pass',
+          agent_review_result: 'fail',
+          codex_review_result: 'pending',
+          verification_report: '/repo/report.md',
+          build_sha: 'sha1',
+        },
+      }),
+      makeChange('data-model', 'spec', { track: 'backend' }),
+    ]),
+  ])
+
+  it('点第一行 → 下方出 change 详情卡（含正确的 change 名）；行内证据 chips 渲染 pass/fail tone 类名', () => {
+    renderInbox({ snapshot: snap })
+    // 证据 chips（行内 <div class="ev">，gateEvidence 复用）：tone 类名齐全。
+    expect(screen.getByTestId('inbox-evidence-verify_result').className).toContain('ev__chip--pass')
+    expect(screen.getByTestId('inbox-evidence-agent_review_result').className).toContain('ev__chip--fail')
+
+    expect(screen.queryByTestId('change-detail')).toBeNull()
+    fireEvent.click(screen.getAllByTestId('inbox-card')[0]!)
+    const detail = screen.getByTestId('change-detail')
+    expect(detail).toBeInTheDocument()
+    expect(detail).toHaveTextContent('login-flow')
+  })
+
+  it('Enter（默认 kbd-focus 落在首行）→ 出 change 详情卡', () => {
+    renderInbox({ snapshot: snap })
+    expect(screen.queryByTestId('change-detail')).toBeNull()
+    fireEvent.keyDown(document, { key: 'Enter' })
+    expect(screen.getByTestId('change-detail')).toBeInTheDocument()
+  })
+
+  it('j/k 移动 .kbd-focus（首行默认聚焦，j 移到下一行，k 移回首行）', () => {
+    renderInbox({ snapshot: snap })
+    expect(screen.getAllByTestId('inbox-card')[0]!.className).toContain('kbd-focus')
+    expect(screen.getAllByTestId('inbox-card')[1]!.className).not.toContain('kbd-focus')
+
+    fireEvent.keyDown(document, { key: 'j' })
+    expect(screen.getAllByTestId('inbox-card')[0]!.className).not.toContain('kbd-focus')
+    expect(screen.getAllByTestId('inbox-card')[1]!.className).toContain('kbd-focus')
+
+    fireEvent.keyDown(document, { key: 'k' })
+    expect(screen.getAllByTestId('inbox-card')[0]!.className).toContain('kbd-focus')
+    expect(screen.getAllByTestId('inbox-card')[1]!.className).not.toContain('kbd-focus')
+  })
+
+  it('Esc 关闭已打开的详情卡', () => {
+    renderInbox({ snapshot: snap })
+    fireEvent.click(screen.getAllByTestId('inbox-card')[0]!)
+    expect(screen.getByTestId('change-detail')).toBeInTheDocument()
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.queryByTestId('change-detail')).toBeNull()
+  })
+})

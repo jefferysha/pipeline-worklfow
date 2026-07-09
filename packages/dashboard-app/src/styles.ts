@@ -164,6 +164,42 @@ body { margin: 0; }
 .qk__btn--ghost:hover { background: transparent; border-color: var(--text-3); color: var(--text); }
 .qk__btn:disabled { opacity: .45; cursor: not-allowed; }
 
+/* ── 行内证据 chips（Task 7，评审 P0-1：gateEvidence 复用，收件箱行内即时可见）── */
+.ev { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; flex-basis: 100%; margin-top: 2px; }
+.ev__chip { display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 8px; border-radius: 6px; font-size: 11px; font-family: var(--mono); border: 1px solid var(--border); background: var(--fill); color: var(--text-2); white-space: nowrap; }
+.ev__chip--pass { background: var(--green-t); color: var(--green-d); border-color: var(--green-b); }
+.ev__chip--fail { background: var(--red-t); color: var(--red-d); border-color: var(--red-b); }
+.ev__chip--pending { background: transparent; border-style: dashed; color: var(--text-3); }
+button.ev__chip--neutral { cursor: pointer; }
+button.ev__chip--neutral:hover { border-color: var(--border-2); color: var(--text); background: var(--card); }
+
+/* ── 收件箱行的键盘焦点环 / 展开态（j/k 移动焦点环、点开详情卡）── */
+.ticket-row.kbd-focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.ticket-row--open { border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); }
+.ticket-row--open:hover { border-color: var(--accent); }
+
+/* ── change 详情卡（Task 7，评审 P0-1 核心交付件；视觉基准 v4-openai-trellis.html「change 详情」段，
+   历史区除外——spec §5 登记，待 history 读端点）；Task 9 看板复用同一组件，样式不与 InboxView 耦合。 ── */
+.detail { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); margin-top: 10px; padding: 0 16px; }
+.detail__head { display: flex; align-items: center; gap: 9px; padding: 13px 0; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.detail__close { margin-left: auto; }
+.detail__sec { padding: 14px 0; border-bottom: 1px solid var(--border); }
+.detail__sec:last-of-type { border-bottom: none; }
+.detail__sec-h { display: flex; align-items: center; gap: 7px; margin-bottom: 10px; color: var(--text-3); }
+.detail__sec-h b { font-size: 12.5px; font-weight: 700; color: var(--text); }
+.detail__why { margin: 0 0 12px; font-size: 12.5px; color: var(--text-2); line-height: 1.6; }
+.detail__grid { display: flex; flex-wrap: wrap; gap: 8px; }
+.detail__field { flex: 1; min-width: 148px; background: var(--fill); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; }
+.detail__field-key { font-size: 10.5px; color: var(--text-3); font-family: var(--mono); }
+.detail__field-value { display: flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; font-family: var(--mono); color: var(--text-2); }
+.detail__field-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.detail__field--pass .detail__field-value { color: var(--green-d); }
+.detail__field--fail .detail__field-value { color: var(--red-d); }
+.detail__field--pending .detail__field-value { color: var(--text-3); font-weight: 400; }
+.detail__copy { flex: none; margin-left: auto; border: 0; background: transparent; color: var(--text-3); cursor: pointer; display: inline-flex; padding: 3px; border-radius: 5px; }
+.detail__copy:hover { color: var(--text); background: var(--card); }
+.detail__foot { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 13px 0; }
+
 /* ── 看板：分组（--ink 铭牌）+ 列井 ── */
 .board__group { margin-bottom: 22px; }
 .board__group:last-child { margin-bottom: 4px; }
