@@ -1,0 +1,841 @@
+<!doctype html>
+<!--
+  v4 · OpenAI 配色 × Trellis 布局 —— Pipeline 控制台
+  设计逻辑：v1 骨架一字不动（顶栏/编号阶段卡横排/主面板+右摘要栏/收件箱/change详情/看板/Loop、间距、圆角、阴影、组件结构全部保留），
+           只替换颜色体系为 OpenAI 2025 品牌语言：Cod Gray 近黑（#0d0d0d 一族）× 白的单色骨架，灰阶中性偏暖（禁蓝灰倾向），
+           签名 accent 只有一个电光蓝（浅色 #0b6cff / 深色 #4d94ff），用于激活态阶段卡描边+浅蓝 tint、选中项、链接、聚焦环、少量关键计数。
+  色板决策：
+    · 主操作 = 近黑实底白字（--ink，深色主题反转为白实底近黑字，OpenAI 产品主导按钮模式）；次操作 = 灰 ghost；
+      v1 的绿实底「保存工作流」、紫实底「新建 change」全部收敛进这套。
+    · 紫色全部退役：track 徽章/产物图标/「添加阶段」→ 中性灰；JSON 高亮数字/布尔 → 墨色。
+    · 蓝取代 v1 里绿承担的「激活/推进/确认」结构角色：激活阶段卡、选中收件箱行、连接虚线、完成 tick、就绪度点、推进按钮、历史 transition 点。
+    · 语义色仅保留在状态语义处且降饱和小面积：pass/已加载 = 柔和绿 tint（#187339 on #e9f6ee）；
+      fail/复核门/预警/「等你复核」= 红 tint 底深红字（#b42318 on #fdf0ee），不做大色块。
+    · 深色主题：#0d0d0d 底 / #171717 卡 / #262626 边 的近黑暖灰分层，白墨 #f2f2f0，蓝提亮一档 #4d94ff——禁均匀深蓝底与霓虹 glow。
+    · 正文对比度均 ≥4.5:1（--text-3 #6a6a62 对白 5.2:1；--accent-d #0a5ce0 对白 5.7:1）。字体保持 system-ui 栈，mono 仅用于 id/路径/代码。
+  参照来源：/design-demos/v1-trellis-faithful.html（布局真相源）× OpenAI 2025 品牌事实（单色骨架 + 单一 emotive 电光蓝）。
+-->
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pipeline 控制台 · v4 OpenAI 配色 × Trellis 布局</title>
+<style>
+/* ============ tokens ============ */
+:root, [data-theme="light"]{
+  color-scheme: light;
+  --bg:#f7f7f5; --card:#ffffff; --fill:#f4f4f2; --fill-2:#ebebe8;
+  --border:#e4e4e0; --border-2:#d2d2cc;
+  --text:#0d0d0d; --text-2:#40403c; --text-3:#6a6a62;
+  --accent:#0b6cff; --accent-d:#0a5ce0; --accent-t:#eaf2ff; --accent-b:#c5daff;
+  --green:#1f9d51; --green-d:#187339; --green-t:#e9f6ee; --green-b:#c8e8d2;
+  --red:#d92d20; --red-d:#b42318; --red-t:#fdf0ee; --red-b:#f3cfc9;
+  --ink:#0d0d0d; --ink-fg:#ffffff; --ink-hover:#2e2e2c;
+  --btn-bg:#0b6cff; --btn-fg:#ffffff; --btn-hover:#0a5ce0;
+  --code-bg:#f6f6f4; --code-border:#e4e4e0;
+  --shadow:0 1px 2px rgba(0,0,0,.04);
+  --shadow-2:0 1px 3px rgba(0,0,0,.06),0 1px 2px rgba(0,0,0,.04);
+  --ring:rgba(11,108,255,.13);
+}
+[data-theme="dark"]{
+  color-scheme: dark;
+  --bg:#0d0d0d; --card:#171717; --fill:#1e1e1d; --fill-2:#262624;
+  --border:#262626; --border-2:#3a3a37;
+  --text:#f2f2f0; --text-2:#c9c9c4; --text-3:#94948d;
+  --accent:#4d94ff; --accent-d:#7fb2ff; --accent-t:rgba(77,148,255,.13); --accent-b:rgba(77,148,255,.38);
+  --green:#3fb950; --green-d:#55c368; --green-t:rgba(63,185,80,.13); --green-b:rgba(63,185,80,.35);
+  --red:#e5534b; --red-d:#f2867e; --red-t:rgba(229,83,75,.14); --red-b:rgba(229,83,75,.40);
+  --ink:#f2f2f2; --ink-fg:#0d0d0d; --ink-hover:#d8d8d5;
+  --btn-bg:#2b7fff; --btn-fg:#ffffff; --btn-hover:#4d94ff;
+  --code-bg:#111110; --code-border:#2a2a28;
+  --shadow:0 1px 2px rgba(0,0,0,.35);
+  --shadow-2:0 2px 6px rgba(0,0,0,.35);
+  --ring:rgba(77,148,255,.20);
+}
+/* ============ base ============ */
+*{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-text-size-adjust:100%}
+body{
+  font-family:system-ui,-apple-system,"SF Pro Text","PingFang SC","Hiragino Sans GB","Microsoft YaHei","Segoe UI",sans-serif;
+  font-size:14px;line-height:1.55;color:var(--text);background:var(--bg);
+  min-width:1180px;
+}
+.mono{font-family:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,"JetBrains Mono",monospace}
+a{color:var(--accent-d);text-decoration:none}
+button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
+button:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:8px}
+.container{max-width:1400px;margin:0 auto;padding:0 28px}
+h1,h2,h3,.card-t{text-wrap:balance}
+.i{width:16px;height:16px;flex:none;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.i.sm{width:13px;height:13px}
+.i.lg{width:18px;height:18px}
+
+/* ============ topbar ============ */
+.topbar{position:sticky;top:0;z-index:50;background:var(--card);border-bottom:1px solid var(--border)}
+.tb{display:flex;align-items:center;gap:20px;height:56px}
+.brand{display:flex;align-items:center;gap:9px}
+.brand .mark{width:26px;height:26px;border-radius:8px;background:var(--ink);display:grid;place-items:center;box-shadow:var(--shadow)}
+.brand .mark svg{width:16px;height:16px;stroke:var(--card);fill:none;stroke-width:1.9;stroke-linecap:round}
+.brand b{font-size:15px;font-weight:650;letter-spacing:.01em}
+.nav{display:flex;align-items:center;gap:4px}
+.nav a{display:inline-flex;align-items:center;gap:7px;padding:6px 11px;border-radius:9px;font-size:13.5px;color:var(--text-2)}
+.nav a:hover{background:var(--fill);color:var(--text)}
+.nav a.on{background:var(--fill-2);color:var(--text);font-weight:600}
+.nav .cnt{font-size:11px;line-height:1;padding:3px 6px;border-radius:999px;background:var(--red-t);color:var(--red-d);font-weight:700;border:1px solid var(--red-b)}
+.tb .sp{flex:1}
+.switcher{display:inline-flex;align-items:center;gap:8px;height:34px;padding:0 11px;border:1px solid var(--border);border-radius:10px;background:var(--card);font-size:13.5px;font-weight:600;box-shadow:var(--shadow)}
+.switcher:hover{border-color:var(--border-2);background:var(--fill)}
+.switcher .dia{color:var(--text-2);font-size:14px;line-height:1}
+.switcher .i{color:var(--text-3)}
+.iconbtn{width:34px;height:34px;border:1px solid var(--border);border-radius:10px;background:var(--card);display:inline-grid;place-items:center;color:var(--text-2);box-shadow:var(--shadow)}
+.iconbtn:hover{background:var(--fill);color:var(--text)}
+[data-theme="light"] .only-dark{display:none}
+[data-theme="dark"] .only-light{display:none}
+
+/* ============ title row ============ */
+.titlebar{display:flex;align-items:flex-end;gap:18px;margin:22px 0 18px}
+.crumb{font-size:12.5px;color:var(--text-3);display:flex;align-items:center;gap:6px;margin-bottom:7px}
+.crumb .sep{opacity:.55}
+.h1row{display:flex;align-items:center;gap:10px}
+.h1row h1{font-size:23px;font-weight:700;letter-spacing:-.01em;font-family:ui-monospace,"SF Mono",Menlo,monospace}
+.pencil{width:28px;height:28px;border-radius:8px;display:inline-grid;place-items:center;color:var(--text-3)}
+.pencil:hover{background:var(--fill);color:var(--text)}
+.titlebar .sp{flex:1}
+.tb-actions{display:flex;align-items:center;gap:8px;padding-bottom:2px;flex-wrap:wrap;justify-content:flex-end}
+.pill{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 11px;border-radius:999px;font-size:12.5px;font-weight:600}
+.pill.green{background:var(--green-t);color:var(--green-d);border:1px solid var(--green-b)}
+.pill .i{width:12px;height:12px;stroke-width:2.4}
+
+/* ============ buttons ============ */
+.btn{display:inline-flex;align-items:center;gap:6px;height:34px;padding:0 13px;border-radius:9px;font-size:13.5px;font-weight:600;border:1px solid transparent;transition:filter .12s,background .12s}
+.btn:hover{filter:brightness(.96)}
+[data-theme="dark"] .btn:hover{filter:brightness(1.08)}
+.btn:active{transform:translateY(.5px)}
+.btn.primary{background:var(--btn-bg);color:var(--btn-fg)}
+.btn.primary:hover{filter:none;background:var(--btn-hover)}
+.btn.ghost{background:var(--card);border-color:var(--border);color:var(--text-2);box-shadow:var(--shadow)}
+.btn.ghost:hover{background:var(--fill);color:var(--text);filter:none}
+.btn.tint-accent{background:var(--accent-t);color:var(--accent-d);border-color:var(--accent-b)}
+.btn.tint-red{background:var(--red-t);color:var(--red-d);border-color:var(--red-b)}
+.btn.sm{height:28px;padding:0 10px;font-size:12.5px;border-radius:8px;gap:5px}
+.btn .aw{font-family:ui-monospace,Menlo,monospace;font-weight:700}
+
+/* ============ stage strip ============ */
+.stagehead{display:flex;align-items:center;gap:10px;margin:0 0 10px}
+.overline{font-size:12px;font-weight:700;letter-spacing:.08em;color:var(--text-3)}
+.stagehead .wf{font-size:12px;color:var(--text-3)}
+.stagehead .sp{flex:1}
+.stages{display:flex;align-items:stretch;gap:0;margin-bottom:20px}
+.stage{flex:1;position:relative;background:var(--card);border:1px solid var(--border);border-radius:13px;box-shadow:var(--shadow);padding:15px 16px 14px;display:flex;gap:12px;transition:border-color .15s, box-shadow .15s}
+.stage:hover{border-color:var(--border-2);box-shadow:var(--shadow-2)}
+.stage .num{width:28px;height:28px;flex:none;border-radius:999px;background:var(--fill-2);border:1px solid var(--border-2);color:var(--text-2);display:grid;place-items:center;font-size:13px;font-weight:700;font-family:ui-monospace,Menlo,monospace}
+.stage .st-t{display:flex;align-items:center;gap:8px;margin-bottom:3px}
+.stage .st-t b{font-size:14.5px;font-weight:700;font-family:ui-monospace,Menlo,monospace;letter-spacing:-.01em}
+.stage p{font-size:12.5px;color:var(--text-3);line-height:1.5;min-height:2.9em}
+.stage.active{border-color:var(--accent);background:linear-gradient(0deg,var(--accent-t),var(--accent-t)),var(--card);box-shadow:0 0 0 3px var(--ring),var(--shadow)}
+[data-theme="dark"] .stage.active{background:linear-gradient(0deg,rgba(77,148,255,.09),rgba(77,148,255,.09)),var(--card)}
+.stage.active p{color:var(--text-2)}
+.stage.active .num{background:var(--accent-t);border-color:var(--accent-b);color:var(--accent-d)}
+[data-theme="dark"] .stage.active .num{background:rgba(77,148,255,.16)}
+.stage .tick{position:absolute;top:-8px;right:-8px;width:20px;height:20px;border-radius:999px;background:var(--accent);display:grid;place-items:center;box-shadow:0 1px 3px rgba(0,0,0,.18)}
+.stage .tick svg{width:11px;height:11px;stroke:var(--card);stroke-width:3;fill:none;stroke-linecap:round;stroke-linejoin:round}
+/* 签名细节：流动虚线连接线 + review→ship 之间的门形节点 */
+.conn{flex:none;width:46px;position:relative;align-self:center;height:20px}
+.conn::before{content:"";position:absolute;left:4px;right:9px;top:9px;height:2px;
+  background:repeating-linear-gradient(90deg,var(--accent) 0 6px,transparent 6px 12px);
+  animation:flow 1.4s linear infinite}
+.conn::after{content:"";position:absolute;right:2px;top:5px;width:6px;height:10px;background:var(--accent);clip-path:polygon(0 0,100% 50%,0 100%)}
+.conn.gated::before{background:repeating-linear-gradient(90deg,var(--red) 0 6px,transparent 6px 12px);animation-duration:2.6s}
+.conn.gated::after{background:var(--red)}
+.conn .gate-node{position:absolute;left:50%;top:10px;transform:translate(-50%,-50%) rotate(45deg);width:10px;height:10px;background:var(--red-t);border:1.6px solid var(--red);border-radius:2px}
+@keyframes flow{to{background-position:-12px 0}}
+@media (prefers-reduced-motion:reduce){.conn::before{animation:none}}
+
+/* ============ badges & chips ============ */
+.badge{display:inline-flex;align-items:center;gap:5px;height:20px;padding:0 7px;border-radius:6px;font-size:11.5px;font-weight:600;line-height:1;border:1px solid transparent;white-space:nowrap}
+.badge.mono{font-family:ui-monospace,Menlo,monospace;font-weight:600}
+.badge.neutral{background:var(--fill-2);color:var(--text-2);border-color:var(--border)}
+.badge.outline{background:transparent;color:var(--text-3);border-color:var(--border-2)}
+.badge.green{background:var(--green-t);color:var(--green-d);border-color:var(--green-b)}
+.badge.red{background:var(--red-t);color:var(--red-d);border-color:var(--red-b)}
+.badge.blue{background:var(--accent-t);color:var(--accent-d);border-color:var(--accent-b)}
+.badge .dot{width:5px;height:5px;border-radius:999px;background:currentColor}
+.chip{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 9px;border-radius:7px;font-size:12px;line-height:1;border:1px solid var(--border);background:var(--fill);color:var(--text-2);font-family:ui-monospace,Menlo,monospace;white-space:nowrap}
+.chip .i{width:12px;height:12px;stroke-width:2.2}
+.chip.pass{background:var(--green-t);color:var(--green-d);border-color:var(--green-b)}
+.chip.fail{background:var(--red-t);color:var(--red-d);border-color:var(--red-b)}
+.chip.empty{background:transparent;border-style:dashed;color:var(--text-3)}
+.chip.empty .zh{font-family:system-ui,-apple-system,"PingFang SC",sans-serif}
+button.chip{cursor:pointer}
+button.chip:hover{border-color:var(--border-2);color:var(--text)}
+button.chip.pass:hover{border-color:var(--green);color:var(--green-d)}
+
+/* ============ cards ============ */
+.card{background:var(--card);border:1px solid var(--border);border-radius:13px;box-shadow:var(--shadow)}
+.card + .card{margin-top:18px}
+.card-h{display:flex;align-items:center;gap:9px;padding:13px 16px;border-bottom:1px solid var(--border)}
+.card-h .i{color:var(--text-3)}
+.card-t{font-size:14.5px;font-weight:700}
+.card-h .sub{font-size:12px;color:var(--text-3)}
+.card-h .sp{flex:1}
+.grid{display:grid;grid-template-columns:minmax(0,1fr) 356px;gap:20px;align-items:start}
+.colR{position:sticky;top:76px}
+.colR .card + .card{margin-top:16px}
+
+/* ============ inbox ============ */
+.inbox-list{padding:8px}
+.row{border:1px solid transparent;border-radius:10px;padding:12px 12px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 14px;align-items:center}
+.row + .row{margin-top:4px}
+.row:hover{background:var(--fill)}
+.row.open{background:var(--accent-t);border-color:var(--accent);box-shadow:0 0 0 3px var(--ring)}
+[data-theme="dark"] .row.open{background:rgba(77,148,255,.08)}
+.row .l1{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
+.row .name{font-family:ui-monospace,Menlo,monospace;font-size:13.5px;font-weight:700}
+.row .meta{font-size:12px;color:var(--text-3);white-space:nowrap}
+.row .meta .mono{font-size:11.5px}
+.row .l2{grid-column:1;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.row .acts{grid-row:1 / span 2;grid-column:2;display:flex;gap:6px;align-items:center}
+.row.single .acts{grid-row:1}
+
+/* ============ detail ============ */
+.detail .card-h{gap:8px}
+.dt-close{margin-left:4px}
+.sec{padding:15px 16px;border-bottom:1px solid var(--border)}
+.sec:last-of-type{border-bottom:none}
+.sec-h{display:flex;align-items:center;gap:7px;margin-bottom:10px}
+.sec-h .i{color:var(--text-3)}
+.sec-h b{font-size:13px;font-weight:700}
+.sec-h .hint{font-size:12px;color:var(--text-3)}
+.why{font-size:13px;color:var(--text-2);margin-bottom:12px}
+.why .k{font-family:ui-monospace,Menlo,monospace;font-size:12px}
+.res3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:10px}
+.field{background:var(--fill);border:1px solid var(--border);border-radius:10px;padding:10px 12px}
+.field .fk{display:block;font-family:ui-monospace,Menlo,monospace;font-size:11.5px;color:var(--text-3);margin-bottom:6px}
+.field .fv{display:flex;align-items:center;gap:7px;font-family:ui-monospace,Menlo,monospace;font-size:13.5px;font-weight:700}
+.fv .okc,.fv .noc{width:17px;height:17px;border-radius:999px;display:grid;place-items:center;flex:none}
+.fv .okc{background:var(--green-t);border:1px solid var(--green-b)}
+.fv .noc{background:var(--red-t);border:1px solid var(--red-b)}
+.fv .okc svg{width:9px;height:9px;stroke:var(--green-d);stroke-width:3;fill:none;stroke-linecap:round;stroke-linejoin:round}
+.fv .noc svg{width:8px;height:8px;stroke:var(--red-d);stroke-width:3;fill:none;stroke-linecap:round}
+.fv.ok{color:var(--green-d)} .fv.no{color:var(--red-d)} .fv.plain{color:var(--text-2);font-weight:600}
+.res2{display:grid;grid-template-columns:1.6fr 1fr 1fr;gap:10px}
+.field.pathf{display:flex;align-items:center;gap:8px}
+.field.pathf .fk{margin-bottom:0}
+.field.pathf .grow{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.pathv{font-family:ui-monospace,Menlo,monospace;font-size:12.5px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.copybtn{width:26px;height:26px;border-radius:7px;display:inline-grid;place-items:center;color:var(--text-3);border:1px solid transparent;flex:none}
+.copybtn:hover{background:var(--card);border-color:var(--border);color:var(--text)}
+.arts .art{display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--border);border-radius:10px;background:var(--card)}
+.arts .art + .art{margin-top:8px}
+.ficon{width:28px;height:28px;flex:none;border-radius:8px;background:var(--fill);border:1px solid var(--border);display:grid;place-items:center;color:var(--text-2)}
+.ficon.blue{background:var(--accent-t);border-color:var(--accent-b);color:var(--accent-d)}
+.art .ak{font-family:ui-monospace,Menlo,monospace;font-size:11.5px;color:var(--text-3);display:block;line-height:1.3}
+.art .av{font-family:ui-monospace,Menlo,monospace;font-size:12.5px;font-weight:600;line-height:1.35;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.art .av.link{color:var(--accent-d)}
+.art .grow{flex:1;min-width:0}
+.ctx{display:flex;flex-wrap:wrap;gap:8px}
+.ctx .field{padding:8px 11px;flex:1;min-width:118px}
+.ctx .fk{margin-bottom:4px}
+.ctx .cv{font-family:ui-monospace,Menlo,monospace;font-size:12.5px;font-weight:600;color:var(--text-2);white-space:nowrap}
+.hist .h-row{display:flex;align-items:baseline;gap:10px;padding:5.5px 0}
+.hist .h-dot{width:6px;height:6px;border-radius:999px;flex:none;align-self:center}
+.h-dot.a{background:var(--accent)} .h-dot.n{background:var(--text-3)}
+.hist time{font-family:ui-monospace,Menlo,monospace;font-size:12px;color:var(--text-3);width:96px;flex:none}
+.hist .h-ev{font-size:13px;color:var(--text-2)}
+.hist .h-ev .mono{font-size:12.5px;font-weight:600;color:var(--text)}
+.dt-foot{display:flex;align-items:center;gap:8px;padding:13px 16px;background:var(--fill);border-top:1px solid var(--border);border-radius:0 0 13px 13px}
+.dt-foot .note{font-size:12.5px;color:var(--text-3)}
+.dt-foot .note .mono{font-size:12px}
+.dt-foot .sp{flex:1}
+
+/* ============ kanban ============ */
+.board{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;padding:14px 16px 16px}
+.kcol{background:var(--fill);border:1px solid var(--border);border-radius:10px;padding:8px;min-height:118px}
+.kcol-h{display:flex;align-items:center;gap:6px;padding:2px 4px 8px}
+.kcol-h b{font-family:ui-monospace,Menlo,monospace;font-size:12px;color:var(--text-2);font-weight:700}
+.kcol-h .n{margin-left:auto;font-family:ui-monospace,Menlo,monospace;font-size:11px;color:var(--text-3);background:var(--card);border:1px solid var(--border);border-radius:6px;padding:1px 6px}
+.kcard{background:var(--card);border:1px solid var(--border);border-radius:9px;padding:9px 10px;box-shadow:var(--shadow)}
+.kcard + .kcard{margin-top:8px}
+.kcard:hover{border-color:var(--border-2);box-shadow:var(--shadow-2)}
+.kcard .kn{font-family:ui-monospace,Menlo,monospace;font-size:12.5px;font-weight:700;margin-bottom:6px}
+.kcard .kb{display:flex;gap:5px;flex-wrap:wrap}
+.kempty{border:1px dashed var(--border-2);border-radius:9px;min-height:72px;display:grid;place-items:center;font-size:12px;color:var(--text-3)}
+.kfold{border:1px dashed var(--border-2);border-radius:9px;min-height:72px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:var(--text-3);font-size:12px}
+.kfold .mono{font-size:13px;font-weight:700;color:var(--text-2)}
+.kfold button{font-size:12px;color:var(--accent-d);font-weight:600}
+.kfold button:hover{text-decoration:underline}
+
+/* ============ loop ============ */
+.loop{display:flex;align-items:center;gap:14px;padding:13px 16px;flex-wrap:wrap}
+.loop .lname{display:flex;align-items:center;gap:8px}
+.loop .lname b{font-family:ui-monospace,Menlo,monospace;font-size:13px;font-weight:700}
+.lmetric{display:flex;flex-direction:column;gap:5px}
+.lmetric .lk{font-size:11.5px;color:var(--text-3);font-weight:600}
+.lmetric .lv{display:flex;align-items:center;gap:7px}
+.dots{display:flex;gap:2.5px}
+.dots i{width:7px;height:7px;border-radius:999px;background:var(--fill-2);border:1px solid var(--border-2)}
+.dots i.on{background:var(--accent);border-color:var(--accent)}
+.lv .mono{font-size:12px;font-weight:700;color:var(--text-2)}
+.bar{width:110px;height:8px;border-radius:999px;background:var(--fill-2);border:1px solid var(--border);overflow:hidden}
+.bar i{display:block;height:100%;width:82%;background:var(--red);border-radius:999px}
+.lv .warn-num{color:var(--red-d)}
+.loop .sp{flex:1}
+.loop .lacts{display:flex;gap:8px}
+
+/* ============ right rail ============ */
+.sum{padding:6px 16px 8px}
+.sum-row{display:flex;align-items:center;gap:10px;padding:11px 0}
+.sum-row + .sum-row{border-top:1px solid var(--border)}
+.sum-row .i{color:var(--text-3)}
+.sum-row .sk{font-size:13.5px;color:var(--text-2);font-weight:550}
+.sum-row .sv{margin-left:auto;font-family:ui-monospace,Menlo,monospace;font-size:15px;font-weight:750;color:var(--accent-d)}
+.files{padding:6px 16px 10px}
+.file-row{display:flex;align-items:center;gap:10px;padding:9px 0}
+.file-row + .file-row{border-top:1px solid var(--border)}
+.file-row .grow{flex:1;min-width:0}
+.file-row .fk2{display:block;font-family:ui-monospace,Menlo,monospace;font-size:11px;color:var(--text-3);line-height:1.3}
+.file-row .fv2{display:block;font-family:ui-monospace,Menlo,monospace;font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.file-row .fv2.link{color:var(--accent-d)}
+.codewrap{padding:12px 16px 16px}
+.code{background:var(--code-bg);border:1px solid var(--code-border);border-radius:10px;padding:12px 14px;overflow-x:auto}
+.code pre{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:12.5px;line-height:1.7;color:var(--text-2)}
+.tk-p{color:var(--text-3)} .tk-k{color:var(--accent-d);font-weight:600} .tk-s{color:var(--text-2)} .tk-n{color:var(--text);font-weight:600} .tk-b{color:var(--text);font-weight:600}
+.proj{padding:6px 16px 8px}
+.proj-row{display:flex;align-items:center;gap:9px;padding:10px 0}
+.proj-row + .proj-row{border-top:1px solid var(--border)}
+.proj-row .dia{color:var(--text-3);font-size:13px;line-height:1}
+.proj-row .pn{font-size:13.5px;font-weight:600;color:var(--text-2)}
+.proj-row .pn.mono{font-size:12.5px}
+.proj-row .pv{margin-left:auto;font-family:ui-monospace,Menlo,monospace;font-size:14px;font-weight:750;color:var(--accent-d)}
+
+/* ============ footer & toast ============ */
+.pagefoot{padding:26px 0 30px;text-align:center;font-size:12px;color:var(--text-3)}
+.pagefoot .mono{font-size:11.5px}
+#toast{position:fixed;left:50%;bottom:26px;transform:translate(-50%,14px);opacity:0;pointer-events:none;
+  background:var(--ink);border:1px solid var(--ink);color:var(--ink-fg);
+  font-size:12.5px;font-weight:600;padding:8px 14px;border-radius:999px;box-shadow:var(--shadow-2);
+  display:flex;align-items:center;gap:7px;max-width:70vw;transition:opacity .18s,transform .18s;z-index:99}
+#toast.show{opacity:1;transform:translate(-50%,0)}
+#toast .mono{font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+</style>
+</head>
+<body>
+
+<!-- 图标库（极简线条，无 emoji） -->
+<svg style="display:none" aria-hidden="true">
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M4.5 12.5l5 5 10-11"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+  <symbol id="i-inbox" viewBox="0 0 24 24"><path d="M3 13h5l2 3h4l2-3h5"/><path d="M5 4h14l2 9v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-6z"/></symbol>
+  <symbol id="i-board" viewBox="0 0 24 24"><rect x="3.5" y="4" width="5" height="16" rx="1.2"/><rect x="9.5" y="4" width="5" height="10" rx="1.2"/><rect x="15.5" y="4" width="5" height="13" rx="1.2"/></symbol>
+  <symbol id="i-bench" viewBox="0 0 24 24"><rect x="3.5" y="4" width="17" height="16" rx="2"/><path d="M3.5 9.5h17M9.5 9.5V20"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.8v3M12 18.2v3M21.2 12h-3M5.8 12h-3M18.5 5.5l-2.1 2.1M7.6 16.4l-2.1 2.1M18.5 18.5l-2.1-2.1M7.6 7.6L5.5 5.5"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.4M12 19.1v2.4M21.5 12h-2.4M4.9 12H2.5M18.7 5.3l-1.7 1.7M7 17l-1.7 1.7M18.7 18.7L17 17M7 7L5.3 5.3"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20.5 14.5A8.5 8.5 0 1 1 9.5 3.5a7 7 0 0 0 11 11z"/></symbol>
+  <symbol id="i-pencil" viewBox="0 0 24 24"><path d="M4 20l1-4L16.5 4.5a2.1 2.1 0 0 1 3 3L8 19l-4 1z"/><path d="M14.5 6.5l3 3"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a1.5 1.5 0 0 1-1.5-1.5v-9A1.5 1.5 0 0 1 4 3h9A1.5 1.5 0 0 1 14.5 4.5V5"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 6a1.5 1.5 0 0 1 1.5-1.5H9L11 7h8.5A1.5 1.5 0 0 1 21 8.5v9A1.5 1.5 0 0 1 19.5 19h-15A1.5 1.5 0 0 1 3 17.5z"/></symbol>
+  <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 14a4.2 4.2 0 0 0 6 0l3-3a4.24 4.24 0 0 0-6-6l-1.5 1.5"/><path d="M14 10a4.2 4.2 0 0 0-6 0l-3 3a4.24 4.24 0 0 0 6 6L12.5 17.5"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l7.5 3v5.5c0 4.5-3 7.8-7.5 9.5-4.5-1.7-7.5-5-7.5-9.5V6z"/><path d="M9 11.8l2.2 2.2 4-4.5"/></symbol>
+  <symbol id="i-layers" viewBox="0 0 24 24"><path d="M12 3.5L21 8l-9 4.5L3 8z"/><path d="M3 12.5l9 4.5 9-4.5M3 17l9 4.5L21 17" opacity=".55"/></symbol>
+  <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3.5l1.8 5.4 5.7 1.9-5.7 1.9L12 18.1l-1.8-5.4-5.7-1.9 5.7-1.9z"/><path d="M19 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 8v4.6"/><path d="M12 15.9v.2"/></symbol>
+  <symbol id="i-code" viewBox="0 0 24 24"><path d="M8.5 7L4 12l4.5 5M15.5 7L20 12l-4.5 5"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5.5v13M5.5 12h13"/></symbol>
+  <symbol id="i-export" viewBox="0 0 24 24"><path d="M12 15V4M8 8l4-4 4 4"/><path d="M4.5 15v3.5A1.5 1.5 0 0 0 6 20h12a1.5 1.5 0 0 0 1.5-1.5V15"/></symbol>
+  <symbol id="i-loop" viewBox="0 0 24 24"><path d="M4 12a8 8 0 0 1 13.6-5.7L20 8.5"/><path d="M20 4v4.5h-4.5"/><path d="M20 12a8 8 0 0 1-13.6 5.7L4 15.5"/><path d="M4 20v-4.5h4.5"/></symbol>
+</svg>
+
+<!-- ============ 顶栏 ============ -->
+<header class="topbar">
+  <div class="container tb">
+    <div class="brand">
+      <span class="mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><circle cx="6" cy="12" r="2.1"/><circle cx="18" cy="6.5" r="2.1"/><circle cx="18" cy="17.5" r="2.1"/><path d="M8 11l8-3.6M8 13l8 3.6"/></svg>
+      </span>
+      <b>Pipeline 控制台</b>
+    </div>
+    <nav class="nav" aria-label="主导航">
+      <a href="#inbox">收件箱 <span class="cnt mono">3</span></a>
+      <a href="#board">看板</a>
+      <a href="#" class="on" aria-current="page">工作台</a>
+      <a href="#">设置</a>
+    </nav>
+    <span class="sp"></span>
+    <button class="switcher" type="button">
+      <span class="dia" aria-hidden="true">◈</span> 全部项目
+      <svg class="i sm"><use href="#i-chev"/></svg>
+    </button>
+    <button class="iconbtn" id="themeToggle" type="button" aria-label="切换深浅色">
+      <svg class="i only-light"><use href="#i-moon"/></svg>
+      <svg class="i only-dark"><use href="#i-sun"/></svg>
+    </button>
+  </div>
+</header>
+
+<main class="container">
+
+  <!-- ============ 标题行 ============ -->
+  <section class="titlebar">
+    <div>
+      <div class="crumb">工作台 <span class="sep">·</span> 工作流编辑器 <span class="sep">·</span> 草稿</div>
+      <div class="h1row">
+        <h1>release-train</h1>
+        <button class="pencil" type="button" aria-label="重命名工作流"><svg class="i"><use href="#i-pencil"/></svg></button>
+        <span class="badge neutral">自定义 workflow</span>
+      </div>
+    </div>
+    <span class="sp"></span>
+    <div class="tb-actions">
+      <span class="pill green"><svg class="i"><use href="#i-check"/></svg>已连接 <span class="mono">2</span> 个项目</span>
+      <span class="pill green"><svg class="i"><use href="#i-check"/></svg>校验通过</span>
+      <button class="btn ghost" type="button"><svg class="i sm"><use href="#i-export"/></svg>导出配置</button>
+      <button class="btn primary" type="button"><svg class="i sm"><use href="#i-check"/></svg>保存工作流</button>
+      <button class="btn ghost" type="button"><svg class="i sm"><use href="#i-plus"/></svg>新建 change</button>
+    </div>
+  </section>
+
+  <!-- ============ 编号阶段卡横排 ============ -->
+  <div class="stagehead">
+    <span class="overline">阶段编排</span>
+    <span class="wf">workflow <span class="mono">release-train</span> · <span class="mono">3</span> 相位 · 复核门在 <span class="mono">review</span></span>
+    <span class="sp"></span>
+    <button class="btn ghost sm" type="button"><svg class="i sm"><use href="#i-plus"/></svg>添加阶段</button>
+  </div>
+  <section class="stages" aria-label="阶段编排">
+    <article class="stage">
+      <span class="num">1</span>
+      <div>
+        <div class="st-t"><b>draft</b><span class="badge mono outline">phase</span></div>
+        <p>起草发布说明，作为发布列车的起点相位。</p>
+      </div>
+    </article>
+    <div class="conn" aria-hidden="true"></div>
+    <article class="stage active">
+      <span class="tick" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7"/></svg></span>
+      <span class="num">2</span>
+      <div>
+        <div class="st-t"><b>review</b><span class="badge red"><span class="dot"></span>复核门</span></div>
+        <p>人工复核后放行，change 会在此停下等你决定。</p>
+      </div>
+    </article>
+    <div class="conn gated" aria-hidden="true"><span class="gate-node"></span></div>
+    <article class="stage">
+      <span class="num">3</span>
+      <div>
+        <div class="st-t"><b>ship</b><span class="badge mono outline">phase</span></div>
+        <p>发布并归档，走完发布列车的最后一步。</p>
+      </div>
+    </article>
+  </section>
+
+  <!-- ============ 双列 ============ -->
+  <div class="grid">
+
+    <!-- ===== 左：工作面板 ===== -->
+    <div class="colL">
+
+      <!-- 收件箱 -->
+      <section class="card" id="inbox">
+        <div class="card-h">
+          <svg class="i"><use href="#i-inbox"/></svg>
+          <span class="card-t">收件箱</span>
+          <span class="badge red"><span class="dot"></span><span class="mono">3</span> 张等你决定</span>
+          <span class="sp"></span>
+          <span class="sub">点行查看「为什么在等你」</span>
+        </div>
+        <div class="inbox-list">
+
+          <div class="row open">
+            <div class="l1">
+              <span class="name">guide-cn</span>
+              <span class="badge mono neutral">frontend</span>
+              <span class="badge mono outline">default</span>
+              <span class="badge mono neutral">verify</span>
+              <span class="badge red"><span class="dot"></span>等你复核</span>
+              <span class="meta">docs-site · <span class="mono">07-06 11:27</span></span>
+              <span class="badge red mono">已等 3 天</span>
+            </div>
+            <div class="l2">
+              <span class="chip pass"><svg class="i"><use href="#i-check"/></svg>verify_result=pass</span>
+              <span class="chip pass"><svg class="i"><use href="#i-check"/></svg>agent_review=pass</span>
+              <span class="chip fail"><svg class="i"><use href="#i-x"/></svg>codex_review=fail</span>
+              <button class="chip" type="button" data-copy=".superpowers/verify/guide-cn.md" title="拷贝报告路径"><svg class="i"><use href="#i-copy"/></svg>report: .superpowers/verify/guide-cn.md</button>
+              <button class="chip" type="button" data-copy="e4f21c9" title="拷贝 build_sha"><svg class="i"><use href="#i-copy"/></svg>build_sha=e4f21c9</button>
+            </div>
+            <div class="acts">
+              <button class="btn tint-accent sm" type="button"><span class="aw">→</span><span class="mono">archive</span></button>
+              <button class="btn tint-red sm" type="button"><span class="aw">↩</span><span class="mono">build</span></button>
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="l1">
+              <span class="name">demo-b</span>
+              <span class="badge mono neutral">backend</span>
+              <span class="badge mono outline">default</span>
+              <span class="badge mono neutral">explore</span>
+              <span class="badge red"><span class="dot"></span>等你复核</span>
+              <span class="meta">pipeline-worklfow · <span class="mono">07-09 14:02</span></span>
+            </div>
+            <div class="l2">
+              <button class="chip" type="button" data-copy="docs/specs/demo-b.md" title="拷贝路径"><svg class="i"><use href="#i-copy"/></svg>design_doc: docs/specs/demo-b.md</button>
+              <span class="chip empty">plan=<span class="zh">未产出</span></span>
+            </div>
+            <div class="acts">
+              <button class="btn tint-accent sm" type="button"><span class="aw">→</span><span class="mono">spec</span></button>
+            </div>
+          </div>
+
+          <div class="row single">
+            <div class="l1">
+              <span class="name">changelog-cn</span>
+              <span class="badge mono outline">release-train</span>
+              <span class="badge mono neutral">review</span>
+              <span class="badge red"><span class="dot"></span>等你复核</span>
+              <span class="meta">pipeline-worklfow · <span class="mono">07-09 13:40</span></span>
+            </div>
+            <div class="acts">
+              <button class="btn tint-accent sm" type="button"><span class="aw">→</span><span class="mono">ship</span></button>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- change 详情（打开态） -->
+      <section class="card detail" aria-label="change 详情">
+        <div class="card-h">
+          <svg class="i"><use href="#i-file"/></svg>
+          <span class="card-t">change 详情</span>
+          <span class="badge mono neutral" style="font-size:12px">guide-cn</span>
+          <span class="badge mono neutral">verify</span>
+          <span class="badge red"><span class="dot"></span>等你复核</span>
+          <span class="sp"></span>
+          <span class="sub">docs-site · 打开于收件箱</span>
+          <button class="copybtn dt-close" type="button" aria-label="关闭详情"><svg class="i sm"><use href="#i-x"/></svg></button>
+        </div>
+
+        <div class="sec">
+          <div class="sec-h"><svg class="i"><use href="#i-alert"/></svg><b>为什么在等你</b><span class="hint">相位 <span class="mono">verify</span> 是复核门</span></div>
+          <p class="why"><span class="k">verify</span> 与 <span class="k">agent_review</span> 均已通过，但 <span class="k">codex_review</span> 亮红——需要你看完证据后决定放行或打回。</p>
+          <div class="res3">
+            <div class="field">
+              <span class="fk">verify_result</span>
+              <span class="fv ok"><span class="okc"><svg viewBox="0 0 24 24"><path d="M5 13l4.5 4.5L19 7"/></svg></span>pass</span>
+            </div>
+            <div class="field">
+              <span class="fk">agent_review_result</span>
+              <span class="fv ok"><span class="okc"><svg viewBox="0 0 24 24"><path d="M5 13l4.5 4.5L19 7"/></svg></span>pass</span>
+            </div>
+            <div class="field">
+              <span class="fk">codex_review_result</span>
+              <span class="fv no"><span class="noc"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></span>fail</span>
+            </div>
+          </div>
+          <div class="res2">
+            <div class="field pathf">
+              <div class="grow">
+                <span class="fk">verification_report</span>
+                <span class="pathv">.superpowers/verify/guide-cn.md</span>
+              </div>
+              <button class="copybtn" type="button" data-copy=".superpowers/verify/guide-cn.md" aria-label="拷贝报告路径"><svg class="i sm"><use href="#i-copy"/></svg></button>
+            </div>
+            <div class="field pathf">
+              <div class="grow">
+                <span class="fk">build_sha</span>
+                <span class="pathv">e4f21c9</span>
+              </div>
+              <button class="copybtn" type="button" data-copy="e4f21c9" aria-label="拷贝 build_sha"><svg class="i sm"><use href="#i-copy"/></svg></button>
+            </div>
+            <div class="field">
+              <span class="fk">branch_status</span>
+              <span class="fv plain">handled</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="sec">
+          <div class="sec-h"><svg class="i"><use href="#i-folder"/></svg><b>产物</b></div>
+          <div class="arts">
+            <div class="art">
+              <span class="ficon"><svg class="i"><use href="#i-file"/></svg></span>
+              <div class="grow"><span class="ak">design_doc</span><span class="av">docs/specs/guide-cn.md</span></div>
+              <button class="copybtn" type="button" data-copy="docs/specs/guide-cn.md" aria-label="拷贝路径"><svg class="i sm"><use href="#i-copy"/></svg></button>
+            </div>
+            <div class="art">
+              <span class="ficon"><svg class="i"><use href="#i-file"/></svg></span>
+              <div class="grow"><span class="ak">plan</span><span class="av">docs/plans/guide-cn.md</span></div>
+              <button class="copybtn" type="button" data-copy="docs/plans/guide-cn.md" aria-label="拷贝路径"><svg class="i sm"><use href="#i-copy"/></svg></button>
+            </div>
+            <div class="art">
+              <span class="ficon blue"><svg class="i"><use href="#i-link"/></svg></span>
+              <div class="grow"><span class="ak">pr_url</span><span class="av link">github.com/…/pull/42</span></div>
+              <button class="copybtn" type="button" data-copy="github.com/…/pull/42" aria-label="拷贝链接"><svg class="i sm"><use href="#i-copy"/></svg></button>
+            </div>
+          </div>
+        </div>
+
+        <div class="sec">
+          <div class="sec-h"><svg class="i"><use href="#i-layers"/></svg><b>语境</b></div>
+          <div class="ctx">
+            <div class="field"><span class="fk">workflow</span><span class="cv">default</span></div>
+            <div class="field"><span class="fk">track</span><span class="cv">frontend</span></div>
+            <div class="field"><span class="fk">preset</span><span class="cv">full</span></div>
+            <div class="field"><span class="fk">automation</span><span class="cv">off</span></div>
+            <div class="field"><span class="fk">周期</span><span class="cv">07-02 → 07-06</span></div>
+          </div>
+        </div>
+
+        <div class="sec hist">
+          <div class="sec-h"><svg class="i"><use href="#i-clock"/></svg><b>最近历史</b></div>
+          <div class="h-row"><span class="h-dot a"></span><time>07-06 11:27</time><span class="h-ev">transition <span class="mono">build→verify</span></span></div>
+          <div class="h-row"><span class="h-dot n"></span><time>07-06 10:58</time><span class="h-ev">set <span class="mono">verification_report</span></span></div>
+          <div class="h-row"><span class="h-dot a"></span><time>07-05 18:12</time><span class="h-ev">transition <span class="mono">spec→build</span></span></div>
+        </div>
+
+        <div class="dt-foot">
+          <span class="note">放行将 transition 到 <span class="mono">archive</span>；打回退回 <span class="mono">build</span></span>
+          <span class="sp"></span>
+          <button class="btn tint-red" type="button"><span class="aw">↩</span>打回</button>
+          <button class="btn primary" type="button"><span class="aw">→</span>放行</button>
+        </div>
+      </section>
+
+      <!-- 看板一瞥 -->
+      <section class="card" id="board">
+        <div class="card-h">
+          <svg class="i"><use href="#i-board"/></svg>
+          <span class="card-t">看板一瞥</span>
+          <span class="badge mono outline">pipeline-worklfow · default</span>
+          <span class="sp"></span>
+          <span class="sub">截取 <span class="mono">5/7</span> 列（隐藏 <span class="mono">open · plan</span>）</span>
+        </div>
+        <div class="board">
+          <div class="kcol">
+            <div class="kcol-h"><b>explore</b><span class="n">1</span></div>
+            <div class="kcard">
+              <div class="kn">demo-b</div>
+              <div class="kb"><span class="badge mono neutral">backend</span><span class="badge red"><span class="dot"></span>等你复核</span></div>
+            </div>
+          </div>
+          <div class="kcol">
+            <div class="kcol-h"><b>spec</b><span class="n">1</span></div>
+            <div class="kcard">
+              <div class="kn">i18n-extract</div>
+              <div class="kb"><span class="badge mono neutral">chat</span></div>
+            </div>
+          </div>
+          <div class="kcol">
+            <div class="kcol-h"><b>build</b><span class="n">1</span></div>
+            <div class="kcard">
+              <div class="kn">demo-a</div>
+              <div class="kb"><span class="badge mono neutral">frontend</span></div>
+            </div>
+          </div>
+          <div class="kcol">
+            <div class="kcol-h"><b>verify</b><span class="n">0</span></div>
+            <div class="kempty">暂无卡片</div>
+          </div>
+          <div class="kcol">
+            <div class="kcol-h"><b>archive</b><span class="n">4</span></div>
+            <div class="kfold"><span><span class="mono">4</span> 张已归档</span><button type="button">展开</button></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Loop 治理 -->
+      <section class="card">
+        <div class="card-h">
+          <svg class="i"><use href="#i-loop"/></svg>
+          <span class="card-t">Loop 治理</span>
+          <span class="sp"></span>
+          <span class="sub">自主等级 <span class="mono">L1–L3</span></span>
+        </div>
+        <div class="loop">
+          <div class="lname">
+            <b>dashboard-redesign</b>
+            <span class="badge blue"><span class="mono">L2</span> 半自动</span>
+          </div>
+          <div class="lmetric">
+            <span class="lk">就绪度</span>
+            <span class="lv">
+              <span class="dots" aria-hidden="true"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i></span>
+              <span class="mono">8/10</span>
+            </span>
+          </div>
+          <div class="lmetric">
+            <span class="lk">预算 <span class="mono">82%</span></span>
+            <span class="lv">
+              <span class="bar" role="img" aria-label="预算已用 82%"><i></i></span>
+              <span class="mono warn-num">82k/100k · 剩 18k</span>
+              <span class="badge red"><span class="dot"></span>预警</span>
+            </span>
+          </div>
+          <span class="sp"></span>
+          <div class="lacts">
+            <button class="btn tint-accent sm" type="button"><span class="aw">↑</span>升到 <span class="mono">L3</span></button>
+            <button class="btn tint-red sm" type="button"><span class="aw">↓</span>降到 <span class="mono">L1</span></button>
+          </div>
+        </div>
+      </section>
+
+    </div>
+
+    <!-- ===== 右：摘要栏 ===== -->
+    <aside class="colR">
+
+      <section class="card">
+        <div class="card-h">
+          <svg class="i"><use href="#i-layers"/></svg>
+          <span class="card-t">工作流摘要</span>
+          <span class="sp"></span>
+          <span class="badge mono outline">release-train</span>
+        </div>
+        <div class="sum">
+          <div class="sum-row"><svg class="i"><use href="#i-layers"/></svg><span class="sk">阶段</span><span class="sv">3</span></div>
+          <div class="sum-row"><svg class="i"><use href="#i-shield"/></svg><span class="sk">复核门</span><span class="sv">1</span></div>
+          <div class="sum-row"><svg class="i"><use href="#i-spark"/></svg><span class="sk">skills</span><span class="sv">5</span></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-h">
+          <svg class="i"><use href="#i-folder"/></svg>
+          <span class="card-t">关联产物</span>
+          <span class="sp"></span>
+          <span class="badge mono outline">guide-cn</span>
+        </div>
+        <div class="files">
+          <div class="file-row">
+            <span class="ficon"><svg class="i"><use href="#i-file"/></svg></span>
+            <div class="grow"><span class="fk2">design_doc</span><span class="fv2">docs/specs/guide-cn.md</span></div>
+            <span class="badge green"><svg class="i sm" style="width:11px;height:11px"><use href="#i-check"/></svg>已加载</span>
+          </div>
+          <div class="file-row">
+            <span class="ficon"><svg class="i"><use href="#i-file"/></svg></span>
+            <div class="grow"><span class="fk2">plan</span><span class="fv2">docs/plans/guide-cn.md</span></div>
+            <span class="badge green"><svg class="i sm" style="width:11px;height:11px"><use href="#i-check"/></svg>已加载</span>
+          </div>
+          <div class="file-row">
+            <span class="ficon"><svg class="i"><use href="#i-file"/></svg></span>
+            <div class="grow"><span class="fk2">verification_report</span><span class="fv2">.superpowers/verify/guide-cn.md</span></div>
+            <span class="badge green"><svg class="i sm" style="width:11px;height:11px"><use href="#i-check"/></svg>已加载</span>
+          </div>
+          <div class="file-row">
+            <span class="ficon blue"><svg class="i"><use href="#i-link"/></svg></span>
+            <div class="grow"><span class="fk2">pr_url</span><span class="fv2 link">github.com/…/pull/42</span></div>
+            <span class="badge blue"><svg class="i sm" style="width:11px;height:11px"><use href="#i-link"/></svg>链接</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-h">
+          <svg class="i"><use href="#i-code"/></svg>
+          <span class="card-t">生成配置预览</span>
+          <span class="sp"></span>
+          <button class="btn ghost sm" type="button" data-copy='{"name":"release-train","phases":[{"id":"draft","desc":"起草发布说明"},{"id":"review","desc":"人工复核后放行","gate":true},{"id":"ship","desc":"发布并归档"}],"skills":5}'><svg class="i sm"><use href="#i-copy"/></svg>复制 JSON</button>
+        </div>
+        <div class="codewrap">
+          <div class="code"><pre><span class="tk-p">{</span>
+  <span class="tk-k">"name"</span><span class="tk-p">:</span> <span class="tk-s">"release-train"</span><span class="tk-p">,</span>
+  <span class="tk-k">"phases"</span><span class="tk-p">:</span> <span class="tk-p">[</span>
+    <span class="tk-p">{</span>
+      <span class="tk-k">"id"</span><span class="tk-p">:</span> <span class="tk-s">"draft"</span><span class="tk-p">,</span>
+      <span class="tk-k">"desc"</span><span class="tk-p">:</span> <span class="tk-s">"起草发布说明"</span>
+    <span class="tk-p">},</span>
+    <span class="tk-p">{</span>
+      <span class="tk-k">"id"</span><span class="tk-p">:</span> <span class="tk-s">"review"</span><span class="tk-p">,</span>
+      <span class="tk-k">"desc"</span><span class="tk-p">:</span> <span class="tk-s">"人工复核后放行"</span><span class="tk-p">,</span>
+      <span class="tk-k">"gate"</span><span class="tk-p">:</span> <span class="tk-b">true</span>
+    <span class="tk-p">},</span>
+    <span class="tk-p">{</span>
+      <span class="tk-k">"id"</span><span class="tk-p">:</span> <span class="tk-s">"ship"</span><span class="tk-p">,</span>
+      <span class="tk-k">"desc"</span><span class="tk-p">:</span> <span class="tk-s">"发布并归档"</span>
+    <span class="tk-p">}</span>
+  <span class="tk-p">],</span>
+  <span class="tk-k">"skills"</span><span class="tk-p">:</span> <span class="tk-n">5</span>
+<span class="tk-p">}</span></pre></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-h">
+          <svg class="i"><use href="#i-board"/></svg>
+          <span class="card-t">项目在制</span>
+          <span class="sp"></span>
+          <span class="sub">张 = 在制 change</span>
+        </div>
+        <div class="proj">
+          <div class="proj-row"><span class="dia" aria-hidden="true">◈</span><span class="pn">全部项目</span><span class="badge blue">当前</span><span class="pv">7</span></div>
+          <div class="proj-row"><svg class="i sm" style="color:var(--text-3)"><use href="#i-folder"/></svg><span class="pn mono">pipeline-worklfow</span><span class="pv">5</span></div>
+          <div class="proj-row"><svg class="i sm" style="color:var(--text-3)"><use href="#i-folder"/></svg><span class="pn mono">docs-site</span><span class="pv">2</span></div>
+        </div>
+      </section>
+
+    </aside>
+  </div>
+
+  <footer class="pagefoot">pipeline-lite · 本机 dashboard · <span class="mono">v4 openai-trellis</span> · 演示数据</footer>
+</main>
+
+<div id="toast" role="status" aria-live="polite">
+  <svg class="i sm"><use href="#i-check"/></svg><span>已复制</span><span class="mono" id="toastPath"></span>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  // 主题切换
+  var root = document.documentElement;
+  var btn = document.getElementById('themeToggle');
+  if (btn) {
+    btn.addEventListener('click', function () {
+      root.dataset.theme = root.dataset.theme === 'dark' ? 'light' : 'dark';
+    });
+  }
+
+  // 拷贝（file:// 下 clipboard API 可能不可用，逐级降级，绝不抛错）
+  var toastEl = document.getElementById('toast');
+  var toastPath = document.getElementById('toastPath');
+  var toastTimer = null;
+  function showToast(text) {
+    if (!toastEl) return;
+    if (toastPath) toastPath.textContent = text.length > 46 ? text.slice(0, 45) + '…' : text;
+    toastEl.classList.add('show');
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { toastEl.classList.remove('show'); }, 1600);
+  }
+  function fallbackCopy(text) {
+    try {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      return true;
+    } catch (e) { return false; }
+  }
+  document.addEventListener('click', function (e) {
+    var el = e.target && e.target.closest ? e.target.closest('[data-copy]') : null;
+    if (!el) return;
+    var text = el.getAttribute('data-copy') || '';
+    var done = function () { showToast(text); };
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text).then(done, function () { fallbackCopy(text); done(); });
+    } else {
+      fallbackCopy(text);
+      done();
+    }
+  });
+})();
+</script>
+</body>
+</html>
