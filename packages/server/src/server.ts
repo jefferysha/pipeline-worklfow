@@ -36,7 +36,7 @@ import { listAllSkills } from './skillsRegistry.js'
 import { buildSnapshot, computeFingerprint, dedupeRoots, type SnapshotDeps } from './snapshot.js'
 import { generateToken, tokenFromHeaders, tokensMatch } from './token.js'
 import { listTraceSessions, readTraceRecords } from './traces.js'
-import { performTransition } from './transition.js'
+import { performTransition, readChangeHistory } from './transition.js'
 import type { DashboardServer, DashboardServerOptions } from './types.js'
 import { SERVER_VERSION } from './version.js'
 
@@ -360,6 +360,29 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
         return sendJson(res, 400, { ok: false, error: '找不到该 change（无 .pipeline.yaml）' })
       }
       return sendJson(res, 200, { log: await readAfkRunLog(dir) })
+    }
+    // ── v5 T1（G21）：GET /api/change/:name/history —— change 阶段时间线数据源
+    //    （.pipeline-history.jsonl 按 ts 升序回放，见 transition.ts::readChangeHistory）。
+    //    校验顺序同 /api/afk/<name>/log 兄弟端点：先 change 名格式（防路径穿越）、再 root
+    //    信任锚（两侧 resolvePath 规范化再比对注册表 → 404）、最后 changeDir 存在性（ENOENT
+    //    前置校验 → 400，同 cancel/retry/log 三兄弟对这条完全相同判断的统一状态码约定——
+    //    不与「change 存在但还没记录」的 200 { entries: [] } 混为一谈）。
+    //    读端点对齐 /api/config、/api/skills/registry：本机回环 GET 不鉴权。
+    const mHistory = /^\/api\/change\/([^/]+)\/history$/.exec(path)
+    if (mHistory) {
+      const name = decodeURIComponent(mHistory[1]!)
+      if (!name || !/^[a-zA-Z0-9_-]+$/.test(name) || name.includes('..')) {
+        return sendJson(res, 400, { ok: false, error: '非法 change 名（仅允许 a-z A-Z 0-9 - _）' })
+      }
+      const root = new URL(req.url ?? '/', 'http://localhost').searchParams.get('root') ?? ''
+      if (!dedupeRoots(registry()).includes(resolvePath(root))) {
+        return sendJson(res, 404, { ok: false, error: 'root 未在机器级项目注册表中' })
+      }
+      const dir = join(root, 'openspec', 'changes', name)
+      if (!existsSync(join(dir, '.pipeline.yaml'))) {
+        return sendJson(res, 400, { ok: false, error: '找不到该 change（无 .pipeline.yaml）' })
+      }
+      return sendJson(res, 200, { entries: await readChangeHistory(dir) })
     }
     // ── loops 治理面数据端：跨项目聚合 loops.yaml ──
     if (path === '/api/loops/snapshot') {
@@ -700,7 +723,8 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
       return sendJson(res, 404, { ok: false, error: 'root 非已知 Project（未注册或不可信）' })
     }
     const name = decodeURIComponent(mTr[1]!)
-    const outcome = await performTransition({ store, flow, clock, fileExists, gitHeadSha }, root, name, event)
+    // history 注入（G20 / v5-T1）：转换成功 → .pipeline-history.jsonl 记账，guard 拒绝零记账。
+    const outcome = await performTransition({ store, flow, clock, fileExists, gitHeadSha, history }, root, name, event)
     return sendJson(res, outcome.code, outcome.body)
   }
 

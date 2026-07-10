@@ -10,16 +10,18 @@
  * 老仓 dashboard 写回 run_transition 是 subprocess 跑 guard+state.sh；lite 走 kernel 直调（真改盘）。
  */
 import { existsSync } from 'node:fs'
+import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import {
   applyTransitionEffects,
   checkTransitionPreconditions,
   eventEdge,
   evaluateStepGuards,
+  HISTORY_FILE,
   IllegalTransitionError,
   loadWorkflow,
 } from '@pipeline-lite/kernel'
-import type { FieldName, FlowEngine, PipelineState, StateStore, TransitionContext } from '@pipeline-lite/kernel'
+import type { FieldName, FlowEngine, HistoryEntry, HistoryWriter, PipelineState, StateStore, TransitionContext } from '@pipeline-lite/kernel'
 
 // 事件 → 转移边表：re-export kernel 单一真相源（server/index.ts 对外沿用同名）。
 export { TRANSITION_EVENTS, eventEdge } from '@pipeline-lite/kernel'
@@ -33,6 +35,14 @@ export interface TransitionDeps {
   fileExists?: (root: string, relPath: string) => boolean
   /** `git rev-parse HEAD`（build-complete 冻结 SHA + verify-pass barrier；缺省跳过 SHA 面）。 */
   gitHeadSha?: (cwd: string) => Promise<string>
+  /**
+   * .pipeline-history.jsonl 记账（G20 / v5-T1）：转换成功后追加一行，形状对齐 CLI 侧
+   * cli/commands/transition.ts 的既有口径——kind='transition' + raw=触发它的 event 名
+   * （「transition-kind 的 raw = event」不变式）。best-effort：写失败仅 WARN 走 stderr，
+   * 绝不影响主写已成功的 200（同 server.ts POST /api/changes 的 kind=init 记账语义）。
+   * guard/前置校验拒绝的转换在 withLock 内即抛错，天然零记账。缺省 = 不记账（测试可不注入）。
+   */
+  history?: HistoryWriter
 }
 
 export interface TransitionOutcome {
@@ -118,6 +128,21 @@ export async function performTransition(
       await deps.store.write(dir, r.state)
       return { from: r.from, to: r.to }
     })
+    // history 记账在锁外（只有成功转换才走到这里；被拒的在上面抛错短路）——两条 workflow
+    // 分岔（default / 自定义）共用这一处，保证两轨记录形状一致。
+    if (deps.history) {
+      try {
+        await deps.history.append(dir, {
+          ts: deps.clock(),
+          kind: 'transition',
+          from: result.from,
+          to: result.to,
+          raw: event, // 老仓 transitions_history.event 对位（与 cli/commands/transition.ts、legacy.ts 导入映射同口径）
+        })
+      } catch (e) {
+        process.stderr.write(`WARN: history 写入失败: ${e instanceof Error ? e.message : String(e)}\n`)
+      }
+    }
     return { code: 200, body: { ok: true, name, event, from: result.from, to: result.to } }
   } catch (e) {
     if (e instanceof UnknownEventError) return { code: 400, body: { ok: false, error: e.message } }
@@ -127,4 +152,36 @@ export async function performTransition(
     if (e instanceof IllegalTransitionError) return { code: 409, body: { ok: false, error: e.message } }
     return { code: 500, body: { ok: false, error: e instanceof Error ? e.message : String(e) } }
   }
+}
+
+/**
+ * 读 changeDir/.pipeline-history.jsonl → 按 ts 升序的 HistoryEntry 数组（G21 / v5-T1，
+ * GET /api/change/:name/history 数据源，供详情卡阶段时间线消费）。
+ * 只读 JSONL 侧文件——legacy opaqueTail 里的 transitions_history 不合并读（决议登记 #10：
+ * 老 change 时间线由前端显示「早期记录不可用」）。宽容读：文件缺失 → []；损坏行（非 JSON /
+ * 非对象 / 缺 ts）逐行跳过不 500——读端点面对历史文件的任何局部污染都应尽量交付可用部分。
+ */
+export async function readChangeHistory(changeDir: string): Promise<HistoryEntry[]> {
+  let text: string
+  try {
+    text = await readFile(join(changeDir, HISTORY_FILE), 'utf8')
+  } catch {
+    return [] // 文件不存在（还没任何记账）→ 空时间线，不是错误
+  }
+  const entries: HistoryEntry[] = []
+  for (const line of text.split('\n')) {
+    const trimmed = line.trim()
+    if (!trimmed) continue
+    try {
+      const parsed: unknown = JSON.parse(trimmed)
+      if (typeof parsed === 'object' && parsed !== null && typeof (parsed as { ts?: unknown }).ts === 'string') {
+        entries.push(parsed as HistoryEntry)
+      }
+    } catch {
+      /* 损坏行跳过（宽容读） */
+    }
+  }
+  // ISO-8601 字符串序 = 时间序；Array#sort 稳定，同 ts 记录保持写入相对顺序。
+  entries.sort((a, b) => (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0))
+  return entries
 }

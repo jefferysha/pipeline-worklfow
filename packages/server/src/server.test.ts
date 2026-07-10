@@ -272,6 +272,120 @@ describe('POST 写端点纵深防线（老仓安全模型 parity）', () => {
   })
 })
 
+describe('POST /api/change/<name>/transition —— .pipeline-history.jsonl 记账（G20 / v5-T1）', () => {
+  it('转换成功 → changeDir/.pipeline-history.jsonl 追加一行，形状对齐 CLI recordHistory（kind=transition + raw=event 不变式）', async () => {
+    const h = await start()
+    const r = await reqPost(h.port, `/api/change/${h.name}/transition`, { root: h.root, event: 'open-complete' }, {
+      headers: { Authorization: `Bearer ${h.token}` },
+    })
+    expect(r.status).toBe(200)
+    const text = await readFile(join(h.changeDir, '.pipeline-history.jsonl'), 'utf8')
+    const lines = text.trim().split('\n')
+    expect(lines).toHaveLength(1)
+    expect(JSON.parse(lines[0]!)).toEqual({
+      ts: '2026-07-07T00:00:00Z',
+      kind: 'transition',
+      from: 'open',
+      to: 'explore',
+      raw: 'open-complete', // 老仓 transitions_history.event 对位（同 cli/commands/transition.ts 口径）
+    })
+  })
+
+  it('转换被拒（event 与当前 phase 不匹配 → 409）→ 不写 history（guard 拒绝零记账）', async () => {
+    const h = await start()
+    const r = await reqPost(h.port, `/api/change/${h.name}/transition`, { root: h.root, event: 'verify-pass' }, {
+      headers: { Authorization: `Bearer ${h.token}` },
+    })
+    expect(r.status).toBe(409)
+    expect(existsSync(join(h.changeDir, '.pipeline-history.jsonl'))).toBe(false)
+  })
+
+  it('连续两次转换 → 追加两行（append 语义，不覆盖）', async () => {
+    const h = await start()
+    // explore-complete 有 design_doc 前置校验（字段非空 + 文件真存在）——先满足再转换。
+    const { writeFile } = await import('node:fs/promises')
+    await writeFile(join(h.root, 'design.md'), '# design\n', 'utf8')
+    await h.store.set(h.changeDir, 'design_doc', 'design.md')
+    for (const event of ['open-complete', 'explore-complete']) {
+      const r = await reqPost(h.port, `/api/change/${h.name}/transition`, { root: h.root, event }, {
+        headers: { Authorization: `Bearer ${h.token}` },
+      })
+      expect(r.status).toBe(200)
+    }
+    const text = await readFile(join(h.changeDir, '.pipeline-history.jsonl'), 'utf8')
+    const rows = text.trim().split('\n').map((l) => JSON.parse(l) as { from: string; to: string })
+    expect(rows.map((e) => `${e.from}->${e.to}`)).toEqual(['open->explore', 'explore->spec'])
+  })
+})
+
+describe('GET /api/change/:name/history —— 阶段时间线读端点（G21 / v5-T1）', () => {
+  it('无 .pipeline-history.jsonl → 200 空 entries（不是 404，与「change 不存在」区分）', async () => {
+    const h = await start()
+    const r = await reqGet(h.port, `/api/change/${h.name}/history?root=${encodeURIComponent(h.root)}`)
+    expect(r.status).toBe(200)
+    expect(r.json<{ entries: unknown[] }>().entries).toEqual([])
+  })
+
+  it('有记录 → 按 ts 升序返回（文件里乱序写入也重排）', async () => {
+    const h = await start()
+    const { writeFile } = await import('node:fs/promises')
+    const rows = [
+      { ts: '2026-07-07T02:00:00Z', kind: 'transition', from: 'explore', to: 'spec', raw: 'explore-complete' },
+      { ts: '2026-07-07T01:00:00Z', kind: 'transition', from: 'open', to: 'explore', raw: 'open-complete' },
+    ]
+    await writeFile(join(h.changeDir, '.pipeline-history.jsonl'), rows.map((e) => JSON.stringify(e)).join('\n') + '\n', 'utf8')
+    const r = await reqGet(h.port, `/api/change/${h.name}/history?root=${encodeURIComponent(h.root)}`)
+    expect(r.status).toBe(200)
+    const entries = r.json<{ entries: Array<{ ts: string; to: string }> }>().entries
+    expect(entries.map((e) => e.ts)).toEqual(['2026-07-07T01:00:00Z', '2026-07-07T02:00:00Z'])
+    expect(entries.map((e) => e.to)).toEqual(['explore', 'spec'])
+  })
+
+  it('损坏行（非 JSON）与空行被跳过，其余照常返回（不 500）', async () => {
+    const h = await start()
+    const { writeFile } = await import('node:fs/promises')
+    const good = { ts: '2026-07-07T01:00:00Z', kind: 'init' }
+    await writeFile(join(h.changeDir, '.pipeline-history.jsonl'), `not-json{{{\n\n${JSON.stringify(good)}\n`, 'utf8')
+    const r = await reqGet(h.port, `/api/change/${h.name}/history?root=${encodeURIComponent(h.root)}`)
+    expect(r.status).toBe(200)
+    expect(r.json<{ entries: unknown[] }>().entries).toEqual([good])
+  })
+
+  it('转换成功后立即可读（写读闭环：POST transition → GET history 回放同一条记录）', async () => {
+    const h = await start()
+    const w = await reqPost(h.port, `/api/change/${h.name}/transition`, { root: h.root, event: 'open-complete' }, {
+      headers: { Authorization: `Bearer ${h.token}` },
+    })
+    expect(w.status).toBe(200)
+    const r = await reqGet(h.port, `/api/change/${h.name}/history?root=${encodeURIComponent(h.root)}`)
+    expect(r.status).toBe(200)
+    expect(r.json<{ entries: Array<{ kind: string; from: string; to: string; raw: string }> }>().entries).toEqual([
+      { ts: '2026-07-07T00:00:00Z', kind: 'transition', from: 'open', to: 'explore', raw: 'open-complete' },
+    ])
+  })
+
+  it('非法 change 名（.. 路径穿越尝试）→ 400，同 afk log/cancel/retry 兄弟端点的 name 校验', async () => {
+    const h = await start()
+    const r = await reqGet(h.port, `/api/change/${encodeURIComponent('..')}/history?root=${encodeURIComponent(h.root)}`)
+    expect(r.status).toBe(400)
+  })
+
+  it('root 不在注册表（不可信项目）→ 404，同兄弟端点共用的信任锚模式', async () => {
+    const h = await start()
+    const r = await reqGet(h.port, `/api/change/${h.name}/history?root=${encodeURIComponent('/tmp/not-registered')}`)
+    expect(r.status).toBe(404)
+    // 精确匹配信任锚校验的错误文案（而非落到路由表尾部「未知端点」兜底 404）——证明真走了本端点的 root 校验分支。
+    expect(r.json<{ error: string }>().error).toBe('root 未在机器级项目注册表中')
+  })
+
+  it('change 名合法但该 change 实际不存在（无 .pipeline.yaml）→ 400，同 afk log 端点的 ENOENT 前置约定，不与「还没记录」的 200 混淆', async () => {
+    const h = await start()
+    const r = await reqGet(h.port, `/api/change/does-not-exist/history?root=${encodeURIComponent(h.root)}`)
+    expect(r.status).toBe(400)
+    expect(r.json<{ error: string }>().error).toBe('找不到该 change（无 .pipeline.yaml）')
+  })
+})
+
 describe('GET /api/stream —— SSE 真推送（.pipeline.yaml 变化即推）', () => {
   it('首连推初始快照；transition 改盘后推新快照（phase=explore）', async () => {
     const h = await start({ pollIntervalMs: 20 })
