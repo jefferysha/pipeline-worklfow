@@ -276,6 +276,20 @@ export const zh: Dict = {
     // Task 15：画布上方阶段卡横排（视觉基准 v4 demo「阶段编排」段）的 aria-label。
     stage_row_label: '阶段编排',
   },
+  // Task 17（spec §3 布局骨架收口）：收件箱 + 编辑器右栏摘要卡共用文案——两处视图各自消费
+  // 其中一部分 key（收件箱用 projects_*/artifacts_*，编辑器用 summary_*/config_*/copy_json），
+  // 放在同一个 side 命名空间下是因为它们是同一套"右栏摘要卡"视觉词汇的文案投影，不是巧合
+  // 重名。
+  side: {
+    projects_title: '项目在制',
+    artifacts_title: '关联产物',
+    summary_title: '摘要',
+    summary_phases: '阶段',
+    summary_gates: '复核门',
+    summary_skills: 'skills',
+    config_title: '生成配置预览',
+    copy_json: '复制 JSON',
+  },
 }
 
 export const en: Dict = {
@@ -536,6 +550,16 @@ export const en: Dict = {
     discard_confirm_desc: 'Going back to the list discards your unsaved changes. Continue?',
     discard_confirm_action: 'Discard and go back',
     stage_row_label: 'Stages',
+  },
+  side: {
+    projects_title: 'Projects in flight',
+    artifacts_title: 'Related artifacts',
+    summary_title: 'Summary',
+    summary_phases: 'Phases',
+    summary_gates: 'Review gates',
+    summary_skills: 'skills',
+    config_title: 'Generated config preview',
+    copy_json: 'Copy JSON',
   },
 }
 

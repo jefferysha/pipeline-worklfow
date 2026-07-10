@@ -8,7 +8,7 @@ import { Dialog } from '../shell/Dialog'
 import { Icon } from '../shell/Icon'
 import { revealList } from '../workflow/motion'
 import { ChangeDetailCard } from './ChangeDetailCard'
-import { gateEvidence, type EvidenceChip } from './evidence'
+import { artifactChips, gateEvidence, type EvidenceChip } from './evidence'
 import { changeWorkflow, projectName, selectInbox } from './inbox'
 
 interface InboxViewProps {
@@ -130,6 +130,19 @@ export function InboxView({ snapshot, loading, error, currentRoot, rulesByKey, o
     return m
   }, [snapshot])
 
+  // Task 17（spec §3）：右栏「项目在制」行——数据字面是 snapshot.projects 里 ok 项目的
+  // changes.length（brief 原话），不是 items.length/该项目的 gate 卡数：一个项目可以有很多
+  // 非 gate 相位的 change 正在推进，"在制"数的是全部，不是只数停在复核门的那一小撮。聚合语境
+  // （currentRoot===''）逐项目行；非聚合语境只出当前项目一行。
+  const projectRows = useMemo(() => {
+    const projects = snapshot?.projects ?? []
+    if (currentRoot === '') {
+      return projects.filter((p) => p.ok).map((p) => ({ root: p.root, name: projectName(p), count: p.changes.length }))
+    }
+    const cur = projects.find((p) => p.root === currentRoot)
+    return cur ? [{ root: cur.root, name: projectName(cur), count: cur.changes.length }] : []
+  }, [snapshot, currentRoot])
+
   async function apply(name: string, root: string, planned: PlannedTransition): Promise<void> {
     setBusy(true)
     try {
@@ -191,6 +204,10 @@ export function InboxView({ snapshot, loading, error, currentRoot, rulesByKey, o
   }
 
   const selectedItem = selected ? items.find((it) => `${it.root}/${it.change.name}` === selected) : undefined
+  // Task 17：右栏「关联产物」的数据源——artifactChips 正门（与 ChangeDetailCard 产物区共享
+  // 同一个函数，但故意不去重/不与证据格联动：右栏是选中 change 的速览，详情卡才是全景，两处
+  // 信息密度定位不同，不算重复渲染）。空态（无选中）时这张卡不渲染。
+  const selectedArtifacts = selectedItem ? artifactChips(selectedItem.change) : []
 
   return (
     <section className="view inbox" data-testid="inbox-view">
@@ -206,7 +223,9 @@ export function InboxView({ snapshot, loading, error, currentRoot, rulesByKey, o
           </button>
         )}
       </header>
-      <ul className="inbox__list" data-testid="inbox-list" ref={listRef}>
+      <div className="view-split">
+        <div className="view-split__main">
+          <ul className="inbox__list" data-testid="inbox-list" ref={listRef}>
         {items.map(({ root, change }, index) => {
           const wf = changeWorkflow(change)
           const rules = rulesByKey.get(rulesKey(root, wf))
@@ -272,19 +291,70 @@ export function InboxView({ snapshot, loading, error, currentRoot, rulesByKey, o
             </li>
           )
         })}
-      </ul>
+          </ul>
 
-      {selectedItem && (
-        <ChangeDetailCard
-          root={selectedItem.root}
-          change={selectedItem.change}
-          rules={rulesByKey.get(rulesKey(selectedItem.root, changeWorkflow(selectedItem.change)))}
-          onTransition={onTransition}
-          onClose={() => setSelected(null)}
-          onToast={onToast}
-          onError={onError}
-        />
-      )}
+          {selectedItem && (
+            <ChangeDetailCard
+              root={selectedItem.root}
+              change={selectedItem.change}
+              rules={rulesByKey.get(rulesKey(selectedItem.root, changeWorkflow(selectedItem.change)))}
+              onTransition={onTransition}
+              onClose={() => setSelected(null)}
+              onToast={onToast}
+              onError={onError}
+            />
+          )}
+        </div>
+
+        {/* Task 17（spec §3 布局骨架收口）：右栏摘要卡——「项目在制」恒渲染，「关联产物」只在
+            选中 change 且 artifactChips 非空时渲染（空态不占位）。 */}
+        <aside className="side-col">
+        <section className="side-card">
+          <div className="side-card__head">
+            <Icon name="board" size={14} />
+            <b>{t('side.projects_title')}</b>
+          </div>
+          <div className="side-card__body" data-testid="side-projects">
+            {projectRows.map((row) => (
+              <div className="side-card__row" key={row.root}>
+                <span className="side-card__row-icon"><Icon name="folder" size={13} /></span>
+                <span className="side-card__row-label side-card__row-label--mono">{row.name}</span>
+                <span className="side-card__row-value">{row.count}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {selectedItem && selectedArtifacts.length > 0 && (
+          <section className="side-card">
+            <div className="side-card__head">
+              <Icon name="folder" size={14} />
+              <b>{t('side.artifacts_title')}</b>
+            </div>
+            <div className="side-card__body" data-testid="side-artifacts">
+              {selectedArtifacts.map((chip) => (
+                <div className="side-card__file" key={chip.key}>
+                  <span className="side-card__row-icon"><Icon name="doc" size={14} /></span>
+                  <div className="side-card__file-info">
+                    <span className="side-card__file-key">{chip.key}</span>
+                    <span className="side-card__file-val">{chip.value}</span>
+                  </div>
+                  <button
+                    type="button"
+                    className="side-card__copy"
+                    data-testid={`side-artifact-copy-${chip.key}`}
+                    aria-label={t('detail.copy_field', { field: chip.key })}
+                    onClick={() => copyEvidence(chip.value)}
+                  >
+                    <Icon name="copy" size={13} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+        </aside>
+      </div>
 
       {pending && (
         <Dialog

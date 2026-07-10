@@ -123,6 +123,41 @@ body { margin: 0; }
 .view__note { padding: 20px; color: var(--text-3); font-size: 13px; }
 .view__note--error { color: var(--red); }
 
+/* ── 双列视图骨架：主列 + 右侧 sticky 摘要栏（Task 17，spec §3；视觉基准
+   v4-openai-trellis.html 的 .grid/.colR/.card/.sum-row/.file-row/.proj-row/.code，本文件
+   按既有 BEM 词汇重命名为 .view-split/.side-col/.side-card*）。宽度收窄到 280px——v4 的
+   356px 是给它自己更宽的 1400px 容器算的，本应用 .main 的 max-width:1200px 用不上那么宽。
+   窄屏（≤720px，同文件末尾既有断点）右栏下沉到主列下方、撤销 sticky，见文件末尾
+   @media (max-width: 720px) 块。既有视图内容（inbox__list/workflow-canvas__stage 等）
+   原样作为 .view-split__main 的子节点，不改自身结构。── */
+.view-split { display: flex; align-items: flex-start; gap: 20px; }
+.view-split__main { flex: 1; min-width: 0; }
+.side-col { flex: 0 0 280px; width: 280px; display: flex; flex-direction: column; gap: 16px; position: sticky; top: 20px; }
+.side-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); }
+.side-card__head { display: flex; align-items: center; gap: 8px; padding: 11px 14px; border-bottom: 1px solid var(--border); color: var(--text-3); }
+.side-card__head b { font-size: 13px; font-weight: 700; color: var(--text); }
+.side-card__head-meta { margin-left: auto; font-family: var(--mono); font-size: 11px; color: var(--text-3); }
+.side-card__head-action { margin-left: auto; }
+.side-card__body { padding: 2px 14px 4px; }
+/* 摘要行 / 项目行共用：图标 + label + 右侧蓝 mono 计数（v4 .sum-row/.proj-row 合流）。 */
+.side-card__row { display: flex; align-items: center; gap: 9px; padding: 9px 0; font-size: 12.5px; color: var(--text-2); }
+.side-card__row + .side-card__row { border-top: 1px solid var(--border); }
+.side-card__row-icon { color: var(--text-3); display: inline-flex; flex: none; }
+.side-card__row-label { flex: 1; min-width: 0; font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.side-card__row-label--mono { font-family: var(--mono); font-size: 12.5px; }
+.side-card__row-value { font-family: var(--mono); font-size: 14px; font-weight: 750; color: var(--accent-d); flex: none; }
+/* 产物/文件行：图标 + 上下两行（字段名 + 路径值）+ 拷贝钮（v4 .file-row）。 */
+.side-card__file { display: flex; align-items: center; gap: 9px; padding: 8px 0; }
+.side-card__file + .side-card__file { border-top: 1px solid var(--border); }
+.side-card__file-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.side-card__file-key { font-family: var(--mono); font-size: 10.5px; color: var(--text-3); }
+.side-card__file-val { font-family: var(--mono); font-size: 12px; font-weight: 600; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.side-card__copy { flex: none; border: 0; background: transparent; color: var(--text-3); cursor: pointer; padding: 3px; border-radius: 5px; display: inline-flex; }
+.side-card__copy:hover { color: var(--text); background: var(--fill); }
+/* 生成配置 JSON 预览（v4 .code；--code-bg/--code-border token 首次真正被消费）。 */
+.side-card__code { padding: 10px 14px 14px; }
+.side-card__code pre { margin: 0; background: var(--code-bg); border: 1px solid var(--code-border); border-radius: var(--radius-sm); padding: 11px 13px; font-family: var(--mono); font-size: 11.5px; line-height: 1.6; color: var(--text-2); overflow-x: auto; white-space: pre; }
+
 /* ── 空态（教学式 onboarding 复用同族）── */
 .empty { max-width: 460px; margin: 8vh auto; text-align: center; padding: 30px 32px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); }
 .empty__mark { width: 42px; height: 42px; border-radius: var(--radius); background: var(--ink); color: var(--ink-fg); font-size: 20px; line-height: 42px; margin: 0 auto 14px; font-weight: 700; }
@@ -520,5 +555,7 @@ button.ev__chip--neutral:hover { border-color: var(--border-2); color: var(--tex
 @media (max-width: 720px) {
   .board__grid { grid-template-columns: repeat(7, minmax(140px, 1fr)); } .main { padding: 14px; }
   .step-detail-panel { width: 100%; }
+  /* Task 17：右栏窄屏下沉到主列下方，撤销 sticky（没有横向空间放 280px 侧栏了）。 */
+  .view-split { flex-direction: column; } .side-col { width: 100%; flex: none; position: static; }
 }
 `

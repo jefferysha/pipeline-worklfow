@@ -117,8 +117,16 @@ beforeAll(() => {
   // ByText 命中面里排除：既有查询继续精确命中 xyflow 节点文字，新的阶段卡断言全部走
   // data-testid + textContent（见 Task 15 describe 块）。afterAll 还原，同上面 offsetWidth
   // 的不依赖文件隔离假设的惯例。
+  // Task 17：同样的坑在右栏摘要卡上再现两次——① 「生成配置预览」代码块，
+  // `JSON.stringify(wf,...)` 逐字含全部 step id/event 名/label（如 "intake"/"restart"/
+  // "archive"）；② 「摘要」卡的「复核门」行标签字面复用与 gate 徽章相同的 i18n 文案
+  // （workflow_editor.gate_badge），跟"gate 节点徽章"用例的 `getByText('复核门')` 撞车。
+  // 两者都恒渲染在 `.side-col` 里，会让本文件全部既有裸 `getByText(/intake/i)` 式查询、
+  // 以及 gate 徽章文本查询从"唯一命中"变成"命中两处"——同 `.stage-card` 一样的处理：把
+  // 整个 `.side-col` 子树从 ByText 命中面里排除，右栏摘要卡自己的断言本就全部走
+  // testid+textContent（brief 已提前点名这个坑），不受影响。
   originalDefaultIgnore = getConfig().defaultIgnore
-  configure({ defaultIgnore: `${originalDefaultIgnore}, .stage-card, .stage-card *` })
+  configure({ defaultIgnore: `${originalDefaultIgnore}, .stage-card, .stage-card *, .side-col, .side-col *` })
   originalOffsetWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetWidth')
   originalOffsetHeight = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetHeight')
   Object.defineProperty(HTMLElement.prototype, 'offsetWidth', { configurable: true, value: 150 })
@@ -159,7 +167,10 @@ beforeEach(() => {
     throw new Error(`unexpected fetch ${url}`)
   }) as unknown as typeof fetch
 })
-afterEach(() => vi.restoreAllMocks())
+afterEach(() => {
+  vi.restoreAllMocks()
+  vi.unstubAllGlobals()
+})
 
 describe('WorkflowCanvas —— 顶层 step 拓扑', () => {
   it('挂载后真 fetch workflow，渲染两个 step 节点', async () => {
@@ -812,5 +823,64 @@ describe('保存后规则缓存失效（评审 P0-4）', () => {
     // 3. 消费方再次挂载：缓存已失效 → 真重拉 → 看到 v2 的 3 个 step
     render(<RulesProbe />)
     await waitFor(() => expect(screen.getByTestId('rules-probe').textContent).toBe('3'))
+  })
+})
+
+// ── Task 17（spec §3 布局骨架收口）：右栏摘要卡（阶段/复核门/skills 计数 + 生成配置 JSON
+// 预览 + 复制）。断言全部走 data-testid + textContent（不用 getByText）——JSON 预览文本本身
+// 含 step id（如 "intake"），会被本文件顶部 beforeAll 排除 .stage-card 子树之后剩下的
+// getByText 查询命中多份（画布节点 + JSON 文本），brief 已明确点名这个坑。
+describe('WorkflowCanvas —— Task 17：右栏摘要卡（阶段/复核门/skills 计数 + JSON 预览/复制）', () => {
+  const SUMMARY_WF = {
+    name: NAME,
+    steps: [
+      { id: 'intake', label: 'Intake', gate: null, skills: [{ id: 'a' }, { id: 'b' }], inputs: [], outputs: [], guards: [], transitions: [{ event: 'complete', to: 'check' }] },
+      { id: 'check', label: 'Check', gate: 'review', skills: [{ id: 'c' }], inputs: [], outputs: [], guards: [], transitions: [{ event: 'go', to: 'done' }] },
+      { id: 'done', label: 'Done', gate: null, skills: [], inputs: [], outputs: [], guards: [], transitions: [] },
+    ],
+  }
+
+  beforeEach(() => {
+    global.fetch = vi.fn(async (url: string) => {
+      if (url === `/api/workflows/${NAME}?root=${encodeURIComponent(ROOT)}`) {
+        return new Response(JSON.stringify(SUMMARY_WF), { status: 200 })
+      }
+      throw new Error(`unexpected fetch ${url}`)
+    }) as unknown as typeof fetch
+  })
+
+  it('右栏「摘要」计数正确：3 阶段 · 1 复核门（review+confirm 合并计） · 3 个 skills（跨 step 求和）', async () => {
+    renderCanvas()
+    const summary = await screen.findByTestId('side-summary')
+    const rows = summary.querySelectorAll('.side-card__row')
+    expect(rows).toHaveLength(3)
+    expect(rows[0]?.querySelector('.side-card__row-value')?.textContent).toBe('3')
+    expect(rows[1]?.querySelector('.side-card__row-value')?.textContent).toBe('1')
+    expect(rows[2]?.querySelector('.side-card__row-value')?.textContent).toBe('3')
+  })
+
+  it('「复制 JSON」→ 写剪贴板，内容是合法 JSON 且含 steps 数组（与当前 wf 一致）', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    renderCanvas()
+    await screen.findByTestId('side-config-json')
+    // 组件已完整挂载（含 xyflow 的 pan/zoom 初始化，读一次性的 navigator.maxTouchPoints）
+    // 之后才替换 navigator——不影响已经初始化完的画布，只影响本测试接下来点的这一次拷贝。
+    vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } })
+    fireEvent.click(screen.getByTestId('side-copy-json'))
+    await waitFor(() => expect(writeText).toHaveBeenCalled())
+    const copied = writeText.mock.calls[0]![0] as string
+    const parsed = JSON.parse(copied) as { steps: { id: string }[] }
+    expect(Array.isArray(parsed.steps)).toBe(true)
+    expect(parsed.steps.map((s) => s.id)).toEqual(['intake', 'check', 'done'])
+  })
+
+  it('钻入 skill 层后右栏保持不变（数据始终是顶层 wf，不随钻入切换）', async () => {
+    renderCanvas()
+    await screen.findByTestId('side-summary')
+    fireEvent.doubleClick(screen.getByText(/intake/i))
+    await waitFor(() => expect(screen.getByText(/当前：intake/)).toBeInTheDocument())
+    const rows = screen.getByTestId('side-summary').querySelectorAll('.side-card__row')
+    expect(rows[0]?.querySelector('.side-card__row-value')?.textContent).toBe('3')
+    expect(screen.getByTestId('side-config-json')).toBeInTheDocument()
   })
 })

@@ -11,6 +11,7 @@ import { getToken } from '../api/client'
 import { useT } from '../i18n'
 import { invalidateWorkflowRules } from '../model/workflowModel'
 import { Dialog } from '../shell/Dialog'
+import { Icon } from '../shell/Icon'
 import { layoutNodes } from './layout'
 import { StepDetailPanel, type SkillRef, type StepDef } from './StepDetailPanel'
 import { crossfadeStage, revealDialog } from './motion'
@@ -634,6 +635,13 @@ function WorkflowCanvasInner({ root, name, onBack }: WorkflowCanvasProps): JSX.E
   if (loadError) return <p className="view__note view__note--error">{loadError}</p>
   if (!wf) return <p className="view__note">{t('common.loading')}</p>
 
+  // Task 17（spec §3/§4.3）：右栏「生成配置预览」卡的文本与「复制 JSON」按钮共用同一份
+  // JSON.stringify(wf,...)——只算一次，不是分别各调一次。brief 草案原话写的是「含 phases
+  // 数组」，但 WorkflowDef 的真实字段是 steps（phases 是视觉基准 demo 里虚构的示例字段名，
+  // 不是本应用的真实数据形状）——这里如实预览当前 wf，天然含 steps，不伪造一个不存在的
+  // phases 字段。
+  const wfJson = JSON.stringify(wf, null, 2)
+
   return (
     <div className="workflow-canvas" ref={rootRef}>
       <div className="workflow-canvas__toolbar">
@@ -750,31 +758,85 @@ function WorkflowCanvasInner({ root, name, onBack }: WorkflowCanvasProps): JSX.E
         </Dialog>
       )}
 
-      <div className="workflow-canvas__stage" ref={stageRef}>
-        <div data-testid="debug-trigger-connect" ref={debugTriggerRef} style={{ display: 'none' }} />
-        <div data-testid="debug-trigger-delete-nodes" ref={debugDeleteNodesRef} style={{ display: 'none' }} />
-        <div data-testid="debug-trigger-delete-edges" ref={debugDeleteEdgesRef} style={{ display: 'none' }} />
-        <ReactFlow
-          nodes={nodes}
-          edges={edges}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          onConnect={onConnect}
-          onNodesDelete={onNodesDelete}
-          onEdgesDelete={onEdgesDelete}
-          onNodeClick={onNodeClick}
-          onNodeDoubleClick={onNodeDoubleClick}
-        >
-          <Background />
-          <Controls />
-        </ReactFlow>
-        {!drillStepId && selectedStep && (
-          <StepDetailPanel
-            step={selectedStep}
-            onChange={(next) => setWf((prev) => (prev ? { ...prev, steps: prev.steps.map((s) => (s.id === next.id ? next : s)) } : prev))}
-            onClose={() => setSelectedStepId(null)}
-          />
-        )}
+      <div className="view-split">
+        <div className="view-split__main">
+          <div className="workflow-canvas__stage" ref={stageRef}>
+            <div data-testid="debug-trigger-connect" ref={debugTriggerRef} style={{ display: 'none' }} />
+            <div data-testid="debug-trigger-delete-nodes" ref={debugDeleteNodesRef} style={{ display: 'none' }} />
+            <div data-testid="debug-trigger-delete-edges" ref={debugDeleteEdgesRef} style={{ display: 'none' }} />
+            <ReactFlow
+              nodes={nodes}
+              edges={edges}
+              onNodesChange={onNodesChange}
+              onEdgesChange={onEdgesChange}
+              onConnect={onConnect}
+              onNodesDelete={onNodesDelete}
+              onEdgesDelete={onEdgesDelete}
+              onNodeClick={onNodeClick}
+              onNodeDoubleClick={onNodeDoubleClick}
+            >
+              <Background />
+              <Controls />
+            </ReactFlow>
+            {!drillStepId && selectedStep && (
+              <StepDetailPanel
+                step={selectedStep}
+                onChange={(next) => setWf((prev) => (prev ? { ...prev, steps: prev.steps.map((s) => (s.id === next.id ? next : s)) } : prev))}
+                onClose={() => setSelectedStepId(null)}
+              />
+            )}
+          </div>
+        </div>
+
+        {/* Task 17（spec §3/§4.3）：右栏摘要卡——钻入态（drillStepId 非空）右栏原样保持，数据
+            始终读顶层 wf（steps/gate/skills 计数与 JSON 预览都不随钻入切换），不是另起一份
+            "当前视图层"的统计口径。 */}
+        <aside className="side-col">
+          <section className="side-card">
+            <div className="side-card__head">
+              <Icon name="layers" size={14} />
+              <b>{t('side.summary_title')}</b>
+            </div>
+            <div className="side-card__body" data-testid="side-summary">
+              <div className="side-card__row">
+                <span className="side-card__row-icon"><Icon name="layers" size={13} /></span>
+                <span className="side-card__row-label">{t('side.summary_phases')}</span>
+                <span className="side-card__row-value">{wf.steps.length}</span>
+              </div>
+              <div className="side-card__row">
+                <span className="side-card__row-icon"><Icon name="gate" size={13} /></span>
+                <span className="side-card__row-label">{t('side.summary_gates')}</span>
+                <span className="side-card__row-value">{wf.steps.filter((s) => s.gate).length}</span>
+              </div>
+              <div className="side-card__row">
+                <span className="side-card__row-icon"><Icon name="flow" size={13} /></span>
+                <span className="side-card__row-label">{t('side.summary_skills')}</span>
+                <span className="side-card__row-value">{wf.steps.reduce((n, s) => n + s.skills.length, 0)}</span>
+              </div>
+            </div>
+          </section>
+
+          <section className="side-card">
+            <div className="side-card__head">
+              <Icon name="doc" size={14} />
+              <b>{t('side.config_title')}</b>
+              {/* canvas 无 onToast prop（见文件头/任务报告的判断记录）：只拷贝，不弹轻提示——
+                  避免为了一个拷贝按钮新开一条 App 级 toast 布线，或借用语义不符的保存状态行。 */}
+              <button
+                type="button"
+                className="btn btn--ghost side-card__head-action"
+                data-testid="side-copy-json"
+                onClick={() => { void navigator.clipboard?.writeText(wfJson) }}
+              >
+                <Icon name="copy" size={13} />
+                {t('side.copy_json')}
+              </button>
+            </div>
+            <div className="side-card__code">
+              <pre data-testid="side-config-json">{wfJson}</pre>
+            </div>
+          </section>
+        </aside>
       </div>
     </div>
   )

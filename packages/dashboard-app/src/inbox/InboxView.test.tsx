@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { act, render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { I18nProvider } from '../i18n'
 import { InboxView } from './InboxView'
@@ -7,6 +7,10 @@ import { makeChange, makeProject, makeSnapshot } from '../testkit'
 
 beforeEach(() => {
   localStorage.clear()
+})
+
+afterEach(() => {
+  vi.unstubAllGlobals()
 })
 
 const REL_RULES = rulesFromDef({
@@ -294,5 +298,67 @@ describe('InboxView 聚合语境（currentRoot=""，Task 8/G19③ 前半）', ()
     expect(screen.getByTestId('inbox-quick-verify-pass')).toBeInTheDocument()
     expect(screen.getByTestId('inbox-quick-verify-fail')).toBeInTheDocument()
     expect(screen.getByTestId('inbox-quick-shipped')).toBeInTheDocument()
+  })
+})
+
+/**
+ * 右栏摘要卡（Task 17，spec §3 布局骨架收口件）：InboxView 增 sticky 右栏——「项目在制」卡
+ * （数据 = snapshot.projects 里 ok 项目的 changes.length，聚合语境逐项目行/非聚合语境当前
+ * 项目一行；故意不等于 inbox 卡数——一个项目可以有非 gate 的 change，这些也算"在制"）
+ * + 选中 change 时「关联产物」卡（artifactChips 复用，速览定位，与 ChangeDetailCard 产物区
+ * 共享同一份数据源不冲突：右栏是速览、详情卡是全景）。空态（无选中）产物卡不渲染。
+ */
+describe('InboxView 右栏摘要卡（Task 17，spec §3 布局骨架收口）', () => {
+  const aggSnap = makeSnapshot([
+    makeProject('/repo-a', [
+      makeChange('a-verify', 'verify', { updated_at: '2026-07-02T00:00:00Z' }),
+      makeChange('a-build', 'build', { updated_at: '2026-07-01T00:00:00Z' }),
+    ]),
+    makeProject('/repo-b', [
+      makeChange('b-review', 'review', { updated_at: '2026-07-01T00:00:00Z', fields: { workflow: 'release-train' } }),
+    ]),
+  ])
+  const AGG_RULES = new Map<string, WorkflowRules>([
+    [rulesKey('/repo-a', 'default'), DEFAULT_RULES],
+    [rulesKey('/repo-b', 'default'), DEFAULT_RULES],
+    [rulesKey('/repo-b', 'release-train'), REL_RULES],
+  ])
+
+  it('聚合语境（currentRoot=""）→ 右栏「项目在制」逐项目行，计数=该项目 changes.length（非 inbox 卡数）', () => {
+    renderInbox({ snapshot: aggSnap, currentRoot: '', rulesByKey: AGG_RULES })
+    const rows = screen.getByTestId('side-projects').querySelectorAll('.side-card__row')
+    expect(rows).toHaveLength(2)
+    // /repo-a 有 2 张 change（a-verify 是 gate 卡，a-build 不是——"项目在制"数的是该项目全部
+    // change，不是只数 inbox 卡，否则这里会错误显示 1）；/repo-b 有 1 张。
+    expect(rows[0]?.querySelector('.side-card__row-label')?.textContent).toBe('repo-a')
+    expect(rows[0]?.querySelector('.side-card__row-value')?.textContent).toBe('2')
+    expect(rows[1]?.querySelector('.side-card__row-label')?.textContent).toBe('repo-b')
+    expect(rows[1]?.querySelector('.side-card__row-value')?.textContent).toBe('1')
+  })
+
+  it('非聚合语境 → 右栏只出当前项目一行；选中一张有产物字段的 change → 右栏「关联产物」出现且拷贝调 clipboard', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } })
+    renderInbox({
+      snapshot: makeSnapshot([
+        makeProject('/repo', [
+          makeChange('login-flow', 'explore', {
+            fields: { design_doc: 'docs/specs/login-flow.md', plan: 'docs/plans/login-flow.md' },
+          }),
+        ]),
+      ]),
+    })
+    const projectRows = screen.getByTestId('side-projects').querySelectorAll('.side-card__row')
+    expect(projectRows).toHaveLength(1)
+    expect(projectRows[0]?.querySelector('.side-card__row-value')?.textContent).toBe('1')
+    expect(screen.queryByTestId('side-artifacts')).toBeNull()
+
+    fireEvent.click(screen.getByTestId('inbox-card'))
+    const artifactRows = screen.getByTestId('side-artifacts').querySelectorAll('.side-card__file')
+    expect(artifactRows).toHaveLength(2)
+    expect(artifactRows[0]?.querySelector('.side-card__file-val')?.textContent).toBe('docs/specs/login-flow.md')
+
+    fireEvent.click(screen.getByTestId('side-artifact-copy-design_doc'))
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('docs/specs/login-flow.md'))
   })
 })
