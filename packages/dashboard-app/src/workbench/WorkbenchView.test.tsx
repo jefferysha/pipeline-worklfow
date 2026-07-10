@@ -8,7 +8,7 @@ const ROOT = '/tmp/proj-a'
 
 // T12 fixture：对照 design-demos/v5-progress-workbench.html 的 release-train 三阶段示例，
 // 但形状是真实 server 契约（GET /api/workflows/:name 的 { name, steps: StepDef[] }，同
-// WorkflowEditorView.test.tsx 顶层 fixture 一致）。draft 带 3 个技能（验证 chips 截断 +N）、
+// 旧 workflow 列表页测试（T18 已退役） 顶层 fixture 一致）。draft 带 3 个技能（验证 chips 截断 +N）、
 // review 是复核门、ship 带 2 个产出（验证摘要行计数）。
 const RELEASE_TRAIN = {
   name: 'release-train',
@@ -86,7 +86,7 @@ let loopRows: unknown[]
 
 beforeEach(() => {
   localStorage.clear()
-  invalidateWorkflowRules() // 模块级 rules 缓存跨用例清空（同 WorkflowEditorView.test.tsx 既有先例）
+  invalidateWorkflowRules() // 模块级 rules 缓存跨用例清空（同 旧 workflow 列表页测试（T18 已退役） 既有先例）
   loopRows = []
   global.fetch = vi.fn(async (url: string, opts?: RequestInit) => {
     if (url === `/api/workflows?root=${encodeURIComponent(ROOT)}`) {
@@ -332,7 +332,7 @@ describe('WorkbenchView T13 编辑 → 保存（验收①）', () => {
   })
 })
 
-// 验收②后半：保存成功 → (root,name) 规则缓存失效（同 WorkflowCanvas.test.tsx 评审 P0-4 的
+// 验收②后半：保存成功 → (root,name) 规则缓存失效（同 旧画布编辑器测试（T18 已退役） 评审 P0-4 的
 // RulesProbe 内容断言法：探针先灌 v1 缓存，保存后重挂探针，真重拉才能看到 v2 的 4 个 step）。
 function RulesProbe(): JSX.Element {
   const { rules } = useWorkflowRules(ROOT, ['release-train'])

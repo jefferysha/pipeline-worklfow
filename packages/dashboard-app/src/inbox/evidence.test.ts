@@ -1,7 +1,7 @@
 /**
  * gateEvidence（评审 P0-1 核心）—— 真机评审证实 snapshot 每帧送 38 个字段前端只渲染 6 个，
  * verify 门放行要看的 verify_result/agent_review_result/codex_review_result/verification_report/
- * build_sha 全在 ChangeSnapshot.fields 里从未被渲染。本测试锁定"当前相位该出示哪些证据"的映射
+ * build_sha 全在 ChangeSnapshot.fields 里从未被渲染。本测试锁定"当前阶段该出示哪些证据"的映射
  * 规则（见 .superpowers/sdd/task-6-brief.md），Task 7（详情卡+行内 chips）直接消费这份契约。
  */
 import { describe, expect, it } from 'vitest'
@@ -110,7 +110,7 @@ describe('gateEvidence（gate 证据映射纯函数）', () => {
     expect(gateEvidence(c, CUSTOM_RULES)).toEqual(expected)
   })
 
-  it('相位不在映射表 + rules 缺失 + 字段全空 → 返回 []', () => {
+  it('阶段不在映射表 + rules 缺失 + 字段全空 → 返回 []', () => {
     const c = makeChange('c', 'open', { fields: {} })
     expect(gateEvidence(c, undefined)).toEqual([])
   })

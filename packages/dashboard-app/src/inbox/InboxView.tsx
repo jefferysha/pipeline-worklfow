@@ -3,11 +3,11 @@ import { useT } from '../i18n'
 import type { ChangeSnapshot, Snapshot } from '../types'
 import { rulesKey, type WorkflowRules } from '../model/workflowModel'
 import { changeProgressState, type ProgressState } from '../model/progressModel'
-import { legalTargets, plannedTransition, type PlannedTransition } from '../board/events'
+import { legalTargets, plannedTransition, type PlannedTransition } from '../model/events'
 import { shortTime } from '../model/time'
 import { Dialog } from '../shell/Dialog'
 import { Icon } from '../shell/Icon'
-import { revealList } from '../workflow/motion'
+import { revealList } from '../shared/motion'
 import { TaskDetail } from '../shared/TaskDetail'
 import { postAfkDismiss, postAfkRetry } from '../api/client'
 import { gateEvidence, VERIFY_STATUS_FIELDS, type EvidenceChip } from './evidence'
@@ -153,7 +153,7 @@ function itemKey(it: InboxItem): string {
  * 默认开首行详情；点行切换；Esc/✕ 收起出占位卡；Enter 开关 kbd 焦点行；j/k 移焦点环
  * （scrollIntoView 跟随）。动作条按计划决议 #13 归宿主：gate 行放行/打回走既有 transition
  * 管线（回退二次确认 + busy 守卫），失败行重试/放弃走 afk 端点（postAfkRetry/postAfkDismiss，
- * dismiss 端点由 T11 落地）。旧 ChangeDetailCard 仍被 BoardView 消费，T18 统一退役。
+ * dismiss 端点由 T11 落地）。旧 ChangeDetailCard 与旧看板视图已随 T18 退役删除。
  * requirement 数据面：change fields 无「任务一句话」字段——不传 prop，TaskDetail 缺省整节
  * 不渲染（读组件缺省行为，不伪造需求文案）。
  */

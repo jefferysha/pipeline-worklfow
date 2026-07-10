@@ -3,7 +3,7 @@
  * 真 fetch server 集成（GOAL C9 真实证据链）——起真 dashboard server 实例：
  *   真 createStateStore/createFlowEngine/loadManifest（kernel）+ 真临时 fs + 真 node:http + 真 token。
  * 断言：GET /api/snapshot 真形状喂进本前端 selectInbox 选卡正确；POST transition 带 token 真改盘 →
- * 快照真变、change 真进入复核相位、收件箱据此真出现该卡。非 mock 返回。
+ * 快照真变、change 真进入复核阶段、收件箱据此真出现该卡。非 mock 返回。
  */
 import { describe, it, expect, afterAll } from 'vitest'
 import { mkdtemp } from 'node:fs/promises'
@@ -65,7 +65,7 @@ describe('真 server /api/snapshot → 前端 selectInbox', () => {
     expect(snap.projects.map((p) => p.root)).toContain(started.root)
     const demo = snap.projects[0]!.changes.find((c) => c.name === 'demo')
     expect(demo?.phase).toBe('open')
-    // open 非复核相位 → 收件箱空
+    // open 非复核阶段 → 收件箱空
     expect(selectInbox(snap, started.root, RULES)).toEqual([])
   })
 

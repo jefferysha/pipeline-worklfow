@@ -1,11 +1,12 @@
 /**
- * 看板拖拽换列 → 转换 event 的规划（纯函数，G17 泛化版）。
- * 规则来源不再写死 default 七相位常量，改为注入 WorkflowRules（default 走
+ * 阶段间转换 event 的规划（纯函数，G17 泛化版；T18 自 board/ 迁入 model/——board 视图退役，
+ * 消费方现为 InboxView / ProgressView / shared/TaskDetail）。
+ * 规则来源不写死 default 七阶段常量，改为注入 WorkflowRules（default 走
  * workflowModel.DEFAULT_RULES，自定义 workflow 走 API 拉取的映射）——每张卡按
  * 它自己所属 workflow 的转换图判定合法性与 event 名。
  * 回退语义：目标 step 在 rules.steps 里的序号 < 当前 step 序号 = 回退边（UI 需二次确认）。
  */
-import type { WorkflowRules } from '../model/workflowModel'
+import type { WorkflowRules } from './workflowModel'
 
 export interface PlannedTransition {
   event: string

@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { getToken } from '../api/client'
 import { useT } from '../i18n'
-import { MANDATORY_SKILLS, MATRIX_TRACKS } from '../settings/data'
-import { SkillTransferModal } from '../settings/SkillTransferModal'
+import { MANDATORY_SKILLS, MATRIX_TRACKS } from './data'
+import { SkillTransferModal } from './SkillTransferModal'
 import type { WbSkillRef, WbStepDef } from './WorkbenchView'
 
 /**
@@ -18,11 +18,11 @@ import type { WbSkillRef, WbStepDef } from './WorkbenchView'
  *   见 WorkbenchView.readSaveErrors），本组件不自造 DAG 校验逻辑（skillDag.ts 纪律）。
  *
  * · default workflow（决议 #6 穿梭框能力迁移）：轨道 tab（pm/frontend/backend）× 当前
- *   阶段的 manifest 强制技能（数据 GET /api/config，探测逻辑自 SettingsView 直接迁移：
+ *   阶段的 manifest 强制技能（数据 GET /api/config，探测逻辑自 旧设置视图 直接迁移：
  *   探测成功 = 可编辑，编辑经 SkillTransferModal 穿梭框 + POST /api/config/mandatory-skills
  *   真写 templates/manifest.yaml；探测不到（旧 server / 网络失败）= 只读预览，静态镜像
- *   settings/data.ts::MANDATORY_SKILLS 兜底，不谎报能力。in-flight 保存守卫（savingKeyRef）
- *   同样自 SettingsView 迁移——同 cell 在途保存时重复保存/取消整体 no-op。
+ *   workbench/data.ts::MANDATORY_SKILLS 兜底，不谎报能力。in-flight 保存守卫（savingKeyRef）
+ *   同样自 旧设置视图 迁移——同 cell 在途保存时重复保存/取消整体 no-op。
  *   注意：default 模式忽略 readonly prop——workflow 定义只读（server 400 已挡）不等于
  *   manifest 强制技能矩阵只读，两者是不同的数据面。
  *
@@ -108,7 +108,7 @@ function buildChains(skills: readonly WbSkillRef[]): ChainProjection {
 
 // ── default 模式：manifest 强制技能矩阵的模块级探测缓存 ──
 // StepEditor 按 (workflow, step) 复合 key 挂载，切阶段即重挂——探测结果放模块级，
-// 避免每次切阶段都重打一发 GET /api/config（SettingsView 的 fetchedConfigRef 等价物，
+// 避免每次切阶段都重打一发 GET /api/config（旧设置视图 的 fetchedConfigRef 等价物，
 // 但要跨 remount 存活）。保存成功后同步写缓存，重挂读到的就是新值。
 interface MandatoryConfig {
   capable: boolean
@@ -143,7 +143,7 @@ function loadMandatoryConfig(): Promise<MandatoryConfig> {
   return cfgInflight
 }
 
-/** POST /api/config/mandatory-skills 的成功响应体形状（自 SettingsView 迁移）。 */
+/** POST /api/config/mandatory-skills 的成功响应体形状（自 旧设置视图 迁移）。 */
 interface MandatorySkillsPostResponse {
   ok?: boolean
   error?: string
@@ -175,7 +175,7 @@ export function SkillChain({ step, workflow = '', readonly = false, onChange }: 
   const [cfg, setCfg] = useState<MandatoryConfig | null>(cfgCache)
   const [editing, setEditing] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
-  // 自 SettingsView 迁移的 in-flight 保存守卫：ref 而非 state——只在回调里同步读，
+  // 自 旧设置视图 迁移的 in-flight 保存守卫：ref 而非 state——只在回调里同步读，
   // 不参与渲染，保证判断即时生效。
   const savingKeyRef = useRef<string | null>(null)
 
@@ -234,7 +234,7 @@ export function SkillChain({ step, workflow = '', readonly = false, onChange }: 
     setDep('')
   }
 
-  // ── default 模式动作（探测/保存逻辑自 SettingsView saveCellWith/requestSave/requestCancel 迁移）──
+  // ── default 模式动作（探测/保存逻辑自 旧设置视图 saveCellWith/requestSave/requestCancel 迁移）──
 
   const phase = step.id
   function effectiveSkills(tr: string): string[] {

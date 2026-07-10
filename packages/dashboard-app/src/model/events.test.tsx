@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { legalTargets, plannedTransition } from './events'
-import { DEFAULT_RULES, rulesFromDef } from '../model/workflowModel'
-import type { StepDef } from '../workflow/StepDetailPanel'
+import { DEFAULT_RULES, rulesFromDef, type StepDef } from './workflowModel'
 
 /** 自定义三步 workflow：draft →(approved) review →(shipped) ship；review 还留一条回 draft 的返工边。 */
 const REL_RULES = rulesFromDef({
@@ -37,11 +36,11 @@ describe('plannedTransition（default 规则下行为与旧常量版逐字一致
     expect(plannedTransition(DEFAULT_RULES, 'open', 'verify')).toBeNull()
   })
 
-  it('同相位 → null（no-op 回弹）', () => {
+  it('同阶段 → null（no-op 回弹）', () => {
     expect(plannedTransition(DEFAULT_RULES, 'build', 'build')).toBeNull()
   })
 
-  it('未知相位 → null', () => {
+  it('未知阶段 → null', () => {
     expect(plannedTransition(DEFAULT_RULES, 'bogus', 'build')).toBeNull()
     expect(plannedTransition(DEFAULT_RULES, 'build', 'bogus')).toBeNull()
   })

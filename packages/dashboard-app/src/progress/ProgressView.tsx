@@ -5,10 +5,10 @@ import { useT } from '../i18n'
 import type { ChangeSnapshot, Snapshot } from '../types'
 import { isPhase } from '../types'
 import type { WorkflowRules } from '../model/workflowModel'
-import { plannedTransition, type PlannedTransition } from '../board/events'
+import { plannedTransition, type PlannedTransition } from '../model/events'
 import { getToken, postTransition } from '../api/client'
 import { TaskDetail } from '../shared/TaskDetail'
-import { useAfkLog } from '../afk/useAfkLog'
+import { useAfkLog } from './useAfkLog'
 import {
   PROGRESS_STATES,
   missingGateArtifacts,

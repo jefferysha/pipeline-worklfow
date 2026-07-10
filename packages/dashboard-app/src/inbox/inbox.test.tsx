@@ -47,9 +47,9 @@ const RULES = new Map<string, WorkflowRules>([
 ])
 
 /**
- * T7 准入修订（决策 B）：判据从「gate 相位就进」改为「人现在能拍板」——与 progressModel
+ * T7 准入修订（决策 B）：判据从「gate 阶段就进」改为「人现在能拍板」——与 progressModel
  * 五态判定共享同源谓词（state ∈ {gate, failed}），缺产出的 gate 卡判给进度「等 agent」不进
- * 收件箱。既有 G17 测试的意图迁移：原「门相位在等」用例补齐证据字段后期望不变；新增「缺产出
+ * 收件箱。既有 G17 测试的意图迁移：原「门阶段在等」用例补齐证据字段后期望不变；新增「缺产出
  * 不进」「automation paused/failed 进、running/queued 不进」两组判据。
  */
 describe('isAwaitingDecision（T7 准入：人现在能拍板）', () => {
@@ -59,7 +59,7 @@ describe('isAwaitingDecision（T7 准入：人现在能拍板）', () => {
     expect(isAwaitingDecision(makeChange('c', 'verify', { fields: { ...VERIFY_OK } }), DEFAULT_RULES)).toBe(true)
   })
 
-  it('default：门相位但缺产出/证据 → 不在等（判给进度「等 agent 补产出」）', () => {
+  it('default：门阶段但缺产出/证据 → 不在等（判给进度「等 agent 补产出」）', () => {
     expect(isAwaitingDecision(makeChange('c', 'explore'), DEFAULT_RULES)).toBe(false)
     expect(isAwaitingDecision(makeChange('c', 'spec', { fields: { design_doc: 'docs/d.md' } }), DEFAULT_RULES)).toBe(false)
     expect(isAwaitingDecision(makeChange('c', 'verify', { fields: { ...VERIFY_OK, codex_review_result: 'pending' } }), DEFAULT_RULES)).toBe(false)
@@ -69,7 +69,7 @@ describe('isAwaitingDecision（T7 准入：人现在能拍板）', () => {
     expect(isAwaitingDecision(makeChange('c', 'verify', { fields: { ...VERIFY_OK } }), DEFAULT_RULES)).toBe(true)
   })
 
-  it('default：open/build/ship/archive 非门相位不在等我决定', () => {
+  it('default：open/build/ship/archive 非门阶段不在等我决定', () => {
     for (const phase of ['open', 'build', 'ship', 'archive']) {
       expect(isAwaitingDecision(makeChange('c', phase), DEFAULT_RULES)).toBe(false)
     }
@@ -91,13 +91,13 @@ describe('isAwaitingDecision（T7 准入：人现在能拍板）', () => {
     expect(isAwaitingDecision(makeChange('c', 'review', { fields: { release_notes: 'notes.md' } }), REL_RULES_GUARDED)).toBe(true)
   })
 
-  it('automation ∈ {paused, failed, conflict} → 在等（不论相位，人要拍板放行/重试/放弃）', () => {
+  it('automation ∈ {paused, failed, conflict} → 在等（不论阶段，人要拍板放行/重试/放弃）', () => {
     expect(isAwaitingDecision(makeChange('c', 'build', { fields: { automation: 'paused' } }), DEFAULT_RULES)).toBe(true)
     expect(isAwaitingDecision(makeChange('c', 'build', { fields: { automation: 'failed' } }), DEFAULT_RULES)).toBe(true)
     expect(isAwaitingDecision(makeChange('c', 'build', { fields: { automation: 'conflict' } }), DEFAULT_RULES)).toBe(true)
   })
 
-  it('automation ∈ {running, scheduled, queued} → 不在等（agent 在飞，门相位证据齐也不进）', () => {
+  it('automation ∈ {running, scheduled, queued} → 不在等（agent 在飞，门阶段证据齐也不进）', () => {
     for (const automation of ['running', 'scheduled', 'queued']) {
       expect(isAwaitingDecision(makeChange('c', 'verify', { fields: { ...VERIFY_OK, automation } }), DEFAULT_RULES)).toBe(false)
     }
@@ -234,7 +234,7 @@ describe('selectInbox 聚合语境（currentRoot=""，Task 8/G19③ 前半）', 
 })
 
 describe('decisionKind / projectName', () => {
-  it('decisionKind：default 三相位保留细分文案 key，自定义 step 一律 other', () => {
+  it('decisionKind：default 三阶段保留细分文案 key，自定义 step 一律 other', () => {
     expect(decisionKind(makeChange('c', 'explore'))).toBe('explore')
     expect(decisionKind(makeChange('c', 'spec'))).toBe('spec')
     expect(decisionKind(makeChange('c', 'verify'))).toBe('verify')

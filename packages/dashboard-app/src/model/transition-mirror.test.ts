@@ -22,7 +22,7 @@ describe('单源守卫 —— dashboard transition 镜像 == kernel 单源（#25
   })
 
   it('TRANSITIONS 合法边集与 kernel 单源一致（每 from 的 to 集合相等）', () => {
-    // 从 kernel 单源派生每个 from 相位的合法目标集
+    // 从 kernel 单源派生每个 from 阶段的合法目标集
     const kernelEdges: Record<string, string[]> = {}
     for (const edge of Object.values(TRANSITION_EVENTS as Record<string, EventEdge>)) {
       ;(kernelEdges[edge.from] ??= []).push(edge.to)

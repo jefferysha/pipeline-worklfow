@@ -1,5 +1,6 @@
 /**
- * Settings 静态数据 —— 相位轴 + 相位×轨道强制/推荐技能矩阵。
+ * 工作台静态数据（T18 自 settings/ 迁入——旧设置视图 退役，消费方为 workbench/SkillChain）
+ * —— 阶段轴 + 阶段×轨道强制/推荐技能矩阵。
  * 均为 templates/manifest.yaml（单一真相源）的前端只读镜像；写回待 M3 后续 config 写端点。
  */
 import { PHASES, REVIEW_PHASES, TRACKS, TRANSITIONS } from '../types'

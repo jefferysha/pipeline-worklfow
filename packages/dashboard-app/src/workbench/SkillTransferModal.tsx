@@ -105,10 +105,10 @@ export function SkillTransferModal({ selected, onSave, onCancel }: SkillTransfer
     // 更名 `.transfer`，styles.ts 补齐 `.transfer*` 全套真样式（双栏布局/条目 hover/选中态/
     // 搜索框，token 化、跟随深浅色主题）。交互补齐"点击即移动"：左栏条目点击 → moveToChosen，
     // 右栏条目点击 → moveToAvailable。条目元素从 <div> 换成 <button type="button">——对齐
-    // 仓库既有"可点击列表项 = 原生 button"惯例（WorkflowCanvas.tsx 的 stage-card、
-    // AfkWorkbench.tsx 的 afk-item 先例），顺带获得键盘 Enter/Space 可达性（此前纯 div 键盘
+    // 仓库既有"可点击列表项 = 原生 button"惯例（旧画布编辑器（T18 已退役） 的 stage-card、
+    // 旧 AFK 工作台（T18 已退役） 的 afk-item 先例），顺带获得键盘 Enter/Space 可达性（此前纯 div 键盘
     // 完全不可达，仅能拖拽）。Save/Cancel 补 .btn/.btn--ghost（对齐其余全部 Dialog actions
-    // 的既有用法，如 NewChangeDialog/BoardView 确认框），此前是零样式裸 <button>。
+    // 的既有用法，如 NewChangeDialog/旧看板视图 确认框），此前是零样式裸 <button>。
     <Dialog
       title={t('skill_transfer.title')}
       onClose={onCancel}

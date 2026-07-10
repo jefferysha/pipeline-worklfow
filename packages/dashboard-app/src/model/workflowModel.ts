@@ -12,7 +12,19 @@
  */
 import { useEffect, useMemo, useState } from 'react'
 import { EVENT_BY_EDGE, PHASES, REVIEW_PHASES, TRANSITIONS } from '../types'
-import type { StepDef } from '../workflow/StepDetailPanel'
+
+// ── kernel WorkflowDef/StepDef 的 JSON 形状（跨 HTTP 边界手抄，不 import kernel 类型只为了
+//    编译期形状——原单一真相源 workflow/StepDetailPanel.tsx 随 T18 退役，声明迁入本模块；
+//    workbench/WorkbenchView.tsx 的 Wb* 系列是同形状的视图层手抄，两处各自消费）──
+export interface FieldRef { field: string; type: 'string' | 'file_path' | 'boolean' }
+export interface SkillRef { id: string; depends_on?: string[] }
+export type GuardConfig = { type: 'tasks-at-least'; n: number } | { type: 'nonempty-output' }
+export interface StepTransition { event: string; to: string }
+export interface StepDef {
+  id: string; label: string; gate: 'review' | 'confirm' | null
+  skills: SkillRef[]; inputs: FieldRef[]; outputs: FieldRef[]
+  guards: GuardConfig[]; transitions: StepTransition[]
+}
 
 export interface WorkflowRules {
   steps: readonly string[]

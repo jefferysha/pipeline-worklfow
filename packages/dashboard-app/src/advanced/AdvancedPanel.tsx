@@ -18,7 +18,7 @@ const PANELS: Partial<Record<(typeof TOOLS)[number]['key'], () => JSX.Element>> 
 
 /**
  * 高级 / 调试工具（病灶③解法）——traffic/runtime 从一级导航降级为默认折叠入口
- *（afk 与 loops 原也在此列：afk 于 Task 8 升格为一级导航 <AfkWorkbench/>；loops 于
+ *（afk 与 loops 原也在此列：afk 于 Task 8 升格为一级导航 <旧 AFK 工作台/>；loops 于
  * GOAL.md F1 收尾升格为工作台下拉里的一级导航 <LoopsPanel/>——两者均不再在这里重复渲染
  * 只读摘要，避免两份视图让用户困惑哪个是准的）。
  * 能力声明驱动（GOAL B6，不谎报）：

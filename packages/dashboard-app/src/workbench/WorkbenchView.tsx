@@ -6,7 +6,7 @@ import { useT } from '../i18n'
 import { DEFAULT_RULES, invalidateWorkflowRules, rulesKey, useWorkflowRulesMulti } from '../model/workflowModel'
 import { Dialog } from '../shell/Dialog'
 import { EVENT_BY_EDGE, PHASES, REVIEW_PHASES, TRANSITIONS, isPhase } from '../types'
-import { revealDialog, revealList } from '../workflow/motion'
+import { revealDialog, revealList } from '../shared/motion'
 import { HookTimeline, useHooksConfig } from './HookTimeline'
 import { LoopCard, useLoops } from './LoopCard'
 import { StepEditor } from './StepEditor'
@@ -20,7 +20,7 @@ gsap.registerPlugin(useGSAP)
  * 交互真相源 design-demos/v5-progress-workbench.html workbench 段（六轮验收定稿）；
  * 视觉 token 沿 v4 不变（styles.ts wb- 区块）。
  *
- * React 重写纪律（决议 #1 前置）：不搬 @xyflow 概念——layout.ts/画布坐标全不复用；数据读写走
+ * React 重写纪律（决议 #1 前置）：不搬 旧画布库概念——layout.ts/画布坐标全不复用；数据读写走
  * 既有 GET /api/workflows(+/:name) 与 model/workflowModel（下拉菜单的阶段计数经
  * useWorkflowRulesMulti 按 rulesKey(root,name) 索引，不自己拼缓存键）。
  *
@@ -30,10 +30,10 @@ gsap.registerPlugin(useGSAP)
  *   · 「+ 添加阶段」按钮仍禁用态占位（阶段增删不在 T13 范围）；
  *   · 摘要卡「钩子」行 '—' 占位（T5 数据面 + T15 接线后出真数）；
  *   · 「自动运行(Loop)」卡 = T16。
- * 过渡期与旧 WorkflowEditorView 并存（不挂导航，T17 切换、T18 退役旧视图）。
+ * 过渡期与旧 旧 workflow 列表页 并存（不挂导航，T17 切换、T18 退役旧视图）。
  *
  * T13 编辑真写回：def 本身就是编辑草稿（StepEditor 每次编辑交回完整 step，这里按 id 换入）；
- * 脏守卫沿 WorkflowCanvas Task 15 四件套先例——快照存 ref（defSnapshotRef，load/save 成功时
+ * 脏守卫沿 旧画布编辑器 Task 15 四件套先例——快照存 ref（defSnapshotRef，load/save 成功时
  * 写入一次）、dirty 每次渲染由「当前 def vs 快照」重算（故意不 useMemo，ref 变化对记忆化不可
  * 见）、守卫函数不 useCallback（会冻结 dirty 快照）、保存成功推进快照即清脏。保存走既有
  * POST /api/workflows/:name，成功后 invalidateWorkflowRules(root,name)（spec §2.1 缓存失效
@@ -85,7 +85,7 @@ const DEFAULT_DEF: WbWorkflowDef = buildDefaultDef()
 
 interface ErrorBody { error?: string }
 
-/** 非 2xx 响应尽量读出 server 的 { error } 文案（同 WorkflowEditorView.tsx 的既有模式）。 */
+/** 非 2xx 响应尽量读出 server 的 { error } 文案（同 旧 workflow 列表页（T18 已退役） 的既有模式）。 */
 async function readErrorDetail(res: Response): Promise<string> {
   try {
     const body = (await res.json()) as ErrorBody
@@ -145,7 +145,7 @@ export function WorkbenchView({ root, onToggleError }: WorkbenchViewProps): JSX.
   const trackRef = useRef<HTMLDivElement>(null)
   const mmRef = useRef<gsap.MatchMedia | null>(null)
   const tlRef = useRef<gsap.core.Timeline | null>(null)
-  // T13 脏状态四件套之一（WorkflowCanvas Task 15 先例）：「最近一次加载/保存成功」的 def 快照
+  // T13 脏状态四件套之一（旧画布编辑器 Task 15 先例）：「最近一次加载/保存成功」的 def 快照
   // 存 ref 不进 state——快照只在 load/save 成功那一刻写入，本身不需要触发渲染；dirty 每次渲染
   // 从「当前 def vs 快照」重算（见下方声明处注释：故意不 useMemo，ref 变化对记忆化不可见）。
   const defSnapshotRef = useRef<string | null>(null)
@@ -225,7 +225,7 @@ export function WorkbenchView({ root, onToggleError }: WorkbenchViewProps): JSX.
   // ── T13 编辑真写回 ──
   const readonlyWf = wfName === 'default'
   // 脏状态四件套之二：每次渲染重算，不做 useMemo（save() 成功只更新 defSnapshotRef 这个 ref、
-  // 不换 def 引用，[def] 依赖的记忆化会继续供 save 之前缓存的 true——WorkflowCanvas Task 15
+  // 不换 def 引用，[def] 依赖的记忆化会继续供 save 之前缓存的 true——旧画布编辑器 Task 15
   // 声明处注释的同一条 React 记忆化限制）。JSON.stringify 在编辑器量级的 def 上开销可忽略。
   const dirty = !readonlyWf && def !== null && defSnapshotRef.current !== null && JSON.stringify(def) !== defSnapshotRef.current
 
@@ -250,7 +250,7 @@ export function WorkbenchView({ root, onToggleError }: WorkbenchViewProps): JSX.
         return
       }
       // spec §2.1：保存成功必须失效 (root,name) 规则缓存——收件箱/进度的下一个消费方才能
-      // 看到新 gate/新阶段（WorkflowCanvas 评审 P0-4 的同一条纪律，接线不遗漏）。
+      // 看到新 gate/新阶段（旧画布编辑器 评审 P0-4 的同一条纪律，接线不遗漏）。
       invalidateWorkflowRules(root, wfName)
       // 四件套之四：快照推进到「刚被 POST 的这份 def」（与请求体同源的闭包值），dirty 随
       // 下一次渲染重算自然清除。
@@ -264,7 +264,7 @@ export function WorkbenchView({ root, onToggleError }: WorkbenchViewProps): JSX.
   }
 
   // 菜单项点击的切换入口。脏状态四件套之三：禁止 useCallback 包裹（冻结 dirty 快照——
-  // BoardView/InboxView closePending 的 busy 冻结教训同款），每次渲染的新鲜闭包正是这里
+  // 旧看板视图/InboxView closePending 的 busy 冻结教训同款），每次渲染的新鲜闭包正是这里
   // 读到最新 dirty 的机制。
   function requestSwitch(name: string): void {
     setMenuOpen(false)
@@ -351,13 +351,13 @@ export function WorkbenchView({ root, onToggleError }: WorkbenchViewProps): JSX.
   // ── stepper 入场（沿 motion.ts 既有词汇；reduced-motion 由 revealList 自身处理）──
   // T13 起 def 就是编辑草稿：依赖收敛为 def?.name（只在切换 workflow/首次载入时重播），
   // 依赖整个 def 会让每次击键都重播全排卡入场——装饰性噪音，不是真实状态变化
-  //（WorkflowEditorView 列表入场依赖 Boolean(names) 的同一条既有纪律）。
+  //（旧 workflow 列表页 列表入场依赖 Boolean(names) 的同一条既有纪律）。
   useGSAP(() => {
     if (def && def.steps.length > 0) revealList('.wb-step')
   }, { scope: rootRef, dependencies: [def?.name] })
 
   // T13：脏切换确认 Dialog 入场（共享 <Dialog> 不对外暴露内部节点，scope 选择器文本寻址——
-  // WorkflowCanvas Task 15 返回确认弹窗的同款既有写法）。
+  // 旧画布编辑器 Task 15 返回确认弹窗的同款既有写法）。
   useGSAP(() => {
     if (pendingSwitch !== null) {
       revealDialog(

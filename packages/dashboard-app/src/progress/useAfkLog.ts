@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useT } from '../i18n'
 
+// T18 自 afk/ 迁入 progress/——旧 AFK 工作台 随 v5 三视图 IA 退役，本 hook 的唯一存活消费方
+// 是 ProgressView（T11 running 行日志尾部）。下文注释里对 旧 AFK 工作台 的引用是历史语境。
+
 /**
  * 轮询间隔（ms）——导出供测试用 `vi.advanceTimersByTimeAsync(AFK_LOG_POLL_INTERVAL_MS)` 精确
  * 对齐，不在测试里重复硬编码这个数字（一改两处同步，容易漂移）。
@@ -13,8 +16,8 @@ interface ErrorBody {
 
 /**
  * 非 2xx 响应尽量读出 server 的 { error } 文案；没有 JSON 体（如纯文本 500）就吞掉，回落调用方
- * 的通用文案。与 AfkWorkbench.tsx 同名私有函数逐字同构的第二份局部拷贝——两个文件各自只用
- * 这一处，故意不跨模块抽取（precedent：BoardView.tsx `rootTail()` 头注"三处都只是这一行，不
+ * 的通用文案。与 旧 AFK 工作台（T18 已退役） 同名私有函数逐字同构的第二份局部拷贝——两个文件各自只用
+ * 这一处，故意不跨模块抽取（precedent：旧看板视图（T18 已退役） `rootTail()` 头注"三处都只是这一行，不
  * 值得为此新增跨模块依赖"的既有判断，这里是同一类判断的第二次应用）。
  */
 async function readErrorDetail(res: Response): Promise<string> {
@@ -30,7 +33,7 @@ async function readErrorDetail(res: Response): Promise<string> {
 export interface UseAfkLogResult {
   /** 随时可渲染的字符串：真实日志内容 / 空日志占位文案 / 错误文案三态合一——评审"错误全部
    *  行内可见"这条纪律依然成立，只是不再单独暴露一个 logError 字段，折进这一个字符串里
-   *  （AfkWorkbench.tsx 里原本的 `logError ? <p className="field__error"> : <pre>` 两分支
+   *  （旧 AFK 工作台（T18 已退役） 里原本的 `logError ? <p className="field__error"> : <pre>` 两分支
    *  因此收敛成一个恒定渲染的 `<pre>{log}</pre>`）。 */
   log: string
   follow: boolean
@@ -44,14 +47,14 @@ export interface UseAfkLogResult {
  * 评审 P0-3「监控不成立」之一：日志此前选中拉一次即永久冻结（无轮询/无刷新钮）——运行中的
  * 任务在 AFK 面板里看起来像是卡死了，用户无从判断它是否还活着。本 hook 补上"自动轮询"与
  * "手动刷新"两条路径；`follow` 复用同一个开关同时管住"要不要继续自动轮询"与消费方
- * （AfkWorkbench）"要不要跟着新内容滚动到底"（跟随尾部）两件事——两者语义上本来就是同一个
+ * （旧 AFK 工作台）"要不要跟着新内容滚动到底"（跟随尾部）两件事——两者语义上本来就是同一个
  * "还在盯着这个任务的尾部实时看"意图，brief 原文措辞如此，不拆成两个开关。
  *
  * 参数签名相对 brief 字面 `(name, status)` 多出的第三个必需参数 `root`：log 端点
  * `GET /api/afk/:name/log?root=` 的 root 在 URL 层面"可省略"（server 端 `?? ''` 兜底为空串），
  * 但省略后落地 `resolvePath('')` = 进程 cwd，几乎不可能命中任何已注册项目 root，实际会 100%
  * 404（`server.ts` 的 `logMatch` 分支：`!dedupeRoots(registry()).includes(resolvePath(root))`
- * → 404 'root 未在机器级项目注册表中'；已读 server 源码核实，非猜测）。AfkWorkbench.tsx 迁移前
+ * → 404 'root 未在机器级项目注册表中'；已读 server 源码核实，非猜测）。旧 AFK 工作台（T18 已退役） 迁移前
  * 的既有实现已经在带 root（`?root=${encodeURIComponent(selected.root)}`），而本任务同时把 AFK
  * 面板从"隐式单项目"改成"卡片各带 root、可跨项目混列"（P0-3 的另一半），更不能省略——两个
  * 不同项目可能有同名 change，仅凭 name 轮询会在切换选中时悄悄拉错项目的日志。

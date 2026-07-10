@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '../i18n'
-import { AFK_LOG_POLL_INTERVAL_MS } from '../afk/useAfkLog'
+import { AFK_LOG_POLL_INTERVAL_MS } from './useAfkLog'
 import { DEFAULT_RULES, rulesFromDef, rulesKey, type WorkflowRules } from '../model/workflowModel'
 import { makeChange, makeProject, makeSnapshot } from '../testkit'
 import type { Snapshot } from '../types'

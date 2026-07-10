@@ -131,7 +131,7 @@ body { margin: 0; }
    按既有 BEM 词汇重命名为 .view-split/.side-col/.side-card*）。宽度收窄到 280px——v4 的
    356px 是给它自己更宽的 1400px 容器算的，本应用 .main 的 max-width:1200px 用不上那么宽。
    窄屏（≤720px，同文件末尾既有断点）右栏下沉到主列下方、撤销 sticky，见文件末尾
-   @media (max-width: 720px) 块。既有视图内容（inbox__list/workflow-canvas__stage 等）
+   @media (max-width: 720px) 块。既有视图内容（inbox__list 等）
    原样作为 .view-split__main 的子节点，不改自身结构。── */
 .view-split { display: flex; align-items: flex-start; gap: 20px; }
 .view-split__main { flex: 1; min-width: 0; }
@@ -237,57 +237,11 @@ button.ev__chip--neutral:hover { border-color: var(--border-2); color: var(--tex
 .detail__copy:hover { color: var(--text); background: var(--card); }
 .detail__foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; padding: 13px 0; }
 
-/* ── 看板：分组（--ink 铭牌）+ 列井 ── */
-.board__group { margin-bottom: 22px; }
-.board__group:last-child { margin-bottom: 4px; }
-.board__group-head { display: flex; align-items: center; gap: 9px; margin-bottom: 10px; background: var(--ink); color: var(--ink-fg); border-radius: var(--radius-sm); padding: 7px 12px; }
-.board__group-caret { border: 0; background: transparent; color: var(--ink-fg); padding: 0 2px; font-size: 11px; cursor: pointer; }
-.board__group-name { font-weight: 700; font-family: var(--mono); font-size: 13px; }
-/* 聚合看板组头「<root 尾段> · <wf>」（Task 11，G19③）：root 段沿用父级 --ink-fg mono，
-   降不透明度做次级信息层次（同 .board__group-meta 的 opacity 惯例），wf 段保持满不透明度主标签。 */
-.board__group-root { opacity: .7; }
-.board__group-meta { font-size: 12px; opacity: .75; }
-.board__group-error { margin: 0 0 10px; padding: 8px 11px; border-radius: 7px; background: var(--red-t); color: var(--red); font-size: 11.5px; font-weight: 600; }
-.board__scroll { overflow-x: auto; padding-bottom: 4px; }
-.board__grid { display: grid; grid-template-columns: repeat(7, minmax(126px, 1fr)); gap: 9px; align-items: start; }
-.board__col { background: var(--fill); border-radius: var(--radius); padding: 8px; display: flex; flex-direction: column; min-height: 108px; transition: opacity .15s ease, box-shadow .15s ease; }
-/* 终审修复批：target（拖拽悬停中的合法落点）此前误用绿（outline+tint），与 spec §1"绿只承担
-   语义、蓝才是唯一激活/选中签名色"的纪律冲突——改蓝系，但与下面 --legal 的蓝 inset ring 用
-   不同手法（outline+bg tint vs inset box-shadow）保持视觉可区分，不是同一个描边叠两次。 */
-.board__col--target { outline: 2px solid var(--accent); outline-offset: -2px; background: var(--accent-t); }
-/* 拖拽合法性前示（评审 P1-11）：合法列蓝 ring（--accent 是唯一 emotive 签名色，语义=可推进目标），
-   非法列降透明度——不再"任何列都亮 target"，落点前就能分清能不能放。 */
-.board__col--legal { box-shadow: inset 0 0 0 2px var(--accent); }
-.board__col--illegal { opacity: .38; }
-.board__col--shake { animation: board-col-shake .3s; }
-@keyframes board-col-shake {
-  20% { transform: translateX(-4px); }
-  40% { transform: translateX(4px); }
-  60% { transform: translateX(-3px); }
-  80% { transform: translateX(2px); }
-}
-.board__col-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 2px 2px 9px; }
-.board__col-name { font-family: var(--mono); font-weight: 600; color: var(--text); font-size: 11.5px; }
-.board__col-count { font-family: var(--mono); font-size: 11px; color: var(--text-3); min-width: 18px; text-align: center; }
-.board__col-body { display: flex; flex-direction: column; gap: 7px; }
-.board__card { position: relative; padding: 8px 10px; cursor: grab; display: flex; flex-direction: column; gap: 0; }
-.board__card:hover { border-color: var(--green); }
-.board__card--gate { border: 1.5px solid var(--red); }
-.board__card--gate:hover { border-color: var(--red); box-shadow: 0 0 0 3px var(--red-t); }
-.board__card-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.board__card-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 7px; padding-top: 7px; border-top: 1px dashed var(--border); font-size: 11px; color: var(--text-3); }
-.board__card .qk { margin-top: 7px; }
-.board__col-empty { text-align: center; color: var(--text-3); font-size: 11.5px; opacity: .55; padding: 10px 0; }
-/* G19④：折叠条从纯展示 div 升格为 <button aria-expanded>（点击展开只读归档名单）——
-   补齐浏览器按钮默认样式的复位（背景/字体/宽度/指针），视觉逐字保留原 div 观感。 */
-.board__fold { width: 100%; background: transparent; font: inherit; cursor: pointer; text-align: center; color: var(--text-3); font-size: 11.5px; padding: 10px 6px; border-radius: var(--radius-sm); border: 1px dashed var(--border); }
-.board__fold:hover { color: var(--text-2); border-color: var(--border-2); }
-.board__fold-wrap { display: flex; flex-direction: column; }
-/* 名单挂载时播 motion.ts foldOpen（同 .board__scroll 既有套路，"沿用既有 foldOpen 词汇"）——
-   这层本身不做 CSS 动画，只是 foldOpen 的 GSAP height 补间需要一个稳定的挂载目标。 */
+/* T18 死 CSS 清理登记：.board__*（含 board-col-shake keyframes 与两处 media query 分支）
+   随 BoardView 退役删除——全仓 tsx 零消费。 */
+/* 名单挂载时播 motion.ts foldOpen——这层本身不做 CSS 动画，只是 foldOpen 的 GSAP height
+   补间需要一个稳定的挂载目标。 */
 .fold-body { margin-top: 6px; }
-.board__archive-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
-.board__archive-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 9px; border-radius: var(--radius-sm); background: var(--fill); }
 
 /* ── 盖章确认（转换成功，motion.ts stampConfirm 驱动）── */
 .stamp { position: absolute; right: 8px; top: -9px; background: var(--green); color: #ffffff; font-size: 10.5px; font-weight: 800; border-radius: 999px; padding: 3px 9px; transform: rotate(-7deg); box-shadow: 0 2px 8px rgba(20,90,50,.35); pointer-events: none; white-space: nowrap; }
@@ -297,10 +251,7 @@ button.ev__chip--neutral:hover { border-color: var(--border-2); color: var(--tex
 .tab { border: 1px solid var(--border); background: var(--card); color: var(--text-2); border-radius: var(--radius-sm); padding: 6px 13px; font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; transition: border-color .14s ease; }
 .tab:hover { border-color: var(--green); }
 .tab--active { background: var(--ink); color: var(--ink-fg); border-color: var(--ink); }
-.settings__panel { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; }
-.settings__h2 { margin: 0 0 6px; font-size: 16px; color: var(--text); }
-.settings__desc { margin: 0 0 14px; font-size: 12.5px; color: var(--text-3); }
-.settings__note { margin: 0 0 14px; font-size: 12px; color: var(--text-3); }
+/* T18 死 CSS 清理登记：.settings__* 4 条随 SettingsView 退役删除——全仓 tsx 零消费。 */
 .axis { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .axis__row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: var(--fill); border-radius: var(--radius-sm); }
 .axis__phase { font-weight: 700; color: var(--text); min-width: 60px; font-family: var(--mono); font-size: 12px; }
@@ -370,7 +321,7 @@ button.ev__chip--neutral:hover { border-color: var(--border-2); color: var(--tex
 
 /* 底部居中胶囊（v4 #toast 忠实还原，spec §2 组件语言表 toast 行）：
    成功=--ink/--ink-fg 中性深底白字，错误=--red 底白字；z-index 60 高于 .dialog__backdrop(50)。
-   入场动效由 App.tsx 挂载时调用 workflow/motion.ts 的 toastIn()（y 14→0 + fade）承担，此处不重复定义。 */
+   入场动效由 App.tsx 挂载时调用 shared/motion.ts 的 toastIn()（y 14→0 + fade）承担，此处不重复定义。 */
 .flash {
   position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%);
   display: flex; align-items: center; gap: 7px; max-width: 70vw;
@@ -399,89 +350,6 @@ button.ev__chip--neutral:hover { border-color: var(--border-2); color: var(--tex
 .field__error { font-size: 11px; color: var(--red); font-weight: 600; }
 .field__hint { font-size: 11px; color: var(--text-3); font-family: var(--mono); font-weight: 400; }
 
-/* ── workflow 编辑器 —— 列表页 ── */
-.workflow-editor__list { list-style: none; margin: 0 0 20px; padding: 0; display: flex; flex-direction: column; gap: 7px; }
-.workflow-editor__item { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; transition: border-color .14s ease; }
-.workflow-editor__item:hover { border-color: var(--green); }
-.workflow-editor__open { border: 0; background: transparent; padding: 0; font: inherit; font-size: 13px; font-weight: 600; font-family: var(--mono); color: var(--text); cursor: pointer; text-align: left; display: flex; align-items: center; gap: 10px; }
-.workflow-editor__open-mark { color: var(--green); font-size: 14px; line-height: 1; }
-/* 评审 P2-14 前半（Task 14）：行 meta（步数/门数/引用数）紧跟名字，同属左侧主区——
-   保持 .workflow-editor__item 原有两段式 space-between（左=主区，右=删除钮）不变。 */
-.workflow-editor__item-main { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-.workflow-editor__meta { font-size: 11px; color: var(--text-3); font-family: var(--mono); white-space: nowrap; }
-.workflow-editor__new { display: flex; gap: 8px; margin-top: 4px; }
-.workflow-editor__new .input { flex: 1; }
-
-/* ── workflow 编辑器 —— 画布（点阵网格底 + xyflow 主题化）── */
-.workflow-canvas { display: flex; flex-direction: column; gap: 12px; }
-.workflow-canvas__toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-height: 34px; }
-.workflow-canvas__crumb { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--text-3); padding: 4px 4px 4px 0; }
-.workflow-canvas__crumb-current { font-weight: 700; color: var(--text); font-family: var(--mono); }
-.workflow-canvas__spacer { flex: 1; }
-.workflow-canvas__status { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 999px; }
-.workflow-canvas__status--ok { background: var(--green-t); color: var(--green); }
-.workflow-canvas__status--error { background: var(--red-t); color: var(--red); }
-.workflow-canvas__title { font-family: var(--mono); font-size: 12.5px; font-weight: 700; color: var(--text); }
-/* 脏状态「未保存」chip（评审 P1-8）：中性虚线——不是错误也不是成功，只是"还没落盘"。 */
-.workflow-canvas__status--dirty { background: var(--fill); color: var(--text-2); border: 1px dashed var(--border-2); }
-
-/* ── 阶段卡横排（评审 P1-8；画布上方，wf.steps 顺序渲染；视觉基准 v4-openai-trellis.html
-   编号阶段卡段——编号圆标+id+label+gate 标记，激活=蓝描边+--accent-t 底）── */
-.stage-card-row { display: flex; flex-wrap: wrap; align-items: stretch; gap: 8px; }
-.stage-card { flex: 1 1 180px; display: flex; align-items: center; gap: 10px; text-align: left; background: var(--card); border: 1.5px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 9px 12px; font: inherit; color: inherit; cursor: pointer; transition: border-color .14s ease, box-shadow .14s ease, background .14s ease; }
-.stage-card:hover { border-color: var(--border-2); }
-.stage-card--active { border-color: var(--accent); background: var(--accent-t); box-shadow: 0 0 0 3px var(--ring); }
-.stage-card__num { flex: none; width: 24px; height: 24px; border-radius: 999px; background: var(--fill-2); border: 1px solid var(--border-2); color: var(--text-2); display: grid; place-items: center; font-size: 11.5px; font-weight: 700; font-family: var(--mono); }
-.stage-card--active .stage-card__num { background: var(--accent-t); border-color: var(--accent-b); color: var(--accent-d); }
-.stage-card__body { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 1px; }
-.stage-card__id { font-family: var(--mono); font-size: 12.5px; font-weight: 700; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.stage-card__label { font-size: 11px; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.stage-card .badge { flex: none; }
-
-.workflow-canvas__stage { position: relative; height: 520px; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; background-color: var(--bg); background-image: radial-gradient(var(--border) 1px, transparent 1px); background-size: 22px 22px; }
-.workflow-canvas__stage .react-flow__renderer,
-.workflow-canvas__stage .react-flow { background: transparent; }
-.workflow-canvas__stage .react-flow__node {
-  padding: 9px 14px; border-radius: var(--radius-sm); border: 1.5px solid var(--border);
-  background: var(--card); color: var(--text); font: inherit; font-family: var(--mono); font-size: 12.5px; font-weight: 700;
-  width: auto; transition: border-color .14s ease, box-shadow .14s ease;
-}
-.workflow-canvas__stage .react-flow__node.selected,
-.workflow-canvas__stage .react-flow__node:focus-visible {
-  border-color: var(--green); box-shadow: 0 0 0 3px var(--green-t);
-}
-.workflow-canvas__stage .react-flow__node .badge { margin-left: 7px; }
-.workflow-canvas__stage .react-flow__handle { width: 8px; height: 8px; background: var(--text-3); border: 2px solid var(--card); }
-.workflow-canvas__stage .react-flow__handle:hover { background: var(--green); }
-.workflow-canvas__stage .react-flow__edge-path { stroke: var(--green); stroke-width: 1.5; }
-.workflow-canvas__stage .react-flow__edge.selected .react-flow__edge-path,
-.workflow-canvas__stage .react-flow__edge:hover .react-flow__edge-path { stroke: var(--green); stroke-width: 2.5; }
-.workflow-canvas__stage .react-flow__edge-text { font: inherit; font-family: var(--mono); font-size: 10px; fill: var(--text-3); }
-.workflow-canvas__stage .react-flow__edge-textbg { fill: var(--bg); }
-.workflow-canvas__stage .react-flow__controls { border: 1px solid var(--border); border-radius: 7px; overflow: hidden; box-shadow: none; }
-.workflow-canvas__stage .react-flow__controls-button { background: var(--card); border-bottom: 1px solid var(--border); fill: var(--text-2); }
-.workflow-canvas__stage .react-flow__controls-button:hover { background: var(--fill); }
-.workflow-canvas__stage .react-flow__attribution { display: none; }
-
-/* ── 详情侧栏（画布右滑面板）── */
-.step-detail-panel {
-  position: absolute; top: 0; right: 0; bottom: 0; width: min(320px, 86%); z-index: 5;
-  display: flex; flex-direction: column; gap: 14px; padding: 16px; overflow-y: auto;
-  background: var(--card); border-left: 1px solid var(--border); box-shadow: -10px 0 24px rgba(15,25,18,.10);
-}
-.step-detail-panel__head { display: flex; align-items: center; justify-content: space-between; }
-.step-detail-panel__title { margin: 0; font-size: 13.5px; color: var(--text); font-family: var(--mono); font-weight: 700; }
-.step-detail-panel__section { display: flex; flex-direction: column; gap: 7px; }
-.step-detail-panel__section h4 { margin: 0; font-size: 10.5px; font-weight: 700; color: var(--ink); text-transform: uppercase; letter-spacing: .03em; }
-:root[data-theme="dark"] .step-detail-panel__section h4 { color: var(--green); }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .step-detail-panel__section h4 { color: var(--green); } }
-.step-detail-panel__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-.step-detail-panel__row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 9px; background: var(--fill); border-radius: 6px; font-size: 11.5px; color: var(--text-2); }
-.step-detail-panel__row-name { font-family: var(--mono); color: var(--text); font-weight: 600; }
-.gd-form { display: flex; gap: 7px; align-items: center; }
-.gd-form .select { flex: 1; }
-.gd-form .gd-n { width: 64px; }
-
 /* ── tap 流量查看器（Advanced 折叠面板内）── */
 .traffic { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
 .traffic__note { margin: 0; font-size: 11px; color: var(--text-3); font-family: var(--mono); }
@@ -499,38 +367,8 @@ button.ev__chip--neutral:hover { border-color: var(--border-2); color: var(--tex
 .traffic__records { margin: 0; padding: 10px 12px 10px 32px; background: var(--fill); border: 1px dashed var(--border); border-radius: var(--radius-sm); font-family: var(--mono); font-size: 11px; line-height: 1.7; color: var(--text-2); overflow-x: auto; }
 .traffic__record { white-space: nowrap; }
 
-/* ── AFK 工作台 ── */
-.afk-split { display: flex; gap: 14px; align-items: stretch; }
-.afk-list { flex: 0 0 280px; display: flex; flex-direction: column; gap: 7px; min-width: 0; }
-.afk-enq { display: flex; gap: 7px; }
-.afk-enq .input { flex: 1; min-width: 0; }
-.afk-item { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 9px 11px; cursor: pointer; font: inherit; color: inherit; text-align: left; display: flex; flex-direction: column; gap: 6px; transition: border-color .14s ease, box-shadow .14s ease; }
-.afk-item:hover { border-color: var(--green); }
-.afk-item.is-active { border: 1.5px solid var(--green); box-shadow: 0 0 0 3px var(--green-t); }
-.afk-item.is-failed { border-color: var(--red); }
-.afk-itemtop { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.afk-itemtitle { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
-.afk-item-root { font-family: var(--mono); font-size: 10px; color: var(--text-3); white-space: nowrap; }
-.afk-itemmeta { font-size: 11px; color: var(--text-3); }
-.afk-state { font-size: 10.5px; font-weight: 700; padding: 2px 7px; border-radius: 999px; white-space: nowrap; }
-.afk-state--run { background: var(--green-t); color: var(--green); }
-.afk-state--queue { background: var(--fill); color: var(--text-3); }
-.afk-state--fail { background: var(--red-t); color: var(--red-d); }
-.afk-state--pause { background: var(--fill); color: var(--text-2); border: 1px dashed var(--border); }
-.afk-detail { flex: 1; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
-.afk-dhead { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.afk-dtitle { margin: 0; font-size: 15px; color: var(--text); font-family: var(--mono); font-weight: 700; }
-.afk-dactions { display: flex; gap: 8px; }
-.afk-dmeta { display: flex; gap: 16px; font-size: 11.5px; color: var(--text-3); flex-wrap: wrap; }
-.afk-dmeta b { color: var(--text-2); font-weight: 600; font-family: var(--mono); }
-.afk-loghead { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 11px; color: var(--text-3); font-family: var(--mono); }
-.afk-logtools { display: flex; align-items: center; gap: 10px; font-family: var(--font); }
-.afk-follow { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--text-3); cursor: pointer; }
-.afk-follow input { cursor: pointer; }
-.afk-log { background: #10150f; color: #cde3cf; border-radius: var(--radius-sm); padding: 12px 14px; font-family: var(--mono); font-size: 11px; line-height: 1.7; overflow-x: auto; margin: 0; border: 1px solid var(--border); }
-:root[data-theme="dark"] .afk-log { background: #0c110d; }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .afk-log { background: #0c110d; } }
-@media (max-width: 720px) { .afk-split { flex-direction: column; } .afk-list { flex: 1; } }
+/* T18 死 CSS 清理登记：.afk-* 全组（含 dark 主题双写与窄屏 media query）随 AfkWorkbench
+   退役删除——全仓 tsx 零消费。 */
 
 /* ── Loop 治理面板 ── */
 .loop-row { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 4px 6px; }
@@ -648,7 +486,7 @@ button.ev__chip--neutral:hover { border-color: var(--border-2); color: var(--tex
 .wb-addchip:hover { background: var(--fill); color: var(--text-2); }
 .wb-chip-in { width: 180px; height: 26px; font-size: 12px; font-family: var(--mono); }
 .wb-ed-adderr { margin: 6px 0 0; }
-/* 工具条右侧：状态 pill 家族（沿 workflow-canvas__status 的语义：脏=中性虚线、成功=绿、失败=红、只读=灰） */
+/* 工具条右侧：状态 pill 家族（沿旧画布编辑器状态 pill 的既有语义：脏=中性虚线、成功=绿、失败=红、只读=灰） */
 .wb-spacer { flex: 1; }
 .wb-status { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 999px; }
 .wb-status--dirty { background: var(--fill); color: var(--text-2); border: 1px dashed var(--border-2); }
@@ -672,12 +510,8 @@ button.ev__chip--neutral:hover { border-color: var(--border-2); color: var(--tex
 
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { * { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
-/* 非法 drop 的 shake 是状态反馈（"这条边不存在"）不是装饰，评审 P1-11 要求从上面的降动效豁免——
-   类选择器优先级天然高于 *，同为 !important 时这条规则仍会赢。 */
-@media (prefers-reduced-motion: reduce) { .board__col--shake { animation-duration: .3s !important; } }
 @media (max-width: 720px) {
-  .board__grid { grid-template-columns: repeat(7, minmax(140px, 1fr)); } .main { padding: 14px; }
-  .step-detail-panel { width: 100%; }
+  .main { padding: 14px; }
   /* Task 17：右栏窄屏下沉到主列下方，撤销 sticky（没有横向空间放 280px 侧栏了）。 */
   .view-split { flex-direction: column; } .side-col { width: 100%; flex: none; position: static; }
 }

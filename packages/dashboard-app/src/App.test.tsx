@@ -129,7 +129,7 @@ describe('App 注册 UI 退役（T17 决议#7：pipeline init 自动登记，注
 })
 
 describe('App SSE 实时更新（真 EventSource stub → 组件真更新，非 mock 返回）', () => {
-  it('emit 含复核相位卡的快照 → 收件箱由空态更新为有卡 + 徽标计数', async () => {
+  it('emit 含复核阶段卡的快照 → 收件箱由空态更新为有卡 + 徽标计数', async () => {
     render(<App />)
     // 初始空态
     expect(await screen.findByTestId('inbox-empty')).toBeInTheDocument()

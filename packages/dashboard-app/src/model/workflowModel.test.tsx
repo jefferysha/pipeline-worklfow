@@ -7,8 +7,8 @@ import {
   useWorkflowRules,
   useWorkflowRulesMulti,
   invalidateWorkflowRules,
+  type StepDef,
 } from './workflowModel'
-import type { StepDef } from '../workflow/StepDetailPanel'
 
 /** 极简自定义 workflow（demo 语境的 release-train）：draft →(approved) review →(shipped) ship */
 function relDef(): { name: string; steps: StepDef[] } {
@@ -40,7 +40,7 @@ afterEach(() => {
 })
 
 describe('DEFAULT_RULES —— types.ts 四常量的 WorkflowRules 投影', () => {
-  it('7 相位顺序 + verify 双出口（ship=verify-pass / build=verify-fail）', () => {
+  it('7 阶段顺序 + verify 双出口（ship=verify-pass / build=verify-fail）', () => {
     expect(DEFAULT_RULES.steps).toEqual(['open', 'explore', 'spec', 'build', 'verify', 'ship', 'archive'])
     expect(DEFAULT_RULES.transitions['verify']).toEqual([
       { event: 'verify-pass', to: 'ship' },
@@ -49,7 +49,7 @@ describe('DEFAULT_RULES —— types.ts 四常量的 WorkflowRules 投影', () =
     expect(DEFAULT_RULES.transitions['build']).toEqual([{ event: 'build-complete', to: 'verify' }])
   })
 
-  it('gateByStep：REVIEW_PHASES 三相位 = review，其余 null', () => {
+  it('gateByStep：REVIEW_PHASES 三阶段 = review，其余 null', () => {
     expect(DEFAULT_RULES.gateByStep['explore']).toBe('review')
     expect(DEFAULT_RULES.gateByStep['spec']).toBe('review')
     expect(DEFAULT_RULES.gateByStep['verify']).toBe('review')

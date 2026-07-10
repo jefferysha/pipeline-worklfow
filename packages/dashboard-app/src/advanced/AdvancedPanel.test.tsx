@@ -5,7 +5,7 @@ import { AdvancedPanel } from './AdvancedPanel'
 import { makeSnapshot } from '../testkit'
 
 // traffic 面板挂载即 fetch 数据端——stub 全局 fetch 喂空形状，隔离网络（能力驱动渲染判据不依赖内容）。
-// afk 已升格为一级导航 <AfkWorkbench/>（Task 8），Advanced 折叠面不再挂载它，故不再需要 stub
+// afk 已升格为一级导航 <旧 AFK 工作台/>（Task 8），Advanced 折叠面不再挂载它，故不再需要 stub
 // /api/afk/snapshot。
 function stubFetch(): void {
   vi.stubGlobal(
@@ -59,7 +59,7 @@ describe('AdvancedPanel（病灶③：debug 工具降级为折叠占位）', () 
     expect(screen.getByTestId('advanced-traffic').textContent).toMatch(/M8/)
   })
 
-  it('Task 8：afk 已升格为一级导航 <AfkWorkbench/>，即便 server 声明 afk=true，Advanced 折叠面也不再渲染 afk 摘要/占位（避免两份视图打架）', () => {
+  it('Task 8：afk 已升格为一级导航 <旧 AFK 工作台/>，即便 server 声明 afk=true，Advanced 折叠面也不再渲染 afk 摘要/占位（避免两份视图打架）', () => {
     renderAdv(makeSnapshot([], { capabilities: { afk: true } }))
     expect(screen.queryByTestId('advanced-afk')).toBeNull()
     expect(screen.queryByTestId('afk-panel')).toBeNull()

@@ -74,7 +74,7 @@ const FAILED = {
   automation_last_error: 'verify: 2 failed · auth.test.ts',
 }
 
-/** 手动控制的 Promise：制造"请求在途"窗口（busy 守卫断言用，做法对齐 SettingsView.test.tsx）。 */
+/** 手动控制的 Promise：制造"请求在途"窗口（busy 守卫断言用，做法对齐 旧设置视图测试（T18 已退役））。 */
 function deferred<T>(): { promise: Promise<T>; resolve: (v: T) => void } {
   let resolve!: (v: T) => void
   const promise = new Promise<T>((res) => {
@@ -164,7 +164,7 @@ describe('InboxView 行列表（v5：人话主文案 + 结论式 badge + 证据 
     expect(rows[3]!.textContent).toContain('人工复核')
   })
 
-  it('行元素：wf 标签只在非 default 行出现；相位胶囊原始 step id；失败行出 automation 值 chip', async () => {
+  it('行元素：wf 标签只在非 default 行出现；阶段胶囊原始 step id；失败行出 automation 值 chip', async () => {
     renderInbox({ snapshot: snap })
     await settled()
     const wfLabels = screen.getAllByTestId('inbox-card-wf')

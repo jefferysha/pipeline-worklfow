@@ -256,7 +256,7 @@ describe('SkillChain default workflow：轨道 tab × 强制技能矩阵', () =>
     await screen.findByTestId('wb-sk-tracks')
     expect(screen.getByTestId('wb-sk-cfg-ro')).toBeInTheDocument()
     expect(screen.queryByTestId('wb-sk-edit')).toBeNull()
-    // 静态镜像兜底（settings/data.ts 的 MANDATORY_SKILLS：build.pm 首项 prototype|huashu-design）
+    // 静态镜像兜底（workbench/data.ts 的 MANDATORY_SKILLS：build.pm 首项 prototype|huashu-design）
     expect(within(screen.getByTestId('wb-sk-mand')).getByText('prototype|huashu-design')).toBeInTheDocument()
   })
 

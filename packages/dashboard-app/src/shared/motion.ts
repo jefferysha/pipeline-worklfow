@@ -1,7 +1,8 @@
 import gsap from 'gsap'
 
 /**
- * workflow 编辑器共享的 GSAP 入场/切换动效——三个组件（列表页/画布/详情侧栏）用同一套
+ * 跨视图共享的 GSAP 入场/切换动效（T18 自 workflow/ 迁入 shared/——workflow 编辑器退役，
+ * 现消费方：App toast / InboxView / shared/TaskDetail / WorkbenchView）：同一套
  * reduced-motion 判断 + 时长/缓动惯例，抽成一份而非各自重复 gsap.matchMedia 判断逻辑。
  * 必须在各组件的 `useGSAP(() => { ... }, { scope })` 回调内同步调用——GSAP 的 context
  * 追踪按调用栈生效，不按函数定义所在文件生效，这里的调用一样会被自动纳入清理范围。

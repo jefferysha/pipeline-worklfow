@@ -38,7 +38,7 @@ const VERIFY_OK = { verify_result: 'pass', agent_review_result: 'pass', codex_re
 
 describe('changeProgressState —— 五态判定（表驱动全覆盖）', () => {
   const table: [string, ChangeSnapshot, ProgressRules | undefined, (typeof PROGRESS_STATES)[number]][] = [
-    // ── gate（等你确认）：gate 相位且证据/产出齐 ──
+    // ── gate（等你确认）：gate 阶段且证据/产出齐 ──
     ['verify 三轨全 pass → gate', makeChange('c', 'verify', { fields: { ...VERIFY_OK } }), DEFAULT_RULES, 'gate'],
     ['verify 有 fail 判定（可打回）→ gate', makeChange('c', 'verify', { fields: { ...VERIFY_OK, verify_result: 'fail' } }), DEFAULT_RULES, 'gate'],
     ['verify 三轨齐但 verification_report/build_sha 未设 → gate（产物没产出不等于验证没过）', makeChange('c', 'verify', { fields: { ...VERIFY_OK } }), DEFAULT_RULES, 'gate'],
@@ -50,24 +50,24 @@ describe('changeProgressState —— 五态判定（表驱动全覆盖）', () =
     ["explore 的 design_doc 是字面 'null' → agent（cmd_get 口径未设）", makeChange('c', 'explore', { fields: { design_doc: 'null', plan: 'docs/p.md' } }), DEFAULT_RULES, 'agent'],
     ['verify 三轨全 pending → agent', makeChange('c', 'verify'), DEFAULT_RULES, 'agent'],
     ['自定义 review 步 nonempty guard 且产出未设 → agent', makeChange('c', 'review'), REL_RULES_GUARDED, 'agent'],
-    ['default 非门相位（build）无自动化 → agent', makeChange('c', 'build'), DEFAULT_RULES, 'agent'],
-    ['default 非门相位（open）无自动化 → agent', makeChange('c', 'open'), DEFAULT_RULES, 'agent'],
+    ['default 非门阶段（build）无自动化 → agent', makeChange('c', 'build'), DEFAULT_RULES, 'agent'],
+    ['default 非门阶段（open）无自动化 → agent', makeChange('c', 'open'), DEFAULT_RULES, 'agent'],
     ['confirm 门是终端会话内的秒级门，不是 dashboard 拍板点 → agent', makeChange('c', 'ship'), REL_RULES, 'agent'],
-    ['automation=merged 回归相位判定（ship 非门）→ agent', makeChange('c', 'ship', { fields: { automation: 'merged' } }), DEFAULT_RULES, 'agent'],
+    ['automation=merged 回归阶段判定（ship 非门）→ agent', makeChange('c', 'ship', { fields: { automation: 'merged' } }), DEFAULT_RULES, 'agent'],
     ['rules 缺失（定义拉取失败）→ agent（卡不消失，判不了门）', makeChange('c', 'verify', { fields: { ...VERIFY_OK } }), undefined, 'agent'],
-    // ── running / queued / failed：automation 态优先于相位判定 ──
+    // ── running / queued / failed：automation 态优先于阶段判定 ──
     ['automation=running → running', makeChange('c', 'build', { fields: { automation: 'running' } }), DEFAULT_RULES, 'running'],
     ['automation=scheduled（已认领在飞）→ running', makeChange('c', 'build', { fields: { automation: 'scheduled' } }), DEFAULT_RULES, 'running'],
-    ['gate 相位但 automation=running 仍是 running（automation 优先）', makeChange('c', 'verify', { fields: { ...VERIFY_OK, automation: 'running' } }), DEFAULT_RULES, 'running'],
+    ['gate 阶段但 automation=running 仍是 running（automation 优先）', makeChange('c', 'verify', { fields: { ...VERIFY_OK, automation: 'running' } }), DEFAULT_RULES, 'running'],
     ['automation=queued → queued', makeChange('c', 'open', { fields: { automation: 'queued' } }), DEFAULT_RULES, 'queued'],
     ['automation=failed → failed', makeChange('c', 'build', { fields: { automation: 'failed' } }), DEFAULT_RULES, 'failed'],
     ['automation=conflict（现场保留）→ failed', makeChange('c', 'build', { fields: { automation: 'conflict' } }), DEFAULT_RULES, 'failed'],
     ['rules 缺失但 automation=failed → failed（automation 判定不依赖 rules）', makeChange('c', 'build', { fields: { automation: 'failed' } }), undefined, 'failed'],
     // ── paused：跑完停住（L1/L2 report-only）归等你确认 ──
-    ['automation=paused（非门相位 build）→ gate（跑完停住等人放行）', makeChange('c', 'build', { fields: { automation: 'paused' } }), DEFAULT_RULES, 'gate'],
+    ['automation=paused（非门阶段 build）→ gate（跑完停住等人放行）', makeChange('c', 'build', { fields: { automation: 'paused' } }), DEFAULT_RULES, 'gate'],
     ['automation=paused + rules 缺失 → gate', makeChange('c', 'explore', { fields: { automation: 'paused' } }), undefined, 'gate'],
-    // ── 未知 automation 值：回落相位判定 ──
-    ['automation 未知值回落相位判定（verify 证据齐）→ gate', makeChange('c', 'verify', { fields: { ...VERIFY_OK, automation: 'bogus' } }), DEFAULT_RULES, 'gate'],
+    // ── 未知 automation 值：回落阶段判定 ──
+    ['automation 未知值回落阶段判定（verify 证据齐）→ gate', makeChange('c', 'verify', { fields: { ...VERIFY_OK, automation: 'bogus' } }), DEFAULT_RULES, 'gate'],
   ]
 
   it.each(table)('%s', (_desc, change, rules, expected) => {
@@ -106,7 +106,7 @@ describe('missingGateArtifacts —— 「等 agent 补产出」的欠账清单',
     expect(missingGateArtifacts(makeChange('c', 'review'), REL_RULES)).toEqual([])
   })
 
-  it('default 非门相位 / rules 缺失 → 空', () => {
+  it('default 非门阶段 / rules 缺失 → 空', () => {
     expect(missingGateArtifacts(makeChange('c', 'build'), DEFAULT_RULES)).toEqual([])
     expect(missingGateArtifacts(makeChange('c', 'verify'), undefined)).toEqual([])
   })

@@ -31,7 +31,7 @@ function stubFetch(over: { createStatus?: number; createError?: string } = {}) {
 
 /**
  * 手动控制的 Promise：制造"创建请求在途"窗口（busy=true 期间不会自动结算），
- * 用于验证 Esc 不绕过 busy 锁（评审修复轮）。做法对齐 SettingsView.test.tsx 的 deferred()。
+ * 用于验证 Esc 不绕过 busy 锁（评审修复轮）。做法对齐 旧设置视图测试（T18 已退役） 的 deferred()。
  */
 function deferred<T>(): { promise: Promise<T>; resolve: (v: T) => void } {
   let resolve!: (v: T) => void

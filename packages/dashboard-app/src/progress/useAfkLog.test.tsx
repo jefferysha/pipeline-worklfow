@@ -2,7 +2,7 @@
  * useAfkLog —— AFK 日志轮询 hook（Task 12，评审 P0-3「日志选中拉一次即永久冻结」修复）。
  *
  * fake timers 下一律用 `vi.waitFor`（不用 `@testing-library/react` 的 `waitFor`）——复刻
- * WorkflowCanvas.test.tsx Task 8 用例的既有踩坑记录：RTL 的 `waitFor` 内部轮询走的
+ * 旧画布编辑器测试（T18 已退役） Task 8 用例的既有踩坑记录：RTL 的 `waitFor` 内部轮询走的
  * `setTimeout` 会被 `vi.useFakeTimers()` 一并接管，从而永远等不到自己的下一次检查；
  * `vi.waitFor` 是计时器实现感知的，两者不可混用（同一份 fake-timers 作用域内只用后者）。
  *
@@ -40,7 +40,7 @@ function stubLogFetch(): () => number {
 
 /**
  * 手动控制的 Promise：制造"两个请求同时在途、谁先落地谁后落地由测试摆布"的窗口——用于验证
- * 请求级乱序 guard（评审 Important B）。做法对齐 BoardView.test.tsx / SettingsView.test.tsx 的
+ * 请求级乱序 guard（评审 Important B）。做法对齐 旧看板视图测试（T18 已退役） / 旧设置视图测试（T18 已退役） 的
  * 既有 deferred() 先例。
  */
 function deferred<T>(): { promise: Promise<T>; resolve: (v: T) => void } {

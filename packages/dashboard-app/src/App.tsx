@@ -14,7 +14,7 @@ import { useSnapshot } from './state/useSnapshot'
 import { GLOBAL_CSS } from './styles'
 import type { ChangeSnapshot } from './types'
 import { WorkbenchView } from './workbench/WorkbenchView'
-import { toastIn } from './workflow/motion'
+import { toastIn } from './shared/motion'
 
 type Theme = 'light' | 'dark'
 const THEME_KEY = 'pipeline-dashboard-theme'
@@ -114,7 +114,7 @@ function AppShell(): JSX.Element {
   // ——收件箱徽章/InboxView/ProgressView 三个消费方吃同一份 Map。聚合语境（currentRoot===''）
   // 收集全部 ok 项目的 (root,wf) 对；单项目语境只请求当前项目（default 零网络，自定义走
   // fetchRules 模块级 cache/inflight 去重，见 workflowModel.ts）。旧的 useWorkflowRules 单项目
-  // 调用随 BoardView 退出 App 接线而移除（T17；组件文件 T18 删）。
+  // 调用随 旧看板视图 退出 App 接线而移除（T17；组件文件 T18 删）。
   const rulesPairs = useMemo(() => {
     if (currentRoot !== '') return [{ root: currentRoot, names: wfNames }]
     return (snapshot?.projects ?? []).filter((p) => p.ok).map((p) => ({ root: p.root, names: wfNamesFor(p.changes) }))
