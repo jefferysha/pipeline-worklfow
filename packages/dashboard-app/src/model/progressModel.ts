@@ -1,0 +1,219 @@
+/**
+ * progressModel —— v5 进度视图的模型层（纯函数，零 IO 零 React；plan T6）。
+ * 回答三个问题并收敛成同源谓词，供进度视图（T10/T11）与收件箱准入修订（T7）共用：
+ *   ① 单个 change 此刻处于五态中的哪一态（等你确认 gate / 等 agent agent / 执行中 running /
+ *      排队 queued / 失败 failed）——态字符串对齐 demo v5 的 data-f-state；
+ *   ② 项目×workflow 怎么分组（rulesKey(root,wf) 组合键，禁手拼 NUL 分隔串）；
+ *   ③ 调度器健康灯怎么聚合（判据对齐 server afk.ts computeSchedulerHealth）。
+ *
+ * 五态判定优先级（automation 态压过相位判定，枚举以 packages/automation types.ts
+ * AUTOMATION_STATES 真实字符串为准，server afk.ts laneOf 同一折叠口径）：
+ *   running‖scheduled → running；queued → queued；failed‖conflict → failed；
+ *   paused → gate（L1/L2 report-only 跑完停住，等人复核放行——demo「等你确认 · 跑完停住」）；
+ *   off / merged / 空 / 未知值 → 回到 host 相位判定：
+ *     review 门相位 → 产出/证据齐可拍板 = gate，欠产出 = agent（「等 agent 补产出」）；
+ *     其余（含 confirm 门与 rules 缺失）→ agent（活在终端里由 agent 推进）。
+ *
+ * 口径备注：
+ *   · confirm 门不是 dashboard 拍板点——kernel types.ts 注释明确它是终端会话内 AskUserQuestion
+ *     秒级即清的安全网门，对齐 inbox.ts isAwaitingDecision 只认 review 的既有行为（T7 复用时
+ *     准入判据不因本模块而漂移）。
+ *   · rules 缺失（自定义 workflow 定义拉取失败）：G17 底线是卡不消失——行仍出现在进度里，
+ *     判不了门就归 agent（不误报「等你确认」）；automation 活跃态不依赖 rules，照常判定。
+ */
+import type { ChangeSnapshot, Snapshot } from '../types'
+import { DEFAULT_RULES, rulesKey, type WorkflowRules } from './workflowModel'
+import { gateEvidence, VERIFY_STATUS_FIELDS } from '../inbox/evidence'
+
+/** 五态字典（顺序即筛选条 chips 顺序，键对齐 demo v5 的 data-f-state）。 */
+export const PROGRESS_STATES = ['gate', 'agent', 'running', 'queued', 'failed'] as const
+export type ProgressState = (typeof PROGRESS_STATES)[number]
+
+/**
+ * WorkflowRules 的可选产出扩展面——「自定义 workflow 的 nonempty-output guard」判定所需的
+ * 每 step 产出声明。T6 先定契约：T7 扩 rulesFromDef 让自定义 rules 自然携带这两张表后，
+ * 本模块的判定不需要再改一行。缺省（今天的裸 WorkflowRules）视为「gate 无自动证据」——
+ * 人可直接拍板，不会把自定义门误判成等 agent。
+ */
+export interface StepOutputRules {
+  /** step id → 该步声明的 outputs 字段名列表。 */
+  outputsByStep?: Record<string, readonly string[]>
+  /** step id → 该步是否挂了 nonempty-output guard（产出非空方可推进）。 */
+  nonemptyOutputByStep?: Record<string, boolean>
+}
+export type ProgressRules = WorkflowRules & StepOutputRules
+
+/** 老内核 cmd_get 口径：空串或字面 'null' 都算未设（同 evidence.ts 的模块私有 isUnset）。 */
+function isUnset(v: string): boolean {
+  return v === '' || v === 'null'
+}
+
+/** fields 值可能是 string[]；非字符串一律当未设（同 evidence.ts fieldStr 口径）。 */
+function fieldStr(c: ChangeSnapshot, key: string): string {
+  const v = c.fields[key]
+  return typeof v === 'string' ? v : ''
+}
+
+/** 该 change 声明的 workflow 名（未设/空 → 'default'；同 inbox.ts changeWorkflow 口径，
+ *  本模块不 import inbox 以保持依赖单向——T7 让 inbox 反向复用本模块时不成环）。 */
+export function changeWorkflowName(c: ChangeSnapshot): string {
+  const wf = c.fields['workflow']
+  return typeof wf === 'string' && wf ? wf : 'default'
+}
+
+/**
+ * 该相位是不是 dashboard 上的拍板门（T7 收件箱准入的同源判据）。
+ * 只认 review：confirm 是终端会话门（见文件头口径备注），rules 缺失不误报。
+ */
+export function isDashboardGate(rules: WorkflowRules | undefined, phase: string): boolean {
+  return rules !== undefined && rules.gateByStep[phase] === 'review'
+}
+
+/**
+ * 「等 agent 补产出」的欠账清单——gate 相位下 agent 还欠哪些证据/产出字段（badge 文案数据源，
+ * demo「等 agent · 补产出 plan」）。空数组 = 证据/产出齐，人现在能拍板。
+ *   · DEFAULT_RULES 表驱动路径：消费 gateEvidence 的 pending chips；verify 相位只认三轨判定
+ *     字段（VERIFY_STATUS_FIELDS）——verification_report/build_sha 是产物不是判定，
+ *     「产物没产出不等于验证没过」（evidence.ts Important-1 教训），不入欠账。
+ *   · 自定义 rules：只有当前步挂了 nonempty-output guard 才点名未设的 outputs；
+ *     无产出声明（含今天的裸 WorkflowRules）→ 无自动证据，返回空。
+ */
+export function missingGateArtifacts(c: ChangeSnapshot, rules: ProgressRules | undefined): string[] {
+  if (!rules) return []
+  if (rules === DEFAULT_RULES) {
+    const pending = gateEvidence(c, rules).filter((chip) => chip.tone === 'pending')
+    if (c.phase === 'verify') {
+      return pending.filter((chip) => (VERIFY_STATUS_FIELDS as readonly string[]).includes(chip.key)).map((chip) => chip.key)
+    }
+    return pending.map((chip) => chip.key)
+  }
+  if (!rules.nonemptyOutputByStep?.[c.phase]) return []
+  const outputs = rules.outputsByStep?.[c.phase] ?? []
+  return outputs.filter((key) => isUnset(fieldStr(c, key)))
+}
+
+/** 单 change 五态判定（优先级见文件头）。archived 排除是 selectProgress 的事，本函数不管。 */
+export function changeProgressState(c: ChangeSnapshot, rules: ProgressRules | undefined): ProgressState {
+  const automation = fieldStr(c, 'automation')
+  if (automation === 'running' || automation === 'scheduled') return 'running'
+  if (automation === 'queued') return 'queued'
+  if (automation === 'failed' || automation === 'conflict') return 'failed'
+  if (automation === 'paused') return 'gate'
+  // off / merged / 空 / 未知值 → host 相位判定
+  if (isDashboardGate(rules, c.phase)) {
+    return missingGateArtifacts(c, rules).length > 0 ? 'agent' : 'gate'
+  }
+  return 'agent'
+}
+
+export interface ProgressRow {
+  root: string
+  change: ChangeSnapshot
+  state: ProgressState
+}
+
+/** 项目×workflow 一组（进度视图一张卡）。key 恒为 rulesKey(root,workflow)，消费方禁手拼。 */
+export interface ProgressGroup {
+  key: string
+  root: string
+  workflow: string
+  /** 未归档行，updated_at 倒序（并列 name 升序，同收件箱时间轴口径）。 */
+  rows: ProgressRow[]
+  /** 决议 #5：archived 排除出行，组头尾缀「· N 已归档」的计数来源。 */
+  archivedCount: number
+}
+
+export type ProgressCounts = Record<ProgressState, number>
+
+export interface ProgressSelection {
+  /** 组序：root 升序；同 root 下 default 在前，其余 workflow 名升序。纯归档组（无活跃行）不出。 */
+  groups: ProgressGroup[]
+  /** 五态计数（筛选条 chips 数据源）。不变式：各态之和 === total === 各组行数之和。 */
+  counts: ProgressCounts
+  total: number
+}
+
+function emptyCounts(): ProgressCounts {
+  return { gate: 0, agent: 0, running: 0, queued: 0, failed: 0 }
+}
+
+/** 行序比较：updated_at 倒序，并列 name 升序（同 inbox selectInbox 的时间轴口径）。 */
+function compareRows(a: ProgressRow, b: ProgressRow): number {
+  const ua = a.change.updated_at
+  const ub = b.change.updated_at
+  if (ua !== ub) return ua < ub ? 1 : -1
+  return a.change.name < b.change.name ? -1 : a.change.name > b.change.name ? 1 : 0
+}
+
+/** 组序比较：root 升序；同 root 下 default 恒在前（主流程），其余按 workflow 名升序。 */
+function compareGroups(a: ProgressGroup, b: ProgressGroup): number {
+  if (a.root !== b.root) return a.root < b.root ? -1 : 1
+  if (a.workflow === b.workflow) return 0
+  if (a.workflow === 'default') return -1
+  if (b.workflow === 'default') return 1
+  return a.workflow < b.workflow ? -1 : 1
+}
+
+/**
+ * 从 snapshot 摘出进度视图的全部分组与计数。currentRoot 语境同 selectInbox（D5）：
+ * 非空 → 只看该项目；空串 → 全部项目聚合，每行仍各自带 root。
+ * rulesByKey 按 rulesKey(root,wf) 索引（useWorkflowRulesMulti 的返回契约）。
+ * counts 与 groups 出自同一次遍历——「计数与分组行数恒等」由构造保证，测试再钉不变式。
+ */
+export function selectProgress(
+  snapshot: Snapshot | null,
+  currentRoot: string,
+  rulesByKey: ReadonlyMap<string, WorkflowRules>,
+): ProgressSelection {
+  const counts = emptyCounts()
+  if (!snapshot) return { groups: [], counts, total: 0 }
+
+  const byKey = new Map<string, ProgressGroup>()
+  for (const p of snapshot.projects) {
+    if (!p.ok) continue
+    if (currentRoot !== '' && p.root !== currentRoot) continue
+    for (const c of p.changes) {
+      const workflow = changeWorkflowName(c)
+      const key = rulesKey(p.root, workflow)
+      let group = byKey.get(key)
+      if (!group) {
+        group = { key, root: p.root, workflow, rows: [], archivedCount: 0 }
+        byKey.set(key, group)
+      }
+      if (c.archived === 'true') {
+        group.archivedCount += 1
+        continue
+      }
+      const state = changeProgressState(c, rulesByKey.get(key))
+      group.rows.push({ root: p.root, change: c, state })
+      counts[state] += 1
+    }
+  }
+
+  const groups = [...byKey.values()].filter((g) => g.rows.length > 0)
+  for (const g of groups) g.rows.sort(compareRows)
+  groups.sort(compareGroups)
+  const total = PROGRESS_STATES.reduce((n, s) => n + counts[s], 0)
+  return { groups, counts, total }
+}
+
+/** 调度器健康灯三色（对位 server afk.ts SchedulerHealth.status）。 */
+export type SchedulerLight = 'ok' | 'busy' | 'attention'
+
+export interface SchedulerHealthSummary {
+  status: SchedulerLight
+  running: number
+  queued: number
+  failed: number
+}
+
+/**
+ * 健康灯聚合：attention（有 failed/conflict 待人工）压过 busy（有排队或在跑），否则 ok。
+ * 判据逐字对齐 server afk.ts computeSchedulerHealth；输入就是 selectProgress 的 counts
+ * （running 已含 scheduled 折叠、failed 已含 conflict 折叠），文案由视图层 i18n 负责。
+ */
+export function schedulerHealth(counts: ProgressCounts): SchedulerHealthSummary {
+  const { running, queued, failed } = counts
+  const status: SchedulerLight = failed > 0 ? 'attention' : running + queued > 0 ? 'busy' : 'ok'
+  return { status, running, queued, failed }
+}
