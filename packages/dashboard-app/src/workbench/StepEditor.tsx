@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useT } from '../i18n'
+import { SkillChain } from './SkillChain'
 import type { WbStepDef } from './WorkbenchView'
 
 /**
@@ -22,12 +23,14 @@ import type { WbStepDef } from './WorkbenchView'
  * review——运行时语境里 confirm 门只出现在 default（只读态），自定义 workflow 的编辑
  * 语义按 demo 拍板为 review 单档。
  *
- * T14 挂载点：技能链（SkillChain，依赖链可视化 + 添加面板）在「基本」与「产出物」两区
- * 之间插入；T15 挂载点：Hook 会话时序线跟在技能区之后。两区都吃本组件同款
- * readonly/onChange 契约。
+ * T14（已挂载）：技能链 <SkillChain> 在「基本」与「产出物」两区之间——自定义 workflow 编辑
+ * step.skills 依赖链，default workflow 走 manifest 强制技能矩阵（决议 #6，独立数据面，
+ * 不受本卡 readonly 约束，见 SkillChain 头注释）。T15 挂载点：Hook 会话时序线跟在技能区之后。
  */
 export interface StepEditorProps {
   step: WbStepDef
+  /** 所属 workflow 名（SkillChain 按 'default' 分岔强制技能矩阵模式）；缺省按自定义处理。 */
+  workflow?: string
   /** default workflow 只读镜像：全部控件禁用 + 顶部只读说明（server 端 400 已挡，此处前端预示）。 */
   readonly?: boolean
   onChange: (updated: WbStepDef) => void
@@ -37,7 +40,7 @@ export interface StepEditorProps {
 // 写出、parse 用 (\S+) 读回，字符集越界=「保存成功、下次打不开」，客户端先挡一道）。
 const FIELD_RE = /^[a-zA-Z0-9_-]+$/
 
-export function StepEditor({ step, readonly = false, onChange }: StepEditorProps): JSX.Element {
+export function StepEditor({ step, workflow, readonly = false, onChange }: StepEditorProps): JSX.Element {
   const { t } = useT()
   // 「+ 添加」就地输入态（demo commitChipInput 同款：Enter 提交 / Esc 取消 / 失焦有值即提交）。
   // 组件在 WorkbenchView 侧按 step.id 加 key 挂载——切阶段时输入态随卸载自然复位，不需手动清。
@@ -141,7 +144,9 @@ export function StepEditor({ step, readonly = false, onChange }: StepEditorProps
         </div>
       </div>
 
-      {/* T14 挂载点：技能链区（SkillChain：依赖链可视化 + 移除 × + 添加面板）插在这里。 */}
+      {/* T14：技能链区（依赖链可视化 + 移除 × + 添加面板；default = 强制技能矩阵）。 */}
+      <SkillChain step={step} workflow={workflow} readonly={readonly} onChange={onChange} />
+
       {/* T15 挂载点：Hook 会话时序线区（四时机人话卡 + 开关）跟在技能区之后。 */}
 
       <div className="wb-ed-sec">

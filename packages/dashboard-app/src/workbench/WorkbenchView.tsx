@@ -503,6 +503,7 @@ export function WorkbenchView({ root }: WorkbenchViewProps): JSX.Element {
                   <StepEditor
                     key={`${def.name}:${selectedStep.id}`}
                     step={selectedStep}
+                    workflow={def.name}
                     readonly={readonlyWf}
                     onChange={updateStep}
                   />

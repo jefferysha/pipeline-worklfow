@@ -865,4 +865,32 @@ button.ev__chip--neutral:hover { border-color: var(--border-2); color: var(--tex
 .dt-tab--fail.on { border-color: var(--red); box-shadow: 0 0 0 3px var(--red-t); color: var(--btn-fg); }
 .dt-pane[hidden] { display: none; }
 .dt-empty { padding: 16px 12px; text-align: center; font-size: 12.5px; color: var(--text-3); border: 1px dashed var(--border-2); border-radius: 10px; }
+/* ==== T14 ==== */
+/* 技能链区（SkillChain）：依赖链 chips + 添加面板 + default 轨道 tab。
+   对照 demo 的 wb-chain / wb-skpanel / wb-tracks 区块，全部走既有 v4 token。 */
+.wb-chain { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 7px 0; }
+.wb-chain + .wb-chain { border-top: 1px dashed var(--border); }
+.wb-chain-k { font-size: 11px; font-weight: 700; letter-spacing: .04em; color: var(--text-3); margin-right: 4px; flex: none; }
+.wb-chain-seg { display: inline-flex; align-items: center; gap: 6px; }
+.wb-arr { color: var(--text-3); font-size: 13px; line-height: 1; }
+.wb-chip--ghost { opacity: .55; border-style: dashed; }
+.wb-sk-actions { display: flex; align-items: center; gap: 8px; padding-top: 9px; }
+.wb-sk-err { margin: 8px 0 0; }
+.wb-skpanel { margin-top: 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); box-shadow: var(--shadow-2); padding: 12px; }
+.wb-skp-h { font-size: 12.5px; font-weight: 700; margin-bottom: 9px; }
+.wb-skp-h .hint { font-weight: 400; color: var(--text-3); margin-left: 6px; font-size: 12px; }
+.wb-skp-list { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 11px; }
+.wb-skopt { height: 26px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--fill); font: inherit; font-size: 12px; font-family: var(--mono); color: var(--text-2); cursor: pointer; transition: border-color .12s ease, background .12s ease, color .12s ease, box-shadow .12s ease; }
+.wb-skopt:hover { border-color: var(--border-2); }
+.wb-skopt.on, .wb-skopt.on:hover { border-color: var(--accent); background: var(--accent-t); color: var(--accent-d); box-shadow: 0 0 0 3px var(--ring); }
+.wb-skopt:disabled { opacity: .5; cursor: not-allowed; }
+.wb-skp-foot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.wb-skp-foot label { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-3); font-weight: 600; }
+.wb-skp-dep { width: auto; max-width: 300px; height: 28px; font-size: 12px; font-family: var(--mono); }
+/* default 强制技能矩阵的轨道 tab（pm/frontend/backend） */
+.wb-tracks { display: flex; gap: 4px; margin-bottom: 10px; }
+.wb-track { height: 26px; padding: 0 11px; border: 0; background: transparent; border-radius: 8px; font: inherit; font-size: 12.5px; font-weight: 600; color: var(--text-3); font-family: var(--mono); cursor: pointer; transition: background .12s ease, color .12s ease; }
+.wb-track:hover { background: var(--fill); color: var(--text-2); }
+.wb-track.on, .wb-track.on:hover { background: var(--fill-2); color: var(--text); }
+.wb-track b { font-weight: 700; color: var(--accent); margin-left: 3px; }
 `
