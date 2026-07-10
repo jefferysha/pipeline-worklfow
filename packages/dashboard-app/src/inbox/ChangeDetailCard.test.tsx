@@ -204,4 +204,16 @@ describe('ChangeDetailCard 动作条：全边渲染 + 相位感知文案（评�
     expect(approve.textContent).not.toContain('放行')
     expect(reject.textContent).not.toContain('打回')
   })
+
+  // 终审修复批（非 gate 不说谎）：非 gate 相位没有任何决策在等——「等你复核」徽章与「为什么在
+  // 等你」区此前恒渲染，即便这个相位根本不是 review 门也照样说"等你复核"，是误导性文案。
+  it('非 gate 相位（gate=null）→ 不渲染"等你复核"徽章、不渲染"为什么在等你"区', () => {
+    renderCard({
+      change: makeChange('c1', 'mid', { fields: { workflow: 'release-train' } }),
+      rules: NONGATE_RULES,
+    })
+    // 修复前：badge/why 区恒渲染，不受 isGatePhase 影响——以下两条断言都会失败，这就是红。
+    expect(screen.queryByText('等你复核')).toBeNull()
+    expect(screen.queryByText('为什么在等你')).toBeNull()
+  })
 })

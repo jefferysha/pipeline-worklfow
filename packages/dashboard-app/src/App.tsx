@@ -300,8 +300,11 @@ function AppShell(): JSX.Element {
             </button>
           }
         >
+          {/* hideTitle（终审修复批）：Dialog 的 title 已经渲染过 onboard.no_project_title 这句
+              文案（aria-label 也需要它，Dialog 侧不能去掉）——Onboarding 自己不必再渲染一遍。 */}
           <Onboarding
             kind="no-project"
+            hideTitle
             onRegistered={() => {
               setRegisterOpen(false)
               refresh()

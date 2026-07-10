@@ -72,6 +72,11 @@ export const zh: Dict = {
     copied: '已复制：{value}',
     copy_field: '拷贝 {field}',
   },
+  // 终审修复批：evidence.ts 的未产出占位契约修正——不再把中文「未产出」焊死进纯函数层，改由
+  // 消费方（InboxView 证据 chip / ChangeDetailCard FieldBox）按 EvidenceChip.unset 走这里的 i18n。
+  evidence: {
+    unset: '未产出',
+  },
   board: {
     title: '看板',
     subtitle: '拖拽卡片换相位即触发转换（经 server token 写回）',
@@ -192,6 +197,9 @@ export const zh: Dict = {
     cancel_confirm_dismiss: '取消',
     cancel_confirm_action: '确认取消',
     open_change_toast: '已切换到看板，请查找 "{name}"',
+    // 终审修复批：聚合语境（currentRoot=''）下挂队无法确定目标项目——输入框/按钮 disabled 时的
+    // title 提示。
+    enqueue_aggregate_hint: '聚合视图下请先切换到具体项目',
   },
   onboard: {
     no_project_title: '还没有注册任何项目',
@@ -352,6 +360,9 @@ export const en: Dict = {
     copied: 'Copied: {value}',
     copy_field: 'Copy {field}',
   },
+  evidence: {
+    unset: 'not produced',
+  },
   board: {
     title: 'Board',
     subtitle: 'Drag a card across phases to trigger a transition (written back via server token)',
@@ -469,6 +480,7 @@ export const en: Dict = {
     cancel_confirm_dismiss: 'Cancel',
     cancel_confirm_action: 'Confirm cancel',
     open_change_toast: 'Switched to the board — look for "{name}"',
+    enqueue_aggregate_hint: 'Switch to a specific project first in the aggregate view',
   },
   onboard: {
     no_project_title: 'No project registered yet',

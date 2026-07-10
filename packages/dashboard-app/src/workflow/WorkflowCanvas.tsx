@@ -562,19 +562,20 @@ function WorkflowCanvasInner({ root, name, onBack }: WorkflowCanvasProps): JSX.E
   // UI 重构（impeccable + gsap）：三个组件共用的 motion.ts 工具，用法同已完成的
   // WorkflowEditorView.tsx/StepDetailPanel.tsx——必须在 useGSAP(() => {...}, { scope }) 回调内
   // 同步调用，GSAP 的 context 追踪按调用栈生效。rootRef 挂在最外层 .workflow-canvas，
-  // stageRef 挂在 .workflow-canvas__stage（承载 crossfadeStage 的数据源切换提示）；
-  // addStepDialogRef 挂在 add-step/add-skill 共用弹窗的 backdrop 上（这一个仍是手写
-  // dialog__backdrop，不在本轮 Task 4 迁移范围内——brief 明确只迁 event 名输入弹窗一处）。
-  // event 名输入弹窗（pendingConnection）Task 4 起改用共享 <Dialog>，不再暴露 backdrop ref；
-  // 下面它自己的 useGSAP 改用 scope 选择器文本寻址（同 WorkflowEditorView.tsx 迁移时的写法
-  // 一致，详见其注释），不再需要 addTransitionDialogRef。
+  // stageRef 挂在 .workflow-canvas__stage（承载 crossfadeStage 的数据源切换提示）。
+  // event 名输入弹窗（pendingConnection）Task 4 起改用共享 <Dialog>；add-step/add-skill 共用
+  // 弹窗（终审修复批：全分支最后一处手写 backdrop，第 9 处）随后同样迁移——两者都不再暴露
+  // backdrop ref，各自的 useGSAP 改用 scope 选择器文本寻址（同 WorkflowEditorView.tsx 迁移时的
+  // 写法一致，详见其注释），不再需要 addStepDialogRef/addTransitionDialogRef。
   const rootRef = useRef<HTMLDivElement>(null)
   const stageRef = useRef<HTMLDivElement>(null)
-  const addStepDialogRef = useRef<HTMLDivElement>(null)
 
   useGSAP(() => {
-    if (addStepOpen && addStepDialogRef.current) {
-      revealDialog(addStepDialogRef.current, addStepDialogRef.current.querySelector('.dialog'))
+    if (addStepOpen) {
+      revealDialog(
+        '[data-testid="workflow-add-step"]',
+        '[data-testid="workflow-add-step"] .dialog',
+      )
     }
   }, { scope: rootRef, dependencies: [addStepOpen] })
 
@@ -700,23 +701,29 @@ function WorkflowCanvasInner({ root, name, onBack }: WorkflowCanvasProps): JSX.E
         </section>
       )}
 
+      {/* 终审修复批：第 9 处手写 backdrop 迁移到共享 <Dialog>（同下方 pendingConnection 弹窗的
+          既有迁移模式）——迁移前这里是纯手写 dialog__backdrop，没有任何键盘礼仪（Esc 不关、
+          无焦点困笼、卸载不归位），是本文件最后一处遗留陷阱。 */}
       {addStepOpen && (
-        <div className="dialog__backdrop" ref={addStepDialogRef}>
-          <div role="dialog" className="dialog">
-            <h3 className="dialog__title">{t(drillStepId ? 'workflow_editor.add_skill' : 'workflow_editor.add_step')}</h3>
-            <input
-              className="input"
-              placeholder={t(drillStepId ? 'workflow_editor.add_skill_prompt' : 'workflow_editor.add_step_prompt')}
-              value={newStepId}
-              onChange={(e) => setNewStepId(e.target.value)}
-            />
-            {addStepError && <p className="view__note view__note--error">{addStepError}</p>}
-            <div className="dialog__actions">
+        <Dialog
+          title={t(drillStepId ? 'workflow_editor.add_skill' : 'workflow_editor.add_step')}
+          onClose={() => setAddStepOpen(false)}
+          testid="workflow-add-step"
+          actions={
+            <>
               <button className="btn btn--ghost" onClick={() => setAddStepOpen(false)}>{t('workflow_editor.cancel')}</button>
               <button className="btn" onClick={confirmAddStep}>{t('workflow_editor.confirm')}</button>
-            </div>
-          </div>
-        </div>
+            </>
+          }
+        >
+          <input
+            className="input"
+            placeholder={t(drillStepId ? 'workflow_editor.add_skill_prompt' : 'workflow_editor.add_step_prompt')}
+            value={newStepId}
+            onChange={(e) => setNewStepId(e.target.value)}
+          />
+          {addStepError && <p className="view__note view__note--error">{addStepError}</p>}
+        </Dialog>
       )}
       {pendingConnection && (
         <Dialog

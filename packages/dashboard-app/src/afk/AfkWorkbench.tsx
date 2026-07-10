@@ -178,7 +178,16 @@ export function AfkWorkbench({ root = '', snapshot: mainSnapshot = null, onOpenC
   // 混列且不显 root）——''=聚合，原样显示全部；非空=只保留该项目的卡。
   const visibleCards = root === '' ? allCards : allCards.filter((c) => c.root === root)
   const scheduler = snapshot?.scheduler
-  const enqueueOptions = useMemo(() => contextChanges(mainSnapshot, root), [mainSnapshot, root])
+  // 终审修复批：聚合语境（root===''）下无法确定挂队目标项目——contextChanges 在 root==='' 时
+  // 会把全部 ok 项目的 change 混进候选列表（见其函数注释），既不能替用户消歧，也不能安全拼一个
+  // 具体 project root 去 POST /enqueue（提交时 body 里的 root 就是这个空字符串本身，server 没有
+  // "全部项目"这个合法挂队目标）。数据源层面直接收空（datalist 无候选），配合下方输入框/按钮
+  // disabled 双保险，title 提示用户先切到具体项目。
+  const isAggregate = root === ''
+  const enqueueOptions = useMemo(
+    () => (isAggregate ? [] : contextChanges(mainSnapshot, root)),
+    [mainSnapshot, root, isAggregate],
+  )
 
   async function doAction(action: 'cancel' | 'retry'): Promise<void> {
     if (!selected) return
@@ -251,6 +260,8 @@ export function AfkWorkbench({ root = '', snapshot: mainSnapshot = null, onOpenC
               list="afk-enqueue-datalist"
               value={enqueueName}
               placeholder={t('afk.enqueue_placeholder')}
+              disabled={isAggregate}
+              title={isAggregate ? t('afk.enqueue_aggregate_hint') : undefined}
               onChange={(e) => { setEnqueueName(e.target.value); setEnqueueError(null) }}
             />
             <datalist id="afk-enqueue-datalist">
@@ -260,7 +271,15 @@ export function AfkWorkbench({ root = '', snapshot: mainSnapshot = null, onOpenC
                 </option>
               ))}
             </datalist>
-            <button type="button" className="btn" disabled={!enqueueName.trim()} onClick={() => void doEnqueue()}>{t('afk.enqueue')}</button>
+            <button
+              type="button"
+              className="btn"
+              disabled={isAggregate || !enqueueName.trim()}
+              title={isAggregate ? t('afk.enqueue_aggregate_hint') : undefined}
+              onClick={() => void doEnqueue()}
+            >
+              {t('afk.enqueue')}
+            </button>
           </div>
           {enqueueError && <p className="field__error" data-testid="afk-enqueue-error">{enqueueError}</p>}
           {visibleCards.map((c) => {

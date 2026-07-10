@@ -52,18 +52,23 @@ interface FieldBoxProps {
   copyable?: boolean
   testid?: string
   onCopy?: (value: string) => void
+  /** 终审修复批：未产出占位契约修正——evidence.ts 不再把中文「未产出」焊死进 value，改用
+   *  unset:true 语义标记（此时 value 恒为 ''）；本组件按 unset 走 i18n t('evidence.unset')
+   *  渲染展示文案，不直接吐 value。 */
+  unset?: boolean
 }
 
 /** 证据格 / 产物行 / 语境格三处共用的 key:value 展示格——tone 决定语义色，copyable 决定要不要拷贝钮。 */
-function FieldBox({ fieldKey, value, tone = 'neutral', copyable, testid, onCopy }: FieldBoxProps): JSX.Element {
+function FieldBox({ fieldKey, value, tone = 'neutral', copyable, testid, onCopy, unset }: FieldBoxProps): JSX.Element {
   const { t } = useT()
   const icon = TONE_ICON[tone]
+  const displayValue = unset ? t('evidence.unset') : value
   return (
     <div className={`detail__field detail__field--${tone}`} data-testid={testid}>
       <span className="detail__field-key">{fieldKey}</span>
       <span className="detail__field-value">
         {icon && <Icon name={icon} size={12} />}
-        <span className="detail__field-text">{value}</span>
+        <span className="detail__field-text">{displayValue}</span>
         {copyable && (
           <button
             type="button"
@@ -150,6 +155,8 @@ export function ChangeDetailCard({ root, change, rules, onTransition, onClose, o
     }
   }
 
+  // 禁止用 useCallback 包裹本函数——会冻结 busy 快照，连取消钮/Esc/backdrop 的 busy 语义一起
+  // 假死，且 exhaustive-deps 拦不住（同 InboxView.tsx closePending 的既有告诫，同构复用）。
   function closePending(): void {
     if (!busy) setPending(null)
   }
@@ -163,7 +170,9 @@ export function ChangeDetailCard({ root, change, rules, onTransition, onClose, o
       <header className="detail__head">
         <span className="card__name">{change.name}</span>
         <span className="g-phase">{change.phase}</span>
-        <span className="badge badge--gate">{t('inbox.badge_waiting')}</span>
+        {/* 终审修复批（非 gate 不说谎）：「等你复核」是 review 门专属语义（二元放行/打回决策），
+            非 gate 相位（含 confirm 门）此刻并没有任何决策在等——挂 isGatePhase 而非恒渲染。 */}
+        {isGatePhase && <span className="badge badge--gate">{t('inbox.badge_waiting')}</span>}
         <button
           type="button"
           className="detail__close btn--icon"
@@ -175,28 +184,36 @@ export function ChangeDetailCard({ root, change, rules, onTransition, onClose, o
         </button>
       </header>
 
-      <div className="detail__sec">
-        <div className="detail__sec-h">
-          <Icon name="gate" size={13} />
-          <b>{t('detail.why_heading')}</b>
-        </div>
-        <p className="detail__why">{whyText}</p>
-        {evidenceChips.length > 0 && (
-          <div className="detail__grid">
-            {evidenceChips.map((chip) => (
-              <FieldBox
-                key={chip.key}
-                fieldKey={chip.key}
-                value={chip.value}
-                tone={chip.tone}
-                copyable={chip.copyable}
-                testid={`detail-evidence-${chip.key}`}
-                onCopy={copy}
-              />
-            ))}
+      {/* 终审修复批（非 gate 不说谎）：整节挂 isGatePhase——"为什么在等你"这句话 + 证据格，
+          语义上都是"解释这个决策"的一部分；非 gate 相位没有决策在等，不该渲染这节（含证据格：
+          DEFAULT_RULES 下能产出非空证据格的三个相位 verify/explore/spec 恰好也是仅有的三个
+          review 门相位，isGatePhase 收紧对它们零影响，见 evidence.ts/workflowModel.ts 的
+          REVIEW_PHASES 映射）。 */}
+      {isGatePhase && (
+        <div className="detail__sec">
+          <div className="detail__sec-h">
+            <Icon name="gate" size={13} />
+            <b>{t('detail.why_heading')}</b>
           </div>
-        )}
-      </div>
+          <p className="detail__why">{whyText}</p>
+          {evidenceChips.length > 0 && (
+            <div className="detail__grid">
+              {evidenceChips.map((chip) => (
+                <FieldBox
+                  key={chip.key}
+                  fieldKey={chip.key}
+                  value={chip.value}
+                  tone={chip.tone}
+                  copyable={chip.copyable}
+                  unset={chip.unset}
+                  testid={`detail-evidence-${chip.key}`}
+                  onCopy={copy}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {artifacts.length > 0 && (
         <div className="detail__sec">

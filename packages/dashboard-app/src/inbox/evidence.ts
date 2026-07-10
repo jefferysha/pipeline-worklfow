@@ -13,6 +13,10 @@ export interface EvidenceChip {
   value: string // 原值
   tone: 'pass' | 'fail' | 'pending' | 'neutral'
   copyable?: boolean // 路径/sha 类
+  /** 终审修复批（契约修正）：路径型字段未设时的占位标记——true 时 value 恒为 ''，展示文案不再
+   *  由本纯函数层焊死中文「未产出」，改由消费方（InboxView 证据 chip / ChangeDetailCard
+   *  FieldBox）按这个标记走 i18n t('evidence.unset') 渲染，服务两种语言的 UI。 */
+  unset?: boolean
 }
 
 /**
@@ -52,9 +56,10 @@ function pathChip(c: ChangeSnapshot, key: string): EvidenceChip | null {
   return { key, value, tone: 'neutral', copyable: true }
 }
 
-/** 路径型字段未设时的统一占位：key=字段名（不剔除、不替换 key），value='未产出'，tone pending。 */
+/** 路径型字段未设时的统一占位：key=字段名（不剔除、不替换 key），value=''+unset:true，tone
+ *  pending（终审修复批：不再把中文「未产出」焊死在这里，消费方按 unset 走 i18n）。 */
 function unsetPlaceholder(key: string): EvidenceChip {
-  return { key, value: '未产出', tone: 'pending' }
+  return { key, value: '', tone: 'pending', unset: true }
 }
 
 /**
@@ -95,7 +100,8 @@ export function gateEvidence(c: ChangeSnapshot, rules: WorkflowRules | undefined
       chips.push(pathChip(c, 'build_sha') ?? unsetPlaceholder('build_sha'))
       return chips
     }
-    // phase ∈ {explore, spec}：design_doc/plan 齐查，空的一个不剔除而是替换成"未产出" pending 条目。
+    // phase ∈ {explore, spec}：design_doc/plan 齐查，空的一个不剔除而是替换成 unset pending 条目
+    // （展示文案交给消费方 i18n，本层不再写死中文）。
     return ['design_doc', 'plan'].map((key) => pathChip(c, key) ?? unsetPlaceholder(key))
   }
 

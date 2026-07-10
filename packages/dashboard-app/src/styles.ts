@@ -84,12 +84,13 @@ body { margin: 0; }
 .nav__item { position: relative; border: 0; background: transparent; color: var(--text-3); font: inherit; font-size: 13px; padding: 6px 12px; border-radius: 7px; cursor: pointer; transition: color .14s ease, background .14s ease; }
 .nav__item:hover { color: var(--text); }
 .nav__item--active { background: var(--green-t); color: var(--green); font-weight: 700; }
-.nav__badge { display: inline-block; margin-left: 6px; min-width: 17px; padding: 0 5px; height: 17px; line-height: 17px; text-align: center; font-size: 10.5px; font-weight: 700; font-family: var(--mono); color: var(--red-d); background: var(--red-t); border-radius: 9px; }
+.nav__badge { display: inline-block; margin-left: 6px; min-width: 17px; padding: 0 5px; height: 17px; line-height: 17px; text-align: center; font-size: 10.5px; font-weight: 700; font-family: var(--mono); color: var(--red-d); background: var(--red-t); border: 1px solid var(--red-b); border-radius: 9px; }
 .nav__group { position: relative; }
 .nav__dropdown { position: absolute; top: calc(100% + 4px); left: 0; display: flex; flex-direction: column; min-width: 190px; padding: 4px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-sm); box-shadow: 0 6px 16px rgba(10,22,14,.14); z-index: 20; }
 .nav__dropdown-item { border: 0; background: transparent; color: var(--text-3); font: inherit; font-size: 13px; text-align: left; padding: 6px 10px; border-radius: 6px; cursor: pointer; }
 .nav__dropdown-item:hover { color: var(--text); background: var(--fill); }
-.nav__dropdown-item--active { background: var(--green-t); color: var(--green); font-weight: 700; }
+/* 激活=蓝纪律（spec §1：蓝 accent 专属激活/选中，绿全线降级为纯语义 tint）——此前误用 --green-t/--green。 */
+.nav__dropdown-item--active { background: var(--accent-t); color: var(--accent); font-weight: 700; }
 .nav__dropdown-dia { color: var(--text-3); }
 .nav__dropdown-count { margin-left: 6px; font-family: var(--mono); font-weight: 700; color: var(--accent-d); }
 /* 项目项 + 「注销…」入口同一行（评审 P2-13）：注销钮常态透明，行 hover/自身 focus 才现身。 */
@@ -250,7 +251,10 @@ button.ev__chip--neutral:hover { border-color: var(--border-2); color: var(--tex
 .board__scroll { overflow-x: auto; padding-bottom: 4px; }
 .board__grid { display: grid; grid-template-columns: repeat(7, minmax(126px, 1fr)); gap: 9px; align-items: start; }
 .board__col { background: var(--fill); border-radius: var(--radius); padding: 8px; display: flex; flex-direction: column; min-height: 108px; transition: opacity .15s ease, box-shadow .15s ease; }
-.board__col--target { outline: 2px solid var(--green); outline-offset: -2px; background: var(--green-t); }
+/* 终审修复批：target（拖拽悬停中的合法落点）此前误用绿（outline+tint），与 spec §1"绿只承担
+   语义、蓝才是唯一激活/选中签名色"的纪律冲突——改蓝系，但与下面 --legal 的蓝 inset ring 用
+   不同手法（outline+bg tint vs inset box-shadow）保持视觉可区分，不是同一个描边叠两次。 */
+.board__col--target { outline: 2px solid var(--accent); outline-offset: -2px; background: var(--accent-t); }
 /* 拖拽合法性前示（评审 P1-11）：合法列蓝 ring（--accent 是唯一 emotive 签名色，语义=可推进目标），
    非法列降透明度——不再"任何列都亮 target"，落点前就能分清能不能放。 */
 .board__col--legal { box-shadow: inset 0 0 0 2px var(--accent); }

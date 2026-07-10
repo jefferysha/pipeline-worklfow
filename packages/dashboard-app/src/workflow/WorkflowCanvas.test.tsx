@@ -194,6 +194,9 @@ describe('WorkflowCanvas —— 顶层 step 拓扑', () => {
     renderCanvas()
     await waitFor(() => expect(screen.getByText(/intake/i)).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: '+ step' }))
+    // 终审修复批（对话框查询语义化）：迁移到共享 Dialog 后可以直接按 role=dialog 断言，
+    // 不必只靠 placeholder/按钮文案间接证明弹窗已经打开。
+    expect(await screen.findByRole('dialog')).toBeInTheDocument()
     fireEvent.change(screen.getByPlaceholderText(/step id/), { target: { value: 'review' } })
     fireEvent.click(screen.getByRole('button', { name: '确认' }))
     await waitFor(() => expect(screen.getByText(/review/i)).toBeInTheDocument())
@@ -206,6 +209,18 @@ describe('WorkflowCanvas —— 顶层 step 拓扑', () => {
     fireEvent.change(screen.getByPlaceholderText(/step id/), { target: { value: 'intake' } })
     fireEvent.click(screen.getByRole('button', { name: '确认' }))
     expect(screen.getByText(/id 重复/)).toBeInTheDocument()
+  })
+
+  // 终审修复批（第 9 处手写 backdrop 迁移到共享 Dialog）：迁移前 add-step 弹窗是纯手写
+  // dialog__backdrop，没有任何键盘礼仪——Esc 对它完全无效，同注册对话框 P0-5 修复前的陷阱。
+  it('add-step 弹窗：真 role=dialog + Esc 可关（迁移前手写 backdrop 对 Esc 无反应）', async () => {
+    renderCanvas()
+    await waitFor(() => expect(screen.getByText(/intake/i)).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: '+ step' }))
+    expect(await screen.findByRole('dialog')).toBeInTheDocument()
+    fireEvent.keyDown(document, { key: 'Escape' })
+    // 修复前：手写 backdrop 没有任何键盘监听，本断言会失败——这就是红。
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
   it('真触发 onConnect（模拟拖线）→ 弹 event 名输入 → 确认后新增一条 transition', async () => {
@@ -422,6 +437,8 @@ describe('WorkflowCanvas —— 钻入 skill DAG 层', () => {
     fireEvent.doubleClick(screen.getByText(/intake/i))
     await waitFor(() => expect(screen.getByText('a')).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: '+ skill' }))
+    // 终审修复批（对话框查询语义化）：同上，add-step/add-skill 共用同一个迁移后的 Dialog。
+    expect(await screen.findByRole('dialog')).toBeInTheDocument()
     fireEvent.change(screen.getByPlaceholderText(/skill id/), { target: { value: 'c' } })
     fireEvent.click(screen.getByRole('button', { name: '确认' }))
     await waitFor(() => expect(screen.getByText('c')).toBeInTheDocument())

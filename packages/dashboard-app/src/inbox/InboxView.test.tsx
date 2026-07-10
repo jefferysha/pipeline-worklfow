@@ -156,6 +156,28 @@ describe('InboxView busy 守卫（评审修复：迁移到共享 Dialog 后 Esc/
   })
 })
 
+/**
+ * 终审修复批：Enter 分支补上与 Esc 同款的"Dialog 打开时整体不处理"旁路——此前只有 Esc 有这条
+ * 判断。回退确认框打开期间对 document 按 Enter（例如用户想用 Enter 确认对话框里的按钮，但
+ * 焦点尚未真正落进对话框，或键盘事件冒泡到 document），此前会顺带把 kbdFocus 所在行（默认
+ * 首行）的详情卡也 toggle 开——document 级监听器不知道焦点已经被 Dialog 的困笼接管。
+ */
+describe('InboxView Enter 键盘守卫（终审修复批：与 Esc 同款，Dialog 打开时不 toggle 背后详情卡）', () => {
+  it('回退确认 Dialog 打开时对 document 发 Enter → 详情卡不被 toggle（仍保持关闭）', async () => {
+    const snap = makeSnapshot([
+      makeProject('/repo', [makeChange('login-flow', 'verify', { track: 'frontend' })]),
+    ])
+    renderInbox({ snapshot: snap })
+    expect(screen.queryByTestId('change-detail')).toBeNull()
+    fireEvent.click(screen.getByTestId('inbox-quick-verify-fail'))
+    expect(await screen.findByRole('dialog')).toBeInTheDocument()
+
+    fireEvent.keyDown(document, { key: 'Enter' })
+    // 修复前：Enter 无条件 toggle kbdFocus（默认 0）所在行的详情卡，本断言会失败——这就是红。
+    expect(screen.queryByTestId('change-detail')).toBeNull()
+  })
+})
+
 describe('InboxView loading / error', () => {
   it('首帧 loading（无 snapshot）显示加载中', () => {
     renderInbox({ snapshot: null, loading: true })

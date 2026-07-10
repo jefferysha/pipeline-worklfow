@@ -39,8 +39,11 @@ interface Pending {
  * 行内证据 chip（Task 7，评审 P0-1：gateEvidence 复用，行内即时可见，不必点开详情卡才看得到）。
  * copyable 字段（路径/sha 类）渲染成可点的 button（拷贝值），其余 tone 语义字段渲染成只读 span
  * ——同视觉基准 demo 的 `.chip`/`button.chip` 区分（非 button 的 chip 不该看起来可点）。
+ * 终审修复批：未产出占位改走 i18n——chip.unset 时展示 t('evidence.unset')，不直接吐 chip.value
+ * （evidence.ts 的 unsetPlaceholder() 此时 value 恒为 ''，不再是焊死的中文字面量）；未设字段
+ * 从不 copyable，故只有非 copyable 分支需要处理。
  */
-function renderEvidenceChip(chip: EvidenceChip, onCopy: (value: string) => void): JSX.Element {
+function renderEvidenceChip(chip: EvidenceChip, onCopy: (value: string) => void, t: (key: string, vars?: Record<string, string | number>) => string): JSX.Element {
   if (chip.copyable) {
     return (
       <button
@@ -59,10 +62,15 @@ function renderEvidenceChip(chip: EvidenceChip, onCopy: (value: string) => void)
     <span key={chip.key} className={`ev__chip ev__chip--${chip.tone}`} data-testid={`inbox-evidence-${chip.key}`}>
       {chip.tone === 'pass' && <Icon name="check" size={11} />}
       {chip.tone === 'fail' && <Icon name="x" size={11} />}
-      {chip.key}={chip.value}
+      {chip.key}={chip.unset ? t('evidence.unset') : chip.value}
     </span>
   )
 }
+
+/** Enter/j/k 键盘旁路的 tagName 集合（终审修复批收紧：从 {INPUT,TEXTAREA} 扩到含
+ *  SELECT/BUTTON/A）——Dialog 内除文本输入外，select/按钮/链接上按下这些键同样不该被下面
+ *  这个 document 级监听器接管。 */
+const FOCUSABLE_BYPASS_TAGS = new Set(['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON', 'A'])
 
 /**
  * 收件箱 —— 默认落地视图（病灶②的解法）。只答一个问题："现在哪个 change 在等我决定"。
@@ -93,23 +101,27 @@ export function InboxView({ snapshot, loading, error, currentRoot, rulesByKey, o
   }, [items.length])
 
   // j/k 移动焦点环、Enter 开/关 kbdFocus 所在行的详情卡、Esc 关详情——单个 document keydown
-  // 监听（brief 明确要求合一，不是三个监听器）。两条旁路：① e.target 是 INPUT/TEXTAREA 时整体
-  // 不处理——NewChangeDialog/Onboarding 的文本输入与本视图同时挂载（对话框是覆盖层，不卸载
-  // 背后的 InboxView），敲字符 'j'/'k' 或提交时的 Enter 不该拨动收件箱的隐藏状态；
-  // ② Esc 时若 document 上还有打开的 [role="dialog"]（本视图的回退确认框，或详情卡自己的回退
-  // 确认框）则整体不处理，让位给 Dialog 自己的 LIFO 栈 Esc 逻辑——避免"关掉确认框的同一次 Esc
-  // 顺带把详情卡也关了"的双重反应。Dialog 组件的状态更新在这次事件派发的同步阶段还没有落到
-  // DOM 上（React 18 批处理），这里的 document.querySelector 读到的仍是"事件发生时"的 DOM，
-  // 与 Dialog 自己监听器的注册/执行顺序无关，两边独立判断都成立。
+  // 监听（brief 明确要求合一，不是三个监听器）。两条旁路：① e.target 的 tagName 命中
+  // FOCUSABLE_BYPASS_TAGS 时整体不处理——NewChangeDialog/Onboarding 的文本输入、Dialog 内的
+  // select/button/链接与本视图同时挂载（对话框是覆盖层，不卸载背后的 InboxView），敲字符
+  // 'j'/'k' 或对话框内控件上的 Enter 不该拨动收件箱的隐藏状态（终审修复批收紧：此前只挡
+  // INPUT/TEXTAREA，SELECT/BUTTON/A 上按下的 Enter/j/k 会漏到这个监听器）；
+  // ② Enter/Esc 时若 document 上还有打开的 [role="dialog"]（本视图的回退确认框，或详情卡自己
+  // 的回退确认框）则整体不处理，让位给 Dialog 自己的 LIFO 栈 Esc/提交逻辑——避免"确认框内按
+  // Enter 提交的同一次按键，顺带把背后 kbdFocus 所在行的详情卡也 toggle 了"的双重反应（终审
+  // 修复批：此前只有 Esc 分支有这条判断，Enter 分支没有）。Dialog 组件的状态更新在这次事件
+  // 派发的同步阶段还没有落到 DOM 上（React 18 批处理），这里的 document.querySelector 读到的
+  // 仍是"事件发生时"的 DOM，与 Dialog 自己监听器的注册/执行顺序无关，两边独立判断都成立。
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent): void {
       const target = e.target
-      if (target instanceof HTMLElement && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return
+      if (target instanceof HTMLElement && FOCUSABLE_BYPASS_TAGS.has(target.tagName)) return
       if (e.key === 'j') {
         setKbdFocus((i) => Math.min(i + 1, items.length - 1))
       } else if (e.key === 'k') {
         setKbdFocus((i) => Math.max(i - 1, 0))
       } else if (e.key === 'Enter') {
+        if (document.querySelector('[role="dialog"]')) return
         const item = items[kbdFocus]
         if (item) {
           const key = `${item.root}/${item.change.name}`
@@ -287,7 +299,7 @@ export function InboxView({ snapshot, loading, error, currentRoot, rulesByKey, o
               )}
               {evidence.length > 0 && (
                 <div className="ev" onClick={(e) => e.stopPropagation()}>
-                  {evidence.map((chip) => renderEvidenceChip(chip, copyEvidence))}
+                  {evidence.map((chip) => renderEvidenceChip(chip, copyEvidence, t))}
                 </div>
               )}
             </li>

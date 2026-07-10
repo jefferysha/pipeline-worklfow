@@ -10,13 +10,19 @@ export interface OnboardingProps {
   onRegistered?: () => void
   /** no-change 形态主按钮 → 打开 NewChangeDialog。 */
   onNewChange?: () => void
+  /** 终审修复批：App.tsx 的注册对话框场景下，外层 <Dialog title=.../> 已经渲染过一次
+   *  onboard.no_project_title 这句文案（Dialog 的 h2.dialog__title，aria-label 也需要它，
+   *  不能去掉）——本组件自己 kind==='no-project' 时还会再渲染一遍同文案的 h2.empty__title，
+   *  同一句标题在对话框里重复出现两次。true 时本组件不渲染自己那份（只对 no-project 生效：
+   *  no-change 形态不会被套进"外层也有标题"的 Dialog 场景，无需理会）。 */
+  hideTitle?: boolean
 }
 
 /**
  * 教学式空状态（G18，spec §3.2；视觉真相源 demo all-views §6）：
  * 空状态不只说"没有数据"，而是教会界面怎么用——表单直连新端点 + CLI 等价命令双路径。
  */
-export function Onboarding({ kind, root, onRegistered, onNewChange }: OnboardingProps): JSX.Element {
+export function Onboarding({ kind, root, onRegistered, onNewChange, hideTitle }: OnboardingProps): JSX.Element {
   const { t } = useT()
   const [path, setPath] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -53,7 +59,7 @@ export function Onboarding({ kind, root, onRegistered, onNewChange }: Onboarding
       <div className="empty__mark" aria-hidden="true">⧉</div>
       {kind === 'no-project' ? (
         <>
-          <h2 className="empty__title">{t('onboard.no_project_title')}</h2>
+          {!hideTitle && <h2 className="empty__title">{t('onboard.no_project_title')}</h2>}
           <p className="empty__desc">{t('onboard.no_project_desc')}</p>
           <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
             <input

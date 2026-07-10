@@ -177,7 +177,9 @@ describe('AfkWorkbench', () => {
       }
       throw new Error(`unexpected ${url}`)
     }) as unknown as typeof fetch
-    renderAfk()
+    // root 显式传具体项目（终审修复批：root===''是聚合语境，挂队区整体 disabled——本用例的
+    // 意图是验证挂队提交流程本身，与聚合禁用是两个正交关注点，不依赖 renderAfk() 的默认 root）。
+    renderAfk({ root: '/tmp/a' })
     await waitFor(() => expect(screen.getByText('demo-2')).toBeInTheDocument())
     expect(snapshotCalls).toBe(1)
     const input = screen.getByPlaceholderText(/change 名|change name/i)
@@ -196,7 +198,8 @@ describe('AfkWorkbench', () => {
       }
       throw new Error(`unexpected ${url}`)
     }) as unknown as typeof fetch
-    renderAfk()
+    // root 显式传具体项目（终审修复批：见上一条用例同款注释——聚合禁用与本用例意图正交）。
+    renderAfk({ root: '/tmp/a' })
     await waitFor(() => expect(screen.getByText('demo-2')).toBeInTheDocument())
     const input = screen.getByPlaceholderText(/change 名|change name/i)
     fireEvent.change(input, { target: { value: 'dup' } })
@@ -212,7 +215,9 @@ describe('AfkWorkbench', () => {
       if (url === '/api/afk/snapshot') return new Response(JSON.stringify(SNAPSHOT), { status: 200 })
       throw new Error(`unexpected ${url}`)
     }) as unknown as typeof fetch
-    renderAfk()
+    // root 显式传具体项目（终审修复批：本用例验证的是"空名 disabled"这条纪律，与聚合禁用是
+    // 两个正交关注点——聚合语境下按钮恒 disabled，会掩盖"填字符后启用"这条断言本身）。
+    renderAfk({ root: '/tmp/a' })
     await waitFor(() => expect(screen.getByText('demo-2')).toBeInTheDocument())
     const btn = screen.getByRole('button', { name: /挂队|Enqueue/i })
     expect(btn).toBeDisabled()
@@ -381,5 +386,33 @@ describe('AfkWorkbench', () => {
     expect(followSwitch.checked).toBe(true)
     fireEvent.click(followSwitch)
     expect(followSwitch.checked).toBe(false)
+  })
+})
+
+/**
+ * 终审修复批：聚合语境（root===''）下挂队无法确定目标项目——contextChanges 在 root==='' 时会把
+ * 全部 ok 项目的 change 混进候选列表（既无法替用户消歧，也无法安全拼一个具体 project root 去
+ * POST /enqueue）。修复前挂队区在聚合语境下与单项目语境一视同仁地可用，是"看起来能挂队、
+ * 实际会拼错 root"的陷阱。
+ */
+describe('AFK 挂队聚合禁用（终审修复批）', () => {
+  it('聚合语境（root=""）→ 挂队输入框/按钮 disabled，datalist 无候选项', async () => {
+    const mainSnapshot = makeSnapshot([makeProject('/tmp/a', [makeChange('alpha', 'build')])])
+    const { container } = renderAfk({ root: '', snapshot: mainSnapshot })
+    await waitFor(() => expect(screen.getByText('demo-2')).toBeInTheDocument())
+    const input = screen.getByPlaceholderText(/change 名|change name/i)
+    const btn = screen.getByRole('button', { name: /挂队|Enqueue/i })
+    // 修复前：两者都不受 root 影响，本两条断言都会失败——这就是红。
+    expect(input).toBeDisabled()
+    expect(btn).toBeDisabled()
+    expect(container.querySelectorAll('datalist option')).toHaveLength(0)
+  })
+
+  it('非聚合语境（root="/tmp/a"）→ 挂队输入框/按钮不因语境本身 disabled（仍受空名规则约束）', async () => {
+    const mainSnapshot = makeSnapshot([makeProject('/tmp/a', [makeChange('alpha', 'build')])])
+    renderAfk({ root: '/tmp/a', snapshot: mainSnapshot })
+    await waitFor(() => expect(screen.getByText('demo-2')).toBeInTheDocument())
+    const input = screen.getByPlaceholderText(/change 名|change name/i)
+    expect(input).not.toBeDisabled()
   })
 })

@@ -94,6 +94,20 @@ describe('App 注册对话框（评审 P0-5：陷阱修复——迁移前无 rol
     fireEvent.click(screen.getByRole('button', { name: '取消' }))
     expect(screen.queryByTestId('register-dialog')).toBeNull()
   })
+
+  // 终审修复批：Dialog 的 title 与 Onboarding 自己的 h2 此前都渲染 onboard.no_project_title，
+  // 同一句"还没有注册任何项目"在对话框里出现两次（Dialog 需要它做 aria-label，不能去掉那份；
+  // 重复的是 Onboarding 自己的 h2，见 Onboarding.tsx 的 hideTitle prop）。
+  it('对话框内标题文案「还没有注册任何项目」只出现一次', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await screen.findByTestId('inbox-view')
+    await user.click(screen.getByTestId('project-register'))
+    const dialog = await screen.findByTestId('register-dialog')
+    // 修复前：Dialog 的 h2.dialog__title + Onboarding 自己的 h2.empty__title 各渲染一遍，
+    // 命中两处——本断言会失败，这就是红。
+    expect(within(dialog).getAllByText('还没有注册任何项目')).toHaveLength(1)
+  })
 })
 
 describe('App workflow 编辑器接线（GOAL.md E8 收编，Task 9）', () => {

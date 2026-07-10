@@ -58,7 +58,7 @@ describe('gateEvidence（gate 证据映射纯函数）', () => {
     expect(gateEvidence(c, DEFAULT_RULES)).toEqual(expected)
   })
 
-  it('verify 门：report 字面 null → pending 占位（不再剔除）；空字符串 tri-state 字段 → pending', () => {
+  it('verify 门：report 字面 null → unset pending 占位（不再剔除）；空字符串 tri-state 字段 → pending', () => {
     const c = makeChange('c', 'verify', {
       fields: {
         verify_result: 'pass',
@@ -72,13 +72,15 @@ describe('gateEvidence（gate 证据映射纯函数）', () => {
       { key: 'verify_result', value: 'pass', tone: 'pass' },
       { key: 'agent_review_result', value: 'pass', tone: 'pass' },
       { key: 'codex_review_result', value: '', tone: 'pending' },
-      { key: 'verification_report', value: '未产出', tone: 'pending' },
+      // 终审修复批（契约修正）：未产出占位不再把中文「未产出」焊死进 value——value 置空 +
+      // unset:true，展示文案交给消费方 i18n t('evidence.unset')。
+      { key: 'verification_report', value: '', tone: 'pending', unset: true },
       { key: 'build_sha', value: 'sha123', tone: 'neutral', copyable: true },
     ]
     expect(gateEvidence(c, DEFAULT_RULES)).toEqual(expected)
   })
 
-  it('explore 门：design_doc 有值 copyable；plan 未产出 → value 替换为「未产出」+ pending（key 仍是字段名）', () => {
+  it('explore 门：design_doc 有值 copyable；plan 未产出 → value 置空 + unset:true + pending（key 仍是字段名，展示文案交给消费方 i18n）', () => {
     const c = makeChange('c', 'explore', {
       fields: {
         design_doc: '/repo/openspec/changes/c/design.md',
@@ -87,7 +89,7 @@ describe('gateEvidence（gate 证据映射纯函数）', () => {
     })
     const expected: EvidenceChip[] = [
       { key: 'design_doc', value: '/repo/openspec/changes/c/design.md', tone: 'neutral', copyable: true },
-      { key: 'plan', value: '未产出', tone: 'pending' },
+      { key: 'plan', value: '', tone: 'pending', unset: true },
     ]
     expect(gateEvidence(c, DEFAULT_RULES)).toEqual(expected)
   })
