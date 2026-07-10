@@ -213,7 +213,7 @@ export function TaskDetail({
   const footLabel =
     state === 'failed' ? `automation · ${automation}` : firstForward ? `${change.phase} → ${firstForward.to}` : change.phase
 
-  /** 当前行结论（demo dt-verdict）：gate 相位沿 ChangeDetailCard whyText 判据迁移
+  /** 当前行结论（demo dt-verdict）：gate 阶段沿 ChangeDetailCard whyText 判据迁移
    *  （verify 用 VERIFY_STATUS_FIELDS 白名单圈未过项——产物没产出不等于验证没过，Important-1），
    *  其余按五态给一句人话。 */
   function verdict(): { text: string; bad: boolean; glyph: string } {

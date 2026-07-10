@@ -5,14 +5,13 @@ import { Onboarding } from './Onboarding'
 
 beforeEach(() => {
   localStorage.clear()
-  ;(window as unknown as { __PIPELINE_DASHBOARD_TOKEN__?: string }).__PIPELINE_DASHBOARD_TOKEN__ = 'tok'
 })
 afterEach(() => {
   vi.unstubAllGlobals()
 })
 
 function renderOb(over: Partial<Parameters<typeof Onboarding>[0]> = {}) {
-  const props = { kind: 'no-project' as const, onRegistered: vi.fn(), onNewChange: vi.fn(), ...over }
+  const props = { kind: 'no-project' as const, onNewChange: vi.fn(), ...over }
   render(
     <I18nProvider>
       <Onboarding {...props} />
@@ -21,41 +20,38 @@ function renderOb(over: Partial<Parameters<typeof Onboarding>[0]> = {}) {
   return props
 }
 
-describe('Onboarding no-project（零项目首屏：注册表单 + CLI 双路径）', () => {
-  it('渲染标题/路径输入/注册按钮/CLI 教学块', () => {
+// T17（决议#7 + T2）：注册表单退役——pipeline init 会 best-effort 自动登记项目，no-project
+// 空状态改纯教学态。旧断言意图迁移表：
+//   · 「路径输入 + 注册按钮 + POST /api/projects」→ 表单 0 渲染（注册走 CLI，端点仅兼容保留）
+//   · 「注册失败行内文案」→ 无注册路径，无此态
+//   · 「复制按钮写入 pipeline projects add …」→ 幽灵命令清除，写入的是 pipeline init 命令
+describe('Onboarding no-project（T17 纯教学态：跑 pipeline init，项目自动出现）', () => {
+  it('渲染标题 + 教学文案（pipeline init 自动登记）+ CLI 命令块', () => {
     renderOb()
     expect(screen.getByText('还没有注册任何项目')).toBeInTheDocument()
-    expect(screen.getByTestId('onboard-path')).toBeInTheDocument()
-    expect(screen.getByTestId('onboard-register')).toBeInTheDocument()
-    expect(screen.getByTestId('onboard-cli').textContent).toContain('pipeline')
+    expect(screen.getByTestId('onboard-no-project').textContent).toContain('自动出现')
+    expect(screen.getByTestId('onboard-cli').textContent).toContain('pipeline init')
   })
 
-  it('注册提交：POST /api/projects → onRegistered 回调', async () => {
-    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ ok: true, root: '/x' }) })
-    vi.stubGlobal('fetch', fetchMock)
-    const props = renderOb()
-    fireEvent.change(screen.getByTestId('onboard-path'), { target: { value: '/Users/me/code/proj' } })
-    fireEvent.click(screen.getByTestId('onboard-register'))
-    await waitFor(() => expect(props.onRegistered).toHaveBeenCalledOnce())
-    expect(String(fetchMock.mock.calls[0]![0])).toBe('/api/projects')
+  it('注册表单已退役：无路径输入、无注册按钮', () => {
+    renderOb()
+    expect(screen.queryByTestId('onboard-path')).toBeNull()
+    expect(screen.queryByTestId('onboard-register')).toBeNull()
   })
 
-  it('注册失败：server 文案行内可见，不回调', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 404, json: async () => ({ ok: false, error: '路径不存在' }) }))
-    const props = renderOb()
-    fireEvent.change(screen.getByTestId('onboard-path'), { target: { value: '/nope' } })
-    fireEvent.click(screen.getByTestId('onboard-register'))
-    await waitFor(() => expect(screen.getByTestId('onboard-error').textContent).toContain('路径不存在'))
-    expect(props.onRegistered).not.toHaveBeenCalled()
+  it('幽灵命令清除：整个空状态不出现 "pipeline projects add"（真实命令是 pipeline init 自动登记）', () => {
+    renderOb()
+    expect(screen.getByTestId('onboard-no-project').textContent).not.toContain('projects add')
   })
 
-  it('复制按钮：clipboard 写入 CLI 命令 + 文案切换"已复制"', async () => {
+  it('复制按钮：clipboard 写入 pipeline init 命令 + 文案切换"已复制"', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined)
     vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } })
     renderOb()
     fireEvent.click(screen.getByTestId('onboard-copy'))
     await waitFor(() => expect(screen.getByTestId('onboard-copy').textContent).toContain('已复制'))
-    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('pipeline projects add'))
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('pipeline init'))
+    expect(writeText).not.toHaveBeenCalledWith(expect.stringContaining('projects add'))
   })
 })
 

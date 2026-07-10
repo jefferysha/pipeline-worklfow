@@ -171,6 +171,25 @@ describe('HookTimeline 开关写回（验收②）', () => {
     expect(within(screen.getByTestId('wb-step-draft')).getByText(/8 钩子/)).toBeInTheDocument()
   })
 
+  // T17：挂上 App 后失败提示升级 showFlash——宿主传 onToggleError 时错误走回调（App 接
+  // showFlash('error')），行内 role=alert 不再重复渲染；未传时行为与 T15 完全一致（上一条用例钉住）。
+  it('T17 onToggleError 接线：POST 失败走宿主回调（带 server 原文），行内 alert 不渲染', async () => {
+    postHooksResponse = () => new Response(JSON.stringify({ ok: false, error: '磁盘只读' }), { status: 500 })
+    const onToggleError = vi.fn()
+    render(
+      <I18nProvider>
+        <WorkbenchView root={ROOT} onToggleError={onToggleError} />
+      </I18nProvider>,
+    )
+    await screen.findByTestId('wb-hooks')
+    const sw = screen.getByTestId('wb-hk-sw-router')
+    fireEvent.click(sw)
+    await waitFor(() => expect(sw).toHaveAttribute('aria-checked', 'true')) // 失败仍回滚
+    expect(onToggleError).toHaveBeenCalledTimes(1)
+    expect(String(onToggleError.mock.calls[0]![0])).toContain('磁盘只读')
+    expect(screen.queryByTestId('wb-hk-toggle-error')).toBeNull()
+  })
+
   it('矩阵预置禁用键只作用在对应阶段：router.draft 禁用时，draft 关/review 开', async () => {
     hooksMatrix = { 'router.draft': false }
     renderView()

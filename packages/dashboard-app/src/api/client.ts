@@ -42,7 +42,7 @@ export async function fetchSnapshot(): Promise<Snapshot> {
 }
 
 /**
- * 写回一次相位转换。server 契约：body { root, event }；写端点强制 token（Authorization: Bearer）。
+ * 写回一次阶段转换。server 契约：body { root, event }；写端点强制 token（Authorization: Bearer）。
  * 失败抛 ApiError（含 server 的 error 文案），调用方 toast 呈现。
  */
 export async function postTransition(name: string, root: string, event: string): Promise<void> {

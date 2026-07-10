@@ -7,9 +7,10 @@ export interface Dict {
 
 export const zh: Dict = {
   app: { title: 'Pipeline 控制台', subtitle: '全局工作流看板' },
+  // T17（v5 三视图 IA）：一级导航收敛 收件箱/进度/工作台；board/settings/loops/afk/workflows
+  // 入口键随下拉分组退役删除（组件文件 T18 删）；注册项目入口删除（决议#7，pipeline init 自动登记）。
   nav: {
-    inbox: '收件箱', board: '看板', settings: '设置', workbench: '工作台', loops: 'Loop 设置', afk: 'AFK 工作台', workflows: 'Workflow 编辑器',
-    project_register: '＋ 注册项目…',
+    inbox: '收件箱', progress: '进度', workbench: '工作台',
     // D5/G19③ 聚合入口收编（Task 5）：切换器下拉首项，root='' 是全应用聚合语境的唯一表示。
     project_all: '全部项目',
     // 项目项 hover 区的注销入口（评审 P2-13）；确认走 Dialog，见下方 unregister_* 四项。
@@ -27,7 +28,8 @@ export const zh: Dict = {
     loading: '加载中…',
     refresh: '刷新',
     project: '项目',
-    phase: '相位',
+    // T17 决议#8：用户可见文案一律「阶段」（代码标识符 phase 不动）。
+    phase: '阶段',
     track: '轨道',
     updated: '更新于',
     connected: '实时已连接',
@@ -45,9 +47,10 @@ export const zh: Dict = {
     // T9（v5 重构）：副标题对齐 demo v5 收件箱口径——只收现在就能拍板的事。
     subtitle: '只收你现在就能拍板的事——放行、打回、重试、放弃；缺产出的活在进度里等 agent',
     empty_title: '没有在等你的事',
-    empty_desc: '当前没有 change 停在需要你决定的复核门。可去看板查看全部进度。',
+    empty_desc: '当前没有 change 停在需要你决定的复核门。可去进度查看全部任务。',
     count: '{n} 个在等你',
-    open_board: '去看板',
+    // T17 三视图 IA：看板退役，空态按钮改指进度（key 名不动，代码标识符纪律同决议#8）。
+    open_board: '去进度',
     badge_waiting: '等你复核',
     awaiting: {
       explore: '调研完成，等你逐项确认设计',
@@ -124,17 +127,17 @@ export const zh: Dict = {
   },
   board: {
     title: '看板',
-    subtitle: '拖拽卡片换相位即触发转换（经 server token 写回）',
+    subtitle: '拖拽卡片换阶段即触发转换（经 server token 写回）',
     empty: '还没有任何 change。用 CLI 建一个：pipeline init',
     col_empty: '空',
-    drop_hint: '松手推进到此相位',
+    drop_hint: '松手推进到此阶段',
     transition_ok: '{name}：{event} 已提交',
     transition_fail: '转换失败：{msg}',
     confirm_backward_title: '确认打回？',
     confirm_backward_desc: '{name} 将从 {from} 回退到 {to}（{event}）。这是回退边，确认继续？',
     confirm_yes: '确认',
     confirm_no: '取消',
-    group_meta: '{steps} 相位 · {cards} 张',
+    group_meta: '{steps} 阶段 · {cards} 张',
     group_meta_nocol: '{cards} 张',
     group_error: 'workflow 定义加载失败：{msg}',
     archived_fold: '{n} 张已归档',
@@ -147,17 +150,17 @@ export const zh: Dict = {
   },
   settings: {
     title: '设置',
-    tab_axis: '相位轴',
+    tab_axis: '阶段轴',
     tab_matrix: '技能矩阵',
-    axis_title: '相位轴 / 转换图',
-    axis_desc: '7 相位与合法转换边（manifest 单一真相源镜像）；标记复核门相位。',
+    axis_title: '阶段轴 / 转换图',
+    axis_desc: '7 阶段与合法转换边（manifest 单一真相源镜像）；标记复核门阶段。',
     review_gate: '复核门',
-    matrix_title: '相位 × 轨道 强制技能矩阵',
-    matrix_desc: '各相位各轨道的强制 / 推荐 skill；改动实时写回本机 manifest。',
+    matrix_title: '阶段 × 轨道 强制技能矩阵',
+    matrix_desc: '各阶段各轨道的强制 / 推荐 skill；改动实时写回本机 manifest。',
     mandatory: '强制',
     recommended: '推荐',
     no_config_endpoint: '（只读预览：本机 server 暂无 config 写端点，编辑待后续里程碑）',
-    phase: '相位',
+    phase: '阶段',
   },
   advanced: {
     title: '高级 / 调试工具',
@@ -248,16 +251,14 @@ export const zh: Dict = {
   },
   onboard: {
     no_project_title: '还没有注册任何项目',
-    no_project_desc: '把一个项目根目录注册进来，它的所有 change 就会出现在收件箱和看板上。',
-    register: '注册项目',
-    path_placeholder: '/Users/you/code/my-project',
+    // T17 纯教学态（决议#7 + T2）：pipeline init 自动登记项目，注册表单/幽灵命令全部退役。
+    no_project_desc: '在项目目录里跑一次 pipeline init，项目就会自动出现在这里——不需要单独注册。',
     or_cli: '或者用 CLI',
     copy: '复制',
     copied: '已复制 ✓',
     no_change_title: '这个项目还没有 change',
     no_change_desc: '新建一个 change 开始跑流水线；也可以用 CLI 初始化。',
     new_change: '新建 change',
-    cancel: '取消',
   },
   newchange: {
     title: '新建 change',
@@ -278,7 +279,7 @@ export const zh: Dict = {
     new_placeholder: '新 workflow 名（a-z A-Z 0-9 - _）',
     create: '新建',
     delete: '删除',
-    meta: '{steps} 相位 · {gates} 门 · {refs} 张引用',
+    meta: '{steps} 阶段 · {gates} 门 · {refs} 张引用',
     delete_confirm: '确定删除 workflow "{name}"？如果有 change 正引用它，删除后其 transition/internal-skill-gate 会报"workflow 未找到"。',
     delete_refs_warning: '{n} 张 change 正在引用',
     invalid_name: '非法名字（仅允许 a-z A-Z 0-9 - _），或与 default 冲突',
@@ -399,6 +400,9 @@ export const zh: Dict = {
     names_error: 'workflow 列表获取失败：{msg}',
     def_error: '加载 workflow 失败：{msg}',
     network_error: '网络错误',
+    // T17 评审收口：项目非零但全部不可达（ok=false）时工作台没有可用的项目根——
+    // 诚实空态，不拿空 root 打端点得一屏报错。
+    no_reachable_root: '没有可读取的项目——工作台的配置都挂在具体项目上，请先确认项目目录存在且可访问。',
     // T14（v5 交互重建）：技能链区（依赖链可视化 + 添加面板 + default 强制技能矩阵）。
     sk_sec: '技能',
     sk_hint_custom: '空 = 不限制；声明后即为白名单并按依赖顺序解锁',
@@ -482,6 +486,7 @@ export const zh: Dict = {
     lp_risk_low: 'low · 低(推荐)',
     lp_risk_medium: 'medium · 中',
     lp_risk_high: 'high · 高',
+    lp_runner: '执行 agent(runner)',
     lp_sec_budget: '节奏与预算',
     lp_sec_budget_hint: '推荐值已预填——拖动调节，超出预算按下面的策略处理',
     lp_sld_cadence: '运行节奏',
@@ -603,8 +608,7 @@ export const zh: Dict = {
 export const en: Dict = {
   app: { title: 'Pipeline Console', subtitle: 'Global workflow board' },
   nav: {
-    inbox: 'Inbox', board: 'Board', settings: 'Settings', workbench: 'Workbench', loops: 'Loop Settings', afk: 'AFK Workbench', workflows: 'Workflow Editor',
-    project_register: '+ Register project…',
+    inbox: 'Inbox', progress: 'Progress', workbench: 'Workbench',
     project_all: 'All projects',
     project_unregister: 'Unregister…',
     unregister_title: 'Unregister project "{name}"?',
@@ -635,9 +639,9 @@ export const en: Dict = {
     title: 'Waiting on you',
     subtitle: 'Only what you can decide right now — approve, send back, retry or dismiss; work missing outputs waits for the agent in Progress',
     empty_title: 'Nothing is waiting on you',
-    empty_desc: 'No change is parked at a review gate right now. Head to the board to see all progress.',
+    empty_desc: 'No change is parked at a review gate right now. Head to Progress to see every task in flight.',
     count: '{n} waiting on you',
-    open_board: 'Open board',
+    open_board: 'Open progress',
     badge_waiting: 'Awaiting review',
     awaiting: {
       explore: 'Exploration done — confirm the design',
@@ -825,16 +829,13 @@ export const en: Dict = {
   },
   onboard: {
     no_project_title: 'No project registered yet',
-    no_project_desc: 'Register a project root and all of its changes will show up in the inbox and on the board.',
-    register: 'Register project',
-    path_placeholder: '/Users/you/code/my-project',
+    no_project_desc: 'Run pipeline init once inside your project and it will show up here automatically — no separate registration needed.',
     or_cli: 'or use the CLI',
     copy: 'Copy',
     copied: 'Copied ✓',
     no_change_title: 'No changes in this project yet',
     no_change_desc: 'Create a change to start the pipeline; the CLI works too.',
     new_change: 'New change',
-    cancel: 'Cancel',
   },
   newchange: {
     title: 'New change',
@@ -966,6 +967,7 @@ export const en: Dict = {
     play: '▶ Rehearse flow',
     stop: '■ Stop',
     names_error: 'Failed to fetch workflow list: {msg}',
+    no_reachable_root: 'No readable project — workbench configuration lives on a concrete project; make sure the project directory exists and is accessible.',
     def_error: 'Failed to load workflow: {msg}',
     network_error: 'Network error',
     // T14: skill chain section (dependency chains + add panel + default mandatory-skills matrix).
@@ -1047,6 +1049,7 @@ export const en: Dict = {
     lp_risk_low: 'low (recommended)',
     lp_risk_medium: 'medium',
     lp_risk_high: 'high',
+    lp_runner: 'Runner (runner)',
     lp_sec_budget: 'Cadence & budget',
     lp_sec_budget_hint: 'recommended values are pre-filled — drag to adjust; over budget, the policy below applies',
     lp_sld_cadence: 'Run cadence',

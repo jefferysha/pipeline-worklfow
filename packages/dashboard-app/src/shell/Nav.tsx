@@ -4,19 +4,16 @@ import type { Lang } from '../i18n/translations'
 import { Dialog } from './Dialog'
 import { Icon } from './Icon'
 
-export type View = 'inbox' | 'board' | 'settings' | 'loops' | 'afk' | 'workflows'
-
-/** 一级导航项 —— 病灶③解法的显式枚举白名单，顶部恰 3 项。 */
-export const PRIMARY_VIEWS: View[] = ['inbox', 'board', 'settings']
-
 /**
- * GOAL.md F1 收尾：loop 设置 + AFK 工作台原本各自的一级导航入口收进一个"工作台"下拉分组，
- * 顶部导航因此恢复到 3 项（+1 个分组触发按钮）。skill 编辑器已经是设置页内的弹窗，不占导航项。
- * workflow 编辑器（E8 画布 UI，GOAL.md 2026-07-08 收编）是本分组第三项——`WorkflowEditorView`
- * 列表页 + `WorkflowCanvas` 画布页两者共用这一个入口，具体渲染哪个由 App.tsx 内部的
- * "当前打开的 workflow 名字"状态决定，本文件不关心。
+ * T17（计划 2026-07-11-v5-interaction-rebuild）：IA 收敛三视图——收件箱 / 进度 / 工作台。
+ * 交互真相源 design-demos/v5-progress-workbench.html 顶栏（#mainNav 恰 3 项，收件箱带计数）。
+ * 旧的「工作台下拉分组（loops/afk/workflows）」与 nav-board/nav-settings 一并退役：能力分别
+ * 收编进工作台（T12-T16）与进度（T10/T11），旧组件文件 T18 删除。
  */
-export const WORKBENCH_VIEWS: View[] = ['loops', 'afk', 'workflows']
+export type View = 'inbox' | 'progress' | 'workbench'
+
+/** 一级导航项 —— 显式枚举白名单，顶部恰 3 项（demo v5 顶栏口径）。 */
+export const PRIMARY_VIEWS: View[] = ['inbox', 'progress', 'workbench']
 
 export interface NavProject {
   root: string
@@ -48,12 +45,13 @@ interface NavProps {
    */
   currentRoot?: string
   onRoot?: (root: string) => void
-  /** 注册新项目入口（G18）；缺省则不渲染入口。 */
-  onRegisterProject?: () => void
   /**
-   * 注销项目（G18 `DELETE /api/projects` + 评审 P2-13 入口，Task 5）：项目切换器每项 hover
-   * 区的「注销…」，用户在本组件内的 Dialog 确认后才调用，只传出 root——真正的网络调用/
-   * refresh/currentRoot 归属判断都是调用方（App）的职责。缺省则不渲染注销入口。
+   * 注销项目（G18 `DELETE /api/projects` + 评审 P2-13 入口，Task 5；T17 决议#7 保留）：
+   * 项目切换器每项 hover 区的「注销…」，用户在本组件内的 Dialog 确认后才调用，只传出 root——
+   * 真正的网络调用/refresh/currentRoot 归属判断都是调用方（App）的职责。缺省则不渲染注销入口。
+   *
+   * 「注册项目」入口已随 T17 删除（决议#7）：pipeline init 会 best-effort 自动登记项目
+   * （T2），dashboard 侧不再提供注册 UI；POST /api/projects 端点仅兼容保留。
    */
   onUnregister?: (root: string) => void
 }
@@ -70,23 +68,15 @@ export function Nav({
   projects,
   currentRoot,
   onRoot,
-  onRegisterProject,
   onUnregister,
 }: NavProps): JSX.Element {
   const { t } = useT()
-  const [workbenchOpen, setWorkbenchOpen] = useState(false)
   const [projectOpen, setProjectOpen] = useState(false)
   const [pendingUnregister, setPendingUnregister] = useState<NavProject | null>(null)
-  const workbenchActive = WORKBENCH_VIEWS.includes(view)
   const currentProject = projects?.find((p) => p.root === currentRoot)
   // 聚合项计数 = 各 ok 项目 change 总和（ok=false 的不可达项目不计入，D5/G19③ 拍板）。
   const aggregateCount = (projects ?? []).reduce((sum, p) => sum + (p.ok === false ? 0 : p.count), 0)
   const switcherLabel = currentRoot === '' ? t('nav.project_all') : currentProject?.name ?? currentRoot
-
-  const selectWorkbenchView = (v: View) => {
-    onView(v)
-    setWorkbenchOpen(false)
-  }
 
   return (
     <header className="nav" role="banner">
@@ -157,33 +147,12 @@ export function Nav({
                   )}
                 </div>
               ))}
-              {onRegisterProject && (
-                <button
-                  type="button"
-                  role="menuitem"
-                  data-testid="project-register"
-                  className="nav__dropdown-item"
-                  onClick={() => {
-                    onRegisterProject()
-                    setProjectOpen(false)
-                  }}
-                >
-                  {t('nav.project_register')}
-                </button>
-              )}
             </div>
           )}
         </div>
       )}
       {projects && projects.length === 1 && (
-        <>
-          <span className="nav__project-label" data-testid="project-label">{projects[0]!.name}</span>
-          {onRegisterProject && (
-            <button type="button" className="nav__tool" data-testid="project-register" onClick={onRegisterProject}>
-              ＋
-            </button>
-          )}
-        </>
+        <span className="nav__project-label" data-testid="project-label">{projects[0]!.name}</span>
       )}
       <nav className="nav__primary" aria-label="primary" data-testid="primary-nav">
         {PRIMARY_VIEWS.map((v) => (
@@ -203,43 +172,6 @@ export function Nav({
             )}
           </button>
         ))}
-        <div
-          className="nav__group"
-          onBlur={(e) => {
-            if (!e.currentTarget.contains(e.relatedTarget as Node)) setWorkbenchOpen(false)
-          }}
-        >
-          <button
-            type="button"
-            data-testid="nav-workbench"
-            aria-haspopup="menu"
-            aria-expanded={workbenchOpen}
-            aria-current={workbenchActive ? 'page' : undefined}
-            className={workbenchActive ? 'nav__item nav__item--active' : 'nav__item'}
-            onClick={() => setWorkbenchOpen((open) => !open)}
-          >
-            {t('nav.workbench')}
-          </button>
-          {workbenchOpen && (
-            <div className="nav__dropdown" role="menu" data-testid="workbench-menu">
-              {WORKBENCH_VIEWS.map((v) => (
-                <button
-                  key={v}
-                  type="button"
-                  role="menuitem"
-                  data-testid={`nav-${v}`}
-                  aria-current={view === v ? 'page' : undefined}
-                  className={
-                    view === v ? 'nav__dropdown-item nav__dropdown-item--active' : 'nav__dropdown-item'
-                  }
-                  onClick={() => selectWorkbenchView(v)}
-                >
-                  {t(`nav.${v}`)}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
       </nav>
       <div className="nav__tools">
         <span

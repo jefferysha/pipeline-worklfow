@@ -117,9 +117,14 @@ async function readSaveErrors(res: Response): Promise<string[]> {
 
 export interface WorkbenchViewProps {
   root: string
+  /**
+   * T17（T15 登记的接线口）：Hook 开关写回失败的提示出口。挂在 App 上时传 showFlash('error')
+   * ——失败回滚提示走全局 flash；缺省（独立渲染/测试）沿 T15 行为，HookTimeline 行内 role=alert。
+   */
+  onToggleError?: (msg: string) => void
 }
 
-export function WorkbenchView({ root }: WorkbenchViewProps): JSX.Element {
+export function WorkbenchView({ root, onToggleError }: WorkbenchViewProps): JSX.Element {
   const { t } = useT()
   const [names, setNames] = useState<string[] | null>(null)
   const [namesError, setNamesError] = useState<string | null>(null)
@@ -146,7 +151,7 @@ export function WorkbenchView({ root }: WorkbenchViewProps): JSX.Element {
   const defSnapshotRef = useRef<string | null>(null)
   // T15：/api/hooks 读写状态托管在这里（不在 HookTimeline 内）——阶段卡 hooksCount 真数、
   // 摘要卡「钩子」行、时序线开关三个消费方吃同一份矩阵。per-root 配置，与 workflow 草稿无关。
-  const hooksConfig = useHooksConfig(root)
+  const hooksConfig = useHooksConfig(root, onToggleError)
   // T16：/api/loops/snapshot 的读取托管在这里（useHooksConfig 的同一条「数据住共同祖先」
   // 纪律）——Loop 卡与右栏摘要「自动运行」行吃同一份 rows。
   const loops = useLoops(root)

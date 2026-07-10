@@ -49,8 +49,11 @@ export interface HooksConfigState {
 /**
  * /api/hooks 的读写状态托管（WorkbenchView 调用，传给 HookTimeline/阶段卡/摘要三个消费方）。
  * toggle 乐观更新：先翻本地矩阵再 POST，失败按原值回滚 + toggleError 提示（验收②）。
+ *
+ * T17：可选 onError——宿主（App 经 WorkbenchView）传入时，写回失败的提示改走它（接全局
+ * showFlash），不再落 toggleError 行内 alert（两处同时报同一件事是重复）；缺省行为与 T15 一致。
  */
-export function useHooksConfig(root: string): HooksConfigState {
+export function useHooksConfig(root: string, onError?: (msg: string) => void): HooksConfigState {
   const { t } = useT()
   const [hooks, setHooks] = useState<WbHookMeta[] | null>(null)
   const [matrix, setMatrix] = useState<Record<string, false>>({})
@@ -103,7 +106,9 @@ export function useHooksConfig(root: string): HooksConfigState {
           else delete next[key]
           return next
         })
-        setToggleError(t('workbench.hk_toggle_error', { msg: err instanceof Error ? err.message : t('workbench.network_error') }))
+        const msg = t('workbench.hk_toggle_error', { msg: err instanceof Error ? err.message : t('workbench.network_error') })
+        if (onError) onError(msg)
+        else setToggleError(msg)
       })
       .finally(() => {
         setBusyKeys((prev) => {

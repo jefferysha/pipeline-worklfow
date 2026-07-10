@@ -6,12 +6,12 @@
  *   ② 项目×workflow 怎么分组（rulesKey(root,wf) 组合键，禁手拼 NUL 分隔串）；
  *   ③ 调度器健康灯怎么聚合（判据对齐 server afk.ts computeSchedulerHealth）。
  *
- * 五态判定优先级（automation 态压过相位判定，枚举以 packages/automation types.ts
+ * 五态判定优先级（automation 态压过阶段判定，枚举以 packages/automation types.ts
  * AUTOMATION_STATES 真实字符串为准，server afk.ts laneOf 同一折叠口径）：
  *   running‖scheduled → running；queued → queued；failed‖conflict → failed；
  *   paused → gate（L1/L2 report-only 跑完停住，等人复核放行——demo「等你确认 · 跑完停住」）；
- *   off / merged / 空 / 未知值 → 回到 host 相位判定：
- *     review 门相位 → 产出/证据齐可拍板 = gate，欠产出 = agent（「等 agent 补产出」）；
+ *   off / merged / 空 / 未知值 → 回到 host 阶段判定：
+ *     review 门阶段 → 产出/证据齐可拍板 = gate，欠产出 = agent（「等 agent 补产出」）；
  *     其余（含 confirm 门与 rules 缺失）→ agent（活在终端里由 agent 推进）。
  *
  * 口径备注：
@@ -58,7 +58,7 @@ export function changeWorkflowName(c: ChangeSnapshot): string {
 }
 
 /**
- * 该相位是不是 dashboard 上的拍板门（T7 收件箱准入的同源判据）。
+ * 该阶段是不是 dashboard 上的拍板门（T7 收件箱准入的同源判据）。
  * 只认 review：confirm 是终端会话门（见文件头口径备注），rules 缺失不误报。
  */
 export function isDashboardGate(rules: WorkflowRules | undefined, phase: string): boolean {
@@ -66,9 +66,9 @@ export function isDashboardGate(rules: WorkflowRules | undefined, phase: string)
 }
 
 /**
- * 「等 agent 补产出」的欠账清单——gate 相位下 agent 还欠哪些证据/产出字段（badge 文案数据源，
+ * 「等 agent 补产出」的欠账清单——gate 阶段下 agent 还欠哪些证据/产出字段（badge 文案数据源，
  * demo「等 agent · 补产出 plan」）。空数组 = 证据/产出齐，人现在能拍板。
- *   · DEFAULT_RULES 表驱动路径：消费 gateEvidence 的 pending chips；verify 相位只认三轨判定
+ *   · DEFAULT_RULES 表驱动路径：消费 gateEvidence 的 pending chips；verify 阶段只认三轨判定
  *     字段（VERIFY_STATUS_FIELDS）——verification_report/build_sha 是产物不是判定，
  *     「产物没产出不等于验证没过」（evidence.ts Important-1 教训），不入欠账。
  *   · 自定义 rules：只有当前步挂了 nonempty-output guard 才点名未设的 outputs；
@@ -95,7 +95,7 @@ export function changeProgressState(c: ChangeSnapshot, rules: ProgressRules | un
   if (automation === 'queued') return 'queued'
   if (automation === 'failed' || automation === 'conflict') return 'failed'
   if (automation === 'paused') return 'gate'
-  // off / merged / 空 / 未知值 → host 相位判定
+  // off / merged / 空 / 未知值 → host 阶段判定
   if (isDashboardGate(rules, c.phase)) {
     return missingGateArtifacts(c, rules).length > 0 ? 'agent' : 'gate'
   }

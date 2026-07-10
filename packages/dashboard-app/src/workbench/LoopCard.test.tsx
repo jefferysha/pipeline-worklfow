@@ -1,7 +1,8 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { LOOP_RUNNERS as KERNEL_LOOP_RUNNERS } from '@pipeline-lite/kernel'
 import { I18nProvider } from '../i18n'
-import { LoopCard, useLoops } from './LoopCard'
+import { LOOP_RUNNERS, LoopCard, useLoops } from './LoopCard'
 
 /**
  * T16「自动运行(Loop)」卡（计划 2026-07-11-v5-interaction-rebuild）。
@@ -221,6 +222,37 @@ describe('LoopCard 编辑 → 保存（验收②）', () => {
     expect(screen.getByTestId('lp-save-errors')).toHaveTextContent("loops[0].cadence: 不匹配 pattern")
     expect(screen.getByTestId('lp-goal')).toHaveValue('新目标')
     expect(screen.getByTestId('lp-dirty')).toBeInTheDocument()
+  })
+})
+
+describe('LoopCard runner 下拉（T17 补挂，计划决议#14：双选项 + POST /api/loops/update 落盘）', () => {
+  it('单源守卫：dashboard LOOP_RUNNERS 镜像 == kernel 单源（transition-mirror 同款跨边界断言）', () => {
+    expect([...LOOP_RUNNERS]).toEqual([...KERNEL_LOOP_RUNNERS])
+  })
+
+  it('下拉恰双选项且回显现值；切到 codex → 未保存 chip，保存 patch 只带 {runner:"codex"}', async () => {
+    renderCard()
+    await screen.findByTestId('lp-goal')
+    const sel = screen.getByTestId('lp-runner')
+    expect(sel).toHaveValue('claude-code')
+    expect(within(sel).getAllByRole('option').map((o) => o.textContent)).toEqual(['claude-code', 'codex'])
+
+    fireEvent.change(sel, { target: { value: 'codex' } })
+    expect(screen.getByTestId('lp-dirty')).toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('lp-save'))
+    await waitFor(() => expect(screen.getByTestId('lp-save-ok')).toBeInTheDocument())
+    expect(lastPostBody('/api/loops/update')).toEqual({ root: ROOT, id: 'restyle-loop', patch: { runner: 'codex' } })
+    // reload 后 server 新真值回显
+    expect(screen.getByTestId('lp-runner')).toHaveValue('codex')
+  })
+
+  it('历史自由字符串 runner（cron）：真值补渲染为额外选项——回显不谎报为双选项之一', async () => {
+    rows = [makeRow({ runner: 'cron' })]
+    renderCard()
+    await screen.findByTestId('lp-goal')
+    const sel = screen.getByTestId('lp-runner')
+    expect(sel).toHaveValue('cron')
+    expect(within(sel).getAllByRole('option').map((o) => o.textContent)).toEqual(['cron', 'claude-code', 'codex'])
   })
 })
 

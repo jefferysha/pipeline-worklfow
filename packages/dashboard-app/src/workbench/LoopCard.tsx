@@ -22,6 +22,15 @@ import { Dialog } from '../shell/Dialog'
  * 换新（首载/切 loop/保存后 reload）即以 server 真值重置草稿。摘要行显示已保存真值，不吃草稿。
  */
 
+/**
+ * kernel loops/types.ts::LOOP_RUNNERS 的纯数据镜像（T17 决议#14：runner 下拉双选项）。
+ * dashboard 是浏览器 bundle，直接 import @pipeline-lite/kernel 会拉进 node:fs 代码破坏构建
+ * （types.ts TRANSITIONS 镜像的同一条纪律）——单源守卫见 LoopCard.test.tsx 的镜像相等断言。
+ * 注意 LoopEntry.runner 是自由字符串（历史登记存在 'cron'/'cron-session'）：现值不在清单内时
+ * 下拉额外渲染该真值选项，不谎报为双选项之一。
+ */
+export const LOOP_RUNNERS = ['claude-code', 'codex'] as const
+
 // ── 草稿形状：/api/loops/update 可 patch 字段的编辑面（kernel loops/update.ts 全集，
 //    autonomy_level 除外——见头注释）──
 interface LoopDraft {
@@ -31,6 +40,7 @@ interface LoopDraft {
   /** row.change_prefix null ↔ 草稿空串；保存时空串写回 null（kernel checkedValue 允许）。 */
   change_prefix: string
   risk: string
+  runner: string
   cadence: string
   max_runs_per_day: number
   max_in_flight: number
@@ -49,6 +59,7 @@ function draftOf(row: WbLoopRow): LoopDraft {
     design_doc: row.design_doc,
     change_prefix: row.change_prefix ?? '',
     risk: row.risk,
+    runner: row.runner,
     cadence: row.cadence,
     max_runs_per_day: row.budget_decl.max_runs_per_day,
     max_in_flight: row.budget_decl.max_in_flight,
@@ -64,7 +75,7 @@ function draftOf(row: WbLoopRow): LoopDraft {
 /** 草稿 vs 基线 → 精确 patch（只带被改字段——验收②「不夹带未改字段」）。 */
 function computePatch(draft: LoopDraft, base: LoopDraft): Record<string, unknown> {
   const patch: Record<string, unknown> = {}
-  for (const k of ['status', 'goal', 'design_doc', 'risk', 'cadence', 'on_exceed'] as const) {
+  for (const k of ['status', 'goal', 'design_doc', 'risk', 'runner', 'cadence', 'on_exceed'] as const) {
     if (draft[k] !== base[k]) patch[k] = draft[k]
   }
   if (draft.change_prefix !== base.change_prefix) {
@@ -527,6 +538,26 @@ export function LoopCard({ root, loops }: LoopCardProps): JSX.Element {
               <option value="low">{t('workbench.lp_risk_low')}</option>
               <option value="medium">{t('workbench.lp_risk_medium')}</option>
               <option value="high">{t('workbench.lp_risk_high')}</option>
+            </select>
+          </div>
+          {/* T17 决议#14：runner 下拉（LOOP_RUNNERS 双选项）——数据面 T20 已交付
+              （PATCHABLE_SCALAR_FIELDS 含 runner），写回走同一 dirty→保存钮 patch 链路。
+              runner id 是代码标识符（mono 呈现，不翻译）；历史自由字符串真值补渲染为第三选项。 */}
+          <div>
+            <label className="wb-flabel" htmlFor="lp-runner">{t('workbench.lp_runner')}</label>
+            <select
+              className="wb-input lp-mono"
+              id="lp-runner"
+              data-testid="lp-runner"
+              value={draft.runner}
+              onChange={(e) => edit({ runner: e.target.value })}
+            >
+              {!(LOOP_RUNNERS as readonly string[]).includes(draft.runner) && (
+                <option value={draft.runner}>{draft.runner}</option>
+              )}
+              {LOOP_RUNNERS.map((r) => (
+                <option key={r} value={r}>{r}</option>
+              ))}
             </select>
           </div>
         </div>

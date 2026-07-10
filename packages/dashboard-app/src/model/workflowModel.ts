@@ -1,5 +1,5 @@
 /**
- * workflowModel —— G17 根治的核心抽象（spec §2.1）：把「一个 change 此刻遵循哪套相位规则」
+ * workflowModel —— G17 根治的核心抽象（spec §2.1）：把「一个 change 此刻遵循哪套阶段规则」
  * 收敛成统一的 WorkflowRules，views（看板/收件箱/events）从此只消费本模块，不再直接
  * import types.ts 的四个 default 常量。
  *

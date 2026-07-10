@@ -162,12 +162,12 @@ describe('WorkflowEditorView 列表行信息量（评审 P2-14 前半，Task 14�
     return makeSnapshot([makeProject(ROOT, changes)])
   }
 
-  it('行 meta 渲染「N 相位 · M 门 · K 张引用」', async () => {
+  it('行 meta 渲染「N 阶段 · M 门 · K 张引用」（决议#8：可见文案一律「阶段」）', async () => {
     renderView(vi.fn(), snapshotWithOnboardingRefs(2))
     await waitFor(() => expect(screen.getByTestId('wf-meta-onboarding')).toBeInTheDocument())
     // ONBOARDING_DEF：2 个 step（intake/done），1 个非空 gate（done=review）；快照里 2 个
     // change 声明 fields.workflow==='onboarding'。
-    expect(screen.getByTestId('wf-meta-onboarding').textContent).toBe('2 相位 · 1 门 · 2 张引用')
+    expect(screen.getByTestId('wf-meta-onboarding').textContent).toBe('2 阶段 · 1 门 · 2 张引用')
   })
 
   it('删除确认弹窗：引用数 > 0 时正文出现红字警示「N 张 change 正在引用」', async () => {
@@ -199,8 +199,8 @@ describe('WorkflowEditorView 引用计数口径修正（评审修复轮，Task 1
     const snapshot = makeSnapshot([makeProject(ROOT, changes)])
     renderView(vi.fn(), snapshot)
     await waitFor(() => expect(screen.getByTestId('wf-meta-onboarding')).toBeInTheDocument())
-    // 旧代码不检查 archived，会把 3 张全计入（'2 相位 · 1 门 · 3 张引用'）。
-    expect(screen.getByTestId('wf-meta-onboarding').textContent).toBe('2 相位 · 1 门 · 1 张引用')
+    // 旧代码不检查 archived，会把 3 张全计入（'2 阶段 · 1 门 · 3 张引用'）。
+    expect(screen.getByTestId('wf-meta-onboarding').textContent).toBe('2 阶段 · 1 门 · 1 张引用')
 
     fireEvent.click(screen.getAllByRole('button', { name: '删除' })[0]!) // 第一项 = onboarding
     expect(screen.getByText('1 张 change 正在引用')).toBeInTheDocument()
@@ -233,7 +233,7 @@ describe('WorkflowEditorView 引用计数口径修正（评审修复轮，Task 1
       </I18nProvider>,
     )
     await waitFor(() => expect(screen.getByTestId('wf-meta-onboarding')).toBeInTheDocument())
-    // 旧代码 root===''时聚合全部 ok 项目，会把两个项目的 change 数合并（'2 相位 · 1 门 · 3 张引用'）。
-    expect(screen.getByTestId('wf-meta-onboarding').textContent).toBe('2 相位 · 1 门 · 1 张引用')
+    // 旧代码 root===''时聚合全部 ok 项目，会把两个项目的 change 数合并（'2 阶段 · 1 门 · 3 张引用'）。
+    expect(screen.getByTestId('wf-meta-onboarding').textContent).toBe('2 阶段 · 1 门 · 1 张引用')
   })
 })

@@ -4,7 +4,7 @@
  * 动作文案以 demo v5 为唯一口径（计划决议 #13）。
  *
  * 意图迁移表（旧 InboxView.test.tsx 断言 → 新归属）：
- *   · 空态 + 去看板                                → 逐字保留（UI 未变）
+ *   · 空态 + 去进度（T17 前是"去看板"）              → 按钮去处随三视图 IA 改指进度
  *   · 准入过滤（selectInbox 消费面）+ currentRoot   → 保留；行 testid 仍 inbox-card
  *   · 「等你复核」徽章                              → 结论式语义 badge 三态（✓可以放行 /
  *     失败 ×N · 等你决定 / 等你判断），本文件「行列表」组
@@ -110,12 +110,12 @@ async function settled(): Promise<void> {
 }
 
 describe('InboxView 空态（默认回答"在等我什么"，无事时明说）', () => {
-  it('无在等的 change → 空态 + 去看板按钮触发 onOpenBoard', () => {
+  it('无在等的 change → 空态 + 去进度按钮触发 onOpenBoard（T17 IA：看板退役，去处改进度）', () => {
     const props = renderInbox()
     expect(screen.getByTestId('inbox-empty')).toBeInTheDocument()
     expect(screen.getByText('没有在等你的事')).toBeInTheDocument()
     expect(screen.queryByTestId('inbox-card')).toBeNull()
-    fireEvent.click(screen.getByText('去看板'))
+    fireEvent.click(screen.getByText('去进度'))
     expect(props.onOpenBoard).toHaveBeenCalledOnce()
   })
 })

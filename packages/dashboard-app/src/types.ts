@@ -44,12 +44,12 @@ export const TRACKS = ['chat', 'pm', 'frontend', 'backend'] as const
 export type Track = (typeof TRACKS)[number]
 
 /**
- * review-gate 相位（manifest review_phases 镜像）：进入这些相位即落复核门 marker，
+ * review-gate 阶段（manifest review_phases 镜像）：进入这些阶段即落复核门 marker，
  * 是"在等我决定"的判据源（收件箱据此选卡，B10/病灶②的解法）。
  */
 export const REVIEW_PHASES = ['explore', 'spec', 'verify'] as const
 
-/** from → 合法目标相位（manifest transitions 镜像；verify 双出口 = ship/build 回退）。 */
+/** from → 合法目标阶段（manifest transitions 镜像；verify 双出口 = ship/build 回退）。 */
 export const TRANSITIONS: Record<Phase, readonly Phase[]> = {
   open: ['explore'],
   explore: ['spec'],

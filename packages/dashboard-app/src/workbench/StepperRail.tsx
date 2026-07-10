@@ -10,7 +10,7 @@ import { useT } from '../i18n'
  */
 export interface StepperStep {
   id: string
-  /** 展示名（label 优先，default 相位走 i18n phases.*，兜底 id）——投影层已算好。 */
+  /** 展示名（label 优先，default 阶段走 i18n phases.*，兜底 id）——投影层已算好。 */
   name: string
   gate: 'review' | 'confirm' | null
   /** 去重后的技能 id 序（chips 只展示前 2 个短名 + 截断计数）。 */

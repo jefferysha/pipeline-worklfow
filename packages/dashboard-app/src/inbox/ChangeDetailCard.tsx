@@ -11,11 +11,11 @@ import { decisionKind } from './inbox'
 
 /**
  * ChangeDetailCard（评审 P0-1 核心交付件，Task 7）—— 收件箱行点开后的详情卡：
- * 头（名字/相位/等你复核徽章/关闭）→「为什么在等你」一句话 + 证据格（gateEvidence 复用）
+ * 头（名字/阶段/等你复核徽章/关闭）→「为什么在等你」一句话 + 证据格（gateEvidence 复用）
  * → 产物（非空路径字段+拷贝钮，evidence.ts 导出的 artifactChips 正门）→ 语境
  * （workflow/track/preset/automation/created→updated）→ 底部动作条（legalTargets+
  * plannedTransition 逐出边渲染全部前进/回退边，评审 Important-2 修复；review 门文案带
- * "· 放行"/"· 打回"，其余相位通用"→ {to}"/"↩ {to}"）。视觉基准
+ * "· 放行"/"· 打回"，其余阶段通用"→ {to}"/"↩ {to}"）。视觉基准
  * design-demos/v4-openai-trellis.html 的「change 详情」卡段（信息架构照抄，历史区除外
  * ——spec §5 登记：待 history 读端点，本轮不做）。
  *
@@ -137,8 +137,8 @@ export function ChangeDetailCard({ root, change, rules, onTransition, onClose, o
   // 用 detail-forward-{event}/detail-backward-{event}。
   const forwardEdges = planned.filter((p) => !p.backward)
   const backwardEdges = planned.filter((p) => p.backward)
-  // 文案相位感知：只有 review 门（放行/打回二元决策语义）才缀"· 放行"/"· 打回"；confirm 门
-  // 或非 gate 相位一律用通用的"→ {to}"/"↩ {to}"——review 是唯一带"审批"语义的 gate 类型
+  // 文案阶段感知：只有 review 门（放行/打回二元决策语义）才缀"· 放行"/"· 打回"；confirm 门
+  // 或非 gate 阶段一律用通用的"→ {to}"/"↩ {to}"——review 是唯一带"审批"语义的 gate 类型
   // （见 workflowModel.ts WorkflowRules.gateByStep 的三态定义）。
   const isGatePhase = rules?.gateByStep[change.phase] === 'review'
 
@@ -171,7 +171,7 @@ export function ChangeDetailCard({ root, change, rules, onTransition, onClose, o
         <span className="card__name">{change.name}</span>
         <span className="g-phase">{change.phase}</span>
         {/* 终审修复批（非 gate 不说谎）：「等你复核」是 review 门专属语义（二元放行/打回决策），
-            非 gate 相位（含 confirm 门）此刻并没有任何决策在等——挂 isGatePhase 而非恒渲染。 */}
+            非 gate 阶段（含 confirm 门）此刻并没有任何决策在等——挂 isGatePhase 而非恒渲染。 */}
         {isGatePhase && <span className="badge badge--gate">{t('inbox.badge_waiting')}</span>}
         <button
           type="button"
@@ -185,9 +185,9 @@ export function ChangeDetailCard({ root, change, rules, onTransition, onClose, o
       </header>
 
       {/* 终审修复批（非 gate 不说谎）：整节挂 isGatePhase——"为什么在等你"这句话 + 证据格，
-          语义上都是"解释这个决策"的一部分；非 gate 相位没有决策在等，不该渲染这节（含证据格：
-          DEFAULT_RULES 下能产出非空证据格的三个相位 verify/explore/spec 恰好也是仅有的三个
-          review 门相位，isGatePhase 收紧对它们零影响，见 evidence.ts/workflowModel.ts 的
+          语义上都是"解释这个决策"的一部分；非 gate 阶段没有决策在等，不该渲染这节（含证据格：
+          DEFAULT_RULES 下能产出非空证据格的三个阶段 verify/explore/spec 恰好也是仅有的三个
+          review 门阶段，isGatePhase 收紧对它们零影响，见 evidence.ts/workflowModel.ts 的
           REVIEW_PHASES 映射）。 */}
       {isGatePhase && (
         <div className="detail__sec">

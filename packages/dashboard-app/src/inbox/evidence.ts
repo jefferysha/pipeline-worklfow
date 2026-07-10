@@ -1,9 +1,9 @@
 /**
  * gateEvidence（评审 P0-1 核心）—— 真机评审证实 snapshot 每帧送 38 个字段前端只渲染 6 个，
  * verify 门放行要看的 verify_result/agent_review_result/codex_review_result/verification_report/
- * build_sha 全在 ChangeSnapshot.fields 里从未被渲染。本函数把"当前相位该出示哪些证据"收敛成
+ * build_sha 全在 ChangeSnapshot.fields 里从未被渲染。本函数把"当前阶段该出示哪些证据"收敛成
  * 纯函数（零 IO 零 React）——Task 7（详情卡+行内 chips）直接消费这份契约，自己不判断是否该渲染
- * （archived/非 gate 相位由调用方自行决定要不要调用/展示，见 inbox.ts isAwaitingDecision）。
+ * （archived/非 gate 阶段由调用方自行决定要不要调用/展示，见 inbox.ts isAwaitingDecision）。
  */
 import type { ChangeSnapshot } from '../types'
 import { DEFAULT_RULES, type StepOutputRules, type WorkflowRules } from '../model/workflowModel'
@@ -29,7 +29,7 @@ export interface EvidenceChip {
  */
 export const VERIFY_STATUS_FIELDS = ['verify_result', 'agent_review_result', 'codex_review_result'] as const
 
-/** 自定义 workflow / 相位不在映射表时兜底展示的路径型字段（顺序即 chip 出现顺序）。 */
+/** 自定义 workflow / 阶段不在映射表时兜底展示的路径型字段（顺序即 chip 出现顺序）。 */
 const PATH_FIELDS = ['design_doc', 'plan', 'verification_report', 'pr_url'] as const
 
 /** 老内核 cmd_get 口径：字面 'null'（init heredoc）或空串都算未设（同 packages/kernel/src/flow/transition-table.ts 的 isUnset）。 */
@@ -65,7 +65,7 @@ function unsetPlaceholder(key: string): EvidenceChip {
 /**
  * 产物正门（评审 Important-1 + Minor-3 同根修复导出）——返回全部非空路径型字段
  * （design_doc/plan/verification_report/pr_url）的 chip，统一 neutral + copyable。
- * gateEvidence 的"自定义 workflow / rules 缺失 / 相位不在映射表"兜底分支就是本函数本身
+ * gateEvidence 的"自定义 workflow / rules 缺失 / 阶段不在映射表"兜底分支就是本函数本身
  * （内部共享实现，不是各自维护一份"遍历 PATH_FIELDS 挑非空"的重复逻辑）。ChangeDetailCard
  * 的「产物」区改从这里直接拿候选集，不再靠"传 gateEvidence(c, undefined) 强制走兜底分支"
  * 这种隐式技巧反推同一份结果——那个技巧的副作用是连带把 whyText 的"未过项"判据也带偏了
@@ -81,7 +81,7 @@ export function artifactChips(c: ChangeSnapshot): EvidenceChip[] {
 }
 
 /**
- * 按 change 当前 gate 相位返回应展示的证据 chips。
+ * 按 change 当前 gate 阶段返回应展示的证据 chips。
  * 分支判据（评审收紧后）：rules === DEFAULT_RULES（严格引用相等）且 phase ∈ {verify, explore,
  * spec} 映射表内 → 按 phase 走对应的表驱动规则；其余情况（自定义 rules / rules 未提供
  * / phase 不在表内）一律走"自定义 workflow"兜底分支（只出非空路径字段，空的剔除）——
@@ -105,7 +105,7 @@ export function gateEvidence(c: ChangeSnapshot, rules: WorkflowRules | undefined
     return ['design_doc', 'plan'].map((key) => pathChip(c, key) ?? unsetPlaceholder(key))
   }
 
-  // 自定义 workflow / rules 缺失 / 相位不在映射表：兜底就是「产物正门」本身——见 artifactChips。
+  // 自定义 workflow / rules 缺失 / 阶段不在映射表：兜底就是「产物正门」本身——见 artifactChips。
   return artifactChips(c)
 }
 

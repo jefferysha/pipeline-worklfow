@@ -1,10 +1,16 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, act, within } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import { App } from './App'
 import { lastEventSource, resetEventSources } from './test-setup'
 import { makeChange, makeProject, makeSnapshot } from './testkit'
 
+// T17（计划 2026-07-11-v5-interaction-rebuild）：IA 收敛三视图。旧断言意图迁移表：
+//   · 「一级导航恰 4 项（3+下拉触发）」→「恰 3 项：收件箱/进度/工作台」
+//   · 「点看板→board-view / 点设置→settings-view」→「点进度→progress-view / 点工作台→workbench-view」
+//   · 「注册对话框（register-dialog）三条」→ 注册 UI 退役（决议#7），迁移为 0 渲染断言；
+//     零项目教学态断言收进 G18 describe（教学文案 + 无表单 + 无幽灵命令）
+//   · 「工作台下拉→workflow 编辑器（nav-workflows）」→ 工作台是单一视图，直达断言
+//   · 新增：视图记忆 localStorage 兜底（旧值 board/settings → inbox）、聚合语境进度渲染护栏
 beforeEach(() => {
   localStorage.clear()
   resetEventSources()
@@ -13,13 +19,9 @@ beforeEach(() => {
   } catch {
     /* ignore */
   }
-  // 初始 GET /api/snapshot → 空快照（无待办）；新增 /api/workflows?root= 分支（GOAL E8
-  // 接线，Task 9）——WorkflowEditorView 挂载时真 fetch 这个端点，桩子按 URL 分派而不是像此前
-  // 那样对任意 fetch 调用都无差别返回同一个快照，否则这条新端点会因为拿到快照形状的 body
-  // （而非 `{ names: [] }`）而在 `.json()` 之后解析出不匹配的字段。
-  // G18 后语义：零项目快照会渲染教学 onboarding 而非收件箱——默认桩子给一个带
-  // 非 gate change 的项目，让"默认落地=收件箱（空态）"这批既有断言的语境继续成立；
-  // 零项目路径由下方专门的 onboarding 用例覆盖。
+  // 初始 GET /api/snapshot → 单项目一张非 gate 卡（默认落地=收件箱空态语境）；
+  // /api/workflows、/api/hooks、/api/loops/snapshot 三个分支喂 WorkbenchView 挂载时的真 fetch
+  // （names 空 → 选中 default 零网络投影；hooks/loops 给合法空数据，不迫使工作台走错误分支）。
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: string) => {
@@ -28,6 +30,12 @@ beforeEach(() => {
       }
       if (url.startsWith('/api/workflows?root=')) {
         return { ok: true, json: async () => ({ names: [] }) }
+      }
+      if (url.startsWith('/api/hooks?root=')) {
+        return { ok: true, json: async () => ({ ok: true, hooks: [], matrix: {} }) }
+      }
+      if (url === '/api/loops/snapshot') {
+        return { ok: true, json: async () => ({ generated_at: '2026-07-11T00:00:00Z', rows: [] }) }
       }
       throw new Error(`unexpected fetch ${url}`)
     }),
@@ -38,90 +46,85 @@ afterEach(() => {
 })
 
 describe('App 默认落地 = 收件箱（病灶②解法）', () => {
-  it('首屏渲染收件箱视图，而非看板', async () => {
+  it('首屏渲染收件箱视图，而非进度/工作台', async () => {
     render(<App />)
     expect(await screen.findByTestId('inbox-view')).toBeInTheDocument()
-    expect(screen.queryByTestId('board-view')).toBeNull()
+    expect(screen.queryByTestId('progress-view')).toBeNull()
+    expect(screen.queryByTestId('workbench-view')).toBeNull()
   })
 
-  it('一级导航折叠态恰好 4 项：收件箱/看板/设置 + 工作台下拉触发（GOAL.md F1 收尾）', async () => {
+  it('一级导航恰好 3 项：收件箱 / 进度 / 工作台（T17 三视图 IA）', async () => {
     render(<App />)
     await screen.findByTestId('inbox-view')
     const nav = screen.getByTestId('primary-nav')
-    expect(within(nav).getAllByRole('button')).toHaveLength(4)
+    expect(within(nav).getAllByRole('button')).toHaveLength(3)
+    expect(screen.queryByTestId('nav-board')).toBeNull()
+    expect(screen.queryByTestId('nav-settings')).toBeNull()
   })
 })
 
-describe('App 视图切换', () => {
-  it('点看板 → 显示看板视图；点设置 → 设置视图', async () => {
+describe('App 视图切换（T17 三视图接线）', () => {
+  it('点进度 → 渲染 ProgressView；点工作台 → 渲染 WorkbenchView（直达，无下拉）', async () => {
     render(<App />)
     await screen.findByTestId('inbox-view')
-    fireEvent.click(screen.getByTestId('nav-board'))
-    expect(screen.getByTestId('board-view')).toBeInTheDocument()
-    fireEvent.click(screen.getByTestId('nav-settings'))
-    expect(screen.getByTestId('settings-view')).toBeInTheDocument()
-  })
-})
-
-describe('App 注册对话框（评审 P0-5：陷阱修复——迁移前无 role/无取消/Esc 与 backdrop 点击都不关）', () => {
-  it('打开注册对话框 → 有「取消」按钮、按 Esc 对话框消失、焦点回到「＋」钮', async () => {
-    const user = userEvent.setup()
-    render(<App />)
-    await screen.findByTestId('inbox-view')
-
-    const plusBtn = screen.getByTestId('project-register')
-    await user.click(plusBtn)
-    expect(await screen.findByTestId('register-dialog')).toBeInTheDocument()
-
-    // 取消按钮存在（迁移前这个对话框没有任何取消入口——无路可退陷阱）
-    expect(screen.getByRole('button', { name: '取消' })).toBeInTheDocument()
-
-    // Esc 关闭
-    fireEvent.keyDown(document, { key: 'Escape' })
-    expect(screen.queryByTestId('register-dialog')).toBeNull()
-
-    // 焦点归位到打开前的触发元素（Dialog 卸载归位契约）
-    expect(document.activeElement).toBe(plusBtn)
+    fireEvent.click(screen.getByTestId('nav-progress'))
+    expect(screen.getByTestId('progress-view')).toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('nav-workbench'))
+    expect(await screen.findByTestId('workbench-view')).toBeInTheDocument()
+    expect(screen.queryByTestId('workbench-menu')).toBeNull()
   })
 
-  it('点「取消」按钮同样能关闭注册对话框', async () => {
-    const user = userEvent.setup()
-    render(<App />)
-    await screen.findByTestId('inbox-view')
-    await user.click(screen.getByTestId('project-register'))
-    await screen.findByTestId('register-dialog')
-
-    fireEvent.click(screen.getByRole('button', { name: '取消' }))
-    expect(screen.queryByTestId('register-dialog')).toBeNull()
-  })
-
-  // 终审修复批：Dialog 的 title 与 Onboarding 自己的 h2 此前都渲染 onboard.no_project_title，
-  // 同一句"还没有注册任何项目"在对话框里出现两次（Dialog 需要它做 aria-label，不能去掉那份；
-  // 重复的是 Onboarding 自己的 h2，见 Onboarding.tsx 的 hideTitle prop）。
-  it('对话框内标题文案「还没有注册任何项目」只出现一次', async () => {
-    const user = userEvent.setup()
-    render(<App />)
-    await screen.findByTestId('inbox-view')
-    await user.click(screen.getByTestId('project-register'))
-    const dialog = await screen.findByTestId('register-dialog')
-    // 修复前：Dialog 的 h2.dialog__title + Onboarding 自己的 h2.empty__title 各渲染一遍，
-    // 命中两处——本断言会失败，这就是红。
-    expect(within(dialog).getAllByText('还没有注册任何项目')).toHaveLength(1)
-  })
-})
-
-describe('App workflow 编辑器接线（GOAL.md E8 收编，Task 9）', () => {
-  it('点工作台下拉里的 workflow 编辑器 → 渲染 WorkflowEditorView（列表页）', async () => {
+  it('聚合语境 + 项目非零但全部不可达（ok=false）：工作台渲染诚实空态，不拿空 root 挂 WorkbenchView（T17 评审收口）', async () => {
+    localStorage.setItem('pipeline-dashboard-root', '') // 聚合选择——回落链在此才可能全落空
+    ;(global.fetch as ReturnType<typeof vi.fn>).mockImplementation(async (url: string) => {
+      if (url === '/api/snapshot') {
+        return { ok: true, json: async () => makeSnapshot([makeProject('/repo', [], { ok: false })]) }
+      }
+      throw new Error(`unexpected fetch ${url}`)
+    })
     render(<App />)
     await screen.findByTestId('inbox-view')
     fireEvent.click(screen.getByTestId('nav-workbench'))
-    fireEvent.click(screen.getByTestId('nav-workflows'))
-    // getByText（单一匹配）在这里会因为“找到多个元素”报错：names 为空数组时
-    // WorkflowEditorView 同时渲染标题 `<h2>自定义 workflow</h2>` 和空态文案
-    // `还没有自定义 workflow`（后者字面包含前者作为子串），两者都命中这个正则。改用
-    // `getAllByText` 断言"至少渲染出一处"——同 RTL 在这种歧义报错里自己建议的修法一致，
-    // 断言意图不变（确认 WorkflowEditorView 列表页真的渲染了），不是放松验证强度。
-    await waitFor(() => expect(screen.getAllByText(/自定义 workflow|Custom workflows/).length).toBeGreaterThan(0))
+    expect(await screen.findByTestId('wb-no-root')).toHaveTextContent('没有可读取的项目')
+    expect(screen.queryByTestId('workbench-view')).toBeNull()
+  })
+
+  it('收件箱空态「去进度」→ 切到进度视图', async () => {
+    render(<App />)
+    // 默认桩子只有一张非 gate 卡 → 收件箱空态 + 去进度按钮
+    expect(await screen.findByTestId('inbox-empty')).toBeInTheDocument()
+    fireEvent.click(screen.getByText('去进度'))
+    expect(screen.getByTestId('progress-view')).toBeInTheDocument()
+  })
+})
+
+describe('App 视图记忆（T17：localStorage 旧值兜底回 inbox）', () => {
+  it('记忆值是退役视图（board）→ 落地收件箱而非崩溃/空渲染', async () => {
+    localStorage.setItem('pipeline-dashboard-view', 'board')
+    render(<App />)
+    expect(await screen.findByTestId('inbox-view')).toBeInTheDocument()
+  })
+
+  it('记忆值是合法新视图（progress）→ 直接落地进度', async () => {
+    localStorage.setItem('pipeline-dashboard-view', 'progress')
+    render(<App />)
+    expect(await screen.findByTestId('progress-view')).toBeInTheDocument()
+  })
+
+  it('切视图写回记忆：点工作台后 localStorage 存 workbench', async () => {
+    render(<App />)
+    await screen.findByTestId('inbox-view')
+    fireEvent.click(screen.getByTestId('nav-workbench'))
+    expect(localStorage.getItem('pipeline-dashboard-view')).toBe('workbench')
+  })
+})
+
+describe('App 注册 UI 退役（T17 决议#7：pipeline init 自动登记，注册入口全删）', () => {
+  it('单项目语境无 ＋ 注册按钮、无注册对话框入口', async () => {
+    render(<App />)
+    await screen.findByTestId('inbox-view')
+    expect(screen.queryByTestId('project-register')).toBeNull()
+    expect(screen.queryByTestId('register-dialog')).toBeNull()
   })
 })
 
@@ -177,8 +180,8 @@ describe('App 深浅色自适应 + i18n', () => {
   })
 })
 
-describe('App G18 教学空状态', () => {
-  it('零项目快照 → 全视图替换为注册 onboarding（而非收件箱空态）', async () => {
+describe('App G18 教学空状态（T17 起纯教学态）', () => {
+  it('零项目快照 → 全视图替换为教学 onboarding：无注册表单、CLI 是 pipeline init、无幽灵命令', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async (url: string) => {
@@ -188,8 +191,13 @@ describe('App G18 教学空状态', () => {
       }),
     )
     render(<App />)
-    expect(await screen.findByTestId('onboard-no-project')).toBeInTheDocument()
+    const ob = await screen.findByTestId('onboard-no-project')
     expect(screen.queryByTestId('inbox-view')).toBeNull()
+    // 决议#7 + T2：注册表单退役，教学 CLI 为 pipeline init（自动登记），幽灵命令清除
+    expect(screen.queryByTestId('onboard-path')).toBeNull()
+    expect(screen.queryByTestId('onboard-register')).toBeNull()
+    expect(screen.getByTestId('onboard-cli').textContent).toContain('pipeline init')
+    expect(ob.textContent).not.toContain('projects add')
   })
 
   it('有项目零 change → 收件箱替换为新建引导 onboarding', async () => {
@@ -202,7 +210,7 @@ describe('App G18 教学空状态', () => {
       }),
     )
     render(<App />)
-    expect(await screen.findByTestId('onboard-no-change')).toBeInTheDocument()
+    expect(await screen.findByTestId('onboard-new-change')).toBeInTheDocument()
     // 打开新建对话框入口真的接线
     fireEvent.click(screen.getByTestId('onboard-new-change'))
     expect(await screen.findByTestId('newchange-dialog')).toBeInTheDocument()
@@ -231,6 +239,36 @@ describe('App currentRoot 语义（D5：吃掉 G14，多项目默认取第一个
     // 断言"至少一处"（意图不变：currentRoot 过滤后只看得到第一个项目的卡）。
     expect(screen.getAllByText('a-verify').length).toBeGreaterThan(0)
     expect(screen.queryByText('b-verify')).toBeNull()
+  })
+})
+
+describe('App 聚合语境渲染护栏（T17 验收④：currentRoot 空串 → 进度看全部项目）', () => {
+  it('聚合 + 进度视图：两个项目的任务行都渲染', async () => {
+    localStorage.setItem('pipeline-dashboard-root', '')
+    localStorage.setItem('pipeline-dashboard-view', 'progress')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url === '/api/snapshot') {
+          return {
+            ok: true,
+            json: async () =>
+              makeSnapshot([
+                makeProject('/repo-a', [makeChange('a1', 'build')]),
+                makeProject('/repo-b', [makeChange('b1', 'build')]),
+              ]),
+          }
+        }
+        if (url.startsWith('/api/workflows?root=')) return { ok: true, json: async () => ({ names: [] }) }
+        throw new Error(`unexpected fetch ${url}`)
+      }),
+    )
+    render(<App />)
+    expect(await screen.findByTestId('progress-view')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByTestId('prg-row-a1')).toBeInTheDocument()
+      expect(screen.getByTestId('prg-row-b1')).toBeInTheDocument()
+    })
   })
 })
 

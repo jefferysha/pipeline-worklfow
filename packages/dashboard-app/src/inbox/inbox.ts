@@ -1,8 +1,8 @@
 /**
  * 收件箱选卡逻辑（病灶②的解法核心）——回答"现在哪个 change 在等我决定"。
- * T7 准入修订（v5 决策 B）：判据从「gate 相位就进」（G17 的 gate === 'review' 泛化）改为
+ * T7 准入修订（v5 决策 B）：判据从「gate 阶段就进」（G17 的 gate === 'review' 泛化）改为
  * 「人现在能拍板」——直接消费 progressModel 的五态判定（同源谓词，口径不与进度视图漂移）：
- *   · state === 'gate'：gate 相位且证据/产出齐、或 gate 无自动证据（自定义门无产出声明）、
+ *   · state === 'gate'：gate 阶段且证据/产出齐、或 gate 无自动证据（自定义门无产出声明）、
  *     或 automation=paused（跑完停住等放行）→ 进；
  *   · state === 'failed'：automation ∈ {failed, conflict}，人要拍板重试/放弃 → 进；
  *   · state === 'agent'（含缺产出的 gate 卡——判给进度「等 agent 补产出」）/ running /
@@ -28,7 +28,7 @@ export function changeWorkflow(c: ChangeSnapshot): string {
 
 /**
  * 单个 change 是否在等我决定（T7 起 = 人现在能拍板，判据见文件头）。
- * rules 缺失（自定义 workflow 定义拉取失败）→ 相位判不了门归 agent 不误报（路径字段非空也
+ * rules 缺失（自定义 workflow 定义拉取失败）→ 阶段判不了门归 agent 不误报（路径字段非空也
  * 不进——交叉场景），该卡的可见性兜底在进度视图（G17 底线：卡不消失）；automation 的
  * paused/failed/conflict 判定不依赖 rules，照常进。archived 一票否决（决议 #5）。
  */
@@ -76,7 +76,7 @@ export function selectInbox(
   return items
 }
 
-/** 该 change 在等哪一类决定（i18n key 后缀）：default 三相位保留细分文案，其余（含自定义 step）一律 other。 */
+/** 该 change 在等哪一类决定（i18n key 后缀）：default 三阶段保留细分文案，其余（含自定义 step）一律 other。 */
 export function decisionKind(c: ChangeSnapshot): 'explore' | 'spec' | 'verify' | 'other' {
   if (changeWorkflow(c) !== 'default') return 'other'
   if (c.phase === 'explore' || c.phase === 'spec' || c.phase === 'verify') return c.phase

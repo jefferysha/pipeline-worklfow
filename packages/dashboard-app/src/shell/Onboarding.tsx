@@ -1,51 +1,30 @@
 import { useState } from 'react'
-import { ApiError, registerProject } from '../api/client'
 import { useT } from '../i18n'
 
 export interface OnboardingProps {
   kind: 'no-project' | 'no-change'
   /** no-change 形态：当前项目 root（拼 CLI 命令用）。 */
   root?: string
-  /** 注册成功 → App refresh。 */
-  onRegistered?: () => void
   /** no-change 形态主按钮 → 打开 NewChangeDialog。 */
   onNewChange?: () => void
-  /** 终审修复批：App.tsx 的注册对话框场景下，外层 <Dialog title=.../> 已经渲染过一次
-   *  onboard.no_project_title 这句文案（Dialog 的 h2.dialog__title，aria-label 也需要它，
-   *  不能去掉）——本组件自己 kind==='no-project' 时还会再渲染一遍同文案的 h2.empty__title，
-   *  同一句标题在对话框里重复出现两次。true 时本组件不渲染自己那份（只对 no-project 生效：
-   *  no-change 形态不会被套进"外层也有标题"的 Dialog 场景，无需理会）。 */
-  hideTitle?: boolean
 }
 
 /**
- * 教学式空状态（G18，spec §3.2；视觉真相源 demo all-views §6）：
- * 空状态不只说"没有数据"，而是教会界面怎么用——表单直连新端点 + CLI 等价命令双路径。
+ * 教学式空状态（G18，spec §3.2；视觉真相源 demo all-views §6）：空状态不只说"没有数据"，
+ * 而是教会界面怎么用。
+ *
+ * T17（决议#7 + T2）：no-project 改纯教学态——pipeline init 会 best-effort 自动登记项目
+ * （kernel projectRegistry，T2 已落地），注册表单与 POST /api/projects 调用从这里退役
+ * （端点仅兼容保留），幽灵命令 `pipeline projects add`（CLI 从未实现）一并清除。
+ * 唯一路径 = 在项目里跑一次 pipeline init，项目自动出现。
  */
-export function Onboarding({ kind, root, onRegistered, onNewChange, hideTitle }: OnboardingProps): JSX.Element {
+export function Onboarding({ kind, root, onNewChange }: OnboardingProps): JSX.Element {
   const { t } = useT()
-  const [path, setPath] = useState('')
-  const [error, setError] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
   const [copied, setCopied] = useState(false)
 
   const cli = kind === 'no-project'
-    ? `pipeline projects add ${path || '~/code/my-project'}`
+    ? 'cd ~/code/my-project && pipeline init my-change --track chat --preset full'
     : `cd ${root || '<project>'} && pipeline init my-change --track chat --preset full`
-
-  async function submit(): Promise<void> {
-    if (!path || busy) return
-    setBusy(true)
-    setError(null)
-    try {
-      await registerProject(path)
-      onRegistered?.()
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : String(e))
-    } finally {
-      setBusy(false)
-    }
-  }
 
   function copy(): void {
     void navigator.clipboard?.writeText(cli).then(() => {
@@ -59,25 +38,8 @@ export function Onboarding({ kind, root, onRegistered, onNewChange, hideTitle }:
       <div className="empty__mark" aria-hidden="true">⧉</div>
       {kind === 'no-project' ? (
         <>
-          {!hideTitle && <h2 className="empty__title">{t('onboard.no_project_title')}</h2>}
+          <h2 className="empty__title">{t('onboard.no_project_title')}</h2>
           <p className="empty__desc">{t('onboard.no_project_desc')}</p>
-          <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-            <input
-              className="input"
-              style={{ flex: 1, textAlign: 'left' }}
-              data-testid="onboard-path"
-              placeholder={t('onboard.path_placeholder')}
-              value={path}
-              onChange={(e) => {
-                setPath(e.target.value)
-                setError(null)
-              }}
-            />
-            <button type="button" className="btn" data-testid="onboard-register" disabled={busy || !path} onClick={() => void submit()}>
-              {t('onboard.register')}
-            </button>
-          </div>
-          {error && <p className="field__error" data-testid="onboard-error" style={{ marginBottom: 12 }}>{error}</p>}
         </>
       ) : (
         <>
@@ -86,13 +48,13 @@ export function Onboarding({ kind, root, onRegistered, onNewChange, hideTitle }:
           <button type="button" className="btn" data-testid="onboard-new-change" style={{ marginBottom: 16 }} onClick={onNewChange}>
             ＋ {t('onboard.new_change')}
           </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: 'var(--text-3)', fontSize: 11, marginBottom: 10 }}>
+            <span style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+            {t('onboard.or_cli')}
+            <span style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+          </div>
         </>
       )}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: 'var(--text-3)', fontSize: 11, marginBottom: 10 }}>
-        <span style={{ flex: 1, height: 1, background: 'var(--border)' }} />
-        {t('onboard.or_cli')}
-        <span style={{ flex: 1, height: 1, background: 'var(--border)' }} />
-      </div>
       <div className="dlg-cli" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, textAlign: 'left' }}>
         <span data-testid="onboard-cli" style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{cli}</span>
         <button
