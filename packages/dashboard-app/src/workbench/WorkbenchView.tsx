@@ -1,10 +1,13 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import gsap from 'gsap'
 import { useGSAP } from '@gsap/react'
+import { getToken } from '../api/client'
 import { useT } from '../i18n'
-import { DEFAULT_RULES, rulesKey, useWorkflowRulesMulti } from '../model/workflowModel'
+import { DEFAULT_RULES, invalidateWorkflowRules, rulesKey, useWorkflowRulesMulti } from '../model/workflowModel'
+import { Dialog } from '../shell/Dialog'
 import { EVENT_BY_EDGE, PHASES, REVIEW_PHASES, TRANSITIONS, isPhase } from '../types'
-import { revealList } from '../workflow/motion'
+import { revealDialog, revealList } from '../workflow/motion'
+import { StepEditor } from './StepEditor'
 import { StepperRail, type StepperStep } from './StepperRail'
 
 gsap.registerPlugin(useGSAP)
@@ -20,11 +23,20 @@ gsap.registerPlugin(useGSAP)
  * useWorkflowRulesMulti 按 rulesKey(root,name) 索引，不自己拼缓存键）。
  *
  * 骨架范围（后续任务挂载点，见 JSX 内注释）：
- *   · 阶段编辑区 = T13（本任务只渲染占位卡 + 选中联动）；技能链 T14 / Hook 时序线 T15 挂其内；
- *   · 「+ 添加阶段」按钮禁用态占位（T13 接线 onAddStage）；
+ *   · 阶段编辑区 = T13（已挂载 <StepEditor>：基本/产出物/guards 中文化，Inputs UI 按决议不渲染）；
+ *     技能链 T14 / Hook 时序线 T15 继续在 StepEditor 内分区挂载；
+ *   · 「+ 添加阶段」按钮仍禁用态占位（阶段增删不在 T13 范围）；
  *   · 摘要卡「钩子」行 '—' 占位（T5 数据面 + T15 接线后出真数）；
- *   · 「自动运行(Loop)」卡 = T16；保存/校验工具条 = T13。
+ *   · 「自动运行(Loop)」卡 = T16。
  * 过渡期与旧 WorkflowEditorView 并存（不挂导航，T17 切换、T18 退役旧视图）。
+ *
+ * T13 编辑真写回：def 本身就是编辑草稿（StepEditor 每次编辑交回完整 step，这里按 id 换入）；
+ * 脏守卫沿 WorkflowCanvas Task 15 四件套先例——快照存 ref（defSnapshotRef，load/save 成功时
+ * 写入一次）、dirty 每次渲染由「当前 def vs 快照」重算（故意不 useMemo，ref 变化对记忆化不可
+ * 见）、守卫函数不 useCallback（会冻结 dirty 快照）、保存成功推进快照即清脏。保存走既有
+ * POST /api/workflows/:name，成功后 invalidateWorkflowRules(root,name)（spec §2.1 缓存失效
+ * 纪律）；kernel validate 拒绝时 errors[] 原文逐条上抛展示。default = manifest 镜像只读态
+ * （server 端 400 已挡，前端 readonly + 只读 pill 预示，不渲染保存钮）。
  */
 
 // ── kernel WorkflowDef 的 JSON 形状（跨 HTTP 边界手抄，同 StepDetailPanel.tsx 惯例；
@@ -82,6 +94,25 @@ async function readErrorDetail(res: Response): Promise<string> {
   return ''
 }
 
+/**
+ * 保存端点的非 2xx 错误映射（T13）：POST /api/workflows/:name 有两种失败体——
+ * kernel validate 拒绝 = { ok:false, errors: string[] }（循环依赖/非法字符等，逐条原文上抛），
+ * name/root 守卫 = { ok:false, error: string }（单条）。都读不出来时回落状态码占位。
+ */
+async function readSaveErrors(res: Response): Promise<string[]> {
+  try {
+    const body = (await res.json()) as { error?: unknown; errors?: unknown }
+    if (Array.isArray(body?.errors)) {
+      const errors = body.errors.filter((e): e is string => typeof e === 'string')
+      if (errors.length > 0) return errors
+    }
+    if (typeof body?.error === 'string') return [body.error]
+  } catch {
+    /* 无 JSON 体 */
+  }
+  return [`(${res.status})`]
+}
+
 export interface WorkbenchViewProps {
   root: string
 }
@@ -95,6 +126,11 @@ export function WorkbenchView({ root }: WorkbenchViewProps): JSX.Element {
   const [defError, setDefError] = useState<string | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
   const [stageId, setStageId] = useState<string | null>(null)
+  // T13 保存状态：error 时 errors[] 是 server/kernel validate 的原文（不翻译、不吞并）。
+  const [saveStatus, setSaveStatus] = useState<{ kind: 'idle' | 'ok' } | { kind: 'error'; errors: string[] }>({ kind: 'idle' })
+  const [saving, setSaving] = useState(false)
+  // T13 脏守卫：dirty 时点了菜单里的另一个 workflow 名 → 先存这里弹确认，确认才真切。
+  const [pendingSwitch, setPendingSwitch] = useState<string | null>(null)
   // 预演点亮数：前 lit 个预览节点/阶段卡处于点亮态（最后一个绿）。
   const [lit, setLit] = useState(0)
   const [playing, setPlaying] = useState(false)
@@ -102,6 +138,10 @@ export function WorkbenchView({ root }: WorkbenchViewProps): JSX.Element {
   const trackRef = useRef<HTMLDivElement>(null)
   const mmRef = useRef<gsap.MatchMedia | null>(null)
   const tlRef = useRef<gsap.core.Timeline | null>(null)
+  // T13 脏状态四件套之一（WorkflowCanvas Task 15 先例）：「最近一次加载/保存成功」的 def 快照
+  // 存 ref 不进 state——快照只在 load/save 成功那一刻写入，本身不需要触发渲染；dirty 每次渲染
+  // 从「当前 def vs 快照」重算（见下方声明处注释：故意不 useMemo，ref 变化对记忆化不可见）。
+  const defSnapshotRef = useRef<string | null>(null)
 
   // ── workflow 名列表（自定义名；default 恒在菜单尾部本地补上）──
   useEffect(() => {
@@ -132,14 +172,17 @@ export function WorkbenchView({ root }: WorkbenchViewProps): JSX.Element {
   // ── 选中 workflow 的完整定义（default 零网络投影；自定义名走既有端点）──
   useEffect(() => {
     if (!wfName) return
+    setSaveStatus({ kind: 'idle' }) // 上一个 workflow 的保存态不跨名残留
     if (wfName === 'default') {
       setDef(DEFAULT_DEF)
       setDefError(null)
+      defSnapshotRef.current = null // default 只读态：永不参与 dirty 判定
       return
     }
     let cancelled = false
     setDef(null)
     setDefError(null)
+    defSnapshotRef.current = null
     fetch(`/api/workflows/${encodeURIComponent(wfName)}?root=${encodeURIComponent(root)}`)
       .then(async (r) => {
         if (!r.ok) throw new Error((await readErrorDetail(r)) || `(${r.status})`)
@@ -149,6 +192,7 @@ export function WorkbenchView({ root }: WorkbenchViewProps): JSX.Element {
         if (cancelled) return
         setDef(body)
         setDefError(null)
+        defSnapshotRef.current = JSON.stringify(body)
       })
       .catch((err: unknown) => {
         if (cancelled) return
@@ -164,6 +208,65 @@ export function WorkbenchView({ root }: WorkbenchViewProps): JSX.Element {
     if (!def) return
     setStageId((cur) => (cur && def.steps.some((s) => s.id === cur) ? cur : def.steps[0]?.id ?? null))
   }, [def])
+
+  // ── T13 编辑真写回 ──
+  const readonlyWf = wfName === 'default'
+  // 脏状态四件套之二：每次渲染重算，不做 useMemo（save() 成功只更新 defSnapshotRef 这个 ref、
+  // 不换 def 引用，[def] 依赖的记忆化会继续供 save 之前缓存的 true——WorkflowCanvas Task 15
+  // 声明处注释的同一条 React 记忆化限制）。JSON.stringify 在编辑器量级的 def 上开销可忽略。
+  const dirty = !readonlyWf && def !== null && defSnapshotRef.current !== null && JSON.stringify(def) !== defSnapshotRef.current
+
+  // StepEditor 的写回口：按 id 换入编辑后的完整 step（def 是唯一草稿真相源，
+  // stepper/摘要/流程预览全部由它派生，编辑即联动）。
+  function updateStep(updated: WbStepDef): void {
+    setDef((prev) => (prev ? { ...prev, steps: prev.steps.map((s) => (s.id === updated.id ? updated : s)) } : prev))
+  }
+
+  async function save(): Promise<void> {
+    if (!def || !wfName || readonlyWf || !dirty || saving) return
+    setSaving(true)
+    setSaveStatus({ kind: 'idle' })
+    try {
+      const res = await fetch(`/api/workflows/${encodeURIComponent(wfName)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
+        body: JSON.stringify({ ...def, root }),
+      })
+      if (!res.ok) {
+        setSaveStatus({ kind: 'error', errors: await readSaveErrors(res) })
+        return
+      }
+      // spec §2.1：保存成功必须失效 (root,name) 规则缓存——收件箱/进度的下一个消费方才能
+      // 看到新 gate/新阶段（WorkflowCanvas 评审 P0-4 的同一条纪律，接线不遗漏）。
+      invalidateWorkflowRules(root, wfName)
+      // 四件套之四：快照推进到「刚被 POST 的这份 def」（与请求体同源的闭包值），dirty 随
+      // 下一次渲染重算自然清除。
+      defSnapshotRef.current = JSON.stringify(def)
+      setSaveStatus({ kind: 'ok' })
+    } catch (err) {
+      setSaveStatus({ kind: 'error', errors: [err instanceof Error ? err.message : t('workbench.network_error')] })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // 菜单项点击的切换入口。脏状态四件套之三：禁止 useCallback 包裹（冻结 dirty 快照——
+  // BoardView/InboxView closePending 的 busy 冻结教训同款），每次渲染的新鲜闭包正是这里
+  // 读到最新 dirty 的机制。
+  function requestSwitch(name: string): void {
+    setMenuOpen(false)
+    if (name === wfName) return
+    if (dirty) {
+      setPendingSwitch(name)
+    } else {
+      setWfName(name)
+    }
+  }
+
+  function confirmSwitch(): void {
+    if (pendingSwitch !== null) setWfName(pendingSwitch)
+    setPendingSwitch(null)
+  }
 
   // ── 预演控制（GSAP）──
   const stopRehearsal = useCallback((resetLit: boolean) => {
@@ -233,9 +336,23 @@ export function WorkbenchView({ root }: WorkbenchViewProps): JSX.Element {
   }
 
   // ── stepper 入场（沿 motion.ts 既有词汇；reduced-motion 由 revealList 自身处理）──
+  // T13 起 def 就是编辑草稿：依赖收敛为 def?.name（只在切换 workflow/首次载入时重播），
+  // 依赖整个 def 会让每次击键都重播全排卡入场——装饰性噪音，不是真实状态变化
+  //（WorkflowEditorView 列表入场依赖 Boolean(names) 的同一条既有纪律）。
   useGSAP(() => {
     if (def && def.steps.length > 0) revealList('.wb-step')
-  }, { scope: rootRef, dependencies: [def] })
+  }, { scope: rootRef, dependencies: [def?.name] })
+
+  // T13：脏切换确认 Dialog 入场（共享 <Dialog> 不对外暴露内部节点，scope 选择器文本寻址——
+  // WorkflowCanvas Task 15 返回确认弹窗的同款既有写法）。
+  useGSAP(() => {
+    if (pendingSwitch !== null) {
+      revealDialog(
+        '[data-testid="wb-switch-confirm"]',
+        '[data-testid="wb-switch-confirm"] .dialog',
+      )
+    }
+  }, { scope: rootRef, dependencies: [pendingSwitch] })
 
   // ── 投影层 ──
   const stepName = useCallback(
@@ -315,10 +432,7 @@ export function WorkbenchView({ root }: WorkbenchViewProps): JSX.Element {
                     className={`wb-wf-item${n === wfName ? ' on' : ''}`}
                     role="menuitem"
                     data-testid={`wb-wf-item-${n}`}
-                    onClick={() => {
-                      setWfName(n)
-                      setMenuOpen(false)
-                    }}
+                    onClick={() => requestSwitch(n)}
                   >
                     <span>{n}</span>
                     {cnt != null && <span className="n">{t('workbench.wf_stages', { n: cnt })}</span>}
@@ -328,8 +442,35 @@ export function WorkbenchView({ root }: WorkbenchViewProps): JSX.Element {
             </div>
           )}
         </div>
-        {/* T13 挂载点：校验状态 pill + 保存按钮（脏计数）落在这条工具条右侧 */}
+        <span className="wb-spacer" />
+        {/* T13：工具条右侧——default 只读 pill；自定义 workflow 的 未保存 chip / 保存态 / 保存钮。 */}
+        {readonlyWf ? (
+          <span className="wb-status wb-status--ro" data-testid="wb-ro-pill">{t('workbench.readonly_pill')}</span>
+        ) : (
+          <>
+            {dirty && <span className="wb-status wb-status--dirty" data-testid="wb-dirty">{t('workbench.dirty_badge')}</span>}
+            {saveStatus.kind === 'ok' && !dirty && (
+              <span className="wb-status wb-status--ok" data-testid="wb-save-ok">{t('workbench.save_success')}</span>
+            )}
+            {saveStatus.kind === 'error' && (
+              <span className="wb-status wb-status--error" data-testid="wb-save-error">{t('workbench.save_error_pill')}</span>
+            )}
+            {/* 非 dirty 保存钮 disabled（上轮 minor 收口项）：没有可保存的东西就不给可点的实底钮。 */}
+            <button className="btn" data-testid="wb-save" onClick={save} disabled={!dirty || saving}>
+              {t('workbench.save')}
+            </button>
+          </>
+        )}
       </div>
+
+      {/* kernel validate / server 拒绝的错误原文逐条展示（循环依赖、非法字符、未知 to 等）。 */}
+      {saveStatus.kind === 'error' && (
+        <ul className="wb-save-errors" data-testid="wb-save-errors">
+          {saveStatus.errors.map((e) => (
+            <li key={e}>{e}</li>
+          ))}
+        </ul>
+      )}
 
       {namesError && <p className="view__note view__note--error">{namesError}</p>}
       {defError && <p className="view__note view__note--error">{defError}</p>}
@@ -346,7 +487,7 @@ export function WorkbenchView({ root }: WorkbenchViewProps): JSX.Element {
                 label={t('workbench.rail_label', { name: def.name })}
               />
               {selectedStep && (
-                <section className="card wb-editor" data-testid="wb-editor-placeholder">
+                <section className="card wb-editor" data-testid="wb-editor">
                   <div className="wb-editor-head">
                     <b>{t('workbench.editor_title')}</b>
                     <span className="g-phase" data-testid="wb-editor-stage">{selectedStep.id}</span>
@@ -357,9 +498,14 @@ export function WorkbenchView({ root }: WorkbenchViewProps): JSX.Element {
                     )}
                     <span className="wb-ed-note">{t('workbench.editor_hint')}</span>
                   </div>
-                  {/* T13 挂载点：<StepEditor step={selectedStep} …/>（基本信息/产出物/guards）；
-                      T14 技能链、T15 Hook 时序线在 StepEditor 内继续分区挂载。 */}
-                  <p className="wb-ed-placeholder">{t('workbench.editor_placeholder', { name: stepName(selectedStep) })}</p>
+                  {/* T13：阶段编辑表单（T14 技能链 / T15 Hook 时序线在 StepEditor 内继续分区挂载）。
+                      key 按 (workflow, step) 复合——切阶段/切 workflow 时「+ 添加」输入态随卸载复位。 */}
+                  <StepEditor
+                    key={`${def.name}:${selectedStep.id}`}
+                    step={selectedStep}
+                    readonly={readonlyWf}
+                    onChange={updateStep}
+                  />
                 </section>
               )}
               {/* T16 挂载点：「自动运行(Loop)」卡跟在阶段编辑卡之后 */}
@@ -434,6 +580,23 @@ export function WorkbenchView({ root }: WorkbenchViewProps): JSX.Element {
           </div>
         </aside>
       </div>
+
+      {/* T13 脏守卫：切 workflow 前的未保存确认（经共享 Dialog——Esc/困笼/焦点归位一并到位）。 */}
+      {pendingSwitch !== null && (
+        <Dialog
+          title={t('workbench.switch_confirm_title')}
+          onClose={() => setPendingSwitch(null)}
+          testid="wb-switch-confirm"
+          actions={
+            <>
+              <button className="btn btn--ghost" onClick={() => setPendingSwitch(null)}>{t('workbench.switch_cancel')}</button>
+              <button className="btn btn--danger" onClick={confirmSwitch}>{t('workbench.switch_discard')}</button>
+            </>
+          }
+        >
+          <p className="dialog__desc">{t('workbench.switch_confirm_body', { name: wfName ?? '' })}</p>
+        </Dialog>
+      )}
     </section>
   )
 }

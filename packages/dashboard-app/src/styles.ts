@@ -609,11 +609,55 @@ button.ev__chip--neutral:hover { border-color: var(--border-2); color: var(--tex
 .wb-step--add:hover { background: var(--card); color: var(--text-2); }
 .wb-step--add:disabled { opacity: .55; cursor: not-allowed; }
 .wb-step--add:disabled:hover { background: transparent; color: var(--text-3); }
-/* 阶段编辑卡（T12 占位骨架；T13 起 StepEditor 填充） */
+/* 阶段编辑卡（T13，StepEditor）：基本/产出物分区表单。对照 demo 的 wb- 编辑区块
+   （wb-basic/wb-input/wb-switchrow/wb-chips），全部走既有 token。 */
 .wb-editor-head { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
 .wb-editor-head b { font-size: 13px; color: var(--text); }
 .wb-ed-note { font-size: 12px; color: var(--text-3); font-weight: 400; margin-left: auto; }
-.wb-ed-placeholder { margin: 10px 0 4px; font-size: 12.5px; color: var(--text-3); line-height: 1.7; }
+.wb-ed-ro { margin: 10px 0 0; padding: 8px 11px; background: var(--fill); border-radius: var(--radius-sm); }
+.wb-ed-sec { padding: 14px 0 4px; }
+.wb-ed-sec + .wb-ed-sec { margin-top: 12px; border-top: 1px solid var(--border); }
+.wb-ed-sec-h { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; margin-bottom: 10px; }
+.wb-ed-sec-h .hint { font-size: 12px; font-weight: 400; color: var(--text-3); }
+.wb-basic { display: grid; grid-template-columns: 230px 170px minmax(0, 1fr); gap: 14px; }
+@media (max-width: 720px) { .wb-basic { grid-template-columns: 1fr; } }
+.wb-flabel { display: block; font-size: 12px; font-weight: 600; color: var(--text-3); margin-bottom: 5px; }
+.wb-input { width: 100%; height: 34px; padding: 0 11px; border-radius: 9px; border: 1px solid var(--border); background: var(--card); font: inherit; font-size: 13.5px; color: var(--text); transition: border-color .12s ease, box-shadow .12s ease; }
+.wb-input:hover { border-color: var(--border-2); }
+.wb-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); }
+.wb-input:disabled { background: var(--fill); color: var(--text-3); cursor: not-allowed; }
+.wb-input--ro { display: flex; align-items: center; background: var(--fill); color: var(--text-2); font-family: var(--mono); }
+.wb-switchrow { display: flex; align-items: center; gap: 9px; }
+.wb-swlabel { font-size: 13px; font-weight: 600; }
+.wb-note { font-size: 12px; color: var(--text-3); line-height: 1.55; }
+.wb-sec-note { margin-top: 10px; }
+.wb-tail-note { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border); }
+/* 开关（demo .switch 同款，34×20 胶囊 + 位移圆钮；开=accent） */
+.switch { position: relative; width: 34px; height: 20px; border-radius: 999px; background: var(--fill-2); border: 1px solid var(--border-2); cursor: pointer; flex: none; transition: background .15s ease, border-color .15s ease; }
+.switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 999px; background: var(--card); box-shadow: var(--shadow-2); transition: transform .15s ease; }
+.switch[aria-checked="true"] { background: var(--accent); border-color: var(--accent); }
+.switch[aria-checked="true"]::after { transform: translateX(14px); }
+.switch:disabled { opacity: .55; cursor: not-allowed; }
+/* 产出物 chips：字段 chip + × 移除 + 「+ 添加」就地输入 */
+.wb-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.wb-empty { font-size: 12.5px; color: var(--text-3); }
+.wb-chip { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 9px; border-radius: 7px; border: 1px solid var(--border); background: var(--fill); font-size: 12px; color: var(--text-2); font-family: var(--mono); }
+.wb-x { display: inline-grid; place-items: center; width: 16px; height: 16px; margin-right: -3px; padding: 0; border: 0; background: transparent; border-radius: 5px; color: var(--text-3); font-size: 13px; line-height: 1; cursor: pointer; transition: background .12s ease, color .12s ease; }
+.wb-x:hover { background: var(--red-t); color: var(--red-d); }
+.wb-addchip { height: 24px; padding: 0 9px; border-radius: 7px; border: 1px dashed var(--border-2); background: transparent; color: var(--text-3); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; transition: background .12s ease, color .12s ease; }
+.wb-addchip:hover { background: var(--fill); color: var(--text-2); }
+.wb-chip-in { width: 180px; height: 26px; font-size: 12px; font-family: var(--mono); }
+.wb-ed-adderr { margin: 6px 0 0; }
+/* 工具条右侧：状态 pill 家族（沿 workflow-canvas__status 的语义：脏=中性虚线、成功=绿、失败=红、只读=灰） */
+.wb-spacer { flex: 1; }
+.wb-status { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 999px; }
+.wb-status--dirty { background: var(--fill); color: var(--text-2); border: 1px dashed var(--border-2); }
+.wb-status--ok { background: var(--green-t); color: var(--green); }
+.wb-status--error { background: var(--red-t); color: var(--red); }
+.wb-status--ro { background: var(--fill-2); color: var(--text-3); }
+/* kernel validate 错误原文列表（保存失败时挂在工具条下方，就近呈现不打断编辑） */
+.wb-save-errors { margin: 0 0 14px; padding: 10px 12px; list-style: none; border: 1px solid var(--red-b); background: var(--red-t); border-radius: var(--radius-sm); }
+.wb-save-errors li { font-size: 12.5px; color: var(--red-d); line-height: 1.6; font-family: var(--mono); }
 /* 右栏流程预览 + 预演 */
 .wb-pv-flow { overflow-x: auto; padding: 8px 0 6px; }
 .wb-pv-track { position: relative; display: flex; align-items: center; width: max-content; min-width: 100%; padding: 4px 0; }

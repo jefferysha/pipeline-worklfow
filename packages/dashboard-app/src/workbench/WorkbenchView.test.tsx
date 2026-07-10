@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '../i18n'
-import { invalidateWorkflowRules } from '../model/workflowModel'
+import { invalidateWorkflowRules, useWorkflowRules } from '../model/workflowModel'
 import { WorkbenchView } from './WorkbenchView'
 
 const ROOT = '/tmp/proj-a'
@@ -20,8 +20,10 @@ const RELEASE_TRAIN = {
       transitions: [{ event: 'submitted', to: 'review' }],
     },
     {
+      // T13：review 带 inputs——验收①「保存 body 含 inputs 原样透传」的探针字段
+      //（Inputs UI 不渲染，但 schema/serialize 兼容保留，保存不丢）。
       id: 'review', label: '人工复核', gate: 'review',
-      skills: [], inputs: [], outputs: [], guards: [],
+      skills: [], inputs: [{ field: 'draft_doc', type: 'file_path' }], outputs: [], guards: [],
       transitions: [{ event: 'approved', to: 'ship' }, { event: 'rejected', to: 'draft' }],
     },
     {
@@ -60,12 +62,16 @@ function stubMatchMedia(reduceMatches: boolean): void {
 beforeEach(() => {
   localStorage.clear()
   invalidateWorkflowRules() // 模块级 rules 缓存跨用例清空（同 WorkflowEditorView.test.tsx 既有先例）
-  global.fetch = vi.fn(async (url: string) => {
+  global.fetch = vi.fn(async (url: string, opts?: RequestInit) => {
     if (url === `/api/workflows?root=${encodeURIComponent(ROOT)}`) {
       return new Response(JSON.stringify({ names: ['release-train'] }), { status: 200 })
     }
     if (url === `/api/workflows/release-train?root=${encodeURIComponent(ROOT)}`) {
       return new Response(JSON.stringify(RELEASE_TRAIN), { status: 200 })
+    }
+    // T13：保存端点（POST /api/workflows/:name，root 在 body 里）——缺省恒成功
+    if (url === '/api/workflows/release-train' && opts?.method === 'POST') {
+      return new Response(JSON.stringify({ ok: true }), { status: 200 })
     }
     throw new Error(`unexpected fetch ${url}`)
   }) as unknown as typeof fetch
@@ -208,6 +214,188 @@ describe('WorkbenchView 预演（验收④）', () => {
     fireEvent.click(await screen.findByTestId('wb-wf-item-default'))
     await screen.findByTestId('wb-step-open')
     expect(screen.getByTestId('wb-pv-node-open')).not.toHaveClass('lit')
+  })
+})
+
+// ── T13：阶段编辑区（StepEditor 挂载 + 保存接线 + 脏守卫 + default 只读）──
+
+/** 取最近一次 POST 保存调用（url + 解析后的 body）；无 POST → null。 */
+function lastSaveCall(): { url: string; body: unknown } | null {
+  const calls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls
+  const post = [...calls].reverse().find((c) => (c[1] as RequestInit | undefined)?.method === 'POST')
+  if (!post) return null
+  return { url: String(post[0]), body: JSON.parse(String((post[1] as RequestInit).body)) }
+}
+
+describe('WorkbenchView T13 编辑 → 保存（验收①）', () => {
+  it('加载后未编辑：无「未保存」chip，保存钮 disabled（上轮 minor 收口项）', async () => {
+    renderView()
+    await screen.findByTestId('wb-step-draft')
+    expect(screen.queryByTestId('wb-dirty')).toBeNull()
+    expect(screen.getByTestId('wb-save')).toBeDisabled()
+  })
+
+  it('编辑名称+开 nonempty 开关 → dirty chip 出现；保存 body 与 def 形状一致且 inputs 原样透传', async () => {
+    renderView()
+    await screen.findByTestId('wb-step-draft')
+    fireEvent.change(screen.getByLabelText('阶段名称'), { target: { value: '初稿' } })
+    fireEvent.click(screen.getByRole('switch', { name: '产出非空方可推进' }))
+    expect(screen.getByTestId('wb-dirty')).toHaveTextContent('未保存')
+    expect(screen.getByTestId('wb-save')).toBeEnabled()
+
+    fireEvent.click(screen.getByTestId('wb-save'))
+    await waitFor(() => expect(screen.getByTestId('wb-save-ok')).toHaveTextContent('已保存'))
+
+    const save = lastSaveCall()
+    expect(save?.url).toBe('/api/workflows/release-train')
+    // 与 kernel serialize 消费的 WorkflowDef 形状逐字段一致：只有 draft 的 label/guards 变化，
+    // review 的 inputs（Inputs UI 已移除）原样透传，其余步骤零改动。
+    expect(save?.body).toEqual({
+      ...RELEASE_TRAIN,
+      steps: [
+        { ...RELEASE_TRAIN.steps[0], label: '初稿', guards: [{ type: 'nonempty-output' }] },
+        RELEASE_TRAIN.steps[1],
+        RELEASE_TRAIN.steps[2],
+      ],
+      root: ROOT,
+    })
+    // 保存成功后脏状态清除、保存钮回到 disabled
+    expect(screen.queryByTestId('wb-dirty')).toBeNull()
+    expect(screen.getByTestId('wb-save')).toBeDisabled()
+  })
+
+  it('编辑联动：改名后阶段卡与右栏流程预览同步显示新名（摘要联动的同一份 def 状态）', async () => {
+    renderView()
+    await screen.findByTestId('wb-step-draft')
+    fireEvent.change(screen.getByLabelText('阶段名称'), { target: { value: '初稿' } })
+    expect(within(screen.getByTestId('wb-step-draft')).getByText('初稿')).toBeInTheDocument()
+    expect(screen.getByTestId('wb-pv-node-draft')).toHaveTextContent('初稿')
+    // 开复核门 → 摘要「复核门」计数 1→2 联动
+    fireEvent.click(screen.getByRole('switch', { name: '复核门' }))
+    expect(screen.getByTestId('wb-sum-gates')).toHaveTextContent('2')
+  })
+
+  it('保存被 kernel validate 拒（400 errors[]）→ 错误原文上抛展示，已编辑内容不丢', async () => {
+    global.fetch = vi.fn(async (url: string, opts?: RequestInit) => {
+      if (url === `/api/workflows?root=${encodeURIComponent(ROOT)}`) {
+        return new Response(JSON.stringify({ names: ['release-train'] }), { status: 200 })
+      }
+      if (url === `/api/workflows/release-train?root=${encodeURIComponent(ROOT)}`) {
+        return new Response(JSON.stringify(RELEASE_TRAIN), { status: 200 })
+      }
+      if (url === '/api/workflows/release-train' && opts?.method === 'POST') {
+        return new Response(JSON.stringify({ ok: false, errors: ["step 'draft': 循环依赖：a -> b -> a", "step 'draft' 的 skill id 'x y' 含非法字符（仅允许 a-zA-Z0-9_-）"] }), { status: 400 })
+      }
+      throw new Error(`unexpected fetch ${url}`)
+    }) as unknown as typeof fetch
+    renderView()
+    await screen.findByTestId('wb-step-draft')
+    fireEvent.change(screen.getByLabelText('阶段名称'), { target: { value: '初稿' } })
+    fireEvent.click(screen.getByTestId('wb-save'))
+    await waitFor(() => expect(screen.getByTestId('wb-save-errors')).toBeInTheDocument())
+    // kernel validate 错误逐条原文展示（不翻译、不吞并）
+    expect(screen.getByText("step 'draft': 循环依赖：a -> b -> a")).toBeInTheDocument()
+    expect(screen.getByText(/skill id 'x y' 含非法字符/)).toBeInTheDocument()
+    // 编辑内容仍在、dirty 未被误清
+    expect(screen.getByLabelText('阶段名称')).toHaveValue('初稿')
+    expect(screen.getByTestId('wb-dirty')).toBeInTheDocument()
+  })
+})
+
+// 验收②后半：保存成功 → (root,name) 规则缓存失效（同 WorkflowCanvas.test.tsx 评审 P0-4 的
+// RulesProbe 内容断言法：探针先灌 v1 缓存，保存后重挂探针，真重拉才能看到 v2 的 4 个 step）。
+function RulesProbe(): JSX.Element {
+  const { rules } = useWorkflowRules(ROOT, ['release-train'])
+  return <div data-testid="rules-probe">{rules.get('release-train')?.steps.length ?? 0}</div>
+}
+
+describe('WorkbenchView T13 保存后规则缓存失效（验收②）', () => {
+  it('保存成功 → 下一个 useWorkflowRules 消费方真重拉、看到保存后的新定义', async () => {
+    const V2 = {
+      ...RELEASE_TRAIN,
+      steps: [...RELEASE_TRAIN.steps, { id: 'extra', label: '', gate: null, skills: [], inputs: [], outputs: [], guards: [], transitions: [] }],
+    }
+    let saved = false
+    global.fetch = vi.fn(async (url: string, opts?: RequestInit) => {
+      if (url === `/api/workflows?root=${encodeURIComponent(ROOT)}`) {
+        return new Response(JSON.stringify({ names: ['release-train'] }), { status: 200 })
+      }
+      if (url === `/api/workflows/release-train?root=${encodeURIComponent(ROOT)}`) {
+        return new Response(JSON.stringify(saved ? V2 : RELEASE_TRAIN), { status: 200 })
+      }
+      if (url === '/api/workflows/release-train' && opts?.method === 'POST') {
+        saved = true
+        return new Response(JSON.stringify({ ok: true }), { status: 200 })
+      }
+      throw new Error(`unexpected fetch ${url}`)
+    }) as unknown as typeof fetch
+
+    // 1. 探针灌 v1 缓存（模拟收件箱/进度已消费过规则）
+    const probe1 = render(<RulesProbe />)
+    await waitFor(() => expect(screen.getByTestId('rules-probe').textContent).toBe('3'))
+    probe1.unmount()
+
+    // 2. 工作台编辑 + 保存成功（此后 server 端已是 v2）
+    renderView()
+    await screen.findByTestId('wb-step-draft')
+    fireEvent.change(screen.getByLabelText('阶段名称'), { target: { value: '初稿' } })
+    fireEvent.click(screen.getByTestId('wb-save'))
+    await waitFor(() => expect(screen.getByTestId('wb-save-ok')).toBeInTheDocument())
+
+    // 3. 消费方再次挂载：缓存已失效 → 真重拉 → 看到 v2 的 4 个 step
+    render(<RulesProbe />)
+    await waitFor(() => expect(screen.getByTestId('rules-probe').textContent).toBe('4'))
+  })
+})
+
+describe('WorkbenchView T13 脏守卫：切 workflow 确认 Dialog（验收③）', () => {
+  it('dirty 时切 workflow → 共享 Dialog 确认；取消停留原 workflow，确认丢弃并切换', async () => {
+    renderView()
+    await screen.findByTestId('wb-step-draft')
+    fireEvent.change(screen.getByLabelText('阶段名称'), { target: { value: '初稿' } })
+
+    // 切到 default → 不直接切，先弹确认
+    fireEvent.click(screen.getByTestId('wb-wf-btn'))
+    fireEvent.click(await screen.findByTestId('wb-wf-item-default'))
+    expect(screen.getByTestId('wb-switch-confirm')).toBeInTheDocument()
+    expect(screen.queryByTestId('wb-step-open')).toBeNull()
+
+    // 取消：停留 release-train，编辑内容仍在
+    fireEvent.click(screen.getByRole('button', { name: '取消' }))
+    expect(screen.queryByTestId('wb-switch-confirm')).toBeNull()
+    expect(screen.getByLabelText('阶段名称')).toHaveValue('初稿')
+
+    // 再切 + 确认丢弃：真切到 default
+    fireEvent.click(screen.getByTestId('wb-wf-btn'))
+    fireEvent.click(await screen.findByTestId('wb-wf-item-default'))
+    fireEvent.click(screen.getByRole('button', { name: '丢弃并切换' }))
+    await screen.findByTestId('wb-step-open')
+  })
+
+  it('非 dirty 切 workflow 不弹确认（既有直切行为不回归）', async () => {
+    renderView()
+    await screen.findByTestId('wb-step-draft')
+    fireEvent.click(screen.getByTestId('wb-wf-btn'))
+    fireEvent.click(await screen.findByTestId('wb-wf-item-default'))
+    expect(screen.queryByTestId('wb-switch-confirm')).toBeNull()
+    await screen.findByTestId('wb-step-open')
+  })
+})
+
+describe('WorkbenchView T13 default workflow 只读态（验收④）', () => {
+  it('default：只读 pill + 只读说明明示、控件禁用、无保存钮（server 端 400 已挡，前端预示）', async () => {
+    renderView()
+    await screen.findByTestId('wb-step-draft')
+    fireEvent.click(screen.getByTestId('wb-wf-btn'))
+    fireEvent.click(await screen.findByTestId('wb-wf-item-default'))
+    await screen.findByTestId('wb-step-open')
+
+    expect(screen.getByTestId('wb-ro-pill')).toHaveTextContent('内置 · 只读')
+    expect(screen.getByTestId('wb-ed-readonly')).toHaveTextContent(/只读镜像/)
+    expect(screen.getByLabelText('阶段名称')).toBeDisabled()
+    expect(screen.getByRole('switch', { name: '复核门' })).toBeDisabled()
+    expect(screen.queryByTestId('wb-save')).toBeNull()
+    expect(screen.queryByTestId('wb-dirty')).toBeNull()
   })
 })
 
