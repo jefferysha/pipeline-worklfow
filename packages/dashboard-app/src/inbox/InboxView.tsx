@@ -1,15 +1,17 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useT } from '../i18n'
-import type { Snapshot } from '../types'
+import type { ChangeSnapshot, Snapshot } from '../types'
 import { rulesKey, type WorkflowRules } from '../model/workflowModel'
+import { changeProgressState, type ProgressState } from '../model/progressModel'
 import { legalTargets, plannedTransition, type PlannedTransition } from '../board/events'
 import { shortTime } from '../model/time'
 import { Dialog } from '../shell/Dialog'
 import { Icon } from '../shell/Icon'
 import { revealList } from '../workflow/motion'
-import { ChangeDetailCard } from './ChangeDetailCard'
-import { artifactChips, gateEvidence, type EvidenceChip } from './evidence'
-import { changeWorkflow, projectName, selectInbox } from './inbox'
+import { TaskDetail } from '../shared/TaskDetail'
+import { postAfkDismiss, postAfkRetry } from '../api/client'
+import { gateEvidence, VERIFY_STATUS_FIELDS, type EvidenceChip } from './evidence'
+import { changeWorkflow, decisionKind, projectName, selectInbox, type InboxItem } from './inbox'
 
 interface InboxViewProps {
   snapshot: Snapshot | null
@@ -17,8 +19,8 @@ interface InboxViewProps {
   error: string | null
   /** D5 项目切换器语义：非空=只看该项目；空串=全部项目聚合（Task 5 契约）。 */
   currentRoot: string
-  /** App 统一拉取的 workflow 规则集，键=rulesKey(root,wf)（Task 8/G19③：聚合语境下同名
-   *  自定义 workflow 跨项目不串缓存，键必须带 root 才能唯一定位）。 */
+  /** App 统一拉取的 workflow 规则集，键=rulesKey(root,wf)（G19③：聚合语境下同名自定义
+   *  workflow 跨项目不串缓存，键必须带 root 才能唯一定位）。 */
   rulesByKey: ReadonlyMap<string, WorkflowRules>
   onOpenBoard: () => void
   /** 快捷转换（App 注入 = api/client.postTransition + 成功后 refresh）。 */
@@ -35,15 +37,85 @@ interface Pending {
   planned: PlannedTransition
 }
 
+/** 行/详情共用的结论式语义（demo v5 三情形口径）：badge 一句结论 + lead 一句人话。 */
+interface RowSemantics {
+  tone: 'green' | 'red'
+  badgeText: string
+  lead: string
+}
+
+/** 老内核 cmd_get 口径：字面 'null'（init heredoc）或空串算未设（同 evidence.ts 私有 fieldStr）。 */
+function fieldStr(c: ChangeSnapshot, key: string): string {
+  const v = c.fields[key]
+  return typeof v === 'string' ? v : ''
+}
+
 /**
- * 行内证据 chip（Task 7，评审 P0-1：gateEvidence 复用，行内即时可见，不必点开详情卡才看得到）。
- * copyable 字段（路径/sha 类）渲染成可点的 button（拷贝值），其余 tone 语义字段渲染成只读 span
- * ——同视觉基准 demo 的 `.chip`/`button.chip` 区分（非 button 的 chip 不该看起来可点）。
- * 终审修复批：未产出占位改走 i18n——chip.unset 时展示 t('evidence.unset')，不直接吐 chip.value
- * （evidence.ts 的 unsetPlaceholder() 此时 value 恒为 ''，不再是焊死的中文字面量）；未设字段
- * 从不 copyable，故只有非 copyable 分支需要处理。
+ * 行语义判定（T9，demo v5 收件箱三情形口径）：
+ *   · failed（automation ∈ {failed, conflict}）→「失败 ×N · 等你决定」+「重试还是放弃？」；
+ *   · gate 且证据里有未过判定（verify 三轨白名单，产物没产出不等于验证没过——Important-1
+ *     教训沿用）或根本没有任何自动证据（自定义门/纯人判）→「等你判断」；
+ *   · gate 且证据齐 →「✓ 可以放行」，lead 按决定类型细分（verify 用 demo 全句，其余沿
+ *     awaiting.* 既有细分文案）。
+ * 纯函数（t 注入），行与右栏详情卡头部 badge 同源消费，两处不漂移。
  */
-function renderEvidenceChip(chip: EvidenceChip, onCopy: (value: string) => void, t: (key: string, vars?: Record<string, string | number>) => string): JSX.Element {
+function rowSemantics(
+  change: ChangeSnapshot,
+  state: ProgressState,
+  evidence: EvidenceChip[],
+  t: (key: string, vars?: Record<string, string | number>) => string,
+): RowSemantics {
+  if (state === 'failed') {
+    const attempts = fieldStr(change, 'automation_attempts')
+    const err = fieldStr(change, 'automation_last_error') || t('detail.fail_generic')
+    return {
+      tone: 'red',
+      badgeText: attempts !== '' ? t('inbox.badge_failed', { n: attempts }) : t('inbox.badge_failed_plain'),
+      lead: attempts !== '' ? t('inbox.lead_failed', { err, n: attempts }) : t('inbox.lead_failed_plain', { err }),
+    }
+  }
+  const hasJudgment = evidence.some((c) => !c.unset)
+  if (!hasJudgment) {
+    return { tone: 'red', badgeText: t('inbox.badge_judge'), lead: t('inbox.lead_judge', { wf: changeWorkflow(change) }) }
+  }
+  const kind = decisionKind(change)
+  const failedTracks = evidence.filter(
+    (c) => (VERIFY_STATUS_FIELDS as readonly string[]).includes(c.key) && c.tone !== 'pass',
+  )
+  if (kind === 'verify' && failedTracks.length > 0) {
+    return {
+      tone: 'red',
+      badgeText: t('inbox.badge_judge'),
+      lead: t('detail.why_gate', { names: failedTracks.map((c) => c.key.replace(/_result$/, '')).join('、') }),
+    }
+  }
+  return {
+    tone: 'green',
+    badgeText: t('inbox.badge_pass'),
+    lead: kind === 'verify' ? t('inbox.lead_verify_pass') : t(`inbox.awaiting.${kind}`),
+  }
+}
+
+/** 结论式 badge（demo badge--green / badge--red 对位；红系带闪点，同 prg-badge 语义家族）。 */
+function semBadge(sem: RowSemantics): JSX.Element {
+  if (sem.tone === 'green') return <span className="badge badge--green">{sem.badgeText}</span>
+  return (
+    <span className="badge badge--red">
+      <span className="dot" aria-hidden="true" />
+      {sem.badgeText}
+    </span>
+  )
+}
+
+/**
+ * 行内证据 chip（Task 7 评审 P0-1 沿用：gateEvidence 复用，行内即时可见）。copyable 字段渲染
+ * 成可点 button（拷贝值），其余 tone 语义字段渲染成只读 span；unset 走 i18n t('evidence.unset')。
+ */
+function renderEvidenceChip(
+  chip: EvidenceChip,
+  onCopy: (value: string) => void,
+  t: (key: string, vars?: Record<string, string | number>) => string,
+): JSX.Element {
   if (chip.copyable) {
     return (
       <button
@@ -67,31 +139,40 @@ function renderEvidenceChip(chip: EvidenceChip, onCopy: (value: string) => void,
   )
 }
 
-/** Enter/j/k 键盘旁路的 tagName 集合（终审修复批收紧：从 {INPUT,TEXTAREA} 扩到含
- *  SELECT/BUTTON/A）——Dialog 内除文本输入外，select/按钮/链接上按下这些键同样不该被下面
- *  这个 document 级监听器接管。 */
+/** Enter/j/k 键盘旁路的 tagName 集合（终审修复批口径沿用：Dialog 内 select/按钮/链接上的
+ *  这些键不该被 document 级监听器接管）。 */
 const FOCUSABLE_BYPASS_TAGS = new Set(['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON', 'A'])
 
+function itemKey(it: InboxItem): string {
+  return `${it.root}/${it.change.name}`
+}
+
 /**
- * 收件箱 —— 默认落地视图（病灶②的解法）。只答一个问题："现在哪个 change 在等我决定"。
- * 工票车间语言（spec §2.3）：朱红工票行 + 实底"等你复核"徽章 + 行尾快捷转换按钮
- * （与看板同一 legalTargets/plannedTransition 管线，回退边共用二次确认语义）。
- * 设计变更登记：原"决定类型文案行"（awaiting.<kind>）退役——紧凑行里徽章已表达"在等"，
- * 细分语义由相位胶囊承担；awaiting.* i18n key 保留供空态副本等复用。
+ * 收件箱 v5（T9）—— master-detail：左行列表（人话主文案 + 结论式 badge + 证据 chips）+
+ * 右 356px sticky 详情（shared/TaskDetail variant='timeline'）。交互基准 demo v5 收件箱段：
+ * 默认开首行详情；点行切换；Esc/✕ 收起出占位卡；Enter 开关 kbd 焦点行；j/k 移焦点环
+ * （scrollIntoView 跟随）。动作条按计划决议 #13 归宿主：gate 行放行/打回走既有 transition
+ * 管线（回退二次确认 + busy 守卫），失败行重试/放弃走 afk 端点（postAfkRetry/postAfkDismiss，
+ * dismiss 端点由 T11 落地）。旧 ChangeDetailCard 仍被 BoardView 消费，T18 统一退役。
+ * requirement 数据面：change fields 无「任务一句话」字段——不传 prop，TaskDetail 缺省整节
+ * 不渲染（读组件缺省行为，不伪造需求文案）。
  */
 export function InboxView({ snapshot, loading, error, currentRoot, rulesByKey, onOpenBoard, onTransition, onToast, onError, onNewChange }: InboxViewProps): JSX.Element {
   const { t } = useT()
   const [pending, setPending] = useState<Pending | null>(null)
   const [busy, setBusy] = useState(false)
-  // 详情卡点开（Task 7，评审 P0-1）：selected 是被点开那行的 `${root}/${change.name}` 复合键
-  // （单项目语境下 root 恒定，仍取复合键是为了防御未来聚合视图；见 selectInbox 的 currentRoot
-  // 过滤注释）。kbdFocus 是独立的"键盘焦点环"索引——j/k 移动它，不联动 selected（哪行展开
-  // 详情只由点击/Enter 决定），两者语义分离对齐 brief"焦点环"与"选中"是两件事的措辞。
-  const [selected, setSelected] = useState<string | null>(null)
+  // master-detail 选中态：selKey 是被选行的 `${root}/${name}` 复合键（聚合语境同名 change 不串），
+  // open 是右栏详情开合（demo 默认开）。selKey=null 或指向已离开收件箱的行 → 回落首行——
+  // 转换成功后该行离场，详情自动落到下一张待拍板的卡，不留空窗。
+  const [selKey, setSelKey] = useState<string | null>(null)
+  const [open, setOpen] = useState(true)
+  // 键盘焦点环索引——j/k 移动它，与「哪行在右栏展开」语义分离（点击/Enter 才改选中）。
   const [kbdFocus, setKbdFocus] = useState(0)
   const listRef = useRef<HTMLUListElement>(null)
+  const rowRefs = useRef<(HTMLLIElement | null)[]>([])
   const revealedRef = useRef(false)
   const items = useMemo(() => selectInbox(snapshot, currentRoot, rulesByKey), [snapshot, currentRoot, rulesByKey])
+
   // 视图进场 stagger（只播首次数据到达，SSE 后续刷新瞬时——product register：不重播编排）
   useEffect(() => {
     if (items.length > 0 && listRef.current && !revealedRef.current) {
@@ -100,60 +181,54 @@ export function InboxView({ snapshot, loading, error, currentRoot, rulesByKey, o
     }
   }, [items.length])
 
-  // j/k 移动焦点环、Enter 开/关 kbdFocus 所在行的详情卡、Esc 关详情——单个 document keydown
-  // 监听（brief 明确要求合一，不是三个监听器）。两条旁路：① e.target 的 tagName 命中
-  // FOCUSABLE_BYPASS_TAGS 时整体不处理——NewChangeDialog/Onboarding 的文本输入、Dialog 内的
-  // select/button/链接与本视图同时挂载（对话框是覆盖层，不卸载背后的 InboxView），敲字符
-  // 'j'/'k' 或对话框内控件上的 Enter 不该拨动收件箱的隐藏状态（终审修复批收紧：此前只挡
-  // INPUT/TEXTAREA，SELECT/BUTTON/A 上按下的 Enter/j/k 会漏到这个监听器）；
-  // ② Enter/Esc 时若 document 上还有打开的 [role="dialog"]（本视图的回退确认框，或详情卡自己
-  // 的回退确认框）则整体不处理，让位给 Dialog 自己的 LIFO 栈 Esc/提交逻辑——避免"确认框内按
-  // Enter 提交的同一次按键，顺带把背后 kbdFocus 所在行的详情卡也 toggle 了"的双重反应（终审
-  // 修复批：此前只有 Esc 分支有这条判断，Enter 分支没有）。Dialog 组件的状态更新在这次事件
-  // 派发的同步阶段还没有落到 DOM 上（React 18 批处理），这里的 document.querySelector 读到的
-  // 仍是"事件发生时"的 DOM，与 Dialog 自己监听器的注册/执行顺序无关，两边独立判断都成立。
+  // 行数收缩时焦点环回夹（转换成功/放弃后行离场，焦点不悬空在越界索引上）
+  useEffect(() => {
+    setKbdFocus((i) => Math.min(i, Math.max(items.length - 1, 0)))
+  }, [items.length])
+
+  const selectedItem: InboxItem | undefined = open
+    ? (items.find((it) => itemKey(it) === selKey) ?? items[0])
+    : undefined
+
+  // j/k 移焦点环（scrollIntoView 跟随）、Enter 开/关焦点行详情、Esc 收起——单个 document
+  // keydown 监听。两条旁路沿终审修复批口径：① e.target 命中 FOCUSABLE_BYPASS_TAGS 整体不
+  // 处理（对话框覆盖层不卸载背后的本视图，敲字符/控件上的 Enter 不该拨动隐藏状态）；
+  // ② Enter/Esc 时 document 上还有打开的 [role="dialog"]（回退确认框）→ 让位给 Dialog 自己
+  // 的 LIFO 栈，避免同一次按键双重反应。
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent): void {
       const target = e.target
       if (target instanceof HTMLElement && FOCUSABLE_BYPASS_TAGS.has(target.tagName)) return
-      if (e.key === 'j') {
-        setKbdFocus((i) => Math.min(i + 1, items.length - 1))
-      } else if (e.key === 'k') {
-        setKbdFocus((i) => Math.max(i - 1, 0))
+      if (e.key === 'j' || e.key === 'k') {
+        const next = e.key === 'j' ? Math.min(kbdFocus + 1, items.length - 1) : Math.max(kbdFocus - 1, 0)
+        setKbdFocus(next)
+        // jsdom / 极老内核无 scrollIntoView——可选调用，不做垫片
+        rowRefs.current[next]?.scrollIntoView?.({ block: 'nearest' })
       } else if (e.key === 'Enter') {
         if (document.querySelector('[role="dialog"]')) return
         const item = items[kbdFocus]
-        if (item) {
-          const key = `${item.root}/${item.change.name}`
-          setSelected((prev) => (prev === key ? null : key))
+        if (!item) return
+        const key = itemKey(item)
+        if (open && selectedItem && itemKey(selectedItem) === key) {
+          setOpen(false)
+        } else {
+          setSelKey(key)
+          setOpen(true)
         }
       } else if (e.key === 'Escape') {
         if (document.querySelector('[role="dialog"]')) return
-        setSelected(null)
+        setOpen(false)
       }
     }
     document.addEventListener('keydown', onKeyDown)
     return () => document.removeEventListener('keydown', onKeyDown)
-  }, [items, kbdFocus])
+  }, [items, kbdFocus, open, selectedItem])
 
   const rootToName = useMemo(() => {
     const m = new Map<string, string>()
     for (const p of snapshot?.projects ?? []) m.set(p.root, projectName(p))
     return m
   }, [snapshot])
-
-  // Task 17（spec §3）：右栏「项目在制」行——数据字面是 snapshot.projects 里 ok 项目的
-  // changes.length（brief 原话），不是 items.length/该项目的 gate 卡数：一个项目可以有很多
-  // 非 gate 相位的 change 正在推进，"在制"数的是全部，不是只数停在复核门的那一小撮。聚合语境
-  // （currentRoot===''）逐项目行；非聚合语境只出当前项目一行。
-  const projectRows = useMemo(() => {
-    const projects = snapshot?.projects ?? []
-    if (currentRoot === '') {
-      return projects.filter((p) => p.ok).map((p) => ({ root: p.root, name: projectName(p), count: p.changes.length }))
-    }
-    const cur = projects.find((p) => p.root === currentRoot)
-    return cur ? [{ root: cur.root, name: projectName(cur), count: cur.changes.length }] : []
-  }, [snapshot, currentRoot])
 
   async function apply(name: string, root: string, planned: PlannedTransition): Promise<void> {
     setBusy(true)
@@ -168,31 +243,100 @@ export function InboxView({ snapshot, loading, error, currentRoot, rulesByKey, o
     }
   }
 
-  function onQuick(name: string, root: string, planned: PlannedTransition): void {
-    if (planned.backward) {
-      setPending({ name, root, planned })
-    } else {
-      void apply(name, root, planned)
+  /** 失败卡动作（demo 口径：重试=清零计数重新挂队；放弃=退出自动化现场保留）。busy 与
+   *  transition 动作共锁——详情卡是唯一动作面，在途期间所有按钮一起禁用。 */
+  async function doAfk(action: 'retry' | 'dismiss', item: InboxItem): Promise<void> {
+    setBusy(true)
+    try {
+      if (action === 'retry') await postAfkRetry(item.change.name, item.root)
+      else await postAfkDismiss(item.change.name, item.root)
+      onToast?.(t(action === 'retry' ? 'inbox.afk_retry_ok' : 'inbox.afk_dismiss_ok', { name: item.change.name }))
+    } catch (e) {
+      onError?.(t('inbox.afk_fail', { msg: e instanceof Error ? e.message : String(e) }))
+    } finally {
+      setBusy(false)
     }
   }
 
-  // busy 守卫（评审修复）：迁移到共享 Dialog 后 Esc/backdrop 都会调 onClose，
-  // 迁移前的手写 backdrop 是死 div、busy 期间点它没有任何效果——这里补回等价语义。
-  // 取消钮也复用同一个函数（本来就该和 Esc/backdrop 一致，不必各写一份）。
-  // 禁止用 useCallback 包裹本函数——会冻结 busy 快照，连取消钮的 busy 语义一起假死，且 exhaustive-deps 拦不住。
+  // busy 守卫：Esc/backdrop/取消钮都走这里——在途请求期间确认框不许关（既有语义沿用）。
+  // 禁止用 useCallback 包裹——会冻结 busy 快照，连取消钮的 busy 语义一起假死。
   function closePending(): void {
     if (!busy) setPending(null)
-  }
-
-  function toggleRow(key: string, index: number): void {
-    setKbdFocus(index)
-    setSelected((prev) => (prev === key ? null : key))
   }
 
   function copyEvidence(value: string): void {
     void navigator.clipboard?.writeText(value).then(() => {
       onToast?.(t('detail.copied', { value }))
     })
+  }
+
+  /**
+   * 详情卡动作条（决议 #13 props 化下放宿主，文案以 demo v5 为唯一口径）：
+   *   · failed →「✕ 放弃」+「↻ 重试」走 afk 端点；
+   *   · gate → 全部出边逐条渲染（Important-2 纪律沿用：2+ 条同向出边一条不落）——单边用
+   *     demo 字面「→ 放行」「↩ 打回」，多边退到带目标名的「→ {to}」消歧；回退边先过二次确认。
+   * 无可用动作（rules 缺失/无出边）→ undefined，TaskDetail 不渲染动作条。
+   */
+  function detailActions(item: InboxItem, state: ProgressState, rules: WorkflowRules | undefined): ReactNode | undefined {
+    if (state === 'failed') {
+      return (
+        <>
+          <button
+            type="button"
+            className="btn btn--ghost ibx-act"
+            data-testid="inbox-act-dismiss"
+            disabled={busy}
+            onClick={() => void doAfk('dismiss', item)}
+          >
+            {t('inbox.act_dismiss')}
+          </button>
+          <button
+            type="button"
+            className="btn ibx-act"
+            data-testid="inbox-act-retry"
+            disabled={busy}
+            onClick={() => void doAfk('retry', item)}
+          >
+            {t('inbox.act_retry')}
+          </button>
+        </>
+      )
+    }
+    if (!rules) return undefined
+    const planned = legalTargets(rules, item.change.phase)
+      .map((to) => plannedTransition(rules, item.change.phase, to))
+      .filter((p): p is PlannedTransition => p !== null)
+    if (planned.length === 0) return undefined
+    const backward = planned.filter((p) => p.backward)
+    const forward = planned.filter((p) => !p.backward)
+    return (
+      <>
+        {backward.map((p, i) => (
+          <button
+            key={p.event}
+            type="button"
+            className="btn btn--verm-ghost ibx-act"
+            data-testid={i === 0 ? 'inbox-act-reject' : `inbox-act-backward-${p.event}`}
+            disabled={busy}
+            onClick={() => setPending({ name: item.change.name, root: item.root, planned: p })}
+          >
+            {backward.length === 1 ? t('inbox.act_reject') : t('inbox.act_backward', { to: p.to })}
+          </button>
+        ))}
+        {forward.map((p, i) => (
+          <button
+            key={p.event}
+            type="button"
+            className="btn ibx-act"
+            data-testid={i === 0 ? 'inbox-act-approve' : `inbox-act-forward-${p.event}`}
+            disabled={busy}
+            onClick={() => void apply(item.change.name, item.root, p)}
+          >
+            {forward.length === 1 ? t('inbox.act_approve') : t('inbox.act_forward', { to: p.to })}
+          </button>
+        ))}
+      </>
+    )
   }
 
   if (loading && !snapshot) {
@@ -215,13 +359,13 @@ export function InboxView({ snapshot, loading, error, currentRoot, rulesByKey, o
     )
   }
 
-  const selectedItem = selected ? items.find((it) => `${it.root}/${it.change.name}` === selected) : undefined
-  // Task 17：右栏「关联产物」的数据源——artifactChips 正门（与 ChangeDetailCard 产物区共享
-  // 同一个函数，但故意不去重/不与证据格联动：右栏是选中 change 的速览，详情卡才是全景，两处
-  // 信息密度定位不同，不算重复渲染）。空态（无选中）时这张卡不渲染。
-  // 与详情卡产物区不同：此处不做证据格去重——verify 相位已设的 verification_report 会在右栏
-  // 出现而详情卡产物区不出现（它在证据格里），属有意速览口径。
-  const selectedArtifacts = selectedItem ? artifactChips(selectedItem.change) : []
+  // 选中行的详情面数据（badge 与行同源；rules/state/动作都按行自己的 root 取——聚合语境禁
+  // currentRoot 哨兵，上轮 Task 9→11 教训）。
+  const selRules = selectedItem ? rulesByKey.get(rulesKey(selectedItem.root, changeWorkflow(selectedItem.change))) : undefined
+  const selState = selectedItem ? changeProgressState(selectedItem.change, selRules) : undefined
+  const selSem = selectedItem && selState !== undefined
+    ? rowSemantics(selectedItem.change, selState, selState === 'failed' ? [] : gateEvidence(selectedItem.change, selRules), t)
+    : undefined
 
   return (
     <section className="view inbox" data-testid="inbox-view">
@@ -237,136 +381,93 @@ export function InboxView({ snapshot, loading, error, currentRoot, rulesByKey, o
           </button>
         )}
       </header>
-      <div className="view-split">
-        <div className="view-split__main">
-          <ul className="inbox__list" data-testid="inbox-list" ref={listRef}>
-        {items.map(({ root, change }, index) => {
-          const wf = changeWorkflow(change)
-          const rules = rulesByKey.get(rulesKey(root, wf))
-          const targets = rules ? legalTargets(rules, change.phase) : []
-          const key = `${root}/${change.name}`
-          const isSelected = selected === key
-          const evidence = gateEvidence(change, rules)
-          const rowClass = [
-            'ticket-row',
-            'ticket-row--gate',
-            isSelected && 'ticket-row--open',
-            kbdFocus === index && 'kbd-focus',
-          ]
-            .filter(Boolean)
-            .join(' ')
-          return (
-            <li
-              key={key}
-              className={rowClass}
-              data-testid="inbox-card"
-              tabIndex={0}
-              aria-expanded={isSelected}
-              onClick={() => toggleRow(key, index)}
-              onFocus={() => setKbdFocus(index)}
-            >
-              <span className="card__name">{change.name}</span>
-              {change.track && <span className="card__track">{change.track}</span>}
-              <span className="wf-label" data-testid="inbox-card-wf">{wf}</span>
-              <span className="g-phase" data-testid="inbox-card-phase">{change.phase}</span>
-              <span className="badge badge--gate">{t('inbox.badge_waiting')}</span>
-              <span className="ticket-row__time">{rootToName.get(root) ?? root}{change.updated_at ? ` · ${shortTime(change.updated_at)}` : ''}</span>
-              <span className="ticket-row__spacer" />
-              {/* 评审 Minor-5 修复：卡打开时该行快捷钮组隐藏——详情卡动作条是唯一动作面，
-                  避免同一条转换在行内快捷钮与详情卡两处都能触发（双提交风险）。 */}
-              {!isSelected && (
-                <span className="qk">
-                  {targets.map((to) => {
-                    const planned = rules ? plannedTransition(rules, change.phase, to) : null
-                    if (!planned) return null
-                    return (
-                      <button
-                        key={planned.event}
-                        type="button"
-                        className={planned.backward ? 'qk__btn qk__btn--back' : 'qk__btn'}
-                        data-testid={`inbox-quick-${planned.event}`}
-                        disabled={busy}
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          onQuick(change.name, root, planned)
-                        }}
-                      >
-                        {planned.backward ? `↩ ${to}` : `→ ${to}`}
-                      </button>
+      <div className="ibx-grid">
+        <div className="ibx-main">
+          <ul className="ibx-list" role="listbox" aria-label={t('inbox.list_label')} data-testid="inbox-list" ref={listRef}>
+            {items.map((item, index) => {
+              const { root, change } = item
+              const wf = changeWorkflow(change)
+              const rules = rulesByKey.get(rulesKey(root, wf))
+              const state = changeProgressState(change, rules)
+              const evidence = state === 'failed' ? [] : gateEvidence(change, rules)
+              const sem = rowSemantics(change, state, evidence, t)
+              const key = itemKey(item)
+              const isSel = selectedItem !== undefined && itemKey(selectedItem) === key
+              const rowClass = ['ibx-row', isSel && 'ibx-row--on', kbdFocus === index && 'kbd-focus']
+                .filter(Boolean)
+                .join(' ')
+              const automation = fieldStr(change, 'automation')
+              return (
+                <li
+                  key={key}
+                  className={rowClass}
+                  data-testid="inbox-card"
+                  role="option"
+                  tabIndex={0}
+                  aria-selected={isSel}
+                  ref={(el) => {
+                    rowRefs.current[index] = el
+                  }}
+                  onClick={() => {
+                    setSelKey(key)
+                    setOpen(true)
+                    setKbdFocus(index)
+                  }}
+                  onFocus={() => setKbdFocus(index)}
+                >
+                  <div className="ibx-r1">
+                    <span className="ibx-name">{change.name}</span>
+                    {change.track && <span className="card__track">{change.track}</span>}
+                    {wf !== 'default' && <span className="ibx-wf" data-testid="inbox-card-wf">{wf}</span>}
+                    <span className="g-phase" data-testid="inbox-card-phase">{change.phase}</span>
+                    {semBadge(sem)}
+                    <span className="ibx-sp" />
+                    <span className="ibx-time">
+                      {rootToName.get(root) ?? root}
+                      {change.updated_at ? ` · ${shortTime(change.updated_at)}` : ''}
+                    </span>
+                  </div>
+                  <div className="ibx-lead" data-testid="inbox-lead">{sem.lead}</div>
+                  {state === 'failed' ? (
+                    <div className="ibx-r2" onClick={(e) => e.stopPropagation()}>
+                      <span className="ev__chip ev__chip--fail" data-testid="inbox-fail-chip">
+                        automation={automation}
+                      </span>
+                    </div>
+                  ) : (
+                    evidence.length > 0 && (
+                      <div className="ibx-r2" onClick={(e) => e.stopPropagation()}>
+                        {evidence.map((chip) => renderEvidenceChip(chip, copyEvidence, t))}
+                      </div>
                     )
-                  })}
-                </span>
-              )}
-              {evidence.length > 0 && (
-                <div className="ev" onClick={(e) => e.stopPropagation()}>
-                  {evidence.map((chip) => renderEvidenceChip(chip, copyEvidence, t))}
-                </div>
-              )}
-            </li>
-          )
-        })}
+                  )}
+                </li>
+              )
+            })}
           </ul>
-
-          {selectedItem && (
-            <ChangeDetailCard
-              root={selectedItem.root}
-              change={selectedItem.change}
-              rules={rulesByKey.get(rulesKey(selectedItem.root, changeWorkflow(selectedItem.change)))}
-              onTransition={onTransition}
-              onClose={() => setSelected(null)}
-              onToast={onToast}
-              onError={onError}
-            />
-          )}
         </div>
 
-        {/* Task 17（spec §3 布局骨架收口）：右栏摘要卡——「项目在制」恒渲染，「关联产物」只在
-            选中 change 且 artifactChips 非空时渲染（空态不占位）。 */}
-        <aside className="side-col">
-        <section className="side-card">
-          <div className="side-card__head">
-            <Icon name="board" size={14} />
-            <b>{t('side.projects_title')}</b>
-          </div>
-          <div className="side-card__body" data-testid="side-projects">
-            {projectRows.map((row) => (
-              <div className="side-card__row" key={row.root}>
-                <span className="side-card__row-icon"><Icon name="folder" size={13} /></span>
-                <span className="side-card__row-label side-card__row-label--mono">{row.name}</span>
-                <span className="side-card__row-value">{row.count}</span>
+        <aside className="ibx-side">
+          {selectedItem && selState !== undefined && selSem !== undefined ? (
+            <TaskDetail
+              root={selectedItem.root}
+              change={selectedItem.change}
+              rules={selRules}
+              variant="timeline"
+              badge={semBadge(selSem)}
+              actions={detailActions(selectedItem, selState, selRules)}
+              onClose={() => setOpen(false)}
+              onToast={onToast}
+            />
+          ) : (
+            <div className="card ibx-collapsed" data-testid="inbox-collapsed">
+              <div className="ibx-collapsed-in">
+                {t('inbox.collapsed_title')}
+                <br />
+                {t('inbox.collapsed_hint')}
               </div>
-            ))}
-          </div>
-        </section>
-
-        {selectedItem && selectedArtifacts.length > 0 && (
-          <section className="side-card">
-            <div className="side-card__head">
-              <Icon name="folder" size={14} />
-              <b>{t('side.artifacts_title')}</b>
             </div>
-            <div className="side-card__body" data-testid="side-artifacts">
-              {selectedArtifacts.map((chip) => (
-                <div className="side-card__file" key={chip.key}>
-                  <span className="side-card__row-icon"><Icon name="doc" size={14} /></span>
-                  <div className="side-card__file-info">
-                    <span className="side-card__file-key">{chip.key}</span>
-                    <span className="side-card__file-val">{chip.value}</span>
-                  </div>
-                  <button
-                    type="button"
-                    className="side-card__copy"
-                    data-testid={`side-artifact-copy-${chip.key}`}
-                    aria-label={t('detail.copy_field', { field: chip.key })}
-                    onClick={() => copyEvidence(chip.value)}
-                  >
-                    <Icon name="copy" size={13} />
-                  </button>
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
+          )}
         </aside>
       </div>
 

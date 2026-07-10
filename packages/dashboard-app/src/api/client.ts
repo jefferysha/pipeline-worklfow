@@ -333,6 +333,34 @@ export async function getHistory(name: string, root: string): Promise<ChangeHist
   return ((await res.json()) as { entries: ChangeHistoryEntry[] }).entries
 }
 
+// ── T9：收件箱失败卡动作（计划决议 #4/#13）──
+
+/** 失败卡动作共用 POST（/api/afk/:name/retry|dismiss，body { root }；写端点带 token）。 */
+async function postAfkAction(name: string, root: string, action: 'retry' | 'dismiss', fallback: string): Promise<void> {
+  let res: Response
+  try {
+    res = await fetch(`/api/afk/${encodeURIComponent(name)}/${action}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
+      body: JSON.stringify({ root }),
+    })
+  } catch (err) {
+    wrapNetwork(err)
+  }
+  if (!res.ok) await throwApiError(res, fallback)
+}
+
+/** T9：失败卡「↻ 重试」——清零计数重新挂队（server 既有 retryAfkRun，CAS failed/conflict/paused → queued）。 */
+export async function postAfkRetry(name: string, root: string): Promise<void> {
+  await postAfkAction(name, root, 'retry', '重试失败')
+}
+
+/** T9：失败卡「✕ 放弃」——退出自动化，现场与 worktree 保留（决议 #4：failed/conflict → off；
+ *  server 端点由 T11 落地，本客户端先按 retry 同款契约接线）。 */
+export async function postAfkDismiss(name: string, root: string): Promise<void> {
+  await postAfkAction(name, root, 'dismiss', '放弃失败')
+}
+
 /**
  * 订阅 SSE 快照流。返回退订函数。onSnapshot 每收到一帧 'snapshot' 事件即回调解析后的 Snapshot。
  * 走真 EventSource（测试用 test-setup 的可驱动 stub，组件真注册监听 + 真更新）。

@@ -151,3 +151,34 @@ describe('G18 api 四函数（registerProject/unregisterProject/createChange/fet
     expect(String(fetchMock.mock.calls[0]![0])).toBe('/api/workflows?root=%2Frepo')
   })
 })
+
+/**
+ * T9 失败卡动作两函数：重试（server 既有 /retry，CAS failed/conflict/paused → queued）与
+ * 放弃（决议 #4 的 /dismiss，端点由 T11 落地——客户端先按同一契约接线）。
+ */
+describe('T9 afk 失败卡动作（postAfkRetry/postAfkDismiss）', () => {
+  it('postAfkRetry：POST /api/afk/:name/retry 带 token + body {root}（name URL 编码）', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ok: true }) })
+    vi.stubGlobal('fetch', fetchMock)
+    const { postAfkRetry } = await import('./client')
+    await postAfkRetry('hotfix login', '/repo-a')
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe('/api/afk/hotfix%20login/retry')
+    expect(init.method).toBe('POST')
+    const headers = init.headers as Record<string, string>
+    expect(headers.Authorization).toBe('Bearer tok-abc')
+    expect(headers['Content-Type']).toBe('application/json')
+    expect(JSON.parse(init.body as string)).toEqual({ root: '/repo-a' })
+  })
+
+  it('postAfkDismiss：POST /api/afk/:name/dismiss；!ok 抛 ApiError 带 server 文案', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ok: true }) })
+    vi.stubGlobal('fetch', fetchMock)
+    const { postAfkDismiss } = await import('./client')
+    await postAfkDismiss('hotfix-login', '/repo-a')
+    expect(String(fetchMock.mock.calls[0]![0])).toBe('/api/afk/hotfix-login/dismiss')
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 409, json: async () => ({ ok: false, error: '状态已变，请刷新' }) }))
+    await expect(postAfkDismiss('hotfix-login', '/repo-a')).rejects.toThrow('状态已变')
+  })
+})

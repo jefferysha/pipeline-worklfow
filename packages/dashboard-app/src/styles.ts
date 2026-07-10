@@ -1009,4 +1009,35 @@ button.ev__chip--neutral:hover { border-color: var(--border-2); color: var(--tex
 .prg-follow { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--text-3); }
 .prg-log { margin: 0; padding: 10px; max-height: 200px; overflow: auto; font-size: 11.5px; line-height: 1.6; color: var(--text-2); white-space: pre-wrap; overflow-wrap: anywhere; }
 .prg-lognote { margin: 0; padding: 6px 10px; border-top: 1px solid var(--code-border); font-size: 11.5px; color: var(--text-3); }
+/* ==== T9 收件箱 v5（ibx- 区块）—— master-detail：左行列表 + 右 356px sticky 详情。
+   对照 design-demos/v5-progress-workbench.html 收件箱段；全部走既有 token，无新原色。
+   选中态 = accent 描边 + ring（同 demo .ibx-row--on）；焦点环沿既有 .kbd-focus outline。 ==== */
+.ibx-grid { display: grid; grid-template-columns: minmax(0, 1fr) 356px; gap: 20px; align-items: start; }
+.ibx-side { position: sticky; top: 76px; min-width: 0; }
+.ibx-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.ibx-row { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 11px 14px; cursor: pointer; transition: background .12s ease, border-color .12s ease, box-shadow .12s ease; }
+.ibx-row:hover { background: var(--fill); }
+.ibx-row--on { background: var(--accent-t); border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); }
+.ibx-row--on:hover { background: var(--accent-t); }
+.ibx-row.kbd-focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.ibx-r1 { display: flex; align-items: center; gap: 8px; min-width: 0; flex-wrap: wrap; }
+.ibx-name { font-family: var(--mono); font-size: 13.5px; font-weight: 600; color: var(--text); }
+.ibx-wf { font-size: 12px; color: var(--text-3); font-family: var(--mono); }
+.ibx-sp { flex: 1; }
+.ibx-time { font-size: 12px; color: var(--text-3); font-family: var(--mono); flex: none; }
+.ibx-lead { margin-top: 7px; font-size: 13px; color: var(--text-2); line-height: 1.55; }
+.ibx-r2 { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; }
+/* 结论式语义徽章（demo badge--green/--red 对位）：绿=证据齐可前进，红=要人裁决（同 spec §1 家族） */
+.badge--green { background: var(--green-t); color: var(--green-d); }
+.badge--red { display: inline-flex; align-items: center; gap: 5px; background: var(--red-t); color: var(--red-d); }
+.badge--red .dot { width: 5px; height: 5px; border-radius: 999px; background: currentColor; flex: none; animation: prg-blink 1.3s ease-in-out infinite; }
+/* 动作条按钮（TaskDetail dt-foot-btns 内，宿主注入）：不折行 + 收窄到 sm 尺寸 */
+.ibx-act { white-space: nowrap; padding: 6px 12px; font-size: 12px; }
+/* Esc 收起后的占位卡 */
+.ibx-collapsed-in { padding: 34px 18px; text-align: center; font-size: 12.5px; color: var(--text-3); line-height: 2; }
+@media (max-width: 900px) {
+  /* 窄屏：右栏详情下沉为纵排（sticky 失去意义） */
+  .ibx-grid { grid-template-columns: 1fr; }
+  .ibx-side { position: static; }
+}
 `

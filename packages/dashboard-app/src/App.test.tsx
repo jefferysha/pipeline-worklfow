@@ -145,9 +145,12 @@ describe('App SSE 实时更新（真 EventSource stub → 组件真更新，非 
       es!.emit('snapshot', JSON.stringify(next))
     })
 
-    // 组件真更新：空态消失、卡片出现、导航徽标计数 1
+    // 组件真更新：空态消失、卡片出现、导航徽标计数 1。
+    // T9 起收件箱是 master-detail 且默认开首行详情——change 名会同时出现在行与右栏详情头
+    // （getByText 单一匹配会因"找到多个"报错），改 getAllByText 断言"至少渲染出一处"，
+    // 断言意图不变（SSE 帧真的驱动了收件箱更新）。
     await waitFor(() => expect(screen.getByTestId('inbox-card')).toBeInTheDocument())
-    expect(screen.getByText('needs-review')).toBeInTheDocument()
+    expect(screen.getAllByText('needs-review').length).toBeGreaterThan(0)
     expect(screen.getByTestId('inbox-badge').textContent).toBe('1')
     expect(screen.queryByTestId('inbox-empty')).toBeNull()
   })
@@ -224,7 +227,9 @@ describe('App currentRoot 语义（D5：吃掉 G14，多项目默认取第一个
       es!.emit('snapshot', JSON.stringify(next))
     })
     await waitFor(() => expect(screen.getByTestId('inbox-badge').textContent).toBe('1'))
-    expect(screen.getByText('a-verify')).toBeInTheDocument()
+    // T9 master-detail 默认开首行详情：a-verify 同时出现在行与右栏详情头，改 getAllByText
+    // 断言"至少一处"（意图不变：currentRoot 过滤后只看得到第一个项目的卡）。
+    expect(screen.getAllByText('a-verify').length).toBeGreaterThan(0)
     expect(screen.queryByText('b-verify')).toBeNull()
   })
 })
