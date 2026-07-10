@@ -277,6 +277,22 @@ button.ev__chip--neutral:hover { border-color: var(--border-2); color: var(--tex
 .sk--add { background: transparent; border: 1px dashed var(--border); color: var(--text-3); cursor: pointer; }
 .sk--add:hover { border-color: var(--green); color: var(--green); }
 
+/* ── 技能穿梭框（设置 · 矩阵单元编辑，评审 P1-10 后半，Task 16）：双栏 available/chosen +
+   搜索框，此前 .modal / .split 零 CSS 规则裸渲染在此收口。宽度受 Dialog 固定
+   width:min(420px,92%) 约束（Dialog 不接受宽度覆盖），条目用省略号防溢出、title 属性兜底
+   全名。条目点击即移动为主交互，拖拽保留为增强——不另设选中态类之外的强调色，直接靠
+   .transfer__item--chosen 修饰符区分已选条目。 ── */
+.transfer__search { display: block; width: 100%; margin: 4px 0 0; font: inherit; font-size: 12.5px; color: var(--text); background: var(--fill); border: 1px solid var(--border); border-radius: 7px; padding: 7px 10px; transition: border-color .14s ease, box-shadow .14s ease; }
+.transfer__search::placeholder { color: var(--text-3); }
+.transfer__search:focus-visible { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); }
+.transfer { display: flex; gap: 10px; margin-top: 10px; }
+.transfer__col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; height: 220px; overflow-y: auto; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 7px; }
+.transfer__item { display: block; width: 100%; text-align: left; font: inherit; font-size: 12px; font-family: var(--mono); color: var(--text-2); background: var(--fill); border: 1px solid transparent; border-radius: 6px; padding: 6px 9px; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; transition: border-color .14s ease, background .14s ease, color .14s ease; }
+.transfer__item:hover { border-color: var(--accent-b); background: var(--accent-t); color: var(--accent-d); }
+.transfer__item--chosen { background: var(--accent-t); color: var(--accent-d); }
+.transfer__item--chosen:hover { border-color: var(--red-b); background: var(--red-t); color: var(--red-d); }
+.transfer__error { margin: 0; padding: 6px 2px; font-size: 11.5px; color: var(--red); font-weight: 600; }
+
 /* ── 页脚 / Advanced ── */
 .footer { padding: 14px 20px; border-top: 1px solid var(--border); display: flex; align-items: center; gap: 16px; }
 .footer__ver { margin-left: auto; font-size: 11.5px; color: var(--text-3); font-family: var(--mono); }

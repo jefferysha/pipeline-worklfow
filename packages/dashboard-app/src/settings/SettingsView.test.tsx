@@ -223,6 +223,51 @@ describe('SettingsView 矩阵 —— M3 config 写端点真接线（真 fetch + 
     expect(fetchMock.mock.calls.some((args: unknown[]) => String(args[0]) === '/api/config/mandatory-skills')).toBe(false)
   })
 
+  // Task 16（评审 P1-10 后半）：此前左右栏条目只能靠 HTML5 拖拽移动，点击整个无反应——
+  // 这是本条的红（旧实现：条目是纯 <div draggable>，未接 onClick，点击后两栏内容不变）。
+  it('点击左栏条目 → 移入右栏；点击右栏条目 → 移回左栏（点击即移动，拖拽保留为增强）', async () => {
+    stubConfigFetch({
+      capable: true,
+      mandatorySkills: { 'build.backend': ['old'] },
+      registrySkills: ['old', 'x'],
+    })
+    renderSettings()
+    fireEvent.click(screen.getByTestId('settings-tab-matrix'))
+    fireEvent.click(await screen.findByTestId('matrix-edit-build-backend'))
+
+    const available = await screen.findByTestId('skill-available')
+    const chosen = screen.getByTestId('skill-chosen')
+    await waitFor(() => expect(available.textContent).toContain('x'))
+    expect(chosen.textContent).not.toContain('x')
+
+    // 左栏点击 → 移入右栏
+    fireEvent.click(screen.getByText('x'))
+    expect(chosen.textContent).toContain('x')
+    expect(available.textContent).not.toContain('x')
+
+    // 右栏点击 → 移回左栏（对称验证，防止只接了一侧）
+    fireEvent.click(screen.getByText('x'))
+    expect(available.textContent).toContain('x')
+    expect(chosen.textContent).not.toContain('x')
+  })
+
+  // Task 16：Dialog 的 Esc 关闭能力从 Task 4 起就有（onClose={onCancel}），本条不是红转绿，
+  // 是回归钉——本任务要重构条目 markup（div→button）+ 接入点击，钉住 Esc 关闭仍然只读退出、
+  // 不误触发保存 POST，防止重构过程中不小心把 onClose 接线弄丢。
+  it('穿梭框内按 Esc 关闭 → 视为取消（恢复只读且不发 POST）', async () => {
+    const fetchMock = stubConfigFetch({ capable: true, mandatorySkills: { 'spec.pm': ['a', 'b'] } })
+    renderSettings()
+    fireEvent.click(screen.getByTestId('settings-tab-matrix'))
+    fireEvent.click(await screen.findByTestId('matrix-edit-spec-pm'))
+    expect(await screen.findByTestId('skill-chosen')).toBeInTheDocument()
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+
+    expect(screen.queryByTestId('skill-chosen')).toBeNull()
+    expect(screen.getByTestId('matrix-edit-spec-pm')).toBeInTheDocument()
+    expect(fetchMock.mock.calls.some((args: unknown[]) => String(args[0]) === '/api/config/mandatory-skills')).toBe(false)
+  })
+
   it('编辑 + 保存 → 真 POST 请求 url/method/Authorization Bearer/body 正确，成功后回显新值并退出编辑态', async () => {
     const fetchMock = stubConfigFetch({
       capable: true,

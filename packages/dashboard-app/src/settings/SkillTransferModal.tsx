@@ -50,47 +50,86 @@ export function SkillTransferModal({ selected, onSave, onCancel }: SkillTransfer
 
   const available = all.filter((s) => !chosen.includes(s) && s.toLowerCase().includes(query.toLowerCase()))
 
+  // 点击与拖拽共用同一对纯函数（Task 16，评审 P1-10 后半）：点击即移动是主交互，HTML5 拖拽
+  // 保留作为增强，onDragStart/onDrop 落到同一对 move 函数上，不是两套平行逻辑。两者对同一
+  // skill 重复调用都是幂等的（moveToChosen 有 includes 去重、moveToAvailable 的 filter 对
+  // 已不在列表里的项是安全 no-op），故不需要额外去重判断谁先触发。
+  function moveToChosen(skill: string): void {
+    if (!chosen.includes(skill)) setChosen([...chosen, skill])
+  }
+  function moveToAvailable(skill: string): void {
+    setChosen(chosen.filter((s) => s !== skill))
+  }
   function onDropToChosen(e: React.DragEvent): void {
     e.preventDefault()
     const skill = e.dataTransfer.getData(DND_MIME)
-    if (skill && !chosen.includes(skill)) setChosen([...chosen, skill])
+    if (skill) moveToChosen(skill)
   }
   function onDropToAvailable(e: React.DragEvent): void {
     e.preventDefault()
     const skill = e.dataTransfer.getData(DND_MIME)
-    setChosen(chosen.filter((s) => s !== skill))
+    if (skill) moveToAvailable(skill)
   }
 
   return (
-    // Task 4（评审 P0-5）：只做壳迁移——外层手写 `<div className="modal" role="dialog">` 换成
-    // 共享 <Dialog>（Esc/焦点管理/backdrop 点击关随之补齐）。`.modal`/`.split` 此前就没有任何
-    // CSS 规则（真实样式是评审 P1-10 后半，留给 Task 16），内部条目的拖拽/搜索/保存/取消交互
-    // 逐字不动——"点击即移动"是 Task 16 的范围，这里不碰。
+    // Task 4（评审 P0-5）：外层手写 `<div className="modal" role="dialog">` 换成共享 <Dialog>
+    // （Esc/焦点管理/backdrop 点击关随之补齐）。当时只做壳迁移，内部条目交互与真实样式明确
+    // 留给 Task 16。
+    //
+    // Task 16（评审 P1-10 后半）：`.modal`/`.split` 此前零 CSS 规则的裸渲染在此收口——`.split`
+    // 更名 `.transfer`，styles.ts 补齐 `.transfer*` 全套真样式（双栏布局/条目 hover/选中态/
+    // 搜索框，token 化、跟随深浅色主题）。交互补齐"点击即移动"：左栏条目点击 → moveToChosen，
+    // 右栏条目点击 → moveToAvailable。条目元素从 <div> 换成 <button type="button">——对齐
+    // 仓库既有"可点击列表项 = 原生 button"惯例（WorkflowCanvas.tsx 的 stage-card、
+    // AfkWorkbench.tsx 的 afk-item 先例），顺带获得键盘 Enter/Space 可达性（此前纯 div 键盘
+    // 完全不可达，仅能拖拽）。Save/Cancel 补 .btn/.btn--ghost（对齐其余全部 Dialog actions
+    // 的既有用法，如 NewChangeDialog/BoardView 确认框），此前是零样式裸 <button>。
     <Dialog
       title={t('skill_transfer.title')}
       onClose={onCancel}
       actions={
         <>
-          <button onClick={() => onSave(chosen)}>{t('skill_transfer.save')}</button>
-          <button onClick={onCancel}>{t('skill_transfer.cancel')}</button>
+          <button type="button" className="btn" onClick={() => onSave(chosen)}>{t('skill_transfer.save')}</button>
+          <button type="button" className="btn btn--ghost" onClick={onCancel}>{t('skill_transfer.cancel')}</button>
         </>
       }
     >
-      <input placeholder={t('skill_transfer.search_placeholder')} value={query} onChange={(e) => setQuery(e.target.value)} />
-      <div className="split">
-        <div data-testid="skill-available" onDragOver={(e) => e.preventDefault()} onDrop={onDropToAvailable}>
-          {error && <div data-testid="skill-error" style={{ color: 'red' }}>{error}</div>}
+      <input
+        className="transfer__search"
+        placeholder={t('skill_transfer.search_placeholder')}
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+      />
+      <div className="transfer">
+        <div className="transfer__col" data-testid="skill-available" onDragOver={(e) => e.preventDefault()} onDrop={onDropToAvailable}>
+          {error && <div className="transfer__error" data-testid="skill-error">{error}</div>}
           {!error && available.map((s) => (
-            <div key={s} draggable onDragStart={(e) => e.dataTransfer.setData(DND_MIME, s)}>
+            <button
+              key={s}
+              type="button"
+              className="transfer__item"
+              title={s}
+              draggable
+              onDragStart={(e) => e.dataTransfer.setData(DND_MIME, s)}
+              onClick={() => moveToChosen(s)}
+            >
               {s}
-            </div>
+            </button>
           ))}
         </div>
-        <div data-testid="skill-chosen" onDragOver={(e) => e.preventDefault()} onDrop={onDropToChosen}>
+        <div className="transfer__col" data-testid="skill-chosen" onDragOver={(e) => e.preventDefault()} onDrop={onDropToChosen}>
           {chosen.map((s) => (
-            <div key={s} draggable onDragStart={(e) => e.dataTransfer.setData(DND_MIME, s)}>
+            <button
+              key={s}
+              type="button"
+              className="transfer__item transfer__item--chosen"
+              title={s}
+              draggable
+              onDragStart={(e) => e.dataTransfer.setData(DND_MIME, s)}
+              onClick={() => moveToAvailable(s)}
+            >
               {s}
-            </div>
+            </button>
           ))}
         </div>
       </div>
