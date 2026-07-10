@@ -77,3 +77,39 @@ export function foldOpen(el: Element): void {
     clearProps: 'height', // 动画后交还文档流，避免锁死后续内容变化的自然高度
   })
 }
+
+/* ==== T8 ==== */
+
+/**
+ * 任务详情垂直时间线入场：逐阶段行上浮淡入 stagger（demo v5 playStages 对位，.25s/power2.out/.04）。
+ * 与文件上方 revealList 的差别：本函数按 T8 验收走 gsap.matchMedia 双分支（测试要能断言
+ * 「reduce 分支被真消费」而不是 window.matchMedia 布尔短路），reduce → gsap.set 直达终态。
+ * 必须在 useGSAP({ scope }) 回调内同步调用（选择器文本按 scope 寻址 + 自动清理，同文件头告诫）；
+ * matchMedia context 建在 useGSAP 的 gsap.context 内，卸载/依赖重跑时随之 revert。
+ * 环境无 matchMedia（极老内核）→ 直达终态兜底，不留半透明残留（WorkbenchView 预演的同款兜底）。
+ */
+export function revealStages(targets: gsap.TweenTarget): void {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+    gsap.set(targets, { autoAlpha: 1, y: 0 })
+    return
+  }
+  let handled = false
+  gsap.matchMedia().add(
+    { reduce: '(prefers-reduced-motion: reduce)', motion: '(prefers-reduced-motion: no-preference)' },
+    (ctx) => {
+      handled = true
+      const reduce = Boolean((ctx.conditions as { reduce?: boolean } | undefined)?.reduce)
+      if (reduce) {
+        gsap.set(targets, { autoAlpha: 1, y: 0 })
+        return
+      }
+      gsap.fromTo(
+        targets,
+        { autoAlpha: 0, y: 6 },
+        { autoAlpha: 1, y: 0, duration: 0.25, ease: 'power2.out', stagger: 0.04, clearProps: 'all' },
+      )
+    },
+  )
+  // matchMedia 存在但两个条件都不匹配（非常规 UA 桩）：同无 matchMedia 兜底，保证可见。
+  if (!handled) gsap.set(targets, { autoAlpha: 1, y: 0 })
+}

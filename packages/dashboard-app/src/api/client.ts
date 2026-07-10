@@ -152,6 +152,39 @@ export async function fetchWorkflowNames(root: string): Promise<string[]> {
 }
 
 /**
+ * change 历史记账单条（T8 消费 T1 端点）——镜像 kernel types.ts HistoryEntry 的可选面
+ * （无 npm 跨包依赖，手抄保零耦合，同本文件头 Snapshot 契约的既有纪律）。
+ * transition-kind 不变式：raw = 触发它的 event 名（server/cli 两写入口同口径）。
+ */
+export interface ChangeHistoryEntry {
+  ts: string
+  kind: string
+  field?: string
+  from?: string
+  to?: string
+  by?: string
+  raw?: string
+}
+
+/**
+ * T8：GET /api/change/:name/history?root= → { entries }（ts 升序，server readChangeHistory 已排好）。
+ * 无文件（老 change 只有 legacy opaqueTail 历史）→ 200 空数组——「早期记录不可用」的展示判据
+ * 由消费方负责（决议 #10）。读端点同 fetchSnapshot 不带 token。
+ */
+export async function getHistory(name: string, root: string): Promise<ChangeHistoryEntry[]> {
+  let res: Response
+  try {
+    res = await fetch(`/api/change/${encodeURIComponent(name)}/history?root=${encodeURIComponent(root)}`, {
+      headers: { Accept: 'application/json' },
+    })
+  } catch (err) {
+    wrapNetwork(err)
+  }
+  if (!res.ok) await throwApiError(res, '历史获取失败')
+  return ((await res.json()) as { entries: ChangeHistoryEntry[] }).entries
+}
+
+/**
  * 订阅 SSE 快照流。返回退订函数。onSnapshot 每收到一帧 'snapshot' 事件即回调解析后的 Snapshot。
  * 走真 EventSource（测试用 test-setup 的可驱动 stub，组件真注册监听 + 真更新）。
  */

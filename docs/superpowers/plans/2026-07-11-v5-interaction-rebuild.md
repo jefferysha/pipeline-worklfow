@@ -21,6 +21,7 @@
 | 10 | history legacy | 只读 .pipeline-history.jsonl;老 change 时间线显示「早期记录不可用」 |
 | 11 | 进度虚拟化 | 本轮不做(<50 行现实规模) |
 | 12 | allowlist/denylist 语义 | 路径 glob;存储+展示(T3/T16)之外,**真实生效**:run 结算时 git diff --name-only 对 denylist 匹配,违规判 conflict 保留现场(并入 T4 验收) |
+| 13 | T8 动作条归属(评审登记) | 四动作(继续/打回/重试/终止+放弃)**props 化下放宿主**:TaskDetail 只留 automation 感知的 foot 标签与 actions 插槽,端点调用/busy 守卫/二次确认归 T9(收件箱)与 T11(进度)各自实现——组件零业务端点;两宿主动作文案与语义以 demo v5 prg-dfoot/收件箱右卡动作条为唯一口径,T9/T11 验收各自钉住,防两处漂移 |
 
 ## 新增任务(草案外,用户 /loop 新要求)
 

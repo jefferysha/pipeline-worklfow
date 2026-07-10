@@ -778,4 +778,91 @@ button.ev__chip--neutral:hover { border-color: var(--border-2); color: var(--tex
   .prg-row__main { grid-template-columns: 1fr; gap: 8px; padding: 10px 16px; }
   .prg-state { justify-content: flex-start; }
 }
+/* ==== T8 共享任务详情（TaskDetail：dt- 卡骨架 + dtl- 垂直时间线）——视觉基准
+   design-demos/v5-progress-workbench.html 收件箱右卡；全部走既有 token，无新原色。
+   节点语义分工沿 spec §1：绿=完成、蓝 accent=当前（带 ring）、红=失败、空心=未开始。 ==== */
+.dt { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 0 16px; }
+.dt-head { display: flex; align-items: center; gap: 9px; padding: 13px 0; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.dt-name { font-family: var(--mono); font-size: 13.5px; font-weight: 700; color: var(--text); }
+.dt-sp { flex: 1; }
+.dt-close { margin-left: 0; }
+.dt-sec { padding: 13px 0; border-bottom: 1px solid var(--border); }
+.dt-sec:last-of-type { border-bottom: none; }
+.dt-sec-h { display: flex; align-items: baseline; gap: 7px; font-size: 12.5px; font-weight: 700; color: var(--text); margin-bottom: 10px; }
+.dt-hint { font-size: 12px; font-weight: 400; color: var(--text-3); }
+.dt-req { margin: 0; font-size: 13px; color: var(--text-2); line-height: 1.6; }
+/* 垂直时间线（dtl-）：左轨 2px 竖线 + 16px 节点圆 */
+.dtl-it { position: relative; padding: 0 0 12px 24px; }
+.dtl-it:last-child { padding-bottom: 0; }
+.dtl-it::before { content: ""; position: absolute; left: 7px; top: 18px; bottom: -2px; width: 2px; background: var(--border); border-radius: 2px; }
+.dtl-it--done::before { background: var(--green-b); }
+.dtl-it:last-child::before { display: none; }
+.dtl-node { position: absolute; left: 0; top: 2px; width: 16px; height: 16px; border-radius: 999px; display: grid; place-items: center; font-size: 11px; font-weight: 700; line-height: 1; }
+.dtl-node--done { background: var(--green); color: var(--btn-fg); }
+.dtl-node--cur { background: var(--btn-bg); box-shadow: 0 0 0 3px var(--accent-b); }
+.dtl-node--fail { background: var(--red); color: var(--btn-fg); font-size: 10px; }
+.dtl-node--todo { background: var(--card); border: 2px solid var(--border-2); }
+.dtl-r { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-height: 22px; }
+.dtl-name { font-size: 13px; font-weight: 500; color: var(--text); }
+.dtl-it--cur .dtl-name, .dtl-it--fail .dtl-name { font-weight: 600; }
+.dtl-it--fail .dtl-name { color: var(--red-d); }
+.dtl-it--todo .dtl-name { font-weight: 400; color: var(--text-3); }
+.dtl-dim { font-size: 12px; color: var(--text-3); }
+/* 行内产物 chip：实值可拷贝（mono），未产出虚线占位 */
+.dtl-chip { display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 7px; border-radius: 7px; border: 1px solid var(--border); background: var(--fill); font: inherit; font-size: 11.5px; font-family: var(--mono); color: var(--text-2); cursor: pointer; transition: background .12s ease, border-color .12s ease, color .12s ease; }
+.dtl-chip:hover { background: var(--fill-2); border-color: var(--border-2); color: var(--text); }
+.dtl-chip .cp { color: var(--text-3); font-size: 11px; }
+.dtl-chip--ro { cursor: default; }
+.dtl-chip--ro:hover { background: var(--fill); border-color: var(--border); color: var(--text-2); }
+.dtl-chip--empty { display: inline-flex; align-items: center; height: 22px; padding: 0 7px; border-radius: 7px; border: 1px dashed var(--border-2); background: transparent; font-size: 11.5px; font-family: var(--mono); color: var(--text-3); }
+/* 当前/失败行下的高亮框：结论行 + 字段格栅 */
+.dtl-box { margin-top: 8px; padding: 10px 11px; background: var(--accent-t); border: 1px solid var(--accent-b); border-radius: var(--radius-sm); }
+.dtl-box--bad { background: var(--red-t); border-color: var(--red-b); }
+.dt-verdict { display: flex; align-items: baseline; gap: 6px; font-size: 12.5px; font-weight: 600; color: var(--text); margin-bottom: 8px; line-height: 1.5; }
+.dt-verdict--bad { color: var(--red-d); }
+.dt-verdict .ic { flex: none; }
+.dt-verdict .ic--good { color: var(--green); }
+.dt-arts { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; }
+.dt-field { background: var(--card); border: 1px solid var(--border); border-radius: 7px; padding: 5px 8px; min-width: 0; }
+.dt-field--wide { grid-column: 1 / -1; }
+.dt-fk { font-size: 10.5px; color: var(--text-3); font-family: var(--mono); overflow-wrap: anywhere; }
+.dt-fv { font-size: 12px; color: var(--text); overflow-wrap: anywhere; }
+.dt-fv--copy { display: inline; padding: 0; border: 0; background: transparent; font: inherit; font-size: 12px; font-family: var(--mono); color: var(--text); cursor: pointer; text-align: left; transition: color .12s ease; }
+.dt-fv--copy:hover { color: var(--accent-d); }
+.dt-field--pass .dt-fv { color: var(--green-d); font-weight: 700; }
+.dt-field--fail .dt-fv { color: var(--red-d); font-weight: 700; }
+.dt-field--miss { background: transparent; border-style: dashed; }
+.dt-field--miss .dt-fv { color: var(--text-3); }
+.dtl-err { font-family: var(--mono); color: var(--red-d); }
+.dt-none { margin: 0; font-size: 12px; color: var(--text-3); }
+.dt-note { margin: 8px 0 0; font-size: 12px; color: var(--text-3); line-height: 1.55; }
+/* 「在终端继续」命令区 */
+.dt-code { display: flex; align-items: center; gap: 8px; padding: 8px 11px; background: var(--code-bg); border: 1px solid var(--code-border); border-radius: var(--radius-sm); font-family: var(--mono); font-size: 12px; }
+.dt-code .p { color: var(--text-3); }
+.dt-code code { flex: 1; min-width: 0; overflow-wrap: anywhere; color: var(--text); }
+.dt-code-copy { display: grid; place-items: center; width: 22px; height: 22px; padding: 0; border: 0; background: transparent; border-radius: 6px; color: var(--text-3); cursor: pointer; transition: background .12s ease, color .12s ease; }
+.dt-code-copy:hover { background: var(--fill-2); color: var(--text); }
+/* history 区 */
+.dt-hist { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 5px; max-height: 180px; overflow-y: auto; }
+.dt-hist-it { display: flex; align-items: baseline; gap: 8px; font-size: 12px; }
+.dt-hist-ts { font-family: var(--mono); color: var(--text-3); white-space: nowrap; }
+.dt-hist-txt { color: var(--text-2); overflow-wrap: anywhere; }
+/* 底部动作条（按钮由宿主注入） */
+.dt-foot { display: flex; align-items: center; gap: 9px; padding: 12px 0 13px; border-top: 1px solid var(--border); }
+.dt-foot-l { font-family: var(--mono); font-size: 11.5px; color: var(--text-3); }
+.dt-foot-btns { margin-left: auto; display: flex; gap: 8px; }
+/* 形态 B（dt-tabs 阶段 sheet，进度行内展开 T11 复用）——demo v5 dt-tabs/dt-pane 对位，全走既有 token */
+.dt-tabs { display: flex; align-items: center; gap: 5px; overflow-x: auto; padding: 3px; margin: -3px -3px 9px; }
+.dt-tab { flex: none; display: inline-flex; align-items: center; gap: 4px; height: 25px; padding: 0 9px; border-radius: 8px; font: inherit; font-size: 12px; font-weight: 600; white-space: nowrap; background: var(--fill); border: 1px solid var(--border); color: var(--text-3); cursor: pointer; transition: background .12s ease, border-color .12s ease, color .12s ease, box-shadow .12s ease; }
+.dt-tab:hover { background: var(--fill-2); color: var(--text-2); }
+.dt-tab .tfx { font-size: 10.5px; line-height: 1; }
+.dt-tab--done { color: var(--text-2); }
+.dt-tab--done .tfx { color: var(--green); }
+.dt-tab--cur, .dt-tab--cur:hover { background: var(--btn-bg); border-color: var(--btn-bg); color: var(--btn-fg); }
+.dt-tab--fail, .dt-tab--fail:hover { background: var(--red); border-color: var(--red); color: var(--btn-fg); }
+.dt-tab.on { border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); color: var(--text); }
+.dt-tab--cur.on { border-color: var(--btn-bg); color: var(--btn-fg); }
+.dt-tab--fail.on { border-color: var(--red); box-shadow: 0 0 0 3px var(--red-t); color: var(--btn-fg); }
+.dt-pane[hidden] { display: none; }
+.dt-empty { padding: 16px 12px; text-align: center; font-size: 12.5px; color: var(--text-3); border: 1px dashed var(--border-2); border-radius: 10px; }
 `
