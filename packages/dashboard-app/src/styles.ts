@@ -364,8 +364,16 @@ button.ev__chip--neutral:hover { border-color: var(--border-2); color: var(--tex
 .dialog__actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
 .dlg-cli { background: var(--fill); border: 1px dashed var(--border); border-radius: 7px; padding: 8px 11px; font-family: var(--mono); font-size: 11px; color: var(--text-3); overflow-x: auto; white-space: nowrap; }
 
-.flash { padding: 10px 20px; font-size: 12.5px; font-weight: 700; }
-.flash--toast { background: var(--green); color: #ffffff; }
+/* 底部居中胶囊（v4 #toast 忠实还原，spec §2 组件语言表 toast 行）：
+   成功=--ink/--ink-fg 中性深底白字，错误=--red 底白字；z-index 60 高于 .dialog__backdrop(50)。
+   入场动效由 App.tsx 挂载时调用 workflow/motion.ts 的 toastIn()（y 14→0 + fade）承担，此处不重复定义。 */
+.flash {
+  position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 7px; max-width: 70vw;
+  padding: 8px 14px; border-radius: 999px; font-size: 12.5px; font-weight: 600;
+  box-shadow: var(--shadow-2); pointer-events: none; z-index: 60;
+}
+.flash--toast { background: var(--ink); color: var(--ink-fg); }
 .flash--error { background: var(--red); color: #ffffff; }
 
 /* ── 表单控件（含错误态语义）── */
