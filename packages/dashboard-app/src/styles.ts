@@ -83,7 +83,7 @@ body { margin: 0; }
 .nav__primary { display: flex; gap: 2px; }
 .nav__item { position: relative; border: 0; background: transparent; color: var(--text-3); font: inherit; font-size: 13px; padding: 6px 12px; border-radius: 7px; cursor: pointer; transition: color .14s ease, background .14s ease; }
 .nav__item:hover { color: var(--text); }
-.nav__item--active { background: var(--green-t); color: var(--green); font-weight: 700; }
+.nav__item--active { background: var(--accent-t); color: var(--accent); font-weight: 700; }
 .nav__badge { display: inline-block; margin-left: 6px; min-width: 17px; padding: 0 5px; height: 17px; line-height: 17px; text-align: center; font-size: 10.5px; font-weight: 700; font-family: var(--mono); color: var(--red-d); background: var(--red-t); border: 1px solid var(--red-b); border-radius: 9px; }
 .nav__group { position: relative; }
 .nav__dropdown { position: absolute; top: calc(100% + 4px); left: 0; display: flex; flex-direction: column; min-width: 190px; padding: 4px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-sm); box-shadow: 0 6px 16px rgba(10,22,14,.14); z-index: 20; }
