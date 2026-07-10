@@ -681,4 +681,101 @@ button.ev__chip--neutral:hover { border-color: var(--border-2); color: var(--tex
   /* Task 17：右栏窄屏下沉到主列下方，撤销 sticky（没有横向空间放 280px 侧栏了）。 */
   .view-split { flex-direction: column; } .side-col { width: 100%; flex: none; position: static; }
 }
+
+/* ==== T10 ==== */
+/* ── 进度视图（prg- 区块）：分组卡 + chevron 箭头带 + 筛选条 + 调度器健康灯。
+   对照 design-demos/v5-progress-workbench.html 进度段；token 全走既有变量。
+   busy 黄 = 红绿 token 在 oklch 空间取中派生（决议 #9 不引入新原色）——双写兜底：
+   不支持 color-mix 的内核回落第一行 var(--red)。 ── */
+.prg-doctor { display: inline-flex; align-items: center; gap: 8px; height: 28px; padding: 0 12px; border-radius: 999px; background: var(--card); border: 1px solid var(--border); box-shadow: var(--shadow); font-size: 12px; font-weight: 600; color: var(--text-2); white-space: nowrap; }
+.prg-doctor__d { width: 8px; height: 8px; border-radius: 999px; flex: none; }
+.prg-doctor__d--ok { background: var(--green); }
+.prg-doctor__d--busy { background: var(--red); background: color-mix(in oklch, var(--red) 52%, var(--green)); }
+.prg-doctor__d--attention { background: var(--red); }
+/* 加载/错误提示行（骨架期轻量文本，不抢分组卡视觉） */
+.prg-note { margin: 0 0 12px; font-size: 12.5px; color: var(--text-3); }
+.prg-note--error { color: var(--red-d); }
+/* 筛选条：项目下拉多选 × 状态计数 chips */
+.prg-filters { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin: -4px 0 18px; }
+.prg-fdiv { width: 1px; height: 16px; background: var(--border-2); flex: none; }
+.prg-dd { position: relative; }
+.prg-ddbtn { display: inline-flex; align-items: center; gap: 7px; height: 28px; padding: 0 12px; border-radius: 999px; font: inherit; font-size: 12px; font-weight: 600; background: var(--card); border: 1px solid var(--border); color: var(--text-2); box-shadow: var(--shadow); cursor: pointer; transition: background .12s ease, border-color .12s ease; }
+.prg-ddbtn:hover, .prg-ddbtn[aria-expanded="true"] { background: var(--fill); border-color: var(--border-2); }
+.prg-ddval { color: var(--text); }
+.prg-ddcaret { font-size: 9px; color: var(--text-3); }
+.prg-ddmenu { position: absolute; left: 0; top: calc(100% + 6px); min-width: 180px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-2); padding: 6px; z-index: 45; }
+.prg-ddopt { display: flex; align-items: center; gap: 9px; padding: 7px 10px; border-radius: var(--radius-sm); font-size: 13px; color: var(--text-2); cursor: pointer; }
+.prg-ddopt:hover { background: var(--fill); }
+.prg-ddopt input { width: 14px; height: 14px; margin: 0; accent-color: var(--accent); flex: none; }
+.prg-ddfoot { margin-top: 4px; padding: 7px 10px 4px; border-top: 1px solid var(--border); }
+.prg-ddclear { border: 0; background: transparent; font: inherit; font-size: 12px; font-weight: 600; color: var(--accent); padding: 0; cursor: pointer; }
+.prg-ddclear:hover { color: var(--accent-d); }
+/* 状态计数 chips（五态字典 + 全部；选中 = accent 描边 + accent-t 底） */
+.prg-schips { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.prg-schip { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 11px; border-radius: 999px; font: inherit; font-size: 12px; font-weight: 600; background: var(--card); border: 1px solid var(--border); color: var(--text-2); box-shadow: var(--shadow); cursor: pointer; transition: background .12s ease, border-color .12s ease, color .12s ease; }
+.prg-schip:hover { background: var(--fill); border-color: var(--border-2); }
+.prg-schip.on, .prg-schip.on:hover { background: var(--accent-t); border-color: var(--accent); color: var(--accent-d); box-shadow: none; }
+.prg-schip .n { font-weight: 600; color: var(--text-3); }
+.prg-schip.on .n { color: var(--accent-d); }
+.prg-sdot { width: 6px; height: 6px; border-radius: 999px; flex: none; }
+.prg-sdot--gate { background: var(--red); }
+/* 「等 agent」点 = busy 同款派生黄（同一语义家族：既不是红门也不是绿完成） */
+.prg-sdot--agent { background: var(--red); background: color-mix(in oklch, var(--red) 52%, var(--green)); }
+.prg-sdot--running { background: var(--accent); }
+.prg-sdot--queued { background: var(--text-3); }
+.prg-sx { font-size: 11px; font-weight: 700; line-height: 1; color: var(--red); font-style: normal; }
+/* 分组：整组一张卡（.card 缺省内边距清零，行自己控制），轻量组头 + 分隔线行 */
+.prg-group { padding: 0; overflow: hidden; margin-bottom: 14px; }
+.prg-ghead { display: flex; align-items: center; gap: 8px; width: 100%; padding: 10px 16px; border: 0; border-bottom: 1px solid var(--border); background: transparent; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+.prg-ghead:hover { background: color-mix(in srgb, var(--fill) 55%, transparent); }
+.prg-ghead__name { font-size: 12.5px; font-weight: 600; letter-spacing: .02em; }
+.prg-ghead__meta { font-size: 12px; color: var(--text-3); }
+.prg-ghead__caret { margin-left: auto; font-size: 10px; color: var(--text-3); transition: transform .15s ease; }
+.prg-group--closed .prg-ghead { border-bottom-color: transparent; }
+.prg-group--closed .prg-ghead__caret { transform: rotate(-90deg); }
+/* 行：分隔线行，~64px，hover --fill（点行展开 = T11） */
+.prg-row + .prg-row { border-top: 1px solid var(--border); }
+.prg-row__main { display: grid; grid-template-columns: 210px minmax(0, 1fr) 230px; gap: 16px; align-items: center; min-height: 64px; padding: 6px 16px; transition: background .12s ease; }
+.prg-row__main:hover { background: var(--fill); }
+.prg-name { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.prg-name__t { font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* chevron 铰接箭头带：clip-path 四态段（长 workflow 名 max-width + ellipsis 防溢出） */
+.prg-flow { display: flex; align-items: center; min-width: 0; }
+.prg-seg { position: relative; flex: 1 1 0; min-width: 0; max-width: 170px; height: 30px; display: flex; align-items: center; justify-content: center; padding: 0 10px 0 15px; clip-path: polygon(0 0, calc(100% - 9px) 0, 100% 50%, calc(100% - 9px) 100%, 0 100%, 9px 50%); }
+.prg-seg + .prg-seg { margin-left: -7px; }
+.prg-seg:first-child { clip-path: polygon(0 0, calc(100% - 9px) 0, 100% 50%, calc(100% - 9px) 100%, 0 100%); padding-left: 12px; }
+.prg-seg:last-child { clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%, 9px 50%); padding-right: 12px; }
+.prg-seg__t { font-family: var(--mono); font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.prg-seg--past { background: var(--green-t); color: var(--green-d); }
+.prg-seg--cur { background: var(--accent); color: var(--btn-fg); }
+.prg-seg--fail { background: var(--red); color: var(--btn-fg); }
+.prg-seg--fut { background: var(--fill); color: var(--text-3); }
+/* 行 hover 底为 --fill 时，未来段换 --fill-2 保住箭形轮廓 */
+.prg-row__main:hover .prg-seg--fut { background: var(--fill-2); }
+/* 未到达的复核门段：右上角 6px 红点 */
+.prg-seg--gate::after { content: ""; position: absolute; top: 3px; right: 13px; width: 6px; height: 6px; border-radius: 999px; background: var(--red); }
+/* 执行中段：光泽扫过条（GSAP x 位移 repeat:-1；无 GSAP / reduced-motion 时保持透明） */
+.prg-gloss { position: absolute; top: 0; bottom: 0; left: 0; width: 42px; opacity: 0; pointer-events: none; background: linear-gradient(105deg, transparent 12%, color-mix(in srgb, var(--btn-fg) 45%, transparent) 50%, transparent 88%); }
+/* 状态徽章 + 快捷钮 */
+.prg-state { display: flex; align-items: center; justify-content: flex-end; gap: 8px; white-space: nowrap; }
+.prg-badge { display: inline-flex; align-items: center; gap: 5px; font-size: 10.5px; padding: 2px 8px; border-radius: 999px; font-weight: 700; white-space: nowrap; background: var(--fill); color: var(--text-2); }
+.prg-badge__dot { width: 5px; height: 5px; border-radius: 999px; background: currentColor; flex: none; }
+.prg-badge--gate { background: var(--red-t); color: var(--red-d); }
+.prg-badge--failed { background: var(--red-t); color: var(--red-d); }
+.prg-badge--running { background: var(--accent-t); color: var(--accent-d); }
+.prg-badge--gate .prg-badge__dot, .prg-badge--running .prg-badge__dot { animation: prg-blink 1.3s ease-in-out infinite; }
+@keyframes prg-blink { 50% { opacity: .3; } }
+.prg-btn { display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 10px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--card); font: inherit; font-size: 12.5px; font-weight: 600; color: var(--text-2); cursor: pointer; transition: border-color .12s ease, background .12s ease, color .12s ease; }
+.prg-btn:hover { border-color: var(--text-3); color: var(--text); }
+.prg-btn--danger { background: var(--red-t); border-color: var(--red-b); color: var(--red-d); }
+.prg-btn--danger:hover { border-color: var(--red); color: var(--red-d); }
+.prg-caret { color: var(--text-3); font-size: 10px; line-height: 1; transform: rotate(-90deg); transition: transform .15s ease; }
+/* 空态 + 底部说明 */
+.prg-empty { padding: 26px 16px; text-align: center; font-size: 12.5px; color: var(--text-3); border: 1px dashed var(--border-2); border-radius: var(--radius); margin-bottom: 18px; }
+.prg-foot { margin-top: 14px; font-size: 12.5px; color: var(--text-3); }
+@media (max-width: 720px) {
+  /* 窄屏：三列网格退化为纵排，箭头带独占一行保住可读性 */
+  .prg-row__main { grid-template-columns: 1fr; gap: 8px; padding: 10px 16px; }
+  .prg-state { justify-content: flex-start; }
+}
 `
