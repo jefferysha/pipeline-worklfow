@@ -457,6 +457,21 @@ button.ev__chip--neutral:hover { border-color: var(--border-2); color: var(--tex
 .loop-ready b { color: var(--green); font-family: var(--mono); }
 .loop-detail { padding: 4px 8px 10px 28px; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
 .loop-band { margin: 0; font-size: 11.5px; color: var(--text-3); }
+/* 预算行（Task 13，评审 P1-6）：轨道中性底，填充色随 usedRatio 语义变化（>0.8 红，否则绿）。 */
+.loop-budget { display: flex; flex-direction: column; gap: 5px; width: 240px; max-width: 100%; }
+.loop-budget__track { height: 6px; border-radius: 999px; background: var(--fill); overflow: hidden; }
+.loop-budget__fill { height: 100%; border-radius: 999px; background: var(--green); transition: width .2s ease; }
+.loop-budget__fill--warn { background: var(--red); }
+.loop-budget__label { margin: 0; font-size: 11.5px; color: var(--text-3); font-family: var(--mono); }
+.loop-budget__label--none { font-family: var(--font); font-style: italic; }
+/* 就绪构成行：dimensions[] 逐项 ✓/✗（Task 13）。 */
+.loop-dims { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 5px 14px; }
+.loop-dim { font-size: 11.5px; color: var(--text-3); display: inline-flex; align-items: center; gap: 4px; }
+.loop-dim__mark { font-weight: 700; }
+.loop-dim--pass .loop-dim__mark { color: var(--green); }
+.loop-dim--fail .loop-dim__mark { color: var(--red); }
+/* 熔断说明块：区别于 loop-reject（POST 拒绝反馈）——同色底但语义是"解释+出口"，非错误。 */
+.loop-tripped { margin: 0; padding: 8px 11px; border-radius: 7px; background: var(--red-t); color: var(--red-d); font-size: 11.5px; line-height: 1.5; }
 .loop-reject { margin: 0; padding: 8px 11px; border-radius: 7px; background: var(--red-t); color: var(--red); font-size: 11.5px; font-weight: 600; }
 
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
