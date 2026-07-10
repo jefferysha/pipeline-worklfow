@@ -262,7 +262,24 @@ function AppShell(): JSX.Element {
         )}
         {view === 'settings' && <SettingsView />}
         {view === 'loops' && <LoopsPanel />}
-        {view === 'afk' && <AfkWorkbench root={currentRoot} />}
+        {view === 'afk' && (
+          <AfkWorkbench
+            root={currentRoot}
+            snapshot={snapshot}
+            onOpenChange={(changeRoot, name) => {
+              // Task 12（评审 P1-7 附带需求）：AFK 详情区「查看 change →」——缩小范围方案
+              // （brief 授权的 DONE_WITH_CONCERNS 退路，见任务报告）。BoardView 的 detail 状态
+              // 完全私有（useState 初始化 + 一个"切 currentRoot 即清空"的 mount-time-also-fires
+              // useEffect），要把"跳转即直接打开该卡详情"做对，需要新增 initialDetail 受控
+              // 入口并联动改那个既有 effect 的首跑豁免逻辑——BoardView 承担着 Task 9/11 两轮
+              // 评审修复留下的详情态防错配双保险，改动面/回归面已经超出本任务授权范围。改用
+              // 最小改动：切到该卡所属项目 + 切视图到看板 + toast 提示去哪找，用户自己点开该卡。
+              setCurrentRoot(changeRoot)
+              setView('board')
+              showFlash('toast', t('afk.open_change_toast', { name }))
+            }}
+          />
+        )}
         {view === 'workflows' && (
           openWorkflowName
             ? <WorkflowCanvas root={currentRoot} name={openWorkflowName} onBack={() => setOpenWorkflowName(null)} />

@@ -1,7 +1,8 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '../i18n'
-import { AfkWorkbench } from './AfkWorkbench'
+import { makeChange, makeProject, makeSnapshot } from '../testkit'
+import { AfkWorkbench, type AfkWorkbenchProps } from './AfkWorkbench'
 
 const SNAPSHOT = {
   generated_at: '2026-07-07T00:00:00Z',
@@ -14,10 +15,10 @@ const SNAPSHOT = {
   cards: [],
 }
 
-function renderAfk() {
-  render(
+function renderAfk(props: Partial<AfkWorkbenchProps> = {}) {
+  return render(
     <I18nProvider>
-      <AfkWorkbench />
+      <AfkWorkbench {...props} />
     </I18nProvider>,
   )
 }
@@ -102,7 +103,7 @@ describe('AfkWorkbench', () => {
     await waitFor(() => expect(screen.getByText(/日志加载失败|加载失败|error|Error/i)).toBeInTheDocument())
   })
 
-  it('取消操作失败（非 2xx）时显示错误信息', async () => {
+  it('取消操作失败（非 2xx）时显示错误信息（点「取消」先过确认框，确认后才真 POST）', async () => {
     global.fetch = vi.fn(async (url: string, opts?: RequestInit) => {
       if (url === '/api/afk/snapshot') return new Response(JSON.stringify(SNAPSHOT), { status: 200 })
       if (url.startsWith('/api/afk/demo-2/log')) return new Response(JSON.stringify({ log: 'building...\n' }), { status: 200 })
@@ -116,6 +117,8 @@ describe('AfkWorkbench', () => {
     fireEvent.click(screen.getByText('demo-2'))
     const cancelBtn = await screen.findByRole('button', { name: /取消|Cancel/i })
     fireEvent.click(cancelBtn)
+    const confirmBtn = await screen.findByTestId('afk-cancel-confirm')
+    fireEvent.click(confirmBtn)
     await waitFor(() => expect(screen.getByText(/取消失败|操作失败|error|Error/i)).toBeInTheDocument())
   })
 
@@ -127,7 +130,7 @@ describe('AfkWorkbench', () => {
       scheduler: { status: 'busy', queued: 0, running: 1, merged: 0, failed: 0, conflict: 0, paused: 0, total: 1, message: '' },
       lanes: {
         queued: [], merged: [], failed: [], conflict: [], paused: [],
-        running: [{ name: 'demo-scheduled', root: '/tmp/a', path: '/tmp/a/openspec/changes/demo-scheduled', phase: 'build', automation: 'scheduled', lane: 'running', attempts: 0, queued_at: '', last_error: '', sandbox: 'sandcastle-xyz', worktree: '/tmp/wt-3' }],
+        running: [{ name: 'demo-scheduled', root: '/tmp/a', path: '/tmp/a/openspec/changes/demo-scheduled', phase: 'build', automation: 'scheduled', lane: 'running', attempts: 0, queued_at: '', last_error: '', sandbox: 'sandbox-xyz', worktree: '/tmp/wt-3' }],
       },
       cards: [],
     }
@@ -202,7 +205,7 @@ describe('AfkWorkbench', () => {
     expect((input as HTMLInputElement).value).toBe('dup')
   })
 
-  it('输入框为空时点"挂队" → 不发请求（前端最基本的非空校验，不靠 server 兜底一个空字符串 name）', async () => {
+  it('输入框为空时挂队钮 disabled（不靠 server 兜底一个空字符串 name）；填字符后启用', async () => {
     const calls: string[] = []
     global.fetch = vi.fn(async (url: string) => {
       calls.push(url)
@@ -211,8 +214,14 @@ describe('AfkWorkbench', () => {
     }) as unknown as typeof fetch
     renderAfk()
     await waitFor(() => expect(screen.getByText('demo-2')).toBeInTheDocument())
-    fireEvent.click(screen.getByRole('button', { name: /挂队|Enqueue/i }))
+    const btn = screen.getByRole('button', { name: /挂队|Enqueue/i })
+    expect(btn).toBeDisabled()
+    fireEvent.click(btn)
     await waitFor(() => expect(calls).toEqual(['/api/afk/snapshot']))
+
+    const input = screen.getByPlaceholderText(/change 名|change name/i)
+    fireEvent.change(input, { target: { value: 'x' } })
+    expect(btn).not.toBeDisabled()
   })
 
   it('中英切换：英文下渲染英文空态提示（此前面板完全不走 t()）', async () => {
@@ -228,5 +237,149 @@ describe('AfkWorkbench', () => {
     }) as unknown as typeof fetch
     renderAfk()
     await waitFor(() => expect(screen.getByText('Select a change to see details')).toBeInTheDocument())
+  })
+
+  // ── Task 12（评审 P0-3/P1-7）新增 ──────────────────────────────────────────────
+
+  it('卡片带项目 root 徽章（root 尾段 mono）', async () => {
+    renderAfk({ root: '' })
+    await waitFor(() => expect(screen.getByText('demo-2')).toBeInTheDocument())
+    expect(screen.getByTestId('afk-item-root-demo-2').textContent).toBe('a')
+    expect(screen.getByTestId('afk-item-root-demo-1').textContent).toBe('a')
+  })
+
+  it('列表按 currentRoot 过滤（非空 root 只看该项目；重渲染成 "" 后聚合显示全部）', async () => {
+    const MULTI_ROOT_SNAPSHOT = {
+      generated_at: '2026-07-07T00:00:00Z',
+      scheduler: { status: 'busy', queued: 0, running: 2, merged: 0, failed: 0, conflict: 0, paused: 0, total: 2, message: '' },
+      lanes: {
+        queued: [], merged: [], failed: [], conflict: [], paused: [],
+        running: [
+          { name: 'proj-a-task', root: '/tmp/a', path: '', phase: 'build', automation: 'running', lane: 'running', attempts: 0, queued_at: '', last_error: '', sandbox: '', worktree: '' },
+          { name: 'proj-b-task', root: '/tmp/b', path: '', phase: 'build', automation: 'running', lane: 'running', attempts: 0, queued_at: '', last_error: '', sandbox: '', worktree: '' },
+        ],
+      },
+      cards: [],
+    }
+    global.fetch = vi.fn(async (url: string) => {
+      if (url === '/api/afk/snapshot') return new Response(JSON.stringify(MULTI_ROOT_SNAPSHOT), { status: 200 })
+      throw new Error(`unexpected ${url}`)
+    }) as unknown as typeof fetch
+    const { rerender } = renderAfk({ root: '/tmp/a' })
+    await waitFor(() => expect(screen.getByText('proj-a-task')).toBeInTheDocument())
+    expect(screen.queryByText('proj-b-task')).not.toBeInTheDocument()
+
+    rerender(
+      <I18nProvider>
+        <AfkWorkbench root="" />
+      </I18nProvider>,
+    )
+    await waitFor(() => expect(screen.getByText('proj-b-task')).toBeInTheDocument())
+    expect(screen.getByText('proj-a-task')).toBeInTheDocument()
+  })
+
+  it('挂队输入 datalist 选项来自主 snapshot 当前语境的 change「name（phase）」', async () => {
+    const mainSnapshot = makeSnapshot([
+      makeProject('/tmp/a', [makeChange('alpha', 'build'), makeChange('beta', 'spec')]),
+      makeProject('/tmp/b', [makeChange('gamma', 'explore')]),
+    ])
+    const { container } = renderAfk({ root: '/tmp/a', snapshot: mainSnapshot })
+    await waitFor(() => expect(screen.getByText('demo-2')).toBeInTheDocument())
+    const options = Array.from(container.querySelectorAll('datalist option')) as HTMLOptionElement[]
+    const values = options.map((o) => o.value)
+    expect(values).toContain('alpha')
+    expect(values).toContain('beta')
+    expect(values).not.toContain('gamma') // 当前语境是 /tmp/a，/tmp/b 的 change 不该出现
+    const alphaOption = options.find((o) => o.value === 'alpha')
+    expect(alphaOption?.textContent).toBe('alpha（build）')
+  })
+
+  it('取消走 Dialog 二次确认：点「取消」先弹框、不立即发请求；确认后才真 POST /cancel', async () => {
+    let cancelCalls = 0
+    global.fetch = vi.fn(async (url: string, opts?: RequestInit) => {
+      if (url === '/api/afk/snapshot') return new Response(JSON.stringify(SNAPSHOT), { status: 200 })
+      if (url.startsWith('/api/afk/demo-2/log')) return new Response(JSON.stringify({ log: 'building...\n' }), { status: 200 })
+      if (url.startsWith('/api/afk/demo-2/cancel') && opts?.method === 'POST') {
+        cancelCalls += 1
+        return new Response(JSON.stringify({ ok: true }), { status: 200 })
+      }
+      throw new Error(`unexpected ${url}`)
+    }) as unknown as typeof fetch
+    renderAfk()
+    await waitFor(() => expect(screen.getByText('demo-2')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('demo-2'))
+    const cancelBtn = await screen.findByTestId('afk-cancel')
+    fireEvent.click(cancelBtn)
+
+    expect(await screen.findByRole('dialog')).toBeInTheDocument()
+    expect(cancelCalls).toBe(0) // 弹框阶段还没真发请求
+
+    fireEvent.click(screen.getByTestId('afk-cancel-confirm'))
+    await waitFor(() => expect(cancelCalls).toBe(1))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('取消确认框点「取消」（dismiss）→ 关闭弹框，不发请求', async () => {
+    global.fetch = vi.fn(async (url: string) => {
+      if (url === '/api/afk/snapshot') return new Response(JSON.stringify(SNAPSHOT), { status: 200 })
+      if (url.startsWith('/api/afk/demo-2/log')) return new Response(JSON.stringify({ log: 'building...\n' }), { status: 200 })
+      throw new Error(`unexpected ${url}`)
+    }) as unknown as typeof fetch
+    renderAfk()
+    await waitFor(() => expect(screen.getByText('demo-2')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('demo-2'))
+    fireEvent.click(await screen.findByTestId('afk-cancel'))
+    expect(await screen.findByRole('dialog')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByTestId('afk-cancel-dismiss'))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('详情区「查看 change →」点击调用 onOpenChange(root, name)', async () => {
+    const onOpenChange = vi.fn()
+    renderAfk({ onOpenChange })
+    await waitFor(() => expect(screen.getByText('demo-2')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('demo-2'))
+    await waitFor(() => expect(screen.getByText(/building\.\.\./)).toBeInTheDocument())
+    fireEvent.click(screen.getByTestId('afk-open-change'))
+    expect(onOpenChange).toHaveBeenCalledWith('/tmp/a', 'demo-2')
+  })
+
+  it('未传 onOpenChange 时不渲染「查看 change →」按钮', async () => {
+    renderAfk()
+    await waitFor(() => expect(screen.getByText('demo-2')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('demo-2'))
+    await waitFor(() => expect(screen.getByText(/building\.\.\./)).toBeInTheDocument())
+    expect(screen.queryByTestId('afk-open-change')).not.toBeInTheDocument()
+  })
+
+  it('点击「↻ 刷新」→ 真实再拉一次日志', async () => {
+    let logCalls = 0
+    global.fetch = vi.fn(async (url: string) => {
+      if (url === '/api/afk/snapshot') return new Response(JSON.stringify(SNAPSHOT), { status: 200 })
+      if (url.startsWith('/api/afk/demo-2/log')) {
+        logCalls += 1
+        return new Response(JSON.stringify({ log: `building #${logCalls}...\n` }), { status: 200 })
+      }
+      throw new Error(`unexpected ${url}`)
+    }) as unknown as typeof fetch
+    renderAfk()
+    await waitFor(() => expect(screen.getByText('demo-2')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('demo-2'))
+    await waitFor(() => expect(logCalls).toBe(1))
+    fireEvent.click(screen.getByTestId('afk-log-refresh'))
+    await waitFor(() => expect(logCalls).toBe(2))
+    await waitFor(() => expect(screen.getByText(/building #2/)).toBeInTheDocument())
+  })
+
+  it('「跟随尾部」switch 默认开启，点击可关闭', async () => {
+    renderAfk()
+    await waitFor(() => expect(screen.getByText('demo-2')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('demo-2'))
+    await waitFor(() => expect(screen.getByText(/building\.\.\./)).toBeInTheDocument())
+    const followSwitch = screen.getByTestId('afk-follow') as HTMLInputElement
+    expect(followSwitch.checked).toBe(true)
+    fireEvent.click(followSwitch)
+    expect(followSwitch.checked).toBe(false)
   })
 })

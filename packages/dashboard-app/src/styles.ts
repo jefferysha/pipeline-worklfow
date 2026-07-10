@@ -423,6 +423,8 @@ button.ev__chip--neutral:hover { border-color: var(--border-2); color: var(--tex
 .afk-item.is-active { border: 1.5px solid var(--green); box-shadow: 0 0 0 3px var(--green-t); }
 .afk-item.is-failed { border-color: var(--red); }
 .afk-itemtop { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.afk-itemtitle { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+.afk-item-root { font-family: var(--mono); font-size: 10px; color: var(--text-3); white-space: nowrap; }
 .afk-itemmeta { font-size: 11px; color: var(--text-3); }
 .afk-state { font-size: 10.5px; font-weight: 700; padding: 2px 7px; border-radius: 999px; white-space: nowrap; }
 .afk-state--run { background: var(--green-t); color: var(--green); }
@@ -435,7 +437,10 @@ button.ev__chip--neutral:hover { border-color: var(--border-2); color: var(--tex
 .afk-dactions { display: flex; gap: 8px; }
 .afk-dmeta { display: flex; gap: 16px; font-size: 11.5px; color: var(--text-3); flex-wrap: wrap; }
 .afk-dmeta b { color: var(--text-2); font-weight: 600; font-family: var(--mono); }
-.afk-loghead { font-size: 11px; color: var(--text-3); font-family: var(--mono); }
+.afk-loghead { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 11px; color: var(--text-3); font-family: var(--mono); }
+.afk-logtools { display: flex; align-items: center; gap: 10px; font-family: var(--font); }
+.afk-follow { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--text-3); cursor: pointer; }
+.afk-follow input { cursor: pointer; }
 .afk-log { background: #10150f; color: #cde3cf; border-radius: var(--radius-sm); padding: 12px 14px; font-family: var(--mono); font-size: 11px; line-height: 1.7; overflow-x: auto; margin: 0; border: 1px solid var(--border); }
 :root[data-theme="dark"] .afk-log { background: #0c110d; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .afk-log { background: #0c110d; } }
