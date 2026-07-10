@@ -1,9 +1,12 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import gsap from 'gsap'
 import { useGSAP } from '@gsap/react'
 import { getToken } from '../api/client'
 import { useT } from '../i18n'
+import { changeWorkflow } from '../inbox/inbox'
+import { rulesKey, useWorkflowRulesMulti } from '../model/workflowModel'
 import { Dialog } from '../shell/Dialog'
+import type { Snapshot } from '../types'
 import { revealDialog, revealList } from './motion'
 
 gsap.registerPlugin(useGSAP)
@@ -23,6 +26,14 @@ gsap.registerPlugin(useGSAP)
 export interface WorkflowEditorViewProps {
   root: string
   onOpen: (name: string) => void
+  /**
+   * 主 snapshot（App 的 useSnapshot() 产出，与 AfkWorkbench.tsx 的同名 prop 是同一份数据源）：
+   * 引用计数（评审 P2-14 前半，Task 14）——行 meta「N 相位 · M 门 · K 张引用」与删除确认弹窗的
+   * 引用数红字警示，K 值纯前端算，不新增任何网络请求。root 语境同 AfkWorkbench.tsx
+   * contextChanges() 一致的既有约定（''=聚合全部 ok 项目，非空=只看该项目），不重新发明。
+   * 缺省/null → 引用数一律按 0 计（不阻塞列表本身渲染，只是引用数信息暂缺）。
+   */
+  snapshot?: Snapshot | null
 }
 
 const NAME_RE = /^[a-zA-Z0-9_-]+$/
@@ -40,7 +51,7 @@ async function readErrorDetail(res: Response): Promise<string> {
   return ''
 }
 
-export function WorkflowEditorView({ root, onOpen }: WorkflowEditorViewProps): JSX.Element {
+export function WorkflowEditorView({ root, onOpen, snapshot = null }: WorkflowEditorViewProps): JSX.Element {
   const { t } = useT()
   const [names, setNames] = useState<string[] | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -54,6 +65,29 @@ export function WorkflowEditorView({ root, onOpen }: WorkflowEditorViewProps): J
   // 的既有模式一致），不吞掉其余 UI。
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const rootRef = useRef<HTMLElement>(null)
+
+  // 引用计数（评审 P2-14 前半，Task 14）：root 语境同 AfkWorkbench.tsx 的 contextChanges()
+  // 一致的既有约定（''=聚合全部 ok 项目，非空=只看该项目），不重新发明 root 过滤语义。
+  // changeWorkflow() 处理 change 未设 workflow 字段时回落到 'default' 的既有规则，逐字复用。
+  const refCounts = useMemo(() => {
+    const counts = new Map<string, number>()
+    if (!snapshot) return counts
+    for (const p of snapshot.projects) {
+      if (!p.ok) continue
+      if (root !== '' && p.root !== root) continue
+      for (const c of p.changes) {
+        const wf = changeWorkflow(c)
+        counts.set(wf, (counts.get(wf) ?? 0) + 1)
+      }
+    }
+    return counts
+  }, [snapshot, root])
+  const pendingDeleteRefs = pendingDelete ? refCounts.get(pendingDelete) ?? 0 : 0
+
+  // 行 meta 的 steps/gate 数据源：按 rulesKey(root,name) 批量拉（复用 model/workflowModel.ts
+  // 的模块级缓存 + in-flight 去重，不重新实现拉取逻辑）。names 为 null（首次加载中）时传空
+  // 数组——hooks 顺序不受影响（本 hook 每次 render 都无条件调用），只是暂无待拉名字。
+  const { rules: rulesByKey } = useWorkflowRulesMulti(names ? [{ root, names }] : [])
 
   // 列表入场：只在"从加载态首次拿到数据"这一刻触发一次（依赖 Boolean(names)，不是 names
   // 本身）——如果依赖整个 names 数组，之后每次新建/删除导致的数组引用变化都会让已经在屏幕上
@@ -159,15 +193,34 @@ export function WorkflowEditorView({ root, onOpen }: WorkflowEditorViewProps): J
         </div>
       ) : (
         <ul className="workflow-editor__list">
-          {names.map((name) => (
-            <li key={name} className="card workflow-editor__item">
-              <button className="workflow-editor__open" onClick={() => onOpen(name)}>
-                <span className="workflow-editor__open-mark" aria-hidden="true">⎔</span>
-                {name}
-              </button>
-              <button className="btn--icon" onClick={() => setPendingDelete(name)}>{t('workflow_editor.delete')}</button>
-            </li>
-          ))}
+          {names.map((name) => {
+            // 评审 P2-14 前半（Task 14）：行 meta 只在 rules 已就绪时渲染——拉取失败/仍在途的
+            // 名字不在 rulesByKey 里，那一行就不出 meta（G17"卡不消失"纪律同源：宁可信息
+            // 不全，也不能让整行消失或显示错误数字）。引用数（refs）与 rules 就绪与否无关，
+            // 但一并归在同一条 meta 里——单独露出"K 张引用"而 steps/gate 数缺失意义不大。
+            const rowRules = rulesByKey.get(rulesKey(root, name))
+            const refs = refCounts.get(name) ?? 0
+            return (
+              <li key={name} className="card workflow-editor__item">
+                <div className="workflow-editor__item-main">
+                  <button className="workflow-editor__open" onClick={() => onOpen(name)}>
+                    <span className="workflow-editor__open-mark" aria-hidden="true">⎔</span>
+                    {name}
+                  </button>
+                  {rowRules && (
+                    <span className="workflow-editor__meta" data-testid={`wf-meta-${name}`}>
+                      {t('workflow_editor.meta', {
+                        steps: rowRules.steps.length,
+                        gates: Object.values(rowRules.gateByStep).filter(Boolean).length,
+                        refs,
+                      })}
+                    </span>
+                  )}
+                </div>
+                <button className="btn--icon" onClick={() => setPendingDelete(name)}>{t('workflow_editor.delete')}</button>
+              </li>
+            )
+          })}
         </ul>
       )}
 
@@ -186,6 +239,11 @@ export function WorkflowEditorView({ root, onOpen }: WorkflowEditorViewProps): J
           }
         >
           <p className="dialog__desc">{t('workflow_editor.delete_confirm', { name: pendingDelete })}</p>
+          {pendingDeleteRefs > 0 && (
+            <p className="dialog__desc dialog__desc--danger" data-testid="workflow-delete-refs-warning">
+              {t('workflow_editor.delete_refs_warning', { n: pendingDeleteRefs })}
+            </p>
+          )}
         </Dialog>
       )}
 

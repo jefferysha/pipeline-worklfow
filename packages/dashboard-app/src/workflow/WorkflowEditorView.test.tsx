@@ -1,14 +1,35 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '../i18n'
+import { invalidateWorkflowRules } from '../model/workflowModel'
+import { makeChange, makeProject, makeSnapshot } from '../testkit'
+import type { Snapshot } from '../types'
 import { WorkflowEditorView } from './WorkflowEditorView'
 
 const ROOT = '/tmp/proj-a'
 
-function renderView(onOpen = vi.fn()) {
+// Task 14 起：WorkflowEditorView 挂载时对列表里每个名字都真 fetch 一次 rules（行 meta 的
+// 步数/门数数据源），故 beforeEach 的桩子需要同时覆盖这两个 GET /api/workflows/:name?root=
+// 端点——同 WorkflowCanvas.test.tsx 顶层 fixture 一致的 { name, steps: StepDef[] } 形状。
+const ONBOARDING_DEF = {
+  name: 'onboarding',
+  steps: [
+    { id: 'intake', label: '', gate: null, skills: [], inputs: [], outputs: [], guards: [], transitions: [{ event: 'go', to: 'done' }] },
+    { id: 'done', label: '', gate: 'review', skills: [], inputs: [], outputs: [], guards: [], transitions: [] },
+  ],
+}
+const RELEASE_DEF = {
+  name: 'release',
+  steps: [
+    { id: 'draft', label: '', gate: null, skills: [], inputs: [], outputs: [], guards: [], transitions: [{ event: 'ok', to: 'ship' }] },
+    { id: 'ship', label: '', gate: 'confirm', skills: [], inputs: [], outputs: [], guards: [], transitions: [] },
+  ],
+}
+
+function renderView(onOpen = vi.fn(), snapshot: Snapshot | null = null) {
   render(
     <I18nProvider>
-      <WorkflowEditorView root={ROOT} onOpen={onOpen} />
+      <WorkflowEditorView root={ROOT} onOpen={onOpen} snapshot={snapshot} />
     </I18nProvider>,
   )
   return onOpen
@@ -16,9 +37,16 @@ function renderView(onOpen = vi.fn()) {
 
 beforeEach(() => {
   localStorage.clear()
+  invalidateWorkflowRules() // 模块级缓存跨用例清空（同 WorkflowCanvas.test.tsx 既有先例）
   global.fetch = vi.fn(async (url: string, opts?: RequestInit) => {
     if (url === `/api/workflows?root=${encodeURIComponent(ROOT)}`) {
       return new Response(JSON.stringify({ names: ['onboarding', 'release'] }), { status: 200 })
+    }
+    if (url === `/api/workflows/onboarding?root=${encodeURIComponent(ROOT)}` && !opts?.method) {
+      return new Response(JSON.stringify(ONBOARDING_DEF), { status: 200 })
+    }
+    if (url === `/api/workflows/release?root=${encodeURIComponent(ROOT)}` && !opts?.method) {
+      return new Response(JSON.stringify(RELEASE_DEF), { status: 200 })
     }
     if (url === '/api/workflows/newone' && opts?.method === 'POST') {
       return new Response(JSON.stringify({ ok: true }), { status: 200 })
@@ -120,5 +148,40 @@ describe('WorkflowEditorView', () => {
     expect(input).toHaveValue('newone')
     // 删除按钮本身也还在、可再次点击（不是一次性挡死后再也点不到）。
     expect(screen.getAllByRole('button', { name: '删除' }).length).toBeGreaterThan(0)
+  })
+})
+
+// 评审 P2-14 前半（Task 14）：列表行只有名字、删除确认无引用计数——行内补步数/门数/引用数，
+// 删除确认弹窗正文追加引用数红字警示（>0 时）。引用数纯前端算：snapshot 里
+// fields.workflow===name 的 change 计数（inbox.ts 的 changeWorkflow 同款 'default' 回落规则）。
+describe('WorkflowEditorView 列表行信息量（评审 P2-14 前半，Task 14）', () => {
+  function snapshotWithOnboardingRefs(n: number): Snapshot {
+    const changes = Array.from({ length: n }, (_, i) =>
+      makeChange(`c${i}`, 'build', { fields: { workflow: 'onboarding' } }),
+    )
+    return makeSnapshot([makeProject(ROOT, changes)])
+  }
+
+  it('行 meta 渲染「N 相位 · M 门 · K 张引用」', async () => {
+    renderView(vi.fn(), snapshotWithOnboardingRefs(2))
+    await waitFor(() => expect(screen.getByTestId('wf-meta-onboarding')).toBeInTheDocument())
+    // ONBOARDING_DEF：2 个 step（intake/done），1 个非空 gate（done=review）；快照里 2 个
+    // change 声明 fields.workflow==='onboarding'。
+    expect(screen.getByTestId('wf-meta-onboarding').textContent).toBe('2 相位 · 1 门 · 2 张引用')
+  })
+
+  it('删除确认弹窗：引用数 > 0 时正文出现红字警示「N 张 change 正在引用」', async () => {
+    renderView(vi.fn(), snapshotWithOnboardingRefs(2))
+    await waitFor(() => expect(screen.getByText('onboarding')).toBeInTheDocument())
+    fireEvent.click(screen.getAllByRole('button', { name: '删除' })[0]!) // 第一项 = onboarding
+    expect(screen.getByText('2 张 change 正在引用')).toBeInTheDocument()
+  })
+
+  it('引用数为 0 时删除确认弹窗不出现警示', async () => {
+    renderView() // 无 snapshot → 全部引用数按 0 计
+    await waitFor(() => expect(screen.getByText('onboarding')).toBeInTheDocument())
+    fireEvent.click(screen.getAllByRole('button', { name: '删除' })[0]!)
+    expect(screen.getByText(/^确认/)).toBeInTheDocument() // 弹窗确实打开了
+    expect(screen.queryByText(/张 change 正在引用/)).not.toBeInTheDocument()
   })
 })

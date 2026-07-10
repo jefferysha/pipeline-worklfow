@@ -283,7 +283,7 @@ function AppShell(): JSX.Element {
         {view === 'workflows' && (
           openWorkflowName
             ? <WorkflowCanvas root={currentRoot} name={openWorkflowName} onBack={() => setOpenWorkflowName(null)} />
-            : <WorkflowEditorView root={currentRoot} onOpen={setOpenWorkflowName} />
+            : <WorkflowEditorView root={currentRoot} onOpen={setOpenWorkflowName} snapshot={snapshot} />
         )}
           </>
         )}

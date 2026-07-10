@@ -308,6 +308,7 @@ button.ev__chip--neutral:hover { border-color: var(--border-2); color: var(--tex
 .dialog { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px 22px; width: min(420px, 92%); box-shadow: var(--shadow-2); }
 .dialog__title { margin: 0 0 6px; font-size: 15px; color: var(--text); font-weight: 700; }
 .dialog__desc { margin: 0 0 16px; font-size: 12.5px; color: var(--text-2); line-height: 1.6; }
+.dialog__desc--danger { color: var(--red); font-weight: 700; }
 .dialog__actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
 .dlg-cli { background: var(--fill); border: 1px dashed var(--border); border-radius: 7px; padding: 8px 11px; font-family: var(--mono); font-size: 11px; color: var(--text-3); overflow-x: auto; white-space: nowrap; }
 
@@ -340,6 +341,10 @@ button.ev__chip--neutral:hover { border-color: var(--border-2); color: var(--tex
 .workflow-editor__item:hover { border-color: var(--green); }
 .workflow-editor__open { border: 0; background: transparent; padding: 0; font: inherit; font-size: 13px; font-weight: 600; font-family: var(--mono); color: var(--text); cursor: pointer; text-align: left; display: flex; align-items: center; gap: 10px; }
 .workflow-editor__open-mark { color: var(--green); font-size: 14px; line-height: 1; }
+/* 评审 P2-14 前半（Task 14）：行 meta（步数/门数/引用数）紧跟名字，同属左侧主区——
+   保持 .workflow-editor__item 原有两段式 space-between（左=主区，右=删除钮）不变。 */
+.workflow-editor__item-main { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.workflow-editor__meta { font-size: 11px; color: var(--text-3); font-family: var(--mono); white-space: nowrap; }
 .workflow-editor__new { display: flex; gap: 8px; margin-top: 4px; }
 .workflow-editor__new .input { flex: 1; }
 
