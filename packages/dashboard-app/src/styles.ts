@@ -357,6 +357,23 @@ button.ev__chip--neutral:hover { border-color: var(--border-2); color: var(--tex
 .workflow-canvas__status { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 999px; }
 .workflow-canvas__status--ok { background: var(--green-t); color: var(--green); }
 .workflow-canvas__status--error { background: var(--red-t); color: var(--red); }
+.workflow-canvas__title { font-family: var(--mono); font-size: 12.5px; font-weight: 700; color: var(--text); }
+/* 脏状态「未保存」chip（评审 P1-8）：中性虚线——不是错误也不是成功，只是"还没落盘"。 */
+.workflow-canvas__status--dirty { background: var(--fill); color: var(--text-2); border: 1px dashed var(--border-2); }
+
+/* ── 阶段卡横排（评审 P1-8；画布上方，wf.steps 顺序渲染；视觉基准 v4-openai-trellis.html
+   编号阶段卡段——编号圆标+id+label+gate 标记，激活=蓝描边+--accent-t 底）── */
+.stage-card-row { display: flex; flex-wrap: wrap; align-items: stretch; gap: 8px; }
+.stage-card { flex: 1 1 180px; display: flex; align-items: center; gap: 10px; text-align: left; background: var(--card); border: 1.5px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 9px 12px; font: inherit; color: inherit; cursor: pointer; transition: border-color .14s ease, box-shadow .14s ease, background .14s ease; }
+.stage-card:hover { border-color: var(--border-2); }
+.stage-card--active { border-color: var(--accent); background: var(--accent-t); box-shadow: 0 0 0 3px var(--ring); }
+.stage-card__num { flex: none; width: 24px; height: 24px; border-radius: 999px; background: var(--fill-2); border: 1px solid var(--border-2); color: var(--text-2); display: grid; place-items: center; font-size: 11.5px; font-weight: 700; font-family: var(--mono); }
+.stage-card--active .stage-card__num { background: var(--accent-t); border-color: var(--accent-b); color: var(--accent-d); }
+.stage-card__body { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 1px; }
+.stage-card__id { font-family: var(--mono); font-size: 12.5px; font-weight: 700; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stage-card__label { font-size: 11px; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stage-card .badge { flex: none; }
+
 .workflow-canvas__stage { position: relative; height: 520px; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; background-color: var(--bg); background-image: radial-gradient(var(--border) 1px, transparent 1px); background-size: 22px 22px; }
 .workflow-canvas__stage .react-flow__renderer,
 .workflow-canvas__stage .react-flow { background: transparent; }

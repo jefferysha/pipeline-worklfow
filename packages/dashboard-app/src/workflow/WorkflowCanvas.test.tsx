@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, configure, fireEvent, getConfig, render, screen, waitFor } from '@testing-library/react'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -105,7 +105,20 @@ class MockDOMMatrixReadOnly {
 let originalOffsetWidth: PropertyDescriptor | undefined
 let originalOffsetHeight: PropertyDescriptor | undefined
 let addedGetBBox = false
+let originalDefaultIgnore: string
 beforeAll(() => {
+  // Task 15 起画布上方多了一排阶段卡：每个 step 的 id/label/gate 徽章文字会在卡片里再出现
+  // 一遍（与 xyflow 节点内的同一份文字并存）。本文件既有 40 处左右的裸 `getByText(/intake/i)`
+  // 式查询全部指望"这段文字在 DOM 里只有一份"（getByText 遇到多个匹配直接抛错），逐处改写
+  // 成 within(...) 会把既有用例的意图 diff 撑得非常大。改用 testing-library 为此暴露的正式
+  // 配置面：`defaultIgnore` 是 ByText 系查询专用的排除选择器（源码 queries/text.js 里
+  // `.filter(node => !node.matches(ignore))`，只影响 ByText，Role/TestId/Placeholder/
+  // DisplayValue 一概不受影响——读 dist 源码确认过，非猜测），把 `.stage-card` 子树整体从
+  // ByText 命中面里排除：既有查询继续精确命中 xyflow 节点文字，新的阶段卡断言全部走
+  // data-testid + textContent（见 Task 15 describe 块）。afterAll 还原，同上面 offsetWidth
+  // 的不依赖文件隔离假设的惯例。
+  originalDefaultIgnore = getConfig().defaultIgnore
+  configure({ defaultIgnore: `${originalDefaultIgnore}, .stage-card, .stage-card *` })
   originalOffsetWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetWidth')
   originalOffsetHeight = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetHeight')
   Object.defineProperty(HTMLElement.prototype, 'offsetWidth', { configurable: true, value: 150 })
@@ -126,6 +139,7 @@ beforeAll(() => {
   }
 })
 afterAll(() => {
+  configure({ defaultIgnore: originalDefaultIgnore })
   if (originalOffsetWidth) Object.defineProperty(HTMLElement.prototype, 'offsetWidth', originalOffsetWidth)
   if (originalOffsetHeight) Object.defineProperty(HTMLElement.prototype, 'offsetHeight', originalOffsetHeight)
   if (addedGetBBox) delete (SVGElement.prototype as { getBBox?: unknown }).getBBox
@@ -154,11 +168,15 @@ describe('WorkflowCanvas —— 顶层 step 拓扑', () => {
     expect(screen.getByText(/done/i)).toBeInTheDocument()
   })
 
-  it('点"返回列表" → 调用 onBack', async () => {
+  // 意图迁移（Task 15，评审 P1-8）：原「点返回列表→onBack」升级为「非 dirty 直接 onBack；
+  // dirty 时先确认」。本用例保留其中"非 dirty 直连"这一半（加载后未做任何编辑，dirty=false，
+  // 行为与迁移前逐字一致）；dirty 分支见下方 Task 15 describe 块。
+  it('非 dirty 时点"返回列表" → 直接调用 onBack（不弹确认）', async () => {
     const onBack = renderCanvas()
     await waitFor(() => expect(screen.getByText(/intake/i)).toBeInTheDocument())
     fireEvent.click(screen.getByText(/返回列表/))
     expect(onBack).toHaveBeenCalled()
+    expect(screen.queryByTestId('canvas-back-confirm')).not.toBeInTheDocument()
   })
 
   it('点"+ step"输入合法新 id → 新增一个 step 节点（初始空 skills/transitions）', async () => {
@@ -660,6 +678,96 @@ describe('gate 节点徽章（工票车间：编辑器侧的 gate 可视化）',
     expect(screen.getByText('确认门').className).toContain('badge--phase')
     // 无 gate 的节点不带徽章（按节点框自身的文本判断，不受兄弟节点影响）
     expect(screen.getByText('draft').closest('.react-flow__node')?.textContent).toBe('draft')
+  })
+})
+
+// ── Task 15（评审 P1-8）：阶段卡横排 + 脏状态守卫 ──
+// 阶段卡内容断言全部走 data-testid + textContent，不走 getByText：文件顶部 beforeAll 把
+// `.stage-card` 子树从 ByText 查询里排除了（原因见那段注释——保护既有 40 处裸文本查询）。
+describe('WorkflowCanvas —— Task 15：阶段卡横排 + 脏状态守卫（评审 P1-8）', () => {
+  it('阶段卡按 wf.steps 顺序渲染（编号圆标+id+label+gate 徽章），点卡=选中该 step 打开详情侧栏、卡亮激活描边', async () => {
+    // 本用例专用 fixture：给 intake 挂 review gate，顺带把"卡上 gate 徽章"一起钉住。
+    const GATED_ROW = {
+      name: NAME,
+      steps: [
+        { id: 'intake', label: 'Intake', gate: 'review', skills: [], inputs: [], outputs: [], guards: [], transitions: [{ event: 'complete', to: 'done' }] },
+        { id: 'done', label: 'Done', gate: null, skills: [], inputs: [], outputs: [], guards: [], transitions: [] },
+      ],
+    }
+    global.fetch = vi.fn(async (url: string) => {
+      if (url === `/api/workflows/${NAME}?root=${encodeURIComponent(ROOT)}`) {
+        return new Response(JSON.stringify(GATED_ROW), { status: 200 })
+      }
+      throw new Error(`unexpected fetch ${url}`)
+    }) as unknown as typeof fetch
+
+    renderCanvas()
+    await waitFor(() => expect(screen.getByTestId('stage-card-row')).toBeInTheDocument())
+    // 顺序 = wf.steps 声明顺序（不是布局算法或字典序）
+    const cards = screen.getByTestId('stage-card-row').querySelectorAll('.stage-card')
+    expect([...cards].map((c) => c.getAttribute('data-testid'))).toEqual(['stage-card-intake', 'stage-card-done'])
+    // 编号圆标 + step id（mono）+ label + gate 徽章同卡呈现
+    const intakeCard = screen.getByTestId('stage-card-intake')
+    expect(intakeCard.querySelector('.stage-card__num')?.textContent).toBe('1')
+    expect(intakeCard.querySelector('.stage-card__id')?.textContent).toBe('intake')
+    expect(intakeCard.querySelector('.stage-card__label')?.textContent).toBe('Intake')
+    expect(intakeCard.querySelector('.badge--gate')?.textContent).toBe('复核门')
+    expect(screen.getByTestId('stage-card-done').querySelector('.stage-card__num')?.textContent).toBe('2')
+
+    // 点卡=选中 step：与画布点节点写同一个 selectedStepId，详情侧栏打开（Done 的 label 输入框）
+    fireEvent.click(screen.getByTestId('stage-card-done'))
+    await waitFor(() => expect(screen.getByDisplayValue('Done')).toBeInTheDocument())
+    expect(screen.getByTestId('stage-card-done').className).toContain('stage-card--active')
+    expect(screen.getByTestId('stage-card-intake').className).not.toContain('stage-card--active')
+  })
+
+  it('编辑后 canvas-dirty chip 出现、保存钮从 ghost 变实底（加载后未编辑=干净态两者皆无）', async () => {
+    renderCanvas()
+    await waitFor(() => expect(screen.getByText(/intake/i)).toBeInTheDocument())
+    expect(screen.queryByTestId('canvas-dirty')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '保存' }).className).toContain('btn--ghost')
+    // 真编辑：debug-trigger 触发真实 onNodesDelete（同本文件既有约定，不走 DOM 模拟）
+    fireDebugDeleteNodes(screen.getByTestId('debug-trigger-delete-nodes'), [{ id: 'done' }])
+    await waitFor(() => expect(screen.getByTestId('canvas-dirty')).toBeInTheDocument())
+    expect(screen.getByTestId('canvas-dirty').textContent).toBe('未保存')
+    expect(screen.getByRole('button', { name: '保存' }).className).not.toContain('btn--ghost')
+  })
+
+  it('dirty 时点"返回列表" → 先弹确认（onBack 不被直接调用）；取消留下，确认「丢弃并返回」后 onBack', async () => {
+    const onBack = renderCanvas()
+    await waitFor(() => expect(screen.getByText(/intake/i)).toBeInTheDocument())
+    fireDebugDeleteNodes(screen.getByTestId('debug-trigger-delete-nodes'), [{ id: 'done' }])
+    await waitFor(() => expect(screen.getByTestId('canvas-dirty')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByText(/返回列表/))
+    expect(onBack).not.toHaveBeenCalled()
+    expect(screen.getByTestId('canvas-back-confirm')).toBeInTheDocument()
+
+    // 取消：确认框关闭、留在编辑器（onBack 仍未被调用）
+    fireEvent.click(screen.getByRole('button', { name: '取消' }))
+    expect(screen.queryByTestId('canvas-back-confirm')).not.toBeInTheDocument()
+    expect(onBack).not.toHaveBeenCalled()
+
+    // 再点返回、这次确认丢弃 → onBack 恰好一次
+    fireEvent.click(screen.getByText(/返回列表/))
+    fireEvent.click(screen.getByRole('button', { name: '丢弃并返回' }))
+    expect(onBack).toHaveBeenCalledTimes(1)
+  })
+
+  it('dirty 后保存成功 → 快照推进、canvas-dirty 清除、保存钮回到 ghost；此后返回列表直接 onBack 不再弹确认', async () => {
+    const onBack = renderCanvas()
+    await waitFor(() => expect(screen.getByText(/intake/i)).toBeInTheDocument())
+    fireDebugDeleteNodes(screen.getByTestId('debug-trigger-delete-nodes'), [{ id: 'done' }])
+    await waitFor(() => expect(screen.getByTestId('canvas-dirty')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    await waitFor(() => expect(screen.getByText('已保存')).toBeInTheDocument())
+    expect(screen.queryByTestId('canvas-dirty')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '保存' }).className).toContain('btn--ghost')
+
+    fireEvent.click(screen.getByText(/返回列表/))
+    expect(screen.queryByTestId('canvas-back-confirm')).not.toBeInTheDocument()
+    expect(onBack).toHaveBeenCalled()
   })
 })
 

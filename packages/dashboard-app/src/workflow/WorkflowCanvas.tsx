@@ -128,6 +128,13 @@ gsap.registerPlugin(useGSAP)
  *    文件其余全部 onNodesDelete/onEdgesDelete 测试（Task 6 已建立的唯一约定）保持一致，删除类
  *    交互测试统一走 debug-trigger 直接调用真实回调，不走 DOM 事件模拟，两种手法不在同一文件里
  *    混用。测试细节见 WorkflowCanvas.test.tsx 对应用例的注释。
+ *
+ * Task 15（评审 P1-8）：① 画布上方阶段卡横排（仅顶层态渲染，视觉基准 v4「阶段编排」段），
+ * 点卡与画布单击节点写同一个 selectedStepId（不另起并行选中状态）；② dirty 位 = 当前 wf 与
+ * "最近一次加载/保存成功"快照的 JSON.stringify 比较（快照存 wfSnapshotRef，理由见声明处
+ * 注释——特意既不进 state 也不做 useMemo）；dirty 时标题旁「未保存」chip + 保存钮实底，
+ * 返回列表先弹确认 Dialog。本任务不触碰上述 debug-trigger/callback-ref 机制涉及的任何回调
+ * 依赖数组（onConnect/onNodesDelete/onEdgesDelete 原样），新增交互全部走普通函数或独立 state。
  */
 // FieldRef/SkillRef/GuardConfig/StepTransition/StepDef 五个本地类型（Task 6 起草）Task 8 起
 // 收拢进 StepDetailPanel.tsx 单一声明（上面 import 一行），本文件不再重复声明——同一份形状
@@ -220,6 +227,8 @@ function WorkflowCanvasInner({ root, name, onBack }: WorkflowCanvasProps): JSX.E
   const [eventName, setEventName] = useState('')
   const [connectError, setConnectError] = useState<string | null>(null)
   const [saveStatus, setSaveStatus] = useState<{ kind: 'idle' | 'ok' | 'error'; msg?: string }>({ kind: 'idle' })
+  // Task 15（评审 P1-8）：dirty 时点"返回列表"触发的确认 Dialog 开关。
+  const [confirmBackOpen, setConfirmBackOpen] = useState(false)
   // Task 7：非 null = 正在钻入看该 step 的 skill DAG（值是该 step 的 id）。
   const [drillStepId, setDrillStepId] = useState<string | null>(null)
   // Task 8：顶层单击选中打开详情侧栏的 step id。只在非钻入态下由 onNodeClick 设置——钻入态下
@@ -235,6 +244,16 @@ function WorkflowCanvasInner({ root, name, onBack }: WorkflowCanvasProps): JSX.E
     drillStepIdRef.current = drillStepId
   }, [drillStepId])
 
+  // Task 15（评审 P1-8）脏状态守卫：`dirty` = 当前 wf 与"最近一次加载/保存成功"那个快照的
+  // JSON.stringify 比较。快照存 ref（不进 state）——快照本身不需要触发渲染，只在 load/save
+  // 成功的那一刻被写入一次；`dirty` 每次渲染都从"当前 wf vs 快照"重新算一遍，故意不用
+  // useMemo(() => ..., [wf]) 记忆化：save() 成功后只更新这个 ref、不改变 wf 这个引用本身，
+  // 若靠 [wf] 做依赖数组，deps 没变就会继续返回 save 之前缓存的 true，"保存成功后 dirty
+  // 清除"这条要求会被记忆化悄悄吃掉（不是纸面推演的假设风险——ref 变化对 useMemo 天生不可见，
+  // 这是 React 文档明确写过的记忆化限制）。JSON.stringify 在编辑器这种量级的 wf 上開销可忽略。
+  const wfSnapshotRef = useRef<string | null>(null)
+  const dirty = wf !== null && wfSnapshotRef.current !== null && JSON.stringify(wf) !== wfSnapshotRef.current
+
   useEffect(() => {
     fetch(`/api/workflows/${encodeURIComponent(name)}?root=${encodeURIComponent(root)}`)
       .then(async (r) => {
@@ -243,6 +262,7 @@ function WorkflowCanvasInner({ root, name, onBack }: WorkflowCanvasProps): JSX.E
       })
       .then((body) => {
         setWf(body)
+        wfSnapshotRef.current = JSON.stringify(body)
         setNodes(stepsToNodes(body.steps, gateLabel))
         setEdges(stepsToEdges(body.steps))
       })
@@ -320,6 +340,37 @@ function WorkflowCanvasInner({ root, name, onBack }: WorkflowCanvasProps): JSX.E
     setSelectedStepId(null)
     if (!drillStepId) setDrillStepId(node.id)
   }, [drillStepId])
+
+  // Task 15：阶段卡横排的点击入口——与画布点节点共用同一个 selectedStepId 状态（不另起状态），
+  // 但不复用 onNodeClick 那套 250ms 去抖：那套延迟专门用来消歧"单击 vs 双击钻入"这对在 xyflow
+  // 节点上竞争的手势，阶段卡没有对应的"双击钻入"手势，不存在需要消歧的竞争，直接同步选中即可。
+  // 仍然防御性地清一次 clickTimer——避免"先点了一下 xyflow 节点（挂起 250ms 定时器）、
+  // 250ms 内又点了阶段卡"这种小概率交错场景里，稍后触发的旧定时器把 selectedStepId 覆盖回去。
+  function selectStep(stepId: string): void {
+    if (clickTimer.current) {
+      clearTimeout(clickTimer.current)
+      clickTimer.current = null
+    }
+    setSelectedStepId(stepId)
+  }
+
+  // Task 15（评审 P1-8）：返回列表前的脏状态守卫。非 dirty 直接调用 onBack（既有行为不变）；
+  // dirty 时先弹确认 Dialog，用户确认「丢弃并返回」才真正调用 onBack，取消则停留在编辑器。
+  // 禁止用 useCallback 包裹本函数——会冻结 dirty 快照（同 BoardView/InboxView closePending
+  // 的 busy 冻结教训，Task 4 评审），且 exhaustive-deps 拦不住；每次渲染的新鲜闭包正是这里
+  // 读到最新 dirty 的机制本身。
+  function requestBack(): void {
+    if (dirty) {
+      setConfirmBackOpen(true)
+    } else {
+      onBack()
+    }
+  }
+
+  function confirmBack(): void {
+    setConfirmBackOpen(false)
+    onBack()
+  }
 
   function openAddStep(): void {
     setAddStepOpen(true)
@@ -535,6 +586,17 @@ function WorkflowCanvasInner({ root, name, onBack }: WorkflowCanvasProps): JSX.E
     }
   }, { scope: rootRef, dependencies: [Boolean(pendingConnection)] })
 
+  // Task 15：返回确认 Dialog 的入场——同上面 event 名弹窗一致的 scope 选择器文本寻址
+  //（共享 <Dialog> 不对外暴露内部节点，见 WorkflowEditorView.tsx 迁移注释）。
+  useGSAP(() => {
+    if (confirmBackOpen) {
+      revealDialog(
+        '[data-testid="canvas-back-confirm"]',
+        '[data-testid="canvas-back-confirm"] .dialog',
+      )
+    }
+  }, { scope: rootRef, dependencies: [confirmBackOpen] })
+
   // 数据源切换（顶层 ⇄ 钻入）提示："内容已切换"而非资产突变的错觉——drillStepId 变化时（含
   // 首次挂载画布本身）触发一次短暂淡入，product register 原话："motion conveys state, not
   // decoration"，两层图数据源切换正是一次真实的状态变化。
@@ -558,6 +620,11 @@ function WorkflowCanvasInner({ root, name, onBack }: WorkflowCanvasProps): JSX.E
       // spec §2.1：保存成功必须失效 (root,name) 规则缓存，否则看板/收件箱用旧规则直到整页刷新
       // （评审 P0-4——invalidateWorkflowRules 为此而写却从未接线）。
       invalidateWorkflowRules(root, name)
+      // Task 15：保存成功即把快照推进到"刚保存的这份 wf"——dirty 随之清除。快照存的是闭包里
+      // 被 POST 的那个 wf（与请求体同源），不是 setSaveStatus 之后可能已经变化的最新 state；
+      // ref 写入本身不触发渲染，紧随其后的 setSaveStatus 会带出一次重渲染，dirty 在渲染期
+      // 重新计算（见 wfSnapshotRef 声明处注释——正因如此 dirty 故意不做 useMemo 记忆化）。
+      wfSnapshotRef.current = JSON.stringify(wf)
       setSaveStatus({ kind: 'ok' })
     } catch (err) {
       setSaveStatus({ kind: 'error', msg: err instanceof Error ? err.message : t('workflow_editor.network_error') })
@@ -571,25 +638,59 @@ function WorkflowCanvasInner({ root, name, onBack }: WorkflowCanvasProps): JSX.E
     <div className="workflow-canvas" ref={rootRef}>
       <div className="workflow-canvas__toolbar">
         {drillStepId ? (
-          <>
-            <div className="workflow-canvas__crumb">
-              <button className="btn--icon" onClick={() => setDrillStepId(null)}>{t('workflow_editor.breadcrumb_top')}</button>
-              <span className="workflow-canvas__crumb-current">{t('workflow_editor.breadcrumb_current', { stepId: drillStepId })}</span>
-            </div>
-            <span className="workflow-canvas__spacer" />
-            <button className="btn" onClick={openAddStep}>{t('workflow_editor.add_skill')}</button>
-          </>
+          <div className="workflow-canvas__crumb">
+            <button className="btn--icon" onClick={() => setDrillStepId(null)}>{t('workflow_editor.breadcrumb_top')}</button>
+            <span className="workflow-canvas__crumb-current">{t('workflow_editor.breadcrumb_current', { stepId: drillStepId })}</span>
+          </div>
         ) : (
           <>
-            <button className="btn--icon" onClick={onBack}>{t('workflow_editor.back')}</button>
-            <span className="workflow-canvas__spacer" />
-            <button className="btn" onClick={openAddStep}>{t('workflow_editor.add_step')}</button>
+            <button className="btn--icon" onClick={requestBack}>{t('workflow_editor.back')}</button>
+            <span className="workflow-canvas__title">{name}</span>
           </>
         )}
-        <button className="btn" onClick={save}>{t('workflow_editor.save')}</button>
+        {/* Task 15（评审 P1-8）：dirty 时标题旁「未保存」chip。放在两个分支之外——钻入态下
+            编辑 skill 依赖同样会弄脏 wf，chip 不应该因为视图钻入而消失。 */}
+        {dirty && (
+          <span className="workflow-canvas__status workflow-canvas__status--dirty" data-testid="canvas-dirty">
+            {t('workflow_editor.dirty_badge')}
+          </span>
+        )}
+        <span className="workflow-canvas__spacer" />
+        <button className="btn" onClick={openAddStep}>{t(drillStepId ? 'workflow_editor.add_skill' : 'workflow_editor.add_step')}</button>
+        {/* dirty 才实底主按钮；干净态降为 ghost——"没有可保存的东西"不该扛着每屏唯一的蓝实底。 */}
+        <button className={dirty ? 'btn' : 'btn btn--ghost'} onClick={save}>{t('workflow_editor.save')}</button>
         {saveStatus.kind === 'ok' && <span className="workflow-canvas__status workflow-canvas__status--ok">{t('workflow_editor.save_success')}</span>}
         {saveStatus.kind === 'error' && <span className="workflow-canvas__status workflow-canvas__status--error">{t('workflow_editor.save_error')}{saveStatus.msg}</span>}
       </div>
+
+      {/* Task 15：阶段卡横排（视觉基准 v4「阶段编排」段：编号圆标 + step id mono + label +
+          gate 徽章；激活=蓝描边）。仅顶层渲染——钻入态画布上是 skill DAG，卡片点击落进
+          selectedStepId 会与钻入语义打架，且 StepDetailPanel 的渲染条件本就要求 !drillStepId。
+          点击卡与画布单击节点走同一个 selectedStepId（不另起状态）——所以画布点选 intake 时
+          intake 的卡也会亮蓝描边，两条入口共享同一份选中真相。 */}
+      {!drillStepId && (
+        <section className="stage-card-row" aria-label={t('workflow_editor.stage_row_label')} data-testid="stage-card-row">
+          {wf.steps.map((s, i) => (
+            <button
+              key={s.id}
+              type="button"
+              className={selectedStepId === s.id ? 'stage-card stage-card--active' : 'stage-card'}
+              data-testid={`stage-card-${s.id}`}
+              aria-pressed={selectedStepId === s.id}
+              onClick={() => selectStep(s.id)}
+            >
+              <span className="stage-card__num" aria-hidden="true">{i + 1}</span>
+              <span className="stage-card__body">
+                <span className="stage-card__id">{s.id}</span>
+                {s.label && <span className="stage-card__label">{s.label}</span>}
+              </span>
+              {s.gate && (
+                <span className={s.gate === 'review' ? 'badge badge--gate' : 'badge badge--phase'}>{gateLabel(s.gate)}</span>
+              )}
+            </button>
+          ))}
+        </section>
+      )}
 
       {addStepOpen && (
         <div className="dialog__backdrop" ref={addStepDialogRef}>
@@ -628,6 +729,24 @@ function WorkflowCanvasInner({ root, name, onBack }: WorkflowCanvasProps): JSX.E
             onChange={(e) => setEventName(e.target.value)}
           />
           {connectError && <p className="view__note view__note--error">{connectError}</p>}
+        </Dialog>
+      )}
+      {/* Task 15（评审 P1-8）：dirty 时点"返回列表"的确认。确认=丢弃未保存编辑并 onBack；
+          取消=留在编辑器。单独由用户点击触发挂载（不与其它 Dialog 同 commit 首挂），符合
+          Dialog.tsx 登记的"禁止同 commit 父子首挂"边界。 */}
+      {confirmBackOpen && (
+        <Dialog
+          title={t('workflow_editor.discard_confirm_title')}
+          onClose={() => setConfirmBackOpen(false)}
+          testid="canvas-back-confirm"
+          actions={
+            <>
+              <button className="btn btn--ghost" onClick={() => setConfirmBackOpen(false)}>{t('workflow_editor.cancel')}</button>
+              <button className="btn btn--danger" onClick={confirmBack}>{t('workflow_editor.discard_confirm_action')}</button>
+            </>
+          }
+        >
+          <p className="dialog__desc">{t('workflow_editor.discard_confirm_desc')}</p>
         </Dialog>
       )}
 

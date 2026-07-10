@@ -49,6 +49,7 @@ export function NewChangeDialog({ root, onClose, onCreated }: NewChangeDialogPro
   // 迁移前的手写 backdrop 是死 div、busy 期间点它没有任何效果——这里补回等价语义。
   // busy 态是本组件内部状态，App 拿不到，故守卫包在这里而非调用方。取消钮也复用
   // 同一个函数（本来就该和 Esc/backdrop 一致，不必各写一份）。
+  // 禁止用 useCallback 包裹本函数——会冻结 busy 快照，连取消钮的 busy 语义一起假死，且 exhaustive-deps 拦不住。
   function guardedClose(): void {
     if (!busy) onClose()
   }

@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import gsap from 'gsap'
 import { useGSAP } from '@gsap/react'
 import { useT } from '../i18n'
+import { Dialog } from '../shell/Dialog'
 import { revealDialog, slideInPanel } from './motion'
 
 gsap.registerPlugin(useGSAP)
@@ -52,7 +53,9 @@ export function StepDetailPanel({ step, onChange, onClose }: StepDetailPanelProp
   const [guardN, setGuardN] = useState('1')
   const [guardNError, setGuardNError] = useState<string | null>(null)
   const rootRef = useRef<HTMLDivElement>(null)
-  const addFieldDialogRef = useRef<HTMLDivElement>(null)
+  // Task 15（Task 4 移交的第 8 处 backdrop）：字段名输入框的 initialFocusRef——迁移到共享
+  // <Dialog> 后由它负责挂载即聚焦（同 NewChangeDialog 的迁移模式）。
+  const fieldInputRef = useRef<HTMLInputElement>(null)
 
   // 面板每次挂载（选中一个 step）滑入一次——dependencies: [] 只在挂载时播放一次；若用户
   // 不关闭面板直接点另一个 step 节点，父组件只换 `step` prop、面板不会被卸载重挂，因此不会
@@ -61,9 +64,15 @@ export function StepDetailPanel({ step, onChange, onClose }: StepDetailPanelProp
     slideInPanel(rootRef.current)
   }, { scope: rootRef, dependencies: [] })
 
+  // 迁移到共享 <Dialog> 后不再有 backdrop 的 ref 可拿（Dialog 不对外暴露内部 DOM 节点），
+  // 改用 useGSAP 的 scope 选择器文本寻址——同 WorkflowEditorView.tsx/WorkflowCanvas.tsx
+  // Task 4 迁移时的既有写法，用 data-testid 精确寻址避免误选其它 backdrop。
   useGSAP(() => {
-    if (addingField && addFieldDialogRef.current) {
-      revealDialog(addFieldDialogRef.current, addFieldDialogRef.current.querySelector('.dialog'))
+    if (addingField) {
+      revealDialog(
+        '[data-testid="stepdetail-add-field"]',
+        '[data-testid="stepdetail-add-field"] .dialog',
+      )
     }
   }, { scope: rootRef, dependencies: [addingField] })
 
@@ -192,23 +201,31 @@ export function StepDetailPanel({ step, onChange, onClose }: StepDetailPanelProp
       {renderFieldList('inputs', t('workflow_editor.detail_inputs'))}
       {renderFieldList('outputs', t('workflow_editor.detail_outputs'))}
 
+      {/* Task 15（Task 4 移交的第 8 处 backdrop）：迁移到统一 <Dialog>——Esc 关/焦点困笼/
+          卸载归位由共享组件接管；取消钮语义保留。用户点"+ 字段"后才挂载（独立 commit），
+          不与宿主的任何 Dialog 构成同 commit 父子首挂（Dialog.tsx 登记的已知边界）。 */}
       {addingField && (
-        <div className="dialog__backdrop" ref={addFieldDialogRef}>
-          <div role="dialog" className="dialog">
-            <h3 className="dialog__title">{t('workflow_editor.detail_field_add')}</h3>
-            <input
-              className="input"
-              placeholder={t('workflow_editor.detail_field_name_prompt')}
-              value={fieldName}
-              onChange={(e) => setFieldName(e.target.value)}
-            />
-            {fieldNameError && <p className="view__note view__note--error">{fieldNameError}</p>}
-            <div className="dialog__actions">
+        <Dialog
+          title={t('workflow_editor.detail_field_add')}
+          onClose={() => setAddingField(null)}
+          testid="stepdetail-add-field"
+          initialFocusRef={fieldInputRef}
+          actions={
+            <>
               <button className="btn btn--ghost" onClick={() => setAddingField(null)}>{t('workflow_editor.cancel')}</button>
               <button className="btn" onClick={confirmAddField}>{t('workflow_editor.confirm')}</button>
-            </div>
-          </div>
-        </div>
+            </>
+          }
+        >
+          <input
+            ref={fieldInputRef}
+            className="input"
+            placeholder={t('workflow_editor.detail_field_name_prompt')}
+            value={fieldName}
+            onChange={(e) => setFieldName(e.target.value)}
+          />
+          {fieldNameError && <p className="view__note view__note--error">{fieldNameError}</p>}
+        </Dialog>
       )}
     </div>
   )

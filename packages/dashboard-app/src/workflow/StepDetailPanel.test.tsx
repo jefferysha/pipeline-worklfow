@@ -88,6 +88,33 @@ describe('StepDetailPanel', () => {
   })
 })
 
+// Task 15（Task 4 移交的第 8 处手写 backdrop）：字段弹窗迁移到统一 <Dialog>——键盘礼仪
+// （Esc 关、initialFocusRef 挂载即聚焦）由共享组件接管；取消钮语义原样保留。断言手法照
+// Task 4 的迁移模式（App.test.tsx register-dialog / NewChangeDialog.test.tsx 同款）。
+describe('字段弹窗迁移到统一 Dialog（Task 15，Task 4 移交的第 8 处 backdrop）', () => {
+  it('打开"+ 字段"弹窗 → 字段名输入框自动聚焦（initialFocusRef）；按 Esc 关闭且不触发 onChange', () => {
+    const { onChange } = renderPanel()
+    fireEvent.click(screen.getAllByRole('button', { name: '+ 字段' })[1]!) // outputs
+    expect(screen.getByTestId('stepdetail-add-field')).toBeInTheDocument()
+    // 迁移前的手写 backdrop 不做任何焦点管理（activeElement 停在 body）——这条断言就是红。
+    expect(document.activeElement).toBe(screen.getByPlaceholderText('字段名'))
+    // 迁移前 Esc 无人监听、弹窗关不掉——这条断言也是红。
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.queryByTestId('stepdetail-add-field')).not.toBeInTheDocument()
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('取消钮语义保留：点取消关闭弹窗、不触发 onChange（迁移不回归）', () => {
+    const { onChange } = renderPanel()
+    fireEvent.click(screen.getAllByRole('button', { name: '+ 字段' })[0]!) // inputs
+    fireEvent.change(screen.getByPlaceholderText('字段名'), { target: { value: 'abc' } })
+    fireEvent.click(screen.getByRole('button', { name: '取消' }))
+    expect(screen.queryByTestId('stepdetail-add-field')).not.toBeInTheDocument()
+    expect(screen.queryByPlaceholderText('字段名')).not.toBeInTheDocument()
+    expect(onChange).not.toHaveBeenCalled()
+  })
+})
+
 describe('guard 新增表单（补齐历史缺口：此前只有移除没有新增）', () => {
   it('默认类型 tasks-at-least 显示 n 输入；添加 n=5 → onChange 追加 guard', () => {
     const { onChange } = renderPanel()

@@ -268,6 +268,13 @@ export const zh: Dict = {
     gate_badge: '复核门',
     gate_badge_confirm: '确认门',
     invalid_guard_n: 'n 须为 ≥1 的整数',
+    // Task 15（评审 P1-8）：脏状态守卫——标题旁「未保存」chip + 返回列表确认 Dialog。
+    dirty_badge: '未保存',
+    discard_confirm_title: '未保存的编辑将丢弃',
+    discard_confirm_desc: '返回列表会放弃尚未保存的修改，确定继续？',
+    discard_confirm_action: '丢弃并返回',
+    // Task 15：画布上方阶段卡横排（视觉基准 v4 demo「阶段编排」段）的 aria-label。
+    stage_row_label: '阶段编排',
   },
 }
 
@@ -524,6 +531,11 @@ export const en: Dict = {
     gate_badge: 'review gate',
     gate_badge_confirm: 'confirm gate',
     invalid_guard_n: 'n must be an integer ≥ 1',
+    dirty_badge: 'Unsaved',
+    discard_confirm_title: 'Unsaved edits will be discarded',
+    discard_confirm_desc: 'Going back to the list discards your unsaved changes. Continue?',
+    discard_confirm_action: 'Discard and go back',
+    stage_row_label: 'Stages',
   },
 }
 
