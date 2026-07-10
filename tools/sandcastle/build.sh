@@ -32,5 +32,17 @@ case "$VARIANT" in
 esac
 
 echo "构建 ${TAG}（--build-arg ${BUILD_ARG}）..."
-docker build -f tools/sandcastle/Dockerfile -t "$TAG" --build-arg "$BUILD_ARG" "$REPO_ROOT"
-echo "完成：$TAG"
+docker build -f tools/sandcastle/Dockerfile -t "${TAG}" --build-arg "${BUILD_ARG}" "$REPO_ROOT"
+
+# 镜像 ↔ 仓库脚本版本对账（真机验收 P1，2026-07-11）：host 侧 runner
+# （packages/automation/src/runner/runner.ts 的 AFK_RUN_SCRIPT_SHA256 + buildAfkRunCommand 前置守卫）
+# 在每次 run 前核对镜像内 /usr/local/bin/pipeline-afk-run 的 sha256，不符则 exit 95 硬错误。
+# 这里构建完当场自验一次，陈旧层缓存/错构建当场可见，而不是留到 run 时才炸。
+REPO_SHA="$( (sha256sum tools/sandcastle/pipeline-afk-run.sh 2>/dev/null || shasum -a 256 tools/sandcastle/pipeline-afk-run.sh) | awk '{print $1}')"
+IMAGE_SHA="$(docker run --rm --entrypoint sha256sum "${TAG}" /usr/local/bin/pipeline-afk-run | awk '{print $1}')"
+if [ "${REPO_SHA}" != "${IMAGE_SHA}" ]; then
+  echo "对账失败：镜像内 pipeline-afk-run（${IMAGE_SHA}）不等于仓库脚本（${REPO_SHA}）——构建缓存异常？" >&2
+  exit 1
+fi
+echo "完成：${TAG}（pipeline-afk-run sha256=${IMAGE_SHA}，已与仓库脚本对账一致）"
+echo "提醒：host 侧 runner.ts 的 AFK_RUN_SCRIPT_SHA256 须与该 sha 一致（由 runner.test.ts 同步测试钉住）"

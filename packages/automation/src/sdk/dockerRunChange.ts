@@ -26,7 +26,7 @@ import type { StateStore } from '@pipeline-lite/kernel'
 import { runChangeInSandbox } from '../lifecycle/lifecycle.js'
 import { createLifecyclePorts } from '../lifecycle/ports.js'
 import { nodeExec, type ExecFn } from '../runner/exec.js'
-import { sanitize, type RunChange } from '../scheduler/scheduler.js'
+import { sanitizePath, type RunChange } from '../scheduler/scheduler.js'
 import type { AutomationLevel } from '../types.js'
 
 export interface DockerRunChangeOptions {
@@ -57,8 +57,10 @@ export interface DockerRunChangeOptions {
    * 子串（如 "repo #2" 这类去重目录名），直写会撞 kernel 四闸（parse.ts::quoteGate 禁换行/
    * ": "/" #"/首引号）同步 throw QuoteGateError，且该错误无 _tag，classifyFailure 只当瞬态
    * retry 处理——同一 hostRepoDir 永不可能好转，直到 attempts 耗尽 failed。故写前复用
-   * scheduler.ts::sanitize()（与 automation_last_error/automation_preserved_path 同一份实现，
-   * 不分叉出第二份）。automation_sandbox 不需要：containerName 由 container.ts::createDockerSandbox
+   * scheduler.ts::sanitizePath()（四闸清洗的同一份实现，不分叉出第二份；**不截断**——真机验收
+   * P1：深路径项目 worktree 全路径 > 200 字符被 sanitize 的 slice(0,200) 截成残路径，server 侧
+   * cancelAfkRun 按残路径写 .cancel-requested → ENOENT → dashboard cancel 永远 500）。
+   * automation_sandbox 不需要：containerName 由 container.ts::createDockerSandbox
    * 生成，定长安全字符集 [0-9a-z-]（sandcastle-<base36 时间戳>-<6 位 hex 随机>），不可能含
    * 四闸任何一种禁串。
    */
@@ -91,7 +93,7 @@ export const createDockerRunChange = (opts: DockerRunChangeOptions): RunChange =
   // 不误消毒不该消毒的字段。
   const setStateField = store
     ? (name: string, field: string, value: string): Promise<void> =>
-        store.set(changeDir(name), field as never, field === 'automation_worktree' ? sanitize(value) : value)
+        store.set(changeDir(name), field as never, field === 'automation_worktree' ? sanitizePath(value) : value)
     : undefined
   const ports = createLifecyclePorts({
     exec,

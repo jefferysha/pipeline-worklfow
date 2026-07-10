@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { RunOutcome } from '../types.js'
-import { createScheduler } from './scheduler.js'
+import { createScheduler, sanitize, sanitizePath } from './scheduler.js'
 import type { SchedulerDeps, StateWriter } from './scheduler.js'
 
 /** 内存 StateWriter fake：真状态机语义（claim/CAS/attempts），无 fs。 */
@@ -190,5 +190,29 @@ describe('scheduler round（真状态机写回 + 分级放权）', () => {
     }
     await createScheduler(deps).runRoundOnce(['c'])
     expect(failedSync).toContain('c')
+  })
+})
+
+/**
+ * 真机验收 P1（2026-07-11）：sanitize 的 slice(0,200) 只该管"错误消息别爆长"，绝不该管路径——
+ * automation_worktree/automation_preserved_path 是要被 cancelAfkRun / 现场恢复按原样使用的真路径，
+ * 深路径项目（>200 字符）被截断后 cancel 按残path写 .cancel-requested → ENOENT → 500。
+ * 拆成两个导出：sanitizePath（四闸清洗、不截断）与 sanitize（同一清洗 + 200 字符截断，错误消息用）。
+ */
+describe('sanitize / sanitizePath —— 四闸消毒的截断纪律（深路径 P1）', () => {
+  it('sanitizePath：>200 字符的深 worktree 全路径完整保留（不截断），干净路径原样返回', () => {
+    const deep = `/Users/x/${'p'.repeat(220)}/.sandcastle/worktrees/sandcastle-pipeline-af-fix-thing`
+    expect(deep.length).toBeGreaterThan(200)
+    expect(sanitizePath(deep)).toBe(deep)
+  })
+
+  it('sanitizePath：仍做与 sanitize 同一份四闸清洗（换行 / ": " / " #" / 首引号）', () => {
+    expect(sanitizePath('"a\nb: c #d')).toBe('a b; c d')
+    expect(sanitizePath('')).toBe('error')
+  })
+
+  it('sanitize（错误消息用）：保持 ≤200 字符截断（automation_last_error 既有契约不回归）', () => {
+    expect(sanitize('e'.repeat(500)).length).toBeLessThanOrEqual(200)
+    expect(sanitize('x\ny: z #w')).toBe('x y; z w')
   })
 })

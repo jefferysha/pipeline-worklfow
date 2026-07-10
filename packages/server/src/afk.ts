@@ -240,7 +240,20 @@ export async function cancelAfkRun(store: StateStore, changeDir: string): Promis
   if (!worktree || !sandbox) {
     return { ok: false, error: '缺 automation_worktree/automation_sandbox，无法定位容器' }
   }
-  await writeFile(join(worktree, CANCEL_MARKER_FILE), '1', 'utf8')
+  // 真机验收 P1（2026-07-11）：worktree 目录可能不存在——历史上 automation_worktree 曾被
+  // scheduler sanitize 的 slice(0,200) 截断（深路径项目截成 "…/sandcastle-pipeline-af" 残路径，
+  // 写回已改走 sanitizePath 不再截断，但旧数据仍在盘上），或 worktree 已被并发 teardown 清理。
+  // 裸抛 ENOENT 会流进 handlePost 顶层兜底 catch 变 500，且 err.message 携带的原始全路径直接
+  // 泄漏进响应体。这里就地拦成本端点语义内的 400（ok:false），文案只带 errno code、不带路径。
+  try {
+    await writeFile(join(worktree, CANCEL_MARKER_FILE), '1', 'utf8')
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException | null)?.code ?? 'unknown'
+    return {
+      ok: false,
+      error: `无法在 automation_worktree 目录落取消标记（${code}）：worktree 目录可能已被清理，或字段值曾被旧版截断损坏——若任务实际已不在跑，可直接重试/放弃该任务`,
+    }
+  }
   await new Promise<void>((resolve) => {
     execFile('docker', ['kill', sandbox], () => resolve()) // kill 失败（容器已退出）不视为错误
   })

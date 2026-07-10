@@ -869,6 +869,23 @@ describe('POST /api/afk/:name/cancel —— 取消运行中的 automation 任务
     expect(existsSync(join(h.worktreeDir, '.cancel-requested'))).toBe(false)
   })
 
+  it('automation_worktree 指向不存在的目录（深路径截断/已清理类损坏）→ 400 干净错误，不 500、不泄漏原始全路径（真机 P1）', async () => {
+    const h = await start()
+    // 模拟真机现场：字段里存的是坏路径（曾被 200 字符截断成 "…/sandcastle-pipeline-af" 一类），磁盘上不存在
+    const bogusWorktree = join(h.worktreeDir, 'truncated-away', 'sandcastle-pipeline-af')
+    await h.store.set(h.changeDir, 'automation', 'running')
+    await h.store.set(h.changeDir, 'automation_sandbox', 'sandcastle-test-container-not-real')
+    await h.store.set(h.changeDir, 'automation_worktree', bogusWorktree)
+    const r = await reqPost(h.port, `/api/afk/${h.name}/cancel`, { root: h.root }, {
+      headers: { Authorization: `Bearer ${h.token}` },
+    })
+    expect(r.status).toBe(400) // writeFile ENOENT 裸抛会走顶层兜底 catch 变 500（RED）
+    const body = r.json<{ ok: boolean; error?: string }>()
+    expect(body.ok).toBe(false)
+    expect(body.error).toBeTruthy()
+    expect(body.error!).not.toContain(bogusWorktree) // 原始 ENOENT 全路径不得泄漏进响应体
+  })
+
   it('无 token → 401（确认新路由确实接在 handlePost 统一鉴权守卫之后，而非绕过）', async () => {
     const h = await start()
     await h.store.set(h.changeDir, 'automation', 'running')

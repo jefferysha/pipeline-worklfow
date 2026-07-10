@@ -1,8 +1,9 @@
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createStateStore } from '@pipeline-lite/kernel'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { worktreePathFor } from '../lifecycle/worktree.js'
 import type { ExecFn, ExecResult } from '../runner/exec.js'
 import { createDockerRunChange } from './dockerRunChange.js'
 
@@ -197,6 +198,36 @@ describe('createDockerRunChange · automation_worktree 写回前 sanitize（四�
     const worktree = await store.get(dir, 'automation_worktree')
     expect(worktree).not.toBe('')
     expect(worktree).not.toContain(' #')
+  })
+})
+
+/**
+ * 真机验收 P1（2026-07-11）：深路径项目（worktree 全路径 > 200 字符）下 automation_worktree 被
+ * sanitize 的 slice(0,200) 截断（真机截成 "…/sandcastle-pipeline-af"），cancelAfkRun 按残路径写
+ * .cancel-requested → ENOENT → dashboard cancel 永远 500。路径消毒只做四闸清洗，绝不截断
+ * （scheduler.ts::sanitizePath），截断只属于错误消息（sanitize）。
+ */
+describe('createDockerRunChange · automation_worktree 深路径不截断（真机 P1：cancel 500 根因）', () => {
+  let base: string
+  beforeEach(async () => { base = await mkdtemp(join(tmpdir(), 'dockerrc-deep-')) })
+  afterEach(async () => { await rm(base, { recursive: true, force: true }) })
+
+  it('worktree 全路径 > 200 字符 → 完整写回真 StateStore（与 worktreePathFor 派生值逐字相等）', async () => {
+    const seg = 'x'.repeat(60)
+    const repo = join(base, seg, seg, seg) // 深路径项目（如 scratchpad 里 226 字符的真机复现）
+    await mkdir(repo, { recursive: true })
+    const { exec } = makeFakeExec()
+    const store = createStateStore()
+    const dir = await store.init({ repoRoot: repo, name: 'deep', track: 'backend', preset: 'full' })
+
+    const runChange = createDockerRunChange({
+      hostRepoDir: repo, base: 'main', level: 'L1', image: 'sandcastle:local', exec, store,
+    })
+    await expect(runChange('deep', new AbortController().signal)).resolves.toBeDefined()
+
+    const expected = worktreePathFor(repo, 'sandcastle-pipeline/deep')
+    expect(expected.length).toBeGreaterThan(200) // 前提成立：确实超过截断阈值
+    expect(await store.get(dir, 'automation_worktree')).toBe(expected) // 截断则必不相等（RED）
   })
 })
 

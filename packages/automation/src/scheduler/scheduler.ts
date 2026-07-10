@@ -66,22 +66,31 @@ export interface Scheduler {
 }
 
 /**
- * yaml_set 拒 换行 / ": " / 首引号（kernel 四闸）。把错误 message 压成单行安全 token，
- * 让字段写永不弹（老仓 scheduler/scheduler.ts:232-239）。
+ * yaml_set 拒 换行 / ": " / 首引号（kernel 四闸）。四闸清洗的唯一实现——任何直接把值转发给真
+ * StateStore.set 的 automation_* 字段写回都必须复用它（文化硬规则：ONE sanitization，不许分叉
+ * 出第二份）。见 sdk/dockerRunChange.ts::setStateField 对 automation_worktree 的复用（Task 1
+ * 复查 Fix 2——worktreePath 由 hostRepoDir 真机器路径拼出，同样可能撞四闸）。
  *
- * export：任何直接把值转发给真 StateStore.set 的 automation_* 字段写回都必须复用这唯一实现
- * （文化硬规则：ONE sanitization，不许分叉出第二份）。见 sdk/dockerRunChange.ts::setStateField
- * 对 automation_worktree 的复用（Task 1 复查 Fix 2——worktreePath 由 hostRepoDir 真机器路径拼出，
- * 同样可能撞四闸，与这里的 last_error/preserved_path 同类风险）。
+ * 截断纪律（真机验收 P1，2026-07-11）：**不截断**。截断只属于错误消息（见下方 sanitize）——
+ * automation_worktree/automation_preserved_path 是要被 server 侧 cancelAfkRun（写 .cancel-requested
+ * 标记）与现场恢复按原样使用的真路径，深路径项目（worktree 全路径 > 200 字符）被 slice(0,200)
+ * 截成残路径后，cancel 按残路径 writeFile → ENOENT → dashboard 永远 500，运行中的任务无法从 UI 终止。
+ * kernel 四闸本身没有长度闸，路径不需要也不允许截断。
  */
-export const sanitize = (s: string): string =>
+export const sanitizePath = (s: string): string =>
   s
     .replace(/[\r\n]+/g, ' ')
     .replace(/:\s/g, '; ')
     .replace(/\s#/g, ' ')
     .replace(/^["']+/, '')
-    .slice(0, 200)
     .trim() || 'error'
+
+/**
+ * 错误 message 专用：同一份四闸清洗 + 压到 200 字符的单行安全 token，让字段写永不弹
+ * （老仓 scheduler/scheduler.ts:232-239）。只喂 automation_last_error 这类**消息**字段；
+ * 路径字段一律走 sanitizePath（见上）。
+ */
+export const sanitize = (s: string): string => sanitizePath(s).slice(0, 200).trim() || 'error'
 
 /** 已 settle 的终态；"skipped" = 写回发现 change 已被他人 settle，啥都没动。 */
 type Terminal = AutomationState | 'skipped'
@@ -139,7 +148,9 @@ export const createScheduler = (deps: SchedulerDeps): Scheduler => {
       const won = await state.setAutomationOwned(name, 'conflict')
       if (!won) return 'skipped'
       await state.setField(name, 'automation_last_error', lastError)
-      if (c.preservedPath) await state.setField(name, 'automation_preserved_path', sanitize(c.preservedPath))
+      // 路径字段走 sanitizePath（不截断）：preserved_path 是留现场的真 worktree 路径，深路径项目
+      // 截断即损坏（同 automation_worktree 的真机 P1 同类，见 sanitizePath 注释）。
+      if (c.preservedPath) await state.setField(name, 'automation_preserved_path', sanitizePath(c.preservedPath))
       return 'conflict'
     }
 

@@ -81,7 +81,35 @@ export const parseSandboxReport = (stdout: string): SandboxReport => {
 }
 
 /**
- * 沙箱内 afk-run 命令（老仓 runner/docker/pipeline-afk-run.sh，全链 #29c）。
+ * 仓库 tools/sandcastle/pipeline-afk-run.sh 现内容的 sha256 —— 镜像 ↔ 仓库脚本的版本对账锚点
+ * （真机验收 P1，2026-07-11：现役 sandcastle:local 镜像内置的旧版脚本无 codex/PIPELINE_RUNNER
+ * 分支，runner: codex 被静默降级走确定性路径并「成功」结算 paused，exit 96 诚实报错路径不可达，
+ * 而镜像与仓库脚本此前没有任何对账机制，漂移完全不可见）。
+ *
+ * 同步纪律（两道闸，缺一不可）：
+ *   ① runner.test.ts 的 sha 同步测试把本常量与仓库脚本现内容钉死——改脚本不 bump 常量 → 单测红；
+ *   ② buildAfkRunCommand 把本常量嵌进 run 前置守卫——镜像内脚本 sha 不符 → exit 95 + 重建指引，
+ *      经 ports.ts runWork 非零退出 throw 流进 automation_last_error，绝不带陈旧脚本静默跑。
+ * bump 方式：shasum -a 256 tools/sandcastle/pipeline-afk-run.sh。bump 后旧镜像自动 fail-loud，
+ * 重建入口 tools/sandcastle/build.sh（构建完自验镜像内 sha，见该脚本）。
+ */
+export const AFK_RUN_SCRIPT_SHA256 = 'ced942a5193c6af48eeb70fd34a0c81e928b40a7fcb9796ed8bb3eb450fd8704'
+
+/** 对账失败的沙箱退出码（与脚本内 96=codex CLI 缺失、97=tap proxy 未起同段的硬错误码位）。 */
+export const AFK_RUN_DRIFT_EXIT_CODE = 95
+
+/**
+ * run 前置对账守卫（沙箱内执行，busybox sha256sum/grep 皆为 alpine 自带 applet）：镜像内
+ * /usr/local/bin/pipeline-afk-run 的 sha256 必须等于 AFK_RUN_SCRIPT_SHA256，否则打清晰 stderr
+ * 并 exit 95——绝不让陈旧脚本静默跑（sha256sum 输出格式 "<hash>  <path>"，锚 "^<hash> " 两端皆容）。
+ */
+const AFK_RUN_DRIFT_GUARD =
+  `sha256sum /usr/local/bin/pipeline-afk-run 2>/dev/null | grep -q "^${AFK_RUN_SCRIPT_SHA256} "` +
+  ` || { echo "sandcastle 镜像内 pipeline-afk-run 与仓库 tools/sandcastle/pipeline-afk-run.sh 不一致（镜像陈旧或脚本已更新未重建）——请重建镜像：tools/sandcastle/build.sh" >&2; exit ${AFK_RUN_DRIFT_EXIT_CODE}; }`
+
+/**
+ * 沙箱内 afk-run 命令（老仓 runner/docker/pipeline-afk-run.sh，全链 #29c）。整条经
+ * container.ts::buildExecArgs 的 `sh -c` 单参执行，故守卫与真命令可用 `;` 串接，守卫恒在前。
  *
  * v5 T20 runner 分派：runner === 'codex' → 注入 PIPELINE_RUNNER=codex，沙箱脚本据此改起
  * codex exec 无头会话（codex CLI 惯例；脚本内 CLI 缺失时打清晰错误并非零退出——错误经
@@ -90,8 +118,8 @@ export const parseSandboxReport = (stdout: string): SandboxReport => {
  */
 export const buildAfkRunCommand = (name: string, runner?: string): string =>
   runner === 'codex'
-    ? `PIPELINE_AFK=1 PIPELINE_RUNNER=codex pipeline-afk-run ${name}`
-    : `PIPELINE_AFK=1 pipeline-afk-run ${name}`
+    ? `${AFK_RUN_DRIFT_GUARD}; PIPELINE_AFK=1 PIPELINE_RUNNER=codex pipeline-afk-run ${name}`
+    : `${AFK_RUN_DRIFT_GUARD}; PIPELINE_AFK=1 pipeline-afk-run ${name}`
 
 /**
  * 跑一个 change 的 build→verify→ship 并回读握手（注入 exec 面）。非零退出 = build/verify 真失败
