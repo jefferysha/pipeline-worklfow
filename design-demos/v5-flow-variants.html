@@ -1,0 +1,568 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>进度流程样式选型 — 箭头流程 × 动画 4 方案</title>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/gsap.min.js"></script>
+<style>
+/* ============ tokens(v5-progress-workbench 逐字继承) ============ */
+:root, [data-theme="light"] {
+  color-scheme: light;
+  --bg:#f7f7f5; --card:#ffffff; --fill:#f4f4f2; --fill-2:#ebebe8;
+  --border:#e4e4e0; --border-2:#d2d2cc;
+  --text:#0d0d0d; --text-2:#40403c; --text-3:#6a6a62;
+  --accent:#0b6cff; --accent-d:#0a5ce0; --accent-t:#eaf2ff; --accent-b:#c5daff;
+  --green:#1f9d51; --green-d:#187339; --green-t:#e9f6ee; --green-b:#c8e8d2;
+  --red:#d92d20; --red-d:#b42318; --red-t:#fdf0ee; --red-b:#f3cfc9;
+  --ink:#0d0d0d; --ink-fg:#ffffff; --ink-hover:#2e2e2c;
+  --btn-bg:#0b6cff; --btn-fg:#ffffff; --btn-hover:#0a5ce0;
+  --code-bg:#f6f6f4; --code-border:#e4e4e0;
+  --shadow:0 1px 2px rgba(0,0,0,.04);
+  --shadow-2:0 1px 3px rgba(0,0,0,.06),0 1px 2px rgba(0,0,0,.04);
+  --ring:rgba(11,108,255,.13);
+}
+[data-theme="dark"] {
+  color-scheme: dark;
+  --bg:#0d0d0d; --card:#171717; --fill:#1e1e1d; --fill-2:#262624;
+  --border:#262626; --border-2:#3a3a37;
+  --text:#f2f2f0; --text-2:#c9c9c4; --text-3:#94948d;
+  --accent:#4d94ff; --accent-d:#7fb2ff; --accent-t:rgba(77,148,255,.13); --accent-b:rgba(77,148,255,.38);
+  --green:#3fb950; --green-d:#55c368; --green-t:rgba(63,185,80,.13); --green-b:rgba(63,185,80,.35);
+  --red:#e5534b; --red-d:#f2867e; --red-t:rgba(229,83,75,.14); --red-b:rgba(229,83,75,.40);
+  --ink:#f2f2f2; --ink-fg:#0d0d0d; --ink-hover:#d8d8d5;
+  --btn-bg:#2b7fff; --btn-fg:#ffffff; --btn-hover:#4d94ff;
+  --code-bg:#111110; --code-border:#2a2a28;
+  --shadow:0 1px 2px rgba(0,0,0,.35);
+  --shadow-2:0 2px 6px rgba(0,0,0,.35);
+  --ring:rgba(77,148,255,.20);
+}
+[data-theme="light"] .only-dark { display:none }
+[data-theme="dark"] .only-light { display:none }
+
+/* ============ base(同源复制) ============ */
+* { box-sizing:border-box; margin:0; padding:0 }
+html { scroll-behavior:smooth }
+body {
+  font: 14px/1.55 system-ui,-apple-system,"SF Pro Text","PingFang SC","Hiragino Sans GB","Microsoft YaHei","Segoe UI",sans-serif;
+  background:var(--bg); color:var(--text); min-width:1180px;
+}
+.mono { font-family: ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,"JetBrains Mono",monospace }
+a { color:var(--accent); text-decoration:none }
+button { font:inherit; color:inherit; background:none; border:none; cursor:pointer }
+:focus-visible { outline:2px solid var(--accent); outline-offset:2px; border-radius:8px }
+.overline { font-size:12px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--text-3) }
+
+.card { background:var(--card); border:1px solid var(--border); border-radius:13px; box-shadow:var(--shadow) }
+.card + .card { margin-top:18px }
+.card-h { display:flex; align-items:center; gap:10px; padding:13px 16px; border-bottom:1px solid var(--border) }
+.card-t { font-size:14.5px; font-weight:700 }
+.sec { padding:15px 16px }
+.card-f { display:flex; align-items:center; gap:12px; padding:11px 16px; border-top:1px solid var(--border) }
+.card-f .hint { font-size:12px; color:var(--text-3) }
+
+.btn {
+  display:inline-flex; align-items:center; gap:6px; height:34px; padding:0 14px;
+  border-radius:9px; font-size:13.5px; font-weight:600; border:1px solid transparent;
+  transition:background .12s, border-color .12s, box-shadow .12s;
+}
+.btn--tint { background:var(--accent-t); border-color:var(--accent-b); color:var(--accent-d) }
+.btn--tint:hover { border-color:var(--accent) }
+
+.iconbtn { display:grid; place-items:center; width:34px; height:34px; border-radius:10px; color:var(--text-2) }
+.iconbtn:hover { background:var(--fill) }
+.iconbtn svg { width:16px; height:16px; stroke:currentColor; stroke-width:1.7; fill:none; stroke-linecap:round; stroke-linejoin:round }
+
+.toast { position:fixed; left:50%; bottom:28px; transform:translate(-50%, 12px); background:var(--ink); color:var(--ink-fg); font-size:12.5px; padding:8px 16px; border-radius:999px; opacity:0; pointer-events:none; transition:opacity .18s, transform .18s; z-index:99 }
+.toast.show { opacity:1; transform:translate(-50%, 0) }
+
+/* ============ 选型页骨架 ============ */
+.page { max-width:1080px; margin:0 auto; padding:26px 28px 48px }
+.page-h { display:flex; align-items:flex-start; gap:12px; margin-bottom:22px }
+.page-h h1 { font-size:22px; font-weight:700; margin-top:4px; font-family:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace }
+.page-sub { margin-top:6px; font-size:13px; color:var(--text-3) }
+.sp { flex:1 }
+.pagefoot { margin-top:26px; font-size:12px; color:var(--text-3); text-align:center }
+
+.v-letter { width:24px; height:24px; border-radius:8px; background:var(--ink); color:var(--ink-fg); display:grid; place-items:center; font-weight:800; font-size:13px; flex:none; font-family:ui-monospace,Menlo,monospace }
+.v-tag { font-size:12.5px; color:var(--text-3) }
+
+.flow-row { display:flex; align-items:center; gap:16px; padding:9px 0 }
+.flow-row + .flow-row { margin-top:4px }
+.row-name { flex:none; width:104px; text-align:right; font-size:12.5px; color:var(--text-2) }
+
+/* ============ A 箭头带(chevron 铰接带) ============ */
+.fa-band { display:flex; flex:1; min-width:0 }
+.fa-seg {
+  position:relative; flex:1; height:38px; margin-left:-9px; overflow:hidden;
+  display:flex; align-items:center; justify-content:center; gap:7px;
+  font-size:12.5px; font-weight:600;
+  clip-path:polygon(0 0, calc(100% - 13px) 0, 100% 50%, calc(100% - 13px) 100%, 0 100%, 13px 50%);
+}
+.fa-seg:first-child { margin-left:0; border-radius:9px 0 0 9px; clip-path:polygon(0 0, calc(100% - 13px) 0, 100% 50%, calc(100% - 13px) 100%, 0 100%) }
+.fa-seg:last-child { border-radius:0 9px 9px 0; clip-path:polygon(0 0, 100% 0, 100% 100%, 0 100%, 13px 50%) }
+.fa--done { background:var(--green-t); color:var(--green-d) }
+.fa--cur { background:var(--btn-bg); color:#fff }
+.fa--fail { background:var(--red); color:#fff }
+.fa--future { background:var(--fill-2); color:var(--text-3) }
+.fa-note { font-size:11px; font-weight:700; font-style:normal; padding:1px 7px; border-radius:999px; background:rgba(255,255,255,.24) }
+.fa-gloss {
+  position:absolute; top:0; bottom:0; left:0; width:38%; opacity:0; pointer-events:none;
+  background:linear-gradient(105deg, rgba(255,255,255,0) 12%, rgba(255,255,255,.5) 50%, rgba(255,255,255,0) 88%);
+}
+
+/* ============ B 节点 + SVG 箭头连线 ============ */
+.fb-flow { display:flex; align-items:flex-start; flex:1; min-width:0 }
+.fb-node { flex:none; width:58px; display:flex; flex-direction:column; align-items:center; gap:6px; position:relative }
+.fb-dot { width:26px; height:26px; border-radius:999px; display:grid; place-items:center; font-size:12px; font-weight:700 }
+.fb--done .fb-dot { background:var(--green); color:#fff }
+.fb--cur .fb-dot { background:var(--btn-bg); color:#fff; box-shadow:0 0 0 4px var(--accent-t) }
+.fb--cur .fb-dot::after { content:""; width:8px; height:8px; border-radius:999px; background:#fff }
+.fb--fail .fb-dot { background:var(--red); color:#fff; box-shadow:0 0 0 4px var(--red-t) }
+.fb--future .fb-dot { background:var(--fill-2); color:var(--text-3); border:1.5px dashed var(--border-2) }
+.fb-gdot { position:absolute; top:-3px; right:13px; width:9px; height:9px; border-radius:999px; background:var(--border-2); border:2px solid var(--card) }
+.fb--cur .fb-gdot { background:var(--red) }
+.fb-name { font-size:12px; color:var(--text-2); display:flex; flex-direction:column; align-items:center; line-height:1.3; text-align:center }
+.fb--future .fb-name { color:var(--text-3) }
+.fb--cur .fb-name { color:var(--accent-d); font-weight:700 }
+.fb--fail .fb-name { color:var(--red-d); font-weight:700 }
+.fb-name em { font-style:normal; font-size:10.5px; font-weight:600; opacity:.85 }
+.fb-link { flex:1; position:relative; height:14px; margin:6px 3px 0; min-width:26px }
+.fb-svg { position:absolute; inset:0; width:100%; height:14px; overflow:visible; display:block }
+.fb-svg line { stroke-width:2; stroke-linecap:round }
+.fb-link--done line { stroke:var(--green) }
+.fb-link--fail line { stroke:var(--red) }
+.fb-link--future line { stroke:var(--border-2); stroke-dasharray:3 4 }
+.fb-spark { position:absolute; left:0; top:3px; width:8px; height:8px; border-radius:999px; background:var(--accent); box-shadow:0 0 8px 1px var(--accent); opacity:0; visibility:hidden }
+
+/* ============ C 流动进度管 ============ */
+.fc-wrap { flex:1; min-width:0 }
+.fc-tube { display:flex; gap:2px; height:16px; border-radius:999px; background:var(--fill); border:1px solid var(--border); overflow:hidden }
+.fc-segw { flex:1; position:relative; background:var(--fill-2); overflow:hidden }
+.fc-liq { position:absolute; inset:0 }
+.fc-liq.fc--done { background:var(--green) }
+.fc-liq.fc--cur { background:var(--accent) }
+.fc-liq.fc--fail { background:var(--red) }
+.fc-x { position:absolute; top:2px; right:3px; width:10px; height:10px; line-height:10px; text-align:center; font-size:8.5px; font-weight:800; font-style:normal; color:#fff }
+.fc-ticks { display:flex; gap:2px; margin-top:8px }
+.fc-tick { flex:1; text-align:center; font-size:11.5px; color:var(--text-3); position:relative; padding-top:7px; line-height:1.3 }
+.fc-tick::before { content:""; position:absolute; top:0; left:50%; margin-left:-0.5px; width:1px; height:4px; background:var(--border-2) }
+.fc-t--done { color:var(--text-2) }
+.fc-t--cur { color:var(--accent-d); font-weight:700 }
+.fc-t--fail { color:var(--red-d); font-weight:700 }
+.fc-tick em { display:block; font-style:normal; font-size:10.5px; font-weight:600 }
+
+/* ============ D 地铁线 ============ */
+.fd-wrap { flex:1; min-width:0; position:relative; padding-top:2px }
+.fd-track { position:absolute; top:11px; left:calc(100% / 14); right:calc(100% / 14); height:6px; border-radius:999px; background:var(--fill-2) }
+.fd-paint { position:absolute; top:11px; left:calc(100% / 14); width:calc(100% * 6 / 7); height:6px; border-radius:999px; background:var(--green); transform-origin:left center }
+.fd-train { position:absolute; top:8px; left:calc(100% / 14 - 6px); width:12px; height:12px; border-radius:999px; background:var(--accent); box-shadow:0 0 0 3px var(--ring), 0 0 10px var(--accent); opacity:0; visibility:hidden; z-index:3 }
+.fd-stas { display:flex; position:relative }
+.fd-sta { flex:1; display:flex; flex-direction:column; align-items:center; gap:6px }
+.fd-ringbox { position:relative; width:24px; height:24px; display:grid; place-items:center; z-index:2 }
+.fd-pulse { position:absolute; inset:1px; border-radius:999px; border:2px solid var(--accent); opacity:0; pointer-events:none }
+.fd--fail .fd-pulse { border-color:var(--red) }
+.fd-ring { display:grid; place-items:center; border-radius:999px; font-size:9px; font-weight:800; font-style:normal }
+.fd--done .fd-ring { width:12px; height:12px; background:var(--green); box-shadow:0 0 0 3px var(--card) }
+.fd--future .fd-ring { width:12px; height:12px; background:var(--card); border:2px solid var(--border-2); box-shadow:0 0 0 3px var(--card) }
+.fd--cur .fd-ring { width:20px; height:20px; background:var(--card); border:3px solid var(--accent); box-shadow:0 0 0 3px var(--card) }
+.fd--fail .fd-ring { width:20px; height:20px; background:var(--red-t); border:3px solid var(--red); color:var(--red-d); box-shadow:0 0 0 3px var(--card) }
+.fd-gate.fd--future .fd-ring { box-shadow:0 0 0 2px var(--card), 0 0 0 3.5px var(--border-2), 0 0 0 6px var(--card) }
+.fd-gate.fd--done .fd-ring { box-shadow:0 0 0 2px var(--card), 0 0 0 3.5px var(--green-b), 0 0 0 6px var(--card) }
+.fd-gate.fd--cur .fd-ring { box-shadow:0 0 0 2px var(--card), 0 0 0 3.5px var(--accent-b), 0 0 0 6px var(--card) }
+.fd-name { font-size:12px; color:var(--text-2) }
+.fd--future .fd-name { color:var(--text-3) }
+.fd--cur .fd-name { color:var(--accent-d); font-weight:700 }
+.fd--fail .fd-name { color:var(--red-d); font-weight:700 }
+.fd-note { font-style:normal; font-size:10.5px; font-weight:600; margin-top:-3px }
+.fd--cur .fd-note { color:var(--accent-d) }
+.fd--fail .fd-note { color:var(--red-d) }
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior:auto }
+  *, *::before, *::after { animation-duration:.01ms !important; transition-duration:.01ms !important }
+}
+</style>
+</head>
+<body>
+
+<!-- SVG 箭头 marker 定义(全局共享) -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <marker id="mkDone" markerWidth="8" markerHeight="8" refX="7" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0 0 L7 3.5 L0 7 Z" fill="var(--green)"/></marker>
+    <marker id="mkFail" markerWidth="8" markerHeight="8" refX="7" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0 0 L7 3.5 L0 7 Z" fill="var(--red)"/></marker>
+    <marker id="mkFuture" markerWidth="8" markerHeight="8" refX="7" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0 0 L7 3.5 L0 7 Z" fill="var(--border-2)"/></marker>
+  </defs>
+</svg>
+
+<div class="page">
+  <header class="page-h">
+    <div>
+      <div class="overline">Design Picker · v5</div>
+      <h1>进度流程样式选型</h1>
+      <p class="page-sub">四个方案,各点「▶ 播放」看动画——选一个,回复方案字母即可</p>
+    </div>
+    <div class="sp"></div>
+    <button class="iconbtn" id="themeToggle" aria-label="切换主题">
+      <svg class="only-light" viewBox="0 0 16 16"><path d="M13.5 9.5A5.5 5.5 0 1 1 6.5 2.5a4.5 4.5 0 0 0 7 7z"/></svg>
+      <svg class="only-dark" viewBox="0 0 16 16"><circle cx="8" cy="8" r="3.2"/><path d="M8 1.2v1.6M8 13.2v1.6M1.2 8h1.6M13.2 8h1.6M3.2 3.2l1.1 1.1M11.7 11.7l1.1 1.1M12.8 3.2l-1.1 1.1M4.3 11.7l-1.1 1.1"/></svg>
+    </button>
+  </header>
+
+  <section class="card" id="card-A">
+    <div class="card-h">
+      <span class="v-letter">A</span><span class="card-t">箭头带</span>
+      <span class="v-tag">连续 chevron 铰接带:阶段即箭形段,段间咬合,方向感最强</span>
+    </div>
+    <div class="sec">
+      <div class="flow-row"><span class="row-name mono">gate-demo</span><div class="fa-band" data-v="A" data-r="0"></div></div>
+      <div class="flow-row"><span class="row-name mono">hotfix-login</span><div class="fa-band" data-v="A" data-r="1"></div></div>
+    </div>
+    <div class="card-f">
+      <button class="btn btn--tint play-btn" data-v="A">▶ 播放动画</button>
+      <span class="hint">timeline:段依次点亮(stagger)→ 当前段光泽扫过 → 失败段抖动</span>
+    </div>
+  </section>
+
+  <section class="card" id="card-B">
+    <div class="card-h">
+      <span class="v-letter">B</span><span class="card-t">节点+箭头连线</span>
+      <span class="v-tag">圆节点 + SVG 箭头线:阶段是站点,门阶段带红点标识,信息密度最高</span>
+    </div>
+    <div class="sec">
+      <div class="flow-row"><span class="row-name mono">gate-demo</span><div class="fb-flow" data-v="B" data-r="0"></div></div>
+      <div class="flow-row"><span class="row-name mono">hotfix-login</span><div class="fb-flow" data-v="B" data-r="1"></div></div>
+    </div>
+    <div class="card-f">
+      <button class="btn btn--tint play-btn" data-v="B">▶ 播放动画</button>
+      <span class="hint">timeline:光点沿线流动 → 到站弹性点亮 → 门阶段红点脉冲/失败站抖动</span>
+    </div>
+  </section>
+
+  <section class="card" id="card-C">
+    <div class="card-h">
+      <span class="v-letter">C</span><span class="card-t">流动进度管</span>
+      <span class="v-tag">圆角管道分段液体填充:最安静克制,阶段名做管下刻度</span>
+    </div>
+    <div class="sec">
+      <div class="flow-row"><span class="row-name mono">gate-demo</span><div class="fc-wrap" data-v="C" data-r="0"></div></div>
+      <div class="flow-row"><span class="row-name mono">hotfix-login</span><div class="fc-wrap" data-v="C" data-r="1"></div></div>
+    </div>
+    <div class="card-f">
+      <button class="btn btn--tint play-btn" data-v="C">▶ 播放动画</button>
+      <span class="hint">timeline:液体逐段连续流入 → 当前段呼吸 → 失败段尾端 ✕ 弹出</span>
+    </div>
+  </section>
+
+  <section class="card" id="card-D">
+    <div class="card-h">
+      <span class="v-letter">D</span><span class="card-t">地铁线</span>
+      <span class="v-tag">粗线 + 站点圆环:门阶段是双环换乘站,当前站大环脉冲</span>
+    </div>
+    <div class="sec">
+      <div class="flow-row"><span class="row-name mono">gate-demo</span><div class="fd-wrap" data-v="D" data-r="0"></div></div>
+      <div class="flow-row"><span class="row-name mono">hotfix-login</span><div class="fd-wrap" data-v="D" data-r="1"></div></div>
+    </div>
+    <div class="card-f">
+      <button class="btn btn--tint play-btn" data-v="D">▶ 播放动画</button>
+      <span class="hint">timeline:列车点滑到当前站(途经站依次点亮)→ 到站环 back.out 放大定格</span>
+    </div>
+  </section>
+
+  <footer class="pagefoot">选定后套回进度视图;执行中/排队等其余状态动画同语言推导</footer>
+</div>
+
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+'use strict';
+(function () {
+  var root = document.documentElement;
+
+  /* 主题切换(同 v5 主 demo) */
+  document.getElementById('themeToggle').addEventListener('click', function () {
+    root.dataset.theme = root.dataset.theme === 'dark' ? 'light' : 'dark';
+  });
+
+  /* toast */
+  var toastEl = document.getElementById('toast'), toastTimer = null;
+  function toast(msg) {
+    toastEl.textContent = msg;
+    toastEl.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { toastEl.classList.remove('show'); }, 2600);
+  }
+
+  /* ============ 演示数据(四方案共用) ============ */
+  var STAGES = ['立项', '调研', '规格', '实现', '验证', '交付', '归档'];
+  var GATE = 4; /* 验证 = 门阶段 */
+  var ROWS = [
+    { name: 'gate-demo',    cur: 4, fail: false, note: '等确认' }, /* 前4完成,当前=验证 */
+    { name: 'hotfix-login', cur: 3, fail: true,  note: '失败'   }  /* 前3完成,当前=实现(失败) */
+  ];
+  function st(row, i) { return i < row.cur ? 'done' : i === row.cur ? (row.fail ? 'fail' : 'cur') : 'future'; }
+  function q(v, r) { return document.querySelector('[data-v="' + v + '"][data-r="' + r + '"]'); }
+  function qa(sel) { return Array.prototype.slice.call(document.querySelectorAll(sel)); }
+
+  /* ============ 静态结构生成 ============ */
+  function buildA(el, row) {
+    var h = '';
+    for (var i = 0; i < 7; i++) {
+      var s = st(row, i);
+      h += '<div class="fa-seg fa--' + s + '"><span>' + STAGES[i] + '</span>';
+      if (s === 'cur') h += '<em class="fa-note">' + row.note + '</em><i class="fa-gloss"></i>';
+      if (s === 'fail') h += '<em class="fa-note">✕ ' + row.note + '</em>';
+      h += '</div>';
+    }
+    el.innerHTML = h;
+  }
+
+  function buildB(el, row) {
+    var h = '';
+    for (var i = 0; i < 7; i++) {
+      var s = st(row, i);
+      var glyph = s === 'done' ? '✓' : s === 'fail' ? '✕' : '';
+      h += '<div class="fb-node fb--' + s + (i === GATE ? ' fb-gate' : '') + '">'
+         + '<span class="fb-dot">' + glyph + '</span>'
+         + (i === GATE ? '<i class="fb-gdot"></i>' : '')
+         + '<span class="fb-name">' + STAGES[i]
+         + ((s === 'cur' || s === 'fail') ? '<em>' + row.note + '</em>' : '')
+         + '</span></div>';
+      if (i < 6) {
+        var ls = (i + 1 < row.cur) ? 'done' : (i + 1 === row.cur) ? (row.fail ? 'fail' : 'done') : 'future';
+        var mk = ls === 'done' ? 'mkDone' : ls === 'fail' ? 'mkFail' : 'mkFuture';
+        h += '<div class="fb-link fb-link--' + ls + '">'
+           + '<svg class="fb-svg" aria-hidden="true"><line x1="1" y1="7" x2="100%" y2="7" marker-end="url(#' + mk + ')"/></svg>'
+           + '<i class="fb-spark"></i></div>';
+      }
+    }
+    el.innerHTML = h;
+  }
+
+  function buildC(el, row) {
+    var tube = '', ticks = '';
+    for (var i = 0; i < 7; i++) {
+      var s = st(row, i);
+      tube += '<div class="fc-segw">';
+      if (s !== 'future') tube += '<div class="fc-liq fc--' + s + '"></div>';
+      if (s === 'fail') tube += '<b class="fc-x">✕</b>';
+      tube += '</div>';
+      ticks += '<span class="fc-tick fc-t--' + s + '">' + STAGES[i]
+             + ((s === 'cur' || s === 'fail') ? '<em>' + row.note + '</em>' : '')
+             + '</span>';
+    }
+    el.innerHTML = '<div class="fc-tube">' + tube + '</div><div class="fc-ticks">' + ticks + '</div>';
+  }
+
+  function buildD(el, row) {
+    var stas = '';
+    for (var i = 0; i < 7; i++) {
+      var s = st(row, i);
+      stas += '<div class="fd-sta fd--' + s + (i === GATE ? ' fd-gate' : '') + '">'
+            + '<span class="fd-ringbox">'
+            + ((s === 'cur' || s === 'fail') ? '<i class="fd-pulse"></i>' : '')
+            + '<span class="fd-ring">' + (s === 'fail' ? '✕' : '') + '</span>'
+            + '</span>'
+            + '<span class="fd-name">' + STAGES[i] + '</span>'
+            + ((s === 'cur' || s === 'fail') ? '<em class="fd-note">' + row.note + '</em>' : '')
+            + '</div>';
+    }
+    el.innerHTML = '<div class="fd-track"></div>'
+      + '<div class="fd-paint" style="transform:scaleX(' + (row.cur / 6) + ')"></div>'
+      + '<div class="fd-train"></div>'
+      + '<div class="fd-stas">' + stas + '</div>';
+  }
+
+  ROWS.forEach(function (row, r) {
+    buildA(q('A', r), row);
+    buildB(q('B', r), row);
+    buildC(q('C', r), row);
+    buildD(q('D', r), row);
+  });
+
+  /* ============ reduced-motion 检测(gsap.matchMedia conditions 语法) ============ */
+  var reduceMotion = false;
+  if (window.gsap) {
+    var mm = gsap.matchMedia();
+    mm.add(
+      { reduceMotion: '(prefers-reduced-motion: reduce)', okMotion: '(prefers-reduced-motion: no-preference)' },
+      function (context) { reduceMotion = !!context.conditions.reduceMotion; }
+    );
+  }
+
+  /* ============ 复位:清掉动画残留,回到静态(=终)态 ============ */
+  var RESET = {
+    A: function () {
+      gsap.set(qa('#card-A .fa-seg, #card-A .fa-gloss'), { clearProps: 'all' });
+    },
+    B: function () {
+      gsap.set(qa('#card-B .fb-dot, #card-B .fb-spark, #card-B .fb-gdot'), { clearProps: 'all' });
+    },
+    C: function () {
+      gsap.set(qa('#card-C .fc-liq, #card-C .fc-x'), { clearProps: 'all' });
+    },
+    D: function () {
+      gsap.set(qa('#card-D .fd-ring, #card-D .fd-train, #card-D .fd-pulse, #card-D .fd-paint'), { clearProps: 'all' });
+      ROWS.forEach(function (row, r) {
+        gsap.set(q('D', r).querySelector('.fd-paint'), { scaleX: row.cur / 6, transformOrigin: 'left center' });
+      });
+    }
+  };
+
+  /* ============ 动画:每方案一条主 timeline(两行并入) ============ */
+  var ANIM = {
+    /* A 箭头带:依次点亮 → 光泽扫过 → 失败段 shake */
+    A: function () {
+      var tl = gsap.timeline();
+      ROWS.forEach(function (row, r) {
+        var rowEl = q('A', r);
+        var segs = rowEl.querySelectorAll('.fa-seg');
+        var gloss = rowEl.querySelector('.fa-gloss');
+        var fail = rowEl.querySelector('.fa--fail');
+        var rtl = gsap.timeline();
+        rtl.from(segs, {
+          autoAlpha: 0, scaleX: 0.85, transformOrigin: 'left center',
+          duration: 0.38, ease: 'power2.out', stagger: 0.09
+        });
+        if (gloss) {
+          rtl.fromTo(gloss, { xPercent: -160, autoAlpha: 1 },
+            { xPercent: 420, duration: 0.7, ease: 'power1.inOut', immediateRender: false }, '>-0.05')
+             .set(gloss, { autoAlpha: 0 });
+        }
+        if (fail) {
+          rtl.fromTo(fail, { x: -3 }, { x: 3, duration: 0.055, ease: 'power1.inOut', yoyo: true, repeat: 3, immediateRender: false }, '>-0.02')
+             .set(fail, { x: 0 });
+        }
+        tl.add(rtl, r * 0.15);
+      });
+      return tl;
+    },
+
+    /* B 节点+箭头连线:光点沿线流动 → 到站 back.out 点亮 → 门红点脉冲 / 失败 elastic */
+    B: function () {
+      var tl = gsap.timeline();
+      ROWS.forEach(function (row, r) {
+        var rowEl = q('B', r);
+        var dots = rowEl.querySelectorAll('.fb-dot');
+        var links = rowEl.querySelectorAll('.fb-link');
+        var sparks = rowEl.querySelectorAll('.fb-spark');
+        var gdot = rowEl.querySelector('.fb--cur .fb-gdot');
+        var lit = [];
+        for (var i = 0; i <= row.cur; i++) lit.push(dots[i]);
+        var rtl = gsap.timeline();
+        rtl.set(lit, { autoAlpha: 0.2, scale: 0.4 });
+        rtl.to(dots[0], { autoAlpha: 1, scale: 1, duration: 0.45, ease: 'back.out(1.7)' }, 0);
+        var t = 0.45;
+        for (var j = 0; j < row.cur; j++) {
+          var dist = Math.max(links[j].getBoundingClientRect().width - 8, 10);
+          rtl.fromTo(sparks[j], { x: 0, autoAlpha: 1 },
+            { x: dist, duration: 0.34, ease: 'power1.inOut', immediateRender: false }, t);
+          t += 0.34;
+          rtl.set(sparks[j], { autoAlpha: 0 }, t);
+          var isLast = (j + 1 === row.cur);
+          if (isLast && row.fail) {
+            rtl.to(dots[j + 1], { autoAlpha: 1, scale: 1, duration: 0.8, ease: 'elastic.out(1, 0.3)' }, t);
+            rtl.fromTo(dots[j + 1], { x: -2 }, { x: 2, duration: 0.06, yoyo: true, repeat: 3, ease: 'power1.inOut', immediateRender: false }, t)
+               .set(dots[j + 1], { x: 0 }, t + 0.3);
+          } else {
+            rtl.to(dots[j + 1], { autoAlpha: 1, scale: 1, duration: 0.45, ease: 'back.out(1.7)' }, t);
+          }
+          t += isLast ? 0.45 : 0.16;
+        }
+        if (gdot) {
+          rtl.fromTo(gdot, { scale: 1 }, { scale: 1.8, duration: 0.2, yoyo: true, repeat: 3, ease: 'sine.inOut' }, t + 0.05);
+        }
+        tl.add(rtl, r * 0.15);
+      });
+      return tl;
+    },
+
+    /* C 流动进度管:液体逐段 scaleX 连续流入 → 当前段呼吸 → 失败段 ✕ 弹出 */
+    C: function () {
+      var tl = gsap.timeline();
+      ROWS.forEach(function (row, r) {
+        var rowEl = q('C', r);
+        var liqs = rowEl.querySelectorAll('.fc-liq');
+        var curLiq = rowEl.querySelector('.fc-liq.fc--cur');
+        var failLiq = rowEl.querySelector('.fc-liq.fc--fail');
+        var xmark = rowEl.querySelector('.fc-x');
+        var rtl = gsap.timeline();
+        rtl.set(liqs, { scaleX: 0, transformOrigin: 'left center' }, 0);
+        if (xmark) rtl.set(xmark, { autoAlpha: 0 }, 0);
+        liqs.forEach(function (liq, i) {
+          rtl.to(liq, { scaleX: 1, duration: 0.34, ease: 'sine.inOut' }, 0.05 + i * 0.34);
+        });
+        var endT = 0.05 + liqs.length * 0.34;
+        if (curLiq) {
+          rtl.to(curLiq, { autoAlpha: 0.65, duration: 0.6, ease: 'sine.inOut', yoyo: true, repeat: -1 }, endT);
+        }
+        if (failLiq && xmark) {
+          rtl.fromTo(xmark, { autoAlpha: 0, scale: 0.3 },
+            { autoAlpha: 1, scale: 1, duration: 0.3, ease: 'back.out(2)', immediateRender: false }, endT);
+          rtl.to(failLiq, { autoAlpha: 0.7, duration: 0.11, yoyo: true, repeat: 3, ease: 'power1.inOut' }, endT + 0.05);
+        }
+        tl.add(rtl, r * 0.15);
+      });
+      return tl;
+    },
+
+    /* D 地铁线:列车点滑行(途经站 stagger 点亮)→ 到站环 back.out 放大定格 */
+    D: function () {
+      var tl = gsap.timeline();
+      ROWS.forEach(function (row, r) {
+        var rowEl = q('D', r);
+        var stas = rowEl.querySelector('.fd-stas');
+        var rings = rowEl.querySelectorAll('.fd-ring');
+        var paint = rowEl.querySelector('.fd-paint');
+        var train = rowEl.querySelector('.fd-train');
+        var pulse = rowEl.querySelector('.fd-pulse');
+        var step = stas.getBoundingClientRect().width / 7;
+        var passed = [];
+        for (var i = 0; i < row.cur; i++) passed.push(rings[i]);
+        var curRing = rings[row.cur];
+        var dur = 1.15;
+        var rtl = gsap.timeline();
+        rtl.set(passed.concat([curRing]), { autoAlpha: 0.25, scale: 0.6 }, 0);
+        rtl.set(train, { autoAlpha: 1, x: 0 }, 0);
+        rtl.to(train, { x: step * row.cur, duration: dur, ease: 'power3.inOut' }, 0.05);
+        rtl.fromTo(paint, { scaleX: 0 },
+          { scaleX: row.cur / 6, duration: dur, ease: 'power3.inOut', transformOrigin: 'left center' }, 0.05);
+        rtl.to(passed, {
+          autoAlpha: 1, scale: 1, duration: 0.28, ease: 'power2.out',
+          stagger: (dur * 0.75) / Math.max(row.cur, 1)
+        }, 0.12);
+        var arr = 0.05 + dur;
+        rtl.to(train, { autoAlpha: 0, duration: 0.25 }, arr);
+        rtl.to(curRing, { autoAlpha: 1, scale: 1, duration: 0.55, ease: 'back.out(1.7)' }, arr - 0.05);
+        rtl.fromTo(pulse, { scale: 0.5, autoAlpha: 0.7 },
+          { scale: 2, autoAlpha: 0, duration: 0.55, ease: 'power1.out', repeat: 1, immediateRender: false }, arr);
+        tl.add(rtl, r * 0.2);
+      });
+      return tl;
+    }
+  };
+
+  /* ============ 播放调度:kill → 复位 → 重建 ============ */
+  var TL = { A: null, B: null, C: null, D: null };
+  function play(v, btn) {
+    if (!window.gsap) {
+      toast('GSAP 未能从 CDN 加载,动画暂不可用(静态样式不受影响)');
+      return;
+    }
+    if (TL[v]) { TL[v].kill(); TL[v] = null; }
+    RESET[v]();
+    if (reduceMotion) {
+      toast('检测到「减少动态效果」偏好:已直接呈现终态,不播放动画');
+      return;
+    }
+    TL[v] = ANIM[v]();
+    if (btn) btn.textContent = '↻ 重新播放';
+  }
+
+  qa('.play-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () { play(btn.dataset.v, btn); });
+  });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,2881 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Pipeline v5 — 只读进度 × 统一工作台(交互重构 demo)</title>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/gsap.min.js"></script>
+<style>
+/* ============ tokens(v4 逐字继承) ============ */
+:root, [data-theme="light"] {
+  color-scheme: light;
+  --bg:#f7f7f5; --card:#ffffff; --fill:#f4f4f2; --fill-2:#ebebe8;
+  --border:#e4e4e0; --border-2:#d2d2cc;
+  --text:#0d0d0d; --text-2:#40403c; --text-3:#6a6a62;
+  --accent:#0b6cff; --accent-d:#0a5ce0; --accent-t:#eaf2ff; --accent-b:#c5daff;
+  --green:#1f9d51; --green-d:#187339; --green-t:#e9f6ee; --green-b:#c8e8d2;
+  --red:#d92d20; --red-d:#b42318; --red-t:#fdf0ee; --red-b:#f3cfc9;
+  --ink:#0d0d0d; --ink-fg:#ffffff; --ink-hover:#2e2e2c;
+  --btn-bg:#0b6cff; --btn-fg:#ffffff; --btn-hover:#0a5ce0;
+  --code-bg:#f6f6f4; --code-border:#e4e4e0;
+  --shadow:0 1px 2px rgba(0,0,0,.04);
+  --shadow-2:0 1px 3px rgba(0,0,0,.06),0 1px 2px rgba(0,0,0,.04);
+  --ring:rgba(11,108,255,.13);
+}
+[data-theme="dark"] {
+  color-scheme: dark;
+  --bg:#0d0d0d; --card:#171717; --fill:#1e1e1d; --fill-2:#262624;
+  --border:#262626; --border-2:#3a3a37;
+  --text:#f2f2f0; --text-2:#c9c9c4; --text-3:#94948d;
+  --accent:#4d94ff; --accent-d:#7fb2ff; --accent-t:rgba(77,148,255,.13); --accent-b:rgba(77,148,255,.38);
+  --green:#3fb950; --green-d:#55c368; --green-t:rgba(63,185,80,.13); --green-b:rgba(63,185,80,.35);
+  --red:#e5534b; --red-d:#f2867e; --red-t:rgba(229,83,75,.14); --red-b:rgba(229,83,75,.40);
+  --ink:#f2f2f2; --ink-fg:#0d0d0d; --ink-hover:#d8d8d5;
+  --btn-bg:#2b7fff; --btn-fg:#ffffff; --btn-hover:#4d94ff;
+  --code-bg:#111110; --code-border:#2a2a28;
+  --shadow:0 1px 2px rgba(0,0,0,.35);
+  --shadow-2:0 2px 6px rgba(0,0,0,.35);
+  --ring:rgba(77,148,255,.20);
+}
+[data-theme="light"] .only-dark { display:none }
+[data-theme="dark"] .only-light { display:none }
+
+/* ============ base ============ */
+* { box-sizing:border-box; margin:0; padding:0 }
+html { scroll-behavior:smooth }
+body {
+  font: 14px/1.55 system-ui,-apple-system,"SF Pro Text","PingFang SC","Hiragino Sans GB","Microsoft YaHei","Segoe UI",sans-serif;
+  background:var(--bg); color:var(--text); min-width:1180px;
+}
+.mono { font-family: ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,"JetBrains Mono",monospace }
+.container { max-width:1400px; margin:0 auto; padding:0 28px }
+a { color:var(--accent); text-decoration:none }
+button { font:inherit; color:inherit; background:none; border:none; cursor:pointer }
+:focus-visible { outline:2px solid var(--accent); outline-offset:2px; border-radius:8px }
+.sp { flex:1 }
+.overline { font-size:12px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--text-3) }
+
+/* ============ 通用组件 ============ */
+.card { background:var(--card); border:1px solid var(--border); border-radius:13px; box-shadow:var(--shadow) }
+.card + .card { margin-top:18px }
+.card-h { display:flex; align-items:center; gap:8px; padding:13px 16px; border-bottom:1px solid var(--border) }
+.card-t { font-size:14.5px; font-weight:700 }
+.sec { padding:15px 16px }
+.sec + .sec { border-top:1px solid var(--border) }
+.sec-h { display:flex; align-items:center; gap:6px; font-size:13px; font-weight:700; margin-bottom:10px }
+.sec-h .hint { font-size:12px; font-weight:400; color:var(--text-3) }
+
+.btn {
+  display:inline-flex; align-items:center; gap:6px; height:34px; padding:0 14px;
+  border-radius:9px; font-size:13.5px; font-weight:600; border:1px solid transparent;
+  transition:background .12s, border-color .12s, box-shadow .12s;
+}
+.btn.sm { height:28px; padding:0 10px; border-radius:8px; font-size:12.5px }
+.btn--primary { background:var(--btn-bg); color:var(--btn-fg) }
+.btn--primary:hover { background:var(--btn-hover) }
+.btn--ghost { background:var(--card); border-color:var(--border); color:var(--text-2); box-shadow:var(--shadow) }
+.btn--ghost:hover { border-color:var(--border-2); background:var(--fill) }
+.btn--tint { background:var(--accent-t); border-color:var(--accent-b); color:var(--accent-d) }
+.btn--tint:hover { border-color:var(--accent) }
+.btn--tint-red { background:var(--red-t); border-color:var(--red-b); color:var(--red-d) }
+.btn--tint-red:hover { border-color:var(--red) }
+
+.badge {
+  display:inline-flex; align-items:center; gap:5px; height:20px; padding:0 7px;
+  border-radius:6px; font-size:11.5px; font-weight:600; background:var(--fill-2); color:var(--text-2);
+}
+.badge .dot { width:5px; height:5px; border-radius:999px; background:currentColor }
+.badge--outline { background:transparent; border:1px solid var(--border-2) }
+.badge--green { background:var(--green-t); color:var(--green-d) }
+.badge--red { background:var(--red-t); color:var(--red-d) }
+.badge--blue { background:var(--accent-t); color:var(--accent-d) }
+
+.chip {
+  display:inline-flex; align-items:center; gap:5px; height:24px; padding:0 8px;
+  border-radius:7px; font-size:12px; background:var(--fill); border:1px solid var(--border);
+  font-family:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace; color:var(--text-2);
+}
+.chip--pass { background:var(--green-t); border-color:var(--green-b); color:var(--green-d) }
+.chip--empty { background:transparent; border-style:dashed; color:var(--text-3) }
+
+.pill { display:inline-flex; align-items:center; gap:6px; height:26px; padding:0 11px; border-radius:999px; font-size:12px; font-weight:600 }
+.pill--green { background:var(--green-t); color:var(--green-d); border:1px solid var(--green-b) }
+
+.g-phase { display:inline-flex; align-items:center; height:20px; padding:0 7px; border-radius:6px; font-size:12px; font-weight:600; background:var(--fill-2); color:var(--text-2); font-family:ui-monospace,"SF Mono",Menlo,monospace }
+
+.kbd { display:inline-block; padding:1px 6px; border-radius:5px; border:1px solid var(--border-2); background:var(--fill); font-family:ui-monospace,Menlo,monospace; font-size:11px; color:var(--text-2) }
+
+.field { background:var(--fill); border-radius:10px; padding:9px 11px }
+.field .fk { font-size:11.5px; color:var(--text-3); font-family:ui-monospace,Menlo,monospace; margin-bottom:2px }
+.field .fv { font-size:13px; font-weight:600 }
+
+/* ============ 任务详情 dt-(收件箱 / 进度 共用) ============ */
+.dt-req { font-size:13px; color:var(--text-2); line-height:1.6 }
+/* 阶段 sheet tab 条 */
+.dt-tabs { display:flex; align-items:center; gap:5px; overflow-x:auto; padding:3px; margin:-3px -3px 9px }
+.dt-tab {
+  flex:none; display:inline-flex; align-items:center; gap:4px; height:25px; padding:0 9px;
+  border-radius:8px; font-size:12px; font-weight:600; white-space:nowrap;
+  background:var(--fill); border:1px solid var(--border); color:var(--text-3);
+  transition:background .12s, border-color .12s, color .12s, box-shadow .12s;
+}
+.dt-tab:hover { background:var(--fill-2); color:var(--text-2) }
+.dt-tab .tfx { font-size:10.5px; line-height:1 }
+.dt-tab--done { color:var(--text-2) }
+.dt-tab--done .tfx { color:var(--green) }
+.dt-tab--cur, .dt-tab--cur:hover { background:var(--btn-bg); border-color:var(--btn-bg); color:var(--btn-fg) }
+.dt-tab--fail, .dt-tab--fail:hover { background:var(--red); border-color:var(--red); color:var(--btn-fg) }
+.dt-tab.on { border-color:var(--accent); box-shadow:0 0 0 3px var(--ring); color:var(--text) }
+.dt-tab--cur.on { border-color:var(--btn-bg); color:var(--btn-fg) }
+.dt-tab--fail.on { border-color:var(--red); box-shadow:0 0 0 3px var(--red-t); color:var(--btn-fg) }
+/* tab 内容区 */
+.dt-pane[hidden] { display:none }
+.dt-desc { font-size:12.5px; color:var(--text-3); line-height:1.6 }
+.dt-desc + .dt-arts, .dt-desc + .dt-none { margin-top:9px }
+.dt-verdict { display:flex; align-items:baseline; gap:6px; font-size:13px; color:var(--text-2); margin-bottom:8px }
+.dt-verdict .ic { flex:none; font-weight:700 }
+.dt-verdict .ic--good { color:var(--green) }
+.dt-verdict .ic--dim { color:var(--text-3); font-weight:400 }
+.dt-verdict .ic--run { color:var(--accent) }
+.dt-verdict--bad { color:var(--red-d); font-weight:600 }
+.dt-verdict--bad .ic { color:var(--red) }
+/* 产物列表(field 风格) */
+.dt-arts { display:grid; grid-template-columns:1fr 1fr; gap:8px }
+.dt-arts .field { min-width:0 }
+.dt-arts .fv { overflow-wrap:anywhere; font-size:12.5px }
+.dt-arts .fv[data-copy] { cursor:pointer; transition:color .12s }
+.dt-arts .fv[data-copy]:hover { color:var(--accent-d) }
+.dt-arts .dt-cp { color:var(--text-3); font-size:11px }
+.dt-art--wide { grid-column:1 / -1 }
+.dt-pass { color:var(--green-d) }
+.dt-field--miss { background:transparent; border:1px dashed var(--border-2) }
+.dt-field--miss .fv { color:var(--text-3); font-weight:400 }
+.dt-none { font-size:12.5px; color:var(--text-3) }
+.dt-empty { padding:16px 12px; text-align:center; font-size:12.5px; color:var(--text-3); border:1px dashed var(--border-2); border-radius:10px }
+.dt-note { margin-top:9px; font-size:12px; color:var(--text-3); line-height:1.6 }
+
+.switch { position:relative; width:34px; height:20px; border-radius:999px; background:var(--fill-2); border:1px solid var(--border-2); transition:background .15s, border-color .15s; flex:none }
+.switch::after { content:""; position:absolute; top:2px; left:2px; width:14px; height:14px; border-radius:999px; background:var(--card); box-shadow:var(--shadow-2); transition:left .15s }
+.switch[aria-checked="true"] { background:var(--accent); border-color:var(--accent) }
+.switch[aria-checked="true"]::after { left:16px }
+
+/* ============ 顶栏 ============ */
+.topbar { position:sticky; top:0; z-index:50; background:var(--card); border-bottom:1px solid var(--border) }
+.tb { display:flex; align-items:center; gap:6px; height:56px }
+.brand { display:flex; align-items:center; gap:9px; margin-right:14px }
+.brand-mark { width:26px; height:26px; border-radius:8px; background:var(--ink); display:grid; place-items:center; flex:none }
+.brand-mark svg { width:14px; height:14px; stroke:var(--ink-fg); stroke-width:2; fill:none; stroke-linecap:round }
+.brand-name { font-size:15px; font-weight:650 }
+.nav { display:flex; align-items:center; gap:2px }
+.nav a { display:inline-flex; align-items:center; gap:6px; padding:6px 11px; border-radius:9px; font-size:13.5px; color:var(--text-2) }
+.nav a:hover { background:var(--fill) }
+.nav a.on { background:var(--fill-2); color:var(--text); font-weight:600 }
+.cnt { display:inline-grid; place-items:center; min-width:18px; height:18px; padding:0 5px; border-radius:999px; background:var(--red-t); color:var(--red-d); font-size:11px; font-weight:700 }
+
+/* 项目切换器(重设计:ghost 态,点击不残留焦点环) */
+.switcher { position:relative }
+.switcher-btn { display:inline-flex; align-items:center; gap:7px; height:34px; padding:0 12px; border-radius:10px; font-size:13px; font-weight:600; color:var(--text-2); border:1px solid transparent }
+.switcher-btn:hover { background:var(--fill) }
+.switcher-btn[aria-expanded="true"] { background:var(--fill-2) }
+.switcher-btn:focus:not(:focus-visible) { outline:none }
+.switcher-btn .chev { font-size:10px; color:var(--text-3) }
+.sw-menu { position:absolute; right:0; top:calc(100% + 6px); min-width:230px; background:var(--card); border:1px solid var(--border); border-radius:12px; box-shadow:var(--shadow-2); padding:6px; display:none; z-index:60 }
+.sw-menu.open { display:block }
+.sw-item { display:flex; align-items:center; gap:8px; width:100%; padding:8px 10px; border-radius:8px; font-size:13px; color:var(--text-2); text-align:left }
+.sw-item:hover { background:var(--fill) }
+.sw-item.on { background:var(--fill-2); color:var(--text); font-weight:600 }
+.sw-item .n { margin-left:auto; font-family:ui-monospace,Menlo,monospace; font-size:12px; color:var(--accent); font-weight:600 }
+.sw-item .dia { color:var(--text-3) }
+.sw-note { margin-top:6px; padding:8px 10px 4px; border-top:1px solid var(--border); font-size:11.5px; color:var(--text-3); line-height:1.5 }
+.iconbtn { display:grid; place-items:center; width:34px; height:34px; border-radius:10px; color:var(--text-2) }
+.iconbtn:hover { background:var(--fill) }
+.iconbtn svg { width:16px; height:16px; stroke:currentColor; stroke-width:1.7; fill:none; stroke-linecap:round; stroke-linejoin:round }
+
+/* ============ 视图容器 ============ */
+.view { display:none; padding:26px 0 60px }
+.view.on { display:block }
+.view__head { display:flex; align-items:center; gap:12px; margin-bottom:18px }
+.view__head h1 { font-size:23px; font-weight:700; font-family:ui-monospace,"SF Mono",Menlo,monospace }
+.view__sub { font-size:12.5px; color:var(--text-3) }
+
+/* toast */
+.toast { position:fixed; left:50%; bottom:28px; transform:translate(-50%, 12px); background:var(--ink); color:var(--ink-fg); font-size:12.5px; padding:8px 16px; border-radius:999px; opacity:0; pointer-events:none; transition:opacity .18s, transform .18s; z-index:99 }
+.toast.show { opacity:1; transform:translate(-50%, 0) }
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior:auto }
+  *, *::before, *::after { animation-duration:.01ms !important; transition-duration:.01ms !important }
+}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="container tb">
+    <div class="brand">
+      <div class="brand-mark"><svg viewBox="0 0 16 16"><path d="M2 8h4l2-5 2 10 2-5h2"/></svg></div>
+      <div class="brand-name">Pipeline</div>
+    </div>
+    <nav class="nav" id="mainNav">
+      <a href="#inbox" data-nav="inbox" class="on">收件箱 <span class="cnt">3</span></a>
+      <a href="#progress" data-nav="progress">进度</a>
+      <a href="#workbench" data-nav="workbench">工作台</a>
+    </nav>
+    <div class="sp"></div>
+    <span class="badge badge--outline">v5 交互重构 demo</span>
+    <div class="switcher">
+      <button class="switcher-btn" id="swBtn" aria-haspopup="menu" aria-expanded="false">proj-a <span class="chev">▾</span></button>
+      <div class="sw-menu" id="swMenu" role="menu">
+        <button class="sw-item"><span class="dia">◈</span> 全部项目 <span class="n">7</span></button>
+        <button class="sw-item on">proj-a <span class="n">6</span></button>
+        <button class="sw-item">proj-b <span class="n">1</span></button>
+        <div class="sw-note">项目由 CLI 使用时自动登记,无需注册。<br/>在项目里跑 <span class="mono">pipeline init</span> 即可出现在这里。</div>
+      </div>
+    </div>
+    <button class="iconbtn" id="themeToggle" aria-label="切换主题">
+      <svg class="only-light" viewBox="0 0 16 16"><path d="M13.5 9.5A5.5 5.5 0 1 1 6.5 2.5a4.5 4.5 0 0 0 7 7z"/></svg>
+      <svg class="only-dark" viewBox="0 0 16 16"><circle cx="8" cy="8" r="3.2"/><path d="M8 1.2v1.6M8 13.2v1.6M1.2 8h1.6M13.2 8h1.6M3.2 3.2l1.1 1.1M11.7 11.7l1.1 1.1M12.8 3.2l-1.1 1.1M4.3 11.7l-1.1 1.1"/></svg>
+    </button>
+  </div>
+</header>
+
+<main class="container">
+  <section class="view on" data-view="inbox">
+    
+    <style>
+/* ============ 收件箱 ibx- ============ */
+.ibx-grid { display:grid; grid-template-columns:minmax(0,1fr) 356px; gap:20px; align-items:start }
+.ibx-side { position:sticky; top:76px }
+
+/* 左列表 */
+.ibx-list { display:flex; flex-direction:column; gap:8px }
+.ibx-row {
+  padding:13px 15px; border-radius:10px; border:1px solid transparent;
+  background:var(--card); box-shadow:var(--shadow); cursor:pointer;
+  transition:background .12s, border-color .12s, box-shadow .12s;
+}
+.ibx-row:hover { background:var(--fill) }
+.ibx-row--on { background:var(--accent-t); border-color:var(--accent); box-shadow:0 0 0 3px var(--ring) }
+.ibx-row--on:hover { background:var(--accent-t) }
+.ibx-r1 { display:flex; align-items:center; gap:8px; min-width:0 }
+.ibx-name { font-size:13.5px; font-weight:600 }
+.ibx-wf { font-size:12px; color:var(--text-3) }
+.ibx-time { font-size:12px; color:var(--text-3); flex:none }
+.ibx-lead { margin-top:7px; font-size:13px; color:var(--text-2); line-height:1.55 }
+.ibx-r2 { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin-top:8px }
+.ibx-copychip { cursor:pointer; transition:background .12s, border-color .12s }
+.ibx-copychip:hover { background:var(--fill-2); border-color:var(--border-2); color:var(--text) }
+.ibx-copychip .ibx-cp { color:var(--text-3); font-size:11px }
+
+/* 绿 pill 的小点 */
+.ibx-pilldot { width:6px; height:6px; border-radius:999px; background:var(--green); flex:none }
+
+/* 右详情卡(任务详情——「阶段」用垂直时间线 dtl-) */
+.ibx-dname { font-size:15px; font-weight:700 }
+.ibx-close {
+  width:26px; height:26px; border-radius:8px; display:grid; place-items:center;
+  color:var(--text-3); font-size:13px; transition:background .12s, color .12s;
+}
+.ibx-close:hover { background:var(--fill); color:var(--text) }
+.ibx-chip-fail { background:var(--red-t); border-color:var(--red-b); color:var(--red-d) }
+
+/* 阶段垂直时间线(7 阶段一屏全见,零交互) */
+.dtl-it { position:relative; padding:0 0 12px 24px }
+.dtl-it:last-child { padding-bottom:0 }
+.dtl-it::before {
+  content:""; position:absolute; left:6px; top:20px; bottom:-5px; width:2px;
+  border-radius:1px; background:var(--border);
+}
+.dtl-it--done::before { background:var(--green-b) }
+.dtl-it:last-child::before { display:none }
+.dtl-node {
+  position:absolute; left:0; top:4px; width:14px; height:14px; border-radius:999px;
+  display:grid; place-items:center; font-size:9px; font-weight:700; line-height:1;
+}
+.dtl-node--done { background:var(--green); color:var(--btn-fg) }
+.dtl-node--cur  { background:var(--btn-bg); box-shadow:0 0 0 3px var(--accent-b) }
+.dtl-node--fail { background:var(--red); color:var(--btn-fg); font-size:10px }
+.dtl-node--todo { background:var(--card); border:2px solid var(--border-2) }
+.dtl-r { display:flex; flex-wrap:wrap; align-items:center; gap:6px; min-height:22px }
+.dtl-name { font-size:13px; font-weight:500 }
+.dtl-it--cur .dtl-name, .dtl-it--fail .dtl-name { font-weight:600 }
+.dtl-it--fail .dtl-name { color:var(--red-d) }
+.dtl-it--todo .dtl-name { font-weight:400; color:var(--text-3) }
+.dtl-dim { font-size:12px; color:var(--text-3) }
+.dtl-chip { height:22px; padding:0 7px; cursor:pointer; transition:background .12s, border-color .12s, color .12s }
+.dtl-chip:hover { background:var(--fill-2); border-color:var(--border-2); color:var(--text) }
+.dtl-chip .cp { color:var(--text-3); font-size:11px }
+/* 当前 / 失败阶段的高亮框 */
+.dtl-box {
+  margin-top:8px; padding:11px 12px; border-radius:10px;
+  background:var(--accent-t); border:1px solid var(--accent-b);
+}
+.dtl-box--bad { background:var(--red-t); border-color:var(--red-b) }
+.dtl-box .field { background:var(--card) }
+.dtl-box .dt-field--miss { background:transparent }
+.dtl-box .fk { overflow-wrap:anywhere }
+.dtl-err { color:var(--red-d) }
+
+.ibx-code {
+  display:flex; align-items:flex-start; gap:8px; padding:10px 12px;
+  background:var(--code-bg); border:1px solid var(--code-border); border-radius:9px;
+}
+.ibx-code .p { font-size:13px; color:var(--text-3); flex:none; line-height:1.55 }
+.ibx-code code { flex:1; min-width:0; font-size:13px; color:var(--text); white-space:pre-wrap; overflow-wrap:anywhere; line-height:1.55 }
+.ibx-codecopy {
+  width:26px; height:26px; margin:-3px -4px -3px 0; border-radius:7px; flex:none;
+  display:grid; place-items:center; color:var(--text-3); font-size:13px;
+  transition:background .12s, color .12s;
+}
+.ibx-codecopy:hover { background:var(--fill-2); color:var(--text) }
+.ibx-note { margin-top:8px; font-size:12px; color:var(--text-3); line-height:1.6 }
+
+.ibx-foot {
+  display:flex; align-items:center; flex-wrap:wrap; gap:8px; padding:12px 16px;
+  background:var(--fill); border-top:1px solid var(--border); border-radius:0 0 12px 12px;
+}
+.ibx-foot-l { font-size:11.5px; color:var(--text-3); flex:none }
+.ibx-foot-btns { display:flex; align-items:center; gap:8px; margin-left:auto }
+.ibx-act { white-space:nowrap }
+.ibx-act--blocked, .ibx-act--blocked:hover { opacity:.5; cursor:not-allowed; background:var(--btn-bg) }
+.ibx-blocknote { font-size:11.5px; color:var(--text-3); line-height:1.45 }
+
+/* Esc 收起后的占位卡 */
+.ibx-empty-in { padding:34px 18px; text-align:center; font-size:12.5px; color:var(--text-3); line-height:2 }
+</style>
+
+<div class="view__head">
+  <h1>在等你决定</h1>
+  <span class="view__sub">只收你现在就能拍板的事——继续、打回、重试、终止;缺产出的活在进度里等 agent</span>
+  <span class="sp"></span>
+  <span class="pill pill--green"><span class="ibx-pilldot"></span>3 个在等你</span>
+</div>
+
+<div class="ibx-grid">
+  <div class="ibx-main">
+    <div class="ibx-list" role="listbox" aria-label="等你确认的 change">
+
+      <div class="ibx-row ibx-row--on" role="option" tabindex="0" aria-selected="true" data-ibx="gate-demo">
+        <div class="ibx-r1">
+          <span class="ibx-name mono">gate-demo</span>
+          <span class="badge mono">backend</span>
+          <span class="g-phase">verify</span>
+          <span class="badge badge--green">✓ 可以放行</span>
+          <span class="sp"></span>
+          <span class="ibx-time mono">07-10 09:13</span>
+        </div>
+        <div class="ibx-lead">验证阶段完成:自动验证、agent review、codex review 全部通过——确认无误就放行进入交付</div>
+        <div class="ibx-r2">
+          <span class="chip chip--pass">✓ verify_result=pass</span>
+          <span class="chip chip--pass">✓ agent_review=pass</span>
+          <span class="chip chip--pass">✓ codex_review=pass</span>
+          <button class="chip ibx-copychip" data-copy="docs/verify.md" title="拷贝路径 docs/verify.md"><span class="ibx-cp">⧉</span> verification_report</button>
+        </div>
+      </div>
+
+      <div class="ibx-row" role="option" tabindex="0" aria-selected="false" data-ibx="hotfix-login">
+        <div class="ibx-r1">
+          <span class="ibx-name mono">hotfix-login</span>
+          <span class="badge mono">backend</span>
+          <span class="g-phase">build</span>
+          <span class="badge badge--red"><span class="dot"></span>失败 ×3 · 等你决定</span>
+          <span class="sp"></span>
+          <span class="ibx-time mono">07-10 09:05</span>
+        </div>
+        <div class="ibx-lead">自动化跑挂了:verify 有 2 个用例未过(auth.test.ts),已自动重试 3 次——重试还是放弃?</div>
+        <div class="ibx-r2">
+          <span class="chip ibx-chip-fail">automation=failed</span>
+        </div>
+      </div>
+
+      <div class="ibx-row" role="option" tabindex="0" aria-selected="false" data-ibx="changelog-cn">
+        <div class="ibx-r1">
+          <span class="ibx-name mono">changelog-cn</span>
+          <span class="badge mono">chat</span>
+          <span class="ibx-wf mono">release-train</span>
+          <span class="g-phase">review</span>
+          <span class="badge badge--red"><span class="dot"></span>等你判断</span>
+          <span class="sp"></span>
+          <span class="ibx-time mono">07-10 09:19</span>
+        </div>
+        <div class="ibx-lead">到了人工复核:release-train 没有自动检查,发不发布完全由你判断</div>
+      </div>
+
+    </div>
+  </div>
+
+  <aside class="ibx-side">
+
+    <!-- gate-demo 详情(任务详情共用设计) -->
+    <div class="card ibx-detail" data-ibx-detail="gate-demo">
+      <div class="card-h">
+        <span class="ibx-dname mono">gate-demo</span>
+        <span class="badge badge--green">✓ 可以放行</span>
+        <span class="sp"></span>
+        <button class="ibx-close" aria-label="收起详情" title="收起(Esc)">✕</button>
+      </div>
+      <div class="sec">
+        <div class="sec-h">任务</div>
+        <p class="dt-req">修复登录 token 过期后静默失效——会话需自动续期并给出过期提示</p>
+      </div>
+      <div class="sec">
+        <div class="sec-h">阶段 <span class="hint">执行到哪、每步产出了什么</span></div>
+        <div class="dtl" role="list" aria-label="gate-demo 七个阶段">
+          <div class="dtl-it dtl-it--done" role="listitem">
+            <span class="dtl-node dtl-node--done" aria-hidden="true">✓</span>
+            <div class="dtl-r"><span class="dtl-name">立项</span><span class="dtl-dim">无产物</span></div>
+          </div>
+          <div class="dtl-it dtl-it--done" role="listitem">
+            <span class="dtl-node dtl-node--done" aria-hidden="true">✓</span>
+            <div class="dtl-r">
+              <span class="dtl-name">调研</span>
+              <button class="chip dtl-chip" data-copy="docs/design.md" title="design_doc — 点击拷贝路径"><span class="cp">⧉</span> docs/design.md</button>
+            </div>
+          </div>
+          <div class="dtl-it dtl-it--done" role="listitem">
+            <span class="dtl-node dtl-node--done" aria-hidden="true">✓</span>
+            <div class="dtl-r">
+              <span class="dtl-name">规格</span>
+              <button class="chip dtl-chip" data-copy="docs/plan.md" title="plan — 点击拷贝路径"><span class="cp">⧉</span> docs/plan.md</button>
+            </div>
+          </div>
+          <div class="dtl-it dtl-it--done" role="listitem">
+            <span class="dtl-node dtl-node--done" aria-hidden="true">✓</span>
+            <div class="dtl-r">
+              <span class="dtl-name">实现</span>
+              <button class="chip dtl-chip" data-copy="feat/gate-demo" title="branch — 点击拷贝"><span class="cp">⧉</span> feat/gate-demo</button>
+              <span class="chip chip--empty" title="build_sha 未产出 · direct 模式豁免">build_sha 豁免</span>
+            </div>
+          </div>
+          <div class="dtl-it dtl-it--cur" role="listitem">
+            <span class="dtl-node dtl-node--cur" aria-hidden="true"></span>
+            <div class="dtl-r"><span class="dtl-name">验证</span></div>
+            <div class="dtl-box">
+              <div class="dt-verdict"><span class="ic ic--good">✓</span>三项检查全部通过——确认无误就放行</div>
+              <div class="dt-arts">
+                <div class="field"><div class="fk">verify_result</div><div class="fv dt-pass">pass</div></div>
+                <div class="field"><div class="fk" title="agent_review_result">agent_review</div><div class="fv dt-pass">pass</div></div>
+                <div class="field"><div class="fk" title="codex_review_result">codex_review</div><div class="fv dt-pass">pass</div></div>
+                <div class="field"><div class="fk" title="verification_report">report</div><div class="fv mono" data-copy="docs/verify.md" title="点击拷贝路径">docs/verify.md <span class="dt-cp">⧉</span></div></div>
+              </div>
+            </div>
+          </div>
+          <div class="dtl-it dtl-it--todo" role="listitem">
+            <span class="dtl-node dtl-node--todo" aria-hidden="true"></span>
+            <div class="dtl-r"><span class="dtl-name">交付</span><span class="dtl-dim">未开始</span></div>
+          </div>
+          <div class="dtl-it dtl-it--todo" role="listitem">
+            <span class="dtl-node dtl-node--todo" aria-hidden="true"></span>
+            <div class="dtl-r"><span class="dtl-name">归档</span><span class="dtl-dim">未开始</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="sec">
+        <div class="sec-h">在终端继续</div>
+        <div class="ibx-code">
+          <span class="p mono">$</span>
+          <code class="mono">pipeline transition gate-demo verify-pass</code>
+          <button class="ibx-codecopy" data-copy="pipeline transition gate-demo verify-pass" title="拷贝命令">⧉</button>
+        </div>
+        <div class="ibx-note">或直接在下方放行——两者等价,都会走同一转换校验</div>
+      </div>
+      <div class="ibx-foot">
+        <span class="ibx-foot-l mono">verify → ship</span>
+        <div class="ibx-foot-btns">
+          <button class="btn sm btn--tint-red ibx-act">↩ 打回</button>
+          <button class="btn sm btn--primary ibx-act">→ 放行</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- hotfix-login 详情(任务详情共用设计) -->
+    <div class="card ibx-detail" data-ibx-detail="hotfix-login" style="display:none">
+      <div class="card-h">
+        <span class="ibx-dname mono">hotfix-login</span>
+        <span class="badge badge--red"><span class="dot"></span>失败 ×3 · 等你决定</span>
+        <span class="sp"></span>
+        <button class="ibx-close" aria-label="收起详情" title="收起(Esc)">✕</button>
+      </div>
+      <div class="sec">
+        <div class="sec-h">任务</div>
+        <p class="dt-req">紧急修复 OAuth 回调 500</p>
+      </div>
+      <div class="sec">
+        <div class="sec-h">阶段 <span class="hint">执行到哪、每步产出了什么</span></div>
+        <div class="dtl" role="list" aria-label="hotfix-login 七个阶段">
+          <div class="dtl-it dtl-it--done" role="listitem">
+            <span class="dtl-node dtl-node--done" aria-hidden="true">✓</span>
+            <div class="dtl-r"><span class="dtl-name">立项</span><span class="dtl-dim">无产物</span></div>
+          </div>
+          <div class="dtl-it dtl-it--done" role="listitem">
+            <span class="dtl-node dtl-node--done" aria-hidden="true">✓</span>
+            <div class="dtl-r">
+              <span class="dtl-name">调研</span>
+              <button class="chip dtl-chip" data-copy="docs/design.md" title="design_doc — 点击拷贝路径"><span class="cp">⧉</span> docs/design.md</button>
+            </div>
+          </div>
+          <div class="dtl-it dtl-it--done" role="listitem">
+            <span class="dtl-node dtl-node--done" aria-hidden="true">✓</span>
+            <div class="dtl-r">
+              <span class="dtl-name">规格</span>
+              <button class="chip dtl-chip" data-copy="docs/plan.md" title="plan — 点击拷贝路径"><span class="cp">⧉</span> docs/plan.md</button>
+            </div>
+          </div>
+          <div class="dtl-it dtl-it--fail" role="listitem">
+            <span class="dtl-node dtl-node--fail" aria-hidden="true">×</span>
+            <div class="dtl-r"><span class="dtl-name">实现</span><span class="dtl-dim">自动重试 3 次后停在这</span></div>
+            <div class="dtl-box dtl-box--bad">
+              <div class="dt-verdict dt-verdict--bad"><span class="ic">×</span>verify 失败:2 个用例未过(auth.test.ts)</div>
+              <div class="dt-arts">
+                <div class="field dt-art--wide"><div class="fk">last_error</div><div class="fv mono dtl-err">verify: 2 failed · auth.test.ts</div></div>
+                <div class="field"><div class="fk">attempts</div><div class="fv">3</div></div>
+                <div class="field dt-field--miss"><div class="fk">branch · build_sha</div><div class="fv">未产出</div></div>
+              </div>
+              <p class="dt-note">重试会清零计数重新挂队;放弃则归档现场,worktree 保留</p>
+            </div>
+          </div>
+          <div class="dtl-it dtl-it--todo" role="listitem">
+            <span class="dtl-node dtl-node--todo" aria-hidden="true"></span>
+            <div class="dtl-r"><span class="dtl-name">验证</span><span class="dtl-dim">未开始</span></div>
+          </div>
+          <div class="dtl-it dtl-it--todo" role="listitem">
+            <span class="dtl-node dtl-node--todo" aria-hidden="true"></span>
+            <div class="dtl-r"><span class="dtl-name">交付</span><span class="dtl-dim">未开始</span></div>
+          </div>
+          <div class="dtl-it dtl-it--todo" role="listitem">
+            <span class="dtl-node dtl-node--todo" aria-hidden="true"></span>
+            <div class="dtl-r"><span class="dtl-name">归档</span><span class="dtl-dim">未开始</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="ibx-foot">
+        <span class="ibx-foot-l mono">automation · failed</span>
+        <div class="ibx-foot-btns">
+          <button class="btn sm btn--ghost ibx-act" data-toast="demo:放弃——归档现场,worktree 保留">✕ 放弃</button>
+          <button class="btn sm btn--primary ibx-act" data-toast="demo:重试——清零计数重新挂队">↻ 重试</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- changelog-cn 详情(任务详情共用设计) -->
+    <div class="card ibx-detail" data-ibx-detail="changelog-cn" style="display:none">
+      <div class="card-h">
+        <span class="ibx-dname mono">changelog-cn</span>
+        <span class="badge badge--red"><span class="dot"></span>等你判断</span>
+        <span class="sp"></span>
+        <button class="ibx-close" aria-label="收起详情" title="收起(Esc)">✕</button>
+      </div>
+      <div class="sec">
+        <div class="sec-h">任务</div>
+        <p class="dt-req">发布面向用户的中文更新日志页</p>
+      </div>
+      <div class="sec">
+        <div class="sec-h">阶段 <span class="hint">执行到哪、每步产出了什么</span></div>
+        <div class="dtl" role="list" aria-label="changelog-cn 三个阶段">
+          <div class="dtl-it dtl-it--done" role="listitem">
+            <span class="dtl-node dtl-node--done" aria-hidden="true">✓</span>
+            <div class="dtl-r">
+              <span class="dtl-name">起草</span>
+              <button class="chip dtl-chip" data-copy="docs/changelog-draft.md" title="draft — 点击拷贝路径"><span class="cp">⧉</span> docs/changelog-draft.md</button>
+            </div>
+          </div>
+          <div class="dtl-it dtl-it--cur" role="listitem">
+            <span class="dtl-node dtl-node--cur" aria-hidden="true"></span>
+            <div class="dtl-r"><span class="dtl-name">人工复核</span></div>
+            <div class="dtl-box">
+              <div class="dt-verdict"><span class="ic ic--dim">○</span>无自动检查,发不发布由你判断</div>
+              <div class="dt-none">本阶段无产物登记</div>
+            </div>
+          </div>
+          <div class="dtl-it dtl-it--todo" role="listitem">
+            <span class="dtl-node dtl-node--todo" aria-hidden="true"></span>
+            <div class="dtl-r"><span class="dtl-name">发布</span><span class="dtl-dim">未开始</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="sec">
+        <div class="sec-h">在终端继续</div>
+        <div class="ibx-code">
+          <span class="p mono">$</span>
+          <code class="mono">pipeline transition changelog-cn approved</code>
+          <button class="ibx-codecopy" data-copy="pipeline transition changelog-cn approved" title="拷贝命令">⧉</button>
+        </div>
+        <div class="ibx-note">或直接在下方发布——两者等价,都会走同一转换校验</div>
+      </div>
+      <div class="ibx-foot">
+        <span class="ibx-foot-l mono">review → ship</span>
+        <div class="ibx-foot-btns">
+          <button class="btn sm btn--tint-red ibx-act">↩ 打回</button>
+          <button class="btn sm btn--primary ibx-act">→ 发布</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Esc 收起占位 -->
+    <div class="card ibx-empty" style="display:none">
+      <div class="ibx-empty-in">
+        详情已收起<br/>
+        按 <span class="kbd">Enter</span> 或点击左侧任意行重新打开
+      </div>
+    </div>
+
+  </aside>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  var view = document.querySelector('.view[data-view="inbox"]');
+  if (!view) return;
+
+  var rows = Array.prototype.slice.call(view.querySelectorAll('.ibx-row'));
+  var details = Array.prototype.slice.call(view.querySelectorAll('.ibx-detail'));
+  var empty = view.querySelector('.ibx-empty');
+  var current = 0;      /* 默认选中 gate-demo */
+  var open = true;      /* 详情卡是否展开 */
+
+  /* 阶段时间线进场:stagger 淡入一次;reduced-motion 直接终态 */
+  var reduceMotion = false;
+  if (window.gsap && typeof window.gsap.matchMedia === 'function') {
+    window.gsap.matchMedia().add('(prefers-reduced-motion: reduce)', function () {
+      reduceMotion = true;
+      details.forEach(function (d) {
+        if (d._dtlTl) { d._dtlTl.kill(); d._dtlTl = null; }
+        window.gsap.set(d.querySelectorAll('.dtl-it'), { autoAlpha: 1, y: 0 });
+      });
+      return function () { reduceMotion = false; };
+    });
+  }
+  function playStages(card) {
+    if (!window.gsap || !card) return;
+    var items = card.querySelectorAll('.dtl-it');
+    if (!items.length) return;
+    if (card._dtlTl) { card._dtlTl.kill(); card._dtlTl = null; }
+    if (reduceMotion) { window.gsap.set(items, { autoAlpha: 1, y: 0 }); return; }
+    var tl = window.gsap.timeline({
+      onComplete: function () { window.gsap.set(items, { clearProps: 'all' }); card._dtlTl = null; }
+    });
+    tl.fromTo(items,
+      { autoAlpha: 0, y: 6 },
+      { autoAlpha: 1, y: 0, duration: .25, ease: 'power2.out', stagger: .04 });
+    card._dtlTl = tl;
+  }
+
+  function render() {
+    rows.forEach(function (r, i) {
+      var on = open && i === current;
+      r.classList.toggle('ibx-row--on', on);
+      r.setAttribute('aria-selected', String(on));
+    });
+    details.forEach(function (d) {
+      var on = open && d.getAttribute('data-ibx-detail') === rows[current].getAttribute('data-ibx');
+      var was = d.style.display !== 'none';
+      d.style.display = on ? '' : 'none';
+      if (on && !was) playStages(d);
+    });
+    if (empty) empty.style.display = open ? 'none' : '';
+  }
+
+  /* 点行切换 */
+  rows.forEach(function (r, i) {
+    r.addEventListener('click', function () {
+      current = i; open = true; render();
+    });
+  });
+
+  /* 关闭钮 = Esc */
+  Array.prototype.forEach.call(view.querySelectorAll('.ibx-close'), function (b) {
+    b.addEventListener('click', function (e) {
+      e.stopPropagation(); open = false; render();
+    });
+  });
+
+  /* 放行 / 打回:demo 只提示;被产出检查拦下的放行钮给出原因 */
+  Array.prototype.forEach.call(view.querySelectorAll('.ibx-act'), function (b) {
+    b.addEventListener('click', function () {
+      if (b.classList.contains('ibx-act--blocked')) {
+        if (window.showToast) window.showToast('产出检查未过:plan 未产出');
+        return;
+      }
+      var msg = b.getAttribute('data-toast') || 'demo:此处将调用真实转换端点';
+      if (window.showToast) window.showToast(msg);
+    });
+  });
+
+  /* 键盘:仅本视图可见时生效;输入类/按钮焦点旁路 */
+  function typingTarget(t) {
+    if (!t || !t.closest) return false;
+    return !!t.closest('input, textarea, select, [contenteditable="true"]');
+  }
+  document.addEventListener('keydown', function (e) {
+    var host = rows[0].closest('.view');
+    if (!host || !host.classList.contains('on')) return;
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (typingTarget(e.target)) return;
+
+    if (e.key === 'j' || e.key === 'k') {
+      e.preventDefault();
+      current = e.key === 'j' ? Math.min(current + 1, rows.length - 1) : Math.max(current - 1, 0);
+      open = true; render();
+      if (rows[current].scrollIntoView) rows[current].scrollIntoView({ block: 'nearest' });
+    } else if (e.key === 'Enter') {
+      /* 焦点在按钮/链接上时不劫持 Enter */
+      if (e.target && e.target.closest && e.target.closest('button, a') && !e.target.closest('.ibx-row')) return;
+      e.preventDefault();
+      open = true; render();
+    } else if (e.key === 'Escape') {
+      if (open) { open = false; render(); }
+    }
+  });
+
+  /* 首次进场:默认展开的详情卡播一次 */
+  playStages(details.filter(function (d) { return d.style.display !== 'none' })[0]);
+})();
+</script>
+
+
+    </section>
+  <section class="view" data-view="progress">
+    
+    <style>
+/* ============ 进度视图(prg-)— r5:箭头带 × SaaS 分组卡 × 项目下拉多选 × 状态计数 chips ============ */
+
+/* 调度器健康灯(busy=黄:红绿 token 在 oklch 空间取中,不引入硬编码色值) */
+.prg-doctor { display:inline-flex; align-items:center; gap:8px; height:28px; padding:0 12px; border-radius:999px; background:var(--card); border:1px solid var(--border); box-shadow:var(--shadow); font-size:12px; font-weight:600; color:var(--text-2); white-space:nowrap }
+.prg-doctor__d { width:8px; height:8px; border-radius:999px; flex:none; background:var(--red); background:color-mix(in oklch, var(--red) 52%, var(--green)) }
+
+/* 筛选条:项目下拉多选 × 状态计数 chips */
+.prg-filters { display:flex; align-items:center; flex-wrap:wrap; gap:8px 12px; margin:-4px 0 18px }
+.prg-fdiv { width:1px; height:16px; background:var(--border-2); flex:none }
+
+/* 项目下拉多选 */
+.prg-dd { position:relative }
+.prg-ddbtn { display:inline-flex; align-items:center; gap:7px; height:28px; padding:0 12px; border-radius:999px; font-size:12px; font-weight:600; background:var(--card); border:1px solid var(--border); color:var(--text-2); box-shadow:var(--shadow); transition:background .12s, border-color .12s }
+.prg-ddbtn:hover, .prg-ddbtn[aria-expanded="true"] { background:var(--fill); border-color:var(--border-2) }
+.prg-ddval { color:var(--text) }
+.prg-ddcaret { font-size:9px; color:var(--text-3) }
+.prg-ddmenu { position:absolute; left:0; top:calc(100% + 6px); min-width:180px; background:var(--card); border:1px solid var(--border); border-radius:12px; box-shadow:var(--shadow-2); padding:6px; z-index:45 }
+.prg-ddmenu[hidden] { display:none }
+.prg-ddopt { display:flex; align-items:center; gap:9px; padding:7px 10px; border-radius:8px; font-size:13px; color:var(--text-2); cursor:pointer }
+.prg-ddopt:hover { background:var(--fill) }
+.prg-ddopt input { width:14px; height:14px; margin:0; accent-color:var(--accent); flex:none }
+.prg-ddfoot { margin-top:4px; padding:7px 10px 4px; border-top:1px solid var(--border) }
+.prg-ddclear { font-size:12px; font-weight:600; color:var(--accent); padding:0 }
+.prg-ddclear:hover { color:var(--accent-d) }
+
+/* 状态计数 chips(固定五态字典 + 全部;选中 = accent 描边 + accent-t 底) */
+.prg-schips { display:flex; align-items:center; flex-wrap:wrap; gap:6px }
+.prg-schip { display:inline-flex; align-items:center; gap:6px; height:28px; padding:0 11px; border-radius:999px; font-size:12px; font-weight:600; background:var(--card); border:1px solid var(--border); color:var(--text-2); box-shadow:var(--shadow); transition:background .12s, border-color .12s, color .12s }
+.prg-schip:hover { background:var(--fill); border-color:var(--border-2) }
+.prg-schip.on, .prg-schip.on:hover { background:var(--accent-t); border-color:var(--accent); color:var(--accent-d); box-shadow:none }
+.prg-schip .n { font-weight:600; color:var(--text-3) }
+.prg-schip.on .n { color:var(--accent-d) }
+.prg-sdot { width:6px; height:6px; border-radius:999px; flex:none }
+.prg-sdot--gate { background:var(--red) }
+.prg-sdot--agent { background:var(--red); background:color-mix(in oklch, var(--red) 52%, var(--green)) }
+.prg-sdot--run { background:var(--accent) }
+.prg-sdot--queue { background:var(--text-3) }
+.prg-sx { font-size:11px; font-weight:700; line-height:1; color:var(--red); font-style:normal }
+
+/* ============ 分组:整组一张卡,轻量组头 + 分隔线行(Linear/Height 式) ============ */
+.prg-group { overflow:hidden }
+.prg-ghead { display:flex; align-items:center; gap:8px; width:100%; padding:10px 16px; border-bottom:1px solid var(--border); text-align:left; cursor:pointer }
+.prg-ghead:hover { background:color-mix(in srgb, var(--fill) 55%, transparent) }
+.prg-ghead__name { font-size:12.5px; font-weight:600; letter-spacing:.02em }
+.prg-ghead__meta { font-size:12px; color:var(--text-3) }
+.prg-ghead__caret { margin-left:auto; font-size:10px; color:var(--text-3); transition:transform .15s }
+.prg-group--closed .prg-ghead { border-bottom-color:transparent }
+.prg-group--closed .prg-ghead__caret { transform:rotate(-90deg) }
+.prg-group--closed .prg-rows { display:none }
+
+/* 行:组卡内分隔线行,~64px,hover --fill */
+.prg-row + .prg-row { border-top:1px solid var(--border) }
+.prg-row__main { display:grid; grid-template-columns:210px minmax(0,1fr) 230px; gap:16px; align-items:center; min-height:64px; padding:6px 16px; cursor:pointer; transition:background .12s }
+.prg-row__main:hover { background:var(--fill) }
+
+.prg-name { display:flex; align-items:center; gap:8px; min-width:0 }
+.prg-name__t { font-size:13.5px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+
+/* ============ 方案 A:连续 chevron 铰接箭头带 ============ */
+.prg-flow { display:flex; align-items:center; min-width:0 }
+.prg-seg {
+  position:relative; flex:1 1 0; min-width:0; max-width:170px; height:30px;
+  display:flex; align-items:center; justify-content:center; padding:0 10px 0 15px;
+  clip-path:polygon(0 0, calc(100% - 9px) 0, 100% 50%, calc(100% - 9px) 100%, 0 100%, 9px 50%);
+}
+.prg-seg + .prg-seg { margin-left:-7px }
+.prg-seg:first-child { clip-path:polygon(0 0, calc(100% - 9px) 0, 100% 50%, calc(100% - 9px) 100%, 0 100%); padding-left:12px }
+.prg-seg:last-child { clip-path:polygon(0 0, 100% 0, 100% 100%, 0 100%, 9px 50%); padding-right:12px }
+.prg-seg__t { font-family:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace; font-size:12px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100% }
+.prg-seg--past { background:var(--green-t); color:var(--green-d) }
+.prg-seg--cur { background:var(--accent); color:var(--btn-fg) }
+.prg-seg--fail { background:var(--red); color:var(--btn-fg) }
+.prg-seg--fut { background:var(--fill); color:var(--text-3) }
+/* 行 hover 底为 --fill 时,未来段换 --fill-2 保住箭形轮廓 */
+.prg-row__main:hover .prg-seg--fut { background:var(--fill-2) }
+/* 未到达的门阶段:段右上角 6px 红点 */
+.prg-seg--gate::after { content:""; position:absolute; top:3px; right:13px; width:6px; height:6px; border-radius:999px; background:var(--red) }
+/* 执行中段:光泽扫过条(GSAP x 位移 repeat:-1;无 GSAP / reduced-motion 时保持透明) */
+.prg-gloss { position:absolute; top:0; bottom:0; left:0; width:42px; opacity:0; pointer-events:none; background:linear-gradient(105deg, transparent 12%, color-mix(in srgb, var(--btn-fg) 45%, transparent) 50%, transparent 88%) }
+
+/* 状态 + 快捷钮 */
+.prg-state { display:flex; align-items:center; justify-content:flex-end; gap:8px; white-space:nowrap }
+.prg-badge--pulse .dot { animation:prg-blink 1.3s ease-in-out infinite }
+@keyframes prg-blink { 50% { opacity:.3 } }
+.prg-caret { color:var(--text-3); font-size:10px; line-height:1; transition:transform .15s; transform:rotate(-90deg) }
+.prg-row--open .prg-caret { transform:rotate(0deg) }
+
+/* 展开区:行下任务详情,fill 底(dt- 阶段 sheet 共用组件) */
+.prg-detail { display:none; background:var(--fill); border-top:1px solid var(--border) }
+.prg-row--open .prg-detail { display:block }
+.prg-dsec { padding:14px 16px }
+.prg-dsec + .prg-dsec { border-top:1px solid var(--border) }
+.prg-dsec .dt-req, .prg-dsec .dt-stages { max-width:860px }
+/* fill 底上的 dt- 组件换底,保持可辨 */
+.prg-detail .field { background:var(--card) }
+.prg-detail .dt-field--miss { background:transparent }
+.prg-detail .dt-tab:not(.dt-tab--cur):not(.dt-tab--fail) { background:var(--card) }
+.prg-detail .dt-tab:not(.dt-tab--cur):not(.dt-tab--fail):hover { background:var(--fill-2) }
+.prg-dfoot { display:flex; align-items:center; flex-wrap:wrap; gap:8px; padding:12px 16px; border-top:1px solid var(--border) }
+.prg-dfoot-l { font-size:11.5px; color:var(--text-3); flex:none }
+.prg-dfoot-note { font-size:12.5px; color:var(--text-3) }
+.prg-dfoot-btns { display:flex; align-items:center; gap:8px; margin-left:auto }
+
+/* 「实现」阶段 tab 内的执行日志(afk-demo) */
+.prg-logwrap { margin-top:10px }
+.prg-logbar { display:flex; align-items:center; gap:8px; margin-bottom:8px }
+.prg-loglabel { font-size:11.5px; font-weight:600; letter-spacing:.04em; color:var(--text-3) }
+.prg-follow { display:inline-flex; align-items:center; gap:7px; font-size:12px; color:var(--text-2) }
+.prg-log { margin:0; background:var(--code-bg); border:1px solid var(--code-border); border-radius:10px; padding:11px 14px; font-size:12px; line-height:1.75; color:var(--text-2); overflow-x:auto }
+.prg-log__ok { color:var(--green-d) }
+.prg-lognote { margin-top:8px; font-size:12px; color:var(--text-3) }
+
+/* 筛选空态 + 底部说明 */
+.prg-empty { padding:26px 16px; text-align:center; font-size:12.5px; color:var(--text-3); border:1px dashed var(--border-2); border-radius:12px; margin-bottom:18px }
+.prg-foot { margin-top:14px; font-size:12.5px; color:var(--text-3) }
+</style>
+
+<div class="view__head">
+  <h1>进度</h1>
+  <span class="view__sub">操作就在这里做——点行展开详情,放行 / 打回 / 重试 / 终止</span>
+  <span class="sp"></span>
+  <span class="prg-doctor"><i class="prg-doctor__d"></i>调度中 · 1 执行 1 排队 1 失败</span>
+</div>
+
+<div class="prg-filters">
+  <div class="prg-dd">
+    <button class="prg-ddbtn" type="button" aria-haspopup="true" aria-expanded="false">项目:<span class="prg-ddval">全部</span><span class="prg-ddcaret" aria-hidden="true">▾</span></button>
+    <div class="prg-ddmenu" hidden>
+      <label class="prg-ddopt"><input type="checkbox" value="proj-a" /><span class="mono">proj-a</span></label>
+      <label class="prg-ddopt"><input type="checkbox" value="proj-b" /><span class="mono">proj-b</span></label>
+      <div class="prg-ddfoot"><button class="prg-ddclear" type="button">清空</button></div>
+    </div>
+  </div>
+  <i class="prg-fdiv" aria-hidden="true"></i>
+  <div class="prg-schips" role="group" aria-label="按状态筛选">
+    <button class="prg-schip on" data-f-state="all" aria-pressed="true">全部 <span class="n mono">7</span></button>
+    <button class="prg-schip" data-f-state="gate" aria-pressed="false"><i class="prg-sdot prg-sdot--gate"></i>等你确认 <span class="n mono">3</span></button>
+    <button class="prg-schip" data-f-state="agent" aria-pressed="false"><i class="prg-sdot prg-sdot--agent"></i>等 agent <span class="n mono">1</span></button>
+    <button class="prg-schip" data-f-state="running" aria-pressed="false"><i class="prg-sdot prg-sdot--run"></i>执行中 <span class="n mono">1</span></button>
+    <button class="prg-schip" data-f-state="queued" aria-pressed="false"><i class="prg-sdot prg-sdot--queue"></i>排队 <span class="n mono">1</span></button>
+    <button class="prg-schip" data-f-state="failed" aria-pressed="false"><i class="prg-sx" aria-hidden="true">×</i>失败 <span class="n mono">1</span></button>
+  </div>
+</div>
+
+<!-- ===== proj-a · default(5 个任务) ===== -->
+<div class="prg-group card">
+  <button class="prg-ghead" type="button" aria-expanded="true">
+    <span class="prg-ghead__name mono">proj-a</span>
+    <span class="badge mono">default</span>
+    <span class="prg-ghead__meta">7 阶段 · 5 个任务</span>
+    <span class="prg-ghead__caret" aria-hidden="true">▾</span>
+  </button>
+  <div class="prg-rows">
+
+    <!-- gate-demo · verify · 等你确认 -->
+    <div class="prg-row" data-prg-expand data-task="gate-demo" data-proj="proj-a" data-state="gate">
+      <div class="prg-row__main" role="button" tabindex="0" aria-expanded="false">
+        <div class="prg-name">
+          <span class="prg-name__t mono">gate-demo</span>
+          <span class="badge mono">backend</span>
+        </div>
+        <div class="prg-flow" aria-label="default 工作流,当前阶段 验证(第 5 / 7),等你确认">
+          <span class="prg-seg prg-seg--past"><span class="prg-seg__t">✓ 立项</span></span>
+          <span class="prg-seg prg-seg--past"><span class="prg-seg__t">✓ 调研</span></span>
+          <span class="prg-seg prg-seg--past"><span class="prg-seg__t">✓ 规格</span></span>
+          <span class="prg-seg prg-seg--past"><span class="prg-seg__t">✓ 实现</span></span>
+          <span class="prg-seg prg-seg--cur"><span class="prg-seg__t">验证</span></span>
+          <span class="prg-seg prg-seg--fut"><span class="prg-seg__t">交付</span></span>
+          <span class="prg-seg prg-seg--fut"><span class="prg-seg__t">归档</span></span>
+        </div>
+        <div class="prg-state">
+          <span class="badge badge--red"><span class="dot"></span>等你确认</span>
+          <span class="prg-caret" aria-hidden="true">▾</span>
+        </div>
+      </div>
+      <div class="prg-detail">
+        <div class="prg-dsec">
+          <div class="sec-h">任务</div>
+          <p class="dt-req">修复登录 token 过期后静默失效——会话需自动续期并给出过期提示</p>
+        </div>
+        <div class="prg-dsec">
+          <div class="sec-h">阶段 <span class="hint">执行到哪、每步产出了什么</span></div>
+          <div class="dt-stages">
+            <div class="dt-tabs" role="tablist" aria-label="gate-demo 各阶段(进度)">
+              <button class="dt-tab dt-tab--done" data-dt-tab="open" role="tab" aria-selected="false"><span class="tfx">✓</span>立项</button>
+              <button class="dt-tab dt-tab--done" data-dt-tab="explore" role="tab" aria-selected="false"><span class="tfx">✓</span>调研</button>
+              <button class="dt-tab dt-tab--done" data-dt-tab="spec" role="tab" aria-selected="false"><span class="tfx">✓</span>规格</button>
+              <button class="dt-tab dt-tab--done" data-dt-tab="build" role="tab" aria-selected="false"><span class="tfx">✓</span>实现</button>
+              <button class="dt-tab dt-tab--cur on" data-dt-tab="verify" role="tab" aria-selected="true"><span class="tfx">●</span>验证</button>
+              <button class="dt-tab" data-dt-tab="ship" role="tab" aria-selected="false">交付</button>
+              <button class="dt-tab" data-dt-tab="archive" role="tab" aria-selected="false">归档</button>
+            </div>
+            <div class="dt-pane" data-dt-pane="open" hidden>
+              <p class="dt-desc">登记任务、进入调度队列——本阶段无产物</p>
+              <div class="dt-none">无产物登记</div>
+            </div>
+            <div class="dt-pane" data-dt-pane="explore" hidden>
+              <p class="dt-desc">摸清现状与方案取舍,产出设计文档</p>
+              <div class="dt-arts">
+                <div class="field dt-art--wide"><div class="fk">design_doc</div><div class="fv mono" data-copy="docs/design.md" title="点击拷贝路径">docs/design.md <span class="dt-cp">⧉</span></div></div>
+              </div>
+            </div>
+            <div class="dt-pane" data-dt-pane="spec" hidden>
+              <p class="dt-desc">把设计定稿为可执行计划</p>
+              <div class="dt-arts">
+                <div class="field dt-art--wide"><div class="fk">plan</div><div class="fv mono" data-copy="docs/plan.md" title="点击拷贝路径">docs/plan.md <span class="dt-cp">⧉</span></div></div>
+              </div>
+            </div>
+            <div class="dt-pane" data-dt-pane="build" hidden>
+              <p class="dt-desc">按 plan 在独立分支上写码构建</p>
+              <div class="dt-arts">
+                <div class="field"><div class="fk">branch</div><div class="fv mono" data-copy="feat/gate-demo" title="点击拷贝">feat/gate-demo <span class="dt-cp">⧉</span></div></div>
+                <div class="field dt-field--miss"><div class="fk">build_sha</div><div class="fv">未产出 · direct 模式豁免</div></div>
+              </div>
+            </div>
+            <div class="dt-pane" data-dt-pane="verify">
+              <div class="dt-verdict"><span class="ic ic--good">✓</span>三项检查全部通过——确认无误就放行</div>
+              <p class="dt-desc">自动验证 + agent/codex 双 review,产出四项证据</p>
+              <div class="dt-arts">
+                <div class="field"><div class="fk">verify_result</div><div class="fv dt-pass">pass</div></div>
+                <div class="field"><div class="fk">agent_review_result</div><div class="fv dt-pass">pass</div></div>
+                <div class="field"><div class="fk">codex_review_result</div><div class="fv dt-pass">pass</div></div>
+                <div class="field"><div class="fk">verification_report</div><div class="fv mono" data-copy="docs/verify.md" title="点击拷贝路径">docs/verify.md <span class="dt-cp">⧉</span></div></div>
+              </div>
+            </div>
+            <div class="dt-pane" data-dt-pane="ship" hidden><div class="dt-empty">未开始</div></div>
+            <div class="dt-pane" data-dt-pane="archive" hidden><div class="dt-empty">未开始</div></div>
+          </div>
+        </div>
+        <div class="prg-dfoot">
+          <span class="prg-dfoot-l mono">verify → ship</span>
+          <div class="prg-dfoot-btns">
+            <button class="btn sm btn--tint-red" data-prg-act="reject" data-toast="demo:打回——退回上一阶段重跑">↩ 打回</button>
+            <button class="btn sm btn--primary" data-prg-act="pass" data-toast="demo:放行——走转换校验进入交付">→ 放行</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- triage-demo · spec · 等 agent 补产出 -->
+    <div class="prg-row" data-prg-expand data-task="triage-demo" data-proj="proj-a" data-state="agent">
+      <div class="prg-row__main" role="button" tabindex="0" aria-expanded="false">
+        <div class="prg-name">
+          <span class="prg-name__t mono">triage-demo</span>
+          <span class="badge mono">chat</span>
+        </div>
+        <div class="prg-flow" aria-label="default 工作流,当前阶段 规格(第 3 / 7),等 agent 补产出">
+          <span class="prg-seg prg-seg--past"><span class="prg-seg__t">✓ 立项</span></span>
+          <span class="prg-seg prg-seg--past"><span class="prg-seg__t">✓ 调研</span></span>
+          <span class="prg-seg prg-seg--cur"><span class="prg-seg__t">规格</span></span>
+          <span class="prg-seg prg-seg--fut"><span class="prg-seg__t">实现</span></span>
+          <span class="prg-seg prg-seg--fut prg-seg--gate"><span class="prg-seg__t">验证</span></span>
+          <span class="prg-seg prg-seg--fut"><span class="prg-seg__t">交付</span></span>
+          <span class="prg-seg prg-seg--fut"><span class="prg-seg__t">归档</span></span>
+        </div>
+        <div class="prg-state">
+          <span class="badge">等 agent · 补产出 plan</span>
+          <span class="prg-caret" aria-hidden="true">▾</span>
+        </div>
+      </div>
+      <div class="prg-detail">
+        <div class="prg-dsec">
+          <div class="sec-h">任务</div>
+          <p class="dt-req">聊天输入框支持图片粘贴直接上传</p>
+        </div>
+        <div class="prg-dsec">
+          <div class="sec-h">阶段 <span class="hint">执行到哪、每步产出了什么</span></div>
+          <div class="dt-stages">
+            <div class="dt-tabs" role="tablist" aria-label="triage-demo 各阶段(进度)">
+              <button class="dt-tab dt-tab--done" data-dt-tab="open" role="tab" aria-selected="false"><span class="tfx">✓</span>立项</button>
+              <button class="dt-tab dt-tab--done" data-dt-tab="explore" role="tab" aria-selected="false"><span class="tfx">✓</span>调研</button>
+              <button class="dt-tab dt-tab--cur on" data-dt-tab="spec" role="tab" aria-selected="true"><span class="tfx">●</span>规格</button>
+              <button class="dt-tab" data-dt-tab="build" role="tab" aria-selected="false">实现</button>
+              <button class="dt-tab" data-dt-tab="verify" role="tab" aria-selected="false">验证</button>
+              <button class="dt-tab" data-dt-tab="ship" role="tab" aria-selected="false">交付</button>
+              <button class="dt-tab" data-dt-tab="archive" role="tab" aria-selected="false">归档</button>
+            </div>
+            <div class="dt-pane" data-dt-pane="open" hidden>
+              <p class="dt-desc">登记任务、进入调度队列——本阶段无产物</p>
+              <div class="dt-none">无产物登记</div>
+            </div>
+            <div class="dt-pane" data-dt-pane="explore" hidden>
+              <p class="dt-desc">摸清现状与方案取舍,产出设计文档</p>
+              <div class="dt-arts">
+                <div class="field dt-art--wide"><div class="fk">design_doc</div><div class="fv mono" data-copy="docs/design.md" title="点击拷贝路径">docs/design.md <span class="dt-cp">⧉</span></div></div>
+              </div>
+            </div>
+            <div class="dt-pane" data-dt-pane="spec">
+              <div class="dt-verdict"><span class="ic ic--dim">○</span>plan 未产出——等 agent 在终端补齐后才能推进</div>
+              <p class="dt-desc">把设计定稿为可执行计划</p>
+              <div class="dt-arts">
+                <div class="field dt-field--miss dt-art--wide"><div class="fk">plan</div><div class="fv">未产出</div></div>
+              </div>
+            </div>
+            <div class="dt-pane" data-dt-pane="build" hidden><div class="dt-empty">未开始</div></div>
+            <div class="dt-pane" data-dt-pane="verify" hidden><div class="dt-empty">未开始</div></div>
+            <div class="dt-pane" data-dt-pane="ship" hidden><div class="dt-empty">未开始</div></div>
+            <div class="dt-pane" data-dt-pane="archive" hidden><div class="dt-empty">未开始</div></div>
+          </div>
+        </div>
+        <div class="prg-dfoot">
+          <span class="prg-dfoot-note">等 agent 补产出 plan——在终端继续</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- afk-demo · build · running -->
+    <div class="prg-row" data-prg-expand data-task="afk-demo" data-proj="proj-a" data-state="running">
+      <div class="prg-row__main" role="button" tabindex="0" aria-expanded="false">
+        <div class="prg-name">
+          <span class="prg-name__t mono">afk-demo</span>
+          <span class="badge mono">chat</span>
+        </div>
+        <div class="prg-flow" aria-label="default 工作流,当前阶段 实现(第 4 / 7),执行中">
+          <span class="prg-seg prg-seg--past"><span class="prg-seg__t">✓ 立项</span></span>
+          <span class="prg-seg prg-seg--past"><span class="prg-seg__t">✓ 调研</span></span>
+          <span class="prg-seg prg-seg--past"><span class="prg-seg__t">✓ 规格</span></span>
+          <span class="prg-seg prg-seg--cur prg-seg--run"><span class="prg-seg__t">实现</span><i class="prg-gloss" aria-hidden="true"></i></span>
+          <span class="prg-seg prg-seg--fut prg-seg--gate"><span class="prg-seg__t">验证</span></span>
+          <span class="prg-seg prg-seg--fut"><span class="prg-seg__t">交付</span></span>
+          <span class="prg-seg prg-seg--fut"><span class="prg-seg__t">归档</span></span>
+        </div>
+        <div class="prg-state">
+          <span class="badge badge--blue prg-badge--pulse"><span class="dot"></span>执行中</span>
+          <button class="btn sm btn--tint-red" data-prg-act="kill">⏹ 终止</button>
+          <span class="prg-caret" aria-hidden="true">▾</span>
+        </div>
+      </div>
+      <div class="prg-detail">
+        <div class="prg-dsec">
+          <div class="sec-h">任务</div>
+          <p class="dt-req">会话列表虚拟滚动性能重构</p>
+        </div>
+        <div class="prg-dsec">
+          <div class="sec-h">阶段 <span class="hint">执行到哪、每步产出了什么</span></div>
+          <div class="dt-stages">
+            <div class="dt-tabs" role="tablist" aria-label="afk-demo 各阶段(进度)">
+              <button class="dt-tab dt-tab--done" data-dt-tab="open" role="tab" aria-selected="false"><span class="tfx">✓</span>立项</button>
+              <button class="dt-tab dt-tab--done" data-dt-tab="explore" role="tab" aria-selected="false"><span class="tfx">✓</span>调研</button>
+              <button class="dt-tab dt-tab--done" data-dt-tab="spec" role="tab" aria-selected="false"><span class="tfx">✓</span>规格</button>
+              <button class="dt-tab dt-tab--cur on" data-dt-tab="build" role="tab" aria-selected="true"><span class="tfx">●</span>实现</button>
+              <button class="dt-tab" data-dt-tab="verify" role="tab" aria-selected="false">验证</button>
+              <button class="dt-tab" data-dt-tab="ship" role="tab" aria-selected="false">交付</button>
+              <button class="dt-tab" data-dt-tab="archive" role="tab" aria-selected="false">归档</button>
+            </div>
+            <div class="dt-pane" data-dt-pane="open" hidden>
+              <p class="dt-desc">登记任务、进入调度队列——本阶段无产物</p>
+              <div class="dt-none">无产物登记</div>
+            </div>
+            <div class="dt-pane" data-dt-pane="explore" hidden>
+              <p class="dt-desc">摸清现状与方案取舍,产出设计文档</p>
+              <div class="dt-arts">
+                <div class="field dt-art--wide"><div class="fk">design_doc</div><div class="fv mono" data-copy="docs/design.md" title="点击拷贝路径">docs/design.md <span class="dt-cp">⧉</span></div></div>
+              </div>
+            </div>
+            <div class="dt-pane" data-dt-pane="spec" hidden>
+              <p class="dt-desc">把设计定稿为可执行计划</p>
+              <div class="dt-arts">
+                <div class="field dt-art--wide"><div class="fk">plan</div><div class="fv mono" data-copy="docs/plan.md" title="点击拷贝路径">docs/plan.md <span class="dt-cp">⧉</span></div></div>
+              </div>
+            </div>
+            <div class="dt-pane" data-dt-pane="build">
+              <div class="dt-verdict"><span class="ic ic--run">●</span>执行中——沙箱内 agent 正在写码构建</div>
+              <p class="dt-desc">按 plan 在独立分支上写码构建</p>
+              <div class="dt-arts">
+                <div class="field"><div class="fk">sandbox</div><div class="fv mono" data-copy="sandcastle-afk-demo-x1" title="点击拷贝">sandcastle-afk-demo-x1 <span class="dt-cp">⧉</span></div></div>
+                <div class="field"><div class="fk">attempts</div><div class="fv">1</div></div>
+                <div class="field dt-art--wide"><div class="fk">worktree</div><div class="fv mono" data-copy=".sandcastle/worktrees/afk-demo" title="点击拷贝">.sandcastle/worktrees/afk-demo <span class="dt-cp">⧉</span></div></div>
+              </div>
+              <div class="prg-logwrap">
+                <div class="prg-logbar">
+                  <span class="prg-loglabel mono">log · tail</span>
+                  <span class="sp"></span>
+                  <span class="prg-follow">跟随尾部 <button class="switch" role="switch" aria-checked="true" data-prg-follow aria-label="跟随尾部"></button></span>
+                </div>
+                <pre class="prg-log mono">$ npm test --workspaces --run
+✓ auth/session.test.ts  (9 tests)  611ms
+✓ board/list.test.ts  (12 tests)  843ms
+✓ board/move.test.ts  (7 tests)  402ms
+Test Files  3 passed (3)
+     Tests  28 passed (28)
+<span class="prg-log__ok">[TRANSITION] afk-demo: build -&gt; verify (worktree)</span></pre>
+                <p class="prg-lognote">沙箱内阶段:<span class="mono">verify</span>(host 阶段在 run 结束后结算)</p>
+              </div>
+            </div>
+            <div class="dt-pane" data-dt-pane="verify" hidden><div class="dt-empty">未开始</div></div>
+            <div class="dt-pane" data-dt-pane="ship" hidden><div class="dt-empty">未开始</div></div>
+            <div class="dt-pane" data-dt-pane="archive" hidden><div class="dt-empty">未开始</div></div>
+          </div>
+        </div>
+        <div class="prg-dfoot">
+          <span class="prg-dfoot-l mono">automation · running</span>
+          <div class="prg-dfoot-btns">
+            <button class="btn sm btn--tint-red" data-prg-act="kill">⏹ 终止</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- board-demo · open · queued -->
+    <div class="prg-row" data-prg-expand data-task="board-demo" data-proj="proj-a" data-state="queued">
+      <div class="prg-row__main" role="button" tabindex="0" aria-expanded="false">
+        <div class="prg-name">
+          <span class="prg-name__t mono">board-demo</span>
+          <span class="badge mono">frontend</span>
+        </div>
+        <div class="prg-flow" aria-label="default 工作流,当前阶段 立项(第 1 / 7),排队中">
+          <span class="prg-seg prg-seg--cur"><span class="prg-seg__t">立项</span></span>
+          <span class="prg-seg prg-seg--fut prg-seg--gate"><span class="prg-seg__t">调研</span></span>
+          <span class="prg-seg prg-seg--fut prg-seg--gate"><span class="prg-seg__t">规格</span></span>
+          <span class="prg-seg prg-seg--fut"><span class="prg-seg__t">实现</span></span>
+          <span class="prg-seg prg-seg--fut prg-seg--gate"><span class="prg-seg__t">验证</span></span>
+          <span class="prg-seg prg-seg--fut"><span class="prg-seg__t">交付</span></span>
+          <span class="prg-seg prg-seg--fut"><span class="prg-seg__t">归档</span></span>
+        </div>
+        <div class="prg-state">
+          <span class="badge">排队 <span class="mono">#2</span></span>
+          <span class="prg-caret" aria-hidden="true">▾</span>
+        </div>
+      </div>
+      <div class="prg-detail">
+        <div class="prg-dsec">
+          <div class="sec-h">任务</div>
+          <p class="dt-req">看板支持自定义列排序</p>
+        </div>
+        <div class="prg-dsec">
+          <div class="sec-h">阶段 <span class="hint">执行到哪、每步产出了什么</span></div>
+          <div class="dt-stages">
+            <div class="dt-tabs" role="tablist" aria-label="board-demo 各阶段(进度)">
+              <button class="dt-tab dt-tab--cur on" data-dt-tab="open" role="tab" aria-selected="true"><span class="tfx">●</span>立项</button>
+              <button class="dt-tab" data-dt-tab="explore" role="tab" aria-selected="false">调研</button>
+              <button class="dt-tab" data-dt-tab="spec" role="tab" aria-selected="false">规格</button>
+              <button class="dt-tab" data-dt-tab="build" role="tab" aria-selected="false">实现</button>
+              <button class="dt-tab" data-dt-tab="verify" role="tab" aria-selected="false">验证</button>
+              <button class="dt-tab" data-dt-tab="ship" role="tab" aria-selected="false">交付</button>
+              <button class="dt-tab" data-dt-tab="archive" role="tab" aria-selected="false">归档</button>
+            </div>
+            <div class="dt-pane" data-dt-pane="open">
+              <div class="dt-verdict"><span class="ic ic--dim">○</span>排队中 #2——调度器按序拉起,轮到后自动开跑</div>
+              <p class="dt-desc">登记任务、进入调度队列——本阶段无产物</p>
+              <div class="dt-none">无产物登记</div>
+            </div>
+            <div class="dt-pane" data-dt-pane="explore" hidden><div class="dt-empty">未开始</div></div>
+            <div class="dt-pane" data-dt-pane="spec" hidden><div class="dt-empty">未开始</div></div>
+            <div class="dt-pane" data-dt-pane="build" hidden><div class="dt-empty">未开始</div></div>
+            <div class="dt-pane" data-dt-pane="verify" hidden><div class="dt-empty">未开始</div></div>
+            <div class="dt-pane" data-dt-pane="ship" hidden><div class="dt-empty">未开始</div></div>
+            <div class="dt-pane" data-dt-pane="archive" hidden><div class="dt-empty">未开始</div></div>
+          </div>
+        </div>
+        <div class="prg-dfoot">
+          <span class="prg-dfoot-note">排队中,由调度器执行</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- hotfix-login · build · failed -->
+    <div class="prg-row" data-prg-expand data-task="hotfix-login" data-proj="proj-a" data-state="failed">
+      <div class="prg-row__main" role="button" tabindex="0" aria-expanded="false">
+        <div class="prg-name">
+          <span class="prg-name__t mono">hotfix-login</span>
+          <span class="badge mono">backend</span>
+        </div>
+        <div class="prg-flow" aria-label="default 工作流,当前阶段 实现(第 4 / 7),失败">
+          <span class="prg-seg prg-seg--past"><span class="prg-seg__t">✓ 立项</span></span>
+          <span class="prg-seg prg-seg--past"><span class="prg-seg__t">✓ 调研</span></span>
+          <span class="prg-seg prg-seg--past"><span class="prg-seg__t">✓ 规格</span></span>
+          <span class="prg-seg prg-seg--fail"><span class="prg-seg__t">× 实现</span></span>
+          <span class="prg-seg prg-seg--fut prg-seg--gate"><span class="prg-seg__t">验证</span></span>
+          <span class="prg-seg prg-seg--fut"><span class="prg-seg__t">交付</span></span>
+          <span class="prg-seg prg-seg--fut"><span class="prg-seg__t">归档</span></span>
+        </div>
+        <div class="prg-state">
+          <span class="badge badge--red">失败 ×3</span>
+          <button class="btn sm btn--ghost" data-prg-act="retry">↻ 重试</button>
+          <span class="prg-caret" aria-hidden="true">▾</span>
+        </div>
+      </div>
+      <div class="prg-detail">
+        <div class="prg-dsec">
+          <div class="sec-h">任务</div>
+          <p class="dt-req">紧急修复 OAuth 回调 500</p>
+        </div>
+        <div class="prg-dsec">
+          <div class="sec-h">阶段 <span class="hint">执行到哪、每步产出了什么</span></div>
+          <div class="dt-stages">
+            <div class="dt-tabs" role="tablist" aria-label="hotfix-login 各阶段(进度)">
+              <button class="dt-tab dt-tab--done" data-dt-tab="open" role="tab" aria-selected="false"><span class="tfx">✓</span>立项</button>
+              <button class="dt-tab dt-tab--done" data-dt-tab="explore" role="tab" aria-selected="false"><span class="tfx">✓</span>调研</button>
+              <button class="dt-tab dt-tab--done" data-dt-tab="spec" role="tab" aria-selected="false"><span class="tfx">✓</span>规格</button>
+              <button class="dt-tab dt-tab--fail on" data-dt-tab="build" role="tab" aria-selected="true"><span class="tfx">×</span>实现</button>
+              <button class="dt-tab" data-dt-tab="verify" role="tab" aria-selected="false">验证</button>
+              <button class="dt-tab" data-dt-tab="ship" role="tab" aria-selected="false">交付</button>
+              <button class="dt-tab" data-dt-tab="archive" role="tab" aria-selected="false">归档</button>
+            </div>
+            <div class="dt-pane" data-dt-pane="open" hidden>
+              <p class="dt-desc">登记任务、进入调度队列——本阶段无产物</p>
+              <div class="dt-none">无产物登记</div>
+            </div>
+            <div class="dt-pane" data-dt-pane="explore" hidden>
+              <p class="dt-desc">摸清现状与方案取舍,产出设计文档</p>
+              <div class="dt-arts">
+                <div class="field dt-art--wide"><div class="fk">design_doc</div><div class="fv mono" data-copy="docs/design.md" title="点击拷贝路径">docs/design.md <span class="dt-cp">⧉</span></div></div>
+              </div>
+            </div>
+            <div class="dt-pane" data-dt-pane="spec" hidden>
+              <p class="dt-desc">把设计定稿为可执行计划</p>
+              <div class="dt-arts">
+                <div class="field dt-art--wide"><div class="fk">plan</div><div class="fv mono" data-copy="docs/plan.md" title="点击拷贝路径">docs/plan.md <span class="dt-cp">⧉</span></div></div>
+              </div>
+            </div>
+            <div class="dt-pane" data-dt-pane="build">
+              <div class="dt-verdict dt-verdict--bad"><span class="ic">×</span>verify 失败:2 个用例未过(auth.test.ts)</div>
+              <p class="dt-desc">按 plan 在独立分支上写码构建——自动化重试 3 次后停在这里</p>
+              <div class="dt-arts">
+                <div class="field"><div class="fk">attempts</div><div class="fv">3</div></div>
+                <div class="field dt-field--miss"><div class="fk">branch</div><div class="fv">未产出</div></div>
+                <div class="field dt-field--miss"><div class="fk">build_sha</div><div class="fv">未产出</div></div>
+              </div>
+              <p class="dt-note">重试会清零计数重新挂队;放弃则归档现场,worktree 保留</p>
+            </div>
+            <div class="dt-pane" data-dt-pane="verify" hidden><div class="dt-empty">未开始</div></div>
+            <div class="dt-pane" data-dt-pane="ship" hidden><div class="dt-empty">未开始</div></div>
+            <div class="dt-pane" data-dt-pane="archive" hidden><div class="dt-empty">未开始</div></div>
+          </div>
+        </div>
+        <div class="prg-dfoot">
+          <span class="prg-dfoot-l mono">automation · failed</span>
+          <div class="prg-dfoot-btns">
+            <button class="btn sm btn--ghost" data-prg-act="drop" data-toast="demo:放弃——归档现场,worktree 保留">✕ 放弃</button>
+            <button class="btn sm btn--primary" data-prg-act="retry" data-toast="demo:重试——清零计数重新挂队">↻ 重试</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ===== proj-a · release-train(1 个任务) ===== -->
+<div class="prg-group card">
+  <button class="prg-ghead" type="button" aria-expanded="true">
+    <span class="prg-ghead__name mono">proj-a</span>
+    <span class="badge mono">release-train</span>
+    <span class="prg-ghead__meta">3 阶段 · 1 个任务</span>
+    <span class="prg-ghead__caret" aria-hidden="true">▾</span>
+  </button>
+  <div class="prg-rows">
+
+    <!-- changelog-cn · review · 等你确认 -->
+    <div class="prg-row" data-prg-expand data-task="changelog-cn" data-proj="proj-a" data-state="gate">
+      <div class="prg-row__main" role="button" tabindex="0" aria-expanded="false">
+        <div class="prg-name">
+          <span class="prg-name__t mono">changelog-cn</span>
+          <span class="badge mono">chat</span>
+        </div>
+        <div class="prg-flow" aria-label="release-train 工作流,当前阶段 人工复核(第 2 / 3),等你确认">
+          <span class="prg-seg prg-seg--past"><span class="prg-seg__t">✓ 起草</span></span>
+          <span class="prg-seg prg-seg--cur"><span class="prg-seg__t">人工复核</span></span>
+          <span class="prg-seg prg-seg--fut"><span class="prg-seg__t">发布</span></span>
+        </div>
+        <div class="prg-state">
+          <span class="badge badge--red"><span class="dot"></span>等你确认</span>
+          <span class="prg-caret" aria-hidden="true">▾</span>
+        </div>
+      </div>
+      <div class="prg-detail">
+        <div class="prg-dsec">
+          <div class="sec-h">任务</div>
+          <p class="dt-req">发布面向用户的中文更新日志页</p>
+        </div>
+        <div class="prg-dsec">
+          <div class="sec-h">阶段 <span class="hint">执行到哪、每步产出了什么</span></div>
+          <div class="dt-stages">
+            <div class="dt-tabs" role="tablist" aria-label="changelog-cn 各阶段(进度)">
+              <button class="dt-tab dt-tab--done" data-dt-tab="draft" role="tab" aria-selected="false"><span class="tfx">✓</span>起草</button>
+              <button class="dt-tab dt-tab--cur on" data-dt-tab="review" role="tab" aria-selected="true"><span class="tfx">●</span>人工复核</button>
+              <button class="dt-tab" data-dt-tab="ship" role="tab" aria-selected="false">发布</button>
+            </div>
+            <div class="dt-pane" data-dt-pane="draft" hidden>
+              <p class="dt-desc">起草面向用户的更新日志文稿</p>
+              <div class="dt-arts">
+                <div class="field dt-art--wide"><div class="fk">draft</div><div class="fv mono" data-copy="docs/changelog-draft.md" title="点击拷贝路径">docs/changelog-draft.md <span class="dt-cp">⧉</span></div></div>
+              </div>
+            </div>
+            <div class="dt-pane" data-dt-pane="review">
+              <div class="dt-verdict"><span class="ic ic--dim">○</span>没有自动检查——发不发布完全由你判断</div>
+              <p class="dt-desc">人工把关文稿质量与发布时机</p>
+              <div class="dt-none">本阶段无产物登记</div>
+            </div>
+            <div class="dt-pane" data-dt-pane="ship" hidden><div class="dt-empty">未开始</div></div>
+          </div>
+        </div>
+        <div class="prg-dfoot">
+          <span class="prg-dfoot-l mono">review → ship</span>
+          <div class="prg-dfoot-btns">
+            <button class="btn sm btn--tint-red" data-prg-act="reject" data-toast="demo:打回——退回起草重改">↩ 打回</button>
+            <button class="btn sm btn--primary" data-prg-act="pass" data-toast="demo:放行——走转换校验进入发布">→ 放行</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ===== proj-b · default(1 个任务) ===== -->
+<div class="prg-group card">
+  <button class="prg-ghead" type="button" aria-expanded="true">
+    <span class="prg-ghead__name mono">proj-b</span>
+    <span class="badge mono">default</span>
+    <span class="prg-ghead__meta">7 阶段 · 1 个任务</span>
+    <span class="prg-ghead__caret" aria-hidden="true">▾</span>
+  </button>
+  <div class="prg-rows">
+
+    <!-- b-demo · explore · 跑完停住(归入等你确认) -->
+    <div class="prg-row" data-prg-expand data-task="b-demo" data-proj="proj-b" data-state="gate">
+      <div class="prg-row__main" role="button" tabindex="0" aria-expanded="false">
+        <div class="prg-name">
+          <span class="prg-name__t mono">b-demo</span>
+          <span class="badge mono">chat</span>
+        </div>
+        <div class="prg-flow" aria-label="default 工作流,当前阶段 调研(第 2 / 7),等你确认(跑完停住)">
+          <span class="prg-seg prg-seg--past"><span class="prg-seg__t">✓ 立项</span></span>
+          <span class="prg-seg prg-seg--cur"><span class="prg-seg__t">调研</span></span>
+          <span class="prg-seg prg-seg--fut prg-seg--gate"><span class="prg-seg__t">规格</span></span>
+          <span class="prg-seg prg-seg--fut"><span class="prg-seg__t">实现</span></span>
+          <span class="prg-seg prg-seg--fut prg-seg--gate"><span class="prg-seg__t">验证</span></span>
+          <span class="prg-seg prg-seg--fut"><span class="prg-seg__t">交付</span></span>
+          <span class="prg-seg prg-seg--fut"><span class="prg-seg__t">归档</span></span>
+        </div>
+        <div class="prg-state">
+          <span class="badge badge--red"><span class="dot"></span>等你确认 · 跑完停住</span>
+          <span class="prg-caret" aria-hidden="true">▾</span>
+        </div>
+      </div>
+      <div class="prg-detail">
+        <div class="prg-dsec">
+          <div class="sec-h">任务</div>
+          <p class="dt-req">接入 webhook 通知外部系统</p>
+        </div>
+        <div class="prg-dsec">
+          <div class="sec-h">阶段 <span class="hint">执行到哪、每步产出了什么</span></div>
+          <div class="dt-stages">
+            <div class="dt-tabs" role="tablist" aria-label="b-demo 各阶段(进度)">
+              <button class="dt-tab dt-tab--done" data-dt-tab="open" role="tab" aria-selected="false"><span class="tfx">✓</span>立项</button>
+              <button class="dt-tab dt-tab--cur on" data-dt-tab="explore" role="tab" aria-selected="true"><span class="tfx">●</span>调研</button>
+              <button class="dt-tab" data-dt-tab="spec" role="tab" aria-selected="false">规格</button>
+              <button class="dt-tab" data-dt-tab="build" role="tab" aria-selected="false">实现</button>
+              <button class="dt-tab" data-dt-tab="verify" role="tab" aria-selected="false">验证</button>
+              <button class="dt-tab" data-dt-tab="ship" role="tab" aria-selected="false">交付</button>
+              <button class="dt-tab" data-dt-tab="archive" role="tab" aria-selected="false">归档</button>
+            </div>
+            <div class="dt-pane" data-dt-pane="open" hidden>
+              <p class="dt-desc">登记任务、进入调度队列——本阶段无产物</p>
+              <div class="dt-none">无产物登记</div>
+            </div>
+            <div class="dt-pane" data-dt-pane="explore">
+              <div class="dt-verdict"><span class="ic ic--dim">○</span>本轮跑完停住——继续会开新一轮调研,或终止收工</div>
+              <p class="dt-desc">摸清现状与方案取舍,产出设计文档</p>
+              <div class="dt-arts">
+                <div class="field dt-field--miss dt-art--wide"><div class="fk">design_doc</div><div class="fv">未产出</div></div>
+              </div>
+            </div>
+            <div class="dt-pane" data-dt-pane="spec" hidden><div class="dt-empty">未开始</div></div>
+            <div class="dt-pane" data-dt-pane="build" hidden><div class="dt-empty">未开始</div></div>
+            <div class="dt-pane" data-dt-pane="verify" hidden><div class="dt-empty">未开始</div></div>
+            <div class="dt-pane" data-dt-pane="ship" hidden><div class="dt-empty">未开始</div></div>
+            <div class="dt-pane" data-dt-pane="archive" hidden><div class="dt-empty">未开始</div></div>
+          </div>
+        </div>
+        <div class="prg-dfoot">
+          <span class="prg-dfoot-l mono">automation · paused</span>
+          <div class="prg-dfoot-btns">
+            <button class="btn sm btn--tint-red" data-prg-act="kill" data-toast="demo:终止——收工归档现场">⏹ 终止</button>
+            <button class="btn sm btn--primary" data-prg-act="continue" data-toast="demo:继续——从当前阶段接着跑">→ 继续</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="prg-empty" hidden>没有匹配的任务——换个筛选条件试试</div>
+
+<p class="prg-foot">执行队列由调度器管理;每个动作都有等价的 pipeline 终端命令,两边走同一转换校验。</p>
+
+<script>
+(function () {
+  'use strict';
+  var root = document.querySelector('.view[data-view="progress"]');
+  if (!root) return;
+  function all(sel, scope) { return Array.prototype.slice.call((scope || root).querySelectorAll(sel)); }
+
+  /* 点行 → 行下展开任务详情(dt- 阶段 sheet) */
+  all('.prg-row[data-prg-expand]').forEach(function (row) {
+    var main = row.querySelector('.prg-row__main');
+    if (!main) return;
+    function toggle() {
+      var open = row.classList.toggle('prg-row--open');
+      main.setAttribute('aria-expanded', String(open));
+      if (open && window.dtReveal) window.dtReveal(row);
+    }
+    main.addEventListener('click', function (e) {
+      if (e.target.closest && e.target.closest('button, a, [data-copy], .switch')) return;
+      toggle();
+    });
+    main.addEventListener('keydown', function (e) {
+      if ((e.key === 'Enter' || e.key === ' ') && e.target === main) {
+        e.preventDefault();
+        toggle();
+      }
+    });
+  });
+
+  /* 组头折叠 */
+  all('.prg-ghead').forEach(function (head) {
+    head.addEventListener('click', function () {
+      var g = head.closest('.prg-group');
+      if (!g) return;
+      var closed = g.classList.toggle('prg-group--closed');
+      head.setAttribute('aria-expanded', String(!closed));
+    });
+  });
+
+  /* 筛选:项目多选(空 = 全部)× 状态单选;空组隐藏 */
+  var projSel = [];
+  var stateSel = 'all';
+  var groups = all('.prg-group');
+  var emptyNote = root.querySelector('.prg-empty');
+  function applyFilter() {
+    var any = false;
+    groups.forEach(function (g) {
+      var gShow = false;
+      all('.prg-row', g).forEach(function (row) {
+        var show = (projSel.length === 0 || projSel.indexOf(row.getAttribute('data-proj')) !== -1) &&
+                   (stateSel === 'all' || row.getAttribute('data-state') === stateSel);
+        row.style.display = show ? '' : 'none';
+        if (show) gShow = true;
+      });
+      g.style.display = gShow ? '' : 'none';
+      if (gShow) any = true;
+    });
+    if (emptyNote) emptyNote.hidden = any;
+  }
+
+  /* 项目下拉多选 */
+  var dd = root.querySelector('.prg-dd');
+  var ddBtn = root.querySelector('.prg-ddbtn');
+  var ddMenu = root.querySelector('.prg-ddmenu');
+  var ddVal = root.querySelector('.prg-ddval');
+  if (dd && ddBtn && ddMenu && ddVal) {
+    var boxes = all('input[type="checkbox"]', ddMenu);
+    var setOpen = function (open) {
+      ddMenu.hidden = !open;
+      ddBtn.setAttribute('aria-expanded', String(open));
+    };
+    var syncProj = function () {
+      projSel = boxes.filter(function (b) { return b.checked; }).map(function (b) { return b.value; });
+      if (projSel.length === 0) {
+        ddVal.textContent = '全部';
+        ddVal.classList.remove('mono');
+      } else {
+        ddVal.textContent = projSel[0] + (projSel.length > 1 ? ' +' + (projSel.length - 1) : '');
+        ddVal.classList.add('mono');
+      }
+      applyFilter();
+    };
+    ddBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      setOpen(ddMenu.hidden);
+    });
+    document.addEventListener('click', function (e) {
+      if (!dd.contains(e.target)) setOpen(false);
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && !ddMenu.hidden) { setOpen(false); ddBtn.focus(); }
+    });
+    boxes.forEach(function (b) { b.addEventListener('change', syncProj); });
+    var clearBtn = ddMenu.querySelector('.prg-ddclear');
+    if (clearBtn) clearBtn.addEventListener('click', function () {
+      boxes.forEach(function (b) { b.checked = false; });
+      syncProj();
+    });
+  }
+
+  /* 状态计数 chips(单选) */
+  var chips = all('.prg-schip');
+  chips.forEach(function (chip) {
+    chip.addEventListener('click', function () {
+      stateSel = chip.getAttribute('data-f-state');
+      chips.forEach(function (c) {
+        var on = c === chip;
+        c.classList.toggle('on', on);
+        c.setAttribute('aria-pressed', String(on));
+      });
+      applyFilter();
+    });
+  });
+
+  /* 行上快捷钮 + 详情动作条 → demo toast(真端点由实现层接) */
+  all('[data-prg-act]').forEach(function (btn) {
+    btn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var msg = btn.getAttribute('data-toast');
+      if (!msg) {
+        var ep = btn.getAttribute('data-prg-act') === 'kill' ? '/api/afk/kill' : '/api/afk/retry';
+        msg = 'demo:将调用 ' + ep + ' 真端点';
+      }
+      if (window.showToast) window.showToast(msg);
+    });
+  });
+
+  /* 跟随尾部开关 */
+  var follow = root.querySelector('[data-prg-follow]');
+  if (follow) {
+    follow.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var on = follow.getAttribute('aria-checked') === 'true';
+      follow.setAttribute('aria-checked', String(!on));
+      if (window.showToast) window.showToast(on ? '跟随尾部:关' : '跟随尾部:开');
+    });
+  }
+
+  /* GSAP:箭头带入场 stagger 点亮一次 + 执行中段光泽循环扫过 */
+  if (window.gsap) {
+    var mm = window.gsap.matchMedia();
+    mm.add({
+      reduce: '(prefers-reduced-motion: reduce)',
+      full: '(prefers-reduced-motion: no-preference)'
+    }, function (ctx) {
+      var reduce = !!(ctx.conditions && ctx.conditions.reduce);
+      var entryTl = null;
+      var glossTls = [];
+      function playEntry() {
+        if (entryTl) { entryTl.kill(); entryTl = null; }
+        var segs = all('.prg-flow .prg-seg');
+        if (!segs.length) return;
+        if (reduce) { window.gsap.set(segs, { autoAlpha: 1, scaleX: 1 }); return; }
+        entryTl = window.gsap.timeline();
+        all('.prg-flow').forEach(function (flow, i) {
+          entryTl.fromTo(flow.querySelectorAll('.prg-seg'),
+            { autoAlpha: 0, scaleX: .9, transformOrigin: 'left center' },
+            { autoAlpha: 1, scaleX: 1, duration: .34, ease: 'power2.out', stagger: .045 },
+            i * .07);
+        });
+      }
+      function playGloss() {
+        glossTls.forEach(function (t) { t.kill(); });
+        glossTls = [];
+        all('.prg-gloss').forEach(function (g) {
+          if (reduce) { window.gsap.set(g, { autoAlpha: 0 }); return; }
+          var seg = g.parentNode;
+          var tl = window.gsap.timeline({ repeat: -1, repeatDelay: 1.2 });
+          tl.fromTo(g, { x: -48, autoAlpha: 1 },
+            { x: function () { return seg.offsetWidth + 48; }, duration: 1.05, ease: 'power1.inOut' });
+          glossTls.push(tl);
+        });
+      }
+      function onShown(e) {
+        if (e.detail === 'progress') { playEntry(); playGloss(); }
+      }
+      document.addEventListener('viewshown', onShown);
+      if (root.classList.contains('on')) { playEntry(); playGloss(); }
+      return function () {
+        document.removeEventListener('viewshown', onShown);
+        if (entryTl) entryTl.kill();
+        glossTls.forEach(function (t) { t.kill(); });
+      };
+    });
+  }
+})();
+</script>
+
+    </section>
+  <section class="view" data-view="workbench">
+    
+    <style>
+/* ============ workbench(wb-) ============ */
+/* ---- 顶条 ---- */
+.wb-toolbar { display:flex; align-items:center; gap:10px; margin-bottom:16px; flex-wrap:wrap }
+.wb-wf { position:relative }
+.wb-wf-btn { display:inline-flex; align-items:center; gap:9px; height:36px; padding:0 13px; border-radius:10px; background:var(--card); border:1px solid var(--border); box-shadow:var(--shadow); transition:border-color .12s, background .12s }
+.wb-wf-btn:hover { border-color:var(--border-2); background:var(--fill) }
+.wb-wf-k { font-size:10.5px; font-weight:700; letter-spacing:.07em; text-transform:uppercase; color:var(--text-3) }
+.wb-wf-name { font-size:13px; font-weight:700 }
+.wb-wf-sub { font-size:12px; color:var(--text-3) }
+.wb-chev { font-size:10px; color:var(--text-3) }
+.wb-wf-menu { position:absolute; left:0; top:calc(100% + 6px); min-width:238px; background:var(--card); border:1px solid var(--border); border-radius:12px; box-shadow:var(--shadow-2); padding:6px; display:none; z-index:40 }
+.wb-wf-menu.open { display:block }
+.wb-wf-item { display:flex; align-items:center; gap:8px; width:100%; padding:8px 10px; border-radius:8px; font-size:13px; color:var(--text-2); text-align:left; transition:background .12s }
+.wb-wf-item:hover { background:var(--fill) }
+.wb-wf-item.on { background:var(--fill-2); color:var(--text); font-weight:600 }
+.wb-wf-item .n { margin-left:auto; font-size:12px; color:var(--text-3) }
+.wb-wf-group { padding:8px 10px 3px; font-size:11px; font-weight:700; letter-spacing:.05em; color:var(--text-3) }
+.wb-wf-group + .wb-wf-group, .wb-wf-item + .wb-wf-group { border-top:1px solid var(--border); margin-top:4px }
+
+.pill--dim { background:var(--fill-2); color:var(--text-2); border:1px solid var(--border-2) }
+.wb-cnt { display:inline-grid; place-items:center; min-width:16px; height:16px; padding:0 4px; border-radius:999px; background:var(--red); color:var(--btn-fg); font-size:10.5px; font-weight:700 }
+
+/* ---- 主布局 ---- */
+.wb-main { display:grid; grid-template-columns:minmax(0,1fr) 356px; gap:20px; align-items:start }
+[data-view="workbench"] .pill[hidden], [data-view="workbench"] .wb-cnt[hidden], [data-view="workbench"] .badge[hidden] { display:none }
+.wb-left { min-width:0 }
+.wb-side { position:sticky; top:76px }
+
+/* ---- 阶段 stepper(线性 builder 风)---- */
+.wb-rail { display:none; background:var(--fill); border-radius:16px; padding:11px; margin-bottom:16px }
+.wb-rail.on { display:block }
+.wb-steps { display:flex; align-items:stretch; overflow-x:auto; padding:3px 1px }
+.wb-step { position:relative; overflow:hidden; flex:none; min-width:148px; max-width:200px; display:flex; flex-direction:column; align-items:flex-start; text-align:left; padding:10px 12px 11px; background:var(--card); border:1px solid var(--border); border-radius:12px; box-shadow:var(--shadow); cursor:pointer; transition:border-color .15s, box-shadow .15s }
+.wb-step:hover { border-color:var(--border-2) }
+.wb-step--on, .wb-step--on:hover { border-color:var(--accent); box-shadow:0 0 0 3px var(--ring), var(--shadow) }
+.wb-step--on::before { content:""; position:absolute; left:0; right:0; top:0; height:42px; background:linear-gradient(var(--accent-t), transparent); pointer-events:none }
+.wb-step--live { border-color:var(--accent) }
+.wb-step--live-g { border-color:var(--green) }
+.wb-step > * { position:relative }
+.wb-step-top { display:flex; align-items:center; gap:8px; width:100%; margin-bottom:7px; min-height:22px }
+.wb-step-num { width:22px; height:22px; border-radius:999px; background:var(--fill-2); display:grid; place-items:center; font-size:11.5px; font-weight:700; color:var(--text-2); flex:none }
+.wb-step--on .wb-step-num { background:var(--accent); color:var(--btn-fg) }
+.wb-step-gate { margin-left:auto }
+.wb-step-name { font-size:15px; font-weight:700; line-height:1.25 }
+.wb-step-id { font-size:11.5px; color:var(--text-3); margin-top:1px }
+.wb-step-meta { display:flex; flex-wrap:wrap; align-items:center; gap:3px 5px; margin-top:9px; padding-top:8px; border-top:1px dashed var(--border); width:100%; font-size:11px; color:var(--text-3) }
+.wb-step-meta span { white-space:nowrap }
+.wb-step-meta i { font-style:normal; color:var(--border-2) }
+.wb-step-sk { display:flex; flex-wrap:wrap; align-items:center; gap:4px; margin-top:6px; width:100% }
+.wb-skc { display:inline-block; max-width:124px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding:1px 6px; border-radius:6px; background:var(--fill); border:1px solid var(--border); font-size:11px; color:var(--text-2) }
+.wb-skc-n { font-size:11px; color:var(--text-3) }
+.wb-link { flex:none; align-self:center; display:flex; flex-direction:column; align-items:center; gap:2px; padding:0 6px; color:var(--border-2) }
+.wb-link-ev { font-size:11px; color:var(--text-3); white-space:nowrap }
+.wb-link svg { display:block }
+.wb-step--add { flex:none; min-width:104px; margin-left:12px; display:flex; align-items:center; justify-content:center; padding:12px; border:1px dashed var(--border-2); border-radius:12px; background:transparent; color:var(--text-3); font-size:13px; font-weight:600; box-shadow:none; transition:background .12s, color .12s, border-color .12s }
+.wb-step--add:hover { background:var(--card); color:var(--text-2) }
+
+/* ---- 编辑区 ---- */
+.wb-editor { display:none }
+.wb-editor.on { display:block }
+.wb-ed-note { font-size:12px; color:var(--text-3); font-weight:400 }
+.wb-basic { display:grid; grid-template-columns:230px 170px minmax(0,1fr); gap:14px }
+.wb-flabel { display:block; font-size:12px; font-weight:600; color:var(--text-3); margin-bottom:5px }
+.wb-input { width:100%; height:34px; padding:0 11px; border-radius:9px; border:1px solid var(--border); background:var(--card); font:inherit; font-size:13.5px; color:var(--text); transition:border-color .12s, box-shadow .12s }
+.wb-input:hover { border-color:var(--border-2) }
+.wb-input:focus { outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--ring) }
+.wb-input--ro { display:flex; align-items:center; background:var(--fill); color:var(--text-2) }
+select.wb-input { padding:0 8px }
+textarea.wb-input { height:auto; min-height:56px; padding:8px 11px; resize:vertical; line-height:1.55 }
+.wb-switchrow { display:flex; align-items:center; gap:9px }
+.wb-swlabel { font-size:13px; font-weight:600 }
+.wb-note { font-size:12px; color:var(--text-3); line-height:1.55 }
+.wb-sec-note { margin-top:10px }
+.wb-tail-note { margin-top:10px; padding-top:10px; border-top:1px dashed var(--border) }
+
+.wb-chips { display:flex; flex-wrap:wrap; align-items:center; gap:8px }
+.wb-empty { font-size:12.5px; color:var(--text-3) }
+.wb-x { display:inline-grid; place-items:center; width:16px; height:16px; margin-left:2px; margin-right:-3px; border-radius:5px; color:var(--text-3); font-size:13px; line-height:1; transition:background .12s, color .12s }
+.wb-x:hover { background:var(--red-t); color:var(--red-d) }
+.wb-addchip { height:24px; padding:0 9px; border-radius:7px; border:1px dashed var(--border-2); background:transparent; color:var(--text-3); font-size:12px; font-weight:600; transition:background .12s, color .12s }
+.wb-addchip:hover { background:var(--fill); color:var(--text-2) }
+
+.wb-tracks { display:flex; gap:4px; margin-bottom:10px }
+.wb-track { height:26px; padding:0 11px; border-radius:8px; font-size:12.5px; font-weight:600; color:var(--text-3); font-family:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace; transition:background .12s, color .12s }
+.wb-track:hover { background:var(--fill); color:var(--text-2) }
+.wb-track.on, .wb-track.on:hover { background:var(--fill-2); color:var(--text) }
+.wb-track b { font-weight:700; color:var(--accent); margin-left:3px }
+
+/* ---- 技能依赖链 ---- */
+.wb-chain { display:flex; flex-wrap:wrap; align-items:center; gap:6px; padding:7px 0 }
+.wb-chain + .wb-chain { border-top:1px dashed var(--border) }
+.wb-chain-k { font-size:11px; font-weight:700; letter-spacing:.04em; color:var(--text-3); margin-right:4px; flex:none }
+.wb-arr { color:var(--text-3); font-size:13px; line-height:1 }
+.wb-chain .chip.ghost { opacity:.55; border-style:dashed }
+.wb-sk-actions { display:flex; align-items:center; gap:8px; padding-top:9px }
+.wb-skpanel { margin-top:10px; border:1px solid var(--border); border-radius:12px; background:var(--card); box-shadow:var(--shadow-2); padding:12px }
+.wb-skpanel[hidden] { display:none }
+.wb-skp-h { font-size:12.5px; font-weight:700; margin-bottom:9px }
+.wb-skp-h .hint { font-weight:400; color:var(--text-3); margin-left:6px; font-size:12px }
+.wb-skp-list { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:11px }
+.wb-skopt { height:26px; padding:0 10px; border-radius:8px; border:1px solid var(--border); background:var(--fill); font-size:12px; color:var(--text-2); transition:border-color .12s, background .12s, color .12s, box-shadow .12s }
+.wb-skopt:hover { border-color:var(--border-2) }
+.wb-skopt.on, .wb-skopt.on:hover { border-color:var(--accent); background:var(--accent-t); color:var(--accent-d); box-shadow:0 0 0 3px var(--ring) }
+.wb-skp-foot { display:flex; align-items:center; gap:8px; flex-wrap:wrap }
+.wb-skp-foot label { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--text-3); font-weight:600 }
+.wb-skp-dep { width:auto; max-width:300px; height:28px; font-size:12px }
+
+/* ---- Hook 会话时序线 ---- */
+.wb-hkline { position:relative; display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); column-gap:12px; padding-top:2px }
+.wb-hkline::before { content:""; position:absolute; left:5px; right:14px; top:10px; height:2px; border-radius:2px; background:var(--border-2) }
+.wb-hkline::after { content:""; position:absolute; right:6px; top:6px; border-left:7px solid var(--border-2); border-top:5px solid transparent; border-bottom:5px solid transparent }
+.wb-hknode { grid-row:1; position:relative; padding:22px 0 10px 18px }
+.wb-hknode::before { content:""; position:absolute; left:0; top:5px; width:12px; height:12px; border-radius:999px; background:var(--card); border:3px solid var(--accent) }
+.wb-hk-t { font-size:13px; font-weight:700; line-height:1.2 }
+.wb-hk-ev { font-size:11px; color:var(--text-3); margin-top:1px }
+.wb-hkloop { grid-row:2; grid-column:3 / 5; position:relative; height:14px; margin:0 14px 12px 4px; border:1.5px dashed var(--border-2); border-bottom:none; border-radius:10px 10px 0 0 }
+.wb-hkloop span { position:absolute; left:50%; top:-9px; transform:translateX(-50%); background:var(--card); padding:0 8px; font-size:11px; color:var(--text-3); white-space:nowrap }
+.wb-hkstack { grid-row:3; display:flex; flex-direction:column; gap:8px; min-width:0 }
+.wb-hkcard { background:var(--fill); border-radius:10px; padding:8px 11px }
+.wb-hkcard-t { display:flex; align-items:center; gap:8px; font-size:12.5px; font-weight:650 }
+.wb-hkcard-t .switch { margin-left:auto; transform:scale(.85); transform-origin:right center }
+.wb-hkcard-d { font-size:11.5px; color:var(--text-3); line-height:1.5; margin-top:2px }
+
+/* ---- 右栏(编排)---- */
+.wb-sum { display:none }
+.wb-sum.on { display:block }
+.wb-sum-row { display:flex; align-items:center; justify-content:space-between; padding:10px 16px; font-size:13px; color:var(--text-2) }
+.wb-sum-row + .wb-sum-row { border-top:1px solid var(--border) }
+.wb-sum-row b { font-family:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace; font-size:13.5px; font-weight:700; color:var(--accent) }
+
+.wb-pv-flow { display:none; overflow-x:auto; padding-bottom:6px; margin-bottom:10px }
+.wb-pv-flow.on { display:block }
+.wb-pv-track { position:relative; display:flex; align-items:center; width:max-content; min-width:100%; padding:4px 0 }
+.wb-pv-node { flex:none; display:inline-flex; align-items:center; gap:5px; height:26px; padding:0 10px; border-radius:999px; border:1px solid var(--border); background:var(--fill); font-size:12px; font-weight:600; color:var(--text-2); transition:background .3s, border-color .3s, color .3s }
+.wb-pv-node.lit { background:var(--accent-t); border-color:var(--accent); color:var(--accent-d) }
+.wb-pv-node.lit-g { background:var(--green-t); border-color:var(--green); color:var(--green-d) }
+.wb-pv-line { flex:none; width:16px; height:2px; border-radius:2px; background:var(--border-2); transition:background .3s }
+.wb-pv-line.lit { background:var(--accent) }
+.wb-pv-gdot { display:inline-block; width:6px; height:6px; border-radius:999px; background:var(--red) }
+.wb-pv-dot { position:absolute; left:0; top:50%; width:8px; height:8px; margin-top:-4px; border-radius:999px; background:var(--accent); opacity:0; pointer-events:none; box-shadow:0 0 0 3px var(--ring) }
+.wb-play { width:100%; justify-content:center }
+
+/* ---- 自动运行(Loop)卡 ---- */
+.lp-head { flex-wrap:wrap }
+.lp-head-sub { flex-basis:100%; font-size:12px; color:var(--text-3); font-weight:400; margin-top:1px }
+.lp-dirty { background:var(--accent-t); color:var(--accent-d) }
+.lp-row3 { display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:14px; margin-top:12px }
+.lp-eg { font-size:11.5px; color:var(--text-3); margin-top:5px }
+.lp-eg b { color:var(--text-2); font-weight:600 }
+
+/* 拖拉条组 */
+.lp-slds { display:grid; grid-template-columns:1fr 1fr; gap:8px 28px }
+.lp-sld-top { display:flex; align-items:baseline; gap:8px }
+.lp-sld-top .wb-flabel { margin:0 }
+.lp-sld-val { margin-left:auto; font-size:12.5px; font-weight:700; color:var(--accent) }
+.lp-range { -webkit-appearance:none; appearance:none; display:block; width:100%; height:16px; margin:8px 0 0; background:transparent; cursor:pointer }
+.lp-range::-webkit-slider-runnable-track { height:5px; border-radius:999px; background:linear-gradient(to right, var(--accent) var(--p,0%), var(--fill-2) var(--p,0%)) }
+.lp-range::-webkit-slider-thumb { -webkit-appearance:none; width:16px; height:16px; margin-top:-5.5px; border-radius:999px; background:var(--card); border:1px solid var(--border-2); box-shadow:var(--shadow-2) }
+.lp-range::-moz-range-track { height:5px; border-radius:999px; background:var(--fill-2) }
+.lp-range::-moz-range-progress { height:5px; border-radius:999px; background:var(--accent) }
+.lp-range::-moz-range-thumb { width:16px; height:16px; border-radius:999px; background:var(--card); border:1px solid var(--border-2); box-shadow:var(--shadow-2) }
+.lp-sld-marks { position:relative; height:16px; margin-top:2px }
+.lp-sld-reco { position:absolute; top:0; transform:translateX(-50%); font-size:10.5px; color:var(--text-3); white-space:nowrap }
+.lp-sld-reco--edge { transform:none }
+
+/* 超限策略 pill 单选 */
+.lp-policy { display:flex; align-items:center; gap:12px; margin-top:10px; padding-top:12px; border-top:1px dashed var(--border) }
+.lp-policy .wb-flabel { margin:0 }
+.lp-pills { display:flex; gap:6px; flex-wrap:wrap }
+.lp-opt { height:28px; padding:0 12px; border-radius:999px; border:1px solid var(--border); background:var(--fill); font-size:12.5px; font-weight:600; color:var(--text-2); transition:border-color .12s, background .12s, color .12s, box-shadow .12s }
+.lp-opt:hover { border-color:var(--border-2) }
+.lp-opt.on, .lp-opt.on:hover { background:var(--accent-t); border-color:var(--accent); color:var(--accent-d); box-shadow:0 0 0 3px var(--ring) }
+
+/* 自主级别 segmented */
+.lp-lv { display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:10px; margin:2px 0 4px }
+.lp-lv-tile { display:flex; flex-direction:column; gap:2px; padding:11px 12px 12px; border:1px solid var(--border); border-radius:11px; background:var(--fill); text-align:left; cursor:pointer; transition:border-color .12s, background .12s, box-shadow .12s }
+.lp-lv-tile:hover { border-color:var(--border-2) }
+.lp-lv-tile.on, .lp-lv-tile.on:hover { background:var(--accent-t); border-color:var(--accent); box-shadow:0 0 0 3px var(--ring) }
+.lp-lv-k { font-size:13px; font-weight:750 }
+.lp-lv-tile.on .lp-lv-k { color:var(--accent-d) }
+.lp-lv-d { font-size:11.5px; color:var(--text-3); line-height:1.45 }
+
+/* 闸门 / 终止条件 / 范围 chips 行 */
+.lp-saferow { display:grid; grid-template-columns:150px minmax(0,1fr); gap:12px; align-items:start; padding:10px 0 }
+.lp-saferow + .lp-saferow { border-top:1px dashed var(--border) }
+.lp-saferow:last-child { padding-bottom:2px }
+.lp-saferow .wb-flabel { margin:4px 0 0 }
+.lp-chip-d { font-family:system-ui,-apple-system,"SF Pro Text","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif; color:var(--text-3); font-size:11.5px }
+.lp-chip-in { width:180px; height:24px; font-size:12px; padding:0 8px; border-radius:7px }
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <marker id="wbArrowM" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1 0.8 L7.2 4 L1 7.2" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+  </defs>
+</svg>
+
+<div class="view__head">
+  <h1>工作台</h1>
+  <span class="view__sub">工作流、技能、钩子与自动运行,在一个页面统一编排</span>
+</div>
+
+<!-- ================= 工作流编排 ================= -->
+
+  <div class="wb-toolbar">
+    <div class="wb-wf">
+      <button class="wb-wf-btn" id="wbWfBtn" aria-haspopup="menu" aria-expanded="false">
+        <span class="wb-wf-k mono">workflow</span>
+        <span class="wb-wf-name mono" id="wbWfName">release-train</span>
+        <span class="wb-wf-sub" id="wbWfSub">3 阶段</span>
+        <span class="wb-chev">▾</span>
+      </button>
+      <div class="wb-wf-menu" id="wbWfMenu" role="menu">
+        <button class="wb-wf-item on" data-wf="release-train" role="menuitem"><span class="mono">release-train</span><span class="n">3 阶段</span></button>
+        <button class="wb-wf-item" data-wf="default" role="menuitem"><span class="mono">default</span><span class="n">7 阶段</span></button>
+      </div>
+    </div>
+    <span class="pill pill--green">✓ 校验通过</span>
+    <span class="sp"></span>
+    <button class="btn btn--ghost sm" id="wbCopyJson">复制 JSON</button>
+    <button class="btn btn--primary" id="wbSave">保存 <span class="wb-cnt" id="wbSaveCnt" hidden>0</span></button>
+  </div>
+
+  <div class="wb-main">
+    <div class="wb-left">
+
+      <!-- stepper 底轨(内容由 JS 按数据渲染) -->
+      <div class="wb-rail on" data-wfview="release-train"><div class="wb-steps" data-steps="release-train" aria-label="release-train 阶段"></div></div>
+      <div class="wb-rail" data-wfview="default"><div class="wb-steps" data-steps="default" aria-label="default 阶段"></div></div>
+
+      <!-- release-train 编辑区 -->
+      <div class="card wb-editor on" data-wfview="release-train">
+        <div class="card-h">
+          <span class="card-t">阶段编辑</span>
+          <span class="g-phase" data-ed-phase>review</span>
+          <span class="badge badge--red" data-ed-gatebadge><span class="dot"></span>复核门</span>
+          <span class="sp"></span>
+          <span class="wb-ed-note">点击上方阶段卡切换</span>
+        </div>
+        <div class="sec">
+          <div class="sec-h">基本</div>
+          <div class="wb-basic">
+            <div>
+              <label class="wb-flabel" for="wbLabelRt">阶段名称</label>
+              <input class="wb-input" id="wbLabelRt" data-ed-label value="人工复核" />
+            </div>
+            <div>
+              <span class="wb-flabel">阶段 ID</span>
+              <div class="wb-input wb-input--ro mono" data-ed-id>review</div>
+            </div>
+            <div>
+              <span class="wb-flabel">复核门</span>
+              <div class="wb-switchrow">
+                <button class="switch" role="switch" aria-checked="true" data-ed-gate-sw aria-label="复核门"></button>
+                <span class="wb-note">打开后,change 会停在此阶段等人放行——出现在收件箱</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="sec">
+          <div class="sec-h">技能 <span class="hint" data-ed-skillhint></span></div>
+          <div data-ed-skillsbox></div>
+          <p class="wb-note wb-sec-note">依赖顺序=解锁顺序:前一个技能完成后,下一个才在会话里解锁(<span class="mono">PreToolUse</span> 门真实拦截)</p>
+        </div>
+        <div class="sec">
+          <div class="sec-h">Hook(会话钩子)<span class="hint">按阶段开关,由 pipeline 插件提供,不可自由编写</span></div>
+          <p class="wb-note" style="margin:-2px 0 14px">钩子实际作用在终端里的 Claude Code 会话上;这里配置哪些启用——效果发生在会话内,不在本面板。</p>
+          <div class="wb-hkline" data-ed-hooks></div>
+        </div>
+        <div class="sec">
+          <div class="sec-h">产出物 <span class="hint">离开此阶段时应产出的字段</span></div>
+          <div class="wb-chips" data-ed-outputs></div>
+          <div class="wb-switchrow wb-sec-note">
+            <button class="switch" role="switch" aria-checked="false" data-ed-nonempty aria-label="产出非空方可推进"></button>
+            <span class="wb-swlabel">产出非空方可推进</span>
+          </div>
+          <p class="wb-note" style="margin-top:6px">打开后,离开此阶段前会检查每个产出物字段已填写(即 <span class="mono">nonempty-output guard</span>)</p>
+          <p class="wb-note wb-tail-note">原 <span class="mono">inputs</span> 字段无运行时作用,已移除;跨阶段数据流由产出物自动校验。</p>
+        </div>
+      </div>
+
+      <!-- default 编辑区 -->
+      <div class="card wb-editor" data-wfview="default">
+        <div class="card-h">
+          <span class="card-t">阶段编辑</span>
+          <span class="g-phase" data-ed-phase>verify</span>
+          <span class="badge badge--red" data-ed-gatebadge><span class="dot"></span>复核门</span>
+          <span class="sp"></span>
+          <span class="wb-ed-note">点击上方阶段卡切换</span>
+        </div>
+        <div class="sec">
+          <div class="sec-h">基本</div>
+          <div class="wb-basic">
+            <div>
+              <label class="wb-flabel" for="wbLabelDf">阶段名称</label>
+              <input class="wb-input" id="wbLabelDf" data-ed-label value="验证" />
+            </div>
+            <div>
+              <span class="wb-flabel">阶段 ID</span>
+              <div class="wb-input wb-input--ro mono" data-ed-id>verify</div>
+            </div>
+            <div>
+              <span class="wb-flabel">复核门</span>
+              <div class="wb-switchrow">
+                <button class="switch" role="switch" aria-checked="true" data-ed-gate-sw aria-label="复核门"></button>
+                <span class="wb-note">打开后,change 会停在此阶段等人放行——出现在收件箱</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="sec">
+          <div class="sec-h">技能 <span class="hint" data-ed-skillhint></span></div>
+          <div data-ed-skillsbox></div>
+          <p class="wb-note wb-sec-note">依赖顺序=解锁顺序:前一个技能完成后,下一个才在会话里解锁(<span class="mono">PreToolUse</span> 门真实拦截)</p>
+        </div>
+        <div class="sec">
+          <div class="sec-h">Hook(会话钩子)<span class="hint">按阶段开关,由 pipeline 插件提供,不可自由编写</span></div>
+          <p class="wb-note" style="margin:-2px 0 14px">钩子实际作用在终端里的 Claude Code 会话上;这里配置哪些启用——效果发生在会话内,不在本面板。</p>
+          <div class="wb-hkline" data-ed-hooks></div>
+        </div>
+        <div class="sec">
+          <div class="sec-h">产出物 <span class="hint">离开此阶段时应产出的字段</span></div>
+          <div class="wb-chips" data-ed-outputs></div>
+          <div class="wb-switchrow wb-sec-note">
+            <button class="switch" role="switch" aria-checked="true" data-ed-nonempty aria-label="产出非空方可推进"></button>
+            <span class="wb-swlabel">产出非空方可推进</span>
+          </div>
+          <p class="wb-note" style="margin-top:6px">打开后,离开此阶段前会检查每个产出物字段已填写(即 <span class="mono">nonempty-output guard</span>)</p>
+          <p class="wb-note wb-tail-note">原 <span class="mono">inputs</span> 字段无运行时作用,已移除;跨阶段数据流由产出物自动校验。</p>
+        </div>
+      </div>
+
+      <!-- 自动运行(Loop):loops.yaml 全参数,就地控制 -->
+      <div class="card" id="wbLoopCard">
+        <div class="card-h lp-head">
+          <span class="card-t">自动运行(Loop)</span>
+          <button class="switch" role="switch" aria-checked="true" id="lpEnable" aria-label="启用自动运行"></button>
+          <span class="pill pill--green" id="lpPill">运行中</span>
+          <span class="badge lp-dirty" id="lpDirty" hidden>未保存</span>
+          <span class="sp"></span>
+          <button class="btn btn--ghost sm" id="lpRunNow">▶ 立即跑一轮</button>
+          <button class="btn btn--ghost sm" id="lpPauseBtn">⏸ 暂停</button>
+          <span class="lp-head-sub">让 agent 按节奏自动认领并推进任务——所有改动走上面的阶段流程,该停的门照样停</span>
+        </div>
+
+        <div class="sec">
+          <div class="sec-h">目标 <span class="hint">loop 替你盯什么——写得越具体,越不容易跑偏</span></div>
+          <label class="wb-flabel" for="lpGoal">目标(goal)</label>
+          <input class="wb-input" id="lpGoal" data-lp value="把旧版工单卡样式逐个迁移到 SaaS 卡片风" />
+          <div class="lp-row3">
+            <div>
+              <label class="wb-flabel" for="lpDoc">设计文档(design_doc)</label>
+              <input class="wb-input mono" id="lpDoc" data-lp value="design/restyle.md" />
+            </div>
+            <div>
+              <label class="wb-flabel" for="lpPrefix">变更前缀(change_prefix)</label>
+              <input class="wb-input mono" id="lpPrefix" data-lp value="rl-" />
+              <p class="lp-eg">示例分支:<b class="mono" id="lpPrefixEg">rl-0142-migrate-card</b></p>
+            </div>
+            <div>
+              <label class="wb-flabel" for="lpRisk">风险档(risk)</label>
+              <select class="wb-input" id="lpRisk" data-lp>
+                <option value="low" selected>low · 低(推荐)</option>
+                <option value="medium">medium · 中</option>
+                <option value="high">high · 高</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="sec">
+          <div class="sec-h">节奏与预算 <span class="hint">推荐值已预填——拖动调节,超出预算按下面的策略处理</span></div>
+          <div class="lp-slds">
+            <div class="lp-sld">
+              <div class="lp-sld-top"><label class="wb-flabel" for="lpSldCad">运行节奏</label><span class="lp-sld-val mono" id="lpValCad">2h</span></div>
+              <input type="range" class="lp-range" id="lpSldCad" data-sld="cad" min="0" max="6" step="1" value="4" aria-label="运行节奏" />
+              <div class="lp-sld-marks"><span class="lp-sld-reco" style="left:calc(8px + (100% - 16px) * 0.6667)">▽ 推荐 2h</span></div>
+            </div>
+            <div class="lp-sld">
+              <div class="lp-sld-top"><label class="wb-flabel" for="lpSldRuns">每日最多运行</label><span class="lp-sld-val mono" id="lpValRuns">24 次</span></div>
+              <input type="range" class="lp-range" id="lpSldRuns" data-sld="runs" min="1" max="100" step="1" value="24" aria-label="每日最多运行" />
+              <div class="lp-sld-marks"><span class="lp-sld-reco" style="left:calc(8px + (100% - 16px) * 0.2323)">▽ 推荐 24</span></div>
+            </div>
+            <div class="lp-sld">
+              <div class="lp-sld-top"><label class="wb-flabel" for="lpSldInflight">同时在跑上限</label><span class="lp-sld-val mono" id="lpValInflight">1 个</span></div>
+              <input type="range" class="lp-range" id="lpSldInflight" data-sld="inflight" min="1" max="4" step="1" value="1" aria-label="同时在跑上限" />
+              <div class="lp-sld-marks"><span class="lp-sld-reco lp-sld-reco--edge" style="left:2px">▽ 推荐 1</span></div>
+            </div>
+            <div class="lp-sld">
+              <div class="lp-sld-top"><label class="wb-flabel" for="lpSldTokens">每日 token 上限</label><span class="lp-sld-val mono" id="lpValTokens">100k</span></div>
+              <input type="range" class="lp-range" id="lpSldTokens" data-sld="tokens" min="10" max="500" step="10" value="100" aria-label="每日 token 上限" />
+              <div class="lp-sld-marks"><span class="lp-sld-reco" style="left:calc(8px + (100% - 16px) * 0.1837)">▽ 推荐 100k</span></div>
+            </div>
+          </div>
+          <div class="lp-policy">
+            <span class="wb-flabel">超限策略</span>
+            <div class="lp-pills" role="radiogroup" aria-label="超限策略">
+              <button class="lp-opt on" data-exceed="skip" role="radio" aria-checked="true">跳过本轮(推荐)</button>
+              <button class="lp-opt" data-exceed="pause" role="radio" aria-checked="false">暂停 loop</button>
+            </div>
+            <span class="wb-note">当日运行次数或 token 触顶后怎么办</span>
+          </div>
+        </div>
+
+        <div class="sec">
+          <div class="sec-h">自主与安全 <span class="hint">agent 能自己走多远、哪里必须有人把关</span></div>
+          <span class="wb-flabel">自主级别</span>
+          <div class="lp-lv" role="radiogroup" aria-label="自主级别">
+            <button class="lp-lv-tile on" data-lv="1" role="radio" aria-checked="true"><span class="lp-lv-k">L1 报告</span><span class="lp-lv-d">只报告不动手,改动全由人来做(推荐)</span></button>
+            <button class="lp-lv-tile" data-lv="2" role="radio" aria-checked="false"><span class="lp-lv-k">L2 辅助</span><span class="lp-lv-d">可改代码开 PR,合并必须人工放行</span></button>
+            <button class="lp-lv-tile" data-lv="3" role="radio" aria-checked="false"><span class="lp-lv-k">L3 无人值守</span><span class="lp-lv-d">全自动跑,仍受预算与终止条件约束</span></button>
+          </div>
+          <div class="lp-saferow">
+            <span class="wb-flabel">人工闸门</span>
+            <div class="wb-chips" data-chips="gate">
+              <span class="chip">合并前<button class="wb-x" data-del aria-label="移除 合并前">×</button></span>
+              <button class="wb-addchip" data-add>+ 添加</button>
+              <input class="wb-input lp-chip-in mono" hidden aria-label="新增人工闸门" />
+            </div>
+          </div>
+          <div class="lp-saferow">
+            <span class="wb-flabel">终止条件</span>
+            <div class="wb-chips" data-chips="kill">
+              <span class="chip">no-change-3<span class="lp-chip-d">连续3次无改动</span><button class="wb-x" data-del aria-label="移除 no-change-3">×</button></span>
+              <span class="chip">budget-burn-2d<span class="lp-chip-d">连续2天预算触顶</span><button class="wb-x" data-del aria-label="移除 budget-burn-2d">×</button></span>
+              <button class="wb-addchip" data-add>+ 添加</button>
+              <input class="wb-input lp-chip-in mono" hidden aria-label="新增终止条件" />
+            </div>
+          </div>
+          <div class="lp-saferow">
+            <span class="wb-flabel">允许范围(allowlist)</span>
+            <div class="wb-chips" data-chips="allow">
+              <span class="chip">src/styles/**<button class="wb-x" data-del aria-label="移除 src/styles/**">×</button></span>
+              <span class="chip">src/components/**<button class="wb-x" data-del aria-label="移除 src/components/**">×</button></span>
+              <button class="wb-addchip" data-add>+ 添加</button>
+              <input class="wb-input lp-chip-in mono" hidden aria-label="新增允许路径" />
+            </div>
+          </div>
+          <div class="lp-saferow">
+            <span class="wb-flabel">禁止范围(denylist)</span>
+            <div class="wb-chips" data-chips="deny">
+              <span class="chip">src/payments/**<button class="wb-x" data-del aria-label="移除 src/payments/**">×</button></span>
+              <span class="chip">**/*.env<button class="wb-x" data-del aria-label="移除 **/*.env">×</button></span>
+              <button class="wb-addchip" data-add>+ 添加</button>
+              <input class="wb-input lp-chip-in mono" hidden aria-label="新增禁止路径" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- 右栏 -->
+    <aside class="wb-side">
+      <div class="card">
+        <div class="card-h"><span class="card-t">摘要</span><span class="sp"></span><span class="g-phase" data-sum-wf>release-train</span></div>
+        <div class="wb-sum on" data-wfview="release-train">
+          <div class="wb-sum-row"><span>阶段</span><b data-sum="stages">3</b></div>
+          <div class="wb-sum-row"><span>复核门</span><b data-sum="gates">1</b></div>
+          <div class="wb-sum-row"><span>技能</span><b data-sum="skills">0</b></div>
+          <div class="wb-sum-row"><span>钩子</span><b data-sum="hooks">9</b></div>
+          <div class="wb-sum-row"><span>自动运行</span><b data-sum="loop">开 · 今日 3/24</b></div>
+        </div>
+        <div class="wb-sum" data-wfview="default">
+          <div class="wb-sum-row"><span>阶段</span><b data-sum="stages">7</b></div>
+          <div class="wb-sum-row"><span>复核门</span><b data-sum="gates">3</b></div>
+          <div class="wb-sum-row"><span>技能</span><b data-sum="skills">7</b></div>
+          <div class="wb-sum-row"><span>钩子</span><b data-sum="hooks">9</b></div>
+          <div class="wb-sum-row"><span>自动运行</span><b data-sum="loop">开 · 今日 3/24</b></div>
+        </div>
+      </div>
+
+      <div class="card wb-preview">
+        <div class="card-h"><span class="card-t">流程预览</span><span class="sp"></span><span class="wb-ed-note">按转换事件顺序</span></div>
+        <div class="sec">
+          <div class="wb-pv-flow on" data-wfview="release-train">
+            <div class="wb-pv-track">
+              <span class="wb-pv-node">起草</span>
+              <span class="wb-pv-line"></span>
+              <span class="wb-pv-node" data-gate="1">人工复核<i class="wb-pv-gdot"></i></span>
+              <span class="wb-pv-line"></span>
+              <span class="wb-pv-node">发布</span>
+              <span class="wb-pv-dot"></span>
+            </div>
+          </div>
+          <div class="wb-pv-flow" data-wfview="default">
+            <div class="wb-pv-track">
+              <span class="wb-pv-node">立项</span>
+              <span class="wb-pv-line"></span>
+              <span class="wb-pv-node" data-gate="1">调研<i class="wb-pv-gdot"></i></span>
+              <span class="wb-pv-line"></span>
+              <span class="wb-pv-node" data-gate="1">规格<i class="wb-pv-gdot"></i></span>
+              <span class="wb-pv-line"></span>
+              <span class="wb-pv-node">实现</span>
+              <span class="wb-pv-line"></span>
+              <span class="wb-pv-node" data-gate="1">验证<i class="wb-pv-gdot"></i></span>
+              <span class="wb-pv-line"></span>
+              <span class="wb-pv-node">交付</span>
+              <span class="wb-pv-line"></span>
+              <span class="wb-pv-node">归档</span>
+              <span class="wb-pv-dot"></span>
+            </div>
+          </div>
+          <button class="btn btn--tint wb-play" id="wbPlay">▶ 预演流程</button>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+<script>
+/* ============ 工作流编排 ============ */
+(function () {
+  'use strict';
+  var rootSec = document.querySelector('.view[data-view="workbench"]');
+  if (!rootSec) return;
+  var $ = function (sel, el) { return (el || rootSec).querySelector(sel); };
+  var $$ = function (sel, el) { return Array.prototype.slice.call((el || rootSec).querySelectorAll(sel)); };
+  function toast(msg) { if (window.showToast) window.showToast(msg); }
+
+  /* ---- reduced-motion 判定 ---- */
+  var motionOK = true;
+  if (window.gsap && window.gsap.matchMedia) {
+    motionOK = false;
+    var mm = window.gsap.matchMedia();
+    mm.add('(prefers-reduced-motion: no-preference)', function () {
+      motionOK = true;
+      return function () { motionOK = false; };
+    });
+  } else if (window.matchMedia) {
+    motionOK = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  }
+
+  /* ---- 演示数据 ---- */
+  var TRACKS = ['pm', 'frontend', 'backend', 'chat'];
+  function tr0() { return { pm: [], frontend: [], backend: [], chat: [] }; }
+  var DATA = {
+    'release-train': {
+      sub: '3 阶段',
+      order: ['draft', 'review', 'ship'],
+      events: { draft: 'submitted', review: 'approved' },
+      stages: {
+        draft: { name: '起草', gate: false, outputs: ['draft_doc'], nonempty: false, skills: tr0() },
+        review: { name: '人工复核', gate: true, outputs: [], nonempty: false, skills: tr0() },
+        ship: { name: '发布', gate: false, outputs: ['release_notes'], nonempty: false, skills: tr0() }
+      }
+    },
+    'default': {
+      sub: '7 阶段',
+      order: ['open', 'explore', 'spec', 'build', 'verify', 'ship', 'archive'],
+      events: { open: 'kickoff', explore: 'explore-pass', spec: 'spec-pass', build: 'build-done', verify: 'verify-pass', ship: 'shipped' },
+      stages: {
+        open: { name: '立项', gate: false, outputs: [], nonempty: false, skills: tr0() },
+        explore: { name: '调研', gate: true, outputs: ['design_doc'], nonempty: false, skills: tr0() },
+        spec: { name: '规格', gate: true, outputs: ['plan'], nonempty: false, skills: tr0() },
+        build: {
+          name: '实现', gate: false, outputs: ['build_sha'], nonempty: false,
+          skills: {
+            pm: [], chat: [],
+            frontend: [
+              { id: 'superpowers:tdd', dep: null },
+              { id: 'impeccable', dep: 'superpowers:tdd' }
+            ],
+            backend: [{ id: 'superpowers:tdd', dep: null }]
+          }
+        },
+        verify: {
+          name: '验证', gate: true, outputs: ['verify_result', 'agent_review_result', 'codex_review_result', 'verification_report'], nonempty: true,
+          skills: {
+            pm: [], chat: [],
+            frontend: [
+              { id: 'superpowers:verification-before-completion', dep: null },
+              { id: 'e2e-testing', dep: 'superpowers:verification-before-completion' },
+              { id: 'browser-qa', dep: 'e2e-testing' }
+            ],
+            backend: [{ id: 'superpowers:verification-before-completion', dep: null }]
+          }
+        },
+        ship: { name: '交付', gate: false, outputs: [], nonempty: false, skills: tr0() },
+        archive: { name: '归档', gate: false, outputs: [], nonempty: false, skills: tr0() }
+      }
+    }
+  };
+  /* 技能库(添加面板候选) */
+  var CAND = ['superpowers:brainstorming', 'superpowers:tdd', 'superpowers:code-review', 'superpowers:verification-before-completion', 'impeccable', 'browser-qa', 'e2e-testing', 'security-review'];
+  var HOOK_TL = [
+    { t: '会话开始', ev: 'SessionStart', hooks: [
+      ['注入工作流规则', 'agent 一进来就知道当前阶段该干什么、能用什么'],
+      ['注入项目上下文', '当前 change 状态、产物路径'],
+      ['注入 openspec 上下文', '当前提案与规格增量,供对齐']
+    ]},
+    { t: '你发消息', ev: 'UserPromptSubmit', hooks: [
+      ['重提任务面包屑', '长会话不跑偏'],
+      ['按轨道路由提示', 'pm / frontend / backend 各给对的方法论']
+    ]},
+    { t: 'agent 调工具', ev: 'PreToolUse', hooks: [
+      ['门拦截', '复核没过时,挡住技能调用与写文件'],
+      ['技能解锁检查', '依赖顺序没到的技能直接拦下']
+    ]},
+    { t: '工具完成', ev: 'PostToolUse', hooks: [
+      ['记录技能完成', '供解锁链与审计'],
+      ['记录你的决策', '写进 change 记录,可回溯']
+    ]}
+  ];
+  var state = { wf: 'release-train', stage: { 'release-train': 'review', 'default': 'verify' }, track: 'frontend' };
+
+  function edOf(wf) { return $('.wb-editor[data-wfview="' + wf + '"]'); }
+  function stageOf(wf) { return DATA[wf].stages[state.stage[wf]]; }
+  function shortName(id) { return id.indexOf(':') > -1 ? id.split(':').pop() : id; }
+  function uniqSkills(st) {
+    var seen = {}, out = [];
+    TRACKS.forEach(function (t) {
+      (st.skills[t] || []).forEach(function (s) { if (!seen[s.id]) { seen[s.id] = 1; out.push(s.id); } });
+    });
+    return out;
+  }
+
+  /* ---- stepper 渲染 ---- */
+  function connHTML(ev) {
+    return '<div class="wb-link" aria-hidden="true"><span class="wb-link-ev mono">' + ev + '</span>' +
+      '<svg viewBox="0 0 54 10" width="54" height="10"><line x1="1" y1="5" x2="46" y2="5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" marker-end="url(#wbArrowM)"/></svg></div>';
+  }
+  function renderStepper(wf) {
+    var box = $('.wb-steps[data-steps="' + wf + '"]');
+    if (!box) return;
+    var d = DATA[wf], html = '';
+    d.order.forEach(function (sid, i) {
+      var st = d.stages[sid];
+      var on = state.stage[wf] === sid;
+      var uniq = uniqSkills(st);
+      html += '<button class="wb-step' + (on ? ' wb-step--on' : '') + '" data-stage="' + sid + '"' + (on ? ' aria-current="step"' : '') + '>' +
+        '<span class="wb-step-top"><span class="wb-step-num mono">' + (i + 1) + '</span>' +
+        (st.gate ? '<span class="badge badge--red wb-step-gate"><span class="dot"></span>复核门</span>' : '') +
+        '</span>' +
+        '<span class="wb-step-name">' + st.name + '</span>' +
+        '<span class="wb-step-id mono">' + sid + '</span>' +
+        '<span class="wb-step-meta"><span>◇ ' + uniq.length + ' 技能</span><i>·</i><span>⚙︎ 9 钩子</span><i>·</i><span>▤ ' + st.outputs.length + ' 产出</span></span>' +
+        (uniq.length ? '<span class="wb-step-sk">' + uniq.slice(0, 2).map(function (id) { return '<span class="wb-skc mono" title="' + id + '">' + shortName(id) + '</span>'; }).join('') + (uniq.length > 2 ? '<span class="wb-skc-n mono">+' + (uniq.length - 2) + '</span>' : '') + '</span>' : '') +
+        '</button>';
+      if (d.events[sid]) html += connHTML(d.events[sid]);
+    });
+    html += '<button class="wb-step--add" data-demo>+ 添加阶段</button>';
+    box.innerHTML = html;
+  }
+
+  /* ---- 技能:依赖链 + 添加面板 ---- */
+  function chipHTML(id) { return '<span class="chip">' + id + '<button class="wb-x" data-del-skill="' + id + '" aria-label="移除 ' + id + '">×</button></span>'; }
+  function chainsHTML(list) {
+    if (!list.length) return '<div class="wb-chain"><span class="wb-empty">该轨道在此阶段未强制技能——全部技能可用</span></div>';
+    var byId = {}; list.forEach(function (s) { byId[s.id] = s; });
+    var kids = {}; list.forEach(function (s) { if (s.dep && byId[s.dep]) { (kids[s.dep] = kids[s.dep] || []).push(s.id); } });
+    var used = {}, chains = [], solos = [];
+    function walk(start) {
+      var ch = [start]; used[start] = 1; var cur = start;
+      while (kids[cur] && kids[cur].length) {
+        var nx = null;
+        for (var i = 0; i < kids[cur].length; i++) { if (!used[kids[cur][i]]) { nx = kids[cur][i]; break; } }
+        if (!nx) break;
+        ch.push(nx); used[nx] = 1; cur = nx;
+      }
+      return ch;
+    }
+    list.forEach(function (s) {
+      if (used[s.id]) return;
+      if (!s.dep || !byId[s.dep]) {
+        var ch = walk(s.id);
+        if (ch.length === 1) solos.push(s.id); else chains.push({ ghost: null, ids: ch });
+      }
+    });
+    list.forEach(function (s) { if (!used[s.id]) chains.push({ ghost: s.dep, ids: walk(s.id) }); });
+    var html = '';
+    chains.forEach(function (c) {
+      html += '<div class="wb-chain"><span class="wb-chain-k">依赖链</span>';
+      if (c.ghost) html += '<span class="chip ghost">' + c.ghost + '</span><span class="wb-arr" aria-hidden="true">➝</span>';
+      c.ids.forEach(function (id, i) {
+        if (i) html += '<span class="wb-arr" aria-hidden="true">➝</span>';
+        html += chipHTML(id);
+      });
+      html += '</div>';
+    });
+    if (solos.length) html += '<div class="wb-chain"><span class="wb-chain-k">无依赖</span>' + solos.map(chipHTML).join('') + '</div>';
+    return html;
+  }
+  function panelHTML(list) {
+    var have = {}; list.forEach(function (s) { have[s.id] = 1; });
+    var opts = CAND.filter(function (id) { return !have[id]; });
+    return '<div class="wb-skpanel" data-sk-panel hidden>' +
+      '<div class="wb-skp-h">添加强制技能<span class="hint">选一个技能,可指定它依赖哪个已有技能</span></div>' +
+      '<div class="wb-skp-list">' + (opts.length
+        ? opts.map(function (id) { return '<button class="wb-skopt mono" data-sk-opt="' + id + '">' + id + '</button>'; }).join('')
+        : '<span class="wb-empty">技能库里的技能都已在此轨道</span>') + '</div>' +
+      '<div class="wb-skp-foot"><label>依赖于 <select class="wb-input wb-skp-dep mono" data-sk-dep aria-label="依赖于"><option value="">无依赖 · 立即解锁</option>' +
+      list.map(function (s) { return '<option value="' + s.id + '">' + s.id + '</option>'; }).join('') +
+      '</select></label><span class="sp"></span>' +
+      '<button class="btn btn--ghost sm" data-sk-cancel>取消</button>' +
+      '<button class="btn btn--primary sm" data-sk-confirm>添加</button></div></div>';
+  }
+  function renderSkillsBox(wf) {
+    var ed = edOf(wf);
+    var sid = state.stage[wf], st = DATA[wf].stages[sid];
+    var list = st.skills[state.track];
+    var box = $('[data-ed-skillsbox]', ed);
+    box.innerHTML =
+      '<div class="wb-tracks" data-ed-tracks>' + TRACKS.map(function (t) {
+        var n = (st.skills[t] || []).length;
+        return '<button class="wb-track' + (t === state.track ? ' on' : '') + '" data-track="' + t + '">' + t + (n ? '<b>' + n + '</b>' : '') + '</button>';
+      }).join('') + '</div>' +
+      '<div data-ed-chains>' + chainsHTML(list) + '</div>' +
+      '<div class="wb-sk-actions"><button class="wb-addchip" data-sk-open>+ 添加</button></div>' +
+      panelHTML(list);
+    $('[data-ed-skillhint]', ed).innerHTML = '<span class="mono">' + sid + '</span> 阶段 · 按轨道强制';
+  }
+
+  /* ---- Hook 会话时序线(两个编辑器注入同一份)---- */
+  function hooksHTML() {
+    var nodes = '', stacks = '';
+    HOOK_TL.forEach(function (g, gi) {
+      nodes += '<div class="wb-hknode" style="grid-column:' + (gi + 1) + '"><div class="wb-hk-t">' + g.t + '</div><div class="wb-hk-ev mono">' + g.ev + '</div></div>';
+      stacks += '<div class="wb-hkstack" style="grid-column:' + (gi + 1) + '">' + g.hooks.map(function (h) {
+        return '<div class="wb-hkcard"><div class="wb-hkcard-t">' + h[0] + '<button class="switch" role="switch" aria-checked="true" aria-label="' + h[0] + '"></button></div><div class="wb-hkcard-d">' + h[1] + '</div></div>';
+      }).join('') + '</div>';
+    });
+    return nodes + '<div class="wb-hkloop" aria-hidden="true"><span>⟳ 每轮工具调用都重复</span></div>' + stacks;
+  }
+
+  /* ---- 编辑区渲染 ---- */
+  function renderOutputs(ed, st) {
+    var box = $('[data-ed-outputs]', ed);
+    var html = '';
+    if (!st.outputs.length) html += '<span class="wb-empty">无</span>';
+    else st.outputs.forEach(function (o) {
+      html += '<span class="chip">' + o + '<button class="wb-x" data-del-output="' + o + '" aria-label="移除 ' + o + '">×</button></span>';
+    });
+    html += '<button class="wb-addchip" data-demo>+ 添加</button>';
+    box.innerHTML = html;
+    $('[data-ed-nonempty]', ed).setAttribute('aria-checked', String(st.nonempty));
+  }
+  function renderEditor(wf) {
+    var ed = edOf(wf);
+    var sid = state.stage[wf];
+    var st = DATA[wf].stages[sid];
+    $('[data-ed-phase]', ed).textContent = sid;
+    $('[data-ed-gatebadge]', ed).style.display = st.gate ? '' : 'none';
+    $('[data-ed-label]', ed).value = st.name;
+    $('[data-ed-id]', ed).textContent = sid;
+    $('[data-ed-gate-sw]', ed).setAttribute('aria-checked', String(st.gate));
+    renderOutputs(ed, st);
+    renderSkillsBox(wf);
+  }
+  function renderSummary(wf) {
+    var d = DATA[wf];
+    var box = $('.wb-sum[data-wfview="' + wf + '"]');
+    if (!box) return;
+    var gates = 0, skills = 0;
+    d.order.forEach(function (sid) {
+      var st = d.stages[sid];
+      if (st.gate) gates++;
+      TRACKS.forEach(function (t) { skills += (st.skills[t] || []).length; });
+    });
+    $('[data-sum="stages"]', box).textContent = d.order.length;
+    $('[data-sum="gates"]', box).textContent = gates;
+    $('[data-sum="skills"]', box).textContent = skills;
+    $('[data-sum="hooks"]', box).textContent = 9;
+  }
+
+  /* ---- workflow 切换 ---- */
+  var wfBtn = $('#wbWfBtn'), wfMenu = $('#wbWfMenu');
+  function closeWfMenu() { wfMenu.classList.remove('open'); wfBtn.setAttribute('aria-expanded', 'false'); }
+  wfBtn.addEventListener('click', function (e) {
+    e.stopPropagation();
+    var open = wfMenu.classList.toggle('open');
+    wfBtn.setAttribute('aria-expanded', String(open));
+  });
+  document.addEventListener('click', function (e) {
+    if (wfMenu.classList.contains('open') && !wfMenu.contains(e.target) && !wfBtn.contains(e.target)) closeWfMenu();
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && wfMenu.classList.contains('open')) { closeWfMenu(); wfBtn.focus(); }
+  });
+  $$('.wb-wf-item', wfMenu).forEach(function (item) {
+    item.addEventListener('click', function () { setWf(item.dataset.wf); });
+  });
+  function setWf(wf) {
+    stopAnim();
+    state.wf = wf;
+    $$('[data-wfview]').forEach(function (el) { el.classList.toggle('on', el.dataset.wfview === wf); });
+    $('#wbWfName').textContent = wf;
+    $('#wbWfSub').textContent = DATA[wf].sub;
+    $$('.wb-wf-item', wfMenu).forEach(function (it) { it.classList.toggle('on', it.dataset.wf === wf); });
+    var sumTag = $('[data-sum-wf]');
+    if (sumTag) sumTag.textContent = wf;
+    closeWfMenu();
+    var steps = $('.wb-steps[data-steps="' + wf + '"]');
+    if (steps) steps.scrollLeft = 0;
+  }
+
+  /* ---- 委托交互 ---- */
+  rootSec.addEventListener('click', function (e) {
+    if (!e.target.closest) return;
+    var el, ed, wf, st, list;
+    /* 删除强制技能 chip(后继自动接到被删项的依赖上) */
+    if ((el = e.target.closest('[data-del-skill]'))) {
+      ed = el.closest('.wb-editor'); wf = ed.dataset.wfview;
+      st = stageOf(wf); list = st.skills[state.track];
+      var name = el.getAttribute('data-del-skill'), removed = null;
+      for (var i = 0; i < list.length; i++) { if (list[i].id === name) { removed = list[i]; list.splice(i, 1); break; } }
+      if (removed) list.forEach(function (s) { if (s.dep === name) s.dep = removed.dep; });
+      renderSkillsBox(wf); renderStepper(wf); renderSummary(wf);
+      toast('已移除 ' + name + '(内存态)——后继技能自动前移接链');
+      return;
+    }
+    /* 技能添加面板 */
+    if ((el = e.target.closest('[data-sk-open]'))) {
+      var panel = $('[data-sk-panel]', el.closest('[data-ed-skillsbox]'));
+      if (panel.hasAttribute('hidden')) panel.removeAttribute('hidden'); else panel.setAttribute('hidden', '');
+      return;
+    }
+    if ((el = e.target.closest('.wb-skopt'))) {
+      $$('.wb-skopt', el.closest('.wb-skp-list')).forEach(function (o) { o.classList.toggle('on', o === el); });
+      return;
+    }
+    if ((el = e.target.closest('[data-sk-cancel]'))) {
+      el.closest('[data-sk-panel]').setAttribute('hidden', '');
+      return;
+    }
+    if ((el = e.target.closest('[data-sk-confirm]'))) {
+      ed = el.closest('.wb-editor'); wf = ed.dataset.wfview;
+      st = stageOf(wf); list = st.skills[state.track];
+      var pn = el.closest('[data-sk-panel]');
+      var opt = pn.querySelector('.wb-skopt.on');
+      if (!opt) { toast('先在上面选一个技能'); return; }
+      var skid = opt.getAttribute('data-sk-opt');
+      var dep = pn.querySelector('[data-sk-dep]').value || null;
+      list.push({ id: skid, dep: dep });
+      renderSkillsBox(wf); renderStepper(wf); renderSummary(wf);
+      if (window.gsap && motionOK) {
+        var chips = $$('[data-ed-chains] .chip', edOf(wf)).filter(function (c) { return c.textContent.indexOf(skid) === 0; });
+        if (chips.length) window.gsap.from(chips[chips.length - 1], { scale: .7, autoAlpha: 0, duration: .32, ease: 'back.out(2.2)', clearProps: 'all' });
+      }
+      toast('已添加 ' + skid + (dep ? '(依赖 ' + shortName(dep) + ')' : '') + '——内存态,保存后写入 workflow');
+      return;
+    }
+    /* 删除产出物 chip */
+    if ((el = e.target.closest('[data-del-output]'))) {
+      ed = el.closest('.wb-editor'); wf = ed.dataset.wfview;
+      st = stageOf(wf);
+      var j = st.outputs.indexOf(el.getAttribute('data-del-output'));
+      if (j > -1) st.outputs.splice(j, 1);
+      renderOutputs(ed, st); renderStepper(wf);
+      toast('已移除产出物(demo 不落盘)');
+      return;
+    }
+    /* 轨道 tab */
+    if ((el = e.target.closest('.wb-track'))) {
+      state.track = el.dataset.track;
+      renderSkillsBox(el.closest('.wb-editor').dataset.wfview);
+      return;
+    }
+    /* 阶段卡选中 */
+    if ((el = e.target.closest('.wb-step[data-stage]'))) {
+      wf = el.closest('.wb-rail').dataset.wfview;
+      state.stage[wf] = el.dataset.stage;
+      renderStepper(wf); renderEditor(wf);
+      return;
+    }
+    /* 复核门开关(真更新数据 → 阶段卡徽章/摘要联动) */
+    if ((el = e.target.closest('[data-ed-gate-sw]'))) {
+      ed = el.closest('.wb-editor'); wf = ed.dataset.wfview;
+      st = stageOf(wf); st.gate = !st.gate;
+      renderEditor(wf); renderStepper(wf); renderSummary(wf);
+      toast(st.gate ? '已开复核门——change 将停在此阶段等人放行' : '已关复核门');
+      return;
+    }
+    /* 产出非空开关 */
+    if ((el = e.target.closest('[data-ed-nonempty]'))) {
+      st = stageOf(el.closest('.wb-editor').dataset.wfview);
+      st.nonempty = !st.nonempty;
+      el.setAttribute('aria-checked', String(st.nonempty));
+      return;
+    }
+    /* 其余开关(视觉切换;自动运行卡的开关由其自身脚本接管) */
+    if ((el = e.target.closest('.switch[role="switch"]')) && !el.closest('#wbLoopCard')) {
+      el.setAttribute('aria-checked', String(el.getAttribute('aria-checked') !== 'true'));
+      return;
+    }
+    /* 纯示意按钮 */
+    if ((el = e.target.closest('[data-demo]'))) {
+      toast('示意操作——demo 未实际生效');
+      return;
+    }
+  });
+  $('#wbSave').addEventListener('click', function () { toast('已保存(demo 示意)'); });
+  $('#wbCopyJson').addEventListener('click', function () { toast('已拷贝 workflow JSON(demo 示意)'); });
+
+  /* ---- GSAP 预演动画 ---- */
+  var playBtn = $('#wbPlay');
+  var tlRef = null;
+  function collect() {
+    var wf = state.wf;
+    var track = $('.wb-pv-flow[data-wfview="' + wf + '"] .wb-pv-track');
+    return {
+      track: track,
+      nodes: $$('.wb-pv-node', track),
+      lines: $$('.wb-pv-line', track),
+      dot: $('.wb-pv-dot', track),
+      steps: $$('.wb-steps[data-steps="' + wf + '"] .wb-step[data-stage]')
+    };
+  }
+  function resetAnim() {
+    $$('.wb-pv-node').forEach(function (n) { n.classList.remove('lit', 'lit-g'); });
+    $$('.wb-pv-line').forEach(function (l) { l.classList.remove('lit'); });
+    $$('.wb-step').forEach(function (s) { s.classList.remove('wb-step--live', 'wb-step--live-g'); });
+    if (window.gsap) {
+      window.gsap.set($$('.wb-pv-dot'), { clearProps: 'all' });
+      window.gsap.set($$('.wb-pv-node').concat($$('.wb-pv-gdot'), $$('.wb-step-gate'), $$('.wb-pv-track')), { clearProps: 'transform' });
+    }
+  }
+  function stopAnim() {
+    if (tlRef) { tlRef.kill(); tlRef = null; }
+    resetAnim();
+    if (playBtn) playBtn.textContent = '▶ 预演流程';
+  }
+  function finalState(c) {
+    c.nodes.forEach(function (n, i) {
+      var last = i === c.nodes.length - 1;
+      n.classList.add(last ? 'lit-g' : 'lit');
+      if (c.steps[i]) c.steps[i].classList.add(last ? 'wb-step--live-g' : 'wb-step--live');
+    });
+    c.lines.forEach(function (l) { l.classList.add('lit'); });
+  }
+  playBtn.addEventListener('click', function () {
+    if (!window.gsap) { toast('动画库未加载'); return; }
+    if (tlRef) { stopAnim(); return; } /* 播放中再点=停止(先 kill) */
+    resetAnim();
+    var c = collect();
+    if (!c.track || !c.nodes.length) return;
+    if (!motionOK) { finalState(c); return; } /* reduced-motion:直接终态 */
+    var centers = c.nodes.map(function (n) { return n.offsetLeft + n.offsetWidth / 2 - 4; });
+    playBtn.textContent = '■ 停止';
+    var tl = window.gsap.timeline({
+      onComplete: function () { tlRef = null; playBtn.textContent = '▶ 预演流程'; }
+    });
+    tlRef = tl;
+    c.nodes.forEach(function (node, i) {
+      var last = i === c.nodes.length - 1;
+      tl.add(function () {
+        node.classList.add(last ? 'lit-g' : 'lit');
+        if (c.steps[i]) c.steps[i].classList.add(last ? 'wb-step--live-g' : 'wb-step--live');
+      });
+      tl.to(node, { keyframes: [{ scale: 1.06, duration: 0.18 }, { scale: 1, duration: 0.17 }], ease: 'power1.out' });
+      if (node.getAttribute('data-gate') === '1') {
+        var pulse = [];
+        var gd = node.querySelector('.wb-pv-gdot');
+        if (gd) pulse.push(gd);
+        var sb = c.steps[i] && c.steps[i].querySelector('.wb-step-gate');
+        if (sb) pulse.push(sb);
+        if (pulse.length) tl.to(pulse, { keyframes: [{ scale: 1.25, duration: 0.15 }, { scale: 1, duration: 0.15 }], repeat: 1, transformOrigin: '50% 50%' });
+        tl.to({}, { duration: 0.6 });
+      }
+      if (!last) {
+        tl.set(c.dot, { x: centers[i], opacity: 1 });
+        tl.add((function (line) { return function () { line.classList.add('lit'); }; })(c.lines[i]));
+        tl.to(c.dot, { x: centers[i + 1], duration: 0.5, ease: 'power1.inOut' });
+      }
+    });
+    tl.set(c.dot, { opacity: 0 });
+    tl.to(c.track, { y: -2, duration: 0.1, ease: 'power1.out' });
+    tl.to(c.track, { y: 0, duration: 0.22, ease: 'power2.in' });
+  });
+
+  /* ---- 初始渲染 ---- */
+  $$('[data-ed-hooks]').forEach(function (box) { box.innerHTML = hooksHTML(); });
+  ['release-train', 'default'].forEach(function (wf) {
+    renderStepper(wf); renderEditor(wf); renderSummary(wf);
+  });
+})();
+</script>
+
+<script>
+/* ============ 自动运行(Loop)卡 ============ */
+(function () {
+  'use strict';
+  var rootSec = document.querySelector('.view[data-view="workbench"]');
+  var card = rootSec && rootSec.querySelector('#wbLoopCard');
+  if (!card) return;
+  var $ = function (sel, el) { return (el || card).querySelector(sel); };
+  var $$ = function (sel, el) { return Array.prototype.slice.call((el || card).querySelectorAll(sel)); };
+  function toast(msg) { if (window.showToast) window.showToast(msg); }
+  function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+
+  /* ---- 状态(内存态,推荐值即默认值)---- */
+  var CADS = ['5m', '15m', '30m', '1h', '2h', '6h', '1d'];
+  var st = { enabled: true, usedToday: 3, runsMax: 24, dirty: 0 };
+
+  var saveBtn = rootSec.querySelector('#wbSave');
+  var saveCnt = rootSec.querySelector('#wbSaveCnt');
+  var dirtyBadge = $('#lpDirty');
+
+  function markDirty() {
+    st.dirty++;
+    dirtyBadge.hidden = false;
+    saveCnt.textContent = st.dirty;
+    saveCnt.hidden = false;
+  }
+  saveBtn.addEventListener('click', function () {
+    if (!st.dirty) return; /* 无变更时沿用编排脚本的提示 */
+    toast('已保存 ' + st.dirty + ' 处变更(demo 示意,未落盘 loops.yaml)');
+    st.dirty = 0;
+    dirtyBadge.hidden = true;
+    saveCnt.hidden = true;
+  });
+
+  /* ---- 右栏摘要联动 ---- */
+  function renderSummary() {
+    Array.prototype.forEach.call(rootSec.querySelectorAll('[data-sum="loop"]'), function (b) {
+      b.textContent = (st.enabled ? '开' : '停') + ' · 今日 ' + st.usedToday + '/' + st.runsMax;
+    });
+  }
+
+  /* ---- 启停(卡头大开关 = 暂停钮,同一状态)---- */
+  var enableSw = $('#lpEnable'), pill = $('#lpPill'), pauseBtn = $('#lpPauseBtn');
+  function renderEnabled() {
+    enableSw.setAttribute('aria-checked', String(st.enabled));
+    pill.textContent = st.enabled ? '运行中' : '已暂停';
+    pill.classList.toggle('pill--green', st.enabled);
+    pill.classList.toggle('pill--dim', !st.enabled);
+    pauseBtn.textContent = st.enabled ? '⏸ 暂停' : '▶ 恢复';
+    renderSummary();
+  }
+  function toggleEnabled() {
+    st.enabled = !st.enabled;
+    renderEnabled();
+    markDirty();
+    toast(st.enabled ? '已恢复自动运行——下一轮按节奏触发' : '已暂停——不再触发新一轮,在跑的照常收尾');
+  }
+  enableSw.addEventListener('click', toggleEnabled);
+  pauseBtn.addEventListener('click', toggleEnabled);
+  $('#lpRunNow').addEventListener('click', function () {
+    if (!st.enabled) { toast('当前已暂停——先打开自动运行再跑'); return; }
+    if (st.usedToday >= st.runsMax) { toast('今日运行次数已触顶——按超限策略处理'); return; }
+    st.usedToday++;
+    renderSummary();
+    toast('已触发一轮运行(demo 示意)——今日 ' + st.usedToday + '/' + st.runsMax);
+  });
+
+  /* ---- 拖拉条:拖动实时更新数值与已填充段 ---- */
+  function fmtSld(kind, v) {
+    if (kind === 'cad') return CADS[v];
+    if (kind === 'runs') return v + ' 次';
+    if (kind === 'inflight') return v + ' 个';
+    return v + 'k'; /* tokens */
+  }
+  var VAL_EL = { cad: $('#lpValCad'), runs: $('#lpValRuns'), inflight: $('#lpValInflight'), tokens: $('#lpValTokens') };
+  function renderSlider(input) {
+    var kind = input.dataset.sld;
+    var v = +input.value, min = +input.min, max = +input.max;
+    input.style.setProperty('--p', ((v - min) / (max - min) * 100) + '%');
+    VAL_EL[kind].textContent = fmtSld(kind, v);
+    if (kind === 'runs') { st.runsMax = v; renderSummary(); }
+  }
+  $$('.lp-range').forEach(function (input) {
+    renderSlider(input); /* 初始填充 */
+    input.addEventListener('input', function () { renderSlider(input); });
+    input.addEventListener('change', markDirty); /* 松手才算一处变更 */
+  });
+
+  /* ---- 变更前缀示例联动 ---- */
+  var prefixIn = $('#lpPrefix'), prefixEg = $('#lpPrefixEg');
+  prefixIn.addEventListener('input', function () {
+    prefixEg.textContent = (prefixIn.value || 'rl-') + '0142-migrate-card';
+  });
+
+  /* ---- 文本 / select 变更 ---- */
+  $$('[data-lp]').forEach(function (el) {
+    el.addEventListener('change', markDirty);
+  });
+
+  /* ---- 委托点击:pill 单选 / segmented / chips 增删 ---- */
+  card.addEventListener('click', function (e) {
+    if (!e.target.closest) return;
+    var el;
+    /* 超限策略 pill 单选 */
+    if ((el = e.target.closest('.lp-opt'))) {
+      $$('.lp-opt').forEach(function (o) {
+        var on = o === el;
+        o.classList.toggle('on', on);
+        o.setAttribute('aria-checked', String(on));
+      });
+      markDirty();
+      toast(el.dataset.exceed === 'skip' ? '超限后跳过本轮,次日自动恢复' : '超限后暂停整个 loop,需人工恢复');
+      return;
+    }
+    /* 自主级别 segmented */
+    if ((el = e.target.closest('.lp-lv-tile'))) {
+      $$('.lp-lv-tile').forEach(function (t) {
+        var on = t === el;
+        t.classList.toggle('on', on);
+        t.setAttribute('aria-checked', String(on));
+      });
+      markDirty();
+      return;
+    }
+    /* chip 删除 */
+    if ((el = e.target.closest('[data-del]'))) {
+      var chip = el.closest('.chip');
+      var name = chip.textContent.replace(/×$/, '').trim();
+      chip.remove();
+      markDirty();
+      toast('已移除 ' + name + '(内存态)');
+      return;
+    }
+    /* chip 添加:按钮换成就地输入 */
+    if ((el = e.target.closest('[data-add]'))) {
+      var box = el.closest('.wb-chips');
+      var input = box.querySelector('.lp-chip-in');
+      el.hidden = true;
+      input.hidden = false;
+      input.value = '';
+      input.focus();
+      return;
+    }
+  });
+
+  /* chip 输入:Enter 提交,Esc 取消,失焦时有值即提交 */
+  function commitChipInput(input, cancel) {
+    var box = input.closest('.wb-chips');
+    var addBtn = box.querySelector('[data-add]');
+    var v = input.value.trim();
+    if (!cancel && v) {
+      var chip = document.createElement('span');
+      chip.className = 'chip';
+      chip.innerHTML = esc(v) + '<button class="wb-x" data-del aria-label="移除 ' + esc(v) + '">×</button>';
+      box.insertBefore(chip, addBtn);
+      markDirty();
+    }
+    input.hidden = true;
+    addBtn.hidden = false;
+  }
+  $$('.lp-chip-in').forEach(function (input) {
+    input.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); commitChipInput(input, false); }
+      else if (e.key === 'Escape') { commitChipInput(input, true); }
+    });
+    input.addEventListener('blur', function () {
+      if (!input.hidden) commitChipInput(input, false);
+    });
+  });
+
+  /* ---- 初始 ---- */
+  renderEnabled();
+})();
+</script>
+
+    </section>
+</main>
+
+<div class="toast" id="toast" role="status" aria-live="polite">已拷贝</div>
+
+<script>
+'use strict';
+(function () {
+  var root = document.documentElement;
+
+  /* 主题切换 */
+  document.getElementById('themeToggle').addEventListener('click', function () {
+    root.dataset.theme = root.dataset.theme === 'dark' ? 'light' : 'dark';
+  });
+
+  /* 视图切换 */
+  var navLinks = Array.prototype.slice.call(document.querySelectorAll('#mainNav a[data-nav]'));
+  var views = Array.prototype.slice.call(document.querySelectorAll('.view[data-view]'));
+  function show(name) {
+    views.forEach(function (v) { v.classList.toggle('on', v.dataset.view === name) });
+    navLinks.forEach(function (a) {
+      var on = a.dataset.nav === name;
+      a.classList.toggle('on', on);
+      if (on) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
+    });
+    document.dispatchEvent(new CustomEvent('viewshown', { detail: name }));
+  }
+  navLinks.forEach(function (a) {
+    a.addEventListener('click', function (e) { e.preventDefault(); show(a.dataset.nav); history.replaceState(null, '', '#' + a.dataset.nav) });
+  });
+  if (location.hash) {
+    var h = location.hash.slice(1);
+    if (views.some(function (v) { return v.dataset.view === h })) show(h);
+  }
+
+  /* 项目切换器 */
+  var swBtn = document.getElementById('swBtn');
+  var swMenu = document.getElementById('swMenu');
+  swBtn.addEventListener('click', function (e) {
+    e.stopPropagation();
+    var open = swMenu.classList.toggle('open');
+    swBtn.setAttribute('aria-expanded', String(open));
+  });
+  document.addEventListener('click', function (e) {
+    if (!swMenu.contains(e.target)) { swMenu.classList.remove('open'); swBtn.setAttribute('aria-expanded', 'false') }
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && swMenu.classList.contains('open')) { swMenu.classList.remove('open'); swBtn.setAttribute('aria-expanded', 'false'); swBtn.focus() }
+  });
+
+  /* 任务详情——阶段 sheet tab(dt- 共用组件:收件箱 / 进度) */
+  /* 选中 tab 滚入可视区(tab 条可横向滚动;详情卡显隐后需重新对位) */
+  window.dtReveal = function (root) {
+    Array.prototype.forEach.call((root || document).querySelectorAll('.dt-tabs'), function (strip) {
+      var on = strip.querySelector('.dt-tab.on');
+      if (!on || !strip.clientWidth) return;
+      var target = on.offsetLeft + on.offsetWidth - strip.clientWidth + 6;
+      if (strip.scrollLeft < target) strip.scrollLeft = target;
+    });
+  };
+  window.dtReveal(document);
+  document.addEventListener('click', function (e) {
+    var tab = e.target.closest ? e.target.closest('.dt-tab') : null;
+    if (!tab) return;
+    var host = tab.closest('.dt-stages');
+    if (!host) return;
+    Array.prototype.forEach.call(host.querySelectorAll('.dt-tab'), function (t) {
+      var on = t === tab;
+      t.classList.toggle('on', on);
+      t.setAttribute('aria-selected', String(on));
+    });
+    var id = tab.getAttribute('data-dt-tab');
+    Array.prototype.forEach.call(host.querySelectorAll('.dt-pane'), function (p) {
+      if (p.getAttribute('data-dt-pane') === id) p.removeAttribute('hidden');
+      else p.setAttribute('hidden', '');
+    });
+  });
+
+  /* data-copy + toast */
+  var toast = document.getElementById('toast');
+  var toastTimer = null;
+  window.showToast = function (msg) {
+    toast.textContent = msg || '已拷贝';
+    toast.classList.add('show');
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { toast.classList.remove('show') }, 1600);
+  };
+  document.addEventListener('click', function (e) {
+    var el = e.target.closest ? e.target.closest('[data-copy]') : null;
+    if (!el) return;
+    var text = el.getAttribute('data-copy');
+    function done() { window.showToast('已拷贝 ' + (text.length > 46 ? text.slice(0, 46) + '…' : text)) }
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text).then(done, function () { fallback() });
+    } else fallback();
+    function fallback() {
+      var ta = document.createElement('textarea');
+      ta.value = text; document.body.appendChild(ta); ta.select();
+      try { document.execCommand('copy') } catch (err) { /* file:// 下静默 */ }
+      document.body.removeChild(ta); done();
+    }
+  });
+})();
+</script>
+
+</body>
+</html>
