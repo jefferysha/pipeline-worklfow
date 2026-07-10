@@ -560,6 +560,72 @@ button.ev__chip--neutral:hover { border-color: var(--border-2); color: var(--tex
 .loop-tripped { margin: 0; padding: 8px 11px; border-radius: 7px; background: var(--red-t); color: var(--red-d); font-size: 11.5px; line-height: 1.5; }
 .loop-reject { margin: 0; padding: 8px 11px; border-radius: 7px; background: var(--red-t); color: var(--red); font-size: 11.5px; font-weight: 600; }
 
+/* ── 工作台（T12 骨架，wb- 区块）：线性 stepper 阶段卡 + 右栏摘要/流程预览/预演。
+   交互真相源 design-demos/v5-progress-workbench.html workbench 段（六轮验收定稿）；视觉 token
+   沿 v4 不变（全部走既有变量，无新原色）。右栏复用既有 .view-split/.side-col 骨架（Task 17
+   先例 280px——v5 demo 的 356px 是它自己 1400px 容器的取值，本应用 .main max-width:1200px）。
+   阶段编辑区（T13）/技能链（T14）/Hook 时序线（T15）/Loop 卡（T16）后续在 .wb-editor 卡内挂载。 ── */
+.wb-toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+.wb-wf { position: relative; }
+.wb-wf-btn { display: inline-flex; align-items: center; gap: 9px; height: 36px; padding: 0 13px; border-radius: 10px; background: var(--card); border: 1px solid var(--border); box-shadow: var(--shadow); font: inherit; color: inherit; cursor: pointer; transition: border-color .12s ease, background .12s ease; }
+.wb-wf-btn:hover { border-color: var(--border-2); background: var(--fill); }
+.wb-wf-k { font-size: 10.5px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--text-3); font-family: var(--mono); }
+.wb-wf-name { font-size: 13px; font-weight: 700; color: var(--text); font-family: var(--mono); }
+.wb-wf-sub { font-size: 12px; color: var(--text-3); }
+.wb-chev { font-size: 10px; color: var(--text-3); }
+.wb-wf-menu { position: absolute; left: 0; top: calc(100% + 6px); min-width: 238px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-2); padding: 6px; z-index: 40; }
+.wb-wf-item { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 10px; border: 0; background: transparent; border-radius: var(--radius-sm); font: inherit; font-size: 13px; font-family: var(--mono); color: var(--text-2); text-align: left; cursor: pointer; transition: background .12s ease; }
+.wb-wf-item:hover { background: var(--fill); }
+.wb-wf-item.on { background: var(--fill-2); color: var(--text); font-weight: 600; }
+.wb-wf-item .n { margin-left: auto; font-size: 12px; color: var(--text-3); font-family: var(--font); }
+/* stepper 底轨 */
+.wb-rail { background: var(--fill); border-radius: 16px; padding: 11px; margin-bottom: 16px; }
+.wb-steps { display: flex; align-items: stretch; overflow-x: auto; padding: 3px 1px; }
+.wb-step { position: relative; overflow: hidden; flex: none; min-width: 148px; max-width: 200px; display: flex; flex-direction: column; align-items: flex-start; text-align: left; padding: 10px 12px 11px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); font: inherit; color: inherit; cursor: pointer; transition: border-color .15s ease, box-shadow .15s ease; }
+.wb-step:hover { border-color: var(--border-2); }
+.wb-step--on, .wb-step--on:hover { border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring), var(--shadow); }
+.wb-step--on::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 42px; background: linear-gradient(var(--accent-t), transparent); pointer-events: none; }
+/* 预演点亮态（GSAP 预演驱动）：进行中蓝、终点绿——沿 spec §1 蓝=进行/绿=完成的语义分工。 */
+.wb-step--live { border-color: var(--accent); }
+.wb-step--live-g { border-color: var(--green); }
+.wb-step > * { position: relative; }
+.wb-step-top { display: flex; align-items: center; gap: 8px; width: 100%; margin-bottom: 7px; min-height: 22px; }
+.wb-step-num { width: 22px; height: 22px; border-radius: 999px; background: var(--fill-2); display: grid; place-items: center; font-size: 11.5px; font-weight: 700; color: var(--text-2); font-family: var(--mono); flex: none; }
+.wb-step--on .wb-step-num { background: var(--accent); color: var(--btn-fg); }
+.wb-step-gate { margin-left: auto; }
+.wb-step-name { font-size: 15px; font-weight: 700; line-height: 1.25; color: var(--text); }
+.wb-step-id { font-size: 11.5px; color: var(--text-3); margin-top: 1px; font-family: var(--mono); }
+.wb-step-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 5px; margin-top: 9px; padding-top: 8px; border-top: 1px dashed var(--border); width: 100%; font-size: 11px; color: var(--text-3); }
+.wb-step-meta span { white-space: nowrap; }
+.wb-step-meta i { font-style: normal; color: var(--border-2); }
+.wb-step-sk { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 6px; width: 100%; }
+.wb-skc { display: inline-block; max-width: 124px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 1px 6px; border-radius: 6px; background: var(--fill); border: 1px solid var(--border); font-size: 11px; color: var(--text-2); font-family: var(--mono); }
+.wb-skc-n { font-size: 11px; color: var(--text-3); font-family: var(--mono); }
+/* 卡间连接件：转换事件名 + 箭头 */
+.wb-link { flex: none; align-self: center; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 0 6px; color: var(--border-2); }
+.wb-link-ev { font-size: 11px; color: var(--text-3); white-space: nowrap; font-family: var(--mono); }
+.wb-link svg { display: block; }
+.wb-step--add { flex: none; min-width: 104px; margin-left: 12px; display: flex; align-items: center; justify-content: center; padding: 12px; border: 1px dashed var(--border-2); border-radius: var(--radius); background: transparent; color: var(--text-3); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; transition: background .12s ease, color .12s ease; }
+.wb-step--add:hover { background: var(--card); color: var(--text-2); }
+.wb-step--add:disabled { opacity: .55; cursor: not-allowed; }
+.wb-step--add:disabled:hover { background: transparent; color: var(--text-3); }
+/* 阶段编辑卡（T12 占位骨架；T13 起 StepEditor 填充） */
+.wb-editor-head { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+.wb-editor-head b { font-size: 13px; color: var(--text); }
+.wb-ed-note { font-size: 12px; color: var(--text-3); font-weight: 400; margin-left: auto; }
+.wb-ed-placeholder { margin: 10px 0 4px; font-size: 12.5px; color: var(--text-3); line-height: 1.7; }
+/* 右栏流程预览 + 预演 */
+.wb-pv-flow { overflow-x: auto; padding: 8px 0 6px; }
+.wb-pv-track { position: relative; display: flex; align-items: center; width: max-content; min-width: 100%; padding: 4px 0; }
+.wb-pv-node { flex: none; display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--border); background: var(--fill); font-size: 12px; font-weight: 600; color: var(--text-2); transition: background .3s ease, border-color .3s ease, color .3s ease; }
+.wb-pv-node.lit { background: var(--accent-t); border-color: var(--accent); color: var(--accent-d); }
+.wb-pv-node.lit-g { background: var(--green-t); border-color: var(--green); color: var(--green-d); }
+.wb-pv-line { flex: none; width: 16px; height: 2px; border-radius: 2px; background: var(--border-2); transition: background .3s ease; }
+.wb-pv-line.lit { background: var(--accent); }
+.wb-pv-gdot { display: inline-block; width: 6px; height: 6px; border-radius: 999px; background: var(--red); }
+.wb-pv-dot { position: absolute; left: 0; top: 50%; width: 8px; height: 8px; margin-top: -4px; border-radius: 999px; background: var(--accent); opacity: 0; pointer-events: none; box-shadow: 0 0 0 3px var(--ring); }
+.wb-play { display: block; width: 100%; margin: 4px 0 12px; text-align: center; }
+
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { * { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
 /* 非法 drop 的 shake 是状态反馈（"这条边不存在"）不是装饰，评审 P1-11 要求从上面的降动效豁免——
