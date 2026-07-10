@@ -6,7 +6,7 @@
  * （archived/非 gate 相位由调用方自行决定要不要调用/展示，见 inbox.ts isAwaitingDecision）。
  */
 import type { ChangeSnapshot } from '../types'
-import { DEFAULT_RULES, type WorkflowRules } from '../model/workflowModel'
+import { DEFAULT_RULES, type StepOutputRules, type WorkflowRules } from '../model/workflowModel'
 
 export interface EvidenceChip {
   key: string // 字段名，mono 展示
@@ -107,4 +107,49 @@ export function gateEvidence(c: ChangeSnapshot, rules: WorkflowRules | undefined
 
   // 自定义 workflow / rules 缺失 / 相位不在映射表：兜底就是「产物正门」本身——见 artifactChips。
   return artifactChips(c)
+}
+
+/** 一个阶段（step）的产物清单：喂 T8 详情双形态（垂直时间线的阶段节点 / dt-tabs 阶段 sheet）。 */
+export interface StageArtifacts {
+  step: string
+  chips: EvidenceChip[]
+}
+
+/**
+ * default 工作流的阶段产物映射（T7 决策 B）：调研 design_doc / 规格 plan / 实现 branch+build_sha /
+ * 验证四证据（三轨判定 + verification_report——build_sha 归实现阶段，不重复列）。
+ * open/ship/archive 无产物声明 → 空清单。字段名全部在 kernel types.ts KNOWN_FIELDS 之内。
+ */
+const DEFAULT_STAGE_OUTPUTS: Record<string, readonly string[]> = {
+  explore: ['design_doc'],
+  spec: ['plan'],
+  build: ['branch', 'build_sha'],
+  verify: [...VERIFY_STATUS_FIELDS, 'verification_report'],
+}
+
+/** 单个产物字段 → chip：三轨判定字段如实映射 tone（同 gateEvidence verify 分支口径），
+ *  其余按路径型处理——实值 neutral+copyable，未设走 unsetPlaceholder（pending+unset，
+ *  展示文案由消费方按 unset 走 i18n，本层不写死中文）。 */
+function stageChip(c: ChangeSnapshot, key: string): EvidenceChip {
+  if ((VERIFY_STATUS_FIELDS as readonly string[]).includes(key)) {
+    const value = fieldStr(c, key)
+    return { key, value, tone: statusTone(value) }
+  }
+  return pathChip(c, key) ?? unsetPlaceholder(key)
+}
+
+/**
+ * stageArtifacts（T7）—— 每阶段产物清单：按 rules.steps 顺序逐阶段给出 outputs 的实值 chip
+ * 与未产出占位。default 走 DEFAULT_STAGE_OUTPUTS 映射（引用相等分支，同 gateEvidence 判据）；
+ * 自定义 rules 消费 rulesFromDef 携带的 outputsByStep（T6 时代的裸 rules 无产出声明 → 每步
+ * 空清单，不伪造产物）；rules 缺失（定义拉取失败）→ []，消费方回落 artifactChips 产物正门
+ * （G17 底线：时间线留白但卡不消失）。
+ */
+export function stageArtifacts(rules: (WorkflowRules & StepOutputRules) | undefined, c: ChangeSnapshot): StageArtifacts[] {
+  if (!rules) return []
+  const outputsByStep = rules === DEFAULT_RULES ? DEFAULT_STAGE_OUTPUTS : rules.outputsByStep
+  return rules.steps.map((step) => ({
+    step,
+    chips: (outputsByStep?.[step] ?? []).map((key) => stageChip(c, key)),
+  }))
 }

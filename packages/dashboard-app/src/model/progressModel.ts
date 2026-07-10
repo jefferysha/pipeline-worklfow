@@ -16,13 +16,13 @@
  *
  * 口径备注：
  *   · confirm 门不是 dashboard 拍板点——kernel types.ts 注释明确它是终端会话内 AskUserQuestion
- *     秒级即清的安全网门，对齐 inbox.ts isAwaitingDecision 只认 review 的既有行为（T7 复用时
- *     准入判据不因本模块而漂移）。
+ *     秒级即清的安全网门，只认 review（T7 起 inbox.ts isAwaitingDecision 直接消费本模块的
+ *     changeProgressState，「收件箱只收能拍板的」与进度五态同源不漂移）。
  *   · rules 缺失（自定义 workflow 定义拉取失败）：G17 底线是卡不消失——行仍出现在进度里，
  *     判不了门就归 agent（不误报「等你确认」）；automation 活跃态不依赖 rules，照常判定。
  */
 import type { ChangeSnapshot, Snapshot } from '../types'
-import { DEFAULT_RULES, rulesKey, type WorkflowRules } from './workflowModel'
+import { DEFAULT_RULES, rulesKey, type StepOutputRules, type WorkflowRules } from './workflowModel'
 import { gateEvidence, VERIFY_STATUS_FIELDS } from '../inbox/evidence'
 
 /** 五态字典（顺序即筛选条 chips 顺序，键对齐 demo v5 的 data-f-state）。 */
@@ -31,16 +31,12 @@ export type ProgressState = (typeof PROGRESS_STATES)[number]
 
 /**
  * WorkflowRules 的可选产出扩展面——「自定义 workflow 的 nonempty-output guard」判定所需的
- * 每 step 产出声明。T6 先定契约：T7 扩 rulesFromDef 让自定义 rules 自然携带这两张表后，
- * 本模块的判定不需要再改一行。缺省（今天的裸 WorkflowRules）视为「gate 无自动证据」——
- * 人可直接拍板，不会把自定义门误判成等 agent。
+ * 每 step 产出声明。T6 在这里先定契约，T7 兑现：定义收敛进 workflowModel（rulesFromDef 产出
+ * 的自定义 rules 自然携带这两张表），本处 re-export 保住既有 import 面，本模块的判定一行未改。
+ * 缺省（T6 时代的裸 WorkflowRules）视为「gate 无自动证据」——人可直接拍板，不会把自定义门
+ * 误判成等 agent。
  */
-export interface StepOutputRules {
-  /** step id → 该步声明的 outputs 字段名列表。 */
-  outputsByStep?: Record<string, readonly string[]>
-  /** step id → 该步是否挂了 nonempty-output guard（产出非空方可推进）。 */
-  nonemptyOutputByStep?: Record<string, boolean>
-}
+export type { StepOutputRules } from './workflowModel'
 export type ProgressRules = WorkflowRules & StepOutputRules
 
 /** 老内核 cmd_get 口径：空串或字面 'null' 都算未设（同 evidence.ts 的模块私有 isUnset）。 */

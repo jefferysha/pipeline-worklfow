@@ -68,6 +68,25 @@ describe('rulesFromDef —— WorkflowDef → WorkflowRules 映射', () => {
     expect(rules.gateByStep['review']).toBe('review')
     expect(rules.gateByStep['ship']).toBe('confirm')
   })
+
+  it('T7 产出扩展面：outputs/guards → outputsByStep/nonemptyOutputByStep 随 rules 自然携带（兑现 T6 契约）', () => {
+    const def = relDef()
+    def.steps[1] = {
+      ...def.steps[1]!,
+      outputs: [{ field: 'release_notes', type: 'file_path' }, { field: 'changelog', type: 'string' }],
+      guards: [{ type: 'nonempty-output' }],
+    }
+    const rules = rulesFromDef(def)
+    expect(rules.outputsByStep).toEqual({ draft: [], review: ['release_notes', 'changelog'], ship: [] })
+    expect(rules.nonemptyOutputByStep).toEqual({ draft: false, review: true, ship: false })
+  })
+
+  it('T7 产出扩展面：tasks-at-least guard 不算 nonempty-output（判据只认产出非空守卫）', () => {
+    const def = relDef()
+    def.steps[1] = { ...def.steps[1]!, guards: [{ type: 'tasks-at-least', n: 3 }] }
+    const rules = rulesFromDef(def)
+    expect(rules.nonemptyOutputByStep?.['review']).toBe(false)
+  })
 })
 
 describe('useWorkflowRules —— default 零网络 / 自定义 fetch+缓存 / 失败进 errors', () => {

@@ -75,6 +75,21 @@ describe('changeProgressState —— 五态判定（表驱动全覆盖）', () =
   })
 })
 
+describe('changeProgressState —— T7 兑现 T6 契约：rulesFromDef 产出的 rules 自然携带产出表', () => {
+  it('def 声明 outputs+nonempty guard 后，判定不需要测试侧手工扩展 outputsByStep', () => {
+    const rules = rulesFromDef({
+      ...REL_DEF,
+      steps: REL_DEF.steps.map((s) =>
+        s.id === 'review'
+          ? { ...s, outputs: [{ field: 'release_notes', type: 'file_path' as const }], guards: [{ type: 'nonempty-output' as const }] }
+          : s,
+      ),
+    })
+    expect(changeProgressState(makeChange('c', 'review'), rules)).toBe('agent')
+    expect(changeProgressState(makeChange('c', 'review', { fields: { release_notes: 'notes.md' } }), rules)).toBe('gate')
+  })
+})
+
 describe('missingGateArtifacts —— 「等 agent 补产出」的欠账清单', () => {
   it('spec 缺 plan → ["plan"]（badge 文案数据源）', () => {
     const c = makeChange('c', 'spec', { fields: { design_doc: 'docs/d.md' } })

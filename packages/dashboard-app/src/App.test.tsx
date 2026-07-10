@@ -133,7 +133,14 @@ describe('App SSE 实时更新（真 EventSource stub → 组件真更新，非 
 
     const es = lastEventSource()
     expect(es).toBeDefined()
-    const next = makeSnapshot([makeProject('/repo', [makeChange('needs-review', 'verify')])])
+    // T7 准入修订：verify 卡要进收件箱必须三轨证据齐（缺产出判给进度「等 agent」不进）。
+    const next = makeSnapshot([
+      makeProject('/repo', [
+        makeChange('needs-review', 'verify', {
+          fields: { verify_result: 'pass', agent_review_result: 'pass', codex_review_result: 'pass' },
+        }),
+      ]),
+    ])
     act(() => {
       es!.emit('snapshot', JSON.stringify(next))
     })
@@ -204,9 +211,14 @@ describe('App currentRoot 语义（D5：吃掉 G14，多项目默认取第一个
     render(<App />)
     await screen.findByTestId('inbox-view')
     const es = lastEventSource()
+    // T7 准入修订：证据齐的 gate 卡才计入徽章（判据在 inbox.test.tsx 钉，这里只验 currentRoot 过滤）。
+    const evidenceOk = { verify_result: 'pass', agent_review_result: 'pass', codex_review_result: 'pass' }
     const next = makeSnapshot([
-      makeProject('/repo-a', [makeChange('a-verify', 'verify')]),
-      makeProject('/repo-b', [makeChange('b-verify', 'verify'), makeChange('b-spec', 'spec')]),
+      makeProject('/repo-a', [makeChange('a-verify', 'verify', { fields: { ...evidenceOk } })]),
+      makeProject('/repo-b', [
+        makeChange('b-verify', 'verify', { fields: { ...evidenceOk } }),
+        makeChange('b-spec', 'spec', { fields: { design_doc: 'docs/d.md', plan: 'docs/p.md' } }),
+      ]),
     ])
     act(() => {
       es!.emit('snapshot', JSON.stringify(next))

@@ -12,6 +12,32 @@ const REL_RULES = rulesFromDef({
   ],
 })
 
+/** review 步挂 nonempty-output guard 的同名 workflow——T7 起 rulesFromDef 自然携带产出表，
+ *  不再需要测试侧手工拼 outputsByStep/nonemptyOutputByStep（progressModel.test 的 REL_RULES_GUARDED
+ *  是 T6 时代的手工扩展写法，这里走正门钉 rulesFromDef → 准入的端到端链路）。 */
+const REL_RULES_GUARDED = rulesFromDef({
+  name: 'release-train',
+  steps: [
+    { id: 'draft', label: '', gate: null, skills: [], inputs: [], outputs: [], guards: [], transitions: [{ event: 'approved', to: 'review' }] },
+    {
+      id: 'review',
+      label: '',
+      gate: 'review',
+      skills: [],
+      inputs: [],
+      outputs: [{ field: 'release_notes', type: 'file_path' }],
+      guards: [{ type: 'nonempty-output' }],
+      transitions: [{ event: 'shipped', to: 'ship' }],
+    },
+    { id: 'ship', label: '', gate: 'confirm', skills: [], inputs: [], outputs: [], guards: [], transitions: [] },
+  ],
+})
+
+/** verify 门三轨证据齐（可拍板）的 fields（同 progressModel.test 的 VERIFY_OK 口径）。 */
+const VERIFY_OK = { verify_result: 'pass', agent_review_result: 'pass', codex_review_result: 'pass' }
+/** explore/spec 门双产出齐的 fields。 */
+const DOCS_OK = { design_doc: 'docs/d.md', plan: 'docs/p.md' }
+
 // Task 8（G19③）：selectInbox 第三参键从「裸 wf 名」升级为「rulesKey(root,wf)」——本文件既有
 // selectInbox 测试全部固定用 root='/a'，迁移只需把 Map 的 key 从 wf 名换成 rulesKey('/a', wf)，
 // 断言的期望输出（items 内容/顺序）逐字不变——这就是意图迁移表要证明的"非聚合路径行为不变"。
@@ -20,31 +46,71 @@ const RULES = new Map<string, WorkflowRules>([
   [rulesKey('/a', 'release-train'), REL_RULES],
 ])
 
-describe('isAwaitingDecision（gate 泛化判据，G17）', () => {
-  it('default：explore/spec/verify（未归档）在等我决定', () => {
-    for (const phase of ['explore', 'spec', 'verify']) {
-      expect(isAwaitingDecision(makeChange('c', phase), DEFAULT_RULES)).toBe(true)
-    }
+/**
+ * T7 准入修订（决策 B）：判据从「gate 相位就进」改为「人现在能拍板」——与 progressModel
+ * 五态判定共享同源谓词（state ∈ {gate, failed}），缺产出的 gate 卡判给进度「等 agent」不进
+ * 收件箱。既有 G17 测试的意图迁移：原「门相位在等」用例补齐证据字段后期望不变；新增「缺产出
+ * 不进」「automation paused/failed 进、running/queued 不进」两组判据。
+ */
+describe('isAwaitingDecision（T7 准入：人现在能拍板）', () => {
+  it('default：explore/spec 双产出齐、verify 三轨齐（未归档）→ 在等我决定', () => {
+    expect(isAwaitingDecision(makeChange('c', 'explore', { fields: { ...DOCS_OK } }), DEFAULT_RULES)).toBe(true)
+    expect(isAwaitingDecision(makeChange('c', 'spec', { fields: { ...DOCS_OK } }), DEFAULT_RULES)).toBe(true)
+    expect(isAwaitingDecision(makeChange('c', 'verify', { fields: { ...VERIFY_OK } }), DEFAULT_RULES)).toBe(true)
   })
 
-  it('default：open/build/ship/archive 不在等我决定', () => {
+  it('default：门相位但缺产出/证据 → 不在等（判给进度「等 agent 补产出」）', () => {
+    expect(isAwaitingDecision(makeChange('c', 'explore'), DEFAULT_RULES)).toBe(false)
+    expect(isAwaitingDecision(makeChange('c', 'spec', { fields: { design_doc: 'docs/d.md' } }), DEFAULT_RULES)).toBe(false)
+    expect(isAwaitingDecision(makeChange('c', 'verify', { fields: { ...VERIFY_OK, codex_review_result: 'pending' } }), DEFAULT_RULES)).toBe(false)
+  })
+
+  it('default：verify 三轨齐但 verification_report/build_sha 未设仍在等（产物没产出不等于验证没过）', () => {
+    expect(isAwaitingDecision(makeChange('c', 'verify', { fields: { ...VERIFY_OK } }), DEFAULT_RULES)).toBe(true)
+  })
+
+  it('default：open/build/ship/archive 非门相位不在等我决定', () => {
     for (const phase of ['open', 'build', 'ship', 'archive']) {
       expect(isAwaitingDecision(makeChange('c', phase), DEFAULT_RULES)).toBe(false)
     }
   })
 
-  it('已归档（archived=true）即便处于复核相位也不入收件箱', () => {
-    expect(isAwaitingDecision(makeChange('c', 'verify', { archived: 'true' }), DEFAULT_RULES)).toBe(false)
+  it('已归档（archived=true）即便证据齐/automation failed 也不入收件箱', () => {
+    expect(isAwaitingDecision(makeChange('c', 'verify', { archived: 'true', fields: { ...VERIFY_OK } }), DEFAULT_RULES)).toBe(false)
+    expect(isAwaitingDecision(makeChange('c', 'build', { archived: 'true', fields: { automation: 'failed' } }), DEFAULT_RULES)).toBe(false)
   })
 
-  it('自定义 workflow：gate=review 的 step 在等；gate=confirm/null 不在等', () => {
+  it('自定义 workflow：review 门无产出声明（无自动证据）→ 在等；gate=confirm/null 不在等', () => {
     expect(isAwaitingDecision(makeChange('c', 'review'), REL_RULES)).toBe(true)
     expect(isAwaitingDecision(makeChange('c', 'ship'), REL_RULES)).toBe(false)
     expect(isAwaitingDecision(makeChange('c', 'draft'), REL_RULES)).toBe(false)
   })
 
-  it('rules 缺失（定义拉取失败）→ 不误报', () => {
-    expect(isAwaitingDecision(makeChange('c', 'verify'), undefined)).toBe(false)
+  it('自定义 workflow：nonempty-output guard 缺产出不进，产出齐才进（rulesFromDef 自然携带产出表）', () => {
+    expect(isAwaitingDecision(makeChange('c', 'review'), REL_RULES_GUARDED)).toBe(false)
+    expect(isAwaitingDecision(makeChange('c', 'review', { fields: { release_notes: 'notes.md' } }), REL_RULES_GUARDED)).toBe(true)
+  })
+
+  it('automation ∈ {paused, failed, conflict} → 在等（不论相位，人要拍板放行/重试/放弃）', () => {
+    expect(isAwaitingDecision(makeChange('c', 'build', { fields: { automation: 'paused' } }), DEFAULT_RULES)).toBe(true)
+    expect(isAwaitingDecision(makeChange('c', 'build', { fields: { automation: 'failed' } }), DEFAULT_RULES)).toBe(true)
+    expect(isAwaitingDecision(makeChange('c', 'build', { fields: { automation: 'conflict' } }), DEFAULT_RULES)).toBe(true)
+  })
+
+  it('automation ∈ {running, scheduled, queued} → 不在等（agent 在飞，门相位证据齐也不进）', () => {
+    for (const automation of ['running', 'scheduled', 'queued']) {
+      expect(isAwaitingDecision(makeChange('c', 'verify', { fields: { ...VERIFY_OK, automation } }), DEFAULT_RULES)).toBe(false)
+    }
+  })
+
+  it('rules 缺失（定义拉取失败）→ 不误报；路径字段非空也不进（交叉场景补钉）', () => {
+    expect(isAwaitingDecision(makeChange('c', 'verify', { fields: { ...VERIFY_OK } }), undefined)).toBe(false)
+    expect(isAwaitingDecision(makeChange('c', 'review', { fields: { ...DOCS_OK } }), undefined)).toBe(false)
+  })
+
+  it('rules 缺失但 automation=failed/paused → 仍在等（automation 判定不依赖 rules）', () => {
+    expect(isAwaitingDecision(makeChange('c', 'build', { fields: { automation: 'failed' } }), undefined)).toBe(true)
+    expect(isAwaitingDecision(makeChange('c', 'build', { fields: { automation: 'paused' } }), undefined)).toBe(true)
   })
 })
 
@@ -56,21 +122,47 @@ describe('changeWorkflow（fields.workflow 回落 default）', () => {
   })
 })
 
-describe('selectInbox（currentRoot 语境下摘出在等决定的 change）', () => {
+describe('selectInbox（currentRoot 语境下摘出人现在能拍板的 change）', () => {
   it('null snapshot → 空', () => {
     expect(selectInbox(null, '/a', RULES)).toEqual([])
   })
 
-  it('只保留 gate 卡，且只看 currentRoot 项目（其它项目的卡不出现）', () => {
+  it('只保留能拍板的卡，且只看 currentRoot 项目（其它项目的卡不出现）', () => {
     const snap = makeSnapshot([
-      makeProject('/a', [makeChange('a-open', 'open'), makeChange('a-verify', 'verify')]),
-      makeProject('/b', [makeChange('b-spec', 'spec')]),
+      makeProject('/a', [
+        makeChange('a-open', 'open'),
+        makeChange('a-verify', 'verify', { fields: { ...VERIFY_OK } }),
+      ]),
+      makeProject('/b', [makeChange('b-spec', 'spec', { fields: { ...DOCS_OK } })]),
     ])
     const items = selectInbox(snap, '/a', RULES)
     expect(items.map((i) => i.change.name)).toEqual(['a-verify'])
   })
 
-  it('自定义 workflow 的 gate 卡也进收件箱（G17 修复证据）', () => {
+  it('缺产出的 gate 卡不进收件箱（T7 决策 B：判给进度「等 agent」）', () => {
+    const snap = makeSnapshot([
+      makeProject('/a', [
+        makeChange('evidence-ok', 'verify', { fields: { ...VERIFY_OK } }),
+        makeChange('evidence-missing', 'verify'),
+        makeChange('plan-missing', 'spec', { fields: { design_doc: 'docs/d.md' } }),
+      ]),
+    ])
+    expect(selectInbox(snap, '/a', RULES).map((i) => i.change.name)).toEqual(['evidence-ok'])
+  })
+
+  it('automation failed/paused 卡进收件箱，running/queued 不进', () => {
+    const snap = makeSnapshot([
+      makeProject('/a', [
+        makeChange('afk-failed', 'build', { fields: { automation: 'failed' } }),
+        makeChange('afk-paused', 'build', { fields: { automation: 'paused' }, updated_at: '2026-07-06T00:00:00Z' }),
+        makeChange('afk-running', 'build', { fields: { automation: 'running' } }),
+        makeChange('afk-queued', 'open', { fields: { automation: 'queued' } }),
+      ]),
+    ])
+    expect(selectInbox(snap, '/a', RULES).map((i) => i.change.name)).toEqual(['afk-failed', 'afk-paused'])
+  })
+
+  it('自定义 workflow 的 gate 卡也进收件箱（G17 修复证据；无产出声明 = 无自动证据可直接拍板）', () => {
     const snap = makeSnapshot([
       makeProject('/a', [
         makeChange('rel-x', 'review', { fields: { workflow: 'release-train' } }),
@@ -82,7 +174,7 @@ describe('selectInbox（currentRoot 语境下摘出在等决定的 change）', (
 
   it('跳过 ok=false 的项目（不可达 project 不谎报待办）', () => {
     const snap = makeSnapshot([
-      makeProject('/bad', [makeChange('x', 'verify')], { ok: false, error: 'unreachable' }),
+      makeProject('/bad', [makeChange('x', 'verify', { fields: { ...VERIFY_OK } })], { ok: false, error: 'unreachable' }),
     ])
     expect(selectInbox(snap, '/bad', RULES)).toEqual([])
   })
@@ -90,9 +182,9 @@ describe('selectInbox（currentRoot 语境下摘出在等决定的 change）', (
   it('按 updated_at 倒序、并列按 name 升序', () => {
     const snap = makeSnapshot([
       makeProject('/a', [
-        makeChange('old', 'verify', { updated_at: '2026-07-01T00:00:00Z' }),
-        makeChange('new-b', 'spec', { updated_at: '2026-07-07T00:00:00Z' }),
-        makeChange('new-a', 'explore', { updated_at: '2026-07-07T00:00:00Z' }),
+        makeChange('old', 'verify', { updated_at: '2026-07-01T00:00:00Z', fields: { ...VERIFY_OK } }),
+        makeChange('new-b', 'spec', { updated_at: '2026-07-07T00:00:00Z', fields: { ...DOCS_OK } }),
+        makeChange('new-a', 'explore', { updated_at: '2026-07-07T00:00:00Z', fields: { ...DOCS_OK } }),
       ]),
     ])
     expect(selectInbox(snap, '/a', RULES).map((i) => i.change.name)).toEqual(['new-a', 'new-b', 'old'])
@@ -100,11 +192,11 @@ describe('selectInbox（currentRoot 语境下摘出在等决定的 change）', (
 })
 
 describe('selectInbox 聚合语境（currentRoot=""，Task 8/G19③ 前半）', () => {
-  it("currentRoot='' → 遍历全部 ok 项目的 gate 卡，每条各自带正确 root（ok=false 项目仍被跳过）", () => {
+  it("currentRoot='' → 遍历全部 ok 项目的可拍板卡，每条各自带正确 root（ok=false 项目仍被跳过）", () => {
     const snap = makeSnapshot([
-      makeProject('/a', [makeChange('a-verify', 'verify', { updated_at: '2026-07-01T00:00:00Z' })]),
-      makeProject('/b', [makeChange('b-spec', 'spec', { updated_at: '2026-07-02T00:00:00Z' })]),
-      makeProject('/bad', [makeChange('bad-verify', 'verify')], { ok: false, error: 'unreachable' }),
+      makeProject('/a', [makeChange('a-verify', 'verify', { updated_at: '2026-07-01T00:00:00Z', fields: { ...VERIFY_OK } })]),
+      makeProject('/b', [makeChange('b-spec', 'spec', { updated_at: '2026-07-02T00:00:00Z', fields: { ...DOCS_OK } })]),
+      makeProject('/bad', [makeChange('bad-verify', 'verify', { fields: { ...VERIFY_OK } })], { ok: false, error: 'unreachable' }),
     ])
     const rulesByKey = new Map<string, WorkflowRules>([
       [rulesKey('/a', 'default'), DEFAULT_RULES],

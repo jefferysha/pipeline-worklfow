@@ -1,14 +1,19 @@
 /**
  * 收件箱选卡逻辑（病灶②的解法核心）——回答"现在哪个 change 在等我决定"。
- * G17 泛化（spec §2.3）：判据从写死的 REVIEW_PHASES 改为「该 change 所属 workflow 的
- * 当前 step gate === 'review'」——自定义 workflow 的复核门从此也进收件箱；default 的
- * 行为逐字不变（DEFAULT_RULES.gateByStep 就是 REVIEW_PHASES 的投影）。
+ * T7 准入修订（v5 决策 B）：判据从「gate 相位就进」（G17 的 gate === 'review' 泛化）改为
+ * 「人现在能拍板」——直接消费 progressModel 的五态判定（同源谓词，口径不与进度视图漂移）：
+ *   · state === 'gate'：gate 相位且证据/产出齐、或 gate 无自动证据（自定义门无产出声明）、
+ *     或 automation=paused（跑完停住等放行）→ 进；
+ *   · state === 'failed'：automation ∈ {failed, conflict}，人要拍板重试/放弃 → 进；
+ *   · state === 'agent'（含缺产出的 gate 卡——判给进度「等 agent 补产出」）/ running /
+ *     queued → 不进。
  * currentRoot 语境（D5 项目切换器语义）：非空 → 只看当前项目，与 AFK/workflow 编辑器对齐；
  * 空串 → 全部项目聚合（Task 5 契约，G19③ 由 Task 8 落地到 selectInbox）。
  * 纯函数，供 InboxView / App（导航徽章计数）与真组件测试共用。
  */
 import type { ChangeSnapshot, ProjectSnapshot, Snapshot } from '../types'
 import { rulesKey, type WorkflowRules } from '../model/workflowModel'
+import { changeProgressState, type ProgressRules } from '../model/progressModel'
 
 /** 老内核 cmd_get 口径：字面 'null'（init heredoc）或空串都算未设。 */
 function truthy(v: string): boolean {
@@ -22,13 +27,15 @@ export function changeWorkflow(c: ChangeSnapshot): string {
 }
 
 /**
- * 单个 change 是否在等我决定。rules 缺失（自定义 workflow 定义拉取失败）→ false：
- * 收件箱不误报，该卡的可见性兜底在看板错误分组（G17 底线：卡不消失）。
+ * 单个 change 是否在等我决定（T7 起 = 人现在能拍板，判据见文件头）。
+ * rules 缺失（自定义 workflow 定义拉取失败）→ 相位判不了门归 agent 不误报（路径字段非空也
+ * 不进——交叉场景），该卡的可见性兜底在进度视图（G17 底线：卡不消失）；automation 的
+ * paused/failed/conflict 判定不依赖 rules，照常进。archived 一票否决（决议 #5）。
  */
-export function isAwaitingDecision(c: ChangeSnapshot, rules: WorkflowRules | undefined): boolean {
+export function isAwaitingDecision(c: ChangeSnapshot, rules: ProgressRules | undefined): boolean {
   if (truthy(c.archived)) return false
-  if (!rules) return false
-  return rules.gateByStep[c.phase] === 'review'
+  const state = changeProgressState(c, rules)
+  return state === 'gate' || state === 'failed'
 }
 
 export interface InboxItem {

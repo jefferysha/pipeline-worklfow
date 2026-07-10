@@ -11,7 +11,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createDashboardServer } from '@pipeline-lite/server'
-import { createFlowEngine, createStateStore, loadManifest } from '@pipeline-lite/kernel'
+import { createFlowEngine, createStateStore, loadManifest, type StateStore } from '@pipeline-lite/kernel'
 import { selectInbox } from '../inbox/inbox'
 import { DEFAULT_RULES, rulesKey } from '../model/workflowModel'
 import type { Snapshot } from '../types'
@@ -23,6 +23,7 @@ interface Started {
   port: number
   root: string
   token: string
+  store: StateStore
   close: () => Promise<void>
 }
 
@@ -40,7 +41,7 @@ async function startRealServer(): Promise<Started> {
     clock,
   })
   const { port } = await srv.listen(0, '127.0.0.1')
-  return { port, root, token: srv.token, close: () => srv.close() }
+  return { port, root, token: srv.token, store, close: () => srv.close() }
 }
 
 const started = await startRealServer()
@@ -68,7 +69,7 @@ describe('真 server /api/snapshot → 前端 selectInbox', () => {
     expect(selectInbox(snap, started.root, RULES)).toEqual([])
   })
 
-  it('POST transition 带 token 真改盘 → change 进 explore（复核相位）→ 收件箱真出现该卡', async () => {
+  it('POST transition 带 token 真改盘 → change 进 explore；T7 准入：缺产出不进收件箱，真补产出字段后才进', async () => {
     const post = await fetch(url('/api/change/demo/transition'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${started.token}` },
@@ -79,7 +80,13 @@ describe('真 server /api/snapshot → 前端 selectInbox', () => {
     const snap = (await (await fetch(url('/api/snapshot'))).json()) as Snapshot
     const demo = snap.projects[0]!.changes.find((c) => c.name === 'demo')
     expect(demo?.phase).toBe('explore')
-    const inbox = selectInbox(snap, started.root, RULES)
+    // T7 准入修订（决策 B）：刚进 explore 的卡 design_doc/plan 都未产出 → 「等 agent」，不进收件箱。
+    expect(selectInbox(snap, started.root, RULES).map((i) => i.change.name)).not.toContain('demo')
+
+    // agent 真落产出字段（走真 store 改真盘，snapshot 的 path 就是 changeDir）→ 人现在能拍板 → 进收件箱。
+    await started.store.setMany(demo!.path, { design_doc: 'docs/design.md', plan: 'docs/plan.md' })
+    const snap2 = (await (await fetch(url('/api/snapshot'))).json()) as Snapshot
+    const inbox = selectInbox(snap2, started.root, RULES)
     expect(inbox.map((i) => i.change.name)).toContain('demo')
   })
 

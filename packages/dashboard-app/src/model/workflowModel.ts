@@ -21,6 +21,19 @@ export interface WorkflowRules {
   gateByStep: Record<string, 'review' | 'confirm' | null>
 }
 
+/**
+ * WorkflowRules 的可选产出扩展面（T6 在 progressModel 定契约，T7 落到这里成为单一定义源，
+ * progressModel 原地 re-export 不破既有 import 面）——「自定义 workflow 的 nonempty-output
+ * guard」判定所需的每 step 产出声明。rulesFromDef 产出的自定义 rules 自然携带这两张表；
+ * DEFAULT_RULES 不带（default 的证据判定走 evidence.ts 的表驱动路径，靠引用相等分支）。
+ */
+export interface StepOutputRules {
+  /** step id → 该步声明的 outputs 字段名列表。 */
+  outputsByStep?: Record<string, readonly string[]>
+  /** step id → 该步是否挂了 nonempty-output guard（产出非空方可推进）。 */
+  nonemptyOutputByStep?: Record<string, boolean>
+}
+
 function buildDefaultRules(): WorkflowRules {
   const transitions: Record<string, { event: string; to: string }[]> = {}
   const gateByStep: Record<string, 'review' | 'confirm' | null> = {}
@@ -35,14 +48,18 @@ function buildDefaultRules(): WorkflowRules {
 
 export const DEFAULT_RULES: WorkflowRules = buildDefaultRules()
 
-export function rulesFromDef(def: { name: string; steps: StepDef[] }): WorkflowRules {
+export function rulesFromDef(def: { name: string; steps: StepDef[] }): WorkflowRules & StepOutputRules {
   const transitions: Record<string, { event: string; to: string }[]> = {}
   const gateByStep: Record<string, 'review' | 'confirm' | null> = {}
+  const outputsByStep: Record<string, readonly string[]> = {}
+  const nonemptyOutputByStep: Record<string, boolean> = {}
   for (const s of def.steps) {
     transitions[s.id] = s.transitions.map((t) => ({ event: t.event, to: t.to }))
     gateByStep[s.id] = s.gate
+    outputsByStep[s.id] = s.outputs.map((o) => o.field)
+    nonemptyOutputByStep[s.id] = s.guards.some((g) => g.type === 'nonempty-output')
   }
-  return { steps: def.steps.map((s) => s.id), transitions, gateByStep }
+  return { steps: def.steps.map((s) => s.id), transitions, gateByStep, outputsByStep, nonemptyOutputByStep }
 }
 
 // ── (root,name) 模块级缓存 + in-flight 去重 ──

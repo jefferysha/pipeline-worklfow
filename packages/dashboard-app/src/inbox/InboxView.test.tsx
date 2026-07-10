@@ -29,6 +29,12 @@ const RULES = new Map<string, WorkflowRules>([
   [rulesKey('/repo', 'release-train'), REL_RULES],
 ])
 
+// T7 准入修订（决策 B）：selectInbox 只收「人现在能拍板」的卡——default 的 gate 卡必须证据/
+// 产出齐才进（缺产出判给进度「等 agent」）。本文件既有 fixtures 的意图迁移：给要进收件箱的
+// verify/spec 卡补上齐全的证据字段，断言意图逐字不变（准入判据本身在 inbox.test.tsx 钉）。
+const VERIFY_OK = { verify_result: 'pass', agent_review_result: 'pass', codex_review_result: 'pass' }
+const DOCS_OK = { design_doc: 'docs/d.md', plan: 'docs/p.md' }
+
 /**
  * 手动控制的 Promise：制造"转换请求在途"窗口（busy=true 期间不会自动结算），
  * 用于验证 Esc/backdrop 不绕过 busy 锁（评审修复轮）。做法对齐
@@ -77,12 +83,12 @@ describe('InboxView 空态（默认回答"在等我什么"，无事时明说）'
 describe('InboxView 工票行（gate 泛化 + 快捷转换）', () => {
   const snap = makeSnapshot([
     makeProject('/repo', [
-      makeChange('login-flow', 'verify', { track: 'frontend' }),
-      makeChange('data-model', 'spec', { track: 'backend' }),
+      makeChange('login-flow', 'verify', { track: 'frontend', fields: { ...VERIFY_OK } }),
+      makeChange('data-model', 'spec', { track: 'backend', fields: { ...DOCS_OK } }),
       makeChange('busy-one', 'build'),
       makeChange('changelog-cn', 'review', { track: 'chat', fields: { workflow: 'release-train' } }),
     ]),
-    makeProject('/other', [makeChange('other-verify', 'verify')]),
+    makeProject('/other', [makeChange('other-verify', 'verify', { fields: { ...VERIFY_OK } })]),
   ])
 
   it('只渲染 gate 卡（含自定义 workflow 的 review 卡=G17 证据），且只看 currentRoot', () => {
@@ -137,7 +143,7 @@ describe('InboxView busy 守卫（评审修复：迁移到共享 Dialog 后 Esc/
   it('回退确认 busy 在途时按 Esc → 确认框仍在、状态未清；结算后正常收尾', async () => {
     const gate = deferred<void>()
     const props = renderInbox({
-      snapshot: makeSnapshot([makeProject('/repo', [makeChange('c9', 'verify')])]),
+      snapshot: makeSnapshot([makeProject('/repo', [makeChange('c9', 'verify', { fields: { ...VERIFY_OK } })])]),
       onTransition: vi.fn().mockReturnValue(gate.promise),
     })
     fireEvent.click(screen.getByTestId('inbox-quick-verify-fail'))
@@ -165,7 +171,7 @@ describe('InboxView busy 守卫（评审修复：迁移到共享 Dialog 后 Esc/
 describe('InboxView Enter 键盘守卫（终审修复批：与 Esc 同款，Dialog 打开时不 toggle 背后详情卡）', () => {
   it('回退确认 Dialog 打开时对 document 发 Enter → 详情卡不被 toggle（仍保持关闭）', async () => {
     const snap = makeSnapshot([
-      makeProject('/repo', [makeChange('login-flow', 'verify', { track: 'frontend' })]),
+      makeProject('/repo', [makeChange('login-flow', 'verify', { track: 'frontend', fields: { ...VERIFY_OK } })]),
     ])
     renderInbox({ snapshot: snap })
     expect(screen.queryByTestId('change-detail')).toBeNull()
@@ -205,12 +211,14 @@ describe('InboxView 详情卡点开 + 证据 chips + j/k 键盘（Task 7，评�
         fields: {
           verify_result: 'pass',
           agent_review_result: 'fail',
-          codex_review_result: 'pending',
+          // T7 准入下三轨必须都有判定值（fail 也是判定，可打回）；'pending' 会让这张卡
+          // 归「等 agent」不进收件箱，本组测试全部依赖它在场。
+          codex_review_result: 'fail',
           verification_report: '/repo/report.md',
           build_sha: 'sha1',
         },
       }),
-      makeChange('data-model', 'spec', { track: 'backend' }),
+      makeChange('data-model', 'spec', { track: 'backend', fields: { ...DOCS_OK } }),
     ]),
   ])
 
@@ -265,7 +273,9 @@ describe('InboxView 详情卡点开 + 证据 chips + j/k 键盘（Task 7，评�
  */
 describe('InboxView 行内快捷钮 vs 详情卡动作条（评审 Minor-5：卡打开时行内快捷钮组隐藏，动作面唯一）', () => {
   const snap = makeSnapshot([
-    makeProject('/repo', [makeChange('login-flow', 'verify', { track: 'frontend', updated_at: '2026-07-08T00:00:00Z' })]),
+    makeProject('/repo', [
+      makeChange('login-flow', 'verify', { track: 'frontend', updated_at: '2026-07-08T00:00:00Z', fields: { ...VERIFY_OK } }),
+    ]),
   ])
 
   it('点开行 → 该行 inbox-quick-* 从 DOM 消失；关卡后恢复', () => {
@@ -293,7 +303,7 @@ describe('InboxView 行内快捷钮 vs 详情卡动作条（评审 Minor-5：卡
  */
 describe('InboxView 聚合语境（currentRoot=""，Task 8/G19③ 前半）', () => {
   const snap = makeSnapshot([
-    makeProject('/repo-a', [makeChange('a-verify', 'verify', { updated_at: '2026-07-02T00:00:00Z' })]),
+    makeProject('/repo-a', [makeChange('a-verify', 'verify', { updated_at: '2026-07-02T00:00:00Z', fields: { ...VERIFY_OK } })]),
     makeProject('/repo-b', [
       makeChange('b-review', 'review', { updated_at: '2026-07-01T00:00:00Z', fields: { workflow: 'release-train' } }),
     ]),
@@ -333,7 +343,7 @@ describe('InboxView 聚合语境（currentRoot=""，Task 8/G19③ 前半）', ()
 describe('InboxView 右栏摘要卡（Task 17，spec §3 布局骨架收口）', () => {
   const aggSnap = makeSnapshot([
     makeProject('/repo-a', [
-      makeChange('a-verify', 'verify', { updated_at: '2026-07-02T00:00:00Z' }),
+      makeChange('a-verify', 'verify', { updated_at: '2026-07-02T00:00:00Z', fields: { ...VERIFY_OK } }),
       makeChange('a-build', 'build', { updated_at: '2026-07-01T00:00:00Z' }),
     ]),
     makeProject('/repo-b', [
