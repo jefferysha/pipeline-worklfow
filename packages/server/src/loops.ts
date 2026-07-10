@@ -17,6 +17,8 @@ import {
   validateSchema,
   type AutonomyLevel,
   type BudgetStatus,
+  type LoopBudget,
+  type LoopRisk,
   type ReadinessScore,
 } from '@pipeline-lite/kernel'
 
@@ -26,8 +28,21 @@ export interface LoopRow {
   name: string
   autonomy_level: AutonomyLevel
   status: string
-  /** v5 T20：登记表 runner 原值回显（编排页 runner 下拉的当前值；双选项清单见 kernel LOOP_RUNNERS）。 */
+  // ── v5 T16：编排页「自动运行」卡的编辑面回显——T3 扩进 schema 的 allowlist/denylist 与
+  //    其余可 patch 字段（kernel loops/update.ts 全集）逐一透出，滑杆/紧凑行/chips 的初值
+  //    都从这里来（T3 登记过「存储侧已就绪、快照未透出」，本处即闭合）──
+  cadence: string
+  goal: string
+  design_doc: string
+  change_prefix: string | null
+  risk: LoopRisk
   runner: string
+  human_gates: string[]
+  kill_criteria: string[]
+  allowlist: string[]
+  denylist: string[]
+  /** 原始预算声明（loops.yaml budget 块原值，滑杆初值）；区别于下面 budget=computeBudgetStatus 的计算结果。 */
+  budget_decl: LoopBudget
   readiness: ReadinessScore
   budget: BudgetStatus
 }
@@ -117,7 +132,17 @@ export async function buildLoopsSnapshot(deps: LoopsSnapshotDeps): Promise<Loops
         name: loop.name,
         autonomy_level: loop.autonomy_level,
         status: loop.status,
+        cadence: loop.cadence,
+        goal: loop.goal,
+        design_doc: loop.design_doc,
+        change_prefix: loop.change_prefix,
+        risk: loop.risk,
         runner: loop.runner,
+        human_gates: loop.human_gates,
+        kill_criteria: loop.kill_criteria,
+        allowlist: loop.allowlist,
+        denylist: loop.denylist,
+        budget_decl: loop.budget,
         readiness: computeReadiness(loop),
         budget: computeBudgetStatus(loop, runLogText, now),
       })

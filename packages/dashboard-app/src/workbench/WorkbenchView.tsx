@@ -8,6 +8,7 @@ import { Dialog } from '../shell/Dialog'
 import { EVENT_BY_EDGE, PHASES, REVIEW_PHASES, TRANSITIONS, isPhase } from '../types'
 import { revealDialog, revealList } from '../workflow/motion'
 import { HookTimeline, useHooksConfig } from './HookTimeline'
+import { LoopCard, useLoops } from './LoopCard'
 import { StepEditor } from './StepEditor'
 import { StepperRail, type StepperStep } from './StepperRail'
 
@@ -146,6 +147,9 @@ export function WorkbenchView({ root }: WorkbenchViewProps): JSX.Element {
   // T15：/api/hooks 读写状态托管在这里（不在 HookTimeline 内）——阶段卡 hooksCount 真数、
   // 摘要卡「钩子」行、时序线开关三个消费方吃同一份矩阵。per-root 配置，与 workflow 草稿无关。
   const hooksConfig = useHooksConfig(root)
+  // T16：/api/loops/snapshot 的读取托管在这里（useHooksConfig 的同一条「数据住共同祖先」
+  // 纪律）——Loop 卡与右栏摘要「自动运行」行吃同一份 rows。
+  const loops = useLoops(root)
 
   // ── workflow 名列表（自定义名；default 恒在菜单尾部本地补上）──
   useEffect(() => {
@@ -531,7 +535,8 @@ export function WorkbenchView({ root }: WorkbenchViewProps): JSX.Element {
                   />
                 </section>
               )}
-              {/* T16 挂载点：「自动运行(Loop)」卡跟在阶段编辑卡之后 */}
+              {/* T16：「自动运行(Loop)」卡跟在阶段编辑卡之后（per-root 数据面，不吃 workflow 只读态）。 */}
+              <LoopCard root={root} loops={loops} />
             </>
           ) : (
             !defError && <p className="view__note">{t('common.loading')}</p>
@@ -559,6 +564,21 @@ export function WorkbenchView({ root }: WorkbenchViewProps): JSX.Element {
               <div className="side-card__row">
                 <span className="side-card__row-label">{t('workbench.sum_hooks')}</span>
                 <span className="side-card__row-value" data-testid="wb-sum-hooks">{summary?.hooks ?? '—'}</span>
+              </div>
+              {/* T16：「自动运行」行——显示已保存真值（选中 loop 的启停 + 今日轮次/上限），
+                  不吃 Loop 卡未保存草稿；加载中/失败回落 '—'、无 loop 显「未配置」。 */}
+              <div className="side-card__row">
+                <span className="side-card__row-label">{t('workbench.lp_sum')}</span>
+                <span className="side-card__row-value" data-testid="wb-sum-loop">
+                  {loops.rows === null
+                    ? '—'
+                    : loops.selected === null
+                      ? t('workbench.lp_sum_none')
+                      : t(loops.selected.status === 'active' ? 'workbench.lp_sum_on' : 'workbench.lp_sum_off', {
+                          n: loops.selected.budget.runsToday,
+                          max: loops.selected.budget_decl.max_runs_per_day,
+                        })}
+                </span>
               </div>
             </div>
           </div>

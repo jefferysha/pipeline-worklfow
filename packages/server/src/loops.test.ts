@@ -53,6 +53,25 @@ describe('buildLoopsSnapshot', () => {
     }
   })
 
+  it('v5 T16：行透出编辑面全字段（cadence/goal/…/allowlist/denylist + 原始预算声明 budget_decl）', async () => {
+    const root = await makeProjectWithLoop()
+    const snap = await buildLoopsSnapshot({ registry: () => [root], now: () => new Date('2026-07-07T00:00:00Z') })
+    const row = snap.rows[0]!
+    expect(row.cadence).toBe('1h')
+    expect(row.goal).toContain('八门验证')
+    expect(row.design_doc).toBe('docs/build-loop.md')
+    expect(row.change_prefix).toBe('build-loop-')
+    expect(row.risk).toBe('medium')
+    expect(row.runner).toBe('cron')
+    expect(row.human_gates).toEqual(['g1', 'g2'])
+    expect(row.kill_criteria).toEqual(['k1', 'k2'])
+    // T3 新字段：登记表未写时按 schema 缺省 []（loadRegistry 派生补默认）
+    expect(row.allowlist).toEqual([])
+    expect(row.denylist).toEqual([])
+    // 原始预算声明（滑杆初值），区别于 budget=computeBudgetStatus 的计算结果
+    expect(row.budget_decl).toEqual({ max_runs_per_day: 24, max_in_flight: 1, on_exceed: 'skip', max_tokens_per_day: 100000 })
+  })
+
   it('项目没有 loops.yaml → 该项目贡献 0 行，不报错、不跳过其它项目', async () => {
     const rootNoLoops = await mkdtemp(join(tmpdir(), 'loops-snap-empty-'))
     const rootWithLoop = await makeProjectWithLoop()

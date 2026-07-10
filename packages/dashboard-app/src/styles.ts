@@ -924,4 +924,64 @@ button.ev__chip--neutral:hover { border-color: var(--border-2); color: var(--tex
   .wb-hkline::before, .wb-hkline::after, .wb-hkloop { display: none; }
   .wb-hknode, .wb-hkstack { grid-column: 1 !important; grid-row: auto; }
 }
+
+/* ==== T16：「自动运行(Loop)」卡（lp- 区块）——对照 demo v5 #wbLoopCard：滑杆轨道 fill-2、
+   填充 accent（--p 渐变分界）、推荐 ▽ 刻度、超限策略 pill 单选、自主级别 segmented、
+   闸门/终止/范围 chips 行。全部走既有 token，无新原色。 ==== */
+.wb-loop { margin-top: 14px; }
+.lp-mono { font-family: var(--mono); }
+.lp-head { row-gap: 4px; }
+.lp-head-sub { flex-basis: 100%; font-size: 12px; color: var(--text-3); font-weight: 400; margin-top: 1px; }
+.lp-loopsel { width: auto; height: 26px; padding: 0 8px; font-size: 12px; font-family: var(--mono); }
+.lp-errors { margin-top: 12px; }
+.lp-row3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 12px; }
+@media (max-width: 720px) { .lp-row3 { grid-template-columns: 1fr; } }
+.lp-eg { font-size: 11.5px; color: var(--text-3); margin: 5px 0 0; }
+.lp-eg b { color: var(--text-2); font-weight: 600; }
+/* 拖拉条组 */
+.lp-slds { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 28px; }
+@media (max-width: 720px) { .lp-slds { grid-template-columns: 1fr; } }
+.lp-sld-top { display: flex; align-items: baseline; gap: 8px; }
+.lp-sld-top .wb-flabel { margin: 0; }
+.lp-sld-val { margin-left: auto; font-size: 12.5px; font-weight: 700; color: var(--accent); }
+.lp-range { -webkit-appearance: none; appearance: none; display: block; width: 100%; height: 16px; margin: 8px 0 0; background: transparent; cursor: pointer; }
+.lp-range::-webkit-slider-runnable-track { height: 5px; border-radius: 999px; background: linear-gradient(to right, var(--accent) var(--p, 0%), var(--fill-2) var(--p, 0%)); }
+.lp-range::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; margin-top: -5.5px; border-radius: 999px; background: var(--card); border: 1px solid var(--border-2); box-shadow: var(--shadow-2); }
+.lp-range::-moz-range-track { height: 5px; border-radius: 999px; background: var(--fill-2); }
+.lp-range::-moz-range-progress { height: 5px; border-radius: 999px; background: var(--accent); }
+.lp-range::-moz-range-thumb { width: 16px; height: 16px; border-radius: 999px; background: var(--card); border: 1px solid var(--border-2); box-shadow: var(--shadow-2); }
+.lp-range:focus-visible { outline: none; }
+.lp-range:focus-visible::-webkit-slider-thumb { border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); }
+.lp-sld-marks { position: relative; height: 16px; margin-top: 2px; }
+.lp-sld-reco { position: absolute; top: 0; transform: translateX(-50%); font-size: 10.5px; color: var(--text-3); white-space: nowrap; }
+.lp-sld-reco--edge { transform: none; }
+/* 超限策略 pill 单选 */
+.lp-policy { display: flex; align-items: center; gap: 12px; margin-top: 10px; padding-top: 12px; border-top: 1px dashed var(--border); flex-wrap: wrap; }
+.lp-policy .wb-flabel { margin: 0; }
+.lp-pills { display: flex; gap: 6px; flex-wrap: wrap; }
+.lp-opt { height: 28px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--fill); font: inherit; font-size: 12.5px; font-weight: 600; color: var(--text-2); cursor: pointer; transition: border-color .12s ease, background .12s ease, color .12s ease, box-shadow .12s ease; }
+.lp-opt:hover { border-color: var(--border-2); }
+.lp-opt.on, .lp-opt.on:hover { background: var(--accent-t); border-color: var(--accent); color: var(--accent-d); box-shadow: 0 0 0 3px var(--ring); }
+/* 自主级别 segmented */
+.lp-lv { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 2px 0 4px; }
+@media (max-width: 720px) { .lp-lv { grid-template-columns: 1fr; } }
+.lp-lv-tile { display: flex; flex-direction: column; gap: 2px; padding: 11px 12px 12px; border: 1px solid var(--border); border-radius: 11px; background: var(--fill); text-align: left; font: inherit; cursor: pointer; transition: border-color .12s ease, background .12s ease, box-shadow .12s ease; }
+.lp-lv-tile:hover { border-color: var(--border-2); }
+.lp-lv-tile.on, .lp-lv-tile.on:hover { background: var(--accent-t); border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); }
+.lp-lv-tile:disabled { opacity: .6; cursor: not-allowed; }
+.lp-lv-k { font-size: 13px; font-weight: 750; }
+.lp-lv-tile.on .lp-lv-k { color: var(--accent-d); }
+.lp-lv-d { font-size: 11.5px; color: var(--text-3); line-height: 1.45; }
+.lp-level-err { margin: 8px 0 0; }
+/* 闸门 / 终止条件 / 范围 chips 行 */
+.lp-saferow { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 12px; align-items: start; padding: 10px 0; }
+@media (max-width: 720px) { .lp-saferow { grid-template-columns: 1fr; gap: 6px; } }
+.lp-saferow + .lp-saferow { border-top: 1px dashed var(--border); }
+.lp-saferow:last-child { padding-bottom: 2px; }
+.lp-saferow .wb-flabel { margin: 4px 0 0; }
+.lp-chip-d { font-family: var(--font); color: var(--text-3); font-size: 11.5px; }
+/* 无 loop 空态：教学文案 + 最小登记示例 */
+.lp-empty { padding: 10px 0 4px; }
+.lp-empty-t { margin: 0 0 4px; font-size: 13px; font-weight: 700; }
+.lp-empty-yaml { margin: 10px 0 0; padding: 10px 12px; border-radius: var(--radius-sm); background: var(--code-bg); border: 1px solid var(--code-border); font-family: var(--mono); font-size: 11.5px; line-height: 1.6; color: var(--text-2); overflow-x: auto; }
 `

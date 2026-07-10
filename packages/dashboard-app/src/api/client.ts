@@ -197,6 +197,109 @@ export async function postHookToggle(input: { root: string; hook: string; phase:
   if (!res.ok) await throwApiError(res, '钩子开关写回失败')
 }
 
+// ── T16：「自动运行(Loop)」卡的数据面（GET /api/loops/snapshot + POST /api/loops/update|level）──
+
+/**
+ * server/loops.ts::LoopRow 的跨 HTTP 手抄（同 WbHookMeta 的零耦合纪律）。
+ * budget_decl = loops.yaml 原始预算声明（滑杆初值）；budget = kernel computeBudgetStatus
+ * 计算结果（今日轮次/熔断），两者字段面不同，勿混用。
+ */
+export interface WbLoopBudgetDecl {
+  max_runs_per_day: number
+  max_in_flight: number
+  on_exceed: string
+  max_tokens_per_day?: number
+  tokens_per_run?: number
+}
+export interface WbLoopRow {
+  root: string
+  id: string
+  name: string
+  autonomy_level: 'L1' | 'L2' | 'L3'
+  status: string
+  cadence: string
+  goal: string
+  design_doc: string
+  change_prefix: string | null
+  risk: 'low' | 'medium' | 'high'
+  runner: string
+  human_gates: string[]
+  kill_criteria: string[]
+  allowlist: string[]
+  denylist: string[]
+  budget_decl: WbLoopBudgetDecl
+  readiness: { score: number; band: string }
+  budget: { breaker: 'ok' | 'warn' | 'tripped'; runsToday: number; spentToday: number; remaining: number | null; hasBudget?: boolean; maxTokensPerDay?: number | null }
+}
+export interface WbLoopsSnapshot {
+  generated_at: string
+  rows: WbLoopRow[]
+}
+
+/** T16：跨项目 loop 聚合快照（GET /api/loops/snapshot；消费方按 row.root 过滤当前项目）。 */
+export async function fetchLoopsSnapshot(): Promise<WbLoopsSnapshot> {
+  let res: Response
+  try {
+    res = await fetch('/api/loops/snapshot', { headers: { Accept: 'application/json' } })
+  } catch (err) {
+    wrapNetwork(err)
+  }
+  if (!res.ok) await throwApiError(res, 'loop 快照获取失败')
+  return (await res.json()) as WbLoopsSnapshot
+}
+
+/** 非 2xx 统一读 { error, errors } 双信封（loops 两写端点都可能给 errors[]——原文合并上抛）。 */
+async function throwLoopsError(res: Response, fallback: string): Promise<never> {
+  let detail = ''
+  try {
+    const body = (await res.json()) as { error?: string; errors?: string[] }
+    if (Array.isArray(body?.errors) && body.errors.length > 0) {
+      detail = body.errors.filter((e): e is string => typeof e === 'string').join('；')
+    } else if (typeof body?.error === 'string') {
+      detail = body.error
+    }
+  } catch {
+    /* 无 JSON 体 */
+  }
+  throw new ApiError(detail || `${fallback}（${res.status}）`, res.status)
+}
+
+/**
+ * T16：loops.yaml 字段写回（POST /api/loops/update；patch = 字段名→新值，只带被改字段——
+ * server 侧文本手术 + 整文档 schema 重校验 + CAS，拒绝时 error/errors 原文抛 ApiError）。
+ */
+export async function postLoopUpdate(input: { root: string; id: string; patch: Record<string, unknown> }): Promise<void> {
+  let res: Response
+  try {
+    res = await fetch('/api/loops/update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
+      body: JSON.stringify(input),
+    })
+  } catch (err) {
+    wrapNetwork(err)
+  }
+  if (!res.ok) await throwLoopsError(res, '自动运行配置写回失败')
+}
+
+/**
+ * T16：自主级别升降档（POST /api/loops/level——毕业制裁决端点，autonomy_level 的唯一写口；
+ * 升档条件不满足时 server 的 errors[]（plan.reason + blockers）原文抛出，UI 原样展示）。
+ */
+export async function postLoopLevel(input: { root: string; id: string; target: string }): Promise<void> {
+  let res: Response
+  try {
+    res = await fetch('/api/loops/level', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
+      body: JSON.stringify(input),
+    })
+  } catch (err) {
+    wrapNetwork(err)
+  }
+  if (!res.ok) await throwLoopsError(res, '自主级别切换失败')
+}
+
 /**
  * change 历史记账单条（T8 消费 T1 端点）——镜像 kernel types.ts HistoryEntry 的可选面
  * （无 npm 跨包依赖，手抄保零耦合，同本文件头 Snapshot 契约的既有纪律）。

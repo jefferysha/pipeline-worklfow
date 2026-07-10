@@ -59,9 +59,35 @@ function stubMatchMedia(reduceMatches: boolean): void {
   })))
 }
 
+// T16 fixture：/api/loops/snapshot 单 loop 行（server LoopRow 契约形状；缺省空——多数用例只关心
+// workflow 编辑面，摘要「自动运行」行回落「未配置」）。
+const LOOP_ROW = {
+  root: ROOT,
+  id: 'restyle-loop',
+  name: '样式迁移',
+  autonomy_level: 'L1',
+  status: 'active',
+  cadence: '2h',
+  goal: '把旧版工单卡样式逐个迁移到 SaaS 卡片风',
+  design_doc: 'design/restyle.md',
+  change_prefix: 'rl-',
+  risk: 'low',
+  runner: 'claude-code',
+  human_gates: ['合并前'],
+  kill_criteria: ['no-change-3'],
+  allowlist: [],
+  denylist: [],
+  budget_decl: { max_runs_per_day: 24, max_in_flight: 1, on_exceed: 'skip', max_tokens_per_day: 100000 },
+  readiness: { score: 62, band: 'L2-ready' },
+  budget: { breaker: 'ok', runsToday: 3, spentToday: 3000, remaining: 97000, hasBudget: true, maxTokensPerDay: 100000 },
+}
+
+let loopRows: unknown[]
+
 beforeEach(() => {
   localStorage.clear()
   invalidateWorkflowRules() // 模块级 rules 缓存跨用例清空（同 WorkflowEditorView.test.tsx 既有先例）
+  loopRows = []
   global.fetch = vi.fn(async (url: string, opts?: RequestInit) => {
     if (url === `/api/workflows?root=${encodeURIComponent(ROOT)}`) {
       return new Response(JSON.stringify({ names: ['release-train'] }), { status: 200 })
@@ -72,6 +98,10 @@ beforeEach(() => {
     // T13：保存端点（POST /api/workflows/:name，root 在 body 里）——缺省恒成功
     if (url === '/api/workflows/release-train' && opts?.method === 'POST') {
       return new Response(JSON.stringify({ ok: true }), { status: 200 })
+    }
+    // T16：Loop 卡数据面（缺省无 loop——空态；用例按需往 loopRows 里灌行）
+    if (url === '/api/loops/snapshot') {
+      return new Response(JSON.stringify({ generated_at: '2026-07-11T00:00:00Z', rows: loopRows }), { status: 200 })
     }
     throw new Error(`unexpected fetch ${url}`)
   }) as unknown as typeof fetch
@@ -396,6 +426,39 @@ describe('WorkbenchView T13 default workflow 只读态（验收④）', () => {
     expect(screen.getByRole('switch', { name: '复核门' })).toBeDisabled()
     expect(screen.queryByTestId('wb-save')).toBeNull()
     expect(screen.queryByTestId('wb-dirty')).toBeNull()
+  })
+})
+
+// ── T16：「自动运行(Loop)」卡挂载 + 右栏摘要「自动运行」行 ──
+
+describe('WorkbenchView T16 Loop 卡与摘要行', () => {
+  it('无 loop 的 root：编辑卡后挂空态 Loop 卡（loops.yaml 教学），摘要行显「未配置」', async () => {
+    renderView()
+    await screen.findByTestId('wb-step-draft')
+    const card = await screen.findByTestId('wb-loop-card')
+    expect(within(card).getByTestId('lp-empty')).toHaveTextContent('.pipeline/loops.yaml')
+    // 编辑卡在前、Loop 卡在后（demo 布局序）
+    const editor = screen.getByTestId('wb-editor')
+    expect(editor.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    await waitFor(() => expect(screen.getByTestId('wb-sum-loop')).toHaveTextContent('未配置'))
+  })
+
+  it('有 loop：卡渲染真参数，摘要行 = 开 · 今日 runsToday/max_runs_per_day（已保存真值口径）', async () => {
+    loopRows = [LOOP_ROW]
+    renderView()
+    await screen.findByTestId('wb-step-draft')
+    const card = await screen.findByTestId('wb-loop-card')
+    expect(within(card).getByTestId('lp-goal')).toHaveValue('把旧版工单卡样式逐个迁移到 SaaS 卡片风')
+    await waitFor(() => expect(screen.getByTestId('wb-sum-loop')).toHaveTextContent('开 · 今日 3/24'))
+    // 单 loop：卡头下拉隐藏
+    expect(within(card).queryByTestId('lp-loop-select')).toBeNull()
+  })
+
+  it('暂停中的 loop：摘要行「停 · 今日 …」', async () => {
+    loopRows = [{ ...LOOP_ROW, status: 'paused' }]
+    renderView()
+    await screen.findByTestId('wb-step-draft')
+    await waitFor(() => expect(screen.getByTestId('wb-sum-loop')).toHaveTextContent('停 · 今日 3/24'))
   })
 })
 
