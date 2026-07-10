@@ -106,6 +106,18 @@ if [ -n "$PROOT" ]; then
   done
 fi
 
+# 阶段×hook 开关（v5 T5 / 决议#2）：读 <项目根>/.pipeline/hooks.json（server 写端点落盘，
+# canonical 一键一行 `"<hook>.<阶段>": false`，只存禁用项，见 packages/server/src/hooksConfig.ts）。
+# 纯 bash 热路径（CONTRACT §5.4 禁 spawn node/jq）：grep -F 定长匹配即可判定；缺文件/缺键/
+# 手改格式漂移/损坏 JSON → 一律 fail-open 到启用（行为与本配置诞生之前完全一致）。
+# gate.sh 交互门与 interactive-skill-gate.sh 安全门强制常开：不读本配置（server 写端点也拒绝这两个 id）。
+hook_disabled() { # $1=项目根 $2=hook id $3=阶段 → 0=该阶段已禁用
+  [ -n "$1" ] && [ -n "$3" ] || return 1
+  grep -Fq "\"$2.$3\": false" "$1/.pipeline/hooks.json" 2>/dev/null
+}
+# 判定放在派生缓存重生成之前：被禁用的 router 连 stale-cache 触发的一次性 node spawn 都不该发生。
+if [ -n "$PROOT" ] && hook_disabled "$PROOT" router "$CHANGE_PHASE"; then exit 0; fi
+
 # ── 派生缓存定位 + mtime 缓存重生成（**唯一** spawn node 的分支；仅 manifest 变更时触发）──
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." 2>/dev/null && pwd)}"
 MANIFEST="$PLUGIN_ROOT/templates/manifest.yaml"

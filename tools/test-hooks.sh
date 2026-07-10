@@ -9,6 +9,8 @@
 #   5. verify-skills.sh：真实清单全绿；人为埋悬空引用（缺失脚本/不可执行/缺 SKILL.md/未声明外部 skill）抓红且逐条列出
 #   6. 插件清单 JSON 语法校验（plugin.json / hooks.json，经 node —— 测试脚本非 hook，允许）
 #   7. session-start.sh：正常输出引导 exit 0；verify 失败时 stderr 警告但不阻断（fail-open）
+#  11. 阶段×hook 开关矩阵（v5 T5 / 决议#2，.pipeline/hooks.json）：配置关掉的 hook exit 0
+#      零副作用；缺失/损坏 fail-open 到启用；gate/interactive-skill-gate 强制常开忽略配置
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -662,6 +664,113 @@ assert_contains "hooks.json: 注册 skill-tracker.sh" "$hjson" "skill-tracker.sh
 assert_contains "hooks.json: 注册 interactive-skill-gate.sh" "$hjson" "interactive-skill-gate.sh"
 assert_contains "hooks.json: 含 PostToolUse 段" "$hjson" "PostToolUse"
 assert_contains "hooks.json: PostToolUse 挂 AskUserQuestion matcher" "$hjson" "AskUserQuestion"
+
+# ═══════════════ 11. 阶段×hook 开关矩阵（v5 T5 / 决议#2：.pipeline/hooks.json） ═══════════════
+# server 写端点落盘 canonical 形态（JSON.stringify(…,null,2)：矩阵一键一行、只存 false 禁用项，
+# 见 packages/server/src/hooksConfig.ts）；sh 侧热路径纯 bash grep -F 判定（CONTRACT §5.4 禁
+# spawn node/jq）。断言：配置关掉的 hook exit 0 零副作用；缺失/损坏 → 行为与今天完全一致
+# （fail-open 到启用）；gate.sh 交互门与 interactive-skill-gate.sh 安全门强制常开（忽略配置）。
+
+write_hooks_cfg() { # $1=root，其余=禁用键（如 router.build）——逐字模拟 server canonical 落盘形态
+  local root="$1" first=1 k
+  shift
+  mkdir -p "$root/.pipeline"
+  {
+    printf '{\n  "version": 1,\n  "matrix": {\n'
+    for k in "$@"; do
+      [ "$first" = 1 ] || printf ',\n'
+      printf '    "%s": false' "$k"
+      first=0
+    done
+    printf '\n  }\n}\n'
+  } > "$root/.pipeline/hooks.json"
+}
+
+# ── 11a. skill-tracker：当前阶段被禁用 → exit 0 且零副作用（JSONL 不 append）──
+proj="$TMP/hm-st"; mkdir -p "$proj/openspec/changes/demo"
+printf 'track: backend\nphase: build\narchived: \n' > "$proj/openspec/changes/demo/.pipeline.yaml"
+JL="$proj/openspec/changes/demo/.pipeline-history.jsonl"
+write_hooks_cfg "$proj" "skill-tracker.build"
+RC="$(printf '%s' "{\"cwd\":\"$proj\",\"tool_name\":\"Skill\",\"tool_input\":{\"skill\":\"pipeline-build\"}}" | bash "$ST" >/dev/null 2>&1; echo $?)"
+assert_exit "开关: skill-tracker 当前阶段（build）被禁用 → exit 0" 0 "$RC"
+[ "$(count_lines "$JL")" = "0" ] && ok "开关: 禁用的 skill-tracker 零副作用（JSONL 不 append）" || bad "开关: 禁用的 skill-tracker 零副作用（JSONL 不 append）" "行数=$(count_lines "$JL")"
+# 只关别的阶段（verify）→ 本阶段（build）照常写（阶段×hook 精准粒度，非全局开关）
+write_hooks_cfg "$proj" "skill-tracker.verify"
+printf '%s' "{\"cwd\":\"$proj\",\"tool_name\":\"Skill\",\"tool_input\":{\"skill\":\"pipeline-build\"}}" | bash "$ST" >/dev/null 2>&1
+[ "$(count_lines "$JL")" = "1" ] && ok "开关: skill-tracker 仅它阶段被禁 → 本阶段照常 append" || bad "开关: skill-tracker 仅它阶段被禁 → 本阶段照常 append" "行数=$(count_lines "$JL")"
+# 损坏配置 → fail-open 到启用（行为与今天完全一致）
+printf 'not json {{{' > "$proj/.pipeline/hooks.json"
+printf '%s' "{\"cwd\":\"$proj\",\"tool_name\":\"Skill\",\"tool_input\":{\"skill\":\"pipeline-build\"}}" | bash "$ST" >/dev/null 2>&1
+[ "$(count_lines "$JL")" = "2" ] && ok "开关: skill-tracker 配置损坏 → fail-open 照常 append" || bad "开关: skill-tracker 配置损坏 → fail-open 照常 append" "行数=$(count_lines "$JL")"
+
+# ── 11b. breadcrumb：newest change 的阶段被禁用 → 静默 exit 0；别的阶段被禁 → 照常 cat ──
+proj="$TMP/hm-bc"; mkdir -p "$proj/openspec/changes/demo"
+printf 'track: backend\nphase: build\narchived: \n' > "$proj/openspec/changes/demo/.pipeline.yaml"
+printf 'CRUMB-HM\n' > "$proj/openspec/changes/demo/.breadcrumb"
+write_hooks_cfg "$proj" "breadcrumb.build"
+out="$(printf '{"cwd":"%s"}' "$proj" | bash "$BC" 2>/dev/null)"
+rc=$?
+assert_exit "开关: breadcrumb 当前阶段被禁用 → exit 0" 0 "$rc"
+assert_empty "开关: 禁用的 breadcrumb 零输出" "$out"
+write_hooks_cfg "$proj" "breadcrumb.open"
+out="$(printf '{"cwd":"%s"}' "$proj" | bash "$BC" 2>/dev/null)"
+assert_contains "开关: breadcrumb 仅它阶段被禁 → 本阶段照常输出" "$out" "CRUMB-HM"
+printf '{{{broken' > "$proj/.pipeline/hooks.json"
+out="$(printf '{"cwd":"%s"}' "$proj" | bash "$BC" 2>/dev/null)"
+assert_contains "开关: breadcrumb 配置损坏 → fail-open 照常输出" "$out" "CRUMB-HM"
+
+# ── 11c. session-start：当前阶段（mtime 最新活跃 change）被禁用 → exit 0 零输出 ──
+proj="$TMP/hm-ss"; mkdir -p "$proj/openspec/changes/demo"
+printf 'track: backend\nphase: build\narchived: \n' > "$proj/openspec/changes/demo/.pipeline.yaml"
+write_hooks_cfg "$proj" "session-start.build"
+out="$(printf '{"cwd":"%s"}' "$proj" | bash "$SS" 2>/dev/null)"
+rc=$?
+assert_exit "开关: session-start 当前阶段被禁用 → exit 0" 0 "$rc"
+assert_empty "开关: 禁用的 session-start 零输出（宪法/上下文全不注入）" "$out"
+write_hooks_cfg "$proj" "session-start.open"
+out="$(printf '{"cwd":"%s"}' "$proj" | bash "$SS" 2>/dev/null)"
+assert_contains "开关: session-start 仅它阶段被禁 → 本阶段照常注入" "$out" "pipeline"
+printf 'garbage!!' > "$proj/.pipeline/hooks.json"
+out="$(printf '{"cwd":"%s"}' "$proj" | bash "$SS" 2>/dev/null)"
+assert_contains "开关: session-start 配置损坏 → fail-open 照常注入" "$out" "pipeline"
+
+# ── 11d. router：当前阶段被禁用 → exit 0 零注入（判定在缓存重生成之前，禁用连 node 都不 spawn）──
+rproj2="$TMP/hm-router"; mkdir -p "$rproj2/openspec/changes/demo"
+printf 'track: frontend\nphase: build\narchived: \n' > "$rproj2/openspec/changes/demo/.pipeline.yaml"
+write_hooks_cfg "$rproj2" "router.build"
+run_router "{\"prompt\":\"帮我实现一个 React 组件，做个响应式页面 UI\",\"cwd\":\"$rproj2\"}"
+assert_exit "开关: router 当前阶段被禁用 → exit 0" 0 "$RRC"
+assert_empty "开关: 禁用的 router 零注入" "$ROUT"
+# 禁用判定先于缓存重生成：shadow 假 node sentinel，禁用路径必须零 spawn
+FB2="$TMP/hm-router-fakebin"; mkdir -p "$FB2"
+printf '#!/bin/sh\ntouch "%s/HM_NODE_CALLED"\nexit 1\n' "$TMP" > "$FB2/node"; chmod +x "$FB2/node"
+rm -f "$TMP/HM_NODE_CALLED"
+printf '{"prompt":"帮我写个 React 页面 UI","cwd":"%s"}' "$rproj2" | PATH="$FB2:$PATH" PIPELINE_ROUTER_CACHE="$TMP/hm-router-cache.sh" CLAUDE_PLUGIN_ROOT="$ROOT" bash "$R" >/dev/null 2>&1
+[ ! -f "$TMP/HM_NODE_CALLED" ] && ok "开关红线: 禁用的 router 零 node spawn（判定先于缓存重生成）" || bad "开关红线: 禁用的 router 零 node spawn（判定先于缓存重生成）" "禁用路径竟 spawn 了 node"
+if command -v node >/dev/null 2>&1; then
+  rm -f "$rproj2/.pipeline/hooks.json"
+  run_router "{\"prompt\":\"帮我实现一个 React 组件，做个响应式页面 UI\",\"cwd\":\"$rproj2\"}"
+  assert_contains "开关: router 删除配置（解禁）→ 恢复注入（对照组）" "$ROUT" "track=frontend"
+else
+  printf 'skip - node 不可用，跳过 router 解禁对照组\n'
+fi
+
+# ── 11e. gate 强制常开（决议#2）：配置里写 gate.*: false 一律无效，新鲜 marker 照拦 ──
+proj="$TMP/hm-gate"; mkdir -p "$proj/openspec/changes/demo"
+printf 'track: backend\nphase: build\narchived: \n' > "$proj/openspec/changes/demo/.pipeline.yaml"
+touch "$proj/.pipeline-pending-confirm"
+write_hooks_cfg "$proj" "gate.build" "gate.open" "gate.verify"
+run_gate "{\"cwd\":\"$proj\",\"tool_name\":\"Write\"}"
+assert_exit "开关: gate 交互门强制常开——配置禁用无效，新鲜 marker 照拦 exit 2" 2 "$RC"
+
+# ── 11f. interactive-skill-gate 强制常开（决议#2）：配置禁用无效，姿态照注入、硬门照落 ──
+proj="$TMP/hm-ig"; mkdir -p "$proj"
+write_hooks_cfg "$proj" "interactive-skill-gate.build" "interactive-skill-gate.open"
+out="$(printf '%s' "{\"cwd\":\"$proj\",\"tool_name\":\"Skill\",\"tool_input\":{\"skill\":\"superpowers:brainstorming\"}}" | bash "$IG" 2>/dev/null)"
+rc=$?
+assert_exit "开关: interactive-skill-gate 安全门强制常开 → exit 0" 0 "$rc"
+assert_contains "开关: 安全门配置禁用无效，姿态照注入" "$out" "AskUserQuestion"
+[ -f "$proj/.pipeline-pending-interaction" ] && ok "开关: 安全门配置禁用无效，硬门照落" || bad "开关: 安全门配置禁用无效，硬门照落" "marker 未落"
 
 # ───────────────────────── 汇总 ─────────────────────────
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"

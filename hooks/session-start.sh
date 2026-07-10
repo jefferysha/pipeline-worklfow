@@ -39,21 +39,8 @@ PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
 CWD="$(json_get cwd || true)"
 [ -z "$CWD" ] && CWD="$PWD"
 
-# ── 简短引导（一行相位图 + 项目 GOAL.md 头两行，若有）──
-printf '[pipeline-lite] 7-phase 流水线已加载：open → explore → spec → build ⇄ verify → ship → archive。状态操作一律走 pipeline CLI（status / get / set / transition / check），编排入口 skill：/pipeline-lite。\n'
-if [ -f "$CWD/GOAL.md" ]; then
-  head -2 "$CWD/GOAL.md" 2>/dev/null || true
-fi
-
-# ── 注入①：工作流宪法（templates/workflow.md，相对插件根；缺文件静默跳过）──
-WF="$PLUGIN_ROOT/templates/workflow.md"
-if [ -f "$WF" ]; then
-  printf '\n[pipeline-lite 宪法 — %s]\n' "$WF"
-  cat "$WF" 2>/dev/null || true
-  printf '[宪法完]\n'
-fi
-
-# ── 注入②：当前项目 pipeline 上下文（cwd 上溯至多 5 层找 openspec/，同 gate/breadcrumb 上溯语义）──
+# ── 项目根定位（cwd 上溯至多 5 层找 openspec/，同 gate/breadcrumb 上溯语义）——提前到任何
+#    输出之前：阶段×hook 开关判定（v5 T5 / 决议#2）要求禁用 = 零输出退出；注入②同用本结果。──
 OS_ROOT="" d="$CWD"
 for _ in 1 2 3 4 5; do
   if [ -d "$d/openspec" ]; then OS_ROOT="$d"; break; fi
@@ -73,6 +60,49 @@ yget() { # $1=file $2=key
   printf '%s' "$v"
 }
 
+# 阶段×hook 开关（v5 T5 / 决议#2）：读 <项目根>/.pipeline/hooks.json（server 写端点落盘，
+# canonical 一键一行 `"<hook>.<阶段>": false`，只存禁用项，见 packages/server/src/hooksConfig.ts）。
+# 纯 bash（SessionStart 低频但仍守 §5.4 红线：零解释器/外部 JSON 解析器 spawn）：grep -F 定长匹配即可判定；
+# 缺文件/缺键/手改格式漂移/损坏 JSON → 一律 fail-open 到启用（行为与本配置诞生之前完全一致）。
+# gate.sh 交互门与 interactive-skill-gate.sh 安全门强制常开：不读本配置（server 写端点也拒绝这两个 id）。
+hook_disabled() { # $1=项目根 $2=hook id $3=阶段 → 0=该阶段已禁用
+  [ -n "$1" ] && [ -n "$3" ] || return 1
+  grep -Fq "\"$2.$3\": false" "$1/.pipeline/hooks.json" 2>/dev/null
+}
+
+# 当前阶段 = mtime 最新的非归档 change 的 phase（单一活跃 change 启发式，同 router/skill-tracker 口径）
+SS_PHASE=""
+if [ -n "$OS_ROOT" ] && [ -d "$OS_ROOT/openspec/changes" ]; then
+  SS_BEST=0
+  for f in "$OS_ROOT"/openspec/changes/*/.pipeline.yaml; do
+    [ -f "$f" ] || continue
+    [ "$(yget "$f" archived)" = "true" ] && continue
+    # GNU `stat -f` 是文件系统状态模式（非 mtime），先试 GNU 语法（-c）+ 数字校验兜底（同各 hook）。
+    mt="$(stat -c %Y "$f" 2>/dev/null)"
+    case "$mt" in ''|*[!0-9]*) mt="$(stat -f %m "$f" 2>/dev/null)" ;; esac
+    case "$mt" in ''|*[!0-9]*) mt=0 ;; esac
+    if [ "$mt" -ge "$SS_BEST" ]; then SS_BEST="$mt"; SS_PHASE="$(yget "$f" phase)"; fi
+  done
+fi
+if [ -n "$OS_ROOT" ]; then
+  hook_disabled "$OS_ROOT" session-start "$SS_PHASE" && exit 0
+fi
+
+# ── 简短引导（一行相位图 + 项目 GOAL.md 头两行，若有）──
+printf '[pipeline-lite] 7-phase 流水线已加载：open → explore → spec → build ⇄ verify → ship → archive。状态操作一律走 pipeline CLI（status / get / set / transition / check），编排入口 skill：/pipeline-lite。\n'
+if [ -f "$CWD/GOAL.md" ]; then
+  head -2 "$CWD/GOAL.md" 2>/dev/null || true
+fi
+
+# ── 注入①：工作流宪法（templates/workflow.md，相对插件根；缺文件静默跳过）──
+WF="$PLUGIN_ROOT/templates/workflow.md"
+if [ -f "$WF" ]; then
+  printf '\n[pipeline-lite 宪法 — %s]\n' "$WF"
+  cat "$WF" 2>/dev/null || true
+  printf '[宪法完]\n'
+fi
+
+# ── 注入②：当前项目 pipeline 上下文（OS_ROOT/yget 已在文件头定位/定义，开关判定同源复用）──
 if [ -n "$OS_ROOT" ] && [ -d "$OS_ROOT/openspec/changes" ]; then
   # 活跃 change 列表（archived != true）
   CTX=""

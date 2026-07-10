@@ -16,6 +16,10 @@
 #   唯一会 spawn 解释器的分支，且只在该分支触达；workflow==='default'（最高频路径）/
 #   无活跃 change / 非 Skill 调用，三者任一成立就直接跳过，零 spawn，热路径承诺不变。
 # fail-open（绝不死锁）：stdin 解析失败 / cwd 不存在 / 任何异常 → 放行 exit 0。
+# 强制常开（v5 T5 / 决议#2）：本交互门与 interactive-skill-gate.sh 安全门**不读**
+#   .pipeline/hooks.json 阶段×hook 开关矩阵——配置里手写 "gate.<阶段>": false 一律无效
+#   （server 写端点同样拒绝这两个 id），防误配置/AFK 把安全约束关掉；其余 hook 的开关
+#   接线见 router.sh / breadcrumb.sh / skill-tracker.sh / session-start.sh 的 hook_disabled。
 set -uo pipefail
 
 # AFK 逃生门（BACKLOG #7b，对齐老内核沙箱放行语义）：headless 自动化（Docker/CI）里

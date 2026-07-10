@@ -58,6 +58,16 @@ yget() { # $1=file $2=key
   printf '%s' "$v"
 }
 
+# 阶段×hook 开关（v5 T5 / 决议#2）：读 <项目根>/.pipeline/hooks.json（server 写端点落盘，
+# canonical 一键一行 `"<hook>.<阶段>": false`，只存禁用项，见 packages/server/src/hooksConfig.ts）。
+# 纯 bash 热路径（CONTRACT §5.4：零解释器/外部 JSON 解析器 spawn）：grep -F 定长匹配即可判定；缺文件/缺键/
+# 手改格式漂移/损坏 JSON → 一律 fail-open 到启用（行为与本配置诞生之前完全一致）。
+# gate.sh 交互门与 interactive-skill-gate.sh 安全门强制常开：不读本配置（server 写端点也拒绝这两个 id）。
+hook_disabled() { # $1=项目根 $2=hook id $3=阶段 → 0=该阶段已禁用
+  [ -n "$1" ] && [ -n "$3" ] || return 1
+  grep -Fq "\"$2.$3\": false" "$1/.pipeline/hooks.json" 2>/dev/null
+}
+
 CWD="$(json_get cwd || true)"
 [ -z "$CWD" ] && CWD="$PWD"
 [ -d "$CWD" ] || exit 0
@@ -92,6 +102,9 @@ for f in "$PROOT"/openspec/changes/*/.pipeline.yaml; do
   if [ "$mt" -ge "$BEST" ]; then BEST="$mt"; CHANGE_DIR="$(dirname "$f")"; fi
 done
 [ -n "$CHANGE_DIR" ] || exit 0
+
+# ── 阶段×hook 开关（v5 T5 / 决议#2）：当前 change 阶段被配置禁用 → 零副作用退出 ──
+hook_disabled "$PROOT" skill-tracker "$(yget "$CHANGE_DIR/.pipeline.yaml" phase)" && exit 0
 
 TS="$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
 RAW="$(json_escape "$TOOL: $NAME")"
