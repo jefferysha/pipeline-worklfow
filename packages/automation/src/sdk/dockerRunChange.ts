@@ -63,6 +63,14 @@ export interface DockerRunChangeOptions {
    * 四闸任何一种禁串。
    */
   readonly store?: StateStore
+  /**
+   * loop denylist 解析器（T4 决议 #12，可选）：change 名 → 生效的 denylist glob 清单。调用方按
+   * change_prefix 归属从 loops registry 派生（现成帮手：denylist.ts::denylistForChange +
+   * kernel loadRegistry，见 packages/cli/src/commands/afk.ts 的接线）。返回非空 → run 结算时
+   * git diff --name-only 对 glob 匹配，违规判 conflict 保留现场。返回 [] / 未传 / resolver 自身
+   * throw → 无 loop 语境，检查跳过（best-effort：registry 读故障绝不阻断 run）。
+   */
+  readonly resolveDenylist?: (name: string) => Promise<readonly string[]>
 }
 
 /** 构造绑真 docker/git 的 RunChange（喂给 automation.runRound）。 */
@@ -88,10 +96,14 @@ export const createDockerRunChange = (opts: DockerRunChangeOptions): RunChange =
     setStateField,
   })
   const autoMerge = opts.level === 'L3'
-  return (name, signal) =>
-    runChangeInSandbox(
+  return async (name, signal) => {
+    // T4 决议 #12：每次 run 现解析该 change 的 loop denylist（loops.yaml 可能被编辑，不缓存）；
+    // resolver 故障 → []（best-effort，registry 读坏不阻断 run，也不误判违规）。
+    const denylist = opts.resolveDenylist ? await opts.resolveDenylist(name).catch(() => [] as string[]) : []
+    return runChangeInSandbox(
       ports,
-      { hostRepoDir: opts.hostRepoDir, name, base: opts.base, autoMerge, extraEnv: opts.extraEnv },
+      { hostRepoDir: opts.hostRepoDir, name, base: opts.base, autoMerge, extraEnv: opts.extraEnv, denylist },
       signal,
     )
+  }
 }

@@ -15,6 +15,9 @@ export * from './scheduler/scheduler.js'
 // lifecycle：沙箱生命周期编排 / build_sha barrier
 export * from './lifecycle/barrier.js'
 export * from './lifecycle/lifecycle.js'
+// T4：沙箱内阶段回写（[TRANSITION] 检出）+ loop denylist 结算检查（决议 #12）
+export * from './lifecycle/transitionWatch.js'
+export * from './lifecycle/denylist.js'
 // runner：结构化握手解析 / docker 探针
 export * from './runner/runner.js'
 export * from './runner/docker.js'

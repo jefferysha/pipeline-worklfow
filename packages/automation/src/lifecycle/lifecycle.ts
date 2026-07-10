@@ -17,6 +17,8 @@ import { PIPELINE_AFK_ENV } from '../queue/gate.js'
 import { type RunOutcome } from '../types.js'
 import type { SandboxReport } from '../runner/runner.js'
 import { type GitFace, deriveBarrierSha } from './barrier.js'
+import { DenylistViolationError, matchDenylist } from './denylist.js'
+import { createPhaseWatch } from './transitionWatch.js'
 
 /** per-change 命名分支前缀（老仓 sandcastle-pipeline/<name>）。 */
 export const NAMED_BRANCH_PREFIX = 'sandcastle-pipeline/'
@@ -70,6 +72,11 @@ export interface LifecyclePorts {
   runWork: RunWork
   /** 收集命名分支相对 base 的 commits（FIFO；last = build HEAD）。 */
   collectCommits(input: { worktreePath: string; branch: string; base: string }): Promise<{ sha: string }[]>
+  /**
+   * 本次 run 触碰的文件清单（git diff --name-only <base>...<branch>，决议 #12 denylist 结算检查用）。
+   * 仅 cfg.denylist 非空且有 commit 时才调；出错 → []（同 collectCommits 的容错口径，见 mergeback.ts）。
+   */
+  diffNames(input: { worktreePath: string; branch: string; base: string }): Promise<string[]>
   /** 把命名分支 merge 回 host base（仅 autoMerge=L3 时调）。 */
   mergeToBase(input: { worktreePath: string; branch: string; base: string }): Promise<void>
   readonly git: GitFace
@@ -96,6 +103,13 @@ export interface RunChangeConfig {
    * PIPELINE_AFK_ENV 合并，不覆盖后者（extraEnv 尝试设同名键也不生效，硬护栏优先）。
    */
   readonly extraEnv?: Readonly<Record<string, string>>
+  /**
+   * loop denylist 路径 glob（决议 #12，由调用方按 change_prefix 归属从 loops registry 派生——见
+   * denylist.ts::denylistForChange / dockerRunChange.ts::resolveDenylist）。非空时 run 结算对
+   * git diff --name-only 匹配：命中 = 违规 → DenylistViolationError（conflict、保留现场、不 merge）。
+   * 空/未传 = 无 loop 语境 → 跳过检查（零 diff 开销）。
+   */
+  readonly denylist?: readonly string[]
 }
 
 /**
@@ -149,6 +163,8 @@ const PRESERVE_ERROR_TAGS = new Set([
   'BarrierDriftError',
   'WorktreeError',
   'CancelledRunError',
+  // 决议 #12：denylist 违规同 conflict 类——留现场供人工核对越界产出，绝不自动重试/merge。
+  'DenylistViolationError',
 ])
 const isPreserveError = (err: unknown): boolean =>
   typeof err === 'object' && err !== null && PRESERVE_ERROR_TAGS.has((err as { _tag?: string })._tag ?? '')
@@ -167,6 +183,12 @@ export const runChangeInSandbox = async (ports: LifecyclePorts, cfg: RunChangeCo
   let handle: SandboxHandle | undefined
   // #29c：conflict 类错误保留现场（不清 worktree）；见 PRESERVE_ERROR_TAGS。
   let preserve = false
+  // T4（决策 G）：沙箱日志 [TRANSITION] 行 → automation_current_phase 运行期回写（值变才写，限流
+  // 防 SSE 指纹风暴）；run 结算（成功/失败/取消一切路径的 finally）清空。写回 best-effort（.catch
+  // 同 setStateField 既有风格），字段写失败绝不拖垮 run。
+  const phaseWatch = createPhaseWatch(cfg.name, (value) =>
+    ports.setStateField(cfg.name, 'automation_current_phase', value),
+  )
   try {
     // 沙箱 env 注入 PIPELINE_AFK=1（headless 放行三门）+ 调用方 extraEnv（token/代理地址等）；
     // PIPELINE_AFK_ENV 放最后展开，extraEnv 若尝试同名覆盖也不生效（硬护栏优先）。
@@ -179,7 +201,20 @@ export const runChangeInSandbox = async (ports: LifecyclePorts, cfg: RunChangeCo
     await ports.setStateField(cfg.name, 'automation_sandbox', sandbox.containerName)
     await ports.setStateField(cfg.name, 'automation_worktree', worktreePath)
 
-    const report = await ports.runWork((cmd, options) => sandbox.exec(cmd, options), cfg.name, signal)
+    // exec 包装层 tee 日志行给 phaseWatch（[TRANSITION] 检出点）——runWork 自己的 onLine
+    // （race idle 检测）原样续传，互不挤占。
+    const report = await ports.runWork(
+      (cmd, options) =>
+        sandbox.exec(cmd, {
+          ...options,
+          onLine: (line) => {
+            phaseWatch.onLine(line)
+            options?.onLine?.(line)
+          },
+        }),
+      cfg.name,
+      signal,
+    )
 
     // dashboard 取消（afk-workbench Task 3）：本进程的 signal 从没被 abort 过（触发 kill 的是另一个
     // 常驻进程），只能靠标记文件判断——必须先于下面的 signal.aborted 检查（这条路径上 signal.aborted
@@ -192,6 +227,18 @@ export const runChangeInSandbox = async (ports: LifecyclePorts, cfg: RunChangeCo
     if (signal.aborted) throw new AbortedRunError(signal.reason, worktreePath)
 
     const commits = await ports.collectCommits({ worktreePath, branch: wt.branch, base: cfg.base })
+
+    // 决议 #12：run 结算 denylist 检查——loop 语境（denylist 非空）且真有产出（commits 非空）时，
+    // git diff --name-only 对 denylist glob 匹配；命中 = 违规 → conflict 保留现场，且必须先于
+    // mergeToBase（违规产出绝不允许 L3 自动 merge 回主线）。无 loop 语境跳过（零 diff 开销）。
+    const denylist = cfg.denylist ?? []
+    if (denylist.length > 0 && commits.length > 0) {
+      const files = await ports.diffNames({ worktreePath, branch: wt.branch, base: cfg.base })
+      const violations = matchDenylist(files, denylist)
+      if (violations.length > 0) {
+        throw new DenylistViolationError(violations, worktreePath)
+      }
+    }
 
     // barrier 全链同源：命名分支 HEAD == landed；不信沙箱自报（report.build_sha）。
     const barrier = await deriveBarrierSha({
@@ -236,6 +283,8 @@ export const runChangeInSandbox = async (ports: LifecyclePorts, cfg: RunChangeCo
     if (isPreserveError(settled)) preserve = true
     throw settled
   } finally {
+    // T4 结算清理：完成/失败/取消一切路径都清 automation_current_phase（写过才清；排空在途写）。
+    await phaseWatch.settle().catch(() => {})
     if (handle) await handle.close().catch(() => {})
     // 非 abort、非 conflict 路径才 teardown worktree（错误吞掉）；abort/conflict 保留现场。
     if (!signal.aborted && !preserve) {

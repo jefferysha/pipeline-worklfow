@@ -94,6 +94,10 @@ function initialFields(opts: InitOptions, ts: string, baseBranch: string): Recor
   f.verified_at = 'null'
   f.archived_at = 'null'
   f.archived = 'false'
+  // workflow 走 emptyFields() 缺省 'default'（init 不显式设）；automation_current_phase 缺省
+  // 空串（run 外无沙箱内阶段，v5 T4），同样由 emptyFields() 覆盖——这里显式写一遍以对齐
+  // 「heredoc 逐字段初值」的可读清单。
+  f.automation_current_phase = ''
   return f
 }
 

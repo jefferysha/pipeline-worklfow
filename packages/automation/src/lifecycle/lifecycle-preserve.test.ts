@@ -46,6 +46,9 @@ const makePorts = (over: Partial<LifecyclePorts>): { ports: LifecyclePorts; log:
     async collectCommits() {
       return [{ sha: SHA }]
     },
+    async diffNames() {
+      return []
+    },
     async mergeToBase() {
       log.push('mergeToBase')
     },

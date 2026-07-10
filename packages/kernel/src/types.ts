@@ -13,6 +13,12 @@ export const FIELD_ORDER = [
   'branch', 'base_branch', 'scope', 'related_files', 'spec_scope', 'depends_on',
   'created_at', 'updated_at', 'verified_at', 'archived_at', 'archived',
   'workflow',
+  // v5 T4（决策 G）：沙箱内当前阶段（automation runner 检出 [TRANSITION] 行运行期回写；run 结算
+  // 清空）。host 阶段（phase 字段）在 run 结束后才结算，两者并存不冲突。**新字段必须追加在末尾**
+  // （同 workflow 先例）：老版本窄解析器遇到首个未知 key 起整段进 opaqueTail——新字段若插在中段，
+  // 老读者会把其后所有真字段（branch/base_branch/workflow…）当不透明尾巴，回写时用缺省值再造一份
+  // → 重复 key 静默腐蚀；放末尾则老读者只把这一行当尾巴逐字保留，混版本读写无损。
+  'automation_current_phase',
 ] as const
 
 export type FieldName = (typeof FIELD_ORDER)[number]

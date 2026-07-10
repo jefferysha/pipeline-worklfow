@@ -17,9 +17,10 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import {
-  createAutomation, createDockerRunChange, dockerAvailable, nodeExec,
+  createAutomation, createDockerRunChange, denylistForChange, dockerAvailable, nodeExec,
   AUTOMATION_LEVELS, type AutomationLevel,
 } from '@pipeline-lite/automation'
+import { loadRegistry } from '@pipeline-lite/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
 import { changeDir, changesRoot, isValidChangeName } from '../paths.js'
 import { str } from '../render.js'
@@ -122,7 +123,13 @@ export async function cmdAfk(deps: CliDeps, sub: string, name: string | undefine
       // automation_worktree 靠 createDockerRunChange 把 deps.store 转发给 createLifecyclePorts 的
       // setStateField；此前一直没传，字段在真 CLI 路径里永远停在 init 时的 ""（见
       // .superpowers/sdd/task-1-report.md「Concerns」）。
-      const runChange = createDockerRunChange({ hostRepoDir: deps.cwd, base, level, image, store: deps.store })
+      // loop denylist 真实生效（v5 T4 决议 #12）：按 change_prefix 归属从 .pipeline/loops.yaml 派生
+      // 该 change 的 denylist glob；run 结算时 git diff --name-only 对其匹配，违规判 conflict 保留
+      // 现场。registry 缺失/损坏/schema 校验失败 → data null → []（best-effort，无 loop 语境跳过检查，
+      // 绝不阻断 run）。每次 run 现读（loops.yaml 可能被编辑，不缓存）。
+      const resolveDenylist = async (changeName: string): Promise<readonly string[]> =>
+        denylistForChange(loadRegistry(deps.cwd).data?.loops ?? [], changeName)
+      const runChange = createDockerRunChange({ hostRepoDir: deps.cwd, base, level, image, store: deps.store, resolveDenylist })
       await auto.runRound(runChange)
       deps.io.out(`AFK run: 跑完一轮（${ready.length} 项候选，level=${level}，image=${image}）`)
       return 0

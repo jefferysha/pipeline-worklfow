@@ -82,7 +82,7 @@ describe('serializePipeline（严格 FIELD_ORDER 全量写回）', () => {
     })
   }
 
-  it('老 schema 读后写回 → 归一化为全量 37 字段（缺省写空串 ""）', () => {
+  it('老 schema 读后写回 → 归一化为全量 39 字段（缺省写空串 ""）', () => {
     const out = serializePipeline(parsePipeline(fixture('channel-adapter-worker-guard-oldschema.pipeline.yaml')))
     const keys = out
       .split('\n')

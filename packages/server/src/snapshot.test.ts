@@ -43,6 +43,19 @@ describe('buildSnapshot —— 真读多项目 .pipeline.yaml', () => {
     expect(beta.track).toBe('pm')
   })
 
+  it('automation_current_phase 经 fields 全量透传（T4 决策 G：进度详情「沙箱内阶段」数据源）', async () => {
+    const store = newStore()
+    const root = await makeProject()
+    const dir = await initChange(store, root, 'afk-run')
+    // init 缺省空串（run 外无沙箱内阶段）
+    const snap0 = await buildSnapshot({ registry: () => [root], store, version: '1', clock: () => 't' })
+    expect(snap0.projects[0].changes[0].fields.automation_current_phase).toBe('')
+    // automation runner 运行期写入 → snapshot 原值透传（server 不加工、不改名）
+    await store.set(dir, 'automation_current_phase', 'verify')
+    const snap1 = await buildSnapshot({ registry: () => [root], store, version: '1', clock: () => 't' })
+    expect(snap1.projects[0].changes[0].fields.automation_current_phase).toBe('verify')
+  })
+
   it('不存在的注册路径 → ok:false 不炸', async () => {
     const snap = await buildSnapshot({
       registry: () => ['/definitely/not/here'], store: newStore(), version: '0', clock: () => 'x',

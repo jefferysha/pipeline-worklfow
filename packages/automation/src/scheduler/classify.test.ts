@@ -26,6 +26,16 @@ describe('classifyFailure', () => {
     expect(classifyFailure({ _tag: 'WorktreeError' }).kind).toBe('conflict')
   })
 
+  it('denylist 违规（DenylistViolationError，T4 决议 #12）→ conflict，不重试，带结构化 preservedWorktreePath', () => {
+    const c = classifyFailure({
+      _tag: 'DenylistViolationError',
+      message: 'run touched denylisted paths: docs/a.md (denylist: docs/**)',
+      preservedWorktreePath: '/wt/sandcastle-pipeline/x',
+    })
+    expect(c.kind).toBe('conflict')
+    expect(c.preservedPath).toBe('/wt/sandcastle-pipeline/x')
+  })
+
   it('agent idle-timeout → retry（瞬态挂起）', () => {
     expect(classifyFailure({ _tag: 'AgentIdleTimeoutError' }).kind).toBe('retry')
   })

@@ -5,7 +5,11 @@
 ## 1. `.pipeline.yaml` 格式契约（与老内核字节级兼容）
 
 - 位置：`openspec/changes/<name>/.pipeline.yaml`（相对项目根）。
-- **字段序固定**：见 `types.ts::FIELD_ORDER`（37 字段）。写回时严格按此序全量输出，缺省字段写空串。
+- **字段序固定**：见 `types.ts::FIELD_ORDER`（39 字段；2026-07-11 v5 T4 决策 G **末尾追加**
+  `automation_current_phase`——沙箱内当前阶段，automation runner 检出 [TRANSITION] 行运行期回写、
+  run 结算清空；老文件缺该行读作空串，容忍不变。新字段必须末尾追加：老版本窄解析器把首个未知
+  key 起整段当 opaqueTail，插中段会让老读者回写时重复 key 腐蚀文件，见 types.ts 注释）。
+  写回时严格按此序全量输出，缺省字段写空串。
 - **标量引号契约（单层去引号）**：读取时若值首尾为同一对 `"` 或 `'` 则剥一层，不递归；写入时
   值含 `: `、` #`、换行或首字符为引号 → 拒写（fail-loud，对齐老内核 yaml_set 四闸）。
 - **列表字段**（`scope` / `related_files` / `spec_scope` / `depends_on`）：块序列格式

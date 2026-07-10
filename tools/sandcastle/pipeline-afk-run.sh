@@ -75,6 +75,12 @@ if [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ] && command -v claude >/dev/null 2>&1; t
   fi
   printf 'agent exit=%s\n' "$agent_exit" >>".sandcastle-build.agent.log"
 
+  # T4 评审修复（[TRANSITION] 流面）：上面把 agent 全部输出（含沙箱内 pipeline transition 打到
+  # stderr 的 [TRANSITION] 行）重定向进了日志文件，docker exec 的流面上只剩末行握手——host 侧
+  # phaseWatch（exec.ts onLine → transitionWatch）在生产 AFK 路径永远收不到行。把日志里的
+  # [TRANSITION] 行按原样回放到自身 stdout（-a 防日志混入二进制字节时 grep 拒判；无命中不致命）。
+  grep -a '^\[TRANSITION\] ' ".sandcastle-build.agent.log" || true
+
   if [ -n "$tap_port" ]; then
     kill "$tap_pid" 2>/dev/null || true
     wait "$tap_pid" 2>/dev/null || true

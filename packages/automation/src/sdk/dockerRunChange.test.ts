@@ -116,6 +116,67 @@ describe('createDockerRunChange · opts.store 真接线（Task 1 收尾缺口）
  * ${Math.random().toString(16).slice(2,8)}`（container.ts::createDockerSandbox/randomName），
  * 定长安全字符集（[0-9a-z-]），不可能含四闸任何一种禁串，故本组只测 automation_worktree。
  */
+/**
+ * T4 决议 #12：resolveDenylist 装配面——loop denylist 真流到 runChangeInSandbox 的结算检查
+ * （fake exec 只是省掉真 docker/git；git diff --name-only 的返回由 fake 控制）。
+ */
+describe('createDockerRunChange · resolveDenylist（loop denylist 真实生效，决议 #12）', () => {
+  let repo: string
+  beforeEach(async () => { repo = await mkdtemp(join(tmpdir(), 'dockerrc-deny-')) })
+  afterEach(async () => { await rm(repo, { recursive: true, force: true }) })
+
+  const makeDiffExec = (diffFiles: string): { exec: ExecFn } => {
+    const exec: ExecFn = async (file, args) => {
+      if (file === 'docker' && args[0] === 'exec') {
+        return { stdout: `<output>{"verify_result":"pass","build_sha":"${SHA}","phase_event":"verify-pass"}</output>\n`, stderr: '', exitCode: 0 }
+      }
+      if (file === 'git' && args.includes('rev-list')) {
+        return { stdout: `${SHA}\n`, stderr: '', exitCode: 0 }
+      }
+      if (file === 'git' && args[0] === 'diff') {
+        return { stdout: diffFiles, stderr: '', exitCode: 0 }
+      }
+      return { stdout: `${SHA}\n`, stderr: '', exitCode: 0 }
+    }
+    return { exec }
+  }
+
+  it('resolver 给出 denylist 且 diff 命中 → run reject DenylistViolationError（conflict 语义）', async () => {
+    const { exec } = makeDiffExec('docs/a.md\n')
+    const runChange = createDockerRunChange({
+      hostRepoDir: repo, base: 'main', level: 'L1', image: 'sandcastle:local', exec,
+      resolveDenylist: async () => ['docs/**'],
+    })
+    await expect(runChange('loop-a-fix', new AbortController().signal)).rejects.toMatchObject({
+      _tag: 'DenylistViolationError',
+    })
+  })
+
+  it('resolver 返回 []（无 loop 语境）→ 检查跳过，run 正常 resolve', async () => {
+    const { exec } = makeDiffExec('docs/a.md\n')
+    const runChange = createDockerRunChange({
+      hostRepoDir: repo, base: 'main', level: 'L1', image: 'sandcastle:local', exec,
+      resolveDenylist: async () => [],
+    })
+    await expect(runChange('standalone', new AbortController().signal)).resolves.toBeDefined()
+  })
+
+  it('resolver 自己 throw → 按无 denylist 处理（best-effort，registry 故障不阻断 run）', async () => {
+    const { exec } = makeDiffExec('docs/a.md\n')
+    const runChange = createDockerRunChange({
+      hostRepoDir: repo, base: 'main', level: 'L1', image: 'sandcastle:local', exec,
+      resolveDenylist: async () => { throw new Error('loops.yaml unreadable') },
+    })
+    await expect(runChange('x', new AbortController().signal)).resolves.toBeDefined()
+  })
+
+  it('未传 resolveDenylist → 行为不变（不查 denylist）', async () => {
+    const { exec } = makeDiffExec('docs/a.md\n')
+    const runChange = createDockerRunChange({ hostRepoDir: repo, base: 'main', level: 'L1', image: 'sandcastle:local', exec })
+    await expect(runChange('x', new AbortController().signal)).resolves.toBeDefined()
+  })
+})
+
 describe('createDockerRunChange · automation_worktree 写回前 sanitize（四闸防炸，Fix 2）', () => {
   let repo: string
   // 目录名嵌 " #"（四闸禁串之一）：真实世界常见（如手动去重产生的 "repo #2" 这类文件夹名）。

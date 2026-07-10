@@ -13,6 +13,8 @@ const makePorts = (over: Partial<LifecyclePorts> = {}) => {
   // automation_sandbox/automation_worktree 的 fake 落态（真 kernel StateStore 未写入字段前的
   // 默认值语义同为空串——同一断言风格 `.not.toBe('')` 在写回前后都有意义）。
   const stateFields: Record<string, string> = { automation_sandbox: '', automation_worktree: '' }
+  // T4：automation_current_phase 的**逐笔**写入序列（限流断言要看历史，不能只看最新值）。
+  const phaseWrites: string[] = []
   const ports: LifecyclePorts = {
     worktree: {
       async create(_repoDir, branch) {
@@ -49,17 +51,22 @@ const makePorts = (over: Partial<LifecyclePorts> = {}) => {
       log.push('collectCommits')
       return [{ sha: SHA }]
     },
+    async diffNames() {
+      log.push('diffNames')
+      return []
+    },
     async mergeToBase() {
       log.push('mergeToBase')
     },
     git: { revParse: async () => SHA },
     async setStateField(_name, field, value) {
       log.push(`setStateField:${field}`)
+      if (field === 'automation_current_phase') phaseWrites.push(value)
       stateFields[field] = value
     },
     ...over,
   }
-  return { ports, log, env: () => sandboxEnv, state: () => stateFields }
+  return { ports, log, env: () => sandboxEnv, state: () => stateFields, phaseWrites }
 }
 
 describe('runChangeInSandbox（沙箱生命周期纯编排 + 注入面）', () => {
@@ -230,5 +237,159 @@ describe('AbortedRunError', () => {
     expect(e._tag).toBe('AbortedRunError')
     expect(e.preservedPath).toBe('/wt/x')
     expect(e.message).toBe('停止')
+  })
+})
+
+/**
+ * T4（v5 决策 G）：沙箱日志 [TRANSITION] 行 → automation_current_phase 运行期回写 + 结算清理。
+ * fake 沙箱 exec 通过 options.onLine 逐行吐日志（真链路 = docker exec 的 stdout 流），lifecycle
+ * 的 runWork exec 包装层负责 tee 给 phaseWatch——runWork 自己的 onLine（race idle 检测）不受影响。
+ */
+describe('runChangeInSandbox · 沙箱内阶段回写（automation_current_phase）', () => {
+  /** 让 fake 沙箱 exec 逐行吐 script；runWork 真调 exec（覆盖默认「不碰 exec」的 fake）。 */
+  const streamingOver = (script: string[], runWorkTail?: () => Promise<never>): Partial<LifecyclePorts> => ({
+    async createSandbox(opts) {
+      return {
+        env: opts.env,
+        containerName: FAKE_CONTAINER_NAME,
+        async exec(_cmd, options) {
+          for (const line of script) options?.onLine?.(line)
+          return { stdout: '', stderr: '', exitCode: 0 }
+        },
+        async close() {},
+      }
+    },
+    async runWork(exec) {
+      await exec('PIPELINE_AFK=1 pipeline-afk-run x', {})
+      if (runWorkTail) await runWorkTail()
+      return { verify_result: 'pass', build_sha: SHA, phase_event: 'verify-pass' }
+    },
+  })
+
+  it('日志含 [TRANSITION] x: a -> b → 写 automation_current_phase=b；同值重复行不重写（限流）；结算清空', async () => {
+    const { ports, phaseWrites, state } = makePorts(
+      streamingOver([
+        '[TRANSITION] x: build -> verify',
+        '[TRANSITION] x: build -> verify', // 重复行：不产生第二笔写
+        'compile ok',
+        '[TRANSITION] x: verify -> ship',
+      ]),
+    )
+    await runChangeInSandbox(ports, { hostRepoDir: '/repo', name: 'x', base: 'main', autoMerge: false }, new AbortController().signal)
+    // 逐笔：verify → ship → ''（run 完成结算清理）
+    expect(phaseWrites).toEqual(['verify', 'ship', ''])
+    expect(state().automation_current_phase).toBe('')
+  })
+
+  it('其它 change 名的 [TRANSITION] 行忽略；无转换行的 run 全程零写（不产生指纹噪声）', async () => {
+    const { ports, phaseWrites } = makePorts(streamingOver(['[TRANSITION] other: build -> verify', 'noise']))
+    await runChangeInSandbox(ports, { hostRepoDir: '/repo', name: 'x', base: 'main', autoMerge: false }, new AbortController().signal)
+    expect(phaseWrites).toEqual([])
+  })
+
+  it('run 失败路径同样结算清理（字段不能停留在中间态）', async () => {
+    const { ports, phaseWrites } = makePorts(
+      streamingOver(['[TRANSITION] x: build -> verify'], async () => {
+        throw new Error('transient boom')
+      }),
+    )
+    await expect(
+      runChangeInSandbox(ports, { hostRepoDir: '/repo', name: 'x', base: 'main', autoMerge: false }, new AbortController().signal),
+    ).rejects.toThrow('transient boom')
+    expect(phaseWrites).toEqual(['verify', ''])
+  })
+
+  it('dashboard 取消路径同样结算清理（保留现场但不保留中间态阶段字段）', async () => {
+    const { ports, phaseWrites } = makePorts({
+      ...streamingOver(['[TRANSITION] z: build -> verify']),
+      worktree: {
+        async create(_repoDir, branch) {
+          return { path: `/wt/${branch}`, branch }
+        },
+        async remove() {},
+        async hasCancelMarker() {
+          return true
+        },
+      },
+    })
+    await expect(
+      runChangeInSandbox(ports, { hostRepoDir: '/repo', name: 'z', base: 'main', autoMerge: false }, new AbortController().signal),
+    ).rejects.toMatchObject({ _tag: 'CancelledRunError' })
+    expect(phaseWrites).toEqual(['verify', ''])
+  })
+})
+
+/**
+ * T4（v5 决议 #12）：loop denylist 真实生效——run 结算时 git diff --name-only 对 denylist glob
+ * 匹配，违规判 conflict 保留现场；无 loop 语境（cfg.denylist 空/未传）跳过检查、零 diff 开销。
+ */
+describe('runChangeInSandbox · denylist 结算检查（决议 #12）', () => {
+  it('diff 命中 denylist → 抛 DenylistViolationError、不 merge、保留 worktree、容器仍杀', async () => {
+    const { ports, log } = makePorts({
+      async diffNames() {
+        log.push('diffNames')
+        return ['docs/a.md', 'src/ok.ts']
+      },
+    })
+    await expect(
+      runChangeInSandbox(
+        ports,
+        { hostRepoDir: '/repo', name: 'x', base: 'main', autoMerge: true, denylist: ['docs/**'] },
+        new AbortController().signal,
+      ),
+    ).rejects.toMatchObject({
+      _tag: 'DenylistViolationError',
+      preservedWorktreePath: '/wt/sandcastle-pipeline/x',
+    })
+    expect(log).not.toContain('mergeToBase') // 违规绝不 merge 回主线（即便 L3 autoMerge）
+    expect(log.some((l) => l.startsWith('wt.remove'))).toBe(false) // 保留现场
+    expect(log).toContain('sandbox.close') // 容器不泄漏
+  })
+
+  it('denylist 非空但 diff 干净 → 正常结算（L3 照 merge、worktree 照清）', async () => {
+    const { ports, log } = makePorts({
+      async diffNames() {
+        log.push('diffNames')
+        return ['src/ok.ts']
+      },
+    })
+    const out = await runChangeInSandbox(
+      ports,
+      { hostRepoDir: '/repo', name: 'x', base: 'main', autoMerge: true, denylist: ['docs/**'] },
+      new AbortController().signal,
+    )
+    expect(out.verifyResult).toBe('pass')
+    expect(log).toContain('diffNames')
+    expect(log).toContain('mergeToBase')
+    expect(log.some((l) => l.startsWith('wt.remove'))).toBe(true)
+  })
+
+  it('无 loop 语境（denylist 未传/空数组）→ 跳过检查（不调 diffNames）', async () => {
+    const a = makePorts()
+    await runChangeInSandbox(a.ports, { hostRepoDir: '/repo', name: 'x', base: 'main', autoMerge: true }, new AbortController().signal)
+    expect(a.log).not.toContain('diffNames')
+
+    const b = makePorts()
+    await runChangeInSandbox(
+      b.ports,
+      { hostRepoDir: '/repo', name: 'x', base: 'main', autoMerge: true, denylist: [] },
+      new AbortController().signal,
+    )
+    expect(b.log).not.toContain('diffNames')
+  })
+
+  it('零 commit（no-op run）→ 无产出可查，跳过 diff', async () => {
+    const { ports, log } = makePorts({
+      async collectCommits() {
+        return []
+      },
+    })
+    const out = await runChangeInSandbox(
+      ports,
+      { hostRepoDir: '/repo', name: 'x', base: 'main', autoMerge: true, denylist: ['docs/**'] },
+      new AbortController().signal,
+    )
+    expect(out.noop).toBe(true)
+    expect(log).not.toContain('diffNames')
   })
 })

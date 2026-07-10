@@ -33,7 +33,7 @@ import {
 } from '../runner/race.js'
 import { buildAfkRunCommand, parseSandboxReport } from '../runner/runner.js'
 import type { LifecyclePorts } from './lifecycle.js'
-import { collectCommitsReal, mergeBackToBase, realGitFace } from './mergeback.js'
+import { collectCommitsReal, diffNamesReal, mergeBackToBase, realGitFace } from './mergeback.js'
 import { realWorktreePort } from './worktree.js'
 
 export interface LifecyclePortsDeps {
@@ -124,8 +124,9 @@ export const createLifecyclePorts = (deps: LifecyclePortsDeps): LifecyclePorts =
           { idleMs, graceMs, completionSignals, signal },
         )
       } catch (err) {
-        // reject 路径唯一能拿到的内容：onLine 逐行攒的尾部（stderr 不走 onLine，这条路径上确实
-        // 拿不到，天然限制，不伪造）。
+        // reject 路径唯一能拿到的内容：onLine 逐行攒的尾部（T4 评审修复后 exec.ts 的 onLine
+        // 双流都续传，stdout/stderr 行在此按到达序交错——比早先「stderr 拿不到」更全，但仍是
+        // 尾部而非全量，不伪造）。
         await persistLog(fallbackTail.toString())
         throw err
       }
@@ -143,6 +144,10 @@ export const createLifecyclePorts = (deps: LifecyclePortsDeps): LifecyclePorts =
 
     collectCommits: (input) =>
       collectCommitsReal(exec, { hostRepoDir, branch: input.branch, base: input.base }),
+
+    // T4 决议 #12：denylist 结算检查的数据源（同 collectCommits 从 hostRepoDir 读不可变命名 ref）。
+    diffNames: (input) =>
+      diffNamesReal(exec, { hostRepoDir, branch: input.branch, base: input.base }),
 
     mergeToBase: (input) =>
       mergeBackToBase(exec, { hostRepoDir, worktreePath: input.worktreePath, branch: input.branch, base: input.base }),

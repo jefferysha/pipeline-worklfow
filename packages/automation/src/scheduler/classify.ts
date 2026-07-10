@@ -58,8 +58,15 @@ export const classifyFailure = (err: unknown): Classification => {
     }
   }
 
-  // merge-back 失败 / build_sha drift → conflict，绝不重试。
-  if (tag === 'SyncError' || tag === 'MergeToHostTimeoutError' || tag === 'WorktreeError' || tag === 'BarrierDriftError') {
+  // merge-back 失败 / build_sha drift / denylist 违规（T4 决议 #12：run 产出触碰 loop 拉黑路径，
+  // 重试只会再产出同一批越界文件——settled，人工核对现场）→ conflict，绝不重试。
+  if (
+    tag === 'SyncError' ||
+    tag === 'MergeToHostTimeoutError' ||
+    tag === 'WorktreeError' ||
+    tag === 'BarrierDriftError' ||
+    tag === 'DenylistViolationError'
+  ) {
     return {
       kind: 'conflict',
       message: tagged.message ?? 'merge conflict / barrier drift',

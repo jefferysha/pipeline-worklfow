@@ -39,5 +39,6 @@ verified_at: null
 archived_at: null
 archived: false
 workflow: default
+automation_current_phase: ""
 tools_history:
   - { at: 2026-07-06T01:00:00Z, tool: Skill, detail_b64: "cGlwZWxpbmU=" }

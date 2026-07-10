@@ -140,6 +140,7 @@ verified_at: null
 archived_at: null
 archived: false
 workflow: default
+automation_current_phase: ""
 `
 
   it('建 change 骨架：目录 + .pipeline.yaml 与老仓 heredoc 逐字节一致（注入时钟）', async () => {

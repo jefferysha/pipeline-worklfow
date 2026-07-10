@@ -69,6 +69,27 @@ export const collectCommitsReal = async (
   return lines.split('\n').map((sha) => ({ sha: sha.trim() }))
 }
 
+/**
+ * 本次 run 触碰的文件清单（T4 决议 #12 denylist 结算检查的数据源）：
+ * `git diff --name-only <base>...refs/heads/<branch>`（三点号 = 相对 merge-base 的分支侧改动，
+ * 不把 base 上并行推进的文件算到本 run 头上）。读**不可变命名 ref**（sibling-proof，同
+ * collectCommitsReal）。空/出错 → []（容错口径同 collectCommitsReal——git 故障不误判成违规）。
+ */
+export const diffNamesReal = async (
+  exec: ExecFn,
+  input: { hostRepoDir: string; branch: string; base: string },
+): Promise<string[]> => {
+  const r = await exec(
+    'git',
+    ['diff', '--name-only', `${input.base}...refs/heads/${input.branch}`],
+    { cwd: input.hostRepoDir, env: GIT_ENV },
+  )
+  if (r.exitCode !== 0) return []
+  const lines = r.stdout.trim()
+  if (!lines) return []
+  return lines.split('\n').map((f) => f.trim()).filter((f) => f !== '')
+}
+
 /** git-common-dir 解析（worktree 的 .git 是 gitfile stub，锁必须落真 .git 公共目录）。 */
 const resolveLockDir = async (exec: ExecFn, hostRepoDir: string): Promise<string> => {
   const r = await exec('git', ['rev-parse', '--git-common-dir'], { cwd: hostRepoDir, env: GIT_ENV })
