@@ -29,8 +29,13 @@ export interface WorkflowEditorViewProps {
   /**
    * 主 snapshot（App 的 useSnapshot() 产出，与 AfkWorkbench.tsx 的同名 prop 是同一份数据源）：
    * 引用计数（评审 P2-14 前半，Task 14）——行 meta「N 相位 · M 门 · K 张引用」与删除确认弹窗的
-   * 引用数红字警示，K 值纯前端算，不新增任何网络请求。root 语境同 AfkWorkbench.tsx
-   * contextChanges() 一致的既有约定（''=聚合全部 ok 项目，非空=只看该项目），不重新发明。
+   * 引用数红字警示，K 值纯前端算，不新增任何网络请求。
+   * 评审修复轮：K 只计非 archived 的 change（archived 后不再产生 transition/
+   * internal-skill-gate 调用，计入会把安全删除吓退）；root 过滤收敛为单项目口径
+   * （p.root === root 精确匹配）——本视图不是 AfkWorkbench.tsx 那种多项目聚合视图，
+   * root===''聚合语境本就被 names 数据源（GET /api/workflows?root=，单项目 API）的既有 404
+   * 错误页挡住（load() 的 error 分支），refCounts 不需要单独实现一套聚合语义（上一轮"与
+   * AfkWorkbench.tsx contextChanges() 完全同源"的表述不准确，此处更正）。
    * 缺省/null → 引用数一律按 0 计（不阻塞列表本身渲染，只是引用数信息暂缺）。
    */
   snapshot?: Snapshot | null
@@ -66,16 +71,23 @@ export function WorkflowEditorView({ root, onOpen, snapshot = null }: WorkflowEd
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const rootRef = useRef<HTMLElement>(null)
 
-  // 引用计数（评审 P2-14 前半，Task 14）：root 语境同 AfkWorkbench.tsx 的 contextChanges()
-  // 一致的既有约定（''=聚合全部 ok 项目，非空=只看该项目），不重新发明 root 过滤语义。
-  // changeWorkflow() 处理 change 未设 workflow 字段时回落到 'default' 的既有规则，逐字复用。
+  // 引用计数（评审 P2-14 前半，Task 14；评审修复轮收敛口径）：本视图是单项目视图（数据源
+  // GET /api/workflows?root= 本就是单项目 API），root 过滤严格按 p.root === root 精确匹配，
+  // 不再仿 AfkWorkbench.tsx contextChanges() 那样在 root===''时聚合全部项目——root===''时
+  // names 数据源本就 404（见上方 snapshot prop JSDoc），refCounts 单留聚合分支是本视图实际
+  // 到达不了的死代码，删掉。changeWorkflow() 处理 change 未设 workflow 字段时回落到 'default'
+  // 的既有规则，逐字复用。archived change 跳过不计：判据同 inbox/inbox.ts 的
+  // truthy(c.archived)（c.archived === 'true'，与 isAwaitingDecision 既有约定同款；
+  // inbox.ts 的 truthy 是未导出的模块内部函数，这里就地写同款字面判断，不为此扩大
+  // inbox.ts 的导出面）。
   const refCounts = useMemo(() => {
     const counts = new Map<string, number>()
     if (!snapshot) return counts
     for (const p of snapshot.projects) {
       if (!p.ok) continue
-      if (root !== '' && p.root !== root) continue
+      if (p.root !== root) continue
       for (const c of p.changes) {
+        if (c.archived === 'true') continue
         const wf = changeWorkflow(c)
         counts.set(wf, (counts.get(wf) ?? 0) + 1)
       }

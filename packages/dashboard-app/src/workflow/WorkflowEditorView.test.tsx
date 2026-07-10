@@ -185,3 +185,55 @@ describe('WorkflowEditorView 列表行信息量（评审 P2-14 前半，Task 14�
     expect(screen.queryByText(/张 change 正在引用/)).not.toBeInTheDocument()
   })
 })
+
+// 评审修复轮（Task 14 评审 Important A/B）：refCounts 此前遍历全部 change（含 archived）、
+// root===''时仿 AfkWorkbench.tsx contextChanges() 聚合全部项目——两处口径都会导致引用数
+// 虚高/跨项目串号，把本该安全的删除操作吓退，或把不相关项目的引用数错记到当前项目名下。
+describe('WorkflowEditorView 引用计数口径修正（评审修复轮，Task 14）', () => {
+  it('引用计数排除 archived：1 张活跃 + 2 张 archived 引用同一 workflow → 行 meta 与删除警示都只算 1', async () => {
+    const changes = [
+      makeChange('c0', 'build', { fields: { workflow: 'onboarding' } }), // 活跃
+      makeChange('c1', 'build', { fields: { workflow: 'onboarding' }, archived: 'true' }),
+      makeChange('c2', 'build', { fields: { workflow: 'onboarding' }, archived: 'true' }),
+    ]
+    const snapshot = makeSnapshot([makeProject(ROOT, changes)])
+    renderView(vi.fn(), snapshot)
+    await waitFor(() => expect(screen.getByTestId('wf-meta-onboarding')).toBeInTheDocument())
+    // 旧代码不检查 archived，会把 3 张全计入（'2 相位 · 1 门 · 3 张引用'）。
+    expect(screen.getByTestId('wf-meta-onboarding').textContent).toBe('2 相位 · 1 门 · 1 张引用')
+
+    fireEvent.click(screen.getAllByRole('button', { name: '删除' })[0]!) // 第一项 = onboarding
+    expect(screen.getByText('1 张 change 正在引用')).toBeInTheDocument()
+  })
+
+  it('引用计数收敛单项目口径：root="" 渲染时严格按 p.root===root 精确匹配，不聚合其它项目', async () => {
+    global.fetch = vi.fn(async (url: string) => {
+      if (url === '/api/workflows?root=') {
+        return new Response(JSON.stringify({ names: ['onboarding'] }), { status: 200 })
+      }
+      if (url === '/api/workflows/onboarding?root=') {
+        return new Response(JSON.stringify(ONBOARDING_DEF), { status: 200 })
+      }
+      throw new Error(`unexpected fetch ${url}`)
+    }) as unknown as typeof fetch
+    // "当前项目"对应组件本次以 root=''渲染（root===''在真实浏览器里 names 数据源本就 404、
+    // 走既有错误页，此处纯粹隔离验证 refCounts 这个 useMemo 内部的过滤条件，不代表要覆盖或
+    // 依赖那条既有 404 行为——见 WorkflowEditorView.tsx snapshot prop 的 JSDoc）；另一个项目
+    // '/tmp/proj-b' 是不同 root，同名 workflow 也有引用，不应计入当前项目的引用数。
+    const snapshot = makeSnapshot([
+      makeProject('', [makeChange('c0', 'build', { fields: { workflow: 'onboarding' } })]),
+      makeProject('/tmp/proj-b', [
+        makeChange('c1', 'build', { fields: { workflow: 'onboarding' } }),
+        makeChange('c2', 'build', { fields: { workflow: 'onboarding' } }),
+      ]),
+    ])
+    render(
+      <I18nProvider>
+        <WorkflowEditorView root="" onOpen={vi.fn()} snapshot={snapshot} />
+      </I18nProvider>,
+    )
+    await waitFor(() => expect(screen.getByTestId('wf-meta-onboarding')).toBeInTheDocument())
+    // 旧代码 root===''时聚合全部 ok 项目，会把两个项目的 change 数合并（'2 相位 · 1 门 · 3 张引用'）。
+    expect(screen.getByTestId('wf-meta-onboarding').textContent).toBe('2 相位 · 1 门 · 1 张引用')
+  })
+})
