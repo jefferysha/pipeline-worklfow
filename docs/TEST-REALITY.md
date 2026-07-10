@@ -363,4 +363,127 @@ iteration-35）**：
   （到底），零 page error。**过程教训**：真机脚本第一版断言 `row.textContent.includes('L1')`
   假阳性——「降档 → L1」按钮文案本身含 L1，改为查 `.loop-level b` 徽章真值。
 
+### 2026-07-10 · 视觉重塑+交互深化收口追记
+
+（对照评审快照 `.impeccable/critique/2026-07-09T07-42-21Z__packages-dashboard-app-src.md`
+—— `docs/superpowers/plans/2026-07-09-openai-trellis-restyle.md`〔19 任务〕+ 计划落地前
+3 项独立速修，逐条改判。P0/P1 编号沿用该评审在计划与提交历史里实际使用的标签——P0 与
+评审原文 1:1；P1 标签 5/6/8/9/10/11 对应评审原文 P1 列表第 6/7/8/9/10/11 条，P1-7 不是
+评审 P1 列表的独立条目，而是 Design Health Score 启发式表格第 1 行「AFK/Loops 静止快照
+无刷新」分句与 P0-3 的重复引用，随 P0-3 同一次修复一并处置，非另一个缺口。）
+
+**P0（5/5 已闭）**
+
+- **P0-1 已闭**（Task 6/7）：收件箱 gate 行零决策证据——`inbox/evidence.ts::gateEvidence`
+  纯函数按当前 gate 相位映射证据字段（verify 门 verify_result/agent_review_result/
+  codex_review_result + verification_report/build_sha；explore/spec 门 design_doc/plan；
+  未产出显式`未产出`pending 占位，不静默剔除）+ `ChangeDetailCard` 详情卡（证据格/产物/
+  语境/全边动作条）+ InboxView 行内证据 chips、j/k/Enter/Esc 键盘。
+- **P0-2 已闭**（Task 9）：看板卡片死元素（role=button 但 click/Enter/Space 三路无
+  反应的 ARIA 谎言）——点击/键盘打开同一 `ChangeDetailCard`，`draggingRef` 隔离拖拽
+  与点击互斥。
+- **P0-3 已闭**（Task 12，P1-7 随附处置见上）：AFK 日志冻结（选中拉一次永不更新，
+  无轮询无刷新钮）——`useAfkLog` running 态 2.5s 轮询 + 跟随尾部开关 + 手动刷新钮；
+  跨项目混列补 root 徽章 + currentRoot 过滤；挂队自由文本改 `<datalist>` 识别化。
+- **P0-4 已闭（计划落地前独立速修，`0a7204d`，早于 plan 定稿 `be90315`）**：编辑器
+  保存成功后 `invalidateWorkflowRules` 零调用——一行接线补上，收件箱/看板保存后
+  即时见新规则，不再需要整页刷新。
+- **P0-5 已闭**（Task 3/4）：注册对话框陷阱（无 role/无取消/backdrop 不关/Esc 不关，
+  真机证实唯一逃逸是刷新页面）——统一 `<Dialog>` 组件落地（Esc/初焦点/Tab 困笼〔评审
+  修复排除 disabled/hidden 逃逸口〕/模块级 LIFO 栈防多实例串扰/卸载焦点归位），全部
+  7 处手写 backdrop 迁移（含过程中发现计划漏记的第 8 处——`StepDetailPanel` 字段
+  弹窗，移交 Task 15 补齐）。
+
+**P1（7/7 标签已闭，对应评审原文 6 条 P1 列表项）**
+
+- **P1-5 部分已闭（计划落地前独立速修 `8a5de4d`）**：critique 原文第 6 条含两个
+  分句——「guard 失败 detail[] 被 client 丢弃只剩首行」**已闭**（`api/client.ts`
+  改透传全部违规行，用户不再「修一条→再撞下一条」）；「无转换前置预览（qk 钮不带
+  门票状态）」**仍未处置**——`InboxView.tsx`/`BoardView.tsx` 的 `qk__btn` 快捷转换
+  按钮目前仍只按 `planned.backward` 分蓝/红两色，不带任何门禁前置检查或 tooltip，
+  本轮 19 任务未见涉及这半句的实现，如实标记未闭而非笼统报「已闭」。
+- **P1-6 已闭**（Task 13）：Loops budget.remaining 取到不渲染/熔断态无下一步/升 L3
+  全自动无确认（风险倒挂）——预算行+就绪构成行+熔断 tint 说明块+升档 Dialog 确认
+  （降档保持直发，风险改按后果而非「哪个功能先写」排序）。
+- **P1-8 已闭**（Task 15）：画布脏状态零守卫，返回即静默丢编辑，保存钮无 dirty
+  指示——`dirty` 位（JSON 快照浅比较）+ 未保存 chip + 返回确认 Dialog + 保存钮
+  dirty 才实底。
+- **P1-9 已闭**（Task 1 + Task 3）：对话框键盘礼仪全缺（Esc/autoFocus/困笼/归位，
+  全 src 零 keydown）由 `<Dialog>` 组件本体兑现；「两个文本输入框无可见焦点样式
+  （outline:none 且 box-shadow 全透明）」由 Task 1 token 替换时补的全局
+  `:focus-visible`（`--ring` 3px，`.input`/`.select` 专属规则 + 兜底通用规则）
+  一并解决，已在 `styles.ts` 核实存在。
+- **P1-10 已闭（前半计划落地前独立速修 `528c292`；后半 Task 16）**：设置两处陈旧
+  文案正面误导（「逗号分隔」描述已退役文本框、「待 M3 接线」早已接线）改真相；
+  穿梭框此前 `.modal/.split` 无 CSS 裸渲染、条目点击无反应——Dialog 化 + 点击
+  移动 + 真样式。
+- **P1-11 已闭**（Task 10）：拖拽合法性不前示，任何列都亮 target、非法 drop
+  静默——dragStart 按 `plannedTransition` 逐列判 legal/illegal 类，非法 drop
+  shake 300ms + toast 一句解释。
+
+**本轮未处置（P2/P3，spec `docs/superpowers/specs/2026-07-09-openai-trellis-restyle-
+design.md` §5 已登记 YAGNI，非缺口，不重复挂 G 号）**：零过滤/搜索/批量/撤销重做
+（spec 明确非目标）；键盘数字键触发出边（P2 尾巴，plan self-review 已登记未排）；
+跨项目合并同名 workflow 列集（语义不可行，spec 明确判定）。
+
+**新登记（如实追加，非静默留白）**：
+
+- **G21**：change 详情卡（`ChangeDetailCard`）无历史区——spec §5 明确「待 history
+  读端点」：本轮只渲染 snapshot 可得的当前态（证据/产物/语境），无「最近 N 条变更」
+  时间线。现状是 server 侧 history 仍是纯写入面（CLI best-effort 追加 JSONL，
+  `server/src/transition.ts` 也不写，见下方 G20 仍开放条目）、全仓找不到任何
+  `GET .../history` 读端点——补历史区需要先补这个读端点，非本轮 19 任务范围。
+- **G22**：AFK 日志轮询用 2.5s `setInterval` 而非 SSE——spec §5 明确登记「AFK 日志
+  SSE 化：轮询够用，登记 G 项待评估」，是本轮有意的设计决策而非疏漏。相关联的既有
+  架构空白（Task 12 minor deferred 重申，非本轮引入）：AFK 卡片 running→completed
+  的状态感知依赖用户下一次 `doAction`（取消/重试）触发的 resync，组件本身不轮询
+  `/api/afk/snapshot` 顶层状态——P0-3 本轮修的是日志**内容**轮询，不是运行**状态**
+  轮询；若某次运行在两次用户操作之间的空档静默完成，状态徽章会滞后到下一次交互
+  才更新。
+- **G20 仍开放（2026-07-09 登记，本轮 19 任务未处置）**：`server/src/transition.ts::
+  performTransition` 不写 history 记账，dashboard 驱动的相位推进在 history 里不留
+  痕迹（同一 change 的推进按操作入口分裂账本）——本计划范围是视觉重塑+交互深化，
+  未涉及 history 记账链路，该缺口维持登记时状态，待用户勾选处置。
+- **G23**（本轮 `.superpowers/sdd/progress.md` 计划段 minor deferred 台账择要，只
+  登记有复发风险的模式性问题，措辞/命名类瑕疵不进）：
+  - **testing-library `defaultIgnore` 绕过 `within()` 陷阱**（Task 15，
+    `WorkflowCanvas.test.tsx`）：Task 15 新增的阶段卡横排让每个 step 的
+    id/label/gate 徽章文字在 DOM 里重复一份（阶段卡+xyflow 节点内并存），本文件
+    约 40 处既有裸 `getByText` 查询假设「文本只有一份」逐处报错；若逐处改写成
+    `within(...)` 会让 diff 爆炸性膨胀，改用 testing-library 官方
+    `configure({ defaultIgnore })`（ByText 系专属排除选择器，`beforeAll` 覆盖
+    `.stage-card,.stage-card *,.side-col,.side-col *`、`afterAll` 复原）全局解决。
+    已知残留 footgun（Task 15 原始记录）：此 `defaultIgnore` 配置只在本测试文件的
+    `beforeAll/afterAll` 生效——任何其它测试文件若也渲染 `<WorkflowCanvas>` 并对
+    同类重复文本做裸 `getByText` 查询，不会继承这个排除，会重演同样的多重匹配
+    报错；目前无第二个文件这样做，是潜在复发点而非当前故障。
+  - **聚合模式卡片级 testid/name 比对不含 root**（Task 11 minor deferred）：全部
+    项目聚合视图下，同名 change（不同 root）的看板卡片 `board-card-<name>` testid
+    与盖章比对逻辑仍只用 `name`，不拼 root——功能层已用 `group.root` 区分互不
+    误操作，只是 DOM 查询主键理论上可碰撞，罕见边界，未来任何新增查询若照抄现有
+    testid 模式仍会踩中同一个坑。
+  - **`rulesKey` 键分隔符是字面控制字符，消费方必须走函数、禁止手工拼接**
+    （Task 8 既有设计，本轮真实复发一次）：Task 12 的 `useAfkLog` 请求级乱序 guard
+    键构造摹仿同一拼接模式，独立引入同一类源文件二进制化问题（`git diff`/`grep`
+    对其静默失明），Task 12 review 当场自查自纠（`ee2bb20`），过程详见
+    `docs/loops/progress.md` iteration-39 行「过程教训」。任何未来消费方如果绕开
+    `rulesKey()` 手工拼接 root+wf 键，存在重演同一类源文件污染事故的风险。
+  - **`WorkflowEditorView` 列表行 gate 计数把 review+confirm 合并成一个数字**
+    （Task 14 minor deferred）：与画布上分别显示两种徽章的语汇不一致，产品裁决项，
+    未违反功能正确性，但两处呈现口径不统一，后续若要在列表行拆分成两个数字，是
+    已知的一致性欠账而非新发现。
+  - **`closePending`/`guardedClose` 闭包关闭模式 + `deferred<T>()` 辅助函数均已
+    见 4 处局部拷贝**（Task 3/4/15 累计，各消费点各自独立实现同一形状）：均未抽
+    共享 testkit/helper，第 5 处出现时应该抽——继续原样复制会持续增加维护漂移
+    风险（改一处逻辑需要记得同步改另外 4 处），登记以防遗忘。
+  - **Dialog LIFO 栈「最后挂载=最上层」假设有已知边界**（Task 3 重审 Important-
+    边界发现，Task 4 以 JSDoc 登记 + 「迁移时禁止同 commit 首挂父子 Dialog」告诫）：
+    在同一个 commit 里真嵌套挂载父子两个 `<Dialog>` 时不成立（React 子组件 effect
+    先于父组件执行，LIFO 栈顺序与挂载顺序直觉相反）。当前全仓零调用方触发这个
+    场景，约束只靠代码注释而非测试强制——后续任何场景如果需要嵌套弹窗，需要人工
+    记得这条边界，无自动化护栏会在违反时报警。
+
+> 本条追记不改变上方「登记的覆盖缺口」小节任何既有条目的状态；G14/G15/G16/G17/G18/
+> G19 系列缺口的收编状态见各自章节，未被本轮 19 任务触及。
+
 > 缺口在对应里程碑收编时清零；新缺口发现即追加，绝不删除未解决项。
