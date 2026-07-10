@@ -725,6 +725,101 @@ describe('POST /api/loops/level —— 升降档写回', () => {
   })
 })
 
+describe('POST /api/loops/update —— loops.yaml 字段写回（v5 T3）', () => {
+  async function seedLoops(root: string): Promise<void> {
+    const { mkdir, writeFile } = await import('node:fs/promises')
+    await mkdir(join(root, '.pipeline'), { recursive: true })
+    await writeFile(join(root, '.pipeline', 'loops.yaml'), SEED_LOOP_YAML_READY_FOR_L2, 'utf8')
+  }
+
+  it('带 token + root 已注册 → 200 且真改盘（cadence + denylist）', async () => {
+    const h = await start()
+    await seedLoops(h.root)
+    const r = await reqPost(
+      h.port,
+      '/api/loops/update',
+      { root: h.root, id: 'build-loop', patch: { cadence: '2h', denylist: ['secrets/**'] } },
+      { headers: { Authorization: `Bearer ${h.token}` } },
+    )
+    expect(r.status).toBe(200)
+    expect(r.json<{ ok: boolean }>().ok).toBe(true)
+    const text = await readFile(join(h.root, '.pipeline', 'loops.yaml'), 'utf8')
+    expect(text).toContain('cadence: 2h')
+    expect(text).toContain('denylist:')
+    expect(text).toContain('- secrets/**')
+  })
+
+  it('无 token → 401', async () => {
+    const h = await start()
+    const r = await reqPost(h.port, '/api/loops/update', { root: h.root, id: 'build-loop', patch: { cadence: '2h' } })
+    expect(r.status).toBe(401)
+  })
+
+  it('root 不在机器级注册表 → 404', async () => {
+    const h = await start()
+    const r = await reqPost(
+      h.port,
+      '/api/loops/update',
+      { root: '/tmp/not-registered', id: 'build-loop', patch: { cadence: '2h' } },
+      { headers: { Authorization: `Bearer ${h.token}` } },
+    )
+    expect(r.status).toBe(404)
+  })
+
+  it('未知 loop id → 400', async () => {
+    const h = await start()
+    await seedLoops(h.root)
+    const r = await reqPost(
+      h.port,
+      '/api/loops/update',
+      { root: h.root, id: 'ghost-loop', patch: { cadence: '2h' } },
+      { headers: { Authorization: `Bearer ${h.token}` } },
+    )
+    expect(r.status).toBe(400)
+  })
+
+  it('schema 校验失败（risk 非枚举值）→ 400，不改盘', async () => {
+    const h = await start()
+    await seedLoops(h.root)
+    const before = await readFile(join(h.root, '.pipeline', 'loops.yaml'), 'utf8')
+    const r = await reqPost(
+      h.port,
+      '/api/loops/update',
+      { root: h.root, id: 'build-loop', patch: { risk: 'ultra' } },
+      { headers: { Authorization: `Bearer ${h.token}` } },
+    )
+    expect(r.status).toBe(400)
+    expect(await readFile(join(h.root, '.pipeline', 'loops.yaml'), 'utf8')).toBe(before)
+  })
+
+  it('patch 含 autonomy_level → 400（升降档只走 /api/loops/level）', async () => {
+    const h = await start()
+    await seedLoops(h.root)
+    const r = await reqPost(
+      h.port,
+      '/api/loops/update',
+      { root: h.root, id: 'build-loop', patch: { autonomy_level: 'L2' } },
+      { headers: { Authorization: `Bearer ${h.token}` } },
+    )
+    expect(r.status).toBe(400)
+  })
+
+  it('root/id 缺失或 patch 非对象/空对象 → 400', async () => {
+    const h = await start()
+    const cases = [
+      { id: 'build-loop', patch: { cadence: '2h' } },
+      { root: h.root, patch: { cadence: '2h' } },
+      { root: h.root, id: 'build-loop' },
+      { root: h.root, id: 'build-loop', patch: 'cadence=2h' },
+      { root: h.root, id: 'build-loop', patch: {} },
+    ]
+    for (const body of cases) {
+      const r = await reqPost(h.port, '/api/loops/update', body, { headers: { Authorization: `Bearer ${h.token}` } })
+      expect(r.status).toBe(400)
+    }
+  })
+})
+
 describe('POST /api/afk/:name/cancel —— 取消运行中的 automation 任务（afk-workbench Task 4）', () => {
   it('running 状态且 automation_sandbox 非空 → 落 .cancel-requested 标记 + docker kill + 200', async () => {
     const h = await start()
@@ -1220,6 +1315,109 @@ describe('DELETE /api/workflows/:name —— 删除自定义 workflow（GOAL E8�
       { headers: { Authorization: `Bearer ${h.token}` } },
     )
     expect(r.status).toBe(400)
+  })
+})
+
+// ═══════════ v5 T5（决议#2）：阶段×hook 开关矩阵端点（.pipeline/hooks.json）═══════════
+
+describe('GET /api/hooks —— hook 元数据 + 阶段×hook 开关矩阵（v5 T5 / 决议#2）', () => {
+  it('缺 .pipeline/hooks.json → 200 空矩阵（缺省全启用 fail-open）+ 全量 hook 元数据', async () => {
+    const h = await start()
+    const r = await reqGet(h.port, `/api/hooks?root=${encodeURIComponent(h.root)}`)
+    expect(r.status).toBe(200)
+    const body = r.json<{ ok: boolean; hooks: Array<{ id: string; event: string; configurable: boolean }>; matrix: Record<string, false> }>()
+    expect(body.ok).toBe(true)
+    expect(body.matrix).toEqual({})
+    expect(body.hooks.map((x) => x.id).sort()).toEqual([
+      'breadcrumb', 'confirm-clear', 'decision-recorder', 'gate',
+      'interactive-skill-gate', 'router', 'session-start', 'skill-tracker',
+    ])
+    const gate = body.hooks.find((x) => x.id === 'gate')!
+    expect(gate.configurable).toBe(false)
+    expect(gate.event).toBe('PreToolUse')
+  })
+
+  it('root 未注册 → 404（信任锚，同兄弟端点）', async () => {
+    const h = await start()
+    const r = await reqGet(h.port, `/api/hooks?root=${encodeURIComponent('/tmp/not-registered-root')}`)
+    expect(r.status).toBe(404)
+  })
+
+  it('手改文件里的强制常开项（gate.*: false）被过滤，不回显给 UI', async () => {
+    const { mkdir, writeFile } = await import('node:fs/promises')
+    const h = await start()
+    await mkdir(join(h.root, '.pipeline'), { recursive: true })
+    await writeFile(
+      join(h.root, '.pipeline', 'hooks.json'),
+      JSON.stringify({ version: 1, matrix: { 'gate.build': false, 'router.build': false } }, null, 2),
+      'utf8',
+    )
+    const r = await reqGet(h.port, `/api/hooks?root=${encodeURIComponent(h.root)}`)
+    expect(r.json<{ matrix: Record<string, false> }>().matrix).toEqual({ 'router.build': false })
+  })
+})
+
+describe('POST /api/hooks —— 阶段×hook 开关写回（v5 T5 / 决议#2）', () => {
+  it('无 token → 401（同 B5 写端点纵深）', async () => {
+    const h = await start()
+    const r = await reqPost(h.port, '/api/hooks', { root: h.root, hook: 'router', phase: 'build', enabled: false })
+    expect(r.status).toBe(401)
+  })
+
+  it('disable → 200，真落盘 .pipeline/hooks.json（canonical 一键一行，sh 侧 grep -F 契约）；GET round-trip', async () => {
+    const h = await start()
+    const r = await reqPost(
+      h.port, '/api/hooks',
+      { root: h.root, hook: 'router', phase: 'build', enabled: false },
+      { headers: { Authorization: `Bearer ${h.token}` } },
+    )
+    expect(r.status).toBe(200)
+    expect(r.json<{ ok: boolean }>().ok).toBe(true)
+    const text = await readFile(join(h.root, '.pipeline', 'hooks.json'), 'utf8')
+    expect(text).toContain('"router.build": false')
+    expect(text).toMatch(/^\s*"router\.build": false,?$/m)
+    const g = await reqGet(h.port, `/api/hooks?root=${encodeURIComponent(h.root)}`)
+    expect(g.json<{ matrix: Record<string, false> }>().matrix).toEqual({ 'router.build': false })
+  })
+
+  it('enable=true → 键删除（矩阵只存禁用项），GET 回到全默认启用', async () => {
+    const h = await start()
+    const auth = { headers: { Authorization: `Bearer ${h.token}` } }
+    await reqPost(h.port, '/api/hooks', { root: h.root, hook: 'router', phase: 'build', enabled: false }, auth)
+    const r = await reqPost(h.port, '/api/hooks', { root: h.root, hook: 'router', phase: 'build', enabled: true }, auth)
+    expect(r.status).toBe(200)
+    const g = await reqGet(h.port, `/api/hooks?root=${encodeURIComponent(h.root)}`)
+    expect(g.json<{ matrix: Record<string, false> }>().matrix).toEqual({})
+  })
+
+  it('gate / interactive-skill-gate → 400 强制常开（决议#2：写端点拒绝），且不落盘', async () => {
+    const h = await start()
+    const auth = { headers: { Authorization: `Bearer ${h.token}` } }
+    for (const hook of ['gate', 'interactive-skill-gate']) {
+      const r = await reqPost(h.port, '/api/hooks', { root: h.root, hook, phase: 'build', enabled: false }, auth)
+      expect(r.status).toBe(400)
+      expect(r.json<{ error: string }>().error).toContain('强制常开')
+    }
+    expect(existsSync(join(h.root, '.pipeline', 'hooks.json'))).toBe(false)
+  })
+
+  it('未知 hook → 400；阶段名非法字符 → 400；enabled 非布尔 → 400；body 非对象 → 400', async () => {
+    const h = await start()
+    const auth = { headers: { Authorization: `Bearer ${h.token}` } }
+    expect((await reqPost(h.port, '/api/hooks', { root: h.root, hook: 'ghost', phase: 'build', enabled: false }, auth)).status).toBe(400)
+    expect((await reqPost(h.port, '/api/hooks', { root: h.root, hook: 'router', phase: 'a.b', enabled: false }, auth)).status).toBe(400)
+    expect((await reqPost(h.port, '/api/hooks', { root: h.root, hook: 'router', phase: 'build', enabled: 'no' }, auth)).status).toBe(400)
+    expect((await reqPost(h.port, '/api/hooks', undefined, { ...auth, rawBody: '"just a string"' })).status).toBe(400)
+  })
+
+  it('root 未注册 → 404（信任锚先于写盘）', async () => {
+    const h = await start()
+    const r = await reqPost(
+      h.port, '/api/hooks',
+      { root: '/tmp/not-registered-root', hook: 'router', phase: 'build', enabled: false },
+      { headers: { Authorization: `Bearer ${h.token}` } },
+    )
+    expect(r.status).toBe(404)
   })
 })
 

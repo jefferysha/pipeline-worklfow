@@ -26,8 +26,9 @@ import { fileURLToPath } from 'node:url'
 import { applyLevelChange, createFlowEngine, createHistoryWriter, createStateStore, loadManifest, loadRegistry, loadWorkflow, TRACKS } from '@pipeline-lite/kernel'
 import type { FlowEngine, GraduationFs, StateStore, Track, WorkflowDef } from '@pipeline-lite/kernel'
 import { buildAfkLog, buildAfkSnapshot, cancelAfkRun, enqueueAfkRun, readAfkRunLog, retryAfkRun } from './afk.js'
-import { buildLoopsSnapshot } from './loops.js'
+import { applyLoopsUpdate, buildLoopsSnapshot } from './loops.js'
 import { readMandatorySkills, validateMandatorySkillsBody, writeMandatorySkills } from './config.js'
+import { HOOK_METAS, readHooksMatrix, validateHookToggleBody, writeHookToggle } from './hooksConfig.js'
 import { resolveServerPaths } from './paths.js'
 import { addProjectToRegistry, removeProjectFromRegistry } from './projects.js'
 import { deleteWorkflowForApi, listWorkflowNames, readWorkflowForApi, writeWorkflowForApi, WorkflowNotFoundError } from './workflows.js'
@@ -429,6 +430,21 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
         return sendJson(res, 500, { ok: false, error: errMsg(e) })
       }
     }
+    // ── v5 T5（决议#2）：GET /api/hooks —— hook 元数据 + 阶段×hook 开关矩阵 ──
+    //    数据源 <root>/.pipeline/hooks.json（只存禁用项；缺文件/损坏 → 空矩阵 = 缺省全启用，
+    //    fail-open，见 hooksConfig.ts 头注释）。root 信任锚同 /api/workflows；读端点对齐
+    //    /api/config、/api/skills/registry：本机回环 GET 不鉴权。
+    if (path === '/api/hooks') {
+      const root = new URL(req.url ?? '/', 'http://localhost').searchParams.get('root') ?? ''
+      if (!dedupeRoots(registry()).includes(resolvePath(root))) {
+        return sendJson(res, 404, { ok: false, error: 'root 未在机器级项目注册表中' })
+      }
+      try {
+        return sendJson(res, 200, { ok: true, hooks: HOOK_METAS, matrix: readHooksMatrix(root) })
+      } catch (e) {
+        return sendJson(res, 500, { ok: false, error: errMsg(e) })
+      }
+    }
     // ── workflow 编辑器（GOAL E8）：GET /api/workflows —— 列出自定义 workflow（排除 default）──
     if (path === '/api/workflows') {
       const root = new URL(req.url ?? '/', 'http://localhost').searchParams.get('root') ?? ''
@@ -594,6 +610,62 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
       // 映射非 2xx，否则前端只看 res.ok 会把一次真实拒绝误当成功（同 cancel/retry 两个兄弟
       // 端点的 `result.ok ? 200 : 400` 处置一致，这里字段名是 exitCode 不是 ok，语义对齐）。
       return sendJson(res, result.exitCode === 0 ? 200 : 400, result)
+    }
+
+    // ── loops 字段写端点：POST /api/loops/update（v5 T3 / 决议 #3 #12 存储侧）──
+    //    只 patch 已存在 loop 的标量/字符串数组字段（cadence/goal/budget.*/human_gates/
+    //    kill_criteria/allowlist/denylist 等，全集见 kernel loops/update.ts）；autonomy_level
+    //    不收——升降档必须走上面的 /api/loops/level 毕业制裁决，本端点是它的旁路禁区。
+    //    写回逻辑（文本手术 + 整文档 schema 重校验 + 读-判-写 CAS）见 loops.ts::applyLoopsUpdate。
+    if (path === '/api/loops/update') {
+      const rawBody = await readJsonBody(req)
+      // 同 /api/workflows/:name 的 body 形状前置校验：空/非对象 body 不提前拦会在属性访问处
+      // 抛 TypeError 走味成 500。
+      if (typeof rawBody !== 'object' || rawBody === null) {
+        return sendJson(res, 400, { ok: false, error: '请求体须为 JSON 对象' })
+      }
+      const b = rawBody as Record<string, unknown>
+      const root = typeof b.root === 'string' ? b.root : ''
+      const id = typeof b.id === 'string' ? b.id : ''
+      if (!root || !id) {
+        return sendJson(res, 400, { ok: false, error: 'root/id 必填' })
+      }
+      const patch = b.patch
+      if (typeof patch !== 'object' || patch === null || Array.isArray(patch) || Object.keys(patch).length === 0) {
+        return sendJson(res, 400, { ok: false, error: 'patch 须为非空 JSON 对象（字段名 → 新值）' })
+      }
+      // 信任锚：同 /api/loops/level、/api/change/<name>/transition 共用的「两侧规范化再比较」模式。
+      if (!dedupeRoots(registry()).includes(resolvePath(root))) {
+        return sendJson(res, 404, { ok: false, error: 'root 未在机器级项目注册表中' })
+      }
+      const result = await applyLoopsUpdate(root, id, patch as Record<string, unknown>)
+      return sendJson(res, result.ok ? 200 : 400, result)
+    }
+
+    // ── v5 T5（决议#2）：POST /api/hooks —— 阶段×hook 开关写回（.pipeline/hooks.json）──
+    //    gate / interactive-skill-gate 强制常开：validateHookToggleBody 直接 400（决议#2
+    //    「server 写端点拒绝、sh 侧忽略」的前半句）。enabled=true 删键、false 写键（矩阵只存
+    //    禁用项），落盘 canonical 一键一行供热路径 sh 纯 bash grep（CONTRACT §5.4）。
+    if (path === '/api/hooks') {
+      const rawBody = await readJsonBody(req)
+      const validated = validateHookToggleBody(rawBody)
+      if (!validated.ok) return sendJson(res, 400, { ok: false, error: validated.error })
+      const root = typeof (rawBody as Record<string, unknown>).root === 'string'
+        ? (rawBody as Record<string, unknown>).root as string
+        : ''
+      if (!root) {
+        return sendJson(res, 400, { ok: false, error: 'root 必填' })
+      }
+      // 信任锚：同 /api/loops/level、/api/workflows/:name 共用的「两侧规范化再比较」模式。
+      if (!dedupeRoots(registry()).includes(resolvePath(root))) {
+        return sendJson(res, 404, { ok: false, error: 'root 未在机器级项目注册表中' })
+      }
+      try {
+        writeHookToggle(root, validated.value)
+      } catch (e) {
+        return sendJson(res, 500, { ok: false, error: errMsg(e) })
+      }
+      return sendJson(res, 200, { ok: true, ...validated.value })
     }
 
     // ── workflow 编辑器（GOAL E8）：POST /api/workflows/:name —— 新建/覆盖 ──
