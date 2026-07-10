@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useT } from '../i18n'
 import { Dialog } from '../shell/Dialog'
 
@@ -31,6 +31,7 @@ export function SkillTransferModal({ selected, onSave, onCancel }: SkillTransfer
   const [chosen, setChosen] = useState<string[]>(selected)
   const [query, setQuery] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const searchRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     fetch('/api/skills/registry', { headers: { Accept: 'application/json' } })
@@ -52,13 +53,37 @@ export function SkillTransferModal({ selected, onSave, onCancel }: SkillTransfer
 
   // 点击与拖拽共用同一对纯函数（Task 16，评审 P1-10 后半）：点击即移动是主交互，HTML5 拖拽
   // 保留作为增强，onDragStart/onDrop 落到同一对 move 函数上，不是两套平行逻辑。两者对同一
-  // skill 重复调用都是幂等的（moveToChosen 有 includes 去重、moveToAvailable 的 filter 对
-  // 已不在列表里的项是安全 no-op），故不需要额外去重判断谁先触发。
+  // skill 重复调用都是幂等的——moveToChosen/moveToAvailable 现在对称地都以 includes 判断
+  // 是否真的需要移动，已经在目标栏的重复调用直接 return（不产生多余 setState/render），
+  // 故不需要额外去重判断谁先触发。（评审修复轮 Minor：moveToAvailable 此前少了这层
+  // includes 短路，全靠 filter 对不在列表里的项天然 no-op 兜底效果上等价，但要走一次
+  // setChosen([...]) 触发多余 re-render，此处补上与 moveToChosen 对称。）
+  //
+  // 评审修复轮（Important，焦点逃逸）：条目从一栏移到另一栏时，原 <button> 跨父节点重建
+  // （available/chosen 是两个不同的 <div>，React 视为不同父节点下的元素，不会复用/仅
+  // patch 同一 DOM 节点，旧节点直接被卸载）。若点击发生时它持有焦点，DOM 规范行为是卸载后
+  // 焦点回退到 document.body——逃出 Dialog 的 Tab 困笼（困笼只在 keydown 时改判下一跳该
+  // 给谁，接不住已经落到 body 的焦点；键盘用户连续移动多个条目，每次都会被弹出对话框外）。
+  // 修法：真的发生移动时，把焦点归位到搜索框（`.transfer__search`，全程挂载、不随条目增减
+  // 卸载，是栏内唯一稳定的焦点落点，且归位后用户可直接继续输入过滤或 Tab 回条目列表）。
+  //
+  // 时机选同步直调 `.focus()`，不用 requestAnimationFrame/setTimeout/useEffect：这里的
+  // moveToChosen/moveToAvailable 是从 onClick handler 内同步调用的，此刻 React 尚未把
+  // 本次 setState 提交到 DOM——被点击的旧 <button> 此时还在文档里，但 searchRef.current
+  // 指向的搜索框不随本次更新增减，是稳定节点，此处同步 focus() 它，焦点先一步移开；随后
+  // React 提交、移除旧 <button> 时它已不再持有焦点，不会触发"焦点节点被移除→回退 body"
+  // 的浏览器行为，全程不经过可观测的"先掉到 body 再抢回来"中间态。改用
+  // useEffect/rAF/setTimeout 要等 DOM 先提交完（旧节点先被移除、焦点先真的掉一次 body）
+  // 才能补救，效果上殊途同归但多绕一圈，故选更直接的同步方案。
   function moveToChosen(skill: string): void {
-    if (!chosen.includes(skill)) setChosen([...chosen, skill])
+    if (chosen.includes(skill)) return
+    setChosen([...chosen, skill])
+    searchRef.current?.focus()
   }
   function moveToAvailable(skill: string): void {
+    if (!chosen.includes(skill)) return
     setChosen(chosen.filter((s) => s !== skill))
+    searchRef.current?.focus()
   }
   function onDropToChosen(e: React.DragEvent): void {
     e.preventDefault()
@@ -95,6 +120,7 @@ export function SkillTransferModal({ selected, onSave, onCancel }: SkillTransfer
       }
     >
       <input
+        ref={searchRef}
         className="transfer__search"
         placeholder={t('skill_transfer.search_placeholder')}
         value={query}

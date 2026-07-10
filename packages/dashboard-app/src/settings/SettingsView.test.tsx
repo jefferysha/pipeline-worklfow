@@ -251,6 +251,36 @@ describe('SettingsView 矩阵 —— M3 config 写端点真接线（真 fetch + 
     expect(chosen.textContent).not.toContain('x')
   })
 
+  // Task 16 评审修复轮（Important）：点击移动后，原按钮跨父节点重建（available col → chosen
+  // col 是两个不同的 <div>，React 视为不同父节点下的元素，不会复用 DOM 节点，旧节点直接卸载）。
+  // 若卸载时它仍持有焦点，DOM 规范行为是焦点回退到 document.body——逃出 Dialog 的 Tab 困笼
+  // （困笼只在 keydown 时改判下一跳该给谁，接不住已经落到 body 的焦点；键盘用户连续移动多个
+  // 条目，每次都会被弹出对话框）。本条先钉住旧代码的红：条目点击前先真实拿到焦点（对齐"用户
+  // 点击时浏览器先聚焦目标元素"的真实前置状态），移动触发旧按钮卸载后，activeElement 不应
+  // 停在 document.body，应归位到对话框内仍可达的搜索框。
+  it('点击条目移动（导致原按钮卸载）后，焦点归位搜索框，不逃逸到 document.body', async () => {
+    stubConfigFetch({
+      capable: true,
+      mandatorySkills: { 'build.backend': ['old'] },
+      registrySkills: ['old', 'x'],
+    })
+    renderSettings()
+    fireEvent.click(screen.getByTestId('settings-tab-matrix'))
+    fireEvent.click(await screen.findByTestId('matrix-edit-build-backend'))
+
+    const available = await screen.findByTestId('skill-available')
+    await waitFor(() => expect(available.textContent).toContain('x'))
+
+    const item = screen.getByText('x')
+    item.focus()
+    expect(document.activeElement).toBe(item)
+
+    fireEvent.click(item) // 触发 moveToChosen，'x' 从左栏卸载
+
+    expect(document.activeElement).not.toBe(document.body)
+    expect(document.activeElement).toBe(screen.getByPlaceholderText('搜索…'))
+  })
+
   // Task 16：Dialog 的 Esc 关闭能力从 Task 4 起就有（onClose={onCancel}），本条不是红转绿，
   // 是回归钉——本任务要重构条目 markup（div→button）+ 接入点击，钉住 Esc 关闭仍然只读退出、
   // 不误触发保存 POST，防止重构过程中不小心把 onClose 接线弄丢。
