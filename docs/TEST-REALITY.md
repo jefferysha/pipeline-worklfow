@@ -487,3 +487,7 @@ design.md` §5 已登记 YAGNI，非缺口，不重复挂 G 号）**：零过滤
 > G19 系列缺口的收编状态见各自章节，未被本轮 19 任务触及。
 
 > 缺口在对应里程碑收编时清零；新缺口发现即追加，绝不删除未解决项。
+
+## 2026-07-11 追记(v5 交互重建 T19 收口)
+- G24(P2,新):AFK cancel 起步竞态窗口——running 置位与 automation_worktree/sandbox 写回之间 1-2s,窗口内 cancel kill 旧容器名打空,靠 .cancel-requested 标记在 settle 时兜底(取消意图最终达成,非阻塞)。修复建议:claim 时清旧字段或 cancel 校验字段新鲜度。
+- G22(AFK 轮询非 SSE)维持登记;G21 已闭(T1 history 读端点);G20 已闭(T1 server transition 记账)。
