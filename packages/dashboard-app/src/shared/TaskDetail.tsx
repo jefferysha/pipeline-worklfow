@@ -46,6 +46,9 @@ export interface TaskDetailProps {
   badge?: ReactNode
   /** 动作条按钮（props 化）；未传则不渲染动作条。 */
   actions?: ReactNode
+  /** 当前/失败阶段内容体尾部的宿主扩展区（T11 进度宿主的运行日志尾部；纯布局插槽，
+   *  同 actions 的 props 化纪律——组件不感知内容语义，零业务）。 */
+  curStageExtra?: ReactNode
   onClose?: () => void
   onToast?: (msg: string) => void
 }
@@ -134,6 +137,7 @@ export function TaskDetail({
   requirement,
   badge,
   actions,
+  curStageExtra,
   onClose,
   onToast,
 }: TaskDetailProps): JSX.Element {
@@ -385,7 +389,12 @@ export function TaskDetail({
                     ) : (
                       <div className="dt-none">{t('detail.stage_no_outputs')}</div>
                     ))}
-                  {(status === 'cur' || status === 'fail') && boxInner(st.chips)}
+                  {(status === 'cur' || status === 'fail') && (
+                    <>
+                      {boxInner(st.chips)}
+                      {curStageExtra}
+                    </>
+                  )}
                 </div>
               )
             })}
@@ -413,7 +422,12 @@ export function TaskDetail({
                       <span className="dtl-dim">{t('detail.fail_stopped_here', { n: attempts })}</span>
                     )}
                   </div>
-                  {(status === 'cur' || status === 'fail') && renderBox(st.chips)}
+                  {(status === 'cur' || status === 'fail') && (
+                    <>
+                      {renderBox(st.chips)}
+                      {curStageExtra}
+                    </>
+                  )}
                 </div>
               )
             })}
@@ -425,6 +439,7 @@ export function TaskDetail({
           <div className="dtl-fallback">
             <p className="dt-none">{t('detail.stages_unknown')}</p>
             {state === 'failed' && renderBox([])}
+            {curStageExtra}
             <div className="dtl-r">
               {artifactChips(change).map((c) => (
                 <StageChip key={c.key} chip={c} onCopy={copy} />

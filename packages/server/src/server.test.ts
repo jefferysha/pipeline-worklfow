@@ -941,6 +941,65 @@ describe('POST /api/afk/:name/retry —— 重试 failed/conflict/paused 任务�
   })
 })
 
+describe('POST /api/afk/:name/dismiss —— 放弃 failed/conflict 任务（v5-T11，决议 #4）', () => {
+  it.each(['failed', 'conflict'])('automation=%s → CAS 回 off + 200，现场字段（last_error/worktree/attempts）原样保留', async (from) => {
+    const h = await start()
+    await h.store.set(h.changeDir, 'automation', from)
+    await h.store.set(h.changeDir, 'automation_attempts', '3')
+    await h.store.set(h.changeDir, 'automation_last_error', 'verify 失败：2 个用例未过')
+    await h.store.set(h.changeDir, 'automation_worktree', h.worktreeDir)
+    const r = await reqPost(h.port, `/api/afk/${h.name}/dismiss`, { root: h.root }, { headers: { Authorization: `Bearer ${h.token}` } })
+    expect(r.status).toBe(200)
+    expect(await h.store.get(h.changeDir, 'automation')).toBe('off')
+    // 现场保留（决议 #4）：放弃只退出自动化，事后尸检线索一个不清
+    expect(await h.store.get(h.changeDir, 'automation_attempts')).toBe('3')
+    expect(await h.store.get(h.changeDir, 'automation_last_error')).toBe('verify 失败：2 个用例未过')
+    expect(await h.store.get(h.changeDir, 'automation_worktree')).toBe(h.worktreeDir)
+  })
+
+  it.each(['running', 'paused', 'queued', 'off'])('automation=%s → 400（仅 failed/conflict 可放弃），且不改盘', async (from) => {
+    const h = await start()
+    await h.store.set(h.changeDir, 'automation', from)
+    const r = await reqPost(h.port, `/api/afk/${h.name}/dismiss`, { root: h.root }, { headers: { Authorization: `Bearer ${h.token}` } })
+    expect(r.status).toBe(400)
+    expect(await h.store.get(h.changeDir, 'automation')).toBe(from)
+  })
+
+  it('change 名合法但该 change 实际不存在（无 .pipeline.yaml）→ 400，而非 500（同 cancel/retry 端点已修的同类 ENOENT 坑）', async () => {
+    const h = await start()
+    const r = await reqPost(h.port, '/api/afk/does-not-exist/dismiss', { root: h.root }, {
+      headers: { Authorization: `Bearer ${h.token}` },
+    })
+    expect(r.status).toBe(400)
+  })
+
+  it('root 不在注册表（不可信项目）→ 404，同 transition/cancel/retry 端点共用的信任锚模式，且不改盘', async () => {
+    const h = await start()
+    await h.store.set(h.changeDir, 'automation', 'failed')
+    const r = await reqPost(h.port, `/api/afk/${h.name}/dismiss`, { root: '/tmp/not-registered' }, {
+      headers: { Authorization: `Bearer ${h.token}` },
+    })
+    expect(r.status).toBe(404)
+    expect(await h.store.get(h.changeDir, 'automation')).toBe('failed')
+  })
+
+  it('无 token → 401（确认新路由确实接在 handlePost 统一鉴权守卫之后，而非绕过），且不改盘', async () => {
+    const h = await start()
+    await h.store.set(h.changeDir, 'automation', 'failed')
+    const r = await reqPost(h.port, `/api/afk/${h.name}/dismiss`, { root: h.root })
+    expect(r.status).toBe(401)
+    expect(await h.store.get(h.changeDir, 'automation')).toBe('failed')
+  })
+
+  it('非法 change 名（.. 路径穿越尝试）→ 400，同 transition/cancel/retry 端点的 change 名校验', async () => {
+    const h = await start()
+    const r = await reqPost(h.port, `/api/afk/${encodeURIComponent('..')}/dismiss`, { root: h.root }, {
+      headers: { Authorization: `Bearer ${h.token}` },
+    })
+    expect(r.status).toBe(400)
+  })
+})
+
 describe('POST /api/afk/:name/enqueue —— 挂入 AFK 队列（afk-workbench 缺口修复，真机验证发现）', () => {
   it('automation 未设（新 change）→ 200，automation=queued + automation_queued_at 落真时间戳', async () => {
     const h = await start()

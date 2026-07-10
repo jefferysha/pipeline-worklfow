@@ -297,6 +297,17 @@ describe('TaskDetail 形态 B（dt-tabs 阶段 sheet，variant="tabs"，T11 进�
     expect(screen.getByTestId('dt-pane-review').textContent).toContain('本阶段无产物登记')
   })
 
+  it('curStageExtra 插槽（T11）：渲染在当前阶段 pane 内容体尾部，其余 pane 不渲染', async () => {
+    await renderDetail({
+      variant: 'tabs',
+      curStageExtra: <div data-testid="extra-slot">log tail here</div>,
+    })
+    const pane = screen.getByTestId('dt-pane-verify')
+    expect(pane.contains(screen.getByTestId('extra-slot'))).toBe(true)
+    expect(screen.getByTestId('dt-pane-build').textContent).not.toContain('log tail here')
+    expect(screen.getAllByTestId('extra-slot')).toHaveLength(1)
+  })
+
   it('切换 change 后选中 tab 重置回新 change 的当前阶段（不残留上一张卡的手动选择）', async () => {
     const props = await renderDetail({ variant: 'tabs' })
     fireEvent.click(screen.getByTestId('dt-tab-open'))

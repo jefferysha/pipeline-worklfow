@@ -1,10 +1,14 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import gsap from 'gsap'
 import { useGSAP } from '@gsap/react'
 import { useT } from '../i18n'
 import type { ChangeSnapshot, Snapshot } from '../types'
 import { isPhase } from '../types'
 import type { WorkflowRules } from '../model/workflowModel'
+import { plannedTransition, type PlannedTransition } from '../board/events'
+import { getToken, postTransition } from '../api/client'
+import { TaskDetail } from '../shared/TaskDetail'
+import { useAfkLog } from '../afk/useAfkLog'
 import {
   PROGRESS_STATES,
   missingGateArtifacts,
@@ -28,16 +32,23 @@ gsap.registerPlugin(useGSAP)
  * 交互真相源 design-demos/v5-progress-workbench.html 进度段（六轮验收定稿）；
  * 状态判定全部消费 model/progressModel（T6 同源谓词），本视图零判定逻辑。
  *
- * 骨架范围：行 = 名字 + track 徽章 + 箭头带 + 状态徽章 + 快捷钮占位（终止/重试经
- * onAction prop 上抛，端点接线与行展开详情 = T11）；不挂导航（T17 切换）。
+ * T11（本任务）在骨架之上补齐交互面（对照 demo 进度段 prg-row--open/prg-detail/prg-dfoot）：
+ *   · 行点击/Enter/Space 展开阶段 sheet（共享 TaskDetail variant='tabs'，行内按钮点击不触发展开）；
+ *   · 动作真接线（决议 #13：文案以 demo v5 prg-dfoot 为唯一口径）：终止=POST /api/afk/:name/cancel
+ *     （仅 automation==='running' 可点，cancel-gate 纪律）、重试=…/retry（failed 行）、
+ *     放弃=…/dismiss（决议 #4：failed/conflict→off 现场保留）、放行/打回=POST transition（gate 行，
+ *     前进/回退边各取第一条）；乐观更新（本地 patch 叠加 snapshot，成功后 onRefresh resync、
+ *     新快照到达即清 patch；失败回滚 + toast）+ 行级 busy 守卫；
+ *   · running 行详情：当前阶段 pane 尾部日志区（useAfkLog 2.5s 轮询 + 跟随开关）+「沙箱内阶段」
+ *     行（T4 automation_current_phase 字段）；
+ *   · 「等 agent 补产出」/「排队」行：无动作，只有说明（+「在终端继续」）。
+ * 不挂导航（T17 切换）。
  *
  * GSAP（全包 gsap.matchMedia，reduce 分支直达终态）：箭头带入场 stagger 点亮、
  * 执行中段光泽 repeat:-1 循环扫过、失败段一次性抖动（决策 C，沿 motion.ts 词汇
  * 150-250ms）。依赖键 = 可见行指纹：筛选/折叠/数据变化都会 revert 重建——光泽循环
  * 随行卸载必 kill（T11 同款「循环动画随视图收敛」纪律），不留孤儿 timeline。
  */
-
-export type ProgressQuickAction = 'kill' | 'retry'
 
 export interface ProgressViewProps {
   snapshot: Snapshot | null
@@ -47,8 +58,33 @@ export interface ProgressViewProps {
   currentRoot: string
   /** App 统一拉取的 workflow 规则集，键=rulesKey(root,wf)（useWorkflowRulesMulti 契约）。 */
   rulesByKey: ReadonlyMap<string, WorkflowRules>
-  /** 快捷钮占位回调（终止=kill 仅执行中行、重试=retry 仅失败行）；端点接线留 T11。 */
-  onAction?: (action: ProgressQuickAction, root: string, name: string) => void
+  /** 动作结果 toast（成功/失败都走这里；App 注入 showFlash，同 InboxView onToast 契约）。 */
+  onToast?: (msg: string) => void
+  /** 动作成功后 resync（App 注入 useSnapshot().refresh；T17 接线）。 */
+  onRefresh?: () => void | Promise<void>
+}
+
+/** 行级键（busy/展开/乐观 patch 共用）：name 字符集受 server 校验限死 [a-zA-Z0-9_-]，'@' 不会撞。 */
+function rowKeyOf(root: string, name: string): string {
+  return `${name}@${root}`
+}
+
+/** 乐观 patch：动作发出即叠加到 snapshot 投影上，成功等 SSE/refresh 落地，失败回滚。 */
+interface RowPatch {
+  phase?: string
+  fields?: Record<string, string>
+}
+
+/** 非 2xx 响应尽量读出 server 的 { error } 文案（同 useAfkLog.ts 的局部拷贝先例：单处消费，
+ *  不值得为一行 JSON 解析新增跨模块依赖）。 */
+async function readErrorDetail(res: Response): Promise<string> {
+  try {
+    const body = (await res.json()) as { error?: string }
+    if (body && typeof body.error === 'string') return body.error
+  } catch {
+    /* 无 JSON 体 */
+  }
+  return ''
 }
 
 /** root → 尾段项目名（同 inbox.ts projectName 口径，这里入参是裸 root 串）。 */
@@ -142,13 +178,52 @@ function ChevronFlow({ workflow, rules, change, state, stateLabel, t }: ChevronF
   )
 }
 
+// ── running 行详情内日志区（demo prg-logwrap 对位）──
+
+/**
+ * afk-demo 型 running 行的日志尾部：useAfkLog（既有 2.5s 轮询迁移消费——status 传 automation
+ * 原始值，仅 'running' 时轮询）+ 跟随开关 +「沙箱内阶段」行（T4 automation_current_phase，
+ * 沙箱里 [TRANSITION] 已推进但 host 阶段要等 run 结算）。经 TaskDetail curStageExtra 插槽
+ * 挂在当前阶段 pane 尾部（决议 #13：组件零业务，日志语义归本宿主）。
+ */
+function RunLogPane({ root, change }: { root: string; change: ChangeSnapshot }): JSX.Element {
+  const { t } = useT()
+  const { log, follow, setFollow } = useAfkLog(change.name, fieldStr(change, 'automation'), root)
+  const sandboxPhase = fieldStr(change, 'automation_current_phase')
+  return (
+    <div className="prg-logwrap" data-testid={`prg-log-${change.name}`}>
+      <div className="prg-logbar">
+        <span className="prg-loglabel mono">{t('progress.log_label')}</span>
+        <span className="prg-follow">
+          {t('progress.follow_tail')}
+          <button
+            type="button"
+            role="switch"
+            className="switch"
+            aria-checked={follow}
+            aria-label={t('progress.follow_tail')}
+            data-testid={`prg-follow-${change.name}`}
+            onClick={() => setFollow(!follow)}
+          />
+        </span>
+      </div>
+      <pre className="prg-log mono" data-testid={`prg-logtext-${change.name}`}>{log}</pre>
+      {sandboxPhase !== '' && (
+        <p className="prg-lognote" data-testid={`prg-sandbox-phase-${change.name}`}>
+          {t('progress.sandbox_phase', { phase: sandboxPhase })}
+        </p>
+      )}
+    </div>
+  )
+}
+
 // ── 视图 ──
 
 function emptyCounts(): ProgressCounts {
   return { gate: 0, agent: 0, running: 0, queued: 0, failed: 0 }
 }
 
-export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey, onAction }: ProgressViewProps): JSX.Element {
+export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey, onToast, onRefresh }: ProgressViewProps): JSX.Element {
   const { t } = useT()
   const rootRef = useRef<HTMLElement>(null)
   const ddRef = useRef<HTMLDivElement>(null)
@@ -156,8 +231,118 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
   const [stateSel, setStateSel] = useState<ProgressState | 'all'>('all')
   const [ddOpen, setDdOpen] = useState(false)
   const [closedGroups, setClosedGroups] = useState<ReadonlySet<string>>(new Set())
+  // ── T11：行展开 / 行级 busy / 乐观 patch ──
+  const [openRows, setOpenRows] = useState<ReadonlySet<string>>(new Set())
+  const [busyRows, setBusyRows] = useState<ReadonlySet<string>>(new Set())
+  const [patches, setPatches] = useState<ReadonlyMap<string, RowPatch>>(new Map())
 
-  const base = useMemo(() => selectProgress(snapshot, currentRoot, rulesByKey), [snapshot, currentRoot, rulesByKey])
+  // 新 snapshot 到达（SSE/refresh）即清乐观 patch：成功路径 onRefresh 拉回的快照已含真值；
+  // 极端竞态（旧快照晚到）最多短暂回显旧态，下一帧自愈——不做逐字段比对的复杂对账。
+  useEffect(() => {
+    setPatches((prev) => (prev.size === 0 ? prev : new Map()))
+  }, [snapshot])
+
+  // 乐观投影：把在途动作的 patch 叠加到 snapshot 上，selectProgress 及所有下游（徽章/箭头带/
+  // 详情）自然消费同一份判定——不在视图层散落第二套状态判定（T6 同源谓词纪律）。
+  const patchedSnapshot = useMemo(() => {
+    if (!snapshot || patches.size === 0) return snapshot
+    return {
+      ...snapshot,
+      projects: snapshot.projects.map((p) => ({
+        ...p,
+        changes: p.changes.map((c) => {
+          const patch = patches.get(rowKeyOf(p.root, c.name))
+          if (!patch) return c
+          return { ...c, phase: patch.phase ?? c.phase, fields: { ...c.fields, ...patch.fields } }
+        }),
+      })),
+    }
+  }, [snapshot, patches])
+
+  const base = useMemo(() => selectProgress(patchedSnapshot, currentRoot, rulesByKey), [patchedSnapshot, currentRoot, rulesByKey])
+
+  function setPatch(key: string, patch: RowPatch | null): void {
+    setPatches((prev) => {
+      const next = new Map(prev)
+      if (patch) next.set(key, patch)
+      else next.delete(key)
+      return next
+    })
+  }
+
+  function setBusy(key: string, busy: boolean): void {
+    setBusyRows((prev) => {
+      const next = new Set(prev)
+      if (busy) next.add(key)
+      else next.delete(key)
+      return next
+    })
+  }
+
+  /**
+   * afk 三动作（终止=cancel / 重试=retry / 放弃=dismiss，决议 #13 文案口径 = demo v5）。
+   * 乐观 patch：retry→queued+attempts 清零、dismiss→off（服务端 dismissAfkRun 同语义）；
+   * cancel 无即时状态变化（标记文件落地后由 automation 结算），不 patch 只 toast+resync。
+   */
+  async function afkAction(kind: 'kill' | 'retry' | 'dismiss', root: string, name: string): Promise<void> {
+    const key = rowKeyOf(root, name)
+    if (busyRows.has(key)) return
+    setBusy(key, true)
+    const label = t(`progress.act_${kind}`)
+    const patch: RowPatch | null =
+      kind === 'retry'
+        ? { fields: { automation: 'queued', automation_attempts: '0' } }
+        : kind === 'dismiss'
+          ? { fields: { automation: 'off' } }
+          : null
+    if (patch) setPatch(key, patch)
+    try {
+      const endpoint = kind === 'kill' ? 'cancel' : kind
+      const res = await fetch(`/api/afk/${encodeURIComponent(name)}/${endpoint}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
+        body: JSON.stringify({ root }),
+      })
+      if (!res.ok) {
+        throw new Error((await readErrorDetail(res)) || t('progress.act_fail_http', { status: res.status }))
+      }
+      onToast?.(t('progress.act_ok', { name, label }))
+      await onRefresh?.()
+    } catch (err) {
+      if (patch) setPatch(key, null)
+      onToast?.(t('progress.act_fail', { label, msg: err instanceof Error ? err.message : String(err) }))
+    } finally {
+      setBusy(key, false)
+    }
+  }
+
+  /** 放行/打回（gate 行）：走同一 transition 校验管线；乐观 patch = phase 直接落到目标步。 */
+  async function transitionAction(root: string, name: string, planned: PlannedTransition): Promise<void> {
+    const key = rowKeyOf(root, name)
+    if (busyRows.has(key)) return
+    setBusy(key, true)
+    const label = planned.backward ? t('progress.act_reject') : t('progress.act_pass')
+    setPatch(key, { phase: planned.to })
+    try {
+      await postTransition(name, root, planned.event)
+      onToast?.(t('progress.act_ok', { name, label }))
+      await onRefresh?.()
+    } catch (err) {
+      setPatch(key, null)
+      onToast?.(t('progress.act_fail', { label, msg: err instanceof Error ? err.message : String(err) }))
+    } finally {
+      setBusy(key, false)
+    }
+  }
+
+  function toggleRow(key: string): void {
+    setOpenRows((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
 
   // 项目下拉的候选集来自全量分组（不受当前勾选影响，勾掉的项目仍在菜单里可勾回）。
   const rootOptions = useMemo(() => [...new Set(base.groups.map((g) => g.root))], [base])
@@ -283,6 +468,106 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
         const attempts = Number(fieldStr(row.change, 'automation_attempts') || '0')
         return attempts > 0 ? t('progress.failed_times', { n: attempts }) : t('progress.state_failed')
       }
+    }
+  }
+
+  /**
+   * 详情动作条（TaskDetail actions 插槽；决议 #13 props 化下放宿主，文案 = demo v5 prg-dfoot）：
+   *   gate → ↩打回（回退边，红 tint）+ →放行（前进边，主按钮）；running → ⏹终止（仅
+   *   automation==='running' 可点）；failed → ✕放弃 + ↻重试；agent/queued → 无动作只有说明。
+   *   前进/回退边各取第一条（同 TaskDetail firstForward 的「第一条前进边」口径）。
+   */
+  function detailActions(row: ProgressRow, rules: ProgressRules | undefined): ReactNode {
+    const name = row.change.name
+    const key = rowKeyOf(row.root, name)
+    const busy = busyRows.has(key)
+    switch (row.state) {
+      case 'gate': {
+        if (!rules) return undefined
+        const edges = (rules.transitions[row.change.phase] ?? [])
+          .map((e) => plannedTransition(rules, row.change.phase, e.to))
+          .filter((p): p is PlannedTransition => p !== null)
+        const forward = edges.find((p) => !p.backward)
+        const backward = edges.find((p) => p.backward)
+        if (!forward && !backward) return undefined
+        return (
+          <>
+            {backward && (
+              <button
+                type="button"
+                className="prg-btn prg-btn--danger"
+                data-testid={`prg-reject-${name}`}
+                disabled={busy}
+                onClick={() => void transitionAction(row.root, name, backward)}
+              >
+                ↩ {t('progress.act_reject')}
+              </button>
+            )}
+            {forward && (
+              <button
+                type="button"
+                className="prg-btn prg-btn--primary"
+                data-testid={`prg-pass-${name}`}
+                disabled={busy}
+                onClick={() => void transitionAction(row.root, name, forward)}
+              >
+                → {t('progress.act_pass')}
+              </button>
+            )}
+          </>
+        )
+      }
+      case 'running':
+        return (
+          <button
+            type="button"
+            className="prg-btn prg-btn--danger"
+            data-testid={`prg-dt-kill-${name}`}
+            disabled={busy || fieldStr(row.change, 'automation') !== 'running'}
+            onClick={() => void afkAction('kill', row.root, name)}
+          >
+            ⏹ {t('progress.act_kill')}
+          </button>
+        )
+      case 'failed':
+        return (
+          <>
+            <button
+              type="button"
+              className="prg-btn"
+              data-testid={`prg-dismiss-${name}`}
+              disabled={busy}
+              onClick={() => void afkAction('dismiss', row.root, name)}
+            >
+              ✕ {t('progress.act_dismiss')}
+            </button>
+            <button
+              type="button"
+              className="prg-btn prg-btn--primary"
+              data-testid={`prg-dt-retry-${name}`}
+              disabled={busy}
+              onClick={() => void afkAction('retry', row.root, name)}
+            >
+              ↻ {t('progress.act_retry')}
+            </button>
+          </>
+        )
+      case 'agent': {
+        const missing = missingGateArtifacts(row.change, rules)
+        return (
+          <span className="prg-dfoot-note" data-testid={`prg-note-${name}`}>
+            {missing.length > 0
+              ? t('progress.note_agent_missing', { fields: missing.join(' ') })
+              : t('progress.note_agent')}
+          </span>
+        )
+      }
+      case 'queued':
+        return (
+          <span className="prg-dfoot-note" data-testid={`prg-note-${name}`}>
+            {t('progress.note_queued')}
+          </span>
+        )
     }
   }
 
@@ -412,52 +697,96 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
             </button>
             {open && (
               <div className="prg-rows">
-                {rows.map((row) => (
-                  <div key={row.change.name} className="prg-row" data-testid={`prg-row-${row.change.name}`}>
-                    {/* 骨架期纯展示行；点行展开详情（role/tabIndex/aria-expanded）T11 接线 */}
-                    <div className="prg-row__main">
-                      <div className="prg-name">
-                        <span className="prg-name__t mono">{row.change.name}</span>
-                        <span className="card__track mono">{row.change.track}</span>
+                {rows.map((row) => {
+                  const rowKey = rowKeyOf(row.root, row.change.name)
+                  const rowOpen = openRows.has(rowKey)
+                  const rowBusy = busyRows.has(rowKey)
+                  return (
+                    <div
+                      key={row.change.name}
+                      className={`prg-row${rowOpen ? ' prg-row--open' : ''}`}
+                      data-testid={`prg-row-${row.change.name}`}
+                    >
+                      {/* 点行展开详情；行内真按钮（终止/重试）点击不触发展开（closest('button') 旁路，
+                          键盘 Enter/Space 同判据——按钮自身的 Enter 激活不该顺带 toggle 行）。 */}
+                      <div
+                        className="prg-row__main"
+                        role="button"
+                        tabIndex={0}
+                        aria-expanded={rowOpen}
+                        data-testid={`prg-rowmain-${row.change.name}`}
+                        onClick={(e) => {
+                          if (e.target instanceof Element && e.target.closest('button')) return
+                          toggleRow(rowKey)
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.target instanceof Element && e.target.closest('button')) return
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault()
+                            toggleRow(rowKey)
+                          }
+                        }}
+                      >
+                        <div className="prg-name">
+                          <span className="prg-name__t mono">{row.change.name}</span>
+                          <span className="card__track mono">{row.change.track}</span>
+                        </div>
+                        <ChevronFlow
+                          workflow={group.workflow}
+                          rules={groupRules}
+                          change={row.change}
+                          state={row.state}
+                          stateLabel={badgeLabel(row, groupRules)}
+                          t={t}
+                        />
+                        <div className="prg-state">
+                          <span className={`prg-badge prg-badge--${row.state}`} data-testid={`prg-badge-${row.change.name}`}>
+                            {(row.state === 'gate' || row.state === 'running') && <span className="prg-badge__dot" aria-hidden="true" />}
+                            {badgeLabel(row, groupRules)}
+                          </span>
+                          {row.state === 'running' && (
+                            <button
+                              type="button"
+                              className="prg-btn prg-btn--danger"
+                              data-testid={`prg-kill-${row.change.name}`}
+                              disabled={rowBusy || fieldStr(row.change, 'automation') !== 'running'}
+                              onClick={() => void afkAction('kill', row.root, row.change.name)}
+                            >
+                              ⏹ {t('progress.act_kill')}
+                            </button>
+                          )}
+                          {row.state === 'failed' && (
+                            <button
+                              type="button"
+                              className="prg-btn"
+                              data-testid={`prg-retry-${row.change.name}`}
+                              disabled={rowBusy}
+                              onClick={() => void afkAction('retry', row.root, row.change.name)}
+                            >
+                              ↻ {t('progress.act_retry')}
+                            </button>
+                          )}
+                          <span className="prg-caret" aria-hidden="true">▾</span>
+                        </div>
                       </div>
-                      <ChevronFlow
-                        workflow={group.workflow}
-                        rules={groupRules}
-                        change={row.change}
-                        state={row.state}
-                        stateLabel={badgeLabel(row, groupRules)}
-                        t={t}
-                      />
-                      <div className="prg-state">
-                        <span className={`prg-badge prg-badge--${row.state}`} data-testid={`prg-badge-${row.change.name}`}>
-                          {(row.state === 'gate' || row.state === 'running') && <span className="prg-badge__dot" aria-hidden="true" />}
-                          {badgeLabel(row, groupRules)}
-                        </span>
-                        {row.state === 'running' && (
-                          <button
-                            type="button"
-                            className="prg-btn prg-btn--danger"
-                            data-testid={`prg-kill-${row.change.name}`}
-                            onClick={() => onAction?.('kill', row.root, row.change.name)}
-                          >
-                            ⏹ {t('progress.act_kill')}
-                          </button>
-                        )}
-                        {row.state === 'failed' && (
-                          <button
-                            type="button"
-                            className="prg-btn"
-                            data-testid={`prg-retry-${row.change.name}`}
-                            onClick={() => onAction?.('retry', row.root, row.change.name)}
-                          >
-                            ↻ {t('progress.act_retry')}
-                          </button>
-                        )}
-                        <span className="prg-caret" aria-hidden="true">▾</span>
-                      </div>
+                      {rowOpen && (
+                        <div className="prg-detail" data-testid={`prg-detail-${row.change.name}`}>
+                          <TaskDetail
+                            root={row.root}
+                            change={row.change}
+                            rules={groupRules}
+                            variant="tabs"
+                            actions={detailActions(row, groupRules)}
+                            curStageExtra={
+                              row.state === 'running' ? <RunLogPane root={row.root} change={row.change} /> : undefined
+                            }
+                            onToast={onToast}
+                          />
+                        </div>
+                      )}
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )}
           </div>

@@ -277,6 +277,34 @@ export async function retryAfkRun(store: StateStore, changeDir: string): Promise
   return { ok: true }
 }
 
+/** 可放弃的合法源态——决议 #4 只圈 failed/conflict 两个「等人裁决」终态：paused 是拍板门语义
+ *  （放行/打回归 transition），running/queued 是活跃态（先 cancel），都不该被「放弃」短路。 */
+const DISMISSABLE_FROM = ['failed', 'conflict'] as const
+
+/**
+ * v5-T11（计划 2026-07-11-v5-interaction-rebuild 决议 #4）：POST /api/afk/:name/dismiss 的
+ * 写回逻辑——「放弃」：failed/conflict → off，退出自动化路径。
+ * 前置：changeDir 须真存在（同 cancelAfkRun/retryAfkRun 的存在性前置校验，kernel StateStore.get
+ * 对不存在的 changeDir 是真 throw ENOENT，此处不拦会在 handlePost 顶层兜底 catch 里变成走味的
+ * 500）；automation 须是 failed/conflict 之一。
+ * 写回走 CAS（语义对齐 retryAfkRun：同一读-判-写并发兜底，CAS 落空=状态在此期间被并发改动，
+ * 如实回 400）。与 retry 的关键差别：**现场保留**——automation_attempts/automation_last_error/
+ * automation_worktree/automation_preserved_path 一个不清，事后尸检线索全在（demo v5 口径
+ * 「放弃则归档现场，worktree 保留」；detail.fail_note 文案同源）。
+ */
+export async function dismissAfkRun(store: StateStore, changeDir: string): Promise<{ ok: boolean; error?: string }> {
+  if (!existsSync(join(changeDir, '.pipeline.yaml'))) {
+    return { ok: false, error: '找不到该 change（无 .pipeline.yaml），找不到可放弃的任务' }
+  }
+  const current = str(await store.get(changeDir, 'automation'))
+  if (!DISMISSABLE_FROM.includes(current as (typeof DISMISSABLE_FROM)[number])) {
+    return { ok: false, error: `automation 状态是 '${current || '(空)'}'，不可放弃（仅 failed/conflict 可放弃；running 请先 cancel，paused 走放行/打回）` }
+  }
+  const ok = await store.cas(changeDir, 'automation', current, 'off')
+  if (!ok) return { ok: false, error: 'CAS 失败，状态在此期间被并发修改' }
+  return { ok: true }
+}
+
 /**
  * afk-workbench 缺口修复（2026-07-09，本轮真机验证发现）：AfkWorkbench.tsx 此前只有
  * 查看快照/取消/重试三个入口，没有"挂队"——`pipeline afk enqueue <name>` 是唯一能把一个

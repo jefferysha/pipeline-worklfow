@@ -984,4 +984,29 @@ button.ev__chip--neutral:hover { border-color: var(--border-2); color: var(--tex
 .lp-empty { padding: 10px 0 4px; }
 .lp-empty-t { margin: 0 0 4px; font-size: 13px; font-weight: 700; }
 .lp-empty-yaml { margin: 10px 0 0; padding: 10px 12px; border-radius: var(--radius-sm); background: var(--code-bg); border: 1px solid var(--code-border); font-family: var(--mono); font-size: 11.5px; line-height: 1.6; color: var(--text-2); overflow-x: auto; }
+/* ==== T11：进度行展开详情 + 动作接线 + running 行日志区 ——对照 demo v5 进度段
+   .prg-row--open/.prg-detail/.prg-dfoot/.prg-logwrap，全部走既有 token，无新原色。 ==== */
+.prg-row__main { cursor: pointer; }
+.prg-row--open .prg-caret { transform: rotate(0deg); }
+/* 行内展开的详情面：--fill 底与行区分；内嵌 TaskDetail 卡去掉自己的卡壳（贴面不叠框） */
+.prg-detail { background: var(--fill); border-top: 1px solid var(--border); padding: 2px 16px 12px; }
+.prg-detail .dt { background: transparent; border: 0; box-shadow: none; padding: 0; }
+/* --fill 底上字段格/未选中 tab 换 --card 底保住轮廓（demo prg-detail 同款覆写） */
+.prg-detail .dt-field { background: var(--card); }
+.prg-detail .dt-field--miss { background: transparent; }
+.prg-detail .dt-tab:not(.dt-tab--cur):not(.dt-tab--fail) { background: var(--card); }
+.prg-detail .dt-tab:not(.dt-tab--cur):not(.dt-tab--fail):hover { background: var(--fill-2); }
+/* 动作条主按钮（放行/重试）：--btn-bg 蓝实底白字（视觉纪律：主按钮禁黑实底） */
+.prg-btn--primary { background: var(--btn-bg); border-color: var(--btn-bg); color: var(--btn-fg); }
+.prg-btn--primary:hover { border-color: var(--btn-bg); color: var(--btn-fg); opacity: .9; }
+.prg-btn:disabled { opacity: .55; cursor: not-allowed; }
+/* 无动作行的说明（等 agent / 排队）：dt-foot 按钮位上的纯文本 */
+.prg-dfoot-note { font-size: 12.5px; color: var(--text-3); }
+/* running 行日志区（当前阶段 pane 尾部，经 TaskDetail curStageExtra 插槽挂载） */
+.prg-logwrap { margin-top: 10px; border: 1px solid var(--code-border); border-radius: var(--radius-sm); background: var(--code-bg); overflow: hidden; }
+.prg-logbar { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-bottom: 1px solid var(--code-border); }
+.prg-loglabel { font-size: 11px; color: var(--text-3); }
+.prg-follow { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--text-3); }
+.prg-log { margin: 0; padding: 10px; max-height: 200px; overflow: auto; font-size: 11.5px; line-height: 1.6; color: var(--text-2); white-space: pre-wrap; overflow-wrap: anywhere; }
+.prg-lognote { margin: 0; padding: 6px 10px; border-top: 1px solid var(--code-border); font-size: 11.5px; color: var(--text-3); }
 `
