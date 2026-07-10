@@ -393,3 +393,34 @@ describe('runChangeInSandbox · denylist 结算检查（决议 #12）', () => {
     expect(log).not.toContain('diffNames')
   })
 })
+
+/** v5 T20：cfg.runner 真透传到 runWork（ports.ts 真实现据此在命令构造点分派 codex）。 */
+describe('runChangeInSandbox · cfg.runner 透传（v5 T20 双 runner）', () => {
+  it('cfg.runner=codex → runWork 第 4 参收到 codex', async () => {
+    const seen: (string | undefined)[] = []
+    const { ports } = makePorts({
+      async runWork(_exec, _name, _signal, runner) {
+        seen.push(runner)
+        return { verify_result: 'pass', build_sha: SHA, phase_event: 'verify-pass' }
+      },
+    })
+    await runChangeInSandbox(
+      ports,
+      { hostRepoDir: '/repo', name: 'x', base: 'main', autoMerge: false, runner: 'codex' },
+      new AbortController().signal,
+    )
+    expect(seen).toEqual(['codex'])
+  })
+
+  it('未传 cfg.runner → runWork 第 4 参 undefined（缺省 Claude 路径零回归）', async () => {
+    const seen: (string | undefined)[] = []
+    const { ports } = makePorts({
+      async runWork(_exec, _name, _signal, runner) {
+        seen.push(runner)
+        return { verify_result: 'pass', build_sha: SHA, phase_event: 'verify-pass' }
+      },
+    })
+    await runChangeInSandbox(ports, { hostRepoDir: '/repo', name: 'x', base: 'main', autoMerge: false }, new AbortController().signal)
+    expect(seen).toEqual([undefined])
+  })
+})

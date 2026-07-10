@@ -19,6 +19,15 @@ export type LoopRisk = 'low' | 'medium' | 'high'
 /** 分级放权级别（loop-engineering 核心思想；缺省 L1）。 */
 export type AutonomyLevel = 'L1' | 'L2' | 'L3'
 
+/**
+ * v5 T20：已知 agent runner 清单（编排页 runner 下拉的双选项数据面；automation 分派口径见
+ * automation/runner.ts::buildAfkRunCommand——仅 'codex' 走 codex exec 无头会话，其余一律缺省
+ * Claude 路径）。注意 LoopEntry.runner 仍是自由字符串（历史登记表存在 'cron'/'cron-session'
+ * 等非 agent 值，schema 不收紧成 enum 以免旧表载入即坏）。
+ */
+export const LOOP_RUNNERS = ['claude-code', 'codex'] as const
+export type LoopRunner = (typeof LOOP_RUNNERS)[number]
+
 /** 预算声明（老 loops.schema.json budget 76-93）。
  * #36 追加可选 token 级预算（向后兼容，旧登记表无需改）：
  *   · max_tokens_per_day —— token 预算/circuit breaker 硬阈值（累计今日花费达/超即熔断）。

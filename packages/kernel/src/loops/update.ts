@@ -20,8 +20,9 @@
  */
 import { parseLoopsYaml } from './registry.js'
 
-/** loop 顶层可 patch 标量字段（schema 同名约束在写回后由调用方整文档校验）。 */
-export const PATCHABLE_SCALAR_FIELDS = ['cadence', 'goal', 'design_doc', 'change_prefix', 'risk', 'status'] as const
+/** loop 顶层可 patch 标量字段（schema 同名约束在写回后由调用方整文档校验）。
+ * v5 T20：+runner（双 runner 数据面——编排页 runner 下拉走 POST /api/loops/update 落盘）。 */
+export const PATCHABLE_SCALAR_FIELDS = ['cadence', 'goal', 'design_doc', 'change_prefix', 'risk', 'status', 'runner'] as const
 /** budget 嵌套可 patch 标量字段。 */
 export const PATCHABLE_BUDGET_FIELDS = ['max_runs_per_day', 'max_in_flight', 'max_tokens_per_day', 'on_exceed'] as const
 /** 可 patch 字符串数组字段（整块替换）。 */

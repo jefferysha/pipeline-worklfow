@@ -112,3 +112,28 @@ describe('applyLoopsUpdate —— loops.yaml 字段写回（v5 T3，POST /api/lo
     expect(r.ok).toBe(false)
   })
 })
+
+/** v5 T20：runner 双支持——snapshot 行携带 runner（编排页下拉回显），update 端点可写 runner: codex。 */
+describe('loops runner 双支持（v5 T20）', () => {
+  it('buildLoopsSnapshot 的行带 runner 字段（登记表原值回显）', async () => {
+    const root = await makeProjectWithLoop()
+    const snap = await buildLoopsSnapshot({ registry: () => [root], now: () => new Date('2026-07-07T00:00:00Z') })
+    expect(snap.rows[0]?.runner).toBe('cron')
+  })
+
+  it('applyLoopsUpdate 收 runner: codex → 落盘且读回 codex（schema 全绿）', async () => {
+    const root = await makeProjectWithLoop()
+    const r = await applyLoopsUpdate(root, 'build-loop', { runner: 'codex' })
+    expect(r).toEqual({ ok: true })
+    const { data, errors } = loadRegistry(root)
+    expect(errors).toEqual([])
+    expect(data!.loops[0]!.runner).toBe('codex')
+  })
+
+  it('applyLoopsUpdate 收 runner: claude-code → 同样合法（下拉双选项另一半）', async () => {
+    const root = await makeProjectWithLoop()
+    const r = await applyLoopsUpdate(root, 'build-loop', { runner: 'claude-code' })
+    expect(r).toEqual({ ok: true })
+    expect(loadRegistry(root).data!.loops[0]!.runner).toBe('claude-code')
+  })
+})

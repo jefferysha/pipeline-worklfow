@@ -80,8 +80,18 @@ export const parseSandboxReport = (stdout: string): SandboxReport => {
   }
 }
 
-/** 沙箱内 afk-run 命令（老仓 runner/docker/pipeline-afk-run.sh，全链 #29c）。 */
-export const buildAfkRunCommand = (name: string): string => `PIPELINE_AFK=1 pipeline-afk-run ${name}`
+/**
+ * 沙箱内 afk-run 命令（老仓 runner/docker/pipeline-afk-run.sh，全链 #29c）。
+ *
+ * v5 T20 runner 分派：runner === 'codex' → 注入 PIPELINE_RUNNER=codex，沙箱脚本据此改起
+ * codex exec 无头会话（codex CLI 惯例；脚本内 CLI 缺失时打清晰错误并非零退出——错误经
+ * ports.ts runWork 的 throw 流进 scheduler 写 automation_last_error，绝不静默）。其余值
+ * （缺省 / claude-code / 历史自由值 cron 等）一律走既有 Claude 缺省路径，命令零变化。
+ */
+export const buildAfkRunCommand = (name: string, runner?: string): string =>
+  runner === 'codex'
+    ? `PIPELINE_AFK=1 PIPELINE_RUNNER=codex pipeline-afk-run ${name}`
+    : `PIPELINE_AFK=1 pipeline-afk-run ${name}`
 
 /**
  * 跑一个 change 的 build→verify→ship 并回读握手（注入 exec 面）。非零退出 = build/verify 真失败

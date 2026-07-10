@@ -26,6 +26,8 @@ export interface LoopRow {
   name: string
   autonomy_level: AutonomyLevel
   status: string
+  /** v5 T20：登记表 runner 原值回显（编排页 runner 下拉的当前值；双选项清单见 kernel LOOP_RUNNERS）。 */
+  runner: string
   readiness: ReadinessScore
   budget: BudgetStatus
 }
@@ -115,6 +117,7 @@ export async function buildLoopsSnapshot(deps: LoopsSnapshotDeps): Promise<Loops
         name: loop.name,
         autonomy_level: loop.autonomy_level,
         status: loop.status,
+        runner: loop.runner,
         readiness: computeReadiness(loop),
         budget: computeBudgetStatus(loop, runLogText, now),
       })

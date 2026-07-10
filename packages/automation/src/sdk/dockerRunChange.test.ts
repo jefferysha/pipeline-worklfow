@@ -199,3 +199,48 @@ describe('createDockerRunChange · automation_worktree 写回前 sanitize（四�
     expect(worktree).not.toContain(' #')
   })
 })
+
+/**
+ * v5 T20：resolveRunner 装配面——loop 声明的 runner 真流到沙箱命令构造点（docker exec argv 里的
+ * PIPELINE_RUNNER=codex 前缀），resolver 故障/未传按缺省 Claude 路径（best-effort，不阻断 run）。
+ */
+describe('createDockerRunChange · resolveRunner（runner 双支持，v5 T20）', () => {
+  let repo: string
+  beforeEach(async () => { repo = await mkdtemp(join(tmpdir(), 'dockerrc-runner-')) })
+  afterEach(async () => { await rm(repo, { recursive: true, force: true }) })
+
+  it('resolver 给出 codex → docker exec 命令含 PIPELINE_RUNNER=codex', async () => {
+    const { exec, calls } = makeFakeExec()
+    const runChange = createDockerRunChange({
+      hostRepoDir: repo, base: 'main', level: 'L1', image: 'sandcastle:local', exec,
+      resolveRunner: async () => 'codex',
+    })
+    await runChange('loop-a-fix', new AbortController().signal)
+    const dockerExec = calls.find((c) => c[0] === 'docker' && c[1] === 'exec')
+    expect(dockerExec).toBeDefined()
+    expect(dockerExec!.join(' ')).toContain('PIPELINE_RUNNER=codex')
+  })
+
+  it('resolver 给出 claude-code / 未传 resolver → 命令不含 PIPELINE_RUNNER（缺省路径零回归）', async () => {
+    for (const resolveRunner of [async () => 'claude-code', undefined]) {
+      const { exec, calls } = makeFakeExec()
+      const runChange = createDockerRunChange({
+        hostRepoDir: repo, base: 'main', level: 'L1', image: 'sandcastle:local', exec, resolveRunner,
+      })
+      await runChange('x', new AbortController().signal)
+      const dockerExec = calls.find((c) => c[0] === 'docker' && c[1] === 'exec')
+      expect(dockerExec!.join(' ')).not.toContain('PIPELINE_RUNNER')
+    }
+  })
+
+  it('resolver 自己 throw → 按缺省处理（best-effort，registry 故障不阻断 run）', async () => {
+    const { exec, calls } = makeFakeExec()
+    const runChange = createDockerRunChange({
+      hostRepoDir: repo, base: 'main', level: 'L1', image: 'sandcastle:local', exec,
+      resolveRunner: async () => { throw new Error('loops.yaml unreadable') },
+    })
+    await expect(runChange('x', new AbortController().signal)).resolves.toBeDefined()
+    const dockerExec = calls.find((c) => c[0] === 'docker' && c[1] === 'exec')
+    expect(dockerExec!.join(' ')).not.toContain('PIPELINE_RUNNER')
+  })
+})

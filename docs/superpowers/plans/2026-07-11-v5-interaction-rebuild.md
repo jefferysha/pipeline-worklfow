@@ -22,6 +22,7 @@
 | 11 | 进度虚拟化 | 本轮不做(<50 行现实规模) |
 | 12 | allowlist/denylist 语义 | 路径 glob;存储+展示(T3/T16)之外,**真实生效**:run 结算时 git diff --name-only 对 denylist 匹配,违规判 conflict 保留现场(并入 T4 验收) |
 | 13 | T8 动作条归属(评审登记) | 四动作(继续/打回/重试/终止+放弃)**props 化下放宿主**:TaskDetail 只留 automation 感知的 foot 标签与 actions 插槽,端点调用/busy 守卫/二次确认归 T9(收件箱)与 T11(进度)各自实现——组件零业务端点;两宿主动作文案与语义以 demo v5 prg-dfoot/收件箱右卡动作条为唯一口径,T9/T11 验收各自钉住,防两处漂移 |
+| 14 | T20 runner 下拉 UI 侧归属(评审登记) | T20 worktree 只交付数据面(kernel `LOOP_RUNNERS` 双选项清单、`PATCHABLE_SCALAR_FIELDS`+runner、server LoopRow.runner 回显、POST /api/loops/update 可写 runner);编排页「自动运行」卡 runner 下拉因同文件互斥(LoopCard.tsx 属 T16 worktree,且 T16 参数清单不含 runner)**不随 T20 落地——归 Wave 5 收口批:T17 用现成的 row.runner + LOOP_RUNNERS 双选项 + POST /api/loops/update 在 LoopCard 补挂下拉(预估小改),T19 验收补钉 T20 验收项「UI 下拉双选项」单测+真机点击断言**。同批周知(评审 low,均登记不改码):①update 端点 runner 仍收自由字符串(schema 不收紧 enum,兼容历史 `cron`/`cron-session`),写端点对新写值做 LOOP_RUNNERS 软校验(warning 不拒绝)列为可选增强 backlog;②codex CLI 在但认证失效的子路径沿既有诚实分流口径(agent_exit 非零落 .sandcastle-build.agent.log,run 按确定性产物判 verify),报错可见度弱于 CLI 缺失路径(后者 exit 96 硬错落 automation_last_error),如需强化(agent_exit 非零同步落 automation_last_error)亦为 backlog |
 
 ## 新增任务(草案外,用户 /loop 新要求)
 
@@ -30,6 +31,7 @@
 - **目标**:先探查现状(loops runner 枚举、automation 沙箱对 codex CLI 的调用路径、codex_review_result 既有链路),然后补全:loops.yaml `runner: codex` 合法且 automation 层能起 codex 无头会话;编排页「自动运行」卡 runner 下拉含 claude-code/codex 两项;codex 不可用环境下报错清晰(而非静默失败)。
 - **验收**:单测:runner 枚举校验、codex 命令构造(mock 进程层)、UI 下拉双选项;真机:本机若有 codex CLI 则真跑一轮,否则验证报错路径与文案。npm test 全绿。
 - **风险**:codex 集成深度未知,探查后若发现需要大改沙箱层,收缩为「配置层+调用层完整,执行层登记 backlog」并在交付报告明示。
+- **收缩登记(评审后补,见决议#14)**:目标中「编排页 runner 下拉」与验收中「UI 下拉双选项」单测不随 T20 worktree 交付(同文件互斥:LoopCard.tsx 属 T16 worktree)——UI 侧归 T17 落地、T19 验收钉住;T20 已交付其全部数据面依赖,UI 补挂为纯小改。
 
 ## 执行编排(依赖图分波,同文件互斥)
 

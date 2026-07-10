@@ -195,8 +195,8 @@ describe('updateLoopInYaml —— 拒绝面', () => {
     expect(r.error).toContain('autonomy_level')
   })
 
-  test('不可 patch 字段（id/name/phases/state/runner）→ error', () => {
-    for (const field of ['id', 'name', 'phases', 'state', 'runner']) {
+  test('不可 patch 字段（id/name/phases/state）→ error（runner 自 v5 T20 起可 patch，见下方专测）', () => {
+    for (const field of ['id', 'name', 'phases', 'state']) {
       const r = updateLoopInYaml(BASE, 'build-loop', { [field]: 'x' })
       expect(r.text).toBeNull()
       expect(r.error).toContain(field)
@@ -219,5 +219,25 @@ describe('updateLoopInYaml —— 拒绝面', () => {
     const r = updateLoopInYaml(BASE, 'build-loop', {})
     expect(r.text).toBeNull()
     expect(r.error).not.toBeNull()
+  })
+})
+
+// ── v5 T20：runner 双支持（决议 #13 口径外的数据面）——runner 可 patch 且 codex 过整文档 schema ──
+describe('updateLoopInYaml —— runner（v5 T20 双 runner 数据面）', () => {
+  test('patch runner: codex —— 读回一致、schema 全绿、另一 loop 的 runner 不动', () => {
+    const { text, error } = updateLoopInYaml(BASE, 'build-loop', { runner: 'codex' })
+    expect(error).toBeNull()
+    const { data, errors } = readBack(text!)
+    expect(errors).toEqual([])
+    expect(data!.loops.find((l) => l.id === 'build-loop')!.runner).toBe('codex')
+    expect(data!.loops.find((l) => l.id === 'docs-loop')!.runner).toBe('cron')
+  })
+
+  test('patch runner: claude-code —— 同样合法（下拉双选项的另一半）', () => {
+    const { text, error } = updateLoopInYaml(BASE, 'docs-loop', { runner: 'claude-code' })
+    expect(error).toBeNull()
+    const { data, errors } = readBack(text!)
+    expect(errors).toEqual([])
+    expect(data!.loops.find((l) => l.id === 'docs-loop')!.runner).toBe('claude-code')
   })
 })

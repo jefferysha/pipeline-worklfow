@@ -63,6 +63,9 @@ export type RunWork = (
   exec: SandboxHandle['exec'],
   name: string,
   signal: AbortSignal,
+  /** v5 T20：loop 声明的 runner（'codex' → 真实现在命令构造点注入 PIPELINE_RUNNER=codex；
+   * 缺省/其余值走既有 Claude 路径）。可选参数，既有 fake/真实现零改动兼容。 */
+  runner?: string,
 ) => Promise<SandboxReport>
 
 /** 生命周期全部注入 port（真 docker/git/worktree 走 #29c 生产接线）。 */
@@ -110,6 +113,12 @@ export interface RunChangeConfig {
    * 空/未传 = 无 loop 语境 → 跳过检查（零 diff 开销）。
    */
   readonly denylist?: readonly string[]
+  /**
+   * v5 T20：loop 声明的 runner（由调用方按 change_prefix 归属从 loops registry 派生——见
+   * runnerFor.ts::runnerForChange / dockerRunChange.ts::resolveRunner）。'codex' → runWork
+   * 真实现起 codex exec 无头会话；缺省/未传/其余历史值（cron 等）→ 既有 Claude 缺省路径。
+   */
+  readonly runner?: string
 }
 
 /**
@@ -214,6 +223,7 @@ export const runChangeInSandbox = async (ports: LifecyclePorts, cfg: RunChangeCo
         }),
       cfg.name,
       signal,
+      cfg.runner, // v5 T20：runner 分派透传（命令构造点见 ports.ts runWork / buildAfkRunCommand）
     )
 
     // dashboard 取消（afk-workbench Task 3）：本进程的 signal 从没被 abort 过（触发 kill 的是另一个

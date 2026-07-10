@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { StructuredOutputError, parseSandboxReport, runPipeline } from './runner.js'
+import { StructuredOutputError, buildAfkRunCommand, parseSandboxReport, runPipeline } from './runner.js'
 
 /** 结构化握手解析（老仓 scheduler/runChange.ts:447-545）。 */
 describe('parseSandboxReport', () => {
@@ -55,5 +55,22 @@ describe('runPipeline（注入 exec 面驱动 build→verify→ship）', () => {
   it('exec 非零退出（build/verify 真失败）→ 抛错（不伪造 pass）', async () => {
     const exec = async () => ({ stdout: '', stderr: 'boom', exitCode: 1 })
     await expect(runPipeline(exec, 'x', new AbortController().signal)).rejects.toThrow()
+  })
+})
+
+/** v5 T20：runner 分派——命令构造点按 runner 注入 PIPELINE_RUNNER（沙箱脚本据此选 agent CLI）。 */
+describe('buildAfkRunCommand · runner 分派（v5 T20 双 runner）', () => {
+  it('缺省 / claude-code → 命令不变（既有 Claude 路径零回归）', () => {
+    expect(buildAfkRunCommand('x')).toBe('PIPELINE_AFK=1 pipeline-afk-run x')
+    expect(buildAfkRunCommand('x', 'claude-code')).toBe('PIPELINE_AFK=1 pipeline-afk-run x')
+  })
+
+  it('codex → 注入 PIPELINE_RUNNER=codex（沙箱内 pipeline-afk-run 据此起 codex exec 无头会话）', () => {
+    expect(buildAfkRunCommand('x', 'codex')).toBe('PIPELINE_AFK=1 PIPELINE_RUNNER=codex pipeline-afk-run x')
+  })
+
+  it('历史自由值（cron/cron-session 等非 agent runner）→ 不注入，走缺省路径', () => {
+    expect(buildAfkRunCommand('x', 'cron')).toBe('PIPELINE_AFK=1 pipeline-afk-run x')
+    expect(buildAfkRunCommand('x', 'cron-session')).toBe('PIPELINE_AFK=1 pipeline-afk-run x')
   })
 })

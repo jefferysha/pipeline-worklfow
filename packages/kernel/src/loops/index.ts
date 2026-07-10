@@ -36,6 +36,9 @@ export type {
   LoopKind, LoopStatus, LoopRisk, AutonomyLevel, LoopBudget, LoopEntry, LoopRegistry,
   Verdict, Enforcement, VerdictReason, VerdictMetrics, LoopVerdict, RunFacts,
 } from './types.js'
+// v5 T20：runner 双支持数据面（编排页下拉双选项；LoopEntry.runner 本身仍是自由字符串）
+export { LOOP_RUNNERS } from './types.js'
+export type { LoopRunner } from './types.js'
 // #38 分级放权 L1→L3 毕业制升降档裁决（GOAL B19 / D16）
 export {
   decideGraduation, planLevelChange, parseRunHistory, setAutonomyLevelInYaml,

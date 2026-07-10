@@ -82,8 +82,11 @@ export const createLifecyclePorts = (deps: LifecyclePortsDeps): LifecyclePorts =
       return createDockerSandbox(exec, { image, worktreePath, env, gitMounts: mounts, uid, gid, cpus: deps.cpus })
     },
 
-    async runWork(sandboxExec, name, signal) {
-      const cmd = buildAfkRunCommand(name)
+    async runWork(sandboxExec, name, signal, runner) {
+      // v5 T20：runner 分派在命令构造点完成——'codex' → PIPELINE_RUNNER=codex 前缀，沙箱脚本
+      // （tools/sandcastle/pipeline-afk-run.sh）据此起 codex exec 无头会话；CLI 缺失时脚本打
+      // 清晰错误并非零退出，经下方 exitCode!==0 throw 流进 scheduler 写 automation_last_error。
+      const cmd = buildAfkRunCommand(name, runner)
       // afk-workbench Task 2 teardown 修复：落盘位置是 host 侧 openspec/changes/<name>/，不是
       // worktree 内——那个目录只随 change 本身存在（.pipeline.yaml/.pipeline-history.jsonl 的
       // 落地目录），从不随某次 run 的 worktree 一起被 runChangeInSandbox 的 finally 块 teardown。

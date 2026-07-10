@@ -17,7 +17,7 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import {
-  createAutomation, createDockerRunChange, denylistForChange, dockerAvailable, nodeExec,
+  createAutomation, createDockerRunChange, denylistForChange, dockerAvailable, nodeExec, runnerForChange,
   AUTOMATION_LEVELS, type AutomationLevel,
 } from '@pipeline-lite/automation'
 import { loadRegistry } from '@pipeline-lite/kernel'
@@ -129,7 +129,11 @@ export async function cmdAfk(deps: CliDeps, sub: string, name: string | undefine
       // 绝不阻断 run）。每次 run 现读（loops.yaml 可能被编辑，不缓存）。
       const resolveDenylist = async (changeName: string): Promise<readonly string[]> =>
         denylistForChange(loadRegistry(deps.cwd).data?.loops ?? [], changeName)
-      const runChange = createDockerRunChange({ hostRepoDir: deps.cwd, base, level, image, store: deps.store, resolveDenylist })
+      // runner 双支持（v5 T20）：按 change_prefix 归属派生 loop 声明的 runner（'codex' → 沙箱起
+      // codex exec 无头会话；其余/无归属 → 缺省 Claude 路径）。同 denylist 的现读/best-effort 口径。
+      const resolveRunner = async (changeName: string): Promise<string | undefined> =>
+        runnerForChange(loadRegistry(deps.cwd).data?.loops ?? [], changeName)
+      const runChange = createDockerRunChange({ hostRepoDir: deps.cwd, base, level, image, store: deps.store, resolveDenylist, resolveRunner })
       await auto.runRound(runChange)
       deps.io.out(`AFK run: 跑完一轮（${ready.length} 项候选，level=${level}，image=${image}）`)
       return 0

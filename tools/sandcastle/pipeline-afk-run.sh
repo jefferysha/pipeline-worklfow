@@ -35,7 +35,28 @@ git config --global user.name 'pipeline-afk' >/dev/null 2>&1 || true
 # 证明 pipeline 插件在沙箱内真可用（读挂载 worktree 的真 change 状态）；失败不致命（记 unknown）。
 phase="$(pipeline get "$name" phase 2>/dev/null || echo unknown)"
 
-if [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ] && command -v claude >/dev/null 2>&1; then
+if [ "${PIPELINE_RUNNER:-}" = "codex" ]; then
+  # runner 双支持（v5 T20）：runner=codex 由 host 侧命令构造点（runner.ts::buildAfkRunCommand）
+  # 显式注入——用户在 loops.yaml 点名要 codex，CLI 缺失就是硬错误：打清晰 stderr 并非零退出
+  # （错误经 ports.ts runWork 的 throw 流进 scheduler，automation_last_error 落「codex CLI 不可用」），
+  # 绝不静默回落确定性路径伪装 agent 跑过。
+  if ! command -v codex >/dev/null 2>&1; then
+    printf 'codex CLI 不可用（runner=codex 已显式指定，但沙箱镜像内无 codex 命令）：请在 sandcastle 镜像安装 codex CLI，或把该 loop 的 runner 改回 claude-code\n' >&2
+    exit 96
+  fi
+  # codex 无头会话（CLI 惯例：codex exec = 非交互一次性执行）。--dangerously-bypass-approvals-and-sandbox
+  # 对位 claude 的 --dangerously-skip-permissions：headless 容器无 TTY 应答审批，且一次性容器 +
+  # 独立 worktree 本身就是隔离边界（codex 官方口径也只建议在容器内用该开关）。认证走 extraEnv
+  # 注入的 key（如 OPENAI_API_KEY/CODEX_API_KEY）；认证失败由 codex 自身报错落日志，与 claude
+  # 路径同款诚实分流（agent 失败不掩盖，确定性产物兜底记账）。timeout 300 同 claude 路径。
+  agent_exit=0
+  timeout 300 codex exec --dangerously-bypass-approvals-and-sandbox \
+    "Run the pipeline build phase for change ${name}, then stop." \
+    >".sandcastle-build.agent.log" 2>&1 || agent_exit=$?
+  printf 'agent exit=%s\n' "$agent_exit" >>".sandcastle-build.agent.log"
+  # [TRANSITION] 行回放（同 claude 路径的 T4 修复）：host 侧 phaseWatch 只看得到流面。
+  grep -a '^\[TRANSITION\] ' ".sandcastle-build.agent.log" || true
+elif [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ] && command -v claude >/dev/null 2>&1; then
   # 真部署路径：agent 驱动 build。
   #   走代理而非直连：容器内自起 `pipeline tap` reverse proxy（同容器网络命名空间，不依赖
   #   docker↔host 反向连通性——host.docker.internal 在部分沙箱化环境里对宿主监听端口只会

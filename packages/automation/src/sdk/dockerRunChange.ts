@@ -71,6 +71,15 @@ export interface DockerRunChangeOptions {
    * throw → 无 loop 语境，检查跳过（best-effort：registry 读故障绝不阻断 run）。
    */
   readonly resolveDenylist?: (name: string) => Promise<readonly string[]>
+  /**
+   * loop runner 解析器（v5 T20 双 runner，可选）：change 名 → loop 声明的 runner。调用方按
+   * change_prefix 归属从 loops registry 派生（现成帮手：runnerFor.ts::runnerForChange +
+   * kernel loadRegistry，接线见 packages/cli/src/commands/afk.ts）。返回 'codex' → 沙箱命令
+   * 构造点注入 PIPELINE_RUNNER=codex（buildAfkRunCommand），起 codex exec 无头会话；返回
+   * 其余值 / 未传 / resolver 自身 throw → 缺省 Claude 路径（best-effort：registry 读故障绝不
+   * 阻断 run）。codex CLI 不可用时沙箱脚本非零退出并打清晰错误 → automation_last_error。
+   */
+  readonly resolveRunner?: (name: string) => Promise<string | undefined>
 }
 
 /** 构造绑真 docker/git 的 RunChange（喂给 automation.runRound）。 */
@@ -100,9 +109,12 @@ export const createDockerRunChange = (opts: DockerRunChangeOptions): RunChange =
     // T4 决议 #12：每次 run 现解析该 change 的 loop denylist（loops.yaml 可能被编辑，不缓存）；
     // resolver 故障 → []（best-effort，registry 读坏不阻断 run，也不误判违规）。
     const denylist = opts.resolveDenylist ? await opts.resolveDenylist(name).catch(() => [] as string[]) : []
+    // v5 T20：每次 run 现解析该 change 的 loop runner（同 denylist 的不缓存/best-effort 口径）；
+    // resolver 故障 → undefined（缺省 Claude 路径，绝不因 registry 读坏阻断 run）。
+    const runner = opts.resolveRunner ? await opts.resolveRunner(name).catch(() => undefined) : undefined
     return runChangeInSandbox(
       ports,
-      { hostRepoDir: opts.hostRepoDir, name, base: opts.base, autoMerge, extraEnv: opts.extraEnv, denylist },
+      { hostRepoDir: opts.hostRepoDir, name, base: opts.base, autoMerge, extraEnv: opts.extraEnv, denylist, runner },
       signal,
     )
   }
