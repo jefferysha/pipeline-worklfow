@@ -36,6 +36,8 @@ function loop(over: Partial<LoopEntry> = {}): LoopEntry {
     budget: { max_runs_per_day: 24, max_in_flight: 1, on_exceed: 'skip' },
     kill_criteria: ['k'],
     autonomy_level: 'L1',
+    allowlist: [],
+    denylist: [],
     ...over,
   }
 }

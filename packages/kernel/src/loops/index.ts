@@ -45,3 +45,7 @@ export type {
   GraduationHistory, GraduationInputs, GraduationVerdict, LevelChangeKind, LevelChangePlan,
   GraduationFs, GraduationReport, GraduationReportEnvelope, ApplyLevelResult,
 } from './graduation.js'
+// v5 T3：loops.yaml 字段级文本手术（决议 #3 #12 存储侧；升降档另走 graduation）
+export {
+  updateLoopInYaml, PATCHABLE_SCALAR_FIELDS, PATCHABLE_BUDGET_FIELDS, PATCHABLE_ARRAY_FIELDS,
+} from './update.js'

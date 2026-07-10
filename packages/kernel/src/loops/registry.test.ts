@@ -187,4 +187,27 @@ describe('loadRegistry —— 四态载入契约（老 load_registry 149-177）'
     expect(r.data).toBeNull()
     expect(r.errors.length).toBeGreaterThan(0)
   })
+
+  test('allowlist/denylist（v5 决议 #12 存储侧）：声明 → 原样读回；缺 → 缺省 []', () => {
+    const withLists = VALID_LOOP.replace(
+      '    autonomy_level: L2\n',
+      '    autonomy_level: L2\n    allowlist:\n      - src/**\n    denylist:\n      - secrets/**\n      - "**/*.env"\n',
+    )
+    const declared = loadRegistry('/repo', io({ '/repo/.pipeline/loops.yaml': withLists }))
+    expect(declared.errors).toEqual([])
+    expect(declared.data!.loops[0]!.allowlist).toEqual(['src/**'])
+    expect(declared.data!.loops[0]!.denylist).toEqual(['secrets/**', '**/*.env'])
+
+    const absent = loadRegistry('/repo', io({ '/repo/.pipeline/loops.yaml': VALID_LOOP }))
+    expect(absent.errors).toEqual([])
+    expect(absent.data!.loops[0]!.allowlist).toEqual([])
+    expect(absent.data!.loops[0]!.denylist).toEqual([])
+  })
+
+  test('allowlist/denylist 类型受 schema 约束（非字符串项 → 校验失败）', () => {
+    const bad = VALID_LOOP.replace('    autonomy_level: L2\n', '    autonomy_level: L2\n    denylist:\n      - 42\n')
+    const r = loadRegistry('/repo', io({ '/repo/.pipeline/loops.yaml': bad }))
+    expect(r.data).toBeNull()
+    expect(r.errors.some((e) => e.includes('denylist'))).toBe(true)
+  })
 })

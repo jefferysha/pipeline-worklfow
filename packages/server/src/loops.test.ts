@@ -1,8 +1,9 @@
-import { mkdtemp, mkdir, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { buildLoopsSnapshot } from './loops.js'
+import { loadRegistry } from '@pipeline-lite/kernel'
+import { applyLoopsUpdate, buildLoopsSnapshot } from './loops.js'
 
 const LOOP_YAML = `version: 1
 loops:
@@ -58,5 +59,56 @@ describe('buildLoopsSnapshot', () => {
     const snap = await buildLoopsSnapshot({ registry: () => [rootNoLoops, rootWithLoop], now: () => new Date() })
     expect(snap.rows).toHaveLength(1)
     expect(snap.rows[0]?.root).toBe(rootWithLoop)
+  })
+})
+
+describe('applyLoopsUpdate —— loops.yaml 字段写回（v5 T3，POST /api/loops/update 的写回逻辑）', () => {
+  it('patch 标量 + budget + allowlist/denylist → 真改盘，loadRegistry 读回一致', async () => {
+    const root = await makeProjectWithLoop()
+    const r = await applyLoopsUpdate(root, 'build-loop', {
+      cadence: '2h',
+      max_runs_per_day: 12,
+      allowlist: ['src/**'],
+      denylist: ['secrets/**'],
+    })
+    expect(r).toEqual({ ok: true })
+    const { data, errors } = loadRegistry(root)
+    expect(errors).toEqual([])
+    const loop = data!.loops[0]!
+    expect(loop.cadence).toBe('2h')
+    expect(loop.budget.max_runs_per_day).toBe(12)
+    expect(loop.allowlist).toEqual(['src/**'])
+    expect(loop.denylist).toEqual(['secrets/**'])
+  })
+
+  it('未知 loop id → ok:false，盘上文件不动', async () => {
+    const root = await makeProjectWithLoop()
+    const before = await readFile(join(root, '.pipeline', 'loops.yaml'), 'utf8')
+    const r = await applyLoopsUpdate(root, 'ghost-loop', { cadence: '2h' })
+    expect(r.ok).toBe(false)
+    expect('error' in r && r.error).toContain('ghost-loop')
+    expect(await readFile(join(root, '.pipeline', 'loops.yaml'), 'utf8')).toBe(before)
+  })
+
+  it('autonomy_level 不收（走 /api/loops/level）→ ok:false', async () => {
+    const root = await makeProjectWithLoop()
+    const r = await applyLoopsUpdate(root, 'build-loop', { autonomy_level: 'L3' })
+    expect(r.ok).toBe(false)
+    expect('error' in r && r.error).toContain('autonomy_level')
+  })
+
+  it('patch 后 schema 校验失败（cadence 不合 pattern）→ ok:false 携定位错误，不落盘', async () => {
+    const root = await makeProjectWithLoop()
+    const before = await readFile(join(root, '.pipeline', 'loops.yaml'), 'utf8')
+    const r = await applyLoopsUpdate(root, 'build-loop', { cadence: 'whenever-i-feel-like' })
+    expect(r.ok).toBe(false)
+    expect('errors' in r && r.errors!.some((e) => e.includes('cadence'))).toBe(true)
+    expect(await readFile(join(root, '.pipeline', 'loops.yaml'), 'utf8')).toBe(before)
+  })
+
+  it('loops.yaml 不存在 → ok:false（不是 throw）', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'loops-upd-none-'))
+    const r = await applyLoopsUpdate(root, 'build-loop', { cadence: '2h' })
+    expect(r.ok).toBe(false)
   })
 })

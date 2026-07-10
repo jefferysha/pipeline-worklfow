@@ -53,6 +53,11 @@ export interface LoopEntry {
   kill_criteria: string[]
   /** 分级放权级别（缺省填 L1；loadRegistry 派生时补默认）。 */
   autonomy_level: AutonomyLevel
+  /** v5 决议 #12：路径 glob 白名单（存储侧；L3 unattended 自动合并的许可范围，执行面另落）。缺省 []。 */
+  allowlist: string[]
+  /** v5 决议 #12：路径 glob 黑名单（存储侧；运行时校验见 automation/lifecycle/denylist.ts，
+   * 该模块以鸭子类型只读 change_prefix + denylist——本字段名即其消费契约，勿改名）。缺省 []。 */
+  denylist: string[]
 }
 
 export interface LoopRegistry {

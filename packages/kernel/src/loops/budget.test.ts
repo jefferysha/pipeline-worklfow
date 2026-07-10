@@ -25,7 +25,7 @@ function loop(over: Partial<LoopEntry> = {}, budgetOver: Partial<LoopBudget> = {
     risk: 'medium', runner: 'cron', change_prefix: 'loop-be-', phases: ['a', 'b'], human_gates: ['g'],
     state: '.superpowers/loops/progress.md', design_doc: 'd', status: 'active',
     budget: { max_runs_per_day: 24, max_in_flight: 1, on_exceed: 'skip', ...budgetOver },
-    kill_criteria: ['k'], autonomy_level: 'L1', ...over,
+    kill_criteria: ['k'], autonomy_level: 'L1', allowlist: [], denylist: [], ...over,
   }
 }
 

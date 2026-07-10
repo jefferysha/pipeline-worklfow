@@ -322,6 +322,10 @@ export const LOOPS_SCHEMA: SchemaNode = {
           kill_criteria: { type: 'array', minItems: 1, items: { type: 'string' } },
           // 本轮新增：分级放权级别（可选；缺省 L1 由 loadRegistry 派生填充）。
           autonomy_level: { type: 'string', enum: ['L1', 'L2', 'L3'] },
+          // v5 决议 #12：路径 glob 白/黑名单（可选，缺省 [] 由 loadRegistry 派生填充；
+          // denylist 运行时消费见 automation/lifecycle/denylist.ts）。
+          allowlist: { type: 'array', items: { type: 'string' } },
+          denylist: { type: 'array', items: { type: 'string' } },
         },
       },
     },
@@ -347,11 +351,14 @@ export const nodeLoopIo: LoopIo = {
 
 const LOOPS_REL_PATH = ['.pipeline', 'loops.yaml']
 
-/** 派生：schema 校验已过的原始数据 → 带默认的 LoopRegistry（autonomy_level 缺省填 L1）。 */
+/** 派生：schema 校验已过的原始数据 → 带默认的 LoopRegistry（autonomy_level 缺省填 L1；
+ * allowlist/denylist 缺省填 []，决议 #12 存储侧）。 */
 function deriveRegistry(data: Record<string, unknown>): LoopRegistry {
   const loops = (data.loops as Record<string, unknown>[]).map((l) => ({
     ...l,
     autonomy_level: (l.autonomy_level as string | undefined) ?? 'L1',
+    allowlist: (l.allowlist as string[] | undefined) ?? [],
+    denylist: (l.denylist as string[] | undefined) ?? [],
   })) as unknown as LoopEntry[]
   return { version: 1, loops }
 }
