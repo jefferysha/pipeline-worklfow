@@ -25,6 +25,7 @@ export const GLOBAL_CSS = `
   --shadow: 0 1px 2px rgba(0,0,0,.04); --shadow-2: 0 1px 3px rgba(0,0,0,.06),0 1px 2px rgba(0,0,0,.04);
   --ring: rgba(11,108,255,.13);
   --radius: 12px; --radius-sm: 8px;
+  --nav-offset: 64px; /* nav 实际高(约 41-45px) + 20px 呼吸——.side-col sticky top 对齐用，改 .nav 高度需同步此值 */
   --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
   --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
 }
@@ -75,6 +76,7 @@ body { margin: 0; }
 .main { flex: 1; padding: 20px; max-width: 1200px; width: 100%; margin: 0 auto; }
 
 /* ── 导航 ── */
+/* 改 nav 高度需同步 --nav-offset（:root 变量，供 .side-col sticky top 对齐，见下方 .side-col 规则）。 */
 .nav { display: flex; align-items: center; gap: 18px; padding: 10px 20px; background: var(--card); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 10; }
 .nav__brand { display: flex; align-items: center; gap: 9px; font-weight: 700; color: var(--text); font-size: 14px; white-space: nowrap; }
 .nav__brand-mark { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 26px; height: 26px; border-radius: 8px; background: var(--ink); color: var(--ink-fg); }
@@ -132,11 +134,10 @@ body { margin: 0; }
    原样作为 .view-split__main 的子节点，不改自身结构。── */
 .view-split { display: flex; align-items: flex-start; gap: 20px; }
 .view-split__main { flex: 1; min-width: 0; }
-.side-col { flex: 0 0 280px; width: 280px; display: flex; flex-direction: column; gap: 16px; position: sticky; top: 20px; }
+.side-col { flex: 0 0 280px; width: 280px; display: flex; flex-direction: column; gap: 16px; position: sticky; top: var(--nav-offset); }
 .side-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); }
 .side-card__head { display: flex; align-items: center; gap: 8px; padding: 11px 14px; border-bottom: 1px solid var(--border); color: var(--text-3); }
 .side-card__head b { font-size: 13px; font-weight: 700; color: var(--text); }
-.side-card__head-meta { margin-left: auto; font-family: var(--mono); font-size: 11px; color: var(--text-3); }
 .side-card__head-action { margin-left: auto; }
 .side-card__body { padding: 2px 14px 4px; }
 /* 摘要行 / 项目行共用：图标 + label + 右侧蓝 mono 计数（v4 .sum-row/.proj-row 合流）。 */

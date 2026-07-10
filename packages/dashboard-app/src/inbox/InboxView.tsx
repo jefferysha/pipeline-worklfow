@@ -207,6 +207,8 @@ export function InboxView({ snapshot, loading, error, currentRoot, rulesByKey, o
   // Task 17：右栏「关联产物」的数据源——artifactChips 正门（与 ChangeDetailCard 产物区共享
   // 同一个函数，但故意不去重/不与证据格联动：右栏是选中 change 的速览，详情卡才是全景，两处
   // 信息密度定位不同，不算重复渲染）。空态（无选中）时这张卡不渲染。
+  // 与详情卡产物区不同：此处不做证据格去重——verify 相位已设的 verification_report 会在右栏
+  // 出现而详情卡产物区不出现（它在证据格里），属有意速览口径。
   const selectedArtifacts = selectedItem ? artifactChips(selectedItem.change) : []
 
   return (
