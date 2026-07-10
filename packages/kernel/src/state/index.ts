@@ -6,6 +6,8 @@ export { createStateStore, STATE_FILE_NAME } from './store.js'
 export { parsePipeline, serializePipeline, quoteGate, unquoteScalar, emptyFields } from './parse.js'
 export { withLock, LOCK_DIR_NAME, STALE_LOCK_MS } from './lock.js'
 export { createHistoryWriter, HISTORY_FILE } from './history.js'
+// 机器级项目注册表（v5 T2 决策 D）——init 自动登记 + server 项目发现同源
+export { projectRegistryPath, readProjectRegistry, registerProjectRoot, PROJECT_REGISTRY_FILE } from './projectRegistry.js'
 export { parseLegacyHistory, stripLegacyHistory } from './legacy.js'
 // task lifecycle（BACKLOG #15）——依赖图 / children / cascade / canonical
 export {

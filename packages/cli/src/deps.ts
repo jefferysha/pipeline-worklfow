@@ -62,6 +62,12 @@ export interface CliDeps {
   writeBreadcrumb?: (changeDir: string, content: string) => Promise<void>
   /** lite 历史 .pipeline-history.jsonl appender（CONTRACT §1）。best-effort。 */
   history?: HistoryWriter
+  /**
+   * init 成功后把 repoRoot 登记进机器级项目注册表 ~/.claude/pipeline-projects.json
+   * （v5 T2 决策 D：dashboard 项目自动发现）。best-effort：任何注册表故障（损坏/不可写）
+   * 只 WARN，绝不影响 init exit 0。main.ts 用 kernel registerProjectRoot 落地。
+   */
+  registerProject?: (repoRoot: string) => Promise<void>
   /** 读 .pipeline-history.jsonl 原文（缺失 → 空串）。import 幂等哨兵检查用 */
   readHistoryRaw?: (changeDir: string) => Promise<string>
   /** 插件版本（= .claude-plugin/plugin.json 版本；sync 的 cliVersion 真相源）。main.ts 注入 */

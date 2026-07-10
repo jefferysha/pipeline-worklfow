@@ -97,3 +97,53 @@ describe('init --workflow（GOAL E，自定义 workflow 首个 step 落点）', 
     expect(deps.errLines.join('\n')).toContain("workflow 'ghost' 未找到")
   })
 })
+
+/**
+ * 项目注册表 best-effort 自动登记（v5 T2 决策 D）：init 成功后把 repoRoot 交给
+ * deps.registerProject；铁律 = 注册表任何故障都不得让 init 失败（exit 0 + WARN 走 stderr）。
+ */
+describe('init 项目注册表登记（决策 D，best-effort）', () => {
+  test('成功：registerProject 收到 deps.cwd（repoRoot），exit 0', async () => {
+    const deps = makeDeps()
+    const code = await cmdInit(deps, 'demo', { track: 'backend', preset: 'full' })
+    expect(code).toBe(0)
+    expect(deps.registeredRoots).toEqual(['/repo'])
+  })
+
+  test('registerProject 抛错（注册表损坏/目录不可写）：exit 0 不受影响，stderr 出 WARN 行', async () => {
+    const deps = makeDeps()
+    deps.registerProject = async () => {
+      throw new Error('EACCES: permission denied')
+    }
+    const code = await cmdInit(deps, 'demo', { track: 'backend', preset: 'full' })
+    expect(code).toBe(0)
+    expect(deps.errLines.some((l) => l.startsWith('WARN:') && l.includes('EACCES'))).toBe(true)
+    // [INIT] 主输出不受注册表故障影响
+    expect(deps.errLines).toContain('[INIT] /repo/openspec/changes/demo')
+  })
+
+  test('registerProject 未注入（可选依赖缺省）：行为与此前完全一致，exit 0', async () => {
+    const deps = makeDeps()
+    deps.registerProject = undefined
+    const code = await cmdInit(deps, 'demo', { track: 'backend', preset: 'full' })
+    expect(code).toBe(0)
+    expect(deps.errLines).toEqual(['[INIT] /repo/openspec/changes/demo'])
+  })
+
+  test('init 失败（store.init 抛错）：不触发登记', async () => {
+    const deps = makeDeps()
+    deps.store.init = spy(async (_o: InitOptions): Promise<string> => {
+      throw new Error('已存在')
+    })
+    const code = await cmdInit(deps, 'demo', { track: 'backend', preset: 'full' })
+    expect(code).toBe(1)
+    expect(deps.registeredRoots).toEqual([])
+  })
+
+  test('前置校验失败（非法 track）：不触发登记', async () => {
+    const deps = makeDeps()
+    const code = await cmdInit(deps, 'demo', { track: 'devops', preset: 'full' })
+    expect(code).toBe(1)
+    expect(deps.registeredRoots).toEqual([])
+  })
+})

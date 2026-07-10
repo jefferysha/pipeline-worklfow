@@ -83,6 +83,15 @@ export async function cmdInit(deps: CliDeps, name: string, opts: InitCmdOpts): P
       kind: 'init',
       ...(opts.user ? { by: opts.user } : {}),
     })
+    // 决策 D（v5 T2）：init 成功后 best-effort 登记 repoRoot 到机器级项目注册表——
+    // 铁律：注册表任何故障（损坏/目录不可写）只 WARN，绝不让已成功的 init 失败。
+    if (deps.registerProject) {
+      try {
+        await deps.registerProject(deps.cwd)
+      } catch (e) {
+        deps.io.err(`WARN: 项目注册表登记失败: ${errMsg(e)}`)
+      }
+    }
     deps.io.err(`[INIT] ${created}`)
     return 0
   } catch (e) {

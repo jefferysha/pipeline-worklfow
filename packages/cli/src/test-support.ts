@@ -159,6 +159,8 @@ export interface TestDeps extends CliDeps {
   errLines: string[]
   breadcrumbs: Array<[string, string]>
   historyEntries: Array<[string, HistoryEntry]>
+  /** registerProject 收到的 repoRoot 记录（v5 T2 决策 D：init best-effort 自动登记） */
+  registeredRoots: string[]
 }
 
 export interface MakeDepsOpts {
@@ -184,6 +186,7 @@ export function makeDeps(o: MakeDepsOpts = {}): TestDeps {
   const errLines: string[] = []
   const breadcrumbs: Array<[string, string]> = []
   const historyEntries: Array<[string, HistoryEntry]> = []
+  const registeredRoots: string[] = []
   const changes = o.changes ?? (o.states ? Object.keys(o.states) : [])
   return {
     store: mockStore(o.states ?? o.state ?? mockState()),
@@ -207,9 +210,13 @@ export function makeDeps(o: MakeDepsOpts = {}): TestDeps {
         historyEntries.push([changeDir, entry])
       },
     },
+    registerProject: async (repoRoot: string) => {
+      registeredRoots.push(repoRoot)
+    },
     outLines,
     errLines,
     breadcrumbs,
     historyEntries,
+    registeredRoots,
   }
 }

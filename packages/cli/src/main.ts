@@ -14,7 +14,10 @@ import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { CommanderError } from 'commander'
-import { createFlowEngine, createHistoryWriter, createStateStore, loadManifest } from '@pipeline-lite/kernel'
+import {
+  createFlowEngine, createHistoryWriter, createStateStore, loadManifest,
+  projectRegistryPath, registerProjectRoot,
+} from '@pipeline-lite/kernel'
 import { tapStatus } from '@pipeline-lite/tap'
 import type { GuardContext } from '@pipeline-lite/kernel'
 import type { CliDeps, DoctorProbes, GateMarkerInfo } from './deps.js'
@@ -216,6 +219,10 @@ async function main(): Promise<void> {
     readGateMarkers: () => readGateMarkers(process.cwd()),
     writeBreadcrumb: (dir, content) => writeFile(join(dir, '.breadcrumb'), content, 'utf8'),
     history: createHistoryWriter(),
+    // 决策 D（v5 T2）：init 成功后 best-effort 登记项目根到 ~/.claude/pipeline-projects.json
+    registerProject: async (repoRoot) => {
+      await registerProjectRoot(projectRegistryPath(homedir()), repoRoot)
+    },
     readHistoryRaw: async (dir) => {
       try {
         return await readFile(join(dir, '.pipeline-history.jsonl'), 'utf8')
