@@ -151,6 +151,52 @@ export async function fetchWorkflowNames(root: string): Promise<string[]> {
   return ((await res.json()) as { names: string[] }).names
 }
 
+// ── T15：Hook 会话时序线的数据面（消费 T5 的 GET/POST /api/hooks）──
+
+/** hook 时机（Claude Code plugin 注册的四事件）——server/hooksConfig.ts::HookMeta 的跨 HTTP 手抄。 */
+export type WbHookEvent = 'SessionStart' | 'UserPromptSubmit' | 'PreToolUse' | 'PostToolUse'
+export interface WbHookMeta {
+  id: string
+  event: WbHookEvent
+  matcher: string
+  script: string
+  /** false = 强制常开/暂不可配：server 写端点 400，前端渲染禁用态（区分文案由 HookTimeline 判定）。 */
+  configurable: boolean
+}
+export interface WbHooksConfig {
+  hooks: WbHookMeta[]
+  /** 禁用矩阵（只存禁用项）：键 `<hook>.<阶段>`，缺键 = 启用（fail-open，与 server 同语义）。 */
+  matrix: Record<string, false>
+}
+
+/** T15：hook 元数据 + 阶段×hook 禁用矩阵（GET /api/hooks?root=）。 */
+export async function fetchHooksConfig(root: string): Promise<WbHooksConfig> {
+  let res: Response
+  try {
+    res = await fetch(`/api/hooks?root=${encodeURIComponent(root)}`, { headers: { Accept: 'application/json' } })
+  } catch (err) {
+    wrapNetwork(err)
+  }
+  if (!res.ok) await throwApiError(res, '钩子配置获取失败')
+  const body = (await res.json()) as { hooks: WbHookMeta[]; matrix: Record<string, false> }
+  return { hooks: body.hooks, matrix: body.matrix }
+}
+
+/** T15：写回单个 (hook, 阶段) 开关（POST /api/hooks）。enabled=true 删禁用键、false 写键。 */
+export async function postHookToggle(input: { root: string; hook: string; phase: string; enabled: boolean }): Promise<void> {
+  let res: Response
+  try {
+    res = await fetch('/api/hooks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
+      body: JSON.stringify(input),
+    })
+  } catch (err) {
+    wrapNetwork(err)
+  }
+  if (!res.ok) await throwApiError(res, '钩子开关写回失败')
+}
+
 /**
  * change 历史记账单条（T8 消费 T1 端点）——镜像 kernel types.ts HistoryEntry 的可选面
  * （无 npm 跨包依赖，手抄保零耦合，同本文件头 Snapshot 契约的既有纪律）。

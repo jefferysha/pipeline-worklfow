@@ -16,6 +16,11 @@ export interface StepperStep {
   /** 去重后的技能 id 序（chips 只展示前 2 个短名 + 截断计数）。 */
   skills: string[]
   outputsCount: number
+  /**
+   * T15：该阶段的启用 hook 数（/api/hooks 矩阵按阶段算——各卡数字可以不同）；
+   * undefined = 数据面未就绪/加载失败，隐藏该段（诚实占位，不谎报数字）。
+   */
+  hooksCount?: number
   /** 与下一张卡之间的转换事件名；无 forward 边 = null，不画连接件（诚实：边不存在就不画箭头）。 */
   linkEvent: string | null
 }
@@ -26,8 +31,6 @@ export interface StepperRailProps {
   onSelect: (id: string) => void
   /** 预演点亮数（WorkbenchView 的 GSAP 预演驱动）：前 litCount 张卡加 --live，最后一张 --live-g。 */
   litCount?: number
-  /** T15 挂载点：每阶段钩子计数（/api/hooks 配置接入后传入）；undefined = 数据面未接入，隐藏该段。 */
-  hooksCount?: number
   /** T13 挂载点：添加阶段。未接线时按钮渲染禁用态占位。 */
   onAddStage?: () => void
   /** stepper 容器的 aria-label（如「release-train 阶段」）。 */
@@ -40,7 +43,7 @@ function shortSkill(id: string): string {
   return ix >= 0 ? id.slice(ix + 1) : id
 }
 
-export function StepperRail({ steps, selectedId, onSelect, litCount = 0, hooksCount, onAddStage, label }: StepperRailProps): JSX.Element {
+export function StepperRail({ steps, selectedId, onSelect, litCount = 0, onAddStage, label }: StepperRailProps): JSX.Element {
   const { t } = useT()
   return (
     <div className="wb-rail">
@@ -68,10 +71,10 @@ export function StepperRail({ steps, selectedId, onSelect, litCount = 0, hooksCo
                 <span className="wb-step-id">{s.id}</span>
                 <span className="wb-step-meta">
                   <span>◇ {t('workbench.meta_skills', { n: s.skills.length })}</span>
-                  {hooksCount !== undefined && (
+                  {s.hooksCount !== undefined && (
                     <>
                       <i>·</i>
-                      <span>⚙ {t('workbench.meta_hooks', { n: hooksCount })}</span>
+                      <span>⚙ {t('workbench.meta_hooks', { n: s.hooksCount })}</span>
                     </>
                   )}
                   <i>·</i>

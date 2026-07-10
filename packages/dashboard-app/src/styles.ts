@@ -893,4 +893,35 @@ button.ev__chip--neutral:hover { border-color: var(--border-2); color: var(--tex
 .wb-track:hover { background: var(--fill); color: var(--text-2); }
 .wb-track.on, .wb-track.on:hover { background: var(--fill-2); color: var(--text); }
 .wb-track b { font-weight: 700; color: var(--accent); margin-left: 3px; }
+/* ==== T15：Hook 会话时序线（wb-hk 区块）——四时机节点 + 循环弧 + 人话 hook 卡。
+   对照 demo v5 的 .wb-hkline/.wb-hknode/.wb-hkloop/.wb-hkstack/.wb-hkcard，全部走既有 token，
+   无新原色；循环弧跨第 3-4 列（PreToolUse/PostToolUse 每轮工具调用都重复）。 ==== */
+.wb-hk-note { margin: -2px 0 14px; }
+.wb-hkline { position: relative; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); column-gap: 12px; padding-top: 2px; }
+.wb-hkline::before { content: ""; position: absolute; left: 5px; right: 14px; top: 10px; height: 2px; border-radius: 2px; background: var(--border-2); }
+.wb-hkline::after { content: ""; position: absolute; right: 6px; top: 6px; border-left: 7px solid var(--border-2); border-top: 5px solid transparent; border-bottom: 5px solid transparent; }
+.wb-hknode { grid-row: 1; position: relative; padding: 22px 0 10px 18px; }
+.wb-hknode::before { content: ""; position: absolute; left: 0; top: 5px; width: 12px; height: 12px; border-radius: 999px; background: var(--card); border: 3px solid var(--accent); }
+.wb-hk-t { font-size: 13px; font-weight: 700; line-height: 1.2; }
+.wb-hk-ev { font-size: 11px; color: var(--text-3); margin-top: 1px; font-family: var(--mono); }
+.wb-hkloop { grid-row: 2; grid-column: 3 / 5; position: relative; height: 14px; margin: 0 14px 12px 4px; border: 1.5px dashed var(--border-2); border-bottom: none; border-radius: 10px 10px 0 0; }
+.wb-hkloop span { position: absolute; left: 50%; top: -9px; transform: translateX(-50%); background: var(--card); padding: 0 8px; font-size: 11px; color: var(--text-3); white-space: nowrap; }
+.wb-hkstack { grid-row: 3; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.wb-hkcard { background: var(--fill); border-radius: 10px; padding: 8px 11px; }
+/* 暂不可配（confirm-clear/decision-recorder）：整卡灰显——sh 侧未接线，开关放开就是「设置不起效」。 */
+.wb-hkcard--pending { opacity: .6; }
+.wb-hkcard-t { display: flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 650; }
+.wb-hkcard-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wb-hkcard-t .switch { margin-left: auto; transform: scale(.85); transform-origin: right center; }
+.wb-hkcard-d { font-size: 11.5px; color: var(--text-3); line-height: 1.5; margin-top: 2px; }
+.wb-hk-badge { flex: none; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 999px; background: var(--fill-2); color: var(--text-3); white-space: nowrap; }
+/* 强制常开（gate/interactive-skill-gate，决议#2）：红系底与复核门同语义家族——「这里有一道不可撤的门」。 */
+.wb-hk-badge--locked { background: var(--red-t); color: var(--red-d); }
+@media (max-width: 720px) {
+  /* 窄屏时序线退化为纵向清单：一列到底，循环弧与横轨都失去几何意义，直接隐藏。
+     节点/卡列位是行内 style（gridColumn），此处 !important 压制（同上方 reduced-motion 先例）。 */
+  .wb-hkline { grid-template-columns: 1fr; }
+  .wb-hkline::before, .wb-hkline::after, .wb-hkloop { display: none; }
+  .wb-hknode, .wb-hkstack { grid-column: 1 !important; grid-row: auto; }
+}
 `

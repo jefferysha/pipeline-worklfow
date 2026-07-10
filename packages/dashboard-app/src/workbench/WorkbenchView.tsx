@@ -7,6 +7,7 @@ import { DEFAULT_RULES, invalidateWorkflowRules, rulesKey, useWorkflowRulesMulti
 import { Dialog } from '../shell/Dialog'
 import { EVENT_BY_EDGE, PHASES, REVIEW_PHASES, TRANSITIONS, isPhase } from '../types'
 import { revealDialog, revealList } from '../workflow/motion'
+import { HookTimeline, useHooksConfig } from './HookTimeline'
 import { StepEditor } from './StepEditor'
 import { StepperRail, type StepperStep } from './StepperRail'
 
@@ -142,6 +143,9 @@ export function WorkbenchView({ root }: WorkbenchViewProps): JSX.Element {
   // 存 ref 不进 state——快照只在 load/save 成功那一刻写入，本身不需要触发渲染；dirty 每次渲染
   // 从「当前 def vs 快照」重算（见下方声明处注释：故意不 useMemo，ref 变化对记忆化不可见）。
   const defSnapshotRef = useRef<string | null>(null)
+  // T15：/api/hooks 读写状态托管在这里（不在 HookTimeline 内）——阶段卡 hooksCount 真数、
+  // 摘要卡「钩子」行、时序线开关三个消费方吃同一份矩阵。per-root 配置，与 workflow 草稿无关。
+  const hooksConfig = useHooksConfig(root)
 
   // ── workflow 名列表（自定义名；default 恒在菜单尾部本地补上）──
   useEffect(() => {
@@ -360,6 +364,15 @@ export function WorkbenchView({ root }: WorkbenchViewProps): JSX.Element {
     [t],
   )
 
+  // T15：某阶段的启用 hook 数（含强制常开——它们真的在跑）；数据面未就绪 → undefined，
+  // 阶段卡隐藏该段、摘要回落 '—'（诚实占位纪律，同 T12 注释）。
+  const { hooks: hookMetas, matrix: hookMatrix } = hooksConfig
+  const hookCountOf = useCallback(
+    (stageId: string): number | undefined =>
+      hookMetas === null ? undefined : hookMetas.filter((h) => !(`${h.id}.${stageId}` in hookMatrix)).length,
+    [hookMetas, hookMatrix],
+  )
+
   const stepperSteps: StepperStep[] = useMemo(() => {
     if (!def) return []
     return def.steps.map((s, i) => {
@@ -371,10 +384,11 @@ export function WorkbenchView({ root }: WorkbenchViewProps): JSX.Element {
         gate: s.gate,
         skills: [...new Set(s.skills.map((sk) => sk.id))],
         outputsCount: s.outputs.length,
+        hooksCount: hookCountOf(s.id),
         linkEvent: fwd?.event ?? null,
       }
     })
-  }, [def, stepName])
+  }, [def, stepName, hookCountOf])
 
   const summary = useMemo(() => {
     if (!def) return null
@@ -384,8 +398,13 @@ export function WorkbenchView({ root }: WorkbenchViewProps): JSX.Element {
       stages: def.steps.length,
       gates: def.steps.filter((s) => s.gate !== null).length,
       skills: skillIds.size,
+      // T15：钩子行是 workflow 级口径——「在本 workflow 全部阶段都启用」的 hook 数
+      //（任一阶段被关即不计；阶段级差异看阶段卡上的真数）。数据面未就绪 → null 回落 '—'。
+      hooks: hookMetas === null
+        ? null
+        : hookMetas.filter((h) => def.steps.every((s) => !(`${h.id}.${s.id}` in hookMatrix))).length,
     }
-  }, [def])
+  }, [def, hookMetas, hookMatrix])
 
   // 下拉菜单的每名阶段计数：走 workflowModel 缓存（rulesKey 纪律），default 恒 DEFAULT_RULES。
   const { rules: rulesByKey } = useWorkflowRulesMulti(names && names.length > 0 ? [{ root, names }] : [])
@@ -506,6 +525,9 @@ export function WorkbenchView({ root }: WorkbenchViewProps): JSX.Element {
                     workflow={def.name}
                     readonly={readonlyWf}
                     onChange={updateStep}
+                    // T15：Hook 时序线 slot 注入——per-root 配置即时写回，不吃 readonly
+                    //（default 只读锁的是 workflow def，不锁 hooks.json）。
+                    hooksSlot={<HookTimeline phase={selectedStep.id} config={hooksConfig} />}
                   />
                 </section>
               )}
@@ -532,10 +554,11 @@ export function WorkbenchView({ root }: WorkbenchViewProps): JSX.Element {
                 <span className="side-card__row-label">{t('workbench.sum_skills')}</span>
                 <span className="side-card__row-value" data-testid="wb-sum-skills">{summary?.skills ?? '—'}</span>
               </div>
-              {/* T5/T15 挂载点：钩子计数（/api/hooks 配置）——数据面未接入前诚实占位，不谎报数字。 */}
+              {/* T15：钩子行出真数——「全部阶段都启用」的 hook 数（口径见 summary 计算处注释）；
+                  /api/hooks 加载中/失败仍回落 '—' 占位，不谎报数字。 */}
               <div className="side-card__row">
                 <span className="side-card__row-label">{t('workbench.sum_hooks')}</span>
-                <span className="side-card__row-value" data-testid="wb-sum-hooks">—</span>
+                <span className="side-card__row-value" data-testid="wb-sum-hooks">{summary?.hooks ?? '—'}</span>
               </div>
             </div>
           </div>
