@@ -139,17 +139,21 @@ export function AutomationCard({ root }: AutomationCardProps): JSX.Element {
           <span className="hint">{t('workbench.afk_sec_hint')}</span>
         </div>
         <div className="lp-slds">
-          <LpSlider
-            id="afk-sld-parallel"
-            label={t('workbench.afk_sld_parallel')}
-            value={draft.max_parallel}
-            min={PARALLEL_MIN}
-            max={PARALLEL_MAX}
-            display={t('workbench.afk_val_parallel', { n: draft.max_parallel })}
-            recoLabel={t('workbench.lp_reco', { v: RECO_PARALLEL })}
-            recoFrac={(RECO_PARALLEL - PARALLEL_MIN) / (PARALLEL_MAX - PARALLEL_MIN)}
-            onValue={(v) => edit({ max_parallel: v })}
-          />
+          <div>
+            <LpSlider
+              id="afk-sld-parallel"
+              label={t('workbench.afk_sld_parallel')}
+              value={draft.max_parallel}
+              min={PARALLEL_MIN}
+              max={PARALLEL_MAX}
+              display={t('workbench.afk_val_parallel', { n: draft.max_parallel })}
+              recoLabel={t('workbench.lp_reco', { v: RECO_PARALLEL })}
+              recoFrac={(RECO_PARALLEL - PARALLEL_MIN) / (PARALLEL_MAX - PARALLEL_MIN)}
+              onValue={(v) => edit({ max_parallel: v })}
+            />
+            {/* 验收反馈②-④：讲清楚这是「整机」上限，不是单 change 的配额 */}
+            <p className="wb-note lp-sld-note">{t('workbench.afk_sld_parallel_note')}</p>
+          </div>
           <LpSlider
             id="afk-sld-retries"
             label={t('workbench.afk_sld_retries')}

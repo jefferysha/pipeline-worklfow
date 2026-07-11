@@ -91,12 +91,19 @@ let fetchLog: string[] = []
 let logSeq = 0
 let actionResponse: { match: RegExp; status: number; body: unknown } | null = null
 let actionGate: Promise<void> | null = null
+// T2-④（验收反馈②-④）：/api/automation 桩——默认 200 回一份合法 settings（大多数用例的 fixture
+// 是双 root，singleRoot 恒 null，压根不会发这条请求，不影响既有用例）；单测按需改 max_parallel
+// 或翻 automationFail 验证 fail-open。
+let automationSettings = { max_parallel: 4, max_retries: 1, default_opt_in: false, image: '' }
+let automationFail = false
 
 beforeEach(() => {
   fetchLog = []
   logSeq = 0
   actionResponse = null
   actionGate = null
+  automationSettings = { max_parallel: 4, max_retries: 1, default_opt_in: false, image: '' }
+  automationFail = false
   global.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input)
     fetchLog.push(`${init?.method ?? 'GET'} ${url}${typeof init?.body === 'string' ? ` ${init.body}` : ''}`)
@@ -106,6 +113,10 @@ beforeEach(() => {
     if (/\/api\/afk\/[^/]+\/log\?root=/.test(url)) {
       logSeq += 1
       return new Response(JSON.stringify({ log: `line ${logSeq}\n` }), { status: 200 })
+    }
+    if (/\/api\/automation\?root=/.test(url)) {
+      if (automationFail) return new Response(JSON.stringify({ ok: false, error: 'boom' }), { status: 500 })
+      return new Response(JSON.stringify({ ok: true, settings: automationSettings }), { status: 200 })
     }
     if (actionGate) await actionGate
     if (actionResponse && actionResponse.match.test(url)) {
@@ -329,13 +340,15 @@ describe('ProgressView 动作接线：终止/重试/放弃 = afk 端点（T11 �
     expect(onToast).toHaveBeenCalledWith(expect.stringContaining('已提交'))
   })
 
-  it('终止钮仅 automation===running 可点：scheduled（同归执行中泳道）渲染禁用态（cancel-gate 纪律）', () => {
+  it('终止钮仅 automation===running 可点：scheduled（同归执行中泳道）渲染禁用态（cancel-gate 纪律）', async () => {
     renderView({
       snapshot: makeSnapshot([
         makeProject(ROOT_A, [makeChange('sched-demo', 'build', { fields: { automation: 'scheduled' } })]),
       ]),
     })
     expect(screen.getByTestId('prg-kill-sched-demo')).toBeDisabled()
+    // 单 root fixture：触发并发上限探测请求，冲掉其落地（不冲会刷 act 告警，同本文件其余先例）
+    await act(async () => {})
   })
 
   it('重试（失败行）→ POST /api/afk/:name/retry + 乐观更新徽章「排队」', async () => {
@@ -496,13 +509,15 @@ describe('ProgressView 筛选条（验收②）', () => {
     expect(screen.getByTestId('prg-chip-all').textContent).toContain('6')
   })
 
-  it('筛选全空时显示 prg-empty 空态', () => {
+  it('筛选全空时显示 prg-empty 空态', async () => {
     renderView()
     fireEvent.click(screen.getByTestId('prg-proj-btn'))
     fireEvent.click(screen.getByRole('checkbox', { name: 'proj-b' }))
     fireEvent.click(screen.getByTestId('prg-chip-queued'))
     expect(screen.getByTestId('prg-empty')).toBeInTheDocument()
     expect(screen.queryByTestId('prg-ghead-proj-b-release-train')).toBeNull()
+    // 单 root fixture：触发并发上限探测请求，冲掉其落地（不冲会刷 act 告警）
+    await act(async () => {})
   })
 })
 
@@ -514,7 +529,7 @@ describe('ProgressView 调度器健康灯（验收④；验收反馈②-②讲�
     expect(doctor.querySelector('.prg-doctor__d--attention')).not.toBeNull()
   })
 
-  it('无 automation 活动 → ok 灯，三数恒显（含 0，不再按活跃度隐藏计数）', () => {
+  it('无 automation 活动 → ok 灯，三数恒显（含 0，不再按活跃度隐藏计数）', async () => {
     renderView({
       snapshot: makeSnapshot([
         makeProject(ROOT_A, [
@@ -527,12 +542,54 @@ describe('ProgressView 调度器健康灯（验收④；验收反馈②-②讲�
     const doctor = screen.getByTestId('prg-doctor')
     expect(doctor.querySelector('.prg-doctor__d--ok')).not.toBeNull()
     expect(doctor.textContent).toContain('沙箱调度:0 执行 · 0 排队 · 0 失败')
+    // 单 root fixture：触发并发上限探测请求，冲掉其落地（不冲会刷 act 告警）
+    await act(async () => {})
   })
 
   it('灯点区域带 title 提示：只统计自动化沙箱，等你确认/等产出不归调度器', () => {
     renderView()
     expect(screen.getByTestId('prg-doctor')).toHaveAttribute('title', expect.stringContaining('只统计自动化沙箱'))
     expect(screen.getByTestId('prg-doctor')).toHaveAttribute('title', expect.stringContaining('见下方筛选'))
+  })
+})
+
+describe('ProgressView 调度灯并发上限（验收反馈②-④）', () => {
+  it('筛选到单 root 时 GET /api/automation?root= 取 max_parallel，灯尾追加「· 上限 N」', async () => {
+    automationSettings = { max_parallel: 6, max_retries: 1, default_opt_in: false, image: '' }
+    renderView()
+    fireEvent.click(screen.getByTestId('prg-proj-btn'))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'proj-a' }))
+    await waitFor(() => {
+      expect(fetchLog.some((l) => l.startsWith(`GET /api/automation?root=${encodeURIComponent(ROOT_A)}`))).toBe(true)
+    })
+    await waitFor(() => {
+      expect(screen.getByTestId('prg-doctor').textContent).toContain('· 上限 6')
+    })
+  })
+
+  it('多 root（默认全选/未筛选）不显示上限数字，也不发 /api/automation 请求', async () => {
+    renderView()
+    await act(async () => {})
+    expect(screen.getByTestId('prg-doctor').textContent).not.toContain('上限')
+    expect(fetchLog.some((l) => l.includes('/api/automation'))).toBe(false)
+  })
+
+  it('/api/automation 请求失败 → fail-open 静默不显示，不出错误 UI', async () => {
+    automationFail = true
+    renderView()
+    fireEvent.click(screen.getByTestId('prg-proj-btn'))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'proj-a' }))
+    await waitFor(() => {
+      expect(fetchLog.some((l) => l.startsWith('GET /api/automation'))).toBe(true)
+    })
+    await act(async () => {})
+    expect(screen.getByTestId('prg-doctor').textContent).not.toContain('上限')
+    expect(screen.queryByTestId('prg-error')).toBeNull()
+  })
+
+  it('doctor_hint 补一句「并发上限按项目在工作台配置」', () => {
+    renderView()
+    expect(screen.getByTestId('prg-doctor')).toHaveAttribute('title', expect.stringContaining('并发上限按项目在工作台配置'))
   })
 })
 

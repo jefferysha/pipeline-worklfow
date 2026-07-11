@@ -328,6 +328,8 @@ export const zh: Dict = {
     lp_sld_cadence: '运行节奏',
     lp_sld_runs: '每日最多运行',
     lp_sld_inflight: '同时在跑上限',
+    // 验收反馈②-④：讲清楚这个上限只管本 loop 的自动化通道，且是软上限（超出只提醒）。
+    lp_sld_inflight_note: '本 loop 同时走自动化通道的任务数，超出只提醒不硬拦',
     lp_sld_tokens: '每日 token 上限',
     lp_val_runs: '{n} 次',
     lp_val_inflight: '{n} 个',
@@ -369,6 +371,8 @@ export const zh: Dict = {
     afk_sec: '执行参数',
     afk_sec_hint: '保存后立即对下一轮 AFK 运行生效',
     afk_sld_parallel: '并发沙箱上限',
+    // 验收反馈②-④：滑杆下加一行说明——讲清楚这是「整机」上限，不是单 change 的配额。
+    afk_sld_parallel_note: '这台机同时最多跑几个沙箱，全部任务共享',
     afk_sld_retries: '失败自动重试',
     afk_val_parallel: '{n} 个',
     afk_val_retries: '{n} 次',
@@ -392,7 +396,10 @@ export const zh: Dict = {
     // computeSchedulerHealth，只取 running/queued/failed 三桶，gate/agent 不算在内
     // （progressModel.ts schedulerHealth 头注释）；doctor_hint 是灯点区域的 title 提示。
     doctor_counts: '沙箱调度:{running} 执行 · {queued} 排队 · {failed} 失败',
-    doctor_hint: '只统计自动化沙箱里的任务；『等你确认/等产出』的任务不归调度器，见下方筛选',
+    // 验收反馈②-④：筛选范围收敛到单 root 时，行尾追加 doctor_limit（GET /api/automation
+    // 取 max_parallel）；多 root 时不取不显示（fail-open：接口失败也不显示，不出错误 UI）。
+    doctor_limit: '· 上限 {n}',
+    doctor_hint: '只统计自动化沙箱里的任务；『等你确认/等产出』的任务不归调度器，见下方筛选；并发上限按项目在工作台配置',
     filter_project: '项目：',
     filter_all: '全部',
     filter_clear: '清空',
@@ -731,6 +738,7 @@ export const en: Dict = {
     lp_sld_cadence: 'Run cadence',
     lp_sld_runs: 'Max runs per day',
     lp_sld_inflight: 'Max in flight',
+    lp_sld_inflight_note: 'How many tasks this loop pushes through the automation lane at once — going over only warns, it does not hard-block',
     lp_sld_tokens: 'Daily token cap',
     lp_val_runs: '{n} runs',
     lp_val_inflight: '{n}',
@@ -772,6 +780,7 @@ export const en: Dict = {
     afk_sec: 'Execution settings',
     afk_sec_hint: 'saved settings apply from the next AFK round',
     afk_sld_parallel: 'Max parallel sandboxes',
+    afk_sld_parallel_note: 'How many sandboxes this machine runs at once, shared across every task',
     afk_sld_retries: 'Auto-retries on failure',
     afk_val_parallel: '{n}',
     afk_val_retries: '{n} retries',
@@ -791,7 +800,8 @@ export const en: Dict = {
     doctor_busy: 'Scheduler busy',
     doctor_attention: 'Needs attention',
     doctor_counts: 'Sandbox scheduler: {running} running · {queued} queued · {failed} failed',
-    doctor_hint: 'Only counts tasks inside the automation sandbox — tasks marked "Awaiting you" or "Awaiting output" are not tracked by the scheduler; see the filters below',
+    doctor_limit: '· cap {n}',
+    doctor_hint: 'Only counts tasks inside the automation sandbox — tasks marked "Awaiting you" or "Awaiting output" are not tracked by the scheduler; see the filters below; the parallel cap is configured per project in the Workbench',
     filter_project: 'Project:',
     filter_all: 'All',
     filter_clear: 'Clear',

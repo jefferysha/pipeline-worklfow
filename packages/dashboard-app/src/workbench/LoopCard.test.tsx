@@ -147,6 +147,12 @@ describe('LoopCard 读回显（验收①）', () => {
     expect(screen.queryByText(/台账/)).toBeNull()
     expect(screen.queryByText(/漂移/)).toBeNull()
   })
+
+  it('同时在跑上限滑杆下有一行说明（验收反馈②-④：讲清楚是本 loop 的软上限）', async () => {
+    renderCard()
+    await screen.findByTestId('lp-goal')
+    expect(screen.getByText('本 loop 同时走自动化通道的任务数，超出只提醒不硬拦')).toBeInTheDocument()
+  })
 })
 
 describe('LoopCard 编辑 → 保存（验收②）', () => {

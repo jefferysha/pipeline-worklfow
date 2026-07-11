@@ -54,6 +54,12 @@ describe('AutomationCard —— 真值渲染', () => {
     expect(screen.getByText('这些参数作用于本项目全部 AFK 运行——并发几个沙箱、失败自动重试几次')).toBeInTheDocument()
   })
 
+  it('并发沙箱上限滑杆下有一行说明（验收反馈②-④：讲清楚是整机上限）', async () => {
+    renderCard()
+    await waitFor(() => expect(screen.getByTestId('afk-sld-parallel')).toBeInTheDocument())
+    expect(screen.getByText('这台机同时最多跑几个沙箱，全部任务共享')).toBeInTheDocument()
+  })
+
   it('镜像输入 placeholder = sandcastle:local（空串 = 用内置镜像）', async () => {
     renderCard()
     await waitFor(() => expect(screen.getByTestId('afk-image')).toHaveAttribute('placeholder', 'sandcastle:local'))

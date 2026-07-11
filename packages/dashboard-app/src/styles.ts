@@ -772,9 +772,11 @@ button.ev__chip--neutral:hover { border-color: var(--border-2); color: var(--tex
 @media (max-width: 720px) { .lp-row3 { grid-template-columns: 1fr; } }
 .lp-eg { font-size: 11.5px; color: var(--text-3); margin: 5px 0 0; }
 .lp-eg b { color: var(--text-2); font-weight: 600; }
-/* 拖拉条组 */
-.lp-slds { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 28px; }
+/* 拖拉条组：align-items:start 防止带说明行（.lp-sld-note）的格子把同排另一格拉伸变高 */
+.lp-slds { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 28px; align-items: start; }
 @media (max-width: 720px) { .lp-slds { grid-template-columns: 1fr; } }
+/* 验收反馈②-④：滑杆下的一行说明文案（并发上限/inflight 上限「讲清楚」） */
+.lp-sld-note { margin: 4px 0 0; }
 .lp-sld-top { display: flex; align-items: baseline; gap: 8px; }
 .lp-sld-top .wb-flabel { margin: 0; }
 .lp-sld-val { margin-left: auto; font-size: 12.5px; font-weight: 700; color: var(--accent); }

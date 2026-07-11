@@ -595,17 +595,21 @@ export function LoopCard({ root, loops }: LoopCardProps): JSX.Element {
             recoFrac={(RECO_RUNS - 1) / 99}
             onValue={(v) => edit({ max_runs_per_day: v })}
           />
-          <LpSlider
-            id="lp-sld-inflight"
-            label={t('workbench.lp_sld_inflight')}
-            value={clamp(draft.max_in_flight, 1, 4)}
-            min={1}
-            max={4}
-            display={t('workbench.lp_val_inflight', { n: draft.max_in_flight })}
-            recoLabel={t('workbench.lp_reco', { v: RECO_INFLIGHT })}
-            recoFrac="edge"
-            onValue={(v) => edit({ max_in_flight: v })}
-          />
+          <div>
+            <LpSlider
+              id="lp-sld-inflight"
+              label={t('workbench.lp_sld_inflight')}
+              value={clamp(draft.max_in_flight, 1, 4)}
+              min={1}
+              max={4}
+              display={t('workbench.lp_val_inflight', { n: draft.max_in_flight })}
+              recoLabel={t('workbench.lp_reco', { v: RECO_INFLIGHT })}
+              recoFrac="edge"
+              onValue={(v) => edit({ max_in_flight: v })}
+            />
+            {/* 验收反馈②-④：讲清楚这个上限只管本 loop 的自动化通道，且是软上限 */}
+            <p className="wb-note lp-sld-note">{t('workbench.lp_sld_inflight_note')}</p>
+          </div>
           <LpSlider
             id="lp-sld-tokens"
             label={t('workbench.lp_sld_tokens')}

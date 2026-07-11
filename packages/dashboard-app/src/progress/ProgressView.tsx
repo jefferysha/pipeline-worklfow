@@ -6,7 +6,7 @@ import type { ChangeSnapshot, Snapshot } from '../types'
 import { isPhase } from '../types'
 import type { WorkflowRules } from '../model/workflowModel'
 import { plannedTransition, type PlannedTransition } from '../model/events'
-import { getToken, postTransition } from '../api/client'
+import { fetchAutomationSettings, getToken, postTransition } from '../api/client'
 import { TaskDetail } from '../shared/TaskDetail'
 import { useAfkLog } from './useAfkLog'
 import {
@@ -361,6 +361,30 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
   const total = PROGRESS_STATES.reduce((n, s) => n + counts[s], 0)
   const health = schedulerHealth(counts)
 
+  // 验收反馈②-④：筛选范围（当前项目多选，与 chips 计数同一份 projGroups）内恰好只剩一个
+  // root 时才取并发上限一起显示——多项目聚合语境下「上限」没有单一数字，不显示比显示误导性
+  // 数字更诚实。
+  const singleRoot = useMemo(() => {
+    const roots = [...new Set(projGroups.map((g) => g.root))]
+    return roots.length === 1 ? roots[0]! : null
+  }, [projGroups])
+  const [autoMaxParallel, setAutoMaxParallel] = useState<number | null>(null)
+  useEffect(() => {
+    setAutoMaxParallel(null)
+    if (!singleRoot) return
+    let cancelled = false
+    fetchAutomationSettings(singleRoot)
+      .then((s) => {
+        if (!cancelled) setAutoMaxParallel(s.max_parallel)
+      })
+      .catch(() => {
+        /* fail-open：接口失败静默不显示，不出错误 UI（同 AutomationCard 卡内报错语义分离） */
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [singleRoot])
+
   interface VisibleGroup {
     group: ProgressGroup
     rows: ProgressRow[]
@@ -587,11 +611,12 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
   // 验收反馈②-②：讲清楚灯只统计「沙箱」范围（判据逐字对齐 server afk.ts computeSchedulerHealth，
   // 只取 running/queued/failed 三桶）——恒显三数（含 0），不再按活跃度切换「调度空闲/调度中」
   // 短词；状态仍由灯点颜色（.prg-doctor__d--{status}）传达，文案只负责讲清楚统计范围。
-  const doctorText = t('progress.doctor_counts', {
-    running: health.running,
-    queued: health.queued,
-    failed: health.failed,
-  })
+  const doctorText =
+    t('progress.doctor_counts', {
+      running: health.running,
+      queued: health.queued,
+      failed: health.failed,
+    }) + (autoMaxParallel !== null ? ` ${t('progress.doctor_limit', { n: autoMaxParallel })}` : '')
 
   const projBtnValue =
     projSel.length === 0 ? t('progress.filter_all') : projSel.map(rootBasename).join(', ')
