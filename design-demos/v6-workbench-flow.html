@@ -1,0 +1,1397 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>编排页信息架构重构 — 流程即真相 / 双层门架 / 检查站泳道</title>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/gsap.min.js"></script>
+<style>
+/* ============ tokens(v4/v5 逐字继承,禁自创色板) ============ */
+:root, [data-theme="light"] {
+  color-scheme: light;
+  --bg:#f7f7f5; --card:#ffffff; --fill:#f4f4f2; --fill-2:#ebebe8;
+  --border:#e4e4e0; --border-2:#d2d2cc;
+  --text:#0d0d0d; --text-2:#40403c; --text-3:#6a6a62;
+  --accent:#0b6cff; --accent-d:#0a5ce0; --accent-t:#eaf2ff; --accent-b:#c5daff;
+  --green:#1f9d51; --green-d:#187339; --green-t:#e9f6ee; --green-b:#c8e8d2;
+  --red:#d92d20; --red-d:#b42318; --red-t:#fdf0ee; --red-b:#f3cfc9;
+  --ink:#0d0d0d; --ink-fg:#ffffff; --ink-hover:#2e2e2c;
+  --btn-bg:#0b6cff; --btn-fg:#ffffff; --btn-hover:#0a5ce0;
+  --code-bg:#f6f6f4; --code-border:#e4e4e0;
+  --shadow:0 1px 2px rgba(0,0,0,.04);
+  --shadow-2:0 1px 3px rgba(0,0,0,.06),0 1px 2px rgba(0,0,0,.04);
+  --ring:rgba(11,108,255,.13);
+}
+[data-theme="dark"] {
+  color-scheme: dark;
+  --bg:#0d0d0d; --card:#171717; --fill:#1e1e1d; --fill-2:#262624;
+  --border:#262626; --border-2:#3a3a37;
+  --text:#f2f2f0; --text-2:#c9c9c4; --text-3:#94948d;
+  --accent:#4d94ff; --accent-d:#7fb2ff; --accent-t:rgba(77,148,255,.13); --accent-b:rgba(77,148,255,.38);
+  --green:#3fb950; --green-d:#55c368; --green-t:rgba(63,185,80,.13); --green-b:rgba(63,185,80,.35);
+  --red:#e5534b; --red-d:#f2867e; --red-t:rgba(229,83,75,.14); --red-b:rgba(229,83,75,.40);
+  --ink:#f2f2f2; --ink-fg:#0d0d0d; --ink-hover:#d8d8d5;
+  --btn-bg:#2b7fff; --btn-fg:#ffffff; --btn-hover:#4d94ff;
+  --code-bg:#111110; --code-border:#2a2a28;
+  --shadow:0 1px 2px rgba(0,0,0,.35);
+  --shadow-2:0 2px 6px rgba(0,0,0,.35);
+  --ring:rgba(77,148,255,.20);
+}
+[data-theme="light"] .only-dark { display:none }
+[data-theme="dark"] .only-light { display:none }
+
+/* ============ base ============ */
+* { box-sizing:border-box; margin:0; padding:0 }
+html { scroll-behavior:smooth }
+body {
+  font: 14px/1.55 system-ui,-apple-system,"SF Pro Text","PingFang SC","Hiragino Sans GB","Microsoft YaHei","Segoe UI",sans-serif;
+  background:var(--bg); color:var(--text); min-width:1180px;
+}
+.mono { font-family: ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,"JetBrains Mono",monospace }
+.container { max-width:1400px; margin:0 auto; padding:0 28px }
+a { color:var(--accent); text-decoration:none }
+button { font:inherit; color:inherit; background:none; border:none; cursor:pointer }
+:focus-visible { outline:2px solid var(--accent); outline-offset:2px; border-radius:8px }
+.sp { flex:1 }
+.overline { font-size:12px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--text-3) }
+
+/* ============ 通用组件(逐字沿用 v4/v5) ============ */
+.card { background:var(--card); border:1px solid var(--border); border-radius:13px; box-shadow:var(--shadow) }
+.card + .card { margin-top:18px }
+.card-h { display:flex; align-items:center; gap:8px; padding:13px 16px; border-bottom:1px solid var(--border) }
+.card-t { font-size:14.5px; font-weight:700 }
+.sec { padding:15px 16px }
+.sec + .sec { border-top:1px solid var(--border) }
+.sec-h { display:flex; align-items:center; gap:6px; font-size:13px; font-weight:700; margin-bottom:10px }
+.sec-h .hint { font-size:12px; font-weight:400; color:var(--text-3) }
+
+.btn {
+  display:inline-flex; align-items:center; gap:6px; height:34px; padding:0 14px;
+  border-radius:9px; font-size:13.5px; font-weight:600; border:1px solid transparent;
+  transition:background .12s, border-color .12s, box-shadow .12s;
+}
+.btn.sm { height:28px; padding:0 10px; border-radius:8px; font-size:12.5px }
+.btn--primary { background:var(--btn-bg); color:var(--btn-fg) }
+.btn--primary:hover { background:var(--btn-hover) }
+.btn--ghost { background:var(--card); border-color:var(--border); color:var(--text-2); box-shadow:var(--shadow) }
+.btn--ghost:hover { border-color:var(--border-2); background:var(--fill) }
+.btn--tint { background:var(--accent-t); border-color:var(--accent-b); color:var(--accent-d) }
+.btn--tint:hover { border-color:var(--accent) }
+
+.badge {
+  display:inline-flex; align-items:center; gap:5px; height:20px; padding:0 7px;
+  border-radius:6px; font-size:11.5px; font-weight:600; background:var(--fill-2); color:var(--text-2);
+}
+.badge .dot { width:5px; height:5px; border-radius:999px; background:currentColor }
+.badge--red { background:var(--red-t); color:var(--red-d) }
+.badge--blue { background:var(--accent-t); color:var(--accent-d) }
+.badge--green { background:var(--green-t); color:var(--green-d) }
+.badge-pulse .dot { animation:blink 1.3s ease-in-out infinite }
+@keyframes blink { 50% { opacity:.3 } }
+
+.chip {
+  display:inline-flex; align-items:center; gap:5px; height:24px; padding:0 8px;
+  border-radius:7px; font-size:12px; background:var(--fill); border:1px solid var(--border);
+  font-family:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace; color:var(--text-2);
+}
+.chip--pass { background:var(--green-t); border-color:var(--green-b); color:var(--green-d) }
+.chip--ghost { opacity:.55; border-style:dashed }
+
+.g-phase { display:inline-flex; align-items:center; height:20px; padding:0 7px; border-radius:6px; font-size:12px; font-weight:600; background:var(--fill-2); color:var(--text-2); font-family:ui-monospace,"SF Mono",Menlo,monospace }
+
+.field { background:var(--fill); border-radius:10px; padding:9px 11px }
+.field .fk { font-size:11.5px; color:var(--text-3); font-family:ui-monospace,Menlo,monospace; margin-bottom:2px }
+.field .fv { font-size:13px; font-weight:600 }
+
+.switch { position:relative; width:34px; height:20px; border-radius:999px; background:var(--fill-2); border:1px solid var(--border-2); transition:background .15s, border-color .15s; flex:none }
+.switch::after { content:""; position:absolute; top:2px; left:2px; width:14px; height:14px; border-radius:999px; background:var(--card); box-shadow:var(--shadow-2); transition:left .15s }
+.switch[aria-checked="true"] { background:var(--accent); border-color:var(--accent) }
+.switch[aria-checked="true"]::after { left:16px }
+
+.wb-input { width:100%; height:34px; padding:0 11px; border-radius:9px; border:1px solid var(--border); background:var(--card); font:inherit; font-size:13.5px; color:var(--text); transition:border-color .12s, box-shadow .12s }
+.wb-input:hover { border-color:var(--border-2) }
+.wb-input:focus { outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--ring) }
+.wb-input--ro { display:flex; align-items:center; background:var(--fill); color:var(--text-2) }
+.wb-flabel { display:block; font-size:12px; font-weight:600; color:var(--text-3); margin-bottom:5px }
+.wb-note { font-size:12px; color:var(--text-3); line-height:1.55 }
+.wb-switchrow { display:flex; align-items:center; gap:9px }
+.wb-chips { display:flex; flex-wrap:wrap; align-items:center; gap:8px }
+.wb-x { display:inline-grid; place-items:center; width:16px; height:16px; margin-left:2px; margin-right:-3px; border-radius:5px; color:var(--text-3); font-size:13px; line-height:1; transition:background .12s, color .12s }
+.wb-x:hover { background:var(--red-t); color:var(--red-d) }
+.wb-addchip { height:24px; padding:0 9px; border-radius:7px; border:1px dashed var(--border-2); background:transparent; color:var(--text-3); font-size:12px; font-weight:600; transition:background .12s, color .12s }
+.wb-addchip:hover { background:var(--fill); color:var(--text-2) }
+.wb-empty { font-size:12.5px; color:var(--text-3) }
+
+.iconbtn { display:grid; place-items:center; width:34px; height:34px; border-radius:10px; color:var(--text-2) }
+.iconbtn:hover { background:var(--fill) }
+.iconbtn svg { width:16px; height:16px; stroke:currentColor; stroke-width:1.7; fill:none; stroke-linecap:round; stroke-linejoin:round }
+
+.lnk { color:var(--accent); font-weight:600; font-size:inherit; display:inline; padding:0 }
+.lnk:hover { color:var(--accent-d); text-decoration:underline }
+
+.toast { position:fixed; left:50%; bottom:28px; transform:translate(-50%, 12px); background:var(--ink); color:var(--ink-fg); font-size:12.5px; padding:8px 16px; border-radius:999px; opacity:0; pointer-events:none; transition:opacity .18s, transform .18s; z-index:99 }
+.toast.show { opacity:1; transform:translate(-50%, 0) }
+
+/* ============ 顶栏 ============ */
+.topbar { position:sticky; top:0; z-index:50; background:var(--card); border-bottom:1px solid var(--border) }
+.tb { display:flex; align-items:center; gap:10px; height:56px }
+.brand { display:flex; align-items:center; gap:9px }
+.brand-mark { width:26px; height:26px; border-radius:8px; background:var(--ink); display:grid; place-items:center; flex:none }
+.brand-mark svg { width:14px; height:14px; stroke:var(--ink-fg); stroke-width:2; fill:none; stroke-linecap:round }
+.brand-name { font-size:15px; font-weight:650 }
+.badge--tag { background:transparent; border:1px solid var(--border-2); color:var(--text-3) }
+
+/* ============ 页头 + 方案 tab ============ */
+.page { padding:24px 0 60px }
+.page-h { display:flex; align-items:flex-start; gap:12px; margin:22px 0 18px }
+.page-h h1 { font-size:22px; font-weight:700; margin-top:4px; font-family:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace }
+.page-sub { margin-top:6px; font-size:13px; color:var(--text-3); max-width:900px; line-height:1.65 }
+
+.sch-tabs { display:flex; gap:8px; margin-bottom:20px; border-bottom:1px solid var(--border); padding-bottom:0 }
+.sch-tab { display:flex; align-items:center; gap:9px; padding:10px 16px 12px; border-radius:10px 10px 0 0; border:1px solid transparent; border-bottom:none; position:relative; top:1px }
+.sch-tab .letter { width:22px; height:22px; border-radius:7px; background:var(--fill-2); color:var(--text-2); display:grid; place-items:center; font-weight:800; font-size:12px; font-family:ui-monospace,Menlo,monospace; flex:none }
+.sch-tab .tt { text-align:left }
+.sch-tab .tn { font-size:13.5px; font-weight:700; color:var(--text-2) }
+.sch-tab .td { font-size:11px; color:var(--text-3) }
+.sch-tab:hover { background:var(--fill) }
+.sch-tab.on { background:var(--card); border-color:var(--border); border-bottom-color:var(--card) }
+.sch-tab.on .letter { background:var(--ink); color:var(--ink-fg) }
+.sch-tab.on .tn { color:var(--text) }
+
+.scheme[hidden] { display:none }
+.scheme-blurb { font-size:12.5px; color:var(--text-2); background:var(--accent-t); border:1px solid var(--accent-b); border-radius:10px; padding:9px 13px; margin-bottom:16px; line-height:1.6 }
+.scheme-blurb b { color:var(--accent-d) }
+.scheme-foot { margin-top:22px; padding:15px 16px; background:var(--fill); border-radius:12px; border:1px dashed var(--border-2) }
+.scheme-foot .sec-h { margin-bottom:8px }
+.scheme-foot ol { margin:0; padding-left:18px; display:flex; flex-direction:column; gap:5px }
+.scheme-foot li { font-size:12.5px; color:var(--text-2); line-height:1.6 }
+.scheme-foot code { font-family:ui-monospace,Menlo,monospace; font-size:11.5px; background:var(--fill-2); padding:1px 5px; border-radius:5px; color:var(--text-2) }
+
+/* ============ 工具条:workflow 切换 + 任务切换 + 图例(三方案共用) ============ */
+.orc-toolbar { display:flex; align-items:center; flex-wrap:wrap; gap:10px 14px; margin-bottom:14px }
+.seg { display:inline-flex; padding:3px; gap:2px; background:var(--fill); border-radius:11px }
+.seg-opt { height:28px; padding:0 12px; border-radius:8px; font-size:12.5px; font-weight:600; color:var(--text-3); display:inline-flex; align-items:center; gap:6px }
+.seg-opt .n { font-size:11px; color:var(--text-3) }
+.seg-opt:hover { color:var(--text-2) }
+.seg-opt.on { background:var(--card); color:var(--text); box-shadow:var(--shadow) }
+.seg-opt.on .n { color:var(--accent-d) }
+
+.tpills { display:flex; align-items:center; gap:6px; flex-wrap:wrap }
+.tpill { display:inline-flex; align-items:center; gap:6px; height:28px; padding:0 11px; border-radius:999px; font-size:12px; font-weight:600; background:var(--card); border:1px solid var(--border); color:var(--text-2); box-shadow:var(--shadow); font-family:ui-monospace,Menlo,monospace }
+.tpill:hover { border-color:var(--border-2); background:var(--fill) }
+.tpill.on { background:var(--accent-t); border-color:var(--accent); color:var(--accent-d) }
+.tpill .d { width:6px; height:6px; border-radius:999px; flex:none }
+.d--gate { background:var(--red) }
+.d--agent { background:var(--red); background:color-mix(in oklch, var(--red) 52%, var(--green)) }
+.d--run { background:var(--accent) }
+.d--queue { background:var(--text-3) }
+
+.legend { display:flex; align-items:center; gap:12px; flex-wrap:wrap; font-size:11.5px; color:var(--text-3); margin:0 0 14px }
+.legend .li { display:inline-flex; align-items:center; gap:5px }
+.legend .sw { width:12px; height:12px; border-radius:4px; flex:none }
+.sw--past { background:var(--green-t); border:1px solid var(--green-b) }
+.sw--cur { background:var(--accent) }
+.sw--run { background:var(--accent); box-shadow:0 0 0 2px var(--ring) }
+.sw--fail { background:var(--red) }
+.sw--fut { background:var(--fill-2); border:1px solid var(--border) }
+.sw--gate { background:var(--red-t); border:1px solid var(--red-b) }
+
+/* ============ hook 全局面板(A/B/C 共用) ============ */
+.hk-panel { display:flex; flex-direction:column; gap:12px }
+.hk-grp { display:flex; flex-direction:column; gap:6px }
+.hk-grp-h { display:flex; align-items:baseline; gap:8px }
+.hk-grp-t { font-size:12.5px; font-weight:700 }
+.hk-grp-ev { font-size:10.5px; color:var(--text-3) }
+.hk-row { background:var(--fill); border-radius:10px; padding:8px 10px }
+.hk-row-top { display:flex; align-items:center; gap:7px }
+.hk-row-nm { font-size:12.5px; font-weight:650 }
+.hk-row-id { font-size:10.5px; color:var(--text-3) }
+.hk-row-d { font-size:11.5px; color:var(--text-3); line-height:1.5; margin-top:2px }
+.hk-lock { display:inline-flex; align-items:center; gap:4px; font-size:11px; font-weight:600; color:var(--text-3) }
+.hk-lock svg { width:11px; height:11px; stroke:currentColor; stroke-width:1.6; fill:none }
+.hk-unwired { font-size:11px; color:var(--text-3); font-style:italic }
+
+.safe-note { font-size:12px; color:var(--text-2); line-height:1.7 }
+.safe-note b { color:var(--text) }
+
+.replay-list { display:flex; flex-direction:column; gap:12px }
+.replay-task__h { font-size:11.5px; font-weight:700; color:var(--text-3); margin-bottom:6px; display:flex; align-items:center; gap:6px }
+.replay-row { display:flex; align-items:baseline; gap:8px; padding:6px 0; font-size:12px }
+.replay-row + .replay-row { border-top:1px dashed var(--border) }
+.replay-row__main { flex:1 1 auto; min-width:0; display:flex; align-items:baseline; flex-wrap:wrap; row-gap:2px; column-gap:8px }
+.replay-row__t { color:var(--text-2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; flex:1 1 auto }
+.replay-row__t b { font-family:ui-monospace,Menlo,monospace; font-weight:600; color:var(--text) }
+.replay-row__meta { display:flex; align-items:center; gap:8px; flex:none; margin-left:auto }
+.replay-row__ev { font-size:10.5px; color:var(--accent-d); background:var(--accent-t); padding:1px 6px; border-radius:5px; font-family:ui-monospace,Menlo,monospace; flex:none }
+.replay-row__time { font-size:10.5px; color:var(--text-3); flex:none }
+.replay-btn { width:22px; height:22px; border-radius:7px; display:grid; place-items:center; color:var(--text-3); flex:none }
+.replay-btn:hover { background:var(--accent-t); color:var(--accent-d) }
+.replay-empty { font-size:11.5px; color:var(--text-3); font-style:italic }
+
+/* ============ manifest 矩阵模态 ============ */
+.mx-modal { position:fixed; inset:0; z-index:80; display:flex; align-items:center; justify-content:center; padding:30px }
+.mx-modal[hidden] { display:none }
+.mx-backdrop { position:absolute; inset:0; background:rgba(10,10,10,.44) }
+[data-theme="dark"] .mx-backdrop { background:rgba(0,0,0,.62) }
+.mx-panel { position:relative; width:min(920px, 100%); max-height:82vh; overflow:auto; background:var(--card); border:1px solid var(--border); border-radius:14px; box-shadow:var(--shadow-2) }
+.mx-head { position:sticky; top:0; background:var(--card); display:flex; align-items:center; gap:10px; padding:14px 18px; border-bottom:1px solid var(--border); z-index:1 }
+.mx-head h2 { font-size:15px; font-weight:700 }
+.mx-head p { font-size:11.5px; color:var(--text-3); margin-top:2px }
+.mx-body { padding:16px 18px 20px }
+.mx-table { width:100%; border-collapse:collapse; font-size:12px }
+.mx-table th { text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--text-3); padding:6px 10px; border-bottom:1px solid var(--border-2) }
+.mx-table td { vertical-align:top; padding:9px 10px; border-bottom:1px solid var(--border); display:table-cell }
+.mx-phase { font-size:12.5px; font-weight:650; white-space:nowrap }
+.mx-id { display:block; font-size:10.5px; font-weight:400; color:var(--text-3) }
+.mx-chip { display:inline-block; margin:0 4px 4px 0; font-size:10.5px; max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; height:auto; padding:3px 7px }
+.mx-empty { color:var(--text-3) }
+.mx-close { margin-left:auto }
+
+/* ============ reduced motion ============ */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior:auto }
+  *, *::before, *::after { animation-duration:.01ms !important; transition-duration:.01ms !important }
+}
+
+/* ============================================================ */
+/* 方案 A — 流程即真相                                            */
+/* ============================================================ */
+.wsa-band-card .sec { padding:20px 18px 16px }
+.wsa-band { display:flex; align-items:stretch; width:100%; }
+.wsa-seg {
+  position:relative; flex:1 1 0; min-width:0; height:64px;
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px;
+  padding:0 16px 0 22px; text-align:center; cursor:pointer; border:none;
+  clip-path:polygon(0 0, calc(100% - 13px) 0, 100% 50%, calc(100% - 13px) 100%, 0 100%, 13px 50%);
+}
+.wsa-seg + .wsa-seg { margin-left:-11px }
+.wsa-seg:first-child { clip-path:polygon(0 0, calc(100% - 13px) 0, 100% 50%, calc(100% - 13px) 100%, 0 100%); padding-left:18px }
+.wsa-seg:last-child { clip-path:polygon(0 0, 100% 0, 100% 100%, 0 100%, 13px 50%); padding-right:18px }
+.wsa-seg--done { background:var(--green-t); color:var(--green-d) }
+.wsa-seg--current { background:var(--btn-bg); color:var(--btn-fg) }
+.wsa-seg--fail { background:var(--red); color:var(--btn-fg) }
+.wsa-seg--future { background:var(--fill); color:var(--text-3) }
+.wsa-seg:hover { filter:brightness(0.97) }
+[data-theme="dark"] .wsa-seg:hover { filter:brightness(1.08) }
+.wsa-seg__name { font-size:13.5px; font-weight:700 }
+.wsa-seg__id { font-size:10.5px; opacity:.8; font-family:ui-monospace,Menlo,monospace }
+.wsa-seg__ev { position:absolute; bottom:-19px; left:50%; transform:translateX(-50%); font-size:10px; color:var(--text-3); font-family:ui-monospace,Menlo,monospace; white-space:nowrap }
+.wsa-seg:last-child .wsa-seg__ev { display:none }
+.wsa-seg__badges { position:absolute; top:6px; right:14px; display:flex; gap:3px }
+.wsa-seg__count { min-width:16px; height:16px; padding:0 4px; border-radius:999px; background:rgba(255,255,255,.28); font-size:10px; font-weight:800; display:grid; place-items:center }
+.wsa-seg--future .wsa-seg__count { background:var(--fill-2); color:var(--text-2) }
+.wsa-gate-btn { width:18px; height:18px; border-radius:999px; background:rgba(255,255,255,.28); display:grid; place-items:center }
+.wsa-seg--future .wsa-gate-btn, .wsa-seg--done .wsa-gate-btn { background:var(--red-t); border:1px solid var(--red-b) }
+.wsa-gate-btn svg { width:9px; height:9px; stroke:currentColor; stroke-width:2; fill:none }
+.wsa-seg--future .wsa-gate-btn, .wsa-seg--done .wsa-gate-btn { color:var(--red-d) }
+.wsa-seg--current .wsa-gate-btn, .wsa-seg--fail .wsa-gate-btn { color:#fff }
+.wsa-gloss { position:absolute; top:0; bottom:0; left:0; width:46px; opacity:0; pointer-events:none; background:linear-gradient(105deg, transparent 12%, rgba(255,255,255,.5) 50%, transparent 88%) }
+.wsa-seg--sel { box-shadow:inset 0 0 0 2.5px var(--ink); z-index:2 }
+[data-theme="dark"] .wsa-seg--sel { box-shadow:inset 0 0 0 2.5px var(--card) }
+.wsa-back-note { margin-top:26px; font-size:11px; color:var(--text-3); text-align:right }
+
+.wsa-main { display:grid; grid-template-columns:minmax(0,1fr) 340px; gap:20px; align-items:start; margin-top:16px }
+.wsa-side { position:sticky; top:76px; display:flex; flex-direction:column }
+.wsa-hint { padding:34px 16px; text-align:center; font-size:12.5px; color:var(--text-3); border:1px dashed var(--border-2); border-radius:13px }
+.ed-basic { display:grid; grid-template-columns:1.4fr 1fr 1.8fr; gap:14px }
+.ed-track-row { display:flex; align-items:baseline; gap:8px; padding:6px 0; font-size:12px }
+.ed-track-row + .ed-track-row { border-top:1px dashed var(--border) }
+.ed-track-k { width:64px; flex:none; font-family:ui-monospace,Menlo,monospace; font-weight:700; color:var(--text-3) }
+.ed-track-chips { display:flex; flex-wrap:wrap; gap:5px }
+
+/* ============================================================ */
+/* 方案 B — 双层门架                                              */
+/* ============================================================ */
+.wsb-rail { display:flex; align-items:stretch; overflow-x:auto; padding:6px 2px 24px }
+.wsb-card { position:relative; flex:none; width:172px; display:flex; flex-direction:column; align-items:flex-start; text-align:left; padding:11px 13px 12px; background:var(--card); border:1px solid var(--border); border-radius:12px; box-shadow:var(--shadow); cursor:pointer; transition:border-color .15s, box-shadow .15s }
+.wsb-card:hover { border-color:var(--border-2) }
+.wsb-card--on, .wsb-card--on:hover { border-color:var(--accent); box-shadow:0 0 0 3px var(--ring) }
+.wsb-card__top { display:flex; align-items:center; gap:7px; width:100%; margin-bottom:7px }
+.wsb-card__num { width:21px; height:21px; border-radius:999px; background:var(--fill-2); display:grid; place-items:center; font-size:11px; font-weight:700; color:var(--text-2); flex:none }
+.wsb-card--on .wsb-card__num { background:var(--accent); color:#fff }
+.wsb-card__name { font-size:14.5px; font-weight:700 }
+.wsb-card__id { font-size:11px; color:var(--text-3); margin-top:1px; font-family:ui-monospace,Menlo,monospace }
+.wsb-card__data { display:flex; align-items:center; gap:5px; margin-top:9px; padding-top:8px; border-top:1px dashed var(--border); width:100%; font-size:10.5px; color:var(--text-3) }
+.wsb-card__data .n { font-weight:800; color:var(--text-2) }
+.wsb-card__data--run { color:var(--accent-d) }
+.wsb-card__data--run .rd { width:6px; height:6px; border-radius:999px; background:var(--accent); animation:blink 1.3s ease-in-out infinite; flex:none }
+.wsb-card__data--empty { opacity:.6 }
+
+.wsb-link { flex:none; align-self:center; display:flex; flex-direction:column; align-items:center; gap:2px; padding:0 8px; color:var(--border-2); min-width:56px }
+.wsb-link-ev { font-size:10.5px; color:var(--text-3); white-space:nowrap; font-family:ui-monospace,Menlo,monospace }
+.wsb-link svg { display:block }
+
+.wsb-pillar { flex:none; align-self:stretch; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; padding:0 10px; position:relative; min-width:74px }
+.wsb-pillar-line { position:absolute; top:8px; bottom:8px; left:50%; width:2px; background:var(--red-b); transform:translateX(-50%) }
+.wsb-pillar-cap { position:relative; display:flex; flex-direction:column; align-items:center; gap:4px; background:var(--card); padding:6px 0 }
+.wsb-pillar-icons { display:flex; gap:3px; background:var(--red-t); border:1px solid var(--red-b); border-radius:999px; padding:5px 8px }
+.wsb-pillar-icons svg { width:12px; height:12px; stroke:var(--red-d); stroke-width:1.8; fill:none }
+.wsb-pillar-ev { font-size:10px; color:var(--red-d); font-weight:700; font-family:ui-monospace,Menlo,monospace; white-space:nowrap }
+.wsb-pillar-pop { position:absolute; top:100%; left:50%; transform:translateX(-50%) translateY(4px); width:236px; background:var(--card); border:1px solid var(--border); border-radius:11px; box-shadow:var(--shadow-2); padding:10px 12px; opacity:0; visibility:hidden; transition:opacity .14s, visibility .14s; z-index:5; text-align:left }
+.wsb-pillar:hover .wsb-pillar-pop, .wsb-pillar-pop.force-open { opacity:1; visibility:visible }
+.wsb-pillar-pop-t { font-size:11.5px; font-weight:700; margin-bottom:6px }
+.wsb-pillar-pop-row { font-size:11px; color:var(--text-2); line-height:1.6; margin-bottom:5px }
+.wsb-pillar-pop-row b { font-family:ui-monospace,Menlo,monospace; color:var(--text) }
+
+.wsb-main { display:grid; grid-template-columns:minmax(0,1fr) 320px; gap:20px; align-items:start }
+.wsb-side { position:sticky; top:76px }
+.wsb-hint { padding:34px 16px; text-align:center; font-size:12.5px; color:var(--text-3); border:1px dashed var(--border-2); border-radius:13px }
+.wsb-tabs { display:flex; gap:4px; margin-left:auto }
+.wsb-tab { height:26px; padding:0 12px; border-radius:8px; font-size:12px; font-weight:600; color:var(--text-3) }
+.wsb-tab:hover { background:var(--fill) }
+.wsb-tab.on { background:var(--fill-2); color:var(--text) }
+.wsb-pane[hidden] { display:none }
+
+/* ============================================================ */
+/* 方案 C — 检查站泳道                                            */
+/* ============================================================ */
+.wsc-diagram { padding:26px 30px 18px; overflow-x:auto }
+.wsc-upper { position:relative; padding-top:4px; min-width:760px }
+.wsc-track { position:absolute; top:19px; left:calc(100%/14); right:calc(100%/14); height:4px; border-radius:999px; background:var(--border-2) }
+.wsc-stas { display:flex; position:relative }
+.wsc-sta { flex:1; display:flex; flex-direction:column; align-items:center; gap:7px; cursor:pointer; padding-top:4px }
+.wsc-ring { width:15px; height:15px; border-radius:999px; background:var(--card); border:3px solid var(--border-2); position:relative; z-index:2; transition:transform .15s }
+.wsc-sta:hover .wsc-ring { transform:scale(1.15) }
+.wsc-sta--done .wsc-ring { border-color:var(--green); background:var(--green) }
+.wsc-sta--current .wsc-ring { width:19px; height:19px; border-color:var(--accent); box-shadow:0 0 0 4px var(--ring) }
+.wsc-sta--fail .wsc-ring { border-color:var(--red); background:var(--red) }
+.wsc-sta--gate .wsc-ring { box-shadow:0 0 0 3px var(--card), 0 0 0 4.5px var(--red-b) }
+.wsc-sta--gate.wsc-sta--current .wsc-ring { box-shadow:0 0 0 3px var(--card), 0 0 0 4.5px var(--red-b), 0 0 0 8px var(--ring) }
+.wsc-name { font-size:12px; font-weight:600; color:var(--text-2) }
+.wsc-sta--current .wsc-name { color:var(--accent-d); font-weight:700 }
+.wsc-sta--fail .wsc-name { color:var(--red-d); font-weight:700 }
+.wsc-sid { font-size:10px; color:var(--text-3); font-family:ui-monospace,Menlo,monospace; margin-top:-4px }
+.wsc-tokens { display:flex; gap:3px; min-height:16px; flex-wrap:wrap; justify-content:center; max-width:88px }
+.wsc-token { width:15px; height:15px; border-radius:5px; background:var(--fill-2); border:1.5px solid var(--border-2); display:grid; place-items:center; font-size:8px; font-weight:800; color:var(--text-2); cursor:pointer; transition:transform .12s; }
+.wsc-token:hover { transform:translateY(-2px) }
+.wsc-token--gate { background:var(--red-t); border-color:var(--red-b); color:var(--red-d) }
+.wsc-token--run { background:var(--accent); border-color:var(--accent); color:#fff }
+.wsc-token--agent { background:color-mix(in oklch, var(--red) 30%, var(--green) 20%, var(--fill-2)); border-color:var(--border-2); color:var(--text-2) }
+.wsc-token--queue { background:var(--fill-2); border-color:var(--border-2); color:var(--text-3) }
+.wsc-token--sel { box-shadow:0 0 0 2px var(--ink) }
+[data-theme="dark"] .wsc-token--sel { box-shadow:0 0 0 2px var(--card), 0 0 0 3px var(--text) }
+
+.wsc-gantry { position:absolute; top:-14px; width:2px; background:var(--red-b) }
+.wsc-lower { position:relative; display:flex; margin-top:30px; border-top:1.5px dashed var(--border-2); padding-top:12px; min-width:760px }
+.wsc-hkgrp { flex:1; text-align:center; padding:0 6px; cursor:pointer; border-radius:10px; transition:background .12s }
+.wsc-hkgrp:hover { background:var(--fill) }
+.wsc-hkgrp.open { background:var(--fill) }
+.wsc-hkgrp-t { font-size:11.5px; font-weight:700; color:var(--text-2) }
+.wsc-hkgrp-ev { font-size:10px; color:var(--text-3); font-family:ui-monospace,Menlo,monospace }
+.wsc-hkgrp-n { font-size:10px; color:var(--text-3); margin-top:2px }
+.wsc-hkgrp--guard .wsc-hkgrp-t { color:var(--red-d) }
+.wsc-hkdetail { grid-column:1/-1; margin-top:10px; padding:10px 12px; background:var(--fill); border-radius:10px; text-align:left }
+.wsc-hkdetail[hidden] { display:none }
+
+.wsc-main { display:grid; grid-template-columns:minmax(0,1fr) 300px; gap:20px; align-items:start; margin-top:18px }
+.wsc-side { position:sticky; top:76px }
+.wsc-hint { padding:30px 16px; text-align:center; font-size:12.5px; color:var(--text-3); border:1px dashed var(--border-2); border-radius:13px }
+
+.wsc-drawer-backdrop { position:fixed; inset:0; background:rgba(10,10,10,.3); z-index:70; opacity:0; visibility:hidden; transition:opacity .15s, visibility .15s }
+[data-theme="dark"] .wsc-drawer-backdrop { background:rgba(0,0,0,.5) }
+.wsc-drawer-backdrop.open { opacity:1; visibility:visible }
+.wsc-drawer { position:fixed; top:0; right:0; bottom:0; width:380px; max-width:92vw; background:var(--card); border-left:1px solid var(--border); box-shadow:var(--shadow-2); z-index:71; transform:translateX(100%); transition:transform .22s ease; display:flex; flex-direction:column }
+.wsc-drawer.open { transform:translateX(0) }
+.wsc-drawer-h { display:flex; align-items:center; gap:10px; padding:16px 18px; border-bottom:1px solid var(--border) }
+.wsc-drawer-body { padding:16px 18px; overflow-y:auto; flex:1; display:flex; flex-direction:column; gap:14px }
+.wsc-drawer-req { font-size:13px; color:var(--text-2); line-height:1.6 }
+.wsc-drawer-foot { padding:14px 18px; border-top:1px solid var(--border); font-size:11.5px; color:var(--text-3); line-height:1.6 }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <marker id="arrowM" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M1 0.8 L7.2 4 L1 7.2" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+  </defs>
+</svg>
+
+<header class="topbar">
+  <div class="container tb">
+    <div class="brand">
+      <div class="brand-mark"><svg viewBox="0 0 16 16"><path d="M2 8h4l2-5 2 10 2-5h2"/></svg></div>
+      <div class="brand-name">Pipeline</div>
+    </div>
+    <span class="badge badge--tag">v6 设计 demo · Demo 1</span>
+    <div class="sp"></div>
+    <button class="iconbtn" id="themeToggle" aria-label="切换主题">
+      <svg class="only-light" viewBox="0 0 16 16"><path d="M13.5 9.5A5.5 5.5 0 1 1 6.5 2.5a4.5 4.5 0 0 0 7 7z"/></svg>
+      <svg class="only-dark" viewBox="0 0 16 16"><circle cx="8" cy="8" r="3.2"/><path d="M8 1.2v1.6M8 13.2v1.6M1.2 8h1.6M13.2 8h1.6M3.2 3.2l1.1 1.1M11.7 11.7l1.1 1.1M12.8 3.2l-1.1 1.1M4.3 11.7l-1.1 1.1"/></svg>
+    </button>
+  </div>
+</header>
+
+<main class="container page">
+  <div class="page-h">
+    <div>
+      <div class="overline">Design Picker · v6 · Demo 1</div>
+      <h1>编排页信息架构重构</h1>
+      <p class="page-sub">验收反馈第 5/6/7 点合体:①hook 如何作为门控内嵌进流程图 ②阶段编辑区如何瘦身(per-stage 留基本/技能/产出物,全局配置挪去别处) ③「预演」换成真实数据驱动的流转(真实 change 计数、running 脉冲、真 history 事件回放)。三个方案同页,点标签切换——底部数据全部来自 gate-demo / triage-demo / afk-demo / board-demo 四条真任务,不是摆拍。</p>
+    </div>
+  </div>
+
+  <nav class="sch-tabs" role="tablist" aria-label="三个方案">
+    <button class="sch-tab on" data-sch-tab="A" role="tab" aria-selected="true">
+      <span class="letter">A</span><span class="tt"><span class="tn">流程即真相</span><span class="td">大流程带做导航</span></span>
+    </button>
+    <button class="sch-tab" data-sch-tab="B" role="tab" aria-selected="false">
+      <span class="letter">B</span><span class="tt"><span class="tn">双层门架</span><span class="td">保留卡排 + 门柱</span></span>
+    </button>
+    <button class="sch-tab" data-sch-tab="C" role="tab" aria-selected="false">
+      <span class="letter">C</span><span class="tt"><span class="tn">检查站泳道</span><span class="td">任务化身流动 token</span></span>
+    </button>
+  </nav>
+
+  <!-- ================= 方案 A ================= -->
+  <section class="scheme" data-scheme="A">
+    <p class="scheme-blurb"><b>设计意图:</b>流程带即入口,门徽章与计数脉冲长在图上,点阶段只留基本/技能/产出物。<b>取舍:</b>一览强,单任务轨迹需切换追踪。</p>
+
+    <div class="orc-toolbar">
+      <div class="seg" data-wf-switch="A"></div>
+      <div class="tpills" data-task-switch="A"></div>
+    </div>
+    <div class="legend">
+      <span class="li"><i class="sw sw--past"></i>已完成</span>
+      <span class="li"><i class="sw sw--cur"></i>当前(等确认)</span>
+      <span class="li"><i class="sw sw--run"></i>执行中</span>
+      <span class="li"><i class="sw sw--fail"></i>失败</span>
+      <span class="li"><i class="sw sw--fut"></i>未来</span>
+      <span class="li">🔒 = 复核门,由 gate.sh + interactive-skill-gate.sh 拦截强制执行</span>
+    </div>
+
+    <div class="card wsa-band-card">
+      <div class="sec">
+        <div class="wsa-band" data-band="A"></div>
+      </div>
+    </div>
+
+    <div class="wsa-main">
+      <div class="wsa-left">
+        <div class="card wsa-editor" data-editor="A" hidden></div>
+        <div class="wsa-hint" data-editor-hint="A">点上面任意阶段节点——下面出现该阶段的定义编辑区(基本 / 技能 / 产出物);点节点右上角的 🔒 徽章看这道门具体由哪个钩子拦截。</div>
+      </div>
+      <aside class="wsa-side">
+        <div class="card">
+          <div class="card-h"><span class="card-t">钩子时序(全局)</span><span class="sp"></span><span class="wb-note">按会话生命周期 4 时机</span></div>
+          <div class="sec"><div class="hk-panel" data-hooks="A"></div></div>
+        </div>
+        <div class="card">
+          <div class="card-h"><span class="card-t">安全门说明</span></div>
+          <div class="sec"><div class="safe-note" data-safety="A"></div></div>
+        </div>
+        <div class="card">
+          <div class="card-h"><span class="card-t">manifest 技能矩阵</span><span class="sp"></span><button class="btn btn--tint sm" data-open-matrix>查看矩阵 →</button></div>
+          <div class="sec"><p class="wb-note">default 工作流各阶段按轨道(pm/frontend/backend)强制的技能表,来自 <code class="mono">templates/manifest.yaml</code>,跨 workflow 全局生效,不属于单个阶段。</p></div>
+        </div>
+        <div class="card">
+          <div class="card-h"><span class="card-t">最近流转</span><span class="sp"></span><span class="wb-note">真 history 事件</span></div>
+          <div class="sec"><div class="replay-list" data-replay="A"></div></div>
+        </div>
+      </aside>
+    </div>
+
+    <div class="scheme-foot">
+      <div class="sec-h">该方案落地要动什么</div>
+      <ol>
+        <li><code>StepperRail.tsx</code> 整体重写为大流程带组件(替换现有 <code>wb-step</code> 卡横排),新增门徽章 popover 与真实计数/脉冲渲染。</li>
+        <li><code>WorkbenchView.tsx</code> 删除现有「流程预览」预演卡整段(:285-350 的 66 行假动画 + :595-633 的预览 JSX,共 ~110 行),右栏改真数据摘要 + 回放。</li>
+        <li>新增一个「按 workflow 聚合各阶段 change 计数/运行态」的读取——目前只有单 change 的 <code>GET /api/change/:name/history</code>,聚合需要前端对 <code>/api/snapshot</code> 做二次分组,或新增聚合端点。</li>
+        <li><code>HookTimeline.tsx</code> 拆出只读迷你版挂进流程带节点的门徽章,原编辑态整体挪到右栏,复用其 <code>LOCKED_IDS</code>/<code>configurable:false</code> 三态判断。</li>
+        <li><code>StepEditor.tsx</code> 技能区按 workflow 类型分岔:自定义 workflow 走依赖链编辑,default 走 manifest 只读 + <code>SkillTransferModal.tsx</code> 入口跳转。</li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- ================= 方案 B ================= -->
+  <section class="scheme" data-scheme="B" hidden>
+    <p class="scheme-blurb"><b>设计意图:</b>保留卡排,门处插门柱,hover 看拦什么;编辑拆本阶段/全局两 tab。<b>取舍:</b>改动最小,两套视觉语言略割裂。</p>
+
+    <div class="orc-toolbar">
+      <div class="seg" data-wf-switch="B"></div>
+      <div class="tpills" data-task-switch="B"></div>
+    </div>
+    <div class="legend">
+      <span class="li"><i class="sw sw--past"></i>已完成</span>
+      <span class="li"><i class="sw sw--cur"></i>当前</span>
+      <span class="li"><i class="sw sw--gate"></i>门柱 = 复核门检查点</span>
+      <span class="li">卡片下方数字条 = 真实任务计数,蓝点闪烁 = 有任务正在此阶段执行</span>
+    </div>
+
+    <div class="card">
+      <div class="sec">
+        <div class="wsb-rail" data-rail="B"></div>
+      </div>
+    </div>
+
+    <div class="wsb-main">
+      <div class="wsb-left">
+        <div class="card wsb-editor" data-editor="B" hidden></div>
+        <div class="wsb-hint" data-editor-hint="B">点上面任意阶段卡——下面出现编辑区,「本阶段」与「全局」两个 tab 切换;门柱 hover 展开该关卡由哪些钩子把关。</div>
+      </div>
+      <aside class="wsb-side">
+        <div class="card">
+          <div class="card-h"><span class="card-t">最近流转</span><span class="sp"></span><span class="wb-note">真 history · 可回放</span></div>
+          <div class="sec"><div class="replay-list" data-replay="B"></div></div>
+        </div>
+      </aside>
+    </div>
+
+    <div class="scheme-foot">
+      <div class="sec-h">该方案落地要动什么</div>
+      <ol>
+        <li><code>StepperRail.tsx</code> 卡横排基本不动,新增「门柱」子组件插在 <code>step.gate</code> 为真的连接处,数据取 <code>HookTimeline.tsx</code> 的 <code>LOCKED_IDS</code>(gate.sh / interactive-skill-gate.sh)。</li>
+        <li><code>StepEditor.tsx</code> 编辑卡头新增 本阶段/全局 二级 tab(视觉参照现有 <code>dt-tabs</code> 横滚 tab),全局 tab 内嵌 <code>HookTimeline.tsx</code> 全量 + 安全门说明 + 矩阵入口。</li>
+        <li><code>WorkbenchView.tsx</code> 右栏「流程预览」卡(:595-633 JSX + :285-350 预演逻辑)替换为「最近流转」真实 feed,数据源同方案 A 需要的聚合读取。</li>
+        <li>卡片新增真实数据条——复用 <code>/api/afk/snapshot</code>(执行中信号)+ 按阶段分组的 change 计数,ambient 展示不依赖用户先选中某个任务。</li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- ================= 方案 C ================= -->
+  <section class="scheme" data-scheme="C" hidden>
+    <p class="scheme-blurb"><b>设计意图:</b>上泳道阶段流,下泳道钩子常驻,复核门拉出检查门架,任务是流动 token。<b>取舍:</b>密度真实感强,成本高易拥挤。</p>
+
+    <div class="orc-toolbar">
+      <div class="seg" data-wf-switch="C"></div>
+      <span class="wb-note">点圆环站点看阶段定义 · 点方块 token 看任务详情</span>
+    </div>
+    <div class="legend">
+      <span class="li"><i class="sw sw--past"></i>站点已过</span>
+      <span class="li"><i class="sw sw--cur"></i>当前站</span>
+      <span class="li"><i class="sw sw--gate"></i>检查站(复核门)</span>
+      <span class="li">方块 = 一个真实任务,蓝色闪烁 = 执行中;下方虚线以上是钩子常驻层,检查站会向下伸出门架连到对应钩子分组</span>
+    </div>
+
+    <div class="card wsc-diagram">
+      <div class="wsc-upper">
+        <div class="wsc-track"></div>
+        <div class="wsc-stas" data-stas="C"></div>
+      </div>
+      <div class="wsc-lower" data-lower="C"></div>
+    </div>
+
+    <div class="wsc-main">
+      <div class="wsc-left">
+        <div class="card wsc-editor" data-editor="C" hidden></div>
+        <div class="wsc-hint" data-editor-hint="C">点上面圆环站点——下面出现该阶段的定义编辑区;点方块 token 从右侧滑出该任务的只读详情(动作按钮在「进度」页,这里不做)。</div>
+      </div>
+      <aside class="wsc-side">
+        <div class="card">
+          <div class="card-h"><span class="card-t">安全门说明</span></div>
+          <div class="sec"><div class="safe-note" data-safety="C"></div></div>
+        </div>
+        <div class="card">
+          <div class="card-h"><span class="card-t">manifest 技能矩阵</span><span class="sp"></span><button class="btn btn--tint sm" data-open-matrix>查看矩阵 →</button></div>
+          <div class="sec"><p class="wb-note">phase × track 强制技能表,全局生效。</p></div>
+        </div>
+        <div class="card">
+          <div class="card-h"><span class="card-t">最近流转</span></div>
+          <div class="sec"><div class="replay-list" data-replay="C"></div></div>
+        </div>
+      </aside>
+    </div>
+
+    <div class="scheme-foot">
+      <div class="sec-h">该方案落地要动什么</div>
+      <ol>
+        <li>新增 <code>WorkflowLane.tsx</code> 双泳道组件替换 <code>StepperRail.tsx</code> 的视觉呈现,含 token 层(每个 change 一个可点击标记)。</li>
+        <li>新增右侧只读详情抽屉,复用 <code>TaskDetail</code>(<code>shared/</code>)的只读部分渲染,依能力面模型决议 #13 不导入 放行/打回/重试/终止 等动作插槽。</li>
+        <li><code>HookTimeline.tsx</code> 数据下沉为泳道下层的 4 个可展开分组,复用其分组结构,复核门站点新增到分组的视觉门架连线。</li>
+        <li>需要新增「本 workflow 下全部 change 当前所在阶段」的聚合读取(token 定位数据),现无此聚合端点,建议新增或前端对 <code>/api/snapshot</code> 二次分组。</li>
+        <li><code>SkillTransferModal.tsx</code> 保持不变,仅入口从 per-stage 编辑区挪到右栏按钮触发。</li>
+      </ol>
+    </div>
+  </section>
+</main>
+
+<!-- ============ manifest 矩阵模态(三方案共用) ============ -->
+<div class="mx-modal" id="matrixModal" hidden>
+  <div class="mx-backdrop" data-mx-close></div>
+  <div class="mx-panel" role="dialog" aria-modal="true" aria-label="manifest 技能矩阵">
+    <div class="mx-head">
+      <div>
+        <h2>manifest 技能矩阵</h2>
+        <p>phase × track 强制技能表 · 真值来自 <span class="mono">templates/manifest.yaml:68-85</span> · archive 无强制技能 · chat 轨道未在矩阵中出现</p>
+      </div>
+      <button class="btn btn--ghost sm mx-close" data-mx-close>✕ 关闭</button>
+    </div>
+    <div class="mx-body" id="matrixBody"></div>
+  </div>
+</div>
+
+<!-- ============ 方案 C 任务详情抽屉 ============ -->
+<div class="wsc-drawer-backdrop" id="wscDrawerBackdrop"></div>
+<aside class="wsc-drawer" id="wscDrawer">
+  <div class="wsc-drawer-h">
+    <div>
+      <div class="g-phase mono" id="wscDrawerId">gate-demo</div>
+      <div class="wb-note" id="wscDrawerTrack" style="margin-top:3px">backend</div>
+    </div>
+    <span class="sp"></span>
+    <button class="btn btn--ghost sm" id="wscDrawerClose">✕ 关闭</button>
+  </div>
+  <div class="wsc-drawer-body" id="wscDrawerBody"></div>
+  <div class="wsc-drawer-foot">这里只读——放行 / 打回 / 重试 / 终止等动作在「进度」页处理,工作台不做二次入口。</div>
+</aside>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+'use strict';
+/* ============================================================ */
+/* 共享真实数据(禁编造——来自 templates/manifest.yaml、hooks/hooks.json、
+   packages/kernel/src/flow/transition-table.ts、packages/dashboard-app 测试 fixture、
+   v5-progress-workbench.html 四张真卡) */
+/* ============================================================ */
+(function () {
+  var root = document.documentElement;
+
+  /* ---- 工作流定义(default = buildDefaultDef 7 阶段;release-train = WorkbenchView.test.tsx 真 fixture) ---- */
+  var WORKFLOWS = {
+    'default': {
+      label: 'default', sub: '7 阶段',
+      order: ['open', 'explore', 'spec', 'build', 'verify', 'ship', 'archive'],
+      stages: {
+        open:    { name: '立项', gate: false, outputs: [] },
+        explore: { name: '调研', gate: true,  outputs: ['design_doc'] },
+        spec:    { name: '规格', gate: true,  outputs: ['plan'] },
+        build:   { name: '实现', gate: false, outputs: ['build_sha'] },
+        verify:  { name: '验证', gate: true,  outputs: ['verify_result', 'agent_review_result', 'codex_review_result', 'verification_report'] },
+        ship:    { name: '交付', gate: false, outputs: [] },
+        archive: { name: '归档', gate: false, outputs: [] }
+      },
+      edges: {
+        open:    { event: 'open-complete',    to: 'explore' },
+        explore: { event: 'explore-complete', to: 'spec' },
+        spec:    { event: 'spec-complete',    to: 'build' },
+        build:   { event: 'build-complete',   to: 'verify' },
+        verify:  { event: 'verify-pass',      to: 'ship', back: { event: 'verify-fail', to: 'build' } },
+        ship:    { event: 'ship-complete',    to: 'archive' }
+      }
+    },
+    'release-train': {
+      label: 'release-train', sub: '3 阶段',
+      order: ['draft', 'review', 'ship'],
+      stages: {
+        draft:  { name: '起草', gate: false, outputs: ['draft_doc'] },
+        review: { name: '人工复核', gate: true, outputs: [] },
+        ship:   { name: '发布', gate: false, outputs: ['release_notes', 'sha'] }
+      },
+      edges: {
+        draft:  { event: 'submitted', to: 'review' },
+        review: { event: 'approved',  to: 'ship', back: { event: 'rejected', to: 'draft' } }
+      }
+    }
+  };
+
+  /* per-stage 技能只对自定义 workflow 真实(依赖链 DAG);default 的技能是 manifest 矩阵读view,见 MANIFEST */
+  var CUSTOM_SKILLS_SEED = {
+    'release-train': {
+      draft:  [{ id: 'superpowers:tdd', dep: null }, { id: 'impeccable', dep: 'superpowers:tdd' }, { id: 'browser-qa', dep: null }],
+      review: [],
+      ship:   []
+    }
+  };
+  var SKILL_CAND = ['superpowers:brainstorming', 'superpowers:writing-plans', 'superpowers:test-driven-development', 'superpowers:verification-before-completion', 'web-design-guidelines', 'grill-with-docs', 'e2e-testing'];
+
+  /* ---- 四张真卡(v5-progress-workbench.html 逐字承接) + release-train 的 changelog-cn ---- */
+  var TASKS = {
+    'default': [
+      { id: 'gate-demo', track: 'backend', req: '修复登录 token 过期后静默失效——会话需自动续期并给出过期提示',
+        cur: 'verify', done: ['open', 'explore', 'spec', 'build'], state: 'gate',
+        history: [
+          { t: '刚刚', kind: 'set', field: 'verify_result', to: 'pass' },
+          { t: '6 分钟前', kind: 'transition', from: 'build', to: 'verify', raw: 'build-complete' },
+          { t: '1 小时前', kind: 'transition', from: 'spec', to: 'build', raw: 'spec-complete' },
+          { t: '3 小时前', kind: 'transition', from: 'explore', to: 'spec', raw: 'explore-complete' },
+          { t: '5 小时前', kind: 'transition', from: 'open', to: 'explore', raw: 'open-complete' }
+        ],
+        evidence: [['verify_result', 'pass'], ['agent_review_result', 'pass'], ['codex_review_result', 'pass'], ['verification_report', 'docs/verify.md']] },
+      { id: 'triage-demo', track: 'chat', req: '聊天输入框支持图片粘贴直接上传',
+        cur: 'spec', done: ['open', 'explore'], state: 'agent',
+        history: [
+          { t: '40 分钟前', kind: 'transition', from: 'explore', to: 'spec', raw: 'explore-complete' },
+          { t: '2 小时前', kind: 'transition', from: 'open', to: 'explore', raw: 'open-complete' }
+        ],
+        evidence: [] },
+      { id: 'afk-demo', track: 'chat', req: '会话列表虚拟滚动性能重构',
+        cur: 'build', done: ['open', 'explore', 'spec'], state: 'running',
+        history: [
+          { t: '刚刚', kind: 'set', field: 'automation', to: 'running' },
+          { t: '12 分钟前', kind: 'transition', from: 'spec', to: 'build', raw: 'spec-complete' },
+          { t: '50 分钟前', kind: 'transition', from: 'explore', to: 'spec', raw: 'explore-complete' },
+          { t: '2 小时前', kind: 'transition', from: 'open', to: 'explore', raw: 'open-complete' }
+        ],
+        evidence: [['sandbox', 'sandcastle-afk-demo-x1'], ['attempts', '1'], ['worktree', '.sandcastle/worktrees/afk-demo']] },
+      { id: 'board-demo', track: 'frontend', req: '看板支持自定义列排序',
+        cur: 'open', done: [], state: 'queued', history: [], evidence: [] }
+    ],
+    'release-train': [
+      { id: 'changelog-cn', track: 'chat', req: '发布面向用户的中文更新日志页',
+        cur: 'review', done: ['draft'], state: 'gate',
+        history: [{ t: '25 分钟前', kind: 'transition', from: 'draft', to: 'review', raw: 'submitted' }],
+        evidence: [] }
+    ]
+  };
+
+  /* ---- 8 hook × 4 时机(hooks/hooks.json 真值;lock: toggle=真开关 / locked=强制常开 / unwired=configurable:false 不做假开关) ---- */
+  var HOOKS = [
+    { group: 'SessionStart', label: '会话开始', items: [
+      { id: 'session-start.sh', name: '会话启动注入', desc: '注入工作流规则、当前 change 状态、openspec 上下文', lock: 'toggle' }
+    ] },
+    { group: 'UserPromptSubmit', label: '你发消息', items: [
+      { id: 'breadcrumb.sh', name: '任务面包屑', desc: '重提当前阶段该干什么,长会话不跑偏', lock: 'toggle' },
+      { id: 'router.sh', name: '轨道路由提示', desc: '按 pm / frontend / backend 给对的方法论', lock: 'toggle' }
+    ] },
+    { group: 'PreToolUse', label: 'agent 调工具', items: [
+      { id: 'gate.sh', name: '门拦截', desc: '复核门没过时,挡下 Skill / Bash / Edit / Write / MultiEdit', lock: 'locked' }
+    ] },
+    { group: 'PostToolUse', label: '工具完成', items: [
+      { id: 'confirm-clear.sh', name: '确认后清屏', desc: 'AskUserQuestion 完成后的收尾', lock: 'unwired' },
+      { id: 'decision-recorder.sh', name: '决策记录', desc: '把你的选择写进 change 记录,可回溯', lock: 'unwired' },
+      { id: 'skill-tracker.sh', name: '技能完成记录', desc: '供依赖链解锁与审计', lock: 'toggle' },
+      { id: 'interactive-skill-gate.sh', name: '技能安全门', desc: '依赖顺序没到的技能,直接拦下', lock: 'locked' }
+    ] }
+  ];
+  var GATE_HOOKS = [
+    { id: 'gate.sh', timing: 'PreToolUse', name: '门拦截', desc: '挡下 Skill / Bash / Edit / Write / MultiEdit 调用' },
+    { id: 'interactive-skill-gate.sh', timing: 'PostToolUse', name: '技能安全门', desc: '依赖顺序没到的技能直接拦下' }
+  ];
+
+  /* ---- manifest mandatory_skills 真值(templates/manifest.yaml:68-85) ---- */
+  var MANIFEST = {
+    tracks: ['pm', 'frontend', 'backend'],
+    cells: {
+      'open._all': ['opsx:propose|openspec-propose'],
+      'explore.pm': ['superpowers:brainstorming', 'grill-with-docs'],
+      'explore.frontend': ['opsx:explore|openspec-explore', 'superpowers:brainstorming', 'grill-with-docs'],
+      'explore.backend': ['opsx:explore|openspec-explore', 'superpowers:brainstorming', 'grill-with-docs', 'improve-codebase-architecture'],
+      'spec.pm': ['superpowers:brainstorming', 'grill-with-docs'],
+      'spec.frontend': ['opsx:propose|openspec-propose', 'superpowers:writing-plans'],
+      'spec.backend': ['opsx:propose|openspec-propose', 'superpowers:writing-plans'],
+      'build.pm': ['prototype|huashu-design', 'frontend-design', 'design-taste-frontend|taste-skill'],
+      'build.frontend': ['superpowers:test-driven-development', 'frontend-design', 'web-design-guidelines', 'design-taste-frontend|taste-skill'],
+      'build.backend': ['superpowers:writing-plans', 'superpowers:test-driven-development'],
+      'verify.pm': ['browser-qa', 'web-design-guidelines', 'design-taste-frontend|taste-skill', 'superpowers:verification-before-completion'],
+      'verify.frontend': ['superpowers:verification-before-completion', 'e2e-testing', 'browser-qa', 'verify|verification-loop', 'web-design-guidelines', 'design-taste-frontend|taste-skill'],
+      'verify.backend': ['superpowers:verification-before-completion'],
+      'ship.pm': ['to-prd', 'to-issues'],
+      'ship.frontend': ['opsx:apply|openspec-apply-change', 'opsx:archive|openspec-archive-change', 'superpowers:finishing-a-development-branch', 'commit-commands:commit-push-pr'],
+      'ship.backend': ['opsx:apply|openspec-apply-change', 'superpowers:finishing-a-development-branch', 'commit-commands:commit-push-pr']
+    }
+  };
+  function manifestSkills(phase, track) {
+    if (MANIFEST.cells[phase + '._all']) return MANIFEST.cells[phase + '._all'];
+    return MANIFEST.cells[phase + '.' + track] || [];
+  }
+
+  /* ============ 通用工具 ============ */
+  function clone(o) { return JSON.parse(JSON.stringify(o)); }
+  function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function shortSkill(id) { var s = id.split('|')[0]; return s.indexOf(':') > -1 ? s.split(':').pop() : s; }
+  function $all(sel, el) { return Array.prototype.slice.call((el || document).querySelectorAll(sel)); }
+
+  var motionOK = true;
+  if (window.gsap && window.gsap.matchMedia) {
+    motionOK = false;
+    var mm = window.gsap.matchMedia();
+    mm.add('(prefers-reduced-motion: no-preference)', function () { motionOK = true; return function () { motionOK = false; }; });
+  } else if (window.matchMedia) {
+    motionOK = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  }
+
+  var toastEl = document.getElementById('toast'), toastTimer = null;
+  function toast(msg) {
+    toastEl.textContent = msg;
+    toastEl.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { toastEl.classList.remove('show'); }, 2200);
+  }
+
+  document.getElementById('themeToggle').addEventListener('click', function () {
+    root.dataset.theme = root.dataset.theme === 'dark' ? 'light' : 'dark';
+  });
+
+  /* ---- 数据派生:每阶段真实计数 + running 标记 ---- */
+  function ambientFor(wf) {
+    var m = {};
+    WORKFLOWS[wf].order.forEach(function (s) { m[s] = { count: 0, running: false }; });
+    TASKS[wf].forEach(function (t) { m[t.cur].count++; if (t.state === 'running') m[t.cur].running = true; });
+    return m;
+  }
+  function stageVMs(wf, taskId) {
+    var W = WORKFLOWS[wf];
+    var task = TASKS[wf].filter(function (t) { return t.id === taskId; })[0];
+    var amb = ambientFor(wf);
+    return W.order.map(function (sid, i) {
+      var meta = W.stages[sid];
+      var status = 'future';
+      if (task) {
+        if (task.done.indexOf(sid) > -1) status = 'done';
+        else if (sid === task.cur) status = task.state === 'failed' ? 'fail' : 'current';
+      }
+      var edge = W.edges[sid];
+      return {
+        id: sid, idx: i, name: meta.name, gate: meta.gate, outputs: meta.outputs,
+        status: status, count: amb[sid].count,
+        running: !!(amb[sid].running && task && sid === task.cur && task.state === 'running'),
+        ambRunning: amb[sid].running,
+        event: edge ? edge.event : null, back: edge && edge.back ? edge.back : null,
+        isLast: i === W.order.length - 1
+      };
+    });
+  }
+
+  /* ============ hook 面板 / 安全门说明(共用渲染) ============ */
+  function hookRowHTML(h) {
+    var right;
+    if (h.lock === 'toggle') {
+      right = '<button class="switch" role="switch" aria-checked="true" data-hk-toggle="' + h.id + '" aria-label="' + h.name + '"></button>';
+    } else if (h.lock === 'locked') {
+      right = '<span class="hk-lock" title="安全边界,不可关闭"><svg viewBox="0 0 16 16"><path d="M4 7V5a4 4 0 1 1 8 0v2"/><rect x="3" y="7" width="10" height="7" rx="1.5"/></svg>常开</span>';
+    } else {
+      right = '<span class="hk-unwired">未接线</span>';
+    }
+    return '<div class="hk-row"><div class="hk-row-top"><span class="hk-row-nm">' + h.name + '</span><span class="hk-row-id mono">' + h.id + '</span><span class="sp"></span>' + right + '</div><p class="hk-row-d">' + h.desc + '</p></div>';
+  }
+  function hkPanelHTML() {
+    return HOOKS.map(function (g) {
+      return '<div class="hk-grp"><div class="hk-grp-h"><span class="hk-grp-t">' + g.label + '</span><span class="hk-grp-ev mono">' + g.group + '</span></div>' + g.items.map(hookRowHTML).join('') + '</div>';
+    }).join('');
+  }
+  function safetyNoteHTML() {
+    return '<p><b>gate.sh</b>(PreToolUse)与 <b>interactive-skill-gate.sh</b>(PostToolUse)强制常开——这是安全边界,不能在此关闭。<b>confirm-clear.sh</b>、<b>decision-recorder.sh</b> 尚未接线,暂不可配置,不做假开关。</p>';
+  }
+  function wireHookToggles(container) {
+    container.addEventListener('click', function (e) {
+      var el = e.target.closest && e.target.closest('[data-hk-toggle]');
+      if (!el) return;
+      var on = el.getAttribute('aria-checked') !== 'true';
+      el.setAttribute('aria-checked', String(on));
+      toast((on ? '已启用 ' : '已停用 ') + el.getAttribute('data-hk-toggle') + '(内存态,写回 .pipeline/hooks.json)');
+    });
+  }
+
+  /* ============ manifest 矩阵模态 ============ */
+  var mxModal = document.getElementById('matrixModal');
+  function openMatrix() {
+    var phases = ['open', 'explore', 'spec', 'build', 'verify', 'ship', 'archive'];
+    var html = '<table class="mx-table"><thead><tr><th>阶段</th>' + MANIFEST.tracks.map(function (t) { return '<th class="mono">' + t + '</th>'; }).join('') + '</tr></thead><tbody>';
+    phases.forEach(function (p) {
+      var name = WORKFLOWS['default'].stages[p] ? WORKFLOWS['default'].stages[p].name : p;
+      html += '<tr><td class="mx-phase">' + name + '<span class="mx-id mono">' + p + '</span></td>';
+      MANIFEST.tracks.forEach(function (t) {
+        var list = manifestSkills(p, t);
+        html += '<td>' + (list.length ? list.map(function (id) { return '<span class="chip chip--pass mx-chip mono" title="' + esc(id) + '">' + esc(id) + '</span>'; }).join('') : '<span class="mx-empty">—</span>') + '</td>';
+      });
+      html += '</tr>';
+    });
+    html += '</tbody></table>';
+    document.getElementById('matrixBody').innerHTML = html;
+    mxModal.hidden = false;
+    if (window.gsap && motionOK) {
+      gsap.fromTo('.mx-panel', { autoAlpha: 0, y: 10, scale: .98 }, { autoAlpha: 1, y: 0, scale: 1, duration: .22, ease: 'power2.out' });
+      gsap.fromTo('.mx-backdrop', { autoAlpha: 0 }, { autoAlpha: 1, duration: .18 });
+    }
+  }
+  function closeMatrix() { mxModal.hidden = true; }
+  document.addEventListener('click', function (e) {
+    if (e.target.closest && e.target.closest('[data-open-matrix]')) openMatrix();
+    if (e.target.closest && e.target.closest('[data-mx-close]')) closeMatrix();
+  });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !mxModal.hidden) closeMatrix(); });
+
+  /* ============ 阶段编辑区(基本/技能/产出物 · A/B/C 共用生成器) ============ */
+  function editorBodyHTML(wf, sid, state) {
+    var meta = state.stages[sid];
+    var isCustom = !!CUSTOM_SKILLS_SEED[wf];
+    var html = '';
+    html += '<div class="sec"><div class="sec-h">基本</div><div class="ed-basic">'
+      + '<div><label class="wb-flabel">阶段名称</label><input class="wb-input" data-ed-label value="' + esc(meta.name) + '"/></div>'
+      + '<div><span class="wb-flabel">阶段 ID</span><div class="wb-input wb-input--ro mono">' + sid + '</div></div>'
+      + '<div><span class="wb-flabel">复核门</span><div class="wb-switchrow"><button class="switch" role="switch" aria-checked="' + meta.gate + '" data-ed-gate aria-label="复核门"></button><span class="wb-note">打开后 change 会停在此阶段等人放行,由 gate.sh 在会话内真实拦截</span></div></div>'
+      + '</div></div>';
+    html += '<div class="sec"><div class="sec-h">技能<span class="hint">' + (isCustom ? '本阶段依赖链(自定义 workflow,真可编辑)' : 'manifest 矩阵只读视图(default 全局配置)') + '</span></div>';
+    if (isCustom) {
+      var list = meta.skills || [];
+      html += '<div data-ed-chain>' + chainsHTML(list) + '</div><div class="wb-sk-actions" style="padding-top:9px"><button class="wb-addchip" data-sk-add>+ 添加(从技能库随机取一个)</button></div>';
+    } else {
+      MANIFEST.tracks.forEach(function (t) {
+        var list = manifestSkills(sid, t);
+        html += '<div class="ed-track-row"><span class="ed-track-k mono">' + t + '</span><div class="ed-track-chips">' + (list.length ? list.map(function (id) { return '<span class="chip mono" title="' + esc(id) + '">' + esc(shortSkill(id)) + '</span>'; }).join('') : '<span class="wb-empty">—</span>') + '</div></div>';
+      });
+      html += '<p class="wb-note" style="margin-top:8px">chat 轨道未在 manifest 矩阵中出现,不受强制技能约束。不在此增删,<button class="lnk" data-open-matrix>在矩阵中编辑 →</button></p>';
+    }
+    html += '</div>';
+    html += '<div class="sec"><div class="sec-h">产出物<span class="hint">离开此阶段时应产出的字段</span></div><div class="wb-chips" data-ed-outputs>'
+      + meta.outputs.map(function (f) { return '<span class="chip">' + f + '<button class="wb-x" data-del-output="' + f + '" aria-label="移除 ' + f + '">×</button></span>'; }).join('')
+      + '<button class="wb-addchip" data-add-output>+ 添加</button><input class="wb-input mono" data-output-in hidden style="width:140px;height:24px;padding:0 8px;font-size:12px" placeholder="字段名 回车确认"/></div></div>';
+    return html;
+  }
+  function chainsHTML(list) {
+    if (!list.length) return '<div class="wb-empty">该阶段未强制任何技能——全部技能可用</div>';
+    var byId = {}; list.forEach(function (s) { byId[s.id] = s; });
+    var kids = {}; list.forEach(function (s) { if (s.dep && byId[s.dep]) (kids[s.dep] = kids[s.dep] || []).push(s.id); });
+    var used = {}, chains = [], solos = [];
+    function walk(start) { var ch = [start]; used[start] = 1; var cur = start; while (kids[cur] && kids[cur].length) { var nx = null; for (var i = 0; i < kids[cur].length; i++) if (!used[kids[cur][i]]) { nx = kids[cur][i]; break; } if (!nx) break; ch.push(nx); used[nx] = 1; cur = nx; } return ch; }
+    list.forEach(function (s) { if (used[s.id]) return; if (!s.dep || !byId[s.dep]) { var ch = walk(s.id); if (ch.length === 1) solos.push(s.id); else chains.push(ch); } });
+    var html = '';
+    chains.forEach(function (ch) {
+      html += '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:4px 0">';
+      ch.forEach(function (id, i) { if (i) html += '<span style="color:var(--text-3);font-size:13px">➝</span>'; html += '<span class="chip">' + id + '<button class="wb-x" data-del-skill="' + id + '" aria-label="移除 ' + id + '">×</button></span>'; });
+      html += '</div>';
+    });
+    if (solos.length) html += '<div style="display:flex;flex-wrap:wrap;gap:6px;padding:4px 0">' + solos.map(function (id) { return '<span class="chip">' + id + '<button class="wb-x" data-del-skill="' + id + '" aria-label="移除 ' + id + '">×</button></span>'; }).join('') + '</div>';
+    return html;
+  }
+  function wireEditorInteractions(container, wf, sid, state, onChange) {
+    container.addEventListener('click', function (e) {
+      var el;
+      if ((el = e.target.closest('[data-ed-gate]'))) {
+        state.stages[sid].gate = state.stages[sid].gate !== true;
+        el.setAttribute('aria-checked', String(state.stages[sid].gate));
+        toast(state.stages[sid].gate ? '已开复核门——change 将停在此阶段等人放行' : '已关复核门');
+        onChange();
+        return;
+      }
+      if ((el = e.target.closest('[data-del-skill]'))) {
+        var name = el.getAttribute('data-del-skill');
+        var list = state.stages[sid].skills || [];
+        var removed = null;
+        for (var i = 0; i < list.length; i++) if (list[i].id === name) { removed = list[i]; list.splice(i, 1); break; }
+        if (removed) list.forEach(function (s) { if (s.dep === name) s.dep = removed.dep; });
+        container.querySelector('[data-ed-chain]').innerHTML = chainsHTML(list);
+        toast('已移除 ' + name + '(内存态)——后继技能自动前移接链');
+        onChange();
+        return;
+      }
+      if ((el = e.target.closest('[data-sk-add]'))) {
+        var list2 = state.stages[sid].skills || (state.stages[sid].skills = []);
+        var have = {}; list2.forEach(function (s) { have[s.id] = 1; });
+        var cand = SKILL_CAND.filter(function (id) { return !have[id]; });
+        if (!cand.length) { toast('技能库里的技能都已在此阶段'); return; }
+        var pick = cand[Math.floor(Math.random() * cand.length)];
+        list2.push({ id: pick, dep: null });
+        container.querySelector('[data-ed-chain]').innerHTML = chainsHTML(list2);
+        if (window.gsap && motionOK) gsap.from(container.querySelectorAll('[data-ed-chain] .chip'), { scale: .8, autoAlpha: 0, duration: .28, ease: 'back.out(2.2)' });
+        toast('已添加 ' + pick + '(内存态,保存后写入 workflow)');
+        onChange();
+        return;
+      }
+      if ((el = e.target.closest('[data-del-output]'))) {
+        var f = el.getAttribute('data-del-output');
+        var outs = state.stages[sid].outputs;
+        var j = outs.indexOf(f);
+        if (j > -1) outs.splice(j, 1);
+        el.closest('.chip').remove();
+        toast('已移除产出物 ' + f + '(内存态)');
+        onChange();
+        return;
+      }
+      if ((el = e.target.closest('[data-add-output]'))) {
+        var input = container.querySelector('[data-output-in]');
+        el.hidden = true; input.hidden = false; input.value = ''; input.focus();
+        return;
+      }
+    });
+    var outIn = container.querySelector('[data-output-in]');
+    if (outIn) {
+      function commit(cancel) {
+        var addBtn = container.querySelector('[data-add-output]');
+        var v = outIn.value.trim();
+        if (!cancel && v) {
+          state.stages[sid].outputs.push(v);
+          var chip = document.createElement('span'); chip.className = 'chip';
+          chip.innerHTML = esc(v) + '<button class="wb-x" data-del-output="' + esc(v) + '" aria-label="移除 ' + esc(v) + '">×</button>';
+          container.querySelector('[data-ed-outputs]').insertBefore(chip, addBtn);
+          toast('已添加产出物 ' + v + '(内存态)');
+          onChange();
+        }
+        outIn.hidden = true; addBtn.hidden = false;
+      }
+      outIn.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); commit(false); } else if (e.key === 'Escape') commit(true); });
+      outIn.addEventListener('blur', function () { if (!outIn.hidden) commit(false); });
+    }
+  }
+
+  /* ============ 最近流转(真 history 回放列表 · 共用生成器) ============ */
+  function replayListHTML(wf) {
+    var html = '';
+    TASKS[wf].forEach(function (t) {
+      html += '<div class="replay-task"><div class="replay-task__h"><span class="mono">' + t.id + '</span><span class="badge">' + t.track + '</span></div>';
+      if (!t.history.length) {
+        html += '<div class="replay-empty">排队中,尚无流转记录</div>';
+      } else {
+        t.history.slice(0, 4).forEach(function (h) {
+          var main = h.kind === 'transition' ? ('<b>' + h.from + '</b> → <b>' + h.to + '</b>') : ('set <b>' + h.field + '</b> = ' + h.to);
+          var ev = h.kind === 'transition' ? h.raw : 'set';
+          html += '<div class="replay-row" data-replay-row data-task="' + t.id + '" data-to="' + (h.to || '') + '">'
+            + '<button class="replay-btn" data-replay-play data-task="' + t.id + '" data-to="' + (h.kind === 'transition' ? h.to : t.cur) + '" title="回放这次流转">▶</button>'
+            + '<span class="replay-row__main"><span class="replay-row__t">' + main + '</span><span class="replay-row__meta"><span class="replay-row__ev">' + ev + '</span><span class="replay-row__time">' + h.t + '</span></span></span></div>';
+        });
+      }
+      html += '</div>';
+    });
+    return html;
+  }
+
+  /* ============ 任务切换 pills / workflow 切换 seg(共用生成器) ============ */
+  function stateDot(state) {
+    if (state === 'gate') return 'd--gate';
+    if (state === 'agent') return 'd--agent';
+    if (state === 'running') return 'd--run';
+    return 'd--queue';
+  }
+  function segHTML(wf) {
+    return ['default', 'release-train'].map(function (k) {
+      return '<button class="seg-opt' + (k === wf ? ' on' : '') + '" data-set-wf="' + k + '">' + k + ' <span class="n">' + WORKFLOWS[k].sub + '</span></button>';
+    }).join('');
+  }
+  function pillsHTML(wf, sel) {
+    return TASKS[wf].map(function (t) {
+      return '<button class="tpill' + (t.id === sel ? ' on' : '') + '" data-set-task="' + t.id + '"><i class="d ' + stateDot(t.state) + '"></i>' + t.id + '</button>';
+    }).join('');
+  }
+
+  /* ============ 回放脉冲(GSAP,reduced-motion 降级) ============ */
+  function pulseEl(el) {
+    if (!el) return;
+    if (!window.gsap || !motionOK) return;
+    gsap.fromTo(el, { scale: 1 }, { scale: 1.07, duration: .2, yoyo: true, repeat: 1, ease: 'power1.inOut', transformOrigin: '50% 50%' });
+  }
+  function traceFade(container, sel) {
+    if (!window.gsap || !motionOK) return;
+    var els = $all(sel, container);
+    if (els.length) gsap.from(els, { autoAlpha: .35, duration: .28, stagger: .025, ease: 'power1.out' });
+  }
+
+  /* ================================================================ */
+  /* 方案 A — 流程即真相                                                */
+  /* ================================================================ */
+  (function schemeA() {
+    var root = document.querySelector('.scheme[data-scheme="A"]');
+    if (!root) return;
+    var state = { wf: 'default', task: 'gate-demo', sel: null, defs: { 'default': clone(WORKFLOWS['default']), 'release-train': clone(WORKFLOWS['release-train']) } };
+    state.defs['release-train'].stages.draft.skills = clone(CUSTOM_SKILLS_SEED['release-train'].draft);
+    state.defs['release-train'].stages.review.skills = [];
+    state.defs['release-train'].stages.ship.skills = [];
+
+    function gateIconSVG() { return '<svg viewBox="0 0 16 16"><path d="M4 7V5a4 4 0 1 1 8 0v2"/><rect x="3" y="7" width="10" height="7" rx="1.5"/></svg>'; }
+
+    function renderBand() {
+      var box = root.querySelector('[data-band="A"]');
+      var vms = stageVMs(state.wf, state.task);
+      var html = vms.map(function (vm) {
+        var cls = 'wsa-seg wsa-seg--' + vm.status + (state.sel === vm.id ? ' wsa-seg--sel' : '');
+        var gate = vm.gate ? '<span class="wsa-gate-btn" data-gate-info="' + vm.id + '" title="复核门——点看拦截钩子">' + gateIconSVG() + '</span>' : '';
+        var count = vm.count > 0 ? '<span class="wsa-seg__count">' + vm.count + '</span>' : '';
+        return '<button class="' + cls + '" data-stage="' + vm.id + '" type="button">'
+          + '<span class="wsa-seg__badges">' + count + gate + '</span>'
+          + (vm.running ? '<i class="wsa-gloss" data-gloss></i>' : '')
+          + '<span class="wsa-seg__name">' + vm.name + '</span><span class="wsa-seg__id mono">' + vm.id + '</span>'
+          + (vm.event ? '<span class="wsa-seg__ev">' + vm.event + (vm.back ? ' · ⤺' + vm.back.event : '') + '</span>' : '')
+          + '</button>';
+      }).join('');
+      box.innerHTML = html;
+      if (window.gsap && motionOK) {
+        var glosses = $all('[data-gloss]', box);
+        glosses.forEach(function (g) {
+          gsap.fromTo(g, { xPercent: -160, autoAlpha: .9 }, { xPercent: 420, duration: 1.1, ease: 'power1.inOut', repeat: -1, repeatDelay: .5 });
+        });
+      }
+    }
+    function renderPills() {
+      root.querySelector('[data-wf-switch="A"]').innerHTML = segHTML(state.wf);
+      root.querySelector('[data-task-switch="A"]').innerHTML = pillsHTML(state.wf, state.task);
+    }
+    function renderReplay() { root.querySelector('[data-replay="A"]').innerHTML = replayListHTML(state.wf); }
+    function renderGlobals() {
+      root.querySelector('[data-hooks="A"]').innerHTML = hkPanelHTML();
+      root.querySelector('[data-safety="A"]').innerHTML = safetyNoteHTML();
+    }
+    function openEditor(sid) {
+      state.sel = sid;
+      var ed = root.querySelector('[data-editor="A"]');
+      var hint = root.querySelector('[data-editor-hint="A"]');
+      var wfDef = state.defs[state.wf];
+      var meta = wfDef.stages[sid];
+      ed.hidden = false; hint.hidden = true;
+      ed.innerHTML = '<div class="card-h"><span class="card-t">阶段编辑</span><span class="g-phase mono">' + sid + '</span>'
+        + (meta.gate ? '<span class="badge badge--red"><span class="dot"></span>复核门</span>' : '')
+        + '<span class="sp"></span><button class="btn btn--ghost sm" data-close-ed>✕ 收起</button></div>'
+        + editorBodyHTML(state.wf, sid, wfDef);
+      wireEditorInteractions(ed, state.wf, sid, wfDef, function () { renderBand(); });
+      ed.querySelector('[data-close-ed]').addEventListener('click', function () { ed.hidden = true; hint.hidden = false; state.sel = null; renderBand(); });
+      renderBand();
+      if (window.gsap && motionOK) gsap.from(ed, { autoAlpha: 0, y: -8, duration: .22, ease: 'power2.out' });
+    }
+    root.addEventListener('click', function (e) {
+      var el;
+      if ((el = e.target.closest('[data-set-wf]'))) { state.wf = el.getAttribute('data-set-wf'); state.task = TASKS[state.wf][0].id; state.sel = null; root.querySelector('[data-editor="A"]').hidden = true; root.querySelector('[data-editor-hint="A"]').hidden = false; renderPills(); renderBand(); renderReplay(); return; }
+      if ((el = e.target.closest('[data-set-task]'))) { state.task = el.getAttribute('data-set-task'); renderPills(); renderBand(); traceFade(root, '.wsa-seg'); return; }
+      if ((el = e.target.closest('[data-gate-info]'))) { e.stopPropagation(); openEditor(el.getAttribute('data-gate-info')); return; }
+      if ((el = e.target.closest('[data-stage]'))) { openEditor(el.getAttribute('data-stage')); return; }
+      if ((el = e.target.closest('[data-replay-play]'))) {
+        var tid = el.getAttribute('data-task'), to = el.getAttribute('data-to');
+        if (tid !== state.task) { state.task = tid; renderPills(); renderBand(); }
+        pulseEl(root.querySelector('.wsa-seg[data-stage="' + to + '"]'));
+        toast('回放:' + tid + ' → ' + to);
+        return;
+      }
+    });
+    wireHookToggles(root.querySelector('[data-hooks="A"]').closest('.wsa-side') || root);
+    renderPills(); renderBand(); renderReplay(); renderGlobals();
+  })();
+
+  /* ================================================================ */
+  /* 方案 B — 双层门架                                                  */
+  /* ================================================================ */
+  (function schemeB() {
+    var root = document.querySelector('.scheme[data-scheme="B"]');
+    if (!root) return;
+    var state = { wf: 'default', task: 'gate-demo', sel: null, tab: 'stage', defs: { 'default': clone(WORKFLOWS['default']), 'release-train': clone(WORKFLOWS['release-train']) } };
+    state.defs['release-train'].stages.draft.skills = clone(CUSTOM_SKILLS_SEED['release-train'].draft);
+    state.defs['release-train'].stages.review.skills = [];
+    state.defs['release-train'].stages.ship.skills = [];
+
+    function pillarHTML(vm) {
+      if (!vm.gate) {
+        return '<div class="wsb-link" aria-hidden="true"><span class="wsb-link-ev mono">' + (vm.event || '') + '</span><svg viewBox="0 0 54 10" width="46" height="10"><line x1="1" y1="5" x2="40" y2="5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" marker-end="url(#arrowM)"/></svg></div>';
+      }
+      return '<div class="wsb-pillar" data-pillar="' + vm.id + '">'
+        + '<div class="wsb-pillar-line"></div>'
+        + '<div class="wsb-pillar-cap">'
+        + '<div class="wsb-pillar-icons"><svg viewBox="0 0 16 16"><path d="M4 7V5a4 4 0 1 1 8 0v2"/><rect x="3" y="7" width="10" height="7" rx="1.5"/></svg><svg viewBox="0 0 16 16"><path d="M8 2l1.6 3.3 3.6.5-2.6 2.5.6 3.6L8 10.2l-3.2 1.7.6-3.6L2.8 5.8l3.6-.5z"/></svg></div>'
+        + '<span class="wsb-pillar-ev mono">' + (vm.event || '') + '</span>'
+        + '</div>'
+        + '<div class="wsb-pillar-pop"><div class="wsb-pillar-pop-t">此关卡拦什么</div>'
+        + GATE_HOOKS.map(function (h) { return '<div class="wsb-pillar-pop-row"><b>' + h.id + '</b>(' + h.timing + ')——' + h.desc + '</div>'; }).join('')
+        + (vm.back ? '<div class="wsb-pillar-pop-row" style="margin-top:4px;padding-top:6px;border-top:1px dashed var(--border)">打不过退回:<b>' + vm.back.event + '</b> → ' + vm.back.to + '</div>' : '')
+        + '</div></div>';
+    }
+    function renderRail() {
+      var box = root.querySelector('[data-rail="B"]');
+      var vms = stageVMs(state.wf, state.task);
+      var html = vms.map(function (vm, i) {
+        var dataStrip = vm.count > 0
+          ? '<div class="wsb-card__data' + (vm.running ? ' wsb-card__data--run' : '') + '">' + (vm.running ? '<i class="rd"></i>' : '<span class="n">' + vm.count + '</span>') + ' ' + (vm.running ? '执行中' : vm.count + ' 个真实任务') + '</div>'
+          : '<div class="wsb-card__data wsb-card__data--empty">暂无任务在此</div>';
+        var card = '<button class="wsb-card' + (state.sel === vm.id ? ' wsb-card--on' : '') + '" data-stage="' + vm.id + '" type="button" data-stage-node="' + vm.id + '">'
+          + '<div class="wsb-card__top"><span class="wsb-card__num mono">' + (i + 1) + '</span>' + (vm.gate ? '<span class="badge badge--red" style="margin-left:auto"><span class="dot"></span>复核门</span>' : '') + '</div>'
+          + '<span class="wsb-card__name">' + vm.name + '</span><span class="wsb-card__id">' + vm.id + '</span>' + dataStrip + '</button>';
+        return card + (i < vms.length - 1 ? pillarHTML(vm) : '');
+      }).join('');
+      box.innerHTML = html;
+    }
+    function renderPills() {
+      root.querySelector('[data-wf-switch="B"]').innerHTML = segHTML(state.wf);
+      root.querySelector('[data-task-switch="B"]').innerHTML = pillsHTML(state.wf, state.task);
+    }
+    function renderReplay() { root.querySelector('[data-replay="B"]').innerHTML = replayListHTML(state.wf); }
+
+    function openEditor(sid) {
+      state.sel = sid; state.tab = 'stage';
+      var ed = root.querySelector('[data-editor="B"]');
+      var hint = root.querySelector('[data-editor-hint="B"]');
+      var wfDef = state.defs[state.wf];
+      var meta = wfDef.stages[sid];
+      ed.hidden = false; hint.hidden = true;
+      ed.innerHTML = '<div class="card-h"><span class="card-t">阶段编辑</span><span class="g-phase mono">' + sid + '</span>'
+        + (meta.gate ? '<span class="badge badge--red"><span class="dot"></span>复核门</span>' : '')
+        + '<div class="wsb-tabs"><button class="wsb-tab' + (state.tab === 'stage' ? ' on' : '') + '" data-ed-tab="stage">本阶段</button><button class="wsb-tab' + (state.tab === 'global' ? ' on' : '') + '" data-ed-tab="global">全局</button></div>'
+        + '<button class="btn btn--ghost sm" data-close-ed style="margin-left:8px">✕</button></div>'
+        + '<div data-pane="stage"' + (state.tab === 'global' ? ' hidden' : '') + '>' + editorBodyHTML(state.wf, sid, wfDef) + '</div>'
+        + '<div data-pane="global"' + (state.tab === 'stage' ? ' hidden' : '') + '>'
+        + '<div class="sec"><div class="sec-h">Hook 全局时序</div><div class="hk-panel">' + hkPanelHTML() + '</div></div>'
+        + '<div class="sec"><div class="sec-h">安全门说明</div><div class="safe-note">' + safetyNoteHTML() + '</div></div>'
+        + '<div class="sec"><div class="sec-h">manifest 技能矩阵</div><button class="btn btn--tint sm" data-open-matrix>查看矩阵 →</button></div>'
+        + '</div>';
+      wireEditorInteractions(ed, state.wf, sid, wfDef, function () { renderRail(); });
+      wireHookToggles(ed);
+      ed.querySelector('[data-close-ed]').addEventListener('click', function () { ed.hidden = true; hint.hidden = false; state.sel = null; renderRail(); });
+      $all('[data-ed-tab]', ed).forEach(function (b) {
+        b.addEventListener('click', function () {
+          state.tab = b.getAttribute('data-ed-tab');
+          $all('[data-ed-tab]', ed).forEach(function (x) { x.classList.toggle('on', x === b); });
+          ed.querySelector('[data-pane="stage"]').hidden = state.tab !== 'stage';
+          ed.querySelector('[data-pane="global"]').hidden = state.tab !== 'global';
+        });
+      });
+      renderRail();
+      if (window.gsap && motionOK) gsap.from(ed, { autoAlpha: 0, y: -8, duration: .22, ease: 'power2.out' });
+    }
+    root.addEventListener('click', function (e) {
+      var el;
+      if ((el = e.target.closest('[data-set-wf]'))) { state.wf = el.getAttribute('data-set-wf'); state.task = TASKS[state.wf][0].id; state.sel = null; root.querySelector('[data-editor="B"]').hidden = true; root.querySelector('[data-editor-hint="B"]').hidden = false; renderPills(); renderRail(); renderReplay(); return; }
+      if ((el = e.target.closest('[data-set-task]'))) { state.task = el.getAttribute('data-set-task'); renderPills(); renderRail(); traceFade(root, '.wsb-card'); return; }
+      if ((el = e.target.closest('[data-stage-node]'))) { openEditor(el.getAttribute('data-stage-node')); return; }
+      if ((el = e.target.closest('[data-replay-play]'))) {
+        var tid = el.getAttribute('data-task'), to = el.getAttribute('data-to');
+        if (tid !== state.task) { state.task = tid; renderPills(); renderRail(); }
+        pulseEl(root.querySelector('.wsb-card[data-stage-node="' + to + '"]'));
+        toast('回放:' + tid + ' → ' + to);
+        return;
+      }
+    });
+    renderPills(); renderRail(); renderReplay();
+  })();
+
+  /* ================================================================ */
+  /* 方案 C — 检查站泳道                                                */
+  /* ================================================================ */
+  (function schemeC() {
+    var root = document.querySelector('.scheme[data-scheme="C"]');
+    if (!root) return;
+    var state = { wf: 'default', sel: null, openHk: null, defs: { 'default': clone(WORKFLOWS['default']), 'release-train': clone(WORKFLOWS['release-train']) } };
+    state.defs['release-train'].stages.draft.skills = clone(CUSTOM_SKILLS_SEED['release-train'].draft);
+    state.defs['release-train'].stages.review.skills = [];
+    state.defs['release-train'].stages.ship.skills = [];
+
+    function tokenCls(t) {
+      if (t.state === 'gate') return 'wsc-token--gate';
+      if (t.state === 'agent') return 'wsc-token--agent';
+      if (t.state === 'running') return 'wsc-token--run';
+      return 'wsc-token--queue';
+    }
+    function initials(id) { return id.split('-')[0].slice(0, 2).toUpperCase(); }
+
+    function renderUpper() {
+      var box = root.querySelector('[data-stas="C"]');
+      var vms = stageVMs(state.wf, null);
+      var tasks = TASKS[state.wf];
+      var html = vms.map(function (vm) {
+        var toks = tasks.filter(function (t) { return t.cur === vm.id; }).map(function (t) {
+          return '<span class="wsc-token ' + tokenCls(t) + '" data-token="' + t.id + '" title="' + t.id + ' · ' + t.req + '">' + initials(t.id) + '</span>';
+        }).join('');
+        var statusCls = vm.gate ? 'wsc-sta--gate' : '';
+        if (tasks.some(function (t) { return t.cur === vm.id && t.state !== 'queued'; })) statusCls += ' wsc-sta--current';
+        return '<div class="wsc-sta ' + statusCls + '" data-sta="' + vm.id + '" data-idx="' + vm.idx + '">'
+          + '<div class="wsc-tokens">' + toks + '</div>'
+          + '<div class="wsc-ring"></div><div class="wsc-name">' + vm.name + '</div><div class="wsc-sid mono">' + vm.id + '</div>'
+          + '</div>';
+      }).join('');
+      box.innerHTML = html;
+      /* 检查站门架:连到下方对应 hook 分组(PreToolUse 第3列 / PostToolUse 第4列) */
+      requestAnimationFrame(function () {
+        $all('.wsc-gantry', box).forEach(function (g) { g.remove(); });
+        var gateStas = $all('.wsc-sta--gate', box);
+        var lower = root.querySelector('[data-lower="C"]');
+        if (!lower) return;
+        var lowerTop = lower.getBoundingClientRect().top;
+        var upperRect = box.getBoundingClientRect();
+        gateStas.forEach(function (sta) {
+          var r = sta.querySelector('.wsc-ring').getBoundingClientRect();
+          var g = document.createElement('div');
+          g.className = 'wsc-gantry';
+          g.style.left = (r.left + r.width / 2 - upperRect.left - 1) + 'px';
+          g.style.height = (lowerTop - (r.bottom)) + 'px';
+          g.style.top = (r.bottom - upperRect.top) + 'px';
+          box.appendChild(g);
+        });
+      });
+      if (window.gsap && motionOK) {
+        var runTok = $all('.wsc-token--run', box);
+        if (runTok.length) gsap.to(runTok, { scale: 1.22, duration: .55, yoyo: true, repeat: -1, ease: 'sine.inOut', transformOrigin: '50% 50%' });
+      }
+    }
+    function renderLower() {
+      var box = root.querySelector('[data-lower="C"]');
+      box.innerHTML = HOOKS.map(function (g) {
+        var guard = (g.group === 'PreToolUse' || g.group === 'PostToolUse') ? ' wsc-hkgrp--guard' : '';
+        return '<div class="wsc-hkgrp' + guard + (state.openHk === g.group ? ' open' : '') + '" data-hkgrp="' + g.group + '">'
+          + '<div class="wsc-hkgrp-t">' + g.label + '</div><div class="wsc-hkgrp-ev mono">' + g.group + '</div><div class="wsc-hkgrp-n">' + g.items.length + ' 个钩子</div>'
+          + '</div>';
+      }).join('') + '<div class="wsc-hkdetail" data-hkdetail hidden></div>';
+    }
+    function toggleHkGroup(name) {
+      state.openHk = state.openHk === name ? null : name;
+      var box = root.querySelector('[data-lower="C"]');
+      $all('.wsc-hkgrp', box).forEach(function (b) { b.classList.toggle('open', b.getAttribute('data-hkgrp') === state.openHk); });
+      var detail = box.querySelector('[data-hkdetail]');
+      if (!state.openHk) { detail.hidden = true; return; }
+      var g = HOOKS.filter(function (x) { return x.group === state.openHk; })[0];
+      detail.innerHTML = '<div class="hk-panel">' + g.items.map(hookRowHTML).join('') + '</div>';
+      detail.hidden = false;
+      wireHookToggles(detail);
+    }
+    function renderReplay() { root.querySelector('[data-replay="C"]').innerHTML = replayListHTML(state.wf); }
+    function renderGlobals() { root.querySelector('[data-safety="C"]').innerHTML = safetyNoteHTML(); }
+
+    function openEditor(sid) {
+      state.sel = sid;
+      var ed = root.querySelector('[data-editor="C"]');
+      var hint = root.querySelector('[data-editor-hint="C"]');
+      var wfDef = state.defs[state.wf];
+      var meta = wfDef.stages[sid];
+      ed.hidden = false; hint.hidden = true;
+      ed.innerHTML = '<div class="card-h"><span class="card-t">阶段编辑</span><span class="g-phase mono">' + sid + '</span>'
+        + (meta.gate ? '<span class="badge badge--red"><span class="dot"></span>复核门 · 检查站</span>' : '')
+        + '<span class="sp"></span><button class="btn btn--ghost sm" data-close-ed>✕ 收起</button></div>'
+        + editorBodyHTML(state.wf, sid, wfDef);
+      wireEditorInteractions(ed, state.wf, sid, wfDef, function () {});
+      ed.querySelector('[data-close-ed]').addEventListener('click', function () { ed.hidden = true; hint.hidden = false; state.sel = null; });
+      if (window.gsap && motionOK) gsap.from(ed, { autoAlpha: 0, y: -8, duration: .22, ease: 'power2.out' });
+    }
+
+    var drawer = document.getElementById('wscDrawer');
+    var drawerBg = document.getElementById('wscDrawerBackdrop');
+    function openDrawer(taskId) {
+      var t = TASKS[state.wf].filter(function (x) { return x.id === taskId; })[0];
+      if (!t) return;
+      document.getElementById('wscDrawerId').textContent = t.id;
+      document.getElementById('wscDrawerTrack').textContent = t.track + ' 轨道 · 当前阶段 ' + t.cur;
+      var body = document.getElementById('wscDrawerBody');
+      var html = '<p class="wsc-drawer-req">' + t.req + '</p>';
+      if (t.evidence.length) {
+        html += '<div class="wb-chips" style="display:grid;grid-template-columns:1fr;gap:8px">' + t.evidence.map(function (kv) { return '<div class="field"><div class="fk">' + kv[0] + '</div><div class="fv mono">' + kv[1] + '</div></div>'; }).join('') + '</div>';
+      }
+      html += '<div><div class="sec-h" style="margin-bottom:6px">最近流转</div>' + (t.history.length ? t.history.map(function (h) {
+        var main = h.kind === 'transition' ? (h.from + ' → ' + h.to) : ('set ' + h.field + ' = ' + h.to);
+        return '<div class="replay-row"><span class="replay-row__t">' + main + '</span><span class="replay-row__ev">' + (h.raw || 'set') + '</span><span class="replay-row__time">' + h.t + '</span></div>';
+      }).join('') : '<div class="replay-empty">排队中,尚无流转记录</div>') + '</div>';
+      body.innerHTML = html;
+      drawer.classList.add('open'); drawerBg.classList.add('open');
+    }
+    function closeDrawer() { drawer.classList.remove('open'); drawerBg.classList.remove('open'); }
+    document.getElementById('wscDrawerClose').addEventListener('click', closeDrawer);
+    drawerBg.addEventListener('click', closeDrawer);
+
+    root.addEventListener('click', function (e) {
+      var el;
+      if ((el = e.target.closest('[data-set-wf]'))) { state.wf = el.getAttribute('data-set-wf'); state.sel = null; state.openHk = null; root.querySelector('[data-editor="C"]').hidden = true; root.querySelector('[data-editor-hint="C"]').hidden = false; root.querySelector('[data-wf-switch="C"]').innerHTML = segHTML(state.wf); renderUpper(); renderLower(); renderReplay(); return; }
+      if ((el = e.target.closest('[data-token]'))) { e.stopPropagation(); openDrawer(el.getAttribute('data-token')); return; }
+      if ((el = e.target.closest('[data-sta]'))) { openEditor(el.getAttribute('data-sta')); return; }
+      if ((el = e.target.closest('[data-hkgrp]'))) { toggleHkGroup(el.getAttribute('data-hkgrp')); return; }
+      if ((el = e.target.closest('[data-replay-play]'))) {
+        var to = el.getAttribute('data-to');
+        pulseEl(root.querySelector('.wsc-sta[data-sta="' + to + '"] .wsc-ring'));
+        toast('回放:' + el.getAttribute('data-task') + ' → ' + to);
+        return;
+      }
+    });
+
+    root.querySelector('[data-wf-switch="C"]').innerHTML = segHTML(state.wf);
+    renderUpper(); renderLower(); renderReplay(); renderGlobals();
+    window.addEventListener('resize', renderUpper);
+    /* 初始化时本方案 tab 处于 hidden(display:none),getBoundingClientRect 全部塌陷为 0——
+       门架连线需要在 tab 真正可见后重新量一次(同 v5-progress-workbench.html 的 viewshown 事件模式)。 */
+    document.addEventListener('schemeshown', function (e) { if (e.detail === 'C') renderUpper(); });
+  })();
+
+  /* ============ 顶层方案 tab 切换 ============ */
+  var schTabs = $all('[data-sch-tab]');
+  var schemes = $all('.scheme');
+  schTabs.forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var name = btn.getAttribute('data-sch-tab');
+      schTabs.forEach(function (b) { var on = b === btn; b.classList.toggle('on', on); b.setAttribute('aria-selected', String(on)); });
+      schemes.forEach(function (s) { s.hidden = s.getAttribute('data-scheme') !== name; });
+      document.dispatchEvent(new CustomEvent('schemeshown', { detail: name }));
+    });
+  });
+})();
+</script>
+</body>
+</html>
