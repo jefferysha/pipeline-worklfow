@@ -769,6 +769,13 @@ button.ev__chip--neutral:hover { border-color: var(--border-2); color: var(--tex
 .wb-hkline--rail .wb-hkstack { display: flex; flex-direction: column; gap: 8px; }
 .side-card__body--hooks .wb-ed-sec { margin: 0; border-top: none; padding-top: 0; }
 
+/* ── v6 T10：未安装标注(标注型提示,不拦)——badge 黄从既有 token 派生(同 busy 黄先例,决议#9),
+   禁新原色;未安装 chip/条目降饱和示意「本机没有」。 ── */
+.wb-chip--uninstalled, .transfer__item--uninstalled, .wb-skopt--uninstalled { opacity: .62; }
+.wb-chip-badge { flex: none; margin-left: 4px; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 999px; border: none; cursor: pointer; background: color-mix(in oklch, var(--red) 52%, var(--green)); color: var(--card); white-space: nowrap; }
+span.wb-chip-badge { cursor: default; }
+.wb-sk-banner { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 10px; border-radius: 10px; background: color-mix(in srgb, color-mix(in oklch, var(--red) 52%, var(--green)) 14%, var(--card)); border: 1px solid color-mix(in srgb, color-mix(in oklch, var(--red) 52%, var(--green)) 45%, var(--border)); }
+
 /* ==== T16：「自动运行(Loop)」卡（lp- 区块）——对照 demo v5 #wbLoopCard：滑杆轨道 fill-2、
    填充 accent（--p 渐变分界）、推荐 ▽ 刻度、超限策略 pill 单选、自主级别 segmented、
    闸门/终止/范围 chips 行。全部走既有 token，无新原色。 ==== */

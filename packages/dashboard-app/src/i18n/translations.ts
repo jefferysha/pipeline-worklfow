@@ -436,6 +436,11 @@ export const zh: Dict = {
     mx_body: 'default 工作流各阶段按轨道（pm / frontend / backend）强制的技能表，来自 templates/manifest.yaml——跨 workflow 全局生效，不属于单个阶段。',
     mx_open: '去 default 工作流查看矩阵',
     mx_open_here: '当前就在 default 工作流——矩阵在下方技能区',
+    // v6 T10：未安装标注(标注型提示,不拦)。
+    sk_uninstalled: '未安装',
+    sk_uninstalled_hint_user: '本机未检出——用 find-skills 检索安装',
+    sk_banner: '该阶段×轨道的强制技能全部备选未安装:{tokens}',
+    sk_banner_copy: '⧉ 复制安装命令',
   },
   // T10（v5 交互重建）：进度视图骨架文案。口径纪律同 workbench：可见文案一律用「阶段」（旧措辞已废）。
   progress: {
@@ -892,6 +897,10 @@ export const en: Dict = {
     mx_body: 'The per-stage × per-track (pm / frontend / backend) mandatory-skill table of the default workflow, from templates/manifest.yaml — global across workflows, not owned by any single stage.',
     mx_open: 'Open the matrix in the default workflow',
     mx_open_here: 'Already on the default workflow — the matrix lives in the skills section below',
+    sk_uninstalled: 'not installed',
+    sk_uninstalled_hint_user: 'Not detected on this machine — find and install via find-skills',
+    sk_banner: 'All alternatives of mandatory skill(s) for this stage×track are missing: {tokens}',
+    sk_banner_copy: '⧉ Copy install command',
   },
   progress: {
     title: 'Progress',
