@@ -48,6 +48,10 @@ export type {
   GraduationHistory, GraduationInputs, GraduationVerdict, LevelChangeKind, LevelChangePlan,
   GraduationFs, GraduationReport, GraduationReportEnvelope, ApplyLevelResult,
 } from './graduation.js'
+// loop-init P2：草稿标记 sidecar（「agent 草稿 · 待你审阅」标记，纯展示元数据，fail-open 读 + 幂等增删原子写）
+export {
+  draftMarksPath, readDraftMarks, addDraftMark, clearDraftMark, DRAFT_MARKS_FILE,
+} from './drafts.js'
 // v5 T3：loops.yaml 字段级文本手术（决议 #3 #12 存储侧；升降档另走 graduation）
 export {
   updateLoopInYaml, PATCHABLE_SCALAR_FIELDS, PATCHABLE_BUDGET_FIELDS, PATCHABLE_ARRAY_FIELDS,
