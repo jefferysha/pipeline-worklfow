@@ -1,12 +1,32 @@
-import { Fragment } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useT } from '../i18n'
+import { Icon } from '../shell/Icon'
 
 /**
- * StepperRail（T12，v5 交互重建）—— 工作台线性 stepper：阶段卡横排 + 卡间转换事件连接件。
- * 交互真相源 design-demos/v5-progress-workbench.html 的 .wb-steps 段（renderStepper/connHTML）。
+ * StepperRail（v6 计划 T11：docs/superpowers/plans/2026-07-11-v6-recommended-implementation.md
+ * §T11——不要与本文件此前 v5 交互重建 T12 头注释、或 styles.ts/translations.ts 里孤立出现的
+ * 旧「T11/T13」编号混淆，那些是上一轮计划的编号，与本轮 v6 计划的 13 任务编号是两套体系）：
+ * 工作台「流程带」——阶段横排从卡片+箭头连接件，重写为连续的鱼鳞状 chevron 段（几何沿用本仓
+ * 已有 `.prg-seg`（进度视图箭头带）的 clip-path 卡榫写法，非抄 demo 像素）。方案 A「流程即真相」
+ * 交互真相源 design-demos/v6-workbench-flow.html `data-scheme="A"`（`renderBand`/`stageVMs`）。
+ *
+ * 相对旧版新增三件事（据点 stageVMs 的现实 ambient 化）：
+ *   · 真实计数气泡：该阶段当前有多少个真实 change 停留于此（WorkbenchView 的 stageCounts 纯函数
+ *     按 root+workflow 对 /api/snapshot 分桶投影而来，本组件零业务判断，只认 count 数字）；
+ *   · running 脉冲：该阶段存在 automation==='running' 的 change 时显示光泽扫过（GSAP 挂在
+ *     WorkbenchView 侧，本组件只负责在 running=true 时渲染承载元素 `.wb-flow-gloss`）；
+ *   · 门徽章 popover：gate 阶段的徽章升级成可 hover/点击的触发器，展开显示拦截该阶段的 hook
+ *     （gate.sh + interactive-skill-gate.sh 对任意复核门恒强制常开，决议 #2）——本棒用静态
+ *     hook 元数据（`gateHooks` prop，WorkbenchView 用 HookTimeline.tsx 的 LOCKED_IDS + 既有
+ *     i18n hk_name_/hk_desc_ 系列键拼出，不依赖 /api/hooks 是否已加载完成）；T12 起若要按阶段展示
+ *     真实启停态，只需换 WorkbenchView 侧的取数逻辑，本组件 props 形状不用再动（留 slot）。
  *
  * 纯展示组件：不吃原始 WorkflowDef，只吃 WorkbenchView 投影好的 StepperStep 视图模型——
- * 名称回退（label→i18n phases→id）、技能去重、forward 边解析都在投影层做完，本组件零业务判断。
+ * 名称回退（label→i18n phases→id）、技能去重、forward 边解析、真实计数/running 折叠都在
+ * 投影层做完，本组件零业务判断。popover 展开/收起是纯 UI 交互态，留在本组件内部。
+ *
+ * 决议 #1 红线：无画布库——chevron 段用 CSS clip-path（flex 布局的一部分），转换事件名连接件
+ * 用普通文本 chip，不引入任何 SVG DAG/graph 渲染库。
  */
 export interface StepperStep {
   id: string
@@ -17,12 +37,23 @@ export interface StepperStep {
   skills: string[]
   outputsCount: number
   /**
-   * T15：该阶段的启用 hook 数（/api/hooks 矩阵按阶段算——各卡数字可以不同）；
+   * 该阶段的启用 hook 数（/api/hooks 矩阵按阶段算——各卡数字可以不同）；
    * undefined = 数据面未就绪/加载失败，隐藏该段（诚实占位，不谎报数字）。
    */
   hooksCount?: number
   /** 与下一张卡之间的转换事件名；无 forward 边 = null，不画连接件（诚实：边不存在就不画箭头）。 */
   linkEvent: string | null
+  /** v6 T11：该阶段真实 change 计数（stageCounts 投影，snapshot 未就绪/该阶段无任务 = 0）。 */
+  count: number
+  /** v6 T11：该阶段是否存在 automation==='running' 的 change（驱动脉冲光泽承载元素）。 */
+  running: boolean
+}
+
+/** v6 T11：门徽章 popover 内容条目——静态展示，与具体阶段无关（决议 #2 强制常开对任意复核门一致）。 */
+export interface GateHookInfo {
+  id: string
+  name: string
+  desc: string
 }
 
 export interface StepperRailProps {
@@ -38,6 +69,8 @@ export interface StepperRailProps {
   onAddStage?: () => void
   /** stepper 容器的 aria-label（如「release-train 阶段」）。 */
   label: string
+  /** v6 T11：门徽章 popover 里展示的 hook 列表（WorkbenchView 静态拼出，见文件头注释）。 */
+  gateHooks?: readonly GateHookInfo[]
 }
 
 /** 技能短名：带命名空间的 id（superpowers:tdd）只显示冒号后段，全名进 title。 */
@@ -46,30 +79,58 @@ function shortSkill(id: string): string {
   return ix >= 0 ? id.slice(ix + 1) : id
 }
 
-export function StepperRail({ steps, selectedId, onSelect, litCount = 0, onAddStage, label }: StepperRailProps): JSX.Element {
+export function StepperRail({
+  steps,
+  selectedId,
+  onSelect,
+  litCount = 0,
+  onAddStage,
+  label,
+  gateHooks = [],
+}: StepperRailProps): JSX.Element {
   const { t } = useT()
+  // 门徽章 popover 开关态：hover 即显（鼠标移出即收）；点击「钉住」显示，不受后续 mouseLeave
+  // 影响，再点一次或点外部区域才收起——同一时间只会有一个钉住（点新的门徽章直接切换）。
+  const [hoverGate, setHoverGate] = useState<string | null>(null)
+  const [pinnedGate, setPinnedGate] = useState<string | null>(null)
+  const railRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (pinnedGate === null) return
+    function onDocClick(e: MouseEvent): void {
+      if (railRef.current && e.target instanceof Node && !railRef.current.contains(e.target)) setPinnedGate(null)
+    }
+    document.addEventListener('click', onDocClick)
+    return () => document.removeEventListener('click', onDocClick)
+  }, [pinnedGate])
+
   return (
     <div className="wb-rail">
-      <div className="wb-steps" aria-label={label}>
+      <div className="wb-flow" aria-label={label} ref={railRef}>
         {steps.map((s, i) => {
           const on = s.id === selectedId
           const live = i < litCount ? (i === steps.length - 1 ? ' wb-step--live-g' : ' wb-step--live') : ''
+          const openPop = hoverGate === s.id || pinnedGate === s.id
+          const gateLabel = s.gate === 'confirm' ? t('workbench.gate_badge_confirm') : t('workbench.gate_badge')
           return (
-            <Fragment key={s.id}>
-              <button
-                className={`wb-step${on ? ' wb-step--on' : ''}${live}`}
-                data-testid={`wb-step-${s.id}`}
-                aria-current={on ? 'step' : undefined}
-                onClick={() => onSelect(s.id)}
-              >
+            <div
+              key={s.id}
+              className={`wb-flow-seg${i === 0 ? ' wb-flow-seg--first' : ''}${i === steps.length - 1 ? ' wb-flow-seg--last' : ''}${on ? ' wb-flow-seg--on' : ''}${live}`}
+              data-testid={`wb-step-${s.id}`}
+              aria-current={on ? 'step' : undefined}
+              // 选中态点击处理落在外层容器（不落在下面 .wb-flow-hit 按钮本身）：门徽章是这个
+              // 容器的兄弟节点而非 .wb-flow-hit 子节点，选中处理若挂在 .wb-flow-hit 上，直接
+              // 点击容器本身（既有测试的既定用法，如 fireEvent.click(getByTestId('wb-step-x'))）
+              // 不会经过 .wb-flow-hit 冒泡触发。原生点击事件冒泡覆盖 .wb-flow-hit 内部（含键盘
+              // Enter/Space 在其上触发的原生 click），门徽章自己的 onClick 会 stopPropagation
+              // 挡掉，两者不会互相误触发。
+              onClick={() => onSelect(s.id)}
+            >
+              <button type="button" className="wb-flow-hit">
                 <span className="wb-step-top">
                   <span className="wb-step-num">{i + 1}</span>
-                  {s.gate && (
-                    <span className="badge badge--gate wb-step-gate">
-                      {s.gate === 'confirm' ? t('workbench.gate_badge_confirm') : t('workbench.gate_badge')}
-                    </span>
-                  )}
                 </span>
+                {s.running && <i className="wb-flow-gloss" data-testid={`wb-flow-gloss-${s.id}`} aria-hidden="true" />}
                 <span className="wb-step-name">{s.name}</span>
                 <span className="wb-step-id">{s.id}</span>
                 <span className="wb-step-meta">
@@ -92,21 +153,60 @@ export function StepperRail({ steps, selectedId, onSelect, litCount = 0, onAddSt
                   </span>
                 )}
               </button>
+
+              <span className="wb-flow-badges">
+                {s.count > 0 && (
+                  <span
+                    className="wb-flow-count"
+                    data-testid={`wb-flow-count-${s.id}`}
+                    title={t('workbench.flow_count_title', { n: s.count })}
+                  >
+                    {s.count}
+                  </span>
+                )}
+                {s.gate && (
+                  <span className="wb-flow-gatewrap">
+                    <button
+                      type="button"
+                      className="badge badge--gate wb-step-gate wb-flow-gate"
+                      data-testid={`wb-flow-gate-${s.id}`}
+                      aria-expanded={openPop}
+                      title={t('workbench.gate_pop_title')}
+                      onMouseEnter={() => setHoverGate(s.id)}
+                      onMouseLeave={() => setHoverGate(null)}
+                      onFocus={() => setHoverGate(s.id)}
+                      onBlur={() => setHoverGate(null)}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setPinnedGate((cur) => (cur === s.id ? null : s.id))
+                      }}
+                    >
+                      <Icon name="gate" size={10} />
+                      {gateLabel}
+                    </button>
+                    {openPop && (
+                      <div className="wb-flow-gatepop" data-testid={`wb-flow-gatepop-${s.id}`} role="tooltip">
+                        <p className="wb-flow-gatepop-t">{t('workbench.gate_pop_title')}</p>
+                        {gateHooks.map((h) => (
+                          <p key={h.id} className="wb-flow-gatepop-row">
+                            <b>{h.name}</b>
+                            {h.desc}
+                          </p>
+                        ))}
+                      </div>
+                    )}
+                  </span>
+                )}
+              </span>
+
               {s.linkEvent !== null && i < steps.length - 1 && (
-                <span className="wb-link" aria-hidden="true">
-                  <span className="wb-link-ev">{s.linkEvent}</span>
-                  {/* 箭头不用 <marker>（多连接件会产生重复 id），直接画线 + 三角。 */}
-                  <svg viewBox="0 0 54 10" width="54" height="10">
-                    <line x1="1" y1="5" x2="45" y2="5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-                    <path d="M45 1.5 L52 5 L45 8.5 Z" fill="currentColor" />
-                  </svg>
-                </span>
+                <span className="wb-flow-ev" aria-hidden="true">{s.linkEvent}</span>
               )}
-            </Fragment>
+            </div>
           )
         })}
         <button
-          className="wb-step--add"
+          className="wb-flow-add"
           onClick={onAddStage}
           disabled={!onAddStage}
           title={onAddStage ? undefined : t('workbench.add_stage_pending')}
