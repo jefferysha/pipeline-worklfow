@@ -28,7 +28,7 @@ async function readErrorDetail(res: Response): Promise<string> {
 
 export function SkillTransferModal({ selected, onSave, onCancel }: SkillTransferModalProps): JSX.Element {
   const { t } = useT()
-  const [all, setAll] = useState<string[]>([])
+  const [all, setAll] = useState<WbSkillEntry[]>([])
   const [chosen, setChosen] = useState<string[]>(selected)
   const [query, setQuery] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -44,13 +44,24 @@ export function SkillTransferModal({ selected, onSave, onCancel }: SkillTransfer
         if (!r.ok) throw new Error((await readErrorDetail(r)) || t('skill_transfer.load_error_status', { status: r.status }))
         return r.json() as Promise<{ skills: WbSkillEntry[] }>
       })
-      .then((body) => setAll(body.skills.map((e) => e.name)))
+      .then((body) => setAll(body.skills))
       .catch((err: unknown) =>
         setError(t('skill_transfer.load_error', { msg: err instanceof Error ? err.message : t('skill_transfer.network_error') })),
       )
   }, [t])
 
-  const available = all.filter((s) => !chosen.includes(s) && s.toLowerCase().includes(query.toLowerCase()))
+  const available = all.filter((e) => !chosen.includes(e.name) && e.name.toLowerCase().includes(query.toLowerCase()))
+  // v6 T10：未安装 badge 查询面(chosen 栏条目可能不在 registry——如 manifest 自由 token,查无即不标)。
+  const entryOf = new Map(all.map((e) => [e.name, e]))
+  const uninstMark = (name: string): JSX.Element | null => {
+    const entry = entryOf.get(name)
+    if (!entry || entry.installed) return null
+    return (
+      <span className="wb-chip-badge" aria-hidden="true" title={entry.installCmd ?? t('workbench.sk_uninstalled_hint_user')}>
+        {t('workbench.sk_uninstalled')}
+      </span>
+    )
+  }
 
   // 点击与拖拽共用同一对纯函数（Task 16，评审 P1-10 后半）：点击即移动是主交互，HTML5 拖拽
   // 保留作为增强，onDragStart/onDrop 落到同一对 move 函数上，不是两套平行逻辑。两者对同一
@@ -130,17 +141,19 @@ export function SkillTransferModal({ selected, onSave, onCancel }: SkillTransfer
       <div className="transfer">
         <div className="transfer__col" data-testid="skill-available" onDragOver={(e) => e.preventDefault()} onDrop={onDropToAvailable}>
           {error && <div className="transfer__error" data-testid="skill-error">{error}</div>}
-          {!error && available.map((s) => (
+          {!error && available.map(({ name: s, installed }) => (
             <button
               key={s}
               type="button"
-              className="transfer__item"
+              className={`transfer__item${installed ? '' : ' transfer__item--uninstalled'}`}
               title={s}
+              aria-label={s}
               draggable
               onDragStart={(e) => e.dataTransfer.setData(DND_MIME, s)}
               onClick={() => moveToChosen(s)}
             >
               {s}
+              {uninstMark(s)}
             </button>
           ))}
         </div>
@@ -151,11 +164,13 @@ export function SkillTransferModal({ selected, onSave, onCancel }: SkillTransfer
               type="button"
               className="transfer__item transfer__item--chosen"
               title={s}
+              aria-label={s}
               draggable
               onDragStart={(e) => e.dataTransfer.setData(DND_MIME, s)}
               onClick={() => moveToAvailable(s)}
             >
               {s}
+              {uninstMark(s)}
             </button>
           ))}
         </div>
