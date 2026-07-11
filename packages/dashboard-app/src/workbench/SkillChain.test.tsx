@@ -277,3 +277,113 @@ describe('SkillChain default workflow：轨道 tab × 强制技能矩阵', () =>
     expect(within(screen.getByTestId('wb-sk-mand')).getByText(/未强制技能/)).toBeInTheDocument()
   })
 })
+
+/**
+ * v6 T10：未安装 badge(标注型提示,不做代码级拦截——gate 硬拦已拍板不做)+ manifest 缺失黄条。
+ * registry 现改为挂载即拉(chips/黄条都要 installed 信息,不再等面板打开)。
+ */
+/** v6 T10 自定义模式 fetch 桩:registry 挂载即拉(eager),候选与已选 chip 的 installed 由此供给。 */
+function mockCustomFetch(): void {
+  global.fetch = vi.fn(async (url: string) => {
+    if (url === '/api/skills/registry') {
+      return new Response(
+        JSON.stringify({
+          skills: [
+            { name: 'skill-a', installed: true, source: 'local-plugin' },
+            { name: 'new-skill', installed: false, source: 'user' },
+            { name: 'another', installed: false, source: 'user' },
+            { name: 'ext-missing', installed: false, source: 'external-marketplace', installCmd: 'claude plugin install ext' },
+          ],
+        }),
+        { status: 200 },
+      )
+    }
+    throw new Error(`unexpected fetch ${url}`)
+  }) as unknown as typeof fetch
+}
+
+describe('SkillChain v6 T10：未安装 badge(自定义模式)', () => {
+  it('已选 chip:installed:false → wb-chip--uninstalled 类 + badge,title 含 installCmd,点 badge 复制', async () => {
+    const writeText = vi.fn(async () => {})
+    vi.stubGlobal('navigator', { ...globalThis.navigator, clipboard: { writeText } })
+    mockCustomFetch()
+    renderChain({ skills: [{ id: 'ext-missing' }, { id: 'skill-a' }] })
+    const badge = await screen.findByTestId('wb-sk-uninst-ext-missing')
+    expect(badge.title).toContain('claude plugin install ext')
+    const chip = badge.closest('.wb-chip')
+    expect(chip).not.toBeNull()
+    expect(chip!.className).toContain('wb-chip--uninstalled')
+    fireEvent.click(badge)
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('claude plugin install ext'))
+    // 已装的不带 badge
+    expect(screen.queryByTestId('wb-sk-uninst-skill-a')).toBeNull()
+  })
+
+  it('候选面板:未安装项带视觉区分但仍可选中(不拦,呼应「gate 硬拦不做」)', async () => {
+    mockCustomFetch()
+    const { } = renderChain({ skills: [] })
+    fireEvent.click(screen.getByTestId('wb-sk-add'))
+    const opt = await screen.findByTestId('wb-sk-opt-new-skill')
+    expect(opt.className).toContain('wb-skopt--uninstalled')
+    expect(opt).toBeEnabled()
+    fireEvent.click(opt)
+    expect(opt.className).toContain(' on')
+  })
+})
+
+describe('SkillChain v6 T10：manifest 缺失黄条(default 模式)', () => {
+  const GHOST_CONFIG = () =>
+    new Response(
+      JSON.stringify({
+        ok: true,
+        generated_at: '2026-07-11T00:00:00Z',
+        mandatory_skills: {
+          'build._all': ['fallback-skill'],
+          // ghost-a|ghost-b 两备选全部未装 → 该 token 触发黄条;skill-x 已装 → 不触发。
+          'build.frontend': ['ghost-a|ghost-b', 'skill-x'],
+        },
+      }),
+      { status: 200 },
+    )
+  const GHOST_REGISTRY = () =>
+    new Response(
+      JSON.stringify({
+        skills: [
+          { name: 'ghost-a', installed: false, source: 'external-marketplace', installCmd: 'claude plugin install ghost' },
+          { name: 'ghost-b', installed: false, source: 'user' },
+          { name: 'skill-x', installed: true, source: 'local-plugin' },
+          { name: 'skill-y', installed: true, source: 'local-plugin' },
+          { name: 'fallback-skill', installed: true, source: 'user' },
+        ],
+      }),
+      { status: 200 },
+    )
+
+  it('当前阶段×轨道存在全备选未装的 token → 黄条渲染,复制钮给出安装命令', async () => {
+    const writeText = vi.fn(async () => {})
+    vi.stubGlobal('navigator', { ...globalThis.navigator, clipboard: { writeText } })
+    mockDefaultFetch({ '/api/config': GHOST_CONFIG, '/api/skills/registry': GHOST_REGISTRY })
+    renderChain({}, { workflow: 'default', readonly: true })
+    await screen.findByTestId('wb-sk-tracks')
+    fireEvent.click(screen.getByTestId('wb-sk-track-frontend'))
+    const banner = await screen.findByTestId('wb-sk-banner')
+    expect(banner.textContent).toContain('ghost-a')
+    fireEvent.click(screen.getByTestId('wb-sk-banner-copy'))
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('claude plugin install ghost'))
+  })
+
+  it('全部 token 都有已装备选 → 不渲染(部分已装即满足)', async () => {
+    mockDefaultFetch({ '/api/skills/registry': GHOST_REGISTRY })
+    renderChain({}, { workflow: 'default', readonly: true })
+    await screen.findByTestId('wb-sk-tracks')
+    fireEvent.click(screen.getByTestId('wb-sk-track-frontend'))
+    expect(screen.queryByTestId('wb-sk-banner')).toBeNull()
+  })
+
+  it('/api/config 探测失败回落静态镜像(capable:false)→ 黄条不渲染(installed 不可判,保守不显示)', async () => {
+    mockDefaultFetch({ '/api/config': () => new Response('boom', { status: 500 }) })
+    renderChain({}, { workflow: 'default', readonly: true })
+    await screen.findByTestId('wb-sk-tracks')
+    expect(screen.queryByTestId('wb-sk-banner')).toBeNull()
+  })
+})

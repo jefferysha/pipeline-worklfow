@@ -192,19 +192,57 @@ export function SkillChain({ step, workflow = '', readonly = false, onChange }: 
 
   // ── 自定义模式动作 ──
 
+  // v6 T10：registry 挂载即拉(两种模式都要)——已选 chip 的未安装 badge 与 default 黄条都
+  // 需要 installed 信息,不能等「+ 添加」面板打开才知道。失败 fail-soft:regError 行内提示,
+  // badge/黄条按「不可判」整体不显示(保守,不谎报)。
+  useEffect(() => {
+    if (registry !== null || regError !== null) return
+    let cancelled = false
+    fetch('/api/skills/registry', { headers: { Accept: 'application/json' } })
+      .then(async (r) => {
+        if (!r.ok) throw new Error((await readErrorDetail(r)) || `(${r.status})`)
+        return r.json() as Promise<{ skills: WbSkillEntry[] }>
+      })
+      .then((body) => {
+        if (!cancelled) setRegistry(body.skills)
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setRegError(t('workbench.sk_registry_error', { msg: err instanceof Error ? err.message : t('workbench.network_error') }))
+      })
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 只拉一次;t 变化不重拉
+  }, [registry, regError])
+
   function togglePanel(): void {
     setPanelOpen((v) => !v)
-    if (registry === null && regError === null) {
-      fetch('/api/skills/registry', { headers: { Accept: 'application/json' } })
-        .then(async (r) => {
-          if (!r.ok) throw new Error((await readErrorDetail(r)) || `(${r.status})`)
-          return r.json() as Promise<{ skills: WbSkillEntry[] }>
-        })
-        .then((body) => setRegistry(body.skills))
-        .catch((err: unknown) => {
-          setRegError(t('workbench.sk_registry_error', { msg: err instanceof Error ? err.message : t('workbench.network_error') }))
-        })
-    }
+  }
+
+  // v6 T10：name → SkillEntry 查询面(badge/黄条共用);registry 未就绪 → 空表 = 全部「不可判」。
+  const installedMap = new Map((registry ?? []).map((e) => [e.name, e]))
+
+  /** 未安装 badge(标注型提示):有 installCmd → 可点复制;无(user 类)→ 纯提示 title。 */
+  const uninstBadge = (id: string): JSX.Element | null => {
+    const entry = installedMap.get(id)
+    if (!entry || entry.installed) return null
+    const cmd = entry.installCmd
+    const title = cmd ?? t('workbench.sk_uninstalled_hint_user')
+    return cmd ? (
+      <button
+        type="button"
+        className="wb-chip-badge"
+        data-testid={`wb-sk-uninst-${id}`}
+        title={title}
+        onClick={() => void navigator.clipboard?.writeText(cmd)}
+      >
+        {t('workbench.sk_uninstalled')}
+      </button>
+    ) : (
+      <span className="wb-chip-badge" data-testid={`wb-sk-uninst-${id}`} title={title}>
+        {t('workbench.sk_uninstalled')}
+      </span>
+    )
   }
 
   function removeSkill(id: string): void {
@@ -319,11 +357,42 @@ export function SkillChain({ step, workflow = '', readonly = false, onChange }: 
                 )
               })}
             </div>
+            {/* v6 T10：manifest 缺失黄条——当前 阶段×轨道 任一 token 的全部 a|b 备选都未装才触发
+                (部分已装即满足);capable:false(静态镜像兜底)或 registry 未就绪 → 不可判,保守不显示。 */}
+            {(() => {
+              if (cfg.capable !== true || registry === null) return null
+              const rawTokens = cfg.table[`${phase}.${track}`] ?? cfg.table[`${phase}._all`] ?? []
+              const missing = rawTokens.filter((tok) =>
+                tok.split('|').every((alt) => installedMap.get(alt)?.installed !== true),
+              )
+              if (missing.length === 0) return null
+              const firstCmd = missing
+                .flatMap((tok) => tok.split('|'))
+                .map((alt) => installedMap.get(alt)?.installCmd)
+                .find((c) => c !== undefined)
+              return (
+                <p className="wb-note wb-sk-banner" data-testid="wb-sk-banner">
+                  {t('workbench.sk_banner', { tokens: missing.join('、') })}
+                  {firstCmd && (
+                    <button
+                      type="button"
+                      className="wb-chip-badge"
+                      data-testid="wb-sk-banner-copy"
+                      title={firstCmd}
+                      onClick={() => void navigator.clipboard?.writeText(firstCmd)}
+                    >
+                      {t('workbench.sk_banner_copy')}
+                    </button>
+                  )}
+                </p>
+              )
+            })()}
             <div className="wb-chips" data-testid="wb-sk-mand">
               {skills.length === 0 && <span className="wb-empty">{t('workbench.sk_empty_default')}</span>}
               {skills.map((s) => (
-                <span key={s} className="wb-chip" title={s}>
+                <span key={s} className={`wb-chip${installedMap.get(s)?.installed === false ? ' wb-chip--uninstalled' : ''}`} title={s}>
                   {s}
+                  {uninstBadge(s)}
                 </span>
               ))}
             </div>
@@ -354,8 +423,9 @@ export function SkillChain({ step, workflow = '', readonly = false, onChange }: 
   const candidates = (registry ?? []).map((e) => e.name).filter((id) => !have.has(id))
 
   const chip = (id: string): JSX.Element => (
-    <span key={id} className="wb-chip" title={id}>
+    <span key={id} className={`wb-chip${installedMap.get(id)?.installed === false ? ' wb-chip--uninstalled' : ''}`} title={id}>
       {id}
+      {uninstBadge(id)}
       {!readonly && (
         <button type="button" className="wb-x" aria-label={t('workbench.sk_remove', { id })} onClick={() => removeSkill(id)}>
           ×
@@ -429,11 +499,12 @@ export function SkillChain({ step, workflow = '', readonly = false, onChange }: 
             )}
             {candidates.map((id) => {
               const legal = SKILL_ID_RE.test(id)
+              const uninst = installedMap.get(id)?.installed === false
               return (
                 <button
                   key={id}
                   type="button"
-                  className={`wb-skopt${id === candidate ? ' on' : ''}`}
+                  className={`wb-skopt${id === candidate ? ' on' : ''}${uninst ? ' wb-skopt--uninstalled' : ''}`}
                   data-testid={`wb-sk-opt-${id}`}
                   disabled={!legal}
                   title={legal ? id : t('workbench.sk_illegal_hint')}
