@@ -717,7 +717,7 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
               onClick={() => toggleGroup(group.key)}
             >
               <span className="prg-ghead__name mono">{projName}</span>
-              <span className="g-phase">{group.workflow}</span>
+              <span className="g-phase">{t('progress.group_workflow', { name: group.workflow })}</span>
               <span className="prg-ghead__meta">
                 {meta}
                 {group.archivedCount > 0 && ` ${t('progress.group_archived', { n: group.archivedCount })}`}

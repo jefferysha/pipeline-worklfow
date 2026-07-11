@@ -418,6 +418,9 @@ export const zh: Dict = {
     failed_times: '失败 ×{n}',
     act_kill: '终止',
     act_retry: '重试',
+    // 验收反馈③：组头 workflow 徽章裸词（如「default」）容易被当成状态或阶段名——加「工作流:」
+    // 前缀讲清楚这是 workflow 名，样式仍用既有 .g-phase pill（决议：改文案不改视觉）。
+    group_workflow: '工作流:{name}',
     group_meta: '{steps} 阶段 · {rows} 个任务',
     group_meta_noflow: '{rows} 个任务',
     group_archived: '· {n} 已归档',
@@ -818,6 +821,7 @@ export const en: Dict = {
     failed_times: 'Failed ×{n}',
     act_kill: 'Stop',
     act_retry: 'Retry',
+    group_workflow: 'Workflow: {name}',
     group_meta: '{steps} stages · {rows} tasks',
     group_meta_noflow: '{rows} tasks',
     group_archived: '· {n} archived',

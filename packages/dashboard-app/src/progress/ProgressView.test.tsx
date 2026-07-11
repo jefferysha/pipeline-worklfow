@@ -161,14 +161,22 @@ describe('ProgressView 分组（验收①）', () => {
     renderView()
     const headA = screen.getByTestId('prg-ghead-proj-a-default')
     expect(headA.textContent).toContain('proj-a')
-    expect(headA.textContent).toContain('default')
+    // 验收反馈③：workflow 徽章加「工作流:」前缀，裸词不再单独出现（防止被当成状态/阶段名）
+    expect(headA.textContent).toContain('工作流:default')
     expect(headA.textContent).toContain('7 阶段 · 5 个任务')
     expect(headA.textContent).toContain('· 1 已归档')
     const headB = screen.getByTestId('prg-ghead-proj-b-release-train')
     expect(headB.textContent).toContain('proj-b')
-    expect(headB.textContent).toContain('release-train')
+    expect(headB.textContent).toContain('工作流:release-train')
     expect(headB.textContent).toContain('3 阶段 · 1 个任务')
     expect(headB.textContent).not.toContain('已归档')
+  })
+
+  it('workflow 徽章样式仍用既有 .g-phase pill（验收反馈③：改文案不改视觉）', () => {
+    renderView()
+    const badge = screen.getByTestId('prg-ghead-proj-a-default').querySelector('.g-phase')
+    expect(badge).not.toBeNull()
+    expect(badge?.textContent).toBe('工作流:default')
   })
 
   it('组头可折叠：aria-expanded 翻转、行区随折叠卸载', () => {
