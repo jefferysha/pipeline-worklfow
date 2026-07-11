@@ -70,8 +70,13 @@ hook_disabled() { # $1=项目根 $2=hook id $3=阶段 → 0=该阶段已禁用
   grep -Fq "\"$2.$3\": false" "$1/.pipeline/hooks.json" 2>/dev/null
 }
 
-# 当前阶段 = mtime 最新的非归档 change 的 phase（单一活跃 change 启发式，同 router/skill-tracker 口径）
+# 当前阶段 = mtime 最新的非归档 change 的 phase（单一活跃 change 启发式，同 router/skill-tracker 口径）。
+# 同一趟顺手判定 v6 T5 AFK 首跑提示命中（活跃 change 的 automation 字段非 off/空）——复用本循环已在
+# 做的文件遍历/archived 判断，不另起第二趟目录扫描（T5 TDD 要求③「无新增子进程 spawn」：另起一趟
+# 会让本函数 stat/grep 调用数翻倍，实测在 40-change 项目上耗时从 ~0.65s 升到 ~0.96s，故合并进本循环）。
 SS_PHASE=""
+SS_AFK_HIT=""
+[ -n "$OS_ROOT" ] && [ -f "$OS_ROOT/.pipeline/automation.json" ] && SS_AFK_HIT=1
 if [ -n "$OS_ROOT" ] && [ -d "$OS_ROOT/openspec/changes" ]; then
   SS_BEST=0
   for f in "$OS_ROOT"/openspec/changes/*/.pipeline.yaml; do
@@ -82,6 +87,12 @@ if [ -n "$OS_ROOT" ] && [ -d "$OS_ROOT/openspec/changes" ]; then
     case "$mt" in ''|*[!0-9]*) mt="$(stat -f %m "$f" 2>/dev/null)" ;; esac
     case "$mt" in ''|*[!0-9]*) mt=0 ;; esac
     if [ "$mt" -ge "$SS_BEST" ]; then SS_BEST="$mt"; SS_PHASE="$(yget "$f" phase)"; fi
+    if [ -z "$SS_AFK_HIT" ]; then
+      case "$(yget "$f" automation)" in
+        ''|off) ;;
+        *) SS_AFK_HIT=1 ;;
+      esac
+    fi
   done
 fi
 if [ -n "$OS_ROOT" ]; then
@@ -141,6 +152,13 @@ fi
 if [ -n "$OS_ROOT" ]; then
   printf '\n[openspec 提示] 本项目使用 openspec：change 状态在 openspec/changes/<name>/.pipeline.yaml（勿手改，走 pipeline CLI）；主 spec 在 openspec/specs/<capability>/spec.md，动某能力前先 Read 对应 spec；归档产物沉在 openspec/changes/archive/。\n'
 fi
+
+# ── v6 T5：AFK 首跑清单提示（轻量静态提示，不做真探测）──SS_AFK_HIT 已在文件头「当前阶段」循环里
+#    顺手判定（.pipeline/automation.json 存在，或活跃 change 的 automation 字段非 off/空）；此处只
+#    管输出，指向 dashboard 的就绪三灯（GET /api/afk/readiness，v6 T4）。刻意不做任何 docker/凭证
+#    真探测——SessionStart 零阻断纪律下，探测可能挂起；也刻意不指向 `pipeline doctor`（本轮不扩展
+#    该命令，v6 计划附录矛盾登记 1 的取舍）。
+[ -n "$SS_AFK_HIT" ] && printf '\n[pipeline-lite] 检测到 AFK 自动化配置：AFK 就绪状态见 dashboard（就绪三灯）。\n'
 
 # ── 插件资产校验（fail-open：失败仅警告）──
 VS="$PLUGIN_ROOT/tools/verify-skills.sh"
