@@ -111,3 +111,38 @@ describe('镜像 ↔ 仓库脚本版本对账（真机 P1：sandcastle 镜像漂
     expect(buildAfkRunCommand('x', 'codex')).toContain(AFK_RUN_SCRIPT_SHA256)
   })
 })
+
+/**
+ * 观察项③（决议 #14②）：codex 认证失效可见度——此前 codex 非零退出只写进 worktree 内
+ * `.sandcastle-build.agent.log`，脚本继续确定性兜底 commit 并 0 退出，host 侧流面完全看不见，
+ * automation_last_error 永远不落（「agent 跑过了」的假象）。脚本 codex 分支现在把 agent_exit≠0
+ * 以 `[AGENT_EXIT] codex <exit>` 标记行回放到 stdout（与 [TRANSITION] 回放同风格；
+ * parseSandboxReport 容忍多余行，不干扰末行 <output> 握手）；exit=0 零噪音。**确定性兜底与退出
+ * 码语义不变**（run 仍成功——可见度，不是改判）。文本层钉住脚本逻辑（同 sha 测试的「脚本逐字
+ * 一致」口径）。
+ */
+describe('脚本 codex 分支 · agent 非零退出标记行（观察项③）', () => {
+  const here = dirname(fileURLToPath(import.meta.url))
+  const script = readFileSync(join(here, '..', '..', '..', '..', 'tools', 'sandcastle', 'pipeline-afk-run.sh'), 'utf8')
+
+  it('agent_exit≠0 → stdout 回放 [AGENT_EXIT] codex <exit> 标记行（exit=0 不输出）', () => {
+    expect(script).toContain('if [ "$agent_exit" -ne 0 ]')
+    expect(script).toContain(`printf '[AGENT_EXIT] codex %s\\n' "$agent_exit"`)
+  })
+
+  it('标记行输出位于 codex 分支内（claude-code 分支不动，决议 #14② 范围仅 codex）', () => {
+    const markerIdx = script.indexOf(`printf '[AGENT_EXIT] codex %s\\n'`)
+    const codexBranchIdx = script.indexOf('PIPELINE_RUNNER:-')
+    const claudeBranchIdx = script.indexOf('elif [ -n "${CLAUDE_CODE_OAUTH_TOKEN')
+    expect(markerIdx).toBeGreaterThan(codexBranchIdx) // codex 分支入口之后
+    expect(markerIdx).toBeLessThan(claudeBranchIdx) // claude 分支入口之前
+  })
+
+  it('parseSandboxReport 容忍标记行（不干扰末行 <output> 握手解析）', () => {
+    const r = parseSandboxReport(
+      '[AGENT_EXIT] codex 96\n<output>{"verify_result":"pass","build_sha":"abc","phase_event":"verify-pass"}</output>',
+    )
+    expect(r.verify_result).toBe('pass')
+    expect(r.build_sha).toBe('abc')
+  })
+})

@@ -63,6 +63,15 @@ if [ "${PIPELINE_RUNNER:-}" = "codex" ]; then
   printf 'agent exit=%s\n' "$agent_exit" >>".sandcastle-build.agent.log"
   # [TRANSITION] 行回放（同 claude 路径的 T4 修复）：host 侧 phaseWatch 只看得到流面。
   grep -a '^\[TRANSITION\] ' ".sandcastle-build.agent.log" || true
+  # agent 非零退出可见度（观察项③/决议 #14②）：codex 认证失效等失败此前只落在上面那份 worktree
+  # 内日志里——脚本继续确定性兜底 commit 且 0 退出，host 侧流面完全看不见，automation_last_error
+  # 永远不落（「agent 跑过了」的假象）。把非零 exit 以可解析标记行回放到 stdout（同 [TRANSITION]
+  # 回放口径；host 侧 lifecycle exec tee 处检出并同步落 automation_last_error；parseSandboxReport
+  # 容忍多余行，不干扰末行 <output> 握手）。exit=0 不输出（零噪音）。**不改变退出路径**：确定性
+  # 兜底与成败判定原样，run 仍成功——这是可见度，不是改判。
+  if [ "$agent_exit" -ne 0 ]; then
+    printf '[AGENT_EXIT] codex %s\n' "$agent_exit"
+  fi
 elif [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ] && command -v claude >/dev/null 2>&1; then
   # 真部署路径：agent 驱动 build。
   #   走代理而非直连：容器内自起 `pipeline tap` reverse proxy（同容器网络命名空间，不依赖
