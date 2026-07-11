@@ -153,18 +153,21 @@ export function HookTimeline({ phase, config }: HookTimelineProps): JSX.Element 
         <p className="view__note view__note--error" role="alert" data-testid="wb-hk-toggle-error">{config.toggleError}</p>
       )}
       {config.hooks && (
-        <div className="wb-hkline">
-          {EVENT_ORDER.map((ev, i) => (
-            <div key={ev} className="wb-hknode" style={{ gridColumn: i + 1 }} data-testid={`wb-hk-node-${ev}`}>
-              <div className="wb-hk-t">{t(`workbench.hk_ev_${ev}`)}</div>
-              <div className="wb-hk-ev">{ev}</div>
-            </div>
-          ))}
-          {/* 循环弧跨 PreToolUse+PostToolUse 两列：这两拍每轮工具调用都重复（demo wb-hkloop 同款） */}
-          <div className="wb-hkloop" aria-hidden="true"><span>{t('workbench.hk_loop')}</span></div>
-          {EVENT_ORDER.map((ev, i) => (
-            <div key={ev} className="wb-hkstack" style={{ gridColumn: i + 1 }} data-testid={`wb-hk-stack-${ev}`}>
-              {config.hooks!.filter((h) => h.event === ev).map((h) => {
+        // v6 T12：横排 4 列网格 → 纵排分组（唯一消费方改为右栏 280px 窄列；交互真相源
+        // v6-workbench-flow.html 方案 A 右栏「钩子时序(全局)」取代 v5 编辑区横排口径）。
+        // 循环提示（原跨两列的 wb-hkloop 弧）改为 PreToolUse 分组头上的一行小字，语义不丢。
+        <div className="wb-hkline wb-hkline--rail">
+          {EVENT_ORDER.map((ev) => (
+            <div key={ev} className="wb-hkgroup" data-testid={`wb-hk-group-${ev}`}>
+              <div className="wb-hknode" data-testid={`wb-hk-node-${ev}`}>
+                <div className="wb-hk-t">{t(`workbench.hk_ev_${ev}`)}</div>
+                <div className="wb-hk-ev">{ev}</div>
+              </div>
+              {ev === 'PreToolUse' && (
+                <div className="wb-hkloop" aria-hidden="true"><span>{t('workbench.hk_loop')}</span></div>
+              )}
+              <div className="wb-hkstack" data-testid={`wb-hk-stack-${ev}`}>
+                {config.hooks!.filter((h) => h.event === ev).map((h) => {
                 const key = `${h.id}.${phase}`
                 const enabled = !(key in config.matrix)
                 const locked = !h.configurable && LOCKED_IDS.has(h.id)
@@ -195,7 +198,8 @@ export function HookTimeline({ phase, config }: HookTimelineProps): JSX.Element 
                     {desc !== descKey && <div className="wb-hkcard-d">{desc}</div>}
                   </div>
                 )
-              })}
+                })}
+              </div>
             </div>
           ))}
         </div>
