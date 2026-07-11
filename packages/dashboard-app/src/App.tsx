@@ -265,7 +265,10 @@ function AppShell(): JSX.Element {
         )}
         {view === 'workbench' && (
           workbenchRoot !== '' ? (
-            <WorkbenchView root={workbenchRoot} onToggleError={(m) => showFlash('error', m)} />
+            // v6 计划 T11：流程带真实计数/running 脉冲吃同一份已加载的 snapshot（App 是唯一
+            // useSnapshot() 调用点，不在 WorkbenchView 内独立开第二条 SSE 订阅——见
+            // WorkbenchViewProps.snapshot 头注释）。
+            <WorkbenchView root={workbenchRoot} onToggleError={(m) => showFlash('error', m)} snapshot={snapshot} />
           ) : snapshot ? (
             // 项目非零但全部不可达（ok=false）：诚实空态，不挂载 WorkbenchView
             //（零项目已被上方 Onboarding 分支接走，这里只剩「有项目但读不到」的角落）。

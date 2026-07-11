@@ -455,3 +455,30 @@ describe('App 注销项目（评审 P2-13，Task 5）', () => {
     expect(screen.getByTestId('project-switcher').textContent).toContain('repo-a')
   })
 })
+
+// v6 计划 T11：App 是唯一 useSnapshot() 调用点，流程带真实计数/running 脉冲靠这里把同一份
+// snapshot 逐层传给 WorkbenchView（不在 WorkbenchView 内独立开第二条 SSE 订阅）——这里钉住
+// 接线本身没漏（而非重复 WorkbenchView.test.tsx 已经覆盖的 stageCounts 投影细节）。
+describe('App 流程带真实计数接线（v6 计划 T11）', () => {
+  it('点工作台：snapshot 里 automation===running 的 change 所在阶段渲染计数气泡与脉冲', async () => {
+    ;(global.fetch as ReturnType<typeof vi.fn>).mockImplementation(async (url: string) => {
+      if (url === '/api/snapshot') {
+        return {
+          ok: true,
+          json: async () =>
+            makeSnapshot([makeProject('/repo', [makeChange('seed-c', 'build', { fields: { automation: 'running' } })])]),
+        }
+      }
+      if (url.startsWith('/api/workflows?root=')) return { ok: true, json: async () => ({ names: [] }) }
+      if (url.startsWith('/api/hooks?root=')) return { ok: true, json: async () => ({ ok: true, hooks: [], matrix: {} }) }
+      if (url === '/api/loops/snapshot') return { ok: true, json: async () => ({ generated_at: '2026-07-11T00:00:00Z', rows: [] }) }
+      throw new Error(`unexpected fetch ${url}`)
+    })
+    render(<App />)
+    await screen.findByTestId('inbox-view')
+    fireEvent.click(screen.getByTestId('nav-workbench'))
+    await screen.findByTestId('workbench-view')
+    expect(screen.getByTestId('wb-flow-count-build')).toHaveTextContent('1')
+    expect(screen.getByTestId('wb-flow-gloss-build')).toBeInTheDocument()
+  })
+})
