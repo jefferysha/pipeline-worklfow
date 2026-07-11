@@ -6,7 +6,7 @@
  */
 import { describe, expect, test } from 'vitest'
 import { loadRegistry, type LoopIo } from './registry.js'
-import { updateLoopInYaml } from './update.js'
+import { appendLoopToYamlText, createLoopsYamlText, updateLoopInYaml, type NewLoopEntryInput } from './update.js'
 
 const BASE = `# 顶注释：机器登记表
 version: 1
@@ -239,5 +239,128 @@ describe('updateLoopInYaml —— runner（v5 T20 双 runner 数据面）', () =
     const { data, errors } = readBack(text!)
     expect(errors).toEqual([])
     expect(data!.loops.find((l) => l.id === 'docs-loop')!.runner).toBe('claude-code')
+  })
+})
+
+// ── loop init 原语（2026-07-12 loop-init L1）：createLoopsYamlText / appendLoopToYamlText ──
+
+/** 15 个 required 字段全量（拍板 P5：不含 autonomy_level/allowlist/denylist——载入派生，序列化省略）。 */
+const NEW_ENTRY: NewLoopEntryInput = {
+  id: 'restyle-loop',
+  name: 'Restyle Loop',
+  kind: 'orchestrator',
+  goal: '视觉回归巡检每轮真跑不放过样式漂移',
+  cadence: '4h',
+  risk: 'low',
+  runner: 'claude-code',
+  change_prefix: 'rl-',
+  phases: ['explore', 'spec', 'code', 'verify'],
+  human_gates: ['explore', 'spec', 'verify'],
+  state: '.superpowers/loops/progress.md',
+  design_doc: 'docs/loops/restyle-loop.md',
+  status: 'paused',
+  budget: { max_runs_per_day: 48, max_in_flight: 1, on_exceed: 'skip', max_tokens_per_day: 100000 },
+  kill_criteria: ['no-change-3', 'budget-burn-2d'],
+}
+
+describe('createLoopsYamlText —— 全新 loops.yaml 文本（loop-init L1）', () => {
+  test('① 产文过 parse+schema，loadRegistry 等价读回逐字段 roundtrip（载入派生字段补默认）', () => {
+    const { text, error } = createLoopsYamlText(NEW_ENTRY)
+    expect(error).toBeNull()
+    expect(text!.startsWith('version: 1\nloops:\n')).toBe(true)
+    expect(text!.endsWith('\n')).toBe(true)
+    expect(text!.endsWith('\n\n')).toBe(false) // 产文以单个 \n 结尾
+    const { data, errors } = readBack(text!)
+    expect(errors).toEqual([])
+    expect(data!.loops).toHaveLength(1)
+    expect(data!.loops[0]).toEqual({ ...NEW_ENTRY, autonomy_level: 'L1', allowlist: [], denylist: [] })
+  })
+
+  test('排版与手术层 LoopBlock 规则闭环：dash 缩进 2 / 字段列 4 / budget 列 6 / 数组块序列', () => {
+    const lines = createLoopsYamlText(NEW_ENTRY).text!.split('\n')
+    expect(lines).toContain('  - id: restyle-loop')
+    expect(lines).toContain('    name: Restyle Loop')
+    expect(lines).toContain('    budget:')
+    expect(lines).toContain('      max_runs_per_day: 48')
+    expect(lines).toContain('      max_tokens_per_day: 100000')
+    expect(lines).toContain('    human_gates:')
+    expect(lines).toContain('      - explore')
+  })
+
+  test('⑥ change_prefix: null 写裸 null 字面量，读回 null', () => {
+    const { text, error } = createLoopsYamlText({ ...NEW_ENTRY, change_prefix: null })
+    expect(error).toBeNull()
+    expect(text).toContain('    change_prefix: null')
+    const { data, errors } = readBack(text!)
+    expect(errors).toEqual([])
+    expect(data!.loops[0]!.change_prefix).toBeNull()
+  })
+
+  test('④ goal 含双引号（全引号包裹，裸写 roundtrip 失败又不可加引号）/ name 含换行 → error 不产文', () => {
+    const g = createLoopsYamlText({ ...NEW_ENTRY, goal: '"全引号包裹的目标字符串十个字以上"' })
+    expect(g.text).toBeNull()
+    expect(g.error).toContain('goal')
+    const n = createLoopsYamlText({ ...NEW_ENTRY, name: 'Bad\nName' })
+    expect(n.text).toBeNull()
+    expect(n.error).toContain('name')
+  })
+
+  test('⑤ entry 违 schema（phases 单元素 / goal 过短）→ error 不产文（自校验兜底）', () => {
+    const p = createLoopsYamlText({ ...NEW_ENTRY, phases: ['solo'] })
+    expect(p.text).toBeNull()
+    expect(p.error).toContain('phases')
+    const g = createLoopsYamlText({ ...NEW_ENTRY, goal: '太短' })
+    expect(g.text).toBeNull()
+    expect(g.error).toContain('goal')
+  })
+})
+
+describe('appendLoopToYamlText —— 既有文本尾部追加（loop-init L1）', () => {
+  test('② 带注释+多 loop fixture 追加：before 区间逐字节保留（前缀断言）+ 新条目读回', () => {
+    const { text, error } = appendLoopToYamlText(BASE, NEW_ENTRY)
+    expect(error).toBeNull()
+    expect(text!.startsWith(BASE)).toBe(true) // 原文（含顶注释/行尾注释/排版）逐字节不变
+    const { data, errors } = readBack(text!)
+    expect(errors).toEqual([])
+    expect(data!.loops.map((l) => l.id)).toEqual(['build-loop', 'docs-loop', 'restyle-loop'])
+    expect(data!.loops[2]).toEqual({ ...NEW_ENTRY, autonomy_level: 'L1', allowlist: [], denylist: [] })
+    expect(data!.loops[0]!.goal).toBe('保证每次构建都真跑八门验证不假绿') // 旧 loop 原值不动
+  })
+
+  test('before 无尾换行 → 先补一个换行再追加（登记行为），产文仍单 \\n 结尾', () => {
+    const noTrail = BASE.replace(/\n$/, '')
+    const { text, error } = appendLoopToYamlText(noTrail, NEW_ENTRY)
+    expect(error).toBeNull()
+    expect(text!.startsWith(`${noTrail}\n`)).toBe(true)
+    expect(text!.endsWith('\n')).toBe(true)
+    expect(text!.endsWith('\n\n')).toBe(false)
+    expect(readBack(text!).errors).toEqual([])
+  })
+
+  test('③ 重复 id → error 且 text 为 null', () => {
+    const r = appendLoopToYamlText(BASE, { ...NEW_ENTRY, id: 'build-loop' })
+    expect(r.text).toBeNull()
+    expect(r.error).toContain('build-loop')
+  })
+
+  test('before 不可解析 → error 不硬追加', () => {
+    const r = appendLoopToYamlText('   :::坏文本\n', NEW_ENTRY)
+    expect(r.text).toBeNull()
+    expect(r.error).not.toBeNull()
+  })
+
+  test('⑦ 产文再喂 updateLoopInYaml patch 标量 → 手术成功（与手术层定位规则闭环）', () => {
+    const created = createLoopsYamlText(NEW_ENTRY).text!
+    const c = updateLoopInYaml(created, 'restyle-loop', { cadence: '2h' })
+    expect(c.error).toBeNull()
+    expect(readBack(c.text!).data!.loops[0]!.cadence).toBe('2h')
+
+    const appended = appendLoopToYamlText(BASE, NEW_ENTRY).text!
+    const a = updateLoopInYaml(appended, 'restyle-loop', { status: 'active' })
+    expect(a.error).toBeNull()
+    const { data, errors } = readBack(a.text!)
+    expect(errors).toEqual([])
+    expect(data!.loops.find((l) => l.id === 'restyle-loop')!.status).toBe('active')
+    expect(data!.loops[0]!.status).toBe('active') // 追加块的手术不误伤旧块
   })
 })

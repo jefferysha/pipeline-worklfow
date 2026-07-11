@@ -53,6 +53,9 @@ export {
   draftMarksPath, readDraftMarks, addDraftMark, clearDraftMark, DRAFT_MARKS_FILE,
 } from './drafts.js'
 // v5 T3：loops.yaml 字段级文本手术（决议 #3 #12 存储侧；升降档另走 graduation）
+// loop-init L1：+createLoopsYamlText/appendLoopToYamlText（新建/追加原语，产文自校验，P5 不写 autonomy_level）
 export {
   updateLoopInYaml, PATCHABLE_SCALAR_FIELDS, PATCHABLE_BUDGET_FIELDS, PATCHABLE_ARRAY_FIELDS,
+  createLoopsYamlText, appendLoopToYamlText,
 } from './update.js'
+export type { NewLoopEntryInput } from './update.js'

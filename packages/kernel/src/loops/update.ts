@@ -18,7 +18,8 @@
  * 纯函数（text in → text out），零 fs：并发控制（读-判-写 CAS）由调用方（server）负责，
  * 对齐 afk retry 的 CAS 先例。
  */
-import { parseLoopsYaml } from './registry.js'
+import { LOOPS_SCHEMA, parseLoopsYaml, validateSchema } from './registry.js'
+import type { LoopBudget, LoopKind, LoopRisk, LoopStatus } from './types.js'
 
 /** loop 顶层可 patch 标量字段（schema 同名约束在写回后由调用方整文档校验）。
  * v5 T20：+runner（双 runner 数据面——编排页 runner 下拉走 POST /api/loops/update 落盘）。 */
@@ -234,6 +235,131 @@ export function updateLoopInYaml(text: string, loopId: string, patch: Record<str
       }
     }
     return { text: lines.join('\n'), error: null }
+  } catch (e) {
+    if (e instanceof PatchError) return { text: null, error: e.message }
+    throw e
+  }
+}
+
+// ── loop init 原语（2026-07-12 loop-init L1）：新建 loops.yaml / 尾部追加条目 ─────────
+//
+// 与上方字段手术同一分工：纯函数 text-in/text-out，零 fs——fs 与读-判-写 CAS 归调用方
+// （cli init / server）。产出文本在函数内自校验（parseLoopsYaml + validateSchema(LOOPS_SCHEMA)
+// 全过才返回 text，否则返回 error）——调用方拿到的 text 保证是合法登记表，可直接落盘。
+// 排版与 locateLoop 的 LoopBlock 定位规则闭环：`loops:` 顶格、条目 `  - id: <v>`（dash 缩进 2）、
+// 字段列 4、budget 子块列 6、数组一律块序列——产文可直接再喂 updateLoopInYaml 做字段手术。
+// 写回格式直接复用 formatString/formatScalar（不复制规则），拒绝路径同样以 error 回传。
+
+/**
+ * 新建 loop 条目输入：LOOPS_SCHEMA 的 15 个 required 字段（budget 的可选 token 字段随 LoopBudget）。
+ * 刻意不含 autonomy_level / allowlist / denylist（拍板 P5）：三者载入时由 loadRegistry 派生补默认
+ * （L1 / [] / []），序列化整体省略——文件里「未声明」如实；升降档唯毕业制通道（旁路禁区同上）。
+ */
+export interface NewLoopEntryInput {
+  id: string
+  name: string
+  kind: LoopKind
+  goal: string
+  cadence: string
+  risk: LoopRisk
+  runner: string
+  change_prefix: string | null
+  phases: string[]
+  human_gates: string[]
+  state: string
+  design_doc: string
+  status: LoopStatus
+  budget: LoopBudget
+  kill_criteria: string[]
+}
+
+/** 条目 → 行数组（排版口径见上区块注释）；值不可安全写回 → throw PatchError。 */
+function renderLoopEntryLines(entry: NewLoopEntryInput): string[] {
+  const lines: string[] = [`  - id: ${formatScalar(entry.id, 'id')}`]
+  const scalar = (field: string, v: string | number | null): void => {
+    lines.push(`    ${field}: ${formatScalar(v, field)}`)
+  }
+  const seq = (field: string, values: readonly string[]): void => {
+    if (values.length === 0) {
+      lines.push(`    ${field}: []`) // 同 patchArray 空数组口径（minItems 违规由自校验兜底拒绝）
+      return
+    }
+    lines.push(`    ${field}:`)
+    for (const v of values) lines.push(`      - ${formatString(v, field, true)}`)
+  }
+  scalar('name', entry.name)
+  scalar('kind', entry.kind)
+  scalar('goal', entry.goal)
+  scalar('cadence', entry.cadence)
+  scalar('risk', entry.risk)
+  scalar('runner', entry.runner)
+  scalar('change_prefix', entry.change_prefix) // null → 裸 null 字面量
+  seq('phases', entry.phases)
+  seq('human_gates', entry.human_gates)
+  scalar('state', entry.state)
+  scalar('design_doc', entry.design_doc)
+  scalar('status', entry.status)
+  lines.push('    budget:')
+  const budgetScalar = (field: string, v: string | number): void => {
+    lines.push(`      ${field}: ${formatScalar(v, field)}`)
+  }
+  budgetScalar('max_runs_per_day', entry.budget.max_runs_per_day)
+  budgetScalar('max_in_flight', entry.budget.max_in_flight)
+  budgetScalar('on_exceed', entry.budget.on_exceed)
+  if (entry.budget.max_tokens_per_day !== undefined) budgetScalar('max_tokens_per_day', entry.budget.max_tokens_per_day)
+  if (entry.budget.tokens_per_run !== undefined) budgetScalar('tokens_per_run', entry.budget.tokens_per_run)
+  seq('kill_criteria', entry.kill_criteria)
+  return lines
+}
+
+/** 产文自校验：窄解析 + 整文档 schema 全过 → null；否则定位 error（坏文本绝不交给调用方落盘）。 */
+function selfCheckYamlText(text: string): string | null {
+  const { data, error } = parseLoopsYaml(text)
+  if (error !== null) return `产出文本未过窄解析器：${error}`
+  const errors = validateSchema(data, LOOPS_SCHEMA)
+  if (errors.length > 0) return `产出文本未过 LOOPS_SCHEMA：${errors.join('；')}`
+  return null
+}
+
+/**
+ * 纯函数：生成全新 loops.yaml 文本（`version: 1` + `loops:` + 单条目），以单个 \n 结尾。
+ * 成功 → {text, error:null}；写回格式违规 / 条目违 schema → {text:null, error}。
+ */
+export function createLoopsYamlText(entry: NewLoopEntryInput): { text: string | null; error: string | null } {
+  try {
+    const text = `${['version: 1', 'loops:', ...renderLoopEntryLines(entry)].join('\n')}\n`
+    const bad = selfCheckYamlText(text)
+    if (bad !== null) throw new PatchError(bad)
+    return { text, error: null }
+  } catch (e) {
+    if (e instanceof PatchError) return { text: null, error: e.message }
+    throw e
+  }
+}
+
+/**
+ * 纯函数：在既有 loops.yaml 文本的 loops 数组尾部追加条目。
+ * before 原文区间逐字节保留（格式/注释不动，仅在其后接续；唯一例外：before 无尾换行时先补一个 \n）。
+ * entry.id 已存在（parseLoopsYaml(before) 判定）/ before 不可解析 / 产文自校验不过 → {text:null, error}。
+ */
+export function appendLoopToYamlText(before: string, entry: NewLoopEntryInput): { text: string | null; error: string | null } {
+  try {
+    const { data, error } = parseLoopsYaml(before)
+    if (error !== null) throw new PatchError(`既有 loops.yaml 未过窄解析器，拒绝追加：${error}`)
+    const loops = data !== null && typeof data === 'object' && !Array.isArray(data)
+      ? (data as Record<string, unknown>).loops
+      : undefined
+    if (Array.isArray(loops)) {
+      const exists = loops.some((item) =>
+        item !== null && typeof item === 'object' && !Array.isArray(item)
+        && (item as Record<string, unknown>).id === entry.id)
+      if (exists) throw new PatchError(`loop '${entry.id}' 已存在于 loops.yaml（追加不覆盖；改字段走 updateLoopInYaml）`)
+    }
+    const base = before.endsWith('\n') ? before : `${before}\n`
+    const text = `${base}${renderLoopEntryLines(entry).join('\n')}\n`
+    const bad = selfCheckYamlText(text)
+    if (bad !== null) throw new PatchError(bad)
+    return { text, error: null }
   } catch (e) {
     if (e instanceof PatchError) return { text: null, error: e.message }
     throw e
