@@ -469,3 +469,37 @@ export async function fetchAfkReadiness(root: string): Promise<WbAfkReadiness> {
   if (!res.ok) throw new Error(`(${res.status})`)
   return (await res.json()) as WbAfkReadiness
 }
+
+// ── v6 T8：机器级凭证端点(GET 掩码只读;POST/DELETE 走 Bearer 三道纵深)。──
+export interface WbSecretLight {
+  set: boolean
+  masked?: string
+}
+export type WbSecretsKeys = Record<'CLAUDE_CODE_OAUTH_TOKEN' | 'OPENAI_API_KEY', WbSecretLight>
+export async function fetchSecrets(): Promise<WbSecretsKeys> {
+  const res = await fetch('/api/secrets', { headers: { Accept: 'application/json' } })
+  if (!res.ok) throw new Error(`(${res.status})`)
+  const body = (await res.json()) as { ok: boolean; keys: WbSecretsKeys }
+  return body.keys
+}
+export async function postSecret(key: string, value: string): Promise<void> {
+  const res = await fetch('/api/secrets', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
+    body: JSON.stringify({ key, value }),
+  })
+  if (!res.ok) {
+    const detail = (await res.json().catch(() => null)) as { error?: string } | null
+    throw new Error(detail?.error ?? `(${res.status})`)
+  }
+}
+export async function deleteSecret(key: string): Promise<void> {
+  const res = await fetch(`/api/secrets?key=${encodeURIComponent(key)}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${getToken()}` },
+  })
+  if (!res.ok) {
+    const detail = (await res.json().catch(() => null)) as { error?: string } | null
+    throw new Error(detail?.error ?? `(${res.status})`)
+  }
+}
