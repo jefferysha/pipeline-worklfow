@@ -30,8 +30,12 @@ import { useT } from '../i18n'
 /** 时序线固定四时机（列序 = 会话生命周期序；空组也画节点——时序线是解释模型，不随数据缺列）。 */
 const EVENT_ORDER: readonly WbHookEvent[] = ['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse']
 
-/** 强制常开（决议#2）：configurable:false 里的「安全门/交互门」子集；其余 false 项 = 暂不可配。 */
-const LOCKED_IDS: ReadonlySet<string> = new Set(['gate', 'interactive-skill-gate'])
+/**
+ * 强制常开（决议#2）：configurable:false 里的「安全门/交互门」子集；其余 false 项 = 暂不可配。
+ * v6 计划 T11：export 供 WorkbenchView 的流程带门徽章 popover 复用同一对 id（静态兜底展示,
+ * 不依赖本文件内部状态）——T12 拆 HookTimelineMini 只读迷你版时继续消费同一个常量,不重复定义。
+ */
+export const LOCKED_IDS: ReadonlySet<string> = new Set(['gate', 'interactive-skill-gate'])
 
 export interface HooksConfigState {
   /** null = 加载中或加载失败（loadError 区分）——消费方此时隐藏计数（诚实占位，不谎报）。 */
