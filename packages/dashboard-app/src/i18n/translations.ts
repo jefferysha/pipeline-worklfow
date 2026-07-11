@@ -421,6 +421,11 @@ export const zh: Dict = {
     lp_rel_dialog_title: '匹配 {prefix} 的变更',
     lp_rel_dialog_empty: '暂无匹配的变更',
     lp_rel_dialog_close: '关闭',
+    // ── v6 计划 T11：流程带（StepperRail 重写）——真实计数气泡 + 门徽章 popover 文案。
+    //    不要与本文件其它命名空间（如 progress.* 里孤立出现的「T11」注释）混淆，那是上一轮
+    //    v5 计划的编号，跟本轮 v6 计划的 T1-T13 是两套体系。 ──
+    flow_count_title: '{n} 个真实任务当前在此阶段',
+    gate_pop_title: '此阶段由以下钩子强制拦截',
   },
   // T10（v5 交互重建）：进度视图骨架文案。口径纪律同 workbench：可见文案一律用「阶段」（旧措辞已废）。
   progress: {
@@ -865,6 +870,9 @@ export const en: Dict = {
     lp_rel_dialog_title: 'Changes matching {prefix}',
     lp_rel_dialog_empty: 'No matching changes yet',
     lp_rel_dialog_close: 'Close',
+    // ── v6 plan T11: flow band (StepperRail rewrite) — real count bubble + gate badge popover. ──
+    flow_count_title: '{n} real task(s) currently at this stage',
+    gate_pop_title: 'This stage is enforced by these hooks',
   },
   progress: {
     title: 'Progress',
