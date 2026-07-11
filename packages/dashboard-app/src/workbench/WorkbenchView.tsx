@@ -9,6 +9,7 @@ import { Dialog } from '../shell/Dialog'
 import { EVENT_BY_EDGE, PHASES, REVIEW_PHASES, TRANSITIONS, isPhase, type ChangeSnapshot, type Snapshot } from '../types'
 import { revealDialog, revealList } from '../shared/motion'
 import { AutomationCard } from './AutomationCard'
+import { SecretsCard } from './SecretsCard'
 import { HookTimeline, LOCKED_IDS, useHooksConfig } from './HookTimeline'
 import { LoopCard, useLoops } from './LoopCard'
 import { StepEditor } from './StepEditor'
@@ -225,6 +226,8 @@ export function WorkbenchView({ root, onToggleError, snapshot = null }: Workbenc
   // T15：/api/hooks 读写状态托管在这里（不在 HookTimeline 内）——阶段卡 hooksCount 真数、
   // 摘要卡「钩子」行、时序线开关三个消费方吃同一份矩阵。per-root 配置，与 workflow 草稿无关。
   const hooksConfig = useHooksConfig(root, onToggleError)
+  // v6 T8→T9：就绪三灯重拉信号——凭证卡保存/删除成功后 +1(显式动作,不轮询)。
+  const [rdNonce, setRdNonce] = useState(0)
 
   // ── v6 T13：最近流转数据面——当前 (root, workflow) 分组内非 archived change 的 history
   //    合并降序。无轮询(G22 纪律)：只随分组指纹(recentNames)变化拉取；单 change 读失败按
@@ -714,7 +717,9 @@ export function WorkbenchView({ root, onToggleError, snapshot = null }: Workbenc
               <LoopCard root={root} loops={loops} />
               {/* T21：「AFK 执行」卡跟在 Loop 卡之后——per-root .pipeline/automation.json
                   （并发/重试/默认入队/沙箱镜像），数据托管在卡内（与 workflow 草稿无关）。 */}
-              <AutomationCard root={root} />
+              <AutomationCard root={root} refreshToken={rdNonce} />
+              {/* v6 T8：「凭证」卡(机器级)跟在 AFK 执行卡之后——保存/删除成功即刷新上方就绪三灯。 */}
+              <SecretsCard onChanged={() => setRdNonce((n) => n + 1)} />
             </>
           ) : (
             !defError && <p className="view__note">{t('common.loading')}</p>

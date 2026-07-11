@@ -782,6 +782,10 @@ span.wb-chip-badge { cursor: default; }
 .rd-dot--ok { background: var(--green); }
 .rd-dot--no { background: color-mix(in oklch, var(--red) 52%, var(--green)); }
 
+/* ── v6 T8：凭证卡行——掩码等宽降饱和;行内编辑态与既有 lp-policy 布局同族。 ── */
+.sc-row { flex-wrap: wrap; }
+.sc-masked { color: var(--text-2); }
+
 /* ==== T16：「自动运行(Loop)」卡（lp- 区块）——对照 demo v5 #wbLoopCard：滑杆轨道 fill-2、
    填充 accent（--p 渐变分界）、推荐 ▽ 刻度、超限策略 pill 单选、自主级别 segmented、
    闸门/终止/范围 chips 行。全部走既有 token，无新原色。 ==== */
