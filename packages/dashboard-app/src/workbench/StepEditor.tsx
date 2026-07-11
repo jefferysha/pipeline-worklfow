@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useState } from 'react'
 import { useT } from '../i18n'
 import { SkillChain } from './SkillChain'
 import type { WbStepDef } from './WorkbenchView'
@@ -34,19 +34,13 @@ export interface StepEditorProps {
   /** default workflow 只读镜像：全部控件禁用 + 顶部只读说明（server 端 400 已挡，此处前端预示）。 */
   readonly?: boolean
   onChange: (updated: WbStepDef) => void
-  /**
-   * T15：Hook 会话时序线区（<HookTimeline>），由 WorkbenchView 注入。slot 而非自渲染：
-   * hooks 配置是 per-root 的 /api/hooks 数据面、不属于 workflow def 草稿，其状态住在
-   * WorkbenchView（阶段卡计数/摘要卡同源消费）——本组件保持纯受控表单，不自带网络。
-   */
-  hooksSlot?: ReactNode
 }
 
 // 同 kernel validate.ts 的 IDENT_RE / server 路由层 name 校验一条规则（G16：serialize 原样
 // 写出、parse 用 (\S+) 读回，字符集越界=「保存成功、下次打不开」，客户端先挡一道）。
 const FIELD_RE = /^[a-zA-Z0-9_-]+$/
 
-export function StepEditor({ step, workflow, readonly = false, onChange, hooksSlot }: StepEditorProps): JSX.Element {
+export function StepEditor({ step, workflow, readonly = false, onChange }: StepEditorProps): JSX.Element {
   const { t } = useT()
   // 「+ 添加」就地输入态（demo commitChipInput 同款：Enter 提交 / Esc 取消 / 失焦有值即提交）。
   // 组件在 WorkbenchView 侧按 step.id 加 key 挂载——切阶段时输入态随卸载自然复位，不需手动清。
@@ -152,9 +146,6 @@ export function StepEditor({ step, workflow, readonly = false, onChange, hooksSl
 
       {/* T14：技能链区（依赖链可视化 + 移除 × + 添加面板；default = 强制技能矩阵）。 */}
       <SkillChain step={step} workflow={workflow} readonly={readonly} onChange={onChange} />
-
-      {/* T15：Hook 会话时序线区（demo 分区序：基本 → 技能 → Hook → 产出物）。 */}
-      {hooksSlot}
 
       <div className="wb-ed-sec">
         <div className="wb-ed-sec-h">
