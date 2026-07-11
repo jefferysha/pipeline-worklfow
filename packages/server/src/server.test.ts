@@ -49,6 +49,7 @@ async function start(opts?: {
   version?: string
   token?: string
   pollIntervalMs?: number
+  execDocker?: import('./dockerImages.js').ExecDockerFn
   manifestPath?: string
 }): Promise<Harness> {
   const store = newStore()
@@ -65,6 +66,7 @@ async function start(opts?: {
     clock: () => '2026-07-07T00:00:00Z',
     pollIntervalMs: opts?.pollIntervalMs ?? 20,
     manifestPath: opts?.manifestPath,
+    execDocker: opts?.execDocker,
   })
   openServers.push(srv)
   const { port } = await srv.listen(0, '127.0.0.1')
@@ -2050,5 +2052,37 @@ describe('server 进程日志不出现明文 token（真机验收判据的单测
     for (const r of [post, get, del]) {
       expect(r.body).not.toContain(secretValue)
     }
+  })
+})
+
+/**
+ * v6 T3：GET /api/docker/images —— 单机镜像列表端点。ok 恒 true(docker 不可用是常态不是
+ * HTTP 错误,available:false 即前端降级信号);无 root 概念;不要求 token 但吃 isLocalHost。
+ */
+describe('GET /api/docker/images —— 镜像列表(v6 T3)', () => {
+  it('docker 可用 → {ok:true, available:true, images:[...]}(过滤悬空,排序去重);无 root 参数 200', async () => {
+    const h = await start({
+      execDocker: async () => ({ stdout: 'b:2\nsandcastle:local\n<none>:<none>\nb:2\n', stderr: '', exitCode: 0 }),
+    })
+    const r = await reqGet(h.port, '/api/docker/images')
+    expect(r.status).toBe(200)
+    expect(r.json()).toEqual({ ok: true, available: true, images: ['b:2', 'sandcastle:local'] })
+  })
+
+  it('docker 不可用(非零退出)→ 仍 200,available:false 空列表(ok 恒 true)', async () => {
+    const h = await start({
+      execDocker: async () => ({ stdout: '', stderr: 'daemon down', exitCode: 1 }),
+    })
+    const r = await reqGet(h.port, '/api/docker/images')
+    expect(r.status).toBe(200)
+    expect(r.json()).toEqual({ ok: true, available: false, images: [] })
+  })
+
+  it('伪造 Host 头 → 403(isLocalHost 守卫,本机信息端点补校验)', async () => {
+    const h = await start({
+      execDocker: async () => ({ stdout: '', stderr: '', exitCode: 0 }),
+    })
+    const r = await reqGet(h.port, '/api/docker/images', '127.0.0.1', { Host: 'evil.example.com' })
+    expect(r.status).toBe(403)
   })
 })

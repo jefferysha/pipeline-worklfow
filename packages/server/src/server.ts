@@ -38,6 +38,7 @@ import { buildSecretsResponse, isValidSecretKey, removeSecret, SECRET_KEY_LIST, 
 import { listAllSkillsDetailed } from './skillsRegistry.js'
 import { buildSnapshot, computeFingerprint, dedupeRoots, type SnapshotDeps } from './snapshot.js'
 import { generateToken, tokenFromHeaders, tokensMatch } from './token.js'
+import { listDockerImages } from './dockerImages.js'
 import { listTraceSessions, readTraceRecords } from './traces.js'
 import { performTransition, readChangeHistory } from './transition.js'
 import type { DashboardServer, DashboardServerOptions } from './types.js'
@@ -515,6 +516,17 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
       } catch (e) {
         return sendJson(res, 500, { ok: false, error: errMsg(e) })
       }
+    }
+    // ── v6 T3：GET /api/docker/images —— 本机 docker 镜像列表（repo:tag，过滤悬空）。──
+    //    无 root 概念（单机资源，同 /api/secrets 一类）；不要求 token 但加 isLocalHost（决策
+    //    B.2：本机信息端点补 Host 校验）。docker 不可用/超时(5s) → 200 + available:false
+    //    （ok 恒 true——「没装 docker」是常态不是 HTTP 错误，前端据此降级纯文本框，B.1/B.3）。
+    if (path === '/api/docker/images') {
+      if (!isLocalHost(req.headers.host, boundPort)) {
+        return sendJson(res, 403, { ok: false, error: 'Host header 不合法（疑似 DNS 重绑定攻击）' })
+      }
+      const r = await listDockerImages(options.execDocker)
+      return sendJson(res, 200, { ok: true, ...r })
     }
     return sendJson(res, 404, { ok: false, error: '未知端点' })
   }
