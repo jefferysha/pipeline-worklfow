@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { getToken } from '../api/client'
+import { getToken, type WbSkillEntry } from '../api/client'
 import { useT } from '../i18n'
 import { MANDATORY_SKILLS, MATRIX_TRACKS } from './data'
 import { SkillTransferModal } from './SkillTransferModal'
@@ -165,7 +165,7 @@ export function SkillChain({ step, workflow = '', readonly = false, onChange }: 
 
   // ── 自定义模式：添加面板态 ──
   const [panelOpen, setPanelOpen] = useState(false)
-  const [registry, setRegistry] = useState<string[] | null>(null)
+  const [registry, setRegistry] = useState<WbSkillEntry[] | null>(null)
   const [regError, setRegError] = useState<string | null>(null)
   const [candidate, setCandidate] = useState<string | null>(null)
   const [dep, setDep] = useState('')
@@ -198,7 +198,7 @@ export function SkillChain({ step, workflow = '', readonly = false, onChange }: 
       fetch('/api/skills/registry', { headers: { Accept: 'application/json' } })
         .then(async (r) => {
           if (!r.ok) throw new Error((await readErrorDetail(r)) || `(${r.status})`)
-          return r.json() as Promise<{ skills: string[] }>
+          return r.json() as Promise<{ skills: WbSkillEntry[] }>
         })
         .then((body) => setRegistry(body.skills))
         .catch((err: unknown) => {
@@ -351,7 +351,7 @@ export function SkillChain({ step, workflow = '', readonly = false, onChange }: 
   // ── 自定义模式渲染 ──
   const { chains, solos } = buildChains(step.skills)
   const have = new Set(step.skills.map((s) => s.id))
-  const candidates = (registry ?? []).filter((id) => !have.has(id))
+  const candidates = (registry ?? []).map((e) => e.name).filter((id) => !have.has(id))
 
   const chip = (id: string): JSX.Element => (
     <span key={id} className="wb-chip" title={id}>

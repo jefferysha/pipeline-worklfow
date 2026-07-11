@@ -89,7 +89,12 @@ describe('SkillChain 自定义 workflow：添加面板（验收②）', () => {
   beforeEach(() => {
     global.fetch = vi.fn(async (url: string) => {
       if (url === '/api/skills/registry') {
-        return new Response(JSON.stringify({ skills: ['skill-a', 'new-skill', 'another', 'ext:plugin-skill'] }), { status: 200 })
+        return new Response(JSON.stringify({ skills: [
+          { name: 'skill-a', installed: true, source: 'local-plugin' },
+          { name: 'new-skill', installed: false, source: 'user' },
+          { name: 'another', installed: false, source: 'user' },
+          { name: 'ext:plugin-skill', installed: false, source: 'external-marketplace', installCmd: 'claude plugin install ext' },
+        ] }), { status: 200 })
       }
       throw new Error(`unexpected fetch ${url}`)
     }) as unknown as typeof fetch
@@ -186,7 +191,11 @@ function mockDefaultFetch(overrides: Record<string, () => Response | Promise<Res
     if (overrides[key]) return overrides[key]()
     if (url === '/api/config') return new Response(JSON.stringify(CONFIG_BODY), { status: 200 })
     if (url === '/api/skills/registry') {
-      return new Response(JSON.stringify({ skills: ['skill-x', 'skill-y', 'skill-w'] }), { status: 200 })
+      return new Response(JSON.stringify({ skills: [
+        { name: 'skill-x', installed: true, source: 'local-plugin' },
+        { name: 'skill-y', installed: true, source: 'local-plugin' },
+        { name: 'skill-w', installed: false, source: 'user' },
+      ] }), { status: 200 })
     }
     if (url === '/api/config/mandatory-skills' && opts?.method === 'POST') {
       const body = JSON.parse(String(opts.body)) as { phase: string; track: string; skills: string[] }

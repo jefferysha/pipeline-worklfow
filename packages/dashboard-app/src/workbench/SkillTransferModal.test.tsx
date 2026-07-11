@@ -6,7 +6,11 @@ import { SkillTransferModal, type SkillTransferModalProps } from './SkillTransfe
 beforeEach(() => {
   localStorage.clear()
   global.fetch = vi.fn(async () =>
-    new Response(JSON.stringify({ skills: ['browser-qa', 'grill-with-docs', 'superpowers:brainstorming'] }), { status: 200 }),
+    new Response(JSON.stringify({ skills: [
+      { name: 'browser-qa', installed: false, source: 'user' },
+      { name: 'grill-with-docs', installed: true, source: 'user' },
+      { name: 'superpowers:brainstorming', installed: true, source: 'external-marketplace' },
+    ] }), { status: 200 }),
   ) as unknown as typeof fetch
 })
 afterEach(() => vi.restoreAllMocks())

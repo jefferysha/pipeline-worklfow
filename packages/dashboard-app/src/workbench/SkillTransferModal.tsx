@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { type WbSkillEntry } from '../api/client'
 import { useT } from '../i18n'
 import { Dialog } from '../shell/Dialog'
 
@@ -41,9 +42,9 @@ export function SkillTransferModal({ selected, onSave, onCancel }: SkillTransfer
         // reject，若不先查 r.ok，.catch() 永远不会触发，本组件会静默拿到 undefined 的 skills
         // 字段，随后 `all.filter(...)` 在下一次 render 直接抛错——无 ErrorBoundary 兜底会白屏。
         if (!r.ok) throw new Error((await readErrorDetail(r)) || t('skill_transfer.load_error_status', { status: r.status }))
-        return r.json() as Promise<{ skills: string[] }>
+        return r.json() as Promise<{ skills: WbSkillEntry[] }>
       })
-      .then((body) => setAll(body.skills))
+      .then((body) => setAll(body.skills.map((e) => e.name)))
       .catch((err: unknown) =>
         setError(t('skill_transfer.load_error', { msg: err instanceof Error ? err.message : t('skill_transfer.network_error') })),
       )

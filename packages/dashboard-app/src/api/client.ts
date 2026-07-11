@@ -430,3 +430,12 @@ export function subscribeSnapshot(
     es.close()
   }
 }
+
+// ── T6(v6 计划):GET /api/skills/registry 明细化后的共享类型(server SkillEntry 镜像)。
+//    installed 是标注型提示(三源检测,gate 硬拦不做);installCmd 仅未装且存在真实命令时给。──
+export interface WbSkillEntry {
+  name: string
+  installed: boolean
+  source: 'local-plugin' | 'external-marketplace' | 'builtin' | 'user'
+  installCmd?: string
+}
