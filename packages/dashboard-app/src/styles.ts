@@ -370,32 +370,12 @@ button.ev__chip--neutral:hover { border-color: var(--border-2); color: var(--tex
 /* T18 死 CSS 清理登记：.afk-* 全组（含 dark 主题双写与窄屏 media query）随 AfkWorkbench
    退役删除——全仓 tsx 零消费。 */
 
-/* ── Loop 治理面板 ── */
-.loop-row { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 4px 6px; }
-.loop-line { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; width: 100%; border: 0; background: transparent; font: inherit; color: inherit; text-align: left; cursor: pointer; padding: 6px; border-radius: 6px; }
-.loop-line:hover { background: var(--fill); }
-.loop-caret { color: var(--text-3); font-size: 11px; }
-.loop-level { font-family: var(--mono); font-size: 11px; font-weight: 700; padding: 2px 9px; border-radius: 999px; background: var(--ink); color: var(--ink-fg); white-space: nowrap; }
-.loop-level__tag { font-weight: 400; opacity: .8; }
-.loop-ready { font-size: 11.5px; color: var(--text-3); }
-.loop-ready b { color: var(--green); font-family: var(--mono); }
-.loop-detail { padding: 4px 8px 10px 28px; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
-.loop-band { margin: 0; font-size: 11.5px; color: var(--text-3); }
-/* 预算行（Task 13，评审 P1-6）：轨道中性底，填充色随 usedRatio 语义变化（>0.8 红，否则绿）。 */
-.loop-budget { display: flex; flex-direction: column; gap: 5px; width: 240px; max-width: 100%; }
-.loop-budget__track { height: 6px; border-radius: 999px; background: var(--fill); overflow: hidden; }
-.loop-budget__fill { height: 100%; border-radius: 999px; background: var(--green); transition: width .2s ease; }
-.loop-budget__fill--warn { background: var(--red); }
-.loop-budget__label { margin: 0; font-size: 11.5px; color: var(--text-3); font-family: var(--mono); }
-.loop-budget__label--none { font-family: var(--font); font-style: italic; }
-/* 就绪构成行：dimensions[] 逐项 ✓/✗（Task 13）。 */
-.loop-dims { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 5px 14px; }
-.loop-dim { font-size: 11.5px; color: var(--text-3); display: inline-flex; align-items: center; gap: 4px; }
-.loop-dim__mark { font-weight: 700; }
-.loop-dim--pass .loop-dim__mark { color: var(--green); }
-.loop-dim--fail .loop-dim__mark { color: var(--red); }
-/* 熔断说明块：区别于 loop-reject（POST 拒绝反馈）——同色底但语义是"解释+出口"，非错误。 */
-.loop-tripped { margin: 0; padding: 8px 11px; border-radius: 7px; background: var(--red-t); color: var(--red-d); font-size: 11.5px; line-height: 1.5; }
+/* 死 CSS 清理登记（观察项⑤）：2026-07-10 trellis Task 13 LoopsPanel 的 .loop-* 治理面板整组
+   （.loop-row/.loop-line/.loop-caret/.loop-level(__tag)/.loop-ready/.loop-detail/.loop-band/
+   .loop-budget(__track/__fill/__fill--warn/__label/__label--none)/.loop-dims/.loop-dim(__mark/
+   --pass/--fail)/.loop-tripped）随该组件在 v5 T18 随 loops/ 目录退役而删除——全 src 逐类零引用
+   复核。唯一存活的是 .loop-reject（LoopCard.tsx 在用），保留于此。 */
+/* .loop-reject：LoopCard 级别制裁/保存 POST 拒绝的错误反馈块（同色底、语义=错误，非"解释"）。 */
 .loop-reject { margin: 0; padding: 8px 11px; border-radius: 7px; background: var(--red-t); color: var(--red); font-size: 11.5px; font-weight: 600; }
 
 /* ── 工作台（T12 骨架，wb- 区块）：线性 stepper 阶段卡 + 右栏摘要/流程预览/预演。
