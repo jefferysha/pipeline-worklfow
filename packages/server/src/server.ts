@@ -35,7 +35,7 @@ import { addProjectToRegistry, removeProjectFromRegistry } from './projects.js'
 import { deleteWorkflowForApi, listWorkflowNames, readWorkflowForApi, writeWorkflowForApi, WorkflowNotFoundError } from './workflows.js'
 import { readRegistry } from './registry.js'
 import { buildSecretsResponse, isValidSecretKey, removeSecret, SECRET_KEY_LIST, validateSecretWriteBody, writeSecret } from './secrets.js'
-import { listAllSkills } from './skillsRegistry.js'
+import { listAllSkillsDetailed } from './skillsRegistry.js'
 import { buildSnapshot, computeFingerprint, dedupeRoots, type SnapshotDeps } from './snapshot.js'
 import { generateToken, tokenFromHeaders, tokensMatch } from './token.js'
 import { listTraceSessions, readTraceRecords } from './traces.js'
@@ -424,10 +424,12 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
         return sendJson(res, 500, { ok: false, error: errMsg(e) })
       }
     }
-    // ── skills registry 数据端：本仓 skills 目录 + EXTERNAL-SKILLS.md 合并列表（GET 只读，本机回环不鉴权）──
+    // ── skills registry 数据端：本仓 skills 目录 + EXTERNAL-SKILLS.md 合并明细（GET 只读，本机回环不鉴权）。
+    //    T6：响应体从 {skills:string[]} 破坏性升级为 {skills:SkillEntry[]}（研究报告 §4.2 方案 a，
+    //    仓内两个消费方同批改，无仓外第三方）；「已装」三源检测按 paths.claudeDir（hermetic 可覆盖）。──
     if (path === '/api/skills/registry') {
       try {
-        return sendJson(res, 200, { skills: listAllSkills(repoRootForSkills()) })
+        return sendJson(res, 200, { skills: listAllSkillsDetailed(repoRootForSkills(), paths.claudeDir) })
       } catch (e) {
         return sendJson(res, 500, { ok: false, error: errMsg(e) })
       }

@@ -434,14 +434,27 @@ describe('GET /api/config —— M3 config 数据端（Settings 矩阵 tab，本
   })
 })
 
-describe('GET /api/skills/registry —— 全部已注册 skill 列表', () => {
-  it('返回本仓真实 skills 目录 + EXTERNAL-SKILLS.md 合并列表', async () => {
+describe('GET /api/skills/registry —— 全部已注册 skill 明细(T6 升级为 SkillEntry[])', () => {
+  it('返回本仓真实 skills 目录 + EXTERNAL-SKILLS.md 合并明细,逐字段符合 SkillEntry 形状', async () => {
     const h = await start()
     const r = await reqGet(h.port, '/api/skills/registry')
     expect(r.status).toBe(200)
-    const body = r.json<{ skills: string[] }>()
-    expect(body.skills).toContain('pipeline-open') // 本仓真实存在的本地 skill 目录
-    expect(body.skills.length).toBeGreaterThan(14) // 必须包含外部登记，不能只有本地 14 个
+    const body = r.json<{ skills: Array<{ name: string; installed: boolean; source: string; installCmd?: string }> }>()
+    const names = body.skills.map((s) => s.name)
+    expect(names).toContain('pipeline-open') // 本仓真实存在的本地 skill 目录
+    expect(names.length).toBeGreaterThan(14) // 必须包含外部登记，不能只有本地 14 个
+    for (const e of body.skills) {
+      expect(typeof e.name).toBe('string')
+      expect(typeof e.installed).toBe('boolean')
+      expect(['local-plugin', 'external-marketplace', 'builtin', 'user']).toContain(e.source)
+    }
+    const local = body.skills.find((s) => s.name === 'pipeline-open')!
+    expect(local.source).toBe('local-plugin')
+    // builtin 四件套恒已装(写死短名单,不依赖测试机环境)
+    for (const b of ['verify', 'run', 'code-review', 'security-review']) {
+      const e = body.skills.find((s) => s.name === b)
+      if (e) expect(e.installed).toBe(true)
+    }
   })
 })
 
