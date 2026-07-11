@@ -2,7 +2,7 @@ import { chmod, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs
 import { tmpdir } from 'node:os'
 import { join, resolve as resolvePath } from 'node:path'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
-import { projectRegistryPath, readProjectRegistry, registerProjectRoot } from './projectRegistry.js'
+import { projectRegistryPath, readProjectRegistry, registerProjectRoot, writeProjectRegistry } from './projectRegistry.js'
 
 describe('projectRegistry —— 机器级项目注册表读写（v5 T2 决策 D，hermetic 临时 HOME）', () => {
   let home: string
@@ -44,6 +44,31 @@ describe('projectRegistry —— 机器级项目注册表读写（v5 T2 决策 D
       await mkdir(join(home, '.claude'), { recursive: true })
       await writeFile(registry, '["/a", 42]', 'utf8')
       expect(readProjectRegistry(registry)).toEqual(['/a', '42'])
+    })
+  })
+
+  describe('writeProjectRegistry —— 原子写原语（mkdir -p + tmp+rename，逐字节格式）', () => {
+    test('逐字节格式：JSON 数组 + 2 空格缩进 + 尾换行（与 server projects.ts 现状同款）', async () => {
+      await writeProjectRegistry(registry, ['/a', '/b'])
+      const raw = await readFile(registry, 'utf8')
+      expect(raw).toBe(`${JSON.stringify(['/a', '/b'], null, 2)}\n`)
+    })
+
+    test('mkdir -p：目标 .claude 目录不存在时自动创建（beforeEach 只建了临时 home）', async () => {
+      await writeProjectRegistry(registry, ['/x'])
+      expect(JSON.parse(await readFile(registry, 'utf8'))).toEqual(['/x'])
+    })
+
+    test('空数组 → "[]\\n"（server remove 清空注册表的逐字节语义）', async () => {
+      await writeProjectRegistry(registry, [])
+      expect(await readFile(registry, 'utf8')).toBe('[]\n')
+    })
+
+    test('原子写：写后同目录无 *.tmp* 残留（tmp+rename 同目录）', async () => {
+      await writeProjectRegistry(registry, ['/a'])
+      await writeProjectRegistry(registry, ['/a', '/b'])
+      const entries = await readdir(join(home, '.claude'))
+      expect(entries).toEqual(['pipeline-projects.json'])
     })
   })
 

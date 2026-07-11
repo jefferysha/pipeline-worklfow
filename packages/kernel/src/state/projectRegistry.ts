@@ -33,6 +33,18 @@ export function readProjectRegistry(registryPath: string): string[] {
 let tmpSeq = 0
 
 /**
+ * 原子写注册表原语：mkdir -p + 同目录 tmp+rename（写入原子可见——崩溃不留半截 JSON）。
+ * 序列化格式：JSON 数组 + 2 空格缩进 + 尾换行（保持人工可编辑；server projects.ts 复用同款，
+ * 逐字节一致）。写失败抛错（fail-loud）。registerProjectRoot 与 server add/remove 共用本原语。
+ */
+export async function writeProjectRegistry(registryPath: string, roots: string[]): Promise<void> {
+  await mkdir(dirname(registryPath), { recursive: true })
+  const tmp = `${registryPath}.tmp.${process.pid}.${tmpSeq++}`
+  await writeFile(tmp, `${JSON.stringify(roots, null, 2)}\n`, 'utf8')
+  await rename(tmp, registryPath)
+}
+
+/**
  * 登记 repoRoot（resolve 后判重）：已存在 → 返回 false 且不写盘；写入 → 返回 true。
  * 注册表损坏时按空表处理（读容错），登记会将其修复为合法 JSON。写失败抛错（fail-loud）。
  */
@@ -41,10 +53,6 @@ export async function registerProjectRoot(registryPath: string, rawRoot: string)
   const existing = readProjectRegistry(registryPath)
   if (existing.some((e) => e && resolvePath(e) === normalized)) return false
   const next = [...existing, normalized]
-  await mkdir(dirname(registryPath), { recursive: true })
-  // 同目录 tmp + rename，写入原子可见（JSON 数组 + 2 空格缩进，保持人工可编辑）
-  const tmp = `${registryPath}.tmp.${process.pid}.${tmpSeq++}`
-  await writeFile(tmp, `${JSON.stringify(next, null, 2)}\n`, 'utf8')
-  await rename(tmp, registryPath)
+  await writeProjectRegistry(registryPath, next)
   return true
 }
