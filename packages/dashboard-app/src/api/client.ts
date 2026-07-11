@@ -300,6 +300,47 @@ export async function postLoopLevel(input: { root: string; id: string; target: s
   if (!res.ok) await throwLoopsError(res, '自主级别切换失败')
 }
 
+// ── T21：「AFK 执行」卡的数据面（GET/POST /api/automation）──
+
+/** server/automationConfig.ts::AutomationSettings 的跨 HTTP 手抄（同 WbHookMeta 的零耦合纪律）。 */
+export interface WbAutomationSettings {
+  /** 并发沙箱上限（1-8）。 */
+  max_parallel: number
+  /** 失败自动重试次数（0-3）。 */
+  max_retries: number
+  /** spec-complete 的 change 是否默认入 AFK 队列。 */
+  default_opt_in: boolean
+  /** 沙箱镜像；空串 = 用内置 sandcastle:local。 */
+  image: string
+}
+
+/** T21：AFK 执行参数（GET /api/automation?root=；缺文件 server 已回默认值，UI 直接吃）。 */
+export async function fetchAutomationSettings(root: string): Promise<WbAutomationSettings> {
+  let res: Response
+  try {
+    res = await fetch(`/api/automation?root=${encodeURIComponent(root)}`, { headers: { Accept: 'application/json' } })
+  } catch (err) {
+    wrapNetwork(err)
+  }
+  if (!res.ok) await throwApiError(res, 'AFK 执行配置获取失败')
+  return ((await res.json()) as { settings: WbAutomationSettings }).settings
+}
+
+/** T21：AFK 执行参数写回（POST /api/automation；值域越界 server 400 原文抛 ApiError）。 */
+export async function postAutomationSettings(input: { root: string } & WbAutomationSettings): Promise<void> {
+  let res: Response
+  try {
+    res = await fetch('/api/automation', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
+      body: JSON.stringify(input),
+    })
+  } catch (err) {
+    wrapNetwork(err)
+  }
+  if (!res.ok) await throwApiError(res, 'AFK 执行配置写回失败')
+}
+
 /**
  * change 历史记账单条（T8 消费 T1 端点）——镜像 kernel types.ts HistoryEntry 的可选面
  * （无 npm 跨包依赖，手抄保零耦合，同本文件头 Snapshot 契约的既有纪律）。

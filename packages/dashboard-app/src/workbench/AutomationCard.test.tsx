@@ -1,0 +1,112 @@
+/**
+ * AutomationCard.test —— 「AFK 执行」卡（T21）：GET 真值渲染、dirty→保存钮真 POST、
+ * 保存后 GET 回读、值域拒绝原文展示。fetch 打桩（组件测试），server 侧契约由 server.test.ts 钉住。
+ */
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { I18nProvider } from '../i18n'
+import { AutomationCard } from './AutomationCard'
+
+const ROOT = '/tmp/proj-a'
+const GET_URL = `/api/automation?root=${encodeURIComponent(ROOT)}`
+
+let settings: { max_parallel: number; max_retries: number; default_opt_in: boolean; image: string }
+let postCalls: Array<Record<string, unknown>>
+let postResponse: () => Response
+
+function renderCard() {
+  render(
+    <I18nProvider>
+      <AutomationCard root={ROOT} />
+    </I18nProvider>,
+  )
+}
+
+beforeEach(() => {
+  localStorage.clear()
+  settings = { max_parallel: 4, max_retries: 1, default_opt_in: false, image: '' }
+  postCalls = []
+  postResponse = () => new Response(JSON.stringify({ ok: true, settings }), { status: 200 })
+  global.fetch = vi.fn(async (url: string, opts?: RequestInit) => {
+    if (url === GET_URL) {
+      return new Response(JSON.stringify({ ok: true, settings }), { status: 200 })
+    }
+    if (url === '/api/automation' && opts?.method === 'POST') {
+      postCalls.push(JSON.parse(String(opts.body)) as Record<string, unknown>)
+      return postResponse()
+    }
+    throw new Error(`unexpected fetch ${url}`)
+  }) as unknown as typeof fetch
+})
+afterEach(() => {
+  vi.restoreAllMocks()
+  vi.unstubAllGlobals()
+})
+
+describe('AutomationCard —— 真值渲染', () => {
+  it('GET 后两滑杆/开关/镜像输入显示 server 真值；副题一句人话在卡头', async () => {
+    settings = { max_parallel: 6, max_retries: 3, default_opt_in: true, image: 'ghcr.io/a/b:v1' }
+    renderCard()
+    await waitFor(() => expect(screen.getByTestId('afk-sld-parallel')).toHaveValue('6'))
+    expect(screen.getByTestId('afk-sld-retries')).toHaveValue('3')
+    expect(screen.getByTestId('afk-opt-in')).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByTestId('afk-image')).toHaveValue('ghcr.io/a/b:v1')
+    expect(screen.getByText('这些参数作用于本项目全部 AFK 运行——并发几个沙箱、失败自动重试几次')).toBeInTheDocument()
+  })
+
+  it('镜像输入 placeholder = sandcastle:local（空串 = 用内置镜像）', async () => {
+    renderCard()
+    await waitFor(() => expect(screen.getByTestId('afk-image')).toHaveAttribute('placeholder', 'sandcastle:local'))
+    expect(screen.getByTestId('afk-image')).toHaveValue('')
+  })
+
+  it('GET 失败 → 卡内行内报错，不渲染控件（诚实占位）', async () => {
+    ;(global.fetch as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+      return new Response(JSON.stringify({ ok: false, error: 'boom' }), { status: 500 })
+    })
+    renderCard()
+    await waitFor(() => expect(screen.getByTestId('afk-load-error')).toBeInTheDocument())
+    expect(screen.queryByTestId('afk-sld-parallel')).toBeNull()
+  })
+})
+
+describe('AutomationCard —— dirty → 保存真写 → GET 回读', () => {
+  it('初始无 dirty、保存钮禁用；拖滑杆出现 未保存 chip、保存钮可点', async () => {
+    renderCard()
+    await waitFor(() => expect(screen.getByTestId('afk-sld-parallel')).toBeInTheDocument())
+    expect(screen.queryByTestId('afk-dirty')).toBeNull()
+    expect(screen.getByTestId('afk-save')).toBeDisabled()
+    fireEvent.change(screen.getByTestId('afk-sld-parallel'), { target: { value: '8' } })
+    expect(screen.getByTestId('afk-dirty')).toBeInTheDocument()
+    expect(screen.getByTestId('afk-save')).toBeEnabled()
+  })
+
+  it('保存 POST 带 root + 全字段；成功后再 GET 回读、显示 已保存、dirty 清除', async () => {
+    renderCard()
+    await waitFor(() => expect(screen.getByTestId('afk-sld-parallel')).toBeInTheDocument())
+    fireEvent.change(screen.getByTestId('afk-sld-parallel'), { target: { value: '2' } })
+    fireEvent.change(screen.getByTestId('afk-sld-retries'), { target: { value: '0' } })
+    fireEvent.click(screen.getByTestId('afk-opt-in'))
+    fireEvent.change(screen.getByTestId('afk-image'), { target: { value: 'sandcastle:v2' } })
+    // 保存成功后组件会重新 GET——让 GET 返回「已写入」的新真值
+    postResponse = () => {
+      settings = { max_parallel: 2, max_retries: 0, default_opt_in: true, image: 'sandcastle:v2' }
+      return new Response(JSON.stringify({ ok: true, settings }), { status: 200 })
+    }
+    fireEvent.click(screen.getByTestId('afk-save'))
+    await waitFor(() => expect(screen.getByTestId('afk-save-ok')).toBeInTheDocument())
+    expect(postCalls).toEqual([{ root: ROOT, max_parallel: 2, max_retries: 0, default_opt_in: true, image: 'sandcastle:v2' }])
+    expect(screen.queryByTestId('afk-dirty')).toBeNull()
+    expect(screen.getByTestId('afk-sld-parallel')).toHaveValue('2')
+  })
+
+  it('server 400 → 错误原文行内展示，dirty 保留（可改后重试）', async () => {
+    renderCard()
+    await waitFor(() => expect(screen.getByTestId('afk-sld-parallel')).toBeInTheDocument())
+    fireEvent.change(screen.getByTestId('afk-sld-parallel'), { target: { value: '7' } })
+    postResponse = () => new Response(JSON.stringify({ ok: false, error: 'max_parallel 须为 1-8 的整数' }), { status: 400 })
+    fireEvent.click(screen.getByTestId('afk-save'))
+    await waitFor(() => expect(screen.getByTestId('afk-save-error')).toHaveTextContent('max_parallel 须为 1-8 的整数'))
+    expect(screen.getByTestId('afk-dirty')).toBeInTheDocument()
+  })
+})

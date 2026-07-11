@@ -7,6 +7,7 @@ import { DEFAULT_RULES, invalidateWorkflowRules, rulesKey, useWorkflowRulesMulti
 import { Dialog } from '../shell/Dialog'
 import { EVENT_BY_EDGE, PHASES, REVIEW_PHASES, TRANSITIONS, isPhase } from '../types'
 import { revealDialog, revealList } from '../shared/motion'
+import { AutomationCard } from './AutomationCard'
 import { HookTimeline, useHooksConfig } from './HookTimeline'
 import { LoopCard, useLoops } from './LoopCard'
 import { StepEditor } from './StepEditor'
@@ -542,6 +543,9 @@ export function WorkbenchView({ root, onToggleError }: WorkbenchViewProps): JSX.
               )}
               {/* T16：「自动运行(Loop)」卡跟在阶段编辑卡之后（per-root 数据面，不吃 workflow 只读态）。 */}
               <LoopCard root={root} loops={loops} />
+              {/* T21：「AFK 执行」卡跟在 Loop 卡之后——per-root .pipeline/automation.json
+                  （并发/重试/默认入队/沙箱镜像），数据托管在卡内（与 workflow 草稿无关）。 */}
+              <AutomationCard root={root} />
             </>
           ) : (
             !defError && <p className="view__note">{t('common.loading')}</p>

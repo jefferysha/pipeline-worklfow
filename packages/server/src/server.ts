@@ -28,6 +28,7 @@ import type { FlowEngine, GraduationFs, StateStore, Track, WorkflowDef } from '@
 import { buildAfkLog, buildAfkSnapshot, cancelAfkRun, dismissAfkRun, enqueueAfkRun, readAfkRunLog, retryAfkRun } from './afk.js'
 import { applyLoopsUpdate, buildLoopsSnapshot } from './loops.js'
 import { readMandatorySkills, validateMandatorySkillsBody, writeMandatorySkills } from './config.js'
+import { readAutomationSettings, validateAutomationSettingsBody, writeAutomationSettings } from './automationConfig.js'
 import { HOOK_METAS, readHooksMatrix, validateHookToggleBody, writeHookToggle } from './hooksConfig.js'
 import { resolveServerPaths } from './paths.js'
 import { addProjectToRegistry, removeProjectFromRegistry } from './projects.js'
@@ -445,6 +446,20 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
         return sendJson(res, 500, { ok: false, error: errMsg(e) })
       }
     }
+    // ── T21：GET /api/automation —— AFK 执行参数（.pipeline/automation.json）──
+    //    缺文件/损坏 → 全默认（fail-open，见 automationConfig.ts 头注释）。root 信任锚 +
+    //    本机回环 GET 不鉴权，全部对齐 /api/hooks 先例。
+    if (path === '/api/automation') {
+      const root = new URL(req.url ?? '/', 'http://localhost').searchParams.get('root') ?? ''
+      if (!dedupeRoots(registry()).includes(resolvePath(root))) {
+        return sendJson(res, 404, { ok: false, error: 'root 未在机器级项目注册表中' })
+      }
+      try {
+        return sendJson(res, 200, { ok: true, settings: readAutomationSettings(root) })
+      } catch (e) {
+        return sendJson(res, 500, { ok: false, error: errMsg(e) })
+      }
+    }
     // ── workflow 编辑器（GOAL E8）：GET /api/workflows —— 列出自定义 workflow（排除 default）──
     if (path === '/api/workflows') {
       const root = new URL(req.url ?? '/', 'http://localhost').searchParams.get('root') ?? ''
@@ -666,6 +681,32 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
         return sendJson(res, 500, { ok: false, error: errMsg(e) })
       }
       return sendJson(res, 200, { ok: true, ...validated.value })
+    }
+
+    // ── T21：POST /api/automation —— AFK 执行参数写回（.pipeline/automation.json）──
+    //    校验序对齐 /api/hooks：body 形状+值域（automationConfig.ts fail-loud 400）→ root 必填
+    //    400 → 信任锚 404 → 真写（canonical + tmp+rename 原子写）。写完回 settings 归一值，
+    //    UI 保存后再 GET 回读对账。
+    if (path === '/api/automation') {
+      const rawBody = await readJsonBody(req)
+      const validated = validateAutomationSettingsBody(rawBody)
+      if (!validated.ok) return sendJson(res, 400, { ok: false, error: validated.error })
+      const root = typeof (rawBody as Record<string, unknown>).root === 'string'
+        ? (rawBody as Record<string, unknown>).root as string
+        : ''
+      if (!root) {
+        return sendJson(res, 400, { ok: false, error: 'root 必填' })
+      }
+      // 信任锚：同 /api/hooks、/api/loops/level 共用的「两侧规范化再比较」模式。
+      if (!dedupeRoots(registry()).includes(resolvePath(root))) {
+        return sendJson(res, 404, { ok: false, error: 'root 未在机器级项目注册表中' })
+      }
+      try {
+        writeAutomationSettings(root, validated.value)
+      } catch (e) {
+        return sendJson(res, 500, { ok: false, error: errMsg(e) })
+      }
+      return sendJson(res, 200, { ok: true, settings: validated.value })
     }
 
     // ── workflow 编辑器（GOAL E8）：POST /api/workflows/:name —— 新建/覆盖 ──

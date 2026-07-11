@@ -197,8 +197,11 @@ interface SliderProps {
   onValue: (v: number) => void
 }
 
-/** 单条滑杆（轨道 fill-2 / 填充 accent 经 --p 渐变，推荐 ▽ 刻度）——demo .lp-sld 对位。 */
-function LpSlider({ id, label, value, min, max, display, recoLabel, recoFrac, onValue }: SliderProps): JSX.Element {
+/**
+ * 单条滑杆（轨道 fill-2 / 填充 accent 经 --p 渐变，推荐 ▽ 刻度）——demo .lp-sld 对位。
+ * T21 起导出：「AFK 执行」卡（AutomationCard）复用同一滑杆组件与 lp-slider 样式纪律。
+ */
+export function LpSlider({ id, label, value, min, max, display, recoLabel, recoFrac, onValue }: SliderProps): JSX.Element {
   const pct = ((value - min) / (max - min)) * 100
   return (
     <div className="lp-sld">

@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createStateStore } from '@pipeline-lite/kernel'
@@ -74,5 +74,50 @@ describe('createAutomation SDK', () => {
     await initBuild('x')
     const afk = createAutomation({ repoRoot: root, store, clock, config: { level: 'L1', enabled: false } })
     expect(await afk.enqueue('x')).toBe(false)
+  })
+
+  // ── T21：.pipeline/automation.json 装配（优先级 显式 deps.config > 文件 > DEFAULT）──
+  const seedJson = async (obj: unknown) => {
+    await mkdir(join(root, '.pipeline'), { recursive: true })
+    await writeFile(join(root, '.pipeline', 'automation.json'), JSON.stringify(obj, null, 2), 'utf8')
+  }
+
+  it('automation.json 的 max_parallel/max_retries/default_opt_in 真进生效配置（不是假开关）', async () => {
+    await seedJson({ version: 1, max_parallel: 2, max_retries: 3, default_opt_in: false })
+    const afk = createAutomation({ repoRoot: root, store, clock })
+    expect(afk.config.maxParallel).toBe(2)
+    expect(afk.config.maxRetries).toBe(3)
+    expect(afk.config.defaultOptIn).toBe(false)
+  })
+
+  it('文件 default_opt_in=false 覆盖 SDK 内置 true：未显式预置 queued 的 change enqueue 拒绝', async () => {
+    await initBuild('x')
+    await seedJson({ version: 1, default_opt_in: false })
+    const afk = createAutomation({ repoRoot: root, store, clock, config: { level: 'L1' } })
+    expect(await afk.enqueue('x')).toBe(false)
+  })
+
+  it('显式 deps.config 优先于 automation.json（文件说 2 并发，调用方显式给 6 → 6）', async () => {
+    await seedJson({ version: 1, max_parallel: 2 })
+    const afk = createAutomation({ repoRoot: root, store, clock, config: { maxParallel: 6 } })
+    expect(afk.config.maxParallel).toBe(6)
+  })
+
+  it('损坏 automation.json → fail-open 全默认（SDK 内置 enabled/defaultOptIn 仍为 true）', async () => {
+    await mkdir(join(root, '.pipeline'), { recursive: true })
+    await writeFile(join(root, '.pipeline', 'automation.json'), '{{{broken', 'utf8')
+    const afk = createAutomation({ repoRoot: root, store, clock })
+    expect(afk.config.maxParallel).toBe(4)
+    expect(afk.config.maxRetries).toBe(1)
+    expect(afk.config.defaultOptIn).toBe(true)
+    expect(afk.config.enabled).toBe(true)
+  })
+
+  it('文件手塞 enabled/level 被忽略（双源打架防线：这两个键不属于本文件）', async () => {
+    await seedJson({ version: 1, enabled: false, level: 'L3', max_parallel: 5 })
+    const afk = createAutomation({ repoRoot: root, store, clock })
+    expect(afk.config.enabled).toBe(true) // SDK 内置显式 opt-in 语义不被文件翻转
+    expect(afk.config.level).toBe('L1')
+    expect(afk.config.maxParallel).toBe(5)
   })
 })

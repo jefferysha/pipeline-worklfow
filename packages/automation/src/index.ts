@@ -23,6 +23,8 @@ export * from './lifecycle/runnerFor.js'
 // runner：结构化握手解析 / docker 探针
 export * from './runner/runner.js'
 export * from './runner/docker.js'
+// T21：per-root .pipeline/automation.json 读模块（AFK 执行参数配置面的数据面）
+export * from './config/automationJson.js'
 // sdk：对外编排 API
 export * from './sdk/sdk.js'
 // #29-wire：真 docker 执行接线（createLifecyclePorts + runChangeInSandbox → RunChange）

@@ -9,6 +9,7 @@
  */
 import { join } from 'node:path'
 import type { StateStore } from '@pipeline-lite/kernel'
+import { readAutomationJson, type AutomationJsonFs } from '../config/automationJson.js'
 import { claim, getAutomation, incrAttempts, markQueued, setAutomationOwned } from '../queue/claim.js'
 import { shouldEnqueueOnSpecComplete } from '../queue/gate.js'
 import { scanReadyFromFs } from '../queue/scan.js'
@@ -21,6 +22,8 @@ export interface AutomationDeps {
   readonly clock: () => string
   /** 部分配置覆盖；SDK 默认 enabled/defaultOptIn 为 true（显式构造 SDK + 调 enqueue = 已 opt-in）。 */
   readonly config?: Partial<AutomationConfig>
+  /** automation.json 读取的 fs 注入面（测试用）；缺省真 node fs。 */
+  readonly configFs?: AutomationJsonFs
 }
 
 export interface Automation {
@@ -51,7 +54,12 @@ export const storeWriter = (store: StateStore, changeDir: (name: string) => stri
 })
 
 export function createAutomation(deps: AutomationDeps): Automation {
-  const config: AutomationConfig = { ...DEFAULT_CONFIG, enabled: true, defaultOptIn: true, ...deps.config }
+  // T21 装配优先级：显式 deps.config > <root>/.pipeline/automation.json > SDK 内置
+  // （enabled/defaultOptIn=true，显式构造即 opt-in）> DEFAULT_CONFIG。文件缺失/损坏 fail-open
+  // 不改变既有行为；文件里的 image 归 dockerRunChange 装配点消费（cli/commands/afk.ts），
+  // 不属于 AutomationConfig。enabled/level 不进文件（automationJson.ts 头【决策登记】）。
+  const { image: _image, ...fileCfg } = readAutomationJson(deps.repoRoot, deps.configFs)
+  const config: AutomationConfig = { ...DEFAULT_CONFIG, enabled: true, defaultOptIn: true, ...fileCfg, ...deps.config }
   const { store, clock } = deps
   const changesDir = join(deps.repoRoot, 'openspec', 'changes')
   const changeDir = (name: string): string => join(changesDir, name)

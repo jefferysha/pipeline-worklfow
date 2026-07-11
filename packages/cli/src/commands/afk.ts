@@ -17,8 +17,8 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import {
-  createAutomation, createDockerRunChange, denylistForChange, dockerAvailable, nodeExec, runnerForChange,
-  AUTOMATION_LEVELS, type AutomationLevel,
+  createAutomation, createDockerRunChange, denylistForChange, dockerAvailable, nodeExec, readAutomationJson,
+  runnerForChange, AUTOMATION_LEVELS, type AutomationLevel,
 } from '@pipeline-lite/automation'
 import { loadRegistry } from '@pipeline-lite/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
@@ -118,7 +118,10 @@ export async function cmdAfk(deps: CliDeps, sub: string, name: string | undefine
         deps.io.err('[AFK] run 需在 git 仓库内、非 detached HEAD（取不到当前分支名，命名分支/merge-back 无锚点）')
         return 1
       }
-      const image = opts.image ?? DEFAULT_SANDCASTLE_IMAGE
+      // T21 image 同源：--image 显式覆盖 > .pipeline/automation.json 的 image > 内置默认
+      // （与 createAutomation 内 maxParallel/maxRetries/defaultOptIn 吃同一个文件——UI 编排页
+      // 保存的沙箱镜像在真 run 路径真实生效，不是假输入框）。
+      const image = opts.image ?? readAutomationJson(deps.cwd).image ?? DEFAULT_SANDCASTLE_IMAGE
       // store 真接线（Task 1 收尾缺口修复）：runChangeInSandbox 运行期真写回 automation_sandbox/
       // automation_worktree 靠 createDockerRunChange 把 deps.store 转发给 createLifecyclePorts 的
       // setStateField；此前一直没传，字段在真 CLI 路径里永远停在 init 时的 ""（见

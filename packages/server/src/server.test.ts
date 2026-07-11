@@ -1497,6 +1497,78 @@ describe('POST /api/hooks —— 阶段×hook 开关写回（v5 T5 / 决议#2）
   })
 })
 
+// ═══════════ T21：AFK 执行参数端点（.pipeline/automation.json）═══════════
+
+describe('GET /api/automation —— AFK 执行参数（T21）', () => {
+  it('缺 .pipeline/automation.json → 200 全默认（fail-open）', async () => {
+    const h = await start()
+    const r = await reqGet(h.port, `/api/automation?root=${encodeURIComponent(h.root)}`)
+    expect(r.status).toBe(200)
+    const body = r.json<{ ok: boolean; settings: Record<string, unknown> }>()
+    expect(body.ok).toBe(true)
+    expect(body.settings).toEqual({ max_parallel: 4, max_retries: 1, default_opt_in: false, image: '' })
+  })
+
+  it('root 未注册 → 404（信任锚，同兄弟端点）', async () => {
+    const h = await start()
+    const r = await reqGet(h.port, `/api/automation?root=${encodeURIComponent('/tmp/not-registered-root')}`)
+    expect(r.status).toBe(404)
+  })
+})
+
+describe('POST /api/automation —— AFK 执行参数写回（T21）', () => {
+  const SETTINGS = { max_parallel: 6, max_retries: 2, default_opt_in: true, image: 'ghcr.io/a/b:v1' }
+
+  it('无 token → 401（B5 写端点纵深）', async () => {
+    const h = await start()
+    const r = await reqPost(h.port, '/api/automation', { root: h.root, ...SETTINGS })
+    expect(r.status).toBe(401)
+  })
+
+  it('合法写 → 200，真落盘 .pipeline/automation.json；GET round-trip 一致', async () => {
+    const h = await start()
+    const r = await reqPost(h.port, '/api/automation', { root: h.root, ...SETTINGS }, { headers: { Authorization: `Bearer ${h.token}` } })
+    expect(r.status).toBe(200)
+    expect(r.json<{ ok: boolean }>().ok).toBe(true)
+    const text = await readFile(join(h.root, '.pipeline', 'automation.json'), 'utf8')
+    expect(JSON.parse(text)).toEqual({ version: 1, ...SETTINGS })
+    const g = await reqGet(h.port, `/api/automation?root=${encodeURIComponent(h.root)}`)
+    expect(g.json<{ settings: Record<string, unknown> }>().settings).toEqual(SETTINGS)
+  })
+
+  it('值域越界（max_parallel=9 / max_retries=-1 / default_opt_in 非布尔 / image 含空格）→ 400 且不落盘', async () => {
+    const h = await start()
+    const auth = { headers: { Authorization: `Bearer ${h.token}` } }
+    const bads = [
+      { ...SETTINGS, max_parallel: 9 },
+      { ...SETTINGS, max_retries: -1 },
+      { ...SETTINGS, default_opt_in: 'yes' },
+      { ...SETTINGS, image: 'has space' },
+    ]
+    for (const bad of bads) {
+      const r = await reqPost(h.port, '/api/automation', { root: h.root, ...bad }, auth)
+      expect(r.status, JSON.stringify(bad)).toBe(400)
+    }
+    expect(existsSync(join(h.root, '.pipeline', 'automation.json'))).toBe(false)
+  })
+
+  it('image 空串 → 200（= 用内置镜像），GET 回读 image 空串', async () => {
+    const h = await start()
+    const auth = { headers: { Authorization: `Bearer ${h.token}` } }
+    const r = await reqPost(h.port, '/api/automation', { root: h.root, ...SETTINGS, image: '' }, auth)
+    expect(r.status).toBe(200)
+    const g = await reqGet(h.port, `/api/automation?root=${encodeURIComponent(h.root)}`)
+    expect(g.json<{ settings: { image: string } }>().settings.image).toBe('')
+  })
+
+  it('root 缺失 → 400；root 未注册 → 404（信任锚先于写盘）', async () => {
+    const h = await start()
+    const auth = { headers: { Authorization: `Bearer ${h.token}` } }
+    expect((await reqPost(h.port, '/api/automation', { ...SETTINGS }, auth)).status).toBe(400)
+    expect((await reqPost(h.port, '/api/automation', { root: '/tmp/not-registered-root', ...SETTINGS }, auth)).status).toBe(404)
+  })
+})
+
 describe('未知 HTTP 方法（非 GET/POST/DELETE）仍 405（既有兜底不因新增 DELETE 分支而失效）', () => {
   it('PUT → 405', async () => {
     const h = await start()
