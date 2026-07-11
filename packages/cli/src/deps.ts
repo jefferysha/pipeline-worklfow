@@ -80,6 +80,13 @@ export interface CliDeps {
    */
   readGateMarkers?: () => Promise<GateMarkerInfo[]>
   /**
+   * v6 T2：机器级 secrets 存储（~/.claude/pipeline-secrets.json）读成 env 形状，喂 afk run 的
+   * hostEnv 合并（宿主 env 显式非空 > 文件值，沿用 sdk「显式>文件」装配惯例；空串 env 视同缺席，
+   * 不吃掉文件值）。best-effort：未注入/读失败 → {}，行为与接线前完全一致（fail-open，不阻断 run）。
+   * main.ts 用 kernel secretsPath(homedir())+readSecrets 落地；值不进日志（同 dockerRunChange 纪律）。
+   */
+  readSecretsEnv?: () => Promise<Record<string, string>>
+  /**
    * `git rev-parse HEAD` 的 stdout（trim 后；非 git 仓 → 空串）。
    * 对齐老内核 build-complete 的 `$(git rev-parse HEAD 2>/dev/null || echo "")` 口径：
    * 失败也取 stdout——unborn 仓会捕获到字面 "HEAD"（T6 实测怪癖，oracle parity 需要）。

@@ -16,7 +16,7 @@ import { fileURLToPath } from 'node:url'
 import { CommanderError } from 'commander'
 import {
   createFlowEngine, createHistoryWriter, createStateStore, loadManifest,
-  projectRegistryPath, registerProjectRoot,
+  projectRegistryPath, readSecrets, registerProjectRoot, secretsPath,
 } from '@pipeline-lite/kernel'
 import { tapStatus } from '@pipeline-lite/tap'
 import type { GuardContext } from '@pipeline-lite/kernel'
@@ -223,6 +223,9 @@ async function main(): Promise<void> {
     registerProject: async (repoRoot) => {
       await registerProjectRoot(projectRegistryPath(homedir()), repoRoot)
     },
+    // v6 T2：afk run 凭证注入——机器级 secrets 读成 env 形状（kernel readSecrets 自身 fail-open，
+    // 缺失/损坏 → 空 keys）；值不落日志。
+    readSecretsEnv: async () => readSecrets(secretsPath(homedir())).keys,
     readHistoryRaw: async (dir) => {
       try {
         return await readFile(join(dir, '.pipeline-history.jsonl'), 'utf8')

@@ -136,7 +136,18 @@ export async function cmdAfk(deps: CliDeps, sub: string, name: string | undefine
       // codex exec 无头会话；其余/无归属 → 缺省 Claude 路径）。同 denylist 的现读/best-effort 口径。
       const resolveRunner = async (changeName: string): Promise<string | undefined> =>
         runnerForChange(loadRegistry(deps.cwd).data?.loops ?? [], changeName)
-      const runChange = createDockerRunChange({ hostRepoDir: deps.cwd, base, level, image, store: deps.store, resolveDenylist, resolveRunner })
+      // 凭证注入（v6 T2）：机器级 secrets 文件与宿主 env 合并成 hostEnv——宿主显式非空值优先
+      // （沿用 sdk「显式>文件>内置」装配惯例；空串 env 视同缺席，不吃掉文件值）；依赖未注入/
+      // 读失败 → 纯 process.env（fail-open，与接线前行为一致）。每轮 run 启动时合并一次
+      // （scheduler retry 复用同一闭包，不在 round 中途重读——G24 交界的时序稳定性判据）。
+      const secretsEnv: Record<string, string> = deps.readSecretsEnv
+        ? await deps.readSecretsEnv().catch(() => ({}))
+        : {}
+      const hostEnv: Record<string, string | undefined> = { ...secretsEnv }
+      for (const [k, v] of Object.entries(process.env)) {
+        if (v !== undefined && v !== '') hostEnv[k] = v
+      }
+      const runChange = createDockerRunChange({ hostRepoDir: deps.cwd, base, level, image, store: deps.store, resolveDenylist, resolveRunner, hostEnv })
       await auto.runRound(runChange)
       deps.io.out(`AFK run: 跑完一轮（${ready.length} 项候选，level=${level}，image=${image}）`)
       return 0

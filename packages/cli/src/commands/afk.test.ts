@@ -114,3 +114,57 @@ describe("cmdAfk('run') · image 同源三段链路（--image > automation.json 
     expect(argv).not.toContain('bad image')
   })
 })
+
+/**
+ * v6 T2：cmdAfk('run') 凭证注入接线——机器级 secrets 文件(经 deps.readSecretsEnv)与宿主 env
+ * 合并成 hostEnv 传给 createDockerRunChange。优先级:宿主 env 显式非空 > secrets 文件
+ * (沿用 sdk「显式>文件」装配惯例;空串 env 视同缺席,不吃掉文件值)。fail-open:依赖未注入/
+ * 读失败 → 行为与今天完全一致。env 用 vi.stubEnv 隔离(hermetic,不污染真机)。
+ */
+describe("cmdAfk('run') · 凭证注入(secrets 文件 × 宿主 env 合并)", () => {
+  let cwd: string
+  beforeEach(async () => {
+    h.calls.length = 0
+    cwd = await mkdtemp(join(tmpdir(), 'afk-cred-'))
+    await execFileAsync('git', ['init', '-q'], { cwd })
+    await mkdir(join(cwd, 'openspec', 'changes', 'w'), { recursive: true })
+  })
+  afterEach(async () => {
+    vi.unstubAllEnvs()
+    await rm(cwd, { recursive: true, force: true })
+  })
+
+  const deps = () =>
+    makeDeps({ cwd, states: { w: mockState({ phase: 'build', automation: 'queued' }) } })
+
+  it('secrets 文件有 token 而宿主 env 无(空串) → 文件值补位,docker run 注入 -e', async () => {
+    vi.stubEnv('CLAUDE_CODE_OAUTH_TOKEN', '')
+    const d = deps()
+    d.readSecretsEnv = async () => ({ CLAUDE_CODE_OAUTH_TOKEN: 'tok-from-file' })
+    expect(await cmdAfk(d, 'run', undefined, {})).toBe(0)
+    expect(dockerRunArgv()).toContain('CLAUDE_CODE_OAUTH_TOKEN=tok-from-file')
+  })
+
+  it('宿主 env 显式非空 → 覆盖 secrets 文件值(显式>文件)', async () => {
+    vi.stubEnv('CLAUDE_CODE_OAUTH_TOKEN', 'tok-from-env')
+    const d = deps()
+    d.readSecretsEnv = async () => ({ CLAUDE_CODE_OAUTH_TOKEN: 'tok-from-file' })
+    expect(await cmdAfk(d, 'run', undefined, {})).toBe(0)
+    const argv = dockerRunArgv()
+    expect(argv).toContain('CLAUDE_CODE_OAUTH_TOKEN=tok-from-env')
+    expect(argv).not.toContain('tok-from-file')
+  })
+
+  it('readSecretsEnv 未注入/读失败 → 行为与今天一致(无 token 不注入,run 正常跑完)', async () => {
+    vi.stubEnv('CLAUDE_CODE_OAUTH_TOKEN', '')
+    const d = deps()
+    expect(await cmdAfk(d, 'run', undefined, {})).toBe(0)
+    expect(dockerRunArgv()).not.toContain('CLAUDE_CODE_OAUTH_TOKEN')
+
+    h.calls.length = 0
+    const d2 = deps()
+    d2.readSecretsEnv = async () => { throw new Error('secrets 读失败') }
+    expect(await cmdAfk(d2, 'run', undefined, {})).toBe(0)
+    expect(dockerRunArgv()).not.toContain('CLAUDE_CODE_OAUTH_TOKEN')
+  })
+})
