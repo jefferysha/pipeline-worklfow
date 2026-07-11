@@ -441,6 +441,15 @@ export const zh: Dict = {
     sk_uninstalled_hint_user: '本机未检出——用 find-skills 检索安装',
     sk_banner: '该阶段×轨道的强制技能全部备选未安装:{tokens}',
     sk_banner_copy: '⧉ 复制安装命令',
+    // v6 T9：AFK 就绪三灯 + 镜像下拉。
+    afk_rd_docker: 'docker',
+    afk_rd_image: '镜像',
+    afk_rd_cred: '凭证(claude-code)',
+    afk_rd_ok: '就绪',
+    afk_rd_no: '未就绪',
+    afk_rd_unset: '未配置',
+    afk_rd_build_copy: '⧉ 复制构建命令',
+    afk_rd_codex_hint: 'codex 路径:OPENAI_API_KEY {o} · CODEX_HOME {c}',
   },
   // T10（v5 交互重建）：进度视图骨架文案。口径纪律同 workbench：可见文案一律用「阶段」（旧措辞已废）。
   progress: {
@@ -901,6 +910,14 @@ export const en: Dict = {
     sk_uninstalled_hint_user: 'Not detected on this machine — find and install via find-skills',
     sk_banner: 'All alternatives of mandatory skill(s) for this stage×track are missing: {tokens}',
     sk_banner_copy: '⧉ Copy install command',
+    afk_rd_docker: 'docker',
+    afk_rd_image: 'image',
+    afk_rd_cred: 'credential (claude-code)',
+    afk_rd_ok: 'ready',
+    afk_rd_no: 'not ready',
+    afk_rd_unset: 'not set',
+    afk_rd_build_copy: '⧉ Copy build command',
+    afk_rd_codex_hint: 'codex path: OPENAI_API_KEY {o} · CODEX_HOME {c}',
   },
   progress: {
     title: 'Progress',

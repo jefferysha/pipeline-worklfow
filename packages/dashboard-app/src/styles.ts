@@ -776,6 +776,12 @@ button.ev__chip--neutral:hover { border-color: var(--border-2); color: var(--tex
 span.wb-chip-badge { cursor: default; }
 .wb-sk-banner { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 10px; border-radius: 10px; background: color-mix(in srgb, color-mix(in oklch, var(--red) 52%, var(--green)) 14%, var(--card)); border: 1px solid color-mix(in srgb, color-mix(in oklch, var(--red) 52%, var(--green)) 45%, var(--border)); }
 
+/* ── v6 T9：AFK 就绪三灯——绿=既有 --green,未就绪黄=busy 同款派生(决议#9,禁新原色)。 ── */
+.afk-rd { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; margin: 2px 0 10px; font-size: 12px; color: var(--text-2); }
+.rd-dot { flex: none; width: 8px; height: 8px; border-radius: 999px; }
+.rd-dot--ok { background: var(--green); }
+.rd-dot--no { background: color-mix(in oklch, var(--red) 52%, var(--green)); }
+
 /* ==== T16：「自动运行(Loop)」卡（lp- 区块）——对照 demo v5 #wbLoopCard：滑杆轨道 fill-2、
    填充 accent（--p 渐变分界）、推荐 ▽ 刻度、超限策略 pill 单选、自主级别 segmented、
    闸门/终止/范围 chips 行。全部走既有 token，无新原色。 ==== */
