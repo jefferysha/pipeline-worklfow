@@ -80,6 +80,9 @@ const LOOP_ROW = {
   budget_decl: { max_runs_per_day: 24, max_in_flight: 1, on_exceed: 'skip', max_tokens_per_day: 100000 },
   readiness: { score: 62, band: 'L2-ready' },
   budget: { breaker: 'ok', runsToday: 3, spentToday: 3000, remaining: 97000, hasBudget: true, maxTokensPerDay: 100000 },
+  // T7：关系条数据面（server LoopRow 契约形状同步——本文件多数用例不断言关系条内容，给稳定占位值）。
+  matched_changes: ['rl-0142-migrate-card'],
+  phases: ['build', 'verify'],
 }
 
 let loopRows: unknown[]
