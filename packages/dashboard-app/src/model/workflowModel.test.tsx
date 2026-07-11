@@ -56,6 +56,10 @@ describe('DEFAULT_RULES —— types.ts 四常量的 WorkflowRules 投影', () =
     expect(DEFAULT_RULES.gateByStep['open']).toBeNull()
     expect(DEFAULT_RULES.gateByStep['build']).toBeNull()
   })
+
+  it('观察项①：DEFAULT_RULES 不带 labelByStep（default 七相走 phases.* i18n 路径，不经 label 映射）', () => {
+    expect(DEFAULT_RULES.labelByStep).toBeUndefined()
+  })
 })
 
 describe('rulesFromDef —— WorkflowDef → WorkflowRules 映射', () => {
@@ -86,6 +90,16 @@ describe('rulesFromDef —— WorkflowDef → WorkflowRules 映射', () => {
     def.steps[1] = { ...def.steps[1]!, guards: [{ type: 'tasks-at-least', n: 3 }] }
     const rules = rulesFromDef(def)
     expect(rules.nonemptyOutputByStep?.['review']).toBe(false)
+  })
+
+  it('观察项①：labelByStep 携带非空 label；空 label 不落键（消费端安全回退 step id）', () => {
+    const def = relDef()
+    def.steps[0] = { ...def.steps[0]!, label: '起草' }
+    def.steps[1] = { ...def.steps[1]!, label: '人工复核' }
+    // steps[2] 'ship' 的 label 保持 ''（relDef 缺省）→ 该键不落，消费端回退 step id
+    const rules = rulesFromDef(def)
+    expect(rules.labelByStep).toEqual({ draft: '起草', review: '人工复核' })
+    expect(rules.labelByStep?.['ship']).toBeUndefined()
   })
 })
 

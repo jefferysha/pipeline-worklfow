@@ -31,6 +31,14 @@ export interface WorkflowRules {
   /** from step id → 出边列表（event 名 + 目标 step）。 */
   transitions: Record<string, readonly { event: string; to: string }[]>
   gateByStep: Record<string, 'review' | 'confirm' | null>
+  /**
+   * step id → 用户设置的展示名（StepDef.label）。观察项①：进度页箭头带优先显示它，缺键/空
+   * label 时消费端回退 step id；default 七相不带此表（走 phases.* i18n，行为逐字不变）。
+   * 与 gateByStep 同为「每 step 属性表」，故直接挂 WorkflowRules 而非另立扩展接口——ProgressRules
+   * = WorkflowRules & StepOutputRules 已含本接口全部字段，箭头带（消费 ProgressRules）随之自然
+   * 可见，无需改动 progressModel 的组合面。可选：既有 default/其它 WorkflowRules 构造者不受牵动。
+   */
+  labelByStep?: Record<string, string>
 }
 
 /**
@@ -65,13 +73,15 @@ export function rulesFromDef(def: { name: string; steps: StepDef[] }): WorkflowR
   const gateByStep: Record<string, 'review' | 'confirm' | null> = {}
   const outputsByStep: Record<string, readonly string[]> = {}
   const nonemptyOutputByStep: Record<string, boolean> = {}
+  const labelByStep: Record<string, string> = {}
   for (const s of def.steps) {
     transitions[s.id] = s.transitions.map((t) => ({ event: t.event, to: t.to }))
     gateByStep[s.id] = s.gate
     outputsByStep[s.id] = s.outputs.map((o) => o.field)
     nonemptyOutputByStep[s.id] = s.guards.some((g) => g.type === 'nonempty-output')
+    if (s.label) labelByStep[s.id] = s.label // 空串/缺失不落键——消费端安全回退 step id
   }
-  return { steps: def.steps.map((s) => s.id), transitions, gateByStep, outputsByStep, nonemptyOutputByStep }
+  return { steps: def.steps.map((s) => s.id), transitions, gateByStep, outputsByStep, nonemptyOutputByStep, labelByStep }
 }
 
 // ── (root,name) 模块级缓存 + in-flight 去重 ──
