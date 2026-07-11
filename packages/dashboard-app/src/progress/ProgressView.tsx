@@ -661,6 +661,7 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
                 className={`prg-schip${on ? ' on' : ''}`}
                 data-testid={`prg-chip-${s}`}
                 aria-pressed={on}
+                title={s === 'agent' ? t('progress.state_agent_hint') : undefined}
                 onClick={() => setStateSel(on && s !== 'all' ? 'all' : s)}
               >
                 {s === 'failed' && <i className="prg-sx" aria-hidden="true">×</i>}
@@ -740,7 +741,11 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
                           t={t}
                         />
                         <div className="prg-state">
-                          <span className={`prg-badge prg-badge--${row.state}`} data-testid={`prg-badge-${row.change.name}`}>
+                          <span
+                            className={`prg-badge prg-badge--${row.state}`}
+                            data-testid={`prg-badge-${row.change.name}`}
+                            title={row.state === 'agent' ? t('progress.state_agent_hint') : undefined}
+                          >
                             {(row.state === 'gate' || row.state === 'running') && <span className="prg-badge__dot" aria-hidden="true" />}
                             {badgeLabel(row, groupRules)}
                           </span>

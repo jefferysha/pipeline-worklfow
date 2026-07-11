@@ -226,7 +226,7 @@ describe('ProgressView 行骨架（状态徽章 + 快捷钮占位）', () => {
     expect(within(row).getByText('gate-demo')).toBeInTheDocument()
     expect(within(row).getByText('backend')).toBeInTheDocument()
     expect(screen.getByTestId('prg-badge-gate-demo').textContent).toContain('等你确认')
-    expect(screen.getByTestId('prg-badge-triage-demo').textContent).toContain('等 agent · 补产出 plan')
+    expect(screen.getByTestId('prg-badge-triage-demo').textContent).toContain('等产出 · 缺 plan')
     expect(screen.getByTestId('prg-badge-afk-demo').textContent).toContain('执行中')
     expect(screen.getByTestId('prg-badge-board-demo').textContent).toContain('排队')
     expect(screen.getByTestId('prg-badge-hotfix-login').textContent).toContain('失败 ×3')
@@ -424,13 +424,13 @@ describe('ProgressView running 行详情：日志区 + 沙箱内阶段（T11 验
   })
 })
 
-describe('ProgressView 等 agent / 排队行：无动作只有说明（T11 验收）', () => {
-  it('等 agent 行详情：说明点名欠的产出 +「在终端继续」，无任何动作按钮', async () => {
+describe('ProgressView 等产出 / 排队行：无动作只有说明（T11 验收；验收反馈②-③改文案）', () => {
+  it('等产出行详情：说明点名欠的产出 +「在终端让 agent 补齐」，无任何动作按钮', async () => {
     renderView()
     await expandRow('triage-demo')
     const note = screen.getByTestId('prg-note-triage-demo')
     expect(note.textContent).toContain('plan')
-    expect(note.textContent).toContain('在终端继续')
+    expect(note.textContent).toContain('在终端让 agent 补齐')
     for (const tid of ['prg-pass-triage-demo', 'prg-reject-triage-demo', 'prg-dismiss-triage-demo', 'prg-dt-retry-triage-demo', 'prg-dt-kill-triage-demo']) {
       expect(screen.queryByTestId(tid)).toBeNull()
     }
@@ -441,6 +441,14 @@ describe('ProgressView 等 agent / 排队行：无动作只有说明（T11 验�
     await expandRow('board-demo')
     expect(screen.getByTestId('prg-note-board-demo').textContent).toContain('排队中')
     expect(screen.queryByTestId('prg-pass-board-demo')).toBeNull()
+  })
+
+  it('「等产出」徽章与筛选 chip 带 title 提示（agent 在终端工作）；其余状态不带此提示', async () => {
+    renderView()
+    expect(screen.getByTestId('prg-badge-triage-demo')).toHaveAttribute('title', expect.stringContaining('agent 在终端工作'))
+    expect(screen.getByTestId('prg-chip-agent')).toHaveAttribute('title', expect.stringContaining('agent 在终端工作'))
+    expect(screen.getByTestId('prg-badge-gate-demo')).not.toHaveAttribute('title')
+    expect(screen.getByTestId('prg-chip-gate')).not.toHaveAttribute('title')
   })
 })
 
