@@ -37,3 +37,13 @@ describe('GLOBAL_CSS —— 光泽扫过强化（峰值/宽度）', () => {
     expect(body).not.toMatch(/#[0-9a-fA-F]{3,8}\b/)
   })
 })
+
+// v6 计划 T11：流程带 running 脉冲光泽——同上一条纪律，color-mix 派生、禁新硬编码原色（决议 #9）。
+describe('GLOBAL_CSS —— 流程带 running 脉冲（v6 T11，决议 #9 同款校验）', () => {
+  it('.wb-flow-gloss 声明存在：color-mix 派生渐变、缺省 opacity:0（GSAP 驱动可见性），不含新硬编码色值', () => {
+    const body = ruleBody(GLOBAL_CSS, '.wb-flow-gloss')
+    expect(body).toContain('color-mix(')
+    expect(body).toContain('opacity: 0')
+    expect(body).not.toMatch(/#[0-9a-fA-F]{3,8}\b/)
+  })
+})

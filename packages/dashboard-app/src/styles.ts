@@ -912,4 +912,71 @@ button.ev__chip--neutral:hover { border-color: var(--border-2); color: var(--tex
   .ibx-grid { grid-template-columns: 1fr; }
   .ibx-side { position: static; }
 }
+/* ============================================================
+   v6 计划 T11：StepperRail 重写为「流程带」——门徽章 popover + 真实计数气泡 + running 脉冲。
+   docs/superpowers/plans/2026-07-11-v6-recommended-implementation.md §T11（不要与本文件其它
+   命名空间里孤立出现的「T11」注释混淆——如上面 .prg-row__main 附近那段，那是上一轮 v5 计划
+   的编号，跟本轮 v6 计划的 T1-T13 是两套体系）。
+   几何沿用本仓已有 .prg-seg（进度视图箭头带，见上方 T10 区块）的 clip-path 卡榫写法，非抄
+   design-demos/v6-workbench-flow.html 像素；旧 .wb-step*（卡片式）规则保留不删——本轮只新增
+   独立区块，热点文件合并纪律（append-only）不touch其它任务的既有行，旧规则随 T12/T13 后续
+   任务收尾时再评估是否清理。颜色一律复用既有 token；running 脉冲光泽沿用 .prg-gloss 的
+   color-mix 派生公式（决议 #9，禁新硬编码原色）。
+   ============================================================ */
+.wb-flow { display: flex; align-items: stretch; flex-wrap: nowrap; width: 100%; overflow-x: auto; padding: 6px 4px 8px; }
+.wb-flow-seg { position: relative; flex: 1 1 0; min-width: 168px; display: flex; }
+.wb-flow-hit {
+  position: relative; /* .wb-flow-gloss 的定位上下文——显式声明，不依赖与 .wb-flow-hit > * 的层叠序巧合 */
+  flex: 1; display: flex; flex-direction: column; align-items: flex-start; text-align: left;
+  padding: 12px 18px 12px 26px; min-height: 100px;
+  background: var(--fill); border: none; font: inherit; color: inherit; cursor: pointer;
+  clip-path: polygon(0 0, calc(100% - 16px) 0, 100% 50%, calc(100% - 16px) 100%, 0 100%, 16px 50%);
+  transition: background .12s ease, box-shadow .12s ease;
+}
+.wb-flow-seg--first .wb-flow-hit { clip-path: polygon(0 0, calc(100% - 16px) 0, 100% 50%, calc(100% - 16px) 100%, 0 100%); padding-left: 18px; }
+.wb-flow-seg--last .wb-flow-hit { clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%, 16px 50%); }
+.wb-flow-hit:hover { background: var(--fill-2); }
+.wb-flow-hit > * { position: relative; }
+.wb-flow-seg--on .wb-flow-hit { background: var(--card); box-shadow: inset 0 0 0 2px var(--accent); }
+/* 预演点亮态（既有 wb-step--live/--live-g 类名逐字保留——见 StepperRail.tsx 注释，T13 退役预演前不改名）。 */
+.wb-step--live .wb-flow-hit { box-shadow: inset 0 0 0 2px var(--accent); }
+.wb-step--live-g .wb-flow-hit { box-shadow: inset 0 0 0 2px var(--green); }
+/* 真机截图自查（scratchpad/flow-band-preview.html）发现：.prg-gloss 的 --btn-fg（白）配方
+   是给 .prg-seg--cur/--run 的 accent 实底段设计的，白扫白看不清；本组件段底是中性 --fill，
+   改用 --accent 派生扫光——浅色/深色两套 --accent 都是高识别度电光蓝，中性底上对比度稳定。 */
+.wb-flow-gloss {
+  position: absolute; top: 0; bottom: 0; left: 0; width: 46px; opacity: 0; pointer-events: none; z-index: 1;
+  background: linear-gradient(105deg, transparent 6%, color-mix(in srgb, var(--accent) 55%, transparent) 50%, transparent 94%);
+}
+.wb-flow-badges { position: absolute; top: 9px; right: 13px; display: flex; align-items: center; gap: 4px; z-index: 2; }
+.wb-flow-count {
+  display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 5px;
+  border-radius: 999px; background: var(--fill-2); color: var(--text-2); font-size: 10.5px; font-weight: 800; font-family: var(--mono);
+}
+.wb-flow-gatewrap { position: relative; display: inline-flex; }
+.wb-flow-gate { cursor: pointer; }
+.wb-flow-gate:hover, .wb-flow-gate:focus-visible { background: var(--red-b); }
+.wb-flow-gatepop {
+  position: absolute; top: calc(100% + 6px); right: 0; width: 240px; z-index: 6; text-align: left;
+  background: var(--card); border: 1px solid var(--border); border-radius: 11px; box-shadow: var(--shadow-2);
+  padding: 10px 12px;
+}
+.wb-flow-gatepop-t { font-size: 11.5px; font-weight: 700; margin: 0 0 6px; color: var(--text-2); }
+.wb-flow-gatepop-row { margin: 0; font-size: 11.5px; color: var(--text-2); line-height: 1.55; }
+.wb-flow-gatepop-row + .wb-flow-gatepop-row { margin-top: 5px; }
+.wb-flow-gatepop-row b { display: block; color: var(--text); font-weight: 650; }
+.wb-flow-ev {
+  flex: none; align-self: center; margin: 0 3px; padding: 3px 9px; border-radius: 999px;
+  background: var(--fill); border: 1px dashed var(--border-2); color: var(--text-3);
+  font-size: 10.5px; font-family: var(--mono); white-space: nowrap;
+}
+.wb-flow-add {
+  flex: none; align-self: stretch; min-width: 108px; margin-left: 6px; display: flex; align-items: center;
+  justify-content: center; padding: 12px; border: 1px dashed var(--border-2); border-radius: var(--radius);
+  background: transparent; color: var(--text-3); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+  transition: background .12s ease, color .12s ease;
+}
+.wb-flow-add:hover { background: var(--card); color: var(--text-2); }
+.wb-flow-add:disabled { opacity: .55; cursor: not-allowed; }
+.wb-flow-add:disabled:hover { background: transparent; color: var(--text-3); }
 `
