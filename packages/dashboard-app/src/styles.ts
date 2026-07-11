@@ -588,8 +588,13 @@ button.ev__chip--neutral:hover { border-color: var(--border-2); color: var(--tex
 .prg-row__main:hover .prg-seg--fut { background: var(--fill-2); }
 /* 未到达的复核门段：右上角 6px 红点 */
 .prg-seg--gate::after { content: ""; position: absolute; top: 3px; right: 13px; width: 6px; height: 6px; border-radius: 999px; background: var(--red); }
-/* 执行中段：光泽扫过条（GSAP x 位移 repeat:-1；无 GSAP / reduced-motion 时保持透明） */
-.prg-gloss { position: absolute; top: 0; bottom: 0; left: 0; width: 42px; opacity: 0; pointer-events: none; background: linear-gradient(105deg, transparent 12%, color-mix(in srgb, var(--btn-fg) 45%, transparent) 50%, transparent 88%); }
+/* 验收反馈②-①：执行中段常驻区分——比普通 .prg-seg--cur 更亮的 color-mix 派生底色 +
+   内描边，不依赖动画也能看出「在执行」（reduced-motion 下光泽层保持透明，这条底色/描边
+   是唯一线索，必须常驻）；叠加在 .prg-seg--cur 之上（渲染时两类同时挂载）。 */
+.prg-seg--run { background: color-mix(in oklch, var(--accent) 70%, var(--btn-fg) 30%); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--btn-fg) 60%, transparent); }
+/* 执行中段：光泽扫过条（GSAP x 位移 repeat:-1；无 GSAP / reduced-motion 时保持透明）。
+   验收反馈②-①强化：峰值不透明度 45%→75%、宽度 42px→64px，扫过时更醒目；常驻区分见上条。 */
+.prg-gloss { position: absolute; top: 0; bottom: 0; left: 0; width: 64px; opacity: 0; pointer-events: none; background: linear-gradient(105deg, transparent 8%, color-mix(in srgb, var(--btn-fg) 75%, transparent) 50%, transparent 92%); }
 /* 状态徽章 + 快捷钮 */
 .prg-state { display: flex; align-items: center; justify-content: flex-end; gap: 8px; white-space: nowrap; }
 .prg-badge { display: inline-flex; align-items: center; gap: 5px; font-size: 10.5px; padding: 2px 8px; border-radius: 999px; font-weight: 700; white-space: nowrap; background: var(--fill); color: var(--text-2); }

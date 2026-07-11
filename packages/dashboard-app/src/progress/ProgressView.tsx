@@ -447,15 +447,18 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
               { autoAlpha: 1, scaleX: 1, duration: 0.34, ease: 'power2.out', stagger: 0.045, delay: i * 0.07 },
             )
           })
-          // 执行中段：光泽扫过循环（repeat:-1，随 revert 必杀）。
+          // 执行中段：光泽扫过循环（repeat:-1，随 revert 必杀）。起止位移 = 光泽层宽度
+          // （styles.ts .prg-gloss width，验收反馈②-①强化后 64px），保证扫入/扫出前后
+          // 完全清出段外，不留静止时的残留亮边。
           for (const gloss of Array.from(el.querySelectorAll<HTMLElement>('.prg-gloss'))) {
             const seg = gloss.parentElement
+            const glossW = gloss.offsetWidth || 64
             gsap
               .timeline({ repeat: -1, repeatDelay: 1.2 })
               .fromTo(
                 gloss,
-                { x: -48, autoAlpha: 1 },
-                { x: () => (seg?.offsetWidth ?? 120) + 48, duration: 1.05, ease: 'power1.inOut' },
+                { x: -glossW, autoAlpha: 1 },
+                { x: () => (seg?.offsetWidth ?? 120) + glossW, duration: 1.05, ease: 'power1.inOut' },
               )
           }
           // 失败段：一次性抖动（决策 C；motion.ts 词汇 150-250ms，状态反馈非装饰）。
