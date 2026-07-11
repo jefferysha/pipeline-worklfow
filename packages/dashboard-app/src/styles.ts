@@ -825,6 +825,37 @@ button.ev__chip--neutral:hover { border-color: var(--border-2); color: var(--tex
 .lp-empty { padding: 10px 0 4px; }
 .lp-empty-t { margin: 0 0 4px; font-size: 13px; font-weight: 700; }
 .lp-empty-yaml { margin: 10px 0 0; padding: 10px 12px; border-radius: var(--radius-sm); background: var(--code-bg); border: 1px solid var(--code-border); font-family: var(--mono); font-size: 11.5px; line-height: 1.6; color: var(--text-2); overflow-x: auto; }
+/* ==== T7：Loop 卡审阅面重构（空态终端引导 + 字段生产者徽章 + 三方关系条）——交互真相源
+   design-demos/v6-config-copilot.html 方案 A。徽章三色直接指派既有 token（agent=accent 三件套、
+   sys=fill-2 中性、human=ink 深底铭牌，同 .lp-lv-tile.on/.tab--active 既定 --ink 用法），
+   无新原色、无需 color-mix（决议 #9）。上方 .lp-empty-yaml 随本次空态改版成为死代码
+   （EMPTY_EXAMPLE 常量已删），按热点文件「只追加不改既有行」纪律不删，登记供后续清理。 ==== */
+.lp-empty-prompt { margin: 12px 0; padding: 12px 14px; border-radius: var(--radius-sm); background: var(--fill); border: 1px dashed var(--border-2); }
+.lp-empty-prompt-q { margin: 0 0 10px; font-size: 12.5px; line-height: 1.65; color: var(--text-2); }
+.lp-empty-copy { height: 28px; padding: 0 12px; font-size: 12px; }
+.lp-empty-note { margin-top: 8px; }
+/* 字段生产者徽章：agent 生成 / 系统推导 / 人拍板 / 预留字段零消费 */
+.lp-flabel-row { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
+.lp-flabel-row .wb-flabel { margin: 0; }
+.lp-prov { display: inline-flex; align-items: center; height: 18px; padding: 0 7px; border-radius: 6px; font-size: 10.5px; font-weight: 700; white-space: nowrap; flex: none; }
+.lp-prov--agent { background: var(--accent-t); color: var(--accent-d); border: 1px solid var(--accent-b); }
+.lp-prov--sys { background: var(--fill-2); color: var(--text-2); }
+.lp-prov--human { background: var(--ink); color: var(--ink-fg); }
+.lp-prov--reserved { background: transparent; color: var(--text-3); border: 1px dashed var(--border-2); }
+.lp-saferow-label { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+.lp-saferow-body { min-width: 0; }
+.lp-fieldnote { margin-top: 6px; }
+/* 三方关系条：root 徽章 + change_prefix→匹配 changes 弹层 + phases→阶段 chips */
+.lp-rel { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.lp-rel-root { font-family: var(--mono); font-size: 12px; font-weight: 700; max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; background: var(--fill-2); border-radius: 7px; padding: 4px 9px; }
+.lp-rel-root-note { font-size: 11.5px; color: var(--text-3); }
+.lp-rel-arrow { color: var(--text-3); font-size: 13px; }
+.lp-rel-match { height: 26px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--border); background: var(--fill); font: inherit; font-size: 12px; font-family: var(--mono); color: var(--text-2); cursor: pointer; transition: border-color .12s ease, background .12s ease, color .12s ease; }
+.lp-rel-match:hover { border-color: var(--accent); background: var(--accent-t); color: var(--accent-d); }
+.lp-rel-sep { color: var(--border-2); }
+.lp-rel-phases-label { font-size: 12px; font-weight: 600; color: var(--text-3); }
+.lp-rel-note { flex-basis: 100%; margin-top: 4px; }
+.lp-rel-dialog-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; max-height: 320px; overflow-y: auto; }
 /* ==== T11：进度行展开详情 + 动作接线 + running 行日志区 ——对照 demo v5 进度段
    .prg-row--open/.prg-detail/.prg-dfoot/.prg-logwrap，全部走既有 token，无新原色。 ==== */
 .prg-row__main { cursor: pointer; }
