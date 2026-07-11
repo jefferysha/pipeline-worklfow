@@ -695,6 +695,14 @@ export function LoopCard({ root, loops }: LoopCardProps): JSX.Element {
                 <option key={r} value={r}>{r}</option>
               ))}
             </select>
+            {/* 观察项②（决议#14① backlog）：非标准 runner 值软校验警告——纯提示，不拦截保存/
+                不改值/不清第三选项。文案按 runnerFor.ts 真实归属语义（仅 'codex' 起 codex exec，
+                其余一律走 claude-code 缺省路径）：它仍会执行，不谎称「不会执行」。 */}
+            {!(LOOP_RUNNERS as readonly string[]).includes(draft.runner) && (
+              <p className="wb-note lp-runner-warn" data-testid="lp-runner-warn">
+                ⚠ {t('workbench.lp_runner_warn', { runner: draft.runner })}
+              </p>
+            )}
           </div>
         </div>
       </div>

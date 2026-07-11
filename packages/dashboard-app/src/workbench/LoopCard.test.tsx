@@ -269,6 +269,45 @@ describe('LoopCard runner 下拉（T17 补挂，计划决议#14：双选项 + PO
   })
 })
 
+// 观察项②（决议#14① backlog 落地）：runner 非标准值 → 字段下软校验警告（纯提示，不拦截保存、
+// 不改值、不清第三选项）。文案按 runnerFor.ts 真实归属语义：非 codex 值一律走 claude-code（缺省）
+// 路径——它仍会执行，警告不得谎称「不会执行」。
+describe('LoopCard runner 软校验警告（观察项②）', () => {
+  it('非标准 runner（cron）→ 渲染软警告，文案含真实归属语义（非 codex 走 claude-code 路径），且不说「不会执行」', async () => {
+    rows = [makeRow({ runner: 'cron' })]
+    renderCard()
+    await screen.findByTestId('lp-goal')
+    const warn = screen.getByTestId('lp-runner-warn')
+    expect(warn).toBeInTheDocument()
+    // 真值可辨识 + 真实归属语义（非 codex → claude-code 路径），不臆造「不会执行」
+    expect(warn).toHaveTextContent('cron')
+    expect(warn).toHaveTextContent('claude-code')
+    expect(warn).toHaveTextContent(/非 codex/)
+    expect(warn.textContent ?? '').not.toContain('不会执行')
+    // 第三选项不被警告清掉（软提示不改任何值）
+    expect(screen.getByTestId('lp-runner')).toHaveValue('cron')
+  })
+
+  it('标准 runner（claude-code / codex）不渲染软警告', async () => {
+    renderCard() // 默认 claude-code
+    await screen.findByTestId('lp-goal')
+    expect(screen.queryByTestId('lp-runner-warn')).toBeNull()
+    // 切到 codex 仍不渲染（标准值）
+    fireEvent.change(screen.getByTestId('lp-runner'), { target: { value: 'codex' } })
+    expect(screen.queryByTestId('lp-runner-warn')).toBeNull()
+  })
+
+  it('软警告纯提示：存在时不改保存钮语义——有改动即可保存（不因警告 disabled）', async () => {
+    rows = [makeRow({ runner: 'cron' })]
+    renderCard()
+    await screen.findByTestId('lp-goal')
+    expect(screen.getByTestId('lp-runner-warn')).toBeInTheDocument()
+    // 警告常驻，但一旦 dirty，保存钮照常可用（警告不参与 disabled 判定）
+    fireEvent.change(screen.getByTestId('lp-goal'), { target: { value: '新目标' } })
+    expect(screen.getByTestId('lp-save')).not.toBeDisabled()
+  })
+})
+
 describe('LoopCard 自主级别（验收③：升档确认、降档直发、拒绝原文）', () => {
   it('升档 L1→L2：先确认 Dialog（取消不发请求），确认后 POST /api/loops/level 并回显新档', async () => {
     renderCard()

@@ -1001,4 +1001,9 @@ span.wb-chip-badge { cursor: default; }
 .wb-flow-add:hover { background: var(--card); color: var(--text-2); }
 .wb-flow-add:disabled { opacity: .55; cursor: not-allowed; }
 .wb-flow-add:disabled:hover { background: transparent; color: var(--text-3); }
+
+/* 观察项②：runner 非标准值软校验警告——复用 .wb-note 基底，仅覆写为「警示」色调（决议#9：
+   新色一律 color-mix 从既有 token 派生，不硬编码原色）。纯提示语义，无背景块/边框，区别于
+   .loop-reject（POST 拒绝的错误块）。 */
+.lp-runner-warn { margin: 5px 0 0; color: color-mix(in srgb, var(--red) 68%, var(--text-2)); }
 `

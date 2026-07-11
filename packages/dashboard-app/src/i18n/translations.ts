@@ -466,6 +466,10 @@ export const zh: Dict = {
     sc_placeholder: '粘贴新值(保存后只显示掩码)',
     sc_codex_home_note: '路径不是密钥,不进本存储——由宿主环境变量提供,codex 运行时挂载同路径目录(只读说明)',
     sc_precedence_note: '优先级:宿主环境变量(非空)> 此处保存的值——与 afk run 实际注入顺序一致,不会出现「改了没生效」的错觉',
+    // ── 观察项②：runner 非标准值软校验警告（追加区块，勿与上方既有行交错）。文案按
+    //    runnerFor.ts 真实归属语义——仅 'codex' 起 codex exec，其余一律走 claude-code 缺省路径，
+    //    它仍会执行，不谎称「不会执行」。──
+    lp_runner_warn: '"{runner}" 不是标准 runner(仅 claude-code / codex),仍会执行——运行时按真实归属:非 codex 值一律走 claude-code(缺省)路径。',
   },
   // T10（v5 交互重建）：进度视图骨架文案。口径纪律同 workbench：可见文案一律用「阶段」（旧措辞已废）。
   progress: {
@@ -949,6 +953,10 @@ export const en: Dict = {
     sc_placeholder: 'Paste new value (only a mask is shown after saving)',
     sc_codex_home_note: 'A path, not a secret — provided via host env; codex mounts the same directory at runtime (read-only note)',
     sc_precedence_note: 'Precedence: host env (non-empty) > value saved here — matches the real afk-run injection order, no “saved but not applied” illusion',
+    // ── Observation ②: soft validation warning for a non-standard runner value (appended
+    //    block). Wording follows runnerFor.ts real attribution — only 'codex' launches codex
+    //    exec; every other value takes the default claude-code path. It still runs. ──
+    lp_runner_warn: '"{runner}" is not a standard runner (only claude-code / codex). It still runs — at runtime, by real attribution, any non-codex value takes the claude-code (default) path.',
   },
   progress: {
     title: 'Progress',
