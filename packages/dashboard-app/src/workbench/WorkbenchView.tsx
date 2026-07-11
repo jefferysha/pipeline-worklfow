@@ -3,15 +3,16 @@ import gsap from 'gsap'
 import { useGSAP } from '@gsap/react'
 import { getToken } from '../api/client'
 import { useT } from '../i18n'
+import { changeWorkflowName } from '../model/progressModel'
 import { DEFAULT_RULES, invalidateWorkflowRules, rulesKey, useWorkflowRulesMulti } from '../model/workflowModel'
 import { Dialog } from '../shell/Dialog'
-import { EVENT_BY_EDGE, PHASES, REVIEW_PHASES, TRANSITIONS, isPhase } from '../types'
+import { EVENT_BY_EDGE, PHASES, REVIEW_PHASES, TRANSITIONS, isPhase, type ChangeSnapshot, type Snapshot } from '../types'
 import { revealDialog, revealList } from '../shared/motion'
 import { AutomationCard } from './AutomationCard'
-import { HookTimeline, useHooksConfig } from './HookTimeline'
+import { HookTimeline, LOCKED_IDS, useHooksConfig } from './HookTimeline'
 import { LoopCard, useLoops } from './LoopCard'
 import { StepEditor } from './StepEditor'
-import { StepperRail, type StepperStep } from './StepperRail'
+import { StepperRail, type GateHookInfo, type StepperStep } from './StepperRail'
 
 gsap.registerPlugin(useGSAP)
 
@@ -86,6 +87,49 @@ function buildDefaultDef(): WbWorkflowDef {
 }
 const DEFAULT_DEF: WbWorkflowDef = buildDefaultDef()
 
+// ── v6 计划 T11：流程带真实计数 / running 脉冲——按 (root, workflow) 对 snapshot 二次分组
+//    （不新增端点，复用 App 已经 useSnapshot() 拉到的同一份数据；见 WorkbenchViewProps.snapshot
+//    头注释）。fieldStr 同 progressModel.ts/ProgressView.tsx/InboxView.tsx 等既有私有小工具
+//    同款惯例（本仓不为一行判断抽公共模块），非字符串 fields 值一律当未设。 ──
+function fieldStr(c: ChangeSnapshot, key: string): string {
+  const v = c.fields[key]
+  return typeof v === 'string' ? v : ''
+}
+
+/** 单阶段的 ambient 真实信号：count=真实 change 数，running=其中是否有 automation==='running'。 */
+export interface StageAmbient {
+  count: number
+  running: boolean
+}
+
+/**
+ * 该 workflow 下每阶段的真实 change 计数与 running 标记（v6 T11 一句话目标：「数据来自当前
+ * /api/snapshot 已加载的项目状态，前端按 rulesKey(root, workflow) 分组统计，不新增端点」）。
+ * 纯函数、零 IO：只认 snapshot 里 root 精确匹配的项目（且 project.ok，同 selectProgress 对
+ * 不可达项目的既有处理）+ changeWorkflowName(c)===workflow 过滤。archived change 排除
+ * （对齐决议 #5「archive 排除进度」口径——已归档不算这条流程带上的「真实在办」，避免 archive
+ * 阶段桶因历史归档堆积而失真）。running 判据 automation==='running'（不折叠 scheduled，
+ * 逐字对齐计划 T11 TDD 测试要求④「仅在该阶段存在 automation==='running' 的 change 时显示」）。
+ */
+export function stageCounts(
+  snapshot: Snapshot | null | undefined,
+  root: string,
+  workflow: string,
+): Record<string, StageAmbient> {
+  const out: Record<string, StageAmbient> = {}
+  const project = snapshot?.projects.find((p) => p.root === root)
+  if (!project?.ok) return out
+  for (const c of project.changes) {
+    if (c.archived === 'true') continue
+    if (changeWorkflowName(c) !== workflow) continue
+    const bucket = out[c.phase] ?? { count: 0, running: false }
+    bucket.count += 1
+    if (fieldStr(c, 'automation') === 'running') bucket.running = true
+    out[c.phase] = bucket
+  }
+  return out
+}
+
 // 验收反馈#4（补齐 T13 遗留缺口）：新 step 的 id/skill id/event 名同一条字符集规则
 // （kernel validate.ts IDENT_RE、StepEditor.tsx FIELD_RE 同款——G16 纪律，越界=「保存成功、
 // 下次打不开」，客户端先挡一道）。
@@ -141,9 +185,16 @@ export interface WorkbenchViewProps {
    * ——失败回滚提示走全局 flash；缺省（独立渲染/测试）沿 T15 行为，HookTimeline 行内 role=alert。
    */
   onToggleError?: (msg: string) => void
+  /**
+   * v6 计划 T11：流程带真实计数/running 脉冲的数据源——App 已经 useSnapshot() 拉到的同一份
+   * 快照，逐层下传（同 InboxView/ProgressView 既有接线方式，不在本组件内独立开第二条
+   * useSnapshot()/SSE 订阅）。可选：未传（独立渲染/既有测试）时 stageCounts 回落全零，
+   * 流程带只是不显计数气泡与脉冲，不影响其余功能——不破坏任何未接线该 prop 的既有消费方。
+   */
+  snapshot?: Snapshot | null
 }
 
-export function WorkbenchView({ root, onToggleError }: WorkbenchViewProps): JSX.Element {
+export function WorkbenchView({ root, onToggleError, snapshot = null }: WorkbenchViewProps): JSX.Element {
   const { t } = useT()
   const [names, setNames] = useState<string[] | null>(null)
   const [namesError, setNamesError] = useState<string | null>(null)
@@ -441,8 +492,10 @@ export function WorkbenchView({ root, onToggleError }: WorkbenchViewProps): JSX.
   // T13 起 def 就是编辑草稿：依赖收敛为 def?.name（只在切换 workflow/首次载入时重播），
   // 依赖整个 def 会让每次击键都重播全排卡入场——装饰性噪音，不是真实状态变化
   //（旧 workflow 列表页 列表入场依赖 Boolean(names) 的同一条既有纪律）。
+  // v6 T11：选择器随 StepperRail 重写从卡片 .wb-step 换成流程带段 .wb-flow-seg（testid
+  // `wb-step-{id}` 不变，变的只是承载视觉入场动画的 CSS 类）。
   useGSAP(() => {
-    if (def && def.steps.length > 0) revealList('.wb-step')
+    if (def && def.steps.length > 0) revealList('.wb-flow-seg')
   }, { scope: rootRef, dependencies: [def?.name] })
 
   // T13：脏切换确认 Dialog 入场（共享 <Dialog> 不对外暴露内部节点，scope 选择器文本寻址——
@@ -471,11 +524,18 @@ export function WorkbenchView({ root, onToggleError }: WorkbenchViewProps): JSX.
     [hookMetas, hookMatrix],
   )
 
+  // v6 计划 T11：当前 workflow 下每阶段的真实计数/running（stageCounts 纯函数，见文件头）。
+  const ambientByStage = useMemo(
+    () => (wfName ? stageCounts(snapshot, root, wfName) : {}),
+    [snapshot, root, wfName],
+  )
+
   const stepperSteps: StepperStep[] = useMemo(() => {
     if (!def) return []
     return def.steps.map((s, i) => {
       const next = def.steps[i + 1]
       const fwd = next ? s.transitions.find((tr) => tr.to === next.id) : undefined
+      const amb = ambientByStage[s.id]
       return {
         id: s.id,
         name: stepName(s),
@@ -484,9 +544,64 @@ export function WorkbenchView({ root, onToggleError }: WorkbenchViewProps): JSX.
         outputsCount: s.outputs.length,
         hooksCount: hookCountOf(s.id),
         linkEvent: fwd?.event ?? null,
+        count: amb?.count ?? 0,
+        running: amb?.running ?? false,
       }
     })
-  }, [def, stepName, hookCountOf])
+  }, [def, stepName, hookCountOf, ambientByStage])
+
+  // v6 计划 T11：门徽章 popover 静态内容——gate.sh + interactive-skill-gate.sh 对任意复核门
+  // 恒强制拦截（决议 #2），与具体阶段无关，故只需算一次；HookTimeline.tsx 的 LOCKED_IDS 是
+  // 唯一真相源（不在本文件重复写 id 字符串），name/desc 复用其既有 hk_name_/hk_desc_ 系列
+  // 词典（T15 已建）。缺翻译时 t() 回落 key 本身，同 HookTimeline.tsx 同款兜底判断。
+  const gateHooks: GateHookInfo[] = useMemo(
+    () =>
+      [...LOCKED_IDS].map((id) => {
+        const nameKey = `workbench.hk_name_${id}`
+        const descKey = `workbench.hk_desc_${id}`
+        const name = t(nameKey)
+        const desc = t(descKey)
+        return { id, name: name === nameKey ? id : name, desc: desc === descKey ? '' : desc }
+      }),
+    [t],
+  )
+
+  // v6 T11：running 脉冲——光泽扫过循环，惯例逐字对齐 ProgressView.tsx 的执行中段光泽实现
+  // （matchMedia 全包 + reduce 直达终态 + repeat:-1 循环，见该文件 :399-450）。依赖键=当前
+  // running 阶段 id 指纹：running 集合变化（snapshot 新帧/切 workflow）才重建，避免每次渲染
+  // 都杀掉重放循环补间；revertOnUpdate 保证依赖变化时上一轮补间必被清理，不留孤儿循环。
+  const runningKey = stepperSteps.filter((s) => s.running).map((s) => s.id).join(',')
+  useGSAP(
+    () => {
+      const el = rootRef.current
+      if (!el || typeof window.matchMedia !== 'function') return
+      const mm = gsap.matchMedia()
+      mm.add(
+        { reduce: '(prefers-reduced-motion: reduce)', motion: '(prefers-reduced-motion: no-preference)' },
+        (ctx) => {
+          const reduce = Boolean((ctx.conditions as { reduce?: boolean } | undefined)?.reduce)
+          const glosses = Array.from(el.querySelectorAll<HTMLElement>('.wb-flow-gloss'))
+          if (glosses.length === 0) return // 常见态（无 running 阶段）：不喂空数组给 gsap.set，避免控制台噪音
+          if (reduce) {
+            gsap.set(glosses, { autoAlpha: 0 })
+            return
+          }
+          for (const gloss of glosses) {
+            const seg = gloss.parentElement
+            const glossW = gloss.offsetWidth || 46
+            gsap
+              .timeline({ repeat: -1, repeatDelay: 0.5 })
+              .fromTo(
+                gloss,
+                { x: -glossW, autoAlpha: 0.9 },
+                { x: () => (seg?.offsetWidth ?? 160) + glossW, duration: 1.1, ease: 'power1.inOut' },
+              )
+          }
+        },
+      )
+    },
+    { scope: rootRef, dependencies: [runningKey], revertOnUpdate: true },
+  )
 
   const summary = useMemo(() => {
     if (!def) return null
@@ -605,6 +720,7 @@ export function WorkbenchView({ root, onToggleError }: WorkbenchViewProps): JSX.
                 // 验收反馈#4（补齐 T13 遗留缺口）：default 只读态不传 handler——StepperRail
                 // 按既有 disabled={!onAddStage} 语义自动落回禁用态 + title 提示，本组件零改动。
                 onAddStage={readonlyWf ? undefined : () => setAddStageOpen(true)}
+                gateHooks={gateHooks}
               />
               {selectedStep && (
                 <section className="card wb-editor" data-testid="wb-editor">

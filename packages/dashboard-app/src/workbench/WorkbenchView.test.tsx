@@ -2,7 +2,8 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '../i18n'
 import { invalidateWorkflowRules, useWorkflowRules } from '../model/workflowModel'
-import { WorkbenchView, type WbWorkflowDef } from './WorkbenchView'
+import { makeChange, makeProject, makeSnapshot } from '../testkit'
+import { stageCounts, WorkbenchView, type WbWorkflowDef } from './WorkbenchView'
 
 const ROOT = '/tmp/proj-a'
 
@@ -35,10 +36,10 @@ const RELEASE_TRAIN = {
   ],
 }
 
-function renderView() {
+function renderView(props: Partial<Parameters<typeof WorkbenchView>[0]> = {}) {
   render(
     <I18nProvider>
-      <WorkbenchView root={ROOT} />
+      <WorkbenchView root={ROOT} {...props} />
     </I18nProvider>,
   )
 }
@@ -450,11 +451,16 @@ function lastSavedDef(): (WbWorkflowDef & { root: string }) | undefined {
   return call?.body as (WbWorkflowDef & { root: string }) | undefined
 }
 
-/** rail 内按 DOM 顺序排列的阶段卡 id 序（'.wb-step' 是每张卡按钮的基础类，「+ 添加阶段」按钮
- *  的类是不带空格的复合 token 'wb-step--add'，不会被此选择器命中）。 */
+/** rail 内按 DOM 顺序排列的阶段卡 id 序（v6 T11：StepperRail 重写为流程带后按
+ *  data-testid 前缀取值，不再依赖 CSS 类名——「+ 添加阶段」按钮没有 data-testid，
+ *  天然不会被此选择器命中，比原先绑 CSS 类名更不脆弱）。查询范围收在 `.wb-flow`
+ *  容器内（而非整个 workbench-view）：StepEditor.tsx 的编辑区外壳也用了 'wb-step-editor'
+ *  这个 testid，前缀恰好同款，不收范围会被一起命中，数出第 4 个「阶段」。 */
 function railStepOrder(): string[] {
   const root = screen.getByTestId('workbench-view')
-  return Array.from(root.querySelectorAll<HTMLElement>('.wb-step')).map((el) => el.getAttribute('data-testid') ?? '')
+  const rail = root.querySelector('.wb-flow')
+  if (!rail) return []
+  return Array.from(rail.querySelectorAll<HTMLElement>('[data-testid^="wb-step-"]')).map((el) => el.getAttribute('data-testid') ?? '')
 }
 
 function openAddStageDialog(): HTMLElement {
@@ -619,5 +625,129 @@ describe('WorkbenchView 加载失败', () => {
     }) as unknown as typeof fetch
     renderView()
     await waitFor(() => expect(screen.getByText(/加载 workflow 失败：workflow 未找到/)).toBeInTheDocument())
+  })
+})
+
+// ── v6 计划 T11：StepperRail → 流程带——stageCounts 纯函数直测 + WorkbenchView 接线集成测试 ──
+
+describe('stageCounts 纯函数（v6 T11，零 IO）', () => {
+  const OTHER_ROOT = '/tmp/proj-b'
+
+  it('按阶段分桶真实 change 数；只认精确匹配的 root + changeWorkflowName===workflow', () => {
+    const snap = makeSnapshot([
+      makeProject(ROOT, [
+        makeChange('c1', 'draft', { fields: { workflow: 'release-train' } }),
+        makeChange('c2', 'review', { fields: { workflow: 'release-train' } }),
+        makeChange('c3', 'review', { fields: { workflow: 'release-train' } }),
+        makeChange('c4', 'draft', { fields: { workflow: 'default' } }), // 其它 workflow，不计入
+      ]),
+      makeProject(OTHER_ROOT, [makeChange('c5', 'draft', { fields: { workflow: 'release-train' } })]), // 其它 root，不计入
+    ])
+    const counts = stageCounts(snap, ROOT, 'release-train')
+    expect(counts['draft']).toEqual({ count: 1, running: false })
+    expect(counts['review']).toEqual({ count: 2, running: false })
+    expect(counts['ship']).toBeUndefined()
+  })
+
+  it('running 判据精确等于 automation===\'running\'（不折叠 scheduled，逐字对齐验收判据④）', () => {
+    const snap = makeSnapshot([
+      makeProject(ROOT, [
+        makeChange('c1', 'review', { fields: { workflow: 'release-train', automation: 'running' } }),
+        makeChange('c2', 'draft', { fields: { workflow: 'release-train', automation: 'scheduled' } }),
+      ]),
+    ])
+    const counts = stageCounts(snap, ROOT, 'release-train')
+    expect(counts['review']).toEqual({ count: 1, running: true })
+    expect(counts['draft']).toEqual({ count: 1, running: false }) // scheduled ≠ running：不点脉冲
+  })
+
+  it('archived change 排除（对齐决议 #5「archive 排除进度」口径）', () => {
+    const snap = makeSnapshot([
+      makeProject(ROOT, [
+        makeChange('c1', 'ship', { fields: { workflow: 'release-train' }, archived: 'true' }),
+      ]),
+    ])
+    expect(stageCounts(snap, ROOT, 'release-train')).toEqual({})
+  })
+
+  it('root 不可达（ok:false）或 snapshot 为空：回落空对象，不抛异常', () => {
+    const snap = makeSnapshot([makeProject(ROOT, [makeChange('c1', 'draft')], { ok: false })])
+    expect(stageCounts(snap, ROOT, 'release-train')).toEqual({})
+    expect(stageCounts(null, ROOT, 'release-train')).toEqual({})
+  })
+})
+
+describe('WorkbenchView 流程带真实计数 / running 脉冲（v6 T11 集成）', () => {
+  it('snapshot 未传（既有消费方缺省态）：计数气泡与脉冲均不渲染，不报错', async () => {
+    renderView()
+    await screen.findByTestId('wb-step-draft')
+    expect(screen.queryByTestId('wb-flow-count-draft')).toBeNull()
+    expect(screen.queryByTestId('wb-flow-gloss-draft')).toBeNull()
+  })
+
+  it('传入 snapshot：计数气泡精确等于该阶段真实 change 数，running 脉冲只在 automation===running 的阶段渲染', async () => {
+    const snap = makeSnapshot([
+      makeProject(ROOT, [
+        makeChange('c1', 'draft', { fields: { workflow: 'release-train' } }),
+        makeChange('c2', 'review', { fields: { workflow: 'release-train' } }),
+        makeChange('c3', 'review', { fields: { workflow: 'release-train', automation: 'running' } }),
+        makeChange('c4', 'ship', { fields: { workflow: 'release-train' }, archived: 'true' }), // 已归档，不计入
+      ]),
+    ])
+    renderView({ snapshot: snap })
+    await screen.findByTestId('wb-step-draft')
+
+    expect(screen.getByTestId('wb-flow-count-draft')).toHaveTextContent('1')
+    expect(screen.getByTestId('wb-flow-count-review')).toHaveTextContent('2')
+    expect(screen.queryByTestId('wb-flow-count-ship')).toBeNull() // 唯一一条已归档，真实计数为 0
+
+    expect(screen.queryByTestId('wb-flow-gloss-draft')).toBeNull()
+    expect(screen.getByTestId('wb-flow-gloss-review')).toBeInTheDocument()
+    expect(screen.queryByTestId('wb-flow-gloss-ship')).toBeNull()
+  })
+
+  it('切换 workflow 后计数随新 workflow 重新分桶（default 7 阶段投影）', async () => {
+    const snap = makeSnapshot([
+      makeProject(ROOT, [
+        makeChange('c1', 'build', {}), // fields 空 → changeWorkflowName 回落 'default'
+      ]),
+    ])
+    renderView({ snapshot: snap })
+    await screen.findByTestId('wb-step-draft')
+    expect(screen.queryByTestId('wb-flow-count-build')).toBeNull() // 此刻在 release-train，没有 build 阶段
+
+    fireEvent.click(screen.getByTestId('wb-wf-btn'))
+    fireEvent.click(await screen.findByTestId('wb-wf-item-default'))
+    await screen.findByTestId('wb-step-open')
+    expect(screen.getByTestId('wb-flow-count-build')).toHaveTextContent('1')
+  })
+})
+
+describe('WorkbenchView 门徽章 popover（v6 T11 集成，静态 hook 元数据真接线）', () => {
+  it('gate 阶段（review）点击门徽章：popover 显示 gate.sh + interactive-skill-gate.sh 的真实人话名/说明（复用既有 hk_name_*/hk_desc_* 词典）', async () => {
+    renderView()
+    await screen.findByTestId('wb-step-draft')
+    const gate = screen.getByTestId('wb-flow-gate-review')
+    fireEvent.click(gate)
+    const pop = screen.getByTestId('wb-flow-gatepop-review')
+    expect(within(pop).getByText('门拦截')).toBeInTheDocument()
+    expect(within(pop).getByText(/复核没过时，挡住技能调用与写文件/)).toBeInTheDocument()
+    expect(within(pop).getByText('技能解锁检查')).toBeInTheDocument()
+    expect(within(pop).getByText(/依赖顺序没到的技能直接拦下/)).toBeInTheDocument()
+  })
+
+  it('非 gate 阶段（draft/ship）不渲染门徽章', async () => {
+    renderView()
+    await screen.findByTestId('wb-step-draft')
+    expect(screen.queryByTestId('wb-flow-gate-draft')).toBeNull()
+    expect(screen.queryByTestId('wb-flow-gate-ship')).toBeNull()
+  })
+
+  it('点击门徽章不会连带触发选中阶段切换（编辑区仍是原选中阶段）', async () => {
+    renderView()
+    await screen.findByTestId('wb-step-draft')
+    expect(screen.getByTestId('wb-editor-stage')).toHaveTextContent('draft')
+    fireEvent.click(screen.getByTestId('wb-flow-gate-review'))
+    expect(screen.getByTestId('wb-editor-stage')).toHaveTextContent('draft')
   })
 })
