@@ -15,6 +15,11 @@ export interface ServerPaths {
   tokenPath: string
   /** ~/.claude/.pipeline-dashboard.server —— pidfile（pid/port/version，B4 版本抢占用）。 */
   pidfilePath: string
+  /**
+   * ~/.claude/pipeline-secrets.json —— 机器级凭证存储（v6 T1，0600+原子写，白名单仅
+   * CLAUDE_CODE_OAUTH_TOKEN/OPENAI_API_KEY，见 @pipeline-lite/kernel 的 secretsPath）。
+   */
+  secretsPath: string
 }
 
 /** snapshot 里单个 change 的投影（.pipeline.yaml 全字段 + 常读字段提升到顶层）。 */

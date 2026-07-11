@@ -15,5 +15,6 @@ export function resolveServerPaths(opts?: { home?: string }): ServerPaths {
     registryPath: join(claudeDir, 'pipeline-projects.json'),
     tokenPath: join(claudeDir, '.pipeline-dashboard-token'),
     pidfilePath: join(claudeDir, '.pipeline-dashboard.server'),
+    secretsPath: join(claudeDir, 'pipeline-secrets.json'),
   }
 }
