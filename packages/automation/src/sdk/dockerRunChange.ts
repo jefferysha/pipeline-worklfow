@@ -82,6 +82,24 @@ export interface DockerRunChangeOptions {
    * 阻断 run）。codex CLI 不可用时沙箱脚本非零退出并打清晰错误 → automation_last_error。
    */
   readonly resolveRunner?: (name: string) => Promise<string | undefined>
+  /**
+   * host 侧环境（v5 T22 codex 凭证透传，可选）：缺省 process.env（真部署零接线）。仅当该 run
+   * 解析出 runner === 'codex' 时，从中透传 OPENAI_API_KEY / CODEX_HOME 进沙箱（CODEX_HOME
+   * 还会由 ports.ts::createSandbox 按同一绝对路径挂载目录，env var 单独进容器只是悬空路径）。
+   * runner=claude-code / 缺省路径绝不注入——凭证只随点名它的 runner 走。显式 opts.extraEnv 的
+   * 同名键优先于 host 透传（调用方显式配置不被环境静默覆盖）。测试注入 fake（hermetic，不读
+   * 真机 env）。凭证值只进 docker run 子进程 argv（-e K=V），不进任何日志/错误消息——错误面
+   * （scheduler sanitize / startContainer throw）只引用 stderr 片段，不回显 argv。
+   */
+  readonly hostEnv?: Readonly<Record<string, string | undefined>>
+}
+
+/** codex 凭证透传（v5 T22）：只挑 OPENAI_API_KEY / CODEX_HOME 两个白名单键，绝不整份 env 灌进容器。 */
+const codexCredentialEnv = (hostEnv: Readonly<Record<string, string | undefined>>): Record<string, string> => {
+  const out: Record<string, string> = {}
+  if (hostEnv.OPENAI_API_KEY !== undefined && hostEnv.OPENAI_API_KEY !== '') out.OPENAI_API_KEY = hostEnv.OPENAI_API_KEY
+  if (hostEnv.CODEX_HOME !== undefined && hostEnv.CODEX_HOME !== '') out.CODEX_HOME = hostEnv.CODEX_HOME
+  return out
 }
 
 /** 构造绑真 docker/git 的 RunChange（喂给 automation.runRound）。 */
@@ -114,9 +132,13 @@ export const createDockerRunChange = (opts: DockerRunChangeOptions): RunChange =
     // v5 T20：每次 run 现解析该 change 的 loop runner（同 denylist 的不缓存/best-effort 口径）；
     // resolver 故障 → undefined（缺省 Claude 路径，绝不因 registry 读坏阻断 run）。
     const runner = opts.resolveRunner ? await opts.resolveRunner(name).catch(() => undefined) : undefined
+    // v5 T22：codex 凭证透传——仅 runner === 'codex' 时从 host env 白名单透传（claude-code /
+    // 缺省路径零变化）；显式 opts.extraEnv 同名键优先（展开序：host 透传在前、显式在后）。
+    const credEnv = runner === 'codex' ? codexCredentialEnv(opts.hostEnv ?? process.env) : {}
+    const extraEnv = { ...credEnv, ...opts.extraEnv }
     return runChangeInSandbox(
       ports,
-      { hostRepoDir: opts.hostRepoDir, name, base: opts.base, autoMerge, extraEnv: opts.extraEnv, denylist, runner },
+      { hostRepoDir: opts.hostRepoDir, name, base: opts.base, autoMerge, extraEnv, denylist, runner },
       signal,
     )
   }

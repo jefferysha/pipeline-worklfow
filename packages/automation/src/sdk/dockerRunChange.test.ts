@@ -275,3 +275,79 @@ describe('createDockerRunChange · resolveRunner（runner 双支持，v5 T20）'
     expect(dockerExec!.join(' ')).not.toContain('PIPELINE_RUNNER')
   })
 })
+
+/**
+ * v5 T22：codex 凭证透传——仅 runner=codex 且 host 侧真有凭证时，把 OPENAI_API_KEY /
+ * CODEX_HOME 注入容器（docker run -e argv）；CODEX_HOME 额外要求目录挂载（env var 单独进
+ * 容器只是个悬空路径，挂载才让 codex 真读到 auth.json）。hostEnv 显式注入（hermetic：测试
+ * 绝不读真 process.env——本机若恰好设了 OPENAI_API_KEY 不能污染断言）。
+ */
+describe('createDockerRunChange · codex 凭证透传（v5 T22）', () => {
+  let repo: string
+  beforeEach(async () => { repo = await mkdtemp(join(tmpdir(), 'dockerrc-cred-')) })
+  afterEach(async () => { await rm(repo, { recursive: true, force: true }) })
+
+  const run = async (opts: {
+    resolveRunner?: () => Promise<string | undefined>
+    hostEnv?: Readonly<Record<string, string | undefined>>
+  }): Promise<{ dockerRun: string; calls: string[][] }> => {
+    const { exec, calls } = makeFakeExec()
+    const runChange = createDockerRunChange({
+      hostRepoDir: repo, base: 'main', level: 'L1', image: 'sandcastle:local', exec,
+      resolveRunner: opts.resolveRunner, hostEnv: opts.hostEnv ?? {},
+    })
+    await runChange('loop-a-fix', new AbortController().signal)
+    const dockerRun = calls.find((c) => c[0] === 'docker' && c[1] === 'run')
+    expect(dockerRun).toBeDefined()
+    return { dockerRun: dockerRun!.join(' '), calls }
+  }
+
+  it('runner=codex 且 host 有 OPENAI_API_KEY → docker run 注入 -e OPENAI_API_KEY=<值>', async () => {
+    const { dockerRun } = await run({
+      resolveRunner: async () => 'codex',
+      hostEnv: { OPENAI_API_KEY: 'sk-test-t22' },
+    })
+    expect(dockerRun).toContain('OPENAI_API_KEY=sk-test-t22')
+  })
+
+  it('runner=codex 且 host 有 CODEX_HOME（绝对路径）→ 注入 -e CODEX_HOME + 同路径目录挂载', async () => {
+    const { dockerRun } = await run({
+      resolveRunner: async () => 'codex',
+      hostEnv: { CODEX_HOME: '/home/u/.codex' },
+    })
+    expect(dockerRun).toContain('CODEX_HOME=/home/u/.codex')
+    // env var 单独进容器只是悬空路径——目录挂载才让沙箱内 codex 真读到 auth.json（真实起效）。
+    expect(dockerRun).toContain('-v /home/u/.codex:/home/u/.codex')
+  })
+
+  it('runner=codex 但 host 无任何凭证 → 不注入（沙箱内 codex 自己报认证错误，经既有 stderr 通道落账）', async () => {
+    const { dockerRun } = await run({ resolveRunner: async () => 'codex', hostEnv: {} })
+    expect(dockerRun).not.toContain('OPENAI_API_KEY')
+    expect(dockerRun).not.toContain('CODEX_HOME')
+  })
+
+  it('runner=claude-code / 未传 resolver → 即便 host 有凭证也不注入（凭证只随点名它的 runner 走）', async () => {
+    for (const resolveRunner of [async () => 'claude-code', undefined]) {
+      const { dockerRun } = await run({
+        resolveRunner,
+        hostEnv: { OPENAI_API_KEY: 'sk-test-t22', CODEX_HOME: '/home/u/.codex' },
+      })
+      expect(dockerRun).not.toContain('OPENAI_API_KEY')
+      expect(dockerRun).not.toContain('CODEX_HOME')
+    }
+  })
+
+  it('显式 opts.extraEnv 同名键 > host 透传（调用方显式配置优先，不被环境静默覆盖）', async () => {
+    const { exec, calls } = makeFakeExec()
+    const runChange = createDockerRunChange({
+      hostRepoDir: repo, base: 'main', level: 'L1', image: 'sandcastle:local', exec,
+      resolveRunner: async () => 'codex',
+      hostEnv: { OPENAI_API_KEY: 'sk-from-host' },
+      extraEnv: { OPENAI_API_KEY: 'sk-explicit' },
+    })
+    await runChange('loop-a-fix', new AbortController().signal)
+    const dockerRun = calls.find((c) => c[0] === 'docker' && c[1] === 'run')!.join(' ')
+    expect(dockerRun).toContain('OPENAI_API_KEY=sk-explicit')
+    expect(dockerRun).not.toContain('sk-from-host')
+  })
+})

@@ -44,6 +44,13 @@ if [ "${PIPELINE_RUNNER:-}" = "codex" ]; then
     printf 'codex CLI 不可用（runner=codex 已显式指定，但沙箱镜像内无 codex 命令）：请在 sandcastle 镜像安装 codex CLI，或把该 loop 的 runner 改回 claude-code\n' >&2
     exit 96
   fi
+  # 凭证提示（v5 T22）：host 侧（dockerRunChange::codexCredentialEnv）只在 runner=codex 且宿主机
+  # 真有凭证时注入 OPENAI_API_KEY / CODEX_HOME。两者皆缺 → 打一条可操作的 stderr 提示（仅提示，
+  # **不改变退出路径**——codex 自身会报认证错误并非零退出，经既有 stderr 通道流进
+  # automation_last_error，诚实分流不在这里预判/短路）。
+  if [ -z "${OPENAI_API_KEY:-}" ] && [ -z "${CODEX_HOME:-}" ]; then
+    printf '未检测到 codex 凭证：宿主机需设 OPENAI_API_KEY 或挂载 CODEX_HOME（codex 将自行报认证错误）\n' >&2
+  fi
   # codex 无头会话（CLI 惯例：codex exec = 非交互一次性执行）。--dangerously-bypass-approvals-and-sandbox
   # 对位 claude 的 --dangerously-skip-permissions：headless 容器无 TTY 应答审批，且一次性容器 +
   # 独立 worktree 本身就是隔离边界（codex 官方口径也只建议在容器内用该开关）。认证走 extraEnv

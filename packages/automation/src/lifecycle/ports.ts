@@ -78,7 +78,17 @@ export const createLifecyclePorts = (deps: LifecyclePortsDeps): LifecyclePorts =
       // 冗余的 .git 文件挂载，只保留父 .git 目录挂载（gitdir: 绝对路径经它解析）。
       const dotGit = join(worktreePath, '.git')
       const parentGitMounts = gitMounts.filter((m) => m.hostPath !== dotGit)
-      const mounts = [{ hostPath: worktreePath, sandboxPath: worktreePath }, ...parentGitMounts]
+      // v5 T22 codex 凭证目录：env 里透传了 CODEX_HOME（仅 runner=codex 且 host 侧真有配置时由
+      // dockerRunChange 注入）→ 把该 host 目录按同一绝对路径挂进容器——env var 单独进容器只是
+      // 悬空路径，挂载才让沙箱内 codex 真读到 auth.json（设置必须真实起效）。docker -v 只收绝对
+      // 路径，相对值不挂——容器内 codex 找不到凭证自会报认证错误，经既有 stderr 通道落账（诚实
+      // 分流，不在 host 侧预判吞错）。
+      const codexHome = env.CODEX_HOME
+      const codexHomeMounts =
+        codexHome !== undefined && codexHome.startsWith('/')
+          ? [{ hostPath: codexHome, sandboxPath: codexHome }]
+          : []
+      const mounts = [{ hostPath: worktreePath, sandboxPath: worktreePath }, ...parentGitMounts, ...codexHomeMounts]
       return createDockerSandbox(exec, { image, worktreePath, env, gitMounts: mounts, uid, gid, cpus: deps.cpus })
     },
 
