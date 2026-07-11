@@ -4,7 +4,7 @@
  */
 import { afterEach, describe, expect, it } from 'vitest'
 import { existsSync } from 'node:fs'
-import { readFile, stat } from 'node:fs/promises'
+import { readFile, readdir, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import { createDashboardServer } from './server.js'
 import type { DashboardServer } from './types.js'
@@ -1632,6 +1632,17 @@ describe('POST /api/projects —— 注册项目进机器级注册表（G18）',
     expect(snap.json<{ project_count: number }>().project_count).toBe(1)
   })
 
+  it('200：写盘走 kernel 原子原语——内容逐字节（JSON 数组+2 空格缩进+尾换行）且同目录无 *.tmp* 残留（观察项④）', async () => {
+    const h = await startWithHome()
+    const proj = await makeProject()
+    const r = await reqPost(h.port, '/api/projects', { root: proj }, { headers: { Authorization: `Bearer ${h.token}` } })
+    expect(r.status).toBe(200)
+    // 逐字节：与旧 writeFileSync 现状格式完全一致（tmp+rename 原子写不改字节）
+    expect(await readFile(h.registryPath, 'utf8')).toBe(`${JSON.stringify([proj], null, 2)}\n`)
+    // tmp+rename 原子写：完成后同目录只剩正式文件，无中途 .tmp 残留
+    expect(await readdir(join(h.home, '.claude'))).toEqual(['pipeline-projects.json'])
+  })
+
   it('409：重复注册（含尾斜杠等非规范写法，两侧规范化后判重）', async () => {
     const h = await startWithHome()
     const proj = await makeProject()
@@ -1685,6 +1696,19 @@ describe('DELETE /api/projects —— 注销项目（G18 对称操作）', () =>
     expect(onDisk).toHaveLength(0)
     const snap = await reqGet(h.port, '/api/snapshot')
     expect(snap.json<{ project_count: number }>().project_count).toBe(0)
+  })
+
+  it('200：注销写盘走 kernel 原子原语——剩余条目逐字节且同目录无 *.tmp* 残留（观察项④）', async () => {
+    const h = await startWithHome()
+    const projA = await makeProject()
+    const projB = await makeProject()
+    await reqPost(h.port, '/api/projects', { root: projA }, { headers: { Authorization: `Bearer ${h.token}` } })
+    await reqPost(h.port, '/api/projects', { root: projB }, { headers: { Authorization: `Bearer ${h.token}` } })
+    const r = await reqDelete(h.port, `/api/projects?root=${encodeURIComponent(projA)}`, { headers: { Authorization: `Bearer ${h.token}` } })
+    expect(r.status).toBe(200)
+    // 逐字节：删掉 A 后剩 B，格式与现状一致
+    expect(await readFile(h.registryPath, 'utf8')).toBe(`${JSON.stringify([projB], null, 2)}\n`)
+    expect(await readdir(join(h.home, '.claude'))).toEqual(['pipeline-projects.json'])
   })
 
   it('404 未注册；400 缺 root query；401 无 token', async () => {

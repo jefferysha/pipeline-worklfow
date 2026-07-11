@@ -571,7 +571,7 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
     if (path === '/api/projects') {
       const body = await readJsonBody(req)
       const rawRoot = typeof body === 'object' && body !== null ? (body as Record<string, unknown>).root : undefined
-      const result = addProjectToRegistry(paths.registryPath, rawRoot)
+      const result = await addProjectToRegistry(paths.registryPath, rawRoot)
       return result.ok
         ? sendJson(res, 200, { ok: true, root: result.root })
         : sendJson(res, result.code, { ok: false, error: result.error })
@@ -944,7 +944,7 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
     // ── G18：DELETE /api/projects?root= —— 注销项目（注册的对称操作）──
     if (path === '/api/projects') {
       const root = new URL(req.url ?? '/', 'http://localhost').searchParams.get('root')
-      const result = removeProjectFromRegistry(paths.registryPath, root)
+      const result = await removeProjectFromRegistry(paths.registryPath, root)
       return result.ok
         ? sendJson(res, 200, { ok: true })
         : sendJson(res, result.code, { ok: false, error: result.error })
