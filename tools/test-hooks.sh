@@ -11,6 +11,9 @@
 #   7. session-start.sh：正常输出引导 exit 0；verify 失败时 stderr 警告但不阻断（fail-open）
 #  11. 阶段×hook 开关矩阵（v5 T5 / 决议#2，.pipeline/hooks.json）：配置关掉的 hook exit 0
 #      零副作用；缺失/损坏 fail-open 到启用；gate/interactive-skill-gate 强制常开忽略配置
+#  12. v6 T5：session-start.sh AFK 首跑清单提示——.pipeline/automation.json 存在或活跃 change
+#      命中 automation 字段（非 off）时追加静态提示行；archived 排除；阶段×hook 开关优先；
+#      纯静态提示（不做真探测、不指向 pipeline doctor，见 v6 计划附录矛盾登记 1）
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -771,6 +774,70 @@ rc=$?
 assert_exit "开关: interactive-skill-gate 安全门强制常开 → exit 0" 0 "$rc"
 assert_contains "开关: 安全门配置禁用无效，姿态照注入" "$out" "AskUserQuestion"
 [ -f "$proj/.pipeline-pending-interaction" ] && ok "开关: 安全门配置禁用无效，硬门照落" || bad "开关: 安全门配置禁用无效，硬门照落" "marker 未落"
+
+# ═══════════════ 12. v6 T5：AFK 首跑清单提示（session-start.sh，.pipeline/automation.json 或活跃 change 命中 automation 字段） ═══════════════
+# 一句话目标：检测到 .pipeline/automation.json 存在，或活跃（非 archived）change 命中 automation
+# 字段（值非 off/空）时，追加一行静态文案「AFK 就绪状态见 dashboard（就绪三灯）」——纯静态提示，
+# 不做任何 docker/凭证真探测，也不指向 pipeline doctor（本轮不扩展该命令，见 v6 计划附录矛盾登记 1）。
+AFK_HINT="AFK 就绪状态见 dashboard"
+
+# ── 12a. .pipeline/automation.json 存在（即便无任何 change）→ 提示行出现，且不指向 doctor ──
+proj="$TMP/afk-hint-json"; mkdir -p "$proj/openspec" "$proj/.pipeline"
+printf '{}\n' > "$proj/.pipeline/automation.json"
+out="$(printf '{"cwd":"%s"}' "$proj" | bash "$SS" 2>/dev/null)"
+rc=$?
+assert_exit "v6T5: automation.json 存在 → exit 0" 0 "$rc"
+assert_contains "v6T5: automation.json 存在 → 提示含「${AFK_HINT}」" "$out" "$AFK_HINT"
+assert_contains "v6T5: 提示含「就绪三灯」措辞" "$out" "就绪三灯"
+assert_not_contains "v6T5: 提示不指向 pipeline doctor（附录矛盾登记 1 取舍）" "$out" "doctor"
+
+# ── 12b. 完全非 pipeline 目录（无 openspec）→ 新逻辑不报错、不追加提示 ──
+proj="$TMP/afk-hint-nonpipeline"; mkdir -p "$proj"
+out="$(printf '{"cwd":"%s"}' "$proj" | bash "$SS" 2>/dev/null)"
+rc=$?
+assert_exit "v6T5: 非 pipeline 目录 → exit 0（新逻辑不报错）" 0 "$rc"
+assert_not_contains "v6T5: 非 pipeline 目录 → 不追加提示" "$out" "$AFK_HINT"
+
+# ── 12c. 无 automation.json + 无活跃 change（纯 bare pipeline 项目）→ 不追加，且既有引导零回归 ──
+proj="$TMP/afk-hint-bare"; mkdir -p "$proj/openspec"
+out="$(printf '{"cwd":"%s"}' "$proj" | bash "$SS" 2>/dev/null)"
+assert_not_contains "v6T5: 无 automation.json 且无活跃 change → 不追加提示" "$out" "$AFK_HINT"
+assert_contains "v6T5: 无回归——普通项目引导照常输出" "$out" "pipeline-lite"
+
+# ── 12d. 无 automation.json + 活跃 change automation=off（默认值）→ 不追加 ──
+proj="$TMP/afk-hint-off"; mkdir -p "$proj/openspec/changes/demo-off"
+printf 'track: backend\nphase: build\narchived: \nautomation: off\n' > "$proj/openspec/changes/demo-off/.pipeline.yaml"
+out="$(printf '{"cwd":"%s"}' "$proj" | bash "$SS" 2>/dev/null)"
+assert_not_contains "v6T5: 活跃 change automation=off → 不追加提示" "$out" "$AFK_HINT"
+
+# ── 12e. 无 automation.json + 活跃 change 命中 automation 字段（queued，非 off）→ 追加提示（OR 条件生效）──
+proj="$TMP/afk-hint-queued"; mkdir -p "$proj/openspec/changes/demo-queued"
+printf 'track: backend\nphase: build\narchived: \nautomation: queued\n' > "$proj/openspec/changes/demo-queued/.pipeline.yaml"
+out="$(printf '{"cwd":"%s"}' "$proj" | bash "$SS" 2>/dev/null)"
+assert_contains "v6T5: 活跃 change automation=queued（命中）→ 追加提示" "$out" "$AFK_HINT"
+
+# ── 12f. 唯一命中 automation 字段的 change 已 archived → 不追加（archived 排除，呼应决议#5 一致口径）──
+proj="$TMP/afk-hint-archived"; mkdir -p "$proj/openspec/changes/demo-archived"
+printf 'track: backend\nphase: archive\narchived: true\nautomation: running\n' > "$proj/openspec/changes/demo-archived/.pipeline.yaml"
+out="$(printf '{"cwd":"%s"}' "$proj" | bash "$SS" 2>/dev/null)"
+assert_not_contains "v6T5: 唯一命中 change 已 archived → 不追加提示" "$out" "$AFK_HINT"
+
+# ── 12g. 阶段×hook 开关矩阵优先：session-start 当前阶段被禁用时，即便 automation.json 存在也零输出 ──
+proj="$TMP/afk-hint-disabled"; mkdir -p "$proj/openspec/changes/demo-disabled" "$proj/.pipeline"
+printf 'track: backend\nphase: build\narchived: \n' > "$proj/openspec/changes/demo-disabled/.pipeline.yaml"
+printf '{}\n' > "$proj/.pipeline/automation.json"
+write_hooks_cfg "$proj" "session-start.build"
+out="$(printf '{"cwd":"%s"}' "$proj" | bash "$SS" 2>/dev/null)"
+rc=$?
+assert_exit "v6T5: session-start 当前阶段禁用 + automation.json 存在 → 仍 exit 0" 0 "$rc"
+assert_empty "v6T5: 禁用态零输出，AFK 提示也不例外" "$out"
+
+# ── 12h. 红线（TDD 要求③：无新增子进程 spawn，保持纯 bash grep）：新逻辑不引入 find/xargs/jq
+#         （node/python 已由 section 3 对 $SS 覆盖，此处只补 section 3 未测的三个工具名）──
+for tool in find xargs jq; do
+  n="$(grep -c "\\b${tool}\\b" "$SS" 2>/dev/null || true)"
+  [ "$n" = "0" ] && ok "v6T5 红线: session-start.sh 不引入 ${tool}" || bad "v6T5 红线: session-start.sh 不引入 ${tool}" "实得 ${n} 处"
+done
 
 # ───────────────────────── 汇总 ─────────────────────────
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
