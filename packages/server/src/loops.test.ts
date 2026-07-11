@@ -81,6 +81,47 @@ describe('buildLoopsSnapshot', () => {
   })
 })
 
+/**
+ * T7（loop 卡审阅面重构）：关系条数据面——matched_changes 镜像 cli
+ * `packages/cli/src/commands/loops.ts::REAL_LOOPS_FS.listChanges` 的过滤逻辑（不跨包 import，
+ * 对齐 server 零运行时依赖纪律，见 afk.ts:15-19 头注释同款先例）；phases 直接透传登记表原值。
+ */
+describe('buildLoopsSnapshot —— matched_changes / phases（T7 关系条数据面）', () => {
+  it('matched_changes 精确等于 openspec/changes 下 startsWith(change_prefix) 且排除 archive 的目录名，按名排序', async () => {
+    const root = await makeProjectWithLoop()
+    await mkdir(join(root, 'openspec', 'changes', 'build-loop-002'), { recursive: true })
+    await mkdir(join(root, 'openspec', 'changes', 'build-loop-001'), { recursive: true })
+    await mkdir(join(root, 'openspec', 'changes', 'other-change'), { recursive: true }) // 不匹配前缀
+    await mkdir(join(root, 'openspec', 'changes', 'archive'), { recursive: true }) // 归档目录本身恒排除
+
+    const snap = await buildLoopsSnapshot({ registry: () => [root], now: () => new Date('2026-07-11T00:00:00Z') })
+    expect(snap.rows[0]!.matched_changes).toEqual(['build-loop-001', 'build-loop-002'])
+  })
+
+  it('change_prefix 为 null 时 matched_changes 恒为空数组（不做「空前缀匹配一切」的危险默认）', async () => {
+    const root = await makeProjectWithLoop()
+    const upd = await applyLoopsUpdate(root, 'build-loop', { change_prefix: null })
+    expect(upd).toEqual({ ok: true })
+    await mkdir(join(root, 'openspec', 'changes', 'build-loop-001'), { recursive: true })
+
+    const snap = await buildLoopsSnapshot({ registry: () => [root], now: () => new Date('2026-07-11T00:00:00Z') })
+    expect(snap.rows[0]!.change_prefix).toBeNull()
+    expect(snap.rows[0]!.matched_changes).toEqual([])
+  })
+
+  it('openspec/changes 目录不存在 → matched_changes 空数组，不抛错', async () => {
+    const root = await makeProjectWithLoop()
+    const snap = await buildLoopsSnapshot({ registry: () => [root], now: () => new Date('2026-07-11T00:00:00Z') })
+    expect(snap.rows[0]!.matched_changes).toEqual([])
+  })
+
+  it('phases 透传登记表原值（与 yaml 一致，纯声明不做 workflow join 校验）', async () => {
+    const root = await makeProjectWithLoop()
+    const snap = await buildLoopsSnapshot({ registry: () => [root], now: () => new Date('2026-07-11T00:00:00Z') })
+    expect(snap.rows[0]!.phases).toEqual(['build', 'verify'])
+  })
+})
+
 describe('applyLoopsUpdate —— loops.yaml 字段写回（v5 T3，POST /api/loops/update 的写回逻辑）', () => {
   it('patch 标量 + budget + allowlist/denylist → 真改盘，loadRegistry 读回一致', async () => {
     const root = await makeProjectWithLoop()

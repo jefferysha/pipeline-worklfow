@@ -4,7 +4,7 @@
  * dashboard 用的扁平行列表。LoopEntry.id 只在单项目内唯一，聚合后用 root 字段消歧
  * （不假设跨项目全局唯一，不做 id 改写）。
  */
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import {
@@ -45,6 +45,12 @@ export interface LoopRow {
   budget_decl: LoopBudget
   readiness: ReadinessScore
   budget: BudgetStatus
+  // ── T7（loop 卡审阅面重构）：三方关系条数据面 ──
+  /** change_prefix 实际匹配到的 openspec/changes 目录名（已保存真值，不随草稿实时重算）；
+   *  change_prefix 为 null 时恒为 []（不做「空前缀匹配一切」的危险默认）。 */
+  matched_changes: string[]
+  /** 登记表原值透传——全仓无运行时消费者，纯声明标签（decisions.md 关系条不得暗示它会做 workflow join 校验）。 */
+  phases: string[]
 }
 
 export interface LoopsSnapshot {
@@ -62,6 +68,24 @@ function readRunLogText(root: string): string | null {
     return readFileSync(join(root, '.superpowers', 'loops', 'progress.md'), 'utf8')
   } catch {
     return null
+  }
+}
+
+/**
+ * T7：change_prefix 实际匹配的 openspec/changes 目录名——**镜像**
+ * `packages/cli/src/commands/loops.ts::REAL_LOOPS_FS.listChanges` 的过滤逻辑（目录 + 排除
+ * archive + startsWith 前缀 + 按名排序），不跨包 import cli，对齐 server 零运行时依赖纪律
+ * （afk.ts:15-19 头注释同款先例：server 可以直接读 fs，但不能依赖 cli/automation 包）。
+ * changePrefix 为 null 时调用方短路，不调用本函数（见下方 buildLoopsSnapshot）。
+ */
+function listMatchedChanges(root: string, changePrefix: string): string[] {
+  try {
+    return readdirSync(join(root, 'openspec', 'changes'), { withFileTypes: true })
+      .filter((e) => e.isDirectory() && e.name !== 'archive' && e.name.startsWith(changePrefix))
+      .map((e) => e.name)
+      .sort()
+  } catch {
+    return []
   }
 }
 
@@ -145,6 +169,8 @@ export async function buildLoopsSnapshot(deps: LoopsSnapshotDeps): Promise<Loops
         budget_decl: loop.budget,
         readiness: computeReadiness(loop),
         budget: computeBudgetStatus(loop, runLogText, now),
+        matched_changes: loop.change_prefix === null ? [] : listMatchedChanges(root, loop.change_prefix),
+        phases: loop.phases,
       })
     }
   }
