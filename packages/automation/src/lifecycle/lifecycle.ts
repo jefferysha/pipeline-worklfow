@@ -182,6 +182,40 @@ const isPreserveError = (err: unknown): boolean =>
 const finalizeRunOutcome = (o: Omit<RunOutcome, 'noop'>): RunOutcome => ({ ...o, noop: !o.buildSha })
 
 /**
+ * [AGENT_EXIT] 标记行格式（观察项③/决议 #14②）：沙箱脚本（tools/sandcastle/pipeline-afk-run.sh）
+ * codex 分支在 agent 非零退出（认证失效 / codex 自身报错）时向 stdout 回放
+ * `[AGENT_EXIT] codex <exit>`——此前该失败只写进 worktree 内 agent 日志，脚本继续确定性兜底
+ * commit 且 0 退出，host 侧完全不可见。行尾容忍空白/\r（同 TRANSITION_LINE_RE 口径）。
+ */
+const AGENT_EXIT_LINE_RE = /^\[AGENT_EXIT\] (\S+) (\d+)\s*$/
+
+/**
+ * agent 非零退出观察器（装配风格对齐 createPhaseWatch：独立 create 函数 + 注入 write 面；无需
+ * settle/限流链且属 lifecycle 编排私有检出点，直接内联本文件而非新起模块）。检出标记行且
+ * exit≠0 → 写一条**固定模板**消息（模板 + exit 码，不含任何日志正文/凭证值——凭证红线；长度
+ * 远小于 scheduler::sanitize 的 200 字符截断口径）。幂等只写一次（防日志重复回放行）；
+ * best-effort（.catch 吞错，同 setStateField 既有风格），写失败绝不拖垮 run。
+ *
+ * run 成败判定不变（脚本兜底 commit + 0 退出原样）：scheduler 成功路 writeBackSuccess **不清**
+ * automation_last_error → 成功 settle 后该消息仍可见——正是「run 仍成功、错误可见」的目标语义。
+ */
+const createAgentExitWatch = (write: (value: string) => Promise<void>): { onLine(line: string): void } => {
+  let wrote = false
+  return {
+    onLine(line) {
+      if (wrote) return
+      const m = AGENT_EXIT_LINE_RE.exec(line)
+      if (!m || Number(m[2]) === 0) return
+      wrote = true
+      const runner = m[1]!
+      write(`${runner} agent 非零退出（exit ${m[2]!}）：可能凭证失效或 ${runner} 自身报错，详见 agent 日志`).catch(() => {
+        // best-effort：字段写失败吞掉（同 lifecycle 其它 setStateField 的 .catch(() => {}) 风格）
+      })
+    },
+  }
+}
+
+/**
  * 跑一个 change 端到端（沙箱生命周期编排）。返回 RunOutcome 或抛 tagged error（scheduler 据 tag 分类）。
  */
 export const runChangeInSandbox = async (ports: LifecyclePorts, cfg: RunChangeConfig, signal: AbortSignal): Promise<RunOutcome> => {
@@ -198,6 +232,11 @@ export const runChangeInSandbox = async (ports: LifecyclePorts, cfg: RunChangeCo
   const phaseWatch = createPhaseWatch(cfg.name, (value) =>
     ports.setStateField(cfg.name, 'automation_current_phase', value),
   )
+  // 观察项③：[AGENT_EXIT] 标记行 → automation_last_error 同步落（幂等一次、best-effort，见
+  // createAgentExitWatch）。不参与 settle——错误消息本就要在 run 结算后留存可见。
+  const agentExitWatch = createAgentExitWatch((value) =>
+    ports.setStateField(cfg.name, 'automation_last_error', value),
+  )
   try {
     // 沙箱 env 注入 PIPELINE_AFK=1（headless 放行三门）+ 调用方 extraEnv（token/代理地址等）；
     // PIPELINE_AFK_ENV 放最后展开，extraEnv 若尝试同名覆盖也不生效（硬护栏优先）。
@@ -210,14 +249,15 @@ export const runChangeInSandbox = async (ports: LifecyclePorts, cfg: RunChangeCo
     await ports.setStateField(cfg.name, 'automation_sandbox', sandbox.containerName)
     await ports.setStateField(cfg.name, 'automation_worktree', worktreePath)
 
-    // exec 包装层 tee 日志行给 phaseWatch（[TRANSITION] 检出点）——runWork 自己的 onLine
-    // （race idle 检测）原样续传，互不挤占。
+    // exec 包装层 tee 日志行给 phaseWatch（[TRANSITION] 检出点）+ agentExitWatch（[AGENT_EXIT]
+    // 检出点，观察项③）——runWork 自己的 onLine（race idle 检测）原样续传，互不挤占。
     const report = await ports.runWork(
       (cmd, options) =>
         sandbox.exec(cmd, {
           ...options,
           onLine: (line) => {
             phaseWatch.onLine(line)
+            agentExitWatch.onLine(line)
             options?.onLine?.(line)
           },
         }),

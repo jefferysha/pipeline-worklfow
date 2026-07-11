@@ -394,6 +394,108 @@ describe('runChangeInSandbox · denylist 结算检查（决议 #12）', () => {
   })
 })
 
+/**
+ * 观察项③（决议 #14②）：codex agent 非零退出（认证失效 / codex 自身报错）可见度——沙箱脚本
+ * codex 分支把 agent_exit≠0 以 `[AGENT_EXIT] codex <exit>` 标记行回放到流面，lifecycle 的 exec
+ * tee 处检出 → 同步落 automation_last_error（固定模板 + exit 码，不含日志正文/凭证值）。run 的
+ * 成败判定不变（脚本兜底 commit + 0 退出原样）；scheduler 成功路 writeBackSuccess 不清
+ * automation_last_error → 成功 settle 后该消息仍可见，正是「run 仍成功、错误可见」的目标语义。
+ */
+describe('runChangeInSandbox · codex agent 非零退出可见度（automation_last_error，观察项③）', () => {
+  /** fake 沙箱 exec 逐行吐 script（同上 streamingOver 口径）；runWork 走 codex 命令形态。 */
+  const codexStreamingOver = (script: string[]): Partial<LifecyclePorts> => ({
+    async createSandbox(opts) {
+      return {
+        env: opts.env,
+        containerName: FAKE_CONTAINER_NAME,
+        async exec(_cmd, options) {
+          for (const line of script) options?.onLine?.(line)
+          return { stdout: '', stderr: '', exitCode: 0 }
+        },
+        async close() {},
+      }
+    },
+    async runWork(exec) {
+      await exec('PIPELINE_AFK=1 PIPELINE_RUNNER=codex pipeline-afk-run x', {})
+      return { verify_result: 'pass', build_sha: SHA, phase_event: 'verify-pass' }
+    },
+  })
+
+  it('流面检出 [AGENT_EXIT] codex 96 → 落 automation_last_error（含 exit 码），run 仍成功结算（可见度不改判）', async () => {
+    const { ports, state, log } = makePorts(codexStreamingOver(['agent noise', '[AGENT_EXIT] codex 96']))
+    const out = await runChangeInSandbox(
+      ports,
+      { hostRepoDir: '/repo', name: 'x', base: 'main', autoMerge: false, runner: 'codex' },
+      new AbortController().signal,
+    )
+    expect(out.verifyResult).toBe('pass') // 成败判定不变
+    expect(out.noop).toBe(false)
+    expect(state().automation_last_error).toContain('codex')
+    expect(state().automation_last_error).toContain('exit 96')
+    expect(log.some((l) => l.startsWith('wt.remove'))).toBe(true) // 正常 teardown 不受影响
+  })
+
+  it('重复标记行只写一次（幂等，防日志重复回放行）', async () => {
+    const { ports, log } = makePorts(
+      codexStreamingOver(['[AGENT_EXIT] codex 96', '[AGENT_EXIT] codex 96', '[AGENT_EXIT] codex 96']),
+    )
+    await runChangeInSandbox(
+      ports,
+      { hostRepoDir: '/repo', name: 'x', base: 'main', autoMerge: false, runner: 'codex' },
+      new AbortController().signal,
+    )
+    expect(log.filter((l) => l === 'setStateField:automation_last_error')).toHaveLength(1)
+  })
+
+  it('exit=0 标记行不写（脚本层本不输出，宿主侧同样防御）；无标记行的 run 零写', async () => {
+    const a = makePorts(codexStreamingOver(['[AGENT_EXIT] codex 0']))
+    await runChangeInSandbox(
+      a.ports,
+      { hostRepoDir: '/repo', name: 'x', base: 'main', autoMerge: false, runner: 'codex' },
+      new AbortController().signal,
+    )
+    expect(a.log).not.toContain('setStateField:automation_last_error')
+
+    const b = makePorts(codexStreamingOver(['just noise', '[TRANSITION] x: build -> verify']))
+    await runChangeInSandbox(
+      b.ports,
+      { hostRepoDir: '/repo', name: 'x', base: 'main', autoMerge: false, runner: 'codex' },
+      new AbortController().signal,
+    )
+    expect(b.log).not.toContain('setStateField:automation_last_error')
+  })
+
+  it('消息为固定模板：不含日志正文/凭证值（凭证红线），≤200 字符（scheduler sanitize 截断口径）', async () => {
+    const { ports, state } = makePorts(
+      codexStreamingOver(['OPENAI_API_KEY=sk-super-secret 认证失败详情', '[AGENT_EXIT] codex 96']),
+    )
+    await runChangeInSandbox(
+      ports,
+      { hostRepoDir: '/repo', name: 'x', base: 'main', autoMerge: false, runner: 'codex' },
+      new AbortController().signal,
+    )
+    const msg = state().automation_last_error ?? ''
+    expect(msg).not.toBe('')
+    expect(msg).not.toContain('sk-super-secret') // 任何日志正文/凭证不进状态字段
+    expect(msg.length).toBeLessThanOrEqual(200)
+  })
+
+  it('写回失败吞掉（best-effort，同 setStateField 既有 .catch 风格），不拖垮 run', async () => {
+    const { ports } = makePorts({
+      ...codexStreamingOver(['[AGENT_EXIT] codex 96']),
+      async setStateField(_name, field) {
+        if (field === 'automation_last_error') throw new Error('disk boom')
+      },
+    })
+    const out = await runChangeInSandbox(
+      ports,
+      { hostRepoDir: '/repo', name: 'x', base: 'main', autoMerge: false, runner: 'codex' },
+      new AbortController().signal,
+    )
+    expect(out.verifyResult).toBe('pass')
+  })
+})
+
 /** v5 T20：cfg.runner 真透传到 runWork（ports.ts 真实现据此在命令构造点分派 codex）。 */
 describe('runChangeInSandbox · cfg.runner 透传（v5 T20 双 runner）', () => {
   it('cfg.runner=codex → runWork 第 4 参收到 codex', async () => {
