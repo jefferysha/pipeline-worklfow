@@ -8,6 +8,9 @@ export { withLock, LOCK_DIR_NAME, STALE_LOCK_MS } from './lock.js'
 export { createHistoryWriter, HISTORY_FILE } from './history.js'
 // 机器级项目注册表（v5 T2 决策 D）——init 自动登记 + server 项目发现同源
 export { projectRegistryPath, readProjectRegistry, registerProjectRoot, PROJECT_REGISTRY_FILE } from './projectRegistry.js'
+// 机器级凭证存储（v6 T1，proposal C 节）——CLAUDE_CODE_OAUTH_TOKEN/OPENAI_API_KEY 白名单，0600+原子写
+export { secretsPath, readSecrets, writeSecretKey, deleteSecretKey, SECRET_KEYS, SECRETS_FILE_NAME } from './secrets.js'
+export type { SecretKey, SecretsStore } from './secrets.js'
 export { parseLegacyHistory, stripLegacyHistory } from './legacy.js'
 // task lifecycle（BACKLOG #15）——依赖图 / children / cascade / canonical
 export {
