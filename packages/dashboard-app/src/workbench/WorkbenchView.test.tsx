@@ -44,21 +44,6 @@ function renderView(props: Partial<Parameters<typeof WorkbenchView>[0]> = {}) {
   )
 }
 
-/** 可控 matchMedia 桩：预演测试驱动 gsap.matchMedia 的 reduced-motion 分支（jsdom 原生恒 false）。 */
-function stubMatchMedia(reduceMatches: boolean): void {
-  vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
-    matches: query.includes('prefers-reduced-motion: reduce')
-      ? reduceMatches
-      : query.includes('no-preference') && !reduceMatches,
-    media: query,
-    onchange: null,
-    addListener: vi.fn(),
-    removeListener: vi.fn(),
-    addEventListener: vi.fn(),
-    removeEventListener: vi.fn(),
-    dispatchEvent: vi.fn(() => false),
-  })))
-}
 
 // T16 fixture：/api/loops/snapshot 单 loop 行（server LoopRow 契约形状；缺省空——多数用例只关心
 // workflow 编辑面，摘要「自动运行」行回落「未配置」）。
@@ -208,56 +193,12 @@ describe('WorkbenchView 右栏摘要（验收③前半）', () => {
   })
 })
 
-describe('WorkbenchView 流程预览（验收③后半）', () => {
-  it('预览节点序 = steps 序，gate 节点带红点', async () => {
-    renderView()
-    await screen.findByTestId('wb-step-draft')
-    const track = screen.getByTestId('wb-pv-track')
-    const nodes = Array.from(track.querySelectorAll('.wb-pv-node'))
-    expect(nodes.map((n) => n.textContent)).toEqual(['起草', '人工复核', '发布'])
-    expect(screen.getByTestId('wb-pv-gdot-review')).toBeInTheDocument()
-    expect(screen.queryByTestId('wb-pv-gdot-draft')).toBeNull()
-    expect(screen.queryByTestId('wb-pv-gdot-ship')).toBeNull()
-  })
-})
-
-describe('WorkbenchView 预演（验收④）', () => {
-  it('reduced-motion：点「预演」直达终态——节点全亮（末节点绿）、连线全亮、阶段卡同步点亮', async () => {
-    stubMatchMedia(true)
-    renderView()
-    await screen.findByTestId('wb-step-draft')
-    fireEvent.click(screen.getByTestId('wb-play'))
-
-    // 钉住实现路径：终态必须来自 gsap.matchMedia 的 reduce 分支（真消费了媒体查询），
-    // 而不是「环境不支持 matchMedia」的兜底分支——否则 reduced-motion 契约是假绿。
-    const mmCalls = (window.matchMedia as ReturnType<typeof vi.fn>).mock.calls.map((c) => String(c[0]))
-    expect(mmCalls.some((q) => q.includes('prefers-reduced-motion: reduce'))).toBe(true)
-
-    expect(screen.getByTestId('wb-pv-node-draft')).toHaveClass('lit')
-    expect(screen.getByTestId('wb-pv-node-review')).toHaveClass('lit')
-    expect(screen.getByTestId('wb-pv-node-ship')).toHaveClass('lit-g')
-    expect(screen.getByTestId('wb-pv-line-0')).toHaveClass('lit')
-    expect(screen.getByTestId('wb-pv-line-1')).toHaveClass('lit')
-    expect(screen.getByTestId('wb-step-draft')).toHaveClass('wb-step--live')
-    expect(screen.getByTestId('wb-step-ship')).toHaveClass('wb-step--live-g')
-    // 直达终态：不停留在播放中，按钮回到「预演」文案
-    expect(screen.getByTestId('wb-play')).toHaveTextContent('预演流程')
-  })
-
-  it('切换 workflow 复位预演点亮态', async () => {
-    stubMatchMedia(true)
-    renderView()
-    await screen.findByTestId('wb-step-draft')
-    fireEvent.click(screen.getByTestId('wb-play'))
-    expect(screen.getByTestId('wb-pv-node-draft')).toHaveClass('lit')
-
-    fireEvent.click(screen.getByTestId('wb-wf-btn'))
-    fireEvent.click(await screen.findByTestId('wb-wf-item-default'))
-    await screen.findByTestId('wb-step-open')
-    expect(screen.getByTestId('wb-pv-node-open')).not.toHaveClass('lit')
-  })
-})
-
+/**
+ * v6 T13 断言迁移登记：「流程预览」「预演」两组用例随 GSAP 假预演整体退役——
+ * reduced-motion 直达终态类断言无迁移目标(「最近流转」为静态真实事件列表,无循环动画);
+ * gate 红点语义由流程带门徽章(v6 T11 popover 用例)接管;节点序断言由下方「最近流转」
+ * describe 的真实事件序断言接管。
+ */
 // ── T13：阶段编辑区（StepEditor 挂载 + 保存接线 + 脏守卫 + default 只读）──
 
 /** 取最近一次 POST 保存调用（url + 解析后的 body）；无 POST → null。 */
@@ -310,7 +251,8 @@ describe('WorkbenchView T13 编辑 → 保存（验收①）', () => {
     await screen.findByTestId('wb-step-draft')
     fireEvent.change(screen.getByLabelText('阶段名称'), { target: { value: '初稿' } })
     expect(within(screen.getByTestId('wb-step-draft')).getByText('初稿')).toBeInTheDocument()
-    expect(screen.getByTestId('wb-pv-node-draft')).toHaveTextContent('初稿')
+    // v6 T13:右栏流程预览退役——联动断言收敛到流程带段(同一份 def 状态的另一消费方)。
+    expect(screen.getByTestId('wb-step-draft')).toHaveTextContent('初稿')
     // 开复核门 → 摘要「复核门」计数 1→2 联动
     fireEvent.click(screen.getByRole('switch', { name: '复核门' }))
     expect(screen.getByTestId('wb-sum-gates')).toHaveTextContent('2')
@@ -818,5 +760,60 @@ describe('WorkbenchView v6 T12：Hook 时序挪右栏 + 安全门/矩阵卡', ()
     fireEvent.click(btn)
     await waitFor(() => expect(screen.getByTestId('wb-wf-btn').textContent).toContain('default'))
     expect(screen.getByTestId('wb-mx-open')).toBeDisabled()
+  })
+})
+
+/**
+ * v6 T13：「最近流转」——真实 history 事件回放(假预演退役后的右栏接棒)。数据面:当前
+ * (root, workflow) 分组内非 archived change 逐个 GET /api/change/:name/history,合并降序取
+ * 最近 N 条;单 change 无记录计入 legacy 标注(决议#10);archived 不入列(决议#5);无轮询(G22)。
+ */
+describe('WorkbenchView v6 T13：最近流转(真实 history 回放)', () => {
+  const HIST: Record<string, Array<Record<string, string>>> = {
+    c1: [
+      { ts: '2026-07-11T01:00:00Z', kind: 'transition', from: 'draft', to: 'review' },
+      { ts: '2026-07-11T03:00:00Z', kind: 'set', field: 'verify_result' },
+    ],
+    c2: [{ ts: '2026-07-11T02:00:00Z', kind: 'transition', from: 'review', to: 'ship' }],
+    legacy1: [],
+  }
+  beforeEach(() => {
+    const prev = global.fetch
+    global.fetch = vi.fn(async (url: string, opts?: RequestInit) => {
+      const m = /^\/api\/change\/([^/]+)\/history\?root=/.exec(String(url))
+      if (m) {
+        const name = decodeURIComponent(m[1]!)
+        if (!(name in HIST)) return new Response(JSON.stringify({ ok: false, error: 'no such change' }), { status: 404 })
+        return new Response(JSON.stringify({ ok: true, entries: HIST[name] }), { status: 200 })
+      }
+      return (prev as unknown as typeof fetch)(url as never, opts)
+    }) as unknown as typeof fetch
+  })
+
+  const snapWith = (changes: ReturnType<typeof makeChange>[]) => makeSnapshot([makeProject(ROOT, changes)])
+
+  it('多 change 事件合并按 ts 降序;archived 不入列;无记录 change 计入 legacy 标注', async () => {
+    renderView({
+      snapshot: snapWith([
+        makeChange('c1', 'review', { fields: { workflow: 'release-train' } }),
+        makeChange('c2', 'ship', { fields: { workflow: 'release-train' } }),
+        makeChange('legacy1', 'draft', { fields: { workflow: 'release-train' } }),
+        makeChange('c-arch', 'ship', { archived: 'true', fields: { workflow: 'release-train' } }),
+        makeChange('c-other', 'draft', { fields: { workflow: 'default' } }),
+      ]),
+    })
+    const list = await screen.findByTestId('wb-recent-list')
+    const items = Array.from(list.querySelectorAll('.wb-rt-item')).map((li) => li.textContent ?? '')
+    expect(items.length).toBe(3)
+    expect(items[0]).toContain('verify_result') // 03:00 最新
+    expect(items[1]).toContain('review → ship') // 02:00
+    expect(items[2]).toContain('draft → review') // 01:00
+    expect(items.some((x) => x.includes('c-arch'))).toBe(false)
+    expect(screen.getByTestId('wb-recent-legacy').textContent).toContain('1')
+  })
+
+  it('分组内无 change → 空态文案,不发请求也不报错', async () => {
+    renderView({ snapshot: snapWith([makeChange('c-other', 'draft', { fields: { workflow: 'default' } })]) })
+    expect(await screen.findByTestId('wb-recent-empty')).toBeInTheDocument()
   })
 })

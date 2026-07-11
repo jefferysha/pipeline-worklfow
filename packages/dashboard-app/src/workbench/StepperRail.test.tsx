@@ -176,36 +176,8 @@ describe('StepperRail 门徽章 popover（v6 T11，静态 hook 元数据）', ()
   })
 })
 
-describe('StepperRail 预演点亮态（旧 T12/v5 既有行为回归）', () => {
-  // 既有语义（逐字保留自重写前实现，本任务不改预演本身，T13 才退役）：--live-g 只标记「rail
-  // 里绝对意义上的最后一张卡」，且必须同时落在 litCount 覆盖范围内——不是「已点亮集合里最后
-  // 一张」。litCount 未推进到最后一张（本例 2 < 3）时，最后一张两个点亮 class 都不带。
-  it('litCount 未及末卡：前 litCount 张卡 --live，末卡（第三张）不带任何点亮 class', () => {
-    renderRail({ litCount: 2 })
-    expect(screen.getByTestId('wb-step-draft')).toHaveClass('wb-step--live')
-    expect(screen.getByTestId('wb-step-review')).toHaveClass('wb-step--live')
-    expect(screen.getByTestId('wb-step-ship')).not.toHaveClass('wb-step--live')
-    expect(screen.getByTestId('wb-step-ship')).not.toHaveClass('wb-step--live-g')
-  })
-
-  it('litCount 覆盖全部卡（含末卡）：前面各卡 --live，末卡 --live-g', () => {
-    renderRail({ litCount: STEPS.length })
-    expect(screen.getByTestId('wb-step-draft')).toHaveClass('wb-step--live')
-    expect(screen.getByTestId('wb-step-review')).toHaveClass('wb-step--live')
-    expect(screen.getByTestId('wb-step-ship')).toHaveClass('wb-step--live-g')
-    expect(screen.getByTestId('wb-step-ship')).not.toHaveClass('wb-step--live')
-  })
-
-  it('litCount 缺省为 0：无节点带点亮态', () => {
-    renderRail()
-    for (const s of STEPS) {
-      const seg = screen.getByTestId(`wb-step-${s.id}`)
-      expect(seg).not.toHaveClass('wb-step--live')
-      expect(seg).not.toHaveClass('wb-step--live-g')
-    }
-  })
-})
-
+// v6 T13 断言迁移登记：预演点亮态(litCount/--live)随 GSAP 假预演一并退役——载体是
+// WorkbenchView 的预演控制,新「最近流转」为静态真实事件列表,无点亮语义可迁移。
 describe('StepperRail 「+ 添加阶段」（验收反馈#4 已落地交互，本任务回归）', () => {
   it('传入 onAddStage：按钮可点，点击调用回调', () => {
     const onAddStage = vi.fn()

@@ -60,8 +60,6 @@ export interface StepperRailProps {
   steps: StepperStep[]
   selectedId: string | null
   onSelect: (id: string) => void
-  /** 预演点亮数（WorkbenchView 的 GSAP 预演驱动）：前 litCount 张卡加 --live，最后一张 --live-g。 */
-  litCount?: number
   /**
    * 添加阶段（验收反馈#4，补齐 T13 遗留缺口）。未接线（如 default 只读态）时按钮渲染
    * 禁用态占位——WorkbenchView 只在自定义 workflow 非只读态才传入真 handler。
@@ -83,7 +81,6 @@ export function StepperRail({
   steps,
   selectedId,
   onSelect,
-  litCount = 0,
   onAddStage,
   label,
   gateHooks = [],
@@ -109,13 +106,12 @@ export function StepperRail({
       <div className="wb-flow" aria-label={label} ref={railRef}>
         {steps.map((s, i) => {
           const on = s.id === selectedId
-          const live = i < litCount ? (i === steps.length - 1 ? ' wb-step--live-g' : ' wb-step--live') : ''
           const openPop = hoverGate === s.id || pinnedGate === s.id
           const gateLabel = s.gate === 'confirm' ? t('workbench.gate_badge_confirm') : t('workbench.gate_badge')
           return (
             <div
               key={s.id}
-              className={`wb-flow-seg${i === 0 ? ' wb-flow-seg--first' : ''}${i === steps.length - 1 ? ' wb-flow-seg--last' : ''}${on ? ' wb-flow-seg--on' : ''}${live}`}
+              className={`wb-flow-seg${i === 0 ? ' wb-flow-seg--first' : ''}${i === steps.length - 1 ? ' wb-flow-seg--last' : ''}${on ? ' wb-flow-seg--on' : ''}`}
               data-testid={`wb-step-${s.id}`}
               aria-current={on ? 'step' : undefined}
               // 选中态点击处理落在外层容器（不落在下面 .wb-flow-hit 按钮本身）：门徽章是这个

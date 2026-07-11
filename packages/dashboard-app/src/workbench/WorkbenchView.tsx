@@ -1,7 +1,7 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import gsap from 'gsap'
 import { useGSAP } from '@gsap/react'
-import { getToken } from '../api/client'
+import { getHistory, getToken, type ChangeHistoryEntry } from '../api/client'
 import { useT } from '../i18n'
 import { changeWorkflowName } from '../model/progressModel'
 import { DEFAULT_RULES, invalidateWorkflowRules, rulesKey, useWorkflowRulesMulti } from '../model/workflowModel'
@@ -217,13 +217,7 @@ export function WorkbenchView({ root, onToggleError, snapshot = null }: Workbenc
   // 名→slug 惯例）；Dialog 每次关闭都重置，见 closeAddStage。
   const [stageIdTouched, setStageIdTouched] = useState(false)
   const addStageNameRef = useRef<HTMLInputElement>(null)
-  // 预演点亮数：前 lit 个预览节点/阶段卡处于点亮态（最后一个绿）。
-  const [lit, setLit] = useState(0)
-  const [playing, setPlaying] = useState(false)
   const rootRef = useRef<HTMLElement>(null)
-  const trackRef = useRef<HTMLDivElement>(null)
-  const mmRef = useRef<gsap.MatchMedia | null>(null)
-  const tlRef = useRef<gsap.core.Timeline | null>(null)
   // T13 脏状态四件套之一（旧画布编辑器 Task 15 先例）：「最近一次加载/保存成功」的 def 快照
   // 存 ref 不进 state——快照只在 load/save 成功那一刻写入，本身不需要触发渲染；dirty 每次渲染
   // 从「当前 def vs 快照」重算（见下方声明处注释：故意不 useMemo，ref 变化对记忆化不可见）。
@@ -231,6 +225,45 @@ export function WorkbenchView({ root, onToggleError, snapshot = null }: Workbenc
   // T15：/api/hooks 读写状态托管在这里（不在 HookTimeline 内）——阶段卡 hooksCount 真数、
   // 摘要卡「钩子」行、时序线开关三个消费方吃同一份矩阵。per-root 配置，与 workflow 草稿无关。
   const hooksConfig = useHooksConfig(root, onToggleError)
+
+  // ── v6 T13：最近流转数据面——当前 (root, workflow) 分组内非 archived change 的 history
+  //    合并降序。无轮询(G22 纪律)：只随分组指纹(recentNames)变化拉取；单 change 读失败按
+  //    空记录收敛(best-effort，不挡卡片其余行)。
+  const [recent, setRecent] = useState<Array<ChangeHistoryEntry & { change: string }> | null>(null)
+  // 无记录 change 数——legacy「早期记录不可用」的如实标注(决议#10)。
+  const [recentSilent, setRecentSilent] = useState(0)
+  const recentNames = useMemo(() => {
+    const project = snapshot?.projects.find((p) => p.root === root)
+    if (!project?.ok || !wfName) return [] as string[]
+    return project.changes
+      .filter((c) => c.archived !== 'true' && changeWorkflowName(c) === wfName)
+      .map((c) => c.name)
+  }, [snapshot, root, wfName])
+  useEffect(() => {
+    let cancelled = false
+    if (recentNames.length === 0) {
+      setRecent([])
+      setRecentSilent(0)
+      return
+    }
+    setRecent(null)
+    void Promise.all(
+      recentNames.map((n) =>
+        getHistory(n, root)
+          .then((es) => ({ n, es }))
+          .catch(() => ({ n, es: [] as ChangeHistoryEntry[] })),
+      ),
+    ).then((all) => {
+      if (cancelled) return
+      const merged = all.flatMap(({ n, es }) => es.map((e) => ({ ...e, change: n })))
+      merged.sort((a, b) => (a.ts < b.ts ? 1 : a.ts > b.ts ? -1 : 0))
+      setRecent(merged.slice(0, 12))
+      setRecentSilent(all.filter((x) => x.es.length === 0).length)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [recentNames, root])
   // T16：/api/loops/snapshot 的读取托管在这里（useHooksConfig 的同一条「数据住共同祖先」
   // 纪律）——Loop 卡与右栏摘要「自动运行」行吃同一份 rows。
   const loops = useLoops(root)
@@ -421,73 +454,6 @@ export function WorkbenchView({ root, onToggleError, snapshot = null }: Workbenc
     setPendingSwitch(null)
   }
 
-  // ── 预演控制（GSAP）──
-  const stopRehearsal = useCallback((resetLit: boolean) => {
-    tlRef.current?.kill()
-    tlRef.current = null
-    mmRef.current?.revert() // revert 会顺带清掉 matchMedia context 里创建的补间残留（scale 等）
-    mmRef.current = null
-    setPlaying(false)
-    if (resetLit) setLit(0)
-  }, [])
-
-  // 切换 workflow / 卸载时必须 kill 预演 timeline 并复位点亮态（T11 同款「循环动画随视图收敛」纪律）。
-  useEffect(() => () => stopRehearsal(true), [wfName, stopRehearsal])
-
-  function toggleRehearsal(): void {
-    if (playing) {
-      stopRehearsal(true) // 播放中再点 = 停止（demo 同款语义）
-      return
-    }
-    if (!def || def.steps.length === 0) return
-    stopRehearsal(true) // 清掉上一轮终态残留后重播
-    const total = def.steps.length
-    const gates = def.steps.map((s) => s.gate !== null)
-    setPlaying(true)
-    const mm = gsap.matchMedia()
-    mmRef.current = mm
-    let handled = false
-    mm.add(
-      { reduce: '(prefers-reduced-motion: reduce)', motion: '(prefers-reduced-motion: no-preference)' },
-      (ctx) => {
-        handled = true
-        const reduce = Boolean((ctx.conditions as { reduce?: boolean } | undefined)?.reduce)
-        if (reduce) {
-          // reduced-motion：不放动画，直达终态（节点全亮、末节点绿）。
-          setLit(total)
-          setPlaying(false)
-          return
-        }
-        const track = trackRef.current
-        const nodes = track ? Array.from(track.querySelectorAll<HTMLElement>('.wb-pv-node')) : []
-        const dot = track?.querySelector<HTMLElement>('.wb-pv-dot') ?? null
-        const tl = gsap.timeline({
-          onComplete: () => {
-            tlRef.current = null
-            setPlaying(false)
-          },
-        })
-        tlRef.current = tl
-        const centers = nodes.map((n) => n.offsetLeft + n.offsetWidth / 2 - 4)
-        nodes.forEach((node, i) => {
-          tl.add(() => setLit(i + 1))
-          tl.to(node, { keyframes: [{ scale: 1.06, duration: 0.18 }, { scale: 1, duration: 0.17 }], ease: 'power1.out' })
-          if (gates[i]) tl.to({}, { duration: 0.6 }) // 复核门节点：停一拍，示意「这里等人」
-          if (i < nodes.length - 1 && dot) {
-            tl.set(dot, { x: centers[i], opacity: 1 })
-            tl.to(dot, { x: centers[i + 1], duration: 0.5, ease: 'power1.inOut' })
-          }
-        })
-        if (dot) tl.set(dot, { opacity: 0 })
-      },
-    )
-    if (!handled) {
-      // 环境不支持两个媒体条件任一（极老内核/无 matchMedia）：直达终态兜底，不卡在播放态。
-      setLit(total)
-      stopRehearsal(false)
-    }
-  }
-
   // ── stepper 入场（沿 motion.ts 既有词汇；reduced-motion 由 revealList 自身处理）──
   // T13 起 def 就是编辑草稿：依赖收敛为 def?.name（只在切换 workflow/首次载入时重播），
   // 依赖整个 def 会让每次击键都重播全排卡入场——装饰性噪音，不是真实状态变化
@@ -629,7 +595,6 @@ export function WorkbenchView({ root, onToggleError, snapshot = null }: Workbenc
 
   const selectedStep = def?.steps.find((s) => s.id === stageId) ?? null
   const currentStages = def?.steps.length ?? (wfName ? stagesCountOf(wfName) : null)
-  const total = def?.steps.length ?? 0
 
   return (
     <section className="view workbench" data-testid="workbench-view" ref={rootRef}>
@@ -715,7 +680,6 @@ export function WorkbenchView({ root, onToggleError, snapshot = null }: Workbenc
                 steps={stepperSteps}
                 selectedId={stageId}
                 onSelect={setStageId}
-                litCount={lit}
                 label={t('workbench.rail_label', { name: def.name })}
                 // 验收反馈#4（补齐 T13 遗留缺口）：default 只读态不传 handler——StepperRail
                 // 按既有 disabled={!onAddStage} 语义自动落回禁用态 + title 提示，本组件零改动。
@@ -835,43 +799,39 @@ export function WorkbenchView({ root, onToggleError, snapshot = null }: Workbenc
             </div>
           </div>
 
-          <div className="side-card">
+          {/* v6 T13：最近流转——真实 history 事件回放（GSAP 假预演退役,决议#10/#5:legacy 如实
+              标注不可用、archived 不入列;决议#11 量级 <50,逐 change 只读端点合并,不新增聚合端点;
+              G22 纪律:无轮询,只随 (root,workflow,changes) 指纹变化拉取）。 */}
+          <div className="side-card" data-testid="wb-recent">
             <div className="side-card__head">
-              <b>{t('workbench.preview_title')}</b>
-              <span className="side-card__head-action wb-ed-note">{t('workbench.preview_note')}</span>
+              <b>{t('workbench.recent_title')}</b>
+              <span className="side-card__head-action wb-ed-note">{t('workbench.recent_note')}</span>
             </div>
             <div className="side-card__body">
-              <div className="wb-pv-flow">
-                <div className="wb-pv-track" ref={trackRef} data-testid="wb-pv-track">
-                  {def?.steps.map((s, i) => (
-                    <Fragment key={s.id}>
-                      {i > 0 && (
-                        <span
-                          className={`wb-pv-line${i < lit ? ' lit' : ''}`}
-                          data-testid={`wb-pv-line-${i - 1}`}
-                          aria-hidden="true"
-                        />
-                      )}
-                      <span
-                        className={`wb-pv-node${i < lit ? (i === total - 1 ? ' lit-g' : ' lit') : ''}`}
-                        data-testid={`wb-pv-node-${s.id}`}
-                      >
-                        {stepName(s)}
-                        {s.gate && <i className="wb-pv-gdot" data-testid={`wb-pv-gdot-${s.id}`} aria-hidden="true" />}
+              {recent === null && <p className="wb-note">{t('common.loading')}</p>}
+              {recent !== null && recent.length === 0 && (
+                <p className="wb-note" data-testid="wb-recent-empty">{t('workbench.recent_empty')}</p>
+              )}
+              {recent !== null && recent.length > 0 && (
+                <ul className="wb-rt-list" data-testid="wb-recent-list">
+                  {recent.map((e, i) => (
+                    <li key={`${e.change}-${e.ts}-${i}`} className="wb-rt-item">
+                      <span className="wb-rt-ts mono">{e.ts.slice(5, 16).replace('T', ' ')}</span>
+                      <span className="wb-rt-chg mono">{e.change}</span>
+                      <span className="wb-rt-what">
+                        {e.kind === 'transition'
+                          ? `${e.from ?? '?'} → ${e.to ?? '?'}`
+                          : e.field
+                            ? t('workbench.recent_set', { field: e.field })
+                            : (e.raw ?? e.kind)}
                       </span>
-                    </Fragment>
+                    </li>
                   ))}
-                  <span className="wb-pv-dot" aria-hidden="true" />
-                </div>
-              </div>
-              <button
-                className="btn btn--ghost wb-play"
-                data-testid="wb-play"
-                onClick={toggleRehearsal}
-                disabled={!def || def.steps.length === 0}
-              >
-                {playing ? t('workbench.stop') : t('workbench.play')}
-              </button>
+                </ul>
+              )}
+              {recent !== null && recentSilent > 0 && (
+                <p className="wb-note" data-testid="wb-recent-legacy">{t('workbench.recent_legacy', { n: recentSilent })}</p>
+              )}
             </div>
           </div>
         </aside>
