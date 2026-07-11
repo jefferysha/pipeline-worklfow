@@ -230,6 +230,11 @@ export interface WbLoopRow {
   budget_decl: WbLoopBudgetDecl
   readiness: { score: number; band: string }
   budget: { breaker: 'ok' | 'warn' | 'tripped'; runsToday: number; spentToday: number; remaining: number | null; hasBudget?: boolean; maxTokensPerDay?: number | null }
+  // ── T7（loop 卡审阅面重构）：server LoopRow 镜像同步，三方关系条数据面 ──
+  /** change_prefix 实际匹配到的 openspec/changes 目录名（已保存真值）；change_prefix 为 null 时恒为 []。 */
+  matched_changes: string[]
+  /** 登记表原值透传——全仓无运行时消费者，纯声明标签，UI 不得暗示会做 workflow join 校验。 */
+  phases: string[]
 }
 export interface WbLoopsSnapshot {
   generated_at: string
