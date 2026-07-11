@@ -9,6 +9,10 @@ import { LOOP_RUNNERS, LoopCard, useLoops } from './LoopCard'
  * 验收对位：①快照读回显全参数+推荐值标注；②改参数→保存 patch body 精确（不夹带未改字段）；
  * ③升档走确认 Dialog、降档直发、server 拒绝原文展示；④status 开关=active/paused；
  * ⑤不渲染就绪环/台账/漂移（决议 #3 裁减）；另：多 loop 下拉（单 loop 隐藏）、无 loop 空态教学。
+ *
+ * T7（loop 卡审阅面重构）追加：⑥空态终端引导（prompt 示例 + 复制按钮）；⑦15 个字段生产者
+ * 徽章精确对齐 UX 分析文档 §2.1；⑧三方关系条（root 徽章 + change_prefix→匹配 changes 弹层，
+ * 读 row 真值不随草稿重算 + phases→阶段 chips 纯展示）。
  */
 
 const ROOT = '/tmp/proj-a'
@@ -34,6 +38,9 @@ function makeRow(over: Record<string, unknown> = {}): Record<string, unknown> {
     budget_decl: { max_runs_per_day: 24, max_in_flight: 1, on_exceed: 'skip', max_tokens_per_day: 100000 },
     readiness: { score: 62, band: 'L2-ready' },
     budget: { breaker: 'ok', runsToday: 3, spentToday: 3000, remaining: 97000, hasBudget: true, maxTokensPerDay: 100000 },
+    // T7：三方关系条数据面（server LoopRow 契约形状同步）。
+    matched_changes: ['rl-0142-migrate-card', 'rl-0201-nav-cleanup'],
+    phases: ['build', 'verify'],
     ...over,
   }
 }
@@ -304,6 +311,103 @@ describe('LoopCard 自主级别（验收③：升档确认、降档直发、拒�
   })
 })
 
+describe('LoopCard 字段生产者徽章（T7，UX 分析文档 §2.1「应然生产者」列逐字段对齐）', () => {
+  it('14 个字段徽章精确对齐 agent 生成/系统推导/人拍板三色分类', async () => {
+    renderCard()
+    await screen.findByTestId('lp-goal')
+    const expectProv = (field: string, label: string): void => {
+      expect(screen.getByTestId(`lp-prov-${field}`)).toHaveTextContent(label)
+    }
+    expectProv('status', '人拍板')
+    expectProv('goal', 'agent 生成')
+    expectProv('design_doc', 'agent 生成')
+    expectProv('change_prefix', '系统推导')
+    expectProv('risk', 'agent 生成')
+    expectProv('runner', '系统推导')
+    expectProv('cadence', 'agent 生成')
+    expectProv('max_runs_per_day', '系统推导')
+    expectProv('max_in_flight', '系统推导')
+    expectProv('max_tokens_per_day', '系统推导')
+    expectProv('on_exceed', '系统推导')
+    expectProv('human_gates', 'agent 生成')
+    expectProv('kill_criteria', '系统推导')
+    expectProv('denylist', '系统推导')
+  })
+
+  it('红线：allowlist 零消费，不装成三色徽章之一，如实标「预留字段，当前无运行时效果」', async () => {
+    renderCard()
+    await screen.findByTestId('lp-goal')
+    expect(screen.getByTestId('lp-prov-allowlist')).toHaveTextContent('预留字段,当前无运行时效果')
+    // 不是三色徽章之一：不含 agent 生成/系统推导/人拍板 任一措辞
+    const text = screen.getByTestId('lp-prov-allowlist').textContent ?? ''
+    expect(['agent 生成', '系统推导', '人拍板']).not.toContain(text)
+  })
+
+  it('红线：denylist 真硬消费——徽章旁额外标注真实结算行为，措辞与 allowlist 的零消费不同', async () => {
+    renderCard()
+    await screen.findByTestId('lp-goal')
+    expect(screen.getByTestId('lp-prov-denylist')).toHaveTextContent('系统推导')
+    expect(screen.getByText(/真硬消费/)).toBeInTheDocument()
+    expect(screen.getByText(/零消费/)).toBeInTheDocument()
+    // 两条 disclaimer 文本不同（防止复制粘贴出的误导性重复）
+    const denyNote = screen.getByText(/真硬消费/).closest('p')
+    const allowNote = screen.getByText(/零消费/).closest('p')
+    expect(denyNote?.textContent).not.toEqual(allowNote?.textContent)
+  })
+})
+
+describe('LoopCard 三方关系条（T7，A2 决策：root 徽章 + change_prefix→匹配 changes 弹层 + phases→阶段 chips）', () => {
+  it('root 徽章渲染 LoopRow.root；phases 渲染阶段 chips 纯展示（点击无副作用）', async () => {
+    renderCard()
+    await screen.findByTestId('lp-goal')
+    expect(screen.getByTestId('lp-rel-root')).toHaveTextContent(ROOT)
+    const chips = screen.getAllByTestId('lp-rel-phase-chip')
+    expect(chips.map((c) => c.textContent)).toEqual(['build', 'verify'])
+    expect(chips[0]!.tagName).toBe('SPAN') // 纯展示——不是按钮，无点击语义
+    fireEvent.click(chips[0]!)
+    expect(screen.queryByTestId('lp-rel-dialog')).toBeNull() // 点击阶段 chip 不触发任何弹层
+  })
+
+  it('点击 change_prefix 展开弹层显示 matched_changes 列表（真值）', async () => {
+    renderCard()
+    await screen.findByTestId('lp-goal')
+    fireEvent.click(screen.getByTestId('lp-rel-prefix-btn'))
+    const dialog = await screen.findByTestId('lp-rel-dialog')
+    expect(within(dialog).getByText('rl-0142-migrate-card')).toBeInTheDocument()
+    expect(within(dialog).getByText('rl-0201-nav-cleanup')).toBeInTheDocument()
+  })
+
+  it('弹层用已保存真值，不随草稿输入实时重算：编辑 change_prefix 草稿（不保存）后弹层内容不变，保存后才刷新', async () => {
+    renderCard()
+    await screen.findByTestId('lp-goal')
+    // 编辑草稿但不保存
+    fireEvent.change(screen.getByTestId('lp-prefix'), { target: { value: 'zz-' } })
+    expect(screen.getByTestId('lp-dirty')).toBeInTheDocument()
+    // 关系条按钮文案仍显示旧真值（rl-），不随草稿跳动
+    expect(screen.getByTestId('lp-rel-prefix-btn')).toHaveTextContent('rl-')
+    expect(screen.getByTestId('lp-rel-prefix-btn')).not.toHaveTextContent('zz-')
+    fireEvent.click(screen.getByTestId('lp-rel-prefix-btn'))
+    const dialog = await screen.findByTestId('lp-rel-dialog')
+    // 弹层内容仍是旧真值的 matched_changes，未随未保存的草稿重算
+    expect(within(dialog).getByText('rl-0142-migrate-card')).toBeInTheDocument()
+
+    // 保存后：mock /api/loops/update 不改变 matched_changes（server 才是真源），
+    // 但 reload 后卡片以新 row 渲染——本用例只断言保存流程本身不因关系条新增字段而回归破坏。
+    fireEvent.click(screen.getByRole('button', { name: '关闭' }))
+    fireEvent.click(screen.getByTestId('lp-save'))
+    await waitFor(() => expect(screen.getByTestId('lp-save-ok')).toBeInTheDocument())
+  })
+
+  it('弹层空匹配态：matched_changes 为空数组时如实显示空态文案', async () => {
+    rows = [makeRow({ matched_changes: [] })]
+    renderCard()
+    await screen.findByTestId('lp-goal')
+    fireEvent.click(screen.getByTestId('lp-rel-prefix-btn'))
+    const dialog = await screen.findByTestId('lp-rel-dialog')
+    expect(dialog).toHaveTextContent('暂无匹配的变更')
+  })
+})
+
 describe('LoopCard 多 loop 下拉 / 空态', () => {
   it('多 loop：卡头下拉可切换（单 loop 时隐藏——见上组用例无此控件）；dirty 时禁切', async () => {
     rows = [makeRow(), makeRow({ id: 'docs-loop', goal: '文档巡检', autonomy_level: 'L2' })]
@@ -327,15 +431,37 @@ describe('LoopCard 多 loop 下拉 / 空态', () => {
     expect(screen.queryByTestId('lp-loop-select')).toBeNull()
   })
 
-  it('无 loop 的 root：空态教学文案（loops.yaml 最小登记示例），不渲染任何编辑控件', async () => {
+  // T7：空态从「裸 YAML 教学块」换成「去终端」引导——意图迁移（原断言 `.pipeline/loops.yaml`/
+  // `max_runs_per_day: 24` 的 EMPTY_EXAMPLE pre 块字面量已随空态改版删除，见计划任务书
+  // 「①空态区替换 EMPTY_EXAMPLE pre 块为引导卡+复制按钮」；标题文案原样保留，其余替换为
+  // prompt 示例 + 复制按钮的新断言，不静默丢弃「不渲染任何编辑控件」的核心断言）。
+  it('无 loop 的 root：空态换成「去终端」引导卡（prompt 示例 + 复制按钮），不渲染任何编辑控件', async () => {
     rows = []
     renderCard()
     const empty = await screen.findByTestId('lp-empty')
     expect(empty).toHaveTextContent('尚未配置自动运行')
-    expect(empty).toHaveTextContent('.pipeline/loops.yaml')
-    expect(empty).toHaveTextContent('max_runs_per_day: 24')
+    expect(screen.getByTestId('lp-empty-prompt')).toBeInTheDocument()
+    expect(screen.getByTestId('lp-empty-copy')).toBeInTheDocument()
     expect(screen.queryByTestId('lp-goal')).toBeNull()
     expect(screen.queryByTestId('lp-save')).toBeNull()
+  })
+
+  it('空态复制按钮：点击写剪贴板（参数精确等于 prompt 示例文本），按钮文案切换为「已复制」', async () => {
+    rows = []
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } })
+    renderCard()
+    await screen.findByTestId('lp-empty')
+    expect(screen.getByTestId('lp-empty-prompt')).toHaveTextContent(
+      '帮我建一个 loop：盯着<你想让它盯的目录或改动范围>，每 2 小时跑一轮；连续 3 次没有改动，或者预算触顶，就停下来找我确认。',
+    )
+    fireEvent.click(screen.getByTestId('lp-empty-copy'))
+    await waitFor(() =>
+      expect(writeText).toHaveBeenCalledWith(
+        '帮我建一个 loop：盯着<你想让它盯的目录或改动范围>，每 2 小时跑一轮；连续 3 次没有改动，或者预算触顶，就停下来找我确认。',
+      ),
+    )
+    await waitFor(() => expect(screen.getByTestId('lp-empty-copy')).toHaveTextContent('已复制'))
   })
 
   it('快照加载失败：行内错误、不白屏', async () => {
