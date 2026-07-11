@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { fetchAutomationSettings, postAutomationSettings, type WbAutomationSettings } from '../api/client'
+import { fetchAfkReadiness, fetchAutomationSettings, fetchDockerImages, postAutomationSettings, type WbAfkReadiness, type WbAutomationSettings, type WbDockerImages } from '../api/client'
 import { useT } from '../i18n'
 import { LpSlider } from './LoopCard'
 
@@ -31,9 +31,11 @@ const same = (a: WbAutomationSettings, b: WbAutomationSettings): boolean =>
 
 export interface AutomationCardProps {
   root: string
+  /** v6 T9/T8：就绪三灯重拉信号——SecretsCard 保存/删除成功后由宿主 +1(显式动作触发,不轮询,G22 纪律)。 */
+  refreshToken?: number
 }
 
-export function AutomationCard({ root }: AutomationCardProps): JSX.Element {
+export function AutomationCard({ root, refreshToken = 0 }: AutomationCardProps): JSX.Element {
   const { t } = useT()
   // settings = server 已保存真值（GET/保存后回读）；draft = 编辑草稿。
   const [settings, setSettings] = useState<WbAutomationSettings | null>(null)
@@ -42,6 +44,38 @@ export function AutomationCard({ root }: AutomationCardProps): JSX.Element {
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [saveOk, setSaveOk] = useState(false)
+  // v6 T9：镜像下拉候选(机器级,一次拉取;不可用/失败 → null=降级纯文本框,零行为差异)。
+  const [images, setImages] = useState<WbDockerImages | null>(null)
+  // v6 T9：就绪三灯(docker/镜像/凭证);失败 → null=不渲染灯区,不阻塞其余控件。
+  const [readiness, setReadiness] = useState<WbAfkReadiness | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    fetchDockerImages()
+      .then((r) => {
+        if (!cancelled) setImages(r)
+      })
+      .catch(() => {
+        /* 降级纯文本框(fail-open) */
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    fetchAfkReadiness(root)
+      .then((r) => {
+        if (!cancelled) setReadiness(r)
+      })
+      .catch(() => {
+        if (!cancelled) setReadiness(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [root, refreshToken])
 
   // 换 root：清态重载（上一项目的参数不能在新项目语境下多渲染一拍——useLoops 同款纪律）。
   useEffect(() => {
@@ -133,6 +167,48 @@ export function AutomationCard({ root }: AutomationCardProps): JSX.Element {
         </ul>
       )}
 
+      {/* v6 T9：就绪三灯——真探测真值(GET /api/afk/readiness);readiness 拉不到就整区不渲染,不谎报。 */}
+      {readiness && (
+        <div className="afk-rd" data-testid="afk-rd">
+          <span className={`rd-dot ${readiness.docker.available ? 'rd-dot--ok' : 'rd-dot--no'}`} aria-hidden="true" />
+          <span className="afk-rd-item" data-testid="afk-rd-docker">
+            {t('workbench.afk_rd_docker')}:{readiness.docker.available ? t('workbench.afk_rd_ok') : t('workbench.afk_rd_no')}
+          </span>
+          <span className={`rd-dot ${readiness.image.present ? 'rd-dot--ok' : 'rd-dot--no'}`} aria-hidden="true" />
+          <span className="afk-rd-item" data-testid="afk-rd-image" title={readiness.image.configured}>
+            {t('workbench.afk_rd_image')}:{readiness.image.present ? t('workbench.afk_rd_ok') : t('workbench.afk_rd_no')}
+          </span>
+          {!readiness.image.present && (
+            <button
+              type="button"
+              className="wb-chip-badge"
+              data-testid="afk-rd-build-copy"
+              title={readiness.image.build_hint}
+              onClick={() => void navigator.clipboard?.writeText(readiness.image.build_hint)}
+            >
+              {t('workbench.afk_rd_build_copy')}
+            </button>
+          )}
+          <span
+            className={`rd-dot ${readiness.credentials['claude-code'].CLAUDE_CODE_OAUTH_TOKEN.set ? 'rd-dot--ok' : 'rd-dot--no'}`}
+            aria-hidden="true"
+          />
+          <span
+            className="afk-rd-item"
+            data-testid="afk-rd-cred"
+            title={t('workbench.afk_rd_codex_hint', {
+              o: readiness.credentials.codex.OPENAI_API_KEY.set ? '✓' : '✗',
+              c: readiness.credentials.codex.CODEX_HOME.set ? '✓' : '✗',
+            })}
+          >
+            {t('workbench.afk_rd_cred')}:
+            {readiness.credentials['claude-code'].CLAUDE_CODE_OAUTH_TOKEN.set
+              ? t('workbench.afk_rd_ok')
+              : t('workbench.afk_rd_unset')}
+          </span>
+        </div>
+      )}
+
       <div className="wb-ed-sec">
         <div className="wb-ed-sec-h">
           {t('workbench.afk_sec')}
@@ -189,11 +265,21 @@ export function AutomationCard({ root }: AutomationCardProps): JSX.Element {
             data-testid="afk-image"
             placeholder="sandcastle:local"
             value={draft.image}
+            list={images?.available ? 'afk-image-list' : undefined}
             onChange={(e) => edit({ image: e.target.value })}
             onKeyDown={(e) => {
               if (e.key === 'Enter') e.preventDefault() // Enter 守卫：保存只走卡头保存钮（LoopCard 纪律）
             }}
           />
+          {/* v6 T9：原生 datalist(决策 B.3)——docker 不可用/接口失败不渲染,输入框零行为差异降级;
+              手输未来 tag 不被候选限制(原生语义),IMAGE_RE 值域校验仍在 server 侧。 */}
+          {images?.available && (
+            <datalist id="afk-image-list" data-testid="afk-image-list">
+              {images.images.map((im) => (
+                <option key={im} value={im} />
+              ))}
+            </datalist>
+          )}
           <span className="wb-note">{t('workbench.afk_image_note')}</span>
         </div>
       </div>

@@ -439,3 +439,33 @@ export interface WbSkillEntry {
   source: 'local-plugin' | 'external-marketplace' | 'builtin' | 'user'
   installCmd?: string
 }
+
+// ── v6 T9：单机资源探测两端点(GET 不鉴权;server 侧 isLocalHost 已守)。──
+export interface WbDockerImages {
+  available: boolean
+  images: string[]
+}
+export async function fetchDockerImages(): Promise<WbDockerImages> {
+  const res = await fetch('/api/docker/images', { headers: { Accept: 'application/json' } })
+  if (!res.ok) throw new Error(`(${res.status})`)
+  const body = (await res.json()) as { ok: boolean } & WbDockerImages
+  return { available: body.available, images: body.images }
+}
+
+export interface WbCredLight {
+  set: boolean
+  source?: 'host-env' | 'secrets-file'
+}
+export interface WbAfkReadiness {
+  docker: { available: boolean }
+  image: { configured: string; present: boolean; build_hint: string }
+  credentials: {
+    'claude-code': { CLAUDE_CODE_OAUTH_TOKEN: WbCredLight }
+    codex: { OPENAI_API_KEY: WbCredLight; CODEX_HOME: WbCredLight }
+  }
+}
+export async function fetchAfkReadiness(root: string): Promise<WbAfkReadiness> {
+  const res = await fetch(`/api/afk/readiness?root=${encodeURIComponent(root)}`, { headers: { Accept: 'application/json' } })
+  if (!res.ok) throw new Error(`(${res.status})`)
+  return (await res.json()) as WbAfkReadiness
+}

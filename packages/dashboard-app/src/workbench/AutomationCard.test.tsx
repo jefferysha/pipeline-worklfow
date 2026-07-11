@@ -13,6 +13,20 @@ const GET_URL = `/api/automation?root=${encodeURIComponent(ROOT)}`
 let settings: { max_parallel: number; max_retries: number; default_opt_in: boolean; image: string }
 let postCalls: Array<Record<string, unknown>>
 let postResponse: () => Response
+// v6 T9：单机资源两端点的可变桩(缺省 docker 可用+镜像就绪+凭证未配;用例按需改写)。
+let imagesResponse: () => Response
+let readinessResponse: () => Response
+let readinessCalls: number
+const READY_BODY = (over: Record<string, unknown> = {}) => ({
+  ok: true,
+  docker: { available: true },
+  image: { configured: 'sandcastle:local', present: true, build_hint: 'bash tools/sandcastle/build.sh' },
+  credentials: {
+    'claude-code': { CLAUDE_CODE_OAUTH_TOKEN: { set: false } },
+    codex: { OPENAI_API_KEY: { set: false }, CODEX_HOME: { set: false } },
+  },
+  ...over,
+})
 
 function renderCard() {
   render(
@@ -27,6 +41,9 @@ beforeEach(() => {
   settings = { max_parallel: 4, max_retries: 1, default_opt_in: false, image: '' }
   postCalls = []
   postResponse = () => new Response(JSON.stringify({ ok: true, settings }), { status: 200 })
+  imagesResponse = () => new Response(JSON.stringify({ ok: true, available: true, images: ['node:22-slim', 'sandcastle:local'] }), { status: 200 })
+  readinessResponse = () => new Response(JSON.stringify(READY_BODY()), { status: 200 })
+  readinessCalls = 0
   global.fetch = vi.fn(async (url: string, opts?: RequestInit) => {
     if (url === GET_URL) {
       return new Response(JSON.stringify({ ok: true, settings }), { status: 200 })
@@ -34,6 +51,11 @@ beforeEach(() => {
     if (url === '/api/automation' && opts?.method === 'POST') {
       postCalls.push(JSON.parse(String(opts.body)) as Record<string, unknown>)
       return postResponse()
+    }
+    if (url === '/api/docker/images') return imagesResponse()
+    if (url.startsWith('/api/afk/readiness')) {
+      readinessCalls += 1
+      return readinessResponse()
     }
     throw new Error(`unexpected fetch ${url}`)
   }) as unknown as typeof fetch
@@ -114,5 +136,68 @@ describe('AutomationCard —— dirty → 保存真写 → GET 回读', () => {
     fireEvent.click(screen.getByTestId('afk-save'))
     await waitFor(() => expect(screen.getByTestId('afk-save-error')).toHaveTextContent('max_parallel 须为 1-8 的整数'))
     expect(screen.getByTestId('afk-dirty')).toBeInTheDocument()
+  })
+})
+
+
+/**
+ * v6 T9：镜像 datalist(决策 B.3 原生降级语义)+ 就绪三灯(真探测真值,不轮询)。
+ */
+describe('AutomationCard v6 T9：镜像下拉 + 就绪三灯', () => {
+  it('docker 可用 → input 带 list 且 datalist 渲染候选;available:false → 无 datalist 零行为差异', async () => {
+    renderCard()
+    await waitFor(() => expect(screen.getByTestId('afk-image')).toHaveAttribute('list', 'afk-image-list'))
+    const dl = screen.getByTestId('afk-image-list')
+    expect(Array.from(dl.querySelectorAll('option')).map((o) => o.getAttribute('value'))).toEqual([
+      'node:22-slim',
+      'sandcastle:local',
+    ])
+  })
+
+  it('available:false / 接口失败 → 不渲染 datalist,输入框仍在(降级不阻塞)', async () => {
+    imagesResponse = () => new Response(JSON.stringify({ ok: true, available: false, images: [] }), { status: 200 })
+    renderCard()
+    await waitFor(() => expect(screen.getByTestId('afk-image')).toBeInTheDocument())
+    expect(screen.queryByTestId('afk-image-list')).toBeNull()
+    expect(screen.getByTestId('afk-image')).not.toHaveAttribute('list')
+  })
+
+  it('三灯按 readiness 真值:镜像缺失亮黄且给 build_hint 复制;凭证未配显「未配置」', async () => {
+    const writeText = vi.fn(async () => {})
+    vi.stubGlobal('navigator', { ...globalThis.navigator, clipboard: { writeText } })
+    readinessResponse = () =>
+      new Response(
+        JSON.stringify(READY_BODY({ image: { configured: 'sandcastle:local', present: false, build_hint: 'bash tools/sandcastle/build.sh' } })),
+        { status: 200 },
+      )
+    renderCard()
+    const rd = await screen.findByTestId('afk-rd')
+    expect(rd).toBeInTheDocument()
+    expect(screen.getByTestId('afk-rd-image').textContent).toContain('未就绪')
+    expect(screen.getByTestId('afk-rd-cred').textContent).toContain('未配置')
+    fireEvent.click(screen.getByTestId('afk-rd-build-copy'))
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('bash tools/sandcastle/build.sh'))
+  })
+
+  it('readiness 接口失败 → 灯区整体不渲染(不谎报),其余控件不受影响', async () => {
+    readinessResponse = () => new Response('boom', { status: 500 })
+    renderCard()
+    await waitFor(() => expect(screen.getByTestId('afk-image')).toBeInTheDocument())
+    expect(screen.queryByTestId('afk-rd')).toBeNull()
+  })
+
+  it('refreshToken 变化 → readiness 重拉(显式信号,非轮询)', async () => {
+    const { rerender } = render(
+      <I18nProvider>
+        <AutomationCard root={ROOT} refreshToken={0} />
+      </I18nProvider>,
+    )
+    await waitFor(() => expect(readinessCalls).toBe(1))
+    rerender(
+      <I18nProvider>
+        <AutomationCard root={ROOT} refreshToken={1} />
+      </I18nProvider>,
+    )
+    await waitFor(() => expect(readinessCalls).toBe(2))
   })
 })
