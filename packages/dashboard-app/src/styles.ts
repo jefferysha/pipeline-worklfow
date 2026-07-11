@@ -424,8 +424,6 @@ button.ev__chip--neutral:hover { border-color: var(--border-2); color: var(--tex
 .wb-step--on, .wb-step--on:hover { border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring), var(--shadow); }
 .wb-step--on::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 42px; background: linear-gradient(var(--accent-t), transparent); pointer-events: none; }
 /* 预演点亮态（GSAP 预演驱动）：进行中蓝、终点绿——沿 spec §1 蓝=进行/绿=完成的语义分工。 */
-.wb-step--live { border-color: var(--accent); }
-.wb-step--live-g { border-color: var(--green); }
 .wb-step > * { position: relative; }
 .wb-step-top { display: flex; align-items: center; gap: 8px; width: 100%; margin-bottom: 7px; min-height: 22px; }
 .wb-step-num { width: 22px; height: 22px; border-radius: 999px; background: var(--fill-2); display: grid; place-items: center; font-size: 11.5px; font-weight: 700; color: var(--text-2); font-family: var(--mono); flex: none; }
@@ -497,16 +495,12 @@ button.ev__chip--neutral:hover { border-color: var(--border-2); color: var(--tex
 .wb-save-errors { margin: 0 0 14px; padding: 10px 12px; list-style: none; border: 1px solid var(--red-b); background: var(--red-t); border-radius: var(--radius-sm); }
 .wb-save-errors li { font-size: 12.5px; color: var(--red-d); line-height: 1.6; font-family: var(--mono); }
 /* 右栏流程预览 + 预演 */
-.wb-pv-flow { overflow-x: auto; padding: 8px 0 6px; }
-.wb-pv-track { position: relative; display: flex; align-items: center; width: max-content; min-width: 100%; padding: 4px 0; }
-.wb-pv-node { flex: none; display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--border); background: var(--fill); font-size: 12px; font-weight: 600; color: var(--text-2); transition: background .3s ease, border-color .3s ease, color .3s ease; }
-.wb-pv-node.lit { background: var(--accent-t); border-color: var(--accent); color: var(--accent-d); }
-.wb-pv-node.lit-g { background: var(--green-t); border-color: var(--green); color: var(--green-d); }
-.wb-pv-line { flex: none; width: 16px; height: 2px; border-radius: 2px; background: var(--border-2); transition: background .3s ease; }
-.wb-pv-line.lit { background: var(--accent); }
-.wb-pv-gdot { display: inline-block; width: 6px; height: 6px; border-radius: 999px; background: var(--red); }
-.wb-pv-dot { position: absolute; left: 0; top: 50%; width: 8px; height: 8px; margin-top: -4px; border-radius: 999px; background: var(--accent); opacity: 0; pointer-events: none; box-shadow: 0 0 0 3px var(--ring); }
-.wb-play { display: block; width: 100%; margin: 4px 0 12px; text-align: center; }
+/* ── v6 T13：最近流转卡(真实 history 回放;假预演 wb-pv-*/wb-play 已退役) ── */
+.wb-rt-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 7px; }
+.wb-rt-item { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; font-size: 12px; line-height: 1.45; }
+.wb-rt-ts { flex: none; font-size: 10.5px; color: var(--text-3); }
+.wb-rt-chg { flex: none; font-size: 11px; color: var(--text-2); }
+.wb-rt-what { color: var(--text); }
 
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { * { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
