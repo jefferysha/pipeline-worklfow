@@ -34,6 +34,7 @@ import { resolveServerPaths } from './paths.js'
 import { addProjectToRegistry, removeProjectFromRegistry } from './projects.js'
 import { deleteWorkflowForApi, listWorkflowNames, readWorkflowForApi, writeWorkflowForApi, WorkflowNotFoundError } from './workflows.js'
 import { readRegistry } from './registry.js'
+import { buildSecretsResponse, isValidSecretKey, removeSecret, SECRET_KEY_LIST, validateSecretWriteBody, writeSecret } from './secrets.js'
 import { listAllSkills } from './skillsRegistry.js'
 import { buildSnapshot, computeFingerprint, dedupeRoots, type SnapshotDeps } from './snapshot.js'
 import { generateToken, tokenFromHeaders, tokensMatch } from './token.js'
@@ -497,6 +498,22 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
         return sendJson(res, e instanceof WorkflowNotFoundError ? 404 : 500, { ok: false, error: errMsg(e) })
       }
     }
+    // ── v6 T1：GET /api/secrets —— 机器级凭证存储只读探测（掩码，永不回明文）──
+    //    不要求 root（机器级资源，与 GET /api/skills/registry、B 节 GET /api/docker/images
+    //    同类「无信任锚分支」的端点，proposal C.3 明确本端点无 root 概念）；不要求 token
+    //    （维持 GET 惯例，同 B.2 判断），但补一道其余既有 GET 完全没有的 isLocalHost Host
+    //    头校验——本端点碰的是凭证子系统，即便只回掩码也比其余纯读 GET 多一分谨慎（proposal
+    //    决策点 C.3：masked 值本身不可被当凭证使用，但既然要单独加码就顺手做了）。
+    if (path === '/api/secrets') {
+      if (!isLocalHost(req.headers.host, boundPort)) {
+        return sendJson(res, 403, { ok: false, error: 'Host header 不合法（疑似 DNS 重绑定攻击）' })
+      }
+      try {
+        return sendJson(res, 200, buildSecretsResponse(paths.secretsPath))
+      } catch (e) {
+        return sendJson(res, 500, { ok: false, error: errMsg(e) })
+      }
+    }
     return sendJson(res, 404, { ok: false, error: '未知端点' })
   }
 
@@ -837,6 +854,24 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
       return sendJson(res, result.ok ? 200 : 400, result)
     }
 
+    // ── v6 T1：POST /api/secrets —— 写入单个凭证键（值只进文件，不落 HTTP 响应/日志）──
+    //    body：{ key: 'CLAUDE_CODE_OAUTH_TOKEN' | 'OPENAI_API_KEY', value: string }，每次只写
+    //    一个键（不是整份表覆盖式写，见 proposal C.3）。不需要 root——机器级资源，与其余写端点
+    //    「①格式→②root 信任锚→③业务校验→④真读写」四步顺序不同：本端点压根没有 root 概念，
+    //    第②步不存在（同 POST /api/projects 是另一个没有信任锚概念的写端点，但原因不同：
+    //    projects 是信任锚本身；secrets 是机器级资源，与项目注册无关）。
+    if (path === '/api/secrets') {
+      const rawBody = await readJsonBody(req)
+      const validated = validateSecretWriteBody(rawBody)
+      if (!validated.ok) return sendJson(res, 400, { ok: false, error: validated.error })
+      try {
+        const info = await writeSecret(paths.secretsPath, validated.value.key, validated.value.value)
+        return sendJson(res, 200, { ok: true, key: validated.value.key, ...info })
+      } catch (e) {
+        return sendJson(res, 500, { ok: false, error: errMsg(e) })
+      }
+    }
+
     const mTr = /^\/api\/change\/([^/]+)\/transition$/.exec(path)
     if (!mTr) return sendJson(res, 404, { ok: false, error: '未知写回端点' })
 
@@ -904,6 +939,21 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
       try {
         const deleted = deleteWorkflowForApi(root, wfName)
         return sendJson(res, deleted ? 200 : 404, deleted ? { ok: true } : { ok: false, error: `workflow '${wfName}' 不存在` })
+      } catch (e) {
+        return sendJson(res, 500, { ok: false, error: errMsg(e) })
+      }
+    }
+
+    // ── v6 T1：DELETE /api/secrets?key= —— 删单键（同现有 DELETE 惯例：query string 传参，
+    //    对齐 DELETE /api/projects?root=、DELETE /api/workflows/:name?root= 的传参风格）──
+    if (path === '/api/secrets') {
+      const key = new URL(req.url ?? '/', 'http://localhost').searchParams.get('key') ?? ''
+      if (!isValidSecretKey(key)) {
+        return sendJson(res, 400, { ok: false, error: `非法 key（仅允许 ${SECRET_KEY_LIST}）` })
+      }
+      try {
+        await removeSecret(paths.secretsPath, key)
+        return sendJson(res, 200, { ok: true })
       } catch (e) {
         return sendJson(res, 500, { ok: false, error: errMsg(e) })
       }

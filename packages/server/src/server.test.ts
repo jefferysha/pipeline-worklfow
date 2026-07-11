@@ -4,7 +4,7 @@
  */
 import { afterEach, describe, expect, it } from 'vitest'
 import { existsSync } from 'node:fs'
-import { readFile } from 'node:fs/promises'
+import { readFile, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import { createDashboardServer } from './server.js'
 import type { DashboardServer } from './types.js'
@@ -12,7 +12,7 @@ import {
   initChange, makeProject, makeTempHome, makeTempManifest, makeWorktreeDir, newStore, openSSE, reqDelete, reqGet, reqPost, testFlow,
 } from './test-support.js'
 import type { StateStore } from '@pipeline-lite/kernel'
-import { loadManifest, TRANSITION_EVENTS as KERNEL_EVENTS, eventEdge as kernelEventEdge } from '@pipeline-lite/kernel'
+import { loadManifest, secretsPath, TRANSITION_EVENTS as KERNEL_EVENTS, eventEdge as kernelEventEdge } from '@pipeline-lite/kernel'
 import { TRANSITION_EVENTS, eventEdge } from './transition.js'
 
 /** 接线级：server 真消费 kernel 单一真相源（BACKLOG #25b / GOAL B2）——transition.ts 已删本地镜像，
@@ -1862,5 +1862,180 @@ steps:
     const h = await startWithCustomChange()
     const r = await reqPost(h.port, `/api/change/${h.name}/transition`, { root: h.root, event: 'approved' }, { headers: { Authorization: `Bearer ${h.token}` } })
     expect(r.status).toBe(400)
+  })
+})
+
+// ═══════════ v6 T1：机器级凭证存储端点（POST/GET/DELETE /api/secrets）═══════════
+// 掩码 / 0600 / 原子写 / Host 校验（proposal C 节 + docs/superpowers/plans/2026-07-11-
+// v6-recommended-implementation.md T1 节）。真落盘用 startWithHome()（真实临时 HOME，
+// 同 G18 项目注册端点用同一 harness），不注入 registry——机器级资源本就与 registry 无关。
+
+describe('POST /api/secrets —— 写入单个凭证键（值只进文件，不落 HTTP 响应/日志）', () => {
+  it('①401 无 token', async () => {
+    const h = await startWithHome()
+    const r = await reqPost(h.port, '/api/secrets', { key: 'OPENAI_API_KEY', value: 'sk-test-abc123' })
+    expect(r.status).toBe(401)
+  })
+
+  it('①400 非白名单 key（含刻意排除的 CODEX_HOME/ANTHROPIC_API_KEY）', async () => {
+    const h = await startWithHome()
+    for (const badKey of ['ANTHROPIC_API_KEY', 'CODEX_HOME', 'RANDOM_KEY']) {
+      const r = await reqPost(h.port, '/api/secrets', { key: badKey, value: 'sk-test-abc123' }, { headers: { Authorization: `Bearer ${h.token}` } })
+      expect(r.status, `key=${badKey}`).toBe(400)
+    }
+  })
+
+  it('①400 超长 value（>4KB）', async () => {
+    const h = await startWithHome()
+    const r = await reqPost(
+      h.port, '/api/secrets', { key: 'OPENAI_API_KEY', value: 'x'.repeat(4097) }, { headers: { Authorization: `Bearer ${h.token}` } },
+    )
+    expect(r.status).toBe(400)
+  })
+
+  it('400 假 Host（三道纵深里的 Host 守卫在本端点同样生效）；400 非 JSON Content-Type', async () => {
+    const h = await startWithHome()
+    const r1 = await reqPost(
+      h.port, '/api/secrets', { key: 'OPENAI_API_KEY', value: 'sk-abc' },
+      { headers: { Authorization: `Bearer ${h.token}`, Host: 'evil.com' } },
+    )
+    expect(r1.status).toBe(403)
+    const r2 = await reqPost(
+      h.port, '/api/secrets', { key: 'OPENAI_API_KEY', value: 'sk-abc' },
+      { headers: { Authorization: `Bearer ${h.token}`, 'Content-Type': 'text/plain' } },
+    )
+    expect(r2.status).toBe(400)
+  })
+
+  it('④端点不接受/不要求 root 参数（机器级，无信任锚 404 分支）：带任意 root 也 200', async () => {
+    const h = await startWithHome()
+    const r = await reqPost(
+      h.port, '/api/secrets', { key: 'OPENAI_API_KEY', value: 'sk-test-abc123', root: '/tmp/not-a-registered-root' },
+      { headers: { Authorization: `Bearer ${h.token}` } },
+    )
+    expect(r.status).toBe(200)
+  })
+
+  it('响应体不含原始 value 子串（只回 masked）', async () => {
+    const h = await startWithHome()
+    const secretValue = 'sk-ant-oat01-verysecretvalue7f3a'
+    const r = await reqPost(h.port, '/api/secrets', { key: 'CLAUDE_CODE_OAUTH_TOKEN', value: secretValue }, { headers: { Authorization: `Bearer ${h.token}` } })
+    expect(r.status).toBe(200)
+    expect(r.body).not.toContain(secretValue)
+    const body = r.json<{ ok: boolean; key: string; set: boolean; masked: string }>()
+    expect(body.masked).toBe('sk-…7f3a')
+  })
+})
+
+describe('GET /api/secrets —— 只回掩码，永不回明文', () => {
+  it('③无需 token（不带 Authorization 头仍 200）', async () => {
+    const h = await startWithHome()
+    const r = await reqGet(h.port, '/api/secrets')
+    expect(r.status).toBe(200)
+  })
+
+  it('③非法 Host 头（伪造 Host）被拒（403），即便本身不需要 token', async () => {
+    const h = await startWithHome()
+    const r = await reqGet(h.port, '/api/secrets', '127.0.0.1', { Host: 'evil.com' })
+    expect(r.status).toBe(403)
+  })
+
+  it('④端点不接受/不要求 root 参数（机器级，无信任锚 404 分支）：带任意/缺失 root 都 200', async () => {
+    const h = await startWithHome()
+    const withRoot = await reqGet(h.port, `/api/secrets?root=${encodeURIComponent('/tmp/not-a-registered-root')}`)
+    expect(withRoot.status).toBe(200)
+    const withoutRoot = await reqGet(h.port, '/api/secrets')
+    expect(withoutRoot.status).toBe(200)
+  })
+
+  it('未设置任何 key → 两键皆 set:false', async () => {
+    const h = await startWithHome()
+    const r = await reqGet(h.port, '/api/secrets')
+    const body = r.json<{ ok: boolean; keys: Record<string, { set: boolean }> }>()
+    expect(body.keys.CLAUDE_CODE_OAUTH_TOKEN).toEqual({ set: false })
+    expect(body.keys.OPENAI_API_KEY).toEqual({ set: false })
+  })
+})
+
+describe('②round-trip：POST 写入 → GET 读回 masked 且不含明文 → DELETE 后 GET 显示 set:false', () => {
+  it('全链路真落盘验证（含 0600 权限）', async () => {
+    const h = await startWithHome()
+    const secretValue = 'sk-ant-oat01-verysecretvalue7f3a'
+
+    const post = await reqPost(h.port, '/api/secrets', { key: 'CLAUDE_CODE_OAUTH_TOKEN', value: secretValue }, { headers: { Authorization: `Bearer ${h.token}` } })
+    expect(post.status).toBe(200)
+    expect(post.body).not.toContain(secretValue)
+
+    const get1 = await reqGet(h.port, '/api/secrets')
+    expect(get1.status).toBe(200)
+    expect(get1.body).not.toContain(secretValue)
+    const body1 = get1.json<{ ok: boolean; keys: Record<string, { set: boolean; masked?: string }> }>()
+    expect(body1.keys.CLAUDE_CODE_OAUTH_TOKEN).toEqual({ set: true, masked: 'sk-…7f3a' })
+    expect(body1.keys.OPENAI_API_KEY).toEqual({ set: false })
+
+    // 真落盘 0600 + tmp+rename（验收判据同款：stat mode 恰 0o600）
+    const secretsFile = secretsPath(h.home)
+    const st = await stat(secretsFile)
+    expect(st.mode & 0o777).toBe(0o600)
+    const onDisk = JSON.parse(await readFile(secretsFile, 'utf8')) as { keys: Record<string, string> }
+    // 落盘内容本身就该是真值（write-only 是 HTTP 响应/日志的纪律，不是磁盘内容的纪律）
+    expect(onDisk.keys.CLAUDE_CODE_OAUTH_TOKEN).toBe(secretValue)
+
+    const del = await reqDelete(h.port, `/api/secrets?key=${encodeURIComponent('CLAUDE_CODE_OAUTH_TOKEN')}`, { headers: { Authorization: `Bearer ${h.token}` } })
+    expect(del.status).toBe(200)
+
+    const get2 = await reqGet(h.port, '/api/secrets')
+    const body2 = get2.json<{ keys: Record<string, { set: boolean }> }>()
+    expect(body2.keys.CLAUDE_CODE_OAUTH_TOKEN).toEqual({ set: false })
+  })
+})
+
+describe('DELETE /api/secrets?key= —— 删单键（同现有 DELETE 惯例：query string 传参）', () => {
+  it('401 无 token；403 假 Host', async () => {
+    const h = await startWithHome()
+    const r1 = await reqDelete(h.port, `/api/secrets?key=${encodeURIComponent('OPENAI_API_KEY')}`)
+    expect(r1.status).toBe(401)
+    const r2 = await reqDelete(
+      h.port, `/api/secrets?key=${encodeURIComponent('OPENAI_API_KEY')}`,
+      { headers: { Authorization: `Bearer ${h.token}`, Host: 'evil.com' } },
+    )
+    expect(r2.status).toBe(403)
+  })
+
+  it('400 非白名单 key（含缺失 key）', async () => {
+    const h = await startWithHome()
+    const r1 = await reqDelete(h.port, `/api/secrets?key=${encodeURIComponent('CODEX_HOME')}`, { headers: { Authorization: `Bearer ${h.token}` } })
+    expect(r1.status).toBe(400)
+    const r2 = await reqDelete(h.port, '/api/secrets', { headers: { Authorization: `Bearer ${h.token}` } })
+    expect(r2.status).toBe(400)
+  })
+
+  it('删除本就未设置的 key → 幂等 200（不报错）', async () => {
+    const h = await startWithHome()
+    const r = await reqDelete(h.port, `/api/secrets?key=${encodeURIComponent('OPENAI_API_KEY')}`, { headers: { Authorization: `Bearer ${h.token}` } })
+    expect(r.status).toBe(200)
+  })
+
+  it('④端点不接受/不要求 root 参数（机器级，无信任锚 404 分支）', async () => {
+    const h = await startWithHome()
+    await reqPost(h.port, '/api/secrets', { key: 'OPENAI_API_KEY', value: 'sk-test-abc123' }, { headers: { Authorization: `Bearer ${h.token}` } })
+    const r = await reqDelete(
+      h.port, `/api/secrets?key=${encodeURIComponent('OPENAI_API_KEY')}&root=${encodeURIComponent('/tmp/not-a-registered-root')}`,
+      { headers: { Authorization: `Bearer ${h.token}` } },
+    )
+    expect(r.status).toBe(200)
+  })
+})
+
+describe('server 进程日志不出现明文 token（真机验收判据的单测替身：响应体全程扫描）', () => {
+  it('POST/GET/DELETE 三端点响应体全程不含写入过的原始明文值', async () => {
+    const h = await startWithHome()
+    const secretValue = 'sk-ant-oat01-neverleak-thisexactstring-999'
+    const post = await reqPost(h.port, '/api/secrets', { key: 'OPENAI_API_KEY', value: secretValue }, { headers: { Authorization: `Bearer ${h.token}` } })
+    const get = await reqGet(h.port, '/api/secrets')
+    const del = await reqDelete(h.port, `/api/secrets?key=${encodeURIComponent('OPENAI_API_KEY')}`, { headers: { Authorization: `Bearer ${h.token}` } })
+    for (const r of [post, get, del]) {
+      expect(r.body).not.toContain(secretValue)
+    }
   })
 })
