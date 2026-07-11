@@ -506,15 +506,15 @@ describe('ProgressView 筛选条（验收②）', () => {
   })
 })
 
-describe('ProgressView 调度器健康灯（验收④）', () => {
-  it('有失败 → attention 灯 + 聚合计数文案「N 执行 N 排队 N 失败」', () => {
+describe('ProgressView 调度器健康灯（验收④；验收反馈②-②讲清楚「沙箱」范围）', () => {
+  it('有失败 → attention 灯 +「沙箱调度:」聚合计数文案', () => {
     renderView()
     const doctor = screen.getByTestId('prg-doctor')
-    expect(doctor.textContent).toContain('1 执行 1 排队 1 失败')
+    expect(doctor.textContent).toContain('沙箱调度:1 执行 · 1 排队 · 1 失败')
     expect(doctor.querySelector('.prg-doctor__d--attention')).not.toBeNull()
   })
 
-  it('无 automation 活动 → ok 灯，不带计数尾巴', () => {
+  it('无 automation 活动 → ok 灯，三数恒显（含 0，不再按活跃度隐藏计数）', () => {
     renderView({
       snapshot: makeSnapshot([
         makeProject(ROOT_A, [
@@ -526,7 +526,13 @@ describe('ProgressView 调度器健康灯（验收④）', () => {
     })
     const doctor = screen.getByTestId('prg-doctor')
     expect(doctor.querySelector('.prg-doctor__d--ok')).not.toBeNull()
-    expect(doctor.textContent).not.toContain('执行')
+    expect(doctor.textContent).toContain('沙箱调度:0 执行 · 0 排队 · 0 失败')
+  })
+
+  it('灯点区域带 title 提示：只统计自动化沙箱，等你确认/等产出不归调度器', () => {
+    renderView()
+    expect(screen.getByTestId('prg-doctor')).toHaveAttribute('title', expect.stringContaining('只统计自动化沙箱'))
+    expect(screen.getByTestId('prg-doctor')).toHaveAttribute('title', expect.stringContaining('见下方筛选'))
   })
 })
 

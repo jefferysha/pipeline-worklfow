@@ -388,7 +388,11 @@ export const zh: Dict = {
     doctor_ok: '调度空闲',
     doctor_busy: '调度中',
     doctor_attention: '需要关注',
-    doctor_counts: '{running} 执行 {queued} 排队 {failed} 失败',
+    // 验收反馈②-②：讲清楚灯的统计范围是「沙箱」——判据逐字对齐 server afk.ts
+    // computeSchedulerHealth，只取 running/queued/failed 三桶，gate/agent 不算在内
+    // （progressModel.ts schedulerHealth 头注释）；doctor_hint 是灯点区域的 title 提示。
+    doctor_counts: '沙箱调度:{running} 执行 · {queued} 排队 · {failed} 失败',
+    doctor_hint: '只统计自动化沙箱里的任务；『等你确认/等产出』的任务不归调度器，见下方筛选',
     filter_project: '项目：',
     filter_all: '全部',
     filter_clear: '清空',
@@ -786,7 +790,8 @@ export const en: Dict = {
     doctor_ok: 'Scheduler idle',
     doctor_busy: 'Scheduler busy',
     doctor_attention: 'Needs attention',
-    doctor_counts: '{running} running {queued} queued {failed} failed',
+    doctor_counts: 'Sandbox scheduler: {running} running · {queued} queued · {failed} failed',
+    doctor_hint: 'Only counts tasks inside the automation sandbox — tasks marked "Awaiting you" or "Awaiting output" are not tracked by the scheduler; see the filters below',
     filter_project: 'Project:',
     filter_all: 'All',
     filter_clear: 'Clear',

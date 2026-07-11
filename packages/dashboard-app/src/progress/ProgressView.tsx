@@ -584,14 +584,14 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
     setProjSel((prev) => (prev.includes(root) ? prev.filter((r) => r !== root) : [...prev, root]))
   }
 
-  const doctorText =
-    health.running + health.queued + health.failed > 0
-      ? `${t(`progress.doctor_${health.status}`)} · ${t('progress.doctor_counts', {
-          running: health.running,
-          queued: health.queued,
-          failed: health.failed,
-        })}`
-      : t(`progress.doctor_${health.status}`)
+  // 验收反馈②-②：讲清楚灯只统计「沙箱」范围（判据逐字对齐 server afk.ts computeSchedulerHealth，
+  // 只取 running/queued/failed 三桶）——恒显三数（含 0），不再按活跃度切换「调度空闲/调度中」
+  // 短词；状态仍由灯点颜色（.prg-doctor__d--{status}）传达，文案只负责讲清楚统计范围。
+  const doctorText = t('progress.doctor_counts', {
+    running: health.running,
+    queued: health.queued,
+    failed: health.failed,
+  })
 
   const projBtnValue =
     projSel.length === 0 ? t('progress.filter_all') : projSel.map(rootBasename).join(', ')
@@ -605,7 +605,7 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
           <h1 className="view__title">{t('progress.title')}</h1>
           <p className="view__subtitle">{t('progress.subtitle')}</p>
         </div>
-        <span className="prg-doctor" data-testid="prg-doctor">
+        <span className="prg-doctor" data-testid="prg-doctor" title={t('progress.doctor_hint')}>
           <i className={`prg-doctor__d prg-doctor__d--${health.status}`} aria-hidden="true" />
           {doctorText}
         </span>
