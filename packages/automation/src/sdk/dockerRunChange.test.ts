@@ -351,3 +351,63 @@ describe('createDockerRunChange · codex 凭证透传（v5 T22）', () => {
     expect(dockerRun).not.toContain('sk-from-host')
   })
 })
+
+/**
+ * v6 T2：claude-code 凭证透传——与 codex 对称的另一半。此前 claude-code/缺省路径完全没有
+ * host 透传通道（CLAUDE_CODE_OAUTH_TOKEN 只能走 extraEnv 而 cli afk run 没传），沙箱脚本判空
+ * 静默回落「确定性模式」。本批:runner !== 'codex' 时从 hostEnv 白名单透传唯一键
+ * CLAUDE_CODE_OAUTH_TOKEN;互斥纪律不变——凭证只随点名它的 runner 走,codex 路径绝不带
+ * claude token,claude 路径绝不带 OPENAI_API_KEY。hostEnv 显式注入(hermetic,不读真 process.env)。
+ */
+describe('createDockerRunChange · claude-code 凭证透传（v6 T2）', () => {
+  let repo: string
+  beforeEach(async () => { repo = await mkdtemp(join(tmpdir(), 'dockerrc-cred2-')) })
+  afterEach(async () => { await rm(repo, { recursive: true, force: true }) })
+
+  const run = async (opts: {
+    resolveRunner?: () => Promise<string | undefined>
+    hostEnv?: Readonly<Record<string, string | undefined>>
+    extraEnv?: Readonly<Record<string, string>>
+  }): Promise<string> => {
+    const { exec, calls } = makeFakeExec()
+    const runChange = createDockerRunChange({
+      hostRepoDir: repo, base: 'main', level: 'L1', image: 'sandcastle:local', exec,
+      resolveRunner: opts.resolveRunner, hostEnv: opts.hostEnv ?? {}, extraEnv: opts.extraEnv,
+    })
+    await runChange('loop-a-fix', new AbortController().signal)
+    const dockerRun = calls.find((c) => c[0] === 'docker' && c[1] === 'run')
+    expect(dockerRun).toBeDefined()
+    return dockerRun!.join(' ')
+  }
+
+  it('runner 缺省 / claude-code 且 host 有 CLAUDE_CODE_OAUTH_TOKEN → docker run 注入 -e', async () => {
+    for (const resolveRunner of [undefined, async () => 'claude-code']) {
+      const dockerRun = await run({ resolveRunner, hostEnv: { CLAUDE_CODE_OAUTH_TOKEN: 'tok-v6t2' } })
+      expect(dockerRun).toContain('CLAUDE_CODE_OAUTH_TOKEN=tok-v6t2')
+    }
+  })
+
+  it('runner=codex → CLAUDE_CODE_OAUTH_TOKEN 不注入（互斥透传，回归 codex 分支不受影响）', async () => {
+    const dockerRun = await run({
+      resolveRunner: async () => 'codex',
+      hostEnv: { CLAUDE_CODE_OAUTH_TOKEN: 'tok-v6t2', OPENAI_API_KEY: 'sk-ok' },
+    })
+    expect(dockerRun).not.toContain('CLAUDE_CODE_OAUTH_TOKEN')
+    expect(dockerRun).toContain('OPENAI_API_KEY=sk-ok')
+  })
+
+  it('claude 路径不带 OPENAI_API_KEY（对称互斥）；空串 token 不注入', async () => {
+    const dockerRun = await run({ hostEnv: { OPENAI_API_KEY: 'sk-ok', CLAUDE_CODE_OAUTH_TOKEN: '' } })
+    expect(dockerRun).not.toContain('OPENAI_API_KEY')
+    expect(dockerRun).not.toContain('CLAUDE_CODE_OAUTH_TOKEN')
+  })
+
+  it('显式 extraEnv 同名键 > host 透传（claude 路径同 codex 纪律）', async () => {
+    const dockerRun = await run({
+      hostEnv: { CLAUDE_CODE_OAUTH_TOKEN: 'tok-from-host' },
+      extraEnv: { CLAUDE_CODE_OAUTH_TOKEN: 'tok-explicit' },
+    })
+    expect(dockerRun).toContain('CLAUDE_CODE_OAUTH_TOKEN=tok-explicit')
+    expect(dockerRun).not.toContain('tok-from-host')
+  })
+})

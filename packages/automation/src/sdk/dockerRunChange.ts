@@ -102,6 +102,20 @@ const codexCredentialEnv = (hostEnv: Readonly<Record<string, string | undefined>
   return out
 }
 
+/**
+ * claude-code 凭证透传（v6 T2）：与 codexCredentialEnv 对称的另一半——runner !== 'codex' 时
+ * 从 hostEnv 白名单透传唯一键 CLAUDE_CODE_OAUTH_TOKEN（此前该路径零透传通道，cli afk run 又
+ * 没传 extraEnv，沙箱脚本判空静默回落「确定性模式」）。互斥纪律不变：凭证只随点名它的 runner
+ * 走；值只进 docker run argv，不进日志/错误消息（同上方 hostEnv 字段注释）。
+ */
+const claudeCredentialEnv = (hostEnv: Readonly<Record<string, string | undefined>>): Record<string, string> => {
+  const out: Record<string, string> = {}
+  if (hostEnv.CLAUDE_CODE_OAUTH_TOKEN !== undefined && hostEnv.CLAUDE_CODE_OAUTH_TOKEN !== '') {
+    out.CLAUDE_CODE_OAUTH_TOKEN = hostEnv.CLAUDE_CODE_OAUTH_TOKEN
+  }
+  return out
+}
+
 /** 构造绑真 docker/git 的 RunChange（喂给 automation.runRound）。 */
 export const createDockerRunChange = (opts: DockerRunChangeOptions): RunChange => {
   const exec = opts.exec ?? nodeExec
@@ -132,9 +146,11 @@ export const createDockerRunChange = (opts: DockerRunChangeOptions): RunChange =
     // v5 T20：每次 run 现解析该 change 的 loop runner（同 denylist 的不缓存/best-effort 口径）；
     // resolver 故障 → undefined（缺省 Claude 路径，绝不因 registry 读坏阻断 run）。
     const runner = opts.resolveRunner ? await opts.resolveRunner(name).catch(() => undefined) : undefined
-    // v5 T22：codex 凭证透传——仅 runner === 'codex' 时从 host env 白名单透传（claude-code /
-    // 缺省路径零变化）；显式 opts.extraEnv 同名键优先（展开序：host 透传在前、显式在后）。
-    const credEnv = runner === 'codex' ? codexCredentialEnv(opts.hostEnv ?? process.env) : {}
+    // v5 T22 + v6 T2：凭证按 runner 互斥透传——codex 拿 OPENAI_API_KEY/CODEX_HOME，
+    // claude-code/缺省拿 CLAUDE_CODE_OAUTH_TOKEN；显式 opts.extraEnv 同名键优先
+    //（展开序：host 透传在前、显式在后）。
+    const hostEnv = opts.hostEnv ?? process.env
+    const credEnv = runner === 'codex' ? codexCredentialEnv(hostEnv) : claudeCredentialEnv(hostEnv)
     const extraEnv = { ...credEnv, ...opts.extraEnv }
     return runChangeInSandbox(
       ports,
