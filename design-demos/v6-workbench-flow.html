@@ -371,7 +371,7 @@ button { font:inherit; color:inherit; background:none; border:none; cursor:point
 .wsc-token--sel { box-shadow:0 0 0 2px var(--ink) }
 [data-theme="dark"] .wsc-token--sel { box-shadow:0 0 0 2px var(--card), 0 0 0 3px var(--text) }
 
-.wsc-gantry { position:absolute; top:-14px; width:2px; background:var(--red-b) }
+.wsc-gantry { position:absolute; height:2px; background:var(--red-b); transform-origin:0 50%; pointer-events:none }
 .wsc-lower { position:relative; display:flex; margin-top:30px; border-top:1.5px dashed var(--border-2); padding-top:12px; min-width:760px }
 .wsc-hkgrp { flex:1; text-align:center; padding:0 6px; cursor:pointer; border-radius:10px; transition:background .12s }
 .wsc-hkgrp:hover { background:var(--fill) }
@@ -387,10 +387,10 @@ button { font:inherit; color:inherit; background:none; border:none; cursor:point
 .wsc-side { position:sticky; top:76px }
 .wsc-hint { padding:30px 16px; text-align:center; font-size:12.5px; color:var(--text-3); border:1px dashed var(--border-2); border-radius:13px }
 
-.wsc-drawer-backdrop { position:fixed; inset:0; background:rgba(10,10,10,.3); z-index:70; opacity:0; visibility:hidden; transition:opacity .15s, visibility .15s }
+.wsc-drawer-backdrop { position:fixed; top:57px; right:0; bottom:0; left:0; background:rgba(10,10,10,.3); z-index:70; opacity:0; visibility:hidden; transition:opacity .15s, visibility .15s }
 [data-theme="dark"] .wsc-drawer-backdrop { background:rgba(0,0,0,.5) }
 .wsc-drawer-backdrop.open { opacity:1; visibility:visible }
-.wsc-drawer { position:fixed; top:0; right:0; bottom:0; width:380px; max-width:92vw; background:var(--card); border-left:1px solid var(--border); box-shadow:var(--shadow-2); z-index:71; transform:translateX(100%); transition:transform .22s ease; display:flex; flex-direction:column }
+.wsc-drawer { position:fixed; top:57px; right:0; bottom:0; width:380px; max-width:92vw; background:var(--card); border-left:1px solid var(--border); box-shadow:var(--shadow-2); z-index:71; transform:translateX(100%); transition:transform .22s ease; display:flex; flex-direction:column }
 .wsc-drawer.open { transform:translateX(0) }
 .wsc-drawer-h { display:flex; align-items:center; gap:10px; padding:16px 18px; border-bottom:1px solid var(--border) }
 .wsc-drawer-body { padding:16px 18px; overflow-y:auto; flex:1; display:flex; flex-direction:column; gap:14px }
@@ -1273,21 +1273,41 @@ button { font:inherit; color:inherit; background:none; border:none; cursor:point
           + '</div>';
       }).join('');
       box.innerHTML = html;
-      /* 检查站门架:连到下方对应 hook 分组(PreToolUse 第3列 / PostToolUse 第4列) */
+      /* 检查站门架:每个复核门站点向下拉一条线,汇聚到 PreToolUse(gate.sh)+
+         PostToolUse(interactive-skill-gate.sh)两组的跨度中点——这两个钩子是
+         唯一真正拦截的 guard,所有复核门共用同一套拦截点,所以三条门架线应
+         汇聚到同一目标 x,而不是各自从站点原地垂直下落(那样会因为上泳道 7
+         列/下泳道 4 列的列宽不对齐,落在无关的 SessionStart/UserPromptSubmit
+         分组正下方,连线所指与真实拦截钩子对不上)。 */
       requestAnimationFrame(function () {
         $all('.wsc-gantry', box).forEach(function (g) { g.remove(); });
         var gateStas = $all('.wsc-sta--gate', box);
         var lower = root.querySelector('[data-lower="C"]');
         if (!lower) return;
+        var pre = lower.querySelector('[data-hkgrp="PreToolUse"]');
+        var post = lower.querySelector('[data-hkgrp="PostToolUse"]');
         var lowerTop = lower.getBoundingClientRect().top;
         var upperRect = box.getBoundingClientRect();
+        var targetX = null;
+        if (pre && post) {
+          var preR = pre.getBoundingClientRect(), postR = post.getBoundingClientRect();
+          targetX = (preR.left + postR.right) / 2 - upperRect.left;
+        }
         gateStas.forEach(function (sta) {
           var r = sta.querySelector('.wsc-ring').getBoundingClientRect();
+          var sx = r.left + r.width / 2 - upperRect.left;
+          var sy = r.bottom - upperRect.top;
+          var ex = targetX == null ? sx : targetX;
+          var ey = lowerTop - upperRect.top;
+          var dx = ex - sx, dy = ey - sy;
+          var len = Math.sqrt(dx * dx + dy * dy);
+          var ang = Math.atan2(dy, dx) * 180 / Math.PI;
           var g = document.createElement('div');
           g.className = 'wsc-gantry';
-          g.style.left = (r.left + r.width / 2 - upperRect.left - 1) + 'px';
-          g.style.height = (lowerTop - (r.bottom)) + 'px';
-          g.style.top = (r.bottom - upperRect.top) + 'px';
+          g.style.left = sx + 'px';
+          g.style.top = sy + 'px';
+          g.style.width = len + 'px';
+          g.style.transform = 'rotate(' + ang + 'deg)';
           box.appendChild(g);
         });
       });
