@@ -38,6 +38,7 @@ import { buildSecretsResponse, isValidSecretKey, removeSecret, SECRET_KEY_LIST, 
 import { listAllSkillsDetailed } from './skillsRegistry.js'
 import { buildSnapshot, computeFingerprint, dedupeRoots, type SnapshotDeps } from './snapshot.js'
 import { generateToken, tokenFromHeaders, tokensMatch } from './token.js'
+import { buildAfkReadiness } from './afkReadiness.js'
 import { listDockerImages } from './dockerImages.js'
 import { listTraceSessions, readTraceRecords } from './traces.js'
 import { performTransition, readChangeHistory } from './transition.js'
@@ -527,6 +528,23 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
       }
       const r = await listDockerImages(options.execDocker)
       return sendJson(res, 200, { ok: true, ...r })
+    }
+    // ── v6 T4：GET /api/afk/readiness?root= —— AFK 就绪三灯(docker/镜像/凭证)。──
+    //    root 必填(镜像检查要读该 root 的 automation.json;显式缺失 400,未注册 404 信任锚);
+    //    isLocalHost 同 /api/secrets、/api/docker/images(本机信息端点);「没装/没建/没配」
+    //    是常态不是错误 → 恒 200,永不回凭证值(D.1 契约,与 /api/secrets 同条红线)。
+    if (path === '/api/afk/readiness') {
+      if (!isLocalHost(req.headers.host, boundPort)) {
+        return sendJson(res, 403, { ok: false, error: 'Host header 不合法（疑似 DNS 重绑定攻击）' })
+      }
+      const root = new URL(req.url ?? '/', 'http://localhost').searchParams.get('root') ?? ''
+      if (root === '') return sendJson(res, 400, { ok: false, error: '缺少 root 参数' })
+      if (!dedupeRoots(registry()).includes(resolvePath(root))) {
+        return sendJson(res, 404, { ok: false, error: 'root 未在机器级项目注册表中' })
+      }
+      const image = readAutomationSettings(root).image || 'sandcastle:local'
+      const r = await buildAfkReadiness({ image, secretsPath: paths.secretsPath, exec: options.execDocker })
+      return sendJson(res, 200, r)
     }
     return sendJson(res, 404, { ok: false, error: '未知端点' })
   }

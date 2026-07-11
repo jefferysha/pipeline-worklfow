@@ -2086,3 +2086,37 @@ describe('GET /api/docker/images —— 镜像列表(v6 T3)', () => {
     expect(r.status).toBe(403)
   })
 })
+
+/**
+ * v6 T4：GET /api/afk/readiness —— 三灯聚合端点。形状契约由 afkReadiness.test.ts 全量钉住,
+ * 这里只测 HTTP 面:root 参数纪律、isLocalHost、真值贯通(注入 execDocker + hermetic home)。
+ */
+describe('GET /api/afk/readiness —— AFK 就绪三灯(v6 T4)', () => {
+  it('root 缺失 400;未注册 404', async () => {
+    const h = await start({ execDocker: async () => ({ stdout: '', stderr: '', exitCode: 0 }) })
+    expect((await reqGet(h.port, '/api/afk/readiness')).status).toBe(400)
+    expect((await reqGet(h.port, `/api/afk/readiness?root=${encodeURIComponent('/no/such')}`)).status).toBe(404)
+  })
+
+  it('docker 可用+镜像在 → 三灯真值贯通;凭证只回 set/source 不回值', async () => {
+    const h = await start({
+      execDocker: async (args) =>
+        args[0] === 'info' || (args[0] === 'image' && args[2] === 'sandcastle:local')
+          ? { stdout: 'ok', stderr: '', exitCode: 0 }
+          : { stdout: '', stderr: 'x', exitCode: 1 },
+    })
+    const r = await reqGet(h.port, `/api/afk/readiness?root=${encodeURIComponent(h.root)}`)
+    expect(r.status).toBe(200)
+    const body = r.json<{ ok: boolean; docker: { available: boolean }; image: { configured: string; present: boolean; build_hint: string }; credentials: Record<string, unknown> }>()
+    expect(body.ok).toBe(true)
+    expect(body.docker.available).toBe(true)
+    expect(body.image).toEqual({ configured: 'sandcastle:local', present: true, build_hint: 'bash tools/sandcastle/build.sh' })
+    expect(Object.keys(body.credentials).sort()).toEqual(['claude-code', 'codex'])
+  })
+
+  it('伪造 Host 头 → 403', async () => {
+    const h = await start({ execDocker: async () => ({ stdout: '', stderr: '', exitCode: 0 }) })
+    const r = await reqGet(h.port, `/api/afk/readiness?root=${encodeURIComponent(h.root)}`, '127.0.0.1', { Host: 'evil.example.com' })
+    expect(r.status).toBe(403)
+  })
+})
