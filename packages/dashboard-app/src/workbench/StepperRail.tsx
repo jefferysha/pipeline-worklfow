@@ -31,7 +31,10 @@ export interface StepperRailProps {
   onSelect: (id: string) => void
   /** 预演点亮数（WorkbenchView 的 GSAP 预演驱动）：前 litCount 张卡加 --live，最后一张 --live-g。 */
   litCount?: number
-  /** T13 挂载点：添加阶段。未接线时按钮渲染禁用态占位。 */
+  /**
+   * 添加阶段（验收反馈#4，补齐 T13 遗留缺口）。未接线（如 default 只读态）时按钮渲染
+   * 禁用态占位——WorkbenchView 只在自定义 workflow 非只读态才传入真 handler。
+   */
   onAddStage?: () => void
   /** stepper 容器的 aria-label（如「release-train 阶段」）。 */
   label: string

@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '../i18n'
 import { invalidateWorkflowRules, useWorkflowRules } from '../model/workflowModel'
-import { WorkbenchView } from './WorkbenchView'
+import { WorkbenchView, type WbWorkflowDef } from './WorkbenchView'
 
 const ROOT = '/tmp/proj-a'
 
@@ -138,10 +138,17 @@ describe('WorkbenchView stepper（验收①）', () => {
     expect(screen.getByText('approved')).toBeInTheDocument()
   })
 
-  it('「+ 添加阶段」按钮以禁用态占位（T13 挂载点）', async () => {
+  it('「+ 添加阶段」按钮：自定义 workflow 可点、default 保持禁用（验收反馈#4，补齐 T13 遗留缺口）', async () => {
     renderView()
     await screen.findByTestId('wb-step-draft')
-    expect(screen.getByRole('button', { name: '+ 添加阶段' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '+ 添加阶段' })).toBeEnabled()
+
+    fireEvent.click(screen.getByTestId('wb-wf-btn'))
+    fireEvent.click(await screen.findByTestId('wb-wf-item-default'))
+    await screen.findByTestId('wb-step-open')
+    const btn = screen.getByRole('button', { name: '+ 添加阶段' })
+    expect(btn).toBeDisabled()
+    expect(btn).toHaveAttribute('title', 'default 工作流只读，复制为自定义工作流后可编辑')
   })
 })
 
@@ -426,6 +433,143 @@ describe('WorkbenchView T13 default workflow 只读态（验收④）', () => {
     expect(screen.getByRole('switch', { name: '复核门' })).toBeDisabled()
     expect(screen.queryByTestId('wb-save')).toBeNull()
     expect(screen.queryByTestId('wb-dirty')).toBeNull()
+  })
+})
+
+// ── 验收反馈#4（补齐 T13 遗留缺口）：「+ 添加阶段」从禁用占位变真功能 ──
+// 行为规格：自定义 workflow 非只读态可点 → 打开 Dialog（阶段名称 + 阶段 ID，ID 按名称自动
+// slug 化、可再编辑覆盖，校验 ^[a-zA-Z0-9_-]+$ 且 steps 内唯一）→ 确认后在当前选中阶段之后
+// 插入新 step（未选中则追加末尾）、线性语义接转换边、选中态切到新阶段、进入 dirty。
+
+/** 最近一次保存调用的请求体（复用上方 lastSaveCall 的解析约定，narrow 出 WbWorkflowDef 形状）。 */
+function lastSavedDef(): (WbWorkflowDef & { root: string }) | undefined {
+  const call = lastSaveCall()
+  return call?.body as (WbWorkflowDef & { root: string }) | undefined
+}
+
+/** rail 内按 DOM 顺序排列的阶段卡 id 序（'.wb-step' 是每张卡按钮的基础类，「+ 添加阶段」按钮
+ *  的类是不带空格的复合 token 'wb-step--add'，不会被此选择器命中）。 */
+function railStepOrder(): string[] {
+  const root = screen.getByTestId('workbench-view')
+  return Array.from(root.querySelectorAll<HTMLElement>('.wb-step')).map((el) => el.getAttribute('data-testid') ?? '')
+}
+
+function openAddStageDialog(): HTMLElement {
+  fireEvent.click(screen.getByRole('button', { name: '+ 添加阶段' }))
+  return screen.getByTestId('wb-add-stage')
+}
+
+describe('WorkbenchView 添加阶段 Dialog（验收反馈#4，补齐 T13 遗留缺口）', () => {
+  it('点击打开 Dialog：阶段名称 + 阶段 ID 两个字段，ID 按名称自动 slug 化；手改 ID 后不再随名称联动', async () => {
+    renderView()
+    await screen.findByTestId('wb-step-draft')
+    const dialog = openAddStageDialog()
+    expect(within(dialog).getByLabelText('阶段名称')).toBeInTheDocument()
+    expect(within(dialog).getByLabelText('阶段 ID')).toHaveValue('')
+
+    fireEvent.change(within(dialog).getByLabelText('阶段名称'), { target: { value: 'QA Gate' } })
+    expect(within(dialog).getByLabelText('阶段 ID')).toHaveValue('qa-gate')
+
+    // 手改 ID 后视为「已接管」，后续改名称不再覆盖它
+    fireEvent.change(within(dialog).getByLabelText('阶段 ID'), { target: { value: 'qa-custom' } })
+    fireEvent.change(within(dialog).getByLabelText('阶段名称'), { target: { value: 'QA Gate Two' } })
+    expect(within(dialog).getByLabelText('阶段 ID')).toHaveValue('qa-custom')
+  })
+
+  it('ID 校验：非法字符报错、确认钮禁用；改回合法字符后错误消失、可确认', async () => {
+    renderView()
+    await screen.findByTestId('wb-step-draft')
+    const dialog = openAddStageDialog()
+    fireEvent.change(within(dialog).getByLabelText('阶段 ID'), { target: { value: 'bad id!' } })
+    expect(within(dialog).getByTestId('wb-add-stage-id-error')).toHaveTextContent('阶段 ID 仅允许字母 / 数字 / - / _')
+    expect(within(dialog).getByTestId('wb-add-stage-confirm')).toBeDisabled()
+
+    fireEvent.change(within(dialog).getByLabelText('阶段 ID'), { target: { value: 'bad-id' } })
+    expect(within(dialog).queryByTestId('wb-add-stage-id-error')).toBeNull()
+    expect(within(dialog).getByTestId('wb-add-stage-confirm')).toBeEnabled()
+  })
+
+  it('ID 校验：与已有 step 重复报错、确认钮禁用，不落', async () => {
+    renderView()
+    await screen.findByTestId('wb-step-draft')
+    const dialog = openAddStageDialog()
+    fireEvent.change(within(dialog).getByLabelText('阶段 ID'), { target: { value: 'ship' } })
+    expect(within(dialog).getByTestId('wb-add-stage-id-error')).toHaveTextContent('阶段 ID 已存在')
+    expect(within(dialog).getByTestId('wb-add-stage-confirm')).toBeDisabled()
+    // 禁用钮点击是浏览器/jsdom 层面的天然 no-op：不会新增第 4 张卡
+    fireEvent.click(within(dialog).getByTestId('wb-add-stage-confirm'))
+    expect(railStepOrder()).toEqual(['wb-step-draft', 'wb-step-review', 'wb-step-ship'])
+    expect(screen.getByTestId('wb-add-stage')).toBeInTheDocument()
+  })
+
+  it('选中中间阶段（review）后添加 → 插在其后；前一步 transition 重定向指向新阶段、新阶段转到原后继；保存 payload 含新 step', async () => {
+    renderView()
+    await screen.findByTestId('wb-step-draft')
+    fireEvent.click(screen.getByTestId('wb-step-review'))
+
+    const dialog = openAddStageDialog()
+    fireEvent.change(within(dialog).getByLabelText('阶段名称'), { target: { value: 'QA Gate' } })
+    fireEvent.click(within(dialog).getByTestId('wb-add-stage-confirm'))
+
+    // Dialog 关闭、新卡插在 review 与 ship 之间、选中态切到新阶段、进入 dirty
+    expect(screen.queryByTestId('wb-add-stage')).toBeNull()
+    expect(railStepOrder()).toEqual(['wb-step-draft', 'wb-step-review', 'wb-step-qa-gate', 'wb-step-ship'])
+    expect(screen.getByTestId('wb-step-qa-gate')).toHaveAttribute('aria-current', 'step')
+    expect(screen.getByTestId('wb-editor-stage')).toHaveTextContent('qa-gate')
+    expect(screen.getByTestId('wb-dirty')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByTestId('wb-save'))
+    await waitFor(() => expect(screen.getByTestId('wb-save-ok')).toBeInTheDocument())
+
+    const saved = lastSavedDef()
+    expect(saved?.steps.map((s) => s.id)).toEqual(['draft', 'review', 'qa-gate', 'ship'])
+    // review 原 approved→ship 改指 qa-gate，rejected→draft 原样保留
+    expect(saved?.steps.find((s) => s.id === 'review')?.transitions).toEqual([
+      { event: 'approved', to: 'qa-gate' },
+      { event: 'rejected', to: 'draft' },
+    ])
+    // 新 step 形状：{ id, label, gate: null, skills: [], inputs: [], outputs: [], guards: [], transitions }
+    expect(saved?.steps.find((s) => s.id === 'qa-gate')).toEqual({
+      id: 'qa-gate', label: 'QA Gate', gate: null, skills: [], inputs: [], outputs: [], guards: [],
+      transitions: [{ event: 'qa-gate-complete', to: 'ship' }],
+    })
+    // ship 未被牵动
+    expect(saved?.steps.find((s) => s.id === 'ship')?.transitions).toEqual([])
+  })
+
+  it('选中末尾阶段（ship）后添加 → 追加到末尾，不产生悬空边（末尾插入保持终点语义）', async () => {
+    renderView()
+    await screen.findByTestId('wb-step-draft')
+    fireEvent.click(screen.getByTestId('wb-step-ship'))
+
+    const dialog = openAddStageDialog()
+    fireEvent.change(within(dialog).getByLabelText('阶段名称'), { target: { value: 'Notify' } })
+    fireEvent.click(within(dialog).getByTestId('wb-add-stage-confirm'))
+
+    expect(railStepOrder()).toEqual(['wb-step-draft', 'wb-step-review', 'wb-step-ship', 'wb-step-notify'])
+    expect(screen.getByTestId('wb-step-notify')).toHaveAttribute('aria-current', 'step')
+
+    fireEvent.click(screen.getByTestId('wb-save'))
+    await waitFor(() => expect(screen.getByTestId('wb-save-ok')).toBeInTheDocument())
+
+    const saved = lastSavedDef()
+    expect(saved?.steps.map((s) => s.id)).toEqual(['draft', 'review', 'ship', 'notify'])
+    expect(saved?.steps.find((s) => s.id === 'ship')?.transitions).toEqual([]) // 未被强行接上新 step
+    expect(saved?.steps.find((s) => s.id === 'notify')?.transitions).toEqual([]) // 末尾插入不造悬空边
+  })
+
+  it('插入后未保存即切 workflow → 触发脏守卫确认 Dialog（脏守卫四件套复用生效）', async () => {
+    renderView()
+    await screen.findByTestId('wb-step-draft')
+    const dialog = openAddStageDialog()
+    fireEvent.change(within(dialog).getByLabelText('阶段名称'), { target: { value: 'QA Gate' } })
+    fireEvent.click(within(dialog).getByTestId('wb-add-stage-confirm'))
+    expect(screen.getByTestId('wb-dirty')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByTestId('wb-wf-btn'))
+    fireEvent.click(await screen.findByTestId('wb-wf-item-default'))
+    expect(screen.getByTestId('wb-switch-confirm')).toBeInTheDocument()
+    expect(screen.queryByTestId('wb-step-open')).toBeNull()
   })
 })
 

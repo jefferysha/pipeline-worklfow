@@ -28,12 +28,14 @@ gsap.registerPlugin(useGSAP)
  * 骨架范围（后续任务挂载点，见 JSX 内注释）：
  *   · 阶段编辑区 = T13（已挂载 <StepEditor>：基本/产出物/guards 中文化，Inputs UI 按决议不渲染）；
  *     技能链 T14 / Hook 时序线 T15 继续在 StepEditor 内分区挂载；
- *   · 「+ 添加阶段」按钮仍禁用态占位（阶段增删不在 T13 范围）；
+ *   · 「+ 添加阶段」= 验收反馈#4（补齐 T13 遗留缺口）：自定义 workflow 非只读态可点，
+ *     打开 Dialog 插入新 step；default 仍禁用（阶段结构由运行时固定），见 confirmAddStage；
  *   · 摘要卡「钩子」行 '—' 占位（T5 数据面 + T15 接线后出真数）；
  *   · 「自动运行(Loop)」卡 = T16。
  * 过渡期与旧 旧 workflow 列表页 并存（不挂导航，T17 切换、T18 退役旧视图）。
  *
- * T13 编辑真写回：def 本身就是编辑草稿（StepEditor 每次编辑交回完整 step，这里按 id 换入）；
+ * T13 编辑真写回：def 本身就是编辑草稿（StepEditor 每次编辑交回完整 step，这里按 id 换入；
+ * 验收反馈#4 的插入新 step 是同一份草稿上的另一种编辑，走的还是这一条链路）；
  * 脏守卫沿 旧画布编辑器 Task 15 四件套先例——快照存 ref（defSnapshotRef，load/save 成功时
  * 写入一次）、dirty 每次渲染由「当前 def vs 快照」重算（故意不 useMemo，ref 变化对记忆化不可
  * 见）、守卫函数不 useCallback（会冻结 dirty 快照）、保存成功推进快照即清脏。保存走既有
@@ -83,6 +85,22 @@ function buildDefaultDef(): WbWorkflowDef {
   }
 }
 const DEFAULT_DEF: WbWorkflowDef = buildDefaultDef()
+
+// 验收反馈#4（补齐 T13 遗留缺口）：新 step 的 id/skill id/event 名同一条字符集规则
+// （kernel validate.ts IDENT_RE、StepEditor.tsx FIELD_RE 同款——G16 纪律，越界=「保存成功、
+// 下次打不开」，客户端先挡一道）。
+const STAGE_ID_RE = /^[a-zA-Z0-9_-]+$/
+
+/** 阶段名称 → 阶段 ID 的自动 slug 化（小写、非法字符段折叠成单个 -、首尾去 -）；
+ *  用户一旦手改 ID 字段即视为「已接管」，后续改名称不再覆盖（见 Dialog 内 idTouched）。 */
+function slugifyStageName(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+}
 
 interface ErrorBody { error?: string }
 
@@ -139,6 +157,15 @@ export function WorkbenchView({ root, onToggleError }: WorkbenchViewProps): JSX.
   const [saving, setSaving] = useState(false)
   // T13 脏守卫：dirty 时点了菜单里的另一个 workflow 名 → 先存这里弹确认，确认才真切。
   const [pendingSwitch, setPendingSwitch] = useState<string | null>(null)
+  // 验收反馈#4（补齐 T13 遗留缺口）：「+ 添加阶段」Dialog 的本地草稿态——不进 def，
+  // 只在确认那一刻才把完整新 step 写进草稿（def 仍是唯一真相源，见下方 confirmAddStage）。
+  const [addStageOpen, setAddStageOpen] = useState(false)
+  const [stageDraftName, setStageDraftName] = useState('')
+  const [stageDraftId, setStageDraftId] = useState('')
+  // ID 字段一旦被用户直接编辑过，名称字段的自动 slug 化就不再覆盖它（同 GitHub repo
+  // 名→slug 惯例）；Dialog 每次关闭都重置，见 closeAddStage。
+  const [stageIdTouched, setStageIdTouched] = useState(false)
+  const addStageNameRef = useRef<HTMLInputElement>(null)
   // 预演点亮数：前 lit 个预览节点/阶段卡处于点亮态（最后一个绿）。
   const [lit, setLit] = useState(0)
   const [playing, setPlaying] = useState(false)
@@ -234,6 +261,67 @@ export function WorkbenchView({ root, onToggleError }: WorkbenchViewProps): JSX.
   // stepper/摘要/流程预览全部由它派生，编辑即联动）。
   function updateStep(updated: WbStepDef): void {
     setDef((prev) => (prev ? { ...prev, steps: prev.steps.map((s) => (s.id === updated.id ? updated : s)) } : prev))
+  }
+
+  // ── 验收反馈#4（补齐 T13 遗留缺口）：「+ 添加阶段」Dialog 的校验与插入 ──
+  const stageIdTrimmed = stageDraftId.trim()
+  const stageIdInvalid = stageIdTrimmed.length > 0 && !STAGE_ID_RE.test(stageIdTrimmed)
+  const stageIdDup = stageIdTrimmed.length > 0 && !stageIdInvalid && (def?.steps.some((s) => s.id === stageIdTrimmed) ?? false)
+  const stageIdError = stageIdInvalid
+    ? t('workbench.add_stage_id_invalid')
+    : stageIdDup
+      ? t('workbench.add_stage_id_dup')
+      : null
+  const canSubmitStage = stageIdTrimmed.length > 0 && !stageIdInvalid && !stageIdDup
+
+  function closeAddStage(): void {
+    setAddStageOpen(false)
+    setStageDraftName('')
+    setStageDraftId('')
+    setStageIdTouched(false)
+  }
+
+  // 插入语义（线性 stepper，spec 决议）：插在「当前选中阶段」之后；未选中（或选中项已不在
+  // steps 里）则追加到末尾。转换边只处理线性的那一条——插入点前一个 step 若有 transition
+  // 指向「原下一个 step」，把它的 to 改指新 step、新 step 补一条 `${id}-complete` 转到原后继；
+  // 其它分支 transition（如 review 的 rejected→draft）原样不动。插在末尾、或前一步压根没有
+  // 指向原下一个 step 的转换边时，新 step 不加任何 transitions——不替它编造线性语义之外的边，
+  // 也不会产出中间 step 零 transitions 的悬空态（kernel validate 只许最后一个 step 零边）。
+  function confirmAddStage(): void {
+    if (!canSubmitStage || !def) return
+    const id = stageIdTrimmed
+    const label = stageDraftName.trim()
+    setDef((prev) => {
+      if (!prev) return prev
+      const steps = prev.steps
+      const selIdx = stageId ? steps.findIndex((s) => s.id === stageId) : -1
+      const insertIndex = selIdx >= 0 ? selIdx + 1 : steps.length
+      const prevStep = insertIndex > 0 ? steps[insertIndex - 1] : undefined
+      const nextStep = steps[insertIndex] // 插入前的「原下一个 step」，末尾插入时为 undefined
+
+      let newTransitions: WbStepDef['transitions'] = []
+      let steppedSteps = steps
+      if (prevStep && nextStep) {
+        const fwdIdx = prevStep.transitions.findIndex((tr) => tr.to === nextStep.id)
+        if (fwdIdx >= 0) {
+          newTransitions = [{ event: `${id}-complete`, to: nextStep.id }]
+          steppedSteps = steps.map((s, i) =>
+            i === insertIndex - 1
+              ? { ...s, transitions: s.transitions.map((tr, ti) => (ti === fwdIdx ? { ...tr, to: id } : tr)) }
+              : s,
+          )
+        }
+      }
+
+      const newStep: WbStepDef = {
+        id, label, gate: null, skills: [], inputs: [], outputs: [], guards: [], transitions: newTransitions,
+      }
+      const finalSteps = [...steppedSteps]
+      finalSteps.splice(insertIndex, 0, newStep)
+      return { ...prev, steps: finalSteps }
+    })
+    setStageId(id)
+    closeAddStage()
   }
 
   async function save(): Promise<void> {
@@ -514,6 +602,9 @@ export function WorkbenchView({ root, onToggleError }: WorkbenchViewProps): JSX.
                 onSelect={setStageId}
                 litCount={lit}
                 label={t('workbench.rail_label', { name: def.name })}
+                // 验收反馈#4（补齐 T13 遗留缺口）：default 只读态不传 handler——StepperRail
+                // 按既有 disabled={!onAddStage} 语义自动落回禁用态 + title 提示，本组件零改动。
+                onAddStage={readonlyWf ? undefined : () => setAddStageOpen(true)}
               />
               {selectedStep && (
                 <section className="card wb-editor" data-testid="wb-editor">
@@ -648,6 +739,76 @@ export function WorkbenchView({ root, onToggleError }: WorkbenchViewProps): JSX.
           }
         >
           <p className="dialog__desc">{t('workbench.switch_confirm_body', { name: wfName ?? '' })}</p>
+        </Dialog>
+      )}
+
+      {/* 验收反馈#4（补齐 T13 遗留缺口）：「+ 添加阶段」Dialog——阶段名称 + 阶段 ID（自动
+          slug 化、可编辑覆盖）。<form>+onSubmit 让名称/ID 输入框回车即提交（NewChangeDialog
+          既有先例）：自己渲染 dialog__actions 而不用 Dialog 的 actions prop，两个按钮和输入框
+          才能同在一个 <form> 里。 */}
+      {addStageOpen && (
+        <Dialog
+          title={t('workbench.add_stage_dialog_title')}
+          onClose={closeAddStage}
+          testid="wb-add-stage"
+          initialFocusRef={addStageNameRef}
+        >
+          <form
+            onSubmit={(e) => {
+              e.preventDefault()
+              confirmAddStage()
+            }}
+          >
+            {/* htmlFor/id 显式配对而非 label 包裹（NewChangeDialog 的包裹写法在字段无错误态时
+                够用，但错误 <span> 若嵌进同一个 <label>，label 的可访问名会把错误原文一起拼
+                进去，getByLabelText 精确匹配就会在报错那一刻突然找不到控件——本 Dialog 的
+                ID 字段必须能同时有错误态又能被 getByLabelText 稳定命中，改用 StepEditor.tsx
+                「阶段名称」字段同款的显式配对，errors 放 label 之外不影响可访问名）。 */}
+            <div className="dialog__body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div className="field">
+                <label className="field__label" htmlFor="wb-add-stage-name-input">
+                  {t('workbench.add_stage_name_label')}
+                </label>
+                <input
+                  ref={addStageNameRef}
+                  id="wb-add-stage-name-input"
+                  className="input"
+                  data-testid="wb-add-stage-name"
+                  value={stageDraftName}
+                  onChange={(e) => {
+                    const v = e.target.value
+                    setStageDraftName(v)
+                    if (!stageIdTouched) setStageDraftId(slugifyStageName(v))
+                  }}
+                />
+              </div>
+              <div className="field">
+                <label className="field__label" htmlFor="wb-add-stage-id-input">
+                  {t('workbench.add_stage_id_label')}
+                </label>
+                <input
+                  id="wb-add-stage-id-input"
+                  className={stageIdError ? 'input input--error' : 'input'}
+                  style={{ fontFamily: 'var(--mono)' }}
+                  data-testid="wb-add-stage-id"
+                  value={stageDraftId}
+                  onChange={(e) => {
+                    setStageDraftId(e.target.value)
+                    setStageIdTouched(true)
+                  }}
+                />
+                {stageIdError && <span className="field__error" data-testid="wb-add-stage-id-error">{stageIdError}</span>}
+              </div>
+            </div>
+            <div className="dialog__actions">
+              <button type="button" className="btn btn--ghost" onClick={closeAddStage}>
+                {t('workbench.add_stage_cancel')}
+              </button>
+              <button type="submit" className="btn" data-testid="wb-add-stage-confirm" disabled={!canSubmitStage}>
+                {t('workbench.add_stage_confirm')}
+              </button>
+            </div>
+          </form>
         </Dialog>
       )}
     </section>
