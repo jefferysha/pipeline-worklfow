@@ -236,6 +236,58 @@ describe('ProgressView 箭头带（验收③）', () => {
     expect(flow.querySelectorAll('.prg-seg')).toHaveLength(3)
     expect(flow.getAttribute('aria-label')).toContain('第 2 / 3')
   })
+
+  it('观察项①：自定义 workflow 段文本显示用户设置的中文 label（而非 step id）', () => {
+    renderView()
+    const flow = screen.getByTestId('prg-flow-changelog-cn')
+    const segTexts = Array.from(flow.querySelectorAll('.prg-seg__t')).map((s) => s.textContent)
+    expect(segTexts[0]).toContain('起草') // draft（past）
+    expect(segTexts[1]).toContain('人工复核') // review（cur）
+    expect(segTexts[2]).toContain('发布') // ship（future）——即便 id 撞了 default 相名也不回落 i18n
+    // 段文本不再泄露 step id
+    expect(flow.textContent).not.toContain('draft')
+    expect(flow.textContent).not.toContain('review')
+    // aria-label 的当前阶段同步用 label（消费两处口径一致）
+    expect(flow.getAttribute('aria-label')).toContain('人工复核')
+  })
+
+  it('观察项①：自定义步缺 label（空串）→ 段文本回退显示 step id', async () => {
+    const partialRules = rulesFromDef({
+      name: 'wf-partial',
+      steps: [
+        { id: 'draft', label: '起草', gate: null, skills: [], inputs: [], outputs: [], guards: [], transitions: [{ event: 'go', to: 'polish' }] },
+        { id: 'polish', label: '', gate: null, skills: [], inputs: [], outputs: [], guards: [], transitions: [] }, // 空 label
+      ],
+    })
+    render(
+      <I18nProvider>
+        <ProgressView
+          snapshot={makeSnapshot([
+            makeProject(ROOT_A, [makeChange('x-demo', 'polish', { fields: { workflow: 'wf-partial' } })]),
+          ])}
+          loading={false}
+          error={null}
+          currentRoot=""
+          rulesByKey={new Map([[rulesKey(ROOT_A, 'wf-partial'), partialRules]])}
+        />
+      </I18nProvider>,
+    )
+    const flow = screen.getByTestId('prg-flow-x-demo')
+    const segTexts = Array.from(flow.querySelectorAll('.prg-seg__t')).map((s) => s.textContent)
+    expect(segTexts[0]).toContain('起草') // 有 label
+    expect(segTexts[1]).toContain('polish') // 缺 label → 回退 step id
+    // 单 root fixture：触发并发上限探测请求，冲掉其落地（不冲会刷 act 告警，同本文件其余先例）
+    await act(async () => {})
+  })
+
+  it('观察项①：default 七相段文本仍走 phases.* i18n（回归，label 逻辑不侵染 default）', () => {
+    renderView()
+    const flow = screen.getByTestId('prg-flow-gate-demo') // verify 阶段（default 7 相）
+    const segTexts = Array.from(flow.querySelectorAll('.prg-seg__t')).map((s) => s.textContent)
+    expect(segTexts[0]).toContain('立项') // open（past）
+    expect(segTexts[4]).toContain('验证') // verify（cur）
+    expect(segTexts[5]).toContain('交付') // ship（future）
+  })
 })
 
 describe('ProgressView 行骨架（状态徽章 + 快捷钮占位）', () => {

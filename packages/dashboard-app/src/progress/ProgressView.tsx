@@ -109,8 +109,13 @@ interface ChevronFlowProps {
   t: (key: string, vars?: Record<string, string | number>) => string
 }
 
-/** 步 id → 展示名：default 七相走 phases.* i18n，自定义步 id 原样（rules 不携带 label）。 */
-function stepLabel(step: string, t: ChevronFlowProps['t']): string {
+/**
+ * 步 id → 展示名：自定义步优先用用户设置的 label（rules.labelByStep），缺键/空 label 回退
+ * step id；default 七相（labelByStep 缺省）走 phases.* i18n——行为逐字不变（观察项①）。
+ */
+function stepLabel(step: string, labelByStep: Record<string, string> | undefined, t: ChevronFlowProps['t']): string {
+  const custom = labelByStep?.[step]
+  if (custom) return custom
   return isPhase(step) ? t(`phases.${step}`) : step
 }
 
@@ -123,7 +128,7 @@ function stepLabel(step: string, t: ChevronFlowProps['t']): string {
 function ChevronFlow({ workflow, rules, change, state, stateLabel, t }: ChevronFlowProps): JSX.Element {
   const steps = rules?.steps ?? []
   const curIdx = steps.indexOf(change.phase)
-  const phaseLabel = stepLabel(change.phase, t)
+  const phaseLabel = stepLabel(change.phase, rules?.labelByStep, t)
   if (curIdx < 0) {
     return (
       <div
@@ -169,7 +174,7 @@ function ChevronFlow({ workflow, rules, change, state, stateLabel, t }: ChevronF
         }
         return (
           <span key={step} className={classes.join(' ')}>
-            <span className="prg-seg__t">{prefix}{stepLabel(step, t)}</span>
+            <span className="prg-seg__t">{prefix}{stepLabel(step, rules?.labelByStep, t)}</span>
             {i === curIdx && state === 'running' && <i className="prg-gloss" aria-hidden="true" />}
           </span>
         )
