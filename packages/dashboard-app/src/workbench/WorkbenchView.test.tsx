@@ -751,3 +751,72 @@ describe('WorkbenchView 门徽章 popover（v6 T11 集成，静态 hook 元数�
     expect(screen.getByTestId('wb-editor-stage')).toHaveTextContent('draft')
   })
 })
+
+/**
+ * v6 T12：编辑区瘦身——Hook 时序线从 StepEditor slot 挪右栏(per-root 数据面,不吃 workflow
+ * 只读态);右栏新增安全门说明卡(决议#2 人话版)与 manifest 技能矩阵入口卡。
+ * 断言迁移登记:原「编辑区含 Hook 分区」的隐性布局由本 describe 的①显式接管(编辑卡内不再有
+ * wb-hooks);HookTimeline 自身开关/锁定/回滚逻辑仍由 HookTimeline.test.tsx 全量覆盖,不重复。
+ */
+describe('WorkbenchView v6 T12：Hook 时序挪右栏 + 安全门/矩阵卡', () => {
+  const HOOKS_BODY = {
+    hooks: [
+      { id: 'session-start', event: 'SessionStart', configurable: true },
+      { id: 'gate', event: 'PreToolUse', configurable: false },
+      { id: 'interactive-skill-gate', event: 'PostToolUse', configurable: false },
+      { id: 'confirm-clear', event: 'PostToolUse', configurable: false },
+    ],
+    matrix: {},
+  }
+  let hookPosts: string[]
+  beforeEach(() => {
+    hookPosts = []
+    const prev = global.fetch
+    global.fetch = vi.fn(async (url: string, opts?: RequestInit) => {
+      if (typeof url === 'string' && url.startsWith('/api/hooks')) {
+        if (opts?.method === 'POST') {
+          hookPosts.push(String(opts.body))
+          return new Response(JSON.stringify({ ok: true }), { status: 200 })
+        }
+        return new Response(JSON.stringify(HOOKS_BODY), { status: 200 })
+      }
+      return (prev as unknown as typeof fetch)(url as never, opts)
+    }) as unknown as typeof fetch
+  })
+
+  it('① Hook 时序卡渲染在右栏(wb-side-hooks),编辑卡内不再有 wb-hooks', async () => {
+    renderView()
+    const side = await screen.findByTestId('wb-side-hooks')
+    expect(within(side).getByTestId('wb-hooks')).toBeInTheDocument()
+    const editor = await screen.findByTestId('wb-editor')
+    expect(within(editor).queryByTestId('wb-hooks')).toBeNull()
+  })
+
+  it('② 右栏开关按当前选中阶段读写:切到 review 后 POST 键的阶段半边是 review', async () => {
+    renderView()
+    await screen.findByTestId('wb-side-hooks')
+    fireEvent.click(screen.getByTestId('wb-step-review'))
+    fireEvent.click(await screen.findByTestId('wb-hk-sw-session-start'))
+    await waitFor(() => expect(hookPosts.length).toBe(1))
+    const body = JSON.parse(hookPosts[0]!) as { hook: string; phase: string; enabled: boolean }
+    expect(body.hook).toBe('session-start')
+    expect(body.phase).toBe('review')
+    expect(body.enabled).toBe(false)
+  })
+
+  it('③ 安全门说明卡:强制常开与未接线两段人话说明(决议#2 回归)', async () => {
+    renderView()
+    const card = await screen.findByTestId('wb-side-safegate')
+    expect(card.textContent).toContain('强制常开')
+    expect(card.textContent).toContain('不做假开关')
+  })
+
+  it('④ 矩阵入口卡:自定义 workflow 下可点,点击切到 default;default 下按钮禁用', async () => {
+    renderView()
+    const btn = await screen.findByTestId('wb-mx-open')
+    expect(btn).toBeEnabled()
+    fireEvent.click(btn)
+    await waitFor(() => expect(screen.getByTestId('wb-wf-btn').textContent).toContain('default'))
+    expect(screen.getByTestId('wb-mx-open')).toBeDisabled()
+  })
+})

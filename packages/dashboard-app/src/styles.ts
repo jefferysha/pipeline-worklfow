@@ -764,6 +764,17 @@ button.ev__chip--neutral:hover { border-color: var(--border-2); color: var(--tex
   .wb-hknode, .wb-hkstack { grid-column: 1 !important; grid-row: auto; }
 }
 
+/* ── v6 T12：Hook 时序线挪右栏（side-col 280px）——纵排分组取代 4 列横排（交互真相源
+   v6-workbench-flow.html 方案 A 右栏；上方 720px 断点的旧退化分支保留兜底）。横轨/箭头
+   失去几何意义 → 隐藏；分组左侧竖线延续「时序」隐喻；循环提示改 PreToolUse 组内一行小字。 ── */
+.wb-hkline--rail { display: flex; flex-direction: column; gap: 12px; padding-top: 0; }
+.wb-hkline--rail::before, .wb-hkline--rail::after { display: none; }
+.wb-hkgroup { border-left: 2px solid var(--border-2); padding-left: 10px; }
+.wb-hkline--rail .wb-hknode { margin-bottom: 6px; }
+.wb-hkline--rail .wb-hkloop { position: static; display: block; margin: 0 0 6px; font-size: 10.5px; color: var(--text-3); }
+.wb-hkline--rail .wb-hkstack { display: flex; flex-direction: column; gap: 8px; }
+.side-card__body--hooks .wb-ed-sec { margin: 0; border-top: none; padding-top: 0; }
+
 /* ==== T16：「自动运行(Loop)」卡（lp- 区块）——对照 demo v5 #wbLoopCard：滑杆轨道 fill-2、
    填充 accent（--p 渐变分界）、推荐 ▽ 刻度、超限策略 pill 单选、自主级别 segmented、
    闸门/终止/范围 chips 行。全部走既有 token，无新原色。 ==== */

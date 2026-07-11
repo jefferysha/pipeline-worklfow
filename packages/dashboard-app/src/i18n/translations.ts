@@ -426,6 +426,14 @@ export const zh: Dict = {
     //    v5 计划的编号，跟本轮 v6 计划的 T1-T13 是两套体系。 ──
     flow_count_title: '{n} 个真实任务当前在此阶段',
     gate_pop_title: '此阶段由以下钩子强制拦截',
+    // ── v6 计划 T12：编辑区瘦身——Hook 时序挪右栏 + 安全门说明卡 + manifest 矩阵入口卡。──
+    sg_title: '安全门说明',
+    sg_locked_body: '门拦截（gate.sh）与技能安全门（interactive-skill-gate.sh）强制常开——这是安全边界：复核门没过时物理拦住写类工具、依赖顺序没到的技能直接拦下。关掉任何一个，门的语义就失效，所以不提供开关。',
+    sg_pending_body: '确认后清屏（confirm-clear）与决策记录（decision-recorder）脚本侧尚未接线，暂不可配——不做假开关。',
+    mx_title: 'manifest 技能矩阵',
+    mx_body: 'default 工作流各阶段按轨道（pm / frontend / backend）强制的技能表，来自 templates/manifest.yaml——跨 workflow 全局生效，不属于单个阶段。',
+    mx_open: '去 default 工作流查看矩阵',
+    mx_open_here: '当前就在 default 工作流——矩阵在下方技能区',
   },
   // T10（v5 交互重建）：进度视图骨架文案。口径纪律同 workbench：可见文案一律用「阶段」（旧措辞已废）。
   progress: {
@@ -873,6 +881,14 @@ export const en: Dict = {
     // ── v6 plan T11: flow band (StepperRail rewrite) — real count bubble + gate badge popover. ──
     flow_count_title: '{n} real task(s) currently at this stage',
     gate_pop_title: 'This stage is enforced by these hooks',
+    // ── v6 plan T12: editor slim-down — hook timeline moved to right rail + safety-gate card + manifest matrix entry. ──
+    sg_title: 'Safety gates',
+    sg_locked_body: 'The interaction gate (gate.sh) and the skill safety gate (interactive-skill-gate.sh) are always on — they are the security boundary: write-class tools are physically blocked while a review gate is open, and skills whose dependencies are not met are stopped cold. Turning either off would void the gate semantics, so no switch is offered.',
+    sg_pending_body: 'confirm-clear and decision-recorder are not wired on the script side yet, so they are not configurable — no fake switches.',
+    mx_title: 'Manifest skill matrix',
+    mx_body: 'The per-stage × per-track (pm / frontend / backend) mandatory-skill table of the default workflow, from templates/manifest.yaml — global across workflows, not owned by any single stage.',
+    mx_open: 'Open the matrix in the default workflow',
+    mx_open_here: 'Already on the default workflow — the matrix lives in the skills section below',
   },
   progress: {
     title: 'Progress',

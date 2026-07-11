@@ -734,7 +734,8 @@ export function WorkbenchView({ root, onToggleError, snapshot = null }: Workbenc
                     )}
                     <span className="wb-ed-note">{t('workbench.editor_hint')}</span>
                   </div>
-                  {/* T13：阶段编辑表单（T14 技能链 / T15 Hook 时序线在 StepEditor 内继续分区挂载）。
+                  {/* T13：阶段编辑表单（T14 技能链在 StepEditor 内继续分区挂载）。v6 T12：Hook
+                      时序线已挪右栏（per-stage 编辑区只留 基本/技能/产出物 三分区）。
                       key 按 (workflow, step) 复合——切阶段/切 workflow 时「+ 添加」输入态随卸载复位。 */}
                   <StepEditor
                     key={`${def.name}:${selectedStep.id}`}
@@ -742,9 +743,6 @@ export function WorkbenchView({ root, onToggleError, snapshot = null }: Workbenc
                     workflow={def.name}
                     readonly={readonlyWf}
                     onChange={updateStep}
-                    // T15：Hook 时序线 slot 注入——per-root 配置即时写回，不吃 readonly
-                    //（default 只读锁的是 workflow def，不锁 hooks.json）。
-                    hooksSlot={<HookTimeline phase={selectedStep.id} config={hooksConfig} />}
                   />
                 </section>
               )}
@@ -796,6 +794,44 @@ export function WorkbenchView({ root, onToggleError, snapshot = null }: Workbenc
                         })}
                 </span>
               </div>
+            </div>
+          </div>
+
+          {/* v6 T12：Hook 全局时序挪右栏——per-root 数据面（不吃 workflow 只读态），开关仍按
+              当前选中阶段读写（矩阵键 = <hook>.<阶段>）；HookTimeline 自带区头/说明/错误行。 */}
+          {selectedStep && (
+            <div className="side-card" data-testid="wb-side-hooks">
+              <div className="side-card__body side-card__body--hooks">
+                <HookTimeline phase={selectedStep.id} config={hooksConfig} />
+              </div>
+            </div>
+          )}
+
+          {/* v6 T12：安全门说明卡（决议#2 的人话版，静态）——强制常开是安全边界，不提供开关。 */}
+          <div className="side-card" data-testid="wb-side-safegate">
+            <div className="side-card__head"><b>{t('workbench.sg_title')}</b></div>
+            <div className="side-card__body">
+              <p className="wb-note">{t('workbench.sg_locked_body')}</p>
+              <p className="wb-note">{t('workbench.sg_pending_body')}</p>
+            </div>
+          </div>
+
+          {/* v6 T12：manifest 技能矩阵入口卡——矩阵本体住在 default 工作流的技能区（全局
+              manifest，跨 workflow 生效，不属于单个阶段）；入口走既有 requestSwitch（含脏守卫）。 */}
+          <div className="side-card" data-testid="wb-side-matrix">
+            <div className="side-card__head"><b>{t('workbench.mx_title')}</b></div>
+            <div className="side-card__body">
+              <p className="wb-note">{t('workbench.mx_body')}</p>
+              <button
+                type="button"
+                className="btn btn--ghost"
+                data-testid="wb-mx-open"
+                disabled={wfName === 'default'}
+                title={wfName === 'default' ? t('workbench.mx_open_here') : undefined}
+                onClick={() => requestSwitch('default')}
+              >
+                {t('workbench.mx_open')}
+              </button>
             </div>
           </div>
 
