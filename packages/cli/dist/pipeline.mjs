@@ -3031,11 +3031,11 @@ var require_commander = __commonJS({
 
 // packages/cli/src/main.ts
 import { execFile as execFile3 } from "node:child_process";
-import { accessSync, constants as fsConstants, readdirSync as readdirSync5, readFileSync as readFileSync17, statSync as statSync4 } from "node:fs";
+import { accessSync, constants as fsConstants, readdirSync as readdirSync5, readFileSync as readFileSync18, statSync as statSync4 } from "node:fs";
 import { access as access2, readdir as readdir5, readFile as readFile6, stat as stat7, writeFile as writeFile8 } from "node:fs/promises";
 import { homedir as homedir8 } from "node:os";
-import { dirname as dirname8, join as join33 } from "node:path";
-import { fileURLToPath } from "node:url";
+import { dirname as dirname9, join as join34 } from "node:path";
+import { fileURLToPath as fileURLToPath2 } from "node:url";
 
 // node_modules/commander/esm.mjs
 var import_index = __toESM(require_commander(), 1);
@@ -13546,7 +13546,170 @@ async function cmdCheck(deps, name2) {
 }
 
 // packages/cli/src/commands/doctor.ts
-import { join as join20 } from "node:path";
+import { join as join21 } from "node:path";
+
+// packages/cli/src/skillSources.ts
+import { readFileSync as readFileSync14 } from "node:fs";
+import { dirname as dirname6, join as join20 } from "node:path";
+import { fileURLToPath } from "node:url";
+var TOOL_SET = /* @__PURE__ */ new Set([
+  "claude-plugin",
+  "skills-cli",
+  "npm",
+  "builtin",
+  "bundled"
+]);
+var TIER_SET = /* @__PURE__ */ new Set([
+  "mandatory",
+  "recommended",
+  "conditional",
+  "optional"
+]);
+var SkillSourcesError = class extends Error {
+  constructor(message) {
+    super(`skill-sources: ${message}`);
+    this.name = "SkillSourcesError";
+  }
+};
+function defaultRegistryPath() {
+  return join20(dirname6(fileURLToPath(import.meta.url)), "..", "..", "..", "templates", "skill-sources.yaml");
+}
+function stripComment2(line) {
+  const t = line.trimStart();
+  if (t.startsWith("#")) return "";
+  const m = line.match(/^(.*?)\s#/);
+  return (m ? m[1] : line).trimEnd();
+}
+function splitTopLevel(s, sep2) {
+  const out = [];
+  let cur = "";
+  let quote = "";
+  for (const ch of s) {
+    if (quote) {
+      cur += ch;
+      if (ch === quote) quote = "";
+    } else if (ch === '"' || ch === "'") {
+      quote = ch;
+      cur += ch;
+    } else if (ch === sep2) {
+      out.push(cur);
+      cur = "";
+    } else {
+      cur += ch;
+    }
+  }
+  out.push(cur);
+  return out;
+}
+function unquote(v) {
+  const s = v.trim();
+  if (s.length >= 2 && (s[0] === '"' || s[0] === "'") && s[s.length - 1] === s[0]) {
+    return s.slice(1, -1);
+  }
+  return s;
+}
+function parseFlowBody(body, token) {
+  const fields = /* @__PURE__ */ new Map();
+  for (const rawPair of splitTopLevel(body, ",")) {
+    const pair = rawPair.trim();
+    if (pair === "") continue;
+    const colon = pair.indexOf(":");
+    if (colon <= 0) {
+      throw new SkillSourcesError(`token '${token}' \u5B57\u6BB5 '${pair}' \u7F3A 'key: value' \u5192\u53F7`);
+    }
+    const key = pair.slice(0, colon).trim();
+    const value = unquote(pair.slice(colon + 1));
+    if (fields.has(key)) {
+      throw new SkillSourcesError(`token '${token}' \u5B57\u6BB5 '${key}' \u91CD\u590D`);
+    }
+    fields.set(key, value);
+  }
+  return fields;
+}
+function parseEntry(line, lineNo) {
+  const brace = line.indexOf("{");
+  const close = line.lastIndexOf("}");
+  if (brace < 0 || close < brace) {
+    throw new SkillSourcesError(`\u7B2C ${lineNo} \u884C\u4E0D\u662F 'token: { ... }' \u5F62\u6001: '${line.trim()}'`);
+  }
+  const keyPart = line.slice(0, brace).trim();
+  if (!keyPart.endsWith(":")) {
+    throw new SkillSourcesError(`\u7B2C ${lineNo} \u884C\u952E\u987B\u4EE5 ':' \u7ED3\u5C3E: '${line.trim()}'`);
+  }
+  const token = keyPart.slice(0, -1).trim();
+  if (token === "") throw new SkillSourcesError(`\u7B2C ${lineNo} \u884C token \u4E3A\u7A7A`);
+  const f = parseFlowBody(line.slice(brace + 1, close), token);
+  const tool = f.get("tool");
+  if (!tool || !TOOL_SET.has(tool)) {
+    throw new SkillSourcesError(`token '${token}' tool \u975E\u6CD5\u6216\u7F3A\u5931: '${tool ?? ""}'\uFF08\u5408\u6CD5\uFF1A${[...TOOL_SET].join("/")}\uFF09`);
+  }
+  const source = f.get("source");
+  if (source === void 0 || source === "") {
+    throw new SkillSourcesError(`token '${token}' \u7F3A source`);
+  }
+  const tier = f.get("tier");
+  if (!tier || !TIER_SET.has(tier)) {
+    throw new SkillSourcesError(`token '${token}' tier \u975E\u6CD5\u6216\u7F3A\u5931: '${tier ?? ""}'\uFF08\u5408\u6CD5\uFF1A${[...TIER_SET].join("/")}\uFF09`);
+  }
+  const officialRaw = f.get("official");
+  if (officialRaw !== "true" && officialRaw !== "false") {
+    throw new SkillSourcesError(`token '${token}' official \u987B\u4E3A true/false: '${officialRaw ?? ""}'`);
+  }
+  const entry = {
+    token,
+    tool,
+    source,
+    tier,
+    official: officialRaw === "true"
+  };
+  const skill = f.get("skill");
+  if (skill !== void 0 && skill !== "") entry.skill = skill;
+  const engine = f.get("engine");
+  if (engine !== void 0 && engine !== "") entry.engine = engine;
+  const alt = f.get("alt");
+  if (alt !== void 0 && alt !== "") entry.alt = alt;
+  const note = f.get("note");
+  if (note !== void 0 && note !== "") entry.note = note;
+  return entry;
+}
+function parseSkillSources(text) {
+  const lines = text.split("\n");
+  const out = [];
+  const seen = /* @__PURE__ */ new Set();
+  let inSkills = false;
+  for (let i = 0; i < lines.length; i++) {
+    const raw = lines[i];
+    const line = stripComment2(raw);
+    if (line.trim() === "") continue;
+    const indented = /^\s/.test(line);
+    if (!inSkills) {
+      if (/^skills:\s*$/.test(line)) inSkills = true;
+      continue;
+    }
+    if (!indented) {
+      inSkills = false;
+      if (/^skills:\s*$/.test(line)) inSkills = true;
+      continue;
+    }
+    const entry = parseEntry(line, i + 1);
+    if (seen.has(entry.token)) {
+      throw new SkillSourcesError(`token '${entry.token}' \u91CD\u590D\u58F0\u660E\uFF08\u7B2C ${i + 1} \u884C\uFF09`);
+    }
+    seen.add(entry.token);
+    out.push(entry);
+  }
+  return out;
+}
+function readSkillSources(path5) {
+  try {
+    const p = path5 ?? defaultRegistryPath();
+    return parseSkillSources(readFileSync14(p, "utf8"));
+  } catch {
+    return [];
+  }
+}
+
+// packages/cli/src/commands/doctor.ts
 var green = (id, detail) => ({ id, status: "green", detail, hint: "" });
 var yellow = (id, detail, hint) => ({ id, status: "yellow", detail, hint });
 var red = (id, detail, hint) => ({ id, status: "red", detail, hint });
@@ -13573,22 +13736,22 @@ function checkManifest(p) {
   return red(
     "asset:manifest",
     `manifest \u4E0D\u53EF\u7528: ${err}`,
-    `\u68C0\u67E5 ${join20(p.pluginRoot, "templates", "manifest.yaml")} \u662F\u5426\u5B58\u5728\u4E14\u7B26\u5408\u7A84 YAML \u5B50\u96C6\uFF08\u89C1\u6587\u4EF6\u5934\u6CE8\u91CA\uFF09`
+    `\u68C0\u67E5 ${join21(p.pluginRoot, "templates", "manifest.yaml")} \u662F\u5426\u5B58\u5728\u4E14\u7B26\u5408\u7A84 YAML \u5B50\u96C6\uFF08\u89C1\u6587\u4EF6\u5934\u6CE8\u91CA\uFF09`
   );
 }
 function gateAssetProblems(p) {
   const problems = [];
-  if (!p.fileExists(join20(p.pluginRoot, "hooks", "hooks.json"))) problems.push("hooks/hooks.json \u7F3A\u5931");
-  const gate = join20(p.pluginRoot, "hooks", "gate.sh");
+  if (!p.fileExists(join21(p.pluginRoot, "hooks", "hooks.json"))) problems.push("hooks/hooks.json \u7F3A\u5931");
+  const gate = join21(p.pluginRoot, "hooks", "gate.sh");
   if (!p.fileExists(gate)) problems.push("hooks/gate.sh \u7F3A\u5931");
   else if (!p.fileExecutable(gate)) problems.push("hooks/gate.sh \u4E0D\u53EF\u6267\u884C");
   return problems;
 }
 function checkHookAssets(p) {
   const missing = [];
-  if (!p.fileExists(join20(p.pluginRoot, "hooks", "hooks.json"))) missing.push("hooks/hooks.json \u7F3A\u5931");
+  if (!p.fileExists(join21(p.pluginRoot, "hooks", "hooks.json"))) missing.push("hooks/hooks.json \u7F3A\u5931");
   for (const s of HOOK_SCRIPTS) {
-    const abs = join20(p.pluginRoot, "hooks", s);
+    const abs = join21(p.pluginRoot, "hooks", s);
     if (!p.fileExists(abs)) missing.push(`hooks/${s} \u7F3A\u5931`);
     else if (!p.fileExecutable(abs)) missing.push(`hooks/${s} \u4E0D\u53EF\u6267\u884C`);
   }
@@ -13622,7 +13785,7 @@ function checkStatusline(p) {
   return yellow(
     "guard:statusline",
     "statusline \u672A\u63A5\u5165 settings\u2014\u2014\u7EC8\u7AEF\u72B6\u6001\u9762\u4E0D\u53EF\u89C1\uFF08\u529F\u80FD\u964D\u7EA7\uFF09",
-    `\u5728 ~/.claude/settings.json \u52A0 "statusLine": {"type": "command", "command": "bash ${join20(p.pluginRoot, "hooks", "statusline.sh")}"}`
+    `\u5728 ~/.claude/settings.json \u52A0 "statusLine": {"type": "command", "command": "bash ${join21(p.pluginRoot, "hooks", "statusline.sh")}"}`
   );
 }
 function checkTap(p) {
@@ -13648,7 +13811,7 @@ async function checkChanges(deps) {
   const bad = [];
   for (const name2 of names) {
     try {
-      await deps.store.read(join20(root, name2));
+      await deps.store.read(join21(root, name2));
     } catch (e) {
       bad.push(`${name2}\uFF08${errMsg(e)}\uFF09`);
     }
@@ -13682,8 +13845,72 @@ async function checkVerifySkills(p) {
   return red(
     "quality:verify-skills",
     `verify-skills \u5931\u8D25\uFF08exit ${code}\uFF09: ${summary}`,
-    `bash ${join20(p.pluginRoot, "tools", "verify-skills.sh")} \u67E5\u770B\u9010\u6761\u4FEE\u590D\u6307\u5F15`
+    `bash ${join21(p.pluginRoot, "tools", "verify-skills.sh")} \u67E5\u770B\u9010\u6761\u4FEE\u590D\u6307\u5F15`
   );
+}
+function skillInPlace(entry, byToken, installed) {
+  for (const raw of entry.split("|")) {
+    const alt = raw.trim();
+    if (alt === "") continue;
+    const src = byToken.get(alt);
+    if (src && (src.tool === "builtin" || src.tool === "bundled")) return true;
+    if (installed.has(alt)) return true;
+    if (src?.skill !== void 0 && installed.has(src.skill)) return true;
+    const colon = alt.indexOf(":");
+    if (colon > 0) {
+      const prefix = alt.slice(0, colon);
+      const suffix = alt.slice(colon + 1);
+      if (installed.has(prefix) || installed.has(suffix)) return true;
+      const pluginSkill = byToken.get(prefix)?.skill;
+      if (pluginSkill !== void 0 && installed.has(pluginSkill)) return true;
+    }
+  }
+  return false;
+}
+function collectMissingSkills(table, byToken, installed) {
+  const seen = /* @__PURE__ */ new Set();
+  const missing = [];
+  for (const row of Object.values(table)) {
+    for (const list of Object.values(row)) {
+      for (const entry of list ?? []) {
+        if (seen.has(entry)) continue;
+        seen.add(entry);
+        if (!skillInPlace(entry, byToken, installed)) missing.push(entry);
+      }
+    }
+  }
+  return missing;
+}
+function checkSkills(p) {
+  const tables = p.manifestSkills();
+  if (tables === null) {
+    return [
+      yellow("skills:mandatory", "manifest \u4E0D\u53EF\u7528\u2014\u2014\u65E0\u6CD5\u6838\u5F3A\u5236\u6280\u80FD\u9F50\u5168\u5EA6\uFF08\u4E0D\u8BEF\u62A5 green\uFF09", "\u5148\u4FEE\u590D asset:manifest\uFF08templates/manifest.yaml\uFF09\u540E\u91CD\u8DD1 pipeline doctor"),
+      yellow("skills:recommended", "manifest \u4E0D\u53EF\u7528\u2014\u2014\u65E0\u6CD5\u6838\u63A8\u8350\u6280\u80FD\u9F50\u5168\u5EA6", "\u5148\u4FEE\u590D asset:manifest \u540E\u91CD\u8DD1 pipeline doctor")
+    ];
+  }
+  const registry = p.fileExists(join21(p.pluginRoot, "templates", "skill-sources.yaml")) ? readSkillSources() : [];
+  if (registry.length === 0) {
+    return [
+      yellow("skills:mandatory", "registry \u672A\u5C31\u7EEA\uFF08templates/skill-sources.yaml \u7F3A\u5931/\u7A7A\uFF09\u2014\u2014\u65E0\u6CD5\u6838\u5F3A\u5236\u6280\u80FD\u9F50\u5168\u5EA6\uFF08\u4E0D\u8BEF\u62A5 green\uFF09", "\u786E\u8BA4\u63D2\u4EF6\u5B89\u88C5\u5B8C\u6574\uFF08skill-sources.yaml \u5E94\u968F\u63D2\u4EF6\u5206\u53D1\uFF09\u540E\u91CD\u8DD1 pipeline doctor"),
+      yellow("skills:recommended", "registry \u672A\u5C31\u7EEA\uFF08templates/skill-sources.yaml \u7F3A\u5931/\u7A7A\uFF09\u2014\u2014\u65E0\u6CD5\u6838\u63A8\u8350\u6280\u80FD\u9F50\u5168\u5EA6", "\u786E\u8BA4\u63D2\u4EF6\u5B89\u88C5\u5B8C\u6574\u540E\u91CD\u8DD1 pipeline doctor")
+    ];
+  }
+  const byToken = new Map(registry.map((s) => [s.token, s]));
+  const installed = p.installedSkillNames();
+  const missMand = collectMissingSkills(tables.mandatory, byToken, installed);
+  const missRec = collectMissingSkills(tables.recommended, byToken, installed);
+  const mandatory = missMand.length === 0 ? green("skills:mandatory", "\u6240\u6709 manifest \u5F3A\u5236\u6280\u80FD\u5728\u4F4D\uFF08\u963B\u65AD\u51FA\u53E3\u7684\u5F3A\u5236 skill \u5168\u90E8\u53EF\u7528\uFF09") : red(
+    "skills:mandatory",
+    `\u7F3A ${missMand.length} \u4E2A\u5F3A\u5236\u6280\u80FD\uFF1A${missMand.join("\u3001")}`,
+    `\u8DD1 pipeline setup \u5B89\u88C5\u7F3A\u5931\u7684\u5F3A\u5236\u6280\u80FD\uFF08${missMand.join("\u3001")}\uFF09\uFF1B\u88C5\u9F50\u540E\u91CD\u8DD1 pipeline doctor \u590D\u6838`
+  );
+  const recommended = missRec.length === 0 ? green("skills:recommended", "\u6240\u6709 manifest \u63A8\u8350\u6280\u80FD\u5728\u4F4D") : yellow(
+    "skills:recommended",
+    `\u7F3A ${missRec.length} \u4E2A\u63A8\u8350\u6280\u80FD\uFF1A${missRec.join("\u3001")}`,
+    "pipeline setup \u53EF\u4E00\u5E76\u5B89\u88C5\uFF08\u63A8\u8350\u7F3A\u5931\u53EA\u964D\u7EA7\u3001\u4E0D\u963B\u65AD\u51FA\u53E3\uFF09"
+  );
+  return [mandatory, recommended];
 }
 var STATUS_TAG = { green: "[PASS]", yellow: "[WARN]", red: "[FAIL]" };
 async function cmdDoctor(deps, opts) {
@@ -13712,6 +13939,16 @@ async function cmdDoctor(deps, opts) {
     } catch (e) {
       checks.push(red(id, `\u68C0\u67E5\u81EA\u8EAB\u5F02\u5E38: ${errMsg(e)}`, "\u6392\u9664\u63A2\u9488\u73AF\u5883\u95EE\u9898\u540E\u91CD\u8DD1 pipeline doctor"));
     }
+  }
+  try {
+    const [mand, rec] = checkSkills(p);
+    checks.push(mand, rec);
+  } catch (e) {
+    const m = errMsg(e);
+    checks.push(
+      red("skills:mandatory", `\u68C0\u67E5\u81EA\u8EAB\u5F02\u5E38: ${m}`, "\u6392\u9664\u63A2\u9488\u73AF\u5883\u95EE\u9898\u540E\u91CD\u8DD1 pipeline doctor"),
+      red("skills:recommended", `\u68C0\u67E5\u81EA\u8EAB\u5F02\u5E38: ${m}`, "\u6392\u9664\u63A2\u9488\u73AF\u5883\u95EE\u9898\u540E\u91CD\u8DD1 pipeline doctor")
+    );
   }
   const summary = {
     green: checks.filter((c) => c.status === "green").length,
@@ -13915,7 +14152,7 @@ async function cmdImport(deps, name2, opts) {
 }
 
 // packages/cli/src/commands/inbox.ts
-import { join as join21 } from "node:path";
+import { join as join22 } from "node:path";
 function fmtDuration(s) {
   if (s < 60) return `${s}s`;
   const m = Math.floor(s / 60);
@@ -13970,12 +14207,12 @@ async function cmdInbox(deps, opts) {
     seen.add(name2);
   }
   const now = Date.parse(deps.clock());
-  const changesRoot2 = join21(deps.cwd, "openspec", "changes");
+  const changesRoot2 = join22(deps.cwd, "openspec", "changes");
   for (const name2 of await deps.listChanges(changesRoot2)) {
     if (seen.has(name2)) continue;
     let fields;
     try {
-      fields = (await deps.store.read(join21(changesRoot2, name2))).fields;
+      fields = (await deps.store.read(join22(changesRoot2, name2))).fields;
     } catch (e) {
       deps.io.err(`WARN: \u8DF3\u8FC7\u574F change ${name2}: ${errMsg(e)}`);
       continue;
@@ -14381,7 +14618,7 @@ function incrAttempts(store2, changeDir2, max) {
 
 // packages/automation/dist/queue/scan.js
 import { readdir as readdir4 } from "node:fs/promises";
-import { join as join22 } from "node:path";
+import { join as join23 } from "node:path";
 var QUEUED_AT_LAST = "~";
 var depsAllSatisfied = (deps, resolver) => {
   for (const dep of deps) {
@@ -14417,7 +14654,7 @@ async function scanReadyFromFs(changesDir, store2) {
   const entries = [];
   const automationByName = /* @__PURE__ */ new Map();
   for (const name2 of activeNames) {
-    const changeDir2 = join22(changesDir, name2);
+    const changeDir2 = join23(changesDir, name2);
     let state;
     try {
       state = await store2.read(changeDir2);
@@ -14436,7 +14673,7 @@ async function scanReadyFromFs(changesDir, store2) {
   }
   let archiveEntries = [];
   try {
-    const archived = await readdir4(join22(changesDir, "archive"), { withFileTypes: true });
+    const archived = await readdir4(join23(changesDir, "archive"), { withFileTypes: true });
     archiveEntries = archived.filter((d) => d.isDirectory()).map((d) => d.name);
   } catch {
     archiveEntries = [];
@@ -14958,8 +15195,8 @@ var dockerAvailable = async (exec) => {
 };
 
 // packages/automation/dist/config/automationJson.js
-import { readFileSync as readFileSync14 } from "node:fs";
-import { join as join23 } from "node:path";
+import { readFileSync as readFileSync15 } from "node:fs";
+import { join as join24 } from "node:path";
 var AUTOMATION_JSON_LIMITS = {
   maxParallel: { min: 1, max: 8 },
   maxRetries: { min: 0, max: 3 },
@@ -14967,13 +15204,13 @@ var AUTOMATION_JSON_LIMITS = {
 };
 var AUTOMATION_IMAGE_RE = /^[a-zA-Z0-9._/:@-]+$/;
 function automationJsonPath(root) {
-  return join23(root, ".pipeline", "automation.json");
+  return join24(root, ".pipeline", "automation.json");
 }
 var intIn = (v, min, max) => typeof v === "number" && Number.isInteger(v) && v >= min && v <= max;
 function isValidImageRef(v) {
   return v.length > 0 && v.length <= AUTOMATION_JSON_LIMITS.imageMaxLen && AUTOMATION_IMAGE_RE.test(v);
 }
-function readAutomationJson(root, fs = { readFileSync: readFileSync14 }) {
+function readAutomationJson(root, fs = { readFileSync: readFileSync15 }) {
   let parsed;
   try {
     parsed = JSON.parse(fs.readFileSync(automationJsonPath(root), "utf8"));
@@ -15000,7 +15237,7 @@ function readAutomationJson(root, fs = { readFileSync: readFileSync14 }) {
 }
 
 // packages/automation/dist/sdk/sdk.js
-import { join as join24 } from "node:path";
+import { join as join25 } from "node:path";
 var scalar5 = (v) => typeof v === "string" ? v : "";
 var storeWriter = (store2, changeDir2) => ({
   claim: (name2) => claim(store2, changeDir2(name2)),
@@ -15018,8 +15255,8 @@ function createAutomation(deps) {
   const { image: _image, ...fileCfg } = readAutomationJson(deps.repoRoot, deps.configFs);
   const config = { ...DEFAULT_CONFIG, enabled: true, defaultOptIn: true, ...fileCfg, ...deps.config };
   const { store: store2, clock } = deps;
-  const changesDir = join24(deps.repoRoot, "openspec", "changes");
-  const changeDir2 = (name2) => join24(changesDir, name2);
+  const changesDir = join25(deps.repoRoot, "openspec", "changes");
+  const changeDir2 = (name2) => join25(changesDir, name2);
   return {
     config,
     async enqueue(name2) {
@@ -15053,11 +15290,11 @@ function createAutomation(deps) {
 }
 
 // packages/automation/dist/sdk/dockerRunChange.js
-import { join as join28 } from "node:path";
+import { join as join29 } from "node:path";
 
 // packages/automation/dist/lifecycle/ports.js
 import { mkdir as mkdir8, writeFile as writeFile5 } from "node:fs/promises";
-import { join as join27 } from "node:path";
+import { join as join28 } from "node:path";
 
 // packages/automation/dist/runner/boundedTail.js
 var MAX_TAIL_CHARS = 64 * 1024;
@@ -15254,11 +15491,11 @@ var invokeWithRace = (runExec, opts) => new Promise((resolve10, reject) => {
 
 // packages/automation/dist/lifecycle/mergeback.js
 import { mkdir as mkdir7, rmdir as rmdir3, stat as stat5 } from "node:fs/promises";
-import { join as join26, resolve as resolve7 } from "node:path";
+import { join as join27, resolve as resolve7 } from "node:path";
 
 // packages/automation/dist/lifecycle/worktree.js
 import { access, mkdir as mkdir6 } from "node:fs/promises";
-import { join as join25 } from "node:path";
+import { join as join26 } from "node:path";
 var NO_CONFIG_LOCK_FLAGS = [
   "-c",
   "branch.autoSetupMerge=false",
@@ -15270,9 +15507,9 @@ var WorktreeError = class extends Error {
   name = "WorktreeError";
   _tag = "WorktreeError";
 };
-var worktreePathFor = (repoDir, branch) => join25(repoDir, ".sandcastle", "worktrees", branch.replace(/\//g, "-"));
+var worktreePathFor = (repoDir, branch) => join26(repoDir, ".sandcastle", "worktrees", branch.replace(/\//g, "-"));
 var addWorktree = async (exec, repoDir, branch) => {
-  await mkdir6(join25(repoDir, ".sandcastle", "worktrees"), { recursive: true });
+  await mkdir6(join26(repoDir, ".sandcastle", "worktrees"), { recursive: true });
   const path5 = worktreePathFor(repoDir, branch);
   const created = await exec("git", [...NO_CONFIG_LOCK_FLAGS, "worktree", "add", "-b", branch, path5, "HEAD"], { cwd: repoDir, env: GIT_ENV });
   if (created.exitCode === 0)
@@ -15286,7 +15523,7 @@ var addWorktree = async (exec, repoDir, branch) => {
   throw new WorktreeError(`git worktree add failed for '${branch}': ${(reused.stderr || created.stderr).slice(0, 300)}`);
 };
 var removeWorktree = async (exec, path5) => {
-  const repoDir = join25(path5, "..", "..", "..");
+  const repoDir = join26(path5, "..", "..", "..");
   const r = await exec("git", ["worktree", "remove", "--force", path5], { cwd: repoDir, env: GIT_ENV });
   if (r.exitCode !== 0) {
     await exec("git", ["worktree", "prune"], { cwd: repoDir, env: GIT_ENV }).catch(() => {
@@ -15294,7 +15531,7 @@ var removeWorktree = async (exec, path5) => {
   }
 };
 var CANCEL_MARKER_FILE = ".cancel-requested";
-var hasCancelMarker = async (worktreePath) => access(join25(worktreePath, CANCEL_MARKER_FILE)).then(() => true, () => false);
+var hasCancelMarker = async (worktreePath) => access(join26(worktreePath, CANCEL_MARKER_FILE)).then(() => true, () => false);
 var realWorktreePort = (exec) => ({
   create: (repoDir, branch) => addWorktree(exec, repoDir, branch),
   remove: (path5) => removeWorktree(exec, path5),
@@ -15348,7 +15585,7 @@ var diffNamesReal = async (exec, input) => {
 var resolveLockDir = async (exec, hostRepoDir) => {
   const r = await exec("git", ["rev-parse", "--git-common-dir"], { cwd: hostRepoDir, env: GIT_ENV2 });
   const out = r.exitCode === 0 ? r.stdout.trim() : ".git";
-  return join26(resolve7(hostRepoDir, out || ".git"), "sandcastle-mergeback.lock.d");
+  return join27(resolve7(hostRepoDir, out || ".git"), "sandcastle-mergeback.lock.d");
 };
 var acquireMergeLock = async (exec, hostRepoDir, preservedPath) => {
   const lockdir = await resolveLockDir(exec, hostRepoDir);
@@ -15400,8 +15637,8 @@ var createLifecyclePorts = (deps) => {
   return {
     worktree: realWorktreePort(exec),
     async createSandbox({ env, worktreePath }) {
-      const gitMounts = await resolveGitMounts(join27(worktreePath, ".git")).catch(() => []);
-      const dotGit = join27(worktreePath, ".git");
+      const gitMounts = await resolveGitMounts(join28(worktreePath, ".git")).catch(() => []);
+      const dotGit = join28(worktreePath, ".git");
       const parentGitMounts = gitMounts.filter((m) => m.hostPath !== dotGit);
       const codexHome = env.CODEX_HOME;
       const codexHomeMounts = codexHome !== void 0 && codexHome.startsWith("/") ? [{ hostPath: codexHome, sandboxPath: codexHome }] : [];
@@ -15410,8 +15647,8 @@ var createLifecyclePorts = (deps) => {
     },
     async runWork(sandboxExec, name2, signal, runner) {
       const cmd = buildAfkRunCommand(name2, runner);
-      const changeDir2 = join27(hostRepoDir, "openspec", "changes", name2);
-      const logPath = join27(changeDir2, ".sandcastle-run.log");
+      const changeDir2 = join28(hostRepoDir, "openspec", "changes", name2);
+      const logPath = join28(changeDir2, ".sandcastle-run.log");
       const persistLog = async (content) => {
         await mkdir8(changeDir2, { recursive: true }).catch(() => {
         });
@@ -15521,7 +15758,7 @@ var claudeCredentialEnv = (hostEnv) => {
 var createDockerRunChange = (opts) => {
   const exec = opts.exec ?? nodeExec;
   const { store: store2, hostRepoDir } = opts;
-  const changeDir2 = (name2) => join28(hostRepoDir, "openspec", "changes", name2);
+  const changeDir2 = (name2) => join29(hostRepoDir, "openspec", "changes", name2);
   const setStateField = store2 ? (name2, field2, value) => store2.set(changeDir2(name2), field2, field2 === "automation_worktree" ? sanitizePath(value) : value) : void 0;
   const ports = createLifecyclePorts({
     exec,
@@ -16386,7 +16623,7 @@ async function cmdChannel(deps, sub, args, host = nodeChannelHost(deps.cwd)) {
 }
 
 // packages/cli/src/commands/gen-router.ts
-import { readFileSync as readFileSync15 } from "node:fs";
+import { readFileSync as readFileSync16 } from "node:fs";
 function sq(s) {
   return `'${String(s).replace(/'/g, "'\\''")}'`;
 }
@@ -16400,7 +16637,7 @@ async function cmdGenRouterSh(deps, manifestPath2) {
     return 2;
   }
   try {
-    readFileSync15(manifestPath2, "utf8");
+    readFileSync16(manifestPath2, "utf8");
     const m = loadManifest(manifestPath2);
     const out = ["# AUTO-GENERATED by pipeline _gen-router-sh from templates/manifest.yaml \u2014 \u52FF\u624B\u6539"];
     out.push(genRouterSh(m.routerPatterns));
@@ -16570,13 +16807,13 @@ async function cmdInit(deps, name2, opts) {
 }
 
 // packages/cli/src/commands/loops.ts
-import { mkdirSync as mkdirSync6, readFileSync as readFileSync16, readdirSync as readdirSync4, writeFileSync as writeFileSync5 } from "node:fs";
-import { dirname as dirname6, isAbsolute as isAbsolute3, join as join29 } from "node:path";
+import { mkdirSync as mkdirSync6, readFileSync as readFileSync17, readdirSync as readdirSync4, writeFileSync as writeFileSync5 } from "node:fs";
+import { dirname as dirname7, isAbsolute as isAbsolute3, join as join30 } from "node:path";
 import { createInterface as createInterface2 } from "node:readline/promises";
 function readTopLevelScalars(absPath) {
   let text;
   try {
-    text = readFileSync16(absPath, "utf8");
+    text = readFileSync17(absPath, "utf8");
   } catch {
     return null;
   }
@@ -16601,29 +16838,29 @@ function sandboxPipelineYaml(repoRoot, name2, worktree) {
   let base;
   if (worktree && worktree.trim() !== "") {
     const w = worktree.trim();
-    base = isAbsolute3(w) ? w : join29(repoRoot, w);
+    base = isAbsolute3(w) ? w : join30(repoRoot, w);
   } else {
-    base = join29(repoRoot, ".sandcastle", "worktrees", `sandcastle-pipeline-${name2}`);
+    base = join30(repoRoot, ".sandcastle", "worktrees", `sandcastle-pipeline-${name2}`);
   }
-  return join29(base, "openspec", "changes", name2, ".pipeline.yaml");
+  return join30(base, "openspec", "changes", name2, ".pipeline.yaml");
 }
 var REAL_LOOPS_FS = {
   loadRegistry: (repoRoot) => loadRegistry(repoRoot),
   readProgress: (repoRoot) => {
     try {
-      return readFileSync16(join29(repoRoot, ".superpowers", "loops", "progress.md"), "utf8");
+      return readFileSync17(join30(repoRoot, ".superpowers", "loops", "progress.md"), "utf8");
     } catch {
       return null;
     }
   },
   listChanges: (repoRoot, changePrefix) => {
     try {
-      return readdirSync4(join29(repoRoot, "openspec", "changes"), { withFileTypes: true }).filter((e) => e.isDirectory() && e.name !== "archive" && e.name.startsWith(changePrefix)).map((e) => e.name).sort();
+      return readdirSync4(join30(repoRoot, "openspec", "changes"), { withFileTypes: true }).filter((e) => e.isDirectory() && e.name !== "archive" && e.name.startsWith(changePrefix)).map((e) => e.name).sort();
     } catch {
       return [];
     }
   },
-  readChangeFields: (repoRoot, name2) => readTopLevelScalars(join29(repoRoot, "openspec", "changes", name2, ".pipeline.yaml")),
+  readChangeFields: (repoRoot, name2) => readTopLevelScalars(join30(repoRoot, "openspec", "changes", name2, ".pipeline.yaml")),
   readSandboxFields: (repoRoot, name2, worktree) => readTopLevelScalars(sandboxPipelineYaml(repoRoot, name2, worktree))
 };
 var REAL_DRIFT_FS = {
@@ -16631,7 +16868,7 @@ var REAL_DRIFT_FS = {
   readRunLog: (repoRoot) => REAL_LOOPS_FS.readProgress(repoRoot),
   readLoopDoc: (repoRoot) => {
     try {
-      return readFileSync16(join29(repoRoot, "LOOP.md"), "utf8");
+      return readFileSync17(join30(repoRoot, "LOOP.md"), "utf8");
     } catch {
       return null;
     }
@@ -16643,12 +16880,12 @@ var REAL_GRADUATION_FS = {
   readLoopDoc: (repoRoot) => REAL_DRIFT_FS.readLoopDoc(repoRoot),
   readRegistryText: (repoRoot) => {
     try {
-      return readFileSync16(join29(repoRoot, ".pipeline", "loops.yaml"), "utf8");
+      return readFileSync17(join30(repoRoot, ".pipeline", "loops.yaml"), "utf8");
     } catch {
       return null;
     }
   },
-  writeRegistryText: (repoRoot, text) => writeFileSync5(join29(repoRoot, ".pipeline", "loops.yaml"), text, "utf8")
+  writeRegistryText: (repoRoot, text) => writeFileSync5(join30(repoRoot, ".pipeline", "loops.yaml"), text, "utf8")
 };
 function parseArgs2(args) {
   let json = false;
@@ -17100,14 +17337,14 @@ var REAL_INIT_ENV = {
   fs: {
     readText: (path5) => {
       try {
-        return readFileSync16(path5, "utf8");
+        return readFileSync17(path5, "utf8");
       } catch (e) {
         if (e.code === "ENOENT") return null;
         throw e;
       }
     },
     createExclusive: (path5, text) => {
-      mkdirSync6(dirname6(path5), { recursive: true });
+      mkdirSync6(dirname7(path5), { recursive: true });
       writeFileSync5(path5, text, { flag: "wx" });
     },
     overwrite: (path5, text) => writeFileSync5(path5, text, "utf8")
@@ -17191,7 +17428,7 @@ async function cmdInit2(deps, args, env = REAL_INIT_ENV) {
   if (assembleErr !== null || entry === null) {
     return initFail(deps, flags.json, assembleErr ?? "\u7EC4\u88C5 loop \u6761\u76EE\u5931\u8D25");
   }
-  const loopsPath = join29(deps.cwd, ".pipeline", "loops.yaml");
+  const loopsPath = join30(deps.cwd, ".pipeline", "loops.yaml");
   const before = env.fs.readText(loopsPath);
   if (before === null) {
     const { text, error } = createLoopsYamlText(entry);
@@ -17622,7 +17859,7 @@ async function cmdMem(deps, sub, args, fs = nodeMemFs()) {
 
 // packages/cli/src/commands/scaffold.ts
 import { mkdir as mkdir9, readFile as readFile4, rm as rm3, stat as stat6, writeFile as writeFile6 } from "node:fs/promises";
-import { dirname as dirname7, join as join30 } from "node:path";
+import { dirname as dirname8, join as join31 } from "node:path";
 var REAL_FS = {
   exists: async (abs) => {
     try {
@@ -17640,7 +17877,7 @@ var REAL_FS = {
     }
   },
   writeText: async (abs, content) => {
-    await mkdir9(dirname7(abs), { recursive: true });
+    await mkdir9(dirname8(abs), { recursive: true });
     await writeFile6(abs, content, "utf8");
   },
   rmrf: async (abs) => {
@@ -17687,7 +17924,7 @@ async function cmdScaffoldSpec(deps, args, fs) {
   const specDir = flags["spec-dir"] || DEFAULT_SPEC_DIR;
   const rawStrategy = flags["strategy"] || fs.env(SPEC_STRATEGY_SIGNAL) || "";
   const files = buildSpecScaffold(type, specDir);
-  const abs = (rel) => join30(deps.cwd, rel);
+  const abs = (rel) => join31(deps.cwd, rel);
   const existing = /* @__PURE__ */ new Set();
   for (const f of files) {
     if (await fs.exists(abs(f.rel))) existing.add(f.rel);
@@ -17727,7 +17964,7 @@ async function cmdScaffoldSpec(deps, args, fs) {
 async function cmdResolveWorkflow(deps, args, fs) {
   const { positionals: positionals2, flags } = parseFlags(args);
   const requested = positionals2[0];
-  const abs = (rel) => join30(deps.cwd, rel);
+  const abs = (rel) => join31(deps.cwd, rel);
   let available = [];
   const sourceIdx = flags["source-index"];
   if (sourceIdx) {
@@ -17795,14 +18032,14 @@ async function cmdScaffold(deps, sub, args, fs = REAL_FS) {
 
 // packages/cli/src/commands/session.ts
 import { readFile as readFile5, writeFile as writeFile7 } from "node:fs/promises";
-import { join as join31 } from "node:path";
+import { join as join32 } from "node:path";
 var ACTIVE_POINTER_FILE = ".pipeline-active";
 var PROJECT_CONFIG_FILE = ".pipeline-project.yaml";
 var REAL_FS2 = {
   loadPackages: async (cwd) => {
     let text;
     try {
-      text = await readFile5(join31(cwd, PROJECT_CONFIG_FILE), "utf8");
+      text = await readFile5(join32(cwd, PROJECT_CONFIG_FILE), "utf8");
     } catch {
       return null;
     }
@@ -17813,7 +18050,7 @@ var REAL_FS2 = {
     }
   },
   bindPointer: async (cwd, name2) => {
-    await writeFile7(join31(cwd, ACTIVE_POINTER_FILE), `${name2}
+    await writeFile7(join32(cwd, ACTIVE_POINTER_FILE), `${name2}
 `, "utf8");
   }
 };
@@ -17882,9 +18119,10 @@ async function cmdSession(deps, sub, args, fs = REAL_FS2) {
 }
 
 // packages/cli/src/commands/setup.ts
-import { chmodSync as chmodSync2, lstatSync, mkdirSync as mkdirSync7, readlinkSync, symlinkSync, unlinkSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { chmodSync as chmodSync2, lstatSync, mkdirSync as mkdirSync7, readSync as readSync2, readlinkSync, symlinkSync, unlinkSync } from "node:fs";
 import { homedir as homedir7 } from "node:os";
-import { join as join32, resolve as resolve9 } from "node:path";
+import { join as join33, resolve as resolve9 } from "node:path";
 var REAL_SETUP_ENV = {
   homeDir: () => homedir7(),
   pluginRoot: () => {
@@ -17918,18 +18156,42 @@ var REAL_SETUP_ENV = {
   },
   chmodExec: (path5) => {
     chmodSync2(path5, 493);
+  },
+  runCommand: (cmd, args) => {
+    try {
+      const stdout = execFileSync(cmd, args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+      return { code: 0, stdout, stderr: "" };
+    } catch (e) {
+      const err = e;
+      return {
+        code: typeof err.status === "number" ? err.status : 1,
+        stdout: err.stdout != null ? String(err.stdout) : "",
+        stderr: err.stderr != null ? String(err.stderr) : errMsg(e)
+      };
+    }
+  },
+  confirm: (question) => {
+    process.stdout.write(question);
+    try {
+      const buf = Buffer.alloc(64);
+      const n = readSync2(0, buf, 0, 64, null);
+      const ans = buf.toString("utf8", 0, n).trim().toLowerCase();
+      return ans === "y" || ans === "yes";
+    } catch {
+      return false;
+    }
   }
 };
 function resolvePipelineSource(env) {
   const root = env.pluginRoot();
-  if (root !== null) return join32(root, "packages", "cli", "dist", "pipeline.mjs");
+  if (root !== null) return join33(root, "packages", "cli", "dist", "pipeline.mjs");
   return env.selfPath();
 }
 function ensurePipelineOnPath(deps, env = REAL_SETUP_ENV) {
   try {
     const source = resolvePipelineSource(env);
-    const binDir = join32(env.homeDir(), ".local", "bin");
-    const link = join32(binDir, "pipeline");
+    const binDir = join33(env.homeDir(), ".local", "bin");
+    const link = join33(binDir, "pipeline");
     env.mkdirp(binDir);
     const existing = env.readSymlink(link);
     if (existing === source) {
@@ -17961,15 +18223,267 @@ function chmodExecBestEffort(env, source) {
 function printPlanSkeleton(deps, opts) {
   deps.io.out("[setup] \u5168\u529F\u80FD\u5C31\u7EEA\u5F15\u5BFC \u2014\u2014 \u8BA1\u5212\u9AA8\u67B6");
   deps.io.out("  1. PATH \u8F6F\u94FE:\u628A pipeline \u8F6F\u94FE\u5230 ~/.local/bin\uFF08\u672C\u6279\u5DF2\u5B9E\u73B0\uFF09");
-  deps.io.out("  2. \u6280\u80FD\u5B89\u88C5\uFF08Phase 2 \u5F85\u5B9E\u73B0\uFF09:\u6309 manifest \u88C5\u9F50 mandatory/recommended \u6280\u80FD\uFF08\u8BA1\u5212 S2\uFF09");
+  deps.io.out("  2. \u6280\u80FD\u5B89\u88C5\uFF08Phase 2,\u672C\u6279\u5DF2\u5B9E\u88C5\uFF09:\u8BFB registry \u6309 tool \u5206\u7EC4\u9009\u88C5\uFF08\u8BE6\u89C1\u4E0B\u65B9\u6280\u80FD\u8BA1\u5212\uFF09");
   deps.io.out("  3. \u8FD0\u884C\u65F6\u68C0\u67E5\uFF08Phase 3 \u5F85\u5B9E\u73B0\uFF09:docker \u63A2\u6D4B + \u7F3A\u955C\u50CF\u4E00\u952E\u6784\u5EFA\u63D0\u793A\uFF08\u8BA1\u5212 R1\uFF09");
   deps.io.out("  4. \u5168\u529F\u80FD\u5C31\u7EEA\u6E05\u5355\uFF08\u5F85\u805A\u5408\uFF09:\u9010\u9879\u5728\u4F4D/\u964D\u7EA7 \u7EA2\u9EC4\u7EFF\u6C47\u603B");
   if (opts.dryRun) deps.io.out("  \uFF08--dry-run:\u4EC5\u6253\u5370\u8BA1\u5212,\u672A\u8F6F\u94FE\u3001\u672A\u5199\u4EFB\u4F55\u6587\u4EF6\uFF09");
 }
-function cmdSetupSkills(deps, opts) {
-  const suffix = opts.yes ? "\uFF08--yes \u5DF2\u900F\u4F20,\u5C06\u6765\u8DF3\u4EA4\u4E92\u786E\u8BA4\u4F4D\uFF09" : "";
-  deps.io.out(`[setup skills] \u6280\u80FD\u5B89\u88C5\u6BB5\u5F85\u5B9E\u73B0\uFF08Phase 2,\u8BA1\u5212 S2\uFF09\u3002${suffix}`);
-  return 0;
+var REGISTERED_MARKETPLACES = /* @__PURE__ */ new Set(["claude-plugins-official"]);
+var TIER_RANK = { mandatory: 3, recommended: 2, conditional: 1, optional: 0 };
+var higherTier = (a, b) => TIER_RANK[a] >= TIER_RANK[b] ? a : b;
+function marketplaceRepo(source) {
+  return source.includes("/") ? source : `${source}/skills`;
+}
+function skillInstalled(env, name2) {
+  const home = env.homeDir();
+  return env.pathExists(join33(home, ".claude", "skills", name2)) || env.pathExists(join33(home, ".agents", "skills", name2)) || env.pathExists(join33(home, ".claude", "plugins", "cache", name2));
+}
+function cmdStr(c) {
+  return [c.cmd, ...c.args].join(" ");
+}
+function buildSkillsPlan(sources, env) {
+  const alreadyInstalled = [];
+  const noInstall = [];
+  const marketplaceAdds = /* @__PURE__ */ new Map();
+  const pluginCmds = /* @__PURE__ */ new Map();
+  const skillsBySource = /* @__PURE__ */ new Map();
+  const npmCmds = /* @__PURE__ */ new Map();
+  const ensureMarketplace = (source, official) => {
+    if (official || REGISTERED_MARKETPLACES.has(source)) return;
+    const repo = marketplaceRepo(source);
+    if (marketplaceAdds.has(repo)) return;
+    marketplaceAdds.set(repo, {
+      group: "marketplace-add",
+      cmd: "claude",
+      args: ["plugin", "marketplace", "add", repo],
+      tokens: [],
+      names: [],
+      bareAdd: false,
+      source,
+      official: false,
+      tier: "optional",
+      globalDir: "~/.claude",
+      note: "\u975E\u5B98\u65B9 marketplace"
+    });
+  };
+  const addPlugin = (id, source, official, tier, tokenLabel, engineNote) => {
+    if (skillInstalled(env, id)) {
+      alreadyInstalled.push({ token: tokenLabel, where: `~/.claude/plugins/cache/${id}` });
+      return;
+    }
+    ensureMarketplace(source, official);
+    const key = `${id}@${source}`;
+    const existing = pluginCmds.get(key);
+    if (existing) {
+      existing.tokens.push(tokenLabel);
+      existing.tier = higherTier(existing.tier, tier);
+      if (engineNote) existing.note = existing.note ? `${existing.note}\uFF1B${engineNote}` : engineNote;
+      return;
+    }
+    pluginCmds.set(key, {
+      group: "claude-plugin",
+      cmd: "claude",
+      args: ["plugin", "install", key],
+      tokens: [tokenLabel],
+      names: [],
+      bareAdd: false,
+      source,
+      official,
+      tier,
+      globalDir: "~/.claude",
+      note: engineNote
+    });
+  };
+  for (const s of sources) {
+    if (s.tool === "builtin" || s.tool === "bundled") {
+      noInstall.push({ token: s.token, tool: s.tool });
+      continue;
+    }
+    if (s.tool === "claude-plugin") {
+      if (s.note?.includes("\u5DF2\u88C5")) {
+        alreadyInstalled.push({ token: s.token, where: "\u672C\u673A\u901A\u5E38\u5DF2\u88C5\uFF08registry note \u6807\u6CE8\uFF09" });
+        continue;
+      }
+      addPlugin(s.skill ?? s.token, s.source, s.official, s.tier, s.token);
+      continue;
+    }
+    if (s.tool === "skills-cli") {
+      const g = skillsBySource.get(s.source) ?? [];
+      g.push(s);
+      skillsBySource.set(s.source, g);
+      continue;
+    }
+    if (s.tool === "npm") {
+      const existing = npmCmds.get(s.source);
+      if (existing) {
+        existing.tokens.push(s.token);
+        existing.tier = higherTier(existing.tier, s.tier);
+        continue;
+      }
+      npmCmds.set(s.source, {
+        group: "npm",
+        cmd: "npm",
+        args: ["install", "-g", s.source],
+        tokens: [s.token],
+        names: [],
+        bareAdd: false,
+        source: s.source,
+        official: s.official,
+        tier: s.tier,
+        globalDir: "\u5168\u5C40 npm\uFF08npm root -g\uFF09"
+      });
+    }
+  }
+  for (const s of sources) {
+    if (!s.engine) continue;
+    const at = s.engine.lastIndexOf("@");
+    if (at <= 0) continue;
+    addPlugin(
+      s.engine.slice(0, at),
+      s.engine.slice(at + 1),
+      REGISTERED_MARKETPLACES.has(s.engine.slice(at + 1)),
+      s.tier,
+      `${s.engine.slice(0, at)}(\u5F15\u64CE)`,
+      `\u9644\u52A0 MCP \u5F15\u64CE(${s.token} \u9700\u8981)`
+    );
+  }
+  const skillsCliCmds = [];
+  for (const [source, group] of skillsBySource) {
+    const bareAdd = group.length === 1 && group[0].skill === void 0;
+    const toInstall = [];
+    for (const t of group) {
+      if (skillInstalled(env, t.skill ?? t.token)) alreadyInstalled.push({ token: t.token, where: "~/.agents/skills \u6216 ~/.claude/skills" });
+      else toInstall.push(t);
+    }
+    if (toInstall.length === 0) continue;
+    let tier = "optional";
+    for (const t of toInstall) tier = higherTier(tier, t.tier);
+    if (bareAdd) {
+      skillsCliCmds.push({
+        group: "skills-cli",
+        cmd: "npx",
+        args: ["skills", "add", source],
+        tokens: toInstall.map((t) => t.token),
+        names: [],
+        bareAdd: true,
+        source,
+        official: group[0].official,
+        tier,
+        globalDir: "~/.agents/skills"
+      });
+    } else {
+      const names = toInstall.map((t) => t.skill ?? t.token);
+      skillsCliCmds.push({
+        group: "skills-cli",
+        cmd: "npx",
+        args: ["skills", "add", source, ...names.flatMap((n) => ["--skill", n])],
+        tokens: toInstall.map((t) => t.token),
+        names,
+        bareAdd: false,
+        source,
+        official: group[0].official,
+        tier,
+        globalDir: "~/.agents/skills",
+        listCmd: { cmd: "npx", args: ["skills", "add", source, "--list"] }
+      });
+    }
+  }
+  const commands = [...marketplaceAdds.values(), ...pluginCmds.values(), ...skillsCliCmds, ...npmCmds.values()];
+  return { commands, alreadyInstalled, noInstall };
+}
+function renderSkillsPlan(deps, plan) {
+  const dirs = [...new Set(plan.commands.map((c) => c.globalDir))];
+  deps.io.out(
+    `[setup skills] \u6280\u80FD\u5B89\u88C5\u8BA1\u5212 \u2014\u2014 \u5F85\u88C5 ${plan.commands.length} \u6761\u547D\u4EE4 / \u5DF2\u88C5\u8DF3\u8FC7 ${plan.alreadyInstalled.length} / \u5185\u7F6E\xB7\u672C\u4ED3\u81EA\u5E26 ${plan.noInstall.length}\uFF08\u65E0\u9700\u5B89\u88C5\uFF09`
+  );
+  if (dirs.length > 0) deps.io.out(`  \u53D7\u5F71\u54CD\u5168\u5C40\u76EE\u5F55:${dirs.join("\u3001")}`);
+  const sections = [
+    ["marketplace-add", "claude \u63D2\u4EF6 \xB7 marketplace add\uFF08\u975E\u5B98\u65B9\u6E90\u9700\u5148\u6DFB\u52A0\uFF09"],
+    ["claude-plugin", "claude \u63D2\u4EF6\u5B89\u88C5"],
+    ["skills-cli", "skills CLI \xB7 \u6309\u540D\u9009\u88C5\uFF08\u7981\u6574\u88C5\uFF09"],
+    ["npm", "npm \u5168\u5C40"]
+  ];
+  for (const [g, title] of sections) {
+    const cs = plan.commands.filter((c) => c.group === g);
+    if (cs.length === 0) continue;
+    deps.io.out(`  \u2500\u2500 ${title} \u2500\u2500`);
+    for (const c of cs) {
+      const tag2 = c.official ? "[\u5B98\u65B9]" : "[\u7B2C\u4E09\u65B9]";
+      deps.io.out(`   ${cmdStr(c)}   ${tag2} \u2192 ${c.globalDir}${c.note ? `  \uFF08${c.note}\uFF09` : ""}`);
+      if (c.group === "skills-cli" && !c.bareAdd) deps.io.out(`      \u6280\u80FD(${c.names.length}):${c.names.join(", ")}`);
+      else if (c.tokens.length > 0) deps.io.out(`      token:${c.tokens.join(", ")}`);
+    }
+  }
+  if (plan.alreadyInstalled.length > 0) {
+    deps.io.out(`  \u5DF2\u88C5\xB7\u8DF3\u8FC7\uFF08${plan.alreadyInstalled.length}\uFF09:${plan.alreadyInstalled.map((a) => a.token).join(", ")}`);
+  }
+}
+function executeSkillsPlan(deps, plan, env) {
+  const out = { successes: [], failures: [], drifts: [] };
+  for (const c of plan.commands) {
+    if (c.listCmd) {
+      try {
+        const r = env.runCommand(c.listCmd.cmd, c.listCmd.args);
+        if (r.code === 0) {
+          for (const n of c.names) if (!r.stdout.includes(n)) out.drifts.push({ source: c.source, name: n });
+        }
+      } catch {
+      }
+    }
+    deps.io.out(`[setup skills] $ ${cmdStr(c)}`);
+    try {
+      const r = env.runCommand(c.cmd, c.args);
+      if (r.stdout.trim() !== "") deps.io.out(r.stdout.trimEnd());
+      if (r.code === 0) out.successes.push(c);
+      else out.failures.push({ cmd: c, detail: r.stderr.trim() !== "" ? r.stderr.trim() : `\u9000\u51FA\u7801 ${r.code}` });
+    } catch (e) {
+      out.failures.push({ cmd: c, detail: errMsg(e) });
+    }
+  }
+  return out;
+}
+function renderSummary(deps, o, plan) {
+  deps.io.out(
+    `[setup skills] \u5B8C\u6210 \u2014\u2014 \u6210\u529F ${o.successes.length} / \u8DF3\u8FC7 ${plan.alreadyInstalled.length} / \u5931\u8D25 ${o.failures.length}`
+  );
+  for (const d of o.drifts) {
+    deps.io.out(
+      `  [WARN] \u540D\u79F0\u6F02\u79FB:${d.source} \u7684 '${d.name}' \u5728 --list \u672A\u547D\u4E2D\uFF08\u4E0A\u6E38\u53EF\u80FD\u5DF2\u6539\u540D\u2014\u2014\u88C5\u6700\u65B0\u8BED\u4E49;\u53EF\u7528 find-skills \u91CD\u65B0\u5B9A\u4F4D\uFF09`
+    );
+  }
+  let mandatoryFail = false;
+  for (const f of o.failures) {
+    const s = cmdStr(f.cmd);
+    if (f.cmd.tier === "mandatory") {
+      mandatoryFail = true;
+      deps.io.err(`  [FAIL\xB7\u5F3A\u5236] ${s} \u2014\u2014 ${f.detail}`);
+      deps.io.err(`             \u624B\u52A8\u91CD\u8BD5:${s}`);
+    } else {
+      deps.io.err(`  [FAIL] ${s} \u2014\u2014 ${f.detail}\uFF08${f.cmd.tier};\u975E\u5F3A\u5236,\u4E0D\u963B\u65AD\u9000\u51FA\u7801\uFF09`);
+    }
+  }
+  if (o.failures.length === 0) deps.io.out("  \u5168\u90E8\u547D\u4EE4\u6267\u884C\u6210\u529F\u3002");
+  return mandatoryFail ? 1 : 0;
+}
+function cmdSetupSkills(deps, opts, env = REAL_SETUP_ENV, sources = readSkillSources()) {
+  const plan = buildSkillsPlan(sources, env);
+  renderSkillsPlan(deps, plan);
+  if (opts.dryRun) {
+    deps.io.out("[setup skills] --dry-run:\u4EC5\u6253\u5370\u8BA1\u5212,\u672A\u6267\u884C\u4EFB\u4F55\u547D\u4EE4\u3001\u672A\u5199\u4EFB\u4F55\u5168\u5C40\u76EE\u5F55\u3002");
+    return 0;
+  }
+  if (plan.commands.length === 0) {
+    deps.io.out("[setup skills] \u65E0\u5F85\u88C5\u6280\u80FD\uFF08\u5168\u90E8\u5DF2\u5C31\u7EEA\u6216\u65E0\u53EF\u5B89\u88C5\u9879\uFF09\u3002");
+    return 0;
+  }
+  if (!opts.yes) {
+    const dirs = [...new Set(plan.commands.map((c) => c.globalDir))].join(" / ");
+    if (!env.confirm(`[setup skills] \u5C06\u6267\u884C ${plan.commands.length} \u6761\u547D\u4EE4,\u5199\u5165\u5168\u5C40\u76EE\u5F55:${dirs}\u3002\u786E\u8BA4?(y/N) `)) {
+      deps.io.out("[setup skills] \u5DF2\u53D6\u6D88\uFF08\u672A\u6267\u884C\u4EFB\u4F55\u547D\u4EE4\uFF09\u3002");
+      return 0;
+    }
+  }
+  return renderSummary(deps, executeSkillsPlan(deps, plan, env), plan);
 }
 function cmdSetupRuntime(deps, opts) {
   const suffix = opts.yes ? "\uFF08--yes \u5DF2\u900F\u4F20,\u5C06\u6765\u8DF3\u4EA4\u4E92\u786E\u8BA4\u4F4D\uFF09" : "";
@@ -17983,9 +18497,9 @@ function cmdSetup(deps, sub, opts, env = REAL_SETUP_ENV) {
     case "":
       if (!o.dryRun) ensurePipelineOnPath(deps, env);
       printPlanSkeleton(deps, o);
-      return 0;
+      return cmdSetupSkills(deps, o, env);
     case "skills":
-      return cmdSetupSkills(deps, o);
+      return cmdSetupSkills(deps, o, env);
     case "runtime":
       return cmdSetupRuntime(deps, o);
     default:
@@ -18819,6 +19333,7 @@ function buildProgram(deps) {
     writeErr: (s) => deps.io.err(stripNl(s))
   });
   program2.command("init <name>").description("\u521D\u59CB\u5316 change\uFF08stdout \u65E0\u8F93\u51FA\uFF0C\u8DEF\u5F84\u4FE1\u606F\u8D70 stderr\uFF09").requiredOption("--track <track>", "chat | pm | frontend | backend").requiredOption("--preset <preset>", "full | hotfix | tweak").option("--user <user>", "created_by").option("--workflow <workflow>", "\u81EA\u5B9A\u4E49 workflow \u540D\uFF08.pipeline/workflows/<name>.yaml\uFF09\uFF0C\u7F3A\u7701 default").action(async (name2, opts) => bail(await cmdInit(deps, name2, opts)));
+  program2.command("setup [sub]").description("\u5B89\u88C5\u540E\u5168\u529F\u80FD\u5C31\u7EEA\u5F15\u5BFC:\u8F6F\u94FE pipeline \u5230 PATH + \u6280\u80FD\u5B89\u88C5(Phase 2)/\u8FD0\u884C\u65F6\u68C0\u67E5(Phase 3)\u9AA8\u67B6").option("--dry-run", "\u53EA\u6253\u5370\u8BA1\u5212\u9AA8\u67B6,\u7EDD\u4E0D\u8F6F\u94FE/\u5199\u6587\u4EF6").option("-y, --yes", "\u8DF3\u8FC7\u4EA4\u4E92\u786E\u8BA4\u4F4D\uFF08\u672C\u6279\u65E0\u771F\u5B89\u88C5,\u4EC5\u900F\u4F20\u5360\u4F4D\uFF09").allowUnknownOption().action(async (sub, opts) => bail(cmdSetup(deps, sub, { dryRun: opts.dryRun, yes: opts.yes })));
   program2.command("get <name> <field>").description("\u8BFB\u5B57\u6BB5\uFF08stdout: \u88F8\u503C\uFF1B\u5B57\u6BB5\u7F3A\u5931/\u672A\u77E5 \u2192 \u7A7A\u884C + exit 0\uFF09").action(async (name2, fieldName) => bail(await cmdGet(deps, name2, fieldName)));
   program2.command("set <name> <field> <value>").description("\u5199\u5B57\u6BB5\uFF08\u65E0\u8F93\u51FA\uFF1B\u56DB\u95F8\u62D2\u5199 exit 1\uFF09").action(async (name2, fieldName, value) => bail(await cmdSet(deps, name2, fieldName, value)));
   program2.command("set-many <name> <kv...>").description("\u591A\u5B57\u6BB5\u539F\u5B50\u5199 key=value ...\uFF08\u65E0\u8F93\u51FA\uFF09").action(async (name2, kv) => bail(await cmdSetMany(deps, name2, kv)));
@@ -18855,7 +19370,10 @@ function buildProgram(deps) {
   program2.command("_gen-router-sh <manifest>").description("[\u5185\u90E8] \u4ECE manifest \u6D3E\u751F router \u7F13\u5B58 bash\uFF08router.sh \u8C03\u7528\uFF09").action(async (manifest) => bail(await cmdGenRouterSh(deps, manifest)));
   program2.command("internal-skill-gate <name> <skillId>").description("[\u5185\u90E8] \u975E default workflow \u7684 skill DAG \u89E3\u9501\u5224\u5B9A\uFF08hooks/gate.sh \u59D4\u6258\u76EE\u6807\uFF1B0=\u653E\u884C 2=\u62E6\u622A\uFF09").action(async (name2, skillId) => bail(await cmdInternalSkillGate(deps, name2, skillId)));
   program2.command("migrate-workflow <name>").description("[\u4E00\u6B21\u6027] \u8001\u683C\u5F0F change \u8865\u9F50/\u786E\u8BA4 workflow \u5B57\u6BB5\u4E3A default\uFF08\u771F\u5B9E\u81EA\u5B9A\u4E49 workflow \u4E0D\u8986\u76D6\uFF09").action(async (name2) => bail(await cmdMigrateWorkflow(deps, name2)));
-  program2.command("setup [sub]").description("\u5B89\u88C5\u540E\u5168\u529F\u80FD\u5C31\u7EEA\u5F15\u5BFC:\u8F6F\u94FE pipeline \u5230 PATH + \u6280\u80FD\u5B89\u88C5(Phase 2)/\u8FD0\u884C\u65F6\u68C0\u67E5(Phase 3)\u9AA8\u67B6").option("--dry-run", "\u53EA\u6253\u5370\u8BA1\u5212\u9AA8\u67B6,\u7EDD\u4E0D\u8F6F\u94FE/\u5199\u6587\u4EF6").option("-y, --yes", "\u8DF3\u8FC7\u4EA4\u4E92\u786E\u8BA4\u4F4D\uFF08\u672C\u6279\u65E0\u771F\u5B89\u88C5,\u4EC5\u900F\u4F20\u5360\u4F4D\uFF09").allowUnknownOption().action(async (sub, opts) => bail(cmdSetup(deps, sub, { dryRun: opts.dryRun, yes: opts.yes })));
+  program2.addHelpText(
+    "after",
+    "\n\u9996\u6B21\u5B89\u88C5\uFF1Apipeline setup\uFF08\u88C5\u6280\u80FD + \u914D\u5C31\u7EEA\uFF09\u2014\u2014\u9996\u6B21\u7528\u672C\u63D2\u4EF6\u5148\u8DD1 setup\uFF0C\u518D\u7528 init \u8D77 change\u3002"
+  );
   return program2;
 }
 
@@ -18881,7 +19399,7 @@ async function listChanges(changesRoot2) {
   for (const entry of entries) {
     if (!entry.isDirectory() || entry.name === "archive") continue;
     try {
-      await access2(join33(changesRoot2, entry.name, ".pipeline.yaml"));
+      await access2(join34(changesRoot2, entry.name, ".pipeline.yaml"));
       names.push(entry.name);
     } catch {
     }
@@ -18892,7 +19410,7 @@ async function readGateMarkers(cwd) {
   const out = [];
   for (const kind of ["confirm", "review", "interaction"]) {
     try {
-      const p = join33(cwd, `.pipeline-pending-${kind}`);
+      const p = join34(cwd, `.pipeline-pending-${kind}`);
       const st = await stat7(p);
       out.push({ kind, ageMs: Date.now() - st.mtimeMs, raw: await readFile6(p, "utf8") });
     } catch {
@@ -18901,7 +19419,7 @@ async function readGateMarkers(cwd) {
   return out;
 }
 function makeGuardCtx(cwd) {
-  const abs = (relPath) => join33(cwd, relPath);
+  const abs = (relPath) => join34(cwd, relPath);
   return (name2) => ({
     changeDirRel: `openspec/changes/${name2}`,
     fileExists: (p) => {
@@ -18921,7 +19439,7 @@ function makeGuardCtx(cwd) {
     },
     readFile: (p) => {
       try {
-        return readFileSync17(abs(p), "utf8");
+        return readFileSync18(abs(p), "utf8");
       } catch {
         return void 0;
       }
@@ -18946,18 +19464,40 @@ function makeGuardCtx(cwd) {
   });
 }
 function pluginRoot() {
-  return join33(dirname8(fileURLToPath(import.meta.url)), "..", "..", "..");
+  return join34(dirname9(fileURLToPath2(import.meta.url)), "..", "..", "..");
 }
 function manifestPath() {
-  return join33(pluginRoot(), "templates", "manifest.yaml");
+  return join34(pluginRoot(), "templates", "manifest.yaml");
 }
 function readPluginVersion() {
   try {
-    const raw = readFileSync17(join33(pluginRoot(), ".claude-plugin", "plugin.json"), "utf8");
+    const raw = readFileSync18(join34(pluginRoot(), ".claude-plugin", "plugin.json"), "utf8");
     return JSON.parse(raw).version ?? "unknown";
   } catch {
     return "unknown";
   }
+}
+function safeReaddirDirs(dir) {
+  try {
+    return readdirSync5(dir, { withFileTypes: true }).filter((e) => e.isDirectory() || e.isSymbolicLink()).map((e) => e.name);
+  } catch {
+    return [];
+  }
+}
+function scanInstalledSkillNames() {
+  const home = homedir8();
+  const names = /* @__PURE__ */ new Set();
+  for (const n of safeReaddirDirs(join34(home, ".claude", "skills"))) names.add(n);
+  for (const n of safeReaddirDirs(join34(home, ".agents", "skills"))) names.add(n);
+  const cache2 = join34(home, ".claude", "plugins", "cache");
+  for (const marketplace of safeReaddirDirs(cache2)) {
+    const mktDir = join34(cache2, marketplace);
+    for (const plugin of safeReaddirDirs(mktDir)) {
+      names.add(plugin);
+      for (const skill of safeReaddirDirs(join34(mktDir, plugin, "skills"))) names.add(skill);
+    }
+  }
+  return names;
 }
 function makeDoctorProbes() {
   const root = pluginRoot();
@@ -19001,7 +19541,7 @@ function makeDoctorProbes() {
     // 接入判定与 statusline.sh 头注释的接入方式同口径：settings.json 里引用了该脚本即算接入
     statuslineConfigured: () => {
       try {
-        return readFileSync17(join33(homedir8(), ".claude", "settings.json"), "utf8").includes("statusline.sh");
+        return readFileSync18(join34(homedir8(), ".claude", "settings.json"), "utf8").includes("statusline.sh");
       } catch {
         return false;
       }
@@ -19009,7 +19549,7 @@ function makeDoctorProbes() {
     runVerifySkills: () => new Promise((resolve10) => {
       execFile3(
         "bash",
-        [join33(root, "tools", "verify-skills.sh"), "--quiet"],
+        [join34(root, "tools", "verify-skills.sh"), "--quiet"],
         { timeout: 3e4 },
         (err, stdout, stderr) => {
           const errCode = err?.code;
@@ -19022,6 +19562,16 @@ function makeDoctorProbes() {
     tapStatus: () => {
       const s = tapStatus();
       return { intercepting: s.intercepting, captureEnabled: s.captureEnabled, message: s.message };
+    },
+    // 缺技能检测（批2 A1）：本机安装位扫描 + manifest 两表派生（bundle 里正确路径锚在此）
+    installedSkillNames: () => scanInstalledSkillNames(),
+    manifestSkills: () => {
+      try {
+        const m = loadManifest(manifestPath());
+        return { mandatory: m.mandatorySkills, recommended: m.recommendedSkills };
+      } catch {
+        return null;
+      }
     }
   };
 }
@@ -19048,7 +19598,7 @@ async function main() {
     guardCtx: makeGuardCtx(process.cwd()),
     doctor: makeDoctorProbes(),
     readGateMarkers: () => readGateMarkers(process.cwd()),
-    writeBreadcrumb: (dir, content) => writeFile8(join33(dir, ".breadcrumb"), content, "utf8"),
+    writeBreadcrumb: (dir, content) => writeFile8(join34(dir, ".breadcrumb"), content, "utf8"),
     history: createHistoryWriter(),
     // 决策 D（v5 T2）：init 成功后 best-effort 登记项目根到 ~/.claude/pipeline-projects.json
     registerProject: async (repoRoot) => {
@@ -19059,16 +19609,16 @@ async function main() {
     readSecretsEnv: async () => readSecrets(secretsPath(homedir8())).keys,
     readHistoryRaw: async (dir) => {
       try {
-        return await readFile6(join33(dir, ".pipeline-history.jsonl"), "utf8");
+        return await readFile6(join34(dir, ".pipeline-history.jsonl"), "utf8");
       } catch {
         return "";
       }
     },
     gitHeadSha: () => gitHeadSha(process.cwd()),
-    writeReviewMarker: (content) => writeFile8(join33(process.cwd(), ".pipeline-pending-review"), content, "utf8"),
+    writeReviewMarker: (content) => writeFile8(join34(process.cwd(), ".pipeline-pending-review"), content, "utf8"),
     pluginVersion: readPluginVersion(),
     readInstalledPlugins: async () => {
-      for (const p of [join33(pluginRoot(), "..", "installed_plugins.json"), join33(process.env.HOME ?? "", ".claude", "installed_plugins.json")]) {
+      for (const p of [join34(pluginRoot(), "..", "installed_plugins.json"), join34(process.env.HOME ?? "", ".claude", "installed_plugins.json")]) {
         try {
           return await readFile6(p, "utf8");
         } catch {
