@@ -63,6 +63,15 @@ export function buildProgram(deps: CliDeps): Command {
     .action(async (name: string, opts: InitCmdOpts) => bail(await cmdInit(deps, name, opts)))
 
   program
+    .command('setup [sub]')
+    .description('安装后全功能就绪引导:软链 pipeline 到 PATH + 技能安装(Phase 2)/运行时检查(Phase 3)骨架')
+    .option('--dry-run', '只打印计划骨架,绝不软链/写文件')
+    .option('-y, --yes', '跳过交互确认位（本批无真安装,仅透传占位）')
+    .allowUnknownOption() // 未来 Phase 2/3 子命令的自有 flag 透传
+    .action(async (sub: string | undefined, opts: { dryRun?: boolean; yes?: boolean }) =>
+      bail(cmdSetup(deps, sub, { dryRun: opts.dryRun, yes: opts.yes })))
+
+  program
     .command('get <name> <field>')
     .description('读字段（stdout: 裸值；字段缺失/未知 → 空行 + exit 0）')
     .action(async (name: string, fieldName: string) => bail(await cmdGet(deps, name, fieldName)))
@@ -243,14 +252,10 @@ export function buildProgram(deps: CliDeps): Command {
     .description('[一次性] 老格式 change 补齐/确认 workflow 字段为 default（真实自定义 workflow 不覆盖）')
     .action(async (name: string) => bail(await cmdMigrateWorkflow(deps, name)))
 
-  program
-    .command('setup [sub]')
-    .description('安装后全功能就绪引导:软链 pipeline 到 PATH + 技能安装(Phase 2)/运行时检查(Phase 3)骨架')
-    .option('--dry-run', '只打印计划骨架,绝不软链/写文件')
-    .option('-y, --yes', '跳过交互确认位（本批无真安装,仅透传占位）')
-    .allowUnknownOption() // 未来 Phase 2/3 子命令的自有 flag 透传
-    .action(async (sub: string | undefined, opts: { dryRun?: boolean; yes?: boolean }) =>
-      bail(cmdSetup(deps, sub, { dryRun: opts.dryRun, yes: opts.yes })))
+  program.addHelpText(
+    'after',
+    '\n首次安装：pipeline setup（装技能 + 配就绪）——首次用本插件先跑 setup，再用 init 起 change。',
+  )
 
   return program
 }
