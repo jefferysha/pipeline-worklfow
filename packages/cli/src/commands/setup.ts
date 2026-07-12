@@ -170,7 +170,7 @@ function printPlanSkeleton(deps: CliDeps, opts: SetupOpts): void {
   deps.io.out('[setup] 全功能就绪引导 —— 计划骨架')
   deps.io.out('  1. PATH 软链:把 pipeline 软链到 ~/.local/bin（本批已实现）')
   deps.io.out('  2. 技能安装（Phase 2,本批已实装）:读 registry 按 tool 分组选装（详见下方技能计划）')
-  deps.io.out('  3. 运行时检查（Phase 3,已实装 → pipeline setup runtime）:docker/镜像/两 runner 凭证就绪清单 + 缺镜像一键构建')
+  deps.io.out('  3. 运行时检查（Phase 3,已实装）:docker/镜像/两 runner 凭证就绪清单 + 缺镜像一键构建（本流程末尾直接跑;--dry-run 只提示见 pipeline setup runtime）')
   deps.io.out('  4. 全功能就绪清单（待聚合）:逐项在位/降级 红黄绿汇总')
   if (opts.dryRun) deps.io.out('  （--dry-run:仅打印计划,未软链、未写任何文件）')
 }
@@ -556,12 +556,14 @@ export async function cmdSetupRuntime(
 }
 
 /**
- * `pipeline setup [sub]` —— 安装后全功能就绪引导（骨架批 F3）。
- *   空 sub:① ensurePipelineOnPath（软链到 PATH;--dry-run 时跳过一切写）② 打印计划骨架。
- *   sub=skills/runtime:分派到 Phase 2/3 占位（打印待实现,exit 0）。
+ * `pipeline setup [sub]` —— 安装后全功能就绪引导。
+ *   空 sub:① ensurePipelineOnPath（软链到 PATH;--dry-run 跳过一切写）→ ② 计划骨架 → ③ 技能安装段（S2）
+ *          → ④ 运行时就绪清单（R1）。一条命令走完「装技能 + 配就绪 + 一屏清单」。
+ *   sub=skills:仅技能安装段;sub=runtime:仅运行时就绪清单（真 docker/镜像/凭证探测）。
  *   未知 sub:stderr + exit 1（对齐 loops 未知子命令口径）。
- * --dry-run:零副作用（不软链/不写文件）;--yes:跳确认位（本批无真安装,仅透传占位）。
- * env 缺省 REAL_SETUP_ENV（真 node:fs);测试注入临时 HOME / spy 快速回归。
+ * --dry-run:零副作用（不软链/不写文件/不起 docker）——空 sub 的运行时段**只提示不真探测**（R1 concern#1:
+ *   避免 buildProgram 单测经空 sub 起真 docker 子进程）;非 dry-run 才经注入 rt 真探测（单测注入 fakeRt 仍零真 docker）。
+ * --yes:跳技能安装确认位。env/rt 缺省真实现;测试注入临时 HOME / spy / fakeRt 快速回归。
  */
 export function cmdSetup(
   deps: CliDeps,
@@ -573,12 +575,23 @@ export function cmdSetup(
   const o: SetupOpts = { dryRun: opts.dryRun ?? false, yes: opts.yes ?? false }
   switch (sub) {
     case undefined:
-    case '':
-      // 全流程:先把 pipeline 弄上 PATH（dry-run 不软链）→ 打印计划骨架 → 跑技能段（运行时就绪走
-      // 独立子命令 pipeline setup runtime / pipeline doctor，避免全流程单测里真起 docker 子进程）。
+    case '': {
+      // 全流程一条命令:PATH 软链（dry-run 不软链）→ 计划骨架 → 技能安装段 → 运行时就绪清单。
+      // 运行时段 dry-run **只提示不真探测**（避免 buildProgram 单测经空 sub 起真 docker 子进程，R1 concern#1）;
+      // 非 dry-run 才经注入 rt 真探测。技能段先同步跑完再接运行时异步段,故非 dry-run 返 Promise。
       if (!o.dryRun) ensurePipelineOnPath(deps, env)
       printPlanSkeleton(deps, o)
-      return cmdSetupSkills(deps, o, env)
+      const skillsCode = cmdSetupSkills(deps, o, env)
+      if (o.dryRun) {
+        deps.io.out(
+          '[setup] 运行时就绪检查:--dry-run 跳过真探测（不起 docker）——跑 pipeline setup runtime ' +
+            '看真实 docker/镜像/两 runner 凭证就绪清单',
+        )
+        return skillsCode
+      }
+      // 非 dry-run:技能段之后真跑运行时就绪清单;退出码取技能段(强制失败)优先,运行时恒 0 不改判。
+      return cmdSetupRuntime(deps, o, rt).then((rtCode) => (skillsCode !== 0 ? skillsCode : rtCode))
+    }
     case 'skills':
       return cmdSetupSkills(deps, o, env)
     case 'runtime':

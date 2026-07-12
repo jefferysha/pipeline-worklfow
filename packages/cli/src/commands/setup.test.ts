@@ -223,6 +223,47 @@ describe('③skills/runtime 分派 —— skills 真实装派(dry-run 安全) / 
   })
 })
 
+describe('⑨空 sub 全流程 —— 技能段后接运行时就绪清单（dry-run 只提示不真探测,R1 concern#1）', () => {
+  test('非 dry-run:技能段之后真跑运行时就绪清单（注入 fakeRt,零真 docker）→ 出清单 + exit 0', async () => {
+    const deps = makeDeps()
+    // 全部已装 → 技能段几乎空跑;同源软链 → 跳过。聚焦「运行时段确实被接上」(零真 docker 由 fakeRt 保证)。
+    const { env } = spyEnv({
+      readSymlink: () => '/plugin/packages/cli/dist/pipeline.mjs',
+      pathExists: () => true,
+    })
+    const rt = fakeRt({ hostEnv: { CLAUDE_CODE_OAUTH_TOKEN: 'a', OPENAI_API_KEY: 'b' } })
+    const code = await cmdSetup(deps, undefined, { yes: true }, env, rt)
+    expect(code).toBe(0)
+    const out = deps.outLines.join('\n')
+    expect(out).toContain('技能安装计划') // 技能段跑了
+    expect(out).toContain('就绪清单') // 运行时段也跑了（一屏）
+    expect(out).toContain('docker daemon 可用')
+  })
+
+  test('--dry-run:运行时段只提示见 pipeline setup runtime,绝不真探测 docker（同步返 number,不碰 rt）', () => {
+    const deps = makeDeps()
+    const { env, calls } = spyEnv()
+    // 关键:不传 rt（用真实 REAL_RUNTIME_ENV 缺省）——dry-run 仍绝不起真 docker;同步返 number 即证未 await 探测。
+    const code = cmdSetup(deps, undefined, { dryRun: true }, env)
+    expect(code).toBe(0) // 同步 number（非 Promise）——dry-run 不进异步运行时探测
+    const out = deps.outLines.join('\n')
+    expect(out).toContain('运行时就绪检查')
+    expect(out).toContain('pipeline setup runtime') // 指引去独立子命令看真清单
+    expect(out).toContain('--dry-run')
+    expect(calls.exec).toHaveLength(0) // 零 exec（技能段 dry-run 零执行 + 运行时段未探测）
+  })
+
+  test('退出码:技能段强制失败(exit 1) 优先于运行时(恒 0),但运行时清单仍打印（一屏可见）', async () => {
+    const deps = makeDeps()
+    // 无已装 + 全 exec 失败 → 真 registry 的 mandatory 命令全败 → 技能段 exit 1。
+    const exec: ExecStub = () => ({ code: 1, stdout: '', stderr: 'boom' })
+    const { env } = spyEnv({ readSymlink: () => '/plugin/packages/cli/dist/pipeline.mjs' }, exec)
+    const code = await cmdSetup(deps, undefined, { yes: true }, env, fakeRt())
+    expect(code).toBe(1) // 技能段强制失败保留（运行时恒 0 不覆盖）
+    expect(deps.outLines.join('\n')).toContain('就绪清单') // 但运行时段仍跑完（不因技能失败跳过）
+  })
+})
+
 describe('⑧运行时检查段 R1 —— AFK 就绪清单（docker/镜像/两 runner 凭证对称;缺镜像 build_hint;缺凭证去配 X）', () => {
   test('全就绪:docker 可用 + 镜像在位 + 两 runner 凭证已配（宿主 env）→ 清单全就绪 + exit 0', async () => {
     const deps = makeDeps()

@@ -144,11 +144,33 @@ function safeReaddirDirs(dir: string): string[] {
 }
 
 /**
- * 本机已安装技能/插件「能力名」扫描（full-install 批2 A1；对齐老仓 pipeline-doctor.sh:121 口径）：
+ * 读 ~/.claude/settings.json 的 enabledPlugins 里**被显式禁用**（值 === false）的插件键集合
+ * （对齐老仓 pipeline-doctor.sh:120-134 _disabled_cache_dirs）。键形如 `<plugin>@<marketplace>`
+ * （如 ecc@ecc / figma@claude-plugins-official）。禁用插件的 cache 目录仍在盘上，但 CC **不加载**，
+ * 算进「已装」是假阳性（典型:verify/verification-loop 只躺被禁的 ECC cache → 实际加载不到）。
+ * fail-safe:文件缺失/坏 JSON/无 enabledPlugins → 空集（不过滤，优雅退化为旧行为，同老脚本 python3 缺则不过滤）。
+ */
+function readDisabledPluginKeys(): Set<string> {
+  const disabled = new Set<string>()
+  try {
+    const raw = readFileSync(join(homedir(), '.claude', 'settings.json'), 'utf8')
+    const ep = (JSON.parse(raw) as { enabledPlugins?: Record<string, unknown> }).enabledPlugins
+    if (ep !== null && typeof ep === 'object') {
+      for (const [key, val] of Object.entries(ep)) if (val === false) disabled.add(key)
+    }
+  } catch {
+    // settings.json 缺失/坏 JSON/无 enabledPlugins → 不过滤（同老脚本优雅退化）
+  }
+  return disabled
+}
+
+/**
+ * 本机已安装技能/插件「能力名」扫描（full-install 批2 A1 + 批2 S3；对齐老仓 pipeline-doctor.sh:121/120-141 口径）：
  *   · ~/.claude/skills、~/.agents/skills 的直接子目录名 = skill 名（`npx skills add` 默认落 .agents/skills）
  *   · ~/.claude/plugins/cache/<marketplace>/<plugin> 的插件名 + 其 skills/ 子目录名
- * 纯目录扫描（本批口径；enabledPlugins=false 精确排除后续再补，设计 spec §Phase2 已登记）。
- * 全程 fail-safe（缺根目录跳过），供 doctor checkSkills 判在位。
+ *     ——被 settings.json enabledPlugins.<plugin@marketplace>=false 显式禁用的插件**整个排除**（CC 不加载，
+ *       算在位即假 green;禁用键 = `<plugin>@<marketplace>`，对上 cache/<marketplace>/<plugin> 目录）。
+ * 全程 fail-safe（缺根目录/坏 settings.json 跳过），供 doctor checkSkills 判在位。
  */
 function scanInstalledSkillNames(): Set<string> {
   const home = homedir()
@@ -156,9 +178,11 @@ function scanInstalledSkillNames(): Set<string> {
   for (const n of safeReaddirDirs(join(home, '.claude', 'skills'))) names.add(n)
   for (const n of safeReaddirDirs(join(home, '.agents', 'skills'))) names.add(n)
   const cache = join(home, '.claude', 'plugins', 'cache')
+  const disabledPlugins = readDisabledPluginKeys() // enabledPlugins.<plugin@marketplace>=false → 排除
   for (const marketplace of safeReaddirDirs(cache)) {
     const mktDir = join(cache, marketplace)
     for (const plugin of safeReaddirDirs(mktDir)) {
+      if (disabledPlugins.has(`${plugin}@${marketplace}`)) continue // 被禁插件 CC 不加载 → 不算在位（避假 green）
       names.add(plugin) // 插件名（superpowers / commit-commands / frontend-design …）
       for (const skill of safeReaddirDirs(join(mktDir, plugin, 'skills'))) names.add(skill)
     }

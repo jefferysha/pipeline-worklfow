@@ -18325,7 +18325,7 @@ function printPlanSkeleton(deps, opts) {
   deps.io.out("[setup] \u5168\u529F\u80FD\u5C31\u7EEA\u5F15\u5BFC \u2014\u2014 \u8BA1\u5212\u9AA8\u67B6");
   deps.io.out("  1. PATH \u8F6F\u94FE:\u628A pipeline \u8F6F\u94FE\u5230 ~/.local/bin\uFF08\u672C\u6279\u5DF2\u5B9E\u73B0\uFF09");
   deps.io.out("  2. \u6280\u80FD\u5B89\u88C5\uFF08Phase 2,\u672C\u6279\u5DF2\u5B9E\u88C5\uFF09:\u8BFB registry \u6309 tool \u5206\u7EC4\u9009\u88C5\uFF08\u8BE6\u89C1\u4E0B\u65B9\u6280\u80FD\u8BA1\u5212\uFF09");
-  deps.io.out("  3. \u8FD0\u884C\u65F6\u68C0\u67E5\uFF08Phase 3,\u5DF2\u5B9E\u88C5 \u2192 pipeline setup runtime\uFF09:docker/\u955C\u50CF/\u4E24 runner \u51ED\u8BC1\u5C31\u7EEA\u6E05\u5355 + \u7F3A\u955C\u50CF\u4E00\u952E\u6784\u5EFA");
+  deps.io.out("  3. \u8FD0\u884C\u65F6\u68C0\u67E5\uFF08Phase 3,\u5DF2\u5B9E\u88C5\uFF09:docker/\u955C\u50CF/\u4E24 runner \u51ED\u8BC1\u5C31\u7EEA\u6E05\u5355 + \u7F3A\u955C\u50CF\u4E00\u952E\u6784\u5EFA\uFF08\u672C\u6D41\u7A0B\u672B\u5C3E\u76F4\u63A5\u8DD1;--dry-run \u53EA\u63D0\u793A\u89C1 pipeline setup runtime\uFF09");
   deps.io.out("  4. \u5168\u529F\u80FD\u5C31\u7EEA\u6E05\u5355\uFF08\u5F85\u805A\u5408\uFF09:\u9010\u9879\u5728\u4F4D/\u964D\u7EA7 \u7EA2\u9EC4\u7EFF\u6C47\u603B");
   if (opts.dryRun) deps.io.out("  \uFF08--dry-run:\u4EC5\u6253\u5370\u8BA1\u5212,\u672A\u8F6F\u94FE\u3001\u672A\u5199\u4EFB\u4F55\u6587\u4EF6\uFF09");
 }
@@ -18629,10 +18629,18 @@ function cmdSetup(deps, sub, opts, env = REAL_SETUP_ENV, rt = REAL_RUNTIME_ENV) 
   const o = { dryRun: opts.dryRun ?? false, yes: opts.yes ?? false };
   switch (sub) {
     case void 0:
-    case "":
+    case "": {
       if (!o.dryRun) ensurePipelineOnPath(deps, env);
       printPlanSkeleton(deps, o);
-      return cmdSetupSkills(deps, o, env);
+      const skillsCode = cmdSetupSkills(deps, o, env);
+      if (o.dryRun) {
+        deps.io.out(
+          "[setup] \u8FD0\u884C\u65F6\u5C31\u7EEA\u68C0\u67E5:--dry-run \u8DF3\u8FC7\u771F\u63A2\u6D4B\uFF08\u4E0D\u8D77 docker\uFF09\u2014\u2014\u8DD1 pipeline setup runtime \u770B\u771F\u5B9E docker/\u955C\u50CF/\u4E24 runner \u51ED\u8BC1\u5C31\u7EEA\u6E05\u5355"
+        );
+        return skillsCode;
+      }
+      return cmdSetupRuntime(deps, o, rt).then((rtCode) => skillsCode !== 0 ? skillsCode : rtCode);
+    }
     case "skills":
       return cmdSetupSkills(deps, o, env);
     case "runtime":
@@ -19620,15 +19628,29 @@ function safeReaddirDirs(dir) {
     return [];
   }
 }
+function readDisabledPluginKeys() {
+  const disabled = /* @__PURE__ */ new Set();
+  try {
+    const raw = readFileSync18(join34(homedir8(), ".claude", "settings.json"), "utf8");
+    const ep = JSON.parse(raw).enabledPlugins;
+    if (ep !== null && typeof ep === "object") {
+      for (const [key, val] of Object.entries(ep)) if (val === false) disabled.add(key);
+    }
+  } catch {
+  }
+  return disabled;
+}
 function scanInstalledSkillNames() {
   const home = homedir8();
   const names = /* @__PURE__ */ new Set();
   for (const n of safeReaddirDirs(join34(home, ".claude", "skills"))) names.add(n);
   for (const n of safeReaddirDirs(join34(home, ".agents", "skills"))) names.add(n);
   const cache2 = join34(home, ".claude", "plugins", "cache");
+  const disabledPlugins = readDisabledPluginKeys();
   for (const marketplace of safeReaddirDirs(cache2)) {
     const mktDir = join34(cache2, marketplace);
     for (const plugin of safeReaddirDirs(mktDir)) {
+      if (disabledPlugins.has(`${plugin}@${marketplace}`)) continue;
       names.add(plugin);
       for (const skill of safeReaddirDirs(join34(mktDir, plugin, "skills"))) names.add(skill);
     }
