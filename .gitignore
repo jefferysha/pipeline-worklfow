@@ -1,5 +1,11 @@
 node_modules/
 dist/
+# 分发例外:CLI bundle 随插件 git clone 入包（hooks 直接引用 $CLAUDE_PLUGIN_ROOT/packages/cli/dist/pipeline.mjs）。
+# 三行缺一不可：dist/ 忽略了父目录后 git 不再下探，须先放行该目录、再重新忽略目录内全部内容、最后单独放行这一个 bundle。
+# 其余 tsc 产物（main.js/commands/ 等）仍被忽略。改 cli src 后须 npm run build 重构并提交此 bundle，详见 docs/DIST-RELEASE.md。
+!packages/cli/dist/
+packages/cli/dist/*
+!packages/cli/dist/pipeline.mjs
 coverage/
 *.tsbuildinfo
 .DS_Store
