@@ -61,6 +61,30 @@ function redactSecretsInString(s: string): string {
 }
 
 /**
+ * query 专属敏感参数名（比 body 白名单多 `key`/`code`）：`key` 太通用不能进 SENSITIVE_BODY_KEYS
+ * （会误伤任何叫 key 的 body 字段），但在 URL query 里 `?key=<cred>`（Google 式）/`?code=<oauth>`
+ * 是明确凭证约定，按**参数名精确匹配**只在 query 段脱敏，故安全。
+ */
+const QUERY_SENSITIVE_PARAMS: ReadonlySet<string> = new Set([
+  'key', 'api_key', 'apikey', 'access_token', 'refresh_token', 'id_token', 'token',
+  'session_token', 'client_secret', 'password', 'code', 'code_verifier', 'secret',
+])
+
+/** 只脱敏 path 的 query 段（`?a=b&c=d`）里名字命中敏感参数的值；path 段与非敏感参数原样。 */
+function redactPathQuery(rawPath: string): string {
+  const qIdx = rawPath.indexOf('?')
+  if (qIdx < 0) return rawPath
+  const base = rawPath.slice(0, qIdx)
+  const query = rawPath.slice(qIdx + 1)
+  const redacted = query.replace(/([^&=?#]+)=([^&#]*)/g, (m, k: string, _v: string) => {
+    let name = k
+    try { name = decodeURIComponent(k) } catch { /* 保留原始 */ }
+    return QUERY_SENSITIVE_PARAMS.has(name.toLowerCase()) ? `${k}=***` : m
+  })
+  return `${base}?${redacted}`
+}
+
+/**
  * 递归脱敏 body 里的凭证值（对象/数组走键名精确匹配置 `***`，字符串走正则）。纯函数、不改入参，
  * 只用于**存储记录**——上游转发的仍是原始 body（脱敏只发生在写盘那一份）。深度上限防病态嵌套。
  */
@@ -128,8 +152,9 @@ export function buildRecord(p: BuildRecordParams): TraceRecord {
     request: {
       method: p.method,
       // path 含 query（forward 的 pathname+search / reverse 的 req.url）：query 里的凭证（?access_token=…、
-      // ?api_key=…、?key=…）同样会随 trace 入库，套字符串脱敏（对抗复审 I1）。path 段无 k=v 不受影响。
-      path: redactSecretsInString(p.path),
+      // ?api_key=…、?key=… Google 式、?code=… OAuth）同样会随 trace 入库，按参数名脱敏（I1 + codex review：
+      // `key`/`code` 只在 query 段按名精确遮，不进 body 白名单免误伤）。path 段与非敏感参数原样。
+      path: redactPathQuery(p.path),
       headers: filterHeaders(p.reqHeaders, { redactKeys: true }),
       body: redactBodySecrets(p.reqBody),
     },

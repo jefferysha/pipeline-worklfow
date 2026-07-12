@@ -114,17 +114,27 @@ describe('redactBodySecrets —— body 凭证脱敏（deep JSON + 字符串两�
   })
 })
 
-describe('buildRecord —— path query 凭证脱敏（I1）', () => {
-  it('request.path 的 query 里 ?access_token=/?api_key= 被遮', () => {
+describe('buildRecord —— path query 凭证脱敏（I1 + codex review：Google 式 ?key= / OAuth ?code=）', () => {
+  it('query 里 ?access_token=/?api_key=/?key=/?code= 均被遮，非凭证参数与 path 段保留', () => {
     const rec = buildRecord({
       reqId: 'r', turn: 1, durationMs: 1, method: 'GET',
-      path: '/v1/models?access_token=AT-secret&api_key=KEY-secret&model=gpt',
+      path: '/v1beta/models/x:generateContent?access_token=AT&api_key=AK&key=GK-secret&code=OC-secret&model=gpt',
       reqHeaders: {}, reqBody: null, status: 200, respHeaders: {}, respBody: null,
     })
     const path = (rec.request as any).path
     expect(path).toContain('access_token=***')
     expect(path).toContain('api_key=***')
+    expect(path).toContain('key=***') // Google 式 ?key=（codex review P1）
+    expect(path).toContain('code=***') // OAuth ?code=
     expect(path).toContain('model=gpt') // 非凭证参数保留
+    expect(path).toContain('/v1beta/models/x:generateContent?') // path 段原样
+  })
+  it('无 query → 原样（path 段不含 key= 误伤）', () => {
+    const rec = buildRecord({
+      reqId: 'r', turn: 1, durationMs: 1, method: 'POST', path: '/backend-api/codex/responses',
+      reqHeaders: {}, reqBody: null, status: 200, respHeaders: {}, respBody: null,
+    })
+    expect((rec.request as any).path).toBe('/backend-api/codex/responses')
   })
 })
 
