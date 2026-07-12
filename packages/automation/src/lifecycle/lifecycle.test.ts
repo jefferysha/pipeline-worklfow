@@ -526,3 +526,49 @@ describe('runChangeInSandbox · cfg.runner 透传（v5 T20 双 runner）', () =>
     expect(seen).toEqual([undefined])
   })
 })
+
+/**
+ * 观察项③ runner 无关性佐证（批 3 R2 · P1-T1 claude 补齐依赖此性质）：createAgentExitWatch 的
+ * AGENT_EXIT_LINE_RE = /^\[AGENT_EXIT\] (\S+) (\d+)\s*$/ 按 (\S+) 抓 runner 名——脚本 claude 分支
+ * 新发的 `[AGENT_EXIT] claude <exit>` 经既有 exec tee → 同一 watcher 落 automation_last_error，
+ * **lifecycle 一行不改**。此测钉住这条「runner 无关」链路不被后续回改破坏（与 codex 侧同款断言）。
+ */
+describe('runChangeInSandbox · claude agent 非零退出可见度（runner 无关，批 3 R2 · P1-T1）', () => {
+  /** fake 沙箱 exec 逐行吐 script；runWork 走 claude 缺省命令形态（不带 PIPELINE_RUNNER）。 */
+  const claudeStreamingOver = (script: string[]): Partial<LifecyclePorts> => ({
+    async createSandbox(opts) {
+      return {
+        env: opts.env,
+        containerName: FAKE_CONTAINER_NAME,
+        async exec(_cmd, options) {
+          for (const line of script) options?.onLine?.(line)
+          return { stdout: '', stderr: '', exitCode: 0 }
+        },
+        async close() {},
+      }
+    },
+    async runWork(exec) {
+      await exec('PIPELINE_AFK=1 pipeline-afk-run x', {})
+      return { verify_result: 'pass', build_sha: SHA, phase_event: 'verify-pass' }
+    },
+  })
+
+  it('流面检出 [AGENT_EXIT] claude 1 → 既有 watcher 落 automation_last_error（含 claude + exit 1），run 仍成功（可见度不改判）', async () => {
+    const { ports, state, log } = makePorts(claudeStreamingOver(['agent noise', '[AGENT_EXIT] claude 1']))
+    const out = await runChangeInSandbox(
+      ports,
+      { hostRepoDir: '/repo', name: 'x', base: 'main', autoMerge: false },
+      new AbortController().signal,
+    )
+    expect(out.verifyResult).toBe('pass') // 成败判定不变（确定性/真 agent 兜底原样）
+    expect(state().automation_last_error).toContain('claude') // watcher 按 (\S+) 回填 runner 名，runner 无关
+    expect(state().automation_last_error).toContain('exit 1')
+    expect(log.some((l) => l.startsWith('wt.remove'))).toBe(true) // 正常 teardown 不受影响
+  })
+
+  it('claude exit=0 标记行不写（脚本本不输出，宿主侧同款防御）', async () => {
+    const { ports, log } = makePorts(claudeStreamingOver(['[AGENT_EXIT] claude 0']))
+    await runChangeInSandbox(ports, { hostRepoDir: '/repo', name: 'x', base: 'main', autoMerge: false }, new AbortController().signal)
+    expect(log).not.toContain('setStateField:automation_last_error')
+  })
+})

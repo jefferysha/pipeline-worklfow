@@ -146,3 +146,55 @@ describe('脚本 codex 分支 · agent 非零退出标记行（观察项③）',
     expect(r.build_sha).toBe('abc')
   })
 })
+
+/**
+ * P1-T1 / 观察项③ 对齐（批 3 R2）：claude-code 路径此前「最不诚实」——① agent 非零退出（认证失效 /
+ * tap 未起 agent_exit=97）只落 worktree 内 .sandcastle-build.agent.log，脚本继续确定性兜底 commit 且
+ * 0 退出，host 侧流面完全不可见；② 凭证/CLI 缺失时无 else 分支，径直静默走确定性兜底伪装 agent 跑过。
+ * 本批把 claude 分支补齐到 codex 同款可见度：非零退出回放 [AGENT_EXIT] claude <exit>（host 侧
+ * createAgentExitWatch 检出落 automation_last_error；该 watcher AGENT_EXIT_LINE_RE 按 (\S+) 抓 runner
+ * 名、runner 无关，无需改 lifecycle），且加 else 诚实 stderr（让用户看见「本轮没真跑 agent」，但刻意
+ * **不发** EXIT 标记——「没起 agent」不是「agent 失败」，发标记会被 watcher 误报成非零退出污染
+ * last_error）。文本层钉住脚本逻辑（同 sha 测试的「脚本逐字」口径）。**不改 codex 分支、不改
+ * verify_result 语义。**
+ */
+describe('脚本 claude 分支 · agent 非零退出标记行 + 凭证缺失诚实 else（P1-T1，批 3 R2）', () => {
+  const here = dirname(fileURLToPath(import.meta.url))
+  const script = readFileSync(join(here, '..', '..', '..', '..', 'tools', 'sandcastle', 'pipeline-afk-run.sh'), 'utf8')
+
+  it('claude 分支 agent_exit≠0 → stdout 回放 [AGENT_EXIT] claude <exit>（对齐 codex，exit=0 不输出）', () => {
+    expect(script).toContain(`printf '[AGENT_EXIT] claude %s\\n' "$agent_exit"`)
+    expect(script).toContain('if [ "$agent_exit" -ne 0 ]') // 受 exit≠0 守卫（零噪音，同 codex 口径）
+  })
+
+  it('claude 回放位于 claude 分支内（elif 入口之后）', () => {
+    const claudeMarkerIdx = script.indexOf(`printf '[AGENT_EXIT] claude %s\\n'`)
+    const claudeBranchIdx = script.indexOf('elif [ -n "${CLAUDE_CODE_OAUTH_TOKEN')
+    expect(claudeMarkerIdx).toBeGreaterThan(claudeBranchIdx)
+  })
+
+  it('凭证/CLI 缺失 else 分支：打可操作 stderr（本轮未真跑 agent），落 >&2、位于 claude elif 之后', () => {
+    const elseLine = script.split('\n').find((l) => l.includes('agent 未真跑'))
+    expect(elseLine).toBeDefined()
+    expect(elseLine).toContain('printf')
+    expect(elseLine).toContain('未检测到 CLAUDE_CODE_OAUTH_TOKEN')
+    expect(elseLine).toContain('>&2') // 落 stderr，不污染末行 <output> 握手
+    const elseIdx = script.indexOf('agent 未真跑')
+    const claudeBranchIdx = script.indexOf('elif [ -n "${CLAUDE_CODE_OAUTH_TOKEN')
+    expect(elseIdx).toBeGreaterThan(claudeBranchIdx)
+  })
+
+  it('全脚本恰两处 [AGENT_EXIT] 回放（codex + claude），else 诚实分支不发标记（不误报 agent 失败）', () => {
+    const emits = script.match(/printf '\[AGENT_EXIT\]/g) ?? []
+    expect(emits).toHaveLength(2)
+    expect(script).toContain(`printf '[AGENT_EXIT] codex %s\\n'`) // codex 分支原样（回归）
+  })
+
+  it('parseSandboxReport 容忍 claude 标记行（不干扰末行 <output> 握手）', () => {
+    const r = parseSandboxReport(
+      '[AGENT_EXIT] claude 97\n<output>{"verify_result":"pass","build_sha":"abc","phase_event":"verify-pass"}</output>',
+    )
+    expect(r.verify_result).toBe('pass')
+    expect(r.build_sha).toBe('abc')
+  })
+})

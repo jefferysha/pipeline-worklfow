@@ -122,6 +122,26 @@ elif [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ] && command -v claude >/dev/null 2>&1;
     kill "$tap_pid" 2>/dev/null || true
     wait "$tap_pid" 2>/dev/null || true
   fi
+
+  # agent 非零退出可见度（P1-T1「claude-code 路径最不诚实」/ 对齐 codex :72-74 同风格）：claude 认证
+  # 失效、tap 未起（agent_exit=97）等失败此前只落 worktree 内 .sandcastle-build.agent.log——脚本继续
+  # 底部确定性兜底 commit 且 0 退出，host 侧流面看不见，automation_last_error 永不落（「agent 跑过了」
+  # 的假象）。把非零 exit 以可解析标记行回放到 stdout（host 侧 createAgentExitWatch 检出并同步落
+  # automation_last_error；该 watcher AGENT_EXIT_LINE_RE 只按 (\S+) 抓 runner 名——runner 无关，lifecycle
+  # 无需改；parseSandboxReport 容忍多余行，不干扰末行 <output> 握手）。exit=0 不输出（零噪音）。
+  # **不改变退出路径**：确定性兜底与成败判定原样，run 仍成功——这是可见度，不是改判。
+  if [ "$agent_exit" -ne 0 ]; then
+    printf '[AGENT_EXIT] claude %s\n' "$agent_exit"
+  fi
+else
+  # 诚实分流（P1-T1）：既非 runner=codex、又无「CLAUDE_CODE_OAUTH_TOKEN + claude CLI 齐备」——没有任何
+  # agent 会被调起，脚本径直落到底部确定性兜底 commit 并 0 退出。此前这一步完全静默，用户以为 agent
+  # 真跑了（P1-T1 判此路径最不诚实）。打一条可操作 stderr（仅提示、**不改变退出路径**）：让用户看得见
+  # 「这轮没真跑 agent」。刻意**不发 [AGENT_EXIT] 标记**——本轮不是「agent 失败」而是「根本没起 agent」，
+  # 发 EXIT 标记会被 host 侧 createAgentExitWatch 误报成 agent 非零退出、污染 automation_last_error；
+  # 确定性兜底记 pass 是既有设计（见文件头注），本任务只加可见度不动成败判定。stderr 经 docker exec
+  # 流面对用户可见，口径同 codex 凭证缺失提示（:51-53 纯 stderr、不短路）。
+  printf '未检测到 CLAUDE_CODE_OAUTH_TOKEN 或 claude CLI：本轮走确定性兜底，agent 未真跑；配 CLAUDE_CODE_OAUTH_TOKEN 且使用含 claude CLI 的沙箱镜像方启用真 agent\n' >&2
 fi
 
 # build 产物落地（确定性站位 agent 编码；agent 模式下 agent 已改工作树，这里补记账不冲突）。
