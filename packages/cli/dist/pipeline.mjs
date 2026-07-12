@@ -12468,6 +12468,37 @@ var CRED_JSON_STR_RE = new RegExp(`("(?:${CRED_KEYS_ALT})"\\s*:\\s*)"[^"]*"`, "g
 function redactSecretsInString(s) {
   return s.replace(CRED_FORM_RE, "$1=***").replace(CRED_JSON_STR_RE, '$1"***"');
 }
+var QUERY_SENSITIVE_PARAMS = /* @__PURE__ */ new Set([
+  "key",
+  "api_key",
+  "apikey",
+  "access_token",
+  "refresh_token",
+  "id_token",
+  "token",
+  "session_token",
+  "client_secret",
+  "password",
+  "code",
+  "code_verifier",
+  "secret"
+]);
+function redactPathQuery(rawPath) {
+  const qIdx = rawPath.indexOf("?");
+  if (qIdx < 0)
+    return rawPath;
+  const base = rawPath.slice(0, qIdx);
+  const query = rawPath.slice(qIdx + 1);
+  const redacted = query.replace(/([^&=?#]+)=([^&#]*)/g, (m, k, _v) => {
+    let name2 = k;
+    try {
+      name2 = decodeURIComponent(k);
+    } catch {
+    }
+    return QUERY_SENSITIVE_PARAMS.has(name2.toLowerCase()) ? `${k}=***` : m;
+  });
+  return `${base}?${redacted}`;
+}
 function redactBodySecrets(value, depth = 0) {
   if (typeof value === "string")
     return redactSecretsInString(value);
@@ -12513,8 +12544,9 @@ function buildRecord(p) {
     request: {
       method: p.method,
       // path 含 query（forward 的 pathname+search / reverse 的 req.url）：query 里的凭证（?access_token=…、
-      // ?api_key=…、?key=…）同样会随 trace 入库，套字符串脱敏（对抗复审 I1）。path 段无 k=v 不受影响。
-      path: redactSecretsInString(p.path),
+      // ?api_key=…、?key=… Google 式、?code=… OAuth）同样会随 trace 入库，按参数名脱敏（I1 + codex review：
+      // `key`/`code` 只在 query 段按名精确遮，不进 body 白名单免误伤）。path 段与非敏感参数原样。
+      path: redactPathQuery(p.path),
       headers: filterHeaders(p.reqHeaders, { redactKeys: true }),
       body: redactBodySecrets(p.reqBody)
     },
