@@ -235,6 +235,9 @@ export interface WbLoopRow {
   matched_changes: string[]
   /** 登记表原值透传——全仓无运行时消费者，纯声明标签，UI 不得暗示会做 workflow join 校验。 */
   phases: string[]
+  // ── loop-init L4（P2 草稿审阅协议）：server LoopRow.draft 镜像同步 ──
+  /** 该 loop 是否为「agent 草稿·待你审阅」（.pipeline/loops.drafts.json 标记，fail-open→false）；L5 据此渲染徽章与批准/驳回动作行。 */
+  draft: boolean
 }
 export interface WbLoopsSnapshot {
   generated_at: string

@@ -8,11 +8,14 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import {
+  clearDraftMark,
   computeBudgetStatus,
   computeReadiness,
+  draftMarksPath,
   loadRegistry,
   LOOPS_SCHEMA,
   parseLoopsYaml,
+  readDraftMarks,
   updateLoopInYaml,
   validateSchema,
   type AutonomyLevel,
@@ -51,6 +54,10 @@ export interface LoopRow {
   matched_changes: string[]
   /** 登记表原值透传——全仓无运行时消费者，纯声明标签（decisions.md 关系条不得暗示它会做 workflow join 校验）。 */
   phases: string[]
+  // ── loop-init L4（P2 草稿审阅协议）：sidecar 纯展示元数据 ──
+  /** 该 loop 是否在 .pipeline/loops.drafts.json 标记集中（「agent 草稿·待你审阅」）；fail-open——
+   *  标记文件缺失/坏 JSON 一律 false，仅现有行判 draft（标记里多出的 id 不产生幽灵行）。 */
+  draft: boolean
 }
 
 export interface LoopsSnapshot {
@@ -139,6 +146,12 @@ export async function applyLoopsUpdate(root: string, id: string, patch: Record<s
     return { ok: false, error: 'CAS 失败，loops.yaml 在此期间被并发修改' }
   }
   await writeFile(yamlPath, text, 'utf8')
+  // P2：批准(status:active)/驳回(status:paused) 都算「已审阅」——patch 含 status 自有键且已落盘即清草稿标记
+  // （best-effort：标记是展示元数据，清失败吞错，不影响 {ok:true}）。patch 不含 status，或上面任一门先 return
+  // ok:false（updateLoopInYaml/schema/CAS 拒），都走不到这里 → 标记不动。
+  if (Object.prototype.hasOwnProperty.call(patch, 'status')) {
+    await clearDraftMark(draftMarksPath(root), id).catch(() => {})
+  }
   return { ok: true }
 }
 
@@ -149,6 +162,8 @@ export async function buildLoopsSnapshot(deps: LoopsSnapshotDeps): Promise<Loops
     const { data } = loadRegistry(root)
     if (!data) continue
     const runLogText = readRunLogText(root)
+    // P2 草稿标记：每 root 读一次 sidecar（fail-open→[]），行级 draft = id 命中；仅现有行判，无幽灵行。
+    const draftSet = new Set(readDraftMarks(draftMarksPath(root)))
     for (const loop of data.loops) {
       rows.push({
         root,
@@ -171,6 +186,7 @@ export async function buildLoopsSnapshot(deps: LoopsSnapshotDeps): Promise<Loops
         budget: computeBudgetStatus(loop, runLogText, now),
         matched_changes: loop.change_prefix === null ? [] : listMatchedChanges(root, loop.change_prefix),
         phases: loop.phases,
+        draft: draftSet.has(loop.id),
       })
     }
   }

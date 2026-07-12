@@ -1,9 +1,25 @@
 import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { describe, expect, it } from 'vitest'
-import { loadRegistry } from '@pipeline-lite/kernel'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { addDraftMark, clearDraftMark, draftMarksPath, loadRegistry, readDraftMarks } from '@pipeline-lite/kernel'
 import { applyLoopsUpdate, buildLoopsSnapshot } from './loops.js'
+
+/**
+ * loop-init L4：clearDraftMark 打成可控 spy（默认真实现——④ 批准/驳回真清标记；⑤ 单次 reject
+ * 验「清失败不阻断 ok:true」），其余 kernel 导出全真。node:fs/promises 只把 readFile 打成 spy（默认真读；
+ * ④e CAS 靠两次 readFile 返回不同文本注入「并发改」——applyLoopsUpdate 内两读之间无外部 await 隙，
+ * 真 IO 无法确定性注入）。两处 mock 均 passthrough，不动既有 15 测（既有测无 status patch、不断言这两个 spy）。
+ * 打桩口径同 packages/cli/src/commands/afk.test.ts 的 importOriginal 先例。
+ */
+vi.mock('@pipeline-lite/kernel', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@pipeline-lite/kernel')>()
+  return { ...actual, clearDraftMark: vi.fn(actual.clearDraftMark) }
+})
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs/promises')>()
+  return { ...actual, readFile: vi.fn(actual.readFile) }
+})
 
 const LOOP_YAML = `version: 1
 loops:
@@ -195,5 +211,109 @@ describe('loops runner 双支持（v5 T20）', () => {
     const r = await applyLoopsUpdate(root, 'build-loop', { runner: 'claude-code' })
     expect(r).toEqual({ ok: true })
     expect(loadRegistry(root).data!.loops[0]!.runner).toBe('claude-code')
+  })
+})
+
+/**
+ * loop-init L4：LoopRow.draft 透出 —— 每 root 读一次 loops.drafts.json（sidecar，纯展示元数据），
+ * 行级 draft = id 在标记集中；fail-open（缺文件/坏 JSON → 全 false，绝不抛）；仅现有行判 draft，
+ * 标记里多出的 id 不产生幽灵行（循环主体是 loadRegistry 的 data.loops，天然满足）。
+ */
+describe('loop-init L4：LoopRow.draft 透出（sidecar 标记，fail-open）', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('① 标记含该行 id → draft:true；标记里没有该 id → draft:false', async () => {
+    const root = await makeProjectWithLoop() // loop id = build-loop
+    await addDraftMark(draftMarksPath(root), 'build-loop')
+    const snap = await buildLoopsSnapshot({ registry: () => [root], now: () => new Date('2026-07-12T00:00:00Z') })
+    expect(snap.rows[0]!.draft).toBe(true)
+
+    const root2 = await makeProjectWithLoop() // 有标记文件但不含 build-loop
+    await addDraftMark(draftMarksPath(root2), 'some-other-loop')
+    const snap2 = await buildLoopsSnapshot({ registry: () => [root2], now: () => new Date('2026-07-12T00:00:00Z') })
+    expect(snap2.rows[0]!.draft).toBe(false)
+  })
+
+  it('② 标记文件缺失 → 全行 draft:false，不抛（fail-open）', async () => {
+    const root = await makeProjectWithLoop() // 未建 loops.drafts.json
+    const snap = await buildLoopsSnapshot({ registry: () => [root], now: () => new Date('2026-07-12T00:00:00Z') })
+    expect(snap.rows[0]!.draft).toBe(false)
+  })
+
+  it('③ 标记含 loops.yaml 不存在的 id → 行数不变（仅现有行判 draft，无幽灵行）', async () => {
+    const root = await makeProjectWithLoop()
+    await addDraftMark(draftMarksPath(root), 'build-loop') // 存在的行
+    await addDraftMark(draftMarksPath(root), 'ghost-not-in-yaml') // 标记里多出的 id
+    const snap = await buildLoopsSnapshot({ registry: () => [root], now: () => new Date('2026-07-12T00:00:00Z') })
+    expect(snap.rows).toHaveLength(1) // 幽灵 id 不产生行
+    expect(snap.rows[0]!.id).toBe('build-loop')
+    expect(snap.rows[0]!.draft).toBe(true)
+  })
+})
+
+/**
+ * loop-init L4：applyLoopsUpdate 落盘成功且 patch 含 status 自有键（批准 active / 驳回 paused 都算「已审阅」）
+ * → best-effort clearDraftMark（清失败吞错不影响 ok:true）。patch 不含 status 或落盘失败（schema/CAS 拒）→ 不清。
+ */
+describe('loop-init L4：status 写回清标记（批准/驳回即已审阅，best-effort）', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('④a patch 含 status:active（批准）→ 落盘成功后标记被清', async () => {
+    const root = await makeProjectWithLoop()
+    await addDraftMark(draftMarksPath(root), 'build-loop')
+    const r = await applyLoopsUpdate(root, 'build-loop', { status: 'active' })
+    expect(r).toEqual({ ok: true })
+    expect(vi.mocked(clearDraftMark)).toHaveBeenCalledTimes(1)
+    expect(readDraftMarks(draftMarksPath(root))).not.toContain('build-loop')
+  })
+
+  it('④b patch 含 status:paused（驳回，现场保留）→ 落盘成功后标记被清', async () => {
+    const root = await makeProjectWithLoop()
+    await addDraftMark(draftMarksPath(root), 'build-loop')
+    const r = await applyLoopsUpdate(root, 'build-loop', { status: 'paused' })
+    expect(r).toEqual({ ok: true })
+    expect(vi.mocked(clearDraftMark)).toHaveBeenCalledTimes(1)
+    expect(readDraftMarks(draftMarksPath(root))).not.toContain('build-loop')
+  })
+
+  it('④c patch 只含 goal（无 status）→ 标记保留、clearDraftMark 不调用', async () => {
+    const root = await makeProjectWithLoop()
+    await addDraftMark(draftMarksPath(root), 'build-loop')
+    const r = await applyLoopsUpdate(root, 'build-loop', { goal: '换一个足够长度满足 minLength 的新目标描述文字' })
+    expect(r).toEqual({ ok: true })
+    expect(vi.mocked(clearDraftMark)).not.toHaveBeenCalled()
+    expect(readDraftMarks(draftMarksPath(root))).toContain('build-loop')
+  })
+
+  it('④d patch 含 status 但被 schema 拒（未落盘）→ 标记保留、clearDraftMark 不调用', async () => {
+    const root = await makeProjectWithLoop()
+    await addDraftMark(draftMarksPath(root), 'build-loop')
+    // status 在 patch 里，但 cadence 违 pattern → 整文档 schema 校验失败 → 不落盘；清标记在 writeFile 之后不可达
+    const r = await applyLoopsUpdate(root, 'build-loop', { status: 'active', cadence: 'whenever-i-feel' })
+    expect(r.ok).toBe(false)
+    expect(vi.mocked(clearDraftMark)).not.toHaveBeenCalled()
+    expect(readDraftMarks(draftMarksPath(root))).toContain('build-loop')
+  })
+
+  it('④e patch 含 status 但 CAS 拒（并发改）→ 标记保留、clearDraftMark 不调用', async () => {
+    const root = await makeProjectWithLoop()
+    await addDraftMark(draftMarksPath(root), 'build-loop')
+    const yamlPath = join(root, '.pipeline', 'loops.yaml')
+    const orig = await readFile(yamlPath, 'utf8')
+    // 注入：applyLoopsUpdate 内两次 readFile——首读回真原文，CAS 复读回被改文本 → current !== before → 拒
+    vi.mocked(readFile).mockResolvedValueOnce(orig).mockResolvedValueOnce(`${orig}# concurrent\n`)
+    const r = await applyLoopsUpdate(root, 'build-loop', { status: 'active' })
+    expect(r.ok).toBe(false)
+    expect(vi.mocked(clearDraftMark)).not.toHaveBeenCalled()
+    expect(readDraftMarks(draftMarksPath(root))).toContain('build-loop')
+  })
+
+  it('⑤ clearDraftMark 抛错 → update 仍返回 {ok:true}（标记是展示元数据，清失败不阻断写回）', async () => {
+    const root = await makeProjectWithLoop()
+    await addDraftMark(draftMarksPath(root), 'build-loop')
+    vi.mocked(clearDraftMark).mockRejectedValueOnce(new Error('注入：清标记失败'))
+    const r = await applyLoopsUpdate(root, 'build-loop', { status: 'active' })
+    expect(r).toEqual({ ok: true })
+    expect(vi.mocked(clearDraftMark)).toHaveBeenCalledTimes(1)
   })
 })
