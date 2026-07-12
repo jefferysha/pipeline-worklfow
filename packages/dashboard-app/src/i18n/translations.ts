@@ -41,7 +41,7 @@ export const zh: Dict = {
     // 验收反馈②-③：「等 agent」改人话「等产出」，本句口径同步。
     subtitle: '只收你现在就能拍板的事——放行、打回、重试、放弃；缺产出的活在进度里等产出',
     empty_title: '没有在等你的事',
-    empty_desc: '当前没有 change 停在需要你决定的复核门。可去进度查看全部任务。',
+    empty_desc: '没有 change 停在等你拍板的门上。要开始新工作，去终端跑 pipeline init；想追踪在跑的任务，在进度里看。',
     count: '{n} 个在等你',
     // T17 三视图 IA：看板退役，空态按钮改指进度（key 名不动，代码标识符纪律同决议#8）。
     open_board: '去进度',
@@ -161,7 +161,11 @@ export const zh: Dict = {
   onboard: {
     no_project_title: '还没有注册任何项目',
     // T17 纯教学态（决议#7 + T2）：pipeline init 自动登记项目，注册表单/幽灵命令全部退役。
-    no_project_desc: '在项目目录里跑一次 pipeline init，项目就会自动出现在这里——不需要单独注册。',
+    // full-install W2：no-project 改「诚实三步 checklist」——dashboard 只读，注册/装技能/跑流程都在终端（决议#7 不加注册 UI，只给可复制命令导回终端）。
+    no_project_desc: '这个 dashboard 只读，用来看流水线进度。注册项目、装技能、跑流程都在终端——照下面三步做完，回来刷新本页就能看到进度。',
+    step_init: '建一个 change（pipeline init 会把项目自动登记进来，不用单独注册）',
+    step_setup: '装技能 + 配就绪（安装流水线技能，配好 AFK 要的凭证与镜像检查）',
+    step_doctor: '确认环境就绪，然后刷新本页',
     or_cli: '或者用 CLI',
     copy: '复制',
     copied: '已复制 ✓',
@@ -598,7 +602,7 @@ export const en: Dict = {
     title: 'Waiting on you',
     subtitle: 'Only what you can decide right now — approve, send back, retry or dismiss; work missing outputs sits in Progress awaiting output',
     empty_title: 'Nothing is waiting on you',
-    empty_desc: 'No change is parked at a review gate right now. Head to Progress to see every task in flight.',
+    empty_desc: 'No change is parked at a gate waiting on you. To start new work, run pipeline init in your terminal; to track what is already running, open Progress.',
     count: '{n} waiting on you',
     open_board: 'Open progress',
     awaiting: {
@@ -707,7 +711,10 @@ export const en: Dict = {
   },
   onboard: {
     no_project_title: 'No project registered yet',
-    no_project_desc: 'Run pipeline init once inside your project and it will show up here automatically — no separate registration needed.',
+    no_project_desc: 'This dashboard is read-only — it shows pipeline progress. Registering a project, installing skills, and running the pipeline all happen in your terminal. Do the three steps below, then refresh this page to see progress.',
+    step_init: 'Create a change (pipeline init auto-registers the project — no separate registration needed)',
+    step_setup: 'Install skills + set readiness (installs pipeline skills and configures the credential and image checks AFK needs)',
+    step_doctor: 'Confirm the environment is ready, then refresh this page',
     or_cli: 'or use the CLI',
     copy: 'Copy',
     copied: 'Copied ✓',

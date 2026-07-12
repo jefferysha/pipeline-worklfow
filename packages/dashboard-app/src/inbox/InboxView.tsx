@@ -10,6 +10,7 @@ import { Icon } from '../shell/Icon'
 import { revealList } from '../shared/motion'
 import { TaskDetail } from '../shared/TaskDetail'
 import { postAfkDismiss, postAfkRetry } from '../api/client'
+import { diagnoseFailure } from '../shared/failureDiagnosis'
 import { gateEvidence, VERIFY_STATUS_FIELDS, type EvidenceChip } from './evidence'
 import { changeWorkflow, decisionKind, projectName, selectInbox, type InboxItem } from './inbox'
 
@@ -142,6 +143,9 @@ function renderEvidenceChip(
 /** Enter/j/k 键盘旁路的 tagName 集合（终审修复批口径沿用：Dialog 内 select/按钮/链接上的
  *  这些键不该被 document 级监听器接管）。 */
 const FOCUSABLE_BYPASS_TAGS = new Set(['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON', 'A'])
+
+/** 空态给的「建 change」教学命令（字面终端命令，与 shell/Onboarding 的 INIT_CMD 同口径）。 */
+const EMPTY_INIT_CMD = 'pipeline init my-change --track chat'
 
 function itemKey(it: InboxItem): string {
   return `${it.root}/${it.change.name}`
@@ -353,7 +357,27 @@ export function InboxView({ snapshot, loading, error, currentRoot, rulesByKey, o
           <div className="empty__mark" aria-hidden="true">◇</div>
           <h2 className="empty__title">{t('inbox.empty_title')}</h2>
           <p className="empty__desc">{t('inbox.empty_desc')}</p>
-          <button type="button" className="btn" onClick={onOpenBoard}>{t('inbox.open_board')}</button>
+          {/* W2（P0 断点）：CTA 指可执行下一步——新工作去终端 pipeline init（可复制真命令），
+              「去进度」降为次要动作（有在跑的任务时才有内容），不再单一「去进度」死循环。 */}
+          <div className="empty__cli">
+            <button
+              type="button"
+              className="ev__chip ev__chip--neutral"
+              data-testid="inbox-empty-cli"
+              onClick={() => copyEvidence(EMPTY_INIT_CMD)}
+            >
+              <Icon name="copy" size={11} />
+              {EMPTY_INIT_CMD}
+            </button>
+          </div>
+          <div className="empty__acts">
+            {onNewChange && (
+              <button type="button" className="btn" data-testid="inbox-empty-new" onClick={onNewChange}>
+                ＋ {t('newchange.title')}
+              </button>
+            )}
+            <button type="button" className="btn btn--ghost" onClick={onOpenBoard}>{t('inbox.open_board')}</button>
+          </div>
         </div>
       </section>
     )
@@ -397,6 +421,10 @@ export function InboxView({ snapshot, loading, error, currentRoot, rulesByKey, o
                 .filter(Boolean)
                 .join(' ')
               const automation = fieldStr(change, 'automation')
+              // W2：失败行叠加成因诊断——lastError 原文经 W3 diagnoseFailure 映射成短成因 +
+              // 可复制修复命令（非失败态不算，省掉每行的空串正则）。
+              const lastError = state === 'failed' ? fieldStr(change, 'automation_last_error') : ''
+              const failDiag = state === 'failed' ? diagnoseFailure(lastError) : null
               return (
                 <li
                   key={key}
@@ -428,11 +456,32 @@ export function InboxView({ snapshot, loading, error, currentRoot, rulesByKey, o
                     </span>
                   </div>
                   <div className="ibx-lead" data-testid="inbox-lead">{sem.lead}</div>
-                  {state === 'failed' ? (
+                  {state === 'failed' && failDiag ? (
                     <div className="ibx-r2" onClick={(e) => e.stopPropagation()}>
                       <span className="ev__chip ev__chip--fail" data-testid="inbox-fail-chip">
                         automation={automation}
                       </span>
+                      {/* W2：叠加 W3 diagnoseFailure 短成因 + 可复制修复命令——口径与 ProgressView
+                          失败行（failure.short_*）/ TaskDetail 详情（同 helper）一致，收件箱不散落
+                          第二套猜错逻辑（BF11 不漂移）。 */}
+                      <span
+                        className={`ibx-cause ibx-cause--${failDiag.cause}`}
+                        data-testid="inbox-cause"
+                        title={lastError || undefined}
+                      >
+                        {t(`failure.short_${failDiag.cause}`)}
+                      </span>
+                      {failDiag.fixCommand !== null && (
+                        <button
+                          type="button"
+                          className="ev__chip ev__chip--neutral"
+                          data-testid="inbox-fix-cmd"
+                          onClick={() => copyEvidence(failDiag.fixCommand!)}
+                        >
+                          <Icon name="copy" size={11} />
+                          {failDiag.fixCommand}
+                        </button>
+                      )}
                     </div>
                   ) : (
                     evidence.length > 0 && (

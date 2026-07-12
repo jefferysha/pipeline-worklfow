@@ -109,14 +109,27 @@ async function settled(): Promise<void> {
   await waitFor(() => expect(screen.getByTestId('dt-hist-sec').dataset.settled).toBe('true'))
 }
 
-describe('InboxView 空态（默认回答"在等我什么"，无事时明说）', () => {
-  it('无在等的 change → 空态 + 去进度按钮触发 onOpenBoard（T17 IA：看板退役，去处改进度）', () => {
+describe('InboxView 空态（无待拍板事项时给可执行下一步，不再死循环「去进度」）', () => {
+  it('无在等的 change → 空态文案指终端 pipeline init（可复制）+ 保留「去进度」次要动作', () => {
     const props = renderInbox()
-    expect(screen.getByTestId('inbox-empty')).toBeInTheDocument()
+    const empty = screen.getByTestId('inbox-empty')
+    expect(empty).toBeInTheDocument()
     expect(screen.getByText('没有在等你的事')).toBeInTheDocument()
     expect(screen.queryByTestId('inbox-card')).toBeNull()
+    // W2（P0 断点）：空态 CTA 指可执行下一步——新工作去终端 pipeline init，不再只「去进度」死循环
+    expect(empty.textContent).toContain('pipeline init')
+    expect(screen.getByTestId('inbox-empty-cli').textContent).toContain('pipeline init')
+    // 「去进度」仍是合法次要动作（有在跑的任务时去追踪），点它走 onOpenBoard
     fireEvent.click(screen.getByText('去进度'))
     expect(props.onOpenBoard).toHaveBeenCalledOnce()
+  })
+
+  it('空态命令可复制：点 inbox-empty-cli → clipboard 写入 pipeline init 命令', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } })
+    renderInbox()
+    fireEvent.click(screen.getByTestId('inbox-empty-cli'))
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(expect.stringContaining('pipeline init')))
   })
 })
 
@@ -427,5 +440,41 @@ describe('InboxView 聚合语境（currentRoot=""：行带 root 且详情动作�
     await settled()
     fireEvent.click(screen.getByTestId('inbox-act-approve'))
     await waitFor(() => expect(props.onTransition).toHaveBeenCalledWith('b-review', '/repo-b', 'shipped'))
+  })
+})
+
+/**
+ * 失败卡成因诊断（full-install W2，复用 W3 shared/failureDiagnosis）：失败行在 automation 值 chip
+ * 之外叠加 diagnoseFailure 的短成因 + 可复制修复命令，成因口径与 ProgressView 行（failure.short_*）
+ * 及 TaskDetail 详情（同 helper）一致，不在收件箱散落第二套猜错逻辑（BF11 不漂移）。
+ */
+describe('InboxView 失败卡成因诊断（复用 W3 diagnoseFailure，口径与 progress/detail 一致）', () => {
+  const CRED_FAIL = {
+    automation: 'failed',
+    automation_attempts: '2',
+    automation_last_error: '未检测到 codex 凭证：宿主机需设 OPENAI_API_KEY',
+  }
+  const snap = makeSnapshot([
+    makeProject('/repo', [makeChange('cred-fail', 'build', { fields: { ...CRED_FAIL } })]),
+  ])
+
+  it('缺凭证失败行 → 短成因「缺凭证」+ 可复制修复命令 pipeline setup（automation 值 chip 不动）', async () => {
+    renderInbox({ snapshot: snap })
+    await settled()
+    // 既有 automation 值 chip 原样保留（不被成因叠加吞掉）
+    expect(screen.getByTestId('inbox-fail-chip').textContent).toBe('automation=failed')
+    // W2：diagnoseFailure 短成因（missing-credential → failure.short_*，与 ProgressView 同源）
+    expect(screen.getByTestId('inbox-cause').textContent).toBe('缺凭证')
+    // + 可复制修复命令（missing-credential → pipeline setup，与 W3 TaskDetail 口径一致）
+    expect(screen.getByTestId('inbox-fix-cmd').textContent).toContain('pipeline setup')
+  })
+
+  it('修复命令可复制：点 inbox-fix-cmd → clipboard 写入 pipeline setup', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } })
+    renderInbox({ snapshot: snap })
+    await settled()
+    fireEvent.click(screen.getByTestId('inbox-fix-cmd'))
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('pipeline setup'))
   })
 })

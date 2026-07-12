@@ -1033,4 +1033,24 @@ span.wb-chip-badge { cursor: default; }
 .skh-cmd { align-self: flex-start; max-width: 100%; display: inline-flex; align-items: center; border: 1px solid var(--border); background: color-mix(in srgb, var(--fill) 55%, transparent); border-radius: var(--radius-sm); padding: 5px 10px; cursor: pointer; font: inherit; transition: border-color .14s ease, background .14s ease; }
 .skh-cmd:hover { border-color: var(--text-3); background: var(--fill); }
 .skh-cmd code { font-family: var(--mono); font-size: 12px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ── full-install W2（旅程 P0 断点）：首启三步 checklist（Onboarding no-project）+ 收件箱空态可执行
+   CTA + 失败行短成因（.ibx-cause）。决议 #9：不新增原色——命令块复用 --code-bg / --mono 底座，
+   短成因复用 --red-d（同 .prg-cause），明暗随主题自适应。前端只读，命令块唯一动作是拷回终端。 ── */
+.ob-wide { max-width: 520px; }
+.ob-steps { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 14px; text-align: left; }
+.ob-step { display: flex; gap: 12px; }
+.ob-step__n { flex: none; width: 22px; height: 22px; border-radius: 999px; background: var(--ink); color: var(--ink-fg); font-size: 12px; font-weight: 700; line-height: 22px; text-align: center; }
+.ob-step__body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 7px; }
+.ob-step__label { font-size: 12.5px; color: var(--text-2); line-height: 1.6; }
+.ob-cmd { display: flex; align-items: center; gap: 8px; padding: 7px 11px; background: var(--code-bg); border: 1px solid var(--code-border); border-radius: var(--radius-sm); font-family: var(--mono); font-size: 12px; }
+.ob-cmd__p { flex: none; color: var(--text-3); }
+.ob-cmd__code { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; color: var(--text); }
+.ob-cmd__copy { display: inline-flex; align-items: center; gap: 4px; flex: none; border: 0; background: transparent; color: var(--green); font-size: 11px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+.ob-cmd__copy:hover { color: var(--green-d); }
+.ob-or { display: flex; align-items: center; gap: 10px; margin: 4px 0 12px; color: var(--text-3); font-size: 11px; }
+.ob-or__line { flex: 1; height: 1px; background: var(--border); }
+.empty__cli { display: flex; justify-content: center; margin: 0 0 16px; }
+.empty__acts { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+.ibx-cause { flex: none; font-size: 11px; color: var(--red-d); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 16ch; }
 `
