@@ -20,6 +20,7 @@ import { cmdLoops } from './commands/loops.js'
 import { cmdMem } from './commands/mem.js'
 import { cmdScaffold } from './commands/scaffold.js'
 import { cmdSession } from './commands/session.js'
+import { cmdSetup } from './commands/setup.js'
 import { cmdSpec } from './commands/spec.js'
 import { cmdSync } from './commands/sync.js'
 import { cmdTap } from './commands/tap.js'
@@ -241,6 +242,15 @@ export function buildProgram(deps: CliDeps): Command {
     .command('migrate-workflow <name>')
     .description('[一次性] 老格式 change 补齐/确认 workflow 字段为 default（真实自定义 workflow 不覆盖）')
     .action(async (name: string) => bail(await cmdMigrateWorkflow(deps, name)))
+
+  program
+    .command('setup [sub]')
+    .description('安装后全功能就绪引导:软链 pipeline 到 PATH + 技能安装(Phase 2)/运行时检查(Phase 3)骨架')
+    .option('--dry-run', '只打印计划骨架,绝不软链/写文件')
+    .option('-y, --yes', '跳过交互确认位（本批无真安装,仅透传占位）')
+    .allowUnknownOption() // 未来 Phase 2/3 子命令的自有 flag 透传
+    .action(async (sub: string | undefined, opts: { dryRun?: boolean; yes?: boolean }) =>
+      bail(cmdSetup(deps, sub, { dryRun: opts.dryRun, yes: opts.yes })))
 
   return program
 }
