@@ -11772,7 +11772,7 @@ var parseSandboxReport = (stdout) => {
     phase_event: parsed.phase_event ?? "verify-pass"
   };
 };
-var AFK_RUN_SCRIPT_SHA256 = "069e8696c835a0530df559ace2957c199198f128f22ac5460f5e44e79dac67ac";
+var AFK_RUN_SCRIPT_SHA256 = "bfff5965e29f826a1489147d923dbc64075cf49025e916fdea0afda64a166706";
 var AFK_RUN_DRIFT_EXIT_CODE = 95;
 var AFK_RUN_DRIFT_GUARD = `sha256sum /usr/local/bin/pipeline-afk-run 2>/dev/null | grep -q "^${AFK_RUN_SCRIPT_SHA256} " || { echo "sandcastle \u955C\u50CF\u5185 pipeline-afk-run \u4E0E\u4ED3\u5E93 tools/sandcastle/pipeline-afk-run.sh \u4E0D\u4E00\u81F4\uFF08\u955C\u50CF\u9648\u65E7\u6216\u811A\u672C\u5DF2\u66F4\u65B0\u672A\u91CD\u5EFA\uFF09\u2014\u2014\u8BF7\u91CD\u5EFA\u955C\u50CF\uFF1Atools/sandcastle/build.sh" >&2; exit ${AFK_RUN_DRIFT_EXIT_CODE}; }`;
 var buildAfkRunCommand = (name2, runner) => runner === "codex" ? `${AFK_RUN_DRIFT_GUARD}; PIPELINE_AFK=1 PIPELINE_RUNNER=codex pipeline-afk-run ${name2}` : `${AFK_RUN_DRIFT_GUARD}; PIPELINE_AFK=1 pipeline-afk-run ${name2}`;
@@ -14652,11 +14652,12 @@ function recordedPaths(client) {
 
 // packages/tap/dist/launch.js
 var FORWARD_BINDING_NAME = "__forward__";
-var modeOf = (client) => CLIENT_CONFIGS[client].defaultProxyMode ?? "reverse";
-function planBindings(clients, detect) {
+var modeOf = (client, forceForward) => forceForward?.has(client) ? "forward" : CLIENT_CONFIGS[client].defaultProxyMode ?? "reverse";
+function planBindings(clients, detect, forceForward) {
   const unknown = clients.filter((c) => !CLIENT_CONFIGS[c]);
   if (unknown.length > 0)
     throw new Error(`\u672A\u77E5 client: ${unknown.join(", ")}`);
+  const forced = new Set(forceForward ?? []);
   const targets2 = {};
   const bindings = [];
   let needForward = false;
@@ -14664,7 +14665,7 @@ function planBindings(clients, detect) {
     const cfg2 = CLIENT_CONFIGS[client];
     const target = detectTarget(client, detect);
     targets2[client] = target;
-    if (modeOf(client) === "reverse") {
+    if (modeOf(client, forced) === "reverse") {
       bindings.push({
         name: client,
         mode: "reverse",
@@ -14682,8 +14683,9 @@ function planBindings(clients, detect) {
   return { bindings, targets: targets2 };
 }
 async function launchTap(opts) {
-  const { bindings, targets: targets2 } = planBindings(opts.clients, opts.detect);
-  const forwardClients = opts.clients.filter((c) => modeOf(c) === "forward");
+  const forced = new Set(opts.forceForward ?? []);
+  const { bindings, targets: targets2 } = planBindings(opts.clients, opts.detect, opts.forceForward);
+  const forwardClients = opts.clients.filter((c) => modeOf(c, forced) === "forward");
   let authority;
   let caCertPath;
   if (opts.ca) {
@@ -14696,7 +14698,7 @@ async function launchTap(opts) {
   const daemon = await startDaemon({ bindings, store: opts.store, host: opts.host, ca: authority });
   const clients = opts.clients.map((client) => {
     const cfg2 = CLIENT_CONFIGS[client];
-    const mode = modeOf(client);
+    const mode = modeOf(client, forced);
     const handle = mode === "reverse" ? daemon.handles[client] : daemon.handles[FORWARD_BINDING_NAME];
     const env = mode === "reverse" ? reverseEnvMap(cfg2, handle.port) : forwardEnvMap(handle.port, caCertPath);
     return { client, mode, port: handle.port, target: targets2[client], env };
@@ -18857,6 +18859,7 @@ function parseStartArgs(own) {
   let caDir;
   let caRequested = false;
   let json = false;
+  let forward = false;
   let i = 0;
   while (i < own.length) {
     const a = own[i];
@@ -18869,12 +18872,14 @@ function parseStartArgs(own) {
       }
     } else if (a === "--json") {
       json = true;
+    } else if (a === "--forward") {
+      forward = true;
     } else {
       clients.push(...a.split(",").map((s) => s.trim()).filter(Boolean));
     }
     i += 1;
   }
-  return { clients, caDir: caRequested ? caDir ?? "" : void 0, json };
+  return { clients, caDir: caRequested ? caDir ?? "" : void 0, json, forward };
 }
 function envLines(clients) {
   const merged = {};
@@ -18885,7 +18890,7 @@ async function cmdTap(deps, sub, args) {
   switch (sub) {
     case "start": {
       const command = deps.passthroughArgv ?? [];
-      const { clients, caDir, json } = parseStartArgs(args);
+      const { clients, caDir, json, forward } = parseStartArgs(args);
       if (clients.length === 0) {
         deps.io.err("ERROR: tap start \u9700\u81F3\u5C11\u4E00\u4E2A client\uFF08\u5982 pipeline tap start claude\uFF09");
         return 1;
@@ -18895,7 +18900,9 @@ async function cmdTap(deps, sub, args) {
         result = await launchTap({
           clients,
           store: createTraceStore(),
-          ca: caDir !== void 0 ? { dir: caDir || void 0 } : void 0
+          ca: caDir !== void 0 ? { dir: caDir || void 0 } : void 0,
+          // --forward：把列出的 client 全抬成 forward-MITM（codex OAuth 态唯一真捕获路径）。
+          forceForward: forward ? clients : void 0
         });
       } catch (e) {
         deps.io.err(`ERROR: ${errMsg(e)}`);
