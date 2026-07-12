@@ -52,6 +52,16 @@ describe('planBindings —— 纯编排（detectTarget + recordedPaths + stripPr
   it('未知 client → 抛错（不静默忽略）', () => {
     expect(() => planBindings(['not-a-real-client'])).toThrow(/未知 client/)
   })
+
+  it('forceForward 覆盖：reverse-default 的 codex 被强制走 forward 共享绑定（OAuth 态 reverse 假捕获，见 memory）', () => {
+    // codex 默认 reverse（OPENAI_BASE_URL）；ChatGPT OAuth 态 codex 无视该 env → reverse 是假捕获。
+    // forceForward 让它落 __forward__ 共享绑定，改由 HTTPS_PROXY+CA MITM 真拦。
+    const { bindings } = planBindings(['codex'], { home: tmpHome() }, ['codex'])
+    expect(bindings.filter((b) => b.mode === 'reverse')).toHaveLength(0)
+    const fwd = bindings.filter((b) => b.mode === 'forward')
+    expect(fwd).toHaveLength(1)
+    expect(fwd[0]!.name).toBe(FORWARD_BINDING_NAME)
+  })
 })
 
 describe('launchTap —— 真绑定 + 真回读端口 + 真 env 组装', () => {
@@ -98,5 +108,25 @@ describe('launchTap —— 真绑定 + 真回读端口 + 真 env 组装', () => 
     expect(gemini.env.NODE_EXTRA_CA_CERTS).toBe(join(caDir, 'ca.pem'))
     mkdirSync(caDir, { recursive: true })
     expect(() => writeFileSync(join(caDir, '.probe'), '')).not.toThrow() // caDir 真实存在可写（ensureCa 真落盘过）
+  })
+
+  it('forceForward codex + opts.ca → forward-MITM env（HTTPS_PROXY + codex 专用 CODEX_CA_CERTIFICATE）', async () => {
+    const dir = await tempTapDir(); dirs.push(dir)
+    const store = createTraceStore({ dir })
+    const caDir = mkdtempSync(join(tmpdir(), 'pl-launch-ca-')); dirs.push(caDir)
+    const result = await launchTap({ clients: ['codex'], store, ca: { dir: caDir }, forceForward: ['codex'], detect: { home: tmpHome() } })
+    results.push(result)
+
+    const codex = result.clients[0]!
+    expect(codex.mode).toBe('forward')
+    expect(codex.env.HTTPS_PROXY).toBe(`http://127.0.0.1:${codex.port}`)
+    expect(codex.env.CODEX_CA_CERTIFICATE).toBe(join(caDir, 'ca.pem')) // codex 专用 CA env，MITM 才认得
+    expect(codex.env.OPENAI_BASE_URL).toBeUndefined() // forward 模式不注入 reverse base-url（codex OAuth 无视它）
+  })
+
+  it('forceForward codex 缺 opts.ca → 拒绝（forward 无 CA = 盲隧道，信任 env 无意义）', async () => {
+    const dir = await tempTapDir(); dirs.push(dir)
+    const store = createTraceStore({ dir })
+    await expect(launchTap({ clients: ['codex'], store, forceForward: ['codex'], detect: { home: tmpHome() } })).rejects.toThrow(/ca/i)
   })
 })

@@ -93,7 +93,7 @@ export const parseSandboxReport = (stdout: string): SandboxReport => {
  * bump 方式：shasum -a 256 tools/sandcastle/pipeline-afk-run.sh。bump 后旧镜像自动 fail-loud，
  * 重建入口 tools/sandcastle/build.sh（构建完自验镜像内 sha，见该脚本）。
  */
-export const AFK_RUN_SCRIPT_SHA256 = '069e8696c835a0530df559ace2957c199198f128f22ac5460f5e44e79dac67ac'
+export const AFK_RUN_SCRIPT_SHA256 = 'bfff5965e29f826a1489147d923dbc64075cf49025e916fdea0afda64a166706'
 
 /** 对账失败的沙箱退出码（与脚本内 96=codex CLI 缺失、97=tap proxy 未起同段的硬错误码位）。 */
 export const AFK_RUN_DRIFT_EXIT_CODE = 95

@@ -2,7 +2,11 @@
  * tap <sub> [args...] —— tap 流量代理的 CLI 入口（BACKLOG #34-wire：daemon 启动器，此前 tap 包
  * 零 CLI 可达性——只有测试直接 import @pipeline-lite/tap，没有真实用户能启动它）。
  *
- * `pipeline tap start <client...> [--ca [dir]] [--json] [-- <command> [args...]]`：
+ * `pipeline tap start <client...> [--ca [dir]] [--forward] [--json] [-- <command> [args...]]`：
+ *   `--forward`：把列出的 client 强制抬成 forward-MITM（覆盖 defaultProxyMode）。codex 默认 reverse
+ *   （OPENAI_BASE_URL），但 ChatGPT OAuth 态 codex 静默无视该 env（reverse 假捕获，实测坐实）——唯
+ *   forward（HTTPS_PROXY + CA）能真拦，故 `pipeline tap start codex --forward --ca` 是 OAuth codex
+ *   的唯一真捕获路径（sandcastle codex 分支即用此）。--forward 下须配 --ca（forward 硬门）。
  *   真装配 @pipeline-lite/tap 的 launchTap（detectTarget 定位真实上游 + reverseEnvMap/
  *   forwardEnvMap 组装注入 env + 可选 CertificateAuthority.fromDir 真 TLS MITM）。
  *   · 带 `-- <command>`：把组装好的 env 合并进当前 env，前台 spawn 该命令（stdio 继承），
@@ -26,6 +30,7 @@ interface ParsedStart {
   clients: string[]
   caDir?: string
   json: boolean
+  forward: boolean
 }
 
 function parseStartArgs(own: string[]): ParsedStart {
@@ -33,6 +38,7 @@ function parseStartArgs(own: string[]): ParsedStart {
   let caDir: string | undefined
   let caRequested = false
   let json = false
+  let forward = false
   let i = 0
   while (i < own.length) {
     const a = own[i]!
@@ -42,12 +48,16 @@ function parseStartArgs(own: string[]): ParsedStart {
       if (nxt !== undefined && !nxt.startsWith('--')) { caDir = nxt; i += 1 }
     } else if (a === '--json') {
       json = true
+    } else if (a === '--forward') {
+      // 强制把列出的 client 抬成 forward-MITM。codex 默认 reverse（OPENAI_BASE_URL），但
+      // ChatGPT OAuth 态 codex 无视该 env（reverse 假捕获）→ 唯 forward 能真拦，须配 --ca。
+      forward = true
     } else {
       clients.push(...a.split(',').map((s) => s.trim()).filter(Boolean))
     }
     i += 1
   }
-  return { clients, caDir: caRequested ? (caDir ?? '') : undefined, json }
+  return { clients, caDir: caRequested ? (caDir ?? '') : undefined, json, forward }
 }
 
 function envLines(clients: ClientLaunchInfo[]): string[] {
@@ -60,7 +70,7 @@ export async function cmdTap(deps: CliDeps, sub: string, args: string[]): Promis
   switch (sub) {
     case 'start': {
       const command = deps.passthroughArgv ?? []
-      const { clients, caDir, json } = parseStartArgs(args)
+      const { clients, caDir, json, forward } = parseStartArgs(args)
       if (clients.length === 0) {
         deps.io.err('ERROR: tap start 需至少一个 client（如 pipeline tap start claude）')
         return 1
@@ -72,6 +82,8 @@ export async function cmdTap(deps: CliDeps, sub: string, args: string[]): Promis
           clients,
           store: createTraceStore(),
           ca: caDir !== undefined ? { dir: caDir || undefined } : undefined,
+          // --forward：把列出的 client 全抬成 forward-MITM（codex OAuth 态唯一真捕获路径）。
+          forceForward: forward ? clients : undefined,
         })
       } catch (e) {
         deps.io.err(`ERROR: ${errMsg(e)}`)

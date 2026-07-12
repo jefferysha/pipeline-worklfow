@@ -45,21 +45,35 @@ if [ "${PIPELINE_RUNNER:-}" = "codex" ]; then
     exit 96
   fi
   # 凭证提示（v5 T22）：host 侧（dockerRunChange::codexCredentialEnv）只在 runner=codex 且宿主机
-  # 真有凭证时注入 OPENAI_API_KEY / CODEX_HOME。两者皆缺 → 打一条可操作的 stderr 提示（仅提示，
-  # **不改变退出路径**——codex 自身会报认证错误并非零退出，经既有 stderr 通道流进
-  # automation_last_error，诚实分流不在这里预判/短路）。
+  # 真有凭证时注入 OPENAI_API_KEY / CODEX_HOME。codex 自身鉴权走挂载的 CODEX_HOME（OAuth tokens）
+  # 或 OPENAI_API_KEY（api-key）。两者皆缺 → 打一条可操作的 stderr 提示（仅提示，**不改变退出路径**
+  # ——codex 自身会报认证错误，经既有 stderr 通道流进 automation_last_error，不在这里预判/短路）。
   if [ -z "${OPENAI_API_KEY:-}" ] && [ -z "${CODEX_HOME:-}" ]; then
     printf '未检测到 codex 凭证：宿主机需设 OPENAI_API_KEY 或挂载 CODEX_HOME（codex 将自行报认证错误）\n' >&2
   fi
-  # codex 无头会话（CLI 惯例：codex exec = 非交互一次性执行）。--dangerously-bypass-approvals-and-sandbox
-  # 对位 claude 的 --dangerously-skip-permissions：headless 容器无 TTY 应答审批，且一次性容器 +
-  # 独立 worktree 本身就是隔离边界（codex 官方口径也只建议在容器内用该开关）。认证走 extraEnv
-  # 注入的 key（如 OPENAI_API_KEY/CODEX_API_KEY）；认证失败由 codex 自身报错落日志，与 claude
-  # 路径同款诚实分流（agent 失败不掩盖，确定性产物兜底记账）。timeout 300 同 claude 路径。
+  # 走代理而非直连（与 claude 路径对称；tap「捕获+路由」是本项目核心价值，两 runner 都必须过代理）。
+  #   关键实测事实：codex 在 ChatGPT OAuth 登录态**静默无视 OPENAI_BASE_URL**（reverse 代理），会
+  #   直连 chatgpt.com/backend-api/codex——reverse 对 OAuth 态是「假捕获」（流量根本不过代理还不报错）。
+  #   唯 forward-MITM（HTTPS_PROXY + 本地 CA）能真拦：`pipeline tap start codex --forward --ca`
+  #   （launch.ts::forceForward 把默认 reverse 的 codex 抬成 forward）。codex 认 HTTPS_PROXY，主传输
+  #   wss 若 MITM 失败会回退 HTTPS，仍被 forward 代理解密录制（trace 落 PIPELINE_TAP_DIR=worktree
+  #   .sandcastle-tap，随 commit 从 host 可读，证明真走了代理）。CODEX_HOME 供 codex 自身鉴权（挂载
+  #   进来），软链到 $HOME/.codex 让 tap 的 target 检测显对（cosmetic）。CA 落 /tmp（一次性，不入 commit）。
+  #   --dangerously-bypass-approvals-and-sandbox 对位 claude 的 --dangerously-skip-permissions（headless
+  #   容器无 TTY 应答审批，一次性容器+独立 worktree 即隔离边界）。timeout 300 同 claude 路径。
+  tap_dir="$PWD/.sandcastle-tap"
+  mkdir -p "$tap_dir"
+  printf '1' > "${tap_dir}/capture.enabled"
+  [ -n "${CODEX_HOME:-}" ] && ln -sfn "$CODEX_HOME" "$HOME/.codex" 2>/dev/null || true
+  # 经 tap forward 代理跑 codex：`-- <command>` 透传把 forward env（HTTP(S)_PROXY + codex 专用
+  # CODEX_CA_CERTIFICATE + NODE_EXTRA_CA_CERTS/SSL_CERT_FILE）注进子进程；子进程内 timeout 300 收敛
+  # codex，输出重定向进 worktree 日志（同 claude 路径，供 [TRANSITION]/[AGENT_EXIT] 回放）。tap start
+  # 以子进程退出码收尾（passthrough 返回 codex exit code），子进程退出后真关 daemon。name 经位置参
+  # 数 $1 传入内层 sh（避免引号嵌套）。
   agent_exit=0
-  timeout 300 codex exec --dangerously-bypass-approvals-and-sandbox \
-    "Run the pipeline build phase for change ${name}, then stop." \
-    >".sandcastle-build.agent.log" 2>&1 || agent_exit=$?
+  PIPELINE_TAP_DIR="$tap_dir" pipeline tap start codex --forward --ca /tmp/sandcastle-tap-ca -- \
+    sh -c 'timeout 300 codex exec --dangerously-bypass-approvals-and-sandbox "Run the pipeline build phase for change $1, then stop." >".sandcastle-build.agent.log" 2>&1' _ "$name" \
+    || agent_exit=$?
   printf 'agent exit=%s\n' "$agent_exit" >>".sandcastle-build.agent.log"
   # [TRANSITION] 行回放（同 claude 路径的 T4 修复）：host 侧 phaseWatch 只看得到流面。
   grep -a '^\[TRANSITION\] ' ".sandcastle-build.agent.log" || true
@@ -68,7 +82,8 @@ if [ "${PIPELINE_RUNNER:-}" = "codex" ]; then
   # 永远不落（「agent 跑过了」的假象）。把非零 exit 以可解析标记行回放到 stdout（同 [TRANSITION]
   # 回放口径；host 侧 lifecycle exec tee 处检出并同步落 automation_last_error；parseSandboxReport
   # 容忍多余行，不干扰末行 <output> 握手）。exit=0 不输出（零噪音）。**不改变退出路径**：确定性
-  # 兜底与成败判定原样，run 仍成功——这是可见度，不是改判。
+  # 兜底与成败判定原样，run 仍成功——这是可见度，不是改判。注意 codex CLI 有失败仍 exit 0 的既有
+  # 怪癖（认证/网络错也可能 0 退出），故本标记只在 codex 真非零退出（如 timeout=124）时触发。
   if [ "$agent_exit" -ne 0 ]; then
     printf '[AGENT_EXIT] codex %s\n' "$agent_exit"
   fi

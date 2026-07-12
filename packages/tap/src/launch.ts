@@ -38,12 +38,21 @@ export interface PlanResult {
   readonly targets: Record<string, string>
 }
 
-const modeOf = (client: string): 'reverse' | 'forward' => CLIENT_CONFIGS[client]!.defaultProxyMode ?? 'reverse'
+/**
+ * client 的生效代理模式：配置默认 defaultProxyMode，除非被 forceForward 显式抬成 forward。
+ * forceForward 存在的理由：codex 默认 reverse（OPENAI_BASE_URL），但 ChatGPT OAuth 登录态
+ * 的 codex 会**静默无视** OPENAI_BASE_URL 直连 chatgpt.com/backend-api/codex（实测坐实），
+ * reverse 对它是假捕获；唯一能真拦的是 forward-MITM（HTTPS_PROXY + CA）。调用方（如沙箱 codex
+ * 分支 / `pipeline tap start codex --forward`）据此把 codex 抬成 forward。
+ */
+const modeOf = (client: string, forceForward?: ReadonlySet<string>): 'reverse' | 'forward' =>
+  forceForward?.has(client) ? 'forward' : (CLIENT_CONFIGS[client]!.defaultProxyMode ?? 'reverse')
 
 /** 纯编排：client 名单 → DaemonBinding[]（无 socket，可测 argv 级正确性）。 */
-export function planBindings(clients: readonly string[], detect?: DetectOptions): PlanResult {
+export function planBindings(clients: readonly string[], detect?: DetectOptions, forceForward?: readonly string[]): PlanResult {
   const unknown = clients.filter((c) => !CLIENT_CONFIGS[c])
   if (unknown.length > 0) throw new Error(`未知 client: ${unknown.join(', ')}`)
+  const forced = new Set(forceForward ?? [])
 
   const targets: Record<string, string> = {}
   const bindings: DaemonBinding[] = []
@@ -53,7 +62,7 @@ export function planBindings(clients: readonly string[], detect?: DetectOptions)
     const cfg = CLIENT_CONFIGS[client]!
     const target = detectTarget(client, detect)
     targets[client] = target
-    if (modeOf(client) === 'reverse') {
+    if (modeOf(client, forced) === 'reverse') {
       bindings.push({
         name: client,
         mode: 'reverse',
@@ -82,6 +91,12 @@ export interface LaunchOptions {
    * 会直接拒绝（见模块头注释）。
    */
   readonly ca?: CaDirOptions
+  /**
+   * 强制走 forward-MITM 的 client 名单（覆盖其 defaultProxyMode）。codex 默认 reverse，但
+   * ChatGPT OAuth 态无视 OPENAI_BASE_URL（reverse 假捕获），须抬成 forward 才能真拦——见 modeOf 注释。
+   * 被抬成 forward 的 client 与其它 forward client 同受 opts.ca 硬门（缺 ca 即拒绝）。
+   */
+  readonly forceForward?: readonly string[]
 }
 
 export interface ClientLaunchInfo {
@@ -103,8 +118,9 @@ export interface LaunchResult {
 
 /** 真装配：detectTarget + reverseEnvMap/forwardEnvMap + CertificateAuthority.fromDir → 一个真跑的 daemon。 */
 export async function launchTap(opts: LaunchOptions): Promise<LaunchResult> {
-  const { bindings, targets } = planBindings(opts.clients, opts.detect)
-  const forwardClients = opts.clients.filter((c) => modeOf(c) === 'forward')
+  const forced = new Set(opts.forceForward ?? [])
+  const { bindings, targets } = planBindings(opts.clients, opts.detect, opts.forceForward)
+  const forwardClients = opts.clients.filter((c) => modeOf(c, forced) === 'forward')
 
   let authority: CertificateAuthority | undefined
   let caCertPath: string | undefined
@@ -123,7 +139,7 @@ export async function launchTap(opts: LaunchOptions): Promise<LaunchResult> {
 
   const clients: ClientLaunchInfo[] = opts.clients.map((client) => {
     const cfg = CLIENT_CONFIGS[client]!
-    const mode = modeOf(client)
+    const mode = modeOf(client, forced)
     const handle = mode === 'reverse' ? daemon.handles[client]! : daemon.handles[FORWARD_BINDING_NAME]!
     const env = mode === 'reverse' ? reverseEnvMap(cfg, handle.port) : forwardEnvMap(handle.port, caCertPath!)
     return { client, mode, port: handle.port, target: targets[client]!, env }
