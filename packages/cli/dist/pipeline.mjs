@@ -19924,7 +19924,25 @@ function buildProgram(deps) {
   });
   program2.command("uninstall").description("\u5378\u8F7D + \u6240\u6709\u6743 scrubber\uFF08\u53EA\u5220\u81EA\u5DF1\u88C5\u7684\u3001\u7528\u6237\u6539\u8FC7\u7684\u4FDD\u7559\uFF09").option("-y, --yes", "\u975E\u4EA4\u4E92\u786E\u8BA4").option("--dry-run", "\u53EA\u6253\u5370\u8BA1\u5212\u4E0D\u843D\u76D8").action(async (opts) => bail(await cmdUninstall(deps, { yes: opts.yes, dryRun: opts.dryRun })));
   program2.command("afk <sub> [name]").description("AFK \u81EA\u52A8\u5316\uFF1Aenqueue <name> \u6302\u961F / scan \u5C31\u7EEA\u961F\u5217 / status [name] \u6CF3\u9053 / run \u771F\u8DD1 docker \u6C99\u7BB1\uFF08#29-wire\uFF09").option("--json", "JSON \u8F93\u51FA").option("--level <level>", "run\uFF1A\u5206\u7EA7\u653E\u6743\u6863\u4F4D\u8986\u76D6\uFF08L1|L2|L3\uFF0C\u7F3A\u7701 L1 report-only \u5B89\u5168\u9ED8\u8BA4\uFF09").option("--image <image>", "run\uFF1Asandcastle \u955C\u50CF\u540D\uFF08\u7F3A\u7701 sandcastle:local\uFF09").action(async (sub, name2, opts) => bail(await cmdAfk(deps, sub, name2, opts)));
-  program2.command("loops <sub> [args...]").alias("loop").description("loop \u6CBB\u7406\uFF1Ainit \u8D77\u8349\u8349\u7A3F\uFF08\u5411\u5BFC/\u975E\u4EA4\u4E92\uFF09\xB7 list \u767B\u8BB0\u8868 \xB7 enforce R1-R11 \u88C1\u51B3 \xB7 status\uFF08B18/D16\uFF0CL1\u2192L3 \u5206\u7EA7\u653E\u6743\uFF09").allowUnknownOption().action(async (sub, args) => bail(await cmdLoops(deps, sub, args)));
+  program2.command("loops <sub> [args...]").alias("loop").description("loop \u6CBB\u7406\uFF1Ainit \u8D77\u8349\u8349\u7A3F\uFF08\u5411\u5BFC/\u975E\u4EA4\u4E92\uFF09\xB7 list \u767B\u8BB0\u8868 \xB7 enforce R1-R11 \u88C1\u51B3 \xB7 status\uFF08B18/D16\uFF0CL1\u2192L3 \u5206\u7EA7\u653E\u6743\uFF09").allowUnknownOption().addHelpText("after", `
+\u5B50\u547D\u4EE4:
+  init [flags]              \u8D77\u8349\u4E00\u4E2A paused \u8349\u7A3F loop\uFF08TTY \u4E0B\u65E0 flags \u2192 \u4EA4\u4E92\u5411\u5BFC\uFF1B\u975E\u4EA4\u4E92\u89C1\u4E0B\uFF09
+  list [--json]             \u767B\u8BB0\u8868
+  status [--json]           \u5404 loop \u5206\u7EA7\u653E\u6743\u72B6\u6001\uFF08L1 \u62A5\u544A / L2 \u8F85\u52A9 / L3 \u65E0\u4EBA\u503C\u5B88\uFF09
+  enforce [--loop <id>]     \u8DD1 R1-R11 \u88C1\u51B3\u51FA verdict
+  budget|cost [loop]        token \u9884\u7B97 / \u6210\u672C\u4F30\u7B97
+  graduate [loop]          \u5347\u964D\u6863\u88C1\u51B3\uFF08\u6BD5\u4E1A\u5236\uFF09
+  level <loop> [set <L1|L2|L3>] [--confirm]   \u67E5\u770B/\u6539\u6863\uFF08\u5347\u6863\u987B\u51C6\u5165 + --confirm\uFF09
+
+loops init \u975E\u4EA4\u4E92 flags\uFF08agent/CI\uFF1B\u7F3A TTY \u6216 --yes \u8D70\u9ED8\u8BA4\uFF09:
+  --id <id>       *\u5FC5\u586B  loop \u6807\u8BC6\uFF08kebab-case\uFF09
+  --goal <text>   *\u5FC5\u586B  \u8FD9\u4E2A loop \u8981\u66FF\u4F60\u505A\u4EC0\u4E48
+  --runner <claude-code|codex>   \u6267\u884C agent\uFF08\u7F3A\u7701 claude-code\uFF09
+  --kind <orchestrator|executor> \xB7 --prefix <change \u524D\u7F00> \xB7 --cadence <4h> \xB7 --risk <low|medium|high> \xB7 --yes
+
+\u793A\u4F8B:
+  pipeline loops init                                   # TTY \u4EA4\u4E92\u5411\u5BFC
+  pipeline loops init --id nightly-fix --goal "\u591C\u95F4\u4FEE flaky \u6D4B\u8BD5" --runner codex --yes`).action(async (sub, args) => bail(await cmdLoops(deps, sub, args)));
   program2.command("channel <sub> [args...]").description("\u6B63\u4EA4 worker \u5C42\uFF08event-sourced\uFF09\uFF1Acreate/send/wait/messages/thread/forum/registry \u2026").allowUnknownOption().action(async (sub, args) => bail(await cmdChannel(deps, sub, args)));
   program2.command("mem <sub> [args...]").description("\u8DE8 runtime \u4F1A\u8BDD\u68C0\u7D22\uFF1Alist \xB7 search <kw> \xB7 context <id> \xB7 extract <id> \xB7 projects").allowUnknownOption().action(async (sub, args) => bail(await cmdMem(deps, sub, args)));
   program2.command("tap <sub> [args...]").description("tap \u6D41\u91CF\u4EE3\u7406\uFF1Astart <client...> [--ca [dir]] [--json] [-- <command> ...]\uFF08daemon \u542F\u52A8\u5668\uFF0C#34-wire\uFF09").allowUnknownOption().action(async (sub, args) => bail(await cmdTap(deps, sub, args)));

@@ -217,6 +217,27 @@ export function buildProgram(deps: CliDeps): Command {
     .alias('loop')
     .description('loop 治理：init 起草草稿（向导/非交互）· list 登记表 · enforce R1-R11 裁决 · status（B18/D16，L1→L3 分级放权）')
     .allowUnknownOption()
+    // 子命令是手解析的（loops <sub> [args...] 单命令），commander 的 --help 只显父用法看不到 init 的
+    // --id/--goal 等（小白无法从 --help 发现）。补一段 after-help 列出子命令 + init 关键 flags + 示例。
+    .addHelpText('after', `
+子命令:
+  init [flags]              起草一个 paused 草稿 loop（TTY 下无 flags → 交互向导；非交互见下）
+  list [--json]             登记表
+  status [--json]           各 loop 分级放权状态（L1 报告 / L2 辅助 / L3 无人值守）
+  enforce [--loop <id>]     跑 R1-R11 裁决出 verdict
+  budget|cost [loop]        token 预算 / 成本估算
+  graduate [loop]          升降档裁决（毕业制）
+  level <loop> [set <L1|L2|L3>] [--confirm]   查看/改档（升档须准入 + --confirm）
+
+loops init 非交互 flags（agent/CI；缺 TTY 或 --yes 走默认）:
+  --id <id>       *必填  loop 标识（kebab-case）
+  --goal <text>   *必填  这个 loop 要替你做什么
+  --runner <claude-code|codex>   执行 agent（缺省 claude-code）
+  --kind <orchestrator|executor> · --prefix <change 前缀> · --cadence <4h> · --risk <low|medium|high> · --yes
+
+示例:
+  pipeline loops init                                   # TTY 交互向导
+  pipeline loops init --id nightly-fix --goal "夜间修 flaky 测试" --runner codex --yes`)
     .action(async (sub: string, args: string[]) => bail(await cmdLoops(deps, sub, args)))
 
   program
