@@ -25,7 +25,7 @@ export const MANDATORY_SKILLS: Record<string, string[]> = {
   'verify.pm': ['browser-qa', 'web-design-guidelines', 'design-taste-frontend|taste-skill', 'superpowers:verification-before-completion'],
   'verify.frontend': ['superpowers:verification-before-completion', 'e2e-testing', 'browser-qa', 'verify|verification-loop', 'web-design-guidelines', 'design-taste-frontend|taste-skill'],
   'verify.backend': ['superpowers:verification-before-completion'],
-  'ship.pm': ['to-prd', 'to-issues'],
+  'ship.pm': ['to-spec', 'to-tickets'],
   'ship.frontend': ['opsx:apply|openspec-apply-change', 'opsx:archive|openspec-archive-change', 'superpowers:finishing-a-development-branch', 'commit-commands:commit-push-pr'],
   'ship.backend': ['opsx:apply|openspec-apply-change', 'superpowers:finishing-a-development-branch', 'commit-commands:commit-push-pr'],
 }

@@ -81,7 +81,7 @@ DESIGN_DOC=$(pipeline get "$PIPELINE_CHANGE_NAME" design_doc)
    - **plan 结构遵守下面「fe/be plan 硬约束」三条（B1 tracer bullet / B2 子阶段切窗 / B3 原型决策点）**
 
 **可选**：
-- 使用 Skill 工具加载 `to-issues` — 拆 plan 为 GitHub issues
+- 使用 Skill 工具加载 `to-tickets` — 拆 plan 为 GitHub issues
 
 #### ⚙️ Track = backend
 
@@ -92,7 +92,7 @@ DESIGN_DOC=$(pipeline get "$PIPELINE_CHANGE_NAME" design_doc)
    - **plan 结构遵守下面「fe/be plan 硬约束」三条（B1 tracer bullet / B2 子阶段切窗 / B3 原型决策点）**
 
 **可选**：
-- 使用 Skill 工具加载 `to-issues`
+- 使用 Skill 工具加载 `to-tickets`
 
 #### 🧱 fe/be plan 硬约束（HARD RULE，仅 frontend/backend Track 适用；PM 旅程图不受此约束）
 
@@ -159,4 +159,4 @@ guard **只校验、不自动 transition**。校验通过后：
 - external-skill: superpowers:writing-plans · 强制（frontend/backend）
 - external-skill: grill-with-docs · 强制（pm）
 - external-skill: prototype · 条件（B3 原型摸底，用户拍板）
-- external-skill: to-issues · 可选
+- external-skill: to-tickets · 可选

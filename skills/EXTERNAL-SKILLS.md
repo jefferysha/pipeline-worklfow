@@ -43,8 +43,8 @@ bash tools/verify-skills.sh --quiet  # 静默模式（SessionStart hook 使用�
 
 **需求 / 交付产物**
 - triage — issue 流归类（条件）
-- to-prd — PRD 沉淀
-- to-issues — 拆 GitHub issues
+- to-spec — PRD 沉淀
+- to-tickets — 拆 GitHub issues
 - handoff — 团队对接文档
 - github-ops — GitHub 自动化（标签/里程碑/Actions，可选）
 - code-tour — 代码导览

@@ -30,11 +30,11 @@ pipeline status "$PIPELINE_CHANGE_NAME"
 
 **强制 Skill**（按顺序）：
 
-1. 使用 Skill 工具加载 `to-prd`。**禁止跳过此步骤**。
+1. 使用 Skill 工具加载 `to-spec`。**禁止跳过此步骤**。
    - 用于：把调研 + 旅程 + 原型沉淀为正式 PRD
    - 产出：`docs/PRD/<DATE>-<topic>.md`
 
-2. 使用 Skill 工具加载 `to-issues`。**禁止跳过此步骤**。
+2. 使用 Skill 工具加载 `to-tickets`。**禁止跳过此步骤**。
    - 用于：把 PRD 拆为研发可领的 GitHub issues
    - 每个 issue 包含验收标准 + 关联的 prototype 截图
 
@@ -125,8 +125,8 @@ guard **只校验、不自动 transition**。校验通过后，确认 PR / PRD �
 
 ## 外部 skill 依赖（CONTRACT §5.7 显式声明）
 
-- external-skill: to-prd · 强制（pm）
-- external-skill: to-issues · 强制（pm）
+- external-skill: to-spec · 强制（pm）
+- external-skill: to-tickets · 强制（pm）
 - external-skill: superpowers:finishing-a-development-branch · 强制（frontend/backend）
 - external-skill: commit-commands:commit-push-pr · 强制（frontend/backend）
 - external-skill: commit-commands:commit · 可选
