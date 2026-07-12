@@ -3,7 +3,7 @@
  * 读写走窄解析器（parse.ts），互斥走 mkdir 原子锁（lock.ts），init 对齐老仓
  * skills/pipeline/scripts/state-init.sh 的 heredoc 语义。kernel 零第三方运行时依赖。
  */
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import {
   QuoteGateError,
@@ -38,17 +38,30 @@ async function atomicWriteFile(file: string, data: string): Promise<void> {
 }
 
 /**
- * base_branch 探测：读 `.git/HEAD` 的 `ref: refs/heads/<branch>`（纯 fs、零 spawn）。
+ * base_branch 探测：读 `<gitdir>/HEAD` 的 `ref: refs/heads/<branch>`（纯 fs、零 spawn）。
+ * git worktree/submodule 内 `.git` 是**文件**（`gitdir: <path>` 指针）而非目录——直接
+ * readFile(`.git/HEAD`) 会 ENOTDIR 静默回退 main（automation 恰用 worktree）；此处先辨 .git
+ * 类型，为文件则解析指针定位真 gitdir 再读 HEAD。
  * detached / 无 git / 读失败 → 回退 "main"（一等态，绝不阻断 init——对齐老内核）。
  */
 async function detectBaseBranch(repoRoot: string): Promise<string> {
   try {
-    const head = await readFile(path.join(repoRoot, '.git', 'HEAD'), 'utf8')
+    const gitPath = path.join(repoRoot, '.git')
+    let gitDir = gitPath
+    const st = await stat(gitPath)
+    if (!st.isDirectory()) {
+      // worktree/submodule：`.git` 文件内为 `gitdir: <path>`（可为绝对或相对仓根）
+      const pointer = await readFile(gitPath, 'utf8')
+      const pm = /^gitdir:\s*(.+)$/m.exec(pointer)
+      if (!pm) return 'main'
+      gitDir = path.resolve(repoRoot, pm[1]!.trim())
+    }
+    const head = await readFile(path.join(gitDir, 'HEAD'), 'utf8')
     const m = /^ref: refs\/heads\/(\S+)$/.exec(head.trim())
     const branch = m?.[1]
     if (branch) return branch
   } catch {
-    // 无 git —— 走回退
+    // 无 git / 指针坏 / 读失败 —— 走回退
   }
   return 'main'
 }

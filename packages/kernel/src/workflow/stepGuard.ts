@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
+import { taskCount } from '../flow/guard.js'
 import type { StepDef } from './types.js'
 import type { PipelineState, FieldName, GuardResult } from '../types.js'
 
@@ -11,7 +14,16 @@ function scalar(v: string | string[] | undefined): string {
   return typeof v === 'string' ? v : ''
 }
 
-export function evaluateStepGuards(state: PipelineState, step: StepDef, _ctx: StepGuardContext): GuardResult {
+/** 读 <changeDirAbs>/tasks.md 原文；缺失/不可读 → undefined（taskCount 视作 0 个任务，与 flow/guard.ts 同语义）。 */
+function readTasksMd(changeDirAbs: string): string | undefined {
+  try {
+    return readFileSync(path.join(changeDirAbs, 'tasks.md'), 'utf8')
+  } catch {
+    return undefined
+  }
+}
+
+export function evaluateStepGuards(state: PipelineState, step: StepDef, ctx: StepGuardContext): GuardResult {
   const failures: string[] = []
 
   for (const guard of step.guards) {
@@ -24,9 +36,11 @@ export function evaluateStepGuards(state: PipelineState, step: StepDef, _ctx: St
       }
     }
     if (guard.type === 'tasks-at-least') {
-      // TODO（实现时先读 packages/kernel/src/flow/guard.ts 抽出任务计数纯函数并在此复用，
-      // 不要重新实现一份不同的计数逻辑）：
-      failures.push(`guard 'tasks-at-least' 暂未实现（需复用 packages/kernel/src/flow/guard.ts 的任务计数逻辑）`)
+      // 复用 flow/guard.ts 的 taskCount 纯函数（单一真相源），据注入的 changeDirAbs 读 tasks.md 真实计数。
+      const count = taskCount(readTasksMd(ctx.changeDirAbs))
+      if (count < guard.n) {
+        failures.push(`step '${step.id}' 要求 tasks.md 至少 ${guard.n} 个任务（当前=${count}）`)
+      }
     }
   }
 

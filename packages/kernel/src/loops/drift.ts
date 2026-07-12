@@ -178,8 +178,11 @@ export function detectDrift(
       suggestion: '创建仓根 LOOP.md，并为每个 registry loop 写一节（### `id`）',
     })
   } else {
+    // 两侧对称用 extractDocLoopIds（`### `id`` 标题精确抽取）判定「已提及」：
+    // 裸 docText.includes(l.id) 会把 id `lite` 误判进 `elite` 子串（漏报 mirror-missing）。
+    const docIds = new Set(extractDocLoopIds(docText))
     for (const l of registry.loops) {
-      if (!docText.includes(l.id)) {
+      if (!docIds.has(l.id)) {
         items.push({
           loop: l.id, dimension: 'mirror-missing', severity: 'warn',
           detail: `registry loop ${l.id} 未在 LOOP.md 提及`,
@@ -187,7 +190,7 @@ export function detectDrift(
         })
       }
     }
-    for (const docId of extractDocLoopIds(docText)) {
+    for (const docId of docIds) {
       if (!regIds.has(docId)) {
         items.push({
           loop: docId, dimension: 'mirror-orphan', severity: 'warn',

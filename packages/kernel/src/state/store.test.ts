@@ -172,6 +172,25 @@ automation_current_phase: ""
     expect(await store.get(dir, 'base_branch')).toBe('feat/wave1')
   })
 
+  it('B8：worktree 内 .git 为文件(gitdir 指针)→ 解析指针读真 HEAD（automation 用 worktree，勿静默回退 main）', async () => {
+    const gitdir = path.join(repoRoot, 'mainrepo', '.git', 'worktrees', 'wt1')
+    await mkdir(gitdir, { recursive: true })
+    await writeFile(path.join(gitdir, 'HEAD'), 'ref: refs/heads/afk/wave2\n')
+    // worktree 根的 .git 是文件，内容是 `gitdir: <path>` 指针
+    await writeFile(path.join(repoRoot, '.git'), `gitdir: ${gitdir}\n`)
+    const dir = await store.init({ repoRoot, name: 'wtc', track: 'backend', preset: 'full', clock: CLOCK })
+    expect(await store.get(dir, 'base_branch')).toBe('afk/wave2')
+  })
+
+  it('B8：.git 指针 detached（gitdir/HEAD 无 ref:）→ 回退 main（不阻断 init）', async () => {
+    const gitdir = path.join(repoRoot, 'mainrepo', '.git', 'worktrees', 'wt2')
+    await mkdir(gitdir, { recursive: true })
+    await writeFile(path.join(gitdir, 'HEAD'), 'a1b2c3d4e5f6\n') // detached：裸 sha
+    await writeFile(path.join(repoRoot, '.git'), `gitdir: ${gitdir}\n`)
+    const dir = await store.init({ repoRoot, name: 'wtd', track: 'backend', preset: 'full', clock: CLOCK })
+    expect(await store.get(dir, 'base_branch')).toBe('main')
+  })
+
   it('非法 change 名（空/怪字符/..）→ 拒绝', async () => {
     await expect(store.init({ repoRoot, name: '', track: 'backend', preset: 'full', clock: CLOCK })).rejects.toThrow()
     await expect(store.init({ repoRoot, name: 'a/b', track: 'backend', preset: 'full', clock: CLOCK })).rejects.toThrow()

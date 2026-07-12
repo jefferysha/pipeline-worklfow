@@ -127,5 +127,28 @@ describe('projectRegistry —— 机器级项目注册表读写（v5 T2 决策 D
       await chmod(join(home, '.claude'), 0o555)
       await expect(registerProjectRoot(registry, '/repo/x')).rejects.toThrow()
     })
+
+    test('B3：两并发登记不同 root 不丢注册（withLock 串行化 read-modify-write，非无锁 last-write-wins）', async () => {
+      await Promise.all([
+        registerProjectRoot(registry, '/repo/concurrent-a'),
+        registerProjectRoot(registry, '/repo/concurrent-b'),
+      ])
+      const data = JSON.parse(await readFile(registry, 'utf8')) as string[]
+      expect(data).toContain(resolvePath('/repo/concurrent-a'))
+      expect(data).toContain(resolvePath('/repo/concurrent-b'))
+      expect(data).toHaveLength(2)
+    })
+
+    test('B3：多并发登记（含重复）→ 去重且零丢失（最终恰为去重后的全集）', async () => {
+      await Promise.all([
+        registerProjectRoot(registry, '/repo/x'),
+        registerProjectRoot(registry, '/repo/y'),
+        registerProjectRoot(registry, '/repo/x'), // 重复
+        registerProjectRoot(registry, '/repo/z'),
+      ])
+      const data = JSON.parse(await readFile(registry, 'utf8')) as string[]
+      expect(new Set(data)).toEqual(new Set([resolvePath('/repo/x'), resolvePath('/repo/y'), resolvePath('/repo/z')]))
+      expect(data).toHaveLength(3)
+    })
   })
 })

@@ -82,6 +82,19 @@ describe('detectDrift —— 漂移维度', () => {
     expect(r.items.some((i) => i.dimension === 'mirror-missing')).toBe(true)
   })
 
+  test('B6 mirror-missing 精确匹配：id `lite` 不因 LOOP.md 出现 `elite` 被误判已提及（与 orphan 侧对称）', () => {
+    const doc = '### `elite` — 精英 loop'
+    const r = detectDrift(reg(loop({ id: 'lite' })), doc, null, NOW)
+    const it = r.items.find((i) => i.dimension === 'mirror-missing' && i.loop === 'lite')
+    expect(it).toBeDefined() // lite 确实未提及，必须报（裸子串 includes 会漏报）
+  })
+
+  test('B6 mirror-missing 精确匹配：id 作为 `### `id`` 标题提及 → 不报缺失', () => {
+    const doc = '### `lite` — the lite loop'
+    const r = detectDrift(reg(loop({ id: 'lite' })), doc, null, NOW)
+    expect(r.items.some((i) => i.dimension === 'mirror-missing' && i.loop === 'lite')).toBe(false)
+  })
+
   test('mirror-orphan：LOOP.md 声明的 id 不在 registry → warn', () => {
     const doc = '### `loop-be` — BE\n### `ghost-loop` — 已删除但文档还在'
     const runlog = `${RUNLOG_HEADER}\n${row('2026-07-07T11:30', 'loop-be')}`

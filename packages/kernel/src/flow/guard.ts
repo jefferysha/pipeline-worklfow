@@ -176,8 +176,9 @@ function depsOf(v: string | string[] | undefined): string[] {
   return items.map((s) => s.trim()).filter((s) => s !== '' && s !== 'null')
 }
 
-/** `^- \[[ x]\]` 任务行计数（lib:34-39；大写 X 不计，照老仓 regex） */
-function taskCount(content: string | undefined): number {
+/** `^- \[[ x]\]` 任务行计数（lib:34-39；大写 X 不计，照老仓 regex）。
+ *  单一真相源：workflow/stepGuard.ts 的 tasks-at-least guard 复用本函数，勿另造计数逻辑。 */
+export function taskCount(content: string | undefined): number {
   if (content === undefined) return 0
   return content.split('\n').filter((l) => /^- \[[ x]\]/.test(l)).length
 }

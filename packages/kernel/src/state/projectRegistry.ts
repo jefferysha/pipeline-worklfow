@@ -12,6 +12,7 @@
 import { readFileSync } from 'node:fs'
 import { mkdir, rename, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve as resolvePath } from 'node:path'
+import { withLock } from './lock.js'
 
 export const PROJECT_REGISTRY_FILE = 'pipeline-projects.json'
 
@@ -47,12 +48,19 @@ export async function writeProjectRegistry(registryPath: string, roots: string[]
 /**
  * 登记 repoRoot（resolve 后判重）：已存在 → 返回 false 且不写盘；写入 → 返回 true。
  * 注册表损坏时按空表处理（读容错），登记会将其修复为合法 JSON。写失败抛错（fail-loud）。
+ *
+ * read-modify-write 经 withLock 串行化（复用 store.ts/secrets.ts 同款文件锁 lock.ts::withLock）：
+ * 两个并发 init 若不串行会各读同一旧表、后 rename 覆盖前者 → **丢注册**。锁在注册表所在目录
+ * （~/.claude）上；withLock 的 acquire 用非递归 mkdir，故先确保该父目录存在（参照 secrets.ts::withSecretsLock）。
  */
 export async function registerProjectRoot(registryPath: string, rawRoot: string): Promise<boolean> {
   const normalized = resolvePath(rawRoot)
-  const existing = readProjectRegistry(registryPath)
-  if (existing.some((e) => e && resolvePath(e) === normalized)) return false
-  const next = [...existing, normalized]
-  await writeProjectRegistry(registryPath, next)
-  return true
+  const dir = dirname(registryPath)
+  await mkdir(dir, { recursive: true })
+  return withLock(dir, async () => {
+    const existing = readProjectRegistry(registryPath)
+    if (existing.some((e) => e && resolvePath(e) === normalized)) return false
+    await writeProjectRegistry(registryPath, [...existing, normalized])
+    return true
+  })
 }

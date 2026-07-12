@@ -194,6 +194,16 @@ describe('estimateCost —— 成本估算（cadence×pattern）', () => {
     expect(e.maxTokensPerDay).toBeNull()
     expect(e.withinBudget).toBeNull()
   })
+
+  test('B9：非法 risk（越过 schema 直接调用 estimateCost）→ 不产生 NaN 假超预算，tokensPerRun 兜底为数字', () => {
+    const e = estimateCost(loop({ cadence: '1h', risk: 'bogus' as LoopEntry['risk'] }, { max_tokens_per_day: 1_000_000 }))
+    expect(typeof e.tokensPerRun).toBe('number')
+    expect(Number.isNaN(e.tokensPerRun)).toBe(false)
+    expect(e.estimatedTokensPerDay).not.toBeNull()
+    expect(Number.isNaN(e.estimatedTokensPerDay as number)).toBe(false)
+    // 兜底后估算是有限数，与预算的对照是真判定（非 NaN<=max 恒 false 的假超预算）
+    expect(e.withinBudget).toBe(true)
+  })
 })
 
 // ── buildBudgetReport / buildCostReport：编排 + exit code + 注入 fs ───────────

@@ -179,8 +179,11 @@ export function estimateCost(loop: LoopEntry): CostEstimate {
   const budget = loop.budget as LoopBudget
   const declared = budget.tokens_per_run ?? null
   const risk = loop.risk as LoopRisk
-  const tokensPerRun = declared !== null ? declared : PATTERN_TOKENS_PER_RUN[risk]
-  const pattern = declared !== null ? 'declared' : `risk:${risk}`
+  // 非法 risk（越过 schema/直接构造 LoopEntry）→ PATTERN_TOKENS_PER_RUN[risk] 为 undefined，
+  // 会致 estimatedTokensPerDay=NaN、NaN<=max 恒 false 的「假超预算」。兜底 medium 足迹并在 pattern 标注。
+  const preset = (PATTERN_TOKENS_PER_RUN as Record<string, number | undefined>)[risk]
+  const tokensPerRun = declared !== null ? declared : preset ?? PATTERN_TOKENS_PER_RUN.medium
+  const pattern = declared !== null ? 'declared' : preset !== undefined ? `risk:${risk}` : `risk:${risk}(未知,按 medium 估)`
 
   const estimatedTokensPerDay = runsPerDay === null ? null : runsPerDay * tokensPerRun
   const max = budget.max_tokens_per_day ?? null
