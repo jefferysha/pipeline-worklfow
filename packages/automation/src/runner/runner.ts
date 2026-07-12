@@ -8,7 +8,7 @@
  * exec 是注入面：production 绑真 docker exec（IT），单测绑 fake。缺 docker → honest skip（见
  * docker.integration.test.ts）；任何路径不为绿伪造 pass——非零退出真抛错。
  */
-import { type PhaseEvent } from '../types.js'
+import { type PhaseEvent, PHASE_EVENTS } from '../types.js'
 
 /** 沙箱最后一行打印的结构化握手（老仓 SandboxReport）。 */
 export interface SandboxReport {
@@ -72,12 +72,18 @@ export const parseSandboxReport = (stdout: string): SandboxReport => {
   if (parsed.verify_result !== 'pass' && parsed.verify_result !== 'fail') {
     throw new StructuredOutputError('sandbox report missing/invalid verify_result (want "pass"|"fail")', raw)
   }
-  return {
-    verify_result: parsed.verify_result,
-    build_sha: parsed.build_sha,
-    branch: parsed.branch,
-    phase_event: parsed.phase_event ?? 'verify-pass',
-  }
+  // B10：沙箱自报字段不可信——phase_event 校验 PHASE_EVENTS 枚举（`?? 'verify-pass'` 只兜
+  // null/undefined，兜不住非法字符串），非法值回退 verify-pass 不透传污染下游；build_sha/branch
+  // 校验 string 类型（数字/对象/null 视缺失）。build_sha 权威源本就是命名分支 HEAD（barrier.ts
+  // 派生，不信 report.build_sha），这里只做形状诚实化。
+  const rawPhase: unknown = parsed.phase_event
+  const phase_event: PhaseEvent =
+    typeof rawPhase === 'string' && (PHASE_EVENTS as readonly string[]).includes(rawPhase)
+      ? (rawPhase as PhaseEvent)
+      : 'verify-pass'
+  const build_sha = typeof parsed.build_sha === 'string' ? parsed.build_sha : undefined
+  const branch = typeof parsed.branch === 'string' ? parsed.branch : undefined
+  return { verify_result: parsed.verify_result, build_sha, branch, phase_event }
 }
 
 /**
@@ -93,7 +99,7 @@ export const parseSandboxReport = (stdout: string): SandboxReport => {
  * bump 方式：shasum -a 256 tools/sandcastle/pipeline-afk-run.sh。bump 后旧镜像自动 fail-loud，
  * 重建入口 tools/sandcastle/build.sh（构建完自验镜像内 sha，见该脚本）。
  */
-export const AFK_RUN_SCRIPT_SHA256 = 'bfff5965e29f826a1489147d923dbc64075cf49025e916fdea0afda64a166706'
+export const AFK_RUN_SCRIPT_SHA256 = '3d054050150f6b7dcde887b8cbfdfc8e1cf23457c48ce421fc0afbe9af650d90'
 
 /** 对账失败的沙箱退出码（与脚本内 96=codex CLI 缺失、97=tap proxy 未起同段的硬错误码位）。 */
 export const AFK_RUN_DRIFT_EXIT_CODE = 95

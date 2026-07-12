@@ -43,6 +43,27 @@ describe('parseSandboxReport', () => {
   it('缺 phase_event → 缺省 verify-pass', () => {
     expect(parseSandboxReport('<output>{"verify_result":"pass"}</output>').phase_event).toBe('verify-pass')
   })
+
+  // B10：沙箱自报字段不可信——phase_event 必须校验 PHASE_EVENTS 枚举（非法值不透传污染下游），
+  // build_sha/branch 必须校验 string 类型（非 string 视缺失）。`?? 'verify-pass'` 只兜 null/undefined，
+  // 兜不住非法字符串；build_sha 权威源本就是命名分支 HEAD（barrier.ts），这里只做形状诚实化。
+  it('B10 · phase_event 非法枚举 → 回退 verify-pass（不透传越界值）', () => {
+    expect(parseSandboxReport('<output>{"verify_result":"pass","phase_event":"garbage"}</output>').phase_event).toBe('verify-pass')
+  })
+
+  it('B10 · phase_event 合法非缺省值（build-complete / ship-complete）原样保留', () => {
+    expect(parseSandboxReport('<output>{"verify_result":"pass","phase_event":"build-complete"}</output>').phase_event).toBe('build-complete')
+    expect(parseSandboxReport('<output>{"verify_result":"pass","phase_event":"ship-complete"}</output>').phase_event).toBe('ship-complete')
+  })
+
+  it('B10 · build_sha 非 string（数字 / 对象）→ 视缺失（undefined）', () => {
+    expect(parseSandboxReport('<output>{"verify_result":"pass","build_sha":123}</output>').build_sha).toBeUndefined()
+    expect(parseSandboxReport('<output>{"verify_result":"pass","build_sha":{"x":1}}</output>').build_sha).toBeUndefined()
+  })
+
+  it('B10 · branch 非 string → 视缺失（undefined）', () => {
+    expect(parseSandboxReport('<output>{"verify_result":"pass","branch":42}</output>').branch).toBeUndefined()
+  })
 })
 
 describe('runPipeline（注入 exec 面驱动 build→verify→ship）', () => {

@@ -134,7 +134,9 @@ describe('createDockerRunChange · resolveDenylist（loop denylist 真实生效�
       if (file === 'git' && args.includes('rev-list')) {
         return { stdout: `${SHA}\n`, stderr: '', exitCode: 0 }
       }
-      if (file === 'git' && args[0] === 'diff') {
+      // B6：diffNamesReal 现前置 `-c core.quotePath=false`，args[0] 不再是 'diff'——按 includes 匹配
+      // （同上 rev-list 口径）而非位置，才认得出加了全局 flag 后的 git diff 命令。
+      if (file === 'git' && args.includes('diff')) {
         return { stdout: diffFiles, stderr: '', exitCode: 0 }
       }
       return { stdout: `${SHA}\n`, stderr: '', exitCode: 0 }

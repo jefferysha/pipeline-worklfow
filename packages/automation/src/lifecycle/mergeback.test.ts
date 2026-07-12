@@ -39,12 +39,13 @@ describe('diffNamesReal（git diff --name-only，决议 #12 数据源）', () =>
     return { exec, calls }
   }
 
-  it('argv：git diff --name-only <base>...refs/heads/<branch>，cwd=hostRepoDir', async () => {
+  it('argv：git -c core.quotePath=false diff --name-only <base>...refs/heads/<branch>，cwd=hostRepoDir', async () => {
     const { exec, calls } = fakeExec({ stdout: 'docs/a.md\nsrc/x.ts\n', exitCode: 0 })
     const files = await diffNamesReal(exec, { hostRepoDir: '/repo', branch: 'sandcastle-pipeline/x', base: 'main' })
     expect(calls).toHaveLength(1)
     expect(calls[0]!.file).toBe('git')
-    expect(calls[0]!.args).toEqual(['diff', '--name-only', 'main...refs/heads/sandcastle-pipeline/x'])
+    // B6：-c core.quotePath=false 前置——非 ASCII 路径不被转义成 "\346..." 逃过 denylist。
+    expect(calls[0]!.args).toEqual(['-c', 'core.quotePath=false', 'diff', '--name-only', 'main...refs/heads/sandcastle-pipeline/x'])
     expect(calls[0]!.cwd).toBe('/repo')
     expect(files).toEqual(['docs/a.md', 'src/x.ts'])
   })

@@ -81,7 +81,10 @@ export const diffNamesReal = async (
 ): Promise<string[]> => {
   const r = await exec(
     'git',
-    ['diff', '--name-only', `${input.base}...refs/heads/${input.branch}`],
+    // B6：git 默认 core.quotePath=true，非 ASCII 路径输出成 "\346..." 八进制转义双引号串，下游
+    // denylist glob 匹配不到 → 中文/emoji 文件名越界产出逃检（L3 自动 merge）。-c core.quotePath=false
+    // 关掉转义 → 输出 literal UTF-8 路径，denylist 真命中。
+    ['-c', 'core.quotePath=false', 'diff', '--name-only', `${input.base}...refs/heads/${input.branch}`],
     { cwd: input.hostRepoDir, env: GIT_ENV },
   )
   if (r.exitCode !== 0) return []
@@ -129,6 +132,21 @@ export const mergeBackToBase = async (
   input: { hostRepoDir: string; worktreePath: string; branch: string; base: string },
 ): Promise<void> => {
   const { hostRepoDir, worktreePath, branch, base } = input
+  // B3 fail-loud：真 merge 合进 host 当前 HEAD（从不 checkout/校验 base）——host 主树若被切到别的
+  // 分支（或 detached），会静默把命名分支合进错分支。merge 前 assert host symbolic-ref HEAD 确实
+  // == base，不等则抛 SyncError（留现场、绝不静默合错），供人工核对 host 主树状态后再重跑。
+  const headRef = await exec('git', ['symbolic-ref', 'HEAD'], { cwd: hostRepoDir, env: GIT_ENV })
+  const head = headRef.exitCode === 0 ? headRef.stdout.trim() : ''
+  const headShort = head.replace(/^refs\/heads\//, '')
+  const baseShort = base.replace(/^refs\/heads\//, '')
+  if (headShort === '' || headShort !== baseShort) {
+    throw new SyncError(
+      `host repo HEAD is '${head || '(detached)'}' but merge target base is '${base}' — ` +
+        `refusing to merge '${branch}' into the wrong branch. The named branch and worktree are PRESERVED at ${worktreePath}. ` +
+        `To recover: check out '${base}' in the host repo (${hostRepoDir}) and re-run.`,
+      worktreePath,
+    )
+  }
   const lock = await acquireMergeLock(exec, hostRepoDir, worktreePath)
   try {
     const merge = await exec(

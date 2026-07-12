@@ -35,6 +35,10 @@ git config --global user.name 'pipeline-afk' >/dev/null 2>&1 || true
 # 证明 pipeline 插件在沙箱内真可用（读挂载 worktree 的真 change 状态）；失败不致命（记 unknown）。
 phase="$(pipeline get "$name" phase 2>/dev/null || echo unknown)"
 
+# 末行 <output> 的 verify_result（审计 automation-B1）：缺省 pass；agent 被起用且真非零退出的分支会置 fail
+# （host 据此走重试/失败,不把失败 run 记成功）。无 agent 确定性兜底保持 pass（站位,见底部 else + 文件头注）。
+verify_result="pass"
+
 if [ "${PIPELINE_RUNNER:-}" = "codex" ]; then
   # runner 双支持（v5 T20）：runner=codex 由 host 侧命令构造点（runner.ts::buildAfkRunCommand）
   # 显式注入——用户在 loops.yaml 点名要 codex，CLI 缺失就是硬错误：打清晰 stderr 并非零退出
@@ -81,11 +85,14 @@ if [ "${PIPELINE_RUNNER:-}" = "codex" ]; then
   # 内日志里——脚本继续确定性兜底 commit 且 0 退出，host 侧流面完全看不见，automation_last_error
   # 永远不落（「agent 跑过了」的假象）。把非零 exit 以可解析标记行回放到 stdout（同 [TRANSITION]
   # 回放口径；host 侧 lifecycle exec tee 处检出并同步落 automation_last_error；parseSandboxReport
-  # 容忍多余行，不干扰末行 <output> 握手）。exit=0 不输出（零噪音）。**不改变退出路径**：确定性
-  # 兜底与成败判定原样，run 仍成功——这是可见度，不是改判。注意 codex CLI 有失败仍 exit 0 的既有
-  # 怪癖（认证/网络错也可能 0 退出），故本标记只在 codex 真非零退出（如 timeout=124）时触发。
+  # 容忍多余行，不干扰末行 <output> 握手）。exit=0 不输出（零噪音）。注意 codex CLI 有失败仍 exit 0
+  # 的既有怪癖（认证/网络错也可能 0 退出），故本标记只在 codex 真非零退出（如 timeout=124）时触发。
+  # 诚实改判（审计 automation-B1）：agent 被显式起用且**真非零退出** = 本轮 agent 真失败,不再报
+  # verify pass 让 host 当成功/自动合入——置 verify_result=fail,host(scheduler writeBackSuccess)据此走
+  # 重试/失败路。与「无 agent 确定性兜底」区分:那条根本没起 agent(见底部 else),保持 pass 站位。
   if [ "$agent_exit" -ne 0 ]; then
     printf '[AGENT_EXIT] codex %s\n' "$agent_exit"
+    verify_result="fail"
   fi
 elif [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ] && command -v claude >/dev/null 2>&1; then
   # 真部署路径：agent 驱动 build。
@@ -144,9 +151,11 @@ elif [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ] && command -v claude >/dev/null 2>&1;
   # 的假象）。把非零 exit 以可解析标记行回放到 stdout（host 侧 createAgentExitWatch 检出并同步落
   # automation_last_error；该 watcher AGENT_EXIT_LINE_RE 只按 (\S+) 抓 runner 名——runner 无关，lifecycle
   # 无需改；parseSandboxReport 容忍多余行，不干扰末行 <output> 握手）。exit=0 不输出（零噪音）。
-  # **不改变退出路径**：确定性兜底与成败判定原样，run 仍成功——这是可见度，不是改判。
+  # 诚实改判（审计 automation-B1，对齐 codex 分支）：claude 被起用且真非零退出（含 tap 未起 exit=97）
+  # = 本轮真失败,置 verify_result=fail,host 走重试/失败路,不把失败 run 记成功待复核/自动合入。
   if [ "$agent_exit" -ne 0 ]; then
     printf '[AGENT_EXIT] claude %s\n' "$agent_exit"
+    verify_result="fail"
   fi
 else
   # 诚实分流（P1-T1）：既非 runner=codex、又无「CLAUDE_CODE_OAUTH_TOKEN + claude CLI 齐备」——没有任何
@@ -167,4 +176,4 @@ git add -A
 git commit -q -m "afk: build for ${name}" || true
 
 head="$(git rev-parse HEAD)"
-printf '<output>{"verify_result":"pass","build_sha":"%s","phase_event":"verify-pass"}</output>\n' "$head"
+printf '<output>{"verify_result":"%s","build_sha":"%s","phase_event":"verify-pass"}</output>\n' "$verify_result" "$head"

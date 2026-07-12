@@ -220,6 +220,28 @@ describe('runChangeInSandbox（沙箱生命周期纯编排 + 注入面）', () =
     expect(out.buildSha).toBeUndefined()
     expect(out.noop).toBe(true)
   })
+
+  // B9：automation_sandbox/automation_worktree 只是给 dashboard 定位容器/worktree 的字段，写它的
+  // setStateField 若瞬态抖动抛错，本可继续的成功 run 会被 catch 判死重来。对齐 phaseWatch/
+  // agentExitWatch 既有 best-effort .catch 风格——字段写失败绝不拖垮 run。
+  it('B9 · setStateField(automation_sandbox/worktree) 瞬态抛错 → 成功 run 不被判死（best-effort）', async () => {
+    const { ports, log } = makePorts({
+      async setStateField(_name, field) {
+        if (field === 'automation_sandbox' || field === 'automation_worktree') {
+          throw new Error('store hiccup')
+        }
+      },
+    })
+    const out = await runChangeInSandbox(
+      ports,
+      { hostRepoDir: '/repo', name: 'x', base: 'main', autoMerge: true },
+      new AbortController().signal,
+    )
+    expect(out.verifyResult).toBe('pass') // 字段写抖动没把成功 run 判死
+    expect(out.buildSha).toBe(SHA)
+    expect(log).toContain('mergeToBase') // 全链照常走完（L3 真合并）
+    expect(log.some((l) => l.startsWith('wt.remove'))).toBe(true) // 正常 teardown（非 conflict 保留）
+  })
 })
 
 describe('CancelledRunError', () => {

@@ -128,9 +128,17 @@ export const createScheduler = (deps: SchedulerDeps): Scheduler => {
     }
     const current = await state.getAutomation(name).catch(() => '')
     if (isSettled(current)) return 'skipped'
-    const target = settleSuccess(config.level) // L1/L2 → paused；L3 → merged
+    // B2 诚实核心：noop 空跑（零 commit / buildSha 缺失，finalizeRunOutcome 打的诚实标志）即便
+    // verify pass 也绝不落 merged——scan.ts resolver 仅认 automation==merged 满足 dep，空跑落 merged
+    // = 无产出解锁下游。此处（settle 点）消费 noop → 落 paused（停给人工复核「为何跑空」）、附诚实
+    // 原因；L1/L2 本就落 paused，语义不变（只 L3 从 merged 改判 paused）。
+    const noop = outcome.noop === true
+    const target = noop ? 'paused' : settleSuccess(config.level) // L1/L2 → paused；L3 → merged（noop → paused）
     const won = await state.setAutomationOwned(name, target)
     if (!won) return 'skipped'
+    if (noop) {
+      await state.setField(name, 'automation_last_error', sanitize('no-op run：零 commit / 空构建（build_sha 缺失）——未合并、未解锁下游，停给人工复核'))
+    }
     // 成功 = 问题已花完，attempts 清零（若日后重排从干净预算起）。
     await state.setField(name, 'automation_attempts', '0')
     return target
@@ -177,9 +185,18 @@ export const createScheduler = (deps: SchedulerDeps): Scheduler => {
     await semaphore.acquire()
     const controller = new AbortController()
     try {
-      await state.setAutomation(name, 'running')
-      emit(name, 'running')
-      inFlight.add(name)
+      // B5：claim 已把 queued→scheduled。running 转换（+ 随后 in-flight 登记）若抛错，异常会被
+      // runRoundOnce 的 allSettled 吞掉，change 卡 scheduled 永不复捡（scanReady 只捡 queued）→ 孤儿，
+      // 且此刻还没 inFlight.add，shutdown teardown 也标不到它。故这段包错误处理：失败走 applyFailure
+      // （分类 → attempts++ 回 queued 复捡 / 耗尽 failed），绝不留 scheduled 孤儿。
+      try {
+        await state.setAutomation(name, 'running')
+        emit(name, 'running')
+        inFlight.add(name)
+      } catch (err) {
+        emitTerminal(name, await applyFailure(name, err))
+        return
+      }
       try {
         const outcome = await runChange(name, controller.signal)
         emitTerminal(name, await writeBackSuccess(name, outcome))

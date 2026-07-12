@@ -246,8 +246,11 @@ export const runChangeInSandbox = async (ports: LifecyclePorts, cfg: RunChangeCo
 
     // 容器/worktree 都真创建成功 → 真写回 automation_sandbox/automation_worktree（runWork 前，
     // 抄 scheduler.ts 写 automation_last_error/automation_preserved_path 的既有模式）。
-    await ports.setStateField(cfg.name, 'automation_sandbox', sandbox.containerName)
-    await ports.setStateField(cfg.name, 'automation_worktree', worktreePath)
+    // B9 best-effort（.catch 同 phaseWatch/agentExitWatch/handle.close/worktree.remove 既有风格）：
+    // 这两个字段只是给 dashboard 定位容器/worktree，store 瞬态抖动写失败绝不能把本可继续的成功 run
+    // 拖进 catch 判死重来。
+    await ports.setStateField(cfg.name, 'automation_sandbox', sandbox.containerName).catch(() => {})
+    await ports.setStateField(cfg.name, 'automation_worktree', worktreePath).catch(() => {})
 
     // exec 包装层 tee 日志行给 phaseWatch（[TRANSITION] 检出点）+ agentExitWatch（[AGENT_EXIT]
     // 检出点，观察项③）——runWork 自己的 onLine（race idle 检测）原样续传，互不挤占。

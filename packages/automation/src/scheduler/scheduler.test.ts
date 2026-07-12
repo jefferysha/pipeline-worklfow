@@ -191,6 +191,86 @@ describe('scheduler round（真状态机写回 + 分级放权）', () => {
     await createScheduler(deps).runRoundOnce(['c'])
     expect(failedSync).toContain('c')
   })
+
+  // B2（诚实核心）：noop 空跑（零 commit / buildSha 缺失，finalizeRunOutcome 打的诚实标志）即便
+  // verify pass 也绝不落 merged——scan resolver 仅认 automation==merged 满足 dep，空跑落 merged =
+  // 无产出解锁下游。settle 点（writeBackSuccess）必须消费 noop：落 paused，不解锁下游。
+  it('B2 · noop 空跑在 L3 不落 merged（不空跑解锁下游）→ 落 paused + 诚实原因', async () => {
+    const { state, auto, fields } = makeState({ c: 'queued' })
+    await createScheduler({
+      state,
+      runChange: async () => outcome({ commits: [], buildSha: undefined, noop: true }),
+      registerShutdown: noopShutdown,
+      config: { maxParallel: 1, maxRetries: 1, level: 'L3' },
+    }).runRoundOnce(['c'])
+    expect(auto.get('c')).not.toBe('merged') // 关键：绝不空跑解锁下游
+    expect(auto.get('c')).toBe('paused')
+    expect(fields.get('c')?.automation_last_error).toBeTruthy() // 诚实原因可见
+  })
+
+  it('B2 · noop 空跑在 L1 仍落 paused（report-only 既有语义不回归）', async () => {
+    const { state, auto } = makeState({ c: 'queued' })
+    await createScheduler({
+      state,
+      runChange: async () => outcome({ commits: [], buildSha: undefined, noop: true }),
+      registerShutdown: noopShutdown,
+      config: { maxParallel: 1, maxRetries: 1, level: 'L1' },
+    }).runRoundOnce(['c'])
+    expect(auto.get('c')).toBe('paused')
+  })
+
+  it('B2 · 非 noop 真 run 在 L3 仍落 merged（正常解锁下游不回归）', async () => {
+    const { state, auto } = makeState({ c: 'queued' })
+    await createScheduler({
+      state,
+      runChange: async () => outcome({ noop: false }),
+      registerShutdown: noopShutdown,
+      config: { maxParallel: 1, maxRetries: 1, level: 'L3' },
+    }).runRoundOnce(['c'])
+    expect(auto.get('c')).toBe('merged')
+  })
+
+  // B5：claim 已把 queued→scheduled；setAutomation('running')（在 inFlight.add 前）若抛错，异常被
+  // allSettled 吞掉，change 卡 scheduled 永不复捡（scanReady 只捡 queued）→ 孤儿。该段必须包错误处理，
+  // 复位 queued（可复捡）或标 failed（耗尽），绝不留 scheduled 孤儿。
+  it('B5 · setAutomation(running) 抛错 → 不留 scheduled 孤儿（复位 queued/failed），不跑 runChange', async () => {
+    const { state, auto } = makeState({ c: 'queued' })
+    const origSet = state.setAutomation
+    state.setAutomation = async (name, s) => {
+      if (s === 'running') throw new Error('store hiccup on running')
+      return origSet(name, s)
+    }
+    let ran = false
+    await createScheduler({
+      state,
+      runChange: async () => {
+        ran = true
+        return outcome()
+      },
+      registerShutdown: noopShutdown,
+      config: { maxParallel: 1, maxRetries: 1, level: 'L3' },
+    }).runRoundOnce(['c'])
+    expect(auto.get('c')).not.toBe('scheduled') // 绝不卡 scheduled 孤儿
+    expect(['queued', 'failed']).toContain(auto.get('c')) // 复位可复捡 / 标 failed
+    expect(ran).toBe(false) // running 从没成功 → 不该起跑
+  })
+
+  it('B5 · setAutomation(running) 抛错不连累同轮其余 change（allSettled 收口）', async () => {
+    const { state, auto } = makeState({ bad: 'queued', good: 'queued' })
+    const origSet = state.setAutomation
+    state.setAutomation = async (name, s) => {
+      if (name === 'bad' && s === 'running') throw new Error('store hiccup')
+      return origSet(name, s)
+    }
+    await createScheduler({
+      state,
+      runChange: async () => outcome(),
+      registerShutdown: noopShutdown,
+      config: { maxParallel: 2, maxRetries: 1, level: 'L3' },
+    }).runRoundOnce(['bad', 'good'])
+    expect(auto.get('good')).toBe('merged') // 未被 bad 连累
+    expect(auto.get('bad')).not.toBe('scheduled') // bad 也不留孤儿
+  })
 })
 
 /**
