@@ -110,7 +110,9 @@ const FIELD_PROV: Record<Exclude<keyof LoopDraft, 'allowlist'>, ProvKind> = {
   design_doc: 'agent', // 「agent 生成」
   change_prefix: 'sys', // 「系统推导 + 人确认」——从 id 派生默认建议值
   risk: 'agent', // 「agent 生成」
-  runner: 'sys', // 「系统推导 + 人确认」——结合就绪三灯凭证探测反向建议
+  runner: 'sys', // 「系统推导 + 人确认」——从既有 runner 真值/历史默认预填；徽章仅显示中性「系统推导」，
+  //                当前不与就绪三灯凭证探测联动（P2-F2：readiness 反向建议「只给凭证已配的 runner 推荐标记」
+  //                是更大工程，登记为 backlog，见 docs/ux/…-config-experience-analysis.md §2.1 远期项，本轮不接线）
   cadence: 'agent', // 「agent 生成建议 + 人确认」
   max_runs_per_day: 'sys', // 「系统给安全默认 + 人拍板上限」
   max_in_flight: 'sys', // 「系统预填推荐值 + 人可调」
