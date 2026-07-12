@@ -43,7 +43,19 @@ describe('diagnoseFailure 成因分类（W3 ①）', () => {
     ).toBe('missing-docker')
   })
 
-  it('agent 非零：[AGENT_EXIT] <runner> <exit> → agent-nonzero（agent 真跑过且非零，无配置类修复命令）', () => {
+  it('agent 非零退出（生产主路径）：lifecycle 改写的真实落盘句（含「凭证」）→ missing-credential + pipeline setup（非 agent-nonzero）', () => {
+    // 真实落盘串逐字对齐 lifecycle.ts:211 createAgentExitWatch——沙箱 `[AGENT_EXIT] <runner> <exit>` 行
+    // 被改写成含「凭证」的中文句再落 automation_last_error（生产**不落**裸标记）。含「凭证」→ CREDENTIAL_RE
+    // (优先级1)截获 → missing-credential（凭证为主因，原文保留可续诊）。此前 fixture 喂裸标记=假信心。
+    for (const s of [
+      'codex agent 非零退出（exit 96）：可能凭证失效或 codex 自身报错，详见 agent 日志',
+      'claude agent 非零退出（exit 1）：可能凭证失效或 claude 自身报错，详见 agent 日志',
+    ]) {
+      expect(diagnoseFailure(s)).toEqual({ cause: 'missing-credential', fixCommand: 'pipeline setup' })
+    }
+  })
+
+  it('agent-nonzero 分支（防御性兜底）：裸 [AGENT_EXIT] 标记 → agent-nonzero——生产主路径不经此（watcher 已改写为上面的凭证句），保留兜底不删', () => {
     expect(diagnoseFailure('[AGENT_EXIT] claude 96')).toEqual({ cause: 'agent-nonzero', fixCommand: null })
     expect(diagnoseFailure('[AGENT_EXIT] codex 1')).toEqual({ cause: 'agent-nonzero', fixCommand: null })
   })

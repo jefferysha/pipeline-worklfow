@@ -3,9 +3,13 @@
  * 失败态、ProgressView 失败行与 InboxView（W2）三处复用同一份判定（不在各视图散落第二套猜错逻辑）。
  *
  * 输入 = change.fields.automation_last_error 原文。它由 scheduler classifyFailure 落盘（sanitize 后
- * 的 message）/ lifecycle 同步的 `[AGENT_EXIT] <runner> <exit>` 标记 / runner·docker 抛错串组成，
- * 典型形态：`[AGENT_EXIT] claude 96`、`docker run sandcastle:local failed (exit 125): …`、
- * `未检测到 codex 凭证：宿主机需设 OPENAI_API_KEY …`、`verify: 2 failed · auth.test.ts`。
+ * 的 message）/ lifecycle createAgentExitWatch 改写句 / runner·docker 抛错串组成。**注意 agent 非零退出
+ * 不落裸标记**：lifecycle（lifecycle.ts:211 createAgentExitWatch）把沙箱 `[AGENT_EXIT] <runner> <exit>`
+ * 行改写成含「凭证」的中文句再落盘，形如 `codex agent 非零退出（exit 96）：可能凭证失效或 codex 自身报错，
+ * 详见 agent 日志`——该句含「凭证」→ 命中下方优先级1 missing-credential（凭证为主因、原文保留可续诊），
+ * 生产主路径**不**走 agent-nonzero。典型形态：`codex agent 非零退出（exit 96）：…可能凭证失效…`、
+ * `docker run sandcastle:local failed (exit 125): …`、`未检测到 codex 凭证：宿主机需设 OPENAI_API_KEY …`、
+ * `verify: 2 failed · auth.test.ts`。
  *
  * 输出 = { cause, fixCommand }：
  *   · cause 是稳定枚举——人话经 i18n（failure.cause_* / failure.short_*），**不在本层硬编码中文**；
@@ -16,11 +20,14 @@
  *   1 missing-credential —— OPENAI_API_KEY / CLAUDE_CODE_OAUTH / CODEX_HOME / 凭证 / authentication…
  *     **刻意不匹配裸 "auth"**：真实 last_error `verify: 2 failed · auth.test.ts` 是验证失败（auth.test.ts
  *     是失败测试文件名），裸 auth 会把它误判成凭证问题。故只认 authentication/unauthorized/401 等明确串。
+ *     亦是**真实 agent 非零退出的归宿**：lifecycle 改写句含「凭证」→ 首命中于此（见上方输入说明）。
  *   2 missing-docker（daemon 特征串）—— "cannot connect to the docker daemon" 等。放在 image 前：
  *     daemon-down 抛的 `docker run <image> failed …` 串同时含镜像名，不能被 image 规则抢走。
  *   3 missing-image —— 镜像 / unable to find image / no such image / sandcastle → build.sh。
  *   4 missing-docker（泛 docker）—— 其余提及 docker 的失败。
- *   5 agent-nonzero —— `[AGENT_EXIT]` 标记 / "agent … exit"：agent 真跑过且非零退出。
+ *   5 agent-nonzero —— 裸 `[AGENT_EXIT]` 标记 / "agent … exit"。**防御性兜底**：生产主路径不经此——
+ *     真实 agent 非零退出已被 lifecycle 改写成含「凭证」句、于优先级1 归 missing-credential（见上）；本分支
+ *     只兜住裸标记（万一改写逻辑变动或有其它裸标记来源），保留不删以防未来回归。
  *   6 unknown —— 其余（含空串）→ pipeline doctor 兜底（诚实：没识别出成因，先跑就绪诊断）。
  */
 export type FailureCause =

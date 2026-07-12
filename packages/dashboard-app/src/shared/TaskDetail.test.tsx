@@ -389,13 +389,32 @@ describe('TaskDetail 失败诊断（W3：成因徽章 + 可复制修复命令）
     expect(screen.queryByTestId('detail-cmd')).toBeNull()
   })
 
-  it('②agent 非零（[AGENT_EXIT] claude 96）→ 成因徽章在，但无 fixCommand → 不渲染修复命令区', async () => {
+  it('②agent 非零退出：lifecycle 落盘的真实改写句（含「凭证」）→ 成因徽章 missing-credential + 修复命令 pipeline setup（生产主路径，非 agent-nonzero）', async () => {
     await renderDetail({
       change: makeChange('hotfix', 'build', {
-        fields: { automation: 'failed', automation_last_error: '[AGENT_EXIT] claude 96' },
+        fields: {
+          automation: 'failed',
+          // 真实落盘串：lifecycle.ts:211 createAgentExitWatch 把 [AGENT_EXIT] 标记改写成含「凭证」的中文句。
+          // 生产不落裸标记——含「凭证」故归 missing-credential（非 agent-nonzero）；此前 fixture 喂裸标记=假信心。
+          automation_last_error: 'codex agent 非零退出（exit 96）：可能凭证失效或 codex 自身报错，详见 agent 日志',
+        },
       }),
     })
-    expect(screen.getByTestId('dt-diag-cause').textContent).toBe(fz['cause_agent-nonzero'])
+    expect(screen.getByTestId('dt-diag-cause').textContent).toBe(fz['cause_missing-credential'])
+    expect(screen.getByTestId('detail-fix-cmd').textContent).toBe('pipeline setup')
+  })
+
+  it('②null fixCommand 成因（docker daemon 未起，真实落盘串）→ 成因徽章在，但无 fixCommand → 不渲染修复命令区', async () => {
+    await renderDetail({
+      change: makeChange('hotfix', 'build', {
+        fields: {
+          automation: 'failed',
+          automation_last_error:
+            'Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?',
+        },
+      }),
+    })
+    expect(screen.getByTestId('dt-diag-cause').textContent).toBe(fz['cause_missing-docker'])
     expect(screen.queryByTestId('detail-fix-cmd')).toBeNull()
   })
 
