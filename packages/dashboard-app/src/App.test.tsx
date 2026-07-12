@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, act, within } from '@testing-library/react'
-import { App } from './App'
+import { App, ErrorBoundary } from './App'
+import { I18nProvider } from './i18n'
 import { lastEventSource, resetEventSources } from './test-setup'
 import { makeChange, makeProject, makeSnapshot } from './testkit'
 
@@ -480,5 +481,40 @@ describe('App 流程带真实计数接线（v6 计划 T11）', () => {
     await screen.findByTestId('workbench-view')
     expect(screen.getByTestId('wb-flow-count-build')).toHaveTextContent('1')
     expect(screen.getByTestId('wb-flow-gloss-build')).toBeInTheDocument()
+  })
+})
+
+/**
+ * Bug3 配套：顶层 ErrorBoundary——任意子树 render 抛错时局部降级兜底，不再整页白屏
+ * （client.ts 形状校验是第一道，ErrorBoundary 是兜底第二道：任何未预期的 render 抛错都被接住）。
+ */
+describe('ErrorBoundary 顶层兜底（render 抛错不白屏）', () => {
+  function Boom(): JSX.Element {
+    throw new Error('render boom')
+  }
+  it('子树 render 抛错 → 渲染降级兜底（app-error-boundary）而非白屏', () => {
+    // React 会把捕获的错误打到 console.error——本用例故意触发，静音以免污染输出。
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    render(
+      <I18nProvider>
+        <ErrorBoundary>
+          <Boom />
+        </ErrorBoundary>
+      </I18nProvider>,
+    )
+    expect(screen.getByTestId('app-error-boundary')).toBeInTheDocument()
+    spy.mockRestore()
+  })
+
+  it('子树不抛错 → 正常渲染 children，不显兜底', () => {
+    render(
+      <I18nProvider>
+        <ErrorBoundary>
+          <div data-testid="ok-child">ok</div>
+        </ErrorBoundary>
+      </I18nProvider>,
+    )
+    expect(screen.getByTestId('ok-child')).toBeInTheDocument()
+    expect(screen.queryByTestId('app-error-boundary')).toBeNull()
   })
 })

@@ -467,10 +467,34 @@ export interface WbAfkReadiness {
     codex: { OPENAI_API_KEY: WbCredLight; CODEX_HOME: WbCredLight }
   }
 }
+/**
+ * Bug3：readiness 曾盲 `as WbAfkReadiness` 强转——体形错误的 200（如缺 credentials.codex）进 .then 落态后，
+ * AutomationCard 渲染期深访问 `readiness.credentials.codex.OPENAI_API_KEY.set` 抛 undefined 访问 → 白屏。
+ * 修：接缝处对组件真正深访问的路径做浅层形状校验，形不对即 throw → 消费方既有 .catch(setReadiness(null))
+ * 整区不渲染（诚实降级，不谎报）。顶层 ErrorBoundary 是第二道兜底（见 App.tsx）。
+ */
+function isValidReadiness(b: unknown): b is WbAfkReadiness {
+  if (typeof b !== 'object' || b === null) return false
+  const r = b as Record<string, unknown>
+  const okBool = (v: unknown): v is { set: boolean } =>
+    typeof v === 'object' && v !== null && typeof (v as { set?: unknown }).set === 'boolean'
+  const docker = r.docker as { available?: unknown } | undefined
+  const image = r.image as { present?: unknown } | undefined
+  const creds = r.credentials as { 'claude-code'?: { CLAUDE_CODE_OAUTH_TOKEN?: unknown }; codex?: { OPENAI_API_KEY?: unknown; CODEX_HOME?: unknown } } | undefined
+  if (!docker || typeof docker.available !== 'boolean') return false
+  if (!image || typeof image.present !== 'boolean') return false
+  if (!creds || !creds['claude-code'] || !creds.codex) return false
+  if (!okBool(creds['claude-code'].CLAUDE_CODE_OAUTH_TOKEN)) return false
+  if (!okBool(creds.codex.OPENAI_API_KEY) || !okBool(creds.codex.CODEX_HOME)) return false
+  return true
+}
+
 export async function fetchAfkReadiness(root: string): Promise<WbAfkReadiness> {
   const res = await fetch(`/api/afk/readiness?root=${encodeURIComponent(root)}`, { headers: { Accept: 'application/json' } })
   if (!res.ok) throw new Error(`(${res.status})`)
-  return (await res.json()) as WbAfkReadiness
+  const body = (await res.json()) as unknown
+  if (!isValidReadiness(body)) throw new Error('malformed readiness payload')
+  return body
 }
 
 // ── v6 T8：机器级凭证端点(GET 掩码只读;POST/DELETE 走 Bearer 三道纵深)。──

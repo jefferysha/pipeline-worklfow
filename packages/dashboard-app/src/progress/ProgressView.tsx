@@ -74,6 +74,27 @@ function rowKeyOf(root: string, name: string): string {
 interface RowPatch {
   phase?: string
   fields?: Record<string, string>
+  /** Bug4：patch 施加时该 change 的真值基线——区分「server 尚未处理该动作（保留 patch）」vs
+   *  「已推进（无论是否恰达 patch 目标都清）」，避免被无关项目的帧整清导致回弹抖动。 */
+  base: { phase: string; fields: Record<string, string> }
+}
+
+/** patch 是否已在 snapshot 落地（真值恰达 patch 目标）。 */
+function patchLanded(patch: RowPatch, change: ChangeSnapshot): boolean {
+  if (patch.phase !== undefined && change.phase !== patch.phase) return false
+  if (patch.fields) {
+    for (const [k, v] of Object.entries(patch.fields)) if (fieldStr(change, k) !== v) return false
+  }
+  return true
+}
+
+/** patch 施加后真值是否已离开基线（server 已处理该动作，即便未恰达 patch 目标，也该让位真值）。 */
+function patchMovedFromBase(patch: RowPatch, change: ChangeSnapshot): boolean {
+  if (patch.phase !== undefined && change.phase !== patch.base.phase) return true
+  if (patch.fields) {
+    for (const k of Object.keys(patch.fields)) if (fieldStr(change, k) !== (patch.base.fields[k] ?? '')) return true
+  }
+  return false
 }
 
 /** 非 2xx 响应尽量读出 server 的 { error } 文案（同 useAfkLog.ts 的局部拷贝先例：单处消费，
@@ -242,10 +263,27 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
   const [busyRows, setBusyRows] = useState<ReadonlySet<string>>(new Set())
   const [patches, setPatches] = useState<ReadonlyMap<string, RowPatch>>(new Map())
 
-  // 新 snapshot 到达（SSE/refresh）即清乐观 patch：成功路径 onRefresh 拉回的快照已含真值；
-  // 极端竞态（旧快照晚到）最多短暂回显旧态，下一帧自愈——不做逐字段比对的复杂对账。
+  // Bug4：新 snapshot 到达即按 change **逐条**清乐观 patch——只清「已落地（真值达目标）或已离开
+  // 施加基线（server 已推进）」的那条，保留其余项目仍在途、尚未反映的 patch。修复前是每帧
+  // `setPatches(new Map())` 整清，多项目并发时 A 的放行/重试未落地就被无关项目 Y 的 SSE 帧清掉 →
+  // A 行回弹抖动。change 已不在快照里（归档/移除）→ 视作已落地一并清。
   useEffect(() => {
-    setPatches((prev) => (prev.size === 0 ? prev : new Map()))
+    setPatches((prev) => {
+      if (prev.size === 0) return prev
+      const next = new Map(prev)
+      let changed = false
+      for (const [key, patch] of prev) {
+        const at = key.indexOf('@')
+        const name = key.slice(0, at)
+        const root = key.slice(at + 1)
+        const change = snapshot?.projects.find((p) => p.root === root)?.changes.find((c) => c.name === name)
+        if (!change || patchLanded(patch, change) || patchMovedFromBase(patch, change)) {
+          next.delete(key)
+          changed = true
+        }
+      }
+      return changed ? next : prev
+    })
   }, [snapshot])
 
   // 乐观投影：把在途动作的 patch 叠加到 snapshot 上，selectProgress 及所有下游（徽章/箭头带/
@@ -285,6 +323,15 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
     })
   }
 
+  /** Bug4：从当前（未 patch 的）snapshot 取某 change 的真值基线，供 patch 落地/让位判定。
+   *  字段值经 fieldStr 归一为字符串（change.fields 值可能是 string[]），与 patch/比较口径一致。 */
+  function baseOf(root: string, name: string): RowPatch['base'] {
+    const change = snapshot?.projects.find((p) => p.root === root)?.changes.find((c) => c.name === name)
+    const fields: Record<string, string> = {}
+    if (change) for (const k of Object.keys(change.fields)) fields[k] = fieldStr(change, k)
+    return { phase: change?.phase ?? '', fields }
+  }
+
   /**
    * afk 三动作（终止=cancel / 重试=retry / 放弃=dismiss，决议 #13 文案口径 = demo v5）。
    * 乐观 patch：retry→queued+attempts 清零、dismiss→off（服务端 dismissAfkRun 同语义）；
@@ -295,11 +342,12 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
     if (busyRows.has(key)) return
     setBusy(key, true)
     const label = t(`progress.act_${kind}`)
+    const base = baseOf(root, name) // Bug4：施加即快照真值基线
     const patch: RowPatch | null =
       kind === 'retry'
-        ? { fields: { automation: 'queued', automation_attempts: '0' } }
+        ? { base, fields: { automation: 'queued', automation_attempts: '0' } }
         : kind === 'dismiss'
-          ? { fields: { automation: 'off' } }
+          ? { base, fields: { automation: 'off' } }
           : null
     if (patch) setPatch(key, patch)
     try {
@@ -328,7 +376,7 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
     if (busyRows.has(key)) return
     setBusy(key, true)
     const label = planned.backward ? t('progress.act_reject') : t('progress.act_pass')
-    setPatch(key, { phase: planned.to })
+    setPatch(key, { base: baseOf(root, name), phase: planned.to })
     try {
       await postTransition(name, root, planned.event)
       onToast?.(t('progress.act_ok', { name, label }))

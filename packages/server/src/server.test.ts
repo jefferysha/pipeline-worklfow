@@ -2144,3 +2144,48 @@ describe('GET /api/afk/readiness —— AFK 就绪三灯(v6 T4)', () => {
     expect(r.status).toBe(403)
   })
 })
+
+/**
+ * Bug1：此前只有 secrets/docker/readiness 三个 GET 有 isLocalHost 守卫，其余只读数据端点
+ * （snapshot / afk log / change history / workflows / config / loops / traces / hooks / automation
+ * / skills）全无 → evil.com DNS 重绑定到 127.0.0.1 后可被受害者浏览器同源读走全部项目路径、
+ * 状态、run-log（可能含 token）、yaml。修法：handleGet 顶部统一施加 Host 守卫（landing/静态/health
+ * 除外）。这里钉「非本地 Host → 403」在全部此前无守卫的端点上都成立，且本地 Host 不被误伤。
+ */
+describe('Bug1：GET 只读数据端点 DNS 重绑定 Host 守卫（统一补齐）', () => {
+  const EVIL = { Host: 'evil.example.com' }
+
+  it('此前无守卫的 GET 端点在伪造 Host 下一律 403', async () => {
+    const h = await startWithConfig()
+    const rootQ = `root=${encodeURIComponent(h.root)}`
+    const paths = [
+      '/api/snapshot',
+      '/api/afk/snapshot',
+      '/api/afk/log',
+      `/api/afk/${h.name}/log?${rootQ}`,
+      `/api/change/${h.name}/history?${rootQ}`,
+      '/api/loops/snapshot',
+      '/api/traces/sessions',
+      '/api/traces/records?session=x',
+      '/api/config',
+      '/api/skills/registry',
+      `/api/hooks?${rootQ}`,
+      `/api/automation?${rootQ}`,
+      `/api/workflows?${rootQ}`,
+      `/api/workflows/whatever?${rootQ}`,
+    ]
+    for (const p of paths) {
+      const r = await reqGet(h.port, p, '127.0.0.1', EVIL)
+      expect(r.status, `${p} 应被 Host 守卫拒绝为 403`).toBe(403)
+    }
+  })
+
+  it('本地 Host 不受误伤：抽样端点仍正常响应；health 明确保持开放（探针语义，不在守卫范围）', async () => {
+    const h = await startWithConfig()
+    expect((await reqGet(h.port, '/api/snapshot')).status).toBe(200)
+    expect((await reqGet(h.port, '/api/config')).status).toBe(200)
+    expect((await reqGet(h.port, '/api/loops/snapshot')).status).toBe(200)
+    // health 探针位于守卫之前，任意 Host 仍放行（不改其既有探针语义）
+    expect((await reqGet(h.port, '/api/health', '127.0.0.1', EVIL)).status).toBe(200)
+  })
+})

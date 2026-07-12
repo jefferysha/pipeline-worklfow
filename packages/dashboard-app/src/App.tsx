@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Component, useCallback, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactNode } from 'react'
 import { ApiError, postTransition, unregisterProject } from './api/client'
 import { I18nProvider, useT } from './i18n'
 import type { Lang } from './i18n/translations'
@@ -301,10 +301,54 @@ function AppShell(): JSX.Element {
   )
 }
 
+/** ErrorBoundary 兜底 UI（函数式，处于 I18nProvider 内 → 可用 useT 本地化文案）。 */
+function ErrorFallback(): JSX.Element {
+  const { t } = useT()
+  return (
+    <div className="app-error" role="alert" data-testid="app-error-boundary">
+      <p className="view__note view__note--error">{t('common.app_error')}</p>
+      <button type="button" className="btn" onClick={() => { try { location.reload() } catch { /* ignore */ } }}>
+        {t('common.app_error_reload')}
+      </button>
+    </div>
+  )
+}
+
+/**
+ * 顶层 ErrorBoundary（Bug3 配套）：任意子树 render 抛错时局部降级兜底，不再整页白屏。client.ts 的
+ * readiness 形状校验是第一道，本 boundary 是兜底第二道——任何未预期的 render 抛错都被接住，退化为
+ * 一屏可读的错误 + 刷新入口。React ErrorBoundary 必须是类组件（getDerivedStateFromError）。
+ */
+interface ErrorBoundaryState {
+  hasError: boolean
+}
+export class ErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryState> {
+  state: ErrorBoundaryState = { hasError: false }
+
+  static getDerivedStateFromError(): ErrorBoundaryState {
+    return { hasError: true }
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo): void {
+    // 诊断留痕（不吞错）：daemon/浏览器 console 可见，不影响降级 UI。
+    try {
+      console.error('[dashboard] render 抛错，已被顶层 ErrorBoundary 兜底：', error, info.componentStack)
+    } catch {
+      /* ignore */
+    }
+  }
+
+  render(): ReactNode {
+    return this.state.hasError ? <ErrorFallback /> : this.props.children
+  }
+}
+
 export function App(): JSX.Element {
   return (
     <I18nProvider>
-      <AppShell />
+      <ErrorBoundary>
+        <AppShell />
+      </ErrorBoundary>
     </I18nProvider>
   )
 }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { deleteSecret, fetchSecrets, postSecret, type WbSecretsKeys } from '../api/client'
 import { useT } from '../i18n'
 
@@ -33,18 +33,30 @@ export function SecretsCard({ onChanged }: SecretsCardProps): JSX.Element {
   const [busy, setBusy] = useState(false)
   const [opError, setOpError] = useState<string | null>(null)
 
+  // Bug7：reload seq 守卫（参照 SkillChain/SkillHealthPanel）——挂载 + 每次保存/删除后都重拉，
+  // 无守卫时慢响应会盖快响应（out-of-order），卸载后回来则 setState-after-unmount。每次 reload 递增
+  // seq，仅最新一发的响应落态；卸载时再 +1 令全部在途失效。
+  const seqRef = useRef(0)
   function reload(): void {
+    const seq = ++seqRef.current
     fetchSecrets()
       .then((k) => {
+        if (seqRef.current !== seq) return
         setKeys(k)
         setLoadError(null)
       })
       .catch((err: unknown) => {
+        if (seqRef.current !== seq) return
         setLoadError(t('workbench.sc_load_error', { msg: err instanceof Error ? err.message : t('workbench.lp_network_error') }))
       })
   }
-  // 挂载拉一次(机器级资源,与 root 无关)。
-  useEffect(reload, []) // eslint-disable-line react-hooks/exhaustive-deps
+  // 挂载拉一次(机器级资源,与 root 无关)；卸载令在途 reload 失效。
+  useEffect(() => {
+    reload()
+    return () => {
+      seqRef.current += 1
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   function startEdit(key: EditableKey): void {
     setEditing(key)

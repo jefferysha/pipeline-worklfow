@@ -334,3 +334,79 @@ describe('AutomationCard G2:docker 就绪灯「怎么装」引导', () => {
     expect(screen.queryByTestId('afk-rd-docker-howto')).toBeNull()
   })
 })
+
+/**
+ * Bug2：docker 不可用时 image inspect 被短路 → present 恒 false，但此时叫用户「复制 build 命令」
+ * 是走不通的（build 本身需 docker，必失败）。修：build 引导 gate 在 docker.available 之后；docker
+ * 没起时改明示「先起 docker」，不给失败 CTA。
+ */
+describe('AutomationCard Bug2：docker 未起时镜像灯不给走不通的 build CTA', () => {
+  it('docker.available=false + 镜像未就绪 → 不渲染 build 复制钮，改明示「先起 docker」', async () => {
+    readinessResponse = () =>
+      new Response(
+        JSON.stringify(
+          READY_BODY({
+            docker: { available: false },
+            image: { configured: 'sandcastle:local', present: false, build_hint: 'bash tools/sandcastle/build.sh' },
+          }),
+        ),
+        { status: 200 },
+      )
+    renderCard()
+    await screen.findByTestId('afk-rd')
+    // build 复制钮不出现（docker 没起 → build 必失败，不给走不通的引导）
+    expect(screen.queryByTestId('afk-rd-build-copy')).toBeNull()
+    // 改为「先起 docker」引导（明示前置）
+    const needs = await screen.findByTestId('afk-rd-image-needs-docker')
+    expect((needs.textContent ?? '').toLowerCase()).toContain('docker')
+  })
+
+  it('docker.available=true + 镜像未就绪 → 仍给 build_hint 复制钮（健康 docker 下 build 可行），无「先起 docker」', async () => {
+    readinessResponse = () =>
+      new Response(
+        JSON.stringify(
+          READY_BODY({
+            docker: { available: true },
+            image: { configured: 'sandcastle:local', present: false, build_hint: 'bash tools/sandcastle/build.sh' },
+          }),
+        ),
+        { status: 200 },
+      )
+    renderCard()
+    await screen.findByTestId('afk-rd-build-copy')
+    expect(screen.queryByTestId('afk-rd-image-needs-docker')).toBeNull()
+  })
+})
+
+/**
+ * Bug3：readiness 响应盲 `as` 强转 + 深访问——体形错误的 200（缺 credentials.codex 等）落态后，
+ * render 期 `readiness.credentials.codex.OPENAI_API_KEY.set` 抛 undefined 访问 → 无 ErrorBoundary
+ * → 白屏。修：接缝处（client.ts）对 readiness 浅层形状校验，形不对当错误 → 既有 .catch→setReadiness(null)
+ * 整区不渲染。
+ */
+describe('AutomationCard Bug3：畸形 readiness 不崩，形状校验降级', () => {
+  it('200 但缺 credentials.codex → 不崩，灯区整体不渲染（形不对当 null 降级）', async () => {
+    readinessResponse = () =>
+      new Response(
+        JSON.stringify({
+          ok: true,
+          docker: { available: true },
+          image: { configured: 'sandcastle:local', present: true, build_hint: 'x' },
+          credentials: { 'claude-code': { CLAUDE_CODE_OAUTH_TOKEN: { set: false } } }, // 缺 codex
+        }),
+        { status: 200 },
+      )
+    renderCard()
+    await waitFor(() => expect(screen.getByTestId('afk-image')).toBeInTheDocument())
+    expect(screen.queryByTestId('afk-rd')).toBeNull()
+    expect(screen.queryByTestId('afk-rd-cred-codex')).toBeNull()
+  })
+
+  it('200 但 docker 字段整个缺失 → 同样降级不崩', async () => {
+    readinessResponse = () =>
+      new Response(JSON.stringify({ ok: true, image: { present: true }, credentials: {} }), { status: 200 })
+    renderCard()
+    await waitFor(() => expect(screen.getByTestId('afk-image')).toBeInTheDocument())
+    expect(screen.queryByTestId('afk-rd')).toBeNull()
+  })
+})

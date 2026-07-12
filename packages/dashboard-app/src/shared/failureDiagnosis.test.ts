@@ -74,3 +74,52 @@ describe('diagnoseFailure 成因分类（W3 ①）', () => {
     expect(diagnoseFailure('verify: 2 failed · auth.test.ts').cause).toBe('unknown')
   })
 })
+
+// ── Bug5：成因分类修复 —— ①补 conflict/timeout/network 三类（此前全落 unknown 误导跑 doctor）；
+//    ②收窄 IMAGE_RE 防 sandcastle.test.ts 测试文件名被判 missing-image；③收窄 401（栈行号/第三方
+//    401 不再误判凭证）；④unauthorized+镜像上下文 → 镜像鉴权（missing-image）而非 missing-credential；
+//    ⑤docker 泛词不再吞 ENOTFOUND registry-1.docker.io 网络错。照 auth.test.ts 正向的钉法补反例。──
+describe('Bug5 成因分类修复：新增类 + 收窄误判', () => {
+  it('①冲突类：git merge conflict / 中文冲突 → conflict（不再 unknown 误导 doctor；无单一命令 null）', () => {
+    for (const s of [
+      'CONFLICT (content): Merge conflict in src/app.ts',
+      'error: could not apply 3f2a… hint: fix conflicts and then commit the result',
+      'AFK 变基失败：存在冲突，需人工解决',
+    ]) {
+      expect(diagnoseFailure(s)).toEqual({ cause: 'conflict', fixCommand: null })
+    }
+  })
+
+  it('①超时类：merge timed out / operation timeout / 中文超时 → timeout（非 unknown；瞬态无命令 null）', () => {
+    for (const s of ['error: merge timed out after 300s', 'operation timed out', '请求超时，未收到响应']) {
+      expect(diagnoseFailure(s)).toEqual({ cause: 'timeout', fixCommand: null })
+    }
+  })
+
+  it('①⑤网络类：ENOTFOUND registry-1.docker.io / getaddrinfo → network（不被 \\bdocker\\b 吞成 missing-docker）', () => {
+    expect(diagnoseFailure('getaddrinfo ENOTFOUND registry-1.docker.io')).toEqual({ cause: 'network', fixCommand: null })
+    expect(diagnoseFailure('request to https://api.openai.com failed: EAI_AGAIN').cause).toBe('network')
+    expect(diagnoseFailure('网络不可达：无法解析域名 registry.example.com').cause).toBe('network')
+  })
+
+  it('②收窄 IMAGE：sandcastle.test.ts 测试文件名不再被判 missing-image（→ unknown）', () => {
+    expect(diagnoseFailure('verify: 3 failed · sandcastle.test.ts').cause).not.toBe('missing-image')
+    expect(diagnoseFailure('verify: 3 failed · sandcastle.test.ts').cause).toBe('unknown')
+    // 真镜像引用（冒号 tag）仍判 missing-image，收窄不误伤
+    expect(diagnoseFailure("Unable to find image 'sandcastle:local' locally").cause).toBe('missing-image')
+  })
+
+  it('③收窄 401：栈行号 / 裸状态码 401 不再误判 missing-credential（→ unknown）', () => {
+    expect(diagnoseFailure('TypeError: cannot read x (worker.js:401:18)').cause).toBe('unknown')
+    expect(diagnoseFailure('upstream service returned status 401').cause).not.toBe('missing-credential')
+    // 明确 authentication 语境仍判凭证（回归：与既有 401+authentication 用例一致）
+    expect(diagnoseFailure('authentication failed: token expired (401)').cause).toBe('missing-credential')
+  })
+
+  it('④unauthorized + 镜像/registry 上下文 → missing-image（registry 鉴权），不被 credential 最前截胡', () => {
+    expect(diagnoseFailure('docker pull sandcastle:local: unauthorized: authentication required').cause).toBe('missing-image')
+    expect(
+      diagnoseFailure("Error response from daemon: pull access denied for foo, repository may require 'docker login'").cause,
+    ).toBe('missing-image')
+  })
+})

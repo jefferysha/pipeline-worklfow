@@ -183,7 +183,10 @@ export function AutomationCard({ root, refreshToken = 0 }: AutomationCardProps):
           <span className="afk-rd-item" data-testid="afk-rd-image" title={readiness.image.configured}>
             {t('workbench.afk_rd_image')}:{readiness.image.present ? t('workbench.afk_rd_ok') : t('workbench.afk_rd_no')}
           </span>
-          {!readiness.image.present && (
+          {/* Bug2：build 引导 gate 在 docker.available 之后——docker 没起时 image inspect 被短路，present
+              恒 false 并非「镜像真缺」，且 build 本身需 docker 必失败；故此时不给走不通的 build CTA，改明示
+              「先起 docker」。docker 起着且镜像真缺 → 才给 build_hint 复制钮。 */}
+          {!readiness.image.present && readiness.docker.available && (
             <button
               type="button"
               className="wb-chip-badge"
@@ -193,6 +196,9 @@ export function AutomationCard({ root, refreshToken = 0 }: AutomationCardProps):
             >
               {t('workbench.afk_rd_build_copy')}
             </button>
+          )}
+          {!readiness.image.present && !readiness.docker.available && (
+            <span className="afk-rd-howto" data-testid="afk-rd-image-needs-docker">{t('workbench.afk_rd_image_needs_docker')}</span>
           )}
           {/* full-install W1：凭证 per-runner 双灯——claude-code 与 codex 同等可见(各自灯色+文案,不靠 tooltip)。
               旅程唯一真·不对等修复(P1-F1):数据齐(credentials 含两 runner),此前 UI 只渲染 claude-code。 */}

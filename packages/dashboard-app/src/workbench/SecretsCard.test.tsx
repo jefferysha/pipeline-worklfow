@@ -3,7 +3,7 @@
  * 保存-删除真 POST-DELETE 且成功后重拉+onChanged(就绪三灯联动信号)/CODEX_HOME 只读说明
  * (决策 C2b,无编辑入口)/优先级提示。fetch 打桩;server 契约由 server.test.ts 钉住。
  */
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '../i18n'
 import { SecretsCard } from './SecretsCard'
@@ -131,5 +131,59 @@ describe('SecretsCard —— 前置缺失引导「怎么拿」(G2:不光报缺,�
     const row = screen.getByTestId('sc-row-CLAUDE_CODE_OAUTH_TOKEN')
     expect(row.textContent).not.toContain('tok…7f3a') // 编辑态不显掩码
     expect(row.textContent).toContain('claude setup-token') // 引导仍在,且是静态文本
+  })
+})
+
+/**
+ * Bug7：挂载/动作后 reload 无 seq 守卫 → 慢响应盖快响应（out-of-order）/setState-after-unmount。
+ * 参照 SkillChain/SkillHealthPanel 的守卫。这里以「连保存两次」制造两发 reload 竞态，验后发起的
+ * 快响应不被先发起的慢响应覆盖。
+ */
+describe('SecretsCard Bug7：reload seq 守卫（慢响应不盖快响应）', () => {
+  it('out-of-order：先发起的慢 reload 回来不覆盖后发起的快 reload 落地值', async () => {
+    let getCount = 0
+    const laterGets: Array<(r: Response) => void> = []
+    const initial = { CLAUDE_CODE_OAUTH_TOKEN: { set: true, masked: 'v1…7f3a' }, OPENAI_API_KEY: { set: false } }
+    global.fetch = vi.fn(async (url: string, opts?: RequestInit) => {
+      if (url === '/api/secrets' && opts?.method === 'POST') {
+        return new Response(JSON.stringify({ ok: true }), { status: 200 })
+      }
+      if (url === '/api/secrets') {
+        getCount += 1
+        if (getCount === 1) return new Response(JSON.stringify({ ok: true, keys: initial }), { status: 200 })
+        return new Promise<Response>((resolve) => laterGets.push(resolve)) // GET#2、#3 手控解析顺序
+      }
+      throw new Error(`unexpected fetch ${url}`)
+    }) as unknown as typeof fetch
+
+    render(
+      <I18nProvider>
+        <SecretsCard />
+      </I18nProvider>,
+    )
+    await screen.findByTestId('sc-masked-CLAUDE_CODE_OAUTH_TOKEN') // GET#1 落定
+
+    // 保存#1 → reload GET#2（先发起，稍后让它慢回）
+    fireEvent.click(screen.getByTestId('sc-edit-CLAUDE_CODE_OAUTH_TOKEN'))
+    fireEvent.change(screen.getByTestId('sc-input-CLAUDE_CODE_OAUTH_TOKEN'), { target: { value: 'v2' } })
+    fireEvent.click(screen.getByTestId('sc-save-CLAUDE_CODE_OAUTH_TOKEN'))
+    await waitFor(() => expect(laterGets.length).toBe(1))
+
+    // 保存#2 → reload GET#3（后发起，让它先回）
+    fireEvent.click(screen.getByTestId('sc-edit-CLAUDE_CODE_OAUTH_TOKEN'))
+    fireEvent.change(screen.getByTestId('sc-input-CLAUDE_CODE_OAUTH_TOKEN'), { target: { value: 'v3' } })
+    fireEvent.click(screen.getByTestId('sc-save-CLAUDE_CODE_OAUTH_TOKEN'))
+    await waitFor(() => expect(laterGets.length).toBe(2))
+
+    // GET#3（后发起）先回 → v3
+    await act(async () => {
+      laterGets[1]!(new Response(JSON.stringify({ ok: true, keys: { CLAUDE_CODE_OAUTH_TOKEN: { set: true, masked: 'v3…zzzz' }, OPENAI_API_KEY: { set: false } } }), { status: 200 }))
+    })
+    // GET#2（先发起）后回 → v2（stale）——有 seq 守卫则被忽略
+    await act(async () => {
+      laterGets[0]!(new Response(JSON.stringify({ ok: true, keys: { CLAUDE_CODE_OAUTH_TOKEN: { set: true, masked: 'v2…yyyy' }, OPENAI_API_KEY: { set: false } } }), { status: 200 }))
+    })
+
+    expect(screen.getByTestId('sc-masked-CLAUDE_CODE_OAUTH_TOKEN').textContent).toBe('v3…zzzz')
   })
 })

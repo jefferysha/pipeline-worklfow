@@ -30,6 +30,9 @@ export const zh: Dict = {
     // （SSE 断线后并无轮询兜底）；新文案只陈述真相 + 提示数据可能过期，配断线横幅的「重连」钮。
     offline: '连接断开——数据可能过期',
     reconnect: '重连',
+    // Bug3 配套：顶层 ErrorBoundary 兜底文案（任意子树 render 抛错 → 局部降级不白屏）。
+    app_error: '界面出了点问题——已隔离到这块，刷新即可恢复；其余数据不受影响。',
+    app_error_reload: '刷新',
   },
   phases: {
     open: '立项', explore: '调研', spec: '规格', build: '实现',
@@ -453,6 +456,9 @@ export const zh: Dict = {
     afk_rd_no: '未就绪',
     afk_rd_unset: '未配置',
     afk_rd_build_copy: '⧉ 复制构建命令',
+    // Bug2：docker 没起时镜像 inspect 被短路，present 恒 false 并非「真缺镜像」，且 build 需 docker 必失败——
+    //       故此时不给走不通的 build 复制钮，改明示先起 docker。
+    afk_rd_image_needs_docker: '先装/起 Docker 才能检测或构建镜像',
     afk_rd_codex_hint: 'codex 路径:OPENAI_API_KEY {o} · CODEX_HOME {c}',
     // full-install W1：凭证 per-runner 双灯——codex 与 claude-code 同等可见(去「(claude-code)」硬编码);
     // caveat 诚实标注凭证灯是服务进程视角,终端 doctor/setup 为凭证权威(docker/镜像灯保持权威,凭证灯标参考)。
@@ -572,11 +578,17 @@ export const zh: Dict = {
     'cause_missing-credential': '缺凭证——AFK runner 没拿到可用凭证，先配好再重试',
     'cause_missing-image': '缺沙箱镜像——本机没有可用的 AFK 镜像，先构建再重试',
     'cause_missing-docker': 'Docker 未运行——启动 Docker 后重试',
+    cause_conflict: '代码冲突——自动合并/变基遇到冲突，需到终端人工解决后再重试',
+    cause_timeout: '操作超时——多为瞬态，稍后重试；若持续请查网络或负载',
+    cause_network: '网络不可达——无法解析/连接远端（镜像仓库/API），检查网络或代理后重试',
     'cause_agent-nonzero': 'agent 非零退出——看下方原文或运行日志定位，多为可重试的瞬态失败',
     cause_unknown: '成因未自动识别——跑一次就绪诊断看环境哪里没配好',
     'short_missing-credential': '缺凭证',
     'short_missing-image': '缺镜像',
     'short_missing-docker': 'Docker 未运行',
+    short_conflict: '代码冲突',
+    short_timeout: '超时',
+    short_network: '网络不可达',
     'short_agent-nonzero': 'agent 非零退出',
     short_unknown: '成因未识别',
     fix_label: '修复命令',
@@ -601,6 +613,8 @@ export const en: Dict = {
     connected: 'Live connected',
     offline: 'Disconnected — data may be stale',
     reconnect: 'Reconnect',
+    app_error: 'Something went wrong in the UI — it has been contained here; reload to recover. Other data is unaffected.',
+    app_error_reload: 'Reload',
   },
   phases: {
     open: 'Open', explore: 'Explore', spec: 'Spec', build: 'Build',
@@ -991,6 +1005,7 @@ export const en: Dict = {
     afk_rd_no: 'not ready',
     afk_rd_unset: 'not set',
     afk_rd_build_copy: '⧉ Copy build command',
+    afk_rd_image_needs_docker: 'Install/start Docker before the image can be checked or built',
     afk_rd_codex_hint: 'codex path: OPENAI_API_KEY {o} · CODEX_HOME {c}',
     // full-install W1: per-runner credential lights (codex equally visible) + honest service-process caveat.
     afk_rd_cred_codex: 'credential · codex',
@@ -1095,11 +1110,17 @@ export const en: Dict = {
     'cause_missing-credential': 'Missing credential — the AFK runner has no usable credential; set it up, then retry',
     'cause_missing-image': 'Missing sandbox image — no AFK image is built on this machine; build it, then retry',
     'cause_missing-docker': 'Docker is not running — start Docker, then retry',
+    cause_conflict: 'Merge conflict — automatic merge/rebase hit a conflict; resolve it in your terminal, then retry',
+    cause_timeout: 'Timed out — usually transient; retry shortly, and check network/load if it persists',
+    cause_network: 'Network unreachable — could not resolve/reach a remote (registry/API); check your network or proxy, then retry',
     'cause_agent-nonzero': 'Agent exited non-zero — see the raw error or run log below; often a retryable transient failure',
     cause_unknown: 'Cause not auto-classified — run the readiness diagnostics to see what is unconfigured',
     'short_missing-credential': 'missing credential',
     'short_missing-image': 'missing image',
     'short_missing-docker': 'Docker not running',
+    short_conflict: 'merge conflict',
+    short_timeout: 'timed out',
+    short_network: 'network unreachable',
     'short_agent-nonzero': 'agent exited non-zero',
     short_unknown: 'cause unknown',
     fix_label: 'Fix command',

@@ -35,6 +35,9 @@ export function SkillTransferModal({ selected, onSave, onCancel }: SkillTransfer
   const searchRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
+    // Bug6：cancelled 守卫（参照 SkillChain/SkillHealthPanel）——effect 依赖 [t]，切语言即重跑
+    // 发起第二发 fetch；先发起的慢响应回来若无守卫会覆盖后发起的快响应，卸载后回来则 setState-after-unmount。
+    let cancelled = false
     fetch('/api/skills/registry', { headers: { Accept: 'application/json' } })
       .then(async (r) => {
         // r.ok 检查必须在 r.json() 之前（whole-branch review 抓出的真实回归）：server 对错误
@@ -44,10 +47,15 @@ export function SkillTransferModal({ selected, onSave, onCancel }: SkillTransfer
         if (!r.ok) throw new Error((await readErrorDetail(r)) || t('skill_transfer.load_error_status', { status: r.status }))
         return r.json() as Promise<{ skills: WbSkillEntry[] }>
       })
-      .then((body) => setAll(body.skills))
-      .catch((err: unknown) =>
-        setError(t('skill_transfer.load_error', { msg: err instanceof Error ? err.message : t('skill_transfer.network_error') })),
-      )
+      .then((body) => {
+        if (!cancelled) setAll(body.skills)
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setError(t('skill_transfer.load_error', { msg: err instanceof Error ? err.message : t('skill_transfer.network_error') }))
+      })
+    return () => {
+      cancelled = true
+    }
   }, [t])
 
   const available = all.filter((e) => !chosen.includes(e.name) && e.name.toLowerCase().includes(query.toLowerCase()))

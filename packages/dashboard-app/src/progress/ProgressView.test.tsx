@@ -708,3 +708,44 @@ describe('ProgressView 失败行短成因提示（W3 ④）', () => {
     expect(screen.getByTestId('prg-badge-hotfix-login').textContent).toContain('失败 ×3')
   })
 })
+
+/**
+ * Bug4：乐观 patch 此前在每个 snapshot 帧被整清（useEffect(()=>setPatches(new Map()),[snapshot])），
+ * 多项目并发时对 A 点放行/重试未落地就被无关项目的 SSE 帧清掉 → A 行回弹抖动。修：patch 按 change
+ * keyed，只清「已在 snapshot 落地（真值达目标，或已离开施加基线）」的那条，不整清；未落地的保留。
+ */
+describe('ProgressView Bug4：乐观 patch 按 change 落地清除，不被无关帧整清', () => {
+  // 两 root（singleRoot 恒 null，不触发 /api/automation 探测），仅改 hotfix-login 字段构造各帧。
+  function fixtureWith(hotfixFields: Record<string, string>): Snapshot {
+    return makeSnapshot([
+      makeProject(ROOT_A, [makeChange('hotfix-login', 'build', { track: 'backend', fields: hotfixFields })]),
+      makeProject(ROOT_B, [makeChange('changelog-cn', 'review', { track: 'chat', fields: { workflow: 'release-train' } })]),
+    ])
+  }
+  function viewAt(snapshot: Snapshot): JSX.Element {
+    return (
+      <I18nProvider>
+        <ProgressView snapshot={snapshot} loading={false} error={null} currentRoot="" rulesByKey={makeRules()} onToast={vi.fn()} onRefresh={vi.fn()} />
+      </I18nProvider>
+    )
+  }
+
+  it('retry 后无关帧到达 → 未落地 patch 保留（不回弹）；真落地后才清', async () => {
+    const { rerender } = render(viewAt(fixtureWith({ automation: 'failed', automation_attempts: '3' })))
+    // 乐观重试 hotfix-login（ROOT_A）→ 徽章「排队」
+    fireEvent.click(screen.getByTestId('prg-retry-hotfix-login'))
+    await waitFor(() => expect(screen.getByTestId('prg-badge-hotfix-login').textContent).toContain('排队'))
+
+    // 无关帧：新 snapshot 对象，hotfix-login 仍为 failed ×3（未反映本次 retry）——
+    // 修复前会整清 patch → 徽章回弹「失败 ×3」；修复后 patch 保留 → 仍「排队」。
+    rerender(viewAt(fixtureWith({ automation: 'failed', automation_attempts: '3' })))
+    expect(screen.getByTestId('prg-badge-hotfix-login').textContent).toContain('排队')
+    expect(screen.getByTestId('prg-badge-hotfix-login').textContent).not.toContain('失败')
+
+    // 真落地帧：hotfix-login 真值变为 queued → patch 已落地 → 清除。
+    rerender(viewAt(fixtureWith({ automation: 'queued' })))
+    // 之后再来一帧把它打回 failed：patch 若已清则如实回显「失败」；若没清会仍显「排队」——据此证明确已清除。
+    rerender(viewAt(fixtureWith({ automation: 'failed', automation_attempts: '3' })))
+    expect(screen.getByTestId('prg-badge-hotfix-login').textContent).toContain('失败')
+  })
+})

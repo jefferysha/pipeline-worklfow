@@ -310,6 +310,15 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
     if (path === '/api/health') {
       return sendJson(res, 200, { ok: true, scope: 'global', version, pid: process.pid })
     }
+    // ── DNS 重绑定守卫（Bug 修复）：除落地页 / 静态 /assets / health 探针（以上均已 return）外，
+    //    所有 /api 只读数据端点统一挡伪造 Host。此前仅 secrets/docker/readiness 三个端点各自 inline
+    //    了这道校验，其余（snapshot / afk log / change history / workflows / config / loops / traces /
+    //    hooks / automation / skills）全无 → evil.com 经 DNS 重绑定到 127.0.0.1 后，受害者浏览器可同源
+    //    读走全部项目路径、状态、run-log（可能含 token）、yaml。统一在此施加，语义同 handlePost 首道守卫；
+    //    下方 secrets/docker/readiness 的 inline 守卫遂归并至此（不再各自重复）。
+    if (!isLocalHost(req.headers.host, boundPort)) {
+      return sendJson(res, 403, { ok: false, error: 'Host header 不合法（疑似 DNS 重绑定攻击）' })
+    }
     if (path === '/api/snapshot') {
       try {
         return sendJson(res, 200, await buildSnapshot(snapshotDeps()))
@@ -505,13 +514,9 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
     // ── v6 T1：GET /api/secrets —— 机器级凭证存储只读探测（掩码，永不回明文）──
     //    不要求 root（机器级资源，与 GET /api/skills/registry、B 节 GET /api/docker/images
     //    同类「无信任锚分支」的端点，proposal C.3 明确本端点无 root 概念）；不要求 token
-    //    （维持 GET 惯例，同 B.2 判断），但补一道其余既有 GET 完全没有的 isLocalHost Host
-    //    头校验——本端点碰的是凭证子系统，即便只回掩码也比其余纯读 GET 多一分谨慎（proposal
-    //    决策点 C.3：masked 值本身不可被当凭证使用，但既然要单独加码就顺手做了）。
+    //    （维持 GET 惯例，同 B.2 判断）；Host 头 DNS 重绑定守卫已由 handleGet 顶部统一施加
+    //    （本端点碰凭证子系统本就该有，proposal 决策点 C.3——现在全部只读 GET 都有了）。
     if (path === '/api/secrets') {
-      if (!isLocalHost(req.headers.host, boundPort)) {
-        return sendJson(res, 403, { ok: false, error: 'Host header 不合法（疑似 DNS 重绑定攻击）' })
-      }
       try {
         return sendJson(res, 200, buildSecretsResponse(paths.secretsPath))
       } catch (e) {
@@ -519,24 +524,18 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
       }
     }
     // ── v6 T3：GET /api/docker/images —— 本机 docker 镜像列表（repo:tag，过滤悬空）。──
-    //    无 root 概念（单机资源，同 /api/secrets 一类）；不要求 token 但加 isLocalHost（决策
-    //    B.2：本机信息端点补 Host 校验）。docker 不可用/超时(5s) → 200 + available:false
+    //    无 root 概念（单机资源，同 /api/secrets 一类）；不要求 token（Host 头 DNS 重绑定守卫
+    //    已由 handleGet 顶部统一施加，决策 B.2）。docker 不可用/超时(5s) → 200 + available:false
     //    （ok 恒 true——「没装 docker」是常态不是 HTTP 错误，前端据此降级纯文本框，B.1/B.3）。
     if (path === '/api/docker/images') {
-      if (!isLocalHost(req.headers.host, boundPort)) {
-        return sendJson(res, 403, { ok: false, error: 'Host header 不合法（疑似 DNS 重绑定攻击）' })
-      }
       const r = await listDockerImages(options.execDocker)
       return sendJson(res, 200, { ok: true, ...r })
     }
     // ── v6 T4：GET /api/afk/readiness?root= —— AFK 就绪三灯(docker/镜像/凭证)。──
     //    root 必填(镜像检查要读该 root 的 automation.json;显式缺失 400,未注册 404 信任锚);
-    //    isLocalHost 同 /api/secrets、/api/docker/images(本机信息端点);「没装/没建/没配」
-    //    是常态不是错误 → 恒 200,永不回凭证值(D.1 契约,与 /api/secrets 同条红线)。
+    //    Host 头 DNS 重绑定守卫已由 handleGet 顶部统一施加;「没装/没建/没配」是常态不是错误
+    //    → 恒 200,永不回凭证值(D.1 契约,与 /api/secrets 同条红线)。
     if (path === '/api/afk/readiness') {
-      if (!isLocalHost(req.headers.host, boundPort)) {
-        return sendJson(res, 403, { ok: false, error: 'Host header 不合法（疑似 DNS 重绑定攻击）' })
-      }
       const root = new URL(req.url ?? '/', 'http://localhost').searchParams.get('root') ?? ''
       if (root === '') return sendJson(res, 400, { ok: false, error: '缺少 root 参数' })
       if (!dedupeRoots(registry()).includes(resolvePath(root))) {

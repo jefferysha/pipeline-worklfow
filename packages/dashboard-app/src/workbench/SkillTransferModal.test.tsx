@@ -1,6 +1,6 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { I18nProvider } from '../i18n'
+import { I18nProvider, useT } from '../i18n'
 import { SkillTransferModal, type SkillTransferModalProps } from './SkillTransferModal'
 
 beforeEach(() => {
@@ -81,5 +81,46 @@ describe('SkillTransferModal', () => {
     await waitFor(() => expect(screen.getByPlaceholderText('Search…')).toBeInTheDocument())
     expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument()
+  })
+
+  /**
+   * Bug6：挂载 fetch 无 cancelled 守卫 → 慢响应盖快响应 / setState-after-unmount。effect 依赖 [t]，
+   * 切语言即重跑发起第二发 fetch；先发起的（stale）慢响应回来若无守卫会覆盖后发起的（fresh）快响应。
+   * 参照 SkillChain/SkillHealthPanel 的 cancelled 守卫。
+   */
+  it('Bug6：语言切换致 effect 重跑，先发起的慢响应回来不覆盖后发起的快响应（cancelled 守卫）', async () => {
+    const resolvers: Array<(r: Response) => void> = []
+    global.fetch = vi.fn(() => new Promise<Response>((resolve) => resolvers.push(resolve))) as unknown as typeof fetch
+
+    function Harness(): JSX.Element {
+      const { setLang } = useT()
+      return (
+        <>
+          <button data-testid="to-en" onClick={() => setLang('en')}>en</button>
+          <SkillTransferModal selected={[]} onSave={vi.fn()} onCancel={vi.fn()} />
+        </>
+      )
+    }
+    render(
+      <I18nProvider>
+        <Harness />
+      </I18nProvider>,
+    )
+    await waitFor(() => expect(resolvers.length).toBe(1)) // fetch#1（zh）在途
+    fireEvent.click(screen.getByTestId('to-en')) // 切 en → [t] 变 → effect 重跑
+    await waitFor(() => expect(resolvers.length).toBe(2)) // fetch#2（en）在途
+
+    // 后发起的 fetch#2 先回（快，fresh）
+    await act(async () => {
+      resolvers[1]!(new Response(JSON.stringify({ skills: [{ name: 'FRESH-second', installed: true, source: 'user' }] }), { status: 200 }))
+    })
+    // 先发起的 fetch#1 后回（慢，stale）——有守卫则被忽略，不覆盖
+    await act(async () => {
+      resolvers[0]!(new Response(JSON.stringify({ skills: [{ name: 'STALE-first', installed: true, source: 'user' }] }), { status: 200 }))
+    })
+
+    const available = screen.getByTestId('skill-available')
+    expect(available.textContent).toContain('FRESH-second')
+    expect(available.textContent).not.toContain('STALE-first')
   })
 })
