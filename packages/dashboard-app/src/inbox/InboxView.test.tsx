@@ -331,6 +331,71 @@ describe('InboxView 动作条（gate：放行/打回走 transition，demo v5 文
   })
 })
 
+/**
+ * P2-F3（旅程审查修）键盘拍板：此前 j/k/Enter/Esc 只导航，放行/打回全靠鼠标。新增——
+ *   · Shift+Enter = 放行焦点 gate 行第一前进边（Enter 已占详情开合，放行让避到组合键）；
+ *   · Backspace  = 打回焦点 gate 行第一回退边，经既有二次确认 Dialog（不绕过）。
+ * 复用详情动作条同一 apply()/setPending() 链路；守能力面模型——只对能拍板的 gate 行生效，
+ * 失败行（动作是重试/放弃）吞键不误触。
+ */
+describe('InboxView 键盘拍板（Shift+Enter 放行 / Backspace 打回，复用既有动作与二次确认 · P2-F3）', () => {
+  const snap = makeSnapshot([
+    makeProject('/repo', [
+      makeChange('login-flow', 'verify', { updated_at: '2026-07-08T00:00:00Z', fields: { ...VERIFY_OK } }),
+      makeChange('data-model', 'spec', { updated_at: '2026-07-07T00:00:00Z', fields: { ...DOCS_OK } }),
+    ]),
+  ])
+
+  it('Shift+Enter 放行焦点行第一前进边 → onTransition(name, root, 前进 event)，不弹二次确认 + toast', async () => {
+    const props = renderInbox({ snapshot: snap })
+    await settled()
+    // 焦点默认在首行 login-flow（verify gate，前进边 verify-pass）
+    fireEvent.keyDown(document, { key: 'Enter', shiftKey: true })
+    await waitFor(() => expect(props.onTransition).toHaveBeenCalledWith('login-flow', '/repo', 'verify-pass'))
+    expect(screen.queryByRole('dialog')).toBeNull() // 前进低风险，不过二次确认
+    await waitFor(() => expect(props.onToast).toHaveBeenCalled())
+  })
+
+  it('Backspace 打回焦点行第一回退边 → 先弹既有二次确认（不绕过），确认后走回退 event', async () => {
+    const props = renderInbox({ snapshot: snap })
+    await settled()
+    fireEvent.keyDown(document, { key: 'Backspace' })
+    expect(props.onTransition).not.toHaveBeenCalled() // 二次确认前不提交
+    expect(await screen.findByRole('dialog')).toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('inbox-confirm-yes'))
+    await waitFor(() => expect(props.onTransition).toHaveBeenCalledWith('login-flow', '/repo', 'verify-fail'))
+  })
+
+  it('键盘拍板作用于 kbd 焦点行（非默认首行）：j 下移后 Shift+Enter 放行第二行', async () => {
+    const props = renderInbox({ snapshot: snap })
+    await settled()
+    fireEvent.keyDown(document, { key: 'j' }) // 焦点 → data-model（spec gate）
+    fireEvent.keyDown(document, { key: 'Enter', shiftKey: true })
+    await waitFor(() => expect(props.onTransition).toHaveBeenCalledWith('data-model', '/repo', 'spec-complete'))
+  })
+
+  it('普通 Enter（无 Shift）仍只开合详情、不放行——放行绝不误触既有 Enter 语义', async () => {
+    const props = renderInbox({ snapshot: snap })
+    await settled()
+    fireEvent.keyDown(document, { key: 'Enter' }) // 首行默认已开 → 收起
+    expect(props.onTransition).not.toHaveBeenCalled()
+    expect(screen.getByTestId('inbox-collapsed')).toBeInTheDocument()
+  })
+
+  it('能力面守卫：失败行 Shift+Enter/Backspace 吞键（失败行动作是重试/放弃，非 gate 放行/打回）', async () => {
+    const failSnap = makeSnapshot([
+      makeProject('/repo', [makeChange('hotfix-login', 'build', { fields: { ...FAILED } })]),
+    ])
+    const props = renderInbox({ snapshot: failSnap })
+    await settled()
+    fireEvent.keyDown(document, { key: 'Enter', shiftKey: true })
+    fireEvent.keyDown(document, { key: 'Backspace' })
+    expect(props.onTransition).not.toHaveBeenCalled()
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(afkCalls).toHaveLength(0) // 也不误触发 afk 端点
+  })
+})
+
 describe('InboxView 动作条（失败卡：重试/放弃走 afk 端点 + busy 守卫）', () => {
   const snap = makeSnapshot([
     makeProject('/repo', [makeChange('hotfix-login', 'build', { fields: { ...FAILED } })]),

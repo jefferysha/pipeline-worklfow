@@ -151,6 +151,14 @@ function itemKey(it: InboxItem): string {
   return `${it.root}/${it.change.name}`
 }
 
+/** gate 行可走出边（正/反向未分组）——右栏详情动作条与键盘拍板同源取边，两处不漂移
+ *  （P2-F3：Shift+Enter 放行 / Backspace 打回复用同一出边计算，避免第二套判定悄悄漂移）。 */
+function plannedEdges(rules: WorkflowRules, phase: string): PlannedTransition[] {
+  return legalTargets(rules, phase)
+    .map((to) => plannedTransition(rules, phase, to))
+    .filter((p): p is PlannedTransition => p !== null)
+}
+
 /**
  * 收件箱 v5（T9）—— master-detail：左行列表（人话主文案 + 结论式 badge + 证据 chips）+
  * 右 356px sticky 详情（shared/TaskDetail variant='timeline'）。交互基准 demo v5 收件箱段：
@@ -203,11 +211,32 @@ export function InboxView({ snapshot, loading, error, currentRoot, rulesByKey, o
     function onKeyDown(e: KeyboardEvent): void {
       const target = e.target
       if (target instanceof HTMLElement && FOCUSABLE_BYPASS_TAGS.has(target.tagName)) return
+      // ── P2-F3 键盘拍板（守能力面模型：只对能拍板的 gate 焦点行生效）。放行的直觉键 Enter 已
+      //    被详情开合占用（见下 else if），故放行让避到组合键 Shift+Enter；打回用 Backspace（语义
+      //    近「退回上一步」）。两键都复用右栏动作条同一链路——放行走 apply()、打回走 setPending()
+      //    经既有二次确认 Dialog（不绕过）——不重写动作逻辑。失败行不在此列：其动作是重试/放弃
+      //    （afk 端点），非 gate 出边，focusedGateEdges 对 failed 态返回 null 直接吞键不误触。 ──
+      function focusedGateEdges(): { name: string; root: string; forward?: PlannedTransition; backward?: PlannedTransition } | null {
+        const item = items[kbdFocus]
+        if (!item) return null
+        const rules = rulesByKey.get(rulesKey(item.root, changeWorkflow(item.change)))
+        if (!rules || changeProgressState(item.change, rules) === 'failed') return null
+        const edges = plannedEdges(rules, item.change.phase)
+        return { name: item.change.name, root: item.root, forward: edges.find((p) => !p.backward), backward: edges.find((p) => p.backward) }
+      }
       if (e.key === 'j' || e.key === 'k') {
         const next = e.key === 'j' ? Math.min(kbdFocus + 1, items.length - 1) : Math.max(kbdFocus - 1, 0)
         setKbdFocus(next)
         // jsdom / 极老内核无 scrollIntoView——可选调用，不做垫片
         rowRefs.current[next]?.scrollIntoView?.({ block: 'nearest' })
+      } else if (e.key === 'Enter' && e.shiftKey) {
+        // 放行焦点 gate 行的第一前进边——前进低风险，直发不过二次确认（对齐动作条 forward 直发）
+        if (document.querySelector('[role="dialog"]')) return
+        if (busy) return
+        const g = focusedGateEdges()
+        if (!g?.forward) return
+        e.preventDefault()
+        void apply(g.name, g.root, g.forward)
       } else if (e.key === 'Enter') {
         if (document.querySelector('[role="dialog"]')) return
         const item = items[kbdFocus]
@@ -219,6 +248,14 @@ export function InboxView({ snapshot, loading, error, currentRoot, rulesByKey, o
           setSelKey(key)
           setOpen(true)
         }
+      } else if (e.key === 'Backspace') {
+        // 打回焦点 gate 行的第一回退边——回退高风险，经既有 pending 二次确认 Dialog，不绕过
+        if (document.querySelector('[role="dialog"]')) return
+        if (busy) return
+        const g = focusedGateEdges()
+        if (!g?.backward) return
+        e.preventDefault()
+        setPending({ name: g.name, root: g.root, planned: g.backward })
       } else if (e.key === 'Escape') {
         if (document.querySelector('[role="dialog"]')) return
         setOpen(false)
@@ -226,7 +263,7 @@ export function InboxView({ snapshot, loading, error, currentRoot, rulesByKey, o
     }
     document.addEventListener('keydown', onKeyDown)
     return () => document.removeEventListener('keydown', onKeyDown)
-  }, [items, kbdFocus, open, selectedItem])
+  }, [items, kbdFocus, open, selectedItem, rulesByKey, busy, apply])
 
   const rootToName = useMemo(() => {
     const m = new Map<string, string>()
@@ -307,9 +344,7 @@ export function InboxView({ snapshot, loading, error, currentRoot, rulesByKey, o
       )
     }
     if (!rules) return undefined
-    const planned = legalTargets(rules, item.change.phase)
-      .map((to) => plannedTransition(rules, item.change.phase, to))
-      .filter((p): p is PlannedTransition => p !== null)
+    const planned = plannedEdges(rules, item.change.phase)
     if (planned.length === 0) return undefined
     const backward = planned.filter((p) => p.backward)
     const forward = planned.filter((p) => !p.backward)
