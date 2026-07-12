@@ -20,6 +20,36 @@ describe('validateWorkflow', () => {
     expect(result.some((e) => e.includes('循环依赖'))).toBe(true)
   })
 
+  it('命名空间 skill id（superpowers:brainstorming）通过校验（Bug1：validate 与 parse 对齐，可 gate 插件 skill）', () => {
+    const result = validateWorkflow(wf({
+      steps: [{
+        id: 's1', label: 'x', gate: null, inputs: [], outputs: [], guards: [], transitions: [],
+        skills: [
+          { id: 'superpowers:brainstorming' },
+          { id: 'commit-commands:commit', depends_on: ['superpowers:brainstorming'] },
+        ],
+      }],
+    }))
+    expect(result.filter((e) => e.includes('含非法字符'))).toEqual([]) // 冒号命名空间不再被拒
+  })
+
+  it('非法 skill id（含空格/前导冒号）仍被拒（命名空间放宽不等于放任）', () => {
+    const bad = validateWorkflow(wf({
+      steps: [{
+        id: 's1', label: 'x', gate: null, inputs: [], outputs: [], guards: [], transitions: [],
+        skills: [{ id: 'has space' }],
+      }],
+    }))
+    expect(bad.some((e) => e.includes('含非法字符'))).toBe(true)
+    const lead = validateWorkflow(wf({
+      steps: [{
+        id: 's2', label: 'y', gate: null, inputs: [], outputs: [], guards: [], transitions: [],
+        skills: [{ id: ':leading' }],
+      }],
+    }))
+    expect(lead.some((e) => e.includes('含非法字符'))).toBe(true)
+  })
+
   it('depends_on 引用跨 step 不存在的 skill id → 报错', () => {
     const result = validateWorkflow(wf({
       steps: [{

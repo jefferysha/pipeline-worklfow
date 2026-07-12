@@ -27,6 +27,14 @@ function detectCycle(skillIds: string[], dependsOn: Map<string, string[]>): stri
 // 「保存成功、下次打不开」（如含空格）。与 dashboard 客户端表单、server 路由层 name 校验
 // 同一条规则；此处是绕过 UI 直调已鉴权 HTTP 时的唯一服务端后盾。
 const IDENT_RE = /^[a-zA-Z0-9_-]+$/
+/**
+ * skill id 允许命名空间冒号（插件 skill 如 `superpowers:brainstorming`、`commit-commands:commit`）。
+ * skill-tracker.sh 落的是命名空间全名、internal-skill-gate 按全名匹配 step.skills[].id——workflow 必须能
+ * 声明带冒号的 skill id。parse.ts 用 `\S+` 本就接受冒号,validate 此前用 IDENT_RE 拒绝致两处不一致,自定义
+ * workflow 无法 gate 占多数的命名空间 skill（superpowers、commit-commands 等插件下的 skill）。`plugin:skill` 形态,
+ * 每段仍是 IDENT_RE 字符集,允许多级（`a:b:c`）以防未来更深命名空间。
+ */
+const SKILL_IDENT_RE = /^[a-zA-Z0-9_-]+(?::[a-zA-Z0-9_-]+)*$/
 
 export function validateWorkflow(wf: WorkflowDef): string[] {
   const errors: string[] = []
@@ -42,8 +50,8 @@ export function validateWorkflow(wf: WorkflowDef): string[] {
       errors.push(`step id '${step.id}' 含非法字符（仅允许 a-zA-Z0-9_-）`)
     }
     for (const skill of step.skills) {
-      if (!IDENT_RE.test(skill.id)) {
-        errors.push(`step '${step.id}' 的 skill id '${skill.id}' 含非法字符（仅允许 a-zA-Z0-9_-）`)
+      if (!SKILL_IDENT_RE.test(skill.id)) {
+        errors.push(`step '${step.id}' 的 skill id '${skill.id}' 含非法字符（仅允许 a-zA-Z0-9_- 及命名空间冒号，如 superpowers:brainstorming）`)
       }
     }
     for (const ref of [...step.inputs, ...step.outputs]) {

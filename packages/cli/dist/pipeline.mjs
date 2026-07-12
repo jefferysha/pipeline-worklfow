@@ -11125,6 +11125,7 @@ function detectCycle(skillIds, dependsOn) {
   return errors;
 }
 var IDENT_RE = /^[a-zA-Z0-9_-]+$/;
+var SKILL_IDENT_RE = /^[a-zA-Z0-9_-]+(?::[a-zA-Z0-9_-]+)*$/;
 function validateWorkflow(wf) {
   const errors = [];
   const producedByEarlierStep = /* @__PURE__ */ new Set();
@@ -11137,8 +11138,8 @@ function validateWorkflow(wf) {
       errors.push(`step id '${step.id}' \u542B\u975E\u6CD5\u5B57\u7B26\uFF08\u4EC5\u5141\u8BB8 a-zA-Z0-9_-\uFF09`);
     }
     for (const skill of step.skills) {
-      if (!IDENT_RE.test(skill.id)) {
-        errors.push(`step '${step.id}' \u7684 skill id '${skill.id}' \u542B\u975E\u6CD5\u5B57\u7B26\uFF08\u4EC5\u5141\u8BB8 a-zA-Z0-9_-\uFF09`);
+      if (!SKILL_IDENT_RE.test(skill.id)) {
+        errors.push(`step '${step.id}' \u7684 skill id '${skill.id}' \u542B\u975E\u6CD5\u5B57\u7B26\uFF08\u4EC5\u5141\u8BB8 a-zA-Z0-9_- \u53CA\u547D\u540D\u7A7A\u95F4\u5192\u53F7\uFF0C\u5982 superpowers:brainstorming\uFF09`);
       }
     }
     for (const ref of [...step.inputs, ...step.outputs]) {
