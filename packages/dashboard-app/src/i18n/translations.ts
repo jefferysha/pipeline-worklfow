@@ -479,6 +479,19 @@ export const zh: Dict = {
     lp_draft_badge: 'agent 草稿 · 待你审阅',
     lp_draft_approve: '批准并启用',
     lp_draft_reject: '驳回(转暂停，现场保留)',
+    // ── full-install W4：右栏只读「技能齐全度」面（闭 P1-F3/BF10）。前端只读不装——命令本体
+    //    (pipeline setup / pipeline doctor) 不进 i18n（BF11 与终端同源，翻译层不得改写命令），
+    //    此处只存说明文案。skh_unready 措辞对齐 cli doctor「registry 未就绪…不误报 green」口径。──
+    skh_title: '技能齐全度',
+    skh_installed: '已装',
+    skh_missing: '未装',
+    skh_all_installed: '技能已装齐（运行时就绪另见 pipeline doctor）',
+    skh_missing_names: '未装：{names}',
+    skh_guide: '去终端一条命令装齐（已装的自动跳过）：',
+    skh_unready: '技能库未就绪——跑 pipeline doctor 查（不误报「已装齐」）',
+    skh_error: '技能库获取失败：{msg}',
+    skh_copy_hint: '点击复制到剪贴板',
+    skh_readonly_note: '只读面：装技能在终端（pipeline setup），此处只看齐全度、不代装。',
   },
   // T10（v5 交互重建）：进度视图骨架文案。口径纪律同 workbench：可见文案一律用「阶段」（旧措辞已废）。
   progress: {
@@ -992,6 +1005,20 @@ export const en: Dict = {
     lp_draft_badge: 'Agent draft · pending your review',
     lp_draft_approve: 'Approve & enable',
     lp_draft_reject: 'Reject (pause, keep as-is)',
+    // ── full-install W4: read-only "Skill readiness" side panel (closes P1-F3/BF10). Read-only —
+    //    the commands themselves (pipeline setup / pipeline doctor) stay out of i18n (BF11: same
+    //    source as the terminal, the translation layer must not rewrite commands). skh_unready
+    //    wording mirrors the cli doctor "registry not ready … no false green" stance. ──
+    skh_title: 'Skill readiness',
+    skh_installed: 'Installed',
+    skh_missing: 'Missing',
+    skh_all_installed: 'All skills installed (see pipeline doctor for runtime readiness)',
+    skh_missing_names: 'Missing: {names}',
+    skh_guide: 'Install them all with one terminal command (already-installed are skipped):',
+    skh_unready: 'Skill registry not ready — run pipeline doctor to check (no false “all installed”)',
+    skh_error: 'Failed to load skill registry: {msg}',
+    skh_copy_hint: 'Click to copy to clipboard',
+    skh_readonly_note: 'Read-only: skills are installed in the terminal (pipeline setup); this panel only shows readiness, it does not install.',
   },
   progress: {
     title: 'Progress',

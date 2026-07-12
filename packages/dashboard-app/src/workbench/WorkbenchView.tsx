@@ -10,6 +10,7 @@ import { EVENT_BY_EDGE, PHASES, REVIEW_PHASES, TRANSITIONS, isPhase, type Change
 import { revealDialog, revealList } from '../shared/motion'
 import { AutomationCard } from './AutomationCard'
 import { SecretsCard } from './SecretsCard'
+import { SkillHealthPanel } from './SkillHealthPanel'
 import { HookTimeline, LOCKED_IDS, useHooksConfig } from './HookTimeline'
 import { LoopCard, useLoops } from './LoopCard'
 import { StepEditor } from './StepEditor'
@@ -803,6 +804,11 @@ export function WorkbenchView({ root, onToggleError, snapshot = null }: Workbenc
               </button>
             </div>
           </div>
+
+          {/* full-install W4：只读「技能齐全度」面（消费既有 GET /api/skills/registry）——已装/未装
+              计数 + 未装名 +「去终端 pipeline setup 装齐」引导。前端只读不装（装在终端，决议边界）；
+              自带 side-card 外壳与 fetch/fail-soft，一行挂载，不吃 workflow 只读态。 */}
+          <SkillHealthPanel />
 
           {/* v6 T13：最近流转——真实 history 事件回放（GSAP 假预演退役,决议#10/#5:legacy 如实
               标注不可用、archived 不入列;决议#11 量级 <50,逐 change 只读端点合并,不新增聚合端点;

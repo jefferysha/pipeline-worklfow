@@ -1022,4 +1022,15 @@ span.wb-chip-badge { cursor: default; }
 .dt-diag-fix-label { font-size: 11px; color: var(--text-3); }
 /* ProgressView 失败行短成因提示（小字,紧随失败徽章;纯提示无块,超长省略号收口不撑破行）。 */
 .prg-cause { flex: none; font-size: 11px; color: var(--red-d); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 14ch; }
+
+/* ── full-install W4：右栏只读「技能齐全度」面（side-card 内；闭 P1-F3/BF10）——前端只读不装，
+   引导回终端 pipeline setup/doctor。决议 #9：不新增原色——未装计数用既有 --red-d 派生软警示
+   （明暗随主题自适应）；可复制命令块复用 mono + fill 底座，与 .side-card__copy / .dt-diag-fix
+   同调，不引入新视觉语言。计数/名走既有 .side-card__row/.wb-note，本段只补「命令块 + 警示计数」。 ── */
+.skh-n-warn { color: var(--red-d); }
+.skh-miss-names { margin-top: 2px; word-break: break-word; }
+.skh-guide { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+.skh-cmd { align-self: flex-start; max-width: 100%; display: inline-flex; align-items: center; border: 1px solid var(--border); background: color-mix(in srgb, var(--fill) 55%, transparent); border-radius: var(--radius-sm); padding: 5px 10px; cursor: pointer; font: inherit; transition: border-color .14s ease, background .14s ease; }
+.skh-cmd:hover { border-color: var(--text-3); background: var(--fill); }
+.skh-cmd code { font-family: var(--mono); font-size: 12px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 `
