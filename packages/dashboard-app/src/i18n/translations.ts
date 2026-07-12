@@ -444,12 +444,16 @@ export const zh: Dict = {
     // v6 T9：AFK 就绪三灯 + 镜像下拉。
     afk_rd_docker: 'docker',
     afk_rd_image: '镜像',
-    afk_rd_cred: '凭证(claude-code)',
+    afk_rd_cred: '凭证·claude-code',
     afk_rd_ok: '就绪',
     afk_rd_no: '未就绪',
     afk_rd_unset: '未配置',
     afk_rd_build_copy: '⧉ 复制构建命令',
     afk_rd_codex_hint: 'codex 路径:OPENAI_API_KEY {o} · CODEX_HOME {c}',
+    // full-install W1：凭证 per-runner 双灯——codex 与 claude-code 同等可见(去「(claude-code)」硬编码);
+    // caveat 诚实标注凭证灯是服务进程视角,终端 doctor/setup 为凭证权威(docker/镜像灯保持权威,凭证灯标参考)。
+    afk_rd_cred_codex: '凭证·codex',
+    afk_rd_cred_caveat: '凭证灯为服务进程视角，终端 pipeline doctor 为准',
     // v6 T8：凭证卡(机器级,write-only)。
     sc_title: '凭证',
     sc_scope: '机器级',
@@ -937,12 +941,15 @@ export const en: Dict = {
     sk_banner_copy: '⧉ Copy install command',
     afk_rd_docker: 'docker',
     afk_rd_image: 'image',
-    afk_rd_cred: 'credential (claude-code)',
+    afk_rd_cred: 'credential · claude-code',
     afk_rd_ok: 'ready',
     afk_rd_no: 'not ready',
     afk_rd_unset: 'not set',
     afk_rd_build_copy: '⧉ Copy build command',
     afk_rd_codex_hint: 'codex path: OPENAI_API_KEY {o} · CODEX_HOME {c}',
+    // full-install W1: per-runner credential lights (codex equally visible) + honest service-process caveat.
+    afk_rd_cred_codex: 'credential · codex',
+    afk_rd_cred_caveat: 'Credential lights reflect the service process; run `pipeline doctor` in your terminal for the authoritative check',
     sc_title: 'Credentials',
     sc_scope: 'machine-level',
     sc_head_sub: 'Stored in ~/.claude/pipeline-secrets.json (0600), never enters the repo',

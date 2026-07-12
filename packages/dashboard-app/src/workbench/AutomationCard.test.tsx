@@ -174,7 +174,7 @@ describe('AutomationCard v6 T9：镜像下拉 + 就绪三灯', () => {
     const rd = await screen.findByTestId('afk-rd')
     expect(rd).toBeInTheDocument()
     expect(screen.getByTestId('afk-rd-image').textContent).toContain('未就绪')
-    expect(screen.getByTestId('afk-rd-cred').textContent).toContain('未配置')
+    expect(screen.getByTestId('afk-rd-cred-claude').textContent).toContain('未配置')
     fireEvent.click(screen.getByTestId('afk-rd-build-copy'))
     await waitFor(() => expect(writeText).toHaveBeenCalledWith('bash tools/sandcastle/build.sh'))
   })
@@ -199,5 +199,108 @@ describe('AutomationCard v6 T9：镜像下拉 + 就绪三灯', () => {
       </I18nProvider>,
     )
     await waitFor(() => expect(readinessCalls).toBe(2))
+  })
+})
+
+/**
+ * full-install W1（批 4 Wave A）：凭证灯改 per-runner 双灯——claude-code 与 codex 同等可见
+ * （各自灯色+文案,不靠 tooltip;去「(claude-code)」硬编码;加「服务进程视角,终端 doctor 为准」caveat）。
+ * 旅程唯一真·不对等（P1-F1）：数据齐（WbAfkReadiness.credentials 含两 runner）,只是 UI 之前没渲染 codex。
+ */
+describe('AutomationCard full-install W1：凭证 per-runner 双灯 + caveat', () => {
+  const CREDS = (over: Record<string, unknown> = {}) => ({
+    credentials: {
+      'claude-code': { CLAUDE_CODE_OAUTH_TOKEN: { set: false } },
+      codex: { OPENAI_API_KEY: { set: false }, CODEX_HOME: { set: false } },
+      ...over,
+    },
+  })
+
+  it('① codex.OPENAI_API_KEY.set=true → codex 凭证灯可见绿+文案含 codex（不靠 hover）', async () => {
+    readinessResponse = () =>
+      new Response(
+        JSON.stringify(
+          READY_BODY(CREDS({ codex: { OPENAI_API_KEY: { set: true }, CODEX_HOME: { set: true } } })),
+        ),
+        { status: 200 },
+      )
+    renderCard()
+    const codex = await screen.findByTestId('afk-rd-cred-codex')
+    expect(codex.textContent).toContain('codex') // 可见文案含 runner 名,非 tooltip
+    expect(codex.textContent).toContain('就绪') // 就绪态在可见文案里,不靠 hover
+    expect(codex.previousElementSibling).toHaveClass('rd-dot', 'rd-dot--ok') // 绿灯
+  })
+
+  it('② claude 未配 + codex 已配 → 两灯各自态正确（不再只显 claude）', async () => {
+    readinessResponse = () =>
+      new Response(
+        JSON.stringify(
+          READY_BODY(
+            CREDS({
+              'claude-code': { CLAUDE_CODE_OAUTH_TOKEN: { set: false } },
+              codex: { OPENAI_API_KEY: { set: true }, CODEX_HOME: { set: false } },
+            }),
+          ),
+        ),
+        { status: 200 },
+      )
+    renderCard()
+    const claude = await screen.findByTestId('afk-rd-cred-claude')
+    const codex = screen.getByTestId('afk-rd-cred-codex')
+    expect(claude.textContent).toContain('未配置')
+    expect(codex.textContent).toContain('就绪')
+    expect(claude.previousElementSibling).toHaveClass('rd-dot--no')
+    expect(codex.previousElementSibling).toHaveClass('rd-dot--ok')
+  })
+
+  it('③ 凭证文案无「(claude-code)」括号硬编码残留;claude-code 仅作 per-runner 标签', async () => {
+    readinessResponse = () => new Response(JSON.stringify(READY_BODY(CREDS())), { status: 200 })
+    renderCard()
+    const rd = await screen.findByTestId('afk-rd')
+    expect(rd.textContent).not.toContain('(claude-code)') // 括号硬编码已去
+    // claude-code 仍出现,但作 per-runner 并列标签（凭证·claude-code）,非「唯一凭证=claude」的括号形式
+    expect(screen.getByTestId('afk-rd-cred-claude').textContent).toContain('claude-code')
+  })
+
+  it('④ 凭证行渲染诚实 caveat（服务进程视角 / 终端 doctor 为准）', async () => {
+    readinessResponse = () => new Response(JSON.stringify(READY_BODY(CREDS())), { status: 200 })
+    renderCard()
+    const caveat = await screen.findByTestId('afk-rd-cred-caveat')
+    expect(caveat.textContent).toContain('服务进程')
+    expect(caveat.textContent).toContain('doctor')
+  })
+
+  it('⑤ readiness 拉不到 → 双灯+caveat 随整区不渲染（回归 fail-open,不谎报）', async () => {
+    readinessResponse = () => new Response('boom', { status: 500 })
+    renderCard()
+    await waitFor(() => expect(screen.getByTestId('afk-image')).toBeInTheDocument())
+    expect(screen.queryByTestId('afk-rd')).toBeNull()
+    expect(screen.queryByTestId('afk-rd-cred-claude')).toBeNull()
+    expect(screen.queryByTestId('afk-rd-cred-codex')).toBeNull()
+    expect(screen.queryByTestId('afk-rd-cred-caveat')).toBeNull()
+  })
+
+  it('⑥ 凭证双灯复用 color-mix 派生类名(rd-dot--ok/--no),不硬编码新原色(无内联 style)', async () => {
+    readinessResponse = () =>
+      new Response(
+        JSON.stringify(
+          READY_BODY(
+            CREDS({
+              'claude-code': { CLAUDE_CODE_OAUTH_TOKEN: { set: false } },
+              codex: { OPENAI_API_KEY: { set: true }, CODEX_HOME: { set: false } },
+            }),
+          ),
+        ),
+        { status: 200 },
+      )
+    renderCard()
+    const claudeDot = (await screen.findByTestId('afk-rd-cred-claude')).previousElementSibling
+    const codexDot = screen.getByTestId('afk-rd-cred-codex').previousElementSibling
+    // 未配→rd-dot--no(styles.ts: color-mix(in oklch,var(--red) 52%,var(--green)) 派生);已配→rd-dot--ok(var(--green) token)
+    expect(claudeDot).toHaveClass('rd-dot', 'rd-dot--no')
+    expect(codexDot).toHaveClass('rd-dot', 'rd-dot--ok')
+    // 决议#9:不引入新原色——灯元素无内联硬编码色
+    expect(claudeDot).not.toHaveAttribute('style')
+    expect(codexDot).not.toHaveAttribute('style')
   })
 })

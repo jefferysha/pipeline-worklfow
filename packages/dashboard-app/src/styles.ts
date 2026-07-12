@@ -998,4 +998,10 @@ span.wb-chip-badge { cursor: default; }
 .lp-draft-reject { background: color-mix(in srgb, var(--red) 12%, var(--card)); border: 1px solid color-mix(in srgb, var(--red) 30%, var(--border)); color: var(--red-d); }
 .lp-draft-reject:hover { background: color-mix(in srgb, var(--red) 18%, var(--card)); border-color: var(--red); }
 .lp-draft-err { flex-basis: 100%; margin: 2px 0 0; }
+
+/* ── full-install W1：凭证 per-runner 双灯的诚实 caveat——凭证灯为服务进程视角,终端 doctor 为准(P1-F2)。
+   决议 #9：不硬编码新原色——文字色 color-mix 从既有 --text-2 派生更淡的次级语义(随明/暗自适应);
+   flex-basis:100% 令 caveat 在 .afk-rd 弹性行里独占一行,与上方双灯分行。双灯本身复用既有
+   .rd-dot--ok(var(--green))/.rd-dot--no(color-mix 派生),无新增灯样式。 ── */
+.afk-rd-caveat { flex-basis: 100%; margin: 0; font-size: 11px; line-height: 1.4; color: color-mix(in srgb, var(--text-2) 70%, transparent); }
 `

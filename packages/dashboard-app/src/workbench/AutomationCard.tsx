@@ -189,23 +189,38 @@ export function AutomationCard({ root, refreshToken = 0 }: AutomationCardProps):
               {t('workbench.afk_rd_build_copy')}
             </button>
           )}
+          {/* full-install W1：凭证 per-runner 双灯——claude-code 与 codex 同等可见(各自灯色+文案,不靠 tooltip)。
+              旅程唯一真·不对等修复(P1-F1):数据齐(credentials 含两 runner),此前 UI 只渲染 claude-code。 */}
           <span
             className={`rd-dot ${readiness.credentials['claude-code'].CLAUDE_CODE_OAUTH_TOKEN.set ? 'rd-dot--ok' : 'rd-dot--no'}`}
             aria-hidden="true"
           />
-          <span
-            className="afk-rd-item"
-            data-testid="afk-rd-cred"
-            title={t('workbench.afk_rd_codex_hint', {
-              o: readiness.credentials.codex.OPENAI_API_KEY.set ? '✓' : '✗',
-              c: readiness.credentials.codex.CODEX_HOME.set ? '✓' : '✗',
-            })}
-          >
+          <span className="afk-rd-item" data-testid="afk-rd-cred-claude">
             {t('workbench.afk_rd_cred')}:
             {readiness.credentials['claude-code'].CLAUDE_CODE_OAUTH_TOKEN.set
               ? t('workbench.afk_rd_ok')
               : t('workbench.afk_rd_unset')}
           </span>
+          {/* codex 灯:OPENAI_API_KEY.set 决灯色/文案;CODEX_HOME 作只读附注入 title(C2b,不作独立必配灯)。 */}
+          <span
+            className={`rd-dot ${readiness.credentials.codex.OPENAI_API_KEY.set ? 'rd-dot--ok' : 'rd-dot--no'}`}
+            aria-hidden="true"
+          />
+          <span
+            className="afk-rd-item"
+            data-testid="afk-rd-cred-codex"
+            title={t('workbench.afk_rd_codex_hint', {
+              o: readiness.credentials.codex.OPENAI_API_KEY.set ? '✓' : '✗',
+              c: readiness.credentials.codex.CODEX_HOME.set ? '✓' : '✗',
+            })}
+          >
+            {t('workbench.afk_rd_cred_codex')}:
+            {readiness.credentials.codex.OPENAI_API_KEY.set
+              ? t('workbench.afk_rd_ok')
+              : t('workbench.afk_rd_unset')}
+          </span>
+          {/* 诚实 caveat(P1-F2/P1-X1)：凭证灯是服务进程视角快照,终端 doctor/setup 才是凭证权威。整行独占(flex-basis:100%)。 */}
+          <span className="afk-rd-caveat" data-testid="afk-rd-cred-caveat">{t('workbench.afk_rd_cred_caveat')}</span>
         </div>
       )}
 
