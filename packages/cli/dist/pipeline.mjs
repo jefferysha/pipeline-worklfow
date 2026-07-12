@@ -3030,7 +3030,7 @@ var require_commander = __commonJS({
 });
 
 // packages/cli/src/main.ts
-import { execFile as execFile3 } from "node:child_process";
+import { execFile as execFile4 } from "node:child_process";
 import { accessSync, constants as fsConstants, readdirSync as readdirSync5, readFileSync as readFileSync18, statSync as statSync4 } from "node:fs";
 import { access as access2, readdir as readdir5, readFile as readFile6, stat as stat7, writeFile as writeFile8 } from "node:fs/promises";
 import { homedir as homedir8 } from "node:os";
@@ -3110,6 +3110,7 @@ var GATE_TTL_MS = {
   interaction: 18e5
 };
 var GATE_FRESH_MS = 15 * 60 * 1e3;
+var SANDCASTLE_BUILD_HINT = "bash tools/sandcastle/build.sh";
 var IllegalTransitionError = class extends Error {
   from;
   to;
@@ -11148,16 +11149,1234 @@ function isSkillUnlocked(skillId, skills, completedSinceStepEntry) {
   return (ref.depends_on ?? []).every((dep) => completedSinceStepEntry.has(dep));
 }
 
+// packages/automation/dist/types.js
+var AUTOMATION_LEVELS = ["L1", "L2", "L3"];
+var DEFAULT_CONFIG = {
+  enabled: false,
+  defaultOptIn: false,
+  maxParallel: 4,
+  maxRetries: 1,
+  level: "L1"
+};
+
+// packages/automation/dist/queue/state-machine.js
+function settleSuccess(level) {
+  return level === "L3" ? "merged" : "paused";
+}
+function settleFailure(kind, attemptsAfterIncr, maxRetries) {
+  if (kind === "conflict")
+    return "conflict";
+  return attemptsAfterIncr > maxRetries ? "failed" : "queued";
+}
+
+// packages/automation/dist/queue/claim.js
+var DAEMON_OWNED = ["running", "scheduled"];
+async function markQueued(store2, changeDir2, clock) {
+  await store2.setMany(changeDir2, { automation: "queued", automation_queued_at: clock() });
+}
+function claim(store2, changeDir2) {
+  return store2.cas(changeDir2, "automation", "queued", "scheduled");
+}
+async function setAutomationOwned(store2, changeDir2, next) {
+  if (await store2.cas(changeDir2, "automation", "running", next))
+    return true;
+  return store2.cas(changeDir2, "automation", "scheduled", next);
+}
+async function getAutomation(store2, changeDir2) {
+  const v = await store2.get(changeDir2, "automation");
+  return typeof v === "string" ? v : "";
+}
+function isSettled(automation) {
+  return automation !== "" && !DAEMON_OWNED.includes(automation);
+}
+function incrAttempts(store2, changeDir2, max) {
+  return store2.withLock(changeDir2, async () => {
+    const state = await store2.read(changeDir2);
+    const raw = state.fields.automation_attempts;
+    const prev = Number(typeof raw === "string" ? raw : "0");
+    const value = (Number.isFinite(prev) ? prev : 0) + 1;
+    state.fields.automation_attempts = String(value);
+    await store2.write(changeDir2, state);
+    return { value, exhausted: value > max };
+  });
+}
+
+// packages/automation/dist/queue/scan.js
+import { readdir as readdir4 } from "node:fs/promises";
+import { join as join14 } from "node:path";
+var QUEUED_AT_LAST = "~";
+var depsAllSatisfied = (deps, resolver) => {
+  for (const dep of deps) {
+    if (dep === "" || dep === "null")
+      continue;
+    if (!resolver.satisfied(dep))
+      return false;
+  }
+  return true;
+};
+function readyCandidates(entries, resolver) {
+  const ready = entries.filter((e) => e.phase === "build" && e.automation === "queued").filter((e) => depsAllSatisfied(e.dependsOn, resolver));
+  const key = (e) => e.automationQueuedAt === "" || e.automationQueuedAt === "null" ? QUEUED_AT_LAST : e.automationQueuedAt;
+  return ready.slice().sort((a, b) => {
+    const ka = key(a);
+    const kb = key(b);
+    if (ka < kb)
+      return -1;
+    if (ka > kb)
+      return 1;
+    return a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
+  }).map((e) => e.name);
+}
+var scalar4 = (v) => typeof v === "string" ? v : "";
+async function scanReadyFromFs(changesDir, store2) {
+  let dirents;
+  try {
+    dirents = await readdir4(changesDir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  const activeNames = dirents.filter((d) => d.isDirectory() && d.name !== "archive").map((d) => d.name);
+  const entries = [];
+  const automationByName = /* @__PURE__ */ new Map();
+  for (const name2 of activeNames) {
+    const changeDir2 = join14(changesDir, name2);
+    let state;
+    try {
+      state = await store2.read(changeDir2);
+    } catch {
+      continue;
+    }
+    const automation = scalar4(state.fields.automation);
+    automationByName.set(name2, automation);
+    entries.push({
+      name: name2,
+      phase: scalar4(state.fields.phase),
+      automation,
+      automationQueuedAt: scalar4(state.fields.automation_queued_at),
+      dependsOn: normalizeDeps(state.fields.depends_on)
+    });
+  }
+  let archiveEntries = [];
+  try {
+    const archived = await readdir4(join14(changesDir, "archive"), { withFileTypes: true });
+    archiveEntries = archived.filter((d) => d.isDirectory()).map((d) => d.name);
+  } catch {
+    archiveEntries = [];
+  }
+  const resolver = {
+    satisfied(dep) {
+      const a = automationByName.get(dep);
+      if (a !== void 0)
+        return a === "merged";
+      return archiveEntries.some((e) => e === dep || e.endsWith(`-${dep}`));
+    }
+  };
+  return readyCandidates(entries, resolver);
+}
+
+// packages/automation/dist/queue/gate.js
+var PIPELINE_AFK_ENV = "PIPELINE_AFK";
+function optedIn(input) {
+  if (input.track === "pm")
+    return false;
+  if (input.automation === "queued")
+    return true;
+  return input.defaultOptIn;
+}
+function shouldEnqueueOnSpecComplete(input) {
+  if (!input.enabled)
+    return false;
+  return optedIn(input);
+}
+
+// packages/automation/dist/scheduler/semaphore.js
+var createSemaphore = (maxParallel) => {
+  if (maxParallel < 1)
+    throw new Error("maxParallel must be >= 1");
+  let running = 0;
+  const queue = [];
+  const acquire2 = () => {
+    if (running < maxParallel) {
+      running++;
+      return Promise.resolve();
+    }
+    return new Promise((resolve10) => queue.push(resolve10));
+  };
+  const release2 = () => {
+    if (running <= 0)
+      return;
+    running--;
+    const next = queue.shift();
+    if (next) {
+      running++;
+      next();
+    }
+  };
+  return { acquire: acquire2, release: release2, running: () => running };
+};
+
+// packages/automation/dist/scheduler/classify.js
+var TRANSIENT_EXEC_EXIT_CODES = /* @__PURE__ */ new Set([126, 137]);
+var isVerifyFailSentinel = (e) => typeof e === "object" && e !== null && e.verifyFail === true;
+var preservedPathOf = (err) => {
+  if (err.preservedWorktreePath)
+    return err.preservedWorktreePath;
+  const m = err.message?.match(/preserved (?:at )?(.+?)\s*$/im);
+  return m?.[1];
+};
+var classifyFailure = (err) => {
+  if (isVerifyFailSentinel(err)) {
+    return { kind: "retry", message: "verify-fail" };
+  }
+  const tagged = typeof err === "object" && err !== null ? err : {};
+  const tag2 = tagged._tag;
+  if (tag2 === "AbortedRunError" || tag2 === "CancelledRunError") {
+    return {
+      kind: "conflict",
+      message: tagged.message ?? "aborted",
+      preservedPath: tagged.preservedPath ?? preservedPathOf(tagged)
+    };
+  }
+  if (tag2 === "SyncError" || tag2 === "MergeToHostTimeoutError" || tag2 === "WorktreeError" || tag2 === "BarrierDriftError" || tag2 === "DenylistViolationError") {
+    return {
+      kind: "conflict",
+      message: tagged.message ?? "merge conflict / barrier drift",
+      preservedPath: preservedPathOf(tagged)
+    };
+  }
+  if (tag2 === "AgentIdleTimeoutError") {
+    return { kind: "retry", message: tagged.message ?? "agent idle timeout" };
+  }
+  const isTransient = tag2 === "ExecError" && typeof tagged.exitCode === "number" && TRANSIENT_EXEC_EXIT_CODES.has(tagged.exitCode);
+  return {
+    kind: "retry",
+    message: tagged.message ?? (isTransient ? "transient exec failure" : err instanceof Error ? err.message : "run failed")
+  };
+};
+
+// packages/automation/dist/scheduler/scheduler.js
+var sanitizePath = (s) => s.replace(/[\r\n]+/g, " ").replace(/:\s/g, "; ").replace(/\s#/g, " ").replace(/^["']+/, "").trim() || "error";
+var sanitize = (s) => sanitizePath(s).slice(0, 200).trim() || "error";
+var createScheduler = (deps) => {
+  const { state, runChange, registerShutdown, config } = deps;
+  const observer = deps.observer;
+  const semaphore = createSemaphore(config.maxParallel);
+  const inFlight = /* @__PURE__ */ new Set();
+  registerShutdown(() => {
+    for (const name2 of inFlight) {
+      try {
+        state.markFailedSync(name2, "scheduler interrupted");
+      } catch {
+      }
+    }
+  });
+  const emit3 = (name2, s, extra) => {
+    if (!observer)
+      return;
+    try {
+      observer.onState(name2, s, extra);
+    } catch {
+    }
+  };
+  const writeBackSuccess = async (name2, outcome) => {
+    if (outcome.verifyResult === "fail") {
+      return applyFailure(name2, { verifyFail: true });
+    }
+    const current = await state.getAutomation(name2).catch(() => "");
+    if (isSettled(current))
+      return "skipped";
+    const target = settleSuccess(config.level);
+    const won = await state.setAutomationOwned(name2, target);
+    if (!won)
+      return "skipped";
+    await state.setField(name2, "automation_attempts", "0");
+    return target;
+  };
+  const applyFailure = async (name2, err) => {
+    const c = classifyFailure(err);
+    const lastError = sanitize(c.message);
+    const current = await state.getAutomation(name2).catch(() => "");
+    if (isSettled(current))
+      return "skipped";
+    if (c.kind === "conflict") {
+      const won2 = await state.setAutomationOwned(name2, "conflict");
+      if (!won2)
+        return "skipped";
+      await state.setField(name2, "automation_last_error", lastError);
+      if (c.preservedPath)
+        await state.setField(name2, "automation_preserved_path", sanitizePath(c.preservedPath));
+      return "conflict";
+    }
+    const { value } = await state.incrAttempts(name2, config.maxRetries);
+    const next = settleFailure("retry", value, config.maxRetries);
+    const won = await state.setAutomationOwned(name2, next);
+    if (!won)
+      return "skipped";
+    await state.setField(name2, "automation_last_error", lastError);
+    return next;
+  };
+  const emitTerminal = (name2, settled) => {
+    if (settled === "skipped")
+      return;
+    emit3(name2, settled);
+  };
+  const handleOne = async (name2) => {
+    const won = await state.claim(name2);
+    if (!won)
+      return;
+    await semaphore.acquire();
+    const controller = new AbortController();
+    try {
+      await state.setAutomation(name2, "running");
+      emit3(name2, "running");
+      inFlight.add(name2);
+      try {
+        const outcome = await runChange(name2, controller.signal);
+        emitTerminal(name2, await writeBackSuccess(name2, outcome));
+      } catch (err) {
+        emitTerminal(name2, await applyFailure(name2, err));
+      } finally {
+        inFlight.delete(name2);
+      }
+    } finally {
+      semaphore.release();
+    }
+  };
+  const runRoundOnce = async (candidates) => {
+    await Promise.allSettled(candidates.map((name2) => handleOne(name2)));
+  };
+  return { runRoundOnce };
+};
+
+// packages/automation/dist/lifecycle/barrier.js
+var BarrierDriftError = class extends Error {
+  name = "BarrierDriftError";
+  _tag = "BarrierDriftError";
+  constructor(message) {
+    super(message);
+  }
+};
+var deriveBarrierSha = async (input) => {
+  const { git, branch, commits, sandboxReportedSha } = input;
+  if (commits.length === 0)
+    return { buildSha: void 0 };
+  const landed = commits[commits.length - 1]?.sha;
+  if (landed === void 0)
+    return { buildSha: void 0 };
+  let branchHead;
+  try {
+    branchHead = await git.revParse(`refs/heads/${branch}`);
+  } catch (err) {
+    throw new BarrierDriftError(`barrier: cannot resolve host branch ${branch} for build_sha: ${String(err)}`);
+  }
+  if (branchHead !== landed) {
+    throw new BarrierDriftError(`barrier: named branch ${branch} HEAD=${branchHead} != landed build commit ${landed} (named-branch post-freeze drift \u2014 verify would target an unreviewed commit)`);
+  }
+  if (sandboxReportedSha && sandboxReportedSha.length === 40 && sandboxReportedSha !== branchHead) {
+    throw new BarrierDriftError(`barrier: sandbox-reported build_sha=${sandboxReportedSha} diverges from the host-landed commit ${branchHead} (no moving-target verify-pass)`);
+  }
+  return { buildSha: branchHead };
+};
+
+// packages/automation/dist/lifecycle/denylist.js
+var globToRegExp = (glob) => {
+  let re = "";
+  let i = 0;
+  while (i < glob.length) {
+    const c = glob[i];
+    if (c === "*") {
+      if (glob[i + 1] === "*") {
+        if (glob[i + 2] === "/") {
+          re += "(?:.*/)?";
+          i += 3;
+        } else {
+          re += ".*";
+          i += 2;
+        }
+      } else {
+        re += "[^/]*";
+        i += 1;
+      }
+    } else if (c === "?") {
+      re += "[^/]";
+      i += 1;
+    } else {
+      re += c.replace(/[.+^${}()|[\]\\]/g, "\\$&");
+      i += 1;
+    }
+  }
+  return new RegExp(`^${re}$`);
+};
+var matchDenylist = (files, globs) => {
+  if (globs.length === 0)
+    return [];
+  const res = globs.map((g) => ({ glob: g, re: globToRegExp(g) }));
+  const out = [];
+  for (const file of files) {
+    const hit = res.find((r) => r.re.test(file));
+    if (hit)
+      out.push({ file, glob: hit.glob });
+  }
+  return out;
+};
+var denylistForChange = (loops, name2) => {
+  const out = [];
+  for (const l of loops) {
+    if (!l.change_prefix)
+      continue;
+    if (!name2.startsWith(l.change_prefix))
+      continue;
+    for (const g of l.denylist ?? []) {
+      if (!out.includes(g))
+        out.push(g);
+    }
+  }
+  return out;
+};
+var DenylistViolationError = class extends Error {
+  name = "DenylistViolationError";
+  _tag = "DenylistViolationError";
+  violations;
+  preservedWorktreePath;
+  constructor(violations, preservedWorktreePath) {
+    const detail = violations.map((v) => `${v.file} (denylist: ${v.glob})`).join(", ");
+    super(`run touched denylisted paths: ${detail}. Worktree PRESERVED at ${preservedWorktreePath}.`);
+    this.violations = violations;
+    this.preservedWorktreePath = preservedWorktreePath;
+  }
+};
+
+// packages/automation/dist/lifecycle/transitionWatch.js
+var TRANSITION_LINE_RE = /^\[TRANSITION\] (\S+): (\S+) -> (\S+)\s*$/;
+var parseTransitionLine = (line) => {
+  const m = TRANSITION_LINE_RE.exec(line);
+  if (!m)
+    return null;
+  return { name: m[1], from: m[2], to: m[3] };
+};
+var createPhaseWatch = (name2, write) => {
+  let last = "";
+  let chain = Promise.resolve();
+  const enqueue = (value) => {
+    chain = chain.then(() => write(value)).catch(() => {
+    });
+  };
+  return {
+    onLine(line) {
+      const t = parseTransitionLine(line);
+      if (!t || t.name !== name2 || t.to === last)
+        return;
+      last = t.to;
+      enqueue(t.to);
+    },
+    async settle() {
+      if (last !== "") {
+        last = "";
+        enqueue("");
+      }
+      await chain;
+    }
+  };
+};
+
+// packages/automation/dist/lifecycle/lifecycle.js
+var NAMED_BRANCH_PREFIX = "sandcastle-pipeline/";
+var AbortedRunError = class extends Error {
+  name = "AbortedRunError";
+  _tag = "AbortedRunError";
+  reason;
+  preservedPath;
+  constructor(reason, preservedPath) {
+    super(typeof reason === "string" ? reason : reason?.message ?? String(reason));
+    this.reason = reason;
+    this.preservedPath = preservedPath;
+  }
+};
+var CancelledRunError = class extends Error {
+  name = "CancelledRunError";
+  _tag = "CancelledRunError";
+  preservedPath;
+  constructor(reason, preservedPath) {
+    super(reason);
+    this.preservedPath = preservedPath;
+  }
+};
+var PRESERVE_ERROR_TAGS = /* @__PURE__ */ new Set([
+  "SyncError",
+  "MergeToHostTimeoutError",
+  "BarrierDriftError",
+  "WorktreeError",
+  "CancelledRunError",
+  // 决议 #12：denylist 违规同 conflict 类——留现场供人工核对越界产出，绝不自动重试/merge。
+  "DenylistViolationError"
+]);
+var isPreserveError = (err) => typeof err === "object" && err !== null && PRESERVE_ERROR_TAGS.has(err._tag ?? "");
+var finalizeRunOutcome = (o) => ({ ...o, noop: !o.buildSha });
+var AGENT_EXIT_LINE_RE = /^\[AGENT_EXIT\] (\S+) (\d+)\s*$/;
+var createAgentExitWatch = (write) => {
+  let wrote = false;
+  return {
+    onLine(line) {
+      if (wrote)
+        return;
+      const m = AGENT_EXIT_LINE_RE.exec(line);
+      if (!m || Number(m[2]) === 0)
+        return;
+      wrote = true;
+      const runner = m[1];
+      write(`${runner} agent \u975E\u96F6\u9000\u51FA\uFF08exit ${m[2]}\uFF09\uFF1A\u53EF\u80FD\u51ED\u8BC1\u5931\u6548\u6216 ${runner} \u81EA\u8EAB\u62A5\u9519\uFF0C\u8BE6\u89C1 agent \u65E5\u5FD7`).catch(() => {
+      });
+    }
+  };
+};
+var runChangeInSandbox = async (ports, cfg2, signal) => {
+  const branch = `${NAMED_BRANCH_PREFIX}${cfg2.name}`;
+  const wt = await ports.worktree.create(cfg2.hostRepoDir, branch);
+  const worktreePath = wt.path;
+  let handle;
+  let preserve = false;
+  const phaseWatch = createPhaseWatch(cfg2.name, (value) => ports.setStateField(cfg2.name, "automation_current_phase", value));
+  const agentExitWatch = createAgentExitWatch((value) => ports.setStateField(cfg2.name, "automation_last_error", value));
+  try {
+    const env = { ...cfg2.extraEnv, [PIPELINE_AFK_ENV]: "1" };
+    handle = await ports.createSandbox({ env, worktreePath });
+    const sandbox = handle;
+    await ports.setStateField(cfg2.name, "automation_sandbox", sandbox.containerName);
+    await ports.setStateField(cfg2.name, "automation_worktree", worktreePath);
+    const report = await ports.runWork((cmd, options) => sandbox.exec(cmd, {
+      ...options,
+      onLine: (line) => {
+        phaseWatch.onLine(line);
+        agentExitWatch.onLine(line);
+        options?.onLine?.(line);
+      }
+    }), cfg2.name, signal, cfg2.runner);
+    if (await ports.worktree.hasCancelMarker(worktreePath)) {
+      throw new CancelledRunError("cancel requested via dashboard", worktreePath);
+    }
+    if (signal.aborted)
+      throw new AbortedRunError(signal.reason, worktreePath);
+    const commits = await ports.collectCommits({ worktreePath, branch: wt.branch, base: cfg2.base });
+    const denylist = cfg2.denylist ?? [];
+    if (denylist.length > 0 && commits.length > 0) {
+      const files = await ports.diffNames({ worktreePath, branch: wt.branch, base: cfg2.base });
+      const violations = matchDenylist(files, denylist);
+      if (violations.length > 0) {
+        throw new DenylistViolationError(violations, worktreePath);
+      }
+    }
+    const barrier = await deriveBarrierSha({
+      git: ports.git,
+      branch: wt.branch,
+      commits,
+      sandboxReportedSha: report.build_sha
+    });
+    if (cfg2.autoMerge && commits.length > 0) {
+      await ports.mergeToBase({ worktreePath, branch: wt.branch, base: cfg2.base });
+    }
+    return finalizeRunOutcome({
+      commits,
+      verifyResult: report.verify_result,
+      buildSha: barrier.buildSha,
+      branch: wt.branch,
+      phaseEvent: report.phase_event
+    });
+  } catch (err) {
+    if (signal.aborted) {
+      if (handle)
+        await handle.close().catch(() => {
+        });
+      handle = void 0;
+      throw new AbortedRunError(signal.reason, worktreePath);
+    }
+    let settled = err;
+    if (!(err instanceof CancelledRunError) && await ports.worktree.hasCancelMarker(worktreePath)) {
+      settled = new CancelledRunError("cancel requested via dashboard", worktreePath);
+    }
+    if (isPreserveError(settled))
+      preserve = true;
+    throw settled;
+  } finally {
+    await phaseWatch.settle().catch(() => {
+    });
+    if (handle)
+      await handle.close().catch(() => {
+      });
+    if (!signal.aborted && !preserve) {
+      await ports.worktree.remove(worktreePath).catch(() => {
+      });
+    }
+  }
+};
+
+// packages/automation/dist/lifecycle/runnerFor.js
+var runnerForChange = (loops, name2) => {
+  for (const l of loops) {
+    if (!l.change_prefix)
+      continue;
+    if (!name2.startsWith(l.change_prefix))
+      continue;
+    return l.runner;
+  }
+  return void 0;
+};
+
+// packages/automation/dist/runner/runner.js
+var StructuredOutputError = class extends Error {
+  name = "StructuredOutputError";
+  _tag = "StructuredOutputError";
+  rawMatched;
+  constructor(message, rawMatched) {
+    super(message);
+    this.rawMatched = rawMatched;
+  }
+};
+var findLastOutputTag = (stdout) => {
+  const re = /<output>\s*([\s\S]*?)\s*<\/output>/g;
+  let last;
+  for (let m = re.exec(stdout); m !== null; m = re.exec(stdout))
+    last = m[1];
+  return last;
+};
+var unwrapFences = (s) => {
+  const t = s.trim();
+  const fence = t.match(/^```(?:json)?\s*\n?([\s\S]*?)\n?```$/);
+  return fence?.[1] !== void 0 ? fence[1].trim() : t;
+};
+var parseSandboxReport = (stdout) => {
+  const raw = findLastOutputTag(stdout);
+  if (raw === void 0) {
+    throw new StructuredOutputError("sandbox produced no <output>{...}</output> report", "");
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(unwrapFences(raw));
+  } catch (err) {
+    throw new StructuredOutputError(`sandbox <output> is not valid JSON: ${String(err)}`, raw);
+  }
+  if (parsed.verify_result !== "pass" && parsed.verify_result !== "fail") {
+    throw new StructuredOutputError('sandbox report missing/invalid verify_result (want "pass"|"fail")', raw);
+  }
+  return {
+    verify_result: parsed.verify_result,
+    build_sha: parsed.build_sha,
+    branch: parsed.branch,
+    phase_event: parsed.phase_event ?? "verify-pass"
+  };
+};
+var AFK_RUN_SCRIPT_SHA256 = "069e8696c835a0530df559ace2957c199198f128f22ac5460f5e44e79dac67ac";
+var AFK_RUN_DRIFT_EXIT_CODE = 95;
+var AFK_RUN_DRIFT_GUARD = `sha256sum /usr/local/bin/pipeline-afk-run 2>/dev/null | grep -q "^${AFK_RUN_SCRIPT_SHA256} " || { echo "sandcastle \u955C\u50CF\u5185 pipeline-afk-run \u4E0E\u4ED3\u5E93 tools/sandcastle/pipeline-afk-run.sh \u4E0D\u4E00\u81F4\uFF08\u955C\u50CF\u9648\u65E7\u6216\u811A\u672C\u5DF2\u66F4\u65B0\u672A\u91CD\u5EFA\uFF09\u2014\u2014\u8BF7\u91CD\u5EFA\u955C\u50CF\uFF1Atools/sandcastle/build.sh" >&2; exit ${AFK_RUN_DRIFT_EXIT_CODE}; }`;
+var buildAfkRunCommand = (name2, runner) => runner === "codex" ? `${AFK_RUN_DRIFT_GUARD}; PIPELINE_AFK=1 PIPELINE_RUNNER=codex pipeline-afk-run ${name2}` : `${AFK_RUN_DRIFT_GUARD}; PIPELINE_AFK=1 pipeline-afk-run ${name2}`;
+
+// packages/automation/dist/runner/docker.js
+var dockerAvailable = async (exec) => {
+  try {
+    const r = await exec("docker", ["info"]);
+    return r.exitCode === 0;
+  } catch {
+    return false;
+  }
+};
+
+// packages/automation/dist/config/automationJson.js
+import { readFileSync as readFileSync10 } from "node:fs";
+import { join as join15 } from "node:path";
+var AUTOMATION_JSON_LIMITS = {
+  maxParallel: { min: 1, max: 8 },
+  maxRetries: { min: 0, max: 3 },
+  imageMaxLen: 200
+};
+var AUTOMATION_IMAGE_RE = /^[a-zA-Z0-9._/:@-]+$/;
+function automationJsonPath(root) {
+  return join15(root, ".pipeline", "automation.json");
+}
+var intIn = (v, min, max) => typeof v === "number" && Number.isInteger(v) && v >= min && v <= max;
+function isValidImageRef(v) {
+  return v.length > 0 && v.length <= AUTOMATION_JSON_LIMITS.imageMaxLen && AUTOMATION_IMAGE_RE.test(v);
+}
+function readAutomationJson(root, fs = { readFileSync: readFileSync10 }) {
+  let parsed;
+  try {
+    parsed = JSON.parse(fs.readFileSync(automationJsonPath(root), "utf8"));
+  } catch {
+    return {};
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed))
+    return {};
+  const raw = parsed;
+  const cfg2 = {};
+  const { maxParallel: mp, maxRetries: mr } = AUTOMATION_JSON_LIMITS;
+  if (intIn(raw.max_parallel, mp.min, mp.max))
+    cfg2.maxParallel = raw.max_parallel;
+  if (intIn(raw.max_retries, mr.min, mr.max))
+    cfg2.maxRetries = raw.max_retries;
+  if (typeof raw.default_opt_in === "boolean")
+    cfg2.defaultOptIn = raw.default_opt_in;
+  if (typeof raw.image === "string") {
+    const image = raw.image.trim();
+    if (isValidImageRef(image))
+      cfg2.image = image;
+  }
+  return cfg2;
+}
+
+// packages/automation/dist/sdk/sdk.js
+import { join as join16 } from "node:path";
+var scalar5 = (v) => typeof v === "string" ? v : "";
+var storeWriter = (store2, changeDir2) => ({
+  claim: (name2) => claim(store2, changeDir2(name2)),
+  setAutomation: (name2, s) => store2.set(changeDir2(name2), "automation", s),
+  setField: (name2, field2, value) => store2.set(changeDir2(name2), field2, value),
+  incrAttempts: (name2, max) => incrAttempts(store2, changeDir2(name2), max),
+  getAutomation: (name2) => getAutomation(store2, changeDir2(name2)),
+  setAutomationOwned: (name2, next) => setAutomationOwned(store2, changeDir2(name2), next),
+  markFailedSync: (name2, reason) => {
+    void store2.setMany(changeDir2(name2), { automation: "failed", automation_last_error: reason }).catch(() => {
+    });
+  }
+});
+function createAutomation(deps) {
+  const { image: _image, ...fileCfg } = readAutomationJson(deps.repoRoot, deps.configFs);
+  const config = { ...DEFAULT_CONFIG, enabled: true, defaultOptIn: true, ...fileCfg, ...deps.config };
+  const { store: store2, clock } = deps;
+  const changesDir = join16(deps.repoRoot, "openspec", "changes");
+  const changeDir2 = (name2) => join16(changesDir, name2);
+  return {
+    config,
+    async enqueue(name2) {
+      const state = await store2.read(changeDir2(name2));
+      const eligible = shouldEnqueueOnSpecComplete({
+        enabled: config.enabled,
+        track: scalar5(state.fields.track),
+        automation: scalar5(state.fields.automation),
+        defaultOptIn: config.defaultOptIn
+      });
+      if (!eligible)
+        return false;
+      await markQueued(store2, changeDir2(name2), clock);
+      return true;
+    },
+    scanReady() {
+      return scanReadyFromFs(changesDir, store2);
+    },
+    async runRound(runChange) {
+      const candidates = await scanReadyFromFs(changesDir, store2);
+      const scheduler = createScheduler({
+        state: storeWriter(store2, changeDir2),
+        runChange,
+        registerShutdown: () => () => {
+        },
+        config: { maxParallel: config.maxParallel, maxRetries: config.maxRetries, level: config.level }
+      });
+      await scheduler.runRoundOnce(candidates);
+    }
+  };
+}
+
+// packages/automation/dist/sdk/dockerRunChange.js
+import { join as join20 } from "node:path";
+
+// packages/automation/dist/lifecycle/ports.js
+import { mkdir as mkdir8, writeFile as writeFile5 } from "node:fs/promises";
+import { join as join19 } from "node:path";
+
+// packages/automation/dist/runner/boundedTail.js
+var MAX_TAIL_CHARS = 64 * 1024;
+var BoundedTail = class {
+  items = [];
+  totalChars = 0;
+  maxChars;
+  separator;
+  constructor(maxChars = MAX_TAIL_CHARS, separator = "") {
+    this.maxChars = maxChars;
+    this.separator = separator;
+  }
+  push(item) {
+    const bounded = item.length > this.maxChars ? item.slice(item.length - this.maxChars) : item;
+    this.totalChars += bounded.length + (this.items.length > 0 ? this.separator.length : 0);
+    this.items.push(bounded);
+    while (this.totalChars > this.maxChars && this.items.length > 1) {
+      const dropped = this.items.shift();
+      this.totalChars -= dropped.length + this.separator.length;
+    }
+  }
+  toString() {
+    return this.items.join(this.separator);
+  }
+};
+
+// packages/automation/dist/runner/container.js
+var KEEPALIVE_CMD = ["sleep", "2147483647"];
+var formatVolumeMount = (m) => {
+  const base = `${m.hostPath}:${m.sandboxPath}`;
+  const options = [m.readonly ? "ro" : void 0, "z"].filter((o) => o !== void 0).join(",");
+  return `${base}:${options}`;
+};
+var buildContainerRunArgs = (opts) => {
+  const envFlags = Object.entries(opts.env ?? {}).flatMap(([k, v]) => ["-e", `${k}=${v}`]);
+  const volumeFlags = (opts.gitMounts ?? []).flatMap((m) => ["-v", formatVolumeMount(m)]);
+  const userFlags = opts.uid !== void 0 && opts.gid !== void 0 ? ["--user", `${opts.uid}:${opts.gid}`] : [];
+  const cpusFlags = opts.cpus !== void 0 ? ["--cpus", String(opts.cpus)] : [];
+  const workdirFlags = opts.worktreePath ? ["-w", opts.worktreePath] : [];
+  return [
+    "run",
+    "-d",
+    "--name",
+    opts.name,
+    ...envFlags,
+    ...volumeFlags,
+    ...userFlags,
+    ...cpusFlags,
+    ...workdirFlags,
+    opts.image
+    // image 末位（buildContainerRunArgs 契约；保活命令由 startContainer 追加）
+  ];
+};
+var buildExecArgs = (name2, command, opts) => {
+  const cwdFlags = opts?.cwd ? ["-w", opts.cwd] : [];
+  return ["exec", ...cwdFlags, name2, "sh", "-c", command];
+};
+var startContainer = async (exec, opts) => {
+  const args = [...buildContainerRunArgs(opts), ...KEEPALIVE_CMD];
+  const r = await exec("docker", args);
+  if (r.exitCode !== 0) {
+    throw new Error(`docker run ${opts.image} failed (exit ${r.exitCode}): ${r.stderr.slice(0, 300)}`);
+  }
+  return opts.name;
+};
+var execInContainer = (exec, name2, command, opts) => exec("docker", buildExecArgs(name2, command, { cwd: opts?.cwd }), { onLine: opts?.onLine });
+var removeContainer = async (exec, name2) => {
+  await exec("docker", ["stop", name2]).catch(() => {
+  });
+  await exec("docker", ["rm", name2]).catch(() => {
+  });
+};
+var createDockerSandbox = async (exec, opts) => {
+  const name2 = `sandcastle-${randomName()}`;
+  await startContainer(exec, {
+    name: name2,
+    image: opts.image,
+    env: opts.env,
+    gitMounts: opts.gitMounts,
+    worktreePath: opts.worktreePath,
+    uid: opts.uid,
+    gid: opts.gid,
+    cpus: opts.cpus
+  });
+  return {
+    env: opts.env,
+    containerName: name2,
+    exec: (cmd, options) => execInContainer(exec, name2, cmd, { cwd: opts.worktreePath, onLine: options?.onLine }),
+    close: () => removeContainer(exec, name2)
+  };
+};
+var randomName = () => `${Date.now().toString(36)}-${Math.random().toString(16).slice(2, 8)}`;
+
+// packages/automation/dist/runner/gitMounts.js
+import { readFile as fsReadFile, stat as fsStat } from "node:fs/promises";
+import { resolve as resolve5 } from "node:path";
+var resolveGitMounts = async (gitPath, deps) => {
+  const stat8 = deps?.stat ?? ((p) => fsStat(p));
+  const readFile7 = deps?.readFile ?? ((p) => fsReadFile(p, "utf-8"));
+  const s = await stat8(gitPath);
+  if (s.isDirectory()) {
+    return [{ hostPath: gitPath, sandboxPath: gitPath }];
+  }
+  const content = (await readFile7(gitPath)).trim();
+  const match = content.match(/^gitdir:\s*(.+)$/);
+  if (!match) {
+    return [{ hostPath: gitPath, sandboxPath: gitPath }];
+  }
+  const gitdirPath = match[1];
+  const parentGitDir = resolve5(gitdirPath, "..", "..");
+  return [
+    { hostPath: gitPath, sandboxPath: gitPath },
+    { hostPath: parentGitDir, sandboxPath: parentGitDir }
+  ];
+};
+
+// packages/automation/dist/runner/race.js
+var DEFAULT_COMPLETION_SIGNAL = "<promise>COMPLETE</promise>";
+var DEFAULT_IDLE_TIMEOUT_MS = 20 * 60 * 1e3;
+var DEFAULT_COMPLETION_TIMEOUT_MS = 60 * 1e3;
+var AgentIdleTimeoutError = class extends Error {
+  name = "AgentIdleTimeoutError";
+  _tag = "AgentIdleTimeoutError";
+};
+var detectsCompletion = (accumulated, signals) => signals.some((sig) => accumulated.includes(sig));
+var armDecision = (completionDetected, idleMs, graceMs) => completionDetected ? { ms: graceMs, onExpiry: "resolve" } : { ms: idleMs, onExpiry: "reject-idle" };
+var invokeWithRace = (runExec, opts) => new Promise((resolve10, reject) => {
+  const { idleMs, graceMs, completionSignals, signal } = opts;
+  let settled = false;
+  let accumulated = "";
+  let completionDetected = false;
+  let timer = null;
+  const clear = () => {
+    if (timer !== null) {
+      clearTimeout(timer);
+      timer = null;
+    }
+  };
+  const cleanup2 = () => {
+    clear();
+    if (onAbort && signal)
+      signal.removeEventListener("abort", onAbort);
+  };
+  const settleResolve = (v) => {
+    if (settled)
+      return;
+    settled = true;
+    cleanup2();
+    resolve10(v);
+  };
+  const settleReject = (e) => {
+    if (settled)
+      return;
+    settled = true;
+    cleanup2();
+    reject(e);
+  };
+  const resetTimer = () => {
+    clear();
+    const d = armDecision(completionDetected, idleMs, graceMs);
+    timer = setTimeout(() => {
+      if (d.onExpiry === "resolve")
+        settleResolve({ stdout: accumulated, stderr: "", exitCode: 0 });
+      else
+        settleReject(new AgentIdleTimeoutError(`Agent idle for ${idleMs / 1e3}s \u2014 no output received.`));
+    }, d.ms);
+    timer.unref?.();
+  };
+  let onAbort;
+  if (signal) {
+    if (signal.aborted) {
+      reject(signal.reason);
+      return;
+    }
+    onAbort = () => settleReject(signal.reason);
+    signal.addEventListener("abort", onAbort, { once: true });
+  }
+  resetTimer();
+  const onLine = (line) => {
+    if (settled)
+      return;
+    accumulated += (accumulated ? "\n" : "") + line;
+    if (!completionDetected && detectsCompletion(accumulated, completionSignals)) {
+      completionDetected = true;
+    }
+    resetTimer();
+  };
+  runExec(onLine).then((res) => {
+    if (settled)
+      return;
+    settleResolve(res);
+  }).catch((err) => settleReject(err));
+});
+
+// packages/automation/dist/lifecycle/mergeback.js
+import { mkdir as mkdir7, rmdir as rmdir3, stat as stat5 } from "node:fs/promises";
+import { join as join18, resolve as resolve6 } from "node:path";
+
+// packages/automation/dist/lifecycle/worktree.js
+import { access, mkdir as mkdir6 } from "node:fs/promises";
+import { join as join17 } from "node:path";
+var NO_CONFIG_LOCK_FLAGS = [
+  "-c",
+  "branch.autoSetupMerge=false",
+  "-c",
+  "push.autoSetupRemote=false"
+];
+var GIT_ENV = { LC_ALL: "C" };
+var WorktreeError = class extends Error {
+  name = "WorktreeError";
+  _tag = "WorktreeError";
+};
+var worktreePathFor = (repoDir, branch) => join17(repoDir, ".sandcastle", "worktrees", branch.replace(/\//g, "-"));
+var addWorktree = async (exec, repoDir, branch) => {
+  await mkdir6(join17(repoDir, ".sandcastle", "worktrees"), { recursive: true });
+  const path5 = worktreePathFor(repoDir, branch);
+  const created = await exec("git", [...NO_CONFIG_LOCK_FLAGS, "worktree", "add", "-b", branch, path5, "HEAD"], { cwd: repoDir, env: GIT_ENV });
+  if (created.exitCode === 0)
+    return { path: path5, branch };
+  const reused = await exec("git", [...NO_CONFIG_LOCK_FLAGS, "worktree", "add", path5, branch], {
+    cwd: repoDir,
+    env: GIT_ENV
+  });
+  if (reused.exitCode === 0)
+    return { path: path5, branch };
+  throw new WorktreeError(`git worktree add failed for '${branch}': ${(reused.stderr || created.stderr).slice(0, 300)}`);
+};
+var removeWorktree = async (exec, path5) => {
+  const repoDir = join17(path5, "..", "..", "..");
+  const r = await exec("git", ["worktree", "remove", "--force", path5], { cwd: repoDir, env: GIT_ENV });
+  if (r.exitCode !== 0) {
+    await exec("git", ["worktree", "prune"], { cwd: repoDir, env: GIT_ENV }).catch(() => {
+    });
+  }
+};
+var CANCEL_MARKER_FILE = ".cancel-requested";
+var hasCancelMarker = async (worktreePath) => access(join17(worktreePath, CANCEL_MARKER_FILE)).then(() => true, () => false);
+var realWorktreePort = (exec) => ({
+  create: (repoDir, branch) => addWorktree(exec, repoDir, branch),
+  remove: (path5) => removeWorktree(exec, path5),
+  hasCancelMarker: (path5) => hasCancelMarker(path5)
+});
+
+// packages/automation/dist/lifecycle/mergeback.js
+var GIT_ENV2 = { LC_ALL: "C" };
+var LOCK_TIMEOUT_MS2 = 3e5;
+var LOCK_STALE_MS = 12e4;
+var LOCK_POLL_MS = 25;
+var sleep2 = (ms) => new Promise((r) => setTimeout(r, ms));
+var SyncError = class extends Error {
+  name = "SyncError";
+  _tag = "SyncError";
+  preservedWorktreePath;
+  constructor(message, preservedWorktreePath) {
+    super(message);
+    this.preservedWorktreePath = preservedWorktreePath;
+  }
+};
+var parseMergeResult = (r) => ({
+  conflict: r.exitCode !== 0
+});
+var realGitFace = (exec, cwd) => ({
+  async revParse(ref) {
+    const r = await exec("git", ["rev-parse", ref], { cwd, env: GIT_ENV2 });
+    if (r.exitCode !== 0)
+      throw new Error(`git rev-parse ${ref} failed: ${r.stderr.slice(0, 200)}`);
+    return r.stdout.trim();
+  }
+});
+var collectCommitsReal = async (exec, input) => {
+  const r = await exec("git", ["rev-list", `${input.base}..refs/heads/${input.branch}`, "--reverse"], { cwd: input.hostRepoDir, env: GIT_ENV2 });
+  if (r.exitCode !== 0)
+    return [];
+  const lines = r.stdout.trim();
+  if (!lines)
+    return [];
+  return lines.split("\n").map((sha) => ({ sha: sha.trim() }));
+};
+var diffNamesReal = async (exec, input) => {
+  const r = await exec("git", ["diff", "--name-only", `${input.base}...refs/heads/${input.branch}`], { cwd: input.hostRepoDir, env: GIT_ENV2 });
+  if (r.exitCode !== 0)
+    return [];
+  const lines = r.stdout.trim();
+  if (!lines)
+    return [];
+  return lines.split("\n").map((f) => f.trim()).filter((f) => f !== "");
+};
+var resolveLockDir = async (exec, hostRepoDir) => {
+  const r = await exec("git", ["rev-parse", "--git-common-dir"], { cwd: hostRepoDir, env: GIT_ENV2 });
+  const out = r.exitCode === 0 ? r.stdout.trim() : ".git";
+  return join18(resolve6(hostRepoDir, out || ".git"), "sandcastle-mergeback.lock.d");
+};
+var acquireMergeLock = async (exec, hostRepoDir, preservedPath) => {
+  const lockdir = await resolveLockDir(exec, hostRepoDir);
+  const deadline = Date.now() + LOCK_TIMEOUT_MS2;
+  for (; ; ) {
+    try {
+      await mkdir7(lockdir, { recursive: false });
+      return lockdir;
+    } catch {
+      try {
+        const s = await stat5(lockdir);
+        if (Date.now() - s.mtimeMs > LOCK_STALE_MS)
+          await rmdir3(lockdir).catch(() => {
+          });
+      } catch {
+      }
+      if (Date.now() >= deadline) {
+        throw new SyncError(`host merge-back lock not acquired within ${LOCK_TIMEOUT_MS2}ms (${lockdir})`, preservedPath);
+      }
+      await sleep2(LOCK_POLL_MS);
+    }
+  }
+};
+var mergeBackToBase = async (exec, input) => {
+  const { hostRepoDir, worktreePath, branch, base } = input;
+  const lock = await acquireMergeLock(exec, hostRepoDir, worktreePath);
+  try {
+    const merge = await exec("git", [...NO_CONFIG_LOCK_FLAGS, "merge", "--no-edit", `refs/heads/${branch}`], { cwd: hostRepoDir, env: GIT_ENV2 });
+    if (parseMergeResult(merge).conflict) {
+      await exec("git", ["merge", "--abort"], { cwd: hostRepoDir, env: GIT_ENV2 }).catch(() => {
+      });
+      throw new SyncError(`Merge of '${branch}' into base '${base}' failed (conflict). The named branch '${branch}' and worktree are PRESERVED at ${worktreePath}. To retry: cd ${worktreePath} && git merge ${base} (resolve conflicts manually, then commit).`, worktreePath);
+    }
+  } finally {
+    await rmdir3(lock).catch(() => {
+    });
+  }
+};
+
+// packages/automation/dist/lifecycle/ports.js
+var createLifecyclePorts = (deps) => {
+  const { exec, hostRepoDir } = deps;
+  const image = deps.image ?? "sandcastle:local";
+  const uid = deps.uid ?? process.getuid?.();
+  const gid = deps.gid ?? process.getgid?.();
+  const idleMs = deps.idleMs ?? DEFAULT_IDLE_TIMEOUT_MS;
+  const graceMs = deps.graceMs ?? DEFAULT_COMPLETION_TIMEOUT_MS;
+  const completionSignals = deps.completionSignals ?? [DEFAULT_COMPLETION_SIGNAL];
+  return {
+    worktree: realWorktreePort(exec),
+    async createSandbox({ env, worktreePath }) {
+      const gitMounts = await resolveGitMounts(join19(worktreePath, ".git")).catch(() => []);
+      const dotGit = join19(worktreePath, ".git");
+      const parentGitMounts = gitMounts.filter((m) => m.hostPath !== dotGit);
+      const codexHome = env.CODEX_HOME;
+      const codexHomeMounts = codexHome !== void 0 && codexHome.startsWith("/") ? [{ hostPath: codexHome, sandboxPath: codexHome }] : [];
+      const mounts = [{ hostPath: worktreePath, sandboxPath: worktreePath }, ...parentGitMounts, ...codexHomeMounts];
+      return createDockerSandbox(exec, { image, worktreePath, env, gitMounts: mounts, uid, gid, cpus: deps.cpus });
+    },
+    async runWork(sandboxExec, name2, signal, runner) {
+      const cmd = buildAfkRunCommand(name2, runner);
+      const changeDir2 = join19(hostRepoDir, "openspec", "changes", name2);
+      const logPath = join19(changeDir2, ".sandcastle-run.log");
+      const persistLog = async (content) => {
+        await mkdir8(changeDir2, { recursive: true }).catch(() => {
+        });
+        await writeFile5(logPath, content, "utf8").catch(() => {
+        });
+      };
+      const fallbackTail = new BoundedTail(MAX_TAIL_CHARS, "\n");
+      let res;
+      try {
+        res = await invokeWithRace((onLine) => sandboxExec(cmd, {
+          onLine: (line) => {
+            fallbackTail.push(line);
+            onLine(line);
+          }
+        }), { idleMs, graceMs, completionSignals, signal });
+      } catch (err) {
+        await persistLog(fallbackTail.toString());
+        throw err;
+      }
+      const fullLog = [res.stdout, res.stderr].filter((s) => s.length > 0).join("\n");
+      await persistLog(fullLog);
+      if (res.exitCode !== 0) {
+        throw new Error(`pipeline afk-run failed (exit ${res.exitCode}): ${res.stderr.slice(0, 200)}`);
+      }
+      return parseSandboxReport(res.stdout);
+    },
+    collectCommits: (input) => collectCommitsReal(exec, { hostRepoDir, branch: input.branch, base: input.base }),
+    // T4 决议 #12：denylist 结算检查的数据源（同 collectCommits 从 hostRepoDir 读不可变命名 ref）。
+    diffNames: (input) => diffNamesReal(exec, { hostRepoDir, branch: input.branch, base: input.base }),
+    mergeToBase: (input) => mergeBackToBase(exec, { hostRepoDir, worktreePath: input.worktreePath, branch: input.branch, base: input.base }),
+    git: realGitFace(exec, hostRepoDir),
+    setStateField: deps.setStateField ?? (async () => {
+    })
+  };
+};
+
+// packages/automation/dist/runner/exec.js
+import { execFile, spawn as spawn2 } from "node:child_process";
+import { createInterface } from "node:readline";
+var mergedEnv = (env) => env ? { ...process.env, ...env } : process.env;
+var spawnStreaming = (file, args, opts) => new Promise((resolve10) => {
+  const maxTail = opts.maxTailChars ?? MAX_TAIL_CHARS;
+  const proc = spawn2(file, args, {
+    cwd: opts.cwd,
+    env: mergedEnv(opts.env),
+    stdio: [opts.input !== void 0 ? "pipe" : "ignore", "pipe", "pipe"]
+  });
+  if (opts.input !== void 0 && proc.stdin) {
+    proc.stdin.write(opts.input);
+    proc.stdin.end();
+  }
+  const stdoutTail = new BoundedTail(maxTail, "\n");
+  const stderrTail = new BoundedTail(maxTail, opts.onLine ? "\n" : "");
+  if (opts.onLine && proc.stdout) {
+    const rl = createInterface({ input: proc.stdout });
+    rl.on("line", (line) => {
+      stdoutTail.push(line);
+      opts.onLine?.(line);
+    });
+  } else {
+    proc.stdout?.on("data", (chunk) => stdoutTail.push(chunk.toString()));
+  }
+  if (opts.onLine && proc.stderr) {
+    const rlErr = createInterface({ input: proc.stderr });
+    rlErr.on("line", (line) => {
+      stderrTail.push(line);
+      opts.onLine?.(line);
+    });
+  } else {
+    proc.stderr?.on("data", (chunk) => stderrTail.push(chunk.toString()));
+  }
+  proc.on("error", (err) => {
+    stderrTail.push(String(err.message ?? err));
+    resolve10({ stdout: stdoutTail.toString(), stderr: stderrTail.toString(), exitCode: 127 });
+  });
+  proc.on("close", (code) => {
+    resolve10({ stdout: stdoutTail.toString(), stderr: stderrTail.toString(), exitCode: code ?? 0 });
+  });
+});
+var nodeExec = (file, args, opts) => {
+  if (opts?.onLine || opts?.input !== void 0)
+    return spawnStreaming(file, args, opts);
+  return new Promise((resolve10) => {
+    execFile(file, args, { cwd: opts?.cwd, env: mergedEnv(opts?.env), maxBuffer: 64 * 1024 * 1024, encoding: "utf-8" }, (error, stdout, stderr) => {
+      const code = error && typeof error.code === "number" ? error.code : error ? 1 : 0;
+      resolve10({ stdout: String(stdout), stderr: String(stderr), exitCode: code });
+    });
+  });
+};
+
+// packages/automation/dist/sdk/dockerRunChange.js
+var codexCredentialEnv = (hostEnv) => {
+  const out = {};
+  if (hostEnv.OPENAI_API_KEY !== void 0 && hostEnv.OPENAI_API_KEY !== "")
+    out.OPENAI_API_KEY = hostEnv.OPENAI_API_KEY;
+  if (hostEnv.CODEX_HOME !== void 0 && hostEnv.CODEX_HOME !== "")
+    out.CODEX_HOME = hostEnv.CODEX_HOME;
+  return out;
+};
+var claudeCredentialEnv = (hostEnv) => {
+  const out = {};
+  if (hostEnv.CLAUDE_CODE_OAUTH_TOKEN !== void 0 && hostEnv.CLAUDE_CODE_OAUTH_TOKEN !== "") {
+    out.CLAUDE_CODE_OAUTH_TOKEN = hostEnv.CLAUDE_CODE_OAUTH_TOKEN;
+  }
+  return out;
+};
+var createDockerRunChange = (opts) => {
+  const exec = opts.exec ?? nodeExec;
+  const { store: store2, hostRepoDir } = opts;
+  const changeDir2 = (name2) => join20(hostRepoDir, "openspec", "changes", name2);
+  const setStateField = store2 ? (name2, field2, value) => store2.set(changeDir2(name2), field2, field2 === "automation_worktree" ? sanitizePath(value) : value) : void 0;
+  const ports = createLifecyclePorts({
+    exec,
+    hostRepoDir: opts.hostRepoDir,
+    image: opts.image,
+    uid: opts.uid,
+    gid: opts.gid,
+    cpus: opts.cpus,
+    idleMs: opts.idleMs,
+    graceMs: opts.graceMs,
+    setStateField
+  });
+  const autoMerge = opts.level === "L3";
+  return async (name2, signal) => {
+    const denylist = opts.resolveDenylist ? await opts.resolveDenylist(name2).catch(() => []) : [];
+    const runner = opts.resolveRunner ? await opts.resolveRunner(name2).catch(() => void 0) : void 0;
+    const hostEnv = opts.hostEnv ?? process.env;
+    const credEnv = runner === "codex" ? codexCredentialEnv(hostEnv) : claudeCredentialEnv(hostEnv);
+    const extraEnv = { ...credEnv, ...opts.extraEnv };
+    return runChangeInSandbox(ports, { hostRepoDir: opts.hostRepoDir, name: name2, base: opts.base, autoMerge, extraEnv, denylist, runner }, signal);
+  };
+};
+
 // packages/tap/dist/paths.js
 import { homedir as homedir3, tmpdir } from "node:os";
 import { mkdirSync as mkdirSync2 } from "node:fs";
-import { join as join14, dirname as dirname5, resolve as resolve5 } from "node:path";
+import { join as join21, dirname as dirname5, resolve as resolve7 } from "node:path";
 function safeHome() {
   const h = homedir3();
   if (h && h.length > 0)
     return h;
   const uid = typeof process.getuid === "function" ? String(process.getuid()) : "nouid";
-  const base = join14(tmpdir(), `pipeline-tap-${uid}`);
+  const base = join21(tmpdir(), `pipeline-tap-${uid}`);
   try {
     mkdirSync2(base, { recursive: true, mode: 448 });
   } catch {
@@ -11166,26 +12385,26 @@ function safeHome() {
 }
 function resolveTapDir(opts = {}) {
   if (opts.dir)
-    return resolve5(opts.dir);
+    return resolve7(opts.dir);
   const env = opts.env ?? process.env;
   const explicit = (env.PIPELINE_TAP_DIR ?? "").trim();
   if (explicit)
-    return resolve5(explicit);
+    return resolve7(explicit);
   const db = (env.PIPELINE_TAP_DB ?? "").trim();
   if (db)
-    return resolve5(dirname5(resolve5(db)));
+    return resolve7(dirname5(resolve7(db)));
   const xdg = (env.XDG_DATA_HOME ?? "").trim();
   if (xdg)
-    return resolve5(join14(xdg, "pipeline-tap"));
-  return resolve5(join14(safeHome(), ".local", "share", "pipeline-tap"));
+    return resolve7(join21(xdg, "pipeline-tap"));
+  return resolve7(join21(safeHome(), ".local", "share", "pipeline-tap"));
 }
 function resolveStateDir(opts = {}) {
   if (opts.dir)
-    return resolve5(opts.dir);
+    return resolve7(opts.dir);
   const env = opts.env ?? process.env;
   const override = (env.PIPELINE_TAP_STATE_DIR ?? "").trim();
   if (override)
-    return resolve5(override);
+    return resolve7(override);
   return resolveTapDir(opts);
 }
 
@@ -11355,8 +12574,8 @@ function headerLookup(headers, name2) {
 }
 
 // packages/tap/dist/trace-store.js
-import { appendFileSync as appendFileSync2, existsSync as existsSync5, mkdirSync as mkdirSync3, readFileSync as readFileSync10, readdirSync as readdirSync3, renameSync as renameSync2, writeFileSync as writeFileSync2 } from "node:fs";
-import { join as join15 } from "node:path";
+import { appendFileSync as appendFileSync2, existsSync as existsSync5, mkdirSync as mkdirSync3, readFileSync as readFileSync11, readdirSync as readdirSync3, renameSync as renameSync2, writeFileSync as writeFileSync2 } from "node:fs";
+import { join as join22 } from "node:path";
 import { randomUUID } from "node:crypto";
 function resolveTraceDir(opts = {}) {
   return resolveTapDir(opts);
@@ -11373,16 +12592,16 @@ var FileTraceStore = class {
   recordsDir;
   constructor(dir) {
     this.dir = dir;
-    this.sessionsDir = join15(dir, "sessions");
-    this.recordsDir = join15(dir, "records");
+    this.sessionsDir = join22(dir, "sessions");
+    this.recordsDir = join22(dir, "records");
     mkdirSync3(this.sessionsDir, { recursive: true });
     mkdirSync3(this.recordsDir, { recursive: true });
   }
   sessionFile(id) {
-    return join15(this.sessionsDir, `${encodeURIComponent(id)}.json`);
+    return join22(this.sessionsDir, `${encodeURIComponent(id)}.json`);
   }
   recordsFile(id) {
-    return join15(this.recordsDir, `${encodeURIComponent(id)}.jsonl`);
+    return join22(this.recordsDir, `${encodeURIComponent(id)}.jsonl`);
   }
   writeSession(row) {
     const tmp = this.sessionFile(row.id) + ".tmp";
@@ -11394,7 +12613,7 @@ var FileTraceStore = class {
     if (!existsSync5(f))
       return null;
     try {
-      return JSON.parse(readFileSync10(f, "utf8"));
+      return JSON.parse(readFileSync11(f, "utf8"));
     } catch {
       return null;
     }
@@ -11472,7 +12691,7 @@ var FileTraceStore = class {
     const f = this.recordsFile(id);
     if (!existsSync5(f))
       return [];
-    return readFileSync10(f, "utf8").split("\n").filter((line) => line.trim().length > 0).map((line) => JSON.parse(line));
+    return readFileSync11(f, "utf8").split("\n").filter((line) => line.trim().length > 0).map((line) => JSON.parse(line));
   }
   listSessions() {
     if (!existsSync5(this.sessionsDir))
@@ -11482,7 +12701,7 @@ var FileTraceStore = class {
       if (!name2.endsWith(".json"))
         continue;
       try {
-        out.push(JSON.parse(readFileSync10(join15(this.sessionsDir, name2), "utf8")));
+        out.push(JSON.parse(readFileSync11(join22(this.sessionsDir, name2), "utf8")));
       } catch {
       }
     }
@@ -11500,13 +12719,13 @@ function getTraceStore() {
 }
 
 // packages/tap/dist/security.js
-import { existsSync as existsSync6, mkdirSync as mkdirSync4, readFileSync as readFileSync11, renameSync as renameSync3, writeFileSync as writeFileSync3 } from "node:fs";
-import { join as join16 } from "node:path";
+import { existsSync as existsSync6, mkdirSync as mkdirSync4, readFileSync as readFileSync12, renameSync as renameSync3, writeFileSync as writeFileSync3 } from "node:fs";
+import { join as join23 } from "node:path";
 var FLAG_NAME = "capture.enabled";
 var TTL_MS = 1e3;
 var cache = /* @__PURE__ */ new Map();
 function flagPath(opts = {}) {
-  return join16(resolveStateDir(opts), FLAG_NAME);
+  return join23(resolveStateDir(opts), FLAG_NAME);
 }
 function isCaptureEnabled(opts = {}) {
   const p = flagPath(opts);
@@ -11517,7 +12736,7 @@ function isCaptureEnabled(opts = {}) {
   let val = false;
   try {
     if (existsSync6(p)) {
-      const raw = readFileSync11(p, "utf8").trim().toLowerCase();
+      const raw = readFileSync12(p, "utf8").trim().toLowerCase();
       val = raw === "1" || raw === "true" || raw === "on" || raw === "yes";
     }
   } catch {
@@ -12860,9 +14079,9 @@ async function stopHandles(handles) {
 
 // packages/tap/dist/certs.js
 import { X509Certificate, createPublicKey, createPrivateKey, createHash as createHash2, generateKeyPairSync, randomBytes, sign as cryptoSign } from "node:crypto";
-import { chmodSync, existsSync as existsSync7, mkdirSync as mkdirSync5, readFileSync as readFileSync12, renameSync as renameSync4, writeFileSync as writeFileSync4 } from "node:fs";
+import { chmodSync, existsSync as existsSync7, mkdirSync as mkdirSync5, readFileSync as readFileSync13, renameSync as renameSync4, writeFileSync as writeFileSync4 } from "node:fs";
 import { homedir as homedir4 } from "node:os";
-import { join as join17 } from "node:path";
+import { join as join24 } from "node:path";
 var CA_VALIDITY_DAYS = 5 * 365;
 var HOST_VALIDITY_DAYS = 365;
 var DAY_MS = 864e5;
@@ -13122,17 +14341,17 @@ function resolveCaDir(opts = {}) {
   if (override)
     return override;
   const home = opts.home ?? homedir4();
-  return join17(home, ".pipeline-tap");
+  return join24(home, ".pipeline-tap");
 }
 function ensureCa(opts = {}) {
   const caDir = resolveCaDir(opts);
   mkdirSync5(caDir, { recursive: true });
-  const caCertPath = join17(caDir, "ca.pem");
-  const caKeyPath = join17(caDir, "ca-key.pem");
+  const caCertPath = join24(caDir, "ca.pem");
+  const caKeyPath = join24(caDir, "ca-key.pem");
   if (existsSync7(caCertPath) && existsSync7(caKeyPath)) {
     try {
-      const certPem = readFileSync12(caCertPath, "utf8");
-      const keyPem = readFileSync12(caKeyPath, "utf8");
+      const certPem = readFileSync13(caCertPath, "utf8");
+      const keyPem = readFileSync13(caKeyPath, "utf8");
       new X509Certificate(certPem);
       loadPrivateKey(keyPem);
       chmodSync(caKeyPath, 384);
@@ -13188,9 +14407,9 @@ var CertificateAuthority = class _CertificateAuthority {
 };
 
 // packages/tap/dist/clients.js
-import { readFileSync as readFileSync13 } from "node:fs";
+import { readFileSync as readFileSync14 } from "node:fs";
 import { homedir as homedir5 } from "node:os";
-import { join as join18 } from "node:path";
+import { join as join25 } from "node:path";
 function cfg(partial) {
   return {
     provider: "anthropic",
@@ -13371,7 +14590,7 @@ var CLIENT_CONFIGS = {
 };
 function readJson(path5) {
   try {
-    const data = JSON.parse(readFileSync13(path5, "utf8"));
+    const data = JSON.parse(readFileSync14(path5, "utf8"));
     return typeof data === "object" && data !== null && !Array.isArray(data) ? data : {};
   } catch {
     return {};
@@ -13382,7 +14601,7 @@ function detectAnthropicTarget(c, env, home) {
   if (fromEnv)
     return fromEnv.replace(/\/+$/, "");
   for (const name2 of ["settings.json", "settings.local.json"]) {
-    const data = readJson(join18(home, ".claude", name2));
+    const data = readJson(join25(home, ".claude", name2));
     const envBlock = typeof data.env === "object" && data.env !== null ? data.env : {};
     const val = String(envBlock.ANTHROPIC_BASE_URL ?? "").trim();
     if (val)
@@ -13394,7 +14613,7 @@ function detectCodexTarget(c, env, home) {
   const fromEnv = (env.OPENAI_BASE_URL ?? "").trim();
   if (fromEnv)
     return fromEnv.replace(/\/+$/, "");
-  const auth = readJson(join18(home, ".codex", "auth.json"));
+  const auth = readJson(join25(home, ".codex", "auth.json"));
   if (auth.tokens && !auth.OPENAI_API_KEY)
     return "https://chatgpt.com/backend-api/codex";
   return c.defaultTarget;
@@ -13477,18 +14696,75 @@ async function launchTap(opts) {
   return { daemon, clients, caCertPath };
 }
 
+// packages/cli/src/afkReadiness.ts
+import { execFile as execFile2 } from "node:child_process";
+var nodeExecDocker = (args) => new Promise((resolve10) => {
+  execFile2("docker", [...args], (err, stdout, stderr) => {
+    const code = err?.code;
+    const exitCode = err === null ? 0 : typeof code === "number" ? code : 1;
+    resolve10({ stdout: String(stdout ?? ""), stderr: String(stderr ?? ""), exitCode });
+  });
+});
+async function execDocker(args, opts) {
+  const exec = opts?.exec ?? nodeExecDocker;
+  const timeoutMs = opts?.timeoutMs ?? 5e3;
+  let timer;
+  try {
+    const timeout = new Promise((resolve10) => {
+      timer = setTimeout(() => resolve10(null), timeoutMs);
+    });
+    return await Promise.race([exec(args).catch(() => null), timeout]);
+  } finally {
+    if (timer !== void 0) clearTimeout(timer);
+  }
+}
+function credLight(key, hostEnv, secretsEnv) {
+  const envVal = hostEnv[key];
+  if (envVal !== void 0 && envVal !== "") return { set: true, source: "host-env" };
+  const fileVal = secretsEnv[key];
+  if (fileVal !== void 0 && fileVal !== "") return { set: true, source: "secrets-file" };
+  return { set: false };
+}
+function codexHomeLight(hostEnv) {
+  const v = hostEnv.CODEX_HOME;
+  return v !== void 0 && v !== "" ? { set: true, source: "host-env" } : { set: false };
+}
+async function probeAfkReadiness(opts) {
+  const hostEnv = opts.hostEnv ?? process.env;
+  const secretsEnv = opts.secretsEnv ?? {};
+  const info = await execDocker(["info"], { exec: opts.exec, timeoutMs: opts.timeoutMs });
+  const available = info !== null && info.exitCode === 0;
+  let present = false;
+  if (available) {
+    const inspect = await execDocker(["image", "inspect", opts.image], { exec: opts.exec, timeoutMs: opts.timeoutMs });
+    present = inspect !== null && inspect.exitCode === 0;
+  }
+  return {
+    ok: true,
+    docker: { available },
+    image: { configured: opts.image, present, build_hint: SANDCASTLE_BUILD_HINT },
+    credentials: {
+      "claude-code": { CLAUDE_CODE_OAUTH_TOKEN: credLight("CLAUDE_CODE_OAUTH_TOKEN", hostEnv, secretsEnv) },
+      codex: {
+        OPENAI_API_KEY: credLight("OPENAI_API_KEY", hostEnv, secretsEnv),
+        CODEX_HOME: codexHomeLight(hostEnv)
+      }
+    }
+  };
+}
+
 // packages/cli/src/deps.ts
 function errMsg(e) {
   return e instanceof Error ? e.message : String(e);
 }
 
 // packages/cli/src/paths.ts
-import { join as join19 } from "node:path";
+import { join as join26 } from "node:path";
 function changesRoot(cwd) {
-  return join19(cwd, "openspec", "changes");
+  return join26(cwd, "openspec", "changes");
 }
 function changeDir(cwd, name2) {
-  return join19(changesRoot(cwd), name2);
+  return join26(changesRoot(cwd), name2);
 }
 function isValidChangeName(name2) {
   return /^[A-Za-z0-9_-]+$/.test(name2);
@@ -13546,11 +14822,11 @@ async function cmdCheck(deps, name2) {
 }
 
 // packages/cli/src/commands/doctor.ts
-import { join as join21 } from "node:path";
+import { join as join28 } from "node:path";
 
 // packages/cli/src/skillSources.ts
-import { readFileSync as readFileSync14 } from "node:fs";
-import { dirname as dirname6, join as join20 } from "node:path";
+import { readFileSync as readFileSync15 } from "node:fs";
+import { dirname as dirname6, join as join27 } from "node:path";
 import { fileURLToPath } from "node:url";
 var TOOL_SET = /* @__PURE__ */ new Set([
   "claude-plugin",
@@ -13572,7 +14848,7 @@ var SkillSourcesError = class extends Error {
   }
 };
 function defaultRegistryPath() {
-  return join20(dirname6(fileURLToPath(import.meta.url)), "..", "..", "..", "templates", "skill-sources.yaml");
+  return join27(dirname6(fileURLToPath(import.meta.url)), "..", "..", "..", "templates", "skill-sources.yaml");
 }
 function stripComment2(line) {
   const t = line.trimStart();
@@ -13703,7 +14979,7 @@ function parseSkillSources(text) {
 function readSkillSources(path5) {
   try {
     const p = path5 ?? defaultRegistryPath();
-    return parseSkillSources(readFileSync14(p, "utf8"));
+    return parseSkillSources(readFileSync15(p, "utf8"));
   } catch {
     return [];
   }
@@ -13736,22 +15012,22 @@ function checkManifest(p) {
   return red(
     "asset:manifest",
     `manifest \u4E0D\u53EF\u7528: ${err}`,
-    `\u68C0\u67E5 ${join21(p.pluginRoot, "templates", "manifest.yaml")} \u662F\u5426\u5B58\u5728\u4E14\u7B26\u5408\u7A84 YAML \u5B50\u96C6\uFF08\u89C1\u6587\u4EF6\u5934\u6CE8\u91CA\uFF09`
+    `\u68C0\u67E5 ${join28(p.pluginRoot, "templates", "manifest.yaml")} \u662F\u5426\u5B58\u5728\u4E14\u7B26\u5408\u7A84 YAML \u5B50\u96C6\uFF08\u89C1\u6587\u4EF6\u5934\u6CE8\u91CA\uFF09`
   );
 }
 function gateAssetProblems(p) {
   const problems = [];
-  if (!p.fileExists(join21(p.pluginRoot, "hooks", "hooks.json"))) problems.push("hooks/hooks.json \u7F3A\u5931");
-  const gate = join21(p.pluginRoot, "hooks", "gate.sh");
+  if (!p.fileExists(join28(p.pluginRoot, "hooks", "hooks.json"))) problems.push("hooks/hooks.json \u7F3A\u5931");
+  const gate = join28(p.pluginRoot, "hooks", "gate.sh");
   if (!p.fileExists(gate)) problems.push("hooks/gate.sh \u7F3A\u5931");
   else if (!p.fileExecutable(gate)) problems.push("hooks/gate.sh \u4E0D\u53EF\u6267\u884C");
   return problems;
 }
 function checkHookAssets(p) {
   const missing = [];
-  if (!p.fileExists(join21(p.pluginRoot, "hooks", "hooks.json"))) missing.push("hooks/hooks.json \u7F3A\u5931");
+  if (!p.fileExists(join28(p.pluginRoot, "hooks", "hooks.json"))) missing.push("hooks/hooks.json \u7F3A\u5931");
   for (const s of HOOK_SCRIPTS) {
-    const abs = join21(p.pluginRoot, "hooks", s);
+    const abs = join28(p.pluginRoot, "hooks", s);
     if (!p.fileExists(abs)) missing.push(`hooks/${s} \u7F3A\u5931`);
     else if (!p.fileExecutable(abs)) missing.push(`hooks/${s} \u4E0D\u53EF\u6267\u884C`);
   }
@@ -13785,7 +15061,7 @@ function checkStatusline(p) {
   return yellow(
     "guard:statusline",
     "statusline \u672A\u63A5\u5165 settings\u2014\u2014\u7EC8\u7AEF\u72B6\u6001\u9762\u4E0D\u53EF\u89C1\uFF08\u529F\u80FD\u964D\u7EA7\uFF09",
-    `\u5728 ~/.claude/settings.json \u52A0 "statusLine": {"type": "command", "command": "bash ${join21(p.pluginRoot, "hooks", "statusline.sh")}"}`
+    `\u5728 ~/.claude/settings.json \u52A0 "statusLine": {"type": "command", "command": "bash ${join28(p.pluginRoot, "hooks", "statusline.sh")}"}`
   );
 }
 function checkTap(p) {
@@ -13811,7 +15087,7 @@ async function checkChanges(deps) {
   const bad = [];
   for (const name2 of names) {
     try {
-      await deps.store.read(join21(root, name2));
+      await deps.store.read(join28(root, name2));
     } catch (e) {
       bad.push(`${name2}\uFF08${errMsg(e)}\uFF09`);
     }
@@ -13845,7 +15121,7 @@ async function checkVerifySkills(p) {
   return red(
     "quality:verify-skills",
     `verify-skills \u5931\u8D25\uFF08exit ${code}\uFF09: ${summary}`,
-    `bash ${join21(p.pluginRoot, "tools", "verify-skills.sh")} \u67E5\u770B\u9010\u6761\u4FEE\u590D\u6307\u5F15`
+    `bash ${join28(p.pluginRoot, "tools", "verify-skills.sh")} \u67E5\u770B\u9010\u6761\u4FEE\u590D\u6307\u5F15`
   );
 }
 function skillInPlace(entry, byToken, installed) {
@@ -13889,7 +15165,7 @@ function checkSkills(p) {
       yellow("skills:recommended", "manifest \u4E0D\u53EF\u7528\u2014\u2014\u65E0\u6CD5\u6838\u63A8\u8350\u6280\u80FD\u9F50\u5168\u5EA6", "\u5148\u4FEE\u590D asset:manifest \u540E\u91CD\u8DD1 pipeline doctor")
     ];
   }
-  const registry = p.fileExists(join21(p.pluginRoot, "templates", "skill-sources.yaml")) ? readSkillSources() : [];
+  const registry = p.fileExists(join28(p.pluginRoot, "templates", "skill-sources.yaml")) ? readSkillSources() : [];
   if (registry.length === 0) {
     return [
       yellow("skills:mandatory", "registry \u672A\u5C31\u7EEA\uFF08templates/skill-sources.yaml \u7F3A\u5931/\u7A7A\uFF09\u2014\u2014\u65E0\u6CD5\u6838\u5F3A\u5236\u6280\u80FD\u9F50\u5168\u5EA6\uFF08\u4E0D\u8BEF\u62A5 green\uFF09", "\u786E\u8BA4\u63D2\u4EF6\u5B89\u88C5\u5B8C\u6574\uFF08skill-sources.yaml \u5E94\u968F\u63D2\u4EF6\u5206\u53D1\uFF09\u540E\u91CD\u8DD1 pipeline doctor"),
@@ -13911,6 +15187,42 @@ function checkSkills(p) {
     "pipeline setup \u53EF\u4E00\u5E76\u5B89\u88C5\uFF08\u63A8\u8350\u7F3A\u5931\u53EA\u964D\u7EA7\u3001\u4E0D\u963B\u65AD\u51FA\u53E3\uFF09"
   );
   return [mandatory, recommended];
+}
+function credDesc(light) {
+  if (!light.set) return "\u672A\u914D";
+  return `\u5DF2\u914D\uFF08${light.source === "host-env" ? "\u5BBF\u4E3B env" : "secrets \u6587\u4EF6"}\uFF09`;
+}
+async function checkAfk(p) {
+  if (!p.afkReadiness) {
+    const miss = (id) => red(id, "AFK \u5C31\u7EEA\u63A2\u9488\u672A\u88C5\u914D\uFF08main.ts \u96C6\u6210\u7F3A\u53E3\uFF0C\u65E0\u6CD5\u8BC4\u4F30 AFK \u8FD0\u884C\u65F6\u5C31\u7EEA\uFF09", "\u6392\u9664\u63A2\u9488\u73AF\u5883\u95EE\u9898\u540E\u91CD\u8DD1 pipeline doctor");
+    return [miss("afk:docker"), miss("afk:image"), miss("afk:credential-claude-code"), miss("afk:credential-codex")];
+  }
+  const r = await p.afkReadiness();
+  const docker = r.docker.available ? green("afk:docker", "docker daemon \u53EF\u7528\uFF08AFK \u5BB9\u5668\u6267\u884C\u524D\u7F6E\u5C31\u7EEA\uFF09") : yellow(
+    "afk:docker",
+    "docker \u4E0D\u53EF\u7528\u2014\u2014AFK \u5BB9\u5668\u6267\u884C\u964D\u7EA7\u4E0D\u53EF\u7528\uFF08\u53EF\u9009\u80FD\u529B\uFF0C\u4E0D\u963B\u65AD\u975E AFK \u6D41\u7A0B\uFF09",
+    "\u88C5 docker \u5E76\u8D77 daemon \u540E\u91CD\u63A2\uFF08AFK \u975E\u5FC5\u9700\u80FD\u529B\uFF0C\u7F3A\u5B83\u4E0D\u5F71\u54CD\u624B\u52A8\u6D41\u7A0B\uFF09"
+  );
+  const { configured, present, build_hint } = r.image;
+  const image = present ? green("afk:image", `AFK \u955C\u50CF ${configured} \u5728\u4F4D\uFF08\u5BB9\u5668\u53EF\u8D77\uFF09`) : r.docker.available ? yellow("afk:image", `AFK \u955C\u50CF ${configured} \u4E0D\u5728\u672C\u673A\uFF08AFK run \u65E0\u6CD5\u8D77\u5BB9\u5668\uFF09`, `\u6784\u5EFA\u955C\u50CF:${build_hint}`) : yellow(
+    "afk:image",
+    `docker \u4E0D\u53EF\u7528\uFF0C\u672A\u80FD\u6838 AFK \u955C\u50CF ${configured}`,
+    `\u5148\u88C5/\u8D77 docker \u518D\u91CD\u63A2\uFF1B\u7F3A\u955C\u50CF\u65F6\u7528 ${build_hint} \u4E00\u952E\u6784\u5EFA`
+  );
+  const cc = r.credentials["claude-code"].CLAUDE_CODE_OAUTH_TOKEN;
+  const claudeCred = cc.set ? green("afk:credential-claude-code", `claude-code \u51ED\u8BC1 CLAUDE_CODE_OAUTH_TOKEN ${credDesc(cc)}`) : yellow(
+    "afk:credential-claude-code",
+    "claude-code \u51ED\u8BC1 CLAUDE_CODE_OAUTH_TOKEN \u672A\u914D\uFF08AFK \u8DD1 claude-code runner \u4F1A\u7F3A\u9274\u6743\uFF09",
+    "\u53BB\u914D CLAUDE_CODE_OAUTH_TOKEN\uFF08pipeline \u673A\u5668\u7EA7 secrets \u6216\u5BBF\u4E3B env\uFF1B\u7EC8\u7AEF doctor/setup \u4E3A\u51ED\u8BC1\u6743\u5A01\uFF09"
+  );
+  const oa = r.credentials.codex.OPENAI_API_KEY;
+  const ch = r.credentials.codex.CODEX_HOME;
+  const codexCred = oa.set ? green("afk:credential-codex", `codex \u51ED\u8BC1 OPENAI_API_KEY ${credDesc(oa)}\uFF1BCODEX_HOME ${credDesc(ch)}`) : yellow(
+    "afk:credential-codex",
+    `codex \u51ED\u8BC1 OPENAI_API_KEY \u672A\u914D\uFF08AFK \u8DD1 codex runner \u4F1A\u7F3A\u9274\u6743\uFF09\uFF1BCODEX_HOME ${credDesc(ch)}`,
+    "\u53BB\u914D OPENAI_API_KEY\uFF08pipeline \u673A\u5668\u7EA7 secrets \u6216\u5BBF\u4E3B env\uFF1BCODEX_HOME \u53EF\u9009,\u7F3A\u7701 ~/.codex\uFF09"
+  );
+  return [docker, image, claudeCred, codexCred];
 }
 var STATUS_TAG = { green: "[PASS]", yellow: "[WARN]", red: "[FAIL]" };
 async function cmdDoctor(deps, opts) {
@@ -13949,6 +15261,15 @@ async function cmdDoctor(deps, opts) {
       red("skills:mandatory", `\u68C0\u67E5\u81EA\u8EAB\u5F02\u5E38: ${m}`, "\u6392\u9664\u63A2\u9488\u73AF\u5883\u95EE\u9898\u540E\u91CD\u8DD1 pipeline doctor"),
       red("skills:recommended", `\u68C0\u67E5\u81EA\u8EAB\u5F02\u5E38: ${m}`, "\u6392\u9664\u63A2\u9488\u73AF\u5883\u95EE\u9898\u540E\u91CD\u8DD1 pipeline doctor")
     );
+  }
+  try {
+    const [dk, im, cc, cx] = await checkAfk(p);
+    checks.push(dk, im, cc, cx);
+  } catch (e) {
+    const m = errMsg(e);
+    for (const id of ["afk:docker", "afk:image", "afk:credential-claude-code", "afk:credential-codex"]) {
+      checks.push(red(id, `\u68C0\u67E5\u81EA\u8EAB\u5F02\u5E38: ${m}`, "\u6392\u9664\u63A2\u9488\u73AF\u5883\u95EE\u9898\u540E\u91CD\u8DD1 pipeline doctor"));
+    }
   }
   const summary = {
     green: checks.filter((c) => c.status === "green").length,
@@ -14152,7 +15473,7 @@ async function cmdImport(deps, name2, opts) {
 }
 
 // packages/cli/src/commands/inbox.ts
-import { join as join22 } from "node:path";
+import { join as join29 } from "node:path";
 function fmtDuration(s) {
   if (s < 60) return `${s}s`;
   const m = Math.floor(s / 60);
@@ -14207,12 +15528,12 @@ async function cmdInbox(deps, opts) {
     seen.add(name2);
   }
   const now = Date.parse(deps.clock());
-  const changesRoot2 = join22(deps.cwd, "openspec", "changes");
+  const changesRoot2 = join29(deps.cwd, "openspec", "changes");
   for (const name2 of await deps.listChanges(changesRoot2)) {
     if (seen.has(name2)) continue;
     let fields;
     try {
-      fields = (await deps.store.read(join22(changesRoot2, name2))).fields;
+      fields = (await deps.store.read(join29(changesRoot2, name2))).fields;
     } catch (e) {
       deps.io.err(`WARN: \u8DF3\u8FC7\u574F change ${name2}: ${errMsg(e)}`);
       continue;
@@ -14561,1231 +15882,11 @@ async function dryRunPlan(deps, name2, start, through, maxSteps) {
 }
 
 // packages/cli/src/commands/afk.ts
-import { execFile as execFile2 } from "node:child_process";
+import { execFile as execFile3 } from "node:child_process";
 import { promisify } from "node:util";
-
-// packages/automation/dist/types.js
-var AUTOMATION_LEVELS = ["L1", "L2", "L3"];
-var DEFAULT_CONFIG = {
-  enabled: false,
-  defaultOptIn: false,
-  maxParallel: 4,
-  maxRetries: 1,
-  level: "L1"
-};
-
-// packages/automation/dist/queue/state-machine.js
-function settleSuccess(level) {
-  return level === "L3" ? "merged" : "paused";
-}
-function settleFailure(kind, attemptsAfterIncr, maxRetries) {
-  if (kind === "conflict")
-    return "conflict";
-  return attemptsAfterIncr > maxRetries ? "failed" : "queued";
-}
-
-// packages/automation/dist/queue/claim.js
-var DAEMON_OWNED = ["running", "scheduled"];
-async function markQueued(store2, changeDir2, clock) {
-  await store2.setMany(changeDir2, { automation: "queued", automation_queued_at: clock() });
-}
-function claim(store2, changeDir2) {
-  return store2.cas(changeDir2, "automation", "queued", "scheduled");
-}
-async function setAutomationOwned(store2, changeDir2, next) {
-  if (await store2.cas(changeDir2, "automation", "running", next))
-    return true;
-  return store2.cas(changeDir2, "automation", "scheduled", next);
-}
-async function getAutomation(store2, changeDir2) {
-  const v = await store2.get(changeDir2, "automation");
-  return typeof v === "string" ? v : "";
-}
-function isSettled(automation) {
-  return automation !== "" && !DAEMON_OWNED.includes(automation);
-}
-function incrAttempts(store2, changeDir2, max) {
-  return store2.withLock(changeDir2, async () => {
-    const state = await store2.read(changeDir2);
-    const raw = state.fields.automation_attempts;
-    const prev = Number(typeof raw === "string" ? raw : "0");
-    const value = (Number.isFinite(prev) ? prev : 0) + 1;
-    state.fields.automation_attempts = String(value);
-    await store2.write(changeDir2, state);
-    return { value, exhausted: value > max };
-  });
-}
-
-// packages/automation/dist/queue/scan.js
-import { readdir as readdir4 } from "node:fs/promises";
-import { join as join23 } from "node:path";
-var QUEUED_AT_LAST = "~";
-var depsAllSatisfied = (deps, resolver) => {
-  for (const dep of deps) {
-    if (dep === "" || dep === "null")
-      continue;
-    if (!resolver.satisfied(dep))
-      return false;
-  }
-  return true;
-};
-function readyCandidates(entries, resolver) {
-  const ready = entries.filter((e) => e.phase === "build" && e.automation === "queued").filter((e) => depsAllSatisfied(e.dependsOn, resolver));
-  const key = (e) => e.automationQueuedAt === "" || e.automationQueuedAt === "null" ? QUEUED_AT_LAST : e.automationQueuedAt;
-  return ready.slice().sort((a, b) => {
-    const ka = key(a);
-    const kb = key(b);
-    if (ka < kb)
-      return -1;
-    if (ka > kb)
-      return 1;
-    return a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
-  }).map((e) => e.name);
-}
-var scalar4 = (v) => typeof v === "string" ? v : "";
-async function scanReadyFromFs(changesDir, store2) {
-  let dirents;
-  try {
-    dirents = await readdir4(changesDir, { withFileTypes: true });
-  } catch {
-    return [];
-  }
-  const activeNames = dirents.filter((d) => d.isDirectory() && d.name !== "archive").map((d) => d.name);
-  const entries = [];
-  const automationByName = /* @__PURE__ */ new Map();
-  for (const name2 of activeNames) {
-    const changeDir2 = join23(changesDir, name2);
-    let state;
-    try {
-      state = await store2.read(changeDir2);
-    } catch {
-      continue;
-    }
-    const automation = scalar4(state.fields.automation);
-    automationByName.set(name2, automation);
-    entries.push({
-      name: name2,
-      phase: scalar4(state.fields.phase),
-      automation,
-      automationQueuedAt: scalar4(state.fields.automation_queued_at),
-      dependsOn: normalizeDeps(state.fields.depends_on)
-    });
-  }
-  let archiveEntries = [];
-  try {
-    const archived = await readdir4(join23(changesDir, "archive"), { withFileTypes: true });
-    archiveEntries = archived.filter((d) => d.isDirectory()).map((d) => d.name);
-  } catch {
-    archiveEntries = [];
-  }
-  const resolver = {
-    satisfied(dep) {
-      const a = automationByName.get(dep);
-      if (a !== void 0)
-        return a === "merged";
-      return archiveEntries.some((e) => e === dep || e.endsWith(`-${dep}`));
-    }
-  };
-  return readyCandidates(entries, resolver);
-}
-
-// packages/automation/dist/queue/gate.js
-var PIPELINE_AFK_ENV = "PIPELINE_AFK";
-function optedIn(input) {
-  if (input.track === "pm")
-    return false;
-  if (input.automation === "queued")
-    return true;
-  return input.defaultOptIn;
-}
-function shouldEnqueueOnSpecComplete(input) {
-  if (!input.enabled)
-    return false;
-  return optedIn(input);
-}
-
-// packages/automation/dist/scheduler/semaphore.js
-var createSemaphore = (maxParallel) => {
-  if (maxParallel < 1)
-    throw new Error("maxParallel must be >= 1");
-  let running = 0;
-  const queue = [];
-  const acquire2 = () => {
-    if (running < maxParallel) {
-      running++;
-      return Promise.resolve();
-    }
-    return new Promise((resolve10) => queue.push(resolve10));
-  };
-  const release2 = () => {
-    if (running <= 0)
-      return;
-    running--;
-    const next = queue.shift();
-    if (next) {
-      running++;
-      next();
-    }
-  };
-  return { acquire: acquire2, release: release2, running: () => running };
-};
-
-// packages/automation/dist/scheduler/classify.js
-var TRANSIENT_EXEC_EXIT_CODES = /* @__PURE__ */ new Set([126, 137]);
-var isVerifyFailSentinel = (e) => typeof e === "object" && e !== null && e.verifyFail === true;
-var preservedPathOf = (err) => {
-  if (err.preservedWorktreePath)
-    return err.preservedWorktreePath;
-  const m = err.message?.match(/preserved (?:at )?(.+?)\s*$/im);
-  return m?.[1];
-};
-var classifyFailure = (err) => {
-  if (isVerifyFailSentinel(err)) {
-    return { kind: "retry", message: "verify-fail" };
-  }
-  const tagged = typeof err === "object" && err !== null ? err : {};
-  const tag2 = tagged._tag;
-  if (tag2 === "AbortedRunError" || tag2 === "CancelledRunError") {
-    return {
-      kind: "conflict",
-      message: tagged.message ?? "aborted",
-      preservedPath: tagged.preservedPath ?? preservedPathOf(tagged)
-    };
-  }
-  if (tag2 === "SyncError" || tag2 === "MergeToHostTimeoutError" || tag2 === "WorktreeError" || tag2 === "BarrierDriftError" || tag2 === "DenylistViolationError") {
-    return {
-      kind: "conflict",
-      message: tagged.message ?? "merge conflict / barrier drift",
-      preservedPath: preservedPathOf(tagged)
-    };
-  }
-  if (tag2 === "AgentIdleTimeoutError") {
-    return { kind: "retry", message: tagged.message ?? "agent idle timeout" };
-  }
-  const isTransient = tag2 === "ExecError" && typeof tagged.exitCode === "number" && TRANSIENT_EXEC_EXIT_CODES.has(tagged.exitCode);
-  return {
-    kind: "retry",
-    message: tagged.message ?? (isTransient ? "transient exec failure" : err instanceof Error ? err.message : "run failed")
-  };
-};
-
-// packages/automation/dist/scheduler/scheduler.js
-var sanitizePath = (s) => s.replace(/[\r\n]+/g, " ").replace(/:\s/g, "; ").replace(/\s#/g, " ").replace(/^["']+/, "").trim() || "error";
-var sanitize = (s) => sanitizePath(s).slice(0, 200).trim() || "error";
-var createScheduler = (deps) => {
-  const { state, runChange, registerShutdown, config } = deps;
-  const observer = deps.observer;
-  const semaphore = createSemaphore(config.maxParallel);
-  const inFlight = /* @__PURE__ */ new Set();
-  registerShutdown(() => {
-    for (const name2 of inFlight) {
-      try {
-        state.markFailedSync(name2, "scheduler interrupted");
-      } catch {
-      }
-    }
-  });
-  const emit3 = (name2, s, extra) => {
-    if (!observer)
-      return;
-    try {
-      observer.onState(name2, s, extra);
-    } catch {
-    }
-  };
-  const writeBackSuccess = async (name2, outcome) => {
-    if (outcome.verifyResult === "fail") {
-      return applyFailure(name2, { verifyFail: true });
-    }
-    const current = await state.getAutomation(name2).catch(() => "");
-    if (isSettled(current))
-      return "skipped";
-    const target = settleSuccess(config.level);
-    const won = await state.setAutomationOwned(name2, target);
-    if (!won)
-      return "skipped";
-    await state.setField(name2, "automation_attempts", "0");
-    return target;
-  };
-  const applyFailure = async (name2, err) => {
-    const c = classifyFailure(err);
-    const lastError = sanitize(c.message);
-    const current = await state.getAutomation(name2).catch(() => "");
-    if (isSettled(current))
-      return "skipped";
-    if (c.kind === "conflict") {
-      const won2 = await state.setAutomationOwned(name2, "conflict");
-      if (!won2)
-        return "skipped";
-      await state.setField(name2, "automation_last_error", lastError);
-      if (c.preservedPath)
-        await state.setField(name2, "automation_preserved_path", sanitizePath(c.preservedPath));
-      return "conflict";
-    }
-    const { value } = await state.incrAttempts(name2, config.maxRetries);
-    const next = settleFailure("retry", value, config.maxRetries);
-    const won = await state.setAutomationOwned(name2, next);
-    if (!won)
-      return "skipped";
-    await state.setField(name2, "automation_last_error", lastError);
-    return next;
-  };
-  const emitTerminal = (name2, settled) => {
-    if (settled === "skipped")
-      return;
-    emit3(name2, settled);
-  };
-  const handleOne = async (name2) => {
-    const won = await state.claim(name2);
-    if (!won)
-      return;
-    await semaphore.acquire();
-    const controller = new AbortController();
-    try {
-      await state.setAutomation(name2, "running");
-      emit3(name2, "running");
-      inFlight.add(name2);
-      try {
-        const outcome = await runChange(name2, controller.signal);
-        emitTerminal(name2, await writeBackSuccess(name2, outcome));
-      } catch (err) {
-        emitTerminal(name2, await applyFailure(name2, err));
-      } finally {
-        inFlight.delete(name2);
-      }
-    } finally {
-      semaphore.release();
-    }
-  };
-  const runRoundOnce = async (candidates) => {
-    await Promise.allSettled(candidates.map((name2) => handleOne(name2)));
-  };
-  return { runRoundOnce };
-};
-
-// packages/automation/dist/lifecycle/barrier.js
-var BarrierDriftError = class extends Error {
-  name = "BarrierDriftError";
-  _tag = "BarrierDriftError";
-  constructor(message) {
-    super(message);
-  }
-};
-var deriveBarrierSha = async (input) => {
-  const { git, branch, commits, sandboxReportedSha } = input;
-  if (commits.length === 0)
-    return { buildSha: void 0 };
-  const landed = commits[commits.length - 1]?.sha;
-  if (landed === void 0)
-    return { buildSha: void 0 };
-  let branchHead;
-  try {
-    branchHead = await git.revParse(`refs/heads/${branch}`);
-  } catch (err) {
-    throw new BarrierDriftError(`barrier: cannot resolve host branch ${branch} for build_sha: ${String(err)}`);
-  }
-  if (branchHead !== landed) {
-    throw new BarrierDriftError(`barrier: named branch ${branch} HEAD=${branchHead} != landed build commit ${landed} (named-branch post-freeze drift \u2014 verify would target an unreviewed commit)`);
-  }
-  if (sandboxReportedSha && sandboxReportedSha.length === 40 && sandboxReportedSha !== branchHead) {
-    throw new BarrierDriftError(`barrier: sandbox-reported build_sha=${sandboxReportedSha} diverges from the host-landed commit ${branchHead} (no moving-target verify-pass)`);
-  }
-  return { buildSha: branchHead };
-};
-
-// packages/automation/dist/lifecycle/denylist.js
-var globToRegExp = (glob) => {
-  let re = "";
-  let i = 0;
-  while (i < glob.length) {
-    const c = glob[i];
-    if (c === "*") {
-      if (glob[i + 1] === "*") {
-        if (glob[i + 2] === "/") {
-          re += "(?:.*/)?";
-          i += 3;
-        } else {
-          re += ".*";
-          i += 2;
-        }
-      } else {
-        re += "[^/]*";
-        i += 1;
-      }
-    } else if (c === "?") {
-      re += "[^/]";
-      i += 1;
-    } else {
-      re += c.replace(/[.+^${}()|[\]\\]/g, "\\$&");
-      i += 1;
-    }
-  }
-  return new RegExp(`^${re}$`);
-};
-var matchDenylist = (files, globs) => {
-  if (globs.length === 0)
-    return [];
-  const res = globs.map((g) => ({ glob: g, re: globToRegExp(g) }));
-  const out = [];
-  for (const file of files) {
-    const hit = res.find((r) => r.re.test(file));
-    if (hit)
-      out.push({ file, glob: hit.glob });
-  }
-  return out;
-};
-var denylistForChange = (loops, name2) => {
-  const out = [];
-  for (const l of loops) {
-    if (!l.change_prefix)
-      continue;
-    if (!name2.startsWith(l.change_prefix))
-      continue;
-    for (const g of l.denylist ?? []) {
-      if (!out.includes(g))
-        out.push(g);
-    }
-  }
-  return out;
-};
-var DenylistViolationError = class extends Error {
-  name = "DenylistViolationError";
-  _tag = "DenylistViolationError";
-  violations;
-  preservedWorktreePath;
-  constructor(violations, preservedWorktreePath) {
-    const detail = violations.map((v) => `${v.file} (denylist: ${v.glob})`).join(", ");
-    super(`run touched denylisted paths: ${detail}. Worktree PRESERVED at ${preservedWorktreePath}.`);
-    this.violations = violations;
-    this.preservedWorktreePath = preservedWorktreePath;
-  }
-};
-
-// packages/automation/dist/lifecycle/transitionWatch.js
-var TRANSITION_LINE_RE = /^\[TRANSITION\] (\S+): (\S+) -> (\S+)\s*$/;
-var parseTransitionLine = (line) => {
-  const m = TRANSITION_LINE_RE.exec(line);
-  if (!m)
-    return null;
-  return { name: m[1], from: m[2], to: m[3] };
-};
-var createPhaseWatch = (name2, write) => {
-  let last = "";
-  let chain = Promise.resolve();
-  const enqueue = (value) => {
-    chain = chain.then(() => write(value)).catch(() => {
-    });
-  };
-  return {
-    onLine(line) {
-      const t = parseTransitionLine(line);
-      if (!t || t.name !== name2 || t.to === last)
-        return;
-      last = t.to;
-      enqueue(t.to);
-    },
-    async settle() {
-      if (last !== "") {
-        last = "";
-        enqueue("");
-      }
-      await chain;
-    }
-  };
-};
-
-// packages/automation/dist/lifecycle/lifecycle.js
-var NAMED_BRANCH_PREFIX = "sandcastle-pipeline/";
-var AbortedRunError = class extends Error {
-  name = "AbortedRunError";
-  _tag = "AbortedRunError";
-  reason;
-  preservedPath;
-  constructor(reason, preservedPath) {
-    super(typeof reason === "string" ? reason : reason?.message ?? String(reason));
-    this.reason = reason;
-    this.preservedPath = preservedPath;
-  }
-};
-var CancelledRunError = class extends Error {
-  name = "CancelledRunError";
-  _tag = "CancelledRunError";
-  preservedPath;
-  constructor(reason, preservedPath) {
-    super(reason);
-    this.preservedPath = preservedPath;
-  }
-};
-var PRESERVE_ERROR_TAGS = /* @__PURE__ */ new Set([
-  "SyncError",
-  "MergeToHostTimeoutError",
-  "BarrierDriftError",
-  "WorktreeError",
-  "CancelledRunError",
-  // 决议 #12：denylist 违规同 conflict 类——留现场供人工核对越界产出，绝不自动重试/merge。
-  "DenylistViolationError"
-]);
-var isPreserveError = (err) => typeof err === "object" && err !== null && PRESERVE_ERROR_TAGS.has(err._tag ?? "");
-var finalizeRunOutcome = (o) => ({ ...o, noop: !o.buildSha });
-var AGENT_EXIT_LINE_RE = /^\[AGENT_EXIT\] (\S+) (\d+)\s*$/;
-var createAgentExitWatch = (write) => {
-  let wrote = false;
-  return {
-    onLine(line) {
-      if (wrote)
-        return;
-      const m = AGENT_EXIT_LINE_RE.exec(line);
-      if (!m || Number(m[2]) === 0)
-        return;
-      wrote = true;
-      const runner = m[1];
-      write(`${runner} agent \u975E\u96F6\u9000\u51FA\uFF08exit ${m[2]}\uFF09\uFF1A\u53EF\u80FD\u51ED\u8BC1\u5931\u6548\u6216 ${runner} \u81EA\u8EAB\u62A5\u9519\uFF0C\u8BE6\u89C1 agent \u65E5\u5FD7`).catch(() => {
-      });
-    }
-  };
-};
-var runChangeInSandbox = async (ports, cfg2, signal) => {
-  const branch = `${NAMED_BRANCH_PREFIX}${cfg2.name}`;
-  const wt = await ports.worktree.create(cfg2.hostRepoDir, branch);
-  const worktreePath = wt.path;
-  let handle;
-  let preserve = false;
-  const phaseWatch = createPhaseWatch(cfg2.name, (value) => ports.setStateField(cfg2.name, "automation_current_phase", value));
-  const agentExitWatch = createAgentExitWatch((value) => ports.setStateField(cfg2.name, "automation_last_error", value));
-  try {
-    const env = { ...cfg2.extraEnv, [PIPELINE_AFK_ENV]: "1" };
-    handle = await ports.createSandbox({ env, worktreePath });
-    const sandbox = handle;
-    await ports.setStateField(cfg2.name, "automation_sandbox", sandbox.containerName);
-    await ports.setStateField(cfg2.name, "automation_worktree", worktreePath);
-    const report = await ports.runWork((cmd, options) => sandbox.exec(cmd, {
-      ...options,
-      onLine: (line) => {
-        phaseWatch.onLine(line);
-        agentExitWatch.onLine(line);
-        options?.onLine?.(line);
-      }
-    }), cfg2.name, signal, cfg2.runner);
-    if (await ports.worktree.hasCancelMarker(worktreePath)) {
-      throw new CancelledRunError("cancel requested via dashboard", worktreePath);
-    }
-    if (signal.aborted)
-      throw new AbortedRunError(signal.reason, worktreePath);
-    const commits = await ports.collectCommits({ worktreePath, branch: wt.branch, base: cfg2.base });
-    const denylist = cfg2.denylist ?? [];
-    if (denylist.length > 0 && commits.length > 0) {
-      const files = await ports.diffNames({ worktreePath, branch: wt.branch, base: cfg2.base });
-      const violations = matchDenylist(files, denylist);
-      if (violations.length > 0) {
-        throw new DenylistViolationError(violations, worktreePath);
-      }
-    }
-    const barrier = await deriveBarrierSha({
-      git: ports.git,
-      branch: wt.branch,
-      commits,
-      sandboxReportedSha: report.build_sha
-    });
-    if (cfg2.autoMerge && commits.length > 0) {
-      await ports.mergeToBase({ worktreePath, branch: wt.branch, base: cfg2.base });
-    }
-    return finalizeRunOutcome({
-      commits,
-      verifyResult: report.verify_result,
-      buildSha: barrier.buildSha,
-      branch: wt.branch,
-      phaseEvent: report.phase_event
-    });
-  } catch (err) {
-    if (signal.aborted) {
-      if (handle)
-        await handle.close().catch(() => {
-        });
-      handle = void 0;
-      throw new AbortedRunError(signal.reason, worktreePath);
-    }
-    let settled = err;
-    if (!(err instanceof CancelledRunError) && await ports.worktree.hasCancelMarker(worktreePath)) {
-      settled = new CancelledRunError("cancel requested via dashboard", worktreePath);
-    }
-    if (isPreserveError(settled))
-      preserve = true;
-    throw settled;
-  } finally {
-    await phaseWatch.settle().catch(() => {
-    });
-    if (handle)
-      await handle.close().catch(() => {
-      });
-    if (!signal.aborted && !preserve) {
-      await ports.worktree.remove(worktreePath).catch(() => {
-      });
-    }
-  }
-};
-
-// packages/automation/dist/lifecycle/runnerFor.js
-var runnerForChange = (loops, name2) => {
-  for (const l of loops) {
-    if (!l.change_prefix)
-      continue;
-    if (!name2.startsWith(l.change_prefix))
-      continue;
-    return l.runner;
-  }
-  return void 0;
-};
-
-// packages/automation/dist/runner/runner.js
-var StructuredOutputError = class extends Error {
-  name = "StructuredOutputError";
-  _tag = "StructuredOutputError";
-  rawMatched;
-  constructor(message, rawMatched) {
-    super(message);
-    this.rawMatched = rawMatched;
-  }
-};
-var findLastOutputTag = (stdout) => {
-  const re = /<output>\s*([\s\S]*?)\s*<\/output>/g;
-  let last;
-  for (let m = re.exec(stdout); m !== null; m = re.exec(stdout))
-    last = m[1];
-  return last;
-};
-var unwrapFences = (s) => {
-  const t = s.trim();
-  const fence = t.match(/^```(?:json)?\s*\n?([\s\S]*?)\n?```$/);
-  return fence?.[1] !== void 0 ? fence[1].trim() : t;
-};
-var parseSandboxReport = (stdout) => {
-  const raw = findLastOutputTag(stdout);
-  if (raw === void 0) {
-    throw new StructuredOutputError("sandbox produced no <output>{...}</output> report", "");
-  }
-  let parsed;
-  try {
-    parsed = JSON.parse(unwrapFences(raw));
-  } catch (err) {
-    throw new StructuredOutputError(`sandbox <output> is not valid JSON: ${String(err)}`, raw);
-  }
-  if (parsed.verify_result !== "pass" && parsed.verify_result !== "fail") {
-    throw new StructuredOutputError('sandbox report missing/invalid verify_result (want "pass"|"fail")', raw);
-  }
-  return {
-    verify_result: parsed.verify_result,
-    build_sha: parsed.build_sha,
-    branch: parsed.branch,
-    phase_event: parsed.phase_event ?? "verify-pass"
-  };
-};
-var AFK_RUN_SCRIPT_SHA256 = "2de8e28a407f20d4cbed25ad95927ab021abdff2f3ece2d92cf2a97b1c703d53";
-var AFK_RUN_DRIFT_EXIT_CODE = 95;
-var AFK_RUN_DRIFT_GUARD = `sha256sum /usr/local/bin/pipeline-afk-run 2>/dev/null | grep -q "^${AFK_RUN_SCRIPT_SHA256} " || { echo "sandcastle \u955C\u50CF\u5185 pipeline-afk-run \u4E0E\u4ED3\u5E93 tools/sandcastle/pipeline-afk-run.sh \u4E0D\u4E00\u81F4\uFF08\u955C\u50CF\u9648\u65E7\u6216\u811A\u672C\u5DF2\u66F4\u65B0\u672A\u91CD\u5EFA\uFF09\u2014\u2014\u8BF7\u91CD\u5EFA\u955C\u50CF\uFF1Atools/sandcastle/build.sh" >&2; exit ${AFK_RUN_DRIFT_EXIT_CODE}; }`;
-var buildAfkRunCommand = (name2, runner) => runner === "codex" ? `${AFK_RUN_DRIFT_GUARD}; PIPELINE_AFK=1 PIPELINE_RUNNER=codex pipeline-afk-run ${name2}` : `${AFK_RUN_DRIFT_GUARD}; PIPELINE_AFK=1 pipeline-afk-run ${name2}`;
-
-// packages/automation/dist/runner/docker.js
-var dockerAvailable = async (exec) => {
-  try {
-    const r = await exec("docker", ["info"]);
-    return r.exitCode === 0;
-  } catch {
-    return false;
-  }
-};
-
-// packages/automation/dist/config/automationJson.js
-import { readFileSync as readFileSync15 } from "node:fs";
-import { join as join24 } from "node:path";
-var AUTOMATION_JSON_LIMITS = {
-  maxParallel: { min: 1, max: 8 },
-  maxRetries: { min: 0, max: 3 },
-  imageMaxLen: 200
-};
-var AUTOMATION_IMAGE_RE = /^[a-zA-Z0-9._/:@-]+$/;
-function automationJsonPath(root) {
-  return join24(root, ".pipeline", "automation.json");
-}
-var intIn = (v, min, max) => typeof v === "number" && Number.isInteger(v) && v >= min && v <= max;
-function isValidImageRef(v) {
-  return v.length > 0 && v.length <= AUTOMATION_JSON_LIMITS.imageMaxLen && AUTOMATION_IMAGE_RE.test(v);
-}
-function readAutomationJson(root, fs = { readFileSync: readFileSync15 }) {
-  let parsed;
-  try {
-    parsed = JSON.parse(fs.readFileSync(automationJsonPath(root), "utf8"));
-  } catch {
-    return {};
-  }
-  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed))
-    return {};
-  const raw = parsed;
-  const cfg2 = {};
-  const { maxParallel: mp, maxRetries: mr } = AUTOMATION_JSON_LIMITS;
-  if (intIn(raw.max_parallel, mp.min, mp.max))
-    cfg2.maxParallel = raw.max_parallel;
-  if (intIn(raw.max_retries, mr.min, mr.max))
-    cfg2.maxRetries = raw.max_retries;
-  if (typeof raw.default_opt_in === "boolean")
-    cfg2.defaultOptIn = raw.default_opt_in;
-  if (typeof raw.image === "string") {
-    const image = raw.image.trim();
-    if (isValidImageRef(image))
-      cfg2.image = image;
-  }
-  return cfg2;
-}
-
-// packages/automation/dist/sdk/sdk.js
-import { join as join25 } from "node:path";
-var scalar5 = (v) => typeof v === "string" ? v : "";
-var storeWriter = (store2, changeDir2) => ({
-  claim: (name2) => claim(store2, changeDir2(name2)),
-  setAutomation: (name2, s) => store2.set(changeDir2(name2), "automation", s),
-  setField: (name2, field2, value) => store2.set(changeDir2(name2), field2, value),
-  incrAttempts: (name2, max) => incrAttempts(store2, changeDir2(name2), max),
-  getAutomation: (name2) => getAutomation(store2, changeDir2(name2)),
-  setAutomationOwned: (name2, next) => setAutomationOwned(store2, changeDir2(name2), next),
-  markFailedSync: (name2, reason) => {
-    void store2.setMany(changeDir2(name2), { automation: "failed", automation_last_error: reason }).catch(() => {
-    });
-  }
-});
-function createAutomation(deps) {
-  const { image: _image, ...fileCfg } = readAutomationJson(deps.repoRoot, deps.configFs);
-  const config = { ...DEFAULT_CONFIG, enabled: true, defaultOptIn: true, ...fileCfg, ...deps.config };
-  const { store: store2, clock } = deps;
-  const changesDir = join25(deps.repoRoot, "openspec", "changes");
-  const changeDir2 = (name2) => join25(changesDir, name2);
-  return {
-    config,
-    async enqueue(name2) {
-      const state = await store2.read(changeDir2(name2));
-      const eligible = shouldEnqueueOnSpecComplete({
-        enabled: config.enabled,
-        track: scalar5(state.fields.track),
-        automation: scalar5(state.fields.automation),
-        defaultOptIn: config.defaultOptIn
-      });
-      if (!eligible)
-        return false;
-      await markQueued(store2, changeDir2(name2), clock);
-      return true;
-    },
-    scanReady() {
-      return scanReadyFromFs(changesDir, store2);
-    },
-    async runRound(runChange) {
-      const candidates = await scanReadyFromFs(changesDir, store2);
-      const scheduler = createScheduler({
-        state: storeWriter(store2, changeDir2),
-        runChange,
-        registerShutdown: () => () => {
-        },
-        config: { maxParallel: config.maxParallel, maxRetries: config.maxRetries, level: config.level }
-      });
-      await scheduler.runRoundOnce(candidates);
-    }
-  };
-}
-
-// packages/automation/dist/sdk/dockerRunChange.js
-import { join as join29 } from "node:path";
-
-// packages/automation/dist/lifecycle/ports.js
-import { mkdir as mkdir8, writeFile as writeFile5 } from "node:fs/promises";
-import { join as join28 } from "node:path";
-
-// packages/automation/dist/runner/boundedTail.js
-var MAX_TAIL_CHARS = 64 * 1024;
-var BoundedTail = class {
-  items = [];
-  totalChars = 0;
-  maxChars;
-  separator;
-  constructor(maxChars = MAX_TAIL_CHARS, separator = "") {
-    this.maxChars = maxChars;
-    this.separator = separator;
-  }
-  push(item) {
-    const bounded = item.length > this.maxChars ? item.slice(item.length - this.maxChars) : item;
-    this.totalChars += bounded.length + (this.items.length > 0 ? this.separator.length : 0);
-    this.items.push(bounded);
-    while (this.totalChars > this.maxChars && this.items.length > 1) {
-      const dropped = this.items.shift();
-      this.totalChars -= dropped.length + this.separator.length;
-    }
-  }
-  toString() {
-    return this.items.join(this.separator);
-  }
-};
-
-// packages/automation/dist/runner/container.js
-var KEEPALIVE_CMD = ["sleep", "2147483647"];
-var formatVolumeMount = (m) => {
-  const base = `${m.hostPath}:${m.sandboxPath}`;
-  const options = [m.readonly ? "ro" : void 0, "z"].filter((o) => o !== void 0).join(",");
-  return `${base}:${options}`;
-};
-var buildContainerRunArgs = (opts) => {
-  const envFlags = Object.entries(opts.env ?? {}).flatMap(([k, v]) => ["-e", `${k}=${v}`]);
-  const volumeFlags = (opts.gitMounts ?? []).flatMap((m) => ["-v", formatVolumeMount(m)]);
-  const userFlags = opts.uid !== void 0 && opts.gid !== void 0 ? ["--user", `${opts.uid}:${opts.gid}`] : [];
-  const cpusFlags = opts.cpus !== void 0 ? ["--cpus", String(opts.cpus)] : [];
-  const workdirFlags = opts.worktreePath ? ["-w", opts.worktreePath] : [];
-  return [
-    "run",
-    "-d",
-    "--name",
-    opts.name,
-    ...envFlags,
-    ...volumeFlags,
-    ...userFlags,
-    ...cpusFlags,
-    ...workdirFlags,
-    opts.image
-    // image 末位（buildContainerRunArgs 契约；保活命令由 startContainer 追加）
-  ];
-};
-var buildExecArgs = (name2, command, opts) => {
-  const cwdFlags = opts?.cwd ? ["-w", opts.cwd] : [];
-  return ["exec", ...cwdFlags, name2, "sh", "-c", command];
-};
-var startContainer = async (exec, opts) => {
-  const args = [...buildContainerRunArgs(opts), ...KEEPALIVE_CMD];
-  const r = await exec("docker", args);
-  if (r.exitCode !== 0) {
-    throw new Error(`docker run ${opts.image} failed (exit ${r.exitCode}): ${r.stderr.slice(0, 300)}`);
-  }
-  return opts.name;
-};
-var execInContainer = (exec, name2, command, opts) => exec("docker", buildExecArgs(name2, command, { cwd: opts?.cwd }), { onLine: opts?.onLine });
-var removeContainer = async (exec, name2) => {
-  await exec("docker", ["stop", name2]).catch(() => {
-  });
-  await exec("docker", ["rm", name2]).catch(() => {
-  });
-};
-var createDockerSandbox = async (exec, opts) => {
-  const name2 = `sandcastle-${randomName()}`;
-  await startContainer(exec, {
-    name: name2,
-    image: opts.image,
-    env: opts.env,
-    gitMounts: opts.gitMounts,
-    worktreePath: opts.worktreePath,
-    uid: opts.uid,
-    gid: opts.gid,
-    cpus: opts.cpus
-  });
-  return {
-    env: opts.env,
-    containerName: name2,
-    exec: (cmd, options) => execInContainer(exec, name2, cmd, { cwd: opts.worktreePath, onLine: options?.onLine }),
-    close: () => removeContainer(exec, name2)
-  };
-};
-var randomName = () => `${Date.now().toString(36)}-${Math.random().toString(16).slice(2, 8)}`;
-
-// packages/automation/dist/runner/gitMounts.js
-import { readFile as fsReadFile, stat as fsStat } from "node:fs/promises";
-import { resolve as resolve6 } from "node:path";
-var resolveGitMounts = async (gitPath, deps) => {
-  const stat8 = deps?.stat ?? ((p) => fsStat(p));
-  const readFile7 = deps?.readFile ?? ((p) => fsReadFile(p, "utf-8"));
-  const s = await stat8(gitPath);
-  if (s.isDirectory()) {
-    return [{ hostPath: gitPath, sandboxPath: gitPath }];
-  }
-  const content = (await readFile7(gitPath)).trim();
-  const match = content.match(/^gitdir:\s*(.+)$/);
-  if (!match) {
-    return [{ hostPath: gitPath, sandboxPath: gitPath }];
-  }
-  const gitdirPath = match[1];
-  const parentGitDir = resolve6(gitdirPath, "..", "..");
-  return [
-    { hostPath: gitPath, sandboxPath: gitPath },
-    { hostPath: parentGitDir, sandboxPath: parentGitDir }
-  ];
-};
-
-// packages/automation/dist/runner/race.js
-var DEFAULT_COMPLETION_SIGNAL = "<promise>COMPLETE</promise>";
-var DEFAULT_IDLE_TIMEOUT_MS = 20 * 60 * 1e3;
-var DEFAULT_COMPLETION_TIMEOUT_MS = 60 * 1e3;
-var AgentIdleTimeoutError = class extends Error {
-  name = "AgentIdleTimeoutError";
-  _tag = "AgentIdleTimeoutError";
-};
-var detectsCompletion = (accumulated, signals) => signals.some((sig) => accumulated.includes(sig));
-var armDecision = (completionDetected, idleMs, graceMs) => completionDetected ? { ms: graceMs, onExpiry: "resolve" } : { ms: idleMs, onExpiry: "reject-idle" };
-var invokeWithRace = (runExec, opts) => new Promise((resolve10, reject) => {
-  const { idleMs, graceMs, completionSignals, signal } = opts;
-  let settled = false;
-  let accumulated = "";
-  let completionDetected = false;
-  let timer = null;
-  const clear = () => {
-    if (timer !== null) {
-      clearTimeout(timer);
-      timer = null;
-    }
-  };
-  const cleanup2 = () => {
-    clear();
-    if (onAbort && signal)
-      signal.removeEventListener("abort", onAbort);
-  };
-  const settleResolve = (v) => {
-    if (settled)
-      return;
-    settled = true;
-    cleanup2();
-    resolve10(v);
-  };
-  const settleReject = (e) => {
-    if (settled)
-      return;
-    settled = true;
-    cleanup2();
-    reject(e);
-  };
-  const resetTimer = () => {
-    clear();
-    const d = armDecision(completionDetected, idleMs, graceMs);
-    timer = setTimeout(() => {
-      if (d.onExpiry === "resolve")
-        settleResolve({ stdout: accumulated, stderr: "", exitCode: 0 });
-      else
-        settleReject(new AgentIdleTimeoutError(`Agent idle for ${idleMs / 1e3}s \u2014 no output received.`));
-    }, d.ms);
-    timer.unref?.();
-  };
-  let onAbort;
-  if (signal) {
-    if (signal.aborted) {
-      reject(signal.reason);
-      return;
-    }
-    onAbort = () => settleReject(signal.reason);
-    signal.addEventListener("abort", onAbort, { once: true });
-  }
-  resetTimer();
-  const onLine = (line) => {
-    if (settled)
-      return;
-    accumulated += (accumulated ? "\n" : "") + line;
-    if (!completionDetected && detectsCompletion(accumulated, completionSignals)) {
-      completionDetected = true;
-    }
-    resetTimer();
-  };
-  runExec(onLine).then((res) => {
-    if (settled)
-      return;
-    settleResolve(res);
-  }).catch((err) => settleReject(err));
-});
-
-// packages/automation/dist/lifecycle/mergeback.js
-import { mkdir as mkdir7, rmdir as rmdir3, stat as stat5 } from "node:fs/promises";
-import { join as join27, resolve as resolve7 } from "node:path";
-
-// packages/automation/dist/lifecycle/worktree.js
-import { access, mkdir as mkdir6 } from "node:fs/promises";
-import { join as join26 } from "node:path";
-var NO_CONFIG_LOCK_FLAGS = [
-  "-c",
-  "branch.autoSetupMerge=false",
-  "-c",
-  "push.autoSetupRemote=false"
-];
-var GIT_ENV = { LC_ALL: "C" };
-var WorktreeError = class extends Error {
-  name = "WorktreeError";
-  _tag = "WorktreeError";
-};
-var worktreePathFor = (repoDir, branch) => join26(repoDir, ".sandcastle", "worktrees", branch.replace(/\//g, "-"));
-var addWorktree = async (exec, repoDir, branch) => {
-  await mkdir6(join26(repoDir, ".sandcastle", "worktrees"), { recursive: true });
-  const path5 = worktreePathFor(repoDir, branch);
-  const created = await exec("git", [...NO_CONFIG_LOCK_FLAGS, "worktree", "add", "-b", branch, path5, "HEAD"], { cwd: repoDir, env: GIT_ENV });
-  if (created.exitCode === 0)
-    return { path: path5, branch };
-  const reused = await exec("git", [...NO_CONFIG_LOCK_FLAGS, "worktree", "add", path5, branch], {
-    cwd: repoDir,
-    env: GIT_ENV
-  });
-  if (reused.exitCode === 0)
-    return { path: path5, branch };
-  throw new WorktreeError(`git worktree add failed for '${branch}': ${(reused.stderr || created.stderr).slice(0, 300)}`);
-};
-var removeWorktree = async (exec, path5) => {
-  const repoDir = join26(path5, "..", "..", "..");
-  const r = await exec("git", ["worktree", "remove", "--force", path5], { cwd: repoDir, env: GIT_ENV });
-  if (r.exitCode !== 0) {
-    await exec("git", ["worktree", "prune"], { cwd: repoDir, env: GIT_ENV }).catch(() => {
-    });
-  }
-};
-var CANCEL_MARKER_FILE = ".cancel-requested";
-var hasCancelMarker = async (worktreePath) => access(join26(worktreePath, CANCEL_MARKER_FILE)).then(() => true, () => false);
-var realWorktreePort = (exec) => ({
-  create: (repoDir, branch) => addWorktree(exec, repoDir, branch),
-  remove: (path5) => removeWorktree(exec, path5),
-  hasCancelMarker: (path5) => hasCancelMarker(path5)
-});
-
-// packages/automation/dist/lifecycle/mergeback.js
-var GIT_ENV2 = { LC_ALL: "C" };
-var LOCK_TIMEOUT_MS2 = 3e5;
-var LOCK_STALE_MS = 12e4;
-var LOCK_POLL_MS = 25;
-var sleep2 = (ms) => new Promise((r) => setTimeout(r, ms));
-var SyncError = class extends Error {
-  name = "SyncError";
-  _tag = "SyncError";
-  preservedWorktreePath;
-  constructor(message, preservedWorktreePath) {
-    super(message);
-    this.preservedWorktreePath = preservedWorktreePath;
-  }
-};
-var parseMergeResult = (r) => ({
-  conflict: r.exitCode !== 0
-});
-var realGitFace = (exec, cwd) => ({
-  async revParse(ref) {
-    const r = await exec("git", ["rev-parse", ref], { cwd, env: GIT_ENV2 });
-    if (r.exitCode !== 0)
-      throw new Error(`git rev-parse ${ref} failed: ${r.stderr.slice(0, 200)}`);
-    return r.stdout.trim();
-  }
-});
-var collectCommitsReal = async (exec, input) => {
-  const r = await exec("git", ["rev-list", `${input.base}..refs/heads/${input.branch}`, "--reverse"], { cwd: input.hostRepoDir, env: GIT_ENV2 });
-  if (r.exitCode !== 0)
-    return [];
-  const lines = r.stdout.trim();
-  if (!lines)
-    return [];
-  return lines.split("\n").map((sha) => ({ sha: sha.trim() }));
-};
-var diffNamesReal = async (exec, input) => {
-  const r = await exec("git", ["diff", "--name-only", `${input.base}...refs/heads/${input.branch}`], { cwd: input.hostRepoDir, env: GIT_ENV2 });
-  if (r.exitCode !== 0)
-    return [];
-  const lines = r.stdout.trim();
-  if (!lines)
-    return [];
-  return lines.split("\n").map((f) => f.trim()).filter((f) => f !== "");
-};
-var resolveLockDir = async (exec, hostRepoDir) => {
-  const r = await exec("git", ["rev-parse", "--git-common-dir"], { cwd: hostRepoDir, env: GIT_ENV2 });
-  const out = r.exitCode === 0 ? r.stdout.trim() : ".git";
-  return join27(resolve7(hostRepoDir, out || ".git"), "sandcastle-mergeback.lock.d");
-};
-var acquireMergeLock = async (exec, hostRepoDir, preservedPath) => {
-  const lockdir = await resolveLockDir(exec, hostRepoDir);
-  const deadline = Date.now() + LOCK_TIMEOUT_MS2;
-  for (; ; ) {
-    try {
-      await mkdir7(lockdir, { recursive: false });
-      return lockdir;
-    } catch {
-      try {
-        const s = await stat5(lockdir);
-        if (Date.now() - s.mtimeMs > LOCK_STALE_MS)
-          await rmdir3(lockdir).catch(() => {
-          });
-      } catch {
-      }
-      if (Date.now() >= deadline) {
-        throw new SyncError(`host merge-back lock not acquired within ${LOCK_TIMEOUT_MS2}ms (${lockdir})`, preservedPath);
-      }
-      await sleep2(LOCK_POLL_MS);
-    }
-  }
-};
-var mergeBackToBase = async (exec, input) => {
-  const { hostRepoDir, worktreePath, branch, base } = input;
-  const lock = await acquireMergeLock(exec, hostRepoDir, worktreePath);
-  try {
-    const merge = await exec("git", [...NO_CONFIG_LOCK_FLAGS, "merge", "--no-edit", `refs/heads/${branch}`], { cwd: hostRepoDir, env: GIT_ENV2 });
-    if (parseMergeResult(merge).conflict) {
-      await exec("git", ["merge", "--abort"], { cwd: hostRepoDir, env: GIT_ENV2 }).catch(() => {
-      });
-      throw new SyncError(`Merge of '${branch}' into base '${base}' failed (conflict). The named branch '${branch}' and worktree are PRESERVED at ${worktreePath}. To retry: cd ${worktreePath} && git merge ${base} (resolve conflicts manually, then commit).`, worktreePath);
-    }
-  } finally {
-    await rmdir3(lock).catch(() => {
-    });
-  }
-};
-
-// packages/automation/dist/lifecycle/ports.js
-var createLifecyclePorts = (deps) => {
-  const { exec, hostRepoDir } = deps;
-  const image = deps.image ?? "sandcastle:local";
-  const uid = deps.uid ?? process.getuid?.();
-  const gid = deps.gid ?? process.getgid?.();
-  const idleMs = deps.idleMs ?? DEFAULT_IDLE_TIMEOUT_MS;
-  const graceMs = deps.graceMs ?? DEFAULT_COMPLETION_TIMEOUT_MS;
-  const completionSignals = deps.completionSignals ?? [DEFAULT_COMPLETION_SIGNAL];
-  return {
-    worktree: realWorktreePort(exec),
-    async createSandbox({ env, worktreePath }) {
-      const gitMounts = await resolveGitMounts(join28(worktreePath, ".git")).catch(() => []);
-      const dotGit = join28(worktreePath, ".git");
-      const parentGitMounts = gitMounts.filter((m) => m.hostPath !== dotGit);
-      const codexHome = env.CODEX_HOME;
-      const codexHomeMounts = codexHome !== void 0 && codexHome.startsWith("/") ? [{ hostPath: codexHome, sandboxPath: codexHome }] : [];
-      const mounts = [{ hostPath: worktreePath, sandboxPath: worktreePath }, ...parentGitMounts, ...codexHomeMounts];
-      return createDockerSandbox(exec, { image, worktreePath, env, gitMounts: mounts, uid, gid, cpus: deps.cpus });
-    },
-    async runWork(sandboxExec, name2, signal, runner) {
-      const cmd = buildAfkRunCommand(name2, runner);
-      const changeDir2 = join28(hostRepoDir, "openspec", "changes", name2);
-      const logPath = join28(changeDir2, ".sandcastle-run.log");
-      const persistLog = async (content) => {
-        await mkdir8(changeDir2, { recursive: true }).catch(() => {
-        });
-        await writeFile5(logPath, content, "utf8").catch(() => {
-        });
-      };
-      const fallbackTail = new BoundedTail(MAX_TAIL_CHARS, "\n");
-      let res;
-      try {
-        res = await invokeWithRace((onLine) => sandboxExec(cmd, {
-          onLine: (line) => {
-            fallbackTail.push(line);
-            onLine(line);
-          }
-        }), { idleMs, graceMs, completionSignals, signal });
-      } catch (err) {
-        await persistLog(fallbackTail.toString());
-        throw err;
-      }
-      const fullLog = [res.stdout, res.stderr].filter((s) => s.length > 0).join("\n");
-      await persistLog(fullLog);
-      if (res.exitCode !== 0) {
-        throw new Error(`pipeline afk-run failed (exit ${res.exitCode}): ${res.stderr.slice(0, 200)}`);
-      }
-      return parseSandboxReport(res.stdout);
-    },
-    collectCommits: (input) => collectCommitsReal(exec, { hostRepoDir, branch: input.branch, base: input.base }),
-    // T4 决议 #12：denylist 结算检查的数据源（同 collectCommits 从 hostRepoDir 读不可变命名 ref）。
-    diffNames: (input) => diffNamesReal(exec, { hostRepoDir, branch: input.branch, base: input.base }),
-    mergeToBase: (input) => mergeBackToBase(exec, { hostRepoDir, worktreePath: input.worktreePath, branch: input.branch, base: input.base }),
-    git: realGitFace(exec, hostRepoDir),
-    setStateField: deps.setStateField ?? (async () => {
-    })
-  };
-};
-
-// packages/automation/dist/runner/exec.js
-import { execFile, spawn as spawn2 } from "node:child_process";
-import { createInterface } from "node:readline";
-var mergedEnv = (env) => env ? { ...process.env, ...env } : process.env;
-var spawnStreaming = (file, args, opts) => new Promise((resolve10) => {
-  const maxTail = opts.maxTailChars ?? MAX_TAIL_CHARS;
-  const proc = spawn2(file, args, {
-    cwd: opts.cwd,
-    env: mergedEnv(opts.env),
-    stdio: [opts.input !== void 0 ? "pipe" : "ignore", "pipe", "pipe"]
-  });
-  if (opts.input !== void 0 && proc.stdin) {
-    proc.stdin.write(opts.input);
-    proc.stdin.end();
-  }
-  const stdoutTail = new BoundedTail(maxTail, "\n");
-  const stderrTail = new BoundedTail(maxTail, opts.onLine ? "\n" : "");
-  if (opts.onLine && proc.stdout) {
-    const rl = createInterface({ input: proc.stdout });
-    rl.on("line", (line) => {
-      stdoutTail.push(line);
-      opts.onLine?.(line);
-    });
-  } else {
-    proc.stdout?.on("data", (chunk) => stdoutTail.push(chunk.toString()));
-  }
-  if (opts.onLine && proc.stderr) {
-    const rlErr = createInterface({ input: proc.stderr });
-    rlErr.on("line", (line) => {
-      stderrTail.push(line);
-      opts.onLine?.(line);
-    });
-  } else {
-    proc.stderr?.on("data", (chunk) => stderrTail.push(chunk.toString()));
-  }
-  proc.on("error", (err) => {
-    stderrTail.push(String(err.message ?? err));
-    resolve10({ stdout: stdoutTail.toString(), stderr: stderrTail.toString(), exitCode: 127 });
-  });
-  proc.on("close", (code) => {
-    resolve10({ stdout: stdoutTail.toString(), stderr: stderrTail.toString(), exitCode: code ?? 0 });
-  });
-});
-var nodeExec = (file, args, opts) => {
-  if (opts?.onLine || opts?.input !== void 0)
-    return spawnStreaming(file, args, opts);
-  return new Promise((resolve10) => {
-    execFile(file, args, { cwd: opts?.cwd, env: mergedEnv(opts?.env), maxBuffer: 64 * 1024 * 1024, encoding: "utf-8" }, (error, stdout, stderr) => {
-      const code = error && typeof error.code === "number" ? error.code : error ? 1 : 0;
-      resolve10({ stdout: String(stdout), stderr: String(stderr), exitCode: code });
-    });
-  });
-};
-
-// packages/automation/dist/sdk/dockerRunChange.js
-var codexCredentialEnv = (hostEnv) => {
-  const out = {};
-  if (hostEnv.OPENAI_API_KEY !== void 0 && hostEnv.OPENAI_API_KEY !== "")
-    out.OPENAI_API_KEY = hostEnv.OPENAI_API_KEY;
-  if (hostEnv.CODEX_HOME !== void 0 && hostEnv.CODEX_HOME !== "")
-    out.CODEX_HOME = hostEnv.CODEX_HOME;
-  return out;
-};
-var claudeCredentialEnv = (hostEnv) => {
-  const out = {};
-  if (hostEnv.CLAUDE_CODE_OAUTH_TOKEN !== void 0 && hostEnv.CLAUDE_CODE_OAUTH_TOKEN !== "") {
-    out.CLAUDE_CODE_OAUTH_TOKEN = hostEnv.CLAUDE_CODE_OAUTH_TOKEN;
-  }
-  return out;
-};
-var createDockerRunChange = (opts) => {
-  const exec = opts.exec ?? nodeExec;
-  const { store: store2, hostRepoDir } = opts;
-  const changeDir2 = (name2) => join29(hostRepoDir, "openspec", "changes", name2);
-  const setStateField = store2 ? (name2, field2, value) => store2.set(changeDir2(name2), field2, field2 === "automation_worktree" ? sanitizePath(value) : value) : void 0;
-  const ports = createLifecyclePorts({
-    exec,
-    hostRepoDir: opts.hostRepoDir,
-    image: opts.image,
-    uid: opts.uid,
-    gid: opts.gid,
-    cpus: opts.cpus,
-    idleMs: opts.idleMs,
-    graceMs: opts.graceMs,
-    setStateField
-  });
-  const autoMerge = opts.level === "L3";
-  return async (name2, signal) => {
-    const denylist = opts.resolveDenylist ? await opts.resolveDenylist(name2).catch(() => []) : [];
-    const runner = opts.resolveRunner ? await opts.resolveRunner(name2).catch(() => void 0) : void 0;
-    const hostEnv = opts.hostEnv ?? process.env;
-    const credEnv = runner === "codex" ? codexCredentialEnv(hostEnv) : claudeCredentialEnv(hostEnv);
-    const extraEnv = { ...credEnv, ...opts.extraEnv };
-    return runChangeInSandbox(ports, { hostRepoDir: opts.hostRepoDir, name: name2, base: opts.base, autoMerge, extraEnv, denylist, runner }, signal);
-  };
-};
-
-// packages/cli/src/commands/afk.ts
 var AUTOMATION_STATES = ["off", "queued", "scheduled", "running", "merged", "failed", "conflict", "paused"];
 var DEFAULT_SANDCASTLE_IMAGE = "sandcastle:local";
-var execFileAsync = promisify(execFile2);
+var execFileAsync = promisify(execFile3);
 function isAutomationLevel(v) {
   return AUTOMATION_LEVELS.includes(v);
 }
@@ -18224,7 +18325,7 @@ function printPlanSkeleton(deps, opts) {
   deps.io.out("[setup] \u5168\u529F\u80FD\u5C31\u7EEA\u5F15\u5BFC \u2014\u2014 \u8BA1\u5212\u9AA8\u67B6");
   deps.io.out("  1. PATH \u8F6F\u94FE:\u628A pipeline \u8F6F\u94FE\u5230 ~/.local/bin\uFF08\u672C\u6279\u5DF2\u5B9E\u73B0\uFF09");
   deps.io.out("  2. \u6280\u80FD\u5B89\u88C5\uFF08Phase 2,\u672C\u6279\u5DF2\u5B9E\u88C5\uFF09:\u8BFB registry \u6309 tool \u5206\u7EC4\u9009\u88C5\uFF08\u8BE6\u89C1\u4E0B\u65B9\u6280\u80FD\u8BA1\u5212\uFF09");
-  deps.io.out("  3. \u8FD0\u884C\u65F6\u68C0\u67E5\uFF08Phase 3 \u5F85\u5B9E\u73B0\uFF09:docker \u63A2\u6D4B + \u7F3A\u955C\u50CF\u4E00\u952E\u6784\u5EFA\u63D0\u793A\uFF08\u8BA1\u5212 R1\uFF09");
+  deps.io.out("  3. \u8FD0\u884C\u65F6\u68C0\u67E5\uFF08Phase 3,\u5DF2\u5B9E\u88C5 \u2192 pipeline setup runtime\uFF09:docker/\u955C\u50CF/\u4E24 runner \u51ED\u8BC1\u5C31\u7EEA\u6E05\u5355 + \u7F3A\u955C\u50CF\u4E00\u952E\u6784\u5EFA");
   deps.io.out("  4. \u5168\u529F\u80FD\u5C31\u7EEA\u6E05\u5355\uFF08\u5F85\u805A\u5408\uFF09:\u9010\u9879\u5728\u4F4D/\u964D\u7EA7 \u7EA2\u9EC4\u7EFF\u6C47\u603B");
   if (opts.dryRun) deps.io.out("  \uFF08--dry-run:\u4EC5\u6253\u5370\u8BA1\u5212,\u672A\u8F6F\u94FE\u3001\u672A\u5199\u4EFB\u4F55\u6587\u4EF6\uFF09");
 }
@@ -18485,12 +18586,46 @@ function cmdSetupSkills(deps, opts, env = REAL_SETUP_ENV, sources = readSkillSou
   }
   return renderSummary(deps, executeSkillsPlan(deps, plan, env), plan);
 }
-function cmdSetupRuntime(deps, opts) {
-  const suffix = opts.yes ? "\uFF08--yes \u5DF2\u900F\u4F20,\u5C06\u6765\u8DF3\u4EA4\u4E92\u786E\u8BA4\u4F4D\uFF09" : "";
-  deps.io.out(`[setup runtime] \u8FD0\u884C\u65F6\u68C0\u67E5\u6BB5\u5F85\u5B9E\u73B0\uFF08Phase 3,\u8BA1\u5212 R1\uFF09\u3002${suffix}`);
+var REAL_RUNTIME_ENV = {
+  exec: nodeExecDocker,
+  hostEnv: process.env,
+  resolveImage: (cwd) => readAutomationJson(cwd).image ?? "sandcastle:local"
+};
+var READY_TAG = "[\u5C31\u7EEA]";
+var MISS_TAG = "[\u7F3A\u5931]";
+function credSource(light) {
+  return `\u5DF2\u914D\uFF08${light.source === "host-env" ? "\u5BBF\u4E3B env" : "secrets \u6587\u4EF6"}\uFF09`;
+}
+function emitCredLine(deps, runner, key, light, required, note = "") {
+  if (light.set) {
+    deps.io.out(`  ${READY_TAG} ${runner} \u51ED\u8BC1 ${key} ${credSource(light)}`);
+  } else if (required) {
+    deps.io.out(`  ${MISS_TAG} ${runner} \u51ED\u8BC1 ${key} \u672A\u914D \u2192 \u53BB\u914D ${key}\uFF08pipeline \u673A\u5668\u7EA7 secrets \u6216\u5BBF\u4E3B env\uFF09`);
+  } else {
+    deps.io.out(`  ${MISS_TAG} ${runner} ${key} \u672A\u914D${note}`);
+  }
+}
+function renderRuntimeReadiness(deps, r, dryRun) {
+  deps.io.out("[setup runtime] AFK \u8FD0\u884C\u65F6\u5C31\u7EEA\u6E05\u5355\uFF08\u7EC8\u7AEF doctor/setup \u4E3A\u51ED\u8BC1\u6743\u5A01\u2014\u2014\u5373\u5C06 afk run \u7684 shell \u5F53\u523B\u771F\u503C\uFF09");
+  if (r.docker.available) deps.io.out(`  ${READY_TAG} docker daemon \u53EF\u7528`);
+  else deps.io.out(`  ${MISS_TAG} docker \u4E0D\u53EF\u7528\u2014\u2014AFK \u5BB9\u5668\u6267\u884C\u964D\u7EA7\uFF08AFK \u4E3A\u53EF\u9009\u80FD\u529B;\u88C5 docker \u5E76\u8D77 daemon \u540E\u91CD\u63A2\uFF09`);
+  const img = r.image;
+  if (img.present) deps.io.out(`  ${READY_TAG} AFK \u955C\u50CF ${img.configured} \u5728\u4F4D`);
+  else if (r.docker.available) deps.io.out(`  ${MISS_TAG} AFK \u955C\u50CF ${img.configured} \u4E0D\u5728\u672C\u673A \u2192 \u6784\u5EFA:${img.build_hint}`);
+  else deps.io.out(`  ${MISS_TAG} AFK \u955C\u50CF ${img.configured} \u672A\u80FD\u6838\uFF08docker \u4E0D\u53EF\u7528\uFF09\u2192 \u8D77 docker \u540E\u91CD\u63A2;\u7F3A\u5219\u6784\u5EFA:${img.build_hint}`);
+  emitCredLine(deps, "claude-code", "CLAUDE_CODE_OAUTH_TOKEN", r.credentials["claude-code"].CLAUDE_CODE_OAUTH_TOKEN, true);
+  emitCredLine(deps, "codex", "OPENAI_API_KEY", r.credentials.codex.OPENAI_API_KEY, true);
+  emitCredLine(deps, "codex", "CODEX_HOME", r.credentials.codex.CODEX_HOME, false, "\uFF08\u53EF\u9009,\u7F3A\u7701 ~/.codex\uFF09");
+  if (dryRun) deps.io.out("  \uFF08--dry-run:\u53EA\u63A2\u6D4B\u53EA\u6253\u5370,\u672A\u5199\u4EFB\u4F55\u6587\u4EF6\uFF09");
+}
+async function cmdSetupRuntime(deps, opts, rt = REAL_RUNTIME_ENV) {
+  const image = rt.resolveImage(deps.cwd);
+  const secretsEnv = deps.readSecretsEnv ? await deps.readSecretsEnv().catch(() => ({})) : {};
+  const readiness = await probeAfkReadiness({ image, exec: rt.exec, secretsEnv, hostEnv: rt.hostEnv });
+  renderRuntimeReadiness(deps, readiness, opts.dryRun ?? false);
   return 0;
 }
-function cmdSetup(deps, sub, opts, env = REAL_SETUP_ENV) {
+function cmdSetup(deps, sub, opts, env = REAL_SETUP_ENV, rt = REAL_RUNTIME_ENV) {
   const o = { dryRun: opts.dryRun ?? false, yes: opts.yes ?? false };
   switch (sub) {
     case void 0:
@@ -18501,7 +18636,8 @@ function cmdSetup(deps, sub, opts, env = REAL_SETUP_ENV) {
     case "skills":
       return cmdSetupSkills(deps, o, env);
     case "runtime":
-      return cmdSetupRuntime(deps, o);
+      return cmdSetupRuntime(deps, o, rt);
+    // Promise<number>:真运行时段（docker/镜像/凭证就绪清单）
     default:
       deps.io.err(`ERROR: \u672A\u77E5 setup \u5B50\u547D\u4EE4: ${sub}\uFF08\u652F\u6301: skills runtime,\u6216\u4E0D\u5E26\u5B50\u547D\u4EE4\u8D70\u5168\u6D41\u7A0B\uFF09`);
       return 1;
@@ -19333,7 +19469,7 @@ function buildProgram(deps) {
     writeErr: (s) => deps.io.err(stripNl(s))
   });
   program2.command("init <name>").description("\u521D\u59CB\u5316 change\uFF08stdout \u65E0\u8F93\u51FA\uFF0C\u8DEF\u5F84\u4FE1\u606F\u8D70 stderr\uFF09").requiredOption("--track <track>", "chat | pm | frontend | backend").requiredOption("--preset <preset>", "full | hotfix | tweak").option("--user <user>", "created_by").option("--workflow <workflow>", "\u81EA\u5B9A\u4E49 workflow \u540D\uFF08.pipeline/workflows/<name>.yaml\uFF09\uFF0C\u7F3A\u7701 default").action(async (name2, opts) => bail(await cmdInit(deps, name2, opts)));
-  program2.command("setup [sub]").description("\u5B89\u88C5\u540E\u5168\u529F\u80FD\u5C31\u7EEA\u5F15\u5BFC:\u8F6F\u94FE pipeline \u5230 PATH + \u6280\u80FD\u5B89\u88C5(Phase 2)/\u8FD0\u884C\u65F6\u68C0\u67E5(Phase 3)\u9AA8\u67B6").option("--dry-run", "\u53EA\u6253\u5370\u8BA1\u5212\u9AA8\u67B6,\u7EDD\u4E0D\u8F6F\u94FE/\u5199\u6587\u4EF6").option("-y, --yes", "\u8DF3\u8FC7\u4EA4\u4E92\u786E\u8BA4\u4F4D\uFF08\u672C\u6279\u65E0\u771F\u5B89\u88C5,\u4EC5\u900F\u4F20\u5360\u4F4D\uFF09").allowUnknownOption().action(async (sub, opts) => bail(cmdSetup(deps, sub, { dryRun: opts.dryRun, yes: opts.yes })));
+  program2.command("setup [sub]").description("\u5B89\u88C5\u540E\u5168\u529F\u80FD\u5C31\u7EEA\u5F15\u5BFC:\u8F6F\u94FE pipeline \u5230 PATH + \u6280\u80FD\u5B89\u88C5(Phase 2)/\u8FD0\u884C\u65F6\u68C0\u67E5(Phase 3)\u9AA8\u67B6").option("--dry-run", "\u53EA\u6253\u5370\u8BA1\u5212\u9AA8\u67B6,\u7EDD\u4E0D\u8F6F\u94FE/\u5199\u6587\u4EF6").option("-y, --yes", "\u8DF3\u8FC7\u4EA4\u4E92\u786E\u8BA4\u4F4D\uFF08\u672C\u6279\u65E0\u771F\u5B89\u88C5,\u4EC5\u900F\u4F20\u5360\u4F4D\uFF09").allowUnknownOption().action(async (sub, opts) => bail(await cmdSetup(deps, sub, { dryRun: opts.dryRun, yes: opts.yes })));
   program2.command("get <name> <field>").description("\u8BFB\u5B57\u6BB5\uFF08stdout: \u88F8\u503C\uFF1B\u5B57\u6BB5\u7F3A\u5931/\u672A\u77E5 \u2192 \u7A7A\u884C + exit 0\uFF09").action(async (name2, fieldName) => bail(await cmdGet(deps, name2, fieldName)));
   program2.command("set <name> <field> <value>").description("\u5199\u5B57\u6BB5\uFF08\u65E0\u8F93\u51FA\uFF1B\u56DB\u95F8\u62D2\u5199 exit 1\uFF09").action(async (name2, fieldName, value) => bail(await cmdSet(deps, name2, fieldName, value)));
   program2.command("set-many <name> <kv...>").description("\u591A\u5B57\u6BB5\u539F\u5B50\u5199 key=value ...\uFF08\u65E0\u8F93\u51FA\uFF09").action(async (name2, kv) => bail(await cmdSetMany(deps, name2, kv)));
@@ -19383,7 +19519,7 @@ function isoNow() {
 }
 function gitHeadSha(cwd) {
   return new Promise((resolve10) => {
-    execFile3("git", ["rev-parse", "HEAD"], { cwd }, (_err, stdout) => {
+    execFile4("git", ["rev-parse", "HEAD"], { cwd }, (_err, stdout) => {
       resolve10((stdout ?? "").trim());
     });
   });
@@ -19504,7 +19640,7 @@ function makeDoctorProbes() {
   return {
     nodeVersion: () => process.version,
     gitAvailable: () => new Promise((resolve10) => {
-      execFile3("git", ["--version"], (err) => resolve10(!err));
+      execFile4("git", ["--version"], (err) => resolve10(!err));
     }),
     pluginRoot: root,
     manifestError: () => {
@@ -19547,7 +19683,7 @@ function makeDoctorProbes() {
       }
     },
     runVerifySkills: () => new Promise((resolve10) => {
-      execFile3(
+      execFile4(
         "bash",
         [join34(root, "tools", "verify-skills.sh"), "--quiet"],
         { timeout: 3e4 },
@@ -19572,7 +19708,16 @@ function makeDoctorProbes() {
       } catch {
         return null;
       }
-    }
+    },
+    // AFK 运行时就绪探测（R1）：真 execFile docker（超时/spawn 失败降级不抛）+ 凭证注入——
+    // 镜像同 afk run 口径（.pipeline/automation.json 的 image ?? sandcastle:local，读 process.cwd()）；
+    // 凭证 secretsEnv 走机器级 secrets（readSecrets 自身 fail-open），hostEnv 走 process.env（宿主>文件）；
+    // 值永不回显（探针只回 set+source）。docker 缺是常态：doctor checkAfk 据 available 出 yellow 非 red。
+    afkReadiness: () => probeAfkReadiness({
+      image: readAutomationJson(process.cwd()).image ?? "sandcastle:local",
+      secretsEnv: readSecrets(secretsPath(homedir8())).keys,
+      hostEnv: process.env
+    })
   };
 }
 function splitPassthroughArgv(argv) {
