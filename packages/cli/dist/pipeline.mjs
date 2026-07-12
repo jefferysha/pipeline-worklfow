@@ -12436,7 +12436,12 @@ var SENSITIVE_HEADER_KEYS = /* @__PURE__ */ new Set([
   "set-cookie",
   "set-cookie2",
   "x-api-key",
-  "x-amz-security-token"
+  "x-amz-security-token",
+  "x-goog-api-key",
+  "api-key",
+  "x-goog-iam-authorization-token",
+  "x-goog-user-project",
+  "proxy-authorization"
 ]);
 var PREFIX_REDACTED_HEADER_KEYS = /* @__PURE__ */ new Set(["authorization", "x-api-key"]);
 var SENSITIVE_BODY_KEYS = /* @__PURE__ */ new Set([
@@ -12499,6 +12504,18 @@ function redactPathQuery(rawPath) {
   });
   return `${base}?${redacted}`;
 }
+function maskSecretValue(v, depth = 0) {
+  if (typeof v === "string")
+    return v === "" ? "" : "***";
+  if (depth > 40 || v === null || typeof v !== "object")
+    return v;
+  if (Array.isArray(v))
+    return v.map((x) => maskSecretValue(x, depth + 1));
+  const out = {};
+  for (const [k, val] of Object.entries(v))
+    out[k] = maskSecretValue(val, depth + 1);
+  return out;
+}
 function redactBodySecrets(value, depth = 0) {
   if (typeof value === "string")
     return redactSecretsInString(value);
@@ -12508,7 +12525,7 @@ function redactBodySecrets(value, depth = 0) {
     return value.map((v) => redactBodySecrets(v, depth + 1));
   const out = {};
   for (const [k, v] of Object.entries(value)) {
-    out[k] = SENSITIVE_BODY_KEYS.has(k.toLowerCase()) && typeof v === "string" && v !== "" ? "***" : redactBodySecrets(v, depth + 1);
+    out[k] = SENSITIVE_BODY_KEYS.has(k.toLowerCase()) ? maskSecretValue(v) : redactBodySecrets(v, depth + 1);
   }
   return out;
 }
