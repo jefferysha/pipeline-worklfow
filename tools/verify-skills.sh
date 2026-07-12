@@ -8,6 +8,9 @@
 #   4. skills/**/SKILL.md、hooks/hooks.json、templates/manifest.yaml（若有）中形如
 #      `external-skill: <名字>` 的外部 skill 引用，必须在 skills/EXTERNAL-SKILLS.md 中
 #      以 `- <名字>` 显式声明。
+#   5. templates/skill-sources.yaml 中 tool=skills-cli/claude-plugin/npm 的可安装 token，
+#      必须在 skills/EXTERNAL-SKILLS.md 以 `- <token>` 声明（防 registry↔EXTERNAL 漂移；
+#      非技能安装物 playwright/opsx 豁免）。反向：声明了却 registry 无源 → 仅 WARN 不阻断。
 # 任何缺失 → exit 1，逐条列出「缺什么 / 在哪引用的 / 怎么修」。
 #
 # 用法：verify-skills.sh [--quiet] [--root <plugin根>]
@@ -125,6 +128,50 @@ fi
 scan_ext "$HOOKS_JSON"
 scan_ext "$ROOT/templates/manifest.yaml"
 
+# ── 5. registry（skill-sources.yaml）↔ EXTERNAL-SKILLS.md 一致性（防漂移）──
+#   5a 正向（硬失败）：registry 可安装 token（tool=skills-cli/claude-plugin/npm）须在 EXTERNAL 声明；
+#   5b 反向（WARN 不阻断）：EXTERNAL 声明的 token 须在 registry 有源（namespace 折叠：ns:skill 认 ns）。
+# 只 grep 顶层 token 键（`^  <token>: { … }` 单行流映射），不深解析 yaml。
+REGISTRY="$ROOT/templates/skill-sources.yaml"
+N_REG=0
+# 非技能安装物：登记 registry 供 setup 装，但非 external-skill 依赖，不入 EXTERNAL（MCP 引擎 / npm 二进制）。
+REG_SKIP=" playwright opsx "
+if [ -f "$REGISTRY" ] && [ -f "$EXT_MANIFEST" ]; then
+  # 5a 正向
+  while IFS= read -r line; do
+    case "$line" in
+      '  '[![:space:]#]*'{'*) : ;;   # 顶层 token 行：2 空格缩进 + 非 # 键 + 单行流映射
+      *) continue ;;
+    esac
+    tool=""
+    case "$line" in
+      *"tool: skills-cli"*) tool=skills-cli ;;
+      *"tool: claude-plugin"*) tool=claude-plugin ;;
+      *"tool: npm"*) tool=npm ;;
+      *) continue ;;   # builtin/bundled 非可安装 → 跳过
+    esac
+    token=$(printf '%s\n' "$line" | awk '{print $1}')
+    token="${token%:}"
+    [ -n "$token" ] || continue
+    case "$REG_SKIP" in *" $token "*) continue ;; esac   # 非技能安装物豁免
+    N_REG=$((N_REG + 1))
+    grep -Fq -- "- $token" "$EXT_MANIFEST" \
+      || add_fail "registry 可安装 token 未在 EXTERNAL-SKILLS.md 声明: ${token}（tool=${tool}）" \
+                  "templates/skill-sources.yaml ↔ skills/EXTERNAL-SKILLS.md" \
+                  "在 skills/EXTERNAL-SKILLS.md「已声明依赖」加行: - ${token}；若确为非技能安装物（引擎/二进制），改加入本脚本 REG_SKIP 豁免"
+  done < "$REGISTRY"
+
+  # 5b 反向（WARN 不阻断；namespace 折叠 + builtin 在 registry 有条目故不误报）
+  while IFS= read -r token; do
+    [ -n "$token" ] || continue
+    grep -q "^  ${token}:" "$REGISTRY" && continue
+    case "$token" in
+      *:*) grep -q "^  ${token%%:*}:" "$REGISTRY" && continue ;;
+    esac
+    [ "$QUIET" = 1 ] || printf '[verify-skills] WARN — EXTERNAL 声明 %s 在 registry 无安装源（登记未落 source；builtin/内建可忽略）\n' "$token" >&2
+  done < <(sed -n '/^## 已声明依赖/,$p' "$EXT_MANIFEST" | grep '^- ' | awk '{print $2}')
+fi
+
 # ── 汇总 ──
 NFAIL=${#FAIL_WHAT[@]}
 if [ "$NFAIL" -gt 0 ]; then
@@ -142,5 +189,5 @@ if [ "$NFAIL" -gt 0 ]; then
   exit 1
 fi
 
-[ "$QUIET" = 1 ] || printf '[verify-skills] OK — 路径引用 %d 项 / skill 目录 %d 个 / 外部依赖引用 %d 项 全部通过（root: %s）\n' "$N_PATH" "$N_SKILL" "$N_EXT" "$ROOT"
+[ "$QUIET" = 1 ] || printf '[verify-skills] OK — 路径引用 %d 项 / skill 目录 %d 个 / 外部依赖引用 %d 项 / registry 可安装 token %d 项 全部通过（root: %s）\n' "$N_PATH" "$N_SKILL" "$N_EXT" "$N_REG" "$ROOT"
 exit 0
