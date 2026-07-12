@@ -12439,6 +12439,39 @@ var SENSITIVE_HEADER_KEYS = /* @__PURE__ */ new Set([
   "x-amz-security-token"
 ]);
 var PREFIX_REDACTED_HEADER_KEYS = /* @__PURE__ */ new Set(["authorization", "x-api-key"]);
+var SENSITIVE_BODY_KEYS = /* @__PURE__ */ new Set([
+  "refresh_token",
+  "access_token",
+  "id_token",
+  "client_secret",
+  "api_key",
+  "apikey",
+  "code_verifier",
+  "password",
+  "secret",
+  "session_key",
+  "private_key",
+  "authorization"
+]);
+var CRED_KEYS_ALT = [...SENSITIVE_BODY_KEYS].join("|");
+var CRED_FORM_RE = new RegExp(`\\b(${CRED_KEYS_ALT})=([^&\\s]+)`, "gi");
+var CRED_JSON_STR_RE = new RegExp(`("(?:${CRED_KEYS_ALT})"\\s*:\\s*)"[^"]*"`, "gi");
+function redactSecretsInString(s) {
+  return s.replace(CRED_FORM_RE, "$1=***").replace(CRED_JSON_STR_RE, '$1"***"');
+}
+function redactBodySecrets(value, depth = 0) {
+  if (typeof value === "string")
+    return redactSecretsInString(value);
+  if (depth > 40 || value === null || typeof value !== "object")
+    return value;
+  if (Array.isArray(value))
+    return value.map((v) => redactBodySecrets(v, depth + 1));
+  const out = {};
+  for (const [k, v] of Object.entries(value)) {
+    out[k] = SENSITIVE_BODY_KEYS.has(k.toLowerCase()) && typeof v === "string" && v !== "" ? "***" : redactBodySecrets(v, depth + 1);
+  }
+  return out;
+}
 function headerValueToString(v) {
   return Array.isArray(v) ? v.join(", ") : v ?? "";
 }
@@ -12472,12 +12505,12 @@ function buildRecord(p) {
       method: p.method,
       path: p.path,
       headers: filterHeaders(p.reqHeaders, { redactKeys: true }),
-      body: p.reqBody
+      body: redactBodySecrets(p.reqBody)
     },
     response: {
       status: p.status,
       headers: filterHeaders(p.respHeaders, { redactKeys: true }),
-      body: p.respBody
+      body: redactBodySecrets(p.respBody)
     }
   };
   if (p.sseEvents && p.sseEvents.length)
@@ -18938,7 +18971,7 @@ async function cmdTap(deps, sub, args) {
       return 0;
     }
     default:
-      deps.io.err(`ERROR: \u672A\u77E5 tap \u5B50\u547D\u4EE4: ${sub}\uFF08\u652F\u6301: start <client...> [--ca [dir]] [--json] [-- <command> ...]\uFF09`);
+      deps.io.err(`ERROR: \u672A\u77E5 tap \u5B50\u547D\u4EE4: ${sub}\uFF08\u652F\u6301: start <client...> [--ca [dir]] [--forward] [--json] [-- <command> ...]\uFF09`);
       return 1;
   }
 }
