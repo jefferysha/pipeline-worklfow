@@ -153,12 +153,13 @@ if [ -n "$OS_ROOT" ]; then
   printf '\n[openspec 提示] 本项目使用 openspec：change 状态在 openspec/changes/<name>/.pipeline.yaml（勿手改，走 pipeline CLI）；主 spec 在 openspec/specs/<capability>/spec.md，动某能力前先 Read 对应 spec；归档产物沉在 openspec/changes/archive/。\n'
 fi
 
-# ── v6 T5：AFK 首跑清单提示（轻量静态提示，不做真探测）──SS_AFK_HIT 已在文件头「当前阶段」循环里
-#    顺手判定（.pipeline/automation.json 存在，或活跃 change 的 automation 字段非 off/空）；此处只
-#    管输出，指向 dashboard 的就绪三灯（GET /api/afk/readiness，v6 T4）。刻意不做任何 docker/凭证
-#    真探测——SessionStart 零阻断纪律下，探测可能挂起；也刻意不指向 `pipeline doctor`（本轮不扩展
-#    该命令，v6 计划附录矛盾登记 1 的取舍）。
-[ -n "$SS_AFK_HIT" ] && printf '\n[pipeline-lite] 检测到 AFK 自动化配置：AFK 就绪状态见 dashboard（就绪三灯）。\n'
+# ── v6 T5 / full-install 批2 P2-T2：AFK 首跑 + 技能就绪提示（轻量静态提示，不做真探测）──
+#    SS_AFK_HIT 已在文件头「当前阶段」循环里顺手判定（.pipeline/automation.json 存在，或活跃 change 的
+#    automation 字段非 off/空）；此处只管输出。刻意不做任何 docker/凭证/技能真探测——SessionStart
+#    零阻断纪律下探测可能挂起（守零 spawn，只改文案不加探测）。指向 dashboard 就绪三灯（GET
+#    /api/afk/readiness，v6 T4）**并**指向 `pipeline doctor`——批2 A1 已给 doctor 补上缺技能检测与
+#    保障生效面，v6 计划附录矛盾登记 1 的取舍在本批已消解，故回改指向该命令。
+[ -n "$SS_AFK_HIT" ] && printf '\n[pipeline-lite] 检测到 AFK 自动化配置：AFK 就绪状态见 dashboard（就绪三灯）；技能齐全度/保障生效面跑 pipeline doctor 核对。\n'
 
 # ── 插件资产校验（fail-open：失败仅警告）──
 VS="$PLUGIN_ROOT/tools/verify-skills.sh"

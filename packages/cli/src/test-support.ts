@@ -18,6 +18,7 @@ import type {
   ManifestData,
   Phase,
   PipelineState,
+  SkillTable,
   TransitionResult,
 } from '@pipeline-lite/kernel'
 import type { CliDeps, DoctorProbes, GateMarkerInfo } from './deps.js'
@@ -133,6 +134,18 @@ export type MockFlow = ReturnType<typeof mockFlow>
 
 // === DoctorProbes mock：缺省全健康（全绿基线），单测按检查面逐项覆写 ===
 
+/**
+ * 缺技能检测（批2 A1）缺省 fixture：manifestSkills 两表 + installedSkillNames 缺省全在位。
+ * token 刻意取真 registry（templates/skill-sources.yaml）里的真名，让 checkSkills 侧
+ * 真读的 registry 能对 verify=builtin / openspec-propose=bundled 判「恒在位」、对其余按名判在位——
+ * 单测只需覆写 installedSkillNames 增删一个 token 即可精确制造 缺强制/缺推荐/全在位 三态。
+ */
+const DEFAULT_MANIFEST_SKILLS: { mandatory: SkillTable; recommended: SkillTable } = {
+  // grill-with-docs 须真装；verify|verification-loop（builtin）与 opsx:propose|openspec-propose（bundled）恒在位
+  mandatory: { build: { frontend: ['grill-with-docs', 'verify|verification-loop', 'opsx:propose|openspec-propose'] } } as unknown as SkillTable,
+  recommended: { build: { frontend: ['search-first'] } } as unknown as SkillTable,
+}
+
 export function mockDoctorProbes(overrides: Partial<DoctorProbes> = {}): DoctorProbes {
   return {
     nodeVersion: () => 'v22.5.0',
@@ -145,6 +158,9 @@ export function mockDoctorProbes(overrides: Partial<DoctorProbes> = {}): DoctorP
     env: () => undefined,
     statuslineConfigured: () => true,
     runVerifySkills: async () => ({ code: 0, output: '[verify-skills] OK' }),
+    // 缺技能检测（批2 A1）：缺省全在位 → skills:mandatory/recommended 双绿；单测逐项覆写
+    installedSkillNames: () => new Set(['grill-with-docs', 'search-first']),
+    manifestSkills: () => DEFAULT_MANIFEST_SKILLS,
     ...overrides,
   }
 }

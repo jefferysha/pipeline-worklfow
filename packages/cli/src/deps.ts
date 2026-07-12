@@ -2,7 +2,7 @@
  * cli 依赖注入面 —— 命令逻辑全部是接受 CliDeps 的纯函数（CONTRACT §4 agent:cli）。
  * store/flow 按 types.ts 契约注入；测试全 mock，绝不 import kernel 实现。
  */
-import type { FlowEngine, GuardContext, HistoryWriter, StateStore } from '@pipeline-lite/kernel'
+import type { FlowEngine, GuardContext, HistoryWriter, SkillTable, StateStore } from '@pipeline-lite/kernel'
 
 export interface GateMarkerInfo {
   kind: 'confirm' | 'review' | 'interaction'
@@ -36,6 +36,21 @@ export interface DoctorProbes {
   runVerifySkills: () => Promise<{ code: number; output: string }>
   /** tap 流量代理状态（BACKLOG #34e：敏感能力 doctor 明示）。main.ts 注入 @pipeline-lite/tap tapStatus */
   tapStatus?: () => { intercepting: boolean; captureEnabled: boolean; message: string }
+  /**
+   * 本机已安装技能/插件的「能力名」集合（full-install 批2 A1，缺技能检测）。
+   * 对齐老仓 pipeline-doctor.sh:121 口径：扫 ~/.claude/skills + ~/.agents/skills 目录名
+   * ＋ ~/.claude/plugins/cache 的插件名与其 skills 子目录名 → Set。main.ts 用 readdirSync 落地
+   * （fail-safe：缺根目录跳过）；测试注入 fake Set。命名空间 token（superpowers:brainstorming）
+   * 判在位时对本集合查 prefix/suffix（见 doctor checkSkills）。
+   */
+  installedSkillNames: () => ReadonlySet<string>
+  /**
+   * manifest 强制/推荐 skill 两表（full-install 批2 A1）。main.ts 用 loadManifest(manifestPath())
+   * 派生落地（它持有 bundle 里唯一正确的模板路径锚，故两表走探针注入而非 doctor 侧自读——
+   * doctor 被打进 dist/pipeline.mjs 后 import.meta.url 深度与 src 不同，自读会错锚）；测试 mock fixture。
+   * manifest 解析失败 → null，checkSkills 据此出 yellow「无法核技能」而**非**误报 green。
+   */
+  manifestSkills: () => { mandatory: SkillTable; recommended: SkillTable } | null
 }
 
 export interface CliIO {

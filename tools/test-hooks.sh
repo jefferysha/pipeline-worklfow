@@ -11,9 +11,9 @@
 #   7. session-start.sh：正常输出引导 exit 0；verify 失败时 stderr 警告但不阻断（fail-open）
 #  11. 阶段×hook 开关矩阵（v5 T5 / 决议#2，.pipeline/hooks.json）：配置关掉的 hook exit 0
 #      零副作用；缺失/损坏 fail-open 到启用；gate/interactive-skill-gate 强制常开忽略配置
-#  12. v6 T5：session-start.sh AFK 首跑清单提示——.pipeline/automation.json 存在或活跃 change
-#      命中 automation 字段（非 off）时追加静态提示行；archived 排除；阶段×hook 开关优先；
-#      纯静态提示（不做真探测、不指向 pipeline doctor，见 v6 计划附录矛盾登记 1）
+#  12. v6 T5 / 批2 P2-T2：session-start.sh AFK 首跑 + 技能就绪提示——.pipeline/automation.json 存在或
+#      活跃 change 命中 automation 字段（非 off）时追加静态提示行；archived 排除；阶段×hook 开关优先；
+#      纯静态提示（不做真探测）；批2 A1 已扩展 doctor，故提示回改指向 `pipeline doctor`
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -775,13 +775,14 @@ assert_exit "开关: interactive-skill-gate 安全门强制常开 → exit 0" 0 
 assert_contains "开关: 安全门配置禁用无效，姿态照注入" "$out" "AskUserQuestion"
 [ -f "$proj/.pipeline-pending-interaction" ] && ok "开关: 安全门配置禁用无效，硬门照落" || bad "开关: 安全门配置禁用无效，硬门照落" "marker 未落"
 
-# ═══════════════ 12. v6 T5：AFK 首跑清单提示（session-start.sh，.pipeline/automation.json 或活跃 change 命中 automation 字段） ═══════════════
+# ═══════════════ 12. v6 T5 / full-install 批2 P2-T2：AFK 首跑 + 技能就绪提示（session-start.sh，.pipeline/automation.json 或活跃 change 命中 automation 字段） ═══════════════
 # 一句话目标：检测到 .pipeline/automation.json 存在，或活跃（非 archived）change 命中 automation
-# 字段（值非 off/空）时，追加一行静态文案「AFK 就绪状态见 dashboard（就绪三灯）」——纯静态提示，
-# 不做任何 docker/凭证真探测，也不指向 pipeline doctor（本轮不扩展该命令，见 v6 计划附录矛盾登记 1）。
+# 字段（值非 off/空）时，追加一行静态文案「AFK 就绪状态见 dashboard（就绪三灯）；技能齐全度…跑
+# pipeline doctor 核对」——纯静态提示，不做任何 docker/凭证/技能真探测。批2 A1 已给 doctor 补上缺技能
+# 检测（矛盾登记 1 取舍消解），故本提示回改指向 `pipeline doctor`（守零 spawn：只改文案不加探测）。
 AFK_HINT="AFK 就绪状态见 dashboard"
 
-# ── 12a. .pipeline/automation.json 存在（即便无任何 change）→ 提示行出现，且不指向 doctor ──
+# ── 12a. .pipeline/automation.json 存在（即便无任何 change）→ 提示行出现，且指向 pipeline doctor（P2-T2 回改） ──
 proj="$TMP/afk-hint-json"; mkdir -p "$proj/openspec" "$proj/.pipeline"
 printf '{}\n' > "$proj/.pipeline/automation.json"
 out="$(printf '{"cwd":"%s"}' "$proj" | bash "$SS" 2>/dev/null)"
@@ -789,7 +790,7 @@ rc=$?
 assert_exit "v6T5: automation.json 存在 → exit 0" 0 "$rc"
 assert_contains "v6T5: automation.json 存在 → 提示含「${AFK_HINT}」" "$out" "$AFK_HINT"
 assert_contains "v6T5: 提示含「就绪三灯」措辞" "$out" "就绪三灯"
-assert_not_contains "v6T5: 提示不指向 pipeline doctor（附录矛盾登记 1 取舍）" "$out" "doctor"
+assert_contains "P2-T2: 提示回改指向 pipeline doctor（批2 A1 已扩展该命令）" "$out" "pipeline doctor"
 
 # ── 12b. 完全非 pipeline 目录（无 openspec）→ 新逻辑不报错、不追加提示 ──
 proj="$TMP/afk-hint-nonpipeline"; mkdir -p "$proj"

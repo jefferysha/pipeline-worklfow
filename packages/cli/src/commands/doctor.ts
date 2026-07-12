@@ -13,8 +13,10 @@
  */
 import { join } from 'node:path'
 import { GATE_TTL_MS } from '@pipeline-lite/kernel'
+import type { SkillTable } from '@pipeline-lite/kernel'
 import { errMsg, type CliDeps, type DoctorProbes } from '../deps.js'
 import { changesRoot } from '../paths.js'
+import { readSkillSources, type SkillSource } from '../skillSources.js'
 
 export type DoctorStatus = 'green' | 'yellow' | 'red'
 
@@ -185,6 +187,95 @@ async function checkVerifySkills(p: DoctorProbes): Promise<DoctorCheck> {
   )
 }
 
+// ── 缺技能检测（full-install 批2 A1，设计 spec §Phase2 A1）─────────────────────────
+
+/**
+ * 单项技能（manifest 列表里的一个 token，可含 `a|b` 备选）是否在位。
+ * · builtin/bundled（CC 自带 / 本仓自带）→ 恒在位，不需装。
+ * · 命名空间 token（superpowers:brainstorming / commit-commands:commit-push-pr / opsx:propose）：
+ *   查 installedSkillNames 的 前缀(插件名)/后缀(skill 名)/registry.skill(实际安装名) 任一命中即在位。
+ * · `a|b`：任一侧在位即满足该项（消费方自择其一，同 manifest 语义）。
+ */
+function skillInPlace(entry: string, byToken: Map<string, SkillSource>, installed: ReadonlySet<string>): boolean {
+  for (const raw of entry.split('|')) {
+    const alt = raw.trim()
+    if (alt === '') continue
+    const src = byToken.get(alt)
+    if (src && (src.tool === 'builtin' || src.tool === 'bundled')) return true // 恒在位
+    if (installed.has(alt)) return true
+    if (src?.skill !== undefined && installed.has(src.skill)) return true
+    const colon = alt.indexOf(':')
+    if (colon > 0) {
+      const prefix = alt.slice(0, colon) // 命名空间插件（superpowers / commit-commands / opsx）
+      const suffix = alt.slice(colon + 1) // 命名空间内 skill 名（brainstorming / commit-push-pr）
+      if (installed.has(prefix) || installed.has(suffix)) return true
+      const pluginSkill = byToken.get(prefix)?.skill // 前缀在 registry 里对应插件的实际安装名
+      if (pluginSkill !== undefined && installed.has(pluginSkill)) return true
+    }
+  }
+  return false
+}
+
+/** 展平 SkillTable（跨所有 phase.track）→ 去重后逐项判在位，收集缺失项（原始 token 串，含 a|b） */
+function collectMissingSkills(table: SkillTable, byToken: Map<string, SkillSource>, installed: ReadonlySet<string>): string[] {
+  const seen = new Set<string>()
+  const missing: string[] = []
+  for (const row of Object.values(table)) {
+    for (const list of Object.values(row)) {
+      for (const entry of list ?? []) {
+        if (seen.has(entry)) continue
+        seen.add(entry)
+        if (!skillInPlace(entry, byToken, installed)) missing.push(entry)
+      }
+    }
+  }
+  return missing
+}
+
+/**
+ * 缺技能双检（skills:mandatory 红阻断 / skills:recommended 黄降级）。
+ * registry 走本地 readSkillSources 真读（其自带 bundle 安全路径锚，src/dist 同深）+ fileExists 探针
+ * 独立判在否（S1 concern #3：缺/空 → yellow，绝不因空表误报 green）；manifest 两表走探针注入
+ * （main.ts 持 bundle 里唯一正确的模板路径锚）。返回两灯，cmdDoctor 尾部装配。
+ */
+function checkSkills(p: DoctorProbes): [DoctorCheck, DoctorCheck] {
+  const tables = p.manifestSkills()
+  if (tables === null) {
+    return [
+      yellow('skills:mandatory', 'manifest 不可用——无法核强制技能齐全度（不误报 green）', '先修复 asset:manifest（templates/manifest.yaml）后重跑 pipeline doctor'),
+      yellow('skills:recommended', 'manifest 不可用——无法核推荐技能齐全度', '先修复 asset:manifest 后重跑 pipeline doctor'),
+    ]
+  }
+  // registry 独立判在否（fileExists 探针）+ 真读；缺/空 → yellow（concern #3：绝不空表误报 green）
+  const registry = p.fileExists(join(p.pluginRoot, 'templates', 'skill-sources.yaml')) ? readSkillSources() : []
+  if (registry.length === 0) {
+    return [
+      yellow('skills:mandatory', 'registry 未就绪（templates/skill-sources.yaml 缺失/空）——无法核强制技能齐全度（不误报 green）', '确认插件安装完整（skill-sources.yaml 应随插件分发）后重跑 pipeline doctor'),
+      yellow('skills:recommended', 'registry 未就绪（templates/skill-sources.yaml 缺失/空）——无法核推荐技能齐全度', '确认插件安装完整后重跑 pipeline doctor'),
+    ]
+  }
+  const byToken = new Map(registry.map((s) => [s.token, s]))
+  const installed = p.installedSkillNames()
+  const missMand = collectMissingSkills(tables.mandatory, byToken, installed)
+  const missRec = collectMissingSkills(tables.recommended, byToken, installed)
+
+  const mandatory = missMand.length === 0
+    ? green('skills:mandatory', '所有 manifest 强制技能在位（阻断出口的强制 skill 全部可用）')
+    : red(
+        'skills:mandatory',
+        `缺 ${missMand.length} 个强制技能：${missMand.join('、')}`,
+        `跑 pipeline setup 安装缺失的强制技能（${missMand.join('、')}）；装齐后重跑 pipeline doctor 复核`,
+      )
+  const recommended = missRec.length === 0
+    ? green('skills:recommended', '所有 manifest 推荐技能在位')
+    : yellow(
+        'skills:recommended',
+        `缺 ${missRec.length} 个推荐技能：${missRec.join('、')}`,
+        'pipeline setup 可一并安装（推荐缺失只降级、不阻断出口）',
+      )
+  return [mandatory, recommended]
+}
+
 // ── 装配与渲染 ────────────────────────────────────────────────────────────────
 
 const STATUS_TAG: Record<DoctorStatus, string> = { green: '[PASS]', yellow: '[WARN]', red: '[FAIL]' }
@@ -217,6 +308,18 @@ export async function cmdDoctor(deps: CliDeps, opts: { json?: boolean }): Promis
     } catch (e) {
       checks.push(red(id, `检查自身异常: ${errMsg(e)}`, '排除探针环境问题后重跑 pipeline doctor'))
     }
+  }
+
+  // 缺技能双检（批2 A1，尾部只增不改；单次装配两灯）——探针自身异常也各折算 red，不炸命令
+  try {
+    const [mand, rec] = checkSkills(p)
+    checks.push(mand, rec)
+  } catch (e) {
+    const m = errMsg(e)
+    checks.push(
+      red('skills:mandatory', `检查自身异常: ${m}`, '排除探针环境问题后重跑 pipeline doctor'),
+      red('skills:recommended', `检查自身异常: ${m}`, '排除探针环境问题后重跑 pipeline doctor'),
+    )
   }
 
   const summary = {

@@ -109,6 +109,17 @@ export function realDeps(cwd: string, out: string[], err: string[]): CliDeps {
           return { code: er.status ?? 1, output: `${er.stdout ?? ''}${er.stderr ?? ''}` }
         }
       },
+      // 缺技能检测（批2 A1）：harness 不预置外部技能（确定性——不扫开发者本机安装位，doctor 未做 e2e 断言）；
+      // 两表走真 manifest（committed，确定性），与 realDeps「真 kernel」精神一致。
+      installedSkillNames: () => new Set<string>(),
+      manifestSkills: () => {
+        try {
+          const m = loadManifest(MANIFEST)
+          return { mandatory: m.mandatorySkills, recommended: m.recommendedSkills }
+        } catch {
+          return null
+        }
+      },
     },
   }
 }

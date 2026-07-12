@@ -130,6 +130,40 @@ function readPluginVersion(): string {
   }
 }
 
+/** readdir 只取子目录/符号链接名（缺目录/无权限 → []，fail-safe）；skill 常以 symlink 装入，故含 symlink。 */
+function safeReaddirDirs(dir: string): string[] {
+  try {
+    return readdirSync(dir, { withFileTypes: true })
+      .filter((e) => e.isDirectory() || e.isSymbolicLink())
+      .map((e) => e.name)
+  } catch {
+    return []
+  }
+}
+
+/**
+ * 本机已安装技能/插件「能力名」扫描（full-install 批2 A1；对齐老仓 pipeline-doctor.sh:121 口径）：
+ *   · ~/.claude/skills、~/.agents/skills 的直接子目录名 = skill 名（`npx skills add` 默认落 .agents/skills）
+ *   · ~/.claude/plugins/cache/<marketplace>/<plugin> 的插件名 + 其 skills/ 子目录名
+ * 纯目录扫描（本批口径；enabledPlugins=false 精确排除后续再补，设计 spec §Phase2 已登记）。
+ * 全程 fail-safe（缺根目录跳过），供 doctor checkSkills 判在位。
+ */
+function scanInstalledSkillNames(): Set<string> {
+  const home = homedir()
+  const names = new Set<string>()
+  for (const n of safeReaddirDirs(join(home, '.claude', 'skills'))) names.add(n)
+  for (const n of safeReaddirDirs(join(home, '.agents', 'skills'))) names.add(n)
+  const cache = join(home, '.claude', 'plugins', 'cache')
+  for (const marketplace of safeReaddirDirs(cache)) {
+    const mktDir = join(cache, marketplace)
+    for (const plugin of safeReaddirDirs(mktDir)) {
+      names.add(plugin) // 插件名（superpowers / commit-commands / frontend-design …）
+      for (const skill of safeReaddirDirs(join(mktDir, plugin, 'skills'))) names.add(skill)
+    }
+  }
+  return names
+}
+
 /**
  * doctor 探针（BACKLOG #26b）：环境/fs 事实采集的 node 落地，裁决归 cmdDoctor。
  * 各探针独立 fail-safe（fs 异常按「不存在/不可执行」处理）——doctor 要能在坏环境里跑完。
@@ -186,6 +220,16 @@ function makeDoctorProbes(): DoctorProbes {
     tapStatus: () => {
       const s = tapStatus()
       return { intercepting: s.intercepting, captureEnabled: s.captureEnabled, message: s.message }
+    },
+    // 缺技能检测（批2 A1）：本机安装位扫描 + manifest 两表派生（bundle 里正确路径锚在此）
+    installedSkillNames: () => scanInstalledSkillNames(),
+    manifestSkills: () => {
+      try {
+        const m = loadManifest(manifestPath())
+        return { mandatory: m.mandatorySkills, recommended: m.recommendedSkills }
+      } catch {
+        return null // 解析失败 → checkSkills 出 yellow「无法核技能」，不误报 green
+      }
     },
   }
 }
