@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '../i18n'
+import { zh } from '../i18n/translations'
 import { AFK_LOG_POLL_INTERVAL_MS } from './useAfkLog'
 import { DEFAULT_RULES, rulesFromDef, rulesKey, type WorkflowRules } from '../model/workflowModel'
 import { makeChange, makeProject, makeSnapshot } from '../testkit'
@@ -673,5 +674,37 @@ describe('ProgressView GSAP 动效（gsap.matchMedia 全包）', () => {
         expect(seg.style.opacity).toBe('1')
       }
     }, { timeout: 4000 })
+  })
+})
+
+describe('ProgressView 失败行短成因提示（W3 ④）', () => {
+  const fz = zh.failure as Record<string, string>
+
+  it('失败行有 last_error → 徽章旁出短成因（经 i18n，docker 类→「Docker 未运行」）+ title 透传原文', async () => {
+    renderView({
+      snapshot: makeSnapshot([
+        makeProject(ROOT_A, [
+          makeChange('dock-fail', 'build', {
+            fields: {
+              automation: 'failed',
+              automation_attempts: '2',
+              automation_last_error: 'Cannot connect to the Docker daemon at unix:///var/run/docker.sock',
+            },
+          }),
+        ]),
+      ]),
+    })
+    const cause = screen.getByTestId('prg-cause-dock-fail')
+    expect(cause.textContent).toBe(fz['short_missing-docker'])
+    // title 透传 last_error 原文（进度行原先只有徽章计数、看不到落盘错误——观察项③）
+    expect(cause.getAttribute('title')).toContain('Docker daemon')
+    // 单 root fixture：冲掉并发上限探测请求落地（同本文件其余先例）
+    await act(async () => {})
+  })
+
+  it('失败行无 last_error（fixture hotfix-login）→ 不出成因提示，徽章仍「失败 ×3」（退回原样，不臆造成因）', () => {
+    renderView()
+    expect(screen.queryByTestId('prg-cause-hotfix-login')).toBeNull()
+    expect(screen.getByTestId('prg-badge-hotfix-login').textContent).toContain('失败 ×3')
   })
 })

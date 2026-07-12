@@ -9,6 +9,7 @@ import { changeProgressState, type ProgressRules, type ProgressState } from '../
 import { artifactChips, gateEvidence, stageArtifacts, VERIFY_STATUS_FIELDS, type EvidenceChip } from '../inbox/evidence'
 import { decisionKind } from '../inbox/inbox'
 import { getHistory, type ChangeHistoryEntry } from '../api/client'
+import { diagnoseFailure } from './failureDiagnosis'
 import { revealStages } from './motion'
 import { Icon } from '../shell/Icon'
 import { shortTime } from '../model/time'
@@ -244,6 +245,10 @@ export function TaskDetail({
     const v = verdict()
     if (state === 'failed') {
       const missing = chips.filter((c) => c.unset).map((c) => c.key)
+      // W3：成因分类 + 修复命令。原文（last_error）仍由结论行 v.text 与下方 dt-field-last_error
+      // 双重保留，此块只在其上补一层人话成因徽章 + 可复制修复命令，不替换任何原始信息。
+      const diag = diagnoseFailure(lastError)
+      const fix = diag.fixCommand
       return (
         <>
           <div className="dt-verdict dt-verdict--bad">
@@ -251,6 +256,32 @@ export function TaskDetail({
               ×
             </span>
             {v.text}
+          </div>
+          <div className="dt-diag" data-testid="dt-diag">
+            <span className={`dt-diag-badge dt-diag-badge--${diag.cause}`} data-testid="dt-diag-cause">
+              {t(`failure.cause_${diag.cause}`)}
+            </span>
+            {fix !== null && (
+              <div className="dt-diag-fix">
+                <span className="dt-diag-fix-label">{t('failure.fix_label')}</span>
+                <div className="dt-code">
+                  <span className="p" aria-hidden="true">
+                    $
+                  </span>
+                  <code data-testid="detail-fix-cmd">{fix}</code>
+                  <button
+                    type="button"
+                    className="dt-code-copy"
+                    data-copy={fix}
+                    data-testid="detail-fix-copy"
+                    aria-label={t('failure.fix_copy')}
+                    onClick={() => copy(fix)}
+                  >
+                    <Icon name="copy" size={12} />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
           <div className="dt-arts">
             {lastError !== '' && (

@@ -19,8 +19,9 @@
  *   · ✕ 关闭回调                                   → 本文件（onClose 可选，未传不渲染关闭钮）
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { I18nProvider } from '../i18n'
+import { zh } from '../i18n/translations'
 import { TaskDetail } from './TaskDetail'
 import { DEFAULT_RULES, rulesFromDef } from '../model/workflowModel'
 import { makeChange } from '../testkit'
@@ -355,6 +356,64 @@ describe('TaskDetail 失败态（automation failed）', () => {
     await renderDetail({ change: failedChange, actions: <button type="button">重试</button> })
     expect(screen.queryByTestId('detail-cmd')).toBeNull()
     expect(screen.getByTestId('dt-foot-label').textContent).toBe('automation · failed')
+  })
+})
+
+describe('TaskDetail 失败诊断（W3：成因徽章 + 可复制修复命令）', () => {
+  /** zh.failure 命名空间取值（Dict 联合收窄为字符串表，供断言证明成因人话走 i18n 非硬编码）。 */
+  const fz = zh.failure as Record<string, string>
+
+  it('②凭证类失败 → 成因徽章（经 i18n）+ 可复制修复命令 pipeline setup；last_error 原文仍在', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } })
+    await renderDetail({
+      change: makeChange('hotfix', 'build', {
+        fields: {
+          automation: 'failed',
+          automation_last_error: 'codex 认证失败：请设置 OPENAI_API_KEY 后重试',
+          automation_attempts: '2',
+        },
+      }),
+    })
+    // ⑤成因徽章文案取自 zh.failure（组件走 t('failure.cause_*')，不硬编码）
+    expect(screen.getByTestId('dt-diag-cause').textContent).toBe(fz['cause_missing-credential'])
+    // 可复制修复命令
+    expect(screen.getByTestId('detail-fix-cmd').textContent).toBe('pipeline setup')
+    const copyBtn = screen.getByTestId('detail-fix-copy')
+    expect(copyBtn.getAttribute('data-copy')).toBe('pipeline setup')
+    fireEvent.click(copyBtn)
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('pipeline setup'))
+    // 原文保留（成因徽章是补充不是替换）
+    expect(screen.getByTestId('dt-field-last_error').textContent).toContain('OPENAI_API_KEY')
+    // 前进转换命令区（detail-cmd）失败态仍不渲染——与修复命令区（detail-fix-cmd）互不相干
+    expect(screen.queryByTestId('detail-cmd')).toBeNull()
+  })
+
+  it('②agent 非零（[AGENT_EXIT] claude 96）→ 成因徽章在，但无 fixCommand → 不渲染修复命令区', async () => {
+    await renderDetail({
+      change: makeChange('hotfix', 'build', {
+        fields: { automation: 'failed', automation_last_error: '[AGENT_EXIT] claude 96' },
+      }),
+    })
+    expect(screen.getByTestId('dt-diag-cause').textContent).toBe(fz['cause_agent-nonzero'])
+    expect(screen.queryByTestId('detail-fix-cmd')).toBeNull()
+  })
+
+  it('③非失败态（当前 verify 门行）不渲染诊断区（回归：成因区只在 failed 出）', async () => {
+    await renderDetail()
+    expect(screen.queryByTestId('dt-diag')).toBeNull()
+  })
+
+  it('形态 B（tabs）失败 pane 内同样出成因徽章 + 修复命令（镜像类 → build.sh）', async () => {
+    await renderDetail({
+      variant: 'tabs',
+      change: makeChange('hotfix', 'build', {
+        fields: { automation: 'failed', automation_last_error: 'AFK 镜像 sandcastle:local 不在本机' },
+      }),
+    })
+    const pane = screen.getByTestId('dt-pane-build')
+    expect(within(pane).getByTestId('dt-diag-cause').textContent).toBe(fz['cause_missing-image'])
+    expect(within(pane).getByTestId('detail-fix-cmd').textContent).toBe('bash tools/sandcastle/build.sh')
   })
 })
 

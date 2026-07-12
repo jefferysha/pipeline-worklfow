@@ -8,6 +8,7 @@ import type { WorkflowRules } from '../model/workflowModel'
 import { plannedTransition, type PlannedTransition } from '../model/events'
 import { fetchAutomationSettings, getToken, postTransition } from '../api/client'
 import { TaskDetail } from '../shared/TaskDetail'
+import { diagnoseFailure } from '../shared/failureDiagnosis'
 import { useAfkLog } from './useAfkLog'
 import {
   PROGRESS_STATES,
@@ -735,6 +736,8 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
                   const rowKey = rowKeyOf(row.root, row.change.name)
                   const rowOpen = openRows.has(rowKey)
                   const rowBusy = busyRows.has(rowKey)
+                  // W3：失败行短成因提示的数据源（有 last_error 才给成因；无则退回徽章「失败 ×N」原样）。
+                  const lastError = fieldStr(row.change, 'automation_last_error')
                   return (
                     <div
                       key={row.change.name}
@@ -782,6 +785,17 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
                             {(row.state === 'gate' || row.state === 'running') && <span className="prg-badge__dot" aria-hidden="true" />}
                             {badgeLabel(row, groupRules)}
                           </span>
+                          {row.state === 'failed' && lastError !== '' && (
+                            // 短成因提示（小字，紧随「失败 ×N」徽章）；title 透传 last_error 原文——
+                            // 闭合观察项③：进度行原先只有徽章计数，看不到落盘的错误原文。
+                            <span
+                              className="prg-cause"
+                              data-testid={`prg-cause-${row.change.name}`}
+                              title={lastError}
+                            >
+                              {t(`failure.short_${diagnoseFailure(lastError).cause}`)}
+                            </span>
+                          )}
                           {row.state === 'running' && (
                             <button
                               type="button"

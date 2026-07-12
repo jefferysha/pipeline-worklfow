@@ -1004,4 +1004,22 @@ span.wb-chip-badge { cursor: default; }
    flex-basis:100% 令 caveat 在 .afk-rd 弹性行里独占一行,与上方双灯分行。双灯本身复用既有
    .rd-dot--ok(var(--green))/.rd-dot--no(color-mix 派生),无新增灯样式。 ── */
 .afk-rd-caveat { flex-basis: 100%; margin: 0; font-size: 11px; line-height: 1.4; color: color-mix(in srgb, var(--text-2) 70%, transparent); }
+
+/* ── full-install W3：AFK 失败成因徽章 + 修复命令区（TaskDetail 失败态 .dt-diag / ProgressView
+   失败行 .prg-cause）。决议 #9：警示色一律 color-mix 从既有 --red/--green token 派生（明暗两套
+   随主题自适应），不硬编码新原色；修复命令区复用既有 .dt-code 底座，本段只补布局壳 + 徽章配色。 ── */
+.dt-diag { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+.dt-diag-badge { align-self: flex-start; display: inline-flex; align-items: center; padding: 2px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 600; line-height: 1.5; background: var(--red-t); color: var(--red-d); border: 1px solid var(--red-b); }
+/* agent 非零 / unknown：换「琥珀」中性警示（红绿 oklch 取中派生,同调度灯 busy 先例)——这类要人看
+   日志判断、非「去配 X」的硬缺失，色调与缺凭证/镜像/docker 的红徽章区分开。 */
+.dt-diag-badge--agent-nonzero,
+.dt-diag-badge--unknown {
+  background: color-mix(in srgb, color-mix(in oklch, var(--red) 52%, var(--green)) 15%, var(--card));
+  color: color-mix(in oklch, var(--red) 42%, var(--text-2));
+  border-color: color-mix(in srgb, color-mix(in oklch, var(--red) 52%, var(--green)) 46%, var(--border));
+}
+.dt-diag-fix { display: flex; flex-direction: column; gap: 4px; }
+.dt-diag-fix-label { font-size: 11px; color: var(--text-3); }
+/* ProgressView 失败行短成因提示（小字,紧随失败徽章;纯提示无块,超长省略号收口不撑破行）。 */
+.prg-cause { flex: none; font-size: 11px; color: var(--red-d); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 14ch; }
 `

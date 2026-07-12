@@ -540,6 +540,23 @@ export const zh: Dict = {
     follow_tail: '跟随尾部',
     sandbox_phase: '沙箱内阶段：{phase}（host 阶段在 run 结束后结算）',
   },
+  // ── full-install W3：AFK 失败成因分类（TaskDetail 失败态成因徽章 + 修复命令区 / ProgressView
+  //    失败行短成因提示）。成因人话一律经此 i18n，不在 failureDiagnosis.ts 硬编码中文。
+  //    cause_* = 详情态整句；short_* = 行内小字；键尾 = FailureCause 枚举值（含连字符，须整键引号）。──
+  failure: {
+    'cause_missing-credential': '缺凭证——AFK runner 没拿到可用凭证，先配好再重试',
+    'cause_missing-image': '缺沙箱镜像——本机没有可用的 AFK 镜像，先构建再重试',
+    'cause_missing-docker': 'Docker 未运行——启动 Docker 后重试',
+    'cause_agent-nonzero': 'agent 非零退出——看下方原文或运行日志定位，多为可重试的瞬态失败',
+    cause_unknown: '成因未自动识别——跑一次就绪诊断看环境哪里没配好',
+    'short_missing-credential': '缺凭证',
+    'short_missing-image': '缺镜像',
+    'short_missing-docker': 'Docker 未运行',
+    'short_agent-nonzero': 'agent 非零退出',
+    short_unknown: '成因未识别',
+    fix_label: '修复命令',
+    fix_copy: '拷贝修复命令',
+  },
 }
 
 export const en: Dict = {
@@ -1022,6 +1039,23 @@ export const en: Dict = {
     log_label: 'log · tail',
     follow_tail: 'Follow tail',
     sandbox_phase: 'Stage inside sandbox: {phase} (the host stage settles after the run ends)',
+  },
+  // ── full-install W3: AFK failure cause classification (TaskDetail failed-state cause badge +
+  //    fix-command area / ProgressView failed-row short cause hint). Cause wording always via i18n,
+  //    never hardcoded in failureDiagnosis.ts. cause_* = full detail sentence; short_* = inline. ──
+  failure: {
+    'cause_missing-credential': 'Missing credential — the AFK runner has no usable credential; set it up, then retry',
+    'cause_missing-image': 'Missing sandbox image — no AFK image is built on this machine; build it, then retry',
+    'cause_missing-docker': 'Docker is not running — start Docker, then retry',
+    'cause_agent-nonzero': 'Agent exited non-zero — see the raw error or run log below; often a retryable transient failure',
+    cause_unknown: 'Cause not auto-classified — run the readiness diagnostics to see what is unconfigured',
+    'short_missing-credential': 'missing credential',
+    'short_missing-image': 'missing image',
+    'short_missing-docker': 'Docker not running',
+    'short_agent-nonzero': 'agent exited non-zero',
+    short_unknown: 'cause unknown',
+    fix_label: 'Fix command',
+    fix_copy: 'Copy fix command',
   },
 }
 
