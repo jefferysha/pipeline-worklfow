@@ -278,12 +278,16 @@ describe('⑧运行时检查段 R1 —— AFK 就绪清单（docker/镜像/两 r
     expect(out).not.toContain('[缺失]')
   })
 
-  test('docker 不可用 → 降级标缺失（不抛不阻断,exit 0）;镜像未能核给 build_hint', async () => {
+  test('docker 不可用 → 降级标缺失（不抛不阻断,exit 0）;镜像未能核给 build_hint;附「怎么拿」docker 安装引导', async () => {
     const deps = makeDeps()
     expect(await cmdSetupRuntime(deps, {}, fakeRt({ exec: dockerDownExec }))).toBe(0)
     const out = deps.outLines.join('\n')
     expect(out).toContain('docker 不可用')
     expect(out).toContain('bash tools/sandcastle/build.sh') // build_hint 单一真相源
+    // FI·G1:不光报缺,还引导怎么获取——装 OrbStack / Docker Desktop,且明示不自动装
+    expect(out).toContain('OrbStack')
+    expect(out).toContain('Docker Desktop')
+    expect(out).toContain('不自动装')
   })
 
   test('docker 在但镜像缺（inspect 非零）→ [缺失] + 构建:build_hint 一键', async () => {
@@ -296,7 +300,7 @@ describe('⑧运行时检查段 R1 —— AFK 就绪清单（docker/镜像/两 r
     expect(out).toContain('构建:bash tools/sandcastle/build.sh')
   })
 
-  test('凭证缺 → 去配 X;凭证值永不回显（secrets 明文不进输出）', async () => {
+  test('凭证缺 → 去配 X;凭证值永不回显（secrets 明文不进输出）;codex 缺附「怎么拿」两条路,claude 已配则无 claude 引导', async () => {
     const deps = makeDeps()
     // secrets 供 claude-code token（明文），codex OPENAI_API_KEY 两源皆缺
     deps.readSecretsEnv = async () => ({ CLAUDE_CODE_OAUTH_TOKEN: 'super-secret-xyz' })
@@ -306,6 +310,21 @@ describe('⑧运行时检查段 R1 —— AFK 就绪清单（docker/镜像/两 r
     expect(out).not.toContain('super-secret-xyz') // 值永不回显
     expect(out).toContain('CLAUDE_CODE_OAUTH_TOKEN 已配（secrets 文件）') // 只报 set+source
     expect(out).toContain('去配 OPENAI_API_KEY') // 缺 → 去配硬指引
+    // FI·G1:codex 缺 → 引导两条路（codex login / openai api-keys）;claude 已配 → 不出 claude 引导（只对缺项引导）
+    expect(out).toContain('codex login')
+    expect(out).toContain('platform.openai.com/api-keys')
+    expect(out).not.toContain('claude setup-token')
+  })
+
+  test('claude-code 凭证缺 → 附「怎么拿」claude setup-token 引导（值永不回显）', async () => {
+    const deps = makeDeps()
+    // 两 runner 凭证两源皆缺（hostEnv 空 + 无 secrets）
+    deps.readSecretsEnv = async () => ({})
+    expect(await cmdSetupRuntime(deps, {}, fakeRt({ hostEnv: {} }))).toBe(0)
+    const out = deps.outLines.join('\n')
+    expect(out).toContain('去配 CLAUDE_CODE_OAUTH_TOKEN')
+    expect(out).toContain('claude setup-token') // claude-code 缺 → 生成长期 OAuth token
+    expect(out).toContain('codex login') // codex 也缺 → 两条路引导
   })
 
   test('两 runner 凭证对称:claude-code 已配、codex 全缺时,codex 的 OPENAI_API_KEY 与 CODEX_HOME 仍双双在清单（不缺席）', async () => {

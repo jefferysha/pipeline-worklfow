@@ -60,6 +60,22 @@ export const GATE_FRESH_MS = 15 * 60 * 1000
  */
 export const SANDCASTLE_BUILD_HINT = 'bash tools/sandcastle/build.sh'
 
+/**
+ * 前置条件缺失时的「怎么获取」引导 —— 单一真相源（防漂移，同 SANDCASTLE_BUILD_HINT 先例）。
+ * cli `setup runtime` 就绪清单与 `doctor afk:*` 检查、以及（未来）server 同 import 此常量:
+ * 缺凭证 / 缺 docker 时不只报「缺」，而是给出**逐字一致**的「怎么拿」下一步，杜绝两处各写字面串
+ * 静默分叉。凭证只引导获取路径（可执行命令 / 官方地址），绝不回显任何凭证值（同 secrets 纪律）。
+ */
+export const PREREQ_HINTS = {
+  /** claude-code 凭证 CLAUDE_CODE_OAUTH_TOKEN 缺 —— 生成长期 OAuth token。 */
+  claudeToken: '运行 `claude setup-token` 生成长期 OAuth token',
+  /** codex 凭证 OPENAI_API_KEY 缺 —— 两条路(ChatGPT 账户登录 / 建 API key)。 */
+  openaiKey:
+    'codex 两条路：① `codex login` 走 ChatGPT 账户（最简，免 API key）；② 到 platform.openai.com/api-keys 建 key 设为 OPENAI_API_KEY',
+  /** docker daemon 不可用 —— 装 OrbStack 或 Docker Desktop（不自动装，需用户自行安装）。 */
+  docker: '装 OrbStack（orbstack.dev，轻量，推荐 macOS）或 Docker Desktop（docker.com）——不自动装，需你自行安装',
+} as const
+
 export interface PipelineState {
   fields: Record<FieldName, string | string[]>
   /** 老内核 base64 历史区等未知尾块——读时跳过、写回原样逐字保留 */

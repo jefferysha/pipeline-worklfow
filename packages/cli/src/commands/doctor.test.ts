@@ -305,6 +305,11 @@ describe('doctor —— AFK 运行时就绪四检（full-install R1：afk:docker
     expect(code).toBe(0) // yellow 不阻断
     expect(byId(payload, 'afk:docker').status).toBe('yellow')
     expect(byId(payload, 'afk:docker').detail).toContain('docker')
+    // FI·G1:hint 不光说「装 docker」,还引导怎么装——OrbStack / Docker Desktop,明示不自动装
+    const dockerHint = byId(payload, 'afk:docker').hint
+    expect(dockerHint).toContain('OrbStack')
+    expect(dockerHint).toContain('Docker Desktop')
+    expect(dockerHint).toContain('不自动装')
     expect(byId(payload, 'afk:image').status).toBe('yellow')
   })
 
@@ -350,9 +355,14 @@ describe('doctor —— AFK 运行时就绪四检（full-install R1：afk:docker
     const cc = byId(payload, 'afk:credential-claude-code')
     expect(cc.status).toBe('yellow')
     expect(cc.hint).toContain('CLAUDE_CODE_OAUTH_TOKEN')
+    // FI·G1:claude-code 缺 → hint 引导怎么拿（生成长期 OAuth token）
+    expect(cc.hint).toContain('claude setup-token')
     const cx = byId(payload, 'afk:credential-codex')
     expect(cx.status).toBe('yellow')
     expect(cx.hint).toContain('OPENAI_API_KEY')
+    // FI·G1:codex 缺 → hint 引导两条路（codex login 走 ChatGPT / platform.openai.com/api-keys 建 key）
+    expect(cx.hint).toContain('codex login')
+    expect(cx.hint).toContain('platform.openai.com/api-keys')
   })
 
   test('④ 两 runner 凭证对称:codex 缺席不得——OPENAI_API_KEY 与 CODEX_HOME 都在 codex 灯里呈现', async () => {

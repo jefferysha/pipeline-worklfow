@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { FIELD_ORDER } from './types.js'
+import { FIELD_ORDER, PREREQ_HINTS } from './types.js'
 import { emptyFields } from './state/parse.js'
 
 describe('workflow 字段', () => {
@@ -17,5 +17,23 @@ describe('automation_current_phase 字段（v5 T4 决策 G）', () => {
   })
   it('emptyFields() 缺省空串（run 外无沙箱内阶段）', () => {
     expect(emptyFields().automation_current_phase).toBe('')
+  })
+})
+
+describe('PREREQ_HINTS —— 前置条件「怎么获取」单一真相源（full-install FI · G1）', () => {
+  it('claudeToken 指向 `claude setup-token`（生成长期 OAuth token）', () => {
+    expect(PREREQ_HINTS.claudeToken).toContain('claude setup-token')
+    expect(PREREQ_HINTS.claudeToken).toContain('OAuth')
+  })
+  it('openaiKey 给 codex 两条路（codex login 走 ChatGPT / platform.openai.com/api-keys 建 key）', () => {
+    expect(PREREQ_HINTS.openaiKey).toContain('codex login')
+    expect(PREREQ_HINTS.openaiKey).toContain('platform.openai.com/api-keys')
+    expect(PREREQ_HINTS.openaiKey).toContain('OPENAI_API_KEY')
+  })
+  it('docker 引导装 OrbStack / Docker Desktop 且明示不自动装', () => {
+    expect(PREREQ_HINTS.docker).toContain('OrbStack')
+    expect(PREREQ_HINTS.docker).toContain('orbstack.dev')
+    expect(PREREQ_HINTS.docker).toContain('Docker Desktop')
+    expect(PREREQ_HINTS.docker).toContain('不自动装')
   })
 })

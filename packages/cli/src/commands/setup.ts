@@ -17,6 +17,7 @@ import { chmodSync, lstatSync, mkdirSync, readSync, readlinkSync, symlinkSync, u
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { readAutomationJson } from '@pipeline-lite/automation'
+import { PREREQ_HINTS } from '@pipeline-lite/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
 import { nodeExecDocker, probeAfkReadiness, type AfkReadiness, type CredLight, type ExecDockerFn } from '../afkReadiness.js'
 import { readSkillSources, type SkillSource, type SkillTier } from '../skillSources.js'
@@ -504,12 +505,22 @@ function credSource(light: CredLight): string {
   return `已配（${light.source === 'host-env' ? '宿主 env' : 'secrets 文件'}）`
 }
 
-/** 一条凭证清单行:required 缺 → 给「去配 X」硬指引;optional 缺 → 仅标可选（不误导必配）。 */
-function emitCredLine(deps: CliDeps, runner: string, key: string, light: CredLight, required: boolean, note = ''): void {
+/** 「怎么拿」引导行缩进（视觉从属于其上的 [缺失] 行;走 kernel PREREQ_HINTS 单一真相源）。 */
+const HINT_INDENT = '         '
+
+/**
+ * 一条凭证清单行:required 缺 → 给「去配 X」硬指引 + 附一行「怎么拿」获取引导（acquireHint,走 kernel
+ * PREREQ_HINTS 单一真相源，缺则不引导只对缺项引导）;optional 缺 → 仅标可选（不误导必配）。
+ * 凭证只报 set/未设 + 获取路径，永不回显任何值。
+ */
+function emitCredLine(
+  deps: CliDeps, runner: string, key: string, light: CredLight, required: boolean, note = '', acquireHint = '',
+): void {
   if (light.set) {
     deps.io.out(`  ${READY_TAG} ${runner} 凭证 ${key} ${credSource(light)}`)
   } else if (required) {
     deps.io.out(`  ${MISS_TAG} ${runner} 凭证 ${key} 未配 → 去配 ${key}（pipeline 机器级 secrets 或宿主 env）`)
+    if (acquireHint !== '') deps.io.out(`${HINT_INDENT}怎么拿：${acquireHint}`)
   } else {
     deps.io.out(`  ${MISS_TAG} ${runner} ${key} 未配${note}`)
   }
@@ -519,9 +530,12 @@ function emitCredLine(deps: CliDeps, runner: string, key: string, light: CredLig
 function renderRuntimeReadiness(deps: CliDeps, r: AfkReadiness, dryRun: boolean): void {
   deps.io.out('[setup runtime] AFK 运行时就绪清单（终端 doctor/setup 为凭证权威——即将 afk run 的 shell 当刻真值）')
 
-  // docker
+  // docker（不可用不光报缺:附一行「怎么拿」——装 OrbStack / Docker Desktop,走 kernel 单一真相源）
   if (r.docker.available) deps.io.out(`  ${READY_TAG} docker daemon 可用`)
-  else deps.io.out(`  ${MISS_TAG} docker 不可用——AFK 容器执行降级（AFK 为可选能力;装 docker 并起 daemon 后重探）`)
+  else {
+    deps.io.out(`  ${MISS_TAG} docker 不可用——AFK 容器执行降级（AFK 为可选能力;装 docker 并起 daemon 后重探）`)
+    deps.io.out(`${HINT_INDENT}怎么拿：${PREREQ_HINTS.docker}`)
+  }
 
   // 镜像（缺 → build_hint 一键;走探测里的 kernel 单一真相源常量，不另写字面串）
   const img = r.image
@@ -530,8 +544,9 @@ function renderRuntimeReadiness(deps: CliDeps, r: AfkReadiness, dryRun: boolean)
   else deps.io.out(`  ${MISS_TAG} AFK 镜像 ${img.configured} 未能核（docker 不可用）→ 起 docker 后重探;缺则构建:${img.build_hint}`)
 
   // 两 runner 凭证对称:claude-code 的 CLAUDE_CODE_OAUTH_TOKEN + codex 的 OPENAI_API_KEY/CODEX_HOME
-  emitCredLine(deps, 'claude-code', 'CLAUDE_CODE_OAUTH_TOKEN', r.credentials['claude-code'].CLAUDE_CODE_OAUTH_TOKEN, true)
-  emitCredLine(deps, 'codex', 'OPENAI_API_KEY', r.credentials.codex.OPENAI_API_KEY, true)
+  // 各自缺时附「怎么拿」获取引导（claude setup-token / codex login·openai keys,走 kernel PREREQ_HINTS）
+  emitCredLine(deps, 'claude-code', 'CLAUDE_CODE_OAUTH_TOKEN', r.credentials['claude-code'].CLAUDE_CODE_OAUTH_TOKEN, true, '', PREREQ_HINTS.claudeToken)
+  emitCredLine(deps, 'codex', 'OPENAI_API_KEY', r.credentials.codex.OPENAI_API_KEY, true, '', PREREQ_HINTS.openaiKey)
   emitCredLine(deps, 'codex', 'CODEX_HOME', r.credentials.codex.CODEX_HOME, false, '（可选,缺省 ~/.codex）')
 
   if (dryRun) deps.io.out('  （--dry-run:只探测只打印,未写任何文件）')

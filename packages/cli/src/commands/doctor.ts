@@ -12,7 +12,7 @@
  * 探针自身异常 → 该项折算 red（doctor 是降级的观测者，自己不许静默降级）。
  */
 import { join } from 'node:path'
-import { GATE_TTL_MS } from '@pipeline-lite/kernel'
+import { GATE_TTL_MS, PREREQ_HINTS } from '@pipeline-lite/kernel'
 import type { SkillTable } from '@pipeline-lite/kernel'
 import { errMsg, type CliDeps, type DoctorProbes } from '../deps.js'
 import { changesRoot } from '../paths.js'
@@ -301,7 +301,8 @@ async function checkAfk(p: DoctorProbes): Promise<[DoctorCheck, DoctorCheck, Doc
     : yellow(
         'afk:docker',
         'docker 不可用——AFK 容器执行降级不可用（可选能力，不阻断非 AFK 流程）',
-        '装 docker 并起 daemon 后重探（AFK 非必需能力，缺它不影响手动流程）',
+        // 不光说「装 docker」,还引导怎么装（走 kernel PREREQ_HINTS 单一真相源）
+        `装 docker 并起 daemon 后重探（AFK 非必需能力，缺它不影响手动流程）；${PREREQ_HINTS.docker}`,
       )
 
   const { configured, present, build_hint } = r.image
@@ -321,7 +322,8 @@ async function checkAfk(p: DoctorProbes): Promise<[DoctorCheck, DoctorCheck, Doc
     : yellow(
         'afk:credential-claude-code',
         'claude-code 凭证 CLAUDE_CODE_OAUTH_TOKEN 未配（AFK 跑 claude-code runner 会缺鉴权）',
-        '去配 CLAUDE_CODE_OAUTH_TOKEN（pipeline 机器级 secrets 或宿主 env；终端 doctor/setup 为凭证权威）',
+        // 不光说「去配」,还引导怎么拿——生成长期 OAuth token（走 kernel PREREQ_HINTS 单一真相源）
+        `去配 CLAUDE_CODE_OAUTH_TOKEN（pipeline 机器级 secrets 或宿主 env；终端 doctor/setup 为凭证权威）；怎么拿：${PREREQ_HINTS.claudeToken}`,
       )
 
   // codex 对等:OPENAI_API_KEY 为鉴权决胜键（决 green/yellow），CODEX_HOME 恒随行呈现（对称、不缺席）
@@ -332,7 +334,8 @@ async function checkAfk(p: DoctorProbes): Promise<[DoctorCheck, DoctorCheck, Doc
     : yellow(
         'afk:credential-codex',
         `codex 凭证 OPENAI_API_KEY 未配（AFK 跑 codex runner 会缺鉴权）；CODEX_HOME ${credDesc(ch)}`,
-        '去配 OPENAI_API_KEY（pipeline 机器级 secrets 或宿主 env；CODEX_HOME 可选,缺省 ~/.codex）',
+        // 不光说「去配」,还引导两条路——codex login 走 ChatGPT / 建 openai api-key（走 kernel PREREQ_HINTS 单一真相源）
+        `去配 OPENAI_API_KEY（pipeline 机器级 secrets 或宿主 env；CODEX_HOME 可选,缺省 ~/.codex）；怎么拿：${PREREQ_HINTS.openaiKey}`,
       )
 
   return [docker, image, claudeCred, codexCred]
