@@ -145,6 +145,9 @@ export function SecretsCard({ onChanged }: SecretsCardProps): JSX.Element {
                     </button>
                   </>
                 )}
+                {/* G2:前置缺失引导——不光报「未配置」,补一句「怎么拿」(已配态也常驻,兼作轮换指引)。
+                    静态命令文本,不触碰凭证值,write-only 不受影响(单源见 kernel PREREQ_HINTS)。 */}
+                <span className="wb-note sc-howto" data-testid={`sc-howto-${key}`}>{t(`workbench.sc_howto_${key}`)}</span>
               </div>
             )
           })}
@@ -152,6 +155,8 @@ export function SecretsCard({ onChanged }: SecretsCardProps): JSX.Element {
           <div className="lp-policy sc-row" data-testid="sc-row-CODEX_HOME">
             <span className="wb-flabel lp-mono">CODEX_HOME</span>
             <span className="wb-note">{t('workbench.sc_codex_home_note')}</span>
+            {/* G2:即便是只读路径行,也顺手指一句怎么来的(codex login 自动设),闭合 codex 凭证获取故事。 */}
+            <span className="wb-note sc-howto" data-testid="sc-howto-CODEX_HOME">{t('workbench.sc_howto_CODEX_HOME')}</span>
           </div>
           <p className="wb-note wb-sec-note">{t('workbench.sc_precedence_note')}</p>
         </div>

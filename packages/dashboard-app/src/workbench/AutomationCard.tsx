@@ -174,6 +174,11 @@ export function AutomationCard({ root, refreshToken = 0 }: AutomationCardProps):
           <span className="afk-rd-item" data-testid="afk-rd-docker">
             {t('workbench.afk_rd_docker')}:{readiness.docker.available ? t('workbench.afk_rd_ok') : t('workbench.afk_rd_no')}
           </span>
+          {/* G2:docker 不可用时不光报「未就绪」,补一句「怎么装」引导(独占一行,与镜像 build_hint
+              复制钮语义不重复——那是命令可复制,docker 是装 App 无单条命令,故给安装入口 URL)。 */}
+          {!readiness.docker.available && (
+            <span className="afk-rd-howto" data-testid="afk-rd-docker-howto">{t('workbench.afk_rd_docker_howto')}</span>
+          )}
           <span className={`rd-dot ${readiness.image.present ? 'rd-dot--ok' : 'rd-dot--no'}`} aria-hidden="true" />
           <span className="afk-rd-item" data-testid="afk-rd-image" title={readiness.image.configured}>
             {t('workbench.afk_rd_image')}:{readiness.image.present ? t('workbench.afk_rd_ok') : t('workbench.afk_rd_no')}

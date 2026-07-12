@@ -761,10 +761,15 @@ span.wb-chip-badge { cursor: default; }
 .rd-dot { flex: none; width: 8px; height: 8px; border-radius: 999px; }
 .rd-dot--ok { background: var(--green); }
 .rd-dot--no { background: color-mix(in oklch, var(--red) 52%, var(--green)); }
+/* ── G2：docker 灯不可用时的「怎么装」引导——独占一行(flex-basis:100%,同 .afk-rd-caveat 纪律),
+   决议 #9：不引新原色,文字色 color-mix 从既有 --text-2 派生更淡的次级语义(随明/暗自适应)。 ── */
+.afk-rd-howto { flex-basis: 100%; margin: 0; font-size: 11px; line-height: 1.4; color: color-mix(in srgb, var(--text-2) 82%, transparent); }
 
 /* ── v6 T8：凭证卡行——掩码等宽降饱和;行内编辑态与既有 lp-policy 布局同族。 ── */
 .sc-row { flex-wrap: wrap; }
 .sc-masked { color: var(--text-2); }
+/* ── G2：每键「怎么拿」引导——独占一行(flex-basis:100%),沿用 .wb-note 的 --text-3 次级色,无新原色。 ── */
+.sc-howto { flex-basis: 100%; margin: 3px 0 0; font-size: 11.5px; }
 
 /* ==== T16：「自动运行(Loop)」卡（lp- 区块）——对照 demo v5 #wbLoopCard：滑杆轨道 fill-2、
    填充 accent（--p 渐变分界）、推荐 ▽ 刻度、超限策略 pill 单选、自主级别 segmented、

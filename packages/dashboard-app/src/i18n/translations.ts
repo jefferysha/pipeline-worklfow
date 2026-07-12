@@ -458,6 +458,9 @@ export const zh: Dict = {
     // caveat 诚实标注凭证灯是服务进程视角,终端 doctor/setup 为凭证权威(docker/镜像灯保持权威,凭证灯标参考)。
     afk_rd_cred_codex: '凭证·codex',
     afk_rd_cred_caveat: '凭证灯为服务进程视角，终端 pipeline doctor 为准',
+    // G2:前置缺失时引导「怎么装」——docker 灯不可用不光报缺,补一句安装路径。
+    //     单源见 kernel PREREQ_HINTS(dashboard 不依赖 kernel,此处镜像同字符串;命令/URL 稳定不翻译)。
+    afk_rd_docker_howto: '怎么装:装 OrbStack(orbstack.dev)或 Docker Desktop(docker.com)',
     // v6 T8：凭证卡(机器级,write-only)。
     sc_title: '凭证',
     sc_scope: '机器级',
@@ -474,6 +477,11 @@ export const zh: Dict = {
     sc_placeholder: '粘贴新值(保存后只显示掩码)',
     sc_codex_home_note: '路径不是密钥,不进本存储——由宿主环境变量提供,codex 运行时挂载同路径目录(只读说明)',
     sc_precedence_note: '优先级:宿主环境变量(非空)> 此处保存的值——与 afk run 实际注入顺序一致,不会出现「改了没生效」的错觉',
+    // G2:前置缺失时引导「怎么拿」——每键补一句获取路径,不光让人对着「未配置」发懵。
+    //     单源见 kernel PREREQ_HINTS(dashboard 不依赖 kernel,此处镜像同字符串;命令/URL 稳定不翻译)。
+    sc_howto_CLAUDE_CODE_OAUTH_TOKEN: '怎么拿:运行 `claude setup-token` 生成',
+    sc_howto_OPENAI_API_KEY: '怎么拿:`codex login` 走 ChatGPT 账户(最简),或 platform.openai.com/api-keys 建 key',
+    sc_howto_CODEX_HOME: '怎么拿:codex login 会自动设 ~/.codex(通常无需手动配)',
     // ── 观察项②：runner 非标准值软校验警告（追加区块，勿与上方既有行交错）。文案按
     //    runnerFor.ts 真实归属语义——仅 'codex' 起 codex exec，其余一律走 claude-code 缺省路径，
     //    它仍会执行，不谎称「不会执行」。──
@@ -987,6 +995,8 @@ export const en: Dict = {
     // full-install W1: per-runner credential lights (codex equally visible) + honest service-process caveat.
     afk_rd_cred_codex: 'credential · codex',
     afk_rd_cred_caveat: 'Credential lights reflect the service process; run `pipeline doctor` in your terminal for the authoritative check',
+    // G2: guide "how to install" when a prerequisite is missing — mirror of kernel PREREQ_HINTS (commands/URLs kept literal).
+    afk_rd_docker_howto: 'How to install: install OrbStack (orbstack.dev) or Docker Desktop (docker.com)',
     sc_title: 'Credentials',
     sc_scope: 'machine-level',
     sc_head_sub: 'Stored in ~/.claude/pipeline-secrets.json (0600), never enters the repo',
@@ -1002,6 +1012,10 @@ export const en: Dict = {
     sc_placeholder: 'Paste new value (only a mask is shown after saving)',
     sc_codex_home_note: 'A path, not a secret — provided via host env; codex mounts the same directory at runtime (read-only note)',
     sc_precedence_note: 'Precedence: host env (non-empty) > value saved here — matches the real afk-run injection order, no “saved but not applied” illusion',
+    // G2: guide "how to get" per key when a prerequisite is missing — mirror of kernel PREREQ_HINTS (commands/URLs kept literal).
+    sc_howto_CLAUDE_CODE_OAUTH_TOKEN: 'How to get: run `claude setup-token` to generate one',
+    sc_howto_OPENAI_API_KEY: 'How to get: `codex login` via your ChatGPT account (simplest), or create a key at platform.openai.com/api-keys',
+    sc_howto_CODEX_HOME: 'How to get: `codex login` sets ~/.codex automatically (usually no manual setup needed)',
     // ── Observation ②: soft validation warning for a non-standard runner value (appended
     //    block). Wording follows runnerFor.ts real attribution — only 'codex' launches codex
     //    exec; every other value takes the default claude-code path. It still runs. ──

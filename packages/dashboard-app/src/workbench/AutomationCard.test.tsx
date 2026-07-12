@@ -304,3 +304,33 @@ describe('AutomationCard full-install W1：凭证 per-runner 双灯 + caveat', (
     expect(codexDot).not.toHaveAttribute('style')
   })
 })
+
+/**
+ * G2:前置缺失时引导「怎么装」——docker 就绪灯不可用时,除「未就绪」外补一句安装引导
+ * (装 OrbStack / Docker Desktop),不光报缺。缺镜像已有 build_hint 复制钮,此处不重复。
+ */
+describe('AutomationCard G2:docker 就绪灯「怎么装」引导', () => {
+  it('③docker.available=false → 灯区含 orbstack / docker 安装引导', async () => {
+    readinessResponse = () =>
+      new Response(JSON.stringify(READY_BODY({ docker: { available: false } })), { status: 200 })
+    renderCard()
+    const howto = await screen.findByTestId('afk-rd-docker-howto')
+    const txt = (howto.textContent ?? '').toLowerCase()
+    expect(txt).toContain('orbstack')
+    expect(txt).toContain('docker')
+  })
+
+  it('③b docker.available=true → 不渲染该引导(健康态不噪)', async () => {
+    // 缺省 READY_BODY docker.available=true
+    renderCard()
+    await screen.findByTestId('afk-rd-docker')
+    expect(screen.queryByTestId('afk-rd-docker-howto')).toBeNull()
+  })
+
+  it('③c readiness 拉不到 → 引导随灯区整体不渲染(不谎报,fail-open 回归)', async () => {
+    readinessResponse = () => new Response('boom', { status: 500 })
+    renderCard()
+    await waitFor(() => expect(screen.getByTestId('afk-image')).toBeInTheDocument())
+    expect(screen.queryByTestId('afk-rd-docker-howto')).toBeNull()
+  })
+})
