@@ -7,10 +7,11 @@
  * 老仓真相源：forward_proxy.py serve_forward / _handle_connect / _forward_and_record。
  */
 import { afterEach, describe, expect, it } from 'vitest'
+import { connect as netConnect } from 'node:net'
 import { serveForward, type ForwardProxyHandle } from './forward-proxy.js'
 import { createTraceStore } from './trace-store.js'
 import { resetCaptureCache, setCaptureEnabled } from './security.js'
-import { connectThroughProxy, forwardHttpReq, rmDir, startFakeUpstream, startTcpEcho, tempTapDir, type FakeUpstream, type TcpEcho } from './test-support.js'
+import { connectThroughProxy, forwardHttpReq, rmDir, sleep, startFakeUpstream, startTcpEcho, tempTapDir, type FakeUpstream, type TcpEcho } from './test-support.js'
 import { crc32 } from './bedrock.js'
 
 const handles: ForwardProxyHandle[] = []
@@ -119,6 +120,43 @@ describe('forward proxy —— Bedrock EventStream 响应真解码入录（#34-w
     // 真解码：不是原始 base64/乱码字节，是结构化事件 + 装配后的 converse body
     expect(respBody.bedrock_events).toHaveLength(2)
     expect(respBody.output.message.content.length).toBeGreaterThan(0)
+  })
+})
+
+describe('forward proxy —— B2：明文成功回写 client 中断不崩 daemon（robustness 守卫）', () => {
+  it('client 发绝对 URI POST 后立即 abort，upstream 迟回 → 明文成功回写对已断 res 不抛未捕获异常，daemon 存活', async () => {
+    const s = await store()
+    // 上游延迟回包，给 client abort 留窗口（abort 早于 upstream 回包）
+    const upstream = await startFakeUpstream({
+      respond: (_req, res) => setTimeout(() => {
+        const p = Buffer.from(JSON.stringify({ ok: true }), 'utf8')
+        res.writeHead(200, { 'Content-Type': 'application/json', 'Content-Length': p.length }); res.end(p)
+      }, 120),
+    })
+    ups.push(upstream)
+    const proxy = await serveForward({ port: 0, store: s.store })
+    handles.push(proxy)
+
+    const uncaught: unknown[] = []
+    const onErr = (e: unknown): void => { uncaught.push(e) }
+    process.on('uncaughtException', onErr)
+    try {
+      await new Promise<void>((resolve) => {
+        const sock = netConnect(proxy.port, '127.0.0.1', () => {
+          const line = `POST http://127.0.0.1:${upstream.port}/v1/messages HTTP/1.1`
+          sock.write(`${line}\r\nHost: 127.0.0.1:${upstream.port}\r\nContent-Type: application/json\r\nContent-Length: 2\r\n\r\n{}`)
+          setTimeout(() => { try { sock.destroy() } catch { /* ignore */ } ; resolve() }, 30) // abort 早于 upstream 回包
+        })
+        sock.on('error', () => resolve())
+      })
+      await sleep(250) // 等 upstream 迟回窗口过：proxy 明文成功路径对已销毁 res 回写
+      expect(uncaught).toEqual([])
+      // daemon 仍活：后续正常请求照常
+      const res = await forwardHttpReq(proxy.port, { host: '127.0.0.1', port: upstream.port, path: '/v1/messages' }, { method: 'POST', body: '{}', headers: { 'Content-Type': 'application/json' } })
+      expect(res.status).toBe(200)
+    } finally {
+      process.off('uncaughtException', onErr)
+    }
   })
 })
 

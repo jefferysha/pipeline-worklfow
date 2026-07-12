@@ -96,6 +96,8 @@ export function serveForward(opts: ForwardProxyOptions = {}): Promise<ForwardPro
     req.on('data', (c: Buffer) => chunks.push(c))
     req.on('end', () => forward(Buffer.concat(chunks)))
     req.on('error', () => { try { res.destroy() } catch { /* ignore */ } })
+    // B2：挂 res 'error' 静默——client abort 后对已销毁 res 的异步写会 emit 'error'，无监听即抛未捕获带崩 daemon（连累所有 client）。
+    res.on('error', () => { /* client 已断，回写失败无害 */ })
 
     function forward(body: Buffer): void {
       const method = (req.method ?? 'GET').toUpperCase()
@@ -122,8 +124,9 @@ export function serveForward(opts: ForwardProxyOptions = {}): Promise<ForwardPro
         upstream.on('data', (c: Buffer) => buf.push(c))
         upstream.on('end', () => {
           const raw = Buffer.concat(buf)
-          res.writeHead(status, relayHeaders(upstream, true, raw.length))
-          res.end(raw)
+          // B2：成功回写包 try/catch——client abort 后裸调对已销毁 res 写会同步抛，带崩 daemon
+          // （MITM 路径下方 forwardMitm 已如此包，明文路径此前漏包）。捕获仍照常进行。
+          try { res.writeHead(status, relayHeaders(upstream, true, raw.length)); res.end(raw) } catch { /* client 已断 */ }
           if (captureGate) {
             const skip = shouldSkipTraceRecord({
               upstreamUrl: upstreamBaseUrl + path, path,
@@ -205,6 +208,7 @@ export function serveForward(opts: ForwardProxyOptions = {}): Promise<ForwardPro
     req.on('data', (c: Buffer) => chunks.push(c))
     req.on('end', () => forwardMitm(Buffer.concat(chunks)))
     req.on('error', () => { try { res.destroy() } catch { /* ignore */ } })
+    res.on('error', () => { /* B2：client 已断，静默避免未监听 error 崩 daemon */ })
 
     function forwardMitm(body: Buffer): void {
       const method = (req.method ?? 'GET').toUpperCase()

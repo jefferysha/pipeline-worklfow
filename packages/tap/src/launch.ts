@@ -21,6 +21,7 @@ import {
   detectTarget,
   forwardEnvMap,
   recordedPaths,
+  requiresForwardForUrl,
   reverseEnvMap,
   reverseStripPathPrefix,
   type DetectOptions,
@@ -48,6 +49,16 @@ export interface PlanResult {
 const modeOf = (client: string, forceForward?: ReadonlySet<string>): 'reverse' | 'forward' =>
   forceForward?.has(client) ? 'forward' : (CLIENT_CONFIGS[client]!.defaultProxyMode ?? 'reverse')
 
+/**
+ * 生效代理模式（B6）：在 modeOf 基础上，对**解析出的真实 target** 再 consult requiresForwardForUrl——
+ * 原生 AWS Bedrock 端点（bedrock-runtime.*.amazonaws.com）用 SigV4 签名，签名覆盖 Host 头，reverse
+ * 代理改写 Host→127.0.0.1 后客户端签名与真 host 不符 → **403**。故这类 target 无论 client 默认是否
+ * reverse，一律隐式抬成 forward（等价隐式 forceForward）；改由 forward-MITM（HTTPS_PROXY+CA，不改
+ * Host 语义）真拦。requiresForwardForUrl 早已实现却从不被 consult，B6 补上这一步。
+ */
+const effectiveMode = (client: string, target: string, forceForward?: ReadonlySet<string>): 'reverse' | 'forward' =>
+  modeOf(client, forceForward) === 'forward' || requiresForwardForUrl(target) ? 'forward' : 'reverse'
+
 /** 纯编排：client 名单 → DaemonBinding[]（无 socket，可测 argv 级正确性）。 */
 export function planBindings(clients: readonly string[], detect?: DetectOptions, forceForward?: readonly string[]): PlanResult {
   const unknown = clients.filter((c) => !CLIENT_CONFIGS[c])
@@ -62,7 +73,7 @@ export function planBindings(clients: readonly string[], detect?: DetectOptions,
     const cfg = CLIENT_CONFIGS[client]!
     const target = detectTarget(client, detect)
     targets[client] = target
-    if (modeOf(client, forced) === 'reverse') {
+    if (effectiveMode(client, target, forced) === 'reverse') {
       bindings.push({
         name: client,
         mode: 'reverse',
@@ -120,7 +131,8 @@ export interface LaunchResult {
 export async function launchTap(opts: LaunchOptions): Promise<LaunchResult> {
   const forced = new Set(opts.forceForward ?? [])
   const { bindings, targets } = planBindings(opts.clients, opts.detect, opts.forceForward)
-  const forwardClients = opts.clients.filter((c) => modeOf(c, forced) === 'forward')
+  // 与 planBindings 同口径：Bedrock target 隐式抬 forward 的 client 也算 forward（否则下方取 reverse handle 落空）。
+  const forwardClients = opts.clients.filter((c) => effectiveMode(c, targets[c]!, forced) === 'forward')
 
   let authority: CertificateAuthority | undefined
   let caCertPath: string | undefined
@@ -139,7 +151,7 @@ export async function launchTap(opts: LaunchOptions): Promise<LaunchResult> {
 
   const clients: ClientLaunchInfo[] = opts.clients.map((client) => {
     const cfg = CLIENT_CONFIGS[client]!
-    const mode = modeOf(client, forced)
+    const mode = effectiveMode(client, targets[client]!, forced)
     const handle = mode === 'reverse' ? daemon.handles[client]! : daemon.handles[FORWARD_BINDING_NAME]!
     const env = mode === 'reverse' ? reverseEnvMap(cfg, handle.port) : forwardEnvMap(handle.port, caCertPath!)
     return { client, mode, port: handle.port, target: targets[client]!, env }

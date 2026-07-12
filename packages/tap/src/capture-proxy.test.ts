@@ -6,10 +6,11 @@
  * 老仓真相源：capture_proxy.py serve / make_handler / _proxy。
  */
 import { afterEach, describe, expect, it } from 'vitest'
+import { connect as netConnect } from 'node:net'
 import { serve, type CaptureProxyHandle } from './capture-proxy.js'
 import { createTraceStore } from './trace-store.js'
 import { resetCaptureCache, setCaptureEnabled } from './security.js'
-import { httpReq, rmDir, startFakeUpstream, startFakeSseUpstream, tempTapDir, type FakeUpstream } from './test-support.js'
+import { httpReq, rmDir, sleep, startFakeUpstream, startFakeSseUpstream, tempTapDir, type FakeUpstream } from './test-support.js'
 
 const handles: CaptureProxyHandle[] = []
 const ups: FakeUpstream[] = []
@@ -124,5 +125,82 @@ describe('reverse capture proxy —— 真转发 + 真捕获', () => {
     const row = s.store.loadSessionRow(realSid)
     expect(row).not.toBeNull()
     expect(s.store.readRecords(realSid).length).toBe(1)
+  })
+})
+
+describe('reverse capture proxy —— B7：strip-prefix 段边界（不误剥 /v1internal）', () => {
+  it('stripPrefix=/v1：完整段 /v1/x → 剥成 /x；但 /v1internal/x 非同段 → 原样不误剥（不丢前导斜杠）', async () => {
+    const s = await store()
+    const upstream = await startFakeUpstream()
+    ups.push(upstream)
+    const proxy = await serve({ port: 0, target: upstream.url, store: s.store, stripPrefix: '/v1' })
+    handles.push(proxy)
+    // 完整段：/v1/models → 上游收到 /models
+    await httpReq({ port: proxy.port, path: '/v1/models', method: 'GET' })
+    expect(upstream.requests.at(-1)!.url).toBe('/models')
+    // 非同段：/v1internal/foo 不该被裸 startsWith 剥成 internal/foo（丢前导斜杠）；应原样保留
+    await httpReq({ port: proxy.port, path: '/v1internal/foo', method: 'GET' })
+    expect(upstream.requests.at(-1)!.url).toBe('/v1internal/foo')
+  })
+})
+
+describe('reverse capture proxy —— B10：同 session 并发请求 turn 原子自增不撞号', () => {
+  it('两并发录制请求（同 session id + 慢上游）→ 两条记录 turn 互异（非都 =1）', async () => {
+    const s = await store()
+    // 慢上游：保证两请求的 handler 都在任一 appendRecord 之前跑完（复现读-写竞态窗口）
+    const upstream = await startFakeUpstream({
+      respond: (_req, res) => setTimeout(() => {
+        const p = Buffer.from(JSON.stringify({ ok: true }), 'utf8')
+        res.writeHead(200, { 'Content-Type': 'application/json', 'Content-Length': p.length }); res.end(p)
+      }, 80),
+    })
+    ups.push(upstream)
+    setCaptureEnabled(true, { dir: s.dir })
+    const proxy = await serve({ port: 0, target: upstream.url, store: s.store })
+    handles.push(proxy)
+    const sid = 'abcdef12-3456-7890-abcd-ef1234567890'
+    const hdr = { 'Content-Type': 'application/json', 'X-Claude-Code-Session-Id': sid }
+    const [r1, r2] = await Promise.all([
+      httpReq({ port: proxy.port, path: '/v1/messages', method: 'POST', headers: hdr, body: '{"n":1}' }),
+      httpReq({ port: proxy.port, path: '/v1/messages', method: 'POST', headers: hdr, body: '{"n":2}' }),
+    ])
+    expect(r1.status).toBe(200)
+    expect(r2.status).toBe(200)
+    const records = s.store.readRecords(sid)
+    expect(records.length).toBe(2)
+    const turns = records.map((r) => r.turn as number).sort((a, b) => a - b)
+    expect(turns).toEqual([1, 2]) // 老码两条都读到 recordCount=0 → 都 turn=1（撞号）
+  })
+})
+
+describe('reverse capture proxy —— B2：client 中断不崩 daemon', () => {
+  it('SSE 流式中 client 中途 abort → 对已断 res 反复回写不抛未捕获异常，daemon 存活', async () => {
+    const s = await store()
+    const sse = await startFakeSseUpstream(Array.from({ length: 14 }, (_, i) => `data: {"i":${i}}\n\n`))
+    ups.push(sse)
+    setCaptureEnabled(true, { dir: s.dir })
+    const proxy = await serve({ port: 0, target: sse.url, store: s.store })
+    handles.push(proxy)
+
+    // 挂 uncaughtException 监听：既捕获 bug 抛出的未捕获异常（断言其不发生），又阻止 node 真崩进程。
+    const uncaught: unknown[] = []
+    const onErr = (e: unknown): void => { uncaught.push(e) }
+    process.on('uncaughtException', onErr)
+    try {
+      await new Promise<void>((resolve) => {
+        const sock = netConnect(proxy.port, '127.0.0.1', () => {
+          sock.write('POST /v1/messages HTTP/1.1\r\nHost: x\r\nContent-Type: application/json\r\nContent-Length: 2\r\n\r\n{}')
+          sock.once('data', () => setTimeout(() => { try { sock.destroy() } catch { /* ignore */ } ; resolve() }, 5)) // 收首块即断
+          setTimeout(() => { try { sock.destroy() } catch { /* ignore */ } ; resolve() }, 300) // 兜底
+        })
+        sock.on('error', () => resolve())
+      })
+      await sleep(250) // 等 SSE 剩余块推完：proxy 对已销毁 res 反复 write/end
+      expect(uncaught).toEqual([]) // 无未捕获异常
+      const res = await httpReq({ port: proxy.port, path: '/v1/messages', method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+      expect(res.status).toBe(200) // daemon 仍活，后续请求照常
+    } finally {
+      process.off('uncaughtException', onErr)
+    }
   })
 })

@@ -76,6 +76,26 @@ describe('planBindings —— 纯编排（detectTarget + recordedPaths + stripPr
     expect(fwd).toHaveLength(1)
     expect(fwd[0]!.name).toBe(FORWARD_BINDING_NAME) // codex 抬 forward，落共享绑定
   })
+
+  it('B6：claude target 是原生 AWS Bedrock（SigV4）→ 隐式抬 forward（不 reverse 改写 Host 致 403）', () => {
+    // claude 默认 reverse，但 Bedrock 端点的 SigV4 签名覆盖 Host，reverse 改写 Host 必 403。
+    // requiresForwardForUrl 命中 → planBindings 隐式抬 forward（无需显式 forceForward）。
+    const { bindings, targets } = planBindings(
+      ['claude'],
+      { env: { ANTHROPIC_BASE_URL: 'https://bedrock-runtime.us-east-1.amazonaws.com' }, home: tmpHome() },
+    )
+    expect(targets.claude).toBe('https://bedrock-runtime.us-east-1.amazonaws.com')
+    expect(bindings.filter((b) => b.mode === 'reverse')).toHaveLength(0) // 不再各自 reverse
+    const fwd = bindings.filter((b) => b.mode === 'forward')
+    expect(fwd).toHaveLength(1)
+    expect(fwd[0]!.name).toBe(FORWARD_BINDING_NAME)
+  })
+
+  it('B6：非 Bedrock 的 claude 仍走 reverse（不误伤普通 anthropic 端点）', () => {
+    const { bindings } = planBindings(['claude'], { env: { ANTHROPIC_BASE_URL: 'https://api.anthropic.com' }, home: tmpHome() })
+    expect(bindings.filter((b) => b.mode === 'reverse')).toHaveLength(1)
+    expect(bindings.filter((b) => b.mode === 'forward')).toHaveLength(0)
+  })
 })
 
 describe('launchTap —— 真绑定 + 真回读端口 + 真 env 组装', () => {
@@ -142,5 +162,30 @@ describe('launchTap —— 真绑定 + 真回读端口 + 真 env 组装', () => 
     const dir = await tempTapDir(); dirs.push(dir)
     const store = createTraceStore({ dir })
     await expect(launchTap({ clients: ['codex'], store, forceForward: ['codex'], detect: { home: tmpHome() } })).rejects.toThrow(/ca/i)
+  })
+
+  it('B6：Bedrock claude + opts.ca → forward-MITM env（HTTPS_PROXY + CA），不注入 reverse base-url', async () => {
+    const dir = await tempTapDir(); dirs.push(dir)
+    const store = createTraceStore({ dir })
+    const caDir = mkdtempSync(join(tmpdir(), 'pl-launch-ca-')); dirs.push(caDir)
+    const result = await launchTap({
+      clients: ['claude'], store, ca: { dir: caDir },
+      detect: { env: { ANTHROPIC_BASE_URL: 'https://bedrock-runtime.us-east-1.amazonaws.com' }, home: tmpHome() },
+    })
+    results.push(result)
+    const claude = result.clients[0]!
+    expect(claude.mode).toBe('forward') // 隐式抬 forward，与 planBindings 同口径（取到 forward handle 非落空）
+    expect(claude.env.HTTPS_PROXY).toBe(`http://127.0.0.1:${claude.port}`)
+    expect(claude.env.NODE_EXTRA_CA_CERTS).toBe(join(caDir, 'ca.pem'))
+    expect(claude.env.ANTHROPIC_BASE_URL).toBeUndefined() // forward 不注入 reverse base-url
+  })
+
+  it('B6：Bedrock claude 缺 opts.ca → 拒绝（隐式 forward 无 CA 无意义，同显式 forward 口径）', async () => {
+    const dir = await tempTapDir(); dirs.push(dir)
+    const store = createTraceStore({ dir })
+    await expect(launchTap({
+      clients: ['claude'], store,
+      detect: { env: { ANTHROPIC_BASE_URL: 'https://bedrock-runtime.us-east-1.amazonaws.com' }, home: tmpHome() },
+    })).rejects.toThrow(/ca/i)
   })
 })

@@ -20,7 +20,7 @@
  *      `security verify-cert`），绝不自动写钥匙串；实际信任由上层显式发起。
  */
 import { X509Certificate, createPublicKey, createPrivateKey, createHash, generateKeyPairSync, randomBytes, sign as cryptoSign, type KeyObject } from 'node:crypto'
-import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { chmodSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
@@ -271,6 +271,24 @@ export function createCa(opts: CreateCaOptions = {}): KeyCertPair {
   }
 }
 
+/**
+ * 全 host 复用**同一把** host 私钥（B4，mitmproxy 手法）。generateKeyPairSync('rsa',2048) 每次
+ * ~50-100ms **同步阻塞事件循环**——多 SNI 逐 host 现签会串行卡死所有隧道。host 私钥只是 MITM 叶子
+ * 密钥（非信任锚，签发它的 CA 才是），全 host 共用一把安全且对齐 mitmproxy；只证书 subject/SAN 逐 host
+ * 不同。keypair 惰性生成一次进程内缓存，后续 issueHostCert 零 keygen。
+ */
+let sharedHostKey: { privateKey: KeyObject; spkiDer: Buffer; keyPem: string } | null = null
+function getSharedHostKey(): { privateKey: KeyObject; spkiDer: Buffer; keyPem: string } {
+  if (sharedHostKey) return sharedHostKey
+  const { publicKey, privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 })
+  sharedHostKey = {
+    privateKey,
+    spkiDer: publicKey.export({ type: 'spki', format: 'der' }) as Buffer,
+    keyPem: privateKey.export({ type: 'pkcs8', format: 'pem' }) as string,
+  }
+  return sharedHostKey
+}
+
 /** 用 CA 签发一张 host 证书（SAN 含 hostname，SERVER_AUTH extKeyUsage）。certs.py:207 get_host_cert_pem。 */
 export function issueHostCert(ca: KeyCertPair, hostname: string, opts: { validityDays?: number } = {}): KeyCertPair {
   const caKey = createPublicKey(ca.certPem) // 仅取 CA 公钥算 AKI
@@ -279,8 +297,8 @@ export function issueHostCert(ca: KeyCertPair, hostname: string, opts: { validit
   const caCertDer = new X509Certificate(ca.certPem).raw
   const issuer = extractSubjectDn(caCertDer)
 
-  const { publicKey, privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 })
-  const spki = publicKey.export({ type: 'spki', format: 'der' }) as Buffer
+  const hostKey = getSharedHostKey() // B4：复用同一把 host 私钥（不再逐 host 现签阻塞事件循环）
+  const spki = hostKey.spkiDer
   const now = new Date()
   const der = buildCertificate({
     subject: name([[OID.cn, hostname]]),
@@ -299,7 +317,7 @@ export function issueHostCert(ca: KeyCertPair, hostname: string, opts: { validit
   })
   return {
     certPem: toPem(der, 'CERTIFICATE'),
-    keyPem: privateKey.export({ type: 'pkcs8', format: 'pem' }) as string,
+    keyPem: hostKey.keyPem,
   }
 }
 
@@ -332,36 +350,100 @@ export interface EnsureCaResult {
   keyPem: string
 }
 
-/** 确保 CA 落盘存在（ca.pem + ca-key.pem，私钥 0600）；幂等复用。certs.py:51 ensure_ca。 */
+const LOCK_WAIT_MS = 10_000
+
+/**
+ * 读回落盘 CA 并**校验配对**（cert 公钥须与私钥匹配）。返回 null 表示缺文件/损坏/**不配对**——
+ * 后者是 B5 的核心防线：老 ensureCa 只各自校验 cert 可解析 + key 可加载，两并发进程的 cert 与 key
+ * 交错落盘（ca.pem 来自 A 代、ca-key.pem 来自 B 代）时会当成"完好"原样复用 → MITM 全线 TLS 失败。
+ */
+function tryLoadPair(caCertPath: string, caKeyPath: string): { certPem: string; keyPem: string } | null {
+  if (!existsSync(caCertPath) || !existsSync(caKeyPath)) return null
+  try {
+    const certPem = readFileSync(caCertPath, 'utf8')
+    const keyPem = readFileSync(caKeyPath, 'utf8')
+    const cert = new X509Certificate(certPem)
+    const key = loadPrivateKey(keyPem)
+    if (!cert.checkPrivateKey(key)) return null // 配对校验：cert 公钥 ↔ 私钥
+    chmodSync(caKeyPath, 0o600) // 二次收紧（防外部放宽）
+    return { certPem, keyPem }
+  } catch {
+    return null
+  }
+}
+
+/** 有界同步等待另一进程落出配对的 CA（持锁进程正在写）。 */
+function waitForPair(caCertPath: string, caKeyPath: string, timeoutMs: number): { certPem: string; keyPem: string } | null {
+  const deadline = Date.now() + timeoutMs
+  for (;;) {
+    const pair = tryLoadPair(caCertPath, caKeyPath)
+    if (pair) return pair
+    if (Date.now() >= deadline) return null
+    napSync(50)
+  }
+}
+
+/** 同步小睡 ms 毫秒（Atomics.wait 阻塞本线程，不 peg CPU）；SAB 不可用则退化为立即返回（忙等）。 */
+function napSync(ms: number): void {
+  try { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms) } catch { /* 忙等兜底 */ }
+}
+
+/** 夺取疑似陈旧锁（持有者疑似崩溃：等待超时仍无配对 CA）。 */
+function stealLock(lockPath: string): number {
+  try { rmSync(lockPath) } catch { /* ignore */ }
+  try { return openSync(lockPath, 'wx') } catch { return openSync(lockPath, 'w') }
+}
+
+/**
+ * 确保 CA 落盘存在（ca.pem + ca-key.pem，私钥 0600）；幂等复用。certs.py:51 ensure_ca。
+ *
+ * B5 跨进程锁：CA 首次生成用 **O_EXCL 独占锁文件（ca.lock）** 串行化"生成+落盘"。两个并发
+ * `tap start --ca` 曾各自 createCa（不同 keypair）写同一 .tmp，rename 交错 → ca.pem 与 ca-key.pem
+ * 可能来自不同代 → 不配对 → MITM 全线 TLS 失败。现在：抢到锁的进程独家生成并落盘；抢不到的同步
+ * 等它写出**配对的**对再读回（waitForPair），绝不各自生成。叠加 tryLoadPair 的配对校验 + writeAtomic
+ * 的唯一 .tmp 名，确保读到的 pem 对永远配对。
+ */
 export function ensureCa(opts: CaDirOptions = {}): EnsureCaResult {
   const caDir = resolveCaDir(opts)
   mkdirSync(caDir, { recursive: true })
   const caCertPath = join(caDir, 'ca.pem')
   const caKeyPath = join(caDir, 'ca-key.pem')
+  const lockPath = join(caDir, 'ca.lock')
 
-  if (existsSync(caCertPath) && existsSync(caKeyPath)) {
-    try {
-      const certPem = readFileSync(caCertPath, 'utf8')
-      const keyPem = readFileSync(caKeyPath, 'utf8')
-      new X509Certificate(certPem) // 可解析校验
-      loadPrivateKey(keyPem)
-      chmodSync(caKeyPath, 0o600) // 二次收紧（防外部放宽）
-      return { caCertPath, caKeyPath, certPem, keyPem }
-    } catch {
-      /* 落盘 CA 损坏 → 重新生成 */
-    }
+  // 幂等快路径：已落盘且配对 → 复用（绝大多数调用走这里，零锁开销）。
+  const fast = tryLoadPair(caCertPath, caKeyPath)
+  if (fast) return { caCertPath, caKeyPath, ...fast }
+
+  // 抢锁：O_EXCL 原子独占创建 ca.lock。抢到 → 本进程负责生成；EEXIST → 别的进程在写，等它落配对对再读回。
+  let lockFd: number
+  try {
+    lockFd = openSync(lockPath, 'wx')
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err
+    const waited = waitForPair(caCertPath, caKeyPath, LOCK_WAIT_MS)
+    if (waited) return { caCertPath, caKeyPath, ...waited } // 采用持锁进程写的配对对（不自己另生成）
+    lockFd = stealLock(lockPath) // 超时 → 判定陈旧锁 → 夺锁重生成
   }
-
-  const ca = createCa()
-  // 证书公开，普通权限；私钥 0600（仅属主可读写）——本地不外发硬护栏。
-  writeAtomic(caCertPath, ca.certPem, 0o644)
-  writeAtomic(caKeyPath, ca.keyPem, 0o600)
-  chmodSync(caKeyPath, 0o600)
-  return { caCertPath, caKeyPath, certPem: ca.certPem, keyPem: ca.keyPem }
+  try {
+    // 二次检查：拿到/夺到锁后别的进程可能刚写完配对对。
+    const again = tryLoadPair(caCertPath, caKeyPath)
+    if (again) return { caCertPath, caKeyPath, ...again }
+    const ca = createCa()
+    // 证书公开，普通权限；私钥 0600（仅属主可读写）——本地不外发硬护栏。
+    writeAtomic(caCertPath, ca.certPem, 0o644)
+    writeAtomic(caKeyPath, ca.keyPem, 0o600)
+    chmodSync(caKeyPath, 0o600)
+    return { caCertPath, caKeyPath, certPem: ca.certPem, keyPem: ca.keyPem }
+  } finally {
+    // 只有本进程持锁时才走到这里（waited 分支已 return）；释放锁。
+    try { closeSync(lockFd) } catch { /* ignore */ }
+    try { rmSync(lockPath) } catch { /* ignore */ }
+  }
 }
 
 function writeAtomic(path: string, data: string, mode: number): void {
-  const tmp = path + '.tmp'
+  // 唯一 .tmp 名（pid+随机）：即便极端双持锁场景两写手并存，也不互相 clobber 同一 .tmp（B5 加固）。
+  const tmp = `${path}.${process.pid}.${randomBytes(4).toString('hex')}.tmp`
   writeFileSync(tmp, data, { mode })
   renameSync(tmp, path)
   chmodSync(path, mode)

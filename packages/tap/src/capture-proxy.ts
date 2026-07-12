@@ -59,12 +59,18 @@ export function serve(opts: CaptureProxyOptions): Promise<CaptureProxyHandle> {
   const host = opts.host ?? '127.0.0.1'
   const sessionId = store.createSession({ client, proxyMode: 'reverse' })
   const counter = new TurnCounter()
+  // B10：每 real session 一个进程内 turn 计数（同步自增）。避免同 session 并发请求在各自 handler 头都
+  // 读到同一 store.recordCount 撞同一 turn（appendRecord 晚于读，读-写有窗口）。首见用 recordCount 播种。
+  const sessionTurns = new Map<string, number>()
 
   const server: Server = createServer((req, res) => {
     const chunks: Buffer[] = []
     req.on('data', (c: Buffer) => chunks.push(c))
     req.on('end', () => { void handle(Buffer.concat(chunks)) })
     req.on('error', () => { try { res.destroy() } catch { /* ignore */ } })
+    // B2：挂 res 'error' 静默——client abort 后对已销毁 res 的异步写会 emit 'error'，无监听即抛
+    // 未捕获异常带崩整个 daemon（连累所有 client）。回写失败对已断 client 无意义，静默吞。
+    res.on('error', () => { /* client 已断，回写失败无害 */ })
 
     async function handle(body: Buffer): Promise<void> {
       const path = req.url ?? '/'
@@ -78,7 +84,11 @@ export function serve(opts: CaptureProxyOptions): Promise<CaptureProxyHandle> {
         try {
           realSid = extractRealSessionId(req.headers, body, sessionId)
           const { recordCount } = store.getOrCreateSession(realSid, { client, proxyMode: 'reverse' })
-          turn = recordCount + 1
+          // B10：原子自增（本段同步、无 await 穿插，node 单线程天然互斥）。首见该 session 用落盘
+          // recordCount 播种，之后进程内自增 → 同 session 并发请求拿到互异 turn，不再撞号。
+          const base = sessionTurns.get(realSid) ?? recordCount
+          turn = base + 1
+          sessionTurns.set(realSid, turn)
         } catch {
           realSid = sessionId
           turn = counter.next()
@@ -86,7 +96,11 @@ export function serve(opts: CaptureProxyOptions): Promise<CaptureProxyHandle> {
       }
 
       let upstreamPath = path
-      if (stripPrefix && cleanPath.startsWith(stripPrefix)) upstreamPath = path.slice(stripPrefix.length) || '/'
+      // B7：仅当 stripPrefix 是完整路径段（===prefix 或 prefix+'/'）才剥，避免裸 startsWith 把
+      // `/v1internal/x` 误剥成 `internal/x`（丢前导斜杠）。对齐 record.ts shouldSkipTraceRecord 的段判定。
+      if (stripPrefix && (cleanPath === stripPrefix || cleanPath.startsWith(stripPrefix + '/'))) {
+        upstreamPath = path.slice(stripPrefix.length) || '/'
+      }
 
       const fwdHeaders: OutgoingHttpHeaders = {}
       for (const [k, v] of Object.entries(req.headers)) {
@@ -115,13 +129,15 @@ export function serve(opts: CaptureProxyOptions): Promise<CaptureProxyHandle> {
         const captureBuf: Buffer[] = []
 
         if (isStream) {
-          res.writeHead(status, relayHeaders(upstream, false, 0))
+          // B2：成功回写全包 try/catch——client 中途 abort 后对已销毁 res 的 write/writeHead 会
+          // 同步抛（ERR_STREAM_WRITE_AFTER_END/DESTROYED），裸调即带崩 daemon。仍照常收 captureBuf 落录。
+          try { res.writeHead(status, relayHeaders(upstream, false, 0)) } catch { /* client 已断 */ }
           upstream.on('data', (c: Buffer) => {
-            res.write(c)
+            try { res.write(c) } catch { /* client 已断 */ }
             if (recorded) captureBuf.push(c)
           })
           upstream.on('end', () => {
-            res.end()
+            try { res.end() } catch { /* client 已断 */ }
             if (recorded) {
               const rawText = Buffer.concat(captureBuf).toString('utf8')
               appendCapture(status, upstream, rawText, rawText)
@@ -131,8 +147,7 @@ export function serve(opts: CaptureProxyOptions): Promise<CaptureProxyHandle> {
           upstream.on('data', (c: Buffer) => captureBuf.push(c))
           upstream.on('end', () => {
             const raw = Buffer.concat(captureBuf)
-            res.writeHead(status, relayHeaders(upstream, true, raw.length))
-            res.end(raw)
+            try { res.writeHead(status, relayHeaders(upstream, true, raw.length)); res.end(raw) } catch { /* client 已断 */ }
             if (recorded) appendCapture(status, upstream, safeJson(raw), undefined)
           })
         }

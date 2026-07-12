@@ -6,8 +6,9 @@
  */
 import { afterEach, describe, expect, it } from 'vitest'
 import { X509Certificate, createPublicKey } from 'node:crypto'
-import { statSync, readFileSync, existsSync, mkdtempSync, rmSync } from 'node:fs'
+import { statSync, readFileSync, existsSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
 import { readFileSync as rf } from 'node:fs'
+import { spawn } from 'node:child_process'
 import { tmpdir, platform } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -115,6 +116,94 @@ describe('certs —— 持久化 + 安全护栏（#34e：私钥不外发）', ()
     expect(/\bfetch\s*\(/.test(src)).toBe(false)
     // 私钥变量绝不作为 body/data 出现在任何 request/post/send 调用里（源级）
     expect(/\.(write|end|send|post|request)\([^)]*(keyPem|privateKey)/.test(src)).toBe(false)
+  })
+})
+
+describe('certs —— B4：host 私钥全 host 复用（不逐 host generateKeyPairSync 阻塞事件循环）', () => {
+  it('多 host getHostCert 复用同一把 host 私钥；每张证书公钥仍与该私钥配对、仍被 CA 验签', () => {
+    const ca = createCa()
+    const authority = CertificateAuthority.fromCa(ca)
+    const a = authority.getHostCert('api.anthropic.com')
+    const b = authority.getHostCert('generativelanguage.googleapis.com')
+    // 不同 host → 不同证书（subject/SAN 不同）
+    expect(a.certPem).not.toBe(b.certPem)
+    // 但复用同一把 host 私钥（mitmproxy 手法：keypair 只生成一次缓存）
+    expect(a.keyPem).toBe(b.keyPem)
+    // 关键：共享 key 后 cert 公钥仍与该私钥配对（TLS 握手前提，别因复用而 cert/key 解耦）
+    const keyPub = createPublicKey(a.keyPem).export({ type: 'spki', format: 'pem' })
+    expect(new X509Certificate(a.certPem).publicKey.export({ type: 'spki', format: 'pem' })).toBe(keyPub)
+    expect(new X509Certificate(b.certPem).publicKey.export({ type: 'spki', format: 'pem' })).toBe(keyPub)
+    // 仍被 CA 验签通过
+    const caCert = new X509Certificate(ca.certPem)
+    expect(new X509Certificate(a.certPem).verify(caCert.publicKey)).toBe(true)
+    expect(new X509Certificate(b.certPem).verify(caCert.publicKey)).toBe(true)
+  })
+})
+
+describe('certs —— B5：CA 首次生成跨进程锁 + cert/key 配对保证', () => {
+  it('落盘 CA 对不配对（cert 与 key 来自不同代，模拟并发交错恶果）→ ensureCa 不复用、重生成配对的对', () => {
+    const dir = tmp()
+    mkdirSync(dir, { recursive: true })
+    const g1 = createCa()
+    const g2 = createCa()
+    // 模拟两并发进程 rename 交错：ca.pem 来自 g1，ca-key.pem 来自 g2 —— 不配对
+    writeFileSync(join(dir, 'ca.pem'), g1.certPem)
+    writeFileSync(join(dir, 'ca-key.pem'), g2.keyPem)
+    const res = ensureCa({ dir })
+    // 老代码会把这对不配对的当"完好"原样返回；修后必须返回配对的对
+    const certPub = new X509Certificate(res.certPem).publicKey.export({ type: 'spki', format: 'pem' })
+    const keyPub = createPublicKey(res.keyPem).export({ type: 'spki', format: 'pem' })
+    expect(certPub).toBe(keyPub)
+  })
+
+  it('首次生成后释放锁（不泄漏 ca.lock）且返回配对对', () => {
+    const dir = tmp()
+    const res = ensureCa({ dir })
+    expect(existsSync(res.caCertPath)).toBe(true)
+    expect(existsSync(join(dir, 'ca.lock'))).toBe(false) // 锁已释放
+    const certPub = new X509Certificate(res.certPem).publicKey.export({ type: 'spki', format: 'pem' })
+    const keyPub = createPublicKey(res.keyPem).export({ type: 'spki', format: 'pem' })
+    expect(certPub).toBe(keyPub)
+  })
+
+  it('另一进程持锁并写入配对 CA 期间，本次 ensureCa 等待并采用那一对（不各自生成不配对对）', async () => {
+    const dir = tmp()
+    mkdirSync(dir, { recursive: true })
+    const p = createCa() // 预生成一对配对 CA，交给"另一进程"写
+    // 真子进程（纯 JS）：O_EXCL 抢 ca.lock → stdout 报 LOCKED → 150ms 后写入配对的 p → 释放锁
+    const childCode = [
+      "const fs=require('fs'),{join}=require('path');",
+      'const dir=process.env.DIR;',
+      "const fd=fs.openSync(join(dir,'ca.lock'),'wx');",
+      "process.stdout.write('LOCKED\\n');",
+      'setTimeout(()=>{',
+      "  fs.writeFileSync(join(dir,'ca.pem'),process.env.CERT);",
+      "  fs.writeFileSync(join(dir,'ca-key.pem'),process.env.KEY);",
+      '  try{fs.closeSync(fd)}catch{};',
+      "  try{fs.rmSync(join(dir,'ca.lock'))}catch{};",
+      '  process.exit(0);',
+      '},150);',
+    ].join('')
+    const child = spawn(process.execPath, ['-e', childCode], {
+      env: { ...process.env, DIR: dir, CERT: p.certPem, KEY: p.keyPem },
+      stdio: ['ignore', 'pipe', 'inherit'],
+    })
+    // 等子进程真正抢到锁再调 ensureCa（否则父可能先抢锁自生成，测不到竞态）
+    await new Promise<void>((resolve, reject) => {
+      let out = ''
+      child.stdout!.on('data', (d) => { out += String(d); if (out.includes('LOCKED')) resolve() })
+      child.on('error', reject)
+      child.on('exit', (code) => { if (!out.includes('LOCKED')) reject(new Error('子进程未抢到锁, exit ' + code)) })
+    })
+    // 此刻子进程持锁未写完；父 ensureCa 抢不到锁 → 同步等待子进程落配对对再读回
+    const res = ensureCa({ dir })
+    await new Promise<void>((r) => { child.on('exit', () => r()); if (child.exitCode !== null) r() })
+    // 采用了子进程写的那一对（没自己另生成不配对对）
+    expect(res.certPem).toBe(p.certPem)
+    expect(res.keyPem).toBe(p.keyPem)
+    const certPub = new X509Certificate(res.certPem).publicKey.export({ type: 'spki', format: 'pem' })
+    const keyPub = createPublicKey(res.keyPem).export({ type: 'spki', format: 'pem' })
+    expect(certPub).toBe(keyPub)
   })
 })
 
