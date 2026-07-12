@@ -3490,7 +3490,7 @@ async function registerProjectRoot(registryPath, rawRoot) {
 }
 
 // packages/kernel/dist/state/secrets.js
-import { readFileSync as readFileSync2 } from "node:fs";
+import { existsSync, readFileSync as readFileSync2 } from "node:fs";
 import { dirname as dirname2, join as join3 } from "node:path";
 var SECRETS_FILE_NAME = "pipeline-secrets.json";
 var SECRET_KEYS = ["CLAUDE_CODE_OAUTH_TOKEN", "OPENAI_API_KEY"];
@@ -5437,13 +5437,13 @@ async function applyTransitionEffects(event, state, clock, ctx) {
 }
 
 // packages/kernel/dist/mem/fs.js
-import { existsSync, readdirSync, readFileSync as readFileSync4, statSync } from "node:fs";
+import { existsSync as existsSync2, readdirSync, readFileSync as readFileSync4, statSync } from "node:fs";
 import { homedir as homedir2 } from "node:os";
 function nodeMemFs(homeOverride) {
   const home = homeOverride ?? homedir2();
   return {
     home,
-    exists: (p) => existsSync(p),
+    exists: (p) => existsSync2(p),
     readDir: (p) => {
       try {
         return readdirSync(p, { withFileTypes: true }).map((e) => ({
@@ -7792,11 +7792,11 @@ function formatBudgetOverflowError(projectKey2, live, limit) {
 }
 
 // packages/kernel/dist/channel/fs.js
-import { appendFileSync, closeSync, existsSync as existsSync2, mkdirSync, openSync, readdirSync as readdirSync2, readFileSync as readFileSync5, renameSync, rmSync, statSync as statSync2, writeFileSync, writeSync } from "node:fs";
+import { appendFileSync, closeSync, existsSync as existsSync3, mkdirSync, openSync, readdirSync as readdirSync2, readFileSync as readFileSync5, renameSync, rmSync, statSync as statSync2, writeFileSync, writeSync } from "node:fs";
 function nodeChannelFs() {
   return {
     pid: process.pid,
-    exists: (p) => existsSync2(p),
+    exists: (p) => existsSync3(p),
     readText: (p) => {
       try {
         return readFileSync5(p, "utf8");
@@ -10554,11 +10554,11 @@ function renderHandoffSummary(doc, label) {
 }
 
 // packages/kernel/dist/compress/handoff.js
-import { existsSync as existsSync3, readFileSync as readFileSync8 } from "node:fs";
+import { existsSync as existsSync4, readFileSync as readFileSync8 } from "node:fs";
 import { isAbsolute as isAbsolute2, join as join12 } from "node:path";
 function nodeHandoffFs() {
   return {
-    exists: (p) => existsSync3(p),
+    exists: (p) => existsSync4(p),
     readText: (p) => {
       try {
         return readFileSync8(p, "utf8");
@@ -10808,7 +10808,7 @@ resolved_at=${ts}
 }
 
 // packages/kernel/dist/workflow/loadWorkflow.js
-import { existsSync as existsSync4, readFileSync as readFileSync9 } from "node:fs";
+import { existsSync as existsSync5, readFileSync as readFileSync9 } from "node:fs";
 import { join as join13 } from "node:path";
 
 // packages/kernel/dist/workflow/parse.js
@@ -11114,7 +11114,7 @@ function validateWorkflow(wf) {
 // packages/kernel/dist/workflow/loadWorkflow.js
 function loadWorkflow(repoRoot, name2) {
   const p = join13(repoRoot, ".pipeline", "workflows", `${name2}.yaml`);
-  if (!existsSync4(p))
+  if (!existsSync5(p))
     return null;
   const wf = parseWorkflow(readFileSync9(p, "utf8"));
   const errors = validateWorkflow(wf);
@@ -12451,7 +12451,16 @@ var SENSITIVE_BODY_KEYS = /* @__PURE__ */ new Set([
   "secret",
   "session_key",
   "private_key",
-  "authorization"
+  "authorization",
+  // 纵深补充（对抗复审 I2）：裸 token / 连字符变体 / session / bearer / cookie 回显。client_id 是公开值不入，免误伤。
+  "token",
+  "session_token",
+  "access-token",
+  "refresh-token",
+  "session-token",
+  "bearer",
+  "cookie",
+  "set-cookie"
 ]);
 var CRED_KEYS_ALT = [...SENSITIVE_BODY_KEYS].join("|");
 var CRED_FORM_RE = new RegExp(`\\b(${CRED_KEYS_ALT})=([^&\\s]+)`, "gi");
@@ -12503,7 +12512,9 @@ function buildRecord(p) {
     transport: p.transport ?? "reverse",
     request: {
       method: p.method,
-      path: p.path,
+      // path 含 query（forward 的 pathname+search / reverse 的 req.url）：query 里的凭证（?access_token=…、
+      // ?api_key=…、?key=…）同样会随 trace 入库，套字符串脱敏（对抗复审 I1）。path 段无 k=v 不受影响。
+      path: redactSecretsInString(p.path),
       headers: filterHeaders(p.reqHeaders, { redactKeys: true }),
       body: redactBodySecrets(p.reqBody)
     },
@@ -12514,7 +12525,7 @@ function buildRecord(p) {
     }
   };
   if (p.sseEvents && p.sseEvents.length)
-    record.response.sse_events = p.sseEvents;
+    record.response.sse_events = redactBodySecrets(p.sseEvents);
   if (p.upstreamBaseUrl)
     record.upstream_base_url = p.upstreamBaseUrl;
   return record;
@@ -12615,7 +12626,7 @@ function headerLookup(headers, name2) {
 }
 
 // packages/tap/dist/trace-store.js
-import { appendFileSync as appendFileSync2, existsSync as existsSync5, mkdirSync as mkdirSync3, readFileSync as readFileSync11, readdirSync as readdirSync3, renameSync as renameSync2, writeFileSync as writeFileSync2 } from "node:fs";
+import { appendFileSync as appendFileSync2, existsSync as existsSync6, mkdirSync as mkdirSync3, readFileSync as readFileSync11, readdirSync as readdirSync3, renameSync as renameSync2, writeFileSync as writeFileSync2 } from "node:fs";
 import { join as join22 } from "node:path";
 import { randomUUID } from "node:crypto";
 function resolveTraceDir(opts = {}) {
@@ -12651,7 +12662,7 @@ var FileTraceStore = class {
   }
   loadSessionRow(id) {
     const f = this.sessionFile(id);
-    if (!existsSync5(f))
+    if (!existsSync6(f))
       return null;
     try {
       return JSON.parse(readFileSync11(f, "utf8"));
@@ -12730,12 +12741,12 @@ var FileTraceStore = class {
   }
   readRecords(id) {
     const f = this.recordsFile(id);
-    if (!existsSync5(f))
+    if (!existsSync6(f))
       return [];
     return readFileSync11(f, "utf8").split("\n").filter((line) => line.trim().length > 0).map((line) => JSON.parse(line));
   }
   listSessions() {
-    if (!existsSync5(this.sessionsDir))
+    if (!existsSync6(this.sessionsDir))
       return [];
     const out = [];
     for (const name2 of readdirSync3(this.sessionsDir)) {
@@ -12760,7 +12771,7 @@ function getTraceStore() {
 }
 
 // packages/tap/dist/security.js
-import { existsSync as existsSync6, mkdirSync as mkdirSync4, readFileSync as readFileSync12, renameSync as renameSync3, writeFileSync as writeFileSync3 } from "node:fs";
+import { existsSync as existsSync7, mkdirSync as mkdirSync4, readFileSync as readFileSync12, renameSync as renameSync3, writeFileSync as writeFileSync3 } from "node:fs";
 import { join as join23 } from "node:path";
 var FLAG_NAME = "capture.enabled";
 var TTL_MS = 1e3;
@@ -12776,7 +12787,7 @@ function isCaptureEnabled(opts = {}) {
     return hit.val;
   let val = false;
   try {
-    if (existsSync6(p)) {
+    if (existsSync7(p)) {
       const raw = readFileSync12(p, "utf8").trim().toLowerCase();
       val = raw === "1" || raw === "true" || raw === "on" || raw === "yes";
     }
@@ -14120,7 +14131,7 @@ async function stopHandles(handles) {
 
 // packages/tap/dist/certs.js
 import { X509Certificate, createPublicKey, createPrivateKey, createHash as createHash2, generateKeyPairSync, randomBytes, sign as cryptoSign } from "node:crypto";
-import { chmodSync, existsSync as existsSync7, mkdirSync as mkdirSync5, readFileSync as readFileSync13, renameSync as renameSync4, writeFileSync as writeFileSync4 } from "node:fs";
+import { chmodSync, existsSync as existsSync8, mkdirSync as mkdirSync5, readFileSync as readFileSync13, renameSync as renameSync4, writeFileSync as writeFileSync4 } from "node:fs";
 import { homedir as homedir4 } from "node:os";
 import { join as join24 } from "node:path";
 var CA_VALIDITY_DAYS = 5 * 365;
@@ -14389,7 +14400,7 @@ function ensureCa(opts = {}) {
   mkdirSync5(caDir, { recursive: true });
   const caCertPath = join24(caDir, "ca.pem");
   const caKeyPath = join24(caDir, "ca-key.pem");
-  if (existsSync7(caCertPath) && existsSync7(caKeyPath)) {
+  if (existsSync8(caCertPath) && existsSync8(caKeyPath)) {
     try {
       const certPem = readFileSync13(caCertPath, "utf8");
       const keyPem = readFileSync13(caKeyPath, "utf8");
