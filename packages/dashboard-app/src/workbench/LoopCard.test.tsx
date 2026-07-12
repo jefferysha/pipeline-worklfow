@@ -41,6 +41,8 @@ function makeRow(over: Record<string, unknown> = {}): Record<string, unknown> {
     // T7：三方关系条数据面（server LoopRow 契约形状同步）。
     matched_changes: ['rl-0142-migrate-card', 'rl-0201-nav-cleanup'],
     phases: ['build', 'verify'],
+    // loop-init L4 契约：draft =「agent 草稿·待审阅」标记，默认 false（既有卡不受影响、零回归）。
+    draft: false,
     ...over,
   }
 }
@@ -66,6 +68,9 @@ function mockFetch(opts?: { updateStatus?: number; updateBody?: unknown; levelSt
             ;(next as Record<string, unknown>)[k] = v
           }
         }
+        // loop-init L4 契约镜像：任何含 status 键的写回，server 成功后自动清草稿标记——mock 同款，
+        // 让 L5 批准/驳回后显式重拉能真见徽章消失（前端不自发清标记，只重拉）。
+        if ('status' in patch) (next as Record<string, unknown>).draft = false
         return next
       })
       return new Response(JSON.stringify({ ok: true }), { status: 200 })
@@ -508,5 +513,132 @@ describe('LoopCard 多 loop 下拉 / 空态', () => {
     renderCard()
     await waitFor(() => expect(screen.getByTestId('lp-load-error')).toBeInTheDocument())
     expect(screen.getByTestId('lp-load-error')).toHaveTextContent('磁盘只读')
+  })
+})
+
+// ── loop-init L5：草稿审阅闭环（徽章 + 批准/驳回动作行 + 空态提 CLI）。上游契约 L4：
+//    WbLoopRow.draft:boolean；server 侧任何含 status 键的 update 成功后自动清标记，前端动作
+//    后显式重拉（loops.reload，非轮询——G22）即见 draft 消失，不自发清标记。
+//    命名两义（L4 评审点名）：row.draft 是「agent 草稿·待审阅」标记，与既有编辑态
+//    LoopDraft/draft(dirty 草稿) 不是一回事——本组断言用 isPendingReview/审阅语义。──
+describe('LoopCard 草稿审阅（loop-init L5：徽章 + 批准/驳回动作行）', () => {
+  it('①draft:true → 卡头渲染草稿徽章 + 卡尾批准/驳回双钮（动作文案与 demo 逐字）', async () => {
+    rows = [makeRow({ draft: true, status: 'paused' })]
+    renderCard()
+    await screen.findByTestId('lp-goal')
+    const badge = screen.getByTestId('lp-draft-badge')
+    expect(badge).toHaveTextContent('agent 草稿')
+    expect(badge).toHaveTextContent('待你审阅')
+    expect(screen.getByTestId('lp-draft-actions')).toBeInTheDocument()
+    expect(screen.getByTestId('lp-draft-approve')).toHaveTextContent('批准并启用')
+    const reject = screen.getByTestId('lp-draft-reject')
+    expect(reject).toHaveTextContent('驳回')
+    expect(reject).toHaveTextContent('现场保留')
+  })
+
+  it('①draft:false → 徽章与动作行都不渲染（既有卡零回归）', async () => {
+    rows = [makeRow({ draft: false })]
+    renderCard()
+    await screen.findByTestId('lp-goal')
+    expect(screen.queryByTestId('lp-draft-badge')).toBeNull()
+    expect(screen.queryByTestId('lp-draft-actions')).toBeNull()
+    expect(screen.queryByTestId('lp-draft-approve')).toBeNull()
+    expect(screen.queryByTestId('lp-draft-reject')).toBeNull()
+  })
+
+  it('②批准 → POST /api/loops/update body {status:"active"}（与既有 update 同形），成功后显式重拉、徽章消失', async () => {
+    rows = [makeRow({ draft: true, status: 'paused' })]
+    renderCard()
+    await screen.findByTestId('lp-draft-approve')
+    const snapCalls = (): number =>
+      (global.fetch as ReturnType<typeof vi.fn>).mock.calls.filter((c) => c[0] === '/api/loops/snapshot').length
+    const before = snapCalls()
+    fireEvent.click(screen.getByTestId('lp-draft-approve'))
+    // server 清标记 → 重拉后徽章与动作行消失
+    await waitFor(() => expect(screen.queryByTestId('lp-draft-badge')).toBeNull())
+    expect(screen.queryByTestId('lp-draft-actions')).toBeNull()
+    // body 与既有保存链路同形 {root,id,patch}，patch 只带 status:'active'
+    expect(lastPostBody('/api/loops/update')).toEqual({ root: ROOT, id: 'restyle-loop', patch: { status: 'active' } })
+    // 显式重拉（非轮询 G22）：快照被再次请求
+    expect(snapCalls()).toBeGreaterThan(before)
+  })
+
+  it('③驳回 → POST body {status:"paused"}，成功后重拉、徽章消失、现场（字段真值）保留', async () => {
+    rows = [makeRow({ draft: true, status: 'paused' })]
+    renderCard()
+    await screen.findByTestId('lp-draft-reject')
+    fireEvent.click(screen.getByTestId('lp-draft-reject'))
+    await waitFor(() => expect(screen.queryByTestId('lp-draft-badge')).toBeNull())
+    expect(lastPostBody('/api/loops/update')).toEqual({ root: ROOT, id: 'restyle-loop', patch: { status: 'paused' } })
+    // 现场保留：goal 等字段真值仍在（驳回=转暂停不清现场）
+    expect(screen.getByTestId('lp-goal')).toHaveValue('把旧版工单卡样式逐个迁移到 SaaS 卡片风')
+  })
+
+  it('④动作失败（server 拒）→ loop-reject 反馈条渲染 server 原文，徽章仍在（不清标记）', async () => {
+    mockFetch({ updateStatus: 400, updateBody: { ok: false, error: '落盘失败：磁盘只读' } })
+    rows = [makeRow({ draft: true, status: 'paused' })]
+    renderCard()
+    await screen.findByTestId('lp-draft-approve')
+    fireEvent.click(screen.getByTestId('lp-draft-approve'))
+    await waitFor(() => expect(screen.getByTestId('lp-draft-error')).toBeInTheDocument())
+    expect(screen.getByTestId('lp-draft-error')).toHaveTextContent('落盘失败：磁盘只读')
+    // loop-reject 反馈条底座复用（错误语义类名）
+    expect(screen.getByTestId('lp-draft-error')).toHaveClass('loop-reject')
+    // 失败不清徽章
+    expect(screen.getByTestId('lp-draft-badge')).toBeInTheDocument()
+  })
+
+  it('⑤草稿态不禁用字段编辑：改 goal → dirty → 走既有保存链路（与批准/驳回互不干扰）', async () => {
+    rows = [makeRow({ draft: true, status: 'paused' })]
+    renderCard()
+    await screen.findByTestId('lp-goal')
+    // 字段照常可编辑（demo 语义：先调整后批准）
+    expect(screen.getByTestId('lp-goal')).not.toBeDisabled()
+    fireEvent.change(screen.getByTestId('lp-goal'), { target: { value: '调整后的目标文案' } })
+    expect(screen.getByTestId('lp-dirty')).toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('lp-save'))
+    await waitFor(() => expect(screen.getByTestId('lp-save-ok')).toBeInTheDocument())
+    // 保存走既有 update：patch 只带 goal，不夹带 status（保存链路 ≠ 审阅动作）
+    expect(lastPostBody('/api/loops/update')).toEqual({ root: ROOT, id: 'restyle-loop', patch: { goal: '调整后的目标文案' } })
+    // 只改字段不含 status → 草稿标记不被清，徽章仍在（编辑不等于批准）
+    expect(screen.getByTestId('lp-draft-badge')).toBeInTheDocument()
+  })
+
+  it('⑦busy 期间双钮 disabled（防双发，对齐既有 levelBusy 先例）', async () => {
+    let release!: () => void
+    const gate = new Promise<void>((r) => {
+      release = r
+    })
+    global.fetch = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === '/api/loops/snapshot') {
+        return new Response(JSON.stringify({ generated_at: '2026-07-12T00:00:00Z', rows }), { status: 200 })
+      }
+      if (url === '/api/loops/update' && init?.method === 'POST') {
+        await gate // 挂起 update，制造 busy 窗口
+        const { id, patch } = JSON.parse(String(init.body)) as { id: string; patch: Record<string, unknown> }
+        rows = rows.map((r) => (r.id === id ? { ...r, ...patch, draft: false } : r))
+        return new Response(JSON.stringify({ ok: true }), { status: 200 })
+      }
+      throw new Error(`unexpected fetch ${url}`)
+    }) as unknown as typeof fetch
+    rows = [makeRow({ draft: true, status: 'paused' })]
+    renderCard()
+    await screen.findByTestId('lp-draft-approve')
+    fireEvent.click(screen.getByTestId('lp-draft-approve'))
+    // pending 期间：批准 + 驳回 双双 disabled
+    await waitFor(() => expect(screen.getByTestId('lp-draft-approve')).toBeDisabled())
+    expect(screen.getByTestId('lp-draft-reject')).toBeDisabled()
+    release()
+    // 释放后：写回成功 → 重拉 → 徽章消失（busy 解除）
+    await waitFor(() => expect(screen.queryByTestId('lp-draft-badge')).toBeNull())
+  })
+
+  it('⑥空态文案提 pipeline loop init（zh）——保留 agent 手写 .pipeline/loops.yaml 既有措辞', async () => {
+    rows = []
+    renderCard()
+    const empty = await screen.findByTestId('lp-empty')
+    expect(empty).toHaveTextContent('pipeline loop init')
+    // 既有「agent 直接写 .pipeline/loops.yaml」措辞不被替换
+    expect(empty).toHaveTextContent('.pipeline/loops.yaml')
   })
 })

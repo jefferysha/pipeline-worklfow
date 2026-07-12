@@ -398,12 +398,12 @@ export const zh: Dict = {
     // ── T7（loop 卡审阅面重构）：空态「去终端」引导 + 字段生产者徽章 + 三方关系条。
     //    交互真相源 design-demos/v6-config-copilot.html 方案 A；字段分类逐字对齐
     //    docs/ux/2026-07-11-config-experience-analysis.md §2.1（见 LoopCard.tsx FIELD_PROV 注释）。──
-    lp_empty_go: '不用在这里手填 15 个字段。打开终端，把目标告诉 agent——它知道你在盯什么、边界在哪，会直接写好 .pipeline/loops.yaml。',
+    lp_empty_go: '不用在这里手填 15 个字段。打开终端，把目标告诉 agent——它知道你在盯什么、边界在哪，会直接写好 .pipeline/loops.yaml。也可以直接跑 pipeline loop init 向导登记草稿。',
     lp_empty_prompt: '帮我建一个 loop：盯着<你想让它盯的目录或改动范围>，每 2 小时跑一轮；连续 3 次没有改动，或者预算触顶，就停下来找我确认。',
     lp_empty_copy: '⧉ 复制示例',
     lp_empty_copied: '已复制',
     lp_empty_copy_aria: '复制示例提示词',
-    lp_empty_note: '写完刷新本页就能看到——然后可以在这里继续调节奏、预算、自主级别与安全范围。',
+    lp_empty_note: '写完刷新本页就能看到——然后可以在这里继续调节奏、预算、自主级别与安全范围。用 pipeline loop init 登记的草稿会以「待你审阅」态出现，批准后才启用。',
     lp_prov_agent: 'agent 生成',
     lp_prov_sys: '系统推导',
     lp_prov_human: '人拍板',
@@ -470,6 +470,11 @@ export const zh: Dict = {
     //    runnerFor.ts 真实归属语义——仅 'codex' 起 codex exec，其余一律走 claude-code 缺省路径，
     //    它仍会执行，不谎称「不会执行」。──
     lp_runner_warn: '"{runner}" 不是标准 runner(仅 claude-code / codex),仍会执行——运行时按真实归属:非 codex 值一律走 claude-code(缺省)路径。',
+    // ── loop-init L5：草稿审阅（徽章 + 批准/驳回动作行）。文案与 design-demos/v6-config-copilot.html
+    //    方案 A 逐字；✓/✕ 图标在 JSX 侧（同 lp_runner_warn 的 ⚠ 先例），此处只存文字。──
+    lp_draft_badge: 'agent 草稿 · 待你审阅',
+    lp_draft_approve: '批准并启用',
+    lp_draft_reject: '驳回(转暂停，现场保留)',
   },
   // T10（v5 交互重建）：进度视图骨架文案。口径纪律同 workbench：可见文案一律用「阶段」（旧措辞已废）。
   progress: {
@@ -890,12 +895,12 @@ export const en: Dict = {
     afk_save_ok: 'Saved',
     afk_load_error: 'Failed to load AFK execution config: {msg}',
     // ── T7: empty-state "go to terminal" guide + field producer badges + relation bar ──
-    lp_empty_go: "No need to hand-fill 15 fields here. Open a terminal and tell the agent your goal — it already knows what you're watching and where the boundaries are, and will write .pipeline/loops.yaml directly.",
+    lp_empty_go: "No need to hand-fill 15 fields here. Open a terminal and tell the agent your goal — it already knows what you're watching and where the boundaries are, and will write .pipeline/loops.yaml directly. You can also run pipeline loop init to register a draft through the wizard.",
     lp_empty_prompt: "Help me set up a loop: watch <the directory or scope you want it to track>, run every 2 hours; stop and ask me if there are 3 runs in a row with no changes, or the budget is hit.",
     lp_empty_copy: '⧉ Copy example',
     lp_empty_copied: 'Copied',
     lp_empty_copy_aria: 'Copy example prompt',
-    lp_empty_note: 'Refresh this page once it is written — then you can keep tuning cadence, budget, autonomy level and safety scope right here.',
+    lp_empty_note: 'Refresh this page once it is written — then you can keep tuning cadence, budget, autonomy level and safety scope right here. A draft registered via pipeline loop init shows up here as "pending your review", and only goes live once you approve it.',
     lp_prov_agent: 'Agent-generated',
     lp_prov_sys: 'System-derived',
     lp_prov_human: 'Human decision',
@@ -957,6 +962,12 @@ export const en: Dict = {
     //    block). Wording follows runnerFor.ts real attribution — only 'codex' launches codex
     //    exec; every other value takes the default claude-code path. It still runs. ──
     lp_runner_warn: '"{runner}" is not a standard runner (only claude-code / codex). It still runs — at runtime, by real attribution, any non-codex value takes the claude-code (default) path.',
+    // ── loop-init L5: draft review (badge + approve/reject action row). Wording mirrors
+    //    design-demos/v6-config-copilot.html plan A; ✓/✕ icons live in JSX (same as the ⚠ in
+    //    lp_runner_warn), only the text is stored here. ──
+    lp_draft_badge: 'Agent draft · pending your review',
+    lp_draft_approve: 'Approve & enable',
+    lp_draft_reject: 'Reject (pause, keep as-is)',
   },
   progress: {
     title: 'Progress',

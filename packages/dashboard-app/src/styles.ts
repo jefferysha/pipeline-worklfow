@@ -986,4 +986,16 @@ span.wb-chip-badge { cursor: default; }
    新色一律 color-mix 从既有 token 派生，不硬编码原色）。纯提示语义，无背景块/边框，区别于
    .loop-reject（POST 拒绝的错误块）。 */
 .lp-runner-warn { margin: 5px 0 0; color: color-mix(in srgb, var(--red) 68%, var(--text-2)); }
+
+/* ── loop-init L5：草稿审阅（徽章 + 批准/驳回动作行）。决议 #9：新色一律 color-mix 从既有 token
+   派生，不硬编码原色——徽章蓝派生自 --accent，批准/驳回钮绿/红派生自 --green/--red（均既有语义
+   色）。徽章底座复用 .badge、动作钮底座复用 .btn（本段仅覆写配色，源序在后取胜）；与 .loop-reject
+   错误反馈条同一「从 token 派生」纪律。全部 token 皆有明/暗两套，color-mix 随主题自适应。 ── */
+.lp-draft-badge { background: color-mix(in srgb, var(--accent) 14%, var(--card)); color: var(--accent-d); }
+.lp-draft-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
+.lp-draft-approve { background: color-mix(in srgb, var(--green) 13%, var(--card)); border: 1px solid color-mix(in srgb, var(--green) 32%, var(--border)); color: var(--green-d); }
+.lp-draft-approve:hover { background: color-mix(in srgb, var(--green) 20%, var(--card)); border-color: var(--green); }
+.lp-draft-reject { background: color-mix(in srgb, var(--red) 12%, var(--card)); border: 1px solid color-mix(in srgb, var(--red) 30%, var(--border)); color: var(--red-d); }
+.lp-draft-reject:hover { background: color-mix(in srgb, var(--red) 18%, var(--card)); border-color: var(--red); }
+.lp-draft-err { flex-basis: 100%; margin: 2px 0 0; }
 `

@@ -380,6 +380,12 @@ export function LoopCard({ root, loops }: LoopCardProps): JSX.Element {
   const [levelError, setLevelError] = useState<string | null>(null)
   const [levelBusy, setLevelBusy] = useState(false)
   const [confirmLevel, setConfirmLevel] = useState<string | null>(null)
+  // ── loop-init L5：草稿审阅动作态（row.draft「agent 草稿·待审阅」标记 → 批准/驳回）。命名刻意
+  //    避开既有编辑态 draft(LoopDraft dirty 草稿)——见文件头「命名两义」；这里是审阅动作的
+  //    busy/错误态，与上方 saving/saveErrors 语义分离。审阅只发 status 写回，server 含 status 的
+  //    写回成功后自动清 draft 标记，前端动作后显式重拉即见徽章消失（不自发清标记）。 ──
+  const [reviewBusy, setReviewBusy] = useState(false)
+  const [reviewError, setReviewError] = useState<string | null>(null)
   // T7：空态「去终端」引导的复制按钮反馈 + 三方关系条「匹配 changes」弹层开关（两者都是纯
   // UI 局部态，不入草稿——弹层内容读 row 真值，不随草稿输入重算，见下方渲染处）。
   const [promptCopied, setPromptCopied] = useState(false)
@@ -391,6 +397,7 @@ export function LoopCard({ root, loops }: LoopCardProps): JSX.Element {
     setDraft(row ? draftOf(row) : null)
     setSaveErrors(null)
     setLevelError(null)
+    setReviewError(null)
   }, [row])
 
   const base = row ? draftOf(row) : null
@@ -444,6 +451,25 @@ export function LoopCard({ root, loops }: LoopCardProps): JSX.Element {
     }
   }
 
+  // ── loop-init L5：草稿审阅动作——批准（status:'active'）/ 驳回（status:'paused'，现场保留）。
+  //    复用既有 postLoopUpdate（与保存链路同形 body {root,id,patch}，只带 status 一键）；成功后
+  //    显式重拉快照（loops.reload——即时重拉，非 setInterval 轮询，G22 纪律），server 已在含 status
+  //    的写回成功后清 draft 标记，重拉即见徽章消失（前端不发清标记请求）。失败复用 loop-reject
+  //    反馈条呈现 server 原文。 ──
+  async function reviewAction(status: 'active' | 'paused'): Promise<void> {
+    if (!row || reviewBusy) return
+    setReviewBusy(true)
+    setReviewError(null)
+    try {
+      await postLoopUpdate({ root, id: row.id, patch: { status } })
+      loops.reload() // 显式重拉：draft 标记已被 server 清，新快照到达即徽章消失
+    } catch (err) {
+      setReviewError(err instanceof Error ? err.message : t('workbench.lp_network_error'))
+    } finally {
+      setReviewBusy(false)
+    }
+  }
+
   // ── 加载/错误/空态三分支 ──
   if (loops.loadError) {
     return (
@@ -492,6 +518,9 @@ export function LoopCard({ root, loops }: LoopCardProps): JSX.Element {
   }
 
   const active = draft.status === 'active'
+  // loop-init L5：row.draft =「agent 草稿·待你审阅」标记（≠ 上方编辑态 draft/dirty）——据此渲染
+  //   卡头徽章 + 卡尾批准/驳回动作行。L4 保证恒为 boolean（缺标记 fail-open→false）。
+  const isPendingReview = row.draft === true
   const tokensK = draft.max_tokens_per_day === null ? RECO_TOKENS_K : clamp(Math.round(draft.max_tokens_per_day / 10000) * 10, 10, 500)
 
   return (
@@ -511,6 +540,13 @@ export function LoopCard({ root, loops }: LoopCardProps): JSX.Element {
           {t(active ? 'workbench.lp_running' : 'workbench.lp_paused')}
         </span>
         <ProvBadge field="status" />
+        {/* loop-init L5：草稿待审阅徽章——蓝底座复用 .badge + .lp-draft-badge（color-mix 从 --accent
+            派生，决议 #9）；testid/类名走 lp-draft-* 审阅语义，与既有编辑态无关。 */}
+        {isPendingReview && (
+          <span className="badge lp-draft-badge" data-testid="lp-draft-badge">
+            {t('workbench.lp_draft_badge')}
+          </span>
+        )}
         {loops.rows.length > 1 && (
           <select
             className="wb-input lp-loopsel"
@@ -865,6 +901,37 @@ export function LoopCard({ root, loops }: LoopCardProps): JSX.Element {
           onChange={(next) => edit({ denylist: next })}
         />
       </div>
+
+      {/* ── loop-init L5：草稿审阅动作行（卡尾）——row.draft 为真时渲染。批准=status:'active' /
+          驳回=status:'paused'（转暂停，现场保留），复用 /api/loops/update；busy 期间双钮 disabled
+          （对齐 levelBusy 先例，防双发）；失败走 loop-reject 反馈条。✓/✕ 图标同 lp-runner-warn 的
+          ⚠ 先例置于 JSX，文案入 i18n 与 demo 逐字对齐。这是审阅面动作，不是四动作模型第五种
+          （决议 #13 边界，T7 已登记）。 ── */}
+      {isPendingReview && (
+        <div className="lp-draft-actions" data-testid="lp-draft-actions">
+          <button
+            type="button"
+            className="btn lp-draft-approve"
+            data-testid="lp-draft-approve"
+            disabled={reviewBusy}
+            onClick={() => void reviewAction('active')}
+          >
+            ✓ {t('workbench.lp_draft_approve')}
+          </button>
+          <button
+            type="button"
+            className="btn lp-draft-reject"
+            data-testid="lp-draft-reject"
+            disabled={reviewBusy}
+            onClick={() => void reviewAction('paused')}
+          >
+            ✕ {t('workbench.lp_draft_reject')}
+          </button>
+          {reviewError && (
+            <p className="loop-reject lp-draft-err" data-testid="lp-draft-error">⛔ {reviewError}</p>
+          )}
+        </div>
+      )}
 
       {/* 升档确认（沿 LoopsPanel 既有升档 Dialog 的文案键——同一决策同一话术） */}
       {confirmLevel !== null && (
