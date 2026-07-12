@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { parseSkillSources, readSkillSources, SkillSourcesError } from './skillSources.js'
+import { loadSkillSources, parseSkillSources, readSkillSources, SkillSourcesError } from './skillSources.js'
 
 // src 与 dist 同深度：三级上溯 → 仓根（对齐 loader / cli main.ts pluginRoot）
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..')
@@ -77,6 +77,45 @@ describe('② / ③ readSkillSources —— 容错兜底（fail-open）', () => 
     expect(() => parseSkillSources('skills:\n  nobrace: tool skills-cli\n')).toThrow(/token/)
     expect(() => parseSkillSources('skills:\n  dup: { tool: npm, source: a, tier: optional, official: false }\n  dup: { tool: npm, source: b, tier: optional, official: false }\n'))
       .toThrow(/重复/)
+  })
+})
+
+describe('③c loadSkillSources —— 区分 读失败/解析失败 与 合法空 registry（fail-loud，供 setup 装机）', () => {
+  it('缺文件 → { ok:false }（读失败，不当空 registry）', () => {
+    const r = loadSkillSources(join(tmpdir(), 'no-such-skill-sources-zzz.yaml'))
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.error).toContain('读取 registry 失败')
+  })
+
+  it('坏 yaml → { ok:false }（解析失败，携 token 原因，不当空 registry）', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'skillsrc-'))
+    try {
+      const bad = join(dir, 'bad.yaml')
+      await writeFile(bad, 'skills:\n  broken: { tool: not-a-real-tool, source: x, tier: mandatory, official: false }\n', 'utf8')
+      const r = loadSkillSources(bad)
+      expect(r.ok).toBe(false)
+      if (!r.ok) expect(r.error).toContain('broken')
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('合法但无条目 → { ok:true, sources:[] }（真空 registry，与失败区分）', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'skillsrc-'))
+    try {
+      const empty = join(dir, 'empty.yaml')
+      await writeFile(empty, 'version: 1\nskills:\n', 'utf8')
+      const r = loadSkillSources(empty)
+      expect(r).toEqual({ ok: true, sources: [] })
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('真 registry → { ok:true } 且条目数 > 30', () => {
+    const r = loadSkillSources(REGISTRY)
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(r.sources.length).toBeGreaterThan(30)
   })
 })
 

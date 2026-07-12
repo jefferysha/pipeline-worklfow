@@ -216,8 +216,8 @@ export function parseSkillSources(text: string): SkillSource[] {
 
 /**
  * 读并解析 templates/skill-sources.yaml（默认路径经 pluginRoot 三级上溯定位；可传 path 覆盖，测试用）。
- * **fail-open**：文件缺失 / 读失败 / 解析报错 → 返回 []（永不抛；setup/doctor 端凭空数组降级，不崩）。
- * 需要区分「空 registry」与「解析失败」的消费方，请改用 parseSkillSources 直接吃文本。
+ * **fail-open**：文件缺失 / 读失败 / 解析报错 → 返回 []（永不抛；doctor 端凭空数组降级，不崩）。
+ * 需要区分「空 registry」与「读失败/解析失败」的消费方（如 setup 装机段），请改用 loadSkillSources。
  */
 export function readSkillSources(path?: string): SkillSource[] {
   try {
@@ -225,5 +225,32 @@ export function readSkillSources(path?: string): SkillSource[] {
     return parseSkillSources(readFileSync(p, 'utf8'))
   } catch {
     return []
+  }
+}
+
+/** loadSkillSources 结果：ok 携 sources（含合法空 registry []）；失败携人读 error（读失败/解析失败）。 */
+export type SkillSourcesResult =
+  | { ok: true; sources: SkillSource[] }
+  | { ok: false; error: string }
+
+/**
+ * 载入 registry 并**区分**「读失败/解析失败」与「合法空 registry」（fail-loud，供 setup 装机段消费）：
+ *   · 读文件失败（缺失/权限） → { ok:false, error }
+ *   · 解析失败（结构/字段错） → { ok:false, error }
+ *   · 成功（含合法空 registry []）→ { ok:true, sources }
+ * 与 readSkillSources 的 fail-open 分工：doctor 只需降级用 readSkillSources；setup 装机不能把
+ * 「坏/缺 registry → []」当空计划走「无待装 exit 0」假成功（破 full-install 前提），故用本函数。
+ */
+export function loadSkillSources(path?: string): SkillSourcesResult {
+  let text: string
+  try {
+    text = readFileSync(path ?? defaultRegistryPath(), 'utf8')
+  } catch (e) {
+    return { ok: false, error: `读取 registry 失败: ${e instanceof Error ? e.message : String(e)}` }
+  }
+  try {
+    return { ok: true, sources: parseSkillSources(text) }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) }
   }
 }

@@ -13,14 +13,14 @@
  * best-effort:软链任何失败只 WARN 不让 setup 崩（对齐 init.ts「注册表故障只 WARN」精神）。
  */
 import { execFileSync } from 'node:child_process'
-import { chmodSync, lstatSync, mkdirSync, readSync, readlinkSync, symlinkSync, unlinkSync } from 'node:fs'
+import { chmodSync, lstatSync, mkdirSync, readdirSync, readSync, readlinkSync, symlinkSync, unlinkSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { readAutomationJson } from '@pipeline-lite/automation'
 import { PREREQ_HINTS } from '@pipeline-lite/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
 import { nodeExecDocker, probeAfkReadiness, type AfkReadiness, type CredLight, type ExecDockerFn } from '../afkReadiness.js'
-import { readSkillSources, type SkillSource, type SkillTier } from '../skillSources.js'
+import { loadSkillSources, type SkillSource, type SkillSourcesResult, type SkillTier } from '../skillSources.js'
 
 // ── 注入面（测试注入临时 HOME / spy;真实现 = node:fs + os.homedir）──────────────────
 export interface SetupEnv {
@@ -36,6 +36,8 @@ export interface SetupEnv {
   readSymlink(path: string): string | null
   /** lstat 存在性（软链本身也算存在,含悬空软链;判「存在但非软链」用）。 */
   pathExists(path: string): boolean
+  /** 列目录直接子项名（仅目录/软链，缺目录/无权限 → []，fail-safe）——plugin-cache 双层扫用。 */
+  listDir(dir: string): string[]
   /** 建软链 target→linkPath。 */
   makeSymlink(target: string, linkPath: string): void
   /** 删文件/软链（覆盖异源/非软链前置）。 */
@@ -75,6 +77,15 @@ export const REAL_SETUP_ENV: SetupEnv = {
       return true
     } catch {
       return false
+    }
+  },
+  listDir: (dir) => {
+    try {
+      return readdirSync(dir, { withFileTypes: true })
+        .filter((e) => e.isDirectory() || e.isSymbolicLink()) // skill/plugin 常以 symlink 装入
+        .map((e) => e.name)
+    } catch {
+      return [] // 缺目录/无权限 → 空（fail-safe，与 main.ts safeReaddirDirs 同口径）
     }
   },
   makeSymlink: (target, linkPath) => { symlinkSync(target, linkPath) },
@@ -221,14 +232,20 @@ function marketplaceRepo(source: string): string {
   return source.includes('/') ? source : `${source}/skills`
 }
 
-/** 幂等探测:~/.claude/skills、~/.agents/skills、~/.claude/plugins/cache 任一在位即已装（注入 fs）。 */
+/**
+ * 幂等探测:~/.claude/skills、~/.agents/skills（单层子目录名）或 ~/.claude/plugins/cache 任一在位即已装。
+ * plugin-cache 真实布局是**双层** cache/<marketplace>/<plugin>（对齐 main.ts scanInstalledSkillNames），
+ * 故逐 marketplace 扫「有无同名 plugin」——旧单层探测 cache/<name> 恒 miss → 插件每次 setup 重装。
+ */
 function skillInstalled(env: SetupEnv, name: string): boolean {
   const home = env.homeDir()
-  return (
-    env.pathExists(join(home, '.claude', 'skills', name)) ||
-    env.pathExists(join(home, '.agents', 'skills', name)) ||
-    env.pathExists(join(home, '.claude', 'plugins', 'cache', name))
-  )
+  if (env.pathExists(join(home, '.claude', 'skills', name))) return true
+  if (env.pathExists(join(home, '.agents', 'skills', name))) return true
+  const cache = join(home, '.claude', 'plugins', 'cache')
+  for (const marketplace of env.listDir(cache)) {
+    if (env.pathExists(join(cache, marketplace, name))) return true // marketplace/plugin 命中即已装
+  }
+  return false
 }
 
 /** 命令可读串（计划/汇总用）。 */
@@ -452,9 +469,26 @@ export function cmdSetupSkills(
   deps: CliDeps,
   opts: SetupOpts,
   env: SetupEnv = REAL_SETUP_ENV,
-  sources: SkillSource[] = readSkillSources(),
+  sources?: SkillSource[],
+  loadSources: () => SkillSourcesResult = loadSkillSources,
 ): number {
-  const plan = buildSkillsPlan(sources, env)
+  let list: SkillSource[]
+  if (sources !== undefined) {
+    list = sources // 测试注入的显式子集（含合法空 []，为合法空 registry）
+  } else {
+    // 装机段区分「读失败/解析失败」与「真空 registry」：坏/缺 registry 不能当空计划走
+    // 「无待装 exit 0」假成功（什么都没装 → 破 full-install 前提）→ fail-loud 非零退出。
+    const loaded = loadSources()
+    if (!loaded.ok) {
+      deps.io.err(
+        `ERROR: 技能 registry 未就绪（${loaded.error}）——无法生成安装计划，` +
+          '请修复 templates/skill-sources.yaml 后重试 pipeline setup skills。',
+      )
+      return 1
+    }
+    list = loaded.sources // 合法（含真空 registry [] → 下方走「无待装」exit 0）
+  }
+  const plan = buildSkillsPlan(list, env)
   renderSkillsPlan(deps, plan)
 
   if (opts.dryRun) { // dry-run:零执行零全局写（继承 F3 dry-run 不变量）

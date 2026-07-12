@@ -27,7 +27,18 @@ export async function cmdImport(deps: CliDeps, name: string, opts: { strip?: boo
       return 0
     }
     const prior = (await deps.readHistoryRaw?.(dir)) ?? ''
-    if (prior.includes('"kind":"import"')) {
+    // 幂等哨兵：逐行 JSON.parse 判 kind==='import'（不用裸子串 includes——历史行的 raw/文本里
+    // 若字面含 "kind":"import" 会误判已导入，拒绝真正的首次导入）。非 JSON 行忽略。
+    const alreadyImported = prior.split('\n').some((line) => {
+      const t = line.trim()
+      if (t === '') return false
+      try {
+        return (JSON.parse(t) as { kind?: unknown }).kind === 'import'
+      } catch {
+        return false
+      }
+    })
+    if (alreadyImported) {
       deps.io.err(`ERROR: ${name} 已导入过（.pipeline-history.jsonl 存在 import 哨兵），拒绝重复导入`)
       return 1
     }

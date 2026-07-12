@@ -128,6 +128,11 @@ export async function cmdSetMany(deps: CliDeps, name: string, pairs: string[]): 
     }
     const f = asField(deps, pair.slice(0, i))
     if (!f) return 1
+    if (Object.hasOwn(kv, f)) {
+      // 同字段重复 key：拒写（旧行为静默 last-wins，如 `phase=build phase=spec` 只留后者）
+      deps.io.err(`ERROR: set-many 重复字段 '${f}'（同键多次赋值，拒写以免静默 last-wins）`)
+      return 1
+    }
     const v = coerceValue(f, pair.slice(i + 1))
     if (!enumOk(deps, f, v)) return 1
     kv[f] = v

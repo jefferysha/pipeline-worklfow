@@ -137,6 +137,14 @@ describe('set-many —— k=v 批量原子写', () => {
     expect(deps.store.setMany.calls).toHaveLength(0)
   })
 
+  test('重复字段 exit 1，setMany 不被调用（不静默 last-wins）', async () => {
+    const deps = makeDeps()
+    const code = await cmdSetMany(deps, 'demo', ['phase=build', 'phase=spec'])
+    expect(code).toBe(1)
+    expect(deps.store.setMany.calls).toHaveLength(0)
+    expect(deps.errLines.join('\n')).toContain('重复字段')
+  })
+
   test('未知字段 exit 1，setMany 不被调用', async () => {
     const deps = makeDeps()
     const code = await cmdSetMany(deps, 'demo', ['nope=1'])

@@ -34,6 +34,16 @@ describe('import —— 老仓历史区迁移进 JSONL（BACKLOG #11）', () => 
     expect(deps.historyEntries).toHaveLength(0)
   })
 
+  test('幂等哨兵逐行 JSON 判 kind——历史行仅字面含 "kind":"import" 文本时不误判已导入（真首次导入不被拒）', async () => {
+    // 一条非 import 历史行的文本里恰含 `"kind":"import"` 字面子串（拼接注入，非真 kind 字段）——
+    // 旧「裸子串 includes」会误判「已导入」拒绝真正首次导入；新「逐行 JSON.parse 判 kind」不受骗。
+    const priorRaw = '{"ts":"t","kind":"tool","raw":"note about ' + '"kind":"import"' + ' usage"}\n'
+    const deps = makeDeps({ state: stateWithTail(TAIL), historyRaw: priorRaw })
+    const code = await cmdImport(deps, 'demo', {})
+    expect(code).toBe(0) // 真首次导入，不被误拒
+    expect(deps.historyEntries.map(([, e]) => e.kind)).toEqual(['tool', 'transition', 'import'])
+  })
+
   test('--strip：写回清空历史节的 state（其余尾内容保留）', async () => {
     const deps = makeDeps({ state: stateWithTail(`${TAIL}custom_tail: keep\n`) })
     expect(await cmdImport(deps, 'demo', { strip: true })).toBe(0)

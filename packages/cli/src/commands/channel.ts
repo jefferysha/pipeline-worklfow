@@ -246,6 +246,19 @@ function strFlag(flags: Record<string, string | true>, key: string): string | un
   return typeof v === 'string' ? v : undefined
 }
 
+/**
+ * 数值 flag 严格解析（对齐 mem.ts parseOptionalNumberFlag:84-90 口径）：未给 → undefined；
+ * 给了但非有限数 → die exit 2（fail-loud，不让 NaN 静默失效过滤器/返回全部）。
+ */
+function numberFlag(flags: Record<string, string | true>, key: string): number | undefined {
+  const v = flags[key]
+  if (v === undefined) return undefined
+  if (typeof v !== 'string') die(`[channel] --${key} 需数值`)
+  const n = Number(v)
+  if (!Number.isFinite(n)) die(`[channel] --${key} 非法数值: ${v}`)
+  return n
+}
+
 function scopeOf(flags: Record<string, string | true>): Scope {
   return strFlag(flags, 'scope') === 'global' ? 'global' : 'project'
 }
@@ -392,8 +405,7 @@ function cmdWait(deps: CliDeps, host: ChannelHost, p: ParsedArgs): number {
   const all = p.flags.all === true
   const from = csv(strFlag(p.flags, 'from'))
   if (all && from.length === 0) die('[channel wait] --all 必须配 --from')
-  const sinceRaw = strFlag(p.flags, 'since')
-  const since = sinceRaw !== undefined ? Number.parseInt(sinceRaw, 10) : undefined
+  const since = numberFlag(p.flags, 'since')
   const filter = buildWaitFilter(self, p)
 
   const pending = all ? new Set(from) : null
@@ -418,8 +430,7 @@ function cmdMessages(deps: CliDeps, host: ChannelHost, p: ParsedArgs): number {
   const name = p.positional[0]
   if (!name) die('[channel messages] 缺 channel 名')
   const scope = scopeOf(p.flags)
-  const sinceRaw = strFlag(p.flags, 'since')
-  const since = sinceRaw !== undefined ? Number.parseInt(sinceRaw, 10) : undefined
+  const since = numberFlag(p.flags, 'since')
   const from = csv(strFlag(p.flags, 'from'))
   const opts: EventFilterOptions = {}
   const kind = strFlag(p.flags, 'kind')
@@ -433,10 +444,10 @@ function cmdMessages(deps: CliDeps, host: ChannelHost, p: ParsedArgs): number {
     if (since !== undefined && typeof ev.seq === 'number' && ev.seq <= since) return false
     return matchesEventFilter(ev, opts)
   })
-  const lastRaw = strFlag(p.flags, 'last')
-  if (lastRaw) {
-    const n = Number.parseInt(lastRaw, 10)
-    if (Number.isInteger(n) && n > 0) snap = snap.slice(-n)
+  const last = numberFlag(p.flags, 'last')
+  if (last !== undefined) {
+    if (!Number.isInteger(last) || last <= 0) die(`[channel] --last 需正整数: ${strFlag(p.flags, 'last')}`)
+    snap = snap.slice(-last)
   }
   for (const ev of snap) emit(deps, ev)
   return 0

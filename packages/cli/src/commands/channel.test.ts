@@ -197,6 +197,40 @@ describe('wait 事件面（快照扫描）', () => {
   })
 })
 
+describe('数值 flag 校验（--since/--last 坏值 fail-loud exit 2，不静默返回全部——对齐 mem）', () => {
+  test('wait --since abc → exit 2（旧行为：NaN 让过滤器静默失效）', async () => {
+    const c = ctx()
+    await c.run('create', ['ch', '--task', 't'])
+    expect(await c.run('wait', ['ch', '--as', 'me', '--since', 'abc'])).toBe(2)
+    expect(c.err.join('\n')).toContain('--since')
+  })
+
+  test('messages --since abc → exit 2', async () => {
+    const c = ctx()
+    await c.run('create', ['ch', '--task', 't'])
+    expect(await c.run('messages', ['ch', '--since', 'abc'])).toBe(2)
+    expect(c.err.join('\n')).toContain('--since')
+  })
+
+  test('messages --last abc → exit 2（旧行为：NaN 让 --last 静默失效、返回全部）', async () => {
+    const c = ctx()
+    await c.run('create', ['ch', '--task', 't'])
+    await c.run('send', ['ch', 'm1', '--as', 'a'])
+    expect(await c.run('messages', ['ch', '--last', 'abc'])).toBe(2)
+    expect(c.err.join('\n')).toContain('--last')
+  })
+
+  test('合法 --since / --last 仍正常（不误伤）', async () => {
+    const c = ctx()
+    await c.run('create', ['ch', '--task', 't'])
+    await c.run('send', ['ch', 'm1', '--as', 'a'])
+    await c.run('send', ['ch', 'm2', '--as', 'b'])
+    expect(await c.run('messages', ['ch', '--kind', 'message', '--last', '1'])).toBe(0)
+    expect(c.out).toHaveLength(1)
+    expect(await c.run('wait', ['ch', '--as', 'me', '--since', '99'])).toBe(124)
+  })
+})
+
 describe('registry 投影', () => {
   test('spawned + 定向 message → pendingMessageCount', async () => {
     const c = ctx()

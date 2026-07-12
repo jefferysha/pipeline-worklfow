@@ -11,7 +11,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, test } from 'vitest'
 import { makeDeps } from '../test-support.js'
 import { buildProgram, CliExit } from '../program.js'
-import { readSkillSources, type SkillSource } from '../skillSources.js'
+import { readSkillSources, type SkillSource, type SkillSourcesResult } from '../skillSources.js'
 import {
   buildSkillsPlan,
   cmdSetup,
@@ -44,6 +44,7 @@ function spyEnv(over: Partial<SetupEnv> = {}, exec?: ExecStub, confirmAns = true
     mkdirp: (d) => { calls.mkdirp.push(d) },
     readSymlink: () => null,
     pathExists: () => false,
+    listDir: () => [],
     makeSymlink: (t, l) => { calls.makeSymlink.push([t, l]) },
     removePath: (p) => { calls.removePath.push(p) },
     chmodExec: (p) => { calls.chmodExec.push(p) },
@@ -439,6 +440,21 @@ describe('⑤技能安装段 S2 —— 命令生成 / 标注 / 幂等 / dry-run 
     expect(plan.commands.filter((c) => c.source === 'affaan-m/ECC')).toHaveLength(0)
   })
 
+  test('③ 幂等(双层 plugin-cache):cache/<marketplace>/<plugin> 命中即已装(对齐 scanInstalledSkillNames,不每次重装)', () => {
+    const src: SkillSource[] = [
+      { token: 'frontend-design', tool: 'claude-plugin', source: 'claude-plugins-official', skill: 'frontend-design', tier: 'mandatory', official: true },
+    ]
+    const cache = join('/home/test', '.claude', 'plugins', 'cache')
+    // 真实布局是双层 cache/<marketplace>/<plugin>——旧单层探测 cache/frontend-design 恒 miss → 每次重装
+    const { env } = spyEnv({
+      listDir: (d) => (d === cache ? ['claude-plugins-official'] : []),
+      pathExists: (p) => p === join(cache, 'claude-plugins-official', 'frontend-design'),
+    })
+    const plan = buildSkillsPlan(src, env)
+    expect(plan.commands.filter((c) => c.group === 'claude-plugin')).toHaveLength(0) // 已装 → 无 install 命令
+    expect(plan.alreadyInstalled.map((a) => a.token)).toContain('frontend-design')
+  })
+
   test('④ cmdSetupSkills --dry-run:spy exec/mutation 调用数 0,计划仍列 ECC 15 个', () => {
     const deps = makeDeps()
     const { env, calls } = spyEnv()
@@ -512,5 +528,40 @@ describe('⑤技能安装段 S2 —— 命令生成 / 标注 / 幂等 / dry-run 
     }
     const ecc = skillsCli.find((c) => c.source === 'affaan-m/ECC')!
     expect(ecc.names).toHaveLength(15) // ECC 15 个真 registry 里聚合成一条
+  })
+})
+
+describe('⑩ registry 就绪门 —— 坏/缺 registry fail-loud（不空计划假成功），真空 registry 才走无待装', () => {
+  const failLoader = (): SkillSourcesResult => ({ ok: false, error: '解析失败: token x tool 非法' })
+  const emptyLoader = (): SkillSourcesResult => ({ ok: true, sources: [] })
+
+  test('坏 registry（loader 报失败）→ 非零退出 + 明示 registry 未就绪，不打印「无待装」假成功', () => {
+    const deps = makeDeps()
+    const { env, calls } = spyEnv()
+    const code = cmdSetupSkills(deps, { yes: true }, env, undefined, failLoader)
+    expect(code).not.toBe(0) // 非零退出（不假成功）
+    const err = deps.errLines.join('\n')
+    expect(err).toContain('registry 未就绪')
+    expect(err).toContain('解析失败') // 携具体原因
+    expect(deps.outLines.join('\n')).not.toContain('无待装') // 绝不当空计划走假成功
+    expect(calls.exec).toHaveLength(0) // 未执行任何安装命令
+  })
+
+  test('坏 registry + --dry-run 也 fail-loud（零执行，仍非零，不假成功）', () => {
+    const deps = makeDeps()
+    const { env, calls } = spyEnv()
+    const code = cmdSetupSkills(deps, { dryRun: true }, env, undefined, failLoader)
+    expect(code).not.toBe(0)
+    expect(deps.errLines.join('\n')).toContain('registry 未就绪')
+    expect(calls.exec).toHaveLength(0)
+  })
+
+  test('真空 registry（合法但无条目）→ 走「无待装」+ exit 0（与坏 registry 区分）', () => {
+    const deps = makeDeps()
+    const { env } = spyEnv()
+    const code = cmdSetupSkills(deps, { yes: true }, env, undefined, emptyLoader)
+    expect(code).toBe(0)
+    expect(deps.outLines.join('\n')).toContain('无待装')
+    expect(deps.errLines.join('\n')).not.toContain('registry 未就绪')
   })
 })
