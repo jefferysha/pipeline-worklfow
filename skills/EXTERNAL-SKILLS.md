@@ -55,7 +55,6 @@ bash tools/verify-skills.sh --quiet  # 静默模式（SessionStart hook 使用�
 - huashu-design — HTML 设计师原型引擎
 - hallmark — 反 AI-slop 设计层
 - hue — 设计语言/配色生成
-- uiforge — mockup → HTML
 - web-artifacts-builder — 复杂多组件原型
 - uiuxdesign-pro — UX 高级模板（可选）
 - frontend-design — 前端设计评审

@@ -138,7 +138,6 @@ DESIGN_DOC=$(pipeline get "$PIPELINE_CHANGE_NAME" design_doc)
 **推荐**（默认调用）：
 - 使用 Skill 工具加载 `hue` — 配色 / 视觉风格生成（Step 0 设计来源选 hue 设计语言时为必走）
 - `hallmark` — **已并入 Step 0 原型引擎三选一（与 huashu-design 同为推荐项）**，此处不再重复软推荐，按 Step 0 三选一走。
-- 使用 Skill 工具加载 `uiforge` — UI mockup → HTML 重构
 
 **可选**：
 - 使用 Skill 工具加载 `web-artifacts-builder` — 复杂多组件原型
@@ -286,7 +285,6 @@ guard **只校验、不自动 transition**。校验通过后手动推进：
 - external-skill: hallmark · 三选一（pm 原型引擎）/ 推荐（frontend）
 - external-skill: prototype · 三选一（pm 原型引擎备选）
 - external-skill: hue · 推荐（设计来源选 hue 时必走）
-- external-skill: uiforge · 推荐
 - external-skill: web-artifacts-builder · 可选
 - external-skill: uiuxdesign-pro · 可选（若已装）
 - external-skill: shadcn-ui · 条件
