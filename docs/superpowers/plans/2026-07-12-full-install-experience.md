@@ -106,4 +106,14 @@ P2-F2(loop runner 徽章反向接线或文案降级)、P2-F3(收件箱键盘拍�
 
 ## 波末守门(每批)
 
-`npm run build && npm run build:web && npm run build:server` + `npm test` + `npm run test:web` + `npm run typecheck:web`(先 build 再测)。真机验收该批的 spec §8 判据。逐批完成后给用户验收,认可再进下一批。
+`npm run build && npm run build:web && npm run build:server` + `npm test` + `npm run test:web` + `npm run typecheck:web`(先 build 再测)。**姿势变更(用户 07-12):不再逐批找用户验收**——每批内部三连门+评审 Approved 即进下一批,全部批次做完后走最终验收门,一次性交付。
+
+## 最终验收门(所有批次 + 打磨完成后,交付前必过;用户 07-12 追加)
+
+1. **真实 e2e 全自测·两 runner 从头各跑一遍**:claude-code(当前终端)与 codex 各自走完整首跑旅程真机端到端——`claude plugin marketplace add`+`install pipeline-lite` → `pipeline setup`(真装技能,或受控临时 HOME 避免污染) → `pipeline doctor` → `pipeline init` → AFK 真跑(真 docker 沙箱,两 runner 路径都真执行)。不是单测,是真跑。
+2. **前端真实操作一遍**:dashboard 8799 亲手走关键流——凭证卡存 key→三灯变绿(两 runner)、Loop 草稿审阅批准/驳回、AFK 卡就绪三灯+镜像 datalist、失败诊断(成因+runner 身份+last_error 显示)、首启引导页。
+3. **codex CLI review 完整流程**:用 codex CLI(`codex exec`,独立于主会话 subagent 评审)对整个初创的实现+流程做一遍 review,产出问题清单,真问题修掉。
+4. **rubric 全过**:docs/ux/2026-07-12-full-install-journey-review.md 第五章 34 条(A 功能 15 + B-终端 8 + B-前端 11)逐条勾过。
+5. 全过才交付给用户验收。
+
+**前置(缺则向用户要,不静默跳过)**:两 runner 真凭证 `OPENAI_API_KEY`(codex)/`CLAUDE_CODE_OAUTH_TOKEN`(claude-code);docker daemon 可用 + 含两 CLI 的 `sandcastle:local` 镜像(观察项③ 改脚本后须重建镜像);codex CLI 已装并认证(review 步与 codex runner e2e 都需要)。
