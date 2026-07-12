@@ -76,19 +76,31 @@
 
 ---
 
-## 批 2 · Phase 2 技能齐全(到批时展开任务书)
+> 批次经旅程审查(docs/ux/2026-07-12-full-install-journey-review.md,18 问题/34 rubric)重排:批2 终端技能 / 批3 终端运行时 / 批4 前端交互修复 / 打磨。每任务标它闭合的 rubric 问题号。
 
-- **S1 · registry 数据**:`templates/skill-sources.yaml`(从研究 Section 6 全量派生 token→tool/source/skill/tier/official/engine)+ `templates/manifest.yaml` 删 `uiforge`、软状态标注(uiuxdesign-pro 候选 / zoom-out removed)。
-- **S2 · setup 技能安装段**:读 registry → 按 tool 分组生成命令(claude-plugin/skills-cli `--skill`/npm/agents-inc marketplace-add+逐 id)→ 装前 `--list` 核最新 → 幂等(扫 ~/.claude/skills+~/.agents/skills+plugins/cache 差集)→ 逐条容错 → 末尾汇总(强制缺红)。**禁整装**断言。degit 兜底。
-- **S3 · doctor 缺技能检测(A1)**:`pipeline doctor` 新增技能在位检查(扫安装位,对 manifest mandatory/recommended 判在位,强制红+「跑 pipeline setup」/推荐黄)+ `session-start.sh` 一行轻提示(不跑安装)。
-- **S4 · 上游漂移同步 + 一致性门**:registry 里 mattpocock `to-prd→to-spec`/`to-issues→to-tickets` 落实;`tools/verify-skills.sh` 扩一条「registry 与 EXTERNAL-SKILLS.md token 集一致」校验。
-- **并行**:S1 先行(数据地基)→ S2∥S3 依赖 S1 → S4 收尾。
+## 批 2 · Phase 2 技能齐全(终端;闭 P0-T1/P0-T2/P2-T4/P2-T2/P2-T1)
 
-## 批 3 · Phase 3 运行时(到批时展开任务书)
+- **Wave A · S1 · registry 数据+载入器**(施工中):`templates/skill-sources.yaml`(研究 §6 全量 token→tool/source/skill/tier/official/engine)+ `skillSources.ts` 载入器 + manifest `to-prd→to-spec`/`to-issues→to-tickets` 改名 + 删 uiforge(闭 P2-T4/A6)。
+- **Wave B(依赖 S1 载入器,S2∥S3∥S4 文件不重叠三路并行)**:
+  - **S2 · setup 技能安装段**(setup.ts):读 registry→按 tool 分组选装(claude-plugin/skills-cli `--skill`/npm/agents-inc marketplace-add+逐 id)→装前 `--list` 核最新→幂等差集→逐条容错末尾汇总(强制缺红)→计划列官方/第三方标注+受影响全局目录+ECC 按名可见。禁整装断言。degit 兜底。(闭 P0-T1/A2-A4/BT1-BT3)
+  - **S3 · doctor 缺技能检测**(doctor.ts+session-start.sh):新增技能在位检查(扫 ~/.claude/skills+~/.agents/skills+plugins/cache 对齐老仓口径),mandatory 缺→红+「跑 pipeline setup」修复命令,recommended 缺→黄;session-start 提示回改指向 `pipeline doctor`(闭 P0-T2/A5/BT4/BT8/P2-T2)。
+  - **S4 · setup help 位置 + 一致性门**(program.ts+verify-skills.sh):setup 注册提前到 init 附近 + addHelpText「首次安装:pipeline setup」(闭 P2-T1/BT5);verify-skills 扩「registry 与 EXTERNAL-SKILLS.md token 集一致」校验。
 
-- **R1 · setup 运行时段**:docker 探测(CLI 侧直调 `docker info`,对齐 v6 server 先例)+ 缺镜像给一键 `bash tools/sandcastle/build.sh`(两 runner CLI)。
-- **R2 · 双 runner 凭证 + codex 对等**:凭证检查(claude-code OAUTH / codex OPENAI_API_KEY,复用 secrets store,只报 set/未设)+ 就绪清单两 runner 对称呈现。
-- **R3 · 「全功能就绪」清单 + 真机验收脚本**:docker/镜像/两 runner 凭证/技能齐全 一屏聚合;`.playwright-tmp` 下真机验收脚本。
+## 批 3 · Phase 3 运行时+就绪(终端;闭 P1-T2/P1-T1/P1-X1)
+
+- **R1 · setup runtime 段 + doctor afk 检查**(setup.ts runtime 段+doctor.ts):docker 探测(CLI 直调 `docker info` 对齐 v6 server 先例)+缺镜像一键 `build.sh`;doctor 增 `afk:docker`/`afk:image`/`afk:credential-*` check id;与 server 共用同一 `SANDCASTLE_BUILD_HINT` 常量(闭 P1-T2/A8/A13/P1-X1)。
+- **R2 · claude-code 路径诚实度对齐**(pipeline-afk-run.sh claude 分支+lifecycle,沙箱脚本改须 bump AFK_RUN_SCRIPT_SHA256):token 缺失打可操作 stderr 不静默、agent 非零退出补 `[AGENT_EXIT] claude` 回放(对齐观察项③的 codex 侧,让两 runner 失败哲学一致)(闭 P1-T1/A10/BT7)。
+
+## 批 4 · 前端交互修复(dashboard;闭 P0-F1/P1-F1/P1-F2/P1-F3/P2-F1)
+
+- **W1 · codex per-runner 三灯 + 凭证 caveat**(AutomationCard.tsx+afkReadiness 消费+translations):凭证灯改 per-runner 双灯(codex 与 claude-code 同等灯色+文案不靠 tooltip)+去「(claude-code)」硬编码+凭证行加「服务进程视角·终端 doctor 为准」caveat(闭 P1-F1/P1-F2/BF3/BF4/A13)。**codex 对等唯一真缺口,优先。**
+- **W2 · 前端首启引导**(Nav/新 onboarding 组件/空态 CTA):零项目/零 change 给可执行 checklist(注册项目/跑 pipeline init/跑 pipeline setup)+可复制命令;空收件箱 CTA 指可执行下一步非另一空视图;工作台/nav 加「去终端跑 setup」引导(闭 P0-F1/BF1/BF2/A14)。
+- **W3 · AFK 失败诊断 + runner 身份 + last_error 显示**(ProgressView/InboxView/TaskDetail):**显示 automation_last_error**(闭合观察项③——错误落了盘但前端不显示)+成因归因(last_error→缺凭证/镜像/docker+修复命令)+显示 change 的 runner 身份+失败态给终端命令(闭 P2-F1/BF7)。
+- **W4 · dashboard 技能齐全度只读面 + 去终端引导**(消费 doctor JSON,可能需 server 端点):至少「技能齐全度」只读面 +「去终端跑 pipeline setup」引导条(闭 P1-F3/BF10)。
+
+## 打磨(P2 剩余;批 4 后或穿插)
+
+P2-F2(loop runner 徽章反向接线或文案降级)、P2-F3(收件箱键盘拍板)、P2-X1(README 端口 8765→8799)、P2-X2(README 插件安装段)、P2-T3(init 向导)。均低优先,末尾清或登记。
 
 ---
 
