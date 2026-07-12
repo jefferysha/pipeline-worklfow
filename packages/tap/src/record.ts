@@ -37,6 +37,44 @@ export const SENSITIVE_HEADER_KEYS: ReadonlySet<string> = new Set([
 // capture_proxy.py:49
 export const PREFIX_REDACTED_HEADER_KEYS: ReadonlySet<string> = new Set(['authorization', 'x-api-key'])
 
+/**
+ * body 里必须脱敏的凭证键（#codex-proxy）：header 脱敏之外的第二道防线。forward-MITM 对**所有 POST
+ * 全量录 body**（不像 reverse 只录 /v1/messages 白名单），而 trace 会随沙箱 git add -A 提交进 change
+ * 分支——codex OAuth 若在会话内触发 token 刷新，refresh_token/access_token 等长效凭证会逐字落进 trace
+ * 并入库。这些键的值一律 `***`（JSON body deep + 字符串 body 正则两路，见 redactBodySecrets）。
+ * 只匹配**精确键名**（小写），故 codex 用量统计里的 input_tokens/output_tokens 等非凭证键不受影响。
+ */
+export const SENSITIVE_BODY_KEYS: ReadonlySet<string> = new Set([
+  'refresh_token', 'access_token', 'id_token', 'client_secret', 'api_key', 'apikey',
+  'code_verifier', 'password', 'secret', 'session_key', 'private_key', 'authorization',
+])
+
+// 字符串 body（form-urlencoded 如 grant_type=refresh_token&refresh_token=… / JSON-as-string）里的凭证脱敏。
+const CRED_KEYS_ALT = [...SENSITIVE_BODY_KEYS].join('|')
+const CRED_FORM_RE = new RegExp(`\\b(${CRED_KEYS_ALT})=([^&\\s]+)`, 'gi')
+const CRED_JSON_STR_RE = new RegExp(`("(?:${CRED_KEYS_ALT})"\\s*:\\s*)"[^"]*"`, 'gi')
+
+function redactSecretsInString(s: string): string {
+  return s.replace(CRED_FORM_RE, '$1=***').replace(CRED_JSON_STR_RE, '$1"***"')
+}
+
+/**
+ * 递归脱敏 body 里的凭证值（对象/数组走键名精确匹配置 `***`，字符串走正则）。纯函数、不改入参，
+ * 只用于**存储记录**——上游转发的仍是原始 body（脱敏只发生在写盘那一份）。深度上限防病态嵌套。
+ */
+export function redactBodySecrets(value: unknown, depth = 0): unknown {
+  if (typeof value === 'string') return redactSecretsInString(value)
+  if (depth > 40 || value === null || typeof value !== 'object') return value
+  if (Array.isArray(value)) return value.map((v) => redactBodySecrets(v, depth + 1))
+  const out: Record<string, unknown> = {}
+  for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+    out[k] = SENSITIVE_BODY_KEYS.has(k.toLowerCase()) && typeof v === 'string' && v !== ''
+      ? '***'
+      : redactBodySecrets(v, depth + 1)
+  }
+  return out
+}
+
 function headerValueToString(v: string | string[] | undefined): string {
   return Array.isArray(v) ? v.join(', ') : (v ?? '')
 }
@@ -89,12 +127,12 @@ export function buildRecord(p: BuildRecordParams): TraceRecord {
       method: p.method,
       path: p.path,
       headers: filterHeaders(p.reqHeaders, { redactKeys: true }),
-      body: p.reqBody,
+      body: redactBodySecrets(p.reqBody),
     },
     response: {
       status: p.status,
       headers: filterHeaders(p.respHeaders, { redactKeys: true }),
-      body: p.respBody,
+      body: redactBodySecrets(p.respBody),
     },
   }
   if (p.sseEvents && p.sseEvents.length) (record.response as Record<string, unknown>).sse_events = p.sseEvents

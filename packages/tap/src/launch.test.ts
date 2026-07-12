@@ -62,6 +62,20 @@ describe('planBindings —— 纯编排（detectTarget + recordedPaths + stripPr
     expect(fwd).toHaveLength(1)
     expect(fwd[0]!.name).toBe(FORWARD_BINDING_NAME)
   })
+
+  it('部分 forceForward：只抬 codex 时 claude 仍走各自 reverse 绑定，codex 落共享 forward', () => {
+    const { bindings } = planBindings(
+      ['claude', 'codex'],
+      { env: { ANTHROPIC_BASE_URL: 'http://127.0.0.1:9' }, home: tmpHome() },
+      ['codex'],
+    )
+    const reverse = bindings.filter((b) => b.mode === 'reverse')
+    expect(reverse).toHaveLength(1)
+    expect(reverse[0]!.name).toBe('claude') // claude 未被抬，仍 reverse
+    const fwd = bindings.filter((b) => b.mode === 'forward')
+    expect(fwd).toHaveLength(1)
+    expect(fwd[0]!.name).toBe(FORWARD_BINDING_NAME) // codex 抬 forward，落共享绑定
+  })
 })
 
 describe('launchTap —— 真绑定 + 真回读端口 + 真 env 组装', () => {

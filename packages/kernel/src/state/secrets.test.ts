@@ -112,6 +112,28 @@ describe('secrets —— 机器级凭证存储读写（T1，proposal C 节）', 
       })
     })
 
+    test('并发写不同键不丢更新（withLock 串行化 read-modify-write；codex review P1 回归守）', async () => {
+      // 无锁时两个并发 read-modify-write 各读同一旧态、后 rename 覆盖前者 → 丢一个键。
+      await Promise.all([
+        writeSecretKey(path, 'CLAUDE_CODE_OAUTH_TOKEN', 'claude-concurrent'),
+        writeSecretKey(path, 'OPENAI_API_KEY', 'openai-concurrent'),
+      ])
+      expect(readSecrets(path)).toEqual({
+        version: 1,
+        keys: { CLAUDE_CODE_OAUTH_TOKEN: 'claude-concurrent', OPENAI_API_KEY: 'openai-concurrent' },
+      })
+    })
+
+    test('并发写+删不同键互不吞没', async () => {
+      await writeSecretKey(path, 'CLAUDE_CODE_OAUTH_TOKEN', 'keep-me')
+      await Promise.all([
+        writeSecretKey(path, 'OPENAI_API_KEY', 'new-openai'),
+        deleteSecretKey(path, 'CLAUDE_CODE_OAUTH_TOKEN'),
+      ])
+      // claude 被删、openai 被写，两个操作都不因竞态互相覆盖
+      expect(readSecrets(path)).toEqual({ version: 1, keys: { OPENAI_API_KEY: 'new-openai' } })
+    })
+
     test('目录不可写 → 抛错（fail-loud；best-effort 由调用方兜，对齐 projectRegistry.ts 职责切分）', async () => {
       await mkdir(join(home, '.claude'), { recursive: true })
       await chmod(join(home, '.claude'), 0o555)

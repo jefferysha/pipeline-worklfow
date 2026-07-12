@@ -28,6 +28,7 @@
 import { readFileSync } from 'node:fs'
 import { mkdir, rename, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
+import { withLock } from './lock.js'
 
 export const SECRETS_FILE_NAME = 'pipeline-secrets.json'
 
@@ -85,24 +86,41 @@ async function atomicWriteSecrets(path: string, store: SecretsStore): Promise<vo
 }
 
 /**
+ * read-modify-write 串行化（复用 store.ts 同款文件锁 lock.ts::withLock）：writeSecretKey/deleteSecretKey
+ * 各自「读旧态 → 改 → 原子写」，两个并发调用（如 dashboard 同时逐键即时写 CLAUDE_CODE_OAUTH_TOKEN 与
+ * OPENAI_API_KEY 的两个 POST）若不串行会各读同一旧态、后 rename 覆盖前者 → **丢更新**（codex CLI review
+ * 实锤 P1）。withLock 进程内 FIFO + 跨进程 mkdir 锁双层互斥，彻底关掉该窗口。锁在 secrets 文件所在目录
+ * （~/.claude）上；withLock 的 acquire 用非递归 mkdir，故先确保该父目录存在（首次写盘前 .claude 可能不存在）。
+ */
+async function withSecretsLock<T>(path: string, fn: () => Promise<T>): Promise<T> {
+  const dir = dirname(path)
+  await mkdir(dir, { recursive: true })
+  return withLock(dir, fn)
+}
+
+/**
  * 写入单键（覆盖式：同键旧值直接替换，不追加；写盘形状恒为 canonical `{version,keys}`）。
- * 非白名单 key → 抛错（fail-loud）。
+ * 非白名单 key → 抛错（fail-loud，锁外即拒，无谓不入锁）。read-modify-write 经 withSecretsLock 串行。
  */
 export async function writeSecretKey(path: string, key: string, value: string): Promise<void> {
   assertSecretKey(key)
-  const current = readSecrets(path)
-  await atomicWriteSecrets(path, { version: 1, keys: { ...current.keys, [key]: value } })
+  await withSecretsLock(path, async () => {
+    const current = readSecrets(path)
+    await atomicWriteSecrets(path, { version: 1, keys: { ...current.keys, [key]: value } })
+  })
 }
 
 /**
  * 删除单键，其余键原样保留。非白名单 key → 抛错（同 writeSecretKey 防线）。
- * 键本就未设置 → no-op（不写盘，幂等，同现有 DELETE 惯例）。
+ * 键本就未设置 → no-op（不写盘，幂等，同现有 DELETE 惯例）。read-modify-write 经 withSecretsLock 串行。
  */
 export async function deleteSecretKey(path: string, key: string): Promise<void> {
   assertSecretKey(key)
-  const current = readSecrets(path)
-  if (!(key in current.keys)) return
-  const keys = { ...current.keys }
-  delete keys[key]
-  await atomicWriteSecrets(path, { version: 1, keys })
+  await withSecretsLock(path, async () => {
+    const current = readSecrets(path)
+    if (!(key in current.keys)) return
+    const keys = { ...current.keys }
+    delete keys[key]
+    await atomicWriteSecrets(path, { version: 1, keys })
+  })
 }

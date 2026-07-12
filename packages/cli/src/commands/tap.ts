@@ -120,7 +120,7 @@ export async function cmdTap(deps: CliDeps, sub: string, args: string[]): Promis
       return 0
     }
     default:
-      deps.io.err(`ERROR: 未知 tap 子命令: ${sub}（支持: start <client...> [--ca [dir]] [--json] [-- <command> ...]）`)
+      deps.io.err(`ERROR: 未知 tap 子命令: ${sub}（支持: start <client...> [--ca [dir]] [--forward] [--json] [-- <command> ...]）`)
       return 1
   }
 }

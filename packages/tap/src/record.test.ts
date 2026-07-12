@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import {
-  buildRecord, extractRealSessionId, filterHeaders, safeJson, shouldSkipTraceRecord, TurnCounter,
+  buildRecord, extractRealSessionId, filterHeaders, redactBodySecrets, safeJson, shouldSkipTraceRecord, TurnCounter,
 } from './record.js'
 
 describe('filterHeaders —— 剥 hop-by-hop + 脱敏', () => {
@@ -66,6 +66,45 @@ describe('buildRecord —— 组一条 API trace 记录', () => {
     expect((rec.response as any).body).toEqual({ ok: true })
     expect(rec.upstream_base_url).toBe('https://api.anthropic.com')
     expect(typeof rec.timestamp).toBe('string')
+  })
+
+  it('body 凭证脱敏：response 里 refresh_token/access_token 逐字入库被 *** 遮（codex OAuth 刷新泄漏面）', () => {
+    const rec = buildRecord({
+      reqId: 'r', turn: 1, durationMs: 1, method: 'POST', path: '/backend-api/codex/token',
+      reqHeaders: {}, reqBody: 'grant_type=refresh_token&refresh_token=RT-secret-abc&scope=all',
+      status: 200, respHeaders: {},
+      respBody: { access_token: 'AT-secret-xyz', refresh_token: 'RT-secret-abc', id_token: 'ID-secret', expires_in: 3600 },
+    })
+    const rb = (rec.response as any).body
+    expect(rb.access_token).toBe('***')
+    expect(rb.refresh_token).toBe('***')
+    expect(rb.id_token).toBe('***')
+    expect(rb.expires_in).toBe(3600) // 非凭证键原样保留
+    // form-urlencoded 字符串 body 也脱敏
+    expect((rec.request as any).body).toBe('grant_type=refresh_token&refresh_token=***&scope=all')
+  })
+})
+
+describe('redactBodySecrets —— body 凭证脱敏（deep JSON + 字符串两路）', () => {
+  it('嵌套对象/数组里的凭证键值全遮，非凭证键（含 input_tokens 等用量）不动', () => {
+    const out = redactBodySecrets({
+      messages: [{ role: 'user', content: 'hi' }],
+      usage: { input_tokens: 10, output_tokens: 5 },
+      auth: { access_token: 'AT', nested: { client_secret: 'CS' } },
+      api_key: 'sk-xxx',
+    }) as any
+    expect(out.usage).toEqual({ input_tokens: 10, output_tokens: 5 })
+    expect(out.messages[0].content).toBe('hi')
+    expect(out.auth.access_token).toBe('***')
+    expect(out.auth.nested.client_secret).toBe('***')
+    expect(out.api_key).toBe('***')
+  })
+  it('JSON-as-string body 里的 "refresh_token":"…" 也脱敏', () => {
+    expect(redactBodySecrets('{"refresh_token":"RT-secret","model":"gpt"}'))
+      .toBe('{"refresh_token":"***","model":"gpt"}')
+  })
+  it('无凭证键 → 原样返回', () => {
+    expect(redactBodySecrets({ a: 1, b: 'x' })).toEqual({ a: 1, b: 'x' })
   })
 })
 
