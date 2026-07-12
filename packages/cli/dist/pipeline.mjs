@@ -3031,7 +3031,7 @@ var require_commander = __commonJS({
 
 // packages/cli/src/main.ts
 import { execFile as execFile4 } from "node:child_process";
-import { accessSync, constants as fsConstants, readdirSync as readdirSync6, readFileSync as readFileSync19, statSync as statSync4 } from "node:fs";
+import { accessSync, constants as fsConstants, readdirSync as readdirSync6, readFileSync as readFileSync19, statSync as statSync5 } from "node:fs";
 import { access as access2, readdir as readdir5, readFile as readFile7, stat as stat8, writeFile as writeFile9 } from "node:fs/promises";
 import { homedir as homedir8 } from "node:os";
 import { dirname as dirname9, join as join34 } from "node:path";
@@ -3229,16 +3229,25 @@ async function acquire(lockDir) {
 }
 async function release(lockDir, held) {
   clearInterval(held.heartbeat);
+  const grave = `${lockDir}.released.${held.token.replace(/[^a-zA-Z0-9]/g, "")}`;
+  try {
+    await rename(lockDir, grave);
+  } catch {
+    return;
+  }
   let owner = null;
   try {
-    owner = (await readFile(ownerPathFor(lockDir), "utf8")).trim();
+    owner = (await readFile(ownerPathFor(grave), "utf8")).trim();
   } catch {
     owner = null;
   }
-  if (owner !== held.token)
-    return;
-  await rm(lockDir, { recursive: true, force: true }).catch(() => {
-  });
+  if (owner === held.token) {
+    await rm(grave, { recursive: true, force: true }).catch(() => {
+    });
+  } else {
+    await rename(grave, lockDir).catch(() => {
+    });
+  }
 }
 async function withLock(changeDir2, fn) {
   const lockDir = lockDirFor(changeDir2);
@@ -14313,7 +14322,7 @@ async function stopHandles(handles) {
 
 // packages/tap/dist/certs.js
 import { X509Certificate, createPublicKey, createPrivateKey, createHash as createHash2, generateKeyPairSync, randomBytes as randomBytes2, sign as cryptoSign } from "node:crypto";
-import { chmodSync, closeSync as closeSync3, existsSync as existsSync8, mkdirSync as mkdirSync5, openSync as openSync3, readFileSync as readFileSync14, renameSync as renameSync4, rmSync as rmSync2, writeFileSync as writeFileSync4 } from "node:fs";
+import { chmodSync, closeSync as closeSync3, existsSync as existsSync8, mkdirSync as mkdirSync5, openSync as openSync3, readFileSync as readFileSync14, renameSync as renameSync4, rmSync as rmSync2, statSync as statSync4, writeFileSync as writeFileSync4 } from "node:fs";
 import { homedir as homedir4 } from "node:os";
 import { join as join24 } from "node:path";
 var CA_VALIDITY_DAYS = 5 * 365;
@@ -14626,7 +14635,20 @@ function napSync(ms) {
 }
 function stealLock(lockPath2) {
   try {
-    rmSync2(lockPath2);
+    const st = statSync4(lockPath2);
+    if (Date.now() - st.mtimeMs < LOCK_WAIT_MS)
+      return null;
+  } catch {
+    return null;
+  }
+  const grave = `${lockPath2}.stale.${process.pid}.${randomBytes2(4).toString("hex")}`;
+  try {
+    renameSync4(lockPath2, grave);
+  } catch {
+    return null;
+  }
+  try {
+    rmSync2(grave);
   } catch {
   }
   try {
@@ -20003,14 +20025,14 @@ function makeGuardCtx(cwd) {
     changeDirRel: `openspec/changes/${name2}`,
     fileExists: (p) => {
       try {
-        return statSync4(abs(p)).isFile();
+        return statSync5(abs(p)).isFile();
       } catch {
         return false;
       }
     },
     fileNonempty: (p) => {
       try {
-        const st = statSync4(abs(p));
+        const st = statSync5(abs(p));
         return st.isFile() && st.size > 0;
       } catch {
         return false;
@@ -20025,7 +20047,7 @@ function makeGuardCtx(cwd) {
     },
     dirExists: (p) => {
       try {
-        return statSync4(abs(p)).isDirectory();
+        return statSync5(abs(p)).isDirectory();
       } catch {
         return false;
       }
@@ -20110,7 +20132,7 @@ function makeDoctorProbes() {
     },
     fileExists: (p) => {
       try {
-        return statSync4(p).isFile();
+        return statSync5(p).isFile();
       } catch {
         return false;
       }
@@ -20125,7 +20147,7 @@ function makeDoctorProbes() {
     },
     dirExists: (p) => {
       try {
-        return statSync4(p).isDirectory();
+        return statSync5(p).isDirectory();
       } catch {
         return false;
       }

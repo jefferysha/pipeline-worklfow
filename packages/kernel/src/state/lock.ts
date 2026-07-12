@@ -125,15 +125,31 @@ async function acquire(lockDir: string): Promise<Held> {
 
 async function release(lockDir: string, held: Held): Promise<void> {
   clearInterval(held.heartbeat)
+  // 原子归属保留删除（codex review P2）：旧实现"读 owner 确认是我 → rm"有 TOCTOU——读与 rm 之间锁可能
+  // 被夺锁 reclaim 且由新持有者重建同名 lockDir → rm 误删新持有者的锁,放第三者进临界区。改为:先原子
+  // rename 把 lockDir 移到 token 专属坟墓名（rename 只能移走"此刻那个 inode"）,再核对移走那份的 owner:
+  //   · 是自己 → 删（正常释放）;
+  //   · 不是（我已被夺锁,移走的是新持有者的锁）→ rename 回去撤销,绝不删新持有者的锁。
+  // 常见路径（未冻结/未被夺锁）只多一次同父目录内原子 rename,零风险;仅近零频率的">STALE 冻结被夺锁"
+  // 走撤销分支（其间新持有者的心跳 utimes 是 best-effort,微秒级窗口可容）。
+  const grave = `${lockDir}.released.${held.token.replace(/[^a-zA-Z0-9]/g, '')}`
+  try {
+    await rename(lockDir, grave)
+  } catch {
+    return // lockDir 已不在（被 reclaim/已删）→ 无我可删,幂等空操作
+  }
   let owner: string | null = null
   try {
-    owner = (await readFile(ownerPathFor(lockDir), 'utf8')).trim()
+    owner = (await readFile(ownerPathFor(grave), 'utf8')).trim()
   } catch {
     owner = null
   }
-  // token 守卫：锁不再属于自己（被夺锁/已消失）→ 绝不删他人的锁（幂等空操作）。
-  if (owner !== held.token) return
-  await rm(lockDir, { recursive: true, force: true }).catch(() => {})
+  if (owner === held.token) {
+    await rm(grave, { recursive: true, force: true }).catch(() => {})
+  } else {
+    // 移走的是新持有者的锁 → 还回去撤销;若期间第三者又建了 lockDir 则 rename 回失败,grave 成无害孤儿。
+    await rename(grave, lockDir).catch(() => {})
+  }
 }
 
 /** mkdir 原子锁 + 陈锁回收，锁内串行执行 fn；透传 fn 结果，异常时保证释放。 */

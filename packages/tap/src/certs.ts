@@ -20,7 +20,7 @@
  *      `security verify-cert`），绝不自动写钥匙串；实际信任由上层显式发起。
  */
 import { X509Certificate, createPublicKey, createPrivateKey, createHash, generateKeyPairSync, randomBytes, sign as cryptoSign, type KeyObject } from 'node:crypto'
-import { chmodSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
@@ -391,15 +391,30 @@ function napSync(ms: number): void {
 }
 
 /**
- * 夺取疑似陈旧锁（持有者疑似崩溃：等待超时仍无配对 CA）。原子:rmSync 后 O_EXCL(`wx`)独占创建。
- * 若别的进程抢先夺到(EEXIST)→ 返回 null(**输了竞争**)——绝不 fall through 到非独占 `'w'`,否则两个
- * 超时进程会同时"夺锁成功"各自 openSync 拿 fd 并发生成/落盘不同代 CA 对,重现 B5 想防的 cert/key
- * 不配对竞态(codex review P1)。输了的进程由调用方回去等赢家写出的配对对。
+ * 夺取疑似陈旧锁（持有者疑似崩溃：等待超时仍无配对 CA）。两道原子护栏（codex review P1 深化）:
+ *   ① **mtime 复检陈旧**:若锁其实很新（别的进程刚夺到并新建,mtime 在 LOCK_WAIT_MS 内）→ 不夺、返 null,
+ *      回调用方等它写配对对。消除旧实现"rmSync 无条件抹掉别人刚建的新锁"的洞（CA 生成 <1s,活持有者
+ *      的锁创建时间必在 LOCK_WAIT_MS 内;超 LOCK_WAIT_MS 才真陈旧）。
+ *   ② **原子 rename 夺取**:把陈锁 rename 到唯一坟墓名——rename 原子,只一个进程能移走该 inode,其余
+ *      ENOENT→null,绝不像"先 rmSync 再 openSync"那样先删后建给第三者可乘之机。移走后独占创建新锁。
+ * 输了任一步 → 返 null,调用方回去重等/重抢赢家的配对对（绝不各自生成不配对的 CA 对）。
  */
 function stealLock(lockPath: string): number | null {
-  try { rmSync(lockPath) } catch { /* ignore ENOENT */ }
   try {
-    return openSync(lockPath, 'wx')
+    const st = statSync(lockPath)
+    if (Date.now() - st.mtimeMs < LOCK_WAIT_MS) return null // 新锁,不夺
+  } catch {
+    return null // 锁已消失 → 回调用方重抢 openSync(wx)
+  }
+  const grave = `${lockPath}.stale.${process.pid}.${randomBytes(4).toString('hex')}`
+  try {
+    renameSync(lockPath, grave) // 原子移走陈锁(输者 ENOENT)
+  } catch {
+    return null
+  }
+  try { rmSync(grave) } catch { /* ignore */ }
+  try {
+    return openSync(lockPath, 'wx') // 独占创建新锁;极罕见移走后被抢建 → EEXIST→null
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === 'EEXIST') return null
     throw err
