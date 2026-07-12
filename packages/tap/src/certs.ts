@@ -351,6 +351,8 @@ export interface EnsureCaResult {
 }
 
 const LOCK_WAIT_MS = 10_000
+/** 夺锁竞争的有界重试轮数（codex review P1）：每轮 = openSync(wx) + waitForPair + 原子 stealLock。 */
+const STEAL_MAX_ATTEMPTS = 5
 
 /**
  * 读回落盘 CA 并**校验配对**（cert 公钥须与私钥匹配）。返回 null 表示缺文件/损坏/**不配对**——
@@ -388,10 +390,20 @@ function napSync(ms: number): void {
   try { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms) } catch { /* 忙等兜底 */ }
 }
 
-/** 夺取疑似陈旧锁（持有者疑似崩溃：等待超时仍无配对 CA）。 */
-function stealLock(lockPath: string): number {
-  try { rmSync(lockPath) } catch { /* ignore */ }
-  try { return openSync(lockPath, 'wx') } catch { return openSync(lockPath, 'w') }
+/**
+ * 夺取疑似陈旧锁（持有者疑似崩溃：等待超时仍无配对 CA）。原子:rmSync 后 O_EXCL(`wx`)独占创建。
+ * 若别的进程抢先夺到(EEXIST)→ 返回 null(**输了竞争**)——绝不 fall through 到非独占 `'w'`,否则两个
+ * 超时进程会同时"夺锁成功"各自 openSync 拿 fd 并发生成/落盘不同代 CA 对,重现 B5 想防的 cert/key
+ * 不配对竞态(codex review P1)。输了的进程由调用方回去等赢家写出的配对对。
+ */
+function stealLock(lockPath: string): number | null {
+  try { rmSync(lockPath) } catch { /* ignore ENOENT */ }
+  try {
+    return openSync(lockPath, 'wx')
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'EEXIST') return null
+    throw err
+  }
 }
 
 /**
@@ -415,14 +427,24 @@ export function ensureCa(opts: CaDirOptions = {}): EnsureCaResult {
   if (fast) return { caCertPath, caKeyPath, ...fast }
 
   // 抢锁：O_EXCL 原子独占创建 ca.lock。抢到 → 本进程负责生成；EEXIST → 别的进程在写，等它落配对对再读回。
-  let lockFd: number
-  try {
-    lockFd = openSync(lockPath, 'wx')
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err
+  // 夺锁竞争(codex review P1)：等超时判陈旧后夺锁,若竞争输了(stealLock 返 null,别的进程先夺到)不再各自
+  // 生成,回到循环顶部重抢/重等赢家的配对对。有界 STEAL_MAX_ATTEMPTS 轮防病态无限。
+  let lockFd: number | undefined
+  for (let attempt = 0; attempt < STEAL_MAX_ATTEMPTS; attempt++) {
+    try {
+      lockFd = openSync(lockPath, 'wx') // 抢到锁 → 本进程负责生成
+      break
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err
+    }
     const waited = waitForPair(caCertPath, caKeyPath, LOCK_WAIT_MS)
     if (waited) return { caCertPath, caKeyPath, ...waited } // 采用持锁进程写的配对对（不自己另生成）
-    lockFd = stealLock(lockPath) // 超时 → 判定陈旧锁 → 夺锁重生成
+    const stolen = stealLock(lockPath) // 超时 → 判定陈旧锁 → 原子夺锁
+    if (stolen !== null) { lockFd = stolen; break } // 夺锁成功,本进程独家生成
+    // stolen===null：夺锁竞争输了,别的进程正持新锁生成 → 下一轮回顶部 openSync(wx) EEXIST → 再 waitForPair
+  }
+  if (lockFd === undefined) {
+    throw new Error(`ensureCa: CA 锁 ${lockPath} 经 ${STEAL_MAX_ATTEMPTS} 轮夺取竞争仍未取得且始终无配对 CA 落盘——疑似持续争用或磁盘异常`)
   }
   try {
     // 二次检查：拿到/夺到锁后别的进程可能刚写完配对对。

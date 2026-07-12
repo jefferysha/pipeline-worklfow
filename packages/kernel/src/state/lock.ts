@@ -93,11 +93,20 @@ async function acquire(lockDir: string): Promise<Held> {
   const token = `${process.pid}.${randomBytes(8).toString('hex')}.${Date.now()}`
   const deadline = Date.now() + ACQUIRE_TIMEOUT_MS
   for (;;) {
+    let created = false
     try {
       await mkdir(lockDir)
+      created = true // 锁目录是本进程建的
       await writeFile(ownerPathFor(lockDir), `${token}\n`, 'utf8')
       return { token, heartbeat: startHeartbeat(lockDir) }
     } catch (err) {
+      // mkdir 成功但写 owner 失败（ENOSPC/瞬态 IO，codex review P2）：不能把自己刚建的锁目录留成孤儿
+      // ——它没有 owner 文件、mtime 也不会被心跳刷新，后续调用者会当它是活锁空等满 10s 直到 60s 变陈锁。
+      // 清掉再抛，让下一个调用者立刻能 mkdir。
+      if (created) {
+        await rm(lockDir, { recursive: true, force: true }).catch(() => {})
+        throw err
+      }
       if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err
     }
     // 已被占用：陈锁（owner mtime 超 60s）→ 原子回收后立刻重试；否则轮询等待

@@ -3198,12 +3198,19 @@ async function acquire(lockDir) {
   const token = `${process.pid}.${randomBytes(8).toString("hex")}.${Date.now()}`;
   const deadline = Date.now() + ACQUIRE_TIMEOUT_MS;
   for (; ; ) {
+    let created = false;
     try {
       await mkdir(lockDir);
+      created = true;
       await writeFile(ownerPathFor(lockDir), `${token}
 `, "utf8");
       return { token, heartbeat: startHeartbeat(lockDir) };
     } catch (err) {
+      if (created) {
+        await rm(lockDir, { recursive: true, force: true }).catch(() => {
+        });
+        throw err;
+      }
       if (err.code !== "EEXIST")
         throw err;
     }
@@ -14582,6 +14589,7 @@ function resolveCaDir(opts = {}) {
   return join24(home, ".pipeline-tap");
 }
 var LOCK_WAIT_MS = 1e4;
+var STEAL_MAX_ATTEMPTS = 5;
 function tryLoadPair(caCertPath, caKeyPath) {
   if (!existsSync8(caCertPath) || !existsSync8(caKeyPath))
     return null;
@@ -14622,8 +14630,10 @@ function stealLock(lockPath2) {
   }
   try {
     return openSync3(lockPath2, "wx");
-  } catch {
-    return openSync3(lockPath2, "w");
+  } catch (err) {
+    if (err.code === "EEXIST")
+      return null;
+    throw err;
   }
 }
 function ensureCa(opts = {}) {
@@ -14636,15 +14646,25 @@ function ensureCa(opts = {}) {
   if (fast)
     return { caCertPath, caKeyPath, ...fast };
   let lockFd;
-  try {
-    lockFd = openSync3(lockPath2, "wx");
-  } catch (err) {
-    if (err.code !== "EEXIST")
-      throw err;
+  for (let attempt = 0; attempt < STEAL_MAX_ATTEMPTS; attempt++) {
+    try {
+      lockFd = openSync3(lockPath2, "wx");
+      break;
+    } catch (err) {
+      if (err.code !== "EEXIST")
+        throw err;
+    }
     const waited = waitForPair(caCertPath, caKeyPath, LOCK_WAIT_MS);
     if (waited)
       return { caCertPath, caKeyPath, ...waited };
-    lockFd = stealLock(lockPath2);
+    const stolen = stealLock(lockPath2);
+    if (stolen !== null) {
+      lockFd = stolen;
+      break;
+    }
+  }
+  if (lockFd === void 0) {
+    throw new Error(`ensureCa: CA \u9501 ${lockPath2} \u7ECF ${STEAL_MAX_ATTEMPTS} \u8F6E\u593A\u53D6\u7ADE\u4E89\u4ECD\u672A\u53D6\u5F97\u4E14\u59CB\u7EC8\u65E0\u914D\u5BF9 CA \u843D\u76D8\u2014\u2014\u7591\u4F3C\u6301\u7EED\u4E89\u7528\u6216\u78C1\u76D8\u5F02\u5E38`);
   }
   try {
     const again = tryLoadPair(caCertPath, caKeyPath);
