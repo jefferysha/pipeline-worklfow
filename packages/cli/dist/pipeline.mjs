@@ -3229,25 +3229,16 @@ async function acquire(lockDir) {
 }
 async function release(lockDir, held) {
   clearInterval(held.heartbeat);
-  const grave = `${lockDir}.released.${held.token.replace(/[^a-zA-Z0-9]/g, "")}`;
-  try {
-    await rename(lockDir, grave);
-  } catch {
-    return;
-  }
   let owner = null;
   try {
-    owner = (await readFile(ownerPathFor(grave), "utf8")).trim();
+    owner = (await readFile(ownerPathFor(lockDir), "utf8")).trim();
   } catch {
     owner = null;
   }
-  if (owner === held.token) {
-    await rm(grave, { recursive: true, force: true }).catch(() => {
-    });
-  } else {
-    await rename(grave, lockDir).catch(() => {
-    });
-  }
+  if (owner !== held.token)
+    return;
+  await rm(lockDir, { recursive: true, force: true }).catch(() => {
+  });
 }
 async function withLock(changeDir2, fn) {
   const lockDir = lockDirFor(changeDir2);
