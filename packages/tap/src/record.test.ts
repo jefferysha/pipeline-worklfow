@@ -38,6 +38,17 @@ describe('filterHeaders —— 剥 hop-by-hop + 脱敏', () => {
     expect(out['x-amz-security-token']).toBe('***')
   })
 
+  it('头侧凭证补全（B1）：x-goog-api-key/api-key 全遮，不逐字入库', () => {
+    const out = filterHeaders({
+      'x-goog-api-key': 'AIzaSy-real-google-key-xyz',
+      'api-key': 'azure-openai-key-abc',
+      'x-goog-iam-authorization-token': 'iam-tok',
+    }, { redactKeys: true })
+    expect(out['x-goog-api-key']).toBe('***')
+    expect(out['api-key']).toBe('***')
+    expect(out['x-goog-iam-authorization-token']).toBe('***')
+  })
+
   it('不 redact 时敏感值原样保留（转发路径用）', () => {
     const out = filterHeaders({ Authorization: 'Bearer secret' })
     expect(out.Authorization).toBe('Bearer secret')
@@ -105,6 +116,16 @@ describe('redactBodySecrets —— body 凭证脱敏（deep JSON + 字符串两�
   })
   it('无凭证键 → 原样返回', () => {
     expect(redactBodySecrets({ a: 1, b: 'x' })).toEqual({ a: 1, b: 'x' })
+  })
+  it('数组/对象包裹的凭证值也遮（B9：容器包一层不逃）', () => {
+    const out = redactBodySecrets({
+      access_token: ['AT-secret', 'AT2'],
+      token: { jwt: 'JWT-secret', kid: 'k1' },
+      usage: { total_tokens: 42 },
+    }) as any
+    expect(out.access_token).toEqual(['***', '***'])
+    expect(out.token).toEqual({ jwt: '***', kid: '***' })
+    expect(out.usage).toEqual({ total_tokens: 42 }) // 非凭证键不动
   })
   it('裸 token / session_token 等纵深键也遮（I2），access_token 不误伤内嵌 token 计数', () => {
     const out = redactBodySecrets({ token: 'T', session_token: 'ST', input_tokens: 9 }) as any

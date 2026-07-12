@@ -29,10 +29,13 @@ export const HOP_BY_HOP: ReadonlySet<string> = new Set([
   'te', 'trailer', 'transfer-encoding', 'upgrade', 'content-length',
   'host', 'accept-encoding',
 ])
-// capture_proxy.py:45
+// capture_proxy.py:45 + 头侧凭证补全(审计 tap-B1):x-goog-api-key(Gemini/agy)、api-key(Azure OpenAI)、
+// x-goog-iam-authorization-token 都是 forward-MITM 全量录 POST 的 client 用来带密钥的头,漏进名单即逐字入
+// trace 进 git(与 body/query 脱敏同威胁类)。头侧与 query 名单(含 key)对齐,不再单侧漏。
 export const SENSITIVE_HEADER_KEYS: ReadonlySet<string> = new Set([
   'authorization', 'cookie', 'set-cookie', 'set-cookie2', 'x-api-key',
-  'x-amz-security-token',
+  'x-amz-security-token', 'x-goog-api-key', 'api-key', 'x-goog-iam-authorization-token',
+  'x-goog-user-project', 'proxy-authorization',
 ])
 // capture_proxy.py:49
 export const PREFIX_REDACTED_HEADER_KEYS: ReadonlySet<string> = new Set(['authorization', 'x-api-key'])
@@ -85,8 +88,22 @@ function redactPathQuery(rawPath: string): string {
 }
 
 /**
- * 递归脱敏 body 里的凭证值（对象/数组走键名精确匹配置 `***`，字符串走正则）。纯函数、不改入参，
- * 只用于**存储记录**——上游转发的仍是原始 body（脱敏只发生在写盘那一份）。深度上限防病态嵌套。
+ * 敏感键命中后的整值遮蔽（审计 tap-B9）：不只遮直接字符串值,连数组/对象包裹的字符串一并遮
+ * （如 `{"access_token":["<secret>"]}` 或 `{"token":{"jwt":"<secret>"}}`）——凭证被容器包一层不该逃。
+ * 非字符串叶子（数字/布尔）原样保留（token 计数等无意义遮）。
+ */
+function maskSecretValue(v: unknown, depth = 0): unknown {
+  if (typeof v === 'string') return v === '' ? '' : '***'
+  if (depth > 40 || v === null || typeof v !== 'object') return v
+  if (Array.isArray(v)) return v.map((x) => maskSecretValue(x, depth + 1))
+  const out: Record<string, unknown> = {}
+  for (const [k, val] of Object.entries(v as Record<string, unknown>)) out[k] = maskSecretValue(val, depth + 1)
+  return out
+}
+
+/**
+ * 递归脱敏 body 里的凭证值（对象/数组走键名精确匹配 → maskSecretValue 整值遮，字符串走正则）。纯函数、
+ * 不改入参，只用于**存储记录**——上游转发的仍是原始 body（脱敏只发生在写盘那一份）。深度上限防病态嵌套。
  */
 export function redactBodySecrets(value: unknown, depth = 0): unknown {
   if (typeof value === 'string') return redactSecretsInString(value)
@@ -94,8 +111,8 @@ export function redactBodySecrets(value: unknown, depth = 0): unknown {
   if (Array.isArray(value)) return value.map((v) => redactBodySecrets(v, depth + 1))
   const out: Record<string, unknown> = {}
   for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-    out[k] = SENSITIVE_BODY_KEYS.has(k.toLowerCase()) && typeof v === 'string' && v !== ''
-      ? '***'
+    out[k] = SENSITIVE_BODY_KEYS.has(k.toLowerCase())
+      ? maskSecretValue(v)
       : redactBodySecrets(v, depth + 1)
   }
   return out
