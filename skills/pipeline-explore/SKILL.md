@@ -71,7 +71,7 @@ pipeline status "$PIPELINE_CHANGE_NAME"    # 相位/字段摘要，绝不 FAIL
 **推荐**（默认调用，按需取消）：
 - 使用 Skill 工具加载 `search-first` — GitHub / 包注册表查竞品/现成方案
 
-> ⛔ 调研阶段**不要**调用 `triage` / `to-issues`：explore 只做竞品/需求调研与定需求，
+> ⛔ 调研阶段**不要**调用 `triage` / `to-tickets`：explore 只做竞品/需求调研与定需求，
 > 拆 issue / 二次分类是后续 spec/build 的事，提前 triage 会把发散性调研打断。
 
 #### 🎨 Track = frontend（技术调研 + 深度设计）

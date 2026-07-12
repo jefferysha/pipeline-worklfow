@@ -33,6 +33,20 @@ templates/               manifest.yaml（相位/转换/review_phases 单一真�
 
 ## 上手（5 分钟）
 
+### 作为 Claude Code 插件安装（推荐）
+
+面向使用者的一键路径（marketplace 已在 `.claude-plugin/marketplace.json` 就位）：
+
+```bash
+claude plugin marketplace add jefferysha/pipeline-worklfow   # 注册本仓为插件 marketplace
+claude plugin install pipeline-lite@pipeline-lite            # 安装插件（plugin@marketplace，二者同名）
+pipeline setup                                               # 装技能 + 配就绪（把 pipeline 软链到 ~/.local/bin）
+```
+
+装完即可用 `pipeline init/inbox/status` 起 change；dashboard 见下「Dashboard 工作台」（默认 `http://127.0.0.1:8765/`）。
+
+### 从源码构建
+
 ```bash
 npm i && npm run build          # 产出单文件 packages/cli/dist/pipeline.mjs（零 node_modules 运行时）
 npx pipeline init demo --track backend --preset full
