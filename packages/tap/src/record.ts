@@ -47,6 +47,8 @@ export const PREFIX_REDACTED_HEADER_KEYS: ReadonlySet<string> = new Set(['author
 export const SENSITIVE_BODY_KEYS: ReadonlySet<string> = new Set([
   'refresh_token', 'access_token', 'id_token', 'client_secret', 'api_key', 'apikey',
   'code_verifier', 'password', 'secret', 'session_key', 'private_key', 'authorization',
+  // 纵深补充（对抗复审 I2）：裸 token / 连字符变体 / session / bearer / cookie 回显。client_id 是公开值不入，免误伤。
+  'token', 'session_token', 'access-token', 'refresh-token', 'session-token', 'bearer', 'cookie', 'set-cookie',
 ])
 
 // 字符串 body（form-urlencoded 如 grant_type=refresh_token&refresh_token=… / JSON-as-string）里的凭证脱敏。
@@ -125,7 +127,9 @@ export function buildRecord(p: BuildRecordParams): TraceRecord {
     transport: p.transport ?? 'reverse',
     request: {
       method: p.method,
-      path: p.path,
+      // path 含 query（forward 的 pathname+search / reverse 的 req.url）：query 里的凭证（?access_token=…、
+      // ?api_key=…、?key=…）同样会随 trace 入库，套字符串脱敏（对抗复审 I1）。path 段无 k=v 不受影响。
+      path: redactSecretsInString(p.path),
       headers: filterHeaders(p.reqHeaders, { redactKeys: true }),
       body: redactBodySecrets(p.reqBody),
     },
@@ -135,7 +139,8 @@ export function buildRecord(p: BuildRecordParams): TraceRecord {
       body: redactBodySecrets(p.respBody),
     },
   }
-  if (p.sseEvents && p.sseEvents.length) (record.response as Record<string, unknown>).sse_events = p.sseEvents
+  // sse_events 同过脱敏（对抗复审 M1 防回归：当前无 caller 传，但一旦有，SSE 里的凭证也不该逐字入库）。
+  if (p.sseEvents && p.sseEvents.length) (record.response as Record<string, unknown>).sse_events = redactBodySecrets(p.sseEvents)
   if (p.upstreamBaseUrl) record.upstream_base_url = p.upstreamBaseUrl
   return record
 }

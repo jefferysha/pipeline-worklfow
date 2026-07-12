@@ -25,7 +25,7 @@
  * 非白名单 key 写入/删除均 fail-loud 抛错——HTTP 契约层（server/src/secrets.ts）已校验一次，
  *   这里是第二道防线，供其余调用方（如 T2 cli 侧 readSecretsEnv）复用本模块时不必各自重复。
  */
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { mkdir, rename, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { withLock } from './lock.js'
@@ -116,6 +116,8 @@ export async function writeSecretKey(path: string, key: string, value: string): 
  */
 export async function deleteSecretKey(path: string, key: string): Promise<void> {
   assertSecretKey(key)
+  // 文件根本不存在 → 无键可删,提前返回(不入锁、不 mkdir——避免为纯 no-op 删凭空造出空 ~/.claude,对抗复审 M3)。
+  if (!existsSync(path)) return
   await withSecretsLock(path, async () => {
     const current = readSecrets(path)
     if (!(key in current.keys)) return

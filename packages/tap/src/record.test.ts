@@ -106,6 +106,26 @@ describe('redactBodySecrets —— body 凭证脱敏（deep JSON + 字符串两�
   it('无凭证键 → 原样返回', () => {
     expect(redactBodySecrets({ a: 1, b: 'x' })).toEqual({ a: 1, b: 'x' })
   })
+  it('裸 token / session_token 等纵深键也遮（I2），access_token 不误伤内嵌 token 计数', () => {
+    const out = redactBodySecrets({ token: 'T', session_token: 'ST', input_tokens: 9 }) as any
+    expect(out.token).toBe('***')
+    expect(out.session_token).toBe('***')
+    expect(out.input_tokens).toBe(9) // input_tokens 无词边界匹配裸 token，保留
+  })
+})
+
+describe('buildRecord —— path query 凭证脱敏（I1）', () => {
+  it('request.path 的 query 里 ?access_token=/?api_key= 被遮', () => {
+    const rec = buildRecord({
+      reqId: 'r', turn: 1, durationMs: 1, method: 'GET',
+      path: '/v1/models?access_token=AT-secret&api_key=KEY-secret&model=gpt',
+      reqHeaders: {}, reqBody: null, status: 200, respHeaders: {}, respBody: null,
+    })
+    const path = (rec.request as any).path
+    expect(path).toContain('access_token=***')
+    expect(path).toContain('api_key=***')
+    expect(path).toContain('model=gpt') // 非凭证参数保留
+  })
 })
 
 describe('safeJson —— 容错解析', () => {
