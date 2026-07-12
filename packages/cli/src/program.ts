@@ -204,7 +204,8 @@ export function buildProgram(deps: CliDeps): Command {
 
   program
     .command('loops <sub> [args...]')
-    .description('loop 治理：list 登记表 · enforce R1-R11 裁决 · status（B18/D16，L1→L3 分级放权）')
+    .alias('loop')
+    .description('loop 治理：init 起草草稿（向导/非交互）· list 登记表 · enforce R1-R11 裁决 · status（B18/D16，L1→L3 分级放权）')
     .allowUnknownOption()
     .action(async (sub: string, args: string[]) => bail(await cmdLoops(deps, sub, args)))
 
