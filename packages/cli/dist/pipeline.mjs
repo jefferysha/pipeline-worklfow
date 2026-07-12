@@ -3111,6 +3111,14 @@ var GATE_TTL_MS = {
 };
 var GATE_FRESH_MS = 15 * 60 * 1e3;
 var SANDCASTLE_BUILD_HINT = "bash tools/sandcastle/build.sh";
+var PREREQ_HINTS = {
+  /** claude-code 凭证 CLAUDE_CODE_OAUTH_TOKEN 缺 —— 生成长期 OAuth token。 */
+  claudeToken: "\u8FD0\u884C `claude setup-token` \u751F\u6210\u957F\u671F OAuth token",
+  /** codex 凭证 OPENAI_API_KEY 缺 —— 两条路(ChatGPT 账户登录 / 建 API key)。 */
+  openaiKey: "codex \u4E24\u6761\u8DEF\uFF1A\u2460 `codex login` \u8D70 ChatGPT \u8D26\u6237\uFF08\u6700\u7B80\uFF0C\u514D API key\uFF09\uFF1B\u2461 \u5230 platform.openai.com/api-keys \u5EFA key \u8BBE\u4E3A OPENAI_API_KEY",
+  /** docker daemon 不可用 —— 装 OrbStack 或 Docker Desktop（不自动装，需用户自行安装）。 */
+  docker: "\u88C5 OrbStack\uFF08orbstack.dev\uFF0C\u8F7B\u91CF\uFF0C\u63A8\u8350 macOS\uFF09\u6216 Docker Desktop\uFF08docker.com\uFF09\u2014\u2014\u4E0D\u81EA\u52A8\u88C5\uFF0C\u9700\u4F60\u81EA\u884C\u5B89\u88C5"
+};
 var IllegalTransitionError = class extends Error {
   from;
   to;
@@ -15201,7 +15209,8 @@ async function checkAfk(p) {
   const docker = r.docker.available ? green("afk:docker", "docker daemon \u53EF\u7528\uFF08AFK \u5BB9\u5668\u6267\u884C\u524D\u7F6E\u5C31\u7EEA\uFF09") : yellow(
     "afk:docker",
     "docker \u4E0D\u53EF\u7528\u2014\u2014AFK \u5BB9\u5668\u6267\u884C\u964D\u7EA7\u4E0D\u53EF\u7528\uFF08\u53EF\u9009\u80FD\u529B\uFF0C\u4E0D\u963B\u65AD\u975E AFK \u6D41\u7A0B\uFF09",
-    "\u88C5 docker \u5E76\u8D77 daemon \u540E\u91CD\u63A2\uFF08AFK \u975E\u5FC5\u9700\u80FD\u529B\uFF0C\u7F3A\u5B83\u4E0D\u5F71\u54CD\u624B\u52A8\u6D41\u7A0B\uFF09"
+    // 不光说「装 docker」,还引导怎么装（走 kernel PREREQ_HINTS 单一真相源）
+    `\u88C5 docker \u5E76\u8D77 daemon \u540E\u91CD\u63A2\uFF08AFK \u975E\u5FC5\u9700\u80FD\u529B\uFF0C\u7F3A\u5B83\u4E0D\u5F71\u54CD\u624B\u52A8\u6D41\u7A0B\uFF09\uFF1B${PREREQ_HINTS.docker}`
   );
   const { configured, present, build_hint } = r.image;
   const image = present ? green("afk:image", `AFK \u955C\u50CF ${configured} \u5728\u4F4D\uFF08\u5BB9\u5668\u53EF\u8D77\uFF09`) : r.docker.available ? yellow("afk:image", `AFK \u955C\u50CF ${configured} \u4E0D\u5728\u672C\u673A\uFF08AFK run \u65E0\u6CD5\u8D77\u5BB9\u5668\uFF09`, `\u6784\u5EFA\u955C\u50CF:${build_hint}`) : yellow(
@@ -15213,14 +15222,16 @@ async function checkAfk(p) {
   const claudeCred = cc.set ? green("afk:credential-claude-code", `claude-code \u51ED\u8BC1 CLAUDE_CODE_OAUTH_TOKEN ${credDesc(cc)}`) : yellow(
     "afk:credential-claude-code",
     "claude-code \u51ED\u8BC1 CLAUDE_CODE_OAUTH_TOKEN \u672A\u914D\uFF08AFK \u8DD1 claude-code runner \u4F1A\u7F3A\u9274\u6743\uFF09",
-    "\u53BB\u914D CLAUDE_CODE_OAUTH_TOKEN\uFF08pipeline \u673A\u5668\u7EA7 secrets \u6216\u5BBF\u4E3B env\uFF1B\u7EC8\u7AEF doctor/setup \u4E3A\u51ED\u8BC1\u6743\u5A01\uFF09"
+    // 不光说「去配」,还引导怎么拿——生成长期 OAuth token（走 kernel PREREQ_HINTS 单一真相源）
+    `\u53BB\u914D CLAUDE_CODE_OAUTH_TOKEN\uFF08pipeline \u673A\u5668\u7EA7 secrets \u6216\u5BBF\u4E3B env\uFF1B\u7EC8\u7AEF doctor/setup \u4E3A\u51ED\u8BC1\u6743\u5A01\uFF09\uFF1B\u600E\u4E48\u62FF\uFF1A${PREREQ_HINTS.claudeToken}`
   );
   const oa = r.credentials.codex.OPENAI_API_KEY;
   const ch = r.credentials.codex.CODEX_HOME;
   const codexCred = oa.set ? green("afk:credential-codex", `codex \u51ED\u8BC1 OPENAI_API_KEY ${credDesc(oa)}\uFF1BCODEX_HOME ${credDesc(ch)}`) : yellow(
     "afk:credential-codex",
     `codex \u51ED\u8BC1 OPENAI_API_KEY \u672A\u914D\uFF08AFK \u8DD1 codex runner \u4F1A\u7F3A\u9274\u6743\uFF09\uFF1BCODEX_HOME ${credDesc(ch)}`,
-    "\u53BB\u914D OPENAI_API_KEY\uFF08pipeline \u673A\u5668\u7EA7 secrets \u6216\u5BBF\u4E3B env\uFF1BCODEX_HOME \u53EF\u9009,\u7F3A\u7701 ~/.codex\uFF09"
+    // 不光说「去配」,还引导两条路——codex login 走 ChatGPT / 建 openai api-key（走 kernel PREREQ_HINTS 单一真相源）
+    `\u53BB\u914D OPENAI_API_KEY\uFF08pipeline \u673A\u5668\u7EA7 secrets \u6216\u5BBF\u4E3B env\uFF1BCODEX_HOME \u53EF\u9009,\u7F3A\u7701 ~/.codex\uFF09\uFF1B\u600E\u4E48\u62FF\uFF1A${PREREQ_HINTS.openaiKey}`
   );
   return [docker, image, claudeCred, codexCred];
 }
@@ -18596,11 +18607,13 @@ var MISS_TAG = "[\u7F3A\u5931]";
 function credSource(light) {
   return `\u5DF2\u914D\uFF08${light.source === "host-env" ? "\u5BBF\u4E3B env" : "secrets \u6587\u4EF6"}\uFF09`;
 }
-function emitCredLine(deps, runner, key, light, required, note = "") {
+var HINT_INDENT = "         ";
+function emitCredLine(deps, runner, key, light, required, note = "", acquireHint = "") {
   if (light.set) {
     deps.io.out(`  ${READY_TAG} ${runner} \u51ED\u8BC1 ${key} ${credSource(light)}`);
   } else if (required) {
     deps.io.out(`  ${MISS_TAG} ${runner} \u51ED\u8BC1 ${key} \u672A\u914D \u2192 \u53BB\u914D ${key}\uFF08pipeline \u673A\u5668\u7EA7 secrets \u6216\u5BBF\u4E3B env\uFF09`);
+    if (acquireHint !== "") deps.io.out(`${HINT_INDENT}\u600E\u4E48\u62FF\uFF1A${acquireHint}`);
   } else {
     deps.io.out(`  ${MISS_TAG} ${runner} ${key} \u672A\u914D${note}`);
   }
@@ -18608,13 +18621,16 @@ function emitCredLine(deps, runner, key, light, required, note = "") {
 function renderRuntimeReadiness(deps, r, dryRun) {
   deps.io.out("[setup runtime] AFK \u8FD0\u884C\u65F6\u5C31\u7EEA\u6E05\u5355\uFF08\u7EC8\u7AEF doctor/setup \u4E3A\u51ED\u8BC1\u6743\u5A01\u2014\u2014\u5373\u5C06 afk run \u7684 shell \u5F53\u523B\u771F\u503C\uFF09");
   if (r.docker.available) deps.io.out(`  ${READY_TAG} docker daemon \u53EF\u7528`);
-  else deps.io.out(`  ${MISS_TAG} docker \u4E0D\u53EF\u7528\u2014\u2014AFK \u5BB9\u5668\u6267\u884C\u964D\u7EA7\uFF08AFK \u4E3A\u53EF\u9009\u80FD\u529B;\u88C5 docker \u5E76\u8D77 daemon \u540E\u91CD\u63A2\uFF09`);
+  else {
+    deps.io.out(`  ${MISS_TAG} docker \u4E0D\u53EF\u7528\u2014\u2014AFK \u5BB9\u5668\u6267\u884C\u964D\u7EA7\uFF08AFK \u4E3A\u53EF\u9009\u80FD\u529B;\u88C5 docker \u5E76\u8D77 daemon \u540E\u91CD\u63A2\uFF09`);
+    deps.io.out(`${HINT_INDENT}\u600E\u4E48\u62FF\uFF1A${PREREQ_HINTS.docker}`);
+  }
   const img = r.image;
   if (img.present) deps.io.out(`  ${READY_TAG} AFK \u955C\u50CF ${img.configured} \u5728\u4F4D`);
   else if (r.docker.available) deps.io.out(`  ${MISS_TAG} AFK \u955C\u50CF ${img.configured} \u4E0D\u5728\u672C\u673A \u2192 \u6784\u5EFA:${img.build_hint}`);
   else deps.io.out(`  ${MISS_TAG} AFK \u955C\u50CF ${img.configured} \u672A\u80FD\u6838\uFF08docker \u4E0D\u53EF\u7528\uFF09\u2192 \u8D77 docker \u540E\u91CD\u63A2;\u7F3A\u5219\u6784\u5EFA:${img.build_hint}`);
-  emitCredLine(deps, "claude-code", "CLAUDE_CODE_OAUTH_TOKEN", r.credentials["claude-code"].CLAUDE_CODE_OAUTH_TOKEN, true);
-  emitCredLine(deps, "codex", "OPENAI_API_KEY", r.credentials.codex.OPENAI_API_KEY, true);
+  emitCredLine(deps, "claude-code", "CLAUDE_CODE_OAUTH_TOKEN", r.credentials["claude-code"].CLAUDE_CODE_OAUTH_TOKEN, true, "", PREREQ_HINTS.claudeToken);
+  emitCredLine(deps, "codex", "OPENAI_API_KEY", r.credentials.codex.OPENAI_API_KEY, true, "", PREREQ_HINTS.openaiKey);
   emitCredLine(deps, "codex", "CODEX_HOME", r.credentials.codex.CODEX_HOME, false, "\uFF08\u53EF\u9009,\u7F3A\u7701 ~/.codex\uFF09");
   if (dryRun) deps.io.out("  \uFF08--dry-run:\u53EA\u63A2\u6D4B\u53EA\u6253\u5370,\u672A\u5199\u4EFB\u4F55\u6587\u4EF6\uFF09");
 }
