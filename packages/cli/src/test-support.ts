@@ -161,6 +161,20 @@ export function mockDoctorProbes(overrides: Partial<DoctorProbes> = {}): DoctorP
     // 缺技能检测（批2 A1）：缺省全在位 → skills:mandatory/recommended 双绿；单测逐项覆写
     installedSkillNames: () => new Set(['grill-with-docs', 'search-first']),
     manifestSkills: () => DEFAULT_MANIFEST_SKILLS,
+    // AFK 就绪四检（R1）：缺省全就绪（docker 可用 / 镜像在位 / 两 runner 凭证已配）→ afk:* 四绿基线；
+    // 单测按需覆写 afkReadiness 制造 docker 缺 / 镜像缺 / 凭证缺 各态。
+    afkReadiness: async () => ({
+      ok: true as const,
+      docker: { available: true },
+      image: { configured: 'sandcastle:local', present: true, build_hint: 'bash tools/sandcastle/build.sh' },
+      credentials: {
+        'claude-code': { CLAUDE_CODE_OAUTH_TOKEN: { set: true, source: 'host-env' as const } },
+        codex: {
+          OPENAI_API_KEY: { set: true, source: 'host-env' as const },
+          CODEX_HOME: { set: true, source: 'host-env' as const },
+        },
+      },
+    }),
     ...overrides,
   }
 }

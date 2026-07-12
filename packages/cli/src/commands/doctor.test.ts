@@ -10,7 +10,7 @@ interface DoctorJson {
   summary: { green: number; yellow: number; red: number }
 }
 
-/** 检查面全集——id 即对用户的稳定契约，顺序固定（批2 A1 尾部新增 skills:mandatory/recommended，只增不改） */
+/** 检查面全集——id 即对用户的稳定契约，顺序固定（批2 A1 尾部 skills:*；R1 尾部 afk:*，皆只增不改） */
 const EXPECTED_IDS = [
   'env:node',
   'env:git',
@@ -25,6 +25,10 @@ const EXPECTED_IDS = [
   'quality:verify-skills',
   'skills:mandatory',
   'skills:recommended',
+  'afk:docker',
+  'afk:image',
+  'afk:credential-claude-code',
+  'afk:credential-codex',
 ] as const
 
 async function runJson(deps: TestDeps): Promise<{ code: number; payload: DoctorJson }> {
@@ -39,13 +43,13 @@ function byId(payload: DoctorJson, id: string): DoctorCheck {
 }
 
 describe('doctor —— 统一健康面（BACKLOG #26b，GOAL B8 降级可见 / D10 > comet doctor）', () => {
-  test('全绿基线：13 项检查全 green，exit 0，人读输出含汇总行、无 WARN/FAIL', async () => {
+  test('全绿基线：17 项检查全 green，exit 0，人读输出含汇总行、无 WARN/FAIL', async () => {
     const deps = makeDeps()
     const code = await cmdDoctor(deps, {})
     expect(code).toBe(0)
     const text = deps.outLines.join('\n')
     expect(text).toContain('[DOCTOR]')
-    expect(text).toContain('绿 13')
+    expect(text).toContain('绿 17')
     expect(text).not.toContain('[WARN]')
     expect(text).not.toContain('[FAIL]')
     expect(text).not.toContain('fix:')
@@ -62,7 +66,7 @@ describe('doctor —— 统一健康面（BACKLOG #26b，GOAL B8 降级可见 / 
       expect(typeof c.detail).toBe('string')
       expect(typeof c.hint).toBe('string')
     }
-    expect(payload.summary).toEqual({ green: 13, yellow: 0, red: 0 })
+    expect(payload.summary).toEqual({ green: 17, yellow: 0, red: 0 })
   })
 
   test('env:node 红灯：node < 22 → red + 升级指引，exit 1', async () => {
@@ -275,7 +279,128 @@ describe('doctor —— 统一健康面（BACKLOG #26b，GOAL B8 降级可见 / 
     }
     expect(code).toBe(0)
     const payload = JSON.parse(deps.outLines.join('\n')) as DoctorJson
-    expect(payload.summary).toEqual({ green: 13, yellow: 0, red: 0 })
+    expect(payload.summary).toEqual({ green: 17, yellow: 0, red: 0 })
+  })
+})
+
+describe('doctor —— AFK 运行时就绪四检（full-install R1：afk:docker / afk:image / afk:credential-*）', () => {
+  // 缺省 makeDeps 的 afkReadiness = 全就绪（docker 可用/镜像在位/两 runner 凭证已配）→ 四绿基线；
+  // 单测只覆写 afkReadiness 返回值制造 docker 缺 / 镜像缺 / 凭证缺 各态。AFK 是可选能力：一律 yellow 不 red。
+
+  test('① docker 不可用 → afk:docker yellow（AFK 可选，降级不阻断 exit 0）;镜像因 docker 缺也 yellow', async () => {
+    const deps = makeDeps({
+      doctor: {
+        afkReadiness: async () => ({
+          ok: true as const,
+          docker: { available: false },
+          image: { configured: 'sandcastle:local', present: false, build_hint: 'bash tools/sandcastle/build.sh' },
+          credentials: {
+            'claude-code': { CLAUDE_CODE_OAUTH_TOKEN: { set: true, source: 'host-env' as const } },
+            codex: { OPENAI_API_KEY: { set: true, source: 'host-env' as const }, CODEX_HOME: { set: false } },
+          },
+        }),
+      },
+    })
+    const { code, payload } = await runJson(deps)
+    expect(code).toBe(0) // yellow 不阻断
+    expect(byId(payload, 'afk:docker').status).toBe('yellow')
+    expect(byId(payload, 'afk:docker').detail).toContain('docker')
+    expect(byId(payload, 'afk:image').status).toBe('yellow')
+  })
+
+  test('② docker 在但镜像缺 → afk:image yellow + hint 含 build_hint（bash tools/sandcastle/build.sh）', async () => {
+    const deps = makeDeps({
+      doctor: {
+        afkReadiness: async () => ({
+          ok: true as const,
+          docker: { available: true },
+          image: { configured: 'sandcastle:local', present: false, build_hint: 'bash tools/sandcastle/build.sh' },
+          credentials: {
+            'claude-code': { CLAUDE_CODE_OAUTH_TOKEN: { set: true, source: 'host-env' as const } },
+            codex: { OPENAI_API_KEY: { set: true, source: 'host-env' as const }, CODEX_HOME: { set: true, source: 'host-env' as const } },
+          },
+        }),
+      },
+    })
+    const { code, payload } = await runJson(deps)
+    expect(code).toBe(0)
+    const c = byId(payload, 'afk:image')
+    expect(c.status).toBe('yellow')
+    expect(c.detail).toContain('sandcastle:local')
+    expect(c.hint).toContain('bash tools/sandcastle/build.sh')
+    expect(byId(payload, 'afk:docker').status).toBe('green')
+  })
+
+  test('③ 凭证缺 → afk:credential-claude-code / afk:credential-codex 各自 yellow + 去配指引（值永不回显）', async () => {
+    const deps = makeDeps({
+      doctor: {
+        afkReadiness: async () => ({
+          ok: true as const,
+          docker: { available: true },
+          image: { configured: 'sandcastle:local', present: true, build_hint: 'bash tools/sandcastle/build.sh' },
+          credentials: {
+            'claude-code': { CLAUDE_CODE_OAUTH_TOKEN: { set: false } },
+            codex: { OPENAI_API_KEY: { set: false }, CODEX_HOME: { set: false } },
+          },
+        }),
+      },
+    })
+    const { code, payload } = await runJson(deps)
+    expect(code).toBe(0)
+    const cc = byId(payload, 'afk:credential-claude-code')
+    expect(cc.status).toBe('yellow')
+    expect(cc.hint).toContain('CLAUDE_CODE_OAUTH_TOKEN')
+    const cx = byId(payload, 'afk:credential-codex')
+    expect(cx.status).toBe('yellow')
+    expect(cx.hint).toContain('OPENAI_API_KEY')
+  })
+
+  test('④ 两 runner 凭证对称:codex 缺席不得——OPENAI_API_KEY 与 CODEX_HOME 都在 codex 灯里呈现', async () => {
+    // claude-code 已配、codex 的 OPENAI_API_KEY 已配但 CODEX_HOME 缺 → codex 仍 green（API key 决胜），
+    // 但 CODEX_HOME 状态随行在 detail 里可见（对称呈现，不因决胜键已配就隐藏另一键）
+    const deps = makeDeps({
+      doctor: {
+        afkReadiness: async () => ({
+          ok: true as const,
+          docker: { available: true },
+          image: { configured: 'sandcastle:local', present: true, build_hint: 'bash tools/sandcastle/build.sh' },
+          credentials: {
+            'claude-code': { CLAUDE_CODE_OAUTH_TOKEN: { set: true, source: 'secrets-file' as const } },
+            codex: { OPENAI_API_KEY: { set: true, source: 'secrets-file' as const }, CODEX_HOME: { set: false } },
+          },
+        }),
+      },
+    })
+    const { payload } = await runJson(deps)
+    expect(byId(payload, 'afk:credential-claude-code').status).toBe('green')
+    const cx = byId(payload, 'afk:credential-codex')
+    expect(cx.status).toBe('green')
+    expect(cx.detail).toContain('CODEX_HOME') // 对称:CODEX_HOME 恒随行呈现
+  })
+
+  test('⑤ 全就绪基线 → afk:* 四项 green', async () => {
+    const { payload } = await runJson(makeDeps())
+    expect(byId(payload, 'afk:docker').status).toBe('green')
+    expect(byId(payload, 'afk:image').status).toBe('green')
+    expect(byId(payload, 'afk:credential-claude-code').status).toBe('green')
+    expect(byId(payload, 'afk:credential-codex').status).toBe('green')
+  })
+
+  test('⑥ 探针自身抛异常 → afk:* 四项各折算 red，不炸命令', async () => {
+    const deps = makeDeps({
+      doctor: {
+        afkReadiness: async () => {
+          throw new Error('probe boom')
+        },
+      },
+    })
+    const { code, payload } = await runJson(deps)
+    expect(code).toBe(1) // red 阻断
+    for (const id of ['afk:docker', 'afk:image', 'afk:credential-claude-code', 'afk:credential-codex']) {
+      expect(byId(payload, id).status).toBe('red')
+      expect(byId(payload, id).detail).toContain('boom')
+    }
+    expect(payload.checks).toHaveLength(EXPECTED_IDS.length)
   })
 })
 

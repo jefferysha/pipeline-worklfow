@@ -18,9 +18,11 @@ import {
   createFlowEngine, createHistoryWriter, createStateStore, loadManifest,
   projectRegistryPath, readSecrets, registerProjectRoot, secretsPath,
 } from '@pipeline-lite/kernel'
+import { readAutomationJson } from '@pipeline-lite/automation'
 import { tapStatus } from '@pipeline-lite/tap'
 import type { GuardContext } from '@pipeline-lite/kernel'
 import type { CliDeps, DoctorProbes, GateMarkerInfo } from './deps.js'
+import { probeAfkReadiness } from './afkReadiness.js'
 import { buildProgram, CliExit } from './program.js'
 
 /** ISO8601 UTC 秒级（对齐老内核 date -u +%Y-%m-%dT%H:%M:%SZ 口径） */
@@ -231,6 +233,16 @@ function makeDoctorProbes(): DoctorProbes {
         return null // 解析失败 → checkSkills 出 yellow「无法核技能」，不误报 green
       }
     },
+    // AFK 运行时就绪探测（R1）：真 execFile docker（超时/spawn 失败降级不抛）+ 凭证注入——
+    // 镜像同 afk run 口径（.pipeline/automation.json 的 image ?? sandcastle:local，读 process.cwd()）；
+    // 凭证 secretsEnv 走机器级 secrets（readSecrets 自身 fail-open），hostEnv 走 process.env（宿主>文件）；
+    // 值永不回显（探针只回 set+source）。docker 缺是常态：doctor checkAfk 据 available 出 yellow 非 red。
+    afkReadiness: () =>
+      probeAfkReadiness({
+        image: readAutomationJson(process.cwd()).image ?? 'sandcastle:local',
+        secretsEnv: readSecrets(secretsPath(homedir())).keys,
+        hostEnv: process.env,
+      }),
   }
 }
 

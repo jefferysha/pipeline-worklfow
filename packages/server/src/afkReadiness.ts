@@ -8,10 +8,12 @@
  *     同 T2 hostEnv 合并语义)。
  * 「没装 docker/没建镜像/没配凭证」都是常态不是错误:本模块不抛,HTTP 层恒 200。
  */
-import { readSecrets } from '@pipeline-lite/kernel'
+import { readSecrets, SANDCASTLE_BUILD_HINT } from '@pipeline-lite/kernel'
 import { execDocker, type ExecDockerFn } from './dockerImages.js'
 
-export const SANDCASTLE_BUILD_HINT = 'bash tools/sandcastle/build.sh'
+// P1-X1 防漂移：build_hint 单一真相源迁至 kernel（见 kernel types.ts SANDCASTLE_BUILD_HINT）。
+// 本地不再重复定义字面串；仍 re-export 保持本模块既有导出面不破。
+export { SANDCASTLE_BUILD_HINT }
 
 export interface CredLight {
   set: boolean

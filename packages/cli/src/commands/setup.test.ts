@@ -15,13 +15,16 @@ import { readSkillSources, type SkillSource } from '../skillSources.js'
 import {
   buildSkillsPlan,
   cmdSetup,
+  cmdSetupRuntime,
   cmdSetupSkills,
   ensurePipelineOnPath,
   REAL_SETUP_ENV,
   resolvePipelineSource,
   type PlannedCommand,
+  type RuntimeEnv,
   type SetupEnv,
 } from './setup.js'
+import type { ExecDockerFn } from '../afkReadiness.js'
 
 // ── spy env:记录全部 fs mutation + exec 调用,断言「零副作用」/「未碰 PATH」/「零执行」──────
 interface SpyCalls {
@@ -50,6 +53,19 @@ function spyEnv(over: Partial<SetupEnv> = {}, exec?: ExecStub, confirmAns = true
   }
   return { env, calls }
 }
+
+// ── 运行时段 fake RuntimeEnv（注入 docker exec + hostEnv + image;零真 docker 子进程）──────────
+/** 缺省:docker 可用 + 镜像在位;over 覆写 exec/hostEnv/resolveImage 造 docker 缺 / 镜像缺 / 凭证态。 */
+function fakeRt(over: Partial<RuntimeEnv> = {}): RuntimeEnv {
+  const okExec: ExecDockerFn = async (args) => {
+    if (args[0] === 'info') return { stdout: 'ok', stderr: '', exitCode: 0 }
+    if (args[0] === 'image' && args[1] === 'inspect') return { stdout: '[]', stderr: '', exitCode: 0 }
+    return { stdout: '', stderr: '', exitCode: 0 }
+  }
+  return { exec: okExec, hostEnv: {}, resolveImage: () => 'sandcastle:local', ...over }
+}
+/** docker daemon 不可用（info 非零）——镜像 inspect 不应再被调（短路）。 */
+const dockerDownExec: ExecDockerFn = async () => ({ stdout: '', stderr: 'daemon down', exitCode: 1 })
 
 // ── S2 registry fixtures（inline SkillSource[] 子集,不碰真 yaml）──────────────────────
 const ECC_NAMES = [
@@ -191,20 +207,83 @@ describe('③skills/runtime 分派 —— skills 真实装派(dry-run 安全) / 
     expect(calls.mkdirp).toHaveLength(0)
   })
 
-  test('setup runtime → Phase 3 待实现 + exit 0 + 零 mutation', () => {
+  test('setup runtime 分派（注入 fake docker）→ 到达 cmdSetupRuntime，出就绪清单 + exit 0，零软链', async () => {
     const deps = makeDeps()
     const { env, calls } = spyEnv()
-    expect(cmdSetup(deps, 'runtime', {}, env)).toBe(0)
-    const out = deps.outLines.join('\n')
-    expect(out).toContain('待实现')
-    expect(out).toContain('Phase 3')
-    expect(calls.makeSymlink).toHaveLength(0)
+    const code = await cmdSetup(deps, 'runtime', {}, env, fakeRt())
+    expect(code).toBe(0)
+    expect(deps.outLines.join('\n')).toContain('就绪清单')
+    expect(calls.makeSymlink).toHaveLength(0) // runtime 段不碰 PATH/软链
   })
 
   test('未知 sub → stderr + exit 1', () => {
     const deps = makeDeps()
     expect(cmdSetup(deps, 'frobnicate', {}, spyEnv().env)).toBe(1)
     expect(deps.errLines.join('\n')).toContain('未知 setup 子命令')
+  })
+})
+
+describe('⑧运行时检查段 R1 —— AFK 就绪清单（docker/镜像/两 runner 凭证对称;缺镜像 build_hint;缺凭证去配 X）', () => {
+  test('全就绪:docker 可用 + 镜像在位 + 两 runner 凭证已配（宿主 env）→ 清单全就绪 + exit 0', async () => {
+    const deps = makeDeps()
+    const rt = fakeRt({ hostEnv: { CLAUDE_CODE_OAUTH_TOKEN: 'a', OPENAI_API_KEY: 'b', CODEX_HOME: '/c' } })
+    expect(await cmdSetupRuntime(deps, {}, rt)).toBe(0)
+    const out = deps.outLines.join('\n')
+    expect(out).toContain('就绪清单')
+    expect(out).toContain('docker daemon 可用')
+    expect(out).toContain('sandcastle:local 在位')
+    expect(out).toContain('CLAUDE_CODE_OAUTH_TOKEN 已配（宿主 env）')
+    expect(out).toContain('OPENAI_API_KEY 已配（宿主 env）')
+    expect(out).not.toContain('[缺失]')
+  })
+
+  test('docker 不可用 → 降级标缺失（不抛不阻断,exit 0）;镜像未能核给 build_hint', async () => {
+    const deps = makeDeps()
+    expect(await cmdSetupRuntime(deps, {}, fakeRt({ exec: dockerDownExec }))).toBe(0)
+    const out = deps.outLines.join('\n')
+    expect(out).toContain('docker 不可用')
+    expect(out).toContain('bash tools/sandcastle/build.sh') // build_hint 单一真相源
+  })
+
+  test('docker 在但镜像缺（inspect 非零）→ [缺失] + 构建:build_hint 一键', async () => {
+    const deps = makeDeps()
+    const exec: ExecDockerFn = async (args) =>
+      args[0] === 'info' ? { stdout: 'ok', stderr: '', exitCode: 0 } : { stdout: '', stderr: 'no image', exitCode: 1 }
+    expect(await cmdSetupRuntime(deps, {}, fakeRt({ exec }))).toBe(0)
+    const out = deps.outLines.join('\n')
+    expect(out).toContain('docker daemon 可用')
+    expect(out).toContain('构建:bash tools/sandcastle/build.sh')
+  })
+
+  test('凭证缺 → 去配 X;凭证值永不回显（secrets 明文不进输出）', async () => {
+    const deps = makeDeps()
+    // secrets 供 claude-code token（明文），codex OPENAI_API_KEY 两源皆缺
+    deps.readSecretsEnv = async () => ({ CLAUDE_CODE_OAUTH_TOKEN: 'super-secret-xyz' })
+    const out0 = await cmdSetupRuntime(deps, {}, fakeRt({ hostEnv: {} }))
+    expect(out0).toBe(0)
+    const out = deps.outLines.join('\n')
+    expect(out).not.toContain('super-secret-xyz') // 值永不回显
+    expect(out).toContain('CLAUDE_CODE_OAUTH_TOKEN 已配（secrets 文件）') // 只报 set+source
+    expect(out).toContain('去配 OPENAI_API_KEY') // 缺 → 去配硬指引
+  })
+
+  test('两 runner 凭证对称:claude-code 已配、codex 全缺时,codex 的 OPENAI_API_KEY 与 CODEX_HOME 仍双双在清单（不缺席）', async () => {
+    const deps = makeDeps()
+    const rt = fakeRt({ hostEnv: { CLAUDE_CODE_OAUTH_TOKEN: 'only-claude' } })
+    expect(await cmdSetupRuntime(deps, {}, rt)).toBe(0)
+    const out = deps.outLines.join('\n')
+    expect(out).toContain('codex 凭证 OPENAI_API_KEY')
+    expect(out).toContain('codex CODEX_HOME') // codex 对等:两键都呈现
+    expect(out).not.toContain('only-claude') // 值永不回显
+  })
+
+  test('--dry-run:出清单 + dry-run 说明,且零写（store.write 零调用）', async () => {
+    const deps = makeDeps()
+    expect(await cmdSetupRuntime(deps, { dryRun: true }, fakeRt({ exec: dockerDownExec }))).toBe(0)
+    const out = deps.outLines.join('\n')
+    expect(out).toContain('就绪清单')
+    expect(out).toContain('--dry-run')
+    expect(deps.store.write.calls).toHaveLength(0) // 运行时段只探测只打印,零写
   })
 })
 

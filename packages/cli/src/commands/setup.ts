@@ -16,7 +16,9 @@ import { execFileSync } from 'node:child_process'
 import { chmodSync, lstatSync, mkdirSync, readSync, readlinkSync, symlinkSync, unlinkSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
+import { readAutomationJson } from '@pipeline-lite/automation'
 import { errMsg, type CliDeps } from '../deps.js'
+import { nodeExecDocker, probeAfkReadiness, type AfkReadiness, type CredLight, type ExecDockerFn } from '../afkReadiness.js'
 import { readSkillSources, type SkillSource, type SkillTier } from '../skillSources.js'
 
 // ── 注入面（测试注入临时 HOME / spy;真实现 = node:fs + os.homedir）──────────────────
@@ -168,7 +170,7 @@ function printPlanSkeleton(deps: CliDeps, opts: SetupOpts): void {
   deps.io.out('[setup] 全功能就绪引导 —— 计划骨架')
   deps.io.out('  1. PATH 软链:把 pipeline 软链到 ~/.local/bin（本批已实现）')
   deps.io.out('  2. 技能安装（Phase 2,本批已实装）:读 registry 按 tool 分组选装（详见下方技能计划）')
-  deps.io.out('  3. 运行时检查（Phase 3 待实现）:docker 探测 + 缺镜像一键构建提示（计划 R1）')
+  deps.io.out('  3. 运行时检查（Phase 3,已实装 → pipeline setup runtime）:docker/镜像/两 runner 凭证就绪清单 + 缺镜像一键构建')
   deps.io.out('  4. 全功能就绪清单（待聚合）:逐项在位/降级 红黄绿汇总')
   if (opts.dryRun) deps.io.out('  （--dry-run:仅打印计划,未软链、未写任何文件）')
 }
@@ -472,13 +474,84 @@ export function cmdSetupSkills(
   return renderSummary(deps, executeSkillsPlan(deps, plan, env), plan)
 }
 
+// ── 运行时检查段（Phase 3 · R1）:AFK 就绪探测 → 打印就绪清单（docker/镜像/两 runner 凭证）──────
+
 /**
- * TODO(Phase 3 填):运行时检查段——docker 探测（CLI 侧直调 `docker info`）+ 缺镜像给一键
- * `bash tools/sandcastle/build.sh` 构建提示（两 runner）。本批仅占位:打印待实现,exit 0 不报错。
+ * 运行时段注入面（docker 探测 + 凭证宿主 env + 镜像解析）——真实现走真 docker/process.env/
+ * .pipeline/automation.json;测试注入 fake exec + 定值 hostEnv/image（零真 docker 子进程）。
+ * secrets 侧仍复用 deps.readSecretsEnv（与 afk run 同源），不在此重复读文件。
  */
-function cmdSetupRuntime(deps: CliDeps, opts: SetupOpts): number {
-  const suffix = opts.yes ? '（--yes 已透传,将来跳交互确认位）' : ''
-  deps.io.out(`[setup runtime] 运行时检查段待实现（Phase 3,计划 R1）。${suffix}`)
+export interface RuntimeEnv {
+  /** 原始 docker exec（超时收敛由 probeAfkReadiness 内部包裹;spawn 失败按不可用降级）。 */
+  exec: ExecDockerFn
+  /** 宿主 env 快照（凭证灯读 CLAUDE_CODE_OAUTH_TOKEN/OPENAI_API_KEY/CODEX_HOME）。 */
+  hostEnv: Record<string, string | undefined>
+  /** 配置镜像解析（同 afk run 口径:.pipeline/automation.json 的 image ?? 内置 sandcastle:local）。 */
+  resolveImage: (cwd: string) => string
+}
+
+export const REAL_RUNTIME_ENV: RuntimeEnv = {
+  exec: nodeExecDocker,
+  hostEnv: process.env,
+  resolveImage: (cwd) => readAutomationJson(cwd).image ?? 'sandcastle:local',
+}
+
+const READY_TAG = '[就绪]'
+const MISS_TAG = '[缺失]'
+
+/** 凭证灯人读串:已配标 source（宿主 env/secrets 文件），永不回显值。 */
+function credSource(light: CredLight): string {
+  return `已配（${light.source === 'host-env' ? '宿主 env' : 'secrets 文件'}）`
+}
+
+/** 一条凭证清单行:required 缺 → 给「去配 X」硬指引;optional 缺 → 仅标可选（不误导必配）。 */
+function emitCredLine(deps: CliDeps, runner: string, key: string, light: CredLight, required: boolean, note = ''): void {
+  if (light.set) {
+    deps.io.out(`  ${READY_TAG} ${runner} 凭证 ${key} ${credSource(light)}`)
+  } else if (required) {
+    deps.io.out(`  ${MISS_TAG} ${runner} 凭证 ${key} 未配 → 去配 ${key}（pipeline 机器级 secrets 或宿主 env）`)
+  } else {
+    deps.io.out(`  ${MISS_TAG} ${runner} ${key} 未配${note}`)
+  }
+}
+
+/** 就绪清单渲染:docker / 镜像（缺给 build_hint 一键）/ 两 runner 凭证对称呈现（codex 不缺席）。 */
+function renderRuntimeReadiness(deps: CliDeps, r: AfkReadiness, dryRun: boolean): void {
+  deps.io.out('[setup runtime] AFK 运行时就绪清单（终端 doctor/setup 为凭证权威——即将 afk run 的 shell 当刻真值）')
+
+  // docker
+  if (r.docker.available) deps.io.out(`  ${READY_TAG} docker daemon 可用`)
+  else deps.io.out(`  ${MISS_TAG} docker 不可用——AFK 容器执行降级（AFK 为可选能力;装 docker 并起 daemon 后重探）`)
+
+  // 镜像（缺 → build_hint 一键;走探测里的 kernel 单一真相源常量，不另写字面串）
+  const img = r.image
+  if (img.present) deps.io.out(`  ${READY_TAG} AFK 镜像 ${img.configured} 在位`)
+  else if (r.docker.available) deps.io.out(`  ${MISS_TAG} AFK 镜像 ${img.configured} 不在本机 → 构建:${img.build_hint}`)
+  else deps.io.out(`  ${MISS_TAG} AFK 镜像 ${img.configured} 未能核（docker 不可用）→ 起 docker 后重探;缺则构建:${img.build_hint}`)
+
+  // 两 runner 凭证对称:claude-code 的 CLAUDE_CODE_OAUTH_TOKEN + codex 的 OPENAI_API_KEY/CODEX_HOME
+  emitCredLine(deps, 'claude-code', 'CLAUDE_CODE_OAUTH_TOKEN', r.credentials['claude-code'].CLAUDE_CODE_OAUTH_TOKEN, true)
+  emitCredLine(deps, 'codex', 'OPENAI_API_KEY', r.credentials.codex.OPENAI_API_KEY, true)
+  emitCredLine(deps, 'codex', 'CODEX_HOME', r.credentials.codex.CODEX_HOME, false, '（可选,缺省 ~/.codex）')
+
+  if (dryRun) deps.io.out('  （--dry-run:只探测只打印,未写任何文件）')
+}
+
+/**
+ * 运行时检查段（Phase 3 · R1）:解析配置镜像 → probeAfkReadiness（docker info/image inspect + 两 runner
+ * 凭证）→ 打印就绪清单。全程只读探测（本段不写任何文件），--dry-run 与常态同路径、仅追加 dry-run 说明。
+ * docker 不可用一律降级（清单标缺失 + 重探指引），不抛不改退出码——AFK 为可选能力，exit 恒 0。
+ * 凭证复用 deps.readSecretsEnv（与 afk run 同源）+ 注入 hostEnv;值永不回显（只 set/未设 + source）。
+ */
+export async function cmdSetupRuntime(
+  deps: CliDeps,
+  opts: SetupOpts,
+  rt: RuntimeEnv = REAL_RUNTIME_ENV,
+): Promise<number> {
+  const image = rt.resolveImage(deps.cwd)
+  const secretsEnv = deps.readSecretsEnv ? await deps.readSecretsEnv().catch(() => ({})) : {}
+  const readiness = await probeAfkReadiness({ image, exec: rt.exec, secretsEnv, hostEnv: rt.hostEnv })
+  renderRuntimeReadiness(deps, readiness, opts.dryRun ?? false)
   return 0
 }
 
@@ -495,19 +568,21 @@ export function cmdSetup(
   sub: string | undefined,
   opts: SetupOpts,
   env: SetupEnv = REAL_SETUP_ENV,
-): number {
+  rt: RuntimeEnv = REAL_RUNTIME_ENV,
+): number | Promise<number> {
   const o: SetupOpts = { dryRun: opts.dryRun ?? false, yes: opts.yes ?? false }
   switch (sub) {
     case undefined:
     case '':
-      // 全流程:先把 pipeline 弄上 PATH（dry-run 不软链）→ 打印计划骨架 → 跑技能段（本批实装;R1 补运行时段）。
+      // 全流程:先把 pipeline 弄上 PATH（dry-run 不软链）→ 打印计划骨架 → 跑技能段（运行时就绪走
+      // 独立子命令 pipeline setup runtime / pipeline doctor，避免全流程单测里真起 docker 子进程）。
       if (!o.dryRun) ensurePipelineOnPath(deps, env)
       printPlanSkeleton(deps, o)
       return cmdSetupSkills(deps, o, env)
     case 'skills':
       return cmdSetupSkills(deps, o, env)
     case 'runtime':
-      return cmdSetupRuntime(deps, o)
+      return cmdSetupRuntime(deps, o, rt) // Promise<number>:真运行时段（docker/镜像/凭证就绪清单）
     default:
       deps.io.err(`ERROR: 未知 setup 子命令: ${sub}（支持: skills runtime,或不带子命令走全流程）`)
       return 1

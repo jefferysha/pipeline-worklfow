@@ -53,6 +53,13 @@ export type GateKind = 'confirm' | 'review' | 'interaction'
 /** @deprecated BACKLOG #13 起门 TTL 分级（见 GATE_TTL_MS），统一 15min 仅为旧调用面向后兼容保留 */
 export const GATE_FRESH_MS = 15 * 60 * 1000
 
+/**
+ * AFK 沙箱镜像缺失时的一键构建提示（full-install R1 · P1-X1 防漂移单一真相源）。
+ * server `afkReadiness` 与 cli `probeAfkReadiness`/`setup runtime` 同 import 此常量——
+ * 镜像不在本机时，就绪面对两侧给出**逐字一致**的构建命令，杜绝两处各写字面串静默分叉。
+ */
+export const SANDCASTLE_BUILD_HINT = 'bash tools/sandcastle/build.sh'
+
 export interface PipelineState {
   fields: Record<FieldName, string | string[]>
   /** 老内核 base64 历史区等未知尾块——读时跳过、写回原样逐字保留 */

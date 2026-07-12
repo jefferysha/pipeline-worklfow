@@ -69,7 +69,7 @@ export function buildProgram(deps: CliDeps): Command {
     .option('-y, --yes', '跳过交互确认位（本批无真安装,仅透传占位）')
     .allowUnknownOption() // 未来 Phase 2/3 子命令的自有 flag 透传
     .action(async (sub: string | undefined, opts: { dryRun?: boolean; yes?: boolean }) =>
-      bail(cmdSetup(deps, sub, { dryRun: opts.dryRun, yes: opts.yes })))
+      bail(await cmdSetup(deps, sub, { dryRun: opts.dryRun, yes: opts.yes })))
 
   program
     .command('get <name> <field>')

@@ -276,6 +276,68 @@ function checkSkills(p: DoctorProbes): [DoctorCheck, DoctorCheck] {
   return [mandatory, recommended]
 }
 
+// ── AFK 运行时就绪四检（full-install R1，设计 spec §3 Phase3 / 旅程 BT-就绪）───────────────
+// docker/镜像/两 runner 凭证走同一次 p.afkReadiness() 探测派生。AFK 是**可选能力**：docker 不可用/
+// 镜像缺/凭证缺一律 yellow（降级可见、不阻断 exit），绝不 red——red 只留给探针自身缺失/异常。
+// 两 runner 凭证对称呈现（claude-code 的 CLAUDE_CODE_OAUTH_TOKEN 与 codex 的 OPENAI_API_KEY/CODEX_HOME
+// 各出一灯，codex 不缺席）。凭证只报 set/未设 + source，永不回显值（同 secrets 纪律）。
+
+/** 凭证灯人读串:已配标 source（宿主 env / secrets 文件），未配则空——不回显任何值。 */
+function credDesc(light: { set: boolean; source?: 'host-env' | 'secrets-file' }): string {
+  if (!light.set) return '未配'
+  return `已配（${light.source === 'host-env' ? '宿主 env' : 'secrets 文件'}）`
+}
+
+async function checkAfk(p: DoctorProbes): Promise<[DoctorCheck, DoctorCheck, DoctorCheck, DoctorCheck]> {
+  if (!p.afkReadiness) {
+    const miss = (id: string): DoctorCheck =>
+      red(id, 'AFK 就绪探针未装配（main.ts 集成缺口，无法评估 AFK 运行时就绪）', '排除探针环境问题后重跑 pipeline doctor')
+    return [miss('afk:docker'), miss('afk:image'), miss('afk:credential-claude-code'), miss('afk:credential-codex')]
+  }
+  const r = await p.afkReadiness()
+
+  const docker = r.docker.available
+    ? green('afk:docker', 'docker daemon 可用（AFK 容器执行前置就绪）')
+    : yellow(
+        'afk:docker',
+        'docker 不可用——AFK 容器执行降级不可用（可选能力，不阻断非 AFK 流程）',
+        '装 docker 并起 daemon 后重探（AFK 非必需能力，缺它不影响手动流程）',
+      )
+
+  const { configured, present, build_hint } = r.image
+  const image = present
+    ? green('afk:image', `AFK 镜像 ${configured} 在位（容器可起）`)
+    : r.docker.available
+      ? yellow('afk:image', `AFK 镜像 ${configured} 不在本机（AFK run 无法起容器）`, `构建镜像:${build_hint}`)
+      : yellow(
+          'afk:image',
+          `docker 不可用，未能核 AFK 镜像 ${configured}`,
+          `先装/起 docker 再重探；缺镜像时用 ${build_hint} 一键构建`,
+        )
+
+  const cc = r.credentials['claude-code'].CLAUDE_CODE_OAUTH_TOKEN
+  const claudeCred = cc.set
+    ? green('afk:credential-claude-code', `claude-code 凭证 CLAUDE_CODE_OAUTH_TOKEN ${credDesc(cc)}`)
+    : yellow(
+        'afk:credential-claude-code',
+        'claude-code 凭证 CLAUDE_CODE_OAUTH_TOKEN 未配（AFK 跑 claude-code runner 会缺鉴权）',
+        '去配 CLAUDE_CODE_OAUTH_TOKEN（pipeline 机器级 secrets 或宿主 env；终端 doctor/setup 为凭证权威）',
+      )
+
+  // codex 对等:OPENAI_API_KEY 为鉴权决胜键（决 green/yellow），CODEX_HOME 恒随行呈现（对称、不缺席）
+  const oa = r.credentials.codex.OPENAI_API_KEY
+  const ch = r.credentials.codex.CODEX_HOME
+  const codexCred = oa.set
+    ? green('afk:credential-codex', `codex 凭证 OPENAI_API_KEY ${credDesc(oa)}；CODEX_HOME ${credDesc(ch)}`)
+    : yellow(
+        'afk:credential-codex',
+        `codex 凭证 OPENAI_API_KEY 未配（AFK 跑 codex runner 会缺鉴权）；CODEX_HOME ${credDesc(ch)}`,
+        '去配 OPENAI_API_KEY（pipeline 机器级 secrets 或宿主 env；CODEX_HOME 可选,缺省 ~/.codex）',
+      )
+
+  return [docker, image, claudeCred, codexCred]
+}
+
 // ── 装配与渲染 ────────────────────────────────────────────────────────────────
 
 const STATUS_TAG: Record<DoctorStatus, string> = { green: '[PASS]', yellow: '[WARN]', red: '[FAIL]' }
@@ -320,6 +382,17 @@ export async function cmdDoctor(deps: CliDeps, opts: { json?: boolean }): Promis
       red('skills:mandatory', `检查自身异常: ${m}`, '排除探针环境问题后重跑 pipeline doctor'),
       red('skills:recommended', `检查自身异常: ${m}`, '排除探针环境问题后重跑 pipeline doctor'),
     )
+  }
+
+  // AFK 运行时就绪四检（full-install R1，尾部只增不改；单次探测派生四灯）——探针异常各折算 red，不炸命令
+  try {
+    const [dk, im, cc, cx] = await checkAfk(p)
+    checks.push(dk, im, cc, cx)
+  } catch (e) {
+    const m = errMsg(e)
+    for (const id of ['afk:docker', 'afk:image', 'afk:credential-claude-code', 'afk:credential-codex']) {
+      checks.push(red(id, `检查自身异常: ${m}`, '排除探针环境问题后重跑 pipeline doctor'))
+    }
   }
 
   const summary = {

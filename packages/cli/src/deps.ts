@@ -3,6 +3,7 @@
  * store/flow 按 types.ts 契约注入；测试全 mock，绝不 import kernel 实现。
  */
 import type { FlowEngine, GuardContext, HistoryWriter, SkillTable, StateStore } from '@pipeline-lite/kernel'
+import type { AfkReadiness } from './afkReadiness.js'
 
 export interface GateMarkerInfo {
   kind: 'confirm' | 'review' | 'interaction'
@@ -51,6 +52,14 @@ export interface DoctorProbes {
    * manifest 解析失败 → null，checkSkills 据此出 yellow「无法核技能」而**非**误报 green。
    */
   manifestSkills: () => { mandatory: SkillTable; recommended: SkillTable } | null
+  /**
+   * AFK 运行时就绪探测（full-install R1）：docker info / image inspect + 两 runner 凭证 set/未设。
+   * main.ts 用 probeAfkReadiness 落地（真 execFile docker + readSecrets 注入 secretsEnv + process.env
+   * hostEnv + readAutomationJson().image 解析），测试注入 canned AfkReadiness。docker 不可用是常态：
+   * 探针返回 available:false（绝不抛），doctor 据此出 afk:docker **yellow**（AFK 为可选能力，非 red）。
+   * 值永不回显（只 set+source）。缺省 undefined = 未装配 → afk:* 四检自身折算 red（探针缺口可见）。
+   */
+  afkReadiness?: () => Promise<AfkReadiness>
 }
 
 export interface CliIO {
