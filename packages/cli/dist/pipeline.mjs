@@ -3033,8 +3033,8 @@ var require_commander = __commonJS({
 import { execFile as execFile3 } from "node:child_process";
 import { accessSync, constants as fsConstants, readdirSync as readdirSync5, readFileSync as readFileSync17, statSync as statSync4 } from "node:fs";
 import { access as access2, readdir as readdir5, readFile as readFile6, stat as stat7, writeFile as writeFile8 } from "node:fs/promises";
-import { homedir as homedir7 } from "node:os";
-import { dirname as dirname8, join as join32 } from "node:path";
+import { homedir as homedir8 } from "node:os";
+import { dirname as dirname8, join as join33 } from "node:path";
 import { fileURLToPath } from "node:url";
 
 // node_modules/commander/esm.mjs
@@ -8234,8 +8234,8 @@ function readNewEvents(fs, path5, state) {
   return parseEventsText(lines.join("\n"));
 }
 function defaultSleep(ms) {
-  return new Promise((resolve9) => {
-    const t = setTimeout(resolve9, ms);
+  return new Promise((resolve10) => {
+    const t = setTimeout(resolve10, ms);
     if (typeof t.unref === "function")
       t.unref();
   });
@@ -8478,7 +8478,7 @@ var ShutdownController = class {
   awaitKilled() {
     if (this.killedDone || !this.killedStarted)
       return Promise.resolve();
-    return new Promise((resolve9) => this.killedWaiters.push(resolve9));
+    return new Promise((resolve10) => this.killedWaiters.push(resolve10));
   }
   // kill ladder：close stdin → grace → SIGTERM → grace → SIGKILL（shutdown.py:93）。
   startKillLadder() {
@@ -8686,12 +8686,12 @@ async function startSupervisor(channelName, workerName, config, deps) {
   log(`[supervisor] starting ${adapter.provider} ${args.join(" ")}
 `);
   const child = proc.spawn(adapter.provider, args, { cwd: config.cwd, env: childEnv });
-  const settled = new Promise((resolve9) => {
-    child.onSpawn(() => resolve9(true));
+  const settled = new Promise((resolve10) => {
+    child.onSpawn(() => resolve10(true));
     child.onError((err) => {
       log(`[supervisor] worker error: ${err.message}
 `);
-      resolve9(false);
+      resolve10(false);
     });
   });
   child.onStderr((chunk) => log(chunk));
@@ -11714,13 +11714,13 @@ function serve(opts) {
       }
     }
   });
-  return new Promise((resolve9, reject) => {
+  return new Promise((resolve10, reject) => {
     server.once("error", reject);
     server.listen(opts.port ?? 0, host, () => {
       server.removeAllListeners("error");
       const boundPort = server.address().port;
       const unregister = registerIntercept({ kind: "reverse", port: boundPort, client, target: opts.target });
-      resolve9({
+      resolve10({
         port: boundPort,
         host,
         target: opts.target,
@@ -12768,13 +12768,13 @@ function serveForward(opts = {}) {
     upstream.on("close", cleanup2);
     clientSocket.on("close", cleanup2);
   });
-  return new Promise((resolve9, reject) => {
+  return new Promise((resolve10, reject) => {
     server.once("error", reject);
     server.listen(opts.port ?? 0, host, () => {
       server.removeAllListeners("error");
       const boundPort = server.address().port;
       const unregister = registerIntercept({ kind: "forward", port: boundPort, client, tls: !!ca });
-      resolve9({
+      resolve10({
         port: boundPort,
         host,
         client,
@@ -14478,7 +14478,7 @@ var createSemaphore = (maxParallel) => {
       running++;
       return Promise.resolve();
     }
-    return new Promise((resolve9) => queue.push(resolve9));
+    return new Promise((resolve10) => queue.push(resolve10));
   };
   const release2 = () => {
     if (running <= 0)
@@ -15184,7 +15184,7 @@ var AgentIdleTimeoutError = class extends Error {
 };
 var detectsCompletion = (accumulated, signals) => signals.some((sig) => accumulated.includes(sig));
 var armDecision = (completionDetected, idleMs, graceMs) => completionDetected ? { ms: graceMs, onExpiry: "resolve" } : { ms: idleMs, onExpiry: "reject-idle" };
-var invokeWithRace = (runExec, opts) => new Promise((resolve9, reject) => {
+var invokeWithRace = (runExec, opts) => new Promise((resolve10, reject) => {
   const { idleMs, graceMs, completionSignals, signal } = opts;
   let settled = false;
   let accumulated = "";
@@ -15206,7 +15206,7 @@ var invokeWithRace = (runExec, opts) => new Promise((resolve9, reject) => {
       return;
     settled = true;
     cleanup2();
-    resolve9(v);
+    resolve10(v);
   };
   const settleReject = (e) => {
     if (settled)
@@ -15452,7 +15452,7 @@ var createLifecyclePorts = (deps) => {
 import { execFile, spawn as spawn2 } from "node:child_process";
 import { createInterface } from "node:readline";
 var mergedEnv = (env) => env ? { ...process.env, ...env } : process.env;
-var spawnStreaming = (file, args, opts) => new Promise((resolve9) => {
+var spawnStreaming = (file, args, opts) => new Promise((resolve10) => {
   const maxTail = opts.maxTailChars ?? MAX_TAIL_CHARS;
   const proc = spawn2(file, args, {
     cwd: opts.cwd,
@@ -15485,19 +15485,19 @@ var spawnStreaming = (file, args, opts) => new Promise((resolve9) => {
   }
   proc.on("error", (err) => {
     stderrTail.push(String(err.message ?? err));
-    resolve9({ stdout: stdoutTail.toString(), stderr: stderrTail.toString(), exitCode: 127 });
+    resolve10({ stdout: stdoutTail.toString(), stderr: stderrTail.toString(), exitCode: 127 });
   });
   proc.on("close", (code) => {
-    resolve9({ stdout: stdoutTail.toString(), stderr: stderrTail.toString(), exitCode: code ?? 0 });
+    resolve10({ stdout: stdoutTail.toString(), stderr: stderrTail.toString(), exitCode: code ?? 0 });
   });
 });
 var nodeExec = (file, args, opts) => {
   if (opts?.onLine || opts?.input !== void 0)
     return spawnStreaming(file, args, opts);
-  return new Promise((resolve9) => {
+  return new Promise((resolve10) => {
     execFile(file, args, { cwd: opts?.cwd, env: mergedEnv(opts?.env), maxBuffer: 64 * 1024 * 1024, encoding: "utf-8" }, (error, stdout, stderr) => {
       const code = error && typeof error.code === "number" ? error.code : error ? 1 : 0;
-      resolve9({ stdout: String(stdout), stderr: String(stderr), exitCode: code });
+      resolve10({ stdout: String(stdout), stderr: String(stderr), exitCode: code });
     });
   });
 };
@@ -17881,6 +17881,119 @@ async function cmdSession(deps, sub, args, fs = REAL_FS2) {
   }
 }
 
+// packages/cli/src/commands/setup.ts
+import { chmodSync as chmodSync2, lstatSync, mkdirSync as mkdirSync7, readlinkSync, symlinkSync, unlinkSync } from "node:fs";
+import { homedir as homedir7 } from "node:os";
+import { join as join32, resolve as resolve9 } from "node:path";
+var REAL_SETUP_ENV = {
+  homeDir: () => homedir7(),
+  pluginRoot: () => {
+    const r = process.env.CLAUDE_PLUGIN_ROOT;
+    return r !== void 0 && r.trim() !== "" ? r : null;
+  },
+  selfPath: () => resolve9(process.argv[1] ?? ""),
+  mkdirp: (dir) => {
+    mkdirSync7(dir, { recursive: true });
+  },
+  readSymlink: (path5) => {
+    try {
+      return readlinkSync(path5);
+    } catch {
+      return null;
+    }
+  },
+  pathExists: (path5) => {
+    try {
+      lstatSync(path5);
+      return true;
+    } catch {
+      return false;
+    }
+  },
+  makeSymlink: (target, linkPath) => {
+    symlinkSync(target, linkPath);
+  },
+  removePath: (path5) => {
+    unlinkSync(path5);
+  },
+  chmodExec: (path5) => {
+    chmodSync2(path5, 493);
+  }
+};
+function resolvePipelineSource(env) {
+  const root = env.pluginRoot();
+  if (root !== null) return join32(root, "packages", "cli", "dist", "pipeline.mjs");
+  return env.selfPath();
+}
+function ensurePipelineOnPath(deps, env = REAL_SETUP_ENV) {
+  try {
+    const source = resolvePipelineSource(env);
+    const binDir = join32(env.homeDir(), ".local", "bin");
+    const link = join32(binDir, "pipeline");
+    env.mkdirp(binDir);
+    const existing = env.readSymlink(link);
+    if (existing === source) {
+      chmodExecBestEffort(env, source);
+      deps.io.out(`[setup] pipeline \u5DF2\u5728 PATH:${link} \u2192 ${source}\uFF08\u540C\u6E90,\u8DF3\u8FC7\uFF09`);
+      return;
+    }
+    if (existing !== null) {
+      deps.io.err(`WARN: ${link} \u539F\u6307\u5411 ${existing},\u672C\u6B21\u8986\u76D6\u4E3A ${source}\uFF08\u672C\u6B21\u5B89\u88C5\u7684 bundle\uFF09\u3002`);
+      env.removePath(link);
+    } else if (env.pathExists(link)) {
+      deps.io.err(`WARN: ${link} \u5DF2\u5B58\u5728\u4E14\u975E\u8F6F\u94FE,\u672C\u6B21\u8986\u76D6\u4E3A\u6307\u5411 ${source} \u7684\u8F6F\u94FE\u3002`);
+      env.removePath(link);
+    }
+    env.makeSymlink(source, link);
+    chmodExecBestEffort(env, source);
+    deps.io.out(`[setup] \u5DF2\u628A pipeline \u8F6F\u94FE\u5230 PATH:${link} \u2192 ${source}`);
+    deps.io.out('  \u82E5\u7EC8\u7AEF\u4ECD\u627E\u4E0D\u5230 pipeline,\u8BF7\u786E\u8BA4 ~/.local/bin \u5728 $PATH\uFF08\u5982 export PATH="$HOME/.local/bin:$PATH"\uFF09\u3002');
+  } catch (e) {
+    deps.io.err(`WARN: \u8F6F\u94FE pipeline \u5230 PATH \u5931\u8D25\uFF08\u4E0D\u5F71\u54CD\u5176\u4F59\u5B89\u88C5\u6B65\u9AA4,\u53EF\u624B\u52A8\u8F6F\u94FE\uFF09:${errMsg(e)}`);
+  }
+}
+function chmodExecBestEffort(env, source) {
+  try {
+    env.chmodExec(source);
+  } catch {
+  }
+}
+function printPlanSkeleton(deps, opts) {
+  deps.io.out("[setup] \u5168\u529F\u80FD\u5C31\u7EEA\u5F15\u5BFC \u2014\u2014 \u8BA1\u5212\u9AA8\u67B6");
+  deps.io.out("  1. PATH \u8F6F\u94FE:\u628A pipeline \u8F6F\u94FE\u5230 ~/.local/bin\uFF08\u672C\u6279\u5DF2\u5B9E\u73B0\uFF09");
+  deps.io.out("  2. \u6280\u80FD\u5B89\u88C5\uFF08Phase 2 \u5F85\u5B9E\u73B0\uFF09:\u6309 manifest \u88C5\u9F50 mandatory/recommended \u6280\u80FD\uFF08\u8BA1\u5212 S2\uFF09");
+  deps.io.out("  3. \u8FD0\u884C\u65F6\u68C0\u67E5\uFF08Phase 3 \u5F85\u5B9E\u73B0\uFF09:docker \u63A2\u6D4B + \u7F3A\u955C\u50CF\u4E00\u952E\u6784\u5EFA\u63D0\u793A\uFF08\u8BA1\u5212 R1\uFF09");
+  deps.io.out("  4. \u5168\u529F\u80FD\u5C31\u7EEA\u6E05\u5355\uFF08\u5F85\u805A\u5408\uFF09:\u9010\u9879\u5728\u4F4D/\u964D\u7EA7 \u7EA2\u9EC4\u7EFF\u6C47\u603B");
+  if (opts.dryRun) deps.io.out("  \uFF08--dry-run:\u4EC5\u6253\u5370\u8BA1\u5212,\u672A\u8F6F\u94FE\u3001\u672A\u5199\u4EFB\u4F55\u6587\u4EF6\uFF09");
+}
+function cmdSetupSkills(deps, opts) {
+  const suffix = opts.yes ? "\uFF08--yes \u5DF2\u900F\u4F20,\u5C06\u6765\u8DF3\u4EA4\u4E92\u786E\u8BA4\u4F4D\uFF09" : "";
+  deps.io.out(`[setup skills] \u6280\u80FD\u5B89\u88C5\u6BB5\u5F85\u5B9E\u73B0\uFF08Phase 2,\u8BA1\u5212 S2\uFF09\u3002${suffix}`);
+  return 0;
+}
+function cmdSetupRuntime(deps, opts) {
+  const suffix = opts.yes ? "\uFF08--yes \u5DF2\u900F\u4F20,\u5C06\u6765\u8DF3\u4EA4\u4E92\u786E\u8BA4\u4F4D\uFF09" : "";
+  deps.io.out(`[setup runtime] \u8FD0\u884C\u65F6\u68C0\u67E5\u6BB5\u5F85\u5B9E\u73B0\uFF08Phase 3,\u8BA1\u5212 R1\uFF09\u3002${suffix}`);
+  return 0;
+}
+function cmdSetup(deps, sub, opts, env = REAL_SETUP_ENV) {
+  const o = { dryRun: opts.dryRun ?? false, yes: opts.yes ?? false };
+  switch (sub) {
+    case void 0:
+    case "":
+      if (!o.dryRun) ensurePipelineOnPath(deps, env);
+      printPlanSkeleton(deps, o);
+      return 0;
+    case "skills":
+      return cmdSetupSkills(deps, o);
+    case "runtime":
+      return cmdSetupRuntime(deps, o);
+    default:
+      deps.io.err(`ERROR: \u672A\u77E5 setup \u5B50\u547D\u4EE4: ${sub}\uFF08\u652F\u6301: skills runtime,\u6216\u4E0D\u5E26\u5B50\u547D\u4EE4\u8D70\u5168\u6D41\u7A0B\uFF09`);
+      return 1;
+  }
+}
+
 // packages/cli/src/commands/spec.ts
 var REAL_FS3 = { listSpecs: listSpecEntries, inject: injectJsonl };
 function checkName3(deps, name2) {
@@ -18122,21 +18235,21 @@ async function cmdTap(deps, sub, args) {
       if (command.length > 0) {
         const merged = {};
         for (const c of result.clients) Object.assign(merged, c.env);
-        const code = await new Promise((resolve9) => {
+        const code = await new Promise((resolve10) => {
           const child = spawn3(command[0], command.slice(1), {
             stdio: "inherit",
             env: { ...process.env, ...merged }
           });
-          child.on("exit", (exitCode, signal) => resolve9(exitCode ?? (signal ? 1 : 0)));
-          child.on("error", () => resolve9(1));
+          child.on("exit", (exitCode, signal) => resolve10(exitCode ?? (signal ? 1 : 0)));
+          child.on("error", () => resolve10(1));
         });
         await result.daemon.stop();
         return code;
       }
       for (const line of envLines(result.clients)) deps.io.out(line);
-      await new Promise((resolve9) => {
+      await new Promise((resolve10) => {
         const stop = () => {
-          void result.daemon.stop().then(resolve9);
+          void result.daemon.stop().then(resolve10);
         };
         process.once("SIGINT", stop);
         process.once("SIGTERM", stop);
@@ -18742,6 +18855,7 @@ function buildProgram(deps) {
   program2.command("_gen-router-sh <manifest>").description("[\u5185\u90E8] \u4ECE manifest \u6D3E\u751F router \u7F13\u5B58 bash\uFF08router.sh \u8C03\u7528\uFF09").action(async (manifest) => bail(await cmdGenRouterSh(deps, manifest)));
   program2.command("internal-skill-gate <name> <skillId>").description("[\u5185\u90E8] \u975E default workflow \u7684 skill DAG \u89E3\u9501\u5224\u5B9A\uFF08hooks/gate.sh \u59D4\u6258\u76EE\u6807\uFF1B0=\u653E\u884C 2=\u62E6\u622A\uFF09").action(async (name2, skillId) => bail(await cmdInternalSkillGate(deps, name2, skillId)));
   program2.command("migrate-workflow <name>").description("[\u4E00\u6B21\u6027] \u8001\u683C\u5F0F change \u8865\u9F50/\u786E\u8BA4 workflow \u5B57\u6BB5\u4E3A default\uFF08\u771F\u5B9E\u81EA\u5B9A\u4E49 workflow \u4E0D\u8986\u76D6\uFF09").action(async (name2) => bail(await cmdMigrateWorkflow(deps, name2)));
+  program2.command("setup [sub]").description("\u5B89\u88C5\u540E\u5168\u529F\u80FD\u5C31\u7EEA\u5F15\u5BFC:\u8F6F\u94FE pipeline \u5230 PATH + \u6280\u80FD\u5B89\u88C5(Phase 2)/\u8FD0\u884C\u65F6\u68C0\u67E5(Phase 3)\u9AA8\u67B6").option("--dry-run", "\u53EA\u6253\u5370\u8BA1\u5212\u9AA8\u67B6,\u7EDD\u4E0D\u8F6F\u94FE/\u5199\u6587\u4EF6").option("-y, --yes", "\u8DF3\u8FC7\u4EA4\u4E92\u786E\u8BA4\u4F4D\uFF08\u672C\u6279\u65E0\u771F\u5B89\u88C5,\u4EC5\u900F\u4F20\u5360\u4F4D\uFF09").allowUnknownOption().action(async (sub, opts) => bail(cmdSetup(deps, sub, { dryRun: opts.dryRun, yes: opts.yes })));
   return program2;
 }
 
@@ -18750,9 +18864,9 @@ function isoNow() {
   return (/* @__PURE__ */ new Date()).toISOString().replace(/\.\d{3}Z$/, "Z");
 }
 function gitHeadSha(cwd) {
-  return new Promise((resolve9) => {
+  return new Promise((resolve10) => {
     execFile3("git", ["rev-parse", "HEAD"], { cwd }, (_err, stdout) => {
-      resolve9((stdout ?? "").trim());
+      resolve10((stdout ?? "").trim());
     });
   });
 }
@@ -18767,7 +18881,7 @@ async function listChanges(changesRoot2) {
   for (const entry of entries) {
     if (!entry.isDirectory() || entry.name === "archive") continue;
     try {
-      await access2(join32(changesRoot2, entry.name, ".pipeline.yaml"));
+      await access2(join33(changesRoot2, entry.name, ".pipeline.yaml"));
       names.push(entry.name);
     } catch {
     }
@@ -18778,7 +18892,7 @@ async function readGateMarkers(cwd) {
   const out = [];
   for (const kind of ["confirm", "review", "interaction"]) {
     try {
-      const p = join32(cwd, `.pipeline-pending-${kind}`);
+      const p = join33(cwd, `.pipeline-pending-${kind}`);
       const st = await stat7(p);
       out.push({ kind, ageMs: Date.now() - st.mtimeMs, raw: await readFile6(p, "utf8") });
     } catch {
@@ -18787,7 +18901,7 @@ async function readGateMarkers(cwd) {
   return out;
 }
 function makeGuardCtx(cwd) {
-  const abs = (relPath) => join32(cwd, relPath);
+  const abs = (relPath) => join33(cwd, relPath);
   return (name2) => ({
     changeDirRel: `openspec/changes/${name2}`,
     fileExists: (p) => {
@@ -18832,14 +18946,14 @@ function makeGuardCtx(cwd) {
   });
 }
 function pluginRoot() {
-  return join32(dirname8(fileURLToPath(import.meta.url)), "..", "..", "..");
+  return join33(dirname8(fileURLToPath(import.meta.url)), "..", "..", "..");
 }
 function manifestPath() {
-  return join32(pluginRoot(), "templates", "manifest.yaml");
+  return join33(pluginRoot(), "templates", "manifest.yaml");
 }
 function readPluginVersion() {
   try {
-    const raw = readFileSync17(join32(pluginRoot(), ".claude-plugin", "plugin.json"), "utf8");
+    const raw = readFileSync17(join33(pluginRoot(), ".claude-plugin", "plugin.json"), "utf8");
     return JSON.parse(raw).version ?? "unknown";
   } catch {
     return "unknown";
@@ -18849,8 +18963,8 @@ function makeDoctorProbes() {
   const root = pluginRoot();
   return {
     nodeVersion: () => process.version,
-    gitAvailable: () => new Promise((resolve9) => {
-      execFile3("git", ["--version"], (err) => resolve9(!err));
+    gitAvailable: () => new Promise((resolve10) => {
+      execFile3("git", ["--version"], (err) => resolve10(!err));
     }),
     pluginRoot: root,
     manifestError: () => {
@@ -18887,20 +19001,20 @@ function makeDoctorProbes() {
     // 接入判定与 statusline.sh 头注释的接入方式同口径：settings.json 里引用了该脚本即算接入
     statuslineConfigured: () => {
       try {
-        return readFileSync17(join32(homedir7(), ".claude", "settings.json"), "utf8").includes("statusline.sh");
+        return readFileSync17(join33(homedir8(), ".claude", "settings.json"), "utf8").includes("statusline.sh");
       } catch {
         return false;
       }
     },
-    runVerifySkills: () => new Promise((resolve9) => {
+    runVerifySkills: () => new Promise((resolve10) => {
       execFile3(
         "bash",
-        [join32(root, "tools", "verify-skills.sh"), "--quiet"],
+        [join33(root, "tools", "verify-skills.sh"), "--quiet"],
         { timeout: 3e4 },
         (err, stdout, stderr) => {
           const errCode = err?.code;
           const code = err ? typeof errCode === "number" ? errCode : 1 : 0;
-          resolve9({ code, output: `${stdout ?? ""}${stderr ?? ""}` });
+          resolve10({ code, output: `${stdout ?? ""}${stderr ?? ""}` });
         }
       );
     }),
@@ -18934,27 +19048,27 @@ async function main() {
     guardCtx: makeGuardCtx(process.cwd()),
     doctor: makeDoctorProbes(),
     readGateMarkers: () => readGateMarkers(process.cwd()),
-    writeBreadcrumb: (dir, content) => writeFile8(join32(dir, ".breadcrumb"), content, "utf8"),
+    writeBreadcrumb: (dir, content) => writeFile8(join33(dir, ".breadcrumb"), content, "utf8"),
     history: createHistoryWriter(),
     // 决策 D（v5 T2）：init 成功后 best-effort 登记项目根到 ~/.claude/pipeline-projects.json
     registerProject: async (repoRoot) => {
-      await registerProjectRoot(projectRegistryPath(homedir7()), repoRoot);
+      await registerProjectRoot(projectRegistryPath(homedir8()), repoRoot);
     },
     // v6 T2：afk run 凭证注入——机器级 secrets 读成 env 形状（kernel readSecrets 自身 fail-open，
     // 缺失/损坏 → 空 keys）；值不落日志。
-    readSecretsEnv: async () => readSecrets(secretsPath(homedir7())).keys,
+    readSecretsEnv: async () => readSecrets(secretsPath(homedir8())).keys,
     readHistoryRaw: async (dir) => {
       try {
-        return await readFile6(join32(dir, ".pipeline-history.jsonl"), "utf8");
+        return await readFile6(join33(dir, ".pipeline-history.jsonl"), "utf8");
       } catch {
         return "";
       }
     },
     gitHeadSha: () => gitHeadSha(process.cwd()),
-    writeReviewMarker: (content) => writeFile8(join32(process.cwd(), ".pipeline-pending-review"), content, "utf8"),
+    writeReviewMarker: (content) => writeFile8(join33(process.cwd(), ".pipeline-pending-review"), content, "utf8"),
     pluginVersion: readPluginVersion(),
     readInstalledPlugins: async () => {
-      for (const p of [join32(pluginRoot(), "..", "installed_plugins.json"), join32(process.env.HOME ?? "", ".claude", "installed_plugins.json")]) {
+      for (const p of [join33(pluginRoot(), "..", "installed_plugins.json"), join33(process.env.HOME ?? "", ".claude", "installed_plugins.json")]) {
         try {
           return await readFile6(p, "utf8");
         } catch {
