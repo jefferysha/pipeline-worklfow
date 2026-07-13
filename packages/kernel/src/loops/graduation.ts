@@ -38,6 +38,7 @@ import {
 } from './drift.js'
 import { enforcementFor, FAIL_STREAK_WARN } from './enforce.js'
 import type { AutonomyLevel, Enforcement, LoopEntry, LoopRegistry } from './types.js'
+import { insertPointAtBlockEnd, locateLoop } from './yamlBlock.js'
 
 // ── 阈值常量 ───────────────────────────────────────────────────────────────────
 
@@ -264,48 +265,21 @@ export function planLevelChange(current: AutonomyLevel, target: string, verdict:
  */
 export function setAutonomyLevelInYaml(text: string, loopId: string, level: AutonomyLevel): { text: string | null; error: string | null } {
   const lines = text.split('\n')
-  const idRe = /^(\s*)-\s+id:\s+(.+?)\s*(?:#.*)?$/
-  let start = -1
-  let dashIndent = 0
-  for (let i = 0; i < lines.length; i++) {
-    const m = lines[i]!.match(idRe)
-    if (m && m[2]!.trim() === loopId) {
-      start = i
-      dashIndent = m[1]!.length
-      break
-    }
-  }
-  if (start === -1) return { text: null, error: `loop '${loopId}' 未在 loops.yaml 找到（无法改档）` }
-
-  // 块 [start+1, end)：end = 下一个缩进 ≤ dashIndent 的非空行（下个 loop 项 / 顶层 key）
-  let end = lines.length
-  for (let i = start + 1; i < lines.length; i++) {
-    const line = lines[i]!
-    if (line.trim() === '') continue
-    const indent = line.length - line.replace(/^\s*/, '').length
-    if (indent <= dashIndent) {
-      end = i
-      break
-    }
-  }
+  // 块定位收编 yamlBlock.ts（与 update.ts 共享单份；手术责任分离不变：本函数只动 autonomy_level）
+  const block = locateLoop(lines, loopId)
+  if (block === null) return { text: null, error: `loop '${loopId}' 未在 loops.yaml 找到（无法改档）` }
 
   const levelRe = /^(\s*)autonomy_level:\s*.*$/
-  for (let i = start; i < end; i++) {
+  for (let i = block.start; i < block.end; i++) {
     const m = lines[i]!.match(levelRe)
     if (m) {
       lines[i] = `${m[1]!}autonomy_level: ${level}`
       return { text: lines.join('\n'), error: null }
     }
   }
-  // 未声明 → 在块内最后一个非空行后插入（缩进 = dashIndent + 2，与 id 键对齐）
-  let insertAt = end
-  for (let i = end - 1; i > start; i--) {
-    if (lines[i]!.trim() !== '') {
-      insertAt = i + 1
-      break
-    }
-  }
-  lines.splice(insertAt, 0, `${' '.repeat(dashIndent + 2)}autonomy_level: ${level}`)
+  // 未声明 → 在块内最后一个非空行后插入（缩进 = dashIndent + 2，与 id 键对齐——本手术历史口径，
+  // 刻意不换 fieldIndent：登记表 dash 后恒一空格时两者等值，行为保持）
+  lines.splice(insertPointAtBlockEnd(lines, block.start, block.end), 0, `${' '.repeat(block.dashIndent + 2)}autonomy_level: ${level}`)
   return { text: lines.join('\n'), error: null }
 }
 

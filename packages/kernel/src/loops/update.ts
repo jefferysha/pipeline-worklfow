@@ -20,6 +20,7 @@
  */
 import { LOOPS_SCHEMA, parseLoopsYaml, validateSchema } from './registry.js'
 import type { LoopBudget, LoopKind, LoopRisk, LoopStatus } from './types.js'
+import { indentOf, insertPointAtBlockEnd, locateLoop, type LoopBlock } from './yamlBlock.js'
 
 /** loop 顶层可 patch 标量字段（schema 同名约束在写回后由调用方整文档校验）。
  * v5 T20：+runner（双 runner 数据面——编排页 runner 下拉走 POST /api/loops/update 落盘）。 */
@@ -65,40 +66,8 @@ function formatScalar(v: string | number | null, field: string): string {
   return formatString(v, field, false)
 }
 
-interface LoopBlock {
-  /** `- id:` 行下标。 */
-  start: number
-  /** 块结束（不含）：下一个缩进 ≤ dashIndent 的非空行。 */
-  end: number
-  /** 同级字段列（= id 键所在列，即 dash 后首个非空字符）。 */
-  fieldIndent: number
-}
-
-function indentOf(line: string): number {
-  return line.length - line.replace(/^\s*/, '').length
-}
-
-/** 定位目标 loop 块（同 setAutonomyLevelInYaml 的 idRe/块界定规则）。 */
-function locateLoop(lines: string[], loopId: string): LoopBlock | null {
-  const idRe = /^(\s*)-(\s+)id:\s+(.+?)\s*(?:#.*)?$/
-  for (let i = 0; i < lines.length; i++) {
-    const m = lines[i]!.match(idRe)
-    if (!m || m[3]!.trim() !== loopId) continue
-    const dashIndent = m[1]!.length
-    const fieldIndent = dashIndent + 1 + m[2]!.length
-    let end = lines.length
-    for (let j = i + 1; j < lines.length; j++) {
-      const line = lines[j]!
-      if (line.trim() === '') continue
-      if (indentOf(line) <= dashIndent) {
-        end = j
-        break
-      }
-    }
-    return { start: i, end, fieldIndent }
-  }
-  return null
-}
+// 块定位内件（LoopBlock/indentOf/locateLoop/insertPointAtBlockEnd）已收编 yamlBlock.ts
+// （与 graduation.ts::setAutonomyLevelInYaml 共享单份；本侧消费 fieldIndent 支持任意字段列）。
 
 /** 在 [from, to) 找缩进恰为 indent 的 `field:` 行（键精确匹配，不吃前缀同名键）。 */
 function findFieldLine(lines: string[], from: number, to: number, indent: number, field: string): number {
@@ -107,14 +76,6 @@ function findFieldLine(lines: string[], from: number, to: number, indent: number
     if (re.test(lines[i]!)) return i
   }
   return -1
-}
-
-/** 块尾插入点：[start+1, end) 内最后一个非空行之后（同 setAutonomyLevelInYaml）。 */
-function insertPointAtBlockEnd(lines: string[], start: number, end: number): number {
-  for (let i = end - 1; i > start; i--) {
-    if (lines[i]!.trim() !== '') return i + 1
-  }
-  return end
 }
 
 /** 顶层标量：就地替换（保缩进，行尾注释随行更替）；缺行 → 块尾插入。 */
