@@ -12,7 +12,7 @@ import * as tls from 'node:tls'
 import * as http from 'node:http'
 import * as https from 'node:https'
 import type { AddressInfo } from 'node:net'
-import { WsFrameAccumulator } from './ws-proxy.js'
+import { WsFrameAccumulator, attachWsRelay } from './ws-proxy.js'
 import { WS_OPCODES, decodeFrame, encodeFrame, computeAcceptKey, type WsMessage } from './ws-reconstruct.js'
 import { serveForward, type ForwardProxyHandle } from './forward-proxy.js'
 import { createTraceStore } from './trace-store.js'
@@ -65,10 +65,18 @@ if (!supported) {
 
 const handles: ForwardProxyHandle[] = []
 const upstreams: https.Server[] = []
+const relayServers: http.Server[] = []
+const tcpUpstreams: net.Server[] = []
 const dirs: string[] = []
 afterEach(async () => {
   while (handles.length) await handles.pop()!.close()
   while (upstreams.length) await new Promise<void>((r) => upstreams.pop()!.close(() => r()))
+  while (relayServers.length) {
+    const srv = relayServers.pop()!
+    ;(srv as unknown as { closeAllConnections?: () => void }).closeAllConnections?.()
+    await new Promise<void>((r) => srv.close(() => r()))
+  }
+  while (tcpUpstreams.length) await new Promise<void>((r) => tcpUpstreams.pop()!.close(() => r()))
   resetCaptureCache()
   while (dirs.length) await rmDir(dirs.pop()!)
 })
@@ -209,5 +217,89 @@ describe.skipIf(!supported)('ws-proxy —— wss:// 真中继（CONNECT+TLS MITM
     await wsThroughMitm(proxy.port, upstream.port, ca.certPem, requestBody)
     const recorded = store.listSessions().map((s) => store.readRecords(s.id)).flat()
     expect(recorded.length).toBe(0)
+  })
+})
+
+// ── B3：ws relay connect(setup)/idle 超时兜底（防 fd 泄漏）──
+// 直接驱动 attachWsRelay + 纯 TCP 上游（不经 TLS），确定性、毫秒级、无真网络/黑洞 → 不 flaky。
+type UpstreamMode = 'silent' | 'handshake-then-silent'
+/**
+ * 纯 TCP 上游：
+ *   'silent'                → accept 后一言不发（永不回 101）→ 触发 relay 的 **setup(connect) 超时**。
+ *   'handshake-then-silent' → 收到升级请求即回 101，随后静默 → relay 转发 101 后进入 **idle 超时**。
+ * 跟踪 accept 到的 socket 是否被销毁：断言超时兜底真的把**上游 fd 也**清掉。
+ */
+async function startTcpUpstream(mode: UpstreamMode): Promise<{ port: number; get closed(): boolean }> {
+  let closed = false
+  const server = net.createServer((sock) => {
+    sock.on('close', () => { closed = true })
+    sock.on('error', () => { /* ignore */ })
+    if (mode === 'handshake-then-silent') {
+      sock.once('data', () => {
+        sock.write('HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n')
+        // 之后永不发帧 → 制造双向静默
+      })
+    } else {
+      sock.on('data', () => { /* 读走丢弃，永不回 101 */ })
+    }
+  })
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r))
+  tcpUpstreams.push(server)
+  return { port: (server.address() as AddressInfo).port, get closed() { return closed } }
+}
+
+/** 起一个挂了 attachWsRelay 的 http.Server，连一个裸 client 并发 WS 升级请求；返回 client 端 socket。 */
+async function relayClient(target: { port: number; useTls: boolean }, opts: { connectTimeoutMs?: number; idleTimeoutMs?: number }): Promise<net.Socket> {
+  const dir = await tempTapDir(); dirs.push(dir)
+  const store = createTraceStore({ dir })
+  const sessionId = store.createSession({ client: 'test', proxyMode: 'forward' })
+  let turn = 0
+  const server = http.createServer()
+  attachWsRelay(server, {
+    store, sessionId, nextTurn: () => (turn += 1),
+    resolveTarget: () => ({ hostname: '127.0.0.1', port: target.port, useTls: target.useTls }),
+    connectTimeoutMs: opts.connectTimeoutMs, idleTimeoutMs: opts.idleTimeoutMs,
+  })
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r))
+  relayServers.push(server)
+  const port = (server.address() as AddressInfo).port
+  const clientSock = net.connect(port, '127.0.0.1', () => {
+    clientSock.write(
+      'GET /realtime HTTP/1.1\r\nHost: localhost\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n' +
+      'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n',
+    )
+  })
+  // 进入 flowing 模式消费下行字节（如上游 101）：否则 socket 处于 paused、缓冲区有未读数据时
+  // teardown 的 graceful FIN 会把 'end'/'close' 推迟到数据被读走 → 断言 close 会假性超时。
+  clientSock.on('data', () => { /* 丢弃：本用例只关心连接是否被兜底关闭 */ })
+  clientSock.on('error', () => { /* teardown 触发的 RST 亦可，静候 close */ })
+  return clientSock
+}
+
+/** 等 socket 关闭；返回是否在窗口内关闭（超时兜底若失效则隧道永挂 → false → 断言失败）。 */
+function closedWithin(sock: net.Socket, ms: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const t = setTimeout(() => resolve(false), ms)
+    sock.on('close', () => { clearTimeout(t); resolve(true) })
+  })
+}
+
+describe('ws-proxy —— B3：connect(setup)/idle 超时兜底（防 fd 泄漏）', () => {
+  it('上游连上后迟迟不回 101（握手挂起）→ setup(connect) 超时兜底 teardown 两端 fd', async () => {
+    const upstream = await startTcpUpstream('silent')
+    // 注入 40ms setup 超时（生产默认 30s）。上游永不回 101 → 无超时则 relay 永远等握手、两端 fd 泄漏。
+    const client = await relayClient({ port: upstream.port, useTls: false }, { connectTimeoutMs: 40, idleTimeoutMs: 5_000 })
+    expect(await closedWithin(client, 1_500)).toBe(true) // 严格：唯一能关掉 client 的就是 setup 超时兜底
+    await new Promise<void>((r) => setTimeout(r, 50)) // 让上游侧 'close' 冲刷
+    expect(upstream.closed).toBe(true) // 上游 fd 也被销毁（两端都清）
+  })
+
+  it('握手完成后双向长时间静默 → idle 超时兜底 teardown 两端 fd（半开泄漏）', async () => {
+    const upstream = await startTcpUpstream('handshake-then-silent')
+    // 上游回 101 后静默 → relay 转发 101、放宽为 idle；注入 40ms idle（生产默认 600s）→ 兜底 teardown。
+    const client = await relayClient({ port: upstream.port, useTls: false }, { connectTimeoutMs: 5_000, idleTimeoutMs: 40 })
+    expect(await closedWithin(client, 1_500)).toBe(true) // 严格：无 idle 超时则半开隧道永挂
+    await new Promise<void>((r) => setTimeout(r, 50))
+    expect(upstream.closed).toBe(true)
   })
 })

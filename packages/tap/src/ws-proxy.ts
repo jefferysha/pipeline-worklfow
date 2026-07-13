@@ -88,6 +88,18 @@ export interface WsRelayOptions {
   readonly nextTurn: () => number
   /** 从升级请求解析真实上游；返回 null = 不识别该请求，直接断开（不裸转发未知目标）。 */
   readonly resolveTarget: (req: IncomingMessage) => WsRelayTarget | null
+  /**
+   * B3：upstream 连接+握手(setup)超时(ms)——上游 TCP/TLS 握手挂起，或连上后迟迟不回 101，
+   * upstreamSocket 既不进入中继也不 error/close，clientSocket+upstreamSocket 两个 fd 泄漏。
+   * setup 完成（收到上游 101 并转发给 client）后放宽为 idleTimeoutMs。默认 30s；测试注入短值。
+   */
+  readonly connectTimeoutMs?: number
+  /**
+   * B3：握手完成后的双向空闲超时(ms)——半开连接对端消失兜底。默认 600s（**保守取大**）：
+   * WS 长连接（如 realtime 语音/思考停顿）可能长时间无帧，idle 值过小会误杀合法长连；故只用一个
+   * 宽松上界兜底真死连的 fd 泄漏，connect(setup) 超时才是主防线。测试注入短值验证兜底。
+   */
+  readonly idleTimeoutMs?: number
 }
 
 /** 把一个 http.Server 的 'upgrade' 事件接成真中继（BACKLOG #34-wire）。 */
@@ -102,6 +114,10 @@ export function attachWsRelay(server: Server, opts: WsRelayOptions): void {
     // （TS 对嵌套函数闭包引用外层 const 的收窄支持有限），故显式固定类型而非依赖流分析。
     const target: WsRelayTarget = resolved
 
+    // B3 超时兜底默认值（生产值）；测试经 opts 注入毫秒级短值验证兜底触发。
+    const connectTimeoutMs = opts.connectTimeoutMs ?? 30_000
+    const idleTimeoutMs = opts.idleTimeoutMs ?? 600_000
+
     const t0 = Date.now()
     const upstreamSocket = target.useTls
       ? tlsConnect({ host: target.hostname, port: target.port, rejectUnauthorized: false })
@@ -111,6 +127,9 @@ export function attachWsRelay(server: Server, opts: WsRelayOptions): void {
     const teardown = (): void => {
       if (settled) return
       settled = true
+      // 关计时器再销毁（timer 不泄漏）：setTimeout(0) 幂等，对已销毁 socket 亦安全（try 兜底）。
+      try { clientSocket.setTimeout(0) } catch { /* ignore */ }
+      try { upstreamSocket.setTimeout(0) } catch { /* ignore */ }
       try { clientSocket.destroy() } catch { /* ignore */ }
       try { upstreamSocket.destroy() } catch { /* ignore */ }
       finalize()
@@ -119,6 +138,12 @@ export function attachWsRelay(server: Server, opts: WsRelayOptions): void {
     upstreamSocket.on('error', teardown)
     clientSocket.on('close', teardown)
     upstreamSocket.on('close', teardown)
+    // B3：connect/idle 超时兜底——上游连接/握手挂起(黑洞或上游不回 101)时既不中继也不 error/close，
+    // 两个 fd 泄漏。socket.setTimeout 按「无活动」计时：setup 阶段计 connectTimeoutMs，握手完成后放宽为 idle。
+    upstreamSocket.setTimeout(connectTimeoutMs)
+    clientSocket.setTimeout(connectTimeoutMs)
+    upstreamSocket.on('timeout', teardown)
+    clientSocket.on('timeout', teardown)
 
     const clientAcc = new WsFrameAccumulator()
     const serverAcc = new WsFrameAccumulator()
@@ -151,6 +176,9 @@ export function attachWsRelay(server: Server, opts: WsRelayOptions): void {
         const idx = handshakeBuf.indexOf('\r\n\r\n')
         if (idx === -1) return // 握手响应头还没读全，先不转发（避免半截头触发客户端解析错误）
         inHandshake = false
+        // B3：setup 完成（上游 101 到手）→ 放宽两端超时为更保守的 idle 值（WS 长连接可能长时间静默）。
+        upstreamSocket.setTimeout(idleTimeoutMs)
+        clientSocket.setTimeout(idleTimeoutMs)
         const headerPart = handshakeBuf.subarray(0, idx + 4)
         const remainder = handshakeBuf.subarray(idx + 4)
         clientSocket.write(headerPart)

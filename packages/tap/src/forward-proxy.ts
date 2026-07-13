@@ -52,6 +52,17 @@ export interface ForwardProxyOptions {
   client?: string
   /** 提供本地 CA → CONNECT 在 capture ON 时做 TLS MITM 终结（解密录制）；缺省=盲隧道透传（#34b）。 */
   ca?: CertificateAuthority
+  /**
+   * B3：CONNECT 盲隧道 / ws 中继 upstream 的连接(setup)超时(ms)——上游 TCP 握手挂起（黑洞地址/
+   * 防火墙丢包），upstream 既不 'connect' 也不 'error'，clientSocket+upstream 两个 fd 无限期泄漏。
+   * 默认 30s；测试可注入短值(如 20ms)验证兜底。
+   */
+  connectTimeoutMs?: number
+  /**
+   * B3：CONNECT 盲隧道建立后的双向空闲超时(ms)——半开连接对端消失（TCP 不发 FIN）时 socket 永挂。
+   * 默认 300s（保守取大：避免误杀慢/静默的合法隧道；仅兜底真死连的 fd 泄漏）。测试可注入短值。
+   */
+  tunnelIdleTimeoutMs?: number
 }
 
 export interface ForwardProxyHandle {
@@ -80,6 +91,9 @@ export function serveForward(opts: ForwardProxyOptions = {}): Promise<ForwardPro
   const sessionId = store.createSession({ client, proxyMode: 'forward' })
   const counter = new TurnCounter()
   const tunnels = new Set<Socket>()
+  // B3 超时兜底默认值（生产值）；测试经 opts 注入毫秒级短值验证兜底触发。
+  const connectTimeoutMs = opts.connectTimeoutMs ?? 30_000
+  const tunnelIdleTimeoutMs = opts.tunnelIdleTimeoutMs ?? 300_000
 
   // ── ① 明文绝对 URI 代理 ──
   const server: Server = createServer((req: IncomingMessage, res: ServerResponse) => {
@@ -179,6 +193,8 @@ export function serveForward(opts: ForwardProxyOptions = {}): Promise<ForwardPro
     attachWsRelay(mitmServer, {
       store, sessionId, nextTurn: () => counter.next(),
       resolveTarget: (req) => { const t = resolveMitmTarget(req); return { hostname: t.hostname, port: t.port, useTls: true } },
+      // B3：ws relay 复用 forward 的 connect(setup) 超时；idle 用 attachWsRelay 内部更保守的默认(见其定义)。
+      connectTimeoutMs,
     })
     return mitmServer
   }
@@ -287,6 +303,10 @@ export function serveForward(opts: ForwardProxyOptions = {}): Promise<ForwardPro
     }
 
     const upstream = netConnect(port, hostname, () => {
+      // 隧道建立：TCP 握手已完成 → 把 connect 超时放宽为更长的双向 idle 超时（同一 socket.setTimeout
+      // 语义，重设时长即可；'timeout' 事件监听沿用同一个 cleanup）。
+      upstream.setTimeout(tunnelIdleTimeoutMs)
+      clientSocket.setTimeout(tunnelIdleTimeoutMs)
       clientSocket.write('HTTP/1.1 200 Connection Established\r\n\r\n')
       if (head && head.length) upstream.write(head)
       upstream.pipe(clientSocket)
@@ -297,9 +317,18 @@ export function serveForward(opts: ForwardProxyOptions = {}): Promise<ForwardPro
     const cleanup = (): void => {
       tunnels.delete(clientSocket)
       tunnels.delete(upstream)
+      // 关掉计时器再销毁（timer 不泄漏）：setTimeout(0) 幂等，对已销毁 socket 亦安全（try 兜底）。
+      try { upstream.setTimeout(0) } catch { /* ignore */ }
+      try { clientSocket.setTimeout(0) } catch { /* ignore */ }
       try { upstream.destroy() } catch { /* ignore */ }
       try { clientSocket.destroy() } catch { /* ignore */ }
     }
+    // B3：connect/idle 超时兜底——上游握手挂起(黑洞/丢包)时 upstream 既不 'connect' 也不 'error'；
+    // 隧道建立后半开静默时对端不发 FIN。两种情形现有 error/close 都不触发，两个 fd 无限期泄漏。
+    // socket.setTimeout 按「无活动」计时：connect 阶段计 connectTimeoutMs，建立后重设为 idle 值。
+    upstream.setTimeout(connectTimeoutMs)
+    upstream.on('timeout', cleanup)
+    clientSocket.on('timeout', cleanup)
     upstream.on('error', () => { try { clientSocket.end() } catch { /* ignore */ } ; cleanup() })
     clientSocket.on('error', cleanup)
     upstream.on('close', cleanup)

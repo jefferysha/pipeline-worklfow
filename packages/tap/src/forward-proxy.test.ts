@@ -7,7 +7,7 @@
  * 老仓真相源：forward_proxy.py serve_forward / _handle_connect / _forward_and_record。
  */
 import { afterEach, describe, expect, it } from 'vitest'
-import { connect as netConnect } from 'node:net'
+import { connect as netConnect, createServer as createTcpServer, type AddressInfo, type Server as NetServer, type Socket } from 'node:net'
 import { serveForward, type ForwardProxyHandle } from './forward-proxy.js'
 import { createTraceStore } from './trace-store.js'
 import { resetCaptureCache, setCaptureEnabled } from './security.js'
@@ -179,5 +179,71 @@ describe('forward proxy —— CONNECT 盲隧道透明转发（TLS MITM 属 #34b
     expect(got).toContain('PING-THROUGH-TUNNEL')
     expect(echo.connections).toBe(1) // 上游真被连上
     sock.destroy()
+  })
+})
+
+/**
+ * 起一个「接受连接但一言不发」的 TCP 上游：TCP 握手秒完成（本地 loopback），但建立后永不发字节，
+ * 用来确定性地触发盲隧道**建立后 idle 超时**（无需真网络/黑洞，完全确定不 flaky）。同时跟踪 accept
+ * 到的 socket 是否被关闭 —— 断言超时兜底真的把**上游 fd 也**销毁了（不只 clientSocket）。
+ */
+async function startSilentTcpUpstream(): Promise<{ port: number; get closed(): boolean; close(): Promise<void> }> {
+  let closed = false
+  const server: NetServer = createTcpServer((sock: Socket) => {
+    sock.on('data', () => { /* 读走丢弃，永不回写 */ })
+    sock.on('error', () => { /* ignore */ })
+    sock.on('close', () => { closed = true })
+  })
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+  return {
+    port: (server.address() as AddressInfo).port,
+    get closed() { return closed },
+    close: () => new Promise<void>((resolve) => server.close(() => resolve())),
+  }
+}
+
+describe('forward proxy —— B3：CONNECT 隧道 connect/idle 超时兜底（防 fd 泄漏）', () => {
+  it('盲隧道建立后长时间无字节 → idle 超时兜底销毁 clientSocket + 上游两端 fd（防半开泄漏）', async () => {
+    const s = await store()
+    const silent = await startSilentTcpUpstream()
+    // 注入毫秒级 idle（生产默认 300s），connect 超时给足以隔离出「只测 idle」。
+    const proxy = await serveForward({ port: 0, store: s.store, connectTimeoutMs: 5_000, tunnelIdleTimeoutMs: 40 })
+    handles.push(proxy)
+
+    // 建立隧道（上游秒连上 → proxy 回 200），随后**什么都不发**：40ms 无活动 → idle 'timeout' → cleanup。
+    const sock = await connectThroughProxy(proxy.port, `127.0.0.1:${silent.port}`)
+    sock.on('data', () => { /* flowing 消费：防缓冲未读数据把 graceful-FIN 的 'close' 推迟致假超时 */ })
+    sock.on('error', () => { /* 评审🟢：对称兜底（与 connect 用例同款）——万一 destroy 产生 RST，未监听 error 会炸测试进程 */ })
+    const clientClosed = await new Promise<boolean>((resolve) => {
+      const t = setTimeout(() => resolve(false), 1500)
+      sock.on('close', () => { clearTimeout(t); resolve(true) })
+    })
+    expect(clientClosed).toBe(true) // 无 idle 超时则隧道永挂、此处必超时失败 → 该断言严格证明 idle 兜底
+    await sleep(50) // 让上游侧 'close' 事件冲刷
+    expect(silent.closed).toBe(true) // 上游 fd 也被销毁（两端都清，非只清 client）
+    await silent.close()
+  })
+
+  it('CONNECT 上游不可达/握手挂起 → connect(超时)兜底销毁 clientSocket（防 fd 泄漏，有界 teardown）', async () => {
+    const s = await store()
+    // 注入 40ms connect 超时（生产默认 30s）。目标 10.255.255.1（RFC1918 私网、绝大多数环境无路由）。
+    // 稳健不 flaky（有界 teardown，恒绿）：三条路径都在 ~40ms 内销毁两端 fd——
+    //   ① SYN 被丢弃、TCP 握手挂起 → connect 超时(40ms)兜底（40ms « OS 连接超时数十秒，计时先赢）；
+    //   ② 环境快速报错(ENETUNREACH) → 既有 error→cleanup；③ 环境异常地连上 → idle 超时(40ms)兜底。
+    // 纯 TCP 握手无本地确定性 stall 手法（本机 VPN 会吞下任意 IP 的连接），故连接超时的**严格**证明
+    // 放在 ws-proxy.test.ts「上游不回 101」用例；此处证明连接失败/挂起不泄漏 fd。
+    const proxy = await serveForward({ port: 0, store: s.store, connectTimeoutMs: 40, tunnelIdleTimeoutMs: 40 })
+    handles.push(proxy)
+
+    const sock = netConnect(proxy.port, '127.0.0.1', () => {
+      sock.write('CONNECT 10.255.255.1:9 HTTP/1.1\r\nHost: 10.255.255.1:9\r\n\r\n')
+    })
+    sock.on('data', () => { /* flowing 消费 */ })
+    sock.on('error', () => { /* destroy 触发的 RST 亦可，静候 close */ })
+    const closed = await new Promise<boolean>((resolve) => {
+      const t = setTimeout(() => resolve(false), 1_500)
+      sock.on('close', () => { clearTimeout(t); resolve(true) })
+    })
+    expect(closed).toBe(true) // 无超时兜底则挂起的上游让 clientSocket 无限期泄漏
   })
 })
