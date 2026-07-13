@@ -49,7 +49,9 @@ export const storeWriter = (store: StateStore, changeDir: (name: string) => stri
   setAutomationOwned: (name, next) => setAutomationOwned(store, changeDir(name), next),
   markFailedSync: (name, reason) => {
     // shutdown 同步 best-effort：无法 await，fire-and-forget（错误吞掉）。
-    void store.setMany(changeDir(name), { automation: 'failed', automation_last_error: reason }).catch(() => {})
+    // F-b 同写纪律：cause 同批落空串——中断 reason 是自由文本（非 tag，无法干净定成因），空串交
+    // 读取端 regex 兜底；覆盖式写掉上一轮残留 cause，防与新 last_error 撕裂。
+    void store.setMany(changeDir(name), { automation: 'failed', automation_last_error: reason, automation_cause: '' }).catch(() => {})
   },
 })
 

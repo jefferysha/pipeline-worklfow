@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { createStateStore } from '@pipeline-lite/kernel'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { RunOutcome } from '../types.js'
-import { createAutomation } from './sdk.js'
+import { createAutomation, storeWriter } from './sdk.js'
 
 /**
  * SDK 对外 API 端到端（真 fs kernel store）：enqueue → scanReady → runRound（注入 fake runChange）。
@@ -119,5 +119,21 @@ describe('createAutomation SDK', () => {
     expect(afk.config.enabled).toBe(true) // SDK 内置显式 opt-in 语义不被文件翻转
     expect(afk.config.level).toBe('L1')
     expect(afk.config.maxParallel).toBe(5)
+  })
+
+  // ── F-b：storeWriter.markFailedSync 的 shutdown 写点——last_error/cause 同写（真落盘）──
+  it('storeWriter.markFailedSync：中断标 failed + last_error=reason + cause 同写空串（中断非 tag 类，覆盖旧残留，读取端 regex 兜）', async () => {
+    const dir = await initBuild('x')
+    // 预置上一轮残留 cause——验证同写覆盖（防「消息换了、成因还是旧的」撕裂）
+    await store.setMany(dir, { automation: 'running', automation_cause: 'timeout', automation_last_error: 'agent idle timeout' })
+    const writer = storeWriter(store, (name) => join(root, 'openspec', 'changes', name))
+    writer.markFailedSync('x', 'scheduler interrupted')
+    // fire-and-forget（void promise）：轮询等真落盘
+    for (let i = 0; i < 100 && (await store.get(dir, 'automation')) !== 'failed'; i++) {
+      await new Promise((r) => setTimeout(r, 10))
+    }
+    expect(await store.get(dir, 'automation')).toBe('failed')
+    expect(await store.get(dir, 'automation_last_error')).toBe('scheduler interrupted')
+    expect(await store.get(dir, 'automation_cause')).toBe('')
   })
 })

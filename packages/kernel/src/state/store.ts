@@ -111,6 +111,7 @@ function initialFields(opts: InitOptions, ts: string, baseBranch: string): Recor
   // 空串（run 外无沙箱内阶段，v5 T4），同样由 emptyFields() 覆盖——这里显式写一遍以对齐
   // 「heredoc 逐字段初值」的可读清单。
   f.automation_current_phase = ''
+  f.automation_cause = '' // 同上——F-b 末尾追加字段,缺省空串(=成因未知),显式列出保持清单完整(评审 nit)
   return f
 }
 

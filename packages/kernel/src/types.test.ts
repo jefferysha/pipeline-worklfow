@@ -3,8 +3,8 @@ import { FIELD_ORDER, PREREQ_HINTS } from './types.js'
 import { emptyFields } from './state/parse.js'
 
 describe('workflow 字段', () => {
-  it('workflow 在 automation_current_phase 之前（两次「末尾追加」的历史序钉死）', () => {
-    expect(FIELD_ORDER[FIELD_ORDER.length - 2]).toBe('workflow')
+  it('workflow 在 automation_current_phase 之前（历次「末尾追加」的历史序钉死）', () => {
+    expect(FIELD_ORDER[FIELD_ORDER.length - 3]).toBe('workflow')
   })
   it('emptyFields() 里 workflow 缺省值是 default', () => {
     expect(emptyFields().workflow).toBe('default')
@@ -12,11 +12,20 @@ describe('workflow 字段', () => {
 })
 
 describe('automation_current_phase 字段（v5 T4 决策 G）', () => {
-  it('新字段必须追加在 FIELD_ORDER 末尾（老窄解析器把它当尾部不透明行逐字保留，混版本读写无损）', () => {
-    expect(FIELD_ORDER[FIELD_ORDER.length - 1]).toBe('automation_current_phase')
+  it('automation_current_phase 在 automation_cause 之前（末尾追加历史序钉死）', () => {
+    expect(FIELD_ORDER[FIELD_ORDER.length - 2]).toBe('automation_current_phase')
   })
   it('emptyFields() 缺省空串（run 外无沙箱内阶段）', () => {
     expect(emptyFields().automation_current_phase).toBe('')
+  })
+})
+
+describe('automation_cause 字段（F-b 失败成因结构化落盘）', () => {
+  it('新字段必须追加在 FIELD_ORDER 末尾（老窄解析器把它当尾部不透明行逐字保留，混版本读写无损）', () => {
+    expect(FIELD_ORDER[FIELD_ORDER.length - 1]).toBe('automation_cause')
+  })
+  it('emptyFields() 缺省空串（空串=未知成因，读取端 fallback regex 分类）', () => {
+    expect(emptyFields().automation_cause).toBe('')
   })
 })
 

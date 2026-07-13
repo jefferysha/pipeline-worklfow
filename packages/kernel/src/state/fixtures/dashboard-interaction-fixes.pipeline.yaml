@@ -37,6 +37,7 @@ archived_at: null
 archived: false
 workflow: default
 automation_current_phase: ""
+automation_cause: ""
 pipeline_mode: human
 tools_history:
   - { at: 2026-06-30T13:52:46Z, tool: Skill, detail_b64: "aGFuZG9mZg==" }

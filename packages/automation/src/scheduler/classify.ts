@@ -41,7 +41,7 @@ const preservedPathOf = (err: Tagged): string | undefined => {
 
 export const classifyFailure = (err: unknown): Classification => {
   if (isVerifyFailSentinel(err)) {
-    return { kind: 'retry', message: 'verify-fail' }
+    return { kind: 'retry', message: 'verify-fail', cause: 'verify-fail' }
   }
 
   const tagged = (typeof err === 'object' && err !== null ? err : {}) as Tagged
@@ -50,10 +50,13 @@ export const classifyFailure = (err: unknown): Classification => {
   // 操作员 abort / dashboard 取消（CancelledRunError，afk-workbench Task 3：docker kill 前落标记，
   // runWork 结算探测到后转的 tagged error）→ conflict，绝不重试，留现场。preservedPath 直取结构化
   // 字段——两者都在 runChangeInSandbox 同一处构造，构造时早已知道 worktreePath，抄同一个模式。
+  // cause=cancelled（F-b）：人为取消是干净 tag 信号——此前读取端只有 200 字符截断 message 可 regex，
+  // 「用户取消」常被误判 unknown。
   if (tag === 'AbortedRunError' || tag === 'CancelledRunError') {
     return {
       kind: 'conflict',
       message: tagged.message ?? 'aborted',
+      cause: 'cancelled',
       preservedPath: tagged.preservedPath ?? preservedPathOf(tagged),
     }
   }
@@ -70,21 +73,24 @@ export const classifyFailure = (err: unknown): Classification => {
     return {
       kind: 'conflict',
       message: tagged.message ?? 'merge conflict / barrier drift',
+      cause: 'conflict',
       preservedPath: preservedPathOf(tagged),
     }
   }
 
   // agent idle-timeout = 瞬态挂起 → retry（下次可能有进展，非移动靶）。
   if (tag === 'AgentIdleTimeoutError') {
-    return { kind: 'retry', message: tagged.message ?? 'agent idle timeout' }
+    return { kind: 'retry', message: tagged.message ?? 'agent idle timeout', cause: 'timeout' }
   }
 
   // 其余（ExecError 任意 exit、超时、agent 错误）都 retry：瞬态 126/137 与真 build/verify 非零
-  // 都回 queued 直到 attempts 耗尽。仅让 message 更可读，动作不变。
+  // 都回 queued 直到 attempts 耗尽。仅让 message 更可读，动作不变。cause 空串 = 未知（ExecError
+  // 的 exit 码混着基础设施抖动与真 build 失败，tag 面无法干净定成因——不猜，读取端 regex 兜底）。
   const isTransient = tag === 'ExecError' && typeof tagged.exitCode === 'number' && TRANSIENT_EXEC_EXIT_CODES.has(tagged.exitCode)
 
   return {
     kind: 'retry',
     message: tagged.message ?? (isTransient ? 'transient exec failure' : err instanceof Error ? err.message : 'run failed'),
+    cause: '',
   }
 }

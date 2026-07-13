@@ -454,10 +454,12 @@ describe('runChangeInSandbox · codex agent 非零退出可见度（automation_l
     expect(out.noop).toBe(false)
     expect(state().automation_last_error).toContain('codex')
     expect(state().automation_last_error).toContain('exit 96')
+    // F-b：结构化成因与 last_error 同落——诚实 tag agent-exit（它只知道 agent 非零退出，不猜凭证）
+    expect(state().automation_cause).toBe('agent-exit')
     expect(log.some((l) => l.startsWith('wt.remove'))).toBe(true) // 正常 teardown 不受影响
   })
 
-  it('重复标记行只写一次（幂等，防日志重复回放行）', async () => {
+  it('重复标记行只写一次（幂等，防日志重复回放行；cause 同口径）', async () => {
     const { ports, log } = makePorts(
       codexStreamingOver(['[AGENT_EXIT] codex 96', '[AGENT_EXIT] codex 96', '[AGENT_EXIT] codex 96']),
     )
@@ -467,6 +469,7 @@ describe('runChangeInSandbox · codex agent 非零退出可见度（automation_l
       new AbortController().signal,
     )
     expect(log.filter((l) => l === 'setStateField:automation_last_error')).toHaveLength(1)
+    expect(log.filter((l) => l === 'setStateField:automation_cause')).toHaveLength(1)
   })
 
   it('exit=0 标记行不写（脚本层本不输出，宿主侧同样防御）；无标记行的 run 零写', async () => {
@@ -477,6 +480,7 @@ describe('runChangeInSandbox · codex agent 非零退出可见度（automation_l
       new AbortController().signal,
     )
     expect(a.log).not.toContain('setStateField:automation_last_error')
+    expect(a.log).not.toContain('setStateField:automation_cause')
 
     const b = makePorts(codexStreamingOver(['just noise', '[TRANSITION] x: build -> verify']))
     await runChangeInSandbox(
@@ -485,6 +489,7 @@ describe('runChangeInSandbox · codex agent 非零退出可见度（automation_l
       new AbortController().signal,
     )
     expect(b.log).not.toContain('setStateField:automation_last_error')
+    expect(b.log).not.toContain('setStateField:automation_cause')
   })
 
   it('消息为固定模板：不含日志正文/凭证值（凭证红线），≤200 字符（scheduler sanitize 截断口径）', async () => {

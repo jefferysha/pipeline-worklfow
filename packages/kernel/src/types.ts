@@ -19,6 +19,12 @@ export const FIELD_ORDER = [
   // 老读者会把其后所有真字段（branch/base_branch/workflow…）当不透明尾巴，回写时用缺省值再造一份
   // → 重复 key 静默腐蚀；放末尾则老读者只把这一行当尾巴逐字保留，混版本读写无损。
   'automation_current_phase',
+  // F-b（2026-07-13）：失败成因结构化 tag——automation 写入端按 error _tag 干净判定落盘
+  // （cancelled/conflict/timeout/verify-fail/agent-exit/no-op，开放集），空串=未知（基础设施类
+  // 不写，读取端 fallback regex 分类 automation_last_error 文本）。与 automation_last_error
+  // **同写同清**（写点见 automation scheduler/lifecycle/sdk），杜绝「消息换了、成因还是旧的」撕裂。
+  // 末尾追加理由同 automation_current_phase（老窄解析器 opaqueTail 腐蚀警告见上）。
+  'automation_cause',
 ] as const
 
 export type FieldName = (typeof FIELD_ORDER)[number]

@@ -234,9 +234,12 @@ export const runChangeInSandbox = async (ports: LifecyclePorts, cfg: RunChangeCo
   )
   // 观察项③：[AGENT_EXIT] 标记行 → automation_last_error 同步落（幂等一次、best-effort，见
   // createAgentExitWatch）。不参与 settle——错误消息本就要在 run 结算后留存可见。
-  const agentExitWatch = createAgentExitWatch((value) =>
-    ports.setStateField(cfg.name, 'automation_last_error', value),
-  )
+  // F-b：cause=agent-exit 与 last_error 同写（诚实 tag：它只知道 agent 非零退出，不猜凭证失效）；
+  // 若 run 随后真失败，scheduler applyFailure 会按最终失败 tag 整体覆盖两字段，语义自洽。
+  const agentExitWatch = createAgentExitWatch(async (value) => {
+    await ports.setStateField(cfg.name, 'automation_last_error', value)
+    await ports.setStateField(cfg.name, 'automation_cause', 'agent-exit')
+  })
   try {
     // 沙箱 env 注入 PIPELINE_AFK=1（headless 放行三门）+ 调用方 extraEnv（token/代理地址等）；
     // PIPELINE_AFK_ENV 放最后展开，extraEnv 若尝试同名覆盖也不生效（硬护栏优先）。

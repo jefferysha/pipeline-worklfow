@@ -84,9 +84,26 @@ export type AutomationLevel = (typeof AUTOMATION_LEVELS)[number]
 /** 失败分类（老仓 scheduler/types.ts:78-86）：retry 回 queued；conflict 留现场不重试。 */
 export type FailureKind = 'retry' | 'conflict'
 
+/**
+ * 结构化失败成因 tag（F-b，kernel 契约字段 automation_cause 的写入值域）——按 error `_tag`
+ * 干净判定，绝不 regex message（message 会漂、会被 200 字符截断丢信号；tag 不会）：
+ *   - `cancelled`   人为取消（AbortedRunError 操作员 abort / CancelledRunError dashboard 取消）
+ *   - `conflict`    冲突族（SyncError / MergeToHostTimeoutError / WorktreeError /
+ *                   BarrierDriftError / DenylistViolationError）
+ *   - `timeout`     AgentIdleTimeoutError（agent idle 超时）
+ *   - `verify-fail` 诚实结算 verify_result=fail 转失败（sentinel）
+ *   - `agent-exit`  agent 非零退出（lifecycle [AGENT_EXIT] 观察器旁路写点，不经 classifyFailure）
+ *   - `no-op`       空跑（零 commit / buildSha 缺失，scheduler noop 诚实结算写点）
+ *   - `''`（空串）  未知/基础设施类（ExecError 等 tag 无法干净定成因）——读取端 fallback regex 兜。
+ * 读取端按**开放集**消费：未识别值自动 fallback，追加新值不破。生命周期：与
+ * automation_last_error **同写同清**（所有写 last_error 的落点必须同步写 cause，真值或空串），
+ * 杜绝「消息换了、成因还是旧的」撕裂。
+ */
 export interface Classification {
   readonly kind: FailureKind
   readonly message: string
+  /** 结构化成因 tag（必填；空串=未知，见上值域表）。 */
+  readonly cause: string
   /** 保留的脏 worktree 路径（conflict only），供人工接管。 */
   readonly preservedPath?: string
 }

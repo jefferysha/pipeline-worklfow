@@ -59,6 +59,12 @@ describe('parsePipeline（窄解析器）', () => {
     expect(state.fields.depends_on).toBe('channel-supervisor-process')
   })
 
+  it('老文件缺 automation_cause 行 → 读为空串（F-b 末尾追加，容忍不变），写回补 automation_cause: ""', () => {
+    const state = parsePipeline(fixture('channel-adapter-worker-guard-oldschema.pipeline.yaml'))
+    expect(state.fields.automation_cause).toBe('')
+    expect(serializePipeline(state)).toContain('\nautomation_cause: ""\n')
+  })
+
   it('列表字段：块序列 → string[]，空列表 [] → []，flat 标量保持 string', () => {
     const state = parsePipeline(fixture('synthetic-lists.pipeline.yaml'))
     expect(state.fields.scope).toEqual(['packages/kernel', 'packages/cli'])
@@ -82,7 +88,7 @@ describe('serializePipeline（严格 FIELD_ORDER 全量写回）', () => {
     })
   }
 
-  it('老 schema 读后写回 → 归一化为全量 39 字段（缺省写空串 ""）', () => {
+  it('老 schema 读后写回 → 归一化为全量 40 字段（缺省写空串 ""）', () => {
     const out = serializePipeline(parsePipeline(fixture('channel-adapter-worker-guard-oldschema.pipeline.yaml')))
     const keys = out
       .split('\n')

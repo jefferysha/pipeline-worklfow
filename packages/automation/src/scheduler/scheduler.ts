@@ -138,6 +138,9 @@ export const createScheduler = (deps: SchedulerDeps): Scheduler => {
     if (!won) return 'skipped'
     if (noop) {
       await state.setField(name, 'automation_last_error', sanitize('no-op run：零 commit / 空构建（build_sha 缺失）——未合并、未解锁下游，停给人工复核'))
+      // F-b 同写纪律：写 last_error 的落点必须同步写 cause——noop 是结构化标志（outcome.noop），
+      // 干净赢面，落 no-op（读取端开放集，未识别自动 fallback）。
+      await state.setField(name, 'automation_cause', 'no-op')
     }
     // 成功 = 问题已花完，attempts 清零（若日后重排从干净预算起）。
     await state.setField(name, 'automation_attempts', '0')
@@ -156,6 +159,8 @@ export const createScheduler = (deps: SchedulerDeps): Scheduler => {
       const won = await state.setAutomationOwned(name, 'conflict')
       if (!won) return 'skipped'
       await state.setField(name, 'automation_last_error', lastError)
+      // F-b：结构化成因与 last_error 同写（classifyFailure 按 tag 定值，空串=未知交读取端 regex）。
+      await state.setField(name, 'automation_cause', c.cause)
       // 路径字段走 sanitizePath（不截断）：preserved_path 是留现场的真 worktree 路径，深路径项目
       // 截断即损坏（同 automation_worktree 的真机 P1 同类，见 sanitizePath 注释）。
       if (c.preservedPath) await state.setField(name, 'automation_preserved_path', sanitizePath(c.preservedPath))
@@ -168,6 +173,9 @@ export const createScheduler = (deps: SchedulerDeps): Scheduler => {
     const won = await state.setAutomationOwned(name, next)
     if (!won) return 'skipped'
     await state.setField(name, 'automation_last_error', lastError)
+    // F-b 同写纪律（同 conflict 分支）：cause 覆盖式落盘——即便空串也写，防上一轮残留 tag 与新
+    // message 撕裂（「消息换了、成因还是旧的」）。
+    await state.setField(name, 'automation_cause', c.cause)
     return next
   }
 

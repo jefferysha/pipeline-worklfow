@@ -98,7 +98,7 @@ describe('scheduler round（真状态机写回 + 分级放权）', () => {
     expect(auto.get('c')).toBe('merged')
   })
 
-  it('verify-fail：预算内 → queued 重试；耗尽 → failed', async () => {
+  it('verify-fail：预算内 → queued 重试；耗尽 → failed；cause=verify-fail 与 last_error 同落（F-b）', async () => {
     // maxRetries=1：第一次失败 attempts 1<=1 → queued
     const s1 = makeState({ c: 'queued' })
     await createScheduler({
@@ -108,6 +108,8 @@ describe('scheduler round（真状态机写回 + 分级放权）', () => {
       config: { maxParallel: 1, maxRetries: 1, level: 'L3' },
     }).runRoundOnce(['c'])
     expect(s1.auto.get('c')).toBe('queued')
+    expect(s1.fields.get('c')?.automation_last_error).toBe('verify-fail')
+    expect(s1.fields.get('c')?.automation_cause).toBe('verify-fail')
 
     // attempts 已是 1：再失败 → 2>1 → failed
     const s2 = makeState({ c: 'queued' })
@@ -121,7 +123,7 @@ describe('scheduler round（真状态机写回 + 分级放权）', () => {
     expect(s2.auto.get('c')).toBe('failed')
   })
 
-  it('runChange throw conflict 类 → conflict + 落 last_error/preserved_path', async () => {
+  it('runChange throw conflict 类 → conflict + 落 last_error/preserved_path + cause=conflict（F-b）', async () => {
     const { state, auto, fields } = makeState({ c: 'queued' })
     await createScheduler({
       state,
@@ -134,6 +136,36 @@ describe('scheduler round（真状态机写回 + 分级放权）', () => {
     expect(auto.get('c')).toBe('conflict')
     expect(fields.get('c')?.automation_preserved_path).toBe('/wt/c')
     expect(fields.get('c')?.automation_last_error).toBeTruthy()
+    expect(fields.get('c')?.automation_cause).toBe('conflict')
+  })
+
+  it('F-b · dashboard 取消（CancelledRunError）→ conflict + cause=cancelled（读取端不再误判 unknown）', async () => {
+    const { state, auto, fields } = makeState({ c: 'queued' })
+    await createScheduler({
+      state,
+      runChange: async () => {
+        throw { _tag: 'CancelledRunError', message: 'cancel requested via dashboard', preservedPath: '/wt/c' }
+      },
+      registerShutdown: noopShutdown,
+      config: { maxParallel: 1, maxRetries: 1, level: 'L3' },
+    }).runRoundOnce(['c'])
+    expect(auto.get('c')).toBe('conflict')
+    expect(fields.get('c')?.automation_cause).toBe('cancelled')
+  })
+
+  it('F-b · 未知错误（tag 不可干净判定）→ cause 同写空串，覆盖旧值（与 last_error 同写同清，防「消息换了成因还是旧的」撕裂）', async () => {
+    const { state, fields } = makeState({ c: 'queued' })
+    fields.set('c', { automation_cause: 'timeout', automation_last_error: 'agent idle timeout' }) // 上一轮残留
+    await createScheduler({
+      state,
+      runChange: async () => {
+        throw new Error('mystery infra boom')
+      },
+      registerShutdown: noopShutdown,
+      config: { maxParallel: 1, maxRetries: 1, level: 'L3' },
+    }).runRoundOnce(['c'])
+    expect(fields.get('c')?.automation_last_error).toContain('mystery')
+    expect(fields.get('c')?.automation_cause).toBe('') // 空串=未知，读取端 regex 兜底；绝不残留 timeout
   })
 
   it('并发 ≤ maxParallel（观察峰值）', async () => {
@@ -206,6 +238,7 @@ describe('scheduler round（真状态机写回 + 分级放权）', () => {
     expect(auto.get('c')).not.toBe('merged') // 关键：绝不空跑解锁下游
     expect(auto.get('c')).toBe('paused')
     expect(fields.get('c')?.automation_last_error).toBeTruthy() // 诚实原因可见
+    expect(fields.get('c')?.automation_cause).toBe('no-op') // F-b：结构化成因与 last_error 同落
   })
 
   it('B2 · noop 空跑在 L1 仍落 paused（report-only 既有语义不回归）', async () => {
