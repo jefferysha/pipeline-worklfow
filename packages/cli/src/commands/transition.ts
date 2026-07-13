@@ -42,14 +42,16 @@
  * 降级跳过文件面、字段面仍全量——GUARD-RULES §7.2 同款降级口径）。
  */
 import {
+  applyStepTransition,
   applyTransitionEffects,
   checkTransitionPreconditions,
   eventEdge,
-  evaluateStepGuards,
   IllegalTransitionError,
   loadWorkflow,
+  planStepTransition,
+  resolveWorkflowName,
 } from '@pipeline-lite/kernel'
-import type { Phase, PipelineState, TransitionContext, TransitionResult } from '@pipeline-lite/kernel'
+import type { Phase, TransitionContext, TransitionResult } from '@pipeline-lite/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
 import { changeDir, isValidChangeName } from '../paths.js'
 import { str } from '../render.js'
@@ -120,10 +122,10 @@ export async function cmdTransition(deps: CliDeps, name: string, event: string):
   try {
     outcome = await deps.store.withLock(dir, async (): Promise<TxnOutcome> => {
       const state = await deps.store.read(dir)
-      // 双轨分岔（读完 state 立刻按 workflow 字段分流；'' 是历史遗留非自定义名，故 `|| 'default'`
-      // 兜底——`??` 不兜空串）：default 走原有整条固定 8 事件表链路一行不改；非 default 走全新、
+      // 双轨分岔（读完 state 立刻按 workflow 字段分流；'' 历史遗留兜 'default'——习语单源在
+      // kernel resolveWorkflowName）：default 走原有整条固定 8 事件表链路一行不改；非 default 走全新、
       // 更简单的 step-transitions 链路，两条链路除共用「读 state」「写 history」外不共享任何中间步骤。
-      const workflowName = str(state.fields.workflow) || 'default'
+      const workflowName = resolveWorkflowName(state)
       if (workflowName === 'default') {
         const edge = eventEdge(event)
         if (!edge) throw new UnknownEventError(event)
@@ -147,30 +149,26 @@ export async function cmdTransition(deps: CliDeps, name: string, event: string):
       if (!wf) {
         throw new WorkflowError(`ERROR: workflow '${workflowName}' 未找到（期望 .pipeline/workflows/${workflowName}.yaml）`)
       }
-      const currentStepId = str(state.fields.phase)
-      const step = wf.steps.find((s) => s.id === currentStepId)
-      if (!step) {
-        throw new WorkflowError(`ERROR: step '${currentStepId}' 不在 workflow '${workflowName}' 里`)
+      // 解析 step/找边/评 guard 编排在 kernel planStepTransition 单源（guard 求值针对「正在
+      // 退出的」当前 step、找边先于评 guard 的次序都钉在 kernel）；本文件只做 kind→异常/exit
+      // 映射，错误消息模板逐字保持在 adapter。
+      const plan = planStepTransition(wf, state, event, { changeDirAbs: dir })
+      if (!plan.ok) {
+        if (plan.kind === 'step-not-in-graph') {
+          throw new WorkflowError(`ERROR: step '${plan.stepId}' 不在 workflow '${workflowName}' 里`)
+        }
+        if (plan.kind === 'event-unsupported') {
+          const available = plan.available.join(', ') || '(无)'
+          throw new WorkflowError(
+            `ERROR: step '${plan.stepId}' 不支持 event '${event}'；该 step 支持：${available}`,
+          )
+        }
+        throw new StepGuardError([`ERROR: step '${plan.stepId}' guard 未通过：`, ...plan.failures])
       }
-      const edge = step.transitions.find((t) => t.event === event)
-      if (!edge) {
-        const available = step.transitions.map((t) => t.event).join(', ') || '(无)'
-        throw new WorkflowError(
-          `ERROR: step '${currentStepId}' 不支持 event '${event}'；该 step 支持：${available}`,
-        )
-      }
-      // guard 求值针对「正在退出的」当前 step（对齐 default 的「先校验再改相位」次序）
-      const guardResult = evaluateStepGuards(state, step, { changeDirAbs: dir })
-      if (!guardResult.pass) {
-        throw new StepGuardError([`ERROR: step '${currentStepId}' guard 未通过：`, ...guardResult.failures])
-      }
-      // 同一把锁内改写 phase 到目标 step id 并落盘（无 kernel flow：自定义 phase 序不在硬编码相位图里）
-      const next: PipelineState = {
-        ...state,
-        fields: { ...state.fields, phase: edge.to, updated_at: deps.clock() },
-      }
-      await deps.store.write(dir, next)
-      return { workflow: 'custom', from: currentStepId, to: edge.to }
+      // 同一把锁内改写 phase 到目标 step id 并落盘（kernel applyStepTransition 纯变换
+      // phase+updated_at；无 kernel flow：自定义 phase 序不在硬编码相位图里）
+      await deps.store.write(dir, applyStepTransition(state, plan.to, deps.clock))
+      return { workflow: 'custom', from: plan.from, to: plan.to }
     })
   } catch (e) {
     if (e instanceof EventPreconditionError) {

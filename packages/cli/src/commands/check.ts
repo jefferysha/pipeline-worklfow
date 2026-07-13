@@ -9,7 +9,7 @@
  * 非 default → 读该 workflow 当前 step 定义、按 step-guard 评估（evaluateStepGuards）。check 是纯预览：
  * 两条路径都绝不写盘。exit 语义统一：过 0 / guard 不过 2 / 配置错（workflow 缺失·非法、step 不在图）1。
  */
-import { evaluateStepGuards, loadWorkflow } from '@pipeline-lite/kernel'
+import { evaluateStepGuards, loadWorkflow, resolveStep, resolveWorkflowName } from '@pipeline-lite/kernel'
 import type { PipelineState } from '@pipeline-lite/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
 import { changeDir, isValidChangeName } from '../paths.js'
@@ -29,7 +29,7 @@ export async function cmdCheck(deps: CliDeps, name: string): Promise<number> {
     return 1
   }
 
-  const workflowName = str(state.fields.workflow) || 'default'
+  const workflowName = resolveWorkflowName(state)
   if (workflowName !== 'default') {
     return checkCustomWorkflow(deps, name, dir, state, workflowName)
   }
@@ -76,7 +76,7 @@ function checkCustomWorkflow(
     return 1
   }
   const currentStepId = str(state.fields.phase)
-  const step = wf.steps.find((s) => s.id === currentStepId)
+  const step = resolveStep(wf, currentStepId)
   if (!step) {
     deps.io.err(`ERROR: step '${currentStepId}' 不在 workflow '${workflowName}' 里`)
     return 1

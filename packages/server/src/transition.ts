@@ -13,13 +13,15 @@ import { existsSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import {
+  applyStepTransition,
   applyTransitionEffects,
   checkTransitionPreconditions,
   eventEdge,
-  evaluateStepGuards,
   HISTORY_FILE,
   IllegalTransitionError,
   loadWorkflow,
+  planStepTransition,
+  resolveWorkflowName,
 } from '@pipeline-lite/kernel'
 import type { FieldName, FlowEngine, HistoryEntry, HistoryWriter, PipelineState, StateStore, TransitionContext } from '@pipeline-lite/kernel'
 
@@ -87,32 +89,26 @@ export async function performTransition(
   try {
     const result = await deps.store.withLock(dir, async (): Promise<{ from: string; to: string }> => {
       const state = await deps.store.read(dir)
-      // 双轨分岔（对齐 cli/commands/transition.ts:126 的同名逻辑；'' 历史遗留兜 'default'）：
-      // default 走 kernel 固定事件表原链路一行不改；非 default 按该 change 的 workflow 定义
-      // 查当前 step 自己声明的 transitions + step guards（G17 端到端补全——UI 分组看板发出的
-      // 自定义 event 此前会被下面的固定事件表挡成 400）。响应形状两轨一致（D4：端点形状零改动）。
-      const workflowName = fstr(state, 'workflow') || 'default'
+      // 双轨分岔（对齐 cli/commands/transition.ts 的同名逻辑；'' 历史遗留兜 'default'——习语
+      // 单源在 kernel resolveWorkflowName）：default 走 kernel 固定事件表原链路一行不改；非
+      // default 的「解析 step/找边/评 guard」编排在 kernel planStepTransition 单源（G17 端到端
+      // 补全——UI 分组看板发出的自定义 event 此前会被下面的固定事件表挡成 400），本文件只做
+      // kind→HTTP 错误分类映射（消息逐字保持）。响应形状两轨一致（D4：端点形状零改动）。
+      const workflowName = resolveWorkflowName(state)
       if (workflowName !== 'default') {
         const wf = loadWorkflow(root, workflowName)
         if (!wf) throw new ConflictError(`workflow '${workflowName}' 未找到（期望 .pipeline/workflows/${workflowName}.yaml）`)
-        const currentStepId = fstr(state, 'phase')
-        const step = wf.steps.find((s) => s.id === currentStepId)
-        if (!step) throw new ConflictError(`step '${currentStepId}' 不在 workflow '${workflowName}' 里`)
-        const stepEdge = step.transitions.find((t) => t.event === event)
-        if (!stepEdge) {
-          const available = step.transitions.map((t) => t.event).join(', ') || '(无)'
-          throw new ConflictError(`step '${currentStepId}' 不支持 event '${event}'；该 step 支持：${available}`)
+        const plan = planStepTransition(wf, state, event, { changeDirAbs: dir })
+        if (!plan.ok) {
+          if (plan.kind === 'step-not-in-graph') throw new ConflictError(`step '${plan.stepId}' 不在 workflow '${workflowName}' 里`)
+          if (plan.kind === 'event-unsupported') {
+            const available = plan.available.join(', ') || '(无)'
+            throw new ConflictError(`step '${plan.stepId}' 不支持 event '${event}'；该 step 支持：${available}`)
+          }
+          throw new PreconditionError([`step '${plan.stepId}' guard 未通过`, ...plan.failures])
         }
-        const guardResult = evaluateStepGuards(state, step, { changeDirAbs: dir })
-        if (!guardResult.pass) {
-          throw new PreconditionError([`step '${currentStepId}' guard 未通过`, ...guardResult.failures])
-        }
-        const next: PipelineState = {
-          ...state,
-          fields: { ...state.fields, phase: stepEdge.to, updated_at: deps.clock() },
-        }
-        await deps.store.write(dir, next)
-        return { from: currentStepId, to: stepEdge.to }
+        await deps.store.write(dir, applyStepTransition(state, plan.to, deps.clock))
+        return { from: plan.from, to: plan.to }
       }
 
       const edge = eventEdge(event)

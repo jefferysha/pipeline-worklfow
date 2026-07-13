@@ -17,6 +17,10 @@ export * from './scaffold/index.js'
 // ./workflow/types.js（其 GateKind 会与既有 barrel 导出撞名）。
 export { loadWorkflow } from './workflow/loadWorkflow.js'
 export { evaluateStepGuards } from './workflow/stepGuard.js'
+// step 编排层（Wave 2 下沉）：解析 step/找边/评 guard/算下相位的单一真相源，
+// cli transition/check 与 server transition 塌成 adapter（消息模板与错误分类学留 adapter）。
+export { applyStepTransition, firstStep, planStepTransition, resolveStep, resolveWorkflowName } from './workflow/engine.js'
+export type { StepTransitionPlan } from './workflow/engine.js'
 export { isSkillUnlocked } from './workflow/skillDag.js'
 export { serializeWorkflow } from './workflow/serialize.js'
 export { validateWorkflow } from './workflow/validate.js'
