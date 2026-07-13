@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import { useT } from '../i18n'
 import { Icon } from '../shell/Icon'
 
@@ -27,6 +27,15 @@ import { Icon } from '../shell/Icon'
  *
  * 决议 #1 红线：无画布库——chevron 段用 CSS clip-path（flex 布局的一部分），转换事件名连接件
  * 用普通文本 chip，不引入任何 SVG DAG/graph 渲染库。
+ *
+ * v8-E（意见⑥，设计真相源 design-demos/v8-trellis-encore.html #view-workbench .stages 段）：
+ * chevron 鱼鳞段 → 阶段卡横排。卡=序号圆(绿 tint mono)+阶段名 mono+技能 chips+◇/⚙/▤ 微元
+ * 信息+复核门红徽章；选中卡=绿 ring+tint 底(.wb8-stage--on)。段间连接件 .wb8-conn=CSS
+ * repeating-linear-gradient 流动虚线+clip-path 箭头（prefers-reduced-motion 停动画，见 styles
+ * wb8 块）；demo 语义：gated 连接件跟在门阶段**之后**（复核门拦的是「离开该阶段」的推进边），
+ * 红虚线+菱形门节点。连接件仍按「边存在才画」诚实原则（linkEvent null 不画，末尾不画）。
+ * 行为契约零变化：testid（wb-step-/wb-flow-count-/wb-flow-gate-/wb-flow-gatepop-/
+ * wb-flow-gloss-）、onSelect/aria-current/popover/添加阶段 全部保留——变的只是视觉承载结构。
  */
 export interface StepperStep {
   id: string
@@ -102,107 +111,115 @@ export function StepperRail({
   }, [pinnedGate])
 
   return (
-    <div className="wb-rail">
-      <div className="wb-flow" aria-label={label} ref={railRef}>
+    <div className="wb-rail wb8-rail">
+      <div className="wb8-stages" aria-label={label} ref={railRef}>
         {steps.map((s, i) => {
           const on = s.id === selectedId
           const openPop = hoverGate === s.id || pinnedGate === s.id
           const gateLabel = s.gate === 'confirm' ? t('workbench.gate_badge_confirm') : t('workbench.gate_badge')
           return (
-            <div
-              key={s.id}
-              className={`wb-flow-seg${i === 0 ? ' wb-flow-seg--first' : ''}${i === steps.length - 1 ? ' wb-flow-seg--last' : ''}${on ? ' wb-flow-seg--on' : ''}`}
-              data-testid={`wb-step-${s.id}`}
-              aria-current={on ? 'step' : undefined}
-              // 选中态点击处理落在外层容器（不落在下面 .wb-flow-hit 按钮本身）：门徽章是这个
-              // 容器的兄弟节点而非 .wb-flow-hit 子节点，选中处理若挂在 .wb-flow-hit 上，直接
-              // 点击容器本身（既有测试的既定用法，如 fireEvent.click(getByTestId('wb-step-x'))）
-              // 不会经过 .wb-flow-hit 冒泡触发。原生点击事件冒泡覆盖 .wb-flow-hit 内部（含键盘
-              // Enter/Space 在其上触发的原生 click），门徽章自己的 onClick 会 stopPropagation
-              // 挡掉，两者不会互相误触发。
-              onClick={() => onSelect(s.id)}
-            >
-              <button type="button" className="wb-flow-hit">
-                <span className="wb-step-top">
-                  <span className="wb-step-num">{i + 1}</span>
-                </span>
-                {s.running && <i className="wb-flow-gloss" data-testid={`wb-flow-gloss-${s.id}`} aria-hidden="true" />}
-                <span className="wb-step-name">{s.name}</span>
-                <span className="wb-step-id">{s.id}</span>
-                <span className="wb-step-meta">
-                  <span>◇ {t('workbench.meta_skills', { n: s.skills.length })}</span>
-                  {s.hooksCount !== undefined && (
-                    <>
+            <Fragment key={s.id}>
+              <div
+                className={`wb8-stage${on ? ' wb8-stage--on' : ''}`}
+                data-testid={`wb-step-${s.id}`}
+                aria-current={on ? 'step' : undefined}
+                // 选中态点击处理落在外层容器（不落在下面 .wb8-hit 按钮本身）：门徽章是这个
+                // 容器的兄弟节点而非 .wb8-hit 子节点，选中处理若挂在 .wb8-hit 上，直接
+                // 点击容器本身（既有测试的既定用法，如 fireEvent.click(getByTestId('wb-step-x'))）
+                // 不会经过 .wb8-hit 冒泡触发。原生点击事件冒泡覆盖 .wb8-hit 内部（含键盘
+                // Enter/Space 在其上触发的原生 click），门徽章自己的 onClick 会 stopPropagation
+                // 挡掉，两者不会互相误触发。
+                onClick={() => onSelect(s.id)}
+              >
+                <button type="button" className="wb8-hit">
+                  <span className="wb8-num">{i + 1}</span>
+                  {s.running && <i className="wb8-gloss" data-testid={`wb-flow-gloss-${s.id}`} aria-hidden="true" />}
+                  <span className="wb8-body">
+                    <span className="wb8-t">
+                      <b className="wb8-name">{s.name}</b>
+                      <span className="wb8-id">{s.id}</span>
+                    </span>
+                    <span className="wb8-meta">
+                      <span>◇ {t('workbench.meta_skills', { n: s.skills.length })}</span>
+                      {s.hooksCount !== undefined && (
+                        <>
+                          <i>·</i>
+                          <span>⚙ {t('workbench.meta_hooks', { n: s.hooksCount })}</span>
+                        </>
+                      )}
                       <i>·</i>
-                      <span>⚙ {t('workbench.meta_hooks', { n: s.hooksCount })}</span>
-                    </>
-                  )}
-                  <i>·</i>
-                  <span>▤ {t('workbench.meta_outputs', { n: s.outputsCount })}</span>
-                </span>
-                {s.skills.length > 0 && (
-                  <span className="wb-step-sk">
-                    {s.skills.slice(0, 2).map((id) => (
-                      <span key={id} className="wb-skc" title={id}>{shortSkill(id)}</span>
-                    ))}
-                    {s.skills.length > 2 && <span className="wb-skc-n">+{s.skills.length - 2}</span>}
-                  </span>
-                )}
-              </button>
-
-              <span className="wb-flow-badges">
-                {s.count > 0 && (
-                  <span
-                    className="wb-flow-count"
-                    data-testid={`wb-flow-count-${s.id}`}
-                    title={t('workbench.flow_count_title', { n: s.count })}
-                  >
-                    {s.count}
-                  </span>
-                )}
-                {s.gate && (
-                  <span className="wb-flow-gatewrap">
-                    <button
-                      type="button"
-                      className="badge badge--gate wb-step-gate wb-flow-gate"
-                      data-testid={`wb-flow-gate-${s.id}`}
-                      aria-expanded={openPop}
-                      title={t('workbench.gate_pop_title')}
-                      onMouseEnter={() => setHoverGate(s.id)}
-                      onMouseLeave={() => setHoverGate(null)}
-                      onFocus={() => setHoverGate(s.id)}
-                      onBlur={() => setHoverGate(null)}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        setPinnedGate((cur) => (cur === s.id ? null : s.id))
-                      }}
-                    >
-                      <Icon name="gate" size={10} />
-                      {gateLabel}
-                    </button>
-                    {openPop && (
-                      <div className="wb-flow-gatepop" data-testid={`wb-flow-gatepop-${s.id}`} role="tooltip">
-                        <p className="wb-flow-gatepop-t">{t('workbench.gate_pop_title')}</p>
-                        {gateHooks.map((h) => (
-                          <p key={h.id} className="wb-flow-gatepop-row">
-                            <b>{h.name}</b>
-                            {h.desc}
-                          </p>
+                      <span>▤ {t('workbench.meta_outputs', { n: s.outputsCount })}</span>
+                    </span>
+                    {s.skills.length > 0 && (
+                      <span className="wb8-sk">
+                        {s.skills.slice(0, 2).map((id) => (
+                          <span key={id} className="wb-skc" title={id}>{shortSkill(id)}</span>
                         ))}
-                      </div>
+                        {s.skills.length > 2 && <span className="wb-skc-n">+{s.skills.length - 2}</span>}
+                      </span>
                     )}
                   </span>
-                )}
-              </span>
+                </button>
 
+                <span className="wb8-badges">
+                  {s.count > 0 && (
+                    <span
+                      className="wb-flow-count"
+                      data-testid={`wb-flow-count-${s.id}`}
+                      title={t('workbench.flow_count_title', { n: s.count })}
+                    >
+                      {s.count}
+                    </span>
+                  )}
+                  {s.gate && (
+                    <span className="wb-flow-gatewrap">
+                      <button
+                        type="button"
+                        className="badge badge--gate wb-step-gate wb-flow-gate"
+                        data-testid={`wb-flow-gate-${s.id}`}
+                        aria-expanded={openPop}
+                        title={t('workbench.gate_pop_title')}
+                        onMouseEnter={() => setHoverGate(s.id)}
+                        onMouseLeave={() => setHoverGate(null)}
+                        onFocus={() => setHoverGate(s.id)}
+                        onBlur={() => setHoverGate(null)}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setPinnedGate((cur) => (cur === s.id ? null : s.id))
+                        }}
+                      >
+                        <Icon name="gate" size={10} />
+                        {gateLabel}
+                      </button>
+                      {openPop && (
+                        <div className="wb-flow-gatepop" data-testid={`wb-flow-gatepop-${s.id}`} role="tooltip">
+                          <p className="wb-flow-gatepop-t">{t('workbench.gate_pop_title')}</p>
+                          {gateHooks.map((h) => (
+                            <p key={h.id} className="wb-flow-gatepop-row">
+                              <b>{h.name}</b>
+                              {h.desc}
+                            </p>
+                          ))}
+                        </div>
+                      )}
+                    </span>
+                  )}
+                </span>
+              </div>
+
+              {/* 段间连接件：流动虚线+箭头；门阶段之后的推进边=红虚线+菱形门节点（demo .conn.gated）。
+                  连接件是卡的兄弟节点（demo .stages 同款 flex 序），事件名小字随连接件走。 */}
               {s.linkEvent !== null && i < steps.length - 1 && (
-                <span className="wb-flow-ev" aria-hidden="true">{s.linkEvent}</span>
+                <div className={`wb8-conn${s.gate ? ' wb8-conn--gated' : ''}`} aria-hidden="true">
+                  {s.gate && <span className="wb8-gate-node" />}
+                  <span className="wb8-ev">{s.linkEvent}</span>
+                </div>
               )}
-            </div>
+            </Fragment>
           )
         })}
         <button
-          className="wb-flow-add"
+          className="wb8-add"
           onClick={onAddStage}
           disabled={!onAddStage}
           title={onAddStage ? undefined : t('workbench.add_stage_pending')}

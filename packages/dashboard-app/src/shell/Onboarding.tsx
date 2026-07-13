@@ -6,8 +6,6 @@ export interface OnboardingProps {
   kind: 'no-project' | 'no-change'
   /** no-change 形态：当前项目 root（拼 CLI 命令用）。 */
   root?: string
-  /** no-change 形态主按钮 → 打开 NewChangeDialog。 */
-  onNewChange?: () => void
 }
 
 /** 建 change 的教学命令（字面终端命令，非 i18n——命令本身不翻译）。 */
@@ -51,7 +49,7 @@ function CmdRow({ cmd, testid, copyTestid }: { cmd: string; testid: string; copy
  * T17（决议#7 + T2）：pipeline init best-effort 自动登记项目（kernel projectRegistry），注册表单
  * 与 POST /api/projects 调用退役（端点仅兼容保留），幽灵命令 `pipeline projects add` 一并清除。
  */
-export function Onboarding({ kind, root, onNewChange }: OnboardingProps): JSX.Element {
+export function Onboarding({ kind, root }: OnboardingProps): JSX.Element {
   const { t } = useT()
 
   if (kind === 'no-change') {
@@ -61,14 +59,6 @@ export function Onboarding({ kind, root, onNewChange }: OnboardingProps): JSX.El
         <div className="empty__mark" aria-hidden="true">⧉</div>
         <h2 className="empty__title">{t('onboard.no_change_title')}</h2>
         <p className="empty__desc">{t('onboard.no_change_desc')}</p>
-        <button type="button" className="btn" data-testid="onboard-new-change" style={{ marginBottom: 16 }} onClick={onNewChange}>
-          ＋ {t('onboard.new_change')}
-        </button>
-        <div className="ob-or">
-          <span className="ob-or__line" />
-          {t('onboard.or_cli')}
-          <span className="ob-or__line" />
-        </div>
         <CmdRow cmd={cli} testid="onboard-cli" copyTestid="onboard-copy" />
       </div>
     )

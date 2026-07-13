@@ -9,14 +9,14 @@ beforeEach(() => {
 
 function renderNav(over: Partial<Parameters<typeof Nav>[0]> = {}) {
   const props = {
-    view: 'inbox' as const,
+    view: 'progress' as const,
     onView: vi.fn(),
     lang: 'zh' as const,
     onLang: vi.fn(),
     theme: 'light' as const,
     onTheme: vi.fn(),
     connected: true,
-    inboxCount: 0,
+    decisionCount: 0,
     ...over,
   }
   render(
@@ -27,26 +27,25 @@ function renderNav(over: Partial<Parameters<typeof Nav>[0]> = {}) {
   return props
 }
 
-// T17（计划 2026-07-11-v5-interaction-rebuild）：IA 收敛三视图 收件箱/进度/工作台。
-// 旧断言意图迁移表：
-//   · 「折叠态恰 4 项（3 项+工作台下拉触发）」→「恰 3 项，工作台是普通视图钮」
-//   · 「工作台下拉含 loops/afk/workflows」→ 下拉组整体退役（组件文件 T18 删），入口 0 渲染
-//   · 「点看板 onView(board)」→「点进度 onView(progress)」
-//   · 「view=loops 时工作台触发钮标 aria-current」→ workbench 本身是视图，直接标
-describe('Nav 一级导航（T17 v5 IA：收件箱 / 进度 / 工作台 三视图）', () => {
-  it('一级导航恰 3 个按钮：收件箱 / 进度 / 工作台', () => {
+// v9-flowdeck 收件箱退役：IA 收敛两视图 进度/工作台，待拍板红徽标挂「进度」项。
+// 旧断言意图迁移表（叠加 T17 那轮）：
+//   · 「恰 3 项：收件箱/进度/工作台」→「恰 2 项：进度/工作台」，nav-inbox 加入退役 0 渲染名单
+//   · 「inboxCount 徽标挂收件箱项（inbox-badge）」→「decisionCount 徽标挂进度项（progress-badge）」
+//   · 「view=progress 时对照项 nav-inbox 无 aria-current」→ 对照项改 nav-workbench
+describe('Nav 一级导航（v9-flowdeck：进度 / 工作台 两视图，收件箱退役）', () => {
+  it('一级导航恰 2 个按钮：进度 / 工作台，无收件箱', () => {
     renderNav()
     const nav = screen.getByTestId('primary-nav')
     const buttons = within(nav).getAllByRole('button')
-    expect(buttons).toHaveLength(3)
-    expect(nav.textContent).toContain('收件箱')
+    expect(buttons).toHaveLength(2)
     expect(nav.textContent).toContain('进度')
     expect(nav.textContent).toContain('工作台')
+    expect(nav.textContent).not.toContain('收件箱')
   })
 
-  it('旧视图入口全部退役：nav-board / nav-settings / nav-loops / nav-afk / nav-workflows 均不渲染', () => {
+  it('旧视图入口全部退役：nav-inbox / nav-board / nav-settings / nav-loops / nav-afk / nav-workflows 均不渲染', () => {
     renderNav()
-    for (const id of ['nav-board', 'nav-settings', 'nav-loops', 'nav-afk', 'nav-workflows']) {
+    for (const id of ['nav-inbox', 'nav-board', 'nav-settings', 'nav-loops', 'nav-afk', 'nav-workflows']) {
       expect(screen.queryByTestId(id)).toBeNull()
     }
   })
@@ -68,7 +67,7 @@ describe('Nav 一级导航（T17 v5 IA：收件箱 / 进度 / 工作台 三视�
   it('当前视图标 aria-current=page', () => {
     renderNav({ view: 'progress' })
     expect(screen.getByTestId('nav-progress')).toHaveAttribute('aria-current', 'page')
-    expect(screen.getByTestId('nav-inbox')).not.toHaveAttribute('aria-current')
+    expect(screen.getByTestId('nav-workbench')).not.toHaveAttribute('aria-current')
   })
 
   it('view=workbench 时工作台钮标 aria-current=page', () => {
@@ -103,14 +102,18 @@ describe('Nav 交互 + 徽标', () => {
     expect(props.onTheme).toHaveBeenCalledWith('dark')
   })
 
-  it('inboxCount>0 显示徽标数', () => {
-    renderNav({ inboxCount: 4 })
-    expect(screen.getByTestId('inbox-badge').textContent).toBe('4')
+  it('decisionCount>0 徽标挂在「进度」项内显示计数（progress-badge）', () => {
+    renderNav({ decisionCount: 4 })
+    const badge = screen.getByTestId('progress-badge')
+    expect(badge.textContent).toBe('4')
+    expect(within(screen.getByTestId('nav-progress')).getByTestId('progress-badge')).toBe(badge)
+    // 旧收件箱徽标 testid 随视图退役，不再渲染
+    expect(screen.queryByTestId('inbox-badge')).toBeNull()
   })
 
-  it('inboxCount=0 不显示徽标', () => {
-    renderNav({ inboxCount: 0 })
-    expect(screen.queryByTestId('inbox-badge')).toBeNull()
+  it('decisionCount=0 不显示徽标', () => {
+    renderNav({ decisionCount: 0 })
+    expect(screen.queryByTestId('progress-badge')).toBeNull()
   })
 })
 
@@ -228,5 +231,51 @@ describe('Nav 注销项目入口（评审 P2-13；T17 决议#7 保留）', () =>
     renderNav({ projects, currentRoot: '/code/repo-a', onRoot: vi.fn() })
     fireEvent.click(screen.getByTestId('project-switcher'))
     expect(screen.queryByTestId('project-unregister-repo-a')).toBeNull()
+  })
+})
+
+// ── v8-A 意见①（nav8 下拉）：宽度贴内容的新形态下，语义/无障碍面钉住——脚注说明、
+// 注销钮图标化后的 aria-label/title、role=menu 不回退、触发钮 aria-expanded 开合翻转。
+// jsdom 无 matchMedia → GSAP 全部走「直显/直关」守卫路径，断言保持同步无需等动画。
+describe('Nav v8 意见①（nav8 项目下拉）：脚注 / 注销钮无障碍名 / 角色语义', () => {
+  const projects = [
+    { root: '/code/repo-a', name: 'repo-a', count: 3 },
+    { root: '/code/repo-b', name: 'repo-b', count: 1 },
+  ]
+
+  it('菜单仍是 role=menu，全部项目 + 两项目共 3 个 menuitem', () => {
+    renderNav({ projects, currentRoot: '/code/repo-a', onRoot: vi.fn() })
+    fireEvent.click(screen.getByTestId('project-switcher'))
+    const menu = screen.getByTestId('project-menu')
+    expect(menu).toHaveAttribute('role', 'menu')
+    expect(within(menu).getAllByRole('menuitem')).toHaveLength(3)
+  })
+
+  it('菜单底部渲染脚注说明（nav.project_menu_hint，解释隐形注销钮）', () => {
+    renderNav({ projects, currentRoot: '/code/repo-a', onRoot: vi.fn(), onUnregister: vi.fn() })
+    fireEvent.click(screen.getByTestId('project-switcher'))
+    expect(screen.getByTestId('project-menu').textContent).toContain('行尾按钮 = 注销此项目')
+  })
+
+  it('注销钮图标化后带 aria-label 与 title（含项目名），点击仍走既有二次确认 Dialog', () => {
+    renderNav({ projects, currentRoot: '/code/repo-a', onRoot: vi.fn(), onUnregister: vi.fn() })
+    fireEvent.click(screen.getByTestId('project-switcher'))
+    const unreg = screen.getByTestId('project-unregister-repo-a')
+    expect(unreg).toHaveAttribute('aria-label', '注销项目 repo-a')
+    expect(unreg).toHaveAttribute('title', '注销项目 repo-a')
+    fireEvent.click(unreg)
+    expect(screen.getByTestId('unregister-confirm')).toBeInTheDocument()
+  })
+
+  it('触发钮 aria-expanded 随开/合翻转，合上后菜单卸载', () => {
+    renderNav({ projects, currentRoot: '/code/repo-a', onRoot: vi.fn() })
+    const btn = screen.getByTestId('project-switcher')
+    expect(btn).toHaveAttribute('aria-expanded', 'false')
+    fireEvent.click(btn)
+    expect(btn).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByTestId('project-menu')).toBeInTheDocument()
+    fireEvent.click(btn)
+    expect(btn).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByTestId('project-menu')).toBeNull()
   })
 })

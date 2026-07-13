@@ -395,12 +395,13 @@ function lastSavedDef(): (WbWorkflowDef & { root: string }) | undefined {
 
 /** rail 内按 DOM 顺序排列的阶段卡 id 序（v6 T11：StepperRail 重写为流程带后按
  *  data-testid 前缀取值，不再依赖 CSS 类名——「+ 添加阶段」按钮没有 data-testid，
- *  天然不会被此选择器命中，比原先绑 CSS 类名更不脆弱）。查询范围收在 `.wb-flow`
- *  容器内（而非整个 workbench-view）：StepEditor.tsx 的编辑区外壳也用了 'wb-step-editor'
- *  这个 testid，前缀恰好同款，不收范围会被一起命中，数出第 4 个「阶段」。 */
+ *  天然不会被此选择器命中，比原先绑 CSS 类名更不脆弱）。查询范围收在 `.wb8-stages`
+ *  （v8-E 阶段卡横排容器,原 `.wb-flow`）内（而非整个 workbench-view）：StepEditor.tsx 的
+ *  编辑区外壳也用了 'wb-step-editor' 这个 testid，前缀恰好同款，不收范围会被一起命中，
+ *  数出第 4 个「阶段」。 */
 function railStepOrder(): string[] {
   const root = screen.getByTestId('workbench-view')
-  const rail = root.querySelector('.wb-flow')
+  const rail = root.querySelector('.wb8-stages')
   if (!rail) return []
   return Array.from(rail.querySelectorAll<HTMLElement>('[data-testid^="wb-step-"]')).map((el) => el.getAttribute('data-testid') ?? '')
 }
@@ -699,8 +700,11 @@ describe('WorkbenchView 门徽章 popover（v6 T11 集成，静态 hook 元数�
  * 只读态);右栏新增安全门说明卡(决议#2 人话版)与 manifest 技能矩阵入口卡。
  * 断言迁移登记:原「编辑区含 Hook 分区」的隐性布局由本 describe 的①显式接管(编辑卡内不再有
  * wb-hooks);HookTimeline 自身开关/锁定/回滚逻辑仍由 HookTimeline.test.tsx 全量覆盖,不重复。
+ * v8-E 迁移登记：Hook 时序线再挪进「阶段编辑」页签(①断言同步)、矩阵入口卡挪进「技能健康」
+ * 页签(④断言收窄 within(wb-pane-health));安全门说明卡(③)留右栏不动。开关按选中阶段读写(②)
+ * 与矩阵入口脏守卫路径(④)的行为断言全部保留——守门等强度,只换宿主位置。
  */
-describe('WorkbenchView v6 T12：Hook 时序挪右栏 + 安全门/矩阵卡', () => {
+describe('WorkbenchView v6 T12（v8-E 页签化后）：Hook 时序/安全门/矩阵卡', () => {
   const HOOKS_BODY = {
     hooks: [
       { id: 'session-start', event: 'SessionStart', configurable: true },
@@ -726,17 +730,20 @@ describe('WorkbenchView v6 T12：Hook 时序挪右栏 + 安全门/矩阵卡', ()
     }) as unknown as typeof fetch
   })
 
-  it('① Hook 时序卡渲染在右栏(wb-side-hooks),编辑卡内不再有 wb-hooks', async () => {
+  it('① Hook 时序线并入「阶段编辑」页签(v8-E)——wb-hooks 在 wb-pane-stage 内、不在编辑卡内,右栏 wb-side-hooks 卡已撤', async () => {
     renderView()
-    const side = await screen.findByTestId('wb-side-hooks')
-    expect(within(side).getByTestId('wb-hooks')).toBeInTheDocument()
+    const pane = await screen.findByTestId('wb-pane-stage')
+    await within(pane).findByTestId('wb-hooks')
+    // 编辑卡内仍不平铺 hook 区（v6 T12 的既有守门等价物：时序线是编辑卡的兄弟,不是子分区）
     const editor = await screen.findByTestId('wb-editor')
     expect(within(editor).queryByTestId('wb-hooks')).toBeNull()
+    // 右栏宿主卡随 v8-E 右栏瘦身撤下
+    expect(screen.queryByTestId('wb-side-hooks')).toBeNull()
   })
 
-  it('② 右栏开关按当前选中阶段读写:切到 review 后 POST 键的阶段半边是 review', async () => {
+  it('② 开关按当前选中阶段读写:切到 review 后 POST 键的阶段半边是 review', async () => {
     renderView()
-    await screen.findByTestId('wb-side-hooks')
+    await screen.findByTestId('wb-hooks')
     fireEvent.click(screen.getByTestId('wb-step-review'))
     fireEvent.click(await screen.findByTestId('wb-hk-sw-session-start'))
     await waitFor(() => expect(hookPosts.length).toBe(1))
@@ -753,13 +760,66 @@ describe('WorkbenchView v6 T12：Hook 时序挪右栏 + 安全门/矩阵卡', ()
     expect(card.textContent).toContain('不做假开关')
   })
 
-  it('④ 矩阵入口卡:自定义 workflow 下可点,点击切到 default;default 下按钮禁用', async () => {
+  it('④ 矩阵入口卡(v8-E 已并入「技能健康」页签):自定义 workflow 下可点,点击切到 default;default 下按钮禁用', async () => {
     renderView()
-    const btn = await screen.findByTestId('wb-mx-open')
+    const health = await screen.findByTestId('wb-pane-health')
+    const btn = await within(health).findByTestId('wb-mx-open')
     expect(btn).toBeEnabled()
     fireEvent.click(btn)
     await waitFor(() => expect(screen.getByTestId('wb-wf-btn').textContent).toContain('default'))
     expect(screen.getByTestId('wb-mx-open')).toBeDisabled()
+  })
+})
+
+/**
+ * v8-E（意见⑥）：主列 sheet 页签化——五页签(阶段编辑/自动运行/AFK 执行/凭证/技能健康),
+ * pane 恒挂载切 .on 显隐(各卡数据面行为与平铺时代一致,既有 T16/T21/T8 用例不用点页签就能
+ * 寻址);点阶段卡驱动 sheet 切回「阶段编辑」页。墨线/crossfade 是 GSAP 装饰动画,jsdom 不断言。
+ */
+describe('WorkbenchView v8-E：sheet 页签化', () => {
+  it('五页签渲染,默认「阶段编辑」选中;切页签换 aria-selected 与 pane .on;各页宿主卡就位', async () => {
+    renderView()
+    await screen.findByTestId('wb-step-draft')
+    for (const k of ['stage', 'loop', 'afk', 'secrets', 'health']) {
+      expect(screen.getByTestId(`wb-tab-${k}`)).toBeInTheDocument()
+      expect(screen.getByTestId(`wb-pane-${k}`)).toBeInTheDocument()
+    }
+    expect(screen.getByTestId('wb-tab-stage')).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByTestId('wb-pane-stage').className).toContain('on')
+    // 各页宿主卡在自己的 pane 里（恒挂载——换页签不重挂数据面）
+    expect(within(screen.getByTestId('wb-pane-stage')).getByTestId('wb-editor')).toBeInTheDocument()
+    expect(within(screen.getByTestId('wb-pane-loop')).getByTestId('wb-loop-card')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByTestId('wb-tab-loop'))
+    expect(screen.getByTestId('wb-tab-loop')).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByTestId('wb-tab-stage')).toHaveAttribute('aria-selected', 'false')
+    expect(screen.getByTestId('wb-pane-loop').className).toContain('on')
+    expect(screen.getByTestId('wb-pane-stage').className).not.toContain('on')
+  })
+
+  it('点阶段卡=选中并驱动 sheet 切回「阶段编辑」页签(其它页签停留态被拉回)', async () => {
+    renderView()
+    await screen.findByTestId('wb-step-draft')
+    fireEvent.click(screen.getByTestId('wb-tab-secrets'))
+    expect(screen.getByTestId('wb-tab-secrets')).toHaveAttribute('aria-selected', 'true')
+
+    fireEvent.click(screen.getByTestId('wb-step-review'))
+    expect(screen.getByTestId('wb-tab-stage')).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByTestId('wb-pane-stage').className).toContain('on')
+    expect(screen.getByTestId('wb-editor-stage')).toHaveTextContent('review')
+  })
+
+  it('右栏瘦身:摘要/安全门/最近流转留守,SkillHealthPanel 并入「技能健康」页签(skh 标题在 pane 内)', async () => {
+    renderView()
+    await screen.findByTestId('wb-step-draft')
+    const side = screen.getByTestId('workbench-view').querySelector('.side-col')
+    expect(side).not.toBeNull()
+    expect(within(side as HTMLElement).getByTestId('wb-sum-stages')).toBeInTheDocument()
+    expect(within(side as HTMLElement).getByTestId('wb-side-safegate')).toBeInTheDocument()
+    expect(within(side as HTMLElement).getByTestId('wb-recent')).toBeInTheDocument()
+    // 技能齐全度面不再在右栏——在「技能健康」页签里
+    expect(within(side as HTMLElement).queryByText('技能齐全度')).toBeNull()
+    expect(within(screen.getByTestId('wb-pane-health')).getByText('技能齐全度')).toBeInTheDocument()
   })
 })
 

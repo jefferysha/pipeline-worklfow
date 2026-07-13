@@ -12,6 +12,10 @@ import { makeChange, makeProject, makeSnapshot } from './testkit'
 //     零项目教学态断言收进 G18 describe（教学文案 + 无表单 + 无幽灵命令）
 //   · 「工作台下拉→workflow 编辑器（nav-workflows）」→ 工作台是单一视图，直达断言
 //   · 新增：视图记忆 localStorage 兜底（旧值 board/settings → inbox）、聚合语境进度渲染护栏
+// v9-flowdeck 收件箱退役（叠加迁移）：
+//   · 「默认落地=收件箱」→「默认落地=进度」；导航恰 2 项，nav-inbox 0 渲染
+//   · 「收件箱空态/卡片/徽标（inbox-empty/inbox-card/inbox-badge）」→ 徽标断言迁 progress-badge，
+//     空态「去进度」按钮用例整体删除（视图不复存在）；视图记忆兜底目标 inbox → progress
 beforeEach(() => {
   localStorage.clear()
   resetEventSources()
@@ -20,7 +24,7 @@ beforeEach(() => {
   } catch {
     /* ignore */
   }
-  // 初始 GET /api/snapshot → 单项目一张非 gate 卡（默认落地=收件箱空态语境）；
+  // 初始 GET /api/snapshot → 单项目一张非 gate 卡（默认落地=进度，无待拍板徽标语境）；
   // /api/workflows、/api/hooks、/api/loops/snapshot 三个分支喂 WorkbenchView 挂载时的真 fetch
   // （names 空 → 选中 default 零网络投影；hooks/loops 给合法空数据，不迫使工作台走错误分支）。
   vi.stubGlobal(
@@ -46,33 +50,34 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-describe('App 默认落地 = 收件箱（病灶②解法）', () => {
-  it('首屏渲染收件箱视图，而非进度/工作台', async () => {
+describe('App 默认落地 = 进度（v9-flowdeck：收件箱退役，进度=唯一在制面）', () => {
+  it('首屏渲染进度视图，而非工作台；收件箱视图不复存在', async () => {
     render(<App />)
-    expect(await screen.findByTestId('inbox-view')).toBeInTheDocument()
-    expect(screen.queryByTestId('progress-view')).toBeNull()
+    expect(await screen.findByTestId('progress-view')).toBeInTheDocument()
+    expect(screen.queryByTestId('inbox-view')).toBeNull()
     expect(screen.queryByTestId('workbench-view')).toBeNull()
   })
 
-  it('一级导航恰好 3 项：收件箱 / 进度 / 工作台（T17 三视图 IA）', async () => {
+  it('一级导航恰好 2 项：进度 / 工作台（无收件箱入口）', async () => {
     render(<App />)
-    await screen.findByTestId('inbox-view')
+    await screen.findByTestId('progress-view')
     const nav = screen.getByTestId('primary-nav')
-    expect(within(nav).getAllByRole('button')).toHaveLength(3)
+    expect(within(nav).getAllByRole('button')).toHaveLength(2)
+    expect(screen.queryByTestId('nav-inbox')).toBeNull()
     expect(screen.queryByTestId('nav-board')).toBeNull()
     expect(screen.queryByTestId('nav-settings')).toBeNull()
   })
 })
 
-describe('App 视图切换（T17 三视图接线）', () => {
-  it('点进度 → 渲染 ProgressView；点工作台 → 渲染 WorkbenchView（直达，无下拉）', async () => {
+describe('App 视图切换（v9-flowdeck 两视图接线）', () => {
+  it('点工作台 → 渲染 WorkbenchView（直达，无下拉）；点进度切回 ProgressView', async () => {
     render(<App />)
-    await screen.findByTestId('inbox-view')
-    fireEvent.click(screen.getByTestId('nav-progress'))
-    expect(screen.getByTestId('progress-view')).toBeInTheDocument()
+    await screen.findByTestId('progress-view')
     fireEvent.click(screen.getByTestId('nav-workbench'))
     expect(await screen.findByTestId('workbench-view')).toBeInTheDocument()
     expect(screen.queryByTestId('workbench-menu')).toBeNull()
+    fireEvent.click(screen.getByTestId('nav-progress'))
+    expect(screen.getByTestId('progress-view')).toBeInTheDocument()
   })
 
   it('聚合语境 + 项目非零但全部不可达（ok=false）：工作台渲染诚实空态，不拿空 root 挂 WorkbenchView（T17 评审收口）', async () => {
@@ -84,37 +89,37 @@ describe('App 视图切换（T17 三视图接线）', () => {
       throw new Error(`unexpected fetch ${url}`)
     })
     render(<App />)
-    await screen.findByTestId('inbox-view')
+    await screen.findByTestId('progress-view')
     fireEvent.click(screen.getByTestId('nav-workbench'))
     expect(await screen.findByTestId('wb-no-root')).toHaveTextContent('没有可读取的项目')
     expect(screen.queryByTestId('workbench-view')).toBeNull()
   })
 
-  it('收件箱空态「去进度」→ 切到进度视图', async () => {
-    render(<App />)
-    // 默认桩子只有一张非 gate 卡 → 收件箱空态 + 去进度按钮
-    expect(await screen.findByTestId('inbox-empty')).toBeInTheDocument()
-    fireEvent.click(screen.getByText('去进度'))
-    expect(screen.getByTestId('progress-view')).toBeInTheDocument()
-  })
 })
 
-describe('App 视图记忆（T17：localStorage 旧值兜底回 inbox）', () => {
-  it('记忆值是退役视图（board）→ 落地收件箱而非崩溃/空渲染', async () => {
+describe('App 视图记忆（localStorage 旧值兜底回 progress，收件箱退役）', () => {
+  it('记忆值是退役视图（board）→ 落地进度而非崩溃/空渲染', async () => {
     localStorage.setItem('pipeline-dashboard-view', 'board')
-    render(<App />)
-    expect(await screen.findByTestId('inbox-view')).toBeInTheDocument()
-  })
-
-  it('记忆值是合法新视图（progress）→ 直接落地进度', async () => {
-    localStorage.setItem('pipeline-dashboard-view', 'progress')
     render(<App />)
     expect(await screen.findByTestId('progress-view')).toBeInTheDocument()
   })
 
+  it('记忆值是刚退役的 inbox → 同样兜底回进度，不渲染收件箱', async () => {
+    localStorage.setItem('pipeline-dashboard-view', 'inbox')
+    render(<App />)
+    expect(await screen.findByTestId('progress-view')).toBeInTheDocument()
+    expect(screen.queryByTestId('inbox-view')).toBeNull()
+  })
+
+  it('记忆值是合法视图（workbench）→ 直接落地工作台', async () => {
+    localStorage.setItem('pipeline-dashboard-view', 'workbench')
+    render(<App />)
+    expect(await screen.findByTestId('workbench-view')).toBeInTheDocument()
+  })
+
   it('切视图写回记忆：点工作台后 localStorage 存 workbench', async () => {
     render(<App />)
-    await screen.findByTestId('inbox-view')
+    await screen.findByTestId('progress-view')
     fireEvent.click(screen.getByTestId('nav-workbench'))
     expect(localStorage.getItem('pipeline-dashboard-view')).toBe('workbench')
   })
@@ -123,21 +128,22 @@ describe('App 视图记忆（T17：localStorage 旧值兜底回 inbox）', () =>
 describe('App 注册 UI 退役（T17 决议#7：pipeline init 自动登记，注册入口全删）', () => {
   it('单项目语境无 ＋ 注册按钮、无注册对话框入口', async () => {
     render(<App />)
-    await screen.findByTestId('inbox-view')
+    await screen.findByTestId('progress-view')
     expect(screen.queryByTestId('project-register')).toBeNull()
     expect(screen.queryByTestId('register-dialog')).toBeNull()
   })
 })
 
 describe('App SSE 实时更新（真 EventSource stub → 组件真更新，非 mock 返回）', () => {
-  it('emit 含复核阶段卡的快照 → 收件箱由空态更新为有卡 + 徽标计数', async () => {
+  it('emit 含复核阶段卡的快照 → 进度徽标由无到 1，新 change 行真渲染', async () => {
     render(<App />)
-    // 初始空态
-    expect(await screen.findByTestId('inbox-empty')).toBeInTheDocument()
+    await screen.findByTestId('progress-view')
+    // 初始快照只有一张非 gate 卡 → 无待拍板徽标
+    expect(screen.queryByTestId('progress-badge')).toBeNull()
 
     const es = lastEventSource()
     expect(es).toBeDefined()
-    // T7 准入修订：verify 卡要进收件箱必须三轨证据齐（缺产出判给进度「等 agent」不进）。
+    // T7 准入修订：verify 卡计入待拍板必须三轨证据齐（缺产出判「等产出」不计）。
     const next = makeSnapshot([
       makeProject('/repo', [
         makeChange('needs-review', 'verify', {
@@ -149,21 +155,17 @@ describe('App SSE 实时更新（真 EventSource stub → 组件真更新，非 
       es!.emit('snapshot', JSON.stringify(next))
     })
 
-    // 组件真更新：空态消失、卡片出现、导航徽标计数 1。
-    // T9 起收件箱是 master-detail 且默认开首行详情——change 名会同时出现在行与右栏详情头
-    // （getByText 单一匹配会因"找到多个"报错），改 getAllByText 断言"至少渲染出一处"，
-    // 断言意图不变（SSE 帧真的驱动了收件箱更新）。
-    await waitFor(() => expect(screen.getByTestId('inbox-card')).toBeInTheDocument())
+    // 组件真更新：进度徽标计数 1（selectInbox 口径），新 change 名出现在进度列表
+    //（可能同时出现在行与详情等多处，getAllByText 断言"至少一处"）。
+    await waitFor(() => expect(screen.getByTestId('progress-badge').textContent).toBe('1'))
     expect(screen.getAllByText('needs-review').length).toBeGreaterThan(0)
-    expect(screen.getByTestId('inbox-badge').textContent).toBe('1')
-    expect(screen.queryByTestId('inbox-empty')).toBeNull()
   })
 })
 
 describe('App 深浅色自适应 + i18n', () => {
   it('主题切换在 <html data-theme> 落值', async () => {
     render(<App />)
-    await screen.findByTestId('inbox-view')
+    await screen.findByTestId('progress-view')
     // 初始应用主题（默认 light）
     await waitFor(() => expect(document.documentElement.dataset.theme).toBe('light'))
     fireEvent.click(screen.getByTestId('theme-toggle'))
@@ -172,12 +174,12 @@ describe('App 深浅色自适应 + i18n', () => {
 
   it('语言切换 zh→en：一级导航文案真更新', async () => {
     render(<App />)
-    await screen.findByTestId('inbox-view')
+    await screen.findByTestId('progress-view')
     const nav = screen.getByTestId('primary-nav')
-    expect(nav.textContent).toContain('收件箱')
+    expect(nav.textContent).toContain('进度')
     fireEvent.click(screen.getByTestId('lang-toggle'))
-    expect(nav.textContent).toContain('Inbox')
-    expect(nav.textContent).not.toContain('收件箱')
+    expect(nav.textContent).toContain('Progress')
+    expect(nav.textContent).not.toContain('进度')
   })
 })
 
@@ -193,7 +195,7 @@ describe('App G18 教学空状态（T17 起纯教学态）', () => {
     )
     render(<App />)
     const ob = await screen.findByTestId('onboard-no-project')
-    expect(screen.queryByTestId('inbox-view')).toBeNull()
+    expect(screen.queryByTestId('progress-view')).toBeNull()
     // 决议#7 + T2：注册表单退役，教学 CLI 为 pipeline init（自动登记），幽灵命令清除
     expect(screen.queryByTestId('onboard-path')).toBeNull()
     expect(screen.queryByTestId('onboard-register')).toBeNull()
@@ -201,7 +203,7 @@ describe('App G18 教学空状态（T17 起纯教学态）', () => {
     expect(ob.textContent).not.toContain('projects add')
   })
 
-  it('有项目零 change → 收件箱替换为新建引导 onboarding', async () => {
+  it('有项目零 change → 进度替换为 init CLI 教学 onboarding（新建入口已退役：dashboard 只读，创建走终端）', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async (url: string) => {
@@ -211,19 +213,20 @@ describe('App G18 教学空状态（T17 起纯教学态）', () => {
       }),
     )
     render(<App />)
-    expect(await screen.findByTestId('onboard-new-change')).toBeInTheDocument()
-    // 打开新建对话框入口真的接线
-    fireEvent.click(screen.getByTestId('onboard-new-change'))
-    expect(await screen.findByTestId('newchange-dialog')).toBeInTheDocument()
+    expect(await screen.findByTestId('onboard-no-change')).toBeInTheDocument()
+    expect(screen.getByTestId('onboard-cli').textContent).toContain('pipeline init')
+    // 产品决策：dashboard 是只读进度面，新建 change 一律走终端——入口按钮与对话框整组退役
+    expect(screen.queryByTestId('onboard-new-change')).toBeNull()
+    expect(screen.queryByTestId('newchange-dialog')).toBeNull()
   })
 })
 
 describe('App currentRoot 语义（D5：吃掉 G14，多项目默认取第一个）', () => {
-  it('双项目快照：收件箱徽章只计第一个项目的 gate 卡', async () => {
+  it('双项目快照：进度徽标只计第一个项目的 gate 卡', async () => {
     render(<App />)
-    await screen.findByTestId('inbox-view')
+    await screen.findByTestId('progress-view')
     const es = lastEventSource()
-    // T7 准入修订：证据齐的 gate 卡才计入徽章（判据在 inbox.test.tsx 钉，这里只验 currentRoot 过滤）。
+    // T7 准入修订：证据齐的 gate 卡才计入徽标（判据在 inbox.test.tsx 钉，这里只验 currentRoot 过滤）。
     const evidenceOk = { verify_result: 'pass', agent_review_result: 'pass', codex_review_result: 'pass' }
     const next = makeSnapshot([
       makeProject('/repo-a', [makeChange('a-verify', 'verify', { fields: { ...evidenceOk } })]),
@@ -235,9 +238,9 @@ describe('App currentRoot 语义（D5：吃掉 G14，多项目默认取第一个
     act(() => {
       es!.emit('snapshot', JSON.stringify(next))
     })
-    await waitFor(() => expect(screen.getByTestId('inbox-badge').textContent).toBe('1'))
-    // T9 master-detail 默认开首行详情：a-verify 同时出现在行与右栏详情头，改 getAllByText
-    // 断言"至少一处"（意图不变：currentRoot 过滤后只看得到第一个项目的卡）。
+    await waitFor(() => expect(screen.getByTestId('progress-badge').textContent).toBe('1'))
+    // a-verify 可能同时出现在行与详情等多处，getAllByText 断言"至少一处"
+    //（意图不变：currentRoot 过滤后只看得到第一个项目的卡）。
     expect(screen.getAllByText('a-verify').length).toBeGreaterThan(0)
     expect(screen.queryByText('b-verify')).toBeNull()
   })
@@ -267,8 +270,8 @@ describe('App 聚合语境渲染护栏（T17 验收④：currentRoot 空串 → 
     render(<App />)
     expect(await screen.findByTestId('progress-view')).toBeInTheDocument()
     await waitFor(() => {
-      expect(screen.getByTestId('prg-row-a1')).toBeInTheDocument()
-      expect(screen.getByTestId('prg-row-b1')).toBeInTheDocument()
+      expect(screen.getByTestId('prg9-row-a1')).toBeInTheDocument()
+      expect(screen.getByTestId('prg9-row-b1')).toBeInTheDocument()
     })
   })
 })
@@ -276,7 +279,7 @@ describe('App 聚合语境渲染护栏（T17 验收④：currentRoot 空串 → 
 describe('App 高级折叠入口（debug 降级）', () => {
   it('Advanced 折叠面在页脚、不在一级导航', async () => {
     render(<App />)
-    await screen.findByTestId('inbox-view')
+    await screen.findByTestId('progress-view')
     expect(screen.getByTestId('advanced-panel')).toBeInTheDocument()
     const nav = screen.getByTestId('primary-nav')
     expect(nav.textContent).not.toMatch(/流量|traffic|高级/i)
@@ -286,13 +289,13 @@ describe('App 高级折叠入口（debug 降级）', () => {
 describe('App 断线横幅 + 重连（评审 P2-13，Task 5）', () => {
   it('connected=true（默认）时不渲染 offline-banner', async () => {
     render(<App />)
-    await screen.findByTestId('inbox-view')
+    await screen.findByTestId('progress-view')
     expect(screen.queryByTestId('offline-banner')).toBeNull()
   })
 
   it('SSE onerror → connected=false → 渲染 offline-banner（role=status，文案含"连接断开"）', async () => {
     render(<App />)
-    await screen.findByTestId('inbox-view')
+    await screen.findByTestId('progress-view')
     const es = lastEventSource()
     expect(es).toBeDefined()
     act(() => {
@@ -305,7 +308,7 @@ describe('App 断线横幅 + 重连（评审 P2-13，Task 5）', () => {
 
   it('点「重连」：新发起一次 GET /api/snapshot + 重建一条新 SSE 订阅（不复用失效的旧连接）', async () => {
     render(<App />)
-    await screen.findByTestId('inbox-view')
+    await screen.findByTestId('progress-view')
     const es = lastEventSource()
     act(() => {
       es!.emit('error', '')
@@ -329,7 +332,7 @@ describe('App 断线横幅 + 重连（评审 P2-13，Task 5）', () => {
   // 既有的置位逻辑自然翻正，横幅必须从 DOM 消失（而不是像修复前那样常驻，直到原订阅自己恢复）。
   it('点「重连」→ 新连接送帧后，offline-banner 从 DOM 消失（重连下沉 useSnapshot 本体）', async () => {
     render(<App />)
-    await screen.findByTestId('inbox-view')
+    await screen.findByTestId('progress-view')
     const es = lastEventSource()
     act(() => {
       es!.emit('error', '')
@@ -352,7 +355,7 @@ describe('App 断线横幅 + 重连（评审 P2-13，Task 5）', () => {
 describe('App currentRoot 聚合选择（D5/G19③：currentRoot 空串是全应用聚合的唯一表示，Task 5）', () => {
   it('点切换器「全部项目」→ currentRoot 变为空串并保持（不被 roots[0] 兜底逻辑吃回去）', async () => {
     render(<App />)
-    await screen.findByTestId('inbox-view')
+    await screen.findByTestId('progress-view')
     const es = lastEventSource()
     const next = makeSnapshot([
       makeProject('/repo-a', [makeChange('a1', 'build')]),
@@ -377,7 +380,7 @@ describe('App currentRoot 聚合选择（D5/G19③：currentRoot 空串是全应
   it('localStorage 记忆的聚合偏好（空串）跨刷新保持', async () => {
     localStorage.setItem('pipeline-dashboard-root', '')
     render(<App />)
-    await screen.findByTestId('inbox-view')
+    await screen.findByTestId('progress-view')
     const es = lastEventSource()
     const next = makeSnapshot([
       makeProject('/repo-a', [makeChange('a1', 'build')]),
@@ -416,7 +419,7 @@ describe('App 注销项目（评审 P2-13，Task 5）', () => {
     const fetchMock = stubTwoProjects()
     vi.stubGlobal('fetch', fetchMock)
     render(<App />)
-    await screen.findByTestId('inbox-view')
+    await screen.findByTestId('progress-view')
     // D5：无 localStorage 记忆时取第一个已注册项目
     expect(screen.getByTestId('project-switcher').textContent).toContain('repo-a')
 
@@ -439,7 +442,7 @@ describe('App 注销项目（评审 P2-13，Task 5）', () => {
     const fetchMock = stubTwoProjects()
     vi.stubGlobal('fetch', fetchMock)
     render(<App />)
-    await screen.findByTestId('inbox-view')
+    await screen.findByTestId('progress-view')
     expect(screen.getByTestId('project-switcher').textContent).toContain('repo-a')
 
     fireEvent.click(screen.getByTestId('project-switcher'))
@@ -476,7 +479,7 @@ describe('App 流程带真实计数接线（v6 计划 T11）', () => {
       throw new Error(`unexpected fetch ${url}`)
     })
     render(<App />)
-    await screen.findByTestId('inbox-view')
+    await screen.findByTestId('progress-view')
     fireEvent.click(screen.getByTestId('nav-workbench'))
     await screen.findByTestId('workbench-view')
     expect(screen.getByTestId('wb-flow-count-build')).toHaveTextContent('1')

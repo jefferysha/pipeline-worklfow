@@ -35,7 +35,7 @@ describe('StepEditor 基本区（名称/只读 ID/复核门）', () => {
     expect(screen.getByLabelText('阶段名称')).toHaveValue('人工复核')
     expect(screen.getByTestId('wb-ed-id')).toHaveTextContent('review')
     expect(screen.getByRole('switch', { name: '复核门' })).toHaveAttribute('aria-checked', 'true')
-    expect(screen.getByText(/打开后，change 会停在此阶段等人放行——出现在收件箱/)).toBeInTheDocument()
+    expect(screen.getByText(/打开后，change 会停在此阶段等人放行——在进度页亮起等你拍板/)).toBeInTheDocument()
   })
 
   it('改名 → onChange 收到仅 label 变化的完整 step（inputs/skills/transitions/guards 原样透传）', () => {

@@ -29,8 +29,9 @@ function Probe(): JSX.Element {
   const { t, lang, setLang } = useT()
   return (
     <div>
-      <span data-testid="txt">{t('nav.inbox')}</span>
-      <span data-testid="var">{t('inbox.count', { n: 3 })}</span>
+      {/* 收件箱退役：示例键改用存活键——纯文本用 nav.progress，变量插值用 inbox.badge_failed（{n}）。 */}
+      <span data-testid="txt">{t('nav.progress')}</span>
+      <span data-testid="var">{t('inbox.badge_failed', { n: 3 })}</span>
       <span data-testid="lang">{lang}</span>
       <button data-testid="to-en" onClick={() => setLang('en')}>en</button>
     </div>
@@ -45,8 +46,8 @@ describe('useT 真 render（默认 zh、变量插值、切换 en）', () => {
       </I18nProvider>,
     )
     expect(screen.getByTestId('lang').textContent).toBe('zh')
-    expect(screen.getByTestId('txt').textContent).toBe('收件箱')
-    expect(screen.getByTestId('var').textContent).toBe('3 个在等你')
+    expect(screen.getByTestId('txt').textContent).toBe('进度')
+    expect(screen.getByTestId('var').textContent).toBe('失败 ×3 · 等你决定')
   })
 
   it('切到 en 后组件真更新为英文', () => {
@@ -56,7 +57,7 @@ describe('useT 真 render（默认 zh、变量插值、切换 en）', () => {
       </I18nProvider>,
     )
     fireEvent.click(screen.getByTestId('to-en'))
-    expect(screen.getByTestId('txt').textContent).toBe('Inbox')
-    expect(screen.getByTestId('var').textContent).toBe('3 waiting on you')
+    expect(screen.getByTestId('txt').textContent).toBe('Progress')
+    expect(screen.getByTestId('var').textContent).toBe('Failed ×3 · your call')
   })
 })

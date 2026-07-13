@@ -11,7 +11,7 @@ afterEach(() => {
 })
 
 function renderOb(over: Partial<Parameters<typeof Onboarding>[0]> = {}) {
-  const props = { kind: 'no-project' as const, onNewChange: vi.fn(), ...over }
+  const props = { kind: 'no-project' as const, ...over }
   render(
     <I18nProvider>
       <Onboarding {...props} />
@@ -67,13 +67,12 @@ describe('Onboarding no-project（诚实三步 checklist：dashboard 只读，�
   })
 })
 
-describe('Onboarding no-change（有项目零 change：新建引导 + init CLI 教学）', () => {
-  it('渲染新建引导 + 主按钮回调 + init CLI 教学（带项目 root）', () => {
-    const props = renderOb({ kind: 'no-change', root: '/Users/me/code/proj' })
+describe('Onboarding no-change（有项目零 change：init CLI 教学；新建入口已退役——dashboard 只读，创建走终端）', () => {
+  it('渲染标题 + init CLI 教学（带项目 root），无新建按钮', () => {
+    renderOb({ kind: 'no-change', root: '/Users/me/code/proj' })
     expect(screen.getByText('这个项目还没有 change')).toBeInTheDocument()
     expect(screen.getByTestId('onboard-cli').textContent).toContain('pipeline init')
     expect(screen.getByTestId('onboard-cli').textContent).toContain('/Users/me/code/proj')
-    fireEvent.click(screen.getByTestId('onboard-new-change'))
-    expect(props.onNewChange).toHaveBeenCalledOnce()
+    expect(screen.queryByTestId('onboard-new-change')).toBeNull()
   })
 })

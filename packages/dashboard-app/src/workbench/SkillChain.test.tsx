@@ -78,6 +78,23 @@ describe('SkillChain 自定义 workflow：依赖链可视化（验收①）', ()
     expect(within(chain).getByText('skill-f')).toBeInTheDocument()
   })
 
+  it('链 chip 带 .wb8-skn 序号（=链内执行序 1..n）；solo 与幽灵 chip 不编号（评审 P2-10）', () => {
+    renderChain({ skills: [...CHAIN_SKILLS, { id: 'skill-f', depends_on: ['outside'] }] })
+    const chains = screen.getAllByTestId('wb-sk-chain')
+    // a➝b➝c 链：序号恰为 1/2/3
+    const abc = chains.find((c) => c.textContent?.includes('skill-a'))
+    expect(abc).toBeDefined()
+    expect(Array.from(abc!.querySelectorAll('.wb8-skn')).map((n) => n.textContent)).toEqual(['1', '2', '3'])
+    // 幽灵 chip（悬空依赖 outside）不参与编号
+    const ghostChain = chains.find((c) => c.textContent?.includes('outside'))
+    expect(ghostChain).toBeDefined()
+    const ghost = within(ghostChain!).getByText('outside')
+    expect(ghost).toHaveClass('wb-chip--ghost')
+    expect(ghost.querySelector('.wb8-skn')).toBeNull()
+    // 无依赖 solo 行（d/e）整行无序号
+    expect(screen.getByTestId('wb-sk-solo').querySelector('.wb8-skn')).toBeNull()
+  })
+
   it('说明文案明示「依赖顺序=解锁顺序，PreToolUse 门真实拦截」', () => {
     renderChain({ skills: CHAIN_SKILLS })
     expect(screen.getByText(/依赖顺序 = 解锁顺序/)).toBeInTheDocument()

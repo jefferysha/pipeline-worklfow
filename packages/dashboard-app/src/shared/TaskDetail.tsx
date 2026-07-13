@@ -10,6 +10,7 @@ import { artifactChips, gateEvidence, stageArtifacts, VERIFY_STATUS_FIELDS, type
 import { decisionKind } from '../inbox/inbox'
 import { getHistory, type ChangeHistoryEntry } from '../api/client'
 import { diagnoseFailureWithCause } from './failureDiagnosis'
+import { SessionResumeRow } from './SessionResumeRow'
 import { revealStages } from './motion'
 import { Icon } from '../shell/Icon'
 import { shortTime } from '../model/time'
@@ -24,12 +25,18 @@ gsap.registerPlugin(useGSAP)
  *   · 形态 B（variant='tabs'）：dt-tabs 阶段 sheet（role=tablist + dt-pane），进度行内展开
  *     （T11 宿主复用），视觉基准同 demo 进度视图 prg-detail 内 dt-tabs（L924 起）。
  *
- * 骨架：头（名字/宿主 badge/关闭）→ 任务一句话（宿主传入，可无）→ 阶段区（两形态同源消费 T7
- * stageArtifacts；节点/tab 语义 ✓绿 done / ●蓝当前带 ring / ×红失败 / 无缀未开始；当前/失败
- * 阶段展示结论或 last_error）→「在终端继续」命令区（文案与第一条前进 transition 事件一致）→
- * history 区（T1 GET /api/change/:name/history，无记录显示「早期记录不可用」，决议 #10）→
- * 动作条（**props 化**：按钮由宿主传入，组件不绑任何业务端点——放行/打回/重试/放弃的端点调用、
- * busy 守卫、二次确认全归宿主，见 T9/T11 与计划决议 #13）。
+ * 骨架（v8-C 意见④重排，视觉基准 design-demos/v8-trellis-encore.html #drawer）：头（名字/宿主
+ * badge/关闭）→ **动作置顶条 .dt8-acts**（props 化不变：按钮由宿主传入，组件不绑任何业务端点——
+ * 放行/打回/重试/放弃的端点调用、busy 守卫、二次确认全归宿主，见 T9/T11 与计划决议 #13；旁附
+ * footLabel 语境 + 一句语义说明；原底部 .dt-foot JSX 撤下、styles 旧规则双保留）→ 任务一句话
+ * （宿主传入，可无）→ 阶段区（两形态同源消费 T7 stageArtifacts；节点/tab 语义 ✓绿 done /
+ * ●蓝当前带 ring / ×红失败 / 无缀未开始；失败阶段=人话报错卡 .dt8-diag：cause 人话标题 + 处置
+ * 指引 failure.hint_*，last_error 原文收 <details> 折叠，attempts/cause 走 mono 元信息行，
+ * cancelled 琥珀 tone 非故障）→ **「自己上手修」连接命令卡 .dt8-conn-card**（失败态且有
+ * automation_worktree/automation_sandbox 现场字段时渲染；零后端改动——两字段随快照 fields 整包
+ * 透传，照 automation_cause 先例 fieldStr 直读）→「在终端继续」命令区（文案与第一条前进
+ * transition 事件一致）→ history 区（T1 GET /api/change/:name/history，无记录显示「早期记录
+ * 不可用」，决议 #10；**只留流程级事件** transition/init，set 与未知 kind 一律滤掉）。
  *
  * rules 缺失（自定义 workflow 定义拉取失败）或 change.phase 不在 rules.steps（workflow 字段
  * 与规则错位）→ 阶段区留白但卡不消失（G17 底线）：回落 artifactChips 产物正门只列非空路径
@@ -126,6 +133,7 @@ function BoxField({ chip, onCopy }: { chip: EvidenceChip; onCopy: (v: string) =>
 function histText(e: ChangeHistoryEntry, t: (k: string, v?: Record<string, string | number>) => string): string {
   if (e.kind === 'transition' && e.from && e.to) return `${e.from} → ${e.to}${e.raw ? ` · ${e.raw}` : ''}`
   if (e.kind === 'init') return t('detail.hist_init')
+  if (e.kind === 'import') return t('detail.hist_import')
   if (e.kind === 'set' && e.field) return t('detail.hist_set', { field: e.field })
   return e.raw ?? e.kind
 }
@@ -213,6 +221,14 @@ export function TaskDetail({
   const lastError = fieldStr(change, 'automation_last_error')
   // F-b：结构化失败成因（写入端结算现场落盘；空串=老数据/未落 → 诊断层回落 last_error regex）。
   const failCause = fieldStr(change, 'automation_cause')
+  // v8-C 意见④：连接命令卡现场字段——automation_worktree/automation_sandbox 已随快照 fields
+  // 整包透传（零后端改动），照 automation_cause 先例 fieldStr 直读；空串=无现场，对应行不渲染。
+  const worktree = fieldStr(change, 'automation_worktree')
+  const sandbox = fieldStr(change, 'automation_sandbox')
+  const sandboxCmd = `docker exec -it ${sandbox} bash`
+  // worktree 路径进 shell 命令必须包引号（评审 P1-4）：路径含空格时裸 cd 直接碎词。
+  const worktreeCmd = `cd "${worktree}"`
+  const rerunCmd = `pipeline afk run ${change.name}`
   const footLabel =
     state === 'failed' ? `automation · ${automation}` : firstForward ? `${change.phase} → ${firstForward.to}` : change.phase
 
@@ -244,26 +260,23 @@ export function TaskDetail({
   /** 当前/失败阶段的内容体（结论行 + 字段格栅 + 失败说明）——形态 A 包进 dtl-box 高亮框，
    *  形态 B 直接铺在 dt-pane 里（demo 两处对位：收件箱右卡 dtl-box / 进度 dt-pane）。 */
   function boxInner(chips: EvidenceChip[]): JSX.Element {
-    const v = verdict()
     if (state === 'failed') {
       const missing = chips.filter((c) => c.unset).map((c) => c.key)
-      // W3：成因分类 + 修复命令。原文（last_error）仍由结论行 v.text 与下方 dt-field-last_error
-      // 双重保留，此块只在其上补一层人话成因徽章 + 可复制修复命令，不替换任何原始信息。
+      // v8-C 意见④人话报错卡（demo .diag 对位）：标题=人话结论 cause_*，正文=处置指引 hint_*；
+      // last_error 原文不再当结论行平铺，收进 <details> 折叠（默认收起）；attempts/cause 作 mono
+      // 元信息行。cancelled 走琥珀 tone（人为终止非故障，不该红成硬故障）。
       // F-b：结构化 automation_cause 直判优先，空串/未识别回落 last_error regex（老数据兼容）。
       const diag = diagnoseFailureWithCause(failCause, lastError)
       const fix = diag.fixCommand
       return (
         <>
-          <div className="dt-verdict dt-verdict--bad">
-            <span className="ic" aria-hidden="true">
-              ×
-            </span>
-            {v.text}
-          </div>
-          <div className="dt-diag" data-testid="dt-diag">
-            <span className={`dt-diag-badge dt-diag-badge--${diag.cause}`} data-testid="dt-diag-cause">
+          <div className={`dt8-diag${diag.cause === 'cancelled' ? ' dt8-diag--amb' : ''}`} data-testid="dt-diag">
+            <div className="dt8-diag-t" data-testid="dt-diag-cause">
               {t(`failure.cause_${diag.cause}`)}
-            </span>
+            </div>
+            <p className="dt8-diag-hint" data-testid="dt8-diag-hint">
+              {t(`failure.hint_${diag.cause}`)}
+            </p>
             {fix !== null && (
               <div className="dt-diag-fix">
                 <span className="dt-diag-fix-label">{t('failure.fix_label')}</span>
@@ -285,20 +298,24 @@ export function TaskDetail({
                 </div>
               </div>
             )}
+            {lastError !== '' && (
+              <details className="dt8-rawfold" data-testid="dt8-rawfold">
+                <summary>{t('detail.raw_error_summary')}</summary>
+                <pre data-testid="dt8-raw-pre">{lastError}</pre>
+              </details>
+            )}
+            <div className="dt8-diag-meta" data-testid="dt8-diag-meta">
+              {attempts !== '' && (
+                <span>
+                  attempts <b>{attempts}</b>
+                </span>
+              )}
+              <span>
+                cause <b>{diag.cause}</b>
+              </span>
+            </div>
           </div>
           <div className="dt-arts">
-            {lastError !== '' && (
-              <div className="dt-field dt-field--wide" data-testid="dt-field-last_error">
-                <div className="dt-fk">last_error</div>
-                <div className="dt-fv dtl-err">{lastError}</div>
-              </div>
-            )}
-            {attempts !== '' && (
-              <div className="dt-field" data-testid="dt-field-attempts">
-                <div className="dt-fk">attempts</div>
-                <div className="dt-fv">{attempts}</div>
-              </div>
-            )}
             {chips
               .filter((c) => !c.unset)
               .map((c) => (
@@ -315,6 +332,8 @@ export function TaskDetail({
         </>
       )
     }
+    // 评审 P2-9：verdict() 只在非 failed 分支消费——failed 早退前不白算（原先置于函数头是死计算）。
+    const v = verdict()
     return (
       <>
         <div className={`dt-verdict${v.bad ? ' dt-verdict--bad' : ''}`}>
@@ -341,6 +360,12 @@ export function TaskDetail({
     return <div className={`dtl-box${state === 'failed' ? ' dtl-box--bad' : ''}`}>{boxInner(chips)}</div>
   }
 
+  // v8-C 意见④：历史只留流程级事件（transition/init/import——import 与 init 同级里程碑，kernel
+  // kind 值域含之，评审 P2-5 补上）——kind==='set' 字段级噪音与未知 kind 一律滤掉（demo .hist
+  // 对位；区头 hint 注明口径）。data-settled 仍看 entries（拉取落定判据不变）。
+  const flowEntries =
+    entries === null ? null : entries.filter((e) => e.kind === 'transition' || e.kind === 'init' || e.kind === 'import')
+
   return (
     <section className="card dt" data-testid="task-detail" ref={scopeRef}>
       <header className="dt-head">
@@ -359,6 +384,18 @@ export function TaskDetail({
           </button>
         )}
       </header>
+
+      {/* v8-C 意见④：动作置顶条（demo .dw-acts 对位）——原底部 .dt-foot 的按钮与 footLabel 语境
+          挪到头部，旁附一句语义说明；props 化纪律不变（按钮语义/端点全归宿主）。 */}
+      {actions !== undefined && (
+        <div className="dt8-acts" data-testid="dt8-acts">
+          <div className="dt8-acts-btns">{actions}</div>
+          <span className="dt8-acts-ctx" data-testid="dt-foot-label">
+            {footLabel}
+          </span>
+          <span className="dt8-acts-note">{t('detail.acts_note')}</span>
+        </div>
+      )}
 
       {requirement !== undefined && requirement !== '' && (
         <div className="dt-sec">
@@ -483,6 +520,74 @@ export function TaskDetail({
         )}
       </div>
 
+      {/* v8-C 意见④：「自己上手修」连接命令卡（demo .conn-card 对位）——失败态且有现场字段
+          （worktree/sandbox 至少一个非空）才渲染；三行可拷命令，字段空串对应行不渲染；
+          automation!=='running' 时容器行加「（未在跑）」小注；卡底注来源字段说明。 */}
+      {/* v9 追加：running 态（容器活着，恢复会话最有意义）与失败态同渲染本卡。 */}
+      {(state === 'failed' || automation === 'running') && (worktree !== '' || sandbox !== '') && (
+        <div className="dt-sec" data-testid="dt8-conn">
+          <div className="dt-sec-h">
+            {t('detail.selffix_title')} <span className="dt-hint">{t('detail.selffix_desc')}</span>
+          </div>
+          <div className="dt8-conn-card">
+            <div className="dt8-conn-rows">
+              {/* v9-I：恢复会话行（自取数，loading 静默 / 查不到一行灰字）——失败+取消
+                  （conflict/cause=cancelled 同落 failed 态）随本卡覆盖；running 态本卡
+                  不渲染，该态的展示位留宿主决策（见交付报告）。 */}
+              <SessionResumeRow root={root} name={change.name} onCopy={copy} />
+              {worktree !== '' && (
+                <div className="dt8-conn-row" data-testid="dt8-conn-worktree">
+                  <span className="dt8-conn-k">{t('detail.conn_worktree')}</span>
+                  <span className="dt8-conn-v">{worktreeCmd}</span>
+                  <button
+                    type="button"
+                    className="dt-code-copy"
+                    data-copy={worktreeCmd}
+                    data-testid="dt8-conn-worktree-copy"
+                    aria-label={t('detail.copy_cmd')}
+                    onClick={() => copy(worktreeCmd)}
+                  >
+                    <Icon name="copy" size={12} />
+                  </button>
+                </div>
+              )}
+              {sandbox !== '' && (
+                <div className="dt8-conn-row" data-testid="dt8-conn-sandbox">
+                  <span className="dt8-conn-k">{t('detail.conn_sandbox')}</span>
+                  <span className="dt8-conn-v">{sandboxCmd}</span>
+                  {automation !== 'running' && <span className="dt8-conn-note">{t('detail.conn_not_running')}</span>}
+                  <button
+                    type="button"
+                    className="dt-code-copy"
+                    data-copy={sandboxCmd}
+                    data-testid="dt8-conn-sandbox-copy"
+                    aria-label={t('detail.copy_cmd')}
+                    onClick={() => copy(sandboxCmd)}
+                  >
+                    <Icon name="copy" size={12} />
+                  </button>
+                </div>
+              )}
+              <div className="dt8-conn-row" data-testid="dt8-conn-rerun">
+                <span className="dt8-conn-k">{t('detail.conn_rerun')}</span>
+                <span className="dt8-conn-v">{rerunCmd}</span>
+                <button
+                  type="button"
+                  className="dt-code-copy"
+                  data-copy={rerunCmd}
+                  data-testid="dt8-conn-rerun-copy"
+                  aria-label={t('detail.copy_cmd')}
+                  onClick={() => copy(rerunCmd)}
+                >
+                  <Icon name="copy" size={12} />
+                </button>
+              </div>
+            </div>
+            <p className="dt8-conn-src">{t('detail.conn_src')}</p>
+          </div>
+        </div>
+      )}
+
       {cmd && (
         <div className="dt-sec">
           <div className="dt-sec-h">{t('detail.terminal_heading')}</div>
@@ -508,13 +613,15 @@ export function TaskDetail({
 
       {/* data-settled：history 拉取是否已落定（测试用来等异步 setState 收敛，避免 act 警告）。 */}
       <div className="dt-sec" data-testid="dt-hist-sec" data-settled={entries !== null ? 'true' : 'false'}>
-        <div className="dt-sec-h">{t('detail.history_heading')}</div>
-        {entries !== null &&
-          (entries.length === 0 ? (
+        <div className="dt-sec-h">
+          {t('detail.history_heading')} <span className="dt-hint">{t('detail.hist_flow_hint')}</span>
+        </div>
+        {flowEntries !== null &&
+          (flowEntries.length === 0 ? (
             <p className="dt-none">{t('detail.history_empty')}</p>
           ) : (
             <ol className="dt-hist" data-testid="dt-hist">
-              {entries.map((e, i) => (
+              {flowEntries.map((e, i) => (
                 <li className="dt-hist-it" data-testid={`dt-hist-${i}`} key={`${e.ts}-${i}`}>
                   <span className="dt-hist-ts">{shortTime(e.ts)}</span>
                   <span className="dt-hist-txt">{histText(e, t)}</span>
@@ -524,14 +631,6 @@ export function TaskDetail({
           ))}
       </div>
 
-      {actions !== undefined && (
-        <div className="dt-foot">
-          <span className="dt-foot-l" data-testid="dt-foot-label">
-            {footLabel}
-          </span>
-          <div className="dt-foot-btns">{actions}</div>
-        </div>
-      )}
     </section>
   )
 }

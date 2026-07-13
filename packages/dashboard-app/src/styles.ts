@@ -1,11 +1,11 @@
 /**
- * 全局样式（内联字符串，CSP 自足——零外部字体/CDN/图片）。设计语言：「OpenAI 配色 × Trellis 布局」
- * （spec：docs/superpowers/specs/2026-07-09-openai-trellis-restyle-design.md §1；
- *  视觉真相源：design-demos/v4-openai-trellis.html，实现与 spec 冲突时以该 v4 文件为准）——
- * Cod Gray 近黑×白单色骨架，蓝 --accent 是唯一 emotive 签名色（激活态/选中行/链接/聚焦环/推进钮）；
- * 绿/红一律降饱和小面积 tint（*-t 底 *-d 字），仅承担语义（绿=pass/成功，红=复核门/回退/错误），
- * 不再有任何结构性角色；紫色全线退役。主按钮 --btn-bg 蓝实底白字（禁黑实底），次按钮 ghost；
- * --ink/--ink-fg 专用于「brand 块」（导航品牌位/分组头/激活 tab/loop 等级铭牌等深色填充块）；
+ * 全局样式（内联字符串，CSP 自足——零外部字体/CDN/图片）。设计语言：v8「Trellis 惊艳版」
+ * （token 真相源：design-demos/v8-trellis-encore.html :root 三段，2026-07-13 v8-A 换基座；
+ *  布局/组件词汇仍沿 v4/v5/v6 各轮真相源注释，色值冲突时以 v8 token 为准）——
+ * 冷灰蓝×白软 SaaS 骨架；绿 --green=主操作/确认/品牌（主按钮 --btn-bg 绿实底 --solid-fg 字、
+ * 选中行绿 tint + --ring 绿 halo），蓝 --accent=链接/信息/计数/焦点环（蓝 halo 走 --ring-blue）；
+ * 红=复核门/回退/错误；紫 --purple-* 与琥珀 --amb-* 为 v8 新语义扩展（agent 活动/中性警示）；
+ * --ink/--ink-fg 专用于「brand 块」（深色填充铭牌），v8 无 ink——取 --text 同族近黑蓝对位；
  * mono 仅用于 id/路径/sha/JSON/字段名，其余一律 sans。
  * 深浅色自适应三段式（机制沿用）：
  *   · 默认浅色；@media (prefers-color-scheme: dark) 跟随系统；
@@ -13,17 +13,25 @@
  */
 export const GLOBAL_CSS = `
 :root {
-  --bg: #f7f7f5; --card: #ffffff; --fill: #f2f2ef; --fill-2: #ececea;
-  --border: #e4e4e0; --border-2: #d2d2cc;
-  --text: #0d0d0d; --text-2: #40403c; --text-3: #6a6a62;
-  --accent: #0b6cff; --accent-d: #0a5ce0; --accent-t: #eaf2ff; --accent-b: #c5daff;
-  --green: #1f9d51; --green-d: #187339; --green-t: #e9f6ee; --green-b: #c8e8d2;
-  --red: #d92d20; --red-d: #b42318; --red-t: #fdf0ee; --red-b: #f3cfc9;
-  --ink: #0d0d0d; --ink-fg: #ffffff; --ink-hover: #2e2e2c;
-  --btn-bg: #0b6cff; --btn-fg: #ffffff; --btn-hover: #0a5ce0;
-  --code-bg: #f6f6f4; --code-border: #e4e4e0;
-  --shadow: 0 1px 2px rgba(0,0,0,.04); --shadow-2: 0 1px 3px rgba(0,0,0,.06),0 1px 2px rgba(0,0,0,.04);
-  --ring: rgba(11,108,255,.13);
+  color-scheme: light;
+  --bg: #f8f9fc; --card: #ffffff; --fill: #f5f7fa; --fill-2: #eef1f5;
+  --border: #e5e8ec; --border-2: #d6dce4;
+  --text: #1a2330; --text-2: #46536b; --text-3: #5f6b80;
+  --accent: #2563eb; --accent-d: #1d4ed8; --accent-t: #e9effd; --accent-b: #c7d7fa;
+  --green: #16a34a; --green-d: #15803d; --green-t: #e9f9ef; --green-b: #c2e9cf;
+  --red: #dc2626; --red-d: #b91c1c; --red-t: #fdeded; --red-b: #f5c8c8;
+  --purple: #8b5cf6; --purple-d: #6d28d9; --purple-t: #f2edfe; --purple-b: #ded2fb;
+  --amb-d: #8a4d10; --amb-t: #f8efdd; --amb-b: #eeddba;
+  /* v8 无 ink token——取 --text 同族近黑蓝对位；hover 提亮一档（旧 v4 #0d0d0d→#2e2e2c 同款步进） */
+  --ink: #1a2330; --ink-fg: #ffffff; --ink-hover: #2b3648;
+  /* v8 主按钮=绿实底（demo .btn.solid-green）；hover 取 green-d（demo 暗一档 brightness(.94) 对位） */
+  --btn-bg: #16a34a; --btn-fg: #ffffff; --btn-hover: #15803d;
+  --solid-fg: var(--btn-fg); /* 同义引用：--btn-fg 既有=「彩色实底上的前景」，即 demo --solid-fg */
+  --code-bg: #f6f8fa; --code-border: #e5e8ec;
+  --scrim: rgba(16,24,40,.34);
+  --shadow: 0 1px 2px rgba(16,24,40,.04); --shadow-2: 0 1px 3px rgba(16,24,40,.07),0 1px 2px rgba(16,24,40,.04);
+  --shadow-3: 0 12px 32px -8px rgba(16,24,40,.16),0 2px 8px rgba(16,24,40,.06);
+  --ring: rgba(22,163,74,.10); --ring-blue: rgba(37,99,235,.12);
   --radius: 12px; --radius-sm: 8px;
   --nav-offset: 64px; /* nav 实际高(约 41-45px) + 20px 呼吸——.side-col sticky top 对齐用，改 .nav 高度需同步此值 */
   --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
@@ -31,44 +39,63 @@ export const GLOBAL_CSS = `
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #0d0d0d; --card: #171717; --fill: #1e1e1d; --fill-2: #262624;
-    --border: #262626; --border-2: #3a3a37;
-    --text: #f2f2f0; --text-2: #c9c9c4; --text-3: #94948d;
-    --accent: #4d94ff; --accent-d: #7fb2ff; --accent-t: rgba(77,148,255,.13); --accent-b: rgba(77,148,255,.38);
-    --green: #3fb950; --green-d: #55c368; --green-t: rgba(63,185,80,.13); --green-b: rgba(63,185,80,.35);
-    --red: #e5534b; --red-d: #f2867e; --red-t: rgba(229,83,75,.14); --red-b: rgba(229,83,75,.40);
-    --ink: #f2f2f2; --ink-fg: #0d0d0d; --ink-hover: #d8d8d5;
-    --btn-bg: #2b7fff; --btn-fg: #ffffff; --btn-hover: #4d94ff;
-    --code-bg: #111110; --code-border: #2a2a28;
+    color-scheme: dark;
+    --bg: #12161f; --card: #1a202b; --fill: #212836; --fill-2: #273040;
+    --border: #2b3342; --border-2: #3b4557;
+    --text: #e8ecf3; --text-2: #b4bdcc; --text-3: #8f9aad;
+    --accent: #6d9bfb; --accent-d: #9db9fd; --accent-t: rgba(109,155,251,.15); --accent-b: rgba(109,155,251,.42);
+    --green: #3ecf77; --green-d: #8fe7b1; --green-t: rgba(62,207,119,.13); --green-b: rgba(62,207,119,.38);
+    --red: #ee6b6b; --red-d: #f8a8a8; --red-t: rgba(238,107,107,.14); --red-b: rgba(238,107,107,.42);
+    --purple: #a78bfa; --purple-d: #c8b4fd; --purple-t: rgba(167,139,250,.15); --purple-b: rgba(167,139,250,.42);
+    --amb-d: #e8b06a; --amb-t: rgba(224,164,88,.13); --amb-b: rgba(224,164,88,.40);
+    --ink: #e8ecf3; --ink-fg: #0c111c; --ink-hover: #c9d2e0;
+    /* 暗态实底前景=近黑蓝（demo --solid-fg #0c111c）；hover 提亮（demo brightness(1.08) 对位） */
+    --btn-bg: #3ecf77; --btn-fg: #0c111c; --btn-hover: #5fdd90;
+    --solid-fg: var(--btn-fg);
+    --code-bg: #10151f; --code-border: #28303f;
+    --scrim: rgba(0,0,0,.55);
     --shadow: 0 1px 2px rgba(0,0,0,.35); --shadow-2: 0 2px 6px rgba(0,0,0,.35);
-    --ring: rgba(77,148,255,.20);
+    --shadow-3: 0 16px 40px -8px rgba(0,0,0,.55);
+    --ring: rgba(62,207,119,.14); --ring-blue: rgba(109,155,251,.16);
   }
 }
 :root[data-theme="light"] {
-  --bg: #f7f7f5; --card: #ffffff; --fill: #f2f2ef; --fill-2: #ececea;
-  --border: #e4e4e0; --border-2: #d2d2cc;
-  --text: #0d0d0d; --text-2: #40403c; --text-3: #6a6a62;
-  --accent: #0b6cff; --accent-d: #0a5ce0; --accent-t: #eaf2ff; --accent-b: #c5daff;
-  --green: #1f9d51; --green-d: #187339; --green-t: #e9f6ee; --green-b: #c8e8d2;
-  --red: #d92d20; --red-d: #b42318; --red-t: #fdf0ee; --red-b: #f3cfc9;
-  --ink: #0d0d0d; --ink-fg: #ffffff; --ink-hover: #2e2e2c;
-  --btn-bg: #0b6cff; --btn-fg: #ffffff; --btn-hover: #0a5ce0;
-  --code-bg: #f6f6f4; --code-border: #e4e4e0;
-  --shadow: 0 1px 2px rgba(0,0,0,.04); --shadow-2: 0 1px 3px rgba(0,0,0,.06),0 1px 2px rgba(0,0,0,.04);
-  --ring: rgba(11,108,255,.13);
+  color-scheme: light;
+  --bg: #f8f9fc; --card: #ffffff; --fill: #f5f7fa; --fill-2: #eef1f5;
+  --border: #e5e8ec; --border-2: #d6dce4;
+  --text: #1a2330; --text-2: #46536b; --text-3: #5f6b80;
+  --accent: #2563eb; --accent-d: #1d4ed8; --accent-t: #e9effd; --accent-b: #c7d7fa;
+  --green: #16a34a; --green-d: #15803d; --green-t: #e9f9ef; --green-b: #c2e9cf;
+  --red: #dc2626; --red-d: #b91c1c; --red-t: #fdeded; --red-b: #f5c8c8;
+  --purple: #8b5cf6; --purple-d: #6d28d9; --purple-t: #f2edfe; --purple-b: #ded2fb;
+  --amb-d: #8a4d10; --amb-t: #f8efdd; --amb-b: #eeddba;
+  --ink: #1a2330; --ink-fg: #ffffff; --ink-hover: #2b3648;
+  --btn-bg: #16a34a; --btn-fg: #ffffff; --btn-hover: #15803d;
+  --solid-fg: var(--btn-fg);
+  --code-bg: #f6f8fa; --code-border: #e5e8ec;
+  --scrim: rgba(16,24,40,.34);
+  --shadow: 0 1px 2px rgba(16,24,40,.04); --shadow-2: 0 1px 3px rgba(16,24,40,.07),0 1px 2px rgba(16,24,40,.04);
+  --shadow-3: 0 12px 32px -8px rgba(16,24,40,.16),0 2px 8px rgba(16,24,40,.06);
+  --ring: rgba(22,163,74,.10); --ring-blue: rgba(37,99,235,.12);
 }
 :root[data-theme="dark"] {
-  --bg: #0d0d0d; --card: #171717; --fill: #1e1e1d; --fill-2: #262624;
-  --border: #262626; --border-2: #3a3a37;
-  --text: #f2f2f0; --text-2: #c9c9c4; --text-3: #94948d;
-  --accent: #4d94ff; --accent-d: #7fb2ff; --accent-t: rgba(77,148,255,.13); --accent-b: rgba(77,148,255,.38);
-  --green: #3fb950; --green-d: #55c368; --green-t: rgba(63,185,80,.13); --green-b: rgba(63,185,80,.35);
-  --red: #e5534b; --red-d: #f2867e; --red-t: rgba(229,83,75,.14); --red-b: rgba(229,83,75,.40);
-  --ink: #f2f2f2; --ink-fg: #0d0d0d; --ink-hover: #d8d8d5;
-  --btn-bg: #2b7fff; --btn-fg: #ffffff; --btn-hover: #4d94ff;
-  --code-bg: #111110; --code-border: #2a2a28;
+  color-scheme: dark;
+  --bg: #12161f; --card: #1a202b; --fill: #212836; --fill-2: #273040;
+  --border: #2b3342; --border-2: #3b4557;
+  --text: #e8ecf3; --text-2: #b4bdcc; --text-3: #8f9aad;
+  --accent: #6d9bfb; --accent-d: #9db9fd; --accent-t: rgba(109,155,251,.15); --accent-b: rgba(109,155,251,.42);
+  --green: #3ecf77; --green-d: #8fe7b1; --green-t: rgba(62,207,119,.13); --green-b: rgba(62,207,119,.38);
+  --red: #ee6b6b; --red-d: #f8a8a8; --red-t: rgba(238,107,107,.14); --red-b: rgba(238,107,107,.42);
+  --purple: #a78bfa; --purple-d: #c8b4fd; --purple-t: rgba(167,139,250,.15); --purple-b: rgba(167,139,250,.42);
+  --amb-d: #e8b06a; --amb-t: rgba(224,164,88,.13); --amb-b: rgba(224,164,88,.40);
+  --ink: #e8ecf3; --ink-fg: #0c111c; --ink-hover: #c9d2e0;
+  --btn-bg: #3ecf77; --btn-fg: #0c111c; --btn-hover: #5fdd90;
+  --solid-fg: var(--btn-fg);
+  --code-bg: #10151f; --code-border: #28303f;
+  --scrim: rgba(0,0,0,.55);
   --shadow: 0 1px 2px rgba(0,0,0,.35); --shadow-2: 0 2px 6px rgba(0,0,0,.35);
-  --ring: rgba(77,148,255,.20);
+  --shadow-3: 0 16px 40px -8px rgba(0,0,0,.55);
+  --ring: rgba(62,207,119,.14); --ring-blue: rgba(109,155,251,.16);
 }
 * { box-sizing: border-box; }
 body { margin: 0; }
@@ -275,7 +302,7 @@ button.ev__chip--neutral:hover { border-color: var(--border-2); color: var(--tex
    .transfer__item--chosen 修饰符区分已选条目。 ── */
 .transfer__search { display: block; width: 100%; margin: 4px 0 0; font: inherit; font-size: 12.5px; color: var(--text); background: var(--fill); border: 1px solid var(--border); border-radius: 7px; padding: 7px 10px; transition: border-color .14s ease, box-shadow .14s ease; }
 .transfer__search::placeholder { color: var(--text-3); }
-.transfer__search:focus-visible { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); }
+.transfer__search:focus-visible { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring-blue); }
 .transfer { display: flex; gap: 10px; margin-top: 10px; }
 .transfer__col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; height: 220px; overflow-y: auto; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 7px; }
 .transfer__item { display: block; width: 100%; text-align: left; font: inherit; font-size: 12px; font-family: var(--mono); color: var(--text-2); background: var(--fill); border: 1px solid transparent; border-radius: 6px; padding: 6px 9px; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; transition: border-color .14s ease, background .14s ease, color .14s ease; }
@@ -317,7 +344,6 @@ button.ev__chip--neutral:hover { border-color: var(--border-2); color: var(--tex
 .dialog__desc { margin: 0 0 16px; font-size: 12.5px; color: var(--text-2); line-height: 1.6; }
 .dialog__desc--danger { color: var(--red); font-weight: 700; }
 .dialog__actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
-.dlg-cli { background: var(--fill); border: 1px dashed var(--border); border-radius: 7px; padding: 8px 11px; font-family: var(--mono); font-size: 11px; color: var(--text-3); overflow-x: auto; white-space: nowrap; }
 
 /* 底部居中胶囊（v4 #toast 忠实还原，spec §2 组件语言表 toast 行）：
    成功=--ink/--ink-fg 中性深底白字，错误=--red 底白字；z-index 60 高于 .dialog__backdrop(50)。
@@ -401,7 +427,7 @@ button.ev__chip--neutral:hover { border-color: var(--border-2); color: var(--tex
 .wb-steps { display: flex; align-items: stretch; overflow-x: auto; padding: 3px 1px; }
 .wb-step { position: relative; overflow: hidden; flex: none; min-width: 148px; max-width: 200px; display: flex; flex-direction: column; align-items: flex-start; text-align: left; padding: 10px 12px 11px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); font: inherit; color: inherit; cursor: pointer; transition: border-color .15s ease, box-shadow .15s ease; }
 .wb-step:hover { border-color: var(--border-2); }
-.wb-step--on, .wb-step--on:hover { border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring), var(--shadow); }
+.wb-step--on, .wb-step--on:hover { border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring-blue), var(--shadow); }
 .wb-step--on::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 42px; background: linear-gradient(var(--accent-t), transparent); pointer-events: none; }
 /* 预演点亮态（GSAP 预演驱动）：进行中蓝、终点绿——沿 spec §1 蓝=进行/绿=完成的语义分工。 */
 .wb-step > * { position: relative; }
@@ -440,7 +466,7 @@ button.ev__chip--neutral:hover { border-color: var(--border-2); color: var(--tex
 .wb-flabel { display: block; font-size: 12px; font-weight: 600; color: var(--text-3); margin-bottom: 5px; }
 .wb-input { width: 100%; height: 34px; padding: 0 11px; border-radius: 9px; border: 1px solid var(--border); background: var(--card); font: inherit; font-size: 13.5px; color: var(--text); transition: border-color .12s ease, box-shadow .12s ease; }
 .wb-input:hover { border-color: var(--border-2); }
-.wb-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); }
+.wb-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring-blue); }
 .wb-input:disabled { background: var(--fill); color: var(--text-3); cursor: not-allowed; }
 .wb-input--ro { display: flex; align-items: center; background: var(--fill); color: var(--text-2); font-family: var(--mono); }
 .wb-switchrow { display: flex; align-items: center; gap: 9px; }
@@ -612,7 +638,7 @@ button.ev__chip--neutral:hover { border-color: var(--border-2); color: var(--tex
 .dtl-it:last-child::before { display: none; }
 .dtl-node { position: absolute; left: 0; top: 2px; width: 16px; height: 16px; border-radius: 999px; display: grid; place-items: center; font-size: 11px; font-weight: 700; line-height: 1; }
 .dtl-node--done { background: var(--green); color: var(--btn-fg); }
-.dtl-node--cur { background: var(--btn-bg); box-shadow: 0 0 0 3px var(--accent-b); }
+.dtl-node--cur { background: var(--btn-bg); box-shadow: 0 0 0 3px var(--ring); }
 .dtl-node--fail { background: var(--red); color: var(--btn-fg); font-size: 10px; }
 .dtl-node--todo { background: var(--card); border: 2px solid var(--border-2); }
 .dtl-r { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-height: 22px; }
@@ -673,7 +699,7 @@ button.ev__chip--neutral:hover { border-color: var(--border-2); color: var(--tex
 .dt-tab--done .tfx { color: var(--green); }
 .dt-tab--cur, .dt-tab--cur:hover { background: var(--btn-bg); border-color: var(--btn-bg); color: var(--btn-fg); }
 .dt-tab--fail, .dt-tab--fail:hover { background: var(--red); border-color: var(--red); color: var(--btn-fg); }
-.dt-tab.on { border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); color: var(--text); }
+.dt-tab.on { border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring-blue); color: var(--text); }
 .dt-tab--cur.on { border-color: var(--btn-bg); color: var(--btn-fg); }
 .dt-tab--fail.on { border-color: var(--red); box-shadow: 0 0 0 3px var(--red-t); color: var(--btn-fg); }
 .dt-pane[hidden] { display: none; }
@@ -695,7 +721,7 @@ button.ev__chip--neutral:hover { border-color: var(--border-2); color: var(--tex
 .wb-skp-list { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 11px; }
 .wb-skopt { height: 26px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--fill); font: inherit; font-size: 12px; font-family: var(--mono); color: var(--text-2); cursor: pointer; transition: border-color .12s ease, background .12s ease, color .12s ease, box-shadow .12s ease; }
 .wb-skopt:hover { border-color: var(--border-2); }
-.wb-skopt.on, .wb-skopt.on:hover { border-color: var(--accent); background: var(--accent-t); color: var(--accent-d); box-shadow: 0 0 0 3px var(--ring); }
+.wb-skopt.on, .wb-skopt.on:hover { border-color: var(--accent); background: var(--accent-t); color: var(--accent-d); box-shadow: 0 0 0 3px var(--ring-blue); }
 .wb-skopt:disabled { opacity: .5; cursor: not-allowed; }
 .wb-skp-foot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .wb-skp-foot label { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-3); font-weight: 600; }
@@ -799,7 +825,7 @@ span.wb-chip-badge { cursor: default; }
 .lp-range::-moz-range-progress { height: 5px; border-radius: 999px; background: var(--accent); }
 .lp-range::-moz-range-thumb { width: 16px; height: 16px; border-radius: 999px; background: var(--card); border: 1px solid var(--border-2); box-shadow: var(--shadow-2); }
 .lp-range:focus-visible { outline: none; }
-.lp-range:focus-visible::-webkit-slider-thumb { border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); }
+.lp-range:focus-visible::-webkit-slider-thumb { border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring-blue); }
 .lp-sld-marks { position: relative; height: 16px; margin-top: 2px; }
 .lp-sld-reco { position: absolute; top: 0; transform: translateX(-50%); font-size: 10.5px; color: var(--text-3); white-space: nowrap; }
 .lp-sld-reco--edge { transform: none; }
@@ -809,13 +835,13 @@ span.wb-chip-badge { cursor: default; }
 .lp-pills { display: flex; gap: 6px; flex-wrap: wrap; }
 .lp-opt { height: 28px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--fill); font: inherit; font-size: 12.5px; font-weight: 600; color: var(--text-2); cursor: pointer; transition: border-color .12s ease, background .12s ease, color .12s ease, box-shadow .12s ease; }
 .lp-opt:hover { border-color: var(--border-2); }
-.lp-opt.on, .lp-opt.on:hover { background: var(--accent-t); border-color: var(--accent); color: var(--accent-d); box-shadow: 0 0 0 3px var(--ring); }
+.lp-opt.on, .lp-opt.on:hover { background: var(--accent-t); border-color: var(--accent); color: var(--accent-d); box-shadow: 0 0 0 3px var(--ring-blue); }
 /* 自主级别 segmented */
 .lp-lv { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 2px 0 4px; }
 @media (max-width: 720px) { .lp-lv { grid-template-columns: 1fr; } }
 .lp-lv-tile { display: flex; flex-direction: column; gap: 2px; padding: 11px 12px 12px; border: 1px solid var(--border); border-radius: 11px; background: var(--fill); text-align: left; font: inherit; cursor: pointer; transition: border-color .12s ease, background .12s ease, box-shadow .12s ease; }
 .lp-lv-tile:hover { border-color: var(--border-2); }
-.lp-lv-tile.on, .lp-lv-tile.on:hover { background: var(--accent-t); border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); }
+.lp-lv-tile.on, .lp-lv-tile.on:hover { background: var(--accent-t); border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring-blue); }
 .lp-lv-tile:disabled { opacity: .6; cursor: not-allowed; }
 .lp-lv-k { font-size: 13px; font-weight: 750; }
 .lp-lv-tile.on .lp-lv-k { color: var(--accent-d); }
@@ -875,7 +901,7 @@ span.wb-chip-badge { cursor: default; }
 .prg-detail .dt-field--miss { background: transparent; }
 .prg-detail .dt-tab:not(.dt-tab--cur):not(.dt-tab--fail) { background: var(--card); }
 .prg-detail .dt-tab:not(.dt-tab--cur):not(.dt-tab--fail):hover { background: var(--fill-2); }
-/* 动作条主按钮（放行/重试）：--btn-bg 蓝实底白字（视觉纪律：主按钮禁黑实底） */
+/* 动作条主按钮（放行/重试）：--btn-bg 绿实底白字（视觉纪律：主按钮禁黑实底；绿=需要你动手/主操作） */
 .prg-btn--primary { background: var(--btn-bg); border-color: var(--btn-bg); color: var(--btn-fg); }
 .prg-btn--primary:hover { border-color: var(--btn-bg); color: var(--btn-fg); opacity: .9; }
 .prg-btn:disabled { opacity: .55; cursor: not-allowed; }
@@ -1062,4 +1088,270 @@ span.wb-chip-badge { cursor: default; }
 .empty__cli { display: flex; justify-content: center; margin: 0 0 16px; }
 .empty__acts { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
 .ibx-cause { flex: none; font-size: 11px; color: var(--red-d); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 16ch; }
+
+/* ── v8-A:nav8 ── */
+/* 意见①（design-demos/v8-trellis-encore.html .proj-menu/.pm-* 对位）：项目下拉宽度贴内容
+   （max-content，224-300px 夹逼）、圆角 12 + --shadow-3 浮层、行 hover 才现身的注销钮显式化
+   （图标 + title/aria-label + 底部脚注说明）。旧 .nav__dropdown* 规则双保留不删（append-only）；
+   展开动效在 Nav.tsx（useGSAP + gsap.matchMedia，reduced-motion/无 matchMedia 直显终态）。
+   选中态=绿 tint（v8 语言：绿=确认/当前项，蓝 --accent-d 留给计数/信息）。决议 #9：本块零硬编码原色。 */
+.nav8-menu { position: absolute; top: calc(100% + 6px); left: 0; z-index: 30; width: max-content; min-width: 224px; max-width: 300px; padding: 6px; background: var(--card); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow-3); transform-origin: top left; }
+.nav8-row { display: flex; align-items: center; gap: 4px; border-radius: 9px; }
+.nav8-row:hover { background: var(--fill); }
+.nav8-item { flex: 1; display: flex; align-items: center; gap: 9px; min-width: 0; padding: 8px 9px; border: 0; background: transparent; border-radius: 9px; text-align: left; font: inherit; font-size: 13px; color: var(--text-2); cursor: pointer; }
+.nav8-dia { flex: none; color: var(--green); font-size: 13px; line-height: 1; }
+.nav8-name { font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nav8-n { margin-left: auto; padding-left: 10px; font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 12.5px; font-weight: 700; color: var(--accent-d); }
+.nav8-row--on .nav8-item { background: var(--green-t); }
+.nav8-row--on .nav8-name { color: var(--green-d); }
+.nav8-unreg { flex: none; width: 28px; height: 28px; margin-right: 5px; border: 0; background: transparent; border-radius: 8px; display: inline-grid; place-items: center; color: var(--text-3); cursor: pointer; opacity: 0; transition: opacity .14s ease, background .14s ease, color .14s ease; }
+.nav8-row:hover .nav8-unreg, .nav8-unreg:focus-visible { opacity: 1; }
+.nav8-unreg:hover { background: var(--red-t); color: var(--red-d); }
+.nav8-foot { margin: 4px 0 0; padding: 7px 9px 5px; border-top: 1px solid var(--border); font-size: 11.5px; color: var(--text-3); }
+.nav8-chev { display: inline-block; margin-left: 5px; font-size: 10px; color: var(--text-3); transition: transform .18s ease; }
+.nav__project-btn[aria-expanded="true"] .nav8-chev { transform: rotate(180deg); }
+
+/* ── v8-C:dt8 ── */
+/* 意见④ TaskDetail 内件（design-demos/v8-trellis-encore.html #drawer 对位：.dw-acts/.diag/
+   .conn-card/.hist）：动作置顶条 + 人话报错卡（原文折叠）+「自己上手修」连接命令卡 + 流程级
+   历史 hint。旧 .dt-foot/.dt-diag-badge 等 dt- 规则双保留不删；零新原色——红/琥珀/蓝语义全走
+   v8 token（--red-* / --amb-* / --accent-*=demo --blue-* 对位，明暗两套自适应），焦点 halo 走
+   --ring-blue。 */
+.dt8-acts { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; padding: 12px 0; border-bottom: 1px solid var(--border); }
+.dt8-acts-btns { display: flex; align-items: center; gap: 8px; }
+.dt8-acts-ctx { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 11.5px; color: var(--text-3); }
+.dt8-acts-note { font-size: 12px; color: var(--text-3); }
+/* 人话报错卡：结论 + 处置指引为主；cancelled 琥珀 tone（人为终止非故障，不红成硬故障）。 */
+.dt8-diag { border: 1px solid var(--red-b); background: var(--red-t); border-radius: 11px; padding: 13px 15px; }
+.dt8-diag--amb { border-color: var(--amb-b); background: var(--amb-t); }
+.dt8-diag-t { font-size: 14px; font-weight: 700; color: var(--red-d); line-height: 1.45; }
+.dt8-diag--amb .dt8-diag-t { color: var(--amb-d); }
+.dt8-diag-hint { margin: 6px 0 0; font-size: 13px; color: var(--text-2); line-height: 1.6; max-width: 64ch; }
+.dt8-diag .dt-diag-fix { margin-top: 10px; }
+.dt8-rawfold { margin-top: 11px; }
+.dt8-rawfold summary { list-style: none; display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; color: var(--text-2); cursor: pointer; border-radius: 6px; padding: 2px 4px; }
+.dt8-rawfold summary::-webkit-details-marker { display: none; }
+.dt8-rawfold summary::before { content: '▸'; font-size: 10px; color: var(--text-3); transition: transform .16s ease; }
+.dt8-rawfold[open] summary::before { transform: rotate(90deg); }
+.dt8-rawfold summary:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--ring-blue); }
+.dt8-rawfold pre { margin: 8px 0 0; padding: 10px 12px; background: var(--code-bg); border: 1px solid var(--code-border); border-radius: 9px; font-family: var(--mono); font-size: 12px; line-height: 1.65; color: var(--text-2); white-space: pre-wrap; overflow-wrap: anywhere; }
+.dt8-diag-meta { display: flex; gap: 14px; margin-top: 10px; font-size: 12px; color: var(--text-3); font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.dt8-diag-meta b { color: var(--text-2); font-weight: 700; }
+/* 「自己上手修」连接命令卡：蓝=信息语义；行内值 mono 单行省略，拷贝钮复用 .dt-code-copy。 */
+.dt8-conn-card { border: 1px solid var(--accent-b); background: var(--accent-t); border-radius: 11px; padding: 13px 15px; }
+.dt8-conn-rows { display: flex; flex-direction: column; gap: 7px; }
+.dt8-conn-row { display: flex; align-items: center; gap: 10px; padding: 8px 11px; background: var(--card); border: 1px solid var(--border); border-radius: 9px; }
+.dt8-conn-k { flex: none; width: 88px; font-size: 12px; font-weight: 600; color: var(--text-2); }
+.dt8-conn-v { flex: 1; min-width: 0; font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 12px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dt8-conn-note { flex: none; font-size: 11px; color: var(--text-3); white-space: nowrap; }
+.dt8-conn-src { margin: 9px 0 0; font-size: 11.5px; color: var(--text-3); }
+
+/* ── v8-E:wb8 ── 工作台(意见⑥)：阶段卡横排步骤条 + sheet 页签化 + SkillChain 动态链。
+   设计真相源 design-demos/v8-trellis-encore.html #view-workbench（.stages/.stage/.conn/
+   .gate-node/.sheet/.stab/.stab-ink/.pane/#skChain/.skconn）。旧 wb-flow-*/wb-step*/wb-* 规则
+   双保留不删（append-only 热点文件纪律）；新类一律 wb8- 前缀；颜色全走既有/v8-A token
+   （--green*/--red*/--purple*/--ring/--solid-fg/--shadow*），禁新硬编码原色（决议 #9）。 */
+/* 阶段卡横排（demo .stages/.stage）——卡=序号圆+名称 mono+chips+微元信息;选中=绿 ring+tint 底 */
+.wb8-rail { background: transparent; border-radius: 0; padding: 0; }
+.wb8-stages { display: flex; align-items: stretch; gap: 0; width: 100%; overflow-x: auto; padding: 6px 2px 16px; }
+.wb8-stage { position: relative; flex: 1 1 0; min-width: 178px; display: flex; background: var(--card); border: 1px solid var(--border); border-radius: 13px; box-shadow: var(--shadow); transition: border-color .15s ease, box-shadow .15s ease; }
+.wb8-stage:hover { border-color: var(--border-2); box-shadow: var(--shadow-2); }
+.wb8-stage--on { border-color: var(--green); background: color-mix(in srgb, var(--green) 7%, var(--card)); box-shadow: 0 0 0 3px var(--ring), var(--shadow); }
+.wb8-hit { position: relative; flex: 1; min-width: 0; display: flex; gap: 11px; align-items: flex-start; text-align: left; padding: 13px 14px 11px; background: transparent; border: none; border-radius: inherit; font: inherit; color: inherit; cursor: pointer; overflow: hidden; }
+.wb8-num { flex: none; width: 26px; height: 26px; border-radius: 999px; background: var(--green-t); border: 1px solid var(--green-b); color: var(--green-d); display: grid; place-items: center; font-size: 12.5px; font-weight: 700; font-family: var(--mono); }
+.wb8-body { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 4px; }
+.wb8-t { display: flex; align-items: baseline; gap: 7px; min-width: 0; flex-wrap: wrap; padding-right: 40px; }
+.wb8-name { font-size: 13.5px; font-weight: 700; font-family: var(--mono); letter-spacing: -.01em; color: var(--text); }
+.wb8-id { font-size: 10.5px; color: var(--text-3); font-family: var(--mono); }
+.wb8-sk { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.wb8-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 6px; font-size: 11px; color: var(--text-3); font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.wb8-meta i { font-style: normal; color: var(--border-2); }
+.wb8-meta span { white-space: nowrap; }
+.wb8-badges { position: absolute; top: 8px; right: 10px; display: flex; align-items: center; gap: 4px; z-index: 2; }
+/* running 微光扫过承载元素（GSAP 驱动可见性/位移;等强度对位旧 .wb-flow-gloss:color-mix 派生渐变+缺省 opacity:0） */
+.wb8-gloss {
+  position: absolute; top: 0; bottom: 0; left: 0; width: 46px; opacity: 0; pointer-events: none; z-index: 1;
+  background: linear-gradient(105deg, transparent 6%, color-mix(in srgb, var(--green) 42%, transparent) 50%, transparent 94%);
+}
+/* 段间连接件（demo .conn/.conn.gated/.gate-node）：流动虚线+clip-path 箭头;门后推进边=红+菱形门节点 */
+.wb8-conn { flex: none; width: 44px; position: relative; align-self: center; height: 34px; }
+.wb8-conn::before { content: ""; position: absolute; left: 4px; right: 9px; top: 16px; height: 2px; background: repeating-linear-gradient(90deg, var(--green) 0 6px, transparent 6px 12px); animation: wb8-flow 1.4s linear infinite; }
+.wb8-conn::after { content: ""; position: absolute; right: 2px; top: 12px; width: 6px; height: 10px; background: var(--green); clip-path: polygon(0 0, 100% 50%, 0 100%); }
+.wb8-conn--gated::before { background: repeating-linear-gradient(90deg, var(--red) 0 6px, transparent 6px 12px); animation-duration: 2.6s; }
+.wb8-conn--gated::after { background: var(--red); }
+.wb8-gate-node { position: absolute; left: 50%; top: 17px; transform: translate(-50%, -50%) rotate(45deg); width: 10px; height: 10px; background: var(--red-t); border: 1.6px solid var(--red); border-radius: 2px; }
+.wb8-ev { position: absolute; left: 50%; top: 100%; transform: translateX(-50%); margin-top: 1px; max-width: 88px; overflow: hidden; text-overflow: ellipsis; font-size: 9.5px; font-family: var(--mono); color: var(--text-3); white-space: nowrap; }
+@keyframes wb8-flow { to { background-position: -12px 0; } }
+.wb8-add { flex: none; align-self: stretch; min-width: 104px; margin-left: 10px; display: flex; align-items: center; justify-content: center; padding: 12px; border: 1px dashed var(--border-2); border-radius: 13px; background: transparent; color: var(--text-3); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; transition: background .12s ease, color .12s ease, border-color .12s ease; }
+.wb8-add:hover:not(:disabled) { background: var(--card); border-color: var(--green-b); color: var(--text-2); }
+.wb8-add:disabled { opacity: .55; cursor: not-allowed; }
+/* sheet 页签容器（demo .sheet/.sheet-tabs/.stab/.stab-ink/.pane）——主列不再平铺 */
+.wb8-sheet { background: var(--card); border: 1px solid var(--border); border-radius: 13px; box-shadow: var(--shadow); overflow: hidden; }
+.wb8-tabs { display: flex; align-items: center; gap: 2px; padding: 8px 10px 0; border-bottom: 1px solid var(--border); position: relative; overflow-x: auto; }
+.wb8-tab { position: relative; padding: 8px 13px 10px; border: none; background: transparent; border-radius: 9px 9px 0 0; font: inherit; font-size: 13px; font-weight: 600; color: var(--text-3); cursor: pointer; white-space: nowrap; transition: color .14s ease, background .14s ease; }
+.wb8-tab:hover { color: var(--text); background: var(--fill); }
+.wb8-tab[aria-selected="true"] { color: var(--text); }
+.wb8-tab .n { margin-left: 5px; font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 11px; color: var(--text-3); }
+.wb8-ink { position: absolute; bottom: -1px; left: 0; width: 0; height: 2px; background: var(--green); border-radius: 2px; }
+.wb8-sheet-body { position: relative; min-height: 280px; }
+.wb8-pane { display: none; padding: 16px 18px; }
+.wb8-pane.on { display: block; }
+/* 宿主卡进 pane 后卸外层卡壳——sheet 本身已是卡,不叠双层卡框/双份留白;子卡内部结构零改动 */
+.wb8-pane > .card, .wb8-pane > .side-card { border: none; box-shadow: none; background: transparent; border-radius: 0; padding: 0; }
+.wb8-pane > .wb-loop { margin-top: 0; }
+.wb8-pane > .side-card + .side-card, .wb8-pane > .card + .card, .wb8-pane > .side-card + div, .wb8-pane > div + .side-card { margin-top: 14px; border-top: 1px solid var(--border); padding-top: 14px; }
+.wb8-pane > .side-card .side-card__head, .wb8-pane > .side-card .side-card__body { padding-left: 0; padding-right: 0; }
+/* pane 内的 Hook 时序线：跟在编辑卡后,分隔线接续（.wb-ed-sec 的卡内上分隔语义在卡外补齐） */
+.wb8-pane > .wb-ed-sec { margin-top: 14px; border-top: 1px solid var(--border); }
+/* SkillChain 动态链（demo #skChain/.skc/.skn/.skconn）：编号节点紫圆 mono+紫流动虚线连接件 */
+.wb-chip.wb8-skc { background: var(--purple-t); border-color: var(--purple-b); color: var(--purple-d); font-family: var(--mono); }
+.wb8-skn { flex: none; display: inline-grid; place-items: center; width: 15px; height: 15px; border-radius: 999px; background: var(--purple); color: var(--solid-fg); font-size: 10px; font-weight: 700; font-style: normal; font-family: var(--mono); margin-right: 5px; }
+.wb8-skconn { flex: none; display: inline-block; width: 26px; height: 14px; position: relative; margin: 0 2px; }
+.wb8-skconn::before { content: ""; position: absolute; left: 2px; right: 7px; top: 6px; height: 2px; background: repeating-linear-gradient(90deg, var(--purple) 0 5px, transparent 5px 10px); animation: wb8-flowsk 1.6s linear infinite; }
+.wb8-skconn::after { content: ""; position: absolute; right: 1px; top: 3px; width: 5px; height: 8px; background: var(--purple); clip-path: polygon(0 0, 100% 50%, 0 100%); }
+@keyframes wb8-flowsk { to { background-position: -10px 0; } }
+/* reduced-motion：流动虚线全部停帧（GSAP 侧由 matchMedia 各自兜,此处兜 CSS 动画） */
+@media (prefers-reduced-motion: reduce) {
+  .wb8-conn::before, .wb8-skconn::before { animation: none; }
+}
+/* ── v9-F1:prg9+rail ── 进度统一面(收件箱并入)+ 列车轨进度条。设计真相源
+   design-demos/v9-flowdeck.html(.dcard.flow/.need 行体 + .rail 与 .rl- 骨架、.st- 状态类
+   R1 列车轨;R2/R3 备选已退役不移植)。旧 prg- 规则双保留(append-only 热点文件纪律);新类一律
+   .prg9-/.rl- 前缀;零硬编码原色——全走既有 token(绿红琥珀蓝各系 --green·--red·--amb-t·b·d·
+   --accent 与 --ring/--ring-blue/--scrim/--shadow-3),demo 的蓝 token 对位本仓 --accent 系,流光高光以
+   color-mix 从 --solid-fg 派生。动效=状态语义:**在跑才流光**(.prg9-rail[data-mode="run"]
+   门控)/门=红菱形呼吸(data-mode="gate" 门控)/失败=断轨/取消=琥珀/排队与未达=幽灵虚线轨;
+   prefers-reduced-motion 循环全停(块尾停帧规则)。 */
+.prg9-stack { display: flex; flex-direction: column; gap: 10px; }
+.prg9-row { display: grid; grid-template-columns: 186px minmax(0, 1fr) auto; column-gap: 22px; align-items: center; background: var(--card); border: 1px solid var(--border); border-radius: 13px; box-shadow: var(--shadow); padding: 13px 18px; transition: border-color .15s ease, box-shadow .15s ease; }
+.prg9-row:hover { border-color: var(--border-2); box-shadow: var(--shadow-2); }
+/* 高亮=「需要你动手」:绿 ring(全站动作色,demo .dcard.need),严重度由判定徽章表达 */
+.prg9-row--need { border-color: var(--green-b); box-shadow: 0 0 0 3px var(--ring), var(--shadow); }
+.prg9-row--need:hover { border-color: var(--green); box-shadow: 0 0 0 3px var(--ring), var(--shadow-2); }
+.prg9-head { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; min-width: 0; }
+.prg9-name { border: 0; background: transparent; padding: 0; cursor: pointer; text-align: left; font: inherit; font-family: var(--mono); font-size: 13.5px; font-weight: 700; color: var(--text); letter-spacing: -.005em; border-radius: 4px; transition: color .14s ease; }
+.prg9-name:hover { color: var(--accent-d); text-decoration: underline; text-underline-offset: 4px; }
+.prg9-proj { font-size: 11.5px; color: var(--text-3); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.prg9-mid { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.prg9-lead { margin: 0; font-size: 12.5px; color: var(--text-2); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.prg9-ev { height: 20px; padding: 0 7px; font-size: 10.5px; }
+.prg9-side { display: flex; flex-direction: column; align-items: flex-end; gap: 7px; white-space: nowrap; }
+.prg9-judge { display: inline-flex; align-items: center; gap: 8px; }
+.prg9-acts { display: flex; gap: 6px; }
+.prg9-btn { display: inline-flex; align-items: center; gap: 5px; height: 29px; padding: 0 11px; border-radius: 8px; border: 1px solid transparent; background: transparent; font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; white-space: nowrap; transition: background .14s ease, border-color .14s ease, color .14s ease, filter .12s ease; }
+.prg9-btn:disabled { opacity: .55; cursor: not-allowed; }
+.prg9-btn--go { background: var(--green); color: var(--solid-fg); }
+.prg9-btn--go:hover:not(:disabled) { filter: brightness(.94); }
+.prg9-btn--neg { background: var(--card); border-color: var(--border); color: var(--text-2); box-shadow: var(--shadow); }
+.prg9-btn--neg:hover:not(:disabled) { background: var(--red-t); border-color: var(--red-b); color: var(--red-d); }
+.prg9-btn--retry { border-color: var(--accent-b); color: var(--accent-d); }
+.prg9-btn--retry:hover:not(:disabled) { background: var(--accent-t); }
+/* 判定徽章扩展 tone(绿/红沿既有 .badge--green/.badge--red):蓝=运行中/琥珀=已取消/中性=排队与观察 */
+.prg9-bdg { display: inline-flex; align-items: center; gap: 5px; }
+.prg9-bdg .dot { width: 5px; height: 5px; border-radius: 999px; background: currentColor; flex: none; }
+.prg9-bdg--blue { background: var(--accent-t); color: var(--accent-d); }
+.prg9-bdg--blue .dot { animation: prg-blink 1.3s ease-in-out infinite; }
+.prg9-bdg--amb { background: var(--amb-t); color: var(--amb-d); border: 1px solid var(--amb-b); }
+.prg9-bdg--neutral { background: var(--fill-2); color: var(--text-2); border: 1px solid var(--border); }
+.prg9-fold { margin: 12px 4px 0; font-size: 12.5px; color: var(--text-3); }
+/* ── 列车轨 R1(rl- 骨架:名称在下,节点在上,track 连前一节点) ── */
+.prg9-rail { margin: 2px 0; min-width: 0; }
+.prg9-rail .rl { list-style: none; margin: 0; padding: 0; display: flex; }
+.rl-ph { flex: 1; min-width: 0; position: relative; padding-top: 21px; text-align: center; }
+.rl-name { display: block; font-size: 10.5px; line-height: 1.3; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rl-node { position: absolute; top: 2px; left: 50%; transform: translate(-50%, 0); width: 12px; height: 12px; border-radius: 999px; background: var(--card); border: 1.6px solid var(--border-2); z-index: 1; }
+.rl-track { position: absolute; top: 7px; right: calc(50% + 9px); left: calc(-50% + 9px); height: 2.5px; border-radius: 2px; background: var(--fill-2); overflow: hidden; }
+.rl-ph:first-child .rl-track { display: none; }
+/* 已走过段:绿实轨;流光层缺省停位在段外(**在跑才流动**——动画只挂 data-mode="run" 门控) */
+.rl-ph--done .rl-node { background: var(--green); border-color: var(--green); }
+.rl-ph--done .rl-track { background: var(--green); }
+.rl-ph--done .rl-track::after { content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 36%; border-radius: 2px; background: linear-gradient(90deg, transparent, color-mix(in srgb, white 65%, transparent), transparent); transform: translateX(-130%); will-change: transform; }
+.prg9-rail[data-mode="run"] .rl-ph--done .rl-track::after { animation: prg9-railflow 2.3s ease-in-out infinite; animation-delay: calc(var(--i) * .16s); }
+@keyframes prg9-railflow { to { transform: translateX(420%); } }
+/* 当前段:列车头(蓝点)停靠;在跑时脉冲(同门控) */
+.rl-ph--cur .rl-node { width: 15px; height: 15px; top: .5px; background: var(--accent); border-color: var(--accent); box-shadow: 0 0 0 4px var(--ring-blue); }
+.rl-ph--cur .rl-name { color: var(--accent-d); font-weight: 700; }
+.rl-ph--cur .rl-track { background: repeating-linear-gradient(90deg, var(--accent) 0 5px, transparent 5px 10px); }
+.prg9-rail[data-mode="run"] .rl-ph--cur .rl-node { animation: prg9-trainpulse 1.7s ease-in-out infinite; will-change: transform; }
+@keyframes prg9-trainpulse { 50% { transform: translate(-50%, 0) scale(1.22); box-shadow: 0 0 0 7px var(--ring-blue); } }
+/* 门=红闸:菱形节点,呼吸环只在 gate 模式启动 */
+.rl-ph--gate .rl-node { border-radius: 3px; transform: translate(-50%, 0) rotate(45deg); background: var(--red-t); border-color: var(--red); }
+.rl-ph--gate .rl-node::after { content: ""; position: absolute; inset: -7px; border-radius: 6px; border: 1.5px solid var(--red-b); opacity: 0; }
+.prg9-rail[data-mode="gate"] .rl-ph--gate .rl-node::after { animation: prg9-gatepulse 2.6s ease-out infinite; }
+@keyframes prg9-gatepulse { 0% { opacity: .9; transform: scale(.55); } 70% { opacity: 0; transform: scale(1.15); } 100% { opacity: 0; } }
+.rl-ph--gate .rl-name { color: var(--red-d); font-weight: 700; }
+.rl-ph--gate .rl-track { background: repeating-linear-gradient(90deg, var(--red) 0 5px, transparent 5px 10px); }
+/* 失败=断轨豁口 */
+.rl-ph--fail .rl-node { background: var(--red); border-color: var(--red); }
+.rl-ph--fail .rl-name { color: var(--red-d); font-weight: 700; }
+.rl-ph--fail .rl-track { background: linear-gradient(90deg, var(--red) 0 42%, transparent 42% 58%, var(--red) 58% 100%); }
+/* 取消=琥珀(人为终止非故障) */
+.rl-ph--cxl .rl-node { background: var(--amb-t); border-color: var(--amb-d); }
+.rl-ph--cxl .rl-name { color: var(--amb-d); font-weight: 700; }
+.rl-ph--cxl .rl-track { background: var(--amb-b); }
+/* 排队/未达=幽灵虚线轨 */
+.rl-ph--queue .rl-node { border-style: dashed; border-color: var(--border-2); }
+.rl-ph--queue .rl-track { background: repeating-linear-gradient(90deg, var(--border-2) 0 4px, transparent 4px 9px); }
+.rl-ph--todo .rl-track { background: repeating-linear-gradient(90deg, var(--border-2) 0 4px, transparent 4px 9px); opacity: .65; }
+/* ── 详情抽屉(scrim+右滑;GSAP 驱动入场,CSS 缺省停在场外) ── */
+html.prg9-lock { overflow: hidden; }
+.prg9-scrim { position: fixed; inset: 0; z-index: 40; background: var(--scrim); }
+.prg9-drawer { position: fixed; top: 0; right: 0; bottom: 0; z-index: 50; width: min(560px, 100%); display: flex; flex-direction: column; background: var(--card); border-left: 1px solid var(--border); box-shadow: var(--shadow-3); transform: translateX(103%); }
+.prg9-dw-body { flex: 1; overflow-y: auto; padding: 16px 18px 20px; }
+.prg9-dw-body > .card.dt { border: none; box-shadow: none; padding: 0; }
+.prg9-dw-body .prg-logwrap { margin-top: 14px; }
+/* reduced-motion:列车轨/徽章循环动效全停(入场直达终态由 GSAP matchMedia reduce 分支负责) */
+@media (prefers-reduced-motion: reduce) {
+  .prg9-rail .rl-track::after, .prg9-rail .rl-node, .prg9-rail .rl-node::after, .prg9-bdg--blue .dot { animation: none !important; }
+}
+/* ── v9-F1 块尾追加(真机验收 G):need 行 ring 按语义分色 + fail/cxl 行「回终端」命令 chip ──
+   「失败就是红框,终止就是土色框」:gate=绿(沿 .prg9-row--need 现状);失败=红 ring;人为终止=
+   琥珀 ring。tone 类叠加于 --need 之后(同特异度后写覆盖 border/shadow);halo 一律 color-mix
+   从 token 派生,禁 #hex(决议 #9 同款纪律)。 */
+.prg9-row--need-fail { border-color: var(--red-b); box-shadow: 0 0 0 3px color-mix(in srgb, var(--red) 12%, transparent), var(--shadow); }
+.prg9-row--need-fail:hover { border-color: var(--red); box-shadow: 0 0 0 3px color-mix(in srgb, var(--red) 12%, transparent), var(--shadow-2); }
+.prg9-row--need-cxl { border-color: var(--amb-b); box-shadow: 0 0 0 3px color-mix(in srgb, var(--amb-d) 14%, transparent), var(--shadow); }
+.prg9-row--need-cxl:hover { border-color: var(--amb-d); box-shadow: 0 0 0 3px color-mix(in srgb, var(--amb-d) 14%, transparent), var(--shadow-2); }
+/* 命令 chip(替代已退役的行内重试/放弃钮):label 人话 + mono 命令体,点击=拷贝+toast;
+   浅底描边披样对位 dt8-conn 命令行,hover 走 accent 系提示可点。 */
+.prg9-cmdchip { display: inline-flex; align-items: center; gap: 7px; height: 29px; max-width: 360px; padding: 0 11px; border-radius: 8px; border: 1px dashed var(--border-2); background: var(--fill-2); font: inherit; font-size: 12px; font-weight: 600; color: var(--text-2); cursor: pointer; white-space: nowrap; transition: border-color .14s ease, background .14s ease, color .14s ease; }
+.prg9-cmdchip:hover { border-color: var(--accent-b); background: var(--accent-t); color: var(--accent-d); }
+.prg9-cmdchip .prg9-cc { font-size: 11.5px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; }
+
+/* ── v9-H:prg9 tabs+groups ── 进度页状态 sheet 页签(全部/等你动手/运行中/等待中,demo
+   v9-flowdeck .deck-tabs/.stab/#deckInk 对位)+ 聚合语境项目分组组头(demo .pgroup/.pg-h)+
+   行 workflow/调度标识(demo .badge outline 全称 workflow chip/.schip)+ 行体 v2(真机反馈:
+   标题行内联 chips,列车轨整宽,动作在轨道右侧)。页签形制参照 wb8 sheet 页签但进度自持一套
+   类名(.prg9t-/.prg9g-/.prg9s-/.prg9v2- 前缀,不复用 wb8 前缀类);零硬编码原色,全走既有 token。 */
+.prg9t-tabs { position: relative; display: flex; align-items: center; gap: 2px; margin: 2px 0 16px; border-bottom: 1px solid var(--border); padding: 0 2px; overflow-x: auto; }
+.prg9t-tab { position: relative; padding: 8px 13px 10px; border: none; background: transparent; border-radius: 9px 9px 0 0; font: inherit; font-size: 13px; font-weight: 600; color: var(--text-3); cursor: pointer; white-space: nowrap; transition: color .14s ease, background .14s ease; }
+.prg9t-tab:hover { color: var(--text); background: var(--fill); }
+.prg9t-tab[aria-selected="true"] { color: var(--text); }
+.prg9t-n { margin-left: 5px; font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 11px; color: var(--text-3); }
+.prg9t-ink { position: absolute; bottom: -1px; left: 0; width: 0; height: 2px; background: var(--green); border-radius: 2px; }
+/* 项目分组:组头=folder 图标+项目名(mono)+件数胶囊+右延细线;组内行栈同 prg9-stack 间距。 */
+.prg9g-group { min-width: 0; }
+.prg9g-head { display: flex; align-items: center; gap: 8px; margin: 10px 0 10px; font-size: 13px; font-weight: 650; color: var(--text); }
+.prg9g-group:first-child .prg9g-head { margin-top: 0; }
+.prg9g-head > svg { color: var(--text-3); flex: none; }
+.prg9g-name { font-family: var(--mono); letter-spacing: -.005em; }
+.prg9g-n { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 11.5px; color: var(--text-3); font-weight: 700; background: var(--fill-2); border: 1px solid var(--border); border-radius: 6px; padding: 1px 6px; }
+.prg9g-rule { flex: 1; height: 1px; background: var(--border); }
+.prg9g-stack { display: flex; flex-direction: column; gap: 10px; }
+/* 行标识:workflow chip=mono outline 形(全称,不缩写);调度 chip 中性=⌨ 终端,--sbx 蓝 tint=▦ 沙箱。 */
+.prg9s-tags { display: flex; align-items: center; gap: 5px; flex-wrap: nowrap; }
+.prg9s-wf { display: inline-flex; align-items: center; height: 20px; padding: 0 7px; border-radius: 999px; border: 1px solid var(--border); background: transparent; font-family: var(--mono); font-size: 10.5px; font-weight: 600; color: var(--text-2); white-space: nowrap; }
+.prg9s-schip { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 7px; border-radius: 6px; border: 1px solid var(--border); background: var(--fill); font-size: 10.5px; font-weight: 600; color: var(--text-2); white-space: nowrap; }
+.prg9s-schip--sbx { background: var(--accent-t); border-color: var(--accent-b); color: var(--accent-d); }
+/* 行体 v2(真机反馈):标题行内联——名称+track/workflow/调度 chip+时间同行,右端判定徽章;
+   列车轨整宽独占第二行左侧,动作在轨道右侧垂直居中。旧 186px 三列 grid(.prg9-head/-mid/-side)
+   停用退役,规则本体双保留不删(append-only);本组后写覆盖 .prg9-row 的 grid 布局。 */
+.prg9-row { display: block; padding: 12px 18px; }
+.prg9v2-top { display: flex; align-items: center; gap: 9px; min-width: 0; flex-wrap: wrap; }
+.prg9v2-time { font-size: 11.5px; color: var(--text-3); font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.prg9v2-sp { flex: 1; }
+.prg9v2-body { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 24px; align-items: center; margin-top: 8px; }
+.prg9v2-mid { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.prg9v2-mid .prg9-rail { margin: 0; }
+.prg9v2-acts { align-items: center; }
 `

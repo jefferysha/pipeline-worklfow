@@ -1,6 +1,6 @@
 export type Lang = 'zh' | 'en'
 
-// 嵌套字典；index.tsx 以点路径解析（nav.inbox 等）。zh/en 键结构必须逐一对齐（completeness 测试守）。
+// 嵌套字典；index.tsx 以点路径解析（nav.progress 等）。zh/en 键结构必须逐一对齐（completeness 测试守）。
 export interface Dict {
   [k: string]: string | Dict
 }
@@ -9,10 +9,11 @@ export const zh: Dict = {
   // T18 孤儿键清理登记：app.subtitle 与 common.lang/theme_dark/theme_light/refresh/project/
   // phase/track/updated 全仓零消费（HEAD 存量孤儿），随本次修剪删除。
   app: { title: 'Pipeline 控制台' },
-  // T17（v5 三视图 IA）：一级导航收敛 收件箱/进度/工作台；board/settings/loops/afk/workflows
-  // 入口键随下拉分组退役删除（组件文件 T18 删）；注册项目入口删除（决议#7，pipeline init 自动登记）。
+  // v9-flowdeck 收件箱退役：一级导航只剩 进度/工作台（nav.inbox 随 InboxView.tsx 删除，待拍板
+  // 红徽标改挂「进度」项）；更早 board/settings/loops/afk/workflows 入口键随 T17 下拉分组退役
+  // 删除；注册项目入口删除（决议#7，pipeline init 自动登记）。
   nav: {
-    inbox: '收件箱', progress: '进度', workbench: '工作台',
+    progress: '进度', workbench: '工作台',
     // D5/G19③ 聚合入口收编（Task 5）：切换器下拉首项，root='' 是全应用聚合语境的唯一表示。
     project_all: '全部项目',
     // 项目项 hover 区的注销入口（评审 P2-13）；确认走 Dialog，见下方 unregister_* 四项。
@@ -21,6 +22,9 @@ export const zh: Dict = {
     unregister_desc: '只会从本机 dashboard 注册表移除 "{name}"，不会删除任何文件或 change 数据，随时可以重新注册。',
     unregister_confirm: '确认注销',
     unregister_cancel: '取消',
+    // ── v8-A:nav8（意见①）：下拉底部脚注说明 + 注销钮图标化后的无障碍名（文本不可见，靠 aria-label/title）。
+    project_menu_hint: '行尾按钮 = 注销此项目（hover 显现，点击二次确认）',
+    project_unregister_aria: '注销项目 {name}',
   },
   common: {
     theme_toggle: '主题',
@@ -38,17 +42,11 @@ export const zh: Dict = {
     open: '立项', explore: '调研', spec: '规格', build: '实现',
     verify: '验证', ship: '交付', archive: '归档',
   },
+  // v9-flowdeck 收件箱视图退役（进度=唯一在制面）：视图壳键（title/subtitle/empty_*/count/
+  // open_board/list_label/collapsed_*）随 InboxView.tsx 删除；判定徽章/lead/动作/afk 键保留——
+  // 消费方迁至进度（需操作行高亮，F1）与 shared/TaskDetail（inbox.awaiting.*）。域名不改（决议#8
+  // 代码标识符纪律：key 路径是标识符，不随视图改名连坐）。
   inbox: {
-    title: '在等你决定',
-    // T9（v5 重构）：副标题对齐 demo v5 收件箱口径——只收现在就能拍板的事。
-    // 验收反馈②-③：「等 agent」改人话「等产出」，本句口径同步。
-    subtitle: '只收你现在就能拍板的事——放行、打回、重试、放弃；缺产出的活在进度里等产出',
-    empty_title: '没有在等你的事',
-    empty_desc: '没有 change 停在等你拍板的门上。要开始新工作，去终端跑 pipeline init；想追踪在跑的任务，在进度里看。',
-    count: '{n} 个在等你',
-    // T17 三视图 IA：看板退役，空态按钮改指进度（key 名不动，代码标识符纪律同决议#8）。
-    open_board: '去进度',
-    // T18 孤儿键清理登记：badge_waiting 随 ChangeDetailCard.tsx 退役删除（唯一消费方）。
     awaiting: {
       explore: '调研完成，等你逐项确认设计',
       spec: '规格 / 计划完成，等你确认',
@@ -57,7 +55,6 @@ export const zh: Dict = {
     },
     // ── T9 v5 master-detail：结论式 badge 三态 + 人话 lead（demo 三情形口径）+ 动作条文案
     //    （决议 #13：以 demo v5 为唯一口径；「阶段」（旧措辞已废））──
-    list_label: '等你确认的 change',
     badge_pass: '✓ 可以放行',
     badge_judge: '等你判断',
     badge_failed: '失败 ×{n} · 等你决定',
@@ -66,17 +63,14 @@ export const zh: Dict = {
     lead_judge: '到了人工复核：{wf} 没有自动检查，放不放行完全由你判断',
     lead_failed: '自动化跑挂了：{err}，已自动重试 {n} 次——重试还是放弃？',
     lead_failed_plain: '自动化跑挂了：{err}——重试还是放弃？',
-    act_approve: '→ 放行',
+    // gate 多出边逐条渲染（v9 评审 P1-1 回归旧 InboxView 纪律）：act_forward 非首选前进边
+    // （{to}=事件名）、act_backward 全部回退边（{to}=目标相位）——消费方 ProgressView.actionsFor。
+    // act_approve 键随旧 InboxView 退役后零引用，zh/en 对称删（同批登记）。
     act_reject: '↩ 打回',
     act_forward: '→ {to}',
     act_backward: '↩ {to}',
-    act_retry: '↻ 重试',
-    act_dismiss: '✕ 放弃',
-    afk_retry_ok: '{name}：重试已提交——清零计数重新挂队',
-    afk_dismiss_ok: '{name}：已放弃——退出自动化，现场与 worktree 保留',
-    afk_fail: '操作失败：{msg}',
-    collapsed_title: '详情已收起',
-    collapsed_hint: '按 Enter 或点击左侧任意行重新打开',
+    // 真机验收 G 退役登记：act_retry/act_dismiss 及 afk_retry_ok/afk_dismiss_ok/afk_fail 随
+    // 「重试/放弃回终端做」删除——全仓 grep 零引用（排除 design-demos），zh/en 对称。
   },
   detail: {
     close: '关闭详情',
@@ -108,7 +102,24 @@ export const zh: Dict = {
     history_heading: '历史',
     history_empty: '早期记录不可用',
     hist_init: '创建',
+    hist_import: '导入既有任务',
     hist_set: '{field} 已更新',
+    // ── v8-C 意见④（TaskDetail 内件）：动作置顶条语义说明 / 报错原文折叠 summary / 「自己上手修」
+    //    连接命令卡 / 流程级历史 hint。zh/en 对称追加（completeness 测试守）。──
+    acts_note: '动作在此即刻生效——与终端命令等价，走同一校验',
+    raw_error_summary: '报错原文（automation_last_error）',
+    selffix_title: '自己上手修',
+    selffix_desc: '重试不一定能解决——worktree 和容器都还留着，拷一条进终端',
+    conn_worktree: '进 worktree',
+    conn_sandbox: '进容器',
+    conn_rerun: '改完重跑',
+    conn_not_running: '（未在跑）',
+    conn_src: '来源字段：automation_worktree · automation_sandbox（后端已透传）',
+    // ── v9-I（SessionResumeRow）：恢复会话行——关联那次终端会话 + 恢复命令。zh/en 对称。──
+    conn_resume: '恢复会话',
+    conn_resume_none: '未找到可恢复会话',
+    conn_resume_id: '会话 {sid} · {platform}',
+    hist_flow_hint: '只留流程级事件；字段级（set）噪音已滤',
   },
   // 终审修复批：evidence.ts 的未产出占位契约修正——不再把中文「未产出」焊死进纯函数层，改由
   // 消费方（InboxView 证据 chip / ChangeDetailCard FieldBox）按 EvidenceChip.unset 走这里的 i18n。
@@ -169,23 +180,10 @@ export const zh: Dict = {
     step_init: '建一个 change（pipeline init 会把项目自动登记进来，不用单独注册）',
     step_setup: '装技能 + 配就绪（安装流水线技能，配好 AFK 要的凭证与镜像检查）',
     step_doctor: '确认环境就绪，然后刷新本页',
-    or_cli: '或者用 CLI',
     copy: '复制',
     copied: '已复制 ✓',
     no_change_title: '这个项目还没有 change',
-    no_change_desc: '新建一个 change 开始跑流水线；也可以用 CLI 初始化。',
-    new_change: '新建 change',
-  },
-  newchange: {
-    title: '新建 change',
-    desc: '在 {project} 里初始化一个新的 change',
-    name_label: '名字',
-    name_error: '名字只允许字母 / 数字 / - / _（不能含空格）',
-    workflow_label: 'Workflow',
-    track_label: 'Track',
-    create: '创建',
-    cancel: '取消',
-    created_toast: 'change 已创建：{name}',
+    no_change_desc: '在终端用 CLI 初始化一个 change 开始跑流水线。',
   },
   // T12（v5 交互重建）：工作台骨架文案。口径纪律：用户可见文案一律用「阶段」（旧措辞已废）
   // （决议 #8：仅改可见文案，代码标识符 phase 不动）。
@@ -218,7 +216,7 @@ export const zh: Dict = {
     ed_label: '阶段名称',
     ed_id: '阶段 ID',
     ed_gate: '复核门',
-    ed_gate_note: '打开后，change 会停在此阶段等人放行——出现在收件箱',
+    ed_gate_note: '打开后，change 会停在此阶段等人放行——在进度页亮起等你拍板',
     ed_sec_outputs: '产出物',
     ed_outputs_hint: '离开此阶段时应产出的字段',
     ed_outputs_empty: '无',
@@ -510,11 +508,18 @@ export const zh: Dict = {
     skh_error: '技能库获取失败：{msg}',
     skh_copy_hint: '点击复制到剪贴板',
     skh_readonly_note: '只读面：装技能在终端（pipeline setup），此处只看齐全度、不代装。',
+    // ── v8-E（意见⑥）：工作台 sheet 页签化——五页签 + tablist aria 标签。──
+    tabs_label: '工作台分区',
+    tab_stage: '阶段编辑',
+    tab_loop: '自动运行',
+    tab_afk: 'AFK 执行',
+    tab_secrets: '凭证',
+    tab_health: '技能健康',
   },
   // T10（v5 交互重建）：进度视图骨架文案。口径纪律同 workbench：可见文案一律用「阶段」（旧措辞已废）。
   progress: {
     title: '进度',
-    subtitle: '操作就在这里做——点行展开详情，放行 / 打回 / 重试 / 终止',
+    subtitle: '一张列表看所有在制——需要你动手的行会亮起来，放行 / 打回 / 终止就在行内；失败或终止的，拷一条命令回终端接管',
     doctor_ok: '调度空闲',
     doctor_busy: '调度中',
     doctor_attention: '需要关注',
@@ -525,40 +530,21 @@ export const zh: Dict = {
     // 验收反馈②-④：筛选范围收敛到单 root 时，行尾追加 doctor_limit（GET /api/automation
     // 取 max_parallel）；多 root 时不取不显示（fail-open：接口失败也不显示，不出错误 UI）。
     doctor_limit: '· 上限 {n}',
-    doctor_hint: '只统计自动化沙箱里的任务；『等你确认/等产出』的任务不归调度器，见下方筛选；并发上限按项目在工作台配置',
-    filter_project: '项目：',
-    filter_all: '全部',
-    filter_clear: '清空',
-    filter_state_label: '按状态筛选',
-    chip_all: '全部',
-    state_gate: '等你确认',
-    state_gate_paused: '等你确认 · 跑完停住',
+    doctor_hint: '只统计自动化沙箱里的任务；『等你确认/等产出』的任务不归调度器；并发上限按项目在工作台配置',
     // 验收反馈②-③：「等 agent」不是人话——改「等产出」（agent 仍在终端推进，只是人看不到「谁」
     // 在等，看到的是「差什么」）；state_agent_hint 是徽章/chip 的 title 提示，点明 agent 在终端工作。
     state_agent: '等产出',
     state_agent_missing: '等产出 · 缺 {fields}',
     state_agent_hint: '任务停在某阶段，等 agent 补产出或推进——agent 在终端工作',
-    state_running: '执行中',
     state_queued: '排队',
-    state_failed: '失败',
-    failed_times: '失败 ×{n}',
     act_kill: '终止',
-    act_retry: '重试',
-    // 验收反馈③：组头 workflow 徽章裸词（如「default」）容易被当成状态或阶段名——加「工作流:」
-    // 前缀讲清楚这是 workflow 名，样式仍用既有 .g-phase pill（决议：改文案不改视觉）。
-    group_workflow: '工作流:{name}',
-    group_meta: '{steps} 阶段 · {rows} 个任务',
-    group_meta_noflow: '{rows} 个任务',
-    group_archived: '· {n} 已归档',
-    flow_label: '{workflow} 工作流，当前阶段 {phase}（第 {n} / {m}），{state}',
-    flow_label_norules: '{workflow} 工作流，当前阶段 {phase}，{state}',
-    empty: '没有匹配的任务——换个筛选条件试试',
+    empty: '没有在制的任务——去终端 pipeline init 开新工作',
     foot: '执行队列由调度器管理；每个动作都有等价的 pipeline 终端命令，两边走同一转换校验。',
     // T18 孤儿键清理登记：progress.hk_* 28 键系并行 worktree 合并误落本命名空间的副本
     // （HookTimeline 唯一消费 workbench.hk_*，T16 已归位），随本次修剪删除。
-    // ── T11：行展开详情 + 动作接线（终止=cancel / 重试=retry / 放弃=dismiss / 放行·打回=transition）
-    //    + running 行日志区。动作文案以 demo v5 prg-dfoot 为唯一口径（决议 #13）。──
-    act_dismiss: '放弃',
+    // ── T11：行展开详情 + 动作接线（终止=cancel / 放行·打回=transition）+ running 行日志区。
+    //    动作文案以 demo v5 prg-dfoot 为唯一口径（决议 #13）。真机验收 G 退役登记：
+    //    act_retry/act_dismiss 随「重试/放弃回终端做」删除（全仓零引用，zh/en 对称）。──
     act_pass: '放行',
     act_reject: '打回',
     act_ok: '{name}：{label} 已提交',
@@ -570,6 +556,37 @@ export const zh: Dict = {
     log_label: 'log · tail',
     follow_tail: '跟随尾部',
     sandbox_phase: '沙箱内阶段：{phase}（host 阶段在 run 结束后结算）',
+    // ── v9-F1（进度统一面+列车轨）：单列表行体徽章 / 放行带目标相位 / 列车轨 aria / 归档尾缀。
+    //    旧分组/筛选/箭头带键（group_*/filter_*/chip_all/flow_label*/state_gate*/state_running/
+    //    state_failed/failed_times）随 v9 行体退役删除（zh/en 对称；grep 确证消费方仅旧 ProgressView）。──
+    badge_running: '{phase}运行中',
+    badge_cancelled: '已取消（人为终止）',
+    act_pass_to: '放行进入 {to}',
+    fold_archived: '{n} 个已归档',
+    rail_aria_run: '{m} 相位，{phase} 运行中',
+    rail_aria_gate: '{m} 相位，停在 {phase} 复核门',
+    rail_aria_fail: '{m} 相位，{phase} 失败',
+    rail_aria_cxl: '{m} 相位，{phase} 被人为终止',
+    rail_aria_queue: '{m} 相位，排队等待，当前 {phase}',
+    rail_aria_idle: '{m} 相位，当前 {phase}',
+    // ── 真机验收 G：重试/放弃退出进度面回终端——fail/cxl 行改「回终端」可拷命令 chip
+    //    （fail 有 worktree 现场→在终端接管 cd；缺现场→重跑命令；cxl→重新跑的命令），
+    //    抽屉动作条改一句引导文案（承接面=TaskDetail「自己上手修」命令卡）。──
+    cmd_takeover: '在终端接管',
+    cmd_rerun: '重跑命令',
+    cmd_rerun_cxl: '重新跑的命令',
+    acts_terminal_note: '重试/放弃回终端做——连上现场的命令见下方『自己上手修』',
+    // ── v9-H：状态 sheet 页签（全部/等你动手/运行中/等待中；计数=各分类总数不随筛选变）+
+    //    聚合语境项目分组组头 + 行 workflow/调度标识（▦ 沙箱=自动化三桶;⌨ 终端=任务活在终端）。──
+    tabs_label: '按状态筛选',
+    tab_all: '全部',
+    tab_need: '等你动手',
+    tab_run: '运行中',
+    tab_queue: '等待中',
+    // 用户追加口径:workflow chip 用全称,不缩写(不是「wf: default」是「workflow: default」)。
+    wf_label: 'workflow: {wf}',
+    sched_sandbox: '▦ 沙箱',
+    sched_terminal: '⌨ 终端',
   },
   // ── full-install W3：AFK 失败成因分类（TaskDetail 失败态成因徽章 + 修复命令区 / ProgressView
   //    失败行短成因提示）。成因人话一律经此 i18n，不在 failureDiagnosis.ts 硬编码中文。
@@ -604,19 +621,36 @@ export const zh: Dict = {
     //    无产出，非故障；**不建议 doctor**（空跑不是环境故障）。zh/en 尾部对称追加（completeness 守）。──
     'cause_no-op': '空跑——agent 运行成功但未产出提交，非故障；已暂停等人工处理，如需重跑请调整任务后重新入队',
     'short_no-op': '空跑',
+    // ── v8-C 意见④：人话报错卡处置指引 hint_*（11 个 cause 全配；cause_* 讲结论，hint_* 讲下一步
+    //    动作；cancelled/no-op 非故障不引导 doctor）。键尾=FailureCause 枚举值，含连字符整键引号；
+    //    zh/en 对称追加（completeness 测试守）。──
+    'hint_missing-credential': '跑一次修复命令配好凭证，配完回来点重试',
+    'hint_missing-image': '先构建沙箱镜像（拷下方修复命令），构建完成后重试',
+    'hint_missing-docker': '先把 Docker 起起来再重试；拿不准就在终端跑 pipeline doctor 体检',
+    hint_conflict: '进 worktree 手工解完冲突再重试——自动重试解不了冲突',
+    hint_timeout: '多为瞬态，稍等片刻直接重试；反复超时再查网络与负载',
+    hint_network: '检查本机网络、代理与 DNS，恢复后重试',
+    'hint_agent-nonzero': '翻下方报错原文与 agent 日志定位；多为瞬态，可先重试一次',
+    'hint_verify-fail': '报告已落盘，直接重试大概率还挂——先进 worktree 看失败断言再改',
+    hint_cancelled: '人为终止，非故障——不用跑体检；决定要不要重新跑就行',
+    'hint_no-op': '空跑非故障——调整任务描述或拆小粒度后重新入队',
+    hint_unknown: '先跑一次就绪体检（拷下方修复命令），按结果处置',
   },
 }
 
 export const en: Dict = {
   app: { title: 'Pipeline Console' },
   nav: {
-    inbox: 'Inbox', progress: 'Progress', workbench: 'Workbench',
+    progress: 'Progress', workbench: 'Workbench',
     project_all: 'All projects',
     project_unregister: 'Unregister…',
     unregister_title: 'Unregister project "{name}"?',
     unregister_desc: 'This only removes "{name}" from the local dashboard registry on this machine. No files or changes are deleted, and it can be re-registered anytime.',
     unregister_confirm: 'Confirm unregister',
     unregister_cancel: 'Cancel',
+    // ── v8-A:nav8 (opinion ①): menu footnote + accessible name for the icon-only unregister button.
+    project_menu_hint: 'Row-end button unregisters that project (shows on hover, asks to confirm).',
+    project_unregister_aria: 'Unregister project {name}',
   },
   common: {
     theme_toggle: 'Theme',
@@ -632,19 +666,12 @@ export const en: Dict = {
     verify: 'Verify', ship: 'Ship', archive: 'Archive',
   },
   inbox: {
-    title: 'Waiting on you',
-    subtitle: 'Only what you can decide right now — approve, send back, retry or dismiss; work missing outputs sits in Progress awaiting output',
-    empty_title: 'Nothing is waiting on you',
-    empty_desc: 'No change is parked at a gate waiting on you. To start new work, run pipeline init in your terminal; to track what is already running, open Progress.',
-    count: '{n} waiting on you',
-    open_board: 'Open progress',
     awaiting: {
       explore: 'Exploration done — confirm the design',
       spec: 'Spec / plan done — confirm to proceed',
       verify: 'Verification done — review to ship',
       other: 'Awaiting your decision',
     },
-    list_label: 'Changes awaiting your decision',
     badge_pass: '✓ Ready to approve',
     badge_judge: 'Your call',
     badge_failed: 'Failed ×{n} · your call',
@@ -653,17 +680,11 @@ export const en: Dict = {
     lead_judge: 'Human review: {wf} has no automated checks — approving is entirely your judgement',
     lead_failed: 'Automation failed: {err} — retried {n} times automatically. Retry or dismiss?',
     lead_failed_plain: 'Automation failed: {err} — retry or dismiss?',
-    act_approve: '→ Approve',
     act_reject: '↩ Send back',
     act_forward: '→ {to}',
     act_backward: '↩ {to}',
-    act_retry: '↻ Retry',
-    act_dismiss: '✕ Dismiss',
-    afk_retry_ok: '{name}: retry submitted — counter reset, queued again',
-    afk_dismiss_ok: '{name}: dismissed — automation exited, worktree kept',
-    afk_fail: 'Action failed: {msg}',
-    collapsed_title: 'Details collapsed',
-    collapsed_hint: 'Press Enter or click any row on the left to reopen',
+    // Acceptance-G retirement: act_retry/act_dismiss and afk_retry_ok/afk_dismiss_ok/afk_fail
+    // removed with "retry/dismiss go back to the terminal" — zero references repo-wide, zh/en symmetric.
   },
   detail: {
     close: 'Close details',
@@ -691,7 +712,24 @@ export const en: Dict = {
     history_heading: 'History',
     history_empty: 'Earlier records unavailable',
     hist_init: 'created',
+    hist_import: 'imported existing task',
     hist_set: '{field} updated',
+    // ── v8-C note ④ (TaskDetail internals): pinned action bar note / raw-error fold summary /
+    //    "fix it yourself" connect-command card / flow-level history hint. Mirrors zh. ──
+    acts_note: 'Actions here take effect immediately — equivalent to the terminal command, same checks',
+    raw_error_summary: 'Raw error (automation_last_error)',
+    selffix_title: 'Fix it yourself',
+    selffix_desc: 'Retry may not cut it — the worktree and container are still there; copy a line into your terminal',
+    conn_worktree: 'Enter worktree',
+    conn_sandbox: 'Enter container',
+    conn_rerun: 'Rerun after fixing',
+    conn_not_running: '(not running)',
+    conn_src: 'Source fields: automation_worktree · automation_sandbox (already passed through by the backend)',
+    // ── v9-I (SessionResumeRow): resume-session row — link the terminal session + resume command. Mirrors zh. ──
+    conn_resume: 'Resume session',
+    conn_resume_none: 'No resumable session found',
+    conn_resume_id: 'Session {sid} · {platform}',
+    hist_flow_hint: 'flow-level events only; field-level (set) noise filtered out',
   },
   evidence: {
     unset: 'not produced',
@@ -748,23 +786,10 @@ export const en: Dict = {
     step_init: 'Create a change (pipeline init auto-registers the project — no separate registration needed)',
     step_setup: 'Install skills + set readiness (installs pipeline skills and configures the credential and image checks AFK needs)',
     step_doctor: 'Confirm the environment is ready, then refresh this page',
-    or_cli: 'or use the CLI',
     copy: 'Copy',
     copied: 'Copied ✓',
     no_change_title: 'No changes in this project yet',
-    no_change_desc: 'Create a change to start the pipeline; the CLI works too.',
-    new_change: 'New change',
-  },
-  newchange: {
-    title: 'New change',
-    desc: 'Initialize a new change in {project}',
-    name_label: 'Name',
-    name_error: 'Only letters / digits / - / _ allowed (no spaces)',
-    workflow_label: 'Workflow',
-    track_label: 'Track',
-    create: 'Create',
-    cancel: 'Cancel',
-    created_toast: 'Change created: {name}',
+    no_change_desc: 'Initialize a change from the terminal CLI to start the pipeline.',
   },
   workbench: {
     title: 'Workbench',
@@ -793,7 +818,7 @@ export const en: Dict = {
     ed_label: 'Stage name',
     ed_id: 'Stage ID',
     ed_gate: 'Review gate',
-    ed_gate_note: 'When on, changes stop at this stage until a human approves — they show up in the inbox',
+    ed_gate_note: 'When on, changes stop at this stage until a human approves — they light up on the progress page',
     ed_sec_outputs: 'Outputs',
     ed_outputs_hint: 'fields this stage should produce before leaving',
     ed_outputs_empty: 'None',
@@ -1066,42 +1091,32 @@ export const en: Dict = {
     skh_error: 'Failed to load skill registry: {msg}',
     skh_copy_hint: 'Click to copy to clipboard',
     skh_readonly_note: 'Read-only: skills are installed in the terminal (pipeline setup); this panel only shows readiness, it does not install.',
+    // ── v8-E (note ⑥): workbench sheet tabs — five panes + tablist aria label. ──
+    tabs_label: 'Workbench sections',
+    tab_stage: 'Stage editor',
+    tab_loop: 'Auto-run',
+    tab_afk: 'AFK execution',
+    tab_secrets: 'Secrets',
+    tab_health: 'Skill health',
   },
   progress: {
     title: 'Progress',
-    subtitle: 'Act right here — expand a row to approve / send back / retry / stop',
+    subtitle: 'One list for everything in flight — rows needing you light up, with approve / send back / stop inline; for failed or cancelled runs, copy a command and take over in the terminal',
     doctor_ok: 'Scheduler idle',
     doctor_busy: 'Scheduler busy',
     doctor_attention: 'Needs attention',
     doctor_counts: 'Sandbox scheduler: {running} running · {queued} queued · {failed} failed',
     doctor_limit: '· cap {n}',
-    doctor_hint: 'Only counts tasks inside the automation sandbox — tasks marked "Awaiting you" or "Awaiting output" are not tracked by the scheduler; see the filters below; the parallel cap is configured per project in the Workbench',
-    filter_project: 'Project:',
-    filter_all: 'All',
-    filter_clear: 'Clear',
-    filter_state_label: 'Filter by state',
-    chip_all: 'All',
-    state_gate: 'Awaiting you',
-    state_gate_paused: 'Awaiting you · run paused',
+    doctor_hint: 'Only counts tasks inside the automation sandbox — tasks marked "Awaiting you" or "Awaiting output" are not tracked by the scheduler; the parallel cap is configured per project in the Workbench',
     state_agent: 'Awaiting output',
     state_agent_missing: 'Awaiting output · missing {fields}',
     state_agent_hint: 'Parked at a stage, waiting on the agent to produce output or move it forward — the agent works in the terminal',
-    state_running: 'Running',
     state_queued: 'Queued',
-    state_failed: 'Failed',
-    failed_times: 'Failed ×{n}',
     act_kill: 'Stop',
-    act_retry: 'Retry',
-    group_workflow: 'Workflow: {name}',
-    group_meta: '{steps} stages · {rows} tasks',
-    group_meta_noflow: '{rows} tasks',
-    group_archived: '· {n} archived',
-    flow_label: '{workflow} workflow, current stage {phase} ({n} of {m}), {state}',
-    flow_label_norules: '{workflow} workflow, current stage {phase}, {state}',
-    empty: 'No tasks match — try different filters',
+    empty: 'Nothing in flight — start new work with pipeline init in your terminal',
     foot: 'The run queue is managed by the scheduler; every action has an equivalent pipeline terminal command, and both go through the same transition checks.',
-    // ── T11: row detail + action wiring + running-row log tail ──
-    act_dismiss: 'Dismiss',
+    // ── T11: row detail + action wiring + running-row log tail. Acceptance-G retirement:
+    //    act_retry/act_dismiss removed with "retry/dismiss go back to the terminal" (zero refs). ──
     act_pass: 'Approve',
     act_reject: 'Send back',
     act_ok: '{name}: {label} submitted',
@@ -1113,6 +1128,37 @@ export const en: Dict = {
     log_label: 'log · tail',
     follow_tail: 'Follow tail',
     sandbox_phase: 'Stage inside sandbox: {phase} (the host stage settles after the run ends)',
+    // ── v9-F1 (unified progress + train rail): row badges / approve with target phase /
+    //    rail aria / archived fold suffix. Old group/filter/chevron keys removed (zh/en symmetric). ──
+    badge_running: 'Running {phase}',
+    badge_cancelled: 'Cancelled (stopped by hand)',
+    act_pass_to: 'Approve → {to}',
+    fold_archived: '{n} archived',
+    rail_aria_run: '{m} phases, {phase} running',
+    rail_aria_gate: '{m} phases, held at the {phase} review gate',
+    rail_aria_fail: '{m} phases, failed at {phase}',
+    rail_aria_cxl: '{m} phases, stopped by hand at {phase}',
+    rail_aria_queue: '{m} phases, queued at {phase}',
+    rail_aria_idle: '{m} phases, currently at {phase}',
+    // ── Acceptance-G: retry/dismiss leave the progress surface for the terminal — fail/cxl rows
+    //    get a copyable command chip; the drawer action bar becomes a one-line pointer to the
+    //    "Fix it yourself" command card in TaskDetail. ──
+    cmd_takeover: 'Take over in terminal',
+    cmd_rerun: 'Rerun command',
+    cmd_rerun_cxl: 'Command to run again',
+    acts_terminal_note: 'Retry / dismiss happen in the terminal — the commands to reconnect are under "Fix it yourself" below',
+    // ── v9-H: status sheet tabs (all / needs you / running / waiting; counts are per-category
+    //    totals, unaffected by the active filter) + project group headers in the aggregate
+    //    context + per-row workflow / scheduling chips (sandbox = the three automation buckets). ──
+    tabs_label: 'Filter by status',
+    tab_all: 'All',
+    tab_need: 'Needs you',
+    tab_run: 'Running',
+    tab_queue: 'Waiting',
+    // Full word per user feedback: "workflow: default", never the "wf:" abbreviation.
+    wf_label: 'workflow: {wf}',
+    sched_sandbox: '▦ Sandbox',
+    sched_terminal: '⌨ Terminal',
   },
   // ── full-install W3: AFK failure cause classification (TaskDetail failed-state cause badge +
   //    fix-command area / ProgressView failed-row short cause hint). Cause wording always via i18n,
@@ -1147,6 +1193,19 @@ export const en: Dict = {
     //    run) — the run succeeded but produced nothing; not a fault, so **no doctor suggestion**. ──
     'cause_no-op': 'No-op run — the agent finished without producing any commits; not a fault. Paused for human review; adjust the task and re-enqueue to run again',
     'short_no-op': 'no-op run',
+    // ── v8-C note ④: humane failure-card next-step hints, hint_* for all 11 causes (cause_* states
+    //    the conclusion, hint_* the next action; cancelled/no-op are not faults — no doctor push). ──
+    'hint_missing-credential': 'Run the fix command to configure the credential, then come back and retry',
+    'hint_missing-image': 'Build the sandbox image first (copy the fix command below), then retry',
+    'hint_missing-docker': 'Start Docker first, then retry; unsure — run pipeline doctor in your terminal',
+    hint_conflict: 'Enter the worktree and resolve the conflict by hand, then retry — auto-retry cannot resolve conflicts',
+    hint_timeout: 'Usually transient — wait a moment and retry; if it keeps timing out, check network and load',
+    hint_network: 'Check your machine’s network, proxy and DNS, then retry once connectivity is back',
+    'hint_agent-nonzero': 'Check the raw error below and the agent log to locate it; often transient — a retry is worth one shot',
+    'hint_verify-fail': 'The report is on disk; a blind retry will likely fail again — enter the worktree and read the failing assertions first',
+    hint_cancelled: 'Stopped by a person, not a fault — no diagnostics needed; just decide whether to re-run',
+    'hint_no-op': 'A no-op run is not a fault — adjust the task or split it smaller, then re-enqueue',
+    hint_unknown: 'Run the readiness diagnostics first (copy the fix command below) and act on the findings',
   },
 }
 

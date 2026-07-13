@@ -202,7 +202,7 @@ describe('TaskDetail 自定义 workflow（三阶段）与 rules 缺失回落', (
     expect(screen.getByTestId('dtl-chip-design_doc')).toBeInTheDocument()
   })
 
-  it('phase 错位 + automation failed → 失败信息不静默丢：兜底区渲染 last_error 与 attempts', async () => {
+  it('phase 错位 + automation failed → 失败信息不静默丢：兜底区渲染报错原文折叠与 attempts 元信息（v8-C 后原文在 rawfold 内）', async () => {
     await renderDetail({
       change: makeChange('odd', 'nonexistent-step', {
         fields: {
@@ -214,8 +214,8 @@ describe('TaskDetail 自定义 workflow（三阶段）与 rules 缺失回落', (
       }),
       rules: CN_RULES,
     })
-    expect(screen.getByTestId('dt-field-last_error').textContent).toContain('boom: sandbox exploded')
-    expect(screen.getByTestId('dt-field-attempts').textContent).toContain('2')
+    expect(screen.getByTestId('dt8-raw-pre').textContent).toContain('boom: sandbox exploded')
+    expect(screen.getByTestId('dt8-diag-meta').textContent).toContain('attempts 2')
   })
 })
 
@@ -265,7 +265,7 @@ describe('TaskDetail 形态 B（dt-tabs 阶段 sheet，variant="tabs"，T11 进�
     await waitFor(() => expect(writeText).toHaveBeenCalledWith('docs/design.md'))
   })
 
-  it('失败态 → 当前 tab dt-tab--fail 带 ×，pane 内 last_error/attempts/缺产出 miss/重试放弃说明', async () => {
+  it('失败态 → 当前 tab dt-tab--fail 带 ×，pane 内报错卡（原文折叠/attempts 元信息）/缺产出 miss/重试放弃说明', async () => {
     await renderDetail({
       variant: 'tabs',
       change: makeChange('hotfix', 'build', {
@@ -281,8 +281,8 @@ describe('TaskDetail 形态 B（dt-tabs 阶段 sheet，variant="tabs"，T11 进�
     expect(tab.textContent).toContain('×')
     const pane = screen.getByTestId('dt-pane-build')
     expect(pane.hidden).toBe(false)
-    expect(screen.getByTestId('dt-field-last_error').textContent).toContain('verify: 2 failed · auth.test.ts')
-    expect(screen.getByTestId('dt-field-attempts').textContent).toContain('3')
+    expect(screen.getByTestId('dt8-raw-pre').textContent).toContain('verify: 2 failed · auth.test.ts')
+    expect(screen.getByTestId('dt8-diag-meta').textContent).toContain('attempts 3')
     expect(screen.getByTestId('dt-field-missing').textContent).toContain('branch')
     expect(pane.textContent).toContain('重试会清零计数重新挂队')
   })
@@ -335,14 +335,14 @@ describe('TaskDetail 失败态（automation failed）', () => {
     },
   })
 
-  it('当前行 × 红节点 + dtl-box--bad：last_error、attempts、缺产出合并 dt-field--miss、重试/放弃说明', async () => {
+  it('当前行 × 红节点 + dtl-box--bad：报错原文（折叠内）、attempts 元信息、缺产出合并 dt-field--miss、重试/放弃说明', async () => {
     await renderDetail({ change: failedChange })
     const row = screen.getByTestId('dtl-build')
     expect(row.querySelector('.dtl-node')?.className).toContain('dtl-node--fail')
     const box = row.querySelector('.dtl-box')
     expect(box?.className).toContain('dtl-box--bad')
-    expect(screen.getByTestId('dt-field-last_error').textContent).toContain('verify: 2 failed · auth.test.ts')
-    expect(screen.getByTestId('dt-field-attempts').textContent).toContain('3')
+    expect(screen.getByTestId('dt8-raw-pre').textContent).toContain('verify: 2 failed · auth.test.ts')
+    expect(screen.getByTestId('dt8-diag-meta').textContent).toContain('attempts 3')
     // build 阶段声明产出 branch/build_sha 均未设 → 合并为一条 miss 占位
     const miss = screen.getByTestId('dt-field-missing')
     expect(miss.className).toContain('dt-field--miss')
@@ -383,8 +383,8 @@ describe('TaskDetail 失败诊断（W3：成因徽章 + 可复制修复命令）
     expect(copyBtn.getAttribute('data-copy')).toBe('pipeline setup')
     fireEvent.click(copyBtn)
     await waitFor(() => expect(writeText).toHaveBeenCalledWith('pipeline setup'))
-    // 原文保留（成因徽章是补充不是替换）
-    expect(screen.getByTestId('dt-field-last_error').textContent).toContain('OPENAI_API_KEY')
+    // 原文保留（v8-C 后收进 rawfold 折叠，人话结论是补充不是替换）
+    expect(screen.getByTestId('dt8-raw-pre').textContent).toContain('OPENAI_API_KEY')
     // 前进转换命令区（detail-cmd）失败态仍不渲染——与修复命令区（detail-fix-cmd）互不相干
     expect(screen.queryByTestId('detail-cmd')).toBeNull()
   })
@@ -458,8 +458,10 @@ describe('TaskDetail F-b：automation_cause 直判优先，空串回落 regex', 
     expect(screen.getByTestId('dt-diag-cause').textContent).toBe(fz.cause_cancelled)
     // cancelled 非故障：无修复命令区（尤其不再建议 pipeline doctor）
     expect(screen.queryByTestId('detail-fix-cmd')).toBeNull()
-    // last_error 原文照渲染（成因徽章是补充不是替换，与 W3 既有口径一致）
-    expect(screen.getByTestId('dt-field-last_error').textContent).toContain('任务被人工终止')
+    // last_error 原文照渲染（v8-C 后在 rawfold 折叠内，人话结论是补充不是替换，与 W3 既有口径一致）
+    expect(screen.getByTestId('dt8-raw-pre').textContent).toContain('任务被人工终止')
+    // v8-C：cancelled 走琥珀 tone（人为终止非故障，不红成硬故障）
+    expect(screen.getByTestId('dt-diag').className).toContain('dt8-diag--amb')
   })
 
   it('cause=verify-fail → 徽章「验证未通过…」（regex 对 verify 原文只能 unknown 的钉死反例）', async () => {
@@ -559,7 +561,7 @@ describe('TaskDetail history 区（T1 端点接入）', () => {
 })
 
 describe('TaskDetail 动作条 props 化 + 任务一句话 + 头部', () => {
-  it('宿主传入 actions → 渲染在动作条并可点；不传 → 无动作条（组件不绑任何业务端点）', async () => {
+  it('宿主传入 actions → 渲染在置顶动作条（.dt8-acts）并可点；底部不再有 .dt-foot（v8-C 动作置顶）', async () => {
     const onRetry = vi.fn()
     const { container } = await renderDetail({
       actions: (
@@ -570,13 +572,22 @@ describe('TaskDetail 动作条 props 化 + 任务一句话 + 头部', () => {
     })
     fireEvent.click(screen.getByTestId('host-retry'))
     expect(onRetry).toHaveBeenCalledOnce()
-    expect(container.querySelector('.dt-foot')).not.toBeNull()
+    expect(container.querySelector('.dt-foot')).toBeNull()
+    const acts = screen.getByTestId('dt8-acts')
+    expect(acts.contains(screen.getByTestId('host-retry'))).toBe(true)
     expect(screen.getByTestId('dt-foot-label').textContent).toBe('verify → ship')
+    // 置顶位置：动作条在第一个 .dt-sec（任务/阶段区）之前
+    const firstSec = container.querySelector('.dt-sec')
+    expect(firstSec).not.toBeNull()
+    expect(acts.compareDocumentPosition(firstSec as Element) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    // 旁附语义说明（detail.acts_note）
+    expect(acts.textContent).toContain('与终端命令等价')
   })
 
-  it('不传 actions → 无动作条；不传 badge → 头部无徽章；不传 onClose → 无关闭钮', async () => {
+  it('不传 actions → 无动作条（.dt8-acts 与 .dt-foot 皆无）；不传 badge → 头部无徽章；不传 onClose → 无关闭钮', async () => {
     const { container } = await renderDetail()
     expect(container.querySelector('.dt-foot')).toBeNull()
+    expect(container.querySelector('.dt8-acts')).toBeNull()
     expect(container.querySelector('.dt-head .badge')).toBeNull()
     expect(screen.queryByTestId('detail-close')).toBeNull()
   })
@@ -592,6 +603,189 @@ describe('TaskDetail 动作条 props 化 + 任务一句话 + 头部', () => {
     expect(screen.getByText('✓ 可以放行')).toBeInTheDocument()
     fireEvent.click(screen.getByTestId('detail-close'))
     expect(onClose).toHaveBeenCalledOnce()
+  })
+})
+
+/**
+ * v8-C 意见④（design-demos/v8-trellis-encore.html #drawer 对位）：动作置顶 + 人话报错卡
+ * （原文折叠）+「自己上手修」连接命令卡 + 流程级历史。props 接口零增改——宿主（B/D）不动也编译。
+ */
+describe('TaskDetail v8-C 意见④：人话报错卡（.dt8-diag）', () => {
+  const fz = zh.failure as Record<string, string>
+
+  it('失败态 → 卡标题=人话结论（cause_*）+ 处置指引（hint_*）；报错原文收 <details> 默认收起；meta 行含 attempts/cause', async () => {
+    await renderDetail({
+      change: makeChange('hotfix', 'build', {
+        fields: {
+          automation: 'failed',
+          automation_last_error:
+            'Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?',
+          automation_attempts: '3',
+        },
+      }),
+    })
+    expect(screen.getByTestId('dt-diag-cause').textContent).toBe(fz['cause_missing-docker'])
+    expect(screen.getByTestId('dt8-diag-hint').textContent).toBe(fz['hint_missing-docker'])
+    const fold = screen.getByTestId('dt8-rawfold') as HTMLDetailsElement
+    expect(fold.open).toBe(false)
+    expect(fold.querySelector('summary')?.textContent).toContain('automation_last_error')
+    expect(screen.getByTestId('dt8-raw-pre').textContent).toContain('docker daemon')
+    const meta = screen.getByTestId('dt8-diag-meta')
+    expect(meta.textContent).toContain('attempts 3')
+    expect(meta.textContent).toContain('cause missing-docker')
+    // 非 cancelled 不带琥珀修饰
+    expect(screen.getByTestId('dt-diag').className).not.toContain('dt8-diag--amb')
+  })
+
+  it('fixCommand 可拷 chip 保留且在报错卡内（凭证类 → pipeline setup）', async () => {
+    await renderDetail({
+      change: makeChange('hotfix', 'build', {
+        fields: { automation: 'failed', automation_last_error: '未检测到 codex 凭证：宿主机需设 OPENAI_API_KEY' },
+      }),
+    })
+    const card = screen.getByTestId('dt-diag')
+    const chip = screen.getByTestId('detail-fix-cmd')
+    expect(card.contains(chip)).toBe(true)
+    expect(chip.textContent).toBe('pipeline setup')
+    expect(screen.getByTestId('detail-fix-copy').getAttribute('data-copy')).toBe('pipeline setup')
+  })
+
+  it('last_error 空串 → 不渲染 rawfold（不给空折叠）；meta 行仍给 cause', async () => {
+    await renderDetail({
+      change: makeChange('hotfix', 'build', {
+        fields: { automation: 'failed', automation_cause: 'cancelled', automation_last_error: '' },
+      }),
+    })
+    expect(screen.queryByTestId('dt8-rawfold')).toBeNull()
+    expect(screen.getByTestId('dt8-diag-meta').textContent).toContain('cause cancelled')
+  })
+})
+
+describe('TaskDetail v8-C 意见④：「自己上手修」连接命令卡（.dt8-conn）', () => {
+  const connFields = {
+    automation: 'failed',
+    automation_last_error: 'boom',
+    automation_worktree: '/Users/x/.pipeline/worktrees/hotfix',
+    automation_sandbox: 'pipeline-afk-hotfix',
+  }
+
+  it('失败态且有现场字段 → 三行可拷命令；automation!==running → 容器行带「（未在跑）」小注；卡底有来源字段说明', async () => {
+    await renderDetail({ change: makeChange('hotfix', 'build', { fields: { ...connFields } }) })
+    expect(screen.getByTestId('dt8-conn')).toBeInTheDocument()
+    const wt = screen.getByTestId('dt8-conn-worktree')
+    // worktree 路径包引号（评审 P1-4）：展示与 data-copy 同一串——拷走即可用
+    expect(wt.textContent).toContain('cd "/Users/x/.pipeline/worktrees/hotfix"')
+    expect(screen.getByTestId('dt8-conn-worktree-copy').getAttribute('data-copy')).toBe(
+      'cd "/Users/x/.pipeline/worktrees/hotfix"',
+    )
+    const sb = screen.getByTestId('dt8-conn-sandbox')
+    expect(sb.textContent).toContain('docker exec -it pipeline-afk-hotfix bash')
+    expect(sb.textContent).toContain('未在跑')
+    expect(screen.getByTestId('dt8-conn-sandbox-copy').getAttribute('data-copy')).toBe(
+      'docker exec -it pipeline-afk-hotfix bash',
+    )
+    const rr = screen.getByTestId('dt8-conn-rerun')
+    expect(rr.textContent).toContain('pipeline afk run hotfix')
+    expect(screen.getByTestId('dt8-conn-rerun-copy').getAttribute('data-copy')).toBe('pipeline afk run hotfix')
+    expect(screen.getByTestId('dt8-conn').textContent).toContain('automation_worktree')
+  })
+
+  it('sandbox 空串 → 容器行不渲染，worktree/重跑行照常', async () => {
+    await renderDetail({
+      change: makeChange('hotfix', 'build', { fields: { ...connFields, automation_sandbox: '' } }),
+    })
+    expect(screen.queryByTestId('dt8-conn-sandbox')).toBeNull()
+    expect(screen.getByTestId('dt8-conn-worktree')).toBeInTheDocument()
+    expect(screen.getByTestId('dt8-conn-rerun')).toBeInTheDocument()
+  })
+
+  it('worktree 路径含空格 → cd 命令因包引号仍是一条可用命令（评审 P1-4）', async () => {
+    await renderDetail({
+      change: makeChange('hotfix', 'build', {
+        fields: { ...connFields, automation_worktree: '/Users/x/My Work/wt hotfix' },
+      }),
+    })
+    expect(screen.getByTestId('dt8-conn-worktree-copy').getAttribute('data-copy')).toBe(
+      'cd "/Users/x/My Work/wt hotfix"',
+    )
+  })
+
+  it('现场字段全空 → 整卡不渲染（重跑一行不足以称「现场」）', async () => {
+    await renderDetail({
+      change: makeChange('hotfix', 'build', {
+        fields: { automation: 'failed', automation_last_error: 'boom' },
+      }),
+    })
+    expect(screen.queryByTestId('dt8-conn')).toBeNull()
+  })
+
+  it('非失败且非 running 态即使有现场字段也不渲染（卡只服务失败处置与在跑接管）', async () => {
+    await renderDetail({
+      change: makeChange('c9', 'verify', {
+        fields: { automation_worktree: '/w/c9', automation_sandbox: 'pipeline-afk-c9' },
+      }),
+    })
+    expect(screen.queryByTestId('dt8-conn')).toBeNull()
+  })
+
+  it('running 态渲染本卡（容器活着，恢复会话最有意义）且容器行无「未在跑」注', async () => {
+    await renderDetail({
+      change: makeChange('c9', 'verify', {
+        fields: {
+          automation: 'running',
+          automation_worktree: '/w/c9',
+          automation_sandbox: 'pipeline-afk-c9',
+        },
+      }),
+    })
+    expect(screen.getByTestId('dt8-conn')).toBeInTheDocument()
+    const sb = screen.getByTestId('dt8-conn-sandbox')
+    expect(sb.textContent).not.toContain('（未在跑）')
+  })
+})
+
+describe('TaskDetail v8-C 意见④：流程级历史（只留 transition/init/import）', () => {
+  it('history 含 set 与未知 kind → 一律滤掉，只渲染 transition/init；区头有流程级口径 hint', async () => {
+    histEntries = [
+      { ts: '2026-07-09T08:00:00Z', kind: 'init' },
+      { ts: '2026-07-09T08:30:00Z', kind: 'set', field: 'design_doc' },
+      { ts: '2026-07-09T09:00:00Z', kind: 'transition', from: 'open', to: 'explore', raw: 'open-complete' },
+      { ts: '2026-07-09T09:30:00Z', kind: 'set', field: 'plan' },
+      { ts: '2026-07-09T10:00:00Z', kind: 'weird-kind', raw: 'noise' },
+    ]
+    await renderDetail()
+    await waitFor(() => expect(screen.getByTestId('dt-hist')).toBeInTheDocument())
+    const rows = screen.getAllByTestId(/^dt-hist-\d+$/)
+    expect(rows).toHaveLength(2)
+    expect(rows[0]?.textContent).toContain('创建')
+    expect(rows[1]?.textContent).toContain('open → explore · open-complete')
+    const sec = screen.getByTestId('dt-hist-sec')
+    expect(sec.textContent).not.toContain('已更新')
+    expect(sec.textContent).not.toContain('noise')
+    expect(sec.textContent).toContain('只留流程级事件')
+  })
+
+  it('history 含 import（kernel 与 init 同级里程碑，评审 P2-5）→ 白名单放行、人话文案可见', async () => {
+    histEntries = [
+      { ts: '2026-07-09T08:00:00Z', kind: 'import' },
+      { ts: '2026-07-09T09:00:00Z', kind: 'transition', from: 'open', to: 'explore', raw: 'open-complete' },
+    ]
+    await renderDetail()
+    await waitFor(() => expect(screen.getByTestId('dt-hist')).toBeInTheDocument())
+    const rows = screen.getAllByTestId(/^dt-hist-\d+$/)
+    expect(rows).toHaveLength(2)
+    expect(rows[0]?.textContent).toContain('导入既有任务')
+    expect(rows[1]?.textContent).toContain('open → explore · open-complete')
+  })
+
+  it('全是 set 事件 → 滤空后按「早期记录不可用」空态展示（不渲染空列表）', async () => {
+    histEntries = [
+      { ts: '2026-07-09T08:30:00Z', kind: 'set', field: 'design_doc' },
+      { ts: '2026-07-09T09:30:00Z', kind: 'set', field: 'plan' },
+    ]
+    await renderDetail()
+    await waitFor(() => expect(screen.getByText('早期记录不可用')).toBeInTheDocument())
+    expect(screen.queryByTestId('dt-hist')).toBeNull()
   })
 })
 

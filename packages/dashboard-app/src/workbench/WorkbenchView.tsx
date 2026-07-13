@@ -45,6 +45,14 @@ gsap.registerPlugin(useGSAP)
  * POST /api/workflows/:name，成功后 invalidateWorkflowRules(root,name)（spec §2.1 缓存失效
  * 纪律）；kernel validate 拒绝时 errors[] 原文逐条上抛展示。default = manifest 镜像只读态
  * （server 端 400 已挡，前端 readonly + 只读 pill 预示，不渲染保存钮）。
+ *
+ * v8-E（意见⑥，设计真相源 design-demos/v8-trellis-encore.html #view-workbench）：
+ *   · StepperRail = v8 阶段卡横排（流动虚线连接件+门形节点，见 StepperRail.tsx 头注释）；
+ *   · 主列 sheet 页签化：阶段编辑(StepEditor+HookTimeline)/自动运行/AFK 执行/凭证/技能健康
+ *     五页恒挂载切显隐（数据面行为与平铺时代一致）；墨线 ink GSAP 滑动+pane crossfade
+ *     （reduced 直切）；点阶段卡驱动 sheet 切回「阶段编辑」；
+ *   · 右栏瘦身：只留 工作流摘要/安全门说明/最近流转——Hook 时序线并入「阶段编辑」页签、
+ *     矩阵入口卡+SkillHealthPanel 并入「技能健康」页签。
  */
 
 // ── kernel WorkflowDef 的 JSON 形状（跨 HTTP 边界手抄，同 StepDetailPanel.tsx 惯例；
@@ -229,6 +237,15 @@ export function WorkbenchView({ root, onToggleError, snapshot = null }: Workbenc
   const hooksConfig = useHooksConfig(root, onToggleError)
   // v6 T8→T9：就绪三灯重拉信号——凭证卡保存/删除成功后 +1(显式动作,不轮询)。
   const [rdNonce, setRdNonce] = useState(0)
+  // ── v8-E（意见⑥）：主列 sheet 页签化——五页：阶段编辑(StepEditor+HookTimeline)/自动运行
+  //    (LoopCard)/AFK 执行(AutomationCard)/凭证(SecretsCard)/技能健康(SkillHealthPanel+矩阵
+  //    入口卡)。全部 pane 恒挂载（各卡数据面在挂载时自取,与页签化前行为一致；测试也依赖
+  //    恒挂载可寻址），显隐只切 .on 类；点阶段卡 → 选中 + 切回「阶段编辑」页。──
+  const WB_TABS = ['stage', 'loop', 'afk', 'secrets', 'health'] as const
+  type WbTab = (typeof WB_TABS)[number]
+  const [tab, setTab] = useState<WbTab>('stage')
+  // 首帧不放 pane 入场动画（只有真实切页才 crossfade）——ref 存上一次页签。
+  const prevTabRef = useRef<WbTab | null>(null)
 
   // ── v6 T13：最近流转数据面——当前 (root, workflow) 分组内非 archived change 的 history
   //    合并降序。无轮询(G22 纪律)：只随分组指纹(recentNames)变化拉取；单 change 读失败按
@@ -457,9 +474,48 @@ export function WorkbenchView({ root, onToggleError, snapshot = null }: Workbenc
   //（旧 workflow 列表页 列表入场依赖 Boolean(names) 的同一条既有纪律）。
   // v6 T11：选择器随 StepperRail 重写从卡片 .wb-step 换成流程带段 .wb-flow-seg（testid
   // `wb-step-{id}` 不变，变的只是承载视觉入场动画的 CSS 类）。
+  // v8-E：再随阶段卡横排换 .wb8-stage（同一条纪律——入场动画只认视觉承载类，行为契约不动）。
   useGSAP(() => {
-    if (def && def.steps.length > 0) revealList('.wb-flow-seg')
+    if (def && def.steps.length > 0) revealList('.wb8-stage')
   }, { scope: rootRef, dependencies: [def?.name] })
+
+  // ── v8-E：sheet 页签墨线滑动 + pane 切换 crossfade（demo placeInk/stab click 对位）——
+  //    useGSAP+matchMedia 全包：reduced 墨线直落位、pane 直切不 crossfade；首帧只落墨线不放
+  //    pane 动画。依赖含 def?.name：def 首载后 sheet 才在 DOM 里，墨线要补一次落位。
+  //    不挂 revertOnUpdate（评审 P2-7）：revert 会把墨线 inline left/width 打回样式表缺省
+  //    （left:0），每次切页签都从最左飞入——去掉后 gsap.to 天然从当前位置延续滑动；ink 补间
+  //    加 overwrite:'auto' 收编快速连点/媒体查询翻转时的旧补间，pane crossfade 自带 clearProps
+  //    自清，无需整体 revert。──
+  useGSAP(
+    () => {
+      const el = rootRef.current
+      if (!el || typeof window.matchMedia !== 'function') return
+      const mm = gsap.matchMedia()
+      mm.add(
+        { reduce: '(prefers-reduced-motion: reduce)', motion: '(prefers-reduced-motion: no-preference)' },
+        (ctx) => {
+          const reduce = Boolean((ctx.conditions as { reduce?: boolean } | undefined)?.reduce)
+          const ink = el.querySelector<HTMLElement>('.wb8-ink')
+          const onTab = el.querySelector<HTMLElement>(`[data-testid="wb-tab-${tab}"]`)
+          if (ink && onTab?.parentElement) {
+            const tr = onTab.getBoundingClientRect()
+            const pr = onTab.parentElement.getBoundingClientRect()
+            const left = tr.left - pr.left + 6
+            const width = Math.max(tr.width - 12, 0)
+            if (reduce) gsap.set(ink, { left, width })
+            else gsap.to(ink, { left, width, duration: 0.28, ease: 'expo.out', overwrite: 'auto' })
+          }
+          const first = prevTabRef.current === null
+          const changed = prevTabRef.current !== null && prevTabRef.current !== tab
+          prevTabRef.current = tab
+          if (reduce || first || !changed) return
+          const pane = el.querySelector<HTMLElement>(`[data-testid="wb-pane-${tab}"]`)
+          if (pane) gsap.fromTo(pane, { autoAlpha: 0, y: 8 }, { autoAlpha: 1, y: 0, duration: 0.22, ease: 'power3.out', clearProps: 'all' })
+        },
+      )
+    },
+    { scope: rootRef, dependencies: [tab, def?.name] },
+  )
 
   // T13：脏切换确认 Dialog 入场（共享 <Dialog> 不对外暴露内部节点，scope 选择器文本寻址——
   // 旧画布编辑器 Task 15 返回确认弹窗的同款既有写法）。
@@ -543,7 +599,8 @@ export function WorkbenchView({ root, onToggleError, snapshot = null }: Workbenc
         { reduce: '(prefers-reduced-motion: reduce)', motion: '(prefers-reduced-motion: no-preference)' },
         (ctx) => {
           const reduce = Boolean((ctx.conditions as { reduce?: boolean } | undefined)?.reduce)
-          const glosses = Array.from(el.querySelectorAll<HTMLElement>('.wb-flow-gloss'))
+          // v8-E：承载元素随阶段卡横排从 .wb-flow-gloss 换 .wb8-gloss（testid wb-flow-gloss-* 不变）。
+          const glosses = Array.from(el.querySelectorAll<HTMLElement>('.wb8-gloss'))
           if (glosses.length === 0) return // 常见态（无 running 阶段）：不喂空数组给 gsap.set，避免控制台噪音
           if (reduce) {
             gsap.set(glosses, { autoAlpha: 0 })
@@ -676,44 +733,102 @@ export function WorkbenchView({ root, onToggleError, snapshot = null }: Workbenc
               <StepperRail
                 steps={stepperSteps}
                 selectedId={stageId}
-                onSelect={setStageId}
+                // v8-E：点阶段卡 = 选中 + 驱动下方 sheet 切回「阶段编辑」页（demo stage click 同款）。
+                onSelect={(id) => {
+                  setStageId(id)
+                  setTab('stage')
+                }}
                 label={t('workbench.rail_label', { name: def.name })}
                 // 验收反馈#4（补齐 T13 遗留缺口）：default 只读态不传 handler——StepperRail
                 // 按既有 disabled={!onAddStage} 语义自动落回禁用态 + title 提示，本组件零改动。
                 onAddStage={readonlyWf ? undefined : () => setAddStageOpen(true)}
                 gateHooks={gateHooks}
               />
-              {selectedStep && (
-                <section className="card wb-editor" data-testid="wb-editor">
-                  <div className="wb-editor-head">
-                    <b>{t('workbench.editor_title')}</b>
-                    <span className="g-phase" data-testid="wb-editor-stage">{selectedStep.id}</span>
-                    {selectedStep.gate && (
-                      <span className="badge badge--gate">
-                        {selectedStep.gate === 'confirm' ? t('workbench.gate_badge_confirm') : t('workbench.gate_badge')}
-                      </span>
+
+              {/* ── v8-E（意见⑥）：sheet 页签容器——主列不再平铺。五 pane 恒挂载（各卡数据面
+                  行为与平铺时代一致），显隐切 .on；墨线/crossfade 由上方 useGSAP 驱动。 ── */}
+              <div className="wb8-sheet" data-testid="wb-sheet">
+                <div className="wb8-tabs" role="tablist" aria-label={t('workbench.tabs_label')}>
+                  {WB_TABS.map((k) => (
+                    <button
+                      key={k}
+                      type="button"
+                      role="tab"
+                      className="wb8-tab"
+                      aria-selected={tab === k}
+                      data-testid={`wb-tab-${k}`}
+                      onClick={() => setTab(k)}
+                    >
+                      {t(`workbench.tab_${k}`)}
+                      {k === 'stage' && selectedStep && <span className="n">{selectedStep.id}</span>}
+                    </button>
+                  ))}
+                  <span className="wb8-ink" aria-hidden="true" />
+                </div>
+                <div className="wb8-sheet-body">
+                  {/* 页 1：阶段编辑——StepEditor（内含 SkillChain）+ Hook 时序线（v6 T12 曾挪右栏，
+                      v8-E 收进本页签：per-root 数据面不吃 workflow 只读态，开关仍按当前选中阶段读写）。 */}
+                  <div className={`wb8-pane${tab === 'stage' ? ' on' : ''}`} role="tabpanel" data-testid="wb-pane-stage">
+                    {selectedStep && (
+                      <section className="card wb-editor" data-testid="wb-editor">
+                        <div className="wb-editor-head">
+                          <b>{t('workbench.editor_title')}</b>
+                          <span className="g-phase" data-testid="wb-editor-stage">{selectedStep.id}</span>
+                          {selectedStep.gate && (
+                            <span className="badge badge--gate">
+                              {selectedStep.gate === 'confirm' ? t('workbench.gate_badge_confirm') : t('workbench.gate_badge')}
+                            </span>
+                          )}
+                          <span className="wb-ed-note">{t('workbench.editor_hint')}</span>
+                        </div>
+                        {/* T13：阶段编辑表单（T14 技能链在 StepEditor 内继续分区挂载）。
+                            key 按 (workflow, step) 复合——切阶段/切 workflow 时「+ 添加」输入态随卸载复位。 */}
+                        <StepEditor
+                          key={`${def.name}:${selectedStep.id}`}
+                          step={selectedStep}
+                          workflow={def.name}
+                          readonly={readonlyWf}
+                          onChange={updateStep}
+                        />
+                      </section>
                     )}
-                    <span className="wb-ed-note">{t('workbench.editor_hint')}</span>
+                    {selectedStep && <HookTimeline phase={selectedStep.id} config={hooksConfig} />}
                   </div>
-                  {/* T13：阶段编辑表单（T14 技能链在 StepEditor 内继续分区挂载）。v6 T12：Hook
-                      时序线已挪右栏（per-stage 编辑区只留 基本/技能/产出物 三分区）。
-                      key 按 (workflow, step) 复合——切阶段/切 workflow 时「+ 添加」输入态随卸载复位。 */}
-                  <StepEditor
-                    key={`${def.name}:${selectedStep.id}`}
-                    step={selectedStep}
-                    workflow={def.name}
-                    readonly={readonlyWf}
-                    onChange={updateStep}
-                  />
-                </section>
-              )}
-              {/* T16：「自动运行(Loop)」卡跟在阶段编辑卡之后（per-root 数据面，不吃 workflow 只读态）。 */}
-              <LoopCard root={root} loops={loops} />
-              {/* T21：「AFK 执行」卡跟在 Loop 卡之后——per-root .pipeline/automation.json
-                  （并发/重试/默认入队/沙箱镜像），数据托管在卡内（与 workflow 草稿无关）。 */}
-              <AutomationCard root={root} refreshToken={rdNonce} />
-              {/* v6 T8：「凭证」卡(机器级)跟在 AFK 执行卡之后——保存/删除成功即刷新上方就绪三灯。 */}
-              <SecretsCard onChanged={() => setRdNonce((n) => n + 1)} />
+                  {/* 页 2：自动运行(Loop)（per-root 数据面，不吃 workflow 只读态）。 */}
+                  <div className={`wb8-pane${tab === 'loop' ? ' on' : ''}`} role="tabpanel" data-testid="wb-pane-loop">
+                    <LoopCard root={root} loops={loops} />
+                  </div>
+                  {/* 页 3：AFK 执行——per-root .pipeline/automation.json（并发/重试/默认入队/沙箱镜像）。 */}
+                  <div className={`wb8-pane${tab === 'afk' ? ' on' : ''}`} role="tabpanel" data-testid="wb-pane-afk">
+                    <AutomationCard root={root} refreshToken={rdNonce} />
+                  </div>
+                  {/* 页 4：凭证(机器级)——保存/删除成功即刷新 AFK 页就绪三灯（rdNonce 接线不变）。 */}
+                  <div className={`wb8-pane${tab === 'secrets' ? ' on' : ''}`} role="tabpanel" data-testid="wb-pane-secrets">
+                    <SecretsCard onChanged={() => setRdNonce((n) => n + 1)} />
+                  </div>
+                  {/* 页 5：技能健康——SkillHealthPanel + manifest 技能矩阵入口卡（v6 T12 曾在右栏，
+                      v8-E 收进本页签；入口仍走 requestSwitch 含脏守卫）。 */}
+                  <div className={`wb8-pane${tab === 'health' ? ' on' : ''}`} role="tabpanel" data-testid="wb-pane-health">
+                    <SkillHealthPanel />
+                    <div className="side-card wb8-mx" data-testid="wb-mx-card">
+                      <div className="side-card__head"><b>{t('workbench.mx_title')}</b></div>
+                      <div className="side-card__body">
+                        <p className="wb-note">{t('workbench.mx_body')}</p>
+                        <button
+                          type="button"
+                          className="btn btn--ghost"
+                          data-testid="wb-mx-open"
+                          disabled={wfName === 'default'}
+                          title={wfName === 'default' ? t('workbench.mx_open_here') : undefined}
+                          onClick={() => requestSwitch('default')}
+                        >
+                          {t('workbench.mx_open')}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </>
           ) : (
             !defError && <p className="view__note">{t('common.loading')}</p>
@@ -760,15 +875,8 @@ export function WorkbenchView({ root, onToggleError, snapshot = null }: Workbenc
             </div>
           </div>
 
-          {/* v6 T12：Hook 全局时序挪右栏——per-root 数据面（不吃 workflow 只读态），开关仍按
-              当前选中阶段读写（矩阵键 = <hook>.<阶段>）；HookTimeline 自带区头/说明/错误行。 */}
-          {selectedStep && (
-            <div className="side-card" data-testid="wb-side-hooks">
-              <div className="side-card__body side-card__body--hooks">
-                <HookTimeline phase={selectedStep.id} config={hooksConfig} />
-              </div>
-            </div>
-          )}
+          {/* v8-E 右栏瘦身（意见⑥）：Hook 时序卡（v6 T12 曾在此）并入「阶段编辑」页签、
+              矩阵入口卡与 SkillHealthPanel 并入「技能健康」页签——右栏只留 摘要/安全门说明/最近流转。 */}
 
           {/* v6 T12：安全门说明卡（决议#2 的人话版，静态）——强制常开是安全边界，不提供开关。 */}
           <div className="side-card" data-testid="wb-side-safegate">
@@ -778,30 +886,6 @@ export function WorkbenchView({ root, onToggleError, snapshot = null }: Workbenc
               <p className="wb-note">{t('workbench.sg_pending_body')}</p>
             </div>
           </div>
-
-          {/* v6 T12：manifest 技能矩阵入口卡——矩阵本体住在 default 工作流的技能区（全局
-              manifest，跨 workflow 生效，不属于单个阶段）；入口走既有 requestSwitch（含脏守卫）。 */}
-          <div className="side-card" data-testid="wb-side-matrix">
-            <div className="side-card__head"><b>{t('workbench.mx_title')}</b></div>
-            <div className="side-card__body">
-              <p className="wb-note">{t('workbench.mx_body')}</p>
-              <button
-                type="button"
-                className="btn btn--ghost"
-                data-testid="wb-mx-open"
-                disabled={wfName === 'default'}
-                title={wfName === 'default' ? t('workbench.mx_open_here') : undefined}
-                onClick={() => requestSwitch('default')}
-              >
-                {t('workbench.mx_open')}
-              </button>
-            </div>
-          </div>
-
-          {/* full-install W4：只读「技能齐全度」面（消费既有 GET /api/skills/registry）——已装/未装
-              计数 + 未装名 +「去终端 pipeline setup 装齐」引导。前端只读不装（装在终端，决议边界）；
-              自带 side-card 外壳与 fetch/fail-soft，一行挂载，不吃 workflow 只读态。 */}
-          <SkillHealthPanel />
 
           {/* v6 T13：最近流转——真实 history 事件回放（GSAP 假预演退役,决议#10/#5:legacy 如实
               标注不可用、archived 不入列;决议#11 量级 <50,逐 change 只读端点合并,不新增聚合端点;

@@ -1,14 +1,12 @@
 import { Component, useCallback, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactNode } from 'react'
-import { ApiError, postTransition, unregisterProject } from './api/client'
+import { ApiError, unregisterProject } from './api/client'
 import { I18nProvider, useT } from './i18n'
 import type { Lang } from './i18n/translations'
 import { AdvancedPanel } from './advanced/AdvancedPanel'
-import { InboxView } from './inbox/InboxView'
 import { changeWorkflow, selectInbox } from './inbox/inbox'
 import { useWorkflowRulesMulti } from './model/workflowModel'
 import { ProgressView } from './progress/ProgressView'
 import { Nav, PRIMARY_VIEWS, type View } from './shell/Nav'
-import { NewChangeDialog } from './shell/NewChangeDialog'
 import { Onboarding } from './shell/Onboarding'
 import { useSnapshot } from './state/useSnapshot'
 import { GLOBAL_CSS } from './styles'
@@ -19,8 +17,8 @@ import { toastIn } from './shared/motion'
 type Theme = 'light' | 'dark'
 const THEME_KEY = 'pipeline-dashboard-theme'
 const ROOT_KEY = 'pipeline-dashboard-root'
-// T17：视图记忆。旧值（board/settings/loops/afk/workflows）随三视图 IA 退役——initialView
-// 以 PRIMARY_VIEWS 白名单校验，不认识的一律兜底回 inbox（默认落地=收件箱，病灶②口径不变）。
+// 视图记忆。旧值（inbox/board/settings/loops/afk/workflows）随历次 IA 收敛退役——initialView
+// 以 PRIMARY_VIEWS 白名单校验，不认识的一律兜底回 progress（收件箱退役，默认落地=进度，v9-flowdeck 口径）。
 const VIEW_KEY = 'pipeline-dashboard-view'
 
 function initialTheme(): Theme {
@@ -45,7 +43,7 @@ function initialView(): View {
   } catch {
     /* ignore */
   }
-  return 'inbox'
+  return 'progress'
 }
 
 interface Flash {
@@ -66,7 +64,6 @@ function AppShell(): JSX.Element {
   const [view, setViewState] = useState<View>(initialView)
   const [theme, setThemeState] = useState<Theme>(initialTheme)
   const [flash, setFlash] = useState<Flash | null>(null)
-  const [newChangeOpen, setNewChangeOpen] = useState(false)
   const flashRef = useRef<HTMLDivElement>(null)
 
   const setView = useCallback((v: View) => {
@@ -111,7 +108,7 @@ function AppShell(): JSX.Element {
   const wfNames = useMemo(() => wfNamesFor(currentProject?.changes ?? []), [currentProject])
 
   // G19③（Task 8）/ T17：全应用的 workflow 规则统一走 useWorkflowRulesMulti，键=rulesKey(root,wf)
-  // ——收件箱徽章/InboxView/ProgressView 三个消费方吃同一份 Map。聚合语境（currentRoot===''）
+  // ——待拍板徽标/ProgressView 两个消费方吃同一份 Map（收件箱视图已退役）。聚合语境（currentRoot===''）
   // 收集全部 ok 项目的 (root,wf) 对；单项目语境只请求当前项目（default 零网络，自定义走
   // fetchRules 模块级 cache/inflight 去重，见 workflowModel.ts）。旧的 useWorkflowRules 单项目
   // 调用随 旧看板视图 退出 App 接线而移除（T17；组件文件 T18 删）。
@@ -138,7 +135,9 @@ function AppShell(): JSX.Element {
     }
   }, [])
 
-  const inboxCount = useMemo(
+  // 待拍板计数（Nav「进度」项红徽标）：口径沿 selectInbox 不变——收件箱视图退役后，
+  // 选择器保留为「现在就能拍板」的唯一判定源（F1 的进度行高亮同源消费）。
+  const decisionCount = useMemo(
     () => selectInbox(snapshot, currentRoot, rulesByKey).length,
     [snapshot, currentRoot, rulesByKey],
   )
@@ -165,13 +164,8 @@ function AppShell(): JSX.Element {
     window.setTimeout(() => setFlash(null), 4000)
   }, [])
 
-  const onTransition = useCallback(
-    async (name: string, root: string, event: string): Promise<void> => {
-      await postTransition(name, root, event)
-      refresh()
-    },
-    [refresh],
-  )
+  // （收件箱退役收尾）原 onTransition 快捷转换回调随 InboxView 唯一消费方删除；进度面的
+  // 动作接线（继续/打回/重试/终止）由 ProgressView 侧按需重建（postTransition 仍在 api/client）。
 
   // 注销项目（G18 API + 评审 P2-13 入口，Task 5；T17 决议#7 保留）：Nav 拿到用户确认后调用，
   // 这里做真正的网络调用 + 收尾——成功则 refresh（快照重新拉取，注销的项目从列表消失）；若
@@ -201,7 +195,7 @@ function AppShell(): JSX.Element {
         theme={theme}
         onTheme={setTheme}
         connected={connected}
-        inboxCount={inboxCount}
+        decisionCount={decisionCount}
         projects={navProjects}
         currentRoot={currentRoot}
         onRoot={setCurrentRoot}
@@ -230,28 +224,14 @@ function AppShell(): JSX.Element {
 
       <main className="main">
         {/* G18 教学空状态（T17 起纯教学态：pipeline init 自动登记，无注册表单）：
-            零项目 → 全视图 onboarding；有项目零 change → 收件箱/进度替换为新建引导
+            零项目 → 全视图 onboarding；有项目零 change → 进度替换为新建引导
             （工作台不替换——它是配置面，零 change 也有事可做）。 */}
         {snapshot && snapshot.project_count === 0 ? (
           <Onboarding kind="no-project" />
-        ) : snapshot && currentProject && currentProject.changes.length === 0 && (view === 'inbox' || view === 'progress') ? (
-          <Onboarding kind="no-change" root={currentRoot} onNewChange={() => setNewChangeOpen(true)} />
+        ) : snapshot && currentProject && currentProject.changes.length === 0 && view === 'progress' ? (
+          <Onboarding kind="no-change" root={currentRoot} />
         ) : (
           <>
-        {view === 'inbox' && (
-          <InboxView
-            snapshot={snapshot}
-            loading={loading}
-            error={error}
-            currentRoot={currentRoot}
-            rulesByKey={rulesByKey}
-            onOpenBoard={() => setView('progress')}
-            onTransition={onTransition}
-            onToast={(m) => showFlash('toast', m)}
-            onError={(m) => showFlash('error', m)}
-            onNewChange={currentRoot ? () => setNewChangeOpen(true) : undefined}
-          />
-        )}
         {view === 'progress' && (
           <ProgressView
             snapshot={snapshot}
@@ -280,18 +260,6 @@ function AppShell(): JSX.Element {
           </>
         )}
       </main>
-
-      {newChangeOpen && currentRoot && (
-        <NewChangeDialog
-          root={currentRoot}
-          onClose={() => setNewChangeOpen(false)}
-          onCreated={(name) => {
-            setNewChangeOpen(false)
-            showFlash('toast', t('newchange.created_toast', { name }))
-            refresh()
-          }}
-        />
-      )}
 
       <footer className="footer">
         <AdvancedPanel snapshot={snapshot} />

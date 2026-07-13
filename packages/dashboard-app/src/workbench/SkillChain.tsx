@@ -1,9 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
+import gsap from 'gsap'
+import { useGSAP } from '@gsap/react'
 import { fetchConfig, fetchSkillsRegistry, postMandatorySkills, type WbSkillEntry } from '../api/client'
 import { useT } from '../i18n'
 import { MANDATORY_SKILLS, MATRIX_TRACKS } from './data'
 import { SkillTransferModal } from './SkillTransferModal'
 import type { WbSkillRef, WbStepDef } from './WorkbenchView'
+
+gsap.registerPlugin(useGSAP)
 
 /**
  * SkillChain（T14，计划 2026-07-11-v5-interaction-rebuild）—— StepEditor 技能区，
@@ -29,6 +33,10 @@ import type { WbSkillRef, WbStepDef } from './WorkbenchView'
  * 链可视化算法沿 demo chainsHTML：单线 walk（每节点取第一个未用后继），多依赖节点只在首链
  * 出现一次；悬空依赖（指向 step 外/未参与首链）以幽灵 chip 呈现在链头。这只是展示投影——
  * 解锁判定的唯一权威在 kernel skillDag.ts::isSkillUnlocked，前端不复刻其语义。
+ *
+ * v8-E（用户点名，设计真相源 design-demos/v8-trellis-encore.html #skChain/animChain）：
+ * 链 chips → 编号节点（紫圆 mono 序号）+ 紫色流动虚线连接件 + GSAP 逐节点弹入/连线生长；
+ * 依赖链语义、添加面板、default 轨道 tab 全部不动，纯展示升级；reduced-motion 直显。
  */
 
 // 同 kernel validate.ts IDENT_RE / StepEditor FIELD_RE 一条规则：自定义 workflow 的 skill id
@@ -178,6 +186,37 @@ export function SkillChain({ step, workflow = '', readonly = false, onChange }: 
   // 自 旧设置视图 迁移的 in-flight 保存守卫：ref 而非 state——只在回调里同步读，
   // 不参与渲染，保证判断即时生效。
   const savingKeyRef = useRef<string | null>(null)
+
+  // ── v8-E（用户点名）：依赖链动态入场——编号节点逐个弹入 + 紫流动虚线连线生长
+  //    （demo v8 animChain 对位：节点 back.out stagger .07、连线 scaleX 0→1 origin left）。
+  //    纯展示升级：依赖链语义/添加面板/default 轨道 tab 零改动。useGSAP+matchMedia 全包，
+  //    reduced 直显（不放 from 动画,CSS 侧 wb8-skconn::before 的流动虚线也随 media query 停）。
+  //    hook 必须在 isDefault 分岔 return 之前调用（React hooks 纪律）；default 模式 ref 不挂,
+  //    内部空 guard 自然跳过。依赖 = 链指纹（skills id 序）,链变(增删/换阶段重挂)才重播。──
+  const chainsRef = useRef<HTMLDivElement>(null)
+  const chainKey = step.skills.map((s) => s.id).join(',')
+  useGSAP(
+    () => {
+      const el = chainsRef.current
+      if (!el || typeof window.matchMedia !== 'function') return
+      const mm = gsap.matchMedia()
+      mm.add(
+        { reduce: '(prefers-reduced-motion: reduce)', motion: '(prefers-reduced-motion: no-preference)' },
+        (ctx) => {
+          if ((ctx.conditions as { reduce?: boolean } | undefined)?.reduce) return
+          const nodes = el.querySelectorAll('.wb8-skc')
+          if (nodes.length > 0) {
+            gsap.from(nodes, { autoAlpha: 0, scale: 0.88, duration: 0.28, stagger: 0.07, ease: 'back.out(1.8)', clearProps: 'all' })
+          }
+          const conns = el.querySelectorAll('.wb8-skconn')
+          if (conns.length > 0) {
+            gsap.from(conns, { scaleX: 0, transformOrigin: 'left center', duration: 0.24, stagger: 0.07, delay: 0.1, ease: 'power2.out', clearProps: 'transform' })
+          }
+        },
+      )
+    },
+    { scope: chainsRef, dependencies: [chainKey], revertOnUpdate: true },
+  )
 
   useEffect(() => {
     if (!isDefault || cfg !== null) return
@@ -418,8 +457,11 @@ export function SkillChain({ step, workflow = '', readonly = false, onChange }: 
   const have = new Set(step.skills.map((s) => s.id))
   const candidates = (registry ?? []).map((e) => e.name).filter((id) => !have.has(id))
 
-  const chip = (id: string): JSX.Element => (
-    <span key={id} className={`wb-chip${installedMap.get(id)?.installed === false ? ' wb-chip--uninstalled' : ''}`} title={id}>
+  // v8-E：链上 chip 升级为「编号节点」（紫圆 mono 序号 = 链内执行序,demo .skc/.skn 对位）；
+  // seq 缺省（无依赖独立行/幽灵 chip）不编号——solo 无序语义不变,只有链才有「第几步」。
+  const chip = (id: string, seq?: number): JSX.Element => (
+    <span key={id} className={`wb-chip${seq !== undefined ? ' wb8-skc' : ''}${installedMap.get(id)?.installed === false ? ' wb-chip--uninstalled' : ''}`} title={id}>
+      {seq !== undefined && <i className="wb8-skn" aria-hidden="true">{seq}</i>}
       {id}
       {uninstBadge(id)}
       {!readonly && (
@@ -436,7 +478,9 @@ export function SkillChain({ step, workflow = '', readonly = false, onChange }: 
         {t('workbench.sk_sec')}
         <span className="hint">{t('workbench.sk_hint_custom')}</span>
       </div>
-      <div data-testid="wb-sk-chains">
+      {/* v8-E：链行动态化——文本箭头 ➝ 全部换成紫流动虚线连接件（.wb8-skconn,与阶段连线同一
+          签名语言）；入场动画挂 chainsRef（见上方 useGSAP）。链投影算法/DOM 语义序零改动。 */}
+      <div data-testid="wb-sk-chains" ref={chainsRef}>
         {step.skills.length === 0 && (
           <div className="wb-chain">
             <span className="wb-empty">{t('workbench.sk_empty_custom')}</span>
@@ -448,13 +492,13 @@ export function SkillChain({ step, workflow = '', readonly = false, onChange }: 
             {c.ghost && (
               <>
                 <span className="wb-chip wb-chip--ghost">{c.ghost}</span>
-                <span className="wb-arr" aria-hidden="true">➝</span>
+                <span className="wb8-skconn" aria-hidden="true" />
               </>
             )}
             {c.ids.map((id, i) => (
               <span key={id} className="wb-chain-seg">
-                {i > 0 && <span className="wb-arr" aria-hidden="true">➝</span>}
-                {chip(id)}
+                {i > 0 && <span className="wb8-skconn" aria-hidden="true" />}
+                {chip(id, i + 1)}
               </span>
             ))}
           </div>
@@ -462,7 +506,8 @@ export function SkillChain({ step, workflow = '', readonly = false, onChange }: 
         {solos.length > 0 && (
           <div className="wb-chain" data-testid="wb-sk-solo">
             <span className="wb-chain-k">{t('workbench.sk_solo_k')}</span>
-            {solos.map(chip)}
+            {/* 不用 solos.map(chip)：map 会把 index 灌进 seq 形参,solo 无序不编号。 */}
+            {solos.map((id) => chip(id))}
           </div>
         )}
       </div>

@@ -637,3 +637,29 @@ export async function fetchTraceRecords(session: string): Promise<TraceRecordsRe
   if (!res.ok) throw new Error(`traces 记录获取失败（${res.status}）`)
   return (await res.json()) as TraceRecordsResponse
 }
+
+// ── v9-I：change ↔ 终端会话关联（SessionResumeRow 自取数）──
+
+/** GET /api/mem/session-link 响应（镜像 server 端点契约，手抄保零耦合，同 Snapshot 纪律）。
+ *  resumeCmd:null = 平台恢复拼法无把握（opencode/pi），UI 只显示 id+目录、不给假命令。 */
+export interface SessionLink {
+  found: boolean
+  platform?: string
+  sessionId?: string
+  dir?: string
+  resumeCmd?: string | null
+  mtime?: string
+  reason?: string
+}
+
+/** GET /api/mem/session-link?root=&name=——查该 change 现场目录（automation_worktree，空则 root）
+ *  最近的持久化终端会话 + 恢复命令。非 2xx 收敛 found:false（「查不到会话」是常态不是错误，
+ *  不走 ApiError 弹层）；网络失败让 reject 流出，由消费方 catch 后按 found:false 渲染。 */
+export async function fetchSessionLink(root: string, name: string): Promise<SessionLink> {
+  const res = await fetch(
+    `/api/mem/session-link?root=${encodeURIComponent(root)}&name=${encodeURIComponent(name)}`,
+    { headers: { Accept: 'application/json' } },
+  )
+  if (!res.ok) return { found: false, reason: `http-${res.status}` }
+  return (await res.json()) as SessionLink
+}

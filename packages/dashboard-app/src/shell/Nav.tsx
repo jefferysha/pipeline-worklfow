@@ -1,19 +1,23 @@
-import { useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
+import gsap from 'gsap'
+import { useGSAP } from '@gsap/react'
 import { useT } from '../i18n'
 import type { Lang } from '../i18n/translations'
 import { Dialog } from './Dialog'
 import { Icon } from './Icon'
 
-/**
- * T17（计划 2026-07-11-v5-interaction-rebuild）：IA 收敛三视图——收件箱 / 进度 / 工作台。
- * 交互真相源 design-demos/v5-progress-workbench.html 顶栏（#mainNav 恰 3 项，收件箱带计数）。
- * 旧的「工作台下拉分组（loops/afk/workflows）」与 nav-board/nav-settings 一并退役：能力分别
- * 收编进工作台（T12-T16）与进度（T10/T11），旧组件文件 T18 删除。
- */
-export type View = 'inbox' | 'progress' | 'workbench'
+gsap.registerPlugin(useGSAP)
 
-/** 一级导航项 —— 显式枚举白名单，顶部恰 3 项（demo v5 顶栏口径）。 */
-export const PRIMARY_VIEWS: View[] = ['inbox', 'progress', 'workbench']
+/**
+ * v9-flowdeck（收件箱退役）：IA 收敛两视图——进度 / 工作台。交互真相源
+ * design-demos/v9-flowdeck.html 顶栏（导航恰 2 项，待拍板红徽标挂在「进度」项上）。
+ * 收件箱不再是独立视图：进度是唯一在制面（单列表看所有在制，需操作行高亮）；
+ * 更早的「工作台下拉分组（loops/afk/workflows）」与 nav-board/nav-settings 随 T17 退役。
+ */
+export type View = 'progress' | 'workbench'
+
+/** 一级导航项 —— 显式枚举白名单，顶部恰 2 项（demo v9 顶栏口径）。 */
+export const PRIMARY_VIEWS: View[] = ['progress', 'workbench']
 
 export interface NavProject {
   root: string
@@ -35,8 +39,8 @@ interface NavProps {
   theme: 'light' | 'dark'
   onTheme: (t: 'light' | 'dark') => void
   connected: boolean
-  /** 收件箱徽标数（在等你决定的 change 数，currentRoot 语境）。 */
-  inboxCount: number
+  /** 待拍板徽标数（在等你决定的 change 数，currentRoot 语境）——收件箱退役后挂在「进度」导航项上。 */
+  decisionCount: number
   /** D5 项目切换器：已注册项目列表（缺省/空 = 不渲染切换区，如加载首帧）。 */
   projects?: NavProject[]
   /**
@@ -64,7 +68,7 @@ export function Nav({
   theme,
   onTheme,
   connected,
-  inboxCount,
+  decisionCount,
   projects,
   currentRoot,
   onRoot,
@@ -73,6 +77,61 @@ export function Nav({
   const { t } = useT()
   const [projectOpen, setProjectOpen] = useState(false)
   const [pendingUnregister, setPendingUnregister] = useState<NavProject | null>(null)
+  const projRef = useRef<HTMLDivElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  // v8-A 意见①：关=快出（短补间后卸载）。reduced-motion / 无 matchMedia（jsdom/极老内核）直接卸载，
+  // 测试与降级路径都是同步的；只有明确 no-preference 才走 120ms 出场。
+  const closeMenu = useCallback(() => {
+    const el = menuRef.current
+    const canAnimate =
+      el !== null &&
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(prefers-reduced-motion: no-preference)').matches
+    if (!canAnimate) {
+      setProjectOpen(false)
+      return
+    }
+    gsap.to(el, {
+      autoAlpha: 0,
+      scale: 0.97,
+      y: -3,
+      duration: 0.12,
+      ease: 'power1.in',
+      onComplete: () => setProjectOpen(false),
+    })
+  }, [])
+
+  // 开=scale .96→1 + y -4→0 + 行 stagger .03（demo v8 .proj-menu 形态）；gsap.matchMedia 全包，
+  // reduce 分支直显终态（不放补间）——姿势沿 ProgressView.tsx 先例（registerPlugin/useGSAP/matchMedia）。
+  useGSAP(
+    () => {
+      if (!projectOpen) return
+      const el = menuRef.current
+      if (!el || typeof window.matchMedia !== 'function') return
+      const mm = gsap.matchMedia()
+      mm.add(
+        { reduce: '(prefers-reduced-motion: reduce)', motion: '(prefers-reduced-motion: no-preference)' },
+        (ctx) => {
+          if (Boolean((ctx.conditions as { reduce?: boolean } | undefined)?.reduce)) return // 直显即终态
+          gsap
+            .timeline()
+            .fromTo(
+              el,
+              { autoAlpha: 0, scale: 0.96, y: -4, transformOrigin: 'top left' },
+              { autoAlpha: 1, scale: 1, y: 0, duration: 0.18, ease: 'power2.out' },
+            )
+            .fromTo(
+              el.querySelectorAll('.nav8-row, .nav8-foot'),
+              { autoAlpha: 0, y: -4 },
+              { autoAlpha: 1, y: 0, duration: 0.16, ease: 'power2.out', stagger: 0.03 },
+              '<0.04',
+            )
+        },
+      )
+    },
+    { scope: projRef, dependencies: [projectOpen], revertOnUpdate: true },
+  )
   const currentProject = projects?.find((p) => p.root === currentRoot)
   // 聚合项计数 = 各 ok 项目 change 总和（ok=false 的不可达项目不计入，D5/G19③ 拍板）。
   const aggregateCount = (projects ?? []).reduce((sum, p) => sum + (p.ok === false ? 0 : p.count), 0)
@@ -88,9 +147,10 @@ export function Nav({
       </div>
       {projects && projects.length > 1 && (
         <div
+          ref={projRef}
           className="nav__project"
           onBlur={(e) => {
-            if (!e.currentTarget.contains(e.relatedTarget as Node)) setProjectOpen(false)
+            if (!e.currentTarget.contains(e.relatedTarget as Node)) closeMenu()
           }}
         >
           <button
@@ -99,54 +159,62 @@ export function Nav({
             data-testid="project-switcher"
             aria-haspopup="menu"
             aria-expanded={projectOpen}
-            onClick={() => setProjectOpen((open) => !open)}
+            onClick={() => (projectOpen ? closeMenu() : setProjectOpen(true))}
           >
-            {switcherLabel} ▾
+            {switcherLabel}
+            <span className="nav8-chev" aria-hidden="true">▾</span>
           </button>
           {projectOpen && (
-            <div className="nav__dropdown" role="menu" data-testid="project-menu">
-              <button
-                type="button"
-                role="menuitem"
-                data-testid="project-item-all"
-                className={currentRoot === '' ? 'nav__dropdown-item nav__dropdown-item--active' : 'nav__dropdown-item'}
-                onClick={() => {
-                  onRoot?.('')
-                  setProjectOpen(false)
-                }}
-              >
-                <span className="nav__dropdown-dia" aria-hidden="true">◈</span> {t('nav.project_all')}
-                {aggregateCount > 0 && <span className="nav__dropdown-count">{aggregateCount}</span>}
-              </button>
+            <div ref={menuRef} className="nav8-menu" role="menu" data-testid="project-menu">
+              <div className={currentRoot === '' ? 'nav8-row nav8-row--on' : 'nav8-row'}>
+                <button
+                  type="button"
+                  role="menuitem"
+                  data-testid="project-item-all"
+                  className="nav8-item"
+                  onClick={() => {
+                    onRoot?.('')
+                    setProjectOpen(false)
+                  }}
+                >
+                  <span className="nav8-dia" aria-hidden="true">◈</span>
+                  <span className="nav8-name">{t('nav.project_all')}</span>
+                  {aggregateCount > 0 && <span className="nav8-n">{aggregateCount}</span>}
+                </button>
+              </div>
               {projects.map((p) => (
-                <div key={p.root} className="nav__dropdown-row">
+                <div key={p.root} className={p.root === currentRoot ? 'nav8-row nav8-row--on' : 'nav8-row'}>
                   <button
                     type="button"
                     role="menuitem"
                     data-testid={`project-item-${p.name}`}
-                    className={p.root === currentRoot ? 'nav__dropdown-item nav__dropdown-item--active' : 'nav__dropdown-item'}
+                    className="nav8-item"
                     onClick={() => {
                       onRoot?.(p.root)
                       setProjectOpen(false)
                     }}
                   >
-                    {p.name} {p.count > 0 && <span className="nav__dropdown-count">{p.count}</span>}
+                    <span className="nav8-name">{p.name}</span>
+                    {p.count > 0 && <span className="nav8-n">{p.count}</span>}
                   </button>
                   {onUnregister && (
                     <button
                       type="button"
-                      className="nav__dropdown-unreg"
+                      className="nav8-unreg"
                       data-testid={`project-unregister-${p.name}`}
+                      title={t('nav.project_unregister_aria', { name: p.name })}
+                      aria-label={t('nav.project_unregister_aria', { name: p.name })}
                       onClick={() => {
                         setProjectOpen(false)
                         setPendingUnregister(p)
                       }}
                     >
-                      {t('nav.project_unregister')}
+                      <Icon name="x" size={13} />
                     </button>
                   )}
                 </div>
               ))}
+              <p className="nav8-foot">{t('nav.project_menu_hint')}</p>
             </div>
           )}
         </div>
@@ -165,9 +233,9 @@ export function Nav({
             onClick={() => onView(v)}
           >
             {t(`nav.${v}`)}
-            {v === 'inbox' && inboxCount > 0 && (
-              <span className="nav__badge" data-testid="inbox-badge">
-                {inboxCount}
+            {v === 'progress' && decisionCount > 0 && (
+              <span className="nav__badge" data-testid="progress-badge">
+                {decisionCount}
               </span>
             )}
           </button>
