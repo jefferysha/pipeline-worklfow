@@ -357,4 +357,35 @@ describe('fetchSessionLinks（GET /api/mem/session-links 批量）', () => {
     ])
     expect(got).toEqual({})
   })
+
+  // ── 测量方法本身的正确性（codex review 第三轮 P2）：上面两个用例锁住了「按条数+字节数切片」的
+  //    契约，但当时的实现用 encodeURIComponent 手算估算字节数，而 fetchSessionLinksOneChunk 实际
+  //    拼查询串用的是 URLSearchParams（application/x-www-form-urlencoded 规则）——两者对 `! ' ( ) ~`
+  //    这五个字符的转义规则不一样：encodeURIComponent 原样保留（1 字符），URLSearchParams 全部转义
+  //    成 %21/%27/%28/%29/%7E（3 字符）。这几个字符在真实文件系统路径里不算罕见（如
+  //    "My Project (2024)"、"O'Brien's repo"），一旦命中，手算估算会比真实序列化结果小好几倍，
+  //    分片以为留了安全边际，实际发出去的 URL 可能远超阈值，静默丢失整批真恢复命令。以下用例锁住
+  //    「用 URLSearchParams 真实序列化测长度，而不是手算估算」的契约。──
+
+  it('root 含 URLSearchParams 会转义但 encodeURIComponent 不转义的字符（! \' ( ) ~）→ 即便手算估算远低于阈值，真实序列化超阈值时仍正确切成多批，且每批真实查询串长度都 ≤ 6000', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ links: {} }) })
+    vi.stubGlobal('fetch', fetchMock)
+    const { fetchSessionLinks } = await import('./client')
+    // 每项 root 塞 100 个单引号 + ()~!：这 20 项累计后，encodeURIComponent 手算估算总长只有 2560
+    // 字符（远低于 6000，旧实现会误判整批不用切，只发 1 次请求），但真实 URLSearchParams 序列化后
+    // 是 6719 字符——已经超过安全阈值（数值已用脚本对本用例构造分别跑旧/新两版分片逻辑核实过：旧
+    // 实现下这条用例会失败，因为单次请求真实查询串长度 6719 > 6000；修复后正确切成 2 批，真实长度
+    // 分别是 5708 和 1010，均 ≤ 6000）。
+    const items = Array.from({ length: 20 }, (_, i) => ({
+      root: `/repo${"'".repeat(100)}()~!-${i}`,
+      name: `n${i}`,
+    }))
+    await fetchSessionLinks(items)
+    expect(fetchMock.mock.calls.length).toBeGreaterThan(1)
+    const SESSION_LINKS_CHUNK_MAX_URL_CHARS = 6000
+    for (const [url] of fetchMock.mock.calls as Array<[string, RequestInit | undefined]>) {
+      const queryString = String(url).split('?')[1] ?? ''
+      expect(queryString.length).toBeLessThanOrEqual(SESSION_LINKS_CHUNK_MAX_URL_CHARS)
+    }
+  })
 })

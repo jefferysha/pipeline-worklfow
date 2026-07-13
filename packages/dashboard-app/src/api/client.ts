@@ -661,8 +661,28 @@ const SESSION_LINKS_CHUNK_SIZE = 50
  *  条数远没到 SESSION_LINKS_CHUNK_SIZE 时字节数可能已经先超限——纯按条数分片堵不住这个口子。 */
 const SESSION_LINKS_CHUNK_MAX_URL_CHARS = 6000
 
-/** 按「条数」与「编码后查询串长度」两个维度切片，遍历时任一维度先达到上限就切下一批。
- *  `current.length > 0` 这个判断保证「当前批已有内容时才因为超长切下一批」——哪怕单项本身编码后
+/** 用真实 URLSearchParams 序列化量当前候选批次追加这一项后的查询串长度——不用 encodeURIComponent
+ *  手算估算：encodeURIComponent 对 `! ' ( ) ~` 五个字符不转义（原样保留），但 URLSearchParams
+ *  （下面 fetchSessionLinksOneChunk 实际用来拼查询串的机制）序列化遵循
+ *  application/x-www-form-urlencoded 规则，会把这五个字符全部转义成 %21/%27/%28/%29/%7E（1→3
+ *  字符），两者算出来的长度对不上（codex review 第三轮 P2：脚本复现过一个含 20 个单引号+()~! 的
+ *  字符串，encodeURIComponent 估算 24 字符，真实 URLSearchParams 序列化后 77 字符，估算值不到真实
+ *  值三分之一）。这几个字符在真实文件系统路径里并不罕见（如 "My Project (2024)"、"O'Brien's repo"
+ *  在 macOS/Linux 上都是合法目录名）——一旦踩中，分片以为留了安全边际，实际发出去的 URL 可能比
+ *  估算大好几倍，原本安全的批次悄悄超过传输限制，静默丢失整批真恢复命令。直接用真实序列化机制测
+ *  真实结果，不存在两套编码规则不一致的问题；这个函数只在批量预取 failed 行时偶发调用，不是热
+ *  路径，不为性能牺牲正确性。 */
+function sessionLinkParamsLength(items: Array<{ root: string; name: string }>): number {
+  const params = new URLSearchParams()
+  for (const it of items) {
+    params.append('root', it.root)
+    params.append('name', it.name)
+  }
+  return params.toString().length
+}
+
+/** 按「条数」与「真实查询串长度」两个维度切片，遍历时任一维度先达到上限就切下一批。
+ *  `current.length > 0` 这个判断保证「当前批已有内容时才因为超长切下一批」——哪怕单项本身序列化后
  *  就超过 SESSION_LINKS_CHUNK_MAX_URL_CHARS（root 长到离谱的极端情况），也会被单独放进自己的一批
  *  发出去，不会死循环、也不会拖累其它正常长度的项一起失败（这一条本身能不能被 server 接受是另一
  *  回事，不在本函数职责内）。 */
@@ -671,20 +691,15 @@ function chunkSessionLinkItems(
 ): Array<Array<{ root: string; name: string }>> {
   const chunks: Array<Array<{ root: string; name: string }>> = []
   let current: Array<{ root: string; name: string }> = []
-  let currentChars = 0
   for (const it of items) {
-    // 'root=' + 'name=' 两个键名 + 分隔符的近似开销，一并算进单项估算，不用追求逐字节精确。
-    const itemChars =
-      encodeURIComponent(it.root).length + encodeURIComponent(it.name).length + 'root='.length + 'name='.length + 2
     const wouldExceedCount = current.length >= SESSION_LINKS_CHUNK_SIZE
-    const wouldExceedChars = current.length > 0 && currentChars + itemChars > SESSION_LINKS_CHUNK_MAX_URL_CHARS
+    const wouldExceedChars =
+      current.length > 0 && sessionLinkParamsLength([...current, it]) > SESSION_LINKS_CHUNK_MAX_URL_CHARS
     if (wouldExceedCount || wouldExceedChars) {
       chunks.push(current)
       current = []
-      currentChars = 0
     }
     current.push(it)
-    currentChars += itemChars
   }
   if (current.length > 0) chunks.push(current)
   return chunks

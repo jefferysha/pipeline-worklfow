@@ -1084,17 +1084,22 @@ describe('ProgressView 抽屉焦点陷阱（#3 无障碍）', () => {
   })
 
   // flaky 余量（demo↔生产差异清单 #8 同族）：GSAP 退场补间在高并发/满载环境下比本机单跑慢，
-  // waitFor 内部预算放宽到 6000ms 的同时，it() 本身的 vitest 默认 5000ms 测试超时也要跟着放宽
+  // waitFor 内部预算放宽的同时，it() 本身的 vitest 默认 5000ms 测试超时也要跟着放宽
   // （否则外层测试超时会先于内层 waitFor 预算触发，内层放宽形同虚设——本轮曾踩过这个坑）。
+  // 2026-07-13 亲验再加宽：连续 12 次 `npm run test:web` 中撞见 1 次系统瞬时重负载，整套耗时
+  // 31s ≈ 正常 3.8s 的 8 倍，本测试与下方「scrim 点击关闭」测试、以及下方两条 GSAP 入场动效
+  // 测试同时 waitFor 超时失败。GSAP 走真实 wall-clock 定时器，系统越卡动画播放越慢，waitFor
+  // 轮询又吃同一份 CPU 排期，两头一起被拖慢——这是「真动画播放」类测试的结构性弱点，不是功能
+  // bug。进一步放宽余量以扛住类似量级（8~10 倍）的瞬时减速；请勿不明就里地把下面的数字“优化”改小。
   it('no-preference：关闭抽屉（关闭钮，GSAP 退场补间完成后卸载）归还焦点', async () => {
     stubMatchMedia(false)
     renderView()
     const trigger = screen.getByTestId('prg9-name-gate-demo')
     await openDrawer('gate-demo')
     fireEvent.click(screen.getByTestId('detail-close'))
-    await waitFor(() => expect(screen.queryByTestId('prg9-drawer')).toBeNull(), { timeout: 6000 })
+    await waitFor(() => expect(screen.queryByTestId('prg9-drawer')).toBeNull(), { timeout: 15000 })
     expect(document.activeElement).toBe(trigger)
-  }, 9000)
+  }, 20000)
 
   it('no-preference：scrim 点击关闭同样归还焦点（GSAP 退场分支）', async () => {
     stubMatchMedia(false)
@@ -1102,9 +1107,9 @@ describe('ProgressView 抽屉焦点陷阱（#3 无障碍）', () => {
     const trigger = screen.getByTestId('prg9-name-gate-demo')
     await openDrawer('gate-demo')
     fireEvent.click(screen.getByTestId('prg9-scrim'))
-    await waitFor(() => expect(screen.queryByTestId('prg9-drawer')).toBeNull(), { timeout: 6000 })
+    await waitFor(() => expect(screen.queryByTestId('prg9-drawer')).toBeNull(), { timeout: 15000 })
     expect(document.activeElement).toBe(trigger)
-  }, 9000)
+  }, 20000)
 })
 
 describe('ProgressView GSAP 动效（gsap.matchMedia 全包；reduced-motion 守门等强度两分支）', () => {
@@ -1123,8 +1128,13 @@ describe('ProgressView GSAP 动效（gsap.matchMedia 全包；reduced-motion 守
     expect(screen.getByTestId('prg9-rail-triage-demo')).toHaveAttribute('data-mode', 'idle')
   })
 
-  // flaky 余量（#8）：waitFor 预算 8000ms 必须配一个 ≥ 它的 it() 测试超时（vitest 默认 5000ms
+  // flaky 余量（#8）：waitFor 预算必须配一个 ≥ 它的 it() 测试超时（vitest 默认 5000ms
   // 会先于内层 waitFor 触发，放宽 waitFor 不放宽外层等于没放宽——本轮曾在高并发环境撞过）。
+  // 2026-07-13 亲验再加宽：连续 12 次 `npm run test:web` 中撞见 1 次系统瞬时重负载（整套耗时
+  // 31s ≈ 正常 3.8s 的 8 倍），本测试与下方「切页签后可见行入场」测试、以及上方抽屉退场两条
+  // 测试同时 waitFor 超时失败——GSAP 走真实 wall-clock 定时器，系统越卡动画播放越慢，waitFor
+  // 轮询又吃同一份 CPU 排期，两头一起被拖慢。这是「真动画播放」类测试的结构性弱点，不是功能
+  // bug；进一步放宽余量以扛住类似量级（8~10 倍）的瞬时减速，请勿不明就里地把数字“优化”改小。
   it('no-preference：行入场 stagger + 轨道名浮现后到达同一终态（opacity 1）', async () => {
     stubMatchMedia(false)
     renderView()
@@ -1135,8 +1145,8 @@ describe('ProgressView GSAP 动效（gsap.matchMedia 全包；reduced-motion 守
       for (const el of Array.from(screen.getByTestId('prg9-rail-changelog-cn').querySelectorAll<HTMLElement>('.rl-name'))) {
         expect(el.style.opacity).toBe('1')
       }
-    }, { timeout: 8000 })
-  }, 11000)
+    }, { timeout: 15000 })
+  }, 20000)
 
   // ── v9-H：状态 sheet 切换的两分支（demo applyDeckFilter 对位）——reduced 直切不编排，
   //    motion 切换后可见行轻入场并以 clearProps 收束到无 inline 残留（或被首屏入场补间以
@@ -1153,6 +1163,9 @@ describe('ProgressView GSAP 动效（gsap.matchMedia 全包；reduced-motion 守
     expect(screen.getByTestId('prg9-stack').querySelectorAll('[data-testid^="prg9-row-"]')).toHaveLength(6)
   })
 
+  // flaky 余量：与上方「行入场 stagger」测试同族同因（详见该测试前注释）——2026-07-13 亲验，
+  // 系统瞬时重负载（观测到过 8~10 倍于正常耗时）下 GSAP 真动画播放类测试曾与本测试同时超时，
+  // 这里同步加宽，不是功能 bug，请勿单独把本条数字改回小值。
   it('no-preference：切页签后可见行入场编排收束到合法终态（opacity ∈ {""(clearProps 自清), "1"}）', async () => {
     stubMatchMedia(false)
     renderView()
@@ -1163,8 +1176,8 @@ describe('ProgressView GSAP 动效（gsap.matchMedia 全包；reduced-motion 守
         expect(st.opacity === '' || st.opacity === '1').toBe(true)
         expect(st.visibility === '' || st.visibility === 'inherit').toBe(true)
       }
-    }, { timeout: 8000 })
-  }, 11000)
+    }, { timeout: 15000 })
+  }, 20000)
 })
 
 describe('ProgressView 失败行短成因（W3/F-b 沿用：automation_cause 直判优先，空串回落 regex）', () => {
