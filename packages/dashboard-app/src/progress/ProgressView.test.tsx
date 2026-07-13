@@ -138,6 +138,10 @@ let automationFail = false
 // v9-J：/api/mem/session-links 批量预取桩——缺省 { links: {} }（无命中，chip 落回静态命令）；
 // 各用例改写此变量的 links 表来控制个别行的 session-link 命中结果（key=`${name}@${root}`）。
 let sessionLinksResponse: { status: number; body: unknown } = { status: 200, body: { links: {} } }
+// codex review 第四轮 P2 专用：手动控制 /api/mem/session-links 请求何时 resolve（同 actionGate
+// 姿势，但 actionGate 挂在 session-links 分支之后、管不到这个端点）——用来在「新请求已发出但还
+// 没落地」这个窗口里断言 chip 有没有诚实降级，而不是继续挂着上一批可能已经张冠李戴的真命令。
+let sessionLinksGate: Promise<void> | null = null
 
 beforeEach(() => {
   fetchLog = []
@@ -147,6 +151,7 @@ beforeEach(() => {
   automationSettings = { max_parallel: 4, max_retries: 1, default_opt_in: false, image: '' }
   automationFail = false
   sessionLinksResponse = { status: 200, body: { links: {} } }
+  sessionLinksGate = null
   global.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input)
     fetchLog.push(`${init?.method ?? 'GET'} ${url}${typeof init?.body === 'string' ? ` ${init.body}` : ''}`)
@@ -162,6 +167,7 @@ beforeEach(() => {
       return new Response(JSON.stringify({ ok: true, settings: automationSettings }), { status: 200 })
     }
     if (/\/api\/mem\/session-links\?/.test(url)) {
+      if (sessionLinksGate) await sessionLinksGate
       return new Response(JSON.stringify(sessionLinksResponse.body), { status: sessionLinksResponse.status })
     }
     if (actionGate) await actionGate
@@ -933,6 +939,47 @@ describe('ProgressView v9-J：session-link 批量预取依赖键含 automation_w
     expect(screen.getByTestId('prg9-cmd-wt-refetch').textContent).toContain('恢复会话')
   })
 
+  // codex review 第四轮 P2（第二轮修复自己引入的次生问题）：sessionLinks 这个 state 以 fr.key
+  // （不含 worktree）为键，worktree 换新现场触发上面这条重拉时，旧的、可能命中了「旧 worktree」
+  // 真恢复命令的条目在新请求落地前原样留着——网络异常挂起、请求久悬不 resolve 时，chip 会无限期
+  // 继续展示指向已过期/不相关 worktree 的 resumeCmd，用户按下去接管的其实是不相关的旧会话。
+  // fix=重新发起请求前先把这批行在 sessionLinks 里的旧条目清掉，让 cmdChipOf 诚实降级到静态兜底
+  // 命令，直到新请求真正落地。用 sessionLinksGate 卡住新请求，断言这个「诚实降级」的中间态。
+  it('worktree 换新现场、新请求落地前：旧 worktree 的真恢复命令先被清空、chip 落回静态兜底命令（不张冠李戴）', async () => {
+    // 首次批量拉取：旧 worktree 命中 found:true 真恢复命令，chip 显示该真命令。
+    const oldResumeCmd = 'cd /tmp/wt/old && claude --resume old-session'
+    sessionLinksResponse = { status: 200, body: { links: { [WT_KEY]: { found: true, resumeCmd: oldResumeCmd } } } }
+    const { rerender } = render(viewAt(fixture('/tmp/wt/old')))
+    await waitFor(() => expect(sessionLinkCalls()).toBe(1))
+    await waitFor(() => expect(screen.getByTestId('prg9-cmd-wt-refetch').textContent).toContain(oldResumeCmd))
+
+    // 自动重试重新分配了新 worktree（触发 effect 重跑）；这次批量端点先卡住——手动控制何时
+    // resolve，模拟「网络异常挂起、迟迟不落地」的窗口（同本文件 730 行 actionGate 的挂起姿势）。
+    let release!: () => void
+    sessionLinksGate = new Promise<void>((res) => {
+      release = res
+    })
+    const newResumeCmd = 'cd /tmp/wt/new && claude --resume new-session'
+    sessionLinksResponse = { status: 200, body: { links: { [WT_KEY]: { found: true, resumeCmd: newResumeCmd } } } }
+    rerender(viewAt(fixture('/tmp/wt/new')))
+
+    // 新请求已经发出（第 2 次调用）但还没 resolve：chip 不能继续挂着旧 worktree 的真命令，必须先
+    // 诚实降级为新 worktree 的静态兜底命令（在终端接管 cd /tmp/wt/new）。
+    await waitFor(() => expect(sessionLinkCalls()).toBe(2))
+    await waitFor(() => {
+      const chip = screen.getByTestId('prg9-cmd-wt-refetch')
+      expect(chip.textContent).not.toContain(oldResumeCmd)
+      expect(chip.textContent).not.toContain(newResumeCmd)
+      expect(chip.textContent).toContain('在终端接管')
+      expect(chip.getAttribute('title')).toBe('cd /tmp/wt/new')
+    })
+
+    // 放行新请求 resolve（这次落地的是新 worktree 下的新 found:true 结果）：chip 升级为新命令。
+    release()
+    await waitFor(() => expect(screen.getByTestId('prg9-cmd-wt-refetch').textContent).toContain(newResumeCmd))
+    expect(screen.getByTestId('prg9-cmd-wt-refetch').textContent).toContain('恢复会话')
+  })
+
   it('failed 行仅无关字段（updated_at）变化、automation_worktree 不变 → 不重新调用批量端点（防矫枉过正/请求风暴）', async () => {
     sessionLinksResponse = { status: 200, body: { links: {} } }
     const { rerender } = render(viewAt(fixture('/tmp/wt/same', '2026-07-12T10:00:00Z')))
@@ -1090,16 +1137,27 @@ describe('ProgressView 抽屉焦点陷阱（#3 无障碍）', () => {
   // 31s ≈ 正常 3.8s 的 8 倍，本测试与下方「scrim 点击关闭」测试、以及下方两条 GSAP 入场动效
   // 测试同时 waitFor 超时失败。GSAP 走真实 wall-clock 定时器，系统越卡动画播放越慢，waitFor
   // 轮询又吃同一份 CPU 排期，两头一起被拖慢——这是「真动画播放」类测试的结构性弱点，不是功能
-  // bug。进一步放宽余量以扛住类似量级（8~10 倍）的瞬时减速；请勿不明就里地把下面的数字“优化”改小。
+  // bug。上一轮判断“扛住 8~10 倍瞬时减速”即够；本轮（同一 flaky 问题第三次加固）证明这个
+  // 量级仍不够：`uptime` 显示 load averages 7.35 7.31 6.33，1/5/15 分钟三个窗口都在 7 附近，
+  // 是持续高负载（已维持 15 分钟以上）而非瞬时尖峰；机器上同时跑着 WeChat/Obsidian/Codex
+  // 桌面 App（多个 helper 进程）/Live Wallpaper/cmux，加上本会话自身多路并行 agent/codex
+  // review 进程——这是台真实日常使用机器，不是干净专用 CI 机器。本轮撞见系统 16 倍减速
+  // （整套耗时 63s ≈ 正常 3.9s 的 16 倍），15000/20000 没扛住，本测试与「scrim 点击关闭」、
+  // 以及下方两条 GSAP 入场动效测试又双叒同时 waitFor 超时失败，同一根因。再加宽到 waitFor
+  // 40000 / it() 50000——这是这类依赖真实挂钟时间的动画测试能给的合理上限了（单条用例超过
+  // 一分钟会明显拖慢整体反馈，不应再往上加）。若这个量级仍频繁失败（而非罕见撞见），说明
+  // 问题已不在超时数字，根治需要改造成不依赖真实挂钟时间的写法（mock GSAP 完成回调 / fake
+  // timers 手动推进 / 只断言声明式终态而不等真播放完）——那是独立的测试基建改造项，不在本轮
+  // 范围内。请勿不明就里地把下面的数字“优化”改小。
   it('no-preference：关闭抽屉（关闭钮，GSAP 退场补间完成后卸载）归还焦点', async () => {
     stubMatchMedia(false)
     renderView()
     const trigger = screen.getByTestId('prg9-name-gate-demo')
     await openDrawer('gate-demo')
     fireEvent.click(screen.getByTestId('detail-close'))
-    await waitFor(() => expect(screen.queryByTestId('prg9-drawer')).toBeNull(), { timeout: 15000 })
+    await waitFor(() => expect(screen.queryByTestId('prg9-drawer')).toBeNull(), { timeout: 40000 })
     expect(document.activeElement).toBe(trigger)
-  }, 20000)
+  }, 50000)
 
   it('no-preference：scrim 点击关闭同样归还焦点（GSAP 退场分支）', async () => {
     stubMatchMedia(false)
@@ -1107,9 +1165,9 @@ describe('ProgressView 抽屉焦点陷阱（#3 无障碍）', () => {
     const trigger = screen.getByTestId('prg9-name-gate-demo')
     await openDrawer('gate-demo')
     fireEvent.click(screen.getByTestId('prg9-scrim'))
-    await waitFor(() => expect(screen.queryByTestId('prg9-drawer')).toBeNull(), { timeout: 15000 })
+    await waitFor(() => expect(screen.queryByTestId('prg9-drawer')).toBeNull(), { timeout: 40000 })
     expect(document.activeElement).toBe(trigger)
-  }, 20000)
+  }, 50000)
 })
 
 describe('ProgressView GSAP 动效（gsap.matchMedia 全包；reduced-motion 守门等强度两分支）', () => {
@@ -1134,7 +1192,10 @@ describe('ProgressView GSAP 动效（gsap.matchMedia 全包；reduced-motion 守
   // 31s ≈ 正常 3.8s 的 8 倍），本测试与下方「切页签后可见行入场」测试、以及上方抽屉退场两条
   // 测试同时 waitFor 超时失败——GSAP 走真实 wall-clock 定时器，系统越卡动画播放越慢，waitFor
   // 轮询又吃同一份 CPU 排期，两头一起被拖慢。这是「真动画播放」类测试的结构性弱点，不是功能
-  // bug；进一步放宽余量以扛住类似量级（8~10 倍）的瞬时减速，请勿不明就里地把数字“优化”改小。
+  // bug；同一 flaky 问题第三次加固（完整加固历史与结构性弱点判断见上方「关闭抽屉」测试前
+  // 注释）——本轮系统持续高负载（uptime load average ~7.3）下撞见 16 倍减速，15000/20000
+  // 没扛住，本测试与上方两条抽屉退场测试、下方「切页签后可见行入场」测试同批同时失败。加宽
+  // 到 waitFor 40000 / it() 50000，这是这类测试能给的合理上限，请勿单独把数字“优化”改小。
   it('no-preference：行入场 stagger + 轨道名浮现后到达同一终态（opacity 1）', async () => {
     stubMatchMedia(false)
     renderView()
@@ -1145,8 +1206,8 @@ describe('ProgressView GSAP 动效（gsap.matchMedia 全包；reduced-motion 守
       for (const el of Array.from(screen.getByTestId('prg9-rail-changelog-cn').querySelectorAll<HTMLElement>('.rl-name'))) {
         expect(el.style.opacity).toBe('1')
       }
-    }, { timeout: 15000 })
-  }, 20000)
+    }, { timeout: 40000 })
+  }, 50000)
 
   // ── v9-H：状态 sheet 切换的两分支（demo applyDeckFilter 对位）——reduced 直切不编排，
   //    motion 切换后可见行轻入场并以 clearProps 收束到无 inline 残留（或被首屏入场补间以
@@ -1163,9 +1224,9 @@ describe('ProgressView GSAP 动效（gsap.matchMedia 全包；reduced-motion 守
     expect(screen.getByTestId('prg9-stack').querySelectorAll('[data-testid^="prg9-row-"]')).toHaveLength(6)
   })
 
-  // flaky 余量：与上方「行入场 stagger」测试同族同因（详见该测试前注释）——2026-07-13 亲验，
-  // 系统瞬时重负载（观测到过 8~10 倍于正常耗时）下 GSAP 真动画播放类测试曾与本测试同时超时，
-  // 这里同步加宽，不是功能 bug，请勿单独把本条数字改回小值。
+  // flaky 余量：与上方「行入场 stagger」测试同族同因（完整加固历史见「关闭抽屉」测试前注释）
+  // ——本轮系统持续高负载下撞见 16 倍减速，本测试与其余 3 条同批同时失败，同步加宽到 waitFor
+  // 40000 / it() 50000，不是功能 bug，请勿单独把本条数字改回小值。
   it('no-preference：切页签后可见行入场编排收束到合法终态（opacity ∈ {""(clearProps 自清), "1"}）', async () => {
     stubMatchMedia(false)
     renderView()
@@ -1176,8 +1237,8 @@ describe('ProgressView GSAP 动效（gsap.matchMedia 全包；reduced-motion 守
         expect(st.opacity === '' || st.opacity === '1').toBe(true)
         expect(st.visibility === '' || st.visibility === 'inherit').toBe(true)
       }
-    }, { timeout: 15000 })
-  }, 20000)
+    }, { timeout: 40000 })
+  }, 50000)
 })
 
 describe('ProgressView 失败行短成因（W3/F-b 沿用：automation_cause 直判优先，空串回落 regex）', () => {

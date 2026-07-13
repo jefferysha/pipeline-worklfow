@@ -590,6 +590,16 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
     }
     let cancelled = false
     const failedRows = flatRows.filter((fr) => fr.row.state === 'failed')
+    // codex review 第四轮 P2：重新拉取前先清掉这批行在 sessionLinks 里的旧条目——否则 worktree
+    // 换了新现场后，在新请求落地之前（网络异常挂起时可能无限久）会一直吐出上一批可能已经指向
+    // 错误/过期 worktree 的 resumeCmd，用户按下去接管的其实是不相关的旧会话。清空期间 cmdChipOf
+    // 落回静态兜底命令——诚实缺省优先于展示可能张冠李戴的假信息。成功回调仍是整表替换（沿用
+    // new Map(Object.entries(result))），顺带清理「已不再 failed」的陈旧条目，无需额外处理。
+    setSessionLinks((prev) => {
+      const next = new Map(prev)
+      for (const fr of failedRows) next.delete(fr.key)
+      return next
+    })
     fetchSessionLinks(failedRows.map((fr) => ({ root: fr.row.root, name: fr.row.change.name })))
       .then((result) => {
         if (!cancelled) setSessionLinks(new Map(Object.entries(result)))
