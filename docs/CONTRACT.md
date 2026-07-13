@@ -59,6 +59,13 @@ get/set/transition 的 stdout 与 exit code 以 **golden-oracle 双跑逐字一�
 > 1800s，与老内核一致，不再是差异；build⇄verify 自动副作用 —— iteration-10/13 #14 已逐字实现老仓
 > 事件体副作用，不再靠出口补偿。）
 
+> 2026-07-13（workflow-customization-engine）：`check <name>` 现同时支持 default 相位与自定义 workflow
+> ——读 `.pipeline.yaml` 的 `workflow` 字段分流（同 `transition` 的双轨分岔）：`default`（含历史遗留
+> 空串）走相位出口全量规则表（`guardCheck`）；非 `default` 则加载 `.pipeline/workflows/<workflow>.yaml`、
+> 按当前 step 声明的 step-guard（`evaluateStepGuards`）评估。exit 语义对两轨一致：guard 不过同样
+> `2`、通过 `0`；workflow/step 配置错（文件缺失·非法、当前 step 不在图）`1`。两条路径都是纯预览，
+> 绝不写盘。
+
 ## 4. 目录所有权（并行 agent 只写自己的格子）
 
 | 目录 | 所有者 | 内容 |

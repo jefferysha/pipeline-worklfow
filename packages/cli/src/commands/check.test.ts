@@ -1,4 +1,7 @@
-import { describe, expect, test } from 'vitest'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterEach, beforeEach, describe, expect, test } from 'vitest'
 import type { GuardContext, GuardResult, PipelineState } from '@pipeline-lite/kernel'
 import { cmdCheck } from './check.js'
 import { makeDeps, mockState, spy } from '../test-support.js'
@@ -104,5 +107,145 @@ describe('check —— guard 报告（人读）；0 过 / 2 不过（CONTRACT §
     const code = await cmdCheck(deps, '../etc')
     expect(code).toBe(1)
     expect(deps.store.read.calls).toHaveLength(0)
+  })
+
+  test('回归：workflow 字段空串（历史遗留）仍走 default guardCheck，不误入自定义分支（`||` 兜空串）', async () => {
+    const deps = makeDeps({ state: mockState({ phase: 'build', workflow: '' }) })
+    const code = await cmdCheck(deps, 'demo')
+    expect(code).toBe(0)
+    expect(deps.flow.guardCheck.calls).toHaveLength(1)
+    expect(deps.outLines).toEqual(['[CHECK] demo (phase=build)', '  [PASS] 所有检查通过'])
+  })
+})
+
+/** 自定义 workflow 的 step-guard 预览（真临时目录，同 internalSkillGate.test.ts 手法）——
+ * check 是纯预览：读当前 step 定义按 step-guard 评估，绝不写盘。exit 过 0 / guard 不过 2 /
+ * 配置错（workflow 缺失·非法、step 不在图）1。 */
+describe('check —— 自定义 workflow 按当前 step 的 step-guard 评估', () => {
+  let root: string
+
+  // s1 同时挂 tasks-at-least 与 nonempty-output 两类 guard（覆盖两条评估路径）；s1 声明到 s2 的
+  // transition + s2 终态零 transition，仅为满足 loadWorkflow 读入时的 validateWorkflow（非终止 step
+  // 必须有出边），与本文件只测的 step-guard 评估无关。
+  const WF = `name: custom-check
+steps:
+  - id: s1
+    label: build-step
+    gate: null
+    skills: []
+    inputs: []
+    outputs:
+      - field: design_doc
+        type: file_path
+    guards:
+      - type: tasks-at-least
+        n: 1
+      - type: nonempty-output
+    transitions:
+      - event: complete
+        to: s2
+  - id: s2
+    label: done
+    gate: null
+    skills: []
+    inputs: []
+    outputs: []
+    guards: []
+    transitions: []
+`
+
+  beforeEach(async () => {
+    root = await mkdtemp(join(tmpdir(), 'check-custom-wf-'))
+    await mkdir(join(root, '.pipeline', 'workflows'), { recursive: true })
+    await writeFile(join(root, '.pipeline', 'workflows', 'custom-check.yaml'), WF, 'utf8')
+    await mkdir(join(root, 'openspec', 'changes', 'demo'), { recursive: true })
+  })
+
+  afterEach(async () => {
+    await rm(root, { recursive: true, force: true })
+  })
+
+  test('step guard 全通过（tasks.md 达标 + 产出字段非空）→ exit 0 [PASS]，且不调 default guardCheck', async () => {
+    await writeFile(join(root, 'openspec', 'changes', 'demo', 'tasks.md'), '- [ ] 任务一\n', 'utf8')
+    const deps = makeDeps({
+      cwd: root,
+      state: mockState({ workflow: 'custom-check', phase: 's1', design_doc: 'docs/design.md' }),
+    })
+    const code = await cmdCheck(deps, 'demo')
+    expect(code).toBe(0)
+    expect(deps.outLines).toEqual(['[CHECK] demo (phase=s1)', '  [PASS] 所有检查通过'])
+    // 走自定义 step-guard 路径，不再委托 default 相位出口全量规则表
+    expect(deps.flow.guardCheck.calls).toHaveLength(0)
+  })
+
+  test('tasks-at-least 不足（缺 tasks.md）→ exit 2 [FAIL] 逐行 + 汇总', async () => {
+    // design_doc 非空 → nonempty-output 单独通过，隔离出唯一一条 tasks 失败
+    const deps = makeDeps({
+      cwd: root,
+      state: mockState({ workflow: 'custom-check', phase: 's1', design_doc: 'docs/design.md' }),
+    })
+    const code = await cmdCheck(deps, 'demo')
+    expect(code).toBe(2)
+    expect(deps.outLines).toEqual([
+      '[CHECK] demo (phase=s1)',
+      "  [FAIL] step 's1' 要求 tasks.md 至少 1 个任务（当前=0）",
+      '  [FAIL] 共 1 项未通过',
+    ])
+  })
+
+  test('nonempty-output 缺字段（design_doc 空）→ exit 2 [FAIL]', async () => {
+    // tasks.md 达标 → tasks-at-least 单独通过，隔离出唯一一条产出字段失败
+    await writeFile(join(root, 'openspec', 'changes', 'demo', 'tasks.md'), '- [ ] 任务一\n', 'utf8')
+    const deps = makeDeps({
+      cwd: root,
+      state: mockState({ workflow: 'custom-check', phase: 's1', design_doc: '' }),
+    })
+    const code = await cmdCheck(deps, 'demo')
+    expect(code).toBe(2)
+    expect(deps.outLines).toEqual([
+      '[CHECK] demo (phase=s1)',
+      "  [FAIL] 字段 'design_doc' 未设置（step 's1' 声明为必须产出）",
+      '  [FAIL] 共 1 项未通过',
+    ])
+  })
+
+  test('workflow 文件不存在 → exit 1，stderr 报未找到，不写 stdout', async () => {
+    const deps = makeDeps({ cwd: root, state: mockState({ workflow: 'ghost', phase: 's1' }) })
+    const code = await cmdCheck(deps, 'demo')
+    expect(code).toBe(1)
+    expect(deps.outLines).toEqual([])
+    expect(deps.errLines.join('\n')).toContain("workflow 'ghost' 未找到")
+  })
+
+  test('当前 phase 不是该 workflow 任何 step → exit 1', async () => {
+    const deps = makeDeps({ cwd: root, state: mockState({ workflow: 'custom-check', phase: 'no-such-step' }) })
+    const code = await cmdCheck(deps, 'demo')
+    expect(code).toBe(1)
+    expect(deps.outLines).toEqual([])
+    expect(deps.errLines.join('\n')).toContain("step 'no-such-step' 不在 workflow 'custom-check' 里")
+  })
+
+  test('workflow 文件非法（悬空 transition to）→ loadWorkflow 抛错被 catch → exit 1（评审应修：钉住 try/catch 分支）', async () => {
+    // s1 的出边指向不存在的 step → validateWorkflow 报「to 'ghost-step' 不存在」→ loadWorkflow
+    // fail-loud 抛（parse 本身接受该文件，确保走的是 check.ts 的 catch 分支而非 parse 错误）。
+    const BROKEN = `name: broken-wf
+steps:
+  - id: s1
+    label: dangling
+    gate: null
+    skills: []
+    inputs: []
+    outputs: []
+    guards: []
+    transitions:
+      - event: complete
+        to: ghost-step
+`
+    await writeFile(join(root, '.pipeline', 'workflows', 'broken-wf.yaml'), BROKEN, 'utf8')
+    const deps = makeDeps({ cwd: root, state: mockState({ workflow: 'broken-wf', phase: 's1' }) })
+    const code = await cmdCheck(deps, 'demo')
+    expect(code).toBe(1)
+    expect(deps.outLines).toEqual([]) // 配置错不写 stdout（同 未找到/step 不在图 两分支）
+    expect(deps.errLines.join('\n')).toContain('校验失败')
   })
 })
