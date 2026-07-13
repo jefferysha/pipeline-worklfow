@@ -126,7 +126,9 @@ export interface ProgressGroup {
 export type ProgressCounts = Record<ProgressState, number>
 
 export interface ProgressSelection {
-  /** 组序：root 升序；同 root 下 default 在前，其余 workflow 名升序。纯归档组（无活跃行）不出。 */
+  /** 组序：root 升序；同 root 下 default 在前，其余 workflow 名升序——纯归档组（零活跃行、
+   *  archived 非空）现在同样出现，供归档折叠区渲染；真正不出现的只有 rows 与 archived 皆空的
+   *  组，byKey 构造保证不会有这种组（组一旦创建就紧接着被推入其一，见下方构造逻辑）。 */
   groups: ProgressGroup[]
   /** 五态计数（筛选条 chips 数据源）。不变式：各态之和 === total === 各组行数之和。 */
   counts: ProgressCounts
@@ -193,7 +195,7 @@ export function selectProgress(
     }
   }
 
-  const groups = [...byKey.values()].filter((g) => g.rows.length > 0)
+  const groups = [...byKey.values()].filter((g) => g.rows.length > 0 || g.archived.length > 0)
   for (const g of groups) {
     g.rows.sort(compareRows)
     g.archived.sort(compareRows)

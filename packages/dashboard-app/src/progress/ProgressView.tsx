@@ -439,7 +439,8 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
 
   // v9-H：聚合语境（currentRoot=''）按项目分组。组序=各组首行在全局序（需动手置前+updated_at
   // 倒序）中的先后——最紧急/最新的项目组自然靠前；组内序=全局序在组内的投影（口径不变）；
-  // 筛选后空组不产生条目（demo applyDeckFilter 空组隐藏的数据层等价）。
+  // 零活跃行且无归档行的组才会消失——有归档行的 root 即使零活跃行也保留组头，好挂归档折叠区
+  // （archivedSectionFor 本不看 deckTab，归档区独立于筛选恒定存在）。
   const projGroups = useMemo(() => {
     const out: { root: string; rows: FlatRow[] }[] = []
     const idx = new Map<string, number>()
@@ -452,8 +453,14 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
       }
       out[i]!.rows.push(fr)
     }
+    // #2 边界补：零活跃行（本来就没有，或被 deckTab 筛没了）但有归档行的 root 仍要补进来——
+    // 否则挂在 <section className="prg9g-group"> 内部的 archivedSectionFor(g.root) 无处渲染。
+    // 归档折叠区独立于 deckTab 恒定出现（同 archivedSectionFor 本不看 deckTab 的既有设计）。
+    for (const root of archivedFlatByRoot.keys()) {
+      if (!idx.has(root)) out.push({ root, rows: [] })
+    }
     return out
-  }, [visibleRows])
+  }, [visibleRows, archivedFlatByRoot])
 
   function setPatch(key: string, patch: RowPatch | null): void {
     setPatches((prev) => {

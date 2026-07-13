@@ -188,12 +188,11 @@ describe('selectProgress —— 项目×workflow 分组选择器', () => {
     expect(sel.total).toBe(1)
   })
 
-  it('archived 一律排除出行，但计入组头 archivedCount；纯归档组整组隐藏', () => {
+  it('archived 一律排除出行，但计入组头 archivedCount', () => {
     const snap = makeSnapshot([
       makeProject('/a', [
         makeChange('live', 'open'),
         makeChange('gone', 'archive', { archived: 'true' }),
-        makeChange('rel-gone', 'ship', { archived: 'true', fields: { workflow: 'release-train' } }),
       ]),
     ])
     const sel = selectProgress(snap, '/a', RULES)
@@ -201,6 +200,35 @@ describe('selectProgress —— 项目×workflow 分组选择器', () => {
     expect(sel.groups[0]).toMatchObject({ workflow: 'default', archivedCount: 1 })
     expect(sel.groups[0]!.rows.map((r) => r.change.name)).toEqual(['live'])
     expect(sel.total).toBe(1)
+  })
+
+  it('P1 修复：workflow 组若全部 change 都归档（零活跃行），组仍出现在 groups 里（archived 非空即保留组，供归档折叠区渲染）', () => {
+    const snap = makeSnapshot([
+      makeProject('/a', [
+        makeChange('live', 'open'),
+        makeChange('rel-gone-1', 'ship', {
+          archived: 'true',
+          updated_at: '2026-07-05T00:00:00Z',
+          fields: { workflow: 'release-train' },
+        }),
+        makeChange('rel-gone-2', 'review', {
+          archived: 'true',
+          updated_at: '2026-07-06T00:00:00Z',
+          fields: { workflow: 'release-train', release_notes: 'n.md' },
+        }),
+      ]),
+    ])
+    const sel = selectProgress(snap, '/a', RULES)
+    expect(sel.groups).toHaveLength(2)
+    const relGroup = sel.groups.find((g) => g.workflow === 'release-train')
+    expect(relGroup).toBeDefined()
+    expect(relGroup!.root).toBe('/a')
+    expect(relGroup!.rows).toEqual([])
+    expect(relGroup!.archivedCount).toBe(2)
+    expect(relGroup!.archived.map((r) => r.change.name)).toEqual(['rel-gone-2', 'rel-gone-1']) // updated_at 倒序
+    // 不变式不变：纯归档组不产任何计数，counts/total 仍只认活跃行 'live'
+    expect(sel.total).toBe(1)
+    expect(sel.counts).toEqual({ gate: 0, agent: 1, running: 0, queued: 0, failed: 0 })
   })
 
   it('#2：archived 数组含归档行的完整投影（state 判定同源，updated_at 倒序），且不影响 counts/total 不变式', () => {

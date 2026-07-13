@@ -10,6 +10,7 @@ import { ProgressView } from './ProgressView'
 
 const ROOT_A = '/tmp/proj-a'
 const ROOT_B = '/tmp/proj-b'
+const ROOT_C = '/tmp/proj-c'
 
 /**
  * v9-F1 fixture：对照 design-demos/v9-flowdeck.html 进度统一面剧本——单列表六行：
@@ -321,6 +322,48 @@ describe('ProgressView 归档折叠行「展开」（#2 真交互）', () => {
     fireEvent.click(toggle)
     const archivedRow = screen.getByTestId('prg9-archived-row-old-demo')
     expect(within(archivedRow).queryAllByRole('button')).toHaveLength(0)
+    // 单 root fixture：冲掉并发上限探测请求落地（不冲会刷 act 告警）
+    await act(async () => {})
+  })
+
+  it('聚合语境：全归档 root（零活跃行）仍渲染项目组头 + 归档折叠区可展开（P1 修复：demo↔生产残余差异清单 #2 边界补）', () => {
+    renderView({
+      snapshot: makeSnapshot([
+        makeProject(ROOT_A, [makeChange('live-a', 'open')]),
+        makeProject(ROOT_C, [
+          makeChange('gone-1', 'archive', { archived: 'true' }),
+          makeChange('gone-2', 'build', { archived: 'true', fields: { automation: 'failed' } }),
+        ]),
+      ]),
+      rulesByKey: new Map<string, WorkflowRules>([
+        [rulesKey(ROOT_A, 'default'), DEFAULT_RULES],
+        [rulesKey(ROOT_C, 'default'), DEFAULT_RULES],
+      ]),
+    })
+    const group = screen.getByTestId('prg9g-group-proj-c')
+    expect(group).toBeInTheDocument()
+    expect(screen.getByTestId('prg9g-head-proj-c')).toBeInTheDocument()
+    // 零活跃行的诚实计数：不是特殊隐藏，是如实显示 0
+    expect(screen.getByTestId('prg9g-n-proj-c').textContent).toBe('0')
+    const toggle = within(group).getByTestId('prg9-fold-toggle-proj-c')
+    expect(toggle.textContent).toContain('2 个已归档')
+    fireEvent.click(toggle)
+    expect(screen.getByTestId('prg9-archived-row-gone-1')).toBeInTheDocument()
+    expect(screen.getByTestId('prg9-archived-row-gone-2')).toBeInTheDocument()
+  })
+
+  it('单项目语境（currentRoot=全归档 root）：归档折叠区同样可见（防回归——第一层修复已足够，无需本层改动）', async () => {
+    renderView({
+      snapshot: makeSnapshot([
+        makeProject(ROOT_C, [makeChange('gone-1', 'archive', { archived: 'true' })]),
+      ]),
+      rulesByKey: new Map<string, WorkflowRules>([[rulesKey(ROOT_C, 'default'), DEFAULT_RULES]]),
+      currentRoot: ROOT_C,
+    })
+    expect(document.querySelector('[data-testid^="prg9g-head-"]')).toBeNull()
+    const toggle = screen.getByTestId('prg9-fold-toggle-proj-c')
+    fireEvent.click(toggle)
+    expect(screen.getByTestId('prg9-archived-row-gone-1')).toBeInTheDocument()
     // 单 root fixture：冲掉并发上限探测请求落地（不冲会刷 act 告警）
     await act(async () => {})
   })

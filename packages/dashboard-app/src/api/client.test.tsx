@@ -212,4 +212,89 @@ describe('fetchSessionLinks（GET /api/mem/session-links 批量）', () => {
     const got = await fetchSessionLinks([{ root: '/repo', name: 'a' }])
     expect(got).toEqual(links)
   })
+
+  // ── 客户端分片（codex review P2）：server 端单请求硬上限 50（roots.length > 50 → 400），
+  //    此前 fetchSessionLinks 不分片，超限时整批被 400、非 2xx 又被静默吃成 {}，导致全部失败行
+  //    （不只是超出上限的那部分）集体退化成静态兜底命令。以下用例锁住「按 50 一批分片、并发发出、
+  //    结果合并、单批失败只影响那一批」的契约。──
+
+  it('items 超过分片阈值（51 个）→ 按 50 一批分两次请求，各批 root/name 对数分别是 50 和 1', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ links: {} }) })
+    vi.stubGlobal('fetch', fetchMock)
+    const { fetchSessionLinks } = await import('./client')
+    const items = Array.from({ length: 51 }, (_, i) => ({ root: '/repo', name: `n${i}` }))
+    await fetchSessionLinks(items)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    const calls = fetchMock.mock.calls as Array<[string, RequestInit | undefined]>
+    const pairCounts = calls.map(([url]) => {
+      const sp = new URLSearchParams(String(url).split('?')[1] ?? '')
+      return { roots: sp.getAll('root').length, names: sp.getAll('name').length }
+    })
+    expect(pairCounts).toEqual([
+      { roots: 50, names: 50 },
+      { roots: 1, names: 1 },
+    ])
+  })
+
+  it('恰好 50 个（分片阈值本身）→ 只发 1 次请求，不多切一刀', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ links: {} }) })
+    vi.stubGlobal('fetch', fetchMock)
+    const { fetchSessionLinks } = await import('./client')
+    const items = Array.from({ length: 50 }, (_, i) => ({ root: '/repo', name: `n${i}` }))
+    await fetchSessionLinks(items)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('两批都成功 → 合并结果同时包含两批各自的 key，互不覆盖', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(async () => ({
+        ok: true,
+        json: async () => ({ links: { 'a@/repo': { found: true, platform: 'claude', resumeCmd: 'cmd-a' } } }),
+      }))
+      .mockImplementationOnce(async () => ({
+        ok: true,
+        json: async () => ({ links: { 'b@/repo': { found: true, platform: 'codex', resumeCmd: 'cmd-b' } } }),
+      }))
+    vi.stubGlobal('fetch', fetchMock)
+    const { fetchSessionLinks } = await import('./client')
+    const items = Array.from({ length: 51 }, (_, i) => ({ root: '/repo', name: `n${i}` }))
+    const got = await fetchSessionLinks(items)
+    expect(got).toEqual({
+      'a@/repo': { found: true, platform: 'claude', resumeCmd: 'cmd-a' },
+      'b@/repo': { found: true, platform: 'codex', resumeCmd: 'cmd-b' },
+    })
+  })
+
+  it('其中一批非 2xx → 该批 key 缺席，另一批成功的 key 仍在（局部失败不拖累整体）', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(async () => ({ ok: false, status: 500, json: async () => ({ ok: false }) }))
+      .mockImplementationOnce(async () => ({
+        ok: true,
+        json: async () => ({ links: { 'b@/repo': { found: true, platform: 'codex', resumeCmd: 'cmd-b' } } }),
+      }))
+    vi.stubGlobal('fetch', fetchMock)
+    const { fetchSessionLinks } = await import('./client')
+    const items = Array.from({ length: 51 }, (_, i) => ({ root: '/repo', name: `n${i}` }))
+    const got = await fetchSessionLinks(items)
+    expect(got).toEqual({ 'b@/repo': { found: true, platform: 'codex', resumeCmd: 'cmd-b' } })
+  })
+
+  it('其中一批 fetch 网络异常（reject）→ 该批 key 缺席，另一批成功的 key 仍在（网络异常同样不拖累其它批）', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(async () => {
+        throw new Error('network down')
+      })
+      .mockImplementationOnce(async () => ({
+        ok: true,
+        json: async () => ({ links: { 'b@/repo': { found: true, platform: 'codex', resumeCmd: 'cmd-b' } } }),
+      }))
+    vi.stubGlobal('fetch', fetchMock)
+    const { fetchSessionLinks } = await import('./client')
+    const items = Array.from({ length: 51 }, (_, i) => ({ root: '/repo', name: `n${i}` }))
+    const got = await fetchSessionLinks(items)
+    expect(got).toEqual({ 'b@/repo': { found: true, platform: 'codex', resumeCmd: 'cmd-b' } })
+  })
 })

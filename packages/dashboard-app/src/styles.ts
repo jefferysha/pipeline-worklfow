@@ -1018,4 +1018,14 @@ html.prg9-lock { overflow: hidden; }
 .prg9-row--archived { opacity: .6; filter: saturate(.7); }
 .prg9-row--archived .prg9-name--ro,
 .prg9-row--archived .prg9-name--ro:hover { color: var(--text-3); cursor: default; text-decoration: none; }
+
+/* codex review 抓到的误删恢复：上一轮 T18 死 CSS 清理误删了仍在用的 .ev__chip 系列
+   （ProgressView.tsx gate 行内联证据 chip 消费，见 .prg9-ev 高度/字号覆盖同一元素）——
+   ac12204 起点原样摘回，字节级原状，不与 .ev（裸包裹类，全仓 tsx 零引用，确认真死）混淆。 */
+.ev__chip { display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 8px; border-radius: 6px; font-size: 11px; font-family: var(--mono); border: 1px solid var(--border); background: var(--fill); color: var(--text-2); white-space: nowrap; }
+.ev__chip--pass { background: var(--green-t); color: var(--green-d); border-color: var(--green-b); }
+.ev__chip--fail { background: var(--red-t); color: var(--red-d); border-color: var(--red-b); }
+.ev__chip--pending { background: transparent; border-style: dashed; color: var(--text-3); }
+button.ev__chip--neutral { cursor: pointer; }
+button.ev__chip--neutral:hover { border-color: var(--border-2); color: var(--text); background: var(--card); }
 `

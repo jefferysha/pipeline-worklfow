@@ -171,3 +171,25 @@ describe('GLOBAL_CSS —— v9-H 状态 sheet 页签/项目分组/调度 chip/�
     }
   })
 })
+
+// codex review P2 回归守护：.ev__chip 系列（ProgressView.tsx gate 行内联证据 chip，
+// className={`ev__chip ev__chip--${chip.tone} prg9-ev`}）曾在上一轮死 CSS 清理中被误删——
+// .prg9-ev 只管 sizing，盒子样式/语义配色全靠 .ev__chip 本体与 --pass/--fail/--pending 变体。
+// 此处补断言钉住「存在 + 关键 token」，防止未来再被误判成死代码删除而不被发现（不逐字段穷举，
+// 同本文件既有纪律）。
+describe('GLOBAL_CSS —— .ev__chip 证据 chip 系列（codex review 误删恢复守护）', () => {
+  it('.ev__chip 本体：盒子样式存在（border-radius），与 .prg9-ev 的 sizing-only 覆盖分工互补', () => {
+    const body = ruleBody(GLOBAL_CSS, '.ev__chip')
+    expect(body).toContain('border-radius')
+    expect(body).toContain('var(--border)')
+  })
+
+  it('.ev__chip--pass / .ev__chip--fail 各自有语义色 token（绿/红），不是纯文字裸块', () => {
+    const pass = ruleBody(GLOBAL_CSS, '.ev__chip--pass')
+    expect(pass).toContain('var(--green-t)')
+    expect(pass).toContain('var(--green-d)')
+    const fail = ruleBody(GLOBAL_CSS, '.ev__chip--fail')
+    expect(fail).toContain('var(--red-t)')
+    expect(fail).toContain('var(--red-d)')
+  })
+})

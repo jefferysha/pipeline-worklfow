@@ -649,14 +649,41 @@ export async function fetchSessionLink(root: string, name: string): Promise<Sess
   return (await res.json()) as SessionLink
 }
 
+/** GET /api/mem/session-links 服务端硬上限（server.ts 里 `roots.length > 50` 那道校验的同款数字，
+ *  两处独立维护——这个模块一贯手抄 server 契约保零耦合，同文件里其它接口的既有纪律，不额外引入
+ *  跨包依赖）。 */
+const SESSION_LINKS_CHUNK_SIZE = 50
+
 /** GET /api/mem/session-links（批量）——进度视图 failed 行「回终端」chip 一次预取全部失败行
- *  （产品决策：批量端点而非逐行发请求）。非 2xx 静默降级空表，不抛 ApiError——批量预取失败
- *  不该炸整个视图。 */
+ *  （产品决策：批量端点而非逐行发请求）。items 可能超过 server 端硬上限（SESSION_LINKS_CHUNK_SIZE，
+ *  见上）——不分片会「谁超限、大家一起 400」：单次超限请求被 server 整体拒绝，非 2xx 又被静默吃成
+ *  {}，于是全部失败行（不只是超出上限的那部分）集体退化成静态兜底命令，一个只该影响极端边界的
+ *  上限被放大成全或无的功能丢失。这里按该阈值切片、Promise.all 并发发出各批、结果合并——单批
+ *  「非 2xx 或网络异常」只让那一批对应的 key 缺席（调用方 cmdChipOf 本就有查不到 key 时退化静态
+ *  命令的兜底分支，天然兼容），不拖累其它批。 */
 export async function fetchSessionLinks(items: Array<{ root: string; name: string }>): Promise<Record<string, SessionLink>> {
   if (items.length === 0) return {}
+  const chunks: Array<Array<{ root: string; name: string }>> = []
+  for (let i = 0; i < items.length; i += SESSION_LINKS_CHUNK_SIZE) {
+    chunks.push(items.slice(i, i + SESSION_LINKS_CHUNK_SIZE))
+  }
+  const results = await Promise.all(chunks.map(fetchSessionLinksOneChunk))
+  const merged: Record<string, SessionLink> = {}
+  for (const r of results) Object.assign(merged, r)
+  return merged
+}
+
+/** 单批请求：非 2xx 静默降级空表（同原单批语义）。fetch() 网络异常也在这里用 try/catch 兜住降级
+ *  为空表，不让它 reject 出去——否则 Promise.all 会因一批网络异常整体 reject，把其它已成功批的
+ *  结果也一并丢掉，违背「单批失败不拖累其它批」。 */
+async function fetchSessionLinksOneChunk(items: Array<{ root: string; name: string }>): Promise<Record<string, SessionLink>> {
   const params = new URLSearchParams()
   for (const it of items) { params.append('root', it.root); params.append('name', it.name) }
-  const res = await fetch(`/api/mem/session-links?${params.toString()}`, { headers: { Accept: 'application/json' } })
-  if (!res.ok) return {}
-  return ((await res.json()) as { links: Record<string, SessionLink> }).links
+  try {
+    const res = await fetch(`/api/mem/session-links?${params.toString()}`, { headers: { Accept: 'application/json' } })
+    if (!res.ok) return {}
+    return ((await res.json()) as { links: Record<string, SessionLink> }).links
+  } catch {
+    return {}
+  }
 }
