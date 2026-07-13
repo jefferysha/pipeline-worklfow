@@ -215,8 +215,9 @@ describe('fetchSessionLinks（GET /api/mem/session-links 批量）', () => {
 
   // ── 客户端分片（codex review P2）：server 端单请求硬上限 50（roots.length > 50 → 400），
   //    此前 fetchSessionLinks 不分片，超限时整批被 400、非 2xx 又被静默吃成 {}，导致全部失败行
-  //    （不只是超出上限的那部分）集体退化成静态兜底命令。以下用例锁住「按 50 一批分片、并发发出、
-  //    结果合并、单批失败只影响那一批」的契约。──
+  //    （不只是超出上限的那部分）集体退化成静态兜底命令。以下用例锁住「按 50 一批分片、结果合并、
+  //    单批失败只影响那一批」的契约——各批之间是顺序发出还是并发发出不属于这几条用例锁的范围，
+  //    见后面第八轮 codex review P2 专用的用例。──
 
   it('items 超过分片阈值（51 个）→ 按 50 一批分两次请求，各批 root/name 对数分别是 50 和 1', async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ links: {} }) })
@@ -296,6 +297,51 @@ describe('fetchSessionLinks（GET /api/mem/session-links 批量）', () => {
     const items = Array.from({ length: 51 }, (_, i) => ({ root: '/repo', name: `n${i}` }))
     const got = await fetchSessionLinks(items)
     expect(got).toEqual({ 'b@/repo': { found: true, platform: 'codex', resumeCmd: 'cmd-b' } })
+  })
+
+  // ── 各批顺序发出、不再 Promise.all 并发（第八轮 codex review P2）：server 端
+  //    /api/mem/session-links 单次请求内部本身已经对最多 50 个 root/name pair 并发查询（每个 pair
+  //    还可能触发多次文件系统/SQLite 扫描）。客户端如果再把多个 chunk 一起 Promise.all 甩出去，会在
+  //    单进程 dashboard server 上叠加出成百上千个并发操作，拖慢同进程内其它请求（包括 SSE 心跳）——
+  //    于是 fetchSessionLinks 改成逐批 await。以下用例用一个手动控制 resolve 时机的 fetch mock，
+  //    直接锁住「后一批的 fetch 必须等前一批的 fetch 真正 resolve 之后才发起」，而不只是「调用顺序
+  //    是 1→2→3」——并发实现下调用顺序同样是 1→2→3（chunks.map 本身是同步遍历），但不会等前一批
+  //    resolve，这里如果只断言调用顺序会漏过并发这个问题本身。──
+
+  it('items 超过分片阈值（101 个，切 3 片）→ 各批顺序等待发出，不是一次性 Promise.all 并发', async () => {
+    let callCount = 0
+    let resolvedCount = 0
+    const resolvedCountWhenCalled: number[] = []
+    let unblockFirst!: () => void
+    const firstGate = new Promise<void>((res) => {
+      unblockFirst = res
+    })
+    const fetchMock = vi.fn(async () => {
+      callCount += 1
+      const isFirstCall = callCount === 1
+      resolvedCountWhenCalled.push(resolvedCount) // 这次调用发起时，此前已经有几次调用 resolve 完成
+      if (isFirstCall) await firstGate // 卡住第一批，不让它立刻 resolve
+      resolvedCount += 1
+      return { ok: true, json: async () => ({ links: {} }) }
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const { fetchSessionLinks } = await import('./client')
+    const items = Array.from({ length: 101 }, (_, i) => ({ root: '/repo', name: `n${i}` }))
+
+    const pending = fetchSessionLinks(items)
+    // 第一批还卡在 firstGate 上未 resolve 时：顺序实现这时候还没走到第二批的 fetch 调用，只发生过
+    // 1 次调用；旧的 Promise.all 并发实现会在 chunks.map(fetchSessionLinksOneChunk) 这个同步阶段
+    // 就把 3 批的 fetch 全部发出去，这里会立刻观察到 3 次调用。
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+
+    unblockFirst()
+    await pending
+
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+    // 顺序 await 的直接证据：第 2、3 次调用发起时，此前调用都已经 resolve 完成（resolvedCount 此时
+    // 分别已经是 1、2）。并发实现下第一批还没 resolve，第二、三批就已经被同步触发，这里会是
+    // [0, 0, 1] 而不是 [0, 1, 2]。
+    expect(resolvedCountWhenCalled).toEqual([0, 1, 2])
   })
 
   // ── 客户端分片字节维度（codex review 第二轮 P2）：上面的分片用例只锁了「条数」维度，但 root 是

@@ -709,15 +709,22 @@ function chunkSessionLinkItems(
  *  （产品决策：批量端点而非逐行发请求）。items 可能超过 server 端硬上限（SESSION_LINKS_CHUNK_SIZE，
  *  见上）——不分片会「谁超限、大家一起 400」：单次超限请求被 server 整体拒绝，非 2xx 又被静默吃成
  *  {}，于是全部失败行（不只是超出上限的那部分）集体退化成静态兜底命令，一个只该影响极端边界的
- *  上限被放大成全或无的功能丢失。这里按 chunkSessionLinkItems 的条数+字节数双维度切片、
- *  Promise.all 并发发出各批、结果合并——单批「非 2xx 或网络异常」只让那一批对应的 key 缺席
- *  （调用方 cmdChipOf 本就有查不到 key 时退化静态命令的兜底分支，天然兼容），不拖累其它批。 */
+ *  上限被放大成全或无的功能丢失。这里按 chunkSessionLinkItems 的条数+字节数双维度切片，各批依次
+ *  await（不用 Promise.all 并发发出）、结果合并——单批「非 2xx 或网络异常」只让那一批对应的 key
+ *  缺席（调用方 cmdChipOf 本就有查不到 key 时退化静态命令的兜底分支，天然兼容），不拖累其它批。
+ *  第八轮 codex review P2：各批改成顺序发出是刻意的——server 端 /api/mem/session-links 单次请求
+ *  内部本身已经对最多 50 个 root/name pair 并发查询（每个 pair 还可能触发多次 listMemSessions
+ *  扫描，含 opencode 平台的真 SQLite 查询），客户端若再把多个 chunk 用 Promise.all 一起发出，会在
+ *  单进程 dashboard server 上叠加出成百上千个并发文件系统操作，可能拖慢同进程内其它请求（包括 SSE
+ *  心跳）。这里是纯后台预取、不阻塞任何用户可见加载态（chip 在数据落地前有静态兜底命令顶着，不会
+ *  卡出 spinner），用换来的一点延迟保单进程响应性是划算的。 */
 export async function fetchSessionLinks(items: Array<{ root: string; name: string }>): Promise<Record<string, SessionLink>> {
   if (items.length === 0) return {}
   const chunks = chunkSessionLinkItems(items)
-  const results = await Promise.all(chunks.map(fetchSessionLinksOneChunk))
   const merged: Record<string, SessionLink> = {}
-  for (const r of results) Object.assign(merged, r)
+  for (const chunk of chunks) {
+    Object.assign(merged, await fetchSessionLinksOneChunk(chunk))
+  }
   return merged
 }
 
