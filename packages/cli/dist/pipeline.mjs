@@ -13747,6 +13747,8 @@ function attachWsRelay(server, opts) {
       return;
     }
     const target = resolved;
+    const connectTimeoutMs = opts.connectTimeoutMs ?? 3e4;
+    const idleTimeoutMs = opts.idleTimeoutMs ?? 6e5;
     const t0 = Date.now();
     const upstreamSocket = target.useTls ? tlsConnect({ host: target.hostname, port: target.port, rejectUnauthorized: false }) : netConnect(target.port, target.hostname);
     let settled = false;
@@ -13754,6 +13756,14 @@ function attachWsRelay(server, opts) {
       if (settled)
         return;
       settled = true;
+      try {
+        clientSocket.setTimeout(0);
+      } catch {
+      }
+      try {
+        upstreamSocket.setTimeout(0);
+      } catch {
+      }
       try {
         clientSocket.destroy();
       } catch {
@@ -13768,6 +13778,10 @@ function attachWsRelay(server, opts) {
     upstreamSocket.on("error", teardown);
     clientSocket.on("close", teardown);
     upstreamSocket.on("close", teardown);
+    upstreamSocket.setTimeout(connectTimeoutMs);
+    clientSocket.setTimeout(connectTimeoutMs);
+    upstreamSocket.on("timeout", teardown);
+    clientSocket.on("timeout", teardown);
     const clientAcc = new WsFrameAccumulator();
     const serverAcc = new WsFrameAccumulator();
     if (head && head.length)
@@ -13803,6 +13817,8 @@ function attachWsRelay(server, opts) {
         if (idx === -1)
           return;
         inHandshake = false;
+        upstreamSocket.setTimeout(idleTimeoutMs);
+        clientSocket.setTimeout(idleTimeoutMs);
         const headerPart = handshakeBuf.subarray(0, idx + 4);
         const remainder = handshakeBuf.subarray(idx + 4);
         clientSocket.write(headerPart);
@@ -13887,6 +13903,8 @@ function serveForward(opts = {}) {
   const sessionId = store2.createSession({ client, proxyMode: "forward" });
   const counter = new TurnCounter();
   const tunnels = /* @__PURE__ */ new Set();
+  const connectTimeoutMs = opts.connectTimeoutMs ?? 3e4;
+  const tunnelIdleTimeoutMs = opts.tunnelIdleTimeoutMs ?? 3e5;
   const server = createServer2((req, res) => {
     let targetUrl;
     try {
@@ -14021,7 +14039,9 @@ function serveForward(opts = {}) {
       resolveTarget: (req) => {
         const t = resolveMitmTarget(req);
         return { hostname: t.hostname, port: t.port, useTls: true };
-      }
+      },
+      // B3：ws relay 复用 forward 的 connect(setup) 超时；idle 用 attachWsRelay 内部更保守的默认(见其定义)。
+      connectTimeoutMs
     });
     return mitmServer;
   }
@@ -14189,6 +14209,8 @@ function serveForward(opts = {}) {
       return;
     }
     const upstream = netConnect2(port, hostname, () => {
+      upstream.setTimeout(tunnelIdleTimeoutMs);
+      clientSocket.setTimeout(tunnelIdleTimeoutMs);
       clientSocket.write("HTTP/1.1 200 Connection Established\r\n\r\n");
       if (head && head.length)
         upstream.write(head);
@@ -14201,6 +14223,14 @@ function serveForward(opts = {}) {
       tunnels.delete(clientSocket);
       tunnels.delete(upstream);
       try {
+        upstream.setTimeout(0);
+      } catch {
+      }
+      try {
+        clientSocket.setTimeout(0);
+      } catch {
+      }
+      try {
         upstream.destroy();
       } catch {
       }
@@ -14209,6 +14239,9 @@ function serveForward(opts = {}) {
       } catch {
       }
     };
+    upstream.setTimeout(connectTimeoutMs);
+    upstream.on("timeout", cleanup2);
+    clientSocket.on("timeout", cleanup2);
     upstream.on("error", () => {
       try {
         clientSocket.end();
@@ -15164,11 +15197,45 @@ async function cmdCheck(deps, name2) {
     deps.io.err(`ERROR: ${errMsg(e)}`);
     return 1;
   }
+  const workflowName = str(state.fields.workflow) || "default";
+  if (workflowName !== "default") {
+    return checkCustomWorkflow(deps, name2, dir, state, workflowName);
+  }
   const result = deps.flow.guardCheck(state, deps.guardCtx?.(name2));
   deps.io.out(`[CHECK] ${name2} (phase=${display(state.fields.phase)})`);
   for (const warning of result.warnings ?? []) {
     deps.io.out(`  [WARN] ${warning}`);
   }
+  if (result.pass) {
+    deps.io.out("  [PASS] \u6240\u6709\u68C0\u67E5\u901A\u8FC7");
+    return 0;
+  }
+  for (const failure of result.failures) {
+    deps.io.out(`  [FAIL] ${failure}`);
+  }
+  deps.io.out(`  [FAIL] \u5171 ${result.failures.length} \u9879\u672A\u901A\u8FC7`);
+  return 2;
+}
+function checkCustomWorkflow(deps, name2, dir, state, workflowName) {
+  let wf;
+  try {
+    wf = loadWorkflow(deps.cwd, workflowName);
+  } catch (e) {
+    deps.io.err(`ERROR: ${errMsg(e)}`);
+    return 1;
+  }
+  if (!wf) {
+    deps.io.err(`ERROR: workflow '${workflowName}' \u672A\u627E\u5230\uFF08\u671F\u671B .pipeline/workflows/${workflowName}.yaml\uFF09`);
+    return 1;
+  }
+  const currentStepId = str(state.fields.phase);
+  const step = wf.steps.find((s) => s.id === currentStepId);
+  if (!step) {
+    deps.io.err(`ERROR: step '${currentStepId}' \u4E0D\u5728 workflow '${workflowName}' \u91CC`);
+    return 1;
+  }
+  const result = evaluateStepGuards(state, step, { changeDirAbs: dir });
+  deps.io.out(`[CHECK] ${name2} (phase=${display(state.fields.phase)})`);
   if (result.pass) {
     deps.io.out("  [PASS] \u6240\u6709\u68C0\u67E5\u901A\u8FC7");
     return 0;
@@ -17236,12 +17303,83 @@ async function cmdHandoff(deps, name2, opts, fs = nodeHandoffFs()) {
 }
 
 // packages/cli/src/commands/init.ts
-async function cmdInit(deps, name2, opts) {
+import { createInterface as createInterface2 } from "node:readline/promises";
+var REAL_INIT_WIZARD_ENV = {
+  isInteractive: () => Boolean(process.stdin.isTTY && process.stdout.isTTY),
+  makePrompter: () => {
+    const rl = createInterface2({ input: process.stdin, output: process.stdout });
+    return { ask: (prompt) => rl.question(prompt), close: () => rl.close() };
+  }
+};
+var WIZARD_PRESETS = ["full", "hotfix", "tweak"];
+async function askValidated(p, deps, label, dflt, validate) {
+  for (; ; ) {
+    const hasDflt = dflt !== void 0 && dflt !== "";
+    const ans = (await p.ask(hasDflt ? `${label} [${dflt}]: ` : `${label}\uFF08\u5FC5\u586B\uFF09: `)).trim();
+    const val = ans === "" ? dflt ?? "" : ans;
+    if (val === "") {
+      deps.io.err("\u8BE5\u9879\u5FC5\u586B\uFF0C\u8BF7\u8F93\u5165\u4E00\u4E2A\u503C\u3002");
+      continue;
+    }
+    const err = validate(val);
+    if (err !== null) {
+      deps.io.err(err);
+      continue;
+    }
+    return val;
+  }
+}
+async function askPlain(p, label, dflt) {
+  const ans = (await p.ask(dflt ? `${label} [${dflt}]: ` : `${label}: `)).trim();
+  return ans === "" ? dflt : ans;
+}
+async function runInitWizard(deps, flags, env) {
+  const p = env.makePrompter();
+  try {
+    deps.io.out("[init] \u4EA4\u4E92\u5411\u5BFC \u2014\u2014 \u6BCF\u95EE\u5C55\u793A\u9ED8\u8BA4\u503C\uFF08\u4E2D\u62EC\u53F7\u5185\uFF09\uFF0C\u76F4\u63A5\u56DE\u8F66\u5373\u6536\u9ED8\u8BA4\u3002");
+    const track = await askValidated(
+      p,
+      deps,
+      "track\uFF08chat|pm|frontend|backend\uFF09",
+      flags.track,
+      (s) => TRACKS.includes(s) ? null : `ERROR: \u975E\u6CD5 track '${s}'\uFF0C\u5141\u8BB8: ${TRACKS.join(" | ")}`
+    );
+    const preset = await askValidated(
+      p,
+      deps,
+      "preset\uFF08full|hotfix|tweak\uFF09",
+      flags.preset,
+      // 向导仅收标准枚举（BT6 小白防错——提示列了枚举就必须校验，否则 'ful' 静默建出无效 change）；
+      // 专家要自定义 preset 走 --preset flag（flag 主线保持既有宽松语义，零回归）。
+      (s) => WIZARD_PRESETS.includes(s) ? null : `ERROR: \u975E\u6CD5 preset '${s}'\uFF0C\u5141\u8BB8: ${WIZARD_PRESETS.join(" | ")}\uFF08\u81EA\u5B9A\u4E49 preset \u8BF7\u8D70 --preset flag\uFF09`
+    );
+    const userRaw = await askPlain(p, "user\uFF08created_by\uFF0C\u53EF\u7A7A\uFF09", flags.user ?? "");
+    const workflowRaw = await askPlain(p, "workflow\uFF08\u81EA\u5B9A\u4E49 workflow \u540D\uFF0C\u7F3A\u7701 default\uFF09", flags.workflow ?? "");
+    return {
+      ...flags,
+      track,
+      preset,
+      user: userRaw === "" ? void 0 : userRaw,
+      workflow: workflowRaw === "" ? void 0 : workflowRaw
+    };
+  } finally {
+    p.close();
+  }
+}
+async function cmdInit(deps, name2, opts, env = REAL_INIT_WIZARD_ENV) {
   if (!isValidChangeName(name2)) {
     deps.io.err(`ERROR: change-name \u975E\u6CD5: '${name2}' (\u4EC5\u5141\u8BB8 a-z A-Z 0-9 - _)`);
     return 1;
   }
-  if (!TRACKS.includes(opts.track)) {
+  if (!opts.track || !opts.preset) {
+    if (!env.isInteractive()) {
+      const missing = [!opts.track ? "--track" : null, !opts.preset ? "--preset" : null].filter(Boolean).join(" ");
+      deps.io.err(`ERROR: \u975E\u4EA4\u4E92\u6A21\u5F0F\u7F3A\u5C11\u5FC5\u586B\u9879 ${missing}\uFF08agent/CI \u9700\u663E\u5F0F\u63D0\u4F9B\uFF1BTTY \u4E0B\u7701\u7565\u4F1A\u8D70\u4EA4\u4E92\u5411\u5BFC\uFF09`);
+      return 1;
+    }
+    opts = await runInitWizard(deps, opts, env);
+  }
+  if (!TRACKS.includes(opts.track ?? "")) {
     deps.io.err(`ERROR: \u975E\u6CD5 track '${opts.track}'\uFF0C\u5141\u8BB8: ${TRACKS.join(" | ")}`);
     return 1;
   }
@@ -17304,7 +17442,7 @@ async function cmdInit(deps, name2, opts) {
 // packages/cli/src/commands/loops.ts
 import { mkdirSync as mkdirSync6, readFileSync as readFileSync18, readdirSync as readdirSync4, writeFileSync as writeFileSync5 } from "node:fs";
 import { dirname as dirname7, isAbsolute as isAbsolute3, join as join30 } from "node:path";
-import { createInterface as createInterface2 } from "node:readline/promises";
+import { createInterface as createInterface3 } from "node:readline/promises";
 function readTopLevelScalars(absPath) {
   let text;
   try {
@@ -17847,11 +17985,11 @@ var REAL_INIT_ENV = {
   addDraftMark: (path6, id) => addDraftMark(path6, id),
   isInteractive: () => Boolean(process.stdin.isTTY && process.stdout.isTTY),
   makePrompter: () => {
-    const rl = createInterface2({ input: process.stdin, output: process.stdout });
+    const rl = createInterface3({ input: process.stdin, output: process.stdout });
     return { ask: (prompt) => rl.question(prompt), close: () => rl.close() };
   }
 };
-async function askValidated(p, deps, label, dflt, validate, required) {
+async function askValidated2(p, deps, label, dflt, validate, required) {
   for (; ; ) {
     const hasDflt = dflt !== void 0 && dflt !== "";
     const ans = (await p.ask(hasDflt ? `${label} [${dflt}]: ` : `${label}${required ? "\uFF08\u5FC5\u586B\uFF09" : ""}: `)).trim();
@@ -17868,7 +18006,7 @@ async function askValidated(p, deps, label, dflt, validate, required) {
     return val;
   }
 }
-async function askPlain(p, label, dflt) {
+async function askPlain2(p, label, dflt) {
   const ans = (await p.ask(`${label} [${dflt}]: `)).trim();
   return ans === "" ? dflt : ans;
 }
@@ -17880,17 +18018,17 @@ async function runWizard(deps, flags, env) {
   const p = env.makePrompter();
   try {
     deps.io.out("[loops init] \u4EA4\u4E92\u5411\u5BFC \u2014\u2014 \u6BCF\u95EE\u5C55\u793A\u63A8\u5BFC\u9ED8\u8BA4\u503C\uFF0C\u76F4\u63A5\u56DE\u8F66\u5373\u6536\u9ED8\u8BA4\u3002");
-    const id = await askValidated(p, deps, "\u76EE\u6807 loop id", flags.id, validateId, true);
-    const goal = await askValidated(p, deps, "\u4E00\u53E5\u8BDD\u76EE\u6807\uFF08\u226510 \u5B57\u7B26\uFF09", flags.goal, validateGoal, true);
-    const designDoc = await askPlain(p, "\u8BBE\u8BA1\u6587\u6863\u8DEF\u5F84", flags.doc ?? `docs/loops/${id}.md`);
-    const prefixRaw = await askPlain(p, "change \u524D\u7F00\uFF08none = \u4E0D\u8BBE\u524D\u7F00\uFF09", flags.prefix ?? derivePrefix(id));
+    const id = await askValidated2(p, deps, "\u76EE\u6807 loop id", flags.id, validateId, true);
+    const goal = await askValidated2(p, deps, "\u4E00\u53E5\u8BDD\u76EE\u6807\uFF08\u226510 \u5B57\u7B26\uFF09", flags.goal, validateGoal, true);
+    const designDoc = await askPlain2(p, "\u8BBE\u8BA1\u6587\u6863\u8DEF\u5F84", flags.doc ?? `docs/loops/${id}.md`);
+    const prefixRaw = await askPlain2(p, "change \u524D\u7F00\uFF08none = \u4E0D\u8BBE\u524D\u7F00\uFF09", flags.prefix ?? derivePrefix(id));
     const prefix = prefixRaw === "none" ? null : prefixRaw;
-    const kind = await askValidated(p, deps, "\u7C7B\u578B\uFF08orchestrator|executor\uFF09", flags.kind ?? "orchestrator", validateKind, false);
-    const runner = await askPlain(p, "\u6267\u884C agent\uFF08runner\uFF09", flags.runner ?? "claude-code");
+    const kind = await askValidated2(p, deps, "\u7C7B\u578B\uFF08orchestrator|executor\uFF09", flags.kind ?? "orchestrator", validateKind, false);
+    const runner = await askPlain2(p, "\u6267\u884C agent\uFF08runner\uFF09", flags.runner ?? "claude-code");
     const gates = await askCsv(p, "\u590D\u6838\u95E8\u9636\u6BB5\uFF08CSV\uFF09", flags.gates ?? DEFAULT_HUMAN_GATES);
     const kill = await askCsv(p, "\u7EC8\u6B62\u5224\u636E\uFF08CSV\uFF09", flags.kill ?? DEFAULT_KILL_CRITERIA);
-    const risk = await askValidated(p, deps, "\u98CE\u9669\u6863\uFF08low|medium|high\uFF09", flags.risk ?? "low", validateRisk, false);
-    const cadence = await askValidated(p, deps, "\u8282\u594F cadence", flags.cadence ?? RISK_CADENCE[risk], validateCadence, false);
+    const risk = await askValidated2(p, deps, "\u98CE\u9669\u6863\uFF08low|medium|high\uFF09", flags.risk ?? "low", validateRisk, false);
+    const cadence = await askValidated2(p, deps, "\u8282\u594F cadence", flags.cadence ?? RISK_CADENCE[risk], validateCadence, false);
     const phases = await askCsv(p, "\u9636\u6BB5\uFF08CSV\uFF09", flags.phases ?? PHASES);
     return { id, name: flags.name ?? id, goal, designDoc, prefix, kind, runner, gates, kill, risk, cadence, phases };
   } finally {
@@ -19906,7 +20044,7 @@ function buildProgram(deps) {
     writeOut: (s) => deps.io.out(stripNl(s)),
     writeErr: (s) => deps.io.err(stripNl(s))
   });
-  program2.command("init <name>").description("\u521D\u59CB\u5316 change\uFF08stdout \u65E0\u8F93\u51FA\uFF0C\u8DEF\u5F84\u4FE1\u606F\u8D70 stderr\uFF09").requiredOption("--track <track>", "chat | pm | frontend | backend").requiredOption("--preset <preset>", "full | hotfix | tweak").option("--user <user>", "created_by").option("--workflow <workflow>", "\u81EA\u5B9A\u4E49 workflow \u540D\uFF08.pipeline/workflows/<name>.yaml\uFF09\uFF0C\u7F3A\u7701 default").action(async (name2, opts) => bail(await cmdInit(deps, name2, opts)));
+  program2.command("init <name>").description("\u521D\u59CB\u5316 change\uFF08stdout \u65E0\u8F93\u51FA\uFF0C\u8DEF\u5F84\u4FE1\u606F\u8D70 stderr\uFF09").option("--track <track>", "chat | pm | frontend | backend").option("--preset <preset>", "full | hotfix | tweak").option("--user <user>", "created_by").option("--workflow <workflow>", "\u81EA\u5B9A\u4E49 workflow \u540D\uFF08.pipeline/workflows/<name>.yaml\uFF09\uFF0C\u7F3A\u7701 default").action(async (name2, opts) => bail(await cmdInit(deps, name2, opts)));
   program2.command("setup [sub]").description("\u5B89\u88C5\u540E\u5168\u529F\u80FD\u5C31\u7EEA\u5F15\u5BFC:\u8F6F\u94FE pipeline \u5230 PATH + \u6280\u80FD\u5B89\u88C5(Phase 2)/\u8FD0\u884C\u65F6\u68C0\u67E5(Phase 3)\u9AA8\u67B6").option("--dry-run", "\u53EA\u6253\u5370\u8BA1\u5212\u9AA8\u67B6,\u7EDD\u4E0D\u8F6F\u94FE/\u5199\u6587\u4EF6").option("-y, --yes", "\u8DF3\u8FC7\u4EA4\u4E92\u786E\u8BA4\u4F4D\uFF08\u672C\u6279\u65E0\u771F\u5B89\u88C5,\u4EC5\u900F\u4F20\u5360\u4F4D\uFF09").allowUnknownOption().action(async (sub, opts) => bail(await cmdSetup(deps, sub, { dryRun: opts.dryRun, yes: opts.yes })));
   program2.command("get <name> <field>").description("\u8BFB\u5B57\u6BB5\uFF08stdout: \u88F8\u503C\uFF1B\u5B57\u6BB5\u7F3A\u5931/\u672A\u77E5 \u2192 \u7A7A\u884C + exit 0\uFF09").action(async (name2, fieldName) => bail(await cmdGet(deps, name2, fieldName)));
   program2.command("set <name> <field> <value>").description("\u5199\u5B57\u6BB5\uFF08\u65E0\u8F93\u51FA\uFF1B\u56DB\u95F8\u62D2\u5199 exit 1\uFF09").action(async (name2, fieldName, value) => bail(await cmdSet(deps, name2, fieldName, value)));
