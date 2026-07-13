@@ -10253,6 +10253,17 @@ function applyLevelChange(repoRoot, loopId, target, opts, fs) {
   const { text: next, error } = setAutonomyLevelInYaml(text, loopId, plan.to);
   if (error !== null || next === null)
     return { plan, verdict, applied: false, errors: [error ?? "\u6539\u6863\u5199\u56DE\u5931\u8D25"], exitCode: 3 };
+  const recheck = fs.readRegistryText(repoRoot);
+  if (recheck !== text) {
+    const yamlPath = `${repoRoot}/.pipeline/loops.yaml`;
+    return {
+      plan,
+      verdict,
+      applied: false,
+      errors: [recheck === null ? `CAS \u5931\u8D25\uFF1Aloops.yaml \u5728\u6539\u6863\u5199\u56DE\u671F\u95F4\u88AB\u5220\u9664\uFF0C\u5DF2\u5982\u5B9E\u62D2\u7EDD\uFF08\u672A\u843D\u76D8\uFF0C${yamlPath}\uFF09` : `CAS \u5931\u8D25\uFF1Aloops.yaml \u5728\u6539\u6863\u5199\u56DE\u671F\u95F4\u88AB\u5E76\u53D1\u4FEE\u6539\uFF0C\u5DF2\u5982\u5B9E\u62D2\u7EDD\uFF08\u672A\u843D\u76D8\uFF0C${yamlPath}\uFF09`],
+      exitCode: 3
+    };
+  }
   fs.writeRegistryText(repoRoot, next);
   return { plan, verdict, applied: true, errors: [], exitCode: 0 };
 }
@@ -11228,6 +11239,36 @@ function evaluateStepGuards(state, step, ctx) {
     }
   }
   return { pass: failures.length === 0, failures };
+}
+
+// packages/kernel/dist/workflow/engine.js
+function fieldStr(state, k) {
+  const v = state.fields[k];
+  return Array.isArray(v) ? v.join(",") : v ?? "";
+}
+function resolveWorkflowName(state) {
+  return fieldStr(state, "workflow") || "default";
+}
+function resolveStep(wf, stepId) {
+  return wf.steps.find((s) => s.id === stepId) ?? null;
+}
+function planStepTransition(wf, state, event, ctx) {
+  const stepId = fieldStr(state, "phase");
+  const step = resolveStep(wf, stepId);
+  if (!step)
+    return { ok: false, kind: "step-not-in-graph", stepId };
+  const edge = step.transitions.find((t) => t.event === event);
+  if (!edge) {
+    return { ok: false, kind: "event-unsupported", stepId, available: step.transitions.map((t) => t.event) };
+  }
+  const guardResult = evaluateStepGuards(state, step, ctx);
+  if (!guardResult.pass) {
+    return { ok: false, kind: "guard-failed", stepId, failures: guardResult.failures };
+  }
+  return { ok: true, from: stepId, to: edge.to };
+}
+function applyStepTransition(state, to, clock) {
+  return { ...state, fields: { ...state.fields, phase: to, updated_at: clock() } };
 }
 
 // packages/kernel/dist/workflow/skillDag.js
@@ -13194,9 +13235,7 @@ function reqId() {
 }
 
 // packages/tap/dist/forward-proxy.js
-import { createServer as createServer2, request as httpRequest2 } from "node:http";
-import { request as httpsRequest2 } from "node:https";
-import { TLSSocket, createSecureContext } from "node:tls";
+import { createServer as createServer3, request as httpRequest2 } from "node:http";
 import { connect as netConnect2 } from "node:net";
 
 // packages/tap/dist/bedrock.js
@@ -13459,6 +13498,11 @@ function assembleBedrockConverseBody(events) {
   }
   return { output: { message: { role, content } }, usage };
 }
+
+// packages/tap/dist/tls-mitm.js
+import { createServer as createServer2 } from "node:http";
+import { request as httpsRequest2 } from "node:https";
+import { TLSSocket, createSecureContext } from "node:tls";
 
 // packages/tap/dist/ws-proxy.js
 import { connect as netConnect } from "node:net";
@@ -13873,157 +13917,9 @@ function attachWsRelay(server, opts) {
   });
 }
 
-// packages/tap/dist/forward-proxy.js
-function buildRespBody(path6, raw) {
-  if (isBedrockEventstreamPath(path6)) {
-    const events = decodeBedrockEventstreamEvents(raw);
-    if (events.length > 0) {
-      const assembled = assembleBedrockConverseBody(events);
-      return attachBedrockErrors({ ...assembled, bedrock_events: events }, events);
-    }
-  }
-  return safeJson(raw);
-}
-function relayHeaders2(upstream, includeLength, bodyLen) {
-  const out = {};
-  for (const [k, v] of Object.entries(upstream.headers)) {
-    if (HOP_BY_HOP.has(k.toLowerCase()))
-      continue;
-    if (v !== void 0)
-      out[k] = v;
-  }
-  if (includeLength)
-    out["Content-Length"] = String(bodyLen);
-  return out;
-}
-function serveForward(opts = {}) {
-  const store2 = opts.store ?? getTraceStore();
-  const client = opts.client ?? "forward";
-  const host = opts.host ?? "127.0.0.1";
-  const sessionId = store2.createSession({ client, proxyMode: "forward" });
-  const counter = new TurnCounter();
-  const tunnels = /* @__PURE__ */ new Set();
-  const connectTimeoutMs = opts.connectTimeoutMs ?? 3e4;
-  const tunnelIdleTimeoutMs = opts.tunnelIdleTimeoutMs ?? 3e5;
-  const server = createServer2((req, res) => {
-    let targetUrl;
-    try {
-      targetUrl = new URL(req.url ?? "");
-      if (!/^https?:$/.test(targetUrl.protocol))
-        throw new Error("non-http");
-    } catch {
-      res.writeHead(400, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: "forward proxy \u9700\u7EDD\u5BF9 URI" }));
-      return;
-    }
-    const chunks = [];
-    req.on("data", (c) => chunks.push(c));
-    req.on("end", () => forward(Buffer.concat(chunks)));
-    req.on("error", () => {
-      try {
-        res.destroy();
-      } catch {
-      }
-    });
-    res.on("error", () => {
-    });
-    function forward(body) {
-      const method = (req.method ?? "GET").toUpperCase();
-      const path6 = (targetUrl.pathname || "/") + (targetUrl.search || "");
-      const upstreamBaseUrl = `${targetUrl.protocol}//${targetUrl.host}`;
-      const captureGate = method === "POST" && isCaptureEnabled({ dir: store2.dir });
-      const turn = counter.next();
-      const t0 = Date.now();
-      const reqBody = captureGate ? safeJson(body) : null;
-      const fwdHeaders = {};
-      for (const [k, v] of Object.entries(req.headers)) {
-        if (HOP_BY_HOP.has(k.toLowerCase()))
-          continue;
-        if (v !== void 0)
-          fwdHeaders[k] = v;
-      }
-      fwdHeaders.Host = targetUrl.host;
-      const upReq = httpRequest2({
-        protocol: "http:",
-        hostname: targetUrl.hostname,
-        port: targetUrl.port || 80,
-        method,
-        path: path6,
-        headers: fwdHeaders
-      }, (upstream) => {
-        const status = upstream.statusCode ?? 502;
-        const buf = [];
-        upstream.on("data", (c) => buf.push(c));
-        upstream.on("end", () => {
-          const raw = Buffer.concat(buf);
-          try {
-            res.writeHead(status, relayHeaders2(upstream, true, raw.length));
-            res.end(raw);
-          } catch {
-          }
-          if (captureGate) {
-            const skip = shouldSkipTraceRecord({
-              upstreamUrl: upstreamBaseUrl + path6,
-              path: path6,
-              responseHeaders: upstream.headers,
-              requestHeaders: req.headers,
-              method
-            });
-            if (!skip) {
-              try {
-                store2.appendRecord(sessionId, buildRecord({
-                  reqId: reqId2(),
-                  turn,
-                  durationMs: Date.now() - t0,
-                  method,
-                  path: path6,
-                  reqHeaders: req.headers,
-                  reqBody,
-                  status,
-                  respHeaders: upstream.headers,
-                  respBody: buildRespBody(path6, raw),
-                  upstreamBaseUrl,
-                  transport: "forward"
-                }));
-              } catch {
-              }
-            }
-          }
-        });
-      });
-      upReq.on("error", (err) => {
-        const msg = Buffer.from(JSON.stringify({ error: `upstream unavailable: ${err.message}` }), "utf8");
-        try {
-          res.writeHead(502, { "Content-Type": "application/json", "Content-Length": msg.length });
-          res.end(msg);
-        } catch {
-        }
-        if (captureGate) {
-          try {
-            store2.appendRecord(sessionId, buildRecord({
-              reqId: reqId2(),
-              turn,
-              durationMs: Date.now() - t0,
-              method,
-              path: path6,
-              reqHeaders: req.headers,
-              reqBody,
-              status: 502,
-              respHeaders: {},
-              respBody: { error: err.message },
-              upstreamBaseUrl,
-              transport: "forward"
-            }));
-          } catch {
-          }
-        }
-      });
-      if (body.length)
-        upReq.write(body);
-      upReq.end();
-    }
-  });
-  const ca = opts.ca;
+// packages/tap/dist/tls-mitm.js
+function createTlsMitm(deps) {
+  const { ca, store: store2, sessionId, counter, tunnels, connectTimeoutMs, forwardAndRecord: forwardAndRecord2 } = deps;
   let mitmServer = null;
   const resolveMitmTarget = (req) => req.socket.__mitmTarget ?? { hostname: String(req.headers.host ?? "").split(":")[0] || "", port: 443 };
   function getMitmServer() {
@@ -14103,78 +13999,95 @@ function serveForward(opts = {}) {
     res.on("error", () => {
     });
     function forwardMitm(body) {
-      const method = (req.method ?? "GET").toUpperCase();
-      const path6 = req.url ?? "/";
-      const upstreamBaseUrl = `https://${target.hostname}`;
-      const captureGate = method === "POST" && isCaptureEnabled({ dir: store2.dir });
-      const turn = counter.next();
-      const t0 = Date.now();
-      const reqBody = captureGate ? safeJson(body) : null;
-      const fwdHeaders = {};
-      for (const [k, v] of Object.entries(req.headers)) {
-        if (HOP_BY_HOP.has(k.toLowerCase()))
-          continue;
-        if (v !== void 0)
-          fwdHeaders[k] = v;
-      }
-      fwdHeaders.Host = target.hostname;
-      const upReq = httpsRequest2({
-        hostname: target.hostname,
-        port: target.port,
-        method,
-        path: path6,
-        headers: fwdHeaders,
-        rejectUnauthorized: false
-        // MITM 代理不校验上游证书（对齐老仓 forward 语义）
-      }, (upstream) => {
-        const status = upstream.statusCode ?? 502;
-        const buf = [];
-        upstream.on("data", (c) => buf.push(c));
-        upstream.on("end", () => {
-          const raw = Buffer.concat(buf);
-          try {
-            res.writeHead(status, relayHeaders2(upstream, true, raw.length));
-            res.end(raw);
-          } catch {
-          }
-          if (captureGate) {
-            const skip = shouldSkipTraceRecord({
-              upstreamUrl: upstreamBaseUrl + path6,
-              path: path6,
-              responseHeaders: upstream.headers,
-              requestHeaders: req.headers,
-              method
-            });
-            if (!skip) {
-              try {
-                store2.appendRecord(sessionId, buildRecord({
-                  reqId: reqId2(),
-                  turn,
-                  durationMs: Date.now() - t0,
-                  method,
-                  path: path6,
-                  reqHeaders: req.headers,
-                  reqBody,
-                  status,
-                  respHeaders: upstream.headers,
-                  respBody: buildRespBody(path6, raw),
-                  upstreamBaseUrl,
-                  transport: "forward-tls"
-                }));
-              } catch {
-              }
-            }
-          }
-        });
+      forwardAndRecord2(req, res, body, {
+        makeReq: (o, onResp) => httpsRequest2({
+          hostname: target.hostname,
+          port: target.port,
+          method: o.method,
+          path: o.path,
+          headers: o.headers,
+          rejectUnauthorized: false
+          // MITM 代理不校验上游证书（对齐老仓 forward 语义）
+        }, onResp),
+        path: req.url ?? "/",
+        upstreamBaseUrl: `https://${target.hostname}`,
+        transport: "forward-tls",
+        host: target.hostname
       });
-      upReq.on("error", (err) => {
-        const msg = Buffer.from(JSON.stringify({ error: `upstream unavailable: ${err.message}` }), "utf8");
+    }
+  }
+  return {
+    terminate: terminateTls,
+    close() {
+      if (mitmServer) {
         try {
-          res.writeHead(502, { "Content-Type": "application/json", "Content-Length": msg.length });
-          res.end(msg);
+          mitmServer.close();
         } catch {
         }
-        if (captureGate) {
+      }
+    }
+  };
+}
+
+// packages/tap/dist/forward-proxy.js
+function buildRespBody(path6, raw) {
+  if (isBedrockEventstreamPath(path6)) {
+    const events = decodeBedrockEventstreamEvents(raw);
+    if (events.length > 0) {
+      const assembled = assembleBedrockConverseBody(events);
+      return attachBedrockErrors({ ...assembled, bedrock_events: events }, events);
+    }
+  }
+  return safeJson(raw);
+}
+function relayHeaders2(upstream, includeLength, bodyLen) {
+  const out = {};
+  for (const [k, v] of Object.entries(upstream.headers)) {
+    if (HOP_BY_HOP.has(k.toLowerCase()))
+      continue;
+    if (v !== void 0)
+      out[k] = v;
+  }
+  if (includeLength)
+    out["Content-Length"] = String(bodyLen);
+  return out;
+}
+function forwardAndRecord(ctx, req, res, body, plan) {
+  const { store: store2, sessionId, counter } = ctx;
+  const { path: path6, upstreamBaseUrl, transport } = plan;
+  const method = (req.method ?? "GET").toUpperCase();
+  const captureGate = method === "POST" && isCaptureEnabled({ dir: store2.dir });
+  const turn = counter.next();
+  const t0 = Date.now();
+  const reqBody = captureGate ? safeJson(body) : null;
+  const fwdHeaders = {};
+  for (const [k, v] of Object.entries(req.headers)) {
+    if (HOP_BY_HOP.has(k.toLowerCase()))
+      continue;
+    if (v !== void 0)
+      fwdHeaders[k] = v;
+  }
+  fwdHeaders.Host = plan.host;
+  const upReq = plan.makeReq({ method, path: path6, headers: fwdHeaders }, (upstream) => {
+    const status = upstream.statusCode ?? 502;
+    const buf = [];
+    upstream.on("data", (c) => buf.push(c));
+    upstream.on("end", () => {
+      const raw = Buffer.concat(buf);
+      try {
+        res.writeHead(status, relayHeaders2(upstream, true, raw.length));
+        res.end(raw);
+      } catch {
+      }
+      if (captureGate) {
+        const skip = shouldSkipTraceRecord({
+          upstreamUrl: upstreamBaseUrl + path6,
+          path: path6,
+          responseHeaders: upstream.headers,
+          requestHeaders: req.headers,
+          method
+        });
+        if (!skip) {
           try {
             store2.appendRecord(sessionId, buildRecord({
               reqId: reqId2(),
@@ -14184,28 +14097,115 @@ function serveForward(opts = {}) {
               path: path6,
               reqHeaders: req.headers,
               reqBody,
-              status: 502,
-              respHeaders: {},
-              respBody: { error: err.message },
+              status,
+              respHeaders: upstream.headers,
+              respBody: buildRespBody(path6, raw),
               upstreamBaseUrl,
-              transport: "forward-tls"
+              transport
             }));
           } catch {
           }
         }
-      });
-      if (body.length)
-        upReq.write(body);
-      upReq.end();
+      }
+    });
+  });
+  upReq.on("error", (err) => {
+    const msg = Buffer.from(JSON.stringify({ error: `upstream unavailable: ${err.message}` }), "utf8");
+    try {
+      res.writeHead(502, { "Content-Type": "application/json", "Content-Length": msg.length });
+      res.end(msg);
+    } catch {
     }
-  }
+    if (captureGate) {
+      try {
+        store2.appendRecord(sessionId, buildRecord({
+          reqId: reqId2(),
+          turn,
+          durationMs: Date.now() - t0,
+          method,
+          path: path6,
+          reqHeaders: req.headers,
+          reqBody,
+          status: 502,
+          respHeaders: {},
+          respBody: { error: err.message },
+          upstreamBaseUrl,
+          transport
+        }));
+      } catch {
+      }
+    }
+  });
+  if (body.length)
+    upReq.write(body);
+  upReq.end();
+}
+function serveForward(opts = {}) {
+  const store2 = opts.store ?? getTraceStore();
+  const client = opts.client ?? "forward";
+  const host = opts.host ?? "127.0.0.1";
+  const sessionId = store2.createSession({ client, proxyMode: "forward" });
+  const counter = new TurnCounter();
+  const tunnels = /* @__PURE__ */ new Set();
+  const connectTimeoutMs = opts.connectTimeoutMs ?? 3e4;
+  const tunnelIdleTimeoutMs = opts.tunnelIdleTimeoutMs ?? 3e5;
+  const server = createServer3((req, res) => {
+    let targetUrl;
+    try {
+      targetUrl = new URL(req.url ?? "");
+      if (!/^https?:$/.test(targetUrl.protocol))
+        throw new Error("non-http");
+    } catch {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "forward proxy \u9700\u7EDD\u5BF9 URI" }));
+      return;
+    }
+    const chunks = [];
+    req.on("data", (c) => chunks.push(c));
+    req.on("end", () => forward(Buffer.concat(chunks)));
+    req.on("error", () => {
+      try {
+        res.destroy();
+      } catch {
+      }
+    });
+    res.on("error", () => {
+    });
+    function forward(body) {
+      forwardAndRecord({ store: store2, sessionId, counter }, req, res, body, {
+        makeReq: (o, onResp) => httpRequest2({
+          protocol: "http:",
+          hostname: targetUrl.hostname,
+          port: targetUrl.port || 80,
+          method: o.method,
+          path: o.path,
+          headers: o.headers
+        }, onResp),
+        path: (targetUrl.pathname || "/") + (targetUrl.search || ""),
+        upstreamBaseUrl: `${targetUrl.protocol}//${targetUrl.host}`,
+        transport: "forward",
+        host: targetUrl.host
+      });
+    }
+  });
+  const ca = opts.ca;
+  const tlsMitm = ca ? createTlsMitm({
+    ca,
+    store: store2,
+    sessionId,
+    counter,
+    tunnels,
+    connectTimeoutMs,
+    // T-a 共享管路以 DI 注入（预绑 ctx）——不从本文件 export（index.ts 对本文件是 export *，导出即漏公共 API）。
+    forwardAndRecord: (req, res, body, plan) => forwardAndRecord({ store: store2, sessionId, counter }, req, res, body, plan)
+  }) : null;
   server.on("connect", (req, clientSocket, head) => {
     const authority = req.url ?? "";
     const idx = authority.lastIndexOf(":");
     const hostname = idx > 0 ? authority.slice(0, idx) : authority;
     const port = idx > 0 ? Number(authority.slice(idx + 1)) || 443 : 443;
-    if (ca && isCaptureEnabled({ dir: store2.dir })) {
-      terminateTls(clientSocket, head, hostname, port);
+    if (tlsMitm && isCaptureEnabled({ dir: store2.dir })) {
+      tlsMitm.terminate(clientSocket, head, hostname, port);
       return;
     }
     const upstream = netConnect2(port, hostname, () => {
@@ -14276,12 +14276,8 @@ function serveForward(opts = {}) {
               }
             }
             tunnels.clear();
-            if (mitmServer) {
-              try {
-                mitmServer.close();
-              } catch {
-              }
-            }
+            if (tlsMitm)
+              tlsMitm.close();
             try {
               const row = store2.loadSessionRow(sessionId);
               store2.finalizeSession(sessionId, { api_calls: row?.record_count ?? 0, has_error: false });
@@ -15144,6 +15140,28 @@ function splitPassthroughArgv(argv) {
   if (argv[2] !== "tap") return { toParse: [...argv] };
   return { toParse: argv.slice(0, idx), passthrough: argv.slice(idx + 1) };
 }
+function splitFlags(args) {
+  const positional = [];
+  const flags = {};
+  let i = 0;
+  while (i < args.length) {
+    const a = args[i];
+    if (a.startsWith("--")) {
+      const key = a.slice(2);
+      const nxt = args[i + 1];
+      if (nxt !== void 0 && !nxt.startsWith("--")) {
+        flags[key] = nxt;
+        i += 1;
+      } else {
+        flags[key] = true;
+      }
+    } else {
+      positional.push(a);
+    }
+    i += 1;
+  }
+  return { positional, flags };
+}
 
 // packages/cli/src/deps.ts
 function errMsg(e) {
@@ -15197,7 +15215,7 @@ async function cmdCheck(deps, name2) {
     deps.io.err(`ERROR: ${errMsg(e)}`);
     return 1;
   }
-  const workflowName = str(state.fields.workflow) || "default";
+  const workflowName = resolveWorkflowName(state);
   if (workflowName !== "default") {
     return checkCustomWorkflow(deps, name2, dir, state, workflowName);
   }
@@ -15229,7 +15247,7 @@ function checkCustomWorkflow(deps, name2, dir, state, workflowName) {
     return 1;
   }
   const currentStepId = str(state.fields.phase);
-  const step = wf.steps.find((s) => s.id === currentStepId);
+  const step = resolveStep(wf, currentStepId);
   if (!step) {
     deps.io.err(`ERROR: step '${currentStepId}' \u4E0D\u5728 workflow '${workflowName}' \u91CC`);
     return 1;
@@ -16076,17 +16094,17 @@ async function cmdTransition(deps, name2, event) {
   try {
     outcome = await deps.store.withLock(dir, async () => {
       const state = await deps.store.read(dir);
-      const workflowName = str(state.fields.workflow) || "default";
+      const workflowName = resolveWorkflowName(state);
       if (workflowName === "default") {
-        const edge2 = eventEdge(event);
-        if (!edge2) throw new UnknownEventError(event);
+        const edge = eventEdge(event);
+        if (!edge) throw new UnknownEventError(event);
         const current = str(state.fields.phase);
-        if (current !== edge2.from) {
-          throw new IllegalTransitionError(current, edge2.to);
+        if (current !== edge.from) {
+          throw new IllegalTransitionError(current, edge.to);
         }
         const violations = await checkTransitionPreconditions(event, state, txnCtx);
         if (violations) throw new EventPreconditionError(violations);
-        const r = deps.flow.transition(state, edge2.to, deps.clock);
+        const r = deps.flow.transition(state, edge.to, deps.clock);
         const eff = await applyTransitionEffects(event, r.state, deps.clock, txnCtx);
         if (eff.buildShaMissing) {
           deps.io.err("WARN: build-complete \u672A\u53D6\u5230 git HEAD\uFF08\u975E git \u4ED3\uFF1F\uFF09build_sha \u7559\u7A7A\uFF0Cverify \u4E0D\u505A SHA \u6821\u9A8C");
@@ -16098,28 +16116,21 @@ async function cmdTransition(deps, name2, event) {
       if (!wf) {
         throw new WorkflowError(`ERROR: workflow '${workflowName}' \u672A\u627E\u5230\uFF08\u671F\u671B .pipeline/workflows/${workflowName}.yaml\uFF09`);
       }
-      const currentStepId = str(state.fields.phase);
-      const step = wf.steps.find((s) => s.id === currentStepId);
-      if (!step) {
-        throw new WorkflowError(`ERROR: step '${currentStepId}' \u4E0D\u5728 workflow '${workflowName}' \u91CC`);
+      const plan = planStepTransition(wf, state, event, { changeDirAbs: dir });
+      if (!plan.ok) {
+        if (plan.kind === "step-not-in-graph") {
+          throw new WorkflowError(`ERROR: step '${plan.stepId}' \u4E0D\u5728 workflow '${workflowName}' \u91CC`);
+        }
+        if (plan.kind === "event-unsupported") {
+          const available = plan.available.join(", ") || "(\u65E0)";
+          throw new WorkflowError(
+            `ERROR: step '${plan.stepId}' \u4E0D\u652F\u6301 event '${event}'\uFF1B\u8BE5 step \u652F\u6301\uFF1A${available}`
+          );
+        }
+        throw new StepGuardError([`ERROR: step '${plan.stepId}' guard \u672A\u901A\u8FC7\uFF1A`, ...plan.failures]);
       }
-      const edge = step.transitions.find((t) => t.event === event);
-      if (!edge) {
-        const available = step.transitions.map((t) => t.event).join(", ") || "(\u65E0)";
-        throw new WorkflowError(
-          `ERROR: step '${currentStepId}' \u4E0D\u652F\u6301 event '${event}'\uFF1B\u8BE5 step \u652F\u6301\uFF1A${available}`
-        );
-      }
-      const guardResult = evaluateStepGuards(state, step, { changeDirAbs: dir });
-      if (!guardResult.pass) {
-        throw new StepGuardError([`ERROR: step '${currentStepId}' guard \u672A\u901A\u8FC7\uFF1A`, ...guardResult.failures]);
-      }
-      const next = {
-        ...state,
-        fields: { ...state.fields, phase: edge.to, updated_at: deps.clock() }
-      };
-      await deps.store.write(dir, next);
-      return { workflow: "custom", from: currentStepId, to: edge.to };
+      await deps.store.write(dir, applyStepTransition(state, plan.to, deps.clock));
+      return { workflow: "custom", from: plan.from, to: plan.to };
     });
   } catch (e) {
     if (e instanceof EventPreconditionError) {
@@ -16551,28 +16562,6 @@ var ChannelDie = class extends Error {
 };
 function die(msg, code = USAGE_EXIT) {
   throw new ChannelDie(msg, code);
-}
-function parseArgs(args) {
-  const positional = [];
-  const flags = {};
-  let i = 0;
-  while (i < args.length) {
-    const a = args[i];
-    if (a.startsWith("--")) {
-      const key = a.slice(2);
-      const nxt = args[i + 1];
-      if (nxt !== void 0 && !nxt.startsWith("--")) {
-        flags[key] = nxt;
-        i += 1;
-      } else {
-        flags[key] = true;
-      }
-    } else {
-      positional.push(a);
-    }
-    i += 1;
-  }
-  return { positional, flags };
 }
 function strFlag(flags, key) {
   const v = flags[key];
@@ -17130,7 +17119,7 @@ async function cmdChannel(deps, sub, args, host = nodeChannelHost(deps.cwd)) {
     deps.io.out(USAGE);
     return 0;
   }
-  const p = parseArgs(args);
+  const p = splitFlags(args);
   try {
     switch (sub) {
       case "create":
@@ -17520,7 +17509,7 @@ var REAL_GRADUATION_FS = {
   },
   writeRegistryText: (repoRoot, text) => writeFileSync5(join30(repoRoot, ".pipeline", "loops.yaml"), text, "utf8")
 };
-function parseArgs2(args) {
+function parseArgs(args) {
   let json = false;
   let loop = null;
   for (let i = 0; i < args.length; i++) {
@@ -17643,7 +17632,7 @@ function printCostTable(deps, report) {
   }
 }
 function cmdBudget(deps, args, fs) {
-  const p = parseArgs2(args);
+  const p = parseArgs(args);
   const onlyLoop = p.loop ?? positionalLoop(args);
   const now = new Date(deps.clock());
   const { report, errors, exitCode } = buildBudgetReport(deps.cwd, onlyLoop, now, toBudgetFs(fs));
@@ -17659,7 +17648,7 @@ function cmdBudget(deps, args, fs) {
   return exitCode;
 }
 function cmdCost(deps, args, fs) {
-  const p = parseArgs2(args);
+  const p = parseArgs(args);
   const onlyLoop = p.loop ?? positionalLoop(args);
   const now = new Date(deps.clock());
   const { report, errors, exitCode } = buildCostReport(deps.cwd, onlyLoop, now, toBudgetFs(fs));
@@ -17692,7 +17681,7 @@ function printAuditTable(deps, report) {
   }
 }
 function cmdDrift(deps, args, fs) {
-  const p = parseArgs2(args);
+  const p = parseArgs(args);
   const onlyLoop = p.loop ?? positionalLoop(args);
   const now = new Date(deps.clock());
   const { report, errors, exitCode } = buildDriftReport(deps.cwd, onlyLoop, now, fs);
@@ -17708,7 +17697,7 @@ function cmdDrift(deps, args, fs) {
   return exitCode;
 }
 function cmdAudit(deps, args, fs) {
-  const p = parseArgs2(args);
+  const p = parseArgs(args);
   const onlyLoop = p.loop ?? positionalLoop(args);
   const now = new Date(deps.clock());
   const { report, errors, exitCode } = buildAuditReport(deps.cwd, onlyLoop, now, fs);
@@ -17749,7 +17738,7 @@ function printGraduationTable(deps, report) {
   }
 }
 function cmdGraduate(deps, args, fs) {
-  const p = parseArgs2(args);
+  const p = parseArgs(args);
   const onlyLoop = p.loop ?? positionalLoop(args);
   const now = new Date(deps.clock());
   const { report, errors, exitCode } = buildGraduationReport(deps.cwd, onlyLoop, now, fs);
@@ -17775,7 +17764,7 @@ function printLevelView(deps, v) {
   if (v.canGraduate) deps.io.out(`  \u2192 \u53EF\u5347 ${v.recommended}\uFF1Apipeline loops level ${v.id} set ${v.recommended} --confirm`);
 }
 function cmdLevel(deps, args, fs) {
-  const p = parseArgs2(args);
+  const p = parseArgs(args);
   const confirm = args.includes("--confirm") || args.includes("--yes");
   const pos = positionals(args);
   const setPos = pos.indexOf("set");
@@ -18101,7 +18090,7 @@ async function cmdInit2(deps, args, env = REAL_INIT_ENV) {
   return 0;
 }
 async function cmdLoops(deps, sub, args, fs = REAL_LOOPS_FS, driftFs = REAL_DRIFT_FS, graduationFs = REAL_GRADUATION_FS, initEnv = REAL_INIT_ENV) {
-  const p = parseArgs2(args);
+  const p = parseArgs(args);
   switch (sub || "list") {
     case "list":
       return cmdList2(deps, p, fs);
@@ -18136,28 +18125,6 @@ var MemDie = class extends Error {
 };
 function die2(msg) {
   throw new MemDie(msg);
-}
-function parseArgs3(args) {
-  const positional = [];
-  const flags = {};
-  let i = 0;
-  while (i < args.length) {
-    const a = args[i];
-    if (a.startsWith("--")) {
-      const key = a.slice(2);
-      const nxt = args[i + 1];
-      if (nxt !== void 0 && !nxt.startsWith("--")) {
-        flags[key] = nxt;
-        i += 1;
-      } else {
-        flags[key] = true;
-      }
-    } else {
-      positional.push(a);
-    }
-    i += 1;
-  }
-  return { positional, flags };
 }
 function parseDate(raw) {
   const t = Date.parse(raw);
@@ -18456,7 +18423,7 @@ flags:
   --json                                     emit JSON`);
 }
 async function cmdMem(deps, sub, args, fs = nodeMemFs()) {
-  const p = parseArgs3(args);
+  const p = splitFlags(args);
   if (p.flags.help || p.flags.h || sub === "help" || sub === "--help") {
     cmdHelp(deps);
     return 0;
@@ -18519,26 +18486,6 @@ var REAL_FS = {
   },
   env: (name2) => process.env[name2]
 };
-function parseFlags(args) {
-  const positionals2 = [];
-  const flags = {};
-  for (let i = 0; i < args.length; i++) {
-    const a = args[i] ?? "";
-    if (a.startsWith("--")) {
-      const key = a.slice(2);
-      const next = args[i + 1];
-      if (next !== void 0 && !next.startsWith("--")) {
-        flags[key] = next;
-        i++;
-      } else {
-        flags[key] = "";
-      }
-    } else {
-      positionals2.push(a);
-    }
-  }
-  return { positionals: positionals2, flags };
-}
 var SPEC_STRATEGY_SIGNAL = "PIPELINE_SPEC_STRATEGY";
 function conflictGuidance(deps, specDir) {
   deps.io.err(`[SPEC-CONFLICT] ${specDir} \u5DF2\u5B58\u5728\u6587\u4EF6\u2014\u2014\u9700\u9009\u62E9\u6A21\u677F\u7B56\u7565\uFF08\u7F3A\u7701\u51B2\u7A81\uFF0C\u672A\u5F39\u4EA4\u4E92 picker\uFF09\uFF1A`);
@@ -18548,14 +18495,14 @@ function conflictGuidance(deps, specDir) {
   deps.io.err(`  \u4F20\u53C2\u51B3\u7B56\uFF1A--strategy <skip|overwrite|append>  \u6216  ${SPEC_STRATEGY_SIGNAL}=<...>\uFF08\u4E0A\u5C42 AskUserQuestion \u540E\u6CE8\u5165\uFF09`);
 }
 async function cmdScaffoldSpec(deps, args, fs) {
-  const { positionals: positionals2, flags } = parseFlags(args);
+  const { positional: positionals2, flags } = splitFlags(args);
   const type = positionals2[0];
   if (type === void 0 || !isProjectType(type)) {
     deps.io.err(`ERROR: \u975E\u6CD5 project type '${type ?? ""}'\uFF0C\u5141\u8BB8: ${PROJECT_TYPES.join(" | ")}`);
     return 1;
   }
-  const specDir = flags["spec-dir"] || DEFAULT_SPEC_DIR;
-  const rawStrategy = flags["strategy"] || fs.env(SPEC_STRATEGY_SIGNAL) || "";
+  const specDir = typeof flags["spec-dir"] === "string" && flags["spec-dir"] !== "" ? flags["spec-dir"] : DEFAULT_SPEC_DIR;
+  const rawStrategy = typeof flags["strategy"] === "string" && flags["strategy"] !== "" ? flags["strategy"] : fs.env(SPEC_STRATEGY_SIGNAL) || "";
   const files = buildSpecScaffold(type, specDir);
   const abs = (rel) => join31(deps.cwd, rel);
   const existing = /* @__PURE__ */ new Set();
@@ -18595,11 +18542,11 @@ async function cmdScaffoldSpec(deps, args, fs) {
   return 0;
 }
 async function cmdResolveWorkflow(deps, args, fs) {
-  const { positionals: positionals2, flags } = parseFlags(args);
+  const { positional: positionals2, flags } = splitFlags(args);
   const requested = positionals2[0];
   const abs = (rel) => join31(deps.cwd, rel);
   let available = [];
-  const sourceIdx = flags["source-index"];
+  const sourceIdx = typeof flags["source-index"] === "string" ? flags["source-index"] : void 0;
   if (sourceIdx) {
     const text = await fs.readText(abs(sourceIdx));
     if (text === void 0) {
