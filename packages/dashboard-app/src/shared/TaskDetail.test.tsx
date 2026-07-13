@@ -436,6 +436,61 @@ describe('TaskDetail 失败诊断（W3：成因徽章 + 可复制修复命令）
   })
 })
 
+/**
+ * F-b 成因结构化（读取端）：失败诊断优先用结构化 automation_cause 直判
+ * （diagnoseFailureWithCause），空串/缺失/未识别回落 last_error regex——上个 describe（无
+ * automation_cause 的 fixture）原样通过即 fallback 路径不回归的证明。
+ */
+describe('TaskDetail F-b：automation_cause 直判优先，空串回落 regex', () => {
+  const fz = zh.failure as Record<string, string>
+
+  it('cause=cancelled（原文 regex 只能 unknown→误建议 doctor）→ 徽章「已被取消…」+ 不渲染修复命令区；原文仍保留', async () => {
+    await renderDetail({
+      change: makeChange('hotfix', 'build', {
+        fields: {
+          automation: 'failed',
+          automation_cause: 'cancelled',
+          automation_last_error: '任务被人工终止',
+          automation_attempts: '1',
+        },
+      }),
+    })
+    expect(screen.getByTestId('dt-diag-cause').textContent).toBe(fz.cause_cancelled)
+    // cancelled 非故障：无修复命令区（尤其不再建议 pipeline doctor）
+    expect(screen.queryByTestId('detail-fix-cmd')).toBeNull()
+    // last_error 原文照渲染（成因徽章是补充不是替换，与 W3 既有口径一致）
+    expect(screen.getByTestId('dt-field-last_error').textContent).toContain('任务被人工终止')
+  })
+
+  it('cause=verify-fail → 徽章「验证未通过…」（regex 对 verify 原文只能 unknown 的钉死反例）', async () => {
+    await renderDetail({
+      change: makeChange('hotfix', 'build', {
+        fields: {
+          automation: 'failed',
+          automation_cause: 'verify-fail',
+          automation_last_error: 'verify: 2 failed · auth.test.ts',
+        },
+      }),
+    })
+    expect(screen.getByTestId('dt-diag-cause').textContent).toBe(fz['cause_verify-fail'])
+    expect(screen.queryByTestId('detail-fix-cmd')).toBeNull()
+  })
+
+  it('cause 空串（老数据/写入端未落）→ 回落 regex：凭证原文仍判 missing-credential + pipeline setup', async () => {
+    await renderDetail({
+      change: makeChange('hotfix', 'build', {
+        fields: {
+          automation: 'failed',
+          automation_cause: '',
+          automation_last_error: '未检测到 codex 凭证：宿主机需设 OPENAI_API_KEY',
+        },
+      }),
+    })
+    expect(screen.getByTestId('dt-diag-cause').textContent).toBe(fz['cause_missing-credential'])
+    expect(screen.getByTestId('detail-fix-cmd').textContent).toBe('pipeline setup')
+  })
+})
+
 describe('TaskDetail 「在终端继续」命令区', () => {
   it('命令文案与第一条前进 transition 事件一致（verify → verify-pass），拷贝钮带 data-copy 且写剪贴板', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined)

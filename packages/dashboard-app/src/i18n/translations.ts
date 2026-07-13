@@ -593,6 +593,17 @@ export const zh: Dict = {
     short_unknown: '成因未识别',
     fix_label: '修复命令',
     fix_copy: '拷贝修复命令',
+    // ── F-b 成因结构化（读取端）：automation_cause 直判新增的两个展示分类——regex 从错误原文
+    //    根本给不出（取消是人为终止非故障，此前误判 unknown 还错误建议跑 doctor）。键尾 =
+    //    FailureCause 新增枚举值；zh/en 尾部对称追加（completeness 测试守）。──
+    'cause_verify-fail': '验证未通过——测试/检查有未过项，看验证输出与运行日志定位后修复重试',
+    cause_cancelled: '已被取消——人为终止，非故障；如需重跑请重新入队',
+    'short_verify-fail': '验证未通过',
+    short_cancelled: '已取消',
+    // ── cause-touchup：写入端第 6 值 no-op（scheduler noop 结算：零 commit 空跑）——run 成功但
+    //    无产出，非故障；**不建议 doctor**（空跑不是环境故障）。zh/en 尾部对称追加（completeness 守）。──
+    'cause_no-op': '空跑——agent 运行成功但未产出提交，非故障；已暂停等人工处理，如需重跑请调整任务后重新入队',
+    'short_no-op': '空跑',
   },
 }
 
@@ -1125,6 +1136,17 @@ export const en: Dict = {
     short_unknown: 'cause unknown',
     fix_label: 'Fix command',
     fix_copy: 'Copy fix command',
+    // ── F-b structured cause (reader side): two display categories judged directly from
+    //    automation_cause — regex can never derive these from raw error text (cancelled = human
+    //    stop, not a fault; previously fell to unknown with a misleading doctor suggestion). ──
+    'cause_verify-fail': 'Verification failed — some checks/tests did not pass; inspect the verify output and run log, then fix and retry',
+    cause_cancelled: 'Cancelled — stopped by a person, not a fault; re-enqueue it if you want another run',
+    'short_verify-fail': 'verification failed',
+    short_cancelled: 'cancelled',
+    // ── cause-touchup: writer-side 6th value no-op (scheduler noop settlement: zero-commit empty
+    //    run) — the run succeeded but produced nothing; not a fault, so **no doctor suggestion**. ──
+    'cause_no-op': 'No-op run — the agent finished without producing any commits; not a fault. Paused for human review; adjust the task and re-enqueue to run again',
+    'short_no-op': 'no-op run',
   },
 }
 

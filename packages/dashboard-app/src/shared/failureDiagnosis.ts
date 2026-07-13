@@ -38,6 +38,12 @@
  *     真实 agent 非零退出已被 lifecycle 改写成含「凭证」句、于优先级6 归 missing-credential（见上）；本分支
  *     只兜住裸标记（万一改写逻辑变动或有其它裸标记来源），保留不删以防未来回归。
  *   9 unknown —— 其余（含空串）→ pipeline doctor 兜底（诚实：没识别出成因，先跑就绪诊断）。
+ *
+ * F-b 成因结构化落盘（读取端）起，上述 regex 层降级为 **fallback**：写入端（automation 结算处）
+ * 随失败落结构化 `automation_cause` 枚举，视图统一改走 diagnoseFailureWithCause——有 cause 直判
+ * （结算现场的第一手结论，不再从错误原文倒猜），空串/缺失/未识别值回落本文件 regex。fallback
+ * **永久保留不设日落**：老数据无 cause，且基础设施类失败（docker/network/credential/image）本轮
+ * 写入端不落 cause，全靠 regex 继续覆盖——现有 8 类分类学一个不丢。
  */
 export type FailureCause =
   | 'missing-credential'
@@ -47,6 +53,15 @@ export type FailureCause =
   | 'timeout'
   | 'network'
   | 'agent-nonzero'
+  // F-b 新增两类：regex 从错误原文根本给不出（取消是人为终止非故障，此前误判 unknown 还错误建议
+  // 跑 doctor；verify 未过原文形如 `verify: 2 failed · auth.test.ts` 同样只能落 unknown）——仅
+  // 结构化 automation_cause 直判可达，regex fallback 永远不产出这两个值。
+  | 'verify-fail'
+  | 'cancelled'
+  // 写入端第 6 值（scheduler noop 结算）：零 commit 空跑——run 成功但无产出，automation=paused
+  // 停给人工，**非故障**。同样仅结构化可达：落盘原文「no-op run：零 commit …」regex 8 类无一命中，
+  // 此前 fallback 落 unknown 还误建议跑 doctor（空跑不是环境故障，doctor 诊不出）。
+  | 'no-op'
   | 'unknown'
 
 export interface FailureDiagnosis {
@@ -98,4 +113,34 @@ export function diagnoseFailure(lastError: string): FailureDiagnosis {
   if (DOCKER_RE.test(s)) return { cause: 'missing-docker', fixCommand: null }
   if (AGENT_EXIT_RE.test(s)) return { cause: 'agent-nonzero', fixCommand: null }
   return { cause: 'unknown', fixCommand: 'pipeline doctor' }
+}
+
+// ── F-b：automation_cause 直判映射表（契约值域，开放集）。写入端现落 6 值：cancelled /
+// conflict / timeout / verify-fail / agent-exit / no-op——conflict/timeout 归并既有同名类；
+// agent-exit 归既有 agent-nonzero（同一语义：agent 进程非零退出，i18n/配色沿用）；cancelled /
+// verify-fail / no-op 是仅结构化可达的新类（no-op = scheduler.ts noop 结算：零 commit 空跑，
+// run 成功但无产出 → paused 停人工，非故障）。fixCommand 全 null：取消/空跑非故障无可修（重跑
+// 走重试/重新入队按钮，i18n 人话承载，**不建议 doctor**）；verify 未过要看验证输出定位；
+// conflict/timeout/agent-exit 与 regex 同类分支的 null 逐字对齐——同一 cause 两条路径给同一
+// 诊断，不因数据来源新旧漂移。
+// 用 Map 而非对象字面量：automation_cause 是外部落盘字符串，对象字面量按键访问会命中原型链
+// （'toString' 等脏值→返回函数当诊断），Map.get 无此坑。
+const CAUSE_MAP: ReadonlyMap<string, FailureDiagnosis> = new Map<string, FailureDiagnosis>([
+  ['cancelled', { cause: 'cancelled', fixCommand: null }],
+  ['conflict', { cause: 'conflict', fixCommand: null }],
+  ['timeout', { cause: 'timeout', fixCommand: null }],
+  ['verify-fail', { cause: 'verify-fail', fixCommand: null }],
+  ['agent-exit', { cause: 'agent-nonzero', fixCommand: null }],
+  ['no-op', { cause: 'no-op', fixCommand: null }],
+])
+
+/**
+ * F-b 双层入口（三视图统一改走此函数）：有结构化成因用成因——写入端在失败结算现场落的第一手
+ * 判定，可信度高于从 last_error 原文倒猜的 regex（两者冲突时信 cause）；空串/缺失/未识别值
+ * （老数据、基础设施类本轮不落、写入端未来新增值）→ 回落 diagnoseFailure(lastError)。
+ * 返回新对象（不外泄 CAUSE_MAP 条目引用，杜绝调用方误改共享值）。
+ */
+export function diagnoseFailureWithCause(cause: string, lastError: string): FailureDiagnosis {
+  const hit = CAUSE_MAP.get(cause ?? '')
+  return hit ? { ...hit } : diagnoseFailure(lastError)
 }

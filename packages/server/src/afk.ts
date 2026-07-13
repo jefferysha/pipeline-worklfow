@@ -43,6 +43,9 @@ export interface AfkCard {
   sandbox: string
   worktree: string
   preserved_path: string
+  /** F-b：结构化失败成因（automation_cause 原样透传，开放集）。空串 = 写入端未落/老数据 →
+   *  前端回落 last_error regex 诊断（契约：读取端不校验值域，两端可独立演进）。 */
+  cause: string
 }
 
 /** 调度器 doctor 灯：ok（无活跃）/ busy（有排队或在跑）/ attention（有 failed/conflict 待人工）。 */
@@ -129,6 +132,10 @@ function cardOf(root: string, c: Snapshot['projects'][number]['changes'][number]
     sandbox: str(c.fields.automation_sandbox),
     worktree: str(c.fields.automation_worktree),
     preserved_path: str(c.fields.automation_preserved_path),
+    // F-b：宽索引访问而非 c.fields.automation_cause——server 不把编译耦合到 kernel FieldName
+    // 是否已收录该键（写入端并行落 FIELD_ORDER，两端独立可发布）；缺字段 → str(undefined) = ''，
+    // 即「未落/老数据」的契约信号，前端据此回落 regex（同模块头零依赖原则的字段面延伸）。
+    cause: str((c.fields as Record<string, string | string[] | undefined>).automation_cause),
   }
 }
 

@@ -710,6 +710,53 @@ describe('ProgressView 失败行短成因提示（W3 ④）', () => {
 })
 
 /**
+ * F-b 成因结构化（读取端）：失败行短成因优先用结构化 automation_cause 直判
+ * （diagnoseFailureWithCause），空串/未识别回落 last_error regex——上个 describe（无
+ * automation_cause 的 fixture）原样通过即 fallback 路径不回归的证明。
+ */
+describe('ProgressView F-b：automation_cause 直判优先，空串回落 regex', () => {
+  const fz = zh.failure as Record<string, string>
+
+  it('cause=verify-fail（原文 regex 只能 unknown）→ 短成因「验证未通过」；title 仍透传原文', async () => {
+    renderView({
+      snapshot: makeSnapshot([
+        makeProject(ROOT_A, [
+          makeChange('vf-fail', 'build', {
+            fields: {
+              automation: 'failed',
+              automation_attempts: '1',
+              automation_cause: 'verify-fail',
+              automation_last_error: 'verify: 2 failed · auth.test.ts',
+            },
+          }),
+        ]),
+      ]),
+    })
+    const cause = screen.getByTestId('prg-cause-vf-fail')
+    expect(cause.textContent).toBe(fz['short_verify-fail'])
+    expect(cause.getAttribute('title')).toContain('auth.test.ts')
+    // 单 root fixture：冲掉并发上限探测请求落地（同本文件其余先例）
+    await act(async () => {})
+  })
+
+  it('只有 cause 没有 last_error → 仍出短成因（此前条件依赖原文非空会漏行）；title 无原文不挂', async () => {
+    renderView({
+      snapshot: makeSnapshot([
+        makeProject(ROOT_A, [
+          makeChange('cancel-me', 'build', {
+            fields: { automation: 'failed', automation_attempts: '1', automation_cause: 'cancelled' },
+          }),
+        ]),
+      ]),
+    })
+    const cause = screen.getByTestId('prg-cause-cancel-me')
+    expect(cause.textContent).toBe(fz.short_cancelled)
+    expect(cause.getAttribute('title')).toBeNull()
+    await act(async () => {})
+  })
+})
+
+/**
  * Bug4：乐观 patch 此前在每个 snapshot 帧被整清（useEffect(()=>setPatches(new Map()),[snapshot])），
  * 多项目并发时对 A 点放行/重试未落地就被无关项目的 SSE 帧清掉 → A 行回弹抖动。修：patch 按 change
  * keyed，只清「已在 snapshot 落地（真值达目标，或已离开施加基线）」的那条，不整清；未落地的保留。

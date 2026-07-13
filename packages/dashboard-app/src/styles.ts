@@ -1016,9 +1016,13 @@ span.wb-chip-badge { cursor: default; }
 .dt-diag { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
 .dt-diag-badge { align-self: flex-start; display: inline-flex; align-items: center; padding: 2px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 600; line-height: 1.5; background: var(--red-t); color: var(--red-d); border: 1px solid var(--red-b); }
 /* agent 非零 / unknown：换「琥珀」中性警示（红绿 oklch 取中派生,同调度灯 busy 先例)——这类要人看
-   日志判断、非「去配 X」的硬缺失，色调与缺凭证/镜像/docker 的红徽章区分开。 */
+   日志判断、非「去配 X」的硬缺失，色调与缺凭证/镜像/docker 的红徽章区分开。cause-touchup 收编
+   cancelled（人为终止）/ no-op（零 commit 空跑,run 成功但无产出）——二者**非故障**,落红色基础样
+   是视觉误导,同归琥珀中性组;类名由 TaskDetail 按 cause 值拼出（dt-diag-badge--<cause>）。 */
 .dt-diag-badge--agent-nonzero,
-.dt-diag-badge--unknown {
+.dt-diag-badge--unknown,
+.dt-diag-badge--cancelled,
+.dt-diag-badge--no-op {
   background: color-mix(in srgb, color-mix(in oklch, var(--red) 52%, var(--green)) 15%, var(--card));
   color: color-mix(in oklch, var(--red) 42%, var(--text-2));
   border-color: color-mix(in srgb, color-mix(in oklch, var(--red) 52%, var(--green)) 46%, var(--border));

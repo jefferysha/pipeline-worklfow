@@ -6,7 +6,8 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { join } from 'node:path'
 import { createDashboardServer } from './server.js'
-import type { DashboardServer } from './types.js'
+import { buildAfkSnapshot } from './afk.js'
+import type { DashboardServer, Snapshot } from './types.js'
 import { initChange, makeProject, newStore, reqGet, testFlow } from './test-support.js'
 import type { StateStore } from '@pipeline-lite/kernel'
 
@@ -144,5 +145,62 @@ describe('GET /api/afk/log —— 调度器流水（从 automation_* 派生）',
     const h = await startWith({ idle: { state: 'off' } })
     const log = (await reqGet(h.port, '/api/afk/log')).json<any>()
     expect(log.entries).toEqual([])
+  })
+})
+
+// ── F-b 成因结构化落盘（读取端）：AfkCard.cause = automation_cause 原样透传（开放集契约）。
+//    此段刻意用桩 Snapshot 直测 buildAfkSnapshot 而非上面的真落盘 e2e 路——kernel serialize 只走
+//    FIELD_ORDER，在写入端（并行落 FIELD_ORDER + automation 落盘）合入前，setMany('automation_cause')
+//    不会round-trip；桩数据让本测与写入端合入时序解耦、两侧独立常绿（写入端合入后其 e2e 自然补真盘
+//    覆盖）。转发逻辑本身是纯函数投影，桩即足证。──
+describe('F-b AfkCard.cause —— automation_cause 原样透传（开放集，读取端不校验值域）', () => {
+  function stubSnapshotWith(fields: Record<string, string>): Snapshot {
+    return {
+      version: '9.9.9',
+      generated_at: '2026-07-07T00:00:00Z',
+      capabilities: {},
+      project_count: 1,
+      change_count: 1,
+      projects: [
+        {
+          root: '/repo',
+          ok: true,
+          changes: [
+            {
+              name: 'boom',
+              path: '/repo/openspec/changes/boom',
+              phase: 'build',
+              phase_status: '',
+              track: 'backend',
+              preset: '',
+              archived: '',
+              updated_at: '',
+              fields: fields as never,
+            },
+          ],
+        },
+      ],
+    }
+  }
+
+  it('automation_cause 有值 → card.cause 原样转发（值域开放：未来新增值零 server 改动）', () => {
+    const a = buildAfkSnapshot(
+      stubSnapshotWith({ automation: 'failed', automation_cause: 'cancelled', automation_last_error: '任务被人工终止' }),
+      () => '2026-07-07T00:00:00Z',
+    )
+    expect(a.cards).toHaveLength(1)
+    expect(a.cards[0]!.cause).toBe('cancelled')
+    // 既有字段不受牵连（cause 是纯追加，不改任何旧投影）
+    expect(a.cards[0]!.last_error).toBe('任务被人工终止')
+    expect(a.cards[0]!.lane).toBe('failed')
+  })
+
+  it('缺 automation_cause（老数据/写入端未落）→ card.cause 空串（前端回落 last_error regex 的契约信号）', () => {
+    const a = buildAfkSnapshot(
+      stubSnapshotWith({ automation: 'failed', automation_last_error: 'kaboom' }),
+      () => '2026-07-07T00:00:00Z',
+    )
+    expect(a.cards[0]!.cause).toBe('')
+    expect(a.cards[0]!.last_error).toBe('kaboom')
   })
 })

@@ -543,3 +543,32 @@ describe('InboxView 失败卡成因诊断（复用 W3 diagnoseFailure，口径�
     await waitFor(() => expect(writeText).toHaveBeenCalledWith('pipeline setup'))
   })
 })
+
+/**
+ * F-b 成因结构化（读取端）：失败卡优先用结构化 automation_cause 直判（diagnoseFailureWithCause），
+ * 空串/缺失/未识别回落 last_error regex——上个 describe（无 automation_cause 的 fixture）原样通过
+ * 即 fallback 路径不回归的证明。
+ */
+describe('InboxView F-b：automation_cause 直判优先，空串回落 regex', () => {
+  it('cause=cancelled（原文 regex 只能 unknown+误建议 doctor）→ 短成因「已取消」+ 无修复命令按钮', async () => {
+    const snap = makeSnapshot([
+      makeProject('/repo', [
+        makeChange('cancel-me', 'build', {
+          fields: {
+            automation: 'failed',
+            automation_attempts: '1',
+            automation_cause: 'cancelled',
+            automation_last_error: '任务被人工终止',
+          },
+        }),
+      ]),
+    ])
+    renderInbox({ snapshot: snap })
+    await settled()
+    expect(screen.getByTestId('inbox-cause').textContent).toBe('已取消')
+    // cancelled 非故障：不给任何可复制修复命令（尤其不建议 doctor），重跑走重试按钮/重新入队
+    expect(screen.queryByTestId('inbox-fix-cmd')).toBeNull()
+    // 既有 automation 值 chip 不受 cause 叠加牵连
+    expect(screen.getByTestId('inbox-fail-chip').textContent).toBe('automation=failed')
+  })
+})

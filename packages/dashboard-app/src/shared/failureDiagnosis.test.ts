@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { diagnoseFailure } from './failureDiagnosis'
+import { diagnoseFailure, diagnoseFailureWithCause } from './failureDiagnosis'
 
 // ── full-install W3 · TDD ①：diagnoseFailure 纯函数——把 scheduler 落盘的 automation_last_error
 //    原文（classifyFailure sanitize 后消息 / lifecycle [AGENT_EXIT] 标记 / docker·image 抛错串）
@@ -121,5 +121,78 @@ describe('Bug5 成因分类修复：新增类 + 收窄误判', () => {
     expect(
       diagnoseFailure("Error response from daemon: pull access denied for foo, repository may require 'docker login'").cause,
     ).toBe('missing-image')
+  })
+})
+
+// ── F-b 成因结构化落盘（读取端）：diagnoseFailureWithCause 双层入口——结构化 automation_cause
+//    直判优先，空串/缺失/未识别值回落既有 regex。**上方全部既有断言零修改**即 fallback 语义原样
+//    保留的证明（契约：fallback 永久保留不设日落，老数据与基础设施类失败继续走 regex）。──
+describe('F-b diagnoseFailureWithCause：结构化成因直判 + regex fallback', () => {
+  it('写入端本轮值域 5 值逐一映射：conflict/timeout 归既有类、agent-exit→agent-nonzero、cancelled/verify-fail→新类；fixCommand 全 null', () => {
+    expect(diagnoseFailureWithCause('cancelled', '')).toEqual({ cause: 'cancelled', fixCommand: null })
+    expect(diagnoseFailureWithCause('conflict', '')).toEqual({ cause: 'conflict', fixCommand: null })
+    expect(diagnoseFailureWithCause('timeout', '')).toEqual({ cause: 'timeout', fixCommand: null })
+    expect(diagnoseFailureWithCause('verify-fail', '')).toEqual({ cause: 'verify-fail', fixCommand: null })
+    expect(diagnoseFailureWithCause('agent-exit', '')).toEqual({ cause: 'agent-nonzero', fixCommand: null })
+  })
+
+  it('cause 直判优先于 lastError regex（写入端第一手结论 > 原文倒猜；原文含 docker daemon 串也不改判）', () => {
+    expect(
+      diagnoseFailureWithCause('timeout', 'Cannot connect to the Docker daemon at unix:///var/run/docker.sock').cause,
+    ).toBe('timeout')
+  })
+
+  it('cause 空串（老数据 / 基础设施类本轮不落）→ 回落 regex：8 类分类学一个不丢', () => {
+    expect(diagnoseFailureWithCause('', 'getaddrinfo ENOTFOUND registry-1.docker.io')).toEqual({ cause: 'network', fixCommand: null })
+    expect(diagnoseFailureWithCause('', '未检测到 codex 凭证：宿主机需设 OPENAI_API_KEY')).toEqual({
+      cause: 'missing-credential',
+      fixCommand: 'pipeline setup',
+    })
+    expect(diagnoseFailureWithCause('', '')).toEqual({ cause: 'unknown', fixCommand: 'pipeline doctor' })
+  })
+
+  it('未识别 cause 值（开放集：写入端未来新增值/脏数据）→ 不 throw，回落 regex', () => {
+    expect(diagnoseFailureWithCause('some-future-cause', 'AFK 镜像 sandcastle:local 不在本机')).toEqual({
+      cause: 'missing-image',
+      fixCommand: 'bash tools/sandcastle/build.sh',
+    })
+    expect(diagnoseFailureWithCause('some-future-cause', '')).toEqual({ cause: 'unknown', fixCommand: 'pipeline doctor' })
+  })
+
+  it('回归钉死：取消场景 regex 只能 unknown+误建议 doctor；有 cause 后 cancelled 不再建议任何命令', () => {
+    const msg = '任务被人工终止'
+    expect(diagnoseFailure(msg)).toEqual({ cause: 'unknown', fixCommand: 'pipeline doctor' })
+    expect(diagnoseFailureWithCause('cancelled', msg)).toEqual({ cause: 'cancelled', fixCommand: null })
+  })
+
+  it('回归钉死：verify 未过原文 regex 只能 unknown；有 cause 后判 verify-fail（新类首次可达）', () => {
+    const msg = 'verify: 2 failed · auth.test.ts'
+    expect(diagnoseFailure(msg).cause).toBe('unknown')
+    expect(diagnoseFailureWithCause('verify-fail', msg)).toEqual({ cause: 'verify-fail', fixCommand: null })
+  })
+
+  // ── cause-touchup 对账缝：写入端(scheduler.ts:143)第 6 值 `no-op`——零 commit 空跑结算
+  //    (automation=paused,「run 成功但无产出」,非故障)。读取端 Map 若不认识 → fallback regex
+  //    只能 unknown+误建议 doctor(空跑不是可 doctor 的环境故障)。──
+  it('写入端第 6 值 no-op（零 commit 空跑）→ 新类 no-op；非故障无可修，fixCommand=null 不建议任何命令', () => {
+    expect(diagnoseFailureWithCause('no-op', '')).toEqual({ cause: 'no-op', fixCommand: null })
+  })
+
+  it('回归钉死：no-op 写入端 last_error 原文 regex 只能 unknown+误建议 doctor；有 cause 后直判 no-op', () => {
+    // 逐字对齐 scheduler.ts:140 落盘句——regex 8 类无一命中(「未合并」不含冲突关键词、无 agent 词)。
+    const msg = 'no-op run：零 commit / 空构建（build_sha 缺失）——未合并、未解锁下游，停给人工复核'
+    expect(diagnoseFailure(msg)).toEqual({ cause: 'unknown', fixCommand: 'pipeline doctor' })
+    expect(diagnoseFailureWithCause('no-op', msg)).toEqual({ cause: 'no-op', fixCommand: null })
+  })
+
+  it('原型链脏值防御：cause 恰为对象原型键（toString/constructor）→ 不误中映射，回落 regex', () => {
+    expect(diagnoseFailureWithCause('toString', '').cause).toBe('unknown')
+    expect(diagnoseFailureWithCause('constructor', '').cause).toBe('unknown')
+  })
+
+  it('返回值是新对象：改动返回结果不污染后续同 cause 调用（CAUSE_MAP 引用不外泄）', () => {
+    const first = diagnoseFailureWithCause('cancelled', '')
+    first.fixCommand = 'rm -rf /'
+    expect(diagnoseFailureWithCause('cancelled', '')).toEqual({ cause: 'cancelled', fixCommand: null })
   })
 })

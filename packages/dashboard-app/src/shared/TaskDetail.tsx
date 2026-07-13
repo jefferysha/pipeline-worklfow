@@ -9,7 +9,7 @@ import { changeProgressState, type ProgressRules, type ProgressState } from '../
 import { artifactChips, gateEvidence, stageArtifacts, VERIFY_STATUS_FIELDS, type EvidenceChip } from '../inbox/evidence'
 import { decisionKind } from '../inbox/inbox'
 import { getHistory, type ChangeHistoryEntry } from '../api/client'
-import { diagnoseFailure } from './failureDiagnosis'
+import { diagnoseFailureWithCause } from './failureDiagnosis'
 import { revealStages } from './motion'
 import { Icon } from '../shell/Icon'
 import { shortTime } from '../model/time'
@@ -211,6 +211,8 @@ export function TaskDetail({
   const automation = fieldStr(change, 'automation')
   const attempts = fieldStr(change, 'automation_attempts')
   const lastError = fieldStr(change, 'automation_last_error')
+  // F-b：结构化失败成因（写入端结算现场落盘；空串=老数据/未落 → 诊断层回落 last_error regex）。
+  const failCause = fieldStr(change, 'automation_cause')
   const footLabel =
     state === 'failed' ? `automation · ${automation}` : firstForward ? `${change.phase} → ${firstForward.to}` : change.phase
 
@@ -247,7 +249,8 @@ export function TaskDetail({
       const missing = chips.filter((c) => c.unset).map((c) => c.key)
       // W3：成因分类 + 修复命令。原文（last_error）仍由结论行 v.text 与下方 dt-field-last_error
       // 双重保留，此块只在其上补一层人话成因徽章 + 可复制修复命令，不替换任何原始信息。
-      const diag = diagnoseFailure(lastError)
+      // F-b：结构化 automation_cause 直判优先，空串/未识别回落 last_error regex（老数据兼容）。
+      const diag = diagnoseFailureWithCause(failCause, lastError)
       const fix = diag.fixCommand
       return (
         <>

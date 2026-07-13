@@ -10,7 +10,7 @@ import { Icon } from '../shell/Icon'
 import { revealList } from '../shared/motion'
 import { TaskDetail } from '../shared/TaskDetail'
 import { postAfkDismiss, postAfkRetry } from '../api/client'
-import { diagnoseFailure } from '../shared/failureDiagnosis'
+import { diagnoseFailureWithCause } from '../shared/failureDiagnosis'
 import { gateEvidence, VERIFY_STATUS_FIELDS, type EvidenceChip } from './evidence'
 import { changeWorkflow, decisionKind, projectName, selectInbox, type InboxItem } from './inbox'
 
@@ -456,10 +456,12 @@ export function InboxView({ snapshot, loading, error, currentRoot, rulesByKey, o
                 .filter(Boolean)
                 .join(' ')
               const automation = fieldStr(change, 'automation')
-              // W2：失败行叠加成因诊断——lastError 原文经 W3 diagnoseFailure 映射成短成因 +
-              // 可复制修复命令（非失败态不算，省掉每行的空串正则）。
+              // W2：失败行叠加成因诊断——F-b 起结构化 automation_cause 直判优先（写入端结算
+              // 现场的第一手结论），空串/未识别回落 lastError 原文 regex（老数据兼容，fallback
+              // 永久保留）；非失败态不算，省掉每行的空串正则。
               const lastError = state === 'failed' ? fieldStr(change, 'automation_last_error') : ''
-              const failDiag = state === 'failed' ? diagnoseFailure(lastError) : null
+              const failCause = state === 'failed' ? fieldStr(change, 'automation_cause') : ''
+              const failDiag = state === 'failed' ? diagnoseFailureWithCause(failCause, lastError) : null
               return (
                 <li
                   key={key}

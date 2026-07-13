@@ -38,6 +38,22 @@ describe('GLOBAL_CSS —— 光泽扫过强化（峰值/宽度）', () => {
   })
 })
 
+// cause-touchup：失败成因徽章「非故障/未明」琥珀组——cancelled(人为终止)/no-op(空跑无产出)非故障，
+// 不该落 .dt-diag-badge 的红色基础样(视觉误导成硬故障)；与 agent-nonzero/unknown 同组琥珀中性。
+// 类名由 TaskDetail `dt-diag-badge--${diag.cause}` 拼出(TaskDetail.tsx:264)，cause 值即类名尾。
+describe('GLOBAL_CSS —— 失败成因徽章琥珀组收编 cancelled / no-op（cause-touchup）', () => {
+  it('--cancelled/--no-op 与 --agent-nonzero/--unknown 同一选择器组：琥珀 color-mix 派生，禁新硬编码原色', () => {
+    // 组内末位 selector 可被 ruleBody 命中；组体沿用琥珀派生（红绿 oklch 取中），无新原色。
+    const body = ruleBody(GLOBAL_CSS, '.dt-diag-badge--no-op')
+    expect(body).toContain('color-mix(')
+    expect(body).not.toMatch(/#[0-9a-fA-F]{3,8}\b/)
+    // 四类同组（逗号并列共享同一声明体）——cancelled 不再落红色基础样。
+    expect(GLOBAL_CSS).toMatch(
+      /\.dt-diag-badge--agent-nonzero,\s*\.dt-diag-badge--unknown,\s*\.dt-diag-badge--cancelled,\s*\.dt-diag-badge--no-op\s*\{/,
+    )
+  })
+})
+
 // v6 计划 T11：流程带 running 脉冲光泽——同上一条纪律，color-mix 派生、禁新硬编码原色（决议 #9）。
 describe('GLOBAL_CSS —— 流程带 running 脉冲（v6 T11，决议 #9 同款校验）', () => {
   it('.wb-flow-gloss 声明存在：color-mix 派生渐变、缺省 opacity:0（GSAP 驱动可见性），不含新硬编码色值', () => {

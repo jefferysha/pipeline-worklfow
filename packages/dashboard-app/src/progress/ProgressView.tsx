@@ -8,7 +8,7 @@ import type { WorkflowRules } from '../model/workflowModel'
 import { plannedTransition, type PlannedTransition } from '../model/events'
 import { fetchAutomationSettings, postAfkCommand, postTransition } from '../api/client'
 import { TaskDetail } from '../shared/TaskDetail'
-import { diagnoseFailure } from '../shared/failureDiagnosis'
+import { diagnoseFailureWithCause } from '../shared/failureDiagnosis'
 import { useAfkLog } from './useAfkLog'
 import {
   PROGRESS_STATES,
@@ -780,8 +780,10 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
                   const rowKey = rowKeyOf(row.root, row.change.name)
                   const rowOpen = openRows.has(rowKey)
                   const rowBusy = busyRows.has(rowKey)
-                  // W3：失败行短成因提示的数据源（有 last_error 才给成因；无则退回徽章「失败 ×N」原样）。
+                  // W3：失败行短成因提示的数据源——F-b 起 automation_cause 直判优先，空串/未识别
+                  // 回落 last_error regex；两者皆空才退回徽章「失败 ×N」原样（不臆造成因）。
                   const lastError = fieldStr(row.change, 'automation_last_error')
+                  const failCause = fieldStr(row.change, 'automation_cause')
                   return (
                     <div
                       key={row.change.name}
@@ -829,15 +831,17 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
                             {(row.state === 'gate' || row.state === 'running') && <span className="prg-badge__dot" aria-hidden="true" />}
                             {badgeLabel(row, groupRules)}
                           </span>
-                          {row.state === 'failed' && lastError !== '' && (
+                          {row.state === 'failed' && (lastError !== '' || failCause !== '') && (
                             // 短成因提示（小字，紧随「失败 ×N」徽章）；title 透传 last_error 原文——
                             // 闭合观察项③：进度行原先只有徽章计数，看不到落盘的错误原文。
+                            // F-b：只有结构化 cause 没有 last_error 也出成因（此前条件依赖原文非空，
+                            // 会把有第一手结论的行漏成裸徽章）；title 无原文则不挂。
                             <span
                               className="prg-cause"
                               data-testid={`prg-cause-${row.change.name}`}
-                              title={lastError}
+                              title={lastError || undefined}
                             >
-                              {t(`failure.short_${diagnoseFailure(lastError).cause}`)}
+                              {t(`failure.short_${diagnoseFailureWithCause(failCause, lastError).cause}`)}
                             </span>
                           )}
                           {row.state === 'running' && (
