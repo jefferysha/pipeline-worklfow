@@ -297,4 +297,64 @@ describe('fetchSessionLinks（GET /api/mem/session-links 批量）', () => {
     const got = await fetchSessionLinks(items)
     expect(got).toEqual({ 'b@/repo': { found: true, platform: 'codex', resumeCmd: 'cmd-b' } })
   })
+
+  // ── 客户端分片字节维度（codex review 第二轮 P2）：上面的分片用例只锁了「条数」维度，但 root 是
+  //    绝对路径、每一项都要在查询串里完整重复一次，URLSearchParams 序列化又会把 `/` 编码成 %2F，
+  //    条数远没到 50 时单批编码后字节数可能已经先超过 Node --max-http-header-size / 反代请求行长度
+  //    上限——纯按条数切片堵不住这个口子，超限请求会被整体拒绝，非 2xx 又被静默吃成 {}，静默丢失
+  //    该批全部行的真恢复命令。以下用例锁住「按条数 + 编码后字节数双维度切片」的契约。──
+
+  it('条数远小于 50，但单项 root 编码后很长（累计超字节阈值）→ 按字节数切成多批，且每批查询串长度不超过安全阈值', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ links: {} }) })
+    vi.stubGlobal('fetch', fetchMock)
+    const { fetchSessionLinks } = await import('./client')
+    // 模拟嵌套较深的 monorepo 项目根目录：拼接长路径片段到几百字符，10 项累计编码后远超阈值。
+    const deepSegment = '/packages/some-nested-service/src/components/deeply/'
+    const items = Array.from({ length: 10 }, (_, i) => ({
+      root: `/repo${deepSegment.repeat(10)}-${i}`,
+      name: `n${i}`,
+    }))
+    await fetchSessionLinks(items)
+    expect(fetchMock.mock.calls.length).toBeGreaterThan(1)
+    // 6000 镜像 client.ts 里的私有常量 SESSION_LINKS_CHUNK_MAX_URL_CHARS——该常量不导出，测试侧
+    // 手抄同款数字（同文件其它分片阈值用例的既有写法，如上面「恰好 50 个」用例硬编码 50）。
+    const SESSION_LINKS_CHUNK_MAX_URL_CHARS = 6000
+    for (const [url] of fetchMock.mock.calls as Array<[string, RequestInit | undefined]>) {
+      const queryString = String(url).split('?')[1] ?? ''
+      expect(queryString.length).toBeLessThanOrEqual(SESSION_LINKS_CHUNK_MAX_URL_CHARS)
+    }
+  })
+
+  it('正常短路径场景（fixture root 短字符串）× 50 条 → 仍只发 1 次请求，不被字节维度过度切片', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ links: {} }) })
+    vi.stubGlobal('fetch', fetchMock)
+    const { fetchSessionLinks } = await import('./client')
+    const items = Array.from({ length: 50 }, (_, i) => ({ root: '/repo', name: `n${i}` }))
+    await fetchSessionLinks(items)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('单项 root 编码后本身就超过字节阈值（极端超长路径）→ 独占一批，不与相邻正常项合并，不丢数据、不卡死', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ links: {} }) })
+    vi.stubGlobal('fetch', fetchMock)
+    const { fetchSessionLinks } = await import('./client')
+    const items = [
+      { root: '/repo', name: 'a' },
+      { root: `/repo/${'x'.repeat(10000)}`, name: 'huge' }, // 单项编码后远超阈值的极端路径
+      { root: '/repo', name: 'c' },
+    ]
+    const got = await fetchSessionLinks(items)
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+    const calls = fetchMock.mock.calls as Array<[string, RequestInit | undefined]>
+    const pairCounts = calls.map(([url]) => {
+      const sp = new URLSearchParams(String(url).split('?')[1] ?? '')
+      return { roots: sp.getAll('root').length, names: sp.getAll('name').length }
+    })
+    expect(pairCounts).toEqual([
+      { roots: 1, names: 1 },
+      { roots: 1, names: 1 },
+      { roots: 1, names: 1 },
+    ])
+    expect(got).toEqual({})
+  })
 })

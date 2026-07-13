@@ -651,22 +651,55 @@ export async function fetchSessionLink(root: string, name: string): Promise<Sess
 
 /** GET /api/mem/session-links 服务端硬上限（server.ts 里 `roots.length > 50` 那道校验的同款数字，
  *  两处独立维护——这个模块一贯手抄 server 契约保零耦合，同文件里其它接口的既有纪律，不额外引入
- *  跨包依赖）。 */
+ *  跨包依赖）。分片的「条数」维度——另一维度「字节数」见下面 SESSION_LINKS_CHUNK_MAX_URL_CHARS。 */
 const SESSION_LINKS_CHUNK_SIZE = 50
+
+/** 单批编码后查询串长度安全上限——留在 Node --max-http-header-size 默认 16KB（覆盖整个请求行
+ *  +全部请求头，不只是这一个查询串）之下留足安全边际，同时兼顾常见反代/中间件对请求行更保守的
+ *  长度限制（如 Apache 默认 LimitRequestLine ~8KB）。codex review 第二轮 P2：root 是绝对路径，
+ *  每一项都要在查询串里完整重复一次，URLSearchParams 序列化又会把路径里的 `/` 编码成 %2F 之类，
+ *  条数远没到 SESSION_LINKS_CHUNK_SIZE 时字节数可能已经先超限——纯按条数分片堵不住这个口子。 */
+const SESSION_LINKS_CHUNK_MAX_URL_CHARS = 6000
+
+/** 按「条数」与「编码后查询串长度」两个维度切片，遍历时任一维度先达到上限就切下一批。
+ *  `current.length > 0` 这个判断保证「当前批已有内容时才因为超长切下一批」——哪怕单项本身编码后
+ *  就超过 SESSION_LINKS_CHUNK_MAX_URL_CHARS（root 长到离谱的极端情况），也会被单独放进自己的一批
+ *  发出去，不会死循环、也不会拖累其它正常长度的项一起失败（这一条本身能不能被 server 接受是另一
+ *  回事，不在本函数职责内）。 */
+function chunkSessionLinkItems(
+  items: Array<{ root: string; name: string }>,
+): Array<Array<{ root: string; name: string }>> {
+  const chunks: Array<Array<{ root: string; name: string }>> = []
+  let current: Array<{ root: string; name: string }> = []
+  let currentChars = 0
+  for (const it of items) {
+    // 'root=' + 'name=' 两个键名 + 分隔符的近似开销，一并算进单项估算，不用追求逐字节精确。
+    const itemChars =
+      encodeURIComponent(it.root).length + encodeURIComponent(it.name).length + 'root='.length + 'name='.length + 2
+    const wouldExceedCount = current.length >= SESSION_LINKS_CHUNK_SIZE
+    const wouldExceedChars = current.length > 0 && currentChars + itemChars > SESSION_LINKS_CHUNK_MAX_URL_CHARS
+    if (wouldExceedCount || wouldExceedChars) {
+      chunks.push(current)
+      current = []
+      currentChars = 0
+    }
+    current.push(it)
+    currentChars += itemChars
+  }
+  if (current.length > 0) chunks.push(current)
+  return chunks
+}
 
 /** GET /api/mem/session-links（批量）——进度视图 failed 行「回终端」chip 一次预取全部失败行
  *  （产品决策：批量端点而非逐行发请求）。items 可能超过 server 端硬上限（SESSION_LINKS_CHUNK_SIZE，
  *  见上）——不分片会「谁超限、大家一起 400」：单次超限请求被 server 整体拒绝，非 2xx 又被静默吃成
  *  {}，于是全部失败行（不只是超出上限的那部分）集体退化成静态兜底命令，一个只该影响极端边界的
- *  上限被放大成全或无的功能丢失。这里按该阈值切片、Promise.all 并发发出各批、结果合并——单批
- *  「非 2xx 或网络异常」只让那一批对应的 key 缺席（调用方 cmdChipOf 本就有查不到 key 时退化静态
- *  命令的兜底分支，天然兼容），不拖累其它批。 */
+ *  上限被放大成全或无的功能丢失。这里按 chunkSessionLinkItems 的条数+字节数双维度切片、
+ *  Promise.all 并发发出各批、结果合并——单批「非 2xx 或网络异常」只让那一批对应的 key 缺席
+ *  （调用方 cmdChipOf 本就有查不到 key 时退化静态命令的兜底分支，天然兼容），不拖累其它批。 */
 export async function fetchSessionLinks(items: Array<{ root: string; name: string }>): Promise<Record<string, SessionLink>> {
   if (items.length === 0) return {}
-  const chunks: Array<Array<{ root: string; name: string }>> = []
-  for (let i = 0; i < items.length; i += SESSION_LINKS_CHUNK_SIZE) {
-    chunks.push(items.slice(i, i + SESSION_LINKS_CHUNK_SIZE))
-  }
+  const chunks = chunkSessionLinkItems(items)
   const results = await Promise.all(chunks.map(fetchSessionLinksOneChunk))
   const merged: Record<string, SessionLink> = {}
   for (const r of results) Object.assign(merged, r)

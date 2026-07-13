@@ -889,6 +889,61 @@ describe('ProgressView 失败/取消行：回终端命令 chip（重试/放弃�
   })
 })
 
+// codex review 第二轮 P2：failedRowsKey 只编码 (root,name) 成员集合，不含 automation_worktree
+// 值——一行保持 failed 态不变但 automation_worktree 换了新沙箱现场（自动重试重新分配）时，批量
+// 预取本不该跳过。fix=键里再拼进 automation_worktree 值；只扩键、不轮询（无 setInterval/定时器）。
+describe('ProgressView v9-J：session-link 批量预取依赖键含 automation_worktree（codex review 第二轮 P2）', () => {
+  const WT_KEY = `wt-refetch@${ROOT_A}`
+
+  function fixture(worktree: string, updatedAt = '2026-07-12T10:00:00Z'): Snapshot {
+    return makeSnapshot([
+      makeProject(ROOT_A, [
+        makeChange('wt-refetch', 'build', {
+          updated_at: updatedAt,
+          fields: { automation: 'failed', automation_attempts: '1', automation_worktree: worktree },
+        }),
+      ]),
+    ])
+  }
+  function viewAt(snapshot: Snapshot): JSX.Element {
+    return (
+      <I18nProvider>
+        <ProgressView snapshot={snapshot} loading={false} error={null} currentRoot="" rulesByKey={makeRules()} onToast={vi.fn()} onRefresh={vi.fn()} />
+      </I18nProvider>
+    )
+  }
+  function sessionLinkCalls(): number {
+    return fetchLog.filter((l) => l.includes('/api/mem/session-links')).length
+  }
+
+  it('failed 行保持不变但 automation_worktree 换新沙箱现场 → 批量端点重新调用，chip 从静态兜底升级为真恢复命令', async () => {
+    sessionLinksResponse = { status: 200, body: { links: {} } } // 旧现场：批量预取查无
+    const { rerender } = render(viewAt(fixture('/tmp/wt/old')))
+    await waitFor(() => expect(sessionLinkCalls()).toBe(1))
+    expect(screen.getByTestId('prg9-cmd-wt-refetch').textContent).toContain('在终端接管')
+    expect(screen.getByTestId('prg9-cmd-wt-refetch').getAttribute('title')).toBe('cd /tmp/wt/old')
+
+    // 自动重试重新分配了新 worktree；新现场这次批量预取命中真恢复会话
+    const resumeCmd = 'cd /tmp/wt/new && claude --resume abcd-1234'
+    sessionLinksResponse = { status: 200, body: { links: { [WT_KEY]: { found: true, resumeCmd } } } }
+    rerender(viewAt(fixture('/tmp/wt/new')))
+
+    await waitFor(() => expect(sessionLinkCalls()).toBe(2))
+    await waitFor(() => expect(screen.getByTestId('prg9-cmd-wt-refetch').textContent).toContain(resumeCmd))
+    expect(screen.getByTestId('prg9-cmd-wt-refetch').textContent).toContain('恢复会话')
+  })
+
+  it('failed 行仅无关字段（updated_at）变化、automation_worktree 不变 → 不重新调用批量端点（防矫枉过正/请求风暴）', async () => {
+    sessionLinksResponse = { status: 200, body: { links: {} } }
+    const { rerender } = render(viewAt(fixture('/tmp/wt/same', '2026-07-12T10:00:00Z')))
+    await waitFor(() => expect(sessionLinkCalls()).toBe(1))
+
+    rerender(viewAt(fixture('/tmp/wt/same', '2026-07-12T11:00:00Z')))
+    await act(async () => {})
+    expect(sessionLinkCalls()).toBe(1)
+  })
+})
+
 describe('ProgressView 详情抽屉（行名点击右滑；旧行内展开已退役）', () => {
   it('点行名开抽屉：scrim+drawer、TaskDetail timeline 形态、动作与行内同组（dw- 前缀）、滚动锁', async () => {
     renderView()

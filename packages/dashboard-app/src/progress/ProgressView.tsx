@@ -570,11 +570,18 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
   }, [singleRoot])
 
   // v9-J：failed 行「回终端」chip 批量预取（产品决策=批量端点而非逐行发请求，也不是等用户点开
-  // 抽屉才有数据——行内 chip 在需要时批量出现，一次查全部失败行）。依赖键=当前 failed 行 key
-  // 集合拼串（同 animKey 写法）：键不变（哪怕 SSE 帧刷新了其它字段）就不重打请求，只在失败行
-  // 成员真正增减时才重拉；key 唯一决定 (root,name) 对，键相同即可安全复用上一次闭包捕获的
-  // failedRows（不需要把 flatRows 整体放进依赖数组）。
-  const failedRowsKey = flatRows.filter((fr) => fr.row.state === 'failed').map((fr) => fr.key).sort().join('|')
+  // 抽屉才有数据——行内 chip 在需要时批量出现，一次查全部失败行）。依赖键=当前 failed 行
+  // key+automation_worktree 值拼串（同 animKey 写法）：键不变（哪怕 SSE 帧刷新了其它无关字段）
+  // 就不重打请求；失败行成员真正增减，或某行 automation_worktree 换了新沙箱现场（codex review
+  // P2：自动重试重新分配 worktree 后，旧一批预取结果若命中 found:false 会一直卡在静态兜底命令，
+  // 直到这里重拉才能看到新现场的真恢复命令）才重拉。已知残留（如实登记不追）：worktree 不变、
+  // 用户手动在同一目录另起新终端会话这种更罕见场景不在本次修复范围，不为它引入轮询这种更重的
+  // 机制。
+  const failedRowsKey = flatRows
+    .filter((fr) => fr.row.state === 'failed')
+    .map((fr) => `${fr.key}:${fieldStr(fr.row.change, 'automation_worktree')}`)
+    .sort()
+    .join('|')
   const [sessionLinks, setSessionLinks] = useState<ReadonlyMap<string, SessionLink>>(new Map())
   useEffect(() => {
     if (failedRowsKey === '') {
