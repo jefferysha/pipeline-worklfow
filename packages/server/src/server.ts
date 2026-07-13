@@ -23,8 +23,8 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { AddressInfo } from 'node:net'
 import { dirname, join, resolve as resolvePath } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { applyLevelChange, createFlowEngine, createHistoryWriter, createStateStore, firstStep, loadManifest, loadRegistry, loadWorkflow, TRACKS } from '@pipeline-lite/kernel'
-import type { FlowEngine, GraduationFs, StateStore, Track, WorkflowDef } from '@pipeline-lite/kernel'
+import { applyLevelChange, createFlowEngine, createHistoryWriter, createStateStore, firstStep, listMemSessions, loadManifest, loadRegistry, loadWorkflow, nodeMemFs, TRACKS } from '@pipeline-lite/kernel'
+import type { FlowEngine, GraduationFs, MemFs, StateStore, Track, WorkflowDef } from '@pipeline-lite/kernel'
 import { buildAfkLog, buildAfkSnapshot, cancelAfkRun, dismissAfkRun, enqueueAfkRun, readAfkRunLog, retryAfkRun } from './afk.js'
 import { applyLoopsUpdate, buildLoopsSnapshot } from './loops.js'
 import { readMandatorySkills, validateMandatorySkillsBody, writeMandatorySkills } from './config.js'
@@ -125,6 +125,8 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
   const heartbeatMs = options.heartbeatMs ?? 15000
   const gitHeadSha = options.gitHeadSha
   const traceStore = options.traceStore
+  // v9-I：mem 会话检索 fs（只读用户会话历史根，绝不写）；测试注 nodeMemFs(fakeHome) 指 fixture 树。
+  const memFs: MemFs = options.memFs ?? nodeMemFs()
   // config 写端点（M3 可选增量）数据源：manifest.yaml 路径。未注入（如测试只传 flow 而非
   // manifestPath）→ capabilities.config=false，GET/POST config 端点降级 404（不谎报，同 traffic 手法）。
   const manifestPath = options.manifestPath
@@ -552,6 +554,59 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
       const image = readAutomationSettings(root).image || 'sandcastle:local'
       const r = await buildAfkReadiness({ image, secretsPath: paths.secretsPath, exec: options.execDocker })
       return sendJson(res, 200, r)
+    }
+    // ── v9-I：GET /api/mem/session-link?root=&name= —— change ↔ 终端会话关联（恢复命令）。──
+    //    读 change 快照字段 automation_worktree（空则回落 root）作 cwd，经 kernel mem
+    //    listMemSessions 查该目录最近的持久化会话（platform all，recency 首条）；claude/codex
+    //    给真实恢复命令（`claude --resume <id>` / `codex resume <id>`，二者拼法均已在宿主机
+    //    实测 --help 确认），opencode/pi 无把握的恢复拼法 → resumeCmd:null（UI 只显示 id+目录，
+    //    不造假命令）。「查不到会话」是常态不是错误（AFK 沙箱内 claude 会话随容器 HOME=/tmp
+    //    销毁，宿主机本就查不到）→ 恒 200 { found:false, dir, reason }，对齐 /api/afk/readiness
+    //    的恒 200 哲学；查询异常同样收敛 found:false（不 500 裸抛、reason 不带原始路径）。
+    //    校验顺序同 /api/change/:name/history：name 格式 400 → root 信任锚 404 → change 存在 400。
+    if (path === '/api/mem/session-link') {
+      const sp = new URL(req.url ?? '/', 'http://localhost').searchParams
+      const name = sp.get('name') ?? ''
+      if (!name || !/^[a-zA-Z0-9_-]+$/.test(name) || name.includes('..')) {
+        return sendJson(res, 400, { ok: false, error: '非法 change 名（仅允许 a-z A-Z 0-9 - _）' })
+      }
+      const root = sp.get('root') ?? ''
+      if (root === '') return sendJson(res, 400, { ok: false, error: '缺少 root 参数' })
+      if (!isRegisteredRoot(root)) {
+        return sendJson(res, 404, { ok: false, error: 'root 未在机器级项目注册表中' })
+      }
+      const changeDir = join(root, 'openspec', 'changes', name)
+      if (!existsSync(join(changeDir, '.pipeline.yaml'))) {
+        return sendJson(res, 400, { ok: false, error: '找不到该 change（无 .pipeline.yaml）' })
+      }
+      try {
+        const wtRaw = await store.get(changeDir, 'automation_worktree')
+        const wt = Array.isArray(wtRaw) ? wtRaw.join(',') : (wtRaw ?? '')
+        // 老内核 cmd_get 口径：空串 / 字面 'null' 算未设 → 回落 root（本机直跑会话的 cwd）。
+        const lookupDir = wt !== '' && wt !== 'null' ? wt : root
+        const sessions = listMemSessions(memFs, { filter: { cwd: lookupDir, platform: 'all', limit: 3 } })
+        const s = sessions[0]
+        if (!s) return sendJson(res, 200, { found: false, dir: lookupDir, reason: 'no-session' })
+        // cd 目标用会话自己的 cwd（可能是 lookupDir 的后代目录）——claude --resume 按 cwd 派生
+        // 项目目录找会话，cd 错目录会找不到；缺 cwd 才回落查询目录。
+        const dir = s.cwd || lookupDir
+        const resumeCmd =
+          s.platform === 'claude'
+            ? `cd "${dir}" && claude --resume ${s.id}`
+            : s.platform === 'codex'
+              ? `cd "${dir}" && codex resume ${s.id}`
+              : null
+        return sendJson(res, 200, {
+          found: true,
+          platform: s.platform,
+          sessionId: s.id,
+          dir,
+          resumeCmd,
+          ...(s.updated || s.created ? { mtime: s.updated || s.created } : {}),
+        })
+      } catch {
+        return sendJson(res, 200, { found: false, dir: root, reason: 'lookup-error' })
+      }
     }
     return sendJson(res, 404, { ok: false, error: '未知端点' })
   }

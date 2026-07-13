@@ -2,7 +2,7 @@
  * server 契约类型 —— dashboard server 的公共形状。
  * server 是 @pipeline-lite/kernel 的消费方（只 import 不改）+ node stdlib http，零第三方运行时依赖。
  */
-import type { FieldName, FlowEngine, Phase, StateStore } from '@pipeline-lite/kernel'
+import type { FieldName, FlowEngine, MemFs, Phase, StateStore } from '@pipeline-lite/kernel'
 import type { TraceStoreReader } from './traces.js'
 
 /** 机器级路径锚（可经 PIPELINE_DASHBOARD_HOME 覆盖——仅供 hermetic 测试隔离）。 */
@@ -106,6 +106,11 @@ export interface DashboardServerOptions {
    * 结构化注入面（不 import tap，守 server 零第三方 + 构建不耦合）；bin 装配见主会话接线清单。
    */
   traceStore?: TraceStoreReader
+  /**
+   * v9-I：kernel mem 会话检索的 fs 注入面（GET /api/mem/session-link 用；缺省 nodeMemFs() 读真
+   * ~/.claude / ~/.codex 等会话根）。测试注入 nodeMemFs(fakeHome) 指向 fixture 树（hermetic）。
+   */
+  memFs?: MemFs
 }
 
 export interface DashboardServer {
