@@ -333,8 +333,13 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
       // 老内核 cmd_get 口径：空串 / 字面 'null' 算未设 → 回落 root（本机直跑会话的 cwd）。
       const lookupDir = wt !== '' && wt !== 'null' ? wt : root
       const sessions = listMemSessions(memFs, { filter: { cwd: lookupDir, platform: 'all', limit: 3 } })
-      const s = sessions[0]
-      if (!s) return { found: false, dir: lookupDir, reason: 'no-session' }
+      if (sessions.length === 0) return { found: false, dir: lookupDir, reason: 'no-session' }
+      // codex review 第六轮 P2：sessions 已按全平台最近使用时间倒序（listAll 内部 sort），但只有
+      // claude/codex 两个平台的 resumeCmd 拼法有把握——盲选 sessions[0] 会被同目录下更新的
+      // opencode/pi 会话挡住明明存在的可恢复 claude/codex 旧会话。fetched 范围内（limit 3）优先选
+      // 最新的可恢复平台一条；三条里都没有可恢复平台 → 退回全平台最新那条（found:true 但
+      // resumeCmd:null，SessionResumeRow 既有分支正确处理，不是新增行为）。
+      const s = sessions.find((x) => x.platform === 'claude' || x.platform === 'codex') ?? sessions[0]!
       // cd 目标用会话自己的 cwd（可能是 lookupDir 的后代目录）——claude --resume 按 cwd 派生
       // 项目目录找会话，cd 错目录会找不到；缺 cwd 才回落查询目录。
       const dir = s.cwd || lookupDir

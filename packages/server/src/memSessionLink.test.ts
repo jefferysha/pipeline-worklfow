@@ -1,7 +1,7 @@
 /**
  * memSessionLink.test —— v9-I GET /api/mem/session-link 真 HTTP 端到端（GOAL C9：零 mock）。
  * 真起 http server（listen(0)）+ 真建带 automation_worktree 的 change（kernel StateStore 真落盘）
- * + 真写 claude/codex 会话 fixture 树（nodeMemFs(fakeHome) 注入，hermetic 不碰真 ~/.claude）
+ * + 真写 claude/codex/opencode 会话 fixture 树（nodeMemFs(fakeHome) 注入，hermetic 不碰真 ~/.claude）
  * → 真 node:http GET → 断言 found 三态 / resumeCmd 拼法 / 校验顺序（400/404 先例对齐）。
  *
  * 能力边界（端点如实返回，测试如实钉住）：
@@ -11,14 +11,24 @@
  *     其余平台 resumeCmd:null（不造假命令）。
  *   · 查不到会话恒 200 { found:false, reason }——AFK 沙箱 claude 会话随容器 HOME=/tmp 销毁，
  *     宿主机查不到是常态不是错误。
+ *   · fetched 的最近 3 条里，优先选最新的可恢复平台（claude/codex）会话，即便同目录下有更新的
+ *     opencode/pi 会话排在它前面（codex review 第六轮 P2）；3 条里都没有可恢复平台才退回全平台
+ *     最新那条（found:true + resumeCmd:null 的既有降级）。
  */
 import { afterEach, describe, expect, it } from 'vitest'
 import { mkdir, utimes, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { createRequire } from 'node:module'
+import { dirname, join } from 'node:path'
 import { nodeMemFs } from '@pipeline-lite/kernel'
 import { createDashboardServer } from './server.js'
 import type { DashboardServer } from './types.js'
 import { initChange, makeProject, makeTempHome, makeWorktreeDir, newStore, reqGet, testFlow } from './test-support.js'
+
+// node:sqlite 是极新内建模块，vitest 的静态 import 解析认不得它（会当裸包名 "sqlite" 去找
+// node_modules）——用 createRequire 惰性拿，与生产代码 kernel/mem/adapters/opencode.ts、
+// 及其测试 kernel/mem/adapters/opencode.test.ts 同款绕法，非本文件独创。
+type SqliteNS = typeof import('node:sqlite')
+const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite') as SqliteNS
 
 const openServers: DashboardServer[] = []
 afterEach(async () => {
@@ -45,6 +55,40 @@ async function writeCodexSession(home: string, sid: string, cwd: string): Promis
   return file
 }
 
+/**
+ * 真写一个 opencode 会话 fixture：<home>/.local/share/opencode/opencode.db 的 session 表插一行。
+ * schema 取自 packages/kernel/src/mem/adapters/opencode.test.ts 对 opencode-ai@1.17.14 的实测结果，
+ * 列裁到 opencodeListSessions 实际 SELECT 的子集——resolveSessionLink 只查会话头，不读对话，
+ * 无需 message/part 表。updatedIso 直接落 time_updated 整数列（毫秒），不像 claude/codex fixture
+ * 靠文件 mtime 间接控排序——两种控排序手法都是各平台适配器的真实读取路径，不是测试专用捷径。
+ */
+async function writeOpencodeSession(home: string, sid: string, cwd: string, updatedIso: string): Promise<string> {
+  const dbPath = join(home, '.local', 'share', 'opencode', 'opencode.db')
+  await mkdir(dirname(dbPath), { recursive: true })
+  const db = new DatabaseSync(dbPath)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS session (
+      id text PRIMARY KEY,
+      project_id text NOT NULL,
+      workspace_id text,
+      parent_id text,
+      slug text NOT NULL,
+      directory text NOT NULL,
+      path text,
+      title text NOT NULL,
+      version text NOT NULL,
+      time_created integer NOT NULL,
+      time_updated integer NOT NULL
+    );
+  `)
+  db.prepare(
+    `INSERT INTO session (id, project_id, parent_id, slug, directory, title, version, time_created, time_updated)
+     VALUES (?, 'global', NULL, 'test-slug', ?, 'opencode fixture session', '1.17.14', ?, ?)`,
+  ).run(sid, cwd, Date.parse(updatedIso), Date.parse(updatedIso))
+  db.close()
+  return dbPath
+}
+
 interface Harness {
   port: number
   root: string
@@ -64,7 +108,10 @@ async function startWith(changes: Record<string, { worktree?: string }>): Promis
   }
   const srv = createDashboardServer({
     version: '9.9.9', token: 't', registry: () => [root], store, flow: testFlow(),
-    clock: () => '2026-07-13T00:00:00Z', memFs: nodeMemFs(home),
+    // env 全 undefined——不让真跑这套测试的宿主 shell 里可能设置的 XDG_DATA_HOME 泄进来，
+    // 否则 opencode fixture（写在 <home>/.local/share/...）可能被真实 XDG_DATA_HOME 覆盖路径
+    // 而读不到（同 kernel/mem/adapters/opencode.test.ts 的 realFs() precaution）。
+    clock: () => '2026-07-13T00:00:00Z', memFs: { ...nodeMemFs(home), env: () => undefined },
   })
   openServers.push(srv)
   const { port } = await srv.listen(0, '127.0.0.1')
@@ -141,6 +188,38 @@ describe('GET /api/mem/session-link —— found 三态', () => {
     const j = (await reqGet(h.port, linkPath(h.root, 'multi'))).json<any>()
     expect(j.found).toBe(true)
     expect(j.sessionId).toBe('new-session-id-9999')
+  })
+
+  it('同 cwd 下 opencode 会话比 claude 新 → 仍优先选可恢复平台 claude，不被更新的 opencode 挡住（codex review 第六轮 P2）', async () => {
+    const wt = await makeWorktreeDir()
+    const h = await startWith({ mixed: { worktree: wt } })
+    const sid = 'ffffaaaa-1111-2222-3333-444455556666'
+    const claudeFile = await writeClaudeSession(h.home, 'proj-mixed', sid, wt)
+    const past = new Date('2026-07-01T00:00:00Z')
+    await utimes(claudeFile, past, past) // claude 会话故意拨旧
+    // opencode 的 updated 直落 time_updated 列（晚于上面拨旧的 claude），listAll 排序后本会排 sessions[0]——
+    // 旧代码盲选 sessions[0] 会被它挡住；修复后应在 fetched 的 3 条里跳过它选中 claude。
+    await writeOpencodeSession(h.home, 'oc-newer-session', wt, '2026-07-12T00:00:00Z')
+
+    const j = (await reqGet(h.port, linkPath(h.root, 'mixed'))).json<any>()
+    expect(j.found).toBe(true)
+    expect(j.platform).toBe('claude')
+    expect(j.sessionId).toBe(sid)
+    expect(j.dir).toBe(wt)
+    expect(j.resumeCmd).toBe(`cd ${wt} && claude --resume ${sid}`)
+  })
+
+  it('目录下只有 opencode 会话（无 claude/codex）→ fallback 未被破坏：仍 found:true + resumeCmd:null', async () => {
+    const wt = await makeWorktreeDir()
+    const h = await startWith({ ocOnly: { worktree: wt } })
+    await writeOpencodeSession(h.home, 'oc-only-session', wt, '2026-07-05T00:00:00Z')
+
+    const j = (await reqGet(h.port, linkPath(h.root, 'ocOnly'))).json<any>()
+    expect(j.found).toBe(true)
+    expect(j.platform).toBe('opencode')
+    expect(j.sessionId).toBe('oc-only-session')
+    expect(j.dir).toBe(wt)
+    expect(j.resumeCmd).toBeNull()
   })
 
   it('automation_worktree 未设 → 回落 root 目录查（本机直跑会话）', async () => {
