@@ -318,7 +318,7 @@ export interface GraduationFs {
   readRunLog: (repoRoot: string) => string | null
   /** 读仓根 LOOP.md 人类镜像原文（漂移对账用）；缺失 → null。 */
   readLoopDoc: (repoRoot: string) => string | null
-  /** 读 .pipeline/loops.yaml 原文（level set surgical 改档用）；缺失 → null。 */
+  /** 读 .pipeline/loops.yaml 原文（level set surgical 改档的初读 + 写回前 CAS 重读）；缺失 → null。 */
   readRegistryText: (repoRoot: string) => string | null
   /** 写回 .pipeline/loops.yaml 原文（level set --confirm 的唯一 mutation）。 */
   writeRegistryText: (repoRoot: string, text: string) => void
@@ -378,13 +378,14 @@ export interface ApplyLevelResult {
   verdict: GraduationVerdict | null
   applied: boolean
   errors: string[]
-  /** 0 = noop/dry-run/applied；2 = 拒绝（跨级/准入未过/未知档）；3 = 载入/未知 loop/写回错误。 */
+  /** 0 = noop/dry-run/applied；2 = 拒绝（跨级/准入未过/未知档）；3 = 载入/未知 loop/写回错误（含写回 CAS 并发拒绝）。 */
   exitCode: number
 }
 
 /**
  * 编排 level set：载入 → 裁决 → planLevelChange → （confirm 且 allowed）surgical 改档写回 loops.yaml。
  * 安全默认：无 confirm = dry-run（不落盘）；升档须准入；跨级拒；降档总允许。
+ * 写回带读-判-写 CAS：初读→手术→重读比对，间隙被并发修改/删除 → 如实拒绝（errors + exit 3，未落盘）。
  */
 export function applyLevelChange(
   repoRoot: string,
@@ -410,6 +411,20 @@ export function applyLevelChange(
   if (text === null) return { plan, verdict, applied: false, errors: ['无法读取 .pipeline/loops.yaml 原文以写回'], exitCode: 3 }
   const { text: next, error } = setAutonomyLevelInYaml(text, loopId, plan.to!)
   if (error !== null || next === null) return { plan, verdict, applied: false, errors: [error ?? '改档写回失败'], exitCode: 3 }
+  // 读-判-写 CAS（对齐 server applyLoopsUpdate / cli loops init 先例）：写回前重读比对初读原文，
+  // 不一致说明间隙有并发写者（另一进程改档 / /api/loops/update / 人工编辑），如实拒绝不盲写覆盖。
+  // 全程同步无 await；重读→写的残留窗口仅跨进程纳秒级（同锁面已接受的 TOCTOU 残留口径）。
+  const recheck = fs.readRegistryText(repoRoot)
+  if (recheck !== text) {
+    const yamlPath = `${repoRoot}/.pipeline/loops.yaml`
+    return {
+      plan, verdict, applied: false,
+      errors: [recheck === null
+        ? `CAS 失败：loops.yaml 在改档写回期间被删除，已如实拒绝（未落盘，${yamlPath}）`
+        : `CAS 失败：loops.yaml 在改档写回期间被并发修改，已如实拒绝（未落盘，${yamlPath}）`],
+      exitCode: 3,
+    }
+  }
   fs.writeRegistryText(repoRoot, next)
   return { plan, verdict, applied: true, errors: [], exitCode: 0 }
 }
