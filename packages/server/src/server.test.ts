@@ -1446,6 +1446,19 @@ describe('GET /api/hooks —— hook 元数据 + 阶段×hook 开关矩阵（v5 
     const r = await reqGet(h.port, `/api/hooks?root=${encodeURIComponent(h.root)}`)
     expect(r.json<{ matrix: Record<string, false> }>().matrix).toEqual({ 'router.build': false })
   })
+
+  it('信任锚单源（isRegisteredRoot）语义钉：注册 root 精确/尾斜杠非规范形式均放行，未注册 404 + 精确文案', async () => {
+    // 借最轻量的 root-only 读端点钉 helper 三条语义——19 处调用点共用同一谓词后，
+    // 任一语义被改动（如丢掉两侧规范化）本用例即报警。
+    const h = await start()
+    const exact = await reqGet(h.port, `/api/hooks?root=${encodeURIComponent(h.root)}`)
+    expect(exact.status).toBe(200)
+    const slash = await reqGet(h.port, `/api/hooks?root=${encodeURIComponent(`${h.root}/`)}`)
+    expect(slash.status).toBe(200)
+    const alien = await reqGet(h.port, `/api/hooks?root=${encodeURIComponent('/tmp/never-registered-anywhere')}`)
+    expect(alien.status).toBe(404)
+    expect(alien.json<{ error: string }>().error).toBe('root 未在机器级项目注册表中')
+  })
 })
 
 describe('POST /api/hooks —— 阶段×hook 开关写回（v5 T5 / 决议#2）', () => {

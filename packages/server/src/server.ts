@@ -143,6 +143,14 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
     }
   }
 
+  // 信任锚单源：19 处「两侧规范化再比较」的唯一落点——注册表条目经 dedupeRoots 已 resolve
+  // （且过滤空条目，防 resolvePath('')=cwd 混入可信集），提交的 root 此处同样 resolvePath，
+  // 两侧规范化后再比对，防止「同一路径的非规范写法（如结尾多一个斜杠）」被误判为未注册。
+  // 纯读谓词：判定失败后的响应（404 + 各自 error 文案）仍由调用点自持——transition 端点的
+  // 文案与其余 18 处不同，收敛响应会破坏行为保持。
+  const isRegisteredRoot = (root: string): boolean =>
+    dedupeRoots(registry()).includes(resolvePath(root))
+
   let boundPort = 0
 
   // ── SSE 推送引擎 ──
@@ -358,7 +366,7 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
       }
       const root = new URL(req.url ?? '/', 'http://localhost').searchParams.get('root') ?? ''
       // 信任锚：同 /api/afk/<name>/cancel、/api/afk/<name>/retry 共用的「两侧规范化再比较」模式。
-      if (!dedupeRoots(registry()).includes(resolvePath(root))) {
+      if (!isRegisteredRoot(root)) {
         return sendJson(res, 404, { ok: false, error: 'root 未在机器级项目注册表中' })
       }
       const dir = join(root, 'openspec', 'changes', name)
@@ -389,7 +397,7 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
         return sendJson(res, 400, { ok: false, error: '非法 change 名（仅允许 a-z A-Z 0-9 - _）' })
       }
       const root = new URL(req.url ?? '/', 'http://localhost').searchParams.get('root') ?? ''
-      if (!dedupeRoots(registry()).includes(resolvePath(root))) {
+      if (!isRegisteredRoot(root)) {
         return sendJson(res, 404, { ok: false, error: 'root 未在机器级项目注册表中' })
       }
       const dir = join(root, 'openspec', 'changes', name)
@@ -451,7 +459,7 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
     //    /api/config、/api/skills/registry：本机回环 GET 不鉴权。
     if (path === '/api/hooks') {
       const root = new URL(req.url ?? '/', 'http://localhost').searchParams.get('root') ?? ''
-      if (!dedupeRoots(registry()).includes(resolvePath(root))) {
+      if (!isRegisteredRoot(root)) {
         return sendJson(res, 404, { ok: false, error: 'root 未在机器级项目注册表中' })
       }
       try {
@@ -465,7 +473,7 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
     //    本机回环 GET 不鉴权，全部对齐 /api/hooks 先例。
     if (path === '/api/automation') {
       const root = new URL(req.url ?? '/', 'http://localhost').searchParams.get('root') ?? ''
-      if (!dedupeRoots(registry()).includes(resolvePath(root))) {
+      if (!isRegisteredRoot(root)) {
         return sendJson(res, 404, { ok: false, error: 'root 未在机器级项目注册表中' })
       }
       try {
@@ -477,7 +485,7 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
     // ── workflow 编辑器（GOAL E8）：GET /api/workflows —— 列出自定义 workflow（排除 default）──
     if (path === '/api/workflows') {
       const root = new URL(req.url ?? '/', 'http://localhost').searchParams.get('root') ?? ''
-      if (!dedupeRoots(registry()).includes(resolvePath(root))) {
+      if (!isRegisteredRoot(root)) {
         return sendJson(res, 404, { ok: false, error: 'root 未在机器级项目注册表中' })
       }
       try {
@@ -498,7 +506,7 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
         return sendJson(res, 400, { ok: false, error: '非法 workflow 名（仅允许 a-z A-Z 0-9 - _）' })
       }
       const root = new URL(req.url ?? '/', 'http://localhost').searchParams.get('root') ?? ''
-      if (!dedupeRoots(registry()).includes(resolvePath(root))) {
+      if (!isRegisteredRoot(root)) {
         return sendJson(res, 404, { ok: false, error: 'root 未在机器级项目注册表中' })
       }
       try {
@@ -538,7 +546,7 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
     if (path === '/api/afk/readiness') {
       const root = new URL(req.url ?? '/', 'http://localhost').searchParams.get('root') ?? ''
       if (root === '') return sendJson(res, 400, { ok: false, error: '缺少 root 参数' })
-      if (!dedupeRoots(registry()).includes(resolvePath(root))) {
+      if (!isRegisteredRoot(root)) {
         return sendJson(res, 404, { ok: false, error: 'root 未在机器级项目注册表中' })
       }
       const image = readAutomationSettings(root).image || 'sandcastle:local'
@@ -589,7 +597,7 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
       }
       const b = rawBody as Record<string, unknown>
       const root = typeof b.root === 'string' ? b.root : ''
-      if (!dedupeRoots(registry()).includes(resolvePath(root))) {
+      if (!isRegisteredRoot(root)) {
         return sendJson(res, 404, { ok: false, error: 'root 未在机器级项目注册表中' })
       }
       const name = typeof b.name === 'string' ? b.name : ''
@@ -664,7 +672,7 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
       // 信任锚：与 /api/change/<name>/transition 同一「两侧规范化再比较」模式——注册表条目
       // （dedupeRoots 已 resolve）与提交的 root（此处同样 resolvePath）都规范化后再比较，
       // 防止「同一路径的非规范写法（如结尾多一个斜杠）」被误判为未注册。
-      if (!dedupeRoots(registry()).includes(resolvePath(root))) {
+      if (!isRegisteredRoot(root)) {
         return sendJson(res, 404, { ok: false, error: 'root 未在机器级项目注册表中' })
       }
       const result = applyLevelChange(root, id, target, { now: new Date(clock()), confirm: true }, REAL_GRADUATION_FS)
@@ -698,7 +706,7 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
         return sendJson(res, 400, { ok: false, error: 'patch 须为非空 JSON 对象（字段名 → 新值）' })
       }
       // 信任锚：同 /api/loops/level、/api/change/<name>/transition 共用的「两侧规范化再比较」模式。
-      if (!dedupeRoots(registry()).includes(resolvePath(root))) {
+      if (!isRegisteredRoot(root)) {
         return sendJson(res, 404, { ok: false, error: 'root 未在机器级项目注册表中' })
       }
       const result = await applyLoopsUpdate(root, id, patch as Record<string, unknown>)
@@ -720,7 +728,7 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
         return sendJson(res, 400, { ok: false, error: 'root 必填' })
       }
       // 信任锚：同 /api/loops/level、/api/workflows/:name 共用的「两侧规范化再比较」模式。
-      if (!dedupeRoots(registry()).includes(resolvePath(root))) {
+      if (!isRegisteredRoot(root)) {
         return sendJson(res, 404, { ok: false, error: 'root 未在机器级项目注册表中' })
       }
       try {
@@ -746,7 +754,7 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
         return sendJson(res, 400, { ok: false, error: 'root 必填' })
       }
       // 信任锚：同 /api/hooks、/api/loops/level 共用的「两侧规范化再比较」模式。
-      if (!dedupeRoots(registry()).includes(resolvePath(root))) {
+      if (!isRegisteredRoot(root)) {
         return sendJson(res, 404, { ok: false, error: 'root 未在机器级项目注册表中' })
       }
       try {
@@ -782,7 +790,7 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
       }
       const body = rawBody as Record<string, unknown>
       const root = typeof body.root === 'string' ? body.root : ''
-      if (!dedupeRoots(registry()).includes(resolvePath(root))) {
+      if (!isRegisteredRoot(root)) {
         return sendJson(res, 404, { ok: false, error: 'root 未在机器级项目注册表中' })
       }
       try {
@@ -808,7 +816,7 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
         return sendJson(res, 400, { ok: false, error: 'root 须为非空字符串' })
       }
       // 信任锚：同 /api/loops/level、/api/change/<name>/transition 共用的「两侧规范化再比较」模式。
-      if (!dedupeRoots(registry()).includes(resolvePath(root))) {
+      if (!isRegisteredRoot(root)) {
         return sendJson(res, 404, { ok: false, error: 'root 未在机器级项目注册表中' })
       }
       const dir = join(root, 'openspec', 'changes', name)
@@ -831,7 +839,7 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
         return sendJson(res, 400, { ok: false, error: 'root 须为非空字符串' })
       }
       // 信任锚：同 /api/loops/level、/api/change/<name>/transition、/api/afk/<name>/cancel 共用的「两侧规范化再比较」模式。
-      if (!dedupeRoots(registry()).includes(resolvePath(root))) {
+      if (!isRegisteredRoot(root)) {
         return sendJson(res, 404, { ok: false, error: 'root 未在机器级项目注册表中' })
       }
       const dir = join(root, 'openspec', 'changes', name)
@@ -854,7 +862,7 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
         return sendJson(res, 400, { ok: false, error: 'root 须为非空字符串' })
       }
       // 信任锚：同 /api/afk/<name>/cancel、/api/afk/<name>/retry 共用的「两侧规范化再比较」模式。
-      if (!dedupeRoots(registry()).includes(resolvePath(root))) {
+      if (!isRegisteredRoot(root)) {
         return sendJson(res, 404, { ok: false, error: 'root 未在机器级项目注册表中' })
       }
       const dir = join(root, 'openspec', 'changes', name)
@@ -877,7 +885,7 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
         return sendJson(res, 400, { ok: false, error: 'root 须为非空字符串' })
       }
       // 信任锚：同 /api/afk/<name>/cancel、/api/afk/<name>/retry 共用的「两侧规范化再比较」模式。
-      if (!dedupeRoots(registry()).includes(resolvePath(root))) {
+      if (!isRegisteredRoot(root)) {
         return sendJson(res, 404, { ok: false, error: 'root 未在机器级项目注册表中' })
       }
       const dir = join(root, 'openspec', 'changes', name)
@@ -921,7 +929,7 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
     // 对注册表里的空字符串条目会解析成 resolvePath('')=cwd 当一个"可信"条目，dedupeRoots 已
     // 显式过滤掉空条目（whole-branch review 抓出的真实不一致，两者对合法注册表行为等价，
     // 仅在这个边界输入上有差异）。
-    if (!dedupeRoots(registry()).includes(resolvePath(root))) {
+    if (!isRegisteredRoot(root)) {
       return sendJson(res, 404, { ok: false, error: 'root 非已知 Project（未注册或不可信）' })
     }
     const name = decodeURIComponent(mTr[1]!)
@@ -964,7 +972,7 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
         return sendJson(res, 400, { ok: false, error: 'default workflow 不可通过编辑器删除' })
       }
       const root = new URL(req.url ?? '/', 'http://localhost').searchParams.get('root') ?? ''
-      if (!dedupeRoots(registry()).includes(resolvePath(root))) {
+      if (!isRegisteredRoot(root)) {
         return sendJson(res, 404, { ok: false, error: 'root 未在机器级项目注册表中' })
       }
       try {
