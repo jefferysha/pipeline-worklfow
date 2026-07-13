@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import gsap from 'gsap'
 import { I18nProvider } from '../i18n'
 import { zh } from '../i18n/translations'
 import { AFK_LOG_POLL_INTERVAL_MS } from './useAfkLog'
@@ -206,6 +207,25 @@ afterEach(() => {
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
   document.documentElement.classList.remove('prg9-lock')
+  // gsap.ticker 是模块级单例，跨全文件 70 条用例共享同一份状态（不随 render/cleanup 重置）。
+  // GSAP 内建 autoSleep（空闲 ~30/120 帧无活跃 tween 时 ticker 会 sleep() 打盹；下次任何
+  // gsap.to/from/fromTo/set() 创建 tween 都会重新 wake()，wake() 内部现读当下的全局
+  // requestAnimationFrame/setTimeout 作为自驱下一帧的调度源）。若这次 sleep→wake 恰好发生
+  // 在某条用例的 vi.useFakeTimers() 窗口内（本文件目前只有「running 行抽屉…2.5s 轮询」一条
+  // 用例用了 fake timers），ticker 接下来的自驱循环就会被现读成 vitest 的 fake 定时器；等
+  // 这条用例结束、上面 vi.useRealTimers() 卸载 fake clock 时，卡在 fake 定时器里那个尚未
+  // 触发的挂起回调会被静默丢弃、不会补跑——ticker 内部记账（_tickerActive）却仍标记「活跃」，
+  // 于是它再也不会被重新 wake()，永久停摆：此后文件里任何真实时长的新 tween 都能正常造出来，
+  // 但渲染循环再没人推进，动画卡在初始帧不动。这条污染只在多文件并发（真实 `npm run test:web`
+  // 下 CPU 争抢制造的调度抖动）下才有机会命中 sleep→wake 恰落在 fake timers 窗口这个时序缝隙，
+  // 单文件隔离跑几乎不触发——这正是本 bug 只在整包命令下间歇出现、单独跑这一个文件却总是绿的
+  // 原因（已用 gsap.ticker.frame 探针在两种跑法下分别实测验证：整包运行的失败样本里 frame
+  // 在 fake-timer 用例结束后彻底冻结，之后 4 条真动画用例全程无一次新 tick；单文件隔离跑里
+  // frame 全程持续推进）。每条用例后都强制 sleep()+wake() 一次，用「此刻」这份已经真实的
+  // 定时器重新起搭 ticker 自驱循环，兜底清除潜在的卡死状态——对本来就健康在跳的 ticker 这只是
+  // 多余的一次取消+立即重新调度，幂等无副作用。
+  gsap.ticker.sleep()
+  gsap.ticker.wake()
 })
 
 describe('ProgressView 单列表行体（v9-H：聚合语境项目分组 + 行体 v2 标题行内联）', () => {
