@@ -247,3 +247,72 @@ describe('forward proxy —— B3：CONNECT 隧道 connect/idle 超时兜底（�
     expect(closed).toBe(true) // 无超时兜底则挂起的上游让 clientSocket 无限期泄漏
   })
 })
+
+/** 轮询到 pred 为真或超时（确定性等异步 socket 'close' 冲刷，不靠魔法 sleep，恒绿不 flaky）。 */
+async function waitUntil(pred: () => boolean, timeoutMs = 1500, stepMs = 10): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) { if (pred()) return true; await sleep(stepMs) }
+  return pred()
+}
+
+describe('forward proxy —— B3：明文/MITM 转发路径 upstream 无响应超时 + client 断开联动（防 upReq 挂死/fd 泄漏）', () => {
+  it('上游 accept 后永不发 HTTP 响应 → setTimeout 兜底 → client 收 502 + trace 落 error 记录 + 上游侧 fd 释放（与 ECONNREFUSED 同款可观测）', async () => {
+    const s = await store()
+    // startSilentTcpUpstream：TCP accept 但永不回 HTTP 响应——upReq('response' 不来、'error' 不来）本会挂死。
+    const silent = await startSilentTcpUpstream()
+    setCaptureEnabled(true, { dir: s.dir })
+    // 注入 60ms 短超时（生产默认 30s）：TCP 秒连上 loopback 后静默 → 60ms 无活动触发 setTimeout 兜底。
+    const proxy = await serveForward({ port: 0, store: s.store, connectTimeoutMs: 60 })
+    handles.push(proxy)
+
+    const res = await forwardHttpReq(
+      proxy.port,
+      { host: '127.0.0.1', port: silent.port, path: '/v1/messages' },
+      { method: 'POST', body: JSON.stringify({ model: 'x' }), headers: { 'Content-Type': 'application/json' } },
+    )
+    // 超时兜底 → upReq.destroy(err) → 既有 upReq.on('error') → 502（与上游 ECONNREFUSED 同一条 error 路径）
+    expect(res.status).toBe(502)
+    expect(res.json<{ error: string }>().error).toContain('upstream timeout') // destroy 的 err.message 经 error 路径落 502 body
+    // trace 落一条 error 记录（POST + capture ON → captureGate 真，走既有 502 录制分支——与真 error 同款可观测）
+    const recorded = s.store.listSessions().map((row) => s.store.readRecords(row.id)).flat()
+    expect(recorded.length).toBe(1)
+    expect((recorded[0]!.response as { status: number }).status).toBe(502)
+    // 上游侧 socket 被 upReq.destroy 断开（无悬挂 fd）——超时兜底真把到上游的连接也清了
+    expect(await waitUntil(() => silent.closed)).toBe(true)
+    await silent.close()
+  })
+
+  it('client 请求后立即 abort（响应未完成）→ upReq 被销毁（上游侧 socket 关闭可观测）+ daemon 存活（B2 同款不崩）', async () => {
+    const s = await store()
+    resetCaptureCache() // capture OFF：聚焦 socket 生命周期，不涉录制
+    const silent = await startSilentTcpUpstream() // 上游 accept 后静默：client abort 前 upReq 已连上、pending
+    const normal = await startFakeUpstream() // 验证 daemon 存活的正常上游
+    ups.push(normal)
+    // connectTimeoutMs 给足（5s）隔离：本用例只测「client 断 → 联动 destroy upReq」，不让超时兜底抢跑混淆归因。
+    const proxy = await serveForward({ port: 0, store: s.store, connectTimeoutMs: 5_000 })
+    handles.push(proxy)
+
+    const uncaught: unknown[] = []
+    const onErr = (e: unknown): void => { uncaught.push(e) }
+    process.on('uncaughtException', onErr)
+    try {
+      await new Promise<void>((resolve) => {
+        const sock = netConnect(proxy.port, '127.0.0.1', () => {
+          const line = `POST http://127.0.0.1:${silent.port}/v1/messages HTTP/1.1`
+          sock.write(`${line}\r\nHost: 127.0.0.1:${silent.port}\r\nContent-Type: application/json\r\nContent-Length: 2\r\n\r\n{}`)
+          setTimeout(() => { try { sock.destroy() } catch { /* ignore */ } ; resolve() }, 40) // upReq 已 pending 于 silent 后 client abort
+        })
+        sock.on('error', () => resolve())
+      })
+      // client 断 → proxy res 'close'（!writableEnded）→ upReq.destroy() → 上游侧 socket 关闭（fd 不泄漏）
+      expect(await waitUntil(() => silent.closed)).toBe(true)
+      expect(uncaught).toEqual([]) // upReq.destroy() 无参对 pending 请求触发 'socket hang up'→502，client 已断经既有 try/catch 吞掉，不崩
+      // daemon 仍活：后续正常请求照常 200
+      const res = await forwardHttpReq(proxy.port, { host: '127.0.0.1', port: normal.port, path: '/v1/messages' }, { method: 'POST', body: '{}', headers: { 'Content-Type': 'application/json' } })
+      expect(res.status).toBe(200)
+    } finally {
+      process.off('uncaughtException', onErr)
+      await silent.close()
+    }
+  })
+})

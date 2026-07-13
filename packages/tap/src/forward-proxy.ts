@@ -83,8 +83,12 @@ function relayHeaders(upstream: IncomingMessage, includeLength: boolean, bodyLen
   return out
 }
 
-/** forwardAndRecord 的会话上下文（serveForward 闭包三件套，显式传参保持 helper 模块级）。 */
-interface ForwardCtx { store: TraceStore; sessionId: string; counter: TurnCounter }
+/**
+ * forwardAndRecord 的会话上下文（serveForward 闭包四件套，显式传参保持 helper 模块级）。
+ * connectTimeoutMs（B3）：upstream 请求「无活动」兜底阈值——复用 serveForward 的同名旋钮（明文 forward
+ * 与 TLS MITM 两路的 UpstreamPlan 都经此单源共享，故超时也天然两路同享，不新增第二个旋钮）。
+ */
+interface ForwardCtx { store: TraceStore; sessionId: string; counter: TurnCounter; connectTimeoutMs: number }
 
 /**
  * 「转发 + 录制」管路单源（T-a 提取；UpstreamPlan 类型见 tls-mitm.ts——因两模块共用且本文件被
@@ -95,7 +99,7 @@ interface ForwardCtx { store: TraceStore; sessionId: string; counter: TurnCounte
  * B2 防崩 try/catch 自此只此一份；两调用点只算 UpstreamPlan。脱敏接缝（buildRecord）不动。
  */
 function forwardAndRecord(ctx: ForwardCtx, req: IncomingMessage, res: ServerResponse, body: Buffer, plan: UpstreamPlan): void {
-  const { store, sessionId, counter } = ctx
+  const { store, sessionId, counter, connectTimeoutMs } = ctx
   const { path, upstreamBaseUrl, transport } = plan
   const method = (req.method ?? 'GET').toUpperCase()
   const captureGate = method === 'POST' && isCaptureEnabled({ dir: store.dir })
@@ -139,7 +143,9 @@ function forwardAndRecord(ctx: ForwardCtx, req: IncomingMessage, res: ServerResp
   })
   upReq.on('error', (err) => {
     const msg = Buffer.from(JSON.stringify({ error: `upstream unavailable: ${err.message}` }), 'utf8')
-    try { res.writeHead(502, { 'Content-Type': 'application/json', 'Content-Length': msg.length }); res.end(msg) } catch { /* sent */ }
+    // 评审🟡:headers 已发(响应流中途 idle 超时)时 writeHead(502) 同步抛——此时必须 destroy res,
+    // 否则 client 拿着截断的 200 流悬挂到自身超时;client 已断场景 destroy 幂等 no-op。
+    try { res.writeHead(502, { 'Content-Type': 'application/json', 'Content-Length': msg.length }); res.end(msg) } catch { try { res.destroy() } catch { /* ignore */ } }
     if (captureGate) {
       try {
         store.appendRecord(sessionId, buildRecord({
@@ -150,6 +156,18 @@ function forwardAndRecord(ctx: ForwardCtx, req: IncomingMessage, res: ServerResp
       } catch { /* best-effort */ }
     }
   })
+  // B3：upstream 无响应超时兜底（单点覆盖 http/https 两 makeReq——setTimeout 挂返回的 ClientRequest 上，
+  // 与实现无关）。ClientRequest.setTimeout 按 socket「无活动」计时，一处覆盖三段死链：① TCP connect 挂起
+  // （黑洞地址/防火墙丢包，既不 'response' 也不 'error'）；② 上游 accept-后-静默（TCP 连上却不发 HTTP 响应）；
+  // ③ 响应流中途 idle（首字节后卡死，'data' 之间断流）。触发 → upReq.destroy(err) → 既有 upReq.on('error')
+  // → client 收 502 + trace 落 error 记录，与上游 ECONNREFUSED **同款可观测**（同一条 error 路径）。
+  // request 完成后计时器随 request 自动失效（无需手动 setTimeout(0) clear——与 CONNECT 裸 socket 长驻不同）。
+  upReq.setTimeout(connectTimeoutMs, () => upReq.destroy(new Error('upstream timeout')))
+  // B3：client 断开联动——client abort / 连接关闭且响应未完成（!res.writableEnded）→ 销毁 upReq。防上游
+  // 「已连上但静默」（established-but-silent）时 upReq 挂到天荒地老、上游侧 fd 无限期泄漏。判 res.writableEnded
+  // 避免正常完成误杀（正常时 upReq 已完成，destroy 幂等 no-op）；未完成时 upReq 尚 pending，destroy() 触发
+  // 'socket hang up'→502，client 已断经既有 try/catch 无害吞掉（与 B2 明文成功回写守卫一致，不崩 daemon）。
+  res.on('close', () => { if (!res.writableEnded) upReq.destroy() })
   if (body.length) upReq.write(body)
   upReq.end()
 }
@@ -185,7 +203,7 @@ export function serveForward(opts: ForwardProxyOptions = {}): Promise<ForwardPro
 
     // 明文路径的 UpstreamPlan：path/BaseUrl/Host 从绝对 URI 推导（Host 含端口——历史行为保持）。
     function forward(body: Buffer): void {
-      forwardAndRecord({ store, sessionId, counter }, req, res, body, {
+      forwardAndRecord({ store, sessionId, counter, connectTimeoutMs }, req, res, body, {
         makeReq: (o, onResp) => httpRequest({
           protocol: 'http:', hostname: targetUrl.hostname, port: targetUrl.port || 80,
           method: o.method, path: o.path, headers: o.headers,
@@ -204,7 +222,7 @@ export function serveForward(opts: ForwardProxyOptions = {}): Promise<ForwardPro
   const tlsMitm = ca ? createTlsMitm({
     ca, store, sessionId, counter, tunnels, connectTimeoutMs,
     // T-a 共享管路以 DI 注入（预绑 ctx）——不从本文件 export（index.ts 对本文件是 export *，导出即漏公共 API）。
-    forwardAndRecord: (req, res, body, plan: UpstreamPlan) => forwardAndRecord({ store, sessionId, counter }, req, res, body, plan),
+    forwardAndRecord: (req, res, body, plan: UpstreamPlan) => forwardAndRecord({ store, sessionId, counter, connectTimeoutMs }, req, res, body, plan),
   }) : null
 
   // ── ② CONNECT 隧道：ca+capture → TLS MITM 终结；否则盲隧道透传 ──
