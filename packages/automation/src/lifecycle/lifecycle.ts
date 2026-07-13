@@ -199,8 +199,9 @@ const AGENT_EXIT_LINE_RE = /^\[AGENT_EXIT\] (\S+) (\d+)\s*$/
  * run 成败判定不变（脚本兜底 commit + 0 退出原样）：scheduler 成功路 writeBackSuccess **不清**
  * automation_last_error → 成功 settle 后该消息仍可见——正是「run 仍成功、错误可见」的目标语义。
  */
-const createAgentExitWatch = (write: (value: string) => Promise<void>): { onLine(line: string): void } => {
+const createAgentExitWatch = (write: (value: string) => Promise<void>): { onLine(line: string): void; settle(): Promise<void> } => {
   let wrote = false
+  let pending: Promise<void> = Promise.resolve()
   return {
     onLine(line) {
       if (wrote) return
@@ -208,9 +209,14 @@ const createAgentExitWatch = (write: (value: string) => Promise<void>): { onLine
       if (!m || Number(m[2]) === 0) return
       wrote = true
       const runner = m[1]!
-      write(`${runner} agent 非零退出（exit ${m[2]!}）：可能凭证失效或 ${runner} 自身报错，详见 agent 日志`).catch(() => {
+      pending = write(`${runner} agent 非零退出（exit ${m[2]!}）：可能凭证失效或 ${runner} 自身报错，详见 agent 日志`).catch(() => {
         // best-effort：字段写失败吞掉（同 lifecycle 其它 setStateField 的 .catch(() => {}) 风格）
       })
+    },
+    /** 排空在途写（codex P2）：run 结算(finally)时 await——观察写严格先于 scheduler 终态分类落地，
+     *  防延迟的 agent-exit 双字段写倒序覆盖 applyFailure 已落的权威成因(verify-fail/conflict)。 */
+    async settle() {
+      await pending
     },
   }
 }
@@ -233,9 +239,10 @@ export const runChangeInSandbox = async (ports: LifecyclePorts, cfg: RunChangeCo
     ports.setStateField(cfg.name, 'automation_current_phase', value),
   )
   // 观察项③：[AGENT_EXIT] 标记行 → automation_last_error 同步落（幂等一次、best-effort，见
-  // createAgentExitWatch）。不参与 settle——错误消息本就要在 run 结算后留存可见。
+  // createAgentExitWatch）。settle 只**排空在途写**不清字段——错误消息本就要在 run 结算后留存可见。
   // F-b：cause=agent-exit 与 last_error 同写（诚实 tag：它只知道 agent 非零退出，不猜凭证失效）；
-  // 若 run 随后真失败，scheduler applyFailure 会按最终失败 tag 整体覆盖两字段，语义自洽。
+  // 若 run 随后真失败，scheduler applyFailure 会按最终失败 tag 整体覆盖两字段。排空保证观察写严格
+  // 先于结算落地（codex P2）——否则延迟写会倒序覆盖 applyFailure 的权威终态成因,dashboard 显陈旧诊断。
   const agentExitWatch = createAgentExitWatch(async (value) => {
     await ports.setStateField(cfg.name, 'automation_last_error', value)
     await ports.setStateField(cfg.name, 'automation_cause', 'agent-exit')
@@ -341,6 +348,8 @@ export const runChangeInSandbox = async (ports: LifecyclePorts, cfg: RunChangeCo
   } finally {
     // T4 结算清理：完成/失败/取消一切路径都清 automation_current_phase（写过才清；排空在途写）。
     await phaseWatch.settle().catch(() => {})
+    // codex P2:排空 agent-exit 观察器在途写(不清字段)——run promise 结算前落定,scheduler 终态分类严格后写。
+    await agentExitWatch.settle().catch(() => {})
     if (handle) await handle.close().catch(() => {})
     // 非 abort、非 conflict 路径才 teardown worktree（错误吞掉）；abort/conflict 保留现场。
     if (!signal.aborted && !preserve) {

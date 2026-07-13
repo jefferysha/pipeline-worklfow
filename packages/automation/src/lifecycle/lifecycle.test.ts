@@ -472,6 +472,29 @@ describe('runChangeInSandbox · codex agent 非零退出可见度（automation_l
     expect(log.filter((l) => l === 'setStateField:automation_cause')).toHaveLength(1)
   })
 
+  it('codex P2:观察器在途写在 run 结算前排空——延迟的 cause 写不得晚于 run promise 落定(防倒序覆盖 scheduler 终态成因)', async () => {
+    // store 抖动模拟:cause 写慢 30ms(晚于 runWork 完成)。无 finally 排空时 runChangeInSandbox
+    // 先结算、延迟写后落地——scheduler applyFailure 的权威成因(verify-fail/conflict)会被倒序覆盖。
+    const landed: string[] = []
+    const base = codexStreamingOver(['[AGENT_EXIT] codex 96'])
+    const { ports, state } = makePorts({
+      ...base,
+      async setStateField(_name, field, value) {
+        if (field === 'automation_cause') await new Promise((r) => setTimeout(r, 30))
+        landed.push(`${field}=${value}`)
+      },
+    })
+    await runChangeInSandbox(
+      ports,
+      { hostRepoDir: '/repo', name: 'x', base: 'main', autoMerge: false, runner: 'codex' },
+      new AbortController().signal,
+    )
+    // run promise 已落定 → 观察器双字段写必须均已落地(settle 排空);后续 scheduler 写严格更晚,权威性成立
+    expect(landed.some((l) => l.startsWith('automation_cause=agent-exit'))).toBe(true)
+    expect(landed.some((l) => l.startsWith('automation_last_error='))).toBe(true)
+    void state
+  })
+
   it('exit=0 标记行不写（脚本层本不输出，宿主侧同样防御）；无标记行的 run 零写', async () => {
     const a = makePorts(codexStreamingOver(['[AGENT_EXIT] codex 0']))
     await runChangeInSandbox(
