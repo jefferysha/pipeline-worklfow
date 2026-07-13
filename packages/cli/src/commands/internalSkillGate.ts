@@ -11,7 +11,7 @@
  * fail-open 放行，呼应 hooks/gate.sh 文件头总纲："fail-open（绝不死锁）：... 任何异常 → 放行
  * exit 0"——这条硬承诺对本命令同样成立，不因为判定逻辑挪进了 CLI 就打折扣。
  */
-import { isSkillUnlocked, loadWorkflow } from '@pipeline-lite/kernel'
+import { isSkillUnlocked, loadWorkflow, resolveStep, resolveWorkflowName } from '@pipeline-lite/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
 import { changeDir, isValidChangeName } from '../paths.js'
 import { str } from '../render.js'
@@ -80,9 +80,9 @@ export async function cmdInternalSkillGate(deps: CliDeps, name: string, skillId:
 
     const dir = changeDir(deps.cwd, name)
     const state = await deps.store.read(dir)
-    // 双轨分岔同 transition.ts（Task 8）：'' 是历史遗留非自定义名，用 `||` 兜空串
-    // （`??` 只挡 null/undefined、不挡空串——mockState/真实 legacy 状态文件都可能踩这个坑）。
-    const workflowName = str(state.fields.workflow) || 'default'
+    // 双轨分岔同 transition.ts（Task 8）：'' 历史遗留兜 'default' 的 `||` 习语单源在 kernel
+    // resolveWorkflowName（Wave 2 下沉；`??` 只挡 null/undefined、不挡空串的语义原样继承）。
+    const workflowName = resolveWorkflowName(state)
     if (workflowName === 'default') return 0 // default workflow 不受本机制管辖
 
     const wf = loadWorkflow(deps.cwd, workflowName)
@@ -92,7 +92,7 @@ export async function cmdInternalSkillGate(deps: CliDeps, name: string, skillId:
     }
 
     const currentStepId = str(state.fields.phase)
-    const step = wf.steps.find((s) => s.id === currentStepId)
+    const step = resolveStep(wf, currentStepId)
     if (!step) {
       deps.io.err(`WARN: step '${currentStepId}' 不在 workflow '${workflowName}' 里，fail-open 放行`)
       return 0

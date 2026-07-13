@@ -23,7 +23,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { AddressInfo } from 'node:net'
 import { dirname, join, resolve as resolvePath } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { applyLevelChange, createFlowEngine, createHistoryWriter, createStateStore, loadManifest, loadRegistry, loadWorkflow, TRACKS } from '@pipeline-lite/kernel'
+import { applyLevelChange, createFlowEngine, createHistoryWriter, createStateStore, firstStep, loadManifest, loadRegistry, loadWorkflow, TRACKS } from '@pipeline-lite/kernel'
 import type { FlowEngine, GraduationFs, StateStore, Track, WorkflowDef } from '@pipeline-lite/kernel'
 import { buildAfkLog, buildAfkSnapshot, cancelAfkRun, dismissAfkRun, enqueueAfkRun, readAfkRunLog, retryAfkRun } from './afk.js'
 import { applyLoopsUpdate, buildLoopsSnapshot } from './loops.js'
@@ -620,7 +620,8 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
         if (!wf) {
           return sendJson(res, 404, { ok: false, error: `workflow '${workflow}' 未找到（期望 .pipeline/workflows/${workflow}.yaml）` })
         }
-        const first = wf.steps[0]
+        // 首 step 习语单源在 kernel firstStep（Wave 2 下沉；空 steps → null，响应字节不变）
+        const first = firstStep(wf)
         if (!first) {
           return sendJson(res, 400, { ok: false, error: `workflow '${workflow}' 未声明任何 step` })
         }

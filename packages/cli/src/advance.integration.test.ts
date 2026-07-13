@@ -8,7 +8,7 @@
  * 说明：advance 尚未接入 program（收编由主会话统一接线），故用 h.run 做 init/set/transition 铺场，
  * 再用 realDeps 直调 cmdAdvance —— 与 main.ts 同一条 fs 副作用装配路径，只把 io 收进数组。
  */
-import { readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
 import { freshHarness, realDeps, type Harness } from './integration-harness.js'
@@ -157,5 +157,201 @@ describe('真实 e2e —— advance auto-transition 中间档（HITL 红线：�
     // 硬门当前，绝不自动跨越——phase 停在 build，零推进
     expect(await phaseOf('demo')).toBe('build')
     expect(r.out.some((l) => l.includes('[STOP]') && l.includes('confirm'))).toBe(true)
+  })
+})
+
+// ════ 非 default workflow（自定义 step 图；功能缺口补完：advance 此前只认 default manifest）════
+describe('真实 e2e —— advance 非 default workflow（自定义 step 图自动推进）', () => {
+  let h: Harness
+  beforeEach(async () => {
+    h = await freshHarness()
+  })
+  afterEach(async () => {
+    await rm(h.cwd, { recursive: true, force: true })
+  })
+
+  const cd = (name: string) => join(h.cwd, 'openspec', 'changes', name)
+  const phaseOf = async (name: string): Promise<string> =>
+    (await h.read(name)).match(/^phase: (.+)$/m)?.[1] ?? '?'
+
+  async function advance(name: string, opts: AdvanceOpts): Promise<{ code: number; out: string[]; err: string[] }> {
+    const out: string[] = []
+    const err: string[] = []
+    const code = await cmdAdvance(realDeps(h.cwd, out, err), name, opts)
+    return { code, out, err }
+  }
+
+  /** 三步单边链：c1 --go--> c2 --go2--> c3（终态）。 */
+  const CHAIN_WF = `name: chain
+steps:
+  - id: c1
+    label: one
+    gate: null
+    skills: []
+    inputs: []
+    outputs: []
+    guards: []
+    transitions:
+      - event: go
+        to: c2
+  - id: c2
+    label: two
+    gate: null
+    skills: []
+    inputs: []
+    outputs: []
+    guards: []
+    transitions:
+      - event: go2
+        to: c3
+  - id: c3
+    label: three
+    gate: null
+    skills: []
+    inputs: []
+    outputs: []
+    guards: []
+    transitions: []
+`
+
+  /** 多边分岔：f1 两条出边（pass→f2 / fail→f3）。 */
+  const FORK_WF = `name: fork
+steps:
+  - id: f1
+    label: fork
+    gate: null
+    skills: []
+    inputs: []
+    outputs: []
+    guards: []
+    transitions:
+      - event: pass
+        to: f2
+      - event: fail
+        to: f3
+  - id: f2
+    label: ok
+    gate: null
+    skills: []
+    inputs: []
+    outputs: []
+    guards: []
+    transitions:
+      - event: done
+        to: f3
+  - id: f3
+    label: end
+    gate: null
+    skills: []
+    inputs: []
+    outputs: []
+    guards: []
+    transitions: []
+`
+
+  /** g1 声明 nonempty-output guard（design_doc 必须产出）。 */
+  const GUARDED_WF = `name: guarded
+steps:
+  - id: g1
+    label: one
+    gate: null
+    skills: []
+    inputs: []
+    outputs:
+      - field: design_doc
+        type: file_path
+    guards:
+      - type: nonempty-output
+    transitions:
+      - event: done
+        to: g2
+  - id: g2
+    label: end
+    gate: null
+    skills: []
+    inputs: []
+    outputs: []
+    guards: []
+    transitions: []
+`
+
+  /** 真落 workflow 定义 + 真 `init --workflow` 把 change 摆到首个 step（同 transition-custom-workflow 手法）。 */
+  async function setupCustomChange(name: string, workflowName: string, workflowYaml: string): Promise<void> {
+    const wfDir = join(h.cwd, '.pipeline', 'workflows')
+    await mkdir(wfDir, { recursive: true })
+    await writeFile(join(wfDir, `${workflowName}.yaml`), workflowYaml, 'utf8')
+    expect(await h.run(['init', name, '--track', 'backend', '--preset', 'full', '--workflow', workflowName])).toBe(0)
+  }
+
+  test('单边推进多步到终态：phase 真变 c1→c3，history 真落两条 transition，[STOP] 终态', async () => {
+    await setupCustomChange('cw', 'chain', CHAIN_WF)
+    expect(await phaseOf('cw')).toBe('c1')
+
+    const r = await advance('cw', {})
+    expect(r.code).toBe(0)
+    expect(await phaseOf('cw')).toBe('c3')
+    const hist = await readFile(join(cd('cw'), '.pipeline-history.jsonl'), 'utf8')
+    const trans = hist.split('\n').filter((l) => l.includes('"kind":"transition"'))
+    expect(trans.some((l) => l.includes('"to":"c2"') && l.includes('"raw":"go"'))).toBe(true)
+    expect(trans.some((l) => l.includes('"to":"c3"') && l.includes('"raw":"go2"'))).toBe(true)
+    expect(r.out.some((l) => l.includes('[STOP]') && l.includes('终态'))).toBe(true)
+  })
+
+  test('多条出边 → 真停在原 step（需人选 event），[STOP] 列出可选 events', async () => {
+    await setupCustomChange('cw', 'fork', FORK_WF)
+    const before = await h.read('cw')
+
+    const r = await advance('cw', {})
+    expect(r.code).toBe(0)
+    expect(await phaseOf('cw')).toBe('f1')
+    expect(await h.read('cw')).toBe(before) // 字节不变（零推进）
+    const stop = r.out.find((l) => l.includes('[STOP]'))
+    expect(stop).toBeDefined()
+    expect(stop).toContain('pass')
+    expect(stop).toContain('fail')
+  })
+
+  test('guard 不过真不推进：g1 缺 design_doc → exit 2，phase 不变，打出 failures', async () => {
+    await setupCustomChange('cw', 'guarded', GUARDED_WF)
+    const before = await h.read('cw')
+
+    const r = await advance('cw', {})
+    expect(r.code).toBe(2)
+    expect(await phaseOf('cw')).toBe('g1')
+    expect(await h.read('cw')).toBe(before)
+    expect(r.out.some((l) => l.includes('guard'))).toBe(true)
+    expect(r.out.some((l) => l.includes('design_doc'))).toBe(true)
+  })
+
+  test('--max-steps 截停：chain 只真推进 1 步停在 c2', async () => {
+    await setupCustomChange('cw', 'chain', CHAIN_WF)
+
+    const r = await advance('cw', { maxSteps: 1 })
+    expect(r.code).toBe(0)
+    expect(await phaseOf('cw')).toBe('c2')
+    expect(r.out.some((l) => l.includes('[STOP]') && l.includes('max-steps'))).toBe(true)
+  })
+
+  test('workflow 文件事后被删（未找到）→ exit 1 同 transition 措辞，零写盘', async () => {
+    await setupCustomChange('cw', 'chain', CHAIN_WF)
+    await rm(join(h.cwd, '.pipeline', 'workflows', 'chain.yaml'))
+    const before = await h.read('cw')
+
+    const r = await advance('cw', {})
+    expect(r.code).toBe(1)
+    expect(await h.read('cw')).toBe(before)
+    expect(r.err.join('\n')).toContain("workflow 'chain' 未找到")
+  })
+
+  test('--dry-run 真不改盘（自定义轨）：报计划、phase 与字节均不变', async () => {
+    await setupCustomChange('cw', 'chain', CHAIN_WF)
+    const before = await h.read('cw')
+
+    const r = await advance('cw', { dryRun: true })
+    expect(r.code).toBe(0)
+    expect(await h.read('cw')).toBe(before)
+    expect(await phaseOf('cw')).toBe('c1')
+    expect(r.out.some((l) => l.includes('[DRY-RUN]'))).toBe(true)
+    expect(r.out.some((l) => l.includes('c1') && l.includes('c2'))).toBe(true)
   })
 })

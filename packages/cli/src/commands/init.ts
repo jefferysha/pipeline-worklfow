@@ -17,7 +17,7 @@
  * 共享代码路径（zero 改动、zero 回归风险 to oracle 覆盖的 default workflow 主线）。
  */
 import { createInterface } from 'node:readline/promises'
-import { loadWorkflow, TRACKS } from '@pipeline-lite/kernel'
+import { firstStep, loadWorkflow, TRACKS } from '@pipeline-lite/kernel'
 import type { Track } from '@pipeline-lite/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
 import { recordHistory } from './fields.js'
@@ -160,7 +160,8 @@ export async function cmdInit(
       deps.io.err(`ERROR: workflow '${opts.workflow}' 未找到（期望 .pipeline/workflows/${opts.workflow}.yaml）`)
       return 1
     }
-    const first = wf.steps[0]
+    // 首 step 习语单源在 kernel firstStep（Wave 2 下沉；空 steps → null，错误消息逐字不变）
+    const first = firstStep(wf)
     if (!first) {
       deps.io.err(`ERROR: workflow '${opts.workflow}' 未声明任何 step`)
       return 1
