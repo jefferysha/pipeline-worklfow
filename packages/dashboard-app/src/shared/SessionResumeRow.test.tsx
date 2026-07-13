@@ -107,8 +107,9 @@ describe('SessionResumeRow —— found + resumeCmd:null（无把握拼法的平
     expect(row.textContent).not.toContain('resume')
 
     const btn = screen.getByTestId('dt8-conn-resume-copy')
-    expect(btn.getAttribute('data-copy')).toBe('cd "/tmp/wt-c"')
+    // 安全字符目录过 shellQuote 原样不带引号（codex 终稿 P2）
+    expect(btn.getAttribute('data-copy')).toBe('cd /tmp/wt-c')
     fireEvent.click(btn)
-    expect(onCopy).toHaveBeenCalledWith('cd "/tmp/wt-c"')
+    expect(onCopy).toHaveBeenCalledWith('cd /tmp/wt-c')
   })
 })

@@ -11,6 +11,7 @@ import { decisionKind } from '../inbox/inbox'
 import { getHistory, type ChangeHistoryEntry } from '../api/client'
 import { diagnoseFailureWithCause } from './failureDiagnosis'
 import { SessionResumeRow } from './SessionResumeRow'
+import { shellQuote } from './shellQuote'
 import { revealStages } from './motion'
 import { Icon } from '../shell/Icon'
 import { shortTime } from '../model/time'
@@ -32,8 +33,9 @@ gsap.registerPlugin(useGSAP)
  * （宿主传入，可无）→ 阶段区（两形态同源消费 T7 stageArtifacts；节点/tab 语义 ✓绿 done /
  * ●蓝当前带 ring / ×红失败 / 无缀未开始；失败阶段=人话报错卡 .dt8-diag：cause 人话标题 + 处置
  * 指引 failure.hint_*，last_error 原文收 <details> 折叠，attempts/cause 走 mono 元信息行，
- * cancelled 琥珀 tone 非故障）→ **「自己上手修」连接命令卡 .dt8-conn-card**（失败态且有
- * automation_worktree/automation_sandbox 现场字段时渲染；零后端改动——两字段随快照 fields 整包
+ * cancelled 琥珀 tone 非故障）→ **「自己上手修」连接命令卡 .dt8-conn-card**（失败/在跑态
+ * 渲染，不要求现场字段——恢复会话行/重跑行恒在，automation_worktree/automation_sandbox 两行
+ * 按字段渲染；零后端改动——两字段随快照 fields 整包
  * 透传，照 automation_cause 先例 fieldStr 直读）→「在终端继续」命令区（文案与第一条前进
  * transition 事件一致）→ history 区（T1 GET /api/change/:name/history，无记录显示「早期记录
  * 不可用」，决议 #10；**只留流程级事件** transition/init，set 与未知 kind 一律滤掉）。
@@ -225,10 +227,11 @@ export function TaskDetail({
   // 整包透传（零后端改动），照 automation_cause 先例 fieldStr 直读；空串=无现场，对应行不渲染。
   const worktree = fieldStr(change, 'automation_worktree')
   const sandbox = fieldStr(change, 'automation_sandbox')
-  const sandboxCmd = `docker exec -it ${sandbox} bash`
-  // worktree 路径进 shell 命令必须包引号（评审 P1-4）：路径含空格时裸 cd 直接碎词。
-  const worktreeCmd = `cd "${worktree}"`
-  const rerunCmd = `pipeline afk run ${change.name}`
+  // 拷贝命令的动态段一律过 shellQuote（codex 终稿 P2）：原先 `cd "${x}"` 双引号挡不住
+  // `"`/反引号/$()，容器名完全未引；现安全字符原样、特殊字符 POSIX 单引号转义。
+  const sandboxCmd = `docker exec -it ${shellQuote(sandbox)} bash`
+  const worktreeCmd = `cd ${shellQuote(worktree)}`
+  const rerunCmd = `pipeline afk run ${shellQuote(change.name)}`
   const footLabel =
     state === 'failed' ? `automation · ${automation}` : firstForward ? `${change.phase} → ${firstForward.to}` : change.phase
 
@@ -520,11 +523,13 @@ export function TaskDetail({
         )}
       </div>
 
-      {/* v8-C 意见④：「自己上手修」连接命令卡（demo .conn-card 对位）——失败态且有现场字段
-          （worktree/sandbox 至少一个非空）才渲染；三行可拷命令，字段空串对应行不渲染；
+      {/* v8-C 意见④：「自己上手修」连接命令卡（demo .conn-card 对位）——失败/在跑态即渲染，
+          不再要求 worktree/sandbox 现场字段（codex 终稿 P2：server 端 session-link 在
+          worktree 空时回落 root 查会话，本机直跑失败的恢复路径原先在 UI 永远走不到）；
+          恢复会话行与重跑行恒在，worktree/sandbox 行按各自字段空串与否渲染；
           automation!=='running' 时容器行加「（未在跑）」小注；卡底注来源字段说明。 */}
       {/* v9 追加：running 态（容器活着，恢复会话最有意义）与失败态同渲染本卡。 */}
-      {(state === 'failed' || automation === 'running') && (worktree !== '' || sandbox !== '') && (
+      {(state === 'failed' || automation === 'running') && (
         <div className="dt-sec" data-testid="dt8-conn">
           <div className="dt-sec-h">
             {t('detail.selffix_title')} <span className="dt-hint">{t('detail.selffix_desc')}</span>
@@ -532,8 +537,8 @@ export function TaskDetail({
           <div className="dt8-conn-card">
             <div className="dt8-conn-rows">
               {/* v9-I：恢复会话行（自取数，loading 静默 / 查不到一行灰字）——失败+取消
-                  （conflict/cause=cancelled 同落 failed 态）随本卡覆盖；running 态本卡
-                  不渲染，该态的展示位留宿主决策（见交付报告）。 */}
+                  （conflict/cause=cancelled 同落 failed 态）与 running 态随本卡覆盖；
+                  worktree 空时 server 端回落 root 查会话，故本行不依赖现场字段恒挂载。 */}
               <SessionResumeRow root={root} name={change.name} onCopy={copy} />
               {worktree !== '' && (
                 <div className="dt8-conn-row" data-testid="dt8-conn-worktree">

@@ -673,10 +673,10 @@ describe('TaskDetail v8-C 意见④：「自己上手修」连接命令卡（.dt
     await renderDetail({ change: makeChange('hotfix', 'build', { fields: { ...connFields } }) })
     expect(screen.getByTestId('dt8-conn')).toBeInTheDocument()
     const wt = screen.getByTestId('dt8-conn-worktree')
-    // worktree 路径包引号（评审 P1-4）：展示与 data-copy 同一串——拷走即可用
-    expect(wt.textContent).toContain('cd "/Users/x/.pipeline/worktrees/hotfix"')
+    // 安全字符路径过 shellQuote 原样不带引号（codex 终稿 P2）：展示与 data-copy 同一串——拷走即可用
+    expect(wt.textContent).toContain('cd /Users/x/.pipeline/worktrees/hotfix')
     expect(screen.getByTestId('dt8-conn-worktree-copy').getAttribute('data-copy')).toBe(
-      'cd "/Users/x/.pipeline/worktrees/hotfix"',
+      'cd /Users/x/.pipeline/worktrees/hotfix',
     )
     const sb = screen.getByTestId('dt8-conn-sandbox')
     expect(sb.textContent).toContain('docker exec -it pipeline-afk-hotfix bash')
@@ -699,24 +699,29 @@ describe('TaskDetail v8-C 意见④：「自己上手修」连接命令卡（.dt
     expect(screen.getByTestId('dt8-conn-rerun')).toBeInTheDocument()
   })
 
-  it('worktree 路径含空格 → cd 命令因包引号仍是一条可用命令（评审 P1-4）', async () => {
+  it('worktree 路径含空格 → shellQuote 单引号包裹仍是一条可用命令（codex 终稿 P2）', async () => {
     await renderDetail({
       change: makeChange('hotfix', 'build', {
         fields: { ...connFields, automation_worktree: '/Users/x/My Work/wt hotfix' },
       }),
     })
     expect(screen.getByTestId('dt8-conn-worktree-copy').getAttribute('data-copy')).toBe(
-      'cd "/Users/x/My Work/wt hotfix"',
+      "cd '/Users/x/My Work/wt hotfix'",
     )
   })
 
-  it('现场字段全空 → 整卡不渲染（重跑一行不足以称「现场」）', async () => {
+  it('现场字段全空 → 卡仍渲染：恢复会话行挂载+重跑行在，无 worktree/sandbox 行（codex 终稿 P2：server 端 worktree 空回落 root 查会话，root 回退路径必须 UI 可达）', async () => {
     await renderDetail({
       change: makeChange('hotfix', 'build', {
         fields: { automation: 'failed', automation_last_error: 'boom' },
       }),
     })
-    expect(screen.queryByTestId('dt8-conn')).toBeNull()
+    expect(screen.getByTestId('dt8-conn')).toBeInTheDocument()
+    expect(screen.getByTestId('dt8-conn-rerun')).toBeInTheDocument()
+    expect(screen.queryByTestId('dt8-conn-worktree')).toBeNull()
+    expect(screen.queryByTestId('dt8-conn-sandbox')).toBeNull()
+    // 恢复会话行挂载：本基座 fetch 桩对 session-link 报错 → 组件收敛 found:false 灰字行
+    await waitFor(() => expect(screen.getByTestId('dt8-conn-resume-none')).toBeInTheDocument())
   })
 
   it('非失败且非 running 态即使有现场字段也不渲染（卡只服务失败处置与在跑接管）', async () => {

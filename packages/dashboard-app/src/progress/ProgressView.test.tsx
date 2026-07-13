@@ -686,7 +686,7 @@ describe('ProgressView 失败/取消行：回终端命令 chip（重试/放弃�
     expect(fetchLog.some((l) => l.includes('/api/afk/hotfix-login/'))).toBe(false)
   })
 
-  it('失败行（有 worktree 现场）→ chip=「在终端接管」，拷贝值 cd "<worktree>"（带引号，dt8-conn 同款）', async () => {
+  it('失败行（有 worktree 现场）→ chip=「在终端接管」，拷贝值走 shellQuote（安全路径裸串；含空格单引号，codex P2-2 同族）', async () => {
     const writeText = stubClipboard()
     renderView({
       snapshot: makeSnapshot([
@@ -694,14 +694,18 @@ describe('ProgressView 失败/取消行：回终端命令 chip（重试/放弃�
           makeChange('wt-fail', 'build', {
             fields: { automation: 'failed', automation_attempts: '2', automation_worktree: '/tmp/wt/wt-fail' },
           }),
+          makeChange('wt-sp', 'build', {
+            fields: { automation: 'failed', automation_attempts: '1', automation_worktree: '/tmp/My Work/wt sp' },
+          }),
         ]),
       ]),
     })
     const chip = screen.getByTestId('prg9-cmd-wt-fail')
     expect(chip.textContent).toContain('在终端接管')
-    expect(chip.getAttribute('title')).toBe('cd "/tmp/wt/wt-fail"')
+    expect(chip.getAttribute('title')).toBe('cd /tmp/wt/wt-fail')
     fireEvent.click(chip)
-    expect(writeText).toHaveBeenCalledWith('cd "/tmp/wt/wt-fail"')
+    expect(writeText).toHaveBeenCalledWith('cd /tmp/wt/wt-fail')
+    expect(screen.getByTestId('prg9-cmd-wt-sp').getAttribute('title')).toBe("cd '/tmp/My Work/wt sp'")
     // 单 root fixture：冲掉并发上限探测请求落地（不冲会刷 act 告警）
     await act(async () => {})
   })

@@ -11,6 +11,7 @@ import { fetchAutomationSettings, postAfkCommand, postTransition } from '../api/
 import { TaskDetail } from '../shared/TaskDetail'
 import { Icon } from '../shell/Icon'
 import { diagnoseFailureWithCause } from '../shared/failureDiagnosis'
+import { shellQuote } from '../shared/shellQuote'
 import { gateEvidence, VERIFY_STATUS_FIELDS, type EvidenceChip } from '../inbox/evidence'
 import { changeWorkflow, decisionKind } from '../inbox/inbox'
 import { useAfkLog } from './useAfkLog'
@@ -751,13 +752,13 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
   }
 
   /** fail/cxl 行「回终端」命令 chip 数据（真机验收 G）：cxl=重跑命令（人为终止后重新入队）；
-   *  fail 有 worktree 现场→cd 接管（与 TaskDetail dt8-conn 的 worktreeCmd 同款带引号），
-   *  缺现场回落重跑命令。 */
+   *  fail 有 worktree 现场→cd 接管（与 TaskDetail dt8-conn 的 worktreeCmd 同款 shellQuote 转义，
+   *  codex review P2-2 同族），缺现场回落重跑命令。 */
   function cmdChipOf(fr: FlatRow): { label: string; cmd: string } {
-    const rerun = `pipeline afk run ${fr.row.change.name}`
+    const rerun = `pipeline afk run ${shellQuote(fr.row.change.name)}`
     if (fr.cancelled) return { label: t('progress.cmd_rerun_cxl'), cmd: rerun }
     const worktree = fieldStr(fr.row.change, 'automation_worktree')
-    if (worktree !== '') return { label: t('progress.cmd_takeover'), cmd: `cd "${worktree}"` }
+    if (worktree !== '') return { label: t('progress.cmd_takeover'), cmd: `cd ${shellQuote(worktree)}` }
     return { label: t('progress.cmd_rerun'), cmd: rerun }
   }
 

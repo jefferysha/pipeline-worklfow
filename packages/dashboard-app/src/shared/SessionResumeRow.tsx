@@ -15,6 +15,7 @@ import { useEffect, useState } from 'react'
 import { useT } from '../i18n'
 import { fetchSessionLink, type SessionLink } from '../api/client'
 import { Icon } from '../shell/Icon'
+import { shellQuote } from './shellQuote'
 
 export interface SessionResumeRowProps {
   root: string
@@ -63,7 +64,8 @@ export function SessionResumeRow({ root, name, onCopy }: SessionResumeRowProps):
 
   if (cmd === null) {
     // 无把握拼法的平台：只给会话身份 + 目录拷贝（cd 命令），不给假恢复命令。
-    const dirCmd = link.dir ? `cd "${link.dir}"` : ''
+    // 目录段过 shellQuote（codex 终稿 P2 同族）：安全字符原样，特殊字符 POSIX 单引号转义。
+    const dirCmd = link.dir ? `cd ${shellQuote(link.dir)}` : ''
     return (
       <div className="dt8-conn-row" data-testid="dt8-conn-resume">
         <span className="dt8-conn-k">{t('detail.conn_resume')}</span>
