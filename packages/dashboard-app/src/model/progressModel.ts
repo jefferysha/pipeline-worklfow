@@ -117,6 +117,10 @@ export interface ProgressGroup {
   rows: ProgressRow[]
   /** 决议 #5：archived 排除出行，组头尾缀「· N 已归档」的计数来源。 */
   archivedCount: number
+  /** #2 归档折叠行「展开」真交互：归档行的完整投影（state 判定同 changeProgressState），
+   *  updated_at 倒序同 rows 口径——供视图层展开时只读渲染消费。不进 counts/total（archivedCount
+   *  与本数组长度恒等，但 counts 仍只统计未归档行，不变式不变，见文件头「archived 排除」备注）。 */
+  archived: ProgressRow[]
 }
 
 export type ProgressCounts = Record<ProgressState, number>
@@ -173,11 +177,14 @@ export function selectProgress(
       const key = rulesKey(p.root, workflow)
       let group = byKey.get(key)
       if (!group) {
-        group = { key, root: p.root, workflow, rows: [], archivedCount: 0 }
+        group = { key, root: p.root, workflow, rows: [], archivedCount: 0, archived: [] }
         byKey.set(key, group)
       }
       if (c.archived === 'true') {
         group.archivedCount += 1
+        // #2：archived 行仍算出 state（同 changeProgressState 判定，不进 counts）——展开时只读
+        // 渲染消费；counts 不变式（各态之和 === total === 各组行数之和）只认 group.rows，本行不入。
+        group.archived.push({ root: p.root, change: c, state: changeProgressState(c, rulesByKey.get(key)) })
         continue
       }
       const state = changeProgressState(c, rulesByKey.get(key))
@@ -187,7 +194,10 @@ export function selectProgress(
   }
 
   const groups = [...byKey.values()].filter((g) => g.rows.length > 0)
-  for (const g of groups) g.rows.sort(compareRows)
+  for (const g of groups) {
+    g.rows.sort(compareRows)
+    g.archived.sort(compareRows)
+  }
   groups.sort(compareGroups)
   const total = PROGRESS_STATES.reduce((n, s) => n + counts[s], 0)
   return { groups, counts, total }

@@ -203,6 +203,32 @@ describe('selectProgress —— 项目×workflow 分组选择器', () => {
     expect(sel.total).toBe(1)
   })
 
+  it('#2：archived 数组含归档行的完整投影（state 判定同源，updated_at 倒序），且不影响 counts/total 不变式', () => {
+    const snap = makeSnapshot([
+      makeProject('/a', [
+        makeChange('live', 'open'),
+        makeChange('gone-older', 'archive', { archived: 'true', updated_at: '2026-07-01T00:00:00Z' }),
+        makeChange('gone-newer', 'build', {
+          archived: 'true',
+          updated_at: '2026-07-05T00:00:00Z',
+          fields: { automation: 'failed' },
+        }),
+      ]),
+    ])
+    const sel = selectProgress(snap, '/a', RULES)
+    expect(sel.groups).toHaveLength(1)
+    const g = sel.groups[0]!
+    // archived 数组长度恒等 archivedCount；updated_at 倒序（同 rows 口径）
+    expect(g.archivedCount).toBe(2)
+    expect(g.archived.map((r) => r.change.name)).toEqual(['gone-newer', 'gone-older'])
+    // state 判定同 changeProgressState 同源：failed automation → failed；无自动化的非门阶段 → agent
+    expect(g.archived.map((r) => r.state)).toEqual(['failed', 'agent'])
+    expect(g.archived.every((r) => r.root === '/a')).toBe(true)
+    // 不变式不变：counts/total 仍只统计未归档行（live 一条,'open' 非门阶段无自动化 → agent）
+    expect(sel.total).toBe(1)
+    expect(sel.counts).toEqual({ gate: 0, agent: 1, running: 0, queued: 0, failed: 0 })
+  })
+
   it('行上的 state 与 changeProgressState 同源；rules 按 rulesKey 查（同名 wf 跨项目不串）', () => {
     const snap = makeSnapshot([
       makeProject('/a', [

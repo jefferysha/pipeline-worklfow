@@ -96,7 +96,7 @@ describe('subscribeSnapshot（真 EventSource stub，组件真收帧）', () => 
   })
 })
 
-describe('G18 api 四函数（registerProject/unregisterProject/createChange/fetchWorkflowNames）', () => {
+describe('G18 api 三函数（registerProject/unregisterProject/fetchWorkflowNames）', () => {
   it('registerProject：POST /api/projects 带 token + body {root}，返回规范化 root', async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ok: true, root: '/repo-a' }) })
     vi.stubGlobal('fetch', fetchMock)
@@ -127,19 +127,6 @@ describe('G18 api 四函数（registerProject/unregisterProject/createChange/fet
     const headers = init.headers as Record<string, string>
     expect(headers.Authorization).toBe('Bearer tok-abc')
     expect(headers['Content-Type']).toBeUndefined()
-  })
-
-  it('createChange：POST /api/changes 全字段 body；错误文案透传', async () => {
-    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ok: true, name: 'x', path: '/p' }) })
-    vi.stubGlobal('fetch', fetchMock)
-    const { createChange } = await import('./client')
-    await createChange({ root: '/repo', name: 'fix-login', workflow: 'rel', track: 'frontend' })
-    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit]
-    expect(url).toBe('/api/changes')
-    expect(JSON.parse(init.body as string)).toEqual({ root: '/repo', name: 'fix-login', workflow: 'rel', track: 'frontend' })
-
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 400, json: async () => ({ ok: false, error: '非法 change 名' }) }))
-    await expect(createChange({ root: '/repo', name: 'bad name' })).rejects.toThrow('非法 change 名')
   })
 
   it('fetchWorkflowNames：GET /api/workflows?root= 返回 names', async () => {
@@ -180,5 +167,49 @@ describe('T9 afk 失败卡动作（postAfkRetry/postAfkDismiss）', () => {
 
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 409, json: async () => ({ ok: false, error: '状态已变，请刷新' }) }))
     await expect(postAfkDismiss('hotfix-login', '/repo-a')).rejects.toThrow('状态已变')
+  })
+})
+
+/**
+ * v9-J：fetchSessionLinks 批量预取（进度视图 failed 行「回终端」chip 一次拉全部，产品决策=
+ * 批量端点而非逐行发请求）。非 2xx / 网络异常静默降级空表，不抛 ApiError——批量预取失败不该
+ * 炸整个视图（同 fetchSessionLink 单条先例）。
+ */
+describe('fetchSessionLinks（GET /api/mem/session-links 批量）', () => {
+  it('items 为空 → 直接返回空表，不发请求', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    const { fetchSessionLinks } = await import('./client')
+    const got = await fetchSessionLinks([])
+    expect(got).toEqual({})
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('URL 里 root/name 用重复键正确配对（下标对齐，同 server getAll 契约）', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ links: {} }) })
+    vi.stubGlobal('fetch', fetchMock)
+    const { fetchSessionLinks } = await import('./client')
+    await fetchSessionLinks([
+      { root: '/repo a', name: 'x' },
+      { root: '/repo-b', name: 'y' },
+    ])
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit | undefined]
+    expect(String(url)).toBe('/api/mem/session-links?root=%2Frepo+a&name=x&root=%2Frepo-b&name=y')
+    expect((init?.headers as Record<string, string> | undefined)?.Accept).toBe('application/json')
+  })
+
+  it('非 2xx → 静默降级为空对象，不抛错', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 500, json: async () => ({ ok: false }) }))
+    const { fetchSessionLinks } = await import('./client')
+    const got = await fetchSessionLinks([{ root: '/repo', name: 'a' }])
+    expect(got).toEqual({})
+  })
+
+  it('成功 → 透传 server 的 .links', async () => {
+    const links = { 'a@/repo': { found: true, platform: 'claude', resumeCmd: 'cd /repo && claude --resume sid' } }
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ links }) }))
+    const { fetchSessionLinks } = await import('./client')
+    const got = await fetchSessionLinks([{ root: '/repo', name: 'a' }])
+    expect(got).toEqual(links)
   })
 })

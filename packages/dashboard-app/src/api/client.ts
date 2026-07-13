@@ -124,21 +124,6 @@ export async function unregisterProject(root: string): Promise<void> {
   if (!res.ok) await throwApiError(res, '注销项目失败')
 }
 
-/** G18：新建 change（POST /api/changes，pipeline init 的 HTTP 化）。 */
-export async function createChange(input: { root: string; name: string; workflow?: string; track?: string }): Promise<void> {
-  let res: Response
-  try {
-    res = await fetch('/api/changes', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
-      body: JSON.stringify(input),
-    })
-  } catch (err) {
-    wrapNetwork(err)
-  }
-  if (!res.ok) await throwApiError(res, '新建 change 失败')
-}
-
 /** 自定义 workflow 名列表（GET /api/workflows?root=，排除 default——server 语义）。 */
 export async function fetchWorkflowNames(root: string): Promise<string[]> {
   let res: Response
@@ -662,4 +647,16 @@ export async function fetchSessionLink(root: string, name: string): Promise<Sess
   )
   if (!res.ok) return { found: false, reason: `http-${res.status}` }
   return (await res.json()) as SessionLink
+}
+
+/** GET /api/mem/session-links（批量）——进度视图 failed 行「回终端」chip 一次预取全部失败行
+ *  （产品决策：批量端点而非逐行发请求）。非 2xx 静默降级空表，不抛 ApiError——批量预取失败
+ *  不该炸整个视图。 */
+export async function fetchSessionLinks(items: Array<{ root: string; name: string }>): Promise<Record<string, SessionLink>> {
+  if (items.length === 0) return {}
+  const params = new URLSearchParams()
+  for (const it of items) { params.append('root', it.root); params.append('name', it.name) }
+  const res = await fetch(`/api/mem/session-links?${params.toString()}`, { headers: { Accept: 'application/json' } })
+  if (!res.ok) return {}
+  return ((await res.json()) as { links: Record<string, SessionLink> }).links
 }

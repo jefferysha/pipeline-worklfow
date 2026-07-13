@@ -824,6 +824,43 @@ describe('WorkbenchView v8-E：sheet 页签化', () => {
 })
 
 /**
+ * demo↔生产残余差异清单 #4（评审登记项，补测试不改实现）：五个 wb8-pane 恒挂载、只切 .on
+ * 类显隐（见上方 JSX 头注释 :748-749）——切页签不卸载 StepEditor，编辑到一半、还没提交的
+ * 草稿应原样保留。探针刻意不选「阶段名称」input：那是受控自 def（WorkbenchView 状态，T13
+ * 起 def 本身就是编辑草稿），即便 pane 被条件卸载重挂载，重新读同一个 def.steps[].label 也会
+ * "看似"保留，测不出真差异。StepEditor 里唯一真正活在组件自身 useState、不进 def 的，是
+ * 「+ 添加」产出物 chip 的输入态（adding/draft，见 StepEditor.tsx commitAdd 头注释）——
+ * 若 pane 被卸载重挂载，这个 useState 必被清空复位，是能证伪的探针。
+ */
+describe('WorkbenchView v8-E：pane 恒挂载保留未提交草稿（demo↔生产差异清单 #4）', () => {
+  it('阶段编辑页「+ 添加」产出物输入框键入草稿不提交，切到「自动运行」页再切回，草稿原样保留', async () => {
+    renderView()
+    await screen.findByTestId('wb-step-draft')
+
+    // 进入「+ 添加」就地输入态，键入草稿——不按 Enter/失焦提交，此刻只活在 StepEditor 本地 state。
+    fireEvent.click(screen.getByRole('button', { name: '+ 添加' }))
+    const input = screen.getByTestId('wb-ed-output-input')
+    fireEvent.change(input, { target: { value: 'draft_wip_field' } })
+    expect(input).toHaveValue('draft_wip_field')
+
+    // 切到「自动运行」页签（pane 显隐切 .on，不卸载）。
+    fireEvent.click(screen.getByTestId('wb-tab-loop'))
+    expect(screen.getByTestId('wb-pane-loop').className).toContain('on')
+    expect(screen.getByTestId('wb-pane-stage').className).not.toContain('on')
+
+    // 切回「阶段编辑」页——若 StepEditor 曾被卸载重挂载，adding/draft 这两个本地 state 会复位，
+    // 「+ 添加」输入框会消失、换回未展开的 + 按钮；恒挂载则原样还在同一个输入框、同一段草稿文本。
+    fireEvent.click(screen.getByTestId('wb-tab-stage'))
+    expect(screen.getByTestId('wb-pane-stage').className).toContain('on')
+    expect(screen.getByTestId('wb-ed-output-input')).toHaveValue('draft_wip_field')
+
+    // 仍是未提交草稿：没有被打断提交成正式产出物 chip，保存钮也不会因此被点亮。
+    expect(within(screen.getByTestId('wb-ed-outputs')).queryByText('draft_wip_field')).toBeNull()
+    expect(screen.queryByTestId('wb-dirty')).toBeNull()
+  })
+})
+
+/**
  * v6 T13：「最近流转」——真实 history 事件回放(假预演退役后的右栏接棒)。数据面:当前
  * (root, workflow) 分组内非 archived change 逐个 GET /api/change/:name/history,合并降序取
  * 最近 N 条;单 change 无记录计入 legacy 标注(决议#10);archived 不入列(决议#5);无轮询(G22)。

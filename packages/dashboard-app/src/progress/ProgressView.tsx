@@ -7,7 +7,7 @@ import { isPhase } from '../types'
 import type { WorkflowRules } from '../model/workflowModel'
 import { plannedTransition, type PlannedTransition } from '../model/events'
 import { shortTime } from '../model/time'
-import { fetchAutomationSettings, postAfkCommand, postTransition } from '../api/client'
+import { fetchAutomationSettings, fetchSessionLinks, postAfkCommand, postTransition, type SessionLink } from '../api/client'
 import { TaskDetail } from '../shared/TaskDetail'
 import { Icon } from '../shell/Icon'
 import { diagnoseFailureWithCause } from '../shared/failureDiagnosis'
@@ -267,11 +267,46 @@ function compareFlat(a: FlatRow, b: FlatRow): number {
   return na < nb ? -1 : na > nb ? 1 : 0
 }
 
+/** ProgressRow → FlatRow 投影（need/mode/cancelled 一次算好）：live 行与 #2 归档只读行共用同一份
+ *  判定——归档行渲染走 renderRow(fr, true) 时会强制只读/mode='idle'，state 判定本身不因归档而变。 */
+function toFlatRow(row: ProgressRow, rules: ProgressRules | undefined, workflow: string): FlatRow {
+  const need = row.state === 'gate' || row.state === 'failed'
+  const cancelled =
+    row.state === 'failed' &&
+    diagnoseFailureWithCause(fieldStr(row.change, 'automation_cause'), fieldStr(row.change, 'automation_last_error')).cause === 'cancelled'
+  const mode: RailMode =
+    row.state === 'running'
+      ? 'run'
+      : row.state === 'gate'
+        ? 'gate'
+        : row.state === 'failed'
+          ? (cancelled ? 'cxl' : 'fail')
+          : row.state === 'queued'
+            ? 'queue'
+            : 'idle'
+  return { key: rowKeyOf(row.root, row.change.name), row, rules, workflow, need, mode, cancelled }
+}
+
+/** #2：归档行跨 workflow 组归并到同一 root 后的排序——updated_at 倒序、并列 name 升序（同
+ *  progressModel compareRows 口径；组内已排过一次，跨组合并需要重排）。 */
+function compareArchivedFlat(a: FlatRow, b: FlatRow): number {
+  const ua = a.row.change.updated_at
+  const ub = b.row.change.updated_at
+  if (ua !== ub) return ua < ub ? 1 : -1
+  const na = a.row.change.name
+  const nb = b.row.change.name
+  return na < nb ? -1 : na > nb ? 1 : 0
+}
+
 // ── v9-H：状态 sheet 页签 + 调度标识（纯谓词，渲染与计数共用同一口径不漂移）──
 
 /** 页签字典（顺序即渲染序，demo .deck-tabs：全部/等你动手/运行中/等待中）。 */
 const DECK_TABS = ['all', 'need', 'run', 'queue'] as const
 type DeckTab = (typeof DECK_TABS)[number]
+
+// #3 抽屉焦点陷阱（评审 P3 登记项，无障碍）：标准可聚焦元素白名单——同 WAI-ARIA APG focus-trap
+// 惯用判据，disabled 的 button 天然不可聚焦故排除，tabindex="-1" 显式退出 tab 序也排除。
+const DRAWER_FOCUSABLE_SEL = 'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])'
 
 /** 页签分类口径（五态同源谓词——不在视图层摸 automation 原始字段，T6 纪律）：
  *  need=现有 need 判定（gate/failed，失败/取消归此不单列，与 demo 一致）；
@@ -301,6 +336,8 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
   const rootRef = useRef<HTMLElement>(null)
   const drawerRef = useRef<HTMLElement>(null)
   const scrimRef = useRef<HTMLDivElement>(null)
+  // #3 抽屉焦点陷阱：打开前记住触发元素（行名按钮），关闭时归还焦点。
+  const triggerElRef = useRef<HTMLElement | null>(null)
   const [busyRows, setBusyRows] = useState<ReadonlySet<string>>(new Set())
   const [patches, setPatches] = useState<ReadonlyMap<string, RowPatch>>(new Map())
   // 详情抽屉：行名点击打开；Esc/scrim/关闭钮关闭。行离场（归档/换项目）→ 引用失配自动收起。
@@ -354,29 +391,38 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
     const out: FlatRow[] = []
     for (const group of base.groups) {
       const rules = rulesByKey.get(group.key) as ProgressRules | undefined
-      for (const row of group.rows) {
-        const need = row.state === 'gate' || row.state === 'failed'
-        const cancelled =
-          row.state === 'failed' &&
-          diagnoseFailureWithCause(fieldStr(row.change, 'automation_cause'), fieldStr(row.change, 'automation_last_error')).cause === 'cancelled'
-        const mode: RailMode =
-          row.state === 'running'
-            ? 'run'
-            : row.state === 'gate'
-              ? 'gate'
-              : row.state === 'failed'
-                ? (cancelled ? 'cxl' : 'fail')
-                : row.state === 'queued'
-                  ? 'queue'
-                  : 'idle'
-        out.push({ key: rowKeyOf(row.root, row.change.name), row, rules, workflow: group.workflow, need, mode, cancelled })
-      }
+      for (const row of group.rows) out.push(toFlatRow(row, rules, group.workflow))
     }
     out.sort(compareFlat)
     return out
   }, [base, rulesByKey])
 
-  const archivedTotal = useMemo(() => base.groups.reduce((n, g) => n + g.archivedCount, 0), [base])
+  // #2 归档折叠行「展开」真交互：按 root 合并该 root 下所有 workflow 组的归档行只读投影——独立于
+  // deckTab（归档行不参与五态筛选，恒定不随页签变，同旧 archivedTotal 口径不变）；聚合语境每个
+  // 项目组各自的归档行归到各自 root，单项目语境天然只有 currentRoot 一个 key（selectProgress 已按
+  // currentRoot 过滤）。
+  const archivedFlatByRoot = useMemo(() => {
+    const m = new Map<string, FlatRow[]>()
+    for (const group of base.groups) {
+      if (group.archived.length === 0) continue
+      const rules = rulesByKey.get(group.key) as ProgressRules | undefined
+      const frs = group.archived.map((row) => toFlatRow(row, rules, group.workflow))
+      m.set(group.root, [...(m.get(group.root) ?? []), ...frs])
+    }
+    for (const frs of m.values()) frs.sort(compareArchivedFlat)
+    return m
+  }, [base, rulesByKey])
+  // 展开态：键=root（聚合语境每个项目组各自展开/收起；单项目语境只有一个 key）。
+  const [expandedArchive, setExpandedArchive] = useState<ReadonlySet<string>>(new Set())
+  function toggleArchive(root: string): void {
+    setExpandedArchive((prev) => {
+      const next = new Set(prev)
+      if (next.has(root)) next.delete(root)
+      else next.add(root)
+      return next
+    })
+  }
+
   const health = schedulerHealth(base.counts)
 
   // v9-H：页签计数=各分类总数（不随当前筛选变，demo updateDeckCounts 对位）。
@@ -516,6 +562,33 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
     }
   }, [singleRoot])
 
+  // v9-J：failed 行「回终端」chip 批量预取（产品决策=批量端点而非逐行发请求，也不是等用户点开
+  // 抽屉才有数据——行内 chip 在需要时批量出现，一次查全部失败行）。依赖键=当前 failed 行 key
+  // 集合拼串（同 animKey 写法）：键不变（哪怕 SSE 帧刷新了其它字段）就不重打请求，只在失败行
+  // 成员真正增减时才重拉；key 唯一决定 (root,name) 对，键相同即可安全复用上一次闭包捕获的
+  // failedRows（不需要把 flatRows 整体放进依赖数组）。
+  const failedRowsKey = flatRows.filter((fr) => fr.row.state === 'failed').map((fr) => fr.key).sort().join('|')
+  const [sessionLinks, setSessionLinks] = useState<ReadonlyMap<string, SessionLink>>(new Map())
+  useEffect(() => {
+    if (failedRowsKey === '') {
+      setSessionLinks(new Map())
+      return
+    }
+    let cancelled = false
+    const failedRows = flatRows.filter((fr) => fr.row.state === 'failed')
+    fetchSessionLinks(failedRows.map((fr) => ({ root: fr.row.root, name: fr.row.change.name })))
+      .then((result) => {
+        if (!cancelled) setSessionLinks(new Map(Object.entries(result)))
+      })
+      .catch(() => {
+        /* fail-open：接口失败静默不设表，chip 落回现状静态命令（cmdChipOf 的既有兜底分支） */
+      })
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 蓄意只随 failedRowsKey 重拉，见上注释
+  }, [failedRowsKey])
+
   // ── GSAP：行入场 stagger + rail 轨道生长/节点弹入（demo animRails 对位；全包 matchMedia）──
   // 依赖键 = 行成员指纹（仅排序后的 name 集合）：增删行才重放入场；单行状态变化（SSE 帧常态）
   // 不整列表重播 stagger——否则任一帧都会盖掉 pulseRow 的单行强调（评审 P2-6）。
@@ -641,25 +714,70 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
       },
     })
   }, [])
-  const openDrawer = useCallback((key: string): void => {
+  /** #3：trigger 优先取调用点显式传入的元素（行名按钮 click 事件的 e.currentTarget——jsdom 下
+   *  fireEvent.click 不会像真实浏览器那样把焦点先移到被点元素，document.activeElement 在合成
+   *  点击时仍是先前焦点，故不能只靠它；真实浏览器场景下两者通常一致）；未传时退化取当前
+   *  document.activeElement，保底不留 undefined。 */
+  const openDrawer = useCallback((key: string, trigger?: HTMLElement | null): void => {
     if (closingRef.current) return
+    triggerElRef.current = trigger ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null)
     setDrawerKey(key)
   }, [])
 
   useEffect(() => {
     if (!drawerOpen) return
     document.documentElement.classList.add('prg9-lock')
+    /** #3 焦点陷阱：Tab/Shift+Tab 在抽屉内可聚焦元素集合里循环——首/末边界手动拦截+
+     *  focus()（jsdom 无原生 tab 序移动，中间元素交给浏览器默认行为处理，这里只收口两端
+     *  绕出抽屉的情形）；焦点若已经跑到抽屉外（比如脚本式 .focus() 或极端时序竞态），
+     *  按 Tab 方向拉回对应一端，不放它留在外面。 */
     function onKey(e: KeyboardEvent): void {
-      if (e.key === 'Escape') closeDrawer()
+      if (e.key === 'Escape') {
+        closeDrawer()
+        return
+      }
+      if (e.key !== 'Tab') return
+      const drawer = drawerRef.current
+      if (!drawer) return
+      const focusables = Array.from(drawer.querySelectorAll<HTMLElement>(DRAWER_FOCUSABLE_SEL))
+      if (focusables.length === 0) return
+      const first = focusables[0]!
+      const last = focusables[focusables.length - 1]!
+      const active = document.activeElement
+      const inside = active instanceof HTMLElement && drawer.contains(active)
+      if (!inside) {
+        e.preventDefault()
+        ;(e.shiftKey ? last : first).focus()
+      } else if (e.shiftKey && active === first) {
+        e.preventDefault()
+        last.focus()
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault()
+        first.focus()
+      }
     }
     document.addEventListener('keydown', onKey)
     return () => {
-      // 卸载兜底重置：抽屉若因数据变化直接消失（行被归档等），退场守门不悬挂。
+      // 卸载兜底重置：抽屉若因数据变化直接消失（行被归档等），退场守门不悬挂；同一时机把焦点
+      // 还给触发它的元素（#3：drawerOpen true→false 的唯一收口点，覆盖 closeDrawer 的两条退场
+      // 分支 + 数据消失直接卸载的兜底路径）。元素可能已随数据变化被移出 DOM——isConnected 判假
+      // 就静默跳过，不勉强 focus 也不抛错。
       closingRef.current = false
       document.documentElement.classList.remove('prg9-lock')
       document.removeEventListener('keydown', onKey)
+      const trigger = triggerElRef.current
+      if (trigger?.isConnected) trigger.focus()
     }
   }, [drawerOpen, closeDrawer])
+
+  // #3：抽屉打开后焦点移入抽屉内关闭钮（TaskDetail 渲染的 detail-close，抽屉内唯一关闭钮）——
+  // 与滚动锁/Esc 的 effect 分开一个更聚焦：依赖 [drawerOpen]，抽屉挂载与本效果同一次 commit，
+  // drawerRef.current 此时已就位（DOM 已提交，effect 才跑），不需要额外等一帧。
+  useEffect(() => {
+    if (!drawerOpen) return
+    const closeBtn = drawerRef.current?.querySelector<HTMLElement>('[data-testid="detail-close"]')
+    closeBtn?.focus()
+  }, [drawerOpen])
 
   useGSAP(
     () => {
@@ -751,10 +869,14 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
     )
   }
 
-  /** fail/cxl 行「回终端」命令 chip 数据（真机验收 G）：cxl=重跑命令（人为终止后重新入队）；
-   *  fail 有 worktree 现场→cd 接管（与 TaskDetail dt8-conn 的 worktreeCmd 同款 shellQuote 转义，
-   *  codex review P2-2 同族），缺现场回落重跑命令。 */
+  /** fail/cxl 行「回终端」命令 chip 数据（真机验收 G）：v9-J 批量预取命中真恢复会话
+   *  （session-link found + resumeCmd 非 null）→ 优先给真恢复命令，直接可拷贝执行接回原会话；
+   *  否则落回现状：cxl=重跑命令（人为终止后重新入队）；fail 有 worktree 现场→cd 接管（与
+   *  TaskDetail dt8-conn 的 worktreeCmd 同款 shellQuote 转义，codex review P2-2 同族），
+   *  缺现场回落重跑命令。 */
   function cmdChipOf(fr: FlatRow): { label: string; cmd: string } {
+    const link = sessionLinks.get(fr.key)
+    if (link?.found && link.resumeCmd) return { label: t('progress.cmd_resume'), cmd: link.resumeCmd }
     const rerun = `pipeline afk run ${shellQuote(fr.row.change.name)}`
     if (fr.cancelled) return { label: t('progress.cmd_rerun_cxl'), cmd: rerun }
     const worktree = fieldStr(fr.row.change, 'automation_worktree')
@@ -898,8 +1020,11 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
   /** 单行行体渲染（行体 v2，demo .fl-top/.fl-body）：标题行内联——名称 + track/workflow 全称
    *  chip/调度标识 + 弱化 mono 时间，右端判定徽章（+失败短成因）；第二行=列车轨整宽+导语在左，
    *  动作在轨道右侧垂直居中。聚合分组与单项目平铺两个渲染分支共用；key 挂在返回的 article 上
-   *  （两分支都是数组 map 的直子元素）。fail/cxl 的「回终端」命令 chip 走 actionsFor 现状不动。 */
-  function renderRow(fr: FlatRow): JSX.Element {
+   *  （两分支都是数组 map 的直子元素）。fail/cxl 的「回终端」命令 chip 走 actionsFor 现状不动。
+   *  readonly=true（#2 归档折叠行「展开」）：名字降级为纯文本（不开抽屉）、不渲染任何行内动作、
+   *  PhaseRail 强制 mode='idle'（不触发 [data-mode="run"] 流光门控），整行加 .prg9-row--archived
+   *  灰化——徽章/导语/证据 chip 等只读信息照旧渲染，只收口"可交互"面。 */
+  function renderRow(fr: FlatRow, readonly = false): JSX.Element {
     const { row } = fr
     const name = row.change.name
     const rail = railOf(fr)
@@ -907,26 +1032,33 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
     const b = judge(fr, evidence, rail.phaseLabel)
     // 行内小号证据 chip（gate 行）：只出判定型（非 copyable 非占位）——路径产物归抽屉。
     const inlineChips = evidence.filter((ch) => !ch.copyable && !ch.unset)
-    const acts = actionsFor(fr)
+    const acts = readonly ? undefined : actionsFor(fr)
     // 失败行短成因（W3/F-b 沿用）：automation_cause 直判优先，空串回落 last_error regex。
     const lastError = row.state === 'failed' ? fieldStr(row.change, 'automation_last_error') : ''
     const failCause = row.state === 'failed' ? fieldStr(row.change, 'automation_cause') : ''
     const showCause = row.state === 'failed' && !fr.cancelled && (lastError !== '' || failCause !== '')
     // 真机验收 G：need 行 ring 分色——gate 保持绿（--need 现状），失败红（--need-fail），
     // 人为终止琥珀（--need-cxl）；tone 类叠加在 --need 之上（排序/入场语义不变，CSS 后写覆盖）。
+    // 归档只读行不参与 need 分色（灰化盖过一切语义色，见 .prg9-row--archived）。
     const toneCls = fr.need && row.state === 'failed' ? (fr.cancelled ? ' prg9-row--need-cxl' : ' prg9-row--need-fail') : ''
+    const rowCls = readonly ? 'prg9-row prg9-row--archived' : `prg9-row${fr.need ? ' prg9-row--need' : ''}${toneCls}`
+    const railMode: RailMode = readonly ? 'idle' : fr.mode
     const sandbox = inSandbox(fr)
     return (
-      <article key={fr.key} className={`prg9-row${fr.need ? ' prg9-row--need' : ''}${toneCls}`} data-testid={`prg9-row-${name}`}>
+      <article key={fr.key} className={rowCls} data-testid={readonly ? `prg9-archived-row-${name}` : `prg9-row-${name}`}>
         <div className="prg9v2-top">
-          <button
-            type="button"
-            className="prg9-name"
-            data-testid={`prg9-name-${name}`}
-            onClick={() => openDrawer(fr.key)}
-          >
-            {name}
-          </button>
+          {readonly ? (
+            <span className="prg9-name prg9-name--ro">{name}</span>
+          ) : (
+            <button
+              type="button"
+              className="prg9-name"
+              data-testid={`prg9-name-${name}`}
+              onClick={(e) => openDrawer(fr.key, e.currentTarget)}
+            >
+              {name}
+            </button>
+          )}
           <span className="prg9s-tags">
             {row.change.track && <span className="card__track mono">{row.change.track}</span>}
             <span className="prg9s-wf" data-testid={`prg9s-wf-${name}`}>
@@ -952,8 +1084,8 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
             <PhaseRail
               phases={rail.labels}
               currentIndex={rail.idx}
-              mode={fr.mode}
-              ariaLabel={t(`progress.rail_aria_${fr.mode}`, { m: rail.labels.length, phase: rail.phaseLabel })}
+              mode={railMode}
+              ariaLabel={t(`progress.rail_aria_${railMode}`, { m: rail.labels.length, phase: rail.phaseLabel })}
               testid={`prg9-rail-${name}`}
             />
             {b.lead && (
@@ -974,6 +1106,36 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
           {acts && <div className="prg9-acts prg9v2-acts">{acts}</div>}
         </div>
       </article>
+    )
+  }
+
+  /** #2 归档折叠行「展开」：静态文案「N 个已归档」改可点击 toggle，展开时在原位（单项目=列表
+   *  尾部；聚合=该项目组尾部）渲染该 root 下的只读归档行列表（renderRow readonly 分支收口交互）。
+   *  两个渲染分支各自按 root 调一次——无归档行的 root 返回 null（不出空壳）。 */
+  function archivedSectionFor(root: string): ReactNode {
+    const frs = archivedFlatByRoot.get(root) ?? []
+    if (frs.length === 0) return null
+    const rb = rootBasename(root)
+    const expanded = expandedArchive.has(root)
+    return (
+      <div className="prg9-fold" data-testid={`prg9-fold-${rb}`}>
+        <button
+          type="button"
+          className="prg9-fold-toggle"
+          data-testid={`prg9-fold-toggle-${rb}`}
+          aria-expanded={expanded}
+          onClick={() => toggleArchive(root)}
+        >
+          {t('progress.fold_archived', { n: frs.length })}
+          {' · '}
+          {t(expanded ? 'progress.fold_collapse' : 'progress.fold_expand')}
+        </button>
+        {expanded && (
+          <div className="prg9-archived-stack" data-testid={`prg9-archived-stack-${rb}`}>
+            {frs.map((fr) => renderRow(fr, true))}
+          </div>
+        )}
+      </div>
     )
   }
 
@@ -1024,6 +1186,7 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
                   <span className="prg9g-rule" aria-hidden="true" />
                 </header>
                 <div className="prg9g-stack">{g.rows.map((fr) => renderRow(fr))}</div>
+                {archivedSectionFor(g.root)}
               </section>
             ))
           : visibleRows.map((fr) => renderRow(fr))}
@@ -1032,9 +1195,7 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
       {snapshot && flatRows.length === 0 && (
         <div className="prg-empty" data-testid="prg-empty">{t('progress.empty')}</div>
       )}
-      {archivedTotal > 0 && (
-        <p className="prg9-fold" data-testid="prg9-fold">{t('progress.fold_archived', { n: archivedTotal })}</p>
-      )}
+      {currentRoot !== '' && archivedSectionFor(currentRoot)}
       <p className="prg-foot">{t('progress.foot')}</p>
 
       {drawerRow && (

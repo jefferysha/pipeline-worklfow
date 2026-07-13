@@ -57,6 +57,10 @@ function url(path: string): string {
 }
 
 describe('真 server /api/snapshot → 前端 selectInbox', () => {
+  // 登记（demo↔生产残余差异清单 #8）：本文件真起 HTTP server + 真 fs 写盘，本机单跑是绿的，
+  // 但 codex 高并发沙箱资源紧张时时序比默认 vitest testTimeout(5000ms) 更紧，偶发超时/flaky。
+  // 最小侵入放宽：仅给较重的三条 it() 加显式 timeout（第三参，风格同 packages/kernel/src/channel/
+  // process.test.ts / packages/cli/src/channel-process.integration.test.ts 的既有写法），不改任何断言强度。
   it('GET 返回真 Snapshot 形状（含 capabilities/projects）', async () => {
     const res = await fetch(url('/api/snapshot'))
     expect(res.status).toBe(200)
@@ -67,7 +71,7 @@ describe('真 server /api/snapshot → 前端 selectInbox', () => {
     expect(demo?.phase).toBe('open')
     // open 非复核阶段 → 收件箱空
     expect(selectInbox(snap, started.root, RULES)).toEqual([])
-  })
+  }, 15000)
 
   it('POST transition 带 token 真改盘 → change 进 explore；T7 准入：缺产出不进收件箱，真补产出字段后才进', async () => {
     const post = await fetch(url('/api/change/demo/transition'), {
@@ -88,7 +92,7 @@ describe('真 server /api/snapshot → 前端 selectInbox', () => {
     const snap2 = (await (await fetch(url('/api/snapshot'))).json()) as Snapshot
     const inbox = selectInbox(snap2, started.root, RULES)
     expect(inbox.map((i) => i.change.name)).toContain('demo')
-  })
+  }, 20000)
 
   it('POST 无 token → 401（B5 写端点鉴权，前端必须带同源注入 token）', async () => {
     const res = await fetch(url('/api/change/demo/transition'), {
@@ -97,5 +101,5 @@ describe('真 server /api/snapshot → 前端 selectInbox', () => {
       body: JSON.stringify({ root: started.root, event: 'explore-complete' }),
     })
     expect(res.status).toBe(401)
-  })
+  }, 15000)
 })

@@ -61,8 +61,8 @@ export const zh: Dict = {
     badge_failed_plain: '失败 · 等你决定',
     lead_verify_pass: '验证阶段完成：自动验证、agent review、codex review 全部通过——确认无误就放行进入交付',
     lead_judge: '到了人工复核：{wf} 没有自动检查，放不放行完全由你判断',
-    lead_failed: '自动化跑挂了：{err}，已自动重试 {n} 次——重试还是放弃？',
-    lead_failed_plain: '自动化跑挂了：{err}——重试还是放弃？',
+    lead_failed: '自动化跑挂了：{err}，已自动重试 {n} 次——拷命令回终端接管，或重新排队重跑。',
+    lead_failed_plain: '自动化跑挂了：{err}——拷命令回终端接管，或重新排队重跑。',
     // gate 多出边逐条渲染（v9 评审 P1-1 回归旧 InboxView 纪律）：act_forward 非首选前进边
     // （{to}=事件名）、act_backward 全部回退边（{to}=目标相位）——消费方 ProgressView.actionsFor。
     // act_approve 键随旧 InboxView 退役后零引用，zh/en 对称删（同批登记）。
@@ -563,6 +563,9 @@ export const zh: Dict = {
     badge_cancelled: '已取消（人为终止）',
     act_pass_to: '放行进入 {to}',
     fold_archived: '{n} 个已归档',
+    // #2 归档折叠行「展开」真交互：静态文案改可点击 toggle 附缀。
+    fold_expand: '展开',
+    fold_collapse: '收起',
     rail_aria_run: '{m} 相位，{phase} 运行中',
     rail_aria_gate: '{m} 相位，停在 {phase} 复核门',
     rail_aria_fail: '{m} 相位，{phase} 失败',
@@ -575,6 +578,9 @@ export const zh: Dict = {
     cmd_takeover: '在终端接管',
     cmd_rerun: '重跑命令',
     cmd_rerun_cxl: '重新跑的命令',
+    // v9-J：查到该 change 现场真实终端会话（session-link 命中）→ 优先给真恢复命令，
+    // 比静态 cd/重跑更直接（直接可拷贝执行接回原会话）。
+    cmd_resume: '↻ 恢复会话',
     acts_terminal_note: '重试/放弃回终端做——连上现场的命令见下方『自己上手修』',
     // ── v9-H：状态 sheet 页签（全部/等你动手/运行中/等待中；计数=各分类总数不随筛选变）+
     //    聚合语境项目分组组头 + 行 workflow/调度标识（▦ 沙箱=自动化三桶;⌨ 终端=任务活在终端）。──
@@ -678,8 +684,8 @@ export const en: Dict = {
     badge_failed_plain: 'Failed · your call',
     lead_verify_pass: 'Verify stage complete: auto verify, agent review and codex review all passed — approve to move on to ship',
     lead_judge: 'Human review: {wf} has no automated checks — approving is entirely your judgement',
-    lead_failed: 'Automation failed: {err} — retried {n} times automatically. Retry or dismiss?',
-    lead_failed_plain: 'Automation failed: {err} — retry or dismiss?',
+    lead_failed: 'Automation failed: {err} — retried {n} times automatically. Copy the command below to take over in your terminal, or re-queue a rerun.',
+    lead_failed_plain: 'Automation failed: {err} — copy the command below to take over in your terminal, or re-queue a rerun.',
     act_reject: '↩ Send back',
     act_forward: '→ {to}',
     act_backward: '↩ {to}',
@@ -1134,6 +1140,9 @@ export const en: Dict = {
     badge_cancelled: 'Cancelled (stopped by hand)',
     act_pass_to: 'Approve → {to}',
     fold_archived: '{n} archived',
+    // #2 archived-row expand/collapse toggle suffix.
+    fold_expand: 'Expand',
+    fold_collapse: 'Collapse',
     rail_aria_run: '{m} phases, {phase} running',
     rail_aria_gate: '{m} phases, held at the {phase} review gate',
     rail_aria_fail: '{m} phases, failed at {phase}',
@@ -1146,6 +1155,9 @@ export const en: Dict = {
     cmd_takeover: 'Take over in terminal',
     cmd_rerun: 'Rerun command',
     cmd_rerun_cxl: 'Command to run again',
+    // v9-J: session-link found a real terminal session for this change's worktree — prefer the
+    // real resume command (paste-and-run, reconnects to the original session).
+    cmd_resume: '↻ Resume session',
     acts_terminal_note: 'Retry / dismiss happen in the terminal — the commands to reconnect are under "Fix it yourself" below',
     // ── v9-H: status sheet tabs (all / needs you / running / waiting; counts are per-category
     //    totals, unaffected by the active filter) + project group headers in the aggregate

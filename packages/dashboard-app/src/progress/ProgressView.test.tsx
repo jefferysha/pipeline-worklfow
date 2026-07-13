@@ -134,6 +134,9 @@ let actionResponse: { match: RegExp; status: number; body: unknown } | null = nu
 let actionGate: Promise<void> | null = null
 let automationSettings = { max_parallel: 4, max_retries: 1, default_opt_in: false, image: '' }
 let automationFail = false
+// v9-J：/api/mem/session-links 批量预取桩——缺省 { links: {} }（无命中，chip 落回静态命令）；
+// 各用例改写此变量的 links 表来控制个别行的 session-link 命中结果（key=`${name}@${root}`）。
+let sessionLinksResponse: { status: number; body: unknown } = { status: 200, body: { links: {} } }
 
 beforeEach(() => {
   fetchLog = []
@@ -142,6 +145,7 @@ beforeEach(() => {
   actionGate = null
   automationSettings = { max_parallel: 4, max_retries: 1, default_opt_in: false, image: '' }
   automationFail = false
+  sessionLinksResponse = { status: 200, body: { links: {} } }
   global.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input)
     fetchLog.push(`${init?.method ?? 'GET'} ${url}${typeof init?.body === 'string' ? ` ${init.body}` : ''}`)
@@ -155,6 +159,9 @@ beforeEach(() => {
     if (/\/api\/automation\?root=/.test(url)) {
       if (automationFail) return new Response(JSON.stringify({ ok: false, error: 'boom' }), { status: 500 })
       return new Response(JSON.stringify({ ok: true, settings: automationSettings }), { status: 200 })
+    }
+    if (/\/api\/mem\/session-links\?/.test(url)) {
+      return new Response(JSON.stringify(sessionLinksResponse.body), { status: sessionLinksResponse.status })
     }
     if (actionGate) await actionGate
     if (actionResponse && actionResponse.match.test(url)) {
@@ -261,10 +268,61 @@ describe('ProgressView 单列表行体（v9-H：聚合语境项目分组 + 行�
     }
   })
 
-  it('archived 行不出现在列表里；列表尾缀「1 个已归档」', () => {
+  it('archived 行不出现在列表里；组尾缀「1 个已归档」（proj-a 组，old-demo 归属该项目）', () => {
     renderView()
     expect(screen.queryByTestId('prg9-row-old-demo')).toBeNull()
-    expect(screen.getByTestId('prg9-fold').textContent).toContain('1 个已归档')
+    expect(screen.getByTestId('prg9-fold-proj-a').textContent).toContain('1 个已归档')
+  })
+})
+
+// ── #2「demo↔生产残余差异清单」：归档折叠行「展开」真交互——静态「N 个已归档」文案改可点击
+//    toggle；展开出该 root 下的只读归档行（不可开抽屉/不可点动作/rail 无 run 流光门控）；再点
+//    （文案变「收起」）→ 收起。聚合语境（currentRoot=''）按项目组分别展开；单项目语境列表尾部
+//    单一入口。fixture 唯一的 archived 行=old-demo（归属 ROOT_A/proj-a）。──
+describe('ProgressView 归档折叠行「展开」（#2 真交互）', () => {
+  it('聚合语境：proj-a 组尾「1 个已归档 · 展开」可点；展开后归档行只读出现（无名字/动作按钮、rail 非 run 态）；再点变「收起」', () => {
+    renderView()
+    expect(screen.queryByTestId('prg9-archived-row-old-demo')).toBeNull()
+    const toggle = screen.getByTestId('prg9-fold-toggle-proj-a')
+    expect(toggle.textContent).toContain('1 个已归档')
+    expect(toggle.textContent).toContain('展开')
+    expect(toggle.getAttribute('aria-expanded')).toBe('false')
+
+    fireEvent.click(toggle)
+    expect(toggle.textContent).toContain('收起')
+    expect(toggle.getAttribute('aria-expanded')).toBe('true')
+    const archivedRow = screen.getByTestId('prg9-archived-row-old-demo')
+    expect(archivedRow).toBeInTheDocument()
+    expect(archivedRow.className).toContain('prg9-row--archived')
+    // 只读：行内零按钮（无名字钮开抽屉、无行内动作钮）
+    expect(within(archivedRow).queryAllByRole('button')).toHaveLength(0)
+    expect(within(archivedRow).queryByTestId('prg9-name-old-demo')).toBeNull()
+    // rail 不落 run 门控（强制 idle，即便该行真值状态另有其它态）
+    expect(within(archivedRow).getByTestId('prg9-rail-old-demo')).toHaveAttribute('data-mode', 'idle')
+    // 点行体本身不开抽屉（负向：归档行没有可点开详情的入口）
+    fireEvent.click(archivedRow)
+    expect(screen.queryByTestId('prg9-drawer')).toBeNull()
+
+    fireEvent.click(toggle)
+    expect(toggle.textContent).toContain('展开')
+    expect(toggle.getAttribute('aria-expanded')).toBe('false')
+    expect(screen.queryByTestId('prg9-archived-row-old-demo')).toBeNull()
+  })
+
+  it('proj-b 组无归档行：不出现折叠入口', () => {
+    renderView()
+    expect(screen.queryByTestId('prg9-fold-proj-b')).toBeNull()
+  })
+
+  it('单项目语境（currentRoot=ROOT_A）：列表尾部单一入口，展开同样只读', async () => {
+    renderView({ currentRoot: ROOT_A })
+    expect(document.querySelector('[data-testid^="prg9g-head-"]')).toBeNull()
+    const toggle = screen.getByTestId('prg9-fold-toggle-proj-a')
+    fireEvent.click(toggle)
+    const archivedRow = screen.getByTestId('prg9-archived-row-old-demo')
+    expect(within(archivedRow).queryAllByRole('button')).toHaveLength(0)
+    // 单 root fixture：冲掉并发上限探测请求落地（不冲会刷 act 告警）
+    await act(async () => {})
   })
 })
 
@@ -430,10 +488,10 @@ describe('ProgressView 判定徽章与导语（rowSemantics 自 InboxView 搬运
     expect(screen.getByTestId('prg9-lead-changelog-cn').textContent).toContain('release-train')
   })
 
-  it('失败行 → 红「失败 ×3 · 等你决定」+「重试还是放弃」导语；running=蓝「{相位}运行中」；排队=中性；等产出点名缺的字段', () => {
+  it('失败行 → 红「失败 ×3 · 等你决定」+「拷命令回终端接管，或重新排队重跑」导语；running=蓝「{相位}运行中」；排队=中性；等产出点名缺的字段', () => {
     renderView()
     expect(screen.getByTestId('prg9-badge-hotfix-login').textContent).toContain('失败 ×3 · 等你决定')
-    expect(screen.getByTestId('prg9-lead-hotfix-login').textContent).toContain('重试还是放弃')
+    expect(screen.getByTestId('prg9-lead-hotfix-login').textContent).toContain('拷命令回终端接管，或重新排队重跑')
     const run = screen.getByTestId('prg9-badge-afk-demo')
     expect(run.textContent).toContain('实现运行中')
     expect(run.className).toContain('prg9-bdg--blue')
@@ -745,6 +803,47 @@ describe('ProgressView 失败/取消行：回终端命令 chip（重试/放弃�
     expect(note.textContent).toContain('回终端')
     expect(note.textContent).toContain('自己上手修')
   })
+
+  // ── v9-J：批量预取命中真恢复会话 → chip 优先显示真命令；未命中/查无 → 落回上面几条既有静态
+  //    命令断言（不能回归）。sessionLinksResponse 桩挂在 beforeEach（缺省 { links: {} }）。──
+  it('v9-J：session-link 批量命中真恢复命令 → chip 显示/拷贝真命令，不是 pipeline afk run 兜底', async () => {
+    const writeText = stubClipboard()
+    const resumeCmd = 'cd /tmp/wt/hotfix-login && claude --resume abcd-1234'
+    sessionLinksResponse = {
+      status: 200,
+      body: { links: { [`hotfix-login@${ROOT_A}`]: { found: true, platform: 'claude', sessionId: 'abcd-1234', resumeCmd } } },
+    }
+    renderView()
+    const chip = screen.getByTestId('prg9-cmd-hotfix-login')
+    await waitFor(() => expect(chip.textContent).toContain(resumeCmd))
+    expect(chip.textContent).toContain('恢复会话')
+    expect(chip.textContent).not.toContain('pipeline afk run hotfix-login')
+    expect(chip.getAttribute('title')).toBe(resumeCmd)
+    fireEvent.click(chip)
+    expect(writeText).toHaveBeenCalledWith(resumeCmd)
+    await act(async () => {})
+  })
+
+  it('v9-J：session-link 查无（found:false）→ chip 落回现状静态命令（不能回归）', async () => {
+    sessionLinksResponse = {
+      status: 200,
+      body: { links: { [`hotfix-login@${ROOT_A}`]: { found: false, reason: 'no-session' } } },
+    }
+    renderView()
+    await act(async () => {})
+    const chip = screen.getByTestId('prg9-cmd-hotfix-login')
+    expect(chip.textContent).toContain('重跑命令')
+    expect(chip.textContent).toContain('pipeline afk run hotfix-login')
+  })
+
+  it('v9-J：session-links 端点整体失败（非 2xx）→ fail-open，chip 仍落回现状静态命令（不炸视图）', async () => {
+    sessionLinksResponse = { status: 500, body: { ok: false } }
+    renderView()
+    await act(async () => {})
+    const chip = screen.getByTestId('prg9-cmd-hotfix-login')
+    expect(chip.textContent).toContain('重跑命令')
+    expect(chip.textContent).toContain('pipeline afk run hotfix-login')
+  })
 })
 
 describe('ProgressView 详情抽屉（行名点击右滑；旧行内展开已退役）', () => {
@@ -830,6 +929,86 @@ describe('ProgressView 详情抽屉（行名点击右滑；旧行内展开已退
   })
 })
 
+/**
+ * #3 抽屉焦点陷阱（评审 P3 登记项，无障碍）：打开即焦点移入关闭钮；Tab/Shift+Tab 在抽屉内
+ * 可聚焦元素集合里循环；关闭（关闭钮/scrim/Esc，reduced-motion 与 no-preference 两分支）都要把
+ * 焦点还给触发它的行名按钮。
+ */
+describe('ProgressView 抽屉焦点陷阱（#3 无障碍）', () => {
+  it('打开抽屉 → 焦点移入抽屉内关闭钮（detail-close）', async () => {
+    renderView()
+    await openDrawer('gate-demo')
+    expect(document.activeElement).toBe(screen.getByTestId('detail-close'))
+  })
+
+  it('Tab 循环：在最后一个可聚焦元素上 Tab → 回到第一个；在第一个元素上 Shift+Tab → 到最后一个', async () => {
+    renderView()
+    await openDrawer('gate-demo')
+    const drawerEl = screen.getByTestId('prg9-drawer')
+    const focusables = drawerEl.querySelectorAll<HTMLElement>(
+      'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])',
+    )
+    expect(focusables.length).toBeGreaterThan(1)
+    const first = focusables[0]!
+    const last = focusables[focusables.length - 1]!
+    expect(first).toBe(screen.getByTestId('detail-close'))
+
+    last.focus()
+    expect(document.activeElement).toBe(last)
+    fireEvent.keyDown(drawerEl, { key: 'Tab' })
+    expect(document.activeElement).toBe(first)
+
+    first.focus()
+    expect(document.activeElement).toBe(first)
+    fireEvent.keyDown(drawerEl, { key: 'Tab', shiftKey: true })
+    expect(document.activeElement).toBe(last)
+  })
+
+  it('reduce：关闭抽屉（关闭钮，同步卸载）后焦点归还触发它的行名按钮', async () => {
+    stubMatchMedia(true)
+    renderView()
+    const trigger = screen.getByTestId('prg9-name-gate-demo')
+    await openDrawer('gate-demo')
+    expect(document.activeElement).toBe(screen.getByTestId('detail-close'))
+    fireEvent.click(screen.getByTestId('detail-close'))
+    expect(screen.queryByTestId('prg9-drawer')).toBeNull()
+    expect(document.activeElement).toBe(trigger)
+  })
+
+  it('reduce：Esc 关闭同样归还焦点', async () => {
+    stubMatchMedia(true)
+    renderView()
+    const trigger = screen.getByTestId('prg9-name-gate-demo')
+    await openDrawer('gate-demo')
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.queryByTestId('prg9-drawer')).toBeNull()
+    expect(document.activeElement).toBe(trigger)
+  })
+
+  // flaky 余量（demo↔生产差异清单 #8 同族）：GSAP 退场补间在高并发/满载环境下比本机单跑慢，
+  // waitFor 内部预算放宽到 6000ms 的同时，it() 本身的 vitest 默认 5000ms 测试超时也要跟着放宽
+  // （否则外层测试超时会先于内层 waitFor 预算触发，内层放宽形同虚设——本轮曾踩过这个坑）。
+  it('no-preference：关闭抽屉（关闭钮，GSAP 退场补间完成后卸载）归还焦点', async () => {
+    stubMatchMedia(false)
+    renderView()
+    const trigger = screen.getByTestId('prg9-name-gate-demo')
+    await openDrawer('gate-demo')
+    fireEvent.click(screen.getByTestId('detail-close'))
+    await waitFor(() => expect(screen.queryByTestId('prg9-drawer')).toBeNull(), { timeout: 6000 })
+    expect(document.activeElement).toBe(trigger)
+  }, 9000)
+
+  it('no-preference：scrim 点击关闭同样归还焦点（GSAP 退场分支）', async () => {
+    stubMatchMedia(false)
+    renderView()
+    const trigger = screen.getByTestId('prg9-name-gate-demo')
+    await openDrawer('gate-demo')
+    fireEvent.click(screen.getByTestId('prg9-scrim'))
+    await waitFor(() => expect(screen.queryByTestId('prg9-drawer')).toBeNull(), { timeout: 6000 })
+    expect(document.activeElement).toBe(trigger)
+  }, 9000)
+})
+
 describe('ProgressView GSAP 动效（gsap.matchMedia 全包；reduced-motion 守门等强度两分支）', () => {
   it('reduce：行与轨道名直达终态（opacity 1），无入场位移残留；流光门控只落在 running 行（data-mode=run）', () => {
     stubMatchMedia(true)
@@ -846,6 +1025,8 @@ describe('ProgressView GSAP 动效（gsap.matchMedia 全包；reduced-motion 守
     expect(screen.getByTestId('prg9-rail-triage-demo')).toHaveAttribute('data-mode', 'idle')
   })
 
+  // flaky 余量（#8）：waitFor 预算 8000ms 必须配一个 ≥ 它的 it() 测试超时（vitest 默认 5000ms
+  // 会先于内层 waitFor 触发，放宽 waitFor 不放宽外层等于没放宽——本轮曾在高并发环境撞过）。
   it('no-preference：行入场 stagger + 轨道名浮现后到达同一终态（opacity 1）', async () => {
     stubMatchMedia(false)
     renderView()
@@ -856,8 +1037,8 @@ describe('ProgressView GSAP 动效（gsap.matchMedia 全包；reduced-motion 守
       for (const el of Array.from(screen.getByTestId('prg9-rail-changelog-cn').querySelectorAll<HTMLElement>('.rl-name'))) {
         expect(el.style.opacity).toBe('1')
       }
-    }, { timeout: 4000 })
-  })
+    }, { timeout: 8000 })
+  }, 11000)
 
   // ── v9-H：状态 sheet 切换的两分支（demo applyDeckFilter 对位）——reduced 直切不编排，
   //    motion 切换后可见行轻入场并以 clearProps 收束到无 inline 残留（或被首屏入场补间以
@@ -884,8 +1065,8 @@ describe('ProgressView GSAP 动效（gsap.matchMedia 全包；reduced-motion 守
         expect(st.opacity === '' || st.opacity === '1').toBe(true)
         expect(st.visibility === '' || st.visibility === 'inherit').toBe(true)
       }
-    }, { timeout: 4000 })
-  })
+    }, { timeout: 8000 })
+  }, 11000)
 })
 
 describe('ProgressView 失败行短成因（W3/F-b 沿用：automation_cause 直判优先，空串回落 regex）', () => {
