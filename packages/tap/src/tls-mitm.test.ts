@@ -16,6 +16,9 @@ import { createCa, issueHostCert, CertificateAuthority, tlsMitmSupported } from 
 import { createTraceStore } from './trace-store.js'
 import { resetCaptureCache, setCaptureEnabled } from './security.js'
 import { rmDir, tempTapDir } from './test-support.js'
+// T-c 焦点用例（只增不改）：直测终结机件新接缝（createTlsMitm 合同），不经 serveForward。
+import { createTlsMitm, type UpstreamPlan } from './tls-mitm.js'
+import { TurnCounter } from './record.js'
 
 const supported = tlsMitmSupported()
 if (!supported) {
@@ -141,5 +144,82 @@ describe('forward proxy —— 真 TLS MITM 终结（#34b：接本地 CA 升级�
     expect(upstream.requests.length).toBe(1) // 透传：上游仍收到
     const recorded = store.listSessions().map((s) => store.readRecords(s.id)).flat()
     expect(recorded.length).toBe(0) // 默认 OFF：绝不解密录制
+  })
+})
+
+describe('createTlsMitm —— T-c 焦点：终结机件直连单元（新接缝合同，零 mock TLS 握手）', () => {
+  it.skipIf(!supported)('terminate → 本地 CA 真终结 TLS → UpstreamPlan 五字段正确交给注入管路；close() 未终结实例安全 no-op', async () => {
+    const dir = await tempTapDir(); dirs.push(dir)
+    const store = createTraceStore({ dir })
+    const ca = createCa()
+    const authority = CertificateAuthority.fromCa(ca)
+    const sessionId = store.createSession({ client: 'unit', proxyMode: 'forward' })
+    const seen: { plan: UpstreamPlan; body: string }[] = []
+    const deps = {
+      ca: authority, store, sessionId, counter: new TurnCounter(),
+      tunnels: new Set<net.Socket>(), connectTimeoutMs: 30_000,
+      // 注入管路 stub：记录 plan 合同并直接应答（不出网），聚焦终结机件本身。
+      forwardAndRecord: (_req: http.IncomingMessage, res2: http.ServerResponse, body: Buffer, plan: UpstreamPlan): void => {
+        seen.push({ plan, body: body.toString('utf8') })
+        const payload = Buffer.from(JSON.stringify({ unit: true }), 'utf8')
+        res2.writeHead(200, { 'Content-Type': 'application/json', 'Content-Length': payload.length })
+        res2.end(payload)
+      },
+    }
+    // close() 合同：从未 terminate（mitm server 未惰性创建）→ no-op 不抛。
+    expect(() => createTlsMitm(deps).close()).not.toThrow()
+
+    const tlsMitm = createTlsMitm(deps)
+    // 裸 TCP 门：每个连接直接交 terminate——模拟 serveForward 已过 ca&&capture 双护栏后的 CONNECT 分派。
+    const gate = net.createServer((sock) => tlsMitm.terminate(sock, Buffer.alloc(0), 'localhost', 8443))
+    await new Promise<void>((r) => gate.listen(0, '127.0.0.1', r))
+    const gatePort = (gate.address() as AddressInfo).port
+    try {
+      const res = await new Promise<{ status: number; body: string; authorized: boolean }>((resolve, reject) => {
+        const raw = net.connect(gatePort, '127.0.0.1')
+        let banner = ''
+        const onData = (d: Buffer): void => {
+          banner += d.toString('latin1')
+          if (banner.includes('\r\n\r\n')) {
+            raw.removeListener('data', onData)
+            if (!/^HTTP\/1\.1 200/.test(banner)) { raw.destroy(); return reject(new Error('terminate 未回 200 banner: ' + banner.split('\r\n')[0])) }
+            const tlsSock = tls.connect({ socket: raw, servername: 'localhost', ca: [ca.certPem], rejectUnauthorized: true }, () => {
+              const body = '{"probe":"unit"}'
+              const rq = http.request(
+                { createConnection: () => tlsSock as unknown as net.Socket, method: 'POST', path: '/unit', headers: { Host: 'localhost', 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) } },
+                (rs) => {
+                  let b = ''
+                  rs.setEncoding('utf8')
+                  rs.on('data', (c) => { b += c })
+                  rs.on('end', () => { const authorized = tlsSock.authorized; tlsSock.destroy(); resolve({ status: rs.statusCode ?? 0, body: b, authorized }) })
+                },
+              )
+              rq.on('error', reject)
+              rq.write(body)
+              rq.end()
+            })
+            tlsSock.on('error', reject)
+          }
+        }
+        raw.on('data', onData)
+        raw.on('error', reject)
+      })
+      // client 信任本地 CA → 握手 authorized（终结机件真用逐 host 签发证书终结了 TLS）
+      expect(res.authorized).toBe(true)
+      expect(res.status).toBe(200)
+      expect(JSON.parse(res.body).unit).toBe(true)
+      // 注入管路收到解密明文与 UpstreamPlan 合同（T-a 五参差异面）
+      expect(seen.length).toBe(1)
+      expect(seen[0]!.body).toBe('{"probe":"unit"}')
+      const plan = seen[0]!.plan
+      expect(plan.transport).toBe('forward-tls')
+      expect(plan.host).toBe('localhost') // 裸 hostname（无端口）——MITM 路径历史行为保持
+      expect(plan.path).toBe('/unit')
+      expect(plan.upstreamBaseUrl).toBe('https://localhost')
+      expect(typeof plan.makeReq).toBe('function')
+    } finally {
+      tlsMitm.close()
+      await new Promise<void>((r) => gate.close(() => r()))
+    }
   })
 })

@@ -12,20 +12,19 @@
  * TLS 终结新增（#34b，additive）：老仓 forward_proxy.py _handle_connect 用 ssl.wrap_socket 做 MITM；
  *   本仓用 node:tls TLSSocket(isServer) + certs.ts 本地 CA 逐 host 签发对齐。**双护栏**：仅在
  *   ca 提供 **且** isCaptureEnabled 时才解密（否则退回盲隧道，绝不无谓解密）。
+ *   机件本体在 tls-mitm.ts（T-c 迁出）；本文件只留明文 server + CONNECT 分派（双护栏判定）+ 生命周期编排。
  *
  * 与 claude 8766 生命线隔离：绑独立端口。安全护栏（#34e）：录制受 isCaptureEnabled 门控（默认 OFF）；
  *   TLS 解密同受 capture 门控；捕获只落本地 trace_store，CA 私钥不外发（见 certs.ts）。
  */
 import { createServer, request as httpRequest, type IncomingMessage, type Server, type ServerResponse, type OutgoingHttpHeaders } from 'node:http'
-import { request as httpsRequest } from 'node:https'
-import { TLSSocket, createSecureContext } from 'node:tls'
 import { connect as netConnect, type AddressInfo, type Socket } from 'node:net'
 import { HOP_BY_HOP, TurnCounter, buildRecord, safeJson, shouldSkipTraceRecord } from './record.js'
 import { isCaptureEnabled, registerIntercept } from './security.js'
 import { getTraceStore, type TraceStore } from './trace-store.js'
 import type { CertificateAuthority } from './certs.js'
 import { assembleBedrockConverseBody, attachBedrockErrors, decodeBedrockEventstreamEvents, isBedrockEventstreamPath } from './bedrock.js'
-import { attachWsRelay } from './ws-proxy.js'
+import { createTlsMitm, type UpstreamPlan } from './tls-mitm.js'
 
 /**
  * 响应体构建（BACKLOG #34-wire：record 路径接 decodeBedrockEventstreamEvents）—— Bedrock
@@ -84,6 +83,77 @@ function relayHeaders(upstream: IncomingMessage, includeLength: boolean, bodyLen
   return out
 }
 
+/** forwardAndRecord 的会话上下文（serveForward 闭包三件套，显式传参保持 helper 模块级）。 */
+interface ForwardCtx { store: TraceStore; sessionId: string; counter: TurnCounter }
+
+/**
+ * 「转发 + 录制」管路单源（T-a 提取；UpstreamPlan 类型见 tls-mitm.ts——因两模块共用且本文件被
+ * index.ts export *，类型落在不入 index 的 tls-mitm.ts 以免外泄公共 API）——此前 forward/
+ * forwardMitm 是 ~60 行近逐字复制，
+ * B2 漂移（明文侧漏 try/catch 崩 daemon）即由这对复制养出。captureGate、turn、fwdHeaders
+ * 过滤、成功/502 两路 writeHead+end、shouldSkipTraceRecord、buildRecord+appendRecord、
+ * B2 防崩 try/catch 自此只此一份；两调用点只算 UpstreamPlan。脱敏接缝（buildRecord）不动。
+ */
+function forwardAndRecord(ctx: ForwardCtx, req: IncomingMessage, res: ServerResponse, body: Buffer, plan: UpstreamPlan): void {
+  const { store, sessionId, counter } = ctx
+  const { path, upstreamBaseUrl, transport } = plan
+  const method = (req.method ?? 'GET').toUpperCase()
+  const captureGate = method === 'POST' && isCaptureEnabled({ dir: store.dir })
+  const turn = counter.next()
+  const t0 = Date.now()
+  const reqBody = captureGate ? safeJson(body) : null
+
+  const fwdHeaders: OutgoingHttpHeaders = {}
+  for (const [k, v] of Object.entries(req.headers)) {
+    if (HOP_BY_HOP.has(k.toLowerCase())) continue
+    if (v !== undefined) fwdHeaders[k] = v
+  }
+  fwdHeaders.Host = plan.host
+
+  const upReq = plan.makeReq({ method, path, headers: fwdHeaders }, (upstream) => {
+    const status = upstream.statusCode ?? 502
+    const buf: Buffer[] = []
+    upstream.on('data', (c: Buffer) => buf.push(c))
+    upstream.on('end', () => {
+      const raw = Buffer.concat(buf)
+      // B2：成功回写包 try/catch——client abort 后裸调对已销毁 res 写会同步抛，带崩 daemon。捕获仍照常进行。
+      try { res.writeHead(status, relayHeaders(upstream, true, raw.length)); res.end(raw) } catch { /* client 已断 */ }
+      if (captureGate) {
+        const skip = shouldSkipTraceRecord({
+          upstreamUrl: upstreamBaseUrl + path, path,
+          responseHeaders: upstream.headers as Record<string, string | string[] | undefined>,
+          requestHeaders: req.headers, method,
+        })
+        if (!skip) {
+          try {
+            store.appendRecord(sessionId, buildRecord({
+              reqId: reqId(), turn, durationMs: Date.now() - t0, method, path,
+              reqHeaders: req.headers, reqBody, status,
+              respHeaders: upstream.headers as Record<string, string | string[] | undefined>,
+              respBody: buildRespBody(path, raw), upstreamBaseUrl, transport,
+            }))
+          } catch { /* best-effort */ }
+        }
+      }
+    })
+  })
+  upReq.on('error', (err) => {
+    const msg = Buffer.from(JSON.stringify({ error: `upstream unavailable: ${err.message}` }), 'utf8')
+    try { res.writeHead(502, { 'Content-Type': 'application/json', 'Content-Length': msg.length }); res.end(msg) } catch { /* sent */ }
+    if (captureGate) {
+      try {
+        store.appendRecord(sessionId, buildRecord({
+          reqId: reqId(), turn, durationMs: Date.now() - t0, method, path,
+          reqHeaders: req.headers, reqBody, status: 502, respHeaders: {},
+          respBody: { error: err.message }, upstreamBaseUrl, transport,
+        }))
+      } catch { /* best-effort */ }
+    }
+  })
+  if (body.length) upReq.write(body)
+  upReq.end()
+}
+
 export function serveForward(opts: ForwardProxyOptions = {}): Promise<ForwardProxyHandle> {
   const store = opts.store ?? getTraceStore()
   const client = opts.client ?? 'forward'
@@ -113,181 +183,29 @@ export function serveForward(opts: ForwardProxyOptions = {}): Promise<ForwardPro
     // B2：挂 res 'error' 静默——client abort 后对已销毁 res 的异步写会 emit 'error'，无监听即抛未捕获带崩 daemon（连累所有 client）。
     res.on('error', () => { /* client 已断，回写失败无害 */ })
 
+    // 明文路径的 UpstreamPlan：path/BaseUrl/Host 从绝对 URI 推导（Host 含端口——历史行为保持）。
     function forward(body: Buffer): void {
-      const method = (req.method ?? 'GET').toUpperCase()
-      const path = (targetUrl.pathname || '/') + (targetUrl.search || '')
-      const upstreamBaseUrl = `${targetUrl.protocol}//${targetUrl.host}`
-      const captureGate = method === 'POST' && isCaptureEnabled({ dir: store.dir })
-      const turn = counter.next()
-      const t0 = Date.now()
-      const reqBody = captureGate ? safeJson(body) : null
-
-      const fwdHeaders: OutgoingHttpHeaders = {}
-      for (const [k, v] of Object.entries(req.headers)) {
-        if (HOP_BY_HOP.has(k.toLowerCase())) continue
-        if (v !== undefined) fwdHeaders[k] = v
-      }
-      fwdHeaders.Host = targetUrl.host
-
-      const upReq = httpRequest({
-        protocol: 'http:', hostname: targetUrl.hostname, port: targetUrl.port || 80,
-        method, path, headers: fwdHeaders,
-      }, (upstream) => {
-        const status = upstream.statusCode ?? 502
-        const buf: Buffer[] = []
-        upstream.on('data', (c: Buffer) => buf.push(c))
-        upstream.on('end', () => {
-          const raw = Buffer.concat(buf)
-          // B2：成功回写包 try/catch——client abort 后裸调对已销毁 res 写会同步抛，带崩 daemon
-          // （MITM 路径下方 forwardMitm 已如此包，明文路径此前漏包）。捕获仍照常进行。
-          try { res.writeHead(status, relayHeaders(upstream, true, raw.length)); res.end(raw) } catch { /* client 已断 */ }
-          if (captureGate) {
-            const skip = shouldSkipTraceRecord({
-              upstreamUrl: upstreamBaseUrl + path, path,
-              responseHeaders: upstream.headers as Record<string, string | string[] | undefined>,
-              requestHeaders: req.headers, method,
-            })
-            if (!skip) {
-              try {
-                store.appendRecord(sessionId, buildRecord({
-                  reqId: reqId(), turn, durationMs: Date.now() - t0, method, path,
-                  reqHeaders: req.headers, reqBody, status,
-                  respHeaders: upstream.headers as Record<string, string | string[] | undefined>,
-                  respBody: buildRespBody(path, raw), upstreamBaseUrl, transport: 'forward',
-                }))
-              } catch { /* best-effort */ }
-            }
-          }
-        })
+      forwardAndRecord({ store, sessionId, counter }, req, res, body, {
+        makeReq: (o, onResp) => httpRequest({
+          protocol: 'http:', hostname: targetUrl.hostname, port: targetUrl.port || 80,
+          method: o.method, path: o.path, headers: o.headers,
+        }, onResp),
+        path: (targetUrl.pathname || '/') + (targetUrl.search || ''),
+        upstreamBaseUrl: `${targetUrl.protocol}//${targetUrl.host}`,
+        transport: 'forward',
+        host: targetUrl.host,
       })
-      upReq.on('error', (err) => {
-        const msg = Buffer.from(JSON.stringify({ error: `upstream unavailable: ${err.message}` }), 'utf8')
-        try { res.writeHead(502, { 'Content-Type': 'application/json', 'Content-Length': msg.length }); res.end(msg) } catch { /* sent */ }
-        if (captureGate) {
-          try {
-            store.appendRecord(sessionId, buildRecord({
-              reqId: reqId(), turn, durationMs: Date.now() - t0, method, path,
-              reqHeaders: req.headers, reqBody, status: 502, respHeaders: {},
-              respBody: { error: err.message }, upstreamBaseUrl, transport: 'forward',
-            }))
-          } catch { /* best-effort */ }
-        }
-      })
-      if (body.length) upReq.write(body)
-      upReq.end()
     }
   })
 
-  // ── TLS MITM 终结机件（仅 opts.ca 提供时启用；#34b additive）──
+  // ── TLS MITM 终结机件（T-c 迁至 tls-mitm.ts；仅 opts.ca 提供时装配；#34b additive）──
+  // 装配零副作用：内部 mitm http server 仍**惰性**创建（首个 terminate 才起，行为保持）。
   const ca = opts.ca
-  let mitmServer: Server | null = null
-  interface MitmTarget { hostname: string; port: number }
-  const resolveMitmTarget = (req: IncomingMessage): MitmTarget =>
-    (req.socket as unknown as { __mitmTarget?: MitmTarget }).__mitmTarget ?? { hostname: String(req.headers.host ?? '').split(':')[0] || '', port: 443 }
-
-  function getMitmServer(): Server {
-    if (mitmServer) return mitmServer
-    mitmServer = createServer((req: IncomingMessage, res: ServerResponse) => handleMitmRequest(req, res))
-    mitmServer.on('clientError', () => { /* 单连接错误不影响 daemon */ })
-    // #34-wire：wss:// 升级请求（TLS 已被上面终结）真中继 + 帧重组入录（ws-reconstruct 工具首次接活路径）。
-    attachWsRelay(mitmServer, {
-      store, sessionId, nextTurn: () => counter.next(),
-      resolveTarget: (req) => { const t = resolveMitmTarget(req); return { hostname: t.hostname, port: t.port, useTls: true } },
-      // B3：ws relay 复用 forward 的 connect(setup) 超时；idle 用 attachWsRelay 内部更保守的默认(见其定义)。
-      connectTimeoutMs,
-    })
-    return mitmServer
-  }
-
-  function terminateTls(clientSocket: Socket, head: Buffer, hostname: string, port: number): void {
-    try {
-      clientSocket.write('HTTP/1.1 200 Connection Established\r\n\r\n')
-      if (head && head.length) clientSocket.unshift(head)
-      const { key, cert } = ca!.secureContextOptions(hostname)
-      const tlsSocket = new TLSSocket(clientSocket, { isServer: true, secureContext: createSecureContext({ key, cert }) })
-      ;(tlsSocket as unknown as { __mitmTarget: MitmTarget }).__mitmTarget = { hostname, port }
-      tunnels.add(clientSocket)
-      tunnels.add(tlsSocket)
-      const drop = (): void => { tunnels.delete(clientSocket); tunnels.delete(tlsSocket) }
-      tlsSocket.on('error', () => { try { tlsSocket.destroy() } catch { /* ignore */ } ; try { clientSocket.destroy() } catch { /* ignore */ } ; drop() })
-      tlsSocket.on('close', drop)
-      clientSocket.on('error', () => { try { tlsSocket.destroy() } catch { /* ignore */ } ; drop() })
-      getMitmServer().emit('connection', tlsSocket)
-    } catch {
-      try { clientSocket.destroy() } catch { /* ignore */ }
-    }
-  }
-
-  function handleMitmRequest(req: IncomingMessage, res: ServerResponse): void {
-    const target = resolveMitmTarget(req)
-    const chunks: Buffer[] = []
-    req.on('data', (c: Buffer) => chunks.push(c))
-    req.on('end', () => forwardMitm(Buffer.concat(chunks)))
-    req.on('error', () => { try { res.destroy() } catch { /* ignore */ } })
-    res.on('error', () => { /* B2：client 已断，静默避免未监听 error 崩 daemon */ })
-
-    function forwardMitm(body: Buffer): void {
-      const method = (req.method ?? 'GET').toUpperCase()
-      const path = req.url ?? '/'
-      const upstreamBaseUrl = `https://${target.hostname}`
-      const captureGate = method === 'POST' && isCaptureEnabled({ dir: store.dir })
-      const turn = counter.next()
-      const t0 = Date.now()
-      const reqBody = captureGate ? safeJson(body) : null
-
-      const fwdHeaders: OutgoingHttpHeaders = {}
-      for (const [k, v] of Object.entries(req.headers)) {
-        if (HOP_BY_HOP.has(k.toLowerCase())) continue
-        if (v !== undefined) fwdHeaders[k] = v
-      }
-      fwdHeaders.Host = target.hostname
-
-      const upReq = httpsRequest({
-        hostname: target.hostname, port: target.port, method, path, headers: fwdHeaders,
-        rejectUnauthorized: false, // MITM 代理不校验上游证书（对齐老仓 forward 语义）
-      }, (upstream) => {
-        const status = upstream.statusCode ?? 502
-        const buf: Buffer[] = []
-        upstream.on('data', (c: Buffer) => buf.push(c))
-        upstream.on('end', () => {
-          const raw = Buffer.concat(buf)
-          try { res.writeHead(status, relayHeaders(upstream, true, raw.length)); res.end(raw) } catch { /* sent */ }
-          if (captureGate) {
-            const skip = shouldSkipTraceRecord({
-              upstreamUrl: upstreamBaseUrl + path, path,
-              responseHeaders: upstream.headers as Record<string, string | string[] | undefined>,
-              requestHeaders: req.headers, method,
-            })
-            if (!skip) {
-              try {
-                store.appendRecord(sessionId, buildRecord({
-                  reqId: reqId(), turn, durationMs: Date.now() - t0, method, path,
-                  reqHeaders: req.headers, reqBody, status,
-                  respHeaders: upstream.headers as Record<string, string | string[] | undefined>,
-                  respBody: buildRespBody(path, raw), upstreamBaseUrl, transport: 'forward-tls',
-                }))
-              } catch { /* best-effort */ }
-            }
-          }
-        })
-      })
-      upReq.on('error', (err) => {
-        const msg = Buffer.from(JSON.stringify({ error: `upstream unavailable: ${err.message}` }), 'utf8')
-        try { res.writeHead(502, { 'Content-Type': 'application/json', 'Content-Length': msg.length }); res.end(msg) } catch { /* sent */ }
-        if (captureGate) {
-          try {
-            store.appendRecord(sessionId, buildRecord({
-              reqId: reqId(), turn, durationMs: Date.now() - t0, method, path,
-              reqHeaders: req.headers, reqBody, status: 502, respHeaders: {},
-              respBody: { error: err.message }, upstreamBaseUrl, transport: 'forward-tls',
-            }))
-          } catch { /* best-effort */ }
-        }
-      })
-      if (body.length) upReq.write(body)
-      upReq.end()
-    }
-  }
+  const tlsMitm = ca ? createTlsMitm({
+    ca, store, sessionId, counter, tunnels, connectTimeoutMs,
+    // T-a 共享管路以 DI 注入（预绑 ctx）——不从本文件 export（index.ts 对本文件是 export *，导出即漏公共 API）。
+    forwardAndRecord: (req, res, body, plan: UpstreamPlan) => forwardAndRecord({ store, sessionId, counter }, req, res, body, plan),
+  }) : null
 
   // ── ② CONNECT 隧道：ca+capture → TLS MITM 终结；否则盲隧道透传 ──
   server.on('connect', (req: IncomingMessage, clientSocket: Socket, head: Buffer) => {
@@ -296,9 +214,9 @@ export function serveForward(opts: ForwardProxyOptions = {}): Promise<ForwardPro
     const hostname = idx > 0 ? authority.slice(0, idx) : authority
     const port = idx > 0 ? Number(authority.slice(idx + 1)) || 443 : 443
 
-    // 双护栏：仅 ca 提供 **且** capture ON 才解密；否则盲隧道（默认 OFF 绝不解密）。
-    if (ca && isCaptureEnabled({ dir: store.dir })) {
-      terminateTls(clientSocket, head, hostname, port)
+    // 双护栏：仅 ca 提供（tlsMitm 已装配）**且** capture ON 才解密；否则盲隧道（默认 OFF 绝不解密）。
+    if (tlsMitm && isCaptureEnabled({ dir: store.dir })) {
+      tlsMitm.terminate(clientSocket, head, hostname, port)
       return
     }
 
@@ -352,7 +270,7 @@ export function serveForward(opts: ForwardProxyOptions = {}): Promise<ForwardPro
             unregister()
             for (const s of tunnels) { try { s.destroy() } catch { /* ignore */ } }
             tunnels.clear()
-            if (mitmServer) { try { mitmServer.close() } catch { /* ignore */ } }
+            if (tlsMitm) tlsMitm.close() // mitm server 关闭责任随 T-c 迁移（内部自带 try/catch）
             try {
               const row = store.loadSessionRow(sessionId)
               store.finalizeSession(sessionId, { api_calls: row?.record_count ?? 0, has_error: false })
