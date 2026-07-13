@@ -239,4 +239,19 @@ describe('init —— 交互向导（fake InitWizardEnv 注入）', () => {
     expect(deps.store.init.calls[0]?.[0]?.preset).toBe('full')
     expect(deps.errLines.join('\n')).toContain("非法 preset 'ful'")
   })
+
+  test('⑥ flag 已给自定义 preset + 只缺 track：向导回车收下预授权值，不被枚举倒灌拒绝（codex P2）', async () => {
+    const deps = makeDeps()
+    // --preset my-custom 已给（专家开放集）,缺 --track 进向导:track 答 pm,preset 回车收 flag 默认,
+    // user/workflow 回车空——自定义 preset 必须原样透传,绝不反复重问。
+    const env: InitWizardEnv = {
+      isInteractive: () => true,
+      makePrompter: () => scriptedPrompter(['pm', '', '', '']),
+    }
+    const code = await cmdInit(deps, 'demo', { preset: 'my-custom' }, env)
+    expect(code).toBe(0)
+    expect(deps.store.init.calls[0]?.[0]?.track).toBe('pm')
+    expect(deps.store.init.calls[0]?.[0]?.preset).toBe('my-custom')
+    expect(deps.errLines.join('\n')).not.toContain('非法 preset')
+  })
 })

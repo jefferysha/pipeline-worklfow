@@ -96,8 +96,12 @@ async function runInitWizard(deps: CliDeps, flags: InitCmdOpts, env: InitWizardE
     const preset = await askValidated(
       p, deps, 'preset（full|hotfix|tweak）', flags.preset,
       // 向导仅收标准枚举（BT6 小白防错——提示列了枚举就必须校验，否则 'ful' 静默建出无效 change）；
-      // 专家要自定义 preset 走 --preset flag（flag 主线保持既有宽松语义，零回归）。
-      (s) => (WIZARD_PRESETS.includes(s) ? null : `ERROR: 非法 preset '${s}'，允许: ${WIZARD_PRESETS.join(' | ')}（自定义 preset 请走 --preset flag）`),
+      // 例外（codex review P2）：--preset flag 已给的值是专家预授权——只缺 --track 进向导时，
+      // 回车收下该自定义 preset 必须放行，否则 flag 开放集能力在向导路径被倒灌拒绝。
+      // 手敲的新值仍收紧标准枚举（小白保护不变）；纯自定义走全 flag 路径亦零回归。
+      (s) => (s !== '' && s === flags.preset ? null
+        : WIZARD_PRESETS.includes(s) ? null
+        : `ERROR: 非法 preset '${s}'，允许: ${WIZARD_PRESETS.join(' | ')}（自定义 preset 请走 --preset flag）`),
     )
     const userRaw = await askPlain(p, 'user（created_by，可空）', flags.user ?? '')
     const workflowRaw = await askPlain(p, 'workflow（自定义 workflow 名，缺省 default）', flags.workflow ?? '')
