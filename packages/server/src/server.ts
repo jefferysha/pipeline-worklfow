@@ -87,6 +87,17 @@ function errMsg(e: unknown): string {
   return e instanceof Error ? e.message : String(e)
 }
 
+/**
+ * POSIX 单引号转义（codex review 终稿 P2）：resumeCmd 拼接的 dir/sessionId 唯一安全通道——
+ * 原先 `cd "<dir>"` 双引号挡不住 `"`、反引号、`$()`。语义与前端
+ * dashboard-app/src/shared/shellQuote.ts 同款（两端拼法必须一致，改动请两处同步）：
+ * 仅含安全集 [A-Za-z0-9_@%+=:,./-] 原样返回（可读性），否则整体包单引号且内部 `'` → `'\''`。
+ */
+function shQuote(value: string): string {
+  if (/^[A-Za-z0-9_@%+=:,./-]+$/.test(value)) return value
+  return `'${value.replace(/'/g, `'\\''`)}'`
+}
+
 /** DNS-rebinding guard（老仓 core._host_is_local 逐条对位）：仅 loopback（± :port）放行。 */
 export function isLocalHost(host: string | undefined, port: number): boolean {
   if (!host) return false
@@ -590,11 +601,12 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
         // cd 目标用会话自己的 cwd（可能是 lookupDir 的后代目录）——claude --resume 按 cwd 派生
         // 项目目录找会话，cd 错目录会找不到；缺 cwd 才回落查询目录。
         const dir = s.cwd || lookupDir
+        // dir 与 sessionId 都过 shQuote（codex 终稿 P2）：安全字符原样、特殊字符单引号转义。
         const resumeCmd =
           s.platform === 'claude'
-            ? `cd "${dir}" && claude --resume ${s.id}`
+            ? `cd ${shQuote(dir)} && claude --resume ${shQuote(s.id)}`
             : s.platform === 'codex'
-              ? `cd "${dir}" && codex resume ${s.id}`
+              ? `cd ${shQuote(dir)} && codex resume ${shQuote(s.id)}`
               : null
         return sendJson(res, 200, {
           found: true,

@@ -5,8 +5,10 @@
  * → 真 node:http GET → 断言 found 三态 / resumeCmd 拼法 / 校验顺序（400/404 先例对齐）。
  *
  * 能力边界（端点如实返回，测试如实钉住）：
- *   · claude → `cd "<dir>" && claude --resume <sid>`；codex → `cd "<dir>" && codex resume <sid>`
- *     （二者拼法宿主机 --help 实测确认）；其余平台 resumeCmd:null（不造假命令）。
+ *   · claude → `cd <dir> && claude --resume <sid>`；codex → `cd <dir> && codex resume <sid>`
+ *     （二者拼法宿主机 --help 实测确认）；dir/sid 过 POSIX 单引号转义（codex 终稿 P2，
+ *     与前端 shellQuote 同款）：安全字符原样、含空格/`$` 等则整体单引号；
+ *     其余平台 resumeCmd:null（不造假命令）。
  *   · 查不到会话恒 200 { found:false, reason }——AFK 沙箱 claude 会话随容器 HOME=/tmp 销毁，
  *     宿主机查不到是常态不是错误。
  */
@@ -87,7 +89,8 @@ describe('GET /api/mem/session-link —— found 三态', () => {
     expect(j.platform).toBe('claude')
     expect(j.sessionId).toBe(sid)
     expect(j.dir).toBe(wt)
-    expect(j.resumeCmd).toBe(`cd "${wt}" && claude --resume ${sid}`)
+    // mkdtemp 路径全在安全集 [A-Za-z0-9_@%+=:,./-] 内 → 原样不带引号
+    expect(j.resumeCmd).toBe(`cd ${wt} && claude --resume ${sid}`)
     expect(typeof j.mtime).toBe('string')
   })
 
@@ -100,7 +103,21 @@ describe('GET /api/mem/session-link —— found 三态', () => {
     expect(j.found).toBe(true)
     expect(j.platform).toBe('codex')
     expect(j.sessionId).toBe('cdx-uuid-1')
-    expect(j.resumeCmd).toBe(`cd "${wt}" && codex resume cdx-uuid-1`)
+    expect(j.resumeCmd).toBe(`cd ${wt} && codex resume cdx-uuid-1`)
+  })
+
+  it('cwd 含空格与 $ → resumeCmd 目录段单引号转义，仍是一条安全命令（codex 终稿 P2）', async () => {
+    const wt = join(await makeWorktreeDir(), 'My $Work dir')
+    await mkdir(wt, { recursive: true })
+    const h = await startWith({ spicy: { worktree: wt } })
+    const sid = 'ccccdddd-1111-2222-3333-444455556666'
+    await writeClaudeSession(h.home, 'proj-s', sid, wt)
+
+    const j = (await reqGet(h.port, linkPath(h.root, 'spicy'))).json<any>()
+    expect(j.found).toBe(true)
+    expect(j.dir).toBe(wt)
+    // 目录整体单引号（内部无展开）；sid 是安全字符 → 原样
+    expect(j.resumeCmd).toBe(`cd '${wt}' && claude --resume ${sid}`)
   })
 
   it('同 cwd 多会话取最近（mtime 倒序首条）', async () => {
