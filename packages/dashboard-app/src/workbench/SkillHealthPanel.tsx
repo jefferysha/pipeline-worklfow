@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { type WbSkillEntry } from '../api/client'
+import { fetchSkillsRegistry, type WbSkillEntry } from '../api/client'
 import { useT } from '../i18n'
 
 /**
@@ -18,7 +18,7 @@ import { useT } from '../i18n'
  *   · registry 空/未就绪（skills 长度 0）→「未就绪，跑 pipeline doctor 查」，不谎报全绿——
  *     对齐 cli doctor.ts「registry 未就绪…不误报 green」的既有口径。
  *
- * 照 SkillChain.tsx 内联 fetch（不动共享 client.ts）：只借 WbSkillEntry 类型。
+ * 数据面走 client.fetchSkillsRegistry 接缝（dashboard-client-seam 收拢；错误文案仍在本站点）。
  */
 
 // 真命令常量（BF11 与终端同源，不进 i18n——命令本体不随语言变，翻译层不得改写）。
@@ -48,7 +48,7 @@ export function SkillHealthPanel(): JSX.Element {
   // 挂载拉一次（机器级技能库，与 root/workflow 无关；G22 纪律：不轮询）。失败 fail-soft。
   useEffect(() => {
     let cancelled = false
-    fetch('/api/skills/registry', { headers: { Accept: 'application/json' } })
+    fetchSkillsRegistry()
       .then(async (r) => {
         if (!r.ok) throw new Error((await readErrorDetail(r)) || `(${r.status})`)
         return r.json() as Promise<{ skills: WbSkillEntry[] }>

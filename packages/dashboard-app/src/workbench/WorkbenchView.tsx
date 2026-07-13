@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import gsap from 'gsap'
 import { useGSAP } from '@gsap/react'
-import { getHistory, getToken, type ChangeHistoryEntry } from '../api/client'
+import { fetchWorkflow, fetchWorkflowNames, getHistory, postWorkflowDef, type ChangeHistoryEntry } from '../api/client'
 import { useT } from '../i18n'
 import { changeWorkflowName } from '../model/progressModel'
 import { DEFAULT_RULES, invalidateWorkflowRules, rulesKey, useWorkflowRulesMulti } from '../model/workflowModel'
@@ -272,19 +272,16 @@ export function WorkbenchView({ root, onToggleError, snapshot = null }: Workbenc
   // 纪律）——Loop 卡与右栏摘要「自动运行」行吃同一份 rows。
   const loops = useLoops(root)
 
-  // ── workflow 名列表（自定义名；default 恒在菜单尾部本地补上）──
+  // ── workflow 名列表（自定义名；default 恒在菜单尾部本地补上）——client 既有 fetchWorkflowNames
+  //    接缝（错误经 ApiError：server {error} 文案两侧同读；无信封/网络错误的兜底文案随 client 口径）──
   useEffect(() => {
     let cancelled = false
-    fetch(`/api/workflows?root=${encodeURIComponent(root)}`)
-      .then(async (r) => {
-        if (!r.ok) throw new Error((await readErrorDetail(r)) || `(${r.status})`)
-        return r.json() as Promise<{ names: string[] }>
-      })
-      .then((body) => {
+    fetchWorkflowNames(root)
+      .then((names) => {
         if (cancelled) return
-        setNames(body.names)
+        setNames(names)
         setNamesError(null)
-        setWfName((cur) => cur ?? body.names[0] ?? 'default')
+        setWfName((cur) => cur ?? names[0] ?? 'default')
       })
       .catch((err: unknown) => {
         if (cancelled) return
@@ -312,7 +309,7 @@ export function WorkbenchView({ root, onToggleError, snapshot = null }: Workbenc
     setDef(null)
     setDefError(null)
     defSnapshotRef.current = null
-    fetch(`/api/workflows/${encodeURIComponent(wfName)}?root=${encodeURIComponent(root)}`)
+    fetchWorkflow(wfName, root)
       .then(async (r) => {
         if (!r.ok) throw new Error((await readErrorDetail(r)) || `(${r.status})`)
         return r.json() as Promise<WbWorkflowDef>
@@ -417,11 +414,7 @@ export function WorkbenchView({ root, onToggleError, snapshot = null }: Workbenc
     setSaving(true)
     setSaveStatus({ kind: 'idle' })
     try {
-      const res = await fetch(`/api/workflows/${encodeURIComponent(wfName)}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
-        body: JSON.stringify({ ...def, root }),
-      })
+      const res = await postWorkflowDef(wfName, { ...def, root })
       if (!res.ok) {
         setSaveStatus({ kind: 'error', errors: await readSaveErrors(res) })
         return

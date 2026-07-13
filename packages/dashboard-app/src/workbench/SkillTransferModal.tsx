@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { type WbSkillEntry } from '../api/client'
+import { fetchSkillsRegistry, type WbSkillEntry } from '../api/client'
 import { useT } from '../i18n'
 import { Dialog } from '../shell/Dialog'
 
@@ -38,7 +38,7 @@ export function SkillTransferModal({ selected, onSave, onCancel }: SkillTransfer
     // Bug6：cancelled 守卫（参照 SkillChain/SkillHealthPanel）——effect 依赖 [t]，切语言即重跑
     // 发起第二发 fetch；先发起的慢响应回来若无守卫会覆盖后发起的快响应，卸载后回来则 setState-after-unmount。
     let cancelled = false
-    fetch('/api/skills/registry', { headers: { Accept: 'application/json' } })
+    fetchSkillsRegistry()
       .then(async (r) => {
         // r.ok 检查必须在 r.json() 之前（whole-branch review 抓出的真实回归）：server 对错误
         // 统一返回 JSON 信封（{ok:false,error}），非 2xx 时 r.json() 依然会成功 resolve 而不是

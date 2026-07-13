@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { fetchAfkLog } from '../api/client'
 import { useT } from '../i18n'
 
 // T18 自 afk/ 迁入 progress/——旧 AFK 工作台 随 v5 三视图 IA 退役，本 hook 的唯一存活消费方
@@ -78,7 +79,7 @@ export function useAfkLog(name: string | null, status: string | undefined, root:
     if (!name) return
     const seq = ++seqRef.current
     try {
-      const res = await fetch(`/api/afk/${encodeURIComponent(name)}/log?root=${encodeURIComponent(root)}`)
+      const res = await fetchAfkLog(name, root)
       if (!res.ok) {
         throw new Error((await readErrorDetail(res)) || t('afk.log_error_status', { status: res.status }))
       }

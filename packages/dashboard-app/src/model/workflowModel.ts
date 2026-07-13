@@ -11,6 +11,7 @@
  *     卡片仍可见但只读，G17 的底线是「任何情况下卡不消失」）。
  */
 import { useEffect, useMemo, useState } from 'react'
+import { fetchWorkflow } from '../api/client'
 import { EVENT_BY_EDGE, PHASES, REVIEW_PHASES, TRANSITIONS } from '../types'
 
 // ── kernel WorkflowDef/StepDef 的 JSON 形状（跨 HTTP 边界手抄，不 import kernel 类型只为了
@@ -108,9 +109,7 @@ async function fetchRules(root: string, name: string): Promise<WorkflowRules> {
   const pending = inflight.get(key)
   if (pending) return pending
   const p = (async () => {
-    const res = await fetch(`/api/workflows/${encodeURIComponent(name)}?root=${encodeURIComponent(root)}`, {
-      headers: { Accept: 'application/json' },
-    })
+    const res = await fetchWorkflow(name, root)
     if (!res.ok) {
       let detail = ''
       try {

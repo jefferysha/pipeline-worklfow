@@ -384,15 +384,12 @@ export async function getHistory(name: string, root: string): Promise<ChangeHist
 
 // ── T9：收件箱失败卡动作（计划决议 #4/#13）──
 
-/** 失败卡动作共用 POST（/api/afk/:name/retry|dismiss，body { root }；写端点带 token）。 */
+/** 失败卡动作共用 POST（/api/afk/:name/retry|dismiss，body { root }；写端点带 token）——
+ *  请求本体经 postAfkCommand 单点（接缝收拢），本函数只保留 ApiError 包装语义。 */
 async function postAfkAction(name: string, root: string, action: 'retry' | 'dismiss', fallback: string): Promise<void> {
   let res: Response
   try {
-    res = await fetch(`/api/afk/${encodeURIComponent(name)}/${action}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
-      body: JSON.stringify({ root }),
-    })
+    res = await postAfkCommand(name, root, action)
   } catch (err) {
     wrapNetwork(err)
   }
@@ -529,4 +526,114 @@ export async function deleteSecret(key: string): Promise<void> {
     const detail = (await res.json().catch(() => null)) as { error?: string } | null
     throw new Error(detail?.error ?? `(${res.status})`)
   }
+}
+
+// ── 接缝收拢（dashboard-client-seam，2026-07-13）：以下 wrapper 只把「URL/method/headers/body
+//    （写端点含 Bearer）」收进本接缝，一律返回原始 Response——各站点的错误文案/降级语义
+//    （i18n 包装、fail-soft 回落、自建 errors[] 信封）留在消费侧原地不动：收拢是搬运不是改进，
+//    这些语义属站点呈现层，强行统一会改变可观测行为。──
+
+/** GET /api/skills/registry（SkillChain / SkillTransferModal / SkillHealthPanel 三处共用；
+ *  成功体 { skills: WbSkillEntry[] }；非 2xx 的 { error } 信封由站点自读——三站 fallback 文案不同）。 */
+export function fetchSkillsRegistry(): Promise<Response> {
+  return fetch('/api/skills/registry', { headers: { Accept: 'application/json' } })
+}
+
+/** GET /api/workflows/:name?root=（WorkbenchView 定义加载 + workflowModel.fetchRules 两处共用；
+ *  两站错误 fallback 文案不同，故返回原始 Response 各自保形）。 */
+export function fetchWorkflow(name: string, root: string): Promise<Response> {
+  return fetch(`/api/workflows/${encodeURIComponent(name)}?root=${encodeURIComponent(root)}`, {
+    headers: { Accept: 'application/json' },
+  })
+}
+
+/** GET /api/afk/:name/log?root=（useAfkLog 轮询）。原站点 fetch 不带任何 headers——逐字节保持，
+ *  不补 Accept；{ error } 信封读取与 i18n 文案留在 hook 内。 */
+export function fetchAfkLog(name: string, root: string): Promise<Response> {
+  return fetch(`/api/afk/${encodeURIComponent(name)}/log?root=${encodeURIComponent(root)}`)
+}
+
+/** GET /api/config（SkillChain default 模式的 manifest 强制技能矩阵探测）。非 2xx / 网络失败的
+ *  { capable:false } fail-soft 回落（静态镜像兜底、不谎报能力）是站点语义，留在 SkillChain。 */
+export function fetchConfig(): Promise<Response> {
+  return fetch('/api/config', { headers: { Accept: 'application/json' } })
+}
+
+/** POST /api/afk/:name/(cancel|retry|dismiss)（Bearer 单点）。ProgressView 三动作直接消费原始
+ *  Response（{ error } 信封读取 + i18n 兜底文案在站点）；本文件 postAfkRetry/postAfkDismiss
+ *  的请求也经由此发出（外层再包 ApiError，语义不变）。 */
+export function postAfkCommand(name: string, root: string, action: 'cancel' | 'retry' | 'dismiss'): Promise<Response> {
+  return fetch(`/api/afk/${encodeURIComponent(name)}/${action}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
+    body: JSON.stringify({ root }),
+  })
+}
+
+/** POST /api/workflows/:name（T13 保存；body 由调用方拼好——{ ...def, root }——原样序列化）。
+ *  kernel validate 拒绝时的 { errors: string[] } 信封解析（readSaveErrors）留在 WorkbenchView。 */
+export function postWorkflowDef(name: string, payload: Record<string, unknown>): Promise<Response> {
+  return fetch(`/api/workflows/${encodeURIComponent(name)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
+    body: JSON.stringify(payload),
+  })
+}
+
+/** POST /api/config/mandatory-skills（default 模式穿梭框保存）。成功体 { skills } 回读、
+ *  错误文案（body.error || i18n 状态兜底）与 cfgCache 推进都在 SkillChain。 */
+export function postMandatorySkills(input: { phase: string; track: string; skills: string[] }): Promise<Response> {
+  return fetch('/api/config/mandatory-skills', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
+    body: JSON.stringify(input),
+  })
+}
+
+// ── tap 流量查看器数据面（#34d，自 advanced/trafficData.ts 整体迁入的完整客户端函数——
+//    形状逐字镜像 server/src/traces.ts；#34e 护栏：只读本地捕获、GET-only。错误风格为该数据面
+//    既有 plain Error 专属文案，迁移原样保持（不改抛 ApiError）。trafficData.ts re-export
+//    这些名字，消费方 TrafficPanel 的 import 面不变。──
+
+export interface TraceSessionRow {
+  id: string
+  started_at: string
+  updated_at: string
+  date_key: string
+  client: string
+  proxy_mode: string
+  status: string
+  record_count: number
+  summary: Record<string, unknown> | null
+}
+
+export interface TraceSessionsResponse {
+  generated_at: string
+  outbound: string
+  count: number
+  sessions: TraceSessionRow[]
+}
+
+export interface TraceRecordsResponse {
+  generated_at: string
+  outbound: string
+  session: string
+  count: number
+  records: Array<Record<string, unknown>>
+}
+
+/** 列本地捕获会话（同源 GET）。 */
+export async function fetchTraceSessions(): Promise<TraceSessionsResponse> {
+  const res = await fetch('/api/traces/sessions', { headers: { Accept: 'application/json' } })
+  if (!res.ok) throw new Error(`traces 会话获取失败（${res.status}）`)
+  return (await res.json()) as TraceSessionsResponse
+}
+
+/** 读某会话的本地记录（同源 GET）。 */
+export async function fetchTraceRecords(session: string): Promise<TraceRecordsResponse> {
+  const res = await fetch(`/api/traces/records?session=${encodeURIComponent(session)}`, {
+    headers: { Accept: 'application/json' },
+  })
+  if (!res.ok) throw new Error(`traces 记录获取失败（${res.status}）`)
+  return (await res.json()) as TraceRecordsResponse
 }

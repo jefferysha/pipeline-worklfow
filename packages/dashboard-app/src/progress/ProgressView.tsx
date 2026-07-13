@@ -6,7 +6,7 @@ import type { ChangeSnapshot, Snapshot } from '../types'
 import { isPhase } from '../types'
 import type { WorkflowRules } from '../model/workflowModel'
 import { plannedTransition, type PlannedTransition } from '../model/events'
-import { fetchAutomationSettings, getToken, postTransition } from '../api/client'
+import { fetchAutomationSettings, postAfkCommand, postTransition } from '../api/client'
 import { TaskDetail } from '../shared/TaskDetail'
 import { diagnoseFailure } from '../shared/failureDiagnosis'
 import { useAfkLog } from './useAfkLog'
@@ -352,11 +352,7 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
     if (patch) setPatch(key, patch)
     try {
       const endpoint = kind === 'kill' ? 'cancel' : kind
-      const res = await fetch(`/api/afk/${encodeURIComponent(name)}/${endpoint}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
-        body: JSON.stringify({ root }),
-      })
+      const res = await postAfkCommand(name, root, endpoint)
       if (!res.ok) {
         throw new Error((await readErrorDetail(res)) || t('progress.act_fail_http', { status: res.status }))
       }

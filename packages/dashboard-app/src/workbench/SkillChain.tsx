@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { getToken, type WbSkillEntry } from '../api/client'
+import { fetchConfig, fetchSkillsRegistry, postMandatorySkills, type WbSkillEntry } from '../api/client'
 import { useT } from '../i18n'
 import { MANDATORY_SKILLS, MATRIX_TRACKS } from './data'
 import { SkillTransferModal } from './SkillTransferModal'
@@ -126,7 +126,7 @@ export function invalidateMandatoryConfig(): void {
 
 function loadMandatoryConfig(): Promise<MandatoryConfig> {
   if (cfgCache) return Promise.resolve(cfgCache)
-  cfgInflight ??= fetch('/api/config', { headers: { Accept: 'application/json' } })
+  cfgInflight ??= fetchConfig()
     .then(async (res) => {
       // r.ok 检查必须在 r.json() 之前（SkillTransferModal 同一条既有教训：server 错误
       // 也是 JSON 信封，非 2xx 时 json() 照样 resolve，不先查 ok 就探测不到「不可写」）。
@@ -198,7 +198,7 @@ export function SkillChain({ step, workflow = '', readonly = false, onChange }: 
   useEffect(() => {
     if (registry !== null || regError !== null) return
     let cancelled = false
-    fetch('/api/skills/registry', { headers: { Accept: 'application/json' } })
+    fetchSkillsRegistry()
       .then(async (r) => {
         if (!r.ok) throw new Error((await readErrorDetail(r)) || `(${r.status})`)
         return r.json() as Promise<{ skills: WbSkillEntry[] }>
@@ -285,11 +285,7 @@ export function SkillChain({ step, workflow = '', readonly = false, onChange }: 
     savingKeyRef.current = cellKey
     setSaveError(null)
     try {
-      const res = await fetch('/api/config/mandatory-skills', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
-        body: JSON.stringify({ phase, track, skills }),
-      })
+      const res = await postMandatorySkills({ phase, track, skills })
       let body: MandatorySkillsPostResponse = {}
       try {
         body = (await res.json()) as MandatorySkillsPostResponse
