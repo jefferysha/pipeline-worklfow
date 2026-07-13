@@ -11,9 +11,11 @@
  *     其余平台 resumeCmd:null（不造假命令）。
  *   · 查不到会话恒 200 { found:false, reason }——AFK 沙箱 claude 会话随容器 HOME=/tmp 销毁，
  *     宿主机查不到是常态不是错误。
- *   · fetched 的最近 3 条里，优先选最新的可恢复平台（claude/codex）会话，即便同目录下有更新的
- *     opencode/pi 会话排在它前面（codex review 第六轮 P2）；3 条里都没有可恢复平台才退回全平台
- *     最新那条（found:true + resumeCmd:null 的既有降级）。
+ *   · 分别单独查 claude/codex 两个「有把握拼 resumeCmd」的平台各自最新一条，两者间选更新的那条
+ *     ——不再是「fetch 一批混合结果再筛选」，不存在同目录下任意数量的 opencode/pi 会话（哪怕
+ *     远超过第六轮修复用过的 limit:3）能把可恢复会话挤没机会被查到的数量上限（codex review 第七
+ *     轮 P2，是第六轮 limit:3 修法留下的残留边界）；两个平台都没有才退回全平台最新那条
+ *     （found:true + resumeCmd:null 的既有降级）。
  */
 import { afterEach, describe, expect, it } from 'vitest'
 import { mkdir, utimes, writeFile } from 'node:fs/promises'
@@ -202,6 +204,29 @@ describe('GET /api/mem/session-link —— found 三态', () => {
     await writeOpencodeSession(h.home, 'oc-newer-session', wt, '2026-07-12T00:00:00Z')
 
     const j = (await reqGet(h.port, linkPath(h.root, 'mixed'))).json<any>()
+    expect(j.found).toBe(true)
+    expect(j.platform).toBe('claude')
+    expect(j.sessionId).toBe(sid)
+    expect(j.dir).toBe(wt)
+    expect(j.resumeCmd).toBe(`cd ${wt} && claude --resume ${sid}`)
+  })
+
+  it('3 条 opencode 会话都比 claude 新（挤满旧 limit:3 策略的全部名额）→ 仍必须穿透找到可恢复的 claude 会话（codex review 第七轮 P2：不依赖任何数量上限的修法）', async () => {
+    const wt = await makeWorktreeDir()
+    const h = await startWith({ swamped: { worktree: wt } })
+    const sid = 'aaaa1111-1111-2222-3333-444455556666'
+    const claudeFile = await writeClaudeSession(h.home, 'proj-swamped', sid, wt)
+    const past = new Date('2026-07-01T00:00:00Z')
+    await utimes(claudeFile, past, past) // claude 会话故意拨旧
+    // 3 条 opencode 会话，updated 全比上面拨旧的 claude 会话新——第六轮 limit:3 的修法在
+    // platform:'all', limit:3 下会被这 3 条 opencode 会话把 fetch 名额占满，claude 那条连被
+    // fetch 到的机会都没有，.find(x => x.platform === 'claude' || 'codex') 必然落空，错误退化成
+    // 全平台首条（某条 opencode）的静态兜底——这正是第七轮 codex review 点名的残留边界。
+    await writeOpencodeSession(h.home, 'oc-swamp-1', wt, '2026-07-12T00:00:00Z')
+    await writeOpencodeSession(h.home, 'oc-swamp-2', wt, '2026-07-12T01:00:00Z')
+    await writeOpencodeSession(h.home, 'oc-swamp-3', wt, '2026-07-12T02:00:00Z')
+
+    const j = (await reqGet(h.port, linkPath(h.root, 'swamped'))).json<any>()
     expect(j.found).toBe(true)
     expect(j.platform).toBe('claude')
     expect(j.sessionId).toBe(sid)

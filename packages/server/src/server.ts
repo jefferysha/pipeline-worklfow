@@ -332,14 +332,30 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
       const wt = Array.isArray(wtRaw) ? wtRaw.join(',') : (wtRaw ?? '')
       // 老内核 cmd_get 口径：空串 / 字面 'null' 算未设 → 回落 root（本机直跑会话的 cwd）。
       const lookupDir = wt !== '' && wt !== 'null' ? wt : root
-      const sessions = listMemSessions(memFs, { filter: { cwd: lookupDir, platform: 'all', limit: 3 } })
-      if (sessions.length === 0) return { found: false, dir: lookupDir, reason: 'no-session' }
-      // codex review 第六轮 P2：sessions 已按全平台最近使用时间倒序（listAll 内部 sort），但只有
-      // claude/codex 两个平台的 resumeCmd 拼法有把握——盲选 sessions[0] 会被同目录下更新的
-      // opencode/pi 会话挡住明明存在的可恢复 claude/codex 旧会话。fetched 范围内（limit 3）优先选
-      // 最新的可恢复平台一条；三条里都没有可恢复平台 → 退回全平台最新那条（found:true 但
-      // resumeCmd:null，SessionResumeRow 既有分支正确处理，不是新增行为）。
-      const s = sessions.find((x) => x.platform === 'claude' || x.platform === 'codex') ?? sessions[0]!
+      // codex review 第七轮 P2：第六轮「fetched 范围内（limit 3）优先选可恢复平台」的修法仍有数量
+      // 上限——limit 是跨平台合并之后才生效的硬 cap，同目录下 ≥3 条比目标 claude/codex 会话更新的
+      // opencode/pi 会话就能把 limit 名额占满，可恢复会话连被 fetch 到的机会都没有，.find() 自然还是
+      // 落空、静态退化。改用不依赖任何数量上限的策略：claude/codex 是仅有的两个「有把握拼 resumeCmd」
+      // 的平台，分别单独查询各自最新一条——platform 限定单个平台时 listAll 只 fan-out 那一个适配器
+      // （kernel mem/sessions.ts listAll 逐平台 push 前先判 f.platform），压根不会取到 opencode/pi
+      // 的会话，天然不受它们数量影响。两个平台都有 → 选更新的那条；只有一个 → 用那个；两个都没有 →
+      // 退回全平台最新一条（既有 found:true + resumeCmd:null 诚实降级，SessionResumeRow 既有分支
+      // 正确处理，不是新增行为）。
+      const claudeTop = listMemSessions(memFs, { filter: { cwd: lookupDir, platform: 'claude', limit: 1 } })[0]
+      const codexTop = listMemSessions(memFs, { filter: { cwd: lookupDir, platform: 'codex', limit: 1 } })[0]
+      // recency key 手抄 kernel mem/sessions.ts 私有的 recencyKey/recencyDesc 契约（未导出，不为
+      // 复用一个两行比较器去改 kernel 导出面）：updated 优先 created，两者都缺退空串——同 resolveSessionLink
+      // 原有 `s.updated || s.created` 降级顺序（见下方 return 里的 mtime 字段）。四个平台适配器
+      // （claude/codex/opencode/pi）产出的 updated 一律经 `new Date(ms).toISOString()`（kernel
+      // mem/fs.ts mtimeIso 及各 adapters 的 msToIso 同款），定长 UTC ISO-8601，字典序比较等价于
+      // 时间序，两条都有时直接字符串比较取较新；相等则（同 recencyDesc 的稳定排序语义）优先 claude。
+      const s =
+        claudeTop && codexTop
+          ? (codexTop.updated || codexTop.created || '') > (claudeTop.updated || claudeTop.created || '')
+            ? codexTop
+            : claudeTop
+          : (claudeTop ?? codexTop ?? listMemSessions(memFs, { filter: { cwd: lookupDir, platform: 'all', limit: 1 } })[0])
+      if (!s) return { found: false, dir: lookupDir, reason: 'no-session' }
       // cd 目标用会话自己的 cwd（可能是 lookupDir 的后代目录）——claude --resume 按 cwd 派生
       // 项目目录找会话，cd 错目录会找不到；缺 cwd 才回落查询目录。
       const dir = s.cwd || lookupDir
