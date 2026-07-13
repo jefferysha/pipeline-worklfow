@@ -185,6 +185,32 @@ describe('LoopCard 编辑 → 保存（验收②）', () => {
     expect(screen.getByTestId('lp-sld-runs-val')).toHaveTextContent('30 次')
   })
 
+  it('token 预算滑杆 step=10 对齐受控粒度：连续单步（键盘方向键语义）不再原地踏步（真机 E2E bug 回归）', async () => {
+    // 根因：受控 value 的语义网格是「10 的倍数」（tokensK = round(max_tokens_per_day/10000)*10），
+    // 若原生 input 的 step 不等于 10，方向键单步会落到网格外的中间值，onValue 的有损取整把它
+    // 悄悄吃回原值，DOM 弹回、键盘操作卡死。断言 step 属性 = 受控粒度，且连续单步（fireEvent.change
+    // 模拟方向键每次按 step 精确移动后触发的 onChange）确实层层前进，不再卡在原值。
+    renderCard()
+    await screen.findByTestId('lp-goal')
+    const slider = screen.getByTestId('lp-sld-tokens')
+    expect(slider).toHaveAttribute('step', '10')
+    expect(screen.getByTestId('lp-sld-tokens-val')).toHaveTextContent('100k')
+
+    // 第一次单步（方向键语义：DOM 按 step=10 从 100 移到 110）
+    fireEvent.change(slider, { target: { value: '110' } })
+    expect(screen.getByTestId('lp-sld-tokens-val')).toHaveTextContent('110k')
+    expect(screen.getByTestId('lp-dirty')).toHaveTextContent('未保存')
+
+    // 第二次单步（110 → 120）——修复前会原地卡在 100k，永远出不了这个死循环
+    fireEvent.change(slider, { target: { value: '120' } })
+    expect(screen.getByTestId('lp-sld-tokens-val')).toHaveTextContent('120k')
+
+    fireEvent.click(screen.getByTestId('lp-save'))
+    await waitFor(() => expect(screen.getByTestId('lp-save-ok')).toHaveTextContent('已保存'))
+    // 保存 patch 精确带最终值 120000（120*1000），不是有损取整算出的原地踏步值 100000
+    expect(lastPostBody('/api/loops/update')).toEqual({ root: ROOT, id: 'restyle-loop', patch: { max_tokens_per_day: 120000 } })
+  })
+
   it('节奏滑杆是离散档：拖到末档显示 1d，保存 patch {cadence:"1d"}', async () => {
     renderCard()
     await screen.findByTestId('lp-goal')

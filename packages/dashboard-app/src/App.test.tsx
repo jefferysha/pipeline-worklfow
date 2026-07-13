@@ -458,6 +458,24 @@ describe('App 注销项目（评审 P2-13，Task 5）', () => {
     })
     expect(screen.getByTestId('project-switcher').textContent).toContain('repo-a')
   })
+
+  // UX 一致性缺口修复（真机 Playwright E2E 验证发现）：注销成功此前是"静默成功"——对话框关闭、
+  // 项目从列表消失，但没有 toast 反馈，跟应用里其它成功操作（转换/终止/保存配置）均有 toast
+  // 的既有体验不符。onUnregister 的 .then() 分支补一条 showFlash('toast', ...)，这里钉住。
+  it('注销成功 → flash-toast 出现，文案为新增的注销成功提示（此前静默成功，无任何反馈）', async () => {
+    const fetchMock = stubTwoProjects()
+    vi.stubGlobal('fetch', fetchMock)
+    render(<App />)
+    await screen.findByTestId('progress-view')
+
+    fireEvent.click(screen.getByTestId('project-switcher'))
+    fireEvent.click(screen.getByTestId('project-unregister-repo-a'))
+    const dialog = await screen.findByTestId('unregister-confirm')
+    fireEvent.click(within(dialog).getByRole('button', { name: '确认注销' }))
+
+    const toast = await screen.findByTestId('flash-toast')
+    expect(toast.textContent).toBe('已注销该项目')
+  })
 })
 
 // v6 计划 T11：App 是唯一 useSnapshot() 调用点，流程带真实计数/running 脉冲靠这里把同一份

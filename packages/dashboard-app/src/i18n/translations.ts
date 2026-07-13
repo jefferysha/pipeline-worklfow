@@ -22,6 +22,7 @@ export const zh: Dict = {
     unregister_desc: '只会从本机 dashboard 注册表移除 "{name}"，不会删除任何文件或 change 数据，随时可以重新注册。',
     unregister_confirm: '确认注销',
     unregister_cancel: '取消',
+    unregister_ok: '已注销该项目',
     // ── v8-A:nav8（意见①）：下拉底部脚注说明 + 注销钮图标化后的无障碍名（文本不可见，靠 aria-label/title）。
     project_menu_hint: '行尾按钮 = 注销此项目（hover 显现，点击二次确认）',
     project_unregister_aria: '注销项目 {name}',
@@ -654,6 +655,7 @@ export const en: Dict = {
     unregister_desc: 'This only removes "{name}" from the local dashboard registry on this machine. No files or changes are deleted, and it can be re-registered anytime.',
     unregister_confirm: 'Confirm unregister',
     unregister_cancel: 'Cancel',
+    unregister_ok: 'Project unregistered',
     // ── v8-A:nav8 (opinion ①): menu footnote + accessible name for the icon-only unregister button.
     project_menu_hint: 'Row-end button unregisters that project (shows on hover, asks to confirm).',
     project_unregister_aria: 'Unregister project {name}',

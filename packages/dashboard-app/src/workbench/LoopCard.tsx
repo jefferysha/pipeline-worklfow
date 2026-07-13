@@ -243,13 +243,17 @@ interface SliderProps {
   /** T7：字段生产者徽章（可选——仅 Loop 卡的 4 个预算滑杆传入；AutomationCard 不传，不渲染，
    *  零视觉/行为差异，见该组件既有测试回归）。 */
   prov?: JSX.Element
+  /** 原生 input[type=range] 的步进粒度（可选，缺省 1）——必须等于受控 value 的真实语义网格，
+   *  否则键盘方向键单步会落在网格外的中间值，被上层有损取整吞掉、DOM 弹回原值（键盘死锁 bug，
+   *  见 token 预算滑杆调用点）。 */
+  step?: number
 }
 
 /**
  * 单条滑杆（轨道 fill-2 / 填充 accent 经 --p 渐变，推荐 ▽ 刻度）——demo .lp-sld 对位。
  * T21 起导出：「AFK 执行」卡（AutomationCard）复用同一滑杆组件与 lp-slider 样式纪律。
  */
-export function LpSlider({ id, label, value, min, max, display, recoLabel, recoFrac, onValue, prov }: SliderProps): JSX.Element {
+export function LpSlider({ id, label, value, min, max, display, recoLabel, recoFrac, onValue, prov, step }: SliderProps): JSX.Element {
   const pct = ((value - min) / (max - min)) * 100
   return (
     <div className="lp-sld">
@@ -265,7 +269,7 @@ export function LpSlider({ id, label, value, min, max, display, recoLabel, recoF
         data-testid={id}
         min={min}
         max={max}
-        step={1}
+        step={step ?? 1}
         value={value}
         aria-label={label}
         style={{ '--p': `${pct}%` } as CSSProperties}
@@ -799,10 +803,11 @@ export function LoopCard({ root, loops }: LoopCardProps): JSX.Element {
             value={tokensK}
             min={10}
             max={500}
+            step={10}
             display={draft.max_tokens_per_day === null ? t('workbench.lp_tokens_unset') : `${Math.round(draft.max_tokens_per_day / 1000)}k`}
             recoLabel={t('workbench.lp_reco', { v: `${RECO_TOKENS_K}k` })}
             recoFrac={(RECO_TOKENS_K - 10) / 490}
-            onValue={(v) => edit({ max_tokens_per_day: Math.round(v / 10) * 10 * 1000 })}
+            onValue={(v) => edit({ max_tokens_per_day: v * 1000 })}
           />
         </div>
         <div className="lp-policy">

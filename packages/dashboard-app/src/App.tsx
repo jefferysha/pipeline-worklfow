@@ -176,12 +176,13 @@ function AppShell(): JSX.Element {
         .then(() => {
           if (root === currentRoot) setCurrentRoot('')
           refresh()
+          showFlash('toast', t('nav.unregister_ok'))
         })
         .catch((err: unknown) => {
           showFlash('error', err instanceof ApiError ? err.message : String(err))
         })
     },
-    [currentRoot, setCurrentRoot, refresh, showFlash],
+    [currentRoot, setCurrentRoot, refresh, showFlash, t],
   )
 
   return (
