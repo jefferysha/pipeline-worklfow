@@ -112,21 +112,6 @@ body { margin: 0; }
 .nav__item:hover { color: var(--text); }
 .nav__item--active { background: var(--accent-t); color: var(--accent); font-weight: 700; }
 .nav__badge { display: inline-block; margin-left: 6px; min-width: 17px; padding: 0 5px; height: 17px; line-height: 17px; text-align: center; font-size: 10.5px; font-weight: 700; font-family: var(--mono); color: var(--red-d); background: var(--red-t); border: 1px solid var(--red-b); border-radius: 9px; }
-.nav__group { position: relative; }
-.nav__dropdown { position: absolute; top: calc(100% + 4px); left: 0; display: flex; flex-direction: column; min-width: 190px; padding: 4px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-sm); box-shadow: 0 6px 16px rgba(10,22,14,.14); z-index: 20; }
-.nav__dropdown-item { border: 0; background: transparent; color: var(--text-3); font: inherit; font-size: 13px; text-align: left; padding: 6px 10px; border-radius: 6px; cursor: pointer; }
-.nav__dropdown-item:hover { color: var(--text); background: var(--fill); }
-/* 激活=蓝纪律（spec §1：蓝 accent 专属激活/选中，绿全线降级为纯语义 tint）——此前误用 --green-t/--green。 */
-.nav__dropdown-item--active { background: var(--accent-t); color: var(--accent); font-weight: 700; }
-.nav__dropdown-dia { color: var(--text-3); }
-.nav__dropdown-count { margin-left: 6px; font-family: var(--mono); font-weight: 700; color: var(--accent-d); }
-/* 项目项 + 「注销…」入口同一行（评审 P2-13）：注销钮常态透明，行 hover/自身 focus 才现身。 */
-.nav__dropdown-row { display: flex; align-items: stretch; }
-.nav__dropdown-row .nav__dropdown-item { flex: 1; }
-.nav__dropdown-unreg { flex: none; border: 0; background: transparent; color: var(--text-3); font: inherit; font-size: 11px; padding: 6px 8px; margin: 0 2px; border-radius: 6px; cursor: pointer; opacity: 0; transition: opacity .14s ease, color .14s ease, background .14s ease; }
-.nav__dropdown-row:hover .nav__dropdown-unreg,
-.nav__dropdown-unreg:focus-visible { opacity: 1; }
-.nav__dropdown-unreg:hover { color: var(--red-d); background: var(--red-t); }
 .nav__project { position: relative; }
 .nav__project-btn { border: 1px solid var(--border); background: transparent; color: var(--text-2); font: inherit; font-size: 12.5px; font-family: var(--mono); padding: 4px 10px; border-radius: 7px; cursor: pointer; transition: border-color .14s ease; }
 .nav__project-btn:hover { border-color: var(--text-3); }
@@ -149,7 +134,6 @@ body { margin: 0; }
 .view__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
 .view__title { margin: 0; font-size: 18px; color: var(--text); }
 .view__subtitle { margin: 4px 0 0; font-size: 12.5px; color: var(--text-3); }
-.view__count { font-size: 12.5px; color: var(--green); font-weight: 700; white-space: nowrap; font-family: var(--mono); }
 .view__note { padding: 20px; color: var(--text-3); font-size: 13px; }
 .view__note--error { color: var(--red); }
 
@@ -171,21 +155,8 @@ body { margin: 0; }
 /* 摘要行 / 项目行共用：图标 + label + 右侧蓝 mono 计数（v4 .sum-row/.proj-row 合流）。 */
 .side-card__row { display: flex; align-items: center; gap: 9px; padding: 9px 0; font-size: 12.5px; color: var(--text-2); }
 .side-card__row + .side-card__row { border-top: 1px solid var(--border); }
-.side-card__row-icon { color: var(--text-3); display: inline-flex; flex: none; }
 .side-card__row-label { flex: 1; min-width: 0; font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.side-card__row-label--mono { font-family: var(--mono); font-size: 12.5px; }
 .side-card__row-value { font-family: var(--mono); font-size: 14px; font-weight: 750; color: var(--accent-d); flex: none; }
-/* 产物/文件行：图标 + 上下两行（字段名 + 路径值）+ 拷贝钮（v4 .file-row）。 */
-.side-card__file { display: flex; align-items: center; gap: 9px; padding: 8px 0; }
-.side-card__file + .side-card__file { border-top: 1px solid var(--border); }
-.side-card__file-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.side-card__file-key { font-family: var(--mono); font-size: 10.5px; color: var(--text-3); }
-.side-card__file-val { font-family: var(--mono); font-size: 12px; font-weight: 600; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.side-card__copy { flex: none; border: 0; background: transparent; color: var(--text-3); cursor: pointer; padding: 3px; border-radius: 5px; display: inline-flex; }
-.side-card__copy:hover { color: var(--text); background: var(--fill); }
-/* 生成配置 JSON 预览（v4 .code；--code-bg/--code-border token 首次真正被消费）。 */
-.side-card__code { padding: 10px 14px 14px; }
-.side-card__code pre { margin: 0; background: var(--code-bg); border: 1px solid var(--code-border); border-radius: var(--radius-sm); padding: 11px 13px; font-family: var(--mono); font-size: 11.5px; line-height: 1.6; color: var(--text-2); overflow-x: auto; white-space: pre; }
 
 /* ── 空态（教学式 onboarding 复用同族）── */
 .empty { max-width: 460px; margin: 8vh auto; text-align: center; padding: 30px 32px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); }
@@ -195,105 +166,18 @@ body { margin: 0; }
 
 /* ── 卡片基元 ── */
 .card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 12px 14px; transition: border-color .14s ease, box-shadow .14s ease; }
-.card__name { font-weight: 600; color: var(--text); font-size: 12.5px; font-family: var(--mono); }
-.card__reason { margin: 8px 0 0; font-size: 12.5px; color: var(--text-2); }
-.card__meta { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 11px; color: var(--text-3); margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--border); }
 .card__track { font-size: 10.5px; color: var(--text-3); background: var(--fill); border-radius: 4px; padding: 1px 6px; }
 
 /* ── 徽章语义（spec §1：gate 徽章=red-t 底 red-d 字 tint；phase 胶囊=中性 fill；运行=透明底绿字）── */
 .badge { display: inline-block; font-size: 10.5px; padding: 2px 8px; border-radius: 999px; font-weight: 700; white-space: nowrap; }
-.badge--phase { background: var(--fill); color: var(--text); border: 1px solid var(--border); font-family: var(--mono); font-weight: 600; }
 .badge--gate { background: var(--red-t); color: var(--red-d); }
 .badge--pending { background: var(--fill); color: var(--text-3); }
 .badge--run { background: transparent; color: var(--green); padding-left: 0; }
 .g-phase { display: inline-block; font-family: var(--mono); font-size: 11px; font-weight: 600; padding: 2px 9px; border-radius: 999px; background: var(--fill); color: var(--text); border: 1px solid var(--border); white-space: nowrap; }
-.wf-label { font-family: var(--mono); font-size: 10.5px; color: var(--text-3); }
-
-/* ── 工票行（收件箱/列表类视图的行基元）── */
-.ticket-row { display: flex; align-items: center; gap: 10px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 9px 12px; flex-wrap: wrap; transition: border-color .14s ease, box-shadow .14s ease; }
-.ticket-row:hover { border-color: var(--green); }
-.ticket-row--gate { border: 1.5px solid var(--red); }
-.ticket-row--gate:hover { border-color: var(--red); box-shadow: 0 0 0 3px var(--red-t); }
-.ticket-row__time { font-size: 11px; color: var(--text-3); }
-.ticket-row__spacer { flex: 1; }
-.inbox__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 7px; }
-
-/* ── 快捷转换按钮（看板卡 hover 浮现 / 收件箱行常驻）── */
-.qk { display: flex; gap: 6px; }
-.qk__btn { font-size: 11.5px; font-weight: 700; padding: 4px 11px; border-radius: 6px; border: 1px solid var(--accent); background: var(--card); color: var(--accent); cursor: pointer; font-family: var(--font); white-space: nowrap; transition: background .14s ease; }
-.qk__btn:hover { background: var(--accent-t); }
-.qk__btn--back { border-color: var(--red); color: var(--red); }
-.qk__btn--back:hover { background: var(--red-t); }
-.qk__btn--ghost { border-color: var(--border); color: var(--text-2); }
-.qk__btn--ghost:hover { background: transparent; border-color: var(--text-3); color: var(--text); }
-.qk__btn:disabled { opacity: .45; cursor: not-allowed; }
-
-/* ── 行内证据 chips（Task 7，评审 P0-1：gateEvidence 复用，收件箱行内即时可见）── */
-.ev { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; flex-basis: 100%; margin-top: 2px; }
-.ev__chip { display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 8px; border-radius: 6px; font-size: 11px; font-family: var(--mono); border: 1px solid var(--border); background: var(--fill); color: var(--text-2); white-space: nowrap; }
-.ev__chip--pass { background: var(--green-t); color: var(--green-d); border-color: var(--green-b); }
-.ev__chip--fail { background: var(--red-t); color: var(--red-d); border-color: var(--red-b); }
-.ev__chip--pending { background: transparent; border-style: dashed; color: var(--text-3); }
-button.ev__chip--neutral { cursor: pointer; }
-button.ev__chip--neutral:hover { border-color: var(--border-2); color: var(--text); background: var(--card); }
-
-/* ── 收件箱行的键盘焦点环 / 展开态（j/k 移动焦点环、点开详情卡）── */
-.ticket-row.kbd-focus { outline: 2px solid var(--accent); outline-offset: 1px; }
-.ticket-row--open { border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); }
-.ticket-row--open:hover { border-color: var(--accent); }
-
-/* ── change 详情卡（Task 7，评审 P0-1 核心交付件；视觉基准 v4-openai-trellis.html「change 详情」段，
-   历史区除外——spec §5 登记，待 history 读端点）；Task 9 看板复用同一组件，样式不与 InboxView 耦合。 ── */
-.detail { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); margin-top: 10px; padding: 0 16px; }
-.detail__head { display: flex; align-items: center; gap: 9px; padding: 13px 0; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
-.detail__close { margin-left: auto; }
-.detail__sec { padding: 14px 0; border-bottom: 1px solid var(--border); }
-.detail__sec:last-of-type { border-bottom: none; }
-.detail__sec-h { display: flex; align-items: center; gap: 7px; margin-bottom: 10px; color: var(--text-3); }
-.detail__sec-h b { font-size: 12.5px; font-weight: 700; color: var(--text); }
-.detail__why { margin: 0 0 12px; font-size: 12.5px; color: var(--text-2); line-height: 1.6; }
-.detail__grid { display: flex; flex-wrap: wrap; gap: 8px; }
-.detail__field { flex: 1; min-width: 148px; background: var(--fill); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; }
-.detail__field-key { font-size: 10.5px; color: var(--text-3); font-family: var(--mono); }
-.detail__field-value { display: flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; font-family: var(--mono); color: var(--text-2); }
-.detail__field-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.detail__field--pass .detail__field-value { color: var(--green-d); }
-.detail__field--fail .detail__field-value { color: var(--red-d); }
-.detail__field--pending .detail__field-value { color: var(--text-3); font-weight: 400; }
-.detail__copy { flex: none; margin-left: auto; border: 0; background: transparent; color: var(--text-3); cursor: pointer; display: inline-flex; padding: 3px; border-radius: 5px; }
-.detail__copy:hover { color: var(--text); background: var(--card); }
-.detail__foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; padding: 13px 0; }
 
 /* T18 死 CSS 清理登记：.board__*（含 board-col-shake keyframes 与两处 media query 分支）
    随 BoardView 退役删除——全仓 tsx 零消费。 */
-/* 名单挂载时播 motion.ts foldOpen——这层本身不做 CSS 动画，只是 foldOpen 的 GSAP height
-   补间需要一个稳定的挂载目标。 */
-.fold-body { margin-top: 6px; }
-
-/* ── 盖章确认（转换成功，motion.ts stampConfirm 驱动）── */
-.stamp { position: absolute; right: 8px; top: -9px; background: var(--green); color: #ffffff; font-size: 10.5px; font-weight: 800; border-radius: 999px; padding: 3px 9px; transform: rotate(-7deg); box-shadow: 0 2px 8px rgba(20,90,50,.35); pointer-events: none; white-space: nowrap; }
-
-/* ── tabs（设置页等；活跃态=--ink 铭牌）── */
-.tabs { display: flex; gap: 6px; }
-.tab { border: 1px solid var(--border); background: var(--card); color: var(--text-2); border-radius: var(--radius-sm); padding: 6px 13px; font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; transition: border-color .14s ease; }
-.tab:hover { border-color: var(--green); }
-.tab--active { background: var(--ink); color: var(--ink-fg); border-color: var(--ink); }
 /* T18 死 CSS 清理登记：.settings__* 4 条随 SettingsView 退役删除——全仓 tsx 零消费。 */
-.axis { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
-.axis__row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: var(--fill); border-radius: var(--radius-sm); }
-.axis__phase { font-weight: 700; color: var(--text); min-width: 60px; font-family: var(--mono); font-size: 12px; }
-.axis__arrow { color: var(--text-3); }
-.axis__targets { color: var(--text-2); font-size: 12.5px; font-family: var(--mono); }
-.matrix__scroll { overflow-x: auto; }
-.matrix { border-collapse: collapse; width: 100%; font-size: 12px; }
-.matrix th, .matrix td { border: 1px solid var(--border); padding: 8px 10px; text-align: left; vertical-align: top; }
-.matrix th { background: var(--fill); color: var(--text-3); font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; }
-.matrix__phase { font-weight: 700; color: var(--text); white-space: nowrap; font-family: var(--mono); }
-.matrix__skills { margin: 0; padding-left: 16px; }
-.matrix__none { color: var(--text-3); opacity: .6; }
-.sk { display: inline-block; font-family: var(--mono); font-size: 10.5px; background: var(--green-t); color: var(--green); border-radius: 5px; padding: 2px 7px; margin: 1px 3px 1px 0; font-weight: 600; }
-.sk--add { background: transparent; border: 1px dashed var(--border); color: var(--text-3); cursor: pointer; }
-.sk--add:hover { border-color: var(--green); color: var(--green); }
 
 /* ── 技能穿梭框（设置 · 矩阵单元编辑，评审 P1-10 后半，Task 16）：双栏 available/chosen +
    搜索框，此前 .modal / .split 零 CSS 规则裸渲染在此收口。宽度受 Dialog 固定
@@ -331,8 +215,6 @@ button.ev__chip--neutral:hover { border-color: var(--border-2); color: var(--tex
 .btn--ghost:hover { filter: none; border-color: var(--text-3); color: var(--text); }
 .btn--danger { background: transparent; color: var(--red-d); border: 1px solid var(--red-b); }
 .btn--danger:hover { filter: none; background: var(--red-t); }
-.btn--verm-ghost { background: transparent; color: var(--red); border: 1px solid var(--red); font-weight: 700; }
-.btn--verm-ghost:hover { filter: none; background: var(--red-t); }
 .btn:disabled { opacity: .5; cursor: not-allowed; }
 .btn--icon { background: transparent; border: 1px solid transparent; color: var(--text-3); border-radius: 6px; padding: 5px 10px; font: inherit; font-size: 12px; cursor: pointer; transition: color .14s ease, border-color .14s ease, background .14s ease; }
 .btn--icon:hover { color: var(--red); border-color: var(--border); background: var(--fill); }
@@ -342,7 +224,6 @@ button.ev__chip--neutral:hover { border-color: var(--border-2); color: var(--tex
 .dialog { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px 22px; width: min(420px, 92%); box-shadow: var(--shadow-2); }
 .dialog__title { margin: 0 0 6px; font-size: 15px; color: var(--text); font-weight: 700; }
 .dialog__desc { margin: 0 0 16px; font-size: 12.5px; color: var(--text-2); line-height: 1.6; }
-.dialog__desc--danger { color: var(--red); font-weight: 700; }
 .dialog__actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
 
 /* 底部居中胶囊（v4 #toast 忠实还原，spec §2 组件语言表 toast 行）：
@@ -374,7 +255,6 @@ button.ev__chip--neutral:hover { border-color: var(--border-2); color: var(--tex
 :root[data-theme="dark"] .field__label { color: var(--green); }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .field__label { color: var(--green); } }
 .field__error { font-size: 11px; color: var(--red); font-weight: 600; }
-.field__hint { font-size: 11px; color: var(--text-3); font-family: var(--mono); font-weight: 400; }
 
 /* ── tap 流量查看器（Advanced 折叠面板内）── */
 .traffic { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
@@ -424,33 +304,9 @@ button.ev__chip--neutral:hover { border-color: var(--border-2); color: var(--tex
 .wb-wf-item .n { margin-left: auto; font-size: 12px; color: var(--text-3); font-family: var(--font); }
 /* stepper 底轨 */
 .wb-rail { background: var(--fill); border-radius: 16px; padding: 11px; margin-bottom: 16px; }
-.wb-steps { display: flex; align-items: stretch; overflow-x: auto; padding: 3px 1px; }
-.wb-step { position: relative; overflow: hidden; flex: none; min-width: 148px; max-width: 200px; display: flex; flex-direction: column; align-items: flex-start; text-align: left; padding: 10px 12px 11px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); font: inherit; color: inherit; cursor: pointer; transition: border-color .15s ease, box-shadow .15s ease; }
-.wb-step:hover { border-color: var(--border-2); }
-.wb-step--on, .wb-step--on:hover { border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring-blue), var(--shadow); }
-.wb-step--on::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 42px; background: linear-gradient(var(--accent-t), transparent); pointer-events: none; }
-/* 预演点亮态（GSAP 预演驱动）：进行中蓝、终点绿——沿 spec §1 蓝=进行/绿=完成的语义分工。 */
-.wb-step > * { position: relative; }
-.wb-step-top { display: flex; align-items: center; gap: 8px; width: 100%; margin-bottom: 7px; min-height: 22px; }
-.wb-step-num { width: 22px; height: 22px; border-radius: 999px; background: var(--fill-2); display: grid; place-items: center; font-size: 11.5px; font-weight: 700; color: var(--text-2); font-family: var(--mono); flex: none; }
-.wb-step--on .wb-step-num { background: var(--accent); color: var(--btn-fg); }
 .wb-step-gate { margin-left: auto; }
-.wb-step-name { font-size: 15px; font-weight: 700; line-height: 1.25; color: var(--text); }
-.wb-step-id { font-size: 11.5px; color: var(--text-3); margin-top: 1px; font-family: var(--mono); }
-.wb-step-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 5px; margin-top: 9px; padding-top: 8px; border-top: 1px dashed var(--border); width: 100%; font-size: 11px; color: var(--text-3); }
-.wb-step-meta span { white-space: nowrap; }
-.wb-step-meta i { font-style: normal; color: var(--border-2); }
-.wb-step-sk { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 6px; width: 100%; }
 .wb-skc { display: inline-block; max-width: 124px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 1px 6px; border-radius: 6px; background: var(--fill); border: 1px solid var(--border); font-size: 11px; color: var(--text-2); font-family: var(--mono); }
 .wb-skc-n { font-size: 11px; color: var(--text-3); font-family: var(--mono); }
-/* 卡间连接件：转换事件名 + 箭头 */
-.wb-link { flex: none; align-self: center; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 0 6px; color: var(--border-2); }
-.wb-link-ev { font-size: 11px; color: var(--text-3); white-space: nowrap; font-family: var(--mono); }
-.wb-link svg { display: block; }
-.wb-step--add { flex: none; min-width: 104px; margin-left: 12px; display: flex; align-items: center; justify-content: center; padding: 12px; border: 1px dashed var(--border-2); border-radius: var(--radius); background: transparent; color: var(--text-3); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; transition: background .12s ease, color .12s ease; }
-.wb-step--add:hover { background: var(--card); color: var(--text-2); }
-.wb-step--add:disabled { opacity: .55; cursor: not-allowed; }
-.wb-step--add:disabled:hover { background: transparent; color: var(--text-3); }
 /* 阶段编辑卡（T13，StepEditor）：基本/产出物分区表单。对照 demo 的 wb- 编辑区块
    （wb-basic/wb-input/wb-switchrow/wb-chips），全部走既有 token。 */
 .wb-editor-head { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
@@ -529,94 +385,10 @@ button.ev__chip--neutral:hover { border-color: var(--border-2); color: var(--tex
 /* 加载/错误提示行（骨架期轻量文本，不抢分组卡视觉） */
 .prg-note { margin: 0 0 12px; font-size: 12.5px; color: var(--text-3); }
 .prg-note--error { color: var(--red-d); }
-/* 筛选条：项目下拉多选 × 状态计数 chips */
-.prg-filters { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin: -4px 0 18px; }
-.prg-fdiv { width: 1px; height: 16px; background: var(--border-2); flex: none; }
-.prg-dd { position: relative; }
-.prg-ddbtn { display: inline-flex; align-items: center; gap: 7px; height: 28px; padding: 0 12px; border-radius: 999px; font: inherit; font-size: 12px; font-weight: 600; background: var(--card); border: 1px solid var(--border); color: var(--text-2); box-shadow: var(--shadow); cursor: pointer; transition: background .12s ease, border-color .12s ease; }
-.prg-ddbtn:hover, .prg-ddbtn[aria-expanded="true"] { background: var(--fill); border-color: var(--border-2); }
-.prg-ddval { color: var(--text); }
-.prg-ddcaret { font-size: 9px; color: var(--text-3); }
-.prg-ddmenu { position: absolute; left: 0; top: calc(100% + 6px); min-width: 180px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-2); padding: 6px; z-index: 45; }
-.prg-ddopt { display: flex; align-items: center; gap: 9px; padding: 7px 10px; border-radius: var(--radius-sm); font-size: 13px; color: var(--text-2); cursor: pointer; }
-.prg-ddopt:hover { background: var(--fill); }
-.prg-ddopt input { width: 14px; height: 14px; margin: 0; accent-color: var(--accent); flex: none; }
-.prg-ddfoot { margin-top: 4px; padding: 7px 10px 4px; border-top: 1px solid var(--border); }
-.prg-ddclear { border: 0; background: transparent; font: inherit; font-size: 12px; font-weight: 600; color: var(--accent); padding: 0; cursor: pointer; }
-.prg-ddclear:hover { color: var(--accent-d); }
-/* 状态计数 chips（五态字典 + 全部；选中 = accent 描边 + accent-t 底） */
-.prg-schips { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
-.prg-schip { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 11px; border-radius: 999px; font: inherit; font-size: 12px; font-weight: 600; background: var(--card); border: 1px solid var(--border); color: var(--text-2); box-shadow: var(--shadow); cursor: pointer; transition: background .12s ease, border-color .12s ease, color .12s ease; }
-.prg-schip:hover { background: var(--fill); border-color: var(--border-2); }
-.prg-schip.on, .prg-schip.on:hover { background: var(--accent-t); border-color: var(--accent); color: var(--accent-d); box-shadow: none; }
-.prg-schip .n { font-weight: 600; color: var(--text-3); }
-.prg-schip.on .n { color: var(--accent-d); }
-.prg-sdot { width: 6px; height: 6px; border-radius: 999px; flex: none; }
-.prg-sdot--gate { background: var(--red); }
-/* 「等 agent」点 = busy 同款派生黄（同一语义家族：既不是红门也不是绿完成） */
-.prg-sdot--agent { background: var(--red); background: color-mix(in oklch, var(--red) 52%, var(--green)); }
-.prg-sdot--running { background: var(--accent); }
-.prg-sdot--queued { background: var(--text-3); }
-.prg-sx { font-size: 11px; font-weight: 700; line-height: 1; color: var(--red); font-style: normal; }
-/* 分组：整组一张卡（.card 缺省内边距清零，行自己控制），轻量组头 + 分隔线行 */
-.prg-group { padding: 0; overflow: hidden; margin-bottom: 14px; }
-.prg-ghead { display: flex; align-items: center; gap: 8px; width: 100%; padding: 10px 16px; border: 0; border-bottom: 1px solid var(--border); background: transparent; font: inherit; color: inherit; text-align: left; cursor: pointer; }
-.prg-ghead:hover { background: color-mix(in srgb, var(--fill) 55%, transparent); }
-.prg-ghead__name { font-size: 12.5px; font-weight: 600; letter-spacing: .02em; }
-.prg-ghead__meta { font-size: 12px; color: var(--text-3); }
-.prg-ghead__caret { margin-left: auto; font-size: 10px; color: var(--text-3); transition: transform .15s ease; }
-.prg-group--closed .prg-ghead { border-bottom-color: transparent; }
-.prg-group--closed .prg-ghead__caret { transform: rotate(-90deg); }
-/* 行：分隔线行，~64px，hover --fill（点行展开 = T11） */
-.prg-row + .prg-row { border-top: 1px solid var(--border); }
-.prg-row__main { display: grid; grid-template-columns: 210px minmax(0, 1fr) 230px; gap: 16px; align-items: center; min-height: 64px; padding: 6px 16px; transition: background .12s ease; }
-.prg-row__main:hover { background: var(--fill); }
-.prg-name { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.prg-name__t { font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-/* chevron 铰接箭头带：clip-path 四态段（长 workflow 名 max-width + ellipsis 防溢出） */
-.prg-flow { display: flex; align-items: center; min-width: 0; }
-.prg-seg { position: relative; flex: 1 1 0; min-width: 0; max-width: 170px; height: 30px; display: flex; align-items: center; justify-content: center; padding: 0 10px 0 15px; clip-path: polygon(0 0, calc(100% - 9px) 0, 100% 50%, calc(100% - 9px) 100%, 0 100%, 9px 50%); }
-.prg-seg + .prg-seg { margin-left: -7px; }
-.prg-seg:first-child { clip-path: polygon(0 0, calc(100% - 9px) 0, 100% 50%, calc(100% - 9px) 100%, 0 100%); padding-left: 12px; }
-.prg-seg:last-child { clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%, 9px 50%); padding-right: 12px; }
-.prg-seg__t { font-family: var(--mono); font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
-.prg-seg--past { background: var(--green-t); color: var(--green-d); }
-.prg-seg--cur { background: var(--accent); color: var(--btn-fg); }
-.prg-seg--fail { background: var(--red); color: var(--btn-fg); }
-.prg-seg--fut { background: var(--fill); color: var(--text-3); }
-/* 行 hover 底为 --fill 时，未来段换 --fill-2 保住箭形轮廓 */
-.prg-row__main:hover .prg-seg--fut { background: var(--fill-2); }
-/* 未到达的复核门段：右上角 6px 红点 */
-.prg-seg--gate::after { content: ""; position: absolute; top: 3px; right: 13px; width: 6px; height: 6px; border-radius: 999px; background: var(--red); }
-/* 验收反馈②-①：执行中段常驻区分——比普通 .prg-seg--cur 更亮的 color-mix 派生底色 +
-   内描边，不依赖动画也能看出「在执行」（reduced-motion 下光泽层保持透明，这条底色/描边
-   是唯一线索，必须常驻）；叠加在 .prg-seg--cur 之上（渲染时两类同时挂载）。 */
-.prg-seg--run { background: color-mix(in oklch, var(--accent) 70%, var(--btn-fg) 30%); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--btn-fg) 60%, transparent); }
-/* 执行中段：光泽扫过条（GSAP x 位移 repeat:-1；无 GSAP / reduced-motion 时保持透明）。
-   验收反馈②-①强化：峰值不透明度 45%→75%、宽度 42px→64px，扫过时更醒目；常驻区分见上条。 */
-.prg-gloss { position: absolute; top: 0; bottom: 0; left: 0; width: 64px; opacity: 0; pointer-events: none; background: linear-gradient(105deg, transparent 8%, color-mix(in srgb, var(--btn-fg) 75%, transparent) 50%, transparent 92%); }
-/* 状态徽章 + 快捷钮 */
-.prg-state { display: flex; align-items: center; justify-content: flex-end; gap: 8px; white-space: nowrap; }
-.prg-badge { display: inline-flex; align-items: center; gap: 5px; font-size: 10.5px; padding: 2px 8px; border-radius: 999px; font-weight: 700; white-space: nowrap; background: var(--fill); color: var(--text-2); }
-.prg-badge__dot { width: 5px; height: 5px; border-radius: 999px; background: currentColor; flex: none; }
-.prg-badge--gate { background: var(--red-t); color: var(--red-d); }
-.prg-badge--failed { background: var(--red-t); color: var(--red-d); }
-.prg-badge--running { background: var(--accent-t); color: var(--accent-d); }
-.prg-badge--gate .prg-badge__dot, .prg-badge--running .prg-badge__dot { animation: prg-blink 1.3s ease-in-out infinite; }
 @keyframes prg-blink { 50% { opacity: .3; } }
-.prg-btn { display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 10px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--card); font: inherit; font-size: 12.5px; font-weight: 600; color: var(--text-2); cursor: pointer; transition: border-color .12s ease, background .12s ease, color .12s ease; }
-.prg-btn:hover { border-color: var(--text-3); color: var(--text); }
-.prg-btn--danger { background: var(--red-t); border-color: var(--red-b); color: var(--red-d); }
-.prg-btn--danger:hover { border-color: var(--red); color: var(--red-d); }
-.prg-caret { color: var(--text-3); font-size: 10px; line-height: 1; transform: rotate(-90deg); transition: transform .15s ease; }
 /* 空态 + 底部说明 */
 .prg-empty { padding: 26px 16px; text-align: center; font-size: 12.5px; color: var(--text-3); border: 1px dashed var(--border-2); border-radius: var(--radius); margin-bottom: 18px; }
 .prg-foot { margin-top: 14px; font-size: 12.5px; color: var(--text-3); }
-@media (max-width: 720px) {
-  /* 窄屏：三列网格退化为纵排，箭头带独占一行保住可读性 */
-  .prg-row__main { grid-template-columns: 1fr; gap: 8px; padding: 10px 16px; }
-  .prg-state { justify-content: flex-start; }
-}
 /* ==== T8 共享任务详情（TaskDetail：dt- 卡骨架 + dtl- 垂直时间线）——视觉基准
    design-demos/v5-progress-workbench.html 收件箱右卡；全部走既有 token，无新原色。
    节点语义分工沿 spec §1：绿=完成、蓝 accent=当前（带 ring）、红=失败、空心=未开始。 ==== */
@@ -663,7 +435,6 @@ button.ev__chip--neutral:hover { border-color: var(--border-2); color: var(--tex
 .dt-verdict .ic--good { color: var(--green); }
 .dt-arts { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; }
 .dt-field { background: var(--card); border: 1px solid var(--border); border-radius: 7px; padding: 5px 8px; min-width: 0; }
-.dt-field--wide { grid-column: 1 / -1; }
 .dt-fk { font-size: 10.5px; color: var(--text-3); font-family: var(--mono); overflow-wrap: anywhere; }
 .dt-fv { font-size: 12px; color: var(--text); overflow-wrap: anywhere; }
 .dt-fv--copy { display: inline; padding: 0; border: 0; background: transparent; font: inherit; font-size: 12px; font-family: var(--mono); color: var(--text); cursor: pointer; text-align: left; transition: color .12s ease; }
@@ -672,7 +443,6 @@ button.ev__chip--neutral:hover { border-color: var(--border-2); color: var(--tex
 .dt-field--fail .dt-fv { color: var(--red-d); font-weight: 700; }
 .dt-field--miss { background: transparent; border-style: dashed; }
 .dt-field--miss .dt-fv { color: var(--text-3); }
-.dtl-err { font-family: var(--mono); color: var(--red-d); }
 .dt-none { margin: 0; font-size: 12px; color: var(--text-3); }
 .dt-note { margin: 8px 0 0; font-size: 12px; color: var(--text-3); line-height: 1.55; }
 /* 「在终端继续」命令区 */
@@ -686,10 +456,6 @@ button.ev__chip--neutral:hover { border-color: var(--border-2); color: var(--tex
 .dt-hist-it { display: flex; align-items: baseline; gap: 8px; font-size: 12px; }
 .dt-hist-ts { font-family: var(--mono); color: var(--text-3); white-space: nowrap; }
 .dt-hist-txt { color: var(--text-2); overflow-wrap: anywhere; }
-/* 底部动作条（按钮由宿主注入） */
-.dt-foot { display: flex; align-items: center; gap: 9px; padding: 12px 0 13px; border-top: 1px solid var(--border); }
-.dt-foot-l { font-family: var(--mono); font-size: 11.5px; color: var(--text-3); }
-.dt-foot-btns { margin-left: auto; display: flex; gap: 8px; }
 /* 形态 B（dt-tabs 阶段 sheet，进度行内展开 T11 复用）——demo v5 dt-tabs/dt-pane 对位，全走既有 token */
 .dt-tabs { display: flex; align-items: center; gap: 5px; overflow-x: auto; padding: 3px; margin: -3px -3px 9px; }
 .dt-tab { flex: none; display: inline-flex; align-items: center; gap: 4px; height: 25px; padding: 0 9px; border-radius: 8px; font: inherit; font-size: 12px; font-weight: 600; white-space: nowrap; background: var(--fill); border: 1px solid var(--border); color: var(--text-3); cursor: pointer; transition: background .12s ease, border-color .12s ease, color .12s ease, box-shadow .12s ease; }
@@ -711,7 +477,6 @@ button.ev__chip--neutral:hover { border-color: var(--border-2); color: var(--tex
 .wb-chain + .wb-chain { border-top: 1px dashed var(--border); }
 .wb-chain-k { font-size: 11px; font-weight: 700; letter-spacing: .04em; color: var(--text-3); margin-right: 4px; flex: none; }
 .wb-chain-seg { display: inline-flex; align-items: center; gap: 6px; }
-.wb-arr { color: var(--text-3); font-size: 13px; line-height: 1; }
 .wb-chip--ghost { opacity: .55; border-style: dashed; }
 .wb-sk-actions { display: flex; align-items: center; gap: 8px; padding-top: 9px; }
 .wb-sk-err { margin: 8px 0 0; }
@@ -773,7 +538,6 @@ button.ev__chip--neutral:hover { border-color: var(--border-2); color: var(--tex
 .wb-hkline--rail .wb-hknode { margin-bottom: 6px; }
 .wb-hkline--rail .wb-hkloop { position: static; display: block; margin: 0 0 6px; font-size: 10.5px; color: var(--text-3); }
 .wb-hkline--rail .wb-hkstack { display: flex; flex-direction: column; gap: 8px; }
-.side-card__body--hooks .wb-ed-sec { margin: 0; border-top: none; padding-top: 0; }
 
 /* ── v6 T10：未安装标注(标注型提示,不拦)——badge 黄从既有 token 派生(同 busy 黄先例,决议#9),
    禁新原色;未安装 chip/条目降饱和示意「本机没有」。 ── */
@@ -857,12 +621,10 @@ span.wb-chip-badge { cursor: default; }
 /* 无 loop 空态：教学文案 + 最小登记示例 */
 .lp-empty { padding: 10px 0 4px; }
 .lp-empty-t { margin: 0 0 4px; font-size: 13px; font-weight: 700; }
-.lp-empty-yaml { margin: 10px 0 0; padding: 10px 12px; border-radius: var(--radius-sm); background: var(--code-bg); border: 1px solid var(--code-border); font-family: var(--mono); font-size: 11.5px; line-height: 1.6; color: var(--text-2); overflow-x: auto; }
 /* ==== T7：Loop 卡审阅面重构（空态终端引导 + 字段生产者徽章 + 三方关系条）——交互真相源
    design-demos/v6-config-copilot.html 方案 A。徽章三色直接指派既有 token（agent=accent 三件套、
-   sys=fill-2 中性、human=ink 深底铭牌，同 .lp-lv-tile.on/.tab--active 既定 --ink 用法），
-   无新原色、无需 color-mix（决议 #9）。上方 .lp-empty-yaml 随本次空态改版成为死代码
-   （EMPTY_EXAMPLE 常量已删），按热点文件「只追加不改既有行」纪律不删，登记供后续清理。 ==== */
+   sys=fill-2 中性、human=ink 深底铭牌，同 .lp-lv-tile.on 既定 --ink 用法），
+   无新原色、无需 color-mix（决议 #9）。 ==== */
 .lp-empty-prompt { margin: 12px 0; padding: 12px 14px; border-radius: var(--radius-sm); background: var(--fill); border: 1px dashed var(--border-2); }
 .lp-empty-prompt-q { margin: 0 0 10px; font-size: 12.5px; line-height: 1.65; color: var(--text-2); }
 .lp-empty-copy { height: 28px; padding: 0 12px; font-size: 12px; }
@@ -889,22 +651,6 @@ span.wb-chip-badge { cursor: default; }
 .lp-rel-phases-label { font-size: 12px; font-weight: 600; color: var(--text-3); }
 .lp-rel-note { flex-basis: 100%; margin-top: 4px; }
 .lp-rel-dialog-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; max-height: 320px; overflow-y: auto; }
-/* ==== T11：进度行展开详情 + 动作接线 + running 行日志区 ——对照 demo v5 进度段
-   .prg-row--open/.prg-detail/.prg-dfoot/.prg-logwrap，全部走既有 token，无新原色。 ==== */
-.prg-row__main { cursor: pointer; }
-.prg-row--open .prg-caret { transform: rotate(0deg); }
-/* 行内展开的详情面：--fill 底与行区分；内嵌 TaskDetail 卡去掉自己的卡壳（贴面不叠框） */
-.prg-detail { background: var(--fill); border-top: 1px solid var(--border); padding: 2px 16px 12px; }
-.prg-detail .dt { background: transparent; border: 0; box-shadow: none; padding: 0; }
-/* --fill 底上字段格/未选中 tab 换 --card 底保住轮廓（demo prg-detail 同款覆写） */
-.prg-detail .dt-field { background: var(--card); }
-.prg-detail .dt-field--miss { background: transparent; }
-.prg-detail .dt-tab:not(.dt-tab--cur):not(.dt-tab--fail) { background: var(--card); }
-.prg-detail .dt-tab:not(.dt-tab--cur):not(.dt-tab--fail):hover { background: var(--fill-2); }
-/* 动作条主按钮（放行/重试）：--btn-bg 绿实底白字（视觉纪律：主按钮禁黑实底；绿=需要你动手/主操作） */
-.prg-btn--primary { background: var(--btn-bg); border-color: var(--btn-bg); color: var(--btn-fg); }
-.prg-btn--primary:hover { border-color: var(--btn-bg); color: var(--btn-fg); opacity: .9; }
-.prg-btn:disabled { opacity: .55; cursor: not-allowed; }
 /* 无动作行的说明（等 agent / 排队）：dt-foot 按钮位上的纯文本 */
 .prg-dfoot-note { font-size: 12.5px; color: var(--text-3); }
 /* running 行日志区（当前阶段 pane 尾部，经 TaskDetail curStageExtra 插槽挂载） */
@@ -914,41 +660,14 @@ span.wb-chip-badge { cursor: default; }
 .prg-follow { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--text-3); }
 .prg-log { margin: 0; padding: 10px; max-height: 200px; overflow: auto; font-size: 11.5px; line-height: 1.6; color: var(--text-2); white-space: pre-wrap; overflow-wrap: anywhere; }
 .prg-lognote { margin: 0; padding: 6px 10px; border-top: 1px solid var(--code-border); font-size: 11.5px; color: var(--text-3); }
-/* ==== T9 收件箱 v5（ibx- 区块）—— master-detail：左行列表 + 右 356px sticky 详情。
-   对照 design-demos/v5-progress-workbench.html 收件箱段；全部走既有 token，无新原色。
-   选中态 = accent 描边 + ring（同 demo .ibx-row--on）；焦点环沿既有 .kbd-focus outline。 ==== */
-.ibx-grid { display: grid; grid-template-columns: minmax(0, 1fr) 356px; gap: 20px; align-items: start; }
-.ibx-side { position: sticky; top: 76px; min-width: 0; }
-.ibx-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
-.ibx-row { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 11px 14px; cursor: pointer; transition: background .12s ease, border-color .12s ease, box-shadow .12s ease; }
-.ibx-row:hover { background: var(--fill); }
-.ibx-row--on { background: var(--accent-t); border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); }
-.ibx-row--on:hover { background: var(--accent-t); }
-.ibx-row.kbd-focus { outline: 2px solid var(--accent); outline-offset: 1px; }
-.ibx-r1 { display: flex; align-items: center; gap: 8px; min-width: 0; flex-wrap: wrap; }
-.ibx-name { font-family: var(--mono); font-size: 13.5px; font-weight: 600; color: var(--text); }
-.ibx-wf { font-size: 12px; color: var(--text-3); font-family: var(--mono); }
-.ibx-sp { flex: 1; }
-.ibx-time { font-size: 12px; color: var(--text-3); font-family: var(--mono); flex: none; }
-.ibx-lead { margin-top: 7px; font-size: 13px; color: var(--text-2); line-height: 1.55; }
-.ibx-r2 { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; }
 /* 结论式语义徽章（demo badge--green/--red 对位）：绿=证据齐可前进，红=要人裁决（同 spec §1 家族） */
 .badge--green { background: var(--green-t); color: var(--green-d); }
 .badge--red { display: inline-flex; align-items: center; gap: 5px; background: var(--red-t); color: var(--red-d); }
 .badge--red .dot { width: 5px; height: 5px; border-radius: 999px; background: currentColor; flex: none; animation: prg-blink 1.3s ease-in-out infinite; }
-/* 动作条按钮（TaskDetail dt-foot-btns 内，宿主注入）：不折行 + 收窄到 sm 尺寸 */
-.ibx-act { white-space: nowrap; padding: 6px 12px; font-size: 12px; }
-/* Esc 收起后的占位卡 */
-.ibx-collapsed-in { padding: 34px 18px; text-align: center; font-size: 12.5px; color: var(--text-3); line-height: 2; }
-@media (max-width: 900px) {
-  /* 窄屏：右栏详情下沉为纵排（sticky 失去意义） */
-  .ibx-grid { grid-template-columns: 1fr; }
-  .ibx-side { position: static; }
-}
 /* ============================================================
    v6 计划 T11：StepperRail 重写为「流程带」——门徽章 popover + 真实计数气泡 + running 脉冲。
    docs/superpowers/plans/2026-07-11-v6-recommended-implementation.md §T11（不要与本文件其它
-   命名空间里孤立出现的「T11」注释混淆——如上面 .prg-row__main 附近那段，那是上一轮 v5 计划
+   命名空间里孤立出现的「T11」注释混淆——如上面进度视图 dt-tabs 复用那段，那是上一轮 v5 计划
    的编号，跟本轮 v6 计划的 T1-T13 是两套体系）。
    几何沿用本仓已有 .prg-seg（进度视图箭头带，见上方 T10 区块）的 clip-path 卡榫写法，非抄
    design-demos/v6-workbench-flow.html 像素；旧 .wb-step*（卡片式）规则保留不删——本轮只新增
@@ -956,32 +675,6 @@ span.wb-chip-badge { cursor: default; }
    任务收尾时再评估是否清理。颜色一律复用既有 token；running 脉冲光泽沿用 .prg-gloss 的
    color-mix 派生公式（决议 #9，禁新硬编码原色）。
    ============================================================ */
-.wb-flow { display: flex; align-items: stretch; flex-wrap: nowrap; width: 100%; overflow-x: auto; padding: 6px 4px 8px; }
-.wb-flow-seg { position: relative; flex: 1 1 0; min-width: 168px; display: flex; }
-.wb-flow-hit {
-  position: relative; /* .wb-flow-gloss 的定位上下文——显式声明，不依赖与 .wb-flow-hit > * 的层叠序巧合 */
-  flex: 1; display: flex; flex-direction: column; align-items: flex-start; text-align: left;
-  padding: 12px 18px 12px 26px; min-height: 100px;
-  background: var(--fill); border: none; font: inherit; color: inherit; cursor: pointer;
-  clip-path: polygon(0 0, calc(100% - 16px) 0, 100% 50%, calc(100% - 16px) 100%, 0 100%, 16px 50%);
-  transition: background .12s ease, box-shadow .12s ease;
-}
-.wb-flow-seg--first .wb-flow-hit { clip-path: polygon(0 0, calc(100% - 16px) 0, 100% 50%, calc(100% - 16px) 100%, 0 100%); padding-left: 18px; }
-.wb-flow-seg--last .wb-flow-hit { clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%, 16px 50%); }
-.wb-flow-hit:hover { background: var(--fill-2); }
-.wb-flow-hit > * { position: relative; }
-.wb-flow-seg--on .wb-flow-hit { background: var(--card); box-shadow: inset 0 0 0 2px var(--accent); }
-/* 预演点亮态（既有 wb-step--live/--live-g 类名逐字保留——见 StepperRail.tsx 注释，T13 退役预演前不改名）。 */
-.wb-step--live .wb-flow-hit { box-shadow: inset 0 0 0 2px var(--accent); }
-.wb-step--live-g .wb-flow-hit { box-shadow: inset 0 0 0 2px var(--green); }
-/* 真机截图自查（scratchpad/flow-band-preview.html）发现：.prg-gloss 的 --btn-fg（白）配方
-   是给 .prg-seg--cur/--run 的 accent 实底段设计的，白扫白看不清；本组件段底是中性 --fill，
-   改用 --accent 派生扫光——浅色/深色两套 --accent 都是高识别度电光蓝，中性底上对比度稳定。 */
-.wb-flow-gloss {
-  position: absolute; top: 0; bottom: 0; left: 0; width: 46px; opacity: 0; pointer-events: none; z-index: 1;
-  background: linear-gradient(105deg, transparent 6%, color-mix(in srgb, var(--accent) 55%, transparent) 50%, transparent 94%);
-}
-.wb-flow-badges { position: absolute; top: 9px; right: 13px; display: flex; align-items: center; gap: 4px; z-index: 2; }
 .wb-flow-count {
   display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 5px;
   border-radius: 999px; background: var(--fill-2); color: var(--text-2); font-size: 10.5px; font-weight: 800; font-family: var(--mono);
@@ -998,20 +691,6 @@ span.wb-chip-badge { cursor: default; }
 .wb-flow-gatepop-row { margin: 0; font-size: 11.5px; color: var(--text-2); line-height: 1.55; }
 .wb-flow-gatepop-row + .wb-flow-gatepop-row { margin-top: 5px; }
 .wb-flow-gatepop-row b { display: block; color: var(--text); font-weight: 650; }
-.wb-flow-ev {
-  flex: none; align-self: center; margin: 0 3px; padding: 3px 9px; border-radius: 999px;
-  background: var(--fill); border: 1px dashed var(--border-2); color: var(--text-3);
-  font-size: 10.5px; font-family: var(--mono); white-space: nowrap;
-}
-.wb-flow-add {
-  flex: none; align-self: stretch; min-width: 108px; margin-left: 6px; display: flex; align-items: center;
-  justify-content: center; padding: 12px; border: 1px dashed var(--border-2); border-radius: var(--radius);
-  background: transparent; color: var(--text-3); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
-  transition: background .12s ease, color .12s ease;
-}
-.wb-flow-add:hover { background: var(--card); color: var(--text-2); }
-.wb-flow-add:disabled { opacity: .55; cursor: not-allowed; }
-.wb-flow-add:disabled:hover { background: transparent; color: var(--text-3); }
 
 /* 观察项②：runner 非标准值软校验警告——复用 .wb-note 基底，仅覆写为「警示」色调（决议#9：
    新色一律 color-mix 从既有 token 派生，不硬编码原色）。纯提示语义，无背景块/边框，区别于
@@ -1039,20 +718,6 @@ span.wb-chip-badge { cursor: default; }
 /* ── full-install W3：AFK 失败成因徽章 + 修复命令区（TaskDetail 失败态 .dt-diag / ProgressView
    失败行 .prg-cause）。决议 #9：警示色一律 color-mix 从既有 --red/--green token 派生（明暗两套
    随主题自适应），不硬编码新原色；修复命令区复用既有 .dt-code 底座，本段只补布局壳 + 徽章配色。 ── */
-.dt-diag { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
-.dt-diag-badge { align-self: flex-start; display: inline-flex; align-items: center; padding: 2px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 600; line-height: 1.5; background: var(--red-t); color: var(--red-d); border: 1px solid var(--red-b); }
-/* agent 非零 / unknown：换「琥珀」中性警示（红绿 oklch 取中派生,同调度灯 busy 先例)——这类要人看
-   日志判断、非「去配 X」的硬缺失，色调与缺凭证/镜像/docker 的红徽章区分开。cause-touchup 收编
-   cancelled（人为终止）/ no-op（零 commit 空跑,run 成功但无产出）——二者**非故障**,落红色基础样
-   是视觉误导,同归琥珀中性组;类名由 TaskDetail 按 cause 值拼出（dt-diag-badge--<cause>）。 */
-.dt-diag-badge--agent-nonzero,
-.dt-diag-badge--unknown,
-.dt-diag-badge--cancelled,
-.dt-diag-badge--no-op {
-  background: color-mix(in srgb, color-mix(in oklch, var(--red) 52%, var(--green)) 15%, var(--card));
-  color: color-mix(in oklch, var(--red) 42%, var(--text-2));
-  border-color: color-mix(in srgb, color-mix(in oklch, var(--red) 52%, var(--green)) 46%, var(--border));
-}
 .dt-diag-fix { display: flex; flex-direction: column; gap: 4px; }
 .dt-diag-fix-label { font-size: 11px; color: var(--text-3); }
 /* ProgressView 失败行短成因提示（小字,紧随失败徽章;纯提示无块,超长省略号收口不撑破行）。 */
@@ -1060,8 +725,8 @@ span.wb-chip-badge { cursor: default; }
 
 /* ── full-install W4：右栏只读「技能齐全度」面（side-card 内；闭 P1-F3/BF10）——前端只读不装，
    引导回终端 pipeline setup/doctor。决议 #9：不新增原色——未装计数用既有 --red-d 派生软警示
-   （明暗随主题自适应）；可复制命令块复用 mono + fill 底座，与 .side-card__copy / .dt-diag-fix
-   同调，不引入新视觉语言。计数/名走既有 .side-card__row/.wb-note，本段只补「命令块 + 警示计数」。 ── */
+   （明暗随主题自适应）；可复制命令块复用 mono + fill 底座，与 .dt-diag-fix 同调，不引入新视觉
+   语言。计数/名走既有 .side-card__row/.wb-note，本段只补「命令块 + 警示计数」。 ── */
 .skh-n-warn { color: var(--red-d); }
 .skh-miss-names { margin-top: 2px; word-break: break-word; }
 .skh-guide { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
@@ -1069,9 +734,9 @@ span.wb-chip-badge { cursor: default; }
 .skh-cmd:hover { border-color: var(--text-3); background: var(--fill); }
 .skh-cmd code { font-family: var(--mono); font-size: 12px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* ── full-install W2（旅程 P0 断点）：首启三步 checklist（Onboarding no-project）+ 收件箱空态可执行
-   CTA + 失败行短成因（.ibx-cause）。决议 #9：不新增原色——命令块复用 --code-bg / --mono 底座，
-   短成因复用 --red-d（同 .prg-cause），明暗随主题自适应。前端只读，命令块唯一动作是拷回终端。 ── */
+/* ── full-install W2（旅程 P0 断点）：首启三步 checklist（Onboarding no-project）。决议 #9：
+   不新增原色——命令块复用 --code-bg / --mono 底座，明暗随主题自适应。前端只读，命令块唯一
+   动作是拷回终端。 ── */
 .ob-wide { max-width: 520px; }
 .ob-steps { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 14px; text-align: left; }
 .ob-step { display: flex; gap: 12px; }
@@ -1083,11 +748,6 @@ span.wb-chip-badge { cursor: default; }
 .ob-cmd__code { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; color: var(--text); }
 .ob-cmd__copy { display: inline-flex; align-items: center; gap: 4px; flex: none; border: 0; background: transparent; color: var(--green); font-size: 11px; font-weight: 700; cursor: pointer; white-space: nowrap; }
 .ob-cmd__copy:hover { color: var(--green-d); }
-.ob-or { display: flex; align-items: center; gap: 10px; margin: 4px 0 12px; color: var(--text-3); font-size: 11px; }
-.ob-or__line { flex: 1; height: 1px; background: var(--border); }
-.empty__cli { display: flex; justify-content: center; margin: 0 0 16px; }
-.empty__acts { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
-.ibx-cause { flex: none; font-size: 11px; color: var(--red-d); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 16ch; }
 
 /* ── v8-A:nav8 ── */
 /* 意见①（design-demos/v8-trellis-encore.html .proj-menu/.pm-* 对位）：项目下拉宽度贴内容
@@ -1228,14 +888,10 @@ span.wb-chip-badge { cursor: default; }
 /* 高亮=「需要你动手」:绿 ring(全站动作色,demo .dcard.need),严重度由判定徽章表达 */
 .prg9-row--need { border-color: var(--green-b); box-shadow: 0 0 0 3px var(--ring), var(--shadow); }
 .prg9-row--need:hover { border-color: var(--green); box-shadow: 0 0 0 3px var(--ring), var(--shadow-2); }
-.prg9-head { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; min-width: 0; }
 .prg9-name { border: 0; background: transparent; padding: 0; cursor: pointer; text-align: left; font: inherit; font-family: var(--mono); font-size: 13.5px; font-weight: 700; color: var(--text); letter-spacing: -.005em; border-radius: 4px; transition: color .14s ease; }
 .prg9-name:hover { color: var(--accent-d); text-decoration: underline; text-underline-offset: 4px; }
-.prg9-proj { font-size: 11.5px; color: var(--text-3); white-space: nowrap; font-variant-numeric: tabular-nums; }
-.prg9-mid { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
 .prg9-lead { margin: 0; font-size: 12.5px; color: var(--text-2); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .prg9-ev { height: 20px; padding: 0 7px; font-size: 10.5px; }
-.prg9-side { display: flex; flex-direction: column; align-items: flex-end; gap: 7px; white-space: nowrap; }
 .prg9-judge { display: inline-flex; align-items: center; gap: 8px; }
 .prg9-acts { display: flex; gap: 6px; }
 .prg9-btn { display: inline-flex; align-items: center; gap: 5px; height: 29px; padding: 0 11px; border-radius: 8px; border: 1px solid transparent; background: transparent; font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; white-space: nowrap; transition: background .14s ease, border-color .14s ease, color .14s ease, filter .12s ease; }
@@ -1244,8 +900,6 @@ span.wb-chip-badge { cursor: default; }
 .prg9-btn--go:hover:not(:disabled) { filter: brightness(.94); }
 .prg9-btn--neg { background: var(--card); border-color: var(--border); color: var(--text-2); box-shadow: var(--shadow); }
 .prg9-btn--neg:hover:not(:disabled) { background: var(--red-t); border-color: var(--red-b); color: var(--red-d); }
-.prg9-btn--retry { border-color: var(--accent-b); color: var(--accent-d); }
-.prg9-btn--retry:hover:not(:disabled) { background: var(--accent-t); }
 /* 判定徽章扩展 tone(绿/红沿既有 .badge--green/.badge--red):蓝=运行中/琥珀=已取消/中性=排队与观察 */
 .prg9-bdg { display: inline-flex; align-items: center; gap: 5px; }
 .prg9-bdg .dot { width: 5px; height: 5px; border-radius: 999px; background: currentColor; flex: none; }
@@ -1354,4 +1008,14 @@ html.prg9-lock { overflow: hidden; }
 .prg9v2-mid { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
 .prg9v2-mid .prg9-rail { margin: 0; }
 .prg9v2-acts { align-items: center; }
+
+/* ── #2 归档折叠行「展开」真交互(demo↔生产残余差异清单)：静态「N 个已归档」文案改可点击
+   toggle;展开区复用 prg9-stack 同款纵向间距;只读行灰化——降对比度 + 轻降饱和,零新原色,
+   全走既有 --text-2/--text-3 token(禁 color-mix 派生新色以外的硬编码,同本文件既有纪律)。 */
+.prg9-fold-toggle { display: inline-flex; align-items: center; gap: 4px; border: 0; background: transparent; padding: 0; margin: 0; font: inherit; font-size: 12.5px; color: var(--text-3); cursor: pointer; text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--text-3) 45%, transparent); text-underline-offset: 3px; transition: color .14s ease; }
+.prg9-fold-toggle:hover { color: var(--text-2); }
+.prg9-archived-stack { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+.prg9-row--archived { opacity: .6; filter: saturate(.7); }
+.prg9-row--archived .prg9-name--ro,
+.prg9-row--archived .prg9-name--ro:hover { color: var(--text-3); cursor: default; text-decoration: none; }
 `
