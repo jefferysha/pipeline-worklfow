@@ -11779,6 +11779,7 @@ var finalizeRunOutcome = (o) => ({ ...o, noop: !o.buildSha });
 var AGENT_EXIT_LINE_RE = /^\[AGENT_EXIT\] (\S+) (\d+)\s*$/;
 var createAgentExitWatch = (write) => {
   let wrote = false;
+  let pending = Promise.resolve();
   return {
     onLine(line) {
       if (wrote)
@@ -11788,8 +11789,13 @@ var createAgentExitWatch = (write) => {
         return;
       wrote = true;
       const runner = m[1];
-      write(`${runner} agent \u975E\u96F6\u9000\u51FA\uFF08exit ${m[2]}\uFF09\uFF1A\u53EF\u80FD\u51ED\u8BC1\u5931\u6548\u6216 ${runner} \u81EA\u8EAB\u62A5\u9519\uFF0C\u8BE6\u89C1 agent \u65E5\u5FD7`).catch(() => {
+      pending = write(`${runner} agent \u975E\u96F6\u9000\u51FA\uFF08exit ${m[2]}\uFF09\uFF1A\u53EF\u80FD\u51ED\u8BC1\u5931\u6548\u6216 ${runner} \u81EA\u8EAB\u62A5\u9519\uFF0C\u8BE6\u89C1 agent \u65E5\u5FD7`).catch(() => {
       });
+    },
+    /** 排空在途写（codex P2）：run 结算(finally)时 await——观察写严格先于 scheduler 终态分类落地，
+     *  防延迟的 agent-exit 双字段写倒序覆盖 applyFailure 已落的权威成因(verify-fail/conflict)。 */
+    async settle() {
+      await pending;
     }
   };
 };
@@ -11867,6 +11873,8 @@ var runChangeInSandbox = async (ports, cfg2, signal) => {
     throw settled;
   } finally {
     await phaseWatch.settle().catch(() => {
+    });
+    await agentExitWatch.settle().catch(() => {
     });
     if (handle)
       await handle.close().catch(() => {
