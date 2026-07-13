@@ -321,6 +321,43 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
     } catch { return false }
   }
 
+  /** v9-I/J：session-link 核心查询 —— 单条端点与批量端点共用（不复制粘贴）。查 automation_worktree
+   *  →回落 root→listMemSessions→拼 resumeCmd；入参 root/name 假定已过校验（名字格式/root 信任锚/
+   *  change 存在），此函数只管查询与降级，不做 400/404 判断。查询异常收敛 found:false（不外抛），
+   *  同 /api/afk/readiness「查不到是常态不是故障」的恒 200 哲学。 */
+  async function resolveSessionLink(root: string, name: string): Promise<Record<string, unknown>> {
+    const changeDir = join(root, 'openspec', 'changes', name)
+    try {
+      const wtRaw = await store.get(changeDir, 'automation_worktree')
+      const wt = Array.isArray(wtRaw) ? wtRaw.join(',') : (wtRaw ?? '')
+      // 老内核 cmd_get 口径：空串 / 字面 'null' 算未设 → 回落 root（本机直跑会话的 cwd）。
+      const lookupDir = wt !== '' && wt !== 'null' ? wt : root
+      const sessions = listMemSessions(memFs, { filter: { cwd: lookupDir, platform: 'all', limit: 3 } })
+      const s = sessions[0]
+      if (!s) return { found: false, dir: lookupDir, reason: 'no-session' }
+      // cd 目标用会话自己的 cwd（可能是 lookupDir 的后代目录）——claude --resume 按 cwd 派生
+      // 项目目录找会话，cd 错目录会找不到；缺 cwd 才回落查询目录。
+      const dir = s.cwd || lookupDir
+      // dir 与 sessionId 都过 shQuote（codex 终稿 P2）：安全字符原样、特殊字符单引号转义。
+      const resumeCmd =
+        s.platform === 'claude'
+          ? `cd ${shQuote(dir)} && claude --resume ${shQuote(s.id)}`
+          : s.platform === 'codex'
+            ? `cd ${shQuote(dir)} && codex resume ${shQuote(s.id)}`
+            : null
+      return {
+        found: true,
+        platform: s.platform,
+        sessionId: s.id,
+        dir,
+        resumeCmd,
+        ...(s.updated || s.created ? { mtime: s.updated || s.created } : {}),
+      }
+    } catch {
+      return { found: false, dir: root, reason: 'lookup-error' }
+    }
+  }
+
   // ── 路由 ──
   async function handleGet(req: IncomingMessage, res: ServerResponse, path: string): Promise<void> {
     if (path === '/' || path === '/index.html') {
@@ -590,35 +627,45 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
       if (!existsSync(join(changeDir, '.pipeline.yaml'))) {
         return sendJson(res, 400, { ok: false, error: '找不到该 change（无 .pipeline.yaml）' })
       }
-      try {
-        const wtRaw = await store.get(changeDir, 'automation_worktree')
-        const wt = Array.isArray(wtRaw) ? wtRaw.join(',') : (wtRaw ?? '')
-        // 老内核 cmd_get 口径：空串 / 字面 'null' 算未设 → 回落 root（本机直跑会话的 cwd）。
-        const lookupDir = wt !== '' && wt !== 'null' ? wt : root
-        const sessions = listMemSessions(memFs, { filter: { cwd: lookupDir, platform: 'all', limit: 3 } })
-        const s = sessions[0]
-        if (!s) return sendJson(res, 200, { found: false, dir: lookupDir, reason: 'no-session' })
-        // cd 目标用会话自己的 cwd（可能是 lookupDir 的后代目录）——claude --resume 按 cwd 派生
-        // 项目目录找会话，cd 错目录会找不到；缺 cwd 才回落查询目录。
-        const dir = s.cwd || lookupDir
-        // dir 与 sessionId 都过 shQuote（codex 终稿 P2）：安全字符原样、特殊字符单引号转义。
-        const resumeCmd =
-          s.platform === 'claude'
-            ? `cd ${shQuote(dir)} && claude --resume ${shQuote(s.id)}`
-            : s.platform === 'codex'
-              ? `cd ${shQuote(dir)} && codex resume ${shQuote(s.id)}`
-              : null
-        return sendJson(res, 200, {
-          found: true,
-          platform: s.platform,
-          sessionId: s.id,
-          dir,
-          resumeCmd,
-          ...(s.updated || s.created ? { mtime: s.updated || s.created } : {}),
-        })
-      } catch {
-        return sendJson(res, 200, { found: false, dir: root, reason: 'lookup-error' })
+      return sendJson(res, 200, await resolveSessionLink(root, name))
+    }
+    // ── v9-J：GET /api/mem/session-links?root=&name=&root=&name=... —— 批量版 session-link。──
+    //    进度视图 failed 行「回终端」chip 一次预取全部失败行的恢复命令（产品决策：批量端点而非
+    //    逐行发请求，也不是等用户点开抽屉才有数据——行内 chip 在需要时批量出现，逐条查询不理想）。
+    //    参数用重复键（URLSearchParams.getAll），按下标配对；长度不等 → 400。上限 50 对（超出→400，
+    //    防御性上限，非并发预算——批量查询本身够快，避免离谱请求体拖垮单进程 kernel mem 查询循环）。
+    //    单个 pair 校验不过（名字非法/root 未注册/change 不存在）→ 该 key fail-soft 为
+    //    { found:false, reason:'invalid' }，不让一个坏 pair 拖累整批 400 ——呼应本端点家族
+    //    「查不到是常态不是故障」的哲学（同 /api/afk/readiness 恒 200 先例）。成功恒 200，
+    //    body = { links: Record<string, SessionLinkResult> }，key=`${name}@${root}`
+    //    （与前端 ProgressView rowKeyOf 同款拼法，不要用别的分隔符）。核心查询复用 resolveSessionLink
+    //    （单条端点同款 helper，不复制粘贴）。
+    if (path === '/api/mem/session-links') {
+      const sp = new URL(req.url ?? '/', 'http://localhost').searchParams
+      const roots = sp.getAll('root')
+      const names = sp.getAll('name')
+      if (roots.length !== names.length) {
+        return sendJson(res, 400, { ok: false, error: 'root/name 参数数量不匹配' })
       }
+      if (roots.length > 50) {
+        return sendJson(res, 400, { ok: false, error: 'items 过多（上限 50）' })
+      }
+      const links: Record<string, unknown> = {}
+      await Promise.all(
+        roots.map(async (root, i) => {
+          const name = names[i] ?? ''
+          const key = `${name}@${root}`
+          const valid =
+            name !== '' &&
+            /^[a-zA-Z0-9_-]+$/.test(name) &&
+            !name.includes('..') &&
+            root !== '' &&
+            isRegisteredRoot(root) &&
+            existsSync(join(root, 'openspec', 'changes', name, '.pipeline.yaml'))
+          links[key] = valid ? await resolveSessionLink(root, name) : { found: false, reason: 'invalid' }
+        }),
+      )
+      return sendJson(res, 200, { links })
     }
     return sendJson(res, 404, { ok: false, error: '未知端点' })
   }
