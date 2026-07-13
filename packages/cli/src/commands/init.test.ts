@@ -1,7 +1,13 @@
 import { describe, expect, test } from 'vitest'
 import type { InitOptions } from '@pipeline-lite/kernel'
-import { cmdInit } from './init.js'
+import { cmdInit, type InitPrompter, type InitWizardEnv } from './init.js'
 import { makeDeps, spy } from '../test-support.js'
+
+/** 脚本化 Prompter：按注入顺序弹出应答（'' = 回车收默认）。 */
+function scriptedPrompter(answers: string[]): InitPrompter {
+  let i = 0
+  return { ask: async () => answers[i++] ?? '', close: () => {} }
+}
 
 describe('init —— stdout 空 / [INIT] 走 stderr；0/1（oracle 实测回写）', () => {
   test('成功：stdout 无输出，创建路径以 [INIT] 走 stderr，exit 0', async () => {
@@ -145,5 +151,92 @@ describe('init 项目注册表登记（决策 D，best-effort）', () => {
     const code = await cmdInit(deps, 'demo', { track: 'devops', preset: 'full' })
     expect(code).toBe(1)
     expect(deps.registeredRoots).toEqual([])
+  })
+})
+
+/**
+ * 交互向导（BT6 小白友好）：track/preset 缺失且 TTY → 逐项问答收齐；非 TTY 缺参 fail-loud；
+ * 已给 flag → 向导整体跳过走原路径（golden-oracle 双跑守的非交互主线零回归）。
+ * 注入 fake InitWizardEnv（isInteractive + 脚本化 makePrompter）驱动，无真 TTY。
+ */
+describe('init —— 交互向导（fake InitWizardEnv 注入）', () => {
+  test('① 交互态缺 track/preset：向导问答 → 用答案建 change（track/preset 正确透传 store.init）', async () => {
+    // 问题顺序：track, preset, user, workflow —— 计数断言恰好 4 问（防「多问了问题」被
+    // scriptedPrompter 的 ?? '' 兜底吞掉的回归）
+    const deps = makeDeps()
+    let asked = 0
+    const inner = scriptedPrompter(['pm', 'full', '', ''])
+    const env: InitWizardEnv = {
+      isInteractive: () => true,
+      makePrompter: () => ({ ask: (q) => { asked++; return inner.ask(q) }, close: inner.close }),
+    }
+    const code = await cmdInit(deps, 'demo', {}, env)
+    expect(code).toBe(0)
+    expect(asked).toBe(4)
+    const opts = deps.store.init.calls[0]?.[0]
+    expect(opts?.track).toBe('pm')
+    expect(opts?.preset).toBe('full')
+    expect(opts?.user).toBeUndefined() // 空答 → undefined（不落 created_by）
+    expect(deps.errLines).toContain('[INIT] /repo/openspec/changes/demo')
+  })
+
+  test('②a 向导可选项：user 应答透传到 store.init', async () => {
+    const deps = makeDeps()
+    const env: InitWizardEnv = { isInteractive: () => true, makePrompter: () => scriptedPrompter(['backend', 'hotfix', 'jeff', '']) }
+    await cmdInit(deps, 'demo', {}, env)
+    const opts = deps.store.init.calls[0]?.[0]
+    expect(opts?.track).toBe('backend')
+    expect(opts?.preset).toBe('hotfix')
+    expect(opts?.user).toBe('jeff')
+  })
+
+  test('② 已给 track+preset：向导跳过，不造 prompter，走原非交互路径', async () => {
+    const deps = makeDeps()
+    let made = 0
+    const env: InitWizardEnv = {
+      isInteractive: () => true,
+      makePrompter: () => { made++; return scriptedPrompter([]) },
+    }
+    const code = await cmdInit(deps, 'demo', { track: 'backend', preset: 'full' }, env)
+    expect(code).toBe(0)
+    expect(made).toBe(0) // prompter 从未被创建 = 向导整段跳过
+    expect(deps.store.init.calls[0]?.[0]?.track).toBe('backend')
+    expect(deps.store.init.calls[0]?.[0]?.preset).toBe('full')
+    expect(deps.outLines).toEqual([]) // stdout 零回归
+  })
+
+  test('③ 非交互缺参：exit 1 + 明确 err，store.init 不被调用', async () => {
+    const deps = makeDeps()
+    const env: InitWizardEnv = { isInteractive: () => false, makePrompter: () => scriptedPrompter([]) }
+    const code = await cmdInit(deps, 'demo', { preset: 'full' }, env)
+    expect(code).toBe(1)
+    expect(deps.store.init.calls).toHaveLength(0)
+    expect(deps.errLines.join('\n')).toContain('非交互模式缺少必填项')
+  })
+
+  test('④ 向导 track 非法就地重问：收下一个合法值', async () => {
+    const deps = makeDeps()
+    // 首答 devops 非法 → 打错误提示后重问 → pm 合法
+    const env: InitWizardEnv = {
+      isInteractive: () => true,
+      makePrompter: () => scriptedPrompter(['devops', 'pm', 'full', '', '']),
+    }
+    const code = await cmdInit(deps, 'demo', {}, env)
+    expect(code).toBe(0)
+    expect(deps.store.init.calls[0]?.[0]?.track).toBe('pm')
+    expect(deps.errLines.join('\n')).toContain('非法 track')
+  })
+
+  test('⑤ 向导 preset 非法（如笔误 ful）就地重问：仅收标准枚举（评审应修——提示列枚举就必须校验）', async () => {
+    const deps = makeDeps()
+    // 首答 ful 非法 → 错误提示后重问 → full 合法（flag 路径的开放集语义不受影响）
+    const env: InitWizardEnv = {
+      isInteractive: () => true,
+      makePrompter: () => scriptedPrompter(['pm', 'ful', 'full', '', '']),
+    }
+    const code = await cmdInit(deps, 'demo', {}, env)
+    expect(code).toBe(0)
+    expect(deps.store.init.calls[0]?.[0]?.preset).toBe('full')
+    expect(deps.errLines.join('\n')).toContain("非法 preset 'ful'")
   })
 })

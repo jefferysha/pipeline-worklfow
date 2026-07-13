@@ -16,6 +16,7 @@
  * 枚举校验，custom workflow 的任意合法 step id 在这里天然放行，且完全不触碰 enumOk/cmdSet
  * 共享代码路径（zero 改动、zero 回归风险 to oracle 覆盖的 default workflow 主线）。
  */
+import { createInterface } from 'node:readline/promises'
 import { loadWorkflow, TRACKS } from '@pipeline-lite/kernel'
 import type { Track } from '@pipeline-lite/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
@@ -23,18 +24,115 @@ import { recordHistory } from './fields.js'
 import { isValidChangeName } from '../paths.js'
 
 export interface InitCmdOpts {
-  track: string
-  preset: string
+  // track/preset 为 optional：program.ts 用 .option（非 .requiredOption）注册，缺省时由交互
+  // 向导（TTY）补齐或非交互 fail-loud——commander 不再抢在 action 前拦截，向导才有机会跑。
+  track?: string
+  preset?: string
   user?: string
   workflow?: string
 }
 
-export async function cmdInit(deps: CliDeps, name: string, opts: InitCmdOpts): Promise<number> {
+// ── 交互向导的注入面（真实现 = REAL_INIT_WIZARD_ENV；测试注入 fake，命名避开 loops 的 InitEnv/Prompter）──
+
+/** 一问一答面（真实现 = node:readline/promises；测试注入脚本化应答）。 */
+export interface InitPrompter {
+  ask(prompt: string): Promise<string>
+  close(): void
+}
+
+/** init 向导注入环境：交互探测 + Prompter 工厂（仅在决定走向导时才 makePrompter）。 */
+export interface InitWizardEnv {
+  /** 是否交互终端（真实现 = process.stdin.isTTY && process.stdout.isTTY）。 */
+  isInteractive(): boolean
+  makePrompter(): InitPrompter
+}
+
+export const REAL_INIT_WIZARD_ENV: InitWizardEnv = {
+  isInteractive: () => Boolean(process.stdin.isTTY && process.stdout.isTTY),
+  makePrompter: () => {
+    const rl = createInterface({ input: process.stdin, output: process.stdout })
+    return { ask: (prompt) => rl.question(prompt), close: () => rl.close() }
+  },
+}
+
+/** 向导收的标准 preset 枚举（kernel 无 PRESETS 常量——preset 在 flag 路径是开放集，guard 仅对
+ *  full/hotfix/tweak 有特殊语义；向导是小白路径故收紧到标准值，专家自定义走 --preset flag）。 */
+const WIZARD_PRESETS: readonly string[] = ['full', 'hotfix', 'tweak']
+
+/** 问一个带校验的必填项：空输入收默认（若有）；仍为空或校验不过 → 就地重问（交互态语义）。 */
+async function askValidated(
+  p: InitPrompter, deps: CliDeps, label: string,
+  dflt: string | undefined, validate: (s: string) => string | null,
+): Promise<string> {
+  for (;;) {
+    const hasDflt = dflt !== undefined && dflt !== ''
+    const ans = (await p.ask(hasDflt ? `${label} [${dflt}]: ` : `${label}（必填）: `)).trim()
+    const val = ans === '' ? (dflt ?? '') : ans
+    if (val === '') { deps.io.err('该项必填，请输入一个值。'); continue }
+    const err = validate(val)
+    if (err !== null) { deps.io.err(err); continue }
+    return val
+  }
+}
+
+/** 问一个无校验的可选项：空输入收默认（默认为空则不显示中括号）。 */
+async function askPlain(p: InitPrompter, label: string, dflt: string): Promise<string> {
+  const ans = (await p.ask(dflt ? `${label} [${dflt}]: ` : `${label}: `)).trim()
+  return ans === '' ? dflt : ans
+}
+
+/**
+ * 交互向导：逐项问答收齐 track/preset（+ 可选 user/workflow）。已给 flag 作该项默认（回车即收），
+ * track 校验属于 TRACKS、preset 非空，校验不过就地重问。返回补齐后的 opts（原字段其余保留）。
+ */
+async function runInitWizard(deps: CliDeps, flags: InitCmdOpts, env: InitWizardEnv): Promise<InitCmdOpts> {
+  const p = env.makePrompter()
+  try {
+    deps.io.out('[init] 交互向导 —— 每问展示默认值（中括号内），直接回车即收默认。')
+    const track = await askValidated(
+      p, deps, 'track（chat|pm|frontend|backend）', flags.track,
+      (s) => ((TRACKS as readonly string[]).includes(s) ? null : `ERROR: 非法 track '${s}'，允许: ${TRACKS.join(' | ')}`),
+    )
+    const preset = await askValidated(
+      p, deps, 'preset（full|hotfix|tweak）', flags.preset,
+      // 向导仅收标准枚举（BT6 小白防错——提示列了枚举就必须校验，否则 'ful' 静默建出无效 change）；
+      // 专家要自定义 preset 走 --preset flag（flag 主线保持既有宽松语义，零回归）。
+      (s) => (WIZARD_PRESETS.includes(s) ? null : `ERROR: 非法 preset '${s}'，允许: ${WIZARD_PRESETS.join(' | ')}（自定义 preset 请走 --preset flag）`),
+    )
+    const userRaw = await askPlain(p, 'user（created_by，可空）', flags.user ?? '')
+    const workflowRaw = await askPlain(p, 'workflow（自定义 workflow 名，缺省 default）', flags.workflow ?? '')
+    return {
+      ...flags,
+      track,
+      preset,
+      user: userRaw === '' ? undefined : userRaw,
+      workflow: workflowRaw === '' ? undefined : workflowRaw,
+    }
+  } finally {
+    p.close()
+  }
+}
+
+export async function cmdInit(
+  deps: CliDeps, name: string, opts: InitCmdOpts, env: InitWizardEnv = REAL_INIT_WIZARD_ENV,
+): Promise<number> {
   if (!isValidChangeName(name)) {
     deps.io.err(`ERROR: change-name 非法: '${name}' (仅允许 a-z A-Z 0-9 - _)`)
     return 1
   }
-  if (!(TRACKS as readonly string[]).includes(opts.track)) {
+
+  // 缺 track/preset：TTY 下走向导补齐（BT6 小白友好），非交互（agent/CI）fail-loud exit 1。
+  // track 且 preset 都已给 → 本块整体不进（isInteractive/makePrompter 都不触发），下方逻辑与
+  // 此前逐字一致——golden-oracle 双跑守的非交互主线零回归。
+  if (!opts.track || !opts.preset) {
+    if (!env.isInteractive()) {
+      const missing = [!opts.track ? '--track' : null, !opts.preset ? '--preset' : null].filter(Boolean).join(' ')
+      deps.io.err(`ERROR: 非交互模式缺少必填项 ${missing}（agent/CI 需显式提供；TTY 下省略会走交互向导）`)
+      return 1
+    }
+    opts = await runInitWizard(deps, opts, env)
+  }
+  if (!(TRACKS as readonly string[]).includes(opts.track ?? '')) {
     deps.io.err(`ERROR: 非法 track '${opts.track}'，允许: ${TRACKS.join(' | ')}`)
     return 1
   }

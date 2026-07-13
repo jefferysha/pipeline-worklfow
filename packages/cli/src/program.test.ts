@@ -66,11 +66,14 @@ describe('program —— commander 装配与 exit code 逐格对齐', () => {
     expect(await run(deps, ['check', 'demo'])).toBe(2)
   })
 
-  test('init 缺 --track：commander 报错（usage error）', async () => {
+  test('init 缺 --track（非交互）：fail-loud exit 1（向导引入后 track/preset 改 option）', async () => {
+    // 交互向导（BT6）落地后 --track/--preset 由 requiredOption 改 option：commander 不再抢在
+    // action 前抛 missingMandatoryOptionValue；非 TTY（agent/CI，含 vitest）缺参由 cmdInit 接管
+    // fail-loud（exit 1 + 明确 err），脚本可依赖的 exit 1 契约不变；TTY 下则走交互向导。
     const deps = makeDeps()
-    await expect(
-      buildProgram(deps).parseAsync(['init', 'demo', '--preset', 'full'], { from: 'user' }),
-    ).rejects.toMatchObject({ code: 'commander.missingMandatoryOptionValue' })
+    const code = await run(deps, ['init', 'demo', '--preset', 'full'])
+    expect(code).toBe(1)
+    expect(deps.errLines.join('\n')).toContain('非交互模式缺少必填项')
   })
 
   test('init 全参：stdout 空、[INIT] 走 stderr', async () => {
