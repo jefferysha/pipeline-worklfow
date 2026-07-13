@@ -3099,7 +3099,13 @@ var FIELD_ORDER = [
   // （同 workflow 先例）：老版本窄解析器遇到首个未知 key 起整段进 opaqueTail——新字段若插在中段，
   // 老读者会把其后所有真字段（branch/base_branch/workflow…）当不透明尾巴，回写时用缺省值再造一份
   // → 重复 key 静默腐蚀；放末尾则老读者只把这一行当尾巴逐字保留，混版本读写无损。
-  "automation_current_phase"
+  "automation_current_phase",
+  // F-b（2026-07-13）：失败成因结构化 tag——automation 写入端按 error _tag 干净判定落盘
+  // （cancelled/conflict/timeout/verify-fail/agent-exit/no-op，开放集），空串=未知（基础设施类
+  // 不写，读取端 fallback regex 分类 automation_last_error 文本）。与 automation_last_error
+  // **同写同清**（写点见 automation scheduler/lifecycle/sdk），杜绝「消息换了、成因还是旧的」撕裂。
+  // 末尾追加理由同 automation_current_phase（老窄解析器 opaqueTail 腐蚀警告见上）。
+  "automation_cause"
 ];
 var LIST_FIELDS = ["scope", "related_files", "spec_scope", "depends_on"];
 var PHASES = ["open", "explore", "spec", "build", "verify", "ship", "archive"];
@@ -3428,6 +3434,7 @@ function initialFields(opts, ts, baseBranch) {
   f.archived_at = "null";
   f.archived = "false";
   f.automation_current_phase = "";
+  f.automation_cause = "";
   return f;
 }
 function gateValue(field2, value) {
@@ -10029,6 +10036,40 @@ function buildAuditReport(repoRoot, onlyLoop, now, fs) {
 // packages/kernel/dist/loops/types.js
 var LOOP_RUNNERS = ["claude-code", "codex"];
 
+// packages/kernel/dist/loops/yamlBlock.js
+function indentOf2(line) {
+  return line.length - line.replace(/^\s*/, "").length;
+}
+function locateLoop(lines, loopId) {
+  const idRe = /^(\s*)-(\s+)id:\s+(.+?)\s*(?:#.*)?$/;
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i].match(idRe);
+    if (!m || m[3].trim() !== loopId)
+      continue;
+    const dashIndent = m[1].length;
+    const fieldIndent = dashIndent + 1 + m[2].length;
+    let end = lines.length;
+    for (let j = i + 1; j < lines.length; j++) {
+      const line = lines[j];
+      if (line.trim() === "")
+        continue;
+      if (indentOf2(line) <= dashIndent) {
+        end = j;
+        break;
+      }
+    }
+    return { start: i, end, dashIndent, fieldIndent };
+  }
+  return null;
+}
+function insertPointAtBlockEnd(lines, start, end) {
+  for (let i = end - 1; i > start; i--) {
+    if (lines[i].trim() !== "")
+      return i + 1;
+  }
+  return end;
+}
+
 // packages/kernel/dist/loops/graduation.js
 var MIN_L2_RUNS_FOR_L3 = 5;
 var ORDER = ["L1", "L2", "L3"];
@@ -10162,46 +10203,18 @@ function planLevelChange(current, target, verdict) {
 }
 function setAutonomyLevelInYaml(text, loopId, level) {
   const lines = text.split("\n");
-  const idRe = /^(\s*)-\s+id:\s+(.+?)\s*(?:#.*)?$/;
-  let start = -1;
-  let dashIndent = 0;
-  for (let i = 0; i < lines.length; i++) {
-    const m = lines[i].match(idRe);
-    if (m && m[2].trim() === loopId) {
-      start = i;
-      dashIndent = m[1].length;
-      break;
-    }
-  }
-  if (start === -1)
+  const block = locateLoop(lines, loopId);
+  if (block === null)
     return { text: null, error: `loop '${loopId}' \u672A\u5728 loops.yaml \u627E\u5230\uFF08\u65E0\u6CD5\u6539\u6863\uFF09` };
-  let end = lines.length;
-  for (let i = start + 1; i < lines.length; i++) {
-    const line = lines[i];
-    if (line.trim() === "")
-      continue;
-    const indent = line.length - line.replace(/^\s*/, "").length;
-    if (indent <= dashIndent) {
-      end = i;
-      break;
-    }
-  }
   const levelRe = /^(\s*)autonomy_level:\s*.*$/;
-  for (let i = start; i < end; i++) {
+  for (let i = block.start; i < block.end; i++) {
     const m = lines[i].match(levelRe);
     if (m) {
       lines[i] = `${m[1]}autonomy_level: ${level}`;
       return { text: lines.join("\n"), error: null };
     }
   }
-  let insertAt = end;
-  for (let i = end - 1; i > start; i--) {
-    if (lines[i].trim() !== "") {
-      insertAt = i + 1;
-      break;
-    }
-  }
-  lines.splice(insertAt, 0, `${" ".repeat(dashIndent + 2)}autonomy_level: ${level}`);
+  lines.splice(insertPointAtBlockEnd(lines, block.start, block.end), 0, `${" ".repeat(block.dashIndent + 2)}autonomy_level: ${level}`);
   return { text: lines.join("\n"), error: null };
 }
 function gatherInputs(loop, registry, runLog, doc, now) {
@@ -10902,7 +10915,7 @@ function parseInlineList(raw) {
   }
   return trimmed.slice(1, -1).split(",").map((s) => s.trim()).filter((s) => s.length > 0);
 }
-function indentOf2(line) {
+function indentOf3(line) {
   return line.length - line.trimStart().length;
 }
 function parseSkillsBlock(cur, baseIndent) {
@@ -10913,7 +10926,7 @@ function parseSkillsBlock(cur, baseIndent) {
       cur.i++;
       continue;
     }
-    if (indentOf2(line) < baseIndent)
+    if (indentOf3(line) < baseIndent)
       break;
     const idMatch = /^\s*-\s+id:\s*(\S+)\s*$/.exec(line);
     if (!idMatch)
@@ -10922,7 +10935,7 @@ function parseSkillsBlock(cur, baseIndent) {
     let depends_on;
     const next = cur.lines[cur.i] ?? "";
     const depMatch = /^\s*depends_on:\s*(\[.*\])\s*$/.exec(next);
-    if (depMatch && indentOf2(next) > baseIndent) {
+    if (depMatch && indentOf3(next) > baseIndent) {
       depends_on = parseInlineList(depMatch[1]);
       cur.i++;
     }
@@ -10938,7 +10951,7 @@ function parseFieldRefBlock(cur, baseIndent) {
       cur.i++;
       continue;
     }
-    if (indentOf2(line) < baseIndent)
+    if (indentOf3(line) < baseIndent)
       break;
     const fieldMatch = /^\s*-\s+field:\s*(\S+)\s*$/.exec(line);
     if (!fieldMatch)
@@ -10961,7 +10974,7 @@ function parseGuardsBlock(cur, baseIndent) {
       cur.i++;
       continue;
     }
-    if (indentOf2(line) < baseIndent)
+    if (indentOf3(line) < baseIndent)
       break;
     const typeMatch = /^\s*-\s+type:\s*(tasks-at-least|nonempty-output)\s*$/.exec(line);
     if (!typeMatch)
@@ -10989,7 +11002,7 @@ function parseTransitionsBlock(cur, baseIndent) {
       cur.i++;
       continue;
     }
-    if (indentOf2(line) < baseIndent)
+    if (indentOf3(line) < baseIndent)
       break;
     const eventMatch = /^\s*-\s+event:\s*(\S+)\s*$/.exec(line);
     if (!eventMatch)
@@ -11009,7 +11022,7 @@ function parseStep(cur) {
   const idMatch = /^\s*-\s+id:\s*(\S+)\s*$/.exec(idLine);
   if (!idMatch)
     throw new Error(`workflow \u89E3\u6790\u9519\u8BEF\uFF1A\u671F\u671B '- id: <name>'\uFF0C\u5B9E\u9645 '${idLine}'`);
-  const baseIndent = indentOf2(idLine) + 2;
+  const baseIndent = indentOf3(idLine) + 2;
   cur.i++;
   let label = "";
   let gate = null;
@@ -11024,7 +11037,7 @@ function parseStep(cur) {
       cur.i++;
       continue;
     }
-    if (indentOf2(line) < baseIndent - 2)
+    if (indentOf3(line) < baseIndent - 2)
       break;
     if (/^\s*label:\s*(.+)$/.test(line)) {
       label = /^\s*label:\s*(.+)$/.exec(line)[1].trim();
@@ -11252,6 +11265,9 @@ function resolveWorkflowName(state) {
 function resolveStep(wf, stepId) {
   return wf.steps.find((s) => s.id === stepId) ?? null;
 }
+function firstStep(wf) {
+  return wf.steps[0] ?? null;
+}
 function planStepTransition(wf, state, event, ctx) {
   const stepId = fieldStr(state, "phase");
   const step = resolveStep(wf, stepId);
@@ -11459,7 +11475,7 @@ var preservedPathOf = (err) => {
 };
 var classifyFailure = (err) => {
   if (isVerifyFailSentinel(err)) {
-    return { kind: "retry", message: "verify-fail" };
+    return { kind: "retry", message: "verify-fail", cause: "verify-fail" };
   }
   const tagged = typeof err === "object" && err !== null ? err : {};
   const tag2 = tagged._tag;
@@ -11467,6 +11483,7 @@ var classifyFailure = (err) => {
     return {
       kind: "conflict",
       message: tagged.message ?? "aborted",
+      cause: "cancelled",
       preservedPath: tagged.preservedPath ?? preservedPathOf(tagged)
     };
   }
@@ -11474,16 +11491,18 @@ var classifyFailure = (err) => {
     return {
       kind: "conflict",
       message: tagged.message ?? "merge conflict / barrier drift",
+      cause: "conflict",
       preservedPath: preservedPathOf(tagged)
     };
   }
   if (tag2 === "AgentIdleTimeoutError") {
-    return { kind: "retry", message: tagged.message ?? "agent idle timeout" };
+    return { kind: "retry", message: tagged.message ?? "agent idle timeout", cause: "timeout" };
   }
   const isTransient = tag2 === "ExecError" && typeof tagged.exitCode === "number" && TRANSIENT_EXEC_EXIT_CODES.has(tagged.exitCode);
   return {
     kind: "retry",
-    message: tagged.message ?? (isTransient ? "transient exec failure" : err instanceof Error ? err.message : "run failed")
+    message: tagged.message ?? (isTransient ? "transient exec failure" : err instanceof Error ? err.message : "run failed"),
+    cause: ""
   };
 };
 
@@ -11525,6 +11544,7 @@ var createScheduler = (deps) => {
       return "skipped";
     if (noop) {
       await state.setField(name2, "automation_last_error", sanitize("no-op run\uFF1A\u96F6 commit / \u7A7A\u6784\u5EFA\uFF08build_sha \u7F3A\u5931\uFF09\u2014\u2014\u672A\u5408\u5E76\u3001\u672A\u89E3\u9501\u4E0B\u6E38\uFF0C\u505C\u7ED9\u4EBA\u5DE5\u590D\u6838"));
+      await state.setField(name2, "automation_cause", "no-op");
     }
     await state.setField(name2, "automation_attempts", "0");
     return target;
@@ -11540,6 +11560,7 @@ var createScheduler = (deps) => {
       if (!won2)
         return "skipped";
       await state.setField(name2, "automation_last_error", lastError);
+      await state.setField(name2, "automation_cause", c.cause);
       if (c.preservedPath)
         await state.setField(name2, "automation_preserved_path", sanitizePath(c.preservedPath));
       return "conflict";
@@ -11550,6 +11571,7 @@ var createScheduler = (deps) => {
     if (!won)
       return "skipped";
     await state.setField(name2, "automation_last_error", lastError);
+    await state.setField(name2, "automation_cause", c.cause);
     return next;
   };
   const emitTerminal = (name2, settled) => {
@@ -11778,7 +11800,10 @@ var runChangeInSandbox = async (ports, cfg2, signal) => {
   let handle;
   let preserve = false;
   const phaseWatch = createPhaseWatch(cfg2.name, (value) => ports.setStateField(cfg2.name, "automation_current_phase", value));
-  const agentExitWatch = createAgentExitWatch((value) => ports.setStateField(cfg2.name, "automation_last_error", value));
+  const agentExitWatch = createAgentExitWatch(async (value) => {
+    await ports.setStateField(cfg2.name, "automation_last_error", value);
+    await ports.setStateField(cfg2.name, "automation_cause", "agent-exit");
+  });
   try {
     const env = { ...cfg2.extraEnv, [PIPELINE_AFK_ENV]: "1" };
     handle = await ports.createSandbox({ env, worktreePath });
@@ -11975,7 +12000,7 @@ var storeWriter = (store2, changeDir2) => ({
   getAutomation: (name2) => getAutomation(store2, changeDir2(name2)),
   setAutomationOwned: (name2, next) => setAutomationOwned(store2, changeDir2(name2), next),
   markFailedSync: (name2, reason) => {
-    void store2.setMany(changeDir2(name2), { automation: "failed", automation_last_error: reason }).catch(() => {
+    void store2.setMany(changeDir2(name2), { automation: "failed", automation_last_error: reason, automation_cause: "" }).catch(() => {
     });
   }
 });
@@ -14053,7 +14078,7 @@ function relayHeaders2(upstream, includeLength, bodyLen) {
   return out;
 }
 function forwardAndRecord(ctx, req, res, body, plan) {
-  const { store: store2, sessionId, counter } = ctx;
+  const { store: store2, sessionId, counter, connectTimeoutMs } = ctx;
   const { path: path6, upstreamBaseUrl, transport } = plan;
   const method = (req.method ?? "GET").toUpperCase();
   const captureGate = method === "POST" && isCaptureEnabled({ dir: store2.dir });
@@ -14115,6 +14140,10 @@ function forwardAndRecord(ctx, req, res, body, plan) {
       res.writeHead(502, { "Content-Type": "application/json", "Content-Length": msg.length });
       res.end(msg);
     } catch {
+      try {
+        res.destroy();
+      } catch {
+      }
     }
     if (captureGate) {
       try {
@@ -14135,6 +14164,11 @@ function forwardAndRecord(ctx, req, res, body, plan) {
       } catch {
       }
     }
+  });
+  upReq.setTimeout(connectTimeoutMs, () => upReq.destroy(new Error("upstream timeout")));
+  res.on("close", () => {
+    if (!res.writableEnded)
+      upReq.destroy();
   });
   if (body.length)
     upReq.write(body);
@@ -14172,7 +14206,7 @@ function serveForward(opts = {}) {
     res.on("error", () => {
     });
     function forward(body) {
-      forwardAndRecord({ store: store2, sessionId, counter }, req, res, body, {
+      forwardAndRecord({ store: store2, sessionId, counter, connectTimeoutMs }, req, res, body, {
         makeReq: (o, onResp) => httpRequest2({
           protocol: "http:",
           hostname: targetUrl.hostname,
@@ -14197,7 +14231,7 @@ function serveForward(opts = {}) {
     tunnels,
     connectTimeoutMs,
     // T-a 共享管路以 DI 注入（预绑 ctx）——不从本文件 export（index.ts 对本文件是 export *，导出即漏公共 API）。
-    forwardAndRecord: (req, res, body, plan) => forwardAndRecord({ store: store2, sessionId, counter }, req, res, body, plan)
+    forwardAndRecord: (req, res, body, plan) => forwardAndRecord({ store: store2, sessionId, counter, connectTimeoutMs }, req, res, body, plan)
   }) : null;
   server.on("connect", (req, clientSocket, head) => {
     const authority = req.url ?? "";
@@ -16253,11 +16287,17 @@ async function cmdAdvance(deps, name2, opts = {}) {
   const maxSteps = opts.maxSteps ?? DEFAULT_MAX_STEPS;
   const through = opts.throughGates ?? false;
   let startPhase;
+  let workflowName;
   try {
-    startPhase = str((await deps.store.read(changeDir(deps.cwd, name2))).fields.phase);
+    const state = await deps.store.read(changeDir(deps.cwd, name2));
+    startPhase = str(state.fields.phase);
+    workflowName = resolveWorkflowName(state);
   } catch (e) {
     deps.io.err(`ERROR: ${errMsg(e)}`);
     return 1;
+  }
+  if (workflowName !== "default") {
+    return cmdAdvanceCustom(deps, name2, workflowName, startPhase, through, maxSteps, opts.dryRun ?? false);
   }
   if (opts.dryRun) return dryRunPlan(deps, name2, startPhase, through, maxSteps);
   deps.io.out(`[ADVANCE] ${name2}: \u4ECE ${startPhase} \u8D77\u6B65\uFF08max-steps=${maxSteps}${through ? "\uFF0Cthrough-gates" : ""}\uFF09`);
@@ -16336,6 +16376,150 @@ async function dryRunPlan(deps, name2, start, through, maxSteps) {
     steps += 1;
     if (!through && isReviewPhase(deps, current)) {
       deps.io.out(`  \u9884\u8BA1\u505C\u5728 ${current}: \u590D\u6838\u76F8\u4F4D\uFF08HITL \u95E8\uFF0C--through-gates \u653E\u884C\uFF09`);
+      return 0;
+    }
+    if (visited.has(current)) {
+      deps.io.out(`  \u9884\u8BA1\u505C\u5728 ${current}: \u68C0\u6D4B\u5230\u73AF\uFF0C\u505C`);
+      return 0;
+    }
+  }
+  deps.io.out(`  \u9884\u8BA1\u5728 ${current} \u89E6\u53CA --max-steps=${maxSteps} \u4E0A\u9650`);
+  return 0;
+}
+async function cmdAdvanceCustom(deps, name2, workflowName, startPhase, through, maxSteps, dryRun) {
+  let wf;
+  try {
+    wf = loadWorkflow(deps.cwd, workflowName);
+  } catch (e) {
+    deps.io.err(`ERROR: ${errMsg(e)}`);
+    return 1;
+  }
+  if (!wf) {
+    deps.io.err(`ERROR: workflow '${workflowName}' \u672A\u627E\u5230\uFF08\u671F\u671B .pipeline/workflows/${workflowName}.yaml\uFF09`);
+    return 1;
+  }
+  if (!resolveStep(wf, startPhase)) {
+    deps.io.err(`ERROR: step '${startPhase}' \u4E0D\u5728 workflow '${workflowName}' \u91CC`);
+    return 1;
+  }
+  if (dryRun) return dryRunCustomPlan(deps, name2, wf, workflowName, startPhase, through, maxSteps);
+  deps.io.out(`[ADVANCE] ${name2}: \u4ECE ${startPhase} \u8D77\u6B65\uFF08max-steps=${maxSteps}${through ? "\uFF0Cthrough-gates" : ""}\uFF09`);
+  let current = startPhase;
+  let steps = 0;
+  for (; ; ) {
+    const step = resolveStep(wf, current);
+    if (!step) {
+      deps.io.err(`ERROR: step '${current}' \u4E0D\u5728 workflow '${workflowName}' \u91CC`);
+      return 1;
+    }
+    if (step.transitions.length === 0) {
+      deps.io.out(`[STOP] ${name2} @ ${current}: \u5DF2\u5230\u7EC8\u6001\uFF0C\u65E0\u540E\u7EE7\u4E8B\u4EF6\uFF08\u63A8\u8FDB\u5B8C\u6210\uFF09`);
+      return 0;
+    }
+    const hard = await freshHardGate(deps);
+    if (hard) {
+      deps.io.out(`[STOP] ${name2} @ ${current}: \u786C\u95E8 .pipeline-pending-${hard} \u65B0\u9C9C\u5B58\u5728\u2014\u2014\u4E09\u95E8\u7EDD\u4E0D\u81EA\u52A8\u8DE8\u8D8A\uFF08HITL \u7EA2\u7EBF\uFF09`);
+      return 0;
+    }
+    if (step.gate === "confirm") {
+      deps.io.out(`[STOP] ${name2} @ ${current}: step gate 'confirm'\uFF08human gate\uFF09\u2014\u2014\u7EDD\u4E0D\u81EA\u52A8\u8DE8\u8D8A\uFF08HITL \u7EA2\u7EBF\uFF09`);
+      return 0;
+    }
+    if (step.gate === "review" && !through) {
+      deps.io.out(`[STOP] ${name2} @ ${current}: step gate 'review'\uFF08HITL \u95E8\uFF09\uFF0C\u505C\u7ED9\u4EBA\u590D\u6838\u2014\u2014--through-gates \u53EF\u663E\u5F0F\u653E\u884C`);
+      return 0;
+    }
+    if (step.transitions.length > 1) {
+      const events = step.transitions.map((t2) => t2.event).join(", ");
+      deps.io.out(`[STOP] ${name2} @ ${current}: \u591A\u6761\u51FA\u8FB9\u9700\u4EBA\u9009 event\uFF08HITL\uFF09\uFF0C\u624B\u52A8 transition \u5176\u4E00\uFF1A${events}`);
+      return 0;
+    }
+    if (steps >= maxSteps) {
+      deps.io.out(`[STOP] ${name2} @ ${current}: \u8FBE\u5230 --max-steps=${maxSteps} \u4E0A\u9650\uFF0C\u505C\uFF08\u9632\u5931\u63A7\u4FDD\u9669\u4E1D\uFF09`);
+      return 0;
+    }
+    const g = await guardQuietly(deps, name2);
+    if (g.code !== 0) {
+      deps.io.out(`[STOP] ${name2} @ ${current}: guard \u672A\u901A\u8FC7\uFF0C\u505C\uFF08\u4FEE\u590D\u540E\u91CD\u8BD5\uFF09`);
+      for (const l of g.lines) if (l.includes("[FAIL]")) deps.io.out(`  ${l.trim()}`);
+      return g.code === 2 ? 2 : 1;
+    }
+    const edge = step.transitions[0];
+    const t = await transitionQuietly(deps, name2, edge.event);
+    if (t.code !== 0) {
+      deps.io.out(`[STOP] ${name2} @ ${current}: transition ${edge.event} \u5931\u8D25\uFF0C\u505C`);
+      for (const l of t.lines) deps.io.out(`  ${l.trim()}`);
+      return 1;
+    }
+    deps.io.out(`[ADVANCE] ${name2}: ${current} -> ${edge.to}\uFF08${edge.event}\uFF09`);
+    current = edge.to;
+    steps += 1;
+  }
+}
+async function dryRunCustomPlan(deps, name2, wf, workflowName, start, through, maxSteps) {
+  deps.io.out(`[DRY-RUN] ${name2}: \u8BA1\u5212\u9884\u89C8\uFF08\u4E0D\u6539\u76D8\uFF09\u4ECE ${start} \u8D77\uFF08max-steps=${maxSteps}${through ? "\uFF0Cthrough-gates" : ""}\uFF09`);
+  const hard = await freshHardGate(deps);
+  if (hard) {
+    deps.io.out(`  \u9884\u8BA1\u505C\u5728 ${start}: \u786C\u95E8 .pipeline-pending-${hard} \u65B0\u9C9C\u5B58\u5728\uFF0C\u7EDD\u4E0D\u81EA\u52A8\u8DE8\u8D8A\uFF08HITL \u7EA2\u7EBF\uFF09`);
+    return 0;
+  }
+  const startStep = resolveStep(wf, start);
+  if (!startStep) {
+    deps.io.err(`ERROR: step '${start}' \u4E0D\u5728 workflow '${workflowName}' \u91CC`);
+    return 1;
+  }
+  if (startStep.gate === "confirm") {
+    deps.io.out(`  \u9884\u8BA1\u505C\u5728 ${start}: step gate 'confirm'\uFF08human gate\uFF0C\u7EDD\u4E0D\u81EA\u52A8\u8DE8\u8D8A\uFF09`);
+    return 0;
+  }
+  if (startStep.gate === "review" && !through) {
+    deps.io.out(`  \u9884\u8BA1\u505C\u5728 ${start}: step gate 'review'\uFF08HITL \u95E8\uFF0C--through-gates \u653E\u884C\uFF09`);
+    return 0;
+  }
+  if (startStep.transitions.length === 0) {
+    deps.io.out(`  \u9884\u8BA1\u505C\u5728 ${start}: \u5DF2\u5230\u7EC8\u6001`);
+    return 0;
+  }
+  if (startStep.transitions.length > 1) {
+    deps.io.out(`  \u9884\u8BA1\u505C\u5728 ${start}: \u591A\u6761\u51FA\u8FB9\u9700\u4EBA\u9009 event\uFF08\u53EF\u9009: ${startStep.transitions.map((t) => t.event).join(", ")}\uFF09`);
+    return 0;
+  }
+  const g = await guardQuietly(deps, name2);
+  if (g.code !== 0) {
+    deps.io.out(`  guard@${start} \u672A\u901A\u8FC7 \u2192 \u9884\u8BA1\u505C\u5728 ${start}\uFF08\u4E0D\u63A8\u8FDB\uFF09`);
+    for (const l of g.lines) if (l.includes("[FAIL]")) deps.io.out(`  ${l.trim()}`);
+    return 0;
+  }
+  deps.io.out(`  guard@${start}: \u901A\u8FC7`);
+  let current = start;
+  let steps = 0;
+  const visited = /* @__PURE__ */ new Set();
+  while (steps < maxSteps) {
+    const step = resolveStep(wf, current);
+    if (!step) {
+      deps.io.err(`ERROR: step '${current}' \u4E0D\u5728 workflow '${workflowName}' \u91CC`);
+      return 1;
+    }
+    if (step.transitions.length === 0) {
+      deps.io.out(`  \u9884\u8BA1\u505C\u5728 ${current}: \u5DF2\u5230\u7EC8\u6001`);
+      return 0;
+    }
+    if (step.transitions.length > 1) {
+      deps.io.out(`  \u9884\u8BA1\u505C\u5728 ${current}: \u591A\u6761\u51FA\u8FB9\u9700\u4EBA\u9009 event\uFF08\u53EF\u9009: ${step.transitions.map((t) => t.event).join(", ")}\uFF09`);
+      return 0;
+    }
+    const edge = step.transitions[0];
+    deps.io.out(`  \u8BA1\u5212 ${steps + 1}: ${current} -> ${edge.to}\uFF08${edge.event}\uFF09${steps === 0 ? "" : "  [live-guard]"}`);
+    visited.add(current);
+    current = edge.to;
+    steps += 1;
+    const entered = resolveStep(wf, current);
+    if (entered?.gate === "confirm") {
+      deps.io.out(`  \u9884\u8BA1\u505C\u5728 ${current}: step gate 'confirm'\uFF08human gate\uFF0C\u7EDD\u4E0D\u81EA\u52A8\u8DE8\u8D8A\uFF09`);
+      return 0;
+    }
+    if (entered?.gate === "review" && !through) {
+      deps.io.out(`  \u9884\u8BA1\u505C\u5728 ${current}: step gate 'review'\uFF08HITL \u95E8\uFF0C--through-gates \u653E\u884C\uFF09`);
       return 0;
     }
     if (visited.has(current)) {
@@ -17391,7 +17575,7 @@ async function cmdInit(deps, name2, opts, env = REAL_INIT_WIZARD_ENV) {
       deps.io.err(`ERROR: workflow '${opts.workflow}' \u672A\u627E\u5230\uFF08\u671F\u671B .pipeline/workflows/${opts.workflow}.yaml\uFF09`);
       return 1;
     }
-    const first = wf.steps[0];
+    const first = firstStep(wf);
     if (!first) {
       deps.io.err(`ERROR: workflow '${opts.workflow}' \u672A\u58F0\u660E\u4EFB\u4F55 step`);
       return 1;
@@ -19911,7 +20095,7 @@ async function cmdInternalSkillGate(deps, name2, skillId) {
     }
     const dir = changeDir(deps.cwd, name2);
     const state = await deps.store.read(dir);
-    const workflowName = str(state.fields.workflow) || "default";
+    const workflowName = resolveWorkflowName(state);
     if (workflowName === "default") return 0;
     const wf = loadWorkflow(deps.cwd, workflowName);
     if (!wf) {
@@ -19919,7 +20103,7 @@ async function cmdInternalSkillGate(deps, name2, skillId) {
       return 0;
     }
     const currentStepId = str(state.fields.phase);
-    const step = wf.steps.find((s) => s.id === currentStepId);
+    const step = resolveStep(wf, currentStepId);
     if (!step) {
       deps.io.err(`WARN: step '${currentStepId}' \u4E0D\u5728 workflow '${workflowName}' \u91CC\uFF0Cfail-open \u653E\u884C`);
       return 0;
