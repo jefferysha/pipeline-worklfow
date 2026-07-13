@@ -41,6 +41,7 @@ import {
   workflowSourceMarkerContent,
   type DocStrategy,
 } from '@pipeline-lite/kernel'
+import { splitFlags } from '../argv.js'
 import { errMsg, type CliDeps } from '../deps.js'
 
 /**
@@ -81,27 +82,8 @@ export const REAL_FS: ScaffoldFs = {
   env: (name) => process.env[name],
 }
 
-/** 简易 flag 解析：--k v → { k: v }；裸 --flag → { flag: '' }（存在即真）。 */
-function parseFlags(args: readonly string[]): { positionals: string[]; flags: Record<string, string> } {
-  const positionals: string[] = []
-  const flags: Record<string, string> = {}
-  for (let i = 0; i < args.length; i++) {
-    const a = args[i] ?? ''
-    if (a.startsWith('--')) {
-      const key = a.slice(2)
-      const next = args[i + 1]
-      if (next !== undefined && !next.startsWith('--')) {
-        flags[key] = next
-        i++
-      } else {
-        flags[key] = ''
-      }
-    } else {
-      positionals.push(a)
-    }
-  }
-  return { positionals, flags }
-}
+// flag 解析共享 argv.ts splitFlags。哨兵变更：旧本地 parseFlags 裸 --flag → ''（falsy），splitFlags
+// 裸 → true（truthy）——凡「带值取值、否则回落默认」的消费点必须 typeof 守卫，不能再靠 || 的 falsy 回落。
 
 const SPEC_STRATEGY_SIGNAL = 'PIPELINE_SPEC_STRATEGY'
 
@@ -116,15 +98,17 @@ function conflictGuidance(deps: CliDeps, specDir: string): void {
 
 /** scaffold <type>：按类型铺分层空文档集，三态写盘。 */
 async function cmdScaffoldSpec(deps: CliDeps, args: string[], fs: ScaffoldFs): Promise<number> {
-  const { positionals, flags } = parseFlags(args)
+  const { positional: positionals, flags } = splitFlags(args)
   const type = positionals[0]
   if (type === undefined || !isProjectType(type)) {
     deps.io.err(`ERROR: 非法 project type '${type ?? ''}'，允许: ${PROJECT_TYPES.join(' | ')}`)
     return 1
   }
-  const specDir = flags['spec-dir'] || DEFAULT_SPEC_DIR
-  // 策略信号：--strategy > PIPELINE_SPEC_STRATEGY env > 未定
-  const rawStrategy = flags['strategy'] || fs.env(SPEC_STRATEGY_SIGNAL) || ''
+  // typeof 守卫（非 || falsy）：带值取值；裸 --spec-dir（true）/缺省/空值 → 回落默认，行为同旧 '' 哨兵。
+  const specDir = typeof flags['spec-dir'] === 'string' && flags['spec-dir'] !== '' ? flags['spec-dir'] : DEFAULT_SPEC_DIR
+  // 策略信号：--strategy > PIPELINE_SPEC_STRATEGY env > 未定（裸 --strategy 视同未给，回落 env——同旧行为）
+  const rawStrategy =
+    typeof flags['strategy'] === 'string' && flags['strategy'] !== '' ? flags['strategy'] : fs.env(SPEC_STRATEGY_SIGNAL) || ''
   const files = buildSpecScaffold(type, specDir)
   const abs = (rel: string) => join(deps.cwd, rel)
 
@@ -175,13 +159,14 @@ async function cmdScaffoldSpec(deps: CliDeps, args: string[], fs: ScaffoldFs): P
 
 /** resolve-workflow <id>：多 id 解析 + 可选 marker + removeHash 契约。 */
 async function cmdResolveWorkflow(deps: CliDeps, args: string[], fs: ScaffoldFs): Promise<number> {
-  const { positionals, flags } = parseFlags(args)
+  const { positional: positionals, flags } = splitFlags(args)
   const requested = positionals[0]
   const abs = (rel: string) => join(deps.cwd, rel)
 
-  // 源索引（本地文件，无网络）→ 多 workflow id
+  // 源索引（本地文件，无网络）→ 多 workflow id。裸 --source-index（true）折叠为 undefined：
+  // 旧 '' 哨兵同样 falsy 跳读；marker 内容 `source ?? ''` 下 '' 与 undefined 同字节——行为不变。
   let available: string[] = []
-  const sourceIdx = flags['source-index']
+  const sourceIdx = typeof flags['source-index'] === 'string' ? flags['source-index'] : undefined
   if (sourceIdx) {
     const text = await fs.readText(abs(sourceIdx))
     if (text === undefined) {

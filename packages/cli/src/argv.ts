@@ -14,3 +14,34 @@ export function splitPassthroughArgv(argv: readonly string[]): { toParse: string
   if (argv[2] !== 'tap') return { toParse: [...argv] }
   return { toParse: argv.slice(0, idx), passthrough: argv.slice(idx + 1) }
 }
+
+/**
+ * 通用 `--flag` 分离器（mem/channel/scaffold 三份手写 parseArgs/parseFlags 的收敛，语义逐字保持）：
+ *   `--k v`  → flags.k = 'v'（next 存在且不以 `--` 开头即当值吞掉——含 `-x`/负数/空串）；
+ *   裸 `--k`（末尾或后跟另一 `--*`）→ flags.k = true（值不吞 flag）；
+ *   其余 token 保序进 positional；重复 flag 后者覆盖；`--k=v` 不拆等号（key 含 `=`）。
+ * 消费端以 `typeof v === 'string'` 区分带值/裸；不解释语义（数值/枚举校验归各命令）。
+ * ★不适用 loops.ts（csv/强类型 flag 解析）与 tap.ts（--ca 三态），它们的差异是 feature。
+ */
+export function splitFlags(args: readonly string[]): { positional: string[]; flags: Record<string, string | true> } {
+  const positional: string[] = []
+  const flags: Record<string, string | true> = {}
+  let i = 0
+  while (i < args.length) {
+    const a = args[i]!
+    if (a.startsWith('--')) {
+      const key = a.slice(2)
+      const nxt = args[i + 1]
+      if (nxt !== undefined && !nxt.startsWith('--')) {
+        flags[key] = nxt
+        i += 1
+      } else {
+        flags[key] = true
+      }
+    } else {
+      positional.push(a)
+    }
+    i += 1
+  }
+  return { positional, flags }
+}

@@ -33,6 +33,7 @@ import {
   type MemSession,
   type SearchMatch,
 } from '@pipeline-lite/kernel'
+import { splitFlags } from '../argv.js'
 import type { CliDeps } from '../deps.js'
 
 // 供 mock/集成测试构造 fake 树 / 真 fs 指向 fixture home
@@ -47,33 +48,10 @@ function die(msg: string): never {
   throw new MemDie(msg)
 }
 
+/** flag 解析共享 argv.ts splitFlags（老仓 parse_argv:35 语义）；boolean 宽于 true 哨兵，协变兼容。 */
 interface ParsedArgs {
   positional: string[]
   flags: Record<string, string | boolean>
-}
-
-/** argv 手写解析（老仓 parse_argv:35）：--key 后若 next 非 -- → flags[key]=next，否则布尔 True。 */
-function parseArgs(args: string[]): ParsedArgs {
-  const positional: string[] = []
-  const flags: Record<string, string | boolean> = {}
-  let i = 0
-  while (i < args.length) {
-    const a = args[i]!
-    if (a.startsWith('--')) {
-      const key = a.slice(2)
-      const nxt = args[i + 1]
-      if (nxt !== undefined && !nxt.startsWith('--')) {
-        flags[key] = nxt
-        i += 1
-      } else {
-        flags[key] = true
-      }
-    } else {
-      positional.push(a)
-    }
-    i += 1
-  }
-  return { positional, flags }
 }
 
 function parseDate(raw: string): number | null {
@@ -413,7 +391,7 @@ flags:
  * fs 缺省真 node fs（读用户真实 session 目录）；mock 层注入 fake 树、集成层 nodeMemFs 指向 fixture home。
  */
 export async function cmdMem(deps: CliDeps, sub: string, args: string[], fs: MemFs = nodeMemFs()): Promise<number> {
-  const p = parseArgs(args)
+  const p = splitFlags(args)
   if (p.flags.help || p.flags.h || sub === 'help' || sub === '--help') {
     cmdHelp(deps)
     return 0

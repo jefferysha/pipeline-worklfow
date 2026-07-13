@@ -56,6 +56,7 @@ import {
   type SupervisorConfig,
   type WorkerGuardPolicy,
 } from '@pipeline-lite/kernel'
+import { splitFlags } from '../argv.js'
 import type { CliDeps } from '../deps.js'
 
 /** run/spawn 起 supervisor 的产物：pid（forked）+ 可选 in-proc handle（shutdown/done，run 收尾用）。 */
@@ -212,33 +213,10 @@ function die(msg: string, code = USAGE_EXIT): never {
   throw new ChannelDie(msg, code)
 }
 
+/** flag 解析共享 argv.ts splitFlags（--key 后若 next 非 -- → 值，否则布尔 true）。 */
 interface ParsedArgs {
   positional: string[]
   flags: Record<string, string | true>
-}
-
-/** argv 手写解析：--key 后若 next 非 -- → 值，否则布尔 true。 */
-function parseArgs(args: string[]): ParsedArgs {
-  const positional: string[] = []
-  const flags: Record<string, string | true> = {}
-  let i = 0
-  while (i < args.length) {
-    const a = args[i]!
-    if (a.startsWith('--')) {
-      const key = a.slice(2)
-      const nxt = args[i + 1]
-      if (nxt !== undefined && !nxt.startsWith('--')) {
-        flags[key] = nxt
-        i += 1
-      } else {
-        flags[key] = true
-      }
-    } else {
-      positional.push(a)
-    }
-    i += 1
-  }
-  return { positional, flags }
 }
 
 function strFlag(flags: Record<string, string | true>, key: string): string | undefined {
@@ -899,7 +877,7 @@ export async function cmdChannel(
     deps.io.out(USAGE)
     return 0
   }
-  const p = parseArgs(args)
+  const p = splitFlags(args)
   try {
     switch (sub) {
       case 'create':
