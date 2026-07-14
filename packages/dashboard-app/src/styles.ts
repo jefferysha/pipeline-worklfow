@@ -239,18 +239,17 @@ body { margin: 0; }
 .flash--error { background: var(--red); color: #ffffff; }
 
 /* ── 表单控件（含错误态语义）── */
-.input, .select {
+.input {
   font: inherit; font-size: 12.5px; color: var(--text); background: var(--bg);
   border: 1px solid var(--border); border-radius: 7px; padding: 7px 10px;
   transition: border-color .14s ease, box-shadow .14s ease;
 }
 .input::placeholder { color: var(--text-3); }
-.input:focus-visible, .select:focus-visible { outline: none; border-color: var(--green); box-shadow: 0 0 0 3px var(--green-t); }
+.input:focus-visible { outline: none; border-color: var(--green); box-shadow: 0 0 0 3px var(--green-t); }
 .input--error { border-color: var(--red); }
 .input--error:focus-visible { border-color: var(--red); box-shadow: 0 0 0 3px var(--red-t); }
-.select { cursor: pointer; }
 .field { display: flex; flex-direction: column; gap: 5px; font-size: 12.5px; color: var(--text-2); font-weight: 600; }
-.field .input, .field .select { font-weight: 400; }
+.field .input { font-weight: 400; }
 .field__label { font-size: 10.5px; font-weight: 700; color: var(--ink); text-transform: uppercase; letter-spacing: .03em; }
 :root[data-theme="dark"] .field__label { color: var(--green); }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .field__label { color: var(--green); } }
