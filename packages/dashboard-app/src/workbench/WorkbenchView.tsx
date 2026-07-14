@@ -450,6 +450,15 @@ export function WorkbenchView({ root, onToggleError, snapshot = null }: Workbenc
     }
   }
 
+  // 真切换收口：把 def/defError 的清空或预置与 setWfName 摆进同一次事件批次，不等下面
+  // useEffect 异步跟进——消除真机下拉标签先变、阶段卡隔一帧才变的瞬态错位。下面 useEffect
+  // 仍会再跑一遍（default 分支重复赋值是幂等的，非 default 分支照常负责真正发起 fetchWorkflow）。
+  function switchTo(name: string): void {
+    setWfName(name)
+    setDef(name === 'default' ? DEFAULT_DEF : null)
+    setDefError(null)
+  }
+
   // 菜单项点击的切换入口。脏状态四件套之三：禁止 useCallback 包裹（冻结 dirty 快照——
   // 旧看板视图/InboxView closePending 的 busy 冻结教训同款），每次渲染的新鲜闭包正是这里
   // 读到最新 dirty 的机制。
@@ -459,12 +468,12 @@ export function WorkbenchView({ root, onToggleError, snapshot = null }: Workbenc
     if (dirty) {
       setPendingSwitch(name)
     } else {
-      setWfName(name)
+      switchTo(name)
     }
   }
 
   function confirmSwitch(): void {
-    if (pendingSwitch !== null) setWfName(pendingSwitch)
+    if (pendingSwitch !== null) switchTo(pendingSwitch)
     setPendingSwitch(null)
   }
 
