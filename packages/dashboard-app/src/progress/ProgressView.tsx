@@ -157,7 +157,7 @@ interface RowSemantics {
 
 /**
  * 行语义判定（搬运自 InboxView rowSemantics，T9 demo v5 三情形口径）：
- *   · failed（automation ∈ {failed, conflict}）→「失败 ×N · 等你决定」+「重试还是放弃？」；
+ *   · failed（automation ∈ {failed, conflict}）→「失败 ×N · 等你决定」+ 拷命令回终端接管/重新排队重跑引导（lead_failed/lead_failed_plain）；
  *   · gate 且证据里有未过判定（verify 三轨白名单——产物没产出不等于验证没过，Important-1
  *     教训沿用）或根本没有任何自动证据（自定义门/纯人判）→「等你判断」；
  *   · gate 且证据齐 →「✓ 可以放行」，lead 按决定类型细分。

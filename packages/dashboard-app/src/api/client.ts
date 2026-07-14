@@ -729,8 +729,10 @@ export async function fetchSessionLinks(items: Array<{ root: string; name: strin
 }
 
 /** 单批请求：非 2xx 静默降级空表（同原单批语义）。fetch() 网络异常也在这里用 try/catch 兜住降级
- *  为空表，不让它 reject 出去——否则 Promise.all 会因一批网络异常整体 reject，把其它已成功批的
- *  结果也一并丢掉，违背「单批失败不拖累其它批」。 */
+ *  为空表，不让它 reject 出去——调用方 fetchSessionLinks 第八轮 codex review 后已改成 for...await
+ *  顺序发出（不再是 Promise.all，见上方 fetchSessionLinks 头注释），若这里任由异常抛出，顺序循环
+ *  会在抛出的这一批就地中断，连同此前已成功、已并入 merged 的批次结果一起被整体丢弃，同样违背
+ *  「单批失败不拖累其它批」。 */
 async function fetchSessionLinksOneChunk(items: Array<{ root: string; name: string }>): Promise<Record<string, SessionLink>> {
   const params = new URLSearchParams()
   for (const it of items) { params.append('root', it.root); params.append('name', it.name) }
