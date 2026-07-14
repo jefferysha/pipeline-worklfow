@@ -42,7 +42,7 @@ gsap.registerPlugin(useGSAP)
  *     留在 api 层无 UI 消费方）；running=终止（cancel-gate 纪律：仅 automation==='running'
  *     可点，沿现状无二次确认）；排队/等产出=无动作。
  *   · 行名点击开右滑详情抽屉（scrim+GSAP x:103%→0，Esc/scrim/关闭钮，锁滚动）：
- *     TaskDetail variant='timeline'（动作与行内同组；fail/cxl 抽屉=回终端引导文案，承接面是
+ *     TaskDetail（动作与行内同组；fail/cxl 抽屉=回终端引导文案，承接面是
  *     TaskDetail 的 dt8-conn 命令卡）；running 行抽屉内挂 RunLogPane
  *     （useAfkLog 轮询，抽屉关随组件卸载即停）。
  *   · 旧的行内展开（prg-row--open/prg-detail 下方推开）与旧版分组/筛选条整体退役。
@@ -1238,7 +1238,6 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
                 root={drawerRow.row.root}
                 change={drawerRow.row.change}
                 rules={drawerRow.rules}
-                variant="timeline"
                 badge={badgeEl(drawerRow, judge(drawerRow, drawerRow.row.state === 'gate' ? gateEvidence(drawerRow.row.change, drawerRow.rules) : [], railOf(drawerRow).phaseLabel), 'prg9-dw-badge')}
                 actions={drawerActionsFor(drawerRow)}
                 onClose={closeDrawer}

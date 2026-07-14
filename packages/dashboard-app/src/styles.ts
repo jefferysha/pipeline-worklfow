@@ -455,20 +455,6 @@ body { margin: 0; }
 .dt-hist-it { display: flex; align-items: baseline; gap: 8px; font-size: 12px; }
 .dt-hist-ts { font-family: var(--mono); color: var(--text-3); white-space: nowrap; }
 .dt-hist-txt { color: var(--text-2); overflow-wrap: anywhere; }
-/* 形态 B（dt-tabs 阶段 sheet，进度行内展开 T11 复用）——demo v5 dt-tabs/dt-pane 对位，全走既有 token */
-.dt-tabs { display: flex; align-items: center; gap: 5px; overflow-x: auto; padding: 3px; margin: -3px -3px 9px; }
-.dt-tab { flex: none; display: inline-flex; align-items: center; gap: 4px; height: 25px; padding: 0 9px; border-radius: 8px; font: inherit; font-size: 12px; font-weight: 600; white-space: nowrap; background: var(--fill); border: 1px solid var(--border); color: var(--text-3); cursor: pointer; transition: background .12s ease, border-color .12s ease, color .12s ease, box-shadow .12s ease; }
-.dt-tab:hover { background: var(--fill-2); color: var(--text-2); }
-.dt-tab .tfx { font-size: 10.5px; line-height: 1; }
-.dt-tab--done { color: var(--text-2); }
-.dt-tab--done .tfx { color: var(--green); }
-.dt-tab--cur, .dt-tab--cur:hover { background: var(--btn-bg); border-color: var(--btn-bg); color: var(--btn-fg); }
-.dt-tab--fail, .dt-tab--fail:hover { background: var(--red); border-color: var(--red); color: var(--btn-fg); }
-.dt-tab.on { border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring-blue); color: var(--text); }
-.dt-tab--cur.on { border-color: var(--btn-bg); color: var(--btn-fg); }
-.dt-tab--fail.on { border-color: var(--red); box-shadow: 0 0 0 3px var(--red-t); color: var(--btn-fg); }
-.dt-pane[hidden] { display: none; }
-.dt-empty { padding: 16px 12px; text-align: center; font-size: 12.5px; color: var(--text-3); border: 1px dashed var(--border-2); border-radius: 10px; }
 /* ==== T14 ==== */
 /* 技能链区（SkillChain）：依赖链 chips + 添加面板 + default 轨道 tab。
    对照 demo 的 wb-chain / wb-skpanel / wb-tracks 区块，全部走既有 v4 token。 */
@@ -666,8 +652,7 @@ span.wb-chip-badge { cursor: default; }
 /* ============================================================
    v6 计划 T11：StepperRail 重写为「流程带」——门徽章 popover + 真实计数气泡 + running 脉冲。
    docs/superpowers/plans/2026-07-11-v6-recommended-implementation.md §T11（不要与本文件其它
-   命名空间里孤立出现的「T11」注释混淆——如上面进度视图 dt-tabs 复用那段，那是上一轮 v5 计划
-   的编号，跟本轮 v6 计划的 T1-T13 是两套体系）。
+   命名空间里孤立出现的「T11」注释混淆——v5 计划编号与本轮 v6 计划的 T1-T13 是两套体系）。
    几何沿用本仓已有 .prg-seg（进度视图箭头带，见上方 T10 区块）的 clip-path 卡榫写法，非抄
    design-demos/v6-workbench-flow.html 像素；旧 .wb-step*（卡片式）规则保留不删——本轮只新增
    独立区块，热点文件合并纪律（append-only）不touch其它任务的既有行，旧规则随 T12/T13 后续

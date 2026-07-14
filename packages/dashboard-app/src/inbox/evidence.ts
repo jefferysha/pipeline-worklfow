@@ -109,7 +109,7 @@ export function gateEvidence(c: ChangeSnapshot, rules: WorkflowRules | undefined
   return artifactChips(c)
 }
 
-/** 一个阶段（step）的产物清单：喂 T8 详情双形态（垂直时间线的阶段节点 / dt-tabs 阶段 sheet）。 */
+/** 一个阶段（step）的产物清单：喂 T8 详情垂直时间线的阶段节点。 */
 export interface StageArtifacts {
   step: string
   chips: EvidenceChip[]

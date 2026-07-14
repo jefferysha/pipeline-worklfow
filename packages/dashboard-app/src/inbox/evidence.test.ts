@@ -146,8 +146,8 @@ describe('gateEvidence（gate 证据映射纯函数）', () => {
 })
 
 /**
- * stageArtifacts（T7 决策 B 后半）—— 每阶段产物清单纯函数，喂 T8 详情双形态（垂直时间线 /
- * 阶段 sheet）。default 的阶段产物映射：调研 design_doc / 规格 plan / 实现 branch+build_sha /
+ * stageArtifacts（T7 决策 B 后半）—— 每阶段产物清单纯函数，喂 T8 详情垂直时间线的阶段节点。
+ * default 的阶段产物映射：调研 design_doc / 规格 plan / 实现 branch+build_sha /
  * 验证四证据（三轨判定 + verification_report；build_sha 归实现阶段不重复列）。未设占位沿
  * evidence.ts 终审修复批契约：{key, value:'', tone:'pending', unset:true}，展示文案由消费方
  * 按 unset 走 i18n t('evidence.unset')（zh「未产出」/en 'not produced'），本层不焊死中文。

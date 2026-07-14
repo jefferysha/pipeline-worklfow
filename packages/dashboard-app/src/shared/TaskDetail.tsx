@@ -19,18 +19,14 @@ import { shortTime } from '../model/time'
 gsap.registerPlugin(useGSAP)
 
 /**
- * TaskDetail（T8 共享任务详情组件）—— 收件箱右卡（T9）与进度行内展开（T11）共用的一份详情面。
- * 阶段区双形态（计划 T8 原文；demo v5 六轮定稿 3fdb36c 两处都在）：
- *   · 形态 A（variant='timeline'，缺省）：dtl- 垂直时间线，收件箱右栏（T9 宿主），视觉基准
- *     design-demos/v5-progress-workbench.html 收件箱右卡；
- *   · 形态 B（variant='tabs'）：dt-tabs 阶段 sheet（role=tablist + dt-pane），进度行内展开
- *     （T11 宿主复用），视觉基准同 demo 进度视图 prg-detail 内 dt-tabs（L924 起）。
+ * TaskDetail（T8 共享任务详情组件）—— 进度行内展开（T11 宿主）在用的一份详情面。
+ * 阶段区：dtl- 垂直时间线，视觉基准 design-demos/v5-progress-workbench.html 收件箱右卡。
  *
  * 骨架（v8-C 意见④重排，视觉基准 design-demos/v8-trellis-encore.html #drawer）：头（名字/宿主
  * badge/关闭）→ **动作置顶条 .dt8-acts**（props 化不变：按钮由宿主传入，组件不绑任何业务端点——
  * 放行/打回/重试/放弃的端点调用、busy 守卫、二次确认全归宿主，见 T9/T11 与计划决议 #13；旁附
  * footLabel 语境 + 一句语义说明；原底部 .dt-foot JSX 撤下、styles 旧规则双保留）→ 任务一句话
- * （宿主传入，可无）→ 阶段区（两形态同源消费 T7 stageArtifacts；节点/tab 语义 ✓绿 done /
+ * （宿主传入，可无）→ 阶段区（直接消费 T7 stageArtifacts；节点/tab 语义 ✓绿 done /
  * ●蓝当前带 ring / ×红失败 / 无缀未开始；失败阶段=人话报错卡 .dt8-diag：cause 人话标题 + 处置
  * 指引 failure.hint_*，last_error 原文收 <details> 折叠，attempts/cause 走 mono 元信息行，
  * cancelled 琥珀 tone 非故障）→ **「自己上手修」连接命令卡 .dt8-conn-card**（失败/在跑态
@@ -48,8 +44,6 @@ export interface TaskDetailProps {
   root: string
   change: ChangeSnapshot
   rules: ProgressRules | undefined
-  /** 阶段区形态：'timeline'（形态 A，缺省，收件箱右栏）| 'tabs'（形态 B，进度行内展开）。 */
-  variant?: 'timeline' | 'tabs'
   /** 任务需求一句话（宿主传入；快照 fields 无此数据面，缺省整节不渲染）。 */
   requirement?: string
   /** 头部语义徽章（✓可以放行 / 失败 ×N…语义判定归宿主，组件零业务）。 */
@@ -144,7 +138,6 @@ export function TaskDetail({
   root,
   change,
   rules,
-  variant = 'timeline',
   requirement,
   badge,
   actions,
@@ -155,12 +148,6 @@ export function TaskDetail({
   const { t } = useT()
   const scopeRef = useRef<HTMLElement>(null)
   const [entries, setEntries] = useState<ChangeHistoryEntry[] | null>(null)
-  // 形态 B 手动选中的 tab（null=跟随当前阶段）；切 change/阶段推进时重置，防残留上一张卡的选择。
-  const [tabSel, setTabSel] = useState<string | null>(null)
-
-  useEffect(() => {
-    setTabSel(null)
-  }, [change.name, change.phase])
 
   // ── history 端点接入（T1）：切 change/root/阶段重取（评审登记项：同一 change 经动作条转换后
   //    SSE 快照更新 phase，历史区要跟着刷新，不等宿主重挂载——T9/T11 接宿主的前置）；
@@ -183,7 +170,7 @@ export function TaskDetail({
   // ── 阶段区入场 stagger：只在切换 change 时重播（依赖收敛纪律，同 WorkbenchView stepper 入场）。──
   useGSAP(
     () => {
-      revealStages(variant === 'tabs' ? '.dt-tab' : '.dtl-it')
+      revealStages('.dtl-it')
     },
     { scope: scopeRef, dependencies: [change.name] },
   )
@@ -201,8 +188,6 @@ export function TaskDetail({
   // 假信息且会吞掉失败信息（评审 nit）——判给 G17 兜底分支，同 rules 缺失一并处理。
   const misaligned = rules !== undefined && curIdx === -1
   const showStages = stages.length > 0 && !misaligned
-  // 形态 B 生效中的 tab：手动选择优先，否则跟随当前阶段（showStages 保证 change.phase ∈ steps）。
-  const activeTab = tabSel ?? change.phase
 
   function statusOf(i: number): StageStatus {
     if (i < curIdx) return 'done'
@@ -260,8 +245,8 @@ export function TaskDetail({
     return isPhase(id) ? t(`phases.${id}`) : id
   }
 
-  /** 当前/失败阶段的内容体（结论行 + 字段格栅 + 失败说明）——形态 A 包进 dtl-box 高亮框，
-   *  形态 B 直接铺在 dt-pane 里（demo 两处对位：收件箱右卡 dtl-box / 进度 dt-pane）。 */
+  /** 当前/失败阶段的内容体（结论行 + 字段格栅 + 失败说明）——包进 dtl-box 高亮框
+   *  （demo 对位：收件箱右卡 dtl-box）。 */
   function boxInner(chips: EvidenceChip[]): JSX.Element {
     if (state === 'failed') {
       const missing = chips.filter((c) => c.unset).map((c) => c.key)
@@ -358,7 +343,7 @@ export function TaskDetail({
     )
   }
 
-  /** 形态 A 当前/失败行的高亮框（boxInner 外包一层 dtl-box）。 */
+  /** 当前/失败行的高亮框（boxInner 外包一层 dtl-box）。 */
   function renderBox(chips: EvidenceChip[]): JSX.Element {
     return <div className={`dtl-box${state === 'failed' ? ' dtl-box--bad' : ''}`}>{boxInner(chips)}</div>
   }
@@ -411,70 +396,7 @@ export function TaskDetail({
         <div className="dt-sec-h">
           {t('detail.stages_heading')} <span className="dt-hint">{t('detail.stages_hint')}</span>
         </div>
-        {showStages && variant === 'tabs' && (
-          // 形态 B：dt-tabs 阶段 sheet（demo 进度视图对位）——tab 条 + 单 pane 展示，默认跟随当前阶段。
-          <div className="dt-stages">
-            <div className="dt-tabs" role="tablist" aria-label={t('detail.stages_label', { name: change.name, n: stages.length })}>
-              {stages.map((st, i) => {
-                const status = statusOf(i)
-                const on = st.step === activeTab
-                return (
-                  <button
-                    type="button"
-                    role="tab"
-                    key={st.step}
-                    id={`dt-tab-${st.step}`}
-                    aria-selected={on}
-                    aria-controls={`dt-pane-${st.step}`}
-                    className={`dt-tab${status !== 'todo' ? ` dt-tab--${status}` : ''}${on ? ' on' : ''}`}
-                    data-testid={`dt-tab-${st.step}`}
-                    onClick={() => setTabSel(st.step)}
-                  >
-                    {status !== 'todo' && (
-                      <span className="tfx" aria-hidden="true">
-                        {status === 'done' ? '✓' : status === 'fail' ? '×' : '●'}
-                      </span>
-                    )}
-                    {stageLabel(st.step)}
-                  </button>
-                )
-              })}
-            </div>
-            {stages.map((st, i) => {
-              const status = statusOf(i)
-              return (
-                <div
-                  className="dt-pane"
-                  role="tabpanel"
-                  key={st.step}
-                  id={`dt-pane-${st.step}`}
-                  aria-labelledby={`dt-tab-${st.step}`}
-                  data-testid={`dt-pane-${st.step}`}
-                  hidden={st.step !== activeTab}
-                >
-                  {status === 'todo' && <div className="dt-empty">{t('detail.not_started')}</div>}
-                  {status === 'done' &&
-                    (st.chips.length > 0 ? (
-                      <div className="dt-arts">
-                        {st.chips.map((c) => (
-                          <BoxField key={c.key} chip={c} onCopy={copy} />
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="dt-none">{t('detail.stage_no_outputs')}</div>
-                    ))}
-                  {(status === 'cur' || status === 'fail') && (
-                    <>
-                      {boxInner(st.chips)}
-                      {curStageExtra}
-                    </>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        )}
-        {showStages && variant === 'timeline' && (
+        {showStages && (
           <div className="dtl" role="list" aria-label={t('detail.stages_label', { name: change.name, n: stages.length })}>
             {stages.map((st, i) => {
               const status = statusOf(i)

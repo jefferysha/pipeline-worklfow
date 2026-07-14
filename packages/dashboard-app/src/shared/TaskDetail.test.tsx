@@ -1,9 +1,6 @@
 /**
- * TaskDetail（T8 共享任务详情组件）—— 阶段区双形态（计划 T8 原文 + demo v5 六轮定稿 3fdb36c）：
- *   · 形态 A（variant='timeline'，缺省）：dtl- 垂直时间线，收件箱右栏（T9 宿主），视觉基准
- *     design-demos/v5-progress-workbench.html 收件箱右卡；
- *   · 形态 B（variant='tabs'）：dt-tabs 阶段 sheet，进度行内展开（T11 宿主复用），视觉基准
- *     同 demo 进度视图 prg-detail 内 dt-tabs/dt-pane（role=tablist）。
+ * TaskDetail（T8 共享任务详情组件）—— 阶段区：dtl- 垂直时间线，收件箱右栏（T9 宿主），视觉基准
+ * design-demos/v5-progress-workbench.html 收件箱右卡。
  *
  * 意图迁移表（旧 ChangeDetailCard.test.tsx 断言 → 新归属；旧文件与组件暂留给 InboxView
  * 现行实现消费，T9 换宿主后由 T18 退役清理）：
@@ -19,7 +16,7 @@
  *   · ✕ 关闭回调                                   → 本文件（onClose 可选，未传不渲染关闭钮）
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { I18nProvider } from '../i18n'
 import { zh } from '../i18n/translations'
 import { TaskDetail } from './TaskDetail'
@@ -219,111 +216,6 @@ describe('TaskDetail 自定义 workflow（三阶段）与 rules 缺失回落', (
   })
 })
 
-describe('TaskDetail 形态 B（dt-tabs 阶段 sheet，variant="tabs"，T11 进度行内展开复用）', () => {
-  it('role=tablist 渲染 7 个 tab：当前 verify tab aria-selected + dt-tab--cur，done tab 带 ✓；不渲染时间线', async () => {
-    const { container } = await renderDetail({ variant: 'tabs' })
-    expect(screen.getByRole('tablist')).toBeInTheDocument()
-    expect(screen.getAllByRole('tab')).toHaveLength(7)
-    expect(container.querySelectorAll('.dtl-it')).toHaveLength(0)
-    const cur = screen.getByTestId('dt-tab-verify')
-    expect(cur.getAttribute('aria-selected')).toBe('true')
-    expect(cur.className).toContain('dt-tab--cur')
-    const done = screen.getByTestId('dt-tab-open')
-    expect(done.className).toContain('dt-tab--done')
-    expect(done.getAttribute('aria-selected')).toBe('false')
-    expect(done.textContent).toContain('✓')
-  })
-
-  it('默认展示当前阶段 pane（三轨语义色 + 结论），其余 pane hidden', async () => {
-    await renderDetail({ variant: 'tabs' })
-    const pane = screen.getByTestId('dt-pane-verify')
-    expect(pane.hidden).toBe(false)
-    expect(pane.textContent).toContain('三轨全过')
-    expect(screen.getByTestId('dt-field-verify_result').className).toContain('dt-field--pass')
-    expect(screen.getByTestId('dt-pane-ship').hidden).toBe(true)
-    expect(screen.getByTestId('dt-pane-open').hidden).toBe(true)
-  })
-
-  it('点 tab 切换 pane：未开始 tab pane 出「未开始」占位；done tab pane 出产物字段且可拷贝', async () => {
-    const writeText = vi.fn().mockResolvedValue(undefined)
-    vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } })
-    await renderDetail({ variant: 'tabs' })
-    fireEvent.click(screen.getByTestId('dt-tab-ship'))
-    expect(screen.getByTestId('dt-tab-ship').getAttribute('aria-selected')).toBe('true')
-    expect(screen.getByTestId('dt-tab-verify').getAttribute('aria-selected')).toBe('false')
-    expect(screen.getByTestId('dt-pane-ship').hidden).toBe(false)
-    expect(screen.getByTestId('dt-pane-ship').textContent).toContain('未开始')
-    expect(screen.getByTestId('dt-pane-verify').hidden).toBe(true)
-    fireEvent.click(screen.getByTestId('dt-tab-explore'))
-    const explorePane = screen.getByTestId('dt-pane-explore')
-    expect(explorePane.hidden).toBe(false)
-    const field = screen.getByTestId('dt-field-design_doc')
-    expect(explorePane.contains(field)).toBe(true)
-    const copyBtn = field.querySelector('[data-copy]')
-    expect(copyBtn?.getAttribute('data-copy')).toBe('docs/design.md')
-    fireEvent.click(copyBtn as Element)
-    await waitFor(() => expect(writeText).toHaveBeenCalledWith('docs/design.md'))
-  })
-
-  it('失败态 → 当前 tab dt-tab--fail 带 ×，pane 内报错卡（原文折叠/attempts 元信息）/缺产出 miss/重试放弃说明', async () => {
-    await renderDetail({
-      variant: 'tabs',
-      change: makeChange('hotfix', 'build', {
-        fields: {
-          automation: 'failed',
-          automation_last_error: 'verify: 2 failed · auth.test.ts',
-          automation_attempts: '3',
-        },
-      }),
-    })
-    const tab = screen.getByTestId('dt-tab-build')
-    expect(tab.className).toContain('dt-tab--fail')
-    expect(tab.textContent).toContain('×')
-    const pane = screen.getByTestId('dt-pane-build')
-    expect(pane.hidden).toBe(false)
-    expect(screen.getByTestId('dt8-raw-pre').textContent).toContain('verify: 2 failed · auth.test.ts')
-    expect(screen.getByTestId('dt8-diag-meta').textContent).toContain('attempts 3')
-    expect(screen.getByTestId('dt-field-missing').textContent).toContain('branch')
-    expect(pane.textContent).toContain('重试会清零计数重新挂队')
-  })
-
-  it('三阶段自定义 workflow → 3 个 tab；无产物 done 阶段 pane 出「本阶段无产物登记」', async () => {
-    await renderDetail({
-      variant: 'tabs',
-      change: makeChange('cn1', 'ship', { fields: { workflow: 'release-train', design_doc: 'docs/draft.md' } }),
-      rules: CN_RULES,
-    })
-    expect(screen.getAllByRole('tab')).toHaveLength(3)
-    fireEvent.click(screen.getByTestId('dt-tab-review'))
-    expect(screen.getByTestId('dt-pane-review').textContent).toContain('本阶段无产物登记')
-  })
-
-  it('curStageExtra 插槽（T11）：渲染在当前阶段 pane 内容体尾部，其余 pane 不渲染', async () => {
-    await renderDetail({
-      variant: 'tabs',
-      curStageExtra: <div data-testid="extra-slot">log tail here</div>,
-    })
-    const pane = screen.getByTestId('dt-pane-verify')
-    expect(pane.contains(screen.getByTestId('extra-slot'))).toBe(true)
-    expect(screen.getByTestId('dt-pane-build').textContent).not.toContain('log tail here')
-    expect(screen.getAllByTestId('extra-slot')).toHaveLength(1)
-  })
-
-  it('切换 change 后选中 tab 重置回新 change 的当前阶段（不残留上一张卡的手动选择）', async () => {
-    const props = await renderDetail({ variant: 'tabs' })
-    fireEvent.click(screen.getByTestId('dt-tab-open'))
-    expect(screen.getByTestId('dt-tab-open').getAttribute('aria-selected')).toBe('true')
-    const { rerender } = props
-    rerender(
-      <I18nProvider>
-        <TaskDetail {...props} change={makeChange('c2', 'spec', { fields: {} })} />
-      </I18nProvider>,
-    )
-    await waitFor(() => expect(screen.getByTestId('dt-tab-spec').getAttribute('aria-selected')).toBe('true'))
-    expect(screen.getByTestId('dt-tab-open').getAttribute('aria-selected')).toBe('false')
-  })
-})
-
 describe('TaskDetail 失败态（automation failed）', () => {
   const failedChange = makeChange('hotfix', 'build', {
     fields: {
@@ -421,18 +313,6 @@ describe('TaskDetail 失败诊断（W3：成因徽章 + 可复制修复命令）
   it('③非失败态（当前 verify 门行）不渲染诊断区（回归：成因区只在 failed 出）', async () => {
     await renderDetail()
     expect(screen.queryByTestId('dt-diag')).toBeNull()
-  })
-
-  it('形态 B（tabs）失败 pane 内同样出成因徽章 + 修复命令（镜像类 → build.sh）', async () => {
-    await renderDetail({
-      variant: 'tabs',
-      change: makeChange('hotfix', 'build', {
-        fields: { automation: 'failed', automation_last_error: 'AFK 镜像 sandcastle:local 不在本机' },
-      }),
-    })
-    const pane = screen.getByTestId('dt-pane-build')
-    expect(within(pane).getByTestId('dt-diag-cause').textContent).toBe(fz['cause_missing-image'])
-    expect(within(pane).getByTestId('detail-fix-cmd').textContent).toBe('bash tools/sandcastle/build.sh')
   })
 })
 
