@@ -1,7 +1,12 @@
 /**
- * 工作台静态数据（T18 自 settings/ 迁入——旧设置视图 退役，消费方为 workbench/SkillChain）
- * —— 阶段轴 + 阶段×轨道强制/推荐技能矩阵。
- * 均为 templates/manifest.yaml（单一真相源）的前端只读镜像；写回待 M3 后续 config 写端点。
+ * 工作台静态数据（T18 自 settings/ 迁入——旧设置视图 退役）—— 阶段轴 + 阶段×轨道强制技能矩阵。
+ * 消费方：workbench/mandatorySkills（画布 default 泳道技能区）与 workbench/SkillChain。
+ *
+ * 均为 templates/manifest.yaml（单一真相源）的前端只读镜像，作用**只是兜底**：/api/config 不可达
+ * 或非 2xx 时回落到这里显示（mandatorySkills.tsx:85,89），且该态下所有写入口一律 disabled——
+ * 镜像可能与 server 真值不符，给能点的按钮就是谎报。真值的读写都在 server 侧：写回端点
+ * POST /api/config/mandatory-skills 直改 manifest.yaml（仅收 pm/frontend/backend，见
+ * server/src/config.ts 的 EDITABLE_TRACKS；`_all` 与 archive 拒写）。
  */
 import { PHASES, REVIEW_PHASES, TRACKS, TRANSITIONS } from '../types'
 
