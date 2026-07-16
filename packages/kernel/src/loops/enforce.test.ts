@@ -168,7 +168,17 @@ describe('adjudicate —— R1-R11 裁决（老 adjudicate 318-397；verdict 取
   })
 })
 
-describe('分级放权 L1-L3 —— enforce 认级别（本轮新增，#38 执行面留后续）', () => {
+/**
+ * 分级放权 L1-L3 —— enforce 认级别：adjudicate 把 autonomy_level 折成 enforcement/report_only
+ * 写进裁决信封。#38 的毕业制本身已实现且已接线（graduation.ts::applyLevelChange ← CLI
+ * `loops graduate|level`（commands/loops.ts:907/909）+ server.ts:814），它改的是 autonomy_level 本身。
+ *
+ * ★当前限制（这些断言的射程）：verdict×level 不驱动任何自动 gate/halt。裁决信封的唯一消费方是
+ * enforce.ts:362 buildReport（→ `loops report` 展示），没有执行面据此停 loop——automation 的
+ * scheduler/scheduler.ts 零引用裁决与预算。故下面 L1 report_only=true / L3 unattended 的差别只体现
+ * 在信封字段与报告文本上，不改变 loop 实际被调度执行的行为。详见 loops/types.ts:13。
+ */
+describe('分级放权 L1-L3 —— enforce 认级别（级别只进裁决信封，不驱动 gate/halt）', () => {
   test('enforcementFor 映射：L1 report-only / L2 assisted / L3 unattended', () => {
     expect(enforcementFor('L1')).toBe('report-only')
     expect(enforcementFor('L2')).toBe('assisted')

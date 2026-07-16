@@ -59,7 +59,9 @@ describe('docker runner 集成', () => {
       ctx.skip()
       return
     }
-    // 全链 CC-in-sandbox 属 #29c docker 全链 + 真 agent，本批不落地；有 token 时留待接线。
+    // 占位用例：全链 CC-in-sandbox（#29c 的 docker 全链 + 真 agent）在本仓没有实现，故 docker 与
+    // token 都齐备时也无条件 skip。后果：该链路零自动化覆盖——上面两条 skip 只是把「缺依赖」
+    // 与「没实现」分开报，不代表给了 token 就会真跑。
     ctx.skip()
   })
 })

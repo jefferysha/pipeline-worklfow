@@ -35,17 +35,13 @@
  *     file/snapshot/patch/agent/retry/subtask/compaction 均无对话文本或是内部记账，丢弃
  *     （对齐 claude/pi「只收 text、丢 thinking/tool_use」的既有取舍）。
  *
- * 已知诚实缺口（未实现，非漏做——报告中同步说明）：
- *   ① compaction 边界折叠：claude 用 isCompactSummary 内联 summary、pi 用 firstKeptEntryId 回溯，
- *      都能把「压缩前」turns 整体替换成一条 [compact summary]。OpenCode 的压缩语义结构不同——
- *      一个 `compaction` 型 part 只标记边界/tail_start_id，真正摘要文本在*另一条*后续 assistant
- *      消息（经 `message.data.summary === true` 标记）。没有真实已压缩会话可核对，贸然猜测折叠
- *      规则风险大于收益，故本轮不做——compaction part 本身无文本会被自然丢弃，其余消息仍按线性
- *      全量呈现（不丢数据，只是不做「折叠去重」这层优化）。
- *   ② opencodeSearch 的真检索（3 参数重载，见下）目前无法从 sessions.ts 触达——其 switch-case
- *      调用点仍是老 1 参数形式 `opencodeSearch(kw)`（sessions.ts 不在本次任务 file-ownership
- *      范围内，未改）。3 参数真实现已就绪、已测试，集成只需把该行改成
- *      `opencodeSearch(fs, s, kw)` 即可——留给后续接线。
+ * 已知诚实缺口（未实现，非漏做）——compaction 边界折叠：
+ *   claude 用 isCompactSummary 内联 summary、pi 用 firstKeptEntryId 回溯，都能把「压缩前」turns
+ *   整体替换成一条 [compact summary]。OpenCode 的压缩语义结构不同——一个 `compaction` 型 part 只
+ *   标记边界/tail_start_id，真正摘要文本在*另一条*后续 assistant 消息（经 `message.data.summary
+ *   === true` 标记）。没有真实已压缩会话可核对，贸然猜测折叠规则风险大于收益，故不做。后果有界：
+ *   compaction part 本身无文本会被自然丢弃，其余消息仍按线性全量呈现（不丢数据，只是不做
+ *   「折叠去重」这层优化）。
  */
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
@@ -205,8 +201,8 @@ export function opencodeExtractDialogue(fs: MemFs, s: MemSession): DialogueTurn[
 
 /**
  * 真检索（3 参数）+ 老 1 参数签名向后兼容（重载）。
- * sessions.ts 当前的 switch-case 调用点还是 1 参数形式（不在本次 file-ownership 范围内，未改），
- * 该形式继续走 no-op；3 参数形式是给后续接线用的真实现，已含真测试。
+ * 生产调用点是 sessions.ts:106 的 switch-case，走 3 参数形式：真读 db 出对话再检索。
+ * 1 参数形式无生产调用方，只余向后兼容——无 fs/session 可读，恒回空 SearchHit（no-op）。
  */
 export function opencodeSearch(kw: string): SearchHit
 export function opencodeSearch(fs: MemFs, s: MemSession, kw: string): SearchHit

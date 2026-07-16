@@ -10,7 +10,9 @@
  *
  * 本批范围（#34 核心）: daemon 多端口 + capture/forward proxy + trace_store（JSONL）+ 安全护栏。
  * 协议面（#34b/#34c）: ws 帧重组 + bedrock eventstream + 本地 CA/TLS MITM + 多 runtime clients。
- * 后续: dashboard 数据端(#34d)。
+ * dashboard 数据端（#34d）在 server 侧消费本包，不在此实现: server/src/main.ts:75 注入
+ *   createTraceStore() → server/src/traces.ts 出只读 GET /api/traces/sessions|records
+ *   （capabilities.traffic 随注入与否如实报）→ dashboard-app 的 advanced/TrafficPanel.tsx 消费。
  */
 export * from './paths.js'
 export * from './record.js'

@@ -7,16 +7,30 @@
  *
  * 派生函数盘点（× = 派生什么 → 消费方；括号内为老仓 skills/pipeline/scripts/manifest.py 行号）：
  *   · phases/transitions/reviewPhases  ← 老 sorted_phases 212 / get_transitions 372 / review_phases。
- *       消费方：createFlowEngine（引擎真读，iteration-1 已接线）。
- *   · mandatorySkills / recommendedSkills（本轮新增）← 老 evidence 346-355（per phase×track，`_all` 兜底）。
+ *       消费方：createFlowEngine（引擎真读，engine.ts:30-34）。
+ *   · mandatorySkills / recommendedSkills ← 老 evidence 346-355（per phase×track，`_all` 兜底）。
  *       老消费方：pipeline-guard.sh（经 gen_sh 563 派生的 manifest_mandatory/_recommended）。
- *       新仓消费方：guard 强制 skill 校验面 / SessionStart 注入（待 A1 后续）——**派生就绪待消费**。
- *   · routerPatterns（本轮新增）← 老 gen_router_sh 890-898（FE/BE/PM_PATTERN）。
- *       老消费方：pipeline-router.sh score_track。新仓消费方：router hook #19——**派生就绪待消费**。
- *   · breadcrumbs（本轮新增）← 老 breadcrumb 子命令 1031-1037（phases.<phase>.breadcrumb block scalar）。
- *       老消费方：pipeline-router.sh breadcrumb_body（每轮被动注入）。新仓消费方：router hook #19——**待消费**。
- *   · genRouterSh（本轮新增，纯派生 helper）← 老 gen_router_sh 890-898。消费方：router hook #19——**待消费**。
- *   · skillsFor（本轮新增，纯 helper）← 老 evidence 346-355 的三级回退（per-track → `_all` → 空）。
+ *       新仓消费方两条：① router 缓存链——hooks/router-gen.mjs:74-77 与等价的
+ *         packages/cli/src/commands/gen-router.ts:41-44 经 skillsFor 派生
+ *         RECSKILL_/MANDSKILL_<phase>_<track> 写进 .pipeline-router.generated.sh，
+ *         hooks/router.sh:202-203 source 后每轮注入提示；② dashboard 配置面——
+ *         packages/server/src/config.ts:60 flattenMandatorySkills → server.ts:512 GET /api/config。
+ *       两表在新仓的差别**只是注入文案分级**（router.sh:215-216「推荐 skill」/「本相位强制 skill」）：
+ *       老仓 evidence 的「强制缺失 = [HARD] 阻断 / 推荐缺失 = WARN」判定未移植，
+ *       故 mandatory 缺失当前不阻断任何东西（见 GUARD-RULES.md:119，O6/E4/S6/B7/V8/V9/P5 全 ❌）。
+ *       gate.sh / session-start.sh 不读本派生（前者走 internal-skill-gate 的 skill DAG 判定，
+ *       后者只打印静态横幅）——它们曾被规划为消费方，实际接线落在了 router 与 server。
+ *   · routerPatterns ← 老 gen_router_sh 890-898（FE/BE/PM_PATTERN）。
+ *       老消费方：pipeline-router.sh score_track。新仓消费方：经 genRouterSh 落进 router 缓存 →
+ *       hooks/router.sh:168-170 score_track 每轮 grep 打分选 Track。
+ *   · breadcrumbs ← 老 breadcrumb 子命令 1031-1037（phases.<phase>.breadcrumb block scalar）。
+ *       老消费方：pipeline-router.sh breadcrumb_body（每轮被动注入）。
+ *       新仓消费方：router-gen.mjs:66-67 / gen-router.ts:35-36 派生 BREADCRUMB_<phase> →
+ *       hooks/router.sh:201 间接变量取值，每轮随注入体输出。
+ *   · genRouterSh（纯派生 helper）← 老 gen_router_sh 890-898。
+ *       消费方：hooks/router-gen.mjs:62、packages/cli/src/commands/gen-router.ts:32。
+ *   · skillsFor（纯 helper）← 老 evidence 346-355 的三级回退（per-track → `_all` → 空）。
+ *       消费方：同 mandatorySkills/recommendedSkills 的 ① router 缓存链。
  *
  * 窄解析子集（CONTRACT §1 禁 yaml npm 包）：
  *   · 顶层键 `key:` / `key: [inline, list]`
@@ -57,23 +71,27 @@ export interface RouterPatterns {
 const ROUTER_TRACK_SET: ReadonlySet<string> = new Set(['frontend', 'backend', 'pm'])
 
 /**
- * 全派生面 ManifestData（types.ts::ManifestData 的扩展；本轮先在此定义并 export，
- * 报告请主会话把新增字段提升进 types.ts::ManifestData + 由 flow/index.ts + kernel index.ts re-export）。
+ * loadManifest 的完整返回面（types.ts::ManifestData 的扩展）。
+ * 字段留在本文件、没有并进 types.ts::ManifestData：后者是**引擎面最小契约**
+ * （FlowEngine/createFlowEngine 只需 phases/transitions/reviewPhases），本接口是解析器的全量产出，
+ * 二者分开可让引擎不依赖 router/skill 派生。经 flow/index.ts 与 kernel index.ts 的 `export *`
+ * re-export，消费方从 `@pipeline-lite/kernel` 具名导入（如 packages/server/src/config.ts:60）。
  */
 export interface ExtendedManifestData extends ManifestData {
-  /** phase×track 强制 skill 表（缺 = [HARD] 阻断；派生就绪待消费：guard 强制面 / SessionStart） */
+  /** phase×track 强制 skill 表。消费方与「强制」在新仓的实际效力（仅注入文案）见文件头盘点。 */
   mandatorySkills: SkillTable
-  /** phase×track 推荐 skill 表（缺只 WARN；派生就绪待消费） */
+  /** phase×track 推荐 skill 表。与 mandatorySkills 同链路，仅注入文案措辞不同。 */
   recommendedSkills: SkillTable
-  /** router Track 评分正则（派生就绪待消费：router hook #19） */
+  /** router Track 评分正则；经 genRouterSh 进缓存，hooks/router.sh:168-170 打分用。 */
   routerPatterns: RouterPatterns
-  /** phase → breadcrumb prose（派生就绪待消费：router hook #19 每轮注入）。缺相位则键缺省。 */
+  /** phase → breadcrumb prose；hooks/router.sh:201 每轮注入。缺相位则键缺省。 */
   breadcrumbs: Readonly<Partial<Record<Phase, string>>>
 }
 
 /**
  * skill 三级回退查询（对齐老 evidence 346-355：per-track → `_all` → 空）。
- * 纯 helper；未来消费方（guard 强制面 / router hook）调用之，回退逻辑单源于此、不重抄。
+ * 纯 helper；消费方 hooks/router-gen.mjs:74-75 与 cli/src/commands/gen-router.ts:41-42 调用之，
+ * 回退逻辑单源于此、两处消费方都不重抄。
  */
 export function skillsFor(table: SkillTable, phase: Phase, track: string): readonly string[] {
   const row = table[phase]
@@ -90,7 +108,9 @@ function bashSquote(s: string): string {
 
 /**
  * 生成 router 评分正则的 bash 赋值（对齐老 gen_router_sh 890-898）。
- * 纯派生 helper；消费方 = router hook #19（source 后避免 per-prompt fork）——派生就绪待消费。
+ * 纯派生 helper；消费方 hooks/router-gen.mjs:62 与 cli/src/commands/gen-router.ts:32 把它写进
+ * .pipeline-router.generated.sh，hooks/router.sh 命中缓存时纯 source 之——正是为了让热路径
+ * （每轮 UserPromptSubmit）零 node spawn，见 router.sh:153-156 的热路径红线。
  */
 export function genRouterSh(patterns: RouterPatterns): string {
   return [

@@ -54,7 +54,9 @@ describe('resolveStep', () => {
   })
 })
 
-describe('firstStep —— init.ts:159 wf.steps[0] 习语单源（本轮只建不接）', () => {
+// firstStep 是 `wf.steps[0]` 的习语单源，真消费方两处：cli/commands/init.ts:164（init 种 phase）
+// 与 server/src/server.ts:759。空 steps → null 由调用方各自报错。
+describe('firstStep —— wf.steps[0] 习语单源', () => {
   it('非空 → steps[0]', () => {
     expect(firstStep(wf([step({ id: 'a' }), step({ id: 'b' })]))?.id).toBe('a')
   })

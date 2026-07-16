@@ -34,7 +34,10 @@ export function resolveStep(wf: WorkflowDef, stepId: string): StepDef | null {
   return wf.steps.find((s) => s.id === stepId) ?? null
 }
 
-/** 首个 step（init 种 phase 的 `wf.steps[0]` 习语单源；本轮只建不接，init.ts 后续轮迁）。 */
+/**
+ * 首个 step（init 种 phase 的 `wf.steps[0]` 习语单源）。空 steps → null，消息模板留 adapter。
+ * 消费方：cli/commands/init.ts:164（种 phase）、server/src/server.ts:759。
+ */
 export function firstStep(wf: WorkflowDef): StepDef | null {
   return wf.steps[0] ?? null
 }

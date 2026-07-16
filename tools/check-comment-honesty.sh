@@ -113,11 +113,14 @@ PATTERN_MARK='\b(TODO|FIXME|XXX|HACK)\b|(//|/\*|^[[:space:]]*\*|#)[[:space:]]*([
 #
 # ② 未来式谓语类：中文里「预告将来要做某事」的**短语**。
 #    为什么不收裸「后续」「未来」「待办」（codex review 点名要收，实测**不能收**）：
-#      · 「后续」全仓 34 处，绝大多数是**时序副词**而非欠债——「避免影响本文件后续」
-#        「后续 render 里新建的」「后续调用者会当它是活锁」。这些描述的是**现在的代码顺序**。
-#      · 「未来」全仓 15 处，**15/15 都是防御性理由**——「以防未来回归」「允许 manifest 未来加节
-#        而不破 kernel」「哪怕未来新增调用方遗漏校验」。它们解释的是**当下代码为何这样写**，
-#        正是本纪律鼓励的「为什么这样」型注释。收了它们等于惩罚好注释。
+#      · 「后续」绝大多数是**时序副词**而非欠债——「避免影响本文件后续」「后续 render 里新建的」
+#        「后续调用者会当它是活锁」。这些描述的是**现在的代码顺序**。
+#      · 「未来」几乎全是**防御性理由**——「以防未来回归」「允许 manifest 未来加节而不破 kernel」
+#        「哪怕未来新增调用方遗漏校验」。它们解释的是**当下代码为何这样写**，正是本纪律鼓励的
+#        「为什么这样」型注释。收了它们等于惩罚好注释。
+#      （此处刻意不写具体条数：条数随每次改动漂移，写死就会变成本脚本自己的失真断言——
+#        前一版写过「后续 34 处 / 未来 15 处」，很快就与实测不符，被 codex review 点名。
+#        要现场核数请自己 grep，别信注释里的数字。）
 #      · 「待办」是本仓的**领域名词**（compress 抽取的关键词、inbox 的待办项），收它要额外豁免
 #        3 个文件——而「待做/待实现/TODO」已覆盖同一标记语义，收益为零、腐烂成本为正。
 #    结论：收**谓语短语**（留给后续 / 后续实现 / 待 X 后续 / 后续: X …），不收裸副词。
@@ -149,24 +152,26 @@ if [ "${CANARY:-0}" -lt 5 ]; then
   exit 3
 fi
 
-# ── 豁免与基线：**精确文件 + 预期命中数**（不是整棵子树、不是整文件无条件放行）─────────
+# ── 领域例外：**精确文件 + 预期命中数**（不是整棵子树、不是整文件无条件放行）─────────
 # 旧版豁免 `^packages/kernel/src/compress/` **整棵子树** + doc-scaffold.ts **整文件** +
 # `*.test.*` **整类**。前两者意味着「往该目录新增任意文件即可藏债务」，第三者是最大的盲区。
 # 现在改成逐文件钉死条数：**新增文件 → 红；已豁免文件里多写一条 → 红；少写一条也 → 红**
 # （逼人回来改数字并解释，而不是让豁免额度自己长大）。
 #
-# 两张表语义**完全不同**，不要混：
-#   · EXEMPT（领域例外）：关键词是**被处理/被生成的数据**，不是欠债。永久合法，清不掉也不该清。
-#   · DEBT（债务基线）：**真的是未来式注释**，每一条都该被清掉。它在这里不是被赦免，是被**钉住**：
-#     数字只许降、不许升；清完请把该行删掉。
+# 这里**只有一张表**。曾经还有一张 DEBT 债务基线表（钉住存量、只许降不许升），已随存量清零删除：
+# 存量为 0 时全仓扫描本身就是最强约束——任何未来式注释一出现即红，不需要基线、不需要 diff base、
+# 本地与 CI 同款可跑。而基线机制反而有害：它按「命中行数」而非债务身份计数（等量置换绕得过），
+# 且**清干净了会因为「基线下降」而变红**——一个盯债务的机制在惩罚还债的人。
 #
-# ① EXEMPT —— 领域例外（精确文件 → 预期条数）
+# EXEMPT —— 领域例外（精确文件 → 预期条数）：关键词是**被处理/被生成的数据**，不是欠债。
 #    · compress/：该模块的领域功能**就是识别并压缩 TODO 关键词**（markdown.ts 的 TODO_KEYWORD
 #      正则、compress.ts 的 `## Open TODOs` 章节标题）。这里的 TODO 是**被处理的数据**。
 #    · scaffold/doc-scaffold.ts：它**生成**带 TODO 占位的空文档 stub，占位符是给用户填的产品输出。
 #    · 上述两者的 *.test.ts 断言的正是这些领域数据，同理。
-#    · commands/migrateWorkflow.ts：那句注释描述的是**字面量信号值** `"待补齐"`（cas 层拿它去比对
-#      锁内重读的当前值），是**被描述的数据**，不是该文件欠的债。
+#    · commands/migrateWorkflow.ts：「待补齐」是给**数据状态**起的名字（`undefined` 与 `'default'`
+#      是同一个「字段没填」的信号），描述的是用户 change 文件的当下状态，不是本文件欠的工程债。
+#      注意它**不是**代码里的字面量字符串（真字面量是 `'default'`）——这是词表的系统性盲点：
+#      词表词出现在**被引用的语义名/状态名**里就会误报。
 EXEMPT_FILES=(
   'packages/kernel/src/compress/markdown.ts'
   'packages/kernel/src/compress/markdown.test.ts'
@@ -177,25 +182,6 @@ EXEMPT_FILES=(
 )
 EXEMPT_COUNTS=(2 2 1 2 2 1)
 
-# ② DEBT —— 债务基线（精确文件 → 当前条数）。**这是一份真实待清理清单，不是豁免。**
-#    这些注释确实在说「以后要做」，扩词表后被如实抓出。它们全部落在生产代码/他人测试里，
-#    超出本轮改动白名单，故先钉基线、另派单清理；钉住后**它们无法再增长**。
-DEBT_FILES=(
-  'packages/kernel/src/flow/manifest.ts'
-  'packages/kernel/src/flow/manifest-derive.test.ts'
-  'packages/kernel/src/mem/adapters/opencode.ts'
-  'packages/kernel/src/workflow/engine.ts'
-  'packages/kernel/src/channel/guard.test.ts'
-  'packages/kernel/src/loops/enforce.test.ts'
-  'packages/tap/src/index.ts'
-  'packages/cli/src/channel.integration.test.ts'
-  'packages/automation/src/runner/docker.integration.test.ts'
-  'packages/dashboard-app/src/workbench/data.ts'
-  'packages/dashboard-app/src/workbench/WorkbenchView.tsx'
-  'packages/dashboard-app/src/workbench/mandatorySkills.tsx'
-  'packages/dashboard-app/src/workbench/OrchestrationBoard.tsx'
-)
-DEBT_COUNTS=(9 1 1 1 1 1 1 1 1 1 2 1 2)
 
 # ── 失败收集（bash 3.2 兼容：普通数组 + 下标循环，避免 set -u 下空数组展开）──
 FAIL_WHAT=()
@@ -207,22 +193,14 @@ add_fail() { # what where fix
   FAIL_FIX[${#FAIL_FIX[@]}]="$3"
 }
 
-# 表查询（bash 3.2 无关联数组 → 线性查找）。命中回显预期条数，未命中回显空串。
-lookup() { # $1=table(EXEMPT|DEBT) $2=path
+# 例外表查询（bash 3.2 无关联数组 → 线性查找）。命中回显预期条数，未命中回显空串。
+lookup_exempt() { # $1=path
   local i n
-  if [ "$1" = 'EXEMPT' ]; then
-    n=${#EXEMPT_FILES[@]}; i=0
-    while [ "$i" -lt "$n" ]; do
-      [ "${EXEMPT_FILES[$i]}" = "$2" ] && { printf '%s' "${EXEMPT_COUNTS[$i]}"; return 0; }
-      i=$((i + 1))
-    done
-  else
-    n=${#DEBT_FILES[@]}; i=0
-    while [ "$i" -lt "$n" ]; do
-      [ "${DEBT_FILES[$i]}" = "$2" ] && { printf '%s' "${DEBT_COUNTS[$i]}"; return 0; }
-      i=$((i + 1))
-    done
-  fi
+  n=${#EXEMPT_FILES[@]}; i=0
+  while [ "$i" -lt "$n" ]; do
+    [ "${EXEMPT_FILES[$i]}" = "$1" ] && { printf '%s' "${EXEMPT_COUNTS[$i]}"; return 0; }
+    i=$((i + 1))
+  done
   return 1
 }
 
@@ -239,7 +217,7 @@ while read -r cnt path; do
   [ -z "${path:-}" ] && continue
   [ "$path" = "$SELF_FILE" ] && continue
 
-  if exp="$(lookup EXEMPT "$path")"; then
+  if exp="$(lookup_exempt "$path")"; then
     if [ "$cnt" -ne "$exp" ]; then
       add_fail \
         "领域例外条数变化（预期 ${exp} 条，实测 ${cnt} 条）" \
@@ -249,22 +227,7 @@ while read -r cnt path; do
     continue
   fi
 
-  if exp="$(lookup DEBT "$path")"; then
-    if [ "$cnt" -gt "$exp" ]; then
-      add_fail \
-        "债务基线上升（基线 ${exp} 条，实测 ${cnt} 条）——只许降不许升" \
-        "$path" \
-        "$FIX_NEW"
-    elif [ "$cnt" -lt "$exp" ]; then
-      add_fail \
-        "债务基线下降（基线 ${exp} 条，实测 ${cnt} 条）——清理了就把数字改小" \
-        "$path" \
-        "把本脚本 DEBT_COUNTS 里该文件的数字改成 ${cnt}；已清到 0 → 直接删掉 DEBT_FILES/DEBT_COUNTS 里对应那行"
-    fi
-    continue
-  fi
-
-  # 既不在例外表也不在基线表 → 新增债务（含「往 compress/ 新增文件」这种旧版能藏债的路径）
+  # 不在例外表 → 未来式注释（含「往 compress/ 新增文件」这种旧版能藏债的路径）
   scan "$WORK/lines" -nIE "$PATTERN" "$path"
   while IFS= read -r l; do
     [ -z "$l" ] && continue
@@ -272,22 +235,19 @@ while read -r cnt path; do
   done <"$WORK/lines"
 done <"$WORK/counts"
 
-# 基线/例外表里列了、但实测零命中的文件 → 表已过期（文件被删/改名，或债务已清完）
-check_stale() { # $1=table $2=path $3=expected
-  [ "$3" -eq 0 ] && return 0
+# 例外表里列了、但实测零命中 → 表已过期（文件被删/改名，或那处领域用法已消失）。
+# 例外表**必须逐条对得上**：多了是藏债、少了是表没跟着走，两头都红。
+check_stale() { # $1=path $2=expected
   local actual
-  actual="$(awk -v p="$2" '$2 == p { print $1 }' "$WORK/counts")"
+  actual="$(awk -v p="$1" '$2 == p { print $1 }' "$WORK/counts")"
   [ -n "$actual" ] && return 0
   add_fail \
-    "$([ "$1" = 'EXEMPT' ] && echo '领域例外表过期（零命中）' || echo '债务已清空（零命中）')" \
-    "$2（表里写着 $3 条，实测 0 条）" \
-    "文件被删/改名 → 更新本脚本对应表；债务已清完 → 删掉该行（别留着当摆设）"
+    '领域例外表过期（零命中）' \
+    "$1（表里写着 $2 条，实测 0 条）" \
+    '文件被删/改名 → 更新 EXEMPT 表；那处领域用法已不存在 → 删掉该行（别留着当摆设）'
 }
 i=0; while [ "$i" -lt "${#EXEMPT_FILES[@]}" ]; do
-  check_stale EXEMPT "${EXEMPT_FILES[$i]}" "${EXEMPT_COUNTS[$i]}"; i=$((i + 1))
-done
-i=0; while [ "$i" -lt "${#DEBT_FILES[@]}" ]; do
-  check_stale DEBT "${DEBT_FILES[$i]}" "${DEBT_COUNTS[$i]}"; i=$((i + 1))
+  check_stale "${EXEMPT_FILES[$i]}" "${EXEMPT_COUNTS[$i]}"; i=$((i + 1))
 done
 
 # ═══ section 2：结构反漂移（gap #3 绊线）════════════════════════════════════
@@ -315,7 +275,7 @@ fi
 # ═══ 报告 ═══════════════════════════════════════════════════════════════════
 N_FAIL=${#FAIL_WHAT[@]}
 if [ "$N_FAIL" -eq 0 ]; then
-  [ "$QUIET" -eq 1 ] || printf '注释可信度门禁：通过（无新增未来式注释；债务基线未升；transition↔handoff 未接线）\n'
+  [ "$QUIET" -eq 1 ] || printf '注释可信度门禁：通过（全仓零未来式注释；领域例外表逐条对齐；transition↔handoff 未接线）\n'
   exit 0
 fi
 

@@ -158,7 +158,7 @@ describe('派生面 · router patterns（Track 评分正则；对齐 manifest.py
   })
 })
 
-describe('派生面 · gen-router（bash 生成，派生就绪待消费 = router hook #19）', () => {
+describe('派生面 · gen-router（bash 生成；消费方 = hooks/router-gen.mjs:62 与 cli gen-router.ts:32）', () => {
   it('genRouterSh：FE/BE/PM_PATTERN 单引号安全赋值，逐值来自派生', () => {
     const m = loadManifest(TEMPLATE_MANIFEST)
     const sh = genRouterSh(m.routerPatterns)
