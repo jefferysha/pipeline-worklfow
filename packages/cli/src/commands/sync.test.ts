@@ -2,6 +2,7 @@
  * sync 命令 mock 层快速回归（BACKLOG #24，GOAL C9：真 fs 副作用见
  * cli/src/sync-uninstall.integration.test.ts）。内存 fake OwnedFs 穷举决策层分支/退出码。
  */
+import { readFileSync } from 'node:fs'
 import { describe, expect, test } from 'vitest'
 import type { OwnedFs } from '@pipeline-lite/kernel'
 import type { CliDeps } from '../deps.js'
@@ -63,6 +64,93 @@ describe('cmdSync — downgrade 守卫（默认拒不写）', () => {
     const { d, out } = deps()
     expect(await cmdSync(d, { cliVersion: '1.0.0', allowDowngrade: true }, fs)).toBe(0)
     expect(report(out)).toMatchObject({ stage: 'sync', downgrade_action: 'downgrade', proceed: true })
+  })
+})
+
+/**
+ * ★当前限制（gap #4）——迁移注册表在 lite 没有实现，缺省注入是 STUB。
+ *
+ * sync.ts 的 SyncMigrationProvider 缺省 = STUB_MIGRATIONS（空 pending + 无 breaking 元数据）。
+ * 下方「--migrate 硬闸」那组测试全都**显式注入** migrations() 才能把闸门推到 required——
+ * 也就是说：闸门逻辑本身是真的、可测的，但**缺省注入下它永不触发**。真实后果：
+ * 用户敲 `pipeline sync`（无人注入注册表）时，迁移相关分支恒走空集路径，`--migrate` 是死闸。
+ *
+ * ⚠ 本 describe 直接调 cmdSync 走 fallback，只钉得住「**缺省**是 STUB」这一半。缺口能被补上的
+ * 路径有两条，只钉 fallback 会漏掉第二条（生产注入了真 provider → 缺口已补而本测试仍绿）：
+ *   · 改掉 sync.ts 的 STUB_MIGRATIONS 缺省          → **本 describe 红**
+ *   · 在生产调用点注入 migrations                    → 下方『接线面绊线』describe 红
+ * 两半合起来才满足「缺口从任何一条合理路径被实现，测试都会红」。改其一请同步另一半。
+ *
+ * 本 describe **断言当前缺口存在**。接上真迁移注册表（老仓 migrations.py 的等价物）后
+ * 本测试会失败——这是预期的，届时请删除本断言并改为正向测试（缺省即能发现真 pending）。
+ */
+describe('cmdSync — 当前限制：缺省 migrations 是 STUB，--migrate 硬闸是死闸', () => {
+  test('当前限制：不注入 migrations → pending 恒 0、gate 恒 ok，即便 cli>project 的破坏性升级', async () => {
+    const fs = makeFakeFs({ '/proj/.pipeline-version': '1.0.0' })
+    const { d, out, err } = deps()
+    // 刻意不传 migrations：走缺省 STUB_MIGRATIONS。这正是真实 CLI 的调用形态。
+    expect(await cmdSync(d, { cliVersion: '2.0.0' }, fs)).toBe(0)
+    const r = report(out)
+    // 空 pending：STUB 的 pending() 恒返回 []
+    expect(r).toMatchObject({ stage: 'sync', proceed: true, pending_count: 0 })
+    // 硬闸恒 ok/exit 0：inWindow 需要 pendingCount>0，STUB 下永不成立
+    expect(r.migrate_gate).toMatchObject({ decision: 'ok', exitCode: 0 })
+    // 连提示都没有：没有 required 也没有 tip
+    expect(err.join('\n')).not.toContain('MIGRATION REQUIRED')
+    expect(err.join('\n')).not.toContain('--migrate')
+  })
+
+  test('当前限制：缺省 STUB 下 --migrate 与不给 --migrate 的闸门结论无差别（闸门空转）', async () => {
+    const fs1 = makeFakeFs({ '/proj/.pipeline-version': '1.0.0' })
+    const a = deps()
+    expect(await cmdSync(a.d, { cliVersion: '2.0.0' }, fs1)).toBe(0)
+
+    const fs2 = makeFakeFs({ '/proj/.pipeline-version': '1.0.0' })
+    const b = deps()
+    expect(await cmdSync(b.d, { cliVersion: '2.0.0', migrate: true }, fs2)).toBe(0)
+
+    // 唯一差别只剩 migrate_flag/report_only 这两个「回声」字段，闸门决策完全一样：
+    // 说明 --migrate 在缺省注入下不改变任何迁移行为（无 pending 可迁）。
+    expect(report(a.out).migrate_gate).toEqual(report(b.out).migrate_gate)
+    expect(report(a.out)).toMatchObject({ migrate_flag: false, report_only: true, pending_count: 0 })
+    expect(report(b.out)).toMatchObject({ migrate_flag: true, report_only: false, pending_count: 0 })
+  })
+})
+
+/**
+ * ★当前限制（gap #4）**其二：生产接线面绊线**——生产 CLI 从不注入迁移注册表。
+ *
+ * 为什么这条是 grep 源码而不是跑一遍真 CLI：
+ * cmdSync 的签名是 `cmdSync(deps, opts, fs = createOwnedFs())`——生产（program.ts 的 sync
+ * action）只传**两个**参数，故 ① fs 恒为真磁盘 fs、② `opts.migrations` 的**唯一注入点**就是
+ * program.ts 那一处。要把「生产不注入」测成行为，就得驱动真 program 去读真磁盘，那既超出本文件
+ * 的契约（本文件 = 内存 fake 的 mock 层快速回归，真 fs 副作用在 sync-uninstall.integration.test.ts），
+ * 又测不准：真 registry 面对本测试的版本对**也可能合法地返回空 pending**，缺口补上了照样绿。
+ * 「生产不注入某依赖」本质是**「调用点不引用某标识符」**型事实，用 mock 行为表达是假证据——
+ * 同 tools/check-comment-honesty.sh section 2 对 transition↔handoff 的处理，直接断言源码事实。
+ *
+ * 哪天有人在 program.ts 注入真注册表（无论是传字面量、还是从 deps 里取），本绊线变红，
+ * 逼他回来删掉上方那句「缺省注入下 --migrate 是死闸」的当前限制描述，而不是留一句假注释。
+ */
+describe('cmdSync — 当前限制：生产 CLI 从不注入迁移注册表（gap #4 接线面绊线）', () => {
+  /** 抠出 program.ts 里 `sync [sub]` 那条命令的整块（到下一条 `program` 命令为止）。 */
+  function syncCommandBlock(): string {
+    const src = readFileSync(new URL('../program.ts', import.meta.url), 'utf8')
+    const start = src.indexOf(".command('sync [sub]')")
+    // 命令被改名/挪走 → 绊线已过期，直接红（而不是静默扫了个空串然后假绿）
+    expect(start, "program.ts 里找不到 .command('sync [sub]')——本绊线已过期，请更新它").toBeGreaterThan(-1)
+    const rest = src.slice(start)
+    const end = rest.indexOf('\n  program\n')
+    return end === -1 ? rest : rest.slice(0, end)
+  }
+
+  test('绊线自检：抠出的块确实是那条 sync 命令（含 cmdSync 调用）', () => {
+    // 防「块抠歪了 → 恒不含 migrations → 恒绿」：先证明抠对了地方。
+    expect(syncCommandBlock()).toContain('cmdSync(')
+  })
+
+  test('当前限制：program.ts 的 sync action 里零 migrations 注入 → cmdSync 恒走 STUB fallback', () => {
+    expect(syncCommandBlock()).not.toMatch(/migrations/)
   })
 })
 

@@ -193,7 +193,12 @@ function parseDurationS(s: string | undefined, fallback: number): number {
   return n * mul[unit]!
 }
 
-const TIMEOUT_EXIT = 124
+/**
+ * 快照扫描「无匹配」的退出码。沿用 124 是为兼容既有调用方的判码习惯（124 = GNU timeout 的
+ * 超时码），但**语义不是「等待超时」**——cmdWait 从不等待新事件，扫完现存事件即返回。
+ * 措辞与常量名都按实际语义写，别再叫 TIMEOUT。
+ */
+const NO_MATCH_EXIT = 124
 const USAGE_EXIT = 2
 
 /** 用法/校验错误哨兵（对齐老仓 red → exit 2）。 */
@@ -397,9 +402,9 @@ function cmdWait(deps: CliDeps, host: ChannelHost, p: ParsedArgs): number {
       return 0
     }
   }
-  if (pending && pending.size > 0) deps.io.err(`timeout: still waiting on ${[...pending].sort().join(', ')}`)
-  else deps.io.err('timeout: no matching event')
-  return TIMEOUT_EXIT
+  if (pending && pending.size > 0) deps.io.err(`no-match: 已扫完现存事件，未见来自 ${[...pending].sort().join(', ')} 的匹配（本命令不等待新事件到达）`)
+  else deps.io.err('no-match: 已扫完现存事件，无匹配（本命令不等待新事件到达）')
+  return NO_MATCH_EXIT
 }
 
 function cmdMessages(deps: CliDeps, host: ChannelHost, p: ParsedArgs): number {

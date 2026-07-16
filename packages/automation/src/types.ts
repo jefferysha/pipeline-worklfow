@@ -77,7 +77,10 @@ export type PhaseEvent = (typeof PHASE_EVENTS)[number]
  * L1→L3 分级放权（GOAL B19，与 AFK 自动化合体；上游 Phased Rollout × 老仓 human gates）：
  *   - L1 report-only（默认，安全）：挂队 + 沙箱跑 + 报告，但**不自动 merge**（成功停 paused，人工复核）。
  *   - L2 人工门：跑完停 paused 等人工在 dashboard 显式放行 → merged。
- *   - L3 unattended：allowlist 内无监管自动 merge（成功直接 merged）。
+ *   - L3 unattended：无监管自动 merge（成功直接 merged）。★安全边界须知：这是**黑名单**模型——
+ *     只有 denylist 命中会拦截（lifecycle.ts::settle 用 git diff --name-only 匹配 glob，违规判 conflict
+ *     保留现场、先于 mergeToBase）。`allowlist` 字段虽在 schema 里，但**无任何运行时校验消费方**，
+ *     不构成「只在许可范围内自动合并」的白名单保护，勿据其存在高估 L3 的安全性。
  * 毕业制升档：change 先 L1，证明稳定后由 loop 治理（BACKLOG #35）升 L2/L3。字段先纳入。
  */
 export const AUTOMATION_LEVELS = ['L1', 'L2', 'L3'] as const

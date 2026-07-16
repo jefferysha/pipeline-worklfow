@@ -125,7 +125,8 @@ describe('真实 e2e —— wait 快照扫描真事件流', () => {
     await ch('create', ['c', '--task', 't'])
     const r = await ch('wait', ['c', '--as', 'me', '--since', '50'])
     expect(r.code).toBe(124)
-    expect(r.err.join('\n')).toContain('timeout')
+    // 124 沿用 GNU timeout 惯例码，但语义是「扫完现存事件无匹配」——文案不得自称超时/等待。
+    expect(r.err.join('\n')).toContain('no-match')
   })
 })
 

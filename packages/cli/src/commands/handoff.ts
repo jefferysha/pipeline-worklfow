@@ -7,7 +7,8 @@
  * stdout：压缩摘要（下游消费的产物）+ 压缩率行；--json 结构化信封。exit：非法名/状态缺失=1，否则 0。
  *
  * 触发面：handoff 只在用户显式敲 `pipeline handoff` 时跑——相位转换不自动产出 handoff
- * （transition.ts 的进相位副作用里没有 buildHandoff 调用，不落 .breadcrumb/摘要）。
+ * 摘要（transition.ts 的进相位副作用里没有 buildHandoff 调用）。注意 transition 仍会写
+ * `.breadcrumb`，但那只是一行 `pipeline:<name> phase=<to>` 的相位标记，与 handoff 摘要无关。
  */
 import {
   buildHandoff,

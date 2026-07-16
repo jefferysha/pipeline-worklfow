@@ -731,5 +731,5 @@ async function runInboxWatcher(a: InboxWatcherArgs): Promise<void> {
  */
 export function echoOnlyAdapters(provider: string): WorkerAdapter {
   if (provider === 'echo' || provider === 'cat') return new EchoAdapter()
-  throw new Error(`未知 provider: '${provider}'（内置解析器只支持 echo；其他 provider 需注入自定义 resolveAdapter）`)
+  throw new Error(`未知 provider: '${provider}'（内置解析器只支持 echo/cat；其他 provider 需注入自定义 resolveAdapter）`)
 }

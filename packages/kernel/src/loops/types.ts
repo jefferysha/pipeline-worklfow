@@ -7,7 +7,8 @@
  *
  * 分级放权 L1→L3（老仓无此面；对标 cobusgreyling/loop-engineering "Phased Rollout" × 老仓 human_gates）：
  * `autonomy_level` 字段 + verdict 信封的 enforcement/report_only。
- * 缺省 L1 = report-only（观察不动手）；L2 assisted（人工门）；L3 unattended（allowlist 自动）。
+ * 缺省 L1 = report-only（观察不动手）；L2 assisted（人工门）；L3 unattended（无监管自动 merge，
+ * 仅受 denylist 黑名单拦截——allowlist 无运行时校验方，不是白名单保护，详见 automation/types.ts）。
  *
  * ★当前限制（读裁决信封的人须知）：级别与 verdict 都不驱动任何自动 gate/halt。adjudicate 的
  * kill/warn 只汇进报告（enforce.ts::buildReport → CLI `loops report`），没有消费方据此停 loop；

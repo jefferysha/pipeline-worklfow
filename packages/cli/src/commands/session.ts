@@ -102,7 +102,7 @@ async function cmdActivate(deps: CliDeps, name: string | undefined, fs: SessionF
     deps.io.err(`[activate] 活跃指针写入失败 → degraded（回退对话上下文），未落 session 指针: ${errMsg(e)}`)
     return 0
   }
-  deps.io.err(`[OK] activate ${name}（本 session 活跃指针已绑定 .pipeline-active；phase/phase_status 未改动）`)
+  deps.io.err(`[OK] activate ${name}（已写 .pipeline-active；该指针是 repo 粒度、非 per-session——同 repo 的并发 session 会互相覆盖；phase/phase_status 未改动）`)
   return 0
 }
 

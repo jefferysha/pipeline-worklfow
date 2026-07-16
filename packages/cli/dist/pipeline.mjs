@@ -8997,7 +8997,7 @@ async function runInboxWatcher(a) {
 function echoOnlyAdapters(provider) {
   if (provider === "echo" || provider === "cat")
     return new EchoAdapter();
-  throw new Error(`\u672A\u77E5 provider: '${provider}'\uFF08\u5185\u7F6E\u89E3\u6790\u5668\u53EA\u652F\u6301 echo\uFF1B\u5176\u4ED6 provider \u9700\u6CE8\u5165\u81EA\u5B9A\u4E49 resolveAdapter\uFF09`);
+  throw new Error(`\u672A\u77E5 provider: '${provider}'\uFF08\u5185\u7F6E\u89E3\u6790\u5668\u53EA\u652F\u6301 echo/cat\uFF1B\u5176\u4ED6 provider \u9700\u6CE8\u5165\u81EA\u5B9A\u4E49 resolveAdapter\uFF09`);
 }
 
 // packages/kernel/dist/loops/registry.js
@@ -16788,7 +16788,7 @@ function parseDurationS(s, fallback) {
   const mul = { ms: 1e-3, s: 1, m: 60, h: 3600, d: 86400 };
   return n * mul[unit];
 }
-var TIMEOUT_EXIT = 124;
+var NO_MATCH_EXIT = 124;
 var USAGE_EXIT = 2;
 var ChannelDie = class extends Error {
   constructor(msg, code = USAGE_EXIT) {
@@ -16951,9 +16951,9 @@ function cmdWait(deps, host, p) {
       return 0;
     }
   }
-  if (pending && pending.size > 0) deps.io.err(`timeout: still waiting on ${[...pending].sort().join(", ")}`);
-  else deps.io.err("timeout: no matching event");
-  return TIMEOUT_EXIT;
+  if (pending && pending.size > 0) deps.io.err(`no-match: \u5DF2\u626B\u5B8C\u73B0\u5B58\u4E8B\u4EF6\uFF0C\u672A\u89C1\u6765\u81EA ${[...pending].sort().join(", ")} \u7684\u5339\u914D\uFF08\u672C\u547D\u4EE4\u4E0D\u7B49\u5F85\u65B0\u4E8B\u4EF6\u5230\u8FBE\uFF09`);
+  else deps.io.err("no-match: \u5DF2\u626B\u5B8C\u73B0\u5B58\u4E8B\u4EF6\uFF0C\u65E0\u5339\u914D\uFF08\u672C\u547D\u4EE4\u4E0D\u7B49\u5F85\u65B0\u4E8B\u4EF6\u5230\u8FBE\uFF09");
+  return NO_MATCH_EXIT;
 }
 function cmdMessages(deps, host, p) {
   const name2 = p.positional[0];
@@ -18899,7 +18899,7 @@ async function cmdActivate(deps, name2, fs) {
     deps.io.err(`[activate] \u6D3B\u8DC3\u6307\u9488\u5199\u5165\u5931\u8D25 \u2192 degraded\uFF08\u56DE\u9000\u5BF9\u8BDD\u4E0A\u4E0B\u6587\uFF09\uFF0C\u672A\u843D session \u6307\u9488: ${errMsg(e)}`);
     return 0;
   }
-  deps.io.err(`[OK] activate ${name2}\uFF08\u672C session \u6D3B\u8DC3\u6307\u9488\u5DF2\u7ED1\u5B9A .pipeline-active\uFF1Bphase/phase_status \u672A\u6539\u52A8\uFF09`);
+  deps.io.err(`[OK] activate ${name2}\uFF08\u5DF2\u5199 .pipeline-active\uFF1B\u8BE5\u6307\u9488\u662F repo \u7C92\u5EA6\u3001\u975E per-session\u2014\u2014\u540C repo \u7684\u5E76\u53D1 session \u4F1A\u4E92\u76F8\u8986\u76D6\uFF1Bphase/phase_status \u672A\u6539\u52A8\uFF09`);
   return 0;
 }
 async function cmdRouteContext(deps, args, fs) {
@@ -20231,7 +20231,7 @@ function buildProgram(deps) {
     writeErr: (s) => deps.io.err(stripNl(s))
   });
   program2.command("init <name>").description("\u521D\u59CB\u5316 change\uFF08stdout \u65E0\u8F93\u51FA\uFF0C\u8DEF\u5F84\u4FE1\u606F\u8D70 stderr\uFF09").option("--track <track>", "chat | pm | frontend | backend").option("--preset <preset>", "full | hotfix | tweak").option("--user <user>", "created_by").option("--workflow <workflow>", "\u81EA\u5B9A\u4E49 workflow \u540D\uFF08.pipeline/workflows/<name>.yaml\uFF09\uFF0C\u7F3A\u7701 default").action(async (name2, opts) => bail(await cmdInit(deps, name2, opts)));
-  program2.command("setup [sub]").description("\u5B89\u88C5\u540E\u5168\u529F\u80FD\u5C31\u7EEA\u5F15\u5BFC:\u8F6F\u94FE pipeline \u5230 PATH + \u6309 registry \u9009\u88C5\u6280\u80FD + docker/\u955C\u50CF/\u51ED\u8BC1\u5C31\u7EEA\u68C0\u67E5").option("--dry-run", "\u53EA\u6253\u5370\u8BA1\u5212\u9AA8\u67B6,\u7EDD\u4E0D\u8F6F\u94FE/\u5199\u6587\u4EF6").option("-y, --yes", "\u8DF3\u8FC7\u6280\u80FD\u5B89\u88C5\u7684 y/N \u786E\u8BA4\u4F4D\uFF08\u81EA\u52A8\u5316\u73AF\u5883\u7528;\u975E TTY \u7F3A\u7701\u5224 No \u4E0D\u88C5\uFF09").allowUnknownOption().action(async (sub, opts) => bail(await cmdSetup(deps, sub, { dryRun: opts.dryRun, yes: opts.yes })));
+  program2.command("setup [sub]").description("\u5B89\u88C5\u540E\u5168\u529F\u80FD\u5C31\u7EEA\u5F15\u5BFC:\u8F6F\u94FE pipeline \u5230 PATH + \u6309 registry \u9009\u88C5\u6280\u80FD + docker/\u955C\u50CF/\u51ED\u8BC1\u5C31\u7EEA\u68C0\u67E5").option("--dry-run", "\u4E0D\u8F6F\u94FE\u3001\u4E0D\u5199\u4EFB\u4F55\u6587\u4EF6\uFF08\u6CE8\u610F runtime \u6BB5\u4ECD\u4F1A\u505A docker/\u955C\u50CF/\u51ED\u8BC1\u7684\u53EA\u8BFB\u63A2\u6D4B\uFF09").option("-y, --yes", "\u8DF3\u8FC7\u6280\u80FD\u5B89\u88C5\u7684 y/N \u786E\u8BA4\u4F4D;\u4E0D\u7ED9\u65F6\u8BFB\u4E00\u6B21 stdin\uFF08\u7BA1\u9053\u8F93\u5165\u540C\u6837\u6709\u6548\uFF09\uFF0C\u4EC5 y/yes \u653E\u884C\u3001\u8BFB\u4E0D\u5230\u5373\u4E0D\u88C5").allowUnknownOption().action(async (sub, opts) => bail(await cmdSetup(deps, sub, { dryRun: opts.dryRun, yes: opts.yes })));
   program2.command("get <name> <field>").description("\u8BFB\u5B57\u6BB5\uFF08stdout: \u88F8\u503C\uFF1B\u5B57\u6BB5\u7F3A\u5931/\u672A\u77E5 \u2192 \u7A7A\u884C + exit 0\uFF09").action(async (name2, fieldName) => bail(await cmdGet(deps, name2, fieldName)));
   program2.command("set <name> <field> <value>").description("\u5199\u5B57\u6BB5\uFF08\u65E0\u8F93\u51FA\uFF1B\u56DB\u95F8\u62D2\u5199 exit 1\uFF09").action(async (name2, fieldName, value) => bail(await cmdSet(deps, name2, fieldName, value)));
   program2.command("set-many <name> <kv...>").description("\u591A\u5B57\u6BB5\u539F\u5B50\u5199 key=value ...\uFF08\u65E0\u8F93\u51FA\uFF09").action(async (name2, kv) => bail(await cmdSetMany(deps, name2, kv)));
@@ -20249,7 +20249,7 @@ function buildProgram(deps) {
   program2.command("inbox").description("\u6536\u4EF6\u7BB1\uFF1A\u7B49\u5F85\u4EBA\u5DE5\u51B3\u7B56\u7684 change\uFF08\u4E09\u95E8 marker + \u590D\u6838\u76F8\u4F4D\uFF09").option("--json", "JSON \u8F93\u51FA\uFF08schema \u7A33\u5B9A\uFF09").option("--html", "\u81EA\u8DB3\u9759\u6001\u5355\u9875\uFF08\u91CD\u5B9A\u5411\u5230\u6587\u4EF6\u7528\u6D4F\u89C8\u5668\u6253\u5F00\uFF09").action(async (opts) => bail(await cmdInbox(deps, opts)));
   program2.command("status [name]").description("change \u6458\u8981\uFF08\u65E0 name \u5217\u5168\u90E8\u6D3B\u8DC3\uFF09").option("--json", "JSON \u8F93\u51FA\uFF08schema \u7A33\u5B9A\uFF09").action(async (name2, opts) => bail(await cmdStatus2(deps, name2, opts)));
   program2.command("list").description("\u6D3B\u8DC3 change \u8868").option("--json", "JSON \u8F93\u51FA\uFF08schema \u7A33\u5B9A\uFF09").action(async (opts) => bail(await cmdList4(deps, opts)));
-  program2.command("sync [sub]").description("\u9879\u76EE\u5185\u8D44\u4EA7\u540C\u6B65\uFF08downgrade-guard / prune / config \u95E8 / --migrate \u786C\u95F8\uFF09").option("--migrate", "\u6267\u884C\u8FC1\u79FB\uFF08\u7F3A\u7701\u53EA\u62A5\u544A\u4E0D\u6539\u76D8\uFF09").option("--allow-downgrade", "\u653E\u884C\u964D\u7EA7\u540C\u6B65").action(async (sub, opts) => {
+  program2.command("sync [sub]").description("\u9879\u76EE\u5185\u8D44\u4EA7\u540C\u6B65\uFF08downgrade-guard / prune / config \u95E8 / --migrate \u786C\u95F8\uFF09").option("--migrate", "\u653E\u884C\u8FC1\u79FB\u786C\u95F8\uFF08\u7F3A\u7701\u53EA\u62A5\u544A\u4E0D\u6539\u76D8\uFF1B\u6CE8\u610F\u7F3A\u7701\u672A\u6CE8\u5165\u8FC1\u79FB\u6267\u884C\u5668\u65F6\u672C\u95F8\u6052\u7A7A\u8F6C\uFF09").option("--allow-downgrade", "\u653E\u884C\u964D\u7EA7\u540C\u6B65").action(async (sub, opts) => {
     const installedJson = await deps.readInstalledPlugins?.();
     bail(await cmdSync(deps, {
       sub,

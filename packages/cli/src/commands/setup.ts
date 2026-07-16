@@ -111,11 +111,13 @@ export const REAL_SETUP_ENV: SetupEnv = {
     process.stdout.write(question)
     try {
       const buf = Buffer.alloc(64)
-      const n = readSync(0, buf, 0, 64, null) // 同步读 stdin;非 TTY/无输入抛或返 0
+      // 同步读 fd 0 一次。**不检查 isTTY**：判据是「读到了什么」而非「是不是终端」——
+      // 故 `echo y | pipeline setup` 这类管道输入同样会放行（非 TTY 不等于自动判 No）。
+      const n = readSync(0, buf, 0, 64, null)
       const ans = buf.toString('utf8', 0, n).trim().toLowerCase()
       return ans === 'y' || ans === 'yes'
     } catch {
-      return false // 非交互环境（无 TTY）→ 视作 No,fail-closed（自动化走 --yes）
+      return false // 读失败（无输入可读/fd 0 关闭等）→ 判 No，fail-closed（自动化走 --yes）
     }
   },
 }

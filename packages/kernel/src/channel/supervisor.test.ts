@@ -70,10 +70,37 @@ describe('EchoAdapter / echoOnlyAdapters', () => {
     expect(a.isReady()).toBe(true)
     expect(a.parseLine('  echoed  ')).toEqual({ events: [{ kind: 'done', payload: { text: 'echoed' } }], side: null })
   })
-  test('echoOnlyAdapters：echo/cat → EchoAdapter；其他 provider → 抛（内置只支持 echo）', () => {
+  /**
+   * ★当前限制（gap #2）**其一：kernel 内置面**——本模块没有 claude/codex adapter，
+   * 内置解析器只认 echo/cat。
+   *
+   * 真实 provider 的进程协议（claude/codex 的 stdio 帧格式、ready 探测、事件解析）在 kernel
+   * 里不存在；要用真 provider 必须由调用方自带 resolveAdapter 注入（SupervisorDeps.resolveAdapter）。
+   * 换言之：开箱即用的 supervisor 只能跑回显，跑不了真 agent。
+   *
+   * ⚠ 本断言只钉得住 **helper 自身**，钉不住「生产实际注入了谁」——kernel 不能 import cli。
+   * 只有这半边的话，谁把 cli 那边的注入换成真 resolver、同时把本 helper 原样留着（它还有别的
+   * 调用方），就会**缺口已补而本测试仍绿**。故 gap #2 的断言是**两半**，缺一不可：
+   *   · 本断言                                   ← kernel 内置面（有人给 kernel 加 adapter → 红）
+   *   · cli/src/commands/channel.test.ts 的
+   *     『__supervisor —— 当前限制：生产注入的
+   *       resolveAdapter 只认 echo（gap #2 接线面）』 ← 生产接线面（有人换注入 → 红）
+   * 改动其一时请同步另一半，别让两边漂移。
+   *
+   * 下面对 claude/codex 的 toThrow **断言当前缺口存在**。哪天 kernel 内置了这两个 adapter，
+   * 本断言会失败——这是预期的，届时请删除对应的 toThrow 并改为正向测试
+   * （claude/codex → 各自 Adapter 实例），别把这条留成假描述。
+   */
+  test('当前限制：echoOnlyAdapters 只认 echo/cat；claude/codex 无内置 adapter → 抛', () => {
     expect(echoOnlyAdapters('echo')).toBeInstanceOf(EchoAdapter)
     expect(echoOnlyAdapters('cat')).toBeInstanceOf(EchoAdapter)
-    expect(() => echoOnlyAdapters('claude')).toThrow(/只支持 echo/)
+    // 缺口本身：两个真 provider 都没有内置实现。
+    // 断言完整的 echo/cat 语义（而非只匹配 /只支持 echo/）——上面 :95-96 刚证明 cat 也被接受，
+    // 若只匹配前半句，一条说「只支持 echo」的错误消息也能骗过本测试。
+    expect(() => echoOnlyAdapters('claude')).toThrow(/只支持 echo\/cat/)
+    expect(() => echoOnlyAdapters('codex')).toThrow(/只支持 echo\/cat/)
+    // 报错须指出出路（注入 resolveAdapter），否则调用方只会以为 provider 名写错了
+    expect(() => echoOnlyAdapters('codex')).toThrow(/resolveAdapter/)
   })
 })
 

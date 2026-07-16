@@ -67,9 +67,12 @@ export function buildProgram(deps: CliDeps): Command {
   program
     .command('setup [sub]')
     .description('安装后全功能就绪引导:软链 pipeline 到 PATH + 按 registry 选装技能 + docker/镜像/凭证就绪检查')
-    .option('--dry-run', '只打印计划骨架,绝不软链/写文件')
-    .option('-y, --yes', '跳过技能安装的 y/N 确认位（自动化环境用;非 TTY 缺省判 No 不装）')
-    .allowUnknownOption() // setup skills / setup runtime 子命令的自有 flag 透传
+    .option('--dry-run', '不软链、不写任何文件（注意 runtime 段仍会做 docker/镜像/凭证的只读探测）')
+    .option('-y, --yes', '跳过技能安装的 y/N 确认位;不给时读一次 stdin（管道输入同样有效），仅 y/yes 放行、读不到即不装')
+    // 容忍未知 flag。注意 `setup [sub]` 是 positional 参数、不是真 Commander 子命令，故这里只是
+    // 「不报错」而非「透传给子命令」。★已知风险：拼错的 flag（如 --dry-runn）会被静默丢弃，
+    // 于是本该空跑的命令变成真实执行。收紧此项属行为变更，未在清账轮内做。
+    .allowUnknownOption()
     .action(async (sub: string | undefined, opts: { dryRun?: boolean; yes?: boolean }) =>
       bail(await cmdSetup(deps, sub, { dryRun: opts.dryRun, yes: opts.yes })))
 
@@ -184,7 +187,7 @@ export function buildProgram(deps: CliDeps): Command {
   program
     .command('sync [sub]')
     .description('项目内资产同步（downgrade-guard / prune / config 门 / --migrate 硬闸）')
-    .option('--migrate', '执行迁移（缺省只报告不改盘）')
+    .option('--migrate', '放行迁移硬闸（缺省只报告不改盘；注意缺省未注入迁移执行器时本闸恒空转）')
     .option('--allow-downgrade', '放行降级同步')
     .action(async (sub: string | undefined, opts: { migrate?: boolean; allowDowngrade?: boolean }) => {
       const installedJson = await deps.readInstalledPlugins?.()

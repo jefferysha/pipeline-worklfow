@@ -23,6 +23,14 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # 纯静态扫描（bash + grep，零构建依赖、~1s）——放在 build/test 之前 fail-fast：
+      # 一条假待做注释不值得等 30 分钟的构建+docker 集成测试跑完才报。
+      # 走 npm script 而非直接 `bash tools/...`：与本地 `npm run check:comments` 单一真相源，
+      # 免得 CI 与开发机的调用形态各自漂移。
+      # 注意：脚本对「扫描器故障」exit 3、对「命中」exit 1，两者都是非零 → 都会红。
+      - name: 注释可信度门禁 (comment honesty)
+        run: npm run check:comments
+
       - name: Build (tsc -b + dashboard tsc --noEmit + esbuild bundle)
         run: npm run build
 

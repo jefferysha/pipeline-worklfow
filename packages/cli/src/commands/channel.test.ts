@@ -187,13 +187,59 @@ describe('wait 事件面（快照扫描）', () => {
     const c = ctx()
     await c.run('create', ['ch', '--task', 't'])
     expect(await c.run('wait', ['ch', '--as', 'me', '--since', '99'])).toBe(124)
-    expect(c.err.join('\n')).toContain('timeout')
+    expect(c.err.join('\n')).toContain('no-match')
   })
 
   test('--all 必须配 --from', async () => {
     const c = ctx()
     await c.run('create', ['ch', '--task', 't'])
     expect(await c.run('wait', ['ch', '--as', 'me', '--all'])).toBe(2)
+  })
+})
+
+/**
+ * ★当前限制（gap #1）——`channel wait` 名为 wait，实为**快照扫描**。
+ *
+ * cmdWait 读取「调用瞬间已存在」的事件后立即返回：不阻塞、不监听新事件、无超时时钟。
+ * 因此 exit 124 的真实含义是「**扫完现存事件无匹配**」，而非「等待超时」。stderr 措辞与常量名
+ * 已按实际语义收口（no-match / NO_MATCH_EXIT）；退出码仍沿用 124 是为兼容既有调用方的判码习惯。
+ *
+ * 本 describe 下的测试**断言当前缺口存在**。实现「真阻塞等待 + 超时时钟」后本测试会失败
+ * ——这是预期的，届时请删除本 describe 的断言并改为正向测试（真等到新事件 / 真到点超时）。
+ */
+describe('wait —— 当前限制：快照扫描，非真等待', () => {
+  test('当前限制：无超时时钟——传 --timeout 也不等待，立即返回 124', async () => {
+    const c = ctx()
+    await c.run('create', ['ch', '--task', 't'])
+    const t0 = Date.now()
+    // --timeout 被完全忽略（cmdWait 根本不解析它；真阻塞等待落地后这里应等 9999s 或按超时语义返回）
+    expect(await c.run('wait', ['ch', '--as', 'me', '--since', '99', '--timeout', '9999'])).toBe(124)
+    // 立即返回：若真有等待/超时时钟，不可能在 1s 内回来
+    expect(Date.now() - t0).toBeLessThan(1000)
+  })
+
+  test('当前限制：exit 124 = 「扫完现存事件无匹配」而非「等待超时」', async () => {
+    const c = ctx()
+    await c.run('create', ['ch', '--task', 't'])
+    // 事件尚不存在 → 不阻塞等待它出现，直接 124
+    expect(await c.run('wait', ['ch', '--as', 'me', '--since', '1'])).toBe(124)
+    // 文案须自陈「不等待」——旧文案说 'timeout: no matching event'，而它从未等待过，是谎报。
+    expect(c.err.join('\n')).toContain('no-match')
+    expect(c.err.join('\n')).toContain('不等待新事件')
+    // 同一 channel、同样参数：事件先落再扫 → 0。证明上一次调用从未「等待」，只是扫了个空快照。
+    await c.run('send', ['ch', 'ping', '--as', 'main', '--to', 'me'])
+    expect(await c.run('wait', ['ch', '--as', 'me', '--since', '1'])).toBe(0)
+  })
+
+  test('当前限制：--all 只统计现存事件——缺席方不会被等到，直接 124', async () => {
+    const c = ctx()
+    await c.run('create', ['ch', '--task', 't'])
+    await c.run('send', ['ch', 'done-a', '--as', 'a', '--to', 'me'])
+    // 只有 a 发过，b 没有：真等待应挂起等 b；当前实现扫完即弃权
+    expect(await c.run('wait', ['ch', '--as', 'me', '--all', '--from', 'a,b', '--since', '1'])).toBe(124)
+    // 文案须点名缺席方 b，且不得自称在「等待」它（旧文案 'still waiting on b' 是谎报：从未等过）
+    expect(c.err.join('\n')).toContain('未见来自 b')
+    expect(c.err.join('\n')).toContain('不等待新事件')
   })
 })
 
@@ -271,7 +317,7 @@ describe('forum thread（forum 校验 + rename 防 merge）', () => {
   })
 })
 
-describe('list / dir / usage / 留后续', () => {
+describe('list / dir / usage / 未知子命令', () => {
   test('list 汇总创建过的 channel', async () => {
     const c = ctx()
     await c.run('create', ['c1', '--task', 'first', '--type', 'chat'])
@@ -461,5 +507,49 @@ describe('run ephemeral 控制流（mock 进程面）', () => {
   test('run 缺 --message → exit 2', async () => {
     const c = procCtx()
     expect(await c.run('run', ['--as', 'main', '--provider', 'echo'])).toBe(2)
+  })
+})
+
+/**
+ * ★当前限制（gap #2）的**生产接线面**——`channel __supervisor` 只能跑回显，跑不了真 agent。
+ *
+ * 为什么这条必须在这儿，而不是只留 kernel 的 supervisor.test.ts：
+ * kernel 那边钉得住的只有 `echoOnlyAdapters` 这个 **helper 自身**（kernel 不能 import cli）。
+ * 但「缺口还在不在」取决于**生产实际注入的是哪个 resolver**——channel.ts 的 cmdSupervisor 里
+ * `resolveAdapter: echoOnlyAdapters` 那行。只钉 helper 的话，谁把那行换成新 resolver、同时把
+ * helper 原样留着（它还有别的调用方：channel-process.integration.test.ts），就会出现
+ * **缺口已补而测试全绿**——那正是本仓要防的假绿。
+ *
+ * 故此处驱动**真实生产路径**：cmdChannel('__supervisor') → cmdSupervisor → startSupervisor(
+ * …, { resolveAdapter: <生产注入的那个> })，用 provider=claude/codex 逼它现原形。
+ * 缺口在 supervisor.ts 的 step 3（resolveAdapter）暴露，**先于** step 4 spawn，故 mock 进程面
+ * 里也测得准（根本走不到 spawn）。
+ *
+ * 覆盖面（两条路径任一被实现，都会红）：
+ *   · 有人给 kernel 内置 claude/codex adapter  → supervisor.test.ts 的 helper 断言红。
+ *   · 有人把生产注入换成真 resolver             → **本 describe 红**。
+ * 届时请删掉对应断言并改为正向测试，别把它留成假描述。
+ */
+describe('__supervisor —— 当前限制：生产注入的 resolveAdapter 只认 echo（gap #2 接线面）', () => {
+  const writeCfg = (c: ProcCtx, provider: string): string => {
+    c.fs.writeText('/cfg.json', JSON.stringify({ provider }))
+    return '/cfg.json'
+  }
+
+  test('当前限制：provider=claude → 生产路径起不来（exit 1），且错误指出出路 resolveAdapter', async () => {
+    const c = procCtx()
+    await c.run('create', ['c', '--task', 't'])
+    expect(await c.run('__supervisor', ['c', 'w1', writeCfg(c, 'claude')])).toBe(1)
+    // 缺口本身：真 provider 在生产接线下无内置实现
+    expect(c.err.join('\n')).toMatch(/只支持 echo/)
+    // 报错须指出出路，否则调用方只会以为 provider 名写错了
+    expect(c.err.join('\n')).toMatch(/resolveAdapter/)
+  })
+
+  test('当前限制：provider=codex 同样起不来（不是只漏了 claude 一个）', async () => {
+    const c = procCtx()
+    await c.run('create', ['c', '--task', 't'])
+    expect(await c.run('__supervisor', ['c', 'w1', writeCfg(c, 'codex')])).toBe(1)
+    expect(c.err.join('\n')).toMatch(/只支持 echo/)
   })
 })
