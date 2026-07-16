@@ -5,11 +5,16 @@
  *   · registry 数据模式 ← loops.schema.json（version/loops[]/budget/kill_criteria/human_gates …）。
  *   · 裁决信封 ← loops_enforce.py::adjudicate 384-397（id/verdict/reasons/metrics）。
  *
- * 本轮新增（老仓无，loop-engineering 分级放权 L1→L3 打地基，对标 cobusgreyling/loop-engineering
- * "Phased Rollout" × 老仓 human_gates）：`autonomy_level` 字段 + verdict 信封的 enforcement/report_only。
+ * 分级放权 L1→L3（老仓无此面；对标 cobusgreyling/loop-engineering "Phased Rollout" × 老仓 human_gates）：
+ * `autonomy_level` 字段 + verdict 信封的 enforcement/report_only。
  * 缺省 L1 = report-only（观察不动手）；L2 assisted（人工门）；L3 unattended（allowlist 自动）。
- * 本项只把级别纳入 schema + 让 enforce「认」这个级别（信封回显）；把 verdict×level 翻成
- * 具体 gate/halt 动作是 #38（分级放权执行面），budget 熔断是 #36，漂移审计是 #37——均留后续。
+ *
+ * ★当前限制（读裁决信封的人须知）：级别与 verdict 都不驱动任何自动 gate/halt。adjudicate 的
+ * kill/warn 只汇进报告（enforce.ts::buildReport → CLI `loops report`），没有消费方据此停 loop；
+ * enforcement/report_only 是给消费方判读的标注，不是执行动作。相关子系统各自在同目录，且同为
+ * 「算了就报」而非闸门：token 预算熔断 budget.ts（computeBudgetStatus 出 breaker，tripped 只影响
+ * 升降档裁决与展示，不阻断运行）、漂移/就绪审计 drift.ts、升降档毕业制 graduation.ts
+ * （applyLevelChange 改的是 autonomy_level 本身，不是运行闸门）。
  */
 
 export type LoopKind = 'orchestrator' | 'executor'
@@ -43,7 +48,7 @@ export interface LoopBudget {
   tokens_per_run?: number
 }
 
-/** 登记表单条 loop（老 loops.schema.json loops.items 14-100 + 本轮 autonomy_level）。 */
+/** 登记表单条 loop（老 loops.schema.json loops.items 14-100 + 分级放权的 autonomy_level）。 */
 export interface LoopEntry {
   id: string
   name: string
@@ -62,7 +67,8 @@ export interface LoopEntry {
   kill_criteria: string[]
   /** 分级放权级别（缺省填 L1；loadRegistry 派生时补默认）。 */
   autonomy_level: AutonomyLevel
-  /** v5 决议 #12：路径 glob 白名单（存储侧；L3 unattended 自动合并的许可范围，执行面另落）。缺省 []。 */
+  /** v5 决议 #12：路径 glob 白名单（L3 unattended 自动合并的许可范围）。纯存储侧——schema 载入 +
+   * server 只读透出，无运行时校验消费方（对比 denylist 有 automation/lifecycle/denylist.ts）。缺省 []。 */
   allowlist: string[]
   /** v5 决议 #12：路径 glob 黑名单（存储侧；运行时校验见 automation/lifecycle/denylist.ts，
    * 该模块以鸭子类型只读 change_prefix + denylist——本字段名即其消费契约，勿改名）。缺省 []。 */
@@ -77,7 +83,7 @@ export interface LoopRegistry {
 /** 裁决三值（老 ok/warn/kill，kill > warn > ok 取最严；对齐老仓 --json）。 */
 export type Verdict = 'ok' | 'warn' | 'kill'
 
-/** 分级放权级别 → 执行模式（本轮回显；具体动作面留 #38）。 */
+/** 分级放权级别 → 执行模式（随裁决信封回显的标注；不驱动自动动作，见顶注★当前限制）。 */
 export type Enforcement = 'report-only' | 'assisted' | 'unattended'
 
 /** 单条触发规则（老 adjudicate reasons 元素：{rule, detail}）。 */
@@ -97,14 +103,14 @@ export interface VerdictMetrics {
   misaccounted: number
 }
 
-/** 单个 loop 的裁决信封（老 adjudicate 返回 384-397 + 本轮 autonomy_level/enforcement/report_only）。 */
+/** 单个 loop 的裁决信封（老 adjudicate 返回 384-397 + 分级放权的 autonomy_level/enforcement/report_only）。 */
 export interface LoopVerdict {
   id: string
   verdict: Verdict
   autonomy_level: AutonomyLevel
   /** 由 autonomy_level 派生：L1→report-only / L2→assisted / L3→unattended。 */
   enforcement: Enforcement
-  /** = autonomy_level === 'L1'：即便 kill 判据命中也只报告不自动停（执行面留 #38）。 */
+  /** = autonomy_level === 'L1'：标注「即便 kill 判据命中也只报告不自动停」，供消费方判读（见顶注）。 */
   report_only: boolean
   reasons: VerdictReason[]
   metrics: VerdictMetrics

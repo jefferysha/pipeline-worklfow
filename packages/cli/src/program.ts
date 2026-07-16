@@ -66,10 +66,10 @@ export function buildProgram(deps: CliDeps): Command {
 
   program
     .command('setup [sub]')
-    .description('安装后全功能就绪引导:软链 pipeline 到 PATH + 技能安装(Phase 2)/运行时检查(Phase 3)骨架')
+    .description('安装后全功能就绪引导:软链 pipeline 到 PATH + 按 registry 选装技能 + docker/镜像/凭证就绪检查')
     .option('--dry-run', '只打印计划骨架,绝不软链/写文件')
-    .option('-y, --yes', '跳过交互确认位（本批无真安装,仅透传占位）')
-    .allowUnknownOption() // 未来 Phase 2/3 子命令的自有 flag 透传
+    .option('-y, --yes', '跳过技能安装的 y/N 确认位（自动化环境用;非 TTY 缺省判 No 不装）')
+    .allowUnknownOption() // setup skills / setup runtime 子命令的自有 flag 透传
     .action(async (sub: string | undefined, opts: { dryRun?: boolean; yes?: boolean }) =>
       bail(await cmdSetup(deps, sub, { dryRun: opts.dryRun, yes: opts.yes })))
 
@@ -207,7 +207,7 @@ export function buildProgram(deps: CliDeps): Command {
 
   program
     .command('afk <sub> [name]')
-    .description('AFK 自动化：enqueue <name> 挂队 / scan 就绪队列 / status [name] 泳道 / run 真跑 docker 沙箱（#29-wire）')
+    .description('AFK 自动化：enqueue <name> 挂队 / scan 就绪队列 / status [name] 泳道 / run 真跑 docker 沙箱 / cancel <name> 取消运行中任务（落取消标记 + docker kill，对齐 server /api/afk/:name/cancel）')
     .option('--json', 'JSON 输出')
     .option('--level <level>', 'run：分级放权档位覆盖（L1|L2|L3，缺省 L1 report-only 安全默认）')
     .option('--image <image>', 'run：sandcastle 镜像名（缺省 sandcastle:local）')

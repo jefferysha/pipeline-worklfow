@@ -8,20 +8,16 @@
  * 状态与错误（activate [OK]/WARN、ERROR）走 stderr（老仓 red/green/yellow 均 >&2，state-lib.sh:5-7）。
  * exit：错误/非法/缺状态 = 1；成功 = 0；activate 指针写失败 = degraded-safe rc=0（绝不 exit 1）。
  *
- * 老仓亦未实现 / 未移植（诚实标注，GOAL C 精神——不臆造实现）：
+ * 与老仓的差异（诚实标注，GOAL C 精神——不臆造实现）：
  *   · activate 的持久化端在老仓委托 session_store.py（R20 per-session context-keyed 指针，解析
- *     CC session id / Cursor ticket / single-session fallback）；该 context_key 解析子系统本仓尚未移植。
- *     本移植把 activate 落到「repo 级 .pipeline-active 平指针」（老仓 state-session.sh:18 记载的设计意图）
- *     作为真实副作用；per-session context-key 定向是文档化的待移植项（未来 R20 换 SessionFs.bindPointer 即可）。
+ *     CC session id / Cursor ticket / single-session fallback）；该 context_key 解析子系统本仓没有。
+ *     本仓 activate 的真实副作用是「repo 级 .pipeline-active 平指针」（老仓 state-session.sh:18 记载的
+ *     设计意图）：指针是 repo 粒度而非 session 粒度——同一 repo 多个并发 session 共享一个活跃指针，
+ *     互相覆盖。换粒度的接缝是 SessionFs.bindPointer（注入面已就位，见下方 SessionFs）。
  *   · 老仓 route-context 的「python3/monorepo.py 不可达」降级分支在 TS 侧不适用（无子进程依赖）；
  *     等价降级 = .pipeline-project.yaml 缺失/解析失败 → 视为单仓（packages=null，全未归属），fail-open。
  *   · 老仓 state-session.sh:238-253 三项 [PLACEHOLDER]（package-validation / Cursor ticket 写端 /
- *     init-context-deprecation）是老仓自己都未实现的空占位——本移植同样不实现（见 kernel 顶注）。
- *
- * 接线备注（收编前的临时桥，需主会话收编，见报告接线清单）：kernel barrel 尚未导出 session.ts，
- * 故 PackageDecl/纯逻辑用相对 import 直取 kernel 源（tsc -b/vitest/esbuild 三路可解，已实测）。
- * 主会话收编时：① 在 kernel state/index.ts + index.ts 加 session 导出；② 把本文件相对 import 换成
- * '@pipeline-lite/kernel'；③ 在 program.ts 注册 `session` 命令。
+ *     init-context-deprecation）是老仓自己都未实现的空占位——本仓同样没有（见 kernel 顶注）。
  */
 import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
@@ -45,7 +41,7 @@ export const PROJECT_CONFIG_FILE = '.pipeline-project.yaml'
 /**
  * session fs 注入面（默认真 fs；mock 层注入 fake，见 session.test.ts）。
  *   loadPackages: 读项目根 .pipeline-project.yaml → package 声明（缺失/解析失败 → null 单仓，fail-open）。
- *   bindPointer:  绑定本 session 活跃指针（默认写 <cwd>/.pipeline-active；未来 R20 可换 per-session 指针）。
+ *   bindPointer:  绑定活跃指针（默认写 <cwd>/.pipeline-active，repo 粒度——换 per-session 粒度的接缝在此）。
  */
 export interface SessionFs {
   loadPackages: (cwd: string) => Promise<PackageDecl[] | null>

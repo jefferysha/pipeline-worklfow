@@ -14,12 +14,6 @@
  *
  * stdout/exit 对齐仓内风格（session.ts）：数据（写入清单/解析结果）走 stdout；状态/指引/错误走 stderr。
  *   exit：成功=0；非法参数/未知 id（无 --fallback-native）/未知子命令=1；缺省冲突需决策=2（信号）。
- *
- * 接线备注（收编前的临时桥，需主会话收编，见报告接线清单）：kernel barrel（src/index.ts）尚未导出
- *   scaffold/，故 scaffold 纯逻辑用相对 import 直取 kernel 源（tsc -b/vitest/esbuild 三路已验证的模式，
- *   同 loops.ts/handoff.ts 原始桥）；ownership 已在 barrel，其 helper 走 '@pipeline-lite/kernel'。
- *   主会话收编：① src/index.ts 加 `export * from './scaffold/index.js'`；② 换相对 import 为包名；
- *   ③ program.ts 注册 `scaffold` 命令。KNOWN_UNTRACKED_ALLOWLIST 接进 ownership/#24 的方式见报告。
  */
 import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'

@@ -29,14 +29,15 @@
  *     老仓判定：**N/A**——pipeline 无「无 hash→hash-track」迁移期，无对应历史包袱。老仓自留占位入口
  *       （migrations.py 空 KNOWN_UNTRACKED_ALLOWLIST + 原样返回的 apply）。
  *     lite 落地：allowlist.ts 忠实沿用同款「N/A 但留占位入口」——空常量 + pass-through 应用 + 判定函数
- *       （空白名单下全无副作用）。接进 ownership(#24) 的方式见 CLI 顶注 + 报告（不改 ownership.ts）。
+ *       （空白名单下全无副作用）。它不接进 ownership(#24) 的 classify 主路径，也无调用方：白名单为空时
+ *       接进去是纯恒等变换，故只导出入口。填表后的接法说明在 allowlist.ts 顶注。
  *
  *  ── 非本模块（其余 5 partial，主会话/他模块归属，此处仅诚实转述其处置，不重复实现）──────
  *  ⑤ 🟡 init-command-registration（CLI init）——架构差异 N/A：pipeline init 面 = track×preset×template
  *       + SessionStart hook + pipeline-open SKILL，非 17 平台单条 init CLI。归属：init 命令/adapters。
- *  ⑥ 🟡 hardcoded-traces-journal-rename（versioning）——N/A-with-entry：老仓 migrations.py 留空占位
- *       HARDCODED_RENAMES + expand_hardcoded_renames（返 []）。sibling of ④，属**版本/迁移模块**（本仓
- *       尚未移植 migrations 子系统）——不在 scaffold 范围，落点见报告。
+ *  ⑥ 🟡 hardcoded-traces-journal-rename（versioning）——N/A-with-entry：老仓 migrations.py 空占位
+ *       HARDCODED_RENAMES + expand_hardcoded_renames（返 []）。sibling of ④，属**版本/迁移模块**
+ *       （本仓无 migrations 子系统）——不在 scaffold 范围。
  *  ⑦ 🟡 package-validation-create（task lifecycle）——create --package 名校验接线 N/A（单仓无用例）；
  *       路径→package 路由已在 kernel state/session.ts 真补（routeContext）。归属：task/monorepo。
  *  ⑧ 🟡 init-context-deprecation-guard（task lifecycle）——N/A：pipeline 从未引入 init-context；占位说明
@@ -45,10 +46,8 @@
  *       属 living-spec 子系统（kernel state/spec.ts + verify/ship 步骤），不在 scaffold 范围。
  *
  * kernel 零第三方依赖（纯字符串/集合逻辑；hash 经同包 ownership.ts 间接用 node:crypto 内建）。
- * 接线备注（收编前的临时桥）：kernel barrel（src/index.ts / state/index.ts）尚未导出 scaffold/，
- *   故 CLI scaffold.ts 相对 import 直取 kernel 源。主会话收编：① 在 src/index.ts 加
- *   `export * from './scaffold/index.js'`；② 把 CLI 相对 import 换成 '@pipeline-lite/kernel'；
- *   ③ 在 program.ts 注册 scaffold 命令（见报告接线清单）。
+ * 消费方：CLI packages/cli/src/commands/scaffold.ts（经 '@pipeline-lite/kernel' 包名导入，
+ *   命令注册在 program.ts）。
  */
 export * from './doc-scaffold.js'
 export * from './workflow-resolution.js'

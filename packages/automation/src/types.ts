@@ -26,7 +26,9 @@
  *     barrier.ts build_sha 派生、reconcile/abortBridge/afkObserver/kanbanDisplay 旁路上板。
  *     → lite: scheduler/{semaphore,classify,scheduler}.ts（逐字/等价移植 + L1→L3 分级合体）。
  *  4) cli/    （老仓 cli/src/*.ts）—— sandcastle 自身 CLI（init/run/交互式镜像选择），非 pipeline
- *     队列面。→ lite: 未收编（pipeline 侧队列 CLI 命令面交主会话接 packages/cli，见报告接线清单）。
+ *     队列面。→ lite: 未收编——本包不含 CLI 层，只出 sdk 编排面；pipeline 侧的队列命令面在
+ *     packages/cli 的 `pipeline afk`（program.ts::afk <sub>，commands/afk.ts：enqueue/scan/
+ *     status/run/cancel），由它调本包的 sdk。
  *  5) sdk/    （老仓 sdk/src/*.ts）—— createSandbox/createWorktree/run 编排 + output/
  *     extractStructuredOutput（取最后 tag + fence 剥离 + 重试）+ prompt/PromptPreprocessor
  *     （SHELL_BLOCK_MARKER 注入防护）。→ lite: sdk/sdk.ts（对外 API：enqueue/scanReady/runRound）。

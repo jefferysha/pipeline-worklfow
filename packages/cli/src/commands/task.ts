@@ -8,11 +8,6 @@
  *   canonical <name> [--json]  Trellis 24 字段 canonical task.json，stdout（pretty / 紧凑）
  * stdout/exit 对齐老仓：数据走 stdout（老仓 echo/printf/python print），状态与错误走 stderr
  * （老仓 red/green 均 >&2）。exit：错误/非法 = 1；成功 = 0。
- *
- * 接线备注（收编前的临时桥）：kernel barrel 尚未导出 tasks.ts，故此处用相对 import 直取 kernel
- * 源（tsc/vitest/esbuild bundle 三路可解；CLI 发行走 esbuild 单文件 bundle，非裸 dist）。
- * 主会话收编时：① 在 kernel state/index.ts + index.ts 加 tasks 导出；② 把本文件相对 import
- * 换成 '@pipeline-lite/kernel'；③ 在 program.ts 注册 `task` 命令（见报告接线清单）。
  */
 import type { ChangeNode, HistoryEntry, PipelineState, StateStore } from '@pipeline-lite/kernel'
 import {

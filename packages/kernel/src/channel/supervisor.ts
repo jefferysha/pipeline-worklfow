@@ -724,8 +724,12 @@ async function runInboxWatcher(a: InboxWatcherArgs): Promise<void> {
   }
 }
 
-/** 缺省 adapter 解析器（仅 echo；claude/codex 留后续轮真实协议）。 */
+/**
+ * 缺省 adapter 解析器：只识别 echo/cat（→ EchoAdapter），其他 provider 抛错。
+ * 真实 provider（claude/codex）的进程协议由调用方注入自己的 resolveAdapter 实现
+ * （SupervisorDeps.resolveAdapter），本模块不内置。
+ */
 export function echoOnlyAdapters(provider: string): WorkerAdapter {
   if (provider === 'echo' || provider === 'cat') return new EchoAdapter()
-  throw new Error(`未知 provider: '${provider}'（本批仅 echo；claude/codex 留后续）`)
+  throw new Error(`未知 provider: '${provider}'（内置解析器只支持 echo；其他 provider 需注入自定义 resolveAdapter）`)
 }

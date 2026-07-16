@@ -10,11 +10,10 @@
  *   upgrade-channel：从 installed_plugins.json（注入文本）按后缀派生 latest/beta/rc。
  *
  * ★诚实 stub（BACKLOG #24 诚实门）：迁移注册表（老仓 migrations.py get_migrations_for_version /
- *   get_migration_metadata）+ 执行器（migrate-exec.py）**未在 lite 移植**——那是独立子系统（备份先行/
- *   hash 闸/根守护三闸），属未收编里程碑。故 pending/metadata 由注入的 SyncMigrationProvider 提供，
- *   缺省 STUB=空 pending + 无 breaking：sync 决策层全量可跑，但「真跑迁移落盘」面标为 stub、不伪造。
- *
- * 接线备注（收编前临时桥）：同 uninstall.ts —— 相对 import kernel/dist，主会话收编换 barrel + 注册命令。
+ *   get_migration_metadata）+ 执行器（migrate-exec.py）在 lite 没有对应实现——那是独立子系统
+ *   （备份先行/hash 闸/根守护三闸）。故 pending/metadata 由注入的 SyncMigrationProvider 提供，
+ *   缺省 STUB=空 pending + 无 breaking：sync 决策层全量可跑，但「真跑迁移落盘」面是 stub、不伪造。
+ *   实际后果：缺省注入下 --migrate 硬闸永不触发（无 pending、无 breaking），迁移相关分支恒走空集路径。
  */
 import {
   AGENTS_MD,
@@ -35,8 +34,8 @@ import {
 import { errMsg, type CliDeps } from '../deps.js'
 
 /**
- * 迁移注册表注入面（老仓 migrations.py 的 lite 替身）。缺省 STUB：无 pending、无 breaking。
- * 主会话收编迁移子系统时替换为真注册表（见顶注诚实 stub）。
+ * 迁移注册表注入面（老仓 migrations.py 的 lite 替身）。缺省 STUB：无 pending、无 breaking；
+ * 真注册表由调用方注入（见顶注诚实 stub）。
  */
 export interface SyncMigrationProvider {
   /** from→to 半开区间的 pending 迁移路径（老仓 get_migrations_for_version 的 from/to 并集）。 */

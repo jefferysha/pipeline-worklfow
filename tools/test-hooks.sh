@@ -4,7 +4,9 @@
 # 覆盖：
 #   1. gate.sh marker 三态 exit 语义（新鲜=2 / 陈旧=0 / 缺失=0），三个 marker 名都测
 #   2. gate.sh 解析失败 fail-open（exit 0）+ marker 在 cwd 上层目录也能拦（上溯语义）
-#   3. 红线自证：gate.sh / breadcrumb.sh / session-start.sh 内 grep -c "node" 为 0（python 同）
+#   3. 红线自证：breadcrumb.sh / session-start.sh / statusline.sh 内 grep -c "node" 为 0；gate.sh
+#      例外，反向断言它**必须**仍引用 node（Task 9 非 default workflow 的 skill DAG 委托分支，
+#      见下方 section 3 注释）。python 红线四个文件全覆盖（含 gate.sh）；jq 红线覆盖 gate/bc/sl
 #   4. breadcrumb.sh：多缓存取 mtime 最新 / 无缓存静默 exit 0
 #   5. verify-skills.sh：真实清单全绿；人为埋悬空引用（缺失脚本/不可执行/缺 SKILL.md/未声明外部 skill）抓红且逐条列出
 #   6. 插件清单 JSON 语法校验（plugin.json / hooks.json，经 node —— 测试脚本非 hook，允许）

@@ -16,8 +16,9 @@
  *   mergeToBase   → 真 git merge DELIVERY + 冲突留现场（mergeback.ts）—— 仅 L3 调
  *   git           → 真 git rev-parse（barrier build_sha 派生）
  *
- * 主会话在 packages/cli / server 侧把它接进 sdk.runRound（见报告接线清单）。默认 L1 report-only
- * （autoMerge=false → 不调 mergeToBase）。
+ * 真部署调用链：packages/cli/src/commands/afk.ts::cmdAfk（`pipeline afk run`）→
+ * createDockerRunChange（sdk/dockerRunChange.ts，在此装配本工厂）→ automation.runRound。默认
+ * L1 report-only（autoMerge=false → 不调 mergeToBase），仅 L3 真 merge-back。
  */
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
@@ -50,10 +51,11 @@ export interface LifecyclePortsDeps {
   readonly graceMs?: number
   readonly completionSignals?: readonly string[]
   /**
-   * 运行期状态字段写回注入（automation_sandbox/automation_worktree 等）。真接线 = kernel
-   * StateStore.set 经 changeDir(name) 适配（同 sdk.ts::storeWriter 同款模式，由调用方按需接线，
-   * 例如把 name 解析成 join(hostRepoDir, 'openspec', 'changes', name) 再转发给真 StateStore）。
-   * 缺省 no-op：调用方尚未接线真 store 时写回静默跳过，不 throw、不阻断 run。
+   * 运行期状态字段写回注入（automation_sandbox/automation_worktree 等）。生产装配见
+   * sdk/dockerRunChange.ts：注入了真 kernel StateStore 时，把 name 解析成 join(hostRepoDir,
+   * 'openspec', 'changes', name) 再转发给 StateStore.set（同 sdk.ts::storeWriter 同款模式）。
+   * 可选端口——省略时走下方 no-op 缺省，写回静默跳过，不 throw、不阻断 run：本包不硬依赖
+   * StateStore，无状态写回需求的调用方（如注入 fake exec 的单测）直接不传。
    */
   readonly setStateField?: (name: string, field: string, value: string) => Promise<void>
 }

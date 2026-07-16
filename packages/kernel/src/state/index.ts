@@ -1,6 +1,6 @@
 /**
  * kernel/state 公共出口 —— StateStore 工厂 + 供 oracle/cli 复用的解析/锁原语。
- * （根 src/index.ts 的 re-export 由 integrate 阶段接线，见 CONTRACT §4。）
+ * 本 barrel 由根 src/index.ts re-export（见 CONTRACT §4）。
  */
 export { createStateStore, STATE_FILE_NAME } from './store.js'
 export { parsePipeline, serializePipeline, quoteGate, unquoteScalar, emptyFields } from './parse.js'

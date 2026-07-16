@@ -126,7 +126,8 @@ _CLI_BUNDLE="$PLUGIN_ROOT/packages/cli/dist/pipeline.mjs"
 _GEN_MJS="$PLUGIN_ROOT/hooks/router-gen.mjs"
 
 # 缓存生成器（**非热路径**：仅 stale 时调用一次）。生产优先走 bundle 内部子命令
-# `pipeline _gen-router-sh`（待主会话接线，bundle 自含 kernel、安装态最稳）；回退自带 router-gen.mjs。
+# `pipeline _gen-router-sh`（bundle 自含 kernel、安装态最稳）；bundle 缺失/失败回退自带 router-gen.mjs
+# （两者输出逐字等价）。
 # 原子写：写 tmp、校验含 FE_PATTERN 才 mv，失败保留旧缓存（宁可陈旧 patterns 也不清空→静默失效）。
 _router_regen() { # $1=manifest $2=out
   command -v node >/dev/null 2>&1 || return 1

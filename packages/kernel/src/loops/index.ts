@@ -4,10 +4,8 @@
  *   · adjudicate / parseProgress / buildReport / budgetWarnThreshold / cadenceMinutes / enforcementFor —— R1-R11 裁决
  *   · 全部类型（LoopEntry/LoopRegistry/LoopVerdict/RunFacts/EnforceFs/…）
  *
- * 接线备注（收编前的临时桥）：根 kernel src/index.ts barrel 归主会话，本子 barrel 尚未被其 re-export，
- * 故 cli/commands/loops.ts 暂用相对桥直取（../../../kernel/src/loops/index.js，tsc -b/vitest/esbuild 三路已验证）。
- * 主会话收编时：在 kernel src/index.ts 追加 `export * from './loops/index.js'`，并把 cli loops.ts 的相对桥
- * 换成 '@pipeline-lite/kernel'（见报告接线清单）。
+ * 本子 barrel 由根 kernel src/index.ts re-export；消费方（cli/commands/loops.ts、server/loops.ts）
+ * 一律经 '@pipeline-lite/kernel' 包名导入。
  */
 export {
   loadRegistry, parseLoopsYaml, validateSchema, LOOPS_SCHEMA, nodeLoopIo,

@@ -9,11 +9,13 @@
  *   · budget overflow 只 reject 新 spawn，主线 build/verify/ship barrier 完全不经此路径；
  *   · killed 事件由 supervisor 幂等漏斗发（guard 从不自己 append killed）。
  *
- * ── 本批范围 ──────────────────────────────────────────────────────────────────
- *   ✅ 纯决策核心：durable 投影的活 worker 事实（判定①）、idle 清理谓词、预算裁决、overflow 文本。
- *   ⏳ 留后续（进程管理层，需注入 OS 探针）：scanLiveWorkers 的判定②③④（pid 文件 / os.kill /
- *      ps cmdline 验证）、cleanupExpiredIdleWorkers（写 shutdown-reason 侧车 + SIGTERM supervisor）、
- *      enforceSpawnBudget 的 scan→cleanup→重扫、resolvePolicy（manifest 四级链）——见 guard.py:133/224/259/282。
+ * ── 模块边界（为什么只有纯谓词）─────────────────────────────────────────────────
+ *   本文件只放不碰 OS 的纯决策：durable 投影的活 worker 事实（判定①）、idle 清理谓词、预算裁决、
+ *     overflow 文本。这样 barrier 能零副作用地读 worker 事实。
+ *   需 OS 探针/信号的执行面在同目录 liveness.ts：scanLiveWorkers 的判定②③④（pid 文件 / os.kill /
+ *     ps cmdline 验证）、cleanupExpiredIdleWorkers（写 shutdown-reason 侧车 + SIGTERM supervisor）、
+ *     enforceSpawnBudget 的 scan→cleanup→重扫——对应 guard.py:133/224/259/282。
+ *   policy（manifest 四级链）由调用方解析后注入：见 cli/commands/channel.ts::resolvePolicy。
  */
 import type { WorkerState } from './types.js'
 
@@ -22,7 +24,8 @@ export const TERMINAL_LIFECYCLES: ReadonlySet<string> = new Set(['done', 'error'
 
 /**
  * 判定①（durable 真相、可重放、跨机一致）：从 reduceWorkerRegistry 的 workers 里取非 terminal 的。
- * 这是 scanLiveWorkers 四重判定的第一重，也是 barrier 能读的纯事实（其余三重是 OS 探针，留后续）。
+ * 这是 scanLiveWorkers 四重判定的第一重，也是 barrier 能读的纯事实（其余三重是 OS 探针，
+ * 在 liveness.ts::scanLiveWorkers 里叠加）。
  */
 export function liveWorkerCandidates(workers: WorkerState[]): WorkerState[] {
   return workers.filter((w) => !w.terminal && !TERMINAL_LIFECYCLES.has(w.lifecycle))
@@ -35,7 +38,10 @@ export function parseIsoMs(s: string | undefined): number | undefined {
   return Number.isNaN(t) ? undefined : t
 }
 
-/** isIdleCleanupEligible 消费的 live 记录（durable state 必有；OS 探针字段留后续）。 */
+/**
+ * isIdleCleanupEligible 消费的 live 记录：只要 durable state 必有的字段，故本文件不依赖 OS 探针。
+ * liveness.ts 的 LiveWorker 是其超集（另带 supervisorPid/supervisorVerified/workerPid），可直接传入。
+ */
 export interface LiveWorkerRecord {
   state: Pick<WorkerState, 'activity' | 'idleSince' | 'terminal'>
   channel?: string

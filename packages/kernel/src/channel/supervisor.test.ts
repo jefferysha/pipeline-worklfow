@@ -70,10 +70,10 @@ describe('EchoAdapter / echoOnlyAdapters', () => {
     expect(a.isReady()).toBe(true)
     expect(a.parseLine('  echoed  ')).toEqual({ events: [{ kind: 'done', payload: { text: 'echoed' } }], side: null })
   })
-  test('echoOnlyAdapters：echo/cat → EchoAdapter；其他 → 抛（本批仅 echo）', () => {
+  test('echoOnlyAdapters：echo/cat → EchoAdapter；其他 provider → 抛（内置只支持 echo）', () => {
     expect(echoOnlyAdapters('echo')).toBeInstanceOf(EchoAdapter)
     expect(echoOnlyAdapters('cat')).toBeInstanceOf(EchoAdapter)
-    expect(() => echoOnlyAdapters('claude')).toThrow(/仅 echo/)
+    expect(() => echoOnlyAdapters('claude')).toThrow(/只支持 echo/)
   })
 })
 

@@ -8,10 +8,7 @@
  *   projects             项目 cwd 聚合 + per-platform 计数           老仓 cli.py:274
  * stdout/exit 对齐老仓：数据/人读表走 stdout，error/warning 走 stderr；错误 exit 2、成功 0。
  *
- * 接线备注（收编前的临时桥）：kernel barrel 尚未导出 mem/（barrel 归主会话），故此处用相对 import
- * 直取 kernel 源。主会话收编时：① 在 kernel src/index.ts 加 `export * from './mem/index.js'`（或 mem 子
- * barrel）；② 把本文件相对 import 换成 '@pipeline-lite/kernel'；③ 在 program.ts 注册 `mem` 命令
- * （见报告接线清单）。mem 只读外部 session（绝不写用户 session 历史）。
+ * mem 只读外部 session（绝不写用户 session 历史）。
  */
 import { resolve } from 'node:path'
 import {

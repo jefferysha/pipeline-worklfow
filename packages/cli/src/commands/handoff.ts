@@ -6,12 +6,8 @@
  * 做**确定性**结构化压缩，输出下游 handoff 摘要 + 压缩率。零 LLM（纯规则，可测可 oracle）。
  * stdout：压缩摘要（下游消费的产物）+ 压缩率行；--json 结构化信封。exit：非法名/状态缺失=1，否则 0。
  *
- * 接线备注（收编前的临时桥，同 loops.ts / task.ts 先例）：kernel 根 barrel 尚未 re-export
- * compress/（barrel 归主会话），故此处用相对桥直取 kernel compress 源
- * （../../../kernel/src/compress/index.js，tsc -b/vitest/esbuild 三路已验证的模式）。
- * 主会话收编时：① kernel src/index.ts 追加 `export * from './compress/index.js'`；
- * ② 本文件相对桥换 '@pipeline-lite/kernel'；③ program.ts 注册 `handoff` 命令；
- * ④ （可选）transition.ts 进相位副作用里调 buildHandoff 落 .breadcrumb/摘要（见报告接线清单）。
+ * 触发面：handoff 只在用户显式敲 `pipeline handoff` 时跑——相位转换不自动产出 handoff
+ * （transition.ts 的进相位副作用里没有 buildHandoff 调用，不落 .breadcrumb/摘要）。
  */
 import {
   buildHandoff,

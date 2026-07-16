@@ -1,11 +1,13 @@
 /**
- * setup 命令 —— 安装后「全功能就绪」引导（full-install F3 · 骨架批）。
+ * setup 命令 —— 安装后「全功能就绪」引导（full-install F3）。
  *
- * 本批只落两件事:
+ * 三段（空 sub 走全流程,亦可单独敲子命令）:
  *   ① ensurePipelineOnPath():把 CLI bundle 软链到 ~/.local/bin/pipeline（让用户终端能敲 pipeline）;
- *   ② 打印全流程计划骨架（技能安装 / 运行时检查 / 就绪清单 三段标题 + Phase 2/3 TODO 锚点）。
- * 真正的技能安装段（Phase 2,计划 S2）与运行时检查段（Phase 3,计划 R1）本批留占位分派
- * （打印「待实现」exit 0 不报错）+ 清晰 TODO 锚点,不实现。
+ *   ② 技能安装段 cmdSetupSkills()（`setup skills`,:468）:读 registry → 分组命令 → 幂等差集 → 计划
+ *      → 确认位 → 逐条容错 → 汇总;
+ *   ③ 运行时检查段 cmdSetupRuntime()（`setup runtime`,:595）:docker/镜像/两 runner 凭证就绪清单
+ *      + 缺镜像一键构建。
+ * 退出码:全流程取技能段优先（强制失败),运行时段恒 0 不改判;未知子命令 = 1。
  *
  * 注入面 SetupEnv（home/bin 定位 + fs 原语）:测试注入 fake（临时 HOME/内存 spy），
  * 真实现 REAL_SETUP_ENV 走 node:fs + os.homedir()——对齐 loops.ts InitEnv/REAL_INIT_ENV 先例,
@@ -170,14 +172,14 @@ function chmodExecBestEffort(env: SetupEnv, source: string): void {
   }
 }
 
-// ── 计划骨架 + Phase 2/3 占位 ─────────────────────────────────────────────────────────
+// ── 全流程开场白（四段预告,纯呈现）─────────────────────────────────────────────────────
 
 export interface SetupOpts {
   dryRun?: boolean
   yes?: boolean
 }
 
-/** 计划骨架三段标题（技能安装/运行时检查/就绪清单）——Phase 2/3 填真逻辑,本批仅标题 + 锚点。 */
+/** 全流程开场白:向用户预告下面四段会发生什么（纯 stdout 呈现,无副作用;真逻辑在各段自己的函数里）。 */
 function printPlanSkeleton(deps: CliDeps, opts: SetupOpts): void {
   deps.io.out('[setup] 全功能就绪引导 —— 计划骨架')
   deps.io.out('  1. PATH 软链:把 pipeline 软链到 ~/.local/bin（本批已实现）')

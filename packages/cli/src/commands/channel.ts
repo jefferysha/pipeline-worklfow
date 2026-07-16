@@ -7,17 +7,13 @@
  *   本命令只引用 deps.io + deps.cwd（构造默认 host）——绝不读写 deps.store（.pipeline.yaml）、
  *   deps.flow（相位/转换）、三门 marker 或 git。事件全落在 channel root，与 openspec/changes 隔离。
  *
- * ── 本批子命令（事件面）───────────────────────────────────────────────────────────────────
+ * ── 事件面子命令 ──────────────────────────────────────────────────────────────────────────
  *   create / title / context / send / wait / messages / registry / interrupt / thread / forum / list / dir
  *   （send 三态校验：先 append message 永不丢，再据 delivery-mode + classifyDelivery 逐失败 target
  *    append undeliverable；thread 强制 forum 校验 + normalizeThreadKey + rename 防 silently merge。）
- * ── 留后续（真 spawn / 进程管理层，非事件面）──────────────────────────────────────────────
- *   spawn / kill / run / prune —— 需 fork supervisor + OS 信号 + guard 四重 OS 判定（见 kernel guard.ts 顶注）。
- *
- * 接线备注（收编前的临时桥）：kernel barrel（packages/kernel/src/index.ts）尚未导出 channel/（barrel 归主
- *   会话），故此处相对 import 直取 kernel 源。主会话收编时：① 在 kernel src/index.ts 加
- *   `export * from './channel/index.js'`；② 把本文件相对 import 换成 '@pipeline-lite/kernel'；
- *   ③ 在 program.ts 注册 `channel` 命令（见报告接线清单）。
+ * ── 进程管理层（非事件面）──────────────────────────────────────────────────────────────────
+ *   spawn / kill / run / prune —— 建在 fork supervisor + OS 信号 + guard 四重 OS 判定之上
+ *   （见 kernel guard.ts 顶注）；注入面见下方 ChannelHost 的 proc/fs/launchSupervisor。
  */
 import { rmSync } from 'node:fs'
 import { homedir } from 'node:os'
@@ -371,8 +367,10 @@ function buildWaitFilter(self: string | undefined, p: ParsedArgs): EventFilterOp
 }
 
 /**
- * wait 事件面（快照扫描版）：扫 --since 之后匹配 filter 的事件，出首个（exit 0）或 exit 124。
- * ⏳ 留后续：老仓 wait 从 EOF 起阻塞 tail + timeout（watch.py 增量读）——阻塞式 live-tail 是运行时层。
+ * wait 事件面：扫 --since 之后匹配 filter 的事件，出首个（exit 0）或 exit 124。
+ * 语义是**快照扫描**——读完当前已有事件即返回，不从 EOF 起阻塞 tail 新事件、无超时时钟；
+ * exit 124 的含义是「扫完现存事件仍无匹配」，而非「等待超时」。
+ * （老仓 wait 走 watch.py 增量读做阻塞式 live-tail，属运行时层，不在本事件面内。）
  */
 function cmdWait(deps: CliDeps, host: ChannelHost, p: ParsedArgs): number {
   const name = p.positional[0]

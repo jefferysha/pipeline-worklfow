@@ -21,13 +21,17 @@
  *   所有派生状态（worker registry / thread / inbox 计数）都是从事件流纯函数投影，磁盘不存派生态。
  *   seq 由 append 内部分配、单调递增（宁崩不猜、绝不留空洞）。可在任意机器一致重放。
  *
- * ── 本批范围 vs 留后续 ────────────────────────────────────────────────────────────────────
- *   ✅ 本批（事件模型 + 状态重建 + 只读事实）：event log（append/read/reconcile/list）、seq、paths、
- *      worker registry 投影、三过滤、thread 投影、TurnTracker、guard 纯决策核心。
- *   ⏳ 留后续（进程管理层，非纯逻辑）：supervisor 三循环编排 + 真 spawn 子进程（claude/codex/echo）、
- *      inbox_watcher 真 tail→stdin 桥接、stdout_pump、idle/warning timer、shutdown 信号漏斗、
- *      guard 的 OS liveness 四重判定（pid/os.kill/ps）+ SIGTERM cleanup、watch.py 增量 tail、
- *      adapters（provider 编码）。这些需真进程/OS 信号，不在"事件模型 + 状态重建"批次内。
+ * ── 两层构成 ──────────────────────────────────────────────────────────────────────────────
+ *   事件模型 + 状态重建（纯逻辑，无 OS 依赖）：event log（append/read/reconcile/list）、seq、paths、
+ *     worker registry 投影、三过滤、thread 投影、TurnTracker、guard 纯决策核心。
+ *   进程层（需真进程/OS 信号，经 ProcessFace/TailFs 注入面隔离，导出见下方「进程层」段）：
+ *     supervisor 三循环编排 + 真 spawn 子进程、inbox_watcher tail→stdin 桥接、stdout_pump、
+ *     idle/warning timer、shutdown 信号漏斗、OS liveness 四重判定（pid/os.kill/ps）+ SIGTERM
+ *     cleanup、events.jsonl 增量 tail。
+ *
+ * ── adapter 现状 ──────────────────────────────────────────────────────────────────────────
+ *   内置 adapter 只有 EchoAdapter（supervisor.ts）：缺省解析器 echoOnlyAdapters 只识别 echo/cat，
+ *   其他 provider 抛错。真实 provider（claude/codex）的进程协议由调用方注入自己的 resolveAdapter。
  */
 
 // 类型契约

@@ -22,7 +22,6 @@
  * `--dry-run`：只报计划、只读不写盘（当前相位 guard 真判，后续步运行时 live-guard）。
  *
  * exit：0（推进完成/停在门/终态/dry-run）；2（停因 guard 不过）；1（名非法/读失败/transition 出错）。
- * 未接入 program（收编接线由主会话统一做）——本文件只 export cmdAdvance。
  *
  * 双轨（对齐 transition/check 先例）：读完 state 按 workflow 字段分流（习语单源 kernel
  * resolveWorkflowName）。default → 上述 manifest 前向边链路逐字不变；非 default → 按该 workflow

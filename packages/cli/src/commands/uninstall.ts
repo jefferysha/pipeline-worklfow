@@ -16,10 +16,6 @@
  *   confirm：非 dry-run 必须 --yes（fail-closed，等价老仓非 TTY 分支）。
  *   execute：写回 mods → unlink dels → rm -rf .pipeline（存在才） → cleanup 空受管子目录 → final_pass 删空根。
  *   finalize：删 .pipeline-owned.json + .pipeline-version（lite 元数据收尾，卸载后不留残清单）。
- *
- * 接线备注（收编前临时桥）：kernel barrel 尚未导出 ownership.ts，故此处相对 import kernel/dist
- * （tsc 走 .d.ts 类型引用不受 rootDir 约束；vitest/esbuild 解析同一 dist）。主会话收编：① barrel 加
- * ownership 导出；② 本文件 import 换 '@pipeline-lite/kernel'；③ program.ts 注册 uninstall 命令。
  */
 import {
   AGENTS_MD,

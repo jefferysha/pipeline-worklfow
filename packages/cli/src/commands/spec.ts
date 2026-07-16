@@ -8,11 +8,6 @@
  * stdout/exit 对齐老仓：specs 数据走 stdout（老仓 echo/printf）；set-spec-scope 的 green [OK] 走
  * stderr（老仓 green >&2）；inject header/内容走 stdout，WARN 走 stderr。exit：错误/非法名 = 1；
  * inject 内容问题（bad agent / 缺文件 / 坏行）恒 rc0（老仓注入期 fail-open，绝不非零退出）。
- *
- * 接线备注（收编前的临时桥）：kernel barrel 尚未导出 spec.ts，故此处用相对 import 直取 kernel 源
- * （tsc/vitest/esbuild bundle 三路可解；参照 #15 task.ts 同款桥）。主会话收编时：① 在 kernel
- * state/index.ts + index.ts 加 spec 导出；② 把本文件相对 import 换成 '@pipeline-lite/kernel'；
- * ③ 在 program.ts 注册 `spec` 命令（见报告接线清单）。
  */
 import type { HistoryEntry } from '@pipeline-lite/kernel'
 import {
