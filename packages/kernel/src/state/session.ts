@@ -26,8 +26,10 @@
  *     （零第三方依赖，仅认「顶层 packages: 块 → 名: {path:...}」子集），CLI 注入真读 .pipeline-project.yaml。
  *
  * 占位诚实标注（老仓 state-session.sh:238-253 [PLACEHOLDER]，老仓自己都未实现——照实标注、不臆造）：
- *   · package-validation：仅 monorepo 生效；本项目当前单 repo，无包模型 → no-op 占位（待 monorepo 落地）。
- *   · Cursor ticket 写入端：读端已备（老仓 R20/R21），写端（Cursor beforeShellExecution hook 写短命 ticket）待落地。
+ *   · package-validation：仅在 monorepo 语境下有意义；本项目是单 repo、无包模型，故该校验恒为
+ *     no-op（不是缺口，是当前形态下无对象可校验）。
+ *   · Cursor ticket 写入端：只有读端（老仓 R20/R21）。写端本该是 Cursor 的 beforeShellExecution
+ *     hook 落一枚短命 ticket，本仓不存在该 hook → 这条 ticket 链路在生产上从不被触发。
  *   · init-context-deprecation：本项目从未引入 init-context（related_files 走 add-context CSV），概念被废弃/不引入。
  *   以上三项属老仓亦未实现的空占位，本次移植同样不实现（仅 route-context 的路由引擎是真实现）。
  *

@@ -54,8 +54,10 @@ describe('docker 全链 · 真容器生命周期集成', () => {
       ctx.skip()
       return
     }
-    // full CC-in-sandbox 需预构建 pipeline 镜像 + 真 agent，本批不落地；有 token 时留待主会话接线。
-    console.warn('[HONEST SKIP] full CC-in-sandbox 需预构建 pipeline 镜像 + 真 agent 接线，本批不落地')
+    // full CC-in-sandbox 链路在本仓无自动化覆盖：它需要预构建 pipeline 镜像 + 真 agent，本用例只到
+    // 容器可用性为止。给了 token 也不会真跑该链路——本条 skip 与上面「缺 docker」那条是两回事，
+    // 分开报是为了让「缺依赖」与「没覆盖」在输出里可区分。
+    console.warn('[HONEST SKIP] full CC-in-sandbox 链路无自动化覆盖：需预构建 pipeline 镜像 + 真 agent')
     ctx.skip()
   })
 })

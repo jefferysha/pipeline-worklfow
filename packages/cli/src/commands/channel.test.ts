@@ -212,7 +212,8 @@ describe('wait —— 当前限制：快照扫描，非真等待', () => {
     const c = ctx()
     await c.run('create', ['ch', '--task', 't'])
     const t0 = Date.now()
-    // --timeout 被完全忽略（cmdWait 根本不解析它；真阻塞等待落地后这里应等 9999s 或按超时语义返回）
+    // --timeout 被完全忽略：cmdWait 根本不解析它。本断言即绊线——一旦有了真阻塞等待，这里会因
+    // 「等满 9999s 或按超时语义返回」而不再是 124，测试变红，届时请删本 describe 改成正向测试。
     expect(await c.run('wait', ['ch', '--as', 'me', '--since', '99', '--timeout', '9999'])).toBe(124)
     // 立即返回：若真有等待/超时时钟，不可能在 1s 内回来
     expect(Date.now() - t0).toBeLessThan(1000)

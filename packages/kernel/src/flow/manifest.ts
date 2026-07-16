@@ -15,9 +15,11 @@
  *         RECSKILL_/MANDSKILL_<phase>_<track> 写进 .pipeline-router.generated.sh，
  *         hooks/router.sh:202-203 source 后每轮注入提示；② dashboard 配置面——
  *         packages/server/src/config.ts:60 flattenMandatorySkills → server.ts:512 GET /api/config。
- *       两表在新仓的差别**只是注入文案分级**（router.sh:215-216「推荐 skill」/「本相位强制 skill」）：
- *       老仓 evidence 的「强制缺失 = [HARD] 阻断 / 推荐缺失 = WARN」判定未移植，
- *       故 mandatory 缺失当前不阻断任何东西（见 GUARD-RULES.md:119，O6/E4/S6/B7/V8/V9/P5 全 ❌）。
+ *       两表在 router 注入面的差别**只是文案分级**（router.sh:215-216「推荐 skill」/「本相位强制 skill」）：
+ *       老仓 evidence 的「强制缺失 = [HARD] 阻断」判定未移植（GUARD-RULES.md:119，O6/E4/S6/B7/V8/V9/P5
+ *       全 ❌），故 mandatory 缺失**不阻断 phase transition，也不影响 AFK scheduler**。
+ *       但它并非全无后果：`pipeline doctor` 对两表分级处置（doctor.ts:236 起——mandatory 缺失报
+ *       **red 且返回非零**，recommended 缺失只报 yellow），即它会让 doctor 的就绪检查失败。
  *       gate.sh / session-start.sh 不读本派生（前者走 internal-skill-gate 的 skill DAG 判定，
  *       后者只打印静态横幅）——它们曾被规划为消费方，实际接线落在了 router 与 server。
  *   · routerPatterns ← 老 gen_router_sh 890-898（FE/BE/PM_PATTERN）。
@@ -74,8 +76,8 @@ const ROUTER_TRACK_SET: ReadonlySet<string> = new Set(['frontend', 'backend', 'p
  * loadManifest 的完整返回面（types.ts::ManifestData 的扩展）。
  * 字段留在本文件、没有并进 types.ts::ManifestData：后者是**引擎面最小契约**
  * （FlowEngine/createFlowEngine 只需 phases/transitions/reviewPhases），本接口是解析器的全量产出，
- * 二者分开可让引擎不依赖 router/skill 派生。经 flow/index.ts 与 kernel index.ts 的 `export *`
- * re-export，消费方从 `@pipeline-lite/kernel` 具名导入（如 packages/server/src/config.ts:60）。
+ * 二者分开可让引擎不依赖 router/skill 派生。导出链：flow/index.ts **具名** re-export（:7-12），
+ * kernel index.ts 再 `export *`；消费方从 `@pipeline-lite/kernel` 具名导入（如 server/src/config.ts:60）。
  */
 export interface ExtendedManifestData extends ManifestData {
   /** phase×track 强制 skill 表。消费方与「强制」在新仓的实际效力（仅注入文案）见文件头盘点。 */

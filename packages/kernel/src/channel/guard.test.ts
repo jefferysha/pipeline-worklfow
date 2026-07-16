@@ -1,8 +1,9 @@
 /**
  * guard —— worker 只读事实 + spawn 预算裁决（纯决策核心）。
  * 老仓真相源：skills/pipeline/scripts/channel/guard.py。老仓单文件混装的 OS 扫描/SIGTERM 执行面，
- * 本仓按模块边界拆去同目录 liveness.ts（scanLiveWorkers:90 四重判定 / cleanupExpiredIdleWorkers:146
- * 发 SIGTERM），guard.ts 只留不碰 OS 的纯谓词——故本测试零进程、零信号、零 fs。
+ * 本仓按模块边界拆去同目录 liveness.ts（scanLiveWorkers:90 做四重**探测**——注意它会收录
+ * supervisorVerified=false 的记录、只是打上标记，真正以 verified=true 为前提发 SIGTERM 的是
+ * cleanupExpiredIdleWorkers:146→:161），guard.ts 只留不碰 OS 的纯谓词——故本测试零进程、零信号、零 fs。
  *
  * ★红线：guard 只读地为 barrier 提供 worker 事实，绝不触 barrier/三门/build_sha。
  */

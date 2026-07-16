@@ -88,7 +88,8 @@ describe('真实 e2e —— send 三态校验 + 真投影 registry', () => {
   test('spawned 事件后 send 定向 → registry 真重建 pendingMessageCount', async () => {
     await ch('create', ['c', '--task', 't'])
     // supervisor 真 spawn 时会写的 spawned 事件（真实现在 kernel channel/supervisor.ts:446 proc.spawn
-    // → :515 append spawned；真进程面在 channel/process.ts::nodeProcessFace，端到端测在 supervisor.test.ts）。
+    // → :515 append spawned；真进程面在 channel/process.ts::nodeProcessFace）。真 fork/真 SIGTERM 的
+    // 零 mock 端到端测在 channel-process.integration.test.ts——supervisor.test.ts 用的是 fake child。
     // 本文件只测 channel 事件总线本身，故用 store 真 append 直接造出同款事件面，不拉起真子进程。
     host.store.append('c', { kind: 'spawned', by: 'sup', as: 'w1', provider: 'echo' })
     await ch('send', ['c', 'work item', '--as', 'main', '--to', 'w1', '--delivery-mode', 'requireRunningWorker'])

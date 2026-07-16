@@ -174,8 +174,10 @@ describe('adjudicate —— R1-R11 裁决（老 adjudicate 318-397；verdict 取
  * `loops graduate|level`（commands/loops.ts:907/909）+ server.ts:814），它改的是 autonomy_level 本身。
  *
  * ★当前限制（这些断言的射程）：verdict×level 不驱动任何自动 gate/halt。裁决信封的唯一消费方是
- * enforce.ts:362 buildReport（→ `loops report` 展示），没有执行面据此停 loop——automation 的
- * scheduler/scheduler.ts 零引用裁决与预算。故下面 L1 report_only=true / L3 unattended 的差别只体现
+ * enforce.ts:362 buildReport，它被 CLI 的 `loops enforce`（commands/loops.ts:222，**按 verdict 返回
+ * exit 0/1/2**）与 `loops status`（:248）消费——即它能让一次人工/CI 调用失败，但没有执行面据此停
+ * loop：automation 的 scheduler/scheduler.ts 零引用裁决与预算。故下面 L1 report_only=true /
+ * L3 unattended 的差别只体现
  * 在信封字段与报告文本上，不改变 loop 实际被调度执行的行为。详见 loops/types.ts:13。
  */
 describe('分级放权 L1-L3 —— enforce 认级别（级别只进裁决信封，不驱动 gate/halt）', () => {
