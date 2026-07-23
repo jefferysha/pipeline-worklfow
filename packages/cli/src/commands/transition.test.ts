@@ -1,3 +1,6 @@
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, test } from 'vitest'
 import { IllegalTransitionError, TRANSITION_EVENTS, eventEdge as kernelEventEdge } from '@pipeline-lite/kernel'
 import type { Phase, PipelineState, TransitionResult } from '@pipeline-lite/kernel'
@@ -26,8 +29,8 @@ describe('transition —— [TRANSITION] 走 stderr / 非法 exit 1（oracle 实
   })
 
   test('事件映射目标相位并透传注入时钟给 flow.transition', async () => {
-    // track=pm 豁免 spec-complete 的 plan 前置（BACKLOG #14），本测只关注边映射
-    const deps = makeDeps({ state: mockState({ phase: 'spec', track: 'pm' }) })
+    // PM 保持原流程的 legacy plan artifact 豁免；本测只关注边映射。
+    const deps = makeDeps({ state: mockState({ phase: 'spec', track: 'pm', plan: 'null' }) })
     await cmdTransition(deps, 'demo', 'spec-complete')
     const call = deps.flow.transition.calls[0]
     expect(call?.[1]).toBe('build')
@@ -68,7 +71,8 @@ describe('transition —— [TRANSITION] 走 stderr / 非法 exit 1（oracle 实
     expect(deps.store.write.calls).toHaveLength(0)
   })
 
-  test('flow 抛 IllegalTransitionError：exit 2，无 stdout', async () => {
+  test('flow 抛 IllegalTransitionError：exit 1，无 stdout（标题此前误写 exit 2 与断言不符——' +
+    'exit 2 是 step guard 未通过专属，第 1 轮 TransitionApplication review 点名的既有标题失真）', async () => {
     const deps = makeDeps({ state: mockState({ phase: 'verify' }) })
     deps.flow.transition = spy((_s: PipelineState, _to: Phase, _c?: () => string): TransitionResult => {
       throw new IllegalTransitionError('verify', 'ship')
@@ -108,12 +112,33 @@ describe('transition —— [TRANSITION] 走 stderr / 非法 exit 1（oracle 实
     expect(deps.breadcrumbs[0]?.[1]).toContain('explore')
   })
 
-  test('成功后 append 一条 transition 历史，raw=事件名（老仓 transitions_history.event 对位）', async () => {
+  test('成功后 append 一条 transition 历史，raw=事件名（老仓 transitions_history.event 对位），' +
+    'transitionRecordId=tx.commit() 真实返回的 record.id（W1 第二增量：history 合并边界从时间戳 ' +
+    '比较改成来源标记，收尾必须用 kernel transitionRecordToHistoryEntry() 而非手填字段）', async () => {
     const deps = makeDeps({ state: mockState({ phase: 'open' }) })
     await cmdTransition(deps, 'demo', 'open-complete')
+    // mockWorkflowRunRepository.commit() 按 `mock-record-${sequence}` 生成 id（test-support.ts），
+    // sequence 在每个 makeDeps() 新建的 repo 实例里从 0 起数；本测唯一一次 cmdTransition = 唯一
+    // 一次 commit，sequence 落 1，故这里的 'mock-record-1' 是可预测的真实返回值，不是猜的——
+    // 逐值比较（而非仅断言非空字符串）能守住「history 里的 id 确实来自 tx.commit() 返回值」
+    // 这条不变式，若实现改回手填字符串常量也会被这个精确值拆穿。
     expect(deps.historyEntries).toEqual([
-      ['/repo/openspec/changes/demo', { ts: FIXED_CLOCK, kind: 'transition', from: 'open', to: 'explore', raw: 'open-complete' }],
+      [
+        '/repo/openspec/changes/demo',
+        {
+          ts: FIXED_CLOCK, kind: 'transition', from: 'open', to: 'explore', raw: 'open-complete',
+          transitionRecordId: 'mock-record-1',
+        },
+      ],
     ])
+  })
+
+  test('收尾三个副作用的真实调用顺序 = breadcrumb → history → review-marker（G1 REFACTOR 回归锚：' +
+    '第二轮 codex review 抓到过一次 REFACTOR 把这个顺序悄悄改乱——history 延迟/中断时先落 ' +
+    'breadcrumb 能缩短 hook 热路径读到的相位缓存过期窗口，顺序本身是可观测行为，不是实现细节）', async () => {
+    const deps = makeDeps({ state: mockState({ phase: 'open' }) })
+    await cmdTransition(deps, 'demo', 'open-complete') // open -> explore，explore 是复核相位，三者都应真写
+    expect(deps.tailCallOrder).toEqual(['breadcrumb', 'history', 'reviewMarker'])
   })
 
   test('breadcrumb 写失败仅 WARN，不影响 exit 0', async () => {
@@ -125,6 +150,35 @@ describe('transition —— [TRANSITION] 走 stderr / 非法 exit 1（oracle 实
     expect(code).toBe(0)
     expect(deps.outLines).toEqual([])
     expect(deps.errLines.join('\n')).toContain('WARN')
+  })
+
+  test('state YAML projection 写失败仅 WARN：canonical transition 已成功，exit 仍为 0', async () => {
+    const deps = makeDeps({ state: mockState({ phase: 'open' }) })
+    deps.store.write = spy(async () => ({
+      projection: { status: 'pending' as const, error: new Error('disk full') },
+    }))
+    const code = await cmdTransition(deps, 'demo', 'open-complete')
+    expect(code).toBe(0)
+    expect(deps.errLines.join('\n')).toContain('state YAML projection 写入失败（canonical 已提交）')
+  })
+
+  test('breadcrumb 写抛出 falsy 值（如 throw null）仍算失败、仍输出 WARN（G1 REFACTOR 第三轮 ' +
+    'codex review 抓到：{error?:unknown} + truthy 判断会把 falsy 抛出值误判成成功、静默吞掉 ' +
+    'WARN——TailWriteOutcome 改判别联合后用 ok 字段判定，不受 error 值本身是否 falsy 影响）', async () => {
+    const deps = makeDeps({ state: mockState({ phase: 'open' }) })
+    deps.writeBreadcrumb = async () => { throw null }
+    const code = await cmdTransition(deps, 'demo', 'open-complete')
+    expect(code).toBe(0)
+    expect(deps.errLines.join('\n')).toContain('WARN: breadcrumb 写入失败')
+  })
+
+  test('review marker 写抛出 falsy 值（如 throw \'\'）仍算失败、仍输出 WARN（同上，marker 路径的' +
+    '判别联合修复）', async () => {
+    const deps = makeDeps({ state: mockState({ phase: 'open' }) })
+    deps.writeReviewMarker = async () => { throw '' }
+    const code = await cmdTransition(deps, 'demo', 'open-complete') // -> explore，复核相位，会真触发 marker 写
+    expect(code).toBe(0)
+    expect(deps.errLines.join('\n')).toContain('WARN: review marker 写入失败')
   })
 
   test('非法 change 名：exit 1', async () => {
@@ -171,12 +225,12 @@ describe('transition —— 事件前置校验（老仓 case 块，exit 1 + ERRO
     expect(await cmdTransition(deps, 'demo', 'explore-complete')).toBe(0)
   })
 
-  test('spec-complete：backend 无 plan → exit 1；pm 豁免 → exit 0（老仓 L127-138）', async () => {
+  test('spec-complete：backend 无 plan 拒绝；PM 保持原流程豁免并可推进', async () => {
     const be = makeDeps({ state: mockState({ phase: 'spec', track: 'backend', plan: 'null' }) })
     expect(await cmdTransition(be, 'demo', 'spec-complete')).toBe(1)
     expect(be.errLines).toContain('ERROR: backend track spec-complete 要求 plan 字段非空且文件存在 (当前=null)')
-    const pm = makeDeps({ state: mockState({ phase: 'spec', track: 'pm', plan: 'null' }) })
-    expect(await cmdTransition(pm, 'demo', 'spec-complete')).toBe(0)
+    const pmMissing = makeDeps({ state: mockState({ phase: 'spec', track: 'pm', plan: 'null' }) })
+    expect(await cmdTransition(pmMissing, 'demo', 'spec-complete')).toBe(0)
   })
 
   test('build-complete：build_mode/isolation 未设逐个拒（老仓 L144-147）', async () => {
@@ -321,5 +375,61 @@ describe('transition —— Task 8 双轨分支路由（mock 快测）', () => {
     expect(code).toBe(1)
     expect(deps.errLines.join('\n')).toContain("workflow 'ghost' 未找到")
     expect(deps.store.write.calls).toHaveLength(0)
+  })
+})
+
+/** W1 第二增量收尾：非 default workflow 分支同样必须把 tx.commit() 返回的 record 经
+ *  transitionRecordToHistoryEntry() 投影进 history，不能像 default 分支曾经那样各自手填。
+ *  非 default 分支的成功转换需要 kernel loadWorkflow() 真读 <cwd>/.pipeline/workflows/<name>.yaml
+ *  （existsSync/readFileSync，硬 fs 依赖，不受本文件其余 mock 影响）——本文件按约定是 mock 单测
+ *  （对照 transition-custom-workflow.integration.test.ts 文件头注释），不引入 integration-harness.ts
+ *  那套真实项目 harness，只为这一处硬依赖临时开一个 mkdtemp 目录、落一份最小 workflow 定义，
+ *  其余（store/runRepo/history）仍全 mock——不新增被禁止触碰的文件、也不把本文件整体改造成
+ *  真 e2e。 */
+describe('transition —— 非 default workflow 分支的 transitionRecordId（W1 第二增量）', () => {
+  const TWO_STEP_WF = `name: twostep
+steps:
+  - id: s1
+    label: step-one
+    gate: null
+    skills: []
+    inputs: []
+    outputs: []
+    guards: []
+    transitions:
+      - event: complete
+        to: s2
+  - id: s2
+    label: step-two
+    gate: null
+    skills: []
+    inputs: []
+    outputs: []
+    guards: []
+    transitions: []
+`
+
+  test('非 default workflow 成功转换：history 也携带 tx.commit() 真实返回的 record.id', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'transition-record-id-'))
+    try {
+      await mkdir(join(cwd, '.pipeline', 'workflows'), { recursive: true })
+      await writeFile(join(cwd, '.pipeline', 'workflows', 'twostep.yaml'), TWO_STEP_WF, 'utf8')
+      const deps = makeDeps({ cwd, state: mockState({ phase: 's1', workflow: 'twostep' }) })
+      const code = await cmdTransition(deps, 'demo', 'complete')
+      expect(code).toBe(0)
+      // 同上：本测唯一一次 cmdTransition = mockWorkflowRunRepository 唯一一次 commit，
+      // sequence 落 1 → record.id 可预测地等于 'mock-record-1'，逐值比较而非仅断言格式。
+      expect(deps.historyEntries).toEqual([
+        [
+          join(cwd, 'openspec', 'changes', 'demo'),
+          {
+            ts: FIXED_CLOCK, kind: 'transition', from: 's1', to: 's2', raw: 'complete',
+            transitionRecordId: 'mock-record-1',
+          },
+        ],
+      ])
+    } finally {
+      await rm(cwd, { recursive: true, force: true })
+    }
   })
 })

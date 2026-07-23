@@ -68,29 +68,59 @@ steps:
     expect(() => loadWorkflow(root, 'dangling')).toThrow(/does-not-exist/)
   })
 
-  it('真实 templates/workflows/default.yaml 文件 → 解析成功，7 个步骤，包括 tasks-at-least guard', async () => {
+  it('真实 templates/workflows/default.yaml：parseWorkflow 语法层解析成功，7 个步骤，含 tasks-at-least guard', async () => {
     // Find the repo root and read the real default.yaml template file
     const __dirname = dirname(fileURLToPath(import.meta.url))
     const repoRoot = dirname(dirname(dirname(dirname(__dirname))))
     const defaultYamlPath = join(repoRoot, 'templates', 'workflows', 'default.yaml')
     const content = await readFile(defaultYamlPath, 'utf8')
 
-    // Create a temp directory with .pipeline/workflows structure and write the content
+    // 语法层（parseWorkflow）smoke：真文件 → 7 步、step 序、spec 的 tasks-at-least guard。
+    // 注意 loadWorkflow（custom 契约）会因 A 契约拒绝它（下一用例）——parse 层不受 A 契约约束。
+    const wf = parseWorkflow(content)
+    expect(wf.name).toBe('default')
+    expect(wf.steps).toHaveLength(7)
+    expect(wf.steps.map((s) => s.id)).toEqual(['open', 'explore', 'spec', 'build', 'verify', 'ship', 'archive'])
+    const specStep = wf.steps.find((s) => s.id === 'spec')
+    expect(specStep?.guards).toHaveLength(1)
+    expect(specStep?.guards[0]).toEqual({ type: 'tasks-at-least', n: 3 })
+  })
+
+  it('G2 P5 · A 契约：把真实 default.yaml 放进 custom 槽用 loadWorkflow 加载 → fail-loud（custom 不许 effective-phase-skills）', async () => {
+    // default.yaml 的 artifact 声明用 effective-phase-skills（default 轨语义）。loadWorkflow 走 custom
+    // 契约（compileWorkflow），故把 default 工作流塞进 custom 槽会被 A 契约拒——default 运行时不经
+    // loadWorkflow（resolveWorkflowName==='default' 早于 loadWorkflow 分岔），本用例锚 A 契约在加载边界生效。
+    const __dirname = dirname(fileURLToPath(import.meta.url))
+    const repoRoot = dirname(dirname(dirname(dirname(__dirname))))
+    const content = await readFile(join(repoRoot, 'templates', 'workflows', 'default.yaml'), 'utf8')
+
     const tempRoot = await mkdtemp(join(tmpdir(), 'wf-load-real-'))
     await mkdir(join(tempRoot, '.pipeline', 'workflows'), { recursive: true })
     await writeFile(join(tempRoot, '.pipeline', 'workflows', 'default.yaml'), content, 'utf8')
 
-    // Call loadWorkflow to exercise the actual function under test (not just parseWorkflow)
-    const wf = loadWorkflow(tempRoot, 'default')
+    expect(() => loadWorkflow(tempRoot, 'default')).toThrow(/effective-phase-skills/)
+  })
 
-    expect(wf).not.toBeNull()
-    expect(wf?.name).toBe('default')
-    expect(wf?.steps).toHaveLength(7)
-    expect(wf?.steps.map((s) => s.id)).toEqual(['open', 'explore', 'spec', 'build', 'verify', 'ship', 'archive'])
-
-    // Verify the spec step has the tasks-at-least guard
-    const specStep = wf?.steps.find((s) => s.id === 'spec')
-    expect(specStep?.guards).toHaveLength(1)
-    expect(specStep?.guards[0]).toEqual({ type: 'tasks-at-least', n: 3 })
+  it('G2 P2：非法新 guard（scalar guard 挂列表字段 scope）→ 加载入口经 validate→compile 深校验 fail-loud', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'wf-load-badguard-'))
+    await mkdir(join(root, '.pipeline', 'workflows'), { recursive: true })
+    await writeFile(
+      join(root, '.pipeline', 'workflows', 'badguard.yaml'),
+      `name: badguard
+steps:
+  - id: s1
+    label: x
+    gate: null
+    skills: []
+    inputs: []
+    outputs: []
+    guards:
+      - type: field-nonempty
+        field: scope
+    transitions: []
+`,
+      'utf8',
+    )
+    expect(() => loadWorkflow(root, 'badguard')).toThrow(/列表字段/)
   })
 })

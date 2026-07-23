@@ -5,17 +5,22 @@ category: Workflow
 tags: [workflow, pipeline, channel, worker, event-sourced]
 ---
 
-# /channel — 正交持久 worker 层（event-sourced）
+# /channel — 正交持久 worker 层（event-sourced，历史迁移 / experimental 兼容面）
 
 把 pipeline 的 **channel runtime**（event-sourced 消息/事件总线 + worker 生命周期投影）暴露为可调子命令。
-重活在 TS 内核（`packages/kernel/src/channel/`，纯逻辑 + 注入 fs 面，零第三方依赖），CLI 薄壳在
+重活在独立 workspace 包（`packages/channel/src/`，纯逻辑 + 注入 fs 面，零第三方依赖），CLI 薄壳在
 `packages/cli/src/commands/channel.ts`（`cmdChannel(deps, sub, args, host?)`）。
+
+> **定位（GOAL G4(b)，2026-07-16 codex 方案 D）**：channel 已从 kernel 提取为独立包
+> `@pipeline-lite/channel`，CLI 是唯一依赖者，标记为**历史迁移能力 / experimental 兼容面**——保留
+> echo 能力与全部既有测试/事件格式/兼容入口，但**不是 v3 默认 agent runtime**：不移植 Claude/Codex
+> adapter、不新增 server endpoint、不新增 dashboard 页面。重开投资需满足 GOAL G4 的全部条件。
 
 channel 是 pipeline 的**正交持久 worker 层**——与 build→verify barrier 正交，**绝不触 barrier / 三门 /
 build_sha**；worker 不 commit，主线仍 owns commits。channel 只读地为 barrier 提供 worker 事实。
 
 实现真相源（BACKLOG #27 / GOAL A4 M4）：
-- 事件模型 + 状态重建纯逻辑：`packages/kernel/src/channel/`（events / seq / paths / worker-state /
+- 事件模型 + 状态重建纯逻辑：`packages/channel/src/`（events / seq / paths / worker-state /
   filters / thread-state / turns / guard / store）。
 - CLI 薄壳：`packages/cli/src/commands/channel.ts`。
 - 真实 e2e 证据：`packages/cli/src/channel.integration.test.ts`（真临时 channel root、真 append、真重建）。

@@ -7,8 +7,8 @@
 # TTL 分级（BACKLOG #13，对齐老内核 pipeline-gate.sh，勿改回统一值）：
 #   - confirm 300s：正常流程同轮 AskUserQuestion 即清（秒级），300s 只是「漏确认」安全网。
 #   - review / interaction 1800s：跨整个决策 phase（常 >5min），缩短会中途误清 → 绕过强制复核。
-# marker 从 stdin JSON 的 cwd 起上溯至多 5 层查找——marker 写在项目根，
-#   而工具 cwd 可能是子目录（老内核同款不对称 bug 的修复，勿删）。
+# marker 只从当前项目根读取：Git worktree / 显式 PIPELINE_PROJECT_ROOT / 当前 cwd 三者之一。
+#   绝不从普通父目录猜测项目根，避免共享 /tmp 下的外部 Change 拦截无关会话。
 # 纯 bash 热路径（CONTRACT §5.4）：不 spawn 任何解释器/外部 JSON 解析器，
 #   stdin JSON 只用 bash 字符串提取所需两键（cwd / tool_name）。
 # 例外（Task 9，GOAL 清单 E）：非 default workflow 的 change 调用 Skill 工具时，文件尾段
@@ -59,19 +59,27 @@ CWD="$(json_get cwd || true)"
 TOOL="$(json_get tool_name || true)"
 [ -z "$TOOL" ] && TOOL="?"
 
-# yget：读 .pipeline.yaml 单个顶层 key（grep 首个 '^key: '，剥一层首尾同款引号）——逐字复用
-# hooks/router.sh / hooks/skill-tracker.sh 同名函数，本文件之前不需要读 .pipeline.yaml 字段，
+# Marker 与 active Change 都只能落在当前 Git/显式项目根。marker 可能在 OpenSpec Change
+# 创建前就存在，因此这里用 bootstrap 根；该模式只返回 Git 根或 cwd 自身，绝不扫描普通父目录。
+ROOT_HELPER="$(dirname "${BASH_SOURCE[0]:-$0}")/project-root.sh"
+PIPELINE_ROOT=""
+if [ -r "$ROOT_HELPER" ]; then
+  # shellcheck source=project-root.sh
+  . "$ROOT_HELPER"
+  PIPELINE_ROOT="$(pipeline_project_root "$CWD" bootstrap changes || true)"
+fi
+
+# yget：读 canonical hookState；current 从未出现时才兼容 YAML 顶层 key——逐字复用
+# hooks/router.sh / hooks/skill-tracker.sh 同名函数，本文件之前不需要读状态字段，
 # Task 9（非 default workflow 的 skill DAG 判定）新增才要用。
-yget() {
-  local v
-  v="$(grep -m1 "^$2: " "$1" 2>/dev/null || true)"
-  v="${v#"$2: "}"
-  case "$v" in
-    '"'*'"') v="${v#\"}"; v="${v%\"}" ;;
-    "'"*"'") v="${v#\'}"; v="${v%\'}" ;;
-  esac
-  printf '%s' "$v"
-}
+STATE_HELPER="$(dirname "${BASH_SOURCE[0]:-$0}")/canonical-state.sh"
+if [ -r "$STATE_HELPER" ]; then
+  . "$STATE_HELPER"
+else
+  pipeline_state_source() { [ -f "$1/.pipeline.yaml" ] && printf '%s' "$1/.pipeline.yaml"; }
+  pipeline_state_get() { local v; v="$(grep -m1 "^$2: " "$1" 2>/dev/null || true)"; v="${v#"$2: "}"; case "$v" in '"'*'"') v="${v#\"}"; v="${v%\"}" ;; "'"*"'") v="${v#\'}"; v="${v%\'}" ;; esac; printf '%s' "$v"; }
+fi
+yget() { pipeline_state_get "$1" "$2"; }
 
 # marker 新鲜？存在且 age ≤ TTL（第 2 参，秒；缺省 1800）→ 0；陈旧（age > TTL）→ 清掉并 1；不存在 → 1。
 # 边界与老内核 fresh() 一致：-gt 才陈旧（age == TTL 仍新鲜）。TTL 值同 types.ts GATE_TTL_MS。
@@ -92,15 +100,11 @@ fresh() {
   return 0
 }
 
-# 从 CWD 上溯至多 5 层找 marker，返回找到的路径（stdout），找不到返回 1
+# marker 只从已验证项目根读取，返回找到的路径（stdout），找不到返回 1。
 resolve_marker() {
-  local base="$1" d="$CWD" i
-  for i in 1 2 3 4 5; do
-    if [ -f "$d/$base" ]; then printf '%s' "$d/$base"; return 0; fi
-    [ "$d" = "/" ] && break
-    d="$(dirname "$d")"
-  done
-  return 1
+  local base="$1"
+  [ -n "$PIPELINE_ROOT" ] && [ -f "$PIPELINE_ROOT/$base" ] || return 1
+  printf '%s' "$PIPELINE_ROOT/$base"
 }
 
 for kind in confirm review interaction; do
@@ -109,7 +113,7 @@ for kind in confirm review interaction; do
   [ -n "$m" ] || continue
   case "$kind" in confirm) ttl=300 ;; *) ttl=1800 ;; esac
   if fresh "$m" "$ttl"; then
-    printf '【pipeline 门】检测到待处理交互标记 %s（%s 已被拦截）：请先用 AskUserQuestion 把当前决策/产出交用户确认，用户答复后自动解封再重发本次操作；若用户已明示无需确认，删除 %s 即可放行。\n' "$base" "$TOOL" "$m" >&2
+    printf '【pipeline 门】检测到待处理交互标记 %s（%s 已被拦截）：请先把当前决策/产出交用户确认。支持 AskUserQuestion 的宿主可在该交互后解封；Codex 用户在下一条正常对话明确回复“确认继续”或“继续执行”后会自动解封，再重发本次操作。\n' "$base" "$TOOL" >&2
     exit 2
   fi
 done
@@ -123,31 +127,26 @@ done
 if [ "$TOOL" = "Skill" ]; then
   SKILL_ID="$(json_get skill || true)"
   if [ -n "$SKILL_ID" ]; then
-    # 定位活跃 change（同 hooks/skill-tracker.sh 一致手法：cwd 上溯至多 5 层找
-    # openspec/changes；取 mtime 最新的非归档 change——单一活跃 change 的启发式判定，与本仓
-    # 其余 hook（router.sh/skill-tracker.sh）同一口径，非本文件独创，变量名加 SG_ 前缀防与
-    # 未来本文件可能新增的其它变量撞名）。
-    SG_PROOT="" sg_d="$CWD"
-    for _ in 1 2 3 4 5; do
-      if [ -d "$sg_d/openspec/changes" ]; then SG_PROOT="$sg_d"; break; fi
-      [ "$sg_d" = "/" ] && break
-      sg_d="$(dirname "$sg_d")"
-    done
+    # 与其它 hook 共用已验证的项目根，避免跨项目把 Skill DAG 错绑到父目录 Change。
+    SG_PROOT="$PIPELINE_ROOT"
     if [ -n "$SG_PROOT" ]; then
       SG_BEST=0 SG_CHANGE_DIR=""
-      for sg_f in "$SG_PROOT"/openspec/changes/*/.pipeline.yaml; do
-        [ -f "$sg_f" ] || continue
+      for sg_change_dir in "$SG_PROOT"/openspec/changes/*; do
+        [ -d "$sg_change_dir" ] || continue
+        sg_f="$(pipeline_state_source "$sg_change_dir" || true)"
+        [ -n "$sg_f" ] || continue
         [ "$(yget "$sg_f" archived)" = "true" ] && continue
         sg_mt="$(stat -c %Y "$sg_f" 2>/dev/null)"
         case "$sg_mt" in ''|*[!0-9]*) sg_mt="$(stat -f %m "$sg_f" 2>/dev/null)" ;; esac
         case "$sg_mt" in ''|*[!0-9]*) sg_mt=0 ;; esac
         [[ "$sg_mt" =~ ^[0-9]+$ ]] || sg_mt=0
-        if [ "$sg_mt" -ge "$SG_BEST" ]; then SG_BEST="$sg_mt"; SG_CHANGE_DIR="$(dirname "$sg_f")"; fi
+        if [ "$sg_mt" -ge "$SG_BEST" ]; then SG_BEST="$sg_mt"; SG_CHANGE_DIR="$sg_change_dir"; fi
       done
       if [ -n "$SG_CHANGE_DIR" ]; then
-        SG_WORKFLOW="$(yget "$SG_CHANGE_DIR/.pipeline.yaml" workflow)"
+        SG_STATE_SOURCE="$(pipeline_state_source "$SG_CHANGE_DIR" || true)"
+        SG_WORKFLOW="$(yget "$SG_STATE_SOURCE" workflow)"
         if [ -n "$SG_WORKFLOW" ] && [ "$SG_WORKFLOW" != "default" ]; then
-          SG_PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." 2>/dev/null && pwd)}"
+          SG_PLUGIN_ROOT="${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." 2>/dev/null && pwd)}}"
           SG_BUNDLE="$SG_PLUGIN_ROOT/packages/cli/dist/pipeline.mjs"
           if [ -f "$SG_BUNDLE" ] && command -v node >/dev/null 2>&1; then
             SG_CHANGE_NAME="$(basename "$SG_CHANGE_DIR")"

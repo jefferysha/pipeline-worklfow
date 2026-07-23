@@ -19,18 +19,25 @@ import { createDashboardServer } from './server.js'
 import { resolveServerPaths } from './paths.js'
 import { decidePreemption, preemptOldServer, probeHealth } from './preempt.js'
 import { generateToken, writeTokenHandshake } from './token.js'
-import { SERVER_VERSION } from './version.js'
-
-const GLOBAL_PORT = 8765
+import { resolveReleaseVersion } from './version.js'
+import { resolveDashboardPort } from './port.js'
 
 function serverPort(): number {
-  const raw = Number.parseInt(process.env.PIPELINE_DASHBOARD_PORT ?? '', 10)
-  return Number.isFinite(raw) && raw > 0 ? raw : GLOBAL_PORT
+  return resolveDashboardPort(process.env.PIPELINE_DASHBOARD_PORT)
 }
 
-/** dist/main.js → 插件仓根（dist → server → packages → 根）→ templates/manifest.yaml。 */
+function cadencePollInterval(): number {
+  const raw = Number.parseInt(process.env.PIPELINE_CADENCE_POLL_MS ?? '', 10)
+  return Number.isSafeInteger(raw) && raw >= 100 ? raw : 30_000
+}
+
+/** dist/dashboard.mjs → 插件仓根（dist → server → packages → 根）。 */
+function pluginRoot(): string {
+  return join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..')
+}
+
 function manifestPath(): string {
-  return join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'templates', 'manifest.yaml')
+  return join(pluginRoot(), 'templates', 'manifest.yaml')
 }
 
 function gitHeadSha(cwd: string): Promise<string> {
@@ -43,7 +50,9 @@ async function main(): Promise<void> {
   const paths = resolveServerPaths()
   const host = '127.0.0.1'
   const port = serverPort()
-  const version = SERVER_VERSION
+  // Use the marketplace plugin manifest as the release truth.  This lets a freshly auto-updated
+  // bundle preempt an older dashboard process instead of falsely reusing it under a stale constant.
+  const version = resolveReleaseVersion(pluginRoot())
 
   // ── B4 版本抢占 ──
   const existing = await probeHealth(port, host, 400)
@@ -73,6 +82,8 @@ async function main(): Promise<void> {
     // tap 流量查看器数据源（BACKLOG #34d）：只读 listSessions/readRecords，capabilities.traffic=true。
     // tap capture 默认 OFF，无捕获时返回空会话——数据端仍在线（#34e：只读本地、不外发）
     traceStore: createTraceStore(),
+    // H15：生产 server 显式启用真实 cadence；执行复用已构建 CLI，不在 server 复制 runner。
+    cadence: { pollIntervalMs: cadencePollInterval() },
   })
 
   try {

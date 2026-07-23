@@ -11,7 +11,7 @@ jobs:
     # ubuntu-latest ships docker preinstalled — required for the automation/tap docker-backed
     # integration tests (they honest-skip without it; running here means they run for real).
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 
@@ -24,21 +24,48 @@ jobs:
         run: npm ci
 
       # 纯静态扫描（bash + grep，零构建依赖、~1s）——放在 build/test 之前 fail-fast：
-      # 一条假待做注释不值得等 30 分钟的构建+docker 集成测试跑完才报。
+      # 一条假待做注释不值得等 60 分钟的构建+docker/real-Codex 集成测试跑完才报。
       # 走 npm script 而非直接 `bash tools/...`：与本地 `npm run check:comments` 单一真相源，
       # 免得 CI 与开发机的调用形态各自漂移。
       # 注意：脚本对「扫描器故障」exit 3、对「命中」exit 1，两者都是非零 → 都会红。
       - name: 注释可信度门禁 (comment honesty)
         run: npm run check:comments
 
-      - name: Build (tsc -b + dashboard tsc --noEmit + esbuild bundle)
+      # default workflow artifact declaration 真相源 codegen 新鲜度门（G2 P4）——纯 Node 从
+      # templates/workflows/default.yaml 重新生成 default-workflow.generated.ts，再**只 diff 生成文件**
+      # （不裸 git diff：工作树存在并行改动，裸 diff 会误报）。放在 comment gate 后、build 前：codegen
+      # 只需 Node 不需 TS build，stale 生成物 fail-fast；随后的 build 验证生成物类型正确、bundle 把最新
+      # 表纳入真实 CLI bundle。
+      - name: default workflow codegen 新鲜度 (default-workflow freshness)
+        run: npm run check:default-workflow-freshness
+
+      - name: Build complete plugin runtime (tsc + CLI/server bundles + dashboard SPA)
         run: npm run build
 
-      # 类型之外的纯打包破坏（资源 import、vite 插件配置）只有真跑 vite build 才拦得住；
-      # build:web 内含的 tsc --noEmit 与上一步 typecheck:web 重复约数秒，换脚本单一真相源。
-      - name: dashboard-app build (vite)
-        run: npm run build:web
+      # 完整插件 runtime 新鲜度门：marketplace 安装没有本机 node_modules/build 步，因此 CLI、dashboard
+      # server 和 SPA 都必须与当前源码逐字节一致。后面的 smoke 只测行为，不能证明提交资产是最新构建。
+      - name: 校验入库完整插件 runtime 与当前 src 一致 (release freshness)
+        run: git diff --exit-code -- packages/cli/dist/pipeline.mjs packages/server/dist/dashboard.mjs packages/dashboard-app/dist
 
+      - name: Build CLI bundle for required real-Codex
+        run: npm run bundle
+
+      # H14 required acceptance 是 canonical verify 自身的一部分：不依赖 job 名或外部分支保护。
+      # tools/sandcastle/build.sh local 会用上方显式生成并完成 freshness 对账的 bundle 构建镜像，
+      # 同时写入镜像 attestation；定向用例再逐字节核对该 attestation。
+      - name: Build and attest sandcastle:local
+        run: bash tools/sandcastle/build.sh local
+
+      - name: Required real-Codex H14 acceptance
+        env:
+          PIPELINE_REQUIRE_REAL_CODEX: '1'
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          test -n "$OPENAI_API_KEY"
+          npx vitest run packages/cli/src/loop-run.real.integration.test.ts
+
+      # 普通 npm test 里的 real-Codex 文件仍允许本地 honest-skip；canonical verify 已在上方
+      # 以 PIPELINE_REQUIRE_REAL_CODEX=1 定向执行过 fail-closed 验收。
       - name: vitest (kernel/cli/server/automation/tap)
         run: npm test
 

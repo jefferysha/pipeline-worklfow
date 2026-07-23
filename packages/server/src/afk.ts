@@ -19,10 +19,9 @@
  * 同一零依赖原则延伸到 cancelAfkRun 的取消标记文件名——见下方 CANCEL_MARKER_FILE 常量注释。
  */
 import { execFile } from 'node:child_process'
-import { existsSync } from 'node:fs'
 import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import type { StateStore } from '@pipeline-lite/kernel'
+import { stateStorageExistsSync, type StateStore } from '@pipeline-lite/kernel'
 import type { Snapshot } from './types.js'
 
 /** AFK 泳道（对位 automation AUTOMATION_STATES 的活跃子集；off 不入板，scheduled 归 running，见 laneOf）。 */
@@ -223,7 +222,7 @@ const CANCEL_MARKER_FILE = '.cancel-requested'
 
 /**
  * afk-workbench Task 4：POST /api/afk/:name/cancel 的写回逻辑。
- * 前置：changeDir 须真存在（有 .pipeline.yaml，同 transition.ts 的存在性前置校验——kernel
+ * 前置：changeDir 须真存在（有 canonical current 或 legacy YAML，同 transition.ts 的存在性前置校验——kernel
  * StateStore.get/read 对不存在的 changeDir 是真 throw ENOENT，不判在此拦，会在 handlePost
  * 顶层兜底 catch 里变成走味的 500，而非本端点该给的 400）；automation 字段须为 'running'
  * （否则视为找不到运行中的 job）；automation_worktree/automation_sandbox 须非空（Task 1
@@ -235,8 +234,8 @@ const CANCEL_MARKER_FILE = '.cancel-requested'
  * 真正的结算判定权在 automation 侧的 hasCancelMarker 探测，不在这次 kill 的 exec 退出码。
  */
 export async function cancelAfkRun(store: StateStore, changeDir: string): Promise<{ ok: boolean; error?: string }> {
-  if (!existsSync(join(changeDir, '.pipeline.yaml'))) {
-    return { ok: false, error: '找不到该 change（无 .pipeline.yaml），找不到运行中的 job' }
+  if (!stateStorageExistsSync(changeDir)) {
+    return { ok: false, error: '找不到该 change（无 canonical/legacy 状态），找不到运行中的 job' }
   }
   const automation = str(await store.get(changeDir, 'automation'))
   if (automation !== 'running') {
@@ -284,8 +283,8 @@ const RETRYABLE_FROM = ['failed', 'conflict', 'paused'] as const
  * （incrAttempts 的预算判定见 queue/claim.ts）。
  */
 export async function retryAfkRun(store: StateStore, changeDir: string): Promise<{ ok: boolean; error?: string }> {
-  if (!existsSync(join(changeDir, '.pipeline.yaml'))) {
-    return { ok: false, error: '找不到该 change（无 .pipeline.yaml），找不到可重试的任务' }
+  if (!stateStorageExistsSync(changeDir)) {
+    return { ok: false, error: '找不到该 change（无 canonical/legacy 状态），找不到可重试的任务' }
   }
   const current = str(await store.get(changeDir, 'automation'))
   if (!RETRYABLE_FROM.includes(current as (typeof RETRYABLE_FROM)[number])) {
@@ -313,8 +312,8 @@ const DISMISSABLE_FROM = ['failed', 'conflict'] as const
  * 「放弃则归档现场，worktree 保留」；detail.fail_note 文案同源）。
  */
 export async function dismissAfkRun(store: StateStore, changeDir: string): Promise<{ ok: boolean; error?: string }> {
-  if (!existsSync(join(changeDir, '.pipeline.yaml'))) {
-    return { ok: false, error: '找不到该 change（无 .pipeline.yaml），找不到可放弃的任务' }
+  if (!stateStorageExistsSync(changeDir)) {
+    return { ok: false, error: '找不到该 change（无 canonical/legacy 状态），找不到可放弃的任务' }
   }
   const current = str(await store.get(changeDir, 'automation'))
   if (!DISMISSABLE_FROM.includes(current as (typeof DISMISSABLE_FROM)[number])) {
@@ -332,8 +331,8 @@ export async function dismissAfkRun(store: StateStore, changeDir: string): Promi
  *
  * 镜像 `@pipeline-lite/automation` sdk.ts::enqueue 消费的判定逻辑（server 对 automation 包
  * 坚持零运行时依赖，同本文件 CANCEL_MARKER_FILE 的字面量对位先例，不 import）：
- *   · PM track 永不入队（queue/gate.ts::optedIn 的硬规则）。
- *   · 非 PM track：SDK 默认构造 `defaultOptIn=true` 且 CLI 走的正是这条默认路径（未暴露
+ *   · effective registry 的 automationEligible=false 永不入队；能力位由 HTTP 路由跨信任边界显式传入。
+ *   · automationEligible=true：SDK 默认构造 `defaultOptIn=true` 且 CLI 走的正是这条默认路径（未暴露
  *     per-change opt-in 覆盖的 UI/CLI 入口），故这里同样按"默认已 opt-in"处理，不额外建一套
  *     配置面——与 CLI 默认行为等价，不是引入新语义。
  *   · automation 已经处于非 off 态（已挂队/在跑/终态）→ 拒绝重复 enqueue。SDK 侧对
@@ -342,13 +341,17 @@ export async function dismissAfkRun(store: StateStore, changeDir: string): Promi
  * 写回同 automation 包 queue/claim.ts::markQueued 逐字对齐：automation=queued +
  * automation_queued_at=now。
  */
-export async function enqueueAfkRun(store: StateStore, changeDir: string, clock: () => string): Promise<{ ok: boolean; error?: string }> {
-  if (!existsSync(join(changeDir, '.pipeline.yaml'))) {
-    return { ok: false, error: '找不到该 change（无 .pipeline.yaml）' }
+export async function enqueueAfkRun(
+  store: StateStore,
+  changeDir: string,
+  clock: () => string,
+  eligibility: { automationEligible: boolean; trackLabel: string },
+): Promise<{ ok: boolean; error?: string }> {
+  if (!stateStorageExistsSync(changeDir)) {
+    return { ok: false, error: '找不到该 change（无 canonical/legacy 状态）' }
   }
-  const track = str(await store.get(changeDir, 'track'))
-  if (track === 'pm') {
-    return { ok: false, error: 'PM track 不支持 AFK 自动化挂队' }
+  if (!eligibility.automationEligible) {
+    return { ok: false, error: `${eligibility.trackLabel} track 不支持 AFK 自动化挂队` }
   }
   const current = str(await store.get(changeDir, 'automation'))
   if (current && current !== 'off') {
@@ -369,7 +372,7 @@ export async function enqueueAfkRun(store: StateStore, changeDir: string, clock:
  * 需要 store 读/写 automation 字段的写回场景不同，本端点是纯读文件，没有状态机前置校验。
  * 找不到文件（该 change 尚未跑过 automation，或是 Task 2 部署前创建的旧 change）→ 回 null，
  * 不视为错误（不 throw）——changeDir 本身是否存在的 ENOENT 前置校验由 server.ts 路由层做
- * （同 cancelAfkRun/retryAfkRun 的 existsSync(.pipeline.yaml) 前置校验模式一致），本函数只管
+ * （同 cancelAfkRun/retryAfkRun 的 canonical/legacy 存在性前置校验模式一致），本函数只管
  * "有没有这份日志"，不关心 change 本身合不合法。
  */
 export async function readAfkRunLog(changeDir: string): Promise<string | null> {

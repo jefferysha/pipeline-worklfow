@@ -33,19 +33,26 @@ describe('build 相位 automation=queued 双执行守卫（老仓 pipeline-guard
 })
 
 describe('两层开关 + opt-in 判定（老仓 automation-config.sh:19-94）', () => {
-  it('PM track 永不 opt-in', () => {
-    expect(optedIn({ track: 'pm', automation: 'queued', defaultOptIn: true })).toBe(false)
+  it('automationEligible 是唯一能力位：与 track id 无关，并优先于 queued/default opt-in', () => {
+    expect([
+      optedIn({ automationEligible: false, automation: 'queued', defaultOptIn: true }),
+      optedIn({ automationEligible: true, automation: 'queued', defaultOptIn: false }),
+    ]).toEqual([false, true])
+  })
+
+  it('policy 禁止自动化时永不 opt-in', () => {
+    expect(optedIn({ automationEligible: false, automation: 'queued', defaultOptIn: true })).toBe(false)
   })
   it('已预置 automation=queued = 显式挂起意图 → opted-in', () => {
-    expect(optedIn({ track: 'backend', automation: 'queued', defaultOptIn: false })).toBe(true)
+    expect(optedIn({ automationEligible: true, automation: 'queued', defaultOptIn: false })).toBe(true)
   })
   it('否则取全局 default_opt_in', () => {
-    expect(optedIn({ track: 'backend', automation: 'off', defaultOptIn: true })).toBe(true)
-    expect(optedIn({ track: 'backend', automation: 'off', defaultOptIn: false })).toBe(false)
+    expect(optedIn({ automationEligible: true, automation: 'off', defaultOptIn: true })).toBe(true)
+    expect(optedIn({ automationEligible: true, automation: 'off', defaultOptIn: false })).toBe(false)
   })
   it('shouldEnqueueOnSpecComplete：enabled && opted-in 都 ON 才挂队', () => {
-    expect(shouldEnqueueOnSpecComplete({ enabled: true, track: 'backend', automation: 'queued', defaultOptIn: false })).toBe(true)
-    expect(shouldEnqueueOnSpecComplete({ enabled: false, track: 'backend', automation: 'queued', defaultOptIn: true })).toBe(false) // fail-safe OFF
-    expect(shouldEnqueueOnSpecComplete({ enabled: true, track: 'pm', automation: 'queued', defaultOptIn: true })).toBe(false) // PM 永不
+    expect(shouldEnqueueOnSpecComplete({ enabled: true, automationEligible: true, automation: 'queued', defaultOptIn: false })).toBe(true)
+    expect(shouldEnqueueOnSpecComplete({ enabled: false, automationEligible: true, automation: 'queued', defaultOptIn: true })).toBe(false) // fail-safe OFF
+    expect(shouldEnqueueOnSpecComplete({ enabled: true, automationEligible: false, automation: 'queued', defaultOptIn: true })).toBe(false)
   })
 })

@@ -1,34 +1,33 @@
-import { useCallback, useRef, useState } from 'react'
-import gsap from 'gsap'
-import { useGSAP } from '@gsap/react'
+import { useState } from 'react'
+import { Bot, FolderKanban, GitBranch, Moon, ScanLine, Settings, SlidersHorizontal, Sun, type LucideIcon } from 'lucide-react'
 import { useT } from '../i18n'
 import type { Lang } from '../i18n/translations'
-import { Dialog } from './Dialog'
 import { Icon } from './Icon'
 
-gsap.registerPlugin(useGSAP)
-
 /**
- * v9-flowdeck（收件箱退役）：IA 收敛两视图——进度 / 工作台。交互真相源
- * design-demos/v9-flowdeck.html 顶栏（导航恰 2 项，待拍板红徽标挂在「进度」项上）。
- * 收件箱不再是独立视图：进度是唯一在制面（单列表看所有在制，需操作行高亮）；
- * 更早的「工作台下拉分组（loops/afk/workflows）」与 nav-board/nav-settings 随 T17 退役。
+ * 外壳左侧图标 rail（v10b `design-demos/v10b-railway-canvas.html` .rail 结构对位；配色一律走
+ * token）。2026-07-15 外壳 IA 重构拍板：rail 放视图导航——项目 / 进度 / AFK / 工作台 / 机器（五枚
+ * lucide 图标 + 小字）。「项目」既是 rail 首枚入口（点入 view='projects' 总览页），也仍由内容区
+ * 项目总览直接承担自动发现与项目选择；rail 不重复展示当前项目名。
+ *
+ * 结构（自上而下）：logo 标（品牌名收进 title 悬浮）→ 分隔线 → 竖排导航项 项目/进度/AFK/工作台
+ * （lucide 图标 + 小字，激活态沿 aria-current 变体，进度项挂待拍板红徽标、AFK 项挂待处置失败红
+ * 徽标）→ 弹性空档 → 分隔线 → 底部单一「设置」入口；连接、主题和语言收进锚定浮层。
+ * 窄屏（<720px）收为纯图标窄列。
  */
-export type View = 'progress' | 'workbench'
+export type View = 'projects' | 'progress' | 'afk' | 'workbench' | 'machine'
 
-/** 一级导航项 —— 显式枚举白名单，顶部恰 2 项（demo v9 顶栏口径）。 */
-export const PRIMARY_VIEWS: View[] = ['progress', 'workbench']
+/** rail 竖排渲染的一级导航项——显式枚举白名单，顺序=项目/进度/AFK/工作台/机器。 */
+export type RailView = 'projects' | 'progress' | 'afk' | 'workbench' | 'machine'
+export const PRIMARY_VIEWS: RailView[] = ['projects', 'progress', 'afk', 'workbench', 'machine']
 
-export interface NavProject {
-  root: string
-  name: string
-  count: number
-  /**
-   * 聚合计数用（D5/G19③ 聚合入口收编，Task 5）：false = 该项目当前不可达（root 不存在/
-   * 不可读等），「全部项目」聚合总数不计入它的 count。缺省（未传）按 true 处理，兼容早期
-   * 只关心单项目展示的调用方。
-   */
-  ok?: boolean
+/** rail 导航项 lucide 图标：项目=看板文件夹、进度=流程节点、AFK=无人值守机器人、工作台=设置滑杆。 */
+const VIEW_ICONS: Record<RailView, LucideIcon> = {
+  projects: FolderKanban,
+  progress: GitBranch,
+  afk: Bot,
+  workbench: SlidersHorizontal,
+  machine: ScanLine,
 }
 
 interface NavProps {
@@ -41,260 +40,134 @@ interface NavProps {
   connected: boolean
   /** 待拍板徽标数（在等你决定的 change 数，currentRoot 语境）——收件箱退役后挂在「进度」导航项上。 */
   decisionCount: number
-  /** D5 项目切换器：已注册项目列表（缺省/空 = 不渲染切换区，如加载首帧）。 */
-  projects?: NavProject[]
-  /**
-   * ''（空串）= 「全部项目」聚合语境——这是全应用聚合语境的唯一表示（Task 5 起，
-   * App 状态持有；后续任务（视图侧的聚合渲染等）都消费这个约定）。
-   */
-  currentRoot?: string
-  onRoot?: (root: string) => void
-  /**
-   * 注销项目（G18 `DELETE /api/projects` + 评审 P2-13 入口，Task 5；T17 决议#7 保留）：
-   * 项目切换器每项 hover 区的「注销…」，用户在本组件内的 Dialog 确认后才调用，只传出 root——
-   * 真正的网络调用/refresh/currentRoot 归属判断都是调用方（App）的职责。缺省则不渲染注销入口。
-   *
-   * 「注册项目」入口已随 T17 删除（决议#7）：pipeline init 会 best-effort 自动登记项目
-   * （T2），dashboard 侧不再提供注册 UI；POST /api/projects 端点仅兼容保留。
-   */
-  onUnregister?: (root: string) => void
+  /** AFK 待处置徽标数（schedulerHealth.failed，等你处置的失败数，currentRoot 语境）——挂在「AFK」导航项上，>0 才显。 */
+  afkCount: number
 }
 
-export function Nav({
-  view,
-  onView,
-  lang,
-  onLang,
-  theme,
-  onTheme,
-  connected,
-  decisionCount,
-  projects,
-  currentRoot,
-  onRoot,
-  onUnregister,
-}: NavProps): JSX.Element {
+// ── tailwind 类串（状态经 aria-current / data-* 属性挂 aria-*/data-* 变体，测试不断言视觉类名）──
+/** rail 竖排按钮骨架（demo .railbtn 对位）：图标 + 小字纵排；窄屏收为纯图标。 */
+const RAIL_BTN_CLS =
+  'group relative flex w-[72px] cursor-pointer flex-col items-center gap-[3px] rounded-[10px] border border-transparent px-0.5 pb-1.5 pt-2 text-text-3 transition-colors hover:bg-fill hover:text-text max-[720px]:w-10 max-[720px]:px-0'
+/** rail 按钮小字标签（demo .railbtn .lb 对位）；窄屏隐藏（textContent 仍在，仅视觉收起）。 */
+const RAIL_LB_CLS = 'max-w-full truncate text-[11px] leading-[1.2] max-[720px]:hidden'
+export function Nav({ view, onView, lang, onLang, theme, onTheme, connected, decisionCount, afkCount }: NavProps): JSX.Element {
   const { t } = useT()
-  const [projectOpen, setProjectOpen] = useState(false)
-  const [pendingUnregister, setPendingUnregister] = useState<NavProject | null>(null)
-  const projRef = useRef<HTMLDivElement>(null)
-  const menuRef = useRef<HTMLDivElement>(null)
-
-  // v8-A 意见①：关=快出（短补间后卸载）。reduced-motion / 无 matchMedia（jsdom/极老内核）直接卸载，
-  // 测试与降级路径都是同步的；只有明确 no-preference 才走 120ms 出场。
-  const closeMenu = useCallback(() => {
-    const el = menuRef.current
-    const canAnimate =
-      el !== null &&
-      typeof window.matchMedia === 'function' &&
-      window.matchMedia('(prefers-reduced-motion: no-preference)').matches
-    if (!canAnimate) {
-      setProjectOpen(false)
-      return
-    }
-    gsap.to(el, {
-      autoAlpha: 0,
-      scale: 0.97,
-      y: -3,
-      duration: 0.12,
-      ease: 'power1.in',
-      onComplete: () => setProjectOpen(false),
-    })
-  }, [])
-
-  // 开=scale .96→1 + y -4→0 + 行 stagger .03（demo v8 .proj-menu 形态）；gsap.matchMedia 全包，
-  // reduce 分支直显终态（不放补间）——姿势沿 ProgressView.tsx 先例（registerPlugin/useGSAP/matchMedia）。
-  useGSAP(
-    () => {
-      if (!projectOpen) return
-      const el = menuRef.current
-      if (!el || typeof window.matchMedia !== 'function') return
-      const mm = gsap.matchMedia()
-      mm.add(
-        { reduce: '(prefers-reduced-motion: reduce)', motion: '(prefers-reduced-motion: no-preference)' },
-        (ctx) => {
-          if (Boolean((ctx.conditions as { reduce?: boolean } | undefined)?.reduce)) return // 直显即终态
-          gsap
-            .timeline()
-            .fromTo(
-              el,
-              { autoAlpha: 0, scale: 0.96, y: -4, transformOrigin: 'top left' },
-              { autoAlpha: 1, scale: 1, y: 0, duration: 0.18, ease: 'power2.out' },
-            )
-            .fromTo(
-              el.querySelectorAll('.nav8-row, .nav8-foot'),
-              { autoAlpha: 0, y: -4 },
-              { autoAlpha: 1, y: 0, duration: 0.16, ease: 'power2.out', stagger: 0.03 },
-              '<0.04',
-            )
-        },
-      )
-    },
-    { scope: projRef, dependencies: [projectOpen], revertOnUpdate: true },
-  )
-  const currentProject = projects?.find((p) => p.root === currentRoot)
-  // 聚合项计数 = 各 ok 项目 change 总和（ok=false 的不可达项目不计入，D5/G19③ 拍板）。
-  const aggregateCount = (projects ?? []).reduce((sum, p) => sum + (p.ok === false ? 0 : p.count), 0)
-  const switcherLabel = currentRoot === '' ? t('nav.project_all') : currentProject?.name ?? currentRoot
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  // 在线/离线 短标签：title 走既有 common.connected/common.offline 键；短标签内联双语。
+  const connLabel = connected ? (lang === 'zh' ? '在线' : 'Live') : lang === 'zh' ? '离线' : 'Offline'
 
   return (
-    <header className="nav" role="banner">
-      <div className="nav__brand">
-        <span className="nav__brand-mark" aria-hidden="true">
-          <Icon name="flow" size={15} />
-        </span>
-        {t('app.title')}
-      </div>
-      {projects && projects.length > 1 && (
-        <div
-          ref={projRef}
-          className="nav__project"
-          onBlur={(e) => {
-            if (!e.currentTarget.contains(e.relatedTarget as Node)) closeMenu()
-          }}
-        >
-          <button
-            type="button"
-            className="nav__project-btn"
-            data-testid="project-switcher"
-            aria-haspopup="menu"
-            aria-expanded={projectOpen}
-            onClick={() => (projectOpen ? closeMenu() : setProjectOpen(true))}
-          >
-            {switcherLabel}
-            <span className="nav8-chev" aria-hidden="true">▾</span>
-          </button>
-          {projectOpen && (
-            <div ref={menuRef} className="nav8-menu" role="menu" data-testid="project-menu">
-              <div className={currentRoot === '' ? 'nav8-row nav8-row--on' : 'nav8-row'}>
-                <button
-                  type="button"
-                  role="menuitem"
-                  data-testid="project-item-all"
-                  className="nav8-item"
-                  onClick={() => {
-                    onRoot?.('')
-                    setProjectOpen(false)
-                  }}
-                >
-                  <span className="nav8-dia" aria-hidden="true">◈</span>
-                  <span className="nav8-name">{t('nav.project_all')}</span>
-                  {aggregateCount > 0 && <span className="nav8-n">{aggregateCount}</span>}
-                </button>
-              </div>
-              {projects.map((p) => (
-                <div key={p.root} className={p.root === currentRoot ? 'nav8-row nav8-row--on' : 'nav8-row'}>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    data-testid={`project-item-${p.name}`}
-                    className="nav8-item"
-                    onClick={() => {
-                      onRoot?.(p.root)
-                      setProjectOpen(false)
-                    }}
-                  >
-                    <span className="nav8-name">{p.name}</span>
-                    {p.count > 0 && <span className="nav8-n">{p.count}</span>}
-                  </button>
-                  {onUnregister && (
-                    <button
-                      type="button"
-                      className="nav8-unreg"
-                      data-testid={`project-unregister-${p.name}`}
-                      title={t('nav.project_unregister_aria', { name: p.name })}
-                      aria-label={t('nav.project_unregister_aria', { name: p.name })}
-                      onClick={() => {
-                        setProjectOpen(false)
-                        setPendingUnregister(p)
-                      }}
-                    >
-                      <Icon name="x" size={13} />
-                    </button>
-                  )}
-                </div>
-              ))}
-              <p className="nav8-foot">{t('nav.project_menu_hint')}</p>
-            </div>
-          )}
-        </div>
-      )}
-      {projects && projects.length === 1 && (
-        <span className="nav__project-label" data-testid="project-label">{projects[0]!.name}</span>
-      )}
-      <nav className="nav__primary" aria-label="primary" data-testid="primary-nav">
-        {PRIMARY_VIEWS.map((v) => (
-          <button
-            key={v}
-            type="button"
-            data-testid={`nav-${v}`}
-            aria-current={view === v ? 'page' : undefined}
-            className={view === v ? 'nav__item nav__item--active' : 'nav__item'}
-            onClick={() => onView(v)}
-          >
-            {t(`nav.${v}`)}
-            {v === 'progress' && decisionCount > 0 && (
-              <span className="nav__badge" data-testid="progress-badge">
-                {decisionCount}
-              </span>
-            )}
-          </button>
-        ))}
-      </nav>
-      <div className="nav__tools">
-        <span
-          className={connected ? 'nav__conn nav__conn--on' : 'nav__conn'}
-          title={connected ? t('common.connected') : t('common.offline')}
-          data-testid="conn-indicator"
-        >
-          ●
-        </span>
-        <button
-          type="button"
-          className="nav__tool"
-          data-testid="lang-toggle"
-          onClick={() => onLang(lang === 'zh' ? 'en' : 'zh')}
-        >
-          {lang === 'zh' ? 'EN' : '中'}
-        </button>
-        <button
-          type="button"
-          className="nav__tool nav__tool--icon"
-          data-testid="theme-toggle"
-          aria-label={t('common.theme_toggle')}
-          onClick={() => onTheme(theme === 'dark' ? 'light' : 'dark')}
-        >
-          {theme === 'dark' ? '☾' : '☀'}
-        </button>
+    <header
+      className="sticky top-0 z-10 flex h-screen w-[84px] flex-none flex-col items-center gap-1 border-r border-border bg-card px-1.5 py-3 max-[720px]:w-14"
+      role="banner"
+    >
+      {/* 品牌 logo 标（demo .rail .logo 对位）：品牌名收成图标，全名走 title 悬浮。 */}
+      <div
+        className="mb-1.5 grid h-[34px] w-[34px] flex-none place-items-center rounded-[9px] bg-ink text-ink-fg"
+        title={t('app.title')}
+      >
+        <Icon name="flow" size={16} />
       </div>
 
-      {pendingUnregister && (
-        <Dialog
-          title={t('nav.unregister_title', { name: pendingUnregister.name })}
-          onClose={() => setPendingUnregister(null)}
-          testid="unregister-confirm"
-          actions={
-            <>
-              <button type="button" className="btn btn--ghost" onClick={() => setPendingUnregister(null)}>
-                {t('nav.unregister_cancel')}
+      <div className="my-1.5 w-14 flex-none border-t border-border max-[720px]:w-9" aria-hidden="true" />
+
+      <nav className="flex flex-col gap-1" aria-label="primary" data-testid="primary-nav">
+        {PRIMARY_VIEWS.map((v) => {
+          const IconCmp = VIEW_ICONS[v]
+          return (
+            <button
+              key={v}
+              type="button"
+              data-testid={`nav-${v}`}
+              aria-current={view === v ? 'page' : undefined}
+              title={t(`nav.${v}`)}
+              className={`${RAIL_BTN_CLS} aria-[current=page]:border-border-2 aria-[current=page]:bg-fill aria-[current=page]:font-bold aria-[current=page]:text-text`}
+              onClick={() => {
+                setSettingsOpen(false)
+                onView(v)
+              }}
+            >
+              <IconCmp size={18} strokeWidth={1.75} aria-hidden="true" />
+              <span className={`${RAIL_LB_CLS} group-aria-[current=page]:text-(--accent)`}>{t(`nav.${v}`)}</span>
+              {v === 'progress' && decisionCount > 0 && (
+                <span
+                  className="absolute -top-0.5 right-1.5 inline-block h-[17px] min-w-[17px] rounded-[9px] border border-red-b bg-red-t px-[5px] text-center font-mono text-[10.5px] font-bold leading-[17px] text-red-d max-[720px]:-right-1"
+                  data-testid="progress-badge"
+                >
+                  {decisionCount}
+                </span>
+              )}
+              {v === 'afk' && afkCount > 0 && (
+                <span
+                  className="absolute -top-0.5 right-1.5 inline-block h-[17px] min-w-[17px] rounded-[9px] border border-red-b bg-red-t px-[5px] text-center font-mono text-[10.5px] font-bold leading-[17px] text-red-d max-[720px]:-right-1"
+                  data-testid="afk-badge"
+                >
+                  {afkCount}
+                </span>
+              )}
+            </button>
+          )
+        })}
+      </nav>
+
+      <div className="flex-1" aria-hidden="true" />
+      <div className="my-1.5 w-14 flex-none border-t border-border max-[720px]:w-9" aria-hidden="true" />
+
+      <div className="relative flex flex-none flex-col items-center">
+        <button
+          type="button"
+          data-testid="nav-settings"
+          aria-expanded={settingsOpen}
+          aria-haspopup="dialog"
+          className={`${RAIL_BTN_CLS} aria-[expanded=true]:border-border-2 aria-[expanded=true]:bg-fill aria-[expanded=true]:font-bold aria-[expanded=true]:text-text`}
+          onClick={() => setSettingsOpen((open) => !open)}
+        >
+          <Settings size={18} strokeWidth={1.75} aria-hidden="true" />
+          <span className={RAIL_LB_CLS}>设置</span>
+        </button>
+
+        {settingsOpen && (
+          <section
+            role="dialog"
+            aria-label="设置"
+            data-testid="nav-settings-panel"
+            className="absolute bottom-0 left-[calc(100%+12px)] z-50 w-[248px] rounded-2xl border border-border bg-card/95 p-3.5 text-left shadow-[0_18px_55px_rgba(15,23,42,.2)] backdrop-blur-2xl"
+          >
+            <div className="mb-3 flex items-center justify-between gap-3 border-b border-border pb-3">
+              <h2 className="text-sm font-bold text-text">设置</h2>
+              <span
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-text-2"
+                data-on={connected ? 'true' : 'false'}
+                title={connected ? t('common.connected') : t('common.offline')}
+                data-testid="conn-indicator"
+              >
+                <span className={connected ? 'h-2 w-2 rounded-full bg-green' : 'h-2 w-2 rounded-full bg-red'} aria-hidden="true" />
+                {connLabel}
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                className="flex min-h-10 items-center justify-center gap-2 rounded-xl border border-border bg-bg px-3 text-xs font-semibold text-text-2 hover:bg-fill"
+                data-testid="theme-toggle"
+                aria-label={t('common.theme_toggle')}
+                onClick={() => onTheme(theme === 'dark' ? 'light' : 'dark')}
+              >
+                {theme === 'dark' ? <Moon className="h-4 w-4" aria-hidden="true" /> : <Sun className="h-4 w-4" aria-hidden="true" />}
+                {theme === 'dark' ? '深色' : '浅色'}
               </button>
               <button
                 type="button"
-                className="btn btn--danger"
-                onClick={() => {
-                  const root = pendingUnregister.root
-                  setPendingUnregister(null)
-                  onUnregister?.(root)
-                }}
+                className="min-h-10 rounded-xl border border-border bg-bg px-3 text-xs font-semibold text-text-2 hover:bg-fill"
+                data-testid="lang-toggle"
+                onClick={() => onLang(lang === 'zh' ? 'en' : 'zh')}
               >
-                {t('nav.unregister_confirm')}
+                {lang === 'zh' ? 'English' : '中文'}
               </button>
-            </>
-          }
-        >
-          <p className="dialog__desc">{t('nav.unregister_desc', { name: pendingUnregister.name })}</p>
-        </Dialog>
-      )}
+            </div>
+          </section>
+        )}
+      </div>
     </header>
   )
 }

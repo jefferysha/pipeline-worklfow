@@ -11,8 +11,8 @@
  *   · workflow-not-found 同理留在 adapter（loadWorkflow 返回 null 的处理，两侧消息不同）。
  * default workflow 与此无关——它走 flow/transition-table 既有单源路径，本文件零涉足。
  */
-import { evaluateStepGuards, type StepGuardContext } from './stepGuard.js'
-import type { StepDef, WorkflowDef } from './types.js'
+import { buildStepGuardInput, evaluateCompiledGuards, type StepGuardContext } from './stepGuard.js'
+import type { ActionConfig, StepIR, WorkflowIR } from './ir.js'
 import type { FieldName, PipelineState } from '../types.js'
 
 /** 字段值 → 字符串（列表按逗号连接；undefined → 空串）——cli str / server fstr 同款强转。 */
@@ -29,16 +29,18 @@ export function resolveWorkflowName(state: PipelineState): string {
   return fieldStr(state, 'workflow') || 'default'
 }
 
-/** 按 id 定位 step；未命中 → null（不在图里的消息模板留 adapter）。 */
-export function resolveStep(wf: WorkflowDef, stepId: string): StepDef | null {
+/** 按 id 定位 step；未命中 → null（不在图里的消息模板留 adapter）。泛型：同时服务定义层
+ *  WorkflowDef→StepDef（cli check/init、internalSkillGate、advance）与运行层 WorkflowIR→StepIR
+ *  （planStepTransition）——两者 steps 都是 `{id}` 数组，判定逻辑同一。 */
+export function resolveStep<S extends { readonly id: string }>(wf: { readonly steps: readonly S[] }, stepId: string): S | null {
   return wf.steps.find((s) => s.id === stepId) ?? null
 }
 
 /**
  * 首个 step（init 种 phase 的 `wf.steps[0]` 习语单源）。空 steps → null，消息模板留 adapter。
- * 消费方：cli/commands/init.ts:164（种 phase）、server/src/server.ts:759。
+ * 消费方：cli/commands/init.ts:164（种 phase）、server/src/server.ts:759。泛型同 resolveStep。
  */
-export function firstStep(wf: WorkflowDef): StepDef | null {
+export function firstStep<S>(wf: { readonly steps: readonly S[] }): S | null {
   return wf.steps[0] ?? null
 }
 
@@ -47,37 +49,45 @@ export function firstStep(wf: WorkflowDef): StepDef | null {
  *   step-not-in-graph / event-unsupported → cli WorkflowError(exit 1) / server ConflictError(409)；
  *   guard-failed → cli StepGuardError(exit 2) / server PreconditionError(409)。
  * available 携带原始 event 数组（声明序），`join(', ') || '(无)'` 的渲染留 adapter。
+ * ok plan 携带选中边的 actions（编译产物，深冻结）——执行侧（transition-application）直接消费，
+ * 不二次按 from+event 查表，规划即选边的单一真相（消除「规划选一条边、执行另查一条」的语义漂移面）。
  */
 export type StepTransitionPlan =
-  | { readonly ok: true; readonly from: string; readonly to: string }
+  | { readonly ok: true; readonly from: string; readonly to: string; readonly actions: readonly ActionConfig[] }
   | { readonly ok: false; readonly kind: 'step-not-in-graph'; readonly stepId: string }
   | { readonly ok: false; readonly kind: 'event-unsupported'; readonly stepId: string; readonly available: readonly string[] }
   | { readonly ok: false; readonly kind: 'guard-failed'; readonly stepId: string; readonly failures: readonly string[] }
 
 /**
- * 非 default workflow 的转换判定编排：定位当前 step → 按 event 找出边 → 评「正在退出的」
- * 当前 step 的 guard（次序钉死：找边先于评 guard，对齐 cli/server 现行行为与 default 的
- * 「先校验再改相位」精神）。纯判定零写盘；guard 面经 ctx.changeDirAbs 读 tasks.md 的既有
- * 语义原样继承自 evaluateStepGuards（单一真相源，不在此复制）。
+ * 非 default workflow 的转换判定编排（G2 P2：输入收编译产物 WorkflowIR，不再是裸 WorkflowDef）：
+ * 定位当前 step → 按 event 找出边 → 评「正在退出的」当前 step 的**公共出口 guard** + **该边的
+ * edge guard**（次序钉死：找边先于评 guard，对齐 cli/server 现行行为与 default 的「先校验再改
+ * 相位」精神）。纯判定零写盘。guard 经 GUARD_HANDLERS 求值（v1 两变体已由 compileWorkflow 下沉
+ * 成基础 guard，与新变体走同一 handler 路径），collect-all + 失败文案渲染由 evaluateCompiledGuards
+ * 单源产出（stepGuard.ts，check 预览共用同一口径）。变 async：handler 面统一异步。
+ * step 公共 guard 与 edge guard 串接成一组按序 collect-all——旧 YAML 无 edge guard 时该组 =
+ * 仅 step 公共 guard，行为逐字不变。
  */
-export function planStepTransition(
-  wf: WorkflowDef,
+export async function planStepTransition(
+  ir: WorkflowIR,
   state: PipelineState,
   event: string,
   ctx: StepGuardContext,
-): StepTransitionPlan {
+): Promise<StepTransitionPlan> {
   const stepId = fieldStr(state, 'phase')
-  const step = resolveStep(wf, stepId)
+  const step: StepIR | null = resolveStep(ir, stepId)
   if (!step) return { ok: false, kind: 'step-not-in-graph', stepId }
   const edge = step.transitions.find((t) => t.event === event)
   if (!edge) {
     return { ok: false, kind: 'event-unsupported', stepId, available: step.transitions.map((t) => t.event) }
   }
-  const guardResult = evaluateStepGuards(state, step, ctx)
+  const guardResult = await evaluateCompiledGuards(
+    [...step.guards, ...edge.guards], stepId, buildStepGuardInput(state, ctx),
+  )
   if (!guardResult.pass) {
     return { ok: false, kind: 'guard-failed', stepId, failures: guardResult.failures }
   }
-  return { ok: true, from: stepId, to: edge.to }
+  return { ok: true, from: stepId, to: edge.to, actions: edge.actions }
 }
 
 /**

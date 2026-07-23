@@ -9,22 +9,26 @@
  */
 import { execFile } from 'node:child_process'
 import { accessSync, constants as fsConstants, readdirSync, readFileSync, statSync } from 'node:fs'
-import { access, readdir, readFile, stat, writeFile } from 'node:fs/promises'
+import { readdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { CommanderError } from 'commander'
 import {
-  createFlowEngine, createHistoryWriter, createStateStore, loadManifest,
-  projectRegistryPath, readSecrets, registerProjectRoot, secretsPath,
+  BUILTIN_TRACK_DEFINITIONS, createEffectiveSkillResolver, createFlowEngine, createHistoryWriter, createStateStore,
+  createTransitionRecordStore, createWorkflowRunRepository, loadManifest, loadTrackRegistry, loadWorkflow,
+  mutateTrackRegistry, projectRegistryPath, readSecrets, registerProjectRoot, secretsPath,
+  stateStorageExistsSync, withTrackRegistryLock,
 } from '@pipeline-lite/kernel'
 import { readAutomationJson } from '@pipeline-lite/automation'
 import { tapStatus } from '@pipeline-lite/tap'
-import type { GuardContext } from '@pipeline-lite/kernel'
-import type { CliDeps, DoctorProbes, GateMarkerInfo } from './deps.js'
+import type { ExtendedManifestData, TrackRegistry, TrackValidationContext } from '@pipeline-lite/kernel'
+import type { CliDeps, DoctorProbes, GateMarkerInfo, GuardFileContext } from './deps.js'
 import { probeAfkReadiness } from './afkReadiness.js'
 import { splitPassthroughArgv } from './argv.js'
 import { buildProgram, CliExit } from './program.js'
+import { createProductionTriageRuntime } from './commands/triage.js'
+import { resolveMachineStateHome } from './machineHome.js'
 
 /** ISO8601 UTC 秒级（对齐老内核 date -u +%Y-%m-%dT%H:%M:%SZ 口径） */
 function isoNow(): string {
@@ -53,14 +57,27 @@ async function listChanges(changesRoot: string): Promise<string[]> {
   const names: string[] = []
   for (const entry of entries) {
     if (!entry.isDirectory() || entry.name === 'archive') continue
-    try {
-      await access(join(changesRoot, entry.name, '.pipeline.yaml'))
-      names.push(entry.name)
-    } catch {
-      // 无 .pipeline.yaml 的目录不算 pipeline change
-    }
+    if (stateStorageExistsSync(join(changesRoot, entry.name))) names.push(entry.name)
   }
   return names.sort()
+}
+
+/**
+ * 严格候选枚举（Track CRUD 引用扫描专用，codex R3 阻断 D 修复）：只保留目录、排除 archive，
+ * **不做 .pipeline.yaml 存在性过滤**——刻意区别于 listChanges。缺文件/EACCES/半成品目录也进候选，
+ * 交由 scanActiveChanges 逐个 store.read 判可读性（读不了归 unreadable）→ fail-closed 真实生效。
+ */
+async function listChangeDirs(changesRoot: string): Promise<string[]> {
+  let entries
+  try {
+    entries = await readdir(changesRoot, { withFileTypes: true })
+  } catch {
+    return []
+  }
+  return entries
+    .filter((entry) => entry.isDirectory() && entry.name !== 'archive')
+    .map((entry) => entry.name)
+    .sort()
 }
 
 /** 项目根三门 marker（缺失即不在收件箱；新鲜判定归 inbox 命令） */
@@ -83,10 +100,11 @@ async function readGateMarkers(cwd: string): Promise<GateMarkerInfo[]> {
  * 老 guard 在项目根跑 bash `[ -f ]` 等谓词——此处以 cwd 为根做同义解析；
  * 谓词为同步纯读（guardCheck 是纯函数签名），任何 fs 异常一律按「不存在」处理。
  */
-function makeGuardCtx(cwd: string): (name: string) => GuardContext {
+function makeGuardCtx(cwd: string): (name: string) => GuardFileContext {
   const abs = (relPath: string) => join(cwd, relPath)
-  return (name: string): GuardContext => ({
+  return (name: string): GuardFileContext => ({
     changeDirRel: `openspec/changes/${name}`,
+    stateExists: (changeDirRel) => stateStorageExistsSync(abs(changeDirRel)),
     fileExists: (p) => {
       try { return statSync(abs(p)).isFile() } catch { return false }
     },
@@ -123,14 +141,55 @@ function manifestPath(): string {
   return join(pluginRoot(), 'templates', 'manifest.yaml')
 }
 
-/** 读 .claude-plugin/plugin.json 的版本（sync cliVersion 真相源；失败 → 'unknown'） */
-function readPluginVersion(): string {
-  try {
-    const raw = readFileSync(join(pluginRoot(), '.claude-plugin', 'plugin.json'), 'utf8')
-    return (JSON.parse(raw) as { version?: string }).version ?? 'unknown'
-  } catch {
-    return 'unknown'
+/**
+ * Track Registry 校验上下文（GOAL.md 清单 T · R2）：
+ *  - workflowExists 复用 loadWorkflow（'default' 恒存在，其余按 .pipeline/workflows/<id>.yaml 是否可载）；
+ *  - skillProfiles = 内建轨 skill profile（pm/frontend/backend，即 manifest 现行 skill 表 track 键）
+ *    ∪ manifest 两表已声明的非 '_all' 键。缺 tracks.yaml 时 registry=内建四轨、本上下文不会被查
+ *    （validateTrackRegistry 只在 tracks.yaml 存在时跑），此处仍如实构造，让自定义 tracks.yaml 能过校验。
+ * skill profile 键空间改名属清单 T 的 R5 阶段（见 GOAL.md）——R2 不改 manifest 结构，只按现行键派生。
+ */
+function trackValidationContext(repoRoot: string, manifest: ExtendedManifestData): TrackValidationContext {
+  const skillProfiles = new Set<string>()
+  for (const t of BUILTIN_TRACK_DEFINITIONS) {
+    if (t.policyProfile.skills.profile !== '_all') skillProfiles.add(t.policyProfile.skills.profile)
   }
+  for (const table of [manifest.mandatorySkills, manifest.recommendedSkills]) {
+    for (const row of Object.values(table)) {
+      for (const key of Object.keys(row)) if (key !== '_all') skillProfiles.add(key)
+    }
+  }
+  return {
+    workflowExists: (id) => {
+      if (id === 'default') return true
+      try {
+        return loadWorkflow(repoRoot, id) !== null
+      } catch {
+        return false
+      }
+    },
+    skillProfiles,
+  }
+}
+
+/**
+ * Read the release version from the native host manifests. Codex is preferred because it is the
+ * canonical marketplace package; Claude remains a compatibility fallback for an older checkout.
+ */
+function readPluginVersion(): string {
+  for (const rel of [
+    ['.codex-plugin', 'plugin.json'],
+    ['.claude-plugin', 'plugin.json'],
+  ]) {
+    try {
+      const raw = readFileSync(join(pluginRoot(), ...rel), 'utf8')
+      const version = (JSON.parse(raw) as { version?: unknown }).version
+      if (typeof version === 'string' && version.trim() !== '') return version
+    } catch {
+      // Try the compatibility manifest before falling back to unknown.
+    }
+  }
+  return 'unknown'
 }
 
 /** readdir 只取子目录/符号链接名（缺目录/无权限 → []，fail-safe）；skill 常以 symlink 装入，故含 symlink。 */
@@ -192,10 +251,30 @@ function scanInstalledSkillNames(): Set<string> {
 }
 
 /**
+ * Codex discovers skills from an installed native plugin as well as an explicit project adapter;
+ * it does not execute arbitrary cache contents merely because a source happens to be on disk.
+ * Keep this probe separate from the broad cross-host cache scanner: package root and project
+ * adapter are discovery surfaces, cache directories alone are not.
+ */
+function scanCodexProjectSkillNames(cwd: string, root: string): Set<string> {
+  const names = new Set<string>()
+  for (const skillsRoot of [join(root, 'skills'), join(cwd, '.agents', 'skills')]) {
+    for (const name of safeReaddirDirs(skillsRoot)) {
+      try {
+        if (statSync(join(skillsRoot, name, 'SKILL.md')).isFile()) names.add(name)
+      } catch {
+        // A dangling/unreadable link is not an installed Codex skill.
+      }
+    }
+  }
+  return names
+}
+
+/**
  * doctor 探针（BACKLOG #26b）：环境/fs 事实采集的 node 落地，裁决归 cmdDoctor。
  * 各探针独立 fail-safe（fs 异常按「不存在/不可执行」处理）——doctor 要能在坏环境里跑完。
  */
-function makeDoctorProbes(): DoctorProbes {
+function makeDoctorProbes(machineStateHome: string): DoctorProbes {
   const root = pluginRoot()
   return {
     nodeVersion: () => process.version,
@@ -250,6 +329,7 @@ function makeDoctorProbes(): DoctorProbes {
     },
     // 缺技能检测（批2 A1）：本机安装位扫描 + manifest 两表派生（bundle 里正确路径锚在此）
     installedSkillNames: () => scanInstalledSkillNames(),
+    codexProjectSkillNames: () => scanCodexProjectSkillNames(process.cwd(), root),
     manifestSkills: () => {
       try {
         const m = loadManifest(manifestPath())
@@ -265,37 +345,67 @@ function makeDoctorProbes(): DoctorProbes {
     afkReadiness: () =>
       probeAfkReadiness({
         image: readAutomationJson(process.cwd()).image ?? 'sandcastle:local',
-        secretsEnv: readSecrets(secretsPath(homedir())).keys,
+        secretsEnv: readSecrets(secretsPath(machineStateHome)).keys,
         hostEnv: process.env,
+        defaultCodexHome: join(homedir(), '.codex'),
       }),
   }
 }
 
 async function main(): Promise<void> {
+  const machineStateHome = resolveMachineStateHome(process.env, homedir())
   const manifest = loadManifest(manifestPath())
   const { toParse, passthrough } = splitPassthroughArgv(process.argv)
+  const store = createStateStore()
+  // Track Registry：装配处构造上下文，**每次从盘 fresh-load、不跨命令记忆化**（R3 D4）。只读
+  // 命令走 loadRegistry；init/fields 组合校验走 withRegistryLock（registry 锁内 fresh-load）；
+  // tracks CRUD 走 mutateRegistry（mutate-under-lock）。坏 tracks.yaml 只 fail-loud 到相关命令。
+  const trackCtx = trackValidationContext(process.cwd(), manifest)
+  const runRepo = createWorkflowRunRepository({
+    store,
+    recordStore: createTransitionRecordStore(),
+    clock: isoNow,
+  })
   const deps: CliDeps = {
-    store: createStateStore(),
+    // H10 §1/§8任务7：skill_bundle_id 存在性语义校验器——直接复用上面 trackCtx.skillProfiles
+    // （T 线 tracks/validate.ts::profileOk 消费的同一份集合：BUILTIN_TRACK_DEFINITIONS 非 `_all`
+    // policy profile ∪ manifest 两表已声明的非 `_all` track 键），零额外 manifest 解析/新正则。
+    // afk.ts 的 cmdAfk('run') 装配 createLoopAdmission 时转发本字段；loop-run.ts 的 --dry-run
+    // wiring 预览同样消费（见 deps.ts 头注）。
+    isSkillProfileKnown: (id) => trackCtx.skillProfiles.has(id),
+    store,
+    runRepo,
+    loadRegistry: () => loadTrackRegistry(process.cwd(), trackCtx),
+    withRegistryLock: (cb) => withTrackRegistryLock(process.cwd(), trackCtx, cb),
+    mutateRegistry: (cb) => mutateTrackRegistry(process.cwd(), trackCtx, cb),
     flow: createFlowEngine(manifest),
+    // T-R6：artifact 按现载 track registry 映射 skill profile；loader 每次 fresh-read，避免同进程
+    // tracks CRUD 后复用旧快照。H10 skill bundle 走 resolver 的显式 profile 入口，不受此映射干扰。
+    resolver: createEffectiveSkillResolver({
+      registry: () => loadTrackRegistry(process.cwd(), trackCtx),
+      manifest,
+    }),
     cwd: process.cwd(),
+    env: (name) => process.env[name],
     io: {
       out: (line: string) => process.stdout.write(`${line}\n`),
       err: (line: string) => process.stderr.write(`${line}\n`),
     },
     clock: isoNow,
     listChanges,
+    listChangeDirs,
     guardCtx: makeGuardCtx(process.cwd()),
-    doctor: makeDoctorProbes(),
+    doctor: makeDoctorProbes(machineStateHome),
     readGateMarkers: () => readGateMarkers(process.cwd()),
     writeBreadcrumb: (dir, content) => writeFile(join(dir, '.breadcrumb'), content, 'utf8'),
     history: createHistoryWriter(),
     // 决策 D（v5 T2）：init 成功后 best-effort 登记项目根到 ~/.claude/pipeline-projects.json
     registerProject: async (repoRoot) => {
-      await registerProjectRoot(projectRegistryPath(homedir()), repoRoot)
+      await registerProjectRoot(projectRegistryPath(machineStateHome), repoRoot)
     },
     // v6 T2：afk run 凭证注入——机器级 secrets 读成 env 形状（kernel readSecrets 自身 fail-open，
     // 缺失/损坏 → 空 keys）；值不落日志。
-    readSecretsEnv: async () => readSecrets(secretsPath(homedir())).keys,
+    readSecretsEnv: async () => readSecrets(secretsPath(machineStateHome)).keys,
     readHistoryRaw: async (dir) => {
       try {
         return await readFile(join(dir, '.pipeline-history.jsonl'), 'utf8')
@@ -316,7 +426,14 @@ async function main(): Promise<void> {
   }
 
   try {
-    await buildProgram(deps).parseAsync(toParse)
+    await buildProgram(deps, {
+      triage: createProductionTriageRuntime({
+        repoRoot: deps.cwd,
+        store,
+        runRepository: runRepo,
+        clock: isoNow,
+      }),
+    }).parseAsync(toParse)
   } catch (e) {
     if (e instanceof CliExit) {
       process.exitCode = e.code

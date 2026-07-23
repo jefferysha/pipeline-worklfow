@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react'
+import { Switch } from '@/components/ui/switch'
+import { cn } from '@/lib/utils'
 import { fetchHooksConfig, postHookToggle, type WbHookEvent, type WbHookMeta } from '../api/client'
 import { useT } from '../i18n'
 
@@ -137,36 +139,43 @@ export interface HookTimelineProps {
   config: HooksConfigState
 }
 
+/** 原 .wb-hk-badge / --locked 修饰符（W3 tailwind 迁移，颜色全走 token）。 */
+const HK_BADGE_CLS = 'flex-none whitespace-nowrap rounded-full bg-fill-2 px-1.5 py-px text-[10px] font-bold text-text-3'
+
 export function HookTimeline({ phase, config }: HookTimelineProps): JSX.Element {
   const { t } = useT()
   return (
-    <div className="wb-ed-sec" data-testid="wb-hooks">
-      <div className="wb-ed-sec-h">
+    // wb-ed-sec 保留为语义骨架类（wb8-pane 的「编辑卡后接续分隔」上下文仍以它为锚，样式已原子化）。
+    <div className="wb-ed-sec pt-3.5 pb-1" data-testid="wb-hooks">
+      <div className="mb-2.5 flex items-center gap-1.5 text-[13px] font-bold">
         {t('workbench.hk_sec')}
-        <span className="hint">{t('workbench.hk_hint', { phase })}</span>
+        <span className="text-xs font-normal text-text-3">{t('workbench.hk_hint', { phase })}</span>
       </div>
-      <p className="wb-note wb-hk-note">{t('workbench.hk_note')}</p>
+      <p className="-mt-0.5 mb-3.5 text-xs leading-[1.55] text-text-3">{t('workbench.hk_note')}</p>
       {config.loadError && (
-        <p className="view__note view__note--error" data-testid="wb-hk-load-error">{config.loadError}</p>
+        <p className="p-5 text-[13px] text-red" data-testid="wb-hk-load-error">{config.loadError}</p>
       )}
       {config.toggleError && (
-        <p className="view__note view__note--error" role="alert" data-testid="wb-hk-toggle-error">{config.toggleError}</p>
+        <p className="p-5 text-[13px] text-red" role="alert" data-testid="wb-hk-toggle-error">{config.toggleError}</p>
       )}
       {config.hooks && (
         // v6 T12：横排 4 列网格 → 纵排分组（唯一消费方改为右栏 280px 窄列；交互真相源
         // v6-workbench-flow.html 方案 A 右栏「钩子时序(全局)」取代 v5 编辑区横排口径）。
         // 循环提示（原跨两列的 wb-hkloop 弧）改为 PreToolUse 分组头上的一行小字，语义不丢。
-        <div className="wb-hkline wb-hkline--rail">
+        <div className="flex flex-col gap-3">
           {EVENT_ORDER.map((ev) => (
-            <div key={ev} className="wb-hkgroup" data-testid={`wb-hk-group-${ev}`}>
-              <div className="wb-hknode" data-testid={`wb-hk-node-${ev}`}>
-                <div className="wb-hk-t">{t(`workbench.hk_ev_${ev}`)}</div>
-                <div className="wb-hk-ev">{ev}</div>
+            <div key={ev} className="border-l-2 border-border-2 pl-2.5" data-testid={`wb-hk-group-${ev}`}>
+              <div
+                className="relative mb-1.5 pt-[22px] pb-2.5 pl-[18px] before:absolute before:left-0 before:top-[5px] before:h-3 before:w-3 before:rounded-full before:border-[3px] before:border-(--accent) before:bg-card before:content-['']"
+                data-testid={`wb-hk-node-${ev}`}
+              >
+                <div className="text-[13px] font-bold leading-[1.2]">{t(`workbench.hk_ev_${ev}`)}</div>
+                <div className="mt-px font-mono text-[11px] text-text-3">{ev}</div>
               </div>
               {ev === 'PreToolUse' && (
-                <div className="wb-hkloop" aria-hidden="true"><span>{t('workbench.hk_loop')}</span></div>
+                <div className="mb-1.5 text-[10.5px] text-text-3" aria-hidden="true"><span>{t('workbench.hk_loop')}</span></div>
               )}
-              <div className="wb-hkstack" data-testid={`wb-hk-stack-${ev}`}>
+              <div className="flex min-w-0 flex-col gap-2" data-testid={`wb-hk-stack-${ev}`}>
                 {config.hooks!.filter((h) => h.event === ev).map((h) => {
                 const key = `${h.id}.${phase}`
                 const enabled = !(key in config.matrix)
@@ -178,24 +187,29 @@ export function HookTimeline({ phase, config }: HookTimelineProps): JSX.Element 
                 const descKey = `workbench.hk_desc_${h.id}`
                 const desc = t(descKey)
                 return (
-                  <div key={h.id} className={`wb-hkcard${pending ? ' wb-hkcard--pending' : ''}`} data-testid={`wb-hk-${h.id}`}>
-                    <div className="wb-hkcard-t">
-                      <span className="wb-hkcard-name">{name === nameKey ? h.id : name}</span>
-                      {locked && <span className="wb-hk-badge wb-hk-badge--locked">{t('workbench.hk_locked')}</span>}
-                      {pending && <span className="wb-hk-badge">{t('workbench.hk_pending')}</span>}
-                      <button
-                        type="button"
-                        className="switch"
-                        role="switch"
+                  // 三档呈现的状态承载：data-state=pending（暂不可配灰显）/locked（强制常开）/configurable。
+                  <div
+                    key={h.id}
+                    data-state={pending ? 'pending' : locked ? 'locked' : 'configurable'}
+                    className="rounded-[10px] bg-fill px-[11px] py-2 data-[state=pending]:opacity-60"
+                    data-testid={`wb-hk-${h.id}`}
+                  >
+                    <div className="flex items-center gap-1.5 text-[12.5px] font-[650]">
+                      <span className="min-w-0 truncate">{name === nameKey ? h.id : name}</span>
+                      {locked && <span className={cn(HK_BADGE_CLS, 'bg-red-t text-red-d')}>{t('workbench.hk_locked')}</span>}
+                      {pending && <span className={HK_BADGE_CLS}>{t('workbench.hk_pending')}</span>}
+                      <Switch
                         // 强制常开/暂不可配的 hook 实际都在跑（sh 侧不读/不认它们的禁用键）——开关恒显开，不撒谎。
-                        aria-checked={h.configurable ? enabled : true}
+                        checked={h.configurable ? enabled : true}
                         aria-label={name === nameKey ? h.id : name}
                         disabled={!h.configurable || config.busyKeys.has(key)}
                         data-testid={`wb-hk-sw-${h.id}`}
-                        onClick={() => config.toggle(h.id, phase, !enabled)}
+                        onCheckedChange={() => config.toggle(h.id, phase, !enabled)}
+                        // 开=项目蓝（原 .switch[aria-checked=true] 的 --accent 口径，覆掉基元的 primary 绿）。
+                        className="ml-auto origin-right scale-85 data-[state=checked]:bg-(--accent)"
                       />
                     </div>
-                    {desc !== descKey && <div className="wb-hkcard-d">{desc}</div>}
+                    {desc !== descKey && <div className="mt-0.5 text-[11.5px] leading-[1.5] text-text-3">{desc}</div>}
                   </div>
                 )
                 })}

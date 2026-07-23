@@ -110,6 +110,9 @@ function seedClaudeDir(): void {
     join(claudeDir, 'settings.json'),
     JSON.stringify({ enabledPlugins: { 'superpowers@claude-plugins-official': true, 'ghostplug@somewhere': false } }),
   )
+
+  // Codex-first readiness 只把 Codex cache 视为 plugin 可用；Claude cache 仍单独保留兼容探测。
+  mkdirSync(join(base, 'home', '.codex', 'plugins', 'cache', 'claude-plugins-official', 'superpowers', '6.1.1'), { recursive: true })
 }
 
 beforeEach(() => {
@@ -146,15 +149,33 @@ describe('detectInstalled —— 三源探测', () => {
     expect(d.skills.size).toBe(0)
     expect(d.pluginBases.size).toBe(0)
   })
+
+  it('Codex-first：同时扫描同一 home 下 ~/.agents/skills，不把 npx skills -g 的真实安装漏报', () => {
+    const agentsSkill = join(base, 'home', '.agents', 'skills', 'browser-qa')
+    mkdirSync(agentsSkill, { recursive: true })
+    writeFileSync(join(agentsSkill, 'SKILL.md'), '# browser qa\n')
+
+    const d = detectInstalled(claudeDir)
+    expect(d.skills.has('browser-qa')).toBe(true)
+  })
 })
 
 describe('listAllSkillsDetailed —— SkillEntry 明细', () => {
-  it('本仓 skills/ 目录 → local-plugin;未装时 installCmd 给 --plugin-dir 装法', () => {
+  it('本仓 skills/ 目录 → local-plugin 且随当前 pluginRoot 直接可用，不要求重复安装', () => {
+    writeFileSync(join(repoRoot, 'skills', 'pipeline-open', 'SKILL.md'), [
+      '---',
+      'name: pipeline-open',
+      'description: Open a pipeline change and prepare its execution context.',
+      '---',
+      '',
+      '# Pipeline Open',
+    ].join('\n'))
     const entries = listAllSkillsDetailed(repoRoot, claudeDir)
     const e = entries.find((x) => x.name === 'pipeline-open')!
     expect(e.source).toBe('local-plugin')
-    expect(e.installed).toBe(false)
-    expect(e.installCmd).toContain(`claude --plugin-dir ${repoRoot}`)
+    expect(e.installed).toBe(true)
+    expect(e.description).toBe('Open a pipeline change and prepare its execution context.')
+    expect(e.installCmd).toBeUndefined()
   })
 
   it('命名空间 token 按插件前缀匹配判已装:superpowers:* 已装,commit-commands:* 未装', () => {
@@ -189,12 +210,21 @@ describe('listAllSkillsDetailed —— SkillEntry 明细', () => {
     }
   })
 
-  it('按 name 排序且去重;claudeDir 缺失时除 builtin 外全部 installed:false(fail-open)', () => {
+  it('同名能力随插件打包时，包内 SKILL.md 优先于宿主 builtin，UI 不会把完整安装误报成外部前置', () => {
+    mkdirSync(join(repoRoot, 'skills', 'verify'), { recursive: true })
+    writeFileSync(join(repoRoot, 'skills', 'verify', 'SKILL.md'), '# packaged verify\n')
+
+    const entry = listAllSkillsDetailed(repoRoot, claudeDir).find((item) => item.name === 'verify')!
+    expect(entry).toMatchObject({ source: 'local-plugin', installed: true })
+    expect(entry.installCmd).toBeUndefined()
+  })
+
+  it('按 name 排序且去重;claudeDir 缺失时 builtin 与本仓 bundled 可用，其余探测项 fail-open 为未装', () => {
     const entries = listAllSkillsDetailed(repoRoot, join(base, 'no-such-dir'))
     const names = entries.map((x) => x.name)
     expect(names).toEqual([...new Set(names)].sort())
     for (const e of entries) {
-      expect(e.installed).toBe(e.source === 'builtin')
+      expect(e.installed).toBe(e.source === 'builtin' || e.source === 'local-plugin')
     }
   })
 
@@ -202,5 +232,47 @@ describe('listAllSkillsDetailed —— SkillEntry 明细', () => {
     const names = listAllSkills(repoRoot)
     const detailed = listAllSkillsDetailed(repoRoot, claudeDir).map((x) => x.name)
     expect(names).toEqual(detailed)
+  })
+
+  it('Codex-first registry：真实安装 id 改名、bundled、tier 与 unavailable 都来自唯一 skill-sources.yaml', () => {
+    mkdirSync(join(repoRoot, 'templates'), { recursive: true })
+    writeFileSync(join(repoRoot, 'templates', 'skill-sources.yaml'), [
+      'version: 1',
+      'skills:',
+      '  browser-qa: { tool: skills-cli, source: affaan-m/ECC, skill: browser-qa, tier: mandatory, official: false }',
+      '  taste-skill: { tool: skills-cli, source: Leonxlnx/taste-skill, skill: design-taste-frontend, tier: mandatory, official: false }',
+      '  pipeline-open: { tool: bundled, source: pipeline-lite, tier: mandatory, official: false }',
+      '  zoom-out: { tool: skills-cli, source: mattpocock/skills, skill: zoom-out, unavailable: true, tier: optional, official: false }',
+      '',
+    ].join('\n'))
+    for (const name of ['browser-qa', 'design-taste-frontend']) {
+      const dir = join(base, 'home', '.agents', 'skills', name)
+      mkdirSync(dir, { recursive: true })
+      writeFileSync(join(dir, 'SKILL.md'), `# ${name}\n`)
+    }
+
+    const entries = listAllSkillsDetailed(repoRoot, claudeDir)
+    expect(entries.find((x) => x.name === 'browser-qa')).toMatchObject({ installed: true, tier: 'mandatory', available: true })
+    expect(entries.find((x) => x.name === 'taste-skill')).toMatchObject({ installed: true, tier: 'mandatory', available: true })
+    expect(entries.find((x) => x.name === 'pipeline-open')).toMatchObject({ installed: true, tier: 'mandatory', available: true })
+    expect(entries.find((x) => x.name === 'zoom-out')).toMatchObject({ installed: false, tier: 'optional', available: false })
+  })
+
+  it('plugin 类以 Codex cache 为 readiness 真相：Claude-only 不算就绪，Codex cache 命中才算', () => {
+    mkdirSync(join(repoRoot, 'templates'), { recursive: true })
+    writeFileSync(join(repoRoot, 'templates', 'skill-sources.yaml'), [
+      'version: 1',
+      'skills:',
+      '  shadcn-ui: { tool: claude-plugin, source: agents-inc, skill: web-ui-shadcn-ui, tier: recommended, official: false }',
+      '  tailwind-css-patterns: { tool: claude-plugin, source: agents-inc, skill: web-styling-tailwind, tier: recommended, official: false }',
+      '',
+    ].join('\n'))
+    mkdirSync(join(claudeDir, 'plugins', 'cache', 'agents-inc', 'web-ui-shadcn-ui'), { recursive: true })
+    mkdirSync(join(base, 'home', '.codex', 'plugins', 'cache', 'agents-inc', 'web-styling-tailwind', '5.0.0'), { recursive: true })
+
+    const entries = listAllSkillsDetailed(repoRoot, claudeDir)
+
+    expect(entries.find((x) => x.name === 'shadcn-ui')).toMatchObject({ installed: false, tier: 'recommended' })
+    expect(entries.find((x) => x.name === 'tailwind-css-patterns')).toMatchObject({ installed: true, tier: 'recommended' })
   })
 })

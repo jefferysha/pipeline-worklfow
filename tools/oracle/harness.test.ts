@@ -121,6 +121,53 @@ describe('fixtures 生成脚本', () => {
     })
   }
 
+  it('default-effects.sh 独立可跑：确定性 git 仓 + 初始 commit + commit 伪命令行（G2 P3 barrier 覆盖）', () => {
+    const target = mkdtempSync(join(tmpdir(), 'oracle-fx-default-effects-'))
+    try {
+      const res = spawnSync('bash', [join(here, 'fixtures', 'default-effects.sh'), target], { encoding: 'utf8' })
+      expect(res.status).toBe(0)
+      // 确定性初始 commit（build-complete 冻结此 HEAD；双侧同 SHA 靠固定身份+日期）
+      const head = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: target, encoding: 'utf8' })
+      expect(head.status).toBe(0)
+      expect(head.stdout.trim()).toMatch(/^[0-9a-f]{40}$/)
+      const plan = readFileSync(join(target, '.oracle-plan'), 'utf8')
+      expect(plan).toContain('t6-de')
+      // commit 伪命令行（barrier 造 HEAD 位移）与 barrier 触发的 verify-pass（首列非零期望）
+      expect(plan).toMatch(/^0\tcommit\t1$/m)
+      expect(plan).toMatch(/^0\tcommit\t2$/m)
+      expect(plan).toMatch(/^1\ttransition\tt6-de\tverify-pass$/m)
+      for (const line of plan.split('\n').filter((l) => l && !l.startsWith('#'))) {
+        expect(line).toMatch(/^\d+\t\S+\t/)
+      }
+    } finally {
+      rmSync(target, { recursive: true, force: true })
+    }
+  })
+
+  it('default-guard-errors.sh 独立可跑：每种 guard 失败分支的拒绝步 + isolation seed 伪命令 + stderr sidecar（G2 P3 阻断 2）', () => {
+    const target = mkdtempSync(join(tmpdir(), 'oracle-fx-default-guard-errors-'))
+    try {
+      const res = spawnSync('bash', [join(here, 'fixtures', 'default-guard-errors.sh'), target], { encoding: 'utf8' })
+      expect(res.status).toBe(0)
+      // stderr 逐字口径 sidecar（run.sh 据此在 transition 拒绝路径逐字比 stderr）
+      expect(existsSync(join(target, '.oracle-stderr-check'))).toBe(true)
+      const plan = readFileSync(join(target, '.oracle-plan'), 'utf8')
+      expect(plan).toContain('t6-ge')
+      // isolation 非法枚举（field-in）绕过 set 闸 → seed 伪命令注脏值
+      expect(plan).toMatch(/^0\tseed\tt6-ge\tisolation\tbogus$/m)
+      // 每个 phase 至少一条「首列非零期望」的拒绝步（guard 失败分支）
+      for (const ev of ['explore-complete', 'spec-complete', 'build-complete', 'verify-pass']) {
+        expect(plan).toMatch(new RegExp(`^1\\ttransition\\tt6-ge\\t${ev}$`, 'm'))
+      }
+      // 计划行格式：<expected_new_exit>\t<cmd>\t<args...>（seed/transition/set/get/init 全含）
+      for (const line of plan.split('\n').filter((l) => l && !l.startsWith('#'))) {
+        expect(line).toMatch(/^\d+\t\S+\t/)
+      }
+    } finally {
+      rmSync(target, { recursive: true, force: true })
+    }
+  })
+
   it('pm-history fixture 含老内核 base64 历史区 + PRESERVE 基线 sidecar', () => {
     const target = mkdtempSync(join(tmpdir(), 'oracle-fx-hist-'))
     try {

@@ -1,6 +1,6 @@
 ---
 name: pipeline-open
-description: "Pipeline Phase 1: Open · 开启 Change。创建 change 骨架（proposal/design/tasks），用 pipeline init 初始化 .pipeline.yaml。三个 Track（pm/frontend/backend）共享同套流程，但 PM 不需要 design.md。"
+description: "Pipeline Phase 1: Open · 开启 Change。创建 change 骨架（proposal/design/tasks），用 pipeline init 初始化 .pipeline.yaml。三个 Track（pm/frontend/backend）都生成 OpenSpec design.md。"
 ---
 
 # /pipeline-open — Phase 1: 开启 Change
@@ -10,35 +10,30 @@ description: "Pipeline Phase 1: Open · 开启 Change。创建 change 骨架（p
 
 ## 输入
 
-从 /pipeline 主入口经环境变量接收：
-- `$PIPELINE_TRACK` ∈ {pm, frontend, backend}（chat 不会触发本 skill）
-- `$PIPELINE_CHANGE_NAME` — change 短名（kebab-case）
+从 /pipeline 主入口接收：
+- `<pipeline-dispatch>` 的 `track` 与（新建时）由入口根据用户需求生成的 `change` 短名（kebab-case）
+- 兼容快捷方式：`$PIPELINE_TRACK`、`$PIPELINE_CHANGE_NAME`
+
+**上下文恢复（强制）**：Skill 工具调用不保证继承此前 Bash 的 export。环境变量为空时，读取本轮
+`<pipeline-dispatch>` / `<workflow-state>`，运行 `pipeline list --json` 复核；只有仍无法从用户需求
+生成安全的 kebab-case name 时才询问用户。不得因变量为空直接降级成普通对话。
 
 ## 前置条件
 
 - 无活跃 change 或用户明确创建新 change
-- 项目根有 `openspec/` 目录（若无，本 skill 会自动 `openspec init --tools claude --force`）
+- 无需预先安装或运行独立 OpenSpec CLI；本插件的 `pipeline init` 会创建 default change 所需的
+  `openspec/changes/<name>/`、文档骨架与 canonical state。
 
-> **归档软提醒（前置）**：若主入口（`pipeline-lite:pipeline`）已检测到未归档活跃 change、弹过归档提醒并经用户确认「并行新建」，则直接继续。若**本 skill 被直接调用**（未经主入口），先按主入口同规则——`pipeline list` 列活跃 change，非空则**用 AskUserQuestion** 列出（名 + phase + 陈旧度）软提醒 `[归档某个再建 / 并行新建 / 取消]`——再创建。**不硬拦**并行新建。
+> **归档软提醒（前置）**：若主入口（`pipeline`）已检测到未归档活跃 change、弹过归档提醒并经用户确认「并行新建」，则直接继续。若**本 skill 被直接调用**（未经主入口），先按主入口同规则——`pipeline list` 列活跃 change，非空则**用 AskUserQuestion** 列出（名 + phase + 陈旧度）软提醒 `[归档某个再建 / 并行新建 / 取消]`——再创建。**不硬拦**并行新建。
 
 ## 步骤
 
-### Step 0: 入口验证 + 自动初始化 openspec
+### Step 0: 入口验证
 
 ```bash
-[ -z "${PIPELINE_TRACK:-}" ] && { echo "[HARD STOP] 缺 PIPELINE_TRACK"; exit 1; }
-[ -z "${PIPELINE_CHANGE_NAME:-}" ] && { echo "[HARD STOP] 缺 PIPELINE_CHANGE_NAME"; exit 1; }
+# 先以 dispatch 上下文/CLI 复核出的逻辑 track 与 change name 为准；环境变量仅作兼容别名。
+pipeline list --json
 
-# 若项目未 openspec init，自动初始化（无需用户操作）
-if [ ! -d "openspec" ]; then
-  echo "[AUTO-INIT] 项目未 openspec init，自动执行 openspec init --tools claude --force"
-  if ! command -v openspec &>/dev/null; then
-    echo "[HARD STOP] openspec CLI 未安装。执行: npm install -g @fission-ai/openspec"
-    exit 1
-  fi
-  openspec init --tools claude --force || { echo "[HARD STOP] openspec init 失败"; exit 1; }
-  echo "[OK] openspec/ 已初始化"
-fi
 ```
 
 ### Step 1: 创建 change 骨架（强制 Skill）
@@ -54,23 +49,20 @@ triage 是面向 **issue tracker 的状态机**——只在「对**既有项目*
 
 **greenfield 全新立项 / PM market-validation（无 issue tracker）→ 跳过 triage**，改在 proposal 里一句话内联归类（feature / bug / refactor / debt / market-validation）即可。**不要硬套 triage 状态机，也不要因为它"不适用"就停流程。**
 
-#### 🌐 所有 Track 共用：openspec 结构补全（条件）
+#### 🌐 所有 Track 共用：内置 OpenSpec 结构（无需额外安装）
 
-若 Step 0 已经做了自动 `openspec init`，跳过此步。否则若发现缺 `openspec/specs/` 或 `openspec/config.yaml`：
-
-```bash
-openspec init --tools claude --force
-```
+`pipeline init` 负责创建 change 内的 proposal/design/tasks 初始骨架；spec phase 首次创建 capability 时
+再建立 `openspec/specs/<capability>/spec.md`。不要调用或要求用户全局安装另一个 `openspec` 可执行文件。
 
 #### 🌐 所有 Track 共用：openspec-propose（强制）
 
-**立即执行**：使用 Skill 工具加载 `pipeline-lite:openspec-propose`。**禁止跳过此步骤**。
+**立即执行**：使用 Skill 工具加载 `openspec-propose`。**禁止跳过此步骤**。
 
 按 Track 提示生成不同的产物模板：
 
 | Track | proposal.md 重点 | design.md 重点 | tasks.md 重点 |
 |-------|-----------------|---------------|--------------|
-| pm | 目标/受众/动机 | （可选，立项不需高层架构） | PM 推进任务 |
+| pm | 目标/受众/动机 | 初始产品/交互假设（explore 会补足证据与决策） | PM 推进任务 |
 | frontend | 用户痛点/UI 范围 | 组件结构/状态管理 | TDD 任务清单 |
 | backend | 业务问题/API 范围 | 数据模型/架构决策 | 实现任务清单 |
 
@@ -79,7 +71,8 @@ openspec init --tools claude --force
 > 任何工作假设标成「**待 explore 验证**」，别写满了再求用户盖章（HITL 原则③，见 SessionStart 注入的 templates/workflow.md）。
 > proposal 是**活文档**：open 立骨架、explore 充实——openspec 的 `proposal→design→specs→tasks` 是**文档依赖**、不是写作时序，proposal 节点先存在即可。
 
-若 openspec-propose 不可用：fallback 到手动创建 `openspec/changes/<name>/` 下的 proposal.md / design.md / tasks.md。
+若 `openspec-propose` 不可用：只可手动补齐骨架以保留需求，**不得**把 open 视为完成；document ledger 会因
+缺少真实 Skill history 拒绝登记/transition。修复 skill 可用性后必须重新实际调用它。
 
 ### Step 1.5: 选 preset 规模（强制 AskUserQuestion，决定 guard 强度）
 
@@ -145,6 +138,20 @@ pipeline get "$PIPELINE_CHANGE_NAME" phase          # 应返回 "open"
 pipeline get "$PIPELINE_CHANGE_NAME" preset         # 应返回 $PIPELINE_PRESET
 ```
 
+### Step 2.5: 登记 OpenSpec 初始文档证据（受治理 workflow 强制）
+
+default 的全部 track，以及 `openspec_contract: required` 的自定义 workflow，必须把本 phase
+真实由 `openspec-propose` 生成的三份文档登记进 ledger。先确认该 Skill 调用已完成（PostToolUse
+history 会记证据），再运行；不能用手工写文档或伪造 `--producer` 替代。
+
+```bash
+CHANGE_DIR="openspec/changes/$PIPELINE_CHANGE_NAME"
+pipeline document record "$PIPELINE_CHANGE_NAME" proposal "$CHANGE_DIR/proposal.md" --producer openspec-propose
+pipeline document record "$PIPELINE_CHANGE_NAME" openspec-design "$CHANGE_DIR/design.md" --producer openspec-propose
+pipeline document record "$PIPELINE_CHANGE_NAME" tasks "$CHANGE_DIR/tasks.md" --producer openspec-propose
+pipeline document status "$PIPELINE_CHANGE_NAME"
+```
+
 ### Step 3: 验证产物（不自动推进）
 
 ```bash
@@ -155,7 +162,7 @@ guard 通过条件（open 出口，GUARD-RULES §1）：
 - `openspec/changes/<name>/.pipeline.yaml` 存在且非空
 - `openspec/changes/<name>/proposal.md` 存在且非空
 - `openspec/changes/<name>/tasks.md` 存在且至少 1 个 `- [ ]` 任务
-- frontend/backend Track 额外要求：`design.md` 存在且非空（PM Track 不要求）
+- 所有 Track：`design.md` 存在且非空（PM 是初始产品/交互假设）
 
 guard **只校验、不自动 transition**（本 pipeline 永不自动推进）。校验通过后：
 1. 把 proposal.md + tasks.md 交用户过目、收反馈（"立项范围 / 任务对不对？"）；
@@ -172,10 +179,10 @@ guard **只校验、不自动 transition**（本 pipeline 永不自动推进）�
 | 现象 | 处理 |
 |------|------|
 | check 报 proposal 为空 | 提示用户填写后重试 |
-| check 报缺 design.md (frontend/backend) | 用 openspec-propose 补全或手动创建 |
+| check 报缺 design.md | 用 openspec-propose 补全或手动创建 |
 | .pipeline.yaml 已存在但 track 不一致 | 询问是否覆盖；若覆盖则 `pipeline set <name> track <new>` |
 | 用户中途取消 | 删除 change 目录（含 .pipeline.yaml） |
 
-## 外部 skill 依赖（CONTRACT §5.7 显式声明）
+## 打包 skill 依赖（随 pipeline-lite 插件安装）
 
-- external-skill: triage · 条件（既有项目并入 issue 流时才加载）
+- bundled-skill: triage · 条件（既有项目并入 issue 流时才加载）

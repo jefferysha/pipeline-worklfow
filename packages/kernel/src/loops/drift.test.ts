@@ -182,6 +182,12 @@ describe('detectDrift —— 漂移维度', () => {
 // ── computeReadiness：loop-ready 0-100 ─────────────────────────────────────────
 
 describe('computeReadiness —— loop-ready 就绪评分', () => {
+  test('H9 readiness 不再把旧 registry state 路径当作运行状态证据', () => {
+    const s = computeReadiness(loop({ state: undefined }))
+    expect(s.dimensions.find((x) => x.name === 'observability')).toMatchObject({ score: 10, max: 10 })
+    expect(s.score).toBe(100)
+  })
+
   test('满配 loop → 100、band=ready、零 suggestion', () => {
     const s = computeReadiness(loop())
     expect(s.score).toBe(100)

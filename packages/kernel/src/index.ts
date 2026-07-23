@@ -1,16 +1,25 @@
 export * from './types.js'
 export * from './state/index.js'
 export * from './flow/index.js'
+// 动态 Track Registry 公开面（GOAL.md 清单 T · R2 校验面切换）——tracks/ 是 R1 落地的叶子 barrel，
+// 本行把它接进根 barrel，使 cli/server 的 track 校验面从 types.ts 的写死 TRACKS 常量切到 registry
+// 驱动（requireTrack/assertWorkflowAllowed/loadTrackRegistry）。tracks/index.ts 已自做具名导出，
+// 与其它子 barrel（state/flow/…）无名字冲突，故整体 re-export。
+export * from './tracks/index.js'
 // mem 跨 runtime 会话检索（BACKLOG #28）
 export * from './mem/index.js'
-// channel event-sourced worker 总线（BACKLOG #27）
-export * from './channel/index.js'
 // loop 治理子系统（BACKLOG #35，loop-engineering 内建）
 export * from './loops/index.js'
 // 上下文压缩（BACKLOG #30，对标 Comet CONTEXT-COMPRESSION）
 export * from './compress/index.js'
 // Trellis parity 收尾：spec-scaffold / workflow-resolution / allowlist（BACKLOG #33）
 export * from './scaffold/index.js'
+// H7 verifier（GOAL 清单 H）：结构化 verification 结果契约 + 手写窄校验 + merge 授权谓词。
+// verification/ 子 barrel 自做具名导出，符号与其它子 barrel 无碰撞，故整体 re-export。
+export * from './verification/index.js'
+export * from './triage/index.js'
+// skill source registry 是 CLI setup/doctor 与 Dashboard machine readiness 的共享安装契约。
+export * from './skills/index.js'
 // workflow 自定义引擎（GOAL 清单 E）——loadWorkflow（Task 5）+ evaluateStepGuards（Task 7）+
 // isSkillUnlocked（Task 6）供 cli transition / internal-skill-gate 消费自定义 workflow 的真实
 // step 间转换与 skill DAG 解锁判定（Task 8/9）。仅具名导出这三个函数，不整体 re-export
@@ -22,6 +31,64 @@ export { evaluateStepGuards } from './workflow/stepGuard.js'
 export { applyStepTransition, firstStep, planStepTransition, resolveStep, resolveWorkflowName } from './workflow/engine.js'
 export type { StepTransitionPlan } from './workflow/engine.js'
 export { isSkillUnlocked } from './workflow/skillDag.js'
+export { parseWorkflow } from './workflow/parse.js'
 export { serializeWorkflow } from './workflow/serialize.js'
 export { validateWorkflow } from './workflow/validate.js'
-export type { WorkflowDef } from './workflow/types.js'
+export { validateWorkflowTrackReferences } from './workflow/track-reference-validation.js'
+export type { StepDef, StepTransition, WorkflowActionConfig, WorkflowDef, WorkflowGuardConfig } from './workflow/types.js'
+export {
+  DOCUMENT_CONTRACT_PHASES, DOCUMENT_KINDS, isAcceptedDocumentProducer, isDocumentContractPhase,
+  isDocumentKind, isOpenSpecDocumentContractRequired, isOutputAllowedInPhase, outputsRequiredForPhase,
+  producerCandidatesFor, readsRequiredForPhase, recordsRequiredForPhase,
+  shouldEnforceDocumentEvidenceOnTransition, validateOpenSpecContractWorkflow,
+} from './workflow/document-contract.js'
+export type {
+  DocumentContractPhase, DocumentKind, DocumentOutputRequirement, OpenSpecContract,
+} from './workflow/document-contract.js'
+// Workflow IR 编译（G2）：v1 WorkflowDef → 归一化 WorkflowIR（含默认值/深冻结/字段闭集校验）。
+// custom 轨 transition adapter 在 loadWorkflow 后柯里化调用它拿运行层 IR；类型供 adapter/测试引用。
+// compileWorkflow=custom 契约（拒 effective-phase-skills，A 契约）；compileDefaultWorkflow=default 生成
+// 校验专用（允许 phase policy）——见 workflow/compile.ts。
+export { compileWorkflow, compileDefaultWorkflow } from './workflow/compile.js'
+export type { CompiledGuardConfig, StepIR, StepTransitionIR, WorkflowIR } from './workflow/ir.js'
+// default workflow artifact declaration 查询层（G2 P4/P5）：只读生成表 default-workflow.generated.ts 的
+// track-aware 查询接缝——P5 artifact register 经本 API 取 default declaration，不再读 YAML/复制字段表。
+export { defaultArtifactForField, defaultArtifactsForStep, defaultArtifactDeclaredForField } from './workflow/default-artifacts.js'
+export type { DefaultArtifactDeclaration } from './workflow/default-artifacts.js'
+export type { ArtifactProducerPolicy, WorkflowArtifactConfig } from './workflow/types.js'
+// EffectiveSkillResolver（G2 P5）：artifact register 校验具体 producer 的接缝（default=manifest
+// mandatory+recommended / custom=step.skills；a|b 备选拆 alternatives）。artifact command 只依赖本接口。
+export { createEffectiveSkillResolver } from './workflow/effective-skill-resolver.js'
+export type {
+  EffectiveSkillResolver, EffectiveSkillSlot, EffectiveSkillResolverManifest, EffectiveSkillResolverOptions,
+} from './workflow/effective-skill-resolver.js'
+// OpenSpec tasks.md → ordered workflow stages 的只读 Todo 投影（dashboard/native Todo 共用）。
+export { DEFAULT_WORKFLOW_TODO_STAGES, projectPipelineTodo } from './workflow/todo-projection.js'
+export type {
+  PipelineTodoItem, PipelineTodoProjection, PipelineTodoStage, PipelineTodoStageDefinition, PipelineTodoStageStatus,
+} from './workflow/todo-projection.js'
+// SkillBundleResolver（H10 任务 2，G2 适配层）：把 workflow kind/step/profile ID 翻译成对
+// EffectiveSkillResolver 的一次具体调用，产出现有 EffectiveSkillSlot 集与 resolution source
+// （default/custom）；H10 任务 5 的 prepareSkillBundle、任务 4 的 snapshot manifest 消费本接口。
+export { resolveSkillBundle } from './workflow/skill-bundle-resolver.js'
+export type {
+  SkillBundleCustomInput, SkillBundleDefaultInput, SkillBundleResolution,
+  SkillBundleResolutionInput, SkillBundleResolutionSource,
+} from './workflow/skill-bundle-resolver.js'
+// track 谓词判定（P0 原语）——P5 artifact register 评估 custom artifact 的 requiredWhen 对当前 track 是否
+// 适用。predicates.ts 本身零 import（无环险），故经根 barrel 对外具名导出安全（内部消费点仍走直连路径）。
+export { matchesTrackPredicate } from './workflow/predicates.js'
+export type { TrackPredicate } from './workflow/predicates.js'
+// WorkflowRun 持久化提交接缝（W1 第二增量）——具名导出，不整体 re-export ./workflow/run-types.js
+// 避免与上面 ./workflow/types.js 的既有具名导出策略不一致。
+export type {
+  CommitResult, StateFieldEffect, TransitionDraft, TransitionRecord, WorkflowRun,
+  WorkflowRunRepository, WorkflowRunTransaction,
+} from './workflow/run-types.js'
+// 唯一 TransitionApplication 用例（G1 支点，2026-07-17）：CLI 与 server 共用同一份转换编排，
+// 消灭此前 cli/commands/transition.ts 与 server/transition.ts 两处复制。
+export { createTransitionApplication } from './workflow/transition-application.js'
+export type {
+  TransitionApplication, TransitionApplicationDeps, TransitionApplicationResult,
+  TransitionApplicationWarning, TransitionCommand,
+} from './workflow/transition-application.js'

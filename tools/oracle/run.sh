@@ -5,21 +5,27 @@
 # init / get / set / transition / check 逐命令比三面：stdout、exit code、
 # 落盘 openspec/changes/<name>/.pipeline.yaml（逐字 diff）。
 #
-# 白名单（唯二放宽，其余逐字）：
+# 白名单（只放宽以下兼容差异，其余逐字）：
 #   · 时间戳字段值：`*_at` 字段只比 key 存在性（值统一归一为 <WHITELISTED>）
 #   · 老内核历史区块：tools_history / prompts_history / transitions_history 的
 #     key 行 + `  - ` 项行两侧剥除后再 diff（老内核 transition 会往 yaml 追加历史项，
 #     lite 契约写 .pipeline-history.jsonl）。fixture 预置的历史尾块另做 PRESERVE
 #     校验：全程跑完后新侧 yaml 必须逐字保留基线块（CONTRACT §1「读时跳过、写回原样」）。
 #   · check 的 stdout 是人读 guard 报告（CONTRACT §3），stdout 面记 SKIP、exit 面照比。
+#   · G1 canonical cutover 的 `pipeline_state_revision/_id/_digest` 是 YAML adapter 指向唯一
+#     current 的投影元数据；老内核没有 canonical store，三行整行剥除后再比业务投影。
 #
 # 用法:
-#   bash tools/oracle/run.sh [fixture ...]      # 缺省跑全部 fixtures/*.sh
+#   bash tools/oracle/run.sh [fixture ...]      # 缺省跑基础兼容 fixtures；npm run oracle 跑全量
 #
 # 环境变量:
 #   ORACLE_OLD_SCRIPT     oracle 脚本路径（默认老仓 pipeline-state.sh）
 #   ORACLE_NEW_CLI        新 CLI 命令串（默认 node <repo>/packages/cli/dist/main.js；
 #                         设置后跳过构建产物存在性检查——测试注入 stub 用）
+#   ORACLE_DOCUMENT_BOOTSTRAP
+#                         0/1。真实 CLI 双跑时默认 1：为 new 侧建立真实的文档 ledger
+#                         证据，使历史 oracle 的状态 guard 仍可与新 OpenSpec 契约逐面比较。
+#                         注入 ORACLE_NEW_CLI（harness stub）时默认 0；需要时可显式置 1。
 #   ORACLE_REPO_ROOT      仓库根覆盖（默认本脚本上两级）
 #   ORACLE_WORKDIR        工作目录（默认 mktemp；保留现场，报告在 <workdir>/report.txt）
 #   ORACLE_FORCE_DEGRADED 置 1 强制降级（契约测试）模式
@@ -46,18 +52,43 @@ else
   NEW_CMD=(node "$NEW_CLI_DEFAULT")
 fi
 
+# 新 default workflow 的文档契约是有意新增的产品行为；T6 oracle 的职责仍是比较原有状态机
+# guard/effect。因此真实 bundle 双跑会在 new 侧用真实 `document` 命令、真实 PostToolUse tracker
+# 构造可审计的 fixture 证据，而不是把产品契约关掉。stub 只是比较 harness 本身，未实现 document
+# 子命令，故显式注入 ORACLE_NEW_CLI 时默认关闭；需要测试该路径的调用方可置 1。
+if [ -z "${ORACLE_DOCUMENT_BOOTSTRAP:-}" ]; then
+  if [ -n "${ORACLE_NEW_CLI:-}" ]; then
+    DOCUMENT_CONTRACT_BOOTSTRAP=0
+  else
+    DOCUMENT_CONTRACT_BOOTSTRAP=1
+  fi
+else
+  DOCUMENT_CONTRACT_BOOTSTRAP="$ORACLE_DOCUMENT_BOOTSTRAP"
+fi
+case "$DOCUMENT_CONTRACT_BOOTSTRAP" in
+  0|1) ;;
+  *) echo "ORACLE_DOCUMENT_BOOTSTRAP 仅允许 0 或 1（当前 '$DOCUMENT_CONTRACT_BOOTSTRAP'）" >&2; exit 2 ;;
+esac
+
 WORKDIR="${ORACLE_WORKDIR:-$(mktemp -d "${TMPDIR:-/tmp}/pipeline-oracle.XXXXXX")}"
 mkdir -p "$WORKDIR"
+MACHINE_HOME="$WORKDIR/.pipeline-dashboard-home"
 REPORT="$WORKDIR/report.txt"
 ROWS="$WORKDIR/rows.tsv"
 : > "$REPORT"
 : > "$ROWS"
 
 say() { printf '%s\n' "$*" | tee -a "$REPORT"; }
-row() { printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4" "$5" "$6" >> "$ROWS"; }
+# 行 = FIXTURE STEP COMMAND STDOUT EXIT YAML STDERR（四面：新增 STDERR，仅 transition 拒绝路径逐字比）
+row() { printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4" "$5" "$6" "$7" >> "$ROWS"; }
 
-# types.ts::FIELD_ORDER 的 38 字段（降级模式 yaml 面 = 契约 §1 字段序校验）
-FIELD_ORDER_STR="track preset created_by assignee phase phase_status design_doc plan verification_report build_mode isolation build_sha agent_review_result codex_review_result verify_result branch_status direct_override prd_path pr_url automation automation_queued_at automation_sandbox automation_worktree automation_attempts automation_last_error automation_preserved_path branch base_branch scope related_files spec_scope depends_on created_at updated_at verified_at archived_at archived workflow"
+# 剥 ANSI 颜色转义（老内核 red()/green() 用 \033[..m 包裹错误行；新 CLI 明文）——stderr 逐字比前先归一。
+strip_ansi() { awk '{ gsub(/\033\[[0-9;]*m/, ""); print }' "$1"; }
+
+# types.ts::FIELD_ORDER 的当前 40 字段，以及 G1 canonical 首次写入前仍可读的旧版 37 字段。
+# 降级模式只接受其中一套完整顺序；不接受字段缺失、混排或部分升级。
+FIELD_ORDER_STR="track preset created_by assignee phase phase_status design_doc plan verification_report build_mode isolation build_sha agent_review_result codex_review_result verify_result branch_status direct_override prd_path pr_url automation automation_queued_at automation_sandbox automation_worktree automation_attempts automation_last_error automation_preserved_path branch base_branch scope related_files spec_scope depends_on created_at updated_at verified_at archived_at archived workflow automation_current_phase automation_cause"
+LEGACY_FIELD_ORDER_STR="track preset created_by assignee phase phase_status design_doc plan verification_report build_mode isolation build_sha agent_review_result codex_review_result verify_result branch_status direct_override prd_path pr_url automation automation_queued_at automation_sandbox automation_worktree automation_attempts automation_last_error automation_preserved_path branch base_branch scope related_files spec_scope depends_on created_at updated_at verified_at archived_at archived"
 
 FAILS=0
 DEGRADED_REASON=""
@@ -67,9 +98,15 @@ count_fail() { [ "$1" = FAIL ] && FAILS=$((FAILS + 1)); return 0; }
 
 is_ts_field() { case "${1:-}" in *_at) return 0 ;; *) return 1 ;; esac; }
 
-# 三面白名单归一：剥历史区块 + *_at 值归一 + workflow 字段整行剥除
-# （workflow 是新 CLI 专属字段——BACKLOG 工作流定制引擎新增，老脚本 oracle 只读、永远不会
-#  产出这个字段，逐字 diff 会永久不一致；同 history 区块一样整行不计入比较，而非只归一值）。
+# 三面白名单归一：剥历史区块 + *_at 值归一 + 新 CLI 专属字段整行剥除
+# （下列字段是新 CLI 专属——老脚本 oracle 只读、永远不会产出，逐字 diff 会永久不一致，同 history
+#  区块一样整行不计入比较，而非只归一值）：
+#   · workflow                     —— 工作流定制引擎新增（BACKLOG）。
+#   · pipeline_run_id/_transition_* —— G1 WorkflowRun 身份三行块（run_id 还是非确定 UUID，
+#                                     即使想比也比不了）。
+#   · pipeline_state_revision/_id/_digest —— G1 canonical current 的 YAML adapter 指针；
+#                                            业务字段仍须与 oracle 逐字一致。
+#   · automation_current_phase/_cause —— 分叉后 automation 子系统新增字段。
 normalize_yaml() {
   awk '
     /^(tools_history|prompts_history|transitions_history):/ { inhist = 1; next }
@@ -78,24 +115,27 @@ normalize_yaml() {
         if ($0 ~ /^[[:space:]]+- /) next
         inhist = 0
       }
-      if ($0 ~ /^workflow:/) next
+      if ($0 ~ /^(workflow|pipeline_run_id|pipeline_transition_sequence|pipeline_transition_head|pipeline_state_revision|pipeline_state_revision_id|pipeline_state_digest|automation_current_phase|automation_cause):/) next
       if ($0 ~ /^[a-z_]+_at:/) { sub(/:.*$/, ": <WHITELISTED>"); print; next }
       print
     }
   ' "$1"
 }
 
-# 契约 §1：38 字段按 FIELD_ORDER 全量在序（未知行/历史区不计）
+# 契约 §1：当前 40 字段或旧版 37 字段按各自 FIELD_ORDER 全量在序（未知行/历史区不计）
 keyorder_ok() {
   local got
-  got=$(awk -v list="$FIELD_ORDER_STR" '
-    BEGIN { n = split(list, a, " "); for (i = 1; i <= n; i++) known[a[i]] = 1 }
+  got=$(awk -v current="$FIELD_ORDER_STR" -v legacy="$LEGACY_FIELD_ORDER_STR" '
+    BEGIN {
+      n = split(current, a, " "); for (i = 1; i <= n; i++) known[a[i]] = 1
+      n = split(legacy, a, " "); for (i = 1; i <= n; i++) known[a[i]] = 1
+    }
     match($0, /^[a-z_]+:/) {
       k = substr($0, 1, RLENGTH - 1)
       if (k in known) { printf "%s%s", sep, k; sep = " " }
     }
   ' "$1")
-  [ "$got" = "$FIELD_ORDER_STR" ]
+  [ "$got" = "$FIELD_ORDER_STR" ] || [ "$got" = "$LEGACY_FIELD_ORDER_STR" ]
 }
 
 # 老/新两侧参数映射（老: init <name> <track> <preset> / check <name> <phase>；
@@ -158,7 +198,97 @@ if [ "$MODE" = degraded ]; then
 else
   say "  模式  : DUAL（双跑逐字对比；oracle 探针通过）"
 fi
+if [ "$DOCUMENT_CONTRACT_BOOTSTRAP" = 1 ]; then
+  say "  文档账本: new 侧使用真实 CLI + hook 建立 fixture 证据"
+else
+  say "  文档账本: bootstrap 已关闭（stub/显式配置）"
+fi
 say ""
+
+# ---------- new 侧 OpenSpec 文档契约 fixture ----------
+#
+# Oracle fixtures 起源于文档账本出现之前，重点是历史状态机 guard/effect；现在真实 default workflow
+# 会在每次 transition 前验证 document ledger。这里不绕过该验证：它在 new 侧逐个执行产品的
+# `pipeline document init|record|read` 命令，并通过同包 PostToolUse tracker 写入所需的 Skill audit。
+#
+# 对 pm-history 这类“升级前已在 spec”的 fixture，前序已有文档用 `--backfill` 显式登记。该选项也在
+# 产品 CLI 中受到约束：只能补当前 phase 之前的文档，仍需要真实 skill evidence + path/digest 校验，
+# 不能登记未来 phase。这样 oracle 同时覆盖升级兼容入口，而不是把旧 Change 悄悄豁免出治理。
+
+run_new_cli() {
+  local dir="$1"; shift
+  (cd "$dir" && PIPELINE_DASHBOARD_HOME="$MACHINE_HOME" "${NEW_CMD[@]}" "$@")
+}
+
+phase_rank() {
+  case "$1" in
+    open) echo 0 ;;
+    explore) echo 1 ;;
+    spec) echo 2 ;;
+    build) echo 3 ;;
+    verify) echo 4 ;;
+    ship) echo 5 ;;
+    archive) echo 6 ;;
+    *) echo -1 ;;
+  esac
+}
+
+ensure_oracle_document() {
+  local dir="$1" rel="$2" kind="$3" target
+  target="$dir/$rel"
+  if [ -f "$target" ]; then return 0; fi
+  mkdir -p "$(dirname "$target")" || return 1
+  printf '# Oracle document-contract fixture\n\nkind: %s\n' "$kind" > "$target"
+}
+
+track_oracle_skill() {
+  local dir="$1" skill="$2"
+  printf '{"cwd":"%s","tool_name":"Skill","skill":"%s"}' "$dir" "$skill" \
+    | CLAUDE_PLUGIN_ROOT="$REPO_ROOT" bash "$REPO_ROOT/hooks/skill-tracker.sh" >/dev/null
+}
+
+record_oracle_document() {
+  local dir="$1" change="$2" current="$3" owner="$4" kind="$5" rel="$6" producer="$7"
+  local current_rank owner_rank
+  current_rank="$(phase_rank "$current")"
+  owner_rank="$(phase_rank "$owner")"
+  [ "$current_rank" -ge 0 ] && [ "$owner_rank" -ge 0 ] || return 0
+  [ "$owner_rank" -le "$current_rank" ] || return 0
+  ensure_oracle_document "$dir" "$rel" "$kind" || return 1
+  track_oracle_skill "$dir" "$producer" || return 1
+  if [ "$owner_rank" -lt "$current_rank" ]; then
+    run_new_cli "$dir" document record "$change" "$kind" "$rel" --producer "$producer" --backfill
+  else
+    run_new_cli "$dir" document record "$change" "$kind" "$rel" --producer "$producer"
+  fi
+}
+
+bootstrap_new_document_contract() {
+  local dir="$1" change="$2" phase change_dir
+  phase="$(run_new_cli "$dir" get "$change" phase)" || return 1
+  phase="$(printf '%s' "$phase" | tr -d '[:space:]')"
+  [ "$(phase_rank "$phase")" -ge 0 ] || return 0
+  change_dir="openspec/changes/$change"
+
+  run_new_cli "$dir" document init "$change" || return 1
+
+  record_oracle_document "$dir" "$change" "$phase" open proposal "$change_dir/proposal.md" openspec-propose || return 1
+  record_oracle_document "$dir" "$change" "$phase" open openspec-design "$change_dir/design.md" openspec-propose || return 1
+  record_oracle_document "$dir" "$change" "$phase" open tasks "$change_dir/tasks.md" openspec-propose || return 1
+  record_oracle_document "$dir" "$change" "$phase" explore superpower-design "docs/oracle-document-contract/$change/superpower-design.md" brainstorming || return 1
+  record_oracle_document "$dir" "$change" "$phase" explore adr "docs/oracle-document-contract/$change/adr.md" brainstorming || return 1
+  record_oracle_document "$dir" "$change" "$phase" spec delta-spec "$change_dir/specs/oracle/spec.md" openspec-propose || return 1
+  record_oracle_document "$dir" "$change" "$phase" spec superpower-plan "docs/oracle-document-contract/$change/superpower-plan.md" writing-plans || return 1
+  record_oracle_document "$dir" "$change" "$phase" spec plan "docs/oracle-document-contract/$change/plan.md" writing-plans || return 1
+  record_oracle_document "$dir" "$change" "$phase" verify verification-report "docs/oracle-document-contract/$change/verification-report.md" verification-before-completion || return 1
+  record_oracle_document "$dir" "$change" "$phase" ship applied-spec "$change_dir/specs/oracle/applied-spec.md" openspec-apply-change || return 1
+
+  # open has no read inputs. Every later phase consumes the complete hash-bound input set required
+  # by its own contract row; retries simply replace the same-phase receipt and remain idempotent.
+  if [ "$phase" != open ]; then
+    run_new_cli "$dir" document read "$change" all || return 1
+  fi
+}
 
 # ---------- 双跑单步 ----------
 run_step_dual() {
@@ -166,14 +296,30 @@ run_step_dual() {
   shift 5
   local args=("$@")
   local change="${args[0]}"
-  local old_rc new_rc f_out f_exit f_yaml label
+  local old_rc new_rc bootstrap_rc f_out f_exit f_yaml label
+
+  bootstrap_rc=0
+  # `check` shares transition's exact document-evidence predicate, so bootstrap it too.  Otherwise
+  # a historical fixture's preview fails one step before the state guard it is intended to compare.
+  if { [ "$cmd" = transition ] || [ "$cmd" = check ]; } && [ "$DOCUMENT_CONTRACT_BOOTSTRAP" = 1 ]; then
+    bootstrap_new_document_contract "$base/new" "$change" \
+      > "$step_dir/new.document-bootstrap.out" 2> "$step_dir/new.document-bootstrap.err" || bootstrap_rc=$?
+  fi
 
   (cd "$base/old" && PIPELINE_ASSUME_YES=1 bash "$OLD_SCRIPT" "${OLD_ARGS[@]}") \
     > "$step_dir/old.out" 2> "$step_dir/old.err"
   old_rc=$?
-  (cd "$base/new" && "${NEW_CMD[@]}" "${NEW_ARGS[@]}") \
-    > "$step_dir/new.out" 2> "$step_dir/new.err"
-  new_rc=$?
+  if [ "$bootstrap_rc" -eq 0 ]; then
+    run_new_cli "$base/new" "${NEW_ARGS[@]}" > "$step_dir/new.out" 2> "$step_dir/new.err"
+    new_rc=$?
+  else
+    : > "$step_dir/new.out"
+    {
+      printf 'ERROR: oracle document bootstrap 失败（exit=%s）\n' "$bootstrap_rc"
+      cat "$step_dir/new.document-bootstrap.err"
+    } > "$step_dir/new.err"
+    new_rc=125
+  fi
 
   # exit 面
   f_exit=PASS
@@ -215,10 +361,24 @@ run_step_dual() {
     printf '单侧缺文件: old=%s new=%s\n' "$([ -f "$oy" ] && echo 有 || echo 无)" "$([ -f "$ny" ] && echo 有 || echo 无)" > "$step_dir/yaml.diff"
   fi
 
+  # stderr 面：仅**声明 stderr 逐字口径的 fixture**（target 有 .oracle-stderr-check sidecar）的
+  # transition 拒绝路径（双侧都非零退出）逐字比——老内核 red() 走 stderr（ANSI 包裹）、新 CLI 明文，
+  # 剥 ANSI 后 cmp。barrier「双行逐字错误」的等价性此前无从验证（旧 harness 不比 stderr），本面补上
+  # （G2 P3）。sidecar 门控原因：并非所有拒绝路径双侧 stderr 逐字一致——如 unknown-event，老内核附带
+  # 打印「已声明事件」列表、新 CLI 从简只一行 ERROR（既有的、非 P3 引入的可接受差异），全量比会误红；
+  # 只在为 stderr 等价而设计的 fixture（default-effects 的 barrier）上开这一面。成功路径 stderr
+  # （[TRANSITION] → vs -> 等）双侧本就不同——不比（SKIP）。
+  f_err=SKIP
+  if [ -f "$base/new/.oracle-stderr-check" ] && [ "$cmd" = transition ] && [ "$old_rc" != 0 ] && [ "$new_rc" != 0 ]; then
+    strip_ansi "$step_dir/old.err" > "$step_dir/old.err.norm"
+    strip_ansi "$step_dir/new.err" > "$step_dir/new.err.norm"
+    if cmp -s "$step_dir/old.err.norm" "$step_dir/new.err.norm"; then f_err=PASS; else f_err=FAIL; fi
+  fi
+
   label="$cmd ${args[*]}"
   label="${label:0:30}"
-  row "$fx" "$idx" "$label" "$f_out" "$f_exit" "$f_yaml"
-  count_fail "$f_out"; count_fail "$f_exit"; count_fail "$f_yaml"
+  row "$fx" "$idx" "$label" "$f_out" "$f_exit" "$f_yaml" "$f_err"
+  count_fail "$f_out"; count_fail "$f_exit"; count_fail "$f_yaml"; count_fail "$f_err"
 
   if [ "$f_out" = FAIL ]; then
     say "  x [$fx #$idx $label] stdout 不一致："
@@ -227,10 +387,18 @@ run_step_dual() {
   fi
   if [ "$f_exit" = FAIL ]; then
     say "  x [$fx #$idx $label] exit 不一致: old=$old_rc new=$new_rc"
+    if [ "$bootstrap_rc" -ne 0 ]; then
+      say "      new document bootstrap 失败（见 $step_dir/new.document-bootstrap.err）"
+    fi
   fi
   if [ "$f_yaml" = FAIL ]; then
     say "  x [$fx #$idx $label] .pipeline.yaml 不一致（白名单归一后）："
     head -40 "$step_dir/yaml.diff" | sed 's/^/      /' | tee -a "$REPORT"
+  fi
+  if [ "$f_err" = FAIL ]; then
+    say "  x [$fx #$idx $label] stderr 不一致（剥 ANSI 后逐字）："
+    sed 's/^/      old| /' "$step_dir/old.err.norm" | head -6 | tee -a "$REPORT"
+    sed 's/^/      new| /' "$step_dir/new.err.norm" | head -6 | tee -a "$REPORT"
   fi
 }
 
@@ -242,7 +410,7 @@ run_step_degraded() {
   local change="${args[0]}"
   local new_rc f_out f_exit f_yaml label
 
-  (cd "$base/new" && "${NEW_CMD[@]}" "${NEW_ARGS[@]}") \
+  (cd "$base/new" && PIPELINE_DASHBOARD_HOME="$MACHINE_HOME" "${NEW_CMD[@]}" "${NEW_ARGS[@]}") \
     > "$step_dir/new.out" 2> "$step_dir/new.err"
   new_rc=$?
 
@@ -282,7 +450,7 @@ run_step_degraded() {
     esac
   fi
 
-  # yaml 面：契约 §1 字段序（37 字段全量在序）
+  # yaml 面：契约 §1 字段序（40 字段全量在序）
   local ny="$base/new/openspec/changes/$change/.pipeline.yaml"
   if [ -f "$ny" ]; then
     if keyorder_ok "$ny"; then f_yaml=PASS; else f_yaml=FAIL; fi
@@ -294,13 +462,81 @@ run_step_degraded() {
 
   label="$cmd ${args[*]}"
   label="${label:0:30}"
-  row "$fx" "$idx" "$label" "$f_out" "$f_exit" "$f_yaml"
+  row "$fx" "$idx" "$label" "$f_out" "$f_exit" "$f_yaml" "SKIP"
   count_fail "$f_out"; count_fail "$f_exit"; count_fail "$f_yaml"
 
   [ "$f_exit" = FAIL ] && say "  x [$fx #$idx $label] exit 不符契约: got=$new_rc want=$expect"
   [ "$f_out" = FAIL ] && say "  x [$fx #$idx $label] stdout 不符 CONTRACT §3 契约（cmd=${cmd}）"
   [ "$f_yaml" = FAIL ] && say "  x [$fx #$idx $label] .pipeline.yaml 不符 §1 字段序契约"
   return 0
+}
+
+# ---------- commit 伪命令（barrier 场景造 HEAD 位移；双侧确定性同 SHA） ----------
+# .oracle-plan 里 `0|commit|<seq>` 让 harness 在双侧各打一个**确定性** git commit（固定身份 + 固定
+# 日期 + 单一受控文件），使 build 冻结的 build_sha 与后续 HEAD 解耦（scenario D 重冻结 / E barrier
+# 拒绝）。只 add 受控文件、不 add .pipeline.yaml——后者双侧内容不同（新 CLI 带 run_id 等新字段），
+# 全量 add 会让两侧 commit tree 不同 → SHA 漂移；只提交固定内容文件则双侧 tree/parent 全同 → SHA 同。
+git_commit_side() {
+  local dir="$1" seq="$2" d
+  d="2026-02-$(printf '%02d' "$seq")T00:00:00Z"
+  (
+    cd "$dir" || exit 1
+    printf 'oracle barrier fixture commit %s\n' "$seq" > "barrier-src-${seq}.txt"
+    export GIT_AUTHOR_NAME=oracle GIT_AUTHOR_EMAIL=oracle@pipeline.test \
+           GIT_COMMITTER_NAME=oracle GIT_COMMITTER_EMAIL=oracle@pipeline.test \
+           GIT_AUTHOR_DATE="$d" GIT_COMMITTER_DATE="$d"
+    git add "barrier-src-${seq}.txt" && git commit -q -m "oracle fixture commit $seq"
+  )
+}
+
+run_step_commit() {
+  local fx="$1" idx="$2" step_dir="$3" base="$4"; shift 4
+  local seq="$1"
+  local sides="new"; [ "$MODE" = dual ] && sides="old new"
+  local s ok=PASS
+  for s in $sides; do
+    git_commit_side "$base/$s" "$seq" > "$step_dir/commit.$s.log" 2>&1 || ok=FAIL
+  done
+  # commit 是 harness 造 HEAD 位移，不入四面比较（全 "-"）；失败则计一处 FAIL。
+  row "$fx" "$idx" "commit $seq" "-" "-" "-" "-"
+  count_fail "$ok"
+  [ "$ok" = FAIL ] && say "  x [$fx #$idx commit $seq] git commit 失败（见 $step_dir/commit.*.log）"
+}
+
+# ---------- seed 伪命令（注入绕过 set 闸的脏字段值；测枚举纵深防线等 set 面到不了的 guard 失败） ----------
+# .oracle-plan 里 `0|seed|<change>|<field>|<value>` 让 harness 在**每个活跃侧各自 init 产出的**状态文件上
+# 对目标字段做**行定位替换**（`^<field>:` 整行改成 `<field>: <value>`），其余行原样。因为只改一行、且两侧
+# 各改各的同名字段行，双侧内容差异面（run_id 等）不受影响；随后的 transition 拒绝步在双侧读到同一脏值 →
+# 逐字比同一条 renderer 文案。用途：isolation 非法枚举（field-in）是绕过 set 闸的纵深防线，`set` 会被两侧
+# validate_enum 同样拒（到不了该 guard），只能靠 seed 把脏值直接写进落盘状态再跑 transition 触发。
+# G1 后新侧 YAML 是 adapter，直接编辑必须被 canonical 隔离；所以改完新侧 adapter 后立即通过公开
+# `state import-legacy` 显式导入，既保留“绕过 set 闸”的测试目的，又不偷偷恢复双主读取语义。
+run_step_seed() {
+  local fx="$1" idx="$2" step_dir="$3" base="$4"; shift 4
+  local change="$1" field="$2" value="$3"
+  local sides="new"; [ "$MODE" = dual ] && sides="old new"
+  local s ok=PASS sf
+  for s in $sides; do
+    sf="$base/$s/openspec/changes/$change/.pipeline.yaml"
+    if [ -f "$sf" ] && grep -qE "^${field}:" "$sf"; then
+      awk -v f="$field" -v v="$value" '
+        $0 ~ "^"f":" { print f": "v; next }
+        { print }
+      ' "$sf" > "$sf.seed" && mv "$sf.seed" "$sf" || ok=FAIL
+    else
+      ok=FAIL
+    fi
+  done
+  if [ "$ok" = PASS ]; then
+    if ! (cd "$base/new" && PIPELINE_DASHBOARD_HOME="$MACHINE_HOME" "${NEW_CMD[@]}" state import-legacy "$change") \
+      > "$step_dir/new.import.out" 2> "$step_dir/new.import.err"; then
+      ok=FAIL
+    fi
+  fi
+  # seed 是 harness 造脏值注入，不入四面比较（全 "-"）；写失败/字段行缺失则计一处 FAIL。
+  row "$fx" "$idx" "seed $field=$value" "-" "-" "-" "-"
+  count_fail "$ok"
+  [ "$ok" = FAIL ] && say "  x [$fx #$idx seed $field=$value] 状态文件写入失败或字段行缺失（见 $step_dir）"
 }
 
 # ---------- 历史尾块 PRESERVE 校验（新侧，逐字子串） ----------
@@ -320,7 +556,7 @@ check_preserve() {
       ;;
   esac
   count_fail "$res"
-  row "$fx" "--" "PRESERVE(history-tail)" "-" "-" "$res"
+  row "$fx" "--" "PRESERVE(history-tail)" "-" "-" "$res" "-"
 }
 
 # ---------- fixture 主循环 ----------
@@ -359,6 +595,14 @@ run_fixture() {
     local step_dir
     step_dir="$base/steps/$(printf '%02d' "$idx")"
     mkdir -p "$step_dir"
+    if [ "$cmd" = commit ]; then
+      run_step_commit "$fx" "$idx" "$step_dir" "$base" "${args[@]}"
+      continue
+    fi
+    if [ "$cmd" = seed ]; then
+      run_step_seed "$fx" "$idx" "$step_dir" "$base" "${args[@]}"
+      continue
+    fi
     build_args "$cmd" "${args[@]}"
     if [ "$MODE" = dual ]; then
       run_step_dual "$fx" "$idx" "$cmd" "$step_dir" "$base" "${args[@]}"
@@ -382,9 +626,9 @@ done
 say ""
 say "=== 汇总（命令 × 三面：STDOUT / EXIT / YAML）==="
 {
-  printf '%-20s %-4s %-32s %-7s %-7s %-7s\n' FIXTURE STEP COMMAND STDOUT EXIT YAML
-  while IFS=$'\t' read -r c1 c2 c3 c4 c5 c6; do
-    printf '%-20s %-4s %-32s %-7s %-7s %-7s\n' "$c1" "$c2" "$c3" "$c4" "$c5" "$c6"
+  printf '%-20s %-4s %-32s %-7s %-7s %-7s %-7s\n' FIXTURE STEP COMMAND STDOUT EXIT YAML STDERR
+  while IFS=$'\t' read -r c1 c2 c3 c4 c5 c6 c7; do
+    printf '%-20s %-4s %-32s %-7s %-7s %-7s %-7s\n' "$c1" "$c2" "$c3" "$c4" "$c5" "$c6" "$c7"
   done < "$ROWS"
 } | tee -a "$REPORT"
 say ""

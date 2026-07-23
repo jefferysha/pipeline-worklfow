@@ -191,7 +191,7 @@ async function checkVerifySkills(p: DoctorProbes): Promise<DoctorCheck> {
 
 /**
  * 单项技能（manifest 列表里的一个 token，可含 `a|b` 备选）是否在位。
- * · builtin/bundled（CC 自带 / 本仓自带）→ 恒在位，不需装。
+ * · bundled（本插件自带）→ 恒在位，不需另装。
  * · 命名空间 token（superpowers:brainstorming / commit-commands:commit-push-pr / opsx:propose）：
  *   查 installedSkillNames 的 前缀(插件名)/后缀(skill 名)/registry.skill(实际安装名) 任一命中即在位。
  * · `a|b`：任一侧在位即满足该项（消费方自择其一，同 manifest 语义）。
@@ -260,20 +260,72 @@ function checkSkills(p: DoctorProbes): [DoctorCheck, DoctorCheck] {
   const missRec = collectMissingSkills(tables.recommended, byToken, installed)
 
   const mandatory = missMand.length === 0
-    ? green('skills:mandatory', '所有 manifest 强制技能在位（阻断出口的强制 skill 全部可用）')
+    ? green('skills:mandatory', '所有 manifest 强制技能均随当前 pipeline 插件打包并可用')
     : red(
         'skills:mandatory',
-        `缺 ${missMand.length} 个强制技能：${missMand.join('、')}`,
-        `跑 pipeline setup 安装缺失的强制技能（${missMand.join('、')}）；装齐后重跑 pipeline doctor 复核`,
+        `自定义 workflow 缺 ${missMand.length} 个非打包强制技能：${missMand.join('、')}`,
+        `安装或随自定义插件打包这些技能（${missMand.join('、')}）；pipeline setup --<host> 只安装本插件默认流程资产`,
       )
   const recommended = missRec.length === 0
-    ? green('skills:recommended', '所有 manifest 推荐技能在位')
+    ? green('skills:recommended', '所有 manifest 推荐技能均随当前 pipeline 插件打包并可用')
     : yellow(
         'skills:recommended',
-        `缺 ${missRec.length} 个推荐技能：${missRec.join('、')}`,
-        'pipeline setup 可一并安装（推荐缺失只降级、不阻断出口）',
+        `自定义 workflow 缺 ${missRec.length} 个非打包推荐技能：${missRec.join('、')}`,
+        '安装或随自定义插件打包这些推荐技能（默认 pipeline 不会下载第三方技能）',
       )
   return [mandatory, recommended]
+}
+
+/**
+ * The broad installed-skill scanner deliberately accepts other hosts' plugin caches. This separate
+ * light answers the narrower question that caused the normal-chat regression: can the active
+ * Codex context discover the seven phase skills plus this package's OpenSpec document contract?
+ */
+const CODEX_PROJECT_CONTRACT_SKILLS = [
+  'pipeline',
+  'pipeline-open',
+  'pipeline-explore',
+  'pipeline-spec',
+  'pipeline-build',
+  'pipeline-verify',
+  'pipeline-ship',
+  'pipeline-archive',
+  'openspec-propose',
+  'openspec-explore',
+  'openspec-apply-change',
+  'openspec-archive-change',
+  'brainstorming',
+  'grill-with-docs',
+  'improve-codebase-architecture',
+  'writing-plans',
+  'test-driven-development',
+  'verification-before-completion',
+  'finishing-a-development-branch',
+  'browser-qa',
+  'e2e-testing',
+] as const
+
+function checkCodexProjectSkills(p: DoctorProbes): DoctorCheck {
+  if (p.codexProjectSkillNames === undefined) {
+    return yellow(
+      'integration:codex-project-skills',
+      '未装配 Codex skill 探针——无法证明 normal-chat router 的包内 skill 可调用（不以 cache 假装 green）',
+      '使用包含该探针的 pipeline CLI，或运行 pipeline setup --codex 后重试',
+    )
+  }
+  const installed = p.codexProjectSkillNames()
+  const missing = CODEX_PROJECT_CONTRACT_SKILLS.filter((name) => !installed.has(name))
+  if (missing.length === 0) {
+    return green(
+      'integration:codex-project-skills',
+      'Codex 可发现 pipeline/OpenSpec/设计/验证 contract skills 全部来自当前插件（normal-chat 可实际调用）',
+    )
+  }
+  return yellow(
+    'integration:codex-project-skills',
+    `Codex 可发现的 pipeline skills 缺 ${missing.length} 个：${missing.join('、')}（全局 cache 不算）`,
+    '运行 pipeline setup --codex 重新安装并校验完整插件；若使用非原生 adapter，再加 --target <项目目录>',
+  )
 }
 
 // ── AFK 运行时就绪四检（full-install R1，设计 spec §3 Phase3 / 旅程 BT-就绪）───────────────
@@ -283,9 +335,14 @@ function checkSkills(p: DoctorProbes): [DoctorCheck, DoctorCheck] {
 // 各出一灯，codex 不缺席）。凭证只报 set/未设 + source，永不回显值（同 secrets 纪律）。
 
 /** 凭证灯人读串:已配标 source（宿主 env / secrets 文件），未配则空——不回显任何值。 */
-function credDesc(light: { set: boolean; source?: 'host-env' | 'secrets-file' }): string {
+function credDesc(light: { set: boolean; source?: 'host-env' | 'secrets-file' | 'default-home' }): string {
   if (!light.set) return '未配'
-  return `已配（${light.source === 'host-env' ? '宿主 env' : 'secrets 文件'}）`
+  const source = light.source === 'host-env'
+    ? '宿主 env'
+    : light.source === 'default-home'
+      ? '默认 ~/.codex 登录'
+      : 'secrets 文件'
+  return `已配（${source}）`
 }
 
 async function checkAfk(p: DoctorProbes): Promise<[DoctorCheck, DoctorCheck, DoctorCheck, DoctorCheck]> {
@@ -326,10 +383,10 @@ async function checkAfk(p: DoctorProbes): Promise<[DoctorCheck, DoctorCheck, Doc
         `去配 CLAUDE_CODE_OAUTH_TOKEN（pipeline 机器级 secrets 或宿主 env；终端 doctor/setup 为凭证权威）；怎么拿：${PREREQ_HINTS.claudeToken}`,
       )
 
-  // codex 对等:OPENAI_API_KEY 为鉴权决胜键（决 green/yellow），CODEX_HOME 恒随行呈现（对称、不缺席）
+  // Codex CLI 支持 API key 或 Codex home 登录，两条任一就绪即具备鉴权；两项仍同时呈现。
   const oa = r.credentials.codex.OPENAI_API_KEY
   const ch = r.credentials.codex.CODEX_HOME
-  const codexCred = oa.set
+  const codexCred = oa.set || ch.set
     ? green('afk:credential-codex', `codex 凭证 OPENAI_API_KEY ${credDesc(oa)}；CODEX_HOME ${credDesc(ch)}`)
     : yellow(
         'afk:credential-codex',
@@ -385,6 +442,16 @@ export async function cmdDoctor(deps: CliDeps, opts: { json?: boolean }): Promis
       red('skills:mandatory', `检查自身异常: ${m}`, '排除探针环境问题后重跑 pipeline doctor'),
       red('skills:recommended', `检查自身异常: ${m}`, '排除探针环境问题后重跑 pipeline doctor'),
     )
+  }
+
+  try {
+    checks.push(checkCodexProjectSkills(p))
+  } catch (e) {
+    checks.push(red(
+      'integration:codex-project-skills',
+      `检查自身异常: ${errMsg(e)}`,
+      '排除探针环境问题后重跑 pipeline doctor',
+    ))
   }
 
   // AFK 运行时就绪四检（full-install R1，尾部只增不改；单次探测派生四灯）——探针异常各折算 red，不炸命令

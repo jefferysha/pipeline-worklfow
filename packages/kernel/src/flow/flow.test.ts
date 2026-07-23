@@ -198,7 +198,7 @@ describe('FlowEngine · guardCheck（lite 相位出口必填字段表）', () =>
     ).toEqual({ pass: true, failures: [] })
   })
 
-  it('spec 出口：fe/be 需 plan 非空；pm 豁免（老内核 spec-complete track!=pm 语义）', () => {
+  it('spec 出口：非 PM track 需 legacy plan；PM 的文档 plan 由 OpenSpec ledger 单独治理', () => {
     expect(engine.guardCheck(makeState({ phase: 'spec', track: 'backend' })).pass).toBe(false)
     expect(engine.guardCheck(makeState({ phase: 'spec', track: 'frontend' })).pass).toBe(false)
     expect(engine.guardCheck(makeState({ phase: 'spec', track: 'pm' })).pass).toBe(true)

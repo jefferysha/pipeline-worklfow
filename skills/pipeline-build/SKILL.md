@@ -13,6 +13,10 @@ description: "Pipeline Phase 4: Build · 实现。PM Track 生成原型，fronte
 
 - `$PIPELINE_TRACK` / `$PIPELINE_CHANGE_NAME`
 
+**上下文恢复（强制）**：优先读取 `<pipeline-dispatch>` 的 `change/track/phase`，再跑
+`pipeline list --json` 和 `pipeline status <change> --json` 复核。环境变量只是兼容快捷方式；为空时
+不得退出到普通对话。若有多个候选且 dispatch 未指定，才请用户选择。
+
 ## 前置条件
 
 - `phase=build`
@@ -41,8 +45,8 @@ pipeline status "$PIPELINE_CHANGE_NAME"
 | COMPLEX (>10 任务 / 多模块) | `parallel-team` | 多 `pipeline-builder` 并行，每 Builder 独立模块 |
 
 **HARD RULE**：
-- 选 `subagent-driven-development` 时，**立即执行**：使用 Skill 工具加载 `superpowers:subagent-driven-development`
-- 选 `parallel-team` 时，使用 Skill 工具加载 `superpowers:dispatching-parallel-agents`
+- 选 `subagent-driven-development` 时，**立即执行**：使用本插件打包的 Skill `subagent-driven-development`
+- 选 `parallel-team` 时，使用本插件打包的 Skill `dispatching-parallel-agents`
 - 多个独立任务**必须在同一条 Agent 消息**并行 dispatch，不允许串行
 
 ### Step 0.5: 按 Track 注入 stack 规范
@@ -82,6 +86,9 @@ DESIGN_DOC=$(pipeline get "$PIPELINE_CHANGE_NAME" design_doc)
 # build Agent 必须读到它——只凭 plan 写代码会在第 3-10 层靠猜。
 [ -f "$PLAN" ]       && { echo "=== PLAN ==="; cat "$PLAN"; }
 [ -f "$DESIGN_DOC" ] && { echo "=== DESIGN_DOC（业务规则/状态机/不变量）==="; cat "$DESIGN_DOC"; }
+
+# 受治理 workflow：对截至 spec 的全部文档生成本 phase 的 hash-bound read receipt。
+pipeline document read "$PIPELINE_CHANGE_NAME" all
 ```
 
 ### Step 2: Track 分支调用
@@ -124,9 +131,9 @@ DESIGN_DOC=$(pipeline get "$PIPELINE_CHANGE_NAME" design_doc)
 3. **frontend-design + taste 评 → 修 → 复评循环（HARD：禁止敷衍、禁止走过场、禁止只评不修）**——**只针对 Step 2 选定的 winner 变体，且 dispatch 到 subagent 跑、别在主线会话内联**（隔离上下文、省主线 token，跟 explore 的 `pipeline-researcher` 同理）：
    - **用 Agent 工具 dispatch `pipeline-design-reviewer` agent**（本仓 agents/pipeline-design-reviewer.md，独立上下文），交付下面这套 brief，让它**只对 winner 变体**自洽跑完评修复循环，回传 REVIEW.md 路径 + 结论。**别把 N 个变体全 review**（选一个最满意的深做，省 token）。多个待精修对象时同消息并行 dispatch 多个。
    - 交给 `pipeline-design-reviewer` 的 brief：
-     - **a. 评**：加载 `frontend-design` + `taste-skill`，对 winner 变体**逐项严格评估**（设计 token / 层次 / 排版 / 组件态 / 反模板红线 / 可访问性），列出带 severity 的问题清单。禁止"看着还行"就过。
+     - **a. 评**：加载 `frontend-design` + `design-taste-frontend`，对 winner 变体**逐项严格评估**（设计 token / 层次 / 排版 / 组件态 / 反模板红线 / 可访问性），列出带 severity 的问题清单。禁止"看着还行"就过。
      - **b. 修**：修掉清单里**全部 high/critical**（medium 尽量修）。
-     - **c. 复评**：重新跑 `frontend-design` + `taste-skill`，确认问题已消、没引入新问题。
+     - **c. 复评**：重新跑 `frontend-design` + `design-taste-frontend`，确认问题已消、没引入新问题。
      - **d. 循环 a→c，直到两者都无 high/critical**。
      - **e. 留证据**：把「问题清单 + 每轮修复记录」落到 `openspec/changes/<name>/prototype/REVIEW.md`，回传该路径 + "已无 high/critical" 结论。没有它=评估没真做，不算完成、不交付。
    - 主线收到 subagent 回传的 REVIEW.md + 结论才算本步完成、才交付用户；**主线不内联跑 review**。
@@ -149,7 +156,7 @@ DESIGN_DOC=$(pipeline get "$PIPELINE_CHANGE_NAME" design_doc)
 
 **强制 Skill**（hard）：
 
-1. 使用 Skill 工具加载 `superpowers:test-driven-development`。**禁止跳过此步骤**。
+1. 使用本插件打包的 Skill `test-driven-development`。**禁止跳过此步骤**。
    - **完整红-绿-重构（顺序不可省）**：
      - **红**：先写测试，**然后立即运行它、确认它按预期失败**——这步是 TDD 的命门，跳过它就可能写出"永远通过的假测试"（测了个寂寞），后面的绿毫无意义。
      - **绿**：写**最小**实现让测试通过。
@@ -159,10 +166,10 @@ DESIGN_DOC=$(pipeline get "$PIPELINE_CHANGE_NAME" design_doc)
 
 3. 使用 Skill 工具加载 `web-design-guidelines`。**禁止跳过此步骤**。
 
-4. **含 UI 改动时：frontend-design + `taste-skill` 评 → 修 → 复评循环（HARD：禁止只评不修、禁止走过场）**：
-   - **a. 评**：加载 `taste-skill`，对本次新增/改动的组件**逐项严格评估**（设计 token / 层次 / 排版 / 组件态 / 反模板红线 / 可访问性），列出带 severity 的问题清单。禁止"看着还行"就过。
+4. **含 UI 改动时：frontend-design + `design-taste-frontend` 评 → 修 → 复评循环（HARD：禁止只评不修、禁止走过场）**：
+   - **a. 评**：加载 `design-taste-frontend`，对本次新增/改动的组件**逐项严格评估**（设计 token / 层次 / 排版 / 组件态 / 反模板红线 / 可访问性），列出带 severity 的问题清单。禁止"看着还行"就过。
    - **b. 修**：修掉清单里**全部 high/critical**（medium 尽量修）。
-   - **c. 复评**：重跑 `frontend-design` + `taste-skill`，确认问题已消、没引入新问题，循环到两者都无 high/critical。
+   - **c. 复评**：重跑 `frontend-design` + `design-taste-frontend`，确认问题已消、没引入新问题，循环到两者都无 high/critical。
    - **d. 留证据**：把「问题清单 + 每轮修复记录」落到 `openspec/changes/<name>/REVIEW.md`——没有它=评估没真做，不算完成。
    - 遵循项目既有设计系统（design token / 既有组件风格 / 既有动效库），不套 baseline 重构既有页面。
 
@@ -173,7 +180,7 @@ DESIGN_DOC=$(pipeline get "$PIPELINE_CHANGE_NAME" design_doc)
 - 使用 Skill 工具加载 `shadcn-ui` — **仅当** 用 shadcn 组件库
 
 **推荐**：
-- 使用 Skill 工具加载 `superpowers:writing-plans` — 复用上一步 plan
+- 使用 Skill 工具加载 `writing-plans` — 复用上一步 plan
 - 使用 Skill 工具加载 `hallmark` — 反 AI-slop 设计层，做有视觉品质的 UI 时叠加（与 frontend-design / web-design-guidelines 同向）
 
 **可选**：
@@ -181,14 +188,14 @@ DESIGN_DOC=$(pipeline get "$PIPELINE_CHANGE_NAME" design_doc)
 
 **Agent**：
 - build_mode = subagent-driven / parallel-team 时：**每个 task/组件 dispatch 一个 `pipeline-builder` agent**（本仓 agents/pipeline-builder.md，隔离 worktree，同消息并行实现），只回传 diff 摘要+测试结果；主线汇总、不内联逐个实现。
-- `tdd-guide` agent（外部，若装有）— TDD 红绿循环监督。
+- TDD 监督由本插件 `test-driven-development` 的红绿重构纪律承担；不要把未打包 agent 当作默认前置。
 
 #### ⚙️ Track = backend
 
 **强制 Skill**（禁止跳过）：
 
-1. 使用 Skill 工具加载 `superpowers:writing-plans`。**禁止跳过此步骤**。
-2. 使用 Skill 工具加载 `superpowers:test-driven-development`。**禁止跳过此步骤**。
+1. 使用本插件打包的 Skill `writing-plans`。**禁止跳过此步骤**。
+2. 使用本插件打包的 Skill `test-driven-development`。**禁止跳过此步骤**。
    - **完整红-绿-重构（顺序不可省）**：
      - **红**：先写测试，**然后立即运行它、确认它按预期失败**——这步是 TDD 的命门，跳过它就可能写出"永远通过的假测试"，后面的绿毫无意义。
      - **绿**：写**最小**实现让测试通过。
@@ -206,7 +213,7 @@ DESIGN_DOC=$(pipeline get "$PIPELINE_CHANGE_NAME" design_doc)
 
 **Agent**：
 - build_mode = subagent-driven / parallel-team 时：**每个 task/端点/服务 dispatch 一个 `pipeline-builder` agent**（隔离 worktree，同消息并行实现），只回传 diff 摘要+测试结果；主线汇总、不内联逐个实现。
-- 外部 agent（若装有，按需）：`tdd-guide`（TDD 监督）、`build-error-resolver` / `go-build-resolver` / `java-build-resolver` / `rust-build-resolver`（对应语言构建失败时）。
+- 构建失败时保留同一任务的测试输出和最小复现，按 `test-driven-development` 与对应打包 pattern skill 修复；不依赖未打包 agent。
 
 ### Step 3: 按子阶段执行 + 紧反馈循环 + 增量勾选/提交（frontend/backend；PM Track 走上方原型流程，不适用）
 
@@ -238,6 +245,7 @@ plan 已把 build 切成若干**子阶段（每个 ≈ 一个干净上下文窗�
 ### Step 4: 验证（不自动推进）
 
 ```bash
+pipeline document status "$PIPELINE_CHANGE_NAME"
 pipeline check "$PIPELINE_CHANGE_NAME"     # build 出口：0 过 / 2 不过
 ```
 
@@ -272,29 +280,15 @@ guard **只校验、不自动 transition**。校验通过后手动推进：
 不要在 build 还没自测绿 / 没 commit 时就发起 verify——评审移动靶在因果上不成立。
 （verify-fail 回退时 CLI 自动置 `verify_result=fail` 并清空 `build_sha`——返工后重新走 1→4。）
 
-## 外部 skill 依赖（CONTRACT §5.7 显式声明）
+## 打包 skill 依赖（随 pipeline-lite 插件安装）
 
-- external-skill: superpowers:test-driven-development · 强制（frontend/backend）
-- external-skill: superpowers:writing-plans · 强制（backend）/ 推荐（frontend）
-- external-skill: superpowers:subagent-driven-development · 条件（build_mode）
-- external-skill: superpowers:dispatching-parallel-agents · 条件（build_mode）
-- external-skill: frontend-design · 强制（frontend/pm 评修循环）
-- external-skill: web-design-guidelines · 强制（frontend）
-- external-skill: taste-skill · 强制（UI 评修循环）
-- external-skill: huashu-design · 三选一（pm 原型引擎，推荐默认）
-- external-skill: hallmark · 三选一（pm 原型引擎）/ 推荐（frontend）
-- external-skill: prototype · 三选一（pm 原型引擎备选）
-- external-skill: hue · 推荐（设计来源选 hue 时必走）
-- external-skill: web-artifacts-builder · 可选
-- external-skill: uiuxdesign-pro · 可选（若已装）
-- external-skill: shadcn-ui · 条件
-- external-skill: tailwind-css-patterns · 条件
-- external-skill: react-patterns · 条件
-- external-skill: react-best-practices · 条件
-- external-skill: frontend-patterns · 可选
-- external-skill: nestjs-patterns · 条件
-- external-skill: postgres-patterns · 条件
-- external-skill: python-patterns · 条件
-- external-skill: python-testing · 条件
-- external-skill: docker-patterns · 条件
-- external-skill: deployment-patterns · 可选
+- bundled-skill: test-driven-development · 强制（frontend/backend）
+- bundled-skill: writing-plans · 强制（backend）/ 推荐（frontend）
+- bundled-skill: subagent-driven-development · 条件（build_mode）
+- bundled-skill: dispatching-parallel-agents · 条件（build_mode）
+- bundled-skill: frontend-design / web-design-guidelines / design-taste-frontend · UI 评修
+- bundled-skill: huashu-design / hallmark / prototype / hue · PM 原型与视觉方向
+- bundled-skill: shadcn-ui / tailwind-css-patterns / web-artifacts-builder / uiuxdesign-pro · 条件或可选
+- bundled-skill: react-patterns / react-best-practices / frontend-patterns · 前端条件或可选
+- bundled-skill: nestjs-patterns / postgres-patterns / python-patterns / python-testing · 后端条件
+- bundled-skill: docker-patterns / deployment-patterns · 条件或可选

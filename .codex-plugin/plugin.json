@@ -1,0 +1,29 @@
+{
+  "name": "pipeline-lite",
+  "version": "0.2.0",
+  "description": "A complete 7-phase OpenSpec development pipeline with packaged skills, hooks, CLI, dashboard automation, and multi-host adapters.",
+  "author": {
+    "name": "bigdata_storage_compute_engine"
+  },
+  "homepage": "https://github.com/jefferysha/pipeline-worklfow",
+  "repository": "https://github.com/jefferysha/pipeline-worklfow",
+  "license": "MIT",
+  "keywords": ["workflow", "pipeline", "openspec", "skills", "hooks", "codex"],
+  "skills": "./skills/",
+  "hooks": "./hooks/hooks.json",
+  "interface": {
+    "displayName": "Pipeline Lite",
+    "shortDescription": "A complete, host-selectable OpenSpec development pipeline.",
+    "longDescription": "One packaged pipeline plugin: 7-phase orchestration, OpenSpec evidence, built-in workflow skills, hooks, dashboard/AFK tooling, and adapters.",
+    "developerName": "bigdata_storage_compute_engine",
+    "category": "Productivity",
+    "capabilities": ["Interactive", "Write"],
+    "websiteURL": "https://github.com/jefferysha/pipeline-worklfow",
+    "defaultPrompt": [
+      "Create a new default pipeline change for this feature.",
+      "Show the active pipeline change and its required evidence.",
+      "Run the current pipeline phase and record its OpenSpec outputs."
+    ],
+    "brandColor": "#2563EB"
+  }
+}

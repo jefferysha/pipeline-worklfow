@@ -53,35 +53,30 @@ review_phases: [explore, spec, verify]
 # 改这里任一数据 → 派生随之变（单一真相源钉死，manifest-derive.test.ts 回归锚）。
 # ══════════════════════════════════════════════════════════════════════════════
 
-# —— router Track 评分正则（老 gen_router_sh 派生源；逐字复刻老 manifest.yaml:84-86）——
-# 消费方：router hook #19 score_track（mtime 缓存 generated.sh，零 per-prompt fork）。派生就绪待消费。
-# 单引号标量保内部有意义空格（如 "Go " 词界）；正则特殊字符（\. | ( )）逐字保真。
-router_patterns:
-  frontend: '(前端|UI|页面|组件|React|Vue|Next|Tailwind|样式|shadcn|\.tsx|\.jsx|\.vue|web 设计|响应式|button|form|layout)'
-  backend: '(后端|backend|API|接口|数据库|Go |Python |Java |Rust |NestJS|Postgres|endpoint|service|微服务|REST|GraphQL|gRPC|migration|server|controller|schema)'
-  pm: '(调研|竞品|市场|竞争对手|对标|商业模式|PRD|需求|用户旅程|原型|market|立项|产品|user persona|流程图)'
+# Track 路由默认值的单一真相源是 kernel tracks/builtins；项目覆盖写入
+# `.pipeline/tracks.yaml` 的 `policy_profile.routing`，manifest 不再镜像路由规则。
 
 # —— phase × track 强制 skill 表（老 evidence 派生；缺则 full preset [HARD] 阻断）——
 # 键 = 'phase.track'；`_all` = 不分 track、对每 track 兜底（老 evidence 三级回退：per-track → _all → 空）。
-# a|b 备选 token 逐字保留（如 opsx:explore|openspec-explore），消费方自择其一。
-# 消费方：guard 强制 skill 校验面 / SessionStart 注入（待 A1 后续接线）。派生就绪待消费。
+# 所有默认 token 均是本插件内置 skill；新用户不依赖另一宿主、npm 或第三方 marketplace。
+# 消费方：guard 强制 skill 校验面 / SessionStart 注入。
 mandatory_skills:
-  open._all: [opsx:propose|openspec-propose]
-  explore.pm: [superpowers:brainstorming, grill-with-docs]
-  explore.frontend: [opsx:explore|openspec-explore, superpowers:brainstorming, grill-with-docs]
-  explore.backend: [opsx:explore|openspec-explore, superpowers:brainstorming, grill-with-docs, improve-codebase-architecture]
-  spec.pm: [superpowers:brainstorming, grill-with-docs]
-  spec.frontend: [opsx:propose|openspec-propose, superpowers:writing-plans]
-  spec.backend: [opsx:propose|openspec-propose, superpowers:writing-plans]
-  build.pm: [prototype|huashu-design, frontend-design, design-taste-frontend|taste-skill]
-  build.frontend: [superpowers:test-driven-development, frontend-design, web-design-guidelines, design-taste-frontend|taste-skill]
-  build.backend: [superpowers:writing-plans, superpowers:test-driven-development]
-  verify.pm: [browser-qa, web-design-guidelines, design-taste-frontend|taste-skill, superpowers:verification-before-completion]
-  verify.frontend: [superpowers:verification-before-completion, e2e-testing, browser-qa, verify|verification-loop, web-design-guidelines, design-taste-frontend|taste-skill]
-  verify.backend: [superpowers:verification-before-completion]
-  ship.pm: [to-spec, to-tickets]
-  ship.frontend: [opsx:apply|openspec-apply-change, opsx:archive|openspec-archive-change, superpowers:finishing-a-development-branch, commit-commands:commit-push-pr]
-  ship.backend: [opsx:apply|openspec-apply-change, superpowers:finishing-a-development-branch, commit-commands:commit-push-pr]
+  open._all: [openspec-propose]
+  explore.pm: [brainstorming, grill-with-docs]
+  explore.frontend: [openspec-explore, brainstorming, grill-with-docs]
+  explore.backend: [openspec-explore, brainstorming, grill-with-docs, improve-codebase-architecture]
+  spec.pm: [openspec-propose, brainstorming, writing-plans, grill-with-docs]
+  spec.frontend: [openspec-propose, writing-plans]
+  spec.backend: [openspec-propose, writing-plans]
+  build.pm: [prototype, frontend-design, design-taste-frontend]
+  build.frontend: [test-driven-development, frontend-design, web-design-guidelines, design-taste-frontend]
+  build.backend: [writing-plans, test-driven-development]
+  verify.pm: [browser-qa, web-design-guidelines, design-taste-frontend, verification-before-completion, handoff]
+  verify.frontend: [verification-before-completion, e2e-testing, browser-qa, web-design-guidelines, design-taste-frontend]
+  verify.backend: [verification-before-completion]
+  ship.pm: [openspec-apply-change, to-spec, to-tickets]
+  ship.frontend: [openspec-apply-change, openspec-archive-change, finishing-a-development-branch]
+  ship.backend: [openspec-apply-change, finishing-a-development-branch]
   # archive 无强制 skill（归档不 gate skill）——不声明即空表
 
 # —— phase × track 推荐 skill 表（老 evidence 派生；缺只 WARN、不阻断）——
@@ -89,8 +84,8 @@ recommended_skills:
   explore.pm: [pipeline-researcher]
   explore.frontend: [search-first]
   explore.backend: [search-first]
-  build.pm: [shadcn-ui, tailwind-css-patterns, hallmark]
-  build.frontend: [react-patterns, react-best-practices, tailwind-css-patterns, shadcn-ui, hallmark]
+  build.pm: [prototype, frontend-design, hallmark]
+  build.frontend: [react-patterns, web-design-guidelines, hallmark]
 
 # —— breadcrumb prose（老 phases.<phase>.breadcrumb 派生；`|` 字面块标量，缩进 4 定块界）——
 # 消费方：router hook #19 每轮被动注入活跃 change 当前相位的行动提示。派生就绪待消费。
@@ -105,8 +100,8 @@ breadcrumb:
     backend 额外 improve-codebase-architecture 架构扫描（必做）。任何 gap 用 AskUserQuestion 批量问、
     迭代到清零；硬取舍落 ADR。产出 design_doc（含 coverage 块）后停下等用户逐项确认，说"继续"才 transition。
   spec: |
-    规格 + 实施计划：brainstorming 产出 pm=用户旅程图 / fe·be=plan + delta spec。
-    fe·be plan 两条必做：①首阶段 = tracer bullet 纵向打通端到端最小链路；②按上下文窗口拆 build 子阶段，
+    规格 + 实施计划：所有 track 先产出 OpenSpec delta spec + 可执行 plan；pm 额外产出用户旅程图。
+    plan 两条必做：①首阶段 = tracer bullet 纵向打通端到端最小链路；②按上下文窗口拆 build 子阶段，
     plan 里显式标注子阶段边界 + 何处 /clear。产出 plan + 填齐 coverage 块后停下等确认，说"继续"才 transition。
   build: |
     实现（与 verify 是 barrier、不并行）。完成一个 task 立即把 tasks.md 的 [ ] 改 [x]。

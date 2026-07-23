@@ -6,6 +6,13 @@ dist/
 !packages/cli/dist/
 packages/cli/dist/*
 !packages/cli/dist/pipeline.mjs
+# 分发面还包括 dashboard 的单文件 server bundle 与已构建 SPA。Marketplace 安装不带 node_modules，
+# 因此不能只发布源码或让新用户再跑 npm/vite；完整插件必须直接包含这两组运行时产物。
+!packages/server/dist/
+packages/server/dist/*
+!packages/server/dist/dashboard.mjs
+!packages/dashboard-app/dist/
+!packages/dashboard-app/dist/**
 coverage/
 *.tsbuildinfo
 .DS_Store

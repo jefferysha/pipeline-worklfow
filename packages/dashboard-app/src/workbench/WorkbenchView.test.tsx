@@ -2,8 +2,17 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '../i18n'
 import { invalidateWorkflowRules, useWorkflowRules } from '../model/workflowModel'
+import { invalidateMandatoryConfig } from './mandatorySkills'
 import { makeChange, makeProject, makeSnapshot } from '../testkit'
-import { stageCounts, WorkbenchView, type WbWorkflowDef } from './WorkbenchView'
+import {
+  moveSkillInDef,
+  removeStageFromDef,
+  reorderStagesInDef,
+  setSkillDepInDef,
+  stageCounts,
+  WorkbenchView,
+  type WbWorkflowDef,
+} from './WorkbenchView'
 
 const ROOT = '/tmp/proj-a'
 
@@ -36,12 +45,236 @@ const RELEASE_TRAIN = {
   ],
 }
 
-function renderView(props: Partial<Parameters<typeof WorkbenchView>[0]> = {}) {
+/**
+ * v11 P1：删阶段的转换边重连（removeStageFromDef 纯函数）。
+ * 这是本视图唯一会破坏 def 结构完整性的操作——留下悬空 id，kernel validate 保存时当场拒。
+ * 故直接单测，不只靠 UI 层覆盖。fixture 用上面的 RELEASE_TRAIN：
+ *   draft --submitted--> review --approved--> ship（末端）
+ *                        review --rejected--> draft（回边）
+ */
+describe('removeStageFromDef 删阶段重连（v11 P1）', () => {
+  const DEF = RELEASE_TRAIN as WbWorkflowDef
+
+  it('删中间阶段：指向它的边改指它的线性后继，不留悬空 id', () => {
+    const out = removeStageFromDef(DEF, 'review')
+    expect(out.steps.map((s) => s.id)).toEqual(['draft', 'ship'])
+    // draft 的 submitted→review 重连成 submitted→ship（review 的后继）
+    expect(out.steps[0]!.transitions).toEqual([{ event: 'submitted', to: 'ship' }])
+    // 全图不得残留指向已删 id 的边
+    expect(out.steps.flatMap((s) => s.transitions).some((tr) => tr.to === 'review')).toBe(false)
+  })
+
+  it('删末端阶段：指向它的边直接删掉（前一步成为新末端，kernel 只许末端零边）', () => {
+    const out = removeStageFromDef(DEF, 'ship')
+    expect(out.steps.map((s) => s.id)).toEqual(['draft', 'review'])
+    // review 的 approved→ship 没了；rejected→draft 原样保留（不指向被删项，不动）
+    expect(out.steps[1]!.transitions).toEqual([{ event: 'rejected', to: 'draft' }])
+  })
+
+  it('删首阶段：重连若产生自环则丢弃该边（review 的 rejected→draft 不得变成 review 自指）', () => {
+    const out = removeStageFromDef(DEF, 'draft')
+    expect(out.steps.map((s) => s.id)).toEqual(['review', 'ship'])
+    // rejected→draft 本应重连到 draft 的后继 review，但那是 review 自己 → 丢弃
+    expect(out.steps[0]!.transitions).toEqual([{ event: 'approved', to: 'ship' }])
+    // 全图不得出现自环（step 的出边指向自己）
+    expect(out.steps.some((s) => s.transitions.some((tr) => tr.to === s.id))).toBe(false)
+  })
+
+  it('删不存在的 id：原样返回（同一引用，不产生无谓重渲染）', () => {
+    expect(removeStageFromDef(DEF, 'nope')).toBe(DEF)
+  })
+
+  it('未触碰字段原样保留（skills/inputs/outputs/guards 不因删阶段丢失）', () => {
+    const out = removeStageFromDef(DEF, 'review')
+    expect(out.steps[0]!.skills).toEqual(DEF.steps[0]!.skills)
+    expect(out.steps[0]!.outputs).toEqual(DEF.steps[0]!.outputs)
+    expect(out.steps[1]!.outputs).toEqual(DEF.steps[2]!.outputs)
+    expect(out.name).toBe('release-train')
+  })
+})
+
+/**
+ * v11 P2：阶段列拖动重排（reorderStagesInDef 纯函数）。
+ * 与删阶段同理——这是会破坏 def 结构完整性的操作，直接单测。
+ * fixture：draft --submitted--> review --approved--> ship（末端）；review --rejected--> draft（分支回边）
+ */
+describe('reorderStagesInDef 阶段列重排（v11 P2）', () => {
+  const DEF = RELEASE_TRAIN as WbWorkflowDef
+
+  it('把末端 ship 拖到最前：线性边按新序重连，原末端补出边、新末端删出边', () => {
+    // 新序：ship, draft, review
+    const out = reorderStagesInDef(DEF, 'ship', 'draft', false)
+    expect(out.steps.map((s) => s.id)).toEqual(['ship', 'draft', 'review'])
+    // ship 旧序是末端（无线性边）→ 新序不再是末端，必须补一条，否则中间 step 零出边 = kernel 拒
+    expect(out.steps[0]!.transitions).toEqual([{ event: 'ship-complete', to: 'draft' }])
+    // draft 的线性边 submitted 保留事件名，改指新的下一个 = review
+    expect(out.steps[1]!.transitions).toEqual([{ event: 'submitted', to: 'review' }])
+    // review 新序成了末端 → 线性边 approved 删掉；分支边 rejected→draft 原样保留
+    expect(out.steps[2]!.transitions).toEqual([{ event: 'rejected', to: 'draft' }])
+  })
+
+  it('中间 review 拖到末尾：事件名不被重命名，分支边不受影响', () => {
+    // 新序：draft, ship, review
+    const out = reorderStagesInDef(DEF, 'review', 'ship', true)
+    expect(out.steps.map((s) => s.id)).toEqual(['draft', 'ship', 'review'])
+    expect(out.steps[0]!.transitions).toEqual([{ event: 'submitted', to: 'ship' }]) // 事件名保留
+    expect(out.steps[1]!.transitions).toEqual([{ event: 'ship-complete', to: 'review' }]) // 原末端补边
+    expect(out.steps[2]!.transitions).toEqual([{ event: 'rejected', to: 'draft' }]) // 线性边删、分支边留
+  })
+
+  it('重排后不留悬空 id，且每个非末端 step 都有出边（kernel 只许末端零边）', () => {
+    for (const [from, to, after] of [['ship', 'draft', false], ['review', 'ship', true], ['draft', 'ship', true]] as const) {
+      const out = reorderStagesInDef(DEF, from, to, after)
+      const ids = new Set(out.steps.map((s) => s.id))
+      for (const s of out.steps) for (const tr of s.transitions) expect(ids.has(tr.to)).toBe(true)
+      out.steps.slice(0, -1).forEach((s) => expect(s.transitions.length).toBeGreaterThan(0))
+    }
+  })
+
+  it('拖到自己身上 / 不存在的 id → 原样返回', () => {
+    expect(reorderStagesInDef(DEF, 'draft', 'draft', false)).toBe(DEF)
+    expect(reorderStagesInDef(DEF, 'nope', 'draft', false)).toBe(DEF)
+  })
+})
+
+/**
+ * v11 P2：技能拖动落位（moveSkillInDef）+ 依赖增删改（setSkillDepInDef）。
+ * draft 的技能：superpowers:tdd → impeccable(depends_on:[superpowers:tdd]) → browser-qa
+ */
+describe('moveSkillInDef 技能拖排 / 跨列搬（v11 P2）', () => {
+  const DEF = RELEASE_TRAIN as WbWorkflowDef
+
+  it('列内排序：只动次序，depends_on 全部保留（依赖按 id 解析，与视觉序无关）', () => {
+    const out = moveSkillInDef(DEF, { skillId: 'browser-qa', fromStage: 'draft', toStage: 'draft', refSkillId: 'superpowers:tdd', after: false })
+    const draft = out.steps.find((s) => s.id === 'draft')!
+    expect(draft.skills.map((k) => k.id)).toEqual(['browser-qa', 'superpowers:tdd', 'impeccable'])
+    expect(draft.skills.find((k) => k.id === 'impeccable')!.depends_on).toEqual(['superpowers:tdd'])
+  })
+
+  it('跨列搬：源列里指向它的依赖被清掉（否则成跨 step 引用 = kernel 校验期错误）', () => {
+    const out = moveSkillInDef(DEF, { skillId: 'superpowers:tdd', fromStage: 'draft', toStage: 'ship', refSkillId: null, after: true })
+    const draft = out.steps.find((s) => s.id === 'draft')!
+    const ship = out.steps.find((s) => s.id === 'ship')!
+    expect(draft.skills.map((k) => k.id)).toEqual(['impeccable', 'browser-qa'])
+    // impeccable 原本依赖 superpowers:tdd —— 它已被搬走，依赖必须清掉，且剔空后删键（不留空数组）
+    expect(draft.skills.find((k) => k.id === 'impeccable')).not.toHaveProperty('depends_on')
+    expect(ship.skills.map((k) => k.id)).toEqual(['superpowers:tdd'])
+  })
+
+  it('跨列搬：被搬技能自己的 depends_on 整个丢弃（它依赖的是源列的技能）', () => {
+    const out = moveSkillInDef(DEF, { skillId: 'impeccable', fromStage: 'draft', toStage: 'ship', refSkillId: null, after: true })
+    const moved = out.steps.find((s) => s.id === 'ship')!.skills.find((k) => k.id === 'impeccable')!
+    expect(moved).not.toHaveProperty('depends_on')
+  })
+
+  it('目标列已有同名技能 → 整个 no-op（技能在阶段内唯一）', () => {
+    const seeded: WbWorkflowDef = {
+      ...DEF,
+      steps: DEF.steps.map((s) => (s.id === 'ship' ? { ...s, skills: [{ id: 'browser-qa' }] } : s)),
+    }
+    expect(moveSkillInDef(seeded, { skillId: 'browser-qa', fromStage: 'draft', toStage: 'ship', refSkillId: null, after: true })).toBe(seeded)
+  })
+
+  it('不存在的技能 / 阶段 → 原样返回', () => {
+    expect(moveSkillInDef(DEF, { skillId: 'nope', fromStage: 'draft', toStage: 'ship', refSkillId: null, after: true })).toBe(DEF)
+    expect(moveSkillInDef(DEF, { skillId: 'browser-qa', fromStage: 'draft', toStage: 'nope', refSkillId: null, after: true })).toBe(DEF)
+  })
+})
+
+describe('setSkillDepInDef 依赖增删改（v11 P2）', () => {
+  const DEF = RELEASE_TRAIN as WbWorkflowDef
+  // 多依赖 fixture：impeccable 同时依赖 tdd 与 browser-qa
+  const MULTI: WbWorkflowDef = {
+    ...DEF,
+    steps: DEF.steps.map((s) =>
+      s.id !== 'draft'
+        ? s
+        : { ...s, skills: [{ id: 'superpowers:tdd' }, { id: 'impeccable', depends_on: ['superpowers:tdd', 'browser-qa'] }, { id: 'browser-qa' }] },
+    ),
+  }
+  const depsOf = (d: WbWorkflowDef, id: string) => d.steps.find((s) => s.id === 'draft')!.skills.find((k) => k.id === id)!.depends_on
+
+  it('加一条：追加到已有依赖之后，不覆写既有的', () => {
+    const out = setSkillDepInDef(MULTI, 'draft', 'superpowers:tdd', 'browser-qa', null)
+    expect(depsOf(out, 'superpowers:tdd')).toEqual(['browser-qa'])
+    // 别人的依赖不受影响
+    expect(depsOf(out, 'impeccable')).toEqual(['superpowers:tdd', 'browser-qa'])
+  })
+
+  it('多依赖下改其中一条：只换那一条、保持位置，另一条纹丝不动（不静默丢数据）', () => {
+    const out = setSkillDepInDef(MULTI, 'draft', 'impeccable', 'browser-qa', 'superpowers:tdd')
+    // 把第一条 superpowers:tdd 换成 browser-qa → 与已有的 browser-qa 去重后只剩一条
+    expect(depsOf(out, 'impeccable')).toEqual(['browser-qa'])
+  })
+
+  it('多依赖下清其中一条：另一条保留（整体覆写会把它抹掉——这条守的就是这个）', () => {
+    const out = setSkillDepInDef(MULTI, 'draft', 'impeccable', null, 'superpowers:tdd')
+    expect(depsOf(out, 'impeccable')).toEqual(['browser-qa'])
+  })
+
+  it('清掉最后一条依赖 → 删键而不是留空数组（serialize 不写无意义空行）', () => {
+    const out = setSkillDepInDef(DEF, 'draft', 'impeccable', null, 'superpowers:tdd')
+    expect(out.steps.find((s) => s.id === 'draft')!.skills.find((k) => k.id === 'impeccable')).not.toHaveProperty('depends_on')
+  })
+
+  it('重复加同一条 → 不产生重复项', () => {
+    const out = setSkillDepInDef(DEF, 'draft', 'impeccable', 'superpowers:tdd', null)
+    expect(depsOf(out, 'impeccable')).toEqual(['superpowers:tdd'])
+  })
+})
+
+function renderView(props: Partial<Parameters<typeof WorkbenchView>[0]> = {}, _openEditor = true) {
   render(
     <I18nProvider>
       <WorkbenchView root={ROOT} {...props} />
     </I18nProvider>,
   )
+  // 编辑器现在直接常驻主页；测试不再模拟一个已删除的“查看与编辑”中转操作。
+}
+
+async function openGovernance(): Promise<HTMLElement> {
+  const button = await screen.findByTestId('wb-governance-open')
+  await waitFor(() => expect(button).toBeEnabled())
+  fireEvent.click(button)
+  return screen.findByTestId('wb-side-col')
+}
+
+/**
+ * ══════════════════════════════════════════════════════════════════════════════════════
+ * v11 P4 断言迁移登记（2026-07-15）：五页签 sheet 退役 —— 编辑驱动点从 sheet 里的
+ * <StepEditor> 换成**画布泳道就地编**。
+ * ══════════════════════════════════════════════════════════════════════════════════════
+ *
+ * 「合并的是 IA，不是能力」——被测行为基本没变，变的是渲染位置。全文件落点对照：
+ *   sheet 页签      wb-tab-* / wb-pane-*             → 无（页签概念本身退役，见下方 §删除登记）
+ *   阶段名          getByLabelText('阶段名称')        → wb-lane-name-${id} 点开 → wb-lane-name-input-${id}
+ *   复核门          getByRole('switch',{name:'复核门'}) → wb-lane-gate-sw-${id}
+ *   产出非空 guard   getByRole('switch',{name:'产出非空方可推进'}) → wb-lane-guard-${id}
+ *   加产出          getByRole('button',{name:'+ 添加'}) → wb-lane-out-add-${id} → wb-lane-out-input-${id}
+ *   选中态读数      wb-editor-stage 文本              → 泳道 aria-current="step" / data-state="current"
+ *   只读说明        wb-ed-readonly                    → 泳道 wb-lane-lock-${id} 徽章 + 零编辑入口
+ *   Loop 卡         wb-pane-loop 内 wb-loop-card      → wb-rail-loop-full → wb-rail-loop-dialog 内挂原件
+ *   AFK/凭证/技能健康 wb-pane-afk/secrets/health       → 右栏 wb-rail-machine-summary 折叠区（默认收起）
+ *   default 强制矩阵 SkillChain default 模式 + wb-mx-open → 画布 wb-mand-* + 看板级 wb-track-*
+ *
+ * §删除登记（**只有**随页签本身消失的概念才删，逐条附因）：
+ *   · 「点 tab 切 pane / aria-selected 与 pane data-state 联动」——页签没了，tab/pane 不存在。
+ *   · 「墨线 ink GSAP 滑动 + pane crossfade」——本就不在 jsdom 断言，随页签一并作废。
+ *   · 「pane 恒挂载保留未提交草稿」——探针（StepEditor 的 adding/draft 本地 state）与被证伪对象
+ *     （pane 条件卸载）双双随页签退役；画布无页签、无 pane 切换，「切走再切回」这个动作不存在。
+ *   · 「编辑卡在前、Loop 卡在后（demo 布局序）」——编辑卡（wb-editor）已卸载，两者不再同列共存。
+ *   · 「矩阵入口卡 wb-mx-open：自定义 workflow 可点 → 切到 default；default 下禁用」——入口卡
+ *     随「技能健康」页签一并被摘（生产侧 Task C 的决定；i18n 的 mx_open/mx_open_here 已成孤儿键，
+ *     已上报）。其守的**能力**（default 的强制技能矩阵可达）未丢：改由 workflow 下拉切 default
+ *     → 画布技能区渲 wb-mand-* 承载，见下方「default 强制技能矩阵」用例。
+ */
+
+/** 泳道阶段名就地改：点名字进编辑态 → 改 → Enter 提交（画布 commitName：空名/同名不提交）。 */
+function editLaneName(stage: string, value: string): void {
+  fireEvent.click(screen.getByTestId(`wb-lane-name-${stage}`))
+  const input = screen.getByTestId(`wb-lane-name-input-${stage}`)
+  fireEvent.change(input, { target: { value } })
+  fireEvent.keyDown(input, { key: 'Enter' })
 }
 
 
@@ -72,62 +305,194 @@ const LOOP_ROW = {
 }
 
 let loopRows: unknown[]
+let workflowDefs: Record<string, typeof RELEASE_TRAIN>
 
 beforeEach(() => {
   localStorage.clear()
   invalidateWorkflowRules() // 模块级 rules 缓存跨用例清空（同 旧 workflow 列表页测试（T18 已退役） 既有先例）
+  // v11 P1：mandatory config 也是模块级缓存（mandatorySkills.tsx 的 cfgCache，与 sheet 里的
+  // SkillChain 共用一份）——不清就会跨用例泄漏：第一个用例把 {capable:false} 写进缓存后，
+  // 后续用例的 peekMandatoryConfig() 直接命中它、连 fetch 都不发，于是「跑单条绿、整文件红」
+  // 这类顺序依赖就出现了（本轮真踩过）。同 invalidateWorkflowRules 的既有纪律。
+  invalidateMandatoryConfig()
   loopRows = []
+  workflowDefs = { 'release-train': structuredClone(RELEASE_TRAIN) }
   global.fetch = vi.fn(async (url: string, opts?: RequestInit) => {
     if (url === `/api/workflows?root=${encodeURIComponent(ROOT)}`) {
-      return new Response(JSON.stringify({ names: ['release-train'] }), { status: 200 })
+      return new Response(JSON.stringify({ names: Object.keys(workflowDefs).sort() }), { status: 200 })
     }
-    if (url === `/api/workflows/release-train?root=${encodeURIComponent(ROOT)}`) {
-      return new Response(JSON.stringify(RELEASE_TRAIN), { status: 200 })
+    const workflowRead = /^\/api\/workflows\/([^?]+)\?root=/.exec(url)
+    if (workflowRead && (!opts?.method || opts.method === 'GET')) {
+      const name = decodeURIComponent(workflowRead[1]!)
+      const found = workflowDefs[name]
+      return found
+        ? new Response(JSON.stringify(found), { status: 200 })
+        : new Response(JSON.stringify({ error: `workflow '${name}' 不存在` }), { status: 404 })
     }
-    // T13：保存端点（POST /api/workflows/:name，root 在 body 里）——缺省恒成功
-    if (url === '/api/workflows/release-train' && opts?.method === 'POST') {
+    // T13 + v3 Studio：保存、新建与复制共用 POST /api/workflows/:name。
+    const workflowWrite = /^\/api\/workflows\/([^?]+)$/.exec(url)
+    if (workflowWrite && opts?.method === 'POST') {
+      const name = decodeURIComponent(workflowWrite[1]!)
+      const body = JSON.parse(String(opts.body)) as typeof RELEASE_TRAIN & { root?: string }
+      const { root: _root, ...stored } = body
+      workflowDefs[name] = stored as typeof RELEASE_TRAIN
+      return new Response(JSON.stringify({ ok: true }), { status: 200 })
+    }
+    const workflowDelete = /^\/api\/workflows\/([^?]+)\?root=/.exec(url)
+    if (workflowDelete && opts?.method === 'DELETE') {
+      const name = decodeURIComponent(workflowDelete[1]!)
+      delete workflowDefs[name]
       return new Response(JSON.stringify({ ok: true }), { status: 200 })
     }
     // T16：Loop 卡数据面（缺省无 loop——空态；用例按需往 loopRows 里灌行）
     if (url === '/api/loops/snapshot') {
       return new Response(JSON.stringify({ generated_at: '2026-07-11T00:00:00Z', rows: loopRows }), { status: 200 })
     }
+    // v11 P1：本视图现在托管 useMandatorySkills（default 的 manifest 强制技能矩阵），
+    // 它 mount 即拉 config 与 registry。这两条**必须**显式应答：走下面的 throw 兜底虽被
+    // loadMandatoryConfig 的 fail-soft catch 接住（不会炸），但会把 {capable:false} 写进
+    // 模块缓存、并让一个 async setState 落在用例边界之外——正是 flake 的来源。
+    if (url.startsWith('/api/config?root=')) {
+      return new Response(JSON.stringify({
+        ok: true,
+        generated_at: '2026-07-19T00:00:00Z',
+        revision: 'workbench-r5',
+        source: 'builtin-only',
+        mandatory_skills_writable_profiles: ['pm', 'frontend', 'backend'],
+        mandatory_skills: {},
+        tracks: ['pm', 'frontend', 'backend'].map((id, index) => ({
+          id,
+          label: id,
+          builtin: true,
+          workflow: { default: 'default', allowed: '*' },
+          policyProfile: {
+            reviewSeed: id === 'pm' ? 'skipped' : 'pending',
+            automationEligible: true,
+            coverageProfile: id,
+            routing: { enabled: true, pattern: id, priority: 100 + index },
+            skills: { matrix: true, profile: id },
+          },
+        })),
+      }), { status: 200 })
+    }
+    if (url === '/api/skills/registry') {
+      return new Response(JSON.stringify({ skills: [] }), { status: 200 })
+    }
+    // ── v11 P4：右栏「机器配置」折叠区的三件原件（AutomationCard/SecretsCard/SkillHealthPanel）
+    //    各自 mount 即拉。**闭合即卸载**（WorkbenchSideRail.tsx:134），故只有真展开折叠区的那条
+    //    用例会走到这里；但仍**显式应答**而非留给 throw 兜底——理由同上面 /api/config 那条登记：
+    //    fail-soft catch 会把一个 async setState 落在用例边界之外，正是 flake 的来源。
+    //    三条 body 逐字对齐各自 client 接缝消费的形状（AutomationCard.test/SecretsCard.test 同款）
+    //    ——形状糊弄不过去：readiness 有 isValidReadiness 浅校验（client.ts:460-473，Bug3 的修复），
+    //    SecretsCard 则会直接深访问 keys[key].set。
+    if (url.startsWith('/api/automation')) {
+      return new Response(
+        JSON.stringify({ ok: true, engine: 'claude-code', max_parallel: 1, dry_run: false, image: 'pipeline-afk:latest' }),
+        { status: 200 },
+      )
+    }
+    if (url.startsWith('/api/afk/readiness')) {
+      return new Response(
+        JSON.stringify({
+          ok: true,
+          docker: { available: true },
+          image: { configured: 'pipeline-afk:latest', present: true, build_hint: '' },
+          credentials: {
+            'claude-code': { CLAUDE_CODE_OAUTH_TOKEN: { set: true, source: 'secrets-file' } },
+            codex: { OPENAI_API_KEY: { set: false }, CODEX_HOME: { set: false } },
+          },
+        }),
+        { status: 200 },
+      )
+    }
+    if (url.startsWith('/api/secrets')) {
+      return new Response(
+        JSON.stringify({
+          ok: true,
+          keys: { CLAUDE_CODE_OAUTH_TOKEN: { set: false }, OPENAI_API_KEY: { set: false } },
+        }),
+        { status: 200 },
+      )
+    }
     throw new Error(`unexpected fetch ${url}`)
   }) as unknown as typeof fetch
 })
 afterEach(() => {
+  delete window.__PIPELINE_DASHBOARD_TOKEN__
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
 })
 
 describe('WorkbenchView stepper（验收①）', () => {
-  it('按 /api/workflows 数据渲染 3 张阶段卡：序号/名称/ID/配置摘要计数与 def 一致', async () => {
-    renderView()
-    const draft = await screen.findByTestId('wb-step-draft')
-    expect(within(draft).getByText('1')).toBeInTheDocument()
-    expect(within(draft).getByText('起草')).toBeInTheDocument()
-    expect(within(draft).getByText('draft')).toBeInTheDocument()
-    expect(within(draft).getByText(/3 技能/)).toBeInTheDocument()
-    expect(within(draft).getByText(/1 产出/)).toBeInTheDocument()
-    // 技能 chips：前 2 个短名 + 截断 +1
-    expect(within(draft).getByText('tdd')).toBeInTheDocument()
-    expect(within(draft).getByText('impeccable')).toBeInTheDocument()
-    expect(within(draft).getByText('+1')).toBeInTheDocument()
+  it('主视图就是工作流编辑器；不再经过“查看与编辑”二层浮层，阶段内添加 Skill 才打开编排浮层', async () => {
+    renderView({}, false)
+    await screen.findByTestId('wb-step-draft')
 
-    const ship = screen.getByTestId('wb-step-ship')
-    expect(within(ship).getByText(/0 技能/)).toBeInTheDocument()
-    expect(within(ship).getByText(/2 产出/)).toBeInTheDocument()
+    expect(screen.getByTestId('wb-wf-btn')).toHaveTextContent('当前工作流')
+    expect(screen.getByTestId('wb-wf-btn')).toHaveTextContent('release-train')
+    expect(screen.queryByTestId('wb-workflow-edit')).toBeNull()
+    expect(screen.queryByTestId('wb-advanced-orchestration')).toBeNull()
+    expect(screen.getByTestId('step-policy-editor')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '配置 Skill 依赖' })).toBeNull()
 
-    // gate 徽章只出现在 review 卡
-    expect(within(screen.getByTestId('wb-step-review')).getByText('复核门')).toBeInTheDocument()
-    expect(within(draft).queryByText('复核门')).toBeNull()
-
-    // 卡间连接件带转换事件名
-    expect(screen.getByText('submitted')).toBeInTheDocument()
-    expect(screen.getByText('approved')).toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('wb-lane-sk-add-draft'))
+    expect(await screen.findByTestId('wb-skill-orchestration')).toBeInTheDocument()
   })
 
-  it('「+ 添加阶段」按钮：自定义 workflow 可点、default 保持禁用（验收反馈#4，补齐 T13 遗留缺口）', async () => {
+  it('编排画布没有旧 wb-stage 动画锚点时不向 GSAP 传空目标，控制台保持干净', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    renderView()
+    await screen.findByTestId('wb-step-draft')
+
+    expect(warn.mock.calls.flat().join('\n')).not.toContain('GSAP target')
+  })
+
+  /**
+   * v11 P0 断言迁移：主列的流程带（StepperRail）换成编排画布（OrchestrationBoard）后，
+   * 本用例的「表现层」断言随之改写——被测行为不变（阶段数/名称/复核语义/技能与产出来自 def），
+   * 变的是渲染形态：
+   *   · 「3 技能 / 1 产出」摘要计数 → 画布直接把技能卡与产出 chip 逐条列出（计数不再是唯一信息）；
+   *   · 技能 chips 的「前 2 个短名 + 截断 +1」→ 全名逐条直出。**这正是本轮硬约束要消灭的反例**
+   *     （用户明确要求任何名称不换行不省略），故此处反向钉住：全名在、`+1` 截断计数不在。
+   * 零截断的完整守门在 OrchestrationBoard.test.tsx（含变异测试），此处只钉住接线后的真实渲染。
+   */
+  it('按 /api/workflows 数据渲染阶段导航；所选阶段的 Skill 与产出进入唯一纵向编辑器', async () => {
+    renderView()
+    const draft = await screen.findByTestId('wb-step-draft')
+    // 泳道序号：画布内技能卡也带 1..n 序号，故按泳道头的可及名定位，避免 getByText('1') 多义
+    expect(within(draft).getByRole('button', { name: '选择阶段 起草' })).toHaveTextContent('1')
+    expect(within(draft).getByText('起草')).toBeInTheDocument()
+
+    // 技能：def 的 3 个技能逐条全名直出（不短名化、不截断）。
+    // 注：带命名空间的名字在 DOM 里拆成两个 span（前缀弱化着色），视觉仍是完整一行，
+    // 故按卡片的 textContent 断言全名，而非 getByText（后者不跨元素匹配）。
+    expect(screen.getByTestId('wb-lane-sk-draft-superpowers:tdd')).toHaveTextContent('superpowers:tdd')
+    expect(screen.getByTestId('wb-lane-sk-draft-impeccable')).toHaveTextContent('impeccable')
+    expect(screen.getByTestId('wb-lane-sk-draft-browser-qa')).toHaveTextContent('browser-qa')
+    // 旧板的截断计数必须绝迹（硬约束回归守门）
+    expect(within(draft).queryByText('+1')).toBeNull()
+
+    // 产出：当前 draft 1 个；切到 ship 后，同一编辑器原位显示 ship 的 2 个产出。
+    expect(within(screen.getByTestId('wb-lane-outs-draft')).getByText('阶段草稿')).toBeInTheDocument()
+    fireEvent.click(within(screen.getByTestId('wb-step-ship')).getByRole('button', { name: '选择阶段 发布' }))
+    const shipOuts = screen.getByTestId('wb-lane-outs-ship')
+    expect(within(shipOuts).getByText('发布说明')).toBeInTheDocument()
+    expect(within(shipOuts).getByText('代码版本')).toBeInTheDocument()
+    expect(screen.getByTestId('wb-timeline-node-codex')).toHaveTextContent('此阶段尚未配置 Skill')
+
+    // 总览轨道不重复渲染复核徽标；复核语义收口在所选阶段的详情中。
+    expect(screen.queryByTestId('wb-flow-gate-review')).toBeNull()
+    expect(screen.queryByTestId('wb-flow-gate-draft')).toBeNull()
+    fireEvent.click(within(screen.getByTestId('wb-step-review')).getByRole('button', { name: '选择阶段 人工复核' }))
+    expect(screen.getByTestId('wb-selected-gate')).toHaveTextContent('复核门')
+
+    // #2（2026-07-15）：卡间连接件的转换事件名小字已退役（会被相邻卡挡住、非必要）
+    expect(screen.queryByText('submitted')).toBeNull()
+    expect(screen.queryByText('approved')).toBeNull()
+  })
+
+  it('「+ 添加阶段」只在可编辑 workflow 出现；default 不渲染假入口', async () => {
     renderView()
     await screen.findByTestId('wb-step-draft')
     expect(screen.getByRole('button', { name: '+ 添加阶段' })).toBeEnabled()
@@ -135,28 +500,174 @@ describe('WorkbenchView stepper（验收①）', () => {
     fireEvent.click(screen.getByTestId('wb-wf-btn'))
     fireEvent.click(await screen.findByTestId('wb-wf-item-default'))
     await screen.findByTestId('wb-step-open')
-    const btn = screen.getByRole('button', { name: '+ 添加阶段' })
-    expect(btn).toBeDisabled()
-    expect(btn).toHaveAttribute('title', 'default 工作流只读，复制为自定义工作流后可编辑')
+    expect(screen.queryByRole('button', { name: '+ 添加阶段' })).toBeNull()
+    expect(screen.queryByTestId('wb-default-copy-cue')).toBeNull()
+    expect(screen.getByTestId('wb-workflow-copy')).toHaveTextContent('创建可编辑副本')
   })
 })
 
-describe('WorkbenchView 选中态与编辑区占位（验收②）', () => {
-  it('默认选中第一阶段；点卡切换 aria-current 且编辑区占位联动', async () => {
+describe('WorkbenchView v3 Workflow 生命周期', () => {
+  it('新建：提交受治理的 canonical OpenSpec 七阶段定义，成功后立即切到新 workflow', async () => {
+    renderView()
+    await screen.findByTestId('wb-step-draft')
+
+    fireEvent.click(screen.getByTestId('wb-workflow-new'))
+    const dialog = await screen.findByTestId('wb-workflow-create-dialog')
+    fireEvent.change(within(dialog).getByLabelText('Workflow 名称'), { target: { value: 'ops-flow' } })
+    fireEvent.click(within(dialog).getByTestId('wb-workflow-create-confirm'))
+
+    await screen.findByTestId('wb-step-open')
+    expect(screen.getByTestId('wb-step-archive')).toBeInTheDocument()
+    expect(screen.getByTestId('wb-wf-btn')).toHaveTextContent('ops-flow')
+    expect(screen.getByTestId('step-policy-editor')).toBeInTheDocument()
+    expect(screen.getByTestId('wb-save')).toBeInTheDocument()
+    expect(screen.queryByTestId('wb-ro-pill')).toBeNull()
+    const post = vi.mocked(fetch).mock.calls.find(([url, opts]) => url === '/api/workflows/ops-flow' && opts?.method === 'POST')
+    expect(post).toBeDefined()
+    const body = JSON.parse(String(post?.[1]?.body)) as WbWorkflowDef & { root: string }
+    expect(body).toMatchObject({ root: ROOT, name: 'ops-flow', openspecContract: 'required' })
+    expect(body.steps.map((step) => step.id)).toEqual(['open', 'explore', 'spec', 'build', 'verify', 'ship', 'archive'])
+    expect(body.steps.find((step) => step.id === 'explore')?.gate).toBe('review')
+    expect(body.steps.find((step) => step.id === 'explore')?.skills.map((skill) => skill.id)).toContain('brainstorming')
+    expect(body.steps.find((step) => step.id === 'spec')?.skills.map((skill) => skill.id)).toContain('writing-plans')
+    expect(body.steps.find((step) => step.id === 'verify')?.skills.map((skill) => skill.id)).toContain('verification-before-completion')
+  })
+
+  it('新建：Workflow 名称支持中文并按真实名称写入 URL 与定义', async () => {
+    renderView()
+    await screen.findByTestId('wb-step-draft')
+
+    fireEvent.click(screen.getByTestId('wb-workflow-new'))
+    const dialog = await screen.findByTestId('wb-workflow-create-dialog')
+    const input = within(dialog).getByLabelText('Workflow 名称')
+    fireEvent.change(input, { target: { value: '发布验收流程' } })
+    expect(input).toHaveAttribute('aria-invalid', 'false')
+    expect(within(dialog).queryByText(/仅允许字母/)).toBeNull()
+    fireEvent.click(within(dialog).getByTestId('wb-workflow-create-confirm'))
+
+    await waitFor(() => expect(screen.getByTestId('wb-wf-btn')).toHaveTextContent('发布验收流程'))
+    const post = vi.mocked(fetch).mock.calls.find(([url, opts]) => url === '/api/workflows/%E5%8F%91%E5%B8%83%E9%AA%8C%E6%94%B6%E6%B5%81%E7%A8%8B' && opts?.method === 'POST')
+    expect(post).toBeDefined()
+    expect(JSON.parse(String(post?.[1]?.body))).toMatchObject({ name: '发布验收流程' })
+  })
+
+  it('复制：完整保留当前 workflow 定义，只替换名称', async () => {
+    renderView()
+    await screen.findByTestId('wb-step-draft')
+
+    fireEvent.click(screen.getByTestId('wb-workflow-copy'))
+    const dialog = await screen.findByTestId('wb-workflow-copy-dialog')
+    const input = within(dialog).getByLabelText('Workflow 名称')
+    expect(input).toHaveValue('release-train-copy')
+    fireEvent.change(input, { target: { value: 'release-safe' } })
+    fireEvent.click(within(dialog).getByTestId('wb-workflow-copy-confirm'))
+
+    await waitFor(() => expect(screen.getByTestId('wb-wf-btn')).toHaveTextContent('release-safe'))
+    const post = vi.mocked(fetch).mock.calls.find(([url, opts]) => url === '/api/workflows/release-safe' && opts?.method === 'POST')
+    const body = JSON.parse(String(post?.[1]?.body)) as Record<string, unknown>
+    expect(body.name).toBe('release-safe')
+    expect(body.steps).toEqual(RELEASE_TRAIN.steps)
+  })
+
+  it('删除：确认后走带 token 的 DELETE，成功后从列表移除并切回 default', async () => {
+    window.__PIPELINE_DASHBOARD_TOKEN__ = 'studio-token'
+    renderView()
+    await screen.findByTestId('wb-step-draft')
+
+    fireEvent.click(screen.getByTestId('wb-workflow-delete'))
+    const dialog = await screen.findByTestId('wb-workflow-delete-dialog')
+    fireEvent.click(within(dialog).getByTestId('wb-workflow-delete-confirm'))
+
+    await screen.findByTestId('wb-step-open')
+    expect(screen.getByTestId('wb-wf-btn')).toHaveTextContent('default')
+    const remove = vi.mocked(fetch).mock.calls.find(([url, opts]) =>
+      url === `/api/workflows/release-train?root=${encodeURIComponent(ROOT)}` && opts?.method === 'DELETE')
+    expect(remove?.[1]?.headers).toEqual(expect.objectContaining({ Authorization: 'Bearer studio-token' }))
+  })
+
+  it('删除被引用 workflow：409 引用来源逐条展示，定义与当前选择保持不变', async () => {
+    const baseFetch = global.fetch
+    global.fetch = vi.fn(async (url: string, opts?: RequestInit) => {
+      if (url === `/api/workflows/release-train?root=${encodeURIComponent(ROOT)}` && opts?.method === 'DELETE') {
+        return new Response(JSON.stringify({
+          ok: false,
+          code: 'WORKFLOW_REFERENCED',
+          workflow: 'release-train',
+          references: [
+            { kind: 'loop-binding', source: 'loop:release-loop' },
+            { kind: 'track-default', source: 'track:frontend.workflow.default' },
+          ],
+        }), { status: 409 })
+      }
+      return baseFetch(url, opts)
+    }) as unknown as typeof fetch
+
+    renderView()
+    await screen.findByTestId('wb-step-draft')
+    fireEvent.click(screen.getByTestId('wb-workflow-delete'))
+    const dialog = await screen.findByTestId('wb-workflow-delete-dialog')
+    fireEvent.click(within(dialog).getByTestId('wb-workflow-delete-confirm'))
+
+    expect(await within(dialog).findByTestId('wb-workflow-delete-error')).toHaveTextContent('release-loop')
+    expect(within(dialog).getByTestId('wb-workflow-delete-error')).toHaveTextContent('frontend.workflow.default')
+    expect(screen.getByTestId('wb-wf-btn')).toHaveTextContent('release-train')
+    expect(screen.getByTestId('wb-step-draft')).toBeInTheDocument()
+  })
+
+  it('default 只读：复制入口并入顶部操作区，不再插入突兀说明横幅', async () => {
+    renderView()
+    await screen.findByTestId('wb-step-draft')
+    fireEvent.click(screen.getByTestId('wb-wf-btn'))
+    fireEvent.click(await screen.findByTestId('wb-wf-item-default'))
+    await screen.findByTestId('wb-step-open')
+
+    expect(screen.queryByTestId('wb-default-copy-cue')).toBeNull()
+    expect(screen.getByTestId('wb-workflow-copy')).toHaveTextContent('创建可编辑副本')
+    expect(screen.getByTestId('wb-workflow-copy')).toBeEnabled()
+    expect(screen.queryByTestId('wb-workflow-delete')).toBeNull()
+  })
+
+  it('轨道是项目级运行配置：自定义与 default workflow 都能选择并进入轨道设置', async () => {
+    renderView()
+    await screen.findByTestId('wb-step-draft')
+    expect(screen.getByTestId('wb-track-tabs')).toBeInTheDocument()
+    expect(screen.getByTestId('wb-track-settings-toggle')).toBeEnabled()
+
+    fireEvent.click(screen.getByTestId('wb-wf-btn'))
+    fireEvent.click(await screen.findByTestId('wb-wf-item-default'))
+    await screen.findByTestId('wb-step-open')
+    expect(screen.getByTestId('wb-track-tabs')).toBeInTheDocument()
+    expect(screen.getByTestId('wb-track-settings-toggle')).toBeEnabled()
+  })
+})
+
+describe('WorkbenchView 选中态（验收②）', () => {
+  /**
+   * P4 迁移：原名「选中态与编辑区占位」。被测行为——「默认选中第一阶段、点卡换选中态、
+   * 同一时刻只有一列被选中」——完全没变；变的是**选中态读数落在哪**：sheet 时代由
+   * wb-editor-stage（StepEditor 卡头的阶段 id 文本）承载，画布时代由泳道自己的
+   * aria-current="step" + data-state="current" 承载（OrchestrationBoard.tsx:1079-1081）。
+   * 两个属性都断：aria-current 是无障碍契约，data-state 是样式承载（v10b 迁移后的既定纪律），
+   * 只断一个另一个悄悄掉了不会红。
+   */
+  it('默认选中第一阶段；点卡切换 aria-current/data-state，且同时只有一列被选中', async () => {
     renderView()
     const draft = await screen.findByTestId('wb-step-draft')
     expect(draft).toHaveAttribute('aria-current', 'step')
-    expect(screen.getByTestId('wb-editor-stage')).toHaveTextContent('draft')
+    expect(draft).toHaveAttribute('data-state', 'current')
+    expect(screen.getByTestId('wb-step-ship')).not.toHaveAttribute('aria-current')
 
     fireEvent.click(screen.getByTestId('wb-step-ship'))
-    expect(screen.getByTestId('wb-step-ship')).toHaveAttribute('aria-current', 'step')
+    const ship = screen.getByTestId('wb-step-ship')
+    expect(ship).toHaveAttribute('aria-current', 'step')
+    expect(ship).toHaveAttribute('data-state', 'current')
     expect(draft).not.toHaveAttribute('aria-current')
-    expect(screen.getByTestId('wb-editor-stage')).toHaveTextContent('ship')
+    expect(draft).not.toHaveAttribute('data-state', 'current')
   })
 })
 
 describe('WorkbenchView workflow 下拉（验收①/②）', () => {
-  it('按钮显示当前 workflow 与阶段数；切到 default 渲染 7 张卡、复核门徽章落在 review 阶段', async () => {
+  it('按钮显示当前 workflow 与阶段数；切到 default 渲染 7 个完整阶段名且总览不叠加复核徽标', async () => {
     renderView()
     await screen.findByTestId('wb-step-draft')
     const btn = screen.getByTestId('wb-wf-btn')
@@ -173,11 +684,16 @@ describe('WorkbenchView workflow 下拉（验收①/②）', () => {
     for (const p of ['open', 'explore', 'spec', 'build', 'verify', 'ship', 'archive']) {
       expect(screen.getByTestId(`wb-step-${p}`)).toBeInTheDocument()
     }
-    // REVIEW_PHASES（explore/spec/verify）带复核门徽章，open 不带
+    // 复核状态不挤占阶段轨道；阶段名完整展示，不靠省略号腾位置。
     for (const p of ['explore', 'spec', 'verify']) {
-      expect(within(screen.getByTestId(`wb-step-${p}`)).getByText('复核门')).toBeInTheDocument()
+      expect(screen.queryByTestId(`wb-flow-gate-${p}`)).toBeNull()
     }
-    expect(within(screen.getByTestId('wb-step-open')).queryByText('复核门')).toBeNull()
+    expect(screen.queryByText('离开前复核')).toBeNull()
+    expect(within(screen.getByTestId('wb-step-explore')).getByText('调研')).not.toHaveClass('truncate')
+    for (const [phase, output] of [['explore', '调研文档'], ['spec', '实施计划'], ['build', '构建版本'], ['verify', '验证报告']] as const) {
+      fireEvent.click(within(screen.getByTestId(`wb-step-${phase}`)).getByRole('button', { name: new RegExp(`选择阶段`) }))
+      expect(within(screen.getByTestId(`wb-lane-outs-${phase}`)).getByText(output)).toBeInTheDocument()
+    }
     expect(btn).toHaveTextContent('7 阶段')
   })
 })
@@ -186,17 +702,18 @@ describe('WorkbenchView 右栏摘要（验收③前半）', () => {
   it('摘要四行：阶段 3 / 复核门 1 / 技能 3（跨阶段去重）/ 钩子占位', async () => {
     renderView()
     await screen.findByTestId('wb-step-draft')
-    expect(screen.getByTestId('wb-sum-stages')).toHaveTextContent('3')
-    expect(screen.getByTestId('wb-sum-gates')).toHaveTextContent('1')
-    expect(screen.getByTestId('wb-sum-skills')).toHaveTextContent('3')
-    expect(screen.getByTestId('wb-sum-hooks')).toHaveTextContent('—')
+    const side = await openGovernance()
+    expect(within(side).getByTestId('wb-sum-stages')).toHaveTextContent('3')
+    expect(within(side).getByTestId('wb-sum-gates')).toHaveTextContent('1')
+    expect(within(side).getByTestId('wb-sum-skills')).toHaveTextContent('3')
+    expect(within(side).getByTestId('wb-sum-hooks')).toHaveTextContent('—')
   })
 })
 
 /**
  * v6 T13 断言迁移登记：「流程预览」「预演」两组用例随 GSAP 假预演整体退役——
  * reduced-motion 直达终态类断言无迁移目标(「最近流转」为静态真实事件列表,无循环动画);
- * gate 红点语义由流程带门徽章(v6 T11 popover 用例)接管;节点序断言由下方「最近流转」
+ * gate 语义由所选阶段详情接管；节点序断言由下方「最近流转」
  * describe 的真实事件序断言接管。
  */
 // ── T13：阶段编辑区（StepEditor 挂载 + 保存接线 + 脏守卫 + default 只读）──
@@ -217,11 +734,24 @@ describe('WorkbenchView T13 编辑 → 保存（验收①）', () => {
     expect(screen.getByTestId('wb-save')).toBeDisabled()
   })
 
-  it('编辑名称+开 nonempty 开关 → dirty chip 出现；保存 body 与 def 形状一致且 inputs 原样透传', async () => {
+  it('完整 Step IR 编辑器已接到唯一 def 草稿：Prompt 修改后随保存 payload 写回，未触碰字段不丢', async () => {
     renderView()
     await screen.findByTestId('wb-step-draft')
-    fireEvent.change(screen.getByLabelText('阶段名称'), { target: { value: '初稿' } })
-    fireEvent.click(screen.getByRole('switch', { name: '产出非空方可推进' }))
+    fireEvent.click(screen.getByRole('button', { name: '执行指令' }))
+    fireEvent.change(screen.getByLabelText('Codex 阶段指令'), { target: { value: 'Implement and run browser E2E.' } })
+    expect(screen.getByTestId('wb-dirty')).toHaveTextContent('未保存')
+    fireEvent.click(screen.getByTestId('wb-save'))
+    await waitFor(() => expect(screen.getByTestId('wb-save-ok')).toHaveTextContent('已保存'))
+    const body = lastSaveCall()?.body as { steps: Array<Record<string, unknown>> }
+    expect(body.steps[0]).toEqual({ ...RELEASE_TRAIN.steps[0], prompt: 'Implement and run browser E2E.' })
+    expect(body.steps[1]).toEqual(RELEASE_TRAIN.steps[1])
+    expect(body.steps[2]).toEqual(RELEASE_TRAIN.steps[2])
+  })
+
+  it('编辑名称后保存：隐藏的 guard、inputs 与 outputs 均原样透传', async () => {
+    renderView()
+    await screen.findByTestId('wb-step-draft')
+    editLaneName('draft', '初稿')
     expect(screen.getByTestId('wb-dirty')).toHaveTextContent('未保存')
     expect(screen.getByTestId('wb-save')).toBeEnabled()
 
@@ -230,12 +760,11 @@ describe('WorkbenchView T13 编辑 → 保存（验收①）', () => {
 
     const save = lastSaveCall()
     expect(save?.url).toBe('/api/workflows/release-train')
-    // 与 kernel serialize 消费的 WorkflowDef 形状逐字段一致：只有 draft 的 label/guards 变化，
-    // review 的 inputs（Inputs UI 已移除）原样透传，其余步骤零改动。
+    // 页面不再让用户手工声明产出或守卫；保存别的字段时，这些运行契约仍不能丢。
     expect(save?.body).toEqual({
       ...RELEASE_TRAIN,
       steps: [
-        { ...RELEASE_TRAIN.steps[0], label: '初稿', guards: [{ type: 'nonempty-output' }] },
+        { ...RELEASE_TRAIN.steps[0], label: '初稿' },
         RELEASE_TRAIN.steps[1],
         RELEASE_TRAIN.steps[2],
       ],
@@ -246,16 +775,44 @@ describe('WorkbenchView T13 编辑 → 保存（验收①）', () => {
     expect(screen.getByTestId('wb-save')).toBeDisabled()
   })
 
-  it('编辑联动：改名后阶段卡与右栏流程预览同步显示新名（摘要联动的同一份 def 状态）', async () => {
+  it('运行时产出只读：不提供人工增删，保存其他字段仍保留原始类型', async () => {
     renderView()
     await screen.findByTestId('wb-step-draft')
-    fireEvent.change(screen.getByLabelText('阶段名称'), { target: { value: '初稿' } })
+    expect(screen.queryByTestId('wb-lane-out-add-draft')).toBeNull()
+    expect(screen.getByTestId('wb-lane-outs-draft')).toHaveTextContent('运行 Agent 显式登记，系统校验后展示')
+    editLaneName('draft', '初稿')
+
+    fireEvent.click(screen.getByTestId('wb-save'))
+    await waitFor(() => expect(screen.getByTestId('wb-save-ok')).toHaveTextContent('已保存'))
+
+    const outputs = (lastSaveCall()?.body as { steps: { id: string; outputs: unknown }[] }).steps.find(
+      (s) => s.id === 'draft',
+    )!.outputs
+    expect(outputs).toEqual([
+      { field: 'draft_doc', type: 'file_path' },
+    ])
+  })
+
+  /**
+   * P4 迁移：驱动点换画布就地编。被测行为不变——**同一份 def 状态被多个消费方同时消费**：
+   * 改名 → 泳道自己的展示名跟着变；开门 → 右栏摘要的「复核门」计数联动 1→2。
+   * 注：sheet 时代「编辑区改、阶段卡跟着变」是跨组件联动；画布时代编辑入口与展示名同在泳道内，
+   * 故这里把**右栏摘要计数**这条真正的跨消费方联动看得更重（它才是「一份状态、多处消费」的证据），
+   * 门开关与摘要分居主列/右栏两处，联动断了当场红。
+   */
+  it('编辑联动：改名后阶段泳道显示新名；开复核门 → 右栏摘要计数联动（同一份 def 状态的多个消费方）', async () => {
+    renderView()
+    await screen.findByTestId('wb-step-draft')
+    editLaneName('draft', '初稿')
     expect(within(screen.getByTestId('wb-step-draft')).getByText('初稿')).toBeInTheDocument()
-    // v6 T13:右栏流程预览退役——联动断言收敛到流程带段(同一份 def 状态的另一消费方)。
     expect(screen.getByTestId('wb-step-draft')).toHaveTextContent('初稿')
-    // 开复核门 → 摘要「复核门」计数 1→2 联动
-    fireEvent.click(screen.getByRole('switch', { name: '复核门' }))
-    expect(screen.getByTestId('wb-sum-gates')).toHaveTextContent('2')
+    // 开复核门 → 治理面板摘要读到 2（review 本有门，draft 再开一个）
+    fireEvent.click(screen.getByTestId('wb-lane-gate-sw-draft'))
+    const side = await openGovernance()
+    expect(within(side).getByTestId('wb-sum-gates')).toHaveTextContent('2')
+    // 复核门真实写入，但总览轨道仍保持干净；详情承担状态解释。
+    expect(screen.queryByTestId('wb-flow-gate-draft')).toBeNull()
+    expect(screen.getByTestId('wb-selected-gate')).toHaveTextContent('复核门')
   })
 
   it('保存被 kernel validate 拒（400 errors[]）→ 错误原文上抛展示，已编辑内容不丢', async () => {
@@ -273,14 +830,16 @@ describe('WorkbenchView T13 编辑 → 保存（验收①）', () => {
     }) as unknown as typeof fetch
     renderView()
     await screen.findByTestId('wb-step-draft')
-    fireEvent.change(screen.getByLabelText('阶段名称'), { target: { value: '初稿' } })
+    editLaneName('draft', '初稿')
     fireEvent.click(screen.getByTestId('wb-save'))
     await waitFor(() => expect(screen.getByTestId('wb-save-errors')).toBeInTheDocument())
     // kernel validate 错误逐条原文展示（不翻译、不吞并）
     expect(screen.getByText("step 'draft': 循环依赖：a -> b -> a")).toBeInTheDocument()
     expect(screen.getByText(/skill id 'x y' 含非法字符/)).toBeInTheDocument()
-    // 编辑内容仍在、dirty 未被误清
-    expect(screen.getByLabelText('阶段名称')).toHaveValue('初稿')
+    // 编辑内容仍在、dirty 未被误清。P4 迁移：读数从 StepEditor 的受控 input value 换成
+    // 泳道展示名（就地编提交后输入框收起，名字回到 wb-lane-name-* 按钮上——它的 textContent
+    // 逐字等于全名，见 OrchestrationBoard.tsx:1202-1204）。
+    expect(screen.getByTestId('wb-lane-name-draft')).toHaveTextContent('初稿')
     expect(screen.getByTestId('wb-dirty')).toBeInTheDocument()
   })
 })
@@ -318,10 +877,11 @@ describe('WorkbenchView T13 保存后规则缓存失效（验收②）', () => {
     await waitFor(() => expect(screen.getByTestId('rules-probe').textContent).toBe('3'))
     probe1.unmount()
 
-    // 2. 工作台编辑 + 保存成功（此后 server 端已是 v2）
+    // 2. 工作台编辑 + 保存成功（此后 server 端已是 v2）。P4 迁移：编辑驱动点换画布就地编，
+    //    「保存成功 → invalidateWorkflowRules(root,name)」这条被测行为一字未变。
     renderView()
     await screen.findByTestId('wb-step-draft')
-    fireEvent.change(screen.getByLabelText('阶段名称'), { target: { value: '初稿' } })
+    editLaneName('draft', '初稿')
     fireEvent.click(screen.getByTestId('wb-save'))
     await waitFor(() => expect(screen.getByTestId('wb-save-ok')).toBeInTheDocument())
 
@@ -335,7 +895,8 @@ describe('WorkbenchView T13 脏守卫：切 workflow 确认 Dialog（验收③�
   it('dirty 时切 workflow → 共享 Dialog 确认；取消停留原 workflow，确认丢弃并切换', async () => {
     renderView()
     await screen.findByTestId('wb-step-draft')
-    fireEvent.change(screen.getByLabelText('阶段名称'), { target: { value: '初稿' } })
+    // P4 迁移：编辑驱动点换画布就地编——脏守卫四件套的被测行为一字未变。
+    editLaneName('draft', '初稿')
 
     // 切到 default → 不直接切，先弹确认
     fireEvent.click(screen.getByTestId('wb-wf-btn'))
@@ -343,10 +904,10 @@ describe('WorkbenchView T13 脏守卫：切 workflow 确认 Dialog（验收③�
     expect(screen.getByTestId('wb-switch-confirm')).toBeInTheDocument()
     expect(screen.queryByTestId('wb-step-open')).toBeNull()
 
-    // 取消：停留 release-train，编辑内容仍在
+    // 取消：停留 release-train，编辑内容仍在（读数换泳道展示名，同「保存被拒」用例的登记）
     fireEvent.click(screen.getByRole('button', { name: '取消' }))
     expect(screen.queryByTestId('wb-switch-confirm')).toBeNull()
-    expect(screen.getByLabelText('阶段名称')).toHaveValue('初稿')
+    expect(screen.getByTestId('wb-lane-name-draft')).toHaveTextContent('初稿')
 
     // 再切 + 确认丢弃：真切到 default
     fireEvent.click(screen.getByTestId('wb-wf-btn'))
@@ -366,7 +927,18 @@ describe('WorkbenchView T13 脏守卫：切 workflow 确认 Dialog（验收③�
 })
 
 describe('WorkbenchView T13 default workflow 只读态（验收④）', () => {
-  it('default：只读 pill + 只读说明明示、控件禁用、无保存钮（server 端 400 已挡，前端预示）', async () => {
+  /**
+   * P4 迁移：原断言是「只读 pill + wb-ed-readonly 只读说明 + StepEditor 控件 disabled + 无保存钮」。
+   * 被测行为——「default 是 manifest 只读镜像：前端不给任何编辑入口，不给保存钮」——完全没变，
+   * 变的是**只读的表达方式**：sheet 时代是「控件在、但 disabled」；画布时代按契约验收清单
+   * 「default 满屏 🔒：零拖手柄、零编辑入口、零假按钮」收严成 **入口根本不渲染**
+   * （OrchestrationBoard 的 `回调 !== undefined && !readonly` 同款把关，组件 :618-627）。
+   * 故 disabled 断言 → 「一个都不长」，并配**正向对照组**（同一批 testid 在自定义 workflow 下全在）
+   * ——否则 testid 拼错/整块没渲染也会让这一串 queryBy…toBeNull 假绿。
+   * wb-ed-readonly 的只读说明随 StepEditor 卸载失去渲染方，其对位是 wb-ro-pill（工具条）+
+   * 逐列 wb-lane-lock-* 锁徽章 + 「+ 添加阶段」钮的 title（后者已由本文件 stepper describe 钉住）。
+   */
+  it('default：顶部只读态统一表达，阶段内零编辑入口、无保存钮', async () => {
     renderView()
     await screen.findByTestId('wb-step-draft')
     fireEvent.click(screen.getByTestId('wb-wf-btn'))
@@ -374,11 +946,36 @@ describe('WorkbenchView T13 default workflow 只读态（验收④）', () => {
     await screen.findByTestId('wb-step-open')
 
     expect(screen.getByTestId('wb-ro-pill')).toHaveTextContent('内置 · 只读')
-    expect(screen.getByTestId('wb-ed-readonly')).toHaveTextContent(/只读镜像/)
-    expect(screen.getByLabelText('阶段名称')).toBeDisabled()
-    expect(screen.getByRole('switch', { name: '复核门' })).toBeDisabled()
+    // 阶段导航保持只读；锁定原因统一放在顶部，避免每个阶段重复图标并与复核门重叠。
+    for (const p of ['open', 'explore', 'spec', 'build', 'verify', 'ship', 'archive']) {
+      expect(screen.queryByTestId(`wb-lane-lock-${p}`)).toBeNull()
+      expect(screen.queryByTestId(`wb-lane-grip-${p}`)).toBeNull()
+    }
+    expect(screen.queryByTestId('wb-lane-gate-sw-open')).toBeNull()
+    expect(screen.queryByTestId('wb-lane-rm-open')).toBeNull()
+    expect(screen.queryByTestId('wb-lane-out-add-open')).toBeNull()
+    expect(screen.queryByTestId('wb-lane-sk-add-open')).toBeNull()
+    expect(screen.queryByTestId('wb-mand-add-open')).toBeNull()
+    expect(screen.getByTestId('wb-track-settings-toggle')).toBeEnabled()
+    expect(screen.queryByRole('switch')).toBeNull()
+    expect(screen.queryByTestId('wb-add-stage-open')).toBeNull()
     expect(screen.queryByTestId('wb-save')).toBeNull()
     expect(screen.queryByTestId('wb-dirty')).toBeNull()
+  })
+
+  it('对照组：同一批编辑入口在自定义 workflow 下全部在场（证明上一条的反向断言有牙）', async () => {
+    renderView()
+    await screen.findByTestId('wb-step-draft')
+    expect(screen.getByTestId('wb-lane-name-draft')).toBeInTheDocument()
+    expect(screen.getByTestId('wb-lane-gate-sw-draft')).toBeInTheDocument()
+    expect(screen.getByTestId('wb-lane-rm-draft')).toBeInTheDocument()
+    expect(screen.getByTestId('wb-lane-grip-draft')).toBeInTheDocument()
+    expect(screen.queryByTestId('wb-lane-out-add-draft')).toBeNull()
+    expect(screen.getByTestId('wb-lane-sk-add-draft')).toBeInTheDocument()
+    expect(screen.getByTestId('wb-add-stage-open')).toBeInTheDocument()
+    expect(screen.getByTestId('wb-save')).toBeInTheDocument()
+    expect(screen.queryByTestId('wb-ro-pill')).toBeNull()
+    expect(screen.queryByTestId('wb-lane-lock-draft')).toBeNull()
   })
 })
 
@@ -395,14 +992,12 @@ function lastSavedDef(): (WbWorkflowDef & { root: string }) | undefined {
 
 /** rail 内按 DOM 顺序排列的阶段卡 id 序（v6 T11：StepperRail 重写为流程带后按
  *  data-testid 前缀取值，不再依赖 CSS 类名——「+ 添加阶段」按钮没有 data-testid，
- *  天然不会被此选择器命中，比原先绑 CSS 类名更不脆弱）。查询范围收在 `.wb8-stages`
- *  （v8-E 阶段卡横排容器,原 `.wb-flow`）内（而非整个 workbench-view）：StepEditor.tsx 的
- *  编辑区外壳也用了 'wb-step-editor' 这个 testid，前缀恰好同款，不收范围会被一起命中，
- *  数出第 4 个「阶段」。 */
+ *  天然不会被此选择器命中，比原先绑 CSS 类名更不脆弱）。查询范围收在阶段卡横排容器
+ *  `wb-stages`（v10b tailwind 迁移后类名不再是锚点，改 data-testid 寻址）内（而非整个
+ *  workbench-view）：StepEditor.tsx 的编辑区外壳也用了 'wb-step-editor' 这个 testid，
+ *  前缀恰好同款，不收范围会被一起命中，数出第 4 个「阶段」。 */
 function railStepOrder(): string[] {
-  const root = screen.getByTestId('workbench-view')
-  const rail = root.querySelector('.wb8-stages')
-  if (!rail) return []
+  const rail = screen.getByTestId('wb-stages')
   return Array.from(rail.querySelectorAll<HTMLElement>('[data-testid^="wb-step-"]')).map((el) => el.getAttribute('data-testid') ?? '')
 }
 
@@ -466,8 +1061,10 @@ describe('WorkbenchView 添加阶段 Dialog（验收反馈#4，补齐 T13 遗留
     // Dialog 关闭、新卡插在 review 与 ship 之间、选中态切到新阶段、进入 dirty
     expect(screen.queryByTestId('wb-add-stage')).toBeNull()
     expect(railStepOrder()).toEqual(['wb-step-draft', 'wb-step-review', 'wb-step-qa-gate', 'wb-step-ship'])
+    // P4 迁移：选中态读数从 wb-editor-stage（StepEditor 卡头）换成泳道 aria-current
+    // （同「选中态」describe 的登记）。「插入后选中态切到新阶段」这条行为本身没变。
     expect(screen.getByTestId('wb-step-qa-gate')).toHaveAttribute('aria-current', 'step')
-    expect(screen.getByTestId('wb-editor-stage')).toHaveTextContent('qa-gate')
+    expect(screen.getByTestId('wb-step-review')).not.toHaveAttribute('aria-current')
     expect(screen.getByTestId('wb-dirty')).toBeInTheDocument()
 
     fireEvent.click(screen.getByTestId('wb-save'))
@@ -489,7 +1086,7 @@ describe('WorkbenchView 添加阶段 Dialog（验收反馈#4，补齐 T13 遗留
     expect(saved?.steps.find((s) => s.id === 'ship')?.transitions).toEqual([])
   })
 
-  it('选中末尾阶段（ship）后添加 → 追加到末尾，不产生悬空边（末尾插入保持终点语义）', async () => {
+  it('选中末尾阶段（ship）后添加 → 追加到末尾，原终点自动接到新终点', async () => {
     renderView()
     await screen.findByTestId('wb-step-draft')
     fireEvent.click(screen.getByTestId('wb-step-ship'))
@@ -506,8 +1103,10 @@ describe('WorkbenchView 添加阶段 Dialog（验收反馈#4，补齐 T13 遗留
 
     const saved = lastSavedDef()
     expect(saved?.steps.map((s) => s.id)).toEqual(['draft', 'review', 'ship', 'notify'])
-    expect(saved?.steps.find((s) => s.id === 'ship')?.transitions).toEqual([]) // 未被强行接上新 step
-    expect(saved?.steps.find((s) => s.id === 'notify')?.transitions).toEqual([]) // 末尾插入不造悬空边
+    expect(saved?.steps.find((s) => s.id === 'ship')?.transitions).toEqual([
+      { event: 'ship-complete', to: 'notify' },
+    ])
+    expect(saved?.steps.find((s) => s.id === 'notify')?.transitions).toEqual([])
   })
 
   it('插入后未保存即切 workflow → 触发脏守卫确认 Dialog（脏守卫四件套复用生效）', async () => {
@@ -527,25 +1126,59 @@ describe('WorkbenchView 添加阶段 Dialog（验收反馈#4，补齐 T13 遗留
 
 // ── T16：「自动运行(Loop)」卡挂载 + 右栏摘要「自动运行」行 ──
 
-describe('WorkbenchView T16 Loop 卡与摘要行', () => {
-  it('无 loop 的 root：编辑卡后挂空态 Loop 卡（loops.yaml 教学），摘要行显「未配置」', async () => {
+/**
+ * P4 迁移登记：「自动运行」页签退役 → LoopCard **原件**改挂右栏「完整治理设置」Dialog
+ * （wb-rail-loop-full → wb-rail-loop-dialog，WorkbenchSideRail.tsx:161-183）。
+ * 被测行为不变：① 卡吃的是同一份 useLoops rows（「数据住共同祖先」——宿主 WorkbenchView 拉、
+ * 治理轨与 Dialog 共用），故空态/真参数渲染逐字照旧；② 右栏摘要「自动运行」行读的是已保存
+ * 真值，与卡是否展开无关（下面刻意**不开 Dialog** 就断摘要行，钉住这条解耦）。
+ *
+ * §删除登记：「编辑卡在前、Loop 卡在后（demo 布局序）」——StepEditor（wb-editor）已从本视图
+ * 卸载，两者不再同列共存，这条 DOM 序断言失去参照物。Loop 卡现在的位置语义（右栏 Dialog 内）
+ * 由下面的 within(dialog) 断言承载。
+ */
+describe('WorkbenchView T16 Loop 卡（右栏「完整治理设置」Dialog）与摘要行', () => {
+  /** 开「完整治理设置」Dialog（P4 落点：原 sheet「自动运行」页签的对位）。 */
+  async function openLoopDialog(): Promise<HTMLElement> {
+    if (screen.queryByTestId('wb-side-col') === null) await openGovernance()
+    fireEvent.click(screen.getByTestId('wb-rail-loop-full'))
+    return screen.findByTestId('wb-rail-loop-dialog')
+  }
+
+  it('入口默认收着：LoopCard 不挂载；点「完整治理设置」→ Dialog 内挂 LoopCard 原件（能力未丢）', async () => {
     renderView()
     await screen.findByTestId('wb-step-draft')
-    const card = await screen.findByTestId('wb-loop-card')
-    expect(within(card).getByTestId('lp-empty')).toHaveTextContent('.pipeline/loops.yaml')
-    // 编辑卡在前、Loop 卡在后（demo 布局序）
-    const editor = screen.getByTestId('wb-editor')
-    expect(editor.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    await waitFor(() => expect(screen.getByTestId('wb-sum-loop')).toHaveTextContent('未配置'))
+    await openGovernance()
+    // 反向断言配正向对照：入口钮在场（能力可达），只是卡还没挂
+    expect(screen.getByTestId('wb-rail-loop-full')).toBeInTheDocument()
+    expect(screen.queryByTestId('wb-loop-card')).toBeNull()
+
+    const dialog = await openLoopDialog()
+    expect(within(dialog).getByTestId('wb-loop-card')).toBeInTheDocument()
   })
 
-  it('有 loop：卡渲染真参数，摘要行 = 开 · 今日 runsToday/max_runs_per_day（已保存真值口径）', async () => {
+  it('无 loop 的 root：Dialog 内是空态 Loop 卡（loops.yaml 教学），摘要行显「未配置」', async () => {
+    renderView()
+    await screen.findByTestId('wb-step-draft')
+    await openGovernance()
+    // 摘要行不依赖 Dialog 展开（读的是宿主 useLoops 的已保存真值）——先断它，再开卡
+    await waitFor(() => expect(screen.getByTestId('wb-sum-loop')).toHaveTextContent('未配置'))
+
+    const dialog = await openLoopDialog()
+    const card = within(dialog).getByTestId('wb-loop-card')
+    expect(within(card).getByTestId('lp-empty')).toHaveTextContent('.pipeline/loops.yaml')
+  })
+
+  it('有 loop：Dialog 内的卡渲染真参数，摘要行 = 开 · 今日 runsToday/max_runs_per_day（已保存真值口径）', async () => {
     loopRows = [LOOP_ROW]
     renderView()
     await screen.findByTestId('wb-step-draft')
-    const card = await screen.findByTestId('wb-loop-card')
-    expect(within(card).getByTestId('lp-goal')).toHaveValue('把旧版工单卡样式逐个迁移到 SaaS 卡片风')
+    await openGovernance()
     await waitFor(() => expect(screen.getByTestId('wb-sum-loop')).toHaveTextContent('开 · 今日 3/24'))
+
+    const dialog = await openLoopDialog()
+    const card = within(dialog).getByTestId('wb-loop-card')
+    await waitFor(() => expect(within(card).getByTestId('lp-goal')).toHaveValue('把旧版工单卡样式逐个迁移到 SaaS 卡片风'))
     // 单 loop：卡头下拉隐藏
     expect(within(card).queryByTestId('lp-loop-select')).toBeNull()
   })
@@ -554,6 +1187,7 @@ describe('WorkbenchView T16 Loop 卡与摘要行', () => {
     loopRows = [{ ...LOOP_ROW, status: 'paused' }]
     renderView()
     await screen.findByTestId('wb-step-draft')
+    await openGovernance()
     await waitFor(() => expect(screen.getByTestId('wb-sum-loop')).toHaveTextContent('停 · 今日 3/24'))
   })
 })
@@ -628,7 +1262,7 @@ describe('WorkbenchView 流程带真实计数 / running 脉冲（v6 T11 集成�
     expect(screen.queryByTestId('wb-flow-gloss-draft')).toBeNull()
   })
 
-  it('传入 snapshot：计数气泡精确等于该阶段真实 change 数，running 脉冲只在 automation===running 的阶段渲染', async () => {
+  it('传入 snapshot：编辑器不展示在办数量，running 脉冲只在 automation===running 的阶段渲染', async () => {
     const snap = makeSnapshot([
       makeProject(ROOT, [
         makeChange('c1', 'draft', { fields: { workflow: 'release-train' } }),
@@ -640,16 +1274,16 @@ describe('WorkbenchView 流程带真实计数 / running 脉冲（v6 T11 集成�
     renderView({ snapshot: snap })
     await screen.findByTestId('wb-step-draft')
 
-    expect(screen.getByTestId('wb-flow-count-draft')).toHaveTextContent('1')
-    expect(screen.getByTestId('wb-flow-count-review')).toHaveTextContent('2')
-    expect(screen.queryByTestId('wb-flow-count-ship')).toBeNull() // 唯一一条已归档，真实计数为 0
+    expect(screen.queryByTestId('wb-flow-count-draft')).toBeNull()
+    expect(screen.queryByTestId('wb-flow-count-review')).toBeNull()
+    expect(screen.queryByTestId('wb-flow-count-ship')).toBeNull()
 
     expect(screen.queryByTestId('wb-flow-gloss-draft')).toBeNull()
-    expect(screen.getByTestId('wb-flow-gloss-review')).toBeInTheDocument()
+    expect(screen.getAllByTestId('wb-flow-gloss-review')).toHaveLength(1)
     expect(screen.queryByTestId('wb-flow-gloss-ship')).toBeNull()
   })
 
-  it('切换 workflow 后计数随新 workflow 重新分桶（default 7 阶段投影）', async () => {
+  it('切换 workflow 后仍不在编辑器混入任务计数', async () => {
     const snap = makeSnapshot([
       makeProject(ROOT, [
         makeChange('c1', 'build', {}), // fields 空 → changeWorkflowName 回落 'default'
@@ -662,36 +1296,18 @@ describe('WorkbenchView 流程带真实计数 / running 脉冲（v6 T11 集成�
     fireEvent.click(screen.getByTestId('wb-wf-btn'))
     fireEvent.click(await screen.findByTestId('wb-wf-item-default'))
     await screen.findByTestId('wb-step-open')
-    expect(screen.getByTestId('wb-flow-count-build')).toHaveTextContent('1')
+    expect(screen.queryByTestId('wb-flow-count-build')).toBeNull()
   })
 })
 
-describe('WorkbenchView 门徽章 popover（v6 T11 集成，静态 hook 元数据真接线）', () => {
-  it('gate 阶段（review）点击门徽章：popover 显示 gate.sh + interactive-skill-gate.sh 的真实人话名/说明（复用既有 hk_name_*/hk_desc_* 词典）', async () => {
+describe('WorkbenchView 阶段总览复核信息收口', () => {
+  it('总览不渲染复核徽标；选择有复核门的阶段后只在详情展示真实状态', async () => {
     renderView()
     await screen.findByTestId('wb-step-draft')
-    const gate = screen.getByTestId('wb-flow-gate-review')
-    fireEvent.click(gate)
-    const pop = screen.getByTestId('wb-flow-gatepop-review')
-    expect(within(pop).getByText('门拦截')).toBeInTheDocument()
-    expect(within(pop).getByText(/复核没过时，挡住技能调用与写文件/)).toBeInTheDocument()
-    expect(within(pop).getByText('技能解锁检查')).toBeInTheDocument()
-    expect(within(pop).getByText(/依赖顺序没到的技能直接拦下/)).toBeInTheDocument()
-  })
-
-  it('非 gate 阶段（draft/ship）不渲染门徽章', async () => {
-    renderView()
-    await screen.findByTestId('wb-step-draft')
-    expect(screen.queryByTestId('wb-flow-gate-draft')).toBeNull()
-    expect(screen.queryByTestId('wb-flow-gate-ship')).toBeNull()
-  })
-
-  it('点击门徽章不会连带触发选中阶段切换（编辑区仍是原选中阶段）', async () => {
-    renderView()
-    await screen.findByTestId('wb-step-draft')
-    expect(screen.getByTestId('wb-editor-stage')).toHaveTextContent('draft')
-    fireEvent.click(screen.getByTestId('wb-flow-gate-review'))
-    expect(screen.getByTestId('wb-editor-stage')).toHaveTextContent('draft')
+    expect(screen.queryByTestId('wb-flow-gate-review')).toBeNull()
+    fireEvent.click(within(screen.getByTestId('wb-step-review')).getByRole('button', { name: '选择阶段 人工复核' }))
+    expect(screen.getByTestId('wb-step-review')).toHaveAttribute('aria-current', 'step')
+    expect(screen.getByTestId('wb-selected-gate')).toHaveTextContent('复核门')
   })
 })
 
@@ -703,8 +1319,22 @@ describe('WorkbenchView 门徽章 popover（v6 T11 集成，静态 hook 元数�
  * v8-E 迁移登记：Hook 时序线再挪进「阶段编辑」页签(①断言同步)、矩阵入口卡挪进「技能健康」
  * 页签(④断言收窄 within(wb-pane-health));安全门说明卡(③)留右栏不动。开关按选中阶段读写(②)
  * 与矩阵入口脏守卫路径(④)的行为断言全部保留——守门等强度,只换宿主位置。
+ *
+ * ── v11 P4 迁移登记（2026-07-15，五页签退役）──
+ * ① Hook 时序线**第三次搬家**：右栏 → 「阶段编辑」页签 → **画布逐列 Hook 区**
+ *    （wb-lane-hooks-${stage}）。断言随之从「wb-hooks 在 pane 内、不在编辑卡内」改成
+ *    「Hook 区在每条泳道内、右栏仍无 wb-side-hooks」。
+ * ② 「开关按**当前选中阶段**读写」→ 「开关按**所在列**读写」：画布一屏 N 列各一份 Hook 区，
+ *    键的阶段半边恒 = 本列 lane.id（OrchestrationBoard.tsx:892-894），不再读 selectedId。
+ *    这是增强不是缩水（不必先选中就能改任意列），故断言改为「点 review 列的开关 → phase=review，
+ *    且此刻选中的是 draft」——比原来更严：写键若回退成读 selectedId，这条当场红。
+ * ③ 安全门说明卡留右栏不动，断言原样。
+ * ④ 矩阵入口卡（wb-mx-open）随「技能健康」页签一并被摘（生产侧决定，i18n 的 mx_open/
+ *    mx_open_here 已成孤儿键——已上报）。它守的**能力**（default 的强制技能矩阵可达）未丢，
+ *    改由 workflow 下拉切 default → 画布技能区渲 wb-mand-* + 看板级 wb-track-* 承载，
+ *    故 ④ 迁移成对新落点的断言（含自定义 workflow 下不渲染的对照组）。
  */
-describe('WorkbenchView v6 T12（v8-E 页签化后）：Hook 时序/安全门/矩阵卡', () => {
+describe('WorkbenchView v6 T12（v11 P4 画布化后）：Hook 区/安全门/default 强制技能矩阵', () => {
   const HOOKS_BODY = {
     hooks: [
       { id: 'session-start', event: 'SessionStart', configurable: true },
@@ -730,22 +1360,32 @@ describe('WorkbenchView v6 T12（v8-E 页签化后）：Hook 时序/安全门/�
     }) as unknown as typeof fetch
   })
 
-  it('① Hook 时序线并入「阶段编辑」页签(v8-E)——wb-hooks 在 wb-pane-stage 内、不在编辑卡内,右栏 wb-side-hooks 卡已撤', async () => {
+  /** 唯一纵向编辑器只渲染当前阶段；切换阶段后读取该阶段完整 Hook 时序。 */
+  async function selectLaneHooks(stage: string): Promise<HTMLElement> {
+    const lane = await screen.findByTestId(`wb-step-${stage}`)
+    fireEvent.click(within(lane).getByRole('button', { name: /选择阶段/ }))
+    return screen.getByTestId(`wb-lane-hooks-${stage}`)
+  }
+
+  it('① Hook 区进入唯一纵向编辑器——切换阶段时原位展示该阶段 Hook，右栏不重复', async () => {
     renderView()
-    const pane = await screen.findByTestId('wb-pane-stage')
-    await within(pane).findByTestId('wb-hooks')
-    // 编辑卡内仍不平铺 hook 区（v6 T12 的既有守门等价物：时序线是编辑卡的兄弟,不是子分区）
-    const editor = await screen.findByTestId('wb-editor')
-    expect(within(editor).queryByTestId('wb-hooks')).toBeNull()
-    // 右栏宿主卡随 v8-E 右栏瘦身撤下
-    expect(screen.queryByTestId('wb-side-hooks')).toBeNull()
+    await screen.findByTestId('wb-step-draft')
+    for (const p of ['draft', 'review', 'ship']) {
+      expect(await selectLaneHooks(p)).toBeInTheDocument()
+    }
+    // 右栏宿主卡自 v8-E 右栏瘦身起就已撤下，P4 后仍不许回潮
+    const side = await openGovernance()
+    expect(within(side).queryByTestId('wb-side-hooks')).toBeNull()
+    expect(within(side).queryByTestId('wb-lane-hooks-draft')).toBeNull()
+    // 正向对照（防上面两条 queryBy 假绿）：右栏确实渲染着它该有的东西
+    expect(within(side).getByTestId('wb-sum-hooks')).toBeInTheDocument()
   })
 
-  it('② 开关按当前选中阶段读写:切到 review 后 POST 键的阶段半边是 review', async () => {
+  it('② 开关按当前编辑阶段写回：在 review 编辑器点击开关 → POST phase=review', async () => {
     renderView()
-    await screen.findByTestId('wb-hooks')
-    fireEvent.click(screen.getByTestId('wb-step-review'))
-    fireEvent.click(await screen.findByTestId('wb-hk-sw-session-start'))
+    const zone = await selectLaneHooks('review')
+
+    fireEvent.click(within(zone).getByTestId('wb-lane-hk-sw-review-session-start'))
     await waitFor(() => expect(hookPosts.length).toBe(1))
     const body = JSON.parse(hookPosts[0]!) as { hook: string; phase: string; enabled: boolean }
     expect(body.hook).toBe('session-start')
@@ -755,108 +1395,120 @@ describe('WorkbenchView v6 T12（v8-E 页签化后）：Hook 时序/安全门/�
 
   it('③ 安全门说明卡:强制常开与未接线两段人话说明(决议#2 回归)', async () => {
     renderView()
-    const card = await screen.findByTestId('wb-side-safegate')
+    await screen.findByTestId('wb-step-draft')
+    const side = await openGovernance()
+    const card = within(side).getByTestId('wb-side-safegate')
     expect(card.textContent).toContain('强制常开')
     expect(card.textContent).toContain('不做假开关')
   })
 
-  it('④ 矩阵入口卡(v8-E 已并入「技能健康」页签):自定义 workflow 下可点,点击切到 default;default 下按钮禁用', async () => {
-    renderView()
-    const health = await screen.findByTestId('wb-pane-health')
-    const btn = await within(health).findByTestId('wb-mx-open')
-    expect(btn).toBeEnabled()
-    fireEvent.click(btn)
-    await waitFor(() => expect(screen.getByTestId('wb-wf-btn').textContent).toContain('default'))
-    expect(screen.getByTestId('wb-mx-open')).toBeDisabled()
-  })
-})
-
-/**
- * v8-E（意见⑥）：主列 sheet 页签化——五页签(阶段编辑/自动运行/AFK 执行/凭证/技能健康),
- * pane 恒挂载切 .on 显隐(各卡数据面行为与平铺时代一致,既有 T16/T21/T8 用例不用点页签就能
- * 寻址);点阶段卡驱动 sheet 切回「阶段编辑」页。墨线/crossfade 是 GSAP 装饰动画,jsdom 不断言。
- */
-describe('WorkbenchView v8-E：sheet 页签化', () => {
-  it('五页签渲染,默认「阶段编辑」选中;切页签换 aria-selected 与 pane .on;各页宿主卡就位', async () => {
+  it('④ default 强制技能矩阵(原「矩阵入口卡」的能力落点):切到 default → 画布技能区渲矩阵 + 看板级 track 选择器', async () => {
     renderView()
     await screen.findByTestId('wb-step-draft')
-    for (const k of ['stage', 'loop', 'afk', 'secrets', 'health']) {
-      expect(screen.getByTestId(`wb-tab-${k}`)).toBeInTheDocument()
-      expect(screen.getByTestId(`wb-pane-${k}`)).toBeInTheDocument()
+    // 自定义 workflow 不渲染 default 专属矩阵，但仍能选择项目级运行轨道。
+    expect(screen.queryByTestId('wb-mand-draft')).toBeNull()
+    expect(screen.getByTestId('wb-track-tabs')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByTestId('wb-wf-btn'))
+    fireEvent.click(await screen.findByTestId('wb-wf-item-default'))
+    await screen.findByTestId('wb-step-open')
+
+    // 矩阵随当前阶段进入同一 Skill 区；切换阶段后原位更新，track 仍是全局单份。
+    for (const p of ['open', 'build', 'verify']) {
+      const lane = screen.getByTestId(`wb-step-${p}`)
+      fireEvent.click(within(lane).getByRole('button', { name: /选择阶段/ }))
+      expect(await screen.findByTestId(`wb-mand-${p}`)).toBeInTheDocument()
     }
-    expect(screen.getByTestId('wb-tab-stage')).toHaveAttribute('aria-selected', 'true')
-    expect(screen.getByTestId('wb-pane-stage').className).toContain('on')
-    // 各页宿主卡在自己的 pane 里（恒挂载——换页签不重挂数据面）
-    expect(within(screen.getByTestId('wb-pane-stage')).getByTestId('wb-editor')).toBeInTheDocument()
-    expect(within(screen.getByTestId('wb-pane-loop')).getByTestId('wb-loop-card')).toBeInTheDocument()
-
-    fireEvent.click(screen.getByTestId('wb-tab-loop'))
-    expect(screen.getByTestId('wb-tab-loop')).toHaveAttribute('aria-selected', 'true')
-    expect(screen.getByTestId('wb-tab-stage')).toHaveAttribute('aria-selected', 'false')
-    expect(screen.getByTestId('wb-pane-loop').className).toContain('on')
-    expect(screen.getByTestId('wb-pane-stage').className).not.toContain('on')
-  })
-
-  it('点阶段卡=选中并驱动 sheet 切回「阶段编辑」页签(其它页签停留态被拉回)', async () => {
-    renderView()
-    await screen.findByTestId('wb-step-draft')
-    fireEvent.click(screen.getByTestId('wb-tab-secrets'))
-    expect(screen.getByTestId('wb-tab-secrets')).toHaveAttribute('aria-selected', 'true')
-
-    fireEvent.click(screen.getByTestId('wb-step-review'))
-    expect(screen.getByTestId('wb-tab-stage')).toHaveAttribute('aria-selected', 'true')
-    expect(screen.getByTestId('wb-pane-stage').className).toContain('on')
-    expect(screen.getByTestId('wb-editor-stage')).toHaveTextContent('review')
-  })
-
-  it('右栏瘦身:摘要/安全门/最近流转留守,SkillHealthPanel 并入「技能健康」页签(skh 标题在 pane 内)', async () => {
-    renderView()
-    await screen.findByTestId('wb-step-draft')
-    const side = screen.getByTestId('workbench-view').querySelector('.side-col')
-    expect(side).not.toBeNull()
-    expect(within(side as HTMLElement).getByTestId('wb-sum-stages')).toBeInTheDocument()
-    expect(within(side as HTMLElement).getByTestId('wb-side-safegate')).toBeInTheDocument()
-    expect(within(side as HTMLElement).getByTestId('wb-recent')).toBeInTheDocument()
-    // 技能齐全度面不再在右栏——在「技能健康」页签里
-    expect(within(side as HTMLElement).queryByText('技能齐全度')).toBeNull()
-    expect(within(screen.getByTestId('wb-pane-health')).getByText('技能齐全度')).toBeInTheDocument()
+    expect(screen.getByTestId('wb-track-tabs')).toBeInTheDocument()
+    // 用户看到阶段入口与 Skill 调用链，不暴露“无序集合”实现术语。
+    fireEvent.click(within(screen.getByTestId('wb-step-build')).getByRole('button', { name: /选择阶段/ }))
+    const chain = screen.getByTestId('wb-mand-parallel-build')
+    expect(chain).toHaveTextContent('阶段开始')
+    expect(chain).not.toHaveTextContent('无序')
   })
 })
 
 /**
- * demo↔生产残余差异清单 #4（评审登记项，补测试不改实现）：五个 wb8-pane 恒挂载、只切 .on
- * 类显隐（见上方 JSX 头注释 :748-749）——切页签不卸载 StepEditor，编辑到一半、还没提交的
- * 草稿应原样保留。探针刻意不选「阶段名称」input：那是受控自 def（WorkbenchView 状态，T13
- * 起 def 本身就是编辑草稿），即便 pane 被条件卸载重挂载，重新读同一个 def.steps[].label 也会
- * "看似"保留，测不出真差异。StepEditor 里唯一真正活在组件自身 useState、不进 def 的，是
- * 「+ 添加」产出物 chip 的输入态（adding/draft，见 StepEditor.tsx commitAdd 头注释）——
- * 若 pane 被卸载重挂载，这个 useState 必被清空复位，是能证伪的探针。
+ * ══════════════════════════════════════════════════════════════════════════════════════
+ * v11 P4（2026-07-15）：原「WorkbenchView v8-E：sheet 页签化」describe —— **整组删除**。
+ * ══════════════════════════════════════════════════════════════════════════════════════
+ * 逐条登记「原断言 → 为何随页签消失」（这三条是本轮**唯二**够格被删的那类：被断言的概念
+ * 本身不存在了，不是换了个地方）：
+ *
+ * ① 「五页签渲染,默认『阶段编辑』选中;切页签换 aria-selected 与 pane data-state」
+ *    → **删**。wb-tab-* / wb-pane-* / tab 状态整套随 sheet 退役（WorkbenchView.tsx:1147-1158
+ *    的退役登记）。「页签」这个概念没了，「点 tab 切 pane」就无从谈起。
+ *    其中「各页宿主卡就位（恒挂载）」这半条**没有被删**，而是拆到了各自的新宿主：
+ *      · wb-editor（StepEditor）→ 编辑能力迁画布就地编，由本文件 T13 组全量守门；
+ *      · wb-loop-card → 迁「完整治理设置」Dialog，由本文件 T16 组守门（含「入口在、卡按需挂」）。
+ *
+ * ② 「点阶段卡=选中并驱动 sheet 切回『阶段编辑』页签(其它页签停留态被拉回)」
+ *    → **删**。这条断言的**全部内容**就是「选中动作会把 sheet 页签拉回第一页」——没有页签就
+ *    没有「拉回」。其中「点阶段卡=选中」这半条由本文件「选中态」describe 全量接管（那里连
+ *    aria-current/data-state 双读数与互斥性一起钉）。
+ *
+ * ③ 「右栏瘦身:摘要/安全门/最近流转留守,SkillHealthPanel 并入『技能健康』页签」
+ *    → **迁移**（不是删）：见下方「v11 P4：右栏重组」describe——留守三卡照旧断，
+ *    SkillHealthPanel 的落点从「技能健康」页签换成「机器配置」折叠区。
+ *
+ * ④ 原「pane 恒挂载保留未提交草稿（demo↔生产差异清单 #4）」describe
+ *    → **删**。这条用例的探针与被证伪对象**双双随页签退役**：探针是 StepEditor 的
+ *    adding/draft 本地 state（组件已从本视图卸载），被证伪对象是「pane 会不会被条件卸载」
+ *    （pane 不存在了）。画布无页签、无 pane 切换，「切走再切回」这个动作在新 IA 里没有对应操作
+ *    ——不存在「换个地方还测同一件事」的选项。
+ *    注：画布自己的就地输入态（wb-lane-out-input-* 的 outAdd 本地 state）另有守门——
+ *    OrchestrationBoard.test.tsx 的 P1 产出区用例覆盖其提交/取消/校验语义。
+ *    「墨线 ink GSAP 滑动 + pane crossfade」本就在 jsdom 不断言（原 describe 头注释已声明），
+ *    随页签一并作废，无迁移目标。
  */
-describe('WorkbenchView v8-E：pane 恒挂载保留未提交草稿（demo↔生产差异清单 #4）', () => {
-  it('阶段编辑页「+ 添加」产出物输入框键入草稿不提交，切到「自动运行」页再切回，草稿原样保留', async () => {
+
+/**
+ * v11 P4：右栏重组（原「v8-E 右栏瘦身」的迁移落点）。
+ * 五页签退役后右栏 = 治理轨(P3 三卡) +「完整治理设置」入口 +「机器配置」折叠区 + 既有留守卡。
+ * 本组守两件事：① 留守三卡（摘要/安全门/最近流转）没在重组里丢；② AFK 执行/凭证/技能健康
+ * 三张 per-root 机器卡的**能力未丢**——从「技能健康/AFK/凭证」三个页签换成「机器配置」折叠区，
+ * 默认收起（机器级配置与当前 workflow 正交，不是日常路径），展开后三件原件都在。
+ */
+describe('WorkbenchView v11 P4：右栏重组（治理轨 + 机器配置折叠区）', () => {
+  it('留守三卡仍在右栏：摘要/安全门/最近流转（重组不许顺手丢东西）', async () => {
     renderView()
     await screen.findByTestId('wb-step-draft')
+    // v10b 迁移：右栏容器从 .side-col 类锚点改 data-testid 寻址
+    const side = await openGovernance()
+    expect(within(side).getByTestId('wb-sum-stages')).toBeInTheDocument()
+    expect(within(side).getByTestId('wb-side-safegate')).toBeInTheDocument()
+    expect(within(side).getByTestId('wb-recent')).toBeInTheDocument()
+    // P3 治理轨在右栏顶部（P4 的「完整治理设置」入口是它的延伸）
+    expect(within(side).getByTestId('wb-gov-rail')).toBeInTheDocument()
+    expect(within(side).getByTestId('wb-rail-loop-full')).toBeInTheDocument()
+  })
 
-    // 进入「+ 添加」就地输入态，键入草稿——不按 Enter/失焦提交，此刻只活在 StepEditor 本地 state。
-    fireEvent.click(screen.getByRole('button', { name: '+ 添加' }))
-    const input = screen.getByTestId('wb-ed-output-input')
-    fireEvent.change(input, { target: { value: 'draft_wip_field' } })
-    expect(input).toHaveValue('draft_wip_field')
+  /**
+   * 原 v8-E ③ 的迁移：「技能齐全度不在右栏平铺、在『技能健康』页签里」→ 「不平铺、在
+   * 『机器配置』折叠区里，且默认收起」。被测行为（右栏不平铺这块面、但它可达）不变；
+   * P4 还多守一条：**闭合即卸载**（WorkbenchSideRail.tsx:134 的 `{machineOpen && …}`）——
+   * 三张卡各自 mount 即 fetch，闭合还留在 DOM = 给用户没打开的面板白烧 3 个请求。
+   */
+  it('「机器配置」默认折叠：三件机器卡都不挂载；展开后 AFK/凭证/技能健康三件原件在场', async () => {
+    renderView()
+    await screen.findByTestId('wb-step-draft')
+    const side = await openGovernance()
 
-    // 切到「自动运行」页签（pane 显隐切 .on，不卸载）。
-    fireEvent.click(screen.getByTestId('wb-tab-loop'))
-    expect(screen.getByTestId('wb-pane-loop').className).toContain('on')
-    expect(screen.getByTestId('wb-pane-stage').className).not.toContain('on')
+    // 默认收起：入口在（能力可达）、内容不挂载（闭合即卸载）
+    const summary = within(side).getByTestId('wb-rail-machine-summary')
+    expect(within(side).getByTestId('wb-rail-machine')).not.toHaveAttribute('open')
+    expect(within(side).queryByText('技能齐全度')).toBeNull()
 
-    // 切回「阶段编辑」页——若 StepEditor 曾被卸载重挂载，adding/draft 这两个本地 state 会复位，
-    // 「+ 添加」输入框会消失、换回未展开的 + 按钮；恒挂载则原样还在同一个输入框、同一段草稿文本。
-    fireEvent.click(screen.getByTestId('wb-tab-stage'))
-    expect(screen.getByTestId('wb-pane-stage').className).toContain('on')
-    expect(screen.getByTestId('wb-ed-output-input')).toHaveValue('draft_wip_field')
+    fireEvent.click(summary)
 
-    // 仍是未提交草稿：没有被打断提交成正式产出物 chip，保存钮也不会因此被点亮。
-    expect(within(screen.getByTestId('wb-ed-outputs')).queryByText('draft_wip_field')).toBeNull()
-    expect(screen.queryByTestId('wb-dirty')).toBeNull()
+    expect(within(side).getByTestId('wb-rail-machine')).toHaveAttribute('open')
+    // 三件原件在场（各自渲染自己的卡头，组装件不重复贴标题）
+    expect(await within(side).findByText('技能齐全度')).toBeInTheDocument()
+    expect(within(side).getByTestId('wb-side-skillhealth')).toBeInTheDocument() // SkillHealthPanel
+    expect(within(side).getByTestId('wb-afk-card')).toBeInTheDocument() // AutomationCard
+    expect(within(side).getByTestId('wb-secrets-card')).toBeInTheDocument() // SecretsCard
+    // 区头说明：讲清「这些是 per-root 机器级配置，与当前 workflow 无关」
+    expect(within(side).getByTestId('wb-rail-machine-note')).toBeInTheDocument()
   })
 })
 
@@ -899,8 +1551,10 @@ describe('WorkbenchView v6 T13：最近流转(真实 history 回放)', () => {
         makeChange('c-other', 'draft', { fields: { workflow: 'default' } }),
       ]),
     })
-    const list = await screen.findByTestId('wb-recent-list')
-    const items = Array.from(list.querySelectorAll('.wb-rt-item')).map((li) => li.textContent ?? '')
+    const side = await openGovernance()
+    const list = await within(side).findByTestId('wb-recent-list')
+    // v10b 迁移：条目从 .wb-rt-item 类锚点改按列表结构（li）寻址
+    const items = Array.from(list.querySelectorAll('li')).map((li) => li.textContent ?? '')
     expect(items.length).toBe(3)
     expect(items[0]).toContain('verify_result') // 03:00 最新
     expect(items[1]).toContain('review → ship') // 02:00
@@ -911,6 +1565,7 @@ describe('WorkbenchView v6 T13：最近流转(真实 history 回放)', () => {
 
   it('分组内无 change → 空态文案,不发请求也不报错', async () => {
     renderView({ snapshot: snapWith([makeChange('c-other', 'draft', { fields: { workflow: 'default' } })]) })
-    expect(await screen.findByTestId('wb-recent-empty')).toBeInTheDocument()
+    const side = await openGovernance()
+    expect(await within(side).findByTestId('wb-recent-empty')).toBeInTheDocument()
   })
 })

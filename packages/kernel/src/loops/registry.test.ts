@@ -4,12 +4,18 @@
  * + loops.schema.json。本测试覆盖：narrow parser 嵌套结构、schema 子集全关键字、fail-loud、
  * loadRegistry 四态契约（缺文件 / 坏 yaml / 校验失败 / 合法）、autonomy_level 分级放权默认 L1。
  */
-import { describe, expect, test } from 'vitest'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterEach, beforeEach, describe, expect, test } from 'vitest'
 import {
   parseLoopsYaml,
   validateSchema,
   loadRegistry,
   LOOPS_SCHEMA,
+  nodeLoopIoStrict,
+  RegistryReadError,
+  SKILL_BUNDLE_ID_RE,
   type LoopIo,
 } from './registry.js'
 
@@ -153,8 +159,40 @@ loops:
     expect(errs.some((e) => e.includes('autonomy_level') && e.includes('one of'))).toBe(true)
   })
 
+  test('H9 旧 state 可兼容读取但不再是 registry 必填运行状态', () => {
+    const raw = parseLoopsYaml(VALID_LOOP).data as { loops: Record<string, unknown>[] }
+    const { state: _legacyState, ...withoutLegacyState } = raw.loops[0]!
+    expect(validateSchema({ version: 1, loops: [withoutLegacyState] }, LOOPS_SCHEMA)).toEqual([])
+  })
+
   test('fail-loud：schema 出现未实现关键字 → 抛（老 R3 不静默放行）', () => {
     expect(() => validateSchema(1, { type: 'integer', multipleOf: 2 })).toThrow(/unsupported schema keyword/i)
+  })
+
+  // H10 §1：skill_bundle_id 可选（缺省合法）；非空须过词法（'_all' 或 TRACK_ID_RE 形状）——
+  // 存在性语义校验（manifest 是否真声明该 profile）不在本层，属后续任务。
+  test('skill_bundle_id 可选（缺省/null 合法）；非空须过 _all|TRACK_ID_RE 词法，否则 type/pattern 报错', () => {
+    const raw = parseLoopsYaml(VALID_LOOP).data as { loops: Record<string, unknown>[] }
+    expect(validateSchema({ version: 1, loops: [raw.loops[0]] }, LOOPS_SCHEMA)).toEqual([]) // 字段缺席
+    expect(validateSchema({ version: 1, loops: [{ ...raw.loops[0], skill_bundle_id: null }] }, LOOPS_SCHEMA)).toEqual([])
+    expect(validateSchema({ version: 1, loops: [{ ...raw.loops[0], skill_bundle_id: '_all' }] }, LOOPS_SCHEMA)).toEqual([])
+    expect(validateSchema({ version: 1, loops: [{ ...raw.loops[0], skill_bundle_id: 'pm' }] }, LOOPS_SCHEMA)).toEqual([])
+
+    const badShape = validateSchema({ version: 1, loops: [{ ...raw.loops[0], skill_bundle_id: 'Bad_ID' }] }, LOOPS_SCHEMA)
+    expect(badShape.some((e) => e.includes('skill_bundle_id') && e.includes('pattern'))).toBe(true)
+
+    const badType = validateSchema({ version: 1, loops: [{ ...raw.loops[0], skill_bundle_id: 123 }] }, LOOPS_SCHEMA)
+    expect(badType.some((e) => e.includes('skill_bundle_id') && e.includes('type'))).toBe(true)
+  })
+
+  test('SKILL_BUNDLE_ID_RE：复用 T 线 TRACK_ID_RE 词法风格，额外放行保留字 `_all`', () => {
+    expect(SKILL_BUNDLE_ID_RE.test('_all')).toBe(true)
+    expect(SKILL_BUNDLE_ID_RE.test('pm')).toBe(true)
+    expect(SKILL_BUNDLE_ID_RE.test('front-end_2')).toBe(true)
+    expect(SKILL_BUNDLE_ID_RE.test('')).toBe(false) // 空串非法（区别于 null 的 unwired 语义）
+    expect(SKILL_BUNDLE_ID_RE.test('Bad_ID')).toBe(false) // 大写开头不合法
+    expect(SKILL_BUNDLE_ID_RE.test('_secret')).toBe(false) // 下划线开头只放行 `_all` 这一个字面量
+    expect(SKILL_BUNDLE_ID_RE.test('a'.repeat(33))).toBe(false) // 超 32 长度上限
   })
 })
 
@@ -209,5 +247,175 @@ describe('loadRegistry —— 四态载入契约（老 load_registry 149-177）'
     const r = loadRegistry('/repo', io({ '/repo/.pipeline/loops.yaml': bad }))
     expect(r.data).toBeNull()
     expect(r.errors.some((e) => e.includes('denylist'))).toBe(true)
+  })
+
+  // H10 §1：skill_bundle_id——旧登记表兼容（缺字段/显式 null 都归一化为 null=unwired）、
+  // 合法非空值原样读回、非法词法值拒绝整份 registry（fail-closed，同其余字段口径）。
+  describe('skill_bundle_id（H10 §1：policy 字段，缺省/null=unwired，非空须过词法）', () => {
+    test('旧 YAML 缺字段 → 归一化 null（不是空 bundle，也不是默认 bundle）', () => {
+      const r = loadRegistry('/repo', io({ '/repo/.pipeline/loops.yaml': VALID_LOOP }))
+      expect(r.errors).toEqual([])
+      expect(r.data!.loops[0]!.skill_bundle_id).toBeNull()
+    })
+
+    test('显式 null → 与缺字段同归一化为 null', () => {
+      const withNull = VALID_LOOP.replace(
+        '    autonomy_level: L2\n',
+        '    autonomy_level: L2\n    skill_bundle_id: null\n',
+      )
+      const r = loadRegistry('/repo', io({ '/repo/.pipeline/loops.yaml': withNull }))
+      expect(r.errors).toEqual([])
+      expect(r.data!.loops[0]!.skill_bundle_id).toBeNull()
+    })
+
+    test('合法非空值（_all / 具体 profile id）→ 原样读回', () => {
+      const withAll = VALID_LOOP.replace(
+        '    autonomy_level: L2\n',
+        '    autonomy_level: L2\n    skill_bundle_id: _all\n',
+      )
+      const rAll = loadRegistry('/repo', io({ '/repo/.pipeline/loops.yaml': withAll }))
+      expect(rAll.errors).toEqual([])
+      expect(rAll.data!.loops[0]!.skill_bundle_id).toBe('_all')
+
+      const withPm = VALID_LOOP.replace(
+        '    autonomy_level: L2\n',
+        '    autonomy_level: L2\n    skill_bundle_id: pm\n',
+      )
+      const rPm = loadRegistry('/repo', io({ '/repo/.pipeline/loops.yaml': withPm }))
+      expect(rPm.errors).toEqual([])
+      expect(rPm.data!.loops[0]!.skill_bundle_id).toBe('pm')
+    })
+
+    test('非法词法值 → 整份 registry 拒绝（data:null，errors 提及 skill_bundle_id）', () => {
+      for (const bad of ['Bad_ID', '_secret', '', '123']) {
+        const withBad = VALID_LOOP.replace(
+          '    autonomy_level: L2\n',
+          `    autonomy_level: L2\n    skill_bundle_id: "${bad}"\n`,
+        )
+        const r = loadRegistry('/repo', io({ '/repo/.pipeline/loops.yaml': withBad }))
+        expect(r.data, `bad=${JSON.stringify(bad)}`).toBeNull()
+        expect(r.errors.some((e) => e.includes('skill_bundle_id'))).toBe(true)
+      }
+    })
+  })
+
+  describe('H11 starter wiring 持久化字段', () => {
+    test('旧 YAML 缺四个 wiring 字段仍合法，且载入不凭空持久化状态或改写 status', () => {
+      const legacyPaused = VALID_LOOP.replace('    status: active\n', '    status: paused\n')
+      const r = loadRegistry('/repo', io({ '/repo/.pipeline/loops.yaml': legacyPaused }))
+
+      expect(r.errors).toEqual([])
+      const loop = r.data!.loops[0]!
+      expect(loop.status).toBe('paused')
+      expect(loop.template_id).toBeUndefined()
+      expect(loop.template_version).toBeUndefined()
+      expect(loop.workflow_id).toBeUndefined()
+      expect(loop.skill_bundle_id).toBeNull()
+      expect(loop).not.toHaveProperty('wiring_status')
+    })
+
+    test('合法 template/version/workflow/skill bundle 字面量原样载入', () => {
+      const wired = VALID_LOOP.replace(
+        '    autonomy_level: L2\n',
+        [
+          '    autonomy_level: L2',
+          '    template_id: future-template',
+          '    template_version: 1',
+          '    workflow_id: release-train',
+          '    skill_bundle_id: pm',
+          '',
+        ].join('\n'),
+      )
+      const r = loadRegistry('/repo', io({ '/repo/.pipeline/loops.yaml': wired }))
+
+      expect(r.errors).toEqual([])
+      expect(r.data!.loops[0]).toMatchObject({
+        template_id: 'future-template',
+        template_version: 1,
+        workflow_id: 'release-train',
+        skill_bundle_id: 'pm',
+      })
+    })
+
+    test('template_version 字段存在时只接受数字 1', () => {
+      for (const bad of ['2', '0', '"1"']) {
+        const yaml = VALID_LOOP.replace(
+          '    autonomy_level: L2\n',
+          `    autonomy_level: L2\n    template_version: ${bad}\n`,
+        )
+        const r = loadRegistry('/repo', io({ '/repo/.pipeline/loops.yaml': yaml }))
+
+        expect(r.data, `bad=${bad}`).toBeNull()
+        expect(r.errors.some((e) => e.includes('template_version'))).toBe(true)
+      }
+    })
+
+    test('template_id 字段存在时须为非空安全 kebab token（registry 不校验 catalog 存在性）', () => {
+      for (const bad of ['', 'CI-sweeper', 'ci_sweeper', '../ci-sweeper', '-ci', 'ci-', 'ci--sweeper']) {
+        const yaml = VALID_LOOP.replace(
+          '    autonomy_level: L2\n',
+          `    autonomy_level: L2\n    template_id: "${bad}"\n`,
+        )
+        const r = loadRegistry('/repo', io({ '/repo/.pipeline/loops.yaml': yaml }))
+
+        expect(r.data, `bad=${JSON.stringify(bad)}`).toBeNull()
+        expect(r.errors.some((e) => e.includes('template_id'))).toBe(true)
+      }
+    })
+
+    test('workflow_id 字段存在时须为安全 workflow identifier', () => {
+      for (const bad of ['', 'Release-train', 'release_train', '../release-train', 'dir/release', '-release', 'release-', 'release--train']) {
+        const yaml = VALID_LOOP.replace(
+          '    autonomy_level: L2\n',
+          `    autonomy_level: L2\n    workflow_id: "${bad}"\n`,
+        )
+        const r = loadRegistry('/repo', io({ '/repo/.pipeline/loops.yaml': yaml }))
+
+        expect(r.data, `bad=${JSON.stringify(bad)}`).toBeNull()
+        expect(r.errors.some((e) => e.includes('workflow_id'))).toBe(true)
+      }
+    })
+
+    test('wiring_status 不是持久化字段，继续按 unknown key 拒绝', () => {
+      const yaml = VALID_LOOP.replace(
+        '    autonomy_level: L2\n',
+        '    autonomy_level: L2\n    wiring_status: ready\n',
+      )
+      const r = loadRegistry('/repo', io({ '/repo/.pipeline/loops.yaml': yaml }))
+
+      expect(r.data).toBeNull()
+      expect(r.errors.some((e) => e.includes('wiring_status') && e.includes('additional'))).toBe(true)
+    })
+  })
+})
+
+/**
+ * nodeLoopIoStrict（Stage B 返工 #2）：admission reserve 用——**只** ENOENT→null（合法「无 registry」），
+ * 其它真实 I/O 故障（EISDIR/EACCES…）throw RegistryReadError，绝不吞成「文件不存在」。区别于宽容的 nodeLoopIo
+ * （不可读→null）。真 fs 临时目录覆盖三态：缺文件 / 合法读回 / 路径是目录（真 EISDIR）。
+ */
+describe('nodeLoopIoStrict —— 严格 I/O 区分（ENOENT→null；其它 I/O→throw RegistryReadError）', () => {
+  let dir: string
+  beforeEach(async () => { dir = await mkdtemp(join(tmpdir(), 'reg-strict-')) })
+  afterEach(async () => { await rm(dir, { recursive: true, force: true }) })
+
+  test('文件不存在（ENOENT）→ null（合法无 registry，不 throw）', () => {
+    expect(nodeLoopIoStrict.readText(join(dir, 'nope.yaml'))).toBeNull()
+    // 经 loadRegistry：ENOENT → (null, []) 四态契约不变
+    expect(loadRegistry(dir, nodeLoopIoStrict)).toEqual({ data: null, errors: [] })
+  })
+
+  test('合法文件 → 读回原文', async () => {
+    const p = join(dir, 'ok.yaml')
+    await writeFile(p, 'version: 1\n', 'utf8')
+    expect(nodeLoopIoStrict.readText(p)).toBe('version: 1\n')
+  })
+
+  test('路径是目录（真 EISDIR）→ throw RegistryReadError（不吞成 null）', async () => {
+    const p = join(dir, 'isdir.yaml')
+    await mkdir(p, { recursive: true }) // 路径被目录占据 → readFileSync EISDIR
+    expect(() => nodeLoopIoStrict.readText(p)).toThrow(RegistryReadError)
+    // 经 loadRegistry：真实 I/O 故障 fail-loud 上抛（不返 (null,[]) 假装无 registry）
+    expect(() => loadRegistry(dir, { readText: () => nodeLoopIoStrict.readText(p) })).toThrow(RegistryReadError)
   })
 })

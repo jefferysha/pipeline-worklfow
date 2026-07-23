@@ -170,6 +170,19 @@ describe('T9 afk 失败卡动作（postAfkRetry/postAfkDismiss）', () => {
   })
 })
 
+describe('AFK 手动挂队（postAfkEnqueue）', () => {
+  it('POST /api/afk/:name/enqueue 带 token + body {root}', async () => {
+    const fetchMock = vi.mocked(global.fetch)
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), { status: 200 }))
+    const { postAfkEnqueue } = await import('./client')
+    await postAfkEnqueue('gate d', '/repo-a')
+    expect(fetchMock).toHaveBeenCalledWith('/api/afk/gate%20d/enqueue', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ root: '/repo-a' }),
+    }))
+  })
+})
+
 /**
  * v9-J：fetchSessionLinks 批量预取（进度视图 failed 行「回终端」chip 一次拉全部，产品决策=
  * 批量端点而非逐行发请求）。非 2xx / 网络异常静默降级空表，不抛 ApiError——批量预取失败不该

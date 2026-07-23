@@ -12,6 +12,10 @@ description: "Pipeline Phase 2: Explore · 调研 + 深度设计。PM Track 做�
 - `$PIPELINE_TRACK` ∈ {pm, frontend, backend}
 - `$PIPELINE_CHANGE_NAME`
 
+**上下文恢复（强制）**：优先读取 `<pipeline-dispatch>` 的 `change/track/phase`，再跑
+`pipeline list --json` 和 `pipeline status <change> --json` 复核。环境变量只是兼容快捷方式；为空时
+不得退出到普通对话。若有多个候选且 dispatch 未指定，才请用户选择。
+
 ## 前置条件
 
 - `.pipeline.yaml` 含 `phase=explore`（`pipeline get <name> phase`）
@@ -40,6 +44,13 @@ pipeline status "$PIPELINE_CHANGE_NAME"    # 相位/字段摘要，绝不 FAIL
 - `openspec/changes/$PIPELINE_CHANGE_NAME/design.md`（若存在）— 高层架构
 - `openspec/specs/<capability>/spec.md`（若有主 spec）— 已有能力
 
+受治理 workflow（default 的全部 track 或 `openspec_contract: required`）还必须留下“本阶段确实读了
+open 产物”的 hash 收据。先全文读取上述文件，再执行命令；这不是单纯的状态标记。
+
+```bash
+pipeline document read "$PIPELINE_CHANGE_NAME" all
+```
+
 ### Step 2: Track 分支调用
 
 > ⚠️ **交互式 skill（brainstorming / grill-with-docs）的硬姿态 → 见 SessionStart 注入的
@@ -61,7 +72,7 @@ pipeline status "$PIPELINE_CHANGE_NAME"    # 相位/字段摘要，绝不 FAIL
    - 各子 agent 在隔离上下文里（可自行加载 deep-research / market-research 取方法论）拉真实源、写报告到盘，**各自只回传 路径 + ≤10 行摘要 + 3-5 个待用户决断的开放问题**。
    - 主线**不**把全文吸进来污染上下文，也**不**在主线直接加载 deep-research / market-research——下一步 brainstorming 才把各份报告当**外部输入**读。
 
-2. 使用 Skill 工具加载 `superpowers:brainstorming`（**必做，按上面「硬姿态」运行**）。
+2. 使用本插件打包的 Skill `brainstorming`（**必做，按上面「硬姿态」运行**）。
    - **先读** sub-agent 写的调研报告（当外部输入质疑，不是你的定论），带它回传的开放问题**逼用户在硬取舍上决断**（尤其目标用户，不许「双边 / 都要」收场）。
    - 产出：`docs/superpowers/specs/<DATE>-<topic>-requirements.md`
 
@@ -83,11 +94,11 @@ pipeline status "$PIPELINE_CHANGE_NAME"    # 相位/字段摘要，绝不 FAIL
    - 输出：候选库列表 + 优劣分析
    - **「读很多」的活走隔离 sub-agent（同 PM track）**：凡需查库 / 比较方案 / 读外部库文档全文等"拉取量大"的调研，优先用 **Agent 工具** dispatch `pipeline-researcher` 子 agent（`track=frontend`）——产出落盘 `docs/superpowers/specs/<DATE>-<topic>-<维度>-research.md`，**只回传 路径 + ≤10 行摘要 + 3-5 个开放问题**。主线**不**把库文档全文吸进主上下文（保护主窗口的聪明区），下一步 brainstorming 把报告当**外部输入**读。多维度时同一条 Agent 消息内并行 dispatch（一维度一个）。
 
-2. 使用 Skill 工具加载 `pipeline-lite:openspec-explore`。**禁止跳过此步骤**。
+2. 使用 Skill 工具加载 `openspec-explore`。**禁止跳过此步骤**。
    - 用于：探索现有 `openspec/specs/` 已有能力
    - 防重复造轮子
 
-3. 使用 Skill 工具加载 `superpowers:brainstorming`。**禁止跳过此步骤**。
+3. 使用本插件打包的 Skill `brainstorming`。**禁止跳过此步骤**。
    - 用于：深度技术设计对话
    - 产出：`docs/superpowers/specs/<DATE>-<topic>-design.md`（技术 RFC）
 
@@ -100,7 +111,7 @@ pipeline status "$PIPELINE_CHANGE_NAME"    # 相位/字段摘要，绝不 FAIL
 
 **可选**：
 - 使用 Skill 工具加载 `find-skills` — 找可复用 skill
-- 首次用 openspec 时运行 `openspec init`（CLI；通常 open 阶段已自动初始化，无需重复）
+- 无需运行独立 OpenSpec CLI；读取本插件 `pipeline init` 创建的 change 骨架和已有 main specs。
 
 #### ⚙️ Track = backend
 
@@ -108,8 +119,8 @@ pipeline status "$PIPELINE_CHANGE_NAME"    # 相位/字段摘要，绝不 FAIL
 
 1. 使用 Skill 工具加载 `search-first`。**默认执行**——确无外部库/现成方案可搜时方可跳过（recommended，缺=WARN 不阻断）。
    - **「读很多」的活走隔离 sub-agent（同 PM track）**：凡需查库 / 比较方案 / 读外部库文档全文等"拉取量大"的调研，优先用 **Agent 工具** dispatch `pipeline-researcher` 子 agent（`track=backend`）——产出落盘 `docs/superpowers/specs/<DATE>-<topic>-<维度>-research.md`，**只回传 路径 + ≤10 行摘要 + 3-5 个开放问题**。主线**不**把库文档全文吸进主上下文，下一步 brainstorming 把报告当**外部输入**读。多维度时同一条 Agent 消息内并行 dispatch（一维度一个）。
-2. 使用 Skill 工具加载 `pipeline-lite:openspec-explore`。**禁止跳过此步骤**。
-3. 使用 Skill 工具加载 `superpowers:brainstorming`。**禁止跳过此步骤**。
+2. 使用 Skill 工具加载 `openspec-explore`。**禁止跳过此步骤**。
+3. 使用本插件打包的 Skill `brainstorming`。**禁止跳过此步骤**。
 4. 使用 Skill 工具加载 `grill-with-docs`。**禁止跳过此步骤**。
 5. 使用 Skill 工具加载 `improve-codebase-architecture`。**禁止跳过此步骤**。
    - 用于：架构机会扫描、识别耦合/重复
@@ -119,15 +130,32 @@ pipeline status "$PIPELINE_CHANGE_NAME"    # 相位/字段摘要，绝不 FAIL
 
 **可选**：
 - 使用 Skill 工具加载 `find-skills`
-- 首次用 openspec 时运行 `openspec init`（CLI；通常 open 阶段已自动初始化）
+- OpenSpec 目录结构由本插件创建和维护，不需要外部 CLI。
 - 使用 Skill 工具加载 `zoom-out`
 
 ### Step 3: 记录 design_doc 路径
 
-产出文件后立即写入状态（路径相对项目根）：
+产出文件后立即经 artifact contract 写入状态（路径相对项目根）。不要用 `pipeline set` 绕过
+当前 phase 的 producer 校验：
 
 ```bash
-pipeline set "$PIPELINE_CHANGE_NAME" design_doc "docs/superpowers/specs/$(date +%Y-%m-%d)-<topic>-design.md"
+pipeline artifact register "$PIPELINE_CHANGE_NAME" design_doc \
+  "docs/superpowers/specs/$(date +%Y-%m-%d)-<topic>-design.md" --producer brainstorming
+```
+
+### Step 3.25: 登记 Superpowers 设计与 ADR（受治理 workflow 强制）
+
+`brainstorming` 必须产出技术设计文档，且至少落一份 ADR：即使结论是“不引入新架构决策”，也要把该结论、
+替代方案和后果写成 ADR，避免后续 spec/build 只能猜测。默认统一调用本插件打包的 bare
+`brainstorming`；`--producer` 写实际调用的名字。
+
+```bash
+DESIGN_DOC="$(pipeline get "$PIPELINE_CHANGE_NAME" design_doc)"
+ADR_PATH="docs/adr/$(date +%Y-%m-%d)-${PIPELINE_CHANGE_NAME}-explore.md"
+# 用 Edit/Write 写 ADR（Context / Decision / Alternatives / Consequences），再登记；不可登记空文件。
+pipeline document record "$PIPELINE_CHANGE_NAME" superpower-design "$DESIGN_DOC" --producer brainstorming
+pipeline document record "$PIPELINE_CHANGE_NAME" adr "$ADR_PATH" --producer brainstorming
+pipeline document status "$PIPELINE_CHANGE_NAME"
 ```
 
 ### Step 3.5: 在 design_doc 写入全栈 Spec 覆盖块
@@ -178,13 +206,13 @@ guard **只校验、不自动 transition**（本 pipeline 永不自动推进）�
 > 就继续写产出/推进的动作，"solo 一个 turn 跑完 brainstorming + transition" 在结构上不可能。
 > 别为过 phase 草草收尾：终态是**用户在硬取舍上做了承诺**，不是"文档写出来了"。
 
-## 外部 skill 依赖（CONTRACT §5.7 显式声明）
+## 打包 skill 依赖（随 pipeline-lite 插件安装）
 
-- external-skill: superpowers:brainstorming · 强制
-- external-skill: grill-with-docs · 强制
-- external-skill: improve-codebase-architecture · 强制（backend）
-- external-skill: search-first · 推荐
-- external-skill: deep-research · 推荐
-- external-skill: market-research · 推荐（researcher 子 agent 内按需加载）
-- external-skill: zoom-out · 可选
-- external-skill: find-skills · 可选
+- bundled-skill: brainstorming · 强制
+- bundled-skill: grill-with-docs · 强制
+- bundled-skill: improve-codebase-architecture · 强制（backend）
+- bundled-skill: search-first · 推荐
+- bundled-skill: deep-research · 推荐
+- bundled-skill: market-research · 推荐（researcher 子 agent 内按需加载）
+- bundled-skill: zoom-out · 可选
+- bundled-skill: find-skills · 可选

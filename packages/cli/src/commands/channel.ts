@@ -51,7 +51,7 @@ import {
   type ShutdownReason,
   type SupervisorConfig,
   type WorkerGuardPolicy,
-} from '@pipeline-lite/kernel'
+} from '@pipeline-lite/channel'
 import { splitFlags } from '../argv.js'
 import type { CliDeps } from '../deps.js'
 

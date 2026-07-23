@@ -1,15 +1,27 @@
 import { useState } from 'react'
 import { useT } from '../i18n'
 import { Icon } from './Icon'
+import { CreateChangeDialog } from '../progress/CreateChangeDialog'
 
 export interface OnboardingProps {
   kind: 'no-project' | 'no-change'
   /** no-change 形态：当前项目 root（拼 CLI 命令用）。 */
   root?: string
+  onCreated?: (name: string) => void | Promise<void>
+  onToast?: (message: string) => void
 }
 
 /** 建 change 的教学命令（字面终端命令，非 i18n——命令本身不翻译）。 */
 const INIT_CMD = 'pipeline init my-change --track chat'
+
+// ── tailwind 类串（v10b 迁移：.empty/.ob-* 全局类退役，样式全由原子类承载）──
+/** 教学空态卡片基底（max-width 按形态各自补：no-change 460px / no-project 520px）。 */
+const EMPTY_CLS = 'mx-auto my-[8vh] rounded-lg border border-border bg-card px-8 py-[30px] text-center'
+const EMPTY_MARK_CLS = 'mx-auto mb-3.5 grid h-[42px] w-[42px] place-items-center rounded-lg bg-ink text-ink-fg'
+const EMPTY_TITLE_CLS = 'mb-2 text-[17px] font-bold text-text'
+const EMPTY_DESC_CLS = 'mb-[18px] text-[12.5px] leading-[1.7] text-text-3'
+const STEP_LABEL_CLS = 'text-[12.5px] leading-[1.6] text-text-2'
+const STEP_N_CLS = 'h-[22px] w-[22px] flex-none rounded-full bg-ink text-center text-xs font-bold leading-[22px] text-ink-fg'
 
 /**
  * 单条可复制命令行（$ 提示符 + 命令 + 复制钮，自管 copied 态 2s 回落）。前端只读，唯一动作是
@@ -25,10 +37,15 @@ function CmdRow({ cmd, testid, copyTestid }: { cmd: string; testid: string; copy
     })
   }
   return (
-    <div className="ob-cmd">
-      <span className="ob-cmd__p" aria-hidden="true">$</span>
-      <code className="ob-cmd__code" data-testid={testid}>{cmd}</code>
-      <button type="button" className="ob-cmd__copy" data-testid={copyTestid} onClick={copy}>
+    <div className="flex items-center gap-2 rounded-md border border-code-border bg-code-bg px-[11px] py-[7px] font-mono text-xs">
+      <span className="flex-none text-text-3" aria-hidden="true">$</span>
+      <code className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap text-text" data-testid={testid}>{cmd}</code>
+      <button
+        type="button"
+        className="inline-flex flex-none cursor-pointer items-center gap-1 whitespace-nowrap text-[11px] font-bold text-green hover:text-green-d"
+        data-testid={copyTestid}
+        onClick={copy}
+      >
         <Icon name="copy" size={12} />
         {copied ? t('onboard.copied') : t('onboard.copy')}
       </button>
@@ -49,46 +66,65 @@ function CmdRow({ cmd, testid, copyTestid }: { cmd: string; testid: string; copy
  * T17（决议#7 + T2）：pipeline init best-effort 自动登记项目（kernel projectRegistry），注册表单
  * 与 POST /api/projects 调用退役（端点仅兼容保留），幽灵命令 `pipeline projects add` 一并清除。
  */
-export function Onboarding({ kind, root }: OnboardingProps): JSX.Element {
+export function Onboarding({ kind, root, onCreated, onToast }: OnboardingProps): JSX.Element {
   const { t } = useT()
+  const [createOpen, setCreateOpen] = useState(false)
 
   if (kind === 'no-change') {
     const cli = `cd ${root || '<project>'} && ${INIT_CMD}`
     return (
-      <div className="empty" data-testid="onboard-no-change">
-        <div className="empty__mark" aria-hidden="true">⧉</div>
-        <h2 className="empty__title">{t('onboard.no_change_title')}</h2>
-        <p className="empty__desc">{t('onboard.no_change_desc')}</p>
+      <div className={`${EMPTY_CLS} max-w-[460px]`} data-testid="onboard-no-change">
+        <div className={EMPTY_MARK_CLS} aria-hidden="true"><Icon name="flow" size={20} /></div>
+        <h2 className={EMPTY_TITLE_CLS}>{t('onboard.no_change_title')}</h2>
+        <p className={EMPTY_DESC_CLS}>{t('onboard.no_change_desc')}</p>
+        <button
+          type="button"
+          className="mb-4 inline-flex items-center justify-center rounded-lg bg-btn-bg px-4 py-2 text-xs font-bold text-btn-fg hover:bg-btn-hover"
+          data-testid="onboard-new-change"
+          onClick={() => setCreateOpen(true)}
+        >
+          {t('change_create.create')}
+        </button>
+        <div className="mb-2 text-[10px] font-bold uppercase tracking-[0.14em] text-text-3">{t('onboard.cli_fallback')}</div>
         <CmdRow cmd={cli} testid="onboard-cli" copyTestid="onboard-copy" />
+        {createOpen && root && (
+          <CreateChangeDialog
+            root={root}
+            onClose={() => setCreateOpen(false)}
+            onCreated={onCreated ?? (() => undefined)}
+            onToast={onToast}
+          />
+        )}
       </div>
     )
   }
 
-  // no-project：诚实三步 checklist——起步/装技能/跑流程都在终端，逐条可复制真命令导回终端。
+  // no-project：pipeline init 会自动登记项目；界面只保留可复制的真实终端步骤，不再要求用户
+  // 暴露本机绝对路径或理解项目注册表。
   return (
-    <div className="empty ob-wide" data-testid="onboard-no-project">
-      <div className="empty__mark" aria-hidden="true">⧉</div>
-      <h2 className="empty__title">{t('onboard.no_project_title')}</h2>
-      <p className="empty__desc">{t('onboard.no_project_desc')}</p>
-      <ol className="ob-steps">
-        <li className="ob-step">
-          <span className="ob-step__n" aria-hidden="true">1</span>
-          <div className="ob-step__body">
-            <div className="ob-step__label">{t('onboard.step_init')}</div>
+    <div className={`${EMPTY_CLS} max-w-[620px]`} data-testid="onboard-no-project">
+      <div className={EMPTY_MARK_CLS} aria-hidden="true"><Icon name="folder" size={20} /></div>
+      <h2 className={EMPTY_TITLE_CLS}>{t('onboard.no_project_title')}</h2>
+      <p className={EMPTY_DESC_CLS}>{t('onboard.no_project_desc')}</p>
+      <ol className="mt-1 flex list-none flex-col gap-3.5 p-0 text-left">
+        <li className="flex gap-3">
+          <span className={STEP_N_CLS} aria-hidden="true">1</span>
+          <div className="flex min-w-0 flex-1 flex-col gap-[7px]">
+            <div className={STEP_LABEL_CLS}>{t('onboard.step_init')}</div>
             <CmdRow cmd={INIT_CMD} testid="onboard-cli" copyTestid="onboard-copy" />
           </div>
         </li>
-        <li className="ob-step">
-          <span className="ob-step__n" aria-hidden="true">2</span>
-          <div className="ob-step__body">
-            <div className="ob-step__label">{t('onboard.step_setup')}</div>
+        <li className="flex gap-3">
+          <span className={STEP_N_CLS} aria-hidden="true">2</span>
+          <div className="flex min-w-0 flex-1 flex-col gap-[7px]">
+            <div className={STEP_LABEL_CLS}>{t('onboard.step_setup')}</div>
             <CmdRow cmd="pipeline setup" testid="onboard-cmd-setup" copyTestid="onboard-copy-setup" />
           </div>
         </li>
-        <li className="ob-step">
-          <span className="ob-step__n" aria-hidden="true">3</span>
-          <div className="ob-step__body">
-            <div className="ob-step__label">{t('onboard.step_doctor')}</div>
+        <li className="flex gap-3">
+          <span className={STEP_N_CLS} aria-hidden="true">3</span>
+          <div className="flex min-w-0 flex-1 flex-col gap-[7px]">
+            <div className={STEP_LABEL_CLS}>{t('onboard.step_doctor')}</div>
             <CmdRow cmd="pipeline doctor" testid="onboard-cmd-doctor" copyTestid="onboard-copy-doctor" />
           </div>
         </li>

@@ -118,4 +118,14 @@ describe('probeAfkReadiness —— cli 侧 AFK 就绪探测', () => {
     })
     expect(r.credentials.codex.CODEX_HOME).toEqual({ set: false })
   })
+
+  it('Codex-first：默认 ~/.codex/auth.json 可读时，即使 shell 未导出 CODEX_HOME 也判就绪', async () => {
+    const opts = {
+      image: 'x:y', exec: dockerOk(['x:y']), secretsEnv: {}, hostEnv: {},
+      defaultCodexHome: '/users/codex-owner/.codex',
+      canReadFile: (path: string) => path === '/users/codex-owner/.codex/auth.json',
+    }
+    const r = await probeAfkReadiness(opts)
+    expect(r.credentials.codex.CODEX_HOME).toEqual({ set: true, source: 'default-home' })
+  })
 })

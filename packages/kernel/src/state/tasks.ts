@@ -31,7 +31,7 @@
 import { readdir, stat } from 'node:fs/promises'
 import path from 'node:path'
 import type { FieldName, PipelineState, StateStore } from '../types.js'
-import { STATE_FILE_NAME } from './store.js'
+import { stateStorageSourcePathSync } from './run-revision-store.js'
 
 /** 老仓空集哨兵：depends_on/scope 等整字段取值 "null" 视为空（_deps_read state-task.sh:143） */
 const NULL_SENTINEL = 'null'
@@ -227,8 +227,13 @@ async function readDepsSafe(store: StateStore, dir: string): Promise<string[] | 
   }
 }
 
-/** 递归收集归档区任意深度的 .pipeline.yaml（老仓 `find archive -name .pipeline.yaml`），name=父目录名。 */
+/** 递归收集归档区任意深度的 canonical/legacy state，name=状态所在目录名。 */
 async function walkArchive(dir: string, store: StateStore, nodes: ChangeNode[]): Promise<void> {
+  if (stateStorageSourcePathSync(dir) !== undefined) {
+    const deps = await readDepsSafe(store, dir)
+    if (deps !== undefined) nodes.push({ name: path.basename(dir), archived: true, deps })
+    return
+  }
   let entries
   try {
     entries = await readdir(dir, { withFileTypes: true })
@@ -237,12 +242,7 @@ async function walkArchive(dir: string, store: StateStore, nodes: ChangeNode[]):
   }
   for (const e of entries) {
     const full = path.join(dir, e.name)
-    if (e.isDirectory()) {
-      await walkArchive(full, store, nodes)
-    } else if (e.isFile() && e.name === STATE_FILE_NAME) {
-      const deps = await readDepsSafe(store, dir)
-      if (deps !== undefined) nodes.push({ name: path.basename(dir), archived: true, deps })
-    }
+    if (e.isDirectory()) await walkArchive(full, store, nodes)
   }
 }
 
@@ -264,7 +264,7 @@ export async function loadTaskTree(cwd: string, store: StateStore): Promise<Chan
   for (const e of entries) {
     if (!e.isDirectory() || e.name === 'archive') continue
     const deps = await readDepsSafe(store, path.join(root, e.name))
-    if (deps === undefined) continue // 无 .pipeline.yaml → 跳过
+    if (deps === undefined) continue // 无 canonical/legacy state 或状态损坏 → 跳过
     nodes.push({ name: e.name, archived: false, deps })
   }
   await walkArchive(path.join(root, 'archive'), store, nodes)

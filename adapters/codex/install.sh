@@ -3,12 +3,12 @@
 #
 # 三档（互斥，由 flag 选）：
 #   默认（无 flag）= 档 A 全保真·manual-trust：
-#       写 hooks.json（inject/veto/track wrapper 绝对路径）到 CODEX_HOME，落静态上下文层，
+#       写 hooks.json（inject/route/veto/track wrapper 绝对路径）到 CODEX_HOME，落静态上下文层，
 #       结尾打印一次性 trust 指引（codex TUI 里 /hooks 按 t）。
 #   --managed  = 档 B 全保真·managed/MDM：写 /etc/codex/{requirements.toml,managed_hooks}。需 root。
 #       绝不静默 sudo——非 root 就打印需手动 sudo 的命令、不自动执行。
 #   --static   = 档 C 静态降级：只落静态上下文层（AGENTS.md 哨兵块），不装 hooks（无自动强制，
-#       靠 AGENTS.md 自律 + 手动 Unlock sentinel `rm .pipeline-pending-<kind>`）。
+#       靠 AGENTS.md 自律 + 人类下一条明确确认）。
 #
 # 选项：--target <dir>（默认 $PWD）/ --codex-home <dir>（默认 ${CODEX_HOME:-$HOME/.codex}）/ --yes / -h
 # 安全：默认绝不碰 /etc 或 root 路径；--managed 检测非 root 即停、只打印命令。
@@ -55,29 +55,97 @@ install_static() {
 ## Pipeline Workflow（Codex 静态层）
 
 7-phase 流水线：open → explore → spec → build ⇄ verify → ship → archive。状态操作一律走 `pipeline` CLI
-（status / get / set / transition / check），勿手改 `.pipeline.yaml`。
+（status / get / set / transition / check），勿手改 canonical state 或 `.pipeline.yaml` 投影。
 
-进入 review phase（explore / spec / verify 出口）须人类显式确认才能 transition。档 C 无 hook 硬拦，
-用 **Unlock sentinel** 放行：确认无误后删除项目根 marker 即可——
+正常开发对话默认走 default workflow：先调用 `pipeline`，由入口 skill 创建/恢复 Change、
+初始化 OpenSpec 并分派当前 phase skill；Todo 的一级项必须是七个 pipeline phase，任务来自该 Change 的
+`tasks.md`，不得先生成脱离 phase 的通用 Todo。
 
-    rm .pipeline-pending-review   # 或 .pipeline-pending-confirm / .pipeline-pending-interaction
-
-不得绕过 review-gate（会产生 solo 推进）。
+进入 review phase（explore / spec / verify 出口）须人类显式确认才能 transition。档 A/B 的普通对话中，
+用户下一条明确回复“确认继续”或“继续执行”会自动解封 review marker；档 C 没有 hook 时，必须等待该明确
+确认并在后续操作中保留确认事实，不能用删除 marker 的方式绕过 review-gate。
 EOF
 )"
   local f="$dest/AGENTS.md"
   if [ -f "$f" ] && grep -qF "$START" "$f" 2>/dev/null; then
     # 哨兵块精确替换（块内重刷、块外用户内容原样保留）
-    local tmp; tmp="$(mktemp)"
-    awk -v s="$START" -v e="$END" -v blk="$block" '
-      $0==s {print s; print blk; print e; skip=1; next}
+    # macOS/BSD awk 不接受带换行的 -v 值。把新块放进受控临时文件，再由 awk 逐行读取，
+    # 才能既保留块外内容又保证第二次安装真幂等。
+    local tmp block_tmp
+    tmp="$(mktemp)"
+    block_tmp="$(mktemp)"
+    printf '%s\n' "$block" > "$block_tmp"
+    if awk -v s="$START" -v e="$END" -v b="$block_tmp" '
+      $0==s {
+        print s
+        while ((getline line < b) > 0) print line
+        close(b)
+        print e
+        skip=1
+        next
+      }
       $0==e {skip=0; next}
       !skip {print}
-    ' "$f" > "$tmp" && mv "$tmp" "$f"
+    ' "$f" > "$tmp"; then
+      mv "$tmp" "$f"
+    else
+      rm -f "$tmp"
+      rm -f "$block_tmp"
+      err "无法刷新 AGENTS.md 的 Pipeline 静态块: $f"
+      exit 1
+    fi
+    rm -f "$block_tmp"
   else
     { printf '\n%s\n' "$START"; printf '%s\n' "$block"; printf '%s\n' "$END"; } >> "$f"
   fi
   info "AGENTS.md 静态层 → ${f}（哨兵块幂等）"
+}
+
+# ── 项目技能部署（三档共用）───────────────────────────────────────────────
+# 这是非原生 adapter 的兼容投影：`pipeline setup --codex` 走 Codex marketplace 原生插件，
+# 不会调用本脚本。仅当用户明确需要把 pipeline 投递到某个项目时，才软链**本插件完整自带**的
+# skills 到目标 `.agents/skills/`。不读取 Claude/Codex 的第三方 cache，也不安装任何外部 skill。
+# 已有用户目录或非同源链接一律报错而不覆盖。
+
+install_project_skills() {
+  local dest="$1"
+  local source_root skills_dest source name target linked installed=0
+  local -a sources
+  source_root="$(cd -P "$ADAPTER_DIR/../../skills" 2>/dev/null && pwd -P)" || { err "找不到插件 skills 目录"; exit 1; }
+  [ -d "$source_root" ] || { err "找不到插件 skills 目录: $source_root"; exit 1; }
+  skills_dest="$dest/.agents/skills"
+  mkdir -p "$skills_dest" || { err "无法创建项目技能目录: $skills_dest"; exit 1; }
+
+  sources=()
+  for source in "$source_root"/*; do
+    [ -d "$source" ] || continue
+    [ -f "$source/SKILL.md" ] || { err "插件 skill 缺 SKILL.md: $source"; exit 1; }
+    sources+=("$source")
+  done
+
+  # 先完整检查冲突，避免半途失败留下半套投递结果。
+  for source in "${sources[@]}"; do
+    name="${source##*/}"
+    target="$skills_dest/$name"
+    if [ -L "$target" ]; then
+      linked="$(cd -P "$target" 2>/dev/null && pwd)" || { err "项目 skill 是悬空链接，拒绝覆盖: $target"; exit 1; }
+      [ "$linked" = "$source" ] || { err "项目 skill 已指向其他来源，拒绝覆盖: $target"; exit 1; }
+    elif [ -e "$target" ]; then
+      err "项目 skill 已存在，拒绝覆盖: $target"
+      exit 1
+    fi
+  done
+
+  for source in "${sources[@]}"; do
+    name="${source##*/}"
+    target="$skills_dest/$name"
+    if [ -L "$target" ]; then
+      continue
+    fi
+    ln -s "$source" "$target" || { err "无法投递项目 skill: $target"; exit 1; }
+    installed=$((installed + 1))
+  done
+  info "项目 pipeline/OpenSpec skills → ${skills_dest}（新增 ${installed} 个，已存在同源链接保持不变）"
 }
 
 # ── hooks.json 投递（档 A）：占位替换为绝对适配器路径 ──
@@ -91,13 +159,13 @@ install_hooks_codex_home() {
     return 0
   fi
   sed "s#__ADAPTER_DIR__#$ADAPTER_DIR#g" "$ADAPTER_DIR/hooks.json" > "$hj"
-  info "hooks.json → ${hj}（inject/veto/track wrapper 绝对路径已绑定）"
+  info "hooks.json → ${hj}（inject/route/veto/track wrapper 绝对路径已绑定）"
 }
 
 print_trust_instructions() {
   note ""
   note "${B}════════ 档 A 全保真：还差一步（一次性 trust）════════${Z}"
-  note "Codex 普通用户态对自定义 hook 要求一次性人工 trust。未 trust 前 inject/veto/track 不生效。"
+  note "Codex 普通用户态对自定义 hook 要求一次性人工 trust。未 trust 前 inject/route/veto/track 不生效。"
   note "  1. 启动 Codex TUI：${B}codex${Z}   2. 输入 ${B}/hooks${Z}   3. 对 pipeline hooks.json 按 ${B}t${Z}"
   note "改动 wrapper/hooks.json 后需重新 trust。之后 \`codex exec\` 复用 trust，三能力自动跑。"
   note "${B}══════════════════════════════════════════════════${Z}"
@@ -116,25 +184,25 @@ install_managed() {
     note "  cat $staged_req ; cat $staged_hooks"
     note "  sudo mkdir -p $mdir && sudo cp $staged_hooks $mdir/hooks.json"
     note "  sudo cp $staged_req $req   # 若已存在改为手动合并 [hooks] 段"
-    install_static "$TARGET"
+    install_static "$TARGET"; install_project_skills "$TARGET"
     return 0
   fi
   confirm "确认以 root 写入 ${req} 与 ${mdir}？" || { warn "已取消，未改动系统。"; return 0; }
   mkdir -p "$mdir"; cp "$staged_hooks" "$mdir/hooks.json"
   [ -f "$req" ] && warn "$req 已存在——请手动并 [hooks] 段。" || { cp "$staged_req" "$req"; info "requirements.toml → $req"; }
   info "managed hooks → $mdir/hooks.json（always-on、免 trust）"
-  install_static "$TARGET"
+  install_static "$TARGET"; install_project_skills "$TARGET"
 }
 
 # ════════════════ 主流程 ════════════════
 note "${B}Codex pipeline 适配器安装${Z}  mode=${MODE}  target=${TARGET}"
 case "$MODE" in
   static)
-    install_static "$TARGET"
-    info "档 C（静态降级）完成：AGENTS.md 静态层已落地，${B}未装 hooks${Z}（无自动强制，靠 Unlock sentinel）。"
+    install_static "$TARGET"; install_project_skills "$TARGET"
+    info "档 C（静态降级）完成：AGENTS.md 与本地 skills 已落地，${B}未装 hooks${Z}（无自动强制；review 仍必须等用户下一条明确确认，不能删 marker 绕过）。"
     ;;
   full)
-    install_static "$TARGET"; install_hooks_codex_home; print_trust_instructions
+    install_static "$TARGET"; install_project_skills "$TARGET"; install_hooks_codex_home; print_trust_instructions
     ;;
   managed)
     install_managed

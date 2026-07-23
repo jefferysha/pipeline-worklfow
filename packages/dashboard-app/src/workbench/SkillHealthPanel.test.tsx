@@ -49,11 +49,12 @@ describe('SkillHealthPanel（full-install W4）：技能齐全度只读面', () 
     ])
     renderPanel()
 
-    // 已装/未装计数口径：installed=true 计已装，false 计未装。
+    // 已装/未装计数口径：installed=true 计已装，false 计未装（计数是核心，第一屏直接可见）。
     expect(await screen.findByTestId('skh-installed-n')).toHaveTextContent('2')
     expect(screen.getByTestId('skh-missing-n')).toHaveTextContent('2')
 
-    // 未装名列表（未装>0 才出现）。
+    // IA 精简（2026-07-14）：未装名长列表 + setup 引导收进「▸ 高级设置」折叠区，展开后可见。
+    fireEvent.click(screen.getByTestId('skh-adv'))
     const names = screen.getByTestId('skh-missing-names')
     expect(names).toHaveTextContent('zoom-out')
     expect(names).toHaveTextContent('uiuxdesign-pro')
@@ -111,7 +112,9 @@ describe('SkillHealthPanel（full-install W4）：技能齐全度只读面', () 
     mockRegistry([{ name: 'zoom-out', installed: false, source: 'user' }])
     renderPanel()
 
-    fireEvent.click(await screen.findByTestId('skh-copy-setup'))
+    // setup 引导在「▸ 高级设置」折叠区内——先展开（未装计数亮红后折叠区才在）。
+    fireEvent.click(await screen.findByTestId('skh-adv'))
+    fireEvent.click(screen.getByTestId('skh-copy-setup'))
     await waitFor(() => expect(writeText).toHaveBeenCalledWith('pipeline setup'))
     // 不漂移成别的安装命令。
     expect(writeText).not.toHaveBeenCalledWith(expect.stringContaining('npm'))

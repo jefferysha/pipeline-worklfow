@@ -68,9 +68,8 @@ function runHook(script: string, payload: unknown, extraEnv: Record<string, stri
   return { code: res.status ?? -1, stdout: res.stdout ?? '', stderr: res.stderr ?? '' }
 }
 
-/** manifest skill token（如 'opsx:explore|openspec-explore'）解析成本仓真实会调用的具体名字：
- *  优先取本地真有 SKILL.md 的备选（真查文件系统，非猜测）；否则回退首个备选（外部 skill 形态，
- *  由 EXTERNAL-SKILLS.md 声明覆盖，见下方 verify-skills 一致性用例）。 */
+/** Manifest token resolves to the packaged skill directory. Legacy alternatives stay supported by
+ * the resolver, but the shipped default workflow references bare first-party IDs only. */
 function resolveSkillToken(token: string): string {
   const alts = token.split('|')
   for (const alt of alts) {
@@ -119,7 +118,7 @@ describe('真实 e2e —— 完整多相位 workflow × skill 编排一体化闭
     changeDir = join(h.cwd, 'openspec/changes', CHANGE)
     historyPath = join(changeDir, '.pipeline-history.jsonl')
     // 隔离缓存路径：避免撞车开发机真实 ~/.claude 缓存，也避免与并行跑的其它测试文件/agent 竞争
-    routerCache = join(h.cwd, '.router-cache.generated.sh')
+    routerCache = join(h.cwd, '.router-cache.v2.data')
     unlockCount = 0
     toolCount = 0
   })
@@ -141,6 +140,18 @@ describe('真实 e2e —— 完整多相位 workflow × skill 编排一体化闭
 
   function runRouter(prompt: string): HookResult {
     return runHook('router.sh', { prompt, cwd: h.cwd }, { CLAUDE_PLUGIN_ROOT: REPO_ROOT, PIPELINE_ROUTER_CACHE: routerCache })
+  }
+
+  /** Router does not execute a host Skill tool itself; it must nevertheless emit the exact required
+   * dispatch and the manifest-derived required slots that the root pipeline skill will execute. */
+  function expectPhaseDispatch(result: HookResult, phase: Phase): void {
+    expect(result.code).toBe(0)
+    expect(result.stdout).toContain('<pipeline-dispatch>')
+    expect(result.stdout).toContain('skill: pipeline')
+    expect(result.stdout).toContain('workflow: default')
+    for (const skill of skillsFor(manifest.mandatorySkills, phase, TRACK)) {
+      expect(result.stdout, `${phase} dispatch should retain mandatory skill ${skill}`).toContain(skill)
+    }
   }
 
   /**
@@ -221,11 +232,21 @@ describe('真实 e2e —— 完整多相位 workflow × skill 编排一体化闭
   }
 
   test('7 相位真转移 × manifest 真派生 skill 全量调用 × 真 gate veto/unlock × 单一 JSONL 因果一致', async () => {
+    // 正常开发对话、尚无 Change：router 必须直接交给 default root skill，不能退回
+    // AskUserQuestion 的 workflow 选择分支。hook 只能请求 host 调用 Skill，实际调用由入口 skill
+    // 承担（这条边界在 adapter conformance 中也以 Codex hook envelope 覆盖）。
+    let r = runRouter('设计一个后端 API 接口，接 Postgres 数据库，写 service 层')
+    expectPhaseDispatch(r, 'open')
+    expect(r.stdout).toContain('intent: new')
+    expect(r.stdout).toContain('独立新任务')
+    expect(r.stdout).toContain('phase: open')
+
     // ── phase=open：init 落地，尚无任何 marker，mandatory skill 应直接放行（无需解锁）──
     expect(await h.run(['init', CHANGE, '--track', TRACK, '--preset', 'full', '--user', 'e2e'])).toBe(0)
+    await h.seedGovernedDocumentEvidence(CHANGE)
     expect(await h.read(CHANGE)).toMatch(/^phase: open$/m)
-    let r = runRouter('设计一个后端 API 接口，接 Postgres 数据库，写 service 层')
-    expect(r.code).toBe(0)
+    r = runRouter('继续设计这个后端 API 接口，接 Postgres 数据库，写 service 层')
+    expectPhaseDispatch(r, 'open')
     expect(r.stdout).toContain('track=backend')
     expect(r.stdout).toContain('phase=open')
     expect(r.stdout).toContain(CHANGE)
@@ -235,28 +256,32 @@ describe('真实 e2e —— 完整多相位 workflow × skill 编排一体化闭
     expect(await h.run(['transition', CHANGE, 'open-complete'])).toBe(0)
     expect(await pathExists(join(h.cwd, '.pipeline-pending-review'))).toBe(true)
     r = runRouter('继续深入这个后端 API 的调研和设计')
+    expectPhaseDispatch(r, 'explore')
     expect(r.stdout).toContain('phase=explore')
     await runMandatorySkillsForPhase('explore')
     // interaction 门是共享状态、非 per-tool-type——explore 全部 skill 走完（含 2 个交互式 skill 各自
     // 落门又被解锁）后，门应彻底清空，任意工具类型（这里探 Bash，不仅 Skill）都应真放行
     const bashProbe = runHook('gate.sh', { cwd: h.cwd, tool_name: 'Bash' })
     expect(bashProbe.code, 'explore 全部 skill 走完后门应清空，Bash 也应放行').toBe(0)
-    await seed(`openspec/changes/${CHANGE}/design.md`, '# design\n覆盖矩阵齐全\n')
-    expect(await h.run(['set', CHANGE, 'design_doc', `openspec/changes/${CHANGE}/design.md`])).toBe(0)
+    // 文档账本已经用真实 hash 记录 OpenSpec design；不要在此改写同一文件，否则后续 phase
+    // 应当（也会）因 stale receipt 被拒。本用例只验证 hook/skill 编排，直接登记该既有文档路径。
+    await h.seedArtifact(CHANGE, 'design_doc', `openspec/changes/${CHANGE}/design.md`) // P6：artifact 白盒预置
 
     // ── explore-complete → spec（review 相位）──
     expect(await h.run(['transition', CHANGE, 'explore-complete'])).toBe(0)
     expect(await pathExists(join(h.cwd, '.pipeline-pending-review'))).toBe(true)
     r = runRouter('继续实现这个后端 service 层的 API 落地')
+    expectPhaseDispatch(r, 'spec')
     expect(r.stdout).toContain('phase=spec')
     await runMandatorySkillsForPhase('spec')
     await seed(`openspec/changes/${CHANGE}/plan.md`, '# plan\n')
-    expect(await h.run(['set', CHANGE, 'plan', `openspec/changes/${CHANGE}/plan.md`])).toBe(0)
+    await h.seedArtifact(CHANGE, 'plan', `openspec/changes/${CHANGE}/plan.md`) // P6：artifact 白盒预置
 
     // ── spec-complete → build（非 review 相位，不落 marker——skill 应全程无阻）──
     expect(await h.run(['transition', CHANGE, 'spec-complete'])).toBe(0)
     expect(await pathExists(join(h.cwd, '.pipeline-pending-review'))).toBe(false)
     r = runRouter('继续写这个后端 API 的 service 层实现')
+    expectPhaseDispatch(r, 'build')
     expect(r.stdout).toContain('phase=build')
     await runMandatorySkillsForPhase('build')
     expect(await h.run(['set-many', CHANGE, 'build_mode=direct', 'isolation=worktree', 'direct_override=true'])).toBe(0)
@@ -264,13 +289,15 @@ describe('真实 e2e —— 完整多相位 workflow × skill 编排一体化闭
     // ── build-complete → verify（review 相位）──
     expect(await h.run(['transition', CHANGE, 'build-complete'])).toBe(0)
     expect(await pathExists(join(h.cwd, '.pipeline-pending-review'))).toBe(true)
+    r = runRouter('继续完成这个后端 API 的三轨验证')
+    expectPhaseDispatch(r, 'verify')
     await runMandatorySkillsForPhase('verify')
     await seed(`openspec/changes/${CHANGE}/verify.md`, '# verify\n')
+    await h.seedArtifact(CHANGE, 'verification_report', `openspec/changes/${CHANGE}/verify.md`) // P6：verify 相位 verification_report 是有效 artifact，白盒预置
     expect(
       await h.run([
         'set-many',
         CHANGE,
-        `verification_report=openspec/changes/${CHANGE}/verify.md`,
         'branch_status=handled',
         'agent_review_result=pass',
         'codex_review_result=pass',
@@ -279,7 +306,8 @@ describe('真实 e2e —— 完整多相位 workflow × skill 编排一体化闭
 
     // ── verify-pass → ship（非 review 相位）──
     expect(await h.run(['transition', CHANGE, 'verify-pass'])).toBe(0)
-    r = runRouter('准备把这个后端服务的 API 发布上线')
+    r = runRouter('继续准备把这个后端服务的 API 发布上线')
+    expectPhaseDispatch(r, 'ship')
     expect(r.stdout).toContain('phase=ship')
     await runMandatorySkillsForPhase('ship')
 
@@ -291,7 +319,8 @@ describe('真实 e2e —— 完整多相位 workflow × skill 编排一体化闭
 
     // 归档后 router 不再把它算作"活跃 change"（真读 archived:true 字段的真实行为，非猜测）
     r = runRouter('继续这个后端服务的收尾')
-    expect(r.stdout).toContain('尚无活跃 change')
+    expect(r.stdout).toContain('intent: new')
+    expect(r.stdout).toContain('phase: open')
     expect(r.stdout).not.toContain(CHANGE)
 
     // ── 单一 JSONL 真相源的因果一致性（同一份文件里 kernel 侧 transition/set 与 hooks 侧 tool/prompt 真交替）──
@@ -306,9 +335,18 @@ describe('真实 e2e —— 完整多相位 workflow × skill 编排一体化闭
     // 自洽核验：JSONL 里落盘的行数必须等于流程里实际触发的次数（防「hook 声称 append 了但文件没有」这类假绿）
     expect(tools).toHaveLength(toolCount)
     expect(prompts).toHaveLength(unlockCount)
-    // 与当前真实 manifest.yaml 的锚点（backend track 全 7 相位 mandatory_skills 求和）——manifest 改了
-    // 这两个数会跟着变，届时需要人工确认是有意变化（同 manifest-derive.test.ts 的单源回归锚哲学）
-    expect(toolCount).toBe(13)
+    // Ship 契约分两层：manifest 只列可由 Skill 工具加载的 mandatory skill；commit/push/PR 是
+    // pipeline-ship 里的必做交付动作，不能伪装成 command token 塞进 skill bundle。
+    expect(skillsFor(manifest.mandatorySkills, 'ship', TRACK)).toEqual([
+      'openspec-apply-change',
+      'finishing-a-development-branch',
+    ])
+    const pipelineShip = readFileSync(join(REPO_ROOT, 'skills', 'pipeline-ship', 'SKILL.md'), 'utf8')
+    expect(pipelineShip).toContain('完成 commit + push + 创建 PR。**这是必做交付动作，不是 Skill。**')
+    expect(pipelineShip).toContain('/commit-commands:commit-push-pr` 仅是可选命令加速器，不进入 skill bundle。')
+
+    // 与当前真实 manifest.yaml 的锚点（backend track 全 7 相位 mandatory skill 求和）。
+    expect(toolCount).toBe(12)
     expect(unlockCount).toBe(5)
 
     // 行序因果核验（非仅计数）：每个相位区间内的 tool/prompt 条数必须落在该相位真实转移事件之间
@@ -329,12 +367,45 @@ describe('真实 e2e —— 完整多相位 workflow × skill 编排一体化闭
     expect(seg(idxBuild, idxVerify).filter((p) => p.kind === 'prompt')).toHaveLength(0) // build 非 review 相位，全程不该有解锁
     expect(seg(idxVerify, idxShip).filter((p) => p.kind === 'tool')).toHaveLength(1)
     expect(seg(idxVerify, idxShip).filter((p) => p.kind === 'prompt')).toHaveLength(1)
-    expect(seg(idxShip, idxArchive).filter((p) => p.kind === 'tool')).toHaveLength(3)
+    expect(seg(idxShip, idxArchive).filter((p) => p.kind === 'tool')).toHaveLength(2)
     expect(seg(idxShip, idxArchive).filter((p) => p.kind === 'prompt')).toHaveLength(0) // ship 非 review 相位，全程不该有解锁
   }, 30_000)
 
+  test('router reports a dynamic track id while resolving inherited profile skills even when matrix=false', async () => {
+    await seed('.pipeline/tracks.yaml', `version: 1
+tracks:
+  - id: designer-mobile
+    label: Designer Mobile
+    workflow:
+      default: default
+      allowed: '*'
+    policy_profile:
+      review_seed: pending
+      automation_eligible: true
+      coverage_profile: frontend
+      routing:
+        enabled: true
+        pattern: '(mobile-route-token)'
+        priority: 901
+      skills:
+        matrix: false
+        profile: backend
+`)
+    expect(await h.run(['init', CHANGE, '--track', 'designer-mobile', '--preset', 'full'])).toBe(0)
+    await h.seedGovernedDocumentEvidence(CHANGE)
+    expect(await h.run(['transition', CHANGE, 'open-complete'])).toBe(0)
+
+    const routed = runRouter('继续处理 mobile-route-token')
+    expect(routed.code).toBe(0)
+    expect(routed.stdout).toContain('track=designer-mobile')
+    expect(routed.stdout).toContain('phase=explore')
+    expect(routed.stdout).toContain('improve-codebase-architecture') // explore.backend；dynamic id 自身无 manifest 列
+    expect(routed.stdout).toContain('search-first')
+  })
+
   test('kernel 真产出的 review marker 陈旧超 TTL 后，gate.sh 真自愈放行（无需 AskUserQuestion）', async () => {
     expect(await h.run(['init', CHANGE, '--track', TRACK, '--preset', 'full'])).toBe(0)
+    await h.seedGovernedDocumentEvidence(CHANGE)
     expect(await h.run(['transition', CHANGE, 'open-complete'])).toBe(0) // → explore，真落 review marker
     const markerPath = join(h.cwd, '.pipeline-pending-review')
     expect(await pathExists(markerPath)).toBe(true)

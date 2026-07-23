@@ -36,6 +36,12 @@ function renderCard() {
   )
 }
 
+// IA 精简（2026-07-14）：就绪三灯是只读诊断，收进「▸ 高级设置」折叠区默认收起——断言前先展开。
+// 折叠钮 afk-adv 仅在 readiness 拉到后渲染（拉不到整块不出，不谎报），故 findByTestId 等它出现。
+async function openAfkAdvanced(): Promise<void> {
+  fireEvent.click(await screen.findByTestId('afk-adv'))
+}
+
 beforeEach(() => {
   localStorage.clear()
   settings = { max_parallel: 4, max_retries: 1, default_opt_in: false, image: '' }
@@ -171,7 +177,8 @@ describe('AutomationCard v6 T9：镜像下拉 + 就绪三灯', () => {
         { status: 200 },
       )
     renderCard()
-    const rd = await screen.findByTestId('afk-rd')
+    await openAfkAdvanced()
+    const rd = screen.getByTestId('afk-rd')
     expect(rd).toBeInTheDocument()
     expect(screen.getByTestId('afk-rd-image').textContent).toContain('未就绪')
     expect(screen.getByTestId('afk-rd-cred-claude').textContent).toContain('未配置')
@@ -225,10 +232,26 @@ describe('AutomationCard full-install W1：凭证 per-runner 双灯 + caveat', (
         { status: 200 },
       )
     renderCard()
-    const codex = await screen.findByTestId('afk-rd-cred-codex')
+    await openAfkAdvanced()
+    const codex = screen.getByTestId('afk-rd-cred-codex')
     expect(codex.textContent).toContain('codex') // 可见文案含 runner 名,非 tooltip
     expect(codex.textContent).toContain('就绪') // 就绪态在可见文案里,不靠 hover
-    expect(codex.previousElementSibling).toHaveClass('rd-dot', 'rd-dot--ok') // 绿灯
+    expect(codex.previousElementSibling).toHaveAttribute('data-state', 'ok') // 绿灯
+  })
+
+  it('Codex-first：OPENAI_API_KEY 未配但默认 Codex home 已登录 → codex 灯仍就绪', async () => {
+    readinessResponse = () =>
+      new Response(
+        JSON.stringify(
+          READY_BODY(CREDS({ codex: { OPENAI_API_KEY: { set: false }, CODEX_HOME: { set: true, source: 'default-home' } } })),
+        ),
+        { status: 200 },
+      )
+    renderCard()
+    await openAfkAdvanced()
+    const codex = screen.getByTestId('afk-rd-cred-codex')
+    expect(codex.textContent).toContain('就绪')
+    expect(codex.previousElementSibling).toHaveAttribute('data-state', 'ok')
   })
 
   it('② claude 未配 + codex 已配 → 两灯各自态正确（不再只显 claude）', async () => {
@@ -245,18 +268,20 @@ describe('AutomationCard full-install W1：凭证 per-runner 双灯 + caveat', (
         { status: 200 },
       )
     renderCard()
-    const claude = await screen.findByTestId('afk-rd-cred-claude')
+    await openAfkAdvanced()
+    const claude = screen.getByTestId('afk-rd-cred-claude')
     const codex = screen.getByTestId('afk-rd-cred-codex')
     expect(claude.textContent).toContain('未配置')
     expect(codex.textContent).toContain('就绪')
-    expect(claude.previousElementSibling).toHaveClass('rd-dot--no')
-    expect(codex.previousElementSibling).toHaveClass('rd-dot--ok')
+    expect(claude.previousElementSibling).toHaveAttribute('data-state', 'no')
+    expect(codex.previousElementSibling).toHaveAttribute('data-state', 'ok')
   })
 
   it('③ 凭证文案无「(claude-code)」括号硬编码残留;claude-code 仅作 per-runner 标签', async () => {
     readinessResponse = () => new Response(JSON.stringify(READY_BODY(CREDS())), { status: 200 })
     renderCard()
-    const rd = await screen.findByTestId('afk-rd')
+    await openAfkAdvanced()
+    const rd = screen.getByTestId('afk-rd')
     expect(rd.textContent).not.toContain('(claude-code)') // 括号硬编码已去
     // claude-code 仍出现,但作 per-runner 并列标签（凭证·claude-code）,非「唯一凭证=claude」的括号形式
     expect(screen.getByTestId('afk-rd-cred-claude').textContent).toContain('claude-code')
@@ -265,7 +290,8 @@ describe('AutomationCard full-install W1：凭证 per-runner 双灯 + caveat', (
   it('④ 凭证行渲染诚实 caveat（服务进程视角 / 终端 doctor 为准）', async () => {
     readinessResponse = () => new Response(JSON.stringify(READY_BODY(CREDS())), { status: 200 })
     renderCard()
-    const caveat = await screen.findByTestId('afk-rd-cred-caveat')
+    await openAfkAdvanced()
+    const caveat = screen.getByTestId('afk-rd-cred-caveat')
     expect(caveat.textContent).toContain('服务进程')
     expect(caveat.textContent).toContain('doctor')
   })
@@ -280,7 +306,7 @@ describe('AutomationCard full-install W1：凭证 per-runner 双灯 + caveat', (
     expect(screen.queryByTestId('afk-rd-cred-caveat')).toBeNull()
   })
 
-  it('⑥ 凭证双灯复用 color-mix 派生类名(rd-dot--ok/--no),不硬编码新原色(无内联 style)', async () => {
+  it('⑥ 凭证双灯状态走 data-state(ok/no),灯色 token/color-mix 派生,不硬编码新原色(无内联 style)', async () => {
     readinessResponse = () =>
       new Response(
         JSON.stringify(
@@ -294,11 +320,12 @@ describe('AutomationCard full-install W1：凭证 per-runner 双灯 + caveat', (
         { status: 200 },
       )
     renderCard()
-    const claudeDot = (await screen.findByTestId('afk-rd-cred-claude')).previousElementSibling
+    await openAfkAdvanced()
+    const claudeDot = screen.getByTestId('afk-rd-cred-claude').previousElementSibling
     const codexDot = screen.getByTestId('afk-rd-cred-codex').previousElementSibling
-    // 未配→rd-dot--no(styles.ts: color-mix(in oklch,var(--red) 52%,var(--green)) 派生);已配→rd-dot--ok(var(--green) token)
-    expect(claudeDot).toHaveClass('rd-dot', 'rd-dot--no')
-    expect(codexDot).toHaveClass('rd-dot', 'rd-dot--ok')
+    // 未配→data-state="no"(灯色 color-mix(in oklch,var(--red) 52%,var(--green)) 派生);已配→data-state="ok"(var(--green) token)
+    expect(claudeDot).toHaveAttribute('data-state', 'no')
+    expect(codexDot).toHaveAttribute('data-state', 'ok')
     // 决议#9:不引入新原色——灯元素无内联硬编码色
     expect(claudeDot).not.toHaveAttribute('style')
     expect(codexDot).not.toHaveAttribute('style')
@@ -314,7 +341,8 @@ describe('AutomationCard G2:docker 就绪灯「怎么装」引导', () => {
     readinessResponse = () =>
       new Response(JSON.stringify(READY_BODY({ docker: { available: false } })), { status: 200 })
     renderCard()
-    const howto = await screen.findByTestId('afk-rd-docker-howto')
+    await openAfkAdvanced()
+    const howto = screen.getByTestId('afk-rd-docker-howto')
     const txt = (howto.textContent ?? '').toLowerCase()
     expect(txt).toContain('orbstack')
     expect(txt).toContain('docker')
@@ -323,7 +351,8 @@ describe('AutomationCard G2:docker 就绪灯「怎么装」引导', () => {
   it('③b docker.available=true → 不渲染该引导(健康态不噪)', async () => {
     // 缺省 READY_BODY docker.available=true
     renderCard()
-    await screen.findByTestId('afk-rd-docker')
+    await openAfkAdvanced()
+    expect(screen.getByTestId('afk-rd-docker')).toBeInTheDocument()
     expect(screen.queryByTestId('afk-rd-docker-howto')).toBeNull()
   })
 
@@ -353,11 +382,12 @@ describe('AutomationCard Bug2：docker 未起时镜像灯不给走不通的 buil
         { status: 200 },
       )
     renderCard()
-    await screen.findByTestId('afk-rd')
+    await openAfkAdvanced()
+    expect(screen.getByTestId('afk-rd')).toBeInTheDocument()
     // build 复制钮不出现（docker 没起 → build 必失败，不给走不通的引导）
     expect(screen.queryByTestId('afk-rd-build-copy')).toBeNull()
     // 改为「先起 docker」引导（明示前置）
-    const needs = await screen.findByTestId('afk-rd-image-needs-docker')
+    const needs = screen.getByTestId('afk-rd-image-needs-docker')
     expect((needs.textContent ?? '').toLowerCase()).toContain('docker')
   })
 
@@ -373,7 +403,8 @@ describe('AutomationCard Bug2：docker 未起时镜像灯不给走不通的 buil
         { status: 200 },
       )
     renderCard()
-    await screen.findByTestId('afk-rd-build-copy')
+    await openAfkAdvanced()
+    expect(screen.getByTestId('afk-rd-build-copy')).toBeInTheDocument()
     expect(screen.queryByTestId('afk-rd-image-needs-docker')).toBeNull()
   })
 })

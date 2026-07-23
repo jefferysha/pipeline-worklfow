@@ -89,18 +89,18 @@ describe('StepperRail 基础渲染（节点数/名称/ID/选中态）', () => {
   })
 })
 
-describe('StepperRail 转换事件连接件', () => {
-  it('非末尾节点带 linkEvent 时渲染事件名；null 不渲染；末尾节点不渲染尾随连接件', () => {
+describe('StepperRail 段间连接件（#2：转换事件名小字退役）', () => {
+  it('段间连接件不再渲染转换事件名小字（会被相邻卡挡住、非必要，2026-07-15 退役）', () => {
     renderRail()
-    expect(screen.getByText('submitted')).toBeInTheDocument()
-    expect(screen.getByText('approved')).toBeInTheDocument()
+    // 事件名（submitted/approved）作为可见文本已不渲染——连接件只留流动虚线+门菱形
+    expect(screen.queryByText('submitted')).toBeNull()
+    expect(screen.queryByText('approved')).toBeNull()
   })
 
-  it('末尾节点即便 linkEvent 非空也不画尾随连接件（无下一节点可指）', () => {
-    const steps = [...STEPS]
-    steps[2] = { ...steps[2]!, linkEvent: 'archived' }
-    renderRail({ steps })
-    expect(screen.queryByText('archived')).toBeNull()
+  it('linkEvent 仍决定是否画连接件：非末尾且非空 → 画（门菱形在），末尾不画', () => {
+    renderRail()
+    // review→ship 是门后推进边，菱形门节点在连接件里（testid 无独立锚，验其存在靠 gate 段）
+    expect(screen.getByTestId('wb-step-review')).toBeInTheDocument()
   })
 })
 

@@ -31,6 +31,7 @@ const FIELD_ORDER = [
   'automation_attempts', 'automation_last_error', 'automation_preserved_path',
   'branch', 'base_branch', 'scope', 'related_files', 'spec_scope', 'depends_on',
   'created_at', 'updated_at', 'verified_at', 'archived_at', 'archived',
+  'workflow', 'automation_current_phase', 'automation_cause',
 ]
 
 // 老内核 cmd_set 白名单（state-fields.sh ALLOWED_FIELDS）
@@ -157,6 +158,7 @@ function cmdInit() {
     branch: 'null', base_branch: 'main', scope: 'null', related_files: 'null', spec_scope: 'null',
     depends_on: 'null', created_at: now, updated_at: now,
     verified_at: 'null', archived_at: 'null', archived: 'false',
+    workflow: 'default', automation_current_phase: '""', automation_cause: '""',
   }
   writeFileSync(yamlPath(name), FIELD_ORDER.map((f) => `${f}: ${v[f]}`).join('\n') + '\n')
   if (MODE === 'contract') process.stdout.write(`openspec/changes/${name}\n`) // 契约：创建路径一行
@@ -262,5 +264,14 @@ switch (cmd) {
   case 'set': cmdSet(); break
   case 'transition': cmdTransition(); break
   case 'check': cmdCheck(); break
+  // G1 oracle seed 在直改新侧 YAML 后会显式调用 import；stub 没有第二份 canonical store，
+  // 因而这一步的忠实等价行为就是确认 adapter 已经是当前状态并成功 no-op。
+  case 'state': {
+    const [, sub, name] = argv
+    if (sub !== 'import-legacy') die(1, `未知 state 子命令: ${sub}`)
+    readDoc(name)
+    process.exit(0)
+    break
+  }
   default: die(1, `未知子命令: ${cmd}`)
 }

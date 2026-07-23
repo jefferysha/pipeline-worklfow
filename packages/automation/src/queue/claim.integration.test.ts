@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createStateStore } from '@pipeline-lite/kernel'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { claim, incrAttempts, markQueued, setAutomationOwned } from './claim.js'
+import { claim, commitFailureOwned, incrAttempts, markQueued, setAutomationOwned } from './claim.js'
 
 /**
  * 真 fs + 真 kernel StateStore：驱动 automation 字段的 cas 并发闸（无 mock）。
@@ -15,7 +15,10 @@ describe('cas 并发闸（真 kernel cas 写 automation 字段）', () => {
   const fixedClock = () => '2026-07-07T00:00:00Z'
 
   const initChange = async (name: string, track: 'backend' | 'pm' = 'backend') =>
-    store.init({ repoRoot: root, name, track, preset: 'full', clock: fixedClock })
+    store.init({
+      repoRoot: root, name, track, reviewSeed: track === 'pm' ? 'skipped' : 'pending',
+      preset: 'full', clock: fixedClock,
+    })
 
   beforeEach(async () => {
     root = await mkdtemp(join(tmpdir(), 'afk-claim-'))
@@ -58,6 +61,36 @@ describe('cas 并发闸（真 kernel cas 写 automation 字段）', () => {
     expect(await store.get(dir, 'automation_attempts')).toBe('1') // 真落盘
     const r2 = await incrAttempts(store, dir, 1)
     expect(r2).toEqual({ value: 2, exhausted: true }) // 2 > maxRetries=1
+  })
+
+  it('commitFailureOwned retry：owner 校验、attempts+1、queued 与诊断字段在同一锁内一次提交', async () => {
+    const dir = await initChange('failure-commit')
+    await markQueued(store, dir, fixedClock)
+    await claim(store, dir)
+    await store.set(dir, 'automation', 'running')
+
+    expect(await commitFailureOwned(store, dir, {
+      classification: 'retry',
+      maxRetries: 1,
+      fields: { automation_last_error: 'boom', automation_cause: '' },
+    })).toEqual({ status: 'committed', automation: 'queued', attempts: 1 })
+    expect(await store.get(dir, 'automation')).toBe('queued')
+    expect(await store.get(dir, 'automation_attempts')).toBe('1')
+    expect(await store.get(dir, 'automation_last_error')).toBe('boom')
+  })
+
+  it('commitFailureOwned owner 已丢失：返回同锁内 observed，attempts/诊断零改动', async () => {
+    const dir = await initChange('failure-lost')
+    await store.set(dir, 'automation', 'merged')
+
+    expect(await commitFailureOwned(store, dir, {
+      classification: 'retry',
+      maxRetries: 1,
+      fields: { automation_last_error: 'must-not-write', automation_cause: '' },
+    })).toEqual({ status: 'ownership-lost', observed: 'merged' })
+    expect(await store.get(dir, 'automation')).toBe('merged')
+    expect(await store.get(dir, 'automation_attempts')).toBe('0')
+    expect(await store.get(dir, 'automation_last_error')).toBe('')
   })
 
   it('并发两个 claim 竞同一 change：恰好一个赢（真锁串行）', async () => {

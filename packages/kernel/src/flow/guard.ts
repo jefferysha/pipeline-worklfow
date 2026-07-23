@@ -20,27 +20,40 @@
  *   · verify 出口 verify_result=pass 只对 pm track（老 manifest M246 tracks: pm；
  *     fe/be 由 verify-pass 事件体落 pass，新仓 transition.ts 同款）。
  *
+ * track 条件（2026-07-17 P0 advisory/enforcement 对齐）：规则的 when= 是 TrackPredicate
+ * （workflow/predicates.ts），老仓 tracks=backend,frontend 白名单已统一改为 NON_PM 谓词——
+ * guard 的 advisory 预览（pipeline check/doctor）与 transition 强制层（flow/transition-table.ts）
+ * 对 chat/未知 track 同判（都要求 plan/review 等）。PM 对 legacy `plan` state artifact 保持
+ * 原流程豁免；它仍须通过 OpenSpec 文档账本提交 plan 文档，二者不可混为一谈。
+ *
  * 「null」哨兵：老内核把字符串 "null" 视同空（yaml_nonempty `[ "$v" != "null" ]`），照搬。
  */
 import type { FieldName, GuardContext, GuardResult, Phase, PipelineState } from '../types.js'
+// 具体文件路径而非 barrel（同 transition-table.ts）：predicates.ts 零 import，物理上无环。
+import { matchesTrackPredicate, NON_PM, type TrackPredicate } from '../workflow/predicates.js'
 
 type GuardRule =
   // ── 纯字段谓词（无 ctx 也评估；lite 原有面）──
-  | { kind: 'nonempty'; field: FieldName; tracks?: readonly string[] }
-  | { kind: 'eq'; field: FieldName; value: string; tracks?: readonly string[] }
+  | { kind: 'nonempty'; field: FieldName; when?: TrackPredicate }
+  | { kind: 'eq'; field: FieldName; value: string; when?: TrackPredicate }
   | { kind: 'automation-queued' }      // guard.sh:154-162 build 前置闸（纯字段 + ctx.automationRunner 旁路）
   | { kind: 'full-direct-override' }   // guard.sh:537-542 preset=full && build_mode=direct → direct_override=true
   // ── 文件面谓词（需 ctx 对应能力，缺则跳过）──
   | { kind: 'statefile' }                                                    // manifest: file_nonempty .pipeline.yaml
-  | { kind: 'file-nonempty'; path: string; tracks?: readonly string[] }      // change 目录内产物
+  | { kind: 'file-nonempty'; path: string; when?: TrackPredicate }           // change 目录内产物
   | { kind: 'file-exists'; path: string }                                    // change 目录内产物
   | { kind: 'tasks-at-least'; n: number }                                    // lib:34-39 `^- \[[ x]\]` 计数
   | { kind: 'tasks-all-done' }                                               // lib:41-45 文件缺失=FAIL
-  | { kind: 'field-file-exists'; field: FieldName; desc?: string; tracks?: readonly string[] } // 字段值=项目根相对路径
+  | { kind: 'field-file-exists'; field: FieldName; desc?: string; when?: TrackPredicate } // 字段值=项目根相对路径
   | { kind: 'coverage' }                                                     // guard.sh:510-528 M1 覆盖 gate
   | { kind: 'depends-archived' }                                             // guard.sh:544-559
 
-/** 相位出口规则表（顺序 = 老仓声明/评估顺序：automation 闸 → exit_checks → 显式步） */
+/** 仅 pm 轨适用（老仓 tracks=pm 的 verify_result / prd_path 各条，语义与老仓一致）。 */
+const PM_ONLY: TrackPredicate = { kind: 'track-in', values: ['pm'] }
+
+/** 相位出口规则表（顺序 = 老仓声明/评估顺序：automation 闸 → exit_checks → 显式步）。
+ *  when= 语义见文件头「track 条件」：NON_PM 用于原流程的 plan/review/PR 分支；PM_ONLY 各条
+ *  保留 PM 交付物行为。OpenSpec document ledger 对所有 track 另有独立的文档要求。 */
 const EXIT_RULES: Readonly<Record<Phase, readonly GuardRule[]>> = {
   // open 出口（manifest.yaml:146-151）
   open: [
@@ -48,7 +61,7 @@ const EXIT_RULES: Readonly<Record<Phase, readonly GuardRule[]>> = {
     { kind: 'file-nonempty', path: 'proposal.md' },
     { kind: 'file-exists', path: 'tasks.md' },
     { kind: 'tasks-at-least', n: 1 },
-    { kind: 'file-nonempty', path: 'design.md', tracks: ['backend', 'frontend'] },
+    { kind: 'file-nonempty', path: 'design.md' },
   ],
   // explore 出口（manifest.yaml:171-174）
   explore: [
@@ -59,8 +72,8 @@ const EXIT_RULES: Readonly<Record<Phase, readonly GuardRule[]>> = {
   // spec 出口（manifest.yaml:188-192 + guard.sh:510-528 coverage 显式步）
   spec: [
     { kind: 'statefile' },
-    { kind: 'nonempty', field: 'plan', tracks: ['backend', 'frontend'] },
-    { kind: 'field-file-exists', field: 'plan', tracks: ['backend', 'frontend'] },
+    { kind: 'nonempty', field: 'plan', when: NON_PM },
+    { kind: 'field-file-exists', field: 'plan', when: NON_PM },
     { kind: 'tasks-at-least', n: 3 },
     { kind: 'coverage' },
   ],
@@ -80,16 +93,16 @@ const EXIT_RULES: Readonly<Record<Phase, readonly GuardRule[]>> = {
     { kind: 'nonempty', field: 'verification_report' },
     { kind: 'field-file-exists', field: 'verification_report', desc: 'verification_report 文件存在' },
     { kind: 'eq', field: 'branch_status', value: 'handled' },
-    { kind: 'eq', field: 'agent_review_result', value: 'pass', tracks: ['frontend', 'backend'] },
-    { kind: 'eq', field: 'codex_review_result', value: 'pass', tracks: ['frontend', 'backend'] },
-    { kind: 'eq', field: 'verify_result', value: 'pass', tracks: ['pm'] },
+    { kind: 'eq', field: 'agent_review_result', value: 'pass', when: NON_PM },
+    { kind: 'eq', field: 'codex_review_result', value: 'pass', when: NON_PM },
+    { kind: 'eq', field: 'verify_result', value: 'pass', when: PM_ONLY },
   ],
   // ship 出口（manifest.yaml:259-263）
   ship: [
     { kind: 'statefile' },
-    { kind: 'nonempty', field: 'prd_path', tracks: ['pm'] },
-    { kind: 'field-file-exists', field: 'prd_path', desc: 'prd_path 文件存在', tracks: ['pm'] },
-    { kind: 'nonempty', field: 'pr_url', tracks: ['frontend', 'backend'] },
+    { kind: 'nonempty', field: 'prd_path', when: PM_ONLY },
+    { kind: 'field-file-exists', field: 'prd_path', desc: 'prd_path 文件存在', when: PM_ONLY },
+    { kind: 'nonempty', field: 'pr_url', when: NON_PM },
   ],
   // archive 出口（manifest.yaml:272-274）
   archive: [
@@ -107,8 +120,8 @@ const COVERAGE_LAYERS = [
 
 type Applicability = 'required' | 'optional' | 'na'
 
-/** 每 track 每层适用性（lib:119-141）；表外 track / 表外层 = na */
-const COVERAGE_APPLICABILITY: Readonly<Record<string, Readonly<Record<string, Applicability>>>> = {
+/** 每 coverage profile 每层适用性（lib:119-141）；表外层 = na；none 在入口直接跳过。 */
+const COVERAGE_PROFILE_APPLICABILITY: Readonly<Record<string, Readonly<Record<string, Applicability>>>> = {
   backend: {
     L1_api: 'required', L2_data: 'required', L3_rules: 'required', L4_state: 'required',
     L5_errors: 'required', L6_security: 'required', L8_deps: 'required',
@@ -183,14 +196,15 @@ export function taskCount(content: string | undefined): number {
   return content.split('\n').filter((l) => /^- \[[ x]\]/.test(l)).length
 }
 
-/** tracks= 过滤（guard.sh:322-331）：无 tracks 对全部生效；track 不在列表 → 跳过 */
-function trackApplies(tracks: readonly string[] | undefined, track: string): boolean {
-  return tracks === undefined || tracks.includes(track)
+/** when= 条件求值（占老仓 guard.sh:322-331 tracks= 过滤的位置）：无 when 对全轨生效；
+ *  有 when 按 TrackPredicate 判定——与 transition 层共用 matchesTrackPredicate，两层同判。 */
+function trackApplies(when: TrackPredicate | undefined, track: string): boolean {
+  return when === undefined || matchesTrackPredicate(when, track)
 }
 
-/** 老仓 label 的 track 后缀（guardcheck_* 有 tracks= 条件时带出当前 track） */
-function trackSuffix(tracks: readonly string[] | undefined, track: string): string {
-  return tracks === undefined ? '' : ` (${track} track)`
+/** 老仓 label 的 track 后缀（guardcheck_* 有 track 条件时带出当前 track） */
+function trackSuffix(when: TrackPredicate | undefined, track: string): string {
+  return when === undefined ? '' : ` (${track} track)`
 }
 
 /** M1 覆盖 gate（guard.sh:436-477 emit_coverage_status + 510-528 spec 显式步） */
@@ -200,14 +214,13 @@ function evaluateCoverage(
   failures: string[],
   warnings: string[],
 ): void {
-  if (ctx.readFile === undefined) return
-  const track = scalar(state.fields.track)
+  if (ctx.readFile === undefined || ctx.coverageProfile === 'none') return
   const preset = scalar(state.fields.preset)
   const dd = scalar(state.fields.design_doc)
   const content = dd !== '' && dd !== 'null' ? ctx.readFile(dd) : undefined
   const lines = coverageBlockLines(content)
   const touches = coverageTouches(lines)
-  const applicability = COVERAGE_APPLICABILITY[track]
+  const applicability = COVERAGE_PROFILE_APPLICABILITY[ctx.coverageProfile]
 
   // emit 行格式照老仓：`$layer $app $status $verdict$tag`（na 层 skip，连锁也不查——guard.sh:459）
   const blockedLines: string[] = []
@@ -258,7 +271,7 @@ export function evaluateGuard(state: PipelineState, ctx?: GuardContext): GuardRe
   for (const rule of rules) {
     switch (rule.kind) {
       case 'nonempty': {
-        if (!trackApplies(rule.tracks, track)) break
+        if (!trackApplies(rule.when, track)) break
         const value = state.fields[rule.field]
         if (isEmpty(value)) {
           failures.push(`${phase} 出口：要求 ${rule.field} 非空（当前='${scalar(value)}'）`)
@@ -266,7 +279,7 @@ export function evaluateGuard(state: PipelineState, ctx?: GuardContext): GuardRe
         break
       }
       case 'eq': {
-        if (!trackApplies(rule.tracks, track)) break
+        if (!trackApplies(rule.when, track)) break
         const value = state.fields[rule.field]
         if (scalar(value) !== rule.value) {
           failures.push(`${phase} 出口：要求 ${rule.field}=${rule.value}（当前='${scalar(value)}'）`)
@@ -293,17 +306,21 @@ export function evaluateGuard(state: PipelineState, ctx?: GuardContext): GuardRe
         break
       }
       case 'statefile': {
-        if (ctx?.fileNonempty === undefined || changeDir === undefined) break
-        if (!ctx.fileNonempty(`${changeDir}/.pipeline.yaml`)) {
-          failures.push(`${phase} 出口：要求 状态文件存在且非空（.pipeline.yaml）`)
+        if (changeDir === undefined) break
+        const exists = ctx?.stateExists !== undefined
+          ? ctx.stateExists(changeDir)
+          : ctx?.fileNonempty?.(`${changeDir}/.pipeline.yaml`)
+        if (exists === undefined) break
+        if (!exists) {
+          failures.push(`${phase} 出口：要求 canonical 状态文件存在（兼容 legacy .pipeline.yaml）`)
         }
         break
       }
       case 'file-nonempty': {
-        if (!trackApplies(rule.tracks, track)) break
+        if (!trackApplies(rule.when, track)) break
         if (ctx?.fileNonempty === undefined || changeDir === undefined) break
         if (!ctx.fileNonempty(`${changeDir}/${rule.path}`)) {
-          failures.push(`${phase} 出口：要求 ${rule.path} 存在且非空${trackSuffix(rule.tracks, track)}`)
+          failures.push(`${phase} 出口：要求 ${rule.path} 存在且非空${trackSuffix(rule.when, track)}`)
         }
         break
       }
@@ -337,13 +354,13 @@ export function evaluateGuard(state: PipelineState, ctx?: GuardContext): GuardRe
         break
       }
       case 'field-file-exists': {
-        if (!trackApplies(rule.tracks, track)) break
+        if (!trackApplies(rule.when, track)) break
         if (ctx?.fileExists === undefined) break
         const v = scalar(state.fields[rule.field])
         // lib:67-72 yaml_file_exists：字段空/"null"/文件不存在 都 FAIL（与 nonempty 条双计，老仓同）
         if (v === '' || v === 'null' || !ctx.fileExists(v)) {
           const label = rule.desc ?? `${rule.field} 指向的文件存在`
-          failures.push(`${phase} 出口：要求 ${label}${trackSuffix(rule.tracks, track)}（当前='${v}'）`)
+          failures.push(`${phase} 出口：要求 ${label}${trackSuffix(rule.when, track)}（当前='${v}'）`)
         }
         break
       }

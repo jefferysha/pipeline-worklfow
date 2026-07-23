@@ -196,6 +196,37 @@ export interface WbLoopBudgetDecl {
   max_tokens_per_day?: number
   tokens_per_run?: number
 }
+export interface WbLoopLedgerSnapshot {
+  health: 'ok' | 'degraded' | 'missing'
+  rejected_records: number
+  admission_enforced: boolean
+  inflight_enforced: boolean
+  runs_today: number
+  in_flight: number
+  activated_in_flight: number
+  settled_tokens_actual: number
+  settled_tokens_estimated: number
+  reserved_tokens: number
+  remaining_tokens: number | null
+  last_result: 'merged' | 'paused' | 'conflict' | 'failed' | 'retry-queued' | 'skipped' | null
+  last_finished_at: string | null
+}
+export interface WbLoopGraduation {
+  id: string
+  current: 'L1' | 'L2' | 'L3'
+  recommended: 'L1' | 'L2' | 'L3'
+  enforcement: string
+  canGraduate: boolean
+  blockers: string[]
+  demotionReason: string | null
+  demotionSignals: string[]
+  readinessScore: number
+  readinessBand: string
+  driftCount: number
+  breaker: 'ok' | 'warn' | 'tripped'
+  failStreak: number
+  runs: number
+}
 export interface WbLoopRow {
   root: string
   id: string
@@ -223,6 +254,16 @@ export interface WbLoopRow {
   // ── loop-init L4（P2 草稿审阅协议）：server LoopRow.draft 镜像同步 ──
   /** 该 loop 是否为「agent 草稿·待你审阅」（.pipeline/loops.drafts.json 标记，fail-open→false）；L5 据此渲染徽章与批准/驳回动作行。 */
   draft: boolean
+  /** H11 starter/binding 身份；旧 loop 可缺席。 */
+  template_id?: string
+  template_version?: 1
+  workflow_id?: string
+  /** H10：null = 明确未接线，不能 real-run。 */
+  skill_bundle_id: string | null
+  /** H1/G5/H6：admission 与 UI 共用的 durable ledger 投影。旧 server 缺席时 UI 必须显示未知。 */
+  ledger?: WbLoopLedgerSnapshot
+  /** 新 server 恒有；optional 仅兼容旧快照/测试 fixture，缺席时 UI 必须显示 unknown。 */
+  graduation?: WbLoopGraduation | null
 }
 export interface WbLoopsSnapshot {
   generated_at: string
@@ -367,11 +408,248 @@ export async function getHistory(name: string, root: string): Promise<ChangeHist
   return ((await res.json()) as { entries: ChangeHistoryEntry[] }).entries
 }
 
+// ── Control Room：canonical WorkflowRun / revision / TransitionRecord / loop ledger 审计面。──
+
+export interface WbRunIdentity {
+  id: string
+  workflow_id: string
+  current_step: string
+  lifecycle: 'active' | 'archived'
+  transition_sequence: number
+  transition_head?: string
+  created_at: string
+  updated_at: string
+  policy_id?: string
+  policy_version?: string
+  loop_id?: string
+  iteration_id?: string
+  automation_policy?: Record<string, unknown>
+}
+
+export interface WbRunRevision {
+  revision: number
+  revisionId: string
+  previousRevisionId?: string
+  stateDigest: string
+  mutation: { kind: string; observedAt?: string; transitionRecordId?: string }
+  [key: string]: unknown
+}
+
+export interface WbTransitionRecord {
+  id: string
+  runId: string
+  sequence: number
+  event: string
+  from: string
+  to: string
+  observedAt: string
+  effects: unknown[]
+  [key: string]: unknown
+}
+
+export type WbLedgerRecord = {
+  kind: string
+  record_id: string
+  recorded_at: string
+  [key: string]: unknown
+}
+
+export interface WbAttemptContext {
+  record_id: string
+  recorded_at: string
+  reservation_id: string
+  attempt_id: string
+  iteration_id?: string
+  loop_id: string
+  source_run_record_ids: string[]
+  omitted_attempt_ids: string[]
+  rendered: string
+  stagnation: {
+    stagnant: boolean
+    fingerprint?: string
+    repeated_attempt_ids: string[]
+  }
+}
+
+export interface WbRunDetail {
+  ok: true
+  root: string
+  change: string
+  source: 'canonical' | 'legacy'
+  projection: { status: string; [key: string]: unknown }
+  workflow_run: WbRunIdentity | null
+  current_revision: WbRunRevision | null
+  revisions: WbRunRevision[]
+  transitions: WbTransitionRecord[]
+  attempt_contexts: WbAttemptContext[]
+  ledger: {
+    health: 'ok' | 'degraded' | 'missing'
+    rejected: Array<{ line: number; raw_hash: string; error: string }>
+    records: WbLedgerRecord[]
+  }
+}
+
+/** GET /api/change/:name/run-detail —— 只读 canonical 审计面；损坏响应 fail-loud，不降级 history。 */
+export async function fetchRunDetail(name: string, root: string): Promise<WbRunDetail> {
+  let res: Response
+  try {
+    res = await fetch(`/api/change/${encodeURIComponent(name)}/run-detail?root=${encodeURIComponent(root)}`, {
+      headers: { Accept: 'application/json' },
+    })
+  } catch (err) {
+    wrapNetwork(err)
+  }
+  if (!res.ok) await throwApiError(res, '运行审计获取失败')
+  const body = await res.json() as Partial<WbRunDetail>
+  if (body.ok !== true
+    || (body.source !== 'canonical' && body.source !== 'legacy')
+    || typeof body.projection !== 'object' || body.projection === null
+    || typeof body.projection.status !== 'string'
+    || !Array.isArray(body.revisions)
+    || !Array.isArray(body.transitions)
+    || !Array.isArray(body.attempt_contexts)
+    || typeof body.ledger !== 'object' || body.ledger === null
+    || !Array.isArray(body.ledger.records) || !Array.isArray(body.ledger.rejected)) {
+    throw new ApiError('运行审计响应形状无效', res.status)
+  }
+  return body as WbRunDetail
+}
+
+// ── v3 Operations：H11 starter / H12 Codex triage / H13 sync / H14 real-run。──
+
+export interface AutomationStarterTemplate {
+  version: 1
+  id: string
+  goal: string
+  trigger: Array<{ kind: 'schedule' | 'event' | 'manual' }>
+  risk: 'low' | 'medium' | 'high'
+  recommendedWorkflow: 'default'
+  recommendedSkills: string[]
+}
+
+export interface OperationResponse {
+  ok: boolean
+  exit_code: number
+  command: string[]
+  result: unknown | null
+  stdout: string
+  stderr: string
+}
+
+export async function fetchAutomationStarters(root: string): Promise<AutomationStarterTemplate[]> {
+  let res: Response
+  try {
+    res = await fetch(`/api/operations/starters?root=${encodeURIComponent(root)}`, {
+      headers: { Accept: 'application/json' },
+    })
+  } catch (err) {
+    wrapNetwork(err)
+  }
+  if (!res.ok) await throwApiError(res, 'Starter 目录获取失败')
+  return ((await res.json()) as { templates: AutomationStarterTemplate[] }).templates
+}
+
+export type WbCadenceLoopState = 'inactive' | 'continuous' | 'waiting' | 'in-flight' | 'running' | 'succeeded' | 'failed' | 'blocked'
+export interface WbCadenceLoopStatus {
+  root: string
+  loop_id: string
+  cadence: string
+  runner: string
+  state: WbCadenceLoopState
+  last_finished_at: string | null
+  due_at: string | null
+  attempted_at?: string
+  exit_code?: number
+  error?: string
+}
+export interface WbCadenceStatus {
+  enabled: true
+  poll_interval_ms: number
+  generated_at: string
+  running: boolean
+  loops: WbCadenceLoopStatus[]
+  errors: string[]
+}
+
+/** GET /api/cadence/status：server 真实时钟/ledger/CLI 状态，不从可编辑 cadence 字段猜。 */
+export async function fetchCadenceStatus(root: string): Promise<WbCadenceStatus> {
+  let res: Response
+  try {
+    res = await fetch(`/api/cadence/status?root=${encodeURIComponent(root)}`, {
+      headers: { Accept: 'application/json' },
+    })
+  } catch (err) {
+    wrapNetwork(err)
+  }
+  if (!res.ok) await throwApiError(res, 'cadence 状态获取失败')
+  const body = await res.json() as Partial<WbCadenceStatus>
+  if (body.enabled !== true || typeof body.poll_interval_ms !== 'number'
+    || typeof body.generated_at !== 'string' || typeof body.running !== 'boolean'
+    || !Array.isArray(body.loops) || !Array.isArray(body.errors)) {
+    throw new ApiError('cadence 状态响应形状无效', res.status)
+  }
+  return body as WbCadenceStatus
+}
+
+async function postOperation(path: string, input: Record<string, unknown>): Promise<OperationResponse> {
+  let res: Response
+  try {
+    res = await fetch(path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
+      body: JSON.stringify(input),
+    })
+  } catch (err) {
+    wrapNetwork(err)
+  }
+  const body = await res.json() as Partial<OperationResponse> & { error?: string }
+  if (!res.ok && typeof body.exit_code !== 'number') {
+    throw new ApiError(body.error || `操作失败（${res.status}）`, res.status)
+  }
+  return body as OperationResponse
+}
+
+export const postLoopStarterInit = (input: Record<string, unknown>): Promise<OperationResponse> =>
+  postOperation('/api/operations/loops/init', input)
+
+export const postLoopRun = (input: Record<string, unknown>): Promise<OperationResponse> =>
+  postOperation('/api/operations/loops/run', input)
+
+export const postLoopSync = (input: Record<string, unknown>): Promise<OperationResponse> =>
+  postOperation('/api/operations/loops/sync', input)
+
+export const postTriage = (input: Record<string, unknown>): Promise<OperationResponse> =>
+  postOperation('/api/operations/triage', input)
+
+export const postArtifactRegister = (input: Record<string, unknown>): Promise<OperationResponse> =>
+  postOperation('/api/operations/artifact/register', input)
+
+export async function postProjectionAction(input: {
+  root: string
+  change: string
+  action: 'repair-projection' | 'import-legacy'
+  force_canonical?: boolean
+  confirm_import?: boolean
+}): Promise<{ ok: true; projection: { status: string; [key: string]: unknown } }> {
+  let res: Response
+  try {
+    res = await fetch(`/api/change/${encodeURIComponent(input.change)}/projection`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
+      body: JSON.stringify(input),
+    })
+  } catch (err) {
+    wrapNetwork(err)
+  }
+  if (!res.ok) await throwApiError(res, 'Projection 操作失败')
+  return (await res.json()) as { ok: true; projection: { status: string; [key: string]: unknown } }
+}
+
 // ── T9：收件箱失败卡动作（计划决议 #4/#13）──
 
 /** 失败卡动作共用 POST（/api/afk/:name/retry|dismiss，body { root }；写端点带 token）——
  *  请求本体经 postAfkCommand 单点（接缝收拢），本函数只保留 ApiError 包装语义。 */
-async function postAfkAction(name: string, root: string, action: 'retry' | 'dismiss', fallback: string): Promise<void> {
+async function postAfkAction(name: string, root: string, action: 'enqueue' | 'retry' | 'dismiss', fallback: string): Promise<void> {
   let res: Response
   try {
     res = await postAfkCommand(name, root, action)
@@ -379,6 +657,12 @@ async function postAfkAction(name: string, root: string, action: 'retry' | 'dism
     wrapNetwork(err)
   }
   if (!res.ok) await throwApiError(res, fallback)
+}
+
+/** AFK 指挥面「挂队」——把 off/未设置的 change 送入真实调度队列。资格校验仍由 server 以
+ *  effective track registry 为准，前端不复制 policyProfile 规则。 */
+export async function postAfkEnqueue(name: string, root: string): Promise<void> {
+  await postAfkAction(name, root, 'enqueue', '挂队失败')
 }
 
 /** T9：失败卡「↻ 重试」——清零计数重新挂队（server 既有 retryAfkRun，CAS failed/conflict/paused → queued）。 */
@@ -422,6 +706,12 @@ export interface WbSkillEntry {
   name: string
   installed: boolean
   source: 'local-plugin' | 'external-marketplace' | 'builtin' | 'user'
+  /** 由当前机器真实 SKILL.md 提取；旧 server 可缺省。 */
+  description?: string
+  /** Missing on legacy servers; current server always emits it from skill-sources.yaml. */
+  tier?: 'mandatory' | 'recommended' | 'conditional' | 'optional'
+  /** false marks a deliberately retired upstream, not a machine fault. */
+  available?: boolean
   installCmd?: string
 }
 
@@ -439,7 +729,7 @@ export async function fetchDockerImages(): Promise<WbDockerImages> {
 
 export interface WbCredLight {
   set: boolean
-  source?: 'host-env' | 'secrets-file'
+  source?: 'host-env' | 'secrets-file' | 'default-home'
 }
 export interface WbAfkReadiness {
   docker: { available: boolean }
@@ -538,16 +828,122 @@ export function fetchAfkLog(name: string, root: string): Promise<Response> {
   return fetch(`/api/afk/${encodeURIComponent(name)}/log?root=${encodeURIComponent(root)}`)
 }
 
-/** GET /api/config（SkillChain default 模式的 manifest 强制技能矩阵探测）。非 2xx / 网络失败的
- *  { capable:false } fail-soft 回落（静态镜像兜底、不谎报能力）是站点语义，留在 SkillChain。 */
-export function fetchConfig(): Promise<Response> {
-  return fetch('/api/config', { headers: { Accept: 'application/json' } })
+/**
+ * T-R5 effective track registry 的跨 HTTP 投影。前端只消费 server 已合成的 effective 顺序，
+ * 不重算 builtin fallback、override 或 revision；这样自定义第 5+ 轨与 policy profile 不会漂移。
+ */
+export interface WbTrackDefinition {
+  id: string
+  label: string
+  builtin: boolean
+  workflow: { default: string; allowed: '*' | string[] }
+  policyProfile: {
+    reviewSeed: 'pending' | 'skipped'
+    automationEligible: boolean
+    coverageProfile: 'none' | 'pm' | 'frontend' | 'backend'
+    routing:
+      | { enabled: false }
+      | { enabled: true; pattern: string; priority: number }
+    skills: { matrix: boolean; profile: string }
+  }
+}
+
+export interface WbRouterPreviewCandidate {
+  track: WbTrackDefinition
+  order: number
+  priority: number
+  score: number
+  routable: boolean
+}
+
+export interface WbRouterPreview {
+  ok: true
+  revision: string
+  source: 'builtin-only' | 'project-file'
+  winner: WbRouterPreviewCandidate | null
+  candidates: WbRouterPreviewCandidate[]
+  suppressed_reason: 'system-notification' | 'slash-command' | 'l5-override' | 'discussion' | null
+}
+
+/** 公共 Track Router 预览：server 生产实现真执行 grep -ciE，前端不自行解释 ERE。 */
+export async function postRouterPreview(root: string, prompt: string, draftTrack?: WbTrackDefinition): Promise<WbRouterPreview> {
+  let res: Response
+  try {
+    res = await fetch('/api/router/preview', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
+      body: JSON.stringify({ root, prompt, ...(draftTrack === undefined ? {} : { draft_track: draftTrack }) }),
+    })
+  } catch (error) {
+    wrapNetwork(error)
+  }
+  if (!res.ok) await throwApiError(res, '路由预览失败')
+  return (await res.json()) as WbRouterPreview
+}
+
+export type ChangeSessionStatus = 'not_requested' | 'unavailable' | 'failed' | 'degraded' | 'active'
+
+export interface ChangeSessionLaunch {
+  requested: boolean
+  active: boolean
+  status: ChangeSessionStatus
+  exit_code: number | null
+}
+
+export interface CreatedChange {
+  ok: true
+  name: string
+  path: string
+  /** Absent only when talking to an older compatible server. */
+  task_prompt_saved?: boolean
+  /** Absent only when talking to an older compatible server. */
+  session?: ChangeSessionLaunch
+}
+
+/** 真创建 Change；Track/Workflow 白名单与首 Step 仍由 server 锁内复验。 */
+export async function postCreateChange(input: {
+  root: string
+  name: string
+  track: string
+  workflow: string
+  task_prompt?: string
+  activate_session?: boolean
+}): Promise<CreatedChange> {
+  let res: Response
+  try {
+    res = await fetch('/api/changes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
+      body: JSON.stringify(input),
+    })
+  } catch (error) {
+    wrapNetwork(error)
+  }
+  if (!res.ok) await throwApiError(res, 'Change 创建失败')
+  return (await res.json()) as CreatedChange
+}
+
+/** GET /api/config 的 T-R5 项目级快照形状。任一字段缺席时前端 fail-closed，不退回手抄轨道。 */
+export interface WbConfigSnapshot {
+  ok: true
+  generated_at: string
+  revision: string
+  source: 'builtin-only' | 'project-file'
+  mandatory_skills: Record<string, string[]>
+  tracks: WbTrackDefinition[]
+  /** Server 逐 profile 声明现有 mandatory-skills 写端真实接受的范围；前端绝不按 id 猜。 */
+  mandatory_skills_writable_profiles: string[]
+}
+
+/** GET /api/config?root=（manifest mandatory skills + 同 revision effective tracks 投影）。 */
+export function fetchConfig(root: string): Promise<Response> {
+  return fetch(`/api/config?root=${encodeURIComponent(root)}`, { headers: { Accept: 'application/json' } })
 }
 
 /** POST /api/afk/:name/(cancel|retry|dismiss)（Bearer 单点）。ProgressView 三动作直接消费原始
  *  Response（{ error } 信封读取 + i18n 兜底文案在站点）；本文件 postAfkRetry/postAfkDismiss
  *  的请求也经由此发出（外层再包 ApiError，语义不变）。 */
-export function postAfkCommand(name: string, root: string, action: 'cancel' | 'retry' | 'dismiss'): Promise<Response> {
+export function postAfkCommand(name: string, root: string, action: 'cancel' | 'enqueue' | 'retry' | 'dismiss'): Promise<Response> {
   return fetch(`/api/afk/${encodeURIComponent(name)}/${action}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
@@ -565,13 +961,54 @@ export function postWorkflowDef(name: string, payload: Record<string, unknown>):
   })
 }
 
+/** DELETE /api/workflows/:name?root=（v3 Studio 删除）。返回原始 Response：409 的
+ * references / blockers 是产品信息，必须由 WorkbenchView 完整呈现，不能被通用 ApiError
+ * 压扁成一行字符串。 */
+export function deleteWorkflowDef(name: string, root: string): Promise<Response> {
+  return fetch(`/api/workflows/${encodeURIComponent(name)}?root=${encodeURIComponent(root)}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${getToken()}` },
+  })
+}
+
 /** POST /api/config/mandatory-skills（default 模式穿梭框保存）。成功体 { skills } 回读、
  *  错误文案（body.error || i18n 状态兜底）与 cfgCache 推进都在 SkillChain。 */
-export function postMandatorySkills(input: { phase: string; track: string; skills: string[] }): Promise<Response> {
+export function postMandatorySkills(input: { phase: string; track: string; skills: string[]; root: string }): Promise<Response> {
   return fetch('/api/config/mandatory-skills', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
     body: JSON.stringify(input),
+  })
+}
+
+/** v3 Studio Track CRUD。响应保持原始 Response，让编辑器呈现 revision conflict、引用列表与
+ * fail-closed 扫描 blockers；这些都不是可丢弃的“错误详情”。 */
+export function postTrackDefinition(input: { root: string; revision: string; track: WbTrackDefinition }): Promise<Response> {
+  const { builtin: _builtin, ...track } = input.track
+  return fetch('/api/tracks', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
+    body: JSON.stringify({ root: input.root, revision: input.revision, track }),
+  })
+}
+
+export function patchTrackDefinition(
+  root: string,
+  revision: string,
+  id: string,
+  patch: Record<string, unknown>,
+): Promise<Response> {
+  return fetch(`/api/tracks/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
+    body: JSON.stringify({ root, revision, patch }),
+  })
+}
+
+export function deleteTrackDefinition(root: string, revision: string, id: string): Promise<Response> {
+  return fetch(`/api/tracks/${encodeURIComponent(id)}?root=${encodeURIComponent(root)}&revision=${encodeURIComponent(revision)}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${getToken()}` },
   })
 }
 

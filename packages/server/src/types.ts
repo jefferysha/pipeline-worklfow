@@ -2,8 +2,17 @@
  * server 契约类型 —— dashboard server 的公共形状。
  * server 是 @pipeline-lite/kernel 的消费方（只 import 不改）+ node stdlib http，零第三方运行时依赖。
  */
-import type { FieldName, FlowEngine, MemFs, Phase, StateStore } from '@pipeline-lite/kernel'
+import type {
+  DocumentEvidenceItemStatus,
+  FieldName,
+  FlowEngine,
+  MemFs,
+  Phase,
+  PipelineTodoProjection,
+  StateStore,
+} from '@pipeline-lite/kernel'
 import type { TraceStoreReader } from './traces.js'
+import type { LoopActivationValidator } from './loops.js'
 
 /** 机器级路径锚（可经 PIPELINE_DASHBOARD_HOME 覆盖——仅供 hermetic 测试隔离）。 */
 export interface ServerPaths {
@@ -33,6 +42,25 @@ export interface ChangeSnapshot {
   archived: string
   updated_at: string
   fields: Record<FieldName, string | string[]>
+  /** OpenSpec tasks.md projected onto the workflow stages; omitted only for an older server response. */
+  todo?: PipelineTodoProjection
+  /** Governed OpenSpec artifact/reader evidence, calculated from the immutable document ledger. */
+  documents?: DocumentEvidenceSnapshot
+}
+
+export interface DocumentEvidenceSnapshot {
+  governed: boolean
+  phase?: string
+  ledgerPresent?: boolean
+  pass?: boolean
+  blockers: string[]
+  items: Array<{
+    kind: string
+    status: DocumentEvidenceItemStatus
+    requiredRead: boolean
+    paths: string[]
+    producers: string[]
+  }>
 }
 
 /** 单个已注册 Project 的聚合（openspec/changes/* 下所有活跃 change）。 */
@@ -111,6 +139,20 @@ export interface DashboardServerOptions {
    * ~/.claude / ~/.codex 等会话根）。测试注入 nodeMemFs(fakeHome) 指向 fixture 树（hermetic）。
    */
   memFs?: MemFs
+  /** H11：starter 激活候选的完整运行接线校验；缺省由 manifest + runner roots 生产装配。 */
+  validateLoopActivation?: LoopActivationValidator
+  /**
+   * H11-H14/G1/G2 Operations 生产 CLI 接缝。缺省执行当前仓已构建的真实
+   * `packages/cli/dist/pipeline.mjs`；测试注入 fake 只核 HTTP/argv 映射。
+   */
+  runPipelineCli?: import('./operations.js').PipelineCliRunner
+  /**
+   * H15：Global server 的真实 finite-cadence 时钟。缺省不启用，避免把嵌入式/测试 server
+   * 静默变成执行器；生产 main.ts 显式传入配置。执行仍复用 runPipelineCli。
+   */
+  cadence?: false | Omit<import('./cadence.js').CadenceSchedulerOptions, 'roots' | 'clock' | 'runPipelineCli'>
+  /** Track Router 预览计分器；缺省真执行 `grep -ciE`，测试可注入 hermetic scorer。 */
+  scoreRouterPattern?: import('./routerPreview.js').RouterPatternScorer
 }
 
 export interface DashboardServer {

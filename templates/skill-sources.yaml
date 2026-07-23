@@ -1,115 +1,79 @@
-# templates/skill-sources.yaml — 技能 token → 官方最新源 registry（安装地基数据，唯一真相源）
+# templates/skill-sources.yaml — packaged default-workflow skill inventory
 #
-# 目的：为「装 pipeline-lite 插件后全功能全量可用」提供地基数据——每个技能 token 的
-#   **官方最新版来源** 与安装通道。批 2 setup 安装段（S2）与 doctor 检测（S3）的共同数据依赖。
-# 数据权威源：docs/research/2026-07-12-skill-install-sources.md §6.2 补正结论表 + §6.3 去重安装清单；
-#   格式权威：docs/superpowers/specs/2026-07-12-full-install-experience-design.md §2。
+# This is the single source of truth for the skills a new pipeline user receives.  Every default
+# requirement is first-party and lives under this plugin's `skills/` tree; setup therefore never
+# downloads a mandatory skill from npm, a third-party marketplace, or another host's cache.
 #
-# ── 硬纪律（用户拍板）──
-#   · 装上游最新、非写死：registry 只记 source（owner/repo 或 marketplace 或 npm 包名），**绝不 pin sha/版本**。
-#     `npx skills add owner/repo` 拉默认分支=最新；装前 `--list` 核当前 id（应对 mattpocock 改名类漂移）。
-#   · 按名选装、禁整装：任何多技能大仓（ECC 278/mattpocock/anthropics/agents-inc）一律 `--skill <名>` 或按 id，
-#     绝不整插件/整仓装（研究 §6.5）。
-#
-# ── 解析器 = packages/cli/src/skillSources.ts 手写窄解析（CONTRACT §1 禁 yaml npm 包）──
-#   支持子集：顶层 `version:`（忽略）+ `skills:` 块；块内每行 `<token>: { k: v, k: v, ... }` 单行流式映射；
-#   `#` 整行/行尾注释、空行。其余 YAML 特性不支持。
-#
-# ── 字段语义 ──
-#   tool     ∈ {claude-plugin, skills-cli, npm, builtin, bundled}——决定安装通道。
-#   source   repo(owner/repo) / marketplace 名 / npm 包名；builtin/bundled 记逻辑来源。
-#   skill    skills-cli 的 `--skill <名>` / claude-plugin 的 plugin id。
-#            **省略 = 单技能仓 bare `npx skills add <source>`（hallmark/hue/huashu-design）或 = token**；
-#            出现 = 多技能仓需 `--skill`（或 plugin id ≠ token）。
-#   tier     ∈ {mandatory, recommended, conditional, optional}——doctor 缺失时：mandatory 红阻断/其余 WARN。
-#            取自 manifest（强制表=mandatory/推荐表=recommended）或各 SKILL.md·EXTERNAL-SKILLS.md 标注（条件/可选）。
-#   official bool——Anthropic 官方（claude-plugins-official / anthropics/skills / Claude Code builtin）=true；
-#            第三方（ECC/mattpocock/vercel/Leonxlnx/nutlope/dominikmartn/alchaincyf/agents-inc/npm）=false。
-#   engine   该技能额外需要的 MCP 引擎（browser-qa 需 playwright MCP，见下）。
-#   alt      manifest 里 `a|b` 备选的另一侧 token（消费方自择其一）。
-#   note     软状态/特例说明（candidate/removed/已装跳过/兜底 等）。
-#
-# ── 覆盖口径 ──
-#   全量 token 以 manifest mandatory/recommended + skills/EXTERNAL-SKILLS.md 为准，逐一对齐研究 §6.2。
-#   命名空间 token（superpowers:* / opsx:*）折叠为其插件/npm 单条（装一次覆盖全命名空间）。
-#   uiforge：**不入 registry**（用户拍板，4 次联网真无源，已从 manifest/散文删除）。
-
-version: 1
+# Optional ecosystem integrations may be documented separately, but they cannot appear here as a
+# mandatory dependency.  The narrow parser in packages/kernel/src/skills/source-registry.ts reads
+# one `token: { ... }` mapping per line.
+version: 2
 
 skills:
-  # ═══ ECC（affaan-m/ECC，Everything Claude Code，278 技能巨仓；第三方；按名选装 15 个，禁整装）═══
-  #     旧名 affaan-m/everything-claude-code（301→ECC）。标准扁平 skills/<token>/SKILL.md，天然契合 --skill。
-  browser-qa:            { tool: skills-cli, source: affaan-m/ECC, skill: browser-qa, tier: mandatory, official: false, engine: "playwright@claude-plugins-official" }
-  e2e-testing:           { tool: skills-cli, source: affaan-m/ECC, skill: e2e-testing, tier: mandatory, official: false }
-  search-first:          { tool: skills-cli, source: affaan-m/ECC, skill: search-first, tier: recommended, official: false }
-  deep-research:         { tool: skills-cli, source: affaan-m/ECC, skill: deep-research, tier: recommended, official: false }
-  market-research:       { tool: skills-cli, source: affaan-m/ECC, skill: market-research, tier: recommended, official: false }
-  code-tour:             { tool: skills-cli, source: affaan-m/ECC, skill: code-tour, tier: optional, official: false }
-  github-ops:            { tool: skills-cli, source: affaan-m/ECC, skill: github-ops, tier: optional, official: false }
-  react-patterns:        { tool: skills-cli, source: affaan-m/ECC, skill: react-patterns, tier: recommended, official: false }
-  python-patterns:       { tool: skills-cli, source: affaan-m/ECC, skill: python-patterns, tier: conditional, official: false }
-  python-testing:        { tool: skills-cli, source: affaan-m/ECC, skill: python-testing, tier: conditional, official: false }
-  nestjs-patterns:       { tool: skills-cli, source: affaan-m/ECC, skill: nestjs-patterns, tier: conditional, official: false }
-  postgres-patterns:     { tool: skills-cli, source: affaan-m/ECC, skill: postgres-patterns, tier: conditional, official: false }
-  docker-patterns:       { tool: skills-cli, source: affaan-m/ECC, skill: docker-patterns, tier: conditional, official: false }
-  deployment-patterns:   { tool: skills-cli, source: affaan-m/ECC, skill: deployment-patterns, tier: optional, official: false }
-  frontend-patterns:     { tool: skills-cli, source: affaan-m/ECC, skill: frontend-patterns, tier: optional, official: false }
+  pipeline:                         { tool: bundled, source: pipeline-lite, content_skill: pipeline, tier: mandatory, official: true }
+  pipeline-lite:                    { tool: bundled, source: pipeline-lite, content_skill: pipeline-lite, tier: mandatory, official: true }
+  pipeline-open:                    { tool: bundled, source: pipeline-lite, content_skill: pipeline-open, tier: mandatory, official: true }
+  pipeline-explore:                 { tool: bundled, source: pipeline-lite, content_skill: pipeline-explore, tier: mandatory, official: true }
+  pipeline-spec:                    { tool: bundled, source: pipeline-lite, content_skill: pipeline-spec, tier: mandatory, official: true }
+  pipeline-build:                   { tool: bundled, source: pipeline-lite, content_skill: pipeline-build, tier: mandatory, official: true }
+  pipeline-verify:                  { tool: bundled, source: pipeline-lite, content_skill: pipeline-verify, tier: mandatory, official: true }
+  pipeline-ship:                    { tool: bundled, source: pipeline-lite, content_skill: pipeline-ship, tier: mandatory, official: true }
+  pipeline-archive:                 { tool: bundled, source: pipeline-lite, content_skill: pipeline-archive, tier: mandatory, official: true }
+  pipeline-researcher:              { tool: bundled, source: pipeline-lite, content_skill: pipeline-researcher, tier: recommended, official: true }
+  learn-record:                     { tool: bundled, source: pipeline-lite, content_skill: learn-record, tier: optional, official: true }
 
-  # ═══ mattpocock/skills（多技能仓；第三方；--skill 按名）═══
-  #     ⚠️ 上游已改名：to-prd→to-spec、to-issues→to-tickets（研究 §6.2/§6.3 tree 实锤）。token 取当前上游名。
-  grill-with-docs:               { tool: skills-cli, source: mattpocock/skills, skill: grill-with-docs, tier: mandatory, official: false }
-  improve-codebase-architecture: { tool: skills-cli, source: mattpocock/skills, skill: improve-codebase-architecture, tier: mandatory, official: false }
-  prototype:                     { tool: skills-cli, source: mattpocock/skills, skill: prototype, tier: mandatory, official: false, alt: huashu-design }
-  triage:                        { tool: skills-cli, source: mattpocock/skills, skill: triage, tier: conditional, official: false }
-  handoff:                       { tool: skills-cli, source: mattpocock/skills, skill: handoff, tier: recommended, official: false }
-  to-spec:                       { tool: skills-cli, source: mattpocock/skills, skill: to-spec, tier: mandatory, official: false, note: "上游由 to-prd 改名（装最新非写死）" }
-  to-tickets:                    { tool: skills-cli, source: mattpocock/skills, skill: to-tickets, tier: mandatory, official: false, note: "上游由 to-issues 改名（装最新非写死）" }
+  openspec-propose:                 { tool: bundled, source: pipeline-lite, content_skill: openspec-propose, tier: mandatory, official: true }
+  openspec-explore:                 { tool: bundled, source: pipeline-lite, content_skill: openspec-explore, tier: mandatory, official: true }
+  openspec-apply-change:            { tool: bundled, source: pipeline-lite, content_skill: openspec-apply-change, tier: mandatory, official: true }
+  openspec-archive-change:          { tool: bundled, source: pipeline-lite, content_skill: openspec-archive-change, tier: mandatory, official: true }
 
-  # ═══ vercel-labs/agent-skills（多技能仓；第三方 Vercel；--skill 按名）═══
-  web-design-guidelines: { tool: skills-cli, source: vercel-labs/agent-skills, skill: web-design-guidelines, tier: mandatory, official: false }
-  react-best-practices:  { tool: skills-cli, source: vercel-labs/agent-skills, skill: react-best-practices, tier: recommended, official: false }
+  brainstorming:                    { tool: bundled, source: pipeline-lite, content_skill: brainstorming, tier: mandatory, official: true }
+  writing-plans:                    { tool: bundled, source: pipeline-lite, content_skill: writing-plans, tier: mandatory, official: true }
+  test-driven-development:          { tool: bundled, source: pipeline-lite, content_skill: test-driven-development, tier: mandatory, official: true }
+  subagent-driven-development:      { tool: bundled, source: pipeline-lite, content_skill: subagent-driven-development, tier: conditional, official: true }
+  dispatching-parallel-agents:      { tool: bundled, source: pipeline-lite, content_skill: dispatching-parallel-agents, tier: conditional, official: true }
+  verification-before-completion:   { tool: bundled, source: pipeline-lite, content_skill: verification-before-completion, tier: mandatory, official: true }
+  finishing-a-development-branch:   { tool: bundled, source: pipeline-lite, content_skill: finishing-a-development-branch, tier: mandatory, official: true }
 
-  # ═══ anthropics/skills（官方 Anthropic；--skill 按名）═══
-  web-artifacts-builder: { tool: skills-cli, source: anthropics/skills, skill: web-artifacts-builder, tier: optional, official: true }
+  grill-with-docs:                  { tool: bundled, source: pipeline-lite, content_skill: grill-with-docs, tier: mandatory, official: true }
+  improve-codebase-architecture:    { tool: bundled, source: pipeline-lite, content_skill: improve-codebase-architecture, tier: mandatory, official: true }
+  prototype:                        { tool: bundled, source: pipeline-lite, content_skill: prototype, tier: mandatory, official: true }
+  frontend-design:                  { tool: bundled, source: pipeline-lite, content_skill: frontend-design, tier: mandatory, official: true }
+  web-design-guidelines:            { tool: bundled, source: pipeline-lite, content_skill: web-design-guidelines, tier: mandatory, official: true }
+  design-taste-frontend:            { tool: bundled, source: pipeline-lite, content_skill: design-taste-frontend, tier: mandatory, official: true }
+  browser-qa:                       { tool: bundled, source: pipeline-lite, content_skill: browser-qa, tier: mandatory, official: true }
+  e2e-testing:                      { tool: bundled, source: pipeline-lite, content_skill: e2e-testing, tier: mandatory, official: true }
+  handoff:                          { tool: bundled, source: pipeline-lite, content_skill: handoff, tier: recommended, official: true }
+  to-spec:                          { tool: bundled, source: pipeline-lite, content_skill: to-spec, tier: mandatory, official: true }
+  to-tickets:                       { tool: bundled, source: pipeline-lite, content_skill: to-tickets, tier: mandatory, official: true }
 
-  # ═══ 单技能仓（第三方；bare `npx skills add <source>`，无 --skill）═══
-  taste-skill:   { tool: skills-cli, source: Leonxlnx/taste-skill, skill: taste-skill, tier: mandatory, official: false, alt: design-taste-frontend }
-  huashu-design: { tool: skills-cli, source: alchaincyf/huashu-design, tier: mandatory, official: false, alt: prototype }
-  hallmark:      { tool: skills-cli, source: nutlope/hallmark, tier: recommended, official: false }
-  hue:           { tool: skills-cli, source: dominikmartn/hue, tier: recommended, official: false }
+  search-first:                     { tool: bundled, source: pipeline-lite, content_skill: search-first, tier: recommended, official: true }
+  hallmark:                         { tool: bundled, source: pipeline-lite, content_skill: hallmark, tier: recommended, official: true }
+  react-patterns:                   { tool: bundled, source: pipeline-lite, content_skill: react-patterns, tier: recommended, official: true }
 
-  # ═══ 官方 claude-plugin（claude-plugins-official 本机已注册，无需 marketplace add）═══
-  frontend-design:                 { tool: claude-plugin, source: claude-plugins-official, skill: frontend-design, tier: mandatory, official: true }
-  skill-creator:                   { tool: claude-plugin, source: claude-plugins-official, skill: skill-creator, tier: optional, official: true }
-  commit-commands:commit-push-pr:  { tool: claude-plugin, source: claude-plugins-official, skill: commit-commands, tier: mandatory, official: true, note: "命令非技能；装 commit-commands 插件即得" }
-  commit-commands:commit:          { tool: claude-plugin, source: claude-plugins-official, skill: commit-commands, tier: optional, official: true, note: "命令非技能；同 commit-commands 插件" }
-  playwright:                      { tool: claude-plugin, source: claude-plugins-official, skill: playwright, tier: mandatory, official: true, note: "browser-qa/e2e-testing 的 MCP 引擎（Microsoft），非技能" }
-  superpowers:                     { tool: claude-plugin, source: claude-plugins-official, skill: superpowers, tier: mandatory, official: true, note: "本机通常已装跳过；一次覆盖 superpowers:* 全命名空间（7 个）" }
-
-  # ═══ agents-inc/skills（非官方 marketplace，需先 marketplace add；每 id=单技能插件，逐 id 装即选装）═══
-  shadcn-ui:             { tool: claude-plugin, source: agents-inc, skill: web-ui-shadcn-ui, tier: recommended, official: false }
-  tailwind-css-patterns: { tool: claude-plugin, source: agents-inc, skill: web-styling-tailwind, tier: recommended, official: false }
-
-  # ═══ npm CLI（openspec 二进制——opsx:* 4 命令的硬前提；openspec-* 兜底随本仓）═══
-  opsx: { tool: npm, source: "@fission-ai/openspec", tier: mandatory, official: false, alt: openspec-propose, note: "提供 openspec 二进制 + opsx:propose/explore/apply/archive 斜杠命令" }
-
-  # ═══ bundled（本仓自带随 pipeline-lite，无需外装）═══
-  openspec-propose:       { tool: bundled, source: pipeline-lite, tier: mandatory, official: false, alt: "opsx:propose", note: "本仓兜底技能；调 openspec 二进制" }
-  openspec-explore:       { tool: bundled, source: pipeline-lite, tier: mandatory, official: false, alt: "opsx:explore", note: "本仓兜底技能；调 openspec 二进制" }
-  openspec-apply-change:  { tool: bundled, source: pipeline-lite, tier: mandatory, official: false, alt: "opsx:apply", note: "本仓兜底技能；调 openspec 二进制" }
-  openspec-archive-change: { tool: bundled, source: pipeline-lite, tier: mandatory, official: false, alt: "opsx:archive", note: "本仓兜底技能；调 openspec 二进制" }
-  pipeline-researcher:    { tool: bundled, source: pipeline-lite, tier: recommended, official: false, note: "本仓 agent（agents/pipeline-researcher.md）" }
-
-  # ═══ builtin（Claude Code 自带，无从安装）═══
-  verify:          { tool: builtin, source: claude-code, tier: mandatory, official: true, alt: verification-loop }
-  run:             { tool: builtin, source: claude-code, tier: optional, official: true }
-  security-review: { tool: builtin, source: claude-code, tier: optional, official: true }
-  code-review:     { tool: builtin, source: claude-code, tier: optional, official: true, note: "builtin 优先；mattpocock/skills 亦有同名，双源不冲突" }
-
-  # ═══ 条件级 superpowers 命名空间补充（同 superpowers 插件；不单独装）═══
-  # subagent-driven-development / dispatching-parallel-agents 均随 superpowers 插件到位，见上 superpowers 条。
-
-  # ═══ 软状态（optional，声明+WARN+find-skills 提示，不阻断）═══
-  find-skills:    { tool: skills-cli, source: vercel-labs/skills, skill: find-skills, tier: optional, official: false, note: "随 skills CLI 仓分发，按需装" }
-  uiuxdesign-pro: { tool: skills-cli, source: nextlevelbuilder/ui-ux-pro-max-skill, tier: optional, official: false, note: "candidate — 无逐字同名，最强候选 nextlevelbuilder/ui-ux-pro-max-skill；用户可重定向" }
-  zoom-out:       { tool: skills-cli, source: mattpocock/skills, skill: zoom-out, tier: optional, official: false, note: "removed — 上游已删（现 404），无活跃精确源→降级 WARN；语义近邻 ECC strategic-compact/context-budget" }
+  triage:                           { tool: bundled, source: pipeline-lite, content_skill: triage, tier: conditional, official: true }
+  deep-research:                    { tool: bundled, source: pipeline-lite, content_skill: deep-research, tier: recommended, official: true }
+  market-research:                  { tool: bundled, source: pipeline-lite, content_skill: market-research, tier: recommended, official: true }
+  zoom-out:                         { tool: bundled, source: pipeline-lite, content_skill: zoom-out, tier: optional, official: true }
+  find-skills:                      { tool: bundled, source: pipeline-lite, content_skill: find-skills, tier: optional, official: true }
+  huashu-design:                    { tool: bundled, source: pipeline-lite, content_skill: huashu-design, tier: recommended, official: true }
+  hue:                              { tool: bundled, source: pipeline-lite, content_skill: hue, tier: conditional, official: true }
+  shadcn-ui:                        { tool: bundled, source: pipeline-lite, content_skill: shadcn-ui, tier: conditional, official: true }
+  tailwind-css-patterns:            { tool: bundled, source: pipeline-lite, content_skill: tailwind-css-patterns, tier: conditional, official: true }
+  web-artifacts-builder:            { tool: bundled, source: pipeline-lite, content_skill: web-artifacts-builder, tier: optional, official: true }
+  uiuxdesign-pro:                   { tool: bundled, source: pipeline-lite, content_skill: uiuxdesign-pro, tier: optional, official: true }
+  react-best-practices:             { tool: bundled, source: pipeline-lite, content_skill: react-best-practices, tier: conditional, official: true }
+  frontend-patterns:                { tool: bundled, source: pipeline-lite, content_skill: frontend-patterns, tier: optional, official: true }
+  nestjs-patterns:                  { tool: bundled, source: pipeline-lite, content_skill: nestjs-patterns, tier: conditional, official: true }
+  postgres-patterns:                { tool: bundled, source: pipeline-lite, content_skill: postgres-patterns, tier: conditional, official: true }
+  python-patterns:                  { tool: bundled, source: pipeline-lite, content_skill: python-patterns, tier: conditional, official: true }
+  python-testing:                   { tool: bundled, source: pipeline-lite, content_skill: python-testing, tier: conditional, official: true }
+  docker-patterns:                  { tool: bundled, source: pipeline-lite, content_skill: docker-patterns, tier: conditional, official: true }
+  deployment-patterns:              { tool: bundled, source: pipeline-lite, content_skill: deployment-patterns, tier: recommended, official: true }
+  verify:                           { tool: bundled, source: pipeline-lite, content_skill: verify, tier: recommended, official: true }
+  run:                              { tool: bundled, source: pipeline-lite, content_skill: run, tier: optional, official: true }
+  security-review:                  { tool: bundled, source: pipeline-lite, content_skill: security-review, tier: optional, official: true }
+  code-review:                      { tool: bundled, source: pipeline-lite, content_skill: code-review, tier: optional, official: true }
+  code-tour:                        { tool: bundled, source: pipeline-lite, content_skill: code-tour, tier: optional, official: true }
+  github-ops:                       { tool: bundled, source: pipeline-lite, content_skill: github-ops, tier: optional, official: true }
+  skill-creator:                    { tool: bundled, source: pipeline-lite, content_skill: skill-creator, tier: optional, official: true }

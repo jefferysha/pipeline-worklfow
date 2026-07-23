@@ -14,7 +14,7 @@ if [ -n "${2:-}" ]; then INPUT="$2"; else INPUT="$(cat 2>/dev/null || printf '{}
 [ -z "$INPUT" ] && INPUT='{}'
 
 _ROOT="${CLAUDE_PLUGIN_ROOT:-}"
-if [ -z "$_ROOT" ] || [ ! -d "$_ROOT/hooks" ]; then
+if [ -z "$_ROOT" ] || [ ! -f "$_ROOT/hooks/skill-tracker.sh" ]; then
   _ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../../.." 2>/dev/null && pwd || printf '%s' "$HOME/.claude")"
 fi
 export CLAUDE_PLUGIN_ROOT="$_ROOT"

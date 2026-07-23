@@ -10,31 +10,38 @@ import { artifactChips, gateEvidence, stageArtifacts, VERIFY_STATUS_FIELDS, type
 import { decisionKind } from '../inbox/inbox'
 import { getHistory, type ChangeHistoryEntry } from '../api/client'
 import { diagnoseFailureWithCause } from './failureDiagnosis'
-import { SessionResumeRow } from './SessionResumeRow'
+import { SessionResumeRow, connKeyCls, connNoteCls, connRowCls, connValCls, copyBtnCls } from './SessionResumeRow'
 import { shellQuote } from './shellQuote'
 import { revealStages } from './motion'
 import { Icon } from '../shell/Icon'
 import { shortTime } from '../model/time'
+import { RunAuditPanel } from './RunAuditPanel'
+import { outputPresentation, outputValuePresentation } from './outputPresentation'
 
 gsap.registerPlugin(useGSAP)
 
 /**
  * TaskDetail（T8 共享任务详情组件）—— 进度行内展开（T11 宿主）在用的一份详情面。
- * 阶段区：dtl- 垂直时间线，视觉基准 design-demos/v5-progress-workbench.html 收件箱右卡。
+ * 阶段区：垂直阶段时间线，视觉基准 design-demos/v5-progress-workbench.html 收件箱右卡。
  *
  * 骨架（v8-C 意见④重排，视觉基准 design-demos/v8-trellis-encore.html #drawer）：头（名字/宿主
- * badge/关闭）→ **动作置顶条 .dt8-acts**（props 化不变：按钮由宿主传入，组件不绑任何业务端点——
+ * badge/关闭）→ **动作置顶条**（props 化不变：按钮由宿主传入，组件不绑任何业务端点——
  * 放行/打回/重试/放弃的端点调用、busy 守卫、二次确认全归宿主，见 T9/T11 与计划决议 #13；旁附
- * footLabel 语境 + 一句语义说明；原底部 .dt-foot JSX 撤下、styles 旧规则双保留）→ 任务一句话
- * （宿主传入，可无）→ 阶段区（直接消费 T7 stageArtifacts；节点/tab 语义 ✓绿 done /
- * ●蓝当前带 ring / ×红失败 / 无缀未开始；失败阶段=人话报错卡 .dt8-diag：cause 人话标题 + 处置
- * 指引 failure.hint_*，last_error 原文收 <details> 折叠，attempts/cause 走 mono 元信息行，
- * cancelled 琥珀 tone 非故障）→ **「自己上手修」连接命令卡 .dt8-conn-card**（失败/在跑态
- * 渲染，不要求现场字段——恢复会话行/重跑行恒在，automation_worktree/automation_sandbox 两行
- * 按字段渲染；零后端改动——两字段随快照 fields 整包
- * 透传，照 automation_cause 先例 fieldStr 直读）→「在终端继续」命令区（文案与第一条前进
- * transition 事件一致）→ history 区（T1 GET /api/change/:name/history，无记录显示「早期记录
- * 不可用」，决议 #10；**只留流程级事件** transition/init，set 与未知 kind 一律滤掉）。
+ * footLabel 语境 + 一句语义说明）→ 任务一句话（宿主传入，可无）→ 阶段区（直接消费 T7
+ * stageArtifacts；节点/行语义 ✓绿 done / ●蓝当前带 ring / ×红失败 / 无缀未开始，状态由行上
+ * data-state 承载；失败阶段=人话报错卡 dt-diag：cause 人话标题 + 处置指引 failure.hint_*，
+ * last_error 原文收 <details> 折叠，attempts/cause 走 mono 元信息行，cancelled 琥珀 tone
+ * （data-tone=amb）非故障）→ **「自己上手修」连接命令卡 dt8-conn**（失败/在跑态渲染，不要求
+ * 现场字段——恢复会话行/重跑行恒在，automation_worktree/automation_sandbox 两行按字段渲染；
+ * 零后端改动——两字段随快照 fields 整包透传，照 automation_cause 先例 fieldStr 直读）→
+ * 「在终端继续」命令区（文案与第一条前进 transition 事件一致）→ history 区（T1
+ * GET /api/change/:name/history，无记录显示「早期记录不可用」，决议 #10；**只留流程级事件**
+ * transition/init/import，set 与未知 kind 一律滤掉）。
+ *
+ * v10b 迁移：样式全部 tailwind 原子类（颜色只走 token 语义类），状态一律 data-state/data-tone
+ * 承载；GSAP 入场锚点从类名换成 data-anim="stage"。根节点不再自带卡皮（.card 退役）——唯一
+ * 宿主进度抽屉本就用 `.prg9-dw-body > .card.dt` 剥掉边框/阴影/内边距，直渲染即现状观感，
+ * 卡面（bg-card）由抽屉面板提供。
  *
  * rules 缺失（自定义 workflow 定义拉取失败）或 change.phase 不在 rules.steps（workflow 字段
  * 与规则错位）→ 阶段区留白但卡不消失（G17 底线）：回落 artifactChips 产物正门只列非空路径
@@ -53,11 +60,47 @@ export interface TaskDetailProps {
   /** 当前/失败阶段内容体尾部的宿主扩展区（T11 进度宿主的运行日志尾部；纯布局插槽，
    *  同 actions 的 props 化纪律——组件不感知内容语义，零业务）。 */
   curStageExtra?: ReactNode
+  /** 默认详情只展示用户可决策信息；技术审计与流程历史折叠到按需展开区。 */
+  collapseTechnical?: boolean
   onClose?: () => void
   onToast?: (msg: string) => void
 }
 
 type StageStatus = 'done' | 'cur' | 'fail' | 'todo'
+
+/* ── tailwind 类串（旧 dt-/dtl-/dt8- 规则一比一对位；状态类改由 data-state/data-tone 驱动） ── */
+/** 区块（旧 .dt-sec）：最后一块无底线。 */
+const secCls = 'border-b border-border py-[13px] last:border-b-0'
+/** 区头（旧 .dt-sec-h）+ 头旁小字 hint（旧 .dt-hint）。 */
+const secHeadCls = 'mb-2.5 flex items-baseline gap-[7px] text-[12.5px] font-bold text-text'
+const hintCls = 'text-xs font-normal text-text-3'
+/** 灰字空态/注释（旧 .dt-none / .dt-note）。 */
+const noneCls = 'm-0 text-xs text-text-3'
+const noteCls = 'mt-2 mb-0 text-xs leading-[1.55] text-text-3'
+/** 命令块（旧 .dt-code 及其 $ 提示符）。 */
+const codeRowCls = 'flex items-center gap-2 rounded-md border border-code-border bg-code-bg px-[11px] py-2 font-mono text-xs'
+const codePromptCls = 'text-text-3'
+const codeCls = 'min-w-0 flex-1 text-text [overflow-wrap:anywhere]'
+/** 产物 chip 行（旧 .dtl-r）。 */
+const chipRowCls = 'flex min-h-[22px] flex-wrap items-center gap-1.5'
+/** 字段格栅（旧 .dt-arts）。 */
+const artsCls = 'grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-1.5'
+
+/** 时间线节点四态（旧 .dtl-node--*）。 */
+const nodeBaseCls = 'absolute left-0 top-0.5 grid size-4 place-items-center rounded-full font-bold leading-none'
+const nodeToneCls: Record<StageStatus, string> = {
+  done: 'bg-green text-[11px] text-btn-fg',
+  cur: 'bg-btn-bg text-[11px] shadow-[0_0_0_3px_var(--ring)]',
+  fail: 'bg-red text-[10px] text-btn-fg',
+  todo: 'border-2 border-border-2 bg-card text-[11px]',
+}
+/** 阶段名四态（旧 .dtl-name 及状态修饰）。 */
+const stageNameCls: Record<StageStatus, string> = {
+  done: 'font-medium text-text',
+  cur: 'font-semibold text-text',
+  fail: 'font-semibold text-red-d',
+  todo: 'font-normal text-text-3',
+}
 
 /** 老内核 cmd_get 口径：字面 'null' 或空串算未设（同 evidence.ts 私有 isUnset，只读展示不导出）。 */
 function fieldStr(c: ChangeSnapshot, key: string): string {
@@ -68,58 +111,70 @@ function fieldStr(c: ChangeSnapshot, key: string): string {
 /** 行内产物 chip：实值可拷贝（data-copy=值）；三轨判定字段展示 key=value；未设走占位 chip。 */
 function StageChip({ chip, onCopy }: { chip: EvidenceChip; onCopy: (v: string) => void }): JSX.Element {
   const { t } = useT()
+  const presentation = outputPresentation(chip.key)
   if (chip.unset) {
     return (
-      <span className="dtl-chip--empty" data-testid={`dtl-chip-empty-${chip.key}`}>
-        {chip.key} · {t('evidence.unset')}
+      <span
+        className="inline-flex h-[22px] items-center rounded-[7px] border border-dashed border-border-2 bg-transparent px-[7px] font-mono text-[11.5px] text-text-3"
+        data-testid={`dtl-chip-empty-${chip.key}`}
+      >
+        <span title={presentation.title}>{presentation.label}</span> · {t('evidence.unset')}
       </span>
     )
   }
   if (!chip.copyable) {
     return (
-      <span className="dtl-chip dtl-chip--ro" data-testid={`dtl-chip-${chip.key}`}>
-        {chip.key}={chip.value}
+      <span
+        className="inline-flex h-[22px] items-center gap-1 rounded-[7px] border border-border bg-fill px-[7px] font-mono text-[11.5px] text-text-2"
+        data-testid={`dtl-chip-${chip.key}`}
+      >
+        <span title={presentation.title}>{presentation.label}</span>：{outputValuePresentation(chip.value)}
       </span>
     )
   }
   return (
     <button
       type="button"
-      className="dtl-chip"
+      className="inline-flex h-[22px] cursor-pointer items-center gap-1 rounded-[7px] border border-border bg-fill px-[7px] font-mono text-[11.5px] text-text-2 transition-colors hover:border-border-2 hover:bg-fill-2 hover:text-text"
       data-copy={chip.value}
       data-testid={`dtl-chip-${chip.key}`}
       title={t('detail.copy_field', { field: chip.key })}
       onClick={() => onCopy(chip.value)}
     >
-      <span className="cp" aria-hidden="true">
-        ⧉
-      </span>
+      <span className="text-text-3" aria-hidden="true"><Icon name="copy" size={11} /></span>
       {chip.value}
     </button>
   )
 }
 
-/** 高亮框内字段格：pass/fail 语义色、未设 miss 占位、路径值可点拷贝。 */
+/** 高亮框内字段格：pass/fail 语义色、未设 miss 占位、路径值可点拷贝（状态挂 data-state）。 */
 function BoxField({ chip, onCopy }: { chip: EvidenceChip; onCopy: (v: string) => void }): JSX.Element {
   const { t } = useT()
-  const tone = chip.unset ? 'miss' : chip.tone === 'pass' ? 'pass' : chip.tone === 'fail' ? 'fail' : ''
+  const presentation = outputPresentation(chip.key)
+  const tone = chip.unset ? 'miss' : chip.tone === 'pass' ? 'pass' : chip.tone === 'fail' ? 'fail' : 'plain'
+  const valToneCls =
+    tone === 'pass' ? 'font-bold text-green-d' : tone === 'fail' ? 'font-bold text-red-d' : tone === 'miss' ? 'text-text-3' : 'text-text'
   return (
-    <div className={`dt-field${tone ? ` dt-field--${tone}` : ''}`} data-testid={`dt-field-${chip.key}`}>
-      <div className="dt-fk" title={chip.key}>
-        {chip.key}
+    <div
+      className={`min-w-0 rounded-[7px] border border-border px-2 py-[5px] ${tone === 'miss' ? 'border-dashed bg-transparent' : 'bg-card'}`}
+      data-state={tone}
+      data-testid={`dt-field-${chip.key}`}
+    >
+      <div className="text-[11px] font-semibold text-text-2 [overflow-wrap:anywhere]" title={`${presentation.title}（字段：${chip.key}）`}>
+        {presentation.label}
       </div>
       {chip.copyable && !chip.unset ? (
         <button
           type="button"
-          className="dt-fv dt-fv--copy"
+          className={`inline cursor-pointer border-0 bg-transparent p-0 text-left font-mono text-xs transition-colors [overflow-wrap:anywhere] hover:text-accent-d ${valToneCls}`}
           data-copy={chip.value}
           title={t('detail.copy_field', { field: chip.key })}
           onClick={() => onCopy(chip.value)}
         >
-          {chip.value} <span aria-hidden="true">⧉</span>
+          {chip.value} <span className="inline-block align-[-2px]" aria-hidden="true"><Icon name="copy" size={11} /></span>
         </button>
       ) : (
-        <div className="dt-fv">{chip.unset ? t('evidence.unset') : chip.value}</div>
+        <div className={`text-xs [overflow-wrap:anywhere] ${valToneCls}`}>{chip.unset ? t('evidence.unset') : outputValuePresentation(chip.value)}</div>
       )}
     </div>
   )
@@ -142,6 +197,7 @@ export function TaskDetail({
   badge,
   actions,
   curStageExtra,
+  collapseTechnical = false,
   onClose,
   onToast,
 }: TaskDetailProps): JSX.Element {
@@ -167,10 +223,11 @@ export function TaskDetail({
     }
   }, [change.name, change.phase, root])
 
-  // ── 阶段区入场 stagger：只在切换 change 时重播（依赖收敛纪律，同 WorkbenchView stepper 入场）。──
+  // ── 阶段区入场 stagger：只在切换 change 时重播（依赖收敛纪律，同 WorkbenchView stepper 入场）。
+  //    锚点 data-anim="stage"（v10b：GSAP 选择器不再吃视觉类名）。──
   useGSAP(
     () => {
-      revealStages('.dtl-it')
+      revealStages('[data-anim="stage"]')
     },
     { scope: scopeRef, dependencies: [change.name] },
   )
@@ -183,6 +240,10 @@ export function TaskDetail({
 
   const state: ProgressState = changeProgressState(change, rules)
   const stages = stageArtifacts(rules, change)
+  // `todo` is server-projected from the active Change's OpenSpec tasks.md. Keep the existing stage
+  // timeline as the workflow/artefact view, then attach only real checkbox rows to their phase rather
+  // than deriving a second generic list from the raw user prompt.
+  const todoByStage = new Map((change.todo?.stages ?? []).map((stage) => [stage.id, stage]))
   const curIdx = rules ? rules.steps.indexOf(change.phase) : -1
   // workflow 字段与规则错位（rules 存在但 change.phase 不在 steps）：全 todo 的时间线/tab 条是
   // 假信息且会吞掉失败信息（评审 nit）——判给 G17 兜底分支，同 rules 缺失一并处理。
@@ -201,7 +262,6 @@ export function TaskDetail({
         .map((e) => plannedTransition(rules, change.phase, e.to))
         .find((p): p is PlannedTransition => p !== null && !p.backward) ?? null)
     : null
-  const cmd = state !== 'failed' && firstForward ? `pipeline transition ${change.name} ${firstForward.event}` : null
 
   const automation = fieldStr(change, 'automation')
   const attempts = fieldStr(change, 'automation_attempts')
@@ -216,7 +276,9 @@ export function TaskDetail({
   // `"`/反引号/$()，容器名完全未引；现安全字符原样、特殊字符 POSIX 单引号转义。
   const sandboxCmd = `docker exec -it ${shellQuote(sandbox)} bash`
   const worktreeCmd = `cd ${shellQuote(worktree)}`
-  const rerunCmd = `pipeline afk run ${shellQuote(change.name)}`
+  // #6（2026-07-15 调查）：afk run 忽略 name、跑整轮就绪队列；按名重跑该 change 的正确命令是
+  // afk enqueue（重新入队该 change）。三处 cmdChip（ProgressView/AfkView/此处）口径统一为 enqueue。
+  const rerunCmd = `pipeline afk enqueue ${shellQuote(change.name)}`
   const footLabel =
     state === 'failed' ? `automation · ${automation}` : firstForward ? `${change.phase} → ${firstForward.to}` : change.phase
 
@@ -245,37 +307,44 @@ export function TaskDetail({
     return isPhase(id) ? t(`phases.${id}`) : id
   }
 
-  /** 当前/失败阶段的内容体（结论行 + 字段格栅 + 失败说明）——包进 dtl-box 高亮框
+  /** 当前/失败阶段的内容体（结论行 + 字段格栅 + 失败说明）——包进高亮框
    *  （demo 对位：收件箱右卡 dtl-box）。 */
   function boxInner(chips: EvidenceChip[]): JSX.Element {
     if (state === 'failed') {
       const missing = chips.filter((c) => c.unset).map((c) => c.key)
       // v8-C 意见④人话报错卡（demo .diag 对位）：标题=人话结论 cause_*，正文=处置指引 hint_*；
       // last_error 原文不再当结论行平铺，收进 <details> 折叠（默认收起）；attempts/cause 作 mono
-      // 元信息行。cancelled 走琥珀 tone（人为终止非故障，不该红成硬故障）。
+      // 元信息行。cancelled 走琥珀 tone（人为终止非故障，不该红成硬故障）→ data-tone=amb。
       // F-b：结构化 automation_cause 直判优先，空串/未识别回落 last_error regex（老数据兼容）。
       const diag = diagnoseFailureWithCause(failCause, lastError)
+      const amb = diag.cause === 'cancelled'
       const fix = diag.fixCommand
       return (
         <>
-          <div className={`dt8-diag${diag.cause === 'cancelled' ? ' dt8-diag--amb' : ''}`} data-testid="dt-diag">
-            <div className="dt8-diag-t" data-testid="dt-diag-cause">
+          <div
+            className={`rounded-[11px] border px-[15px] py-[13px] ${amb ? 'border-amb-b bg-amb-t' : 'border-red-b bg-red-t'}`}
+            data-tone={amb ? 'amb' : 'red'}
+            data-testid="dt-diag"
+          >
+            <div className={`text-sm font-bold leading-[1.45] ${amb ? 'text-amb-d' : 'text-red-d'}`} data-testid="dt-diag-cause">
               {t(`failure.cause_${diag.cause}`)}
             </div>
-            <p className="dt8-diag-hint" data-testid="dt8-diag-hint">
+            <p className="mt-1.5 mb-0 max-w-[64ch] text-[13px] leading-[1.6] text-text-2" data-testid="dt8-diag-hint">
               {t(`failure.hint_${diag.cause}`)}
             </p>
             {fix !== null && (
-              <div className="dt-diag-fix">
-                <span className="dt-diag-fix-label">{t('failure.fix_label')}</span>
-                <div className="dt-code">
-                  <span className="p" aria-hidden="true">
+              <div className="mt-2.5 flex flex-col gap-1">
+                <span className="text-[11px] text-text-3">{t('failure.fix_label')}</span>
+                <div className={codeRowCls}>
+                  <span className={codePromptCls} aria-hidden="true">
                     $
                   </span>
-                  <code data-testid="detail-fix-cmd">{fix}</code>
+                  <code className={codeCls} data-testid="detail-fix-cmd">
+                    {fix}
+                  </code>
                   <button
                     type="button"
-                    className="dt-code-copy"
+                    className={copyBtnCls}
                     data-copy={fix}
                     data-testid="detail-fix-copy"
                     aria-label={t('failure.fix_copy')}
@@ -287,12 +356,22 @@ export function TaskDetail({
               </div>
             )}
             {lastError !== '' && (
-              <details className="dt8-rawfold" data-testid="dt8-rawfold">
-                <summary>{t('detail.raw_error_summary')}</summary>
-                <pre data-testid="dt8-raw-pre">{lastError}</pre>
+              <details className="group mt-[11px]" data-testid="dt8-rawfold">
+                <summary className="inline-flex cursor-pointer list-none items-center gap-1.5 rounded-md px-1 py-0.5 text-[12.5px] font-semibold text-text-2 outline-none before:text-[10px] before:text-text-3 before:transition-transform before:content-['▸'] group-open:before:rotate-90 focus-visible:shadow-[0_0_0_3px_var(--ring-blue)] [&::-webkit-details-marker]:hidden">
+                  {t('detail.raw_error_summary')}
+                </summary>
+                <pre
+                  className="mt-2 mb-0 rounded-[9px] border border-code-border bg-code-bg px-3 py-2.5 font-mono text-xs leading-[1.65] whitespace-pre-wrap text-text-2 [overflow-wrap:anywhere]"
+                  data-testid="dt8-raw-pre"
+                >
+                  {lastError}
+                </pre>
               </details>
             )}
-            <div className="dt8-diag-meta" data-testid="dt8-diag-meta">
+            <div
+              className="mt-2.5 flex gap-3.5 font-mono text-xs tabular-nums text-text-3 [&_b]:font-bold [&_b]:text-text-2"
+              data-testid="dt8-diag-meta"
+            >
               {attempts !== '' && (
                 <span>
                   attempts <b>{attempts}</b>
@@ -303,20 +382,24 @@ export function TaskDetail({
               </span>
             </div>
           </div>
-          <div className="dt-arts">
+          <div className={artsCls}>
             {chips
               .filter((c) => !c.unset)
               .map((c) => (
                 <BoxField key={c.key} chip={c} onCopy={copy} />
               ))}
             {missing.length > 0 && (
-              <div className="dt-field dt-field--miss" data-testid="dt-field-missing">
-                <div className="dt-fk">{missing.join(' · ')}</div>
-                <div className="dt-fv">{t('evidence.unset')}</div>
+              <div
+                className="min-w-0 rounded-[7px] border border-dashed border-border bg-transparent px-2 py-[5px]"
+                data-state="miss"
+                data-testid="dt-field-missing"
+              >
+                <div className="font-mono text-[10.5px] text-text-3 [overflow-wrap:anywhere]">{missing.join(' · ')}</div>
+                <div className="text-xs text-text-3 [overflow-wrap:anywhere]">{t('evidence.unset')}</div>
               </div>
             )}
           </div>
-          <p className="dt-note">{t('detail.fail_note')}</p>
+          <p className={noteCls}>{t('detail.fail_note')}</p>
         </>
       )
     }
@@ -324,28 +407,42 @@ export function TaskDetail({
     const v = verdict()
     return (
       <>
-        <div className={`dt-verdict${v.bad ? ' dt-verdict--bad' : ''}`}>
-          <span className={`ic${v.glyph === '✓' ? ' ic--good' : ''}`} aria-hidden="true">
+        <div
+          className={`mb-2 flex items-baseline gap-1.5 text-[12.5px] leading-normal font-semibold ${v.bad ? 'text-red-d' : 'text-text'}`}
+          data-tone={v.bad ? 'bad' : 'ok'}
+          data-testid="dt-verdict"
+        >
+          {/* tailwind v4 扫描器纪律：类与插值间留空白，防「类名+插值」连成非法 token 被丢弃 */}
+          <span className={`flex-none ${v.glyph === '✓' ? 'text-green' : ''}`} aria-hidden="true">
             {v.glyph}
           </span>
           {v.text}
         </div>
         {chips.length > 0 ? (
-          <div className="dt-arts">
+          <div className={artsCls}>
             {chips.map((c) => (
               <BoxField key={c.key} chip={c} onCopy={copy} />
             ))}
           </div>
         ) : (
-          <div className="dt-none">{t('detail.stage_no_outputs')}</div>
+          <div className={noneCls}>{t('detail.stage_no_outputs')}</div>
         )}
       </>
     )
   }
 
-  /** 当前/失败行的高亮框（boxInner 外包一层 dtl-box）。 */
+  /** 当前/失败行的高亮框（boxInner 外包一层；失败态红 tone → data-tone=bad）。 */
   function renderBox(chips: EvidenceChip[]): JSX.Element {
-    return <div className={`dtl-box${state === 'failed' ? ' dtl-box--bad' : ''}`}>{boxInner(chips)}</div>
+    const bad = state === 'failed'
+    return (
+      <div
+        className={`mt-2 rounded-md border px-[11px] py-2.5 ${bad ? 'border-red-b bg-red-t' : 'border-accent-b bg-accent-t'}`}
+        data-tone={bad ? 'bad' : 'ok'}
+        data-testid="dtl-box"
+      >
+        {boxInner(chips)}
+      </div>
+    )
   }
 
   // v8-C 意见④：历史只留流程级事件（transition/init/import——import 与 init 同级里程碑，kernel
@@ -354,16 +451,37 @@ export function TaskDetail({
   const flowEntries =
     entries === null ? null : entries.filter((e) => e.kind === 'transition' || e.kind === 'init' || e.kind === 'import')
 
+  const historySection = (
+    <div className={secCls} data-testid="dt-hist-sec" data-settled={entries !== null ? 'true' : 'false'}>
+      <div className={secHeadCls}>
+        {t('detail.history_heading')} <span className={hintCls}>{t('detail.hist_flow_hint')}</span>
+      </div>
+      {flowEntries !== null &&
+        (flowEntries.length === 0 ? (
+          <p className={noneCls}>{t('detail.history_empty')}</p>
+        ) : (
+          <ol className="m-0 flex max-h-[180px] list-none flex-col gap-[5px] overflow-y-auto p-0" data-testid="dt-hist">
+            {flowEntries.map((e, i) => (
+              <li className="flex items-baseline gap-2 text-xs" data-testid={`dt-hist-${i}`} key={`${e.ts}-${i}`}>
+                <span className="font-mono whitespace-nowrap text-text-3">{shortTime(e.ts)}</span>
+                <span className="text-text-2 [overflow-wrap:anywhere]">{histText(e, t)}</span>
+              </li>
+            ))}
+          </ol>
+        ))}
+    </div>
+  )
+
   return (
-    <section className="card dt" data-testid="task-detail" ref={scopeRef}>
-      <header className="dt-head">
-        <span className="dt-name">{change.name}</span>
+    <section data-testid="task-detail" ref={scopeRef}>
+      <header className="flex flex-wrap items-center gap-[9px] border-b border-border py-[13px]" data-testid="dt-head">
+        <span className="font-mono text-[13.5px] font-bold text-text">{change.name}</span>
         {badge}
-        <span className="dt-sp" />
+        <span className="flex-1" />
         {onClose && (
           <button
             type="button"
-            className="dt-close btn--icon"
+            className="cursor-pointer rounded-[6px] border border-transparent bg-transparent px-2.5 py-[5px] text-xs text-text-3 transition-colors hover:border-border hover:bg-fill hover:text-red"
             data-testid="detail-close"
             aria-label={t('detail.close')}
             onClick={onClose}
@@ -373,49 +491,56 @@ export function TaskDetail({
         )}
       </header>
 
-      {/* v8-C 意见④：动作置顶条（demo .dw-acts 对位）——原底部 .dt-foot 的按钮与 footLabel 语境
+      {/* v8-C 意见④：动作置顶条（demo .dw-acts 对位）——原底部动作区的按钮与 footLabel 语境
           挪到头部，旁附一句语义说明；props 化纪律不变（按钮语义/端点全归宿主）。 */}
       {actions !== undefined && (
-        <div className="dt8-acts" data-testid="dt8-acts">
-          <div className="dt8-acts-btns">{actions}</div>
-          <span className="dt8-acts-ctx" data-testid="dt-foot-label">
+        <div className="flex flex-wrap items-center gap-[9px] border-b border-border py-3" data-testid="dt8-acts">
+          <div className="flex items-center gap-2">{actions}</div>
+          <span className="font-mono text-[11.5px] tabular-nums text-text-3" data-testid="dt-foot-label">
             {footLabel}
           </span>
-          <span className="dt8-acts-note">{t('detail.acts_note')}</span>
         </div>
       )}
 
       {requirement !== undefined && requirement !== '' && (
-        <div className="dt-sec">
-          <div className="dt-sec-h">{t('detail.req_heading')}</div>
-          <p className="dt-req">{requirement}</p>
+        <div className={secCls}>
+          <div className={secHeadCls}>{t('detail.req_heading')}</div>
+          <p className="m-0 text-[13px] leading-[1.6] text-text-2">{requirement}</p>
         </div>
       )}
 
-      <div className="dt-sec">
-        <div className="dt-sec-h">
-          {t('detail.stages_heading')} <span className="dt-hint">{t('detail.stages_hint')}</span>
+      <div className={secCls} data-testid="dt-stages-sec">
+        <div className={secHeadCls}>
+          {t('detail.stages_heading')} <span className={hintCls}>{t('detail.stages_hint')}</span>
         </div>
         {showStages && (
-          <div className="dtl" role="list" aria-label={t('detail.stages_label', { name: change.name, n: stages.length })}>
+          <div role="list" aria-label={t('detail.stages_label', { name: change.name, n: stages.length })}>
             {stages.map((st, i) => {
               const status = statusOf(i)
+              const todo = todoByStage.get(st.step)
               return (
-                <div className={`dtl-it dtl-it--${status}`} role="listitem" data-testid={`dtl-${st.step}`} key={st.step}>
-                  <span className={`dtl-node dtl-node--${status}`} aria-hidden="true">
+                <div
+                  className={`relative pb-3 pl-6 before:absolute before:top-[18px] before:-bottom-0.5 before:left-[7px] before:w-0.5 before:rounded-full before:content-[''] last:pb-0 last:before:hidden ${status === 'done' ? 'before:bg-green-b' : 'before:bg-border'}`}
+                  role="listitem"
+                  data-anim="stage"
+                  data-state={status}
+                  data-testid={`dtl-${st.step}`}
+                  key={st.step}
+                >
+                  <span className={`${nodeBaseCls} ${nodeToneCls[status]}`} aria-hidden="true">
                     {status === 'done' ? '✓' : status === 'fail' ? '×' : ''}
                   </span>
-                  <div className="dtl-r">
-                    <span className="dtl-name">{stageLabel(st.step)}</span>
-                    {status === 'todo' && <span className="dtl-dim">{t('detail.not_started')}</span>}
+                  <div className={chipRowCls}>
+                    <span className={`text-[13px] ${stageNameCls[status]}`}>{stageLabel(st.step)}</span>
+                    {status === 'todo' && <span className="text-xs text-text-3">{t('detail.not_started')}</span>}
                     {status === 'done' &&
                       (st.chips.length > 0 ? (
                         st.chips.map((c) => <StageChip key={c.key} chip={c} onCopy={copy} />)
                       ) : (
-                        <span className="dtl-dim">{t('detail.no_outputs')}</span>
+                        <span className="text-xs text-text-3">{t('detail.no_outputs')}</span>
                       ))}
                     {status === 'fail' && attempts !== '' && (
-                      <span className="dtl-dim">{t('detail.fail_stopped_here', { n: attempts })}</span>
+                      <span className="text-xs text-text-3">{t('detail.fail_stopped_here', { n: attempts })}</span>
                     )}
                   </div>
                   {(status === 'cur' || status === 'fail') && (
@@ -423,6 +548,24 @@ export function TaskDetail({
                       {renderBox(st.chips)}
                       {curStageExtra}
                     </>
+                  )}
+                  {todo !== undefined && todo.tasks.length > 0 && (
+                    <ul
+                      className="mt-2 mb-0 flex list-none flex-col gap-1 pl-0 text-xs"
+                      data-testid={`dtl-todo-${st.step}`}
+                    >
+                      {todo.tasks.map((task, taskIndex) => (
+                        <li
+                          className={`flex gap-1.5 [overflow-wrap:anywhere] ${task.completed ? 'text-text-3 line-through' : 'text-text-2'}`}
+                          data-completed={task.completed ? 'true' : 'false'}
+                          data-testid={`dtl-todo-${st.step}-${taskIndex}`}
+                          key={`${taskIndex}-${task.text}`}
+                        >
+                          <span aria-hidden="true">{task.completed ? '✓' : '○'}</span>
+                          <span>{task.text}</span>
+                        </li>
+                      ))}
+                    </ul>
                   )}
                 </div>
               )
@@ -432,11 +575,11 @@ export function TaskDetail({
         {!showStages && (
           // rules 缺失或 phase 与规则错位：阶段区留白但卡不消失（G17 底线）——回落产物正门，
           // 只列非空路径字段；失败态下失败框照渲染（last_error/attempts 不随阶段区静默丢失）。
-          <div className="dtl-fallback">
-            <p className="dt-none">{t('detail.stages_unknown')}</p>
+          <div>
+            <p className={noneCls}>{t('detail.stages_unknown')}</p>
             {state === 'failed' && renderBox([])}
             {curStageExtra}
-            <div className="dtl-r">
+            <div className={chipRowCls}>
               {artifactChips(change).map((c) => (
                 <StageChip key={c.key} chip={c} onCopy={copy} />
               ))}
@@ -445,6 +588,61 @@ export function TaskDetail({
         )}
       </div>
 
+      {change.documents?.governed && (
+        <div className={secCls} data-testid="dt-documents">
+          <div className={secHeadCls}>
+            {t('detail.docs_heading')}
+            <span className={hintCls}>
+              {change.documents.pass === true ? t('detail.docs_complete') : t('detail.docs_incomplete')}
+            </span>
+          </div>
+          {change.documents.items.length > 0 && (
+            <ul className="m-0 flex list-none flex-col gap-1.5 p-0" data-testid="dt-documents-items">
+              {change.documents.items.map((item) => (
+                <li
+                  className={`rounded-md border px-2 py-1.5 text-xs [overflow-wrap:anywhere] ${
+                    item.status === 'recorded' ? 'border-green-b bg-green-t text-green-d' : 'border-red-b bg-red-t text-red-d'
+                  }`}
+                  data-status={item.status}
+                  data-testid={`dt-document-${item.kind}`}
+                  key={item.kind}
+                >
+                  <b>{item.kind}</b>
+                  {' · '}
+                  {item.status === 'recorded'
+                    ? t('detail.docs_recorded')
+                    : item.status === 'missing'
+                      ? t('detail.docs_missing')
+                      : item.status === 'stale'
+                        ? t('detail.docs_stale')
+                        : t('detail.docs_unread')}
+                  {item.requiredRead && <span className="text-text-3"> · {t('detail.docs_read_required')}</span>}
+                  {item.paths.length > 0 && <span className="font-mono text-[11px] text-text-2"> · {item.paths.join(', ')}</span>}
+                </li>
+              ))}
+            </ul>
+          )}
+          {change.documents.blockers.length > 0 && (
+            <ul className="mt-2 mb-0 flex list-none flex-col gap-1 pl-0 text-xs text-red-d" data-testid="dt-document-blockers">
+              {change.documents.blockers.map((blocker) => <li key={blocker}>× {blocker}</li>)}
+            </ul>
+          )}
+          {change.documents.items.length === 0 && change.documents.blockers.length === 0 && (
+            <p className={noneCls}>{t('detail.docs_empty')}</p>
+          )}
+        </div>
+      )}
+
+      {collapseTechnical ? (
+        <details className="my-3 rounded-xl border border-border bg-fill/40 px-3" data-testid="detail-technical">
+          <summary className="cursor-pointer py-3 text-[12.5px] font-semibold text-text">运行记录</summary>
+          <RunAuditPanel root={root} change={change.name} refreshKey={`${change.phase}:${automation}`} />
+          {historySection}
+        </details>
+      ) : (
+        <RunAuditPanel root={root} change={change.name} refreshKey={`${change.phase}:${automation}`} />
+      )}
+
       {/* v8-C 意见④：「自己上手修」连接命令卡（demo .conn-card 对位）——失败/在跑态即渲染，
           不再要求 worktree/sandbox 现场字段（codex 终稿 P2：server 端 session-link 在
           worktree 空时回落 root 查会话，本机直跑失败的恢复路径原先在 UI 永远走不到）；
@@ -452,23 +650,23 @@ export function TaskDetail({
           automation!=='running' 时容器行加「（未在跑）」小注；卡底注来源字段说明。 */}
       {/* v9 追加：running 态（容器活着，恢复会话最有意义）与失败态同渲染本卡。 */}
       {(state === 'failed' || automation === 'running') && (
-        <div className="dt-sec" data-testid="dt8-conn">
-          <div className="dt-sec-h">
-            {t('detail.selffix_title')} <span className="dt-hint">{t('detail.selffix_desc')}</span>
+        <div className={secCls} data-testid="dt8-conn">
+          <div className={secHeadCls}>
+            {t('detail.selffix_title')} <span className={hintCls}>{t('detail.selffix_desc')}</span>
           </div>
-          <div className="dt8-conn-card">
-            <div className="dt8-conn-rows">
+          <div className="rounded-[11px] border border-accent-b bg-accent-t px-[15px] py-[13px]">
+            <div className="flex flex-col gap-[7px]">
               {/* v9-I：恢复会话行（自取数，loading 静默 / 查不到一行灰字）——失败+取消
                   （conflict/cause=cancelled 同落 failed 态）与 running 态随本卡覆盖；
                   worktree 空时 server 端回落 root 查会话，故本行不依赖现场字段恒挂载。 */}
               <SessionResumeRow root={root} name={change.name} onCopy={copy} />
               {worktree !== '' && (
-                <div className="dt8-conn-row" data-testid="dt8-conn-worktree">
-                  <span className="dt8-conn-k">{t('detail.conn_worktree')}</span>
-                  <span className="dt8-conn-v">{worktreeCmd}</span>
+                <div className={connRowCls} data-testid="dt8-conn-worktree">
+                  <span className={connKeyCls}>{t('detail.conn_worktree')}</span>
+                  <span className={connValCls}>{worktreeCmd}</span>
                   <button
                     type="button"
-                    className="dt-code-copy"
+                    className={copyBtnCls}
                     data-copy={worktreeCmd}
                     data-testid="dt8-conn-worktree-copy"
                     aria-label={t('detail.copy_cmd')}
@@ -479,13 +677,13 @@ export function TaskDetail({
                 </div>
               )}
               {sandbox !== '' && (
-                <div className="dt8-conn-row" data-testid="dt8-conn-sandbox">
-                  <span className="dt8-conn-k">{t('detail.conn_sandbox')}</span>
-                  <span className="dt8-conn-v">{sandboxCmd}</span>
-                  {automation !== 'running' && <span className="dt8-conn-note">{t('detail.conn_not_running')}</span>}
+                <div className={connRowCls} data-testid="dt8-conn-sandbox">
+                  <span className={connKeyCls}>{t('detail.conn_sandbox')}</span>
+                  <span className={connValCls}>{sandboxCmd}</span>
+                  {automation !== 'running' && <span className={connNoteCls}>{t('detail.conn_not_running')}</span>}
                   <button
                     type="button"
-                    className="dt-code-copy"
+                    className={copyBtnCls}
                     data-copy={sandboxCmd}
                     data-testid="dt8-conn-sandbox-copy"
                     aria-label={t('detail.copy_cmd')}
@@ -495,12 +693,12 @@ export function TaskDetail({
                   </button>
                 </div>
               )}
-              <div className="dt8-conn-row" data-testid="dt8-conn-rerun">
-                <span className="dt8-conn-k">{t('detail.conn_rerun')}</span>
-                <span className="dt8-conn-v">{rerunCmd}</span>
+              <div className={connRowCls} data-testid="dt8-conn-rerun">
+                <span className={connKeyCls}>{t('detail.conn_rerun')}</span>
+                <span className={connValCls}>{rerunCmd}</span>
                 <button
                   type="button"
-                  className="dt-code-copy"
+                  className={copyBtnCls}
                   data-copy={rerunCmd}
                   data-testid="dt8-conn-rerun-copy"
                   aria-label={t('detail.copy_cmd')}
@@ -510,53 +708,16 @@ export function TaskDetail({
                 </button>
               </div>
             </div>
-            <p className="dt8-conn-src">{t('detail.conn_src')}</p>
+            <p className="mt-[9px] mb-0 text-[11.5px] text-text-3">{t('detail.conn_src')}</p>
           </div>
         </div>
       )}
 
-      {cmd && (
-        <div className="dt-sec">
-          <div className="dt-sec-h">{t('detail.terminal_heading')}</div>
-          <div className="dt-code">
-            <span className="p" aria-hidden="true">
-              $
-            </span>
-            <code data-testid="detail-cmd">{cmd}</code>
-            <button
-              type="button"
-              className="dt-code-copy"
-              data-copy={cmd}
-              data-testid="detail-cmd-copy"
-              aria-label={t('detail.copy_cmd')}
-              onClick={() => copy(cmd)}
-            >
-              <Icon name="copy" size={12} />
-            </button>
-          </div>
-          <p className="dt-note">{t('detail.terminal_note')}</p>
-        </div>
-      )}
+      {/* #7（2026-07-15）：门行「在终端继续 pipeline transition」命令区退役——与抽屉内联动作
+          按钮完全等价，属冗余；detail-cmd/detail-cmd-copy testid 与 terminal_heading/terminal_note
+          随之退役。失败态的「自己上手修」连接命令卡（dt8-conn）是终端专属、保留。 */}
 
-      {/* data-settled：history 拉取是否已落定（测试用来等异步 setState 收敛，避免 act 警告）。 */}
-      <div className="dt-sec" data-testid="dt-hist-sec" data-settled={entries !== null ? 'true' : 'false'}>
-        <div className="dt-sec-h">
-          {t('detail.history_heading')} <span className="dt-hint">{t('detail.hist_flow_hint')}</span>
-        </div>
-        {flowEntries !== null &&
-          (flowEntries.length === 0 ? (
-            <p className="dt-none">{t('detail.history_empty')}</p>
-          ) : (
-            <ol className="dt-hist" data-testid="dt-hist">
-              {flowEntries.map((e, i) => (
-                <li className="dt-hist-it" data-testid={`dt-hist-${i}`} key={`${e.ts}-${i}`}>
-                  <span className="dt-hist-ts">{shortTime(e.ts)}</span>
-                  <span className="dt-hist-txt">{histText(e, t)}</span>
-                </li>
-              ))}
-            </ol>
-          ))}
-      </div>
+      {!collapseTechnical && historySection}
 
     </section>
   )

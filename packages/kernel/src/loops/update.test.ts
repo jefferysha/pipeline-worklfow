@@ -242,6 +242,40 @@ describe('updateLoopInYaml —— runner（v5 T20 双 runner 数据面）', () =
   })
 })
 
+// ── H10 §1：skill_bundle_id 治理写入（policy 字段；本函数只搬字面量，不做词法/存在性校验——
+// 写回后调用方须重跑 parseLoopsYaml + validateSchema(LOOPS_SCHEMA) 才拦下非法值，同 cadence/risk 口径）──
+describe('updateLoopInYaml —— skill_bundle_id（H10 §1 policy 字段治理写入）', () => {
+  test('patch 非空 profile id：读回一致，另一 loop 的字段不受影响（缺省仍是 null）', () => {
+    const { text, error } = updateLoopInYaml(BASE, 'build-loop', { skill_bundle_id: 'pm' })
+    expect(error).toBeNull()
+    const { data, errors } = readBack(text!)
+    expect(errors).toEqual([])
+    expect(data!.loops.find((l) => l.id === 'build-loop')!.skill_bundle_id).toBe('pm')
+    expect(data!.loops.find((l) => l.id === 'docs-loop')!.skill_bundle_id).toBeNull()
+  })
+
+  test('patch null：显式退回 unwired，读回 null（同 change_prefix 的 null 写回口径）', () => {
+    const seeded = updateLoopInYaml(BASE, 'build-loop', { skill_bundle_id: '_all' }).text!
+    const { text, error } = updateLoopInYaml(seeded, 'build-loop', { skill_bundle_id: null })
+    expect(error).toBeNull()
+    const { data, errors } = readBack(text!)
+    expect(errors).toEqual([])
+    expect(data!.loops[0]!.skill_bundle_id).toBeNull()
+  })
+
+  test('非法词法值：本函数仍写回（不做值域校验），但调用方重跑 schema 会拦下', () => {
+    const { text, error } = updateLoopInYaml(BASE, 'build-loop', { skill_bundle_id: 'Bad_ID' })
+    expect(error).toBeNull()
+    const { errors } = readBack(text!)
+    expect(errors.some((e) => e.includes('skill_bundle_id'))).toBe(true)
+  })
+
+  test('类型错误（数组/数字）→ error 提及字段名', () => {
+    expect(updateLoopInYaml(BASE, 'build-loop', { skill_bundle_id: ['pm'] }).error).toContain('skill_bundle_id')
+    expect(updateLoopInYaml(BASE, 'build-loop', { skill_bundle_id: 42 }).error).toContain('skill_bundle_id')
+  })
+})
+
 // ── loop init 原语（2026-07-12 loop-init L1）：createLoopsYamlText / appendLoopToYamlText ──
 
 /** 15 个 required 字段全量（拍板 P5：不含 autonomy_level/allowlist/denylist——载入派生，序列化省略）。 */
@@ -256,14 +290,28 @@ const NEW_ENTRY: NewLoopEntryInput = {
   change_prefix: 'rl-',
   phases: ['explore', 'spec', 'code', 'verify'],
   human_gates: ['explore', 'spec', 'verify'],
-  state: '.superpowers/loops/progress.md',
   design_doc: 'docs/loops/restyle-loop.md',
   status: 'paused',
   budget: { max_runs_per_day: 48, max_in_flight: 1, on_exceed: 'skip', max_tokens_per_day: 100000 },
   kill_criteria: ['no-change-3', 'budget-burn-2d'],
 }
 
+const WIRED_ENTRY = {
+  ...NEW_ENTRY,
+  template_id: 'future-template',
+  template_version: 1,
+  workflow_id: 'release-train',
+  skill_bundle_id: 'pm',
+} satisfies NewLoopEntryInput
+
 describe('createLoopsYamlText —— 全新 loops.yaml 文本（loop-init L1）', () => {
+  test('H9 新建条目不再持久化旧 state 运行状态字段', () => {
+    const { state: _legacyState, ...entry } = NEW_ENTRY
+    const { text, error } = createLoopsYamlText(entry as NewLoopEntryInput)
+    expect(error).toBeNull()
+    expect(text).not.toMatch(/^\s+state:/m)
+  })
+
   test('① 产文过 parse+schema，loadRegistry 等价读回逐字段 roundtrip（载入派生字段补默认）', () => {
     const { text, error } = createLoopsYamlText(NEW_ENTRY)
     expect(error).toBeNull()
@@ -273,7 +321,27 @@ describe('createLoopsYamlText —— 全新 loops.yaml 文本（loop-init L1）'
     const { data, errors } = readBack(text!)
     expect(errors).toEqual([])
     expect(data!.loops).toHaveLength(1)
-    expect(data!.loops[0]).toEqual({ ...NEW_ENTRY, autonomy_level: 'L1', allowlist: [], denylist: [] })
+    expect(data!.loops[0]).toEqual({ ...NEW_ENTRY, autonomy_level: 'L1', allowlist: [], denylist: [], skill_bundle_id: null })
+  })
+
+  test('H11 四个 wiring 字段原样 round-trip；status 保持 paused 且不持久化 wiring status', () => {
+    const { text, error } = createLoopsYamlText(WIRED_ENTRY)
+
+    expect(error).toBeNull()
+    expect(text).toContain('    template_id: future-template\n')
+    expect(text).toContain('    template_version: 1\n')
+    expect(text).toContain('    workflow_id: release-train\n')
+    expect(text).toContain('    skill_bundle_id: pm\n')
+    expect(text).not.toContain('wiring_status')
+    const { data, errors } = readBack(text!)
+    expect(errors).toEqual([])
+    expect(data!.loops[0]).toMatchObject({
+      template_id: 'future-template',
+      template_version: 1,
+      workflow_id: 'release-train',
+      skill_bundle_id: 'pm',
+      status: 'paused',
+    })
   })
 
   test('排版与手术层 LoopBlock 规则闭环：dash 缩进 2 / 字段列 4 / budget 列 6 / 数组块序列', () => {
@@ -323,8 +391,25 @@ describe('appendLoopToYamlText —— 既有文本尾部追加（loop-init L1）
     const { data, errors } = readBack(text!)
     expect(errors).toEqual([])
     expect(data!.loops.map((l) => l.id)).toEqual(['build-loop', 'docs-loop', 'restyle-loop'])
-    expect(data!.loops[2]).toEqual({ ...NEW_ENTRY, autonomy_level: 'L1', allowlist: [], denylist: [] })
+    expect(data!.loops[2]).toEqual({ ...NEW_ENTRY, autonomy_level: 'L1', allowlist: [], denylist: [], skill_bundle_id: null })
     expect(data!.loops[0]!.goal).toBe('保证每次构建都真跑八门验证不假绿') // 旧 loop 原值不动
+  })
+
+  test('H11 四个 wiring 字段随追加条目 round-trip，不改旧前缀、不默认 active、不写 wiring status', () => {
+    const { text, error } = appendLoopToYamlText(BASE, WIRED_ENTRY)
+
+    expect(error).toBeNull()
+    expect(text!.startsWith(BASE)).toBe(true)
+    expect(text).not.toContain('wiring_status')
+    const { data, errors } = readBack(text!)
+    expect(errors).toEqual([])
+    expect(data!.loops[2]).toMatchObject({
+      template_id: 'future-template',
+      template_version: 1,
+      workflow_id: 'release-train',
+      skill_bundle_id: 'pm',
+      status: 'paused',
+    })
   })
 
   test('before 无尾换行 → 先补一个换行再追加（登记行为），产文仍单 \\n 结尾', () => {

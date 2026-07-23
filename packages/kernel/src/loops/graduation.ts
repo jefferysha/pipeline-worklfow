@@ -285,6 +285,12 @@ export function setAutonomyLevelInYaml(text: string, loopId: string, level: Auto
 
 // ── 编排 + fs 注入面 ───────────────────────────────────────────────────────────
 
+/** level set 改档的 loops.yaml 快照（原文 + 字节 epoch）——写回 epoch-CAS 的初读。 */
+export interface RegistryTextSnapshot {
+  text: string
+  epoch: string
+}
+
 /** graduate/level 的 fs 触面注入（默认真 node fs 由 cli 提供；kernel/test 注入 fake）。 */
 export interface GraduationFs {
   loadRegistry: (repoRoot: string) => { data: LoopRegistry | null; errors: string[] }
@@ -292,10 +298,18 @@ export interface GraduationFs {
   readRunLog: (repoRoot: string) => string | null
   /** 读仓根 LOOP.md 人类镜像原文（漂移对账用）；缺失 → null。 */
   readLoopDoc: (repoRoot: string) => string | null
-  /** 读 .pipeline/loops.yaml 原文（level set surgical 改档的初读 + 写回前 CAS 重读）；缺失 → null。 */
-  readRegistryText: (repoRoot: string) => string | null
-  /** 写回 .pipeline/loops.yaml 原文（level set --confirm 的唯一 mutation）。 */
-  writeRegistryText: (repoRoot: string, text: string) => void
+  /** 读 .pipeline/loops.yaml 快照（原文 + 字节 epoch）：level set surgical 改档的初读，供写回 epoch-CAS；缺失 → null。 */
+  readRegistrySnapshot: (repoRoot: string) => Promise<RegistryTextSnapshot | null>
+  /**
+   * governance 锁 + 字节 epoch-CAS + atomic 写回（Stage B 返工 #3#4：level set --confirm 的唯一 mutation
+   * 与 admission 复验/其它 registry 写方**同 governance 锁串行**，绝不非治理旁路覆盖）：produce 对**锁内
+   * 当前文本**做 surgical 变换（初读 epoch 与锁内重读不符 → CAS 拒；produce 返 error → 不落盘）。
+   */
+  writeRegistryGoverned: (
+    repoRoot: string,
+    expectedEpoch: string,
+    produce: (currentText: string) => { text: string | null; error: string | null },
+  ) => Promise<{ ok: boolean; error: string | null }>
 }
 
 export interface GraduationReport {
@@ -359,15 +373,17 @@ export interface ApplyLevelResult {
 /**
  * 编排 level set：载入 → 裁决 → planLevelChange → （confirm 且 allowed）surgical 改档写回 loops.yaml。
  * 安全默认：无 confirm = dry-run（不落盘）；升档须准入；跨级拒；降档总允许。
- * 写回带读-判-写 CAS：初读→手术→重读比对，间隙被并发修改/删除 → 如实拒绝（errors + exit 3，未落盘）。
+ * 写回走 governance 锁 + 字节 epoch-CAS + atomic writer（Stage B 返工 #3#4）：初读快照取 epoch，
+ * 写方持 governance 锁重读 epoch，与初读不符（另一进程改档 / /api/loops/update / 人工编辑 / admission
+ * 物化）→ CAS 拒（errors + exit 3，未落盘），绝不非治理旁路盲写覆盖或留半文件。
  */
-export function applyLevelChange(
+export async function applyLevelChange(
   repoRoot: string,
   loopId: string,
   target: string,
   opts: { now: Date; confirm: boolean },
   fs: GraduationFs,
-): ApplyLevelResult {
+): Promise<ApplyLevelResult> {
   const { data, errors } = fs.loadRegistry(repoRoot)
   if (errors.length > 0) return { plan: null, verdict: null, applied: false, errors, exitCode: 3 }
   if (data === null) return { plan: null, verdict: null, applied: false, errors: [`loops.yaml 未找到于 ${repoRoot}/.pipeline/loops.yaml`], exitCode: 3 }
@@ -381,24 +397,20 @@ export function applyLevelChange(
   if (!plan.allowed) return { plan, verdict, applied: false, errors: [plan.reason, ...plan.blockers], exitCode: 2 }
   if (!opts.confirm) return { plan, verdict, applied: false, errors: [], exitCode: 0 } // dry-run（默认不改档）
 
-  const text = fs.readRegistryText(repoRoot)
-  if (text === null) return { plan, verdict, applied: false, errors: ['无法读取 .pipeline/loops.yaml 原文以写回'], exitCode: 3 }
-  const { text: next, error } = setAutonomyLevelInYaml(text, loopId, plan.to!)
-  if (error !== null || next === null) return { plan, verdict, applied: false, errors: [error ?? '改档写回失败'], exitCode: 3 }
-  // 读-判-写 CAS（对齐 server applyLoopsUpdate / cli loops init 先例）：写回前重读比对初读原文，
-  // 不一致说明间隙有并发写者（另一进程改档 / /api/loops/update / 人工编辑），如实拒绝不盲写覆盖。
-  // 全程同步无 await；重读→写的残留窗口仅跨进程纳秒级（同锁面已接受的 TOCTOU 残留口径）。
-  const recheck = fs.readRegistryText(repoRoot)
-  if (recheck !== text) {
-    const yamlPath = `${repoRoot}/.pipeline/loops.yaml`
+  const yamlPath = `${repoRoot}/.pipeline/loops.yaml`
+  // 初读快照取字节 epoch（surgical 改档基线）；文件消失 → 如实拒绝。
+  const snap = await fs.readRegistrySnapshot(repoRoot)
+  if (snap === null) {
+    return { plan, verdict, applied: false, errors: [`CAS 失败：loops.yaml 在改档写回期间被删除，已如实拒绝（未落盘，${yamlPath}）`], exitCode: 3 }
+  }
+  // governance 锁内 epoch-CAS + atomic 写回：produce 对锁内当前文本做 surgical 改档。epoch 不符（并发写）→ ok:false。
+  const res = await fs.writeRegistryGoverned(repoRoot, snap.epoch, (cur) => setAutonomyLevelInYaml(cur, loopId, plan.to!))
+  if (!res.ok) {
     return {
       plan, verdict, applied: false,
-      errors: [recheck === null
-        ? `CAS 失败：loops.yaml 在改档写回期间被删除，已如实拒绝（未落盘，${yamlPath}）`
-        : `CAS 失败：loops.yaml 在改档写回期间被并发修改，已如实拒绝（未落盘，${yamlPath}）`],
+      errors: [`CAS 失败：loops.yaml 在改档写回期间被并发修改，已如实拒绝（未落盘，${yamlPath}）${res.error ? `：${res.error}` : ''}`],
       exitCode: 3,
     }
   }
-  fs.writeRegistryText(repoRoot, next)
   return { plan, verdict, applied: true, errors: [], exitCode: 0 }
 }

@@ -10,7 +10,7 @@
  * 命中「伪测试」判据即不算数：断言 mock 返回 / 真实路径未执行 / 伪造 pass。本文件全程摸真盘。
  */
 import { execFileSync } from 'node:child_process'
-import { readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { readFile, rm, stat, unlink, writeFile } from 'node:fs/promises'
 import { statSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
@@ -74,13 +74,13 @@ describe('真实 e2e —— 全命令驱动真 kernel + 真 fs（GOAL C9）', ()
 
   test('check 真跑 guard 全量面：未满足出口条件 exit 2，满足 exit 0（G3）', async () => {
     await h.run(['init', 'demo', '--track', 'backend', '--preset', 'full'])
+    await h.seedGovernedDocumentEvidence('demo')
     await h.run(['transition', 'demo', 'open-complete']) // → explore
     // explore 出口要求 design_doc 指向存在文件——未设 → check 不过 exit 2
     expect(await h.run(['check', 'demo'])).toBe(2)
     // 真建 design doc 并指向它 → check 过
     const ddir = join(h.cwd, 'openspec/changes/demo')
-    await writeFile(join(ddir, 'design.md'), '# design\n覆盖矩阵齐全\n', 'utf8')
-    await h.run(['set', 'demo', 'design_doc', 'openspec/changes/demo/design.md'])
+    await h.seedArtifact('demo', 'design_doc', 'openspec/changes/demo/design.md') // P6：artifact 白盒预置
     expect(await h.run(['check', 'demo'])).toBe(0)
   })
 
@@ -101,6 +101,7 @@ describe('真实 e2e —— 全命令驱动真 kernel + 真 fs（GOAL C9）', ()
 
   test('transition 真改相位 + 真落 review marker + 真记历史', async () => {
     await h.run(['init', 'demo', '--track', 'backend', '--preset', 'full'])
+    await h.seedGovernedDocumentEvidence('demo')
     expect(await h.run(['transition', 'demo', 'open-complete'])).toBe(0)
     expect(await h.read('demo')).toMatch(/^phase: explore$/m)
     // explore 是复核相位 → 真落 .pipeline-pending-review
@@ -118,16 +119,16 @@ describe('真实 e2e —— 全命令驱动真 kernel + 真 fs（GOAL C9）', ()
 
   test('build-complete 真冻结 build_sha（喂足真实前置，忠实老内核 case 块）', async () => {
     await h.run(['init', 'demo', '--track', 'backend', '--preset', 'full'])
-    // explore 出口：真建 design doc 并指向它（老仓 L120-126 要求非空+存在）
-    await writeFile(join(h.cwd, 'openspec/changes/demo/design.md'), '# design\n覆盖矩阵齐全\n', 'utf8')
-    await h.run(['set', 'demo', 'design_doc', 'openspec/changes/demo/design.md'])
+    await h.seedGovernedDocumentEvidence('demo')
+    // explore 出口：使用已记录的 OpenSpec design 并登记字段（不得改写 hash-bound 文档）。
+    await h.seedArtifact('demo', 'design_doc', 'openspec/changes/demo/design.md') // P6：artifact 白盒预置
     await h.run(['transition', 'demo', 'open-complete'])
     await rm(join(h.cwd, '.pipeline-pending-review'), { force: true })
     await h.run(['transition', 'demo', 'explore-complete'])
     await rm(join(h.cwd, '.pipeline-pending-review'), { force: true })
     // spec 出口（backend）：真建 plan 并指向它（老仓 L127-138）
     await writeFile(join(h.cwd, 'openspec/changes/demo/plan.md'), '# plan\n', 'utf8')
-    await h.run(['set', 'demo', 'plan', 'openspec/changes/demo/plan.md'])
+    await h.seedArtifact('demo', 'plan', 'openspec/changes/demo/plan.md') // P6：artifact 白盒预置
     await h.run(['transition', 'demo', 'spec-complete'])
     // build 出口：build_mode + isolation 必设；full+direct 须显式 direct_override=true（老仓 L144-151）
     await h.run(['set-many', 'demo', 'build_mode=direct', 'isolation=worktree', 'direct_override=true'])
@@ -138,6 +139,7 @@ describe('真实 e2e —— 全命令驱动真 kernel + 真 fs（GOAL C9）', ()
 
   test('inbox 真读复核相位 change（--json schema）', async () => {
     await h.run(['init', 'demo', '--track', 'backend', '--preset', 'full'])
+    await h.seedGovernedDocumentEvidence('demo')
     await h.run(['transition', 'demo', 'open-complete']) // → explore（复核相位）
     expect(await h.run(['inbox', '--json'])).toBe(0)
     const payload = JSON.parse(h.out.join('\n')) as { inbox: Array<{ name: string; waiting_on: string }> }
@@ -182,9 +184,10 @@ describe('真实 e2e —— 全命令驱动真 kernel + 真 fs（GOAL C9）', ()
     expect(await h.run(['session', 'activate', 'nonesuch'])).toBe(1)
   })
 
-  test('status/list 真枚举活跃 change', async () => {
+  test('status/list 真枚举活跃 change（含 YAML projection 缺失的 canonical-only change）', async () => {
     await h.run(['init', 'a1', '--track', 'backend', '--preset', 'full'])
     await h.run(['init', 'b2', '--track', 'pm', '--preset', 'full'])
+    await unlink(join(h.cwd, 'openspec', 'changes', 'b2', '.pipeline.yaml'))
     expect(await h.run(['list', '--json'])).toBe(0)
     const payload = JSON.parse(h.out.join('\n')) as { changes: Array<{ name: string }> }
     expect(payload.changes.map((c) => c.name).sort()).toEqual(['a1', 'b2'])
@@ -219,6 +222,7 @@ describe('真实 e2e —— 全命令驱动真 kernel + 真 fs（GOAL C9）', ()
   test('全程 init→archive 七相位真跑通（喂足每相位真实前置，忠实老内核）', async () => {
     const cd = join(h.cwd, 'openspec/changes/e2e')
     await h.run(['init', 'e2e', '--track', 'backend', '--preset', 'full', '--user', 'conv'])
+    await h.seedGovernedDocumentEvidence('e2e')
     const clearGates = async () => {
       for (const k of ['confirm', 'review', 'interaction']) await rm(join(h.cwd, `.pipeline-pending-${k}`), { force: true })
     }
@@ -229,17 +233,18 @@ describe('真实 e2e —— 全命令驱动真 kernel + 真 fs（GOAL C9）', ()
     }
     // 每相位出口前喂真实前置（老仓 state-transition.sh case 块要求）
     await h.run(['transition', 'e2e', 'open-complete']); await clearGates()
-    await writeFile(join(cd, 'design.md'), '# design\n覆盖矩阵齐全\n', 'utf8')
-    await h.run(['set', 'e2e', 'design_doc', 'openspec/changes/e2e/design.md'])
+    // design.md 已由真实 ledger fixture 记录，保持它的 digest 不变。
+    await h.seedArtifact('e2e', 'design_doc', 'openspec/changes/e2e/design.md') // P6：artifact 白盒预置
     await step('explore-complete')
     await writeFile(join(cd, 'plan.md'), '# plan\n', 'utf8')
-    await h.run(['set', 'e2e', 'plan', 'openspec/changes/e2e/plan.md'])
+    await h.seedArtifact('e2e', 'plan', 'openspec/changes/e2e/plan.md') // P6：artifact 白盒预置
     await step('spec-complete')
     await h.run(['set-many', 'e2e', 'build_mode=direct', 'isolation=worktree', 'direct_override=true'])
     await step('build-complete')
     // verify 出口：报告 + branch_status + 双 review pass + barrier（build_sha 已=DEADBEEF）
     await writeFile(join(cd, 'verify.md'), '# verify\n', 'utf8')
-    await h.run(['set-many', 'e2e', 'verification_report=openspec/changes/e2e/verify.md', 'branch_status=handled', 'agent_review_result=pass', 'codex_review_result=pass'])
+    await h.seedArtifact('e2e', 'verification_report', 'openspec/changes/e2e/verify.md') // P6：verify 相位 verification_report 是有效 artifact，白盒预置
+    await h.run(['set-many', 'e2e', 'branch_status=handled', 'agent_review_result=pass', 'codex_review_result=pass'])
     await step('verify-pass')
     await step('ship-complete')
     await step('archived')

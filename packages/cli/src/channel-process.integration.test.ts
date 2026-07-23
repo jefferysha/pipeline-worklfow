@@ -24,7 +24,7 @@ import {
   type ChannelEnv,
   type ChannelStore,
   type SupervisorConfig,
-} from '@pipeline-lite/kernel'
+} from '@pipeline-lite/channel'
 import { cmdChannel, type ChannelHost, type LaunchedSupervisor } from './commands/channel.js'
 import { realDeps } from './integration-harness.js'
 

@@ -1,7 +1,12 @@
-import { useEffect, useState, type CSSProperties } from 'react'
+import { useEffect, useState, type CSSProperties, type ReactNode } from 'react'
+import { ChevronRight, CircleAlert } from 'lucide-react'
 import { fetchLoopsSnapshot, postLoopLevel, postLoopUpdate, type WbLoopRow } from '../api/client'
 import { useT } from '../i18n'
 import { Dialog } from '../shell/Dialog'
+import { Button } from '@/components/ui/button'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import { Switch } from '@/components/ui/switch'
+import { cn } from '@/lib/utils'
 
 /**
  * LoopCard（T16，计划 2026-07-11-v5-interaction-rebuild）——「自动运行(Loop)」卡并入编排页。
@@ -20,6 +25,10 @@ import { Dialog } from '../shell/Dialog'
  * 状态托管：快照读取住在 useLoops（WorkbenchView 持有）——右栏摘要「自动运行」行与本卡吃同
  * 一份 rows（useHooksConfig 的同一条「数据住共同祖先」纪律）。草稿（draft）住本卡：row 对象
  * 换新（首载/切 loop/保存后 reload）即以 server 真值重置草稿。摘要行显示已保存真值，不吃草稿。
+ *
+ * v10b 全量迁移（Phase 2 / W2）：手写全局类（wb-/lp-/loop-reject）退役，样式改 tailwind v4
+ * 原子类就地承载——颜色一律 token 语义类或 var(--*)（禁新硬编码色值；派生色沿 color-mix 从
+ * 既有 token 计算的决议 #9 口径），状态由 data 属性与 aria 承载（测试不再断言视觉类名）。
  */
 
 /**
@@ -30,6 +39,83 @@ import { Dialog } from '../shell/Dialog'
  * 下拉额外渲染该真值选项，不谎报为双选项之一。
  */
 export const LOOP_RUNNERS = ['claude-code', 'codex'] as const
+
+/**
+ * v10b 迁移：三张工作台卡（LoopCard/AutomationCard/SecretsCard）共用的卡壳/表单原子类词汇
+ * ——旧 .card/.wb-editor-head/.wb-input/.wb-note/.wb-ed-sec/.wb-status/.lp-policy 家族的对位。
+ * AutomationCard 已 import LpSlider，同源消费本表；不入 components/ui（那里不许动）。
+ */
+export const WB_TW = {
+  /** 旧 .card + .wb-loop 卡壳——按旧 `.wb8-pane > .card` 剥皮语义收平（Phase 4 视觉验收 #3）：
+   *  三卡（Loop/AFK/凭证）只在 sheet pane 内渲染，pane 自带外卡壳与内边距，卡根不再套第二层
+   *  border/bg-card/shadow/圆角/外边距（卡内卡）；区块分隔由 WB_TW.sec 的 border-t 承担。 */
+  card: '',
+  /** 旧 .wb-editor-head + .lp-head 卡头行（row-gap 4px 是 lp-head 覆写）。 */
+  head: 'flex flex-wrap items-center gap-x-[9px] gap-y-1',
+  headB: 'text-[13px] text-text',
+  /** 旧 .lp-head-sub 卡头副题（basis-full 独占一行）。 */
+  headSub: 'mt-px basis-full text-xs font-normal text-text-3',
+  /** 旧 .wb-input（hover/focus/disabled 三态；focus 环走 --ring-blue token）。 */
+  input:
+    'h-[34px] w-full rounded-[9px] border border-border bg-card px-[11px] text-[13.5px] text-text transition-[border-color,box-shadow] duration-[120ms] hover:border-border-2 focus:border-(--accent) focus:shadow-[0_0_0_3px_var(--ring-blue)] focus:outline-none disabled:cursor-not-allowed disabled:bg-fill disabled:text-text-3',
+  /** 旧 .wb-note。 */
+  note: 'text-xs leading-[1.55] text-text-3',
+  /** 旧 .wb-flabel（margin 由调用点自补——旧表在不同容器里分别清零/覆写过）。 */
+  flabel: 'block text-xs font-semibold text-text-3',
+  /** 旧 .wb-ed-sec；相邻分区的顶界/间距用 [data-sec] + & 变体对位旧 `+` 组合子语义。 */
+  sec: 'pt-3.5 pb-1 [[data-sec]+&]:mt-3 [[data-sec]+&]:border-t [[data-sec]+&]:border-border',
+  /** 旧 .wb-ed-sec-h 与其内 .hint。 */
+  secH: 'mb-2.5 flex items-center gap-1.5 text-[13px] font-bold',
+  hint: 'text-xs font-normal text-text-3',
+  /** 旧 .wb-status--dirty / --ok 状态 pill。 */
+  statusDirty:
+    'inline-flex items-center gap-1.5 rounded-full border border-dashed border-border-2 bg-fill px-2.5 py-1 text-[11px] font-bold text-text-2',
+  statusOk: 'inline-flex items-center gap-1.5 rounded-full bg-green-t px-2.5 py-1 text-[11px] font-bold text-green',
+  /** 旧 .wb-save-errors + .lp-errors（li 单列）。 */
+  saveErrors: 'mt-3 mb-3.5 list-none rounded-md border border-red-b bg-red-t px-3 py-2.5',
+  saveErrorsLi: 'font-mono text-[12.5px] leading-[1.6] text-red-d',
+  /** 旧 .lp-policy 弹性参数行（SecretsCard 的 .sc-row 同族）。 */
+  policyRow: 'mt-2.5 flex flex-wrap items-center gap-3 border-t border-dashed border-border pt-3',
+  /** 旧 .view__note / .view__note--error（错误态另配 data-tone="error"）。 */
+  loading: 'p-5 text-[13px] text-text-3',
+  loadError: 'p-5 text-[13px] text-red',
+  /** shadcn Button 的项目微调：solid 配 <Button size="sm">、ghost 配 <Button variant="ghost" size="sm">。 */
+  btnSolid: 'px-4 text-[12.5px] font-bold',
+  btnGhost: 'border border-border px-4 text-[12.5px] font-semibold text-text-2 hover:border-text-3 hover:bg-transparent hover:text-text',
+  /** shadcn Switch 的项目微调：开=accent 蓝（旧 .switch[aria-checked=true] 口径，非 shadcn 默认绿）。 */
+  switch: 'data-[state=checked]:bg-(--accent)',
+} as const
+
+/**
+ * 工作台各页签共用的「▸ 高级设置」折叠区（IA 精简：每个页签只把高频核心直接展开，次要/
+ * 只读诊断/解释性内容一键收进本折叠，默认收起）。shadcn Collapsible（radix，闭合即卸载内容——
+ * 恒不撑视觉高度）；触发钮文案随开合切 advanced_show/advanced_hide，▸ 图标随开态旋转 90°。
+ * 测试锚点走 testid（各页签唯一：lp-adv/afk-adv/sc-adv/skh-adv/wb-stage-adv）——折叠区内的
+ * 既有 testid 全保留，用例需先点 testid 展开再断言（内容闭合态不在 DOM）。
+ */
+export function WbAdvanced({ testid, children }: { testid: string; children: ReactNode }): JSX.Element {
+  const { t } = useT()
+  const [open, setOpen] = useState(false)
+  return (
+    <Collapsible open={open} onOpenChange={setOpen} className="mt-3.5 border-t border-border pt-2.5">
+      <CollapsibleTrigger
+        data-testid={testid}
+        className="flex w-full cursor-pointer items-center gap-1 rounded-md text-xs font-semibold text-text-3 transition-colors hover:text-text-2"
+      >
+        <ChevronRight aria-hidden="true" className={cn('size-3.5 flex-none transition-transform duration-150', open && 'rotate-90')} />
+        {open ? t('workbench.advanced_hide') : t('workbench.advanced_show')}
+      </CollapsibleTrigger>
+      <CollapsibleContent className="pt-1">{children}</CollapsibleContent>
+    </Collapsible>
+  )
+}
+
+/** 旧 .loop-reject 错误反馈块（语义=错误，由 data-tone="error" 承载，调用点自补 margin）。 */
+const ERR_BLOCK_TW = 'rounded-[7px] bg-red-t px-[11px] py-2 text-[11.5px] font-semibold text-red'
+/** 旧 .wb-chip（mono 值 chip）。 */
+const CHIP_TW = 'inline-flex h-6 items-center gap-1 rounded-[7px] border border-border bg-fill px-[9px] font-mono text-xs text-text-2'
+/** 旧 .badge 底座（--run/--pending/lp-draft-badge 的差异色由调用点条件类补）。 */
+const BADGE_TW = 'inline-block whitespace-nowrap rounded-full px-2 py-0.5 text-[10.5px] font-bold'
 
 // ── 草稿形状：/api/loops/update 可 patch 字段的编辑面（kernel loops/update.ts 全集，
 //    autonomy_level 除外——见头注释）──
@@ -101,7 +187,7 @@ function computePatch(draft: LoopDraft, base: LoopDraft): Record<string, unknown
 //    （如「系统推导 + 人确认」）取首个产出实质内容的一方——人确认/人可调是几乎每个字段
 //    收尾都有的动作,不单独成类,否则三色徽章会退化成「全员人拍板」。
 //    allowlist 不在此表:它是全表唯一「应然生产者=暂不呈现为需决策字段」的例外（零消费、
-//    「执行面另落」）,不装成三色徽章之一,渲染时走独立 lp-prov--reserved disclaimer。──
+//    「执行面另落」）,不装成三色徽章之一,渲染时走独立 reserved disclaimer。──
 type ProvKind = 'agent' | 'sys' | 'human'
 
 const FIELD_PROV: Record<Exclude<keyof LoopDraft, 'allowlist'>, ProvKind> = {
@@ -129,12 +215,22 @@ const PROV_LABEL_KEY: Record<ProvKind, string> = {
   human: 'workbench.lp_prov_human',
 }
 
+/** 徽章三色直接指派既有 token（agent=accent 三件套、sys=fill-2 中性、human=ink 深底铭牌）。 */
+const PROV_BASE_TW = 'inline-flex h-[18px] flex-none items-center whitespace-nowrap rounded-[6px] px-[7px] text-[10.5px] font-bold'
+const PROV_KIND_TW: Record<ProvKind, string> = {
+  agent: 'border border-accent-b bg-accent-t text-accent-d',
+  sys: 'bg-fill-2 text-text-2',
+  human: 'bg-ink text-ink-fg',
+}
+/** allowlist 专用「运行时硬约束」徽章：H5 已在 L3 写入与合并两道边界真实消费。 */
+const PROV_ENFORCED_TW = cn(PROV_BASE_TW, 'border border-green-b bg-green-t text-green-d')
+
 /** 字段生产者徽章（T7）——纯展示，无点击语义；field 取 LoopDraft 键名做 data-testid 锚点。 */
 function ProvBadge({ field }: { field: keyof typeof FIELD_PROV }): JSX.Element {
   const { t } = useT()
   const kind = FIELD_PROV[field]
   return (
-    <span className={`lp-prov lp-prov--${kind}`} data-testid={`lp-prov-${field}`}>
+    <span className={cn(PROV_BASE_TW, PROV_KIND_TW[kind])} data-kind={kind} data-testid={`lp-prov-${field}`}>
       {t(PROV_LABEL_KEY[kind])}
     </span>
   )
@@ -250,21 +346,40 @@ interface SliderProps {
 }
 
 /**
+ * 滑杆样式（旧 .lp-range）——保持原生 input[type=range]（测试契约 fireEvent.change/toHaveValue/
+ * step 属性 + 原生键盘语义都钉在原生控件上，shadcn/radix Slider 换不动），轨道 fill-2/填充
+ * accent 经 --p 渐变、16px 白 thumb、focus 环 --ring-blue——全部 token，无新硬编码色值。
+ */
+const RANGE_TW = [
+  'mt-2 block h-4 w-full cursor-pointer appearance-none bg-transparent focus-visible:outline-none',
+  '[&::-webkit-slider-runnable-track]:h-[5px] [&::-webkit-slider-runnable-track]:rounded-full',
+  '[&::-webkit-slider-runnable-track]:bg-[linear-gradient(to_right,var(--accent)_var(--p,0%),var(--fill-2)_var(--p,0%))]',
+  '[&::-webkit-slider-thumb]:-mt-[5.5px] [&::-webkit-slider-thumb]:size-4 [&::-webkit-slider-thumb]:appearance-none',
+  '[&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border [&::-webkit-slider-thumb]:border-border-2',
+  '[&::-webkit-slider-thumb]:bg-card [&::-webkit-slider-thumb]:shadow-md',
+  '[&:focus-visible::-webkit-slider-thumb]:border-(--accent) [&:focus-visible::-webkit-slider-thumb]:shadow-[0_0_0_3px_var(--ring-blue)]',
+  '[&::-moz-range-track]:h-[5px] [&::-moz-range-track]:rounded-full [&::-moz-range-track]:bg-fill-2',
+  '[&::-moz-range-progress]:h-[5px] [&::-moz-range-progress]:rounded-full [&::-moz-range-progress]:bg-(--accent)',
+  '[&::-moz-range-thumb]:size-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border [&::-moz-range-thumb]:border-border-2',
+  '[&::-moz-range-thumb]:bg-card [&::-moz-range-thumb]:shadow-md',
+].join(' ')
+
+/**
  * 单条滑杆（轨道 fill-2 / 填充 accent 经 --p 渐变，推荐 ▽ 刻度）——demo .lp-sld 对位。
- * T21 起导出：「AFK 执行」卡（AutomationCard）复用同一滑杆组件与 lp-slider 样式纪律。
+ * T21 起导出：「AFK 执行」卡（AutomationCard）复用同一滑杆组件与滑杆样式纪律。
  */
 export function LpSlider({ id, label, value, min, max, display, recoLabel, recoFrac, onValue, prov, step }: SliderProps): JSX.Element {
   const pct = ((value - min) / (max - min)) * 100
   return (
-    <div className="lp-sld">
-      <div className="lp-sld-top">
-        <label className="wb-flabel" htmlFor={id}>{label}</label>
+    <div>
+      <div className="flex items-baseline gap-2">
+        <label className={WB_TW.flabel} htmlFor={id}>{label}</label>
         {prov}
-        <span className="lp-sld-val lp-mono" data-testid={`${id}-val`}>{display}</span>
+        <span className="ml-auto font-mono text-[12.5px] font-bold text-(--accent)" data-testid={`${id}-val`}>{display}</span>
       </div>
       <input
         type="range"
-        className="lp-range"
+        className={RANGE_TW}
         id={id}
         data-testid={id}
         min={min}
@@ -275,9 +390,9 @@ export function LpSlider({ id, label, value, min, max, display, recoLabel, recoF
         style={{ '--p': `${pct}%` } as CSSProperties}
         onChange={(e) => onValue(Number(e.target.value))}
       />
-      <div className="lp-sld-marks" aria-hidden="true">
+      <div className="relative mt-0.5 h-4" aria-hidden="true">
         <span
-          className={`lp-sld-reco${recoFrac === 'edge' ? ' lp-sld-reco--edge' : ''}`}
+          className={cn('absolute top-0 whitespace-nowrap text-[10.5px] text-text-3', recoFrac !== 'edge' && '-translate-x-1/2')}
           style={recoFrac === 'edge' ? { left: '2px' } : { left: recoLeft(recoFrac) }}
         >
           {recoLabel}
@@ -308,6 +423,10 @@ interface ChipRowProps {
   onChange: (next: string[]) => void
 }
 
+/** 旧 .lp-saferow：150px 标签列 + 弹性内容列；相邻行虚线顶界经 [data-saferow] + & 对位旧 `+` 组合子。 */
+const SAFEROW_TW =
+  'grid grid-cols-[150px_minmax(0,1fr)] items-start gap-3 py-2.5 last:pb-0.5 max-[720px]:grid-cols-1 max-[720px]:gap-1.5 [[data-saferow]+&]:border-t [[data-saferow]+&]:border-dashed [[data-saferow]+&]:border-border'
+
 function LpChipRow({ label, values, addAria, descKeys, prov, note, onChange }: ChipRowProps): JSX.Element {
   const { t } = useT()
   // 「+ 添加」就地输入态（StepEditor commitAdd 同款：Enter 提交 / Esc 取消 / 失焦有值即提交）。
@@ -322,25 +441,30 @@ function LpChipRow({ label, values, addAria, descKeys, prov, note, onChange }: C
   }
 
   return (
-    <div className="lp-saferow">
-      <div className="lp-saferow-label">
-        <span className="wb-flabel">{label}</span>
+    <div className={SAFEROW_TW} data-saferow="">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+        <span className={cn(WB_TW.flabel, 'mt-1')}>{label}</span>
         {prov}
       </div>
-      <div className="lp-saferow-body">
-        <div className="wb-chips">
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
           {values.map((v) => (
-            <span key={v} className="wb-chip">
+            <span key={v} className={CHIP_TW}>
               {v}
-              {descKeys?.[v] && <span className="lp-chip-d">{t(descKeys[v]!)}</span>}
-              <button type="button" className="wb-x" aria-label={t('workbench.lp_chip_remove', { v })} onClick={() => onChange(values.filter((x) => x !== v))}>
+              {descKeys?.[v] && <span className="font-sans text-[11.5px] text-text-3">{t(descKeys[v]!)}</span>}
+              <button
+                type="button"
+                className="-mr-[3px] inline-grid size-4 cursor-pointer place-items-center rounded-[5px] border-0 bg-transparent p-0 text-[13px] leading-none text-text-3 transition-colors duration-[120ms] hover:bg-red-t hover:text-red-d"
+                aria-label={t('workbench.lp_chip_remove', { v })}
+                onClick={() => onChange(values.filter((x) => x !== v))}
+              >
                 ×
               </button>
             </span>
           ))}
           {adding ? (
             <input
-              className="wb-input wb-chip-in"
+              className={cn(WB_TW.input, 'h-[26px] w-[180px] font-mono text-xs')}
               aria-label={addAria}
               value={draft}
               // eslint-disable-next-line jsx-a11y/no-autofocus -- 用户刚点了「+ 添加」，焦点进输入框是这次点击的直接延续
@@ -357,12 +481,17 @@ function LpChipRow({ label, values, addAria, descKeys, prov, note, onChange }: C
               onBlur={() => commit(false)}
             />
           ) : (
-            <button type="button" className="wb-addchip" aria-label={addAria} onClick={() => setAdding(true)}>
+            <button
+              type="button"
+              className="h-6 cursor-pointer rounded-[7px] border border-dashed border-border-2 bg-transparent px-[9px] text-xs font-semibold text-text-3 transition-colors duration-[120ms] hover:bg-fill hover:text-text-2"
+              aria-label={addAria}
+              onClick={() => setAdding(true)}
+            >
               {t('workbench.lp_chip_add')}
             </button>
           )}
         </div>
-        {note && <p className="wb-note lp-fieldnote">{note}</p>}
+        {note && <p className={cn(WB_TW.note, 'mt-1.5')}>{note}</p>}
       </div>
     </div>
   )
@@ -460,8 +589,8 @@ export function LoopCard({ root, loops }: LoopCardProps): JSX.Element {
   // ── loop-init L5：草稿审阅动作——批准（status:'active'）/ 驳回（status:'paused'，现场保留）。
   //    复用既有 postLoopUpdate（与保存链路同形 body {root,id,patch}，只带 status 一键）；成功后
   //    显式重拉快照（loops.reload——即时重拉，非 setInterval 轮询，G22 纪律），server 已在含 status
-  //    的写回成功后清 draft 标记，重拉即见徽章消失（前端不发清标记请求）。失败复用 loop-reject
-  //    反馈条呈现 server 原文。 ──
+  //    的写回成功后清 draft 标记，重拉即见徽章消失（前端不发清标记请求）。失败复用错误反馈条
+  //    （data-tone="error"）呈现 server 原文。 ──
   async function reviewAction(status: 'active' | 'paused'): Promise<void> {
     if (!row || reviewBusy) return
     setReviewBusy(true)
@@ -479,17 +608,17 @@ export function LoopCard({ root, loops }: LoopCardProps): JSX.Element {
   // ── 加载/错误/空态三分支 ──
   if (loops.loadError) {
     return (
-      <section className="card wb-loop" data-testid="wb-loop-card">
-        <div className="wb-editor-head lp-head"><b>{t('workbench.lp_title')}</b></div>
-        <p className="view__note view__note--error" data-testid="lp-load-error">{loops.loadError}</p>
+      <section className={WB_TW.card} data-testid="wb-loop-card">
+        <div className={WB_TW.head}><b className={WB_TW.headB}>{t('workbench.lp_title')}</b></div>
+        <p className={WB_TW.loadError} data-tone="error" data-testid="lp-load-error">{loops.loadError}</p>
       </section>
     )
   }
   if (loops.rows === null) {
     return (
-      <section className="card wb-loop" data-testid="wb-loop-card">
-        <div className="wb-editor-head lp-head"><b>{t('workbench.lp_title')}</b></div>
-        <p className="view__note">{t('common.loading')}</p>
+      <section className={WB_TW.card} data-testid="wb-loop-card">
+        <div className={WB_TW.head}><b className={WB_TW.headB}>{t('workbench.lp_title')}</b></div>
+        <p className={WB_TW.loading}>{t('common.loading')}</p>
       </section>
     )
   }
@@ -498,16 +627,17 @@ export function LoopCard({ root, loops }: LoopCardProps): JSX.Element {
     // 配置的生产者应是 agent/系统，不是人从空白开始手填 15 个字段；不渲染任何编辑控件，不谎报可配。
     const prompt = t('workbench.lp_empty_prompt')
     return (
-      <section className="card wb-loop" data-testid="wb-loop-card">
-        <div className="wb-editor-head lp-head"><b>{t('workbench.lp_title')}</b></div>
-        <div className="lp-empty" data-testid="lp-empty">
-          <p className="lp-empty-t">{t('workbench.lp_empty_title')}</p>
-          <p className="wb-note">{t('workbench.lp_empty_go')}</p>
-          <div className="lp-empty-prompt" data-testid="lp-empty-prompt">
-            <p className="lp-empty-prompt-q">{prompt}</p>
-            <button
-              type="button"
-              className="btn btn--ghost lp-empty-copy"
+      <section className={WB_TW.card} data-testid="wb-loop-card">
+        <div className={WB_TW.head}><b className={WB_TW.headB}>{t('workbench.lp_title')}</b></div>
+        <div className="pt-2.5 pb-1" data-testid="lp-empty">
+          <p className="mb-1 text-[13px] font-bold">{t('workbench.lp_empty_title')}</p>
+          <p className={WB_TW.note}>{t('workbench.lp_empty_go')}</p>
+          <div className="my-3 rounded-md border border-dashed border-border-2 bg-fill px-3.5 py-3" data-testid="lp-empty-prompt">
+            <p className="mb-2.5 text-[12.5px] leading-[1.65] text-text-2">{prompt}</p>
+            <Button
+              variant="ghost"
+              size="sm"
+              className={cn(WB_TW.btnGhost, 'h-7 px-3 text-xs')}
               data-testid="lp-empty-copy"
               aria-label={t('workbench.lp_empty_copy_aria')}
               onClick={() => {
@@ -515,9 +645,9 @@ export function LoopCard({ root, loops }: LoopCardProps): JSX.Element {
               }}
             >
               {promptCopied ? t('workbench.lp_empty_copied') : t('workbench.lp_empty_copy')}
-            </button>
+            </Button>
           </div>
-          <p className="wb-note lp-empty-note">{t('workbench.lp_empty_note')}</p>
+          <p className={cn(WB_TW.note, 'mt-2')}>{t('workbench.lp_empty_note')}</p>
         </div>
       </section>
     )
@@ -530,32 +660,37 @@ export function LoopCard({ root, loops }: LoopCardProps): JSX.Element {
   const tokensK = draft.max_tokens_per_day === null ? RECO_TOKENS_K : clamp(Math.round(draft.max_tokens_per_day / 10000) * 10, 10, 500)
 
   return (
-    <section className="card wb-loop" data-testid="wb-loop-card">
-      <div className="wb-editor-head lp-head">
-        <b>{t('workbench.lp_title')}</b>
-        <button
-          type="button"
-          className="switch"
-          role="switch"
-          aria-checked={active}
+    <section className={WB_TW.card} data-testid="wb-loop-card">
+      <div className={WB_TW.head}>
+        <b className={WB_TW.headB}>{t('workbench.lp_title')}</b>
+        <Switch
+          className={WB_TW.switch}
+          checked={active}
           aria-label={t('workbench.lp_enable')}
           data-testid="lp-enable"
-          onClick={() => edit({ status: active ? 'paused' : 'active' })}
+          onCheckedChange={() => edit({ status: active ? 'paused' : 'active' })}
         />
-        <span className={`badge ${active ? 'badge--run' : 'badge--pending'}`} data-testid="lp-pill">
+        <span
+          className={cn(BADGE_TW, active ? 'bg-transparent pl-0 text-green' : 'bg-fill text-text-3')}
+          data-state={active ? 'run' : 'paused'}
+          data-testid="lp-pill"
+        >
           {t(active ? 'workbench.lp_running' : 'workbench.lp_paused')}
         </span>
         <ProvBadge field="status" />
-        {/* loop-init L5：草稿待审阅徽章——蓝底座复用 .badge + .lp-draft-badge（color-mix 从 --accent
-            派生，决议 #9）；testid/类名走 lp-draft-* 审阅语义，与既有编辑态无关。 */}
+        {/* loop-init L5：草稿待审阅徽章——蓝底 color-mix 从 --accent 派生（决议 #9）；testid 走
+            lp-draft-* 审阅语义，与既有编辑态无关。 */}
         {isPendingReview && (
-          <span className="badge lp-draft-badge" data-testid="lp-draft-badge">
+          <span
+            className={cn(BADGE_TW, 'bg-[color-mix(in_srgb,var(--accent)_14%,var(--card))] text-accent-d')}
+            data-testid="lp-draft-badge"
+          >
             {t('workbench.lp_draft_badge')}
           </span>
         )}
         {loops.rows.length > 1 && (
           <select
-            className="wb-input lp-loopsel"
+            className={cn(WB_TW.input, 'h-[26px] w-auto px-2 font-mono text-xs')}
             aria-label={t('workbench.lp_loop_select')}
             data-testid="lp-loop-select"
             value={row.id}
@@ -569,19 +704,19 @@ export function LoopCard({ root, loops }: LoopCardProps): JSX.Element {
             ))}
           </select>
         )}
-        <span className="wb-spacer" />
-        {dirty && <span className="wb-status wb-status--dirty" data-testid="lp-dirty">{t('workbench.lp_dirty')}</span>}
-        {saveOk && !dirty && <span className="wb-status wb-status--ok" data-testid="lp-save-ok">{t('workbench.lp_save_ok')}</span>}
-        <button className="btn" data-testid="lp-save" onClick={() => void save()} disabled={!dirty || saving}>
+        <span className="flex-1" />
+        {dirty && <span className={WB_TW.statusDirty} data-state="dirty" data-testid="lp-dirty">{t('workbench.lp_dirty')}</span>}
+        {saveOk && !dirty && <span className={WB_TW.statusOk} data-state="ok" data-testid="lp-save-ok">{t('workbench.lp_save_ok')}</span>}
+        <Button size="sm" className={WB_TW.btnSolid} data-testid="lp-save" onClick={() => void save()} disabled={!dirty || saving}>
           {t('workbench.lp_save')}
-        </button>
-        <span className="lp-head-sub">{t('workbench.lp_head_sub')}</span>
+        </Button>
+        <span className={WB_TW.headSub}>{t('workbench.lp_head_sub')}</span>
       </div>
 
       {saveErrors && (
-        <ul className="wb-save-errors lp-errors" data-testid="lp-save-errors">
+        <ul className={WB_TW.saveErrors} data-testid="lp-save-errors">
           {saveErrors.map((e) => (
-            <li key={e}>{e}</li>
+            <li key={e} className={WB_TW.saveErrorsLi}>{e}</li>
           ))}
         </ul>
       )}
@@ -590,19 +725,25 @@ export function LoopCard({ root, loops }: LoopCardProps): JSX.Element {
           change_prefix → 实际匹配的 changes（弹层，读 row 真值，不随草稿输入重算——保存前
           修改草稿不影响本条显示，保存并 reload 后才随新真值刷新）；phases → 阶段 chips 纯
           展示无点击语义。决议 #3 裁减口径：这是「数据关系澄清」，不是健康度评分——不画环、
-          不给成功率角标。布局内层沿用 .lp-policy 的 flex-wrap 分组样式纪律。 ── */}
-      <div className="wb-ed-sec lp-rel-sec">
-        <div className="wb-ed-sec-h">
+          不给成功率角标。布局沿旧 .lp-policy 的 flex-wrap 分组纪律。 ── */}
+      <div className={WB_TW.sec} data-sec="">
+        <div className={WB_TW.secH}>
           {t('workbench.lp_rel_sec')}
-          <span className="hint">{t('workbench.lp_rel_sec_hint')}</span>
+          <span className={WB_TW.hint}>{t('workbench.lp_rel_sec_hint')}</span>
         </div>
-        <div className="lp-rel" data-testid="lp-rel">
-          <span className="lp-rel-root" data-testid="lp-rel-root" title={row.root}>{row.root}</span>
-          <span className="lp-rel-root-note">{t('workbench.lp_rel_root_note')}</span>
-          <span className="lp-rel-arrow" aria-hidden="true">➝</span>
+        <div className="flex flex-wrap items-center gap-2.5" data-testid="lp-rel">
+          <span
+            className="max-w-[280px] overflow-hidden rounded-[7px] bg-fill-2 px-[9px] py-1 font-mono text-xs font-bold text-ellipsis whitespace-nowrap"
+            data-testid="lp-rel-root"
+            title={row.root}
+          >
+            {row.root}
+          </span>
+          <span className="text-[11.5px] text-text-3">{t('workbench.lp_rel_root_note')}</span>
+          <span className="text-[13px] text-text-3" aria-hidden="true">➝</span>
           <button
             type="button"
-            className="lp-rel-match"
+            className="h-[26px] cursor-pointer rounded-full border border-border bg-fill px-2.5 font-mono text-xs text-text-2 transition-colors duration-[120ms] hover:border-(--accent) hover:bg-accent-t hover:text-accent-d"
             data-testid="lp-rel-prefix-btn"
             onClick={() => setShowMatches(true)}
           >
@@ -611,16 +752,16 @@ export function LoopCard({ root, loops }: LoopCardProps): JSX.Element {
               n: row.matched_changes.length,
             })}
           </button>
-          <span className="lp-rel-sep" aria-hidden="true">·</span>
-          <span className="lp-rel-phases-label">{t('workbench.lp_rel_phases_label')}</span>
+          <span className="text-border-2" aria-hidden="true">·</span>
+          <span className="text-xs font-semibold text-text-3">{t('workbench.lp_rel_phases_label')}</span>
           {row.phases.length === 0 ? (
-            <span className="wb-note">{t('workbench.lp_rel_phases_empty')}</span>
+            <span className={WB_TW.note}>{t('workbench.lp_rel_phases_empty')}</span>
           ) : (
             row.phases.map((p) => (
-              <span key={p} className="wb-chip lp-mono" data-testid="lp-rel-phase-chip">{p}</span>
+              <span key={p} className={CHIP_TW} data-testid="lp-rel-phase-chip">{p}</span>
             ))
           )}
-          <p className="wb-note lp-rel-note">{t('workbench.lp_rel_note')}</p>
+          <p className={cn(WB_TW.note, 'mt-1 basis-full')}>{t('workbench.lp_rel_note')}</p>
         </div>
       </div>
 
@@ -630,17 +771,17 @@ export function LoopCard({ root, loops }: LoopCardProps): JSX.Element {
           onClose={() => setShowMatches(false)}
           testid="lp-rel-dialog"
           actions={
-            <button type="button" className="btn btn--ghost" onClick={() => setShowMatches(false)}>
+            <Button variant="ghost" size="sm" className={WB_TW.btnGhost} onClick={() => setShowMatches(false)}>
               {t('workbench.lp_rel_dialog_close')}
-            </button>
+            </Button>
           }
         >
           {row.matched_changes.length === 0 ? (
-            <p className="dialog__desc">{t('workbench.lp_rel_dialog_empty')}</p>
+            <p className="mb-4 text-[12.5px] leading-[1.6] text-text-2">{t('workbench.lp_rel_dialog_empty')}</p>
           ) : (
-            <ul className="lp-rel-dialog-list" data-testid="lp-rel-dialog-list">
+            <ul className="flex max-h-80 list-none flex-col gap-1.5 overflow-y-auto p-0 text-[12.5px]" data-testid="lp-rel-dialog-list">
               {row.matched_changes.map((c) => (
-                <li key={c} className="lp-mono">{c}</li>
+                <li key={c} className="font-mono">{c}</li>
               ))}
             </ul>
           )}
@@ -648,17 +789,17 @@ export function LoopCard({ root, loops }: LoopCardProps): JSX.Element {
       )}
 
       {/* ── 目标 ── */}
-      <div className="wb-ed-sec">
-        <div className="wb-ed-sec-h">
+      <div className={WB_TW.sec} data-sec="">
+        <div className={WB_TW.secH}>
           {t('workbench.lp_sec_goal')}
-          <span className="hint">{t('workbench.lp_sec_goal_hint')}</span>
+          <span className={WB_TW.hint}>{t('workbench.lp_sec_goal_hint')}</span>
         </div>
-        <div className="lp-flabel-row">
-          <label className="wb-flabel" htmlFor="lp-goal">{t('workbench.lp_goal')}</label>
+        <div className="mb-[5px] flex items-center gap-2">
+          <label className={WB_TW.flabel} htmlFor="lp-goal">{t('workbench.lp_goal')}</label>
           <ProvBadge field="goal" />
         </div>
         <input
-          className="wb-input"
+          className={WB_TW.input}
           id="lp-goal"
           data-testid="lp-goal"
           value={draft.goal}
@@ -667,14 +808,14 @@ export function LoopCard({ root, loops }: LoopCardProps): JSX.Element {
             if (e.key === 'Enter') e.preventDefault() // Enter 守卫：保存只走卡头保存钮
           }}
         />
-        <div className="lp-row3">
+        <div className="mt-3 grid grid-cols-3 gap-3.5 max-[720px]:grid-cols-1">
           <div>
-            <div className="lp-flabel-row">
-              <label className="wb-flabel" htmlFor="lp-doc">{t('workbench.lp_doc')}</label>
+            <div className="mb-[5px] flex items-center gap-2">
+              <label className={WB_TW.flabel} htmlFor="lp-doc">{t('workbench.lp_doc')}</label>
               <ProvBadge field="design_doc" />
             </div>
             <input
-              className="wb-input lp-mono"
+              className={cn(WB_TW.input, 'font-mono')}
               id="lp-doc"
               data-testid="lp-doc"
               value={draft.design_doc}
@@ -685,12 +826,12 @@ export function LoopCard({ root, loops }: LoopCardProps): JSX.Element {
             />
           </div>
           <div>
-            <div className="lp-flabel-row">
-              <label className="wb-flabel" htmlFor="lp-prefix">{t('workbench.lp_prefix')}</label>
+            <div className="mb-[5px] flex items-center gap-2">
+              <label className={WB_TW.flabel} htmlFor="lp-prefix">{t('workbench.lp_prefix')}</label>
               <ProvBadge field="change_prefix" />
             </div>
             <input
-              className="wb-input lp-mono"
+              className={cn(WB_TW.input, 'font-mono')}
               id="lp-prefix"
               data-testid="lp-prefix"
               value={draft.change_prefix}
@@ -699,17 +840,17 @@ export function LoopCard({ root, loops }: LoopCardProps): JSX.Element {
                 if (e.key === 'Enter') e.preventDefault()
               }}
             />
-            <p className="lp-eg">
+            <p className="mt-[5px] text-[11.5px] text-text-3">
               {t('workbench.lp_prefix_eg')}
-              <b className="lp-mono" data-testid="lp-prefix-eg">{`${draft.change_prefix}0142-migrate-card`}</b>
+              <b className="font-mono font-semibold text-text-2" data-testid="lp-prefix-eg">{`${draft.change_prefix}0142-migrate-card`}</b>
             </p>
           </div>
           <div>
-            <div className="lp-flabel-row">
-              <label className="wb-flabel" htmlFor="lp-risk">{t('workbench.lp_risk')}</label>
+            <div className="mb-[5px] flex items-center gap-2">
+              <label className={WB_TW.flabel} htmlFor="lp-risk">{t('workbench.lp_risk')}</label>
               <ProvBadge field="risk" />
             </div>
-            <select className="wb-input" id="lp-risk" data-testid="lp-risk" value={draft.risk} onChange={(e) => edit({ risk: e.target.value })}>
+            <select className={WB_TW.input} id="lp-risk" data-testid="lp-risk" value={draft.risk} onChange={(e) => edit({ risk: e.target.value })}>
               <option value="low">{t('workbench.lp_risk_low')}</option>
               <option value="medium">{t('workbench.lp_risk_medium')}</option>
               <option value="high">{t('workbench.lp_risk_high')}</option>
@@ -719,12 +860,12 @@ export function LoopCard({ root, loops }: LoopCardProps): JSX.Element {
               （PATCHABLE_SCALAR_FIELDS 含 runner），写回走同一 dirty→保存钮 patch 链路。
               runner id 是代码标识符（mono 呈现，不翻译）；历史自由字符串真值补渲染为第三选项。 */}
           <div>
-            <div className="lp-flabel-row">
-              <label className="wb-flabel" htmlFor="lp-runner">{t('workbench.lp_runner')}</label>
+            <div className="mb-[5px] flex items-center gap-2">
+              <label className={WB_TW.flabel} htmlFor="lp-runner">{t('workbench.lp_runner')}</label>
               <ProvBadge field="runner" />
             </div>
             <select
-              className="wb-input lp-mono"
+              className={cn(WB_TW.input, 'font-mono')}
               id="lp-runner"
               data-testid="lp-runner"
               value={draft.runner}
@@ -739,9 +880,10 @@ export function LoopCard({ root, loops }: LoopCardProps): JSX.Element {
             </select>
             {/* 观察项②（决议#14① backlog）：非标准 runner 值软校验警告——纯提示，不拦截保存/
                 不改值/不清第三选项。文案按 runnerFor.ts 真实归属语义（仅 'codex' 起 codex exec，
-                其余一律走 claude-code 缺省路径）：它仍会执行，不谎称「不会执行」。 */}
+                其余一律走 claude-code 缺省路径）：它仍会执行，不谎称「不会执行」。警示色
+                color-mix 从既有 --red/--text-2 派生（决议#9，禁新原色）。 */}
             {!(LOOP_RUNNERS as readonly string[]).includes(draft.runner) && (
-              <p className="wb-note lp-runner-warn" data-testid="lp-runner-warn">
+              <p className="mt-[5px] text-xs leading-[1.55] text-[color-mix(in_srgb,var(--red)_68%,var(--text-2))]" data-testid="lp-runner-warn">
                 ⚠ {t('workbench.lp_runner_warn', { runner: draft.runner })}
               </p>
             )}
@@ -749,13 +891,16 @@ export function LoopCard({ root, loops }: LoopCardProps): JSX.Element {
         </div>
       </div>
 
+      {/* IA 精简：节奏与预算 + 自主与安全（4 滑杆/超限策略/3 自主级别/4 组安全 chips）是低频细则，
+          整体收进「▸ 高级设置」默认折叠——核心第一屏只留 启停/关系/目标。折叠区内 testid 全保留。 */}
+      <WbAdvanced testid="lp-adv">
       {/* ── 节奏与预算（四滑杆 + 超限策略 pill）── */}
-      <div className="wb-ed-sec">
-        <div className="wb-ed-sec-h">
+      <div className={WB_TW.sec} data-sec="">
+        <div className={WB_TW.secH}>
           {t('workbench.lp_sec_budget')}
-          <span className="hint">{t('workbench.lp_sec_budget_hint')}</span>
+          <span className={WB_TW.hint}>{t('workbench.lp_sec_budget_hint')}</span>
         </div>
-        <div className="lp-slds">
+        <div className="grid grid-cols-2 items-start gap-x-7 gap-y-2 max-[720px]:grid-cols-1">
           <LpSlider
             id="lp-sld-cadence"
             label={t('workbench.lp_sld_cadence')}
@@ -794,7 +939,7 @@ export function LoopCard({ root, loops }: LoopCardProps): JSX.Element {
               onValue={(v) => edit({ max_in_flight: v })}
             />
             {/* 验收反馈②-④：讲清楚这个上限只管本 loop 的自动化通道，且是软上限 */}
-            <p className="wb-note lp-sld-note">{t('workbench.lp_sld_inflight_note')}</p>
+            <p className={cn(WB_TW.note, 'mt-1')}>{t('workbench.lp_sld_inflight_note')}</p>
           </div>
           <LpSlider
             id="lp-sld-tokens"
@@ -810,15 +955,20 @@ export function LoopCard({ root, loops }: LoopCardProps): JSX.Element {
             onValue={(v) => edit({ max_tokens_per_day: v * 1000 })}
           />
         </div>
-        <div className="lp-policy">
-          <span className="wb-flabel">{t('workbench.lp_policy')}</span>
+        <div className={WB_TW.policyRow}>
+          <span className={WB_TW.flabel}>{t('workbench.lp_policy')}</span>
           <ProvBadge field="on_exceed" />
-          <div className="lp-pills" role="radiogroup" aria-label={t('workbench.lp_policy')}>
+          <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label={t('workbench.lp_policy')}>
             {(['skip', 'pause'] as const).map((p) => (
               <button
                 key={p}
                 type="button"
-                className={`lp-opt${draft.on_exceed === p ? ' on' : ''}`}
+                className={cn(
+                  'h-7 cursor-pointer rounded-full border px-3 text-[12.5px] font-semibold transition-[border-color,background-color,color,box-shadow] duration-[120ms]',
+                  draft.on_exceed === p
+                    ? 'border-(--accent) bg-accent-t text-accent-d shadow-[0_0_0_3px_var(--ring-blue)]'
+                    : 'border-border bg-fill text-text-2 hover:border-border-2',
+                )}
                 role="radio"
                 aria-checked={draft.on_exceed === p}
                 data-testid={`lp-exceed-${p}`}
@@ -828,35 +978,41 @@ export function LoopCard({ root, loops }: LoopCardProps): JSX.Element {
               </button>
             ))}
           </div>
-          <span className="wb-note">{t('workbench.lp_policy_note')}</span>
+          <span className={WB_TW.note}>{t('workbench.lp_policy_note')}</span>
         </div>
       </div>
 
       {/* ── 自主与安全 ── */}
-      <div className="wb-ed-sec">
-        <div className="wb-ed-sec-h">
+      <div className={WB_TW.sec} data-sec="">
+        <div className={WB_TW.secH}>
           {t('workbench.lp_sec_auto')}
-          <span className="hint">{t('workbench.lp_sec_auto_hint')}</span>
+          <span className={WB_TW.hint}>{t('workbench.lp_sec_auto_hint')}</span>
         </div>
-        <span className="wb-flabel">{t('workbench.lp_level')}</span>
-        <div className="lp-lv" role="radiogroup" aria-label={t('workbench.lp_level')}>
-          {LEVELS.map((lv) => (
-            <button
-              key={lv}
-              type="button"
-              className={`lp-lv-tile${row.autonomy_level === lv ? ' on' : ''}`}
-              role="radio"
-              aria-checked={row.autonomy_level === lv}
-              data-testid={`lp-lv-${lv}`}
-              disabled={levelBusy}
-              onClick={() => requestLevel(lv)}
-            >
-              <span className="lp-lv-k">{t(`workbench.lp_lv${lv.slice(1)}_k`)}</span>
-              <span className="lp-lv-d">{t(`workbench.lp_lv${lv.slice(1)}_d`)}</span>
-            </button>
-          ))}
+        <span className={cn(WB_TW.flabel, 'mb-[5px]')}>{t('workbench.lp_level')}</span>
+        <div className="mt-0.5 mb-1 grid grid-cols-3 gap-2.5 max-[720px]:grid-cols-1" role="radiogroup" aria-label={t('workbench.lp_level')}>
+          {LEVELS.map((lv) => {
+            const on = row.autonomy_level === lv
+            return (
+              <button
+                key={lv}
+                type="button"
+                className={cn(
+                  'flex cursor-pointer flex-col gap-0.5 rounded-[11px] border px-3 pt-[11px] pb-3 text-left transition-[border-color,background-color,box-shadow] duration-[120ms] disabled:cursor-not-allowed disabled:opacity-60',
+                  on ? 'border-(--accent) bg-accent-t shadow-[0_0_0_3px_var(--ring-blue)]' : 'border-border bg-fill hover:border-border-2',
+                )}
+                role="radio"
+                aria-checked={on}
+                data-testid={`lp-lv-${lv}`}
+                disabled={levelBusy}
+                onClick={() => requestLevel(lv)}
+              >
+                <span className={cn('text-[13px] font-[750]', on && 'text-accent-d')}>{t(`workbench.lp_lv${lv.slice(1)}_k`)}</span>
+                <span className="text-[11.5px] leading-[1.45] text-text-3">{t(`workbench.lp_lv${lv.slice(1)}_d`)}</span>
+              </button>
+            )
+          })}
         </div>
-        {levelError && <p className="loop-reject lp-level-err" data-testid="lp-level-error">⛔ {levelError}</p>}
+        {levelError && <p className={cn(ERR_BLOCK_TW, 'mt-2')} data-tone="error" data-testid="lp-level-error"><CircleAlert className="mr-1 inline size-3.5" aria-hidden="true" />{levelError}</p>}
 
         <LpChipRow
           label={t('workbench.lp_gates')}
@@ -873,14 +1029,14 @@ export function LoopCard({ root, loops }: LoopCardProps): JSX.Element {
           prov={<ProvBadge field="kill_criteria" />}
           onChange={(next) => edit({ kill_criteria: next })}
         />
-        {/* 红线：allowlist 如实标「预留字段，当前无运行时效果」——它是 15 个草稿字段里唯一
-            「应然生产者=暂不呈现为需决策字段」的例外（UX 分析文档 §2.1），不装成三色徽章之一。 */}
+        {/* H5 真相源：allowlist 同时约束 L3 写入面与自动合并面。空 allowlist = 零路径获准，
+            不能继续展示 H5 之前的「预留字段/零消费」文案。 */}
         <LpChipRow
           label={t('workbench.lp_allow')}
           values={draft.allowlist}
           addAria={t('workbench.lp_add_allow_aria')}
           prov={
-            <span className="lp-prov lp-prov--reserved" data-testid="lp-prov-allowlist">
+            <span className={PROV_ENFORCED_TW} data-kind="enforced" data-testid="lp-prov-allowlist">
               {t('workbench.lp_prov_reserved')}
             </span>
           }
@@ -892,8 +1048,8 @@ export function LoopCard({ root, loops }: LoopCardProps): JSX.Element {
           }
           onChange={(next) => edit({ allowlist: next })}
         />
-        {/* 红线：denylist 如实标真硬消费——区别于 allowlist 的零消费措辞，避免两个 chips 行
-            视觉相似让人误判「反正都是随便填」。 */}
+        {/* denylist 同样是真硬消费，但语义相反：它拒绝命中的黑名单路径；allowlist 拒绝
+            白名单之外的路径。两者都不是仅存储的声明字段。 */}
         <LpChipRow
           label={t('workbench.lp_deny')}
           values={draft.denylist}
@@ -908,34 +1064,36 @@ export function LoopCard({ root, loops }: LoopCardProps): JSX.Element {
           onChange={(next) => edit({ denylist: next })}
         />
       </div>
+      </WbAdvanced>
 
       {/* ── loop-init L5：草稿审阅动作行（卡尾）——row.draft 为真时渲染。批准=status:'active' /
           驳回=status:'paused'（转暂停，现场保留），复用 /api/loops/update；busy 期间双钮 disabled
-          （对齐 levelBusy 先例，防双发）；失败走 loop-reject 反馈条。✓/✕ 图标同 lp-runner-warn 的
-          ⚠ 先例置于 JSX，文案入 i18n 与 demo 逐字对齐。这是审阅面动作，不是四动作模型第五种
-          （决议 #13 边界，T7 已登记）。 ── */}
+          （对齐 levelBusy 先例，防双发）；失败走错误反馈条（data-tone="error"）。✓/✕ 图标同
+          lp-runner-warn 的 ⚠ 先例置于 JSX，文案入 i18n 与 demo 逐字对齐。双钮绿/红底 color-mix
+          从 --green/--red 派生（决议 #9）。这是审阅面动作，不是四动作模型第五种（决议 #13 边界，
+          T7 已登记）。 ── */}
       {isPendingReview && (
-        <div className="lp-draft-actions" data-testid="lp-draft-actions">
-          <button
-            type="button"
-            className="btn lp-draft-approve"
+        <div className="mt-4 flex flex-wrap items-center gap-2.5 border-t border-border pt-3.5" data-testid="lp-draft-actions">
+          <Button
+            size="sm"
+            className="border border-[color-mix(in_srgb,var(--green)_32%,var(--border))] bg-[color-mix(in_srgb,var(--green)_13%,var(--card))] px-4 text-[12.5px] font-bold text-green-d hover:border-green hover:bg-[color-mix(in_srgb,var(--green)_20%,var(--card))]"
             data-testid="lp-draft-approve"
             disabled={reviewBusy}
             onClick={() => void reviewAction('active')}
           >
             ✓ {t('workbench.lp_draft_approve')}
-          </button>
-          <button
-            type="button"
-            className="btn lp-draft-reject"
+          </Button>
+          <Button
+            size="sm"
+            className="border border-[color-mix(in_srgb,var(--red)_30%,var(--border))] bg-[color-mix(in_srgb,var(--red)_12%,var(--card))] px-4 text-[12.5px] font-bold text-red-d hover:border-red hover:bg-[color-mix(in_srgb,var(--red)_18%,var(--card))]"
             data-testid="lp-draft-reject"
             disabled={reviewBusy}
             onClick={() => void reviewAction('paused')}
           >
             ✕ {t('workbench.lp_draft_reject')}
-          </button>
+          </Button>
           {reviewError && (
-            <p className="loop-reject lp-draft-err" data-testid="lp-draft-error">⛔ {reviewError}</p>
+            <p className={cn(ERR_BLOCK_TW, 'mt-0.5 basis-full')} data-tone="error" data-testid="lp-draft-error"><CircleAlert className="mr-1 inline size-3.5" aria-hidden="true" />{reviewError}</p>
           )}
         </div>
       )}
@@ -948,12 +1106,12 @@ export function LoopCard({ root, loops }: LoopCardProps): JSX.Element {
           testid="lp-promote-confirm"
           actions={
             <>
-              <button type="button" className="btn btn--ghost" data-testid="lp-promote-cancel" onClick={() => setConfirmLevel(null)}>
+              <Button variant="ghost" size="sm" className={WB_TW.btnGhost} data-testid="lp-promote-cancel" onClick={() => setConfirmLevel(null)}>
                 {t('loops.promote_confirm_no')}
-              </button>
-              <button
-                type="button"
-                className="btn"
+              </Button>
+              <Button
+                size="sm"
+                className={WB_TW.btnSolid}
                 data-testid="lp-promote-submit"
                 onClick={() => {
                   // 乐观关闭再真 POST（LoopsPanel confirmPromoteNow 的既有先例）
@@ -963,11 +1121,11 @@ export function LoopCard({ root, loops }: LoopCardProps): JSX.Element {
                 }}
               >
                 {t('loops.promote_confirm_yes')}
-              </button>
+              </Button>
             </>
           }
         >
-          <p className="dialog__desc">
+          <p className="mb-4 text-[12.5px] leading-[1.6] text-text-2">
             {t('loops.promote_confirm_desc', {
               band: row.readiness.band,
               budget: row.budget.hasBudget

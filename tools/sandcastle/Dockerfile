@@ -13,6 +13,8 @@ ARG NODE_IMAGE=node:22-alpine
 FROM ${NODE_IMAGE}
 
 ARG WITH_CLAUDE_CODE=true
+ARG PIPELINE_TEST_ALLOW_DETERMINISTIC_FALLBACK=0
+ENV PIPELINE_TEST_ALLOW_DETERMINISTIC_FALLBACK=${PIPELINE_TEST_ALLOW_DETERMINISTIC_FALLBACK}
 
 RUN apk add --no-cache git
 
@@ -57,5 +59,14 @@ RUN printf '#!/bin/sh\nexec node /opt/pipeline/packages/cli/dist/pipeline.mjs "$
 # 沙箱内 afk 驱动（build→verify→ship + 末行 <output> 结构化握手）
 COPY tools/sandcastle/pipeline-afk-run.sh /usr/local/bin/pipeline-afk-run
 RUN chmod +x /usr/local/bin/pipeline-afk-run
+
+# H10 r6：镜像内实际字节 attestation。两份 COPY 都完成后现场计算，不把 CLI 自身摘要嵌回
+# pipeline.mjs，因而没有自引用 hash。host 运行守卫可把当前 CLI 摘要传给 runner.ts 逐项对账。
+RUN set -eu; \
+  afk_sha="$(sha256sum /usr/local/bin/pipeline-afk-run | awk '{print $1}')"; \
+  cli_sha="$(sha256sum /opt/pipeline/packages/cli/dist/pipeline.mjs | awk '{print $1}')"; \
+  printf 'pipeline_afk_run_sha256=%s\npipeline_cli_dist_sha256=%s\n' "$afk_sha" "$cli_sha" \
+    > /opt/pipeline/image-attestation.env; \
+  chmod 0444 /opt/pipeline/image-attestation.env
 
 # 默认 workdir 由容器启动时 -w <worktreePath> 覆盖（createDockerSandbox）

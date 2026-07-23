@@ -19,7 +19,7 @@ model: sonnet
 - 设计约束（CONTEXT.md、design.md、已定的风格方向；若本机装有 `~/.claude/rules/web/design-quality.md` 反模板红线则一并遵守）
 
 ## 方法（评 → 修 → 复评，HARD：禁止只评不修、禁止走过场）
-1. 用 **Skill 工具**加载 `frontend-design` + `taste-skill`（视觉栈再补 `web-design-guidelines`）。
+1. 用 **Skill 工具**加载本插件打包的 `frontend-design` + `design-taste-frontend`（视觉栈再补 `web-design-guidelines`）。
 2. **评**：对目标**逐项严格评估**，列带 severity 的问题清单——
    - 设计 token（色/字号/间距/圆角是否成体系，非散值）
    - 层次（scale 对比、视觉重心）、排版（字体配对、节奏）

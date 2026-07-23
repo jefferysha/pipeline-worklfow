@@ -4,7 +4,7 @@
       {
         "matcher": "*",
         "hooks": [
-          { "type": "command", "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/session-start.sh\"", "timeout": 10 }
+          { "type": "command", "command": "bash \"${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-}}/hooks/session-start.sh\"", "timeout": 10 }
         ]
       }
     ],
@@ -12,8 +12,9 @@
       {
         "matcher": "*",
         "hooks": [
-          { "type": "command", "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/breadcrumb.sh\"", "timeout": 5 },
-          { "type": "command", "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/router.sh\"", "timeout": 5 }
+          { "type": "command", "command": "bash \"${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-}}/hooks/confirm-clear-prompt.sh\"", "timeout": 5 },
+          { "type": "command", "command": "bash \"${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-}}/hooks/breadcrumb.sh\"", "timeout": 5 },
+          { "type": "command", "command": "bash \"${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-}}/hooks/router.sh\"", "timeout": 5 }
         ]
       }
     ],
@@ -21,7 +22,7 @@
       {
         "matcher": "Skill|Bash|Edit|Write|MultiEdit",
         "hooks": [
-          { "type": "command", "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/gate.sh\"", "timeout": 5 }
+          { "type": "command", "command": "bash \"${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-}}/hooks/gate.sh\"", "timeout": 5 }
         ]
       }
     ],
@@ -29,15 +30,15 @@
       {
         "matcher": "AskUserQuestion",
         "hooks": [
-          { "type": "command", "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/confirm-clear.sh\"", "timeout": 5 },
-          { "type": "command", "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/decision-recorder.sh\"", "timeout": 5 }
+          { "type": "command", "command": "bash \"${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-}}/hooks/confirm-clear.sh\"", "timeout": 5 },
+          { "type": "command", "command": "bash \"${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-}}/hooks/decision-recorder.sh\"", "timeout": 5 }
         ]
       },
       {
         "matcher": "Skill",
         "hooks": [
-          { "type": "command", "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/skill-tracker.sh\"", "timeout": 5 },
-          { "type": "command", "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/interactive-skill-gate.sh\"", "timeout": 5 }
+          { "type": "command", "command": "bash \"${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-}}/hooks/skill-tracker.sh\"", "timeout": 5 },
+          { "type": "command", "command": "bash \"${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-}}/hooks/interactive-skill-gate.sh\"", "timeout": 5 }
         ]
       }
     ]

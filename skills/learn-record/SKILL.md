@@ -32,7 +32,7 @@ description: "学习沉淀聚合 skill（替代 ECC 的 /learn）：提取本次
 
 | 场景 | 说明 |
 |------|------|
-| pipeline phase=archive 时 | `pipeline-lite:pipeline-archive` 内部条件触发（debug ≥2 轮 / 比较 ≥2 方案 / 用户要求"沉淀"） |
+| pipeline phase=archive 时 | `pipeline-archive` 内部条件触发（debug ≥2 轮 / 比较 ≥2 方案 / 用户要求"沉淀"） |
 | 用户手动调用 | "学习一下 / 沉淀这次经验 / /learn-record" |
 | Pipeline 不在运行时 | 仍可用：跳过 OpenSpec spec 步骤，仅写 ~/.claude/skills/learned + shadoc |
 

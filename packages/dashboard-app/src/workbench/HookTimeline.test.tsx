@@ -2,13 +2,11 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '../i18n'
 import { invalidateWorkflowRules } from '../model/workflowModel'
+import { invalidateMandatoryConfig } from './mandatorySkills'
 import { WorkbenchView } from './WorkbenchView'
 
 const ROOT = '/tmp/proj-a'
 
-// T15 fixture：GET /api/hooks 的 hooks 元数据——与 server/hooksConfig.ts::HOOK_METAS 逐条同形
-// （8 hook + 时机归类以 plugin 注册为准；gate/interactive-skill-gate 强制常开、
-// confirm-clear/decision-recorder 暂不可配，都是 configurable:false）。
 const HOOKS = [
   { id: 'session-start', event: 'SessionStart', matcher: '*', script: 'hooks/session-start.sh', configurable: true },
   { id: 'breadcrumb', event: 'UserPromptSubmit', matcher: '*', script: 'hooks/breadcrumb.sh', configurable: true },
@@ -20,7 +18,6 @@ const HOOKS = [
   { id: 'interactive-skill-gate', event: 'PostToolUse', matcher: 'Skill', script: 'hooks/interactive-skill-gate.sh', configurable: false },
 ]
 
-// 与 WorkbenchView.test.tsx 同款三阶段 workflow（draft/review/ship），Hook 开关按选中阶段写键。
 const RELEASE_TRAIN = {
   name: 'release-train',
   steps: [
@@ -41,17 +38,24 @@ const RELEASE_TRAIN = {
 let hooksMatrix: Record<string, false>
 let postHooksResponse: () => Response
 
-function renderView() {
+function renderView(props: Partial<Parameters<typeof WorkbenchView>[0]> = {}) {
   render(
     <I18nProvider>
-      <WorkbenchView root={ROOT} />
+      <WorkbenchView root={ROOT} {...props} />
     </I18nProvider>,
   )
+}
+
+async function selectStage(stage: string): Promise<HTMLElement> {
+  const step = await screen.findByTestId(`wb-step-${stage}`)
+  fireEvent.click(step)
+  return screen.findByTestId(`wb-lane-hooks-${stage}`)
 }
 
 beforeEach(() => {
   localStorage.clear()
   invalidateWorkflowRules()
+  invalidateMandatoryConfig()
   hooksMatrix = {}
   postHooksResponse = () => new Response(JSON.stringify({ ok: true }), { status: 200 })
   global.fetch = vi.fn(async (url: string, opts?: RequestInit) => {
@@ -64,144 +68,145 @@ beforeEach(() => {
     if (url === `/api/hooks?root=${encodeURIComponent(ROOT)}`) {
       return new Response(JSON.stringify({ ok: true, hooks: HOOKS, matrix: hooksMatrix }), { status: 200 })
     }
-    if (url === '/api/hooks' && opts?.method === 'POST') {
-      return postHooksResponse()
+    if (url === '/api/hooks' && opts?.method === 'POST') return postHooksResponse()
+    if (url.startsWith('/api/config?root=')) {
+      return new Response(JSON.stringify({
+        ok: true,
+        generated_at: '2026-07-19T00:00:00Z',
+        revision: 'hooks-r5',
+        source: 'builtin-only',
+        mandatory_skills_writable_profiles: ['pm', 'frontend', 'backend'],
+        mandatory_skills: {},
+        tracks: ['pm', 'frontend', 'backend'].map((id, index) => ({
+          id,
+          label: id,
+          builtin: true,
+          workflow: { default: 'default', allowed: '*' },
+          policyProfile: {
+            reviewSeed: id === 'pm' ? 'skipped' : 'pending',
+            automationEligible: true,
+            coverageProfile: id,
+            routing: { enabled: true, pattern: id, priority: 100 + index },
+            skills: { matrix: true, profile: id },
+          },
+        })),
+      }), { status: 200 })
+    }
+    if (url === '/api/skills/registry') return new Response(JSON.stringify({ skills: [] }), { status: 200 })
+    if (url === '/api/loops/snapshot') {
+      return new Response(JSON.stringify({ generated_at: '2026-07-11T00:00:00Z', rows: [] }), { status: 200 })
     }
     throw new Error(`unexpected fetch ${url}`)
   }) as unknown as typeof fetch
 })
+
 afterEach(() => {
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
 })
 
-describe('HookTimeline 四时机分组（验收①）', () => {
-  it('水平时序线渲染四时机节点 + 每轮重复标注 + 区头说明，8 个 hook 卡各归其时机列', async () => {
+describe('纵向阶段编辑器 Hook 执行链', () => {
+  it('在一条执行时间线上展示四个时机，并把 8 个 Hook 放进真实时机', async () => {
     renderView()
-    const sec = await screen.findByTestId('wb-hooks')
+    const zone = await selectStage('draft')
 
-    // 四时机节点：人话标题 + 事件名
-    for (const [title, ev] of [
-      ['会话开始', 'SessionStart'],
-      ['你发消息', 'UserPromptSubmit'],
-      ['agent 调工具', 'PreToolUse'],
-      ['工具完成', 'PostToolUse'],
+    for (const [event, title] of [
+      ['SessionStart', '进入阶段'],
+      ['UserPromptSubmit', '准备输入'],
+      ['PreToolUse', '工具调用前'],
+      ['PostToolUse', '工具调用后'],
     ]) {
-      const node = within(sec).getByTestId(`wb-hk-node-${ev}`)
-      expect(node).toHaveTextContent(title!)
-      expect(node).toHaveTextContent(ev!)
+      expect(within(zone).getByTestId(`wb-timeline-node-${event}`)).toHaveTextContent(title)
     }
-    // 中段「每轮重复」循环标注 + 区头人话说明
-    expect(within(sec).getByText('⟳ 每轮工具调用都重复')).toBeInTheDocument()
-    expect(within(sec).getByText(/钩子实际作用在终端里的 Claude Code 会话上/)).toBeInTheDocument()
 
-    // 8 卡按 plugin 注册的时机归类（不凭名字猜：interactive-skill-gate 在 PostToolUse）
-    const stackOf = (ev: string) => within(sec).getByTestId(`wb-hk-stack-${ev}`)
-    expect(within(stackOf('SessionStart')).getByTestId('wb-hk-session-start')).toBeInTheDocument()
-    expect(within(stackOf('UserPromptSubmit')).getByTestId('wb-hk-breadcrumb')).toBeInTheDocument()
-    expect(within(stackOf('UserPromptSubmit')).getByTestId('wb-hk-router')).toBeInTheDocument()
-    expect(within(stackOf('PreToolUse')).getByTestId('wb-hk-gate')).toBeInTheDocument()
-    for (const id of ['confirm-clear', 'decision-recorder', 'skill-tracker', 'interactive-skill-gate']) {
-      expect(within(stackOf('PostToolUse')).getByTestId(`wb-hk-${id}`)).toBeInTheDocument()
+    for (const id of HOOKS.map((hook) => hook.id)) {
+      expect(within(zone).getByTestId(`wb-timeline-hook-${id}`)).toBeInTheDocument()
     }
-    // 人话卡：名称 + 一句做什么
-    const router = within(sec).getByTestId('wb-hk-router')
+    const router = within(zone).getByTestId('wb-timeline-hook-router')
     expect(router).toHaveTextContent('按轨道路由提示')
-    expect(router).toHaveTextContent('pm / frontend / backend 各给对的方法论')
+    expect(router).toHaveTextContent('运行时启用路由的轨道各给对的方法论')
+    expect(router).toHaveTextContent('内置 Hook')
+    expect(router).toHaveAttribute('title', expect.stringContaining('hooks/router.sh'))
+    expect(router).toHaveAttribute('title', expect.stringContaining('匹配 *'))
   })
-})
 
-describe('HookTimeline 锁定态与灰显（验收③）', () => {
-  it('gate/interactive-skill-gate：「强制常开」badge + 开关禁用恒开；confirm-clear/decision-recorder：灰显「暂不可配」', async () => {
+  it('内置强制 Hook 不提供假开关；允许调整的 Hook 才提供真实开关', async () => {
     renderView()
-    await screen.findByTestId('wb-hooks')
-    for (const id of ['gate', 'interactive-skill-gate']) {
-      const card = screen.getByTestId(`wb-hk-${id}`)
-      expect(within(card).getByText('强制常开')).toBeInTheDocument()
-      const sw = screen.getByTestId(`wb-hk-sw-${id}`)
-      expect(sw).toBeDisabled()
+    const zone = await selectStage('draft')
+
+    for (const id of ['gate', 'confirm-clear', 'decision-recorder', 'interactive-skill-gate']) {
+      const row = within(zone).getByTestId(`wb-timeline-hook-${id}`)
+      expect(row).toHaveTextContent('内置 Hook')
+      expect(within(row).queryByRole('switch')).toBeNull()
+    }
+    for (const id of ['session-start', 'breadcrumb', 'router', 'skill-tracker']) {
+      const sw = within(zone).getByTestId(`wb-lane-hk-sw-draft-${id}`)
+      expect(sw).toBeEnabled()
       expect(sw).toHaveAttribute('aria-checked', 'true')
     }
-    for (const id of ['confirm-clear', 'decision-recorder']) {
-      const card = screen.getByTestId(`wb-hk-${id}`)
-      expect(card).toHaveClass('wb-hkcard--pending')
-      expect(within(card).getByText('暂不可配')).toBeInTheDocument()
-      expect(screen.getByTestId(`wb-hk-sw-${id}`)).toBeDisabled()
-    }
   })
 })
 
-describe('HookTimeline 开关写回（验收②）', () => {
-  it('关掉 router：乐观翻转 + POST body 按当前选中阶段；阶段卡/摘要计数联动 8→7', async () => {
+describe('纵向阶段编辑器 Hook 写回', () => {
+  it('关掉 router：乐观更新并写入当前阶段，运行前事实同步为 7/8', async () => {
     renderView()
-    await screen.findByTestId('wb-hooks')
-    // 数据面就绪后：阶段卡与摘要出真数（8 个 hook 全启用）
-    const draft = screen.getByTestId('wb-step-draft')
-    expect(within(draft).getByText(/8 钩子/)).toBeInTheDocument()
-    expect(screen.getByTestId('wb-sum-hooks')).toHaveTextContent('8')
+    const zone = await selectStage('draft')
+    const facts = screen.getByTestId('wb-runtime-facts')
+    await waitFor(() => expect(facts).toHaveTextContent('8 个 Hook · 8/8 已启用'))
 
-    const sw = screen.getByTestId('wb-hk-sw-router')
-    expect(sw).toHaveAttribute('aria-checked', 'true')
+    const sw = within(zone).getByTestId('wb-lane-hk-sw-draft-router')
     fireEvent.click(sw)
-    // 乐观更新：POST 未返回就先翻
     expect(sw).toHaveAttribute('aria-checked', 'false')
     await waitFor(() => {
-      const calls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls
-      const post = calls.find(([u, o]) => u === '/api/hooks' && (o as RequestInit)?.method === 'POST')
+      const post = (global.fetch as ReturnType<typeof vi.fn>).mock.calls.find(
+        ([url, options]) => url === '/api/hooks' && (options as RequestInit)?.method === 'POST',
+      )
       expect(post).toBeTruthy()
       expect(JSON.parse(String((post![1] as RequestInit).body))).toEqual({
         root: ROOT, hook: 'router', phase: 'draft', enabled: false,
       })
     })
-    // 计数联动：draft 卡 8→7，其他阶段仍 8；摘要（全阶段完全启用的 hook 数）8→7
-    await waitFor(() => expect(within(draft).getByText(/7 钩子/)).toBeInTheDocument())
-    expect(within(screen.getByTestId('wb-step-review')).getByText(/8 钩子/)).toBeInTheDocument()
-    expect(screen.getByTestId('wb-sum-hooks')).toHaveTextContent('7')
+    await waitFor(() => expect(facts).toHaveTextContent('7 个 Hook · 7/8 已启用'))
   })
 
-  it('POST 失败：回滚开关与计数 + 错误提示带 server 原文', async () => {
-    postHooksResponse = () => new Response(JSON.stringify({ ok: false, error: '磁盘只读' }), { status: 500 })
-    renderView()
-    await screen.findByTestId('wb-hooks')
-    const sw = screen.getByTestId('wb-hk-sw-router')
-    fireEvent.click(sw)
-    expect(sw).toHaveAttribute('aria-checked', 'false') // 乐观先翻
-    await waitFor(() => expect(sw).toHaveAttribute('aria-checked', 'true')) // 失败回滚
-    expect(screen.getByTestId('wb-hk-toggle-error')).toHaveTextContent('磁盘只读')
-    expect(within(screen.getByTestId('wb-step-draft')).getByText(/8 钩子/)).toBeInTheDocument()
-  })
-
-  // T17：挂上 App 后失败提示升级 showFlash——宿主传 onToggleError 时错误走回调（App 接
-  // showFlash('error')），行内 role=alert 不再重复渲染；未传时行为与 T15 完全一致（上一条用例钉住）。
-  it('T17 onToggleError 接线：POST 失败走宿主回调（带 server 原文），行内 alert 不渲染', async () => {
-    postHooksResponse = () => new Response(JSON.stringify({ ok: false, error: '磁盘只读' }), { status: 500 })
-    const onToggleError = vi.fn()
-    render(
-      <I18nProvider>
-        <WorkbenchView root={ROOT} onToggleError={onToggleError} />
-      </I18nProvider>,
-    )
-    await screen.findByTestId('wb-hooks')
-    const sw = screen.getByTestId('wb-hk-sw-router')
-    fireEvent.click(sw)
-    await waitFor(() => expect(sw).toHaveAttribute('aria-checked', 'true')) // 失败仍回滚
-    expect(onToggleError).toHaveBeenCalledTimes(1)
-    expect(String(onToggleError.mock.calls[0]![0])).toContain('磁盘只读')
-    expect(screen.queryByTestId('wb-hk-toggle-error')).toBeNull()
-  })
-
-  it('矩阵预置禁用键只作用在对应阶段：router.draft 禁用时，draft 关/review 开', async () => {
+  it('切到 review 后写回 review，draft 的矩阵状态不会串到 review', async () => {
     hooksMatrix = { 'router.draft': false }
     renderView()
-    await screen.findByTestId('wb-hooks')
-    expect(screen.getByTestId('wb-hk-sw-router')).toHaveAttribute('aria-checked', 'false')
-    expect(within(screen.getByTestId('wb-step-draft')).getByText(/7 钩子/)).toBeInTheDocument()
-    expect(within(screen.getByTestId('wb-step-review')).getByText(/8 钩子/)).toBeInTheDocument()
-    // 摘要=全阶段完全启用的 hook 数：router 在 draft 被关 → 7
-    expect(screen.getByTestId('wb-sum-hooks')).toHaveTextContent('7')
+    const draft = await selectStage('draft')
+    expect(within(draft).getByTestId('wb-lane-hk-sw-draft-router')).toHaveAttribute('aria-checked', 'false')
 
-    // 切到 review 阶段：同一张卡的开关反映 review 的矩阵（未禁用 → 开）
-    fireEvent.click(screen.getByTestId('wb-step-review'))
-    expect(screen.getByTestId('wb-hk-sw-router')).toHaveAttribute('aria-checked', 'true')
+    const review = await selectStage('review')
+    const reviewSwitch = within(review).getByTestId('wb-lane-hk-sw-review-router')
+    expect(reviewSwitch).toHaveAttribute('aria-checked', 'true')
+    fireEvent.click(reviewSwitch)
+    await waitFor(() => {
+      const post = (global.fetch as ReturnType<typeof vi.fn>).mock.calls.find(
+        ([url, options]) => url === '/api/hooks' && (options as RequestInit)?.method === 'POST',
+      )
+      expect(JSON.parse(String((post![1] as RequestInit).body))).toEqual({
+        root: ROOT, hook: 'router', phase: 'review', enabled: false,
+      })
+    })
+  })
+
+  it('POST 失败会回滚开关与运行前事实', async () => {
+    postHooksResponse = () => new Response(JSON.stringify({ ok: false, error: '磁盘只读' }), { status: 500 })
+    renderView()
+    const zone = await selectStage('draft')
+    const sw = within(zone).getByTestId('wb-lane-hk-sw-draft-router')
+    fireEvent.click(sw)
+    expect(sw).toHaveAttribute('aria-checked', 'false')
+    await waitFor(() => expect(sw).toHaveAttribute('aria-checked', 'true'))
+    expect(screen.getByTestId('wb-runtime-facts')).toHaveTextContent('8 个 Hook · 8/8 已启用')
+  })
+
+  it('POST 失败通过宿主错误出口保留服务端原文', async () => {
+    postHooksResponse = () => new Response(JSON.stringify({ ok: false, error: '磁盘只读' }), { status: 500 })
+    const onToggleError = vi.fn()
+    renderView({ onToggleError })
+    const zone = await selectStage('draft')
+    fireEvent.click(within(zone).getByTestId('wb-lane-hk-sw-draft-router'))
+    await waitFor(() => expect(onToggleError).toHaveBeenCalledTimes(1))
+    expect(String(onToggleError.mock.calls[0]![0])).toContain('磁盘只读')
   })
 })

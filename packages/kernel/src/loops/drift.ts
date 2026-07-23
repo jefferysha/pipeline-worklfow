@@ -19,7 +19,7 @@
  *       · status-drift     status=paused/retired 但今日仍有执行（声明已停却实际在跑）
  *   · loop-audit（loop-ready score 0-100）：给 loop **定义就绪度**打分——一个 schema 合法的 loop
  *     未必"就绪"，就绪要求治理要件齐全（明确 goal / kill 判据 / human gates / 预算 / 可调度 cadence /
- *     产出隔离 change_prefix / 可观测 state+design_doc）。七维加权求和到 100，缺项给具体改进建议：
+ *     产出隔离 change_prefix / 可观测 design_doc）。七维加权求和到 100，缺项给具体改进建议：
  *       goal 20 · kill_criteria 20 · human_gates 20 · budget 15 · cadence 10 · change_prefix 5 · observability 10
  *     分档：≥90 ready / ≥70 mostly-ready / <70 not-ready（CI 门以 <70 视为未就绪 → exit 1）。
  *
@@ -336,11 +336,10 @@ export function computeReadiness(loop: LoopEntry): ReadinessScore {
   dims.push(dim('change_prefix', hasPrefix ? 5 : 0, 5,
     '声明 change_prefix 以隔离本 loop 产出的 change（便于在途计数/归属对账）'))
 
-  // observability 10：design_doc 5 + state 5
+  // observability 10：design_doc 是治理文档；iteration runtime state 由 ledger 投影，不以旧路径字段计分。
   const hasDoc = (loop.design_doc ?? '').trim().length >= 2
-  const hasState = (loop.state ?? '').trim().length >= 2
-  dims.push(dim('observability', (hasDoc ? 5 : 0) + (hasState ? 5 : 0), 10,
-    '补 design_doc（设计文档）与 state（run-log 路径）以保证可观测'))
+  dims.push(dim('observability', hasDoc ? 10 : 0, 10,
+    '补 design_doc（设计文档）；iteration runtime state 由 ledger audit facts 投影'))
 
   const score = dims.reduce((a, d) => a + d.score, 0)
   const band: ReadinessBand = score >= READY_STRONG ? 'ready' : score >= READY_THRESHOLD ? 'mostly-ready' : 'not-ready'

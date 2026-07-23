@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { DenylistViolationError, denylistForChange, matchDenylist } from './denylist.js'
+import {
+  AllowlistViolationError, DenylistViolationError, denylistForChange, matchAllowlist, matchDenylist, pathPolicyForLoop,
+} from './denylist.js'
 
 /**
  * T4 决议 #12：loop denylist 真实生效——run 结算时 git diff --name-only 对 denylist glob 匹配，
@@ -44,6 +46,20 @@ describe('matchDenylist（路径 glob 匹配）', () => {
   })
 })
 
+describe('matchAllowlist（L3 自动合并白名单）', () => {
+  it('只返回未被任一 glob 覆盖的文件；顺序稳定', () => {
+    expect(matchAllowlist(['src/a.ts', 'docs/a.md', 'src/nested/b.ts'], ['src/**'])).toEqual(['docs/a.md'])
+  })
+
+  it('空 allowlist = 不允许任何产出，不把缺配置解释成全放行', () => {
+    expect(matchAllowlist(['src/a.ts', 'README.md'], [])).toEqual(['src/a.ts', 'README.md'])
+  })
+
+  it('全部命中 → 空违规集', () => {
+    expect(matchAllowlist(['src/a.ts', 'docs/a.md'], ['src/**', '**/*.md', 'src/a.ts'])).toEqual([])
+  })
+})
+
 describe('denylistForChange（loop 语境派生：change_prefix 前缀归属）', () => {
   const loops = [
     { change_prefix: 'loop-a-', denylist: ['docs/**', 'secrets/**'] },
@@ -73,6 +89,25 @@ describe('denylistForChange（loop 语境派生：change_prefix 前缀归属）'
   })
 })
 
+describe('pathPolicyForLoop（一次 registry 快照派生完整路径策略）', () => {
+  const loops = [
+    { id: 'a', allowlist: ['src/**'], denylist: ['src/secrets/**'] },
+    { id: 'b', allowlist: [], denylist: [] },
+  ]
+
+  it('按 loop_id 同时返回 allowlist/denylist 的副本', () => {
+    expect(pathPolicyForLoop(loops, 'a')).toEqual({ allowlist: ['src/**'], denylist: ['src/secrets/**'] })
+  })
+
+  it('显式空数组保持空策略；不会把空 allowlist 偷换成全放行', () => {
+    expect(pathPolicyForLoop(loops, 'b')).toEqual({ allowlist: [], denylist: [] })
+  })
+
+  it('未知 loop fail-loud，不能伪装成空策略', () => {
+    expect(() => pathPolicyForLoop(loops, 'missing')).toThrow(/missing/)
+  })
+})
+
 describe('DenylistViolationError', () => {
   it('携带 _tag / preservedWorktreePath / 违规明细（供 classify 归 conflict + 留现场）', () => {
     const e = new DenylistViolationError([{ file: 'docs/a.md', glob: 'docs/**' }], '/wt/x')
@@ -81,5 +116,19 @@ describe('DenylistViolationError', () => {
     expect(e.violations).toEqual([{ file: 'docs/a.md', glob: 'docs/**' }])
     expect(e.message).toContain('docs/a.md')
     expect(e.message).toContain('docs/**')
+  })
+})
+
+describe('AllowlistViolationError', () => {
+  it('携带稳定 tag、越界文件与 preservedWorktreePath', () => {
+    const e = new AllowlistViolationError(['docs/a.md', '.github/workflows/ci.yml'], ['src/**'], '/wt/x')
+    expect(e).toMatchObject({
+      _tag: 'AllowlistViolationError',
+      files: ['docs/a.md', '.github/workflows/ci.yml'],
+      allowlist: ['src/**'],
+      preservedWorktreePath: '/wt/x',
+    })
+    expect(e.message).toContain('docs/a.md')
+    expect(e.message).toContain('src/**')
   })
 })

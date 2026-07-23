@@ -10,9 +10,10 @@
  * 覆盖（C10）：budget happy(ok)/warn(减速线)/tripped(熔断)/无预算/--json/--loop 过滤/registry 错误；
  * cost within/over/continuous/--json；跨命令串联 list→budget→cost 同一真 registry。
  */
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
+import { appendFile, mkdir, mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { createLoopLedgerStore, ledgerFilePath } from '@pipeline-lite/kernel'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
 import { realDeps, rm } from './integration-harness.js'
 import { cmdLoops, REAL_LOOPS_FS } from './commands/loops.js'
@@ -262,5 +263,59 @@ describe('真实 e2e —— 跨命令串联（同一真 registry）', () => {
     expect((await loops('budget')).code).toBe(2)
     // cost：24×8000=192000 >> 10000 → 超预算 exit 1（估算即预警会超支）
     expect((await loops('cost')).code).toBe(1)
+  })
+})
+
+// ── Stage B 返工 #7：budget --json 的 admission 字段（ledger 投影，与硬 admission 同源）──────────
+describe('真实 e2e —— budget --json 的 admission 面（#7 统一读面）', () => {
+  const seedOpenReservation = async (loopId: string): Promise<void> => {
+    await createLoopLedgerStore().append(cwd, {
+      schema_version: 1, record_id: 'rec-1', recorded_at: `${TODAY}T00:00:00Z`, kind: 'budget-reservation',
+      reservation_id: 'res-1', attempt_id: 'att-1', loop_id: loopId, change: `${loopId}-a`, budget_day: TODAY,
+      reserved_runs: 1, reserved_tokens: 5000, token_basis: 'risk-default',
+      limits_snapshot: { max_runs_per_day: 24, max_in_flight: 1, on_exceed: 'skip-run' }, expires_at: `${TODAY}T01:00:00Z`,
+    })
+  }
+
+  test('legacy breaker=ok 但 ledger 在途占满 → admission.allowed=false blocked_by=max-in-flight（解决读面矛盾）', async () => {
+    await writeRegistry(loopBlock({ id: 'lp', maxTokens: 100000 })) // max_in_flight=1（loopBlock 固定）
+    await seedOpenReservation('lp') // 一条未关闭预占 → inFlight=1，占满 max_in_flight
+    const r = await loops('budget', '--json')
+    const s = JSON.parse(r.out.join('\n')).statuses[0]
+    expect(s.breaker).toBe('ok') // legacy 软指标：无 progress.md 花费 → ok
+    expect(s.breaker_source).toBe('legacy-progress') // 明标非 admission authority
+    expect(s.admission.source).toBe('ledger')
+    expect(s.admission.allowed).toBe(false) // 硬 admission：在途占满
+    expect(s.admission.blocked_by).toBe('max-in-flight')
+    expect(s.admission.in_flight).toBe(1)
+    expect(s.admission.health).toBe('ok')
+  })
+
+  test('legacy 顶层字段一字不改（向后兼容）+ 新增 admission 并存', async () => {
+    await writeRegistry(loopBlock({ id: 'lp', maxTokens: 100000 }))
+    await writeRunLog([{ ts: `${TODAY}T08:00`, id: 'lp', tokens: 20000 }])
+    const s = JSON.parse((await loops('budget', '--json')).out.join('\n')).statuses[0]
+    expect(s.spentToday).toBe(20000) // legacy 值不变
+    expect(s.remaining).toBe(80000)
+    expect(s.breaker).toBe('ok')
+    expect(s.admission).toBeDefined() // 新增字段并存
+    expect(s.admission.allowed).toBe(true)
+  })
+
+  test('ledger 坏行 → admission.health=degraded、allowed=false blocked_by=ledger-degraded', async () => {
+    await writeRegistry(loopBlock({ id: 'lp', maxTokens: 100000 }))
+    await mkdir(join(cwd, '.pipeline', 'loops'), { recursive: true })
+    await appendFile(ledgerFilePath(cwd), '{bad json line\n', 'utf8')
+    const s = JSON.parse((await loops('budget', '--json')).out.join('\n')).statuses[0]
+    expect(s.admission.health).toBe('degraded')
+    expect(s.admission.allowed).toBe(false)
+    expect(s.admission.blocked_by).toBe('ledger-degraded')
+  })
+
+  test('ledger 文件缺失 → admission.health=missing、allowed=true', async () => {
+    await writeRegistry(loopBlock({ id: 'lp', maxTokens: 100000 }))
+    const s = JSON.parse((await loops('budget', '--json')).out.join('\n')).statuses[0]
+    expect(s.admission.health).toBe('missing')
+    expect(s.admission.allowed).toBe(true)
   })
 })

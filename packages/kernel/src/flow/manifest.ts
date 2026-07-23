@@ -22,15 +22,10 @@
  *       **red 且返回非零**，recommended 缺失只报 yellow），即它会让 doctor 的就绪检查失败。
  *       gate.sh / session-start.sh 不读本派生（前者走 internal-skill-gate 的 skill DAG 判定，
  *       后者只打印静态横幅）——它们曾被规划为消费方，实际接线落在了 router 与 server。
- *   · routerPatterns ← 老 gen_router_sh 890-898（FE/BE/PM_PATTERN）。
- *       老消费方：pipeline-router.sh score_track。新仓消费方：经 genRouterSh 落进 router 缓存 →
- *       hooks/router.sh:168-170 score_track 每轮 grep 打分选 Track。
  *   · breadcrumbs ← 老 breadcrumb 子命令 1031-1037（phases.<phase>.breadcrumb block scalar）。
  *       老消费方：pipeline-router.sh breadcrumb_body（每轮被动注入）。
  *       新仓消费方：router-gen.mjs:66-67 / gen-router.ts:35-36 派生 BREADCRUMB_<phase> →
  *       hooks/router.sh:201 间接变量取值，每轮随注入体输出。
- *   · genRouterSh（纯派生 helper）← 老 gen_router_sh 890-898。
- *       消费方：hooks/router-gen.mjs:62、packages/cli/src/commands/gen-router.ts:32。
  *   · skillsFor（纯 helper）← 老 evidence 346-355 的三级回退（per-track → `_all` → 空）。
  *       消费方：同 mandatorySkills/recommendedSkills 的 ① router 缓存链。
  *
@@ -38,7 +33,6 @@
  *   · 顶层键 `key:` / `key: [inline, list]`
  *   · 块序列（两空格缩进 `- item`）
  *   · transitions / *_skills 小节的 `from: [to1, to2]` 条目（skill token 逐字保留，含 a|b 备选与 : 前缀）
- *   · router_patterns 小节：`track: 'regex'`（单/双引号标量，保内部空格）
  *   · breadcrumb 小节：`phase: |` 字面块标量（缩进决定块界，末尾换行 rstrip，对齐老 CLI）
  *   · `#` 整行注释、行尾注释（前置空白 + #）、空行
  * 其余 YAML 特性一律不支持；结构错误 fail-loud（ManifestError），
@@ -64,19 +58,11 @@ const SKILL_TRACK_SET: ReadonlySet<string> = new Set<SkillTrackKey>(['pm', 'fron
 /** phase → track → skill token 列表（a|b 备选逐字保留，消费方自择其一） */
 export type SkillTable = Readonly<Record<Phase, Readonly<Partial<Record<SkillTrackKey, readonly string[]>>>>>
 
-/** router Track 评分正则（老 gen_router_sh 的 FE/BE/PM_PATTERN 三值） */
-export interface RouterPatterns {
-  frontend: string
-  backend: string
-  pm: string
-}
-const ROUTER_TRACK_SET: ReadonlySet<string> = new Set(['frontend', 'backend', 'pm'])
-
 /**
  * loadManifest 的完整返回面（types.ts::ManifestData 的扩展）。
  * 字段留在本文件、没有并进 types.ts::ManifestData：后者是**引擎面最小契约**
  * （FlowEngine/createFlowEngine 只需 phases/transitions/reviewPhases），本接口是解析器的全量产出，
- * 二者分开可让引擎不依赖 router/skill 派生。导出链：flow/index.ts **具名** re-export（:7-12），
+ * 二者分开可让引擎不依赖 skill/breadcrumb 派生。导出链：flow/index.ts **具名** re-export（:7-12），
  * kernel index.ts 再 `export *`；消费方从 `@pipeline-lite/kernel` 具名导入（如 server/src/config.ts:60）。
  */
 export interface ExtendedManifestData extends ManifestData {
@@ -84,8 +70,6 @@ export interface ExtendedManifestData extends ManifestData {
   mandatorySkills: SkillTable
   /** phase×track 推荐 skill 表。与 mandatorySkills 同链路，仅注入文案措辞不同。 */
   recommendedSkills: SkillTable
-  /** router Track 评分正则；经 genRouterSh 进缓存，hooks/router.sh:168-170 打分用。 */
-  routerPatterns: RouterPatterns
   /** phase → breadcrumb prose；hooks/router.sh:201 每轮注入。缺相位则键缺省。 */
   breadcrumbs: Readonly<Partial<Record<Phase, string>>>
 }
@@ -103,24 +87,46 @@ export function skillsFor(table: SkillTable, phase: Phase, track: string): reado
   return []
 }
 
-/** bash 单引号安全包裹（对齐老 manifest.py::_bash_squote 613-614，防 token 逃逸成命令注入） */
-function bashSquote(s: string): string {
-  return "'" + s.replace(/'/g, "'\\''") + "'"
-}
-
 /**
- * 生成 router 评分正则的 bash 赋值（对齐老 gen_router_sh 890-898）。
- * 纯派生 helper；消费方 hooks/router-gen.mjs:62 与 cli/src/commands/gen-router.ts:32 把它写进
- * .pipeline-router.generated.sh，hooks/router.sh 命中缓存时纯 source 之——正是为了让热路径
- * （每轮 UserPromptSubmit）零 node spawn，见 router.sh:153-156 的热路径红线。
+ * skill token 归一（G2 P5）——把一个 manifest skill token 的 `a|b` 备选语法拆成具体
+ * alternatives 列表（保序）。manifest 把 `a|b` 原样保留、要求消费方自择其一（见 skillsFor 头注 +
+ * SkillTable 注释 + templates/manifest.yaml `opsx:explore|openspec-explore` 等）；EffectiveSkillResolver
+ * （artifact register 的 producer 校验接缝）据本 helper 把一个 token 展开成「满足其一即可」的具体
+ * skill 集。无 `|` 的 token → 单元素 [token]（具体 skill id 退化态）。
+ *
+ * 畸形 token fail-loud（绝不静默过滤，对齐 loadManifest 的 fail-loud 纪律）：
+ *   · 空 branch（`a|`、`|b`、`a||b`）—— 备选语法不许空段，manifest 数据错误；
+ *   · 重复 branch（`a|a`）—— 同一 slot 内重复具体 id，manifest 数据错误；
+ *   · branch 按 `:`（namespaced `plugin:skill` 分隔符）再拆一层后，任一段为空或恰为 `.`
+ *     （如单独的 `.`、`superpowers:`、`:brainstorming`、`superpowers:.`）—— 这类 id 下游经
+ *     `join(root, id)` 定位物理内容时会解析回根目录本身，等于把整个 skill 根目录错当一个 skill
+ *     交出去（H10 r1 复审阻断4；对齐 `packages/automation/src/skills/types.ts::isPathSafeSkillId`
+ *     的路径纪律——那层校验拦得住 `/`、`..`，但拦不住裸 `.`，本处在 token 语义层把这个口子堵上）。
+ * 本 helper 只做纯字符串归一，不改 manifest 数据模型；错误用 ManifestError（token 源出 manifest）。
  */
-export function genRouterSh(patterns: RouterPatterns): string {
-  return [
-    '# AUTO-GENERATED from manifest.yaml (kernel loadManifest) — 不要手改',
-    `FE_PATTERN=${bashSquote(patterns.frontend)}`,
-    `BE_PATTERN=${bashSquote(patterns.backend)}`,
-    `PM_PATTERN=${bashSquote(patterns.pm)}`,
-  ].join('\n')
+export function skillTokenAlternatives(token: string): readonly string[] {
+  const branches = token.split('|')
+  const out: string[] = []
+  const seen = new Set<string>()
+  for (const branch of branches) {
+    if (branch.trim() === '') {
+      throw new ManifestError(`skill token '${token}' 含空/纯空白 alternative branch（如 'a|b'、'|b'、'a| |b'，备选语法不许空段）`)
+    }
+    for (const segment of branch.split(':')) {
+      if (segment === '' || segment === '.') {
+        throw new ManifestError(
+          `skill token '${token}' 的 alternative branch '${branch}' 含非法路径段 ${JSON.stringify(segment)}`
+          + `（禁空段、禁单独 '.'——会被物理定位当成整个 skill 根目录）`,
+        )
+      }
+    }
+    if (seen.has(branch)) {
+      throw new ManifestError(`skill token '${token}' 含重复 alternative branch '${branch}'`)
+    }
+    seen.add(branch)
+    out.push(branch)
+  }
+  return out
 }
 
 function assertPhase(name: string, ctx: string): Phase {
@@ -156,7 +162,7 @@ function parseFlowList(raw: string, ctx: string): string[] {
   return inner.split(',').map((x) => x.trim()).filter((x) => x !== '')
 }
 
-/** 解析单/双引号标量或裸标量（router_patterns 值）；引号内内容逐字保真（含空格），裸值裁行尾注释 */
+/** 解析单/双引号标量或裸标量（breadcrumb 单行值）；引号内内容逐字保真，裸值裁行尾注释 */
 function parseScalarValue(rest: string, ctx: string): string {
   const s = rest.trim()
   if (s.startsWith("'")) {
@@ -179,8 +185,88 @@ interface RawSections {
   review_phases?: string[]
   mandatory_skills?: Map<string, string[]>
   recommended_skills?: Map<string, string[]>
-  router_patterns?: Map<string, string>
   breadcrumb?: Map<string, string>
+}
+
+function decodeDoubleQuotedYamlKey(token: string): string | undefined {
+  if (!token.startsWith('"') || !token.endsWith('"')) return undefined
+  const body = token.slice(1, -1)
+  let decoded = ''
+  for (let i = 0; i < body.length; i++) {
+    const char = body[i]!
+    if (char !== '\\') {
+      decoded += char
+      continue
+    }
+    const escape = body[++i]
+    if (escape === undefined) return undefined
+    const width = escape === 'x' ? 2 : escape === 'u' ? 4 : escape === 'U' ? 8 : 0
+    if (width > 0) {
+      const hex = body.slice(i + 1, i + 1 + width)
+      if (hex.length !== width || !/^[0-9A-Fa-f]+$/.test(hex)) return undefined
+      const codePoint = Number.parseInt(hex, 16)
+      if (codePoint > 0x10ffff) return undefined
+      decoded += String.fromCodePoint(codePoint)
+      i += width
+      continue
+    }
+    const simple: Readonly<Record<string, string>> = {
+      '0': '\0', a: '\x07', b: '\b', t: '\t', n: '\n', v: '\v', f: '\f', r: '\r', e: '\x1b',
+      ' ': ' ', '"': '"', '/': '/', '\\': '\\', N: '\x85', _: '\xa0', L: '\u2028', P: '\u2029',
+    }
+    const value = simple[escape]
+    if (value === undefined) return undefined
+    decoded += value
+  }
+  return decoded
+}
+
+/** 只解码 YAML scalar key；用途仅限识别废弃顶层键，不扩张 manifest 的受支持 YAML 子集。 */
+function decodeYamlKey(token: string): string | undefined {
+  const trimmed = token.trim()
+  if (trimmed.startsWith('"')) return decodeDoubleQuotedYamlKey(trimmed)
+  if (trimmed.startsWith("'") && trimmed.endsWith("'")) {
+    return trimmed.slice(1, -1).replace(/''/g, "'")
+  }
+  return /^[A-Za-z_][A-Za-z0-9_-]*$/.test(trimmed) ? trimmed : undefined
+}
+
+function topLevelKeyToken(raw: string): string | undefined {
+  const line = raw.trimStart()
+  if (line === '' || line.startsWith('#')) return undefined
+
+  const explicit = line.match(/^\?\s+(.+?)\s*(?:\s+#.*)?$/)
+  if (explicit) return explicit[1]
+
+  const quoted = line.match(/^("(?:\\.|[^"\\])*"|'(?:''|[^'])*')\s*:/)
+  if (quoted) return quoted[1]
+
+  const plain = line.match(/^([^:#]+?)\s*:/)
+  return plain?.[1]
+}
+
+function hasDeprecatedRouterKeyAt(lines: readonly string[], index: number): boolean {
+  const direct = topLevelKeyToken(lines[index]!)
+  if (direct !== undefined && decodeYamlKey(direct) === 'router_patterns') return true
+
+  // YAML explicit mapping key 也允许 `?` 与 scalar 分行；只看当前顶层扫描位置的缩进子行。
+  const current = lines[index]!
+  if (current.trim() !== '?') return false
+  const parentIndent = indentOf(current)
+  for (let i = index + 1; i < lines.length; i++) {
+    const candidate = lines[i]!
+    if (candidate.trim() === '' || candidate.trimStart().startsWith('#')) continue
+    if (indentOf(candidate) <= parentIndent) return false
+    return decodeYamlKey(candidate.trim()) === 'router_patterns'
+  }
+  return false
+}
+
+function throwDeprecatedRouterKey(path: string, line: number): never {
+  throw new ManifestError(
+    `${path}:${line} router_patterns 已迁移到 .pipeline/tracks.yaml 的 policy_profile.routing；`
+    + '请删除旧字段并在 Track Registry 中声明 routing policy',
+  )
 }
 
 /** 块小节 `key: [flowlist]`（*_skills 用；key 允许含 `.` 与 `_all`）；返回 {map, next} */
@@ -196,25 +282,6 @@ function parseSkillBlock(lines: string[], start: number, path: string, section: 
       throw new ManifestError(`${path}:${i + 1} ${section} 条目须为 'phase.track: [skill, ...]'，得到 '${lines[i]}'`)
     }
     map.set(entry[1]!, parseFlowList(entry[2]!, `${section}.${entry[1]}`))
-    i++
-  }
-  return { map, next: i }
-}
-
-/** 块小节 `key: 'scalar'`（router_patterns 用）；返回 {map, next} */
-function parseScalarBlock(lines: string[], start: number, path: string, section: string): { map: Map<string, string>; next: number } {
-  const map = new Map<string, string>()
-  let i = start
-  while (i < lines.length) {
-    const raw = lines[i]!
-    if (raw.trim() === '') { i++; continue }
-    if (raw.trimStart().startsWith('#')) { i++; continue }
-    if (!/^\s/.test(raw)) break // 回到顶层
-    const entry = raw.match(/^\s+([A-Za-z_][A-Za-z0-9_-]*):\s*(.*)$/)
-    if (!entry) {
-      throw new ManifestError(`${path}:${i + 1} ${section} 条目须为 'key: value'，得到 '${lines[i]}'`)
-    }
-    map.set(entry[1]!, parseScalarValue(entry[2]!, `${section}.${entry[1]}`))
     i++
   }
   return { map, next: i }
@@ -267,11 +334,16 @@ function scanSections(text: string, path: string): RawSections {
   const out: RawSections = {}
   let i = 0
   while (i < lines.length) {
+    if (hasDeprecatedRouterKeyAt(lines, i)) throwDeprecatedRouterKey(path, i + 1)
     const line = stripComment(lines[i]!)
     if (line.trim() === '') { i++; continue }
     const top = line.match(/^([A-Za-z_][A-Za-z0-9_-]*):\s*(.*)$/)
     if (!top) {
-      throw new ManifestError(`${path}:${i + 1} 无法解析的顶层行 '${lines[i]}'（窄解析子集外）`)
+      throw new ManifestError(
+        `${path}:${i + 1} 无法解析的顶层行 '${lines[i]}'（窄解析子集外）；`
+        + '若该键是旧 router_patterns 的 YAML 等价写法：它已迁移到 '
+        + '.pipeline/tracks.yaml 的 policy_profile.routing',
+      )
     }
     const key = top[1]!
     const rest = top[2]!.trim()
@@ -314,11 +386,6 @@ function scanSections(text: string, path: string): RawSections {
       const r = parseSkillBlock(lines, i + 1, path, key)
       if (key === 'mandatory_skills') out.mandatory_skills = r.map
       else out.recommended_skills = r.map
-      i = r.next
-    } else if (key === 'router_patterns') {
-      if (rest !== '') throw new ManifestError(`${path}:${i + 1} router_patterns 必须是块小节`)
-      const r = parseScalarBlock(lines, i + 1, path, 'router_patterns')
-      out.router_patterns = r.map
       i = r.next
     } else if (key === 'breadcrumb') {
       if (rest !== '') throw new ManifestError(`${path}:${i + 1} breadcrumb 必须是块小节`)
@@ -414,16 +481,6 @@ export function loadManifest(path: string): ExtendedManifestData {
   const mandatorySkills = deriveSkillTable(raw.mandatory_skills, declared, 'mandatory_skills')
   const recommendedSkills = deriveSkillTable(raw.recommended_skills, declared, 'recommended_skills')
 
-  const routerPatterns: RouterPatterns = { frontend: '', backend: '', pm: '' }
-  if (raw.router_patterns) {
-    for (const [track, pat] of raw.router_patterns) {
-      if (!ROUTER_TRACK_SET.has(track)) {
-        throw new ManifestError(`router_patterns 含未知 track '${track}'（合法：frontend/backend/pm）`)
-      }
-      routerPatterns[track as keyof RouterPatterns] = pat
-    }
-  }
-
   const breadcrumbs: Partial<Record<Phase, string>> = {}
   if (raw.breadcrumb) {
     for (const [phaseName, prose] of raw.breadcrumb) {
@@ -433,5 +490,5 @@ export function loadManifest(path: string): ExtendedManifestData {
     }
   }
 
-  return { phases, transitions, reviewPhases, mandatorySkills, recommendedSkills, routerPatterns, breadcrumbs }
+  return { phases, transitions, reviewPhases, mandatorySkills, recommendedSkills, breadcrumbs }
 }

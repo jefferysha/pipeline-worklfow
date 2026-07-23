@@ -5,8 +5,9 @@ import { useEffect, useRef } from 'react'
  *
  * 真机评审证实现有 7 处手写 backdrop 对话框键盘礼仪全缺：Esc 不关、焦点不进入、
  * 无困笼、卸载不归位，注册对话框更是「无路可退陷阱」。本组件收拢这四件事，
- * Task 4 起逐个迁移调用方。样式复用既有 `.dialog__backdrop/.dialog/.dialog__title/
- * .dialog__actions`（Task 1 已换新 token），不新发明样式类。
+ * Task 4 起逐个迁移调用方。样式已迁 tailwind 原子类（v10b 全量迁移）；外部 GSAP
+ * （WorkbenchView 的 revealDialog）以 `[data-testid="…"] [role="dialog"]` 寻址内容
+ * 节点——ARIA 契约即锚点，原 `.dialog` 骨架类已无消费方，Phase 3 收尾删除。
  *
  * 多层 Dialog 叠加时 Esc/Tab 的归属（评审修复轮）：初版用
  * `containerRef.current.contains(document.activeElement)` 判断"是不是我"，看似够用，
@@ -34,6 +35,10 @@ export interface DialogProps {
   children: React.ReactNode
   actions?: React.ReactNode      // 底部动作条（调用方放确认/取消按钮）
   testid?: string
+  /** 少数编排型对话框需要更宽的工作面；缺省仍保持既有 420px。 */
+  panelClassName?: string
+  /** 大型编辑器使用沉浸式工作区骨架；普通确认框保持 default。 */
+  variant?: 'default' | 'workspace'
   /** 首个聚焦目标：缺省聚焦对话框容器内第一个可聚焦元素 */
   initialFocusRef?: React.RefObject<HTMLElement>
 }
@@ -64,7 +69,7 @@ function getFocusableElements(container: HTMLElement): HTMLElement[] {
   return Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR))
 }
 
-export function Dialog({ title, onClose, children, actions, testid, initialFocusRef }: DialogProps): JSX.Element {
+export function Dialog({ title, onClose, children, actions, testid, panelClassName, variant = 'default', initialFocusRef }: DialogProps): JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null)
   const previousFocusRef = useRef<HTMLElement | null>(null)
   // 本实例在 dialogStack 里的身份令牌。用 useRef 惰性初始化一次即可——初始化表达式
@@ -139,16 +144,38 @@ export function Dialog({ title, onClose, children, actions, testid, initialFocus
 
   return (
     <div
-      className="dialog__backdrop"
+      className={`fixed inset-0 z-50 flex items-center justify-center bg-scrim ${variant === 'workspace' ? 'p-4 backdrop-blur-[3px]' : ''}`}
       data-testid={testid}
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose()
       }}
     >
-      <div className="dialog" role="dialog" aria-modal="true" aria-label={title} ref={containerRef} tabIndex={-1}>
-        <h2 className="dialog__title">{title}</h2>
-        {children}
-        {actions && <div className="dialog__actions">{actions}</div>}
+      <div
+        className={variant === 'workspace'
+          ? `${panelClassName ?? 'w-[min(1480px,96vw)]'} flex max-h-[94vh] flex-col overflow-hidden rounded-[24px] border border-border bg-bg shadow-xl`
+          : `${panelClassName ?? 'w-[min(420px,92%)]'} max-h-[90vh] overflow-y-auto rounded-lg border border-border bg-card px-[22px] py-5 shadow-md`}
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        ref={containerRef}
+        tabIndex={-1}
+      >
+        {variant === 'workspace' ? (
+          <>
+            <header className="flex min-h-16 flex-none items-center gap-4 border-b border-border bg-card px-6">
+              <h2 className="min-w-0 flex-1 truncate text-[18px] font-bold tracking-[-0.015em] text-text">{title}</h2>
+              <button type="button" className="grid size-10 place-items-center rounded-full text-xl text-text-3 transition hover:bg-fill hover:text-text" aria-label="关闭" onClick={onClose}>×</button>
+            </header>
+            <div className="min-h-0 flex-1 overflow-y-auto p-5 sm:p-6">{children}</div>
+            {actions && <footer className="flex flex-none justify-end gap-2 border-t border-border bg-card px-6 py-4">{actions}</footer>}
+          </>
+        ) : (
+          <>
+            <h2 className="mb-1.5 text-[15px] font-bold text-text">{title}</h2>
+            {children}
+            {actions && <div className="mt-4 flex justify-end gap-2">{actions}</div>}
+          </>
+        )}
       </div>
     </div>
   )

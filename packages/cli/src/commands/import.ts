@@ -9,6 +9,53 @@ import { parseLegacyHistory, stripLegacyHistory } from '@pipeline-lite/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
 import { changeDir, isValidChangeName } from '../paths.js'
 
+async function runImportUnderLock(
+  deps: CliDeps,
+  dir: string,
+  name: string,
+  opts: { strip?: boolean },
+): Promise<number> {
+  const state = await deps.store.read(dir)
+  const entries = parseLegacyHistory(state.opaqueTail)
+  if (entries.length === 0) {
+    deps.io.err(`[IMPORT] ${name}: 无历史区可导入`)
+    return 0
+  }
+  const prior = (await deps.readHistoryRaw?.(dir)) ?? ''
+  // 幂等哨兵：逐行 JSON.parse 判 kind==='import'（不用裸子串 includes——历史行的 raw/文本里
+  // 若字面含 "kind":"import" 会误判已导入，拒绝真正的首次导入）。非 JSON 行忽略。
+  const alreadyImported = prior.split('\n').some((line) => {
+    const t = line.trim()
+    if (t === '') return false
+    try {
+      return (JSON.parse(t) as { kind?: unknown }).kind === 'import'
+    } catch {
+      return false
+    }
+  })
+  if (alreadyImported) {
+    deps.io.err(`ERROR: ${name} 已导入过（.pipeline-history.jsonl 存在 import 哨兵），拒绝重复导入`)
+    return 1
+  }
+  for (const e of entries) await deps.history!.append(dir, e)
+  await deps.history!.append(dir, {
+    ts: deps.clock(),
+    kind: 'import',
+    raw: `legacy-yaml: ${entries.length} entries`,
+  })
+  if (opts.strip) {
+    await deps.store.writeUnderLock(
+      dir,
+      { ...state, opaqueTail: stripLegacyHistory(state.opaqueTail) },
+      { kind: 'legacy-import' },
+    )
+  }
+  deps.io.err(
+    `[IMPORT] ${name}: ${entries.length} 条历史 → .pipeline-history.jsonl${opts.strip ? '（已清理 YAML 历史区）' : ''}`,
+  )
+  return 0
+}
+
 export async function cmdImport(deps: CliDeps, name: string, opts: { strip?: boolean }): Promise<number> {
   if (!isValidChangeName(name)) {
     deps.io.err(`ERROR: change-name 非法: '${name}' (仅允许 a-z A-Z 0-9 - _)`)
@@ -20,43 +67,9 @@ export async function cmdImport(deps: CliDeps, name: string, opts: { strip?: boo
   }
   const dir = changeDir(deps.cwd, name)
   try {
-    const state = await deps.store.read(dir)
-    const entries = parseLegacyHistory(state.opaqueTail)
-    if (entries.length === 0) {
-      deps.io.err(`[IMPORT] ${name}: 无历史区可导入`)
-      return 0
-    }
-    const prior = (await deps.readHistoryRaw?.(dir)) ?? ''
-    // 幂等哨兵：逐行 JSON.parse 判 kind==='import'（不用裸子串 includes——历史行的 raw/文本里
-    // 若字面含 "kind":"import" 会误判已导入，拒绝真正的首次导入）。非 JSON 行忽略。
-    const alreadyImported = prior.split('\n').some((line) => {
-      const t = line.trim()
-      if (t === '') return false
-      try {
-        return (JSON.parse(t) as { kind?: unknown }).kind === 'import'
-      } catch {
-        return false
-      }
-    })
-    if (alreadyImported) {
-      deps.io.err(`ERROR: ${name} 已导入过（.pipeline-history.jsonl 存在 import 哨兵），拒绝重复导入`)
-      return 1
-    }
-    for (const e of entries) {
-      await deps.history.append(dir, e)
-    }
-    await deps.history.append(dir, {
-      ts: deps.clock(),
-      kind: 'import',
-      raw: `legacy-yaml: ${entries.length} entries`,
-    })
-    if (opts.strip) {
-      await deps.store.write(dir, { ...state, opaqueTail: stripLegacyHistory(state.opaqueTail) })
-    }
-    deps.io.err(
-      `[IMPORT] ${name}: ${entries.length} 条历史 → .pipeline-history.jsonl${opts.strip ? '（已清理 YAML 历史区）' : ''}`,
-    )
-    return 0
+    // history 幂等检查、append 与可选 canonical strip 同属一次导入事务；同一 change 锁覆盖
+    // 全过程，避免并发 import 双写哨兵或 strip 用陈旧 state 覆盖别的 mutation。
+    return await deps.store.withLock(dir, () => runImportUnderLock(deps, dir, name, opts))
   } catch (e) {
     deps.io.err(`ERROR: ${errMsg(e)}`)
     return 1

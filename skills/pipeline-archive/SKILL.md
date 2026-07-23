@@ -12,6 +12,10 @@ description: "Pipeline Phase 7: Archive · 归档 + 学习沉淀。所有 Track 
 
 - `$PIPELINE_TRACK` / `$PIPELINE_CHANGE_NAME`
 
+**上下文恢复（强制）**：优先读取 `<pipeline-dispatch>` 的 `change/track/phase`，再跑
+`pipeline list --json` 和 `pipeline status <change> --json` 复核。环境变量只是兼容快捷方式；为空时
+不得退出到普通对话。若有多个候选且 dispatch 未指定，才请用户选择。
+
 ## 前置条件
 
 - `phase=archive`（`ship-complete` 已推进）
@@ -23,6 +27,9 @@ description: "Pipeline Phase 7: Archive · 归档 + 学习沉淀。所有 Track 
 
 ```bash
 pipeline status "$PIPELINE_CHANGE_NAME"
+# Archive 是最后一次证明确实消费了 applied spec 及此前所有文档的机会；必须在 check/transition 前写 receipt。
+pipeline document read "$PIPELINE_CHANGE_NAME" all
+pipeline document status "$PIPELINE_CHANGE_NAME"
 pipeline check "$PIPELINE_CHANGE_NAME"     # archive 出口：verify_result=pass 等（0 过 / 2 不过）
 ```
 
@@ -49,7 +56,8 @@ pipeline check "$PIPELINE_CHANGE_NAME"     # archive 出口：verify_result=pass
 
 3. **同步 delta spec → main spec**（幂等兜底；verify Step 1.6 / ship 已做过则本步为空操作）：
    逐个把 `openspec/changes/<name>/specs/<cap>/spec.md` 合并进 `openspec/specs/<cap>/spec.md`
-   （Read + Edit 工具）。PM Track 没有 delta spec，跳过。
+   （Read + Edit 工具）。default 的全部 Track（包括 PM）都必须已有 delta spec；缺失时先回到 spec/ship
+   补齐，不得把 PRD 当成 applied spec 的替代品。
 
 4. **标注产物 frontmatter**：给 `design_doc` / `plan` 指向的文件头部加
    `archived-with: <name>`（Edit 工具）。
@@ -85,7 +93,7 @@ pipeline check "$PIPELINE_CHANGE_NAME"     # archive 出口：verify_result=pass
 | 用户回复 | 动作 |
 |---------|------|
 | "无" / "skip" / "no" | 跳过 learn-record，继续归档 |
-| 任意非空内容 | **立即执行**：使用 Skill 工具加载 `pipeline-lite:learn-record`，**禁止跳过此步骤** |
+| 任意非空内容 | **立即执行**：使用 Skill 工具加载 `learn-record`，**禁止跳过此步骤** |
 
 ### 自动加分条件（即使用户没主动说，仍触发）
 
@@ -106,7 +114,8 @@ pipeline check "$PIPELINE_CHANGE_NAME"     # archive 出口：verify_result=pass
 如果本次发现可复用的模式：
 
 **可选**：使用 Skill 工具加载 `skill-creator`。
-- 用于：把本次经验生成为新的 ~/.claude/skills/<name>/SKILL.md
+- 用于：把本次经验沉淀为本插件 `skills/<name>/SKILL.md` 的候选改动，并同时更新打包 registry；
+  不要把它写成用户机器上的隐式全局依赖。
 
 ### Step 4: 可选 — 生成 handoff（PM 特别推荐）
 
@@ -144,7 +153,7 @@ archive 是不可逆操作（change 目录会被移动）。执行前若用户�
 2. 询问用户确认
 3. 仅在用户明确同意后执行正式归档
 
-## 外部 skill 依赖（CONTRACT §5.7 显式声明）
+## 打包 skill 依赖（随 pipeline-lite 插件安装）
 
-- external-skill: skill-creator · 可选
-- external-skill: handoff · 可选（pm 强烈推荐）
+- bundled-skill: skill-creator · 可选
+- bundled-skill: handoff · 可选（pm 强烈推荐）

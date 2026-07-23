@@ -1,0 +1,216 @@
+/**
+ * IR guard handler 注册表（G2 P1）——default 轨（DefaultEventPolicy，G2 P3 起）与 custom 轨共用的
+ * 前置判定实现，语义源两处：
+ *   · 老仓 skills/pipeline/scripts/state-transition.sh cmd_transition 各事件前置校验
+ *     → field-nonempty / file-exists / field-equals / field-in / full-direct-override /
+ *       build-head-unchanged 六个基础 guard 的组合。
+ *   · workflow/stepGuard.ts evaluateStepGuards 两个 v1 guard
+ *     → tasks-at-least 原样、nonempty-output 由 compileWorkflow 编译期展开（本表只留兜底）。
+ * 每个 handler 的判定逐条对齐老仓 case 块语义（就地注释标注）；单测 guard-handlers.test.ts 逐分支
+ * 手写期望值（对齐老仓，不 import 任何旧函数当 oracle）。
+ *
+ * 分层（裁决钉死）：handler 只回结构化 GuardDecision，不拼错误文案——渲染是另一层的职责。
+ * 注册表是 exhaustive mapped type 静态闭集（属性 readonly + 对象 Object.freeze）：新增变体 =
+ * 改 ir.ts 联合，此处随之编译报错；刻意没有运行时注册/替换 API。
+ */
+import { taskCount } from '../flow/guard.js'
+import { matchesTrackPredicate } from './predicates.js'
+import type { FieldName } from '../types.js'
+import type { WorkflowGuardConfig } from './types.js'
+import type { CompiledGuardConfig, GuardDecision, GuardInput, OutputPresentGuard } from './ir.js'
+
+export type GuardHandler<C extends WorkflowGuardConfig> = (
+  config: C,
+  input: GuardInput,
+) => GuardDecision | Promise<GuardDecision>
+
+/**
+ * 注册表按**定义层** WorkflowGuardConfig 全 8 键建（含 nonempty-output）：nonempty-output 只留
+ * fail-loud 兜底 handler，防有人绕过编译器直接构造它进运行期；而 evaluateGuards / 编译产物的
+ * guards[] 用运行层 CompiledGuardConfig（严格 typed guard 7 键 + output-present）。dispatchGuard
+ * 先单独派发 output-present（编译产物，不在定义层注册表内，见 evalOutputPresent），其余 7 键的 type
+ * ⊆ 本注册表键集（8 键定义层的子集），索引恒命中。
+ */
+export type GuardHandlerRegistry = {
+  readonly [K in WorkflowGuardConfig['type']]: GuardHandler<Extract<WorkflowGuardConfig, { type: K }>>
+}
+
+/** 字段读值：编译产物保证 scalar guard 的 field 非列表字段（compile.ts scalarField 闸），
+ *  运行期读到数组 = 调用方绕过了编译器 → fail-loud（同 nonempty-output handler 的兜底
+ *  先例）；非数组沿老内核 fstr 的缺省支（缺省/undefined → ''）。 */
+function scalarValue(fields: GuardInput['fields'], k: FieldName): string {
+  const v = fields[k]
+  if (Array.isArray(v)) {
+    throw new Error(
+      `guard 读到列表字段 '${k}' 的数组值：scalar guard 不定义列表语义，compileWorkflow 编译期拒绝列表字段——运行期出现 = 绕过编译器`,
+    )
+  }
+  return v ?? ''
+}
+
+/** 老内核 cmd_get 口径：字面 'null'（init heredoc）或空串都算未设。 */
+function isUnset(v: string): boolean {
+  return v === '' || v === 'null'
+}
+
+const PASSED: GuardDecision = { kind: 'passed' }
+
+export const GUARD_HANDLERS: GuardHandlerRegistry = Object.freeze({
+  /** stepGuard.ts L38-44 同语义：tasks.md 任务数 ≥ n。文件读取走 readText 能力注入
+   *  （stepGuard 直接 readFileSync，本层纯函数化）；readText 注入但文件缺失 → undefined →
+   *  taskCount=0（stepGuard L17-24 缺失=0 同口径），能力本身未注入才是 skipped。 */
+  'tasks-at-least': (config, input) => {
+    if (!input.readText) return { kind: 'skipped', capability: 'readText' }
+    const count = taskCount(input.readText('tasks.md'))
+    if (count < config.n) {
+      return { kind: 'failed', guardType: 'tasks-at-least', actual: String(count), expected: [String(config.n)] }
+    }
+    return PASSED
+  },
+
+  /** 纯定义层变体：compileWorkflow 按 step.outputs 展开成 field-nonempty 集合，经编译的 IR
+   *  里不存在它。handler 拿不到 step.outputs（GuardInput 刻意不带 step 形状），运行期收到它
+   *  = 调用方绕过了编译器，fail-loud。 */
+  'nonempty-output': () => {
+    throw new Error(
+      "guard 'nonempty-output' 是 v1 定义层变体，compileWorkflow 按 step.outputs 展开为 field-nonempty；运行期注册表不实现它",
+    )
+  },
+
+  /** 老仓 state-transition.sh 各事件的字段非空面：isUnset（''/'null'）→ failed。
+   *  纯字段谓词，无能力依赖，永不 skipped。 */
+  'field-nonempty': (config, input) => {
+    const v = scalarValue(input.fields, config.field)
+    if (isUnset(v)) {
+      return { kind: 'failed', guardType: 'field-nonempty', field: config.field, actual: v }
+    }
+    return PASSED
+  },
+
+  /** 老仓 state-transition.sh 各事件的文件存在面：字段值即项目根相对路径。
+   *  字段未设 → failed（未设的路径必不存在；与 field-nonempty 前置搭配时被首错截断，
+   *  单独使用时行为自洽）；fileExists 未注入 → skipped（L92-93 降级视为存在）。 */
+  'file-exists': (config, input) => {
+    const v = scalarValue(input.fields, config.path.field)
+    if (isUnset(v)) {
+      return { kind: 'failed', guardType: 'file-exists', field: config.path.field, actual: v }
+    }
+    if (!input.fileExists) return { kind: 'skipped', capability: 'fileExists' }
+    if (!input.fileExists(v)) {
+      return { kind: 'failed', guardType: 'file-exists', field: config.path.field, actual: v }
+    }
+    return PASSED
+  },
+
+  /** 老仓 state-transition.sh verify-pass 的等值面（branch_status=handled、双 review=pass）。 */
+  'field-equals': (config, input) => {
+    const v = scalarValue(input.fields, config.field)
+    if (v !== config.value) {
+      return { kind: 'failed', guardType: 'field-equals', field: config.field, actual: v, expected: [config.value] }
+    }
+    return PASSED
+  },
+
+  /** 老仓 state-transition.sh build-complete 的枚举面（isolation ∈ {branch, worktree}），expected 带全量合法值。 */
+  'field-in': (config, input) => {
+    const v = scalarValue(input.fields, config.field)
+    if (!config.values.includes(v)) {
+      return { kind: 'failed', guardType: 'field-in', field: config.field, actual: v, expected: config.values }
+    }
+    return PASSED
+  },
+
+  /** 老仓 state-transition.sh build-complete：preset=full ∧ build_mode=direct → direct_override 必须
+   *  字面 'true'（set 闸之外的纵深防线）。条件不齐（非 full / 非 direct）→ passed。 */
+  'full-direct-override': (_config, input) => {
+    const override = scalarValue(input.fields, 'direct_override')
+    if (scalarValue(input.fields, 'preset') === 'full' && scalarValue(input.fields, 'build_mode') === 'direct' && override !== 'true') {
+      return { kind: 'failed', guardType: 'full-direct-override', field: 'direct_override', actual: override, expected: ['true'] }
+    }
+    return PASSED
+  },
+
+  /** 老仓 state-transition.sh verify-pass barrier（ADR 0005）：verify 审的必须是 build 冻结的 SHA。
+   *  IO 序镜像老代码：L149 先读 bsha，L150 gitHeadSha 注入即调用（HEAD 取值与异常都发生在
+   *  build_sha 判空之前；抛错原样上抛，老代码不 catch——build_sha 未设时同样先经历这次调用）。
+   *  L151 合取的三态映射：
+   *    · build_sha 未设 → passed（首个合取不成立 → 老代码放行，barrier 不适用）；
+   *    · gitHeadSha 未注入 / 注入但 trim 后空串（HEAD 不可取，非 git 仓）→ skipped
+   *      （L150 `?? ''` 与 L151 head!=='' 同归「HEAD 面不可用」，退化跳过）；
+   *    · head≠bsha → failed；相等 → passed。 */
+  'build-head-unchanged': async (config, input) => {
+    const bsha = scalarValue(input.fields, config.field)
+    const head = input.gitHeadSha ? (await input.gitHeadSha()).trim() : undefined
+    if (isUnset(bsha)) return PASSED
+    if (head === undefined || head === '') return { kind: 'skipped', capability: 'gitHeadSha' }
+    if (head !== bsha) {
+      return { kind: 'failed', guardType: 'build-head-unchanged', field: config.field, actual: head, expected: [bsha] }
+    }
+    return PASSED
+  },
+})
+
+/**
+ * output-present 求值（compile 从 v1 nonempty-output 对「列表 / 未知惰性 output 字段」下沉出的
+ * 编译产物，不在定义层 WorkflowGuardConfig 里，故不进上面的 exhaustive 注册表，而由 dispatchGuard
+ * 单独派发）。按旧 stepGuard.scalar 折值——数组或未设 → ''（列表字段恒 fail、未知惰性字段永不
+ * 落值恒 fail），非空标量放行。产出普通 guard failure（不 throw）：nonempty-output 遇列表/惰性
+ * 是 v1 兼容的合法输入，不是绕过编译器，与 field-nonempty 对数组的 fail-loud 越界兜底刻意分道。
+ */
+function evalOutputPresent(config: OutputPresentGuard, input: GuardInput): GuardDecision {
+  const raw = input.fields[config.field as FieldName]
+  const v = Array.isArray(raw) ? '' : (raw ?? '')
+  if (isUnset(v)) {
+    return { kind: 'failed', guardType: 'output-present', field: config.field as FieldName, actual: v }
+  }
+  return PASSED
+}
+
+/** 单个 guard 的评估结果：guard 原配置 + 判定，evaluateGuards 的输出元素。 */
+export interface GuardEvaluation {
+  readonly guard: CompiledGuardConfig
+  readonly decision: GuardDecision
+}
+
+/** 注册表按 type 收窄的派发点。output-present 是编译产物（不在定义层注册表）先单独派发；其余
+ *  strict 变体的 type ⊆ WorkflowGuardConfig['type']（注册表键集），收窄机械安全（相关联合的已知
+ *  限制下用 cast 桥接）。 */
+function dispatchGuard(config: CompiledGuardConfig, input: GuardInput): GuardDecision | Promise<GuardDecision> {
+  if (config.type === 'output-present') return evalOutputPresent(config, input)
+  const handler = GUARD_HANDLERS[config.type] as GuardHandler<typeof config>
+  return handler(config, input)
+}
+
+/** evaluateGuards 的评估策略。stopOnFirstFailure：
+ *   · true（缺省）——首个 failed 即停，对齐老仓 cmd_transition 每个 case 首个违反
+ *     立即 return 的首错优先语义（transition/edge 前置校验用）。
+ *   · false——评估全部适用 guard、收集全部 failed，对齐旧 evaluateStepGuards 逐条列全部未过
+ *     项的 step-guard 语义（custom step 出口 guard 用，令旧 YAML 多失败项行为逐字不变）。 */
+export interface EvaluateGuardsOptions {
+  readonly stopOnFirstFailure?: boolean
+}
+
+/**
+ * 按声明顺序评估一组 guard：
+ *   · when 谓词不命中 → 该 guard 整体不适用，不产生任何 decision（不算 failed 也不算
+ *     skipped-capability）；命中（或无 when）才评估。
+ *   · stopOnFirstFailure（缺省 true）时首个 failed 即停（其后的 guard 不评估、不触发其能力
+ *     IO）；false 时评估全部适用 guard 并收集全部 failed。
+ *   · skipped（能力缺失降级）不打断评估。
+ * 返回按评估顺序的 (guard, decision) 对；全适用全通过时长度 = 适用 guard 数。
+ */
+export async function evaluateGuards(
+  guards: readonly CompiledGuardConfig[],
+  input: GuardInput,
+  options: EvaluateGuardsOptions = {},
+): Promise<readonly GuardEvaluation[]> {
+  const stopOnFirstFailure = options.stopOnFirstFailure ?? true
+  const evaluated: GuardEvaluation[] = []
+  for (const guard of guards) {
+    if (guard.when !== undefined && !matchesTrackPredicate(guard.when, input.track)) continue
+    const decision = await dispatchGuard(guard, input)
+    evaluated.push({ guard, decision })
+    if (decision.kind === 'failed' && stopOnFirstFailure) break
+  }
+  return evaluated
+}

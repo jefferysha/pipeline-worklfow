@@ -107,6 +107,54 @@ describe('serializePipeline（严格 FIELD_ORDER 全量写回）', () => {
   })
 })
 
+describe('parsePipeline/serializePipeline —— 内部提交元数据三行块（W1 第二增量，不进 FIELD_ORDER）', () => {
+  it('已知字段后紧跟元数据三行 → runMetadata 真解析，opaqueTail 从第四行开始（不含元数据本身）', () => {
+    const raw = fixture('zz-container-e2e.pipeline.yaml')
+    const withMeta = raw.replace(
+      /\n(pipeline_mode:|tools_history:|$)/,
+      '\npipeline_run_id: run-42\npipeline_transition_sequence: 5\npipeline_transition_head: rec-5\n$1',
+    )
+    const state = parsePipeline(withMeta)
+    expect(state.runMetadata).toEqual({ runId: 'run-42', transitionSequence: 5, transitionHead: 'rec-5' })
+    expect(state.opaqueTail.startsWith('pipeline_run_id')).toBe(false)
+  })
+
+  it('没有元数据三行的老文件（现有全部 fixture）→ runMetadata 为 undefined，opaqueTail 逐字不变', () => {
+    const state = parsePipeline(fixture('zz-container-e2e.pipeline.yaml'))
+    expect(state.runMetadata).toBeUndefined()
+  })
+
+  it('serializePipeline：runMetadata 存在时，三行写在 FIELD_ORDER 字段之后、opaqueTail 之前', () => {
+    const state = parsePipeline(fixture('channel-adapter-worker-guard-oldschema.pipeline.yaml'))
+    state.runMetadata = { runId: 'run-9', transitionSequence: 1, transitionHead: undefined }
+    const out = serializePipeline(state)
+    const lines = out.split('\n')
+    const archivedIdx = lines.indexOf(`archived: ${state.fields.archived === '' ? '""' : state.fields.archived}`)
+    expect(archivedIdx).toBeGreaterThanOrEqual(0)
+    expect(lines).toContain('pipeline_run_id: run-9')
+    expect(lines).toContain('pipeline_transition_sequence: 1')
+    expect(lines).toContain('pipeline_transition_head: null')
+    // 元数据三行必须紧跟在最后一个 FIELD_ORDER 字段之后，早于 opaqueTail 内容
+    // （动态取 FIELD_ORDER 最后一个字段名，不硬编码——它随末尾追加的新字段变化，见 types.ts 注释）
+    const lastFieldKey = FIELD_ORDER[FIELD_ORDER.length - 1]!
+    const metaIdx = lines.indexOf('pipeline_run_id: run-9')
+    const lastFieldIdx = lines.findIndex((l) => l.startsWith(`${lastFieldKey}:`))
+    expect(metaIdx).toBe(lastFieldIdx + 1)
+  })
+
+  it('往返：解析→序列化，runMetadata 逐字段还原（含 head）', () => {
+    const state = parsePipeline(fixture('zz-container-e2e.pipeline.yaml'))
+    state.runMetadata = { runId: 'run-r', transitionSequence: 12, transitionHead: 'rec-12' }
+    const roundTripped = parsePipeline(serializePipeline(state))
+    expect(roundTripped.runMetadata).toEqual(state.runMetadata)
+  })
+
+  it('往返：runMetadata 为 undefined 时序列化不新增任何字节、opaqueTail 逐字不变（现有 fixture 零回归的直接证明）', () => {
+    const raw = fixture('dashboard-html-parity-restore.pipeline.yaml')
+    expect(serializePipeline(parsePipeline(raw))).toBe(raw)
+  })
+})
+
 describe('四闸（QuoteGateError）', () => {
   function baseState(): PipelineState {
     return parsePipeline(fixture('zz-container-e2e.pipeline.yaml'))

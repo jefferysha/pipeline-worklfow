@@ -23,8 +23,12 @@ import type { LoopBudget, LoopKind, LoopRisk, LoopStatus } from './types.js'
 import { indentOf, insertPointAtBlockEnd, locateLoop, type LoopBlock } from './yamlBlock.js'
 
 /** loop 顶层可 patch 标量字段（schema 同名约束在写回后由调用方整文档校验）。
- * v5 T20：+runner（双 runner 数据面——编排页 runner 下拉走 POST /api/loops/update 落盘）。 */
-export const PATCHABLE_SCALAR_FIELDS = ['cadence', 'goal', 'design_doc', 'change_prefix', 'risk', 'status', 'runner'] as const
+ * v5 T20：+runner（双 runner 数据面——编排页 runner 下拉走 POST /api/loops/update 落盘）。
+ * H10 §1：+skill_bundle_id（policy 字段治理写入；本函数只搬字面量，不做词法/存在性校验——写回后
+ * 调用方须重跑 parseLoopsYaml + validateSchema(LOOPS_SCHEMA) 才拦下非法值，同 cadence/risk 口径）。 */
+export const PATCHABLE_SCALAR_FIELDS = [
+  'cadence', 'goal', 'design_doc', 'change_prefix', 'risk', 'status', 'runner', 'skill_bundle_id',
+] as const
 /** budget 嵌套可 patch 标量字段。 */
 export const PATCHABLE_BUDGET_FIELDS = ['max_runs_per_day', 'max_in_flight', 'max_tokens_per_day', 'on_exceed'] as const
 /** 可 patch 字符串数组字段（整块替换）。 */
@@ -157,7 +161,7 @@ function checkedValue(field: string, value: unknown): string | number | null | s
     if (typeof value !== 'number') throw new PatchError(`字段 '${field}' 须为数字`)
     return value
   }
-  if (field === 'change_prefix' && value === null) return null
+  if ((field === 'change_prefix' || field === 'skill_bundle_id') && value === null) return null
   if (typeof value !== 'string') throw new PatchError(`字段 '${field}' 须为字符串`)
   return value
 }
@@ -212,9 +216,10 @@ export function updateLoopInYaml(text: string, loopId: string, patch: Record<str
 // 写回格式直接复用 formatString/formatScalar（不复制规则），拒绝路径同样以 error 回传。
 
 /**
- * 新建 loop 条目输入：LOOPS_SCHEMA 的 15 个 required 字段（budget 的可选 token 字段随 LoopBudget）。
- * 刻意不含 autonomy_level / allowlist / denylist（拍板 P5）：三者载入时由 loadRegistry 派生补默认
- * （L1 / [] / []），序列化整体省略——文件里「未声明」如实；升降档唯毕业制通道（旁路禁区同上）。
+ * 新建 loop 条目输入：LOOPS_SCHEMA 的 required 字段（budget 的可选 token 字段随 LoopBudget）
+ * + H11 可选 starter/binding 引用。刻意不含 autonomy_level / allowlist / denylist（拍板 P5）：三者
+ * 载入时由 loadRegistry 派生补默认（L1 / [] / []），序列化整体省略——文件里「未声明」如实；
+ * 升降档唯毕业制通道（旁路禁区同上）。
  */
 export interface NewLoopEntryInput {
   id: string
@@ -227,11 +232,20 @@ export interface NewLoopEntryInput {
   change_prefix: string | null
   phases: string[]
   human_gates: string[]
-  state: string
+  /** @deprecated H9 compatibility input; serializers intentionally do not persist it. */
+  state?: string
   design_doc: string
   status: LoopStatus
   budget: LoopBudget
   kill_criteria: string[]
+  /** H11 starter 来源；本写入层只保存安全 token，不校验 catalog 引用存在性。 */
+  template_id?: string
+  /** H11 starter schema 版本；当前只支持 1。 */
+  template_version?: 1
+  /** H11 编译后绑定的 workflow token。 */
+  workflow_id?: string
+  /** H10/H11 skill bundle 引用；undefined 省略，null 显式表示 unwired。 */
+  skill_bundle_id?: string | null
 }
 
 /** 条目 → 行数组（排版口径见上区块注释）；值不可安全写回 → throw PatchError。 */
@@ -257,9 +271,12 @@ function renderLoopEntryLines(entry: NewLoopEntryInput): string[] {
   scalar('change_prefix', entry.change_prefix) // null → 裸 null 字面量
   seq('phases', entry.phases)
   seq('human_gates', entry.human_gates)
-  scalar('state', entry.state)
   scalar('design_doc', entry.design_doc)
   scalar('status', entry.status)
+  if (entry.template_id !== undefined) scalar('template_id', entry.template_id)
+  if (entry.template_version !== undefined) scalar('template_version', entry.template_version)
+  if (entry.workflow_id !== undefined) scalar('workflow_id', entry.workflow_id)
+  if (entry.skill_bundle_id !== undefined) scalar('skill_bundle_id', entry.skill_bundle_id)
   lines.push('    budget:')
   const budgetScalar = (field: string, v: string | number): void => {
     lines.push(`      ${field}: ${formatScalar(v, field)}`)

@@ -27,13 +27,19 @@ const CHAIN_SKILLS: WbStepDef['skills'] = [
 
 function renderChain(
   overrides: Partial<WbStepDef> = {},
-  opts: { workflow?: string; readonly?: boolean } = {},
+  opts: { workflow?: string; readonly?: boolean; root?: string } = {},
 ) {
   const onChange = vi.fn()
   const step = { ...BASE, ...overrides }
   render(
     <I18nProvider>
-      <SkillChain step={step} workflow={opts.workflow ?? 'release-train'} readonly={opts.readonly} onChange={onChange} />
+      <SkillChain
+        step={step}
+        workflow={opts.workflow ?? 'release-train'}
+        readonly={opts.readonly}
+        root={opts.root ?? '/repo/default'}
+        onChange={onChange}
+      />
     </I18nProvider>,
   )
   return { onChange, step }
@@ -74,25 +80,25 @@ describe('SkillChain 自定义 workflow：依赖链可视化（验收①）', ()
   it('悬空依赖（depends_on 指向 step 外）→ 依赖名以幽灵 chip 呈现在链头', () => {
     renderChain({ skills: [{ id: 'skill-f', depends_on: ['outside' ] }] })
     const chain = screen.getByTestId('wb-sk-chain')
-    expect(within(chain).getByText('outside')).toHaveClass('wb-chip--ghost')
+    expect(within(chain).getByText('outside')).toHaveAttribute('data-ghost')
     expect(within(chain).getByText('skill-f')).toBeInTheDocument()
   })
 
-  it('链 chip 带 .wb8-skn 序号（=链内执行序 1..n）；solo 与幽灵 chip 不编号（评审 P2-10）', () => {
+  it('链 chip 带 [data-skn] 序号（=链内执行序 1..n）；solo 与幽灵 chip 不编号（评审 P2-10）', () => {
     renderChain({ skills: [...CHAIN_SKILLS, { id: 'skill-f', depends_on: ['outside'] }] })
     const chains = screen.getAllByTestId('wb-sk-chain')
     // a➝b➝c 链：序号恰为 1/2/3
     const abc = chains.find((c) => c.textContent?.includes('skill-a'))
     expect(abc).toBeDefined()
-    expect(Array.from(abc!.querySelectorAll('.wb8-skn')).map((n) => n.textContent)).toEqual(['1', '2', '3'])
+    expect(Array.from(abc!.querySelectorAll('[data-skn]')).map((n) => n.textContent)).toEqual(['1', '2', '3'])
     // 幽灵 chip（悬空依赖 outside）不参与编号
     const ghostChain = chains.find((c) => c.textContent?.includes('outside'))
     expect(ghostChain).toBeDefined()
     const ghost = within(ghostChain!).getByText('outside')
-    expect(ghost).toHaveClass('wb-chip--ghost')
-    expect(ghost.querySelector('.wb8-skn')).toBeNull()
+    expect(ghost).toHaveAttribute('data-ghost')
+    expect(ghost.querySelector('[data-skn]')).toBeNull()
     // 无依赖 solo 行（d/e）整行无序号
-    expect(screen.getByTestId('wb-sk-solo').querySelector('.wb8-skn')).toBeNull()
+    expect(screen.getByTestId('wb-sk-solo').querySelector('[data-skn]')).toBeNull()
   })
 
   it('说明文案明示「依赖顺序=解锁顺序，PreToolUse 门真实拦截」', () => {
@@ -196,6 +202,22 @@ describe('SkillChain 自定义 workflow：移除级联（验收④）', () => {
 const CONFIG_BODY = {
   ok: true,
   generated_at: '2026-07-11T00:00:00Z',
+  revision: 'skill-chain-r5',
+  source: 'builtin-only',
+  mandatory_skills_writable_profiles: ['pm', 'frontend', 'backend'],
+  tracks: ['pm', 'frontend', 'backend'].map((id, index) => ({
+    id,
+    label: id === 'pm' ? 'Product' : id[0]!.toUpperCase() + id.slice(1),
+    builtin: true,
+    workflow: { default: 'default', allowed: '*' },
+    policyProfile: {
+      reviewSeed: id === 'pm' ? 'skipped' : 'pending',
+      automationEligible: true,
+      coverageProfile: id,
+      routing: { enabled: true, pattern: id, priority: 100 + index },
+      skills: { matrix: true, profile: id },
+    },
+  })),
   mandatory_skills: {
     'build._all': ['fallback-skill'],
     'build.frontend': ['skill-x', 'skill-y'],
@@ -204,9 +226,10 @@ const CONFIG_BODY = {
 
 function mockDefaultFetch(overrides: Record<string, () => Response | Promise<Response>> = {}): ReturnType<typeof vi.fn> {
   const fn = vi.fn(async (url: string, opts?: RequestInit) => {
-    const key = opts?.method === 'POST' ? `POST ${url}` : url
+    const normalizedUrl = url.startsWith('/api/config?root=') ? '/api/config' : url
+    const key = opts?.method === 'POST' ? `POST ${normalizedUrl}` : normalizedUrl
     if (overrides[key]) return overrides[key]()
-    if (url === '/api/config') return new Response(JSON.stringify(CONFIG_BODY), { status: 200 })
+    if (normalizedUrl === '/api/config') return new Response(JSON.stringify(CONFIG_BODY), { status: 200 })
     if (url === '/api/skills/registry') {
       return new Response(JSON.stringify({ skills: [
         { name: 'skill-x', installed: true, source: 'local-plugin' },
@@ -225,6 +248,29 @@ function mockDefaultFetch(overrides: Record<string, () => Response | Promise<Res
 }
 
 describe('SkillChain default workflow：轨道 tab × 强制技能矩阵', () => {
+  it('内置轨道用矢量锁图标标识，不把 emoji 混进名称', async () => {
+    mockDefaultFetch()
+    renderChain({}, { workflow: 'default', readonly: true })
+    const pm = await screen.findByTestId('wb-sk-track-pm')
+    expect(pm).not.toHaveTextContent('🔒')
+    expect(pm.querySelector('svg')).not.toBeNull()
+  })
+
+  it('项目 root 显式贯穿 GET、POST 与缓存，不保留空 root 的第二套旁路', async () => {
+    const fetchMock = mockDefaultFetch()
+    renderChain({}, { workflow: 'default', readonly: true, root: '/repo with space' })
+    await screen.findByTestId('wb-sk-tracks')
+    expect(fetchMock).toHaveBeenCalledWith('/api/config?root=%2Frepo%20with%20space', {
+      headers: { Accept: 'application/json' },
+    })
+    fireEvent.click(screen.getByTestId('wb-sk-track-frontend'))
+    fireEvent.click(screen.getByTestId('wb-sk-edit'))
+    fireEvent.click(await screen.findByRole('button', { name: '保存' }))
+    await waitFor(() => expect(screen.queryByRole('button', { name: '保存' })).toBeNull())
+    const post = fetchMock.mock.calls.find((call) => (call[1] as RequestInit | undefined)?.method === 'POST')
+    expect(JSON.parse(String((post?.[1] as RequestInit).body))).toMatchObject({ root: '/repo with space' })
+  })
+
   it('探测 /api/config 成功 → 轨道 tab 渲染；pm 走 _all 兜底、frontend 显示 per-track 强制技能', async () => {
     mockDefaultFetch()
     const { onChange } = renderChain({}, { workflow: 'default', readonly: true })
@@ -258,6 +304,7 @@ describe('SkillChain default workflow：轨道 tab × 强制技能矩阵', () =>
       phase: 'build',
       track: 'frontend',
       skills: ['skill-x', 'skill-y', 'skill-w'],
+      root: '/repo/default',
     })
     // 保存成功 → chips 联动刷新
     expect(within(screen.getByTestId('wb-sk-mand')).getByText('skill-w')).toBeInTheDocument()
@@ -269,6 +316,7 @@ describe('SkillChain default workflow：轨道 tab × 强制技能矩阵', () =>
     })
     renderChain({}, { workflow: 'default', readonly: true })
     await screen.findByTestId('wb-sk-tracks')
+    fireEvent.click(screen.getByTestId('wb-sk-track-frontend'))
     fireEvent.click(screen.getByTestId('wb-sk-edit'))
     fireEvent.click(await screen.findByRole('button', { name: 'skill-w' }))
     fireEvent.click(screen.getByRole('button', { name: '保存' }))
@@ -276,14 +324,78 @@ describe('SkillChain default workflow：轨道 tab × 强制技能矩阵', () =>
     expect(screen.getByRole('button', { name: '保存' })).toBeInTheDocument()
   })
 
-  it('探测不到 config 写端点（GET /api/config 非 2xx）→ 只读预览：静态镜像 + 只读说明、无编辑钮', async () => {
-    mockDefaultFetch({ '/api/config': () => new Response(JSON.stringify({ ok: false, error: 'config 数据端未装' }), { status: 404 }) })
+  it('保存端 HTTP 200 但 ok:false → 保持编辑态并显示原文，不把本地草稿写进 cache', async () => {
+    mockDefaultFetch({
+      'POST /api/config/mandatory-skills': () =>
+        new Response(JSON.stringify({ ok: false, error: 'revision 已变化' }), { status: 200 }),
+    })
     renderChain({}, { workflow: 'default', readonly: true })
     await screen.findByTestId('wb-sk-tracks')
+    fireEvent.click(screen.getByTestId('wb-sk-track-frontend'))
+    fireEvent.click(screen.getByTestId('wb-sk-edit'))
+    fireEvent.click(await screen.findByRole('button', { name: '保存' }))
+    await waitFor(() => expect(screen.getByTestId('wb-sk-save-error')).toHaveTextContent('revision 已变化'))
+    expect(screen.getByRole('button', { name: '保存' })).toBeInTheDocument()
+  })
+
+  it('root A 的 POST 晚到不覆盖 root B 的 legacy UI；成功只推进 A 项目 cache', async () => {
+    let releaseA!: (response: Response) => void
+    global.fetch = vi.fn((url: string, opts?: RequestInit) => {
+      if (url === '/api/config?root=%2Frepo-a') return Promise.resolve(new Response(JSON.stringify(CONFIG_BODY), { status: 200 }))
+      if (url === '/api/config?root=%2Frepo-b') {
+        return Promise.resolve(new Response(JSON.stringify({
+          ...CONFIG_BODY,
+          mandatory_skills: { ...CONFIG_BODY.mandatory_skills, 'build.frontend': ['b-only'] },
+        }), { status: 200 }))
+      }
+      if (url === '/api/skills/registry') {
+        return Promise.resolve(new Response(JSON.stringify({ skills: [] }), { status: 200 }))
+      }
+      if (url === '/api/config/mandatory-skills' && opts?.method === 'POST') {
+        return new Promise<Response>((resolve) => { releaseA = resolve })
+      }
+      throw new Error(`unexpected fetch ${url}`)
+    }) as unknown as typeof fetch
+
+    const onChange = vi.fn()
+    const view = render(
+      <I18nProvider>
+        <SkillChain step={BASE} workflow="default" readonly root="/repo-a" onChange={onChange} />
+      </I18nProvider>,
+    )
+    await screen.findByTestId('wb-sk-tracks')
+    fireEvent.click(screen.getByTestId('wb-sk-track-frontend'))
+    fireEvent.click(screen.getByTestId('wb-sk-edit'))
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    view.rerender(
+      <I18nProvider>
+        <SkillChain step={BASE} workflow="default" readonly root="/repo-b" onChange={onChange} />
+      </I18nProvider>,
+    )
+    const rootBMandatory = await screen.findByTestId('wb-sk-mand')
+    await within(rootBMandatory).findByText('b-only')
+    releaseA(new Response(JSON.stringify({ ok: true, skills: ['a-after-save'] }), { status: 200 }))
+    await waitFor(() => expect(within(screen.getByTestId('wb-sk-mand')).getByText('b-only')).toBeInTheDocument())
+    expect(screen.queryByText('a-after-save')).toBeNull()
+
+    view.unmount()
+    render(
+      <I18nProvider>
+        <SkillChain step={BASE} workflow="default" readonly root="/repo-a" onChange={onChange} />
+      </I18nProvider>,
+    )
+    fireEvent.click(await screen.findByTestId('wb-sk-track-frontend'))
+    expect(await screen.findByText('a-after-save')).toBeInTheDocument()
+  })
+
+  it('探测不到 runtime config（GET /api/config 非 2xx）→ 不退回静态轨道/技能，无编辑钮', async () => {
+    mockDefaultFetch({ '/api/config': () => new Response(JSON.stringify({ ok: false, error: 'config 数据端未装' }), { status: 404 }) })
+    renderChain({}, { workflow: 'default', readonly: true })
+    await screen.findByText('没有可用于技能矩阵的轨道')
     expect(screen.getByTestId('wb-sk-cfg-ro')).toBeInTheDocument()
     expect(screen.queryByTestId('wb-sk-edit')).toBeNull()
-    // 静态镜像兜底（workbench/data.ts 的 MANDATORY_SKILLS：build.pm 首项 prototype|huashu-design）
-    expect(within(screen.getByTestId('wb-sk-mand')).getByText('prototype|huashu-design')).toBeInTheDocument()
+    expect(screen.queryByTestId('wb-sk-track-pm')).toBeNull()
+    expect(within(screen.getByTestId('wb-sk-mand')).getByText(/未强制技能/)).toBeInTheDocument()
   })
 
   it('archive 阶段：无强制技能约定 → 不给编辑钮（端点拒 archive）', async () => {
@@ -320,16 +432,16 @@ function mockCustomFetch(): void {
 }
 
 describe('SkillChain v6 T10：未安装 badge(自定义模式)', () => {
-  it('已选 chip:installed:false → wb-chip--uninstalled 类 + badge,title 含 installCmd,点 badge 复制', async () => {
+  it('已选 chip:installed:false → data-uninstalled 态 + badge,title 含 installCmd,点 badge 复制', async () => {
     const writeText = vi.fn(async () => {})
     vi.stubGlobal('navigator', { ...globalThis.navigator, clipboard: { writeText } })
     mockCustomFetch()
     renderChain({ skills: [{ id: 'ext-missing' }, { id: 'skill-a' }] })
     const badge = await screen.findByTestId('wb-sk-uninst-ext-missing')
     expect(badge.title).toContain('claude plugin install ext')
-    const chip = badge.closest('.wb-chip')
+    const chip = badge.closest('[data-chip]')
     expect(chip).not.toBeNull()
-    expect(chip!.className).toContain('wb-chip--uninstalled')
+    expect(chip).toHaveAttribute('data-uninstalled')
     fireEvent.click(badge)
     await waitFor(() => expect(writeText).toHaveBeenCalledWith('claude plugin install ext'))
     // 已装的不带 badge
@@ -341,10 +453,10 @@ describe('SkillChain v6 T10：未安装 badge(自定义模式)', () => {
     const { } = renderChain({ skills: [] })
     fireEvent.click(screen.getByTestId('wb-sk-add'))
     const opt = await screen.findByTestId('wb-sk-opt-new-skill')
-    expect(opt.className).toContain('wb-skopt--uninstalled')
+    expect(opt).toHaveAttribute('data-uninstalled')
     expect(opt).toBeEnabled()
     fireEvent.click(opt)
-    expect(opt.className).toContain(' on')
+    expect(opt).toHaveAttribute('aria-pressed', 'true')
   })
 })
 
@@ -352,8 +464,7 @@ describe('SkillChain v6 T10：manifest 缺失黄条(default 模式)', () => {
   const GHOST_CONFIG = () =>
     new Response(
       JSON.stringify({
-        ok: true,
-        generated_at: '2026-07-11T00:00:00Z',
+        ...CONFIG_BODY,
         mandatory_skills: {
           'build._all': ['fallback-skill'],
           // ghost-a|ghost-b 两备选全部未装 → 该 token 触发黄条;skill-x 已装 → 不触发。
@@ -397,10 +508,10 @@ describe('SkillChain v6 T10：manifest 缺失黄条(default 模式)', () => {
     expect(screen.queryByTestId('wb-sk-banner')).toBeNull()
   })
 
-  it('/api/config 探测失败回落静态镜像(capable:false)→ 黄条不渲染(installed 不可判,保守不显示)', async () => {
+  it('/api/config 探测失败(capable:false)→ 黄条不渲染(installed 不可判,保守不显示)', async () => {
     mockDefaultFetch({ '/api/config': () => new Response('boom', { status: 500 }) })
     renderChain({}, { workflow: 'default', readonly: true })
-    await screen.findByTestId('wb-sk-tracks')
+    await screen.findByText('没有可用于技能矩阵的轨道')
     expect(screen.queryByTestId('wb-sk-banner')).toBeNull()
   })
 })

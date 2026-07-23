@@ -5,9 +5,10 @@
  * 端点：
  *   GET  /                          前端落地页（同源注入本 server token，B5 交付；#26 前端重构承接）
  *   GET  /api/health                存活探针 + 本 server 版本（B4）
- *   GET  /api/snapshot              聚合本机所有注册 Project 的 .pipeline.yaml → JSON
- *   GET  /api/stream                SSE：.pipeline.yaml 变化即推新快照 + 心跳
- *   GET  /api/config                Settings 矩阵 tab 数据源：manifest.yaml mandatory_skills 扁平映射（M3）
+ *   GET  /api/snapshot              聚合本机所有注册 Project 的 canonical state → JSON
+ *   GET  /api/change/<name>/run-detail       canonical Run/revision/ledger 审计投影
+ *   GET  /api/stream                SSE：canonical current 变化即推新快照 + 心跳
+ *   GET  /api/config?root=          Settings 数据源：mandatory_skills + 项目 effective Track Registry
  *   POST /api/change/<name>/transition        写回转换（B5 token 鉴权 + Host 守卫 + application/json）
  *   POST /api/config/mandatory-skills         写回一条 phase.track 强制 skill（同 B5 鉴权；M3 可选增量收编，
  *                                              全机唯一 manifest.yaml、无 root/name，见 config.ts 头注释）
@@ -18,21 +19,43 @@
  *     （Authorization: Bearer / X-Pipeline-Token，缺/错 → 401）；(3) 强制 application/json（借同源策略）。
  *   token 启动生成、写 0600 握手文件、同源注入前端；较老仓「仅靠同源 + 无 token」是净收紧。
  */
-import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, lstatSync, readFileSync, statSync } from 'node:fs'
+import { readdir } from 'node:fs/promises'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import type { AddressInfo } from 'node:net'
+import { homedir } from 'node:os'
 import { dirname, join, resolve as resolvePath } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { applyLevelChange, createFlowEngine, createHistoryWriter, createStateStore, firstStep, listMemSessions, loadManifest, loadRegistry, loadWorkflow, nodeMemFs, TRACKS } from '@pipeline-lite/kernel'
-import type { FlowEngine, GraduationFs, MemFs, StateStore, Track, WorkflowDef } from '@pipeline-lite/kernel'
+import {
+  ABSENT_REGISTRY_EPOCH, applyLevelChange, assertTrackDeletable, assertUpdatePreservesReferences, assertWorkflowAllowed,
+  BUILTIN_TRACK_DEFINITIONS, BuiltinTrackDeleteError, BuiltinTrackPolicyError, ChangeScanFailedError, createBreadcrumbWriter, createFlowEngine,
+  createEffectiveSkillResolver, createHistoryWriter, createLoopLedgerStore, createReviewMarkerWriter, createStateStore,
+  createTrack, createTransitionRecordStore, createWorkflowRunRepository, deleteTrack, firstStep, listMemSessions, loadManifest,
+  listAutomationPolicyTemplates, loadRegistry, loadTrackRegistry, loadWorkflow, mutateTrackRegistry, nodeMemFs, readRegistrySnapshot, RegistryRevisionConflictError,
+  requireTrack, TrackAlreadyExistsError, TrackNotFoundError, TrackReferencedError, TrackReferencesInvalidatedError, updateTrack,
+  validateWorkflow,
+  stateStorageExistsSync, validateWorkflowTrackReferences, withRegistryGovernanceLock, withTrackRegistryLock,
+  writeRegistryWithGovernance,
+} from '@pipeline-lite/kernel'
+import { createRunnerSkillContentLocator, evaluateLoopExecutionWiring } from '@pipeline-lite/automation'
+import type {
+  ChangeRefScan, CreateTrackSpec, ExtendedManifestData, FlowEngine, GraduationFs, MemFs, StateStore, TrackDefinition,
+  TrackRegistry, TrackValidationContext, UpdateTrackPatch, WorkflowDef,
+} from '@pipeline-lite/kernel'
 import { buildAfkLog, buildAfkSnapshot, cancelAfkRun, dismissAfkRun, enqueueAfkRun, readAfkRunLog, retryAfkRun } from './afk.js'
-import { applyLoopsUpdate, buildLoopsSnapshot } from './loops.js'
-import { readMandatorySkills, validateMandatorySkillsBody, writeMandatorySkills } from './config.js'
+import { applyLoopsUpdate, buildLoopsSnapshot, type LoopActivationValidator } from './loops.js'
+import { readConfigSnapshot, validateMandatorySkillsBody, writeMandatorySkills } from './config.js'
 import { readAutomationSettings, validateAutomationSettingsBody, writeAutomationSettings } from './automationConfig.js'
 import { HOOK_METAS, readHooksMatrix, validateHookToggleBody, writeHookToggle } from './hooksConfig.js'
 import { resolveServerPaths } from './paths.js'
 import { addProjectToRegistry, removeProjectFromRegistry } from './projects.js'
-import { deleteWorkflowForApi, listWorkflowNames, readWorkflowForApi, writeWorkflowForApi, WorkflowNotFoundError } from './workflows.js'
+import {
+  assertWorkflowRootAnchor, captureWorkflowDeletePermit, captureWorkflowRootAnchor, closeWorkflowRootAnchor,
+  deleteWorkflowForApi, ensureWorkflowGovernanceCoordinationPath, ensureWorkflowProjectCoordinationPath,
+  listWorkflowNames, readWorkflowForApi, scanWorkflowReferencesForApi, writeWorkflowForApi,
+  WorkflowDeleteConflictError, WorkflowNotFoundError,
+  type WorkflowRootAnchor,
+} from './workflows.js'
 import { readRegistry } from './registry.js'
 import { buildSecretsResponse, isValidSecretKey, removeSecret, SECRET_KEY_LIST, validateSecretWriteBody, writeSecret } from './secrets.js'
 import { listAllSkillsDetailed } from './skillsRegistry.js'
@@ -42,10 +65,26 @@ import { buildAfkReadiness } from './afkReadiness.js'
 import { listDockerImages } from './dockerImages.js'
 import { listTraceSessions, readTraceRecords } from './traces.js'
 import { performTransition, readChangeHistory } from './transition.js'
+import { buildRunDetail } from './runDetail.js'
+import {
+  activateChangeSession, notRequestedSessionActivation, parseChangeSessionActivation,
+  parseChangeTaskPrompt, writeChangeTaskPrompt,
+} from './changeLaunch.js'
+import {
+  cliExitHttpStatus, parsePipelineCliJson, pipelineCliAvailable, runPipelineCli,
+  type PipelineCliRunner,
+} from './operations.js'
+import { applyRouterDraft, parseRouterDraft, previewTrackRouting, scoreRouterPatternWithGrep } from './routerPreview.js'
+import { createCadenceScheduler } from './cadence.js'
 import type { DashboardServer, DashboardServerOptions } from './types.js'
 import { SERVER_VERSION } from './version.js'
 
 const MAX_POST_BODY = 64 * 1024
+const WORKFLOW_NAME_RE = /^[\p{L}\p{N}\p{M}_-]+$/u
+
+function isWorkflowName(name: string): boolean {
+  return name !== '' && WORKFLOW_NAME_RE.test(name)
+}
 
 function isoNow(): string {
   return new Date().toISOString().replace(/\.\d{3}Z$/, 'Z')
@@ -68,14 +107,16 @@ const REAL_GRADUATION_FS: GraduationFs = {
       return null
     }
   },
-  readRegistryText: (repoRoot) => {
-    try {
-      return readFileSync(join(repoRoot, '.pipeline', 'loops.yaml'), 'utf8')
-    } catch {
-      return null
-    }
+  // Stage B 返工 #3#4：level set 写回走 governance 锁 + 字节 epoch-CAS + atomic writer（与 admission
+  // 复验/cli init/level、/api/loops/update 同锁串行，绝不非治理旁路覆盖）。
+  readRegistrySnapshot: async (repoRoot) => {
+    const snap = await readRegistrySnapshot(repoRoot)
+    return snap.epoch === ABSENT_REGISTRY_EPOCH ? null : { text: snap.text, epoch: snap.epoch }
   },
-  writeRegistryText: (repoRoot, text) => writeFileSync(join(repoRoot, '.pipeline', 'loops.yaml'), text, 'utf8'),
+  writeRegistryGoverned: async (repoRoot, expectedEpoch, produce) => {
+    const r = await writeRegistryWithGovernance(repoRoot, expectedEpoch, (cur) => produce(cur))
+    return { ok: r.ok, error: r.ok ? null : r.error }
+  },
 }
 
 /** 从 packages/server/dist/server.js 位置往上定位到仓库根（对位 main.ts 的 manifestPath 写法）。 */
@@ -127,11 +168,68 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
   const paths = resolveServerPaths({ home: options.home })
   const registry: () => string[] = options.registry ?? (() => readRegistry(paths.registryPath))
   const store: StateStore = options.store ?? createStateStore()
+  const recordStore = createTransitionRecordStore()
+  const loopLedger = createLoopLedgerStore()
+  const runRepo = createWorkflowRunRepository({ store, recordStore, clock })
   const history = createHistoryWriter()
+  const breadcrumb = createBreadcrumbWriter()
+  const reviewMarker = createReviewMarkerWriter()
+  const loadedManifest: ExtendedManifestData | undefined =
+    options.manifestPath ? loadManifest(options.manifestPath) : undefined
   const flow: FlowEngine = options.flow
-    ?? (options.manifestPath
-      ? createFlowEngine(loadManifest(options.manifestPath))
+    ?? (loadedManifest
+      ? createFlowEngine(loadedManifest)
       : (() => { throw new Error('createDashboardServer: 需注入 flow 或 manifestPath') })())
+  // Track Registry 校验用 skill profile 集合（GOAL.md 清单 T · R2）：内建轨 profile（pm/frontend/
+  // backend，即 manifest 现行 skill 表 track 键）∪ manifest 两表已声明的非 '_all' 键。仅在项目
+  // tracks.yaml 存在且含自定义 track 时被 validateTrackRegistry 查；POST /api/changes 每请求按 root
+  // 现载 registry（多项目 server 无单一 root，不能装配处一次性 load）。profile 键空间改名属 R5。
+  const trackSkillProfiles: ReadonlySet<string> = (() => {
+    const s = new Set<string>()
+    for (const t of BUILTIN_TRACK_DEFINITIONS) {
+      if (t.policyProfile.skills.profile !== '_all') s.add(t.policyProfile.skills.profile)
+    }
+    if (loadedManifest) {
+      for (const table of [loadedManifest.mandatorySkills, loadedManifest.recommendedSkills]) {
+        for (const row of Object.values(table)) {
+          for (const k of Object.keys(row)) if (k !== '_all') s.add(k)
+        }
+      }
+    }
+    return s
+  })()
+  const validateLoopActivation: LoopActivationValidator | undefined = options.validateLoopActivation
+    ?? (loadedManifest === undefined
+      ? undefined
+      : async ({ root, loopId, candidate }) => {
+          const loop = candidate.loops.find((entry) => entry.id === loopId)
+          if (loop === undefined) return { ok: false, error: `候选 registry 中找不到 loop "${loopId}"` }
+          const resolver = createEffectiveSkillResolver({
+            registry: () => {
+              const rootCheck = workflowRootForRequest(root)
+              if (!rootCheck.ok) throw new Error(rootCheck.error)
+              return loadTrackRegistry(root, trackValidationContextFor(rootCheck.anchor))
+            },
+            manifest: loadedManifest,
+          })
+          const wiringForRunner = (runner: string) => ({
+            resolver,
+            locator: createRunnerSkillContentLocator({
+              runner,
+              home: options.home ?? homedir(),
+              bundledRoot: join(repoRootForSkills(), 'skills'),
+            }),
+            isSkillProfileKnown: (profileId: string) => profileId === '_all' || trackSkillProfiles.has(profileId),
+          })
+          const wiring = await evaluateLoopExecutionWiring(loop, candidate.loops, {
+            repoRoot: root,
+            skillBundleWiring: wiringForRunner(loop.runner),
+            skillBundleWiringForLoop: (entry) => wiringForRunner(entry.runner),
+          })
+          return wiring.status === 'ready'
+            ? { ok: true }
+            : { ok: false, error: `${wiring.dimension}: ${wiring.reason}` }
+        })
   const pollIntervalMs = options.pollIntervalMs ?? 1000
   const heartbeatMs = options.heartbeatMs ?? 15000
   const gitHeadSha = options.gitHeadSha
@@ -145,8 +243,115 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
   // 能力声明（GOAL B6）：afk 数据端始终已接线（读同一 registry+store 的 automation_* 字段）；
   // traffic 仅注入 traceStore 时为真（未装 → 前端 Advanced 仍占位，不谎报）；
   // loops 数据端始终已接线（无可选运行时依赖）。#29d / #34d。
-  const capabilities: Record<string, boolean> = { afk: true, loops: true, traffic: Boolean(traceStore), config: Boolean(manifestPath) }
+  const operationRunner: PipelineCliRunner = options.runPipelineCli ?? runPipelineCli
+  const operationsAvailable = options.runPipelineCli !== undefined || pipelineCliAvailable()
+  const cadenceScheduler = options.cadence === undefined || options.cadence === false
+    ? null
+    : createCadenceScheduler({
+        ...options.cadence,
+        roots: registry,
+        clock,
+        runPipelineCli: operationRunner,
+      })
+  const routerPatternScorer = options.scoreRouterPattern ?? scoreRouterPatternWithGrep
+  const capabilities: Record<string, boolean> = {
+    afk: true,
+    loops: true,
+    operations: operationsAvailable,
+    traffic: Boolean(traceStore),
+    config: Boolean(manifestPath),
+    router_preview: true,
+    cadence: cadenceScheduler !== null,
+  }
   const snapshotDeps = (): SnapshotDeps => ({ registry, store, version, clock, capabilities })
+
+  function trackRegistryBody(trackRegistry: TrackRegistry): Record<string, unknown> {
+    return {
+      ok: true,
+      revision: trackRegistry.revision,
+      source: trackRegistry.source,
+      tracks: trackRegistry.ordered,
+    }
+  }
+
+  async function scanActiveTrackChanges(root: string): Promise<ChangeRefScan> {
+    const changesRoot = join(root, 'openspec', 'changes')
+    let entries
+    try {
+      entries = await readdir(changesRoot, { withFileTypes: true })
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { refs: [], unreadable: [] }
+      return { refs: [], unreadable: [`<changes-root>: ${errMsg(error)}`] }
+    }
+    const names = entries
+      .filter((entry) => entry.isDirectory() && entry.name !== 'archive')
+      .map((entry) => entry.name)
+      .sort()
+    const refs: Array<{ name: string; track: string; workflow: string }> = []
+    const unreadable: string[] = []
+    for (const name of names) {
+      try {
+        const state = await store.read(join(changesRoot, name))
+        const track = state.fields.track
+        const workflow = state.fields.workflow
+        refs.push({
+          name,
+          track: Array.isArray(track) ? track.join(',') : (track ?? ''),
+          workflow: Array.isArray(workflow) ? workflow.join(',') : (workflow ?? ''),
+        })
+      } catch {
+        unreadable.push(name)
+      }
+    }
+    return { refs, unreadable }
+  }
+
+  function sendTrackError(res: ServerResponse, error: unknown): void {
+    if (error instanceof RegistryRevisionConflictError) {
+      return sendJson(res, 409, {
+        ok: false, code: 'TRACK_REVISION_CONFLICT', error: error.message,
+        expected: error.expected, actual: error.actual,
+      })
+    }
+    if (error instanceof TrackReferencedError) {
+      return sendJson(res, 409, { ok: false, code: 'TRACK_REFERENCED', error: error.message, references: error.references })
+    }
+    if (error instanceof TrackReferencesInvalidatedError) {
+      return sendJson(res, 409, { ok: false, code: 'TRACK_REFERENCES_INVALIDATED', error: error.message, references: error.offending })
+    }
+    if (error instanceof ChangeScanFailedError) {
+      return sendJson(res, 409, { ok: false, code: 'TRACK_REFERENCE_SCAN_FAILED', error: error.message, blockers: error.unreadable })
+    }
+    if (error instanceof TrackAlreadyExistsError) {
+      return sendJson(res, 409, { ok: false, code: 'TRACK_ALREADY_EXISTS', error: error.message })
+    }
+    if (error instanceof TrackNotFoundError) {
+      return sendJson(res, 404, { ok: false, code: 'TRACK_NOT_FOUND', error: error.message })
+    }
+    if (error instanceof BuiltinTrackDeleteError || error instanceof BuiltinTrackPolicyError) {
+      return sendJson(res, 400, { ok: false, code: 'TRACK_BUILTIN_LOCKED', error: error.message })
+    }
+    const message = errMsg(error)
+    if (message.startsWith('mutateTrackRegistry: next 未过完整校验')) {
+      return sendJson(res, 400, { ok: false, code: 'TRACK_INVALID', error: message })
+    }
+    return sendJson(res, 500, { ok: false, error: message })
+  }
+
+  async function mutateTrackForApi<T>(
+    anchor: WorkflowRootAnchor,
+    expectedRevision: string,
+    mutate: Parameters<typeof mutateTrackRegistry<T>>[2],
+  ): Promise<ReturnType<typeof mutateTrackRegistry<T>>> {
+    assertWorkflowRootAnchor(anchor)
+    ensureWorkflowProjectCoordinationPath(anchor)
+    return mutateTrackRegistry(anchor.path, trackValidationContextFor(anchor), async (snapshot) => {
+      if (snapshot.registry.revision !== expectedRevision) {
+        throw new RegistryRevisionConflictError(expectedRevision, snapshot.registry.revision)
+      }
+      return mutate(snapshot)
+    })
+  }
 
   const fileExists = (root: string, relPath: string): boolean => {
     try {
@@ -163,6 +368,83 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
   // 文案与其余 18 处不同，收敛响应会破坏行为保持。
   const isRegisteredRoot = (root: string): boolean =>
     dedupeRoots(registry()).includes(resolvePath(root))
+
+  async function executeOperation(
+    res: ServerResponse,
+    root: string,
+    args: readonly string[],
+  ): Promise<void> {
+    if (!operationsAvailable) {
+      return sendJson(res, 503, { ok: false, error: 'Operations 未接线：pipeline CLI bundle 不存在' })
+    }
+    if (!root || !isRegisteredRoot(root)) {
+      return sendJson(res, 404, { ok: false, error: 'root 未在机器级项目注册表中' })
+    }
+    try {
+      const result = await operationRunner(resolvePath(root), args)
+      return sendJson(res, cliExitHttpStatus(result.exitCode), {
+        ok: result.exitCode === 0,
+        exit_code: result.exitCode,
+        command: ['pipeline', ...args],
+        result: parsePipelineCliJson(result.stdout),
+        stdout: result.stdout.trimEnd(),
+        stderr: result.stderr.trimEnd(),
+      })
+    } catch (error) {
+      return sendJson(res, 500, { ok: false, error: errMsg(error) })
+    }
+  }
+
+  // workflow CRUD 的注册根是能力锚，不是每请求可重新学习的 pathname。启动时只捕获当下已注册、
+  // 且确为非 symlink 目录的 inode；注册表在进程外新增的条目不会在首个业务请求上补锚（那会把
+  // 已被换位的路径误认成可信），须经 POST /api/projects 显式注册或重启 server。
+  const workflowRootAnchors = new Map<string, WorkflowRootAnchor>()
+  try {
+    for (const root of dedupeRoots(registry())) {
+      try { workflowRootAnchors.set(root, captureWorkflowRootAnchor(root)) } catch { /* 陈旧/不安全条目隔离 */ }
+    }
+  } catch {
+    // 注册表读取本就具 best-effort 语义；读取失败时 workflow CRUD 没有锚，统一 fail-closed。
+  }
+
+  type WorkflowRootCheck =
+    | { ok: true; anchor: WorkflowRootAnchor }
+    | { ok: false; code: 403 | 404; error: string }
+
+  const workflowRootForRequest = (root: string): WorkflowRootCheck => {
+    const normalized = resolvePath(root)
+    if (!dedupeRoots(registry()).includes(normalized)) {
+      const stale = workflowRootAnchors.get(normalized)
+      if (stale) {
+        closeWorkflowRootAnchor(stale)
+        workflowRootAnchors.delete(normalized)
+      }
+      return { ok: false, code: 404, error: 'root 未在机器级项目注册表中' }
+    }
+    const anchor = workflowRootAnchors.get(normalized)
+    if (!anchor) {
+      return { ok: false, code: 403, error: 'registered root 未在 server 启动/显式注册时建立可信 inode 锚' }
+    }
+    try {
+      assertWorkflowRootAnchor(anchor)
+      return { ok: true, anchor }
+    } catch (e) {
+      return { ok: false, code: 403, error: errMsg(e) }
+    }
+  }
+
+  const trackValidationContextFor = (anchor: WorkflowRootAnchor): TrackValidationContext => ({
+    workflowExists: (id) => {
+      if (id === 'default') return true
+      try {
+        readWorkflowForApi(anchor, id)
+        return true
+      } catch {
+        return false
+      }
+    },
+    skillProfiles: trackSkillProfiles,
+  })
 
   let boundPort = 0
 
@@ -381,6 +663,17 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
 
   // ── 路由 ──
   async function handleGet(req: IncomingMessage, res: ServerResponse, path: string): Promise<void> {
+    if (path === '/api/cadence/status') {
+      if (cadenceScheduler === null) {
+        return sendJson(res, 404, { ok: false, error: 'cadence scheduler 未启用（capabilities.cadence=false）' })
+      }
+      const root = new URL(req.url ?? '/', 'http://localhost').searchParams.get('root')
+      const status = cadenceScheduler.snapshot()
+      return sendJson(res, 200, root === null ? status : {
+        ...status,
+        loops: status.loops.filter((row) => row.root === resolvePath(root)),
+      })
+    }
     if (path === '/' || path === '/index.html') {
       if (serveIndexWithToken(res)) return // SPA 产物存在 → 服务真前端
       return sendHtml(res, 200, indexHtml(token)) // 回退最小落地页
@@ -406,6 +699,18 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
       }
     }
     if (path === '/api/stream') return handleStream(req, res)
+    // ── H11 starter gallery：直接投影 kernel 版本化模板目录，不在前端手抄七份。──
+    if (path === '/api/operations/starters') {
+      const root = new URL(req.url ?? '/', 'http://localhost').searchParams.get('root') ?? ''
+      if (!isRegisteredRoot(root)) {
+        return sendJson(res, 404, { ok: false, error: 'root 未在机器级项目注册表中' })
+      }
+      return sendJson(res, 200, {
+        ok: true,
+        templates: listAutomationPolicyTemplates(),
+        defaults: { runner: 'codex', workflow: 'default' },
+      })
+    }
     // ── #29d AFK 指挥面数据端：聚合 automation_* → 泳道 + 调度器 doctor 灯 + 流水 ──
     if (path === '/api/afk/snapshot') {
       try {
@@ -444,13 +749,13 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
       // ENOENT 前置校验（同 cancelAfkRun/retryAfkRun 的存在性前置）：change 真不存在时给 400，
       // 不与「change 存在但还没日志」的 200 { log: null } 混为一谈。这里刻意用 400 而非看似更
       // "RESTful" 的 404——三个同由 root+name 寻址的兄弟端点（cancel/retry/log）在这条完全相同
-      // 的 !existsSync(.pipeline.yaml) 判断上必须给同一状态码：cancel/retry 经
+      // 的“canonical current 与 legacy YAML 都不存在”判断上必须给同一状态码：cancel/retry 经
       // `sendJson(res, result.ok ? 200 : 400, result)` 把这个条件统一收敛成 400（见下方两个
       // handlePost 分支），log 若单独选 404 会让共享这三个端点错误处理逻辑的前端踩坑（review
       // finding）。root 未注册（上面那个分支）仍是 404，因为那是三端点另一个真正统一使用 404
       // 的既有约定，与此处无关。
-      if (!existsSync(join(dir, '.pipeline.yaml'))) {
-        return sendJson(res, 400, { ok: false, error: '找不到该 change（无 .pipeline.yaml）' })
+      if (!stateStorageExistsSync(dir)) {
+        return sendJson(res, 400, { ok: false, error: '找不到该 change（无 canonical/legacy 状态）' })
       }
       return sendJson(res, 200, { log: await readAfkRunLog(dir) })
     }
@@ -472,10 +777,35 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
         return sendJson(res, 404, { ok: false, error: 'root 未在机器级项目注册表中' })
       }
       const dir = join(root, 'openspec', 'changes', name)
-      if (!existsSync(join(dir, '.pipeline.yaml'))) {
-        return sendJson(res, 400, { ok: false, error: '找不到该 change（无 .pipeline.yaml）' })
+      if (!stateStorageExistsSync(dir)) {
+        return sendJson(res, 400, { ok: false, error: '找不到该 change（无 canonical/legacy 状态）' })
       }
-      return sendJson(res, 200, { entries: await readChangeHistory(dir) })
+      return sendJson(res, 200, { entries: await readChangeHistory(dir, { store, recordStore }) })
+    }
+    // ── Control Room：canonical WorkflowRun + TransitionRecord + 关联 loop ledger 审计真相源。──
+    const mRunDetail = /^\/api\/change\/([^/]+)\/run-detail$/.exec(path)
+    if (mRunDetail) {
+      const name = decodeURIComponent(mRunDetail[1]!)
+      if (!name || !/^[a-zA-Z0-9_-]+$/.test(name) || name.includes('..')) {
+        return sendJson(res, 400, { ok: false, error: '非法 change 名（仅允许 a-z A-Z 0-9 - _）' })
+      }
+      const root = new URL(req.url ?? '/', 'http://localhost').searchParams.get('root') ?? ''
+      if (!isRegisteredRoot(root)) {
+        return sendJson(res, 404, { ok: false, error: 'root 未在机器级项目注册表中' })
+      }
+      const dir = join(root, 'openspec', 'changes', name)
+      if (!stateStorageExistsSync(dir)) {
+        return sendJson(res, 400, { ok: false, error: '找不到该 change（无 canonical/legacy 状态）' })
+      }
+      try {
+        return sendJson(res, 200, await buildRunDetail(root, dir, name, {
+          store,
+          recordStore,
+          ledger: loopLedger,
+        }))
+      } catch (error) {
+        return sendJson(res, 500, { ok: false, error: errMsg(error) })
+      }
     }
     // ── loops 治理面数据端：跨项目聚合 loops.yaml ──
     if (path === '/api/loops/snapshot') {
@@ -505,11 +835,53 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
         return sendJson(res, 500, { ok: false, error: errMsg(e) })
       }
     }
-    // ── M3 config 数据端：Settings 矩阵 tab 的 phase×track 强制 skill 表（GET 只读，本机回环不鉴权）──
+    // ── v3 Studio Track Registry：独立只读端点，不依赖 manifest/config capability。──
+    if (path === '/api/tracks') {
+      const root = new URL(req.url ?? '/', 'http://localhost').searchParams.get('root') ?? ''
+      const rootCheck = workflowRootForRequest(root)
+      if (!rootCheck.ok) return sendJson(res, rootCheck.code, { ok: false, error: rootCheck.error })
+      try {
+        assertWorkflowRootAnchor(rootCheck.anchor)
+        let pipelineExists = true
+        try { lstatSync(join(rootCheck.anchor.path, '.pipeline')) } catch (error) {
+          if ((error as NodeJS.ErrnoException).code === 'ENOENT') pipelineExists = false
+          else throw error
+        }
+        if (pipelineExists) ensureWorkflowProjectCoordinationPath(rootCheck.anchor)
+        const trackRegistry = loadTrackRegistry(rootCheck.anchor.path, trackValidationContextFor(rootCheck.anchor))
+        assertWorkflowRootAnchor(rootCheck.anchor)
+        return sendJson(res, 200, trackRegistryBody(trackRegistry))
+      } catch (error) {
+        return sendJson(res, 500, { ok: false, error: errMsg(error) })
+      }
+    }
+    // ── G3/T-R5 config 数据端：manifest 强制 skill 表 + 项目 effective Track Registry。──
     if (path === '/api/config') {
       if (!manifestPath) return sendJson(res, 404, { ok: false, error: 'config 数据端未装（capabilities.config=false）' })
+      const root = new URL(req.url ?? '/', 'http://localhost').searchParams.get('root') ?? ''
+      if (root === '') return sendJson(res, 400, { ok: false, error: '缺少 root 参数' })
+      const rootCheck = workflowRootForRequest(root)
+      if (!rootCheck.ok) return sendJson(res, rootCheck.code, { ok: false, error: rootCheck.error })
       try {
-        return sendJson(res, 200, { ok: true, generated_at: clock(), mandatory_skills: readMandatorySkills(manifestPath) })
+        assertWorkflowRootAnchor(rootCheck.anchor)
+        // 缺 `.pipeline` 是 builtin-only 的合法纯读路径，不能为 GET 凭空创建目录；目录一旦存在，
+        // 则先复用 G6 的 O_NOFOLLOW/inode 校验，拒绝 `.pipeline` 或 tracks.yaml 外部 symlink。
+        let pipelineExists = true
+        try {
+          lstatSync(join(rootCheck.anchor.path, '.pipeline'))
+        } catch (e) {
+          if ((e as NodeJS.ErrnoException).code === 'ENOENT') pipelineExists = false
+          else throw e
+        }
+        if (pipelineExists) ensureWorkflowProjectCoordinationPath(rootCheck.anchor)
+        const snapshot = readConfigSnapshot({
+          manifestPath,
+          repoRoot: rootCheck.anchor.path,
+          trackValidationContext: trackValidationContextFor(rootCheck.anchor),
+          generatedAt: clock(),
+        })
+        assertWorkflowRootAnchor(rootCheck.anchor)
+        return sendJson(res, 200, snapshot)
       } catch (e) {
         return sendJson(res, 500, { ok: false, error: errMsg(e) })
       }
@@ -556,11 +928,10 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
     // ── workflow 编辑器（GOAL E8）：GET /api/workflows —— 列出自定义 workflow（排除 default）──
     if (path === '/api/workflows') {
       const root = new URL(req.url ?? '/', 'http://localhost').searchParams.get('root') ?? ''
-      if (!isRegisteredRoot(root)) {
-        return sendJson(res, 404, { ok: false, error: 'root 未在机器级项目注册表中' })
-      }
+      const rootCheck = workflowRootForRequest(root)
+      if (!rootCheck.ok) return sendJson(res, rootCheck.code, { ok: false, error: rootCheck.error })
       try {
-        return sendJson(res, 200, { names: listWorkflowNames(root) })
+        return sendJson(res, 200, { names: listWorkflowNames(rootCheck.anchor) })
       } catch (e) {
         return sendJson(res, 500, { ok: false, error: errMsg(e) })
       }
@@ -568,26 +939,53 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
 
     // ── workflow 编辑器（GOAL E8）：GET /api/workflows/:name —— 读单个 workflow ──
     // 校验顺序同 /api/afk/<name>/log、/api/afk/<name>/cancel、/api/afk/<name>/retry：
-    // 先 name 格式（防路径穿越：拒 '..' 等非法段落入 loadWorkflow 内部的 join），
+    // 先 name 格式（防路径穿越：拒 '..' 等非法段落入安全读取层的 child lookup），
     // 再 root 信任锚，最后真读+解析。
     const mWfGet = /^\/api\/workflows\/([^/]+)$/.exec(path)
     if (mWfGet) {
       const wfName = decodeURIComponent(mWfGet[1]!)
-      if (!wfName || !/^[a-zA-Z0-9_-]+$/.test(wfName) || wfName.includes('..')) {
-        return sendJson(res, 400, { ok: false, error: '非法 workflow 名（仅允许 a-z A-Z 0-9 - _）' })
+      if (!isWorkflowName(wfName)) {
+        return sendJson(res, 400, { ok: false, error: '非法 workflow 名（允许中文、字母、数字、- 与 _；不允许空格、点或路径符号）' })
       }
       const root = new URL(req.url ?? '/', 'http://localhost').searchParams.get('root') ?? ''
-      if (!isRegisteredRoot(root)) {
-        return sendJson(res, 404, { ok: false, error: 'root 未在机器级项目注册表中' })
+      const rootCheck = workflowRootForRequest(root)
+      if (!rootCheck.ok) return sendJson(res, rootCheck.code, { ok: false, error: rootCheck.error })
+      try {
+        // 先用 G6 安全读区分真 404/结构损坏；目标存在后才准备 project lock，避免 GET ghost
+        // 为纯查询凭空创建 `.pipeline`。
+        readWorkflowForApi(rootCheck.anchor, wfName)
+        ensureWorkflowProjectCoordinationPath(rootCheck.anchor)
+      } catch (e) {
+        return sendJson(res, e instanceof WorkflowNotFoundError ? 404 : 500, { ok: false, error: errMsg(e) })
       }
       try {
-        return sendJson(res, 200, readWorkflowForApi(root, wfName))
+        const checked = await withTrackRegistryLock(
+          rootCheck.anchor.path,
+          trackValidationContextFor(rootCheck.anchor),
+          async ({ registry }) => {
+            assertWorkflowRootAnchor(rootCheck.anchor)
+            const workflow = readWorkflowForApi(rootCheck.anchor, wfName)
+            return { workflow, errors: validateWorkflowTrackReferences(workflow, registry) }
+          },
+        )
+        if (checked.errors.length > 0) {
+          return sendJson(res, 409, {
+            ok: false,
+            code: 'WORKFLOW_TRACK_REFERENCES_INVALID',
+            workflow: wfName,
+            errors: checked.errors,
+          })
+        }
+        return sendJson(res, 200, checked.workflow)
       } catch (e) {
-        // 结构化判断（round 2 review fix）：不再对错误信息做子串匹配（loadWorkflow 的校验/
-        // 解析错误会把用户自起的 step id / event 名等任意文本原样拼进消息，子串匹配会被
-        // 这些文本误导），改用 WorkflowNotFoundError 的类型区分「真不存在」（404）与
-        // 「存在但校验/解析失败」（500）。
-        return sendJson(res, e instanceof WorkflowNotFoundError ? 404 : 500, { ok: false, error: errMsg(e) })
+        if (e instanceof WorkflowNotFoundError) return sendJson(res, 404, { ok: false, error: errMsg(e) })
+        // registry 本身损坏/引用缺失同样不能把 workflow 伪装成健康 200；显式 degraded 409。
+        return sendJson(res, 409, {
+          ok: false,
+          code: 'WORKFLOW_REFERENCE_CONTEXT_DEGRADED',
+          workflow: wfName,
+          errors: [errMsg(e)],
+        })
       }
     }
     // ── v6 T1：GET /api/secrets —— 机器级凭证存储只读探测（掩码，永不回明文）──
@@ -621,7 +1019,12 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
         return sendJson(res, 404, { ok: false, error: 'root 未在机器级项目注册表中' })
       }
       const image = readAutomationSettings(root).image || 'sandcastle:local'
-      const r = await buildAfkReadiness({ image, secretsPath: paths.secretsPath, exec: options.execDocker })
+      const r = await buildAfkReadiness({
+        image,
+        secretsPath: paths.secretsPath,
+        exec: options.execDocker,
+        defaultCodexHome: join(homedir(), '.codex'),
+      })
       return sendJson(res, 200, r)
     }
     // ── v9-I：GET /api/mem/session-link?root=&name= —— change ↔ 终端会话关联（恢复命令）。──
@@ -645,8 +1048,8 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
         return sendJson(res, 404, { ok: false, error: 'root 未在机器级项目注册表中' })
       }
       const changeDir = join(root, 'openspec', 'changes', name)
-      if (!existsSync(join(changeDir, '.pipeline.yaml'))) {
-        return sendJson(res, 400, { ok: false, error: '找不到该 change（无 .pipeline.yaml）' })
+      if (!stateStorageExistsSync(changeDir)) {
+        return sendJson(res, 400, { ok: false, error: '找不到该 change（无 canonical/legacy 状态）' })
       }
       return sendJson(res, 200, await resolveSessionLink(root, name))
     }
@@ -682,7 +1085,7 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
             !name.includes('..') &&
             root !== '' &&
             isRegisteredRoot(root) &&
-            existsSync(join(root, 'openspec', 'changes', name, '.pipeline.yaml'))
+            stateStorageExistsSync(join(root, 'openspec', 'changes', name))
           links[key] = valid ? await resolveSessionLink(root, name) : { found: false, reason: 'invalid' }
         }),
       )
@@ -707,16 +1110,254 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
       return sendJson(res, 400, { ok: false, error: '写回端点要求 Content-Type: application/json' })
     }
 
+    // ── Track Router 公共预览：消费 effective registry，生产默认 scorer 真执行 grep -ciE。──
+    // 虽然不写盘，仍走 POST：prompt 可能较长且携带用户意图，不放 URL/query；统一受 token、Host、
+    // JSON 三闸保护。响应保留全部候选分数，suppressed_reason 非空时 winner=null，显式创建 UI 仍可手选。
+    if (path === '/api/router/preview') {
+      const raw = await readJsonBody(req)
+      if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+        return sendJson(res, 400, { ok: false, error: '请求体须为 JSON 对象' })
+      }
+      const body = raw as Record<string, unknown>
+      const root = typeof body.root === 'string' ? body.root : ''
+      const prompt = typeof body.prompt === 'string' ? body.prompt : ''
+      if (prompt.trim() === '') return sendJson(res, 400, { ok: false, error: 'prompt 不得为空' })
+      const rootCheck = workflowRootForRequest(root)
+      if (!rootCheck.ok) return sendJson(res, rootCheck.code, { ok: false, error: rootCheck.error })
+      try {
+        assertWorkflowRootAnchor(rootCheck.anchor)
+        let pipelineExists = true
+        try { lstatSync(join(rootCheck.anchor.path, '.pipeline')) } catch (error) {
+          if ((error as NodeJS.ErrnoException).code === 'ENOENT') pipelineExists = false
+          else throw error
+        }
+        if (pipelineExists) ensureWorkflowProjectCoordinationPath(rootCheck.anchor)
+        const registry = loadTrackRegistry(rootCheck.anchor.path, trackValidationContextFor(rootCheck.anchor))
+        const draft = body.draft_track === undefined ? null : parseRouterDraft(body.draft_track)
+        const candidates = draft === null ? registry.ordered : applyRouterDraft(registry.ordered, draft)
+        const preview = await previewTrackRouting(prompt, candidates, routerPatternScorer)
+        assertWorkflowRootAnchor(rootCheck.anchor)
+        return sendJson(res, 200, { ok: true, revision: registry.revision, source: registry.source, ...preview })
+      } catch (error) {
+        return sendJson(res, 400, { ok: false, error: errMsg(error) })
+      }
+    }
+
+    // ── H11-H14/G2 Operations：HTTP 只负责严格校验 + argv 映射；执行语义复用 built CLI。──
+    if (path === '/api/operations/loops/init') {
+      const raw = await readJsonBody(req)
+      if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+        return sendJson(res, 400, { ok: false, error: '请求体须为 JSON 对象' })
+      }
+      const body = raw as Record<string, unknown>
+      const root = typeof body.root === 'string' ? body.root : ''
+      const id = typeof body.id === 'string' ? body.id.trim() : ''
+      const template = typeof body.template === 'string' ? body.template : ''
+      const workflow = typeof body.workflow === 'string' && body.workflow.trim() !== '' ? body.workflow.trim() : 'default'
+      const runner = typeof body.runner === 'string' && body.runner.trim() !== '' ? body.runner.trim() : 'codex'
+      const skillBundle = typeof body.skill_bundle === 'string' ? body.skill_bundle.trim() : ''
+      const goal = typeof body.goal === 'string' ? body.goal.trim() : ''
+      if (!/^[a-z][a-z0-9-]{1,63}$/.test(id)) {
+        return sendJson(res, 400, { ok: false, error: 'id 须为 2-64 位 kebab-case' })
+      }
+      if (!listAutomationPolicyTemplates().some((item) => item.id === template)) {
+        return sendJson(res, 400, { ok: false, error: 'template 不在版本化 starter 目录中' })
+      }
+      if (runner !== 'codex' && runner !== 'claude-code') {
+        return sendJson(res, 400, { ok: false, error: 'runner 仅允许 codex 或 claude-code' })
+      }
+      const args = [
+        'loops', 'init', '--id', id, '--template', template, '--workflow', workflow,
+        ...(skillBundle === '' ? [] : ['--skill-bundle', skillBundle]),
+        '--runner', runner,
+        ...(goal === '' ? [] : ['--goal', goal]),
+        '--yes', '--json',
+      ]
+      return executeOperation(res, root, args)
+    }
+
+    if (path === '/api/operations/loops/run') {
+      const raw = await readJsonBody(req)
+      if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+        return sendJson(res, 400, { ok: false, error: '请求体须为 JSON 对象' })
+      }
+      const body = raw as Record<string, unknown>
+      const root = typeof body.root === 'string' ? body.root : ''
+      const selector = typeof body.selector === 'string' ? body.selector.trim() : ''
+      const level = typeof body.level === 'string' ? body.level : 'L1'
+      const dryRun = body.dry_run !== false
+      const commit = body.commit === true
+      if (selector === '' || !['L1', 'L2', 'L3'].includes(level)) {
+        return sendJson(res, 400, { ok: false, error: 'selector 必填，level 仅允许 L1/L2/L3' })
+      }
+      if (!dryRun && body.confirm_run !== true) {
+        return sendJson(res, 400, { ok: false, error: '真实运行须显式 confirm_run=true' })
+      }
+      if (!dryRun && level === 'L3' && body.confirm_l3 !== true) {
+        return sendJson(res, 400, { ok: false, error: 'L3 自动合并须额外 confirm_l3=true' })
+      }
+      const args = [
+        'loops', 'run', selector,
+        ...(dryRun ? ['--dry-run'] : []),
+        '--level', level,
+        ...(!dryRun && commit ? ['--commit'] : []),
+        '--json',
+      ]
+      return executeOperation(res, root, args)
+    }
+
+    if (path === '/api/operations/loops/sync') {
+      const raw = await readJsonBody(req)
+      if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+        return sendJson(res, 400, { ok: false, error: '请求体须为 JSON 对象' })
+      }
+      const body = raw as Record<string, unknown>
+      const root = typeof body.root === 'string' ? body.root : ''
+      const loopId = typeof body.loop_id === 'string' ? body.loop_id.trim() : ''
+      const mode = body.mode === 'apply' ? 'apply' : body.mode === 'dry-run' ? 'dry-run' : ''
+      if (loopId === '' || mode === '') {
+        return sendJson(res, 400, { ok: false, error: 'loop_id 必填，mode 仅允许 dry-run/apply' })
+      }
+      if (mode === 'apply' && body.confirm_apply !== true) {
+        return sendJson(res, 400, { ok: false, error: 'sync apply 须显式 confirm_apply=true' })
+      }
+      const registrySha = typeof body.expected_registry_sha === 'string' ? body.expected_registry_sha.trim() : ''
+      const workflowSha = typeof body.expected_workflow_sha === 'string' ? body.expected_workflow_sha.trim() : ''
+      const args = [
+        'loops', 'sync', loopId, mode === 'apply' ? '--apply' : '--dry-run',
+        ...(registrySha === '' ? [] : ['--expected-registry-sha', registrySha]),
+        ...(workflowSha === '' ? [] : ['--expected-workflow-sha', workflowSha]),
+        '--json',
+      ]
+      return executeOperation(res, root, args)
+    }
+
+    if (path === '/api/operations/triage') {
+      const raw = await readJsonBody(req)
+      if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+        return sendJson(res, 400, { ok: false, error: '请求体须为 JSON 对象' })
+      }
+      const body = raw as Record<string, unknown>
+      const root = typeof body.root === 'string' ? body.root : ''
+      const source = body.source === 'git-commits' || body.source === 'loop-run-terminals' ? body.source : ''
+      if (source === '') return sendJson(res, 400, { ok: false, error: 'source 仅允许 git-commits/loop-run-terminals' })
+      if (body.confirm_apply !== true) {
+        return sendJson(res, 400, { ok: false, error: 'triage 会创建 WorkflowRun 并提交 checkpoint，须显式 confirm_apply=true' })
+      }
+      const positiveInt = (value: unknown, fallback: number): number =>
+        typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? value : fallback
+      const model = typeof body.model === 'string' ? body.model.trim() : ''
+      const args = [
+        'triage', source, '--provider', 'codex',
+        ...(model === '' ? [] : ['--model', model]),
+        '--page-size', String(positiveInt(body.page_size, 20)),
+        '--max-pages', String(positiveInt(body.max_pages, 4)),
+        '--max-high-candidates', String(positiveInt(body.max_high_candidates, 10)),
+        '--json',
+      ]
+      return executeOperation(res, root, args)
+    }
+
+    if (path === '/api/operations/artifact/register') {
+      const raw = await readJsonBody(req)
+      if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+        return sendJson(res, 400, { ok: false, error: '请求体须为 JSON 对象' })
+      }
+      const body = raw as Record<string, unknown>
+      const root = typeof body.root === 'string' ? body.root : ''
+      const change = typeof body.change === 'string' ? body.change.trim() : ''
+      const field = typeof body.field === 'string' ? body.field.trim() : ''
+      const artifactPath = typeof body.path === 'string' ? body.path : ''
+      const producer = typeof body.producer === 'string' ? body.producer.trim() : ''
+      if (!/^[a-zA-Z0-9_-]+$/.test(change) || field === '' || artifactPath === '' || producer === '') {
+        return sendJson(res, 400, { ok: false, error: 'change/field/path/producer 均为必填且 change 名须合法' })
+      }
+      return executeOperation(res, root, [
+        'artifact', 'register', change, field, artifactPath, '--producer', producer,
+      ])
+    }
+
+    // ── G1 canonical/projection 显式修复面。默认拒绝把 legacy 重新提升为真相源。──
+    const projectionMatch = /^\/api\/change\/([^/]+)\/projection$/.exec(path)
+    if (projectionMatch) {
+      const name = decodeURIComponent(projectionMatch[1]!)
+      if (!name || !/^[a-zA-Z0-9_-]+$/.test(name) || name.includes('..')) {
+        return sendJson(res, 400, { ok: false, error: '非法 change 名（仅允许 a-z A-Z 0-9 - _）' })
+      }
+      const raw = await readJsonBody(req)
+      if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+        return sendJson(res, 400, { ok: false, error: '请求体须为 JSON 对象' })
+      }
+      const body = raw as Record<string, unknown>
+      const root = typeof body.root === 'string' ? body.root : ''
+      if (!isRegisteredRoot(root)) {
+        return sendJson(res, 404, { ok: false, error: 'root 未在机器级项目注册表中' })
+      }
+      const dir = join(root, 'openspec', 'changes', name)
+      if (!stateStorageExistsSync(dir)) {
+        return sendJson(res, 400, { ok: false, error: '找不到该 change（无 canonical/legacy 状态）' })
+      }
+      try {
+        if (body.action === 'repair-projection') {
+          const projection = await store.repairProjection(dir, { forceCanonical: body.force_canonical === true })
+          return sendJson(res, 200, { ok: true, action: body.action, projection })
+        }
+        if (body.action === 'import-legacy') {
+          if (body.confirm_import !== true) {
+            return sendJson(res, 400, { ok: false, error: 'import-legacy 须显式 confirm_import=true' })
+          }
+          const imported = await store.importLegacyProjection(dir)
+          return sendJson(res, 200, { ok: true, action: body.action, projection: imported.projection })
+        }
+        return sendJson(res, 400, { ok: false, error: 'action 仅允许 repair-projection/import-legacy' })
+      } catch (error) {
+        return sendJson(res, 409, { ok: false, error: errMsg(error) })
+      }
+    }
+
     // ── G18：POST /api/projects —— 注册项目进机器级注册表 ──
     //    全仓唯一豁免第四层信任锚的写端点（职责就是把 root 放进注册表，"必须已注册"逻辑
     //    不成立）；补偿校验（路径存在/是目录/规范化判重）在 projects.ts 内完成。
     if (path === '/api/projects') {
       const body = await readJsonBody(req)
       const rawRoot = typeof body === 'object' && body !== null ? (body as Record<string, unknown>).root : undefined
+      let pendingAnchor: WorkflowRootAnchor | undefined
+      if (typeof rawRoot === 'string' && rawRoot) {
+        try {
+          pendingAnchor = captureWorkflowRootAnchor(rawRoot)
+        } catch (e) {
+          // projects.ts 历来用 stat 跟随 symlink；workflow 能力锚必须更严：最终词法段本身若是
+          // symlink，不能先把它写进注册表再在业务请求上学习其目标 inode。
+          try {
+            if (lstatSync(resolvePath(rawRoot)).isSymbolicLink()) {
+              return sendJson(res, 400, { ok: false, error: `registered root 不得是 symlink：${resolvePath(rawRoot)}` })
+            }
+          } catch {
+            // 不存在/不可访问/非目录继续交给 projects.ts，以保持既有 404 文案与状态码。
+          }
+        }
+      }
       const result = await addProjectToRegistry(paths.registryPath, rawRoot)
-      return result.ok
-        ? sendJson(res, 200, { ok: true, root: result.root })
-        : sendJson(res, result.code, { ok: false, error: result.error })
+      if (!result.ok) {
+        if (pendingAnchor) closeWorkflowRootAnchor(pendingAnchor)
+        return sendJson(res, result.code, { ok: false, error: result.error })
+      }
+      if (!pendingAnchor || pendingAnchor.path !== result.root) {
+        if (pendingAnchor) closeWorkflowRootAnchor(pendingAnchor)
+        await removeProjectFromRegistry(paths.registryPath, result.root).catch(() => undefined)
+        return sendJson(res, 400, { ok: false, error: 'registered root 在注册期间未能建立稳定 inode 锚' })
+      }
+      try {
+        assertWorkflowRootAnchor(pendingAnchor)
+      } catch (e) {
+        closeWorkflowRootAnchor(pendingAnchor)
+        await removeProjectFromRegistry(paths.registryPath, result.root).catch(() => undefined)
+        return sendJson(res, 400, { ok: false, error: errMsg(e) })
+      }
+      const previous = workflowRootAnchors.get(result.root)
+      if (previous) closeWorkflowRootAnchor(previous)
+      workflowRootAnchors.set(result.root, pendingAnchor)
+      return sendJson(res, 200, { ok: true, root: result.root })
     }
 
     // ── G18：POST /api/changes —— pipeline init 的 HTTP 化 ──
@@ -732,45 +1373,99 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
       }
       const b = rawBody as Record<string, unknown>
       const root = typeof b.root === 'string' ? b.root : ''
-      if (!isRegisteredRoot(root)) {
-        return sendJson(res, 404, { ok: false, error: 'root 未在机器级项目注册表中' })
-      }
+      const rootCheck = workflowRootForRequest(root)
+      if (!rootCheck.ok) return sendJson(res, rootCheck.code, { ok: false, error: rootCheck.error })
       const name = typeof b.name === 'string' ? b.name : ''
       if (!name || !/^[a-zA-Z0-9_-]+$/.test(name)) {
         return sendJson(res, 400, { ok: false, error: '非法 change 名（仅允许 a-z A-Z 0-9 - _）' })
       }
-      const track = typeof b.track === 'string' && b.track ? b.track : 'chat'
-      if (!(TRACKS as readonly string[]).includes(track)) {
-        return sendJson(res, 400, { ok: false, error: `非法 track '${track}'，允许: ${TRACKS.join(' | ')}` })
-      }
-      const workflow = typeof b.workflow === 'string' && b.workflow ? b.workflow : 'default'
-      let customStart: { workflow: string; phase: string } | undefined
-      if (workflow !== 'default') {
-        let wf: ReturnType<typeof loadWorkflow>
-        try {
-          wf = loadWorkflow(root, workflow)
-        } catch (e) {
-          return sendJson(res, 400, { ok: false, error: errMsg(e) })
-        }
-        if (!wf) {
-          return sendJson(res, 404, { ok: false, error: `workflow '${workflow}' 未找到（期望 .pipeline/workflows/${workflow}.yaml）` })
-        }
-        // 首 step 习语单源在 kernel firstStep（Wave 2 下沉；空 steps → null，响应字节不变）
-        const first = firstStep(wf)
-        if (!first) {
-          return sendJson(res, 400, { ok: false, error: `workflow '${workflow}' 未声明任何 step` })
-        }
-        customStart = { workflow, phase: first.id }
-      }
-      let created: string
+      const taskPrompt = parseChangeTaskPrompt(b.task_prompt)
+      if (!taskPrompt.ok) return sendJson(res, 400, { ok: false, error: taskPrompt.error })
+      const activation = parseChangeSessionActivation(b.activate_session, taskPrompt.value !== null)
+      if (!activation.ok) return sendJson(res, 400, { ok: false, error: activation.error })
+      // track/workflow 绑定改走 Track Registry（GOAL.md 清单 T · R2）：缺省仍是不可删内建轨 'chat'；
+      // 按 root 现载 registry（缺 tracks.yaml → 内建四轨，requireTrack 与旧 TRACKS 枚举校验等价），
+      // 再校验「该 track 是否允许该 workflow」（assertWorkflowAllowed）。全部先于任何落盘。
+      const trackId = typeof b.track === 'string' && b.track ? b.track : 'chat'
+      const workflowRaw = typeof b.workflow === 'string' && b.workflow ? b.workflow : ''
       try {
-        created = await store.init({ repoRoot: root, name, track: track as Track, preset: 'full', clock })
+        ensureWorkflowProjectCoordinationPath(rootCheck.anchor)
+      } catch (e) {
+        return sendJson(res, 500, { ok: false, error: errMsg(e) })
+      }
+
+      type CreateChangeOutcome =
+        | { readonly ok: true; readonly created: string; readonly taskPromptSaved: boolean }
+        | { readonly ok: false; readonly code: 400 | 404 | 500; readonly error: string }
+      let outcome: CreateChangeOutcome
+      try {
+        outcome = await withTrackRegistryLock(
+          rootCheck.anchor.path,
+          trackValidationContextFor(rootCheck.anchor),
+          async ({ registry }): Promise<CreateChangeOutcome> => {
+            assertWorkflowRootAnchor(rootCheck.anchor)
+            let track: TrackDefinition
+            let workflowId: string
+            try {
+              track = requireTrack(registry, trackId)
+              workflowId = workflowRaw || track.workflow.default
+              assertWorkflowAllowed(track, workflowId)
+            } catch (e) {
+              return { ok: false, code: 400, error: errMsg(e) }
+            }
+
+            let customStart: { workflow: string; phase: string; openspecContract?: boolean } | undefined
+            if (workflowId !== 'default') {
+              let workflow: WorkflowDef
+              try {
+                workflow = readWorkflowForApi(rootCheck.anchor, workflowId)
+              } catch (e) {
+                return e instanceof WorkflowNotFoundError
+                  ? { ok: false, code: 404, error: `workflow '${workflowId}' 未找到（期望 .pipeline/workflows/${workflowId}.yaml）` }
+                  : { ok: false, code: 400, error: errMsg(e) }
+              }
+              const referenceErrors = validateWorkflowTrackReferences(workflow, registry)
+              if (referenceErrors.length > 0) {
+                return { ok: false, code: 400, error: referenceErrors.join('；') }
+              }
+              const first = firstStep(workflow)
+              if (!first) return { ok: false, code: 400, error: `workflow '${workflowId}' 未声明任何 step` }
+              customStart = {
+                workflow: workflowId,
+                phase: first.id,
+                ...(workflow.openspecContract === 'required' ? { openspecContract: true } : {}),
+              }
+            }
+
+            try {
+              // project registry 锁保持到 state 独占发布完成；DELETE 持同锁扫描，二者不再有
+              // “workflow 已校验但引用尚未落盘”的窗口。
+              const initResult = await runRepo.initChange({
+                repoRoot: root, name, track: track.id, reviewSeed: track.policyProfile.reviewSeed,
+                preset: 'full', clock, initialWorkflow: customStart,
+              })
+              if (taskPrompt.value !== null) {
+                try {
+                  await writeChangeTaskPrompt(initResult.changeDir, taskPrompt.value)
+                } catch (error) {
+                  return {
+                    ok: false,
+                    code: 500,
+                    error: `Change 已创建，但任务提示词未保存：${errMsg(error)}`,
+                  }
+                }
+              }
+              return { ok: true, created: initResult.changeDir, taskPromptSaved: taskPrompt.value !== null }
+            } catch (e) {
+              return { ok: false, code: 400, error: errMsg(e) }
+            }
+          },
+        )
       } catch (e) {
         return sendJson(res, 400, { ok: false, error: errMsg(e) })
       }
-      if (customStart) {
-        await store.setMany(created, { workflow: customStart.workflow, phase: customStart.phase })
-      }
+      if (!outcome.ok) return sendJson(res, outcome.code, { ok: false, error: outcome.error })
+      const created = outcome.created
       // best-effort（CONTRACT §1 语义同 CLI recordHistory）：server 全源无 console，WARN 走
       // stderr——daemon 日志可见且不污染任何 HTTP 响应。
       try {
@@ -778,7 +1473,21 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
       } catch (e) {
         process.stderr.write(`WARN: history 写入失败: ${errMsg(e)}\n`)
       }
-      return sendJson(res, 200, { ok: true, name, path: created })
+      const session = activation.value
+        ? await activateChangeSession({
+          available: operationsAvailable,
+          runner: operationRunner,
+          repoRoot: rootCheck.anchor.path,
+          changeName: name,
+        })
+        : notRequestedSessionActivation()
+      return sendJson(res, 200, {
+        ok: true,
+        name,
+        path: created,
+        task_prompt_saved: outcome.taskPromptSaved,
+        session,
+      })
     }
 
     // ── M3 config 写端点：全机唯一 manifest.yaml，无 root/name（不是按 Project 分立的资源）──
@@ -811,7 +1520,7 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
       if (!isRegisteredRoot(root)) {
         return sendJson(res, 404, { ok: false, error: 'root 未在机器级项目注册表中' })
       }
-      const result = applyLevelChange(root, id, target, { now: new Date(clock()), confirm: true }, REAL_GRADUATION_FS)
+      const result = await applyLevelChange(root, id, target, { now: new Date(clock()), confirm: true }, REAL_GRADUATION_FS)
       // exitCode 0 = 已应用 或 合法 noop（如目标档已达到，dry-run 语义）；2 = 逻辑拒绝（跨级/
       // 就绪未达标）；3 = 载入/未知 loop/写回错误——只有前者是「请求本身处理成功」，非 0 必须
       // 映射非 2xx，否则前端只看 res.ok 会把一次真实拒绝误当成功（同 cancel/retry 两个兄弟
@@ -845,7 +1554,9 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
       if (!isRegisteredRoot(root)) {
         return sendJson(res, 404, { ok: false, error: 'root 未在机器级项目注册表中' })
       }
-      const result = await applyLoopsUpdate(root, id, patch as Record<string, unknown>)
+      const result = await applyLoopsUpdate(root, id, patch as Record<string, unknown>, {
+        validateActivation: validateLoopActivation,
+      })
       return sendJson(res, result.ok ? 200 : 400, result)
     }
 
@@ -909,8 +1620,8 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
       // /api/afk/<name>/retry 共用的 name 校验模式）：写端点比读端点更需要这道门——不挡住的话，
       // 恶意 name 能让 writeWorkflowForApi 内部的 join(dir, `${name}.yaml`) 写到
       // .pipeline/workflows/ 之外的任意文件。必须先于下面的 'default' 检查执行。
-      if (!wfName || !/^[a-zA-Z0-9_-]+$/.test(wfName) || wfName.includes('..')) {
-        return sendJson(res, 400, { ok: false, error: '非法 workflow 名（仅允许 a-z A-Z 0-9 - _）' })
+      if (!isWorkflowName(wfName)) {
+        return sendJson(res, 400, { ok: false, error: '非法 workflow 名（允许中文、字母、数字、- 与 _；不允许空格、点或路径符号）' })
       }
       if (wfName === 'default') {
         return sendJson(res, 400, { ok: false, error: 'default workflow 不可通过编辑器创建/覆盖（运行时不读这个文件）' })
@@ -925,15 +1636,39 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
         return sendJson(res, 400, { ok: false, error: '请求体须为 JSON 对象' })
       }
       const body = rawBody as Record<string, unknown>
-      const root = typeof body.root === 'string' ? body.root : ''
-      if (!isRegisteredRoot(root)) {
-        return sendJson(res, 404, { ok: false, error: 'root 未在机器级项目注册表中' })
+      if (body.name !== wfName) {
+        return sendJson(res, 400, { ok: false, error: 'URL workflow name 必须与 body.name 完全一致' })
       }
+      const root = typeof body.root === 'string' ? body.root : ''
+      const rootCheck = workflowRootForRequest(root)
+      if (!rootCheck.ok) return sendJson(res, rootCheck.code, { ok: false, error: rootCheck.error })
+      const workflow = body as unknown as WorkflowDef
+      const shapeErrors = validateWorkflow(workflow)
+      if (shapeErrors.length > 0) return sendJson(res, 400, { ok: false, errors: shapeErrors })
       try {
-        const result = writeWorkflowForApi(root, wfName, body as unknown as WorkflowDef)
-        return sendJson(res, result.ok ? 200 : 400, result)
+        ensureWorkflowProjectCoordinationPath(rootCheck.anchor)
       } catch (e) {
         return sendJson(res, 500, { ok: false, error: errMsg(e) })
+      }
+      let enteredRegistrySnapshot = false
+      try {
+        const result = await withTrackRegistryLock(
+          rootCheck.anchor.path,
+          trackValidationContextFor(rootCheck.anchor),
+          async ({ registry }) => {
+            enteredRegistrySnapshot = true
+            assertWorkflowRootAnchor(rootCheck.anchor)
+            const referenceErrors = validateWorkflowTrackReferences(workflow, registry)
+            if (referenceErrors.length > 0) return { ok: false as const, errors: referenceErrors }
+            return writeWorkflowForApi(rootCheck.anchor, wfName, workflow)
+          },
+        )
+        return sendJson(res, result.ok ? 200 : 400, result)
+      } catch (e) {
+        // 无法形成 effective registry 快照时不能保存未经引用校验的 workflow。
+        return enteredRegistrySnapshot
+          ? sendJson(res, 500, { ok: false, error: errMsg(e) })
+          : sendJson(res, 400, { ok: false, errors: [errMsg(e)] })
       }
     }
 
@@ -1025,7 +1760,33 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
         return sendJson(res, 404, { ok: false, error: 'root 未在机器级项目注册表中' })
       }
       const dir = join(root, 'openspec', 'changes', name)
-      const result = await enqueueAfkRun(store, dir, clock)
+      // 先保留旧端点对不存在 change 的精确 400 语义；只有真 state 才进 registry 解析。
+      if (!stateStorageExistsSync(dir)) {
+        return sendJson(res, 400, { ok: false, error: '找不到该 change（无 canonical/legacy 状态）' })
+      }
+      let track: TrackDefinition
+      try {
+        const rawTrack = await store.get(dir, 'track')
+        const trackId = Array.isArray(rawTrack) ? rawTrack.join(',') : (rawTrack ?? '')
+        const trackCtx: TrackValidationContext = {
+          workflowExists: (id) => {
+            if (id === 'default') return true
+            try {
+              return loadWorkflow(root, id) !== null
+            } catch {
+              return false
+            }
+          },
+          skillProfiles: trackSkillProfiles,
+        }
+        track = requireTrack(loadTrackRegistry(root, trackCtx), trackId)
+      } catch (e) {
+        return sendJson(res, 400, { ok: false, error: errMsg(e) })
+      }
+      const result = await enqueueAfkRun(store, dir, clock, {
+        automationEligible: track.policyProfile.automationEligible,
+        trackLabel: track.label,
+      })
       return sendJson(res, result.ok ? 200 : 400, result)
     }
 
@@ -1044,6 +1805,32 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
         return sendJson(res, 200, { ok: true, key: validated.value.key, ...info })
       } catch (e) {
         return sendJson(res, 500, { ok: false, error: errMsg(e) })
+      }
+    }
+
+    // ── v3 Studio：POST /api/tracks 创建额外 Track。revision 在 registry 锁内比较。──
+    if (path === '/api/tracks') {
+      const rawBody = await readJsonBody(req)
+      if (typeof rawBody !== 'object' || rawBody === null || Array.isArray(rawBody)) {
+        return sendJson(res, 400, { ok: false, error: '请求体须为 JSON 对象' })
+      }
+      const trackBody = rawBody as Record<string, unknown>
+      const root = typeof trackBody.root === 'string' ? trackBody.root : ''
+      const revision = typeof trackBody.revision === 'string' ? trackBody.revision : ''
+      const track = trackBody.track
+      if (revision === '' || typeof track !== 'object' || track === null || Array.isArray(track)) {
+        return sendJson(res, 400, { ok: false, error: 'revision 与 track 对象为必填' })
+      }
+      const rootCheck = workflowRootForRequest(root)
+      if (!rootCheck.ok) return sendJson(res, rootCheck.code, { ok: false, error: rootCheck.error })
+      try {
+        const mutation = await mutateTrackForApi(rootCheck.anchor, revision, async ({ config }) => ({
+          next: createTrack(config, track as CreateTrackSpec),
+          result: undefined,
+        }))
+        return sendJson(res, 200, trackRegistryBody(mutation.registry))
+      } catch (error) {
+        return sendTrackError(res, error)
       }
     }
 
@@ -1070,8 +1857,50 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
     }
     const name = decodeURIComponent(mTr[1]!)
     // history 注入（G20 / v5-T1）：转换成功 → .pipeline-history.jsonl 记账，guard 拒绝零记账。
-    const outcome = await performTransition({ store, flow, clock, fileExists, gitHeadSha, history }, root, name, event)
+    const outcome = await performTransition(
+      { store, runRepo, flow, clock, fileExists, gitHeadSha, history, breadcrumb, reviewMarker }, root, name, event,
+    )
     return sendJson(res, outcome.code, outcome.body)
+  }
+
+  async function handlePatch(req: IncomingMessage, res: ServerResponse, path: string): Promise<void> {
+    if (!isLocalHost(req.headers.host, boundPort)) {
+      return sendJson(res, 403, { ok: false, error: 'Host header 不合法（疑似 DNS 重绑定攻击）' })
+    }
+    const provided = tokenFromHeaders(req.headers)
+    if (!provided || !tokensMatch(provided, token)) {
+      return sendJson(res, 401, { ok: false, error: '缺少或无效 token（写端点需鉴权）' })
+    }
+    const ctype = String(req.headers['content-type'] ?? '').split(';', 1)[0]!.trim().toLowerCase()
+    if (ctype !== 'application/json') {
+      return sendJson(res, 400, { ok: false, error: '写回端点要求 Content-Type: application/json' })
+    }
+    const match = /^\/api\/tracks\/([^/]+)$/.exec(path)
+    if (!match) return sendJson(res, 404, { ok: false, error: '未知写回端点' })
+    const id = decodeURIComponent(match[1]!)
+    const rawBody = await readJsonBody(req)
+    if (typeof rawBody !== 'object' || rawBody === null || Array.isArray(rawBody)) {
+      return sendJson(res, 400, { ok: false, error: '请求体须为 JSON 对象' })
+    }
+    const body = rawBody as Record<string, unknown>
+    const root = typeof body.root === 'string' ? body.root : ''
+    const revision = typeof body.revision === 'string' ? body.revision : ''
+    const patch = body.patch
+    if (revision === '' || typeof patch !== 'object' || patch === null || Array.isArray(patch) || Object.keys(patch).length === 0) {
+      return sendJson(res, 400, { ok: false, error: 'revision 与非空 patch 对象为必填' })
+    }
+    const rootCheck = workflowRootForRequest(root)
+    if (!rootCheck.ok) return sendJson(res, rootCheck.code, { ok: false, error: rootCheck.error })
+    try {
+      const mutation = await mutateTrackForApi(rootCheck.anchor, revision, async ({ config }) => {
+        const next = updateTrack(config, id, patch as UpdateTrackPatch)
+        await assertUpdatePreservesReferences(next, id, () => scanActiveTrackChanges(rootCheck.anchor.path))
+        return { next, result: undefined }
+      })
+      return sendJson(res, 200, trackRegistryBody(mutation.registry))
+    } catch (error) {
+      return sendTrackError(res, error)
+    }
   }
 
   async function handleDelete(req: IncomingMessage, res: ServerResponse, path: string): Promise<void> {
@@ -1088,9 +1917,36 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
     if (path === '/api/projects') {
       const root = new URL(req.url ?? '/', 'http://localhost').searchParams.get('root')
       const result = await removeProjectFromRegistry(paths.registryPath, root)
-      return result.ok
-        ? sendJson(res, 200, { ok: true })
-        : sendJson(res, result.code, { ok: false, error: result.error })
+      if (!result.ok) return sendJson(res, result.code, { ok: false, error: result.error })
+      const normalized = resolvePath(root!)
+      const anchor = workflowRootAnchors.get(normalized)
+      if (anchor) {
+        closeWorkflowRootAnchor(anchor)
+        workflowRootAnchors.delete(normalized)
+      }
+      return sendJson(res, 200, { ok: true })
+    }
+
+    // ── v3 Studio：DELETE /api/tracks/:id，活跃 Change 引用与不可读候选均 fail-closed。──
+    const trackDelete = /^\/api\/tracks\/([^/]+)$/.exec(path)
+    if (trackDelete) {
+      const id = decodeURIComponent(trackDelete[1]!)
+      const query = new URL(req.url ?? '/', 'http://localhost').searchParams
+      const root = query.get('root') ?? ''
+      const revision = query.get('revision') ?? ''
+      if (revision === '') return sendJson(res, 400, { ok: false, error: '缺少 revision 参数' })
+      const rootCheck = workflowRootForRequest(root)
+      if (!rootCheck.ok) return sendJson(res, rootCheck.code, { ok: false, error: rootCheck.error })
+      try {
+        const mutation = await mutateTrackForApi(rootCheck.anchor, revision, async ({ config }) => {
+          const next = deleteTrack(config, id)
+          await assertTrackDeletable(id, () => scanActiveTrackChanges(rootCheck.anchor.path))
+          return { next, result: undefined }
+        })
+        return sendJson(res, 200, trackRegistryBody(mutation.registry))
+      } catch (error) {
+        return sendTrackError(res, error)
+      }
     }
 
     // ── workflow 编辑器（GOAL E8）：DELETE /api/workflows/:name ──
@@ -1101,20 +1957,92 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
       // 模式）：必须先于下面的 'default' 检查执行——不挡住的话，恶意 name 能让
       // deleteWorkflowForApi 内部的 join(dir, `${name}.yaml`) 删到 .pipeline/workflows/ 之外
       // 的任意文件（DELETE 比 POST 更危险：一次成功调用即不可逆地抹掉目标文件）。
-      if (!wfName || !/^[a-zA-Z0-9_-]+$/.test(wfName) || wfName.includes('..')) {
-        return sendJson(res, 400, { ok: false, error: '非法 workflow 名（仅允许 a-z A-Z 0-9 - _）' })
+      if (!isWorkflowName(wfName)) {
+        return sendJson(res, 400, { ok: false, error: '非法 workflow 名（允许中文、字母、数字、- 与 _；不允许空格、点或路径符号）' })
       }
       if (wfName === 'default') {
         return sendJson(res, 400, { ok: false, error: 'default workflow 不可通过编辑器删除' })
       }
       const root = new URL(req.url ?? '/', 'http://localhost').searchParams.get('root') ?? ''
-      if (!isRegisteredRoot(root)) {
-        return sendJson(res, 404, { ok: false, error: 'root 未在机器级项目注册表中' })
-      }
+      const rootCheck = workflowRootForRequest(root)
+      if (!rootCheck.ok) return sendJson(res, rootCheck.code, { ok: false, error: rootCheck.error })
+      let permit: ReturnType<typeof captureWorkflowDeletePermit>
       try {
-        const deleted = deleteWorkflowForApi(root, wfName)
-        return sendJson(res, deleted ? 200 : 404, deleted ? { ok: true } : { ok: false, error: `workflow '${wfName}' 不存在` })
+        // 先安全打开并钉住目标 inode；不存在不创建任何协调目录。随后准备两把现有跨进程锁的
+        // 真实父目录，拒绝 symlink/换位，保留 G6 O_NOFOLLOW/root identity 边界。
+        permit = captureWorkflowDeletePermit(rootCheck.anchor, wfName)
+        if (!permit) return sendJson(res, 404, { ok: false, error: `workflow '${wfName}' 不存在` })
+        ensureWorkflowGovernanceCoordinationPath(rootCheck.anchor)
       } catch (e) {
+        return sendJson(res, 500, { ok: false, error: errMsg(e) })
+      }
+
+      type DeleteWorkflowOutcome =
+        | { readonly kind: 'deleted' }
+        | { readonly kind: 'referenced'; readonly references: ReturnType<typeof scanWorkflowReferencesForApi>['references'] }
+        | {
+            readonly kind: 'scan-failed'
+            readonly references: ReturnType<typeof scanWorkflowReferencesForApi>['references']
+            readonly blockers: ReturnType<typeof scanWorkflowReferencesForApi>['blockers']
+          }
+      let enteredGovernance = false
+      let enteredTrackSnapshot = false
+      try {
+        const outcome = await withRegistryGovernanceLock(rootCheck.anchor.path, async (): Promise<DeleteWorkflowOutcome> => {
+          enteredGovernance = true
+          assertWorkflowRootAnchor(rootCheck.anchor)
+          return withTrackRegistryLock(
+            rootCheck.anchor.path,
+            trackValidationContextFor(rootCheck.anchor),
+            async ({ registry }): Promise<DeleteWorkflowOutcome> => {
+              enteredTrackSnapshot = true
+              assertWorkflowRootAnchor(rootCheck.anchor)
+              const scan = scanWorkflowReferencesForApi(rootCheck.anchor, wfName, registry)
+              if (scan.blockers.length > 0) {
+                return { kind: 'scan-failed', references: scan.references, blockers: scan.blockers }
+              }
+              if (scan.references.length > 0) return { kind: 'referenced', references: scan.references }
+              deleteWorkflowForApi(rootCheck.anchor, wfName, permit!)
+              return { kind: 'deleted' }
+            },
+          )
+        })
+        if (outcome.kind === 'scan-failed') {
+          return sendJson(res, 409, {
+            ok: false,
+            code: 'WORKFLOW_REFERENCE_SCAN_FAILED',
+            workflow: wfName,
+            references: outcome.references,
+            blockers: outcome.blockers,
+          })
+        }
+        if (outcome.kind === 'referenced') {
+          return sendJson(res, 409, {
+            ok: false,
+            code: 'WORKFLOW_REFERENCED',
+            workflow: wfName,
+            references: outcome.references,
+          })
+        }
+        return sendJson(res, 200, { ok: true })
+      } catch (e) {
+        if (e instanceof WorkflowDeleteConflictError) {
+          return sendJson(res, 409, {
+            ok: false,
+            code: 'WORKFLOW_DELETE_STALE',
+            workflow: wfName,
+            error: errMsg(e),
+          })
+        }
+        if (enteredGovernance && !enteredTrackSnapshot) {
+          return sendJson(res, 409, {
+            ok: false,
+            code: 'WORKFLOW_REFERENCE_SCAN_FAILED',
+            workflow: wfName,
+            references: [],
+            blockers: [{ source: 'track-registry', detail: errMsg(e) }],
+          })
+        }
         return sendJson(res, 500, { ok: false, error: errMsg(e) })
       }
     }
@@ -1144,9 +2072,11 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
       ? handleGet(req, res, path)
       : method === 'POST'
         ? handlePost(req, res, path)
-        : method === 'DELETE'
-          ? handleDelete(req, res, path)
-          : Promise.resolve(sendJson(res, 405, { ok: false, error: 'method not allowed' }))
+        : method === 'PATCH'
+          ? handlePatch(req, res, path)
+          : method === 'DELETE'
+            ? handleDelete(req, res, path)
+            : Promise.resolve(sendJson(res, 405, { ok: false, error: 'method not allowed' }))
     handler.catch((e) => {
       try { sendJson(res, 500, { ok: false, error: errMsg(e) }) } catch { /* 已写头 */ }
     })
@@ -1163,6 +2093,7 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
         httpServer.listen(port, host, () => {
           httpServer.removeListener('error', onError)
           boundPort = (httpServer.address() as AddressInfo).port
+          cadenceScheduler?.start()
           resolve({ port: boundPort, host })
         })
       })
@@ -1170,6 +2101,9 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
     close(): Promise<void> {
       return new Promise((resolve) => {
         stopPoll()
+        cadenceScheduler?.stop()
+        for (const anchor of workflowRootAnchors.values()) closeWorkflowRootAnchor(anchor)
+        workflowRootAnchors.clear()
         for (const res of clients) {
           try { res.end() } catch { /* ignore */ }
         }

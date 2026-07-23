@@ -2,10 +2,42 @@
  * kernel/state 公共出口 —— StateStore 工厂 + 供 oracle/cli 复用的解析/锁原语。
  * 本 barrel 由根 src/index.ts re-export（见 CONTRACT §4）。
  */
-export { createStateStore, STATE_FILE_NAME } from './store.js'
+export { atomicWriteFile, createStateStore, StateProjectionDriftError, STATE_FILE_NAME } from './store.js'
+export type { StateStoreOptions } from './store.js'
+export { ensureDefaultOpenSpecScaffold } from './default-openspec-scaffold.js'
+export type { DefaultOpenSpecScaffoldResult } from './default-openspec-scaffold.js'
+export {
+  DOCUMENT_LEDGER_FILE, DocumentLedgerError, ensureDocumentLedger, evaluateDocumentEvidence,
+  readDocumentLedger, recordDocument, recordDocumentReads,
+} from './document-ledger.js'
+export type {
+  DocumentEvidenceItem, DocumentEvidenceItemStatus, DocumentEvidenceReport, DocumentLedger,
+  DocumentReadReceipt, DocumentRecord, ReadDocumentsInput, RecordDocumentInput,
+} from './document-ledger.js'
 export { parsePipeline, serializePipeline, quoteGate, unquoteScalar, emptyFields } from './parse.js'
 export { withLock, LOCK_DIR_NAME, STALE_LOCK_MS } from './lock.js'
-export { createHistoryWriter, HISTORY_FILE } from './history.js'
+export { createHistoryWriter, HISTORY_FILE, transitionRecordToHistoryEntry } from './history.js'
+export {
+  createBreadcrumbWriter, createReviewMarkerWriter, reviewHint, BREADCRUMB_FILE, REVIEW_MARKER_FILE,
+} from './markers.js'
+export type { BreadcrumbWriter, ReviewMarkerWriter } from './markers.js'
+export { applyBreadcrumbTail, applyReviewMarkerTail } from './transitionTail.js'
+export type { BreadcrumbTailArgs, ReviewMarkerTailArgs, TailWriteOutcome } from './transitionTail.js'
+// WorkflowRun 持久化提交接缝（W1 第二增量，2026-07-16 codex 范围评估）
+export { diffFieldsToEffects, parseRunMetadataLines, serializeRunMetadataLines } from './run-metadata.js'
+export {
+  createTransitionRecordStore, InvalidRecordIdentityError, RecordAlreadyExistsError, TRANSITION_RECORDS_DIR,
+} from './transition-record-store.js'
+export type { TransitionRecordStore } from './transition-record-store.js'
+export { createWorkflowRunRepository } from './workflow-run-repository.js'
+export type { WorkflowRunRepositoryDeps } from './workflow-run-repository.js'
+export {
+  projectionMetadataFor, readCurrentRunRevision, readCurrentRunRevisionFromSync,
+  readCurrentRunRevisionSync, readImmutableRunRevision,
+  RunStateCorruptError, RUN_CURRENT_FILE, RUN_REVISIONS_DIR, RUN_STATE_DIR,
+  stateStorageExistsSync, stateStorageSourcePathSync, validateCanonicalRevisionHistory,
+} from './run-revision-store.js'
+export type { RunHookState, RunRevision, RunRevisionTextReader, RunStateMutation } from './run-revision-store.js'
 // 机器级项目注册表（v5 T2 决策 D）——init 自动登记 + server 项目发现同源
 export { projectRegistryPath, readProjectRegistry, registerProjectRoot, writeProjectRegistry, PROJECT_REGISTRY_FILE } from './projectRegistry.js'
 // 机器级凭证存储（v6 T1，proposal C 节）——CLAUDE_CODE_OAUTH_TOKEN/OPENAI_API_KEY 白名单，0600+原子写

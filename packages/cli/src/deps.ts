@@ -2,8 +2,11 @@
  * cli 依赖注入面 —— 命令逻辑全部是接受 CliDeps 的纯函数（CONTRACT §4 agent:cli）。
  * store/flow 按 types.ts 契约注入；测试全 mock，绝不 import kernel 实现。
  */
-import type { FlowEngine, GuardContext, HistoryWriter, SkillTable, StateStore } from '@pipeline-lite/kernel'
+import type { DocumentContractPhase, DocumentEvidenceReport, EffectiveSkillResolver, FlowEngine, GuardContext, HistoryWriter, MutationOutcome, ProjectTrackConfig, RegistrySnapshot, SkillTable, StateStore, TrackRegistry, WorkflowRunRepository } from '@pipeline-lite/kernel'
 import type { AfkReadiness } from './afkReadiness.js'
+
+/** fs/env 探针半成品；cmdCheck 必须再注入 effective policy 才能组成 kernel GuardContext。 */
+export type GuardFileContext = Omit<GuardContext, 'coverageProfile'>
 
 export interface GateMarkerInfo {
   kind: 'confirm' | 'review' | 'interaction'
@@ -46,6 +49,12 @@ export interface DoctorProbes {
    */
   installedSkillNames: () => ReadonlySet<string>
   /**
+   * 当前 Codex 上下文实际可发现的 skill 目录名（原生插件自身 `skills/` + 非原生 adapter 投递的
+   * 项目 `.agents/skills`）。它与全局插件 cache 故意分开：cache 在盘上并不意味着 Codex 已加载它。
+   * 缺省 undefined 时 doctor 把 Codex 就绪面标为 yellow，而不是把缓存误报为可调用。
+   */
+  codexProjectSkillNames?: () => ReadonlySet<string>
+  /**
    * manifest 强制/推荐 skill 两表（full-install 批2 A1）。main.ts 用 loadManifest(manifestPath())
    * 派生落地（它持有 bundle 里唯一正确的模板路径锚，故两表走探针注入而非 doctor 侧自读——
    * doctor 被打进 dist/pipeline.mjs 后 import.meta.url 深度与 src 不同，自读会错锚）；测试 mock fixture。
@@ -72,13 +81,70 @@ export interface CliIO {
 export interface CliDeps {
   store: StateStore
   flow: FlowEngine
+  /**
+   * EffectiveSkillResolver（G2 P5）——artifact register 校验具体 producer 的接缝：default 走 manifest
+   * mandatory+recommended、custom 走 step.skills（a|b 备选拆 alternatives）。artifact command 只依赖本
+   * 接口、不直接读 manifest/registry；装配处（main.ts / harness）使用 registry-aware resolver，
+   * 由 track.policyProfile.skills.profile 映射 manifest 表；register 调用面保持不感知 Registry。
+   */
+  resolver: EffectiveSkillResolver
+  /**
+   * WorkflowRun 持久化提交接缝（W1 第二增量）：transition 收尾统一走 runRepo.transact，
+   * 锁的持有范围覆盖整个 callback（含 commit + breadcrumb/history/marker 兼容投影），堵死
+   * 此前锁外副作用可能因并发交错产生的撕裂。cmdTransition 唯一消费方。
+   */
+  runRepo: WorkflowRunRepository
+  /**
+   * OpenSpec evidence reader seam. Omit it in production: kernel/CLI then read the authoritative
+   * hash-bound ledger. It exists so command unit tests can isolate rendering and exit-code logic
+   * without weakening the production contract.
+   */
+  documentEvidence?: (
+    root: string,
+    changeDir: string,
+    phase: DocumentContractPhase,
+  ) => Promise<DocumentEvidenceReport>
+  /**
+   * 载入项目 Track Registry（GOAL.md 清单 T · R2 校验面切换）：缺 `<cwd>/.pipeline/tracks.yaml`
+   * → 内建四轨（builtin-only，行为与「没有本功能」逐字一致）；坏文件 fail-loud。装配处
+   * （main.ts / integration-harness realDeps）用 loadTrackRegistry(cwd, ctx) 落地，**每次都从盘读、
+   * 不跨命令记忆化**（R3 D4：CRUD 后同进程续用陈旧 registry 是真实竞态源）。**只读用途**
+   * （tracks list/show 等）走它；需要「与 change 写原子」的组合校验（init/set track|workflow/
+   * set-many/cas）改走 withRegistryLock 在 registry 锁内 fresh-load，别用本无锁读。
+   */
+  loadRegistry: () => TrackRegistry
+  /**
+   * registry 生命周期锁内 fresh-load 后运行 cb（R3 D4：锁序 registry→change 的**外层锁**）。
+   * init/fields 用它先拿 `.pipeline` 仓级锁、锁内新鲜读 registry，再进各自 change 锁做最终
+   * {track,workflow} 组合校验/写——关闭「锁外读 registry、之后才写 change」的跨锁 TOCTOU
+   * （含 delete 扫描期与 init/set track 竞争）。损坏 tracks.yaml 在锁内 load 处 fail-loud（cb 不跑）。
+   * main.ts/harness 用 kernel withTrackRegistryLock 落地；cb 内禁再取同一 registry 锁（非重入）。
+   */
+  withRegistryLock: <T>(cb: (snap: RegistrySnapshot) => Promise<T>) => Promise<T>
+  /**
+   * mutate-under-lock（`pipeline tracks` CRUD 专用，R3 D4）：`.pipeline` 仓级锁内 read 最新 raw
+   * config → cb（锁内构造 next + 引用扫描）→ 完整 next 校验 → 同锁原子写。不嵌套 writeTrackRegistry、
+   * 不隐式 repairCorrupt。main.ts/harness 用 kernel mutateTrackRegistry 落地。
+   */
+  mutateRegistry: <T>(cb: (snap: RegistrySnapshot) => Promise<{ next: ProjectTrackConfig; result: T }>) => Promise<MutationOutcome<T>>
   /** 项目根：change 定位在 <cwd>/openspec/changes/<name>/ */
   cwd: string
+  /** Process environment read boundary; automation transition gates consume PIPELINE_AFK without global reads. */
+  env?: (name: string) => string | undefined
   io: CliIO
   /** ISO8601 UTC 注入时钟（CONTRACT §5.6：业务码禁止散落 new Date()） */
   clock: () => string
   /** 枚举 changesRoot 下的活跃 change 目录名（不含 archive 目录）；main.ts 用 fs 实现 */
   listChanges: (changesRoot: string) => Promise<string[]>
+  /**
+   * 严格枚举 changesRoot 下**所有非 archive 的活跃候选目录名**——与 listChanges 的关键区别：
+   * **不做 `.pipeline.yaml` 存在性过滤**（listChanges 会 access 该文件、把缺失/EACCES/半成品目录
+   * 剔除出结果）。Track CRUD 的引用扫描（scanActiveChanges）专用：用 listChanges 会让「目录在但
+   * .pipeline.yaml 缺失/不可读」的 change 根本不进候选集 → unreadable 恒空 → fail-closed 被绕过误删
+   * （codex R3 阻断 D）。本枚举保留全部候选，交由 scanActiveChanges 逐个 store.read 判定可读性
+   * （读不了的归 unreadable）。main.ts/harness 用 readdir 落地（只保留目录、排除 archive；缺根 → []）。
+   */
+  listChangeDirs: (changesRoot: string) => Promise<string[]>
   /**
    * transition 成功后写 openspec/changes/<name>/.breadcrumb（CONTRACT §5.4，
    * hook shim 只 cat 该缓存）。best-effort：失败仅 WARN，不影响已完成的转换。
@@ -123,11 +189,11 @@ export interface CliDeps {
   writeReviewMarker?: (content: string) => Promise<void>
   /**
    * check 命令的 guard 文件面注入（BACKLOG #12 guard 全量校验面）：按 change 名构造
-   * GuardContext——fileExists/fileNonempty/readFile/dirExists/changeArchived 相对 cwd 解析，
+   * GuardFileContext——fileExists/fileNonempty/readFile/dirExists/changeArchived 相对 cwd 解析，
    * changeDirRel=openspec/changes/<name>，automationRunner 读 PIPELINE_AUTOMATION_RUNNER。
-   * 缺省 undefined = guardCheck 纯字段 lite 面（文件类检查静默跳过，见 kernel GUARD-RULES.md §7.2）。
+   * coverageProfile 不允许由 fs 工厂猜测；cmdCheck 用 requireTrack 的 effective policy 合成。
    */
-  guardCtx?: (name: string) => GuardContext
+  guardCtx?: (name: string) => GuardFileContext
   /**
    * `pipeline doctor` 健康面探针（BACKLOG #26b）。缺省 undefined = 未装配，
    * doctor 命令直接报错 exit 1（doctor 本身不允许静默降级——它就是降级的观测者）。
@@ -142,6 +208,25 @@ export interface CliDeps {
    * `--` 透传段。
    */
   passthroughArgv?: string[]
+  /**
+   * H10 §1/§8任务7：skill bundle profile（`skill_bundle_id`）存在性语义校验器——复用 T 线现有
+   * profile 校验器（`tracks/validate.ts::profileOk` 消费的同一份 `TrackValidationContext.
+   * skillProfiles` 集合：BUILTIN_TRACK_DEFINITIONS 的非 `_all` policy profile ∪ manifest
+   * mandatory/recommended 两表已声明的非 `_all` track 键），不另造正则/枚举、不重新解析 manifest。
+   * 装配处（main.ts / integration-harness realDeps）用 `(id) => trackCtx.skillProfiles.has(id)`
+   * 落地——与 `loadRegistry`/`withRegistryLock` 共用同一个 trackCtx 构造，零额外 I/O。
+   *
+   * 消费方：
+   *   · afk.ts 的 cmdAfk('run') 装配 `createLoopAdmission({ isSkillProfileKnown })`——具名
+   *     （非 `_all`）profile 若本函数返回 false → `skill-bundle-profile-not-found`（admission
+   *     拒绝、暂停 loop）；`_all` 恒合法，不调用本函数。
+   *   · loop-run.ts 的 `--dry-run` wiring 预览（evaluateSkillBundleWiring，见
+   *     loop-admission-view.ts）同样用它判 `invalid` vs 可能 `ready`。
+   * 缺省 undefined = 未装配：具名 profile 走 fail-closed（loop-admission.ts 对 admission 路径
+   * throw `SkillProfileValidatorUnconfiguredError`；wiring 预览路径判 `invalid`），绝不误判成
+   * "profile 确实不存在"这一虚假治理事实。
+   */
+  isSkillProfileKnown?: (profileId: string) => boolean
 }
 
 /** 统一错误消息提取（避免各命令散落 String(e) 口径） */

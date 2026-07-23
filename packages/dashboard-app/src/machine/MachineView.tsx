@@ -1,0 +1,233 @@
+import { AlertTriangle, Box, BrainCircuit, Container, KeyRound, RefreshCw, ServerCog, type LucideIcon } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import {
+  fetchAfkReadiness,
+  fetchDockerImages,
+  fetchLoopsSnapshot,
+  fetchSecrets,
+  fetchSkillsRegistry,
+  type WbAfkReadiness,
+  type WbDockerImages,
+  type WbLoopRow,
+  type WbSecretsKeys,
+  type WbSkillEntry,
+} from '../api/client'
+import { useT } from '../i18n'
+import type { Snapshot } from '../types'
+
+type ReadinessState = 'ready' | 'blocked' | 'unknown'
+
+interface MachineViewProps {
+  snapshot: Snapshot | null
+  currentRoot: string
+  onOpenProject: (root: string) => void
+}
+
+interface ReadinessCardProps {
+  icon: LucideIcon
+  label: string
+  state: ReadinessState
+  detail: string
+  testId: string
+}
+
+function ReadinessCard({ icon: Icon, label, state, detail, testId }: ReadinessCardProps): JSX.Element {
+  const { t } = useT()
+  const tone = state === 'ready' ? 'text-green-d bg-green-t border-green-b' : state === 'blocked' ? 'text-red-d bg-red-t border-red-b' : 'text-amber-d bg-amber-t border-amber-b'
+  return (
+    <article className="flex min-w-0 items-center gap-3 rounded-lg border border-border bg-card px-3 py-2.5" data-state={state} data-testid={testId}>
+      <span className="grid size-8 flex-none place-items-center rounded-lg bg-fill text-text"><Icon size={16} aria-hidden={true} /></span>
+      <div className="min-w-0 flex-1">
+        <h3 className="font-bold text-text">{label}</h3>
+        <p className="truncate text-[11px] text-text-3" title={detail}>{detail}</p>
+      </div>
+      <span className={`flex-none rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${tone}`}>{t(`machine.${state}`)}</span>
+    </article>
+  )
+}
+
+interface ProjectRisk {
+  key: string
+  root: string
+  title: string
+  details: string[]
+  testId: string
+}
+
+function rootName(root: string): string {
+  return root.split('/').filter(Boolean).pop() ?? root
+}
+
+/** Unknown legacy tier stays conservative; explicit conditional/optional entries are informational. */
+function blocksMachine(skill: WbSkillEntry): boolean {
+  return skill.available !== false && (skill.tier === undefined || skill.tier === 'mandatory' || skill.tier === 'recommended')
+}
+
+type Translate = (key: string, vars?: Record<string, string | number>) => string
+
+function credentialSourceLabel(source: string, t: Translate): string {
+  const labels: Record<string, string> = {
+    'host-env': t('machine.credential_source_host_env'),
+    'secrets-file': t('machine.credential_source_secrets_file'),
+    'default-home': t('machine.credential_source_default_home'),
+    secrets: t('machine.credential_source_secrets_file'),
+    'not detected': t('machine.credential_source_missing'),
+  }
+  return labels[source] ?? source
+}
+
+function machineRisks(snapshot: Snapshot | null, loops: readonly WbLoopRow[], t: Translate): ProjectRisk[] {
+  const rows: ProjectRisk[] = []
+  for (const project of snapshot?.projects ?? []) {
+    if (!project.ok) {
+      rows.push({ key: `project:${project.root}`, root: project.root, title: rootName(project.root), details: [t('machine.risk_project_unreadable', { error: project.error ?? t('machine.risk_unknown_error') })], testId: `machine-risk-open-project-${rootName(project.root)}` })
+      continue
+    }
+    for (const change of project.changes) {
+      const automation = typeof change.fields.automation === 'string' ? change.fields.automation : ''
+      if (change.archived !== 'true' && (automation === 'failed' || automation === 'conflict')) {
+        rows.push({ key: `change:${project.root}:${change.name}`, root: project.root, title: change.name, details: [t(`machine.risk_automation_${automation}`), t('machine.risk_project_name', { name: rootName(project.root) })], testId: `machine-risk-open-change-${change.name}` })
+      }
+    }
+  }
+  for (const loop of loops) {
+    const details: string[] = []
+    if (loop.ledger?.health === 'degraded') details.push(t('machine.risk_ledger_degraded', { count: loop.ledger.rejected_records }))
+    if (loop.ledger?.health === 'missing') details.push(t('machine.risk_ledger_missing'))
+    if (loop.budget.breaker === 'tripped') details.push(t('machine.risk_budget_tripped'))
+    if (loop.budget.breaker === 'warn') details.push(t('machine.risk_budget_warn'))
+    if (loop.readiness.band === 'not-ready') details.push(t('machine.risk_readiness_not_ready'))
+    if (loop.readiness.band === 'mostly-ready') details.push(t('machine.risk_readiness_mostly_ready'))
+    if (loop.status === 'active' && loop.skill_bundle_id === null) details.push(t('machine.risk_skill_bundle_missing'))
+    if (details.length > 0) rows.push({ key: `loop:${loop.root}:${loop.id}`, root: loop.root, title: loop.name || loop.id, details, testId: `machine-risk-open-${loop.id}` })
+  }
+  return rows
+}
+
+/**
+ * 机器控制面：把原先散落在 Workbench 折叠区与 AFK 卡片里的机器事实集中到一个入口。
+ * 所有状态都来自真实端点；请求失败保持 unknown，并进入 blocker 清单，绝不把“没读到”画成 ready。
+ */
+export function MachineView({ snapshot, currentRoot, onOpenProject }: MachineViewProps): JSX.Element {
+  const { t } = useT()
+  const [reloadKey, setReloadKey] = useState(0)
+  const [readiness, setReadiness] = useState<WbAfkReadiness | null>(null)
+  const [images, setImages] = useState<WbDockerImages | null>(null)
+  const [secrets, setSecrets] = useState<WbSecretsKeys | null>(null)
+  const [skills, setSkills] = useState<WbSkillEntry[] | null>(null)
+  const [loops, setLoops] = useState<WbLoopRow[] | null>(null)
+  const [errors, setErrors] = useState<string[]>([])
+
+  const load = useCallback(() => setReloadKey((value) => value + 1), [])
+
+  useEffect(() => {
+    let live = true
+    setReadiness(null)
+    setImages(null)
+    setSecrets(null)
+    setSkills(null)
+    setLoops(null)
+    setErrors([])
+
+    const report = (source: string, error: unknown): void => {
+      if (!live) return
+      setErrors((current) => [...current, `${source}: ${error instanceof Error ? error.message : String(error)}`])
+    }
+
+    if (currentRoot !== '') void fetchAfkReadiness(currentRoot).then((value) => { if (live) setReadiness(value) }, (error) => report('readiness', error))
+    else report('readiness', new Error('no registered project selected'))
+
+    void fetchDockerImages().then((value) => { if (live) setImages(value) }, (error) => report('docker images', error))
+    void fetchSecrets().then((value) => { if (live) setSecrets(value) }, (error) => report('secrets', error))
+    void fetchSkillsRegistry().then(async (response) => {
+      if (!response.ok) throw new Error(`(${response.status})`)
+      const body = (await response.json()) as { skills?: unknown }
+      if (!Array.isArray(body.skills)) throw new Error('malformed skills payload')
+      if (live) setSkills(body.skills as WbSkillEntry[])
+    }, (error) => report('skills', error)).catch((error) => report('skills', error))
+    void fetchLoopsSnapshot().then((value) => { if (live) setLoops(value.rows) }, (error) => report('loops', error))
+
+    return () => { live = false }
+  }, [currentRoot, reloadKey])
+
+  const dockerState: ReadinessState = readiness === null || images === null ? 'unknown' : readiness.docker.available && images.available ? 'ready' : 'blocked'
+  const imageState: ReadinessState = readiness === null || images === null ? 'unknown' : readiness.image.present || images.images.includes(readiness.image.configured) ? 'ready' : 'blocked'
+  const codexState: ReadinessState = readiness === null || secrets === null ? 'unknown' : readiness.credentials.codex.OPENAI_API_KEY.set || readiness.credentials.codex.CODEX_HOME.set || secrets.OPENAI_API_KEY.set ? 'ready' : 'unknown'
+  const skillState: ReadinessState = skills === null
+    ? 'unknown'
+    : skills.length > 0 && skills.filter(blocksMachine).every((skill) => skill.installed) ? 'ready' : 'blocked'
+  const operationsState: ReadinessState = snapshot === null ? 'unknown' : snapshot.capabilities.operations === true ? 'ready' : 'blocked'
+
+  const blockers = useMemo(() => {
+    const values = [...errors]
+    if (readiness && !readiness.docker.available) values.push(t('machine.blocker_docker'))
+    if (readiness && !readiness.image.present && !(images?.images.includes(readiness.image.configured) ?? false)) values.push(t('machine.blocker_image', { image: readiness.image.configured, command: readiness.image.build_hint }))
+    for (const skill of skills ?? []) if (blocksMachine(skill) && !skill.installed) values.push(t('machine.blocker_skill', { skill: skill.name, command: skill.installCmd ?? t('machine.no_install_command') }))
+    if (snapshot && snapshot.capabilities.operations !== true) values.push(t('machine.blocker_operations'))
+    return values
+  }, [errors, images, readiness, skills, snapshot, t])
+
+  const risks = useMemo(() => machineRisks(snapshot, loops ?? [], t), [loops, snapshot, t])
+  const configuredImage = readiness?.image.configured ?? t('machine.loading_signal')
+  const installedSkills = skills?.filter((skill) => skill.installed).length ?? 0
+  const secretSource = readiness?.credentials.codex.OPENAI_API_KEY.source
+    ?? readiness?.credentials.codex.CODEX_HOME.source
+    ?? (secrets?.OPENAI_API_KEY.set ? 'secrets' : 'not detected')
+
+  return (
+    <section className="mx-auto w-full max-w-[1088px] pt-7 pb-5" data-testid="machine-view" data-page-frame="standard">
+      <header className="mb-5 flex flex-wrap items-start justify-between gap-3 border-b border-border pb-4">
+        <div>
+          <p className="mb-1 font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-text-3">{t('machine.eyebrow')}</p>
+          <h1 className="text-2xl font-black tracking-tight text-text">{t('machine.title')}</h1>
+          <p className="mt-1 max-w-3xl text-sm text-text-3">{t('machine.subtitle')}</p>
+        </div>
+        <button type="button" className="inline-flex items-center rounded-lg border border-border bg-card px-3 py-2 text-xs font-bold text-text hover:bg-fill" onClick={load}>
+          <RefreshCw className="mr-1.5 size-3.5" aria-hidden="true" />{t('machine.refresh')}
+        </button>
+      </header>
+
+      <section data-testid="machine-readiness">
+        <h2 className="mb-3 text-sm font-black text-text">{t('machine.readiness')}</h2>
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+          <ReadinessCard icon={Container} label={t('machine.docker')} state={dockerState} detail={images ? t('machine.docker_detail', { count: images.images.length }) : t('machine.loading_signal')} testId="machine-docker" />
+          <ReadinessCard icon={Box} label={t('machine.image')} state={imageState} detail={configuredImage} testId="machine-image" />
+          <ReadinessCard icon={KeyRound} label={t('machine.codex')} state={codexState} detail={t('machine.codex_detail', { source: credentialSourceLabel(secretSource, t) })} testId="machine-codex" />
+          <ReadinessCard icon={BrainCircuit} label={t('machine.skills')} state={skillState} detail={skills ? t('machine.skills_detail', { installed: installedSkills, total: skills.length }) : t('machine.loading_signal')} testId="machine-skills" />
+          <ReadinessCard icon={ServerCog} label={t('machine.operations')} state={operationsState} detail={t('machine.operations_detail')} testId="machine-operations" />
+        </div>
+      </section>
+
+      <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(280px,0.75fr)_minmax(520px,1.6fr)]">
+        <section className="rounded-xl border border-border bg-card p-4" data-testid="machine-blockers">
+          <div className="flex items-center gap-2 text-text"><AlertTriangle size={16} aria-hidden="true" /><h2 className="font-bold">{t('machine.blockers')}</h2></div>
+          {blockers.length === 0 ? <p className="mt-3 text-xs text-green-d">{t('machine.blockers_empty')}</p> : (
+            <ul className="mt-3 space-y-2 p-0">
+              {blockers.map((blocker, index) => <li key={`${blocker}:${index}`} className="rounded-lg border border-amber-b bg-amber-t px-3 py-2 text-xs leading-relaxed text-amber-d">{blocker}</li>)}
+            </ul>
+          )}
+        </section>
+        <section className="rounded-xl border border-border bg-card p-4" data-testid="machine-risk-queue">
+          <div className="flex items-center justify-between gap-3">
+            <div><h2 className="font-bold text-text">{t('machine.risks')}</h2><p className="mt-0.5 text-xs text-text-3">{t('machine.risks_note')}</p></div>
+            <span className="rounded-full bg-fill px-2.5 py-1 font-mono text-xs font-bold text-text">{risks.length}</span>
+          </div>
+          {loops === null ? <p className="mt-4 text-xs text-text-3">{t('machine.loading_signal')}</p> : risks.length === 0 ? <p className="mt-4 text-xs text-green-d">{t('machine.risks_empty')}</p> : (
+            <ul className="mt-3 divide-y divide-border p-0">
+              {risks.map((risk) => (
+                <li key={risk.key} className="flex items-center gap-3 py-3 first:pt-1 last:pb-0">
+                  <span className="h-8 w-1 flex-none rounded-full bg-red" aria-hidden="true" />
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate font-bold text-text">{risk.title}</div>
+                    <div className="mt-0.5 text-xs text-text-3">{risk.details.join(' · ')}</div>
+                  </div>
+                  <button type="button" data-testid={risk.testId} className="flex-none rounded-md border border-border px-2.5 py-1.5 text-xs font-bold text-text hover:bg-fill" onClick={() => onOpenProject(risk.root)}>{t('machine.open_project')}</button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </div>
+    </section>
+  )
+}

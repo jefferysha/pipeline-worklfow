@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { applyStepTransition, firstStep, planStepTransition, resolveStep, resolveWorkflowName } from './engine.js'
+import { compileWorkflow } from './compile.js'
 import type { StepDef, WorkflowDef } from './types.js'
 import { emptyFields } from '../state/parse.js'
 import type { PipelineState } from '../types.js'
@@ -69,27 +70,27 @@ describe('firstStep —— wf.steps[0] 习语单源', () => {
 describe('planStepTransition —— 解析 step/找边/评 guard 的编排单源', () => {
   const ctx = { changeDirAbs: '/nonexistent-dir-for-engine-test' }
 
-  it('当前 phase 不在图里 → step-not-in-graph，携带 stepId 供 adapter 复原逐字消息', () => {
+  it('当前 phase 不在图里 → step-not-in-graph，携带 stepId 供 adapter 复原逐字消息', async () => {
     const w = wf([step({ id: 'collect' })])
-    const plan = planStepTransition(w, state({ phase: 'ghost' }), 'go', ctx)
+    const plan = await planStepTransition(compileWorkflow(w), state({ phase: 'ghost' }), 'go', ctx)
     expect(plan).toEqual({ ok: false, kind: 'step-not-in-graph', stepId: 'ghost' })
   })
 
-  it('step 命中但无该 event 出边 → event-unsupported，available 按声明序全量携带', () => {
+  it('step 命中但无该 event 出边 → event-unsupported，available 按声明序全量携带', async () => {
     const w = wf([
       step({ id: 'verify', transitions: [{ event: 'pass', to: 'ship' }, { event: 'fail', to: 'build' }] }),
     ])
-    const plan = planStepTransition(w, state({ phase: 'verify' }), 'explode', ctx)
+    const plan = await planStepTransition(compileWorkflow(w), state({ phase: 'verify' }), 'explode', ctx)
     expect(plan).toEqual({ ok: false, kind: 'event-unsupported', stepId: 'verify', available: ['pass', 'fail'] })
   })
 
-  it('step 零出边（终点 step）→ event-unsupported 且 available 为空数组（adapter 兜 "(无)"）', () => {
+  it('step 零出边（终点 step）→ event-unsupported 且 available 为空数组（adapter 兜 "(无)"）', async () => {
     const w = wf([step({ id: 'done', transitions: [] })])
-    const plan = planStepTransition(w, state({ phase: 'done' }), 'go', ctx)
+    const plan = await planStepTransition(compileWorkflow(w), state({ phase: 'done' }), 'go', ctx)
     expect(plan).toEqual({ ok: false, kind: 'event-unsupported', stepId: 'done', available: [] })
   })
 
-  it('guard 不过 → guard-failed，failures 原样携带（evaluateStepGuards 单源产出）', () => {
+  it('guard 不过 → guard-failed，failures 原样携带（evaluateStepGuards 单源产出）', async () => {
     const w = wf([
       step({
         id: 'collect',
@@ -98,7 +99,7 @@ describe('planStepTransition —— 解析 step/找边/评 guard 的编排单源
         transitions: [{ event: 'go', to: 'train' }],
       }),
     ])
-    const plan = planStepTransition(w, state({ phase: 'collect', design_doc: 'null' }), 'go', ctx)
+    const plan = await planStepTransition(compileWorkflow(w), state({ phase: 'collect', design_doc: 'null' }), 'go', ctx)
     expect(plan.ok).toBe(false)
     if (plan.ok || plan.kind !== 'guard-failed') throw new Error('期望 guard-failed')
     expect(plan.stepId).toBe('collect')
@@ -106,7 +107,7 @@ describe('planStepTransition —— 解析 step/找边/评 guard 的编排单源
     expect(plan.failures[0]).toContain('design_doc')
   })
 
-  it('次序钉死：无边 + guard 也会挂 → 先报 event-unsupported（对齐 cli/server 现行「找边先于评 guard」）', () => {
+  it('次序钉死：无边 + guard 也会挂 → 先报 event-unsupported（对齐 cli/server 现行「找边先于评 guard」）', async () => {
     const w = wf([
       step({
         id: 'collect',
@@ -115,29 +116,50 @@ describe('planStepTransition —— 解析 step/找边/评 guard 的编排单源
         transitions: [{ event: 'go', to: 'train' }],
       }),
     ])
-    const plan = planStepTransition(w, state({ phase: 'collect', design_doc: 'null' }), 'wrong-event', ctx)
+    const plan = await planStepTransition(compileWorkflow(w), state({ phase: 'collect', design_doc: 'null' }), 'wrong-event', ctx)
     expect(plan.ok).toBe(false)
     if (plan.ok) throw new Error('unreachable')
     expect(plan.kind).toBe('event-unsupported')
   })
 
-  it('全通过 → ok，from=当前 step id、to=该 event 边的目标', () => {
+  it('全通过 → ok，from=当前 step id、to=该 event 边的目标', async () => {
     const w = wf([
       step({ id: 'collect', transitions: [{ event: 'go', to: 'train' }] }),
       step({ id: 'train' }),
     ])
-    const plan = planStepTransition(w, state({ phase: 'collect' }), 'go', ctx)
-    expect(plan).toEqual({ ok: true, from: 'collect', to: 'train' })
+    const plan = await planStepTransition(compileWorkflow(w), state({ phase: 'collect' }), 'go', ctx)
+    // ok plan 携带选中边的 actions（此边无 action → []），执行侧直接消费不二次查表
+    expect(plan).toEqual({ ok: true, from: 'collect', to: 'train', actions: [] })
   })
 
-  it('多出边 step：不同 event 选不同目标（verify-pass→ship / verify-fail→build 型分支）', () => {
+  it('多出边 step：不同 event 选不同目标（verify-pass→ship / verify-fail→build 型分支）', async () => {
     const w = wf([
       step({ id: 'verify', transitions: [{ event: 'pass', to: 'ship' }, { event: 'fail', to: 'build' }] }),
     ])
-    const p1 = planStepTransition(w, state({ phase: 'verify' }), 'pass', ctx)
-    const p2 = planStepTransition(w, state({ phase: 'verify' }), 'fail', ctx)
-    expect(p1).toEqual({ ok: true, from: 'verify', to: 'ship' })
-    expect(p2).toEqual({ ok: true, from: 'verify', to: 'build' })
+    const ir = compileWorkflow(w)
+    const p1 = await planStepTransition(ir, state({ phase: 'verify' }), 'pass', ctx)
+    const p2 = await planStepTransition(ir, state({ phase: 'verify' }), 'fail', ctx)
+    expect(p1).toEqual({ ok: true, from: 'verify', to: 'ship', actions: [] })
+    expect(p2).toEqual({ ok: true, from: 'verify', to: 'build', actions: [] })
+  })
+
+  it('ok plan 携带选中边的 edge actions（规划即选边的单一真相，执行不二次查表）', async () => {
+    const w = wf([
+      step({
+        id: 'verify',
+        transitions: [
+          { event: 'pass', to: 'ship', actions: [{ type: 'mark-verification-passed' }] },
+          { event: 'fail', to: 'build', actions: [{ type: 'mark-verification-failed' }] },
+        ],
+      }),
+      step({ id: 'ship' }),
+      step({ id: 'build' }),
+    ])
+    const ir = compileWorkflow(w)
+    const p1 = await planStepTransition(ir, state({ phase: 'verify' }), 'pass', ctx)
+    const p2 = await planStepTransition(ir, state({ phase: 'verify' }), 'fail', ctx)
+    expect(p1).toEqual({ ok: true, from: 'verify', to: 'ship', actions: [{ type: 'mark-verification-passed' }] })
+    expect(p2).toEqual({ ok: true, from: 'verify', to: 'build', actions: [{ type: 'mark-verification-failed' }] })
   })
 })
 

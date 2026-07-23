@@ -1,46 +1,153 @@
 /**
- * 调度核心 —— 移植老仓 scheduler/scheduler.ts:1-374 的纯编排（over 注入 ports）。
+ * 调度核心 —— 移植老仓 scheduler/scheduler.ts:1-374 的纯编排（over 注入 ports），GOAL H · Stage C
+ * 起接上 loop admission 权威闸门。
  *
- * 一轮 = 处理一个候选列表，有界并发：
- *   claim（TOCTOU 原子）→ 标 running → 跑沙箱（runChange）→ settle → 写回。
+ * 一轮 = 处理一个候选列表，有界并发。handleOne 顺序（codex 第 3 节权威点，claim 之前先原子 preflight）：
+ *   semaphore.acquire → admission.reserve()（仓级锁内重读 registry+ledger）→ claim queued→scheduled
+ *   → reservation.activate() → status recheck → running → runChange(context) → pre-merge/terminal
+ *   recheck → terminal CAS → append UsageRecord* + terminal RunRecord（commit marker，关闭 reservation）。
+ * 先拿 semaphore 再 reserve：避免候选在等全局槽位时提前占用 loop reservation。
  *
- * 与老仓的（有意）差异：把成功落态按 L1→L3 分级（settleSuccess）——默认 L1 report-only 落
- * paused（不自动 merge，安全），L3 才 merged。老仓无分级、一律 merged。
+ * kill-switch 四重查（第 3 节）：①reserve 内 status!==active 硬拒 ②claim 后 running 前重查
+ * ③L3 merge 前重查（lifecycle.ts checkActive 接缝，停用则不 merge、killSwitched）④terminal settle
+ * 前重查（防成功态被写成 merged）。
  *
- * 不变量（逐条对齐老仓注释）：
- *  ② semaphore 限并发到 maxParallel。
- *  ③ 失败 → classifyFailure → retry(queued, attempts++) | conflict(留现场, 不重试)。
- *  ④ inFlight Set + registerShutdown teardown 同步把每个 running change 标 failed（shutdown 回调
- *     无法 await），kanban 绝不卡在 running。
- *  ⑤ 写回绝不双写：终态经 setAutomationOwned 的双 cas 提交点；claim 是唯一原子认领点。
- *  ⑥ Promise.allSettled 收口——一个 reject 绝不连累其余的写回。
+ * H9 边界（第 4 节）：automation settle **不**塞进 WorkflowRunRepository.transact（不产伪 transition、
+ * 不碰 G1/G2 并行区）。结算顺序：setAutomationOwnedWithFields 原子 CAS 得真实 terminal + subordinate
+ * fields → 锁内 append RunRecord（commit marker）。ledger 写失败 → 记进 RoundReport.ledgerFailures，
+ * CLI 据此返非零，绝不再打印「跑完一轮」；现有 Promise.allSettled 不再吞 ledger failure 让 CLI 报成功。
+ *
+ * 不变量（逐条对齐老仓）：② semaphore 限并发；③ 失败 classifyFailure → retry|conflict；
+ * ④ inFlight Set + shutdown teardown 同步标 failed；⑤ 终态经 setAutomationOwned 双 cas；
+ * ⑥ allSettled 收口——一个 reject 不连累其余写回。
+ *
+ * H7 verifier Phase 2（settlement verification gate，D3 消费点裁决）：writeBackSuccess 在选择
+ * merged/paused/retry **之前**，先经 evaluateVerificationGate 判定 outcome.verification——trusted
+ * passed 且 subject SHA 与本次 buildSha 相符才 authorized（继续按既有 killSwitched/noop/level 逻辑
+ * 决定 merged/paused）；trusted failed → 并入既有 verify-fail 失败路（applyFailure）；
+ * absent/untrusted/inconclusive/SHA 漂移 → fail-closed 强 paused + 诚实 reason（RunRecord.reason 的
+ * verification-* 扩，见 kernel ledger-types.ts）。判定纯函数在 verifier.ts，本模块只消费、不重新
+ * 定义判定表；settlementFor 只把已判定的 reason/verification 持久化，不在 ledger 锁里跑 verifier。
+ *
+ * H7-S2（r2 阻断1-4 收口，automation 半边）：evaluateVerificationGate 的入参扩了 expectedSubject
+ * （workflow_run_id/attempt_id/change）与 requireWorkflowBinding——writeBackSuccess/settlementFor
+ * 两个消费点都必须传，经 verificationGateFor 从各自持有的 ExecutionContext 派生（workflow_run_id
+ * 以 `?? attempt_id` 兜底，镜像 lifecycle.ts 对同一 ExecutionContext 形状的兜底规则）+
+ * outcome.requireWorkflowBinding（lifecycle 按 cfg.workflowKind 判定后透传）。两处消费点共用同一个
+ * verificationGateFor 辅助函数构造 gate 输入，结构上不可能各写一份漂移。
  */
-import { isSettled } from '../queue/claim.js'
-import { settleFailure, settleSuccess } from '../queue/state-machine.js'
+import { isSettled, type FailureCommitInput, type FailureCommitResult } from '../queue/claim.js'
+import { settleSuccess } from '../queue/state-machine.js'
 import { type AutomationConfig, type AutomationState, type RunOutcome } from '../types.js'
+import type {
+  ExecutionContext, ExecutionPreparationPort, PrepareOutcome, PreparationFailureReason, PreparedExecutionContext,
+} from '../admission/execution-context.js'
+import { consumeIssuedPreparedContext } from '../admission/execution-context.js'
+import type { ActivateResult, AdmissionDenial, ReserveResult, RunSettlement } from '../admission/loop-admission.js'
 import { classifyFailure } from './classify.js'
 import { createSemaphore } from './semaphore.js'
+import { evaluateVerificationGate, isBoundaryVerifiedResult, type VerificationGateResult } from '../verifier/verifier.js'
+import { validateVerificationResult } from '@pipeline-lite/kernel'
+import { certifyLifecycleOutcome, isCertifiedLifecycleOutcome } from '../lifecycle/outcome.js'
+
+/** ledger store 抛出的 typed 错误 _tag 集（Stage B 返工 #2：据此归 kind=ledger-io，绝不被 allSettled 吞成 ok=true）。 */
+const LEDGER_ERROR_TAGS = new Set([
+  'LedgerDegradedError', 'UnknownReservationError', 'ReservationCorruptionError',
+  'ReservationMismatchError', 'ReservationAppendError',
+])
+/** registry 读 typed 错误 _tag（Stage B 返工 #2：admission reserve 的 loops.yaml 真实 I/O 故障 → kind=registry-io，
+ *  绝不被吞成「无 registry」denial 让 round 假 ok=true）。 */
+const REGISTRY_ERROR_TAGS = new Set(['RegistryReadError'])
+/** H10 §1/§5：「必要协作方未装配」类错误的 _tag 集——语义上不是 ledger/registry/state I/O 故障，
+ *  是当前调用方缺少必需校验器/端口，归 kind=config，与真实 I/O 故障区分
+ *  开（诊断读出来才不会误导成「磁盘/网络坏了」）。其中包括 loop-admission 的 profile validator、
+ *  SDK 的 bundle preparation，以及本模块在真实 loop context 上缺 execution-wiring validator 的错误。 */
+const CONFIG_ERROR_TAGS = new Set([
+  'SkillProfileValidatorUnconfiguredError',
+  'SkillBundlePreparationUnconfiguredError',
+  'ExecutionWiringValidatorUnconfiguredError',
+  'PathPolicyResolverUnconfiguredError',
+  'PathPolicyUnconfiguredError',
+])
+
+const safeFailureProperty = (error: unknown, key: string): unknown => {
+  if (typeof error !== 'object' || error === null) return undefined
+  try {
+    return (error as Record<string, unknown>)[key]
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * G² 子问题1：base 被第三方推进（lifecycle BaseAdvancedError 携 baseAdvanced=true）——这不是普通 per-change
+ * 冲突，是并发异常。除了照 classify 落 conflict 留现场外，另记一条 round failure 使 ok=false（fail-loud：
+ * CLI 非零、不打印跑完一轮）。普通 content-conflict SyncError（无此标记）仍是正常 settle、round 保持 ok。 */
+const isBaseAdvancedFailure = (err: unknown): boolean => safeFailureProperty(err, 'baseAdvanced') === true
 
 /** 写回 port（由 fs StateStore 适配，见 sdk.ts::storeWriter）。全部经 kernel 锁串行。 */
 export interface StateWriter {
-  /** 原子认领 queued→scheduled；true=本 caller 赢。 */
   claim(name: string): Promise<boolean>
-  /** 轻量 automation 态 set（queued→scheduled→running→…）。 */
   setAutomation(name: string, state: AutomationState): Promise<void>
-  /** set 自由 automation 字段（last_error / preserved_path / attempts）。 */
   setField(name: string, field: string, value: string): Promise<void>
-  /** 原子自增 attempts，报告是否超预算。 */
-  incrAttempts(name: string, max: number): Promise<{ value: number; exhausted: boolean }>
-  /** 读当前 automation（fast-path settled 检查）。 */
   getAutomation(name: string): Promise<string>
-  /** 写终态提交点（双 cas）；false=已被外部 settle → 跳过一切从属写。 */
   setAutomationOwned(name: string, next: AutomationState): Promise<boolean>
-  /** shutdown teardown 的同步 best-effort failed 标记（不 await）。 */
+  setAutomationOwnedWithFields(name: string, next: AutomationState, fields: Readonly<Record<string, string>>): Promise<boolean>
+  commitFailureOwned(name: string, input: FailureCommitInput): Promise<FailureCommitResult>
   markFailedSync(name: string, reason: string): void
 }
 
-/** 跑一个 change 端到端（runner + lifecycle）。成功 resolve RunOutcome，失败 throw tagged error。 */
-export type RunChange = (name: string, signal: AbortSignal) => Promise<RunOutcome>
+/**
+ * loop admission 权威闸门 port（结构面；生产实现 = automation/admission/loop-admission.ts
+ * createLoopAdmission）。scheduler 只依赖此结构，测试注入极小 fake。
+ */
+export interface AdmissionPort {
+  reserve(change: string, opts?: {
+    readonly expectedLoopId?: string
+    readonly expectedAutonomyLevel?: AutomationConfig['level'] | null
+  }): Promise<ReserveResult>
+  activate(ctx: ExecutionContext): Promise<ActivateResult>
+  settleWon(ctx: ExecutionContext, settlement: RunSettlement): Promise<void>
+  settleLost(ctx: ExecutionContext): Promise<void>
+  isActive(loopId: string): Promise<boolean>
+}
+
+/**
+ * 一轮内一个候选的结构化故障（Stage B 返工 #2）——区分「治理常态拒绝」（denial，不进此表、不改 ok）
+ * 与「基础设施故障」（ledger/registry/state I/O throw、执行异常、意外）。allSettled 逐项检查 + handleOne
+ * 顶层 catch 双层防线：任何异常都归此表，绝不再被吞成 ok=true。
+ */
+export interface RoundFailure {
+  readonly change: string
+  /** H10 §3/§8任务5：新增 'preparation'（claim 之后、activate 之前的 prepareSkillBundle 阶段）。 */
+  readonly phase: 'admission' | 'claim' | 'preparation' | 'activation' | 'state-transition' | 'execution' | 'settlement' | 'internal'
+  /** H10 §1/§5：新增 'config'（必要协作方/校验器尚未生产装配，见 CONFIG_ERROR_TAGS 头注）。 */
+  readonly kind: 'ledger-io' | 'registry-io' | 'state-io' | 'execution' | 'config' | 'unexpected'
+  readonly message: string
+}
+
+/** activation append 失败后的补偿结果（Stage B 返工 #6）：绝不空吞，全进 RoundReport。 */
+export type ActivationCompensation =
+  | { readonly status: 'reset-queued' }
+  | { readonly status: 'ownership-lost'; readonly observedState?: string }
+  | { readonly status: 'failed'; readonly error: string }
+
+/** handleOne 结构化结果（Stage B 返工 #2）：ok 不再靠共享数组表达——rejected/!ok 均由收口逐项归 failures。 */
+type HandleResult =
+  | { readonly ok: true; readonly change: string }
+  | { readonly ok: false; readonly change: string; readonly failure: RoundFailure }
+
+/**
+ * 跑一个 change 端到端（runner + lifecycle）。签名改为吃 ExecutionContext（第 2 节）：runner/
+ * denylist/结算都按 context.loop_id 查 loop，不再各自按前缀猜。
+ *
+ * H10 §3/§8任务5：签名改为只收 `PreparedExecutionContext`（`ExecutionContext` 的子类型）——编译期
+ * 钉死 reserve→claim→prepareSkillBundle→activate→runChange 的顺序，任何未来 runner 接线
+ * （H14）都不可能拿着裸 admitted context 直接跑，必须先经 prepareSkillBundle。既有实现（如
+ * dockerRunChange.ts 的 `async (context: ExecutionContext, signal) => …`）参数类型更宽，按 TS
+ * 函数参数逆变规则仍可赋给本类型（宽参数函数可以顶替窄参数函数类型），不构成回归。
+ */
+export type RunChange = (context: PreparedExecutionContext, signal: AbortSignal) => Promise<RunOutcome>
 
 /** 注册同步 shutdown teardown；返回反注册 fn。 */
 export type RegisterShutdown = (teardown: () => void) => () => void
@@ -52,30 +159,93 @@ export interface AfkObserver {
 
 export type SchedulerConfig = Pick<AutomationConfig, 'maxParallel' | 'maxRetries' | 'level'>
 
+export type ExecutionWiringValidationResult =
+  | { readonly ok: true }
+  | {
+      readonly ok: false
+      readonly status: 'unwired' | 'invalid'
+      readonly dimension: 'runner' | 'template' | 'workflow' | 'skill-bundle'
+      readonly reason: string
+      /** validator 已用同一 invalid 结论完成竞态安全 governance pause；scheduler 不得重放旧暂停。 */
+      readonly governancePaused?: boolean
+    }
+
+/**
+ * admission 是可注入边界，context 自报的 bundle/runner/loop 字段不能证明它属于可信 non-loop 路径。
+ * 因此没有显式 execution wiring validator 时一律在 claim 前 fail-closed；需要运行 non-loop context
+ * 的装配方也必须显式提供 validator，不能靠 `skill_bundle_id == null` 这种可伪造字段取得默认放行。
+ */
+export class ExecutionWiringValidatorUnconfiguredError extends Error {
+  override readonly name = 'ExecutionWiringValidatorUnconfiguredError'
+  readonly _tag = 'ExecutionWiringValidatorUnconfiguredError'
+  constructor(readonly loopId: string) {
+    super(`context 声明 loop「${loopId}」，但 execution wiring validator 未装配；无法证明其为可信 loop 或 non-loop 执行`)
+  }
+}
+
 export interface SchedulerDeps {
   readonly state: StateWriter
   readonly runChange: RunChange
   readonly registerShutdown: RegisterShutdown
   readonly config: SchedulerConfig
+  readonly admission: AdmissionPort
   readonly observer?: AfkObserver
+  /** on_exceed=pause-loop 时把 loop status 改 paused（缺省无 → 降级为 skip-run + 记 report）。 */
+  readonly pauseLoop?: (loopId: string) => Promise<void>
+  /**
+   * H11：reservation 取得真实 loop identity 后、claim 之前的 fresh execution wiring 闸。
+   * CLI 生产装配使用共享 evaluator；失败会扣 0 关闭 reservation、排队 governance pause、整轮非零。
+   * 类型上可选以保留构造 API；运行时缺席时默认 validator 对所有 context 抛
+   * `ExecutionWiringValidatorUnconfiguredError`。可信 non-loop 装配也必须显式提供 validator。
+   */
+  readonly validateExecutionWiring?: (
+    context: ExecutionContext,
+  ) => Promise<ExecutionWiringValidationResult>
+  /**
+   * H10 §3/§8任务5：prepareSkillBundle 编排口（claim 成功之后、activate 之前调用；生产实现见
+   * loop-admission.ts::createExecutionPreparation，createAutomation 已支持显式注入并透传）。
+   *
+   * 类型上可选以兼容直接 createScheduler 的构造面；createAutomation 总会提供显式 preparation 或
+   * 安全缺省。直接构造却缺席时，`runRoundOnce` 在处理候选前短路成 config failure（零
+   * admission/claim/runChange），绝不把裸 ExecutionContext 冒充 PreparedExecutionContext。
+   */
+  readonly preparation?: ExecutionPreparationPort
 }
 
-export interface Scheduler {
-  /** 处理一个显式候选列表到收口（allSettled）。 */
-  runRoundOnce(candidates: string[]): Promise<void>
+/** 一个候选的处置（RoundReport 明细）。 */
+export interface RoundOutcomeEntry {
+  readonly change: string
+  readonly loopId?: string
+  /** H10 §3/§8任务5：新增 'preparation-failed'（prepareSkillBundle 结构化失败，镜像
+   *  'activation-failed' 对「claim 已成功、后续阶段未能推进到 running」的既有命名惯例）。
+   *  H7 r6：'recovery-pending' 表示不可逆 merge 已落地、但 automation state 尚未提交；此时
+   *  reservation/merge facts 保持 open，不能谎报 settled，必须交下一轮 durable recovery 收口。 */
+  readonly disposition: 'settled' | 'denied' | 'claim-lost' | 'activation-failed' | 'preparation-failed' | 'recovery-pending'
+  readonly result?: string
+  readonly reason?: string
 }
 
 /**
- * yaml_set 拒 换行 / ": " / 首引号（kernel 四闸）。四闸清洗的唯一实现——任何直接把值转发给真
- * StateStore.set 的 automation_* 字段写回都必须复用它（文化硬规则：ONE sanitization，不许分叉
- * 出第二份）。见 sdk/dockerRunChange.ts::setStateField 对 automation_worktree 的复用（Task 1
- * 复查 Fix 2——worktreePath 由 hostRepoDir 真机器路径拼出，同样可能撞四闸）。
- *
- * 截断纪律（真机验收 P1，2026-07-11）：**不截断**。截断只属于错误消息（见下方 sanitize）——
- * automation_worktree/automation_preserved_path 是要被 server 侧 cancelAfkRun（写 .cancel-requested
- * 标记）与现场恢复按原样使用的真路径，深路径项目（worktree 全路径 > 200 字符）被 slice(0,200)
- * 截成残路径后，cancel 按残路径 writeFile → ENOENT → dashboard 永远 500，运行中的任务无法从 UI 终止。
- * kernel 四闸本身没有长度闸，路径不需要也不允许截断。
+ * 一轮结构化报告（第 4 节）：CLI 据 ledgerFailures/degraded 返非零，不再靠 allSettled 吞错后打印
+ * 「跑完一轮」。denial（超预算/暂停/歧义）是治理常态、不算 round 失败（ok 不受其影响），但坏账本
+ * （ledger-degraded）与 settle 时的 ledger 写失败使 ok=false。
+ */
+export interface RoundReport {
+  readonly candidates: number
+  readonly admitted: number
+  readonly entries: RoundOutcomeEntry[]
+  /** Stage B 返工 #2：结构化故障表（phase/kind/message）——CLI 据此打印诊断并返非零。 */
+  readonly failures: RoundFailure[]
+  /** 兼容既有调用/测试（settle/activation 的 ledger 写失败短期同时填充；后续废弃）。 */
+  readonly ledgerFailures: { change: string; message: string }[]
+  readonly halted: boolean
+  readonly ledgerDegraded: boolean
+  readonly ok: boolean
+}
+
+/**
+ * yaml_set 四闸清洗的唯一实现（不许分叉）。截断纪律：**不截断**（真机 P1，见文件历史）——
+ * automation_worktree/automation_preserved_path 是 server cancelAfkRun / 现场恢复按原样使用的真路径。
  */
 export const sanitizePath = (s: string): string =>
   s
@@ -85,21 +255,228 @@ export const sanitizePath = (s: string): string =>
     .replace(/^["']+/, '')
     .trim() || 'error'
 
-/**
- * 错误 message 专用：同一份四闸清洗 + 压到 200 字符的单行安全 token，让字段写永不弹
- * （老仓 scheduler/scheduler.ts:232-239）。只喂 automation_last_error 这类**消息**字段；
- * 路径字段一律走 sanitizePath（见上）。
- */
+/** 错误 message 专用：同一份四闸清洗 + 压到 200 字符（automation_last_error 类字段用）。 */
 export const sanitize = (s: string): string => sanitizePath(s).slice(0, 200).trim() || 'error'
+
+const errText = (error: unknown): string => {
+  const message = safeFailureProperty(error, 'message')
+  if (typeof message === 'string') return message
+  try {
+    return String(error)
+  } catch {
+    return 'unreadable error value'
+  }
+}
+
+/**
+ * 归类一次候选处理中抛出的异常（Stage B 返工 #2）：ledger store 的 typed error（据 _tag）→ ledger-io；
+ * 否则按抛出所在 phase 推断 kind（admission/activation/settlement 的异常几乎必来自 ledger read/append/
+ * fsync/lock；claim/state-transition → state-io；execution → execution；其余 → unexpected）。
+ */
+export const classifyRoundFailure = (change: string, phase: RoundFailure['phase'], error: unknown): RoundFailure => {
+  const rawTag = safeFailureProperty(error, '_tag')
+  const tag = typeof rawTag === 'string' ? rawTag : undefined
+  let kind: RoundFailure['kind']
+  if (tag !== undefined && REGISTRY_ERROR_TAGS.has(tag)) {
+    kind = 'registry-io' // loops.yaml I/O 故障（EACCES/EIO/EISDIR…）——不当 ledger-io 也不当 denial
+  } else if (tag !== undefined && LEDGER_ERROR_TAGS.has(tag)) {
+    kind = 'ledger-io'
+  } else if (tag !== undefined && CONFIG_ERROR_TAGS.has(tag)) {
+    kind = 'config' // H10 §1：必要协作方/校验器未装配（如 SkillProfileValidatorUnconfiguredError）
+  } else {
+    switch (phase) {
+      case 'admission':
+      case 'preparation':
+      case 'activation':
+      case 'settlement':
+        kind = 'ledger-io'; break
+      case 'claim':
+      case 'state-transition':
+        kind = 'state-io'; break
+      case 'execution':
+        kind = 'execution'; break
+      default:
+        kind = 'unexpected'
+    }
+  }
+  return { change, phase, kind, message: sanitize(errText(error)) }
+}
 
 /** 已 settle 的终态；"skipped" = 写回发现 change 已被他人 settle，啥都没动。 */
 type Terminal = AutomationState | 'skipped'
 
+const EXPLICIT_TERMINALS = new Set<AutomationState>(['off', 'merged', 'failed', 'conflict', 'paused'])
+
+const explicitTerminal = (automation: string): AutomationState | undefined =>
+  EXPLICIT_TERMINALS.has(automation as AutomationState) ? automation as AutomationState : undefined
+
+type TerminalCommit =
+  | { readonly status: 'committed' | 'external-terminal'; readonly terminal: AutomationState }
+  | { readonly status: 'recovery-pending'; readonly observed?: string; readonly error?: unknown }
+
+/** automation terminal → RunRecord.result（settle 关闭 reservation 时的结果映射）。 */
+const terminalToRunResult = (t: Terminal): RunSettlement['result'] => {
+  switch (t) {
+    case 'merged': return 'merged'
+    case 'paused': return 'paused'
+    case 'conflict': return 'conflict'
+    case 'failed': return 'failed'
+    case 'queued': return 'retry-queued'
+    default: return 'skipped' // skipped / off / 非预期终态
+  }
+}
+
+/**
+ * H10 §5：`PreparationFailureReason` → 处置策略——本表是唯一维护 reason→result/charge/是否暂停 loop
+ * 的地方（`ExecutionPreparationPort` 只报「发生了什么事实」，不携带处置策略，见 execution-context.ts
+ * ::PrepareOutcome 头注）。设计定稿 §5 表逐行对应：
+ *
+ *   resolve-failed（default/未指明 workflowKind）→ 暂停 loop（共享 profile，牵连该 profile 下所有 loop）；
+ *   resolve-failed（custom）→ 只暂停本 change，不动 loop；
+ *   skill-not-found / content-invalid / snapshot-io / snapshot-corrupt → 只暂停本 change；
+ *   source-ambiguous → 暂停 loop（同一 ID 有不同内容来源，是接线层面的数据完整性问题）；
+ *   policy-changed / source-unstable → retry-queued，不暂停 loop、不收费，交下一轮重新 admission。
+ *
+ * 准备失败从未创建 sandbox——本表恒 `charge:'none'`（设计 §5 否决「准备失败仍按 reserved estimate
+ * 收费」），调用方（handlePreparationFailure）不应再自行决定 charge。
+ */
+/** 每个 reason 的缺省处置（`Record` 强制覆盖 `PreparationFailureReason` 全部 8 个字面量，编译期
+ *  杜绝漏项）；`skill-bundle-resolve-failed` 的 `pauseLoopByDefault` 只是 custom 分支未指明时的
+ *  保守缺省，真正是否暂停 loop 由 `preparationPolicyFor` 结合 `workflowKind` 决定。 */
+const PREPARATION_POLICY: Record<PreparationFailureReason, { readonly result: 'paused' | 'retry-queued'; readonly pauseLoopByDefault: boolean }> = {
+  'skill-bundle-resolve-failed': { result: 'paused', pauseLoopByDefault: true },
+  'skill-bundle-source-ambiguous': { result: 'paused', pauseLoopByDefault: true },
+  'skill-bundle-skill-not-found': { result: 'paused', pauseLoopByDefault: false },
+  'skill-bundle-content-invalid': { result: 'paused', pauseLoopByDefault: false },
+  'skill-bundle-snapshot-io': { result: 'paused', pauseLoopByDefault: false },
+  'skill-bundle-snapshot-corrupt': { result: 'paused', pauseLoopByDefault: false },
+  'skill-bundle-policy-changed': { result: 'retry-queued', pauseLoopByDefault: false },
+  'skill-bundle-source-unstable': { result: 'retry-queued', pauseLoopByDefault: false },
+}
+
+const preparationPolicyFor = (
+  reason: PreparationFailureReason, workflowKind: 'default' | 'custom' | undefined,
+): { readonly result: 'paused' | 'retry-queued'; readonly pauseLoop: boolean } => {
+  const policy = PREPARATION_POLICY[reason]
+  // resolve-failed 是唯一 pauseLoop 取决于 workflowKind 的 reason（design §5：default/未指明=共享
+  // profile→暂停 loop；custom=只影响本 change→不暂停 loop）；其余 reason 的 pauseLoop 与
+  // workflowKind 无关，直接用表里的缺省值。
+  const pauseLoop = reason === 'skill-bundle-resolve-failed' ? workflowKind !== 'custom' : policy.pauseLoopByDefault
+  return { result: policy.result, pauseLoop }
+}
+
+/** H7-S2：evaluateVerificationGate 的 expectedSubject 派生规则——两个消费点（writeBackSuccess/
+ *  settlementFor）与 lifecycle.ts 的 workflowRunId 派生共用同一条 `?? attempt_id` 兜底（ExecutionContext
+ *  形状相同、来源相同：ctx 与 lifecycle 内部合成的 executionContext 本就是同一份归属数据的两次独立
+ *  持有），保证两处判定的期望值不因兜底逻辑各写一份而漂移。 */
+const expectedSubjectFor = (ctx: ExecutionContext): { workflow_run_id: string; attempt_id: string; change: string } => ({
+  workflow_run_id: ctx.workflow_run_id ?? ctx.attempt_id,
+  attempt_id: ctx.attempt_id,
+  change: ctx.change,
+})
+
+/** H7-S2：两个 settlement 消费点（writeBackSuccess/settlementFor）共用同一份 gate 输入构造，杜绝
+ *  两处各写一份 expectedSubject/requireWorkflowBinding 推导逻辑、结构上不可能对不齐。 */
+const verificationGateFor = (ctx: ExecutionContext, o: RunOutcome): VerificationGateResult =>
+  evaluateVerificationGate({
+    verification: o.verification,
+    buildSha: o.buildSha,
+    expectedSubject: expectedSubjectFor(ctx),
+    requireWorkflowBinding: o.requireWorkflowBinding ?? false,
+    expectedAutomationPolicy: ctx.automation_policy,
+  })
+
+/**
+ * RunChange 是可注入边界：先逐字段各读一次，再构造冻结普通对象。绝不 spread 原对象，也不在
+ * provenance 判定之后重新读取 verification。只有真实 lifecycle WeakSet 签发的 outcome 才能携带
+ * mergeLanded/requireWorkflowBinding 权威事实；普通 RunChange 的同名自报字段一律不采信。
+ */
+const canonicalizeRunOutcome = (raw: RunOutcome, ctx: PreparedExecutionContext): RunOutcome => {
+  const certified = isCertifiedLifecycleOutcome(raw)
+  const commitsRaw = raw.commits
+  const verifyResult = raw.verifyResult
+  const buildSha = raw.buildSha
+  const branch = raw.branch
+  const phaseEvent = raw.phaseEvent
+  const noop = raw.noop
+  const killSwitched = raw.killSwitched
+  const verificationRaw = raw.verification
+  const requireWorkflowBindingRaw = raw.requireWorkflowBinding
+  const mergeLandedRaw = raw.mergeLanded
+  const hostSyncPendingRaw = raw.hostSyncPending
+  const mergeJournalPendingRaw = raw.mergeJournalPending
+
+  if (!Array.isArray(commitsRaw)) throw new Error('RunOutcome.commits 必须是数组')
+  const commits = Object.freeze(commitsRaw.map((commit) => {
+    const sha = commit.sha
+    if (typeof sha !== 'string') throw new Error('RunOutcome.commits[].sha 必须是字符串')
+    return Object.freeze({ sha })
+  }))
+
+  let verification: RunOutcome['verification']
+  if (verificationRaw !== undefined) {
+    const checked = isBoundaryVerifiedResult(verificationRaw)
+      ? validateVerificationResult(verificationRaw)
+      : { ok: false as const, errors: ['verification 未经 lifecycle boundary 签发'] }
+    if (checked.ok) {
+      verification = checked.value
+    } else {
+      const rejected = validateVerificationResult({
+        schema_version: 1,
+        verification_id: `scheduler-boundary-rejected-${ctx.attempt_id}`,
+        subject: {
+          workflow_run_id: ctx.workflow_run_id ?? ctx.attempt_id,
+          attempt_id: ctx.attempt_id,
+          change: ctx.change,
+          revision: { kind: 'named-branch-head', sha: buildSha ?? '0'.repeat(40) },
+        },
+        binding: { kind: 'default-transition', event: phaseEvent },
+        verdict: 'inconclusive',
+        evidence: [],
+        issuer: { kind: 'sandbox-report', runner: 'scheduler-boundary-rejected', trusted: false },
+        evaluated_at: new Date().toISOString(),
+      })
+      verification = rejected.ok ? rejected.value : undefined
+    }
+  }
+
+  const coordinateRequiresWorkflowBinding =
+    ctx.preparedKind === 'loop-bundle' && ctx.skillBundle.resolutionSource === 'custom'
+  const outcome: RunOutcome = Object.freeze({
+    commits,
+    verifyResult,
+    buildSha,
+    branch,
+    phaseEvent,
+    noop,
+    killSwitched,
+    verification,
+    requireWorkflowBinding: coordinateRequiresWorkflowBinding || (certified && requireWorkflowBindingRaw === true),
+    mergeLanded: certified && mergeLandedRaw === true,
+    hostSyncPending: certified && hostSyncPendingRaw === true,
+    mergeJournalPending: certified && mergeJournalPendingRaw === true,
+  })
+  return certified ? certifyLifecycleOutcome(outcome) : outcome
+}
+
+export interface Scheduler {
+  /** 处理一个显式候选列表到收口（allSettled），返回结构化 RoundReport。 */
+  runRoundOnce(candidates: readonly string[], options?: RunRoundOptions): Promise<RoundReport>
+}
+
+/** H14 targeted run：携带 selector 观察到的自然 owner，供 admission 锁内复核；绝不覆盖最新 owner。 */
+export interface RunRoundOptions {
+  readonly expectedLoopIdByChange?: ReadonlyMap<string, string>
+  readonly expectedAutonomyLevelByChange?: ReadonlyMap<string, AutomationConfig['level'] | null>
+}
+
 export const createScheduler = (deps: SchedulerDeps): Scheduler => {
-  const { state, runChange, registerShutdown, config } = deps
+  const validateExecutionWiring = deps.validateExecutionWiring ?? (async (context: ExecutionContext) => {
+    throw new ExecutionWiringValidatorUnconfiguredError(context.loop_id)
+  })
+  const { state, runChange, registerShutdown, config, admission } = deps
   const observer = deps.observer
   const semaphore = createSemaphore(config.maxParallel)
-  // in-flight = automation 此刻为 running 的 change；shutdown teardown 同步读它逐个标 failed。
   const inFlight = new Set<string>()
 
   registerShutdown(() => {
@@ -107,7 +484,7 @@ export const createScheduler = (deps: SchedulerDeps): Scheduler => {
       try {
         state.markFailedSync(name, 'scheduler interrupted')
       } catch {
-        // best-effort：一个标失败不阻断其余
+        // best-effort
       }
     }
   })
@@ -117,66 +494,98 @@ export const createScheduler = (deps: SchedulerDeps): Scheduler => {
     try {
       observer.onState(name, s, extra)
     } catch {
-      // 旁路 channel——吞错，绝不拖垮写回
+      // 旁路 channel——吞错
     }
   }
 
-  /** 成功写回：verify-fail 转失败路；否则按分级 settleSuccess 落 merged(L3) / paused(L1/L2)。 */
-  const writeBackSuccess = async (name: string, outcome: RunOutcome): Promise<Terminal> => {
-    if (outcome.verifyResult === 'fail') {
+  const commitOwnedTerminal = async (
+    name: string,
+    target: AutomationState,
+    fields: Readonly<Record<string, string>>,
+  ): Promise<TerminalCommit> => {
+    try {
+      if (await state.setAutomationOwnedWithFields(name, target, fields)) {
+        return { status: 'committed', terminal: target }
+      }
+      try {
+        const observed = await state.getAutomation(name)
+        const terminal = explicitTerminal(observed)
+        return terminal
+          ? { status: 'external-terminal', terminal }
+          : { status: 'recovery-pending', observed }
+      } catch (error) {
+        return { status: 'recovery-pending', error }
+      }
+    } catch (error) {
+      return { status: 'recovery-pending', error }
+    }
+  }
+
+  /** 成功写回：verify-fail / trusted-failed verdict 转失败路；killSwitched/noop/verification 未
+   *  authorized 强落 paused；否则按分级 settleSuccess。判定优先级（既有 killSwitched/noop 不变，
+   *  H7 gate 追加于其后——no-op 没有可核验的构建，不该被误报成 verification-missing）。
+   *  H10：调用点恒是 prepareSkillBundle 成功后的 preparedCtx（runChange 本身已收窄到
+   *  PreparedExecutionContext），本函数继续声明成 ExecutionContext 只为最小改动面——不因此收窄。 */
+  const writeBackSuccess = async (name: string, ctx: ExecutionContext, outcome: RunOutcome): Promise<TerminalCommit> => {
+    const gate = verificationGateFor(ctx, outcome)
+    if (outcome.verifyResult === 'fail' || gate.kind === 'failure') {
       return applyFailure(name, { verifyFail: true })
     }
-    const current = await state.getAutomation(name).catch(() => '')
-    if (isSettled(current)) return 'skipped'
-    // B2 诚实核心：noop 空跑（零 commit / buildSha 缺失，finalizeRunOutcome 打的诚实标志）即便
-    // verify pass 也绝不落 merged——scan.ts resolver 仅认 automation==merged 满足 dep，空跑落 merged
-    // = 无产出解锁下游。此处（settle 点）消费 noop → 落 paused（停给人工复核「为何跑空」）、附诚实
-    // 原因；L1/L2 本就落 paused，语义不变（只 L3 从 merged 改判 paused）。
-    const noop = outcome.noop === true
-    const target = noop ? 'paused' : settleSuccess(config.level) // L1/L2 → paused；L3 → merged（noop → paused）
-    const won = await state.setAutomationOwned(name, target)
-    if (!won) return 'skipped'
-    if (noop) {
-      await state.setField(name, 'automation_last_error', sanitize('no-op run：零 commit / 空构建（build_sha 缺失）——未合并、未解锁下游，停给人工复核'))
-      // F-b 同写纪律：写 last_error 的落点必须同步写 cause——noop 是结构化标志（outcome.noop），
-      // 干净赢面，落 no-op（读取端开放集，未识别自动 fallback）。
-      await state.setField(name, 'automation_cause', 'no-op')
+    // noop 空跑 / killSwitched（运行中 loop 被停用，lifecycle 已跳过 merge）/ H7 verification gate 未
+    // authorized（absent/untrusted/inconclusive/SHA 漂移，fail-closed）即便 verify pass 也绝不落
+    // merged——停给人工复核。L1/L2 本就 paused，语义不变（只 L3 从 merged 改判 paused）。
+    const mergeMissing = config.level === 'L3' && gate.kind === 'authorized' && outcome.mergeLanded !== true
+    const forcePaused = outcome.noop === true || outcome.killSwitched === true || gate.kind === 'paused' || mergeMissing
+    const target = forcePaused ? 'paused' : settleSuccess(config.level)
+    const terminalFields: Record<string, string> = { automation_attempts: '0' }
+    if (outcome.killSwitched === true) {
+      terminalFields.automation_last_error = sanitize('loop 运行中被停用（kill-switch）——未合并，停给人工复核')
+      terminalFields.automation_cause = 'kill-switch'
+    } else if (outcome.noop === true) {
+      terminalFields.automation_last_error = sanitize('no-op run：零 commit / 空构建（build_sha 缺失）——未合并、未解锁下游，停给人工复核')
+      terminalFields.automation_cause = 'no-op'
+    } else if (gate.kind === 'paused') {
+      terminalFields.automation_last_error = sanitize(`verification gate 未授权 merge（${gate.reason}）——未合并，停给人工复核`)
+      terminalFields.automation_cause = gate.reason
+    } else if (mergeMissing) {
+      terminalFields.automation_last_error = sanitize('核验已授权但缺少 lifecycle 物理 merge receipt——未把普通 RunChange 自报当作 merged')
+      terminalFields.automation_cause = 'merge-not-landed'
+    } else if (outcome.mergeJournalPending === true) {
+      terminalFields.automation_last_error = sanitize('base ref 已合并，但 merge-landed ledger receipt 待 recovery 对账')
+      terminalFields.automation_cause = 'merge-journal-pending'
+    } else if (outcome.hostSyncPending === true) {
+      terminalFields.automation_last_error = sanitize('base ref 已合并，但 host 工作树同步待人工处理')
+      terminalFields.automation_cause = 'host-sync-pending'
     }
-    // 成功 = 问题已花完，attempts 清零（若日后重排从干净预算起）。
-    await state.setField(name, 'automation_attempts', '0')
-    return target
+    return commitOwnedTerminal(name, target, terminalFields)
   }
 
   /** 失败写回：分类 → conflict(留现场, 不重试) | retry(queued, attempts++) → failed(耗尽)。 */
-  const applyFailure = async (name: string, err: unknown): Promise<Terminal> => {
-    const c = classifyFailure(err)
+  const applyFailure = async (
+    name: string,
+    err: unknown,
+    c: ReturnType<typeof classifyFailure> = classifyFailure(err),
+  ): Promise<TerminalCommit> => {
     const lastError = sanitize(c.message)
-    // fast-path settled FIRST：已被外部 settle → 跳过一切，连 attempts 都不烧（防幽灵重排）。
-    const current = await state.getAutomation(name).catch(() => '')
-    if (isSettled(current)) return 'skipped'
-
-    if (c.kind === 'conflict') {
-      const won = await state.setAutomationOwned(name, 'conflict')
-      if (!won) return 'skipped'
-      await state.setField(name, 'automation_last_error', lastError)
-      // F-b：结构化成因与 last_error 同写（classifyFailure 按 tag 定值，空串=未知交读取端 regex）。
-      await state.setField(name, 'automation_cause', c.cause)
-      // 路径字段走 sanitizePath（不截断）：preserved_path 是留现场的真 worktree 路径，深路径项目
-      // 截断即损坏（同 automation_worktree 的真机 P1 同类，见 sanitizePath 注释）。
-      if (c.preservedPath) await state.setField(name, 'automation_preserved_path', sanitizePath(c.preservedPath))
-      return 'conflict'
+    const fields: Record<string, string> = {
+      automation_last_error: lastError,
+      automation_cause: c.cause,
     }
-
-    // retry 类：原子自增 attempts（决定 queued vs failed），再双 cas 提交。
-    const { value } = await state.incrAttempts(name, config.maxRetries)
-    const next = settleFailure('retry', value, config.maxRetries) // queued | failed
-    const won = await state.setAutomationOwned(name, next)
-    if (!won) return 'skipped'
-    await state.setField(name, 'automation_last_error', lastError)
-    // F-b 同写纪律（同 conflict 分支）：cause 覆盖式落盘——即便空串也写，防上一轮残留 tag 与新
-    // message 撕裂（「消息换了、成因还是旧的」）。
-    await state.setField(name, 'automation_cause', c.cause)
-    return next
+    if (c.preservedPath) fields.automation_preserved_path = sanitizePath(c.preservedPath)
+    try {
+      const result = await state.commitFailureOwned(name, {
+        classification: c.kind,
+        maxRetries: config.maxRetries,
+        fields,
+      })
+      if (result.status === 'committed') return { status: 'committed', terminal: result.automation }
+      const terminal = explicitTerminal(result.observed)
+      return terminal
+        ? { status: 'external-terminal', terminal }
+        : { status: 'recovery-pending', observed: result.observed }
+    } catch (error) {
+      return { status: 'recovery-pending', error }
+    }
   }
 
   const emitTerminal = (name: string, settled: Terminal): void => {
@@ -184,45 +593,658 @@ export const createScheduler = (deps: SchedulerDeps): Scheduler => {
     emit(name, settled)
   }
 
-  const handleOne = async (name: string): Promise<void> => {
-    // ⑤ 原子认领：只有一个 worker 赢 queued→scheduled
-    const won = await state.claim(name)
-    if (!won) return // 已被他人/人工拿走，静默跳过
+  /** 由终态 + 运行事实派生 RunSettlement（关闭 reservation 用）。ran=true → 按预占估扣，否则扣 0。
+   *  H7：reason 优先级与 writeBackSuccess 的判定顺序严格对齐（同一份 evaluateVerificationGate 结果、
+   *  同一优先级——两处判定绝不分叉）；verification 原样透传进 RunSettlement，供 buildTerminal 落
+   *  terminal RunRecord.verification（结算只持久化，不重新判定）。
+   *  H10 §3：调用点恒是 prepareSkillBundle 成功后的 preparedCtx——本函数收窄参数为
+   *  PreparedExecutionContext，把 ctx.skillBundle?.snapshotSha256 带进每条 RunSettlement
+   *  （none-bundle 直通产出的 preparedCtx 不带 skillBundle，见 execution-context.ts 头注，此时
+   *  该字段诚实缺席，非伪造 undefined），buildTerminal 据此写终态 RunRecord.skill_bundle_snapshot_sha256。 */
+  const settlementFor = (
+    ctx: PreparedExecutionContext,
+    settled: Terminal,
+    opts: {
+      outcome?: RunOutcome
+      err?: unknown
+      classification?: ReturnType<typeof classifyFailure>
+      ran: boolean
+    },
+  ): RunSettlement => {
+    const result = terminalToRunResult(settled)
+    const charge: RunSettlement['charge'] = opts.ran ? 'reserved-estimate' : 'none'
+    // H10 r1 阻断3/D5 返工（任务B1）：ctx 现是判别联合，skillBundle 只存在于 preparedKind==='loop-bundle'
+    // 分支——显式判别窄化（不能再靠 `?.` 悄悄放过 non-loop 分支）。
+    const snapshotSha256 = ctx.preparedKind === 'loop-bundle' ? ctx.skillBundle.snapshotSha256 : undefined
+    if (opts.outcome) {
+      const o = opts.outcome
+      const gate = verificationGateFor(ctx, o)
+      const reason: RunSettlement['reason'] =
+        o.verifyResult === 'fail' ? 'verify-fail'
+          : gate.kind === 'failure' ? 'verify-fail'
+            : o.killSwitched === true ? 'kill-switch'
+              : o.noop === true ? 'no-op'
+                : gate.kind === 'paused' ? gate.reason
+                  : o.mergeLanded === true && o.mergeJournalPending === true ? 'merge-journal-pending'
+                    : o.mergeLanded === true && o.hostSyncPending === true ? 'host-sync-pending'
+                    : result === 'paused' && config.level === 'L3' && gate.kind === 'authorized' && o.mergeLanded !== true ? 'infrastructure-error'
+                  : settled === 'skipped' ? 'claim-lost'
+                    : 'completed'
+      const artifacts = o.commits.length > 0
+        ? { buildSha: o.buildSha, branch: o.branch, commitShas: o.commits.map((c) => c.sha) }
+        : undefined
+      return { result, reason, charge, verify: { result: o.verifyResult }, verification: o.verification, artifacts, skillBundleSnapshotSha256: snapshotSha256 }
+    }
+    if (opts.err !== undefined) {
+      // H14 r8：error 可能是有状态/敌意 Proxy。执行 catch 必须只分类一次，并把同一份
+      // canonical classification 贯穿写回与 ledger settlement；否则第二次读 getter 既可能
+      // 得到不同裁决，也可能再次 throw，留下 running state + open reservation。
+      const c = opts.classification ?? classifyFailure(opts.err)
+      // H10 r1 阻断6/4（任务B1）：SkillBundleSnapshotMismatchError（容器 mount 前 host 侧核验失败，
+      // ports.ts::verifySkillBundleSnapshot）发生在 agent 从未启动的时间点——即便本 catch 站点恒
+      // opts.ran=true（runChange() 已被调用），也不能按 reserved-estimate 收费；classify.ts 据 tag
+      // 归出的专属 cause 在此 override charge:'none' + reason:'skill-bundle-snapshot-corrupt'
+      // （镜像设计 §5 对 skill-bundle-snapshot-corrupt「不收费」的既有裁决，只是发生时点从
+      // preparation 移到了 execution，处置口径必须一致）。
+      const isSnapshotCorrupt = c.cause === 'skill-bundle-snapshot-corrupt'
+      const isPolicyChanged = c.cause === 'skill-bundle-policy-changed'
+      const reason: RunSettlement['reason'] =
+        isSnapshotCorrupt ? 'skill-bundle-snapshot-corrupt'
+          : isPolicyChanged ? 'skill-bundle-policy-changed'
+          : c.cause === 'verify-fail' ? 'verify-fail'
+            : c.cause === 'cancelled' ? 'cancelled'
+              : settled === 'skipped' ? 'claim-lost'
+                : 'infrastructure-error'
+      return {
+        result, reason, charge: isSnapshotCorrupt || isPolicyChanged ? 'none' : charge,
+        error: { cause: c.cause || 'unknown', message: sanitize(c.message) }, skillBundleSnapshotSha256: snapshotSha256,
+      }
+    }
+    return { result, reason: settled === 'skipped' ? 'claim-lost' : undefined, charge, skillBundleSnapshotSha256: snapshotSha256 }
+  }
 
-    // ② semaphore：限并发沙箱
-    await semaphore.acquire()
-    const controller = new AbortController()
+  /** owner CAS scheduled→queued 补偿（Stage B 返工 #6）：结构化结果，绝不空吞。 */
+  const tryResetScheduledToQueued = async (name: string): Promise<ActivationCompensation> => {
     try {
-      // B5：claim 已把 queued→scheduled。running 转换（+ 随后 in-flight 登记）若抛错，异常会被
-      // runRoundOnce 的 allSettled 吞掉，change 卡 scheduled 永不复捡（scanReady 只捡 queued）→ 孤儿，
-      // 且此刻还没 inFlight.add，shutdown teardown 也标不到它。故这段包错误处理：失败走 applyFailure
-      // （分类 → attempts++ 回 queued 复捡 / 耗尽 failed），绝不留 scheduled 孤儿。
-      try {
-        await state.setAutomation(name, 'running')
-        emit(name, 'running')
-        inFlight.add(name)
-      } catch (err) {
-        emitTerminal(name, await applyFailure(name, err))
-        return
-      }
-      try {
-        const outcome = await runChange(name, controller.signal)
-        emitTerminal(name, await writeBackSuccess(name, outcome))
-      } catch (err) {
-        emitTerminal(name, await applyFailure(name, err))
-      } finally {
-        // settle 完 → 不再 in-flight（迟到的 shutdown 不会再标它）
-        inFlight.delete(name)
-      }
-    } finally {
-      semaphore.release() // ② 槽永远归还，即便 throw
+      const won = await state.setAutomationOwned(name, 'queued')
+      if (won) return { status: 'reset-queued' }
+      const observed = await state.getAutomation(name).catch(() => undefined)
+      return { status: 'ownership-lost', observedState: observed }
+    } catch (e) {
+      return { status: 'failed', error: sanitize(errText(e)) }
     }
   }
 
-  const runRoundOnce = async (candidates: string[]): Promise<void> => {
-    // ⑥ allSettled——绝不 Promise.all：单个 reject 不取消其余的写回。
-    await Promise.allSettled(candidates.map((name) => handleOne(name)))
+  /**
+   * activation append 失败补偿（Stage B 返工 #6）：primary failure 由调用方（allSettled 收口）据返回值
+   * 落 report.failures；本函数落 ledgerFailures（compat）+ 恢复标记 + 二次补偿失败（ownership-lost 仍
+   * 非 terminal / CAS throw）。恢复标记 automation_cause=activation-ledger-failed 只进 change 字段面，
+   * 不进 transact、不造 TransitionRecord（H9 边界）。 */
+  const handleActivationFailure = async (report: MutableReport, name: string, ctx: ExecutionContext, error: unknown): Promise<HandleResult> => {
+    const failure = classifyRoundFailure(name, 'activation', error)
+    report.ledgerFailures.push({ change: name, message: `activation append 失败：${sanitize(errText(error))}` })
+    const comp = await tryResetScheduledToQueued(name)
+    // 恢复标记（best-effort；下轮 scan/recovery 见 scheduled+activation-ledger-failed 尝试回 queued）。
+    await state.setField(name, 'automation_cause', 'activation-ledger-failed').catch(() => {})
+    await state.setField(name, 'automation_last_error', sanitize(errText(error))).catch(() => {})
+    let reason = 'activation-ledger-failed'
+    if (comp.status === 'ownership-lost') {
+      const observed = comp.observedState ?? await state.getAutomation(name).catch(() => '')
+      if (!isSettled(observed)) {
+        report.failures.push({ change: name, phase: 'activation', kind: 'state-io', message: sanitize(`activation-compensation-failed：ownership-lost 但 automation=${observed || '(空)'}`) })
+      }
+      reason = 'ownership-lost'
+    } else if (comp.status === 'failed') {
+      report.failures.push({ change: name, phase: 'activation', kind: 'state-io', message: sanitize(`activation-compensation-failed：${comp.error}`) })
+      reason = 'compensation-failed'
+    }
+    report.entries.push({ change: name, loopId: ctx.loop_id, disposition: 'activation-failed', reason })
+    return { ok: false, change: name, failure }
+  }
+
+  /** H10 §5：prepareSkillBundle 结构化失败处置（claim 之后、activate 之前，此刻尚未 activate、
+   *  从未创建 sandbox）。处置策略统一查 preparationPolicyFor（reason(+workflowKind)→result/是否
+   *  暂停 loop 的唯一表）；恒 charge:'none'（设计 §5 否决「准备失败仍按 reserved estimate 收费」）。
+   *  scope='requeue' 类（policy-changed/source-unstable）复位 automation=queued，交下一轮重新
+   *  admission（不在本轮内部重试）；其余落 paused，pauseLoop=true 时另经 report.pausePending
+   *  让本轮收尾统一暂停 loop（复用 applyDenial 同一套 pause-loop 管道，不发明第二条暂停通路）。 */
+  const handlePreparationFailure = async (
+    report: MutableReport, name: string, ctx: ExecutionContext, prep: Extract<PrepareOutcome, { ok: false }>,
+  ): Promise<HandleResult> => {
+    const policy = preparationPolicyFor(prep.reason, prep.workflowKind)
+    const target: AutomationState = policy.result === 'retry-queued' ? 'queued' : 'paused'
+    try {
+      const won = await state.setAutomationOwnedWithFields(name, target, {
+        automation_cause: prep.reason,
+        automation_last_error: sanitize(`skill bundle 准备失败（${prep.reason}）：${prep.detail}`),
+      })
+      if (!won) {
+        const observed = await state.getAutomation(name).catch(() => '')
+        if (!isSettled(observed)) {
+          const failure: RoundFailure = {
+            change: name, phase: 'preparation', kind: 'state-io',
+            message: sanitize(`preparation-state-commit ownership-lost 且 automation=${observed || '(空)'}`),
+          }
+          report.failures.push(failure)
+          report.entries.push({ change: name, loopId: ctx.loop_id, disposition: 'preparation-failed', reason: 'ownership-lost' })
+          return { ok: false, change: name, failure }
+        }
+        // 外部权威终态已经先行提交；不覆写它，也不用本轮的准备失败关闭
+        // reservation。ledger recovery 会按持久事实对账，避免这里和权威 settlement 竞赛。
+        report.entries.push({ change: name, loopId: ctx.loop_id, disposition: 'preparation-failed', reason: 'ownership-lost' })
+        return { ok: true, change: name }
+      }
+    } catch (error) {
+      const failure: RoundFailure = {
+        change: name, phase: 'preparation', kind: 'state-io', message: sanitize(errText(error)),
+      }
+      report.failures.push(failure)
+      report.entries.push({ change: name, loopId: ctx.loop_id, disposition: 'preparation-failed', reason: 'state-write-failed' })
+      return { ok: false, change: name, failure }
+    }
+    await tryLedger(report, name, 'settlement', () => admission.settleWon(ctx, { result: policy.result, reason: prep.reason, charge: 'none' }))
+    if (policy.pauseLoop) report.pausePending.push(ctx.loop_id)
+    report.entries.push({ change: name, loopId: ctx.loop_id, disposition: 'settled', result: target, reason: prep.reason })
+    if (policy.result === 'paused') emit(name, 'paused')
+    return { ok: true, change: name }
+  }
+
+  /**
+   * H10 §3：preparation.prepare(ctx) 意外抛错（ledger I/O，非结构化 PreparationFailureReason——
+   * 镜像 activate() 对 ledger I/O 的既有处置，调用方 fail-loud，不伪装成某个业务 reason）。claim
+   * 已把 automation 推到 scheduled，此刻 throw 若放任不管会留 scheduled 孤儿；比照 #6
+   * handleActivationFailure 的补偿模式复位 queued。
+   *
+   * reservation 从未 activate（claim 成功但 prepare 抛错，早于 activate 调用）。先以一次 owner CAS
+   * 原子提交 scheduled→queued + preparation-failed diagnostics；只有该 state commit 成功，才用
+   * result:'skipped'/reason:'infrastructure-error'/charge:'none' 关闭 reservation。CAS 输且现状非终态，
+   * 或 state 写抛错时 fail-loud 并保留 open reservation；外部终态抢先时不覆写，也不以本轮失败
+   * settlement。ledger 写失败经 tryLedger 落 failures/ledgerFailures，不吞、不二次抛出。
+   */
+  const handlePreparationThrow = async (report: MutableReport, name: string, ctx: ExecutionContext, error: unknown): Promise<HandleResult> => {
+    const failure = classifyRoundFailure(name, 'preparation', error)
+    let won: boolean
+    try {
+      won = await state.setAutomationOwnedWithFields(name, 'queued', {
+        automation_cause: 'preparation-failed',
+        automation_last_error: sanitize(errText(error)),
+      })
+    } catch (stateError) {
+      report.failures.push(failure)
+      report.entries.push({ change: name, loopId: ctx.loop_id, disposition: 'preparation-failed', reason: 'state-write-failed' })
+      return {
+        ok: false,
+        change: name,
+        failure: {
+          change: name,
+          phase: 'preparation',
+          kind: 'state-io',
+          message: sanitize(errText(stateError)),
+        },
+      }
+    }
+    if (!won) {
+      const observed = await state.getAutomation(name).catch(() => '')
+      if (!isSettled(observed)) {
+        report.failures.push({
+          change: name,
+          phase: 'preparation',
+          kind: 'state-io',
+          message: sanitize(`preparation state commit ownership-lost 且 automation=${observed || '(空)'}`),
+        })
+      }
+      report.entries.push({ change: name, loopId: ctx.loop_id, disposition: 'preparation-failed', reason: 'ownership-lost' })
+      return { ok: false, change: name, failure }
+    }
+    await tryLedger(report, name, 'settlement', () => admission.settleWon(ctx, { result: 'skipped', reason: 'infrastructure-error', charge: 'none' }))
+    report.entries.push({ change: name, loopId: ctx.loop_id, disposition: 'preparation-failed', reason: 'preparation-failed' })
+    return { ok: false, change: name, failure }
+  }
+
+  const handleOne = async (
+    name: string,
+    report: MutableReport,
+    preparation: ExecutionPreparationPort,
+    expectedLoopId: string | undefined,
+    expectedAutonomyLevel: AutomationConfig['level'] | null | undefined,
+  ): Promise<HandleResult> => {
+    await semaphore.acquire()
+    let phase: RoundFailure['phase'] = 'admission'
+    try {
+      if (report.halted) return { ok: true, change: name } // 前序候选触发 halt-round，停止后续 admission（良性跳过）
+
+      // ── ① 原子 preflight（claim 之前，governance+ledger 锁内重读 registry+ledger）。reserve 只对
+      //    「治理/业务拒绝」返 ok=false；ledger/registry I/O 错 throw → 落顶层 catch 归 failures ──
+      phase = 'admission'
+      const res = expectedLoopId === undefined && expectedAutonomyLevel === undefined
+        ? await admission.reserve(name)
+        : await admission.reserve(name, { expectedLoopId, expectedAutonomyLevel })
+      if (!res.ok) {
+        applyDenial(report, name, res) // denial 是治理常态，不进 failures、不改 ok
+        return { ok: true, change: name }
+      }
+      const ctx = res.context
+      report.admitted++
+
+      // H11：命令层 scan 前检查不能替代此处——registry/skill 文件可能在两者间变化，且 SDK/AFK
+      // 可直接进入 scheduler。此闸拿 reserve 刚解析出的 loop_id fresh 校验，仍早于 claim/sandbox。
+      let wiring: ExecutionWiringValidationResult
+      try {
+        wiring = await validateExecutionWiring(ctx)
+      } catch (error) {
+        await tryLedger(report, name, 'settlement', () => admission.settleLost(ctx))
+        return {
+          ok: false,
+          change: name,
+          failure: classifyRoundFailure(name, 'admission', error),
+        }
+      }
+      if (!wiring.ok) {
+        await tryLedger(report, name, 'settlement', () => admission.settleLost(ctx))
+        if (wiring.governancePaused !== true) report.pausePending.push(ctx.loop_id)
+        report.entries.push({
+          change: name,
+          loopId: ctx.loop_id,
+          disposition: 'denied',
+          reason: `execution-wiring-${wiring.status}`,
+        })
+        return {
+          ok: false,
+          change: name,
+          failure: {
+            change: name,
+            phase: 'admission',
+            kind: 'config',
+            message: sanitize(
+              `loop「${ctx.loop_id}」execution wiring ${wiring.status}（${wiring.dimension}）：${wiring.reason}`,
+            ),
+          },
+        }
+      }
+
+      // ── claim queued→scheduled（reservation 已早于此 CAS 落盘）──
+      phase = 'claim'
+      const won = await state.claim(name)
+      if (!won) {
+        phase = 'settlement'
+        await tryLedger(report, name, 'settlement', () => admission.settleLost(ctx)) // 幂等关闭扣 0
+        report.entries.push({ change: name, loopId: ctx.loop_id, disposition: 'claim-lost', result: 'skipped', reason: 'claim-lost' })
+        return { ok: true, change: name }
+      }
+
+      // ── H10 §3：prepareSkillBundle（claim 之后、activate 之前——设计定稿精确顺序）。未 prepared
+      //    绝不放行到 activate/runChange：RunChange 类型本身已收窄为 PreparedExecutionContext，
+      //    这里是编译期约束落地成真实调用顺序的地方。 ──
+      phase = 'preparation'
+      let prep: PrepareOutcome
+      try {
+        prep = await preparation.prepare(ctx)
+      } catch (e) {
+        // preparation 内部 ledger I/O 意外抛错（非结构化 reason）：#6 同款结构化补偿，绝不空吞。
+        return await handlePreparationThrow(report, name, ctx, e)
+      }
+      if (!prep.ok) {
+        return await handlePreparationFailure(report, name, ctx, prep)
+      }
+      const preparedCtx = prep.context
+      const sameAdmissionIdentity =
+        preparedCtx.attempt_id === ctx.attempt_id
+        && preparedCtx.reservation_id === ctx.reservation_id
+        && preparedCtx.loop_id === ctx.loop_id
+        && preparedCtx.change === ctx.change
+        && preparedCtx.policy_epoch === ctx.policy_epoch
+        && preparedCtx.skill_bundle_id === ctx.skill_bundle_id
+      const canonicalCasPath = preparedCtx.preparedKind !== 'loop-bundle'
+        || preparedCtx.skillBundle.casRelativePath === `.pipeline/loops/skill-snapshots/sha256/${preparedCtx.skillBundle.snapshotSha256}`
+      // skill_bundle_id 是 reserve 在治理锁内冻结的权威绑定：有具名 profile 的 loop 只能产出
+      // loop-bundle；缺席/null 的非 loop 才能产出 non-loop。包内发行 WeakSet 只证明对象由工厂
+      // 构造，不证明调用方选对了互斥分支，因此这里必须独立核对。
+      const preparedKindMatchesBinding = ctx.skill_bundle_id == null
+        ? preparedCtx.preparedKind === 'non-loop'
+        : preparedCtx.preparedKind === 'loop-bundle'
+      if (!consumeIssuedPreparedContext(preparedCtx) || !sameAdmissionIdentity || !canonicalCasPath || !preparedKindMatchesBinding) {
+        return await handlePreparationThrow(
+          report,
+          name,
+          ctx,
+          new Error('preparation 返回了未由本进程发行、已消费、身份漂移、bundle 分支不符或 CAS 路径不规范的 PreparedExecutionContext'),
+        )
+      }
+
+      // ── activate：ledger 锁内验证 reservation 未关闭 → append reservation-activated ──
+      phase = 'activation'
+      let act: ActivateResult
+      try {
+        act = await admission.activate(preparedCtx)
+      } catch (e) {
+        // claim 成功但 activation append 失败（ledger I/O）：#6 结构化补偿，绝不空吞。
+        return await handleActivationFailure(report, name, preparedCtx, e)
+      }
+      if (act.status === 'already-terminal') {
+        // reserve→activate 之间 recovery 已关闭 reservation（罕见竞态）：复位 queued 待下轮重开，无需 settle。
+        await tryResetScheduledToQueued(name)
+        report.entries.push({ change: name, loopId: preparedCtx.loop_id, disposition: 'activation-failed', reason: 'already-terminal' })
+        return { ok: true, change: name }
+      }
+
+      // ── ② status recheck（claim 后 running 前）：停用 → 不跑，settle skipped/kill-switch，落 paused ──
+      phase = 'state-transition'
+      if (!(await admission.isActive(preparedCtx.loop_id))) {
+        const won = await state.setAutomationOwnedWithFields(name, 'paused', { automation_cause: 'kill-switch' })
+        if (!won) {
+          const observed = await state.getAutomation(name).catch(() => '')
+          report.entries.push({ change: name, loopId: preparedCtx.loop_id, disposition: 'activation-failed', reason: 'ownership-lost' })
+          if (isSettled(observed)) return { ok: true, change: name }
+          const failure: RoundFailure = {
+            change: name,
+            phase: 'state-transition',
+            kind: 'state-io',
+            message: sanitize(`kill-switch state commit ownership-lost 且 automation=${observed || '(空)'}`),
+          }
+          return { ok: false, change: name, failure }
+        }
+        phase = 'settlement'
+        // H10 r1 阻断3/D5 返工（任务B1）：preparedCtx 现是判别联合，skillBundle 只存在于
+        // preparedKind==='loop-bundle' 分支——显式判别窄化。
+        await tryLedger(report, name, 'settlement', () => admission.settleWon(preparedCtx, {
+          result: 'skipped', reason: 'kill-switch', charge: 'none',
+          skillBundleSnapshotSha256: preparedCtx.preparedKind === 'loop-bundle' ? preparedCtx.skillBundle.snapshotSha256 : undefined,
+        }))
+        report.entries.push({ change: name, loopId: preparedCtx.loop_id, disposition: 'settled', result: 'paused', reason: 'kill-switch' })
+        emit(name, 'paused')
+        return { ok: true, change: name }
+      }
+
+      phase = 'state-transition'
+      // H7 r7：scheduled→running 仍是一次 owner commit，不能用普通 set 覆盖在 isActive 重查后
+      // 并发到达的人工 pause/requeue。CAS 输后只有明确读到非 daemon-owned 状态才可把本次
+      // reservation 以零扣账关闭；读失败或仍见 scheduled/running 时所有权事实不明，保留 open
+      // 给 recovery，绝不启动 runChange。
+      let runningWon: boolean
+      try {
+        runningWon = await state.setAutomationOwned(name, 'running')
+      } catch (err) {
+        const failure = classifyRoundFailure(name, 'state-transition', err)
+        report.entries.push({ change: name, loopId: preparedCtx.loop_id, disposition: 'activation-failed', reason: 'state-write-failed' })
+        return { ok: false, change: name, failure }
+      }
+      if (!runningWon) {
+        let observed: string
+        try {
+          observed = await state.getAutomation(name)
+        } catch (err) {
+          const failure = classifyRoundFailure(name, 'state-transition', err)
+          report.entries.push({ change: name, loopId: preparedCtx.loop_id, disposition: 'activation-failed', reason: 'ownership-lost' })
+          return { ok: false, change: name, failure }
+        }
+        if (isSettled(observed)) {
+          phase = 'settlement'
+          await settleTerminal(report, preparedCtx, 'skipped', { ran: false })
+          report.entries.push({
+            change: name, loopId: preparedCtx.loop_id,
+            disposition: 'activation-failed', result: 'skipped', reason: 'ownership-lost',
+          })
+          return { ok: true, change: name }
+        }
+        const failure: RoundFailure = {
+          change: name,
+          phase: 'state-transition',
+          kind: 'state-io',
+          message: sanitize(`scheduled→running owner CAS 输且 automation=${observed || '(空)'}`),
+        }
+        report.entries.push({ change: name, loopId: preparedCtx.loop_id, disposition: 'activation-failed', reason: 'ownership-lost' })
+        return { ok: false, change: name, failure }
+      }
+      emit(name, 'running')
+      inFlight.add(name)
+      const controller = new AbortController()
+      let executedOutcome: RunOutcome | undefined
+      try {
+        phase = 'execution'
+        let outcome = canonicalizeRunOutcome(await runChange(preparedCtx, controller.signal), preparedCtx)
+        executedOutcome = outcome
+        // ── ④ terminal settle 前重查：停用 → 强落 paused（防成功态被写成 merged）──
+        // 已发生的物理 merge 是不可逆事实；terminal 重查只能阻止尚未 landed 的 run，不能把已合入
+        // base 的结果改写成“kill-switch 未合并”。
+        if (outcome.mergeLanded !== true && !(await admission.isActive(preparedCtx.loop_id))) {
+          outcome = Object.freeze({ ...outcome, killSwitched: true })
+        }
+        const terminalCommit = await writeBackSuccess(name, preparedCtx, outcome)
+        // state commit 未证实时绝不先关 reservation。物理 merge 已落地且 owner 已被外部终态抢走时，
+        // 还要求该外部终态确为 merged；paused/failed 等虽明确，却与不可逆 ref 事实冲突，必须 recovery。
+        // 本地 committed 仍遵守 writeBackSuccess 的既有 level/gate 裁决（例如 L1 report-only）。
+        if (
+          terminalCommit.status === 'recovery-pending'
+          || (
+            outcome.mergeLanded === true
+            && terminalCommit.status === 'external-terminal'
+            && terminalCommit.terminal !== 'merged'
+          )
+        ) {
+          const observed = terminalCommit.status === 'recovery-pending'
+            ? terminalCommit.observed
+            : terminalCommit.terminal
+          const detail = terminalCommit.status === 'recovery-pending' && terminalCommit.error !== undefined
+            ? errText(terminalCommit.error)
+            : `automation=${observed || '(未知)'}`
+          const failure: RoundFailure = {
+            change: name,
+            phase: 'state-transition',
+            kind: 'state-io',
+            message: sanitize(
+              outcome.mergeLanded === true
+                ? `merge 已落地但 terminal state 未确认 merged；${detail}`
+                : `success terminal state commit 未确认；${detail}`,
+            ),
+          }
+          report.entries.push({
+            change: name,
+            loopId: preparedCtx.loop_id,
+            disposition: 'recovery-pending',
+            reason: 'state-write-pending',
+          })
+          return { ok: false, change: name, failure }
+        }
+        const settled = terminalCommit.terminal
+        phase = 'settlement'
+        await settleTerminal(report, preparedCtx, settled, { outcome, ran: true })
+        if (outcome.mergeJournalPending === true) {
+          report.failures.push({
+            change: name, phase: 'settlement', kind: 'ledger-io',
+            message: 'base ref 已落地，但 merge-landed ledger receipt 写入失败；recovery 必须按 intent + ref 对账',
+          })
+        }
+        emitTerminal(name, settled)
+        report.entries.push({ change: name, loopId: preparedCtx.loop_id, disposition: 'settled', result: settled, reason: outcome.killSwitched ? 'kill-switch' : undefined })
+      } catch (err) {
+        if (executedOutcome?.mergeLanded === true) {
+          // update-ref 已成功是不可逆事实；终态 state 写失败不得进通用 retry
+          // 分类，否则会把已合并产物重排 queued 再跑一次。state 尚未提交时也绝不能先关
+          // reservation：否则 recovery 会把它视为 closed、永久留下 running。保留 running +
+          // intent/landed + open reservation，交下一轮先 commitRecoveredMerge 再幂等落 terminal。
+          const failure: RoundFailure = {
+            change: name, phase: 'state-transition', kind: 'state-io', message: sanitize(errText(err)),
+          }
+          report.failures.push(failure)
+          report.entries.push({
+            change: name,
+            loopId: preparedCtx.loop_id,
+            disposition: 'recovery-pending',
+            reason: 'state-write-pending',
+          })
+          return { ok: false, change: name, failure }
+        }
+        // 执行/结算异常：分类落态 + 关闭 reservation（业务失败路，非 round 基础设施故障——settle I/O 失败另经 tryLedger 记）。
+        const failureClassification = classifyFailure(err)
+        const terminalCommit = await applyFailure(name, err, failureClassification)
+        if (terminalCommit.status === 'recovery-pending') {
+          const detail = terminalCommit.error !== undefined
+            ? errText(terminalCommit.error)
+            : `automation=${terminalCommit.observed || '(未知)'}`
+          const failure: RoundFailure = {
+            change: name,
+            phase: 'state-transition',
+            kind: 'state-io',
+            // 两段失败都保留：前半是触发分类/重试的原始执行异常，后半是终态持久化
+            // 未确认的恢复信息。只报告后者会把真正根因遮蔽成笼统的 state-write-pending。
+            message: sanitize(`execution failure: ${failureClassification.message}；terminal commit 未确认；${detail}`),
+          }
+          report.entries.push({
+            change: name,
+            loopId: preparedCtx.loop_id,
+            disposition: 'recovery-pending',
+            reason: 'state-write-pending',
+          })
+          return { ok: false, change: name, failure }
+        }
+        const settled = terminalCommit.terminal
+        phase = 'settlement'
+        await settleTerminal(report, preparedCtx, settled, { err, classification: failureClassification, ran: true })
+        emitTerminal(name, settled)
+        const baseAdvanced = isBaseAdvancedFailure(err)
+        const cleanupFailed = failureClassification.cause === 'container-cleanup'
+        report.entries.push({
+          change: name,
+          loopId: preparedCtx.loop_id,
+          disposition: 'settled',
+          result: settled,
+          reason: baseAdvanced ? 'base-advanced' : cleanupFailed ? 'container-cleanup' : undefined,
+        })
+        // G² 子问题1：base 被第三方推进不是普通 per-change 冲突，是并发异常——settle 为 conflict 留现场之外，
+        // 另记一条 round failure 使 ok=false（CLI 非零、不打印跑完一轮）。H14 r3 同样要求容器清理失败
+        // fail-loud：即便已按 conflict 安全落态，也不能让 round/CLI 报成功。普通 content-conflict 不进此表。
+        if (baseAdvanced || cleanupFailed) report.failures.push(classifyRoundFailure(name, 'execution', err))
+      } finally {
+        inFlight.delete(name)
+      }
+      return { ok: true, change: name }
+    } catch (error) {
+      // 顶层兜底（reserve/claim/isActive/settleLost 等 phase 的意外 throw）：结构化归 failures，绝不吞成成功。
+      return { ok: false, change: name, failure: classifyRoundFailure(name, phase, error) }
+    } finally {
+      semaphore.release()
+    }
+  }
+
+  /** 幂等关闭 reservation（commit marker）；ledger 写失败记进 report（failures + ledgerFailures），不 throw、不打印假成功。
+   *  H10：调用点恒是 prepareSkillBundle 成功后的 preparedCtx（settlementFor 据此把
+   *  skillBundleSnapshotSha256 带进 RunSettlement）。 */
+  const settleTerminal = async (
+    report: MutableReport,
+    ctx: PreparedExecutionContext,
+    settled: Terminal,
+    opts: {
+      outcome?: RunOutcome
+      err?: unknown
+      classification?: ReturnType<typeof classifyFailure>
+      ran: boolean
+    },
+  ): Promise<void> => {
+    if (settled === 'skipped' && !opts.ran) {
+      // 外部 settle 抢先且本地未真跑 → 关闭 reservation 扣 0。
+      await tryLedger(report, ctx.change, 'settlement', () => admission.settleLost(ctx))
+      return
+    }
+    await tryLedger(report, ctx.change, 'settlement', () => admission.settleWon(ctx, settlementFor(ctx, settled, opts)))
+  }
+
+  /** on_exceed 处置：skip-run 只记；pause-loop 改 loop status（有 pauseLoop 才真改）；halt-round 停后续。 */
+  const applyDenial = (report: MutableReport, change: string, denial: AdmissionDenial): void => {
+    report.entries.push({ change, loopId: denial.loopId, disposition: 'denied', reason: denial.reason })
+    if (denial.reason === 'ledger-degraded') report.ledgerDegraded = true
+    // H10 r1 阻断6（任务B1）：loops.yaml 存在但解析/校验失败（registry-unparseable）是配置损坏，不是
+    // 治理常态——CLI 必须非零退出，不能被当成普通 denial 静默吞掉（区别于 no-registry：文件缺失是
+    // 合法「无 loop 语境」，仍保持 ok:true，见 loop-admission.ts::reserveOnce 两者的不同 detail）。
+    // kind 复用既有 'registry-io'（与真实 registry I/O throw 归同一类："registry 此刻不可用"，
+    // 不论成因是权限故障还是内容损坏，诊断读出来都该导向同一处置：非零、不打印跑完一轮）。
+    if (denial.reason === 'registry-unparseable') {
+      report.failures.push({ change, phase: 'admission', kind: 'registry-io', message: sanitize(denial.detail) })
+    }
+    if (denial.action === 'halt-round') report.halted = true
+    if (denial.action === 'pause-loop' && denial.loopId !== undefined && deps.pauseLoop) {
+      report.pausePending.push(denial.loopId)
+    }
+  }
+
+  /** 结算/关闭的 ledger 写包裹：失败记进 report（failures[structured] + ledgerFailures[compat]），不 throw、不打印假成功。
+   *  already-closed 是成功幂等结果（closeReservationIfOpen 返回而非 throw），不进任何失败表。 */
+  const tryLedger = async (report: MutableReport, change: string, phase: RoundFailure['phase'], fn: () => Promise<void>): Promise<void> => {
+    try {
+      await fn()
+    } catch (e) {
+      report.failures.push(classifyRoundFailure(change, phase, e))
+      report.ledgerFailures.push({ change, message: sanitize(errText(e)) })
+    }
+  }
+
+  const runRoundOnce = async (
+    candidates: readonly string[],
+    options: RunRoundOptions = {},
+  ): Promise<RoundReport> => {
+    const report: MutableReport = {
+      candidates: candidates.length, admitted: 0, entries: [], failures: [], ledgerFailures: [],
+      halted: false, ledgerDegraded: false, pausePending: [],
+    }
+    // H10 §3/§8任务5：直接 createScheduler 时 ExecutionPreparationPort 在类型上可选。缺席时整轮
+    // 在处理任何候选**之前**就短路成一条 config 类
+    // RoundFailure：零 admission/claim/runChange，不悄悄 pass-through 冒充「已 prepare」、也不假装
+    // 每个候选都失败预备（那会把「基础设施未装配」误报成一堆逐候选的业务 denial）。
+    if (deps.preparation === undefined) {
+      return {
+        candidates: candidates.length, admitted: 0, entries: [],
+        failures: [{
+          change: '(config)', phase: 'preparation', kind: 'config',
+          message: 'ExecutionPreparationPort 未装配（SchedulerDeps.preparation 缺席）——本轮零 admission/claim/runChange',
+        }],
+        ledgerFailures: [], halted: false, ledgerDegraded: false, ok: false,
+      }
+    }
+    const preparation = deps.preparation
+    // ⑥ allSettled——绝不 Promise.all：单个 reject 不取消其余的写回。halt-round 由 report.halted 阻断后续。
+    const results = await Promise.allSettled(candidates.map((name) => handleOne(
+      name,
+      report,
+      preparation,
+      options.expectedLoopIdByChange?.get(name),
+      options.expectedAutonomyLevelByChange?.get(name),
+    )))
+    // Stage B 返工 #2：allSettled 逐项检查——rejected（handleOne 顶层 catch 外的意外）与 !value.ok 都归 failures，
+    // 绝不再被 allSettled 吞成 ok=true。primary failure 单点在此落表（handleOne 只落 secondary/ledger-compat），不双计。
+    for (const [i, result] of results.entries()) {
+      if (result.status === 'rejected') {
+        report.failures.push({ change: candidates[i]!, phase: 'internal', kind: 'unexpected', message: sanitize(errText(result.reason)) })
+      } else if (!result.value.ok) {
+        report.failures.push(result.value.failure)
+      }
+    }
+    // pause-loop 后处理（改 loop status）。Stage B 返工 #3：pause 是 kill-switch 写，失败不得空吞——
+    // 进 failures（registry-io）使 ok=false（kill-switch 写失败不能被报告为成功暂停）。
+    for (const loopId of [...new Set(report.pausePending)]) {
+      try {
+        await deps.pauseLoop?.(loopId)
+      } catch (e) {
+        report.failures.push({ change: `(pause:${loopId})`, phase: 'state-transition', kind: 'registry-io', message: sanitize(errText(e)) })
+      }
+    }
+    return {
+      candidates: report.candidates, admitted: report.admitted, entries: report.entries,
+      failures: report.failures, ledgerFailures: report.ledgerFailures, halted: report.halted,
+      ledgerDegraded: report.ledgerDegraded,
+      ok: report.failures.length === 0 && report.ledgerFailures.length === 0 && !report.ledgerDegraded,
+    }
   }
 
   return { runRoundOnce }
+}
+
+/** 内部可变累加器（runRoundOnce 收尾冻结成 RoundReport）。 */
+interface MutableReport {
+  candidates: number
+  admitted: number
+  entries: RoundOutcomeEntry[]
+  failures: RoundFailure[]
+  ledgerFailures: { change: string; message: string }[]
+  halted: boolean
+  ledgerDegraded: boolean
+  pausePending: string[]
 }

@@ -15,6 +15,7 @@ import { readSkillSources, type SkillSource, type SkillSourcesResult } from '../
 import {
   buildSkillsPlan,
   cmdSetup,
+  cmdSetupHost,
   cmdSetupRuntime,
   cmdSetupSkills,
   ensurePipelineOnPath,
@@ -32,11 +33,12 @@ interface SpyCalls {
   makeSymlink: Array<[string, string]>
   removePath: string[]
   chmodExec: string[]
+  writeText: Array<[string, string]>
   exec: Array<[string, string[]]>
 }
 type ExecStub = (cmd: string, args: string[]) => { code: number; stdout: string; stderr: string }
 function spyEnv(over: Partial<SetupEnv> = {}, exec?: ExecStub, confirmAns = true): { env: SetupEnv; calls: SpyCalls } {
-  const calls: SpyCalls = { mkdirp: [], makeSymlink: [], removePath: [], chmodExec: [], exec: [] }
+  const calls: SpyCalls = { mkdirp: [], makeSymlink: [], removePath: [], chmodExec: [], writeText: [], exec: [] }
   const env: SetupEnv = {
     homeDir: () => '/home/test',
     pluginRoot: () => '/plugin',
@@ -44,10 +46,12 @@ function spyEnv(over: Partial<SetupEnv> = {}, exec?: ExecStub, confirmAns = true
     mkdirp: (d) => { calls.mkdirp.push(d) },
     readSymlink: () => null,
     pathExists: () => false,
+    commandExists: () => false,
     listDir: () => [],
     makeSymlink: (t, l) => { calls.makeSymlink.push([t, l]) },
     removePath: (p) => { calls.removePath.push(p) },
     chmodExec: (p) => { calls.chmodExec.push(p) },
+    writeText: (p, text) => { calls.writeText.push([p, text]) },
     runCommand: (cmd, args) => { calls.exec.push([cmd, args]); return exec ? exec(cmd, args) : { code: 0, stdout: '', stderr: '' } },
     confirm: () => confirmAns,
     ...over,
@@ -81,6 +85,20 @@ const eccSources: SkillSource[] = ECC_NAMES.map((n) => ({
 }))
 const cmdText = (c: PlannedCommand): string => [c.cmd, ...c.args].join(' ')
 
+/** Native setup must resolve the real plugin root from the host-owned inventory, not cache guesses. */
+const codexInstallExec: ExecStub = (cmd, args) => {
+  if (cmd === 'codex' && args.join(' ') === 'plugin list --json') {
+    return {
+      code: 0,
+      stdout: JSON.stringify({
+        installed: [{ name: 'pipeline-lite', marketplaceName: 'pipeline-lite', source: { path: '/installed/pipeline-lite' } }],
+      }),
+      stderr: '',
+    }
+  }
+  return { code: 0, stdout: '', stderr: '' }
+}
+
 // ── 真 fs env:临时 HOME + 临时源,验证真软链行为 ─────────────────────────────────────
 const tmpDirs: string[] = []
 function mkTmp(prefix: string): string {
@@ -112,25 +130,66 @@ describe('resolvePipelineSource —— 软链源解析', () => {
   })
 })
 
-describe('①--dry-run —— 打印计划骨架且零写、零软链', () => {
-  test('空 sub + --dry-run:骨架含三段 + Phase 锚点,且零 mutation', () => {
+describe('①--dry-run —— 按宿主打印计划且零写、零软链', () => {
+  test('setup --codex --dry-run:骨架含三段 + Phase 锚点,且零 mutation', () => {
     const deps = makeDeps()
     const { env, calls } = spyEnv()
-    expect(cmdSetup(deps, undefined, { dryRun: true }, env)).toBe(0)
+    expect(cmdSetup(deps, undefined, { codex: true, dryRun: true }, env)).toBe(0)
     const out = deps.outLines.join('\n')
     expect(out).toContain('计划骨架')
-    expect(out).toContain('技能安装')
-    expect(out).toContain('Phase 2')
-    expect(out).toContain('运行时检查')
-    expect(out).toContain('Phase 3')
-    expect(out).toContain('就绪清单')
+    expect(out).toContain('唯一 pipeline-lite 插件')
+    expect(out).toContain('内置技能')
+    expect(out).toContain('技能安装计划')
+    expect(out).toContain('运行时就绪检查')
     expect(out).toContain('--dry-run')
     // 零副作用铁律（含技能段:dry-run 零执行）
     expect(calls.mkdirp).toHaveLength(0)
     expect(calls.makeSymlink).toHaveLength(0)
     expect(calls.removePath).toHaveLength(0)
     expect(calls.chmodExec).toHaveLength(0)
+    expect(calls.writeText).toHaveLength(0)
     expect(calls.exec).toHaveLength(0)
+  })
+
+  test('未选择宿主 → fail-loud，不会悄悄同时安装 Codex 与 Claude', () => {
+    const deps = makeDeps()
+    expect(cmdSetup(deps, undefined, { dryRun: true }, spyEnv().env)).toBe(1)
+    expect(deps.errLines.join('\n')).toContain('必须指定一个宿主')
+  })
+})
+
+describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校验后写入用户配置', () => {
+  test('Codex 原生安装验证通过后，--auto-update 写入精确的每日更新偏好', () => {
+    const deps = makeDeps()
+    const { env, calls } = spyEnv({
+      readSymlink: () => '/installed/pipeline-lite/packages/cli/dist/pipeline.mjs',
+      pathExists: () => true,
+    }, codexInstallExec)
+
+    expect(cmdSetupHost(deps, 'codex', { codex: true, autoUpdate: true }, env)).toBe(0)
+    expect(calls.writeText).toEqual([[
+      '/home/test/.config/pipeline-lite/auto-update.conf',
+      'host=codex\nenabled=true\n',
+    ]])
+    expect(calls.mkdirp).toContain('/home/test/.config/pipeline-lite')
+    expect(calls.exec.map(([cmd, args]) => [cmd, args.join(' ')])).toEqual([
+      ['codex', 'plugin marketplace add jefferysha/pipeline-worklfow --ref main'],
+      ['codex', 'plugin add pipeline-lite@pipeline-lite --json'],
+      ['codex', 'plugin list --json'],
+      ['bash', '/installed/pipeline-lite/tools/verify-skills.sh --quiet --root /installed/pipeline-lite'],
+    ])
+    expect(deps.outLines.join('\n')).toContain('已启用 --codex 自动更新')
+    expect(deps.outLines.join('\n')).toContain('输入 /hooks')
+  })
+
+  test('adapter 不能借 --auto-update 伪装成有自己的发布通道', () => {
+    const deps = makeDeps()
+    const { env, calls } = spyEnv()
+
+    expect(cmdSetupHost(deps, 'cursor', { cursor: true, autoUpdate: true }, env)).toBe(1)
+    expect(calls.exec).toEqual([])
+    expect(calls.writeText).toEqual([])
+    expect(deps.errLines.join('\n')).toContain('由承载它的 Codex 或 Claude 插件负责')
   })
 })
 
@@ -231,9 +290,9 @@ describe('⑨空 sub 全流程 —— 技能段后接运行时就绪清单（dry
     const { env } = spyEnv({
       readSymlink: () => '/plugin/packages/cli/dist/pipeline.mjs',
       pathExists: () => true,
-    })
+    }, codexInstallExec)
     const rt = fakeRt({ hostEnv: { CLAUDE_CODE_OAUTH_TOKEN: 'a', OPENAI_API_KEY: 'b' } })
-    const code = await cmdSetup(deps, undefined, { yes: true }, env, rt)
+    const code = await cmdSetup(deps, undefined, { codex: true, yes: true }, env, rt)
     expect(code).toBe(0)
     const out = deps.outLines.join('\n')
     expect(out).toContain('技能安装计划') // 技能段跑了
@@ -245,7 +304,7 @@ describe('⑨空 sub 全流程 —— 技能段后接运行时就绪清单（dry
     const deps = makeDeps()
     const { env, calls } = spyEnv()
     // 关键:不传 rt（用真实 REAL_RUNTIME_ENV 缺省）——dry-run 仍绝不起真 docker;同步返 number 即证未 await 探测。
-    const code = cmdSetup(deps, undefined, { dryRun: true }, env)
+    const code = cmdSetup(deps, undefined, { codex: true, dryRun: true }, env)
     expect(code).toBe(0) // 同步 number（非 Promise）——dry-run 不进异步运行时探测
     const out = deps.outLines.join('\n')
     expect(out).toContain('运行时就绪检查')
@@ -254,14 +313,15 @@ describe('⑨空 sub 全流程 —— 技能段后接运行时就绪清单（dry
     expect(calls.exec).toHaveLength(0) // 零 exec（技能段 dry-run 零执行 + 运行时段未探测）
   })
 
-  test('退出码:技能段强制失败(exit 1) 优先于运行时(恒 0),但运行时清单仍打印（一屏可见）', async () => {
+  test('宿主 marketplace 安装失败时立即退出，不会把未验证的插件伪装成可运行环境', async () => {
     const deps = makeDeps()
     // 无已装 + 全 exec 失败 → 真 registry 的 mandatory 命令全败 → 技能段 exit 1。
     const exec: ExecStub = () => ({ code: 1, stdout: '', stderr: 'boom' })
     const { env } = spyEnv({ readSymlink: () => '/plugin/packages/cli/dist/pipeline.mjs' }, exec)
-    const code = await cmdSetup(deps, undefined, { yes: true }, env, fakeRt())
-    expect(code).toBe(1) // 技能段强制失败保留（运行时恒 0 不覆盖）
-    expect(deps.outLines.join('\n')).toContain('就绪清单') // 但运行时段仍跑完（不因技能失败跳过）
+    const code = await cmdSetup(deps, undefined, { codex: true, yes: true }, env, fakeRt())
+    expect(code).toBe(1)
+    expect(deps.errLines.join('\n')).toContain('失败')
+    expect(deps.outLines.join('\n')).not.toContain('就绪清单')
   })
 })
 
@@ -317,6 +377,18 @@ describe('⑧运行时检查段 R1 —— AFK 就绪清单（docker/镜像/两 r
     expect(out).not.toContain('claude setup-token')
   })
 
+  test('Codex-first：默认 ~/.codex/auth.json 可读 → 不再要求 OPENAI_API_KEY', async () => {
+    const deps = makeDeps()
+    const rt = Object.assign(fakeRt({ hostEnv: {} }), {
+      defaultCodexHome: '/users/codex-owner/.codex',
+      canReadFile: (path: string) => path === '/users/codex-owner/.codex/auth.json',
+    })
+    expect(await cmdSetupRuntime(deps, {}, rt)).toBe(0)
+    const out = deps.outLines.join('\n')
+    expect(out).toContain('默认 ~/.codex 登录')
+    expect(out).not.toContain('去配 OPENAI_API_KEY')
+  })
+
   test('claude-code 凭证缺 → 附「怎么拿」claude setup-token 引导（值永不回显）', async () => {
     const deps = makeDeps()
     // 两 runner 凭证两源皆缺（hostEnv 空 + 无 secrets）
@@ -359,10 +431,16 @@ describe('④program 装配 —— flag 解析 --dry-run/--yes 透传', () => {
     }
   }
 
-  test('setup --dry-run:commander 解析为 dry-run（打印骨架、零副作用安全）', async () => {
+  test('setup --codex --dry-run:commander 解析为 host + dry-run（打印骨架、零副作用安全）', async () => {
     const deps = makeDeps()
-    expect(await runProgram(deps, ['setup', '--dry-run'])).toBe(0)
+    expect(await runProgram(deps, ['setup', '--codex', '--dry-run'])).toBe(0)
     expect(deps.outLines.join('\n')).toContain('--dry-run')
+  })
+
+  test('setup --dry-run 未指定宿主 → exit 1', async () => {
+    const deps = makeDeps()
+    expect(await runProgram(deps, ['setup', '--dry-run'])).toBe(1)
+    expect(deps.errLines.join('\n')).toContain('必须指定一个宿主')
   })
 
   test('setup skills --dry-run:commander 解析,出技能计划零全局写（真装留最终门,不入 CI）', async () => {
@@ -381,13 +459,23 @@ describe('⑤技能安装段 S2 —— 命令生成 / 标注 / 幂等 / dry-run 
     expect(ecc).toBeDefined()
     expect(ecc!.names).toHaveLength(15)
     expect(ecc!.args.filter((a) => a === '--skill')).toHaveLength(15)
+    expect(ecc!.args).toEqual(expect.arrayContaining(['-g', '-y']))
     expect(ecc!.bareAdd).toBe(false)
     expect(cmdText(ecc!)).toContain('npx skills add affaan-m/ECC --skill browser-qa')
     // 禁整装:绝无 args 恰为 skills add affaan-m/ECC（缺 --skill）的整仓命令
     expect(plan.commands.some((c) => c.cmd === 'npx' && c.args.join(' ') === 'skills add affaan-m/ECC')).toBe(false)
   })
 
-  test('① agents-inc marketplace-add 在逐 id install 之前;npm 一条;builtin/bundled 无命令', () => {
+  test('真实 registry：default workflow 全部 bundled，不生成第三方 skills-cli/npm/marketplace 安装命令', () => {
+    const plan = buildSkillsPlan(readSkillSources(), spyEnv().env)
+    expect(plan.commands).toEqual([])
+    expect(plan.noInstall.length).toBeGreaterThan(30)
+    expect(plan.noInstall).toContainEqual({ token: 'brainstorming', tool: 'bundled' })
+    expect(plan.noInstall).toContainEqual({ token: 'openspec-propose', tool: 'bundled' })
+    expect(plan.noInstall).toContainEqual({ token: 'deployment-patterns', tool: 'bundled' })
+  })
+
+  test('① agents-inc marketplace-add 在逐 id install 之前，Codex 优先且保留 Claude 兼容；npm 一条；builtin/bundled 无命令', () => {
     const src: SkillSource[] = [
       { token: 'shadcn-ui', tool: 'claude-plugin', source: 'agents-inc', skill: 'web-ui-shadcn-ui', tier: 'recommended', official: false },
       { token: 'tailwind-css-patterns', tool: 'claude-plugin', source: 'agents-inc', skill: 'web-styling-tailwind', tier: 'recommended', official: false },
@@ -397,12 +485,16 @@ describe('⑤技能安装段 S2 —— 命令生成 / 标注 / 幂等 / dry-run 
     ]
     const plan = buildSkillsPlan(src, spyEnv().env)
     const texts = plan.commands.map(cmdText)
-    const addIdx = texts.findIndex((s) => s.includes('plugin marketplace add agents-inc/skills'))
-    const shadcnIdx = texts.findIndex((s) => s.includes('web-ui-shadcn-ui@agents-inc'))
-    const tailwindIdx = texts.findIndex((s) => s.includes('web-styling-tailwind@agents-inc'))
-    expect(addIdx).toBeGreaterThanOrEqual(0)
-    expect(addIdx).toBeLessThan(shadcnIdx)
-    expect(addIdx).toBeLessThan(tailwindIdx)
+    const codexAddIdx = texts.indexOf('codex plugin marketplace add agents-inc/skills')
+    const claudeAddIdx = texts.indexOf('claude plugin marketplace add agents-inc/skills')
+    const codexShadcnIdx = texts.indexOf('codex plugin add web-ui-shadcn-ui@agents-inc')
+    const codexTailwindIdx = texts.indexOf('codex plugin add web-styling-tailwind@agents-inc')
+    const claudeShadcnIdx = texts.indexOf('claude plugin install web-ui-shadcn-ui@agents-inc')
+    expect(codexAddIdx).toBeGreaterThanOrEqual(0)
+    expect(claudeAddIdx).toBeGreaterThanOrEqual(0)
+    expect(codexAddIdx).toBeLessThan(codexShadcnIdx)
+    expect(codexAddIdx).toBeLessThan(codexTailwindIdx)
+    expect(claudeAddIdx).toBeLessThan(claudeShadcnIdx)
     expect(texts).toContain('npm install -g @fission-ai/openspec')
     expect(texts.some((s) => s.includes('verify') || s.includes('openspec-propose'))).toBe(false)
     expect(plan.noInstall.map((n) => n.token).sort()).toEqual(['openspec-propose', 'verify'])
@@ -440,19 +532,56 @@ describe('⑤技能安装段 S2 —— 命令生成 / 标注 / 幂等 / dry-run 
     expect(plan.commands.filter((c) => c.source === 'affaan-m/ECC')).toHaveLength(0)
   })
 
-  test('③ 幂等(双层 plugin-cache):cache/<marketplace>/<plugin> 命中即已装(对齐 scanInstalledSkillNames,不每次重装)', () => {
+  test('③ 幂等:npm registry 声明的全局 binary 已在 PATH → npm install 整条剔除', () => {
+    const src = [{
+      token: 'opsx', tool: 'npm', source: '@fission-ai/openspec', bin: 'openspec',
+      tier: 'mandatory', official: false,
+    }] as SkillSource[]
+    const { env } = spyEnv({ commandExists: (name) => name === 'openspec' })
+    const plan = buildSkillsPlan(src, env)
+    expect(plan.commands.filter((c) => c.group === 'npm')).toHaveLength(0)
+    expect(plan.alreadyInstalled).toContainEqual({ token: 'opsx', where: 'PATH:openspec' })
+  })
+
+  test('③ 幂等:registry 明示上游 unavailable → 不执行、不反复 WARN 安装失败', () => {
+    const src = [{
+      token: 'zoom-out', tool: 'skills-cli', source: 'mattpocock/skills', skill: 'zoom-out',
+      unavailable: true, tier: 'optional', official: false,
+    }] as SkillSource[]
+    const plan = buildSkillsPlan(src, spyEnv().env)
+    expect(plan.commands).toHaveLength(0)
+    expect(plan.noInstall).toContainEqual({ token: 'zoom-out', tool: 'unavailable-upstream' })
+  })
+
+  test('③ 幂等：Codex 与 Claude 双 cache 都命中才算 plugin 全就绪，不每次重装', () => {
     const src: SkillSource[] = [
       { token: 'frontend-design', tool: 'claude-plugin', source: 'claude-plugins-official', skill: 'frontend-design', tier: 'mandatory', official: true },
     ]
-    const cache = join('/home/test', '.claude', 'plugins', 'cache')
-    // 真实布局是双层 cache/<marketplace>/<plugin>——旧单层探测 cache/frontend-design 恒 miss → 每次重装
+    const claudeCache = join('/home/test', '.claude', 'plugins', 'cache')
+    const codexCache = join('/home/test', '.codex', 'plugins', 'cache')
     const { env } = spyEnv({
-      listDir: (d) => (d === cache ? ['claude-plugins-official'] : []),
-      pathExists: (p) => p === join(cache, 'claude-plugins-official', 'frontend-design'),
+      listDir: () => [],
+      pathExists: (p) => p === join(claudeCache, 'claude-plugins-official', 'frontend-design')
+        || p === join(codexCache, 'claude-plugins-official', 'frontend-design'),
     })
     const plan = buildSkillsPlan(src, env)
-    expect(plan.commands.filter((c) => c.group === 'claude-plugin')).toHaveLength(0) // 已装 → 无 install 命令
+    expect(plan.commands.filter((c) => c.group === 'claude-plugin' || c.group === 'codex-plugin')).toHaveLength(0)
     expect(plan.alreadyInstalled.map((a) => a.token)).toContain('frontend-design')
+  })
+
+  test('Codex-first：Claude plugin 已装但 Codex cache 缺失，仍计划 codex plugin add，绝不误判全就绪', () => {
+    const src: SkillSource[] = [
+      { token: 'tailwind-css-patterns', tool: 'claude-plugin', source: 'agents-inc', skill: 'web-styling-tailwind', tier: 'recommended', official: false },
+    ]
+    const claudePlugin = join('/home/test', '.claude', 'plugins', 'cache', 'agents-inc', 'web-styling-tailwind')
+    const codexMarketplace = join('/home/test', '.codex', '.tmp', 'marketplaces', 'agents-inc')
+    const { env } = spyEnv({ pathExists: (p) => p === claudePlugin || p === codexMarketplace })
+
+    const plan = buildSkillsPlan(src, env)
+
+    expect(plan.commands.map(cmdText)).toContain('codex plugin add web-styling-tailwind@agents-inc')
+    expect(plan.commands.map(cmdText)).not.toContain('claude plugin install web-styling-tailwind@agents-inc')
+    expect(plan.alreadyInstalled.map((row) => row.token)).not.toContain('tailwind-css-patterns')
   })
 
   test('④ cmdSetupSkills --dry-run:spy exec/mutation 调用数 0,计划仍列 ECC 15 个', () => {
@@ -502,32 +631,40 @@ describe('⑤技能安装段 S2 —— 命令生成 / 标注 / 幂等 / dry-run 
     expect(deps.errLines.join('\n')).toContain('nutlope/hallmark')
   })
 
-  test('⑥ browser-qa 的 engine → 附加 claude plugin install playwright@claude-plugins-official（官方）', () => {
+  test('安装命令 exit 0 但请求技能未真正出现在用户级目录 → 不计成功并按真实 tier 失败', () => {
+    const src: SkillSource[] = [
+      { token: 'browser-qa', tool: 'skills-cli', source: 'affaan-m/ECC', skill: 'browser-qa', tier: 'mandatory', official: false },
+    ]
+    const exec: ExecStub = (_cmd, args) => args.includes('--list')
+      ? { code: 0, stdout: 'browser-qa\n', stderr: '' }
+      : { code: 0, stdout: 'installer claimed success', stderr: '' }
+    const deps = makeDeps()
+    const { env } = spyEnv({}, exec)
+    expect(cmdSetupSkills(deps, { yes: true }, env, src)).toBe(1)
+    expect(deps.outLines.join('\n')).toContain('成功 0')
+    expect(deps.errLines.join('\n')).toContain('命令 exit 0')
+    expect(deps.errLines.join('\n')).toContain('browser-qa')
+  })
+
+  test('⑥ browser-qa 的 engine → Codex 优先并附加 Claude 兼容的 playwright plugin（官方）', () => {
     const src: SkillSource[] = [
       { token: 'browser-qa', tool: 'skills-cli', source: 'affaan-m/ECC', skill: 'browser-qa', tier: 'mandatory', official: false, engine: 'playwright@claude-plugins-official' },
     ]
     const plan = buildSkillsPlan(src, spyEnv().env)
     expect(plan.commands.map(cmdText)).toContain('claude plugin install playwright@claude-plugins-official')
-    const pw = plan.commands.find((c) => c.args.includes('playwright@claude-plugins-official'))!
+    expect(plan.commands.map(cmdText)).toContain('codex plugin add playwright@claude-plugins-official')
+    const pw = plan.commands.find((c) => c.group === 'claude-plugin' && c.args.includes('playwright@claude-plugins-official'))!
     expect(pw.group).toBe('claude-plugin')
     expect(pw.official).toBe(true)
   })
 
-  test('⑦ 禁整装:真 registry 全量 —— skills-cli 命令非 --skill 即白名单单技能 bare 源', () => {
+  test('⑦ 真 registry 全量：不再有任何外部安装命令，所有 token 都由随包 skill 提供', () => {
     const all = readSkillSources()
     expect(all.length).toBeGreaterThan(0) // registry 加载成功
-    const plan = buildSkillsPlan(all, spyEnv().env) // 无已装 → 全量生成
-    const BARE_WHITELIST = new Set([
-      'alchaincyf/huashu-design', 'nutlope/hallmark', 'dominikmartn/hue', 'nextlevelbuilder/ui-ux-pro-max-skill',
-    ])
-    const skillsCli = plan.commands.filter((c) => c.group === 'skills-cli')
-    expect(skillsCli.length).toBeGreaterThan(0)
-    for (const c of skillsCli) {
-      if (c.bareAdd) expect(BARE_WHITELIST.has(c.source)).toBe(true) // bare 仅白名单单技能仓
-      else expect(c.args).toContain('--skill') // 其余必按名
-    }
-    const ecc = skillsCli.find((c) => c.source === 'affaan-m/ECC')!
-    expect(ecc.names).toHaveLength(15) // ECC 15 个真 registry 里聚合成一条
+    const plan = buildSkillsPlan(all, spyEnv().env)
+    expect(plan.commands).toEqual([])
+    expect(plan.noInstall).toHaveLength(all.length)
+    expect(plan.noInstall.every((entry) => entry.tool === 'bundled')).toBe(true)
   })
 })
 

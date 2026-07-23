@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
+import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
 import { fetchSkillsRegistry, type WbSkillEntry } from '../api/client'
 import { useT } from '../i18n'
 import { Dialog } from '../shell/Dialog'
@@ -10,6 +12,20 @@ export interface SkillTransferModalProps {
 }
 
 const DND_MIME = 'application/x-pipeline-skill'
+
+// ── W3 tailwind 迁移：原 styles.ts .transfer* 规则的等值原子类串（颜色全走 token；
+//    未安装态由 data-uninstalled 属性驱动，已选态类由调用点条件叠加）。──
+/** 原 .transfer__item（+ --uninstalled 修饰符）。 */
+const ITEM_CLS =
+  'block w-full cursor-pointer truncate rounded-[6px] border border-transparent bg-fill px-[9px] py-1.5 text-left font-mono text-xs text-text-2 transition-colors hover:border-accent-b hover:bg-accent-t hover:text-accent-d data-uninstalled:opacity-62'
+/** 原 .transfer__item--chosen：右栏条目，hover 转红示意「点击移出」。 */
+const CHOSEN_CLS = 'bg-accent-t text-accent-d hover:border-red-b hover:bg-red-t hover:text-red-d'
+/** 原 .transfer__col。 */
+const COL_CLS =
+  'flex h-[220px] min-w-0 flex-1 flex-col gap-[5px] overflow-y-auto rounded-md border border-border bg-card p-[7px]'
+/** 原 .wb-chip-badge（与 SkillChain 同款未安装小徽章；纯提示 span，无点击）。 */
+const CHIP_BADGE_CLS =
+  'ml-1 flex-none whitespace-nowrap rounded-full border-0 bg-[color-mix(in_oklch,var(--red)_52%,var(--green))] px-1.5 py-px text-[10px] font-bold text-card'
 
 interface ErrorBody {
   error?: string
@@ -65,7 +81,7 @@ export function SkillTransferModal({ selected, onSave, onCancel }: SkillTransfer
     const entry = entryOf.get(name)
     if (!entry || entry.installed) return null
     return (
-      <span className="wb-chip-badge" aria-hidden="true" title={entry.installCmd ?? t('workbench.sk_uninstalled_hint_user')}>
+      <span className={CHIP_BADGE_CLS} aria-hidden="true" title={entry.installCmd ?? t('workbench.sk_uninstalled_hint_user')}>
         {t('workbench.sk_uninstalled')}
       </span>
     )
@@ -84,8 +100,8 @@ export function SkillTransferModal({ selected, onSave, onCancel }: SkillTransfer
   // patch 同一 DOM 节点，旧节点直接被卸载）。若点击发生时它持有焦点，DOM 规范行为是卸载后
   // 焦点回退到 document.body——逃出 Dialog 的 Tab 困笼（困笼只在 keydown 时改判下一跳该
   // 给谁，接不住已经落到 body 的焦点；键盘用户连续移动多个条目，每次都会被弹出对话框外）。
-  // 修法：真的发生移动时，把焦点归位到搜索框（`.transfer__search`，全程挂载、不随条目增减
-  // 卸载，是栏内唯一稳定的焦点落点，且归位后用户可直接继续输入过滤或 Tab 回条目列表）。
+  // 修法：真的发生移动时，把焦点归位到搜索框（searchRef 所指的 input，全程挂载、不随条目
+  // 增减卸载，是栏内唯一稳定的焦点落点，且归位后用户可直接继续输入过滤或 Tab 回条目列表）。
   //
   // 时机选同步直调 `.focus()`，不用 requestAnimationFrame/setTimeout/useEffect：这里的
   // moveToChosen/moveToAvailable 是从 onClick handler 内同步调用的，此刻 React 尚未把
@@ -134,26 +150,28 @@ export function SkillTransferModal({ selected, onSave, onCancel }: SkillTransfer
       onClose={onCancel}
       actions={
         <>
-          <button type="button" className="btn" onClick={() => onSave(chosen)}>{t('skill_transfer.save')}</button>
-          <button type="button" className="btn btn--ghost" onClick={onCancel}>{t('skill_transfer.cancel')}</button>
+          <Button type="button" size="sm" onClick={() => onSave(chosen)}>{t('skill_transfer.save')}</Button>
+          <Button type="button" variant="outline" size="sm" className="bg-transparent" onClick={onCancel}>{t('skill_transfer.cancel')}</Button>
         </>
       }
     >
+      {/* 搜索框仍是条目移动后的焦点归位锚（经 searchRef，见上方注释）——样式原子化不改这层契约。 */}
       <input
         ref={searchRef}
-        className="transfer__search"
+        className="mt-1 block w-full rounded-[7px] border border-border bg-fill px-2.5 py-[7px] text-[12.5px] text-text transition placeholder:text-text-3 focus-visible:border-(--accent) focus-visible:shadow-[0_0_0_3px_var(--ring-blue)] focus-visible:outline-none"
         placeholder={t('skill_transfer.search_placeholder')}
         value={query}
         onChange={(e) => setQuery(e.target.value)}
       />
-      <div className="transfer">
-        <div className="transfer__col" data-testid="skill-available" onDragOver={(e) => e.preventDefault()} onDrop={onDropToAvailable}>
-          {error && <div className="transfer__error" data-testid="skill-error">{error}</div>}
+      <div className="mt-2.5 flex gap-2.5">
+        <div className={COL_CLS} data-testid="skill-available" onDragOver={(e) => e.preventDefault()} onDrop={onDropToAvailable}>
+          {error && <div className="m-0 px-0.5 py-1.5 text-[11.5px] font-semibold text-red" data-testid="skill-error">{error}</div>}
           {!error && available.map(({ name: s, installed }) => (
             <button
               key={s}
               type="button"
-              className={`transfer__item${installed ? '' : ' transfer__item--uninstalled'}`}
+              className={ITEM_CLS}
+              data-uninstalled={installed ? undefined : ''}
               title={s}
               aria-label={s}
               draggable
@@ -165,12 +183,12 @@ export function SkillTransferModal({ selected, onSave, onCancel }: SkillTransfer
             </button>
           ))}
         </div>
-        <div className="transfer__col" data-testid="skill-chosen" onDragOver={(e) => e.preventDefault()} onDrop={onDropToChosen}>
+        <div className={COL_CLS} data-testid="skill-chosen" onDragOver={(e) => e.preventDefault()} onDrop={onDropToChosen}>
           {chosen.map((s) => (
             <button
               key={s}
               type="button"
-              className="transfer__item transfer__item--chosen"
+              className={cn(ITEM_CLS, CHOSEN_CLS)}
               title={s}
               aria-label={s}
               draggable

@@ -84,9 +84,12 @@ describe('SecretsCard —— 掩码只读与 write-only 编辑', () => {
     expect(onChanged).toHaveBeenCalledTimes(1)
   })
 
-  it('④CODEX_HOME:只读说明行,无输入框无编辑钮(决策 C2b,不做假开关);优先级提示常驻', async () => {
+  it('④CODEX_HOME:只读说明行,无输入框无编辑钮(决策 C2b,不做假开关);优先级提示折进「▸ 高级设置」', async () => {
     renderCard()
-    const row = await screen.findByTestId('sc-row-CODEX_HOME')
+    await screen.findByTestId('sc-edit-CLAUDE_CODE_OAUTH_TOKEN') // 核心凭证列表就位
+    // IA 精简（2026-07-14）：CODEX_HOME 只读路径 + 优先级说明收进「▸ 高级设置」折叠区，展开后可见。
+    fireEvent.click(screen.getByTestId('sc-adv'))
+    const row = screen.getByTestId('sc-row-CODEX_HOME')
     expect(row.querySelector('input')).toBeNull()
     expect(row.querySelector('button')).toBeNull()
     expect(screen.getByText(/宿主环境变量.*非空.*此处保存的值/)).toBeInTheDocument()
@@ -110,18 +113,22 @@ describe('SecretsCard —— 掩码只读与 write-only 编辑', () => {
 })
 
 describe('SecretsCard —— 前置缺失引导「怎么拿」(G2:不光报缺,教怎么获取)', () => {
-  it('①claude-code 键行含 `claude setup-token` 引导(已配态也常驻,兼作轮换指引)', async () => {
+  it('①claude-code `claude setup-token` 引导(已配态也常驻,折进「▸ 高级设置」)', async () => {
     // 缺省 beforeEach:CLAUDE_CODE_OAUTH_TOKEN set=true —— 引导仍须在(不只未配才教)
     renderCard()
-    const row = await screen.findByTestId('sc-row-CLAUDE_CODE_OAUTH_TOKEN')
-    expect(row.textContent).toContain('claude setup-token')
+    await screen.findByTestId('sc-row-CLAUDE_CODE_OAUTH_TOKEN')
+    // IA 精简：「怎么拿」引导收进「▸ 高级设置」折叠区，展开后仍是静态命令文本。
+    fireEvent.click(screen.getByTestId('sc-adv'))
+    expect(screen.getByTestId('sc-howto-CLAUDE_CODE_OAUTH_TOKEN').textContent).toContain('claude setup-token')
   })
 
-  it('②codex 键行含 `codex login` 与 platform.openai.com/api-keys 两条获取路径', async () => {
+  it('②codex `codex login` 与 platform.openai.com/api-keys 两条获取路径(折进「▸ 高级设置」)', async () => {
     renderCard()
-    const row = await screen.findByTestId('sc-row-OPENAI_API_KEY')
-    expect(row.textContent).toContain('codex login')
-    expect(row.textContent).toContain('platform.openai.com/api-keys')
+    await screen.findByTestId('sc-row-OPENAI_API_KEY')
+    fireEvent.click(screen.getByTestId('sc-adv'))
+    const howto = screen.getByTestId('sc-howto-OPENAI_API_KEY')
+    expect(howto.textContent).toContain('codex login')
+    expect(howto.textContent).toContain('platform.openai.com/api-keys')
   })
 
   it('④write-only 回归:进编辑态输入仍空,引导只是静态命令文本、不回显掩码/明文', async () => {
@@ -130,7 +137,9 @@ describe('SecretsCard —— 前置缺失引导「怎么拿」(G2:不光报缺,�
     expect(screen.getByTestId('sc-input-CLAUDE_CODE_OAUTH_TOKEN')).toHaveValue('')
     const row = screen.getByTestId('sc-row-CLAUDE_CODE_OAUTH_TOKEN')
     expect(row.textContent).not.toContain('tok…7f3a') // 编辑态不显掩码
-    expect(row.textContent).toContain('claude setup-token') // 引导仍在,且是静态文本
+    // 引导已折进「▸ 高级设置」——展开后仍是静态命令文本，不回显掩码/明文
+    fireEvent.click(screen.getByTestId('sc-adv'))
+    expect(screen.getByTestId('sc-howto-CLAUDE_CODE_OAUTH_TOKEN').textContent).toContain('claude setup-token')
   })
 })
 

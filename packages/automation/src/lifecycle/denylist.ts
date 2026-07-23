@@ -52,6 +52,9 @@ const globToRegExp = (glob: string): RegExp => {
   return new RegExp(`^${re}$`)
 }
 
+/** Shared matcher adapter for kernel ConstraintPolicy evaluation. */
+export const matchesPathGlob = (path: string, glob: string): boolean => globToRegExp(glob).test(path)
+
 /** 文件清单 × denylist globs → 违规明细（每个文件只报首个命中的 glob）。 */
 export const matchDenylist = (files: readonly string[], globs: readonly string[]): DenylistViolation[] => {
   if (globs.length === 0) return []
@@ -62,6 +65,15 @@ export const matchDenylist = (files: readonly string[], globs: readonly string[]
     if (hit) out.push({ file, glob: hit.glob })
   }
   return out
+}
+
+/**
+ * 文件清单 × allowlist globs → 未获授权的路径。空白名单刻意等价于“零路径获授权”；L3 调用方
+ * 因而不能把缺配置或读取失败解释成全放行。返回顺序与 git diff 的文件序一致。
+ */
+export const matchAllowlist = (files: readonly string[], globs: readonly string[]): string[] => {
+  const allowed = globs.map(globToRegExp)
+  return files.filter((file) => !allowed.some((re) => re.test(file)))
 }
 
 /**
@@ -76,6 +88,9 @@ export interface LoopDenylistSource {
 /**
  * 按 change_prefix 归属派生一个 change 的生效 denylist（多 loop 命中 → 去重合并）。
  * 空前缀 / null 前缀的 loop 不参与归属；无命中 → []（= 无 loop 语境，检查跳过）。
+ *
+ * GOAL H · Stage B 后 admission 路径改用 denylistForLoop（按 context.loop_id 精确查，不再前缀猜）；
+ * 本前缀版保留供未接 admission 的旧调用面/测试兼容，不删（公共 API）。
  */
 export const denylistForChange = (loops: readonly LoopDenylistSource[], name: string): string[] => {
   const out: string[] = []
@@ -87,6 +102,40 @@ export const denylistForChange = (loops: readonly LoopDenylistSource[], name: st
     }
   }
   return out
+}
+
+/** loop 条目最小面（按 id 精确查）：id + denylist。与 kernel LoopEntry 结构兼容。 */
+export interface LoopDenylistByIdSource {
+  readonly id: string
+  readonly denylist?: readonly string[]
+}
+
+/**
+ * GOAL H · Stage B：按 **loop_id** 精确派生该 loop 的 denylist（admission 路径——ExecutionContext
+ * 已定 loop_id，不再前缀猜）。无此 loop / 无 denylist → []（检查跳过）。
+ */
+export const denylistForLoop = (loops: readonly LoopDenylistByIdSource[], loopId: string): string[] =>
+  [...(loops.find((l) => l.id === loopId)?.denylist ?? [])]
+
+export interface LoopPathPolicySource {
+  readonly id: string
+  readonly allowlist?: readonly string[]
+  readonly denylist?: readonly string[]
+}
+
+export interface LoopPathPolicy {
+  readonly allowlist: readonly string[]
+  readonly denylist: readonly string[]
+}
+
+/**
+ * 从同一份 registry 快照一次派生完整路径策略，避免 allow/deny 分两次读取形成撕裂。未知 loop
+ * fail-loud；只有“真实存在且显式为空”的条目才返回空数组。
+ */
+export function pathPolicyForLoop(loops: readonly LoopPathPolicySource[], loopId: string): LoopPathPolicy {
+  const loop = loops.find((candidate) => candidate.id === loopId)
+  if (loop === undefined) throw new Error(`loop path policy missing for '${loopId}'`)
+  return { allowlist: [...(loop.allowlist ?? [])], denylist: [...(loop.denylist ?? [])] }
 }
 
 /**
@@ -103,5 +152,30 @@ export class DenylistViolationError extends Error {
     super(`run touched denylisted paths: ${detail}. Worktree PRESERVED at ${preservedWorktreePath}.`)
     this.violations = violations
     this.preservedWorktreePath = preservedWorktreePath
+  }
+}
+
+/** L3 产出越出 allowlist：与 denylist 命中同属需保留现场的路径策略冲突。 */
+export class AllowlistViolationError extends Error {
+  override readonly name = 'AllowlistViolationError'
+  readonly _tag = 'AllowlistViolationError'
+  readonly files: readonly string[]
+  readonly allowlist: readonly string[]
+  readonly preservedWorktreePath: string
+  constructor(files: readonly string[], allowlist: readonly string[], preservedWorktreePath: string) {
+    const policy = allowlist.length === 0 ? '<empty>' : allowlist.join(', ')
+    super(`run touched paths outside L3 allowlist: ${files.join(', ')} (allowlist: ${policy}). Worktree PRESERVED at ${preservedWorktreePath}.`)
+    this.files = files
+    this.allowlist = allowlist
+    this.preservedWorktreePath = preservedWorktreePath
+  }
+}
+
+/** L3 direct lifecycle 调用缺少白名单：属于装配错误，必须在任何宿主/Docker 副作用前拒绝。 */
+export class PathPolicyUnconfiguredError extends Error {
+  override readonly name = 'PathPolicyUnconfiguredError'
+  readonly _tag = 'PathPolicyUnconfiguredError'
+  constructor() {
+    super('L3 lifecycle requires an explicit allowlist; refusing an unenforced auto-merge')
   }
 }

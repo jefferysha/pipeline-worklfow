@@ -44,6 +44,9 @@ DESIGN
 printf '# plan\n' > "$target/docs/plan.md"
 printf '# verification report\n' > "$target/docs/verify.md"
 
+# P6 起 set/cas 对「当前有效 artifact 相位」的 artifact 字段拒写（改走 pipeline artifact register）：
+# plan（spec 相位）、verification_report（verify 相位）改用 seed 在双侧直接注同值，隔离 legacy
+# transition 等价面的数据准备（design_doc 在 open 相位 set 时非有效 artifact、照常双跑）。
 # 竖线转 TAB（计划值不含竖线）
 tr '|' '\t' > "$target/.oracle-plan" <<'PLAN'
 0|init|t6-be|backend|full
@@ -55,14 +58,14 @@ tr '|' '\t' > "$target/.oracle-plan" <<'PLAN'
 0|transition|t6-be|open-complete
 0|get|t6-be|phase
 0|transition|t6-be|explore-complete
-0|set|t6-be|plan|docs/plan.md
+0|seed|t6-be|plan|docs/plan.md
 0|check|t6-be|build
 0|transition|t6-be|spec-complete
 0|set|t6-be|build_mode|direct
 0|set|t6-be|isolation|worktree
 0|set|t6-be|direct_override|true
 0|transition|t6-be|build-complete
-0|set|t6-be|verification_report|docs/verify.md
+0|seed|t6-be|verification_report|docs/verify.md
 0|set|t6-be|branch_status|handled
 0|set|t6-be|agent_review_result|pass
 0|set|t6-be|codex_review_result|pass

@@ -8,13 +8,66 @@
  * 默认 L1 report-only（成功停 paused，不自动 merge）——GOAL A5 安全默认。
  */
 import { join } from 'node:path'
-import type { StateStore } from '@pipeline-lite/kernel'
+import {
+  createLoopLedgerStore,
+  loadRegistry,
+  type StateStore,
+  type TrackPolicyProfile,
+} from '@pipeline-lite/kernel'
 import { readAutomationJson, type AutomationJsonFs } from '../config/automationJson.js'
-import { claim, getAutomation, incrAttempts, markQueued, setAutomationOwned } from '../queue/claim.js'
+import { createLoopAdmission, type LoopAdmission } from '../admission/loop-admission.js'
+import { markNonLoopPrepared, type ExecutionContext, type ExecutionPreparationPort, type PrepareOutcome } from '../admission/execution-context.js'
+import { claim, commitFailureOwned, getAutomation, markQueued, setAutomationOwned, setAutomationOwnedWithFields } from '../queue/claim.js'
 import { shouldEnqueueOnSpecComplete } from '../queue/gate.js'
 import { scanReadyFromFs } from '../queue/scan.js'
-import { type RunChange, type StateWriter, createScheduler } from '../scheduler/scheduler.js'
+import {
+  createScheduler,
+  type ExecutionWiringValidationResult,
+  type RoundReport,
+  type RunChange,
+  type StateWriter,
+} from '../scheduler/scheduler.js'
 import { type AutomationConfig, DEFAULT_CONFIG } from '../types.js'
+
+/**
+ * 二次任务（queued 卡死回归修复）：createAutomation 未显式注入 `deps.preparation` 时的缺省
+ * `ExecutionPreparationPort`——比照 `deps.admission` 的既有缺省装配惯例（第 82 行下方），不再让
+ * `SchedulerDeps.preparation` 缺席、不再触发 scheduler.ts::runRoundOnce 的整轮 config 短路。
+ *
+ * 两条分支严格对齐 execution-context.ts 头注的语义划分：
+ *   · `ctx.skill_bundle_id` 缺席/null（无 bundle 绑定——非 loop 的 AFK 直跑，或本包所有既有 fake
+ *     admission 测试 context）→ 直通产出不带 `skillBundle` 的 PreparedExecutionContext（不物化
+ *     CAS、不写 ledger 事件），绝不整轮短路、绝不 pause。
+ *   · `ctx.skill_bundle_id` 有值（真实 loop-admission reserve() 产出、bundle 绑定的 context）→
+ *     本函数尚无法真解析/物化：真实 `EffectiveSkillResolver`/`SkillContentLocator` 装配可行，但
+ *     `ExecutionCoordinatePort`（捕获当前 workflow 坐标）需要 G1/G2 WorkflowRunRepository 状态——
+ *     本包目前没有任何生产来源能诚实提供它（同 lifecycle.ts 头注「custom workflow 坐标」段落同一
+ *     边界，需 H14+ 跨包接线）。故 throw 一个 config 类错误（fail-loud，按候选粒度——只有这一个
+ *     candidate 的 handleOne 被打断，其余候选不受影响，见 scheduler.ts::handlePreparationThrow）；
+ *     镜像 loop-admission.ts::SkillProfileValidatorUnconfiguredError 对「装配缺口 vs 业务判定」的
+ *     既有区分：不伪装成某个 `PreparationFailureReason` 业务结论持久化，也不静默放行当作已 prepare。
+ *     真实全依赖装配是 H10 任务7 的事，不在本函数职责内。
+ */
+export class SkillBundlePreparationUnconfiguredError extends Error {
+  readonly _tag = 'SkillBundlePreparationUnconfiguredError'
+  constructor(message: string) { super(message); this.name = 'SkillBundlePreparationUnconfiguredError' }
+}
+
+/** 见上方 SkillBundlePreparationUnconfiguredError 头注——createAutomation 的默认 preparation 装配。 */
+export const createDefaultExecutionPreparation = (): ExecutionPreparationPort => ({
+  async prepare(ctx: ExecutionContext): Promise<PrepareOutcome> {
+    if (ctx.skill_bundle_id === null || ctx.skill_bundle_id === undefined) {
+      // H10 r1 阻断3/D5 返工（任务B1）：唯一合法构造点是 markNonLoopPrepared()（判别联合的
+      // non-loop 分支），不再手写字面量冒充满足 PreparedExecutionContext。
+      return { ok: true, context: markNonLoopPrepared(ctx) }
+    }
+    throw new SkillBundlePreparationUnconfiguredError(
+      `change「${ctx.change}」归属 loop「${ctx.loop_id}」的 skill_bundle_id="${ctx.skill_bundle_id}"（bundle 绑定）` +
+      '需要真实 skill bundle 解析/CAS 物化依赖（resolver/locator/coordinates），但 createAutomation ' +
+      '默认装配尚未接线（H10 生产装配见任务7）——fail-closed，不放行、不伪造业务判定',
+    )
+  },
+})
 
 export interface AutomationDeps {
   readonly repoRoot: string
@@ -24,15 +77,48 @@ export interface AutomationDeps {
   readonly config?: Partial<AutomationConfig>
   /** automation.json 读取的 fs 注入面（测试用）；缺省真 node fs。 */
   readonly configFs?: AutomationJsonFs
+  /**
+   * GOAL H · Stage C：loop admission 权威闸门（缺省由本 repoRoot/store/clock/level + createLoopLedgerStore
+   * + kernel loadRegistry 装配）。测试注入 fake 断言编排；afk.ts 注入携带 image/自定义时钟的实例。
+   */
+  readonly admission?: LoopAdmission
+  /** ExecutionContext.image（写进 reservation 快照的沙箱镜像）；缺省 admission 装配点透传。 */
+  readonly image?: string
+  /** on_exceed=pause-loop 时把 loop status 改 paused（缺省无 → 降级 skip-run + 记 report）。 */
+  readonly pauseLoop?: (loopId: string) => Promise<void>
+  /** H11：reserve 后、claim 前 fresh 完整 wiring 闸；生产 CLI 注入共享 evaluator。 */
+  readonly validateExecutionWiring?: (
+    context: ExecutionContext,
+  ) => Promise<ExecutionWiringValidationResult>
+  /**
+   * 二次任务（queued 卡死回归修复）：claim 后、activate 前的 prepareSkillBundle 编排口（缺省
+   * createDefaultExecutionPreparation()，见其头注）。真实 loop-bundle 全依赖装配由生产调用方
+   * 在此注入替换；测试可注入 fake 断言编排（同 deps.admission 既有惯例）。
+   */
+  readonly preparation?: ExecutionPreparationPort
+}
+
+/** H14 real-run 选择器落地后的单个目标；owner 是观察值，admission 会在锁内重新解析并复核。 */
+export interface TargetedRunCandidate {
+  readonly change: string
+  readonly expectedLoopId: string
+  /** selector 的默认 autonomy 快照；null 表示用户显式 --level 覆盖，不做默认值 CAS。 */
+  readonly expectedAutonomyLevel: AutomationConfig['level'] | null
 }
 
 export interface Automation {
-  /** 挂队：off→queued + queued_at（经两层开关 + PM 永不闸）。返回是否入队。 */
-  enqueue(name: string): Promise<boolean>
+  /**
+   * 挂队：读 change.track → 由调用者从当前项目 effective registry 解析 policy →
+   * off→queued + queued_at。resolver 对 orphan/损坏 registry 的异常原样 fail-loud。
+   */
+  enqueue(name: string, resolveTrackPolicy: (trackId: string) => TrackPolicyProfile): Promise<boolean>
   /** 就绪扫描：真扫 openspec/changes/* 的 build+queued+deps 满足集（FIFO）。 */
   scanReady(): Promise<string[]>
-  /** 跑一轮：scanReady → 逐 change claim + runChange + 分级 settle 写回。 */
-  runRound(runChange: RunChange): Promise<void>
+  /** 跑一轮：scanReady → 逐 change admission.reserve + claim + runChange(context) + 分级 settle
+   *  + 关闭 reservation。返回结构化 RoundReport（CLI 据 ledger/admission failure 返非零）。 */
+  runRound(runChange: RunChange): Promise<RoundReport>
+  /** fresh scan 后仅执行仍 ready 且被点名的 change；ready FIFO 是唯一执行顺序真相源。 */
+  runTargeted(targets: readonly TargetedRunCandidate[], runChange: RunChange): Promise<RoundReport>
   /** 当前生效配置（含 level）。 */
   readonly config: AutomationConfig
 }
@@ -44,9 +130,10 @@ export const storeWriter = (store: StateStore, changeDir: (name: string) => stri
   claim: (name) => claim(store, changeDir(name)),
   setAutomation: (name, s) => store.set(changeDir(name), 'automation', s),
   setField: (name, field, value) => store.set(changeDir(name), field as never, value),
-  incrAttempts: (name, max) => incrAttempts(store, changeDir(name), max),
+  commitFailureOwned: (name, input) => commitFailureOwned(store, changeDir(name), input),
   getAutomation: (name) => getAutomation(store, changeDir(name)),
   setAutomationOwned: (name, next) => setAutomationOwned(store, changeDir(name), next),
+  setAutomationOwnedWithFields: (name, next, fields) => setAutomationOwnedWithFields(store, changeDir(name), next, fields),
   markFailedSync: (name, reason) => {
     // shutdown 同步 best-effort：无法 await，fire-and-forget（错误吞掉）。
     // F-b 同写纪律：cause 同批落空串——中断 reason 是自由文本（非 tag，无法干净定成因），空串交
@@ -66,13 +153,40 @@ export function createAutomation(deps: AutomationDeps): Automation {
   const changesDir = join(deps.repoRoot, 'openspec', 'changes')
   const changeDir = (name: string): string => join(changesDir, name)
 
+  // GOAL H · Stage C：admission 权威闸门（缺省装配——ledger store + kernel registry + 本 store 读
+  // automation 态供崩溃恢复）。afk.ts 可注入携带 image/自定义时钟的实例。
+  const admission: LoopAdmission = deps.admission ?? createLoopAdmission({
+    repoRoot: deps.repoRoot,
+    ledger: createLoopLedgerStore(),
+    loadRegistry: (root) => loadRegistry(root),
+    clock,
+    level: config.level,
+    image: deps.image,
+    getAutomation: (change) => getAutomation(store, changeDir(change)),
+  })
+  // 二次任务（queued 卡死回归修复）：路由 SchedulerDeps.preparation——缺省 createDefaultExecutionPreparation()
+  // （none-bundle 直通 + bundle 绑定 fail-loud，见其头注），不再让 runRound 因 preparation 缺席整轮短路成
+  // config RoundFailure；显式 production preparation 与安全缺省都经同一字段传给 createScheduler。
+  const preparation: ExecutionPreparationPort = deps.preparation ?? createDefaultExecutionPreparation()
+  const schedulerFor = (runChange: RunChange) => createScheduler({
+    state: storeWriter(store, changeDir),
+    runChange,
+    registerShutdown: () => () => {},
+    config: { maxParallel: config.maxParallel, maxRetries: config.maxRetries, level: config.level },
+    admission,
+    preparation,
+    pauseLoop: deps.pauseLoop,
+    validateExecutionWiring: deps.validateExecutionWiring,
+  })
+
   return {
     config,
-    async enqueue(name) {
+    async enqueue(name, resolveTrackPolicy) {
       const state = await store.read(changeDir(name))
+      const policy = resolveTrackPolicy(scalar(state.fields.track))
       const eligible = shouldEnqueueOnSpecComplete({
         enabled: config.enabled,
-        track: scalar(state.fields.track),
+        automationEligible: policy.automationEligible,
         automation: scalar(state.fields.automation),
         defaultOptIn: config.defaultOptIn,
       })
@@ -85,13 +199,36 @@ export function createAutomation(deps: AutomationDeps): Automation {
     },
     async runRound(runChange) {
       const candidates = await scanReadyFromFs(changesDir, store)
-      const scheduler = createScheduler({
-        state: storeWriter(store, changeDir),
-        runChange,
-        registerShutdown: () => () => {},
-        config: { maxParallel: config.maxParallel, maxRetries: config.maxRetries, level: config.level },
+      return schedulerFor(runChange).runRoundOnce(candidates)
+    },
+    async runTargeted(targets, runChange) {
+      const ready = await scanReadyFromFs(changesDir, store)
+      const expectedLoopIdByChange = new Map<string, string>()
+      const expectedAutonomyLevelByChange = new Map<string, AutomationConfig['level'] | null>()
+      for (const target of targets) {
+        const prior = expectedLoopIdByChange.get(target.change)
+        if (prior !== undefined && prior !== target.expectedLoopId) {
+          throw new Error(
+            `同一 change「${target.change}」不能同时声明不同 expected loop：` +
+            `「${prior}」与「${target.expectedLoopId}」`,
+          )
+        }
+        const priorLevel = expectedAutonomyLevelByChange.get(target.change)
+        if (expectedAutonomyLevelByChange.has(target.change)
+          && priorLevel !== target.expectedAutonomyLevel) {
+          throw new Error(
+            `同一 change「${target.change}」不能同时声明不同 expected autonomy：` +
+            `「${String(priorLevel)}」与「${String(target.expectedAutonomyLevel)}」`,
+          )
+        }
+        expectedLoopIdByChange.set(target.change, target.expectedLoopId)
+        expectedAutonomyLevelByChange.set(target.change, target.expectedAutonomyLevel)
+      }
+      const candidates = ready.filter((change) => expectedLoopIdByChange.has(change))
+      return schedulerFor(runChange).runRoundOnce(candidates, {
+        expectedLoopIdByChange,
+        expectedAutonomyLevelByChange,
       })
-      await scheduler.runRoundOnce(candidates)
     },
   }
 }

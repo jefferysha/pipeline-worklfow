@@ -1,12 +1,57 @@
 import { describe, expect, it } from 'vitest'
 import { validateWorkflow } from './validate.js'
-import type { WorkflowDef } from './types.js'
+import type { WorkflowActionConfig, WorkflowDef } from './types.js'
+import { DOCUMENT_CONTRACT_PHASES } from './document-contract.js'
 
 function wf(overrides: Partial<WorkflowDef>): WorkflowDef {
   return { name: 'test', steps: [], ...overrides }
 }
 
+const CONTRACT_SKILLS: Readonly<Record<string, readonly string[]>> = {
+  open: ['pipeline-open', 'openspec-propose'],
+  explore: ['pipeline-explore', 'brainstorming'],
+  spec: ['pipeline-spec', 'openspec-propose', 'writing-plans'],
+  build: ['pipeline-build'],
+  verify: ['pipeline-verify', 'verification-before-completion'],
+  ship: ['pipeline-ship', 'openspec-apply-change'],
+  archive: ['pipeline-archive'],
+}
+
+function governedWorkflow(overrides: Partial<WorkflowDef> = {}): WorkflowDef {
+  const next = (id: string): readonly { readonly event: string; readonly to: string }[] => {
+    if (id === 'open') return [{ event: 'open-complete', to: 'explore' }]
+    if (id === 'explore') return [{ event: 'explore-complete', to: 'spec' }]
+    if (id === 'spec') return [{ event: 'spec-complete', to: 'build' }]
+    if (id === 'build') return [{ event: 'build-complete', to: 'verify' }]
+    if (id === 'verify') return [{ event: 'verify-pass', to: 'ship' }, { event: 'verify-fail', to: 'build' }]
+    if (id === 'ship') return [{ event: 'ship-complete', to: 'archive' }]
+    return []
+  }
+  return {
+    name: 'governed',
+    openspecContract: 'required',
+    steps: DOCUMENT_CONTRACT_PHASES.map((id) => ({
+      id,
+      label: id,
+      gate: ['explore', 'spec', 'verify'].includes(id) ? 'review' as const : null,
+      skills: CONTRACT_SKILLS[id].map((skill) => ({ id: skill })),
+      inputs: [], outputs: [], guards: [], transitions: next(id),
+    })),
+    ...overrides,
+  }
+}
+
 describe('validateWorkflow', () => {
+  it('openspec_contract: required 只有 canonical 7 phases、边、review gate 和所需 skills 全齐才可保存', () => {
+    expect(validateWorkflow(governedWorkflow())).toEqual([])
+    const broken = governedWorkflow({
+      steps: governedWorkflow().steps.map((step) => step.id === 'explore'
+        ? { ...step, skills: step.skills.filter((skill) => skill.id !== 'brainstorming') }
+        : step),
+    })
+    expect(validateWorkflow(broken).some((error) => error.includes('Superpower brainstorming'))).toBe(true)
+  })
+
   it('skill 依赖成环 → 报错', () => {
     const result = validateWorkflow(wf({
       steps: [{
@@ -142,6 +187,13 @@ describe('validateWorkflow', () => {
     expect(result.some((e) => e.includes("'bad name'") && e.includes('非法字符'))).toBe(true)
   })
 
+  it('workflow 名称允许中文，但路径符号与点仍被拒绝', () => {
+    expect(validateWorkflow(wf({ name: '发布验收流程' })).filter((e) => e.includes('workflow name'))).toEqual([])
+    for (const name of ['发布/验收', '发布.验收', '发布 验收']) {
+      expect(validateWorkflow(wf({ name })).some((e) => e.includes('workflow name') && e.includes('非法字符'))).toBe(true)
+    }
+  })
+
   it('合法 workflow（含分支 transitions）→ 空数组', () => {
     const result = validateWorkflow(wf({
       steps: [
@@ -149,6 +201,124 @@ describe('validateWorkflow', () => {
         { id: 's2', label: 'b', gate: null, skills: [], inputs: [{ field: 'design_doc', type: 'file_path' }], outputs: [], guards: [], transitions: [{ event: 'pass', to: 's3' }, { event: 'fail', to: 's1' }] },
         { id: 's3', label: 'c', gate: null, skills: [], inputs: [], outputs: [], guards: [], transitions: [] },
       ],
+    }))
+    expect(result).toEqual([])
+  })
+
+  // ── G2 P2：validateWorkflow 复用 compileWorkflow 深校验新 guard/action 变体（loadWorkflow /
+  //    server 保存两个入口共用同一 validateWorkflow，故两处都被这层拒） ──
+  it('G2 P2：scalar guard 挂列表字段（field-nonempty on scope）→ 经 compile 深校验拒绝', () => {
+    const result = validateWorkflow(wf({
+      steps: [{
+        id: 's1', label: 'a', gate: null, skills: [], inputs: [], outputs: [],
+        guards: [{ type: 'field-nonempty', field: 'scope' }], transitions: [],
+      }],
+    }))
+    expect(result.some((e) => e.includes('scope') && e.includes('列表字段'))).toBe(true)
+  })
+
+  it('G2 P2：非法 edge action type → 经 compile 深校验拒绝', () => {
+    const result = validateWorkflow(wf({
+      steps: [
+        {
+          id: 's1', label: 'a', gate: null, skills: [], inputs: [], outputs: [], guards: [],
+          transitions: [{ event: 'e', to: 's2', actions: [{ type: 'nuke' } as unknown as WorkflowActionConfig] }],
+        },
+        { id: 's2', label: 'b', gate: null, skills: [], inputs: [], outputs: [], guards: [], transitions: [] },
+      ],
+    }))
+    expect(result.some((e) => e.includes('nuke') && e.includes('action'))).toBe(true)
+  })
+
+  it('G2 P2 兼容回退：含未知惰性 output（custom_doc，type string，无 guard）+ 后序同名 input → 空数组（能 load；pre-P2 合法行为恢复）', () => {
+    const result = validateWorkflow(wf({
+      steps: [
+        { id: 's1', label: 'a', gate: null, skills: [], inputs: [], outputs: [{ field: 'custom_doc', type: 'string' }], guards: [], transitions: [{ event: 'go', to: 's2' }] },
+        { id: 's2', label: 'b', gate: null, skills: [], inputs: [{ field: 'custom_doc', type: 'string' }], outputs: [], guards: [], transitions: [] },
+      ],
+    }))
+    expect(result).toEqual([])
+  })
+
+  it('G2 P2 兼容回退：nonempty-output 指未知惰性 output → validate 不因 compile 深校验而误拒（下沉 output-present，非 load 报错）', () => {
+    const result = validateWorkflow(wf({
+      steps: [
+        { id: 's1', label: 'a', gate: null, skills: [], inputs: [], outputs: [{ field: 'custom_doc', type: 'string' }], guards: [{ type: 'nonempty-output' }], transitions: [] },
+      ],
+    }))
+    expect(result).toEqual([])
+  })
+
+  it('阻断 1：未知 file_path output（custom_report，无显式 artifact）→ 空数组（能 load；不再因 artifact 派生规则误拒）', () => {
+    const result = validateWorkflow(wf({
+      steps: [
+        { id: 's1', label: 'a', gate: null, skills: [], inputs: [], outputs: [{ field: 'custom_report', type: 'file_path' }], guards: [], transitions: [] },
+      ],
+    }))
+    expect(result).toEqual([])
+  })
+
+  it('阻断 3：结构化 guard 附加顶层键（nonempty-output 带 n）经 compile 深校验拒（server 直调 validateWorkflow→serialize 落盘路径，不被 serialize 静默吞）', () => {
+    const result = validateWorkflow(wf({
+      steps: [{
+        id: 's1', label: 'a', gate: null, skills: [], inputs: [], outputs: [],
+        guards: [{ type: 'nonempty-output', n: 2 } as unknown as WorkflowDef['steps'][number]['guards'][number]], transitions: [],
+      }],
+    }))
+    expect(result.some((e) => e.includes('附加键') && e.includes('n'))).toBe(true)
+  })
+
+  it('阻断 3：结构化 guard 嵌套 when 附加键 → 经 compile 深校验拒', () => {
+    const result = validateWorkflow(wf({
+      steps: [{
+        id: 's1', label: 'a', gate: null, skills: [], inputs: [], outputs: [],
+        guards: [{ type: 'full-direct-override', when: { kind: 'track-in', values: ['pm'], extra: 1 } } as unknown as WorkflowDef['steps'][number]['guards'][number]],
+        transitions: [],
+      }],
+    }))
+    expect(result.some((e) => e.includes('when') && e.includes('附加键'))).toBe(true)
+  })
+
+  it('G2 P2：含新变体 + when + edge guards/actions 的合法 workflow → 空数组（不误拒）', () => {
+    const result = validateWorkflow(wf({
+      steps: [
+        {
+          id: 'verify', label: 'v', gate: 'review', skills: [], inputs: [], outputs: [],
+          guards: [{ type: 'field-equals', field: 'branch_status', value: 'handled', when: { kind: 'track-not-in', values: ['pm'] } }],
+          transitions: [{
+            event: 'pass', to: 'done',
+            guards: [{ type: 'field-in', field: 'isolation', values: ['branch', 'worktree'] }],
+            actions: [{ type: 'mark-verification-passed' }],
+          }],
+        },
+        { id: 'done', label: 'd', gate: null, skills: [], inputs: [], outputs: [], guards: [], transitions: [] },
+      ],
+    }))
+    expect(result).toEqual([])
+  })
+
+  // ── G2 P5 · A 契约：validateWorkflow 经 compileWorkflow(custom 契约) 深校验，故 custom workflow
+  //    声明 effective-phase-skills 在保存/加载入口即被拒（loadWorkflow 据此 fail-loud）──
+  it('G2 P5 · A 契约：custom workflow 显式 effective-phase-skills artifact → 校验拒（fail-loud）', () => {
+    const result = validateWorkflow(wf({
+      steps: [{
+        id: 's1', label: 'a', gate: null, skills: [], inputs: [],
+        outputs: [{ field: 'design_doc', type: 'file_path' }],
+        artifacts: [{ field: 'design_doc', type: 'file_path', producerPolicy: 'effective-phase-skills' }],
+        guards: [], transitions: [],
+      }],
+    }))
+    expect(result.some((e) => e.includes('producerPolicy') && e.includes('effective-phase-skills'))).toBe(true)
+  })
+
+  it('G2 P5 · A 契约：custom workflow 显式 effective-step-skills artifact → 不误拒（空数组）', () => {
+    const result = validateWorkflow(wf({
+      steps: [{
+        id: 's1', label: 'a', gate: null, skills: [], inputs: [],
+        outputs: [{ field: 'design_doc', type: 'file_path' }],
+        artifacts: [{ field: 'design_doc', type: 'file_path', producerPolicy: 'effective-step-skills' }],
+        guards: [], transitions: [],
+      }],
     }))
     expect(result).toEqual([])
   })

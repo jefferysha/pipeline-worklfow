@@ -1,0 +1,186 @@
+/*
+ * Tailwind v4 + shadcn 基座（全量迁移的真相源入口）。
+ * 配色 token 三段式逐字搬运自 src/styles.ts GLOBAL_CSS（v8「Trellis 惊艳版」，
+ * token 上游 design-demos/v8-trellis-encore.html :root 三段）——一个色值都不许改：
+ *   · 默认浅色（:root）；
+ *   · @media (prefers-color-scheme: dark) 跟随系统（:root:not([data-theme="light"]) 令显式亮色仍胜系统暗色）；
+ *   · :root[data-theme="light"] / :root[data-theme="dark"] 用户显式切换覆盖系统（两向皆胜）。
+ * 迁移期与 styles.ts GLOBAL_CSS 共存（token 双写等值，视图迁完后 GLOBAL_CSS 退役）。
+ */
+@import "tailwindcss";
+/* shadcn v4 惯例动效基座：animate-in/out、fade/zoom/slide-*（dialog/select/popover/tooltip/dropdown 进出场用）。 */
+@import "tw-animate-css";
+
+/* dark: 变体挂到 [data-theme=dark]（App 显式切换）——系统跟随由下方 media 段的 CSS 变量层承担，
+ * tailwind 类只需感知显式主题（与 shadcn dark mode 惯例一致）。 */
+@custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
+
+:root {
+  color-scheme: light;
+  --bg: #f8f9fc; --card: #ffffff; --fill: #f5f7fa; --fill-2: #eef1f5;
+  --border: #e5e8ec; --border-2: #d6dce4;
+  --text: #1a2330; --text-2: #46536b; --text-3: #5f6b80;
+  --accent: #2563eb; --accent-d: #1d4ed8; --accent-t: #e9effd; --accent-b: #c7d7fa;
+  --green: #16a34a; --green-d: #15803d; --green-t: #e9f9ef; --green-b: #c2e9cf;
+  --red: #dc2626; --red-d: #b91c1c; --red-t: #fdeded; --red-b: #f5c8c8;
+  --purple: #8b5cf6; --purple-d: #6d28d9; --purple-t: #f2edfe; --purple-b: #ded2fb;
+  --amb-d: #8a4d10; --amb-t: #f8efdd; --amb-b: #eeddba;
+  /* v8 无 ink token——取 --text 同族近黑蓝对位；hover 提亮一档（旧 v4 #0d0d0d→#2e2e2c 同款步进） */
+  --ink: #1a2330; --ink-fg: #ffffff; --ink-hover: #2b3648;
+  /* v8 主按钮=绿实底（demo .btn.solid-green）；hover 取 green-d（demo 暗一档 brightness(.94) 对位） */
+  --btn-bg: #16a34a; --btn-fg: #ffffff; --btn-hover: #15803d;
+  --solid-fg: var(--btn-fg); /* 同义引用：--btn-fg 既有=「彩色实底上的前景」，即 demo --solid-fg */
+  --code-bg: #f6f8fa; --code-border: #e5e8ec;
+  --scrim: rgba(16,24,40,.34);
+  --shadow: 0 1px 2px rgba(16,24,40,.04); --shadow-2: 0 1px 3px rgba(16,24,40,.07),0 1px 2px rgba(16,24,40,.04);
+  --shadow-3: 0 12px 32px -8px rgba(16,24,40,.16),0 2px 8px rgba(16,24,40,.06);
+  --ring: rgba(22,163,74,.10); --ring-blue: rgba(37,99,235,.12);
+  --radius: 12px; --radius-sm: 8px;
+  --nav-offset: 20px; /* v10b 外壳改左侧图标 rail 后无顶栏遮挡，仅留 20px 呼吸——WorkbenchView 右栏 sticky top 对齐用（外壳 agent 获准的唯一改动） */
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+  --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #12161f; --card: #1a202b; --fill: #212836; --fill-2: #273040;
+    --border: #2b3342; --border-2: #3b4557;
+    --text: #e8ecf3; --text-2: #b4bdcc; --text-3: #8f9aad;
+    --accent: #6d9bfb; --accent-d: #9db9fd; --accent-t: rgba(109,155,251,.15); --accent-b: rgba(109,155,251,.42);
+    --green: #3ecf77; --green-d: #8fe7b1; --green-t: rgba(62,207,119,.13); --green-b: rgba(62,207,119,.38);
+    --red: #ee6b6b; --red-d: #f8a8a8; --red-t: rgba(238,107,107,.14); --red-b: rgba(238,107,107,.42);
+    --purple: #a78bfa; --purple-d: #c8b4fd; --purple-t: rgba(167,139,250,.15); --purple-b: rgba(167,139,250,.42);
+    --amb-d: #e8b06a; --amb-t: rgba(224,164,88,.13); --amb-b: rgba(224,164,88,.40);
+    --ink: #e8ecf3; --ink-fg: #0c111c; --ink-hover: #c9d2e0;
+    /* 暗态实底前景=近黑蓝（demo --solid-fg #0c111c）；hover 提亮（demo brightness(1.08) 对位） */
+    --btn-bg: #3ecf77; --btn-fg: #0c111c; --btn-hover: #5fdd90;
+    --solid-fg: var(--btn-fg);
+    --code-bg: #10151f; --code-border: #28303f;
+    --scrim: rgba(0,0,0,.55);
+    --shadow: 0 1px 2px rgba(0,0,0,.35); --shadow-2: 0 2px 6px rgba(0,0,0,.35);
+    --shadow-3: 0 16px 40px -8px rgba(0,0,0,.55);
+    --ring: rgba(62,207,119,.14); --ring-blue: rgba(109,155,251,.16);
+  }
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f8f9fc; --card: #ffffff; --fill: #f5f7fa; --fill-2: #eef1f5;
+  --border: #e5e8ec; --border-2: #d6dce4;
+  --text: #1a2330; --text-2: #46536b; --text-3: #5f6b80;
+  --accent: #2563eb; --accent-d: #1d4ed8; --accent-t: #e9effd; --accent-b: #c7d7fa;
+  --green: #16a34a; --green-d: #15803d; --green-t: #e9f9ef; --green-b: #c2e9cf;
+  --red: #dc2626; --red-d: #b91c1c; --red-t: #fdeded; --red-b: #f5c8c8;
+  --purple: #8b5cf6; --purple-d: #6d28d9; --purple-t: #f2edfe; --purple-b: #ded2fb;
+  --amb-d: #8a4d10; --amb-t: #f8efdd; --amb-b: #eeddba;
+  --ink: #1a2330; --ink-fg: #ffffff; --ink-hover: #2b3648;
+  --btn-bg: #16a34a; --btn-fg: #ffffff; --btn-hover: #15803d;
+  --solid-fg: var(--btn-fg);
+  --code-bg: #f6f8fa; --code-border: #e5e8ec;
+  --scrim: rgba(16,24,40,.34);
+  --shadow: 0 1px 2px rgba(16,24,40,.04); --shadow-2: 0 1px 3px rgba(16,24,40,.07),0 1px 2px rgba(16,24,40,.04);
+  --shadow-3: 0 12px 32px -8px rgba(16,24,40,.16),0 2px 8px rgba(16,24,40,.06);
+  --ring: rgba(22,163,74,.10); --ring-blue: rgba(37,99,235,.12);
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #12161f; --card: #1a202b; --fill: #212836; --fill-2: #273040;
+  --border: #2b3342; --border-2: #3b4557;
+  --text: #e8ecf3; --text-2: #b4bdcc; --text-3: #8f9aad;
+  --accent: #6d9bfb; --accent-d: #9db9fd; --accent-t: rgba(109,155,251,.15); --accent-b: rgba(109,155,251,.42);
+  --green: #3ecf77; --green-d: #8fe7b1; --green-t: rgba(62,207,119,.13); --green-b: rgba(62,207,119,.38);
+  --red: #ee6b6b; --red-d: #f8a8a8; --red-t: rgba(238,107,107,.14); --red-b: rgba(238,107,107,.42);
+  --purple: #a78bfa; --purple-d: #c8b4fd; --purple-t: rgba(167,139,250,.15); --purple-b: rgba(167,139,250,.42);
+  --amb-d: #e8b06a; --amb-t: rgba(224,164,88,.13); --amb-b: rgba(224,164,88,.40);
+  --ink: #e8ecf3; --ink-fg: #0c111c; --ink-hover: #c9d2e0;
+  --btn-bg: #3ecf77; --btn-fg: #0c111c; --btn-hover: #5fdd90;
+  --solid-fg: var(--btn-fg);
+  --code-bg: #10151f; --code-border: #28303f;
+  --scrim: rgba(0,0,0,.55);
+  --shadow: 0 1px 2px rgba(0,0,0,.35); --shadow-2: 0 2px 6px rgba(0,0,0,.35);
+  --shadow-3: 0 16px 40px -8px rgba(0,0,0,.55);
+  --ring: rgba(62,207,119,.14); --ring-blue: rgba(109,155,251,.16);
+}
+
+/*
+ * @theme inline：把上面的运行时 token 暴露成 tailwind 工具类颜色（bg-card / text-text-2 /
+ * border-border-2 / bg-green-t …），并映射 shadcn 语义名（background/foreground/primary/…）。
+ * inline 令生成的工具类直接引用 var(--xx)，随三段式主题实时切换。
+ */
+@theme inline {
+  /* ── 项目原生 token → tailwind 颜色 ── */
+  --color-bg: var(--bg);
+  --color-card: var(--card);
+  --color-fill: var(--fill);
+  --color-fill-2: var(--fill-2);
+  --color-border: var(--border);
+  --color-border-2: var(--border-2);
+  --color-text: var(--text);
+  --color-text-2: var(--text-2);
+  --color-text-3: var(--text-3);
+  /* 注：--color-accent 让位给 shadcn 语义（hover 填充=var(--fill)，见下方 shadcn 段）——
+   * 项目蓝 DEFAULT var(--accent) 无同名工具类，需要时用任意值语法 text-(--accent)/bg-(--accent)，
+   * 或蓝 family 的 -d/-t/-b 变体；焦点环蓝走 --color-ring=var(--accent)。 */
+  --color-accent-d: var(--accent-d);
+  --color-accent-t: var(--accent-t);
+  --color-accent-b: var(--accent-b);
+  --color-green: var(--green);
+  --color-green-d: var(--green-d);
+  --color-green-t: var(--green-t);
+  --color-green-b: var(--green-b);
+  --color-red: var(--red);
+  --color-red-d: var(--red-d);
+  --color-red-t: var(--red-t);
+  --color-red-b: var(--red-b);
+  --color-purple: var(--purple);
+  --color-purple-d: var(--purple-d);
+  --color-purple-t: var(--purple-t);
+  --color-purple-b: var(--purple-b);
+  --color-amb-d: var(--amb-d);
+  --color-amb-t: var(--amb-t);
+  --color-amb-b: var(--amb-b);
+  --color-ink: var(--ink);
+  --color-ink-fg: var(--ink-fg);
+  --color-ink-hover: var(--ink-hover);
+  --color-btn-bg: var(--btn-bg);
+  --color-btn-fg: var(--btn-fg);
+  --color-btn-hover: var(--btn-hover);
+  --color-solid-fg: var(--solid-fg);
+  --color-code-bg: var(--code-bg);
+  --color-code-border: var(--code-border);
+  --color-scrim: var(--scrim);
+
+  /* ── shadcn 语义名 → 项目 token（vendored ui 组件的类名词汇） ── */
+  --color-background: var(--bg);
+  --color-foreground: var(--text);
+  --color-card-foreground: var(--text);
+  --color-popover: var(--card);
+  --color-popover-foreground: var(--text);
+  --color-primary: var(--green);
+  --color-primary-foreground: var(--btn-fg);
+  --color-secondary: var(--fill);
+  --color-secondary-foreground: var(--text-2);
+  --color-muted: var(--fill-2);
+  --color-muted-foreground: var(--text-3);
+  --color-accent: var(--fill);
+  --color-accent-foreground: var(--text);
+  --color-destructive: var(--red);
+  --color-destructive-foreground: var(--solid-fg);
+  --color-input: var(--border-2);
+  --color-ring: var(--accent);
+
+  /* ── 字体 / 圆角 / 阴影 ── */
+  --font-sans: var(--font);
+  --font-mono: var(--mono);
+  --radius-lg: var(--radius);
+  --radius-md: var(--radius-sm);
+  --radius-sm: 8px;
+  /* 三档阴影：--shadow→sm、--shadow-2→md、--shadow-3→lg/xl。
+   * 注意不能在此定义裸 --shadow（theme 名与 :root 运行时 token 同名会成 var 自引用环），
+   * 请用 shadow-sm / shadow-md / shadow-lg 工具类。 */
+  --shadow-2xs: var(--shadow);
+  --shadow-xs: var(--shadow);
+  --shadow-sm: var(--shadow);
+  --shadow-md: var(--shadow-2);
+  --shadow-lg: var(--shadow-3);
+  --shadow-xl: var(--shadow-3);
+}

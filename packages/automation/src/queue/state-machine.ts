@@ -58,7 +58,7 @@ export function assertAutomationTransition(from: AutomationState, to: Automation
 
 /**
  * L1→L3 分级放权合体核心：一次成功 run 该落哪个终态。
- *   - L3（unattended, allowlist）→ merged（自动合并回主线）
+ *   - L3（unattended）→ merged 候选；真实 merge 仍须先过 lifecycle 的 verifier + allowlist/denylist
  *   - L1（report-only, 默认）/ L2（人工门）→ paused（跑完停下，等人工复核 / 放行）
  * 这是「默认 report-only、不自动 merge、安全」的落点（GOAL A5）。
  */
@@ -70,7 +70,8 @@ export function settleSuccess(level: AutomationLevel): 'merged' | 'paused' {
  * 一次失败 run 该落哪个态（老仓 scheduler/scheduler.ts:156-201 applyFailure）。
  *   - conflict 类（merge 冲突 / barrier drift / abort）→ conflict，绝不重试、留现场。
  *   - retry 类（verify-fail / 瞬态 exec）→ attemptsAfterIncr > maxRetries 则 failed（预算耗尽），
- *     否则回 queued 重试。attempts 的原子自增在 queue/claim.ts::incrAttempts（真 fs 锁）。
+ *     否则回 queued 重试。scheduler 通过 queue/claim.ts::commitFailureOwned 在真 fs 锁内把
+ *     attempts、诊断字段与目标态一次提交。
  */
 export function settleFailure(kind: FailureKind, attemptsAfterIncr: number, maxRetries: number): 'queued' | 'failed' | 'conflict' {
   if (kind === 'conflict') return 'conflict'

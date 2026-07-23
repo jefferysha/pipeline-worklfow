@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createStateStore } from '@pipeline-lite/kernel'
@@ -15,7 +15,9 @@ describe('scanReadyFromFs（真 fs 枚举 + 真读 automation 字段）', () => 
   const changesDir = () => join(root, 'openspec', 'changes')
 
   const initQueued = async (name: string, queuedAt: string, depends: string[] = []) => {
-    const dir = await store.init({ repoRoot: root, name, track: 'backend', preset: 'full', clock })
+    const dir = await store.init({
+      repoRoot: root, name, track: 'backend', reviewSeed: 'pending', preset: 'full', clock,
+    })
     await store.setMany(dir, {
       phase: 'build',
       automation: 'queued',
@@ -32,11 +34,34 @@ describe('scanReadyFromFs（真 fs 枚举 + 真读 automation 字段）', () => 
     await rm(root, { recursive: true, force: true })
   })
 
+  it('changesDir 只有 ENOENT 可视为空；ENOTDIR 必须 fail-loud', async () => {
+    await expect(scanReadyFromFs(changesDir(), store)).resolves.toEqual([])
+
+    const notDirectory = join(root, 'changes-file')
+    await writeFile(notDirectory, 'not a directory\n', 'utf8')
+    await expect(scanReadyFromFs(notDirectory, store)).rejects.toMatchObject({ code: 'ENOTDIR' })
+  })
+
+  it('任一活跃 change state 读取或解析失败都 fail-loud', async () => {
+    await mkdir(join(changesDir(), 'broken-state'), { recursive: true })
+    const stateError = Object.assign(new Error('simulated state read/parse EIO'), { code: 'EIO' })
+    const failingStore = new Proxy(store, {
+      get(target, property, receiver) {
+        if (property === 'read') return async () => { throw stateError }
+        return Reflect.get(target, property, receiver)
+      },
+    })
+
+    await expect(scanReadyFromFs(changesDir(), failingStore)).rejects.toBe(stateError)
+  })
+
   it('挑出 build+queued 就绪 change，按 queued_at FIFO', async () => {
     await initQueued('later', '2026-07-07T09:00:00Z')
     await initQueued('earlier', '2026-07-07T08:00:00Z')
     // 一个 spec 相位的 change 不该入选
-    const dir = await store.init({ repoRoot: root, name: 'notbuild', track: 'backend', preset: 'full', clock })
+    const dir = await store.init({
+      repoRoot: root, name: 'notbuild', track: 'backend', reviewSeed: 'pending', preset: 'full', clock,
+    })
     await store.setMany(dir, { phase: 'spec', automation: 'queued' })
 
     expect(await scanReadyFromFs(changesDir(), store)).toEqual(['earlier', 'later'])
@@ -60,5 +85,12 @@ describe('scanReadyFromFs（真 fs 枚举 + 真读 automation 字段）', () => 
     // 造一个归档目录 openspec/changes/archive/2026-07-06-archdep
     await mkdir(join(changesDir(), 'archive', '2026-07-06-archdep'), { recursive: true })
     expect(await scanReadyFromFs(changesDir(), store)).toEqual(['child'])
+  })
+
+  it('archive 只有 ENOENT 可视为空；其它读取错误必须 fail-loud', async () => {
+    await initQueued('child', '2026-07-07T08:00:00Z', ['archdep'])
+    await writeFile(join(changesDir(), 'archive'), 'not a directory\n', 'utf8')
+
+    await expect(scanReadyFromFs(changesDir(), store)).rejects.toMatchObject({ code: 'ENOTDIR' })
   })
 })

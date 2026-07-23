@@ -3,6 +3,7 @@
  * 5 包语义盘点 + 队列生命周期状态机见 ./types.ts 顶注。默认 L1 report-only（不自动 merge）。
  */
 export * from './types.js'
+export * from './triage/index.js'
 // queue：状态机 / cas 并发闸 / 扫描 / 门联动
 export * from './queue/state-machine.js'
 export * from './queue/claim.js'
@@ -12,9 +13,32 @@ export * from './queue/gate.js'
 export * from './scheduler/semaphore.js'
 export * from './scheduler/classify.js'
 export * from './scheduler/scheduler.js'
+// GOAL H · Stage B+C：ExecutionContext + loop admission（原子 preflight / reservation 生命周期 /
+// kill-switch / 崩溃恢复）
+export { makeIdGen } from './admission/execution-context.js'
+export type {
+  ExecutionContext, PreparationFailureReason, PreparedSkillSlot, PreparedSkillBundle,
+  LoopPreparedExecutionContext, NonLoopExecutionContext, PreparedExecutionContext,
+  PrepareOutcome, ExecutionPreparationPort, CapturedExecutionCoordinate, ExecutionCoordinatePort,
+} from './admission/execution-context.js'
+export * from './admission/loop-admission.js'
 // lifecycle：沙箱生命周期编排 / build_sha barrier
 export * from './lifecycle/barrier.js'
 export * from './lifecycle/lifecycle.js'
+// GOAL H · H7 verifier Phase 2：公共面只暴露 verifier 配置/类型与纯 gate；boundary 签发器和
+// WeakSet provenance 检查保持包内，普通 RunChange 不能从 package 根给自己签发可信结果。
+export {
+  DEFAULT_VERIFIER_ISSUER_KIND, createDefaultVerifierPort, evaluateVerificationGate,
+} from './verifier/verifier.js'
+export type {
+  VerifierInput, VerifierPort, DefaultVerifierPortOptions, VerificationBlockReason,
+  VerificationGateInput, VerificationGateResult,
+} from './verifier/verifier.js'
+// H14 生产 L3：宿主对权威 worktree revision 执行固定 Git 完整性核验，真实 exit code 签发。
+export {
+  createGitRevisionVerifier, GIT_REVISION_VERIFIER_ISSUER_IDENTITY,
+} from './verifier/git-revision-verifier.js'
+export type { GitRevisionVerifierOptions } from './verifier/git-revision-verifier.js'
 // T4：沙箱内阶段回写（[TRANSITION] 检出）+ loop denylist 结算检查（决议 #12）
 export * from './lifecycle/transitionWatch.js'
 export * from './lifecycle/denylist.js'
@@ -40,3 +64,12 @@ export * from './runner/container.js'
 export * from './lifecycle/worktree.js'
 export * from './lifecycle/mergeback.js'
 export * from './lifecycle/ports.js'
+// H10-T4：skill 内容定位（多根枚举 + 歧义拒绝）+ CAS 快照物化——H10-T7 CLI 生产装配（content-locator
+// 根枚举、ExecutionPreparationDeps.locator 绑定）消费本出口，之前只在包内可见、跨包不可 import。
+export * from './skills/content-locator.js'
+export * from './skills/production-content-locator.js'
+export * from './skills/wiring.js'
+export * from './skills/snapshot-store.js'
+export * from './skills/types.js'
+export * from './starters/wiring.js'
+export * from './starters/execution-guard.js'

@@ -2,7 +2,32 @@
 
 > 本文件 + `packages/kernel/src/types.ts` 是并行开发的单一契约。改契约 = human gate（见 LOOP.md）。
 
-## 1. `.pipeline.yaml` 格式契约（与老内核字节级兼容）
+## 1. Canonical state 与 `.pipeline.yaml` adapter
+
+- **唯一真相/唯一提交点**：`openspec/changes/<name>/.pipeline-run/current.json`。它是当前完整
+  `PipelineState`、hook 热路径五字段快照、mutation reason/effects 与 state digest 的自包含 revision；
+  同字节 immutable twin 位于 `.pipeline-run/revisions/<revision>-<revisionId>.json`。
+- **发布顺序**：所有公开 `StateStore.write()` 自行取得同一把 change 锁；transition 先独占发布
+  `TransitionRecord`，普通 mutation 直接构造下一 revision；随后先发布 immutable revision，再以
+  `current.json` 的 tmp+rename 作为唯一 commit。最后才 best-effort 刷新 `.pipeline.yaml`。record/revision
+  已落而 current 未换只是孤儿；current 已换而 YAML 写失败是已提交状态，返回 projection pending，
+  不得回滚或伪装失败。
+- **完整性**：current 必须通过 closed schema、SHA-256、immutable twin 字节一致、直接 previous 身份与
+  effects 真实 diff 校验。transition mutation 还必须绑定 `transitionRecordId` 与该 record 精确字节的
+  `transitionRecordDigest`；history 冷路径遍历全部 immutable revisions，任一祖先 revision/record
+  缺失或摘要不符均 fail-loud，不用 JSONL/YAML 补洞。
+- **兼容断代**：只有 `current.json` 目录项完全不存在时才读取 legacy `.pipeline.yaml`。current 一旦出现，
+  即使损坏、不可读、是 symlink 或读取中消失，也绝不授权 YAML fallback。首次官方写把 legacy YAML
+  固化为 migration revision 0，再提交目标 mutation。
+- **YAML adapter**：`.pipeline.yaml` 继续按下方窄格式输出，服务旧工具；每份投影带 revision/id/digest
+  元数据。缺失、已知 stale、legacy-compatible 可幂等前滚；未知 drift 不自动覆盖。运维入口：
+  `pipeline state status <change>`、`repair-projection`（未知 drift 需显式 `--force-canonical`）和
+  `import-legacy`（用户明确选择把 YAML 作为一条新 canonical mutation 导入）。server 项目扫描只自动
+  修复可证明的前滚态，并把损坏/未知 drift 暴露为项目错误。
+- **Hooks**：纯 Bash hooks 共用 `hooks/canonical-state.sh` 读取 compact current 的 `hookState`；canonical
+  无效时 fail-open 跳过该 change，但不反向读 YAML。只有从未迁移的 change 才走 legacy grep。
+
+### 1.1 `.pipeline.yaml` 格式契约（与老内核字节级兼容）
 
 - 位置：`openspec/changes/<name>/.pipeline.yaml`（相对项目根）。
 - **字段序固定**：见 `types.ts::FIELD_ORDER`（40 字段；2026-07-11 v5 T4 决策 G **末尾追加**
@@ -21,11 +46,59 @@
 - **历史区容忍**：文件尾部可能出现老内核的 `tools_history:` / `prompts_history:` /
   `transitions_history:` base64 区块。lite **读时跳过、写回时原样逐字保留**（当不透明块处理）。
   lite 自己的历史写 `openspec/changes/<name>/.pipeline-history.jsonl`
-  （每行 `{"ts":ISO8601,"kind":"transition|set|init|tool|prompt|import","field"?,"from"?,"to"?,"by"?,"raw"?}`；
+  （每行 `{"ts":ISO8601,"kind":"transition|set|init|tool|prompt|import","field"?,"from"?,"to"?,"by"?,"raw"?,"transitionRecordId"?}`；
   tool/prompt/import 三种 kind 与 raw 字段是 `pipeline import` 老仓历史迁移的加法扩展，
-  iteration-8，不影响 .pipeline.yaml 兼容）。
+  iteration-8，不影响 .pipeline.yaml 兼容；`transitionRecordId`（W1 第二增量，见下方"不可变
+  TransitionRecord"条目）存在时表示这一行只是某条 canonical TransitionRecord 的兼容投影，
+  不是 legacy 真相源）。
 - **解析器**：kernel 手写窄解析器（仅支持上述子集），**禁止引入 yaml npm 包**——
   通用解析器的引号/锚点语义会悄悄偏离老内核三读取器契约。
+- **内部提交元数据**（W1 第二增量：WorkflowRun 持久化提交接缝，2026-07-16）：`FIELD_ORDER`
+  字段与 opaqueTail 之间可能出现固定三行、要么全有要么全无的保留键——**不进 `FIELD_ORDER`，
+  不可被 `pipeline set` 改写**：
+  ```
+  pipeline_run_id: <uuid>
+  pipeline_transition_sequence: <非负整数>
+  pipeline_transition_head: <recordId 或字面量 "null">
+  ```
+  解析规则同"末尾追加"先例：老版本窄解析器遇到首个未知 key（`pipeline_run_id`）起整段当
+  opaqueTail 逐字保留，混版本读写无损。老 change 缺这三行 → `runMetadata` 为 `undefined`；
+  显式调 `establishRun()` 会立即生成新身份并落盘（幂等，已有 `runMetadata` 则原样返回，不重新
+  生成）；单靠 `transact()` 访问（不落到 `commit()`）不会持久化——本次 callback 内生成的临时
+  身份只存在于这次调用的内存里，callback 若不提交就直接返回，下次再 `transact()` 会重新生成
+  一个不同的临时 id，**不能**把"调用过一次 transact()"等同于"身份已落盘"。新 change 由
+  `WorkflowRunRepository.initChange()` 负责：canonical revision 0 的独占创建里同时嵌入
+  `runMetadata` 与（若提供）custom workflow 首态（`InitOptions.initialWorkflow`）——不是
+  "先建 default/open、后补身份/改首态"两步，写入内容在同目录随机命名的临时文件里以 `wx`
+  完整落盘之后，才用 `link()` 原子发布到目标路径（不用裸 `wx` 直接开在目标路径上——那只保证
+  "创建时不覆盖已有文件"，不保证目标内容整体原子可见，写入过程中并发 reader 可能读到空/半截
+  文件，2026-07-17 codex 架构评估 P1），身份、custom 首态与其余字段从目标文件出现的第一时刻起
+  就已经是完整、一致的，不存在任何中间态，`init()` 失败也不会返回一个身份/首态缺失的"半成功"
+  结果；随后再生成 YAML adapter。详见
+  `packages/kernel/src/state/{run-metadata,run-revision-store,store,workflow-run-repository}.ts`。
+- **不可变 TransitionRecord**（同上）：`openspec/changes/<name>/.pipeline-transitions/
+  <sequence 零填充 6 位>-<recordId>.json`，每条记录一个文件，写入用「临时文件 + `link()` +
+  `unlink()` 临时文件」而非 rename——`link()` 目标已存在时原子失败（`EEXIST`），存储层强制
+  不可变，同 sequence+id 不能被覆盖。记录写入本身不是提交点：先写记录（此时是未被引用的
+  孤儿）、再发布绑定其 id+digest 的完整 revision，最后一次 `current.json` rename 同时提交新 fields
+  与推进的 run 元数据（sequence/head），那次 rename 才是唯一提交点。`GET /api/change/:name/history` 从 `transitionHead`
+  沿 `previousRecordId` 回溯这条链，是 transition 审计的真相源。`.pipeline-history.jsonl`
+  继续承载 `set`/`init`/`tool`/`prompt`/`import`，以及所有没有 `transitionRecordId` 标记的
+  transition 行（legacy/import/非 canonical writer 产生，链建立前后都原样保留）——**合并边界
+  是逐条来源标记，不是时间戳**：每次真实 canonical commit 收尾写 JSONL 时都带上
+  `transitionRecordId = record.id`（`HistoryEntry.transitionRecordId`，见 `types.ts`，唯一
+  构造点是 `packages/kernel/src/state/history.ts` 的 `transitionRecordToHistoryEntry()`），
+  `readChangeHistory()` 读取时只保留"无此标记"的 JSONL transition 行 + canonical 链上的记录——
+  **这一步纳入/排除判定不比较任何 `ts` 字符串**（此前用链首记录时间戳做切分的版本已废弃——
+  同秒冲突、时钟回拨、head 文件缺失导致链空、晚于链建立才执行的 `pipeline import` 都会让时间戳
+  边界出错，2026-07-17 codex 架构评估否决）。最终展示顺序仍然要排序，但不是简单拼接后整体按
+  `ts` 排序：canonical 链本身的顺序真相是 `sequence`（`readChain()` 回溯出的因果顺序，权威、
+  不受时钟影响），只有 JSONL 遗留条目之间、以及遗留条目与 canonical 记录的交叉排位才用 `ts`——
+  两指针合并（`mergeCanonicalAndLegacy()`）保证 canonical 记录之间永远不会互相比较，即使某条
+  canonical 记录的 `observedAt` 因时钟回拨而"看起来"早于它前一条，展示顺序仍然保持 sequence
+  顺序不被打乱（2026-07-17 codex 架构评估同一轮点名）。详见
+  `packages/kernel/src/state/transition-record-store.ts` 与 `packages/server/src/transition.ts`
+  的 `readChangeHistory()` / `mergeCanonicalAndLegacy()`。
 
 ## 2. 相位与转换
 

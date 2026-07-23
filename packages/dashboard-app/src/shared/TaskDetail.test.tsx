@@ -4,8 +4,8 @@
  *
  * 意图迁移表（旧 ChangeDetailCard.test.tsx 断言 → 新归属；旧文件与组件暂留给 InboxView
  * 现行实现消费，T9 换宿主后由 T18 退役清理）：
- *   · verify 三轨证据格语义色 pass/fail/pending    → 当前行 dtl-box 内 dt-field--pass/--fail/
- *     --miss 三态（本文件「默认 workflow 时间线」组）
+ *   · verify 三轨证据格语义色 pass/fail/pending    → 当前行高亮框（dtl-box）内字段格
+ *     data-state=pass/fail/miss 三态（本文件「默认 workflow 时间线」组）
  *   · 产物拷贝钮写剪贴板 + toast                   → done 行产物 chip data-copy 拷贝（本文件）
  *   · whyText 未过项判据（评审 Important-1）        → 当前行 dtl-box 结论行（本文件，判据仍走
  *     VERIFY_STATUS_FIELDS 白名单，verification_report 未设不算未过项）
@@ -16,7 +16,7 @@
  *   · ✕ 关闭回调                                   → 本文件（onClose 可选，未传不渲染关闭钮）
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { I18nProvider } from '../i18n'
 import { zh } from '../i18n/translations'
 import { TaskDetail } from './TaskDetail'
@@ -108,30 +108,30 @@ async function renderDetail(over: Partial<Parameters<typeof TaskDetail>[0]> = {}
 }
 
 describe('TaskDetail 垂直时间线（默认 workflow 七阶段）', () => {
-  it('按 stageArtifacts 渲染 7 个阶段行，节点语义：✓done ×4 / ●cur(verify) / 空心 todo ×2', async () => {
+  it('按 stageArtifacts 渲染 7 个阶段行，行语义（data-state）：done ×4 / cur(verify) / todo ×2', async () => {
     const { container } = await renderDetail()
-    const items = container.querySelectorAll('.dtl-it')
+    const items = container.querySelectorAll('[data-anim="stage"]')
     expect(items).toHaveLength(7)
     for (const step of ['open', 'explore', 'spec', 'build']) {
-      expect(screen.getByTestId(`dtl-${step}`).querySelector('.dtl-node')?.className).toContain('dtl-node--done')
+      expect(screen.getByTestId(`dtl-${step}`).getAttribute('data-state')).toBe('done')
     }
-    expect(screen.getByTestId('dtl-verify').querySelector('.dtl-node')?.className).toContain('dtl-node--cur')
+    expect(screen.getByTestId('dtl-verify').getAttribute('data-state')).toBe('cur')
     for (const step of ['ship', 'archive']) {
-      expect(screen.getByTestId(`dtl-${step}`).querySelector('.dtl-node')?.className).toContain('dtl-node--todo')
+      expect(screen.getByTestId(`dtl-${step}`).getAttribute('data-state')).toBe('todo')
     }
   })
 
   it('当前行（verify）高亮框：三轨字段语义色 + 全过结论；未开始行显示「未开始」，无产物 done 行显示「无产物」', async () => {
     await renderDetail()
-    const box = screen.getByTestId('dtl-verify').querySelector('.dtl-box')
+    const box = screen.getByTestId('dtl-verify').querySelector('[data-testid="dtl-box"]')
     expect(box).not.toBeNull()
-    expect(screen.getByTestId('dt-field-verify_result').className).toContain('dt-field--pass')
-    expect(box?.querySelector('.dt-verdict')?.textContent).toContain('三轨全过')
+    expect(screen.getByTestId('dt-field-verify_result').getAttribute('data-state')).toBe('pass')
+    expect(box?.querySelector('[data-testid="dt-verdict"]')?.textContent).toContain('三轨全过')
     expect(screen.getByTestId('dtl-ship').textContent).toContain('未开始')
     expect(screen.getByTestId('dtl-open').textContent).toContain('无产物')
   })
 
-  it('三轨有 fail → 结论列出未过项；verification_report 未设不算未过项（Important-1 判据迁移）且落 dt-field--miss 占位', async () => {
+  it('三轨有 fail → 结论列出未过项；verification_report 未设不算未过项（Important-1 判据迁移）且落 data-state=miss 占位', async () => {
     await renderDetail({
       change: makeChange('c1', 'verify', {
         fields: {
@@ -142,13 +142,13 @@ describe('TaskDetail 垂直时间线（默认 workflow 七阶段）', () => {
         },
       }),
     })
-    const verdict = screen.getByTestId('dtl-verify').querySelector('.dt-verdict')
-    expect(verdict?.textContent).toContain('codex_review')
-    expect(verdict?.textContent).not.toContain('verification_report')
+    const verdict = within(screen.getByTestId('dtl-verify')).getByTestId('dt-verdict')
+    expect(verdict.textContent).toContain('codex_review')
+    expect(verdict.textContent).not.toContain('verification_report')
     const miss = screen.getByTestId('dt-field-verification_report')
-    expect(miss.className).toContain('dt-field--miss')
+    expect(miss.getAttribute('data-state')).toBe('miss')
     expect(miss.textContent).toContain('未产出')
-    expect(screen.getByTestId('dt-field-codex_review_result').className).toContain('dt-field--fail')
+    expect(screen.getByTestId('dt-field-codex_review_result').getAttribute('data-state')).toBe('fail')
   })
 
   it('done 行产物 chip 带 data-copy，点击写剪贴板 + toast（意图迁移：旧产物区拷贝钮）', async () => {
@@ -161,6 +161,32 @@ describe('TaskDetail 垂直时间线（默认 workflow 七阶段）', () => {
     await waitFor(() => expect(writeText).toHaveBeenCalledWith('docs/design.md'))
     expect(props.onToast).toHaveBeenCalled()
   })
+
+  it('OpenSpec tasks.md 投影的 checkbox 只显示在其 pipeline phase，不从原始需求另造通用 Todo', async () => {
+    await renderDetail({
+      change: makeChange('c1', 'verify', {
+        fields: { verify_result: 'pass', agent_review_result: 'pass', codex_review_result: 'pass' },
+        todo: {
+          hasTaskSource: true,
+          stages: [
+            { id: 'open', label: '立项', status: 'done', tasks: [{ text: '确认范围', completed: true }] },
+            { id: 'explore', label: '调研', status: 'done', tasks: [] },
+            { id: 'spec', label: '规格', status: 'done', tasks: [] },
+            { id: 'build', label: '实现', status: 'done', tasks: [{ text: '实现登录页', completed: true }] },
+            { id: 'verify', label: '验证', status: 'current', tasks: [{ text: '运行浏览器验收', completed: false }] },
+            { id: 'ship', label: '交付', status: 'pending', tasks: [] },
+            { id: 'archive', label: '归档', status: 'pending', tasks: [] },
+          ],
+        },
+      }),
+    })
+    expect(screen.getByTestId('dtl-todo-open').textContent).toContain('确认范围')
+    expect(screen.getByTestId('dtl-todo-open-0').getAttribute('data-completed')).toBe('true')
+    expect(screen.getByTestId('dtl-todo-build').textContent).toContain('实现登录页')
+    expect(screen.getByTestId('dtl-todo-verify').textContent).toContain('运行浏览器验收')
+    expect(screen.getByTestId('dtl-todo-verify-0').getAttribute('data-completed')).toBe('false')
+    expect(screen.queryByTestId('dtl-todo-ship')).toBeNull()
+  })
 })
 
 describe('TaskDetail 自定义 workflow（三阶段）与 rules 缺失回落', () => {
@@ -169,9 +195,9 @@ describe('TaskDetail 自定义 workflow（三阶段）与 rules 缺失回落', (
       change: makeChange('cn1', 'review', { fields: { workflow: 'release-train', design_doc: 'docs/draft.md' } }),
       rules: CN_RULES,
     })
-    expect(container.querySelectorAll('.dtl-it')).toHaveLength(3)
-    expect(screen.getByTestId('dtl-review').querySelector('.dtl-node')?.className).toContain('dtl-node--cur')
-    expect(screen.getByTestId('dtl-review').querySelector('.dtl-box')).not.toBeNull()
+    expect(container.querySelectorAll('[data-anim="stage"]')).toHaveLength(3)
+    expect(screen.getByTestId('dtl-review').getAttribute('data-state')).toBe('cur')
+    expect(screen.getByTestId('dtl-review').querySelector('[data-testid="dtl-box"]')).not.toBeNull()
     expect(screen.getByTestId('dtl-review').textContent).toContain('本阶段无产物登记')
     expect(screen.getByTestId('dtl-chip-design_doc').getAttribute('data-copy')).toBe('docs/draft.md')
   })
@@ -181,7 +207,7 @@ describe('TaskDetail 自定义 workflow（三阶段）与 rules 缺失回落', (
       change: makeChange('c1', 'verify', { fields: { design_doc: 'docs/design.md', pr_url: 'https://x/pr/1' } }),
       rules: undefined,
     })
-    expect(container.querySelectorAll('.dtl-it')).toHaveLength(0)
+    expect(container.querySelectorAll('[data-anim="stage"]')).toHaveLength(0)
     expect(screen.getByTestId('task-detail')).toBeInTheDocument()
     expect(screen.getByTestId('dtl-chip-design_doc')).toBeInTheDocument()
     expect(screen.getByTestId('dtl-chip-pr_url')).toBeInTheDocument()
@@ -194,7 +220,7 @@ describe('TaskDetail 自定义 workflow（三阶段）与 rules 缺失回落', (
       }),
       rules: CN_RULES,
     })
-    expect(container.querySelectorAll('.dtl-it')).toHaveLength(0)
+    expect(container.querySelectorAll('[data-anim="stage"]')).toHaveLength(0)
     expect(screen.getByText('工作流定义不可用，暂无法展示阶段——先列已产出的产物')).toBeInTheDocument()
     expect(screen.getByTestId('dtl-chip-design_doc')).toBeInTheDocument()
   })
@@ -227,17 +253,17 @@ describe('TaskDetail 失败态（automation failed）', () => {
     },
   })
 
-  it('当前行 × 红节点 + dtl-box--bad：报错原文（折叠内）、attempts 元信息、缺产出合并 dt-field--miss、重试/放弃说明', async () => {
+  it('当前行 data-state=fail + 失败框 data-tone=bad：报错原文（折叠内）、attempts 元信息、缺产出合并 miss 占位、重试/放弃说明', async () => {
     await renderDetail({ change: failedChange })
     const row = screen.getByTestId('dtl-build')
-    expect(row.querySelector('.dtl-node')?.className).toContain('dtl-node--fail')
-    const box = row.querySelector('.dtl-box')
-    expect(box?.className).toContain('dtl-box--bad')
+    expect(row.getAttribute('data-state')).toBe('fail')
+    const box = row.querySelector('[data-testid="dtl-box"]')
+    expect(box?.getAttribute('data-tone')).toBe('bad')
     expect(screen.getByTestId('dt8-raw-pre').textContent).toContain('verify: 2 failed · auth.test.ts')
     expect(screen.getByTestId('dt8-diag-meta').textContent).toContain('attempts 3')
     // build 阶段声明产出 branch/build_sha 均未设 → 合并为一条 miss 占位
     const miss = screen.getByTestId('dt-field-missing')
-    expect(miss.className).toContain('dt-field--miss')
+    expect(miss.getAttribute('data-state')).toBe('miss')
     expect(miss.textContent).toContain('branch')
     expect(miss.textContent).toContain('build_sha')
     expect(row.textContent).toContain('自动重试 3 次后停在这')
@@ -341,7 +367,7 @@ describe('TaskDetail F-b：automation_cause 直判优先，空串回落 regex', 
     // last_error 原文照渲染（v8-C 后在 rawfold 折叠内，人话结论是补充不是替换，与 W3 既有口径一致）
     expect(screen.getByTestId('dt8-raw-pre').textContent).toContain('任务被人工终止')
     // v8-C：cancelled 走琥珀 tone（人为终止非故障，不红成硬故障）
-    expect(screen.getByTestId('dt-diag').className).toContain('dt8-diag--amb')
+    expect(screen.getByTestId('dt-diag').getAttribute('data-tone')).toBe('amb')
   })
 
   it('cause=verify-fail → 徽章「验证未通过…」（regex 对 verify 原文只能 unknown 的钉死反例）', async () => {
@@ -373,24 +399,14 @@ describe('TaskDetail F-b：automation_cause 直判优先，空串回落 regex', 
   })
 })
 
-describe('TaskDetail 「在终端继续」命令区', () => {
-  it('命令文案与第一条前进 transition 事件一致（verify → verify-pass），拷贝钮带 data-copy 且写剪贴板', async () => {
-    const writeText = vi.fn().mockResolvedValue(undefined)
-    vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } })
+// #7（2026-07-15）：门行「在终端继续 pipeline transition」命令区退役（与抽屉内联动作按钮等价，
+// 冗余）——原本这里的两条「命令文案/自定义 event」用例随之删除。失败态本就不渲染该区（见上方
+// 「失败态不渲染 detail-cmd」用例，保留），门行现在也一律不渲染 detail-cmd（下方断言锁死）。
+describe('TaskDetail #7：门行不再渲染「在终端继续」命令区（退役）', () => {
+  it('门行（verify 前进边就绪）也不渲染 detail-cmd —— 内联动作即等价', async () => {
     await renderDetail()
-    expect(screen.getByTestId('detail-cmd').textContent).toBe('pipeline transition c1 verify-pass')
-    const btn = screen.getByTestId('detail-cmd-copy')
-    expect(btn.getAttribute('data-copy')).toBe('pipeline transition c1 verify-pass')
-    fireEvent.click(btn)
-    await waitFor(() => expect(writeText).toHaveBeenCalledWith('pipeline transition c1 verify-pass'))
-  })
-
-  it('自定义 workflow 用它自己的 event 名（review → approved）', async () => {
-    await renderDetail({
-      change: makeChange('cn1', 'review', { fields: { workflow: 'release-train' } }),
-      rules: CN_RULES,
-    })
-    expect(screen.getByTestId('detail-cmd').textContent).toBe('pipeline transition cn1 approved')
+    expect(screen.queryByTestId('detail-cmd')).toBeNull()
+    expect(screen.queryByTestId('detail-cmd-copy')).toBeNull()
   })
 })
 
@@ -441,9 +457,9 @@ describe('TaskDetail history 区（T1 端点接入）', () => {
 })
 
 describe('TaskDetail 动作条 props 化 + 任务一句话 + 头部', () => {
-  it('宿主传入 actions → 渲染在置顶动作条（.dt8-acts）并可点；底部不再有 .dt-foot（v8-C 动作置顶）', async () => {
+  it('宿主传入 actions → 渲染在置顶动作条（dt8-acts）并可点；动作只此一处（旧底部动作区退役，v8-C 动作置顶）', async () => {
     const onRetry = vi.fn()
-    const { container } = await renderDetail({
+    await renderDetail({
       actions: (
         <button type="button" data-testid="host-retry" onClick={onRetry}>
           ↻ 重试
@@ -452,23 +468,22 @@ describe('TaskDetail 动作条 props 化 + 任务一句话 + 头部', () => {
     })
     fireEvent.click(screen.getByTestId('host-retry'))
     expect(onRetry).toHaveBeenCalledOnce()
-    expect(container.querySelector('.dt-foot')).toBeNull()
+    // 动作按钮只渲染一份且在置顶条内（不再有底部动作区双挂）
+    expect(screen.getAllByTestId('host-retry')).toHaveLength(1)
     const acts = screen.getByTestId('dt8-acts')
     expect(acts.contains(screen.getByTestId('host-retry'))).toBe(true)
     expect(screen.getByTestId('dt-foot-label').textContent).toBe('verify → ship')
-    // 置顶位置：动作条在第一个 .dt-sec（任务/阶段区）之前
-    const firstSec = container.querySelector('.dt-sec')
-    expect(firstSec).not.toBeNull()
-    expect(acts.compareDocumentPosition(firstSec as Element) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    // 旁附语义说明（detail.acts_note）
-    expect(acts.textContent).toContain('与终端命令等价')
+    // 置顶位置：动作条在阶段区之前
+    const stagesSec = screen.getByTestId('dt-stages-sec')
+    expect(acts.compareDocumentPosition(stagesSec) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    // #7：「动作与终端命令等价」语义说明已退役——动作条只剩动作 + foot 标签，无冗余解释文字
   })
 
-  it('不传 actions → 无动作条（.dt8-acts 与 .dt-foot 皆无）；不传 badge → 头部无徽章；不传 onClose → 无关闭钮', async () => {
-    const { container } = await renderDetail()
-    expect(container.querySelector('.dt-foot')).toBeNull()
-    expect(container.querySelector('.dt8-acts')).toBeNull()
-    expect(container.querySelector('.dt-head .badge')).toBeNull()
+  it('不传 actions → 无动作条；不传 badge → 头部只有名字（无徽章）；不传 onClose → 无关闭钮', async () => {
+    await renderDetail()
+    expect(screen.queryByTestId('dt8-acts')).toBeNull()
+    // 头部除任务名外无任何徽章/按钮文案
+    expect(screen.getByTestId('dt-head').textContent).toBe('c1')
     expect(screen.queryByTestId('detail-close')).toBeNull()
   })
 
@@ -490,7 +505,7 @@ describe('TaskDetail 动作条 props 化 + 任务一句话 + 头部', () => {
  * v8-C 意见④（design-demos/v8-trellis-encore.html #drawer 对位）：动作置顶 + 人话报错卡
  * （原文折叠）+「自己上手修」连接命令卡 + 流程级历史。props 接口零增改——宿主（B/D）不动也编译。
  */
-describe('TaskDetail v8-C 意见④：人话报错卡（.dt8-diag）', () => {
+describe('TaskDetail v8-C 意见④：人话报错卡（dt-diag）', () => {
   const fz = zh.failure as Record<string, string>
 
   it('失败态 → 卡标题=人话结论（cause_*）+ 处置指引（hint_*）；报错原文收 <details> 默认收起；meta 行含 attempts/cause', async () => {
@@ -513,8 +528,8 @@ describe('TaskDetail v8-C 意见④：人话报错卡（.dt8-diag）', () => {
     const meta = screen.getByTestId('dt8-diag-meta')
     expect(meta.textContent).toContain('attempts 3')
     expect(meta.textContent).toContain('cause missing-docker')
-    // 非 cancelled 不带琥珀修饰
-    expect(screen.getByTestId('dt-diag').className).not.toContain('dt8-diag--amb')
+    // 非 cancelled 不带琥珀修饰（红 tone）
+    expect(screen.getByTestId('dt-diag').getAttribute('data-tone')).toBe('red')
   })
 
   it('fixCommand 可拷 chip 保留且在报错卡内（凭证类 → pipeline setup）', async () => {
@@ -541,7 +556,7 @@ describe('TaskDetail v8-C 意见④：人话报错卡（.dt8-diag）', () => {
   })
 })
 
-describe('TaskDetail v8-C 意见④：「自己上手修」连接命令卡（.dt8-conn）', () => {
+describe('TaskDetail v8-C 意见④：「自己上手修」连接命令卡（dt8-conn）', () => {
   const connFields = {
     automation: 'failed',
     automation_last_error: 'boom',
@@ -565,8 +580,9 @@ describe('TaskDetail v8-C 意见④：「自己上手修」连接命令卡（.dt
       'docker exec -it pipeline-afk-hotfix bash',
     )
     const rr = screen.getByTestId('dt8-conn-rerun')
-    expect(rr.textContent).toContain('pipeline afk run hotfix')
-    expect(screen.getByTestId('dt8-conn-rerun-copy').getAttribute('data-copy')).toBe('pipeline afk run hotfix')
+    // #6（2026-07-15）：按名重跑正确命令是 afk enqueue（afk run 忽略 name、跑整轮）
+    expect(rr.textContent).toContain('pipeline afk enqueue hotfix')
+    expect(screen.getByTestId('dt8-conn-rerun-copy').getAttribute('data-copy')).toBe('pipeline afk enqueue hotfix')
     expect(screen.getByTestId('dt8-conn').textContent).toContain('automation_worktree')
   })
 

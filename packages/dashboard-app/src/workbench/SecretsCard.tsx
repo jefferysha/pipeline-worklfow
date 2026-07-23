@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { deleteSecret, fetchSecrets, postSecret, type WbSecretsKeys } from '../api/client'
 import { useT } from '../i18n'
+import { WbAdvanced, WB_TW } from './LoopCard'
+import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
 
 /**
  * SecretsCard(v6 T8)——独立「凭证」卡:机器级 ~/.claude/pipeline-secrets.json 的审阅/写入面,
@@ -14,6 +17,9 @@ import { useT } from '../i18n'
  *   · 优先级提示:宿主 env 显式非空 > 此处保存的文件值(C4,与 afk run 注入的真实合并序一致)。
  *   · 保存/删除成功 → 重拉本卡 + onChanged 通知宿主(AutomationCard 就绪三灯 refreshToken +1);
  *     显式动作触发,不轮询(G22 纪律)。
+ *
+ * v10b 全量迁移（Phase 2 / W2）：wb-/lp-/sc- 手写全局类退役,样式改 tailwind 原子类（共享
+ * 词汇 import LoopCard 的 WB_TW,行布局沿旧 .lp-policy/.sc-row 同族）,无新硬编码色值。
  */
 
 const EDITABLE_KEYS = ['CLAUDE_CODE_OAUTH_TOKEN', 'OPENAI_API_KEY'] as const
@@ -96,47 +102,52 @@ export function SecretsCard({ onChanged }: SecretsCardProps): JSX.Element {
     }
   }
 
+  /** 旧 .sc-howto：每键「怎么拿」引导——独占一行(basis-full),沿 wb-note 次级色,无新原色。 */
+  const HOWTO_TW = cn(WB_TW.note, 'mt-[3px] basis-full text-[11.5px]')
+
   return (
-    <section className="card wb-loop" data-testid="wb-secrets-card">
-      <div className="wb-editor-head lp-head">
-        <b>{t('workbench.sc_title')}</b>
-        <span className="g-phase">{t('workbench.sc_scope')}</span>
-        <span className="wb-spacer" />
-        <span className="lp-head-sub">{t('workbench.sc_head_sub')}</span>
+    <section className={WB_TW.card} data-testid="wb-secrets-card">
+      <div className={WB_TW.head}>
+        <b className={WB_TW.headB}>{t('workbench.sc_title')}</b>
+        <span className="inline-block whitespace-nowrap rounded-full border border-border bg-fill px-[9px] py-0.5 font-mono text-[11px] font-semibold text-text">
+          {t('workbench.sc_scope')}
+        </span>
+        <span className="flex-1" />
+        <span className={WB_TW.headSub}>{t('workbench.sc_head_sub')}</span>
       </div>
-      {loadError && <p className="view__note view__note--error" data-testid="sc-load-error">{loadError}</p>}
-      {opError && <p className="view__note view__note--error" role="alert" data-testid="sc-op-error">{opError}</p>}
+      {loadError && <p className={WB_TW.loadError} data-tone="error" data-testid="sc-load-error">{loadError}</p>}
+      {opError && <p className={WB_TW.loadError} data-tone="error" role="alert" data-testid="sc-op-error">{opError}</p>}
       {keys && (
-        <div className="wb-ed-sec">
+        <div className={WB_TW.sec} data-sec="">
           {EDITABLE_KEYS.map((key) => {
             const light = keys[key]
             const isEditing = editing === key
             return (
-              <div key={key} className="lp-policy sc-row" data-testid={`sc-row-${key}`}>
-                <span className="wb-flabel lp-mono">{key}</span>
-                <span className="wb-note">{t(`workbench.sc_runner_${key}`)}</span>
+              <div key={key} className={WB_TW.policyRow} data-testid={`sc-row-${key}`}>
+                <span className={cn(WB_TW.flabel, 'font-mono')}>{key}</span>
+                <span className={WB_TW.note}>{t(`workbench.sc_runner_${key}`)}</span>
                 {!isEditing && light.set && (
-                  <span className="lp-mono sc-masked" data-testid={`sc-masked-${key}`}>{light.masked}</span>
+                  <span className="font-mono text-text-2" data-testid={`sc-masked-${key}`}>{light.masked}</span>
                 )}
                 {!isEditing && !light.set && (
-                  <span className="wb-note" data-testid={`sc-unset-${key}`}>{t('workbench.sc_unset')}</span>
+                  <span className={WB_TW.note} data-testid={`sc-unset-${key}`}>{t('workbench.sc_unset')}</span>
                 )}
                 {!isEditing && (
                   <>
-                    <button type="button" className="btn btn--ghost" data-testid={`sc-edit-${key}`} onClick={() => startEdit(key)}>
+                    <Button variant="ghost" size="sm" className={WB_TW.btnGhost} data-testid={`sc-edit-${key}`} onClick={() => startEdit(key)}>
                       {light.set ? t('workbench.sc_update') : t('workbench.sc_set')}
-                    </button>
+                    </Button>
                     {light.set && (
-                      <button type="button" className="btn btn--ghost" data-testid={`sc-del-${key}`} disabled={busy} onClick={() => void remove(key)}>
+                      <Button variant="ghost" size="sm" className={WB_TW.btnGhost} data-testid={`sc-del-${key}`} disabled={busy} onClick={() => void remove(key)}>
                         {t('workbench.sc_delete')}
-                      </button>
+                      </Button>
                     )}
                   </>
                 )}
                 {isEditing && (
                   <>
                     <input
-                      className="wb-input lp-mono"
+                      className={cn(WB_TW.input, 'font-mono')}
                       type="password"
                       data-testid={`sc-input-${key}`}
                       placeholder={t('workbench.sc_placeholder')}
@@ -149,28 +160,37 @@ export function SecretsCard({ onChanged }: SecretsCardProps): JSX.Element {
                         }
                       }}
                     />
-                    <button type="button" className="btn" data-testid={`sc-save-${key}`} disabled={draft === '' || busy} onClick={() => void save()}>
+                    <Button size="sm" className={WB_TW.btnSolid} data-testid={`sc-save-${key}`} disabled={draft === '' || busy} onClick={() => void save()}>
                       {t('workbench.sc_save')}
-                    </button>
-                    <button type="button" className="btn btn--ghost" data-testid={`sc-cancel-${key}`} onClick={() => { setEditing(null); setDraft('') }}>
+                    </Button>
+                    <Button variant="ghost" size="sm" className={WB_TW.btnGhost} data-testid={`sc-cancel-${key}`} onClick={() => { setEditing(null); setDraft('') }}>
                       {t('workbench.sc_cancel')}
-                    </button>
+                    </Button>
                   </>
                 )}
-                {/* G2:前置缺失引导——不光报「未配置」,补一句「怎么拿」(已配态也常驻,兼作轮换指引)。
-                    静态命令文本,不触碰凭证值,write-only 不受影响(单源见 kernel PREREQ_HINTS)。 */}
-                <span className="wb-note sc-howto" data-testid={`sc-howto-${key}`}>{t(`workbench.sc_howto_${key}`)}</span>
               </div>
             )
           })}
-          {/* CODEX_HOME:路径不是密钥,不进 secrets 存储(决策 C2b)——只读说明,不做假输入框。 */}
-          <div className="lp-policy sc-row" data-testid="sc-row-CODEX_HOME">
-            <span className="wb-flabel lp-mono">CODEX_HOME</span>
-            <span className="wb-note">{t('workbench.sc_codex_home_note')}</span>
-            {/* G2:即便是只读路径行,也顺手指一句怎么来的(codex login 自动设),闭合 codex 凭证获取故事。 */}
-            <span className="wb-note sc-howto" data-testid="sc-howto-CODEX_HOME">{t('workbench.sc_howto_CODEX_HOME')}</span>
-          </div>
-          <p className="wb-note wb-sec-note">{t('workbench.sc_precedence_note')}</p>
+          {/* IA 精简：「怎么拿」引导 + CODEX_HOME 只读路径 + 优先级说明都是解释性次要内容，
+              收进「▸ 高级设置」默认折叠——核心第一屏只留两把可写凭证的掩码/编辑列表。testid 全保留。 */}
+          <WbAdvanced testid="sc-adv">
+            {/* G2:前置缺失引导——不光报「未配置」,补一句「怎么拿」(已配态也常驻,兼作轮换指引)。
+                静态命令文本,不触碰凭证值,write-only 不受影响(单源见 kernel PREREQ_HINTS)。 */}
+            {EDITABLE_KEYS.map((key) => (
+              <div key={key} className={WB_TW.policyRow} data-testid={`sc-howto-row-${key}`}>
+                <span className={cn(WB_TW.flabel, 'font-mono')}>{key}</span>
+                <span className={cn(WB_TW.note, 'basis-full text-[11.5px]')} data-testid={`sc-howto-${key}`}>{t(`workbench.sc_howto_${key}`)}</span>
+              </div>
+            ))}
+            {/* CODEX_HOME:路径不是密钥,不进 secrets 存储(决策 C2b)——只读说明,不做假输入框。 */}
+            <div className={WB_TW.policyRow} data-testid="sc-row-CODEX_HOME">
+              <span className={cn(WB_TW.flabel, 'font-mono')}>CODEX_HOME</span>
+              <span className={WB_TW.note}>{t('workbench.sc_codex_home_note')}</span>
+              {/* G2:即便是只读路径行,也顺手指一句怎么来的(codex login 自动设),闭合 codex 凭证获取故事。 */}
+              <span className={HOWTO_TW} data-testid="sc-howto-CODEX_HOME">{t('workbench.sc_howto_CODEX_HOME')}</span>
+            </div>
+            <p className={cn(WB_TW.note, 'mt-2.5')}>{t('workbench.sc_precedence_note')}</p>
+          </WbAdvanced>
         </div>
       )}
     </section>

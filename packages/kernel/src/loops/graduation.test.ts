@@ -271,7 +271,7 @@ describe('setAutonomyLevelInYaml —— surgical 改档（保留其余格式）'
   })
 })
 
-describe('applyLevelChange —— 写回 CAS（读-判-写；对齐 server applyLoopsUpdate / cli loops init 先例）', () => {
+describe('applyLevelChange —— governance 写回（字节 epoch-CAS + atomic；Stage B 返工 #3#4）', () => {
   const YAML = [
     'version: 1',
     'loops:',
@@ -281,30 +281,33 @@ describe('applyLevelChange —— 写回 CAS（读-判-写；对齐 server apply
   ].join('\n')
 
   /**
-   * fake GraduationFs：state.file 模拟盘上 loops.yaml 原文；afterRead(第几次读) 钩子在每次
-   * readRegistryText 之后触发——用它在「初读」与「写回」的间隙注入并发写者（另一进程改档/
-   * 人工编辑/删除）。writes 记录全部落盘，断言「拒绝 = 未写盘」。
+   * fake governed GraduationFs：state.file/epoch 模拟盘上 loops.yaml + 字节 epoch（版本号语义）。
+   * beforeWrite() 在 writeGoverned 的「锁内重读 epoch」之前触发——注入并发写者（改 file + epoch），
+   * 语义同真 writeRegistryWithGovernance：expectedEpoch ≠ 锁内当前 epoch → CAS 拒不写（无跨进程 lost-update）。
+   * writes 记录全部落盘，断言「拒绝 = 未写盘」。
    */
   function fakeGradFs(registry: LoopRegistry, initialText: string) {
     const state = {
       file: initialText as string | null,
-      reads: 0,
+      epoch: 'e0',
       writes: [] as string[],
-      afterRead: (_nth: number) => {},
+      beforeWrite: () => {},
     }
     const fs: GraduationFs = {
       loadRegistry: () => ({ data: registry, errors: [] }),
       readRunLog: () => null,
       readLoopDoc: () => null,
-      readRegistryText: () => {
-        const t = state.file
-        state.reads += 1
-        state.afterRead(state.reads)
-        return t
-      },
-      writeRegistryText: (_root, text) => {
-        state.writes.push(text)
+      readRegistrySnapshot: async () => (state.file === null ? null : { text: state.file, epoch: state.epoch }),
+      writeRegistryGoverned: async (_root, expectedEpoch, produce) => {
+        state.beforeWrite() // 注入并发写者（改 file/epoch）——模拟 governance 锁内重读前的第三方写
+        if (state.file === null) return { ok: false, error: 'loops.yaml 在写回期间被删除' }
+        if (state.epoch !== expectedEpoch) return { ok: false, error: `epoch ${expectedEpoch} → ${state.epoch}` }
+        const { text, error } = produce(state.file)
+        if (error !== null || text === null) return { ok: false, error }
         state.file = text
+        state.epoch = `${state.epoch}+1`
+        state.writes.push(text)
+        return { ok: true, error: null }
       },
     }
     return { fs, state }
@@ -314,43 +317,49 @@ describe('applyLevelChange —— 写回 CAS（读-判-写；对齐 server apply
   const registry = (): LoopRegistry => ({ version: 1, loops: [loop({ autonomy_level: 'L2' })] })
   const OPTS = { now: new Date('2026-07-06T00:00:00Z'), confirm: true }
 
-  test('无并发改动 → 照常落盘（读到什么写回什么，非并发路径行为零变）', () => {
+  test('无并发改动 → 照常落盘（surgical 改档 L2→L1，走 governance 写面）', async () => {
     const { fs, state } = fakeGradFs(registry(), YAML)
-    const res = applyLevelChange('/repo', 'loop-be', 'L1', OPTS, fs)
+    const res = await applyLevelChange('/repo', 'loop-be', 'L1', OPTS, fs)
     expect(res.applied).toBe(true)
     expect(res.exitCode).toBe(0)
     expect(res.errors).toEqual([])
     expect(state.writes).toHaveLength(1)
     expect(state.writes[0]).toContain('autonomy_level: L1')
-    // 评审 nit:钉住成功路径也确实执行了 CAS 重读(初读 + 写前复检 = 恰 2 次)
-    expect(state.reads).toBe(2)
   })
 
-  test('初读与写回之间被并发修改 → CAS 拒绝：不写盘、errors 含 CAS 文案、exit 3', () => {
+  test('初读与写回之间被并发修改（epoch 变）→ CAS 拒绝：不写盘、errors 含 CAS 文案、exit 3', async () => {
     const { fs, state } = fakeGradFs(registry(), YAML)
-    state.afterRead = (nth) => {
-      if (nth === 1) state.file = `${YAML}\n  - id: loop-new\n    name: 并发写者刚登记的` // 模拟另一进程追加
+    state.beforeWrite = () => {
+      // 模拟另一进程在 governance 锁内重读前改档：file + epoch 都变 → expected(e0) ≠ 锁内 epoch → CAS 拒
+      state.file = `${YAML}\n  - id: loop-new\n    name: 并发写者刚登记的`
+      state.epoch = 'e-concurrent'
     }
-    const res = applyLevelChange('/repo', 'loop-be', 'L1', OPTS, fs)
+    const res = await applyLevelChange('/repo', 'loop-be', 'L1', OPTS, fs)
     expect(res.applied).toBe(false)
     expect(res.exitCode).toBe(3)
     expect(res.errors.join(' ')).toMatch(/CAS 失败/)
     expect(res.errors.join(' ')).toMatch(/并发修改/)
     expect(res.errors.join(' ')).toMatch(/未落盘/)
-    expect(state.writes).toHaveLength(0) // 绝不盲写覆盖并发写者的改动
+    expect(state.writes).toHaveLength(0) // 绝不盲写覆盖并发写者的改动（无 lost-update）
     expect(res.plan?.allowed).toBe(true) // 裁决本身通过——拒绝只因写回瞬间的并发
   })
 
-  test('初读与写回之间文件被删除 → CAS 拒绝：不写盘、exit 3', () => {
+  test('初读与写回之间文件被删除 → CAS 拒绝：不写盘、exit 3', async () => {
     const { fs, state } = fakeGradFs(registry(), YAML)
-    state.afterRead = (nth) => {
-      if (nth === 1) state.file = null
-    }
-    const res = applyLevelChange('/repo', 'loop-be', 'L1', OPTS, fs)
+    state.beforeWrite = () => { state.file = null }
+    const res = await applyLevelChange('/repo', 'loop-be', 'L1', OPTS, fs)
     expect(res.applied).toBe(false)
     expect(res.exitCode).toBe(3)
     expect(res.errors.join(' ')).toMatch(/CAS 失败/)
-    expect(res.errors.join(' ')).toMatch(/删除/)
+    expect(state.writes).toHaveLength(0)
+  })
+
+  test('初读即缺文件（readRegistrySnapshot=null）→ 如实拒绝 exit 3、不写盘', async () => {
+    const { fs, state } = fakeGradFs(registry(), YAML)
+    state.file = null // loadRegistry(决策)仍走注入 registry，但快照读缺文件
+    const res = await applyLevelChange('/repo', 'loop-be', 'L1', OPTS, fs)
+    expect(res.applied).toBe(false)
+    expect(res.exitCode).toBe(3)
     expect(state.writes).toHaveLength(0)
   })
 })

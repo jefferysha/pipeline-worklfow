@@ -1,0 +1,61 @@
+/*
+ * 进度页专用 keyframes 与复杂选择器（画布 v4 spec）：颜色一律 var(--*) token，结构样式全在组件
+ * tailwind 类里——这里只放 tailwind 原子类装不下的部分（keyframes、跨状态组合选择器、抽屉本体
+ * transform / 滚动锁）。由 ProgressView.tsx import；index.css 归 scaffold agent 不动。
+ *
+ * 画布 v6（每 workflow 一张大卡 · 铺满整卡等分轨道 · 单色流光 · 门呼吸菱形）改动：
+ *   · rail 段/单色流光由 WorkflowCanvas 绝对定位线段 + GSAP 平移（data-anim=prg-flow）承担，
+ *     天然直、不受 change 卡撑动。#5 已把「彗尾 head 辉光 + 已达段呼吸（data-breathe）」花哨的
+ *     退回单色 accent 柔光渐变——已达段呼吸 keyframe 随之退役（此文件不再有 data-breathe 规则）。
+ *   · 门（#5 上轮）= 轨道上会呼吸的 amber 菱形关卡节点（data-gate-pulse），克制的辉光呼吸——门
+ *     文字胶囊退役改视觉标记；此处 keyframe 承担呼吸，reduced-motion 停帧（保留）。
+ * 保留：change 小卡状态点 running 脉冲（data-pulse）、抽屉本体 translateX 停位 + 滚动锁、
+ *       reduced-motion 停帧（脉冲 + GSAP 单色流光 + 门呼吸全静止）。
+ */
+
+/* 状态点/徽章点 running 脉冲（行内 L1、画布小卡、抽屉徽章共用，demo .sdot.pulse 对位） */
+[data-pulse='true'] {
+  animation: prg-blink 1.4s ease-in-out infinite;
+}
+@keyframes prg-blink {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* #5 门节点：轨道上会呼吸的 amber 菱形关卡——克制的辉光呼吸（颜色走 amber token，禁硬编码色）。 */
+[data-gate-pulse='true'] {
+  animation: prg-gate-breathe 2.6s ease-in-out infinite;
+}
+@keyframes prg-gate-breathe {
+  0%,
+  100% {
+    box-shadow: 0 0 0 1px var(--amb-b), 0 0 3px 0 var(--amb-d);
+  }
+  50% {
+    box-shadow: 0 0 0 3px transparent, 0 0 8px 2px var(--amb-d);
+  }
+}
+
+/* 抽屉缺省停在场外（GSAP 入场归零）。不用 tailwind translate-x 工具类——tailwind v4 走
+ * 独立 translate 属性，会与 GSAP 写的 transform 叠加打架，此处必须用 transform 本体。 */
+[data-anim='prg-drawer'] {
+  transform: translateX(103%);
+}
+
+/* 抽屉滚动锁（GLOBAL_CSS 同名规则 Phase 3 退役后由这里接棒；双写等值幂等） */
+html.prg9-lock {
+  overflow: hidden;
+}
+
+/* reduced-motion：循环动效全停——状态点脉冲/门呼吸停帧 + GSAP 单色流光藏起（gsap.matchMedia
+ * reduce 分支已 autoAlpha:0，此处 CSS 兜底：无 matchMedia 的极老内核也不残留流光平移） */
+@media (prefers-reduced-motion: reduce) {
+  [data-pulse='true'],
+  [data-gate-pulse='true'] {
+    animation: none !important;
+  }
+  [data-anim='prg-flow'] {
+    visibility: hidden !important;
+  }
+}

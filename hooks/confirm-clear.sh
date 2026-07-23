@@ -9,9 +9,9 @@
 # 任务 #21 headline「清 confirm marker」被此三清动作包含；AskUserQuestion 即人已交互，
 # 三门都应解封（缺一则 gate.sh 会在人已确认后仍误挡后续合法操作）。
 #
-# 上溯清除（bounded）：router / interactive-skill-gate 可能在项目根（父目录）落 marker，
-# 而本 AskUserQuestion 的 cwd 常是子目录——只清 cwd 会让父目录 marker 残留（跨目录 desync）。
-# 向上至多 5 层有界清除治之；有界（不无限上溯）避免误清无关父项目。
+# 清除范围与 gate/router 共用项目根定位：只接受 Git worktree、显式
+# PIPELINE_PROJECT_ROOT 或当前 cwd。这样子目录中的确认仍能解封当前 Git 项目，且绝不会清到
+# 共享临时父目录的另一项目 marker。
 #
 # 纯 bash 热路径（CONTRACT §5.4：PostToolUse 每次工具后触发）：零解释器 / 外部 JSON 解析器 spawn，
 # stdin JSON 只用 bash 字符串提取 cwd 一键。fail-safe：任何异常一律 exit 0，绝不打断。
@@ -47,14 +47,17 @@ CWD="$(json_get cwd || true)"
 [ -z "$CWD" ] && CWD="$PWD"
 [ -d "$CWD" ] || exit 0
 
-# cwd + 向上至多 5 层祖先，各清三 marker（有界；对齐 gate.sh resolve_marker 上溯层数）
-_d="$CWD"
-for _ in 1 2 3 4 5; do
-  rm -f "$_d/.pipeline-pending-confirm" \
-        "$_d/.pipeline-pending-review" \
-        "$_d/.pipeline-pending-interaction" 2>/dev/null || true
-  [ "$_d" = "/" ] && break
-  _d="$(dirname "$_d")"
-done
+# 无共享 helper 的单文件旧安装保留 cwd fallback；当前安装一定经 helper 取得同一个项目根。
+ROOT="$CWD"
+ROOT_HELPER="$(dirname "${BASH_SOURCE[0]:-$0}")/project-root.sh"
+if [ -r "$ROOT_HELPER" ]; then
+  # shellcheck source=project-root.sh
+  . "$ROOT_HELPER"
+  ROOT="$(pipeline_project_root "$CWD" bootstrap changes || true)"
+fi
+[ -n "$ROOT" ] || exit 0
+rm -f "$ROOT/.pipeline-pending-confirm" \
+      "$ROOT/.pipeline-pending-review" \
+      "$ROOT/.pipeline-pending-interaction" 2>/dev/null || true
 
 exit 0

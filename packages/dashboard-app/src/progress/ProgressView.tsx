@@ -6,71 +6,70 @@ import type { ChangeSnapshot, Snapshot } from '../types'
 import { isPhase } from '../types'
 import type { WorkflowRules } from '../model/workflowModel'
 import { plannedTransition, type PlannedTransition } from '../model/events'
-import { shortTime } from '../model/time'
-import { fetchAutomationSettings, fetchSessionLinks, postAfkCommand, postTransition, type SessionLink } from '../api/client'
+import { fetchSessionLinks, postAfkCommand, postTransition, type SessionLink } from '../api/client'
 import { TaskDetail } from '../shared/TaskDetail'
-import { Icon } from '../shell/Icon'
+import { Switch } from '@/components/ui/switch'
 import { diagnoseFailureWithCause } from '../shared/failureDiagnosis'
 import { shellQuote } from '../shared/shellQuote'
 import { gateEvidence, VERIFY_STATUS_FIELDS, type EvidenceChip } from '../inbox/evidence'
 import { changeWorkflow, decisionKind } from '../inbox/inbox'
 import { useAfkLog } from './useAfkLog'
-import { PhaseRail, type RailMode } from './PhaseRail'
+import {
+  WorkflowCanvas,
+  type CanvasArchivedChange,
+  type CanvasChange,
+  type CanvasDotTone,
+  type CanvasGroup,
+  type CanvasStep,
+} from './WorkflowCanvas'
 import {
   missingGateArtifacts,
-  schedulerHealth,
   selectProgress,
   type ProgressRow,
   type ProgressRules,
   type ProgressState,
 } from '../model/progressModel'
+import './progress.css'
+import { CreateChangeDialog } from './CreateChangeDialog'
+import { ChevronDown, Plus, Square } from 'lucide-react'
 
 gsap.registerPlugin(useGSAP)
 
 /**
- * ProgressView（v9-F1，进度统一面）—— 收件箱退役后的唯一操作面。设计真相源
- * design-demos/v9-flowdeck.html（定稿）：
- *   · 单列表看所有在制（不分组）——同一行体：左=名称钮+「项目 · 时间」+track chip；
- *     中=PhaseRail 列车轨（相位来自该 change 所属 workflow 的真实 steps，不硬编码七相）
- *     + 需操作行一句人话导语（gate 行再附小号证据 chip）；右=一枚人话判定徽章+行内动作。
- *   · 需要动手的行按语义分色 ring 并排前（真机验收 G：「失败就是红框,终止就是土色框」）：
- *     gate=绿（.prg9-row--need 现状）/失败=红（--need-fail）/人为终止=琥珀（--need-cxl）；
- *     观察行安静无动作。
- *   · 行内动作（真机验收 G：重试/放弃退出 UI 回终端）：gate=放行（绿实底带目标相位）/打回
- *     （transition 管线）；failed/cancelled=一枚「回终端」可拷命令 chip（fail 有 worktree
- *     现场→cd 接管，否则回落 pipeline afk run；点击=拷贝+toast；postAfkRetry/postAfkDismiss
- *     留在 api 层无 UI 消费方）；running=终止（cancel-gate 纪律：仅 automation==='running'
- *     可点，沿现状无二次确认）；排队/等产出=无动作。
- *   · 行名点击开右滑详情抽屉（scrim+GSAP x:103%→0，Esc/scrim/关闭钮，锁滚动）：
- *     TaskDetail（动作与行内同组；fail/cxl 抽屉=回终端引导文案，承接面是
- *     TaskDetail 的 dt8-conn 命令卡）；running 行抽屉内挂 RunLogPane
- *     （useAfkLog 轮询，抽屉关随组件卸载即停）。
- *   · 旧的行内展开（prg-row--open/prg-detail 下方推开）与旧版分组/筛选条整体退役。
- *   · v9-H（demo v9.1 增补）：列表上方状态 sheet 页签「全部(默认)/等你动手/运行中/等待中」
- *     ——计数=各分类总数（不随当前筛选变），分类口径全走五态同源谓词（need=gate/failed 含
- *     cancelled 不单列；run=running 态含 scheduled 折叠；queue=queued 态）；切换=墨线滑动
- *     （wb8-ink 同姿势）+ 可见行入场轻编排（reduced 直切）。聚合语境（currentRoot=''）按项目
- *     分组渲染组头（folder+项目名+件数胶囊+右延细线，demo .pgroup/.pg-h），单项目语境不显
- *     组头，筛选后空组自然隐藏。行体 v2（真机反馈）：标题行内联——名称+track/workflow 全称
- *     chip/调度标识（▦ 沙箱=沙箱三桶 running/queued/failed 与调度灯同折叠；⌨ 终端=其余，
- *     demo .schip）+ 弱化 mono 时间，右端判定徽章；列车轨整宽独占第二行左侧，动作在轨道
- *     右侧垂直居中（demo .fl-top/.fl-body）。
+ * ProgressView（v10c 单项目 · 画布即操作面）—— 2026-07-14 拆单项目重做（spec：
+ * design-demos/v10c-per-project-spec.md）。进度页永远单项目（App 保证 currentRoot 非空；
+ * 聚合与「全部项目」总览钻取归 ProjectsView）；画布卡片即操作面，下方按项目分组的重复在制
+ * 列表整段退役——change 只挂在画布相位卡里，点开 = 右滑抽屉（TaskDetail + 全部动作）。
+ * 数据层/动作逻辑沿现状：selectProgress、FlatRow 投影、rowSemantics、乐观 patch、
+ * killAction/transitionAction、v9-J 会话链接批量预取、抽屉焦点陷阱/Esc/scrim/滚动锁、
+ * RunLogPane 轮询。
  *
- * 判定徽章语义（rowSemantics/semBadge 自 InboxView 搬运——该视图由收件箱退役批删除）：
- * gate=「✓ 可以放行」绿 /「等你判断」红；failed=「失败 ×N · 等你决定」红（cause=cancelled
- * → 琥珀「已取消」）；running=蓝「{phase}运行中」；排队/等产出=中性。
- * 待拍板计数与导航徽标同口径 = inbox.ts selectInbox(...).length（App 既有接线，本视图不管）。
+ *   · 吸顶工具条即页头：状态页签（全部/等你动手/运行中/等待中 + 计数，墨线 GSAP）——页签筛选
+ *     作用于画布（未命中的 change 小卡淡出，不移除）。旧「调度」芯片已下线（#6：升级为独立 AFK
+ *     视图，schedulerHealth/并发上限的展示归那处；本视图不再消费）。
+ *   · 页签语义：等待中 = queued + agent；cancelled 仍归「等你动手」。计数=分类总数不随筛选变。
+ *   · workflow 筛选收敛为单一下拉；筛选作用于画布分组，工作流数量增长时不挤占主工具栏。
+ *   · 画布 WorkflowCanvas（v6 单项目 workflow 大卡）：一 workflow 一组，有在制的相位=站台卡、空相位=
+ *     过路小站，连线纯 CSS；change 小卡完整 mono 名（禁 ellipsis）+ lucide sched 图标（沙箱
+ *     机器人 Bot / 终端 Terminal）+ AFK/沙箱极轻 accent tint 区分；小卡点击=openDrawer。归档不
+ *     失联：带归档的相位小站点开 = 站台线下方只读列出该相位归档 change。
  *
- * GSAP（全包 gsap.matchMedia，reduce 分支直达终态）：行入场 stagger、rail 轨道生长+节点弹入
- * （demo animRails 对位）、拍板成功行 settle + 徽章回落 pulse。运行中流光/门呼吸走纯 CSS
- * （styles.ts v9-F1 块，[data-mode="run"|"gate"] 门控），组件内零 JS 循环。
+ * 判定徽章语义（rowSemantics 同源，抽屉徽章消费）：gate=「✓ 可以放行」绿 /「等你判断」红；
+ * failed=「失败 ×N · 等你决定」红（cause=cancelled → 琥珀「已取消」）；running=蓝「{phase}
+ * 运行中」；排队/等产出=中性。状态一律 data-*（data-state/data-pulse/data-sbx），测试断言
+ * data/aria/testid 不断言视觉类名。
+ *
+ * GSAP（全包 gsap.matchMedia，reduce 分支直达终态）：工具条浮现 → 画布节点弹入（scale+
+ * stagger）；墨线滑动、拍板 pulseRow、抽屉开合沿现状逻辑，选择器走 data-anim/data-testid。
+ * 呼吸环/脉冲/流动虚线走纯 CSS（progress.css，reduced 停帧），组件内零 JS 循环。
  */
 
 export interface ProgressViewProps {
   snapshot: Snapshot | null
   loading: boolean
   error: string | null
-  /** D5 项目切换器语义：非空=只看该项目；空串=全部项目聚合。 */
+  /** 单项目进度页：App 保证 view='progress' 时 currentRoot 恒为真实项目 root（非空）——
+   *  聚合与「全部项目」总览钻取归 ProjectsView，本视图不再处理空串聚合分支。 */
   currentRoot: string
   /** App 统一拉取的 workflow 规则集，键=rulesKey(root,wf)（useWorkflowRulesMulti 契约）。 */
   rulesByKey: ReadonlyMap<string, WorkflowRules>
@@ -78,6 +77,10 @@ export interface ProgressViewProps {
   onToast?: (msg: string) => void
   /** 动作成功后 resync（App 注入 useSnapshot().refresh）。 */
   onRefresh?: () => void | Promise<void>
+  /** URL 深链路选中的 change；undefined = 宿主不控制，null = 关闭。 */
+  selectedChange?: string | null
+  /** 抽屉开合回传给宿主，用于同步可复制 URL。 */
+  onSelectedChange?: (name: string | null) => void
 }
 
 /** 行级键（busy/抽屉/乐观 patch 共用）：name 字符集受 server 校验限死 [a-zA-Z0-9_-]，'@' 不会撞。 */
@@ -148,7 +151,8 @@ function stepLabel(step: string, labelByStep: Record<string, string> | undefined
 
 // ── 行语义（自 InboxView 搬运，该文件随收件箱退役删除；判定口径逐字保留）──
 
-/** 行/抽屉共用的结论式语义（demo v5 三情形口径）：badge 一句结论 + lead 一句人话。 */
+/** 行/抽屉共用的结论式语义（demo v5 三情形口径）：badge 一句结论 + lead 一句人话（lead 自
+ *  v10b 起不再在行内渲染——处置指引在抽屉 TaskDetail，函数形状保留供 tone/badge 同源判定）。 */
 interface RowSemantics {
   tone: 'green' | 'red'
   badgeText: string
@@ -157,10 +161,10 @@ interface RowSemantics {
 
 /**
  * 行语义判定（搬运自 InboxView rowSemantics，T9 demo v5 三情形口径）：
- *   · failed（automation ∈ {failed, conflict}）→「失败 ×N · 等你决定」+ 拷命令回终端接管/重新排队重跑引导（lead_failed/lead_failed_plain）；
+ *   · failed（automation ∈ {failed, conflict}）→「失败 ×N · 等你决定」；
  *   · gate 且证据里有未过判定（verify 三轨白名单——产物没产出不等于验证没过，Important-1
  *     教训沿用）或根本没有任何自动证据（自定义门/纯人判）→「等你判断」；
- *   · gate 且证据齐 →「✓ 可以放行」，lead 按决定类型细分。
+ *   · gate 且证据齐 →「✓ 可以放行」。
  * 纯函数（t 注入），行体与抽屉头部 badge 同源消费，两处不漂移。
  */
 function rowSemantics(change: ChangeSnapshot, state: ProgressState, evidence: EvidenceChip[], t: Tr): RowSemantics {
@@ -199,11 +203,9 @@ function rowSemantics(change: ChangeSnapshot, state: ProgressState, evidence: Ev
 interface RowBadge {
   tone: 'green' | 'red' | 'blue' | 'amb' | 'neutral'
   text: string
-  /** 需操作行的一句人话导语（观察行无）。 */
-  lead?: string
 }
 
-// ── running 行抽屉内日志区（旧行内展开迁入抽屉；testid/样式沿用 prg-log*）──
+// ── running 行抽屉内日志区（testid 沿用 prg-log*；样式 tailwind 化）──
 
 /**
  * afk 型 running 行的日志尾部：useAfkLog（2.5s 轮询——status 传 automation 原始值，仅
@@ -215,25 +217,28 @@ function RunLogPane({ root, change }: { root: string; change: ChangeSnapshot }):
   const { log, follow, setFollow } = useAfkLog(change.name, fieldStr(change, 'automation'), root)
   const sandboxPhase = fieldStr(change, 'automation_current_phase')
   return (
-    <div className="prg-logwrap" data-testid={`prg-log-${change.name}`}>
-      <div className="prg-logbar">
-        <span className="prg-loglabel mono">{t('progress.log_label')}</span>
-        <span className="prg-follow">
+    <div className="mt-4 border-t border-border pt-3" data-testid={`prg-log-${change.name}`}>
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <span className="font-mono text-xs text-text-3">{t('progress.log_label')}</span>
+        <span className="flex items-center gap-2 text-xs text-text-2">
           {t('progress.follow_tail')}
-          <button
-            type="button"
-            role="switch"
-            className="switch"
-            aria-checked={follow}
+          <Switch
+            checked={follow}
+            onCheckedChange={setFollow}
+            size="sm"
             aria-label={t('progress.follow_tail')}
             data-testid={`prg-follow-${change.name}`}
-            onClick={() => setFollow(!follow)}
           />
         </span>
       </div>
-      <pre className="prg-log mono" data-testid={`prg-logtext-${change.name}`}>{log}</pre>
+      <pre
+        className="max-h-[220px] overflow-auto rounded-lg border border-code-border bg-code-bg p-2.5 font-mono text-xs leading-relaxed text-text-2"
+        data-testid={`prg-logtext-${change.name}`}
+      >
+        {log}
+      </pre>
       {sandboxPhase !== '' && (
-        <p className="prg-lognote" data-testid={`prg-sandbox-phase-${change.name}`}>
+        <p className="mt-2 text-xs text-text-3" data-testid={`prg-sandbox-phase-${change.name}`}>
           {t('progress.sandbox_phase', { phase: sandboxPhase })}
         </p>
       )}
@@ -243,7 +248,7 @@ function RunLogPane({ root, change }: { root: string; change: ChangeSnapshot }):
 
 // ── 视图 ──
 
-/** 统一列表的行投影：state/rules/mode/need 一次算好，渲染与动效共用。 */
+/** 统一列表的行投影：state/rules/need 一次算好，渲染与动效共用。 */
 interface FlatRow {
   key: string
   row: ProgressRow
@@ -251,56 +256,29 @@ interface FlatRow {
   workflow: string
   /** 需要人动手（gate/failed，含 cancelled）——分色 ring 高亮（gate 绿/fail 红/cxl 琥珀）+ 排前 + 行内动作。 */
   need: boolean
-  mode: RailMode
-  /** failed 且结构化/regex 判为 cancelled（人为终止非故障）→ 琥珀徽章 + cxl 轨。 */
+  /** failed 且结构化/regex 判为 cancelled（人为终止非故障）→ 琥珀徽章 + warn 轨。 */
   cancelled: boolean
 }
 
-/** 行序：需操作行在前；组内 updated_at 倒序，并列 name 升序（同 selectInbox 时间轴口径）。 */
-function compareFlat(a: FlatRow, b: FlatRow): number {
-  if (a.need !== b.need) return a.need ? -1 : 1
-  const ua = a.row.change.updated_at
-  const ub = b.row.change.updated_at
-  if (ua !== ub) return ua < ub ? 1 : -1
-  const na = a.row.change.name
-  const nb = b.row.change.name
-  return na < nb ? -1 : na > nb ? 1 : 0
-}
-
-/** ProgressRow → FlatRow 投影（need/mode/cancelled 一次算好）：live 行与 #2 归档只读行共用同一份
- *  判定——归档行渲染走 renderRow(fr, true) 时会强制只读/mode='idle'，state 判定本身不因归档而变。 */
+/** ProgressRow → FlatRow 投影（need/cancelled 一次算好）：live 行与 #2 归档只读行共用同一份
+ *  判定——归档行渲染走 renderRow(fr, true) 时会强制只读/mute 轨，state 判定本身不因归档而变。 */
 function toFlatRow(row: ProgressRow, rules: ProgressRules | undefined, workflow: string): FlatRow {
   const need = row.state === 'gate' || row.state === 'failed'
   const cancelled =
     row.state === 'failed' &&
     diagnoseFailureWithCause(fieldStr(row.change, 'automation_cause'), fieldStr(row.change, 'automation_last_error')).cause === 'cancelled'
-  const mode: RailMode =
-    row.state === 'running'
-      ? 'run'
-      : row.state === 'gate'
-        ? 'gate'
-        : row.state === 'failed'
-          ? (cancelled ? 'cxl' : 'fail')
-          : row.state === 'queued'
-            ? 'queue'
-            : 'idle'
-  return { key: rowKeyOf(row.root, row.change.name), row, rules, workflow, need, mode, cancelled }
+  return { key: rowKeyOf(row.root, row.change.name), row, rules, workflow, need, cancelled }
 }
 
-/** #2：归档行跨 workflow 组归并到同一 root 后的排序——updated_at 倒序、并列 name 升序（同
- *  progressModel compareRows 口径；组内已排过一次，跨组合并需要重排）。 */
-function compareArchivedFlat(a: FlatRow, b: FlatRow): number {
-  const ua = a.row.change.updated_at
-  const ub = b.row.change.updated_at
-  if (ua !== ub) return ua < ub ? 1 : -1
-  const na = a.row.change.name
-  const nb = b.row.change.name
-  return na < nb ? -1 : na > nb ? 1 : 0
+/** 归档 change 展示序（画布相位小站折叠面）：updated_at 倒序、并列 name 升序。 */
+function compareArchived(a: ChangeSnapshot, b: ChangeSnapshot): number {
+  if (a.updated_at !== b.updated_at) return a.updated_at < b.updated_at ? 1 : -1
+  return a.name < b.name ? -1 : a.name > b.name ? 1 : 0
 }
 
-// ── v9-H：状态 sheet 页签 + 调度标识（纯谓词，渲染与计数共用同一口径不漂移）──
+// ── 状态页签 + 调度标识（纯谓词，渲染与计数共用同一口径不漂移）──
 
-/** 页签字典（顺序即渲染序，demo .deck-tabs：全部/等你动手/运行中/等待中）。 */
+/** 页签字典（顺序即渲染序，demo .tabs：全部/等你动手/运行中/等待中）。 */
 const DECK_TABS = ['all', 'need', 'run', 'queue'] as const
 type DeckTab = (typeof DECK_TABS)[number]
 
@@ -309,8 +287,9 @@ type DeckTab = (typeof DECK_TABS)[number]
 const DRAWER_FOCUSABLE_SEL = 'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])'
 
 /** 页签分类口径（五态同源谓词——不在视图层摸 automation 原始字段，T6 纪律）：
- *  need=现有 need 判定（gate/failed，失败/取消归此不单列，与 demo 一致）；
- *  run=running 态（progressModel 已折叠 scheduled）；queue=queued 态；all=全部。 */
+ *  need=现有 need 判定（gate/failed，失败/取消归此不单列）；run=running 态（progressModel
+ *  已折叠 scheduled）；queue=等待中（v10b §4.1 语义微调：queued+agent——排队与等产出都在等
+ *  系统/agent，修复 agent 行只在「全部」可见的孤儿态，demo waiting 口径）；all=全部。 */
 function deckMatch(fr: FlatRow, tab: DeckTab): boolean {
   switch (tab) {
     case 'all':
@@ -320,30 +299,50 @@ function deckMatch(fr: FlatRow, tab: DeckTab): boolean {
     case 'run':
       return fr.row.state === 'running'
     case 'queue':
-      return fr.row.state === 'queued'
+      return fr.row.state === 'queued' || fr.row.state === 'agent'
   }
 }
 
-/** 调度标识（demo .schip/.schip.sbx）：▦ 沙箱=自动化三桶（running/queued/failed 态，与调度灯
+/** 调度标识（demo 小卡调度符 ▦/⌨）：▦ 沙箱=自动化三桶（running/queued/failed 态，与调度灯
  *  schedulerHealth 同折叠口径——running 含 scheduled、failed 含 conflict）；其余（off/无/merged/
  *  paused 等活在终端的）=⌨ 终端。 */
 function inSandbox(fr: FlatRow): boolean {
   return fr.row.state === 'running' || fr.row.state === 'queued' || fr.row.state === 'failed'
 }
 
-export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey, onToast, onRefresh }: ProgressViewProps): JSX.Element {
+// ── tailwind 类词组（视觉词汇集中一处，行内/抽屉/画布不各写一份）──
+
+/** 前进（放行）钮：绿实底（v8 主按钮 token）。 */
+const BTN_GO_CLS =
+  'inline-flex items-center justify-center gap-1 whitespace-nowrap rounded-lg bg-btn-bg px-3 py-1.5 text-xs font-semibold text-btn-fg hover:bg-btn-hover disabled:opacity-50'
+/** 反向（打回/终止）钮：中性边 + 红字。 */
+const BTN_NEG_CLS =
+  'inline-flex items-center justify-center gap-1 whitespace-nowrap rounded-lg border border-border bg-card px-3 py-1.5 text-xs text-red-d hover:border-red-b hover:bg-red-t disabled:opacity-50'
+/** 判定徽章 tone 配色（token 家族 -t 底 + -d 字）。 */
+const BADGE_TONE_CLS: Record<RowBadge['tone'], string> = {
+  green: 'bg-green-t text-green-d',
+  red: 'bg-red-t text-red-d',
+  blue: 'bg-accent-t text-accent-d',
+  amb: 'bg-amb-t text-amb-d',
+  neutral: 'bg-fill-2 text-text-2',
+}
+
+export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey, onToast, onRefresh, selectedChange, onSelectedChange }: ProgressViewProps): JSX.Element {
   const { t } = useT()
   const rootRef = useRef<HTMLElement>(null)
   const drawerRef = useRef<HTMLElement>(null)
   const scrimRef = useRef<HTMLDivElement>(null)
-  // #3 抽屉焦点陷阱：打开前记住触发元素（行名按钮），关闭时归还焦点。
+  // #3 抽屉焦点陷阱：打开前记住触发元素（行名按钮/画布小卡），关闭时归还焦点。
   const triggerElRef = useRef<HTMLElement | null>(null)
   const [busyRows, setBusyRows] = useState<ReadonlySet<string>>(new Set())
   const [patches, setPatches] = useState<ReadonlyMap<string, RowPatch>>(new Map())
-  // 详情抽屉：行名点击打开；Esc/scrim/关闭钮关闭。行离场（归档/换项目）→ 引用失配自动收起。
+  // 详情抽屉：行名/画布小卡点击打开；Esc/scrim/关闭钮关闭。行离场（归档/换项目）→ 引用失配自动收起。
   const [drawerKey, setDrawerKey] = useState<string | null>(null)
-  // v9-H：状态 sheet 页签（demo .deck-tabs——默认全部）。
+  // 状态页签（默认全部）。
   const [deckTab, setDeckTab] = useState<DeckTab>('all')
+  // 工作流筛选保持为单一 select，避免工作流增多后横向堆满筛选栏。
+  const [wfFilter, setWfFilter] = useState<string>('all')
+  const [createOpen, setCreateOpen] = useState(false)
 
   // Bug4：新 snapshot 到达即按 change **逐条**清乐观 patch——只清「已落地（真值达目标）或已离开
   // 施加基线（server 已推进）」的那条，保留其余项目仍在途、尚未反映的 patch。
@@ -366,8 +365,8 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
     })
   }, [snapshot])
 
-  // 乐观投影：把在途动作的 patch 叠加到 snapshot 上，selectProgress 及所有下游（徽章/列车轨/
-  // 抽屉）自然消费同一份判定——不在视图层散落第二套状态判定（T6 同源谓词纪律）。
+  // 乐观投影：把在途动作的 patch 叠加到 snapshot 上，selectProgress 及所有下游（徽章/相位轨/
+  // 画布/抽屉）自然消费同一份判定——不在视图层散落第二套状态判定（T6 同源谓词纪律）。
   const patchedSnapshot = useMemo(() => {
     if (!snapshot || patches.size === 0) return snapshot
     return {
@@ -385,47 +384,31 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
 
   const base = useMemo(() => selectProgress(patchedSnapshot, currentRoot, rulesByKey), [patchedSnapshot, currentRoot, rulesByKey])
 
-  // 单列表投影：分组打平（数据源沿 selectProgress；归档排除行为保持现状——archivedCount 汇总
-  // 到列表尾缀），排序=需操作行在前、组内 updated_at 倒序。
+  // change 投影打平（单项目语境：base.groups 是当前项目的各 workflow 组）——画布 change 小卡、
+  // 页签计数、GSAP 入场键、抽屉行查找共用同一份 FlatRow。列表已退役，无需再按需操作/时间排序。
   const flatRows: FlatRow[] = useMemo(() => {
     const out: FlatRow[] = []
     for (const group of base.groups) {
       const rules = rulesByKey.get(group.key) as ProgressRules | undefined
       for (const row of group.rows) out.push(toFlatRow(row, rules, group.workflow))
     }
-    out.sort(compareFlat)
     return out
   }, [base, rulesByKey])
+  const frByKey = useMemo(() => new Map(flatRows.map((fr) => [fr.key, fr])), [flatRows])
 
-  // #2 归档折叠行「展开」真交互：按 root 合并该 root 下所有 workflow 组的归档行只读投影——独立于
-  // deckTab（归档行不参与五态筛选，恒定不随页签变，同旧 archivedTotal 口径不变）；聚合语境每个
-  // 项目组各自的归档行归到各自 root，单项目语境天然只有 currentRoot 一个 key（selectProgress 已按
-  // currentRoot 过滤）。
-  const archivedFlatByRoot = useMemo(() => {
-    const m = new Map<string, FlatRow[]>()
-    for (const group of base.groups) {
-      if (group.archived.length === 0) continue
-      const rules = rulesByKey.get(group.key) as ProgressRules | undefined
-      const frs = group.archived.map((row) => toFlatRow(row, rules, group.workflow))
-      m.set(group.root, [...(m.get(group.root) ?? []), ...frs])
+  // URL 首次进入 / 浏览器前进后退：等 snapshot 与 workflow 投影准备好，再按 root+name 精确开抽屉。
+  // selectedChange=undefined 保持旧的非受控组件契约，既有独立测试与嵌入方不受影响。
+  useEffect(() => {
+    if (selectedChange === undefined) return
+    if (selectedChange === null) {
+      if (drawerKey !== null) setDrawerKey(null)
+      return
     }
-    for (const frs of m.values()) frs.sort(compareArchivedFlat)
-    return m
-  }, [base, rulesByKey])
-  // 展开态：键=root（聚合语境每个项目组各自展开/收起；单项目语境只有一个 key）。
-  const [expandedArchive, setExpandedArchive] = useState<ReadonlySet<string>>(new Set())
-  function toggleArchive(root: string): void {
-    setExpandedArchive((prev) => {
-      const next = new Set(prev)
-      if (next.has(root)) next.delete(root)
-      else next.add(root)
-      return next
-    })
-  }
+    const key = rowKeyOf(currentRoot, selectedChange)
+    if (frByKey.has(key) && drawerKey !== key) setDrawerKey(key)
+  }, [currentRoot, drawerKey, frByKey, selectedChange])
 
-  const health = schedulerHealth(base.counts)
-
-  // v9-H：页签计数=各分类总数（不随当前筛选变，demo updateDeckCounts 对位）。
+  // 页签计数=各分类总数（不随当前筛选变）。
   const deckCounts = useMemo(
     () => ({
       all: flatRows.length,
@@ -435,32 +418,15 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
     }),
     [flatRows],
   )
-  const visibleRows = useMemo(() => flatRows.filter((fr) => deckMatch(fr, deckTab)), [flatRows, deckTab])
 
-  // v9-H：聚合语境（currentRoot=''）按项目分组。组序=各组首行在全局序（需动手置前+updated_at
-  // 倒序）中的先后——最紧急/最新的项目组自然靠前；组内序=全局序在组内的投影（口径不变）；
-  // 零活跃行且无归档行的组才会消失——有归档行的 root 即使零活跃行也保留组头，好挂归档折叠区
-  // （archivedSectionFor 本不看 deckTab，归档区独立于筛选恒定存在）。
-  const projGroups = useMemo(() => {
-    const out: { root: string; rows: FlatRow[] }[] = []
-    const idx = new Map<string, number>()
-    for (const fr of visibleRows) {
-      let i = idx.get(fr.row.root)
-      if (i === undefined) {
-        i = out.length
-        idx.set(fr.row.root, i)
-        out.push({ root: fr.row.root, rows: [] })
-      }
-      out[i]!.rows.push(fr)
-    }
-    // #2 边界补：零活跃行（本来就没有，或被 deckTab 筛没了）但有归档行的 root 仍要补进来——
-    // 否则挂在 <section className="prg9g-group"> 内部的 archivedSectionFor(g.root) 无处渲染。
-    // 归档折叠区独立于 deckTab 恒定出现（同 archivedSectionFor 本不看 deckTab 的既有设计）。
-    for (const root of archivedFlatByRoot.keys()) {
-      if (!idx.has(root)) out.push({ root, rows: [] })
-    }
-    return out
-  }, [visibleRows, archivedFlatByRoot])
+  // v10b §4.2：出现过的 workflow 名（有活跃行的组；组序沿 selectProgress——root 升序、default
+  // 恒前，按名去重聚合）。选中的 workflow 若随快照消失，effectiveWf 静默回落「全部」。
+  const wfNames = useMemo(() => {
+    const names: string[] = []
+    for (const g of base.groups) if (g.rows.length > 0 && !names.includes(g.workflow)) names.push(g.workflow)
+    return names
+  }, [base])
+  const effectiveWf = wfFilter !== 'all' && wfNames.includes(wfFilter) ? wfFilter : 'all'
 
   function setPatch(key: string, patch: RowPatch | null): void {
     setPatches((prev) => {
@@ -488,15 +454,15 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
     return { phase: change?.phase ?? '', fields }
   }
 
-  /** 拍板成功的即时反馈（demo 收拢+徽标回落的行级对位）：行 settle + 徽章回落 pulse。
-   *  reduced-motion / 无 matchMedia → 不放（状态变化本身即反馈）。 */
+  /** 拍板成功的即时反馈：画布 change 小卡 settle + 抽屉徽章回落 pulse。reduced-motion /
+   *  无 matchMedia → 不放（状态变化本身即反馈）。 */
   function pulseRow(name: string): void {
     if (typeof window.matchMedia !== 'function' || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
     const root = rootRef.current
     if (!root) return
-    const rowEl = root.querySelector(`[data-testid="prg9-row-${name}"]`)
-    const bdg = root.querySelector(`[data-testid="prg9-badge-${name}"]`)
-    if (rowEl) gsap.fromTo(rowEl, { scale: 0.985 }, { scale: 1, duration: 0.3, ease: 'back.out(2)', clearProps: 'transform' })
+    const cardEl = root.querySelector(`[data-testid="prg-cv-chg-${name}"]`)
+    const bdg = root.querySelector('[data-testid="prg9-dw-badge"]')
+    if (cardEl) gsap.fromTo(cardEl, { scale: 0.985 }, { scale: 1, duration: 0.3, ease: 'back.out(2)', clearProps: 'transform' })
     if (bdg) gsap.fromTo(bdg, { scale: 1.25 }, { scale: 1, duration: 0.35, ease: 'back.out(2)', clearProps: 'transform' })
   }
 
@@ -546,29 +512,6 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
     }
   }
 
-  // 验收反馈②-④沿用：可见范围恰好单 root 时才取并发上限一起显示——多项目聚合语境下
-  // 「上限」没有单一数字，不显示比显示误导性数字更诚实。
-  const singleRoot = useMemo(() => {
-    const roots = [...new Set(base.groups.map((g) => g.root))]
-    return roots.length === 1 ? roots[0]! : null
-  }, [base])
-  const [autoMaxParallel, setAutoMaxParallel] = useState<number | null>(null)
-  useEffect(() => {
-    setAutoMaxParallel(null)
-    if (!singleRoot) return
-    let cancelled = false
-    fetchAutomationSettings(singleRoot)
-      .then((s) => {
-        if (!cancelled) setAutoMaxParallel(s.max_parallel)
-      })
-      .catch(() => {
-        /* fail-open：接口失败静默不显示，不出错误 UI */
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [singleRoot])
-
   // v9-J：failed 行「回终端」chip 批量预取（产品决策=批量端点而非逐行发请求，也不是等用户点开
   // 抽屉才有数据——行内 chip 在需要时批量出现，一次查全部失败行）。依赖键=当前 failed 行
   // key+automation_worktree 值拼串（同 animKey 写法）：键不变（哪怕 SSE 帧刷新了其它无关字段）
@@ -613,10 +556,12 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 蓄意只随 failedRowsKey 重拉，见上注释
   }, [failedRowsKey])
 
-  // ── GSAP：行入场 stagger + rail 轨道生长/节点弹入（demo animRails 对位；全包 matchMedia）──
-  // 依赖键 = 行成员指纹（仅排序后的 name 集合）：增删行才重放入场；单行状态变化（SSE 帧常态）
-  // 不整列表重播 stagger——否则任一帧都会盖掉 pulseRow 的单行强调（评审 P2-6）。
-  // 循环动效（流光/门呼吸）走纯 CSS（[data-mode] 门控 + reduced-motion 停帧），不在这里放 JS 循环。
+  // ── GSAP 入场（spec §4.6）：工具条浮现 → 画布节点弹入（scale+stagger，全包 matchMedia，
+  //    reduce 直达终态）。依赖键 = change 成员指纹（仅排序后的 name 集合）：增删 change 才重放
+  //    入场；单条状态变化（SSE 帧常态）不整画布重播 stagger——否则任一帧都会盖掉 pulseRow 的
+  //    单条强调（评审 P2-6）。循环动效（呼吸环/脉冲/流动虚线）与站台连接段全是纯 CSS
+  //    （progress.css，reduced-motion 停帧），不在这里放 JS 循环；画布站点（小站/站台卡）
+  //    统一挂 [data-anim="prg-node"]，弹入 stagger 直接吃新结构。──
   const animKey = flatRows.map((fr) => fr.row.change.name).sort().join('|')
   useGSAP(
     () => {
@@ -629,46 +574,34 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
         { reduce: '(prefers-reduced-motion: reduce)', motion: '(prefers-reduced-motion: no-preference)' },
         (ctx) => {
           const reduce = Boolean((ctx.conditions as { reduce?: boolean } | undefined)?.reduce)
-          const rows = el.querySelectorAll<HTMLElement>('.prg9-row')
+          const chrome = el.querySelectorAll<HTMLElement>('[data-anim="prg-chrome"]')
+          const nodes = el.querySelectorAll<HTMLElement>('[data-anim="prg-node"]')
           if (reduce) {
-            // 直达终态：行全可见、页签条/组头/轨道名原位（CSS 循环由 media query 自停）。
-            gsap.set(rows, { autoAlpha: 1, y: 0 })
-            gsap.set(el.querySelectorAll('.prg9t-tabs, .prg9g-head'), { autoAlpha: 1, y: 0 })
-            gsap.set(el.querySelectorAll('.prg9-rail .rl-name'), { autoAlpha: 1 })
+            // 直达终态：工具条/画布节点全可见原位（CSS 循环由 media query 自停）。
+            gsap.set(chrome, { autoAlpha: 1, y: 0 })
+            gsap.set(nodes, { autoAlpha: 1, scale: 1 })
             return
           }
-          // v9-H：页签条+组头先浮现（demo enterChoreo 的 .deck-tabs/.pg-h 同参）。
-          const chrome = el.querySelectorAll<HTMLElement>('.prg9t-tabs, .prg9g-head')
           if (chrome.length > 0) {
             gsap.fromTo(chrome, { autoAlpha: 0, y: 8 }, { autoAlpha: 1, y: 0, duration: 0.3, ease: 'power2.out', stagger: 0.07, clearProps: 'all' })
           }
-          // 行入场 stagger（demo enterChoreo 同参）。
-          gsap.fromTo(rows, { autoAlpha: 0, y: 14 }, { autoAlpha: 1, y: 0, duration: 0.4, ease: 'power3.out', stagger: 0.06 })
-          // rail 轨道生长 + 节点弹入 + 名称浮现（demo animRails 逐字对位；行间再错开一拍）。
-          Array.from(el.querySelectorAll<HTMLElement>('.prg9-rail')).forEach((rail, ri) => {
-            gsap.from(rail.querySelectorAll('.rl-track'), {
-              scaleX: 0, transformOrigin: 'left center', duration: 0.3, stagger: 0.05, delay: 0.1 + ri * 0.05, ease: 'power2.out', clearProps: 'transform',
-            })
-            gsap.from(rail.querySelectorAll('.rl-node'), {
-              scale: 0, duration: 0.3, stagger: 0.05, delay: 0.15 + ri * 0.05, ease: 'back.out(2.2)', clearProps: 'transform',
-            })
-            gsap.fromTo(rail.querySelectorAll('.rl-name'), { autoAlpha: 0, y: 4 }, {
-              autoAlpha: 1, y: 0, duration: 0.22, stagger: 0.04, delay: 0.2 + ri * 0.05, ease: 'power2.out',
-            })
-          })
+          if (nodes.length > 0) {
+            gsap.fromTo(
+              nodes,
+              { autoAlpha: 0, scale: 0.9 },
+              { autoAlpha: 1, scale: 1, duration: 0.32, ease: 'back.out(1.8)', stagger: 0.04, delay: 0.08, clearProps: 'all' },
+            )
+          }
         },
       )
     },
     { scope: rootRef, dependencies: [animKey], revertOnUpdate: true },
   )
 
-  // ── v9-H：状态 sheet 墨线滑动 + 切换后可见行/组头入场轻编排（demo placeDeckInk/
-  //    applyDeckFilter 对位）。墨线姿势沿 WorkbenchView wb8-ink：不挂 revertOnUpdate——revert
-  //    会把墨线 inline left/width 打回样式表缺省（left:0 width:0），每次切换都从最左飞入；
-  //    gsap.to 天然从当前位置延续滑动，overwrite:'auto' 收编快速连点。首帧只落墨线不放行编排
-  //    （prevDeckRef 守门）；reduced 墨线直落位、行直切不编排。deps 含 animKey：行成员变化后
-  //    页签宽度（计数位数）可能变，墨线要补一次落位。──
-  const prevDeckRef = useRef<DeckTab | null>(null)
+  // ── 状态页签墨线滑动。墨线不挂 revertOnUpdate——revert 会把墨线 inline left/width 打回缺省
+  //    （left:0 width:0），每次切换都从最左飞入；gsap.to 天然从当前位置延续滑动，overwrite:'auto'
+  //    收编快速连点。reduced 墨线直落位。deps 含 animKey：change 成员变化后页签宽度（计数位数）
+  //    可能变，墨线要补一次落位。──
   useGSAP(
     () => {
       const el = rootRef.current
@@ -678,7 +611,7 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
         { reduce: '(prefers-reduced-motion: reduce)', motion: '(prefers-reduced-motion: no-preference)' },
         (ctx) => {
           const reduce = Boolean((ctx.conditions as { reduce?: boolean } | undefined)?.reduce)
-          const ink = el.querySelector<HTMLElement>('.prg9t-ink')
+          const ink = el.querySelector<HTMLElement>('[data-anim="prg-ink"]')
           const onTab = el.querySelector<HTMLElement>(`[data-testid="prg9t-tab-${deckTab}"]`)
           if (ink && onTab?.parentElement) {
             const tr = onTab.getBoundingClientRect()
@@ -687,20 +620,6 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
             const width = Math.max(tr.width - 12, 0)
             if (reduce) gsap.set(ink, { left, width })
             else gsap.to(ink, { left, width, duration: 0.28, ease: 'expo.out', overwrite: 'auto' })
-          }
-          const first = prevDeckRef.current === null
-          const changed = prevDeckRef.current !== null && prevDeckRef.current !== deckTab
-          prevDeckRef.current = deckTab
-          if (reduce || first || !changed) return
-          // 切换后可见行+组头轻入场（demo applyDeckFilter 的 G.from(visCards) 对位）；
-          // overwrite:'auto' 收编仍在途的首屏入场补间，clearProps 终态自清不残留 inline。
-          const targets = el.querySelectorAll<HTMLElement>('.prg9-row, .prg9g-head')
-          if (targets.length > 0) {
-            gsap.fromTo(
-              targets,
-              { autoAlpha: 0, y: 8 },
-              { autoAlpha: 1, y: 0, duration: 0.25, ease: 'power2.out', stagger: 0.04, overwrite: 'auto', clearProps: 'all' },
-            )
           }
         },
       )
@@ -712,9 +631,9 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
   const drawerRow = drawerKey !== null ? (flatRows.find((fr) => fr.key === drawerKey) ?? null) : null
   const drawerOpen = drawerRow !== null
 
-  /** 退场补间（demo 语义补拍，评审 P2-8）：滑回场外 x:103%（~.24s power3.in）+ scrim 淡出，
-   *  onComplete 才卸载；reduced/无 matchMedia 直接卸载。closingRef 双守门：退场中再点退路不
-   *  重复补间、退场中点行名不重开。 */
+  /** 退场补间：滑回场外 x:103%（~.24s power3.in）+ scrim 淡出，onComplete 才卸载；
+   *  reduced/无 matchMedia 直接卸载。closingRef 双守门：退场中再点退路不重复补间、
+   *  退场中点行名不重开。 */
   const closingRef = useRef(false)
   const closeDrawer = useCallback((): void => {
     if (closingRef.current) return
@@ -724,6 +643,7 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
       typeof window.matchMedia === 'function' && !window.matchMedia('(prefers-reduced-motion: reduce)').matches
     if (!motion || !drawer || !scrim) {
       setDrawerKey(null)
+      onSelectedChange?.(null)
       return
     }
     closingRef.current = true
@@ -735,18 +655,21 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
       onComplete: () => {
         closingRef.current = false
         setDrawerKey(null)
+        onSelectedChange?.(null)
       },
     })
-  }, [])
-  /** #3：trigger 优先取调用点显式传入的元素（行名按钮 click 事件的 e.currentTarget——jsdom 下
-   *  fireEvent.click 不会像真实浏览器那样把焦点先移到被点元素，document.activeElement 在合成
-   *  点击时仍是先前焦点，故不能只靠它；真实浏览器场景下两者通常一致）；未传时退化取当前
-   *  document.activeElement，保底不留 undefined。 */
+  }, [onSelectedChange])
+  /** #3：trigger 优先取调用点显式传入的元素（行名按钮/画布小卡 click 事件的 e.currentTarget
+   *  ——jsdom 下 fireEvent.click 不会像真实浏览器那样把焦点先移到被点元素，
+   *  document.activeElement 在合成点击时仍是先前焦点，故不能只靠它；真实浏览器场景下两者
+   *  通常一致）；未传时退化取当前 document.activeElement，保底不留 undefined。 */
   const openDrawer = useCallback((key: string, trigger?: HTMLElement | null): void => {
     if (closingRef.current) return
     triggerElRef.current = trigger ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null)
     setDrawerKey(key)
-  }, [])
+    const separator = key.indexOf('@')
+    onSelectedChange?.(separator === -1 ? key : key.slice(0, separator))
+  }, [onSelectedChange])
 
   useEffect(() => {
     if (!drawerOpen) return
@@ -832,36 +755,25 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
     { scope: rootRef, dependencies: [drawerKey] },
   )
 
-  // ── 行体投影：徽章/导语/证据/列车轨 ──
+  // ── change 投影：徽章/状态点（抽屉徽章 + 画布小卡共用同源判定）──
 
-  interface RailView {
-    labels: string[]
-    idx: number
-    phaseLabel: string
+  /** 当前相位展示名（自定义步用 labelByStep，default 走 phases.* i18n）——抽屉徽章 running 文案用。 */
+  function phaseLabelOf(fr: FlatRow): string {
+    return stepLabel(fr.row.change.phase, fr.rules?.labelByStep, t)
   }
 
-  /** 相位列表来自该行 workflow 的真实 steps；rules 缺失或当前阶段不在步序（G17 底线：卡不
-   *  消失）→ 退化为单相轨。 */
-  function railOf(fr: FlatRow): RailView {
-    const steps = fr.rules?.steps ?? []
-    const curIdx = steps.indexOf(fr.row.change.phase)
-    const phaseLabel = stepLabel(fr.row.change.phase, fr.rules?.labelByStep, t)
-    if (!fr.rules || curIdx < 0) return { labels: [phaseLabel], idx: 0, phaseLabel }
-    return { labels: steps.map((s) => stepLabel(s, fr.rules?.labelByStep, t)), idx: curIdx, phaseLabel }
-  }
-
-  /** 一枚人话判定徽章 + 需操作行导语（gate/failed 复用 rowSemantics 同源判定）。 */
+  /** 一枚人话判定徽章（gate/failed 复用 rowSemantics 同源判定；行内导语已退役，§4.5）。 */
   function judge(fr: FlatRow, evidence: EvidenceChip[], phaseLabel: string): RowBadge {
     const c = fr.row.change
     switch (fr.row.state) {
       case 'gate': {
         const sem = rowSemantics(c, 'gate', evidence, t)
-        return { tone: sem.tone, text: sem.badgeText, lead: sem.lead }
+        return { tone: sem.tone, text: sem.badgeText }
       }
       case 'failed': {
-        if (fr.cancelled) return { tone: 'amb', text: t('progress.badge_cancelled'), lead: t('failure.hint_cancelled') }
+        if (fr.cancelled) return { tone: 'amb', text: t('progress.badge_cancelled') }
         const sem = rowSemantics(c, 'failed', [], t)
-        return { tone: 'red', text: sem.badgeText, lead: sem.lead }
+        return { tone: 'red', text: sem.badgeText }
       }
       case 'running':
         return { tone: 'blue', text: t('progress.badge_running', { phase: phaseLabel }) }
@@ -877,17 +789,38 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
     }
   }
 
+  /** 状态点语义（画布小卡/站点共用同一判定，rowSemantics 同源，不另起第二套五态映射）。
+   *  #4 颜色收敛：state 仍分档承载语义（testid/aria/data-state 消费），tone 只走信号最小集——
+   *  失败 red、门/取消 amber、运行中 accent(blue)、其余（等产出/排队等）中性 gray。 */
+  function dotOf(fr: FlatRow): { state: string; tone: CanvasDotTone } {
+    switch (fr.row.state) {
+      case 'gate': {
+        const sem = rowSemantics(fr.row.change, 'gate', gateEvidence(fr.row.change, fr.rules), t)
+        return { state: sem.tone === 'green' ? 'gateok' : 'gatejudge', tone: 'amb' }
+      }
+      case 'failed':
+        return fr.cancelled ? { state: 'cancelled', tone: 'amb' } : { state: 'failed', tone: 'red' }
+      case 'running':
+        return { state: 'running', tone: 'blue' }
+      case 'queued':
+        return { state: 'queued', tone: 'gray' }
+      case 'agent':
+        return { state: 'agent', tone: 'gray' }
+    }
+  }
+
   /** testid 由调用点给：行内 prg9-badge-{name}、抽屉 prg9-dw-badge——同名双挂会撞 getByTestId。 */
   function badgeEl(fr: FlatRow, b: RowBadge, testid: string): JSX.Element {
-    const cls =
-      b.tone === 'green' ? 'badge badge--green' : b.tone === 'red' ? 'badge badge--red' : `badge prg9-bdg prg9-bdg--${b.tone}`
     return (
       <span
-        className={cls}
+        className={`inline-flex items-center gap-[5px] whitespace-nowrap rounded-md px-2 py-[1.5px] text-xs font-semibold ${BADGE_TONE_CLS[b.tone]}`}
+        data-tone={b.tone}
         data-testid={testid}
         title={fr.row.state === 'agent' ? t('progress.state_agent_hint') : undefined}
       >
-        {(b.tone === 'red' || b.tone === 'blue' || b.tone === 'amb') && <span className="dot" aria-hidden="true" />}
+        {(b.tone === 'red' || b.tone === 'blue' || b.tone === 'amb') && (
+          <span className="h-1.5 w-1.5 rounded-full bg-current" data-pulse={b.tone === 'blue' || undefined} aria-hidden="true" />
+        )}
         {b.text}
       </span>
     )
@@ -896,12 +829,14 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
   /** fail/cxl 行「回终端」命令 chip 数据（真机验收 G）：v9-J 批量预取命中真恢复会话
    *  （session-link found + resumeCmd 非 null）→ 优先给真恢复命令，直接可拷贝执行接回原会话；
    *  否则落回现状：cxl=重跑命令（人为终止后重新入队）；fail 有 worktree 现场→cd 接管（与
-   *  TaskDetail dt8-conn 的 worktreeCmd 同款 shellQuote 转义，codex review P2-2 同族），
-   *  缺现场回落重跑命令。 */
+   *  TaskDetail 的 worktreeCmd 同款 shellQuote 转义，codex review P2-2 同族），缺现场回落
+   *  重跑命令。 */
   function cmdChipOf(fr: FlatRow): { label: string; cmd: string } {
     const link = sessionLinks.get(fr.key)
     if (link?.found && link.resumeCmd) return { label: t('progress.cmd_resume'), cmd: link.resumeCmd }
-    const rerun = `pipeline afk run ${shellQuote(fr.row.change.name)}`
+    // #6 按名重跑走 `pipeline afk enqueue <name>`：afk run 忽略 name、跑整轮；enqueue 才是唯一能把
+    // 该 change 按名重新摆进 AFK 队列的命令（server afk.ts::enqueueAfkRun 同源），是正确的按名重跑。
+    const rerun = `pipeline afk enqueue ${shellQuote(fr.row.change.name)}`
     if (fr.cancelled) return { label: t('progress.cmd_rerun_cxl'), cmd: rerun }
     const worktree = fieldStr(fr.row.change, 'automation_worktree')
     if (worktree !== '') return { label: t('progress.cmd_takeover'), cmd: `cd ${shellQuote(worktree)}` }
@@ -916,14 +851,13 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
   }
 
   /**
-   * 行内动作（行体与抽屉同组共用）：gate=放行（带目标相位）/打回；failed/cancelled=行内
-   * 「回终端」命令 chip（抽屉侧不双挂——drawerActionsFor 给引导文案，承接面是 TaskDetail
-   * 的 dt8-conn 命令卡）；running=终止（仅 automation==='running' 可点）；排队/等产出=
-   * 无动作 → undefined。
+   * change 动作（画布卡点开 → 抽屉动作条消费）：gate=放行（带目标相位）/打回；failed/cancelled=
+   * 「回终端」命令 chip（v9-J 批量预取命中真恢复会话优先，否则重跑/接管兜底——诚实缺省）；
+   * running=终止（仅 automation==='running' 可点）；排队/等产出=无动作 → undefined。
    * 2+ 条同向出边一条不落（旧 InboxView 纪律回归）：前进边逐条渲染（首选边保持「放行进入
    * {目标相位}」，其余以事件名呈现 inbox.act_forward）；回退边逐条渲染，一律带目标相位
    * （inbox.act_backward——多回退边只写「打回」无从分辨去处）。
-   * dw=true 时 testid 挂 prg9-dw- 前缀——行内与抽屉双挂同名 testid 会撞 getByTestId。
+   * dw 参数保留 testid 前缀契约（抽屉挂 prg9-dw-）——列表退役后仅抽屉调用（dw=true）。
    */
   function actionsFor(fr: FlatRow, dw = false): ReactNode | undefined {
     const name = fr.row.change.name
@@ -945,7 +879,7 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
               <button
                 key={`fw-${p.event}`}
                 type="button"
-                className="prg9-btn prg9-btn--go"
+                className={BTN_GO_CLS}
                 data-testid={i === 0 ? tid('pass') : tid(`fw-${p.event}`)}
                 disabled={busy}
                 onClick={() => void transitionAction(fr.row.root, name, p)}
@@ -959,7 +893,7 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
               <button
                 key={`bw-${p.event}`}
                 type="button"
-                className="prg9-btn prg9-btn--neg"
+                className={BTN_NEG_CLS}
                 data-testid={i === 0 ? tid('reject') : tid(`bw-${p.event}`)}
                 disabled={busy}
                 onClick={() => void transitionAction(fr.row.root, name, p)}
@@ -971,21 +905,20 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
         )
       }
       case 'failed': {
-        // 真机验收 G：重试/放弃不再在进度面上点——行内给一枚可拷贝的终端命令 chip；
-        // 抽屉不双挂（引导文案在 drawerActionsFor，连接现场的完整命令卡在 TaskDetail）。
-        if (dw) return undefined
+        // 真机验收 G：重试/放弃不在进度上点——给一枚可拷贝的终端命令 chip（抽屉动作条内，作为
+        // 显眼的一键恢复 CTA；TaskDetail 另有完整连接现场命令卡兜底更多字段）。
         const chip = cmdChipOf(fr)
         return (
           <button
             type="button"
-            className="prg9-cmdchip"
+            className="inline-flex max-w-full items-center gap-2 rounded-[7px] border border-code-border bg-code-bg px-2.5 py-[5px] text-left text-xs text-text-2 hover:border-(--accent)"
             data-testid={tid('cmd')}
             title={chip.cmd}
             aria-label={`${chip.label}：${chip.cmd}`}
             onClick={() => copyCmd(chip.cmd)}
           >
             {chip.label}
-            <span className="prg9-cc mono">{chip.cmd}</span>
+            <span className="truncate font-mono">{chip.cmd}</span>
           </button>
         )
       }
@@ -993,12 +926,12 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
         return (
           <button
             type="button"
-            className="prg9-btn prg9-btn--neg"
+            className={BTN_NEG_CLS}
             data-testid={tid('kill')}
             disabled={busy || fieldStr(fr.row.change, 'automation') !== 'running'}
             onClick={() => void killAction(fr.row.root, name)}
           >
-            ⏹ {t('progress.act_kill')}
+            <Square className="h-3 w-3" aria-hidden="true" /> {t('progress.act_kill')}
           </button>
         )
       default:
@@ -1006,240 +939,197 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
     }
   }
 
-  /** 抽屉动作条：与行内同组；fail/cxl=回终端引导文案（重试/放弃退出 UI，连接现场的命令
-   *  卡由 TaskDetail「自己上手修」承接）；排队/等产出无动作 → 一句说明（沿旧 note_* 口径）。 */
+  /** 抽屉动作条：与行内同组；fail/cxl 的引导承接面是 TaskDetail 连接现场命令卡（注释句
+   *  acts_terminal_note 已退役，§4.5）；等产出仅在有欠账时点名缺什么（note_queued/note_agent
+   *  两句无动作注释随 §4.5 退役——排队/等产出本身无动作，无需一句话解释）。 */
   function drawerActionsFor(fr: FlatRow): ReactNode | undefined {
     const acts = actionsFor(fr, true)
     if (acts) return acts
-    const name = fr.row.change.name
-    if (fr.row.state === 'failed') {
-      return (
-        <span className="prg-dfoot-note" data-testid={`prg9-note-${name}`}>
-          {t('progress.acts_terminal_note')}
-        </span>
-      )
-    }
     if (fr.row.state === 'agent') {
       const missing = missingGateArtifacts(fr.row.change, fr.rules)
-      return (
-        <span className="prg-dfoot-note" data-testid={`prg9-note-${name}`}>
-          {missing.length > 0 ? t('progress.note_agent_missing', { fields: missing.join(' ') }) : t('progress.note_agent')}
-        </span>
-      )
-    }
-    if (fr.row.state === 'queued') {
-      return (
-        <span className="prg-dfoot-note" data-testid={`prg9-note-${name}`}>
-          {t('progress.note_queued')}
-        </span>
-      )
+      if (missing.length > 0) {
+        return (
+          <span className="text-xs text-text-3" data-testid={`prg9-note-${fr.row.change.name}`}>
+            {t('progress.note_agent_missing', { fields: missing.join(' ') })}
+          </span>
+        )
+      }
     }
     return undefined
   }
 
-  const doctorText =
-    t('progress.doctor_counts', { running: health.running, queued: health.queued, failed: health.failed }) +
-    (autoMaxParallel !== null ? ` ${t('progress.doctor_limit', { n: autoMaxParallel })}` : '')
-
-  /** 单行行体渲染（行体 v2，demo .fl-top/.fl-body）：标题行内联——名称 + track/workflow 全称
-   *  chip/调度标识 + 弱化 mono 时间，右端判定徽章（+失败短成因）；第二行=列车轨整宽+导语在左，
-   *  动作在轨道右侧垂直居中。聚合分组与单项目平铺两个渲染分支共用；key 挂在返回的 article 上
-   *  （两分支都是数组 map 的直子元素）。fail/cxl 的「回终端」命令 chip 走 actionsFor 现状不动。
-   *  readonly=true（#2 归档折叠行「展开」）：名字降级为纯文本（不开抽屉）、不渲染任何行内动作、
-   *  PhaseRail 强制 mode='idle'（不触发 [data-mode="run"] 流光门控），整行加 .prg9-row--archived
-   *  灰化——徽章/导语/证据 chip 等只读信息照旧渲染，只收口"可交互"面。 */
-  function renderRow(fr: FlatRow, readonly = false): JSX.Element {
-    const { row } = fr
-    const name = row.change.name
-    const rail = railOf(fr)
-    const evidence = row.state === 'gate' ? gateEvidence(row.change, fr.rules) : []
-    const b = judge(fr, evidence, rail.phaseLabel)
-    // 行内小号证据 chip（gate 行）：只出判定型（非 copyable 非占位）——路径产物归抽屉。
-    const inlineChips = evidence.filter((ch) => !ch.copyable && !ch.unset)
-    const acts = readonly ? undefined : actionsFor(fr)
-    // 失败行短成因（W3/F-b 沿用）：automation_cause 直判优先，空串回落 last_error regex。
-    const lastError = row.state === 'failed' ? fieldStr(row.change, 'automation_last_error') : ''
-    const failCause = row.state === 'failed' ? fieldStr(row.change, 'automation_cause') : ''
-    const showCause = row.state === 'failed' && !fr.cancelled && (lastError !== '' || failCause !== '')
-    // 真机验收 G：need 行 ring 分色——gate 保持绿（--need 现状），失败红（--need-fail），
-    // 人为终止琥珀（--need-cxl）；tone 类叠加在 --need 之上（排序/入场语义不变，CSS 后写覆盖）。
-    // 归档只读行不参与 need 分色（灰化盖过一切语义色，见 .prg9-row--archived）。
-    const toneCls = fr.need && row.state === 'failed' ? (fr.cancelled ? ' prg9-row--need-cxl' : ' prg9-row--need-fail') : ''
-    const rowCls = readonly ? 'prg9-row prg9-row--archived' : `prg9-row${fr.need ? ' prg9-row--need' : ''}${toneCls}`
-    const railMode: RailMode = readonly ? 'idle' : fr.mode
-    const sandbox = inSandbox(fr)
-    return (
-      <article key={fr.key} className={rowCls} data-testid={readonly ? `prg9-archived-row-${name}` : `prg9-row-${name}`}>
-        <div className="prg9v2-top">
-          {readonly ? (
-            <span className="prg9-name prg9-name--ro">{name}</span>
-          ) : (
-            <button
-              type="button"
-              className="prg9-name"
-              data-testid={`prg9-name-${name}`}
-              onClick={(e) => openDrawer(fr.key, e.currentTarget)}
-            >
-              {name}
-            </button>
-          )}
-          <span className="prg9s-tags">
-            {row.change.track && <span className="card__track mono">{row.change.track}</span>}
-            <span className="prg9s-wf" data-testid={`prg9s-wf-${name}`}>
-              {t('progress.wf_label', { wf: fr.workflow })}
-            </span>
-            <span className={`prg9s-schip${sandbox ? ' prg9s-schip--sbx' : ''}`} data-testid={`prg9s-sched-${name}`}>
-              {t(sandbox ? 'progress.sched_sandbox' : 'progress.sched_terminal')}
-            </span>
-          </span>
-          {row.change.updated_at !== '' && <span className="prg9v2-time">{shortTime(row.change.updated_at)}</span>}
-          <span className="prg9v2-sp" aria-hidden="true" />
-          <span className="prg9-judge">
-            {badgeEl(fr, b, `prg9-badge-${name}`)}
-            {showCause && (
-              <span className="prg-cause" data-testid={`prg9-cause-${name}`} title={lastError || undefined}>
-                {t(`failure.short_${diagnoseFailureWithCause(failCause, lastError).cause}`)}
-              </span>
-            )}
-          </span>
-        </div>
-        <div className="prg9v2-body">
-          <div className="prg9v2-mid">
-            <PhaseRail
-              phases={rail.labels}
-              currentIndex={rail.idx}
-              mode={railMode}
-              ariaLabel={t(`progress.rail_aria_${railMode}`, { m: rail.labels.length, phase: rail.phaseLabel })}
-              testid={`prg9-rail-${name}`}
-            />
-            {b.lead && (
-              <p className="prg9-lead" data-testid={`prg9-lead-${name}`}>
-                {b.lead}
-                {inlineChips.map((chip) => (
-                  <span
-                    key={chip.key}
-                    className={`ev__chip ev__chip--${chip.tone} prg9-ev`}
-                    data-testid={`prg9-ev-${name}-${chip.key}`}
-                  >
-                    {chip.key}={chip.value}
-                  </span>
-                ))}
-              </p>
-            )}
-          </div>
-          {acts && <div className="prg9-acts prg9v2-acts">{acts}</div>}
-        </div>
-      </article>
-    )
-  }
-
-  /** #2 归档折叠行「展开」：静态文案「N 个已归档」改可点击 toggle，展开时在原位（单项目=列表
-   *  尾部；聚合=该项目组尾部）渲染该 root 下的只读归档行列表（renderRow readonly 分支收口交互）。
-   *  两个渲染分支各自按 root 调一次——无归档行的 root 返回 null（不出空壳）。 */
-  function archivedSectionFor(root: string): ReactNode {
-    const frs = archivedFlatByRoot.get(root) ?? []
-    if (frs.length === 0) return null
-    const rb = rootBasename(root)
-    const expanded = expandedArchive.has(root)
-    return (
-      <div className="prg9-fold" data-testid={`prg9-fold-${rb}`}>
-        <button
-          type="button"
-          className="prg9-fold-toggle"
-          data-testid={`prg9-fold-toggle-${rb}`}
-          aria-expanded={expanded}
-          onClick={() => toggleArchive(root)}
-        >
-          {t('progress.fold_archived', { n: frs.length })}
-          {' · '}
-          {t(expanded ? 'progress.fold_collapse' : 'progress.fold_expand')}
-        </button>
-        {expanded && (
-          <div className="prg9-archived-stack" data-testid={`prg9-archived-stack-${rb}`}>
-            {frs.map((fr) => renderRow(fr, true))}
-          </div>
-        )}
-      </div>
-    )
-  }
+  // ── 画布投影（画布 v3 · 单项目）：base.groups 是当前项目的各 workflow 组，一组一条站台线
+  //    （无跨项目合并）。stepIds = rules.steps（缺失回退在制行出现过的 phase 序）+ 追加在制相位
+  //    +追加归档相位（G17 底线卡不消失 + 归档不失联：每条归档 change 都落到它相位的小站）。
+  //    change 小卡 = FlatRow 同源判定（状态点 tone / 沙箱谓词 / 页签未命中淡出 / 抽屉选中）。
+  //    归档 change 只读投影按相位挂到 CanvasStep.archivedChanges（小站点开只读列出）。空组
+  //    （零在制）不占画布。──
+  const canvasGroups: CanvasGroup[] = useMemo(() => {
+    const out: CanvasGroup[] = []
+    for (const group of base.groups) {
+      if (group.rows.length === 0) continue
+      if (effectiveWf !== 'all' && group.workflow !== effectiveWf) continue
+      const rules = rulesByKey.get(group.key) as ProgressRules | undefined
+      const stepIds: string[] = rules ? [...rules.steps] : []
+      for (const row of group.rows) if (!stepIds.includes(row.change.phase)) stepIds.push(row.change.phase)
+      for (const row of group.archived) if (!stepIds.includes(row.change.phase)) stepIds.push(row.change.phase)
+      if (stepIds.length === 0) continue
+      const archivedByPhase = new Map<string, ProgressRow[]>()
+      for (const row of group.archived) {
+        archivedByPhase.set(row.change.phase, [...(archivedByPhase.get(row.change.phase) ?? []), row])
+      }
+      const projName = rootBasename(group.root)
+      const steps: CanvasStep[] = stepIds.map((id) => {
+        const arch = [...(archivedByPhase.get(id) ?? [])].sort((a, b) => compareArchived(a.change, b.change))
+        const archivedChanges: CanvasArchivedChange[] = arch.map((row) => {
+          const fr = toFlatRow(row, rules, group.workflow)
+          const ds = dotOf(fr)
+          return { key: fr.key, name: row.change.name, tone: ds.tone, state: ds.state }
+        })
+        return {
+          id,
+          label: stepLabel(id, rules?.labelByStep, t),
+          gate: rules?.gateByStep[id] ?? null,
+          archived: archivedChanges.length,
+          archivedChanges,
+        }
+      })
+      const changes: CanvasChange[] = group.rows.map((row) => {
+        const fr = frByKey.get(rowKeyOf(row.root, row.change.name))!
+        const ds = dotOf(fr)
+        const status = judge(fr, row.state === 'gate' ? gateEvidence(row.change, fr.rules) : [], phaseLabelOf(fr))
+        return {
+          key: fr.key,
+          name: row.change.name,
+          phase: row.change.phase,
+          state: ds.state,
+          tone: ds.tone,
+          running: row.state === 'running',
+          sandbox: inSandbox(fr),
+          dimmed: deckTab !== 'all' && !deckMatch(fr, deckTab),
+          selected: drawerKey === fr.key,
+          statusLabel: status.text,
+        }
+      })
+      out.push({ key: `${group.root}::${group.workflow}`, projName, workflow: group.workflow, steps, changes })
+    }
+    return out
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- dotOf/t 随组件重建，实际输入已全列
+  }, [base, rulesByKey, frByKey, effectiveWf, deckTab, drawerKey])
 
   return (
-    <section className="view progress" data-testid="progress-view" ref={rootRef}>
-      <header className="view__head">
+    <section className="relative mx-auto w-full max-w-[1088px] pt-7 pb-5" data-testid="progress-view" ref={rootRef}>
+      <div className="mb-8 flex flex-wrap items-end justify-between gap-4" data-anim="prg-chrome" data-testid="prg-hero">
         <div>
-          <h1 className="view__title">{t('progress.title')}</h1>
-          <p className="view__subtitle">{t('progress.subtitle')}</p>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <h1 className="text-[30px] font-bold leading-none tracking-[-0.025em] text-text">进度</h1>
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-1 text-[11px] font-medium text-text-3">
+              <span className="h-1.5 w-1.5 rounded-full bg-green" aria-hidden="true" />
+              {t('progress.realtime_sync')}
+            </span>
+          </div>
+          <p className="mt-2 text-[13px] leading-5 text-text-3">沿工作流查看每个任务所处阶段，需要处理的事项会优先显示</p>
         </div>
-        <span className="prg-doctor" data-testid="prg-doctor" title={t('progress.doctor_hint')}>
-          <i className={`prg-doctor__d prg-doctor__d--${health.status}`} aria-hidden="true" />
-          {doctorText}
-        </span>
-      </header>
-
-      {error && <p className="prg-note prg-note--error" data-testid="prg-error">{error}</p>}
-      {loading && !snapshot && <p className="prg-note">{t('common.loading')}</p>}
-
-      {flatRows.length > 0 && (
-        <div className="prg9t-tabs" role="tablist" aria-label={t('progress.tabs_label')} data-testid="prg9t-tabs">
-          {DECK_TABS.map((tabId) => (
-            <button
-              key={tabId}
-              type="button"
-              role="tab"
-              className="prg9t-tab"
-              aria-selected={deckTab === tabId}
-              data-testid={`prg9t-tab-${tabId}`}
-              onClick={() => setDeckTab(tabId)}
-            >
-              {t(`progress.tab_${tabId}`)}
-              <span className="prg9t-n">{deckCounts[tabId]}</span>
-            </button>
-          ))}
-          <span className="prg9t-ink" aria-hidden="true" />
-        </div>
-      )}
-
-      <div className="prg9-stack" data-testid="prg9-stack">
-        {currentRoot === ''
-          ? projGroups.map((g) => (
-              <section className="prg9g-group" key={g.root} data-testid={`prg9g-group-${rootBasename(g.root)}`}>
-                <header className="prg9g-head" data-testid={`prg9g-head-${rootBasename(g.root)}`}>
-                  <Icon name="folder" />
-                  <span className="prg9g-name">{rootBasename(g.root)}</span>
-                  <span className="prg9g-n" data-testid={`prg9g-n-${rootBasename(g.root)}`}>{g.rows.length}</span>
-                  <span className="prg9g-rule" aria-hidden="true" />
-                </header>
-                <div className="prg9g-stack">{g.rows.map((fr) => renderRow(fr))}</div>
-                {archivedSectionFor(g.root)}
-              </section>
-            ))
-          : visibleRows.map((fr) => renderRow(fr))}
+        <button
+          type="button"
+          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-(--accent) px-4 text-sm font-semibold text-white shadow-sm transition-[transform,box-shadow] hover:shadow-md active:translate-y-px motion-reduce:transform-none"
+          data-testid="progress-new-change"
+          onClick={() => setCreateOpen(true)}
+        >
+          <Plus className="h-4 w-4" aria-hidden="true" /> {t('change_create.create')}
+        </button>
       </div>
 
-      {snapshot && flatRows.length === 0 && (
-        <div className="prg-empty" data-testid="prg-empty">{t('progress.empty')}</div>
+      {flatRows.length > 0 && (
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-4" data-anim="prg-chrome" data-testid="prg-filterbar">
+            <div
+              className="inline-flex items-center gap-1 rounded-xl bg-fill p-1"
+              role="tablist"
+              aria-label={t('progress.tabs_label')}
+              data-testid="prg9t-tabs"
+            >
+              {DECK_TABS.map((tabId) => (
+                <button
+                  key={tabId}
+                  type="button"
+                  role="tab"
+                  className="group flex min-h-9 items-center gap-1.5 rounded-lg px-3 text-[13px] font-semibold text-text-3 transition-colors hover:text-text aria-selected:bg-card aria-selected:text-text aria-selected:shadow-sm"
+                  aria-selected={deckTab === tabId}
+                  data-testid={`prg9t-tab-${tabId}`}
+                  onClick={() => setDeckTab(tabId)}
+                >
+                  {t(`progress.tab_${tabId}`)}
+                  <span className="inline-flex min-w-[18px] items-center justify-center rounded-full bg-card px-1.5 font-mono text-[11px] leading-[18px] text-text-3 group-aria-selected:bg-(--accent) group-aria-selected:text-white" data-testid={`prg9t-n-${tabId}`}>
+                    {deckCounts[tabId]}
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            {wfNames.length > 0 && (
+              <label className="relative max-[760px]:basis-full">
+                <span className="sr-only">按工作流筛选</span>
+                <select
+                  className="h-10 min-w-[180px] appearance-none rounded-xl border border-border bg-card py-2 pr-9 pl-3 text-[13px] font-semibold text-text outline-none transition-shadow focus:border-(--accent) focus:ring-3 focus:ring-accent-t max-[760px]:w-full"
+                  data-testid="prg-workflow-select"
+                  value={effectiveWf}
+                  onChange={(event) => setWfFilter(event.target.value)}
+                >
+                  <option value="all">{t('progress.wf_all')}</option>
+                  {wfNames.map((wf) => <option key={wf} value={wf}>{wf}</option>)}
+                </select>
+                <ChevronDown className="pointer-events-none absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2 text-text-3" aria-hidden="true" />
+              </label>
+            )}
+        </div>
       )}
-      {currentRoot !== '' && archivedSectionFor(currentRoot)}
-      <p className="prg-foot">{t('progress.foot')}</p>
+
+      {error && <p className="py-2 text-[13px] text-red-d" data-testid="prg-error">{error}</p>}
+      {loading && !snapshot && <p className="py-2 text-[13px] text-text-3">{t('common.loading')}</p>}
+
+      {snapshot && flatRows.length > 0 && (
+        <WorkflowCanvas groups={canvasGroups} onOpen={openDrawer} />
+      )}
+
+      {snapshot && flatRows.length === 0 && (
+        <div className="rounded-xl border border-dashed border-border-2 p-5 text-[13px] text-text-3" data-testid="prg-empty">
+          {t('progress.empty')}
+        </div>
+      )}
+
+      {createOpen && (
+        <CreateChangeDialog
+          root={currentRoot}
+          onClose={() => setCreateOpen(false)}
+          onCreated={async (name) => {
+            // 先锁定 URL/宿主选择，再刷新 snapshot；受控 effect 会在新 change 真正进入投影后开抽屉。
+            onSelectedChange?.(name)
+            await onRefresh?.()
+          }}
+          onToast={onToast}
+        />
+      )}
 
       {drawerRow && (
         <>
-          <div className="prg9-scrim" data-testid="prg9-scrim" ref={scrimRef} onClick={closeDrawer} />
+          <div className="fixed inset-0 z-40 bg-scrim" data-testid="prg9-scrim" ref={scrimRef} onClick={closeDrawer} />
           <aside
-            className="prg9-drawer"
+            className="fixed top-0 right-0 bottom-0 z-50 flex w-[560px] max-w-[94vw] flex-col border-l border-border-2 bg-card shadow-lg"
+            data-anim="prg-drawer"
             role="dialog"
             aria-modal="true"
             aria-label={drawerRow.row.change.name}
             data-testid="prg9-drawer"
             ref={drawerRef}
           >
-            <div className="prg9-dw-body">
+            <div className="min-h-0 flex-1 overflow-y-auto p-4">
               <TaskDetail
                 root={drawerRow.row.root}
                 change={drawerRow.row.change}
                 rules={drawerRow.rules}
-                badge={badgeEl(drawerRow, judge(drawerRow, drawerRow.row.state === 'gate' ? gateEvidence(drawerRow.row.change, drawerRow.rules) : [], railOf(drawerRow).phaseLabel), 'prg9-dw-badge')}
+                badge={badgeEl(drawerRow, judge(drawerRow, drawerRow.row.state === 'gate' ? gateEvidence(drawerRow.row.change, drawerRow.rules) : [], phaseLabelOf(drawerRow)), 'prg9-dw-badge')}
                 actions={drawerActionsFor(drawerRow)}
+                collapseTechnical
                 onClose={closeDrawer}
                 onToast={onToast}
               />

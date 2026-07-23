@@ -1,12 +1,32 @@
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
+import { execFile } from 'node:child_process'
+import { lstat, mkdir, mkdtemp, readFile, readdir, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
+import { promisify } from 'node:util'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import type { WorkflowDef } from '@pipeline-lite/kernel'
-import { deleteWorkflowForApi, listWorkflowNames, readWorkflowForApi, writeWorkflowForApi, WorkflowNotFoundError } from './workflows.js'
+import { BUILTIN_TRACK_DEFINITIONS, type TrackRegistry, type WorkflowDef } from '@pipeline-lite/kernel'
+import {
+  captureWorkflowDeletePermit, captureWorkflowRootAnchor, closeWorkflowRootAnchor, deleteWorkflowForApi,
+  listWorkflowNames, readWorkflowForApi, scanWorkflowReferencesForApi, writeWorkflowForApi,
+  WorkflowDeleteConflictError, WorkflowNotFoundError,
+} from './workflows.js'
+
+const execFileAsync = promisify(execFile)
+const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..')
 
 async function tempRoot(): Promise<string> {
   return mkdtemp(join(tmpdir(), 'wf-server-'))
+}
+
+function builtinTrackRegistry(): TrackRegistry {
+  const ordered = [...BUILTIN_TRACK_DEFINITIONS]
+  return {
+    ordered,
+    byId: new Map(ordered.map((track) => [track.id, track])),
+    revision: 'test',
+    source: 'builtin-only',
+  }
 }
 
 const VALID_WF = `name: onboarding
@@ -46,6 +66,16 @@ describe('listWorkflowNames', () => {
     await writeFile(join(dir, 'default.yaml'), VALID_WF.replace('onboarding', 'default'), 'utf8')
     expect(listWorkflowNames(root).sort()).toEqual(['onboarding', 'release'])
   })
+
+  it('.pipeline 换成指向 root 外的 symlink → 拒绝，绝不列出外部 workflow', async () => {
+    const root = await tempRoot()
+    const outside = await tempRoot()
+    await mkdir(join(outside, 'workflows'))
+    await writeFile(join(outside, 'workflows', 'outside.yaml'), VALID_WF.replace('onboarding', 'outside'), 'utf8')
+    await symlink(outside, join(root, '.pipeline'), 'dir')
+
+    expect(() => listWorkflowNames(root)).toThrow()
+  })
 })
 
 describe('readWorkflowForApi', () => {
@@ -59,6 +89,18 @@ describe('readWorkflowForApi', () => {
     expect(wf.steps.map((s) => s.id)).toEqual(['intake', 'done'])
   })
 
+  it('workflow 目标换成指向 root 外文件的 symlink → 拒绝，绝不读取外部 YAML', async () => {
+    const root = await tempRoot()
+    const outside = await tempRoot()
+    const dir = join(root, '.pipeline', 'workflows')
+    const outsideFile = join(outside, 'victim.yaml')
+    await mkdir(dir, { recursive: true })
+    await writeFile(outsideFile, VALID_WF.replace('onboarding', 'victim'), 'utf8')
+    await symlink(outsideFile, join(dir, 'victim.yaml'), 'file')
+
+    expect(() => readWorkflowForApi(root, 'victim')).toThrow()
+  })
+
   it('文件不存在 → 抛错（路由层负责转 404）', async () => {
     const root = await tempRoot()
     expect(() => readWorkflowForApi(root, 'ghost')).toThrow()
@@ -69,7 +111,7 @@ describe('readWorkflowForApi', () => {
     expect(() => readWorkflowForApi(root, 'ghost')).toThrow(WorkflowNotFoundError)
   })
 
-  it('非法 workflow 文件（transitions.to 指向不存在的 step）→ 抛错（loadWorkflow 已接 validateWorkflow，路由层负责转 500）', async () => {
+  it('非法 workflow 文件（transitions.to 指向不存在的 step）→ 安全读后 validateWorkflow 抛错，路由层负责转 500', async () => {
     const root = await tempRoot()
     const dir = join(root, '.pipeline', 'workflows')
     await mkdir(dir, { recursive: true })
@@ -117,7 +159,156 @@ const INVALID_DEF: WorkflowDef = {
   ],
 }
 
+function workflowWithTrackReferences(
+  name: string,
+  stepTrack: string,
+  edgeTrack: string,
+  artifactTrack: string,
+): WorkflowDef {
+  return {
+    name,
+    steps: [
+      {
+        id: 'build',
+        label: '',
+        gate: null,
+        skills: [],
+        inputs: [],
+        outputs: [{ field: 'plan', type: 'file_path' }],
+        artifacts: [{
+          field: 'plan',
+          type: 'file_path',
+          producerPolicy: 'effective-step-skills',
+          requiredWhen: { kind: 'track-in', values: [artifactTrack] },
+        }],
+        guards: [{ type: 'full-direct-override', when: { kind: 'track-in', values: [stepTrack] } }],
+        transitions: [{
+          event: 'done',
+          to: 'done',
+          guards: [{
+            type: 'field-nonempty',
+            field: 'plan',
+            when: { kind: 'track-not-in', values: [edgeTrack] },
+          }],
+        }],
+      },
+      { id: 'done', label: '', gate: null, skills: [], inputs: [], outputs: [], guards: [], transitions: [] },
+    ],
+  }
+}
+
 describe('writeWorkflowForApi', () => {
+  it('T-R7 create：step guard、edge guard、artifact requiredWhen 引用未知动态 track → 聚合拒写', async () => {
+    const root = await tempRoot()
+    const result = writeWorkflowForApi(
+      root,
+      'dynamic-refs',
+      workflowWithTrackReferences('dynamic-refs', 'ghost-step', 'ghost-edge', 'ghost-artifact'),
+    )
+
+    expect(result).toEqual({
+      ok: false,
+      errors: [
+        "workflow.steps[0].guards[0].when.values[0]: 未知 track 'ghost-step'",
+        "workflow.steps[0].transitions[0].guards[0].when.values[0]: 未知 track 'ghost-edge'",
+        "workflow.steps[0].artifacts[0].requiredWhen.values[0]: 未知 track 'ghost-artifact'",
+      ],
+    })
+    const { existsSync } = await import('node:fs')
+    expect(existsSync(join(root, '.pipeline', 'workflows', 'dynamic-refs.yaml'))).toBe(false)
+  })
+
+  it('T-R7 create：三个引用路径都指向 tracks.yaml 中真实动态 track → 保存成功', async () => {
+    const root = await tempRoot()
+    await mkdir(join(root, '.pipeline'), { recursive: true })
+    await writeFile(join(root, '.pipeline', 'tracks.yaml'), `version: 1
+tracks:
+  - id: mobile
+    label: Mobile
+    workflow:
+      default: default
+      allowed: '*'
+    policy_profile:
+      review_seed: pending
+      automation_eligible: true
+      coverage_profile: backend
+      routing:
+        enabled: false
+      skills:
+        matrix: true
+        profile: backend
+`, 'utf8')
+
+    expect(writeWorkflowForApi(
+      root,
+      'dynamic-refs',
+      workflowWithTrackReferences('dynamic-refs', 'mobile', 'mobile', 'mobile'),
+    )).toEqual({ ok: true })
+    expect(await readFile(join(root, '.pipeline', 'workflows', 'dynamic-refs.yaml'), 'utf8')).toContain(
+      'track_in: [mobile]',
+    )
+  })
+
+  it('T-R7 create：tracks.yaml 无法形成可信 track-id 快照 → fail-loud 且不落 workflow', async () => {
+    const root = await tempRoot()
+    await mkdir(join(root, '.pipeline'), { recursive: true })
+    await writeFile(join(root, '.pipeline', 'tracks.yaml'), `version: 1
+tracks:
+  - id: half-configured
+`, 'utf8')
+
+    const result = writeWorkflowForApi(root, 'onboarding', VALID_DEF)
+
+    expect(result.ok).toBe(false)
+    expect((result as { ok: false; errors: string[] }).errors).toEqual(expect.arrayContaining([
+      expect.stringContaining('.pipeline/tracks.yaml'),
+      expect.stringContaining('policy_profile'),
+    ]))
+    const { existsSync } = await import('node:fs')
+    expect(existsSync(join(root, '.pipeline', 'workflows', 'onboarding.yaml'))).toBe(false)
+  })
+
+  it('T-R7 update：新定义出现未知动态 track → 拒绝且旧 workflow 字节不变', async () => {
+    const root = await tempRoot()
+    expect(writeWorkflowForApi(root, 'onboarding', VALID_DEF)).toEqual({ ok: true })
+    const target = join(root, '.pipeline', 'workflows', 'onboarding.yaml')
+    const before = await readFile(target, 'utf8')
+
+    const result = writeWorkflowForApi(
+      root,
+      'onboarding',
+      workflowWithTrackReferences('onboarding', 'backend', 'frontend', 'removed-track'),
+    )
+
+    expect(result).toEqual({
+      ok: false,
+      errors: ["workflow.steps[0].artifacts[0].requiredWhen.values[0]: 未知 track 'removed-track'"],
+    })
+    expect(await readFile(target, 'utf8')).toBe(before)
+  })
+
+  it('当前 schema 不允许伪造 workflow→workflow 边：transition.to 即使等于现存 workflow 名也须是本表 step', async () => {
+    const root = await tempRoot()
+    expect(writeWorkflowForApi(root, 'onboarding', VALID_DEF)).toEqual({ ok: true })
+    const caller: WorkflowDef = {
+      name: 'caller',
+      steps: [{
+        id: 'start', label: '', gate: null, skills: [], inputs: [], outputs: [], guards: [],
+        transitions: [{ event: 'delegate', to: 'onboarding' }],
+      }],
+    }
+
+    const result = writeWorkflowForApi(root, 'caller', caller)
+
+    expect(result.ok).toBe(false)
+    expect((result as { ok: false; errors: string[] }).errors).toContain(
+      "step 'start' 的 transitions 里 event 'delegate' 的 to 'onboarding' 不存在",
+    )
+    const { existsSync } = await import('node:fs')
+    expect(existsSync(join(root, '.pipeline', 'workflows', 'caller.yaml'))).toBe(false)
+    expect(existsSync(join(root, '.pipeline', 'workflows', 'onboarding.yaml'))).toBe(true)
+  })
+
   it('合法 WorkflowDef → 真原子写入 .pipeline/workflows/<name>.yaml，{ok:true}', async () => {
     const root = await tempRoot()
     const result = writeWorkflowForApi(root, 'onboarding', VALID_DEF)
@@ -125,6 +316,16 @@ describe('writeWorkflowForApi', () => {
     const content = await readFile(join(root, '.pipeline', 'workflows', 'onboarding.yaml'), 'utf8')
     expect(content).toContain('name: onboarding')
     expect(content).toContain('- id: intake')
+  })
+
+  it('重复提交同一 create/update 请求保持既有覆盖语义：两次均 {ok:true}，规范化字节一致', async () => {
+    const root = await tempRoot()
+    expect(writeWorkflowForApi(root, 'onboarding', VALID_DEF)).toEqual({ ok: true })
+    const target = join(root, '.pipeline', 'workflows', 'onboarding.yaml')
+    const first = await readFile(target, 'utf8')
+
+    expect(writeWorkflowForApi(root, 'onboarding', VALID_DEF)).toEqual({ ok: true })
+    expect(await readFile(target, 'utf8')).toBe(first)
   })
 
   it('非法 WorkflowDef（validateWorkflow 拒绝）→ {ok:false, errors} + 不落盘', async () => {
@@ -155,6 +356,19 @@ describe('writeWorkflowForApi', () => {
     const content = await readFile(join(root, '.pipeline', 'workflows', 'onboarding.yaml'), 'utf8')
     expect(content).toContain('- id: extra')
   })
+
+  it('临时文件创建后发现正式目标不安全 → 失败且目标目录/sentinel 不变、无 tmp 残留', async () => {
+    const root = await tempRoot()
+    const dir = join(root, '.pipeline', 'workflows')
+    const target = join(dir, 'onboarding.yaml')
+    await mkdir(target, { recursive: true })
+    await writeFile(join(target, 'sentinel'), 'keep target', 'utf8')
+
+    expect(() => writeWorkflowForApi(root, 'onboarding', VALID_DEF)).toThrow()
+    expect((await lstat(target)).isDirectory()).toBe(true)
+    expect(await readFile(join(target, 'sentinel'), 'utf8')).toBe('keep target')
+    expect((await readdir(dir)).some((entry) => entry.includes('.tmp.'))).toBe(false)
+  })
 })
 
 describe('deleteWorkflowForApi', () => {
@@ -169,5 +383,98 @@ describe('deleteWorkflowForApi', () => {
   it('文件不存在 → false（不抛错）', async () => {
     const root = await tempRoot()
     expect(deleteWorkflowForApi(root, 'ghost')).toBe(false)
+  })
+
+  it('重复删除保持既有幂等分类：第一次 true，第二次 false', async () => {
+    const root = await tempRoot()
+    expect(writeWorkflowForApi(root, 'onboarding', VALID_DEF)).toEqual({ ok: true })
+
+    expect(deleteWorkflowForApi(root, 'onboarding')).toBe(true)
+    expect(deleteWorkflowForApi(root, 'onboarding')).toBe(false)
+  })
+
+  it('T-R7 inode CAS：扫描前 permit 钉住旧目标；扫描期间被原子覆盖 → 拒删新 inode', async () => {
+    const root = await tempRoot()
+    writeWorkflowForApi(root, 'onboarding', VALID_DEF)
+    const permit = captureWorkflowDeletePermit(root, 'onboarding')
+    expect(permit).not.toBeNull()
+
+    const replacement: WorkflowDef = {
+      ...VALID_DEF,
+      steps: [{ id: 'replacement', label: '', gate: null, skills: [], inputs: [], outputs: [], guards: [], transitions: [] }],
+    }
+    expect(writeWorkflowForApi(root, 'onboarding', replacement)).toEqual({ ok: true })
+
+    expect(() => deleteWorkflowForApi(root, 'onboarding', permit!)).toThrow(WorkflowDeleteConflictError)
+    expect(readWorkflowForApi(root, 'onboarding').steps[0]!.id).toBe('replacement')
+  })
+})
+
+describe('scanWorkflowReferencesForApi', () => {
+  it('T-R7 delete：loops.yaml 的持久 workflow_id binding 被列为删除引用', async () => {
+    const root = await tempRoot()
+    await mkdir(join(root, '.pipeline'), { recursive: true })
+    await writeFile(join(root, '.pipeline', 'loops.yaml'), `version: 1
+loops:
+  - id: release-loop
+    name: Release loop
+    kind: orchestrator
+    goal: Keep releases moving
+    cadence: 1h
+    risk: medium
+    runner: codex
+    change_prefix: release-
+    phases: [build, verify]
+    human_gates: [manual-review]
+    state: .superpowers/loops/progress.md
+    design_doc: docs/release.md
+    status: active
+    budget:
+      max_runs_per_day: 24
+      max_in_flight: 1
+      on_exceed: skip
+    kill_criteria: [manual-stop]
+    autonomy_level: L2
+    template_id: daily-triage
+    template_version: 1
+    workflow_id: onboarding
+`, 'utf8')
+    const anchor = captureWorkflowRootAnchor(root)
+    try {
+      const scan = scanWorkflowReferencesForApi(anchor, 'onboarding', builtinTrackRegistry())
+
+      expect(scan).toEqual({
+        references: [{ kind: 'loop-binding', source: 'loop:release-loop' }],
+        blockers: [],
+      })
+    } finally {
+      closeWorkflowRootAnchor(anchor)
+    }
+  })
+
+  it('T-R7 delete：automation policy template 的 recommendedWorkflow 进入统一引用图', async () => {
+    const root = await tempRoot()
+    const anchor = captureWorkflowRootAnchor(root)
+    try {
+      const scan = scanWorkflowReferencesForApi(anchor, 'default', builtinTrackRegistry())
+      const templates = scan.references.filter((reference) => reference.kind === 'policy-template-recommended')
+
+      expect(scan.blockers).toEqual([])
+      expect(templates).toHaveLength(7)
+      expect(templates).toEqual(expect.arrayContaining([
+        { kind: 'policy-template-recommended', source: 'template:daily-triage' },
+        { kind: 'policy-template-recommended', source: 'template:pr-babysitter' },
+      ]))
+    } finally {
+      closeWorkflowRootAnchor(anchor)
+    }
+  })
+})
+
+describe('production dist smoke', () => {
+  it('T-R7/Codex r1：真实 Node 可加载 server dist/workflows.js，不残留跨包 src/*.js 路径', async () => {
+    await expect(execFileAsync(process.execPath, [
+      '-e', "import('./packages/server/dist/workflows.js')",
+    ], { cwd: REPO_ROOT })).resolves.toMatchObject({ stderr: '' })
   })
 })

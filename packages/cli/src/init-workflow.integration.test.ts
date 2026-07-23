@@ -59,6 +59,11 @@ describe('真实 e2e —— init --workflow 落地自定义 workflow 的首个 s
     const content = await h.read('demo')
     expect(content).toMatch(/^workflow: default$/m)
     expect(content).toMatch(/^phase: open$/m)
+    // state-first CLI init 也必须留下 OpenSpec 继续点；正常入口中 richer openspec-propose 若已先
+    // 写这些文件，repository 的 wx scaffold 会保留它们，这里覆盖无 OpenSpec skill 的恢复路径。
+    expect(await h.readIn('demo', 'proposal.md')).toContain('TODO(open)')
+    expect(await h.readIn('demo', 'design.md')).toContain('TODO(open)')
+    expect(await h.readIn('demo', 'tasks.md')).toContain('- [ ]')
   })
 
   test('--workflow onboarding：真落 workflow=onboarding + phase=intake（workflow 首个 step 的 id，不是硬编码 open）', async () => {

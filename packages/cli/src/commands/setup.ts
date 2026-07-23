@@ -15,20 +15,30 @@
  * best-effort:软链任何失败只 WARN 不让 setup 崩（对齐 init.ts「注册表故障只 WARN」精神）。
  */
 import { execFileSync } from 'node:child_process'
-import { chmodSync, lstatSync, mkdirSync, readdirSync, readSync, readlinkSync, symlinkSync, unlinkSync } from 'node:fs'
+import { accessSync, chmodSync, constants as fsConstants, lstatSync, mkdirSync, readdirSync, readSync, readlinkSync, realpathSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { readAutomationJson } from '@pipeline-lite/automation'
 import { PREREQ_HINTS } from '@pipeline-lite/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
 import { nodeExecDocker, probeAfkReadiness, type AfkReadiness, type CredLight, type ExecDockerFn } from '../afkReadiness.js'
 import { loadSkillSources, type SkillSource, type SkillSourcesResult, type SkillTier } from '../skillSources.js'
+import {
+  hostFlag,
+  installedPipelineRoot,
+  isNativePipelineHost,
+  nativeInstallPlan,
+  selectPipelineHost,
+  type NativePipelineHost,
+  type PipelineHost,
+  type PipelineHostFlags,
+} from './plugin-host.js'
 
 // ── 注入面（测试注入临时 HOME / spy;真实现 = node:fs + os.homedir）──────────────────
 export interface SetupEnv {
   /** 用户 home（真实现 os.homedir();~/.local/bin 定位锚）。 */
   homeDir(): string
-  /** $CLAUDE_PLUGIN_ROOT（插件安装根）;未设 → null（dev 回退 selfPath）。 */
+  /** $PLUGIN_ROOT / $CLAUDE_PLUGIN_ROOT（插件安装根）;未设 → null（dev 回退 selfPath）。 */
   pluginRoot(): string | null
   /** 本 CLI bundle 自身路径（真实现 resolve(process.argv[1]);pluginRoot 缺失时的 dev 回退源）。 */
   selfPath(): string
@@ -38,6 +48,8 @@ export interface SetupEnv {
   readSymlink(path: string): string | null
   /** lstat 存在性（软链本身也算存在,含悬空软链;判「存在但非软链」用）。 */
   pathExists(path: string): boolean
+  /** PATH 中是否已有可执行命令；只读探测，用于全局 npm 工具的幂等差集。 */
+  commandExists(name: string): boolean
   /** 列目录直接子项名（仅目录/软链，缺目录/无权限 → []，fail-safe）——plugin-cache 双层扫用。 */
   listDir(dir: string): string[]
   /** 建软链 target→linkPath。 */
@@ -46,6 +58,8 @@ export interface SetupEnv {
   removePath(path: string): void
   /** chmod +x（源 bundle 带 shebang,置可执行位;best-effort 补位）。 */
   chmodExec(path: string): void
+  /** 写入受控的用户级 pipeline 配置（自动更新 opt-in）。 */
+  writeText(path: string, text: string): void
   /**
    * 跑一条命令（技能安装 / `--list` 核 id）——真实现 execFileSync 捕获退出码+stdout+stderr（不抛,非零折算 code）;
    * 测试注入 spy（记录调用、伪造成功/失败），不起真装。dry-run 路径**绝不调用**（零执行不变量）。
@@ -61,10 +75,20 @@ export interface SetupEnv {
 export const REAL_SETUP_ENV: SetupEnv = {
   homeDir: () => homedir(),
   pluginRoot: () => {
-    const r = process.env.CLAUDE_PLUGIN_ROOT
+    const r = process.env.PLUGIN_ROOT ?? process.env.CLAUDE_PLUGIN_ROOT
     return r !== undefined && r.trim() !== '' ? r : null
   },
-  selfPath: () => resolve(process.argv[1] ?? ''),
+  selfPath: () => {
+    const candidate = resolve(process.argv[1] ?? '')
+    // The user-facing launcher is a symlink under ~/.local/bin.  Follow it before deriving the
+    // packaged root so `pipeline dashboard` and a later `pipeline update` do not mistake ~/.local
+    // for a plugin checkout.
+    try {
+      return realpathSync(candidate)
+    } catch {
+      return candidate
+    }
+  },
   mkdirp: (dir) => { mkdirSync(dir, { recursive: true }) },
   readSymlink: (path) => {
     try {
@@ -81,6 +105,18 @@ export const REAL_SETUP_ENV: SetupEnv = {
       return false
     }
   },
+  commandExists: (name) => {
+    for (const dir of (process.env.PATH ?? '').split(':')) {
+      if (dir === '') continue
+      try {
+        accessSync(join(dir, name), fsConstants.X_OK)
+        return true
+      } catch {
+        // 继续检查下一个 PATH 目录。
+      }
+    }
+    return false
+  },
   listDir: (dir) => {
     try {
       return readdirSync(dir, { withFileTypes: true })
@@ -93,6 +129,7 @@ export const REAL_SETUP_ENV: SetupEnv = {
   makeSymlink: (target, linkPath) => { symlinkSync(target, linkPath) },
   removePath: (path) => { unlinkSync(path) },
   chmodExec: (path) => { chmodSync(path, 0o755) },
+  writeText: (path, text) => { writeFileSync(path, text, 'utf8') },
   runCommand: (cmd, args) => {
     try {
       const stdout = execFileSync(cmd, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
@@ -124,9 +161,19 @@ export const REAL_SETUP_ENV: SetupEnv = {
 
 // ── 软链源解析 + 上 PATH ────────────────────────────────────────────────────────────
 
-/** 软链源:$CLAUDE_PLUGIN_ROOT/packages/cli/dist/pipeline.mjs 优先,否则 dev 回退 selfPath()。 */
-export function resolvePipelineSource(env: SetupEnv): string {
+/**
+ * 插件根优先取宿主注入；终端直接执行 bundle 时，从 dist/pipeline.mjs 反推仓根。
+ * 这样 `pipeline update` 在宿主重新安装后可用刚解析出的安装根刷新 launcher，而不依赖旧 hook env。
+ */
+export function resolvePipelineRoot(env: SetupEnv): string {
   const root = env.pluginRoot()
+  if (root !== null) return root
+  return resolve(dirname(env.selfPath()), '..', '..', '..')
+}
+
+/** 软链源:插件根/packages/cli/dist/pipeline.mjs；显式根仅供升级后切换 launcher。 */
+export function resolvePipelineSource(env: SetupEnv, rootOverride?: string): string {
+  const root = rootOverride ?? env.pluginRoot()
   if (root !== null) return join(root, 'packages', 'cli', 'dist', 'pipeline.mjs')
   return env.selfPath()
 }
@@ -136,9 +183,9 @@ export function resolvePipelineSource(env: SetupEnv): string {
  * 幂等:已存在且指向同源 → 跳过;指向异源(或存在但非软链)→ 告警覆盖（自定:新装覆盖旧指向）。
  * best-effort:任何失败只 WARN 不让 setup 崩。软链本身不改 $PATH——若 ~/.local/bin 不在 PATH,附一行提示。
  */
-export function ensurePipelineOnPath(deps: CliDeps, env: SetupEnv = REAL_SETUP_ENV): void {
+export function ensurePipelineOnPath(deps: CliDeps, env: SetupEnv = REAL_SETUP_ENV, rootOverride?: string): void {
   try {
-    const source = resolvePipelineSource(env)
+    const source = resolvePipelineSource(env, rootOverride)
     const binDir = join(env.homeDir(), '.local', 'bin')
     const link = join(binDir, 'pipeline')
     env.mkdirp(binDir) // 缺 ~/.local/bin 时建目录
@@ -176,25 +223,191 @@ function chmodExecBestEffort(env: SetupEnv, source: string): void {
 
 // ── 全流程开场白（四段预告,纯呈现）─────────────────────────────────────────────────────
 
-export interface SetupOpts {
+export interface SetupOpts extends PipelineHostFlags {
   dryRun?: boolean
   yes?: boolean
+  /** Explicit target only applies to non-native adapters; defaults to current project. */
+  target?: string
+  /** Opt-in: native host SessionStart performs a throttled marketplace refresh/reinstall. */
+  autoUpdate?: boolean
 }
 
 /** 全流程开场白:向用户预告下面四段会发生什么（纯 stdout 呈现,无副作用;真逻辑在各段自己的函数里）。 */
-function printPlanSkeleton(deps: CliDeps, opts: SetupOpts): void {
-  deps.io.out('[setup] 全功能就绪引导 —— 计划骨架')
-  deps.io.out('  1. PATH 软链:把 pipeline 软链到 ~/.local/bin（本批已实现）')
-  deps.io.out('  2. 技能安装（Phase 2,本批已实装）:读 registry 按 tool 分组选装（详见下方技能计划）')
-  deps.io.out('  3. 运行时检查（Phase 3,已实装）:docker/镜像/两 runner 凭证就绪清单 + 缺镜像一键构建（本流程末尾直接跑;--dry-run 只提示见 pipeline setup runtime）')
-  deps.io.out('  4. 全功能就绪清单（待聚合）:逐项在位/降级 红黄绿汇总')
+function printPlanSkeleton(deps: CliDeps, opts: SetupOpts, host: PipelineHost): void {
+  deps.io.out(`[setup] ${hostFlag(host)} 全功能就绪引导 —— 计划骨架`)
+  deps.io.out('  1. 宿主安装:只验证/部署所选宿主，不会同时改动其他宿主。')
+  deps.io.out('  2. PATH 入口:把 pipeline 软链到 ~/.local/bin（升级后会切换到新插件 bundle）。')
+  deps.io.out('  3. 内置技能:验证本插件随包的 default workflow skills；不拉第三方 marketplace。')
+  deps.io.out('  4. 运行时检查:docker/镜像/两 runner 凭证就绪清单（本流程末尾直接跑;--dry-run 只提示见 pipeline setup runtime）。')
+  deps.io.out('  5. 全功能红黄绿汇总:安装后运行 pipeline doctor --json 获取全机汇总。')
   if (opts.dryRun) deps.io.out('  （--dry-run:仅打印计划,未软链、未写任何文件）')
+}
+
+function autoUpdateConfigPath(env: SetupEnv): string {
+  return join(env.homeDir(), '.config', 'pipeline-lite', 'auto-update.conf')
+}
+
+/** Native host only: write a tiny explicit preference consumed by hooks/auto-update.sh. */
+function configureAutoUpdate(deps: CliDeps, env: SetupEnv, host: PipelineHost, enabled: boolean): number {
+  if (!enabled) return 0
+  if (!isNativePipelineHost(host)) {
+    deps.io.err(`ERROR: ${hostFlag(host)} 没有原生 marketplace，不能启用自动更新；请先更新承载该 adapter 的 Codex 或 Claude 插件。`)
+    return 1
+  }
+  try {
+    const config = autoUpdateConfigPath(env)
+    env.mkdirp(dirname(config))
+    env.writeText(config, `host=${host}\nenabled=true\n`)
+    deps.io.out(`[setup] 已启用 ${hostFlag(host)} 自动更新（每天最多检查一次；新版本安装后请新开会话加载技能与 hooks）。`)
+    return 0
+  } catch (error) {
+    deps.io.err(`WARN: 无法写入自动更新配置（不影响当前安装）:${errMsg(error)}`)
+    return 0
+  }
+}
+
+/** Codex intentionally keeps third-party hook execution behind one explicit local trust decision. */
+function printCodexHookTrust(deps: CliDeps): void {
+  deps.io.out('[setup] Codex 已安装 pipeline hooks；为启用正常对话自动路由，请在 Codex 输入 /hooks，并信任 pipeline-lite。')
+  deps.io.out('        这是 Codex 的一次性本机安全确认；未信任时 skills 仍可用，但 SessionStart/UserPromptSubmit hooks 不会执行。')
+}
+
+/** Verify a resolved plugin root before mutating PATH or an adapter target. */
+export function verifyPackagedAssets(deps: CliDeps, env: SetupEnv, root: string, dryRun: boolean): number {
+  // The launcher is deliberately usable from any project directory.  Resolve the verifier from
+  // the host-owned plugin root, rather than from process.cwd(), or a perfectly valid installed
+  // plugin would fail verification whenever the caller was not sitting in this repository.
+  const command = [join(root, 'tools', 'verify-skills.sh'), '--quiet', '--root', root]
+  deps.io.out(`[setup] 插件资产校验: bash ${command.join(' ')}`)
+  if (dryRun) return 0
+  const result = env.runCommand('bash', command)
+  if (result.code === 0) {
+    deps.io.out('[setup] 插件资产完整：hooks、manifests 与内置 skills 已通过校验。')
+    return 0
+  }
+  deps.io.err(`ERROR: 插件资产校验失败：${result.stderr.trim() || result.stdout.trim() || `退出码 ${result.code}`}`)
+  return 1
+}
+
+function commandText(cmd: string, args: readonly string[]): string {
+  return [cmd, ...args].join(' ')
+}
+
+/** Marketplace add is idempotent on some host versions but reports a non-zero duplicate on others. */
+function isDuplicateMarketplaceResult(result: { stdout: string; stderr: string }): boolean {
+  return /already|exists|registered|duplicate/i.test(`${result.stdout}\n${result.stderr}`)
+}
+
+/**
+ * Install the single release plugin into the selected native host and resolve the root from the
+ * host's own inventory.  Do not infer a cache path: both hosts may change their cache layout.
+ */
+function installNativePlugin(
+  deps: CliDeps,
+  env: SetupEnv,
+  host: NativePipelineHost,
+): string | null {
+  const plan = nativeInstallPlan(host)
+  let inventory = ''
+  for (let index = 0; index < plan.length; index += 1) {
+    const item = plan[index]!
+    deps.io.out(`[setup] $ ${commandText(item.cmd, item.args)}`)
+    const result = env.runCommand(item.cmd, [...item.args])
+    if (result.stdout.trim() !== '') deps.io.out(result.stdout.trimEnd())
+    if (result.code === 0) {
+      if (index === plan.length - 1) inventory = result.stdout
+      continue
+    }
+
+    // Existing marketplaces are a normal idempotent setup case; every other marketplace failure
+    // is surfaced rather than being swallowed (network/auth errors must remain actionable).
+    if (index === 0 && isDuplicateMarketplaceResult(result)) {
+      deps.io.out(`[setup] ${hostFlag(host)} marketplace 已存在，继续验证插件。`)
+      continue
+    }
+
+    // A few host versions reject an already-installed plugin.  Query inventory once and accept
+    // that outcome only if the requested release plugin is actually present.
+    if (index === 1) {
+      const inventoryCommand = plan[plan.length - 1]!
+      const inventoryResult = env.runCommand(inventoryCommand.cmd, [...inventoryCommand.args])
+      const existingRoot = inventoryResult.code === 0
+        ? installedPipelineRoot(host, inventoryResult.stdout)
+        : null
+      if (existingRoot !== null) {
+        deps.io.out(`[setup] ${hostFlag(host)} 已有 pipeline-lite，复用宿主登记的安装。`)
+        return existingRoot
+      }
+    }
+
+    deps.io.err(
+      `ERROR: ${commandText(item.cmd, item.args)} 失败：${result.stderr.trim() || result.stdout.trim() || `退出码 ${result.code}`}`,
+    )
+    return null
+  }
+  const root = installedPipelineRoot(host, inventory)
+  if (root === null) {
+    deps.io.err(`ERROR: ${hostFlag(host)} 插件清单中没有 pipeline-lite；未切换 launcher。`)
+  }
+  return root
+}
+
+/** Host-specific installation that keeps native marketplaces and non-native adapters separate. */
+export function cmdSetupHost(
+  deps: CliDeps,
+  host: PipelineHost,
+  opts: SetupOpts,
+  env: SetupEnv = REAL_SETUP_ENV,
+): number {
+  if (opts.autoUpdate && !isNativePipelineHost(host)) {
+    deps.io.err(`ERROR: ${hostFlag(host)} 是 adapter，自动更新由承载它的 Codex 或 Claude 插件负责；请改用 pipeline setup --codex --auto-update 或 --claude --auto-update。`)
+    return 1
+  }
+
+  if (opts.dryRun) {
+    if (isNativePipelineHost(host)) {
+      deps.io.out(`[setup] ${hostFlag(host)}:将安装本仓 marketplace 中的唯一 pipeline-lite 插件。`)
+      for (const item of nativeInstallPlan(host)) deps.io.out(`[setup] $ ${commandText(item.cmd, item.args)}`)
+      deps.io.out('[setup] 将用宿主插件清单解析安装根，再刷新 ~/.local/bin/pipeline。')
+      if (host === 'codex') deps.io.out('[setup] 安装后需在 Codex 输入 /hooks 并信任 pipeline-lite，正常对话路由才会启用。')
+    } else {
+      const root = resolvePipelineRoot(env)
+      const assetCode = verifyPackagedAssets(deps, env, root, true)
+      if (assetCode !== 0) return assetCode
+      deps.io.out(`[setup] ${hostFlag(host)}:将运行打包 adapter → ${opts.target ?? deps.cwd}`)
+    }
+    if (opts.autoUpdate) deps.io.out(`[setup] 将启用 ${hostFlag(host)} 自动更新偏好。`)
+    return 0
+  }
+
+  if (isNativePipelineHost(host)) {
+    const root = installNativePlugin(deps, env, host)
+    if (root === null) return 1
+    const assetCode = verifyPackagedAssets(deps, env, root, false)
+    if (assetCode !== 0) return assetCode
+    ensurePipelineOnPath(deps, env, root)
+    if (host === 'codex') printCodexHookTrust(deps)
+  } else {
+    const root = resolvePipelineRoot(env)
+    const assetCode = verifyPackagedAssets(deps, env, root, false)
+    if (assetCode !== 0) return assetCode
+    const adapter = join(root, 'adapters', 'install.sh')
+    const args = [adapter, hostFlag(host), '--target', opts.target ?? deps.cwd, '--yes']
+    deps.io.out(`[setup] $ bash ${args.join(' ')}`)
+    const result = env.runCommand('bash', args)
+    if (result.stdout.trim() !== '') deps.io.out(result.stdout.trimEnd())
+    if (result.code !== 0) {
+      deps.io.err(`ERROR: ${hostFlag(host)} adapter 安装失败：${result.stderr.trim() || `退出码 ${result.code}`}`)
+      return 1
+    }
+  }
+  return configureAutoUpdate(deps, env, host, opts.autoUpdate === true)
 }
 
 // ── 技能安装段（Phase 2 · S2）:读 registry → 分组命令 → 幂等差集 → 计划 → 逐条容错 → 汇总 ──────
 
-/** 命令分组（执行顺序即此序:marketplace add 必在 agents-inc install 之前）。 */
-export type CmdGroup = 'marketplace-add' | 'claude-plugin' | 'skills-cli' | 'npm'
+/** 命令分组；Codex 安装面先行，同时保留 Claude Code 兼容安装。 */
+export type CmdGroup = 'codex-marketplace-add' | 'codex-plugin' | 'marketplace-add' | 'claude-plugin' | 'skills-cli' | 'npm'
 
 /** 一条待执行命令 + 计划呈现所需元信息（官方/第三方、受影响全局目录、覆盖 token、tier）。 */
 export interface PlannedCommand {
@@ -205,6 +418,8 @@ export interface PlannedCommand {
   tokens: string[]
   /** skills-cli 的 `--skill` 名（bare-add 或非 skills-cli 时空）——计划里「装哪几个」列出可见。 */
   names: string[]
+  /** skills-cli 精确请求项；用于命令 exit 0 后按真实用户级目录复核，防部分匹配假成功。 */
+  skillRequests?: Array<{ token: string; name: string; tier: SkillTier }>
   /** 单技能仓 bare `npx skills add <source>`（无 --skill;仅白名单单技能源）。 */
   bareAdd: boolean
   source: string
@@ -243,6 +458,7 @@ function marketplaceRepo(source: string): string {
  */
 function skillInstalled(env: SetupEnv, name: string): boolean {
   const home = env.homeDir()
+  if (env.pathExists(join(home, '.codex', 'skills', name))) return true
   if (env.pathExists(join(home, '.claude', 'skills', name))) return true
   if (env.pathExists(join(home, '.agents', 'skills', name))) return true
   const cache = join(home, '.claude', 'plugins', 'cache')
@@ -252,6 +468,22 @@ function skillInstalled(env: SetupEnv, name: string): boolean {
   return false
 }
 
+function pluginInstalled(env: SetupEnv, runner: 'codex' | 'claude', source: string, id: string): boolean {
+  const base = runner === 'codex' ? '.codex' : '.claude'
+  return env.pathExists(join(env.homeDir(), base, 'plugins', 'cache', source, id))
+}
+
+function marketplaceInstalled(env: SetupEnv, runner: 'codex' | 'claude', source: string): boolean {
+  if (REGISTERED_MARKETPLACES.has(source)) return true
+  const home = env.homeDir()
+  if (runner === 'codex') {
+    return env.pathExists(join(home, '.codex', '.tmp', 'marketplaces', source))
+      || env.pathExists(join(home, '.codex', 'plugins', 'cache', source))
+  }
+  return env.pathExists(join(home, '.claude', 'plugins', 'marketplaces', source))
+    || env.pathExists(join(home, '.claude', 'plugins', 'cache', source))
+}
+
 /** 命令可读串（计划/汇总用）。 */
 function cmdStr(c: { cmd: string; args: string[] }): string {
   return [c.cmd, ...c.args].join(' ')
@@ -259,63 +491,88 @@ function cmdStr(c: { cmd: string; args: string[] }): string {
 
 /**
  * 读 registry → 按 tool 分组生成命令 + 幂等差集（纯函数,只经 env.pathExists 读、绝不写/exec）。
- *   claude-plugin:`claude plugin install <skill||token>@<source>`;source 非官方非已注册 → 先 `marketplace add`（去重）;
- *                 note 含「已装」（superpowers）或探测已装 → 剔除。同 <id>@<source> 多 token dedup 成一条。
+ *   claude-plugin:Codex-first 双装：`codex plugin add` + `claude plugin install`；两侧各自按 cache
+ *                 幂等，非官方 marketplace 各自先 add。同 <id>@<source> 多 token dedup 成一条。
  *   skills-cli   :按 source 聚合 `--skill <名…>`（名=skill||token);单技能仓（1 token 且无 skill 字段）→ bare add（白名单）;
  *                 已装 token 从 --skill 剔除,整组已装则整条剔除。附 `--list` 核 id 命令。
- *   npm          :`npm install -g <source>`（openspec;npm 全局位不在三探测点,不做幂等剔除）。
+ *   npm          :`npm install -g <source>`；registry 声明 bin 且该命令已在 PATH 时幂等剔除。
  *   builtin/bundled:不生成命令（记入 noInstall）。
  *   engine       :任何 token 的 engine（如 browser-qa→playwright@claude-plugins-official）→ 附加 claude-plugin 命令,dedup。
  */
 export function buildSkillsPlan(sources: SkillSource[], env: SetupEnv): SkillsPlan {
   const alreadyInstalled: Array<{ token: string; where: string }> = []
   const noInstall: Array<{ token: string; tool: string }> = []
-  const marketplaceAdds = new Map<string, PlannedCommand>() // key: repo
-  const pluginCmds = new Map<string, PlannedCommand>() // key: <id>@<source>
+  const codexMarketplaceAdds = new Map<string, PlannedCommand>()
+  const marketplaceAdds = new Map<string, PlannedCommand>()
+  const codexPluginCmds = new Map<string, PlannedCommand>()
+  const pluginCmds = new Map<string, PlannedCommand>()
   const skillsBySource = new Map<string, SkillSource[]>() // source → tokens（保序）
   const npmCmds = new Map<string, PlannedCommand>() // key: source
 
-  const ensureMarketplace = (source: string, official: boolean): void => {
-    if (official || REGISTERED_MARKETPLACES.has(source)) return // 官方/已注册无需 add
+  const ensureMarketplace = (runner: 'codex' | 'claude', source: string, official: boolean): void => {
+    if (official || marketplaceInstalled(env, runner, source)) return
     const repo = marketplaceRepo(source)
-    if (marketplaceAdds.has(repo)) return // 去重一次
-    marketplaceAdds.set(repo, {
-      group: 'marketplace-add', cmd: 'claude', args: ['plugin', 'marketplace', 'add', repo],
-      tokens: [], names: [], bareAdd: false, source, official: false, tier: 'optional',
-      globalDir: '~/.claude', note: '非官方 marketplace',
-    })
+    const target = runner === 'codex' ? codexMarketplaceAdds : marketplaceAdds
+    if (target.has(repo)) return
+    target.set(repo, runner === 'codex'
+      ? {
+          group: 'codex-marketplace-add', cmd: 'codex', args: ['plugin', 'marketplace', 'add', repo],
+          tokens: [], names: [], bareAdd: false, source, official: false, tier: 'optional',
+          globalDir: '~/.codex', note: 'Codex 非官方 marketplace',
+        }
+      : {
+          group: 'marketplace-add', cmd: 'claude', args: ['plugin', 'marketplace', 'add', repo],
+          tokens: [], names: [], bareAdd: false, source, official: false, tier: 'optional',
+          globalDir: '~/.claude', note: 'Claude 非官方 marketplace',
+        })
   }
 
-  const addPlugin = (
-    id: string, source: string, official: boolean, tier: SkillTier, tokenLabel: string, engineNote?: string,
+  const addPluginCommand = (
+    target: Map<string, PlannedCommand>, runner: 'codex' | 'claude', id: string, source: string,
+    official: boolean, tier: SkillTier, tokenLabel: string, engineNote?: string,
   ): void => {
-    if (skillInstalled(env, id)) { // 幂等:插件缓存在位 → 剔除
-      alreadyInstalled.push({ token: tokenLabel, where: `~/.claude/plugins/cache/${id}` })
-      return
-    }
-    ensureMarketplace(source, official)
+    ensureMarketplace(runner, source, official)
     const key = `${id}@${source}`
-    const existing = pluginCmds.get(key)
-    if (existing) { // dedup:同插件多 token（如 commit-commands 两命令 token）
+    const existing = target.get(key)
+    if (existing) {
       existing.tokens.push(tokenLabel)
       existing.tier = higherTier(existing.tier, tier)
       if (engineNote) existing.note = existing.note ? `${existing.note}；${engineNote}` : engineNote
       return
     }
-    pluginCmds.set(key, {
-      group: 'claude-plugin', cmd: 'claude', args: ['plugin', 'install', key],
-      tokens: [tokenLabel], names: [], bareAdd: false, source, official, tier,
-      globalDir: '~/.claude', note: engineNote,
-    })
+    target.set(key, runner === 'codex'
+      ? {
+          group: 'codex-plugin', cmd: 'codex', args: ['plugin', 'add', key],
+          tokens: [tokenLabel], names: [], bareAdd: false, source, official, tier,
+          globalDir: '~/.codex', note: engineNote,
+        }
+      : {
+          group: 'claude-plugin', cmd: 'claude', args: ['plugin', 'install', key],
+          tokens: [tokenLabel], names: [], bareAdd: false, source, official, tier,
+          globalDir: '~/.claude', note: engineNote,
+        })
+  }
+
+  const addPlugin = (
+    id: string, source: string, official: boolean, tier: SkillTier, tokenLabel: string, engineNote?: string,
+  ): void => {
+    const codexReady = pluginInstalled(env, 'codex', source, id)
+    const claudeReady = pluginInstalled(env, 'claude', source, id)
+    if (codexReady && claudeReady) {
+      alreadyInstalled.push({ token: tokenLabel, where: `Codex + Claude plugin cache:${id}` })
+      return
+    }
+    if (!codexReady) addPluginCommand(codexPluginCmds, 'codex', id, source, official, tier, tokenLabel, engineNote)
+    if (!claudeReady) addPluginCommand(pluginCmds, 'claude', id, source, official, tier, tokenLabel, engineNote)
   }
 
   for (const s of sources) {
+    if (s.unavailable === true) {
+      noInstall.push({ token: s.token, tool: 'unavailable-upstream' })
+      continue
+    }
     if (s.tool === 'builtin' || s.tool === 'bundled') { noInstall.push({ token: s.token, tool: s.tool }); continue }
     if (s.tool === 'claude-plugin') {
-      if (s.note?.includes('已装')) { // superpowers 类:note 标注已装 → 跳过
-        alreadyInstalled.push({ token: s.token, where: '本机通常已装（registry note 标注）' })
-        continue
-      }
       addPlugin(s.skill ?? s.token, s.source, s.official, s.tier, s.token)
       continue
     }
@@ -326,6 +583,10 @@ export function buildSkillsPlan(sources: SkillSource[], env: SetupEnv): SkillsPl
       continue
     }
     if (s.tool === 'npm') {
+      if (s.bin !== undefined && env.commandExists(s.bin)) {
+        alreadyInstalled.push({ token: s.token, where: `PATH:${s.bin}` })
+        continue
+      }
       const existing = npmCmds.get(s.source)
       if (existing) { existing.tokens.push(s.token); existing.tier = higherTier(existing.tier, s.tier); continue }
       npmCmds.set(s.source, {
@@ -338,6 +599,7 @@ export function buildSkillsPlan(sources: SkillSource[], env: SetupEnv): SkillsPl
 
   // 引擎:任何 token 的 engine 字段 → 附加 claude-plugin 命令（去重进 pluginCmds;playwright 与显式 token 天然合并）。
   for (const s of sources) {
+    if (s.unavailable === true) continue
     if (!s.engine) continue
     const at = s.engine.lastIndexOf('@')
     if (at <= 0) continue
@@ -359,7 +621,7 @@ export function buildSkillsPlan(sources: SkillSource[], env: SetupEnv): SkillsPl
     for (const t of toInstall) tier = higherTier(tier, t.tier)
     if (bareAdd) {
       skillsCliCmds.push({
-        group: 'skills-cli', cmd: 'npx', args: ['skills', 'add', source],
+        group: 'skills-cli', cmd: 'npx', args: ['skills', 'add', source, '-g', '-y'],
         tokens: toInstall.map((t) => t.token), names: [], bareAdd: true, source, official: group[0]!.official, tier,
         globalDir: '~/.agents/skills',
       })
@@ -367,16 +629,21 @@ export function buildSkillsPlan(sources: SkillSource[], env: SetupEnv): SkillsPl
       const names = toInstall.map((t) => t.skill ?? t.token)
       skillsCliCmds.push({
         group: 'skills-cli', cmd: 'npx',
-        args: ['skills', 'add', source, ...names.flatMap((n) => ['--skill', n])],
+        args: ['skills', 'add', source, ...names.flatMap((n) => ['--skill', n]), '-g', '-y'],
         tokens: toInstall.map((t) => t.token), names, bareAdd: false, source, official: group[0]!.official, tier,
+        skillRequests: toInstall.map((t) => ({ token: t.token, name: t.skill ?? t.token, tier: t.tier })),
         globalDir: '~/.agents/skills',
         listCmd: { cmd: 'npx', args: ['skills', 'add', source, '--list'] },
       })
     }
   }
 
-  // 执行序:marketplace add（在前,让 agents-inc install 有源）→ claude-plugin install → skills-cli → npm。
-  const commands = [...marketplaceAdds.values(), ...pluginCmds.values(), ...skillsCliCmds, ...npmCmds.values()]
+  // Codex-first；每个 runtime 的 marketplace add 都严格先于其 plugin install。
+  const commands = [
+    ...codexMarketplaceAdds.values(), ...codexPluginCmds.values(),
+    ...marketplaceAdds.values(), ...pluginCmds.values(),
+    ...skillsCliCmds, ...npmCmds.values(),
+  ]
   return { commands, alreadyInstalled, noInstall }
 }
 
@@ -385,11 +652,13 @@ function renderSkillsPlan(deps: CliDeps, plan: SkillsPlan): void {
   const dirs = [...new Set(plan.commands.map((c) => c.globalDir))]
   deps.io.out(
     `[setup skills] 技能安装计划 —— 待装 ${plan.commands.length} 条命令 / 已装跳过 ${plan.alreadyInstalled.length} / ` +
-      `内置·本仓自带 ${plan.noInstall.length}（无需安装）`,
+      `无需或上游不可安装 ${plan.noInstall.length}`,
   )
   if (dirs.length > 0) deps.io.out(`  受影响全局目录:${dirs.join('、')}`)
 
   const sections: Array<[CmdGroup, string]> = [
+    ['codex-marketplace-add', 'Codex 插件 · marketplace add'],
+    ['codex-plugin', 'Codex 插件安装'],
     ['marketplace-add', 'claude 插件 · marketplace add（非官方源需先添加）'],
     ['claude-plugin', 'claude 插件安装'],
     ['skills-cli', 'skills CLI · 按名选装（禁整装）'],
@@ -417,7 +686,9 @@ interface ExecOutcome {
   drifts: Array<{ source: string; name: string }> // `--list` 未命中的 token 名（可能已改名）
 }
 
-/** 分组逐条执行（注入 exec）:skills-cli 先 `--list` 核 id 记漂移,再装;单条失败记入汇总不 abort 其余。 */
+/** 分组逐条执行（注入 exec）:skills-cli 先 `--list` 核 id 记漂移,再装;单条失败记入汇总不 abort 其余。
+ * 非 bare 的 skills-cli 即使命令 exit 0，也须逐项确认真实用户级安装目录已出现；上游 CLI 会在
+ * 部分 `--skill` 名不存在时仍安装其余子集并 exit 0，不能据此把整组冒充成功。 */
 function executeSkillsPlan(deps: CliDeps, plan: SkillsPlan, env: SetupEnv): ExecOutcome {
   const out: ExecOutcome = { successes: [], failures: [], drifts: [] }
   for (const c of plan.commands) {
@@ -431,8 +702,27 @@ function executeSkillsPlan(deps: CliDeps, plan: SkillsPlan, env: SetupEnv): Exec
     try {
       const r = env.runCommand(c.cmd, c.args)
       if (r.stdout.trim() !== '') deps.io.out(r.stdout.trimEnd())
-      if (r.code === 0) out.successes.push(c)
-      else out.failures.push({ cmd: c, detail: r.stderr.trim() !== '' ? r.stderr.trim() : `退出码 ${r.code}` })
+      if (r.code !== 0) {
+        out.failures.push({ cmd: c, detail: r.stderr.trim() !== '' ? r.stderr.trim() : `退出码 ${r.code}` })
+        continue
+      }
+      const missing = (c.skillRequests ?? []).filter((request) => !skillInstalled(env, request.name))
+      if (missing.length > 0) {
+        let tier: SkillTier = 'optional'
+        for (const request of missing) tier = higherTier(tier, request.tier)
+        out.failures.push({
+          cmd: {
+            ...c,
+            tier,
+            tokens: missing.map((request) => request.token),
+            names: missing.map((request) => request.name),
+            skillRequests: missing,
+          },
+          detail: `安装命令 exit 0，但用户级技能目录仍缺失：${missing.map((request) => request.name).join('、')}`,
+        })
+      } else {
+        out.successes.push(c)
+      }
     } catch (e) {
       out.failures.push({ cmd: c, detail: errMsg(e) })
     }
@@ -525,6 +815,10 @@ export interface RuntimeEnv {
   exec: ExecDockerFn
   /** 宿主 env 快照（凭证灯读 CLAUDE_CODE_OAUTH_TOKEN/OPENAI_API_KEY/CODEX_HOME）。 */
   hostEnv: Record<string, string | undefined>
+  /** Codex CLI 缺省登录目录；测试缺省不注入，避免读取开发机真实凭证态。 */
+  defaultCodexHome?: string
+  /** 默认目录 auth.json 可读探针；只回布尔，绝不读/回凭证内容。 */
+  canReadFile?: (path: string) => boolean
   /** 配置镜像解析（同 afk run 口径:.pipeline/automation.json 的 image ?? 内置 sandcastle:local）。 */
   resolveImage: (cwd: string) => string
 }
@@ -532,6 +826,15 @@ export interface RuntimeEnv {
 export const REAL_RUNTIME_ENV: RuntimeEnv = {
   exec: nodeExecDocker,
   hostEnv: process.env,
+  defaultCodexHome: join(homedir(), '.codex'),
+  canReadFile: (path) => {
+    try {
+      accessSync(path, fsConstants.R_OK)
+      return true
+    } catch {
+      return false
+    }
+  },
   resolveImage: (cwd) => readAutomationJson(cwd).image ?? 'sandcastle:local',
 }
 
@@ -540,7 +843,12 @@ const MISS_TAG = '[缺失]'
 
 /** 凭证灯人读串:已配标 source（宿主 env/secrets 文件），永不回显值。 */
 function credSource(light: CredLight): string {
-  return `已配（${light.source === 'host-env' ? '宿主 env' : 'secrets 文件'}）`
+  const source = light.source === 'host-env'
+    ? '宿主 env'
+    : light.source === 'default-home'
+      ? '默认 ~/.codex 登录'
+      : 'secrets 文件'
+  return `已配（${source}）`
 }
 
 /** 「怎么拿」引导行缩进（视觉从属于其上的 [缺失] 行;走 kernel PREREQ_HINTS 单一真相源）。 */
@@ -584,8 +892,14 @@ function renderRuntimeReadiness(deps: CliDeps, r: AfkReadiness, dryRun: boolean)
   // 两 runner 凭证对称:claude-code 的 CLAUDE_CODE_OAUTH_TOKEN + codex 的 OPENAI_API_KEY/CODEX_HOME
   // 各自缺时附「怎么拿」获取引导（claude setup-token / codex login·openai keys,走 kernel PREREQ_HINTS）
   emitCredLine(deps, 'claude-code', 'CLAUDE_CODE_OAUTH_TOKEN', r.credentials['claude-code'].CLAUDE_CODE_OAUTH_TOKEN, true, '', PREREQ_HINTS.claudeToken)
-  emitCredLine(deps, 'codex', 'OPENAI_API_KEY', r.credentials.codex.OPENAI_API_KEY, true, '', PREREQ_HINTS.openaiKey)
-  emitCredLine(deps, 'codex', 'CODEX_HOME', r.credentials.codex.CODEX_HOME, false, '（可选,缺省 ~/.codex）')
+  const codexKey = r.credentials.codex.OPENAI_API_KEY
+  const codexHome = r.credentials.codex.CODEX_HOME
+  if (!codexKey.set && codexHome.set) {
+    deps.io.out(`  ${READY_TAG} codex 凭证 ${credSource(codexHome)}（OPENAI_API_KEY 非必需）`)
+  } else {
+    emitCredLine(deps, 'codex', 'OPENAI_API_KEY', codexKey, true, '', PREREQ_HINTS.openaiKey)
+    emitCredLine(deps, 'codex', 'CODEX_HOME', codexHome, false, '（可选,缺省 ~/.codex）')
+  }
 
   if (dryRun) deps.io.out('  （--dry-run:只探测只打印,未写任何文件）')
 }
@@ -603,15 +917,22 @@ export async function cmdSetupRuntime(
 ): Promise<number> {
   const image = rt.resolveImage(deps.cwd)
   const secretsEnv = deps.readSecretsEnv ? await deps.readSecretsEnv().catch(() => ({})) : {}
-  const readiness = await probeAfkReadiness({ image, exec: rt.exec, secretsEnv, hostEnv: rt.hostEnv })
+  const readiness = await probeAfkReadiness({
+    image,
+    exec: rt.exec,
+    secretsEnv,
+    hostEnv: rt.hostEnv,
+    defaultCodexHome: rt.defaultCodexHome,
+    canReadFile: rt.canReadFile,
+  })
   renderRuntimeReadiness(deps, readiness, opts.dryRun ?? false)
   return 0
 }
 
 /**
  * `pipeline setup [sub]` —— 安装后全功能就绪引导。
- *   空 sub:① ensurePipelineOnPath（软链到 PATH;--dry-run 跳过一切写）→ ② 计划骨架 → ③ 技能安装段（S2）
- *          → ④ 运行时就绪清单（R1）。一条命令走完「装技能 + 配就绪 + 一屏清单」。
+ *   空 sub:必须显式指定一个 host（如 `--codex`）。先验证/部署该 host（绝不双装）→ PATH/adapter →
+ *          内置技能完整性 → 运行时就绪清单。`setup skills`/`setup runtime` 仍保留为兼容诊断子命令。
  *   sub=skills:仅技能安装段;sub=runtime:仅运行时就绪清单（真 docker/镜像/凭证探测）。
  *   未知 sub:stderr + exit 1（对齐 loops 未知子命令口径）。
  * --dry-run:零副作用（不软链/不写文件/不起 docker）——空 sub 的运行时段**只提示不真探测**（R1 concern#1:
@@ -625,15 +946,21 @@ export function cmdSetup(
   env: SetupEnv = REAL_SETUP_ENV,
   rt: RuntimeEnv = REAL_RUNTIME_ENV,
 ): number | Promise<number> {
-  const o: SetupOpts = { dryRun: opts.dryRun ?? false, yes: opts.yes ?? false }
+  const o: SetupOpts = { ...opts, dryRun: opts.dryRun ?? false, yes: opts.yes ?? false, autoUpdate: opts.autoUpdate ?? false }
   switch (sub) {
     case undefined:
     case '': {
-      // 全流程一条命令:PATH 软链（dry-run 不软链）→ 计划骨架 → 技能安装段 → 运行时就绪清单。
-      // 运行时段 dry-run **只提示不真探测**（避免 buildProgram 单测经空 sub 起真 docker 子进程，R1 concern#1）;
+      const selection = selectPipelineHost(o)
+      if (selection.host === null) {
+        deps.io.err(`ERROR: ${selection.error}。示例：pipeline setup --codex`)
+        return 1
+      }
+      const hostCode = cmdSetupHost(deps, selection.host, o, env)
+      if (hostCode !== 0) return hostCode
+      // 全流程一条命令:所选 host → 内置技能验证 → 运行时就绪清单。
+      // 运行时段 dry-run **只提示不真探测**（避免 buildProgram 单测经空 sub 起真 docker 子进程）;
       // 非 dry-run 才经注入 rt 真探测。技能段先同步跑完再接运行时异步段,故非 dry-run 返 Promise。
-      if (!o.dryRun) ensurePipelineOnPath(deps, env)
-      printPlanSkeleton(deps, o)
+      printPlanSkeleton(deps, o, selection.host)
       const skillsCode = cmdSetupSkills(deps, o, env)
       if (o.dryRun) {
         deps.io.out(

@@ -12,6 +12,8 @@
  * 统一按「不可用」收敛（返回 null），绝不上抛。build_hint 走 kernel 单一真相源常量（防漂移）。
  */
 import { execFile } from 'node:child_process'
+import { accessSync, constants as fsConstants } from 'node:fs'
+import { join } from 'node:path'
 import { SANDCASTLE_BUILD_HINT } from '@pipeline-lite/kernel'
 
 export interface ExecResult {
@@ -53,7 +55,7 @@ async function execDocker(
 
 export interface CredLight {
   set: boolean
-  source?: 'host-env' | 'secrets-file'
+  source?: 'host-env' | 'secrets-file' | 'default-home'
 }
 
 export interface AfkReadiness {
@@ -79,10 +81,25 @@ function credLight(
   return { set: false }
 }
 
-/** CODEX_HOME 只看宿主 env（决策 C2b:路径不进 secrets store）。 */
-function codexHomeLight(hostEnv: Readonly<Record<string, string | undefined>>): CredLight {
+function canReadFile(path: string): boolean {
+  try {
+    accessSync(path, fsConstants.R_OK)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** CODEX_HOME 不进 secrets store；显式 env 优先，否则只认默认 home 下可读的 auth.json。 */
+function codexHomeLight(
+  hostEnv: Readonly<Record<string, string | undefined>>,
+  defaultCodexHome?: string,
+  canRead: (path: string) => boolean = canReadFile,
+): CredLight {
   const v = hostEnv.CODEX_HOME
-  return v !== undefined && v !== '' ? { set: true, source: 'host-env' } : { set: false }
+  if (v !== undefined && v !== '') return { set: true, source: 'host-env' }
+  if (defaultCodexHome && canRead(join(defaultCodexHome, 'auth.json'))) return { set: true, source: 'default-home' }
+  return { set: false }
 }
 
 /**
@@ -95,6 +112,8 @@ export async function probeAfkReadiness(opts: {
   exec?: ExecDockerFn
   secretsEnv?: Readonly<Record<string, string>>
   hostEnv?: Readonly<Record<string, string | undefined>>
+  defaultCodexHome?: string
+  canReadFile?: (path: string) => boolean
   timeoutMs?: number
 }): Promise<AfkReadiness> {
   const hostEnv = opts.hostEnv ?? process.env
@@ -116,7 +135,7 @@ export async function probeAfkReadiness(opts: {
       'claude-code': { CLAUDE_CODE_OAUTH_TOKEN: credLight('CLAUDE_CODE_OAUTH_TOKEN', hostEnv, secretsEnv) },
       codex: {
         OPENAI_API_KEY: credLight('OPENAI_API_KEY', hostEnv, secretsEnv),
-        CODEX_HOME: codexHomeLight(hostEnv),
+        CODEX_HOME: codexHomeLight(hostEnv, opts.defaultCodexHome, opts.canReadFile),
       },
     },
   }

@@ -1,8 +1,19 @@
-import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises'
+import { appendFile, mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { addDraftMark, clearDraftMark, draftMarksPath, loadRegistry, readDraftMarks } from '@pipeline-lite/kernel'
+import {
+  addDraftMark,
+  clearDraftMark,
+  createLoopLedgerStore,
+  draftMarksPath,
+  ledgerFilePath,
+  loadRegistry,
+  readDraftMarks,
+  type BudgetReservationRecord,
+  type ReservationActivatedRecord,
+  type RunRecord,
+} from '@pipeline-lite/kernel'
 import { applyLoopsUpdate, buildLoopsSnapshot } from './loops.js'
 
 /**
@@ -52,6 +63,89 @@ async function makeProjectWithLoop(): Promise<string> {
   return root
 }
 
+async function makeProjectWithStarter(status: 'active' | 'paused' = 'paused'): Promise<string> {
+  const root = await mkdtemp(join(tmpdir(), 'loops-starter-'))
+  await mkdir(join(root, '.pipeline'), { recursive: true })
+  const yaml = LOOP_YAML
+    .replace('runner: cron', 'runner: codex')
+    .replace('status: active', `status: ${status}`)
+    .replace(
+      '    autonomy_level: L1\n',
+      '    autonomy_level: L1\n' +
+      '    template_id: ci-sweeper\n' +
+      '    template_version: 1\n' +
+      '    workflow_id: default\n' +
+      '    skill_bundle_id: backend\n',
+    )
+  await writeFile(join(root, '.pipeline', 'loops.yaml'), yaml, 'utf8')
+  return root
+}
+
+function reservationRecord(reservationId: string): BudgetReservationRecord {
+  return {
+    schema_version: 1,
+    record_id: `record-${reservationId}`,
+    recorded_at: '2026-07-17T00:00:00.000Z',
+    kind: 'budget-reservation',
+    reservation_id: reservationId,
+    attempt_id: `attempt-${reservationId}`,
+    loop_id: 'build-loop',
+    change: 'build-loop-change',
+    budget_day: '2026-07-17',
+    reserved_runs: 1,
+    reserved_tokens: 1_000,
+    token_basis: 'risk-default',
+    limits_snapshot: {
+      max_runs_per_day: 24,
+      max_in_flight: 1,
+      max_tokens_per_day: 100_000,
+      on_exceed: 'skip-run',
+    },
+    expires_at: '2026-07-17T01:00:00.000Z',
+  }
+}
+
+function activationRecord(reservationId: string): ReservationActivatedRecord {
+  return {
+    schema_version: 1,
+    record_id: `record-activation-${reservationId}`,
+    recorded_at: '2026-07-17T00:01:00.000Z',
+    kind: 'reservation-activated',
+    reservation_id: reservationId,
+    attempt_id: `attempt-${reservationId}`,
+    loop_id: 'build-loop',
+    change: 'build-loop-change',
+    started_at: '2026-07-17T00:01:00.000Z',
+  }
+}
+
+function settledRunRecord(reservationId: string): RunRecord {
+  return {
+    schema_version: 1,
+    record_id: `record-run-${reservationId}`,
+    recorded_at: '2026-07-17T00:10:00.000Z',
+    kind: 'run',
+    run_record_id: `run-${reservationId}`,
+    attempt_id: `attempt-${reservationId}`,
+    reservation_id: reservationId,
+    loop_id: 'build-loop',
+    change: 'build-loop-change',
+    level: 'L1',
+    runner: 'cron',
+    admitted_at: '2026-07-17T00:00:00.000Z',
+    started_at: '2026-07-17T00:01:00.000Z',
+    finished_at: '2026-07-17T00:10:00.000Z',
+    result: 'merged',
+    reason: 'completed',
+    usage_record_ids: [],
+    accounting: {
+      reserved_tokens: 1_000,
+      charged_tokens: 1_000,
+      charge_source: 'reserved-estimate',
+    },
+  }
+}
+
 describe('buildLoopsSnapshot', () => {
   it('聚合跨项目 loop，行带 root 字段消歧，含真 readiness/budget 计算', async () => {
     const rootA = await makeProjectWithLoop()
@@ -66,6 +160,15 @@ describe('buildLoopsSnapshot', () => {
       expect(row.autonomy_level).toBe('L1')
       expect(row.readiness.score).toBeGreaterThanOrEqual(0)
       expect(row.budget.breaker).toBe('ok')
+      expect(row.graduation).toMatchObject({
+        current: 'L1',
+        recommended: 'L1',
+        canGraduate: false,
+        readinessScore: row.readiness.score,
+        breaker: row.budget.breaker,
+      })
+      expect(row.graduation?.driftCount).toBeGreaterThan(0)
+      expect(row.graduation?.blockers.some((blocker) => blocker.includes('漂移'))).toBe(true)
     }
   })
 
@@ -88,12 +191,140 @@ describe('buildLoopsSnapshot', () => {
     expect(row.budget_decl).toEqual({ max_runs_per_day: 24, max_in_flight: 1, on_exceed: 'skip', max_tokens_per_day: 100000 })
   })
 
+  it('Control Room：starter/binding/skill bundle 身份随 LoopRow 透出，前端无需回读 loops.yaml', async () => {
+    const root = await makeProjectWithStarter('paused')
+    const snap = await buildLoopsSnapshot({ registry: () => [root], now: () => new Date('2026-07-19T00:00:00Z') })
+
+    expect(snap.rows[0]).toMatchObject({
+      template_id: 'ci-sweeper',
+      template_version: 1,
+      workflow_id: 'default',
+      skill_bundle_id: 'backend',
+    })
+  })
+
   it('项目没有 loops.yaml → 该项目贡献 0 行，不报错、不跳过其它项目', async () => {
     const rootNoLoops = await mkdtemp(join(tmpdir(), 'loops-snap-empty-'))
     const rootWithLoop = await makeProjectWithLoop()
     const snap = await buildLoopsSnapshot({ registry: () => [rootNoLoops, rootWithLoop], now: () => new Date() })
     expect(snap.rows).toHaveLength(1)
     expect(snap.rows[0]?.root).toBe(rootWithLoop)
+  })
+
+  it('ledger 缺失或 degraded 时不把 loops.yaml 配置冒充已生效的 admission/inflight enforcement', async () => {
+    const missingRoot = await makeProjectWithLoop()
+    const degradedRoot = await makeProjectWithLoop()
+    await mkdir(join(degradedRoot, '.pipeline', 'loops'), { recursive: true })
+    await writeFile(ledgerFilePath(degradedRoot), '{not valid ledger json}\n', 'utf8')
+
+    const snap = await buildLoopsSnapshot({
+      registry: () => [missingRoot, degradedRoot],
+      now: () => new Date('2026-07-17T00:00:00Z'),
+    })
+    const missing = snap.rows.find((row) => row.root === missingRoot)!
+    const degraded = snap.rows.find((row) => row.root === degradedRoot)!
+
+    expect(missing.ledger).toMatchObject({
+      health: 'missing',
+      admission_enforced: false,
+      inflight_enforced: false,
+      in_flight: 0,
+      activated_in_flight: 0,
+    })
+    expect(degraded.ledger).toMatchObject({
+      health: 'degraded',
+      rejected_records: 1,
+      admission_enforced: false,
+      inflight_enforced: false,
+      in_flight: 0,
+      activated_in_flight: 0,
+    })
+  })
+
+  it('合法 reservation/activation 混入一条坏行后 health=degraded，两个 enforcement 证据位一律 false', async () => {
+    const root = await makeProjectWithLoop()
+    const ledger = createLoopLedgerStore()
+    await ledger.append(root, reservationRecord('reservation-mixed'))
+    await ledger.append(root, activationRecord('reservation-mixed'))
+    await appendFile(ledgerFilePath(root), '{malformed trailing record}\n', 'utf8')
+
+    const snap = await buildLoopsSnapshot({ registry: () => [root], now: () => new Date('2026-07-17T00:05:00Z') })
+
+    expect(snap.rows[0]!.ledger).toMatchObject({
+      health: 'degraded',
+      rejected_records: 1,
+      admission_enforced: false,
+      inflight_enforced: false,
+    })
+  })
+
+  it('attempt 不匹配的伪 activation 不产生 inflight 证据，且账本降级', async () => {
+    const root = await makeProjectWithLoop()
+    const ledger = createLoopLedgerStore()
+    await ledger.append(root, reservationRecord('reservation-forged'))
+    await ledger.append(root, { ...activationRecord('reservation-forged'), attempt_id: 'attempt-forged' })
+
+    const snap = await buildLoopsSnapshot({ registry: () => [root], now: () => new Date('2026-07-17T00:05:00Z') })
+
+    expect(snap.rows[0]!.ledger).toMatchObject({
+      health: 'degraded',
+      admission_enforced: false,
+      inflight_enforced: false,
+      activated_in_flight: 0,
+    })
+  })
+
+  it('open-but-not-activated：reservation 只证明 admission 已原子判定，不冒充 inflight 闸已生效', async () => {
+    const root = await makeProjectWithLoop()
+    await createLoopLedgerStore().append(root, reservationRecord('reservation-open'))
+
+    const snap = await buildLoopsSnapshot({ registry: () => [root], now: () => new Date('2026-07-17T00:05:00Z') })
+
+    expect(snap.rows[0]!.ledger).toMatchObject({
+      health: 'ok',
+      admission_enforced: true,
+      inflight_enforced: false,
+      in_flight: 1,
+      activated_in_flight: 0,
+    })
+  })
+
+  it('activated：绑定 reservation 的 activation 证明 inflight 闸已生效，并单列 activated_in_flight', async () => {
+    const root = await makeProjectWithLoop()
+    const ledger = createLoopLedgerStore()
+    await ledger.append(root, reservationRecord('reservation-activated'))
+    await ledger.append(root, activationRecord('reservation-activated'))
+
+    const snap = await buildLoopsSnapshot({ registry: () => [root], now: () => new Date('2026-07-17T00:05:00Z') })
+
+    expect(snap.rows[0]!.ledger).toMatchObject({
+      health: 'ok',
+      admission_enforced: true,
+      inflight_enforced: true,
+      in_flight: 1,
+      activated_in_flight: 1,
+    })
+  })
+
+  it('settled：保留 admission/inflight 已过闸证据，但当前 open 与 activated in-flight 都归零', async () => {
+    const root = await makeProjectWithLoop()
+    const ledger = createLoopLedgerStore()
+    const reservationId = 'reservation-settled'
+    await ledger.append(root, reservationRecord(reservationId))
+    await ledger.append(root, activationRecord(reservationId))
+    await ledger.closeReservationIfOpen(root, reservationId, () => settledRunRecord(reservationId))
+
+    const snap = await buildLoopsSnapshot({ registry: () => [root], now: () => new Date('2026-07-17T00:15:00Z') })
+
+    expect(snap.rows[0]!.ledger).toMatchObject({
+      health: 'ok',
+      admission_enforced: true,
+      inflight_enforced: true,
+      runs_today: 1,
+      in_flight: 0,
+      activated_in_flight: 0,
+      last_result: 'merged',
+    })
   })
 })
 
@@ -186,6 +417,56 @@ describe('applyLoopsUpdate —— loops.yaml 字段写回（v5 T3，POST /api/lo
     const root = await mkdtemp(join(tmpdir(), 'loops-upd-none-'))
     const r = await applyLoopsUpdate(root, 'build-loop', { cadence: '2h' })
     expect(r.ok).toBe(false)
+  })
+
+  it('H11：starter paused→active 未装配 activation validator → fail-closed，文件不变', async () => {
+    const root = await makeProjectWithStarter('paused')
+    const before = await readFile(join(root, '.pipeline', 'loops.yaml'), 'utf8')
+
+    const result = await applyLoopsUpdate(root, 'build-loop', { status: 'active' })
+
+    expect(result.ok).toBe(false)
+    expect('error' in result && result.error).toMatch(/activation.*validator|激活.*校验/i)
+    expect(await readFile(join(root, '.pipeline', 'loops.yaml'), 'utf8')).toBe(before)
+  })
+
+  it('H11：starter activation validator 判 invalid → 不写 active', async () => {
+    const root = await makeProjectWithStarter('paused')
+    const validateActivation = vi.fn(async () => ({ ok: false as const, error: 'skill bundle missing' }))
+
+    const result = await applyLoopsUpdate(root, 'build-loop', { status: 'active' }, { validateActivation })
+
+    expect(result).toMatchObject({ ok: false, error: expect.stringMatching(/skill bundle missing/) })
+    expect(loadRegistry(root).data!.loops[0]!.status).toBe('paused')
+    expect(validateActivation).toHaveBeenCalledOnce()
+  })
+
+  it('H11：starter candidate 全 wiring ready → validator 见到 proposed active registry 后 CAS 落盘', async () => {
+    const root = await makeProjectWithStarter('paused')
+    const validateActivation = vi.fn(async (input: { candidate: { loops: Array<{ id: string; status: string }> } }) => {
+      expect(input.candidate.loops.find((loop) => loop.id === 'build-loop')?.status).toBe('active')
+      return { ok: true as const }
+    })
+
+    const result = await applyLoopsUpdate(root, 'build-loop', { status: 'active' }, { validateActivation })
+
+    expect(result).toEqual({ ok: true })
+    expect(loadRegistry(root).data!.loops[0]!.status).toBe('active')
+    expect(validateActivation).toHaveBeenCalledTimes(2)
+  })
+
+  it('H11 r2：外层校验通过、governance 提交点复验失败 → 不写 active', async () => {
+    const root = await makeProjectWithStarter('paused')
+    const before = await readFile(join(root, '.pipeline', 'loops.yaml'), 'utf8')
+    const validateActivation = vi.fn()
+      .mockResolvedValueOnce({ ok: true as const })
+      .mockResolvedValueOnce({ ok: false as const, error: 'skill disappeared before commit' })
+
+    const result = await applyLoopsUpdate(root, 'build-loop', { status: 'active' }, { validateActivation })
+
+    expect(result).toMatchObject({ ok: false, error: expect.stringMatching(/skill disappeared.*commit/i) })
+    expect(validateActivation).toHaveBeenCalledTimes(2)
+    expect(await readFile(join(root, '.pipeline', 'loops.yaml'), 'utf8')).toBe(before)
   })
 })
 

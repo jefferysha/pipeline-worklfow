@@ -10,7 +10,7 @@ interface DoctorJson {
   summary: { green: number; yellow: number; red: number }
 }
 
-/** 检查面全集——id 即对用户的稳定契约，顺序固定（批2 A1 尾部 skills:*；R1 尾部 afk:*，皆只增不改） */
+/** 检查面全集——id 即对用户的稳定契约，顺序固定（skills/Codex/AFK 均只增不改） */
 const EXPECTED_IDS = [
   'env:node',
   'env:git',
@@ -25,6 +25,7 @@ const EXPECTED_IDS = [
   'quality:verify-skills',
   'skills:mandatory',
   'skills:recommended',
+  'integration:codex-project-skills',
   'afk:docker',
   'afk:image',
   'afk:credential-claude-code',
@@ -43,13 +44,13 @@ function byId(payload: DoctorJson, id: string): DoctorCheck {
 }
 
 describe('doctor —— 统一健康面（BACKLOG #26b，GOAL B8 降级可见 / D10 > comet doctor）', () => {
-  test('全绿基线：17 项检查全 green，exit 0，人读输出含汇总行、无 WARN/FAIL', async () => {
+  test('全绿基线：18 项检查全 green，exit 0，人读输出含汇总行、无 WARN/FAIL', async () => {
     const deps = makeDeps()
     const code = await cmdDoctor(deps, {})
     expect(code).toBe(0)
     const text = deps.outLines.join('\n')
     expect(text).toContain('[DOCTOR]')
-    expect(text).toContain('绿 17')
+    expect(text).toContain('绿 18')
     expect(text).not.toContain('[WARN]')
     expect(text).not.toContain('[FAIL]')
     expect(text).not.toContain('fix:')
@@ -66,7 +67,7 @@ describe('doctor —— 统一健康面（BACKLOG #26b，GOAL B8 降级可见 / 
       expect(typeof c.detail).toBe('string')
       expect(typeof c.hint).toBe('string')
     }
-    expect(payload.summary).toEqual({ green: 17, yellow: 0, red: 0 })
+    expect(payload.summary).toEqual({ green: 18, yellow: 0, red: 0 })
   })
 
   test('env:node 红灯：node < 22 → red + 升级指引，exit 1', async () => {
@@ -230,6 +231,17 @@ describe('doctor —— 统一健康面（BACKLOG #26b，GOAL B8 降级可见 / 
     expect(c.hint).toContain('verify-skills')
   })
 
+  test('Codex skills 黄灯：只在 cache 不能替代原生插件或项目 adapter 的实际发现', async () => {
+    const deps = makeDeps({ doctor: { codexProjectSkillNames: () => new Set(['pipeline']) } })
+    const { code, payload } = await runJson(deps)
+    expect(code).toBe(0)
+    const c = byId(payload, 'integration:codex-project-skills')
+    expect(c.status).toBe('yellow')
+    expect(c.detail).toContain('openspec-propose')
+    expect(c.detail).toContain('全局 cache 不算')
+    expect(c.hint).toContain('pipeline setup --codex')
+  })
+
   test('探针自身异常不炸命令：该项折算 red（fail-loud 可见），其余检查照常', async () => {
     const deps = makeDeps({
       doctor: {
@@ -279,7 +291,7 @@ describe('doctor —— 统一健康面（BACKLOG #26b，GOAL B8 降级可见 / 
     }
     expect(code).toBe(0)
     const payload = JSON.parse(deps.outLines.join('\n')) as DoctorJson
-    expect(payload.summary).toEqual({ green: 17, yellow: 0, red: 0 })
+    expect(payload.summary).toEqual({ green: 18, yellow: 0, red: 0 })
   })
 })
 
@@ -388,6 +400,26 @@ describe('doctor —— AFK 运行时就绪四检（full-install R1：afk:docker
     expect(cx.detail).toContain('CODEX_HOME') // 对称:CODEX_HOME 恒随行呈现
   })
 
+  test('Codex-first：API key 缺席但默认 Codex home 登录可用 → codex 检查仍为 green', async () => {
+    const deps = makeDeps({
+      doctor: {
+        afkReadiness: async () => ({
+          ok: true as const,
+          docker: { available: true },
+          image: { configured: 'sandcastle:local', present: true, build_hint: 'bash tools/sandcastle/build.sh' },
+          credentials: {
+            'claude-code': { CLAUDE_CODE_OAUTH_TOKEN: { set: false } },
+            codex: { OPENAI_API_KEY: { set: false }, CODEX_HOME: { set: true, source: 'default-home' as const } },
+          },
+        }),
+      },
+    })
+    const { payload } = await runJson(deps)
+    const cx = byId(payload, 'afk:credential-codex')
+    expect(cx.status).toBe('green')
+    expect(cx.detail).toContain('默认 ~/.codex 登录')
+  })
+
   test('⑤ 全就绪基线 → afk:* 四项 green', async () => {
     const { payload } = await runJson(makeDeps())
     expect(byId(payload, 'afk:docker').status).toBe('green')
@@ -415,31 +447,40 @@ describe('doctor —— AFK 运行时就绪四检（full-install R1：afk:docker
 })
 
 describe('doctor 缺技能检测（full-install 批2 A1：skills:mandatory / skills:recommended）', () => {
-  // registry 走 checkSkills 侧真读 templates/skill-sources.yaml（verify=builtin / openspec-*=bundled 恒在位、
-  // token→skill 解析皆真值）；manifest 两表走 manifestSkills mock（缺省 fixture：强制 3 项 / 推荐 1 项，
-  // 见 test-support DEFAULT_MANIFEST_SKILLS）。单测只覆写 installedSkillNames / manifestSkills / fileExists。
+  // registry 走 checkSkills 侧真读 templates/skill-sources.yaml；默认项全部 bundled。缺失态必须用
+  // 自定义 workflow 的非 registry token，证明 doctor 不会把外部扩展误称为 setup 自动可得。
 
-  test('① 缺某强制 token → skills:mandatory red + hint 含该 token 名 + pipeline setup，exit 1', async () => {
-    // 缺 grill-with-docs（只装 search-first）；verify|... 与 opsx:...|... 恒在位
-    const deps = makeDeps({ doctor: { installedSkillNames: () => new Set(['search-first']) } })
+  test('① 自定义 workflow 缺强制 skill → skills:mandatory red，exit 1', async () => {
+    const deps = makeDeps({ doctor: {
+      manifestSkills: () => ({
+        mandatory: { build: { frontend: ['custom-required'] } } as never,
+        recommended: {} as never,
+      }),
+      installedSkillNames: () => new Set(),
+    } })
     const { code, payload } = await runJson(deps)
     expect(code).toBe(1)
     const c = byId(payload, 'skills:mandatory')
     expect(c.status).toBe('red')
-    expect(c.detail).toContain('grill-with-docs')
-    expect(c.hint).toContain('grill-with-docs')
-    expect(c.hint).toContain('pipeline setup')
+    expect(c.detail).toContain('custom-required')
+    expect(c.hint).toContain('custom-required')
+    expect(c.hint).toContain('自定义插件')
   })
 
-  test('② 缺推荐不缺强制 → mandatory green、recommended yellow（缺名进 detail），exit 0', async () => {
-    // 只装 grill-with-docs（缺 search-first）
-    const deps = makeDeps({ doctor: { installedSkillNames: () => new Set(['grill-with-docs']) } })
+  test('② 自定义 workflow 缺推荐不缺强制 → mandatory green、recommended yellow（缺名进 detail），exit 0', async () => {
+    const deps = makeDeps({ doctor: {
+      manifestSkills: () => ({
+        mandatory: { build: { frontend: ['custom-required'] } } as never,
+        recommended: { build: { frontend: ['custom-recommended'] } } as never,
+      }),
+      installedSkillNames: () => new Set(['custom-required']),
+    } })
     const { code, payload } = await runJson(deps)
     expect(code).toBe(0)
     expect(byId(payload, 'skills:mandatory').status).toBe('green')
     const r = byId(payload, 'skills:recommended')
     expect(r.status).toBe('yellow')
-    expect(r.detail).toContain('search-first')
+    expect(r.detail).toContain('custom-recommended')
   })
 
   test('③ 全在位 → 两项 green（缺省基线）', async () => {
@@ -448,14 +489,12 @@ describe('doctor 缺技能检测（full-install 批2 A1：skills:mandatory / ski
     expect(byId(payload, 'skills:recommended').status).toBe('green')
   })
 
-  test('④ builtin/bundled token（verify / openspec-propose）恒算在位——即便 installedSkillNames 全空也不进缺失名单', async () => {
+  test('④ bundled token（默认流程全部如此）恒算在位——即便 installedSkillNames 全空也不进缺失名单', async () => {
     const deps = makeDeps({ doctor: { installedSkillNames: () => new Set<string>() } })
     const { payload } = await runJson(deps)
     const c = byId(payload, 'skills:mandatory')
-    // grill-with-docs 缺 → red；但 verify|verification-loop（builtin）与 opsx:propose|openspec-propose（bundled）不进缺名
-    expect(c.status).toBe('red')
-    expect(c.detail).toContain('grill-with-docs')
-    expect(c.detail).not.toContain('verify')
+    expect(c.status).toBe('green')
+    expect(c.detail).not.toContain('test-driven-development')
     expect(c.detail).not.toContain('openspec-propose')
   })
 
@@ -475,20 +514,19 @@ describe('doctor 缺技能检测（full-install 批2 A1：skills:mandatory / ski
     expect(m.detail).toContain('registry 未就绪')
   })
 
-  test('⑥ a|b 备选任一侧在位即算满足该项（两侧都缺才 red）', async () => {
-    // manifest 仅一条强制 a|b：design-taste-frontend|taste-skill（两侧均非 builtin/bundled，逼真考 a|b 逻辑）
+  test('⑥ 自定义 a|b 备选任一侧在位即算满足该项（两侧都缺才 red）', async () => {
     const mk = (installed: string[]) =>
       makeDeps({
         doctor: {
           manifestSkills: () => ({
-            mandatory: { build: { frontend: ['design-taste-frontend|taste-skill'] } } as never,
+            mandatory: { build: { frontend: ['custom-a|custom-b'] } } as never,
             recommended: {} as never,
           }),
           installedSkillNames: () => new Set(installed),
         },
       })
-    expect(byId((await runJson(mk(['taste-skill']))).payload, 'skills:mandatory').status).toBe('green')
-    expect(byId((await runJson(mk(['design-taste-frontend']))).payload, 'skills:mandatory').status).toBe('green')
+    expect(byId((await runJson(mk(['custom-a']))).payload, 'skills:mandatory').status).toBe('green')
+    expect(byId((await runJson(mk(['custom-b']))).payload, 'skills:mandatory').status).toBe('green')
     expect(byId((await runJson(mk([]))).payload, 'skills:mandatory').status).toBe('red')
   })
 
@@ -499,12 +537,18 @@ describe('doctor 缺技能检测（full-install 批2 A1：skills:mandatory / ski
     expect(byId(payload, 'skills:recommended').status).toBe('yellow')
   })
 
-  test('人读输出：缺强制技能 → [FAIL] skills:mandatory + fix: 行含 pipeline setup', async () => {
-    const deps = makeDeps({ doctor: { installedSkillNames: () => new Set(['search-first']) } })
+  test('人读输出：缺自定义强制技能 → [FAIL] skills:mandatory + fix: 行含打包指引', async () => {
+    const deps = makeDeps({ doctor: {
+      manifestSkills: () => ({
+        mandatory: { build: { frontend: ['custom-required'] } } as never,
+        recommended: {} as never,
+      }),
+      installedSkillNames: () => new Set(),
+    } })
     const code = await cmdDoctor(deps, {})
     expect(code).toBe(1)
     const text = deps.outLines.join('\n')
     expect(text).toContain('[FAIL] skills:mandatory')
-    expect(text).toMatch(/fix: .*pipeline setup/)
+    expect(text).toMatch(/fix: .*自定义插件/)
   })
 })

@@ -18,6 +18,10 @@ steps:
     outputs:
       - field: design_doc
         type: file_path
+    artifacts:
+      - field: design_doc
+        type: file_path
+        producer_policy: effective-phase-skills
     guards: []
     transitions:
       - event: explore-complete
@@ -32,6 +36,12 @@ steps:
     outputs:
       - field: plan
         type: file_path
+    artifacts:
+      - field: plan
+        type: file_path
+        producer_policy: effective-phase-skills
+        required_when:
+          track_not_in: [pm]
     guards:
       - type: tasks-at-least
         n: 3
@@ -64,6 +74,10 @@ steps:
     outputs:
       - field: verification_report
         type: file_path
+    artifacts:
+      - field: verification_report
+        type: file_path
+        producer_policy: effective-phase-skills
     guards: []
     transitions:
       - event: verify-pass

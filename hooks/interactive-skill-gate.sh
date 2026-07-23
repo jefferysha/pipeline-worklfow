@@ -75,7 +75,16 @@ done
 # === 硬门：落 .pipeline-pending-interaction（供 gate.sh 在 AskUserQuestion / 写类工具前挡产出）===
 CWD="$(json_get cwd || true)"
 [ -z "$CWD" ] && CWD="$PWD"
-[ -d "$CWD" ] && printf '%s\n' "$SKILL" > "$CWD/.pipeline-pending-interaction" 2>/dev/null || true
+# 必须与 gate.sh 选到同一项目根。旧代码把 marker 写进子目录，gate 却在项目根读，导致
+# 交互式 skill 的硬门悄然失效；共享 helper 同时避免跨普通父目录误写别的项目。
+ROOT="$CWD"
+ROOT_HELPER="$(dirname "${BASH_SOURCE[0]:-$0}")/project-root.sh"
+if [ -r "$ROOT_HELPER" ]; then
+  # shellcheck source=project-root.sh
+  . "$ROOT_HELPER"
+  ROOT="$(pipeline_project_root "$CWD" bootstrap changes || true)"
+fi
+[ -n "$ROOT" ] && [ -d "$ROOT" ] && printf '%s\n' "$SKILL" > "$ROOT/.pipeline-pending-interaction" 2>/dev/null || true
 
 # === 软提醒：注入 L2.6 交互硬姿态（additionalContext，non-blocking）===
 CTX="$(cat <<EOF

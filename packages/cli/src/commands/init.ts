@@ -12,13 +12,16 @@
  * 一个引用了坏 workflow 的 change 先被创建出来），再把 workflow 字段设成该名字、phase 字段
  * 种到它 steps[0] 的 id（而不是硬编码的 'open'）。这里故意绕开 CLI `set` 子命令那层的
  * enumOk（对齐 manifest.phases 的老内核枚举校验，仅对 `pipeline set phase ...` 这一入口生效）
- * ——直接调用 kernel StateStore.setMany，其闸门只做 quoteGate（YAML 安全字符集），不做语义
- * 枚举校验，custom workflow 的任意合法 step id 在这里天然放行，且完全不触碰 enumOk/cmdSet
- * 共享代码路径（zero 改动、zero 回归风险 to oracle 覆盖的 default workflow 主线）。
+ * ——workflow/phase 首态随 `runRepo.initChange()` 的 `initialWorkflow` 参数，进 kernel
+ * `StateStore.init()` 独占创建那唯一一次原子写入（第 7 轮 codex review P1：此前是 initChange
+ * 之后再补一次 StateStore.setMany，两次写之间有竞态窗口，见 store.ts init() 头部注释），
+ * 校验仍只有 quoteGate（YAML 安全字符集），不做语义枚举校验，custom workflow 的任意合法 step
+ * id 在这里天然放行，且完全不触碰 enumOk/cmdSet 共享代码路径（zero 改动、zero 回归风险 to
+ * oracle 覆盖的 default workflow 主线）。
  */
 import { createInterface } from 'node:readline/promises'
-import { firstStep, loadWorkflow, TRACKS } from '@pipeline-lite/kernel'
-import type { Track } from '@pipeline-lite/kernel'
+import { assertWorkflowAllowed, firstStep, loadWorkflow, requireTrack } from '@pipeline-lite/kernel'
+import type { TrackDefinition, TrackRegistry } from '@pipeline-lite/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
 import { recordHistory } from './fields.js'
 import { isValidChangeName } from '../paths.js'
@@ -83,15 +86,17 @@ async function askPlain(p: InitPrompter, label: string, dflt: string): Promise<s
 
 /**
  * 交互向导：逐项问答收齐 track/preset（+ 可选 user/workflow）。已给 flag 作该项默认（回车即收），
- * track 校验属于 TRACKS、preset 非空，校验不过就地重问。返回补齐后的 opts（原字段其余保留）。
+ * track 选项与校验从 registry.ordered 生成（不再手抄枚举；缺 tracks.yaml 时即内建四轨），preset 非空，
+ * 校验不过就地重问。返回补齐后的 opts（原字段其余保留）。
  */
-async function runInitWizard(deps: CliDeps, flags: InitCmdOpts, env: InitWizardEnv): Promise<InitCmdOpts> {
+async function runInitWizard(deps: CliDeps, registry: TrackRegistry, flags: InitCmdOpts, env: InitWizardEnv): Promise<InitCmdOpts> {
   const p = env.makePrompter()
   try {
     deps.io.out('[init] 交互向导 —— 每问展示默认值（中括号内），直接回车即收默认。')
+    const trackIds = registry.ordered.map((t) => t.id)
     const track = await askValidated(
-      p, deps, 'track（chat|pm|frontend|backend）', flags.track,
-      (s) => ((TRACKS as readonly string[]).includes(s) ? null : `ERROR: 非法 track '${s}'，允许: ${TRACKS.join(' | ')}`),
+      p, deps, `track（${trackIds.join('|')}）`, flags.track,
+      (s) => (registry.byId.has(s) ? null : `ERROR: 非法 track '${s}'，允许: ${trackIds.join(' | ')}`),
     )
     const preset = await askValidated(
       p, deps, 'preset（full|hotfix|tweak）', flags.preset,
@@ -126,77 +131,113 @@ export async function cmdInit(
   }
 
   // 缺 track/preset：TTY 下走向导补齐（BT6 小白友好），非交互（agent/CI）fail-loud exit 1。
-  // track 且 preset 都已给 → 本块整体不进（isInteractive/makePrompter 都不触发），下方逻辑与
-  // 此前逐字一致——golden-oracle 双跑守的非交互主线零回归。
+  // 向导用一份 registry 生成选项/校验（仅影响交互提示；权威校验在下方 registry 锁内 fresh-load）。
+  // track 且 preset 都已给 → 本块整体不进；golden-oracle 双跑守的非交互主线（内建轨）观测行为不变。
   if (!opts.track || !opts.preset) {
     if (!env.isInteractive()) {
       const missing = [!opts.track ? '--track' : null, !opts.preset ? '--preset' : null].filter(Boolean).join(' ')
       deps.io.err(`ERROR: 非交互模式缺少必填项 ${missing}（agent/CI 需显式提供；TTY 下省略会走交互向导）`)
       return 1
     }
-    opts = await runInitWizard(deps, opts, env)
-  }
-  if (!(TRACKS as readonly string[]).includes(opts.track ?? '')) {
-    deps.io.err(`ERROR: 非法 track '${opts.track}'，允许: ${TRACKS.join(' | ')}`)
-    return 1
-  }
-  if (!opts.preset) {
-    deps.io.err('ERROR: preset 不能为空')
-    return 1
-  }
-
-  // --workflow 校验先于任何落盘：workflow 文件不存在/非法都不应该先建出一个引用坏 workflow
-  // 的 change 再报错（同 transition.ts Task 8 的"先校验后写"纪律）。
-  let customStart: { workflow: string; phase: string } | undefined
-  if (opts.workflow && opts.workflow !== 'default') {
-    let wf: ReturnType<typeof loadWorkflow>
+    let wizRegistry: TrackRegistry
     try {
-      wf = loadWorkflow(deps.cwd, opts.workflow)
+      wizRegistry = deps.loadRegistry()
     } catch (e) {
-      deps.io.err(errMsg(e))
+      deps.io.err(`ERROR: ${errMsg(e)}`)
       return 1
     }
-    if (!wf) {
-      deps.io.err(`ERROR: workflow '${opts.workflow}' 未找到（期望 .pipeline/workflows/${opts.workflow}.yaml）`)
-      return 1
-    }
-    // 首 step 习语单源在 kernel firstStep（Wave 2 下沉；空 steps → null，错误消息逐字不变）
-    const first = firstStep(wf)
-    if (!first) {
-      deps.io.err(`ERROR: workflow '${opts.workflow}' 未声明任何 step`)
-      return 1
-    }
-    customStart = { workflow: opts.workflow, phase: first.id }
+    opts = await runInitWizard(deps, wizRegistry, opts, env)
   }
 
+  // R3 D4：init 纳入仓级 registry 生命周期锁（锁序 registry → change）——锁内 fresh-load registry
+  // 做权威校验、再创建 change，堵住「锁外读 registry、之后才写 change」与 tracks delete 竞争的跨锁
+  // TOCTOU（delete 扫描期 init 同轨必等待）。坏 tracks.yaml 在锁内 load 处 fail-loud（外层 catch →
+  // exit 1）。requireTrack/assertWorkflowAllowed 全部先于落盘（不留引用坏 workflow 的半成品 change）。
   try {
-    const created = await deps.store.init({
-      repoRoot: deps.cwd,
-      name,
-      track: opts.track as Track,
-      preset: opts.preset,
-      user: opts.user,
-      clock: deps.clock,
-    })
-    if (customStart) {
-      await deps.store.setMany(created, { workflow: customStart.workflow, phase: customStart.phase })
-    }
-    await recordHistory(deps, created, {
-      ts: deps.clock(),
-      kind: 'init',
-      ...(opts.user ? { by: opts.user } : {}),
-    })
-    // 决策 D（v5 T2）：init 成功后 best-effort 登记 repoRoot 到机器级项目注册表——
-    // 铁律：注册表任何故障（损坏/目录不可写）只 WARN，绝不让已成功的 init 失败。
-    if (deps.registerProject) {
+    return await deps.withRegistryLock(async ({ registry }) => {
+      // track 合法性改走锁内 fresh registry（requireTrack）：未注册即拒（缺 tracks.yaml 时等价旧四轨枚举）。
+      let track: TrackDefinition
       try {
-        await deps.registerProject(deps.cwd)
+        track = requireTrack(registry, opts.track ?? '')
       } catch (e) {
-        deps.io.err(`WARN: 项目注册表登记失败: ${errMsg(e)}`)
+        deps.io.err(`ERROR: ${errMsg(e)}`)
+        return 1
       }
-    }
-    deps.io.err(`[INIT] ${created}`)
-    return 0
+      if (!opts.preset) {
+        deps.io.err('ERROR: preset 不能为空')
+        return 1
+      }
+
+      // workflow 绑定（codex 设计 §5）：workflowId = 显式 --workflow ?? track.workflow.default；
+      // 校验它在该 track 的 allowed 白名单内、且真实存在可加载。default 走 store.init 老首态（open），
+      // 非 default 则种到该 workflow 首个 step。只接 init 构造点、不改 resolveWorkflowName 读取语义。
+      const workflowId = opts.workflow && opts.workflow !== '' ? opts.workflow : track.workflow.default
+      try {
+        assertWorkflowAllowed(track, workflowId)
+      } catch (e) {
+        deps.io.err(`ERROR: ${errMsg(e)}`)
+        return 1
+      }
+      let customStart: { workflow: string; phase: string; openspecContract?: boolean } | undefined
+      if (workflowId !== 'default') {
+        let wf: ReturnType<typeof loadWorkflow>
+        try {
+          wf = loadWorkflow(deps.cwd, workflowId)
+        } catch (e) {
+          deps.io.err(errMsg(e))
+          return 1
+        }
+        if (!wf) {
+          deps.io.err(`ERROR: workflow '${workflowId}' 未找到（期望 .pipeline/workflows/${workflowId}.yaml）`)
+          return 1
+        }
+        // 首 step 习语单源在 kernel firstStep（Wave 2 下沉；空 steps → null，错误消息逐字不变）
+        const first = firstStep(wf)
+        if (!first) {
+          deps.io.err(`ERROR: workflow '${workflowId}' 未声明任何 step`)
+          return 1
+        }
+        customStart = {
+          workflow: workflowId,
+          phase: first.id,
+          ...(wf.openspecContract === 'required' ? { openspecContract: true } : {}),
+        }
+      }
+
+      try {
+        // 身份随 init 独占创建一次性写入（W1 第五轮 codex review）；custom workflow 首态随
+        // initialWorkflow 进同一次原子发布（第 7 轮 codex review，见 store.ts init() 注释）。
+        const { changeDir: created } = await deps.runRepo.initChange({
+          repoRoot: deps.cwd,
+          name,
+          track: track.id,
+          reviewSeed: track.policyProfile.reviewSeed,
+          preset: opts.preset,
+          user: opts.user,
+          clock: deps.clock,
+          initialWorkflow: customStart,
+        })
+        await recordHistory(deps, created, {
+          ts: deps.clock(),
+          kind: 'init',
+          ...(opts.user ? { by: opts.user } : {}),
+        })
+        // 决策 D（v5 T2）：init 成功后 best-effort 登记 repoRoot 到机器级项目注册表——注册表任何
+        // 故障（损坏/目录不可写）只 WARN，绝不让已成功的 init 失败。
+        if (deps.registerProject) {
+          try {
+            await deps.registerProject(deps.cwd)
+          } catch (e) {
+            deps.io.err(`WARN: 项目注册表登记失败: ${errMsg(e)}`)
+          }
+        }
+        deps.io.err(`[INIT] ${created}`)
+        return 0
+      } catch (e) {
+        deps.io.err(`ERROR: ${errMsg(e)}`)
+        return 1
+      }
+    })
   } catch (e) {
     deps.io.err(`ERROR: ${errMsg(e)}`)
     return 1

@@ -4,19 +4,153 @@
  * 真拷贝仓库 templates/manifest.yaml 到临时文件，真改真读）。HTTP 层的鉴权/路由测试见 server.test.ts。
  */
 import { describe, expect, it } from 'vitest'
-import { mkdtemp, readdir, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { loadManifest } from '@pipeline-lite/kernel'
-import type { ExtendedManifestData } from '@pipeline-lite/kernel'
+import type { ExtendedManifestData, TrackValidationContext } from '@pipeline-lite/kernel'
 import {
   ConfigError,
   flattenMandatorySkills,
+  readConfigSnapshot,
   readMandatorySkills,
   validateMandatorySkillsBody,
   writeMandatorySkills,
 } from './config.js'
 import { makeTempManifest, repoManifestPath } from './test-support.js'
+
+const TRACK_CONTEXT: TrackValidationContext = {
+  workflowExists: (id) => id === 'default',
+  skillProfiles: new Set(['pm', 'frontend', 'backend']),
+}
+
+describe('readConfigSnapshot（manifest + kernel effective track registry 的 dashboard 契约）', () => {
+  it('缺 tracks.yaml 时返回 builtin-only 四轨、matrix/policy profile 与真实写能力', async () => {
+    const repoRoot = await mkdtemp(join(tmpdir(), 'pl-cfg-builtin-tracks-'))
+
+    const snapshot = readConfigSnapshot({
+      manifestPath: repoManifestPath(),
+      repoRoot,
+      trackValidationContext: TRACK_CONTEXT,
+      generatedAt: '2026-07-19T00:00:00Z',
+    })
+
+    expect(snapshot.ok).toBe(true)
+    expect(snapshot.generated_at).toBe('2026-07-19T00:00:00Z')
+    expect(snapshot.source).toBe('builtin-only')
+    expect(snapshot.revision).toMatch(/^[0-9a-f]{16}$/)
+    expect(snapshot.tracks.map((track) => track.id)).toEqual(['chat', 'pm', 'frontend', 'backend'])
+    expect(snapshot.tracks[0]).toMatchObject({
+      id: 'chat',
+      builtin: true,
+      workflow: { default: 'default', allowed: '*' },
+      policyProfile: {
+        reviewSeed: 'pending',
+        automationEligible: true,
+        coverageProfile: 'none',
+        routing: { enabled: false },
+        skills: { matrix: false, profile: '_all' },
+      },
+    })
+    expect(snapshot.tracks[1]?.policyProfile).toMatchObject({
+      reviewSeed: 'skipped',
+      automationEligible: false,
+      coverageProfile: 'pm',
+      skills: { matrix: true, profile: 'pm' },
+    })
+    expect(snapshot.mandatory_skills['build.backend']).toContain('test-driven-development')
+    expect(snapshot.mandatory_skills_writable_profiles).toEqual(['pm', 'frontend', 'backend'])
+  })
+
+  it('项目 registry 的第 5 轨按声明序返回，保留 workflow、routing/policy 与 skills profile 继承', async () => {
+    const repoRoot = await mkdtemp(join(tmpdir(), 'pl-cfg-custom-tracks-'))
+    await mkdir(join(repoRoot, '.pipeline'))
+    await writeFile(join(repoRoot, '.pipeline', 'tracks.yaml'), `version: 1
+tracks:
+  - id: qa
+    label: Quality
+    workflow:
+      default: default
+      allowed: [default]
+    policy_profile:
+      review_seed: pending
+      automation_eligible: true
+      coverage_profile: backend
+      routing:
+        enabled: true
+        pattern: '(qa|test)'
+        priority: 250
+      skills:
+        matrix: true
+        profile: frontend
+`, 'utf8')
+
+    const snapshot = readConfigSnapshot({
+      manifestPath: repoManifestPath(),
+      repoRoot,
+      trackValidationContext: TRACK_CONTEXT,
+      generatedAt: '2026-07-19T00:00:00Z',
+    })
+
+    expect(snapshot.source).toBe('project-file')
+    expect(snapshot.tracks.map((track) => track.id)).toEqual(['chat', 'pm', 'frontend', 'backend', 'qa'])
+    expect(snapshot.tracks[4]).toEqual({
+      id: 'qa',
+      label: 'Quality',
+      builtin: false,
+      workflow: { default: 'default', allowed: ['default'] },
+      policyProfile: {
+        reviewSeed: 'pending',
+        automationEligible: true,
+        coverageProfile: 'backend',
+        routing: { enabled: true, pattern: '(qa|test)', priority: 250 },
+        skills: { matrix: true, profile: 'frontend' },
+      },
+    })
+    // qa 继承 frontend，既有 writer 不能把它谎报成可写的 qa profile。
+    expect(snapshot.mandatory_skills_writable_profiles).toEqual(['pm', 'frontend', 'backend'])
+  })
+
+  it.each([
+    ['空文件', ''],
+    ['畸形定义', 'version: 1\ntracks:\n  - id: qa\n'],
+  ])('%s registry fail-closed，不降级成 builtin-only 快照', async (_label, registryText) => {
+    const repoRoot = await mkdtemp(join(tmpdir(), 'pl-cfg-bad-tracks-'))
+    await mkdir(join(repoRoot, '.pipeline'))
+    await writeFile(join(repoRoot, '.pipeline', 'tracks.yaml'), registryText, 'utf8')
+
+    expect(() => readConfigSnapshot({
+      manifestPath: repoManifestPath(),
+      repoRoot,
+      trackValidationContext: TRACK_CONTEXT,
+      generatedAt: '2026-07-19T00:00:00Z',
+    })).toThrow()
+  })
+
+  it('manifest 合法但缺 mandatory_skills 小节时不谎报写能力', async () => {
+    const repoRoot = await mkdtemp(join(tmpdir(), 'pl-cfg-no-write-section-root-'))
+    const manifestDir = await mkdtemp(join(tmpdir(), 'pl-cfg-no-write-section-manifest-'))
+    const manifestPath = join(manifestDir, 'manifest.yaml')
+    await writeFile(manifestPath, `phases:
+  - open
+  - archive
+transitions:
+  open: [archive]
+  archive: []
+review_phases: []
+`, 'utf8')
+
+    const snapshot = readConfigSnapshot({
+      manifestPath,
+      repoRoot,
+      trackValidationContext: TRACK_CONTEXT,
+      generatedAt: '2026-07-19T00:00:00Z',
+    })
+
+    expect(snapshot.mandatory_skills).toEqual({})
+    expect(snapshot.mandatory_skills_writable_profiles).toEqual([])
+  })
+})
 
 describe('flattenMandatorySkills（纯派生：嵌套 SkillTable → 扁平 phase.track 映射）', () => {
   it('只暴露实际声明过的 phase.track 键（含 _all 兜底键，供前端三级回退只读展示）', () => {
@@ -42,8 +176,8 @@ describe('flattenMandatorySkills（纯派生：嵌套 SkillTable → 扁平 phas
 describe('readMandatorySkills（真读仓库 templates/manifest.yaml，零 mock）', () => {
   it('build.backend 含 TDD skill；open._all 含 propose skill（与前端 data.ts 镜像一致）', () => {
     const flat = readMandatorySkills(repoManifestPath())
-    expect(flat['build.backend']).toContain('superpowers:test-driven-development')
-    expect(flat['open._all']).toContain('opsx:propose|openspec-propose')
+    expect(flat['build.backend']).toContain('test-driven-development')
+    expect(flat['open._all']).toContain('openspec-propose')
     // 目前未声明 open.pm/open.frontend/open.backend（只有 _all 兜底）——写入面测试的前提假设
     expect(flat['open.pm']).toBeUndefined()
   })
@@ -113,13 +247,13 @@ describe('writeMandatorySkills —— 外科手术式改盘 + 真 kernel 往返�
     const reparsed = loadManifest(manifestPath)
     expect(reparsed.mandatorySkills.build.backend).toEqual(['x', 'y'])
     // 其余条目逐字不变（spot check）
-    expect(reparsed.mandatorySkills.explore.pm).toEqual(['superpowers:brainstorming', 'grill-with-docs'])
-    expect(reparsed.mandatorySkills.open._all).toEqual(['opsx:propose|openspec-propose'])
+    expect(reparsed.mandatorySkills.explore.pm).toEqual(['brainstorming', 'grill-with-docs'])
+    expect(reparsed.mandatorySkills.open._all).toEqual(['openspec-propose'])
     expect(reparsed.mandatorySkills.ship.backend).toEqual([
-      'opsx:apply|openspec-apply-change',
-      'superpowers:finishing-a-development-branch',
-      'commit-commands:commit-push-pr',
+      'openspec-apply-change',
+      'finishing-a-development-branch',
     ])
+    expect(reparsed.mandatorySkills.ship.backend).not.toContain('commit-commands:commit-push-pr')
   })
 
   it('新增此前不存在的 key（open.pm 目前仅有 _all 兜底）：写入后独立生效、_all 不受影响', async () => {
@@ -130,13 +264,12 @@ describe('writeMandatorySkills —— 外科手术式改盘 + 真 kernel 往返�
 
     const reparsed = loadManifest(manifestPath)
     expect(reparsed.mandatorySkills.open.pm).toEqual(['custom-skill'])
-    expect(reparsed.mandatorySkills.open._all).toEqual(['opsx:propose|openspec-propose'])
+    expect(reparsed.mandatorySkills.open._all).toEqual(['openspec-propose'])
 
     // 小节尾部的说明性注释逐字保留（未被新条目插入打断/覆盖）
     const text = await readFile(manifestPath, 'utf8')
     expect(text).toContain('# archive 无强制 skill（归档不 gate skill）——不声明即空表')
-    // 其它顶层小节（router_patterns/breadcrumb 等）不受影响 —— 整份仍可被 kernel 完整解析
-    expect(reparsed.routerPatterns.frontend).toContain('React')
+    // 其它顶层小节（如 breadcrumb）不受影响 —— 整份仍可被 kernel 完整解析
     expect(reparsed.breadcrumbs.build).toContain('TDD')
   })
 

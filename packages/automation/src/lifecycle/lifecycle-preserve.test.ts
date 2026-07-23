@@ -3,6 +3,13 @@ import { type LifecyclePorts, runChangeInSandbox } from './lifecycle.js'
 import { SyncError } from './mergeback.js'
 
 const SHA = 'a'.repeat(40)
+const TEST_VERIFIER_IDENTITY = {
+  kind: 'host-verifier', verifier: 'fake-verifier', version: '1',
+} as const
+const testMergeJournal = {
+  async recordMergeIntent() { return 'preserve-intent-1' },
+  async recordMergeLanded() {},
+}
 
 /**
  * #29c 现场保留补强：#29 lifecycle 只在 abort 时保留 worktree；真 merge-back 引入真冲突后，
@@ -54,6 +61,23 @@ const makePorts = (over: Partial<LifecyclePorts>): { ports: LifecyclePorts; log:
     },
     git: { revParse: async () => SHA },
     async setStateField() {},
+    // H7 verifier Phase 2：本文件专测 merge-back 冲突现场保留，不涉及 verifier 行为——固定 trusted
+    // passed（不影响任何断言，mergeToBase 判断块本身不消费 verification）。
+    verifier: {
+      async verify(input) {
+        return {
+          schema_version: 1,
+          verification_id: 'ver-preserve-fake',
+          subject: { workflow_run_id: input.workflowRunId, attempt_id: input.context.attempt_id, change: input.context.change, revision: { kind: 'named-branch-head', sha: input.revisionSha } },
+          binding: input.workflowBinding,
+          verdict: 'passed',
+          evidence: [{ kind: 'command-result', command_id: 'fake', exit_code: 0 }],
+          issuer: { ...TEST_VERIFIER_IDENTITY, trusted: true },
+          evaluated_at: '2026-07-18T00:00:00.000Z',
+        }
+      },
+    },
+    verifierExpectedIssuerIdentity: TEST_VERIFIER_IDENTITY,
     ...over,
   }
   return { ports, log }
@@ -68,8 +92,12 @@ describe('runChangeInSandbox 冲突现场保留（#29c）', () => {
       },
     })
     await expect(
-      runChangeInSandbox(ports, { hostRepoDir: '/repo', name: 'x', base: 'main', autoMerge: true }, new AbortController().signal),
+      runChangeInSandbox(ports, {
+        hostRepoDir: '/repo', name: 'x', base: 'main', autoMerge: true, allowlist: ['**'],
+        requireMergeJournal: true, mergeJournal: testMergeJournal,
+      }, new AbortController().signal),
     ).rejects.toBeInstanceOf(SyncError)
+    expect(log).toContain('mergeToBase')
     // 关键：conflict 不清 worktree（留现场供人工接管）
     expect(log.some((l) => l.startsWith('wt.remove'))).toBe(false)
     // 容器仍杀（不泄漏），worktree 才留
@@ -83,7 +111,10 @@ describe('runChangeInSandbox 冲突现场保留（#29c）', () => {
       },
     })
     await expect(
-      runChangeInSandbox(ports, { hostRepoDir: '/repo', name: 'x', base: 'main', autoMerge: true }, new AbortController().signal),
+      runChangeInSandbox(ports, {
+        hostRepoDir: '/repo', name: 'x', base: 'main', autoMerge: true, allowlist: ['**'],
+        requireMergeJournal: true, mergeJournal: testMergeJournal,
+      }, new AbortController().signal),
     ).rejects.toThrow('transient boom')
     // 非保留类错误：worktree 照清（retry 会重建），不误留现场
     expect(log.some((l) => l.startsWith('wt.remove'))).toBe(true)

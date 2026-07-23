@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react'
 import { fetchAfkReadiness, fetchAutomationSettings, fetchDockerImages, postAutomationSettings, type WbAfkReadiness, type WbAutomationSettings, type WbDockerImages } from '../api/client'
 import { useT } from '../i18n'
-import { LpSlider } from './LoopCard'
+import { LpSlider, WbAdvanced, WB_TW } from './LoopCard'
+import { Button } from '@/components/ui/button'
+import { Switch } from '@/components/ui/switch'
+import { cn } from '@/lib/utils'
 
 /**
  * AutomationCard（T21）——「AFK 执行」卡：per-root .pipeline/automation.json 的编排面，
@@ -10,11 +13,15 @@ import { LpSlider } from './LoopCard'
  *
  * 交互对齐 LoopCard 的既有拍板：全部参数走「dirty 汇总 → 卡头保存钮」一次 POST
  * /api/automation；保存成功后**再 GET 回读**以 server 归一真值重置草稿（验收「保存后 GET
- * 回读一致」——不信任本地草稿，信落盘真值）。滑杆复用 LoopCard 导出的 LpSlider（lp-slider
- * 样式纪律）。加载失败行内报错不渲染控件（诚实占位，不谎报可配）。
+ * 回读一致」——不信任本地草稿，信落盘真值）。滑杆复用 LoopCard 导出的 LpSlider（同一
+ * 滑杆样式纪律）。加载失败行内报错不渲染控件（诚实占位，不谎报可配）。
  *
  * 真实起效链路（不是假开关）：写盘 → automation 包 readAutomationJson → sdk.ts createAutomation
  * 装配（maxParallel/maxRetries/defaultOptIn）+ cli afk run 的 dockerRunChange image 同源。
+ *
+ * v10b 全量迁移（Phase 2 / W2）：wb-/afk-/lp- 手写全局类退役，样式改 tailwind 原子类（共享
+ * 词汇 import LoopCard 的 WB_TW）；就绪灯状态由 data-state="ok"/"no" 承载（测试同步改断言
+ * data 属性），灯色 token/color-mix 派生，无新硬编码色值、无内联 style。
  */
 
 // 推荐值（DEFAULT_CONFIG 同源：maxParallel 4 / maxRetries 1）。
@@ -28,6 +35,21 @@ const RETRIES_MAX = 3
 const same = (a: WbAutomationSettings, b: WbAutomationSettings): boolean =>
   a.max_parallel === b.max_parallel && a.max_retries === b.max_retries &&
   a.default_opt_in === b.default_opt_in && a.image === b.image
+
+/** 就绪灯点：绿=既有 --green，未就绪黄=红绿 oklch 取中派生（决议 #9，禁新原色）；状态走 data-state。 */
+function RdDot({ ok }: { ok: boolean }): JSX.Element {
+  return (
+    <span
+      className={cn('size-2 flex-none rounded-full', ok ? 'bg-green' : 'bg-[color-mix(in_oklch,var(--red)_52%,var(--green))]')}
+      data-state={ok ? 'ok' : 'no'}
+      aria-hidden="true"
+    />
+  )
+}
+
+/** 就绪灯区「独占一行」小字（旧 .afk-rd-howto / .afk-rd-caveat——文字色 color-mix 自 --text-2 派生）。 */
+const RD_HOWTO_TW = 'basis-full text-[11px] leading-[1.4] text-[color-mix(in_srgb,var(--text-2)_82%,transparent)]'
+const RD_CAVEAT_TW = 'basis-full text-[11px] leading-[1.4] text-[color-mix(in_srgb,var(--text-2)_70%,transparent)]'
 
 export interface AutomationCardProps {
   root: string
@@ -133,114 +155,46 @@ export function AutomationCard({ root, refreshToken = 0 }: AutomationCardProps):
 
   if (loadError) {
     return (
-      <section className="card wb-loop" data-testid="wb-afk-card">
-        <div className="wb-editor-head lp-head"><b>{t('workbench.afk_title')}</b></div>
-        <p className="view__note view__note--error" data-testid="afk-load-error">{loadError}</p>
+      <section className={WB_TW.card} data-testid="wb-afk-card">
+        <div className={WB_TW.head}><b className={WB_TW.headB}>{t('workbench.afk_title')}</b></div>
+        <p className={WB_TW.loadError} data-tone="error" data-testid="afk-load-error">{loadError}</p>
       </section>
     )
   }
   if (!draft) {
     return (
-      <section className="card wb-loop" data-testid="wb-afk-card">
-        <div className="wb-editor-head lp-head"><b>{t('workbench.afk_title')}</b></div>
-        <p className="view__note">{t('common.loading')}</p>
+      <section className={WB_TW.card} data-testid="wb-afk-card">
+        <div className={WB_TW.head}><b className={WB_TW.headB}>{t('workbench.afk_title')}</b></div>
+        <p className={WB_TW.loading}>{t('common.loading')}</p>
       </section>
     )
   }
 
   return (
-    <section className="card wb-loop" data-testid="wb-afk-card">
-      <div className="wb-editor-head lp-head">
-        <b>{t('workbench.afk_title')}</b>
-        <span className="wb-spacer" />
-        {dirty && <span className="wb-status wb-status--dirty" data-testid="afk-dirty">{t('workbench.afk_dirty')}</span>}
-        {saveOk && !dirty && <span className="wb-status wb-status--ok" data-testid="afk-save-ok">{t('workbench.afk_save_ok')}</span>}
-        <button className="btn" data-testid="afk-save" onClick={() => void save()} disabled={!dirty || saving}>
+    <section className={WB_TW.card} data-testid="wb-afk-card">
+      <div className={WB_TW.head}>
+        <b className={WB_TW.headB}>{t('workbench.afk_title')}</b>
+        <span className="flex-1" />
+        {dirty && <span className={WB_TW.statusDirty} data-state="dirty" data-testid="afk-dirty">{t('workbench.afk_dirty')}</span>}
+        {saveOk && !dirty && <span className={WB_TW.statusOk} data-state="ok" data-testid="afk-save-ok">{t('workbench.afk_save_ok')}</span>}
+        <Button size="sm" className={WB_TW.btnSolid} data-testid="afk-save" onClick={() => void save()} disabled={!dirty || saving}>
           {t('workbench.afk_save')}
-        </button>
-        <span className="lp-head-sub">{t('workbench.afk_head_sub')}</span>
+        </Button>
+        <span className={WB_TW.headSub}>{t('workbench.afk_head_sub')}</span>
       </div>
 
       {saveError && (
-        <ul className="wb-save-errors lp-errors" data-testid="afk-save-error">
-          <li>{saveError}</li>
+        <ul className={WB_TW.saveErrors} data-testid="afk-save-error">
+          <li className={WB_TW.saveErrorsLi}>{saveError}</li>
         </ul>
       )}
 
-      {/* v6 T9：就绪三灯——真探测真值(GET /api/afk/readiness);readiness 拉不到就整区不渲染,不谎报。 */}
-      {readiness && (
-        <div className="afk-rd" data-testid="afk-rd">
-          <span className={`rd-dot ${readiness.docker.available ? 'rd-dot--ok' : 'rd-dot--no'}`} aria-hidden="true" />
-          <span className="afk-rd-item" data-testid="afk-rd-docker">
-            {t('workbench.afk_rd_docker')}:{readiness.docker.available ? t('workbench.afk_rd_ok') : t('workbench.afk_rd_no')}
-          </span>
-          {/* G2:docker 不可用时不光报「未就绪」,补一句「怎么装」引导(独占一行,与镜像 build_hint
-              复制钮语义不重复——那是命令可复制,docker 是装 App 无单条命令,故给安装入口 URL)。 */}
-          {!readiness.docker.available && (
-            <span className="afk-rd-howto" data-testid="afk-rd-docker-howto">{t('workbench.afk_rd_docker_howto')}</span>
-          )}
-          <span className={`rd-dot ${readiness.image.present ? 'rd-dot--ok' : 'rd-dot--no'}`} aria-hidden="true" />
-          <span className="afk-rd-item" data-testid="afk-rd-image" title={readiness.image.configured}>
-            {t('workbench.afk_rd_image')}:{readiness.image.present ? t('workbench.afk_rd_ok') : t('workbench.afk_rd_no')}
-          </span>
-          {/* Bug2：build 引导 gate 在 docker.available 之后——docker 没起时 image inspect 被短路，present
-              恒 false 并非「镜像真缺」，且 build 本身需 docker 必失败；故此时不给走不通的 build CTA，改明示
-              「先起 docker」。docker 起着且镜像真缺 → 才给 build_hint 复制钮。 */}
-          {!readiness.image.present && readiness.docker.available && (
-            <button
-              type="button"
-              className="wb-chip-badge"
-              data-testid="afk-rd-build-copy"
-              title={readiness.image.build_hint}
-              onClick={() => void navigator.clipboard?.writeText(readiness.image.build_hint)}
-            >
-              {t('workbench.afk_rd_build_copy')}
-            </button>
-          )}
-          {!readiness.image.present && !readiness.docker.available && (
-            <span className="afk-rd-howto" data-testid="afk-rd-image-needs-docker">{t('workbench.afk_rd_image_needs_docker')}</span>
-          )}
-          {/* full-install W1：凭证 per-runner 双灯——claude-code 与 codex 同等可见(各自灯色+文案,不靠 tooltip)。
-              旅程唯一真·不对等修复(P1-F1):数据齐(credentials 含两 runner),此前 UI 只渲染 claude-code。 */}
-          <span
-            className={`rd-dot ${readiness.credentials['claude-code'].CLAUDE_CODE_OAUTH_TOKEN.set ? 'rd-dot--ok' : 'rd-dot--no'}`}
-            aria-hidden="true"
-          />
-          <span className="afk-rd-item" data-testid="afk-rd-cred-claude">
-            {t('workbench.afk_rd_cred')}:
-            {readiness.credentials['claude-code'].CLAUDE_CODE_OAUTH_TOKEN.set
-              ? t('workbench.afk_rd_ok')
-              : t('workbench.afk_rd_unset')}
-          </span>
-          {/* codex 灯:OPENAI_API_KEY.set 决灯色/文案;CODEX_HOME 作只读附注入 title(C2b,不作独立必配灯)。 */}
-          <span
-            className={`rd-dot ${readiness.credentials.codex.OPENAI_API_KEY.set ? 'rd-dot--ok' : 'rd-dot--no'}`}
-            aria-hidden="true"
-          />
-          <span
-            className="afk-rd-item"
-            data-testid="afk-rd-cred-codex"
-            title={t('workbench.afk_rd_codex_hint', {
-              o: readiness.credentials.codex.OPENAI_API_KEY.set ? '✓' : '✗',
-              c: readiness.credentials.codex.CODEX_HOME.set ? '✓' : '✗',
-            })}
-          >
-            {t('workbench.afk_rd_cred_codex')}:
-            {readiness.credentials.codex.OPENAI_API_KEY.set
-              ? t('workbench.afk_rd_ok')
-              : t('workbench.afk_rd_unset')}
-          </span>
-          {/* 诚实 caveat(P1-F2/P1-X1)：凭证灯是服务进程视角快照,终端 doctor/setup 才是凭证权威。整行独占(flex-basis:100%)。 */}
-          <span className="afk-rd-caveat" data-testid="afk-rd-cred-caveat">{t('workbench.afk_rd_cred_caveat')}</span>
-        </div>
-      )}
-
-      <div className="wb-ed-sec">
-        <div className="wb-ed-sec-h">
+      <div className={WB_TW.sec} data-sec="">
+        <div className={WB_TW.secH}>
           {t('workbench.afk_sec')}
-          <span className="hint">{t('workbench.afk_sec_hint')}</span>
+          <span className={WB_TW.hint}>{t('workbench.afk_sec_hint')}</span>
         </div>
-        <div className="lp-slds">
+        <div className="grid grid-cols-2 items-start gap-x-7 gap-y-2 max-[720px]:grid-cols-1">
           <div>
             <LpSlider
               id="afk-sld-parallel"
@@ -254,7 +208,7 @@ export function AutomationCard({ root, refreshToken = 0 }: AutomationCardProps):
               onValue={(v) => edit({ max_parallel: v })}
             />
             {/* 验收反馈②-④：讲清楚这是「整机」上限，不是单 change 的配额 */}
-            <p className="wb-note lp-sld-note">{t('workbench.afk_sld_parallel_note')}</p>
+            <p className={cn(WB_TW.note, 'mt-1')}>{t('workbench.afk_sld_parallel_note')}</p>
           </div>
           <LpSlider
             id="afk-sld-retries"
@@ -269,24 +223,22 @@ export function AutomationCard({ root, refreshToken = 0 }: AutomationCardProps):
           />
         </div>
 
-        <div className="lp-policy">
-          <span className="wb-flabel">{t('workbench.afk_opt_in')}</span>
-          <button
-            type="button"
-            className="switch"
-            role="switch"
-            aria-checked={draft.default_opt_in}
+        <div className={WB_TW.policyRow}>
+          <span className={WB_TW.flabel}>{t('workbench.afk_opt_in')}</span>
+          <Switch
+            className={WB_TW.switch}
+            checked={draft.default_opt_in}
             aria-label={t('workbench.afk_opt_in')}
             data-testid="afk-opt-in"
-            onClick={() => edit({ default_opt_in: !draft.default_opt_in })}
+            onCheckedChange={() => edit({ default_opt_in: !draft.default_opt_in })}
           />
-          <span className="wb-note">{t('workbench.afk_opt_in_note')}</span>
+          <span className={WB_TW.note}>{t('workbench.afk_opt_in_note')}</span>
         </div>
 
-        <div className="lp-policy">
-          <label className="wb-flabel" htmlFor="afk-image">{t('workbench.afk_image')}</label>
+        <div className={WB_TW.policyRow}>
+          <label className={WB_TW.flabel} htmlFor="afk-image">{t('workbench.afk_image')}</label>
           <input
-            className="wb-input lp-mono"
+            className={cn(WB_TW.input, 'font-mono')}
             id="afk-image"
             data-testid="afk-image"
             placeholder="sandcastle:local"
@@ -306,9 +258,73 @@ export function AutomationCard({ root, refreshToken = 0 }: AutomationCardProps):
               ))}
             </datalist>
           )}
-          <span className="wb-note">{t('workbench.afk_image_note')}</span>
+          <span className={WB_TW.note}>{t('workbench.afk_image_note')}</span>
         </div>
       </div>
+
+      {/* IA 精简：就绪三灯是只读诊断（docker/镜像/凭证），收进「▸ 高级设置」默认折叠——核心第一屏
+          只留并发/重试/入队/镜像参数。readiness 拉不到就整块不渲染(连折叠钮一起),不谎报（原逻辑不变）。 */}
+      {readiness && (
+        <WbAdvanced testid="afk-adv">
+          <div className="mt-0.5 mb-1 flex flex-wrap items-center gap-x-2.5 gap-y-1.5 text-xs text-text-2" data-testid="afk-rd">
+            <RdDot ok={readiness.docker.available} />
+            <span data-testid="afk-rd-docker">
+              {t('workbench.afk_rd_docker')}:{readiness.docker.available ? t('workbench.afk_rd_ok') : t('workbench.afk_rd_no')}
+            </span>
+            {/* G2:docker 不可用时不光报「未就绪」,补一句「怎么装」引导(独占一行,与镜像 build_hint
+                复制钮语义不重复——那是命令可复制,docker 是装 App 无单条命令,故给安装入口 URL)。 */}
+            {!readiness.docker.available && (
+              <span className={RD_HOWTO_TW} data-testid="afk-rd-docker-howto">{t('workbench.afk_rd_docker_howto')}</span>
+            )}
+            <RdDot ok={readiness.image.present} />
+            <span data-testid="afk-rd-image" title={readiness.image.configured}>
+              {t('workbench.afk_rd_image')}:{readiness.image.present ? t('workbench.afk_rd_ok') : t('workbench.afk_rd_no')}
+            </span>
+            {/* Bug2：build 引导 gate 在 docker.available 之后——docker 没起时 image inspect 被短路，present
+                恒 false 并非「镜像真缺」，且 build 本身需 docker 必失败；故此时不给走不通的 build CTA，改明示
+                「先起 docker」。docker 起着且镜像真缺 → 才给 build_hint 复制钮。 */}
+            {!readiness.image.present && readiness.docker.available && (
+              <button
+                type="button"
+                className="ml-1 flex-none cursor-pointer rounded-full border-0 bg-[color-mix(in_oklch,var(--red)_52%,var(--green))] px-1.5 py-px text-[10px] font-bold whitespace-nowrap text-card"
+                data-testid="afk-rd-build-copy"
+                title={readiness.image.build_hint}
+                onClick={() => void navigator.clipboard?.writeText(readiness.image.build_hint)}
+              >
+                {t('workbench.afk_rd_build_copy')}
+              </button>
+            )}
+            {!readiness.image.present && !readiness.docker.available && (
+              <span className={RD_HOWTO_TW} data-testid="afk-rd-image-needs-docker">{t('workbench.afk_rd_image_needs_docker')}</span>
+            )}
+            {/* full-install W1：凭证 per-runner 双灯——claude-code 与 codex 同等可见(各自灯色+文案,不靠 tooltip)。
+                旅程唯一真·不对等修复(P1-F1):数据齐(credentials 含两 runner),此前 UI 只渲染 claude-code。 */}
+            <RdDot ok={readiness.credentials['claude-code'].CLAUDE_CODE_OAUTH_TOKEN.set} />
+            <span data-testid="afk-rd-cred-claude">
+              {t('workbench.afk_rd_cred')}:
+              {readiness.credentials['claude-code'].CLAUDE_CODE_OAUTH_TOKEN.set
+                ? t('workbench.afk_rd_ok')
+                : t('workbench.afk_rd_unset')}
+            </span>
+            {/* Codex CLI 支持 API key 或 Codex home 登录；两条任一可用即是真就绪。 */}
+            <RdDot ok={readiness.credentials.codex.OPENAI_API_KEY.set || readiness.credentials.codex.CODEX_HOME.set} />
+            <span
+              data-testid="afk-rd-cred-codex"
+              title={t('workbench.afk_rd_codex_hint', {
+                o: readiness.credentials.codex.OPENAI_API_KEY.set ? '✓' : '✗',
+                c: readiness.credentials.codex.CODEX_HOME.set ? '✓' : '✗',
+              })}
+            >
+              {t('workbench.afk_rd_cred_codex')}:
+              {readiness.credentials.codex.OPENAI_API_KEY.set || readiness.credentials.codex.CODEX_HOME.set
+                ? t('workbench.afk_rd_ok')
+                : t('workbench.afk_rd_unset')}
+            </span>
+            {/* 诚实 caveat(P1-F2/P1-X1)：凭证灯是服务进程视角快照,终端 doctor/setup 才是凭证权威。整行独占(basis-full)。 */}
+            <span className={RD_CAVEAT_TW} data-testid="afk-rd-cred-caveat">{t('workbench.afk_rd_cred_caveat')}</span>
+          </div>
+        </WbAdvanced>
+      )}
     </section>
   )
 }

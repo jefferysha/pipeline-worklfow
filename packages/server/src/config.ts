@@ -2,13 +2,11 @@
  * config 域 —— dashboard Settings「相位 × 轨道 强制技能矩阵」的读 + 写后端
  * （GOAL A3 「config 写端点为可选增量」的收编；SettingsView 矩阵 tab 此前只有只读预览）。
  *
- * "config" 在本仓的确切含义：templates/manifest.yaml 的 `mandatory_skills:` 小节
- * （phase.track → skill token 列表；单一真相源 = kernel loadManifest 全派生面，见
- * packages/kernel/src/flow/manifest.ts）。这是全机唯一一份文件（不像 .pipeline.yaml 按
- * Project 分立存在），因此本域没有 root/name 概念——纯 server 级全局配置，与 transition.ts
- * 的按 Project 写回是不同的形状。
+ * "config" 由两份真相合成：全机 templates/manifest.yaml 的 `mandatory_skills:` 小节，及
+ * 当前 Project 的 kernel effective Track Registry。GET 快照因此必须绑定 root；写端仍只改
+ * 全机 manifest 的既有 mandatory-skills 接缝，不在本模块虚构 track 保存能力。
  *
- * 读：直接消费 kernel loadManifest（只 import 不改），零重复解析逻辑。
+ * 读：直接消费 kernel loadManifest + loadTrackRegistry（只 import 不改），零重复解析/合成逻辑。
  * 写：kernel 只导出了读手（loadManifest），未导出 manifest 写手；本模块不碰 kernel、
  * 自实现最小"外科手术式"文本替换——只在 mandatory_skills 小节内定位/替换/追加目标
  * `phase.track: [skill, ...]` 行，小节内其余行（含缩进注释、空行）逐字节保留。写前必须
@@ -21,17 +19,18 @@
  *
  * 安全面：
  *   · manifestPath 由 server 启动装配注入（main.ts 固定拼出仓库 templates/manifest.yaml
- *     路径），不受请求体控制——没有 root 概念也就没有路径穿越面。
+ *     路径），不受请求 root 控制；root 只选择项目 Track Registry。
  *   · phase 限定 kernel PHASES 且拒 archive（archive 无强制 skill，manifest.yaml 注释自述此约定）。
  *   · track 限定 pm/frontend/backend（不接受 _all——UI 无此列，端点亦不接受，收窄可写面）。
  *   · skill token 白名单字符集（字母数字开头，其后允许 : _ . / | -），拒逗号/方括号/换行/
  *     空白/引号/# 等——防止 token 内容break 出所在的单行 flow-list `[...]` 语法（注入/损坏）。
  *   · 写手自身重复校验字符集与 phase/track 形状（纵深防线，不信任调用方已校验）。
  */
+import { readFileSync } from 'node:fs'
 import { readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
-import { loadManifest, PHASES, withLock } from '@pipeline-lite/kernel'
-import type { ExtendedManifestData, Phase } from '@pipeline-lite/kernel'
+import { loadManifest, loadTrackRegistry, PHASES, withLock } from '@pipeline-lite/kernel'
+import type { ExtendedManifestData, Phase, TrackDefinition, TrackValidationContext } from '@pipeline-lite/kernel'
 
 export class ConfigError extends Error {
   constructor(message: string) {
@@ -48,6 +47,7 @@ const EDITABLE_TRACK_SET: ReadonlySet<string> = new Set(EDITABLE_TRACKS)
 /** skill token 白名单：字母数字开头，其后允许 `: _ . / | -`，长度 1-128（写手 + 校验双侧复用）。 */
 export const SKILL_TOKEN_RE = /^[A-Za-z0-9][A-Za-z0-9_.:/|-]{0,127}$/
 export const MAX_SKILLS = 50
+const SECTION_HEADER_RE = /^mandatory_skills:\s*$/
 
 /** 扁平 'phase.track' → skills 映射（GET /api/config 响应体形状；同前端 data.ts 镜像的形状）。 */
 export type MandatorySkillsMap = Record<string, string[]>
@@ -73,6 +73,82 @@ export function flattenMandatorySkills(data: Pick<ExtendedManifestData, 'mandato
 /** 真读 manifest.yaml（kernel loadManifest，零重复解析逻辑）→ 扁平映射。 */
 export function readMandatorySkills(manifestPath: string): MandatorySkillsMap {
   return flattenMandatorySkills(loadManifest(manifestPath))
+}
+
+export interface ReadConfigSnapshotOptions {
+  readonly manifestPath: string
+  readonly repoRoot: string
+  readonly trackValidationContext: TrackValidationContext
+  readonly generatedAt: string
+}
+
+/** `/api/config?root=` 的 dashboard 契约；tracks 是 kernel effective registry 的保序 JSON 投影。 */
+export interface ConfigSnapshot {
+  readonly ok: true
+  readonly generated_at: string
+  readonly revision: string
+  readonly source: 'builtin-only' | 'project-file'
+  readonly mandatory_skills: MandatorySkillsMap
+  readonly tracks: readonly TrackDefinition[]
+  readonly mandatory_skills_writable_profiles: readonly EditableTrack[]
+}
+
+function projectTrack(track: TrackDefinition): TrackDefinition {
+  return {
+    id: track.id,
+    label: track.label,
+    builtin: track.builtin,
+    workflow: {
+      default: track.workflow.default,
+      allowed: track.workflow.allowed === '*' ? '*' : [...track.workflow.allowed],
+    },
+    policyProfile: {
+      reviewSeed: track.policyProfile.reviewSeed,
+      automationEligible: track.policyProfile.automationEligible,
+      coverageProfile: track.policyProfile.coverageProfile,
+      routing: track.policyProfile.routing.enabled
+        ? {
+            enabled: true,
+            pattern: track.policyProfile.routing.pattern,
+            priority: track.policyProfile.routing.priority,
+          }
+        : { enabled: false },
+      skills: {
+        matrix: track.policyProfile.skills.matrix,
+        profile: track.policyProfile.skills.profile,
+      },
+    },
+  }
+}
+
+/**
+ * 真读 manifest + 项目 registry。registry 解析/语义错误沿用 kernel fail-loud；绝不退回静态轨道。
+ * 写能力只声明既有 POST 真实接受、且 effective track 自持同名 matrix profile 的交集。
+ */
+export function readConfigSnapshot(options: ReadConfigSnapshotOptions): ConfigSnapshot {
+  const manifest = loadManifest(options.manifestPath)
+  const registry = loadTrackRegistry(options.repoRoot, options.trackValidationContext)
+  if (registry.ordered.length === 0) {
+    throw new ConfigError('effective track registry 为空，拒绝生成 config 快照')
+  }
+  const hasWritableSection = readFileSync(options.manifestPath, 'utf8')
+    .split('\n')
+    .some((line) => SECTION_HEADER_RE.test(line))
+  const writableProfiles = hasWritableSection
+    ? EDITABLE_TRACKS.filter((profile) => {
+        const track = registry.byId.get(profile)
+        return track?.policyProfile.skills.matrix === true && track.policyProfile.skills.profile === profile
+      })
+    : []
+  return {
+    ok: true,
+    generated_at: options.generatedAt,
+    revision: registry.revision,
+    source: registry.source,
+    mandatory_skills: flattenMandatorySkills(manifest),
+    tracks: registry.ordered.map(projectTrack),
+    mandatory_skills_writable_profiles: writableProfiles,
+  }
 }
 
 export interface MandatorySkillsEdit {
@@ -137,7 +213,6 @@ function stripComment(line: string): string {
   return (m ? m[1]! : line).trimEnd()
 }
 
-const SECTION_HEADER_RE = /^mandatory_skills:\s*$/
 // 逐字对齐 kernel manifest.ts::parseSkillBlock 的条目正则——保证"这是不是一条 key: [..] 数据行"
 // 的判定与 kernel 解析器完全一致，不会出现"kernel 认为是数据行，本模块当成不认识的格式"的分歧。
 const ENTRY_RE = /^\s+([A-Za-z_][A-Za-z0-9_.-]*):\s*(\[.*\])\s*$/

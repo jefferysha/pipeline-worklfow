@@ -2,20 +2,21 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
-import type { GuardContext, GuardResult, PipelineState } from '@pipeline-lite/kernel'
+import type { GuardResult, PipelineState } from '@pipeline-lite/kernel'
+import type { GuardFileContext } from '../deps.js'
 import { cmdCheck } from './check.js'
 import { makeDeps, mockState, spy } from '../test-support.js'
 
 describe('check —— guard 报告（人读）；0 过 / 2 不过（CONTRACT §3）', () => {
   test('通过：报告打 stdout，exit 0', async () => {
-    const deps = makeDeps({ state: mockState({ phase: 'build' }) })
+    const deps = makeDeps({ state: mockState({ phase: 'build', track: 'pm' }) })
     const code = await cmdCheck(deps, 'demo')
     expect(code).toBe(0)
     expect(deps.outLines).toEqual(['[CHECK] demo (phase=build)', '  [PASS] 所有检查通过'])
   })
 
   test('不过：逐条列出 failure + 汇总行，exit 2', async () => {
-    const deps = makeDeps({ state: mockState({ phase: 'spec' }) })
+    const deps = makeDeps({ state: mockState({ phase: 'spec', track: 'pm' }) })
     deps.flow.guardCheck = spy(
       (_s: PipelineState): GuardResult => ({ pass: false, failures: ['design_doc 缺失', 'plan 缺失'] }),
     )
@@ -29,6 +30,26 @@ describe('check —— guard 报告（人读）；0 过 / 2 不过（CONTRACT §
     ])
   })
 
+  test('受治理 default 的文档账本不通过会被明确渲染为 blocker，不能被 guard 绿灯掩盖', async () => {
+    const deps = makeDeps({
+      state: mockState({ phase: 'build', track: 'pm' }),
+      documentEvidence: async (_root, _changeDir, phase) => ({
+        phase,
+        hasLedger: false,
+        pass: false,
+        blockers: ['document ledger 缺失'],
+        items: [],
+      }),
+    })
+    const code = await cmdCheck(deps, 'demo')
+    expect(code).toBe(2)
+    expect(deps.outLines).toEqual([
+      '[CHECK] demo (phase=build)',
+      '  [FAIL] document: document ledger 缺失',
+      '  [FAIL] 共 1 项未通过',
+    ])
+  })
+
   test('guardCheck 收到读出的完整 state', async () => {
     const state = mockState({ phase: 'verify', track: 'backend' })
     const deps = makeDeps({ state })
@@ -39,8 +60,8 @@ describe('check —— guard 报告（人读）；0 过 / 2 不过（CONTRACT §
   test('注入 deps.guardCtx：按 change 名构造 GuardContext 并传给 guardCheck（全量文件面）', async () => {
     const seen: string[] = []
     const deps = makeDeps({
-      state: mockState({ phase: 'open' }),
-      guardCtx: (name: string): GuardContext => {
+      state: mockState({ phase: 'open', track: 'backend' }),
+      guardCtx: (name: string): GuardFileContext => {
         seen.push(name)
         return { changeDirRel: `openspec/changes/${name}` }
       },
@@ -48,16 +69,17 @@ describe('check —— guard 报告（人读）；0 过 / 2 不过（CONTRACT §
     await cmdCheck(deps, 'demo')
     expect(seen).toEqual(['demo'])
     expect(deps.flow.guardCheck.calls[0]?.[1]?.changeDirRel).toBe('openspec/changes/demo')
+    expect(deps.flow.guardCheck.calls[0]?.[1]?.coverageProfile).toBe('backend')
   })
 
-  test('未注入 guardCtx：guardCheck 第二参 undefined（lite 纯字段面，向后兼容）', async () => {
-    const deps = makeDeps({ state: mockState({ phase: 'open' }) })
+  test('未注入文件探针也从 effective registry 取 policy，并显式传 coverageProfile 给 engine', async () => {
+    const deps = makeDeps({ state: mockState({ phase: 'open', track: 'pm' }) })
     await cmdCheck(deps, 'demo')
-    expect(deps.flow.guardCheck.calls[0]?.[1]).toBeUndefined()
+    expect(deps.flow.guardCheck.calls[0]?.[1]).toEqual({ coverageProfile: 'pm' })
   })
 
   test('warnings 渲染为 [WARN] 行（老 guard yellow 面），不影响 exit 0', async () => {
-    const deps = makeDeps({ state: mockState({ phase: 'spec' }) })
+    const deps = makeDeps({ state: mockState({ phase: 'spec', track: 'pm' }) })
     deps.flow.guardCheck = spy(
       (_s: PipelineState): GuardResult => ({
         pass: true,
@@ -75,7 +97,7 @@ describe('check —— guard 报告（人读）；0 过 / 2 不过（CONTRACT §
   })
 
   test('不过且带 warnings：先 WARN 后 FAIL 明细，exit 2', async () => {
-    const deps = makeDeps({ state: mockState({ phase: 'spec' }) })
+    const deps = makeDeps({ state: mockState({ phase: 'spec', track: 'pm' }) })
     deps.flow.guardCheck = spy(
       (_s: PipelineState): GuardResult => ({
         pass: false,
@@ -110,7 +132,7 @@ describe('check —— guard 报告（人读）；0 过 / 2 不过（CONTRACT §
   })
 
   test('回归：workflow 字段空串（历史遗留）仍走 default guardCheck，不误入自定义分支（`||` 兜空串）', async () => {
-    const deps = makeDeps({ state: mockState({ phase: 'build', workflow: '' }) })
+    const deps = makeDeps({ state: mockState({ phase: 'build', track: 'pm', workflow: '' }) })
     const code = await cmdCheck(deps, 'demo')
     expect(code).toBe(0)
     expect(deps.flow.guardCheck.calls).toHaveLength(1)

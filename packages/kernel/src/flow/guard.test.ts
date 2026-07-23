@@ -12,7 +12,9 @@
 import { describe, it, expect } from 'vitest'
 import { FIELD_ORDER, LIST_FIELDS } from '../types.js'
 import type { FieldName, GuardContext, PipelineState } from '../types.js'
+import type { CoverageProfile } from '../tracks/types.js'
 import { evaluateGuard } from './guard.js'
+import { checkDefaultEventPreconditions } from './default-event-policy.js'
 import { createFlowEngine, loadManifest } from './index.js'
 import { fileURLToPath } from 'node:url'
 
@@ -32,12 +34,14 @@ interface CtxOpts {
   archived?: string[]
   automationRunner?: boolean
   changeDirRel?: string
+  coverageProfile?: CoverageProfile
 }
 
 /** 从「相对路径 → 内容」映射构造全量注入的 GuardContext */
 function ctxOf(files: Record<string, string>, opts: CtxOpts = {}): GuardContext {
   const has = (p: string) => Object.prototype.hasOwnProperty.call(files, p)
   return {
+    coverageProfile: opts.coverageProfile ?? 'backend',
     changeDirRel: opts.changeDirRel ?? CH,
     fileExists: (p) => has(p),
     fileNonempty: (p) => has(p) && files[p]!.length > 0,
@@ -103,6 +107,16 @@ describe('open 出口（O1-O5）', () => {
     expect(fails(r, '状态文件')).toHaveLength(1)
   })
 
+  it('G1 canonical state existence 能力优先于 YAML projection 检查', () => {
+    const files = openFiles()
+    delete files[`${CH}/.pipeline.yaml`]
+    const ctx = ctxOf(files)
+    ctx.stateExists = () => true
+    expect(evaluateGuard(base(), ctx)).toEqual({ pass: true, failures: [] })
+    ctx.stateExists = () => false
+    expect(fails(evaluateGuard(base(), ctx), '状态文件')).toHaveLength(1)
+  })
+
   it('O2 proposal.md 缺失或为空 → fail', () => {
     const missing = openFiles()
     delete missing[`${CH}/proposal.md`]
@@ -128,13 +142,13 @@ describe('open 出口（O1-O5）', () => {
     expect(evaluateGuard(base(), ctxOf(files)).pass).toBe(true)
   })
 
-  it('O5 design.md 仅 backend/frontend 要求；pm 与未知 track 跳过', () => {
+  it('O5 design.md：所有 default track（含 pm/未知）都要求，避免 OpenSpec 初始设计缺失', () => {
     const files = openFiles()
     delete files[`${CH}/design.md`]
     expect(fails(evaluateGuard(base(), ctxOf(files)), 'design.md')).toHaveLength(1)
     expect(fails(evaluateGuard(makeState({ phase: 'open', track: 'frontend' }), ctxOf(files)), 'design.md')).toHaveLength(1)
-    expect(fails(evaluateGuard(makeState({ phase: 'open', track: 'pm' }), ctxOf(files)), 'design.md')).toHaveLength(0)
-    expect(fails(evaluateGuard(makeState({ phase: 'open', track: '' }), ctxOf(files)), 'design.md')).toHaveLength(0)
+    expect(fails(evaluateGuard(makeState({ phase: 'open', track: 'pm' }), ctxOf(files)), 'design.md')).toHaveLength(1)
+    expect(fails(evaluateGuard(makeState({ phase: 'open', track: '' }), ctxOf(files)), 'design.md')).toHaveLength(1)
   })
 })
 
@@ -174,13 +188,13 @@ describe('spec 出口（S1-S5）', () => {
     expect(evaluateGuard(be(), ctxOf(specFiles()))).toEqual({ pass: true, failures: [] })
   })
 
-  it('S3 plan 指向缺失文件 → fail（fe/be）；pm 不查 plan 文件', () => {
+  it('S3 plan 指向缺失文件 → 非 PM track fail；PM 保持 legacy state artifact 豁免', () => {
     const files = specFiles()
     delete files['docs/plan.md']
     expect(fails(evaluateGuard(be(), ctxOf(files)), '指向的文件存在')).toHaveLength(1)
-    const pm = makeState({ phase: 'spec', track: 'pm', preset: 'full', design_doc: 'docs/design.md' })
+    const pm = makeState({ phase: 'spec', track: 'pm', preset: 'full', design_doc: 'docs/design.md', plan: 'null' })
     const pmFiles = { [`${CH}/.pipeline.yaml`]: 'x', [`${CH}/tasks.md`]: '- [ ] a\n- [ ] b\n- [ ] c\n', 'docs/design.md': coverageDoc(ALL_FILLED) }
-    expect(evaluateGuard(pm, ctxOf(pmFiles)).pass).toBe(true)
+    expect(fails(evaluateGuard(pm, ctxOf(pmFiles)), 'plan')).toHaveLength(0)
   })
 
   it('S4 tasks.md 少于 3 个任务 → fail（全 track，含 pm）', () => {
@@ -196,6 +210,22 @@ describe('spec 出口（S1-S5）', () => {
     expect((r.warnings ?? []).filter((w) => w.includes('覆盖阻塞')).length).toBe(7)
   })
 
+  it('S5 coverageProfile 接管适用性：data+backend 按 backend 矩阵，backend+none 不检查', () => {
+    const files = specFiles('# design 无覆盖块\n')
+    const dynamicBackend = evaluateGuard(
+      be({ track: 'data' }),
+      { ...ctxOf(files), coverageProfile: 'backend' },
+    )
+    const builtinNone = evaluateGuard(
+      be({ track: 'backend' }),
+      { ...ctxOf(files), coverageProfile: 'none' },
+    )
+    expect([
+      fails(dynamicBackend, '全栈 Spec 覆盖（7 层阻塞）').length,
+      fails(builtinNone, '全栈 Spec 覆盖').length,
+    ]).toEqual([1, 0])
+  })
+
   it('S5 design_doc 字段空 → 同缺失文件，全 blank 照样阻塞', () => {
     const r = evaluateGuard(be({ design_doc: '' }), ctxOf(specFiles()))
     expect(fails(r, '全栈 Spec 覆盖（7 层阻塞）')).toHaveLength(1)
@@ -208,25 +238,25 @@ describe('spec 出口（S1-S5）', () => {
 
   it('S5 frontend：仅 L4_state/L5_errors required', () => {
     const fe = be({ track: 'frontend' })
-    const blank = evaluateGuard(fe, ctxOf(specFiles(coverageDoc({}))))
+    const blank = evaluateGuard(fe, ctxOf(specFiles(coverageDoc({})), { coverageProfile: 'frontend' }))
     expect(fails(blank, '全栈 Spec 覆盖（2 层阻塞）')).toHaveLength(1)
     const ok = coverageDoc({ L4_state: 'filled', L5_errors: 'filled' })
-    expect(evaluateGuard(fe, ctxOf(specFiles(ok))).pass).toBe(true)
+    expect(evaluateGuard(fe, ctxOf(specFiles(ok), { coverageProfile: 'frontend' })).pass).toBe(true)
   })
 
   it('S5 pm：仅 L3_rules required', () => {
-    const pm = makeState({ phase: 'spec', track: 'pm', preset: 'full', design_doc: 'docs/design.md' })
-    const files = { [`${CH}/.pipeline.yaml`]: 'x', [`${CH}/tasks.md`]: '- [ ] a\n- [ ] b\n- [ ] c\n', 'docs/design.md': coverageDoc({}) }
-    const r = evaluateGuard(pm, ctxOf(files))
+    const pm = makeState({ phase: 'spec', track: 'pm', preset: 'full', design_doc: 'docs/design.md', plan: 'docs/plan.md' })
+    const files = { [`${CH}/.pipeline.yaml`]: 'x', [`${CH}/tasks.md`]: '- [ ] a\n- [ ] b\n- [ ] c\n', 'docs/design.md': coverageDoc({}), 'docs/plan.md': '# plan\n' }
+    const r = evaluateGuard(pm, ctxOf(files, { coverageProfile: 'pm' }))
     expect(fails(r, '全栈 Spec 覆盖（1 层阻塞）')).toHaveLength(1)
     files['docs/design.md'] = coverageDoc({ L3_rules: 'filled' })
-    expect(evaluateGuard(pm, ctxOf(files)).pass).toBe(true)
+    expect(evaluateGuard(pm, ctxOf(files, { coverageProfile: 'pm' })).pass).toBe(true)
   })
 
-  it('S5 未知 track → 全层 na → 0 阻塞（老仓 coverage_applicability * → na）', () => {
-    const chat = makeState({ phase: 'spec', track: 'chat', preset: 'full', design_doc: 'docs/design.md' })
-    const files = { [`${CH}/.pipeline.yaml`]: 'x', [`${CH}/tasks.md`]: '- [ ] a\n- [ ] b\n- [ ] c\n', 'docs/design.md': '# 无覆盖块\n' }
-    expect(evaluateGuard(chat, ctxOf(files)).pass).toBe(true)
+  it('S5 coverageProfile=none → 0 coverage 阻塞（chat 内建 policy；plan 仍按 P0 NON_PM 要求）', () => {
+    const chat = makeState({ phase: 'spec', track: 'chat', preset: 'full', design_doc: 'docs/design.md', plan: 'docs/plan.md' })
+    const files = { [`${CH}/.pipeline.yaml`]: 'x', [`${CH}/tasks.md`]: '- [ ] a\n- [ ] b\n- [ ] c\n', 'docs/design.md': '# 无覆盖块\n', 'docs/plan.md': '# plan\n' }
+    expect(evaluateGuard(chat, ctxOf(files, { coverageProfile: 'none' })).pass).toBe(true)
   })
 
   it('S5 🔒 锁：touches 含 auth → L6_security 必须 filled，waived 也算 LOCKVIOLATION，hotfix 不豁免', () => {
@@ -239,9 +269,9 @@ describe('spec 出口（S1-S5）', () => {
   })
 
   it('S5 🔒 锁只锁非 na 层：pm 的 L6_security=na，touches auth 也不锁', () => {
-    const pm = makeState({ phase: 'spec', track: 'pm', preset: 'full', design_doc: 'docs/design.md' })
-    const files = { [`${CH}/.pipeline.yaml`]: 'x', [`${CH}/tasks.md`]: '- [ ] a\n- [ ] b\n- [ ] c\n', 'docs/design.md': coverageDoc({ L3_rules: 'filled' }, 'auth') }
-    expect(evaluateGuard(pm, ctxOf(files)).pass).toBe(true)
+    const pm = makeState({ phase: 'spec', track: 'pm', preset: 'full', design_doc: 'docs/design.md', plan: 'docs/plan.md' })
+    const files = { [`${CH}/.pipeline.yaml`]: 'x', [`${CH}/tasks.md`]: '- [ ] a\n- [ ] b\n- [ ] c\n', 'docs/design.md': coverageDoc({ L3_rules: 'filled' }, 'auth'), 'docs/plan.md': '# plan\n' }
+    expect(evaluateGuard(pm, ctxOf(files, { coverageProfile: 'pm' })).pass).toBe(true)
   })
 
   it('S5 preset=hotfix/tweak：required-blank 豁免为 WARN，不阻塞', () => {
@@ -389,6 +419,62 @@ describe('ship 出口（P3）与 archive 出口（A1）', () => {
     const s = makeState({ phase: 'archive', verify_result: 'pass' })
     expect(evaluateGuard(s, ctxOf({})).pass).toBe(false)
     expect(evaluateGuard(s, ctxOf({ [`${CH}/.pipeline.yaml`]: 'x' }))).toEqual({ pass: true, failures: [] })
+  })
+})
+
+// ──────────── advisory/enforcement 一致性矩阵（2026-07-17 P0 撕裂修复的验收）────────────
+// 同一 track 问两层同一个问题：「plan / 双 review 是否被要求？」guard（pipeline check/doctor
+// 的 advisory 预览）与 transition（事件强制层）必须同判。修复前 guard 层用 tracks= 白名单，
+// chat/未知 track 被豁免，而 transition 层按 !=pm 拒绝——本矩阵在那两格是红的；统一走
+// workflow/predicates.ts 的 NON_PM 后全绿。legacy `plan` artifact 与双 review 都对 PM 豁免；
+// PM 仍受独立 OpenSpec 文档账本的 plan 文档约束。
+
+describe('一致性矩阵：guard 出口适用性 == transition 前置强制性（track ∈ pm/backend/frontend/chat/ml）', () => {
+  const manifest = loadManifest(fileURLToPath(new URL('../../../../templates/manifest.yaml', import.meta.url)))
+  const engine = createFlowEngine(manifest)
+  const PLAN_MATRIX: readonly [string, boolean][] = [
+    ['pm', false],       // 原流程：PM 不要求 legacy plan artifact
+    ['backend', true],
+    ['frontend', true],
+    ['chat', true],      // 修复前 guard 层豁免（白名单外）→ 与 transition 层撕裂
+    ['ml', true],        // 未知 track，同上
+  ]
+
+  const REVIEW_MATRIX: readonly [string, boolean][] = [
+    ['pm', false],       // PM 走人工原型验收，不要求两条代码 review
+    ['backend', true],
+    ['frontend', true],
+    ['chat', true],
+    ['ml', true],
+  ]
+
+  it.each(PLAN_MATRIX)('track=%s：spec 的 plan 要求两层同判（required=%s）', async (track, required) => {
+    // transition 强制层：spec-complete 前置校验（plan 未设 → 非豁免轨返回违反行）
+    const violations = await checkDefaultEventPreconditions('spec-complete', makeState({ track }))
+    const transitionRequires = violations !== null
+    if (violations !== null) expect(violations[0]).toContain('要求 plan 字段非空')
+    // guard 层：spec 出口 plan 非空是纯字段规则，lite（无 ctx）也评估——这就是 check/doctor 的 advisory 面
+    const failures = engine.guardCheck(makeState({ phase: 'spec', track })).failures
+    const guardRequires = failures.some((f) => f.includes('要求 plan 非空'))
+    expect(guardRequires).toBe(transitionRequires)
+    expect(transitionRequires).toBe(required)
+  })
+
+  it.each(REVIEW_MATRIX)('track=%s：verify 的双 review 要求两层同判（required=%s）', async (track, required) => {
+    // report/branch_status 给足，隔离出 review 面；review 结果留空 = 未通过
+    const fields = {
+      verification_report: 'docs/v.md',
+      branch_status: 'handled',
+    } as const
+    const violations = await checkDefaultEventPreconditions('verify-pass', makeState({ ...fields, track }))
+    const transitionRequires = violations !== null
+    if (violations !== null) expect(violations[0]).toContain('要求 agent_review_result=pass')
+    const failures = engine.guardCheck(makeState({ ...fields, phase: 'verify', track })).failures
+    const guardAgent = failures.some((f) => f.includes('要求 agent_review_result=pass'))
+    const guardCodex = failures.some((f) => f.includes('要求 codex_review_result=pass'))
+    expect(guardAgent).toBe(transitionRequires)
+    expect(guardCodex).toBe(transitionRequires)
+    expect(transitionRequires).toBe(required)
   })
 })
 

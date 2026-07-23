@@ -3,11 +3,19 @@
  * 非 *.test.ts（会被 tsc 编入 dist），但仅测试引用；生产 index.ts 不导出。
  */
 import { request as httpRequest, get as httpGet, type IncomingHttpHeaders } from 'node:http'
-import { copyFile, mkdtemp } from 'node:fs/promises'
+import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { createFlowEngine, createStateStore, loadManifest } from '@pipeline-lite/kernel'
+import {
+  builtinTrack,
+  createFlowEngine,
+  createStateStore,
+  ensureDocumentLedger,
+  loadManifest,
+  recordDocument,
+  recordDocumentReads,
+} from '@pipeline-lite/kernel'
 import type { FlowEngine, StateStore } from '@pipeline-lite/kernel'
 
 /** 新仓根 templates/manifest.yaml（src 下运行时：src → server → packages → 根）。 */
@@ -58,13 +66,90 @@ export async function initChange(
   name: string,
   opts?: { track?: 'chat' | 'pm' | 'frontend' | 'backend'; preset?: string },
 ): Promise<string> {
+  const track = opts?.track ?? 'backend'
   return store.init({
     repoRoot: root,
     name,
-    track: opts?.track ?? 'backend',
+    track,
+    reviewSeed: builtinTrack(track).policyProfile.reviewSeed,
     preset: opts?.preset ?? 'full',
     clock: () => '2026-07-07T00:00:00Z',
   })
+}
+
+const GOVERNED_DESIGN = `# governed design
+
+\`\`\`coverage
+touches:
+L1_api: filled
+L2_data: filled
+L3_rules: filled
+L4_state: filled
+L5_errors: filled
+L6_security: filled
+L7_perf: filled
+L8_deps: filled
+L10_terms: filled
+\`\`\`
+`
+
+/** Seed real ledger/hash/read evidence for tests whose subject is not document authoring. */
+export async function seedGovernedDocumentEvidence(root: string, changeDir: string, name: string): Promise<void> {
+  const docs = {
+    proposal: `openspec/changes/${name}/proposal.md`,
+    design: `openspec/changes/${name}/design.md`,
+    tasks: `openspec/changes/${name}/tasks.md`,
+    superpowerDesign: `docs/superpowers/specs/${name}-design.md`,
+    adr: `docs/adr/${name}.md`,
+    delta: `openspec/changes/${name}/specs/capability/spec.md`,
+    plan: `docs/superpowers/plans/${name}.md`,
+    report: `docs/superpowers/reports/${name}.md`,
+    applied: 'openspec/specs/capability/spec.md',
+  }
+  const contents: Readonly<Record<keyof typeof docs, string>> = {
+    proposal: '# proposal\n', design: GOVERNED_DESIGN, tasks: '- [x] scope\n- [x] implementation\n- [x] verification\n',
+    superpowerDesign: '# Superpower design\n', adr: '# ADR\n', delta: '# Delta spec\n', plan: '# Superpower plan\n',
+    report: '# Verification report\n', applied: '# Applied spec\n',
+  }
+  for (const key of Object.keys(docs) as Array<keyof typeof docs>) {
+    const target = join(root, docs[key])
+    await mkdir(dirname(target), { recursive: true })
+    await writeFile(target, contents[key], 'utf8')
+  }
+  const historyPath = join(changeDir, '.pipeline-history.jsonl')
+  let originalHistory: string | undefined
+  try {
+    originalHistory = await readFile(historyPath, 'utf8')
+  } catch {
+    // A fresh change has no history until its first transition.
+  }
+  const skillLines = [
+    'openspec-propose', 'brainstorming', 'writing-plans', 'verification-before-completion', 'openspec-apply-change',
+  ].map((skill) => JSON.stringify({ kind: 'tool', raw: `Skill: ${skill}` })).join('\n')
+  await writeFile(historyPath, `${originalHistory ?? ''}${skillLines}\n`, 'utf8')
+  try {
+    const recordedAt = '2026-07-07T00:00:00Z'
+    // StateStore.init is intentionally storage-only. The CLI's `init` command creates this
+    // migration-safe sidecar, but server fixtures use StateStore directly, so establish the
+    // same real ledger before registering hash-bound documents.
+    await ensureDocumentLedger(changeDir, recordedAt)
+    await recordDocument({ repoRoot: root, changeDir, phase: 'open', kind: 'proposal', path: docs.proposal, producer: 'openspec-propose', recordedAt })
+    await recordDocument({ repoRoot: root, changeDir, phase: 'open', kind: 'openspec-design', path: docs.design, producer: 'openspec-propose', recordedAt })
+    await recordDocument({ repoRoot: root, changeDir, phase: 'open', kind: 'tasks', path: docs.tasks, producer: 'openspec-propose', recordedAt })
+    await recordDocument({ repoRoot: root, changeDir, phase: 'explore', kind: 'superpower-design', path: docs.superpowerDesign, producer: 'brainstorming', recordedAt })
+    await recordDocument({ repoRoot: root, changeDir, phase: 'explore', kind: 'adr', path: docs.adr, producer: 'brainstorming', recordedAt })
+    await recordDocument({ repoRoot: root, changeDir, phase: 'spec', kind: 'delta-spec', path: docs.delta, producer: 'openspec-propose', recordedAt })
+    await recordDocument({ repoRoot: root, changeDir, phase: 'spec', kind: 'superpower-plan', path: docs.plan, producer: 'writing-plans', recordedAt })
+    await recordDocument({ repoRoot: root, changeDir, phase: 'spec', kind: 'plan', path: docs.plan, producer: 'writing-plans', recordedAt })
+    await recordDocument({ repoRoot: root, changeDir, phase: 'verify', kind: 'verification-report', path: docs.report, producer: 'verification-before-completion', recordedAt })
+    await recordDocument({ repoRoot: root, changeDir, phase: 'ship', kind: 'applied-spec', path: docs.applied, producer: 'openspec-apply-change', recordedAt })
+    for (const phase of ['explore', 'spec', 'build', 'verify', 'ship', 'archive'] as const) {
+      await recordDocumentReads({ repoRoot: root, changeDir, phase, kind: 'all', readAt: recordedAt })
+    }
+  } finally {
+    if (originalHistory === undefined) await rm(historyPath, { force: true })
+    else await writeFile(historyPath, originalHistory, 'utf8')
+  }
 }
 
 export interface HttpResult {
@@ -110,6 +195,32 @@ export function reqPost(
   }
   return new Promise((resolve, reject) => {
     const r = httpRequest({ host, port, path, method: 'POST', headers }, (res) => {
+      let b = ''
+      res.setEncoding('utf8')
+      res.on('data', (c) => (b += c))
+      res.on('end', () => resolve(toResult(res.statusCode ?? 0, res.headers, b)))
+    })
+    r.on('error', reject)
+    r.write(body)
+    r.end()
+  })
+}
+
+export function reqPatch(
+  port: number,
+  path: string,
+  payload: unknown,
+  opts?: { host?: string; headers?: Record<string, string>; rawBody?: string },
+): Promise<HttpResult> {
+  const host = opts?.host ?? '127.0.0.1'
+  const body = opts?.rawBody ?? JSON.stringify(payload)
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'Content-Length': String(Buffer.byteLength(body)),
+    ...(opts?.headers ?? {}),
+  }
+  return new Promise((resolve, reject) => {
+    const r = httpRequest({ host, port, path, method: 'PATCH', headers }, (res) => {
       let b = ''
       res.setEncoding('utf8')
       res.on('data', (c) => (b += c))

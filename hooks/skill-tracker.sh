@@ -47,16 +47,14 @@ json_escape() {
   printf '%s' "$s"
 }
 
-yget() { # $1=file $2=key
-  local v
-  v="$(grep -m1 "^$2: " "$1" 2>/dev/null || true)"
-  v="${v#"$2: "}"
-  case "$v" in
-    '"'*'"') v="${v#\"}"; v="${v%\"}" ;;
-    "'"*"'") v="${v#\'}"; v="${v%\'}" ;;
-  esac
-  printf '%s' "$v"
-}
+STATE_HELPER="$(dirname "${BASH_SOURCE[0]:-$0}")/canonical-state.sh"
+if [ -r "$STATE_HELPER" ]; then
+  . "$STATE_HELPER"
+else
+  pipeline_state_source() { [ -f "$1/.pipeline.yaml" ] && printf '%s' "$1/.pipeline.yaml"; }
+  pipeline_state_get() { local v; v="$(grep -m1 "^$2: " "$1" 2>/dev/null || true)"; v="${v#"$2: "}"; case "$v" in '"'*'"') v="${v#\"}"; v="${v%\"}" ;; "'"*"'") v="${v#\'}"; v="${v%\'}" ;; esac; printf '%s' "$v"; }
+fi
+yget() { pipeline_state_get "$1" "$2"; }
 
 # 阶段×hook 开关（v5 T5 / 决议#2）：读 <项目根>/.pipeline/hooks.json（server 写端点落盘，
 # canonical 一键一行 `"<hook>.<阶段>": false`，只存禁用项，见 packages/server/src/hooksConfig.ts）。
@@ -80,18 +78,19 @@ case "$TOOL" in
 esac
 [ -z "$NAME" ] && exit 0
 
-# ── 定位活跃 change（cwd 上溯至多 5 层找 openspec/changes；取 mtime 最新的非归档）──
-PROOT="" d="$CWD"
-for _ in 1 2 3 4 5; do
-  if [ -d "$d/openspec/changes" ]; then PROOT="$d"; break; fi
-  [ "$d" = "/" ] && break
-  d="$(dirname "$d")"
-done
+# ── 定位活跃 change：根边界由共享 helper 统一，禁止误吸收父目录项目。──
+ROOT_HELPER="$(dirname "${BASH_SOURCE[0]:-$0}")/project-root.sh"
+[ -r "$ROOT_HELPER" ] || exit 0
+# shellcheck source=project-root.sh
+. "$ROOT_HELPER"
+PROOT="$(pipeline_project_root "$CWD" existing changes || true)"
 [ -n "$PROOT" ] || exit 0
 
 BEST=0 CHANGE_DIR=""
-for f in "$PROOT"/openspec/changes/*/.pipeline.yaml; do
-  [ -f "$f" ] || continue
+for candidate_dir in "$PROOT"/openspec/changes/*; do
+  [ -d "$candidate_dir" ] || continue
+  f="$(pipeline_state_source "$candidate_dir" || true)"
+  [ -n "$f" ] || continue
   [ "$(yget "$f" archived)" = "true" ] && continue
   # GNU `stat -f` 是文件系统状态模式（非 mtime），在 Linux 上会"成功"吐非数字，兜底永不触发
   # ——先试 GNU 语法（-c）+ 数字校验，而非只靠退出码判断。
@@ -99,12 +98,13 @@ for f in "$PROOT"/openspec/changes/*/.pipeline.yaml; do
   case "$mt" in ''|*[!0-9]*) mt="$(stat -f %m "$f" 2>/dev/null)" ;; esac
   case "$mt" in ''|*[!0-9]*) mt=0 ;; esac
   [[ "$mt" =~ ^[0-9]+$ ]] || mt=0
-  if [ "$mt" -ge "$BEST" ]; then BEST="$mt"; CHANGE_DIR="$(dirname "$f")"; fi
+  if [ "$mt" -ge "$BEST" ]; then BEST="$mt"; CHANGE_DIR="$candidate_dir"; fi
 done
 [ -n "$CHANGE_DIR" ] || exit 0
 
 # ── 阶段×hook 开关（v5 T5 / 决议#2）：当前 change 阶段被配置禁用 → 零副作用退出 ──
-hook_disabled "$PROOT" skill-tracker "$(yget "$CHANGE_DIR/.pipeline.yaml" phase)" && exit 0
+CHANGE_STATE="$(pipeline_state_source "$CHANGE_DIR" || true)"
+hook_disabled "$PROOT" skill-tracker "$(yget "$CHANGE_STATE" phase)" && exit 0
 
 TS="$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
 RAW="$(json_escape "$TOOL: $NAME")"

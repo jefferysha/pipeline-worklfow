@@ -1,7 +1,7 @@
 /**
  * cas 并发闸（BACKLOG #29b）—— automation 字段的原子认领 / 终态提交 / attempts 自增。
  *
- * 老仓真相源：scheduler/types.ts:98-146（StateWriter.claim / setAutomationOwned / incrAttempts）+
+ * 老仓真相源：scheduler/types.ts:98-146（StateWriter.claim / setAutomationOwned / attempts）+
  * scheduler/scheduler.ts:287-289（handleOne 的 claim gate）。
  *
  * 全部走 @pipeline-lite/kernel 的 StateStore（cas / withLock）——**automation 零 kernel 修改，
@@ -13,13 +13,25 @@
  *   - setAutomationOwned：写终态的唯一正确姿势 = 双 cas（running→next，落空再 scheduled→next）。
  *     两 cas 都落空 = change 已被外部 settle（merged/failed/conflict/…）或被重排 → 返回 false，
  *     调用面必须跳过一切从属写（防"幽灵重排"，老仓 scheduler-shutdown-requeue-rootfix）。
- *   - incrAttempts：read-modify-write 在**同一把锁**内完成（withLock），无 get+set 的 TOCTOU 窗口
- *     （两个失败 worker 都读 0 都写 1 → 预算误算 → 无限重试）。
+ *   - commitFailureOwned：owner 校验、attempts 自增、诊断与终态在**同一把锁**内一次提交；CAS
+ *     所有权已丢失时零写入，避免先耗 retry budget 再发现终态不能提交。
+ *   - incrAttempts：保留给低层兼容调用；scheduler 失败终态不得单独调用它。
  */
 import type { StateStore } from '@pipeline-lite/kernel'
+import { settleFailure } from './state-machine.js'
 
 /** daemon 拥有的两个态：只有它们能被 setAutomationOwned 翻成终态。 */
 const DAEMON_OWNED: readonly string[] = ['running', 'scheduled']
+
+export interface FailureCommitInput {
+  readonly classification: 'conflict' | 'retry'
+  readonly maxRetries: number
+  readonly fields: Readonly<Record<string, string>>
+}
+
+export type FailureCommitResult =
+  | { readonly status: 'committed'; readonly automation: 'conflict' | 'queued' | 'failed'; readonly attempts?: number }
+  | { readonly status: 'ownership-lost'; readonly observed: string }
 
 /**
  * 挂队：写 automation=queued + automation_queued_at（原子 setMany，经 kernel 四闸 + 锁）。
@@ -45,6 +57,55 @@ export function claim(store: StateStore, changeDir: string): Promise<boolean> {
 export async function setAutomationOwned(store: StateStore, changeDir: string, next: string): Promise<boolean> {
   if (await store.cas(changeDir, 'automation', 'running', next)) return true
   return store.cas(changeDir, 'automation', 'scheduled', next)
+}
+
+/** 终态与其从属诊断字段的单次原子提交。 */
+export function setAutomationOwnedWithFields(
+  store: StateStore,
+  changeDir: string,
+  next: string,
+  fields: Readonly<Record<string, string>>,
+): Promise<boolean> {
+  return store.casMany(changeDir, 'automation', DAEMON_OWNED, {
+    ...(fields as Partial<Record<import('@pipeline-lite/kernel').FieldName, string>>),
+    automation: next,
+  })
+}
+
+/**
+ * execution failure 的单次 owner commit：在同一把 StateStore 锁内重读 automation、校验 daemon
+ * ownership，并把 retry attempts 自增、目标态与全部诊断字段一次写盘。owner 已丢失时零写入并返回
+ * 同锁内 observed，调用方据此区分外部终态与 recovery-pending；绝不先耗 attempts 再输终态 CAS。
+ */
+export function commitFailureOwned(
+  store: StateStore,
+  changeDir: string,
+  input: FailureCommitInput,
+): Promise<FailureCommitResult> {
+  return store.withLock(changeDir, async () => {
+    const state = await store.read(changeDir)
+    const writable = state.fields as Record<string, string | string[] | undefined>
+    const rawAutomation = writable.automation
+    const observed = typeof rawAutomation === 'string' ? rawAutomation : ''
+    if (!DAEMON_OWNED.includes(observed)) return { status: 'ownership-lost', observed }
+
+    let attempts: number | undefined
+    let automation: 'conflict' | 'queued' | 'failed'
+    if (input.classification === 'conflict') {
+      automation = 'conflict'
+    } else {
+      const rawAttempts = writable.automation_attempts
+      const parsed = Number(typeof rawAttempts === 'string' ? rawAttempts : '0')
+      attempts = (Number.isFinite(parsed) ? parsed : 0) + 1
+      automation = settleFailure('retry', attempts, input.maxRetries)
+      writable.automation_attempts = String(attempts)
+    }
+
+    for (const [field, value] of Object.entries(input.fields)) writable[field] = value
+    writable.automation = automation
+    await store.writeUnderLock(changeDir, state, { kind: 'automation' })
+    return { status: 'committed', automation, ...(attempts === undefined ? {} : { attempts }) }
+  })
 }
 
 /**
@@ -73,7 +134,7 @@ export function incrAttempts(store: StateStore, changeDir: string, max: number):
     const prev = Number(typeof raw === 'string' ? raw : '0')
     const value = (Number.isFinite(prev) ? prev : 0) + 1
     state.fields.automation_attempts = String(value)
-    await store.write(changeDir, state)
+    await store.writeUnderLock(changeDir, state, { kind: 'automation' })
     return { value, exhausted: value > max }
   })
 }

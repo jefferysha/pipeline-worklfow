@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
+import { cn } from '@/lib/utils'
 import { fetchSkillsRegistry, type WbSkillEntry } from '../api/client'
 import { useT } from '../i18n'
+import { WbAdvanced } from './LoopCard'
 
 /**
  * SkillHealthPanel（full-install W4，计划 2026-07-12-full-install-experience 批 2 Wave B，
@@ -24,6 +26,14 @@ import { useT } from '../i18n'
 // 真命令常量（BF11 与终端同源，不进 i18n——命令本体不随语言变，翻译层不得改写）。
 const SETUP_CMD = 'pipeline setup'
 const DOCTOR_CMD = 'pipeline doctor'
+
+// ── W3 tailwind 迁移：原 styles.ts 规则的等值原子类串（颜色全走 token）。──
+/** 原 .wb-note。 */
+const NOTE_CLS = 'text-xs leading-[1.55] text-text-3'
+/** 原 .side-card__row（相邻行分隔线在第二行上用 border-t 直给）。 */
+const ROW_CLS = 'flex items-center gap-[9px] py-[9px] text-[12.5px] text-text-2'
+/** 原 .side-card__row-value（警示变体 text-red-d 由调用点条件叠加）。 */
+const ROW_VALUE_CLS = 'flex-none font-mono text-sm font-[750] text-accent-d'
 
 interface ErrorBody {
   error?: string
@@ -72,12 +82,12 @@ export function SkillHealthPanel(): JSX.Element {
   const cmdButton = (cmd: string, testid: string): JSX.Element => (
     <button
       type="button"
-      className="skh-cmd"
+      className="inline-flex max-w-full cursor-pointer items-center self-start rounded-md border border-border bg-fill/55 px-2.5 py-[5px] transition-colors hover:border-text-3 hover:bg-fill"
       data-testid={testid}
       title={t('workbench.skh_copy_hint')}
       onClick={() => void navigator.clipboard?.writeText(cmd)}
     >
-      <code>{cmd}</code>
+      <code className="truncate font-mono text-xs text-text">{cmd}</code>
     </button>
   )
 
@@ -85,65 +95,70 @@ export function SkillHealthPanel(): JSX.Element {
   const missing = registry?.filter((e) => !e.installed) ?? []
 
   return (
+    // 旧 `.wb8-pane > .side-card` 剥皮语义（Phase 4 视觉验收 #3）：本面只在技能健康 pane 内渲染，
+    // pane 自带外卡壳——根节点不套第二层 border/bg-card/shadow（卡内卡），head/body 左右内边距收平
+    // （旧 .side-card__head/__body 在 pane 内 padding-left/right:0），与同 pane 矩阵区（wb-mx-card）统一。
     <div className="side-card" data-testid="wb-side-skillhealth">
-      <div className="side-card__head">
-        <b>{t('workbench.skh_title')}</b>
+      <div className="side-card__head flex items-center gap-2 border-b border-border py-[11px] text-text-3">
+        <b className="text-[13px] font-bold text-text">{t('workbench.skh_title')}</b>
       </div>
-      <div className="side-card__body">
+      <div className="side-card__body pt-0.5 pb-1">
         {/* fail-soft：fetch 失败——行内错误，不谎报全绿。 */}
         {regError && (
-          <p className="view__note view__note--error" data-testid="skh-error">
+          <p className="p-5 text-[13px] text-red" data-testid="skh-error">
             {regError}
           </p>
         )}
 
-        {!regError && registry === null && <p className="wb-note">{t('common.loading')}</p>}
+        {!regError && registry === null && <p className={NOTE_CLS}>{t('common.loading')}</p>}
 
         {/* registry 空/未就绪：不谎报「已装齐」，导向终端 doctor（对齐 doctor「不误报 green」）。 */}
         {!regError && registry !== null && registry.length === 0 && (
           <div data-testid="skh-unready">
-            <p className="wb-note">{t('workbench.skh_unready')}</p>
+            <p className={NOTE_CLS}>{t('workbench.skh_unready')}</p>
             {cmdButton(DOCTOR_CMD, 'skh-copy-doctor')}
           </div>
         )}
 
         {!regError && registry !== null && registry.length > 0 && (
           <div data-testid="skh-ready">
-            <div className="side-card__row">
-              <span className="side-card__row-label">{t('workbench.skh_installed')}</span>
-              <span className="side-card__row-value" data-testid="skh-installed-n">
+            <div className={ROW_CLS}>
+              <span className="min-w-0 flex-1 truncate font-[550]">{t('workbench.skh_installed')}</span>
+              <span className={ROW_VALUE_CLS} data-testid="skh-installed-n">
                 {installed.length}
               </span>
             </div>
-            <div className="side-card__row">
-              <span className="side-card__row-label">{t('workbench.skh_missing')}</span>
+            <div className={cn(ROW_CLS, 'border-t border-border')}>
+              <span className="min-w-0 flex-1 truncate font-[550]">{t('workbench.skh_missing')}</span>
               <span
-                className={`side-card__row-value${missing.length > 0 ? ' skh-n-warn' : ''}`}
+                className={cn(ROW_VALUE_CLS, missing.length > 0 && 'text-red-d')}
                 data-testid="skh-missing-n"
               >
                 {missing.length}
               </span>
             </div>
             {missing.length === 0 ? (
-              <p className="wb-note" data-testid="skh-all-good">
+              <p className={NOTE_CLS} data-testid="skh-all-good">
                 {t('workbench.skh_all_installed')}
               </p>
             ) : (
-              <>
-                <p className="wb-note skh-miss-names" data-testid="skh-missing-names">
+              // IA 精简：未装技能长列表 + setup 引导收进「▸ 高级设置」默认折叠——核心第一屏只留
+              // 「已装 N / 未装 M」两行齐全度数字（未装 M 亮红即诚实告警，展开才看逐条名单）。
+              <WbAdvanced testid="skh-adv">
+                <p className={cn(NOTE_CLS, 'break-words')} data-testid="skh-missing-names">
                   {t('workbench.skh_missing_names', { names: missing.map((e) => e.name).join('、') })}
                 </p>
-                <div className="skh-guide">
-                  <p className="wb-note">{t('workbench.skh_guide')}</p>
+                <div className="mt-2 flex flex-col gap-1.5">
+                  <p className={NOTE_CLS}>{t('workbench.skh_guide')}</p>
                   {cmdButton(SETUP_CMD, 'skh-copy-setup')}
                 </div>
-              </>
+              </WbAdvanced>
             )}
           </div>
         )}
 
         {/* 只读边界（始终在场）：装技能在终端，本面只呈现齐全度 + 引导，不提供前端安装按钮。 */}
-        <p className="wb-note wb-sec-note">{t('workbench.skh_readonly_note')}</p>
+        <p className={cn(NOTE_CLS, 'mt-2.5')}>{t('workbench.skh_readonly_note')}</p>
       </div>
     </div>
   )

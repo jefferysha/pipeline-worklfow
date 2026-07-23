@@ -25,6 +25,8 @@ packages/server          全局 dashboard server：snapshot 聚合 + SSE 推送 
 packages/dashboard-app   dashboard 前端 SPA（React + GSAP + @xyflow/react 画布，零外部 CDN/字体）
 packages/automation      AFK 无人值守跑批：队列 + scheduler + docker sandcastle 执行 + L1→L3 放权
 packages/tap             流量代理/tap daemon：本地 CA + TLS MITM 抓 LLM 请求，dashboard 只读展示
+packages/channel         event-sourced worker 总线（历史迁移 / experimental 兼容面）：CLI 唯一依赖，
+                         从 kernel 提取、保留 echo 能力，非 v3 默认 agent runtime
 hooks/                   纯 bash 薄 shim（PreToolUse 三门拦截等，热路径不 spawn node）
 tools/oracle/            golden-oracle 双跑校验（老内核 vs 本仓，逐字 diff）
 tools/sandcastle/        AFK docker 执行镜像构建脚本
@@ -33,22 +35,56 @@ templates/               manifest.yaml（相位/转换/review_phases 单一真�
 
 ## 上手（5 分钟）
 
-### 作为 Claude Code 插件安装（推荐）
+### 安装完整 Pipeline 插件（Codex / Claude）
 
-面向使用者的一键路径（marketplace 已在 `.claude-plugin/marketplace.json` 就位）：
+这是一个完整插件，不是“CLI + 另装一批 skill”的组合包。7-phase 编排、OpenSpec、设计/计划/TDD/
+验证、浏览器验收、ADR 与文档收据所需的 skill，以及 dashboard 的 server bundle 与 SPA 都随插件
+一起安装；默认 workflow 不会再下载 npm、第三方 marketplace 或另一宿主的 cache。
+
+宿主必须明确选择，避免一次安装意外修改多个 AI 工具：
 
 ```bash
-claude plugin marketplace add jefferysha/pipeline-worklfow   # 注册本仓为插件 marketplace
-claude plugin install pipeline-lite@pipeline-lite            # 安装插件（plugin@marketplace，二者同名）
-pipeline setup                                               # 装技能 + 配就绪（把 pipeline 软链到 ~/.local/bin）
+pipeline setup --codex
+pipeline setup --claude
 ```
 
-装完即可用 `pipeline init/inbox/status` 起 change；dashboard 见下「Dashboard 工作台」（默认 `http://127.0.0.1:8765/`）。
+第一次机器上尚不存在 `pipeline` 命令时，使用发布包自带的 bootstrap（它不是第二个包管理器，内部
+仍会执行同一条 `pipeline setup --<host>` 安装契约）：
+
+```bash
+./install.sh --codex
+# 或
+./install.sh --claude
+```
+
+安装时宿主自己管理标准插件目录（Codex: `~/.codex/plugins/...`；Claude: `~/.claude/plugins/...`），
+Pipeline 不猜测也不手改其 cache 布局；只根据宿主 `plugin list --json` 返回的实际安装根校验资产。
+随后会把 launcher 放到 `~/.local/bin/pipeline`。新开一个 Codex/Claude 会话后，包内 skills 与 hooks
+才会被该会话加载。
+
+Codex 对第三方 hook 保留一次性本机信任边界：执行 `pipeline setup --codex` 后，在 Codex 输入 `/hooks` 并信任
+`pipeline-lite`。未信任时插件和 skills 已安装，但 SessionStart / UserPromptSubmit 不会运行，因此正常对话不会
+自动派发 default pipeline；更新后若 Codex 将 hook 标为“已变更”，在同一处重新信任即可。
+
+自动升级是显式 opt-in：
+
+```bash
+pipeline setup --codex --auto-update
+pipeline update --codex                 # 立即更新指定宿主
+```
+
+启用后，SessionStart 最多每天一次在后台刷新所选宿主的 marketplace 和插件，配置只写在
+`~/.config/pipeline-lite/`；当前会话继续使用已加载版本，下一会话加载新版本。Claude 对应使用
+`pipeline setup --claude --auto-update` / `pipeline update --claude`。Cursor 等非原生 marketplace
+宿主仍可 `pipeline setup --cursor --target <项目目录>`，但由承载它的 Codex/Claude 插件负责更新。
+
+装完即可用 `pipeline init/inbox/status` 起 change；`pipeline dashboard` 直接启动随包的完整工作台
+（默认 `http://127.0.0.1:8765/`）。
 
 ### 从源码构建
 
 ```bash
-npm i && npm run build          # 产出单文件 packages/cli/dist/pipeline.mjs（零 node_modules 运行时）
+npm i && npm run build          # 产出 CLI bundle、dashboard server bundle 和 SPA（零 node_modules 运行时）
 npx pipeline init demo --track backend --preset full
 npx pipeline get demo phase     # open
 npx pipeline transition demo open-complete
@@ -68,9 +104,20 @@ npx pipeline status
 （不用记 CLI 参数）：
 
 ```bash
-npm run build:web && npm run build:server   # 产出 dashboard-app/dist + server/dist/dashboard.mjs
-npx pipeline-dashboard                      # 监听 127.0.0.1:8765（已跑同/旧版本会自动让位/被接管）
+pipeline dashboard                            # 监听 127.0.0.1:8765（已跑同/旧版本会自动让位/被接管）
 ```
+
+生产态只有**一个**前端入口：`pipeline dashboard` 在 `127.0.0.1:8765` 同时提供 API 和已构建的
+`dashboard-app/dist` SPA；不会再额外启动一个生产前端端口。开发时才会有 Vite 的独立 UI 端口
+`5173`，它把 `/api` 代理到 `8765`。旧的 `18765` 不是默认端口、当前也没有监听；如需兼容它，可显式：
+
+```bash
+pipeline dashboard --port 18765
+# 前端开发时让 Vite 代理到同一后端：
+PIPELINE_DASHBOARD_PORT=18765 npm run dev -w @pipeline-lite/dashboard-app
+```
+
+Vite UI 端口如有冲突可另设 `PIPELINE_DASHBOARD_DEV_PORT`（默认仍为 `5173`）。
 
 项目注册直接在 dashboard 里完成：首次打开（零项目）会看到**教学式引导页**——填项目根目录
 点「注册项目」即可（等价 CLI：页面上有可复制的命令）；多项目时导航栏有**项目切换器**，
@@ -99,9 +146,9 @@ npx pipeline-dashboard                      # 监听 127.0.0.1:8765（已跑同/
 错误共用）；主内容+右侧摘要栏双列骨架；深浅色双主题；零外部字体/CDN（CSP 自足）。
 
 写端点（相位转换/保存 workflow/AFK 操作等）需要 server 启动时生成的一次性 token，
-**只有 `npx pipeline-dashboard` 真正提供页面时才会同源注入**——单独跑 `vite dev`
+**只有 `pipeline dashboard` 真正提供页面时才会同源注入**——单独跑 `vite dev`
 （`packages/dashboard-app` 内 `npm run dev`）只适合前端本身的样式/组件开发，
-写操作会 401；要驱动完整流程，走上面 `pipeline-dashboard` 这条真实路径。
+写操作会 401；要驱动完整流程，走上面 `pipeline dashboard` 这条真实路径。
 
 ## 自定义 workflow
 
@@ -118,6 +165,13 @@ npx pipeline init <change-name> --track backend --preset full --workflow <name>
 step/guard 定义动态解锁 skill，不再是硬编码的 7 相位判断）。已知简化点（多项目场景固定
 编辑第一个已注册项目、guard 只支持移除不支持新增、无撤销重做/多选/minimap 等）见
 [GOAL.md](GOAL.md) 清单 E8 脚注。
+
+dashboard 新建的 workflow 默认带 `openspec_contract: required`，并写入本插件内置的 bare skill
+ID。它必须保持 seven-phase 结构、review gate 和 OpenSpec skill 组；否则保存时会被校验拒绝。
+默认流程与这类 governed workflow 都会登记 proposal / OpenSpec design / tasks、Superpower design /
+ADR、delta spec / Superpower plan、verification report 与 applied spec。`.pipeline-documents.json`
+记录每份文件的内容 hash、真实 skill 调用证据及后续 phase 的读取收据；缺失、未读取或后来被修改时，
+`pipeline check` / `pipeline transition` 会拒绝推进。
 
 ## 开发
 

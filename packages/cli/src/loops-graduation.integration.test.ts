@@ -281,3 +281,27 @@ describe('真实 e2e —— 跨命令串联（graduate → level set → graduat
     expect(JSON.parse((await loops('graduate', '--json')).out.join('\n')).verdicts[0].current).toBe('L2')
   })
 })
+
+/**
+ * Stage B 返工 #3#4（阻断 D）：level set 写回走 governance 锁 + 字节 epoch-CAS + atomic writer（真 fs）——
+ * 与 admission 复验/init/server 写方同锁串行。两并发 set 只一个落盘、另一个 CAS 拒（或读到已落盘判 noop），
+ * 绝不盲写覆盖/lost-update/半文件（最终 loops.yaml 恒合法）。
+ */
+describe('真实 e2e —— level set 走 governance（并发无 lost-update / atomic）', () => {
+  test('两并发 set L2 --confirm → 只一个落盘、另一个非盲写（CAS 拒或 noop）；最终 loops.yaml 合法 = L2', async () => {
+    await healthySetup('loop-be', 'L1')
+    const [a, b] = await Promise.all([
+      loops('level', 'loop-be', 'set', 'L2', '--confirm'),
+      loops('level', 'loop-be', 'set', 'L2', '--confirm'),
+    ])
+    // 一个 exit 0（落盘）；另一个 exit 0(读到已落盘判 noop) 或 3(governance epoch-CAS 拒)——都非盲写覆盖。
+    expect([a.code, b.code]).toContain(0)
+    for (const c of [a.code, b.code]) expect([0, 3]).toContain(c)
+    // 最终文件合法（无半文件/坏 YAML）且档位 = L2：graduate 真读回（loadRegistry 窄解析+schema 全过）。
+    const g = JSON.parse((await loops('graduate', '--loop', 'loop-be', '--json')).out.join('\n'))
+    expect(g.verdicts[0].current).toBe('L2')
+    const after = await readRegistry()
+    expect(after).toContain('autonomy_level: L2')
+    expect(after).not.toContain('autonomy_level: L1')
+  })
+})

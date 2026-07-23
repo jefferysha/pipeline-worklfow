@@ -18,6 +18,7 @@
  */
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { TRACK_ID_RE } from '../tracks/types.js'
 import type { LoopEntry, LoopRegistry } from './types.js'
 
 // ── 窄 YAML 解析器（块式，缩进决定层级；零第三方）─────────────────────────────
@@ -274,6 +275,20 @@ export function validateSchema(instance: unknown, schema: SchemaNode, path = '')
 
 // ── schema 常量（老 loops.schema.json 移植 + 本轮 autonomy_level）───────────────
 
+/**
+ * H10 §1：`skill_bundle_id` 词法值域——`_all`（manifest 技能表兜底键，T 线 tracks/validate.ts::
+ * profileOk 同款保留字）或 tracks/types.ts::TRACK_ID_RE 形状的 profile id（复用其字符集与 32 长度
+ * 上限的 `.source`，不手抄一份新正则）。这里只钉词法：非空值是否形如合法 id。是否是 manifest 里
+ * 真实声明过的 profile 是存在性语义校验，不在本函数职责内——本层（loops.yaml 词法/schema 校验）
+ * 不持有 manifest 上下文，做不到这一步；那项校验发生在 admission 装配层
+ * （packages/automation/src/admission/loop-admission.ts::LoopAdmissionDeps.isSkillProfileKnown，
+ * 由 reserveOnce 对具名 profile 调用）。
+ */
+export const SKILL_BUNDLE_ID_RE = new RegExp(`^_all$|${TRACK_ID_RE.source}`)
+
+/** H11 持久化引用 token：小写字母起始、kebab 段非空；只钉路径安全词法，不校验引用存在性。 */
+const SAFE_KEBAB_TOKEN_RE = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/
+
 export const LOOPS_SCHEMA: SchemaNode = {
   $schema: 'https://json-schema.org/draft/2020-12/schema',
   type: 'object',
@@ -288,7 +303,7 @@ export const LOOPS_SCHEMA: SchemaNode = {
         type: 'object',
         required: [
           'id', 'name', 'kind', 'goal', 'cadence', 'risk', 'runner',
-          'change_prefix', 'phases', 'human_gates', 'state', 'design_doc',
+          'change_prefix', 'phases', 'human_gates', 'design_doc',
           'status', 'budget', 'kill_criteria',
         ],
         additionalProperties: false,
@@ -303,6 +318,7 @@ export const LOOPS_SCHEMA: SchemaNode = {
           change_prefix: { type: ['string', 'null'] },
           phases: { type: 'array', minItems: 2, items: { type: 'string' } },
           human_gates: { type: 'array', minItems: 1, items: { type: 'string' } },
+          // H9 legacy import only. New writers omit this field; iteration state is projected from ledger facts.
           state: { type: 'string', minLength: 2 },
           design_doc: { type: 'string', minLength: 2 },
           status: { type: 'string', enum: ['active', 'paused', 'retired'] },
@@ -326,6 +342,13 @@ export const LOOPS_SCHEMA: SchemaNode = {
           // denylist 运行时消费见 automation/lifecycle/denylist.ts）。
           allowlist: { type: 'array', items: { type: 'string' } },
           denylist: { type: 'array', items: { type: 'string' } },
+          // H11 starter provenance/binding（均可选，旧登记表保持兼容；template catalog 存在性不在本层）。
+          template_id: { type: 'string', minLength: 1, pattern: SAFE_KEBAB_TOKEN_RE.source },
+          template_version: { const: 1 },
+          workflow_id: { type: 'string', minLength: 1, pattern: SAFE_KEBAB_TOKEN_RE.source },
+          // H10 §1：skill bundle 引用（可选；缺席/null 由 loadRegistry 派生归一化为 null=unwired）。
+          // 非空须过 SKILL_BUNDLE_ID_RE 词法；profile 是否被 manifest 真声明是存在性语义校验，不在此 schema。
+          skill_bundle_id: { type: ['string', 'null'], pattern: SKILL_BUNDLE_ID_RE.source },
         },
       },
     },
@@ -339,6 +362,16 @@ export interface LoopIo {
   readText: (absPath: string) => string | null
 }
 
+/**
+ * loops.yaml 读 I/O 故障（ENOENT 之外的 EACCES/EIO/EISDIR…）——绝不当成「无 registry」denial（Stage B 返工 #2）。
+ * `_tag` 供 scheduler.classifyRoundFailure 归 kind=registry-io（admission reserve 的 registry I/O 故障 =
+ * round failure 使 ok=false，而非静默 skip-run denial）。governance.readRegistrySnapshot 亦复用本类型。
+ */
+export class RegistryReadError extends Error {
+  readonly _tag = 'RegistryReadError'
+  constructor(message: string) { super(message); this.name = 'RegistryReadError' }
+}
+
 export const nodeLoopIo: LoopIo = {
   readText: (p) => {
     try {
@@ -349,16 +382,35 @@ export const nodeLoopIo: LoopIo = {
   },
 }
 
+/**
+ * 严格 fs 读注入面（admission reserve 用）：**只** ENOENT→null（合法「无 registry」），其它 I/O 错误
+ * （EACCES/EIO/EISDIR…）throw RegistryReadError——绝不把真实 I/O 故障吞成「文件不存在」。搭配 loadRegistry
+ * 使用（`loadRegistry(root, nodeLoopIoStrict)`）：ENOENT→{data:null,errors:[]}；其它 I/O→throw（调用方 fail-loud）。
+ * 展示读面（list/status/budget/graduation/server 快照）继续用宽容的 nodeLoopIo（不可读→null，不崩显示）。
+ */
+export const nodeLoopIoStrict: LoopIo = {
+  readText: (p) => {
+    try {
+      return readFileSync(p, 'utf8')
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === 'ENOENT') return null
+      throw new RegistryReadError(`loops.yaml 读失败（${(e as NodeJS.ErrnoException).code ?? 'IO'}）：${e instanceof Error ? e.message : String(e)}`)
+    }
+  },
+}
+
 const LOOPS_REL_PATH = ['.pipeline', 'loops.yaml']
 
 /** 派生：schema 校验已过的原始数据 → 带默认的 LoopRegistry（autonomy_level 缺省填 L1；
- * allowlist/denylist 缺省填 []，决议 #12 存储侧）。 */
+ * allowlist/denylist 缺省填 []，决议 #12 存储侧；H10 §1：skill_bundle_id 缺省/null 归一化填 null，
+ * 语义是 unwired，不是空 bundle）。 */
 function deriveRegistry(data: Record<string, unknown>): LoopRegistry {
   const loops = (data.loops as Record<string, unknown>[]).map((l) => ({
     ...l,
     autonomy_level: (l.autonomy_level as string | undefined) ?? 'L1',
     allowlist: (l.allowlist as string[] | undefined) ?? [],
     denylist: (l.denylist as string[] | undefined) ?? [],
+    skill_bundle_id: (l.skill_bundle_id as string | null | undefined) ?? null,
   })) as unknown as LoopEntry[]
   return { version: 1, loops }
 }

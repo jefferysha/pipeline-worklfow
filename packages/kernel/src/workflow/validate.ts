@@ -1,3 +1,5 @@
+import { compileWorkflow } from './compile.js'
+import { validateOpenSpecContractWorkflow } from './document-contract.js'
 import type { WorkflowDef } from './types.js'
 
 function detectCycle(skillIds: string[], dependsOn: Map<string, string[]>): string[] {
@@ -27,6 +29,8 @@ function detectCycle(skillIds: string[], dependsOn: Map<string, string[]>): stri
 // 「保存成功、下次打不开」（如含空格）。与 dashboard 客户端表单、server 路由层 name 校验
 // 同一条规则；此处是绕过 UI 直调已鉴权 HTTP 时的唯一服务端后盾。
 const IDENT_RE = /^[a-zA-Z0-9_-]+$/
+// Workflow 是用户可见名称；允许 Unicode 字母/数字，但仍拒绝空白、点与路径分隔符。
+const WORKFLOW_NAME_RE = /^[\p{L}\p{N}\p{M}_-]+$/u
 /**
  * skill id 允许命名空间冒号（插件 skill 如 `superpowers:brainstorming`、`commit-commands:commit`）。
  * skill-tracker.sh 落的是命名空间全名、internal-skill-gate 按全名匹配 step.skills[].id——workflow 必须能
@@ -41,8 +45,8 @@ export function validateWorkflow(wf: WorkflowDef): string[] {
   const producedByEarlierStep = new Set<string>()
   const allStepIds = new Set(wf.steps.map((s) => s.id))
 
-  if (!IDENT_RE.test(wf.name)) {
-    errors.push(`workflow name '${wf.name}' 含非法字符（仅允许 a-zA-Z0-9_-）`)
+  if (!WORKFLOW_NAME_RE.test(wf.name)) {
+    errors.push(`workflow name '${wf.name}' 含非法字符（允许中文、字母、数字、- 与 _；不允许空格、点或路径符号）`)
   }
 
   wf.steps.forEach((step, index) => {
@@ -99,6 +103,19 @@ export function validateWorkflow(wf: WorkflowDef): string[] {
       errors.push(`step '${step.id}' 没有声明任何 transitions（不是最后一个 step，会导致走进死路）`)
     }
   })
+
+  errors.push(...validateOpenSpecContractWorkflow(wf))
+
+  // 深校验（G2 P2）：复用 compileWorkflow 做新 guard/action 变体 + FIELD_ORDER 字段闭集 + 列表
+  // 字段互斥 + artifact 形状的结构校验——不在本文件再抄一份闭集判定，避免与编译器漂移。
+  // compileWorkflow 是 fail-loud 首错即抛；本层是收集式校验，故 try/catch 收编为一条错误、追加
+  // 在既有图/标识符校验之后（既有错误恒先收齐，不被 compile 首错抢断），loadWorkflow 据此拒含
+  // 畸形新字段的文件。合法 workflow 编译无错 → 不追加，行为逐字不变。
+  try {
+    compileWorkflow(wf)
+  } catch (e) {
+    errors.push(e instanceof Error ? e.message : String(e))
+  }
 
   return errors
 }

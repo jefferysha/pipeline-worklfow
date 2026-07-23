@@ -13,7 +13,8 @@
  *     CC session id / Cursor ticket / single-session fallback）；该 context_key 解析子系统本仓没有。
  *     本仓 activate 的真实副作用是「repo 级 .pipeline-active 平指针」（老仓 state-session.sh:18 记载的
  *     设计意图）：指针是 repo 粒度而非 session 粒度——同一 repo 多个并发 session 共享一个活跃指针，
- *     互相覆盖。换粒度的接缝是 SessionFs.bindPointer（注入面已就位，见下方 SessionFs）。
+ *     互相覆盖。因此 Hook 只把它作为「用户明确继续/点名 change」时的恢复候选，绝不自动把它注入新会话。
+ *     换粒度的接缝是 SessionFs.bindPointer（注入面已就位，见下方 SessionFs）。
  *   · 老仓 route-context 的「python3/monorepo.py 不可达」降级分支在 TS 侧不适用（无子进程依赖）；
  *     等价降级 = .pipeline-project.yaml 缺失/解析失败 → 视为单仓（packages=null，全未归属），fail-open。
  *   · 老仓 state-session.sh:238-253 三项 [PLACEHOLDER]（package-validation / Cursor ticket 写端 /
@@ -33,7 +34,7 @@ import {
 import { errMsg, type CliDeps } from '../deps.js'
 import { changeDir } from '../paths.js'
 
-/** repo 级平指针文件名（老仓 state-session.sh:18 记载的设计意图 `.pipeline-active`）。 */
+/** repo 级恢复候选指针（不是会话绑定；老仓 state-session.sh:18 记载的 `.pipeline-active`）。 */
 export const ACTIVE_POINTER_FILE = '.pipeline-active'
 /** 项目根 package 声明文件（老仓 monorepo.py PROJECT_CONFIG_FILE）。 */
 export const PROJECT_CONFIG_FILE = '.pipeline-project.yaml'
@@ -41,7 +42,7 @@ export const PROJECT_CONFIG_FILE = '.pipeline-project.yaml'
 /**
  * session fs 注入面（默认真 fs；mock 层注入 fake，见 session.test.ts）。
  *   loadPackages: 读项目根 .pipeline-project.yaml → package 声明（缺失/解析失败 → null 单仓，fail-open）。
- *   bindPointer:  绑定活跃指针（默认写 <cwd>/.pipeline-active，repo 粒度——换 per-session 粒度的接缝在此）。
+ *   bindPointer:  写恢复候选（默认写 <cwd>/.pipeline-active，repo 粒度——换 per-session 粒度的接缝在此）。
  */
 export interface SessionFs {
   loadPackages: (cwd: string) => Promise<PackageDecl[] | null>
@@ -75,21 +76,21 @@ function checkName(deps: CliDeps, name: string | undefined): name is string {
   return false
 }
 
-/** ensure_state_exists（老仓 state-lib.sh:42-49）：读不到 .pipeline.yaml → stderr 两行 ERROR + null。 */
+/** ensure_state_exists：canonical current 与 legacy YAML 都读不到 → stderr 两行 ERROR + null。 */
 async function ensureState(deps: CliDeps, name: string): Promise<string | null> {
   const dir = changeDir(deps.cwd, name)
   try {
     await deps.store.read(dir)
     return dir
   } catch {
-    deps.io.err(`ERROR: 状态文件不存在: openspec/changes/${name}/.pipeline.yaml`)
+    deps.io.err(`ERROR: 状态文件不存在: openspec/changes/${name}/.pipeline-run/current.json（或未迁移 .pipeline.yaml）`)
     deps.io.err(`  先执行: pipeline init ${name} --track <track> --preset <preset>`)
     return null
   }
 }
 
 /**
- * activate（老仓 cmd_activate state-session.sh:28-45）：validate 名 + ensure 状态存在 → 绑定活跃指针。
+ * activate（老仓 cmd_activate state-session.sh:28-45）：validate 名 + ensure 状态存在 → 写恢复候选指针。
  * degraded-safe：指针写失败仅 WARN、rc=0（绝不 exit 1），绝不动 phase/phase_status/assignee。
  */
 async function cmdActivate(deps: CliDeps, name: string | undefined, fs: SessionFs): Promise<number> {
@@ -102,7 +103,7 @@ async function cmdActivate(deps: CliDeps, name: string | undefined, fs: SessionF
     deps.io.err(`[activate] 活跃指针写入失败 → degraded（回退对话上下文），未落 session 指针: ${errMsg(e)}`)
     return 0
   }
-  deps.io.err(`[OK] activate ${name}（已写 .pipeline-active；该指针是 repo 粒度、非 per-session——同 repo 的并发 session 会互相覆盖；phase/phase_status 未改动）`)
+  deps.io.err(`[OK] activate ${name}（已写 .pipeline-active 恢复候选；该指针是 repo 粒度、非 per-session——仅用户明确继续/点名时会被 Hook 使用；phase/phase_status 未改动）`)
   return 0
 }
 

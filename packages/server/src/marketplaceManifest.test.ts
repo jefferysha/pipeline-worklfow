@@ -16,6 +16,8 @@ import { describe, expect, it } from 'vitest'
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..')
 const MARKETPLACE_PATH = join(REPO_ROOT, '.claude-plugin', 'marketplace.json')
 const PLUGIN_PATH = join(REPO_ROOT, '.claude-plugin', 'plugin.json')
+const CODEX_MARKETPLACE_PATH = join(REPO_ROOT, '.agents', 'plugins', 'marketplace.json')
+const CODEX_PLUGIN_PATH = join(REPO_ROOT, '.codex-plugin', 'plugin.json')
 
 interface MarketplacePlugin {
   name: string
@@ -36,12 +38,30 @@ interface PluginManifest {
   version: string
   author?: { name?: string }
 }
+interface CodexMarketplace {
+  name: string
+  plugins: Array<{
+    name: string
+    source: { source: string; path: string }
+    policy?: { installation?: string; authentication?: string }
+  }>
+}
+interface CodexPluginManifest extends PluginManifest {
+  skills?: string
+  hooks?: string
+}
 
 function readMarketplace(): Marketplace {
   return JSON.parse(readFileSync(MARKETPLACE_PATH, 'utf8')) as Marketplace
 }
 function readPlugin(): PluginManifest {
   return JSON.parse(readFileSync(PLUGIN_PATH, 'utf8')) as PluginManifest
+}
+function readCodexMarketplace(): CodexMarketplace {
+  return JSON.parse(readFileSync(CODEX_MARKETPLACE_PATH, 'utf8')) as CodexMarketplace
+}
+function readCodexPlugin(): CodexPluginManifest {
+  return JSON.parse(readFileSync(CODEX_PLUGIN_PATH, 'utf8')) as CodexPluginManifest
 }
 
 describe('.claude-plugin/marketplace.json —— 自托管市场清单（F1）', () => {
@@ -84,5 +104,36 @@ describe('.claude-plugin/marketplace.json —— 自托管市场清单（F1）',
     expect(p.tags).toEqual(
       expect.arrayContaining(['workflow', 'pipeline', 'state-machine', 'openspec', 'hooks', 'lite']),
     )
+  })
+})
+
+describe('.codex-plugin/plugin.json + .agents/plugins/marketplace.json —— Codex 原生单插件分发', () => {
+  it('both Codex manifests are parseable and identify the same single plugin', () => {
+    expect(() => readCodexPlugin()).not.toThrow()
+    expect(() => readCodexMarketplace()).not.toThrow()
+    const plugin = readCodexPlugin()
+    const marketplace = readCodexMarketplace()
+    expect(plugin.name).toBe('pipeline-lite')
+    expect(marketplace.name).toBe('pipeline-lite')
+    expect(marketplace.plugins).toHaveLength(1)
+    expect(marketplace.plugins[0]?.name).toBe(plugin.name)
+  })
+
+  it('Codex marketplace points at this repository root and the plugin declares packaged skills and hooks', () => {
+    const marketplace = readCodexMarketplace()
+    const plugin = readCodexPlugin()
+    expect(marketplace.plugins[0]?.source).toEqual({ source: 'local', path: './' })
+    expect(marketplace.plugins[0]?.policy).toMatchObject({ installation: 'AVAILABLE' })
+    expect(plugin.skills).toBe('./skills/')
+    expect(plugin.hooks).toBe('./hooks/hooks.json')
+  })
+
+  it('Codex and Claude release manifests have one shared version and plugin identity', () => {
+    const codex = readCodexPlugin()
+    const claude = readPlugin()
+    expect(codex.name).toBe(claude.name)
+    expect(codex.version).toBe(claude.version)
+    expect(codex.skills).toBe('./skills/')
+    expect(codex.hooks).toBe('./hooks/hooks.json')
   })
 })

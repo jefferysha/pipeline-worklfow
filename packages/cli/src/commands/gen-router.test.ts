@@ -1,0 +1,126 @@
+import { createHash } from 'node:crypto'
+import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterEach, beforeEach, describe, expect, test } from 'vitest'
+import type { TrackDefinition, TrackRegistry } from '@pipeline-lite/kernel'
+import type { CliDeps } from '../deps.js'
+import { cmdGenRouterSh } from './gen-router.js'
+
+const MANIFEST = new URL('../../../../templates/manifest.yaml', import.meta.url)
+
+function customTrack(pattern = "'$(touch /tmp/router-owned)`printf pwn`|mobile-route-token"): TrackDefinition {
+  return {
+    id: 'designer-mobile',
+    label: 'Designer $(inert)',
+    builtin: false,
+    workflow: { default: 'default', allowed: '*' },
+    policyProfile: {
+      reviewSeed: 'pending',
+      automationEligible: true,
+      coverageProfile: 'frontend',
+      routing: { enabled: true, pattern, priority: 901 },
+      skills: { matrix: false, profile: 'frontend' },
+    },
+  }
+}
+
+function registry(track = customTrack()): TrackRegistry {
+  return {
+    ordered: [track],
+    byId: new Map([[track.id, track]]),
+    revision: '0123456789abcdef',
+    source: 'project-file',
+  }
+}
+
+function deps(root: string, value: TrackRegistry, out: string[], err: string[]): CliDeps {
+  return {
+    cwd: root,
+    loadRegistry: () => value,
+    io: { out: (line) => out.push(line), err: (line) => err.push(line) },
+  } as unknown as CliDeps
+}
+
+describe('_gen-router-sh project data-cache command', () => {
+  let root: string
+
+  beforeEach(async () => {
+    root = await mkdtemp(join(tmpdir(), 'pipeline-gen-router-'))
+    await mkdir(join(root, '.pipeline'), { recursive: true })
+    await writeFile(join(root, '.pipeline', 'tracks.yaml'), 'version: 1\n', 'utf8')
+  })
+
+  afterEach(async () => {
+    await rm(root, { recursive: true, force: true })
+  })
+
+  test('emits PIPELINE_ROUTER_V2 from the effective registry with canonical identity and inert hex data', async () => {
+    const out: string[] = []
+    const err: string[] = []
+    const loadCalls: number[] = []
+    const d = deps(root, registry(), out, err)
+    d.loadRegistry = () => {
+      loadCalls.push(1)
+      return registry()
+    }
+
+    const run = cmdGenRouterSh as unknown as (
+      deps: CliDeps,
+      manifestPath: string | undefined,
+      repoRoot: string | undefined,
+    ) => Promise<number>
+    expect(await run(d, MANIFEST.pathname, root)).toBe(0)
+    expect(loadCalls).toHaveLength(1)
+    expect(err).toEqual([])
+    expect(out).toHaveLength(1)
+
+    const cache = `${out[0]}\n`
+    const lines = cache.trimEnd().split('\n')
+    expect(lines[0]).toBe('PIPELINE_ROUTER_V2')
+    const metadata = lines[1]?.split('|') ?? []
+    expect(metadata).toEqual([
+      'M',
+      Buffer.from(await realpath(root), 'utf8').toString('hex'),
+      createHash('sha256').update(await readFile(MANIFEST)).digest('hex'),
+      '0123456789abcdef',
+      '1',
+    ])
+    const route = lines.find((line) => line.startsWith('R|'))?.split('|') ?? []
+    expect(Buffer.from(route[3] ?? '', 'hex').toString('utf8')).toBe('designer-mobile')
+    expect(Buffer.from(route[4] ?? '', 'hex').toString('utf8')).toContain('mobile-route-token')
+    expect(Buffer.from(route[5] ?? '', 'hex').toString('utf8')).toBe('frontend')
+    expect(route.slice(6, 8)).toEqual(['0', '0']) // matrix=false 仍进入 router；custom 不是 builtin
+    expect(cache).not.toContain('FE_PATTERN=')
+    expect(cache).not.toContain('$(')
+    expect(cache).not.toContain('`')
+    expect(cache).not.toContain('/tmp/router-owned')
+  })
+
+  test('requires a repo root instead of silently generating a project-agnostic cache', async () => {
+    const out: string[] = []
+    const err: string[] = []
+    const run = cmdGenRouterSh as unknown as (
+      deps: CliDeps,
+      manifestPath: string | undefined,
+      repoRoot: string | undefined,
+    ) => Promise<number>
+    expect(await run(deps(root, registry(), out, err), MANIFEST.pathname, undefined)).toBe(2)
+    expect(out).toEqual([])
+    expect(err.join('\n')).toMatch(/项目根|repo root/)
+  })
+
+  test('rejects an enabled pattern that the target grep -E dialect cannot compile', async () => {
+    const out: string[] = []
+    const err: string[] = []
+    const bad = registry(customTrack('[[:not-a-real-class:]]'))
+    const run = cmdGenRouterSh as unknown as (
+      deps: CliDeps,
+      manifestPath: string | undefined,
+      repoRoot: string | undefined,
+    ) => Promise<number>
+    expect(await run(deps(root, bad, out, err), MANIFEST.pathname, root)).toBe(2)
+    expect(out).toEqual([])
+    expect(err.join('\n')).toMatch(/grep|pattern|正则/)
+  })
+})

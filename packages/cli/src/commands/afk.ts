@@ -3,7 +3,8 @@
  * 无 CLI 可达性，本命令补上；#29-wire 收敛：run 真接 docker 执行，不再只 report）。
  *
  * run 的真容器执行需要：① docker daemon 可用 ② 预构建的 sandcastle 镜像（--image 覆盖，缺省
- * sandcastle:local）。无 docker → 诚实报告就绪队列 + 明示原因，绝不伪装已执行（诚实门）。
+ * sandcastle:local）。有候选但无 docker → 诚实报告并返回非零，绝不以成功退出伪装已执行；只有
+ * ready 队列确实为空的 `empty` 才返回 0（诚实门）。
  * 有 docker → 真调 automation.runRound(createDockerRunChange(...))：真 git worktree、真容器、
  * 真 pipeline-afk-run 握手回读、真 barrier build_sha 派生、L3 真 merge-back（L1/L2 report-only
  * 安全默认，成功也只停 paused）。createDockerRunChange 传 deps.store，运行期真写回
@@ -14,37 +15,25 @@
  * 默认 L1 report-only（#29/#38）：enqueue 只挂队不自动跑；--level 覆盖仅影响本次 run 的分级
  * （升档的持久化决策仍走 loops graduation，本命令不改 .pipeline.yaml 之外的任何 level 状态）。
  */
-import { execFile } from 'node:child_process'
 import { writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { promisify } from 'node:util'
 import {
-  CANCEL_MARKER_FILE, createAutomation, createDockerRunChange, denylistForChange, dockerAvailable, nodeExec,
-  readAutomationJson, runnerForChange, AUTOMATION_LEVELS, type AutomationLevel,
+  CANCEL_MARKER_FILE, createAutomation, dockerAvailable, makeIdGen, nodeExec,
+  AUTOMATION_LEVELS, type AutomationLevel,
 } from '@pipeline-lite/automation'
-import { loadRegistry } from '@pipeline-lite/kernel'
+import { createLoopLedgerStore, loadRegistry, requireTrack } from '@pipeline-lite/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
 import { changeDir, changesRoot, isValidChangeName } from '../paths.js'
 import { str } from '../render.js'
+import { runAfkRound } from './afk-executor.js'
+
+export { probeGitCommitAncestry } from './afk-executor.js'
 
 const AUTOMATION_STATES = ['off', 'queued', 'scheduled', 'running', 'merged', 'failed', 'conflict', 'paused'] as const
-const DEFAULT_SANDCASTLE_IMAGE = 'sandcastle:local'
-const execFileAsync = promisify(execFile)
-
-interface AfkOpts { json?: boolean; level?: string; image?: string }
+interface AfkOpts { json?: boolean; level?: string; image?: string; loop?: string }
 
 function isAutomationLevel(v: string): v is AutomationLevel {
   return (AUTOMATION_LEVELS as readonly string[]).includes(v)
-}
-
-/** 当前 checkout 分支（`git branch --show-current`，非 git 仓/detached HEAD → 空串）。 */
-async function currentBranch(cwd: string): Promise<string> {
-  try {
-    const { stdout } = await execFileAsync('git', ['branch', '--show-current'], { cwd })
-    return stdout.trim()
-  } catch {
-    return ''
-  }
 }
 
 export async function cmdAfk(deps: CliDeps, sub: string, name: string | undefined, opts: AfkOpts): Promise<number> {
@@ -61,10 +50,35 @@ export async function cmdAfk(deps: CliDeps, sub: string, name: string | undefine
         deps.io.err(`ERROR: enqueue 需合法 change 名: '${name ?? ''}'`)
         return 1
       }
+      // GOAL H · Stage B 显式绑定入口：--loop 校验 loop 存在 + 落一条 explicit change-loop-binding
+      // （admission 优先级②直接读它，不再前缀猜）。loop 不存在 fail-loud（不静默）。
+      if (opts.loop !== undefined) {
+        const reg = loadRegistry(deps.cwd)
+        if (reg.data === null || !reg.data.loops.some((l) => l.id === opts.loop)) {
+          deps.io.err(`ERROR: --loop '${opts.loop}' 在 .pipeline/loops.yaml 中不存在（无法显式绑定）`)
+          return 1
+        }
+      }
       try {
-        const queued = await auto.enqueue(name)
-        if (opts.json) deps.io.out(JSON.stringify({ change: name, queued }))
-        else deps.io.err(queued ? `[AFK] ${name} 已挂队（automation=queued，默认 L1 report-only）` : `[AFK] ${name} 未挂队（非 spec-complete / PM 轨 / 已在队 / 未 opt-in）`)
+        const queued = await auto.enqueue(
+          name,
+          (trackId) => requireTrack(deps.loadRegistry(), trackId).policyProfile,
+        )
+        let bound = false
+        if (opts.loop !== undefined) {
+          const ledger = createLoopLedgerStore()
+          const id = makeIdGen()
+          await ledger.append(deps.cwd, {
+            schema_version: 1, record_id: id('rec'), recorded_at: deps.clock(),
+            kind: 'change-loop-binding', change: name, loop_id: opts.loop, source: 'explicit',
+          })
+          bound = true
+        }
+        if (opts.json) deps.io.out(JSON.stringify({ change: name, queued, loop: opts.loop ?? null, bound }))
+        else {
+          deps.io.err(queued ? `[AFK] ${name} 已挂队（automation=queued，默认 L1 report-only）` : `[AFK] ${name} 未挂队（非 spec-complete / PM 轨 / 已在队 / 未 opt-in）`)
+          if (bound) deps.io.err(`[AFK] ${name} 已显式绑定 loop '${opts.loop}'（explicit change-loop-binding）`)
+        }
         return queued ? 0 : 3 // 3=未入队（非错误，可判别）
       } catch (e) {
         deps.io.err(`ERROR: ${errMsg(e)}`)
@@ -105,54 +119,36 @@ export async function cmdAfk(deps: CliDeps, sub: string, name: string | undefine
       return 0
     }
     case 'run': {
-      const ready = await auto.scanReady().catch(() => [] as string[])
-      if (ready.length === 0) {
-        deps.io.out('AFK run: 就绪队列空——无 queued 且依赖满足的 change')
+      try {
+        const result = await runAfkRound(deps, { level, image: opts.image })
+        if (result.status === 'empty') {
+          deps.io.out('AFK run: 就绪队列空——无 queued 且依赖满足的 change')
+          return 0
+        }
+        if (result.status === 'docker-unavailable') {
+          if (opts.json) deps.io.out(JSON.stringify({ ok: false, ...result }))
+          else deps.io.err(`[AFK] run 需 docker daemon（未检测到）。就绪队列 ${result.ready.length} 项：${result.ready.join(', ')}。当前环境不执行容器（诚实门：不伪装 docker 就绪）。`)
+          return 1
+        }
+        if (result.status === 'configuration-error') {
+          deps.io.err(`[AFK] run 装配失败（不宣称跑完）：${result.message}`)
+          return 1
+        }
+        const report = result.report
+        if (!report.ok) {
+          deps.io.err(`[AFK] run 一轮遇故障（不宣称跑完）：${report.failures.length} 项 failure${report.ledgerDegraded ? '、账本坏行 fail-closed' : ''}。已 admit ${report.admitted}/${report.candidates}。`)
+          for (const failure of report.failures) {
+            deps.io.err(`  · ${failure.change} [${failure.phase}/${failure.kind}]: ${failure.message}`)
+          }
+          return 1
+        }
+        const denied = report.entries.filter((entry) => entry.disposition === 'denied').length
+        deps.io.out(`AFK run: 跑完一轮（${report.candidates} 项候选，admit ${report.admitted}${denied > 0 ? `、拒 ${denied}` : ''}${report.halted ? '、halt-round' : ''}，level=${result.level}，image=${result.image}）`)
         return 0
-      }
-      const hasDocker = await dockerAvailable((file, args) => nodeExec(file, args))
-      if (!hasDocker) {
-        deps.io.err(`[AFK] run 需 docker daemon（未检测到）。就绪队列 ${ready.length} 项：${ready.join(', ')}。当前环境不执行容器（诚实门：不伪装 docker 就绪）。`)
-        return 0
-      }
-      const base = await currentBranch(deps.cwd)
-      if (!base) {
-        deps.io.err('[AFK] run 需在 git 仓库内、非 detached HEAD（取不到当前分支名，命名分支/merge-back 无锚点）')
+      } catch (error) {
+        deps.io.err(`ERROR: ${errMsg(error)}`)
         return 1
       }
-      // T21 image 同源：--image 显式覆盖 > .pipeline/automation.json 的 image > 内置默认
-      // （与 createAutomation 内 maxParallel/maxRetries/defaultOptIn 吃同一个文件——UI 编排页
-      // 保存的沙箱镜像在真 run 路径真实生效，不是假输入框）。
-      const image = opts.image ?? readAutomationJson(deps.cwd).image ?? DEFAULT_SANDCASTLE_IMAGE
-      // store 真接线（Task 1 收尾缺口修复）：runChangeInSandbox 运行期真写回 automation_sandbox/
-      // automation_worktree 靠 createDockerRunChange 把 deps.store 转发给 createLifecyclePorts 的
-      // setStateField；此前一直没传，字段在真 CLI 路径里永远停在 init 时的 ""（见
-      // .superpowers/sdd/task-1-report.md「Concerns」）。
-      // loop denylist 真实生效（v5 T4 决议 #12）：按 change_prefix 归属从 .pipeline/loops.yaml 派生
-      // 该 change 的 denylist glob；run 结算时 git diff --name-only 对其匹配，违规判 conflict 保留
-      // 现场。registry 缺失/损坏/schema 校验失败 → data null → []（best-effort，无 loop 语境跳过检查，
-      // 绝不阻断 run）。每次 run 现读（loops.yaml 可能被编辑，不缓存）。
-      const resolveDenylist = async (changeName: string): Promise<readonly string[]> =>
-        denylistForChange(loadRegistry(deps.cwd).data?.loops ?? [], changeName)
-      // runner 双支持（v5 T20）：按 change_prefix 归属派生 loop 声明的 runner（'codex' → 沙箱起
-      // codex exec 无头会话；其余/无归属 → 缺省 Claude 路径）。同 denylist 的现读/best-effort 口径。
-      const resolveRunner = async (changeName: string): Promise<string | undefined> =>
-        runnerForChange(loadRegistry(deps.cwd).data?.loops ?? [], changeName)
-      // 凭证注入（v6 T2）：机器级 secrets 文件与宿主 env 合并成 hostEnv——宿主显式非空值优先
-      // （沿用 sdk「显式>文件>内置」装配惯例；空串 env 视同缺席，不吃掉文件值）；依赖未注入/
-      // 读失败 → 纯 process.env（fail-open，与接线前行为一致）。每轮 run 启动时合并一次
-      // （scheduler retry 复用同一闭包，不在 round 中途重读——G24 交界的时序稳定性判据）。
-      const secretsEnv: Record<string, string> = deps.readSecretsEnv
-        ? await deps.readSecretsEnv().catch(() => ({}))
-        : {}
-      const hostEnv: Record<string, string | undefined> = { ...secretsEnv }
-      for (const [k, v] of Object.entries(process.env)) {
-        if (v !== undefined && v !== '') hostEnv[k] = v
-      }
-      const runChange = createDockerRunChange({ hostRepoDir: deps.cwd, base, level, image, store: deps.store, resolveDenylist, resolveRunner, hostEnv })
-      await auto.runRound(runChange)
-      deps.io.out(`AFK run: 跑完一轮（${ready.length} 项候选，level=${level}，image=${image}）`)
-      return 0
     }
     case 'cancel': {
       // server POST /api/afk/:name/cancel（packages/server/src/afk.ts::cancelAfkRun）的 CLI 终端等价：
@@ -165,7 +161,7 @@ export async function cmdAfk(deps: CliDeps, sub: string, name: string | undefine
         return 1
       }
       const dir = changeDir(deps.cwd, name)
-      // store.get 对不存在的 change 真 throw ENOENT（同 server 的 existsSync(.pipeline.yaml) 前置）——
+      // store.get 对不存在的 change 真 throw ENOENT（同 server 的 canonical/legacy 存在性前置）——
       // 这里 catch 成诚实门 exit 1，不裸抛。
       let automation: string
       let worktree: string
@@ -175,7 +171,7 @@ export async function cmdAfk(deps: CliDeps, sub: string, name: string | undefine
         worktree = str(await deps.store.get(dir, 'automation_worktree'))
         sandbox = str(await deps.store.get(dir, 'automation_sandbox'))
       } catch (e) {
-        deps.io.err(`ERROR: 找不到 change '${name}'（无 .pipeline.yaml？）：${errMsg(e)}`)
+        deps.io.err(`ERROR: 找不到 change '${name}'（无 canonical/legacy 状态？）：${errMsg(e)}`)
         return 1
       }
       if (automation !== 'running') {

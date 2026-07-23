@@ -1,6 +1,6 @@
 /**
- * BACKLOG #18 · manifest 全派生面测试 —— mandatory/recommended skills、router patterns、
- * gen-router、breadcrumb prose 的真派生用例（GOAL A1；对齐老仓 skills/pipeline/scripts/manifest.py）。
+ * BACKLOG #18 · manifest 全派生面测试 —— mandatory/recommended skills、breadcrumb prose
+ * 的真派生用例，以及旧路由字段的显式迁移拒绝。
  *
  * C9 真测试纪律：manifest 派生是纯函数 → 真测试 = 真读 templates/manifest.yaml → 真 loadManifest →
  * 断言真实派生输出。改 yaml 数据 → 派生随之变（单一真相源钉死，非硬编码回归锚——正是老仓
@@ -12,7 +12,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { PHASES } from '../types.js'
-import { loadManifest, ManifestError, skillsFor, genRouterSh } from './manifest.js'
+import { loadManifest, ManifestError, skillsFor, skillTokenAlternatives } from './manifest.js'
 
 /** 仓库根 templates/manifest.yaml（相对本文件定位，不依赖 cwd） */
 const TEMPLATE_MANIFEST = fileURLToPath(new URL('../../../../templates/manifest.yaml', import.meta.url))
@@ -41,19 +41,19 @@ function writeManifest(body: string): string {
 describe('派生面 · mandatory / recommended skills（evidence 派生，对齐 manifest.py:evidence 346-355）', () => {
   it('真读 templates：per phase×track 强制 skill 表逐字派生', () => {
     const m = loadManifest(TEMPLATE_MANIFEST)
-    expect(m.mandatorySkills.explore.pm).toEqual(['superpowers:brainstorming', 'grill-with-docs'])
+    expect(m.mandatorySkills.explore.pm).toEqual(['brainstorming', 'grill-with-docs'])
     expect(m.mandatorySkills.explore.backend).toEqual([
-      'opsx:explore|openspec-explore',
-      'superpowers:brainstorming',
+      'openspec-explore',
+      'brainstorming',
       'grill-with-docs',
       'improve-codebase-architecture',
     ])
     expect(m.mandatorySkills.build.backend).toEqual([
-      'superpowers:writing-plans',
-      'superpowers:test-driven-development',
+      'writing-plans',
+      'test-driven-development',
     ])
-    // a|b 备选 token 逐字保留（消费方自行择一），archive 无强制 skill
-    expect(m.mandatorySkills.verify.frontend).toContain('verify|verification-loop')
+    // 默认 workflow 只引用插件内置 skill，archive 无强制 skill。
+    expect(m.mandatorySkills.verify.frontend).toContain('verification-before-completion')
     expect(m.mandatorySkills.archive).toEqual({})
   })
 
@@ -62,9 +62,7 @@ describe('派生面 · mandatory / recommended skills（evidence 派生，对齐
     expect(m.recommendedSkills.explore.pm).toEqual(['pipeline-researcher'])
     expect(m.recommendedSkills.build.frontend).toEqual([
       'react-patterns',
-      'react-best-practices',
-      'tailwind-css-patterns',
-      'shadcn-ui',
+      'web-design-guidelines',
       'hallmark',
     ])
   })
@@ -72,10 +70,10 @@ describe('派生面 · mandatory / recommended skills（evidence 派生，对齐
   it('skillsFor：per-track → _all 兜底 → 空，三级回退与老 evidence 同语义', () => {
     const m = loadManifest(TEMPLATE_MANIFEST)
     // open 只声明 _all，任一 track 都命中 _all 兜底
-    expect(skillsFor(m.mandatorySkills, 'open', 'backend')).toEqual(['opsx:propose|openspec-propose'])
-    expect(skillsFor(m.mandatorySkills, 'open', 'pm')).toEqual(['opsx:propose|openspec-propose'])
+    expect(skillsFor(m.mandatorySkills, 'open', 'backend')).toEqual(['openspec-propose'])
+    expect(skillsFor(m.mandatorySkills, 'open', 'pm')).toEqual(['openspec-propose'])
     // per-track 优先于 _all
-    expect(skillsFor(m.mandatorySkills, 'explore', 'pm')).toEqual(['superpowers:brainstorming', 'grill-with-docs'])
+    expect(skillsFor(m.mandatorySkills, 'explore', 'pm')).toEqual(['brainstorming', 'grill-with-docs'])
     // 无声明 → 空
     expect(skillsFor(m.recommendedSkills, 'archive', 'backend')).toEqual([])
     expect(skillsFor(m.mandatorySkills, 'verify', 'chat')).toEqual([])
@@ -120,21 +118,8 @@ describe('派生面 · mandatory / recommended skills（evidence 派生，对齐
   })
 })
 
-describe('派生面 · router patterns（Track 评分正则；对齐 manifest.py:gen_router_sh 890-898）', () => {
-  it('真读 templates：三 Track 正则逐字派生（含特殊正则字符）', () => {
-    const m = loadManifest(TEMPLATE_MANIFEST)
-    expect(m.routerPatterns.frontend).toContain('前端')
-    expect(m.routerPatterns.frontend).toContain('React')
-    expect(m.routerPatterns.frontend).toContain('\\.tsx')
-    expect(m.routerPatterns.backend).toContain('后端')
-    expect(m.routerPatterns.backend).toContain('GraphQL')
-    // 内部有意义空格（"Go " 词界）在单引号内保真
-    expect(m.routerPatterns.backend).toContain('Go |Python ')
-    expect(m.routerPatterns.pm).toContain('竞品')
-    expect(m.routerPatterns.pm).toContain('user persona')
-  })
-
-  it('单一真相源钉死：改 yaml 的 router_patterns → 派生随之变', () => {
+describe('旧 manifest 路由字段迁移边界', () => {
+  it('旧顶层 router_patterns 必须 fail-loud，并明确迁移到 tracks.yaml policy_profile.routing', () => {
     const p = writeManifest(
       [
         'router_patterns:',
@@ -143,35 +128,54 @@ describe('派生面 · router patterns（Track 评分正则；对齐 manifest.py
         "  pm: '(prd|市场)'",
       ].join('\n'),
     )
-    const m = loadManifest(p)
-    expect(m.routerPatterns).toEqual({ frontend: '(tsx|vue)', backend: '(api|db)', pm: '(prd|市场)' })
+
+    expect(() => loadManifest(p)).toThrow(
+      /router_patterns.*已迁移.*\.pipeline\/tracks\.yaml.*policy_profile\.routing/i,
+    )
   })
 
-  it('缺 router_patterns 节 → 三值空串（对齐老 gen_router_sh rp.get(k, "")）', () => {
-    const m = loadManifest(writeManifest(''))
-    expect(m.routerPatterns).toEqual({ frontend: '', backend: '', pm: '' })
+  it('旧顶层 router_patterns 即使写成 inline 值，也必须给出同一迁移诊断', () => {
+    const p = writeManifest("router_patterns: { frontend: '(tsx)' }")
+
+    expect(() => loadManifest(p)).toThrow(
+      /router_patterns.*已迁移.*\.pipeline\/tracks\.yaml.*policy_profile\.routing/i,
+    )
   })
 
-  it('fail-loud：router_patterns 未知 track → ManifestError', () => {
-    const p = writeManifest(['router_patterns:', "  fullstack: '(x)'"].join('\n'))
-    expect(() => loadManifest(p)).toThrow(ManifestError)
-  })
-})
+  it.each([
+    ['双引号顶层键', '"router_patterns": { frontend: "(tsx)" }'],
+    ['单引号顶层键', "'router_patterns': { frontend: '(tsx)' }"],
+    ['根级缩进块', "  router_patterns:\n    frontend: '(tsx)'"],
+  ])('%s 仍必须给出同一迁移诊断', (_label, legacySection) => {
+    const p = writeManifest(legacySection)
 
-describe('派生面 · gen-router（bash 生成；消费方 = hooks/router-gen.mjs:62 与 cli gen-router.ts:32）', () => {
-  it('genRouterSh：FE/BE/PM_PATTERN 单引号安全赋值，逐值来自派生', () => {
-    const m = loadManifest(TEMPLATE_MANIFEST)
-    const sh = genRouterSh(m.routerPatterns)
-    expect(sh).toContain('# AUTO-GENERATED')
-    expect(sh).toContain(`FE_PATTERN='${m.routerPatterns.frontend}'`)
-    expect(sh).toContain(`BE_PATTERN='${m.routerPatterns.backend}'`)
-    expect(sh).toContain(`PM_PATTERN='${m.routerPatterns.pm}'`)
+    expect(() => loadManifest(p)).toThrow(
+      /router_patterns.*已迁移.*\.pipeline\/tracks\.yaml.*policy_profile\.routing/i,
+    )
   })
 
-  it("genRouterSh：单引号注入防护（' → '\\''）", () => {
-    const sh = genRouterSh({ frontend: "a'b", backend: '', pm: '' })
-    expect(sh).toContain("FE_PATTERN='a'\\''b'")
+  it.each([
+    ['双引号 unicode 转义键', '"router_\\u0070atterns": { frontend: "(tsx)" }'],
+    ['双引号 hex 转义键', '"router_\\x70atterns": { frontend: "(tsx)" }'],
+    ['双引号长 unicode 转义键', '"router_\\U00000070atterns": { frontend: "(tsx)" }'],
+    ['显式 mapping key', "? router_patterns\n: { frontend: '(tsx)' }"],
+    ['显式 mapping key + 转义', '? "router_\\u0070atterns"\n: { frontend: "(tsx)" }'],
+  ])('%s 按 YAML 解码后等价于旧字段，必须给出迁移诊断', (_label, legacySection) => {
+    const p = writeManifest(legacySection)
+
+    expect(() => loadManifest(p)).toThrow(
+      /router_patterns.*已迁移.*\.pipeline\/tracks\.yaml.*policy_profile\.routing/i,
+    )
   })
+
+  it('显式 block-scalar key 等价于旧字段时，窄解析拒绝也必须附带迁移诊断', () => {
+    const p = writeManifest("? |-\n  router_patterns\n: { frontend: '(tsx)' }")
+
+    expect(() => loadManifest(p)).toThrow(
+      /router_patterns.*已迁移.*\.pipeline\/tracks\.yaml.*policy_profile\.routing/i,
+    )
+  })
+
 })
 
 describe('派生面 · breadcrumb prose（对齐 manifest.py breadcrumb 子命令 1031-1037）', () => {
@@ -225,5 +229,51 @@ describe('派生面 · 回归锚（既有 phases/transitions/reviewPhases 派生
     expect(m.phases).toEqual(['open', 'explore', 'spec', 'build', 'verify', 'ship', 'archive'])
     expect(m.transitions.verify).toEqual(['ship', 'build'])
     expect(m.reviewPhases).toEqual(['explore', 'spec', 'verify'])
+  })
+})
+
+describe('skillTokenAlternatives（G2 P5：manifest a|b 备选归一）', () => {
+  it('无 | 的具体 token → 单元素 [token]', () => {
+    expect(skillTokenAlternatives('superpowers:brainstorming')).toEqual(['superpowers:brainstorming'])
+    expect(skillTokenAlternatives('grill-with-docs')).toEqual(['grill-with-docs'])
+  })
+
+  it('a|b 备选 → 逐 branch 拆分保序（对齐 templates/manifest.yaml 的 opsx:explore|openspec-explore）', () => {
+    expect(skillTokenAlternatives('opsx:explore|openspec-explore')).toEqual(['opsx:explore', 'openspec-explore'])
+    expect(skillTokenAlternatives('design-taste-frontend|taste-skill')).toEqual(['design-taste-frontend', 'taste-skill'])
+  })
+
+  it('三段备选 a|b|c → 三 branch', () => {
+    expect(skillTokenAlternatives('a|b|c')).toEqual(['a', 'b', 'c'])
+  })
+
+  it('空 branch（a|、|b、a||b）/ 纯空白 branch（a| |b）→ fail-loud（不静默过滤畸形 token）', () => {
+    expect(() => skillTokenAlternatives('a|')).toThrow(ManifestError)
+    expect(() => skillTokenAlternatives('|b')).toThrow(/alternative branch/)
+    expect(() => skillTokenAlternatives('a||b')).toThrow(/alternative branch/)
+    expect(() => skillTokenAlternatives('a| |b')).toThrow(/alternative branch/)
+  })
+
+  it('重复 branch（a|a）→ fail-loud', () => {
+    expect(() => skillTokenAlternatives('a|a')).toThrow(/重复 alternative branch/)
+  })
+
+  it('单独 "." branch → fail-loud（H10 r1 复审阻断4：join(root, ".") 会解析回根目录本身，把整个 skill 根目录当成一个 skill）', () => {
+    expect(() => skillTokenAlternatives('.')).toThrow(ManifestError)
+    expect(() => skillTokenAlternatives('.')).toThrow(/非法路径段/)
+    expect(() => skillTokenAlternatives('a|.')).toThrow(ManifestError)
+    expect(() => skillTokenAlternatives('.|a')).toThrow(ManifestError)
+  })
+
+  it('namespaced token（plugin:skill）任一 ":" 段为空或恰为 "." → fail-loud（同一类根目录逃逸，只是套了命名空间外壳）', () => {
+    expect(() => skillTokenAlternatives('superpowers:.')).toThrow(ManifestError)
+    expect(() => skillTokenAlternatives('superpowers:')).toThrow(ManifestError)
+    expect(() => skillTokenAlternatives(':brainstorming')).toThrow(ManifestError)
+    expect(() => skillTokenAlternatives('opsx:explore|superpowers:.')).toThrow(ManifestError)
+  })
+
+  it('合法 namespaced token（如真实 manifest.yaml 里的 superpowers:brainstorming）不受新校验影响，照常通过', () => {
+    expect(skillTokenAlternatives('superpowers:brainstorming')).toEqual(['superpowers:brainstorming'])
+    expect(skillTokenAlternatives('opsx:apply|openspec-apply-change')).toEqual(['opsx:apply', 'openspec-apply-change'])
   })
 })

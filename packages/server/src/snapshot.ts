@@ -1,12 +1,23 @@
 /**
- * snapshot 域 —— 聚合本机所有注册 Project 的 .pipeline.yaml → JSON（GET /api/snapshot）。
+ * snapshot 域 —— 聚合本机所有注册 Project 的 canonical state → JSON（GET /api/snapshot）。
  * server 是 kernel 消费方：用 StateStore.read（→ parsePipeline）读盘，绝不自造解析器。
  * 对位老仓 dashboard-generator.build_data 的「聚合所有 Project 的活跃 change」核心面。
  */
-import { readdir, stat } from 'node:fs/promises'
+import { lstat, readFile, readdir, stat } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
-import type { StateStore } from '@pipeline-lite/kernel'
-import type { ChangeSnapshot, ProjectSnapshot, Snapshot } from './types.js'
+import {
+  DEFAULT_WORKFLOW_TODO_STAGES,
+  evaluateDocumentEvidence,
+  isDocumentContractPhase,
+  isOpenSpecDocumentContractRequired,
+  loadWorkflow,
+  projectPipelineTodo,
+  stateStorageSourcePathSync,
+  type WorkflowDef,
+  type PipelineTodoStageDefinition,
+  type StateStore,
+} from '@pipeline-lite/kernel'
+import type { ChangeSnapshot, DocumentEvidenceSnapshot, ProjectSnapshot, Snapshot } from './types.js'
 
 export interface SnapshotDeps {
   registry: () => string[]
@@ -23,6 +34,80 @@ export interface SnapshotDeps {
 function str(v: string | string[] | undefined): string {
   if (Array.isArray(v)) return v.join(',')
   return v ?? ''
+}
+
+async function readTasksMarkdown(changeDir: string): Promise<string | undefined> {
+  const target = join(changeDir, 'tasks.md')
+  try {
+    const info = await lstat(target)
+    // Do not make a dashboard read follow a task-file symlink outside the change directory.
+    if (!info.isFile() || info.isSymbolicLink()) return undefined
+    return await readFile(target, 'utf8')
+  } catch {
+    return undefined
+  }
+}
+
+function todoStages(root: string, workflowName: string, phase: string): readonly PipelineTodoStageDefinition[] {
+  if (workflowName === 'default') return DEFAULT_WORKFLOW_TODO_STAGES
+  try {
+    const workflow = loadWorkflow(root, workflowName)
+    if (workflow) return workflow.steps.map((step) => ({ id: step.id, label: step.label || step.id }))
+  } catch {
+    // A bad/missing custom definition must not make a default-looking Todo.  Retain just the actual
+    // state phase so the snapshot remains usable while the workflow error is surfaced elsewhere.
+  }
+  return phase === '' ? [] : [{ id: phase, label: phase }]
+}
+
+async function documentEvidence(
+  root: string,
+  changeDir: string,
+  workflowName: string,
+  phase: string,
+  track: string,
+): Promise<DocumentEvidenceSnapshot> {
+  let workflow: WorkflowDef | undefined
+  if (workflowName !== 'default') {
+    try {
+      workflow = loadWorkflow(root, workflowName) ?? undefined
+    } catch (error) {
+      // The workflow endpoint surfaces the malformed definition separately.  Snapshot stays readable
+      // and explicitly says why it cannot truthfully assert document governance.
+      return {
+        governed: false,
+        blockers: [`workflow '${workflowName}' 不可读取，无法评估文档契约: ${error instanceof Error ? error.message : String(error)}`],
+        items: [],
+      }
+    }
+  }
+  const governed = isOpenSpecDocumentContractRequired(workflowName, track, workflow)
+  if (!governed) return { governed: false, blockers: [], items: [] }
+  if (!isDocumentContractPhase(phase)) {
+    return {
+      governed: true,
+      phase,
+      ledgerPresent: false,
+      pass: false,
+      blockers: [`受 OpenSpec 文档契约治理的 workflow 当前 phase 必须是标准阶段（当前 '${phase || '空'}'）`],
+      items: [],
+    }
+  }
+  const report = await evaluateDocumentEvidence(root, changeDir, phase)
+  return {
+    governed: true,
+    phase,
+    ledgerPresent: report.hasLedger,
+    pass: report.pass,
+    blockers: [...report.blockers],
+    items: report.items.map((item) => ({
+      kind: item.kind,
+      status: item.status,
+      requiredRead: item.requiredRead,
+      paths: [...item.paths],
+      producers: [...item.producers],
+    })),
+  }
 }
 
 /** 去重（按规范化路径，保序）。 */
@@ -58,29 +143,65 @@ async function scanProject(store: StateStore, root: string): Promise<ProjectSnap
   }
 
   const changes: ChangeSnapshot[] = []
+  const errors: string[] = []
   for (const e of entries) {
     if (!e.isDirectory() || e.name === 'archive') continue
     const changeDir = join(changesRoot, e.name)
+    let source: string | undefined
     try {
+      source = stateStorageSourcePathSync(changeDir)
+    } catch (error) {
+      errors.push(`${e.name}: 状态来源检查失败（${error instanceof Error ? error.message : String(error)}）`)
+      continue
+    }
+    // 普通目录不是 pipeline change，仍允许跳过；一旦 canonical/legacy 状态入口存在，其损坏就
+    // 必须进入项目错误面，不能伪装成“这里没有 change”。
+    if (source === undefined) continue
+    try {
+      const projection = await store.inspectProjection(changeDir)
+      if (projection.status === 'missing' || projection.status === 'stale'
+        || projection.status === 'legacy-compatible') {
+        // 只自动前滚能由 revision metadata 证明的 adapter 状态；unknown drift 永不静默覆盖。
+        await store.repairProjection(changeDir)
+      } else if (projection.status === 'drift') {
+        errors.push(`${e.name}: YAML projection drift（${projection.reason}）`)
+      }
       const state = await store.read(changeDir)
       const f = state.fields
+      const phase = str(f.phase)
+      const workflowName = str(f.workflow) || 'default'
+      const track = str(f.track)
+      const todo = projectPipelineTodo({
+        phase,
+        tasksMarkdown: await readTasksMarkdown(changeDir),
+        stages: todoStages(root, workflowName, phase),
+      })
       changes.push({
         name: e.name,
         path: changeDir,
-        phase: str(f.phase),
+        phase,
         phase_status: str(f.phase_status),
-        track: str(f.track),
+        track,
         preset: str(f.preset),
         archived: str(f.archived),
         updated_at: str(f.updated_at),
         fields: f,
+        todo,
+        documents: await documentEvidence(root, changeDir, workflowName, phase, track),
       })
-    } catch {
-      // 无 .pipeline.yaml / 解析失败 → 非 pipeline change，跳过（有界、容错）
+    } catch (error) {
+      errors.push(
+        `${e.name}: 状态损坏或不可读 [${source}]（${error instanceof Error ? error.message : String(error)}）`,
+      )
     }
   }
   changes.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
-  return { root, ok: true, changes }
+  return {
+    root,
+    ok: errors.length === 0,
+    changes,
+    ...(errors.length === 0 ? {} : { error: errors.join('; ') }),
+  }
 }
 
 export async function buildSnapshot(deps: SnapshotDeps): Promise<Snapshot> {
@@ -99,8 +220,9 @@ export async function buildSnapshot(deps: SnapshotDeps): Promise<Snapshot> {
 }
 
 /**
- * 变更指纹 —— SSE 推送的触发源。每个 .pipeline.yaml 的 path:size:mtimeNs（纳秒精度，
- * 挡同毫秒内两次写）拼接排序；任一 change 改盘 → 指纹变 → 推新快照。
+ * 变更指纹 —— SSE 推送的触发源。每个 change 选择 canonical current（仅其不存在时兼容
+ * legacy YAML），取 path:size:mtimeNs（纳秒精度，挡同毫秒内两次写）拼接排序；任一 canonical
+ * commit → 指纹变 → 推新快照。损坏 current 仍拥有优先权，不借 YAML 掩盖。
  */
 export async function computeFingerprint(roots: string[]): Promise<string> {
   const parts: string[] = []
@@ -114,12 +236,32 @@ export async function computeFingerprint(roots: string[]): Promise<string> {
     }
     for (const e of entries) {
       if (!e.isDirectory() || e.name === 'archive') continue
-      const yml = join(changesRoot, e.name, '.pipeline.yaml')
+      const source = stateStorageSourcePathSync(join(changesRoot, e.name))
+      if (source === undefined) continue
       try {
-        const st = await stat(yml, { bigint: true })
-        parts.push(`${yml}:${st.size}:${st.mtimeNs}`)
+        // lstat 不跟随链接：dangling/malicious current 仍是需要触发快照重读并暴露错误的状态，
+        // 不能因 stat(2) 跟随失败从 fingerprint 消失。
+        const st = await lstat(source, { bigint: true })
+        parts.push(`${source}:${st.size}:${st.mtimeNs}`)
       } catch {
-        // 无 yaml —— 跳过
+        // 来源在选择与 stat 之间消失/不可达；下一轮 fingerprint 会重算。
+      }
+      const tasks = join(changesRoot, e.name, 'tasks.md')
+      try {
+        // tasks.md is the Todo source, so an edit must wake SSE even if canonical state is unchanged.
+        const st = await lstat(tasks, { bigint: true })
+        parts.push(`${tasks}:${st.size}:${st.mtimeNs}`)
+      } catch {
+        // Absent/unreadable tasks are represented by the phase skeleton; a later create changes fp.
+      }
+      const documents = join(changesRoot, e.name, '.pipeline-documents.json')
+      try {
+        // Document ledger is snapshot-visible evidence.  Editing it must wake SSE even if state and
+        // tasks are unchanged, otherwise the dashboard can falsely keep showing stale proof.
+        const st = await lstat(documents, { bigint: true })
+        parts.push(`${documents}:${st.size}:${st.mtimeNs}`)
+      } catch {
+        // Missing evidence is represented by the snapshot report; a later creation changes fp.
       }
     }
   }

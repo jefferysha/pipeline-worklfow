@@ -8,13 +8,62 @@
  * 无 docker → honest skip，绝不伪绿。
  */
 import { execFile } from 'node:child_process'
-import { access, mkdtemp, readFile, rm } from 'node:fs/promises'
+import { access, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { makeHarness, type Harness } from './integration-harness.js'
+
+/**
+ * GOAL H · Stage C：afk run 现经 admission 权威闸门——change 必须归属到一个 active loop 才被 admit。
+ * 本 loops.yaml + `afk enqueue --loop afkloop`（显式 change-loop-binding）让 e2e change 被 admit，
+ * 顺带真跑通显式绑定 → admission ② → reserve → claim → run → settle 全链。
+ *
+ * H10 §1/§8任务7：`skill_bundle_id: _all` 是必填——缺省/null 会被 loop-admission.ts::reserveOnce
+ * 的 unwired 硬闸拒绝（fail-closed，pause-loop），change 永远到不了 claim/prepareSkillBundle/
+ * runChange，本文件下方对 automation 终态字段的断言会全部落空。`_all` 无需 isSkillProfileKnown
+ * 装配即合法；下方 x/y/x2 三个 change 的当前 phase 均为 'build'，templates/manifest.yaml 的
+ * mandatory_skills/recommended_skills 两表都没有 `build._all` 键（只声明了 build.pm/frontend/
+ * backend），故 `resolveDefault('build', '_all')` 三级回退到空——真实
+ * createExecutionPreparation（packages/cli/src/commands/afk.ts 生产装配）据此物化一个合法的
+ * 空 CAS 快照并成功 prepare，不依赖本机是否装有任何具体 skill 内容。
+ */
+const AFK_LOOPS_YAML = `version: 1
+loops:
+  - id: afkloop
+    name: AFK Loop
+    kind: orchestrator
+    goal: run afk e2e changes reliably over time
+    cadence: 1h
+    risk: low
+    runner: claude-code
+    change_prefix: null
+    skill_bundle_id: _all
+    phases:
+      - explore
+      - build
+    human_gates:
+      - verify
+    state: .superpowers/loops/progress.md
+    design_doc: docs/loops/afkloop.md
+    status: active
+    budget:
+      max_runs_per_day: 24
+      max_in_flight: 4
+      on_exceed: skip
+    kill_criteria:
+      - no-change-3
+    # G5：L3 必须显式声明产物路径；本 fixture 要继续走到 H7 verifier gate，而非先因空 allowlist conflict。
+    allowlist:
+      - .sandcastle-build/**
+`
+
+async function seedLoops(cwd: string): Promise<void> {
+  await mkdir(join(cwd, '.pipeline'), { recursive: true })
+  await writeFile(join(cwd, '.pipeline', 'loops.yaml'), AFK_LOOPS_YAML)
+}
 
 const execFileAsync = promisify(execFile)
 const IMAGE = 'sandcastle:test' // 与 dockerRunChange.integration.test.ts 同名同 Dockerfile，build 天然去重
@@ -25,6 +74,27 @@ const dockerfile = join(repoRoot, 'tools', 'sandcastle', 'Dockerfile')
 
 async function git(cwd: string, args: string[]): Promise<void> {
   await execFileAsync('git', args, { cwd })
+}
+
+interface BundleRunResult {
+  readonly code: number
+  readonly stdout: string
+  readonly stderr: string
+}
+
+/** H14 digest 诚实门要求生产 run 必须来自真实 dist；不能再用源码内 buildProgram 冒充 bundle。 */
+async function runBundle(cwd: string, args: readonly string[]): Promise<BundleRunResult> {
+  try {
+    const result = await execFileAsync(process.execPath, [bundlePath, ...args], { cwd })
+    return { code: 0, stdout: result.stdout, stderr: result.stderr }
+  } catch (error) {
+    const failed = error as NodeJS.ErrnoException & { stdout?: string; stderr?: string }
+    return {
+      code: typeof failed.code === 'number' ? failed.code : 1,
+      stdout: failed.stdout ?? '',
+      stderr: failed.stderr ?? failed.message,
+    }
+  }
 }
 
 let hasImage = false
@@ -47,7 +117,10 @@ describe('afk run —— 真调 docker 执行接线（#29-wire 落地到 CLI）'
     }
     // docker build 对同 tag 天然幂等去重：若 dockerRunChange.integration.test.ts 已建过，这里秒过。
     await execFileAsync('docker', [
-      'build', '-f', dockerfile, '-t', IMAGE, '--build-arg', 'WITH_CLAUDE_CODE=false', repoRoot,
+      'build', '-f', dockerfile, '-t', IMAGE,
+      '--build-arg', 'WITH_CLAUDE_CODE=false',
+      '--build-arg', 'PIPELINE_TEST_ALLOW_DETERMINISTIC_FALLBACK=1',
+      repoRoot,
     ]).catch(() => { /* 构建失败：下面 image inspect 会证实并 honest-skip */ })
     try {
       await execFileAsync('docker', ['image', 'inspect', IMAGE])
@@ -70,30 +143,91 @@ describe('afk run —— 真调 docker 执行接线（#29-wire 落地到 CLI）'
     if (hasImage) await rm(h.cwd, { recursive: true, force: true })
   })
 
-  it('L3 --image：真容器跑 + 真 merge-back，automation=merged，host 真拿到产物', async (ctx) => {
+  /** H14 生产装配：default workflow 的命名分支经真实 Git verifier 后，L3 才允许 merge-back。 */
+  it('L3 --image：真实 Git verifier 通过 → automation=merged，host base 与工作树均含产物', async (ctx) => {
     if (!hasImage) { ctx.skip(); return }
     await h.run(['init', 'x', '--track', 'backend', '--preset', 'full'])
     await h.run(['set', 'x', 'phase', 'build'])
+    await seedLoops(h.cwd)
     await git(h.cwd, ['add', '-A'])
     await git(h.cwd, ['commit', '-q', '-m', 'seed'])
 
-    expect(await h.run(['afk', 'enqueue', 'x'])).toBe(0)
-    expect(await h.run(['afk', 'run', '--level', 'L3', '--image', IMAGE])).toBe(0)
+    expect(await h.run(['afk', 'enqueue', 'x', '--loop', 'afkloop'])).toBe(0)
+    const run = await runBundle(h.cwd, ['afk', 'run', '--level', 'L3', '--image', IMAGE])
+    expect(run.code, `${run.stdout}\n${run.stderr}`).toBe(0)
 
     expect(await h.read('x')).toMatch(/^automation: merged$/m)
-    const produced = await readFile(join(h.cwd, '.sandcastle-build', 'x.done'), 'utf8')
-    expect(produced).toContain('afk build for x')
+    expect(await h.read('x')).toMatch(/^automation_cause: ""$/m)
+    let producedAtHead = false
+    try {
+      await execFileAsync('git', ['show', 'HEAD:.sandcastle-build/x.done'], { cwd: h.cwd })
+      producedAtHead = true
+    } catch {
+      /* 断言会失败 */
+    }
+    expect(producedAtHead).toBe(true)
+    let artifactExists = false
+    try { await access(join(h.cwd, '.sandcastle-build', 'x.done')); artifactExists = true } catch { /* 断言会失败 */ }
+    expect(artifactExists).toBe(true)
+  }, 120_000)
+
+  /**
+   * H7+H10：custom workflow change 走真实 `pipeline afk run` 全链（生产装配，非 SDK 直调）——
+   * admission preparation 冻结 workflow/step/coordinate digest，Git verifier 必须把同一坐标签进
+   * workflow-transition binding；只有该 binding 经 lifecycle 与 scheduler 双门复核后才可 merge。
+   * `pipeline set x2 workflow <id>` 对内建 track（workflow.allowed==='*'）合法：写入
+   * 不要求该 workflow id 有真实 .pipeline/workflows/<id>.yaml 定义文件（effectiveArtifactFields
+   * 对缺文件的 workflow 名返回空集，不 fail-loud，见 effective-artifacts.ts），本用例只需要
+   * resolveWorkflowName(state) 不再是 'default'。无声明文件按生产 `createExecutionCoordinatePort`
+   * 的既有契约冻结为 `def:null` 的空声明 step，仍有确定性 digest，并非“坐标缺失”。真正缺少
+   * prepared custom 坐标的 fail-closed 反例由 dockerRunChange.integration.test.ts 保留。
+   */
+  it('custom workflow change + L3 --image：冻结坐标与 Git verifier binding 一致 → 真 merge，ledger 留完整 workflow-transition 证据', async (ctx) => {
+    if (!hasImage) { ctx.skip(); return }
+    await h.run(['init', 'x2', '--track', 'backend', '--preset', 'full'])
+    await h.run(['set', 'x2', 'phase', 'build'])
+    expect(await h.run(['set', 'x2', 'workflow', 'h7s3-custom-workflow'])).toBe(0) // resolveWorkflowName≠'default' → workflowKind='custom'
+    await seedLoops(h.cwd)
+    await git(h.cwd, ['add', '-A'])
+    await git(h.cwd, ['commit', '-q', '-m', 'seed'])
+
+    expect(await h.run(['afk', 'enqueue', 'x2', '--loop', 'afkloop'])).toBe(0)
+    const run = await runBundle(h.cwd, ['afk', 'run', '--level', 'L3', '--image', IMAGE])
+    expect(run.code, `${run.stdout}\n${run.stderr}`).toBe(0)
+
+    expect(await h.read('x2')).toMatch(/^automation: merged$/m)
+    expect(await h.read('x2')).toMatch(/^automation_cause: ""$/m)
+    const ledger = (await readFile(join(h.cwd, '.pipeline', 'loops', 'ledger.jsonl'), 'utf8'))
+      .split(/\r?\n/)
+      .filter((line) => line !== '')
+      .map((line) => JSON.parse(line) as Record<string, unknown>)
+    const terminal = ledger.find((record) => record.kind === 'run' && record.change === 'x2')
+    const verification = terminal?.verification as { binding?: Record<string, unknown> } | undefined
+    expect(verification?.binding).toMatchObject({
+      kind: 'workflow-transition', workflow: 'h7s3-custom-workflow', step: 'build', event: 'verify-pass',
+    })
+    expect(verification?.binding?.workflow_digest).toMatch(/^[0-9a-f]{64}$/)
+    let producedAtHead = false
+    try {
+      await execFileAsync('git', ['show', 'HEAD:.sandcastle-build/x2.done'], { cwd: h.cwd })
+      producedAtHead = true
+    } catch {
+      /* 断言会失败 */
+    }
+    expect(producedAtHead).toBe(true)
   }, 120_000)
 
   it('默认 L1 report-only：真容器跑成功但落 paused，不 merge', async (ctx) => {
     if (!hasImage) { ctx.skip(); return }
     await h.run(['init', 'y', '--track', 'backend', '--preset', 'full'])
     await h.run(['set', 'y', 'phase', 'build'])
+    await seedLoops(h.cwd)
     await git(h.cwd, ['add', '-A'])
     await git(h.cwd, ['commit', '-q', '-m', 'seed'])
 
-    await h.run(['afk', 'enqueue', 'y'])
-    expect(await h.run(['afk', 'run', '--image', IMAGE])).toBe(0)
+    await h.run(['afk', 'enqueue', 'y', '--loop', 'afkloop'])
+    const run = await runBundle(h.cwd, ['afk', 'run', '--image', IMAGE])
+    expect(run.code, `${run.stdout}\n${run.stderr}`).toBe(0)
 
     const yaml = await h.read('y')
     expect(yaml).toMatch(/^automation: paused$/m)

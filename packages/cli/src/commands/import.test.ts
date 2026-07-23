@@ -51,6 +51,7 @@ describe('import —— 老仓历史区迁移进 JSONL（BACKLOG #11）', () => 
     const written = deps.store.write.calls[0]?.[1] as PipelineState
     expect(written.opaqueTail).not.toContain('_history')
     expect(written.opaqueTail).toContain('custom_tail: keep')
+    expect(deps.store.withLock.calls).toHaveLength(1)
   })
 
   test('无历史区：exit 0、零 append、提示无可导入', async () => {

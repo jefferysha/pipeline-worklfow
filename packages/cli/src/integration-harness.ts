@@ -8,20 +8,58 @@
  * 注意：文件名 *-harness.ts 不带 .test.，不会被 vitest 当测试收集（无用例）。
  */
 import { execFileSync } from 'node:child_process'
-import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
+  BUILTIN_TRACK_DEFINITIONS,
+  createEffectiveSkillResolver,
   createFlowEngine,
   createHistoryWriter,
   createStateStore,
+  createTransitionRecordStore,
+  createWorkflowRunRepository,
+  ensureDocumentLedger,
   loadManifest,
-  type GuardContext,
+  loadTrackRegistry,
+  loadWorkflow,
+  mutateTrackRegistry,
+  recordDocument,
+  recordDocumentReads,
+  stateStorageExistsSync,
+  withTrackRegistryLock,
+  type ExtendedManifestData,
+  type FieldName,
+  type TrackValidationContext,
 } from '@pipeline-lite/kernel'
-import type { CliDeps } from './deps.js'
+import type { CliDeps, GuardFileContext } from './deps.js'
 import { buildProgram, CliExit } from './program.js'
+
+/** Track Registry 校验上下文（与 main.ts trackValidationContext 同款，harness 镜像生产装配）。 */
+function trackValidationContext(repoRoot: string, manifest: ExtendedManifestData): TrackValidationContext {
+  const skillProfiles = new Set<string>()
+  for (const t of BUILTIN_TRACK_DEFINITIONS) {
+    if (t.policyProfile.skills.profile !== '_all') skillProfiles.add(t.policyProfile.skills.profile)
+  }
+  for (const table of [manifest.mandatorySkills, manifest.recommendedSkills]) {
+    for (const row of Object.values(table)) {
+      for (const key of Object.keys(row)) if (key !== '_all') skillProfiles.add(key)
+    }
+  }
+  return {
+    workflowExists: (id) => {
+      if (id === 'default') return true
+      try {
+        return loadWorkflow(repoRoot, id) !== null
+      } catch {
+        return false
+      }
+    },
+    skillProfiles,
+  }
+}
 
 export const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..')
 export const MANIFEST = join(REPO_ROOT, 'templates', 'manifest.yaml')
@@ -37,14 +75,125 @@ export interface Harness {
   read: (name: string) => Promise<string>
   /** 读某 change 目录下任意文件（相对 change 目录）；不存在 → 抛 */
   readIn: (name: string, rel: string) => Promise<string>
+  /**
+   * 白盒 state 准备：直接经 kernel store 原语写字段（绕过 CLI set 的 P6 artifact cutover——
+   * 内部 store.set 不受 cutover 限制，设计 D4）。供 e2e 预置 design_doc/plan/verification_report
+   * 等 artifact 字段跑后续 transition guard，语义等价于生产里 agent 经 `artifact register` 产出。
+   */
+  seedArtifact: (name: string, field: string, value: string) => Promise<void>
+  /**
+   * Seed a complete, hash-bound document ledger for a default change without retaining synthetic
+   * Skill history. Transition-centric tests call this explicitly when their subject is unrelated
+   * to document production; ledger-specific tests deliberately do not use it.
+   */
+  seedGovernedDocumentEvidence: (
+    name: string,
+    overrides?: { readonly design?: string; readonly tasks?: string },
+  ) => Promise<void>
+}
+
+const GOVERNED_DESIGN = `# governed design
+
+\`\`\`coverage
+touches:
+L1_api: filled
+L2_data: filled
+L3_rules: filled
+L4_state: filled
+L5_errors: filled
+L6_security: filled
+L7_perf: filled
+L8_deps: filled
+L10_terms: filled
+\`\`\`
+`
+
+/**
+ * Test fixture for transition/HTTP behavior that is intentionally orthogonal to document authoring.
+ * It uses the real ledger API, real digests, real producer-history validation, and real read receipts;
+ * only the temporary Skill history lines are restored afterwards so history-focused assertions keep
+ * their original, narrow fixture contract.
+ */
+export async function seedGovernedDocumentEvidence(
+  root: string,
+  changeDir: string,
+  name: string,
+  overrides: { readonly design?: string; readonly tasks?: string } = {},
+): Promise<void> {
+  const docs = {
+    proposal: `openspec/changes/${name}/proposal.md`,
+    design: `openspec/changes/${name}/design.md`,
+    tasks: `openspec/changes/${name}/tasks.md`,
+    superpowerDesign: `docs/superpowers/specs/${name}-design.md`,
+    adr: `docs/adr/${name}.md`,
+    delta: `openspec/changes/${name}/specs/capability/spec.md`,
+    plan: `docs/superpowers/plans/${name}.md`,
+    report: `docs/superpowers/reports/${name}.md`,
+    applied: 'openspec/specs/capability/spec.md',
+  }
+  const contents: Readonly<Record<keyof typeof docs, string>> = {
+    proposal: '# proposal\n',
+    design: overrides.design ?? GOVERNED_DESIGN,
+    tasks: overrides.tasks ?? '- [x] scope\n- [x] implementation\n- [x] verification\n',
+    superpowerDesign: '# Superpower design\n',
+    adr: '# ADR\n',
+    delta: '# Delta spec\n',
+    plan: '# Superpower plan\n',
+    report: '# Verification report\n',
+    applied: '# Applied spec\n',
+  }
+  for (const key of Object.keys(docs) as Array<keyof typeof docs>) {
+    const target = join(root, docs[key])
+    await mkdir(dirname(target), { recursive: true })
+    await writeFile(target, contents[key], 'utf8')
+  }
+
+  const historyPath = join(changeDir, '.pipeline-history.jsonl')
+  let originalHistory: string | undefined
+  try {
+    originalHistory = await readFile(historyPath, 'utf8')
+  } catch {
+    // A newly initialized change normally has no history file yet.
+  }
+  const skillLines = [
+    'openspec-propose', 'brainstorming', 'writing-plans', 'verification-before-completion', 'openspec-apply-change',
+  ].map((skill) => JSON.stringify({ kind: 'tool', raw: `Skill: ${skill}` })).join('\n')
+  await writeFile(historyPath, `${originalHistory ?? ''}${skillLines}\n`, 'utf8')
+
+  try {
+    const recordedAt = FIXED_CLOCK
+    // CLI init currently creates this sidecar, but keep the harness fixture valid for callers
+    // that initialize through the StateStore seam rather than the CLI command.
+    await ensureDocumentLedger(changeDir, recordedAt)
+    await recordDocument({ repoRoot: root, changeDir, phase: 'open', kind: 'proposal', path: docs.proposal, producer: 'openspec-propose', recordedAt })
+    await recordDocument({ repoRoot: root, changeDir, phase: 'open', kind: 'openspec-design', path: docs.design, producer: 'openspec-propose', recordedAt })
+    await recordDocument({ repoRoot: root, changeDir, phase: 'open', kind: 'tasks', path: docs.tasks, producer: 'openspec-propose', recordedAt })
+    await recordDocument({ repoRoot: root, changeDir, phase: 'explore', kind: 'superpower-design', path: docs.superpowerDesign, producer: 'brainstorming', recordedAt })
+    await recordDocument({ repoRoot: root, changeDir, phase: 'explore', kind: 'adr', path: docs.adr, producer: 'brainstorming', recordedAt })
+    await recordDocument({ repoRoot: root, changeDir, phase: 'spec', kind: 'delta-spec', path: docs.delta, producer: 'openspec-propose', recordedAt })
+    await recordDocument({ repoRoot: root, changeDir, phase: 'spec', kind: 'superpower-plan', path: docs.plan, producer: 'writing-plans', recordedAt })
+    await recordDocument({ repoRoot: root, changeDir, phase: 'spec', kind: 'plan', path: docs.plan, producer: 'writing-plans', recordedAt })
+    await recordDocument({ repoRoot: root, changeDir, phase: 'verify', kind: 'verification-report', path: docs.report, producer: 'verification-before-completion', recordedAt })
+    await recordDocument({ repoRoot: root, changeDir, phase: 'ship', kind: 'applied-spec', path: docs.applied, producer: 'openspec-apply-change', recordedAt })
+    for (const phase of ['explore', 'spec', 'build', 'verify', 'ship', 'archive'] as const) {
+      await recordDocumentReads({ repoRoot: root, changeDir, phase, kind: 'all', readAt: recordedAt })
+    }
+  } finally {
+    if (originalHistory === undefined) {
+      await rm(historyPath, { force: true })
+    } else {
+      await writeFile(historyPath, originalHistory, 'utf8')
+    }
+  }
 }
 
 /** 真实 deps：与 main.ts 同款 fs 副作用，只把 io 收进数组、clock 固定、gitHeadSha 定桩。 */
 export function realDeps(cwd: string, out: string[], err: string[]): CliDeps {
   const manifest = loadManifest(MANIFEST)
   const abs = (p: string) => join(cwd, p)
-  const guardCtx = (name: string): GuardContext => ({
+  const guardCtx = (name: string): GuardFileContext => ({
     changeDirRel: `openspec/changes/${name}`,
+    stateExists: (changeDirRel) => stateStorageExistsSync(abs(changeDirRel)),
     fileExists: (p) => { try { return statSync(abs(p)).isFile() } catch { return false } },
     fileNonempty: (p) => { try { const s = statSync(abs(p)); return s.isFile() && s.size > 0 } catch { return false } },
     readFile: (p) => { try { return readFileSync(abs(p), 'utf8') } catch { return undefined } },
@@ -57,17 +206,41 @@ export function realDeps(cwd: string, out: string[], err: string[]): CliDeps {
     },
     automationRunner: false,
   })
+  const store = createStateStore()
+  const trackCtx = trackValidationContext(cwd, manifest)
   return {
-    store: createStateStore(),
+    // H10 §1/§8任务7：与 main.ts 同款装配——复用 trackCtx.skillProfiles（T 线现有 profile 校验器，
+    // 见 deps.ts 头注），harness 镜像生产装配、不另造一套判定。
+    isSkillProfileKnown: (id) => trackCtx.skillProfiles.has(id),
+    store,
+    runRepo: createWorkflowRunRepository({ store, recordStore: createTransitionRecordStore(), clock: () => FIXED_CLOCK }),
+    loadRegistry: () => loadTrackRegistry(cwd, trackCtx),
+    withRegistryLock: (cb) => withTrackRegistryLock(cwd, trackCtx, cb),
+    mutateRegistry: (cb) => mutateTrackRegistry(cwd, trackCtx, cb),
     flow: createFlowEngine(manifest),
+    // T-R6：镜像生产装配，每次解析 default artifact 都 fresh-load effective registry。
+    resolver: createEffectiveSkillResolver({
+      registry: () => loadTrackRegistry(cwd, trackCtx),
+      manifest,
+    }),
     cwd,
+    env: (name) => process.env[name],
     io: { out: (l) => out.push(l), err: (l) => err.push(l) },
     clock: () => FIXED_CLOCK,
     listChanges: async (root) => {
       try {
         return readdirSync(root, { withFileTypes: true })
           .filter((e) => e.isDirectory() && e.name !== 'archive')
-          .filter((e) => { try { return statSync(join(root, e.name, '.pipeline.yaml')).isFile() } catch { return false } })
+          .filter((e) => stateStorageExistsSync(join(root, e.name)))
+          .map((e) => e.name).sort()
+      } catch { return [] }
+    },
+    // 严格候选枚举（Track CRUD 引用扫描专用，codex R3 阻断 D）：镜像 main.ts listChangeDirs——
+    // 只保留目录、排除 archive、**不过滤 .pipeline.yaml**（缺文件/半成品目录也进候选，交 store.read 判 unreadable）。
+    listChangeDirs: async (root) => {
+      try {
+        return readdirSync(root, { withFileTypes: true })
+          .filter((e) => e.isDirectory() && e.name !== 'archive')
           .map((e) => e.name).sort()
       } catch { return [] }
     },
@@ -143,6 +316,14 @@ export function makeHarness(cwd: string): Harness {
     },
     read: (name) => readFile(join(cwd, 'openspec', 'changes', name, '.pipeline.yaml'), 'utf8'),
     readIn: (name, rel) => readFile(join(cwd, 'openspec', 'changes', name, rel), 'utf8'),
+    seedArtifact: (name, field, value) =>
+      createStateStore().set(join(cwd, 'openspec', 'changes', name), field as FieldName, value),
+    seedGovernedDocumentEvidence: async (name, overrides) => seedGovernedDocumentEvidence(
+      cwd,
+      join(cwd, 'openspec', 'changes', name),
+      name,
+      overrides,
+    ),
   }
 }
 

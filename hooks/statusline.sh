@@ -6,7 +6,8 @@
 #   "statusLine": { "type": "command", "command": "bash <本仓路径>/hooks/statusline.sh" }
 #
 # 热路径红线（CONTRACT §5.4）：statusline 每次渲染都执行——纯 bash，绝不 spawn
-# 任何解释器；.pipeline.yaml 只用 grep 提取顶层键；fail-open：任何异常输出空 exit 0。
+# 任何解释器；canonical current 用共享 Bash helper 校验 digest+twin 后取 hookState，legacy YAML
+# 只在 current 从未出现时兼容；fail-open：任何异常输出空 exit 0。
 set -uo pipefail
 
 INPUT="$(cat 2>/dev/null || printf '{}')"
@@ -39,31 +40,36 @@ CWD="$(json_get cwd || json_get current_dir || true)"
 [ -z "$CWD" ] && CWD="$PWD"
 [ -d "$CWD" ] || exit 0
 
-# 上溯至多 5 层找项目根（有 openspec/changes 的目录）
-ROOT="" d="$CWD"
-for _ in 1 2 3 4 5; do
-  if [ -d "$d/openspec/changes" ]; then ROOT="$d"; break; fi
-  [ "$d" = "/" ] && break
-  d="$(dirname "$d")"
-done
+# 只绑定当前 Git/显式项目根，避免 statusline 在共享父目录显示另一项目的 Change。
+ROOT_HELPER="$(dirname "${BASH_SOURCE[0]:-$0}")/project-root.sh"
+[ -r "$ROOT_HELPER" ] || exit 0
+# shellcheck source=project-root.sh
+. "$ROOT_HELPER"
+ROOT="$(pipeline_project_root "$CWD" existing changes || true)"
 [ -n "$ROOT" ] || exit 0
 
-# 顶层键提取：grep 首个 '^key: '，剥一层首尾同款引号（单层去引号契约的 bash 镜像）
-yget() { # $1=file $2=key
-  local v
-  v="$(grep -m1 "^$2: " "$1" 2>/dev/null || true)"
-  v="${v#"$2: "}"
-  case "$v" in
-    '"'*'"') v="${v#\"}"; v="${v%\"}" ;;
-    "'"*"'") v="${v#\'}"; v="${v%\'}" ;;
-  esac
-  printf '%s' "$v"
-}
+# G1：canonical current 是 hook 真相源；helper 缺失只为单文件 legacy 安装保留 YAML fallback。
+STATE_HELPER="$(dirname "${BASH_SOURCE[0]:-$0}")/canonical-state.sh"
+if [ -r "$STATE_HELPER" ]; then
+  # shellcheck source=canonical-state.sh
+  . "$STATE_HELPER"
+else
+  pipeline_state_source() { [ -f "$1/.pipeline.yaml" ] && printf '%s' "$1/.pipeline.yaml"; }
+  pipeline_state_get() {
+    local v
+    v="$(grep -m1 "^$2: " "$1" 2>/dev/null || true)"; v="${v#"$2: "}"
+    case "$v" in '"'*'"') v="${v#\"}"; v="${v%\"}" ;; "'"*"'") v="${v#\'}"; v="${v%\'}" ;; esac
+    printf '%s' "$v"
+  }
+fi
+yget() { pipeline_state_get "$1" "$2"; }
 
-# 最新活跃 change：按 .pipeline.yaml mtime 取最大且 archived != true
+# 最新活跃 change：canonical 存在时按 current.json mtime；仅未迁移 change 才看 YAML。
 NAME="" PHASE="" BEST=0
-for f in "$ROOT"/openspec/changes/*/.pipeline.yaml; do
-  [ -f "$f" ] || continue
+for change_dir in "$ROOT"/openspec/changes/*; do
+  [ -d "$change_dir" ] || continue
+  f="$(pipeline_state_source "$change_dir" || true)"
+  [ -n "$f" ] || continue
   [ "$(yget "$f" archived)" = "true" ] && continue
   # GNU `stat -f` 是文件系统状态模式（非 mtime），在 Linux 上会"成功"吐非数字，兜底永不触发
   # ——先试 GNU 语法（-c）+ 数字校验，而非只靠退出码判断。
@@ -72,7 +78,7 @@ for f in "$ROOT"/openspec/changes/*/.pipeline.yaml; do
   case "$mt" in ''|*[!0-9]*) mt=0 ;; esac
   if [ "$mt" -ge "$BEST" ]; then
     BEST="$mt"
-    NAME="$(basename "$(dirname "$f")")"
+    NAME="$(basename "$change_dir")"
     PHASE="$(yget "$f" phase)"
   fi
 done

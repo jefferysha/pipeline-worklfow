@@ -90,4 +90,17 @@ describe('buildAfkReadiness', () => {
     })
     expect(r.credentials.codex.OPENAI_API_KEY).toEqual({ set: true, source: 'secrets-file' })
   })
+
+  it('Codex-first：未导出 CODEX_HOME 但默认 ~/.codex/auth.json 可读 → 凭证就绪且不回显路径', async () => {
+    const codexHome = join(base, '.codex')
+    mkdirSync(codexHome, { recursive: true })
+    writeFileSync(join(codexHome, 'auth.json'), '{"tokens":"secret-must-not-leak"}')
+    const opts = {
+      image: 'sandcastle:local', exec: dockerOk(['sandcastle:local']), secretsPath, hostEnv: {}, defaultCodexHome: codexHome,
+    }
+    const r = await buildAfkReadiness(opts)
+    expect(r.credentials.codex.CODEX_HOME).toEqual({ set: true, source: 'default-home' })
+    expect(JSON.stringify(r)).not.toContain(codexHome)
+    expect(JSON.stringify(r)).not.toContain('secret-must-not-leak')
+  })
 })

@@ -34,7 +34,7 @@ function renderModal(props: SkillTransferModalProps) {
 describe('SkillTransferModal', () => {
   it('挂载后真 fetch 全部 skill，左栏显示未选中的、右栏显示已选的', async () => {
     renderModal({ selected: ['grill-with-docs'], onSave: vi.fn(), onCancel: vi.fn() })
-    await waitFor(() => expect(screen.getByTestId('skill-available')).toBeInTheDocument())
+    await screen.findByText('browser-qa')
     const available = screen.getByTestId('skill-available')
     const chosen = screen.getByTestId('skill-chosen')
     expect(available.textContent).toContain('browser-qa')
@@ -45,9 +45,7 @@ describe('SkillTransferModal', () => {
   it('从左栏拖到右栏 → 加入已选；点保存 → onSave 收到含新项的列表', async () => {
     const onSave = vi.fn()
     renderModal({ selected: ['grill-with-docs'], onSave, onCancel: vi.fn() })
-    await waitFor(() => expect(screen.getByTestId('skill-available')).toBeInTheDocument())
-
-    const source = screen.getByText('browser-qa')
+    const source = await screen.findByText('browser-qa')
     const target = screen.getByTestId('skill-chosen')
     const transfer = dt()
     fireEvent.dragStart(source, { dataTransfer: transfer })

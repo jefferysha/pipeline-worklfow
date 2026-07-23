@@ -8,6 +8,12 @@ import react from '@vitejs/plugin-react'
 //   · environment: jsdom 仅作用本包；根 run 用 node 环境，各跑各的。
 export default defineConfig({
   plugins: [react()],
+  resolve: {
+    // '@' → src：与 vite.config / tsconfig paths 一致（shadcn 基建；ui 组件内部 import '@/lib/utils'）。
+    alias: {
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
+    },
+  },
   test: {
     root: fileURLToPath(new URL('.', import.meta.url)),
     environment: 'jsdom',

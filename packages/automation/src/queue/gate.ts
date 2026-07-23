@@ -6,8 +6,8 @@
  *     只放行"停下问用户"的交互门；build_sha barrier 的 HEAD==build_sha 校验在另一层，不触及。
  *   - pipeline-guard.sh:147-162 —— build 相位 automation=queued 双执行守卫（HARD STOP 主线 build，
  *     防主线 agent 与调度器对同一 change 双执行）；PIPELINE_AUTOMATION_RUNNER=1 旁路。
- *   - automation-config.sh:19-94 —— 两层开关 fail-safe OFF；opt-in 判定：PM 永不、已 queued=显式意图、
- *     否则取 default_opt_in。
+ *   - automation-config.sh:19-94 —— 两层开关 fail-safe OFF；opt-in 判定：policy 不允许则永不、
+ *     否则已 queued=显式意图，再否则取 default_opt_in。
  *
  * 全纯函数（无 fs / 无 env 副作用；env 由调用面读入后传值），可穷举单测。
  */
@@ -34,11 +34,15 @@ export function buildQueuedGuardBlocks(input: { phase: string; automation: strin
 }
 
 /**
- * per-change opt-in 判定（老仓 automation-config.sh:77-94 ac_opted_in）：
- *   PM track 永不入队 → false；已预置 automation=queued = 显式挂起意图 → true；否则取 default_opt_in。
+ * per-change opt-in 判定（老仓 automation-config.sh:77-94 ac_opted_in，经 Track Policy 注入）：
+ *   policy 不允许自动化 → false；已预置 automation=queued = 显式挂起意图 → true；否则取 default_opt_in。
  */
-export function optedIn(input: { track: string; automation: string; defaultOptIn: boolean }): boolean {
-  if (input.track === 'pm') return false
+export function optedIn(input: {
+  automationEligible: boolean
+  automation: string
+  defaultOptIn: boolean
+}): boolean {
+  if (!input.automationEligible) return false
   if (input.automation === 'queued') return true
   return input.defaultOptIn
 }
@@ -49,7 +53,7 @@ export function optedIn(input: { track: string; automation: string; defaultOptIn
  */
 export function shouldEnqueueOnSpecComplete(input: {
   enabled: boolean
-  track: string
+  automationEligible: boolean
   automation: string
   defaultOptIn: boolean
 }): boolean {

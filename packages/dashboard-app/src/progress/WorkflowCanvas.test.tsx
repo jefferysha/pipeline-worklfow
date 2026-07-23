@@ -1,0 +1,284 @@
+import { fireEvent, render, screen, within } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
+import { I18nProvider } from '../i18n'
+import {
+  WorkflowCanvas,
+  type CanvasArchivedChange,
+  type CanvasChange,
+  type CanvasGroup,
+  type CanvasStep,
+} from './WorkflowCanvas'
+
+/**
+ * WorkflowCanvas（画布 v3 · 单项目地铁站台）—— 纯展示组件的结构测试（断言 data/aria/testid，
+ * 不断言视觉类名；例外：名称禁截断是拍板硬条款，钉名称节点不落 truncate；sched 图标改 lucide
+ * 后钉 svg.lucide-* 类做「是正规图标非 unicode」的证据）：
+ *   · 空相位=过路小站（data-kind="stop"，不出大卡）；带归档相位小站「N 项已归档」可点开只读名单；
+ *   · 有在制的相位=站台卡（data-kind="card"：序号/相位名/门徽章/件数）；
+ *   · change 小卡（data-state/data-sbx/data-dim/data-on/data-pulse/lucide sched 图标/点击回调/长名完整）；
+ *   · 单项目语境：小卡无项目缩写 chip、组头无「N 个项目」尾缀。
+ * 与 ProgressView 的数据接线（FlatRow → CanvasGroup 投影）由 ProgressView.test 钉住。
+ */
+
+function chg(over: Partial<CanvasChange> & { key: string; name: string; phase: string }): CanvasChange {
+  return { state: 'agent', tone: 'gray', running: false, sandbox: false, dimmed: false, selected: false, statusLabel: '等待处理', ...over }
+}
+
+function arch(over: Partial<CanvasArchivedChange> & { key: string; name: string }): CanvasArchivedChange {
+  return { tone: 'gray', state: 'archived', ...over }
+}
+
+function step(id: string, over: Partial<CanvasStep> = {}): CanvasStep {
+  return { id, label: id, gate: null, archived: 0, archivedChanges: [], ...over }
+}
+
+/** 缺省组：proj-a 的 flow-x（3 相位，draft running·sandbox / review gatejudge，ship 空站）。 */
+function makeGroup(over: Partial<CanvasGroup> = {}): CanvasGroup {
+  return {
+    key: '/tmp/proj-a::flow-x',
+    projName: 'proj-a',
+    workflow: 'flow-x',
+    steps: [step('draft', { label: '起草' }), step('review', { label: '复核', gate: 'review' }), step('ship', { label: '发布' })],
+    changes: [
+      chg({ key: 'a1@/tmp/proj-a', name: 'a1', phase: 'draft', state: 'running', tone: 'blue', running: true, sandbox: true }),
+      chg({ key: 'a2@/tmp/proj-a', name: 'a2', phase: 'review', state: 'gatejudge', tone: 'red', dimmed: true }),
+    ],
+    ...over,
+  }
+}
+
+function renderCanvas(groups: CanvasGroup[], onOpen = vi.fn()): ReturnType<typeof vi.fn> {
+  render(
+    <I18nProvider>
+      <WorkflowCanvas groups={groups} onOpen={onOpen} />
+    </I18nProvider>,
+  )
+  return onOpen
+}
+
+describe('WorkflowCanvas 组与站点（单项目）', () => {
+  it('空 groups → 不渲染画布容器', () => {
+    renderCanvas([])
+    expect(screen.queryByTestId('prg-canvas')).toBeNull()
+  })
+
+  it('全部组都没有在制 change → 画布容器整个不渲染', () => {
+    renderCanvas([makeGroup({ changes: [] })])
+    expect(screen.queryByTestId('prg-canvas')).toBeNull()
+  })
+
+  it('空组与有在制组混合：空组跳过不渲染，有在制的组照常', () => {
+    renderCanvas([
+      makeGroup(),
+      makeGroup({ key: '/tmp/proj-a::flow-y', workflow: 'flow-y', changes: [] }),
+    ])
+    expect(screen.getByTestId('prg-cv-group-proj-a-flow-x')).toBeInTheDocument()
+    expect(screen.queryByTestId('prg-cv-group-proj-a-flow-y')).toBeNull()
+  })
+
+  it('组头同时展示项目名、工作流名与进度摘要', () => {
+    renderCanvas([makeGroup()])
+    const group = screen.getByTestId('prg-cv-group-proj-a-flow-x')
+    expect(group.textContent).toContain('flow-x')
+    expect(group.textContent).toContain('proj-a')
+    expect(group.textContent).toContain('3 步骤 · 流程中 2')
+    expect(group.textContent).not.toContain('个项目')
+    const projectName = screen.getByTestId('prg-cv-project-proj-a-flow-x')
+    expect(projectName.className).toContain('text-[18px]')
+    expect(projectName.className).toContain('font-black')
+    expect(projectName.className).not.toContain('truncate')
+  })
+
+  it('有在制步骤保留阶段、件数和 gate 语义，但按终稿统一使用 done/current/pending 圆形时间线节点', () => {
+    renderCanvas([makeGroup()])
+    const review = screen.getByTestId('prg-cv-node-proj-a-flow-x-review')
+    expect(review).toHaveAttribute('data-kind', 'card')
+    expect(review.textContent).toContain('02')
+    expect(review.textContent).toContain('复核')
+    expect(review.textContent).not.toContain('review 门')
+    const stage = screen.getByTestId('prg-cv-stage-proj-a-flow-x-review')
+    expect(stage).toHaveAttribute('data-stage-state', 'current')
+    expect(stage).toHaveAttribute('title', 'review 门')
+    expect(stage).toHaveAttribute('aria-label', 'review 门')
+    expect(within(review).getByTitle('1 项流程中')).toBeInTheDocument()
+    expect(screen.queryByTestId('prg-cv-gate-proj-a-flow-x-draft')).toBeNull()
+  })
+
+  it('空步骤=过路小站（data-kind="stop"）：仍显示阶段名与 gate 的可访问语义，不出大卡占位「—」', () => {
+    renderCanvas([
+      makeGroup({
+        steps: [step('draft', { label: '起草' }), step('review', { label: '复核', gate: 'review' }), step('ship', { label: '发布' })],
+        changes: [chg({ key: 'a1@/tmp/proj-a', name: 'a1', phase: 'draft' })],
+      }),
+    ])
+    const review = screen.getByTestId('prg-cv-node-proj-a-flow-x-review')
+    expect(review).toHaveAttribute('data-kind', 'stop')
+    expect(review.textContent).toContain('复核')
+    expect(review.textContent).not.toContain('review 门')
+    expect(screen.getByTestId('prg-cv-stage-proj-a-flow-x-review')).toHaveAttribute('aria-label', 'review 门')
+    expect(review.textContent).not.toContain('—')
+    expect(screen.getByTestId('prg-cv-node-proj-a-flow-x-draft')).toHaveAttribute('data-kind', 'card')
+  })
+
+  it('含 running change 的站台卡 data-run（呼吸环/流动段 CSS 门控）；静止站台与小站不落', () => {
+    renderCanvas([makeGroup()])
+    expect(screen.getByTestId('prg-cv-node-proj-a-flow-x-draft')).toHaveAttribute('data-run', 'true')
+    expect(screen.getByTestId('prg-cv-node-proj-a-flow-x-review').getAttribute('data-run')).toBeNull()
+    expect(screen.getByTestId('prg-cv-node-proj-a-flow-x-ship').getAttribute('data-run')).toBeNull()
+  })
+})
+
+// ── 归档不失联：带归档的相位小站把「N 项已归档」做成可点开的只读折叠——点开在站台线下方
+//    平铺该相位归档 change 只读名单；再点收起。──
+describe('WorkflowCanvas 归档相位小站（归档不失联，只读折叠）', () => {
+  function withArchive(): CanvasGroup {
+    return makeGroup({
+      steps: [
+        step('draft', { label: '起草' }),
+        step('review', { label: '复核', gate: 'review' }),
+        step('ship', {
+          label: '发布',
+          archived: 2,
+          archivedChanges: [arch({ key: 'z1@/tmp/proj-a', name: 'z1' }), arch({ key: 'z2@/tmp/proj-a', name: 'z2', tone: 'red', state: 'failed' })],
+        }),
+      ],
+      changes: [chg({ key: 'a1@/tmp/proj-a', name: 'a1', phase: 'draft' })],
+    })
+  }
+
+  it('归档相位小站带「N 项已归档」toggle（默认收起，aria-expanded=false）；名单初始不在 DOM', () => {
+    renderCanvas([withArchive()])
+    const ship = screen.getByTestId('prg-cv-node-proj-a-flow-x-ship')
+    expect(ship).toHaveAttribute('data-kind', 'stop')
+    const toggle = screen.getByTestId('prg-cv-arch-toggle-proj-a-flow-x-ship')
+    expect(toggle.textContent).toContain('2 项已归档')
+    expect(toggle.getAttribute('aria-expanded')).toBe('false')
+    expect(screen.queryByTestId('prg-cv-arch-panel-proj-a-flow-x-ship')).toBeNull()
+    expect(screen.queryByTestId('prg-cv-arch-chg-z1')).toBeNull()
+  })
+
+  it('点开 → 只读平铺归档名单（完整 mono 名、状态点、无点击回调按钮）；再点收起', () => {
+    renderCanvas([withArchive()])
+    const toggle = screen.getByTestId('prg-cv-arch-toggle-proj-a-flow-x-ship')
+    fireEvent.click(toggle)
+    expect(toggle.getAttribute('aria-expanded')).toBe('true')
+    const panel = screen.getByTestId('prg-cv-arch-panel-proj-a-flow-x-ship')
+    expect(within(panel).getByTestId('prg-cv-arch-chg-z1').textContent).toContain('z1')
+    expect(within(panel).getByTestId('prg-cv-arch-chg-z2').textContent).toContain('z2')
+    // 只读：归档条目不是按钮（不开抽屉）
+    expect(within(panel).queryAllByRole('button')).toHaveLength(0)
+    fireEvent.click(toggle)
+    expect(toggle.getAttribute('aria-expanded')).toBe('false')
+    expect(screen.queryByTestId('prg-cv-arch-panel-proj-a-flow-x-ship')).toBeNull()
+  })
+})
+
+describe('WorkflowCanvas change 小卡', () => {
+  it('任务卡使用中文状态与中文元信息标签；时间线给出 done/current 状态', () => {
+    renderCanvas([
+      makeGroup({
+        changes: [
+          chg({ key: 'a1@/tmp/proj-a', name: 'a1', phase: 'draft', state: 'queued', tone: 'blue', sandbox: true, statusLabel: '排队' }),
+          chg({ key: 'a2@/tmp/proj-a', name: 'a2', phase: 'review', state: 'gatejudge', tone: 'amb', statusLabel: '等你判断' }),
+        ],
+      }),
+    ])
+    expect(screen.getByTestId('prg-cv-track-proj-a-flow-x')).toHaveStyle({ minWidth: '780px' })
+    expect(screen.getByTestId('prg-cv-group-proj-a-flow-x')).toContainElement(
+      screen.getByTestId('prg-cv-scroll-proj-a-flow-x'),
+    )
+    expect(screen.getByTestId('prg-cv-stage-proj-a-flow-x-draft')).toHaveAttribute('data-stage-state', 'done')
+    expect(screen.getByTestId('prg-cv-stage-proj-a-flow-x-review')).toHaveAttribute('data-stage-state', 'current')
+    const card = screen.getByTestId('prg-cv-chg-a1')
+    expect(card).toHaveTextContent('等待中')
+    expect(card).not.toHaveTextContent('QUEUED')
+    expect(card).toHaveTextContent('阶段')
+    expect(card).toHaveTextContent('01 · 起草')
+    expect(card).toHaveTextContent('工作流')
+    expect(card).toHaveTextContent('flow-x')
+    expect(card).toHaveTextContent('打开')
+  })
+
+  it('小卡：状态点 data-pulse（running）/data-state/data-sbx；dim 小卡 data-dim；选中小卡 data-on；单项目无项目缩写', () => {
+    renderCanvas([
+      makeGroup({
+        changes: [
+          chg({ key: 'a1@/tmp/proj-a', name: 'a1', phase: 'draft', state: 'running', tone: 'blue', running: true, sandbox: true }),
+          chg({ key: 'a2@/tmp/proj-a', name: 'a2', phase: 'review', state: 'gatejudge', tone: 'red', dimmed: true, selected: true }),
+        ],
+      }),
+    ])
+    const run = screen.getByTestId('prg-cv-chg-a1')
+    expect(run).toHaveAttribute('data-state', 'running')
+    expect(run).toHaveAttribute('data-sbx', 'true')
+    expect(run.querySelector('[data-pulse="true"]')).not.toBeNull()
+    expect(run.getAttribute('data-dim')).toBeNull()
+    // 单项目语境：小卡不带项目缩写
+    expect(run.textContent).not.toContain('proj-a')
+    const judge = screen.getByTestId('prg-cv-chg-a2')
+    expect(judge).toHaveAttribute('data-state', 'gatejudge')
+    expect(judge).toHaveAttribute('data-dim', 'true')
+    expect(judge).toHaveAttribute('data-on', 'true')
+    expect(judge.getAttribute('data-sbx')).toBeNull()
+    expect(judge.querySelector('[data-pulse="true"]')).toBeNull()
+  })
+
+  it('终稿调度图标使用压缩包同款 lucide：沙箱 change → coffee；终端 change → terminal', () => {
+    renderCanvas([
+      makeGroup({
+        changes: [
+          chg({ key: 'a1@/tmp/proj-a', name: 'a1', phase: 'draft', state: 'running', tone: 'blue', running: true, sandbox: true }),
+          chg({ key: 'a2@/tmp/proj-a', name: 'a2', phase: 'review', state: 'gatejudge', tone: 'red', sandbox: false }),
+        ],
+      }),
+    ])
+    const sbx = screen.getByTestId('prg-cv-chg-a1')
+    expect(sbx.querySelector('svg.lucide-coffee')).not.toBeNull()
+    expect(sbx.textContent).not.toContain('▦')
+    const term = screen.getByTestId('prg-cv-chg-a2')
+    expect(term.querySelector('svg.lucide-terminal')).not.toBeNull()
+    expect(term.textContent).not.toContain('⌨')
+  })
+
+  it('AFK/终端角标（顶行最右）：沙箱卡带 coffee 角标与 AFK 字；终端卡带中性 terminal 角标', () => {
+    renderCanvas([
+      makeGroup({
+        changes: [
+          chg({ key: 'a1@/tmp/proj-a', name: 'a1', phase: 'draft', state: 'running', tone: 'blue', running: true, sandbox: true }),
+          chg({ key: 'a2@/tmp/proj-a', name: 'a2', phase: 'review', state: 'gatejudge', tone: 'red', sandbox: false }),
+        ],
+      }),
+    ])
+    const sbx = screen.getByTestId('prg-cv-chg-a1')
+    expect(within(sbx).getByLabelText('AFK 沙箱')).toBeInTheDocument()
+    expect(sbx.querySelector('svg.lucide-coffee')).not.toBeNull()
+    expect(sbx.textContent).toContain('AFK')
+    const term = screen.getByTestId('prg-cv-chg-a2')
+    expect(within(term).queryByLabelText('AFK 沙箱')).toBeNull()
+    expect(within(term).getByLabelText('终端')).toBeInTheDocument()
+    expect(term.querySelector('svg.lucide-terminal')).not.toBeNull()
+  })
+
+  // 反馈②硬条款：change 名称完整渲染，禁 ellipsis（break-all 折行）。textContent 钉全名，
+  // 名称节点不落 truncate（此处例外地断言类名——截断禁令本身就是视觉契约）。
+  it('长 change 名完整渲染：全名在 DOM、名称节点无 truncate', () => {
+    const longName = 'refactor-legacy-payment-gateway-reconciliation-pipeline-and-webhooks-v2'
+    renderCanvas([
+      makeGroup({
+        changes: [chg({ key: `${longName}@/tmp/proj-a`, name: longName, phase: 'draft' })],
+      }),
+    ])
+    const card = screen.getByTestId(`prg-cv-chg-${longName}`)
+    const nameEl = within(card).getByText(longName)
+    expect(nameEl.textContent).toBe(longName)
+    expect(nameEl.className).not.toContain('truncate')
+  })
+
+  it('小卡点击 → onOpen(key, 触发元素)（宿主 openDrawer 的焦点归还契约）', () => {
+    const onOpen = renderCanvas([makeGroup()])
+    const chip = screen.getByTestId('prg-cv-chg-a1')
+    fireEvent.click(chip)
+    expect(onOpen).toHaveBeenCalledTimes(1)
+    expect(onOpen).toHaveBeenCalledWith('a1@/tmp/proj-a', chip)
+  })
+})

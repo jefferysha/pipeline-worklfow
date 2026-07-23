@@ -70,6 +70,21 @@ const DESIGN_DOC = [
   '- Compression MUST NOT drop any decision or constraint line.',
   '- 禁止引入通用 yaml 解析器，沿用窄解析器口径。',
   '',
+  '## Coverage',
+  '',
+  '```coverage',
+  'touches:',
+  'L1_api: filled',
+  'L2_data: filled',
+  'L3_rules: filled',
+  'L4_state: filled',
+  'L5_errors: filled',
+  'L6_security: filled',
+  'L7_perf: filled',
+  'L8_deps: filled',
+  'L10_terms: filled',
+  '```',
+  '',
   '## Tasks',
   '',
   '- [x] draft the compression rules',
@@ -82,6 +97,32 @@ const DESIGN_DOC = [
   'The remaining notes are additional narrative filler that pads the document body with',
   'even more exposition and background reasoning that the builder can safely ignore now,',
   'because everything load-bearing has already been captured under the sections above.',
+].join('\n')
+
+// The default document contract requires OpenSpec tasks as a real, readable upstream input.
+// Keep this fixture prose-heavy so it participates honestly in the compression-ratio assertions.
+const TASKS_DOC = [
+  '# OpenSpec Tasks',
+  '',
+  '## Context',
+  '',
+  'This checklist captures the delivery work after the design and plan have been agreed. The',
+  'surrounding narrative intentionally explains familiar context at length so the compression',
+  'test can prove that the small actionable checklist survives while this exposition is removed.',
+  'The builder does not need to carry this repeated background into the next phase once the',
+  'decisions, constraints, and completion state are already represented by the checklist.',
+  '',
+  '## Checklist',
+  '',
+  '- [x] confirm the OpenSpec proposal and design scope',
+  '- [x] implement the governed workflow document ledger',
+  '- [x] verify the default pipeline reads its required evidence',
+  '',
+  '## Notes',
+  '',
+  'The remaining notes are deliberate narrative filler describing the same workflow context in',
+  'more words than the downstream implementation phase needs. They should not dominate the',
+  'handoff, because the completed tasks above already convey the actionable state precisely.',
 ].join('\n')
 
 const PLAN_DOC = [
@@ -137,13 +178,14 @@ describe('真实 e2e —— build handoff（design→build 真转换链 + 压缩
   beforeEach(async () => {
     h = await freshHarness()
     await init(h, name)
+    await h.seedGovernedDocumentEvidence(name, { design: DESIGN_DOC, tasks: TASKS_DOC })
     // 真转换链 open → explore → spec → build（满足事件前置：design_doc/plan 字段 + 文件真实存在）
     expect(await h.run(['transition', name, 'open-complete'])).toBe(0)
-    await writeFile(changeFile(h, name, 'design.md'), DESIGN_DOC, 'utf8')
-    expect(await h.run(['set', name, 'design_doc', `openspec/changes/${name}/design.md`])).toBe(0)
+    // design/tasks were written before their real ledger records so their evidence remains fresh.
+    await h.seedArtifact(name, 'design_doc', `openspec/changes/${name}/design.md`) // P6：artifact 白盒预置
     expect(await h.run(['transition', name, 'explore-complete'])).toBe(0)
     await writeFile(changeFile(h, name, 'plan.md'), PLAN_DOC, 'utf8')
-    expect(await h.run(['set', name, 'plan', `openspec/changes/${name}/plan.md`])).toBe(0)
+    await h.seedArtifact(name, 'plan', `openspec/changes/${name}/plan.md`) // P6：artifact 白盒预置
     expect(await h.run(['transition', name, 'spec-complete'])).toBe(0)
     // 落到 build 相位（真读盘验证）
     expect(await h.read(name)).toContain('phase: build')
@@ -153,7 +195,7 @@ describe('真实 e2e —— build handoff（design→build 真转换链 + 压缩
     await rm(h.cwd, { recursive: true, force: true })
   })
 
-  test('text：真压缩两份产出（plan + design_doc），决策/约束/待办保留，样板去除', async () => {
+  test('text：真压缩治理产出（plan + design_doc + OpenSpec tasks），决策/约束/待办保留，样板去除', async () => {
     const r = await handoff(h, name)
     expect(r.code).toBe(0)
     const out = r.out.join('\n')
@@ -180,7 +222,7 @@ describe('真实 e2e —— build handoff（design→build 真转换链 + 压缩
     const env = JSON.parse(r.out.join('\n'))
     expect(env.change).toBe(name)
     expect(env.phase).toBe('build')
-    expect(env.docs).toHaveLength(2)
+    expect(env.docs).toHaveLength(3)
     // 聚合压缩率真实测量 ≥ 0.25
     expect(env.aggregate.ratio).toBeGreaterThanOrEqual(0.25)
     expect(env.aggregate.originalChars).toBeGreaterThan(env.aggregate.compressedChars)
@@ -216,7 +258,7 @@ describe('真实 e2e —— verify handoff（--phase 覆写 + change 目录 chan
     await init(h, name)
     // 只需字段 + 文件真实存在；用 --phase verify 覆写，免去 build-complete 的重前置
     await writeFile(changeFile(h, name, 'verification_report.md'), VERIFICATION_REPORT, 'utf8')
-    expect(await h.run(['set', name, 'verification_report', `openspec/changes/${name}/verification_report.md`])).toBe(0)
+    await h.seedArtifact(name, 'verification_report', `openspec/changes/${name}/verification_report.md`) // P6：artifact 白盒预置
     // change 目录内 tasks.md（changefile 候选，验证目录相对解析）
     await writeFile(changeFile(h, name, 'tasks.md'), '# Tasks\n\nnarrative intro prose here.\n\n- [ ] ship it\n', 'utf8')
   })
@@ -250,12 +292,13 @@ describe('真实 e2e —— 边界与错误路径', () => {
     await rm(h.cwd, { recursive: true, force: true })
   })
 
-  test('新 init（open 相位、无产出）→ No handoff documents、exit 0', async () => {
+  test('新 init（open 相位）→ 自动生成的 OpenSpec proposal 可作为 handoff、exit 0', async () => {
     await init(h, 'fresh')
     const r = await handoff(h, 'fresh')
     expect(r.code).toBe(0)
-    expect(r.out.join('\n')).toContain('No handoff documents')
-    expect(r.err.join('\n')).toContain('无可压缩产出文档')
+    expect(r.out.join('\n')).toContain('# Handoff: fresh (phase open)')
+    expect(r.out.join('\n')).toContain('openspec/changes/fresh/proposal.md')
+    expect(r.err).toEqual([])
   })
 
   test('非法 change 名 → exit 1', async () => {

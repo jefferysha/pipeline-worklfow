@@ -11,6 +11,10 @@ description: "Pipeline Phase 5: Verify · 三轨并行验证。PM Track 做原�
 
 - `$PIPELINE_TRACK` / `$PIPELINE_CHANGE_NAME`
 
+**上下文恢复（强制）**：优先读取 `<pipeline-dispatch>` 的 `change/track/phase`，再跑
+`pipeline list --json` 和 `pipeline status <change> --json` 复核。环境变量只是兼容快捷方式；为空时
+不得退出到普通对话。若有多个候选且 dispatch 未指定，才请用户选择。
+
 ## 前置条件
 
 - `phase=verify`
@@ -24,6 +28,9 @@ description: "Pipeline Phase 5: Verify · 三轨并行验证。PM Track 做原�
 
 ```bash
 pipeline status "$PIPELINE_CHANGE_NAME"
+
+# Verify 的判断只能基于已被本 phase 实际读取的冻结文档版本，不能凭上一轮对话记忆。
+pipeline document read "$PIPELINE_CHANGE_NAME" all
 ```
 
 > **review 门提示**：verify 是 review 相位，进入时 CLI 已落 `.pipeline-pending-review` marker。
@@ -41,17 +48,19 @@ pipeline status "$PIPELINE_CHANGE_NAME"
 2. 使用 Skill 工具加载 `web-design-guidelines`。**禁止跳过此步骤**。
    - 对照 UI 设计规范
 
-3. 使用 Skill 工具加载 `taste-skill`。**禁止跳过此步骤**。
+3. 使用本插件打包的 Skill `design-taste-frontend`。**禁止跳过此步骤**。
    - 设计 review 二次把关
 
-4. 使用 Skill 工具加载 `superpowers:verification-before-completion`。**禁止跳过此步骤**。
+4. 使用本插件打包的 Skill `verification-before-completion`。**禁止跳过此步骤**。
    - 验收 checklist
 
 **PM Track 没有 reviewer agent。** 验证完成后由用户**手动**确认，然后设置：
 
 ```bash
 pipeline set "$PIPELINE_CHANGE_NAME" verify_result pass
-pipeline set "$PIPELINE_CHANGE_NAME" verification_report "docs/superpowers/reports/$(date +%Y-%m-%d)-<name>-prototype-review.md"
+pipeline artifact register "$PIPELINE_CHANGE_NAME" verification_report \
+  "docs/superpowers/reports/$(date +%Y-%m-%d)-<name>-prototype-review.md" \
+  --producer verification-before-completion
 pipeline set "$PIPELINE_CHANGE_NAME" branch_status handled
 ```
 
@@ -81,7 +90,7 @@ pipeline set "$PIPELINE_CHANGE_NAME" branch_status handled
 
 **强制 Skill**（禁止跳过）：
 
-1. 使用 Skill 工具加载 `superpowers:verification-before-completion`。**禁止跳过此步骤**。
+1. 使用本插件打包的 Skill `verification-before-completion`。**禁止跳过此步骤**。
 
 2. 使用 Skill 工具加载 `e2e-testing`。**禁止跳过此步骤**。
    - Playwright E2E 模式
@@ -94,7 +103,7 @@ pipeline set "$PIPELINE_CHANGE_NAME" branch_status handled
 
 **含 UI 改动时强制（视觉轨；下面三轨全是代码/行为验证、不覆盖视觉）**：
 
-5. **含 UI 改动时禁止跳过**：把视觉审作为**第四并行轨**——与上面三轨**同消息** dispatch 一个 **`pipeline-design-reviewer` agent**（本仓 agents/pipeline-design-reviewer.md，隔离上下文，读冻结的 `build_sha` 固定靶），让它加载 `web-design-guidelines` + `taste-skill`，对**跑起来的 app**做视觉审查（截图关键屏 + 主要状态、查交互态/材质/反模板红线/无 emoji）。
+5. **含 UI 改动时禁止跳过**：把视觉审作为**第四并行轨**——与上面三轨**同消息** dispatch 一个 **`pipeline-design-reviewer` agent**（本仓 agents/pipeline-design-reviewer.md，隔离上下文，读冻结的 `build_sha` 固定靶），让它加载 `web-design-guidelines` + `design-taste-frontend`，对**跑起来的 app**做视觉审查（截图关键屏 + 主要状态、查交互态/材质/反模板红线/无 emoji）。
    - 它回传 REVIEW.md 路径 + 「已无 high/critical」结论；主线把视觉结论并入 verification_report，有 high/critical 则 verify-fail 回 build。主线**不内联**跑视觉审。
 
 **可选 Skill**：
@@ -131,7 +140,7 @@ fi
 > **三轨同读冻结的 `build_sha`（barrier）**：同 frontend——先 `BUILD_SHA="$(pipeline get "$PIPELINE_CHANGE_NAME" build_sha)"`，三轨审这个固定靶；codex 轨审提交区间 diff（见上方轨道 3 写法）。
 
 **强制 Skill**：
-1. 使用 Skill 工具加载 `superpowers:verification-before-completion`。**禁止跳过此步骤**。
+1. 使用本插件打包的 Skill `verification-before-completion`。**禁止跳过此步骤**。
 
 **推荐 Skill**：
 - 使用 Skill 工具加载 `e2e-testing` — API E2E 测试
@@ -216,12 +225,25 @@ pipeline set "$PIPELINE_CHANGE_NAME" codex_review_result pass
 # 生成聚合报告
 REPORT_PATH="docs/superpowers/reports/$(date +%Y-%m-%d)-${PIPELINE_CHANGE_NAME}-verify.md"
 # ... 写报告（含三/四轨结论 + Step 1.5 勾选表 + Step 1.6 回灌记录）...
-pipeline set "$PIPELINE_CHANGE_NAME" verification_report "$REPORT_PATH"
+pipeline artifact register "$PIPELINE_CHANGE_NAME" verification_report "$REPORT_PATH" \
+  --producer verification-before-completion
+```
+
+### Step 2.25: 登记验证报告（受治理 workflow 强制）
+
+先实际调用本插件 `verification-before-completion`，再登记最终报告。报告每次修改都会改变 SHA-256；
+修改后必须重新登记，不能沿用旧证据。
+
+```bash
+REPORT_PATH="$(pipeline get "$PIPELINE_CHANGE_NAME" verification_report)"
+pipeline document record "$PIPELINE_CHANGE_NAME" verification-report "$REPORT_PATH" \
+  --producer verification-before-completion
+pipeline document status "$PIPELINE_CHANGE_NAME"
 ```
 
 ### Step 3: 处理分支
 
-**立即执行**：使用 Skill 工具加载 `superpowers:finishing-a-development-branch`（推荐，按需）。
+**立即执行**：使用本插件打包的 Skill `finishing-a-development-branch`（推荐，按需）。
 
 完成后：
 ```bash
@@ -231,6 +253,7 @@ pipeline set "$PIPELINE_CHANGE_NAME" branch_status handled
 ### Step 4: 验证（不自动推进）
 
 ```bash
+pipeline document status "$PIPELINE_CHANGE_NAME"
 pipeline check "$PIPELINE_CHANGE_NAME"     # verify 出口：0 过 / 2 不过
 ```
 
@@ -266,16 +289,10 @@ verify-fail 时**必须暂停**询问用户：
 - 修复（回到 build）
 - 接受偏差并强制通过（需说明原因，写入 verification_report）
 
-## 外部 skill 依赖（CONTRACT §5.7 显式声明）
+## 打包 skill 依赖（随 pipeline-lite 插件安装）
 
-- external-skill: superpowers:verification-before-completion · 强制
-- external-skill: superpowers:finishing-a-development-branch · 推荐
-- external-skill: browser-qa · 强制（pm/frontend）
-- external-skill: web-design-guidelines · 强制（pm；视觉轨）
-- external-skill: taste-skill · 强制（pm；视觉轨）
-- external-skill: e2e-testing · 强制（frontend）/ 推荐（backend）
-- external-skill: verify · 强制（frontend）/ 推荐（backend）
-- external-skill: run · 可选
-- external-skill: security-review · 可选（builtin）
-- external-skill: code-review · 可选（builtin）
-- external-skill: python-testing · 可选（Python）
+- bundled-skill: verification-before-completion · 强制
+- bundled-skill: finishing-a-development-branch · 推荐
+- bundled-skill: browser-qa / web-design-guidelines / design-taste-frontend · PM、前端与视觉轨
+- bundled-skill: e2e-testing / verify · 前端强制、后端推荐
+- bundled-skill: run / security-review / code-review / python-testing · 条件或可选

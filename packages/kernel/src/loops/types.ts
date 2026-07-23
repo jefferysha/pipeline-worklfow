@@ -8,7 +8,8 @@
  * 分级放权 L1→L3（老仓无此面；对标 cobusgreyling/loop-engineering "Phased Rollout" × 老仓 human_gates）：
  * `autonomy_level` 字段 + verdict 信封的 enforcement/report_only。
  * 缺省 L1 = report-only（观察不动手）；L2 assisted（人工门）；L3 unattended（无监管自动 merge，
- * 仅受 denylist 黑名单拦截——allowlist 无运行时校验方，不是白名单保护，详见 automation/types.ts）。
+ * 同时受 allowlist 白名单与 denylist 黑名单约束；L3 merge 前由 automation lifecycle 强制校验，
+ * merge permit 还会复核 prepare 时冻结的 policy epoch，避免运行中收紧策略后沿用旧白名单。
  *
  * ★当前限制（读裁决信封的人须知）：级别与 verdict 都不驱动任何自动 gate/halt。adjudicate 的
  * kill/warn 只汇进报告（enforce.ts::buildReport → CLI `loops report`），没有消费方据此停 loop；
@@ -27,12 +28,22 @@ export type AutonomyLevel = 'L1' | 'L2' | 'L3'
 
 /**
  * v5 T20：已知 agent runner 清单（编排页 runner 下拉的双选项数据面；automation 分派口径见
- * automation/runner.ts::buildAfkRunCommand——仅 'codex' 走 codex exec 无头会话，其余一律缺省
- * Claude 路径）。注意 LoopEntry.runner 仍是自由字符串（历史登记表存在 'cron'/'cron-session'
- * 等非 agent 值，schema 不收紧成 enum 以免旧表载入即坏）。
+ * automation/runner.ts::buildAfkRunCommand。LoopEntry.runner 仍是自由字符串以便旧表可读，但
+ * 所有新写入/执行边界必须调用本文件的闭集 guard；历史未知值只能诊断，不能隐式执行。
  */
 export const LOOP_RUNNERS = ['claude-code', 'codex'] as const
 export type LoopRunner = (typeof LOOP_RUNNERS)[number]
+
+export function isLoopRunner(value: unknown): value is LoopRunner {
+  return typeof value === 'string' && (LOOP_RUNNERS as readonly string[]).includes(value)
+}
+
+export function assertLoopRunner(value: unknown): LoopRunner {
+  if (!isLoopRunner(value)) {
+    throw new Error(`runner 非法「${String(value)}」：仅允许 ${LOOP_RUNNERS.join(' / ')}，拒绝隐式降级执行`)
+  }
+  return value
+}
 
 /** 预算声明（老 loops.schema.json budget 76-93）。
  * #36 追加可选 token 级预算（向后兼容，旧登记表无需改）：
@@ -61,19 +72,42 @@ export interface LoopEntry {
   change_prefix: string | null
   phases: string[]
   human_gates: string[]
-  state: string
+  /** @deprecated H9: legacy imported run-log path only; runtime iteration state comes from ledger facts. */
+  state?: string
   design_doc: string
   status: LoopStatus
   budget: LoopBudget
   kill_criteria: string[]
   /** 分级放权级别（缺省填 L1；loadRegistry 派生时补默认）。 */
   autonomy_level: AutonomyLevel
-  /** v5 决议 #12：路径 glob 白名单（L3 unattended 自动合并的许可范围）。纯存储侧——schema 载入 +
-   * server 只读透出，无运行时校验消费方（对比 denylist 有 automation/lifecycle/denylist.ts）。缺省 []。 */
+  /** v5 决议 #12：路径 glob 白名单（L3 unattended 自动合并的许可范围）。schema 载入 + server
+   * 只读透出；运行时由 automation/lifecycle/denylist.ts + lifecycle.ts 在 merge 前强制消费。缺省 []。 */
   allowlist: string[]
   /** v5 决议 #12：路径 glob 黑名单（存储侧；运行时校验见 automation/lifecycle/denylist.ts，
    * 该模块以鸭子类型只读 change_prefix + denylist——本字段名即其消费契约，勿改名）。缺省 []。 */
   denylist: string[]
+  /** H11 starter 来源；旧登记表可缺席，template catalog 的引用存在性不属于 registry 类型层。 */
+  template_id?: string
+  /** H11 starter schema 版本；当前持久化格式只接受字面量 1。 */
+  template_version?: 1
+  /** H11 编译后绑定的 workflow token；旧登记表可缺席。 */
+  workflow_id?: string
+  /**
+   * H10 §1：skill bundle 引用（YAML 字段 `skill_bundle_id`，snake_case，与 change_prefix/human_gates
+   * 等其余字段同一命名口径；执行域消费方若需要 camelCase `skillBundleId`，由消费方自行映射，本类型
+   * 不做转写）。值域词法上是 `_all` 或 tracks/types.ts::TRACK_ID_RE 形状的 profile id（词法规则见
+   * registry.ts::SKILL_BUNDLE_ID_RE，复用既有正则不另造）；是否是 manifest 里真实声明过的 profile
+   * 属存在性语义校验，留给消费本字段的后续任务，本类型与 loadRegistry 均不做、也做不到（这里拿不到
+   * manifest 上下文）。
+   *
+   * `loadRegistry` 派生后：旧登记表缺这一行、或显式写 `null`，一律归一化为 `null`——语义是
+   * **unwired**（未接线），不是"空 bundle"，也不是"沿用某个默认 bundle"；任何 real-run 都据此拒绝。
+   *
+   * 类型标为可选：兼容仓内其余尚未读取本字段的既有 LoopEntry 构造点（避免本次改动波及清单外文件的
+   * 类型检查）。`loadRegistry` 产出的对象本字段恒为 `null` 或合法字符串，不会是 `undefined`——
+   * `undefined` 只出现在尚未接线本字段的手写测试夹具里，语义上与显式 `null` 同视为 unwired。
+   */
+  skill_bundle_id?: string | null
 }
 
 export interface LoopRegistry {

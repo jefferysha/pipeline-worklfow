@@ -2,6 +2,8 @@
  * 契约类型 —— 与 docs/CONTRACT.md 互为镜像。
  * 字段序/引号/列表语义以老内核 state-init.sh heredoc 为准，改动 = human gate（LOOP.md）。
  */
+import type { CoverageProfile, ReviewSeed, TrackId } from './tracks/types.js'
+import type { AutomationPolicySnapshot } from './loops/automation-policy.js'
 
 export const FIELD_ORDER = [
   'track', 'preset', 'created_by', 'assignee', 'phase', 'phase_status',
@@ -34,8 +36,11 @@ export const LIST_FIELDS = ['scope', 'related_files', 'spec_scope', 'depends_on'
 export const PHASES = ['open', 'explore', 'spec', 'build', 'verify', 'ship', 'archive'] as const
 export type Phase = (typeof PHASES)[number]
 
-export const TRACKS = ['chat', 'pm', 'frontend', 'backend'] as const
-export type Track = (typeof TRACKS)[number]
+// track 合法性全集不再是 types.ts 的写死常量：运行时权威改由动态 Track Registry 承载
+// （GOAL.md 清单 T · R2）。内建四轨的 id/默认/排序单一真相源在 tracks/builtins.ts 的
+// BUILTIN_TRACK_IDS；任意 track id 的运行时校验走 registry 的 requireTrack（应用层校验，
+// 见 cli/commands/{fields,init}.ts 与 server POST /api/changes）。故 InitOptions.track
+// 收成开放的 TrackId=string——闭集判定挪到 registry，不再由本类型收窄。
 
 /** 门 marker 文件名（项目根），age ≤ GATE_TTL_MS[kind] 视为新鲜（age > TTL 才陈旧，同老内核 fresh()） */
 export const GATE_MARKERS = ['.pipeline-pending-confirm', '.pipeline-pending-review', '.pipeline-pending-interaction'] as const
@@ -82,8 +87,38 @@ export const PREREQ_HINTS = {
   docker: '装 OrbStack（orbstack.dev，轻量，推荐 macOS）或 Docker Desktop（docker.com）——不自动装，需你自行安装',
 } as const
 
+/**
+ * .pipeline.yaml 内部提交元数据（W1 第二增量：WorkflowRun 持久化接缝）——不进 FIELD_ORDER，
+ * 不可被 `pipeline set` 改写。序列化在 FIELD_ORDER 字段之后、opaqueTail 之前；老版本窄解析器
+ * 遇到首个未知 key（`pipeline_run_id`）起整段当 opaqueTail 逐字保留，混版本读写无损（同
+ * workflow/automation_current_phase 等既有「新字段必须追加在末尾」先例）。
+ */
+export interface RunMetadata {
+  runId: string
+  transitionSequence: number
+  /** 尚未发生过任何 canonical transition 的新 change 合法地没有 head。 */
+  transitionHead?: string
+  /** Immutable policy snapshot bound before an autonomous attempt starts. */
+  automationPolicy?: AutomationPolicySnapshot
+  /** H9 governed identity；两者只在 automationPolicy 已绑定时成对存在。 */
+  loopId?: string
+  iterationId?: string
+}
+
+/** `.pipeline.yaml` adapter 指向的 canonical revision；不属于 WorkflowRun domain state。 */
+export interface StateProjectionMetadata {
+  stateRevision: number
+  stateRevisionId: string
+  stateDigest: string
+}
+
 export interface PipelineState {
   fields: Record<FieldName, string | string[]>
+  /** 缺省 undefined = 尚未升级到 run 身份的老 change（首次经 WorkflowRunRepository.transact
+   * 提交时在同一把锁内生成）。 */
+  runMetadata?: RunMetadata
+  /** 仅 YAML adapter 读写使用；canonical revision 内不存这份派生元数据。 */
+  projectionMetadata?: StateProjectionMetadata
   /** 老内核 base64 历史区等未知尾块——读时跳过、写回原样逐字保留 */
   opaqueTail: string
 }
@@ -91,24 +126,110 @@ export interface PipelineState {
 export interface InitOptions {
   repoRoot: string
   name: string
-  track: Track
+  /** registry 已校验的 track id（合法性由调用方经 requireTrack 保证；store.init 只负责落盘，不再收窄闭集）。 */
+  track: TrackId
+  /** requireTrack 得到的 effective policy 值；StateStore 不按 track id 猜测能力。 */
+  reviewSeed: ReviewSeed
   preset: string
   user?: string
   /** 测试注入时钟；业务码禁止散落 new Date() */
   clock?: () => string
+  /**
+   * W1 第二增量：预生成的 run 身份，随 init 的独占创建（`wx`）一次性写入 .pipeline.yaml，
+   * 不是创建后再补一次 write（第五轮 codex review 抓到：两步之间有竞态窗口，且第二步失败会
+   * 被调用方吞掉、init 仍报成功，"新 change 身份已钉死"这条保证名不副实）。不提供 → 产出的
+   * change 没有 runMetadata（老行为，供不需要 run 身份的调用方/测试用，StateStore 本身不
+   * 依赖 WorkflowRunRepository，不自己生成 ID）。
+   */
+  runId?: string
+  /**
+   * custom workflow 首态覆盖（W1 第二增量收口，第 7 轮 codex review P1）：提供时，init 的独占
+   * 创建一次性把 workflow/phase 写成这里给的值，不是先建 default/open 再补一次 setMany——
+   * 调用方（CLI cmdInit / server POST /api/changes）已经用 loadWorkflow+firstStep 校验过
+   * workflow 存在且非空，这里只负责原子落盘，不重新校验语义合法性。缺省 = default workflow 的
+   * open 首态（老行为不变）。
+   */
+  initialWorkflow?: {
+    workflow: string
+    phase: string
+    /** Custom workflow declared `openspec_contract: required`; initialize its evidence ledger with state. */
+    openspecContract?: boolean
+  }
+}
+
+/** Canonical state revision 的提交原因；与 workflow transition sequence 分轴计数。 */
+export type StateMutationKind =
+  | 'init'
+  | 'migration'
+  | 'replace'
+  | 'set'
+  | 'set-many'
+  | 'cas'
+  | 'cas-many'
+  | 'automation'
+  | 'transition'
+  | 'legacy-import'
+
+/** StateStore writer 向 canonical revision 传递的审计关联。 */
+export interface StateWriteIntent {
+  readonly kind: StateMutationKind
+  readonly transitionRecordId?: string
+}
+
+export type StateProjectionStatus =
+  | { readonly status: 'legacy' }
+  | { readonly status: 'current'; readonly revision: number; readonly revisionId: string }
+  | { readonly status: 'missing'; readonly revision: number; readonly revisionId: string }
+  | { readonly status: 'stale'; readonly revision: number; readonly revisionId: string }
+  | { readonly status: 'legacy-compatible'; readonly revision: number; readonly revisionId: string }
+  | { readonly status: 'drift'; readonly revision: number; readonly revisionId: string; readonly reason: string }
+
+export interface StateWriteResult {
+  readonly projection:
+    | { readonly status: 'updated' }
+    | { readonly status: 'pending'; readonly error: unknown }
+}
+
+export interface RepairProjectionOptions {
+  /** 只有用户明确选择 canonical 覆盖未知 drift 时才传 true。 */
+  readonly forceCanonical?: boolean
 }
 
 export interface StateStore {
   read(changeDir: string): Promise<PipelineState>
-  /** 严格按 FIELD_ORDER 全量写回；值命中四闸（": " / " #" / 换行 / 首引号）→ throw */
-  write(changeDir: string, state: PipelineState): Promise<void>
+  /**
+   * 严格按 FIELD_ORDER 全量写回；值命中四闸（": " / " #" / 换行 / 首引号）→ throw。
+   * 公开入口自行取得 change 锁，保证 canonical revision/current 发布不会产生同代分叉。
+   */
+  write(changeDir: string, state: PipelineState, intent?: StateWriteIntent): Promise<StateWriteResult>
+  /**
+   * 仅供已处于 `withLock(changeDir, ...)` 临界区的组合事务使用；不会重复取得不可重入锁。
+   * 锁外调用是调用方 bug；一般消费者必须使用 `write()`。
+   */
+  writeUnderLock(changeDir: string, state: PipelineState, intent?: StateWriteIntent): Promise<StateWriteResult>
   get(changeDir: string, field: FieldName): Promise<string | string[] | undefined>
   set(changeDir: string, field: FieldName, value: string | string[]): Promise<void>
   setMany(changeDir: string, kv: Partial<Record<FieldName, string | string[]>>): Promise<void>
   /** compare-and-set：当前值 === expect 才写；返回是否写入 */
   cas(changeDir: string, field: FieldName, expect: string, next: string): Promise<boolean>
+  /**
+   * 多值 compare-and-set：guard 字段命中任一 expect 时，在同一把锁、同一次
+   * 原子写中提交整批字段。不命中返回 false 且零写入。
+   */
+  casMany(
+    changeDir: string,
+    field: FieldName,
+    expects: readonly string[],
+    kv: Partial<Record<FieldName, string | string[]>>,
+  ): Promise<boolean>
   /** 返回创建的 change 目录绝对路径 */
   init(opts: InitOptions): Promise<string>
+  /** 只读检查 YAML adapter 与 canonical current 的关系；canonical 损坏会直接抛错。 */
+  inspectProjection(changeDir: string): Promise<StateProjectionStatus>
+  /** 修复缺失/已知滞后 adapter；未知 drift 默认拒绝，显式 forceCanonical 才覆盖。 */
+  repairProjection(changeDir: string, opts?: RepairProjectionOptions): Promise<StateProjectionStatus>
+  /** 用户显式选择把 drifted legacy YAML 导入为一条新的 canonical mutation。 */
+  importLegacyProjection(changeDir: string): Promise<StateWriteResult>
   /** mkdir 原子锁（含陈锁回收），锁内串行执行 fn */
   withLock<T>(changeDir: string, fn: () => Promise<T>): Promise<T>
 }
@@ -145,6 +266,13 @@ export interface GuardResult {
  * 所有路径参数均为**相对项目根**的相对路径（老 guard 运行于项目根，字段值直接 `[ -f ]`）。
  */
 export interface GuardContext {
+  /** requireTrack 得到的 effective coverage policy；coverage 不按 state.track 猜测矩阵。 */
+  coverageProfile: CoverageProfile
+  /**
+   * canonical state 存在性。提供时优先于旧 `.pipeline.yaml` fileNonempty 探针；调用方必须实现
+   * current-first、仅 current 缺失才兼容 legacy YAML 的选择，不能把损坏 current 降级成 YAML。
+   */
+  stateExists?: (changeDirRel: string) => boolean
   /** 文件存在（老 guard `[ -f ]`：file_exists / yaml_file_exists 谓词） */
   fileExists?: (relPath: string) => boolean
   /** 文件存在且非空（老 guard file_nonempty：`[ -f ] && [ -s ]`） */
@@ -180,6 +308,14 @@ export interface HistoryEntry {
   by?: string
   /** 导入的原始载荷（工具名+详情 / Q|A / 事件名） */
   raw?: string
+  /**
+   * 存在 = 这行 JSONL 只是某条 canonical TransitionRecord 的兼容投影（该 change 有 canonical
+   * 链时，真相以链上记录为准，这行不重复计入）；缺失 = legacy/import/非 canonical writer
+   * 产生的 transition，链存在与否都原样保留（W1 第二增量：history 合并边界从时间戳比较改成
+   * 逐条来源标记，见 workflow-run-repository.ts commit() 与 history.ts
+   * transitionRecordToHistoryEntry）。
+   */
+  transitionRecordId?: string
 }
 
 export interface HistoryWriter {

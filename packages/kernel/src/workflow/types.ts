@@ -2,7 +2,17 @@
  * workflow 自定义引擎类型（GOAL 清单 E）——双轨策略：workflow==='default' 时完全不使用
  * 这些类型，走 packages/kernel/src/flow/ 现有的硬编码路径；只有 workflow!=='default'
  * 才会加载、解析、消费这里定义的形状。
+ *
+ * 分层（G2 P2，2026-07-17）：本文件是**定义层**——parse 产出、serialize 写回、validate 校验、
+ * 编辑器/测试夹具直接构造的形状（guard 的 8 变体闭集 + 4 action 变体 + edge 级 guards/actions +
+ * when 谓词）。运行层（归一化、编译期展开 nonempty-output、字段收窄进 FIELD_ORDER 闭集）是
+ * ./ir.ts 的 CompiledGuardConfig / WorkflowIR，由 compileWorkflow（./compile.ts）从本层翻译产出。
+ * 运行层的 CompiledGuardConfig 从本层 WorkflowGuardConfig 派生（Exclude 掉 nonempty-output），
+ * 变体清单单一真相源在此，ir.ts 不再重复罗列。
  */
+import type { FieldName } from '../types.js'
+import type { TrackPredicate } from './predicates.js'
+
 export type FieldType = 'string' | 'file_path' | 'boolean'
 export type GateKind = 'review' | 'confirm' | null
 
@@ -17,31 +27,120 @@ export interface SkillRef {
   readonly depends_on?: readonly string[]
 }
 
-export type GuardConfig =
-  | { readonly type: 'tasks-at-least'; readonly n: number }
-  | { readonly type: 'nonempty-output' }
+/** guard/action 的 track 适用条件（定义层）：无 when 对全轨生效；有 when 且谓词不命中 → 该
+ *  guard 整体不适用（evaluateGuards 不产生任何 decision）。与运行层同结构（ir.ts 复用本形状）。 */
+export interface WorkflowConditional {
+  readonly when?: TrackPredicate
+}
+
+/**
+ * guard 定义层闭集（8 变体）。前两个是 v1 变体（tasks-at-least / nonempty-output）；后六个是
+ * flow/transition-table.ts 事件前置校验下沉出的基础 guard。nonempty-output 是纯定义层变体——
+ * compileWorkflow 按 step.outputs 展开成 field-nonempty 集合，运行层 CompiledGuardConfig 不含它。
+ * 刻意没有任意 set-field/自由脚本类变体（防 custom workflow 获得改 phase/workflow 等系统字段的
+ * 通用能力）。field 位用 FieldName（与运行层同型，令 CompiledGuardConfig 可从本联合 Exclude 派生）；
+ * 字段名是否真属 FIELD_ORDER 闭集由 compileWorkflow 深校验，parse 只做语法层构造。
+ */
+export type WorkflowGuardConfig =
+  | ({ readonly type: 'tasks-at-least'; readonly n: number } & WorkflowConditional)
+  | ({ readonly type: 'nonempty-output' } & WorkflowConditional)
+  | ({ readonly type: 'field-nonempty'; readonly field: FieldName } & WorkflowConditional)
+  | ({ readonly type: 'file-exists'; readonly path: { readonly kind: 'field'; readonly field: FieldName } } & WorkflowConditional)
+  | ({ readonly type: 'field-equals'; readonly field: FieldName; readonly value: string } & WorkflowConditional)
+  | ({ readonly type: 'field-in'; readonly field: FieldName; readonly values: readonly [string, ...string[]] } & WorkflowConditional)
+  /** preset=full ∧ build_mode=direct → direct_override 必须 'true'（老仓 state-transition.sh build-complete）。 */
+  | ({ readonly type: 'full-direct-override' } & WorkflowConditional)
+  /** barrier：HEAD 必须等于 build 冻结的 SHA（老仓 state-transition.sh verify-pass barrier，ADR 0005）。 */
+  | ({ readonly type: 'build-head-unchanged'; readonly field: 'build_sha' } & WorkflowConditional)
+
+/**
+ * 每个 guard 变体在定义层允许的**顶层 data 键**（不含通用的 `type` 与可选 `when`）——附加字段闭集
+ * 校验的单一真相源（G2 P2 阻断 3）。parse（YAML 早期友好报错）与 compile（结构化输入的纵深防线，
+ * server workflows 直调走此路）**共用本表**，杜绝两处白名单漂移：结构化 `{type:'nonempty-output', n:2}`
+ * 等附加键此前能过 validate/compile 再被 serialize 静默丢弃，现在两处都据本表 fail-loud。
+ *
+ * `satisfies Record<WorkflowGuardConfig['type'], …>` 把变体清单钉死同步于上面的联合——新增变体若忘了
+ * 在此登记键集，编译期即报缺键。compile 直接按结构化 def 形状校验顶层键（file-exists 的叶子是嵌套
+ * `path`）；parse 读的是 YAML 扁平子字段，除把 file-exists 的 `path` 折叠成扁平 `field` 外与本表逐键
+ * 一致（见 parse.ts 的 GUARD_FLAT_FIELDS 派生）。
+ */
+export const GUARD_DATA_KEYS = {
+  'tasks-at-least': ['n'],
+  'nonempty-output': [],
+  'field-nonempty': ['field'],
+  'file-exists': ['path'],
+  'field-equals': ['field', 'value'],
+  'field-in': ['field', 'values'],
+  'full-direct-override': [],
+  'build-head-unchanged': ['field'],
+} as const satisfies Record<WorkflowGuardConfig['type'], readonly string[]>
+
+/**
+ * action 定义层闭集（4 变体，与运行层同型）。一一对应老仓 state-transition.sh cmd_transition
+ * 的四个事件专属副作用体（build-complete/verify-pass/verify-fail/archived）。不提供任意 set-field action。
+ */
+export type WorkflowActionConfig =
+  | { readonly type: 'freeze-build-sha' }
+  | { readonly type: 'mark-verification-passed' }
+  | { readonly type: 'mark-verification-failed' }
+  | { readonly type: 'archive-run' }
+
+/**
+ * artifact producer policy 闭集（G2 P4）——作者为一条 file artifact 声明「谁产出它」的策略 token，
+ * 不是具体 skill id 列表：
+ *   · effective-phase-skills —— default 轨：产出者值域 = 当前 phase×track 的 manifest 有效 skill
+ *     集（default step 的 step.skills 恒空，见 default.yaml；真值域来自 flow/manifest.ts）。
+ *   · effective-step-skills —— custom 轨：产出者值域 = 本 step 声明的有效 skill 集。
+ * 具体 skill id 归一化（含 manifest 的 a|b 备选 token）由 artifact register（G2 P5）经
+ * EffectiveSkillResolver 接缝定义；本层只钉 policy token 闭集。ir.ts 的 ArtifactDeclaration 复用本类型。
+ */
+export type ArtifactProducerPolicy = 'effective-step-skills' | 'effective-phase-skills'
+
+/**
+ * 显式 artifact 声明（定义层，G2 P4）——挂在本 step 一条 type:'file_path' 的 output 上，声明其
+ * producer policy 与（可选）track 适用条件。compileWorkflow 深校验 field ∈ FIELD_ORDER 且必须对应
+ * 本 step 的 file_path output（见 compile.ts compileArtifact）；parse 只做语法层构造（field as FieldName）。
+ * requiredWhen 缺省 = 全轨适用；有则复用 TrackPredicate（YAML 侧 required_when: track_in/track_not_in）。
+ */
+export interface WorkflowArtifactConfig {
+  readonly field: FieldName
+  readonly type: 'file_path'
+  readonly producerPolicy: ArtifactProducerPolicy
+  readonly requiredWhen?: TrackPredicate
+}
 
 /** step 间转换边——每个 step 自己声明"按哪个 event 名走向哪个下一个 step"，取代
  *  default workflow 依赖的全局 TRANSITION_EVENTS 表（那张表是 Record<Phase,...>，天然
  *  不适用任意自定义 step）。同一个 step 可以有多条边（不同 event 名指向不同下一个 step，
- *  对齐现有 verify-pass→ship / verify-fail→build 这种真实分支需求）。 */
+ *  对齐现有 verify-pass→ship / verify-fail→build 这种真实分支需求）。
+ *  guards/actions（G2 P2）：edge 级前置守卫（走该边前必须全过）+ 副作用（走该边后改字段）；
+ *  缺省（v1 旧 YAML 无这两键）→ undefined，编译期视作空数组，行为逐字不变。 */
 export interface StepTransition {
   readonly event: string
   readonly to: string
+  readonly guards?: readonly WorkflowGuardConfig[]
+  readonly actions?: readonly WorkflowActionConfig[]
 }
 
 export interface StepDef {
   readonly id: string
   readonly label: string
   readonly gate: GateKind
+  /** 该 step 交给运行时 agent 的任务补充指令。项目 YAML 以 `prompt: |-` literal block 保真落盘。 */
+  readonly prompt?: string
   readonly skills: readonly SkillRef[]
   readonly inputs: readonly FieldRef[]
   readonly outputs: readonly FieldRef[]
-  readonly guards: readonly GuardConfig[]
+  /** 显式 artifact 声明（G2 P4）——缺省（旧 YAML 无本键）= undefined，编译期视作无显式声明
+   *  （artifact 仍从 file_path outputs 派生）；`artifacts: []` 显式空块与 undefined 是两种保留状态。 */
+  readonly artifacts?: readonly WorkflowArtifactConfig[]
+  readonly guards: readonly WorkflowGuardConfig[]
   readonly transitions: readonly StepTransition[]
 }
 
 export interface WorkflowDef {
   readonly name: string
+  /** Explicit opt-in: this custom workflow must retain the canonical OpenSpec seven-phase contract. */
+  readonly openspecContract?: 'required'
   readonly steps: readonly StepDef[]
 }

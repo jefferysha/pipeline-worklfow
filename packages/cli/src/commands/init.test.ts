@@ -1,7 +1,33 @@
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, test } from 'vitest'
 import type { InitOptions } from '@pipeline-lite/kernel'
 import { cmdInit, type InitPrompter, type InitWizardEnv } from './init.js'
 import { makeDeps, spy } from '../test-support.js'
+
+/** 与 init-workflow.integration.test.ts 同一份两步 workflow 定义（intake -> done，event=complete）。 */
+const TWO_STEP_WF = `name: onboarding
+steps:
+  - id: intake
+    label: intake
+    gate: null
+    skills: []
+    inputs: []
+    outputs: []
+    guards: []
+    transitions:
+      - event: complete
+        to: done
+  - id: done
+    label: done
+    gate: null
+    skills: []
+    inputs: []
+    outputs: []
+    guards: []
+    transitions: []
+`
 
 /** 脚本化 Prompter：按注入顺序弹出应答（'' = 回车收默认）。 */
 function scriptedPrompter(answers: string[]): InitPrompter {
@@ -36,6 +62,7 @@ describe('init —— stdout 空 / [INIT] 走 stderr；0/1（oracle 实测回写
     expect(opts?.repoRoot).toBe('/repo')
     expect(opts?.name).toBe('demo')
     expect(opts?.track).toBe('pm')
+    expect(opts?.reviewSeed).toBe('skipped')
     expect(opts?.preset).toBe('hotfix')
     expect(opts?.user).toBe('jeff')
     expect(opts?.clock).toBe(deps.clock)
@@ -101,6 +128,31 @@ describe('init --workflow（GOAL E，自定义 workflow 首个 step 落点）', 
     expect(code).toBe(1)
     expect(deps.store.init.calls).toHaveLength(0)
     expect(deps.errLines.join('\n')).toContain("workflow 'ghost' 未找到")
+  })
+
+  test('合法自定义 workflow：customStart 随 initChange 一次调用整体发布，不再有第二次 setMany' +
+    '（第 7 轮 codex review P1：此前 initChange 建出 default/open 后再补一次 setMany 改成' +
+    'custom/首 step，两次写之间的并发 transition 会对 provisional default/open 提交' +
+    'canonical record，且第二次写失败会留下一个错误的 default change——真实 fs 落盘结果的覆盖见' +
+    'init-workflow.integration.test.ts，这里专门证明"只有一次写"这个调用形状本身：loadWorkflow' +
+    '是硬 fs 依赖、不经 deps 注入，故只为它开一个真实临时目录，store/runRepo/history 仍全 mock）',
+  async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'init-custom-wf-'))
+    try {
+      await mkdir(join(cwd, '.pipeline', 'workflows'), { recursive: true })
+      await writeFile(join(cwd, '.pipeline', 'workflows', 'onboarding.yaml'), TWO_STEP_WF, 'utf8')
+      const deps = makeDeps({ cwd })
+      const code = await cmdInit(deps, 'demo', { track: 'backend', preset: 'full', workflow: 'onboarding' })
+      expect(code).toBe(0)
+      // 核心断言：initialWorkflow 随 initChange（内部真调 store.init，见 mockWorkflowRunRepository）
+      // 唯一一次调用整体传入，且 setMany 完全不再被调用（旧实现会在这里留一条
+      // setMany({workflow:'onboarding', phase:'intake'}) 调用记录——两次写的第二次）。
+      expect(deps.store.setMany.calls).toHaveLength(0)
+      expect(deps.store.init.calls).toHaveLength(1)
+      expect(deps.store.init.calls[0]?.[0]?.initialWorkflow).toEqual({ workflow: 'onboarding', phase: 'intake' })
+    } finally {
+      await rm(cwd, { recursive: true, force: true })
+    }
   })
 })
 

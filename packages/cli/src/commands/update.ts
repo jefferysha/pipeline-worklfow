@@ -1,0 +1,126 @@
+/**
+ * Release update command for the one packaged pipeline plugin.
+ *
+ * Codex and Claude own their marketplace/cache lifecycles, so this command only asks the selected
+ * host to refresh and reinstall its own plugin.  Other supported runtimes are adapters rather than
+ * marketplaces; for them `update` deliberately re-applies the adapter from the already updated
+ * package instead of falsely claiming to fetch a release from that host.
+ */
+import { join } from 'node:path'
+import type { CliDeps } from '../deps.js'
+import {
+  hostFlag,
+  installedPipelineRoot,
+  isNativePipelineHost,
+  PIPELINE_MARKETPLACE_NAME,
+  PIPELINE_PLUGIN_NAME,
+  selectPipelineHost,
+  type HostCommandPlanItem,
+  type PipelineHost,
+  type PipelineHostFlags,
+} from './plugin-host.js'
+import { cmdSetupHost, ensurePipelineOnPath, type SetupEnv, REAL_SETUP_ENV } from './setup.js'
+
+export interface UpdateOpts extends PipelineHostFlags {
+  dryRun?: boolean
+  yes?: boolean
+  auto?: boolean
+  target?: string
+}
+
+export function nativeUpdatePlan(host: Extract<PipelineHost, 'codex' | 'claude'>): readonly HostCommandPlanItem[] {
+  if (host === 'codex') {
+    return [
+      { cmd: 'codex', args: ['plugin', 'marketplace', 'upgrade', PIPELINE_MARKETPLACE_NAME, '--json'] },
+      { cmd: 'codex', args: ['plugin', 'add', `${PIPELINE_PLUGIN_NAME}@${PIPELINE_MARKETPLACE_NAME}`, '--json'] },
+      { cmd: 'codex', args: ['plugin', 'list', '--json'] },
+    ]
+  }
+  return [
+    { cmd: 'claude', args: ['plugin', 'marketplace', 'update', PIPELINE_MARKETPLACE_NAME] },
+    { cmd: 'claude', args: ['plugin', 'update', `${PIPELINE_PLUGIN_NAME}@${PIPELINE_MARKETPLACE_NAME}`] },
+    { cmd: 'claude', args: ['plugin', 'list', '--json'] },
+  ]
+}
+
+function renderPlan(deps: CliDeps, host: PipelineHost, plan: readonly HostCommandPlanItem[]): void {
+  deps.io.out(`[update] ${hostFlag(host)} 发布更新计划（只更新所选宿主）`)
+  for (const item of plan) deps.io.out(`  $ ${item.cmd} ${item.args.join(' ')}`)
+}
+
+/** Hosts differ on whether reinstalling an already-installed plugin is exit 0 or an idempotent error. */
+function isAlreadyInstalledResult(result: { readonly stdout: string; readonly stderr: string }): boolean {
+  return /already|exists|installed|duplicate/i.test(`${result.stdout}\n${result.stderr}`)
+}
+
+function verifyUpdatedRoot(deps: CliDeps, env: SetupEnv, root: string): boolean {
+  // `pipeline` is a user-level launcher and its cwd is normally the target project, not the
+  // plugin checkout.  Verify the freshly installed package using its own absolute asset path.
+  const result = env.runCommand('bash', [join(root, 'tools', 'verify-skills.sh'), '--quiet', '--root', root])
+  if (result.code === 0) return true
+  deps.io.err(`ERROR: 新插件资产校验失败，保持原 launcher：${result.stderr.trim() || result.stdout.trim() || `退出码 ${result.code}`}`)
+  return false
+}
+
+export function cmdUpdate(deps: CliDeps, opts: UpdateOpts, env: SetupEnv = REAL_SETUP_ENV): number {
+  const selection = selectPipelineHost(opts)
+  if (selection.host === null) {
+    deps.io.err(`ERROR: ${selection.error}。示例：pipeline update --codex`)
+    return 1
+  }
+  const host = selection.host
+  if (!isNativePipelineHost(host)) {
+    deps.io.out(`[update] ${hostFlag(host)} 没有独立 marketplace；从当前已更新的 pipeline 包重新部署 adapter。`)
+    return cmdSetupHost(deps, host, { ...opts, autoUpdate: false }, env)
+  }
+
+  const plan = nativeUpdatePlan(host)
+  renderPlan(deps, host, plan)
+  if (opts.dryRun) {
+    deps.io.out('[update] --dry-run:未刷新 marketplace、未重装插件、未切换 launcher。')
+    return 0
+  }
+
+  let inventory = ''
+  for (let index = 0; index < plan.length; index += 1) {
+    const item = plan[index]!
+    const result = env.runCommand(item.cmd, [...item.args])
+    if (result.stdout.trim() !== '' && !opts.auto) deps.io.out(result.stdout.trimEnd())
+    if (result.code !== 0) {
+      // `plugin add` is the host's only cross-version reinstall primitive.  Some host releases
+      // return a non-zero "already installed" result instead of treating it as idempotent.  In
+      // that narrow case, inventory is the authoritative confirmation; network/auth/update errors
+      // remain hard failures and never switch the launcher.
+      if (index === 1 && isAlreadyInstalledResult(result)) {
+        const inventoryItem = plan[plan.length - 1]!
+        const inventoryResult = env.runCommand(inventoryItem.cmd, [...inventoryItem.args])
+        const installedRoot = inventoryResult.code === 0
+          ? installedPipelineRoot(host, inventoryResult.stdout)
+          : null
+        if (installedRoot !== null) {
+          inventory = inventoryResult.stdout
+          break
+        }
+      }
+      deps.io.err(`ERROR: ${item.cmd} ${item.args.join(' ')} 失败：${result.stderr.trim() || `退出码 ${result.code}`}`)
+      return 1
+    }
+    inventory = result.stdout
+  }
+  const root = installedPipelineRoot(host, inventory)
+  if (root === null) {
+    deps.io.err(`ERROR: ${hostFlag(host)} 更新后未在宿主插件清单中找到 pipeline-lite；未切换 launcher。`)
+    return 1
+  }
+  if (!verifyUpdatedRoot(deps, env, root)) return 1
+  ensurePipelineOnPath(deps, env, root)
+  if (opts.auto) {
+    deps.io.out(`[update] ${hostFlag(host)} 已在后台刷新；当前会话继续使用已加载版本，新会话将加载新 skills/hooks。`)
+  } else {
+    deps.io.out(`[update] ${hostFlag(host)} 已更新并刷新 pipeline launcher。请新开会话，让新 skills 与 hooks 生效。`)
+  }
+  if (host === 'codex') {
+    deps.io.out('[update] 若 Codex 将新版本 pipeline hook 标为未信任或已变更，请在 Codex 输入 /hooks 后重新信任；这是宿主的安全边界。')
+  }
+  return 0
+}

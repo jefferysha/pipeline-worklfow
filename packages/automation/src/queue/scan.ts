@@ -60,6 +60,10 @@ export function readyCandidates(entries: readonly ChangeQueueEntry[], resolver: 
 }
 
 const scalar = (v: string | string[] | undefined): string => (typeof v === 'string' ? v : '')
+const nodeErrorCode = (error: unknown): string | undefined =>
+  typeof error === 'object' && error !== null && 'code' in error
+    ? String((error as { code?: unknown }).code)
+    : undefined
 
 /**
  * 真 fs 扫描：枚举 changesDir/*，真读回每个 .pipeline.yaml 的 automation 字段，构造就绪集。
@@ -70,8 +74,9 @@ export async function scanReadyFromFs(changesDir: string, store: StateStore): Pr
   let dirents: import('node:fs').Dirent[]
   try {
     dirents = await readdir(changesDir, { withFileTypes: true })
-  } catch {
-    return [] // 无 changes 目录 → 空就绪集（fail-safe）
+  } catch (error) {
+    if (nodeErrorCode(error) === 'ENOENT') return []
+    throw error
   }
   const activeNames = dirents.filter((d) => d.isDirectory() && d.name !== 'archive').map((d) => d.name)
 
@@ -79,12 +84,7 @@ export async function scanReadyFromFs(changesDir: string, store: StateStore): Pr
   const automationByName = new Map<string, string>()
   for (const name of activeNames) {
     const changeDir = join(changesDir, name)
-    let state: Awaited<ReturnType<StateStore['read']>>
-    try {
-      state = await store.read(changeDir)
-    } catch {
-      continue // 缺 .pipeline.yaml / 解析失败 → 跳过该目录
-    }
+    const state = await store.read(changeDir)
     const automation = scalar(state.fields.automation)
     automationByName.set(name, automation)
     entries.push({
@@ -101,8 +101,8 @@ export async function scanReadyFromFs(changesDir: string, store: StateStore): Pr
   try {
     const archived = await readdir(join(changesDir, 'archive'), { withFileTypes: true })
     archiveEntries = archived.filter((d) => d.isDirectory()).map((d) => d.name)
-  } catch {
-    archiveEntries = []
+  } catch (error) {
+    if (nodeErrorCode(error) !== 'ENOENT') throw error
   }
 
   const resolver: DepResolver = {

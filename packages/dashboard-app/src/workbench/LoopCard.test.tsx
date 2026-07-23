@@ -99,6 +99,13 @@ function renderCard(): void {
   )
 }
 
+// IA 精简（2026-07-14）：节奏与预算（4 滑杆/超限策略）+ 自主与安全（3 自主级别/4 组安全 chips）
+// 收进「▸ 高级设置」折叠区默认收起——核心第一屏只留 启停/关系条/目标。断言这些细则前先展开
+// （lp-adv 触发钮随卡就位即在；折叠区内 testid 全保留）。
+function openAdv(): void {
+  fireEvent.click(screen.getByTestId('lp-adv'))
+}
+
 /** 最近一次指定端点的 POST body。 */
 function lastPostBody(url: string): unknown {
   const calls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls
@@ -123,6 +130,8 @@ describe('LoopCard 读回显（验收①）', () => {
     expect(screen.getByTestId('lp-prefix')).toHaveValue('rl-')
     expect(screen.getByTestId('lp-prefix-eg')).toHaveTextContent('rl-0142-migrate-card')
     expect(screen.getByTestId('lp-risk')).toHaveValue('low')
+    // 预算/自主等细则在「▸ 高级设置」折叠区——展开后断言
+    openAdv()
     // 四滑杆：现值显示 + 推荐刻度标注（demo 口径 2h/24/1/100k）
     expect(screen.getByTestId('lp-sld-cadence-val')).toHaveTextContent('2h')
     expect(screen.getByTestId('lp-sld-runs-val')).toHaveTextContent('24 次')
@@ -163,6 +172,7 @@ describe('LoopCard 读回显（验收①）', () => {
   it('同时在跑上限滑杆下有一行说明（验收反馈②-④：讲清楚是本 loop 的软上限）', async () => {
     renderCard()
     await screen.findByTestId('lp-goal')
+    openAdv()
     expect(screen.getByText('本 loop 同时走自动化通道的任务数，超出只提醒不硬拦')).toBeInTheDocument()
   })
 })
@@ -171,6 +181,7 @@ describe('LoopCard 编辑 → 保存（验收②）', () => {
   it('拖滑杆 → 未保存 chip；保存 body 只带被改字段；成功后 reload 清脏 + 已保存', async () => {
     renderCard()
     await screen.findByTestId('lp-goal')
+    openAdv()
     fireEvent.change(screen.getByTestId('lp-sld-runs'), { target: { value: '30' } })
     expect(screen.getByTestId('lp-sld-runs-val')).toHaveTextContent('30 次')
     expect(screen.getByTestId('lp-dirty')).toHaveTextContent('未保存')
@@ -192,6 +203,7 @@ describe('LoopCard 编辑 → 保存（验收②）', () => {
     // 模拟方向键每次按 step 精确移动后触发的 onChange）确实层层前进，不再卡在原值。
     renderCard()
     await screen.findByTestId('lp-goal')
+    openAdv()
     const slider = screen.getByTestId('lp-sld-tokens')
     expect(slider).toHaveAttribute('step', '10')
     expect(screen.getByTestId('lp-sld-tokens-val')).toHaveTextContent('100k')
@@ -214,6 +226,7 @@ describe('LoopCard 编辑 → 保存（验收②）', () => {
   it('节奏滑杆是离散档：拖到末档显示 1d，保存 patch {cadence:"1d"}', async () => {
     renderCard()
     await screen.findByTestId('lp-goal')
+    openAdv()
     fireEvent.change(screen.getByTestId('lp-sld-cadence'), { target: { value: '6' } })
     expect(screen.getByTestId('lp-sld-cadence-val')).toHaveTextContent('1d')
     fireEvent.click(screen.getByTestId('lp-save'))
@@ -235,6 +248,7 @@ describe('LoopCard 编辑 → 保存（验收②）', () => {
   it('超限策略 pill 单选 + chips 增删：一次保存合并为一个精确 patch', async () => {
     renderCard()
     await screen.findByTestId('lp-goal')
+    openAdv()
     fireEvent.click(screen.getByTestId('lp-exceed-pause'))
     expect(screen.getByTestId('lp-exceed-pause')).toHaveAttribute('aria-checked', 'true')
     // 删闸门 chip
@@ -343,6 +357,7 @@ describe('LoopCard 自主级别（验收③：升档确认、降档直发、拒�
   it('升档 L1→L2：先确认 Dialog（取消不发请求），确认后 POST /api/loops/level 并回显新档', async () => {
     renderCard()
     await screen.findByTestId('lp-goal')
+    openAdv()
     fireEvent.click(screen.getByTestId('lp-lv-L2'))
     expect(screen.getByTestId('lp-promote-confirm')).toBeInTheDocument()
 
@@ -362,6 +377,7 @@ describe('LoopCard 自主级别（验收③：升档确认、降档直发、拒�
     rows = [makeRow({ autonomy_level: 'L2' })]
     renderCard()
     await screen.findByTestId('lp-goal')
+    openAdv()
     fireEvent.click(screen.getByTestId('lp-lv-L1'))
     expect(screen.queryByTestId('lp-promote-confirm')).toBeNull()
     await waitFor(() => expect(screen.getByTestId('lp-lv-L1')).toHaveAttribute('aria-checked', 'true'))
@@ -372,6 +388,7 @@ describe('LoopCard 自主级别（验收③：升档确认、降档直发、拒�
     mockFetch({ levelStatus: 400, levelBody: { errors: ['就绪度未达标：L1-only', '缺 kill_criteria 覆盖'] } })
     renderCard()
     await screen.findByTestId('lp-goal')
+    openAdv()
     fireEvent.click(screen.getByTestId('lp-lv-L2'))
     fireEvent.click(screen.getByTestId('lp-promote-submit'))
     await waitFor(() => expect(screen.getByTestId('lp-level-error')).toBeInTheDocument())
@@ -385,6 +402,7 @@ describe('LoopCard 字段生产者徽章（T7，UX 分析文档 §2.1「应然�
   it('14 个字段徽章精确对齐 agent 生成/系统推导/人拍板三色分类', async () => {
     renderCard()
     await screen.findByTestId('lp-goal')
+    openAdv() // 预算/自主字段徽章在折叠区（目标区字段徽章仍在核心区，展开后一并可断言）
     const expectProv = (field: string, label: string): void => {
       expect(screen.getByTestId(`lp-prov-${field}`)).toHaveTextContent(label)
     }
@@ -404,24 +422,27 @@ describe('LoopCard 字段生产者徽章（T7，UX 分析文档 §2.1「应然�
     expectProv('denylist', '系统推导')
   })
 
-  it('红线：allowlist 零消费，不装成三色徽章之一，如实标「预留字段，当前无运行时效果」', async () => {
+  it('H5 真相源：allowlist 是 L3 执行与合并硬约束，不再显示过期的「无运行时效果」', async () => {
     renderCard()
     await screen.findByTestId('lp-goal')
-    expect(screen.getByTestId('lp-prov-allowlist')).toHaveTextContent('预留字段,当前无运行时效果')
+    openAdv()
+    expect(screen.getByTestId('lp-prov-allowlist')).toHaveTextContent('执行与合并硬约束')
+    expect(screen.getByTestId('lp-prov-allowlist')).not.toHaveTextContent('无运行时效果')
     // 不是三色徽章之一：不含 agent 生成/系统推导/人拍板 任一措辞
     const text = screen.getByTestId('lp-prov-allowlist').textContent ?? ''
     expect(['agent 生成', '系统推导', '人拍板']).not.toContain(text)
   })
 
-  it('红线：denylist 真硬消费——徽章旁额外标注真实结算行为，措辞与 allowlist 的零消费不同', async () => {
+  it('H5：allowlist 与 denylist 都是真硬消费，并分别解释白名单/黑名单语义', async () => {
     renderCard()
     await screen.findByTestId('lp-goal')
+    openAdv()
     expect(screen.getByTestId('lp-prov-denylist')).toHaveTextContent('系统推导')
     expect(screen.getByText(/真硬消费/)).toBeInTheDocument()
-    expect(screen.getByText(/零消费/)).toBeInTheDocument()
+    expect(screen.getByText(/白名单外路径/)).toBeInTheDocument()
     // 两条 disclaimer 文本不同（防止复制粘贴出的误导性重复）
     const denyNote = screen.getByText(/真硬消费/).closest('p')
-    const allowNote = screen.getByText(/零消费/).closest('p')
+    const allowNote = screen.getByText(/白名单外路径/).closest('p')
     expect(denyNote?.textContent).not.toEqual(allowNote?.textContent)
   })
 })
@@ -488,6 +509,7 @@ describe('LoopCard 多 loop 下拉 / 空态', () => {
 
     fireEvent.change(sel, { target: { value: 'docs-loop' } })
     expect(screen.getByTestId('lp-goal')).toHaveValue('文档巡检')
+    openAdv() // 自主级别在折叠区
     expect(screen.getByTestId('lp-lv-L2')).toHaveAttribute('aria-checked', 'true')
 
     // dirty → 下拉禁用（切 loop 会重置草稿，先保存）
@@ -608,8 +630,8 @@ describe('LoopCard 草稿审阅（loop-init L5：徽章 + 批准/驳回动作行
     fireEvent.click(screen.getByTestId('lp-draft-approve'))
     await waitFor(() => expect(screen.getByTestId('lp-draft-error')).toBeInTheDocument())
     expect(screen.getByTestId('lp-draft-error')).toHaveTextContent('落盘失败：磁盘只读')
-    // loop-reject 反馈条底座复用（错误语义类名）
-    expect(screen.getByTestId('lp-draft-error')).toHaveClass('loop-reject')
+    // 错误反馈条语义由 data-tone 承载（v10b 迁移：不断言视觉类名，断言 data 属性）
+    expect(screen.getByTestId('lp-draft-error')).toHaveAttribute('data-tone', 'error')
     // 失败不清徽章
     expect(screen.getByTestId('lp-draft-badge')).toBeInTheDocument()
   })

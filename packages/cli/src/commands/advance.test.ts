@@ -11,10 +11,10 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, test } from 'vitest'
-import { GATE_TTL_MS } from '@pipeline-lite/kernel'
-import type { FieldName, GuardResult, HistoryEntry, Phase, PipelineState } from '@pipeline-lite/kernel'
+import { BUILTIN_TRACK_DEFINITIONS, GATE_TTL_MS } from '@pipeline-lite/kernel'
+import type { FieldName, GuardResult, HistoryEntry, Phase, PipelineState, TrackRegistry } from '@pipeline-lite/kernel'
 import type { CliDeps, GateMarkerInfo } from '../deps.js'
-import { FIXED_CLOCK, mockFlow, mockState, spy } from '../test-support.js'
+import { FIXED_CLOCK, mockFlow, mockState, mockWorkflowRunRepository, spy } from '../test-support.js'
 import { cmdAdvance } from './advance.js'
 
 /** 满足全程事件前置的字段基线（backend track：verify-pass 需 agent/codex pass） */
@@ -33,9 +33,16 @@ const READY: Partial<Record<FieldName, string | string[]>> = {
 /** 有状态 store：write 落进 holder，read 读回 holder —— 让 advance 循环能逐步推进 */
 function statefulStore(initial: PipelineState) {
   let s = initial
+  const write = spy(async (_d: string, ns: PipelineState) => {
+    s = ns
+    return { projection: { status: 'updated' as const } }
+  })
   return {
     read: spy(async (_d: string): Promise<PipelineState> => s),
-    write: spy(async (_d: string, ns: PipelineState): Promise<void> => { s = ns }),
+    write,
+    // WorkflowRunRepository 已持有 change 锁，提交必须走不会二次取锁的入口；与共享 mockStore
+    // 一样返回同一个 spy，保留本文件对 `write.calls` 的既有观测契约。
+    get writeUnderLock() { return write },
     get: spy(async (_d: string, f: FieldName) => s.fields[f]),
     set: spy(async (_d: string, f: FieldName, v: string | string[]): Promise<void> => { s = { ...s, fields: { ...s.fields, [f]: v } } }),
     setMany: spy(async (_d: string, kv: Partial<Record<FieldName, string | string[]>>): Promise<void> => { s = { ...s, fields: { ...s.fields, ...kv } } }),
@@ -67,9 +74,28 @@ function makeAdv(opts: {
   const flow = mockFlow()
   if (opts.guard) flow.guardCheck = spy((): GuardResult => opts.guard as GuardResult)
   const fx = opts.fileExists ?? true
+  const registry: TrackRegistry = {
+    ordered: BUILTIN_TRACK_DEFINITIONS,
+    byId: new Map(BUILTIN_TRACK_DEFINITIONS.map((track) => [track.id, track])),
+    revision: 'advance-test',
+    source: 'builtin-only',
+  }
   const deps = {
     store,
+    runRepo: mockWorkflowRunRepository(store, () => FIXED_CLOCK),
     flow,
+    // cmdCheck 的 default 路径从 effective registry 取 coverageProfile；测试显式注入内建 registry，
+    // 不再靠旧的 track-id 静态分支或缺依赖 TypeError 偶然通过。
+    loadRegistry: () => registry,
+    // advance 的单测目标是停点/事件编排；真实 ledger 的缺失、hash 漂移、PM 强制性由
+    // transition-application 集成测试覆盖，此处显式注入通过的 I/O 端口以隔离两类行为。
+    documentEvidence: async (_root: string, _changeDir: string, phase: Phase) => ({
+      phase,
+      hasLedger: true,
+      pass: true,
+      blockers: [],
+      items: [],
+    }),
     cwd: '/repo',
     io: { out: (l: string) => out.push(l), err: (l: string) => err.push(l) },
     clock: () => FIXED_CLOCK,
@@ -386,6 +412,7 @@ describe('advance —— 非 default workflow（自定义 step 图，快速回�
     const store = statefulStore(mockState({ phase: opts.phase, workflow: opts.workflow, ...opts.fields }))
     const deps = {
       store,
+      runRepo: mockWorkflowRunRepository(store, () => FIXED_CLOCK),
       flow: mockFlow(),
       cwd: root,
       io: { out: (l: string) => out.push(l), err: (l: string) => err.push(l) },

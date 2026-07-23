@@ -10,6 +10,10 @@ import {
   type FieldName,
   type PipelineState,
 } from '../types.js'
+import {
+  parseProjectionMetadataLines, parseRunMetadataLines,
+  serializeProjectionMetadataLines, serializeRunMetadataLines,
+} from './run-metadata.js'
 
 const KNOWN_FIELDS: ReadonlySet<string> = new Set(FIELD_ORDER)
 const LIST_FIELD_SET: ReadonlySet<string> = new Set(LIST_FIELDS)
@@ -64,7 +68,9 @@ export function quoteGate(field: FieldName, value: string): void {
 /**
  * 解析 `.pipeline.yaml` 全文：
  * - 自顶向下消费「已知字段」行（含列表字段的块序列续行）；
- * - 第一行未知 key / 非 key 行起，整段到 EOF 作 opaqueTail 逐字保留
+ * - 已知字段之后尝试识别内部提交元数据三行块（W1 第二增量，run-metadata.ts）——匹配则消费，
+ *   不匹配（含损坏/截断）则原样交还，不吞任何字节；
+ * - 再往后第一行未知 key / 非 key 行起，整段到 EOF 作 opaqueTail 逐字保留
  *   （老内核 tools_history:/prompts_history:/transitions_history: base64 区块与
  *   pipeline_mode 等未知平字段都落在这里——读跳过、写回原样）。
  */
@@ -100,12 +106,23 @@ export function parsePipeline(content: string): PipelineState {
       fields[field] = unquoteScalar(rest)
     }
   }
-  return { fields, opaqueTail: lines.slice(i).join('\n') }
+  const { metadata, consumedLines } = parseRunMetadataLines(lines.slice(i))
+  i += consumedLines
+  const projection = parseProjectionMetadataLines(lines.slice(i))
+  i += projection.consumedLines
+  return {
+    fields,
+    ...(metadata === undefined ? {} : { runMetadata: metadata }),
+    ...(projection.metadata === undefined ? {} : { projectionMetadata: projection.metadata }),
+    opaqueTail: lines.slice(i).join('\n'),
+  }
 }
 
 /**
- * 严格按 FIELD_ORDER 全量写回；每个值过四闸；opaqueTail 逐字拼回文件尾。
- * 空串标量写 `""`（对齐老内核 heredoc 的 automation_* 空值表示），空列表写 `[]`。
+ * 严格按 FIELD_ORDER 全量写回；每个值过四闸；FIELD_ORDER 之后写内部提交元数据三行块
+ * （runMetadata 存在时；不进 FIELD_ORDER，不受四闸约束——值恒为 repository 生成的 UUID/整数，
+ * 不含用户输入）；再拼回 opaqueTail。空串标量写 `""`（对齐老内核 heredoc 的 automation_* 空值
+ * 表示），空列表写 `[]`。
  */
 export function serializePipeline(state: PipelineState): string {
   const out: string[] = []
@@ -124,5 +141,7 @@ export function serializePipeline(state: PipelineState): string {
       out.push(`${field}: ${value === '' ? '""' : value}`)
     }
   }
+  out.push(...serializeRunMetadataLines(state.runMetadata))
+  out.push(...serializeProjectionMetadataLines(state.projectionMetadata))
   return out.join('\n') + '\n' + state.opaqueTail
 }

@@ -6,8 +6,11 @@
 import { Command } from 'commander'
 import type { CliDeps } from './deps.js'
 import { cmdCheck } from './commands/check.js'
+import { cmdDashboard, type DashboardOpts, type DashboardRuntime } from './commands/dashboard.js'
 import { cmdDoctor } from './commands/doctor.js'
 import { cmdCas, cmdGet, cmdSet, cmdSetMany } from './commands/fields.js'
+import { cmdArtifactRegister } from './commands/artifact.js'
+import { cmdDocumentInit, cmdDocumentRead, cmdDocumentRecord, cmdDocumentStatus } from './commands/document.js'
 import { cmdImport } from './commands/import.js'
 import { cmdInbox } from './commands/inbox.js'
 import { cmdAdvance } from './commands/advance.js'
@@ -20,7 +23,8 @@ import { cmdLoops } from './commands/loops.js'
 import { cmdMem } from './commands/mem.js'
 import { cmdScaffold } from './commands/scaffold.js'
 import { cmdSession } from './commands/session.js'
-import { cmdSetup } from './commands/setup.js'
+import { cmdSetup, type SetupOpts } from './commands/setup.js'
+import { cmdUpdate, type UpdateOpts } from './commands/update.js'
 import { cmdSpec } from './commands/spec.js'
 import { cmdSync } from './commands/sync.js'
 import { cmdTap } from './commands/tap.js'
@@ -29,7 +33,20 @@ import { cmdUninstall } from './commands/uninstall.js'
 import { cmdList, cmdStatus } from './commands/status.js'
 import { cmdTransition } from './commands/transition.js'
 import { cmdInternalSkillGate } from './commands/internalSkillGate.js'
+import { cmdInternalConstraintGate } from './commands/internalConstraintGate.js'
+import { cmdInternalCodexJsonl } from './commands/internalCodexJsonl.js'
 import { cmdMigrateWorkflow } from './commands/migrateWorkflow.js'
+import { cmdStateProjection } from './commands/state-projection.js'
+import { cmdTriage, type TriageCommandRuntime } from './commands/triage.js'
+import {
+  cmdTracksCreate,
+  cmdTracksDelete,
+  cmdTracksList,
+  cmdTracksShow,
+  cmdTracksUpdate,
+  type TracksCreateOpts,
+  type TracksUpdateOpts,
+} from './commands/tracks.js'
 
 export class CliExit extends Error {
   constructor(public readonly code: number) {
@@ -43,7 +60,13 @@ function bail(code: number): void {
 
 const stripNl = (s: string): string => s.replace(/\n$/, '')
 
-export function buildProgram(deps: CliDeps): Command {
+export interface ProgramRuntimes {
+  readonly triage?: TriageCommandRuntime
+  /** Injectable only for command tests; production resolves the installed plugin root. */
+  readonly dashboard?: DashboardRuntime
+}
+
+export function buildProgram(deps: CliDeps, runtimes: ProgramRuntimes = {}): Command {
   const program = new Command('pipeline')
   program
     .description('pipeline-lite 状态机 CLI（CONTRACT §3）')
@@ -66,15 +89,52 @@ export function buildProgram(deps: CliDeps): Command {
 
   program
     .command('setup [sub]')
-    .description('安装后全功能就绪引导:软链 pipeline 到 PATH + 按 registry 选装技能 + docker/镜像/凭证就绪检查')
-    .option('--dry-run', '不软链、不写任何文件（注意 runtime 段仍会做 docker/镜像/凭证的只读探测）')
-    .option('-y, --yes', '跳过技能安装的 y/N 确认位;不给时读一次 stdin（管道输入同样有效），仅 y/yes 放行、读不到即不装')
-    // 容忍未知 flag。注意 `setup [sub]` 是 positional 参数、不是真 Commander 子命令，故这里只是
-    // 「不报错」而非「透传给子命令」。★已知风险：拼错的 flag（如 --dry-runn）会被静默丢弃，
-    // 于是本该空跑的命令变成真实执行。收紧此项属行为变更，未在清账轮内做。
-    .allowUnknownOption()
-    .action(async (sub: string | undefined, opts: { dryRun?: boolean; yes?: boolean }) =>
-      bail(await cmdSetup(deps, sub, { dryRun: opts.dryRun, yes: opts.yes })))
+    .description('安装完整 pipeline：必须选择一个宿主（如 --codex）；不会同时修改 Codex 与 Claude')
+    .option('--codex', '安装/验证 Codex 原生插件')
+    .option('--claude', '安装/验证 Claude 原生插件')
+    .option('--cursor', '部署 Cursor adapter')
+    .option('--gemini', '部署 Gemini adapter')
+    .option('--copilot', '部署 Copilot adapter')
+    .option('--pi', '部署 Pi adapter')
+    .option('--devin', '部署 Devin adapter')
+    .option('--zed', '部署 Zed adapter')
+    .option('--aider', '部署 Aider adapter')
+    .option('--continue', '部署 Continue adapter')
+    .option('--cline', '部署 Cline adapter')
+    .option('--amp', '部署 Amp adapter')
+    .option('--target <dir>', '非原生 adapter 的项目目标目录（缺省当前目录）')
+    .option('--auto-update', '为所选原生宿主启用每日一次的自动升级检查')
+    .option('--dry-run', '仅打印所选宿主安装计划，不写文件、不执行 adapter 或 marketplace 操作')
+    .option('-y, --yes', '跳过兼容 skills/setup 的 y/N 确认位')
+    .action(async (sub: string | undefined, opts: SetupOpts) => bail(await cmdSetup(deps, sub, opts)))
+
+  program
+    .command('update')
+    .description('刷新一个已安装的原生 pipeline 插件；升级后请新开会话加载 skills 和 hooks')
+    .option('--codex', '更新 Codex marketplace 中的 pipeline-lite')
+    .option('--claude', '更新 Claude marketplace 中的 pipeline-lite')
+    .option('--cursor', '从当前已更新的包重新部署 Cursor adapter')
+    .option('--gemini', '从当前已更新的包重新部署 Gemini adapter')
+    .option('--copilot', '从当前已更新的包重新部署 Copilot adapter')
+    .option('--pi', '从当前已更新的包重新部署 Pi adapter')
+    .option('--devin', '从当前已更新的包重新部署 Devin adapter')
+    .option('--zed', '从当前已更新的包重新部署 Zed adapter')
+    .option('--aider', '从当前已更新的包重新部署 Aider adapter')
+    .option('--continue', '从当前已更新的包重新部署 Continue adapter')
+    .option('--cline', '从当前已更新的包重新部署 Cline adapter')
+    .option('--amp', '从当前已更新的包重新部署 Amp adapter')
+    .option('--target <dir>', '非原生 adapter 的项目目标目录（缺省当前目录）')
+    .option('--dry-run', '仅打印升级计划，不执行 marketplace 或 adapter 操作')
+    .option('-y, --yes', '供自动更新调用的非交互确认')
+    .option('--auto', '由已明确启用的自动更新任务调用（不改变用户的 opt-in 状态）')
+    .action(async (opts: UpdateOpts) => bail(await cmdUpdate(deps, opts)))
+
+  program
+    .command('dashboard')
+    .description('启动插件内置的单一 dashboard SPA/API 入口（默认 127.0.0.1:8765）')
+    .option('--port <port>', '覆盖监听端口（例如 18765）')
+    .option('--dry-run', '验证已发布 dashboard 资产并打印启动计划，不启动 server')
+    .action(async (opts: DashboardOpts) => bail(await cmdDashboard(deps, opts, runtimes.dashboard)))
 
   program
     .command('get <name> <field>')
@@ -97,6 +157,51 @@ export function buildProgram(deps: CliDeps): Command {
     .description('compare-and-set（无输出；不匹配 exit 3）')
     .action(async (name: string, fieldName: string, expect: string, next: string) =>
       bail(await cmdCas(deps, name, fieldName, expect, next)))
+
+  // ── artifact：受 artifact 契约约束的单字段写（G2 P5）——Commander 真子命令树（同 tracks 装配惯例，
+  // exitOverride/configureOutput 由父命令继承；--producer 缺失 = usage error → main 映射 exit 1）。
+  const artifact = program
+    .command('artifact')
+    .description('artifact 登记：register <change> <field> <path> --producer <skill-id>（受 declaration+producer 校验约束的单字段写）')
+    .action(() => {
+      deps.io.err('用法：pipeline artifact register <change> <field> <path> --producer <skill-id>')
+      bail(1)
+    })
+  artifact
+    .command('register <change> <field> <path>')
+    .description('登记一条 artifact：校验当前 step/track 的 declaration + producer 具体 skill，锁内原子写字段（成功静默 exit 0；任一校验不过 exit 1、state 不变）')
+    .requiredOption('--producer <skill-id>', '产出该 artifact 的具体 skill id（须命中当前 step/track 有效 skill 集的某个具体 alternative；整个 a|b token 非法）')
+    .action(async (change: string, field: string, path: string, opts: { producer: string }) =>
+      bail(await cmdArtifactRegister(deps, change, field, path, opts.producer)))
+
+  const document = program
+    .command('document')
+    .description('OpenSpec 文档证据：init / record / read / status（治理 workflow 的可验证产物与读取收据）')
+    .action(() => {
+      deps.io.err('用法：pipeline document init|record|read|status <change> ...')
+      bail(1)
+    })
+  document
+    .command('init <change>')
+    .description('为既有受治理 Change 创建 .pipeline-documents.json（新建 Change 已自动创建）')
+    .action(async (change: string) => bail(await cmdDocumentInit(deps, change)))
+  document
+    .command('record <change> <kind> <path>')
+    .description('登记当前 phase 产出的文档和实际 Skill 调用证据；旧 Change 可显式 --backfill 补登记前序既有文档')
+    .requiredOption('--producer <skill-id>', '实际生成该文档的具体 skill id')
+    .option('--backfill', '仅升级旧 Change 时补登记此前 phase 的既有文档；仍须有真实 skill 证据，不能登记未来 phase')
+    .action(async (change: string, kind: string, path: string, opts: { producer: string; backfill?: boolean }) =>
+      bail(await cmdDocumentRecord(deps, change, kind, path, opts.producer, opts.backfill === true)))
+  document
+    .command('read <change> <kind>')
+    .description("登记当前 phase 已读取文档（kind 可为 'all'）")
+    .action(async (change: string, kind: string) => bail(await cmdDocumentRead(deps, change, kind)))
+  document
+    .command('status <change>')
+    .description('显示文档产物、内容摘要和当前 phase 的读取收据（不完整 exit 2）')
+    .option('--json', 'JSON 输出')
+    .action(async (change: string, opts: { json?: boolean }) =>
+      bail(await cmdDocumentStatus(deps, change, opts.json === true)))
 
   program
     .command('transition <name> <event>')
@@ -185,6 +290,19 @@ export function buildProgram(deps: CliDeps): Command {
     .action(async (opts: { json?: boolean }) => bail(await cmdList(deps, opts)))
 
   program
+    .command('triage <source>')
+    .description('H12 生产 triage：git-commits | loop-run-terminals；成功页提交 durable checkpoint，可原命令幂等续跑')
+    .option('--provider <provider>', '分类 provider（默认 codex；生产仅支持 codex）', 'codex')
+    .option('--model <model>', 'Codex triage model（缺省使用 host 固定默认）')
+    .option('--page-size <n>', '每页 observation 上限（默认 20）', '20')
+    .option('--max-pages <n>', '本次最多提交页数（默认 4；到限可原命令续跑）', '4')
+    .option('--max-high-candidates <n>', '每页最多创建的 high WorkflowRun（默认 10）', '10')
+    .option('--json', '单行稳定 JSON 输出')
+    .addHelpText('after', '\nsource: git-commits（当前仓 HEAD）| loop-run-terminals（当前仓 durable loop ledger）')
+    .action(async (source: string, opts: import('./commands/triage.js').TriageCmdOpts) =>
+      bail(await cmdTriage(deps, source, opts, runtimes.triage)))
+
+  program
     .command('sync [sub]')
     .description('项目内资产同步（downgrade-guard / prune / config 门 / --migrate 硬闸）')
     .option('--migrate', '放行迁移硬闸（缺省只报告不改盘；注意缺省未注入迁移执行器时本闸恒空转）')
@@ -210,11 +328,12 @@ export function buildProgram(deps: CliDeps): Command {
 
   program
     .command('afk <sub> [name]')
-    .description('AFK 自动化：enqueue <name> 挂队 / scan 就绪队列 / status [name] 泳道 / run 真跑 docker 沙箱 / cancel <name> 取消运行中任务（落取消标记 + docker kill，对齐 server /api/afk/:name/cancel）')
+    .description('AFK 自动化：enqueue <name> [--loop <id>] 挂队(+显式绑定 loop) / scan 就绪队列 / status [name] 泳道 / run 真跑 docker 沙箱 / cancel <name> 取消运行中任务（落取消标记 + docker kill，对齐 server /api/afk/:name/cancel）')
     .option('--json', 'JSON 输出')
     .option('--level <level>', 'run：分级放权档位覆盖（L1|L2|L3，缺省 L1 report-only 安全默认）')
     .option('--image <image>', 'run：sandcastle 镜像名（缺省 sandcastle:local）')
-    .action(async (sub: string, name: string | undefined, opts: { json?: boolean; level?: string; image?: string }) =>
+    .option('--loop <loop-id>', 'enqueue：显式绑定该 change 到 loop（落 explicit change-loop-binding，admission 归属不再前缀猜）')
+    .action(async (sub: string, name: string | undefined, opts: { json?: boolean; level?: string; image?: string; loop?: string }) =>
       bail(await cmdAfk(deps, sub, name, opts)))
 
   program
@@ -233,16 +352,24 @@ export function buildProgram(deps: CliDeps): Command {
   budget|cost [loop]        token 预算 / 成本估算
   graduate [loop]          升降档裁决（毕业制）
   level <loop> [set <L1|L2|L3>] [--confirm]   查看/改档（升档须准入 + --confirm）
+  run <loop-id|pattern> [--dry-run] [--level L1|L2|L3] [--commit] [--json]   定向真跑；--dry-run 为零写/零 Docker 预览
+  sync <loop-id> <--dry-run|--apply> [--expected-registry-sha <sha>] [--expected-workflow-sha <sha>] [--json]
+                            对账 registry/LOOP.md；必须显式二选一：--dry-run 零写入，--apply 执行双 CAS 计划
 
 loops init 非交互 flags（agent/CI；缺 TTY 或 --yes 走默认）:
   --id <id>       *必填  loop 标识（kebab-case）
-  --goal <text>   *必填  这个 loop 要替你做什么
-  --runner <claude-code|codex>   执行 agent（缺省 claude-code）
+  --goal <text>   手工 init 必填；starter 模式下可省略或覆写模板 goal
+  --template <id> 选用 H3 v1 starter：pr-babysitter | daily-triage | ci-sweeper | post-merge-cleanup |
+                  dependency-sweeper | changelog-drafter | issue-triage
+  --workflow <id> 显式 workflow binding（starter 缺省取 recommended workflow）
+  --skill-bundle <profile>   显式 H10 skill profile binding（缺省 null/unwired，不把具体推荐 skill 冒充 profile）
+  --runner <claude-code|codex>   执行 agent（缺省 codex）
   --kind <orchestrator|executor> · --prefix <change 前缀> · --cadence <4h> · --risk <low|medium|high> · --yes
 
 示例:
   pipeline loops init                                   # TTY 交互向导
-  pipeline loops init --id nightly-fix --goal "夜间修 flaky 测试" --runner codex --yes`)
+  pipeline loops init --id nightly-fix --goal "夜间修 flaky 测试" --runner codex --yes
+  pipeline loops init --id ci-loop --template ci-sweeper --skill-bundle backend --yes`)
     .action(async (sub: string, args: string[]) => bail(await cmdLoops(deps, sub, args)))
 
   program
@@ -264,9 +391,10 @@ loops init 非交互 flags（agent/CI；缺 TTY 或 --yes 走默认）:
     .action(async (sub: string, args: string[]) => bail(await cmdTap(deps, sub, args)))
 
   program
-    .command('_gen-router-sh <manifest>')
-    .description('[内部] 从 manifest 派生 router 缓存 bash（router.sh 调用）')
-    .action(async (manifest: string) => bail(await cmdGenRouterSh(deps, manifest)))
+    .command('_gen-router-sh <manifest> <repo-root>')
+    .description('[内部] 从 manifest + effective track registry 派生项目 router data cache（router.sh 调用）')
+    .action(async (manifest: string, repoRoot: string) =>
+      bail(await cmdGenRouterSh(deps, manifest, repoRoot)))
 
   program
     .command('internal-skill-gate <name> <skillId>')
@@ -274,13 +402,81 @@ loops init 非交互 flags（agent/CI；缺 TTY 或 --yes 走默认）:
     .action(async (name: string, skillId: string) => bail(await cmdInternalSkillGate(deps, name, skillId)))
 
   program
+    .command('internal-constraint-gate <operation> <nulPathsFile>')
+    .description('[内部] AutomationPolicy 路径授权（0=放行 2=拒绝 1=输入损坏）')
+    .action(async (operation: string, nulPathsFile: string) =>
+      bail(await cmdInternalConstraintGate(deps, operation, nulPathsFile)))
+
+  program
+    .command('internal-codex-jsonl <mode> <jsonlPath>')
+    .description('[内部] 解析 host-owned codex exec --json 事件（usage|transitions）')
+    .action(async (mode: string, jsonlPath: string) =>
+      bail(await cmdInternalCodexJsonl(deps, mode, jsonlPath)))
+
+  program
     .command('migrate-workflow <name>')
     .description('[一次性] 老格式 change 补齐/确认 workflow 字段为 default（真实自定义 workflow 不覆盖）')
     .action(async (name: string) => bail(await cmdMigrateWorkflow(deps, name)))
 
+  program
+    .command('state <sub> <name>')
+    .description('canonical state 运维：status | repair-projection | import-legacy')
+    .option('--json', '稳定 JSON 输出')
+    .option('--force-canonical', 'repair-projection：明确用 canonical 覆盖未知 YAML drift')
+    .action(async (
+      sub: string,
+      name: string,
+      opts: { json?: boolean; forceCanonical?: boolean },
+    ) => bail(await cmdStateProjection(deps, sub, name, opts)))
+
+  // ── tracks：动态 Track Registry CRUD（T-R3）——Commander 真子命令树（不手解析 [args...]）。
+  // 装配在 Stage B 的 loops 命令之上追加，不改其行。exitOverride/configureOutput 由父命令继承。
+  const tracks = program
+    .command('tracks')
+    .description('动态 Track Registry：list / show <id> / create <id> / update <id> / delete <id>（--json 稳定输出）')
+    .action(() => {
+      deps.io.err('用法：pipeline tracks <list|show|create|update|delete> …（详见 pipeline tracks --help）')
+      bail(1)
+    })
+  tracks
+    .command('list')
+    .description('列出全部 track（内建四轨在前，固定列 ID LABEL BUILTIN DEFAULT ALLOWED POLICY）')
+    .option('--json', 'JSON array 输出')
+    .action(async (opts: { json?: boolean }) => bail(await cmdTracksList(deps, opts)))
+  tracks
+    .command('show <id>')
+    .description('显示某 track 详情（标 source: builtin | builtin-override | custom）')
+    .option('--json', 'JSON object 输出')
+    .action(async (id: string, opts: { json?: boolean }) => bail(await cmdTracksShow(deps, id, opts)))
+  tracks
+    .command('create <id>')
+    .description('新建额外 track（四组必填：--label /--workflow-default /(--workflow-allowed|--workflow-any) /--policy）')
+    .option('--label <text>', 'track 展示名')
+    .option('--workflow-default <id>', '缺省 workflow')
+    .option('--workflow-allowed <ids...>', '允许的 workflow 白名单（可多值）')
+    .option('--workflow-any', "允许任意 workflow（'*'，不必输裸 *）")
+    .option('--policy <preset>', 'policy 模板 chat|pm|frontend|backend（深拷贝该内建 policy 落完整结构）')
+    .option('--json', 'JSON 返回更新后的 effective definition')
+    .action(async (id: string, opts: TracksCreateOpts) => bail(await cmdTracksCreate(deps, id, opts)))
+  tracks
+    .command('update <id>')
+    .description('改 track（≥1 个 --set-*；内建仅 label/workflow 可改，policy/id 锁死不可删）')
+    .option('--set-label <text>', '改展示名')
+    .option('--set-workflow-default <id>', '改缺省 workflow')
+    .option('--set-workflow-allowed <ids...>', '改 workflow 白名单（可多值）')
+    .option('--set-workflow-any', "改为允许任意 workflow（'*'）")
+    .option('--set-policy <preset>', '改 policy 模板（仅额外 track；内建传它拒）')
+    .option('--json', 'JSON 返回更新后的 effective definition')
+    .action(async (id: string, opts: TracksUpdateOpts) => bail(await cmdTracksUpdate(deps, id, opts)))
+  tracks
+    .command('delete <id>')
+    .description('删额外 track（内建拒；被活跃 change 引用拒+列名，fail-closed）')
+    .option('--json', 'JSON 返回 {deleted,revision}')
+    .action(async (id: string, opts: { json?: boolean }) => bail(await cmdTracksDelete(deps, id, opts)))
+
   program.addHelpText(
     'after',
-    '\n首次安装：pipeline setup（装技能 + 配就绪）——首次用本插件先跑 setup，再用 init 起 change。',
+    '\n首次安装：pipeline setup --codex（或 --claude；安装完整打包插件并配就绪）——随后再用 init 起 change。',
   )
 
   return program

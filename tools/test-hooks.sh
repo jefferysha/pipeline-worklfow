@@ -3,11 +3,11 @@
 #
 # 覆盖：
 #   1. gate.sh marker 三态 exit 语义（新鲜=2 / 陈旧=0 / 缺失=0），三个 marker 名都测
-#   2. gate.sh 解析失败 fail-open（exit 0）+ marker 在 cwd 上层目录也能拦（上溯语义）
+#   2. gate.sh 解析失败 fail-open（exit 0）+ Git 项目子目录能定位项目根；普通父目录绝不越界
 #   3. 红线自证：breadcrumb.sh / session-start.sh / statusline.sh 内 grep -c "node" 为 0；gate.sh
 #      例外，反向断言它**必须**仍引用 node（Task 9 非 default workflow 的 skill DAG 委托分支，
 #      见下方 section 3 注释）。python 红线四个文件全覆盖（含 gate.sh）；jq 红线覆盖 gate/bc/sl
-#   4. breadcrumb.sh：多缓存取 mtime 最新 / 无缓存静默 exit 0
+#   4. breadcrumb.sh：只在明确恢复时注入唯一/显式候选；新任务绝不泄漏旧任务
 #   5. verify-skills.sh：真实清单全绿；人为埋悬空引用（缺失脚本/不可执行/缺 SKILL.md/未声明外部 skill）抓红且逐条列出
 #   6. 插件清单 JSON 语法校验（plugin.json / hooks.json，经 node —— 测试脚本非 hook，允许）
 #   7. session-start.sh：正常输出引导 exit 0；verify 失败时 stderr 警告但不阻断（fail-open）
@@ -37,8 +37,29 @@ assert_exit() { # desc expected actual
 assert_contains() { # desc haystack needle
   case "$2" in *"$3"*) ok "$1" ;; *) bad "$1" "输出未包含「${3}」；实际输出：${2}" ;; esac
 }
+assert_not_contains() { # desc haystack needle
+  case "$2" in *"$3"*) bad "$1" "输出不应包含「${3}」；实际输出：${2}" ;; *) ok "$1" ;; esac
+}
 assert_empty() { # desc value
   if [ -z "$2" ]; then ok "$1"; else bad "$1" "期望空输出，实得：${2}"; fi
+}
+
+sha256_text() { # stdin → lowercase hex；测试夹具与生产 helper 使用同一跨 macOS/Linux优先级
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum | awk '{print $1}'
+  else
+    shasum -a 256 | awk '{print $1}'
+  fi
+}
+
+write_hook_current() { # $1=change-dir $2=phase；生成 hook reader 所需 digest+twin envelope
+  local dir="$1" phase="$2" body digest raw
+  mkdir -p "$dir/.pipeline-run/revisions"
+  body="{\"schemaVersion\":1,\"hookState\":{\"phase\":\"$phase\",\"workflow\":\"default\",\"track\":\"backend\",\"archived\":\"false\",\"automation\":\"off\"},\"revision\":0,\"revisionId\":\"hook-fixture\",\"state\":{},\"mutation\":{}}"
+  digest="$(printf '%s' "$body" | sha256_text)"
+  raw="${body%?},\"stateDigest\":\"$digest\"}"
+  printf '%s' "$raw" > "$dir/.pipeline-run/current.json"
+  printf '%s' "$raw" > "$dir/.pipeline-run/revisions/000000-hook-fixture.json"
 }
 
 # 前置：被测文件必须存在（TDD 红阶段在此直接倒）
@@ -146,6 +167,38 @@ if [ -f "$SL" ]; then
   printf 'track: backend\nphase: explore\narchived: \n' > "$proj/openspec/changes/demo/.pipeline.yaml"
   out="$(printf '{"cwd":"%s"}' "$proj" | bash "$SL" 2>/dev/null)"
   case "$out" in *demo*explore*) ok "statusline: 含 change 名与相位" ;; *) bad "statusline: 含 change 名与相位" "得到 '$out'" ;; esac
+  # G1 cutover：canonical current 存在后，YAML 只是 projection。即便 YAML 冲突或整个缺失，
+  # hook 也必须按 current 的 hookState 判活跃/相位，且绝不反向采信 YAML。
+  write_hook_current "$proj/openspec/changes/demo" verify
+  printf 'track: backend\nphase: archive\narchived: true\n' > "$proj/openspec/changes/demo/.pipeline.yaml"
+  out="$(printf '{"cwd":"%s"}' "$proj" | bash "$SL" 2>/dev/null)"
+  case "$out" in *demo*verify*) ok "G1 statusline: current 覆盖冲突 YAML projection" ;; *) bad "G1 statusline: current 覆盖冲突 YAML projection" "得到 '$out'" ;; esac
+  rm -f "$proj/openspec/changes/demo/.pipeline.yaml"
+  out="$(printf '{"cwd":"%s"}' "$proj" | bash "$SL" 2>/dev/null)"
+  case "$out" in *demo*verify*) ok "G1 statusline: YAML 缺失时仍从 canonical current 工作" ;; *) bad "G1 statusline: YAML 缺失时仍从 canonical current 工作" "得到 '$out'" ;; esac
+  rm -f "$proj/openspec/changes/demo/.pipeline-run/revisions/000000-hook-fixture.json"
+  out="$(printf '{"cwd":"%s"}' "$proj" | bash "$SL" 2>/dev/null)"
+  [ -z "$out" ] && ok "G1 statusline: current 缺 immutable twin 时 fail-closed" || bad "G1 statusline: current 缺 immutable twin 时 fail-closed" "得到 '$out'"
+  write_hook_current "$proj/openspec/changes/demo" verify
+  # 外形仍合法但 current 字节被改，digest/twin 都未同步：必须 fail-closed，不能消费伪 hookState。
+  sed 's/"phase":"verify"/"phase":"ship"/' "$proj/openspec/changes/demo/.pipeline-run/current.json" \
+    > "$proj/openspec/changes/demo/.pipeline-run/current.tampered"
+  mv "$proj/openspec/changes/demo/.pipeline-run/current.tampered" "$proj/openspec/changes/demo/.pipeline-run/current.json"
+  out="$(printf '{"cwd":"%s"}' "$proj" | bash "$SL" 2>/dev/null)"
+  [ -z "$out" ] && ok "G1 statusline: digest/twin 不一致的 current fail-closed" || bad "G1 statusline: digest/twin 不一致的 current fail-closed" "得到 '$out'"
+  # dangling current 仍代表 canonical 目录项已经出现；helper 必须选它并 fail-open 为空，绝不能
+  # 因 `-f` 跟随链接失败而反向采信一份看似健康的 YAML。
+  rm -f "$proj/openspec/changes/demo/.pipeline-run/current.json"
+  ln -s missing.json "$proj/openspec/changes/demo/.pipeline-run/current.json"
+  printf 'track: backend\nphase: open\narchived: false\n' > "$proj/openspec/changes/demo/.pipeline.yaml"
+  out="$(printf '{"cwd":"%s"}' "$proj" | bash "$SL" 2>/dev/null)"
+  [ -z "$out" ] && ok "G1 statusline: dangling current 不得回退 YAML" || bad "G1 statusline: dangling current 不得回退 YAML" "得到 '$out'"
+  rm -f "$proj/openspec/changes/demo/.pipeline-run/current.json"
+  printf '{malformed canonical\n' > "$proj/openspec/changes/demo/.pipeline-run/current.json"
+  out="$(printf '{"cwd":"%s"}' "$proj" | bash "$SL" 2>/dev/null)"
+  [ -z "$out" ] && ok "G1 statusline: malformed current 不得回退 YAML 或显示伪状态" || bad "G1 statusline: malformed current 不得回退 YAML 或显示伪状态" "得到 '$out'"
+  rm -rf "$proj/openspec/changes/demo/.pipeline-run"
+  printf 'track: backend\nphase: explore\narchived: \n' > "$proj/openspec/changes/demo/.pipeline.yaml"
   # 新鲜门 marker → 含 等:<kind>
   touch "$proj/.pipeline-pending-confirm"
   out="$(printf '{"cwd":"%s"}' "$proj" | bash "$SL" 2>/dev/null)"
@@ -171,7 +224,7 @@ else
   bad "statusline: hooks/statusline.sh 存在" "缺文件"
 fi
 
-# ─────────────── 2. gate.sh fail-open + 上溯找 marker ───────────────
+# ─────────────── 2. gate.sh fail-open + Git 项目根定位 ───────────────
 proj="$TMP/gate-badjson"
 mkdir -p "$proj"
 ( cd "$proj" && printf 'this is not json at all' | bash "$GATE" >/dev/null 2>&1 )
@@ -181,10 +234,10 @@ assert_exit "gate: stdin 非 JSON → fail-open exit 0" 0 "$?"
 assert_exit "gate: stdin 为空 → fail-open exit 0" 0 "$?"
 
 proj="$TMP/gate-updir"
-mkdir -p "$proj/sub/deep"
+mkdir -p "$proj/.git" "$proj/sub/deep"
 touch "$proj/.pipeline-pending-confirm"
 run_gate "{\"cwd\":\"$proj/sub/deep\",\"tool_name\":\"Write\"}"
-assert_exit "gate: marker 在 cwd 上层（项目根）也拦 → exit 2" 2 "$RC"
+assert_exit "gate: Git 项目子目录读取项目根 marker → exit 2" 2 "$RC"
 
 # ───────────────────────── 3. 红线自证：热路径纯 bash ─────────────────────────
 # gate.sh 例外（Task 9，GOAL 清单 E）：非 default workflow 的 skill DAG 判定合法委托 CLI（spawn
@@ -217,21 +270,50 @@ done
 
 # ───────────────────────── 4. breadcrumb.sh ─────────────────────────
 proj="$TMP/bc-proj"
-mkdir -p "$proj/openspec/changes/aaa-old" "$proj/openspec/changes/bbb-new"
-printf 'OLD-CRUMB\n' > "$proj/openspec/changes/aaa-old/.breadcrumb"
-touch -t 202001010000 "$proj/openspec/changes/aaa-old/.breadcrumb"
-printf 'NEW-CRUMB\n' > "$proj/openspec/changes/bbb-new/.breadcrumb"
-out="$(printf '{"cwd":"%s"}' "$proj" | bash "$BC" 2>/dev/null)"
+mkdir -p "$proj/openspec/changes/only-change"
+printf 'track: backend\nphase: build\narchived: \n' > "$proj/openspec/changes/only-change/.pipeline.yaml"
+printf 'ONLY-CRUMB\n' > "$proj/openspec/changes/only-change/.breadcrumb"
+out="$(printf '{"prompt":"继续实现当前功能","cwd":"%s"}' "$proj" | bash "$BC" 2>/dev/null)"
 rc=$?
-assert_exit "breadcrumb: 有缓存 → exit 0" 0 "$rc"
-if [ "$out" = "NEW-CRUMB" ]; then ok "breadcrumb: cat mtime 最新的一个"; else bad "breadcrumb: cat mtime 最新的一个" "期望 NEW-CRUMB，实得：${out}"; fi
+assert_exit "breadcrumb: 唯一 change 的明确继续 → exit 0" 0 "$rc"
+if [ "$out" = "ONLY-CRUMB" ]; then ok "breadcrumb: 明确继续注入唯一 change 的 breadcrumb"; else bad "breadcrumb: 明确继续注入唯一 change 的 breadcrumb" "期望 ONLY-CRUMB，实得：${out}"; fi
 
 proj="$TMP/bc-none"
 mkdir -p "$proj/openspec/changes/empty-change"
-out="$(printf '{"cwd":"%s"}' "$proj" | bash "$BC" 2>/dev/null)"
+out="$(printf '{"prompt":"继续","cwd":"%s"}' "$proj" | bash "$BC" 2>/dev/null)"
 rc=$?
 assert_exit "breadcrumb: 无缓存 → 静默 exit 0" 0 "$rc"
 assert_empty "breadcrumb: 无缓存 → 无输出" "$out"
+
+# 当前会话显式说继续时，dashboard/CLI 的 `.pipeline-active` 才可作为候选，且不得改取 mtime 最新的别的 Change。
+proj="$TMP/bc-active-task"
+mkdir -p "$proj/openspec/changes/selected" "$proj/openspec/changes/newer"
+printf 'track: frontend\nphase: build\narchived: \n' > "$proj/openspec/changes/selected/.pipeline.yaml"
+printf 'track: backend\nphase: build\narchived: \n' > "$proj/openspec/changes/newer/.pipeline.yaml"
+printf 'selected\n' > "$proj/.pipeline-active"
+printf '实现登录页响应式布局，并跑浏览器验收。\n' > "$proj/openspec/changes/selected/REAL_AGENT_TASK.md"
+printf 'OTHER-CRUMB\n' > "$proj/openspec/changes/newer/.breadcrumb"
+out="$(printf '{"prompt":"继续 selected 的登录页实现","cwd":"%s"}' "$proj" | bash "$BC" 2>/dev/null)"
+rc=$?
+assert_exit "breadcrumb: 当前会话任务 → exit 0" 0 "$rc"
+assert_contains "breadcrumb: 当前会话任务含选中 change" "$out" "change: selected"
+assert_contains "breadcrumb: 当前会话任务含持久化提示词" "$out" "实现登录页响应式布局"
+case "$out" in
+  *OTHER-CRUMB*) bad "breadcrumb: 当前会话任务不漂移到更晚 Change 的 breadcrumb" "输出意外含 OTHER-CRUMB：${out}" ;;
+  *) ok "breadcrumb: 当前会话任务不漂移到更晚 Change 的 breadcrumb" ;;
+esac
+
+out="$(printf '{"prompt":"我现在想要调研一个 SkillHub 项目","cwd":"%s"}' "$proj" | bash "$BC" 2>/dev/null)"
+assert_empty "breadcrumb: 独立新主题不泄漏 repo 级旧任务" "$out"
+
+proj="$TMP/bc-ambiguous-resume"
+mkdir -p "$proj/openspec/changes/older" "$proj/openspec/changes/newer"
+printf 'track: frontend\nphase: build\narchived: \n' > "$proj/openspec/changes/older/.pipeline.yaml"
+printf 'track: backend\nphase: verify\narchived: \n' > "$proj/openspec/changes/newer/.pipeline.yaml"
+printf 'OLDER-CRUMB\n' > "$proj/openspec/changes/older/.breadcrumb"
+printf 'NEWER-CRUMB\n' > "$proj/openspec/changes/newer/.breadcrumb"
+out="$(printf '{"prompt":"继续实现当前功能","cwd":"%s"}' "$proj" | bash "$BC" 2>/dev/null)"
+assert_empty "breadcrumb: 多个候选的泛化继续不按 mtime 猜测" "$out"
 
 # ───────────────────────── 5. verify-skills.sh ─────────────────────────
 out="$(bash "$VS" 2>&1)"
@@ -275,6 +357,7 @@ out="$(bash "$VS" --root "$SB" 2>&1)"
 rc=$?
 assert_exit "verify-skills: 悬空引用 sandbox → exit 1" 1 "$rc"
 assert_contains "verify-skills: 列出缺失脚本 missing.sh" "$out" "missing.sh"
+assert_contains "verify-skills: 列出缺失 canonical state helper" "$out" "canonical-state.sh"
 assert_contains "verify-skills: 列出不可执行 noexec.sh" "$out" "noexec.sh"
 assert_contains "verify-skills: 列出缺 SKILL.md 的 broken-skill" "$out" "broken-skill"
 assert_contains "verify-skills: 列出未声明外部 skill" "$out" "superpowers:nonexistent-thing"
@@ -298,6 +381,7 @@ if command -v node >/dev/null 2>&1; then
           if (h.type !== "command" || !h.command) process.exit(1);
   ' "$ROOT/hooks/hooks.json" 2>/dev/null
   assert_exit "hooks.json 结构对齐老仓（hooks.<Event>[].hooks[].command）" 0 "$?"
+  assert_contains "hooks.json: 同时支持 Codex PLUGIN_ROOT 与 Claude root" "$(cat "$ROOT/hooks/hooks.json")" '${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-}}/hooks/'
 else
   printf 'skip - node 不可用，跳过 JSON 语法校验\n'
 fi
@@ -311,6 +395,23 @@ assert_contains "session-start: 引导提到 7 相位/pipeline" "$out" "pipeline
 err="$(cat "$TMP/ss.err")"
 assert_empty "session-start: 真实清单绿 → 无警告" "$err"
 
+# SessionStart 只能列恢复候选；它没有用户 prompt，绝不能把 repo 级 `.pipeline-active`
+# 与任务内容自动注入一个新 Codex 会话。
+proj="$TMP/ss-active-task"
+mkdir -p "$proj/openspec/changes/selected" "$proj/openspec/changes/newer"
+printf 'track: frontend\nphase: build\narchived: \n' > "$proj/openspec/changes/selected/.pipeline.yaml"
+printf 'track: backend\nphase: explore\narchived: \n' > "$proj/openspec/changes/newer/.pipeline.yaml"
+touch -t 202001010000 "$proj/openspec/changes/selected/.pipeline.yaml"
+printf 'selected\n' > "$proj/.pipeline-active"
+printf '实现登录页响应式布局，并跑浏览器验收。\n' > "$proj/openspec/changes/selected/REAL_AGENT_TASK.md"
+out="$(printf '{\"cwd\":\"%s\"}' "$proj" | bash "$SS" 2>/dev/null)"
+rc=$?
+assert_exit "session-start: 恢复候选上下文 → exit 0" 0 "$rc"
+assert_contains "session-start: 仍列出活跃候选供用户识别" "$out" "selected（track=frontend, phase=build）"
+assert_contains "session-start: 声明候选未自动绑定" "$out" "未与本会话自动绑定"
+assert_not_contains "session-start: 不注入 repo 级 active-task 标签" "$out" "pipeline-active-task"
+assert_not_contains "session-start: 不注入服务端保存的旧任务提示词" "$out" "实现登录页响应式布局"
+
 # fail-open：把 session-start + verify-skills 拷进悬空 sandbox，verify 必红但 hook 不阻断
 mkdir -p "$SB/tools"
 cp "$SS" "$SB/hooks/session-start.sh"
@@ -323,9 +424,6 @@ err="$(cat "$TMP/ss2.err")"
 assert_contains "session-start: verify 失败 → stderr 有警告" "$err" "警告"
 
 # ─────────────── 8. SessionStart 三注入（BACKLOG #20：宪法 / pipeline 上下文 / openspec 提示） ───────────────
-assert_not_contains() { # desc haystack needle
-  case "$2" in *"$3"*) bad "$1" "输出不应包含「${3}」；实际输出：${2}" ;; *) ok "$1" ;; esac
-}
 
 # 8a. 宪法注入：templates/workflow.md 存在，且任意 cwd 下 stdout 都含 7 相位/三门/HITL/breadcrumb 关键词
 WF="$ROOT/templates/workflow.md"
@@ -354,10 +452,11 @@ assert_not_contains "三注入: archived change 不列出" "$out" "done-ss"
 assert_contains "三注入: 新鲜门 marker 列出（review）" "$out" "等:review"
 rm -f "$proj/.pipeline-pending-review"
 
-# 8b'. 上下文注入从子目录 cwd 也能上溯到项目根（与 gate/breadcrumb 上溯对称）
-mkdir -p "$proj/sub/deep"
+# 8b'. Git 项目子目录定位到项目根；非 Git 的嵌套目录必须显式 PIPELINE_PROJECT_ROOT，
+# 不能借共同父目录的 OpenSpec。
+mkdir -p "$proj/.git" "$proj/sub/deep"
 out="$(printf '{"cwd":"%s/sub/deep"}' "$proj" | bash "$SS" 2>/dev/null)"
-assert_contains "三注入: 子目录 cwd 上溯注入上下文" "$out" "demo-ss"
+assert_contains "三注入: Git 子目录注入项目根上下文" "$out" "demo-ss"
 
 # 8c. openspec 提示：openspec 目录存在 → 输出使用提示；无 pipeline 项目 → 无上下文/提示但宪法照常
 assert_contains "三注入: openspec 目录存在 → 使用提示" "$out" "openspec/changes/"
@@ -379,9 +478,9 @@ chmod 644 "$SB2/proj/openspec/changes/broken/.pipeline.yaml" 2>/dev/null || true
 assert_exit "三注入: 缺模板+烂 yaml → 全 fail-open exit 0" 0 "$rc"
 assert_contains "三注入: fail-open 时基础引导仍输出" "$out" "pipeline"
 
-# ═══════════════ 9. router.sh（BACKLOG #19：UserPromptSubmit Track 评分 + breadcrumb 注入） ═══════════════
-# 真实 e2e（C9）：真跑 router.sh 喂真 stdin JSON + 真 manifest 派生缓存（router-gen.mjs → kernel
-# genRouterSh/breadcrumbs/skillsFor），断言真输出。缓存机制 mtime-gated：命中缓存零 node spawn（红线自证）。
+# ═══════════════ 9. router.sh（T-R5：动态 registry + 项目级 data-only cache） ═══════════════
+# 真实 e2e：真跑 router.sh 喂真 stdin JSON + 真 manifest/effective registry 派生
+# PIPELINE_ROUTER_V2；覆盖动态排序、profile、失效、项目隔离与不执行项目 cache。
 R="$ROOT/hooks/router.sh"
 RGEN="$ROOT/hooks/router-gen.mjs"
 [ -f "$R" ]    && ok "router: hooks/router.sh 存在"          || bad "router: hooks/router.sh 存在" "缺文件"
@@ -389,7 +488,7 @@ RGEN="$ROOT/hooks/router-gen.mjs"
 [ -f "$RGEN" ] && ok "router: hooks/router-gen.mjs 存在（派生缓存生成器）" || bad "router: hooks/router-gen.mjs 存在（派生缓存生成器）" "缺文件"
 
 # run_router：喂 stdin JSON，隔离缓存路径，用真实 plugin root（含 templates/manifest.yaml）
-RCACHE="$TMP/router-cache.generated.sh"
+RCACHE="$TMP/router-cache.v2.data"
 run_router() { # $1=stdin-json [$2=cache-override] → 设 ROUT / RRC
   local cache="${2:-$RCACHE}"
   ROUT="$(printf '%s' "$1" | PIPELINE_ROUTER_CACHE="$cache" CLAUDE_PLUGIN_ROOT="$ROOT" bash "$R" 2>/dev/null)"
@@ -399,7 +498,7 @@ run_router() { # $1=stdin-json [$2=cache-override] → 设 ROUT / RRC
 # ── 9a. 红线自证（无条件跑）：HOT PATH 标记以下的**可执行**行（剥注释）零 node/python spawn ──
 below_exec="$(awk '/HOT PATH（每轮命中缓存/{f=1} f' "$R" | grep -vE '^[[:space:]]*#')"
 n="$(printf '%s' "$below_exec" | grep -c 'node' || true)"
-[ "$n" = "0" ] && ok "router 红线: HOT PATH 打分/source 段可执行行 grep node 为 0" || bad "router 红线: HOT PATH 打分/source 段可执行行 grep node 为 0" "实得 ${n} 行"
+[ "$n" = "0" ] && ok "router 红线: cache-load 后打分段可执行行 grep node 为 0" || bad "router 红线: cache-load 后打分段可执行行 grep node 为 0" "实得 ${n} 行"
 n="$(printf '%s' "$below_exec" | grep -c 'python' || true)"
 [ "$n" = "0" ] && ok "router 红线: HOT PATH 段无 python" || bad "router 红线: HOT PATH 段无 python" "实得 ${n} 行"
 # 打分段（score_track 起至 EOF）——评分逻辑本体绝无解释器 spawn
@@ -410,7 +509,7 @@ n="$(printf '%s' "$below_exec" | grep -c 'jq' || true)"
 [ "$n" = "0" ] && ok "router 红线: HOT PATH 段不依赖 jq" || bad "router 红线: HOT PATH 段不依赖 jq" "实得 ${n} 行"
 
 # ── 9b. 跳过规则（无条件；不触达 cache/node）：/命令 / L5 override / 讨论 / 自身回显 → exit 0 空输出 ──
-rproj="$TMP/router-skip"; mkdir -p "$rproj"
+rproj="$TMP/router-skip"; mkdir -p "$rproj/openspec/changes"
 run_router "{\"prompt\":\"/pipeline status\",\"cwd\":\"$rproj\"}"
 assert_exit "router: /命令 → exit 0" 0 "$RRC"; assert_empty "router: /命令 不注入" "$ROUT"
 run_router "{\"prompt\":\"快速修复一下这个 React 组件的样式\",\"cwd\":\"$rproj\"}"
@@ -424,29 +523,49 @@ assert_exit "router: 空 prompt → fail-safe exit 0" 0 "$RRC"; assert_empty "ro
 ( cd "$rproj" && printf 'not json at all' | PIPELINE_ROUTER_CACHE="$RCACHE" CLAUDE_PLUGIN_ROOT="$ROOT" bash "$R" >/dev/null 2>&1 )
 assert_exit "router: 非 JSON stdin → fail-open exit 0" 0 "$?"
 
-# ── 9c. fail-safe：patterns 未载入（缓存无 FE_PATTERN 且 fresh、不重生成）→ 不路由、非阻断 exit 0 ──
-EMPTY_CACHE="$TMP/router-empty.generated.sh"
-printf '# no patterns generated（模拟 manifest/node 坏）\n' > "$EMPTY_CACHE"
-touch "$EMPTY_CACHE"  # fresh：晚于 templates/manifest.yaml → router 不触发重生成，直接 source 空缓存
-run_router "{\"prompt\":\"帮我写个 React 组件响应式页面 UI\",\"cwd\":\"$rproj\"}" "$EMPTY_CACHE"
-assert_exit "router: patterns 未载入 → fail-safe exit 0（非阻断）" 0 "$RRC"
-assert_empty "router: patterns 未载入 → 不路由（无 workflow-state）" "$ROUT"
+# ── 9c. fail-safe：畸形 cache + manifest/generator 都不可用 → 不消费 cache、非阻断 exit 0 ──
+EMPTY_CACHE="$TMP/router-empty.v2.data"
+printf 'PIPELINE_ROUTER_V2\n# malformed\n' > "$EMPTY_CACHE"
+BROKEN_PLUGIN="$TMP/router-broken-plugin"; mkdir -p "$BROKEN_PLUGIN/templates"
+ROUT="$(printf '%s' "{\"prompt\":\"帮我写个 React 组件响应式页面 UI\",\"cwd\":\"$rproj\"}" | PIPELINE_ROUTER_CACHE="$EMPTY_CACHE" CLAUDE_PLUGIN_ROOT="$BROKEN_PLUGIN" bash "$R" 2>/dev/null)"
+RRC=$?
+assert_exit "router: 畸形 cache + 生成不可用 → fail-safe exit 0（非阻断）" 0 "$RRC"
+assert_empty "router: 畸形 cache + 生成不可用 → 不路由" "$ROUT"
 
 # ── 9d. 需 node 的真实派生 + 评分 + 注入 + 缓存红线（node 不可用则跳过，语义同 section 6） ──
 if command -v node >/dev/null 2>&1; then
   rm -f "$RCACHE"
-  # 首轮：无缓存 → router 经 router-gen.mjs 真派生缓存（消费 kernel genRouterSh/breadcrumbs/skillsFor）
+  # 首轮：无缓存 → router 经生成器真派生 data-only cache（effective registry + manifest profile skills）
   run_router "{\"prompt\":\"帮我实现一个 React 组件，做个响应式页面 UI\",\"cwd\":\"$rproj\"}"
   assert_exit "router: FE prompt → exit 0" 0 "$RRC"
   assert_contains "router: FE 特征 prompt → 选 frontend Track" "$ROUT" "track=frontend"
   [ -f "$RCACHE" ] && ok "router: 首轮无缓存 → 派生缓存已生成" || bad "router: 首轮无缓存 → 派生缓存已生成" "缓存未生成"
-  # 单一真相源实证：缓存 FE_PATTERN 逐字来自 manifest（非硬编码兜底）——含 manifest 独有 token「响应式」
-  assert_contains "router: 缓存派生自真实 manifest（含独有 token 响应式）" "$(cat "$RCACHE" 2>/dev/null)" "响应式"
+  assert_contains "router: 缓存 schema 为 PIPELINE_ROUTER_V2" "$(cat "$RCACHE" 2>/dev/null)" "PIPELINE_ROUTER_V2"
+  assert_not_contains "router: data cache 不含可 source 的 FE_PATTERN 赋值" "$(cat "$RCACHE" 2>/dev/null)" "FE_PATTERN="
+  assert_not_contains "router: 自由字符串 hex 编码，缓存不裸露 manifest token" "$(cat "$RCACHE" 2>/dev/null)" "响应式"
+  # Codex 原生 plugin 只注入 PLUGIN_ROOT；用 hooks.json 中的同一 shell 模板真跑一次，
+  # 防止 marketplace 安装成功但正常对话的 default dispatch 因 CLAUDE_PLUGIN_ROOT 缺失而静默失效。
+  ROUT="$(printf '%s' "{\"prompt\":\"帮我实现一个 React 组件，做个响应式页面 UI\",\"cwd\":\"$rproj\"}" | PIPELINE_ROUTER_CACHE="$RCACHE" PLUGIN_ROOT="$ROOT" CLAUDE_PLUGIN_ROOT='' bash -c 'bash "${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-}}/hooks/router.sh"' 2>/dev/null)"
+  RRC=$?
+  assert_exit "router: Codex PLUGIN_ROOT-only hook → exit 0" 0 "$RRC"
+  assert_contains "router: Codex PLUGIN_ROOT-only hook → default dispatch" "$ROUT" "<pipeline-dispatch>"
+  assert_contains "router: Codex PLUGIN_ROOT-only hook → frontend track" "$ROUT" "track=frontend"
   # BE / PM 特征 prompt
   run_router "{\"prompt\":\"设计一个后端 API 接口，接 Postgres 数据库，写 service 层\",\"cwd\":\"$rproj\"}"
   assert_contains "router: BE 特征 prompt → 选 backend Track" "$ROUT" "track=backend"
   run_router "{\"prompt\":\"帮我做竞品调研，写 PRD 需求文档，梳理用户旅程\",\"cwd\":\"$rproj\"}"
   assert_contains "router: PM 特征 prompt → 选 pm Track" "$ROUT" "track=pm"
+
+  # 根隔离回归：/tmp 父目录恰好有另一个 OpenSpec 时，非 Git 子目录必须把自己当 bootstrap
+  # 根，正常对话仍走 default dispatch，但绝不能借用父项目的 change/phase/tasks。
+  foreign_root="$TMP/router-foreign-parent"
+  isolated_child="$foreign_root/isolated-child"
+  mkdir -p "$foreign_root/openspec/changes/foreign-change" "$isolated_child"
+  printf 'track: backend\nphase: build\narchived: false\n' > "$foreign_root/openspec/changes/foreign-change/.pipeline.yaml"
+  run_router "{\"prompt\":\"帮我实现一个 React 组件，做个响应式页面 UI\",\"cwd\":\"$isolated_child\"}" "$TMP/router-root-boundary.cache"
+  assert_contains "router: 非 Git 子目录仍触发 default pipeline dispatch" "$ROUT" "<pipeline-dispatch>"
+  assert_contains "router: 非 Git 子目录 default workflow 从 open 起步" "$ROUT" "phase: open"
+  assert_not_contains "router: 不借父目录 foreign change" "$ROUT" "foreign-change"
 
   # breadcrumb 注入含相位 + 该 phase×track 推荐/强制 skill（活跃 change phase=build, track=frontend）
   rc2="$TMP/router-active"; mkdir -p "$rc2/openspec/changes/demo"
@@ -458,6 +577,40 @@ if command -v node >/dev/null 2>&1; then
   assert_contains "router: 注入含该相位 breadcrumb 行动提示（build 含 TDD）" "$ROUT" "TDD"
   assert_contains "router: 注入含推荐 skill（build.frontend）" "$ROUT" "推荐 skill"
   assert_contains "router: 注入含 build.frontend 推荐 skill token（react-patterns）" "$ROUT" "react-patterns"
+
+  # repo 级 `.pipeline-active` 只是恢复候选，不能劫持另一会话中的明确新主题。
+  # 回归用户真实场景：旧 change 是 normal-chat 编排修复，新输入则是独立的 SkillHub 调研。
+  rc_new_topic="$TMP/router-new-topic"; mkdir -p "$rc_new_topic/openspec/changes/normal-chat-default-orchestration"
+  printf 'track: backend\nphase: spec\narchived: \n' > "$rc_new_topic/openspec/changes/normal-chat-default-orchestration/.pipeline.yaml"
+  printf 'normal-chat-default-orchestration\n' > "$rc_new_topic/.pipeline-active"
+  run_router "{\"prompt\":\"我现在想要调研一个 SkillHub 项目\",\"cwd\":\"$rc_new_topic\"}"
+  assert_contains "router: 明确新调研主题仍选 pm Track" "$ROUT" "track: pm"
+  assert_contains "router: 明确新调研主题从 open 分派" "$ROUT" "phase: open"
+  assert_contains "router: 明确新调研主题标记 new intent" "$ROUT" "intent: new"
+  assert_not_contains "router: 明确新调研主题不绑定 repo 级旧 change" "$ROUT" "change: normal-chat-default-orchestration"
+
+  # 明确 session 指针必须覆盖 mtime 选择；这是 dashboard “创建并开始会话”真正接上
+  # UserPromptSubmit 路由的回归钉子，不依赖人工观察 UI。
+  rc_active="$TMP/router-active-pointer"
+  mkdir -p "$rc_active/openspec/changes/selected" "$rc_active/openspec/changes/newer"
+  printf 'track: frontend\nphase: build\narchived: \n' > "$rc_active/openspec/changes/selected/.pipeline.yaml"
+  printf 'track: backend\nphase: build\narchived: \n' > "$rc_active/openspec/changes/newer/.pipeline.yaml"
+  touch -t 202001010000 "$rc_active/openspec/changes/selected/.pipeline.yaml"
+  printf 'selected\n' > "$rc_active/.pipeline-active"
+  run_router "{\"prompt\":\"继续实现登录页面的 React 组件\",\"cwd\":\"$rc_active\"}"
+  assert_contains "router: session 指针覆盖 mtime，注入选中的 change" "$ROUT" "change=selected"
+  assert_contains "router: session 指针保留选中 change 的 phase" "$ROUT" "phase=build"
+
+  rc_ambiguous="$TMP/router-ambiguous-resume"
+  mkdir -p "$rc_ambiguous/openspec/changes/older" "$rc_ambiguous/openspec/changes/newer"
+  printf 'track: frontend\nphase: build\narchived: \n' > "$rc_ambiguous/openspec/changes/older/.pipeline.yaml"
+  printf 'track: backend\nphase: verify\narchived: \n' > "$rc_ambiguous/openspec/changes/newer/.pipeline.yaml"
+  touch -t 202001010000 "$rc_ambiguous/openspec/changes/older/.pipeline.yaml"
+  run_router "{\"prompt\":\"继续实现一个 React 页面\",\"cwd\":\"$rc_ambiguous\"}"
+  assert_contains "router: 多个候选的泛化继续进入选择 intent" "$ROUT" "intent: select"
+  assert_contains "router: 多个候选的泛化继续派发 select phase" "$ROUT" "phase: select"
+  assert_not_contains "router: 多个候选的泛化继续不按 mtime 选 older" "$ROUT" "change: older"
+  assert_not_contains "router: 多个候选的泛化继续不按 mtime 选 newer" "$ROUT" "change: newer"
 
   # ── 9d'. 自定义 workflow step id（Task 11 修复目标）：phase 不在 7 个固定值内 → 不许被白名单
   # case 静默吞成 open，HDR 的 phase= 字段必须真是该自定义值（否则自定义 workflow 的
@@ -516,6 +669,119 @@ if command -v node >/dev/null 2>&1; then
   ROUT="$(printf '{"prompt":"帮我写个 React 组件页面 UI","cwd":"%s"}' "$rproj" | PATH="$FB:$PATH" PIPELINE_ROUTER_CACHE="$RCACHE" CLAUDE_PLUGIN_ROOT="$ROOT" bash "$R" 2>/dev/null)"
   [ ! -f "$TMP/NODE_CALLED" ] && ok "router 红线: 命中缓存时零 node spawn（假 node sentinel 未落）" || bad "router 红线: 命中缓存时零 node spawn（假 node sentinel 未落）" "cache-hit 竟 spawn 了 node"
   assert_contains "router: 命中缓存（无 node）仍纯 bash 正确评分 frontend" "$ROUT" "track=frontend"
+
+  write_router_track() { # root id pattern priority profile matrix
+    mkdir -p "$1/.pipeline" "$1/openspec/changes"
+    printf "version: 1\ntracks:\n  - id: %s\n    label: %s\n    workflow:\n      default: default\n      allowed: '*'\n    policy_profile:\n      review_seed: pending\n      automation_eligible: true\n      coverage_profile: backend\n      routing:\n        enabled: true\n        pattern: '%s'\n        priority: %s\n      skills:\n        matrix: %s\n        profile: %s\n" \
+      "$2" "$2" "$3" "$4" "$6" "$5" > "$1/.pipeline/tracks.yaml"
+  }
+  write_router_tie_tracks() { # root alpha-priority beta-priority
+    mkdir -p "$1/.pipeline" "$1/openspec/changes"
+    printf "version: 1\ntracks:\n  - id: alpha-lane\n    label: Alpha\n    workflow:\n      default: default\n      allowed: '*'\n    policy_profile:\n      review_seed: pending\n      automation_eligible: true\n      coverage_profile: backend\n      routing:\n        enabled: true\n        pattern: '(tie-route-token)'\n        priority: %s\n      skills:\n        matrix: true\n        profile: backend\n  - id: beta-lane\n    label: Beta\n    workflow:\n      default: default\n      allowed: '*'\n    policy_profile:\n      review_seed: pending\n      automation_eligible: true\n      coverage_profile: backend\n      routing:\n        enabled: true\n        pattern: '(tie-route-token)'\n        priority: %s\n      skills:\n        matrix: true\n        profile: backend\n" \
+      "$2" "$3" > "$1/.pipeline/tracks.yaml"
+  }
+
+  # 动态评分：同 score 先比 priority；score/priority 都同则 registry 声明在前者胜。
+  tieproj="$TMP/router-tie"
+  tiecache="$TMP/router-tie.v2.data"
+  write_router_tie_tracks "$tieproj" 700 701
+  run_router "{\"prompt\":\"tie-route-token\",\"cwd\":\"$tieproj\"}" "$tiecache"
+  assert_contains "router: 同 score 时 priority 高的 beta 胜" "$ROUT" "track=beta-lane"
+  write_router_tie_tracks "$tieproj" 700 700
+  touch -t 203001010000 "$tieproj/.pipeline/tracks.yaml"
+  run_router "{\"prompt\":\"tie-route-token\",\"cwd\":\"$tieproj\"}" "$tiecache"
+  assert_contains "router: 同 score/priority 时 registry 声明在前的 alpha 胜" "$ROUT" "track=alpha-lane"
+
+  # 任意合法 id + profile 继承；matrix=false 只影响矩阵展示，不得禁 router。
+  profileproj="$TMP/router-profile"
+  profilecache="$TMP/router-profile.v2.data"
+  write_router_track "$profileproj" designer-mobile '(mobile-route-token)' 901 backend false
+  mkdir -p "$profileproj/openspec/changes/demo"
+  printf 'track: designer-mobile\nphase: explore\narchived: \n' > "$profileproj/openspec/changes/demo/.pipeline.yaml"
+  run_router "{\"prompt\":\"继续处理 mobile-route-token\",\"cwd\":\"$profileproj\"}" "$profilecache"
+  assert_contains "router: matrix=false 的 custom id 仍动态命中" "$ROUT" "track=designer-mobile"
+  assert_contains "router: 显示 custom track id 但技能继承 backend profile" "$ROUT" "improve-codebase-architecture"
+  assert_contains "router: inherited backend profile 的 recommended skill 生效" "$ROUT" "search-first"
+
+  # stale + 生成失败必须 fail-closed：旧 cache 留盘也不得在本轮消费。
+  staleproj="$TMP/router-stale-failure"
+  stalecache="$TMP/router-stale-failure.v2.data"
+  write_router_track "$staleproj" stale-lane '(stale-route-token)' 950 backend true
+  run_router "{\"prompt\":\"stale-route-token\",\"cwd\":\"$staleproj\"}" "$stalecache"
+  assert_contains "router: stale-failure 前置 cache 真含旧 custom route" "$ROUT" "track=stale-lane"
+  write_router_track "$staleproj" stale-lane '(fresh-route-token)' 950 backend true
+  touch -t 203001010000 "$staleproj/.pipeline/tracks.yaml"
+  STALE_FB="$TMP/router-stale-fakebin"; mkdir -p "$STALE_FB"
+  printf '#!/bin/sh\ntouch "%s/STALE_NODE_CALLED"\nexit 1\n' "$TMP" > "$STALE_FB/node"; chmod +x "$STALE_FB/node"
+  rm -f "$TMP/STALE_NODE_CALLED"
+  ROUT="$(printf '{"prompt":"stale-route-token","cwd":"%s"}' "$staleproj" | PATH="$STALE_FB:$PATH" PIPELINE_ROUTER_CACHE="$stalecache" CLAUDE_PLUGIN_ROOT="$ROOT" bash "$R" 2>/dev/null)"
+  [ -f "$TMP/STALE_NODE_CALLED" ] && ok "router: tracks 更新使 cache stale，真尝试冷生成" || bad "router: tracks 更新使 cache stale，真尝试冷生成" "node sentinel 未调用"
+  assert_empty "router: stale 生成失败本轮绝不消费旧 cache" "$ROUT"
+  [ -f "$stalecache" ] && ok "router: 失败后旧 cache 可留盘诊断" || bad "router: 失败后旧 cache 可留盘诊断" "旧 cache 被破坏性删除"
+
+  # tracks.yaml 删除也是 stale（存在性位变化），须回到 builtin 四轨，不能沿用 custom。
+  deleteproj="$TMP/router-tracks-delete"
+  deletecache="$TMP/router-tracks-delete.v2.data"
+  write_router_track "$deleteproj" deleted-lane '(deleted-route-token)' 960 backend true
+  run_router "{\"prompt\":\"deleted-route-token\",\"cwd\":\"$deleteproj\"}" "$deletecache"
+  assert_contains "router: tracks 删除前 custom route 可命中" "$ROUT" "track=deleted-lane"
+  rm -f "$deleteproj/.pipeline/tracks.yaml"
+  run_router "{\"prompt\":\"deleted-route-token\",\"cwd\":\"$deleteproj\"}" "$deletecache"
+  assert_empty "router: tracks.yaml 删除后旧 custom route 不再命中" "$ROUT"
+  run_router "{\"prompt\":\"React 页面组件\",\"cwd\":\"$deleteproj\"}" "$deletecache"
+  assert_contains "router: tracks.yaml 缺失恢复 builtin 四轨等价行为" "$ROUT" "track=frontend"
+
+  # 默认缓存必须项目内隔离；A 的 custom cache 绝不串给无 tracks.yaml 的 B。
+  aproj="$TMP/router-project-a"; bproj="$TMP/router-project-b"
+  write_router_track "$aproj" security-lane '(security-route-token)' 970 backend true
+  mkdir -p "$bproj/openspec/changes" "$TMP/router-home"
+  ROUT="$(printf '{"prompt":"security-route-token","cwd":"%s"}' "$aproj" | (unset PIPELINE_ROUTER_CACHE; HOME="$TMP/router-home" CLAUDE_PLUGIN_ROOT="$ROOT" bash "$R") 2>/dev/null)"
+  assert_contains "router: 项目 A custom route 可命中" "$ROUT" "track=security-lane"
+  [ -f "$aproj/.pipeline/cache/router.v2.data" ] && ok "router: 默认 cache 落项目 A 内" || bad "router: 默认 cache 落项目 A 内" "项目 cache 缺失"
+  ROUT="$(printf '{"prompt":"security-route-token","cwd":"%s"}' "$bproj" | (unset PIPELINE_ROUTER_CACHE; HOME="$TMP/router-home" CLAUDE_PLUGIN_ROOT="$ROOT" bash "$R") 2>/dev/null)"
+  assert_empty "router: 项目 B 从未消费项目 A custom cache" "$ROUT"
+  [ -f "$bproj/.pipeline/cache/router.v2.data" ] && ok "router: 项目 B 有独立 cache" || bad "router: 项目 B 有独立 cache" "B cache 缺失"
+
+  # 即使测试显式复用同一 override 槽，metadata canonical root mismatch 也必须使 B 重生成。
+  sharedcache="$TMP/router-shared-root.v2.data"
+  run_router "{\"prompt\":\"security-route-token\",\"cwd\":\"$aproj\"}" "$sharedcache"
+  assert_contains "router: shared override 先绑定项目 A canonical root" "$ROUT" "track=security-lane"
+  run_router "{\"prompt\":\"security-route-token\",\"cwd\":\"$bproj\"}" "$sharedcache"
+  assert_empty "router: shared override 的 root mismatch 不消费 A 数据" "$ROUT"
+
+  # 无 tracks 的 builtin cache 之后首次创建 tracks.yaml：存在性位变化必须立即失效。
+  createproj="$TMP/router-tracks-create"; createcache="$TMP/router-tracks-create.v2.data"
+  mkdir -p "$createproj/openspec/changes"
+  run_router "{\"prompt\":\"React 页面组件\",\"cwd\":\"$createproj\"}" "$createcache"
+  assert_contains "router: tracks 创建前 builtin cache 可用" "$ROUT" "track=frontend"
+  write_router_track "$createproj" created-lane '(created-route-token)' 980 backend true
+  run_router "{\"prompt\":\"created-route-token\",\"cwd\":\"$createproj\"}" "$createcache"
+  assert_contains "router: tracks.yaml 首次创建使 builtin cache stale" "$ROUT" "track=created-lane"
+
+  # 直接篡改项目 cache 放 command substitution：只能成为畸形数据，不得执行。
+  injectproj="$TMP/router-cache-injection"; injectcache="$TMP/router-injection.v2.data"
+  mkdir -p "$injectproj/openspec/changes"
+  printf 'PIPELINE_ROUTER_V2\nM|00|%064d|0123456789abcdef|0\n$(touch "%s")\n' 0 "$TMP/CACHE_PWNED" > "$injectcache"
+  touch "$injectcache"
+  INTERP_FB="$TMP/router-interpreter-fakebin"; mkdir -p "$INTERP_FB"
+  for interp in node python python3 jq; do
+    printf '#!/bin/sh\ntouch "%s/INTERPRETER_CALLED"\nexit 1\n' "$TMP" > "$INTERP_FB/$interp"
+    chmod +x "$INTERP_FB/$interp"
+  done
+  rm -f "$TMP/CACHE_PWNED" "$TMP/INTERPRETER_CALLED"
+  ROUT="$(printf '{"prompt":"React 页面组件","cwd":"%s"}' "$injectproj" | PATH="$INTERP_FB:$PATH" PIPELINE_ROUTER_CACHE="$injectcache" CLAUDE_PLUGIN_ROOT="$ROOT" bash "$R" 2>/dev/null)"
+  [ ! -f "$TMP/CACHE_PWNED" ] && ok "router 安全: 篡改 cache 的 \$() 从不执行" || bad "router 安全: 篡改 cache 的 \$() 从不执行" "CACHE_PWNED sentinel 被创建"
+  assert_empty "router 安全: 畸形 cache 且重生成失败时零注入" "$ROUT"
+
+  # 真 cache-hit 同时 shadow node/python/python3/jq：四者都不得触达，路由仍工作。
+  hitproj="$TMP/router-cache-hit"; hitcache="$TMP/router-cache-hit.v2.data"
+  mkdir -p "$hitproj/openspec/changes"
+  run_router "{\"prompt\":\"React 页面组件\",\"cwd\":\"$hitproj\"}" "$hitcache"
+  assert_contains "router: interpreter sentinel 前置 cache 已生成" "$ROUT" "track=frontend"
+  rm -f "$TMP/INTERPRETER_CALLED"
+  ROUT="$(printf '{"prompt":"React 页面组件","cwd":"%s"}' "$hitproj" | PATH="$INTERP_FB:$PATH" PIPELINE_ROUTER_CACHE="$hitcache" CLAUDE_PLUGIN_ROOT="$ROOT" bash "$R" 2>/dev/null)"
+  [ ! -f "$TMP/INTERPRETER_CALLED" ] && ok "router 红线: cache-hit 零 node/python/python3/jq" || bad "router 红线: cache-hit 零 node/python/python3/jq" "解释器 sentinel 被调用"
+  assert_contains "router: cache-hit 无解释器仍正确路由" "$ROUT" "track=frontend"
 else
   printf 'skip - node 不可用，跳过 router 真实派生/评分/缓存红线（同 section 6 语义）\n'
 fi
@@ -524,12 +790,13 @@ fi
 # 真实 e2e（C9）：真跑每个 hook 喂真 stdin JSON，断言真副作用（marker 真被清 / JSONL 真 append 一行
 # 合法 JSON / interactive-gate 真输出姿态）。四脚本是 PostToolUse 热路径（每次工具后触发）→ 纯 bash 红线自证。
 CC="$ROOT/hooks/confirm-clear.sh"
+CP="$ROOT/hooks/confirm-clear-prompt.sh"
 DR="$ROOT/hooks/decision-recorder.sh"
 ST="$ROOT/hooks/skill-tracker.sh"
 IG="$ROOT/hooks/interactive-skill-gate.sh"
 
 # 存在 + 可执行（TDD 红阶段在此直接倒）
-for f in "$CC" "$DR" "$ST" "$IG"; do
+for f in "$CC" "$CP" "$DR" "$ST" "$IG"; do
   base="$(basename "$f")"
   [ -f "$f" ] && ok "PostToolUse: $base 存在" || bad "PostToolUse: $base 存在" "缺文件"
   [ -x "$f" ] && ok "PostToolUse: $base 可执行" || bad "PostToolUse: $base 可执行" "无 x 位"
@@ -550,13 +817,21 @@ assert_exit "confirm-clear: exit 0" 0 "$RC"
 [ ! -f "$proj/.pipeline-pending-confirm" ] && ok "confirm-clear: 清 .pipeline-pending-confirm（任务硬要求）" || bad "confirm-clear: 清 .pipeline-pending-confirm（任务硬要求）" "marker 仍在"
 [ ! -f "$proj/.pipeline-pending-review" ] && ok "confirm-clear: 同清 review marker（faithful）" || bad "confirm-clear: 同清 review marker（faithful）" "marker 仍在"
 [ ! -f "$proj/.pipeline-pending-interaction" ] && ok "confirm-clear: 同清 interaction marker（解封交互门）" || bad "confirm-clear: 同清 interaction marker（解封交互门）" "marker 仍在"
-# 上溯：marker 在父目录（项目根），AskUserQuestion 的 cwd 是子目录 → 也清（治跨目录 desync，老仓语义）
-mkdir -p "$proj/sub/deep"; touch "$proj/.pipeline-pending-confirm"
+# Git 项目子目录的 AskUserQuestion 必须清项目根 marker；普通父目录不属于本项目、不能被清。
+mkdir -p "$proj/.git" "$proj/sub/deep"; touch "$proj/.pipeline-pending-confirm"
 printf '%s' "{\"cwd\":\"$proj/sub/deep\",\"tool_name\":\"AskUserQuestion\"}" | bash "$CC" >/dev/null 2>&1
-[ ! -f "$proj/.pipeline-pending-confirm" ] && ok "confirm-clear: 子目录 cwd 上溯清父目录 marker" || bad "confirm-clear: 子目录 cwd 上溯清父目录 marker" "父 marker 残留"
+[ ! -f "$proj/.pipeline-pending-confirm" ] && ok "confirm-clear: Git 子目录清项目根 marker" || bad "confirm-clear: Git 子目录清项目根 marker" "项目根 marker 残留"
 # fail-open：非 JSON stdin / 空 stdin → 静默 exit 0
 ( printf 'not json at all' | bash "$CC" >/dev/null 2>&1 ); assert_exit "confirm-clear: 非 JSON → exit 0" 0 "$?"
 ( printf '' | bash "$CC" >/dev/null 2>&1 ); assert_exit "confirm-clear: 空 stdin → exit 0" 0 "$?"
+
+# ── 10a'. UserPromptSubmit 真确认：Codex 普通对话没有 AskUserQuestion 时，也必须在下一条明确确认
+# 前清 marker；普通询问绝不能误解封（防这次 review marker 自锁回归）。──
+touch "$proj/.pipeline-pending-review"
+printf '%s' "{\"cwd\":\"$proj\",\"prompt\":\"为什么需要确认？\"}" | bash "$CP" >/dev/null 2>&1
+[ -f "$proj/.pipeline-pending-review" ] && ok "confirm-clear-prompt: 询问不误清 review marker" || bad "confirm-clear-prompt: 询问不误清 review marker" "marker 被错误清除"
+printf '%s' "{\"cwd\":\"$proj\",\"prompt\":\"确认继续，全部执行\"}" | bash "$CP" >/dev/null 2>&1
+[ ! -f "$proj/.pipeline-pending-review" ] && ok "confirm-clear-prompt: 明确确认自动清 review marker" || bad "confirm-clear-prompt: 明确确认自动清 review marker" "marker 仍在"
 
 # ── 10b. decision-recorder：AskUserQuestion 决策 append 进活跃 change 的 .pipeline-history.jsonl（kind=prompt）──
 proj="$TMP/ptu-dr"; mkdir -p "$proj/openspec/changes/demo"
@@ -634,6 +909,15 @@ if command -v node >/dev/null 2>&1; then
   assert_exit "interactive-skill-gate: 输出合法 JSON 且含 additionalContext" 0 "$?"
 fi
 [ -f "$proj/.pipeline-pending-interaction" ] && ok "interactive-skill-gate: 落 .pipeline-pending-interaction 硬门" || bad "interactive-skill-gate: 落 .pipeline-pending-interaction 硬门" "marker 未落"
+# 完整根边界闭环：子目录加载交互式 skill → marker 必须落 Git 项目根，gate 才能从同一子目录
+# 读取并拦截；AskUserQuestion 再由同一根定位清掉它。此前写在子目录而 gate 读项目根，硬门会失效。
+proj_root="$TMP/ptu-ig-root"; mkdir -p "$proj_root/.git" "$proj_root/sub/deep"
+OUT="$(printf '%s' "{\"cwd\":\"$proj_root/sub/deep\",\"tool_name\":\"Skill\",\"tool_input\":{\"skill\":\"superpowers:brainstorming\"}}" | bash "$IG" 2>/dev/null)"
+[ -f "$proj_root/.pipeline-pending-interaction" ] && ok "interactive-skill-gate: Git 子目录 marker 落项目根" || bad "interactive-skill-gate: Git 子目录 marker 落项目根" "项目根 marker 未落"
+run_gate "{\"cwd\":\"$proj_root/sub/deep\",\"tool_name\":\"Write\"}"
+assert_exit "interactive-skill-gate: 子目录 gate 读取同一项目根 marker → exit 2" 2 "$RC"
+printf '%s' "{\"cwd\":\"$proj_root/sub/deep\",\"tool_name\":\"AskUserQuestion\"}" | bash "$CC" >/dev/null 2>&1
+[ ! -f "$proj_root/.pipeline-pending-interaction" ] && ok "interactive-skill-gate: AskUserQuestion 清同一项目根 marker" || bad "interactive-skill-gate: AskUserQuestion 清同一项目根 marker" "项目根 marker 残留"
 # 裸名（无 plugin 前缀）也命中
 proj2="$TMP/ptu-ig-bare"; mkdir -p "$proj2"
 OUT="$(printf '%s' "{\"cwd\":\"$proj2\",\"tool_name\":\"Skill\",\"tool_input\":{\"skill\":\"brainstorming\"}}" | bash "$IG" 2>/dev/null)"
@@ -653,7 +937,7 @@ assert_exit "interactive-skill-gate: 非 Skill 工具 → exit 0" 0 "$RC"
 assert_empty "interactive-skill-gate: 非 Skill 工具 → 空输出" "$OUT"
 
 # ── 10e. 红线自证：四个 PostToolUse hook 是热路径（每次工具后触发）→ 纯 bash，零 node/python/jq ──
-for f in "$CC" "$DR" "$ST" "$IG"; do
+for f in "$CC" "$CP" "$DR" "$ST" "$IG"; do
   base="$(basename "$f")"
   n="$(grep -c "node" "$f" 2>/dev/null || true)";   [ "$n" = "0" ] && ok "红线: $base 内无 node" || bad "红线: $base 内无 node" "实得 ${n} 行"
   n="$(grep -c "python" "$f" 2>/dev/null || true)"; [ "$n" = "0" ] && ok "红线: $base 内无 python" || bad "红线: $base 内无 python" "实得 ${n} 行"
@@ -664,6 +948,7 @@ done
 HJ="$ROOT/hooks/hooks.json"
 hjson="$(cat "$HJ" 2>/dev/null)"
 assert_contains "hooks.json: 注册 confirm-clear.sh" "$hjson" "confirm-clear.sh"
+assert_contains "hooks.json: 注册 confirm-clear-prompt.sh" "$hjson" "confirm-clear-prompt.sh"
 assert_contains "hooks.json: 注册 decision-recorder.sh" "$hjson" "decision-recorder.sh"
 assert_contains "hooks.json: 注册 skill-tracker.sh" "$hjson" "skill-tracker.sh"
 assert_contains "hooks.json: 注册 interactive-skill-gate.sh" "$hjson" "interactive-skill-gate.sh"
@@ -713,15 +998,15 @@ proj="$TMP/hm-bc"; mkdir -p "$proj/openspec/changes/demo"
 printf 'track: backend\nphase: build\narchived: \n' > "$proj/openspec/changes/demo/.pipeline.yaml"
 printf 'CRUMB-HM\n' > "$proj/openspec/changes/demo/.breadcrumb"
 write_hooks_cfg "$proj" "breadcrumb.build"
-out="$(printf '{"cwd":"%s"}' "$proj" | bash "$BC" 2>/dev/null)"
+out="$(printf '{"prompt":"继续","cwd":"%s"}' "$proj" | bash "$BC" 2>/dev/null)"
 rc=$?
 assert_exit "开关: breadcrumb 当前阶段被禁用 → exit 0" 0 "$rc"
 assert_empty "开关: 禁用的 breadcrumb 零输出" "$out"
 write_hooks_cfg "$proj" "breadcrumb.open"
-out="$(printf '{"cwd":"%s"}' "$proj" | bash "$BC" 2>/dev/null)"
+out="$(printf '{"prompt":"继续","cwd":"%s"}' "$proj" | bash "$BC" 2>/dev/null)"
 assert_contains "开关: breadcrumb 仅它阶段被禁 → 本阶段照常输出" "$out" "CRUMB-HM"
 printf '{{{broken' > "$proj/.pipeline/hooks.json"
-out="$(printf '{"cwd":"%s"}' "$proj" | bash "$BC" 2>/dev/null)"
+out="$(printf '{"prompt":"继续","cwd":"%s"}' "$proj" | bash "$BC" 2>/dev/null)"
 assert_contains "开关: breadcrumb 配置损坏 → fail-open 照常输出" "$out" "CRUMB-HM"
 
 # ── 11c. session-start：当前阶段（mtime 最新活跃 change）被禁用 → exit 0 零输出 ──
@@ -743,18 +1028,18 @@ assert_contains "开关: session-start 配置损坏 → fail-open 照常注入" 
 rproj2="$TMP/hm-router"; mkdir -p "$rproj2/openspec/changes/demo"
 printf 'track: frontend\nphase: build\narchived: \n' > "$rproj2/openspec/changes/demo/.pipeline.yaml"
 write_hooks_cfg "$rproj2" "router.build"
-run_router "{\"prompt\":\"帮我实现一个 React 组件，做个响应式页面 UI\",\"cwd\":\"$rproj2\"}"
+run_router "{\"prompt\":\"继续实现一个 React 组件，做个响应式页面 UI\",\"cwd\":\"$rproj2\"}"
 assert_exit "开关: router 当前阶段被禁用 → exit 0" 0 "$RRC"
 assert_empty "开关: 禁用的 router 零注入" "$ROUT"
 # 禁用判定先于缓存重生成：shadow 假 node sentinel，禁用路径必须零 spawn
 FB2="$TMP/hm-router-fakebin"; mkdir -p "$FB2"
 printf '#!/bin/sh\ntouch "%s/HM_NODE_CALLED"\nexit 1\n' "$TMP" > "$FB2/node"; chmod +x "$FB2/node"
 rm -f "$TMP/HM_NODE_CALLED"
-printf '{"prompt":"帮我写个 React 页面 UI","cwd":"%s"}' "$rproj2" | PATH="$FB2:$PATH" PIPELINE_ROUTER_CACHE="$TMP/hm-router-cache.sh" CLAUDE_PLUGIN_ROOT="$ROOT" bash "$R" >/dev/null 2>&1
+printf '{"prompt":"继续帮我写个 React 页面 UI","cwd":"%s"}' "$rproj2" | PATH="$FB2:$PATH" PIPELINE_ROUTER_CACHE="$TMP/hm-router-cache.sh" CLAUDE_PLUGIN_ROOT="$ROOT" bash "$R" >/dev/null 2>&1
 [ ! -f "$TMP/HM_NODE_CALLED" ] && ok "开关红线: 禁用的 router 零 node spawn（判定先于缓存重生成）" || bad "开关红线: 禁用的 router 零 node spawn（判定先于缓存重生成）" "禁用路径竟 spawn 了 node"
 if command -v node >/dev/null 2>&1; then
   rm -f "$rproj2/.pipeline/hooks.json"
-  run_router "{\"prompt\":\"帮我实现一个 React 组件，做个响应式页面 UI\",\"cwd\":\"$rproj2\"}"
+  run_router "{\"prompt\":\"继续实现一个 React 组件，做个响应式页面 UI\",\"cwd\":\"$rproj2\"}"
   assert_contains "开关: router 删除配置（解禁）→ 恢复注入（对照组）" "$ROUT" "track=frontend"
 else
   printf 'skip - node 不可用，跳过 router 解禁对照组\n'
@@ -841,6 +1126,46 @@ for tool in find xargs jq; do
   n="$(grep -c "\\b${tool}\\b" "$SS" 2>/dev/null || true)"
   [ "$n" = "0" ] && ok "v6T5 红线: session-start.sh 不引入 ${tool}" || bad "v6T5 红线: session-start.sh 不引入 ${tool}" "实得 ${n} 处"
 done
+
+# ═════════════════════════════ 13. 打包插件自动更新（opt-in） ═════════════════════════════
+# 用假的 nohup 截获后台调用，验证这个 hook 本身不需要真实网络、也不会碰开发机的用户配置。
+AU="$ROOT/hooks/auto-update.sh"
+AU_ROOT="$TMP/auto-update-plugin"
+AU_CFG="$TMP/auto-update-config"
+AU_BIN="$TMP/auto-update-bin"
+AU_TRACE="$TMP/auto-update.trace"
+mkdir -p "$AU_ROOT/packages/cli/dist" "$AU_CFG/pipeline-lite" "$AU_BIN"
+printf '# fake bundled CLI\n' > "$AU_ROOT/packages/cli/dist/pipeline.mjs"
+cat > "$AU_BIN/nohup" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$AUTO_UPDATE_TRACE"
+EOF
+chmod +x "$AU_BIN/nohup"
+
+# No explicit preference is a no-op: session-start must never create surprise network traffic.
+PATH="$AU_BIN:$PATH" XDG_CONFIG_HOME="$AU_CFG" AUTO_UPDATE_TRACE="$AU_TRACE" bash "$AU" "$AU_ROOT" >/dev/null 2>&1
+assert_exit "auto-update: 未 opt-in → exit 0" 0 "$?"
+[ ! -f "$AU_TRACE" ] && ok "auto-update: 未 opt-in 不启动后台更新" || bad "auto-update: 未 opt-in 不启动后台更新" "意外调用了 nohup"
+
+# An unsupported adapter cannot be smuggled through the preference file.
+printf 'host=cursor\nenabled=true\n' > "$AU_CFG/pipeline-lite/auto-update.conf"
+PATH="$AU_BIN:$PATH" XDG_CONFIG_HOME="$AU_CFG" AUTO_UPDATE_TRACE="$AU_TRACE" bash "$AU" "$AU_ROOT" >/dev/null 2>&1
+assert_exit "auto-update: 非原生宿主配置 → exit 0" 0 "$?"
+[ ! -f "$AU_TRACE" ] && ok "auto-update: 非原生宿主不启动更新" || bad "auto-update: 非原生宿主不启动更新" "意外调用了 nohup"
+
+# Valid Codex opt-in launches the exact non-interactive update command once, then the daily stamp
+# suppresses an immediate duplicate SessionStart invocation.
+printf 'host=codex\nenabled=true\n' > "$AU_CFG/pipeline-lite/auto-update.conf"
+PATH="$AU_BIN:$PATH" XDG_CONFIG_HOME="$AU_CFG" AUTO_UPDATE_TRACE="$AU_TRACE" bash "$AU" "$AU_ROOT" >/dev/null 2>&1
+assert_exit "auto-update: Codex opt-in → exit 0" 0 "$?"
+for _i in 1 2 3 4 5 6 7 8 9 10; do [ -f "$AU_TRACE" ] && break; sleep 0.05; done
+trace="$(cat "$AU_TRACE" 2>/dev/null || true)"
+assert_contains "auto-update: 后台命令带 --codex --yes --auto" "$trace" "update --codex --yes --auto"
+assert_contains "auto-update: 后台命令设置内部标记" "$trace" "PIPELINE_AUTO_UPDATE=1"
+PATH="$AU_BIN:$PATH" XDG_CONFIG_HOME="$AU_CFG" AUTO_UPDATE_TRACE="$AU_TRACE" bash "$AU" "$AU_ROOT" >/dev/null 2>&1
+assert_exit "auto-update: 当日重复 SessionStart → exit 0" 0 "$?"
+trace_lines="$(wc -l < "$AU_TRACE" | tr -d ' ')"
+[ "$trace_lines" = "1" ] && ok "auto-update: 当日只启动一次" || bad "auto-update: 当日只启动一次" "nohup 调用次数=${trace_lines}"
 
 # ───────────────────────── 汇总 ─────────────────────────
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"

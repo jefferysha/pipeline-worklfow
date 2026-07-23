@@ -14,6 +14,42 @@ export interface ChangeSnapshot {
   archived: string
   updated_at: string
   fields: Record<string, string | string[]>
+  /** OpenSpec tasks.md projected by the server onto ordered workflow phases. */
+  todo?: PipelineTodoProjection
+  /** Server-evaluated OpenSpec document contract evidence. */
+  documents?: DocumentEvidenceSnapshot
+}
+
+export interface DocumentEvidenceSnapshot {
+  governed: boolean
+  phase?: string
+  ledgerPresent?: boolean
+  pass?: boolean
+  blockers: string[]
+  items: Array<{
+    kind: string
+    status: 'recorded' | 'missing' | 'stale' | 'unread'
+    requiredRead: boolean
+    paths: string[]
+    producers: string[]
+  }>
+}
+
+export interface PipelineTodoItem {
+  text: string
+  completed: boolean
+}
+
+export interface PipelineTodoStage {
+  id: string
+  label: string
+  status: 'done' | 'current' | 'pending'
+  tasks: PipelineTodoItem[]
+}
+
+export interface PipelineTodoProjection {
+  hasTaskSource: boolean
+  stages: PipelineTodoStage[]
 }
 
 /** 单个已注册 Project 的聚合。 */
@@ -39,9 +75,6 @@ export interface Snapshot {
 
 export const PHASES = ['open', 'explore', 'spec', 'build', 'verify', 'ship', 'archive'] as const
 export type Phase = (typeof PHASES)[number]
-
-export const TRACKS = ['chat', 'pm', 'frontend', 'backend'] as const
-export type Track = (typeof TRACKS)[number]
 
 /**
  * review-gate 阶段（manifest review_phases 镜像）：进入这些阶段即落复核门 marker，

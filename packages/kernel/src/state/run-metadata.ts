@@ -1,0 +1,142 @@
+/**
+ * .pipeline.yaml 内部提交元数据的核心三行 + 可选 policy/loop/iteration 序列化/解析，以及 transition 前后
+ * PipelineState.fields 的真实字段级 diff（TransitionRecord.effects 的唯一来源——调用方不猜测
+ * 传入，repository 自己 diff，避免两处各自实现一份再悄悄漂移）。
+ *
+ * 核心三行固定顺序、要么全有要么全无；policy 是第四行，governed identity 是与 policy 绑定的
+ * 第五/六行。损坏的可选尾部不获授权语义，仍交给 opaqueTail 保留。
+ */
+import type { FieldName, RunMetadata, StateProjectionMetadata } from '../types.js'
+import { validateAutomationPolicySnapshot } from '../loops/automation-policy.js'
+
+const RUN_ID_KEY = 'pipeline_run_id'
+const SEQUENCE_KEY = 'pipeline_transition_sequence'
+const HEAD_KEY = 'pipeline_transition_head'
+const POLICY_KEY = 'pipeline_automation_policy_b64'
+const LOOP_ID_KEY = 'pipeline_loop_id'
+const ITERATION_ID_KEY = 'pipeline_iteration_id'
+const STATE_REVISION_KEY = 'pipeline_state_revision'
+const STATE_REVISION_ID_KEY = 'pipeline_state_revision_id'
+const STATE_DIGEST_KEY = 'pipeline_state_digest'
+const NULL_LITERAL = 'null'
+
+export function serializeRunMetadataLines(metadata: RunMetadata | undefined): string[] {
+  if (!metadata) return []
+  const lines = [
+    `${RUN_ID_KEY}: ${metadata.runId}`,
+    `${SEQUENCE_KEY}: ${metadata.transitionSequence}`,
+    `${HEAD_KEY}: ${metadata.transitionHead ?? NULL_LITERAL}`,
+  ]
+  if (metadata.automationPolicy !== undefined) {
+    lines.push(`${POLICY_KEY}: ${Buffer.from(JSON.stringify(metadata.automationPolicy)).toString('base64url')}`)
+    if (metadata.loopId !== undefined && metadata.iterationId !== undefined) {
+      lines.push(`${LOOP_ID_KEY}: ${metadata.loopId}`)
+      lines.push(`${ITERATION_ID_KEY}: ${metadata.iterationId}`)
+    }
+  }
+  return lines
+}
+
+export interface ParseRunMetadataResult {
+  metadata?: RunMetadata
+  /** 成功解析时为 3、4 或 6，未识别核心三行时为 0。 */
+  consumedLines: number
+}
+
+/** 从 `lines` 开头尝试解析固定三行元数据块；不匹配（含损坏/截断）→ {metadata: undefined, consumedLines: 0}。 */
+export function parseRunMetadataLines(lines: readonly string[]): ParseRunMetadataResult {
+  const NOT_FOUND: ParseRunMetadataResult = { metadata: undefined, consumedLines: 0 }
+  const l0 = lines[0]
+  const l1 = lines[1]
+  const l2 = lines[2]
+  if (l0 === undefined || l1 === undefined || l2 === undefined) return NOT_FOUND
+  const runId = matchLine(l0, RUN_ID_KEY)
+  const sequenceRaw = matchLine(l1, SEQUENCE_KEY)
+  const headRaw = matchLine(l2, HEAD_KEY)
+  if (runId === undefined || sequenceRaw === undefined || headRaw === undefined) return NOT_FOUND
+  const transitionSequence = Number(sequenceRaw)
+  if (!Number.isInteger(transitionSequence) || transitionSequence < 0) return NOT_FOUND
+  const metadata: RunMetadata = {
+    runId,
+    transitionSequence,
+    transitionHead: headRaw === NULL_LITERAL ? undefined : headRaw,
+  }
+  const policyRaw = lines[3] === undefined ? undefined : matchLine(lines[3], POLICY_KEY)
+  if (policyRaw !== undefined) {
+    try {
+      metadata.automationPolicy = validateAutomationPolicySnapshot(
+        JSON.parse(Buffer.from(policyRaw, 'base64url').toString('utf8')),
+      )
+      const loopId = lines[4] === undefined ? undefined : matchLine(lines[4], LOOP_ID_KEY)
+      const iterationId = lines[5] === undefined ? undefined : matchLine(lines[5], ITERATION_ID_KEY)
+      if (loopId !== undefined && iterationId !== undefined
+        && loopId === metadata.automationPolicy.loop_id && iterationId.length > 0) {
+        metadata.loopId = loopId
+        metadata.iterationId = iterationId
+        return { metadata, consumedLines: 6 }
+      }
+      return { metadata, consumedLines: 4 }
+    } catch {
+      // Leave a malformed fourth line untouched in opaqueTail.
+    }
+  }
+  return { metadata, consumedLines: 3 }
+}
+
+export function serializeProjectionMetadataLines(metadata: StateProjectionMetadata | undefined): string[] {
+  if (!metadata) return []
+  return [
+    `${STATE_REVISION_KEY}: ${metadata.stateRevision}`,
+    `${STATE_REVISION_ID_KEY}: ${metadata.stateRevisionId}`,
+    `${STATE_DIGEST_KEY}: ${metadata.stateDigest}`,
+  ]
+}
+
+export interface ParseProjectionMetadataResult {
+  metadata?: StateProjectionMetadata
+  consumedLines: number
+}
+
+export function parseProjectionMetadataLines(lines: readonly string[]): ParseProjectionMetadataResult {
+  const revisionRaw = lines[0] === undefined ? undefined : matchLine(lines[0], STATE_REVISION_KEY)
+  const revisionId = lines[1] === undefined ? undefined : matchLine(lines[1], STATE_REVISION_ID_KEY)
+  const stateDigest = lines[2] === undefined ? undefined : matchLine(lines[2], STATE_DIGEST_KEY)
+  const stateRevision = Number(revisionRaw)
+  if (!Number.isSafeInteger(stateRevision) || stateRevision < 0
+    || revisionId === undefined || !/^[A-Za-z0-9_-]+$/.test(revisionId)
+    || stateDigest === undefined || !/^[0-9a-f]{64}$/.test(stateDigest)) {
+    return { metadata: undefined, consumedLines: 0 }
+  }
+  return { metadata: { stateRevision, stateRevisionId: revisionId, stateDigest }, consumedLines: 3 }
+}
+
+function matchLine(line: string, key: string): string | undefined {
+  const prefix = `${key}: `
+  return line.startsWith(prefix) ? line.slice(prefix.length) : undefined
+}
+
+function fieldValueEqual(a: string | readonly string[], b: string | readonly string[]): boolean {
+  if (Array.isArray(a) || Array.isArray(b)) {
+    if (!Array.isArray(a) || !Array.isArray(b)) return false
+    if (a.length !== b.length) return false
+    return a.every((v, i) => v === b[i])
+  }
+  return a === b
+}
+
+/** diff 两份 fields 快照，产出真实改动的字段列表（不猜测、不遗漏、不重复）。 */
+export function diffFieldsToEffects(
+  before: Record<FieldName, string | string[]>,
+  after: Record<FieldName, string | string[]>,
+): Array<{ kind: 'state-field-change'; field: FieldName; from: string | readonly string[]; to: string | readonly string[] }> {
+  const effects: Array<{ kind: 'state-field-change'; field: FieldName; from: string | readonly string[]; to: string | readonly string[] }> = []
+  const fields = new Set<FieldName>([...Object.keys(before), ...Object.keys(after)] as FieldName[])
+  for (const field of fields) {
+    const from = before[field] ?? ''
+    const to = after[field] ?? ''
+    if (!fieldValueEqual(from, to)) {
+      effects.push({ kind: 'state-field-change', field, from, to })
+    }
+  }
+  return effects
+}

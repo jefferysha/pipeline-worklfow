@@ -11,7 +11,7 @@ import {
   type ChannelEnv,
   type ChannelFs,
   type ProcessFace,
-} from '@pipeline-lite/kernel'
+} from '@pipeline-lite/channel'
 import type { CliDeps } from '../deps.js'
 import { cmdChannel, type ChannelHost } from './channel.js'
 

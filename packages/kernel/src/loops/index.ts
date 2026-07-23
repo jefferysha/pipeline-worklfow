@@ -8,7 +8,8 @@
  * 一律经 '@pipeline-lite/kernel' 包名导入。
  */
 export {
-  loadRegistry, parseLoopsYaml, validateSchema, LOOPS_SCHEMA, nodeLoopIo,
+  loadRegistry, parseLoopsYaml, validateSchema, LOOPS_SCHEMA, nodeLoopIo, nodeLoopIoStrict, RegistryReadError,
+  SKILL_BUNDLE_ID_RE,
 } from './registry.js'
 export type { LoopIo, YamlValue } from './registry.js'
 export {
@@ -35,7 +36,7 @@ export type {
   Verdict, Enforcement, VerdictReason, VerdictMetrics, LoopVerdict, RunFacts,
 } from './types.js'
 // v5 T20：runner 双支持数据面（编排页下拉双选项；LoopEntry.runner 本身仍是自由字符串）
-export { LOOP_RUNNERS } from './types.js'
+export { LOOP_RUNNERS, assertLoopRunner, isLoopRunner } from './types.js'
 export type { LoopRunner } from './types.js'
 // #38 分级放权 L1→L3 毕业制升降档裁决（GOAL B19 / D16）
 export {
@@ -57,3 +58,91 @@ export {
   createLoopsYamlText, appendLoopToYamlText,
 } from './update.js'
 export type { NewLoopEntryInput } from './update.js'
+// GOAL H1：loop durable ledger 存储面——typed 记录（判别联合）+ 单行 JSON 编解码（窄校验）
+// + 带锁原子 append store（复用 state/lock.ts）+ 宽容读 + run 窗口投影
+// H10 §3/§8任务3：新增 SkillBundleSnapshotRecord（skill bundle 内容快照事实，绑 attempt/reservation）
+export type {
+  BudgetExceedAction, LedgerRecordBase, ChangeLoopBindingRecord, BudgetReservationRecord, AttemptContextLedgerSnapshot,
+  SkillBundleSnapshotRecord, ReservationActivatedRecord, UsageRecord, MergeIntentRecord, MergeLandedRecord,
+  RunResult, RunRecord, LedgerRecord,
+} from './ledger-types.js'
+export { projectLoopIterations } from './ledger-projection.js'
+export type { LoopIteration } from './ledger-projection.js'
+export { encodeLedgerRecord, decodeLedgerLine } from './ledger-codec.js'
+export type { LedgerDecodeResult } from './ledger-codec.js'
+export {
+  createLoopLedgerStore, ledgerDirPath, ledgerFilePath, LEDGER_DIR, LEDGER_FILE,
+  LedgerDegradedError, UnknownReservationError, ReservationCorruptionError,
+  ReservationMismatchError, ReservationAppendError,
+} from './ledger-store.js'
+export type { LedgerReadResult, LoopLedgerStore, CloseReservationResult } from './ledger-store.js'
+// GOAL H · Stage B：loop→change 归属绑定 + policy-identity 派生（显式 loop_id / 最长前缀发现 /
+// on_exceed 归一 / 预占 token 依据 / UTC 预算日）——admission 与 ExecutionContext 的语义核心
+export {
+  latestChangeLoopBinding, resolveLoopBinding, normalizeOnExceed, reservedTokensFor, budgetDayOf,
+} from './binding.js'
+export type { BindingLoopSource, BindingDenyReason, BindingResolution } from './binding.js'
+// GOAL H · Stage B 返工 #3+#4：registry governance（治理锁 + 内容 hash epoch + atomic writer + start/merge permit）
+export {
+  withRegistryGovernanceLock, readRegistrySnapshot, assertActiveAtEpoch, writeRegistryTextAtomic,
+  writeRegistryWithGovernance, withLoopStartPermit, withLoopMergePermit, loopMaterialUnchanged,
+  registryContentEpoch, loopsYamlPath, LoopNotActiveError, BaseRefCasError,
+  // H10 §1（复审阻断1修复）：start permit 治理身份 TOCTOU 闸——见 governance.ts::withLoopStartPermit。
+  LoopPolicyChangedError,
+  ABSENT_REGISTRY_EPOCH,
+} from './governance.js'
+export type { LoopRegistrySnapshot, RegistryWriteResult, PreparedPolicySnapshot } from './governance.js'
+// GOAL H · Stage C：ledger → typed 内存投影 + 纯额度判定（admission 判定与 CLI/server 读面同源）
+// Stage B 返工 #1/#8：terminal 去重索引 + runsToday 计数纯函数
+// H10 §3/§8任务3：indexSkillBundleSnapshots——reservation_id → skill-bundle-snapshot 记录的纯投影
+export {
+  projectLoopLedger, admissionDecision, remainingTokens, indexReservationTerminals, countsAsRun,
+  indexSkillBundleSnapshots, indexMergeFactsByAttempt,
+} from './ledger-projection.js'
+export type {
+  LoopLedgerProjection, AdmissionLimits, AdmissionBlock, AdmissionDecision, ReservationTerminalIndex,
+  AttemptMergeFacts,
+} from './ledger-projection.js'
+// GOAL H3：7 个中性、版本化 automation policy 模板及其 fail-loud 查询/覆盖编译面。
+export {
+  AUTOMATION_POLICY_TEMPLATE_VERSION, AUTOMATION_POLICY_TEMPLATE_IDS,
+  listAutomationPolicyTemplates, getAutomationPolicyTemplate,
+  validateAutomationPolicyTemplate, compileAutomationPolicyTemplate,
+} from './policy-template.js'
+export {
+  compileAutomationPolicySnapshot,
+  compileConstraintPolicy,
+  evaluateConstraintPolicy,
+  validateAutomationPolicySnapshot,
+  type AutomationPolicySnapshot,
+  type ConstraintDecision,
+  type ConstraintEvaluationInput,
+  type ConstraintOperation,
+  type ConstraintPolicy,
+} from './automation-policy.js'
+export type {
+  AutomationPolicyTemplateVersion, AutomationPolicyTemplateId, AutomationPolicyRisk,
+  AutomationPolicyTrigger, AutomationPolicyTemplateV1, AutomationPolicyTemplate,
+  AutomationPolicyTemplateOverrideV1, AutomationPolicyTemplateOverride,
+} from './policy-template.js'
+// GOAL H13：typed reconciliation plan + strict 双资源快照 + governance/CAS 原子 apply。
+export {
+  RECONCILIATION_PLAN_KIND, RECONCILIATION_PLAN_SCHEMA_VERSION, RECONCILIATION_TARGET,
+  MANAGED_LOOP_SECTION_OWNERSHIP, resourceEpoch, reconciliationPlanId,
+  decodeReconciliationPlan, encodeReconciliationPlan, managedLoopSectionMarkers,
+  applyReconciliationOperations, buildReconciliationPlan, ReconciliationPlanCodecError,
+} from './reconciliation.js'
+export type {
+  ResourceEpoch, ReconciliationScope, ReconciliationOperation, ReconciliationBlockerReason,
+  ReconciliationBlocker, ReconciliationPlan, ReconciliationPlanPayload,
+  BuildReconciliationPlanInput, ApplyReconciliationOperationsInput,
+  ApplyReconciliationOperationsResult, ReconciliationPlanCodecResult,
+} from './reconciliation.js'
+export {
+  readReconciliationSnapshot, applyReconciliationPlan,
+  ReconciliationResourceError, ReconciliationSourceError,
+} from './reconciliation-store.js'
+export type {
+  ReconciliationSnapshot, ReconciliationResource, ReconciliationApplyWarning,
+  ReconciliationEpochConflict, ReconciliationApplyResult,
+} from './reconciliation-store.js'

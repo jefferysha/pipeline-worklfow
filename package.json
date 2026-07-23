@@ -10,7 +10,7 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "tsc -b packages/kernel packages/tap packages/automation packages/cli packages/server && npm run typecheck:web && npm run bundle",
+    "build": "tsc -b packages/kernel packages/channel packages/tap packages/automation packages/cli packages/server && npm run build:web && npm run build:server && npm run bundle",
     "typecheck:web": "tsc --noEmit -p packages/dashboard-app",
     "build:server": "esbuild packages/server/src/main.ts --bundle --platform=node --format=esm --target=node22 --banner:js=\"import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);\" --outfile=packages/server/dist/dashboard.mjs && chmod +x packages/server/dist/dashboard.mjs",
     "bundle": "esbuild packages/cli/src/main.ts --bundle --platform=node --format=esm --target=node22 --banner:js=\"import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);\" --outfile=packages/cli/dist/pipeline.mjs && chmod +x packages/cli/dist/pipeline.mjs",
@@ -19,7 +19,9 @@
     "test:web": "vitest run --config packages/dashboard-app/vitest.config.ts",
     "test:all": "npm run test && npm run test:web",
     "build:web": "npm run build -w @pipeline-lite/dashboard-app",
-    "oracle": "bash tools/oracle/run.sh"
+    "oracle": "bash tools/oracle/run.sh backend-full default-effects default-guard-errors frontend-quotegate pm-history",
+    "generate:default-workflow": "node tools/generate-default-workflow.mjs",
+    "check:default-workflow-freshness": "npm run generate:default-workflow && git diff --exit-code -- packages/kernel/src/workflow/default-workflow.generated.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

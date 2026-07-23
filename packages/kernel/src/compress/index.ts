@@ -15,6 +15,16 @@ export {
 } from './markdown.js'
 export { compressDocument, ratioOf, renderHandoffSummary, statsFor } from './compress.js'
 export {
+  buildAttemptContext,
+  detectAttemptStagnation,
+  normalizeAttemptError,
+  type AttemptContext,
+  type AttemptContextOptions,
+  type AttemptStagnation,
+  type NormalizedAttemptError,
+  type RunAttemptRecord,
+} from './attempt-context.js'
+export {
   buildHandoff,
   nodeHandoffFs,
   phaseHandoffDocs,

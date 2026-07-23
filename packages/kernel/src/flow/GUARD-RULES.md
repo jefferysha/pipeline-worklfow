@@ -9,6 +9,14 @@
 > 文件类规则仅在 `ctx` 注入了对应能力（fileExists / fileNonempty / readFile / dirExists /
 > changeArchived + changeDirRel）时评估，**未注入 → 静默跳过**（保持 guardCheck(state) 纯函数
 > 调用面 = 原 lite 子集，向后兼容；老仓无「无文件系统」模式，此为新仓构造性选择，见 §7）。
+>
+> **2026-07-17 G2-P0 刻意偏离**：下表 O5/S2/S3/V5/V6/P4 六条的「track/preset 条件」列记录的
+> 是**老仓**的白名单语义（`tracks=backend,frontend`——chat 与未知 track 被豁免）。lite 自
+> P0 起改为 `when: NON_PM`（`track-not-in: ['pm']`）谓词——chat/未知 track/空 track 也适用
+> 这些规则，与 transition 强制层（`checkDefaultEventPreconditions` / DefaultEventPolicy 的同名校验）口径对齐，消灭
+> 「advisory 说行、enforcement 说不行」的既有撕裂（guard.ts 文件头同款记录；一致性矩阵测试
+> 钉在 guard.test.ts）。`tracks=pm` 各行（V7/P2/P3）语义未变（lite 为 track-in:['pm']）。
+> 本表其余内容仍是对老仓的忠实盘点，不随 lite 演进改写。
 
 ## 0. 全局前置闸（相位无关）
 
@@ -44,8 +52,8 @@
 | # | 规则 | 谓词 | 条件 | 老仓行号 | 移植 |
 |---|---|---|---|---|---|
 | S1 | `.pipeline.yaml` 存在且非空 | file_nonempty | 全部 | M189 | ✅ |
-| S2 | `plan` 字段非空 | yaml_nonempty | tracks=backend,frontend（pm 豁免） | M190 | ✅ 纯字段（lite 已有）|
-| S3 | `plan` 指向的文件存在（相对项目根） | yaml_file_exists | tracks=backend,frontend | M191 | ✅ ctx.fileExists |
+| S2 | `plan` 字段非空 | yaml_nonempty | 非 PM track（PM 的 plan 文档由 OpenSpec ledger 约束） | M190 | ✅ 纯字段（lite 已有）|
+| S3 | `plan` 指向的文件存在（相对项目根） | yaml_file_exists | 非 PM track | M191 | ✅ ctx.fileExists |
 | S4 | `tasks.md` 至少 3 个任务 | tasks_at_least | 全部（含 pm） | M192 | ✅ ctx.readFile |
 | S5 | 全栈 Spec 覆盖 gate（M1）：design_doc 的 ```coverage 块逐层判定 | coverage_*（L112-160）、emit_coverage_status（G436-477） | 见下细则 | G510-528 | ✅ ctx.readFile（读 design_doc 内容）|
 | S6 | mandatory skills | — | full 硬卡 | G509, M184-187 | ❌ 同 O6 |

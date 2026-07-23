@@ -6,18 +6,89 @@
  * 快照真变、change 真进入复核阶段、收件箱据此真出现该卡。非 mock 返回。
  */
 import { describe, it, expect, afterAll } from 'vitest'
-import { mkdtemp } from 'node:fs/promises'
+import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createDashboardServer } from '@pipeline-lite/server'
-import { createFlowEngine, createStateStore, loadManifest, type StateStore } from '@pipeline-lite/kernel'
+import {
+  createFlowEngine,
+  createStateStore,
+  ensureDocumentLedger,
+  loadManifest,
+  recordDocument,
+  recordDocumentReads,
+  type StateStore,
+} from '@pipeline-lite/kernel'
 import { selectInbox } from '../inbox/inbox'
 import { DEFAULT_RULES, rulesKey } from '../model/workflowModel'
 import type { Snapshot } from '../types'
 
 const manifestPath = fileURLToPath(new URL('../../../../templates/manifest.yaml', import.meta.url))
 const clock = (): string => '2026-07-07T00:00:00Z'
+
+/**
+ * This integration suite exercises the HTTP/dashboard boundary rather than document authoring.
+ * Seed the same real, hash-bound evidence that a completed default workflow would have, so its
+ * open->explore request reaches the API behavior under test instead of being rejected earlier by
+ * the deliberately fail-closed OpenSpec contract.
+ */
+async function seedGovernedDocumentEvidence(root: string, changeDir: string, name: string): Promise<void> {
+  const proposal = `openspec/changes/${name}/proposal.md`
+  const design = `openspec/changes/${name}/design.md`
+  const tasks = `openspec/changes/${name}/tasks.md`
+  const superpowerDesign = `docs/superpowers/specs/${name}-design.md`
+  const adr = `docs/adr/${name}.md`
+  const delta = `openspec/changes/${name}/specs/capability/spec.md`
+  const plan = `docs/superpowers/plans/${name}.md`
+  const report = `docs/superpowers/reports/${name}.md`
+  const applied = 'openspec/specs/capability/spec.md'
+  const writeDocument = async (path: string, content: string): Promise<void> => {
+    const target = join(root, path)
+    await mkdir(dirname(target), { recursive: true })
+    await writeFile(target, content, 'utf8')
+  }
+
+  await writeDocument(proposal, '# proposal\n')
+  await writeDocument(design, `# design\n\n\`\`\`coverage\ntouches:\nL1_api: filled\nL2_data: filled\nL3_rules: filled\nL4_state: filled\nL5_errors: filled\nL6_security: filled\nL7_perf: filled\nL8_deps: filled\nL10_terms: filled\n\`\`\`\n`)
+  await writeDocument(tasks, '- [x] scope\n- [x] implementation\n- [x] verification\n')
+  await writeDocument(superpowerDesign, '# Superpower design\n')
+  await writeDocument(adr, '# ADR\n')
+  await writeDocument(delta, '# Delta spec\n')
+  await writeDocument(plan, '# Superpower plan\n')
+  await writeDocument(report, '# Verification report\n')
+  await writeDocument(applied, '# Applied spec\n')
+
+  const recordedAt = clock()
+  await ensureDocumentLedger(changeDir, recordedAt)
+  await writeFile(
+    join(changeDir, '.pipeline-history.jsonl'),
+    [
+      'openspec-propose',
+      'brainstorming',
+      'writing-plans',
+      'verification-before-completion',
+      'openspec-apply-change',
+    ].map((skill) => JSON.stringify({ kind: 'tool', raw: `Skill: ${skill}` })).join('\n').concat('\n'),
+    'utf8',
+  )
+  await recordDocument({ repoRoot: root, changeDir, phase: 'open', kind: 'proposal', path: proposal, producer: 'openspec-propose', recordedAt })
+  await recordDocument({ repoRoot: root, changeDir, phase: 'open', kind: 'openspec-design', path: design, producer: 'openspec-propose', recordedAt })
+  await recordDocument({ repoRoot: root, changeDir, phase: 'open', kind: 'tasks', path: tasks, producer: 'openspec-propose', recordedAt })
+  await recordDocument({ repoRoot: root, changeDir, phase: 'explore', kind: 'superpower-design', path: superpowerDesign, producer: 'brainstorming', recordedAt })
+  await recordDocument({ repoRoot: root, changeDir, phase: 'explore', kind: 'adr', path: adr, producer: 'brainstorming', recordedAt })
+  await recordDocument({ repoRoot: root, changeDir, phase: 'spec', kind: 'delta-spec', path: delta, producer: 'openspec-propose', recordedAt })
+  await recordDocument({ repoRoot: root, changeDir, phase: 'spec', kind: 'superpower-plan', path: plan, producer: 'writing-plans', recordedAt })
+  await recordDocument({ repoRoot: root, changeDir, phase: 'spec', kind: 'plan', path: plan, producer: 'writing-plans', recordedAt })
+  await recordDocument({ repoRoot: root, changeDir, phase: 'verify', kind: 'verification-report', path: report, producer: 'verification-before-completion', recordedAt })
+  await recordDocument({ repoRoot: root, changeDir, phase: 'ship', kind: 'applied-spec', path: applied, producer: 'openspec-apply-change', recordedAt })
+  await recordDocumentReads({ repoRoot: root, changeDir, phase: 'explore', kind: 'all', readAt: recordedAt })
+  await recordDocumentReads({ repoRoot: root, changeDir, phase: 'spec', kind: 'all', readAt: recordedAt })
+  await recordDocumentReads({ repoRoot: root, changeDir, phase: 'build', kind: 'all', readAt: recordedAt })
+  await recordDocumentReads({ repoRoot: root, changeDir, phase: 'verify', kind: 'all', readAt: recordedAt })
+  await recordDocumentReads({ repoRoot: root, changeDir, phase: 'ship', kind: 'all', readAt: recordedAt })
+  await recordDocumentReads({ repoRoot: root, changeDir, phase: 'archive', kind: 'all', readAt: recordedAt })
+}
 
 interface Started {
   port: number
@@ -31,7 +102,10 @@ async function startRealServer(): Promise<Started> {
   const root = await mkdtemp(join(tmpdir(), 'pl-dash-it-'))
   const store = createStateStore()
   const flow = createFlowEngine(loadManifest(manifestPath))
-  await store.init({ repoRoot: root, name: 'demo', track: 'backend', preset: 'full', clock })
+  const changeDir = await store.init({
+    repoRoot: root, name: 'demo', track: 'backend', reviewSeed: 'pending', preset: 'full', clock,
+  })
+  await seedGovernedDocumentEvidence(root, changeDir, 'demo')
   const srv = createDashboardServer({
     version: 'itest',
     token: 'itest-token',

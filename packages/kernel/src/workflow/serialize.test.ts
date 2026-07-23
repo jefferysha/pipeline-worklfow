@@ -43,6 +43,20 @@ const RICH: WorkflowDef = {
 }
 
 describe('serializeWorkflow —— parse 的反向操作，往返等价是唯一正确性判据', () => {
+  it('Step 多行 prompt 经 literal block serialize→parse 逐字往返', () => {
+    const prompt = 'Implement the selected slice.\n\nRespect `$HOME`, #hash and "quotes".'
+    const wf: WorkflowDef = {
+      name: 'prompted',
+      steps: [{
+        id: 'build', label: '构建', gate: null, prompt,
+        skills: [], inputs: [], outputs: [], guards: [], transitions: [],
+      }],
+    }
+    const yaml = serializeWorkflow(wf)
+    expect(yaml).toContain('    prompt: |-\n      Implement the selected slice.\n      \n      Respect `$HOME`, #hash and "quotes".')
+    expect(parseWorkflow(yaml)).toEqual(wf)
+  })
+
   it('MINIMAL：serialize→parse 深度等于原始 WorkflowDef', () => {
     const round = parseWorkflow(serializeWorkflow(MINIMAL))
     expect(round).toEqual(MINIMAL)
@@ -90,5 +104,109 @@ describe('serializeWorkflow —— parse 的反向操作，往返等价是唯一
     expect(round).toEqual(wf)
     expect(round.steps[0]!.skills[1]!.depends_on).toEqual([])
     expect(round.steps[0]!.skills[0]!.depends_on).toBeUndefined()
+  })
+
+  // ── G2 P2：新 8 guard 变体 + when + edge guards/actions 的确定性往返 ──
+  const P2: WorkflowDef = {
+    name: 'p2round',
+    steps: [
+      {
+        id: 'verify', label: '验证', gate: 'review', skills: [], inputs: [], outputs: [],
+        guards: [
+          { type: 'field-nonempty', field: 'verification_report' },
+          { type: 'file-exists', path: { kind: 'field', field: 'verification_report' } },
+          { type: 'field-equals', field: 'branch_status', value: 'handled', when: { kind: 'track-not-in', values: ['pm'] } },
+          { type: 'field-in', field: 'isolation', values: ['branch', 'worktree'] },
+          { type: 'full-direct-override' },
+          { type: 'build-head-unchanged', field: 'build_sha' },
+        ],
+        transitions: [
+          {
+            event: 'pass', to: 'done',
+            guards: [{ type: 'field-equals', field: 'agent_review_result', value: 'pass', when: { kind: 'track-in', values: ['backend'] } }],
+            actions: [{ type: 'mark-verification-passed' }, { type: 'freeze-build-sha' }],
+          },
+          { event: 'fail', to: 'done', guards: [], actions: [{ type: 'mark-verification-failed' }] },
+        ],
+      },
+      { id: 'done', label: '', gate: null, skills: [], inputs: [], outputs: [], guards: [], transitions: [] },
+    ],
+  }
+
+  it('P2 全新变体 + when + edge guards/actions：serialize→parse 深度等于原始（含空 guards[]/actions[] 保留）', () => {
+    expect(parseWorkflow(serializeWorkflow(P2))).toEqual(P2)
+  })
+
+  it('field-equals 的 value 含内部空格 → 往返保留（回归：value 用 (.+?) 而非 (\\S+)，否则 serialize 写出的含空格值 parse 读不回）', () => {
+    const wf: WorkflowDef = {
+      name: 'spacedval',
+      steps: [
+        {
+          id: 's1', label: '', gate: null, skills: [], inputs: [], outputs: [],
+          guards: [{ type: 'field-equals', field: 'branch_status', value: 'needs review' }], transitions: [],
+        },
+      ],
+    }
+    const round = parseWorkflow(serializeWorkflow(wf))
+    expect(round).toEqual(wf)
+    expect((round.steps[0]!.guards[0] as { value: string }).value).toBe('needs review')
+  })
+
+  // ── 阻断 2：field-equals value 的 serialize→parse 往返域（representable.ts）——凡 compile/validate
+  //    放行（可表示）的 value 都必须结构相等地读回。空串/换行/回车/tab/首尾空白由 compile fail-loud
+  //    拒绝（见 compile.test.ts），故不进往返夹具；这里钉死「可表示 value 一律往返保真」。 ──
+  it('可表示的各类 field-equals value（内部空格 / 冒号 / 井号 / 逗号 / 歧义标量形）→ serialize→parse 逐字往返', () => {
+    for (const value of ['handled', 'needs review', 'a: b', 'has #hash', 'a,b,c', 'true', '123', '~', '*ref']) {
+      const wf: WorkflowDef = {
+        name: 'reprval',
+        steps: [
+          {
+            id: 's1', label: '', gate: null, skills: [], inputs: [], outputs: [],
+            guards: [{ type: 'field-equals', field: 'branch_status', value }], transitions: [],
+          },
+        ],
+      }
+      const round = parseWorkflow(serializeWorkflow(wf))
+      expect(round).toEqual(wf)
+      expect((round.steps[0]!.guards[0] as { value: string }).value).toBe(value)
+    }
+  })
+
+  // ── G2 P4：显式 artifacts 块（field/type/producer_policy + 可选 required_when）确定性往返 ──
+  it('显式 artifacts（含 required_when，两种 producer policy）→ serialize→parse 深度往返等价', () => {
+    const wf: WorkflowDef = {
+      name: 'p4art',
+      steps: [
+        {
+          id: 'spec', label: '规格', gate: 'review', skills: [], inputs: [],
+          outputs: [{ field: 'plan', type: 'file_path' }],
+          artifacts: [
+            { field: 'plan', type: 'file_path', producerPolicy: 'effective-phase-skills', requiredWhen: { kind: 'track-not-in', values: ['pm'] } },
+          ],
+          guards: [], transitions: [{ event: 'done', to: 'explore' }],
+        },
+        {
+          id: 'explore', label: '', gate: null, skills: [], inputs: [],
+          outputs: [{ field: 'design_doc', type: 'file_path' }],
+          artifacts: [{ field: 'design_doc', type: 'file_path', producerPolicy: 'effective-step-skills' }],
+          guards: [], transitions: [],
+        },
+      ],
+    }
+    expect(parseWorkflow(serializeWorkflow(wf))).toEqual(wf)
+  })
+
+  it('artifacts: [] 与缺省 undefined 两态往返保真（空块写 `artifacts: []`，缺省不写该键）', () => {
+    const wf: WorkflowDef = {
+      name: 'p4empty',
+      steps: [
+        { id: 'a', label: '', gate: null, skills: [], inputs: [], outputs: [], artifacts: [], guards: [], transitions: [{ event: 'e', to: 'b' }] },
+        { id: 'b', label: '', gate: null, skills: [], inputs: [], outputs: [], guards: [], transitions: [] },
+      ],
+    }
+    const round = parseWorkflow(serializeWorkflow(wf))
+    expect(round).toEqual(wf)
+    expect(round.steps[0]!.artifacts).toEqual([])
+    expect(Object.prototype.hasOwnProperty.call(round.steps[1]!, 'artifacts')).toBe(false)
   })
 })

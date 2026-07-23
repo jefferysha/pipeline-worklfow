@@ -24,33 +24,39 @@ const PANELS: Partial<Record<(typeof TOOLS)[number]['key'], () => JSX.Element>> 
  * 能力声明驱动（GOAL B6，不谎报）：
  *   · server 声明 capabilities.<cap>=true 且有真面板（traffic #34d）→ 渲染真数据面板；
  *   · 未声明（runtime 数据端未接线，或 server 未装该域）→ 保持占位 + 待对应里程碑标注。
+ * v10b 迁移：旧 .advanced__* 类退役，样式 tailwind 原子类（App 页脚布局里保持 flex-1 占位）；
+ * 折叠仍走原生 <details>（测试钉 tagName），占位徽标状态由 data-state 承载。
  */
 export function AdvancedPanel({ snapshot }: AdvancedPanelProps): JSX.Element {
   const { t } = useT()
   const caps = snapshot?.capabilities ?? {}
   return (
-    <details className="advanced" data-testid="advanced-panel">
-      <summary className="advanced__summary" data-testid="advanced-summary">
+    <details className="flex-1" data-testid="advanced-panel">
+      <summary className="cursor-pointer text-[12.5px] font-semibold text-text-3 hover:text-text" data-testid="advanced-summary">
         {t('advanced.title')}
       </summary>
-      <div className="advanced__body">
-        <p className="advanced__desc">{t('advanced.desc')}</p>
-        <ul className="advanced__list" data-testid="advanced-list">
+      <div className="pt-3">
+        <p className="mt-0 mb-2.5 text-xs text-text-3">{t('advanced.desc')}</p>
+        <ul className="m-0 flex list-none flex-col gap-1.5 p-0" data-testid="advanced-list">
           {TOOLS.map((tool) => {
             const wired = caps[tool.cap] === true
             const Panel = wired ? PANELS[tool.key] : undefined
             return (
-              <li key={tool.key} className="advanced__item" data-testid={`advanced-${tool.key}`}>
-                <span className="advanced__name">{t(`advanced.${tool.key}`)}</span>
+              <li key={tool.key} className="flex items-center gap-2.5 text-[12.5px]" data-testid={`advanced-${tool.key}`}>
+                <span className="min-w-[130px] text-text-2">{t(`advanced.${tool.key}`)}</span>
                 {Panel ? (
                   // 已接线数据端：真消费面板取代占位徽标
                   <Panel />
                 ) : (
                   <>
-                    <span className="badge badge--pending" data-testid={`advanced-status-${tool.key}`}>
+                    <span
+                      className="inline-block rounded-full bg-fill px-2 py-0.5 text-[10.5px] font-bold whitespace-nowrap text-text-3"
+                      data-state={wired ? 'ready' : 'pending'}
+                      data-testid={`advanced-status-${tool.key}`}
+                    >
                       {wired ? 'ready' : t('advanced.placeholder')}
                     </span>
-                    {!wired && <span className="advanced__when">{t(`advanced.${tool.when}`)}</span>}
+                    {!wired && <span className="text-xs text-text-3">{t(`advanced.${tool.when}`)}</span>}
                   </>
                 )}
               </li>

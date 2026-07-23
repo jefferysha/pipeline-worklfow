@@ -47,6 +47,7 @@ bad() { FAIL=$((FAIL + 1)); printf 'FAIL - %s\n       %s\n' "$1" "${2:-}"; }
 assert_eq()       { if [ "$2" = "$3" ]; then ok "$1"; else bad "$1" "期望「$2」实得「$3」"; fi; }
 assert_ne()       { if [ "$2" != "$3" ]; then ok "$1"; else bad "$1" "期望不等，两者皆「$2」"; fi; }
 assert_contains() { case "$2" in *"$3"*) ok "$1" ;; *) bad "$1" "输出未含「$3」；实际：${2:0:200}" ;; esac; }
+assert_not_contains() { case "$2" in *"$3"*) bad "$1" "输出不应含「$3」；实际：${2:0:200}" ;; *) ok "$1" ;; esac; }
 assert_file()     { if [ -f "$2" ]; then ok "$1"; else bad "$1" "文件不存在：$2"; fi; }
 assert_absent()   { if [ ! -e "$2" ]; then ok "$1"; else bad "$1" "文件本不应存在：$2"; fi; }
 assert_exec()     { if [ -x "$2" ]; then ok "$1"; else bad "$1" "非可执行：$2"; fi; }
@@ -142,8 +143,8 @@ drive_veto_at() { # <wrapper> <format> <json> -> echo DENY/ALLOW
 }
 drive_veto() { drive_veto_at "$ADAPTERS/$1/hooks/veto.sh" "$(reg_field "$1" veto_format)" "$2"; }
 
-# scenario 构造器：在项目根落/清 marker，返回喂 hook 的 JSON
-mk_proj() { local d="$TMP/$1"; mkdir -p "$d"; printf '%s' "$d"; }
+# scenario 构造器：最小 Git 项目根。嵌套 cwd 必须经 Git 根定位，不能靠普通父目录上溯。
+mk_proj() { local d="$TMP/$1"; mkdir -p "$d/.git" "$d/openspec/changes"; printf '%s' "$d"; }
 touch_age() { # <file> <秒龄>（BSD/GNU 双兼容）
   local ts; ts="$(date -v-"$2"S +%Y%m%d%H%M.%S 2>/dev/null || date -d "@$(( $(date +%s) - $2 ))" +%Y%m%d%H%M.%S 2>/dev/null)"
   touch -t "$ts" "$1"
@@ -192,6 +193,84 @@ if [ -f "$cx_inj" ]; then
   assert_contains "inject/codex: additionalContext 真包 baseline 宪法（pipeline-lite）" "$out" "pipeline-lite"
 else
   bad "inject/codex: wrapper 存在" "缺失：$cx_inj"
+fi
+
+# codex 路由：真跑 UserPromptSubmit wrapper。已激活任务必须从 breadcrumb 注入；没有
+# 当前任务时，正常开发对话必须直接触发 default pipeline dispatch，不能先问是否走 workflow。
+cx_prompt="$ADAPTERS/codex/hooks/prompt.sh"
+if [ -f "$cx_prompt" ]; then
+  p="$(mk_change_proj codex-prompt-active)"
+  printf 'demo-change\n' > "$p/.pipeline-active"
+  printf '实现登录页，并完成浏览器验收。\n' > "$p/openspec/changes/demo-change/REAL_AGENT_TASK.md"
+  out="$(printf '{\"prompt\":\"继续实现登录页面的 React 组件\",\"cwd\":\"%s\"}' "$p" | PIPELINE_ROUTER_CACHE="$TMP/codex-prompt-active.cache" CLAUDE_PLUGIN_ROOT="$ROOT" bash "$cx_prompt" UserPromptSubmit 2>/dev/null)"
+  assert_contains "route/codex: 产出 UserPromptSubmit hookSpecificOutput" "$out" "\"hookEventName\":\"UserPromptSubmit\""
+  assert_contains "route/codex: 真注入已激活 Change" "$out" "change: demo-change"
+  assert_contains "route/codex: 真注入已保存任务提示词" "$out" "实现登录页，并完成浏览器验收。"
+  assert_contains "route/codex: 同轮保留真实 workflow-state" "$out" "workflow-state"
+
+  # 回归跨会话劫持：repo 级 `.pipeline-active` 仅是明确恢复候选。一个新的 SkillHub
+  # 调研目标必须从 open 派发独立 change，不能继承 demo-change 的 phase / 任务文本。
+  out="$(printf '{\"prompt\":\"我现在想要调研一个 SkillHub 项目\",\"cwd\":\"%s\"}' "$p" | PIPELINE_ROUTER_CACHE="$TMP/codex-prompt-new-topic.cache" CLAUDE_PLUGIN_ROOT="$ROOT" bash "$cx_prompt" UserPromptSubmit 2>/dev/null)"
+  assert_contains "route/codex: 新主题显式派发 new intent" "$out" "intent: new"
+  assert_contains "route/codex: 新主题从 open 开始" "$out" "phase: open"
+  assert_not_contains "route/codex: 新主题不绑定旧 change" "$out" "change: demo-change"
+  assert_not_contains "route/codex: 新主题不泄漏旧任务文本" "$out" "实现登录页，并完成浏览器验收。"
+
+  # Codex 会为别的插件注入 CLAUDE_PLUGIN_ROOT。适配器必须确认其中实际有
+  # pipeline 的 baseline 脚本，不能只因存在 hooks/ 目录就误取外来插件根。
+  foreign_root="$TMP/codex-foreign-plugin"; mkdir -p "$foreign_root/hooks"
+  out="$(printf '{\"prompt\":\"继续实现登录页面的 React 组件\",\"cwd\":\"%s\"}' "$p" | PIPELINE_ROUTER_CACHE="$TMP/codex-prompt-foreign.cache" CLAUDE_PLUGIN_ROOT="$foreign_root" bash "$cx_prompt" UserPromptSubmit 2>/dev/null)"
+  assert_contains "route/codex: 外来 CLAUDE_PLUGIN_ROOT 不劫持 adapter 根" "$out" "workflow-state"
+
+  p="$TMP/codex-prompt-unrouted"; mkdir -p "$p/openspec/changes"
+  mkdir -p "$p/.pipeline/workflows"
+  printf 'name: landing\nsteps:\n  - id: open\n    title: Start\n    transitions: []\n' > "$p/.pipeline/workflows/landing.yaml"
+  out="$(printf '{\"prompt\":\"请实现一个响应式 React 页面\",\"cwd\":\"%s\"}' "$p" | PIPELINE_ROUTER_CACHE="$TMP/codex-prompt-unrouted.cache" CLAUDE_PLUGIN_ROOT="$ROOT" bash "$cx_prompt" UserPromptSubmit 2>/dev/null)"
+  assert_contains "route/codex: 无当前任务时要求入口 pipeline skill" "$out" "skill: pipeline"
+  assert_contains "route/codex: 无当前任务时派发 default workflow" "$out" "workflow: default"
+  assert_contains "route/codex: 无当前任务时输出结构化 pipeline dispatch" "$out" "pipeline-dispatch"
+  assert_not_contains "route/codex: 正常对话不再先问是否走 workflow" "$out" "要走哪个工作流"
+  assert_not_contains "route/codex: 正常对话不列自定义 workflow 供选择" "$out" "landing"
+
+  # Codex 正常对话没有 AskUserQuestion 工具。明确确认必须在 UserPromptSubmit 阶段先清 marker，
+  # 否则下一次 PreToolUse 会把包括“用于解锁”的工具一并拒绝，形成不可恢复的自锁。
+  p="$(mk_proj codex-prompt-confirm)"
+  touch "$p/.pipeline-pending-review"
+  printf '{"prompt":"为什么需要确认？","cwd":"%s"}' "$p" | CLAUDE_PLUGIN_ROOT="$ROOT" bash "$cx_prompt" UserPromptSubmit >/dev/null 2>&1
+  [ -f "$p/.pipeline-pending-review" ] && ok "route/codex: 普通询问不误清 review marker" || bad "route/codex: 普通询问不误清 review marker" "marker 被错误清除"
+  printf '{"prompt":"确认继续，全部执行","cwd":"%s"}' "$p" | CLAUDE_PLUGIN_ROOT="$ROOT" bash "$cx_prompt" UserPromptSubmit >/dev/null 2>&1
+  [ ! -f "$p/.pipeline-pending-review" ] && ok "route/codex: 明确确认在下一次工具前自动解封" || bad "route/codex: 明确确认在下一次工具前自动解封" "marker 仍在"
+else
+  bad "route/codex: UserPromptSubmit wrapper 存在" "缺失：$cx_prompt"
+fi
+
+# Codex 的项目级 skill 发现依赖 .agents/skills；仅注册 hook/写 AGENTS 无法让宿主实际调用
+# pipeline。静态安装也必须完整投递入口和七个 phase skill，并且重跑幂等。
+cx_inst="$ADAPTERS/codex/install.sh"
+if [ -f "$cx_inst" ]; then
+  cx_target="$TMP/codex-static-skills"
+  if bash "$cx_inst" --static --target "$cx_target" --codex-home "$TMP/codex-static-home" --yes >/dev/null 2>&1; then
+    for skill in pipeline pipeline-open pipeline-explore pipeline-spec pipeline-build pipeline-verify pipeline-ship pipeline-archive brainstorming writing-plans verification-before-completion openspec-propose openspec-apply-change; do
+      assert_file "codex static install: 投递 $skill skill" "$cx_target/.agents/skills/$skill/SKILL.md"
+    done
+    [ -L "$cx_target/.agents/skills/pipeline" ] \
+      && ok "codex static install: pipeline skill 使用同源软链" \
+      || bad "codex static install: pipeline skill 使用同源软链" "未创建软链"
+    for skill in brainstorming writing-plans verification-before-completion; do
+      [ -L "$cx_target/.agents/skills/$skill" ] \
+        && ok "codex static install: $skill 使用插件内置同源软链" \
+        || bad "codex static install: $skill 使用插件内置同源软链" "未创建软链"
+    done
+    if bash "$cx_inst" --static --target "$cx_target" --codex-home "$TMP/codex-static-home" --yes >/dev/null 2>&1; then
+      ok "codex static install: 同源技能重跑幂等"
+    else
+      bad "codex static install: 同源技能重跑幂等" "第二次安装失败"
+    fi
+  else
+    bad "codex static install: 完成 AGENTS 与项目 skills 投递" "安装命令失败"
+  fi
+else
+  bad "codex static install.sh 存在" "缺失：$cx_inst"
 fi
 
 # cursor：inject_status=degraded → 落 .cursor/rules 静态层；且不得暴露伪 SessionStart inject

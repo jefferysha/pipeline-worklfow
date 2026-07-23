@@ -8,6 +8,7 @@
   "bin": { "pipeline-dashboard": "dist/main.js" },
   "engines": { "node": ">=22" },
   "dependencies": {
+    "@pipeline-lite/automation": "*",
     "@pipeline-lite/kernel": "*",
     "@pipeline-lite/tap": "*"
   }

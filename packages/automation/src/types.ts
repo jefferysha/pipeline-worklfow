@@ -55,6 +55,7 @@
  * kernel 契约（只 import 不改）：@pipeline-lite/kernel 的 StateStore 读写 change 的 automation_*
  * 字段（types.ts::FIELD_ORDER 已含 7 个 automation_* 字段）；cas 提供并发闸（compare-and-set）。
  */
+import type { VerificationResult } from '@pipeline-lite/kernel'
 
 /** automation 字段的 8 个合法态（老仓 state-fields.sh:110/154 validate_enum）。 */
 export const AUTOMATION_STATES = [
@@ -77,10 +78,9 @@ export type PhaseEvent = (typeof PHASE_EVENTS)[number]
  * L1→L3 分级放权（GOAL B19，与 AFK 自动化合体；上游 Phased Rollout × 老仓 human gates）：
  *   - L1 report-only（默认，安全）：挂队 + 沙箱跑 + 报告，但**不自动 merge**（成功停 paused，人工复核）。
  *   - L2 人工门：跑完停 paused 等人工在 dashboard 显式放行 → merged。
- *   - L3 unattended：无监管自动 merge（成功直接 merged）。★安全边界须知：这是**黑名单**模型——
- *     只有 denylist 命中会拦截（lifecycle.ts::settle 用 git diff --name-only 匹配 glob，违规判 conflict
- *     保留现场、先于 mergeToBase）。`allowlist` 字段虽在 schema 里，但**无任何运行时校验消费方**，
- *     不构成「只在许可范围内自动合并」的白名单保护，勿据其存在高估 L3 的安全性。
+ *   - L3 unattended：无监管自动 merge（成功直接 merged），但生产 loop 路径在 merge 前同时执行
+ *     allowlist（空表=零路径获准）与 denylist；任一越界都判 conflict、保留现场。策略从同一份 registry
+ *     快照解析，读取失败在创建沙箱前 fail-loud，不降级为空策略。
  * 毕业制升档：change 先 L1，证明稳定后由 loop 治理（BACKLOG #35）升 L2/L3。字段先纳入。
  */
 export const AUTOMATION_LEVELS = ['L1', 'L2', 'L3'] as const
@@ -118,13 +118,45 @@ export interface Classification {
  * 即便 verifyResult pass 也不当真 pass——诚实化 obs-13）。
  */
 export interface RunOutcome {
-  readonly commits: { sha: string }[]
+  readonly commits: readonly Readonly<{ sha: string }>[]
   readonly verifyResult: 'pass' | 'fail'
   readonly buildSha?: string
   readonly branch?: string
   readonly phaseEvent: PhaseEvent
   /** buildSha 缺失（零 commit / 容器跑空）→ true。消费者据此判 no-op，不把空跑读成真 pass。 */
   readonly noop?: boolean
+  /**
+   * GOAL H · Stage C kill-switch 接缝③：运行中 loop 被停用（status!==active）时 lifecycle 在 L3
+   * merge 前重查到停用 → **跳过 merge** 并置本标志。scheduler writeBackSuccess 见 killSwitched 强落
+   * paused（即便 L3、即便 verify pass），reason=kill-switch——「停用则不 merge，结果强制 paused」。
+   */
+  readonly killSwitched?: boolean
+  /**
+   * H7 verifier Phase 2：lifecycle 在 merge 之前、取得权威 build_sha（本 buildSha 字段，barrier 派生
+   * 非沙箱自报）后调 VerifierPort 产出的结构化核验结果。缺席 = no-op（无构建可核验，见
+   * lifecycle.ts::runChangeInSandbox）。scheduler.writeBackSuccess 据 verifier/evaluateVerificationGate
+   * 判定 trusted+passed+SHA 相符才允许结算 merged；absent/untrusted/inconclusive/SHA 漂移一律
+   * fail-closed 落 paused（reason 见 ledger-types.ts RunRecord.reason 的 verification-* 扩）。
+   * 与 verifyResult（沙箱自报二元、untrusted）并存——两者是不同信任等级的独立信号。
+   */
+  readonly verification?: VerificationResult
+  /**
+   * H7-S2 custom fail-closed：lifecycle 由 cfg.workflowKind==='custom' 判定后随本字段透传给
+   * scheduler——scheduler.evaluateVerificationGate 消费点据此要求 canonical.binding.kind 必须是
+   * 'workflow-transition' 才可授权（custom workflow 坐标未真正解析 → fail-closed 落 paused，
+   * reason=verification-binding-unresolved）。缺席/false = 'default' workflow 语义，不加此限制
+   * （行为不变，存量调用点/单测无需升级）。
+   */
+  readonly requireWorkflowBinding?: boolean
+  /**
+   * 仅真实 lifecycle 在 mergeToBase 成功返回后置 true；scheduler 还会核对进程内 lifecycle
+   * provenance，普通 RunChange 自报此布尔不会被采信。terminal kill-switch 不得覆写已 landed 事实。
+   */
+  readonly mergeLanded?: boolean
+  /** base ref 已落地，但 host 工作树同步需人工处理；仍是 merged 事实，不得重分类为 conflict。 */
+  readonly hostSyncPending?: boolean
+  /** base 已落地，但 merge-landed ledger fsync 失败；recovery 须用 intent+ref 对账。 */
+  readonly mergeJournalPending?: boolean
 }
 
 /** 调度器配置（老仓 scheduler/config.ts 的 lite 子集 + 分级 level）。 */

@@ -2,7 +2,7 @@
  * task lifecycle 依赖图 —— 纯逻辑 + 真 fs 树加载单元测试（老仓 state-task.sh 语义对位）。
  * 纯函数无需 mock（本就是真实断言）；loadTaskTree/resolveChangeDir 真跑临时 fs + 真 store。
  */
-import { mkdtemp, rm, mkdir, writeFile } from 'node:fs/promises'
+import { mkdtemp, rename, rm, mkdir, unlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
@@ -232,6 +232,21 @@ describe('loadTaskTree / resolveChangeDir —— 真 fs 树枚举（老仓 _tree
     const kids = directChildren(tree, 'a')
     expect(kids.map((c) => c.name).sort()).toEqual(['99-old', 'b', 'c'])
     expect(kids.find((c) => c.name === '99-old')?.archived).toBe(true)
+  })
+
+  test('G1：归档 change 仅保留 canonical current 时仍进入依赖树', async () => {
+    const dir = await store.init({
+      repoRoot: root, name: 'canonical-old', track: 'backend', reviewSeed: 'pending', preset: 'full',
+      clock: () => '2026-07-19T00:00:00Z',
+    })
+    await store.set(dir, 'depends_on', ['a'])
+    const archived = join(root, 'openspec', 'changes', 'archive', '2026-08', '100-canonical-old')
+    await mkdir(join(root, 'openspec', 'changes', 'archive', '2026-08'), { recursive: true })
+    await rename(dir, archived)
+    await unlink(join(archived, '.pipeline.yaml'))
+
+    const tree = await loadTaskTree(root, store)
+    expect(tree).toContainEqual({ name: '100-canonical-old', archived: true, deps: ['a'] })
   })
 
   test('resolveChangeDir：精确命中', async () => {

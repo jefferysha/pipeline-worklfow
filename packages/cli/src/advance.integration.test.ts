@@ -38,18 +38,21 @@ describe('真实 e2e —— advance auto-transition 中间档（HITL 红线：�
   /** 用裸 transition（只需事件前置，绕过 guard）把 change 真推到 build 相位 */
   async function seedToBuild(name: string): Promise<void> {
     await h.run(['init', name, '--track', 'backend', '--preset', 'full'])
+    await h.seedGovernedDocumentEvidence(name)
     await h.run(['transition', name, 'open-complete']) // → explore（复核相位，落 review marker）
-    await writeFile(join(cd(name), 'design.md'), '# design\n覆盖矩阵齐全\n', 'utf8')
-    await h.run(['set', name, 'design_doc', `openspec/changes/${name}/design.md`])
+    // The seeded OpenSpec design is hash-bound in the document ledger. Reuse it rather than
+    // overwriting it here; overwriting correctly makes explore->spec fail as stale evidence.
+    await h.seedArtifact(name, 'design_doc', `openspec/changes/${name}/design.md`) // P6：artifact 字段白盒预置
     await h.run(['transition', name, 'explore-complete']) // → spec
     await writeFile(join(cd(name), 'plan.md'), '# plan\n', 'utf8')
-    await h.run(['set', name, 'plan', `openspec/changes/${name}/plan.md`])
+    await h.seedArtifact(name, 'plan', `openspec/changes/${name}/plan.md`) // P6：artifact 字段白盒预置
     await h.run(['transition', name, 'spec-complete']) // → build
   }
 
   /** 让 build 出口 guard 真通过：tasks.md 全勾 + build_mode/isolation/direct_override */
   async function armBuildGuard(name: string): Promise<void> {
-    await writeFile(join(cd(name), 'tasks.md'), '- [x] 已完成\n', 'utf8')
+    // seedToBuild 的真实 OpenSpec tasks.md 已有三项全部勾选；不得覆写它，否则 hash-bound
+    // document ledger 会正确判为 stale，掩盖本用例要覆盖的 advance 行为。
     await h.run(['set-many', name, 'build_mode=direct', 'isolation=worktree', 'direct_override=true'])
   }
 
@@ -87,6 +90,7 @@ describe('真实 e2e —— advance auto-transition 中间档（HITL 红线：�
 
   test('HITL 红线：默认从复核相位（explore）立即停，绝不自动离开——phase 不变', async () => {
     await h.run(['init', 'demo', '--track', 'backend', '--preset', 'full'])
+    await h.seedGovernedDocumentEvidence('demo')
     await h.run(['transition', 'demo', 'open-complete']) // → explore（复核相位）
     const before = await h.read('demo')
 
@@ -99,7 +103,9 @@ describe('真实 e2e —— advance auto-transition 中间档（HITL 红线：�
 
   test('guard 不过时真不推进：build 缺 tasks.md → 停在 build，exit 2', async () => {
     await seedToBuild('demo')
-    // 故意不建 tasks.md（build 出口 tasks-all-done 缺文件即 FAIL）
+    // 故意删掉已播种的 tasks.md（build 出口 tasks-all-done 缺文件即 FAIL）。cmdAdvance 先
+    // 跑 guard，因此应在 document evidence 前以明确的 guard 失败停住。
+    await rm(join(cd('demo'), 'tasks.md'))
     await h.run(['set-many', 'demo', 'build_mode=direct', 'isolation=worktree', 'direct_override=true'])
     const before = await h.read('demo')
 

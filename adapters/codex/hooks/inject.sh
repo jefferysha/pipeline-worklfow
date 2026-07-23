@@ -19,7 +19,7 @@ if [ -n "${2:-}" ]; then INPUT="$2"; else INPUT="$(cat 2>/dev/null || printf '{}
 
 # 安装根：优先 CLAUDE_PLUGIN_ROOT（Codex 也注入此 env，spike 实证）；否则自身路径上溯至仓库根。
 _ROOT="${CLAUDE_PLUGIN_ROOT:-}"
-if [ -z "$_ROOT" ] || [ ! -d "$_ROOT/hooks" ]; then
+if [ -z "$_ROOT" ] || [ ! -f "$_ROOT/hooks/session-start.sh" ]; then
   _ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../../.." 2>/dev/null && pwd || printf '%s' "$HOME/.claude")"
 fi
 export CLAUDE_PLUGIN_ROOT="$_ROOT"

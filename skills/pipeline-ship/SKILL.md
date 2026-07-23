@@ -11,6 +11,10 @@ description: "Pipeline Phase 6: Ship · 发布。PM Track 沉淀 PRD + handoff�
 
 - `$PIPELINE_TRACK` / `$PIPELINE_CHANGE_NAME`
 
+**上下文恢复（强制）**：优先读取 `<pipeline-dispatch>` 的 `change/track/phase`，再跑
+`pipeline list --json` 和 `pipeline status <change> --json` 复核。环境变量只是兼容快捷方式；为空时
+不得退出到普通对话。若有多个候选且 dispatch 未指定，才请用户选择。
+
 ## 前置条件
 
 - `phase=ship`
@@ -22,6 +26,8 @@ description: "Pipeline Phase 6: Ship · 发布。PM Track 沉淀 PRD + handoff�
 
 ```bash
 pipeline status "$PIPELINE_CHANGE_NAME"
+
+pipeline document read "$PIPELINE_CHANGE_NAME" all
 ```
 
 ### Step 1: Track 分支调用
@@ -30,11 +36,15 @@ pipeline status "$PIPELINE_CHANGE_NAME"
 
 **强制 Skill**（按顺序）：
 
-1. 使用 Skill 工具加载 `to-spec`。**禁止跳过此步骤**。
+1. 使用 Skill 工具加载 `openspec-apply-change`。**禁止跳过此步骤**。
+   - 用于：把 PM 已确认的 delta spec 同步到 `openspec/specs/` 的主 spec；PRD 是额外交付物，
+     不能替代可追溯的 OpenSpec 主 spec。
+
+2. 使用 Skill 工具加载 `to-spec`。**禁止跳过此步骤**。
    - 用于：把调研 + 旅程 + 原型沉淀为正式 PRD
    - 产出：`docs/PRD/<DATE>-<topic>.md`
 
-2. 使用 Skill 工具加载 `to-tickets`。**禁止跳过此步骤**。
+3. 使用 Skill 工具加载 `to-tickets`。**禁止跳过此步骤**。
    - 用于：把 PRD 拆为研发可领的 GitHub issues
    - 每个 issue 包含验收标准 + 关联的 prototype 截图
 
@@ -44,39 +54,44 @@ pipeline status "$PIPELINE_CHANGE_NAME"
 **可选**：
 - 使用 Skill 工具加载 `code-tour` — 若 PRD 涉及现有代码改造
 
-**注意**：PM Track 不调 `pipeline-lite:openspec-apply-change`（PM 流程没有 delta spec → main spec 的同步）。
+**文档契约**：default PM 与声明 `openspec_contract: required` 的 custom PM workflow 都必须实际运行
+`openspec-apply-change`，并按 Step 2.5 登记 applied spec；否则不得 transition。
 
 #### 🎨 Track = frontend
 
 **强制 Skill**（按顺序）：
 
-1. 使用 Skill 工具加载 `pipeline-lite:openspec-apply-change`。**禁止跳过此步骤**。
+1. 使用 Skill 工具加载 `openspec-apply-change`。**禁止跳过此步骤**。
    - 用于：把 `openspec/changes/<name>/specs/` 的 delta spec 同步覆盖到 `openspec/specs/` 的 main spec
    - （verify Step 1.6 已做过即时回灌的，本步做幂等复核——两处不冲突）
 
-2. 使用 Skill 工具加载 `pipeline-lite:openspec-archive-change`。**禁止跳过此步骤**。
+2. 使用 Skill 工具加载 `openspec-archive-change`。**禁止跳过此步骤**。
    - 用于：准备归档（标注 frontmatter / 状态字段）
 
-3. 使用 Skill 工具加载 `superpowers:finishing-a-development-branch`。**禁止跳过此步骤**。
+3. 使用本插件打包的 Skill `finishing-a-development-branch`。**禁止跳过此步骤**。
    - 用于：分支处理（rebase / squash / 解冲突）
 
-4. 使用 Skill 工具加载 `commit-commands:commit-push-pr`。**禁止跳过此步骤**。
-   - 用于：commit + push + 创建 PR
+4. 完成 commit + push + 创建 PR。**这是必做交付动作，不是 Skill，不得用 Skill 工具加载命令 token。**
+   - 基线做法：用 `git status` / `git commit` / `git push` 与 `gh pr create` 完成交付。
+   - 若运行环境已安装 `commit-commands` 插件，可选用 slash command
+     `/commit-commands:commit-push-pr` 加速；它是命令，不进入 skill bundle。
 
-**可选**：
-- 使用 Skill 工具加载 `commit-commands:commit` — 仅 commit 不开 PR
+**可选命令**（不进入 skill bundle）：
+- `/commit-commands:commit` — 仅 commit 不开 PR；不能替代本 Track 必做的 push + PR
 - 使用 Skill 工具加载 `github-ops` — 自动化（标签/里程碑/Reviewer）
 
 #### ⚙️ Track = backend
 
 **强制 Skill**（按顺序）：
 
-1. 使用 Skill 工具加载 `pipeline-lite:openspec-apply-change`。**禁止跳过此步骤**。
-2. 使用 Skill 工具加载 `superpowers:finishing-a-development-branch`。**禁止跳过此步骤**。
-3. 使用 Skill 工具加载 `commit-commands:commit-push-pr`。**禁止跳过此步骤**。
+1. 使用 Skill 工具加载 `openspec-apply-change`。**禁止跳过此步骤**。
+2. 使用本插件打包的 Skill `finishing-a-development-branch`。**禁止跳过此步骤**。
+3. 完成 commit + push + 创建 PR。**这是必做交付动作，不是 Skill。**
+   - 基线做法：使用 `git` + `gh pr create`。
+   - `/commit-commands:commit-push-pr` 仅是可选命令加速器，不进入 skill bundle。
 
 **推荐 Skill**：
-- 使用 Skill 工具加载 `pipeline-lite:openspec-archive-change`
+- 使用 Skill 工具加载 `openspec-archive-change`
 - 使用 Skill 工具加载 `deployment-patterns` — 部署 checklist
 
 **可选 Skill**：
@@ -87,7 +102,7 @@ pipeline status "$PIPELINE_CHANGE_NAME"
 
 ```bash
 # frontend/backend：记录 PR URL
-PR_URL="<从 commit-push-pr 输出获取>"
+PR_URL="<从 gh pr create 或可选 /commit-commands:commit-push-pr 输出获取>"
 pipeline set "$PIPELINE_CHANGE_NAME" pr_url "$PR_URL"
 
 # PM Track：记录 PRD 路径
@@ -95,9 +110,25 @@ PRD_PATH="docs/PRD/$(date +%Y-%m-%d)-<topic>.md"
 pipeline set "$PIPELINE_CHANGE_NAME" prd_path "$PRD_PATH"
 ```
 
+### Step 2.5: 登记已应用的主 spec（受治理 workflow 强制）
+
+`openspec-apply-change` 必须先真实运行；本步只登记由当前 change 的 delta 对应的主 spec，避免把仓库中
+无关 capability 当成已应用。一个 change 影响多份 spec 时必须逐份登记。
+
+```bash
+find "openspec/changes/$PIPELINE_CHANGE_NAME/specs" -type f -name spec.md -print 2>/dev/null \
+  | while IFS= read -r delta; do
+      capability="$(basename "$(dirname "$delta")")"
+      applied="openspec/specs/$capability/spec.md"
+      pipeline document record "$PIPELINE_CHANGE_NAME" applied-spec "$applied" --producer openspec-apply-change
+    done
+pipeline document status "$PIPELINE_CHANGE_NAME"
+```
+
 ### Step 3: 验证（不自动推进）
 
 ```bash
+pipeline document status "$PIPELINE_CHANGE_NAME"
 pipeline check "$PIPELINE_CHANGE_NAME"     # ship 出口：0 过 / 2 不过
 ```
 
@@ -121,17 +152,17 @@ guard **只校验、不自动 transition**。校验通过后，确认 PR / PRD �
 
 ## 决策节点（暂停等用户）
 
-`superpowers:finishing-a-development-branch` 调用过程中**必须暂停**让用户选择分支处理方式（rebase / squash / merge）。
+`finishing-a-development-branch` 调用过程中**必须暂停**让用户选择分支处理方式（rebase / squash / merge）。
 
-## 外部 skill 依赖（CONTRACT §5.7 显式声明）
+## 打包 skill 依赖（随 pipeline-lite 插件安装）
 
-- external-skill: to-spec · 强制（pm）
-- external-skill: to-tickets · 强制（pm）
-- external-skill: superpowers:finishing-a-development-branch · 强制（frontend/backend）
-- external-skill: commit-commands:commit-push-pr · 强制（frontend/backend）
-- external-skill: commit-commands:commit · 可选
-- external-skill: handoff · 推荐（pm）
-- external-skill: code-tour · 可选
-- external-skill: github-ops · 可选
-- external-skill: deployment-patterns · 推荐（backend）
-- external-skill: docker-patterns · 可选
+- bundled-skill: to-spec / to-tickets · 强制（pm）
+- bundled-skill: openspec-apply-change · 强制（所有 Track）
+- bundled-skill: finishing-a-development-branch · 强制（frontend/backend）
+- bundled-skill: handoff / code-tour / github-ops · PM 推荐或可选
+- bundled-skill: deployment-patterns / docker-patterns · backend 推荐或可选
+
+## 外部命令加速器（不进入 skill bundle）
+
+- external-command: commit-commands:commit-push-pr · 可选；commit + push + PR 动作本身仍强制
+- external-command: commit-commands:commit · 可选；仅 commit

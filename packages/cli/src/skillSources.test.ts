@@ -2,7 +2,7 @@
  * skillSources.test —— registry 载入器（批 2 Wave A · S1）。
  * 真 fs：解析 inline fixture + 真读 templates/skill-sources.yaml / manifest.yaml（只读，不碰全局）。
  */
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -22,6 +22,9 @@ skills:
   browser-qa: { tool: skills-cli, source: affaan-m/ECC, skill: browser-qa, tier: mandatory, official: false, engine: "playwright@claude-plugins-official" }
   huashu-design: { tool: skills-cli, source: alchaincyf/huashu-design, tier: mandatory, official: false, alt: prototype }
   web-artifacts-builder: { tool: skills-cli, source: anthropics/skills, skill: web-artifacts-builder, tier: optional, official: true }
+  opsx: { tool: npm, source: "@fission-ai/openspec", bin: openspec, tier: mandatory, official: false }
+  verify: { tool: builtin, source: claude-code, content_skill: verification-before-completion, tier: mandatory, official: true }
+  zoom-out: { tool: skills-cli, source: mattpocock/skills, skill: zoom-out, unavailable: true, tier: optional, official: false }
   commit-commands:commit-push-pr: { tool: claude-plugin, source: claude-plugins-official, skill: commit-commands, tier: mandatory, official: true, note: "命令非技能，冒号 token 与含逗号 note 都要解析对" }
 `
 
@@ -45,6 +48,12 @@ describe('① parseSkillSources —— 结构化字段', () => {
 
   it('official: true 布尔化（非字符串）', () => {
     expect(by.get('web-artifacts-builder')!.official).toBe(true)
+  })
+
+  it('npm bin 与上游 unavailable 状态结构化保留', () => {
+    expect(by.get('opsx')).toMatchObject({ bin: 'openspec' })
+    expect(by.get('verify')).toMatchObject({ contentSkill: 'verification-before-completion' })
+    expect(by.get('zoom-out')).toMatchObject({ unavailable: true })
   })
 
   it('含冒号 token 正确切分 + 含逗号引号 note 完整保留', () => {
@@ -123,34 +132,27 @@ describe('④ 真读 templates/skill-sources.yaml', () => {
   const rows = readSkillSources(REGISTRY)
   const by = new Map(rows.map((r) => [r.token, r]))
 
-  const ECC = [
-    'browser-qa', 'e2e-testing', 'search-first', 'deep-research', 'market-research',
-    'code-tour', 'github-ops', 'react-patterns', 'python-patterns', 'python-testing',
-    'nestjs-patterns', 'postgres-patterns', 'docker-patterns', 'deployment-patterns', 'frontend-patterns',
-  ]
-
-  it('④a ECC 恰 15 个 token，tool=skills-cli source=affaan-m/ECC', () => {
-    expect(ECC).toHaveLength(15)
-    for (const t of ECC) {
-      const e = by.get(t)
-      expect(e, `${t} 应在 registry`).toBeDefined()
-      expect(e!.tool).toBe('skills-cli')
-      expect(e!.source).toBe('affaan-m/ECC')
+  it('④a 默认 workflow 的所有 registry 项都是本插件 bundled assets，不请求第三方 marketplace/npm', () => {
+    expect(rows.length).toBeGreaterThan(30)
+    for (const entry of rows) {
+      expect(entry.tool, `${entry.token} tool`).toBe('bundled')
+      expect(entry.source, `${entry.token} source`).toBe('pipeline-lite')
+      const physical = entry.contentSkill ?? entry.token
+      expect(existsSync(join(REPO_ROOT, 'skills', physical, 'SKILL.md')), `${entry.token} physical skill`).toBe(true)
     }
-    expect(rows.filter((r) => r.source === 'affaan-m/ECC').map((r) => r.token).sort())
-      .toEqual([...ECC].sort())
   })
 
-  it('④b browser-qa 带 playwright MCP engine', () => {
-    expect(by.get('browser-qa')!.engine).toBe('playwright@claude-plugins-official')
+  it('④b browser-qa 也是包内 skill，不需要额外的 MCP/plugin 安装', () => {
+    expect(by.get('browser-qa')).toMatchObject({ tool: 'bundled', source: 'pipeline-lite', contentSkill: 'browser-qa' })
+    expect(by.get('browser-qa')!.engine).toBeUndefined()
   })
 
-  it('④c 改名落地：to-spec/to-tickets 在、to-prd/to-issues 不在', () => {
+  it('④c 改名落地：to-spec/to-tickets 在、to-prd/to-issues 不在，且都随包提供', () => {
     expect(by.get('to-spec')).toBeDefined()
     expect(by.get('to-tickets')).toBeDefined()
     expect(by.get('to-prd')).toBeUndefined()
     expect(by.get('to-issues')).toBeUndefined()
-    expect(by.get('to-spec')).toMatchObject({ tool: 'skills-cli', source: 'mattpocock/skills', tier: 'mandatory' })
+    expect(by.get('to-spec')).toMatchObject({ tool: 'bundled', source: 'pipeline-lite', tier: 'mandatory' })
   })
 
   it('④d uiforge 不进 registry（无 uiforge 条目；头注可保留“已删”说明）', () => {
@@ -159,13 +161,13 @@ describe('④ 真读 templates/skill-sources.yaml', () => {
     expect(readFileSync(REGISTRY, 'utf8')).not.toMatch(/^\s*uiforge\s*:/m)
   })
 
-  it('④e 全表字段完整、tier/official 合法', () => {
+  it('④e 全表字段完整、tier/official 合法，且无外部安装工具', () => {
     expect(rows.length).toBeGreaterThan(30)
     for (const r of rows) {
       expect(['mandatory', 'recommended', 'conditional', 'optional'], `${r.token} tier`).toContain(r.tier)
       expect(typeof r.official, `${r.token} official`).toBe('boolean')
-      expect(['claude-plugin', 'skills-cli', 'npm', 'builtin', 'bundled'], `${r.token} tool`).toContain(r.tool)
-      expect(r.source, `${r.token} source`).not.toBe('')
+      expect(r.tool, `${r.token} tool`).toBe('bundled')
+      expect(r.source, `${r.token} source`).toBe('pipeline-lite')
     }
   })
 })
@@ -179,7 +181,7 @@ describe('⑤ manifest 改名落地（templates/manifest.yaml）', () => {
     expect(manifest).not.toContain('uiforge')
   })
 
-  it('ship.pm 用改名后的 to-spec / to-tickets', () => {
-    expect(manifest).toMatch(/ship\.pm:\s*\[to-spec,\s*to-tickets\]/)
+  it('ship.pm 先应用 OpenSpec，再使用改名后的 to-spec / to-tickets', () => {
+    expect(manifest).toMatch(/ship\.pm:\s*\[openspec-apply-change,\s*to-spec,\s*to-tickets\]/)
   })
 })

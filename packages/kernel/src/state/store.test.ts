@@ -1,10 +1,10 @@
-import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { copyFile, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { QuoteGateError, type StateStore } from '../types.js'
-import { createStateStore } from './index.js'
+import { atomicWriteFile, createStateStore } from './index.js'
 
 const FIXTURES = fileURLToPath(new URL('./fixtures', import.meta.url))
 const CLOCK = () => '2026-07-06T00:00:00Z'
@@ -19,6 +19,13 @@ async function seedChange(name: string, fixture: string): Promise<string> {
   return changeDir
 }
 
+function stripProjectionMetadata(raw: string): string {
+  return raw.replace(
+    /^pipeline_state_revision: \d+\npipeline_state_revision_id: [A-Za-z0-9_-]+\npipeline_state_digest: [0-9a-f]{64}\n/m,
+    '',
+  )
+}
+
 beforeEach(async () => {
   repoRoot = await mkdtemp(path.join(tmpdir(), 'pl-store-'))
   store = createStateStore()
@@ -29,13 +36,13 @@ afterEach(async () => {
 })
 
 describe('read / write / get', () => {
-  it('read 解析磁盘文件；write 落盘后与原文件逐字节等价（含历史区逐字保留）', async () => {
+  it('read 解析 legacy 文件；write 迁入 canonical 后除三行 adapter metadata 外与原文件逐字节等价', async () => {
     const dir = await seedChange('rt', 'dashboard-interaction-fixes.pipeline.yaml')
     const before = await readFile(path.join(dir, '.pipeline.yaml'), 'utf8')
     const state = await store.read(dir)
     await store.write(dir, state)
     const after = await readFile(path.join(dir, '.pipeline.yaml'), 'utf8')
-    expect(after).toBe(before)
+    expect(stripProjectionMetadata(after)).toBe(before)
   })
 
   it('get 返回裸值（去引号后）；列表字段返回数组', async () => {
@@ -52,12 +59,112 @@ describe('read / write / get', () => {
 })
 
 describe('set / setMany / cas', () => {
+  it('G1 崩溃点：current 已提交但 YAML projection 写失败 → mutation 仍成功可读、状态标 stale；repair 幂等前滚', async () => {
+    let failProjection = false
+    const injected = createStateStore({
+      writeProjection: async (target, content) => {
+        if (failProjection) throw new Error('injected projection failure')
+        await atomicWriteFile(target, content)
+      },
+    })
+    const dir = await injected.init({
+      repoRoot, name: 'projection-failure', track: 'backend', reviewSeed: 'pending', preset: 'full',
+      clock: CLOCK,
+    })
+    const yamlPath = path.join(dir, '.pipeline.yaml')
+    const beforeYaml = await readFile(yamlPath, 'utf8')
+
+    failProjection = true
+    const state = await injected.read(dir)
+    state.fields.phase = 'explore'
+    const outcome = await injected.write(dir, state, { kind: 'set' })
+
+    expect(outcome.projection).toMatchObject({ status: 'pending' })
+    expect(await injected.get(dir, 'phase')).toBe('explore')
+    expect(await readFile(yamlPath, 'utf8')).toBe(beforeYaml)
+    expect(await injected.inspectProjection(dir)).toMatchObject({ status: 'stale' })
+
+    failProjection = false
+    await expect(injected.repairProjection(dir)).resolves.toMatchObject({ status: 'current' })
+    expect(await readFile(yamlPath, 'utf8')).toContain('phase: explore\n')
+    await expect(injected.repairProjection(dir)).resolves.toMatchObject({ status: 'current' })
+  })
+
+  it('G1 双主处置：未知 YAML drift 默认拒修；显式 legacy import 产生审计 revision 并成为新 canonical', async () => {
+    const dir = await store.init({
+      repoRoot, name: 'projection-import', track: 'backend', reviewSeed: 'pending', preset: 'full',
+      clock: CLOCK,
+    })
+    const yamlPath = path.join(dir, '.pipeline.yaml')
+    const yaml = await readFile(yamlPath, 'utf8')
+    await writeFile(yamlPath, yaml.replace('phase: open\n', 'phase: explore\n'), 'utf8')
+
+    expect(await store.inspectProjection(dir)).toMatchObject({ status: 'drift' })
+    await expect(store.repairProjection(dir)).rejects.toThrow(/drift|漂移/i)
+    const imported = await store.importLegacyProjection(dir)
+
+    expect(imported.projection).toMatchObject({ status: 'updated' })
+    expect(await store.get(dir, 'phase')).toBe('explore')
+    const current = JSON.parse(await readFile(path.join(dir, '.pipeline-run', 'current.json'), 'utf8')) as {
+      revision: number
+      mutation: { kind: string }
+    }
+    expect(current.revision).toBe(1)
+    expect(current.mutation.kind).toBe('legacy-import')
+    expect(await store.inspectProjection(dir)).toMatchObject({ status: 'current' })
+  })
+
+  it('G1 canonical mutation：legacy YAML 首次 set 先固化 migration revision 0，再以 revision 1 提交并刷新投影', async () => {
+    const dir = await seedChange('canonical-set', 'zz-container-e2e.pipeline.yaml')
+    await store.set(dir, 'phase', 'verify')
+
+    const runDir = path.join(dir, '.pipeline-run')
+    const current = JSON.parse(await readFile(path.join(runDir, 'current.json'), 'utf8')) as {
+      revision: number
+      revisionId: string
+      previousRevisionId?: string
+      mutation: { kind: string }
+      state: { fields: { phase: string } }
+    }
+    expect(current).toMatchObject({
+      revision: 1,
+      mutation: { kind: 'set' },
+      state: { fields: { phase: 'verify' } },
+    })
+    expect(current.previousRevisionId).toMatch(/^[A-Za-z0-9_-]+$/)
+    const revisionFiles = (await readdir(path.join(runDir, 'revisions'))).sort()
+    expect(revisionFiles).toHaveLength(2)
+    expect(revisionFiles[0]).toMatch(/^000000-/)
+    expect(revisionFiles[1]).toBe(`000001-${current.revisionId}.json`)
+    expect(await readFile(path.join(dir, '.pipeline.yaml'), 'utf8')).toContain('phase: verify\n')
+  })
+
+  it('G1 写兼容断代：YAML projection 带 revision/id/digest；旧 writer 篡改后下一次官方写 fail-loud 且 canonical 零推进', async () => {
+    const dir = await store.init({
+      repoRoot, name: 'projection-drift', track: 'backend', reviewSeed: 'pending', preset: 'full',
+      clock: CLOCK, runId: 'run-projection-drift',
+    })
+    const currentPath = path.join(dir, '.pipeline-run', 'current.json')
+    const beforeCurrent = await readFile(currentPath, 'utf8')
+    const current = JSON.parse(beforeCurrent) as { revision: number; revisionId: string; stateDigest: string }
+    const yamlPath = path.join(dir, '.pipeline.yaml')
+    const yaml = await readFile(yamlPath, 'utf8')
+    expect(yaml).toContain(`pipeline_state_revision: ${current.revision}\n`)
+    expect(yaml).toContain(`pipeline_state_revision_id: ${current.revisionId}\n`)
+    expect(yaml).toContain(`pipeline_state_digest: ${current.stateDigest}\n`)
+
+    await writeFile(yamlPath, yaml.replace('phase: open\n', 'phase: ship\n'), 'utf8')
+    await expect(store.set(dir, 'plan', 'must-not-land')).rejects.toThrow(/projection.*drift|投影.*漂移/i)
+    expect(await readFile(currentPath, 'utf8')).toBe(beforeCurrent)
+    expect(await store.get(dir, 'plan')).toBe('null')
+  })
+
   it('set 只改目标字段，历史区与其余字段逐字保留', async () => {
     const dir = await seedChange('s', 'zz-container-e2e.pipeline.yaml')
     const before = await readFile(path.join(dir, '.pipeline.yaml'), 'utf8')
     await store.set(dir, 'phase', 'verify')
     const after = await readFile(path.join(dir, '.pipeline.yaml'), 'utf8')
-    expect(after).toBe(before.replace('phase: build\n', 'phase: verify\n'))
+    expect(stripProjectionMetadata(after)).toBe(before.replace('phase: build\n', 'phase: verify\n'))
   })
 
   it('set 列表字段为数组 → 块序列；空数组 → []', async () => {
@@ -98,6 +205,28 @@ describe('set / setMany / cas', () => {
     const before = await readFile(path.join(dir, '.pipeline.yaml'), 'utf8')
     expect(await store.cas(dir, 'phase', 'build', 'ship')).toBe(false)
     expect(await readFile(path.join(dir, '.pipeline.yaml'), 'utf8')).toBe(before)
+  })
+
+  it('casMany：guard 任一期望值命中时整批原子提交；不命中或触闸时零写入', async () => {
+    const dir = await seedChange('cas-many', 'zz-container-e2e.pipeline.yaml')
+    await store.set(dir, 'automation', 'scheduled')
+    expect(await store.casMany(dir, 'automation', ['running', 'scheduled'], {
+      automation: 'paused', automation_cause: 'skill-bundle-snapshot-io', automation_last_error: 'disk full',
+    })).toBe(true)
+    expect(await store.get(dir, 'automation')).toBe('paused')
+    expect(await store.get(dir, 'automation_cause')).toBe('skill-bundle-snapshot-io')
+    expect(await store.get(dir, 'automation_last_error')).toBe('disk full')
+
+    const beforeMiss = await readFile(path.join(dir, '.pipeline.yaml'), 'utf8')
+    expect(await store.casMany(dir, 'automation', ['running', 'scheduled'], {
+      automation: 'failed', automation_cause: 'must-not-land',
+    })).toBe(false)
+    expect(await readFile(path.join(dir, '.pipeline.yaml'), 'utf8')).toBe(beforeMiss)
+
+    await expect(store.casMany(dir, 'automation', ['paused'], {
+      automation: 'failed', automation_last_error: 'bad: value',
+    })).rejects.toThrow(QuoteGateError)
+    expect(await readFile(path.join(dir, '.pipeline.yaml'), 'utf8')).toBe(beforeMiss)
   })
 })
 
@@ -145,31 +274,83 @@ automation_cause: ""
 `
 
   it('建 change 骨架：目录 + .pipeline.yaml 与老仓 heredoc 逐字节一致（注入时钟）', async () => {
-    const dir = await store.init({ repoRoot, name: 'my-change', track: 'backend', preset: 'full', clock: CLOCK })
+    const dir = await store.init({ repoRoot, name: 'my-change', track: 'backend', reviewSeed: 'pending', preset: 'full', clock: CLOCK })
     expect(dir).toBe(path.join(repoRoot, 'openspec', 'changes', 'my-change'))
-    expect(await readFile(path.join(dir, '.pipeline.yaml'), 'utf8')).toBe(HEREDOC)
+    expect(stripProjectionMetadata(await readFile(path.join(dir, '.pipeline.yaml'), 'utf8'))).toBe(HEREDOC)
+  })
+
+  it('运行时缺 reviewSeed 不得发布一份下一次读必坏的 canonical current', async () => {
+    const malformed = {
+      repoRoot, name: 'missing-review-seed', track: 'backend', preset: 'full', clock: CLOCK,
+    } as unknown as Parameters<StateStore['init']>[0]
+    await expect(store.init(malformed)).rejects.toThrow('canonical state.fields.agent_review_result 类型非法')
+    await expect(readFile(path.join(
+      repoRoot, 'openspec', 'changes', 'missing-review-seed', '.pipeline-run', 'current.json',
+    ), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
+  it('G1 canonical cutover：init 同时发布 revision 0/current；YAML 后续被旧 writer 篡改也不反向覆盖官方读', async () => {
+    const dir = await store.init({
+      repoRoot, name: 'canonical-init', track: 'backend', reviewSeed: 'pending', preset: 'full',
+      clock: CLOCK, runId: 'run-canonical-init',
+    })
+    const currentPath = path.join(dir, '.pipeline-run', 'current.json')
+    const currentRaw = await readFile(currentPath, 'utf8')
+    const current = JSON.parse(currentRaw) as {
+      schemaVersion: number
+      revision: number
+      revisionId: string
+      state: { fields: { phase: string } }
+    }
+    expect(current).toMatchObject({
+      schemaVersion: 1,
+      revision: 0,
+      state: { fields: { phase: 'open' } },
+    })
+    expect(await readFile(path.join(
+      dir, '.pipeline-run', 'revisions', `000000-${current.revisionId}.json`,
+    ), 'utf8')).toBe(currentRaw)
+
+    const yamlPath = path.join(dir, '.pipeline.yaml')
+    const yaml = await readFile(yamlPath, 'utf8')
+    await writeFile(yamlPath, yaml.replace('phase: open\n', 'phase: ship\n'), 'utf8')
+    expect(await store.get(dir, 'phase')).toBe('open')
   })
 
   it('pm track → agent/codex review 种为 skipped', async () => {
-    const dir = await store.init({ repoRoot, name: 'pm-change', track: 'pm', preset: 'full', clock: CLOCK })
+    const dir = await store.init({ repoRoot, name: 'pm-change', track: 'pm', reviewSeed: 'skipped', preset: 'full', clock: CLOCK })
     expect(await store.get(dir, 'agent_review_result')).toBe('skipped')
     expect(await store.get(dir, 'codex_review_result')).toBe('skipped')
   })
 
-  it('user 真值经四闸写入 created_by（先安全占位 unknown 再写真值）', async () => {
-    const dir = await store.init({ repoRoot, name: 'u1', track: 'backend', preset: 'full', user: 'Host Dev', clock: CLOCK })
+  it('reviewSeed=skipped 与 track id 无关：动态 track 的双 review 初值也为 skipped', async () => {
+    const dir = await store.init({
+      repoRoot,
+      name: 'policy-skipped',
+      track: 'data',
+      preset: 'full',
+      reviewSeed: 'skipped',
+      clock: CLOCK,
+    })
+    expect(await store.get(dir, 'agent_review_result')).toBe('skipped')
+    expect(await store.get(dir, 'codex_review_result')).toBe('skipped')
+  })
+
+  it('user 真值经四闸校验（quoteGate 纯内存判定，随单次原子发布一并写入 created_by，不再是' +
+    '"先落盘 unknown 占位再补一次写"两步——第 7 轮 codex review P1 修复的同一类两步写问题）', async () => {
+    const dir = await store.init({ repoRoot, name: 'u1', track: 'backend', reviewSeed: 'pending', preset: 'full', user: 'Host Dev', clock: CLOCK })
     expect(await store.get(dir, 'created_by')).toBe('Host Dev')
   })
 
   it('user 含破坏字符 → 触闸保留 unknown，不阻断 init', async () => {
-    const dir = await store.init({ repoRoot, name: 'u2', track: 'backend', preset: 'full', user: 'Evil: Dev', clock: CLOCK })
+    const dir = await store.init({ repoRoot, name: 'u2', track: 'backend', reviewSeed: 'pending', preset: 'full', user: 'Evil: Dev', clock: CLOCK })
     expect(await store.get(dir, 'created_by')).toBe('unknown')
   })
 
   it('base_branch 读 .git/HEAD 的当前分支；无 git 回退 main', async () => {
     await mkdir(path.join(repoRoot, '.git'), { recursive: true })
     await writeFile(path.join(repoRoot, '.git', 'HEAD'), 'ref: refs/heads/feat/wave1\n')
-    const dir = await store.init({ repoRoot, name: 'b1', track: 'backend', preset: 'full', clock: CLOCK })
+    const dir = await store.init({ repoRoot, name: 'b1', track: 'backend', reviewSeed: 'pending', preset: 'full', clock: CLOCK })
     expect(await store.get(dir, 'base_branch')).toBe('feat/wave1')
   })
 
@@ -179,7 +360,7 @@ automation_cause: ""
     await writeFile(path.join(gitdir, 'HEAD'), 'ref: refs/heads/afk/wave2\n')
     // worktree 根的 .git 是文件，内容是 `gitdir: <path>` 指针
     await writeFile(path.join(repoRoot, '.git'), `gitdir: ${gitdir}\n`)
-    const dir = await store.init({ repoRoot, name: 'wtc', track: 'backend', preset: 'full', clock: CLOCK })
+    const dir = await store.init({ repoRoot, name: 'wtc', track: 'backend', reviewSeed: 'pending', preset: 'full', clock: CLOCK })
     expect(await store.get(dir, 'base_branch')).toBe('afk/wave2')
   })
 
@@ -188,23 +369,78 @@ automation_cause: ""
     await mkdir(gitdir, { recursive: true })
     await writeFile(path.join(gitdir, 'HEAD'), 'a1b2c3d4e5f6\n') // detached：裸 sha
     await writeFile(path.join(repoRoot, '.git'), `gitdir: ${gitdir}\n`)
-    const dir = await store.init({ repoRoot, name: 'wtd', track: 'backend', preset: 'full', clock: CLOCK })
+    const dir = await store.init({ repoRoot, name: 'wtd', track: 'backend', reviewSeed: 'pending', preset: 'full', clock: CLOCK })
     expect(await store.get(dir, 'base_branch')).toBe('main')
   })
 
   it('非法 change 名（空/怪字符/..）→ 拒绝', async () => {
-    await expect(store.init({ repoRoot, name: '', track: 'backend', preset: 'full', clock: CLOCK })).rejects.toThrow()
-    await expect(store.init({ repoRoot, name: 'a/b', track: 'backend', preset: 'full', clock: CLOCK })).rejects.toThrow()
-    await expect(store.init({ repoRoot, name: '..', track: 'backend', preset: 'full', clock: CLOCK })).rejects.toThrow()
+    await expect(store.init({ repoRoot, name: '', track: 'backend', reviewSeed: 'pending', preset: 'full', clock: CLOCK })).rejects.toThrow()
+    await expect(store.init({ repoRoot, name: 'a/b', track: 'backend', reviewSeed: 'pending', preset: 'full', clock: CLOCK })).rejects.toThrow()
+    await expect(store.init({ repoRoot, name: '..', track: 'backend', reviewSeed: 'pending', preset: 'full', clock: CLOCK })).rejects.toThrow()
   })
 
   it('已初始化的 change → fail-loud 拒绝（不覆盖既有状态）', async () => {
-    await store.init({ repoRoot, name: 'dup', track: 'backend', preset: 'full', clock: CLOCK })
-    await expect(store.init({ repoRoot, name: 'dup', track: 'backend', preset: 'full', clock: CLOCK })).rejects.toThrow()
+    await store.init({ repoRoot, name: 'dup', track: 'backend', reviewSeed: 'pending', preset: 'full', clock: CLOCK })
+    await expect(store.init({ repoRoot, name: 'dup', track: 'backend', reviewSeed: 'pending', preset: 'full', clock: CLOCK })).rejects.toThrow()
+  })
+
+  it('G1 独占创建：成功后只有 canonical 目录与 YAML projection，current/revision 均无临时文件残留', async () => {
+    const dir = await store.init({ repoRoot, name: 'clean-tmp', track: 'backend', reviewSeed: 'pending', preset: 'full', clock: CLOCK })
+    const files = await readdir(dir)
+    expect(files.sort()).toEqual(['.pipeline-run', '.pipeline.yaml'])
+    expect((await readdir(path.join(dir, '.pipeline-run'))).sort()).toEqual(['current.json', 'revisions'])
+    expect(await readdir(path.join(dir, '.pipeline-run', 'revisions'))).toHaveLength(1)
+  })
+
+  it('重复 init 撞名失败时不发布第二份孤儿 revision，也没有本次失败请求的临时文件残留', async () => {
+    await store.init({ repoRoot, name: 'dup-tmp', track: 'backend', reviewSeed: 'pending', preset: 'full', clock: CLOCK })
+    await expect(
+      store.init({ repoRoot, name: 'dup-tmp', track: 'backend', reviewSeed: 'pending', preset: 'full', clock: CLOCK }),
+    ).rejects.toThrow()
+    const dir = path.join(repoRoot, 'openspec', 'changes', 'dup-tmp')
+    const files = await readdir(dir)
+    expect(files.sort()).toEqual(['.pipeline-run', '.pipeline.yaml'])
+    expect(await readdir(path.join(dir, '.pipeline-run', 'revisions'))).toHaveLength(1)
+  })
+
+  it('custom workflow 首态（initialWorkflow）随独占创建一次调用整体发布：workflow/phase 直接就是' +
+    '目标值，不是先落 default/open 再改（第 7 轮 codex review P1：旧两步之间的窗口会让并发' +
+    'transition 对 provisional default/open 提交 canonical record）', async () => {
+    const dir = await store.init({
+      repoRoot, name: 'wf-once', track: 'backend', reviewSeed: 'pending', preset: 'full', clock: CLOCK,
+      initialWorkflow: { workflow: 'onboarding', phase: 'intake' },
+    })
+    expect(await store.get(dir, 'workflow')).toBe('onboarding')
+    expect(await store.get(dir, 'phase')).toBe('intake')
+  })
+
+  it('不提供 initialWorkflow → workflow/phase 仍是老默认值 default/open（回归防护）', async () => {
+    const dir = await store.init({ repoRoot, name: 'wf-default', track: 'backend', reviewSeed: 'pending', preset: 'full', clock: CLOCK })
+    expect(await store.get(dir, 'workflow')).toBe('default')
+    expect(await store.get(dir, 'phase')).toBe('open')
   })
 })
 
 describe('并发（20 写锁零丢失）', () => {
+  it('G1：20 个公开 write 并发也必须由 store 自己串成单一 revision 链，不产生同代分叉', async () => {
+    const dir = await store.init({
+      repoRoot, name: 'cc-public-write', track: 'backend', reviewSeed: 'pending', preset: 'full', clock: CLOCK,
+    })
+    const initial = await store.read(dir)
+
+    await Promise.all(Array.from({ length: 20 }, (_, index) =>
+      store.write(dir, {
+        ...initial,
+        fields: { ...initial.fields, automation_last_error: `writer-${index}` },
+      }, { kind: 'replace' })))
+
+    const current = JSON.parse(await readFile(
+      path.join(dir, '.pipeline-run', 'current.json'), 'utf8',
+    )) as { revision: number }
+    expect(current.revision).toBe(20)
+    expect(await readdir(path.join(dir, '.pipeline-run', 'revisions'))).toHaveLength(21)
+  })
+
   it('20 并发 withLock 读改写自增 → 零丢失（最终 =20）', async () => {
     const dir = await seedChange('cc1', 'zz-container-e2e.pipeline.yaml')
     await store.set(dir, 'automation_attempts', '0')
@@ -213,7 +449,7 @@ describe('并发（20 写锁零丢失）', () => {
         store.withLock(dir, async () => {
           const s = await store.read(dir)
           s.fields.automation_attempts = String(Number(s.fields.automation_attempts) + 1)
-          await store.write(dir, s)
+          await store.writeUnderLock(dir, s)
         }),
       ),
     )

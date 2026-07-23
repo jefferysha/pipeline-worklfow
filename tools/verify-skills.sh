@@ -2,15 +2,13 @@
 # verify-skills.sh — 插件资产零悬空引用校验（CONTRACT §5.7，安装/CI 期硬失败）。
 #
 # 校验面：
-#   1. .claude-plugin/plugin.json 与 hooks/hooks.json 存在，plugin.json 含 name 字段；
-#   2. 两清单中所有 ${CLAUDE_PLUGIN_ROOT}/<path> 引用：路径存在；*.sh 还须可执行；
+#   1. Codex/Claude manifests、Codex marketplace、hooks/hooks.json、CLI/dashboard 发布产物与 canonical helpers 存在；
+#   2. hook command 必须同时支持 Codex 的 $PLUGIN_ROOT 与 Claude 的 $CLAUDE_PLUGIN_ROOT，且目标脚本存在并可执行；
 #   3. skills/ 下每个 skill 目录都含 SKILL.md；
 #   4. skills/**/SKILL.md、hooks/hooks.json、templates/manifest.yaml（若有）中形如
-#      `external-skill: <名字>` 的外部 skill 引用，必须在 skills/EXTERNAL-SKILLS.md 中
-#      以 `- <名字>` 显式声明。
-#   5. templates/skill-sources.yaml 中 tool=skills-cli/claude-plugin/npm 的可安装 token，
-#      必须在 skills/EXTERNAL-SKILLS.md 以 `- <token>` 声明（防 registry↔EXTERNAL 漂移；
-#      非技能安装物 playwright/opsx 豁免）。反向：声明了却 registry 无源 → 仅 WARN 不阻断。
+#      `external-skill: <名字>` 的可选集成引用，必须在 skills/EXTERNAL-SKILLS.md 中说明。
+#   5. templates/skill-sources.yaml 的每一项必须是 bundled，并有同名（或 content_skill 指向）的
+#      SKILL.md；这防止默认 workflow 悄悄重新引入外部安装依赖。
 # 任何缺失 → exit 1，逐条列出「缺什么 / 在哪引用的 / 怎么修」。
 #
 # 用法：verify-skills.sh [--quiet] [--root <plugin根>]
@@ -56,7 +54,15 @@ N_SKILL=0
 N_EXT=0
 
 PLUGIN_JSON="$ROOT/.claude-plugin/plugin.json"
+CODEX_PLUGIN_JSON="$ROOT/.codex-plugin/plugin.json"
+CODEX_MARKETPLACE_JSON="$ROOT/.agents/plugins/marketplace.json"
 HOOKS_JSON="$ROOT/hooks/hooks.json"
+CANONICAL_STATE_HELPER="$ROOT/hooks/canonical-state.sh"
+PROMPT_INTENT_HELPER="$ROOT/hooks/prompt-intent.sh"
+AUTO_UPDATE_HELPER="$ROOT/hooks/auto-update.sh"
+CLI_BUNDLE="$ROOT/packages/cli/dist/pipeline.mjs"
+DASHBOARD_SERVER_BUNDLE="$ROOT/packages/server/dist/dashboard.mjs"
+DASHBOARD_WEB_INDEX="$ROOT/packages/dashboard-app/dist/index.html"
 
 # ── 1. 清单文件本体 ──
 if [ ! -f "$PLUGIN_JSON" ]; then
@@ -65,15 +71,86 @@ else
   grep -q '"name"[[:space:]]*:' "$PLUGIN_JSON" \
     || add_fail "plugin.json 缺少 name 字段" ".claude-plugin/plugin.json" "补充 \"name\": \"<插件名>\""
 fi
+[ -f "$CODEX_PLUGIN_JSON" ] \
+  || add_fail "缺失 Codex 插件清单 .codex-plugin/plugin.json" "Codex 插件规范（原生插件必需）" "在 $ROOT/.codex-plugin/ 下创建 plugin.json，并声明 skills/hooks"
+if [ -f "$CODEX_PLUGIN_JSON" ]; then
+  grep -q '"name"[[:space:]]*:[[:space:]]*"pipeline-lite"' "$CODEX_PLUGIN_JSON" \
+    || add_fail "Codex plugin.json 缺 pipeline-lite name" ".codex-plugin/plugin.json" "补充 name: pipeline-lite"
+  grep -q '"skills"[[:space:]]*:[[:space:]]*"\./skills/"' "$CODEX_PLUGIN_JSON" \
+    || add_fail "Codex plugin.json 未声明打包 skills" ".codex-plugin/plugin.json" "补充 skills: ./skills/"
+  grep -q '"hooks"[[:space:]]*:[[:space:]]*"\./hooks/hooks.json"' "$CODEX_PLUGIN_JSON" \
+    || add_fail "Codex plugin.json 未声明共享 hooks" ".codex-plugin/plugin.json" "补充 hooks: ./hooks/hooks.json"
+fi
+[ -f "$CODEX_MARKETPLACE_JSON" ] \
+  || add_fail "缺失 Codex marketplace .agents/plugins/marketplace.json" "Codex marketplace 规范（远程安装必需）" "创建 marketplace.json 并登记 pipeline-lite"
+if [ -f "$CODEX_MARKETPLACE_JSON" ]; then
+  grep -q '"name"[[:space:]]*:[[:space:]]*"pipeline-lite"' "$CODEX_MARKETPLACE_JSON" \
+    || add_fail "Codex marketplace 未登记 pipeline-lite" ".agents/plugins/marketplace.json" "补充 pipeline-lite 插件条目"
+  grep -q '"path"[[:space:]]*:[[:space:]]*"\./"' "$CODEX_MARKETPLACE_JSON" \
+    || add_fail "Codex marketplace 未指向插件仓根" ".agents/plugins/marketplace.json" "把 source.path 设为 ./"
+fi
 [ -f "$HOOKS_JSON" ] \
   || add_fail "缺失 hooks 清单 hooks/hooks.json" "CC 插件规范（本插件挂 hook 必需）" "在 $ROOT/hooks/ 下创建 hooks.json"
+[ -f "$CANONICAL_STATE_HELPER" ] && [ -r "$CANONICAL_STATE_HELPER" ] \
+  || add_fail "缺失或不可读 hooks/canonical-state.sh" \
+              "G1 hooks canonical state 共享读取依赖" \
+              "把 hooks/canonical-state.sh 纳入插件资产并保证可读；禁止靠各 hook 的 legacy YAML fallback 运行"
+[ -f "$PROMPT_INTENT_HELPER" ] && [ -r "$PROMPT_INTENT_HELPER" ] \
+  || add_fail "缺失或不可读 hooks/prompt-intent.sh" \
+              "UserPromptSubmit 跨会话恢复意图判定依赖" \
+              "把 hooks/prompt-intent.sh 纳入插件资产并保证可读；router/breadcrumb 缺它时必须 fail-closed，避免旧 change 泄漏"
+[ -f "$AUTO_UPDATE_HELPER" ] && [ -x "$AUTO_UPDATE_HELPER" ] \
+  || add_fail "缺失或不可执行 hooks/auto-update.sh" "原生宿主 opt-in 自动升级" "把 hooks/auto-update.sh 纳入插件资产并 chmod +x"
+[ -f "$CLI_BUNDLE" ] && [ -x "$CLI_BUNDLE" ] \
+  || add_fail "缺失或不可执行 packages/cli/dist/pipeline.mjs" "完整插件 CLI runtime" "运行 npm run build，并提交 packages/cli/dist/pipeline.mjs"
+[ -f "$DASHBOARD_SERVER_BUNDLE" ] && [ -r "$DASHBOARD_SERVER_BUNDLE" ] \
+  || add_fail "缺失 dashboard server bundle: packages/server/dist/dashboard.mjs" "完整插件 dashboard runtime" "运行 npm run build，并提交 packages/server/dist/dashboard.mjs"
+[ -f "$DASHBOARD_WEB_INDEX" ] && [ -r "$DASHBOARD_WEB_INDEX" ] \
+  || add_fail "缺失 dashboard SPA: packages/dashboard-app/dist/index.html" "完整插件 dashboard runtime" "运行 npm run build，并提交 packages/dashboard-app/dist/"
 
-# ── 2. ${CLAUDE_PLUGIN_ROOT}/<path> 引用：存在 + *.sh 可执行 ──
+# index.html 是 server 同源托管的入口；仅目录存在不足以保证哈希资源也随 release 进入仓库。
+if [ -f "$DASHBOARD_WEB_INDEX" ]; then
+  while IFS= read -r asset; do
+    [ -n "$asset" ] || continue
+    case "$asset" in
+      assets/*)
+        [ -f "$ROOT/packages/dashboard-app/dist/$asset" ] \
+          || add_fail "dashboard SPA 缺少 index.html 引用的资源: $asset" \
+                      "packages/dashboard-app/dist/index.html" \
+                      "重新运行 npm run build，并把 packages/dashboard-app/dist/ 整目录纳入发布"
+        ;;
+    esac
+  done < <(grep -oE 'assets/[A-Za-z0-9._-]+' "$DASHBOARD_WEB_INDEX" 2>/dev/null | sort -u)
+fi
+
+# ── 2. 跨宿主 hook root + 引用路径：存在 + *.sh 可执行 ──
+# Codex 原生 plugin hook 注入 PLUGIN_ROOT，Claude 注入 CLAUDE_PLUGIN_ROOT。两者不能二选一，
+# 否则 `pipeline setup --codex` 安装虽然成功，但正常对话的 router/auto-update hook 根本不会执行。
+if [ -f "$HOOKS_JSON" ]; then
+  grep -Fq '${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-}}/hooks/' "$HOOKS_JSON" \
+    || add_fail "hooks 未同时兼容 PLUGIN_ROOT/CLAUDE_PLUGIN_ROOT" "hooks/hooks.json" "所有 hook command 使用 \${PLUGIN_ROOT:-\${CLAUDE_PLUGIN_ROOT:-}}/hooks/<script>"
+  for rel in \
+    hooks/session-start.sh \
+    hooks/confirm-clear-prompt.sh \
+    hooks/breadcrumb.sh \
+    hooks/router.sh \
+    hooks/gate.sh \
+    hooks/confirm-clear.sh \
+    hooks/decision-recorder.sh \
+    hooks/skill-tracker.sh \
+    hooks/interactive-skill-gate.sh; do
+    N_PATH=$((N_PATH + 1))
+    p="$ROOT/$rel"
+    [ -f "$p" ] && [ -x "$p" ] \
+      || add_fail "缺失或不可执行 hook 脚本: $rel" "hooks/hooks.json" "把 $rel 纳入发布包并 chmod +x"
+  done
+fi
+
 check_refs() { # file
   local f="$1" rel p disp
   [ -f "$f" ] || return 0
   disp="${f#"$ROOT"/}"
-  # 提取 CLAUDE_PLUGIN_ROOT}/ 后到引号/反斜杠（JSON 转义 \" 的前半）/空白为止的相对路径
+  # 兼容历史的直写 ${CLAUDE_PLUGIN_ROOT}/<path> 引用；共享 hooks 已在上方按跨宿主模板逐项校验。
   for rel in $(grep -o 'CLAUDE_PLUGIN_ROOT}/[^"[:space:]\\]*' "$f" 2>/dev/null | sed 's|^CLAUDE_PLUGIN_ROOT}/||' | sort -u); do
     N_PATH=$((N_PATH + 1))
     p="$ROOT/$rel"
@@ -128,16 +205,13 @@ fi
 scan_ext "$HOOKS_JSON"
 scan_ext "$ROOT/templates/manifest.yaml"
 
-# ── 5. registry（skill-sources.yaml）↔ EXTERNAL-SKILLS.md 一致性（防漂移）──
-#   5a 正向（硬失败）：registry 可安装 token（tool=skills-cli/claude-plugin/npm）须在 EXTERNAL 声明；
-#   5b 反向（WARN 不阻断）：EXTERNAL 声明的 token 须在 registry 有源（namespace 折叠：ns:skill 认 ns）。
+# ── 5. registry 完全打包完整性（防漂移）──
+#   每一个 registry token 都必须是 bundled，并且有 plugins skills/ 中的实体。可选外部命令只能
+#   出现在文档说明，绝不能进入这份默认 workflow 安装清单。
 # 只 grep 顶层 token 键（`^  <token>: { … }` 单行流映射），不深解析 yaml。
 REGISTRY="$ROOT/templates/skill-sources.yaml"
 N_REG=0
-# 非技能安装物：登记 registry 供 setup 装，但非 external-skill 依赖，不入 EXTERNAL（MCP 引擎 / npm 二进制）。
-REG_SKIP=" playwright opsx "
-if [ -f "$REGISTRY" ] && [ -f "$EXT_MANIFEST" ]; then
-  # 5a 正向
+if [ -f "$REGISTRY" ]; then
   while IFS= read -r line; do
     case "$line" in
       '  '[![:space:]#]*'{'*) : ;;   # 顶层 token 行：2 空格缩进 + 非 # 键 + 单行流映射
@@ -148,28 +222,28 @@ if [ -f "$REGISTRY" ] && [ -f "$EXT_MANIFEST" ]; then
       *"tool: skills-cli"*) tool=skills-cli ;;
       *"tool: claude-plugin"*) tool=claude-plugin ;;
       *"tool: npm"*) tool=npm ;;
-      *) continue ;;   # builtin/bundled 非可安装 → 跳过
+      *"tool: bundled"*) tool=bundled ;;
+      *"tool: builtin"*) tool=builtin ;;
+      *) continue ;;
     esac
     token=$(printf '%s\n' "$line" | awk '{print $1}')
     token="${token%:}"
     [ -n "$token" ] || continue
-    case "$REG_SKIP" in *" $token "*) continue ;; esac   # 非技能安装物豁免
     N_REG=$((N_REG + 1))
-    grep -Fq -- "- $token" "$EXT_MANIFEST" \
-      || add_fail "registry 可安装 token 未在 EXTERNAL-SKILLS.md 声明: ${token}（tool=${tool}）" \
-                  "templates/skill-sources.yaml ↔ skills/EXTERNAL-SKILLS.md" \
-                  "在 skills/EXTERNAL-SKILLS.md「已声明依赖」加行: - ${token}；若确为非技能安装物（引擎/二进制），改加入本脚本 REG_SKIP 豁免"
+    if [ "$tool" != bundled ]; then
+      add_fail "default registry 包含非 bundled token: ${token}（tool=${tool}）" \
+        "templates/skill-sources.yaml" \
+        "把该能力实现为 skills/<name>/SKILL.md 并登记 tool: bundled；默认 pipeline 不允许外部安装依赖"
+      continue
+    fi
+    physical="$(printf '%s\n' "$line" | sed -n 's/.*content_skill:[[:space:]]*\([^,}[:space:]]*\).*/\1/p')"
+    [ -n "$physical" ] || physical="$token"
+    if [ ! -f "$ROOT/skills/$physical/SKILL.md" ]; then
+      add_fail "bundled registry token 缺实体 SKILL.md: ${token} → ${physical}" \
+        "templates/skill-sources.yaml" \
+        "创建 skills/${physical}/SKILL.md，或把 content_skill 改为已有 first-party skill"
+    fi
   done < "$REGISTRY"
-
-  # 5b 反向（WARN 不阻断；namespace 折叠 + builtin 在 registry 有条目故不误报）
-  while IFS= read -r token; do
-    [ -n "$token" ] || continue
-    grep -q "^  ${token}:" "$REGISTRY" && continue
-    case "$token" in
-      *:*) grep -q "^  ${token%%:*}:" "$REGISTRY" && continue ;;
-    esac
-    [ "$QUIET" = 1 ] || printf '[verify-skills] WARN — EXTERNAL 声明 %s 在 registry 无安装源（登记未落 source；builtin/内建可忽略）\n' "$token" >&2
-  done < <(sed -n '/^## 已声明依赖/,$p' "$EXT_MANIFEST" | grep '^- ' | awk '{print $2}')
 fi
 
 # ── 汇总 ──

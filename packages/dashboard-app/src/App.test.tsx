@@ -19,6 +19,7 @@ import { makeChange, makeProject, makeSnapshot } from './testkit'
 beforeEach(() => {
   localStorage.clear()
   resetEventSources()
+  window.history.replaceState({}, '', '/')
   try {
     delete document.documentElement.dataset.theme
   } catch {
@@ -58,14 +59,67 @@ describe('App 默认落地 = 进度（v9-flowdeck：收件箱退役，进度=唯
     expect(screen.queryByTestId('workbench-view')).toBeNull()
   })
 
-  it('一级导航恰好 2 项：进度 / 工作台（无收件箱入口）', async () => {
+  it('主导航只保留项目 / 进度 / AFK / 工作台 / 机器；状态、主题与语言收进设置', async () => {
     render(<App />)
     await screen.findByTestId('progress-view')
     const nav = screen.getByTestId('primary-nav')
-    expect(within(nav).getAllByRole('button')).toHaveLength(2)
+    expect(within(nav).getAllByRole('button')).toHaveLength(5)
+    expect(screen.getByTestId('nav-afk')).toBeInTheDocument()
+    // 项目上下文不再占用全局顶栏；项目入口只保留在 rail。
+    expect(screen.getByTestId('nav-projects')).toBeInTheDocument()
+    expect(screen.queryByTestId('app-header')).toBeNull()
+    expect(screen.queryByTestId('header-all-projects')).toBeNull()
+    expect(document.querySelector('footer')).toBeNull()
     expect(screen.queryByTestId('nav-inbox')).toBeNull()
     expect(screen.queryByTestId('nav-board')).toBeNull()
-    expect(screen.queryByTestId('nav-settings')).toBeNull()
+    expect(screen.getByTestId('nav-settings')).toBeInTheDocument()
+    expect(screen.queryByTestId('conn-indicator')).toBeNull()
+  })
+
+  it('点 rail「项目」入口 → 渲染 ProjectsView（同 header「所有项目」落点）', async () => {
+    render(<App />)
+    await screen.findByTestId('progress-view')
+    fireEvent.click(screen.getByTestId('nav-projects'))
+    expect(await screen.findByTestId('projects-view')).toBeInTheDocument()
+    expect(screen.queryByTestId('project-register')).toBeNull()
+    expect(screen.queryByTestId('project-register-path')).toBeNull()
+  })
+})
+
+describe('App URL 深链路（可复制的视图 / 项目 / Change 现场）', () => {
+  it('带 view/root/change 首次进入：直接打开对应项目的 Change 抽屉', async () => {
+    window.history.replaceState({}, '', '/?view=progress&root=%2Frepo&change=seed-c')
+    render(<App />)
+    expect(await screen.findByTestId('prg9-drawer')).toHaveAttribute('aria-label', 'seed-c')
+    expect(new URLSearchParams(window.location.search).get('change')).toBe('seed-c')
+  })
+
+  it('macOS /tmp 深链能命中 snapshot 的 /private/tmp canonical root，不回落到首个旧项目', async () => {
+    window.history.replaceState({}, '', '/?view=progress&root=%2Ftmp%2Fpipeline-ui-project.V60AOf&change=ui-real-browser')
+    ;(global.fetch as ReturnType<typeof vi.fn>).mockImplementation(async (url: string) => {
+      if (url === '/api/snapshot') {
+        return {
+          ok: true,
+          json: async () => makeSnapshot([
+            makeProject('/old/demo-project', []),
+            makeProject('/private/tmp/pipeline-ui-project.V60AOf', [makeChange('ui-real-browser', 'build')]),
+          ]),
+        }
+      }
+      throw new Error(`unexpected fetch ${url}`)
+    })
+    render(<App />)
+    expect(await screen.findByTestId('prg9-drawer')).toHaveAttribute('aria-label', 'ui-real-browser')
+    expect(new URLSearchParams(window.location.search).get('root')).toBe('/private/tmp/pipeline-ui-project.V60AOf')
+  })
+
+  it('切换一级视图会更新可复制 URL，且不丢当前项目 root', async () => {
+    render(<App />)
+    await screen.findByTestId('progress-view')
+    fireEvent.click(screen.getByTestId('nav-projects'))
+    const params = new URLSearchParams(window.location.search)
+    expect(params.get('view')).toBe('projects')
+    expect(params.get('root')).toBe('/repo')
   })
 })
 
@@ -80,8 +134,8 @@ describe('App 视图切换（v9-flowdeck 两视图接线）', () => {
     expect(screen.getByTestId('progress-view')).toBeInTheDocument()
   })
 
-  it('聚合语境 + 项目非零但全部不可达（ok=false）：工作台渲染诚实空态，不拿空 root 挂 WorkbenchView（T17 评审收口）', async () => {
-    localStorage.setItem('pipeline-dashboard-root', '') // 聚合选择——回落链在此才可能全落空
+  it('项目非零但全部不可达（ok=false）：工作台渲染诚实空态，不拿不可达 root 挂 WorkbenchView（v10c：不再经聚合语境）', async () => {
+    localStorage.setItem('pipeline-dashboard-view', 'workbench') // 直接落工作台，回落链此时全落空
     ;(global.fetch as ReturnType<typeof vi.fn>).mockImplementation(async (url: string) => {
       if (url === '/api/snapshot') {
         return { ok: true, json: async () => makeSnapshot([makeProject('/repo', [], { ok: false })]) }
@@ -89,8 +143,6 @@ describe('App 视图切换（v9-flowdeck 两视图接线）', () => {
       throw new Error(`unexpected fetch ${url}`)
     })
     render(<App />)
-    await screen.findByTestId('progress-view')
-    fireEvent.click(screen.getByTestId('nav-workbench'))
     expect(await screen.findByTestId('wb-no-root')).toHaveTextContent('没有可读取的项目')
     expect(screen.queryByTestId('workbench-view')).toBeNull()
   })
@@ -168,6 +220,7 @@ describe('App 深浅色自适应 + i18n', () => {
     await screen.findByTestId('progress-view')
     // 初始应用主题（默认 light）
     await waitFor(() => expect(document.documentElement.dataset.theme).toBe('light'))
+    fireEvent.click(screen.getByTestId('nav-settings'))
     fireEvent.click(screen.getByTestId('theme-toggle'))
     await waitFor(() => expect(document.documentElement.dataset.theme).toBe('dark'))
   })
@@ -177,9 +230,10 @@ describe('App 深浅色自适应 + i18n', () => {
     await screen.findByTestId('progress-view')
     const nav = screen.getByTestId('primary-nav')
     expect(nav.textContent).toContain('进度')
+    fireEvent.click(screen.getByTestId('nav-settings'))
     fireEvent.click(screen.getByTestId('lang-toggle'))
     expect(nav.textContent).toContain('Progress')
-    expect(nav.textContent).not.toContain('进度')
+    expect(nav.textContent).not.toContain('变更')
   })
 })
 
@@ -197,13 +251,14 @@ describe('App G18 教学空状态（T17 起纯教学态）', () => {
     const ob = await screen.findByTestId('onboard-no-project')
     expect(screen.queryByTestId('progress-view')).toBeNull()
     // 决议#7 + T2：注册表单退役，教学 CLI 为 pipeline init（自动登记），幽灵命令清除
-    expect(screen.queryByTestId('onboard-path')).toBeNull()
-    expect(screen.queryByTestId('onboard-register')).toBeNull()
+    expect(screen.queryByTestId('project-register-form')).toBeNull()
+    expect(screen.queryByTestId('project-register-path')).toBeNull()
+    expect(screen.queryByTestId('project-register-submit')).toBeNull()
     expect(screen.getByTestId('onboard-cli').textContent).toContain('pipeline init')
     expect(ob.textContent).not.toContain('projects add')
   })
 
-  it('有项目零 change → 进度替换为 init CLI 教学 onboarding（新建入口已退役：dashboard 只读，创建走终端）', async () => {
+  it('有项目零 change → 进度替换为 Route Lock 新建入口，并保留 init CLI 退路', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async (url: string) => {
@@ -215,9 +270,8 @@ describe('App G18 教学空状态（T17 起纯教学态）', () => {
     render(<App />)
     expect(await screen.findByTestId('onboard-no-change')).toBeInTheDocument()
     expect(screen.getByTestId('onboard-cli').textContent).toContain('pipeline init')
-    // 产品决策：dashboard 是只读进度面，新建 change 一律走终端——入口按钮与对话框整组退役
-    expect(screen.queryByTestId('onboard-new-change')).toBeNull()
-    expect(screen.queryByTestId('newchange-dialog')).toBeNull()
+    fireEvent.click(screen.getByTestId('onboard-new-change'))
+    expect(await screen.findByTestId('create-change-dialog')).toBeInTheDocument()
   })
 })
 
@@ -246,9 +300,9 @@ describe('App currentRoot 语义（D5：吃掉 G14，多项目默认取第一个
   })
 })
 
-describe('App 聚合语境渲染护栏（T17 验收④：currentRoot 空串 → 进度看全部项目）', () => {
-  it('聚合 + 进度视图：两个项目的任务行都渲染', async () => {
-    localStorage.setItem('pipeline-dashboard-root', '')
+describe('App v10c 契约护栏（旧聚合偏好 root=\'\' + 进度视图 → 落「项目」总览页，不渲染聚合）', () => {
+  it("旧聚合偏好（root='')停在 progress → 自动落项目总览页，两项目卡都在，不出聚合进度行", async () => {
+    localStorage.setItem('pipeline-dashboard-root', '') // 旧聚合偏好（本次重构退役）
     localStorage.setItem('pipeline-dashboard-view', 'progress')
     vi.stubGlobal(
       'fetch',
@@ -268,19 +322,48 @@ describe('App 聚合语境渲染护栏（T17 验收④：currentRoot 空串 → 
       }),
     )
     render(<App />)
+    // 契约：progress 恒单项目——旧聚合偏好被 useEffect 落到「项目」总览页（不再渲染聚合进度）。
+    expect(await screen.findByTestId('projects-view')).toBeInTheDocument()
+    expect(screen.getByTestId('project-row-repo-a')).toBeInTheDocument()
+    expect(screen.getByTestId('project-row-repo-b')).toBeInTheDocument()
+    // 聚合进度行不再存在（画布/列表都归单项目进度页）
+    expect(screen.queryByTestId('prg9-row-a1')).toBeNull()
+  })
+
+  it('点项目卡钻进单项目进度页：setCurrentRoot + 切 progress，只看该项目', async () => {
+    localStorage.setItem('pipeline-dashboard-view', 'projects')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url === '/api/snapshot') {
+          return {
+            ok: true,
+            json: async () =>
+              makeSnapshot([
+                makeProject('/repo-a', [makeChange('a1', 'build')]),
+                makeProject('/repo-b', [makeChange('b1', 'build')]),
+              ]),
+          }
+        }
+        if (url.startsWith('/api/workflows?root=')) return { ok: true, json: async () => ({ names: [] }) }
+        throw new Error(`unexpected fetch ${url}`)
+      }),
+    )
+    render(<App />)
+    fireEvent.click(await screen.findByTestId('project-row-repo-b'))
     expect(await screen.findByTestId('progress-view')).toBeInTheDocument()
-    await waitFor(() => {
-      expect(screen.getByTestId('prg9-row-a1')).toBeInTheDocument()
-      expect(screen.getByTestId('prg9-row-b1')).toBeInTheDocument()
-    })
+    // v10c：下方列表已退役，单项目 change 现由画布 change 卡承载（prg-cv-chg-*）。
+    await waitFor(() => expect(screen.getByTestId('prg-cv-chg-b1')).toBeInTheDocument())
+    expect(screen.queryByTestId('prg-cv-chg-a1')).toBeNull()
   })
 })
 
-describe('App 高级折叠入口（debug 降级）', () => {
-  it('Advanced 折叠面在页脚、不在一级导航', async () => {
+describe('App 调试外壳退役', () => {
+  it('高级调试面与 server 版本不再占用全局页脚', async () => {
     render(<App />)
     await screen.findByTestId('progress-view')
-    expect(screen.getByTestId('advanced-panel')).toBeInTheDocument()
+    expect(screen.queryByTestId('advanced-panel')).toBeNull()
+    expect(document.querySelector('footer')).toBeNull()
     const nav = screen.getByTestId('primary-nav')
     expect(nav.textContent).not.toMatch(/流量|traffic|高级/i)
   })
@@ -352,8 +435,11 @@ describe('App 断线横幅 + 重连（评审 P2-13，Task 5）', () => {
   })
 })
 
-describe('App currentRoot 聚合选择（D5/G19③：currentRoot 空串是全应用聚合的唯一表示，Task 5）', () => {
-  it('点切换器「全部项目」→ currentRoot 变为空串并保持（不被 roots[0] 兜底逻辑吃回去）', async () => {
+// v10c：聚合语境（currentRoot 空串）整体退役——「点全部项目→空串保持」「空串偏好跨刷新保持」两用例
+// 随之删除。切项目能力由 project-switcher 下拉 + 「项目」总览页卡覆盖（见上方护栏 describe）。
+
+describe('App 项目切换（项目总览是唯一入口）', () => {
+  it('双项目：从项目总览点 repo-b 后打开该项目进度', async () => {
     render(<App />)
     await screen.findByTestId('progress-view')
     const es = lastEventSource()
@@ -364,125 +450,28 @@ describe('App currentRoot 聚合选择（D5/G19③：currentRoot 空串是全应
     act(() => {
       es!.emit('snapshot', JSON.stringify(next))
     })
-    await waitFor(() => expect(screen.getByTestId('project-switcher').textContent).toContain('repo-a'))
-
-    fireEvent.click(screen.getByTestId('project-switcher'))
-    fireEvent.click(screen.getByTestId('project-item-all'))
-    expect(screen.getByTestId('project-switcher').textContent).toContain('全部项目')
-
-    // 再来一帧快照（模拟后台刷新）：聚合选择必须继续保持，不能被"空串当没设置"的旧兜底吃回去。
-    act(() => {
-      es!.emit('snapshot', JSON.stringify(next))
-    })
-    expect(screen.getByTestId('project-switcher').textContent).toContain('全部项目')
-  })
-
-  it('localStorage 记忆的聚合偏好（空串）跨刷新保持', async () => {
-    localStorage.setItem('pipeline-dashboard-root', '')
-    render(<App />)
-    await screen.findByTestId('progress-view')
-    const es = lastEventSource()
-    const next = makeSnapshot([
-      makeProject('/repo-a', [makeChange('a1', 'build')]),
-      makeProject('/repo-b', [makeChange('b1', 'build')]),
-    ])
-    act(() => {
-      es!.emit('snapshot', JSON.stringify(next))
-    })
-    await waitFor(() => expect(screen.getByTestId('project-switcher')).toBeInTheDocument())
-    expect(screen.getByTestId('project-switcher').textContent).toContain('全部项目')
+    fireEvent.click(screen.getByTestId('nav-projects'))
+    const row = await screen.findByTestId('project-row-repo-b')
+    fireEvent.click(row)
+    await waitFor(() => expect(new URLSearchParams(window.location.search).get('root')).toBe('/repo-b'))
+    expect(screen.getByTestId('progress-view')).toBeInTheDocument()
+    expect(screen.queryByTestId('project-switcher')).toBeNull()
   })
 })
 
-describe('App 注销项目（评审 P2-13，Task 5）', () => {
-  function stubTwoProjects() {
-    return vi.fn(async (url: string, init?: RequestInit) => {
-      if (url === '/api/snapshot') {
-        return {
-          ok: true,
-          json: async () =>
-            makeSnapshot([
-              makeProject('/repo-a', [makeChange('a1', 'build')]),
-              makeProject('/repo-b', [makeChange('b1', 'build')]),
-            ]),
-        }
-      }
-      if (url.startsWith('/api/workflows?root=')) return { ok: true, json: async () => ({ names: [] }) }
-      if (url.startsWith('/api/projects?root=') && init?.method === 'DELETE') {
-        return { ok: true, json: async () => ({}) }
-      }
-      throw new Error(`unexpected fetch ${url}`)
-    })
-  }
-
-  it('注销当前项目成功 → DELETE 命中正确 root + currentRoot 切到聚合（切换器显示"全部项目"）', async () => {
-    const fetchMock = stubTwoProjects()
-    vi.stubGlobal('fetch', fetchMock)
+describe('App 项目自动发现外壳', () => {
+  it('不提供全局项目切换、手工注册或注销入口', async () => {
     render(<App />)
     await screen.findByTestId('progress-view')
-    // D5：无 localStorage 记忆时取第一个已注册项目
-    expect(screen.getByTestId('project-switcher').textContent).toContain('repo-a')
-
-    fireEvent.click(screen.getByTestId('project-switcher'))
-    fireEvent.click(screen.getByTestId('project-unregister-repo-a'))
-    const dialog = await screen.findByTestId('unregister-confirm')
-    fireEvent.click(within(dialog).getByRole('button', { name: '确认注销' }))
-
-    await waitFor(() => {
-      const delCall = fetchMock.mock.calls.find(
-        ([u, i]) => String(u).startsWith('/api/projects?root=') && i?.method === 'DELETE',
-      )
-      expect(delCall).toBeDefined()
-      expect(String(delCall![0])).toContain(encodeURIComponent('/repo-a'))
-    })
-    await waitFor(() => expect(screen.getByTestId('project-switcher').textContent).toContain('全部项目'))
-  })
-
-  it('注销非当前项目成功 → currentRoot 不变', async () => {
-    const fetchMock = stubTwoProjects()
-    vi.stubGlobal('fetch', fetchMock)
-    render(<App />)
-    await screen.findByTestId('progress-view')
-    expect(screen.getByTestId('project-switcher').textContent).toContain('repo-a')
-
-    fireEvent.click(screen.getByTestId('project-switcher'))
-    fireEvent.click(screen.getByTestId('project-unregister-repo-b'))
-    const dialog = await screen.findByTestId('unregister-confirm')
-    fireEvent.click(within(dialog).getByRole('button', { name: '确认注销' }))
-
-    await waitFor(() => {
-      const delCall = fetchMock.mock.calls.find(
-        ([u, i]) => String(u).startsWith('/api/projects?root=') && i?.method === 'DELETE',
-      )
-      expect(delCall).toBeDefined()
-    })
-    expect(screen.getByTestId('project-switcher').textContent).toContain('repo-a')
-  })
-
-  // UX 一致性缺口修复（真机 Playwright E2E 验证发现）：注销成功此前是"静默成功"——对话框关闭、
-  // 项目从列表消失，但没有 toast 反馈，跟应用里其它成功操作（转换/终止/保存配置）均有 toast
-  // 的既有体验不符。onUnregister 的 .then() 分支补一条 showFlash('toast', ...)，这里钉住。
-  it('注销成功 → flash-toast 出现，文案为新增的注销成功提示（此前静默成功，无任何反馈）', async () => {
-    const fetchMock = stubTwoProjects()
-    vi.stubGlobal('fetch', fetchMock)
-    render(<App />)
-    await screen.findByTestId('progress-view')
-
-    fireEvent.click(screen.getByTestId('project-switcher'))
-    fireEvent.click(screen.getByTestId('project-unregister-repo-a'))
-    const dialog = await screen.findByTestId('unregister-confirm')
-    fireEvent.click(within(dialog).getByRole('button', { name: '确认注销' }))
-
-    const toast = await screen.findByTestId('flash-toast')
-    expect(toast.textContent).toBe('已注销该项目')
+    for (const id of ['project-switcher', 'project-register-path', 'project-register-submit', 'unregister-confirm']) {
+      expect(screen.queryByTestId(id)).toBeNull()
+    }
   })
 })
 
-// v6 计划 T11：App 是唯一 useSnapshot() 调用点，流程带真实计数/running 脉冲靠这里把同一份
-// snapshot 逐层传给 WorkbenchView（不在 WorkbenchView 内独立开第二条 SSE 订阅）——这里钉住
-// 接线本身没漏（而非重复 WorkbenchView.test.tsx 已经覆盖的 stageCounts 投影细节）。
-describe('App 流程带真实计数接线（v6 计划 T11）', () => {
-  it('点工作台：snapshot 里 automation===running 的 change 所在阶段渲染计数气泡与脉冲', async () => {
+// Workbench 只负责编辑工作流，不重复展示在办任务数量；运行中的阶段只保留轻量脉冲提示。
+describe('App 工作台运行态接线', () => {
+  it('snapshot 中 automation===running 的 change 所在阶段渲染脉冲，不混入任务计数', async () => {
     ;(global.fetch as ReturnType<typeof vi.fn>).mockImplementation(async (url: string) => {
       if (url === '/api/snapshot') {
         return {
@@ -500,8 +489,8 @@ describe('App 流程带真实计数接线（v6 计划 T11）', () => {
     await screen.findByTestId('progress-view')
     fireEvent.click(screen.getByTestId('nav-workbench'))
     await screen.findByTestId('workbench-view')
-    expect(screen.getByTestId('wb-flow-count-build')).toHaveTextContent('1')
     expect(screen.getByTestId('wb-flow-gloss-build')).toBeInTheDocument()
+    expect(screen.queryByTestId('wb-flow-count-build')).toBeNull()
   })
 })
 

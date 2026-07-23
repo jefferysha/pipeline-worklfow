@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
-# breadcrumb.sh — UserPromptSubmit 薄 shim：每轮重提当前 phase 面包屑，对抗长会话漂移。
+# breadcrumb.sh — UserPromptSubmit 薄 shim：明确恢复时重提该 phase 面包屑。
 #
 # 缓存由 CLI 在 transition 时写 openspec/changes/<name>/.breadcrumb（CONTRACT §5.4）；
-# 本 shim 只做文件存在性检查 + cat mtime 最新的一个，无缓存则静默 exit 0。
+# `.pipeline-active` 是仓库级恢复候选，不能把一个会话的旧任务注入另一个会话。
+# 本 shim 仅在用户明确说继续/恢复或点名 change 时绑定候选；无候选时只有恰好一个
+# 活跃 change 才可由明确恢复词使用。无缓存或新任务时静默 exit 0。
 # 阶段×hook 开关（v5 T5 / 决议#2）：.pipeline/hooks.json 关掉当前阶段的 breadcrumb → 静默退出。
 # 纯 bash 热路径：不 spawn 任何解释器/外部 JSON 解析器。
 # fail-open：stdin 解析失败 → 回退 $PWD；任何异常 → 静默 exit 0。
@@ -37,28 +39,25 @@ json_get() {
 CWD="$(json_get cwd || true)"
 [ -z "$CWD" ] && CWD="$PWD"
 [ -d "$CWD" ] || exit 0
+PROMPT="$(json_get prompt || true)"
 
-# 上溯至多 5 层找 openspec/changes（与 gate.sh 的 marker 上溯对称）；PROOT=项目根（开关判定用）
-CHANGES="" PROOT=""
-d="$CWD"
-for i in 1 2 3 4 5; do
-  if [ -d "$d/openspec/changes" ]; then CHANGES="$d/openspec/changes"; PROOT="$d"; break; fi
-  [ "$d" = "/" ] && break
-  d="$(dirname "$d")"
-done
-[ -n "$CHANGES" ] || exit 0
+# 只绑定当前 Git/显式项目根，避免 /tmp 等共同父目录的 Change 注入无关会话。
+ROOT_HELPER="$(dirname "${BASH_SOURCE[0]:-$0}")/project-root.sh"
+[ -r "$ROOT_HELPER" ] || exit 0
+# shellcheck source=project-root.sh
+. "$ROOT_HELPER"
+PROOT="$(pipeline_project_root "$CWD" existing changes || true)"
+[ -n "$PROOT" ] || exit 0
+CHANGES="$PROOT/openspec/changes"
 
-# yget：读 .pipeline.yaml 单个顶层 key（同 gate.sh/router.sh，保持各 shim 自包含、免 source）
-yget() { # $1=file $2=key
-  local v
-  v="$(grep -m1 "^$2: " "$1" 2>/dev/null || true)"
-  v="${v#"$2: "}"
-  case "$v" in
-    '"'*'"') v="${v#\"}"; v="${v%\"}" ;;
-    "'"*"'") v="${v#\'}"; v="${v%\'}" ;;
-  esac
-  printf '%s' "$v"
-}
+STATE_HELPER="$(dirname "${BASH_SOURCE[0]:-$0}")/canonical-state.sh"
+if [ -r "$STATE_HELPER" ]; then
+  . "$STATE_HELPER"
+else
+  pipeline_state_source() { [ -f "$1/.pipeline.yaml" ] && printf '%s' "$1/.pipeline.yaml"; }
+  pipeline_state_get() { local v; v="$(grep -m1 "^$2: " "$1" 2>/dev/null || true)"; v="${v#"$2: "}"; case "$v" in '"'*'"') v="${v#\"}"; v="${v%\"}" ;; "'"*"'") v="${v#\'}"; v="${v%\'}" ;; esac; printf '%s' "$v"; }
+fi
+yget() { pipeline_state_get "$1" "$2"; }
 
 # 阶段×hook 开关（v5 T5 / 决议#2）：读 <项目根>/.pipeline/hooks.json（server 写端点落盘，
 # canonical 一键一行 `"<hook>.<阶段>": false`，只存禁用项，见 packages/server/src/hooksConfig.ts）。
@@ -70,26 +69,86 @@ hook_disabled() { # $1=项目根 $2=hook id $3=阶段 → 0=该阶段已禁用
   grep -Fq "\"$2.$3\": false" "$1/.pipeline/hooks.json" 2>/dev/null
 }
 
-# 多 change 并存时取 mtime 最新的 .breadcrumb（治「取 glob 第一个」的字母序错绑）
-newest=""
-newest_mt=-1
-for f in "$CHANGES"/*/.breadcrumb; do
-  [ -f "$f" ] || continue
-  # GNU `stat -f` 是文件系统状态模式（非 mtime），在 Linux 上会"成功"吐非数字，兜底永不触发
-  # ——先试 GNU 语法（-c）+ 数字校验，而非只靠退出码判断。
-  mt="$(stat -c %Y "$f" 2>/dev/null)"
-  case "$mt" in ''|*[!0-9]*) mt="$(stat -f %m "$f" 2>/dev/null)" ;; esac
-  case "$mt" in ''|*[!0-9]*) mt=0 ;; esac
-  if [ "$mt" -gt "$newest_mt" ]; then
-    newest_mt="$mt"
-    newest="$f"
-  fi
-done
+# dashboard/CLI 的 `.pipeline-active` 是仓库级恢复候选。只有明确恢复意图才可拿它
+# 注入本轮；否则即使存在 REAL_AGENT_TASK.md 也绝不能泄漏到一条独立新任务。
+ACTIVE_NAME=""
+ACTIVE_DIR=""
+ACTIVE_STATE=""
+ACTIVE_POINTER="$PROOT/.pipeline-active"
+if [ -f "$ACTIVE_POINTER" ] && [ ! -L "$ACTIVE_POINTER" ] && [ -r "$ACTIVE_POINTER" ]; then
+  IFS= read -r ACTIVE_NAME < "$ACTIVE_POINTER" || ACTIVE_NAME=""
+  case "$ACTIVE_NAME" in
+    ''|*[!A-Za-z0-9_-]*) ACTIVE_NAME="" ;;
+    *)
+      ACTIVE_DIR="$CHANGES/$ACTIVE_NAME"
+      ACTIVE_STATE="$(pipeline_state_source "$ACTIVE_DIR" || true)"
+      if [ -z "$ACTIVE_STATE" ] || [ "$(yget "$ACTIVE_STATE" archived)" = "true" ]; then
+        ACTIVE_NAME=""
+        ACTIVE_DIR=""
+        ACTIVE_STATE=""
+      fi
+      ;;
+  esac
+fi
 
-[ -n "$newest" ] || exit 0
+# 只有明确恢复才读取候选。helper 缺失时 fail-closed，避免旧上下文泄漏。
+INTENT_HELPER="$(dirname "${BASH_SOURCE[0]:-$0}")/prompt-intent.sh"
+[ -r "$INTENT_HELPER" ] || exit 0
+# shellcheck source=prompt-intent.sh
+. "$INTENT_HELPER"
+
+RESUME_NAME=""
+RESUME_DIR=""
+RESUME_STATE=""
+if [ -n "$ACTIVE_NAME" ]; then
+  if pipeline_prompt_requests_resume "$PROMPT" "$ACTIVE_NAME"; then
+    RESUME_NAME="$ACTIVE_NAME"
+    RESUME_DIR="$ACTIVE_DIR"
+    RESUME_STATE="$ACTIVE_STATE"
+  else
+    exit 0
+  fi
+elif pipeline_prompt_requests_resume "$PROMPT" ""; then
+  # 没有显式激活指针时，只有唯一活跃 change 可被泛化的“继续”恢复；多 change
+  # 必须由 router/root skill 要求用户选择，绝不按 mtime 猜一个。
+  sole_name=""
+  sole_dir=""
+  sole_state=""
+  active_count=0
+  for change_dir in "$CHANGES"/*; do
+    [ -d "$change_dir" ] || continue
+    state="$(pipeline_state_source "$change_dir" || true)"
+    [ -n "$state" ] || continue
+    [ "$(yget "$state" archived)" = "true" ] && continue
+    active_count=$((active_count + 1))
+    sole_name="${change_dir##*/}"
+    sole_dir="$change_dir"
+    sole_state="$state"
+  done
+  if [ "$active_count" -eq 1 ]; then
+    RESUME_NAME="$sole_name"
+    RESUME_DIR="$sole_dir"
+    RESUME_STATE="$sole_state"
+  else
+    exit 0
+  fi
+else
+  exit 0
+fi
+
+newest="$RESUME_DIR/.breadcrumb"
+if ! hook_disabled "$PROOT" breadcrumb "$(yget "$RESUME_STATE" phase)" && [ -f "$RESUME_DIR/REAL_AGENT_TASK.md" ] && [ ! -L "$RESUME_DIR/REAL_AGENT_TASK.md" ] && [ -r "$RESUME_DIR/REAL_AGENT_TASK.md" ]; then
+  printf '\n<pipeline-active-task>\nchange: %s\nphase: %s\n用户任务：\n' "$RESUME_NAME" "$(yget "$RESUME_STATE" phase)"
+  cat "$RESUME_DIR/REAL_AGENT_TASK.md" 2>/dev/null
+  printf '\n</pipeline-active-task>\n'
+fi
+
+[ -f "$newest" ] || exit 0
 
 # ── 阶段×hook 开关（v5 T5 / 决议#2）：newest 所属 change 的阶段被配置禁用 → 静默退出 ──
-hook_disabled "$PROOT" breadcrumb "$(yget "$(dirname "$newest")/.pipeline.yaml" phase)" && exit 0
+NEWEST_CHANGE_DIR="$(dirname "$newest")"
+NEWEST_STATE="$(pipeline_state_source "$NEWEST_CHANGE_DIR" || true)"
+hook_disabled "$PROOT" breadcrumb "$(yget "$NEWEST_STATE" phase)" && exit 0
 
 cat "$newest" 2>/dev/null
 exit 0
