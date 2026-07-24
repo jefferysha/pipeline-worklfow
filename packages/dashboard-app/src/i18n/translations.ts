@@ -378,8 +378,9 @@ export const zh: Dict = {
   onboard: {
     no_project_title: '还没有注册任何项目',
     // T17 纯教学态（决议#7 + T2）：pipeline init 自动登记项目，注册表单/幽灵命令全部退役。
-    // full-install W2：no-project 改「诚实三步 checklist」——dashboard 只读，注册/装技能/跑流程都在终端（决议#7 不加注册 UI，只给可复制命令导回终端）。
-    no_project_desc: '已初始化的 Pipeline 项目会自动出现在这里；若还没有项目，请按下面三步从终端开始。',
+    // full-install W2：no-project 改「诚实两步 checklist」——setup 已把 Dashboard 带到这里，
+    // 不再猜测 Codex/Claude 宿主；只给 init 与 doctor 的可复制真命令。
+    no_project_desc: '已初始化的 Pipeline 项目会自动出现在这里；若还没有项目，请按下面两步从终端开始。',
     register_title: '注册现有项目',
     register_note: '输入已经初始化过的项目绝对路径；服务端会验证目录与可信 inode。',
     register_path: '项目绝对路径',
@@ -389,7 +390,6 @@ export const zh: Dict = {
     registered: '项目已注册',
     or_initialize: '或者初始化一个新项目',
     step_init: '建一个 change（pipeline init 会把项目自动登记进来，不用单独注册）',
-    step_setup: '装技能 + 配就绪（安装流水线技能，配好 AFK 要的凭证与镜像检查）',
     step_doctor: '确认环境就绪，然后刷新本页',
     copy: '复制',
     copied: '已复制 ✓',
@@ -1491,7 +1491,6 @@ export const en: Dict = {
     registered: 'Project registered',
     or_initialize: 'Or initialize a new project',
     step_init: 'Create a change (pipeline init auto-registers the project — no separate registration needed)',
-    step_setup: 'Install skills + set readiness (installs pipeline skills and configures the credential and image checks AFK needs)',
     step_doctor: 'Confirm the environment is ready, then refresh this page',
     copy: 'Copy',
     copied: 'Copied ✓',

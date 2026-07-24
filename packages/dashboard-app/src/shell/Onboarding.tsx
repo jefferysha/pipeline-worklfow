@@ -58,10 +58,10 @@ function CmdRow({ cmd, testid, copyTestid }: { cmd: string; testid: string; copy
  * 教会界面怎么用。
  *
  * full-install W2（旅程 P0 断点）：纯 dashboard 新用户曾撞死胡同——无注册入口、切换器 >1 才现、
- * 空收件箱 CTA「去进度」也空成死循环。no-project 态从「单条 pipeline init」升级为「诚实三步
- * checklist」：dashboard 只读看进度，注册/装技能/跑流程都在终端，逐条给可复制真命令
- * （pipeline init → setup → doctor），做完刷新本页即可。决议#7 不反悔加注册 UI：不做假注册/假
- * 安装按钮，前端只把命令导回终端。
+ * 空收件箱 CTA「去进度」也空成死循环。no-project 态从「单条 pipeline init」升级为「诚实两步
+ * checklist」：能看到 Dashboard 说明 setup 已完成，这里只引导创建 Change 并运行 doctor 校验
+ * （pipeline init → doctor），做完刷新本页即可。决议#7 不反悔加注册 UI：不做假注册/假安装
+ * 按钮，前端只把命令导回终端，也不猜测宿主是 Codex 还是 Claude。
  *
  * T17（决议#7 + T2）：pipeline init best-effort 自动登记项目（kernel projectRegistry），注册表单
  * 与 POST /api/projects 调用退役（端点仅兼容保留），幽灵命令 `pipeline projects add` 一并清除。
@@ -116,13 +116,6 @@ export function Onboarding({ kind, root, onCreated, onToast }: OnboardingProps):
         </li>
         <li className="flex gap-3">
           <span className={STEP_N_CLS} aria-hidden="true">2</span>
-          <div className="flex min-w-0 flex-1 flex-col gap-[7px]">
-            <div className={STEP_LABEL_CLS}>{t('onboard.step_setup')}</div>
-            <CmdRow cmd="pipeline setup" testid="onboard-cmd-setup" copyTestid="onboard-copy-setup" />
-          </div>
-        </li>
-        <li className="flex gap-3">
-          <span className={STEP_N_CLS} aria-hidden="true">3</span>
           <div className="flex min-w-0 flex-1 flex-col gap-[7px]">
             <div className={STEP_LABEL_CLS}>{t('onboard.step_doctor')}</div>
             <CmdRow cmd="pipeline doctor" testid="onboard-cmd-doctor" copyTestid="onboard-copy-doctor" />
