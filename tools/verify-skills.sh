@@ -3,7 +3,7 @@
 #
 # 校验面：
 #   1. Codex/Claude manifests、Codex marketplace、hooks/hooks.json、CLI/dashboard 发布产物与 canonical helpers 存在；
-#   2. hook command 必须同时支持 Codex 的 $PLUGIN_ROOT 与 Claude 的 $CLAUDE_PLUGIN_ROOT，且目标脚本存在并可执行；
+#   2. hook command 必须调用用户级稳定 pipeline-hook ABI，不能直连可变 marketplace checkout；
 #   3. skills/ 下每个 skill 目录都含 SKILL.md；
 #   4. skills/**/SKILL.md、hooks/hooks.json、templates/manifest.yaml（若有）中形如
 #      `external-skill: <名字>` 的可选集成引用，必须在 skills/EXTERNAL-SKILLS.md 中说明。
@@ -58,11 +58,14 @@ CODEX_PLUGIN_JSON="$ROOT/.codex-plugin/plugin.json"
 CODEX_MARKETPLACE_JSON="$ROOT/.agents/plugins/marketplace.json"
 HOOKS_JSON="$ROOT/hooks/hooks.json"
 CANONICAL_STATE_HELPER="$ROOT/hooks/canonical-state.sh"
+JSON_INPUT_HELPER="$ROOT/hooks/json-input.sh"
 PROMPT_INTENT_HELPER="$ROOT/hooks/prompt-intent.sh"
 AUTO_UPDATE_HELPER="$ROOT/hooks/auto-update.sh"
+RUNTIME_BOOTSTRAP="$ROOT/runtime/pipeline-bootstrap.mjs"
 CLI_BUNDLE="$ROOT/packages/cli/dist/pipeline.mjs"
 DASHBOARD_SERVER_BUNDLE="$ROOT/packages/server/dist/dashboard.mjs"
 DASHBOARD_WEB_INDEX="$ROOT/packages/dashboard-app/dist/index.html"
+SIMPLE_WORKFLOW_TEMPLATE="$ROOT/templates/workflows/simple.yaml"
 
 # ── 1. 清单文件本体 ──
 if [ ! -f "$PLUGIN_JSON" ]; then
@@ -95,18 +98,28 @@ fi
   || add_fail "缺失或不可读 hooks/canonical-state.sh" \
               "G1 hooks canonical state 共享读取依赖" \
               "把 hooks/canonical-state.sh 纳入插件资产并保证可读；禁止靠各 hook 的 legacy YAML fallback 运行"
+[ -f "$JSON_INPUT_HELPER" ] && [ -r "$JSON_INPUT_HELPER" ] \
+  || add_fail "缺失或不可读 hooks/json-input.sh" \
+              "实时 hooks 的共享 JSON 字符串解析依赖" \
+              "把 hooks/json-input.sh 纳入插件资产并保证可读；禁止让任一 hook 回退到各自的截断式解析"
 [ -f "$PROMPT_INTENT_HELPER" ] && [ -r "$PROMPT_INTENT_HELPER" ] \
   || add_fail "缺失或不可读 hooks/prompt-intent.sh" \
               "UserPromptSubmit 跨会话恢复意图判定依赖" \
               "把 hooks/prompt-intent.sh 纳入插件资产并保证可读；router/breadcrumb 缺它时必须 fail-closed，避免旧 change 泄漏"
 [ -f "$AUTO_UPDATE_HELPER" ] && [ -x "$AUTO_UPDATE_HELPER" ] \
   || add_fail "缺失或不可执行 hooks/auto-update.sh" "原生宿主 opt-in 自动升级" "把 hooks/auto-update.sh 纳入插件资产并 chmod +x"
+[ -f "$RUNTIME_BOOTSTRAP" ] && [ -r "$RUNTIME_BOOTSTRAP" ] \
+  || add_fail "缺失 runtime/pipeline-bootstrap.mjs" "稳定 launcher / host hook ABI" "把 runtime/pipeline-bootstrap.mjs 纳入发布包"
 [ -f "$CLI_BUNDLE" ] && [ -x "$CLI_BUNDLE" ] \
   || add_fail "缺失或不可执行 packages/cli/dist/pipeline.mjs" "完整插件 CLI runtime" "运行 npm run build，并提交 packages/cli/dist/pipeline.mjs"
 [ -f "$DASHBOARD_SERVER_BUNDLE" ] && [ -r "$DASHBOARD_SERVER_BUNDLE" ] \
   || add_fail "缺失 dashboard server bundle: packages/server/dist/dashboard.mjs" "完整插件 dashboard runtime" "运行 npm run build，并提交 packages/server/dist/dashboard.mjs"
 [ -f "$DASHBOARD_WEB_INDEX" ] && [ -r "$DASHBOARD_WEB_INDEX" ] \
   || add_fail "缺失 dashboard SPA: packages/dashboard-app/dist/index.html" "完整插件 dashboard runtime" "运行 npm run build，并提交 packages/dashboard-app/dist/"
+[ -f "$SIMPLE_WORKFLOW_TEMPLATE" ] && [ -r "$SIMPLE_WORKFLOW_TEMPLATE" ] \
+  || add_fail "缺失内建轻量 workflow 模板: templates/workflows/simple.yaml" \
+              "simple Track 的发行资产" \
+              "把 templates/workflows/simple.yaml 纳入发布包，并与 kernel 内建定义保持一致"
 
 # index.html 是 server 同源托管的入口；仅目录存在不足以保证哈希资源也随 release 进入仓库。
 if [ -f "$DASHBOARD_WEB_INDEX" ]; then
@@ -123,12 +136,15 @@ if [ -f "$DASHBOARD_WEB_INDEX" ]; then
   done < <(grep -oE 'assets/[A-Za-z0-9._-]+' "$DASHBOARD_WEB_INDEX" 2>/dev/null | sort -u)
 fi
 
-# ── 2. 跨宿主 hook root + 引用路径：存在 + *.sh 可执行 ──
-# Codex 原生 plugin hook 注入 PLUGIN_ROOT，Claude 注入 CLAUDE_PLUGIN_ROOT。两者不能二选一，
-# 否则 `pipeline setup --codex` 安装虽然成功，但正常对话的 router/auto-update hook 根本不会执行。
+# ── 2. 稳定 host hook ABI + payload shell 语法 ──
+# Native host cache 是更新时可变的候选输入。host manifest 只准调用 setup 写入的
+# ~/.local/bin/pipeline-hook；它再进入已验证的 managed release，不能直接跑 PLUGIN_ROOT。
 if [ -f "$HOOKS_JSON" ]; then
-  grep -Fq '${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-}}/hooks/' "$HOOKS_JSON" \
-    || add_fail "hooks 未同时兼容 PLUGIN_ROOT/CLAUDE_PLUGIN_ROOT" "hooks/hooks.json" "所有 hook command 使用 \${PLUGIN_ROOT:-\${CLAUDE_PLUGIN_ROOT:-}}/hooks/<script>"
+  grep -Fq 'pipeline-hook' "$HOOKS_JSON" \
+    || add_fail "hooks 未调用稳定 pipeline-hook launcher" "hooks/hooks.json" "所有 host hook command 使用 bash \"\${HOME}/.local/bin/pipeline-hook\" <hook-id>"
+  if grep -Fq '${PLUGIN_ROOT' "$HOOKS_JSON" || grep -Fq '${CLAUDE_PLUGIN_ROOT' "$HOOKS_JSON"; then
+    add_fail "hooks 直接引用可变 plugin root" "hooks/hooks.json" "host manifest 不得直连 PLUGIN_ROOT；改为稳定 pipeline-hook ABI"
+  fi
   for rel in \
     hooks/session-start.sh \
     hooks/confirm-clear-prompt.sh \
@@ -138,12 +154,21 @@ if [ -f "$HOOKS_JSON" ]; then
     hooks/confirm-clear.sh \
     hooks/decision-recorder.sh \
     hooks/skill-tracker.sh \
-    hooks/interactive-skill-gate.sh; do
+    hooks/interactive-skill-gate.sh \
+    hooks/terminal-activity.sh \
+    hooks/interaction-authority.sh; do
     N_PATH=$((N_PATH + 1))
     p="$ROOT/$rel"
     [ -f "$p" ] && [ -x "$p" ] \
       || add_fail "缺失或不可执行 hook 脚本: $rel" "hooks/hooks.json" "把 $rel 纳入发布包并 chmod +x"
   done
+  while IFS= read -r shell_file; do
+    [ -n "$shell_file" ] || continue
+    N_PATH=$((N_PATH + 1))
+    if ! bash -n "$shell_file" 2>/dev/null; then
+      add_fail "shell 语法无效: ${shell_file#"$ROOT"/}" "打包 hook / adapter" "修复语法后重新运行 bash -n ${shell_file#"$ROOT"/}"
+    fi
+  done < <(find "$ROOT/hooks" "$ROOT/adapters" -type f -name '*.sh' -print 2>/dev/null | sort)
 fi
 
 check_refs() { # file

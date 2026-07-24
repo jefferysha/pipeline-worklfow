@@ -5,7 +5,7 @@
  * - ProjectTrackConfig：`.pipeline/tracks.yaml` 的原始配置（parse 的输出、validate 的输入、
  *   serialize 的输入）。字段可选性如实反映文件里可省略的内容；枚举字段放宽为 string——
  *   闭集校验是 validate 的职责（parse 只管形状与标量类型），所以非法值必须能被本类型承载。
- * - TrackDefinition / TrackRegistry：合成后的 effective 模型（内建四轨 + 项目额外 track），
+ * - TrackDefinition / TrackRegistry：合成后的 effective 模型（内建 Track + 项目额外 track），
  *   字段全部收窄为闭集类型，registry 的消费方只读这一层。
  *
  * 本模块只在 tracks/ 内部与其直接消费方之间使用；kernel/src/types.ts 的 TRACKS 常量仍是
@@ -42,11 +42,23 @@ export interface TrackWorkflowBinding {
  */
 export interface TrackPolicyProfile {
   readonly reviewSeed: ReviewSeed
+  /**
+   * 真正的「spec-complete 后交给 AFK」策略位。它与 automationEligible 分离：后者只表示
+   * 用户显式执行 `pipeline afk enqueue` 是否被允许，不能因为默认值为 true 就劫持正常 Build。
+   * 缺席等价于 false，兼容已存在的项目 track registry。
+   */
+  readonly autoEnqueueOnSpecComplete?: boolean
   readonly automationEligible: boolean
   readonly coverageProfile: CoverageProfile
   readonly routing:
     | { readonly enabled: false }
-    | { readonly enabled: true; readonly pattern: string; readonly priority: number }
+    | {
+        readonly enabled: true
+        readonly pattern: string
+        /** A match here excludes this track before score/priority selection. */
+        readonly excludePattern?: string
+        readonly priority: number
+      }
   readonly skills: {
     readonly matrix: boolean
     /** manifest skill profile 名，不等于 track id；'_all' = 不分 track 的兜底表。 */
@@ -58,13 +70,13 @@ export interface TrackPolicyProfile {
 export interface TrackDefinition {
   readonly id: TrackId
   readonly label: string
-  /** effective 模型的计算字段（内建四轨 true / 项目额外 track false），不直接来自 YAML。 */
+  /** effective 模型的计算字段（内建 Track 为 true / 项目额外 track 为 false），不直接来自 YAML。 */
   readonly builtin: boolean
   readonly workflow: TrackWorkflowBinding
   readonly policyProfile: TrackPolicyProfile
 }
 
-/** 合成后的 registry：内建四轨恒排最前（chat/pm/frontend/backend 固定序），额外 track 按文件声明序。 */
+/** 合成后的 registry：内建 Track 恒排最前（chat/simple/pm/frontend/backend 固定序），额外 track 按文件声明序。 */
 export interface TrackRegistry {
   readonly ordered: readonly TrackDefinition[]
   readonly byId: ReadonlyMap<TrackId, TrackDefinition>
@@ -88,6 +100,7 @@ export interface ProjectWorkflowConfig {
 export interface ProjectRoutingConfig {
   readonly enabled?: boolean
   readonly pattern?: string
+  readonly excludePattern?: string
   readonly priority?: number
 }
 
@@ -99,6 +112,7 @@ export interface ProjectSkillsConfig {
 /** policy_profile 的文件形态：额外 track 必须全字段声明（缺失由 validate 报错，不做隐式默认）。 */
 export interface ProjectPolicyProfileConfig {
   readonly reviewSeed?: string
+  readonly autoEnqueueOnSpecComplete?: boolean
   readonly automationEligible?: boolean
   readonly coverageProfile?: string
   readonly routing?: ProjectRoutingConfig

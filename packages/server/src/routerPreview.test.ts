@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { TrackDefinition } from '@pipeline-lite/kernel'
+import { BUILTIN_TRACK_DEFINITIONS, type TrackDefinition } from '@pipeline-lite/kernel'
 import { applyRouterDraft, previewTrackRouting, scoreRouterPatternWithGrep } from './routerPreview.js'
 
 function track(input: {
@@ -8,6 +8,7 @@ function track(input: {
   priority?: number
   enabled?: boolean
   builtin?: boolean
+  excludePattern?: string
 }): TrackDefinition {
   return {
     id: input.id,
@@ -20,7 +21,12 @@ function track(input: {
       coverageProfile: 'backend',
       routing: input.enabled === false
         ? { enabled: false }
-        : { enabled: true, pattern: input.pattern ?? input.id, priority: input.priority ?? 0 },
+        : {
+            enabled: true,
+            pattern: input.pattern ?? input.id,
+            ...(input.excludePattern === undefined ? {} : { excludePattern: input.excludePattern }),
+            priority: input.priority ?? 0,
+          },
       skills: { matrix: true, profile: input.id },
     },
   }
@@ -44,6 +50,40 @@ describe('Router preview —— 与 hooks/router.sh 的 grep/tie-break 真语义
     const result = await previewTrackRouting('ship this', rows, async () => 1)
     expect(result.winner?.track.id).toBe('second')
     expect(result.candidates.map((candidate) => candidate.order)).toEqual([0, 1, 2])
+  })
+
+  it('exclusion-first：正向和否决同时命中时 simple 归零，完整 Track 接管', async () => {
+    const result = await previewTrackRouting('修复 API 文案 typo', [
+      track({ id: 'simple', pattern: 'typo|文案', excludePattern: 'API', priority: 1000 }),
+      track({ id: 'backend', pattern: '修复|API', priority: 200 }),
+    ])
+    expect(result.winner?.track.id).toBe('backend')
+    expect(result.candidates.find((candidate) => candidate.track.id === 'simple')).toMatchObject({
+      score: 0,
+      excluded: true,
+    })
+  })
+
+  it('快速修复不再被前置抑制，交给 simple 风险分类', async () => {
+    const result = await previewTrackRouting('快速修复 React 组件 typo', [
+      track({ id: 'simple', pattern: '快速修复|typo', priority: 1000 }),
+    ])
+    expect(result.suppressed_reason).toBeNull()
+    expect(result.winner?.track.id).toBe('simple')
+  })
+
+  it('内建 simple 仅接受带具体目标的局部改动；缺目标、跨模块和依赖升级全部 fail-closed', async () => {
+    await expect(previewTrackRouting('修改 README.md 中的 typo', BUILTIN_TRACK_DEFINITIONS))
+      .resolves.toMatchObject({ winner: { track: { id: 'simple' } } })
+    for (const prompt of [
+      '帮我微调一下',
+      '新目标：修改多模块中的同一处 typo',
+      '把 React 版本号从 18 升级到 19',
+    ]) {
+      const result = await previewTrackRouting(prompt, BUILTIN_TRACK_DEFINITIONS)
+      expect(result.winner?.track.id, prompt).not.toBe('simple')
+      expect(result.candidates.find((candidate) => candidate.track.id === 'simple')?.score, prompt).toBe(0)
+    }
   })
 
   it('routing disabled 不参与赢家；零分时无赢家', async () => {

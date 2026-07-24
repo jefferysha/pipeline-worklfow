@@ -1,6 +1,6 @@
 ---
 name: pipeline-build
-description: "Pipeline Phase 4: Build · 实现。PM Track 生成原型，frontend/backend Track 跑 TDD + 多 build_mode 并发模式。出口冻结 build_sha（build→verify barrier）。"
+description: "Pipeline Phase 4: Build · 实现。PM Track 生成原型，frontend/backend Track 跑 TDD + 多 build_mode 并发模式。出口冻结可复验 build_sha 基线（build→verify barrier）。"
 ---
 
 # /pipeline-build — Phase 4: Build
@@ -8,6 +8,9 @@ description: "Pipeline Phase 4: Build · 实现。PM Track 生成原型，fronte
 > 移植来源：老仓 `skills/pipeline-build/SKILL.md`；脚本面已改写为 `pipeline` CLI。
 > build→verify barrier（冻结 build_sha）语义见 `docs/CONTRACT.md` §3 与
 > packages/cli/src/commands/transition.ts 的 build-complete 副作用。
+
+> **Codex 打包 Skill 身份：** 本文件提到的裸 skill id 是 DAG/ledger 的逻辑 id；在 Codex
+> 必须实际加载 `pipeline-lite:<id>` 的当前插件副本，绝不以同名全局或项目 SKILL.md 替代。
 
 ## 输入
 
@@ -57,7 +60,9 @@ pipeline status "$PIPELINE_CHANGE_NAME"
 > 就是 stack 规范真相源，build 前先 Read 它们；对应 stack 的外部 patterns skill
 > （react-patterns / python-patterns 等，见下方 Track 分支）承担同类约束注入。
 
-**询问用户** build_mode 和 isolation（必须暂停等回答）：
+**决策 build_mode 和 isolation**：默认先检查已记录的用户意图。普通交互且没有明确持续授权时，
+必须暂停让用户选择；用户明确授权“后续无需询问 / 自主执行完成”时，按下面的保守策略自动落盘，
+并在 Change 的 Build 记录中说明选择理由。
 
 **build_mode** 选项（枚举与 CLI 校验一致：direct | subagent-driven-development | parallel-team | prototype）：
 - `subagent-driven-development`（默认推荐：拆 sub-agent 并行实现 —— 每个 task dispatch 一个 `pipeline-builder` agent，同消息并行）
@@ -65,8 +70,19 @@ pipeline status "$PIPELINE_CHANGE_NAME"
 - `direct`（PM Track 固定 `prototype`；frontend/backend 仅 hotfix/tweak 默认，full 需 `direct_override: true`）
 
 **isolation** 选项：
-- `branch`（推荐：在当前分支拉新 feature branch）
-- `worktree`（COMPLEX 时：独立 worktree 隔离）
+- `branch`（**宿主已**切到专用 feature branch 时使用；agent 不得自行创建/切换 branch）
+- `worktree`（**宿主已**提供独立 worktree 时使用；agent 不得自行 `git worktree add`）
+- `in-place`（受限 Codex sandbox、unborn repository，或只有重叠文件的串行实现时使用；如实表示
+  只在当前工作目录写入，并非 branch/worktree 的别名）
+
+**自主执行的保守默认**：SIMPLE 或任务文件重叠时选 `direct + in-place`；独立文件且宿主已提供
+隔离环境时才选对应 `subagent-driven-development/parallel-team + branch/worktree`。`full + direct`
+仍必须记录 `direct_override=true`，它是明确的风险确认而不是隐式绕过。
+
+**Git 权限边界**：Codex 常规 workspace sandbox 可以写项目文件，但可能拒绝 `.git/HEAD.lock`。
+因此 agent 不得把 `git checkout -b`、`git worktree add`、`git commit` 当作 Build 前置条件，也不得把
+失败的 Git 命令伪装成已隔离或已提交。由宿主预先提供 branch/worktree 时可消费它；否则使用
+`in-place`，运行 `git diff --check` 与项目验证，把未能执行的 VCS 发布动作如实记为宿主后续动作。
 
 写入决策：
 
@@ -238,9 +254,18 @@ plan 已把 build 切成若干**子阶段（每个 ≈ 一个干净上下文窗�
 #### Step 3.2: 增量勾选 + 提交
 
 每完成一个 task（已过 Step 3.1 全绿）：
-1. **首个 commit 前**：若目标项目尚无 pre-commit，建议为其配置 pre-commit（`husky` + `lint-staged`，或对应 stack 等价物如 Python 的 `pre-commit` 框架、Go 的 `pre-commit` 钩子等）**自动修格式**，避免脏格式噪音淹没后续 review。
-2. 更新 `openspec/changes/<name>/tasks.md` 把 `- [ ]` 改为 `- [x]`
-3. `git commit -m "<task description>"`（message 体现设计意图）
+1. **宿主 VCS 可写时**：首个 commit 前，若目标项目尚无 pre-commit，建议为其配置 pre-commit（`husky` + `lint-staged`，或对应 stack 等价物如 Python 的 `pre-commit` 框架、Go 的 `pre-commit` 钩子等）**自动修格式**，避免脏格式噪音淹没后续 review。受限 agent 不能写 `.git` 时，不得因此阻塞 Build 或声称已提交。
+2. 更新 `openspec/changes/<name>/tasks.md` 把 `- [ ]` 改为 `- [x]`，然后立即由本 phase 已实际调用的
+   `pipeline-build` 重新登记该活文档并重建本 phase 的读取收据；不得用 `--backfill` 沿用 open/spec
+   的 producer，否则当前 SHA 与证据会失真：
+
+   ```bash
+   TASKS_PATH="openspec/changes/$PIPELINE_CHANGE_NAME/tasks.md"
+   pipeline document record "$PIPELINE_CHANGE_NAME" tasks "$TASKS_PATH" --producer pipeline-build
+   pipeline document read "$PIPELINE_CHANGE_NAME" tasks
+   ```
+
+3. 宿主 VCS 可写且项目已有可提交 HEAD 时，可执行 `git commit -m "<task description>"`（message 体现设计意图）；否则保留真实 diff、完成 task/ledger 记录并继续验证。
 
 ### Step 4: 验证（不自动推进）
 
@@ -256,11 +281,25 @@ guard 通过条件（GUARD-RULES §4）：
 - full preset 且 `build_mode=direct` 时必须 `direct_override=true`
 - `depends_on` 声明的依赖 change 均已归档（活跃依赖 → FAIL）
 
-guard **只校验、不自动 transition**。校验通过后手动推进：
-`pipeline transition "$PIPELINE_CHANGE_NAME" build-complete`
-（build→verify 是 barrier：build 全 task 自测绿 + commit 后 `build-complete` 由 CLI 自动冻结
-`build_sha=git rev-parse HEAD` 入 `.pipeline.yaml`，**之后**才进 verify，见下方 HARD RULE；
+guard **只校验、不自动 transition**。校验通过后按当前 workflow 的真实 step gate 推进：
+- `gate: null`：直接 `pipeline transition "$PIPELINE_CHANGE_NAME" build-complete`；不得凭 default 流程虚构 review request。
+- `gate: review`：先 `pipeline review request`，常规模式等待确认；已明确持续授权的 exact Change 在真实证据
+  完成后用 `pipeline review acknowledge "$PIPELINE_CHANGE_NAME" --delegated`，再 transition。
+- `gate: confirm`：保留人为确认，不自动跨越。
+（build→verify 是 barrier：build 全 task 自测绿后 `build-complete` 由 CLI 自动冻结可复验的
+`build_sha` 入 `.pipeline.yaml`：`branch`/`worktree` 为 `git rev-parse HEAD`，`in-place` 为
+`workspace:sha256:<内容基线>`，**之后**才进 verify，见下方 HARD RULE；
 真正"停下等用户复核"在 verify 跑完、进 ship 前的 verify-pass。）
+
+若 build 期间发现需求或设计语义已经变化，不能在本 phase 直接重登记 proposal/design 来掩盖
+stale evidence。先运行：
+
+```bash
+pipeline transition "$PIPELINE_CHANGE_NAME" requirements-changed
+```
+
+回到 spec 后调用 `pipeline-spec`，由它重登记修订后的 proposal/design/tasks，补齐 read receipts 并
+重新通过 spec review；之后才可再次进入 build。纯实现修复、未改变已批准需求/设计时无需回退。
 
 ## 出口
 
@@ -273,11 +312,11 @@ guard **只校验、不自动 transition**。校验通过后手动推进：
 
 交接顺序（不可颠倒）：
 1. build 全 task 完成、每个 task 自测绿（类型 + 测试 + lint）。
-2. **commit** build 产物。
-3. `pipeline transition <name> build-complete` —— CLI 自动冻结 `build_sha=$(git rev-parse HEAD)` 入 `.pipeline.yaml`。
-4. **之后**才进 verify；verify 三轨同读这个冻结的 `build_sha` 固定靶。
+2. 若当前已由宿主提供 branch/worktree，确保该隔离目标的 Git HEAD 就是待验收版本；**不得**为满足流程自行建分支或伪造 commit。`in-place` 则保留真实未提交工作区，不要求 commit。
+3. `pipeline transition <name> build-complete` —— CLI 自动冻结 `build_sha`：branch/worktree 是 `git rev-parse HEAD`；in-place 是排除 OpenSpec、证据、依赖和缓存后的工作区内容 SHA-256。
+4. **之后**才进 verify；verify 必须读取这个冻结基线。in-place 的 verify 期间不得改实现/配置文件；`verify-pass` 会重新计算同一内容基线，漂移即拒绝。
 
-不要在 build 还没自测绿 / 没 commit 时就发起 verify——评审移动靶在因果上不成立。
+不要在 build 还没自测绿 / 还没冻结基线时就发起 verify——评审移动靶在因果上不成立。
 （verify-fail 回退时 CLI 自动置 `verify_result=fail` 并清空 `build_sha`——返工后重新走 1→4。）
 
 ## 打包 skill 依赖（随 pipeline-lite 插件安装）

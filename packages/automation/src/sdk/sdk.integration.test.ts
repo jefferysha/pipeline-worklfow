@@ -665,10 +665,10 @@ describe('createAutomation SDK', () => {
     expect(afk.config.enabled).toBe(true)
   })
 
-  it('文件手塞 enabled/level 被忽略（双源打架防线：这两个键不属于本文件）', async () => {
+  it('项目文件 enabled 是总开关，level 仍由 loop registry 独占', async () => {
     await seedJson({ version: 1, enabled: false, level: 'L3', max_parallel: 5 })
     const afk = createAutomation({ repoRoot: root, store, clock })
-    expect(afk.config.enabled).toBe(true) // SDK 内置显式 opt-in 语义不被文件翻转
+    expect(afk.config.enabled).toBe(false)
     expect(afk.config.level).toBe('L1')
     expect(afk.config.maxParallel).toBe(5)
   })

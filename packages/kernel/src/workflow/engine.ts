@@ -73,6 +73,8 @@ export async function planStepTransition(
   state: PipelineState,
   event: string,
   ctx: StepGuardContext,
+  /** Governed lifecycle invariants supplied by TransitionApplication after it resolves a canonical phase edge. */
+  additionalGuards: readonly import('./ir.js').CompiledGuardConfig[] = [],
 ): Promise<StepTransitionPlan> {
   const stepId = fieldStr(state, 'phase')
   const step: StepIR | null = resolveStep(ir, stepId)
@@ -81,9 +83,14 @@ export async function planStepTransition(
   if (!edge) {
     return { ok: false, kind: 'event-unsupported', stepId, available: step.transitions.map((t) => t.event) }
   }
-  const guardResult = await evaluateCompiledGuards(
-    [...step.guards, ...edge.guards], stepId, buildStepGuardInput(state, ctx),
-  )
+  const guards = [...step.guards, ...edge.guards]
+  for (const additional of additionalGuards) {
+    // A governed custom workflow may declare the canonical guard itself.  Evaluate it only once:
+    // duplicate build-head-unchanged would otherwise read a moving workspace twice and could
+    // produce a false drift result during a single transition transaction.
+    if (!guards.some((existing) => JSON.stringify(existing) === JSON.stringify(additional))) guards.push(additional)
+  }
+  const guardResult = await evaluateCompiledGuards(guards, stepId, buildStepGuardInput(state, ctx))
   if (!guardResult.pass) {
     return { ok: false, kind: 'guard-failed', stepId, failures: guardResult.failures }
   }

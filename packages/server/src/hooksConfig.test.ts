@@ -37,6 +37,12 @@ describe('HOOK_METAS —— hook 元数据（时机/开关粒度单一真相源�
     expect(byId.get('interactive-skill-gate')!.configurable).toBe(false)
   })
 
+  it('人类决策的 PostToolUse 同时覆盖 Claude 与 Codex 的真实工具名', () => {
+    const byId = new Map(HOOK_METAS.map((h) => [h.id, h]))
+    expect(byId.get('confirm-clear')!.matcher).toBe('AskUserQuestion|request_user_input')
+    expect(byId.get('decision-recorder')!.matcher).toBe('AskUserQuestion|request_user_input')
+  })
+
   it('四个 sh 侧已接开关的 hook 可配置（session-start/breadcrumb/router/skill-tracker）', () => {
     const byId = new Map(HOOK_METAS.map((h) => [h.id, h]))
     for (const id of ['session-start', 'breadcrumb', 'router', 'skill-tracker']) {
@@ -44,16 +50,18 @@ describe('HOOK_METAS —— hook 元数据（时机/开关粒度单一真相源�
     }
   })
 
-  it('时机归类逐条核实自插件 hooks/hooks.json（T15 风险项：不得凭名字猜）', () => {
-    // 真读插件清单：每个 meta 的 script 必须出现在其声明 event 段的 command 里。
+  it('时机归类逐条核实自插件 hooks/hooks.json 的稳定 hook-id ABI（T15 风险项：不得凭名字猜）', () => {
+    // 真读插件清单：host 不再直连可变 payload 中的脚本，而是调用稳定 pipeline-hook
+    // 启动器并传入逻辑 hook id；bootstrap 只会进入已验证 release 再解析 meta.script。
     const pluginHooksPath = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'hooks', 'hooks.json')
     const plugin = JSON.parse(readFileSync(pluginHooksPath, 'utf8')) as {
       hooks: Record<string, Array<{ matcher: string; hooks: Array<{ command: string }> }>>
     }
     for (const meta of HOOK_METAS) {
       const entries = plugin.hooks[meta.event] ?? []
-      const commands = entries.flatMap((e) => e.hooks.map((h) => h.command))
-      expect(commands.some((c) => c.includes(meta.script)), `${meta.id} 应挂在 ${meta.event}`).toBe(true)
+      const entry = entries.find((e) => e.hooks.some((h) => h.command.includes(`pipeline-hook\" ${meta.id}`)))
+      expect(entry, `${meta.id} 应挂在 ${meta.event}`).toBeDefined()
+      expect(entry?.matcher, `${meta.id} 的 UI 元数据必须与 hooks.json 同步`).toBe(meta.matcher)
     }
   })
 })

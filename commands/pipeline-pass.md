@@ -39,10 +39,11 @@ tags: [workflow, pipeline, gate, transition, hitl]
   字段非空且文件存在、`verify-pass` 要求 `verification_report` + `branch_status=handled` +
   agent/codex 双 review pass + build_sha==HEAD barrier）。校验不过 → exit 1 + 逐行 stderr 说明缺什么，
   **零写盘**。这是设计上的门，不是命令的 bug——按 stderr 补齐产出后再放行，别绕过。
-- **review 门放行**：先把产出交用户复核，再取得明确的继续指令。Codex 档 A/B 会在用户下一条正常对话
-  中识别“确认继续 / 继续执行 / 全部执行”等，并在下一次工具调用前自动解封 marker；普通询问不会误清。
-  档 C 无 hook 时也必须保留这条明确确认的对话事实，**不得**删除 `.pipeline-pending-*` marker 绕过
-  review（见 `adapters/codex/README.md`「Unlock sentinel」）。
+- **review 门放行**：先完成产物并选择 event，运行
+  `pipeline review request <change> --event <event>`，再把产出交用户复核并取得明确继续指令。Codex
+  档 A/B 会在用户下一条正常对话中识别“确认继续 / 继续执行 / 全部执行”等，并在下一次工具调用前写入
+  event-bound approval receipt；普通询问不会误放行。档 C 无 hook 时也必须保留这条明确确认的对话事实并
+  运行 `pipeline review acknowledge <change>`；**不得**删除 `.pipeline-pending-*` marker 绕过 review。
 - **非 default workflow**：自定义 workflow（`.pipeline/workflows/<name>.yaml`）的 event 名由当前 step
   自己声明，不吃上表固定 8 事件；`pipeline transition` 会按当前 step 的出边解析，event 不在出边里会
   报「该 step 支持：…」，照提示选。

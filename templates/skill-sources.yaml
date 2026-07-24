@@ -19,6 +19,7 @@ skills:
   pipeline-verify:                  { tool: bundled, source: pipeline-lite, content_skill: pipeline-verify, tier: mandatory, official: true }
   pipeline-ship:                    { tool: bundled, source: pipeline-lite, content_skill: pipeline-ship, tier: mandatory, official: true }
   pipeline-archive:                 { tool: bundled, source: pipeline-lite, content_skill: pipeline-archive, tier: mandatory, official: true }
+  simple-task:                      { tool: bundled, source: pipeline-lite, content_skill: simple-task, tier: mandatory, official: true }
   pipeline-researcher:              { tool: bundled, source: pipeline-lite, content_skill: pipeline-researcher, tier: recommended, official: true }
   learn-record:                     { tool: bundled, source: pipeline-lite, content_skill: learn-record, tier: optional, official: true }
 

@@ -127,21 +127,28 @@ function parseTracks(value: unknown): WbTrackDefinition[] | null {
     if (typeof profile !== 'string' || (profile !== '_all' && !TRACK_ID_RE.test(profile)) || typeof matrix !== 'boolean') return null
     const routing = item.policyProfile.routing
     if (!isRecord(routing) || typeof routing.enabled !== 'boolean') return null
-    if (!routing.enabled && (routing.pattern !== undefined || routing.priority !== undefined)) return null
+    if (!routing.enabled && (
+      routing.pattern !== undefined || routing.excludePattern !== undefined || routing.priority !== undefined
+    )) return null
     if (routing.enabled) {
       if (
         typeof routing.pattern !== 'string' || routing.pattern === '' ||
+        (routing.excludePattern !== undefined && (
+          typeof routing.excludePattern !== 'string' || routing.excludePattern === ''
+        )) ||
         typeof routing.priority !== 'number' || !Number.isSafeInteger(routing.priority) ||
         routing.priority < 0 || Object.is(routing.priority, -0)
       ) return null
       try {
         void new RegExp(routing.pattern)
+        if (routing.excludePattern !== undefined) void new RegExp(routing.excludePattern)
       } catch {
         return null
       }
     }
     if (
       (item.policyProfile.reviewSeed !== 'pending' && item.policyProfile.reviewSeed !== 'skipped') ||
+      (item.policyProfile.autoEnqueueOnSpecComplete !== undefined && typeof item.policyProfile.autoEnqueueOnSpecComplete !== 'boolean') ||
       typeof item.policyProfile.automationEligible !== 'boolean' ||
       !['none', 'pm', 'frontend', 'backend'].includes(String(item.policyProfile.coverageProfile))
     ) return null
@@ -154,10 +161,20 @@ function parseTracks(value: unknown): WbTrackDefinition[] | null {
       workflow: { default: item.workflow.default, allowed: allowed === '*' ? '*' : [...allowed] as string[] },
       policyProfile: {
         reviewSeed: item.policyProfile.reviewSeed,
+        ...(item.policyProfile.autoEnqueueOnSpecComplete === undefined
+          ? {}
+          : { autoEnqueueOnSpecComplete: item.policyProfile.autoEnqueueOnSpecComplete }),
         automationEligible: item.policyProfile.automationEligible,
         coverageProfile: item.policyProfile.coverageProfile as WbTrackDefinition['policyProfile']['coverageProfile'],
         routing: routing.enabled
-          ? { enabled: true, pattern: routing.pattern as string, priority: routing.priority as number }
+          ? {
+              enabled: true,
+              pattern: routing.pattern as string,
+              ...(routing.excludePattern === undefined
+                ? {}
+                : { excludePattern: routing.excludePattern as string }),
+              priority: routing.priority as number,
+            }
           : { enabled: false },
         skills: { matrix, profile },
       },
@@ -775,7 +792,13 @@ function draftFromTrack(track: WbTrackDefinition): TrackEditorDraft {
 }
 
 function trackDisplayName(track: WbTrackDefinition): string {
-  const builtin: Record<string, string> = { chat: '对话', pm: '产品', frontend: '前端', backend: '后端' }
+  const builtin: Record<string, string> = {
+    chat: '对话',
+    simple: '简单任务',
+    pm: '产品',
+    frontend: '前端',
+    backend: '后端',
+  }
   return builtin[track.id] ?? track.label
 }
 
@@ -1021,12 +1044,25 @@ function TrackSettings({ state }: { state: MandatoryState }): JSX.Element {
                         <option value="none">不检查</option><option value="pm">产品</option><option value="frontend">前端</option><option value="backend">后端</option>
                       </select>
                     </label>
-                    <label className="flex items-center gap-2 text-[11px] text-text-2"><input aria-label="automationEligible" type="checkbox" checked={editor.draft.policyProfile.automationEligible} onChange={(event) => updateDraft({ policyProfile: { ...editor.draft.policyProfile, automationEligible: event.target.checked } })} />允许自动运行</label>
+                    <label className="flex items-center gap-2 text-[11px] text-text-2"><input aria-label="automationEligible" type="checkbox" checked={editor.draft.policyProfile.automationEligible} onChange={(event) => updateDraft({ policyProfile: { ...editor.draft.policyProfile, automationEligible: event.target.checked } })} />允许手动 AFK</label>
+                    <label className="flex items-center gap-2 text-[11px] text-text-2"><input aria-label="autoEnqueueOnSpecComplete" type="checkbox" checked={editor.draft.policyProfile.autoEnqueueOnSpecComplete ?? false} onChange={(event) => updateDraft({ policyProfile: { ...editor.draft.policyProfile, autoEnqueueOnSpecComplete: event.target.checked } })} />规格完成后自动进入 AFK</label>
                     <label className="flex items-center gap-2 text-[11px] text-text-2"><input aria-label="skills.matrix" type="checkbox" checked={editor.draft.policyProfile.skills.matrix} onChange={(event) => updateDraft({ policyProfile: { ...editor.draft.policyProfile, skills: { ...editor.draft.policyProfile.skills, matrix: event.target.checked } } })} />使用轨道 Skill</label>
                     <label className="grid gap-1 text-[11px] text-text-2">Skill 来源<input aria-label="skills.profile" className={fieldClass} value={editor.draft.policyProfile.skills.profile} onChange={(event) => updateDraft({ policyProfile: { ...editor.draft.policyProfile, skills: { ...editor.draft.policyProfile.skills, profile: event.target.value } } })} /></label>
                     <label className="flex items-center gap-2 text-[11px] text-text-2"><input aria-label="routing.enabled" type="checkbox" checked={editor.draft.policyProfile.routing.enabled} onChange={(event) => updateDraft({ policyProfile: { ...editor.draft.policyProfile, routing: event.target.checked ? { enabled: true, pattern: '', priority: 0 } : { enabled: false } } })} />启用自动分配</label>
                     {editor.draft.policyProfile.routing.enabled && <>
                       <label className="grid gap-1 text-[11px] text-text-2">匹配规则<input aria-label="routing.pattern" className={fieldClass} value={editor.draft.policyProfile.routing.pattern} onChange={(event) => updateDraft({ policyProfile: { ...editor.draft.policyProfile, routing: { ...editor.draft.policyProfile.routing as { enabled: true; pattern: string; priority: number }, pattern: event.target.value } } })} /></label>
+                      <label className="grid gap-1 text-[11px] text-text-2">排除规则（可选）<input aria-label="routing.excludePattern" className={fieldClass} value={editor.draft.policyProfile.routing.excludePattern ?? ''} onChange={(event) => {
+                        const routing = editor.draft.policyProfile.routing as { enabled: true; pattern: string; excludePattern?: string; priority: number }
+                        const excludePattern = event.target.value
+                        updateDraft({
+                          policyProfile: {
+                            ...editor.draft.policyProfile,
+                            routing: excludePattern === ''
+                              ? { enabled: true, pattern: routing.pattern, priority: routing.priority }
+                              : { ...routing, excludePattern },
+                          },
+                        })
+                      }} /></label>
                       <label className="grid gap-1 text-[11px] text-text-2">优先级<input aria-label="routing.priority" type="number" min="0" className={fieldClass} value={editor.draft.policyProfile.routing.priority} onChange={(event) => updateDraft({ policyProfile: { ...editor.draft.policyProfile, routing: { ...editor.draft.policyProfile.routing as { enabled: true; pattern: string; priority: number }, priority: Number(event.target.value) } } })} /></label>
                     </>}
                   </div>
@@ -1120,6 +1156,8 @@ function TrackSettings({ state }: { state: MandatoryState }): JSX.Element {
                     <dd className="m-0 font-semibold text-text">{track.workflow.default}{Array.isArray(track.workflow.allowed) ? ` · ${track.workflow.allowed.join('、')}` : ' · 全部'}</dd>
                     <dt className="text-text-3">自动分配</dt>
                     <dd className="m-0 font-semibold text-text">{routing.enabled ? '已启用' : '未启用'}</dd>
+                    <dt className="text-text-3">AFK 接管</dt>
+                    <dd className="m-0 font-semibold text-text">{track.policyProfile.autoEnqueueOnSpecComplete ? 'Spec 完成后自动排队' : '仅按需执行'}</dd>
                     <dt className="text-text-3">默认技能</dt>
                     <dd className="m-0 font-semibold text-text">
                       {track.policyProfile.skills.matrix

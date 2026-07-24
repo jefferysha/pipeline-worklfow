@@ -31,20 +31,22 @@ phases:
   - archive
 
 # —— 转换图：from: [合法目标...] ——
-# verify 双出口：verify-pass → ship / verify-fail → build（回退边，phase_status=in_progress）。
+# build 的 requirements-changed → spec 与 verify-fail → build 都是受控回退边，
+# phase_status=in_progress；修订后的目标相位证据必须重新 record/read 才能再次前进。
 # archive: [archive] = 终态自环（老内核 archived 事件，phase_status=done、archived=true 由 CLI 层落）。
 # 每个已声明相位必须在此有条目（可为 []），缺条目 = 结构错误，loadManifest fail-loud。
 transitions:
   open: [explore]
   explore: [spec]
   spec: [build]
-  build: [verify]
+  build: [verify, spec]
   verify: [ship, build]
   ship: [archive]
   archive: [archive]
 
-# —— review-gate 相位：进入这些相位时 CLI 落 .pipeline-pending-review 门 marker（CONTRACT §2）——
-# 引擎经 isReviewPhase() 暴露判定；此列表是唯一真相源，引擎/CLI 零硬编码。
+# —— review-gate 相位：完成这些相位、准备离开时必须取得 canonical approval receipt ——
+# 引擎经 isReviewPhase() 暴露判定；此列表是唯一真相源。`pipeline review request` 才写 v2
+# hook marker（receipt 同时绑定离开的 exact event），进入相位本身不写 marker，因而不会锁住该相位的调研/规格/验证工作。
 review_phases: [explore, spec, verify]
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -92,8 +94,8 @@ recommended_skills:
 # 末尾换行 rstrip（对齐老 CLI `bc.rstrip("\n")`）；内部换行/空行逐字保留。
 breadcrumb:
   open: |
-    立项中。确认 track（pm/frontend/backend），产出 proposal.md + tasks.md 骨架，init .pipeline.yaml。
-    别跳到实现。骨架齐了交用户过目、用户说"继续"再手动 transition open→explore——不自动推进。
+    立项中。使用 router 已选的 track（pm/frontend/backend）创建独立 Change，产出 proposal.md + tasks.md 骨架，init .pipeline.yaml；只有 dispatch 明确 unresolved/select 或用户点名自定义 workflow 时才请求选择。
+    别跳到实现。常规模式骨架齐后交用户过目、用户说"继续"再 transition open→explore；已绑定持续授权时，仍须完成真实 OpenSpec 文档证据和 pipeline check，再按既有 guard 继续，绝不跳过验证。
   explore: |
     调研 + 深度设计：research 先用 AskUserQuestion 多选调研维度 → 每维度并行 dispatch 隔离 sub-agent
     pipeline-researcher（同消息内并行、各自落盘）→ brainstorming（必做）→ grill（必做，禁自判跳过）。
@@ -108,9 +110,9 @@ breadcrumb:
     fe·be：TDD 完整红-绿-重构——先写测试 → 运行确认按预期失败(红) → 最小实现到绿 → 重构。
     build 内紧反馈循环（必做）：每 task 自跑类型检查 + 测试 + lint、读输出、失败当场自纠，绿了才算完成。
     fe 含 UI 改动额外过 frontend-design + web-design-guidelines + taste 评→修→复评循环，证据落 REVIEW.md。
-    全 task 自测绿 + commit 后 build-complete 冻结 build_sha，之后才进 verify。verify 跑完停下等复核。
+    全 task 自测绿后 build-complete 冻结可复验 build_sha 基线：branch/worktree 为 Git HEAD，in-place 为工作区内容 SHA-256；之后才进 verify。verify 跑完停下等复核。
   verify: |
-    三轨验证。fe·be：同消息并行 dispatch 三轨——reviewer agent + e2e-runner + codex exec（同读冻结 build_sha）。
+    三轨验证。fe·be：同消息并行 dispatch 三轨——reviewer agent + e2e-runner + codex exec（同读冻结 build_sha 基线；in-place 不得把它当 Git revision）。
     verify 是对 build 已自测产物的独立对抗式二次把关，非替代 build 自测。
     fe 含 UI 改动额外视觉轨：web-design-guidelines + taste 对跑起来的 app 视觉审查，结论并入 verification_report。
     pm：跳过三轨，人工走查原型。产出 verification_report、set verify_result 后停下等复核；verify-fail → 回 build。

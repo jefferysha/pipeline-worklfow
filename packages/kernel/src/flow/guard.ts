@@ -31,6 +31,7 @@
 import type { FieldName, GuardContext, GuardResult, Phase, PipelineState } from '../types.js'
 // 具体文件路径而非 barrel（同 transition-table.ts）：predicates.ts 零 import，物理上无环。
 import { matchesTrackPredicate, NON_PM, type TrackPredicate } from '../workflow/predicates.js'
+import { incompletePipelineTasksForExit } from '../workflow/todo-projection.js'
 
 type GuardRule =
   // ── 纯字段谓词（无 ctx 也评估；lite 原有面）──
@@ -43,7 +44,7 @@ type GuardRule =
   | { kind: 'file-nonempty'; path: string; when?: TrackPredicate }           // change 目录内产物
   | { kind: 'file-exists'; path: string }                                    // change 目录内产物
   | { kind: 'tasks-at-least'; n: number }                                    // lib:34-39 `^- \[[ x]\]` 计数
-  | { kind: 'tasks-all-done' }                                               // lib:41-45 文件缺失=FAIL
+  | { kind: 'tasks-through-phase' }                                          // structured Todo 仅校验截至当前 phase
   | { kind: 'field-file-exists'; field: FieldName; desc?: string; when?: TrackPredicate } // 字段值=项目根相对路径
   | { kind: 'coverage' }                                                     // guard.sh:510-528 M1 覆盖 gate
   | { kind: 'depends-archived' }                                             // guard.sh:544-559
@@ -61,6 +62,7 @@ const EXIT_RULES: Readonly<Record<Phase, readonly GuardRule[]>> = {
     { kind: 'file-nonempty', path: 'proposal.md' },
     { kind: 'file-exists', path: 'tasks.md' },
     { kind: 'tasks-at-least', n: 1 },
+    { kind: 'tasks-through-phase' },
     { kind: 'file-nonempty', path: 'design.md' },
   ],
   // explore 出口（manifest.yaml:171-174）
@@ -68,6 +70,7 @@ const EXIT_RULES: Readonly<Record<Phase, readonly GuardRule[]>> = {
     { kind: 'statefile' },
     { kind: 'nonempty', field: 'design_doc' },
     { kind: 'field-file-exists', field: 'design_doc' },
+    { kind: 'tasks-through-phase' },
   ],
   // spec 出口（manifest.yaml:188-192 + guard.sh:510-528 coverage 显式步）
   spec: [
@@ -75,13 +78,14 @@ const EXIT_RULES: Readonly<Record<Phase, readonly GuardRule[]>> = {
     { kind: 'nonempty', field: 'plan', when: NON_PM },
     { kind: 'field-file-exists', field: 'plan', when: NON_PM },
     { kind: 'tasks-at-least', n: 3 },
+    { kind: 'tasks-through-phase' },
     { kind: 'coverage' },
   ],
   // build 出口（guard.sh:154-162 前置闸 + manifest.yaml:218-222 + guard.sh:532-559 显式步）
   build: [
     { kind: 'automation-queued' },
     { kind: 'statefile' },
-    { kind: 'tasks-all-done' },
+    { kind: 'tasks-through-phase' },
     { kind: 'nonempty', field: 'build_mode' },
     { kind: 'nonempty', field: 'isolation' },
     { kind: 'full-direct-override' },
@@ -96,6 +100,7 @@ const EXIT_RULES: Readonly<Record<Phase, readonly GuardRule[]>> = {
     { kind: 'eq', field: 'agent_review_result', value: 'pass', when: NON_PM },
     { kind: 'eq', field: 'codex_review_result', value: 'pass', when: NON_PM },
     { kind: 'eq', field: 'verify_result', value: 'pass', when: PM_ONLY },
+    { kind: 'tasks-through-phase' },
   ],
   // ship 出口（manifest.yaml:259-263）
   ship: [
@@ -103,11 +108,13 @@ const EXIT_RULES: Readonly<Record<Phase, readonly GuardRule[]>> = {
     { kind: 'nonempty', field: 'prd_path', when: PM_ONLY },
     { kind: 'field-file-exists', field: 'prd_path', desc: 'prd_path 文件存在', when: PM_ONLY },
     { kind: 'nonempty', field: 'pr_url', when: NON_PM },
+    { kind: 'tasks-through-phase' },
   ],
   // archive 出口（manifest.yaml:272-274）
   archive: [
     { kind: 'statefile' },
     { kind: 'eq', field: 'verify_result', value: 'pass' },
+    { kind: 'tasks-through-phase' },
   ],
 }
 
@@ -339,16 +346,23 @@ export function evaluateGuard(state: PipelineState, ctx?: GuardContext): GuardRe
         }
         break
       }
-      case 'tasks-all-done': {
+      case 'tasks-through-phase': {
         if (ctx?.readFile === undefined || changeDir === undefined) break
         const content = ctx.readFile(`${changeDir}/tasks.md`)
         if (content === undefined) {
-          // lib:41-45 tasks_all_done：文件缺失即 FAIL
-          failures.push(`${phase} 出口：要求 tasks.md 全部勾选（tasks.md 缺失）`)
+          // Open already has explicit existence/count checks. Later governed
+          // phases get the file requirement from the document ledger. Keep
+          // legacy guard compatibility while retaining build's historical
+          // fail-closed behaviour when no ledger is present.
+          if (phase === 'build') {
+            failures.push(`${phase} 出口：要求截至当前阶段的 tasks.md 全部勾选（tasks.md 缺失）`)
+          }
         } else {
-          const open = content.split('\n').filter((l) => /^- \[ \]/.test(l)).length
-          if (open > 0) {
-            failures.push(`${phase} 出口：要求 tasks.md 全部勾选（仍有 ${open} 项未勾）`)
+          const status = incompletePipelineTasksForExit({ phase, tasksMarkdown: content })
+          if (status.incomplete > 0) {
+            failures.push(
+              `${phase} 出口：要求截至当前阶段的 tasks.md 全部勾选（仍有 ${status.incomplete} 项未勾）`,
+            )
           }
         }
         break

@@ -28,13 +28,14 @@ const preview: WbRouterPreview = {
   winner: null,
   suppressed_reason: null,
   candidates: [
-    { track: track('frontend'), order: 0, priority: 300, score: 2, routable: true },
+    { track: track('frontend'), order: 0, priority: 300, score: 2, routable: true, excluded: false },
     {
       track: track('backend', { workflow: { default: 'release', allowed: ['release', 'default'] } }),
       order: 1,
       priority: 200,
       score: 1,
       routable: true,
+      excluded: false,
     },
   ],
 }

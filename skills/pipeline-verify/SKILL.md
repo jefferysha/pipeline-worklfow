@@ -1,11 +1,14 @@
 ---
 name: pipeline-verify
-description: "Pipeline Phase 5: Verify · 三轨并行验证。PM Track 做原型走查（无 review agent），frontend/backend Track 跑 reviewer agent + codex + e2e 三轨并行，同读冻结的 build_sha 固定靶。"
+description: "Pipeline Phase 5: Verify · 三轨并行验证。PM Track 做原型走查（无 review agent），frontend/backend Track 跑 reviewer agent + codex + e2e 三轨并行，同读冻结的 build_sha 基线。"
 ---
 
 # /pipeline-verify — Phase 5: Verify
 
 > 移植来源：老仓 `skills/pipeline-verify/SKILL.md`；脚本面已改写为 `pipeline` CLI。
+
+> **Codex 打包 Skill 身份：** 本文件提到的裸 skill id 是 DAG/ledger 的逻辑 id；在 Codex
+> 必须实际加载 `pipeline-lite:<id>` 的当前插件副本，绝不以同名全局或项目 SKILL.md 替代。
 
 ## 输入
 
@@ -20,7 +23,7 @@ description: "Pipeline Phase 5: Verify · 三轨并行验证。PM Track 做原�
 - `phase=verify`
 - `build_mode` / `isolation` 已设
 - `tasks.md` 全勾选
-- `build_sha` 已由 `build-complete` 冻结（`pipeline get <name> build_sha`）
+- `build_sha` 已由 `build-complete` 冻结（`pipeline get <name> build_sha`）：branch/worktree 为 Git SHA；in-place 为 `workspace:sha256:<内容基线>`
 
 ## 步骤
 
@@ -33,8 +36,9 @@ pipeline status "$PIPELINE_CHANGE_NAME"
 pipeline document read "$PIPELINE_CHANGE_NAME" all
 ```
 
-> **review 门提示**：verify 是 review 相位，进入时 CLI 已落 `.pipeline-pending-review` marker。
-> `pipeline check` 是出口校验，放在 Step 4 跑。
+> **review 门提示**：verify 是 review 相位，但进入时不会落 marker；三轨验证、报告生成和文档读取必须
+> 先完整执行。`pipeline check` 是 `verify-pass` 的成功出口校验，放在 Step 4 跑；回退则走独立的
+> `pipeline review request --event verify-fail` 证据校验，不能拿通过路径的 guard 卡死失败决策。
 
 ### Step 1: Track 分支调用
 
@@ -70,12 +74,22 @@ pipeline set "$PIPELINE_CHANGE_NAME" branch_status handled
 
 ⚡ **HARD RULE**：以下 3 轨**必须在同一条 Agent 消息**内并行 dispatch。
 
-> **三轨同读冻结的 `build_sha`（barrier）**：verify 审的是 build-complete 时冻结的固定靶，不是漂移中的 working tree。先取定 SHA 供三轨复用：
+> **三轨同读冻结的 `build_sha` 基线（barrier）**：verify 审的是 build-complete 时冻结的固定靶，不是漂移中的 working tree。先取基线并按类型分流：
 > ```bash
-> BUILD_SHA="$(pipeline get "$PIPELINE_CHANGE_NAME" build_sha)"
-> # 基线（区间起点）= 该 change 的基线分支（按项目填，常见 test/main/develop）
+> BUILD_BASELINE="$(pipeline get "$PIPELINE_CHANGE_NAME" build_sha)"
+> case "$BUILD_BASELINE" in
+>   workspace:sha256:*)
+>     # in-place：不把内容基线传给 git checkout/diff。验证期间不得改实现/配置；
+>     # verify-pass 会重新计算同一工作区内容基线，任何漂移都会真实拒绝。
+>     echo "[verify] in-place workspace baseline: $BUILD_BASELINE"
+>     ;;
+>   *)
+>     # branch/worktree：这是 Git revision，可作为提交区间/checkout 靶。
+>     BUILD_SHA="$BUILD_BASELINE"
+>     ;;
+> esac
 > ```
-> reviewer agent / e2e 审 `BUILD_SHA` 处的代码状态；codex 轨审提交区间 diff（见轨道 3）。
+> reviewer agent / e2e 审该基线对应的代码状态；只有 Git 分支才可让 Codex 轨审 `BUILD_SHA` 提交区间 diff。in-place 的三轨审当前未漂移工作区，并由最终 `verify-pass` barrier 再次证明内容不变。
 
 **并发实现指南**：
 - 主 agent 一次性发起 3 个 tool 调用（2 个 Agent + 1 个 Bash）；含 UI 改动时再加第四轨 `pipeline-design-reviewer` agent（视觉），同消息一并发起
@@ -111,17 +125,19 @@ pipeline set "$PIPELINE_CHANGE_NAME" branch_status handled
 - 使用 Skill 工具加载 `security-review`（builtin）
 
 **【轨道 1】Reviewer Agent（并行）**：
-- Agent 工具调用 `pipeline-reviewer`（本仓 agents/pipeline-reviewer.md）— 读冻结 build_sha、审提交区间 diff、按改动语言套评审视角（TS/JS 专项 + 通用），回传 severity 发现 + PASS/FAIL。固定靶 brief 已收进 agent，无需在此重述。
+- Agent 工具调用 `pipeline-reviewer`（本仓 agents/pipeline-reviewer.md）— 读冻结构建基线；Git 基线审提交区间 diff，in-place 审当前未漂移工作区，按改动语言套评审视角（TS/JS 专项 + 通用），回传 severity 发现 + PASS/FAIL。固定靶 brief 已收进 agent，无需在此重述。
 
 **【轨道 2】E2E（并行）**：
-- dispatch 一个通用子 agent（Agent 工具），brief：checkout/read 冻结 `BUILD_SHA` 的代码状态、加载 `e2e-testing` skill 跑 Playwright E2E、回传通过/失败清单。（老仓专职 `e2e-runner` agent 未迁移，若本机装有可直接用。）
+- dispatch 一个通用子 agent（Agent 工具），brief：Git 基线时 checkout/read 冻结 `BUILD_SHA`；in-place 时读取当前未漂移工作区，加载 `e2e-testing` skill 跑 Playwright E2E、回传通过/失败清单。（老仓专职 `e2e-runner` agent 未迁移，若本机装有可直接用。）
 
 **【轨道 3】Codex CLI（并行，审冻结 SHA 的提交区间；缺失优雅降级）**：
 
 ```bash
 # codex 缺失 → 第三轨跳过（reviewer+e2e 两轨仍审固定靶），不算 FAIL。
-if command -v codex >/dev/null 2>&1; then
+if [ -n "${BUILD_SHA:-}" ] && command -v codex >/dev/null 2>&1; then
   git diff "$BUILD_SHA"^.."$BUILD_SHA" | codex exec "review this diff: correctness/security/error-handling; 输出带 severity 的发现清单 + PASS/FAIL 结论" || echo "[WARN] codex 轨异常，降级两轨"
+elif [ -z "${BUILD_SHA:-}" ]; then
+  echo "[INFO] in-place 内容基线：Codex 轨审当前未漂移工作区；最终 verify-pass 会重算基线"
 else
   echo "[WARN] codex CLI 未装，第三轨跳过（两轨仍有效）"
 fi
@@ -137,7 +153,7 @@ fi
 
 #### ⚙️ Track = backend（多语言 reviewer 并行）
 
-> **三轨同读冻结的 `build_sha`（barrier）**：同 frontend——先 `BUILD_SHA="$(pipeline get "$PIPELINE_CHANGE_NAME" build_sha)"`，三轨审这个固定靶；codex 轨审提交区间 diff（见上方轨道 3 写法）。
+> **三轨同读冻结的 `build_sha` 基线（barrier）**：同 frontend，先按上方 `BUILD_BASELINE` 分流。只有 Git SHA 可用于提交区间 diff；in-place 必须审当前未漂移工作区，最终由 `verify-pass` 重新指纹验证。
 
 **强制 Skill**：
 1. 使用本插件打包的 Skill `verification-before-completion`。**禁止跳过此步骤**。
@@ -153,7 +169,7 @@ fi
 - 使用 Skill 工具加载 `python-testing`（若 Python）
 
 **【轨道 1】强制 Reviewer Agent（并行）**：
-- Agent 工具调用 `pipeline-reviewer` — 读冻结 build_sha、审提交区间 diff，**按改动语言自动套视角**（Python/Go/Rust/Java/TS 后端），回传 severity 发现 + PASS/FAIL。多语言路由已收进 agent，**无需逐语言列 reviewer**。
+- Agent 工具调用 `pipeline-reviewer` — 读冻结构建基线；Git 基线审提交区间 diff，in-place 审当前未漂移工作区，**按改动语言自动套视角**（Python/Go/Rust/Java/TS 后端），回传 severity 发现 + PASS/FAIL。多语言路由已收进 agent，**无需逐语言列 reviewer**。
 - `database-reviewer`（外部，若装有）— 涉及 DB schema/查询时（专项，pipeline-reviewer 不覆盖）
 
 **【轨道 2】E2E（并行）**：
@@ -168,8 +184,12 @@ fi
 不得 verify-pass。对标 Trellis check agent 强制 `git diff --name-only` + `git diff` 逐条对 spec。
 
 ```bash
-# 1) 列出本次 build 冻结靶引入的改动文件（区间 = 基线..BUILD_SHA；无基线时退 working tree diff）
-git diff --name-only "${BUILD_SHA:-HEAD}" 2>/dev/null || git diff --name-only
+# 1) Git 基线时列出冻结靶引入的改动文件；in-place 基线没有 Git 区间，逐文件审当前工作区并保持其不变。
+if [ -n "${BUILD_SHA:-}" ]; then
+  git diff --name-only "${BUILD_SHA:-HEAD}" 2>/dev/null || git diff --name-only
+else
+  git diff --name-only
+fi
 
 # 2) 逐文件：找对应 capability 的主 spec 回读比对
 find openspec/specs -name spec.md 2>/dev/null    # 每 capability → spec.md 路径
@@ -205,7 +225,7 @@ find "openspec/changes/$PIPELINE_CHANGE_NAME/specs" -type f -name spec.md 2>/dev
 
 对每个 delta：`openspec/changes/<name>/specs/<cap>/spec.md` → 合并进 `openspec/specs/<cap>/spec.md`
 （ADDED=追加 requirement 段；MODIFIED=替换同名 requirement 段；REMOVED=删除对应 scenario；
-目标不存在则整建）。**不动代码、不重新 build**——符合 verify「审固定靶」语义（`BUILD_SHA` 冻结靶不受影响）。
+目标不存在则整建）。**不动实现/配置、不重新 build**——符合 verify「审固定靶」语义（Git `BUILD_SHA` 或 in-place 内容基线均不受影响）。
 
 > 命中三触发但未回灌 / 回灌失败 → **HARD STOP**，不得 verify-pass。
 > ⏳ **待迁移（M1 #16）**：老仓 `spec_merge.py` 幂等合并器未迁移，上面是 Edit 工具的等价
@@ -238,6 +258,10 @@ pipeline artifact register "$PIPELINE_CHANGE_NAME" verification_report "$REPORT_
 REPORT_PATH="$(pipeline get "$PIPELINE_CHANGE_NAME" verification_report)"
 pipeline document record "$PIPELINE_CHANGE_NAME" verification-report "$REPORT_PATH" \
   --producer verification-before-completion
+# 勾选本阶段的 Verify checkbox 后，由 phase driver 登记 tasks 当前 digest。
+TASKS_PATH="openspec/changes/$PIPELINE_CHANGE_NAME/tasks.md"
+pipeline document record "$PIPELINE_CHANGE_NAME" tasks "$TASKS_PATH" --producer pipeline-verify
+pipeline document read "$PIPELINE_CHANGE_NAME" all
 pipeline document status "$PIPELINE_CHANGE_NAME"
 ```
 
@@ -268,14 +292,27 @@ guard 通过条件（GUARD-RULES §5，按 Track 不同）：
 - `verification_report` 字段非空且文件存在
 - `branch_status=handled`
 
-guard **只校验、不自动 transition**。
-- 通过 → 把 verification_report 交用户过目、确认后手动推进：
-  `pipeline transition "$PIPELINE_CHANGE_NAME" verify-pass`
-  （CLI 副作用自动落 `verify_result=pass` + `verified_at`；verify→ship 是复核节点——
-  `.pipeline-pending-review` 门会挡住未经 AskUserQuestion 复核的推进）
-- 失败 → 用户确认后手动回退 build：
-  `pipeline transition "$PIPELINE_CHANGE_NAME" verify-fail`
-  （CLI 副作用自动落 `verify_result=fail` 并清空 `build_sha`——barrier 回退）
+guard **只校验、不自动 transition**。若验证通过，先运行：
+
+```bash
+pipeline review request "$PIPELINE_CHANGE_NAME" --event verify-pass
+```
+
+它会为 **verify-pass** 写 pending receipt 并阻止在最终报告之后再静默改写结论。把 verification_report
+交用户过目；用户明确确认、hook 写入 `pipeline review acknowledge` receipt 后，手动推进
+`pipeline transition "$PIPELINE_CHANGE_NAME" verify-pass`。CLI 副作用会落 `verify_result=pass` + `verified_at`。
+
+若报告结论是失败、需要回到 build：不要运行成功路径的 `pipeline check`（它故意要求 pass）。先保证
+`verification_report` 已生成、文件存在且 OpenSpec 文档证据已登记，然后运行：
+
+```bash
+pipeline document status "$PIPELINE_CHANGE_NAME"
+pipeline review request "$PIPELINE_CHANGE_NAME" --event verify-fail
+```
+
+该 request 只校验失败决策可审计所需的报告与文档证据；用户确认回退决定后，hook 写入同一个
+`verify-fail` receipt，再手动运行 `pipeline transition "$PIPELINE_CHANGE_NAME" verify-fail`。CLI 会落
+`verify_result=fail` 并清空 `build_sha`。`verify-fail` receipt 不能用于 `verify-pass`，反之亦然。
 
 ## 出口
 

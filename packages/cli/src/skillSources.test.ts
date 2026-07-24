@@ -147,6 +147,16 @@ describe('④ 真读 templates/skill-sources.yaml', () => {
     expect(by.get('browser-qa')!.engine).toBeUndefined()
   })
 
+  it('④b2 simple-task 是新用户安装清单中的 mandatory 包内能力', () => {
+    expect(by.get('simple-task')).toMatchObject({
+      tool: 'bundled',
+      source: 'pipeline-lite',
+      contentSkill: 'simple-task',
+      tier: 'mandatory',
+    })
+    expect(existsSync(join(REPO_ROOT, 'skills', 'simple-task', 'SKILL.md'))).toBe(true)
+  })
+
   it('④c 改名落地：to-spec/to-tickets 在、to-prd/to-issues 不在，且都随包提供', () => {
     expect(by.get('to-spec')).toBeDefined()
     expect(by.get('to-tickets')).toBeDefined()

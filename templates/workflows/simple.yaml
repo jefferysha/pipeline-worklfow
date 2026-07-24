@@ -1,0 +1,50 @@
+name: simple
+steps:
+  - id: change
+    label: Change
+    gate: null
+    skills:
+      - id: simple-task
+    inputs: []
+    outputs: []
+    guards: []
+    transitions:
+      - event: change-complete
+        to: verify
+      - event: scope-expanded
+        to: escalated
+  - id: verify
+    label: Verify
+    gate: null
+    skills:
+      - id: verification-before-completion
+    inputs: []
+    outputs: []
+    guards: []
+    transitions:
+      - event: verify-pass
+        to: done
+        actions:
+          - type: mark-verification-passed
+      - event: verify-fail
+        to: change
+        actions:
+          - type: mark-verification-failed
+      - event: scope-expanded
+        to: escalated
+  - id: done
+    label: Done
+    gate: null
+    skills: []
+    inputs: []
+    outputs: []
+    guards: []
+    transitions: []
+  - id: escalated
+    label: Escalated
+    gate: null
+    skills: []
+    inputs: []
+    outputs: []
+    guards: []
+    transitions: []

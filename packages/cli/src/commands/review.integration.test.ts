@@ -1,0 +1,104 @@
+import { readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { join } from 'node:path'
+import { afterEach, beforeEach, describe, expect, test } from 'vitest'
+import { REVIEW_MARKER_PROTOCOL } from '@pipeline-lite/kernel'
+import { freshHarness, type Harness } from '../integration-harness.js'
+
+describe('真实 e2e —— review exit receipt（default workflow）', () => {
+  let h: Harness
+
+  beforeEach(async () => {
+    h = await freshHarness()
+    await h.run(['init', 'demo', '--track', 'backend', '--preset', 'full'])
+    await h.seedGovernedDocumentEvidence('demo')
+    expect(await h.run(['transition', 'demo', 'open-complete'])).toBe(0)
+    await h.seedArtifact('demo', 'design_doc', 'openspec/changes/demo/design.md')
+    expect(await h.run(['check', 'demo'])).toBe(0)
+  })
+
+  afterEach(async () => {
+    await rm(h.cwd, { recursive: true, force: true })
+  })
+
+  test('进入 review phase 不写 marker；request → exact pending receipt → acknowledge → transition 消费 receipt', async () => {
+    const marker = join(h.cwd, '.pipeline-pending-review')
+    await expect(stat(marker)).rejects.toMatchObject({ code: 'ENOENT' })
+
+    expect(await h.run(['review', 'request', 'demo', '--event', 'explore-complete'])).toBe(0)
+    const projection = await readFile(marker, 'utf8')
+    expect(projection).toContain(`${REVIEW_MARKER_PROTOCOL}\n`)
+    expect(projection).toContain('phase=explore\n')
+    expect(projection).toContain('change=demo\n')
+    expect(projection).toContain('event=explore-complete\n')
+    expect(await h.read('demo')).toMatch(/^review_gate_phase: explore$/m)
+    expect(await h.read('demo')).toMatch(/^review_gate_status: pending$/m)
+    expect(await h.read('demo')).toMatch(/^review_gate_event: explore-complete$/m)
+
+    // The protected fields cannot be forged through generic mutation commands.
+    expect(await h.run(['set', 'demo', 'review_gate_status', 'approved'])).toBe(1)
+    expect(h.err.join('\n')).toContain('由 pipeline review')
+
+    // Pending receipt is not permission: repeat transition only after the explicit acknowledgement.
+    expect(await h.run(['transition', 'demo', 'explore-complete'])).toBe(2)
+    expect(h.err.join('\n')).toContain('尚未取得人工确认')
+
+    expect(await h.run(['review', 'acknowledge', 'demo'])).toBe(0)
+    await expect(stat(marker)).rejects.toMatchObject({ code: 'ENOENT' })
+    expect(await h.read('demo')).toMatch(/^review_gate_status: approved$/m)
+
+    expect(await h.run(['transition', 'demo', 'explore-complete'])).toBe(0)
+    const state = await h.read('demo')
+    expect(state).toMatch(/^phase: spec$/m)
+    expect(state).not.toMatch(/^review_gate_phase:/m)
+    expect(state).not.toMatch(/^review_gate_status:/m)
+  })
+
+  test('request is an exit operation: incomplete output fails check and never writes a pending receipt', async () => {
+    const h2 = await freshHarness()
+    try {
+      await h2.run(['init', 'incomplete', '--track', 'backend', '--preset', 'full'])
+      await h2.seedGovernedDocumentEvidence('incomplete')
+      expect(await h2.run(['transition', 'incomplete', 'open-complete'])).toBe(0)
+      expect(await h2.run(['review', 'request', 'incomplete', '--event', 'explore-complete'])).toBe(2)
+      const state = await h2.read('incomplete')
+      expect(state).not.toMatch(/^review_gate_status:/m)
+      await expect(stat(join(h2.cwd, '.pipeline-pending-review'))).rejects.toMatchObject({ code: 'ENOENT' })
+    } finally {
+      await rm(h2.cwd, { recursive: true, force: true })
+    }
+  })
+
+  test('delegated acknowledge requires a current Change-bound user authority and records that source', async () => {
+    const marker = join(h.cwd, '.pipeline-pending-review')
+    const authority = join(h.cwd, '.pipeline-interaction-authority')
+    await expect(h.run(['review', 'request', 'demo', '--event', 'explore-complete'])).resolves.toBe(0)
+
+    expect(await h.run(['review', 'acknowledge', 'demo', '--delegated'])).toBe(1)
+    expect(h.err.join('\n')).toContain('没有有效的用户委托')
+
+    await writeFile(join(h.cwd, '.pipeline-active'), 'demo\n', 'utf8')
+    await writeFile(authority, [
+      'pipeline-interaction-authority-v1',
+      'change=demo',
+      'scope=interactive-skills',
+      'review=required',
+      'issued_at=2026-07-24T00:00:00Z',
+      '',
+    ].join('\n'), 'utf8')
+    expect(await h.run(['review', 'acknowledge', 'demo', '--delegated'])).toBe(1)
+
+    await writeFile(authority, [
+      'pipeline-interaction-authority-v1',
+      'change=demo',
+      'scope=interactive-skills',
+      'review=delegated',
+      'issued_at=2026-07-24T00:00:00Z',
+      '',
+    ].join('\n'), 'utf8')
+    expect(await h.run(['review', 'acknowledge', 'demo', '--delegated'])).toBe(0)
+    await expect(stat(marker)).rejects.toMatchObject({ code: 'ENOENT' })
+    const history = await readFile(join(h.cwd, 'openspec/changes/demo/.pipeline-history.jsonl'), 'utf8')
+    expect(history).toContain('review:delegated-ack phase=explore event=explore-complete')
+    expect(history).toContain('authority_issued_at=2026-07-24T00:00:00Z')
+  })
+})

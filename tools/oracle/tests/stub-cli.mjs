@@ -3,12 +3,15 @@
  * stub-cli.mjs — harness 测试专用的「新 CLI」替身（零依赖 ESM，非产品代码）。
  *
  * STUB_MODE:
- *   mirror   忠实复刻老内核 pipeline-state.sh 实测行为（stdout/exit/yaml 三面）
- *            —— 双跑模式下应全绿，证明 harness 的对比机器是准的。
+ *   mirror   忠实复刻老内核 pipeline-state.sh 实测行为，并实现 fixture 明确声明的 PM
+ *            spec-complete 自动入队产品演进——双跑模式下应全绿，证明对比机器既能抓回归，
+ *            也不会把被断言的新能力误判为兼容性退化。
  *   contract 忠实遵循 docs/CONTRACT.md §3 契约表
  *            —— 降级（契约测试）模式下应全绿。
  *   corrupt  在 mirror 基础上故意作恶：get 输出错值、写回丢弃未知尾块（历史区）
  *            —— 三面 diff 与 PRESERVE 校验必须抓红。
+ *   no-pm-auto-enqueue 仅漏掉 PM spec-complete 的已声明产品演进——用于证明 oracle 的
+ *            KNOWN 不是静默白名单，而是会对错误状态显式失败。
  *
  * 老内核实测口径（2026-07-06，见 T6 报告）：
  *   init  stdout 空、exit 0 ；get 缺失字段 → 空行 + exit 0 ；set 成功 stdout 空
@@ -243,6 +246,12 @@ function cmdTransition() {
   setLine(doc, 'phase', to)
   setLine(doc, 'phase_status', status)
   setLine(doc, 'updated_at', ts())
+  // pm-history 的第 6 步用 .oracle-state-extensions 明确声明了这条后置能力。stub 也必须
+  // 产生同一新侧状态，避免 harness 单测把“声明且验证的产品演进”降级成未覆盖的模拟差异。
+  if (MODE !== 'no-pm-auto-enqueue' && event === 'spec-complete' && track === 'pm' && unquote(getRaw(doc.lines, 'automation')) === 'off') {
+    setLine(doc, 'automation', 'queued')
+    setLine(doc, 'automation_queued_at', ts())
+  }
   persist(doc)
   if (MODE === 'contract') process.stdout.write(`${from} -> ${to}\n`) // 契约：`old -> new` 一行
   else process.stderr.write(`[TRANSITION] ${name}: ${from} -> ${to}\n`)

@@ -10,7 +10,7 @@
  * workflow/phase 字段，并链式验证创建出的 change 立即可被其它真实命令（internal-skill-gate/
  * transition）消费，不需要任何手工改写状态文件。
  */
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
 import { freshHarness, rm, type Harness } from './integration-harness.js'
@@ -61,9 +61,50 @@ describe('真实 e2e —— init --workflow 落地自定义 workflow 的首个 s
     expect(content).toMatch(/^phase: open$/m)
     // state-first CLI init 也必须留下 OpenSpec 继续点；正常入口中 richer openspec-propose 若已先
     // 写这些文件，repository 的 wx scaffold 会保留它们，这里覆盖无 OpenSpec skill 的恢复路径。
-    expect(await h.readIn('demo', 'proposal.md')).toContain('TODO(open)')
-    expect(await h.readIn('demo', 'design.md')).toContain('TODO(open)')
+    expect(await h.readIn('demo', 'proposal.md')).toContain('# Proposal')
+    expect(await h.readIn('demo', 'design.md')).toContain('# Design')
     expect(await h.readIn('demo', 'tasks.md')).toContain('- [ ]')
+  })
+
+  test('simple Track 默认绑定内建 simple workflow，从 change 开始且不生成完整 OpenSpec 文档链', async () => {
+    expect(await h.run(['init', 'tiny-fix', '--track', 'simple', '--preset', 'tweak'])).toBe(0)
+    const content = await h.read('tiny-fix')
+    expect(content).toMatch(/^workflow: simple$/m)
+    expect(content).toMatch(/^phase: change$/m)
+    await expect(h.readIn('tiny-fix', 'proposal.md')).rejects.toThrow()
+    await expect(h.readIn('tiny-fix', 'tasks.md')).rejects.toThrow()
+  })
+
+  test('simple workflow 完整生命周期可验证后结束；范围扩大走独立 escalated 终态', async () => {
+    expect(await h.run(['init', 'tiny-done', '--track', 'simple', '--preset', 'tweak'])).toBe(0)
+    expect(await h.run(['transition', 'tiny-done', 'change-complete'])).toBe(2)
+    expect((await h.read('tiny-done'))).toMatch(/^phase: change$/m)
+    await appendFile(
+      join(h.cwd, 'openspec', 'changes', 'tiny-done', '.pipeline-history.jsonl'),
+      `${JSON.stringify({ ts: '2026-07-24T00:00:00Z', kind: 'tool', raw: 'Skill: simple-task' })}\n`,
+      'utf8',
+    )
+    expect(await h.run(['transition', 'tiny-done', 'change-complete'])).toBe(0)
+    expect((await h.read('tiny-done'))).toMatch(/^phase: verify$/m)
+    expect(await h.run(['transition', 'tiny-done', 'verify-pass'])).toBe(2)
+    await appendFile(
+      join(h.cwd, 'openspec', 'changes', 'tiny-done', '.pipeline-history.jsonl'),
+      `${JSON.stringify({ ts: '2026-07-24T00:01:00Z', kind: 'tool', raw: 'Skill: verification-before-completion' })}\n`,
+      'utf8',
+    )
+    expect(await h.run(['transition', 'tiny-done', 'verify-pass'])).toBe(0)
+    const completed = await h.read('tiny-done')
+    expect(completed).toMatch(/^phase: done$/m)
+    expect(completed).toMatch(/^verify_result: pass$/m)
+
+    expect(await h.run(['init', 'tiny-expanded', '--track', 'simple', '--preset', 'tweak'])).toBe(0)
+    await appendFile(
+      join(h.cwd, 'openspec', 'changes', 'tiny-expanded', '.pipeline-history.jsonl'),
+      `${JSON.stringify({ ts: '2026-07-24T00:02:00Z', kind: 'tool', raw: 'Skill: simple-task' })}\n`,
+      'utf8',
+    )
+    expect(await h.run(['transition', 'tiny-expanded', 'scope-expanded'])).toBe(0)
+    expect((await h.read('tiny-expanded'))).toMatch(/^phase: escalated$/m)
   })
 
   test('--workflow onboarding：真落 workflow=onboarding + phase=intake（workflow 首个 step 的 id，不是硬编码 open）', async () => {

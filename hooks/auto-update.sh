@@ -7,12 +7,19 @@
 # skill set, while the next session sees the refreshed plugin.
 set -uo pipefail
 
-PLUGIN_ROOT="${1:-${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-}}}"
-[ -n "$PLUGIN_ROOT" ] || exit 0
-BUNDLE="$PLUGIN_ROOT/packages/cli/dist/pipeline.mjs"
-[ -f "$BUNDLE" ] || exit 0
+[ -n "${HOME:-}" ] || exit 0
+PIPELINE_BIN="${PIPELINE_STABLE_BIN:-$HOME/.local/bin/pipeline}"
+[ -x "$PIPELINE_BIN" ] || exit 0
 
-CONFIG_BASE="${XDG_CONFIG_HOME:-$HOME/.config}/pipeline-lite"
+# The active release passes PIPELINE_RUNTIME_CONFIG_ROOT through the stable bootstrap.  Keep the
+# platform-native fallback for a SessionStart launched immediately after a fresh install.
+if [ -n "${PIPELINE_RUNTIME_CONFIG_ROOT:-}" ]; then
+  CONFIG_BASE="$PIPELINE_RUNTIME_CONFIG_ROOT"
+elif [ "$(uname -s 2>/dev/null || true)" = "Darwin" ]; then
+  CONFIG_BASE="$HOME/Library/Application Support/pipeline-lite/config"
+else
+  CONFIG_BASE="${XDG_CONFIG_HOME:-$HOME/.config}/pipeline-lite"
+fi
 CONFIG="$CONFIG_BASE/auto-update.conf"
 [ -f "$CONFIG" ] && [ ! -L "$CONFIG" ] || exit 0
 
@@ -53,5 +60,5 @@ update_due || exit 0
 # next daily window rather than creating a per-turn retry storm.
 : > "$STAMP" 2>/dev/null || exit 0
 LOG="$CONFIG_BASE/auto-update-${HOST}.log"
-nohup env PIPELINE_AUTO_UPDATE=1 node "$BUNDLE" update "--${HOST}" --yes --auto >>"$LOG" 2>&1 &
+nohup env PIPELINE_AUTO_UPDATE=1 "$PIPELINE_BIN" update "--${HOST}" --yes --auto >>"$LOG" 2>&1 &
 exit 0

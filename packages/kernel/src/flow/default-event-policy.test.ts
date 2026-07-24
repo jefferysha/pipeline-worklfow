@@ -24,10 +24,13 @@ function mkState(fields: Partial<Record<FieldName, string | string[]>>): Pipelin
 /** 文件面注入：全部存在 / 全部不存在。 */
 const filesExist = (exists: boolean): TransitionContext => ({ fileExists: () => exists })
 
-describe('DEFAULT_EVENT_POLICY 表结构（穷尽 8 事件 + action 一一映射老 applyTransitionEffects）', () => {
-  test('键穷尽 = TRANSITION_EVENTS 8 事件', () => {
+describe('DEFAULT_EVENT_POLICY 表结构（穷尽 9 事件 + action 一一映射）', () => {
+  test('键穷尽 = TRANSITION_EVENTS 9 事件', () => {
     expect(Object.keys(DEFAULT_EVENT_POLICY).sort()).toEqual(
-      ['archived', 'build-complete', 'explore-complete', 'open-complete', 'ship-complete', 'spec-complete', 'verify-fail', 'verify-pass'].sort(),
+      [
+        'archived', 'build-complete', 'explore-complete', 'open-complete', 'requirements-changed',
+        'ship-complete', 'spec-complete', 'verify-fail', 'verify-pass',
+      ].sort(),
     )
   })
 
@@ -36,7 +39,7 @@ describe('DEFAULT_EVENT_POLICY 表结构（穷尽 8 事件 + action 一一映射
     expect(DEFAULT_EVENT_POLICY['verify-pass'].actions).toEqual([{ type: 'mark-verification-passed' }])
     expect(DEFAULT_EVENT_POLICY['verify-fail'].actions).toEqual([{ type: 'mark-verification-failed' }])
     expect(DEFAULT_EVENT_POLICY.archived.actions).toEqual([{ type: 'archive-run' }])
-    for (const ev of ['open-complete', 'explore-complete', 'spec-complete', 'ship-complete'] as const) {
+    for (const ev of ['open-complete', 'explore-complete', 'spec-complete', 'requirements-changed', 'ship-complete'] as const) {
       expect(DEFAULT_EVENT_POLICY[ev].actions).toEqual([])
     }
   })
@@ -46,7 +49,7 @@ describe('DEFAULT_EVENT_POLICY 表结构（穷尽 8 事件 + action 一一映射
     expect(DEFAULT_EVENT_POLICY['spec-complete'].guards.length).toBe(1)
     expect(DEFAULT_EVENT_POLICY['build-complete'].guards.length).toBe(4)
     expect(DEFAULT_EVENT_POLICY['verify-pass'].guards.length).toBe(5)
-    for (const ev of ['open-complete', 'verify-fail', 'ship-complete', 'archived'] as const) {
+    for (const ev of ['open-complete', 'requirements-changed', 'verify-fail', 'ship-complete', 'archived'] as const) {
       expect(DEFAULT_EVENT_POLICY[ev].guards).toEqual([])
     }
   })
@@ -124,7 +127,7 @@ describe('checkDefaultEventPreconditions —— build-complete（老仓 L139-153
 
   test('isolation 非法枚举防线（绕过 set 闸的脏值）', async () => {
     const r = await checkDefaultEventPreconditions('build-complete', mkState({ build_mode: 'direct', isolation: 'bogus' }))
-    expect(r).toEqual(["ERROR: 非法值 'bogus'，允许: branch worktree"])
+    expect(r).toEqual(["ERROR: 非法值 'bogus'，允许: branch worktree in-place"])
   })
 
   test('full+direct 缺 direct_override → 拒', async () => {
@@ -139,6 +142,14 @@ describe('checkDefaultEventPreconditions —— build-complete（老仓 L139-153
 
   test('hotfix preset + direct 不锁 direct_override → 通过', async () => {
     const r = await checkDefaultEventPreconditions('build-complete', mkState({ preset: 'hotfix', build_mode: 'direct', isolation: 'branch' }))
+    expect(r).toBeNull()
+  })
+
+  test('full+direct+in-place+direct_override=true → 通过（受限 Codex 沙盒不伪造 Git 隔离）', async () => {
+    const r = await checkDefaultEventPreconditions(
+      'build-complete',
+      mkState({ preset: 'full', build_mode: 'direct', isolation: 'in-place', direct_override: 'true' }),
+    )
     expect(r).toBeNull()
   })
 })
@@ -254,7 +265,7 @@ describe('checkDefaultEventPreconditions —— 数组边界输入（阻断 1：
 
   test("isolation=['branch','worktree'] → 归一 'branch,worktree' → field-in 拒（join 后非法枚举，逐字等价老 fstr）", async () => {
     const r = await checkDefaultEventPreconditions('build-complete', mkState({ build_mode: 'direct', isolation: ['branch', 'worktree'] }))
-    expect(r).toEqual(["ERROR: 非法值 'branch,worktree'，允许: branch worktree"])
+    expect(r).toEqual(["ERROR: 非法值 'branch,worktree'，允许: branch worktree in-place"])
   })
 
   test("design_doc=['a','b'] → 归一 'a,b' 当路径判存在（filesExist=false）→ 拒（当前=a,b）", async () => {
@@ -301,7 +312,7 @@ describe('checkDefaultEventPreconditions —— 数组边界输入（阻断 1：
     ).rejects.toThrow(/数组值/)
     expect(
       await checkDefaultEventPreconditions('build-complete', mkState({ build_mode: 'direct', isolation: ['branch', 'worktree'] })),
-    ).toEqual(["ERROR: 非法值 'branch,worktree'，允许: branch worktree"])
+    ).toEqual(["ERROR: 非法值 'branch,worktree'，允许: branch worktree in-place"])
   })
 })
 

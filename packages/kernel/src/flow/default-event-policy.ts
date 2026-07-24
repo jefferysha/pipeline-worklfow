@@ -58,13 +58,15 @@ export const DEFAULT_EVENT_POLICY = {
     guards: [{ type: 'file-exists', path: { kind: 'field', field: 'plan' }, when: NON_PM }],
     actions: [],
   },
+  'requirements-changed': { guards: [], actions: [] },
   'build-complete': {
-    // 老仓 L139-153 首错优先：build_mode 必设 → isolation 必设 → isolation ∈ {branch,worktree}
-    // → full+direct 锁 direct_override。
+    // 首错优先：build_mode 必设 → isolation 必设 → isolation ∈ {branch,worktree,in-place}
+    // → full+direct 锁 direct_override。in-place 明确表示受限 agent 仅能在当前工作目录写文件，
+    // 不得把它伪装成已创建的 Git branch/worktree。
     guards: [
       { type: 'field-nonempty', field: 'build_mode' },
       { type: 'field-nonempty', field: 'isolation' },
-      { type: 'field-in', field: 'isolation', values: ['branch', 'worktree'] },
+      { type: 'field-in', field: 'isolation', values: ['branch', 'worktree', 'in-place'] },
       { type: 'full-direct-override' },
     ],
     // 老仓 L156-161：git HEAD 冻结进 build_sha（取不到 → 留原值 + WARN 信号）。
@@ -158,7 +160,7 @@ export function renderPreconditionViolation(
           ? ['ERROR: build_mode 必须设置']
           : ['ERROR: isolation 必须设置']
       }
-      if (guard.type === 'field-in') return [`ERROR: 非法值 '${actual}'，允许: branch worktree`]
+      if (guard.type === 'field-in') return [`ERROR: 非法值 '${actual}'，允许: branch worktree in-place`]
       if (guard.type === 'full-direct-override') {
         return ['ERROR: full workflow 使用 build_mode=direct 必须显式设 direct_override=true']
       }
@@ -174,6 +176,12 @@ export function renderPreconditionViolation(
       }
       if (guard.type === 'build-head-unchanged') {
         const bsha = (decision.kind === 'failed' ? decision.expected?.[0] : undefined) ?? ''
+        if (bsha.startsWith('workspace:sha256:')) {
+          return [
+            `ERROR: verify-pass 要求当前工作区内容等于 build 冻结基线（build_sha=${bsha} 当前=${actual}）`,
+            '  修复：工作区在 build 后发生变化；重跑 build-complete 冻结新基线后再验证',
+          ]
+        }
         return [
           `ERROR: verify-pass 要求 HEAD==build_sha（build 后产物被改未复验）build_sha=${bsha} HEAD=${actual}`,
           '  修复：要么把改动并入复验（重跑 build→verify），要么 verify-fail 回退后重新 build-complete 冻结新 SHA',
@@ -208,6 +216,7 @@ export async function checkDefaultEventPreconditions(
     track,
     fileExists: ctx?.fileExists,
     gitHeadSha: ctx?.gitHeadSha,
+    workspaceFingerprint: ctx?.workspaceFingerprint,
   })
   const failed = evaluations.find((e) => e.decision.kind === 'failed')
   if (!failed) return null

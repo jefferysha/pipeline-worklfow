@@ -270,7 +270,10 @@ describe('LaneMandatorySkills §4.7 诚实门：运行时 config/registry 不可
   it.each([
     ['负 priority', { enabled: true, pattern: 'qa', priority: -1 }],
     ['非法正则', { enabled: true, pattern: '[', priority: 1 }],
+    ['空排除规则', { enabled: true, pattern: 'qa', excludePattern: '', priority: 1 }],
+    ['非法排除正则', { enabled: true, pattern: 'qa', excludePattern: '[', priority: 1 }],
     ['disabled 携带 pattern', { enabled: false, pattern: 'qa' }],
+    ['disabled 携带 excludePattern', { enabled: false, excludePattern: 'api' }],
   ])('effective track 的 routing %s → 整包 fail-closed', async (_label, routing) => {
     const tracks = CONFIG_BODY.tracks.map((track) => track.id === 'qa'
       ? { ...track, policyProfile: { ...track.policyProfile, routing } }
@@ -887,6 +890,7 @@ describe('TrackSettings v3 真实 CRUD', () => {
     fireEvent.change(within(editor).getByLabelText('显示名称'), { target: { value: 'Release' } })
     fireEvent.change(within(editor).getByLabelText('默认 Workflow'), { target: { value: 'default' } })
     fireEvent.change(within(editor).getByLabelText('Policy 模板'), { target: { value: 'frontend' } })
+    fireEvent.click(within(editor).getByLabelText('autoEnqueueOnSpecComplete'))
     fireEvent.click(within(editor).getByTestId('wb-track-editor-save'))
 
     await waitFor(() => expect(configReads).toBeGreaterThan(1))
@@ -900,6 +904,9 @@ describe('TrackSettings v3 真实 CRUD', () => {
         policyProfile: CONFIG_BODY.tracks.find((track) => track.id === 'frontend')!.policyProfile,
       },
     })
+    expect(JSON.parse(String((call?.[1] as RequestInit).body))).toMatchObject({
+      track: { policyProfile: { autoEnqueueOnSpecComplete: true } },
+    })
   })
 
   it('自定义 Track 保存前可用未保存草稿跑生产 Router 预览，展示 winner 与全候选分数', async () => {
@@ -912,10 +919,10 @@ describe('TrackSettings v3 真实 CRUD', () => {
           revision: CONFIG_BODY.revision,
           source: 'project-file',
           suppressed_reason: null,
-          winner: { track: body.draft_track, order: 4, priority: 999, score: 2, routable: true },
+          winner: { track: body.draft_track, order: 4, priority: 999, score: 2, routable: true, excluded: false },
           candidates: [
-            { track: CONFIG_BODY.tracks[2], order: 2, priority: 300, score: 1, routable: true },
-            { track: body.draft_track, order: 4, priority: 999, score: 2, routable: true },
+            { track: CONFIG_BODY.tracks[2], order: 2, priority: 300, score: 1, routable: true, excluded: false },
+            { track: body.draft_track, order: 4, priority: 999, score: 2, routable: true, excluded: false },
           ],
         }), { status: 200 })
       }
@@ -925,6 +932,7 @@ describe('TrackSettings v3 真实 CRUD', () => {
     fireEvent.click(screen.getByTestId('wb-track-settings-toggle'))
     fireEvent.click(screen.getByTestId('wb-track-edit-qa'))
     fireEvent.change(screen.getByLabelText('routing.priority'), { target: { value: '999' } })
+    fireEvent.change(screen.getByLabelText('routing.excludePattern'), { target: { value: '(API|schema)' } })
     fireEvent.change(screen.getByTestId('wb-track-route-prompt'), { target: { value: 'test the css' } })
     fireEvent.click(screen.getByTestId('wb-track-route-preview'))
     const result = await screen.findByTestId('wb-track-route-result')
@@ -935,7 +943,17 @@ describe('TrackSettings v3 真实 CRUD', () => {
     expect(JSON.parse(String((call?.[1] as RequestInit).body))).toMatchObject({
       root: '/repo/default',
       prompt: 'test the css',
-      draft_track: { id: 'qa', policyProfile: { routing: { enabled: true, pattern: '(qa|test)', priority: 999 } } },
+      draft_track: {
+        id: 'qa',
+        policyProfile: {
+          routing: {
+            enabled: true,
+            pattern: '(qa|test)',
+            excludePattern: '(API|schema)',
+            priority: 999,
+          },
+        },
+      },
     })
   })
 

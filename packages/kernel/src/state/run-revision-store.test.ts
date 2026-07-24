@@ -7,6 +7,7 @@ import { createStateStore } from './store.js'
 import { createTransitionRecordStore } from './transition-record-store.js'
 import { createWorkflowRunRepository } from './workflow-run-repository.js'
 import { stateStorageSourcePathSync } from './run-revision-store.js'
+import { REVIEW_GATE_FIELDS } from '../types.js'
 
 const roots: string[] = []
 const clock = () => '2026-07-19T00:00:00Z'
@@ -53,6 +54,95 @@ describe('G1 canonical revision 对抗校验', () => {
 
     expect(stateStorageSourcePathSync(dir)).toBe(current)
     await expect(createStateStore().read(dir)).rejects.toThrow(/canonical|current|symlink|符号链接/i)
+  })
+
+  test('自动更新兼容：仅缺 review-gate v2 尾字段的旧 canonical/projection 可读，并在下一次写入时升级', async () => {
+    const { dir } = await fresh()
+    const store = createStateStore()
+    const currentPath = join(dir, '.pipeline-run', 'current.json')
+    const current = JSON.parse(await readFile(currentPath, 'utf8')) as Record<string, unknown>
+    const fields = (current.state as { fields: Record<string, unknown> }).fields
+    for (const field of REVIEW_GATE_FIELDS) delete fields[field]
+    rehash(current)
+    const legacyRaw = JSON.stringify(current)
+    await writeFile(currentPath, legacyRaw, 'utf8')
+    await writeFile(join(
+      dir, '.pipeline-run', 'revisions', `000000-${String(current.revisionId)}.json`,
+    ), legacyRaw, 'utf8')
+
+    const yamlPath = join(dir, '.pipeline.yaml')
+    const yaml = await readFile(yamlPath, 'utf8')
+    const legacyYaml = REVIEW_GATE_FIELDS.reduce(
+      (next, field) => next.replace(new RegExp(`^${field}:.*\\n`, 'm'), ''),
+      yaml,
+    ).replace(/pipeline_state_digest: [0-9a-f]{64}/, `pipeline_state_digest: ${String(current.stateDigest)}`)
+    await writeFile(yamlPath, legacyYaml, 'utf8')
+
+    const recovered = await store.read(dir)
+    for (const field of REVIEW_GATE_FIELDS) expect(recovered.fields[field]).toBe('')
+    expect(await store.inspectProjection(dir)).toMatchObject({ status: 'current', revision: 0 })
+
+    await store.set(dir, 'phase', 'explore')
+    const upgraded = JSON.parse(await readFile(currentPath, 'utf8')) as {
+      revision: number
+      state: { fields: Record<string, unknown> }
+    }
+    expect(upgraded.revision).toBe(1)
+    for (const field of REVIEW_GATE_FIELDS) expect(upgraded.state.fields).toHaveProperty(field, '')
+    // 空 receipt 保留在 canonical schema，但不扰动兼容 YAML projection；真正 request 时会整组出现。
+    const upgradedYaml = await readFile(yamlPath, 'utf8')
+    for (const field of REVIEW_GATE_FIELDS) expect(upgradedYaml).not.toContain(`${field}:`)
+  })
+
+  test('自动更新兼容：早期四字段 receipt 缺 exact event 且 receipt 为空时可读并在下一次写入升级', async () => {
+    const { dir } = await fresh()
+    const store = createStateStore()
+    const currentPath = join(dir, '.pipeline-run', 'current.json')
+    const current = JSON.parse(await readFile(currentPath, 'utf8')) as Record<string, unknown>
+    const fields = (current.state as { fields: Record<string, unknown> }).fields
+    delete fields.review_gate_event
+    rehash(current)
+    const legacyRaw = JSON.stringify(current)
+    await writeFile(currentPath, legacyRaw, 'utf8')
+    await writeFile(join(
+      dir, '.pipeline-run', 'revisions', `000000-${String(current.revisionId)}.json`,
+    ), legacyRaw, 'utf8')
+
+    const yamlPath = join(dir, '.pipeline.yaml')
+    const yaml = await readFile(yamlPath, 'utf8')
+    await writeFile(
+      yamlPath,
+      yaml.replace(/pipeline_state_digest: [0-9a-f]{64}/, `pipeline_state_digest: ${String(current.stateDigest)}`),
+      'utf8',
+    )
+
+    const recovered = await store.read(dir)
+    expect(recovered.fields.review_gate_event).toBe('')
+    await store.set(dir, 'phase', 'explore')
+    const upgraded = JSON.parse(await readFile(currentPath, 'utf8')) as {
+      state: { fields: Record<string, unknown> }
+    }
+    expect(upgraded.state.fields).toHaveProperty('review_gate_event', '')
+  })
+
+  test('缺 exact event 的旧非空 receipt 必须拒绝，不能把未知批准绑定到任意 transition', async () => {
+    const { dir } = await fresh()
+    const currentPath = join(dir, '.pipeline-run', 'current.json')
+    const current = JSON.parse(await readFile(currentPath, 'utf8')) as Record<string, unknown>
+    const fields = (current.state as { fields: Record<string, unknown> }).fields
+    fields.review_gate_phase = 'spec'
+    fields.review_gate_status = 'approved'
+    fields.review_requested_at = '2026-07-24T00:00:00Z'
+    fields.review_acknowledged_at = '2026-07-24T00:01:00Z'
+    delete fields.review_gate_event
+    rehash(current)
+    const legacyRaw = JSON.stringify(current)
+    await writeFile(currentPath, legacyRaw, 'utf8')
+    await writeFile(join(
+      dir, '.pipeline-run', 'revisions', `000000-${String(current.revisionId)}.json`,
+    ), legacyRaw, 'utf8')
+
+    await expect(createStateStore().read(dir)).rejects.toThrow(/FIELD_ORDER 闭集|review.*event|canonical/i)
   })
 
   test('effects 即便攻击者同步重算 digest 并改写 current+twin，未知 shape 仍 fail-loud', async () => {

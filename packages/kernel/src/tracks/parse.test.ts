@@ -22,11 +22,13 @@ tracks:
       allowed: [data-pipeline, default]
     policy_profile:
       review_seed: pending
+      auto_enqueue_on_spec_complete: true
       automation_eligible: true
       coverage_profile: backend
       routing:
         enabled: true
         pattern: '(数据|ETL|warehouse)'
+        exclude_pattern: '(API|schema)'
         priority: 150
       skills:
         matrix: true
@@ -45,9 +47,15 @@ describe('parseTrackRegistry —— 合法形状', () => {
           workflow: { default: 'data-pipeline', allowed: ['data-pipeline', 'default'] },
           policyProfile: {
             reviewSeed: 'pending',
+            autoEnqueueOnSpecComplete: true,
             automationEligible: true,
             coverageProfile: 'backend',
-            routing: { enabled: true, pattern: '(数据|ETL|warehouse)', priority: 150 },
+            routing: {
+              enabled: true,
+              pattern: '(数据|ETL|warehouse)',
+              excludePattern: '(API|schema)',
+              priority: 150,
+            },
             skills: { matrix: true, profile: 'backend' },
           },
         },
@@ -181,7 +189,7 @@ tracks:
     expect(() => parseTrackRegistry(y)).toThrow(/tracks\.yaml:5: .*未知键 'retry'/)
   })
 
-  test('类型错误：id 非字符串 / label 列表 / priority 非整数 / automation_eligible 非布尔', () => {
+  test('类型错误：id 非字符串 / label 列表 / priority 非整数 / AFK policy 非布尔', () => {
     expect(() => parseTrackRegistry('version: 1\ntracks:\n  - id: 123\n')).toThrow(/tracks\.yaml:3: .*应为字符串/)
     expect(() => parseTrackRegistry('version: 1\ntracks:\n  - id: data\n    label: [a, b]\n')).toThrow(
       /tracks\.yaml:4: .*应为字符串/,
@@ -198,7 +206,7 @@ tracks:
 tracks:
   - id: data
     policy_profile:
-      automation_eligible: yes
+      auto_enqueue_on_spec_complete: yes
 `
     expect(() => parseTrackRegistry(badBool)).toThrow(/tracks\.yaml:5: .*应为布尔/)
   })

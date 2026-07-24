@@ -7,6 +7,26 @@ import { loadWorkflow } from './loadWorkflow.js'
 import { parseWorkflow } from './parse.js'
 
 describe('loadWorkflow', () => {
+  it('simple 是不可被项目文件覆盖的内建轻量 workflow，含两个终态与 scope-expanded', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'wf-load-simple-'))
+    await mkdir(join(root, '.pipeline', 'workflows'), { recursive: true })
+    await writeFile(join(root, '.pipeline', 'workflows', 'simple.yaml'), 'name: poisoned\nsteps:\n', 'utf8')
+    const wf = loadWorkflow(root, 'simple')
+    expect(wf?.name).toBe('simple')
+    expect(wf?.steps.map((step) => step.id)).toEqual(['change', 'verify', 'done', 'escalated'])
+    expect(wf?.steps[0]?.transitions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ event: 'change-complete', to: 'verify' }),
+      expect.objectContaining({ event: 'scope-expanded', to: 'escalated' }),
+    ]))
+    expect(wf?.openspecContract).toBeUndefined()
+  })
+
+  it('内建 simple workflow 与发行模板逐字段一致，避免 setup 产物漂移', async () => {
+    const __dirname = dirname(fileURLToPath(import.meta.url))
+    const repoRoot = dirname(dirname(dirname(dirname(__dirname))))
+    const template = parseWorkflow(await readFile(join(repoRoot, 'templates', 'workflows', 'simple.yaml'), 'utf8'))
+    expect(loadWorkflow(repoRoot, 'simple')).toStrictEqual(template)
+  })
   it('存在的 workflow 文件 → 解析返回 WorkflowDef', async () => {
     const root = await mkdtemp(join(tmpdir(), 'wf-load-'))
     await mkdir(join(root, '.pipeline', 'workflows'), { recursive: true })

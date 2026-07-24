@@ -561,6 +561,16 @@ describe('H14 loop run · sandcastle:local real-Codex dist black-box integration
   })
 
   it('selector preserves natural ownership; real L1 pauses with a Git-derived commit, real L3 verifies and merges, then budget blocks before Docker', async (ctx) => {
+    // 真 agent 验收由 CI 以 PIPELINE_REQUIRE_REAL_CODEX=1 + 专用凭证强制执行。
+    // 本地 `npm test` 不得仅因用户恰好登录了 Codex 就消耗其额度；在非 required
+    // 模式下诚实跳过，既不把外部 provider 状态伪造成测试绿，也不掩盖 CI 的硬门。
+    if (!requireRealCodex) {
+      console.warn(
+        '[HONEST SKIP] PIPELINE_REQUIRE_REAL_CODEX!=1; H14 real-Codex acceptance is enforced by the canonical CI job',
+      )
+      ctx.skip()
+      return
+    }
     const unavailablePrerequisite = await prepareRealCodexEnvironment()
     if (unavailablePrerequisite !== undefined) {
       handleMissingRealCodexPrerequisite({

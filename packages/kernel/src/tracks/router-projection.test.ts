@@ -50,7 +50,12 @@ describe('dynamic track router projection', () => {
     const r = registry([
       track({ id: 'mobile', policyProfile: {
         reviewSeed: 'pending', automationEligible: true, coverageProfile: 'frontend',
-        routing: { enabled: true, pattern: '(swift|kotlin)', priority: 900 },
+        routing: {
+          enabled: true,
+          pattern: '(swift|kotlin)',
+          excludePattern: '(API|schema)',
+          priority: 900,
+        },
         skills: { matrix: true, profile: 'frontend' },
       } }),
       track({ id: 'silent', policyProfile: {
@@ -65,11 +70,12 @@ describe('dynamic track router projection', () => {
     ])
 
     const p = buildRouterProjection(r, manifest())
-    expect(p.tracks.map((item) => ({ id: item.id, order: item.order, priority: item.priority }))).toEqual([
-      { id: 'mobile', order: 0, priority: 900 },
-      { id: 'ops', order: 2, priority: 700 },
+    expect(p.tracks.map((item) => ({ id: item.id, order: item.order, priority: item.priority, workflowDefault: item.workflowDefault }))).toEqual([
+      { id: 'mobile', order: 0, priority: 900, workflowDefault: 'default' },
+      { id: 'ops', order: 2, priority: 700, workflowDefault: 'default' },
     ])
     expect(p.tracks[1]).toMatchObject({ matrix: false, profile: 'backend' })
+    expect(p.tracks[0]?.excludePattern).toBe('(API|schema)')
   })
 
   it('resolves skills by profile then _all then empty, never by dynamic track id', () => {
@@ -90,9 +96,16 @@ describe('dynamic track router projection', () => {
     expect(p.tracks[0]?.pattern).toBe('ops')
     expect(p.tracks.map((item) => item.pattern)).not.toContain('poison-be')
   })
+
+  it('preserves the validated Track default workflow for normal-chat selection', () => {
+    const p = buildRouterProjection(registry([
+      track({ id: 'adoption', workflow: { default: 'pet-adoption', allowed: ['pet-adoption'] } }),
+    ]), manifest())
+    expect(p.tracks[0]).toMatchObject({ id: 'adoption', workflowDefault: 'pet-adoption' })
+  })
 })
 
-describe('router v2 data cache encoding', () => {
+describe('router v4 data cache encoding', () => {
   it('is deterministic data-only hex: hostile shell text never appears executable or raw', () => {
     const hostile = track({ id: 'safe-id', policyProfile: {
       reviewSeed: 'pending', automationEligible: true, coverageProfile: 'backend',
@@ -110,7 +123,7 @@ describe('router v2 data cache encoding', () => {
       projection,
     })
 
-    expect(cache).toMatch(/^PIPELINE_ROUTER_V2\nM\|/)
+    expect(cache).toMatch(/^PIPELINE_ROUTER_V4\nM\|/)
     expect(cache).not.toContain('$(')
     expect(cache).not.toContain('`')
     expect(cache).not.toContain('/tmp/router-owned')
@@ -122,6 +135,23 @@ describe('router v2 data cache encoding', () => {
       registryRevision: '0123456789abcdef',
       projection,
     }))
+  })
+
+  it('encodes exclusion patterns as the sixth routing field', () => {
+    const excluded = track({ id: 'simple', policyProfile: {
+      reviewSeed: 'skipped', automationEligible: false, coverageProfile: 'none',
+      routing: { enabled: true, pattern: '(typo|copy)', excludePattern: '(API|schema)', priority: 1000 },
+      skills: { matrix: false, profile: '_all' },
+    } })
+    const cache = encodeRouterDataCache({
+      projectRoot: '/repo',
+      manifestSha256: 'c'.repeat(64),
+      tracksPresent: false,
+      registryRevision: '0123456789abcdef',
+      projection: buildRouterProjection(registry([excluded]), manifest()),
+    })
+    const route = cache.split('\n').find((line) => line.startsWith('R|'))
+    expect(route?.split('|')[5]).toBe(Buffer.from('(API|schema)', 'utf8').toString('hex'))
   })
 
   it('rejects malformed cache identity metadata instead of emitting an ambiguous cache', () => {

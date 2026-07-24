@@ -1,5 +1,5 @@
 /** Single source of truth for the production dashboard listener. */
-export const DEFAULT_DASHBOARD_PORT = 8765
+export const DEFAULT_DASHBOARD_PORT = 18765
 
 /**
  * Resolve the optional dashboard override without accepting a malformed or out-of-range port.

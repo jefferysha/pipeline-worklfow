@@ -22,7 +22,12 @@ function governedWorkflow(overrides: Partial<WorkflowDef> = {}): WorkflowDef {
     if (id === 'open') return [{ event: 'open-complete', to: 'explore' }]
     if (id === 'explore') return [{ event: 'explore-complete', to: 'spec' }]
     if (id === 'spec') return [{ event: 'spec-complete', to: 'build' }]
-    if (id === 'build') return [{ event: 'build-complete', to: 'verify' }]
+    if (id === 'build') {
+      return [
+        { event: 'build-complete', to: 'verify' },
+        { event: 'requirements-changed', to: 'spec' },
+      ]
+    }
     if (id === 'verify') return [{ event: 'verify-pass', to: 'ship' }, { event: 'verify-fail', to: 'build' }]
     if (id === 'ship') return [{ event: 'ship-complete', to: 'archive' }]
     return []
@@ -35,7 +40,13 @@ function governedWorkflow(overrides: Partial<WorkflowDef> = {}): WorkflowDef {
       label: id,
       gate: ['explore', 'spec', 'verify'].includes(id) ? 'review' as const : null,
       skills: CONTRACT_SKILLS[id].map((skill) => ({ id: skill })),
-      inputs: [], outputs: [], guards: [], transitions: next(id),
+      inputs: id === 'verify' ? [{ field: 'build_sha', type: 'string' }] : [],
+      outputs: id === 'build'
+        ? [{ field: 'build_sha', type: 'string' }]
+        : id === 'verify'
+          ? [{ field: 'verification_report', type: 'file_path' }]
+          : [],
+      guards: [], transitions: next(id),
     })),
     ...overrides,
   }
@@ -50,6 +61,18 @@ describe('validateWorkflow', () => {
         : step),
     })
     expect(validateWorkflow(broken).some((error) => error.includes('Superpower brainstorming'))).toBe(true)
+  })
+
+  it('openspec_contract: required 必须把 build 基线显式交给 verify，并声明验证报告输出', () => {
+    const missingBuildBaseline = governedWorkflow({
+      steps: governedWorkflow().steps.map((step) => step.id === 'build' ? { ...step, outputs: [] } : step),
+    })
+    expect(validateWorkflow(missingBuildBaseline).some((error) => error.includes("output 'build_sha'"))).toBe(true)
+
+    const missingVerifyRead = governedWorkflow({
+      steps: governedWorkflow().steps.map((step) => step.id === 'verify' ? { ...step, inputs: [] } : step),
+    })
+    expect(validateWorkflow(missingVerifyRead).some((error) => error.includes("input 'build_sha'"))).toBe(true)
   })
 
   it('skill 依赖成环 → 报错', () => {
@@ -124,17 +147,14 @@ describe('validateWorkflow', () => {
     expect(result.some((e) => e.includes("'does-not-exist'") && e.includes('不存在'))).toBe(true)
   })
 
-  it('非终止 step（没有任何后续 transitions 声明）→ 报错，防止用户漏配走进死路', () => {
+  it('允许多个显式终态，但拒绝从首 step 不可达的节点', () => {
     const result = validateWorkflow(wf({
       steps: [
         { id: 's1', label: 'a', gate: null, skills: [], inputs: [], outputs: [], guards: [], transitions: [] },
         { id: 's2', label: 'b', gate: null, skills: [], inputs: [], outputs: [], guards: [], transitions: [] },
       ],
     }))
-    // s1 前面还有 s2 这个后续 step 存在，s1 自己却没声明任何 transition 能走到它或任何地方——
-    // 只有"数组里最后一个 step"允许零 transitions（终态，如 archive），中间的 step 零
-    // transitions 视为配置错误。
-    expect(result.some((e) => e.includes("step 's1'") && e.includes('没有声明任何 transitions'))).toBe(true)
+    expect(result.some((e) => e.includes("step 's2'") && e.includes('不可达'))).toBe(true)
   })
 
   // G16：serialize 写出 / parse 用 (\S+) 读回的每一类标识符都必须锁 ^[a-zA-Z0-9_-]+$（与

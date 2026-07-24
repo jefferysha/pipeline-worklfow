@@ -1,0 +1,1180 @@
+<!doctype html>
+<!--
+  v11a · 工作台编排画布 —— 形态 A:自由节点画布(n8n / react-flow 式)
+  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ■ 目标:把工作台做成一张真正的「无限画布」——阶段/技能/Hook 都是可拖放的节点,
+    端口间连线表达 顺序/依赖/门;可缩放(滚轮/按钮)、可平移(拖空白)、点节点开配置。
+  ■ 三形态之一(A=自由节点画布;另两路做泳道/树)。范式=业界 n8n/Node-RED/react-flow
+    最典型的「编排画布」。本 demo 只自绘:内联 SVG 画连线 + 原生 JS,零外部库、零 CDN、CSP 自足。
+  ■ 诚实门(强纪律):能写的做真交互(🟢),只读/终端配的诚实标注
+    (🔒 运行时固定 / 📊 只读派生 / ⌘ 终端配),绝不做假按钮。
+    · release-train(自定义 workflow)= 结构全量可编排;
+    · default(硬编码)= 同一张画布的只读态(🔒 满屏),唯一例外=各 track 强制技能集合(🟢 无序)。
+  ■ 数据/内容对齐 v11-workbench-orchestration-spec.md 能力矩阵(真/假边界)与
+    v11-workbench-orchestration.html(阶段/门/技能 DAG/Hook 四时机/Loop L1-L3),内容为演示数据。
+  ■ 配色沿 dashboard-app/src/index.css 三段式 token(冷灰蓝白 SaaS:绿=主操作、蓝=链接/焦点、红=门/危险)。
+  ■ 字号放大(base 15.5px,用户长期嫌小)。深浅色自适应,浅色为主。reduced-motion 全量降级。
+  ■ 这是方向 demo,不是生产代码。不碰任何生产代码、不 git 写。
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Pipeline 工作台 · v11a 节点画布</title>
+<style>
+/* ============ tokens(逐字沿 index.css 三段式) ============ */
+:root{
+  color-scheme: light;
+  --bg:#f8f9fc; --card:#ffffff; --fill:#f5f7fa; --fill-2:#eef1f5;
+  --border:#e5e8ec; --border-2:#d6dce4;
+  --text:#1a2330; --text-2:#46536b; --text-3:#5f6b80;
+  --accent:#2563eb; --accent-d:#1d4ed8; --accent-t:#e9effd; --accent-b:#c7d7fa;
+  --green:#16a34a; --green-d:#15803d; --green-t:#e9f9ef; --green-b:#c2e9cf;
+  --red:#dc2626; --red-d:#b91c1c; --red-t:#fdeded; --red-b:#f5c8c8;
+  --purple:#8b5cf6; --purple-d:#6d28d9; --purple-t:#f2edfe; --purple-b:#ded2fb;
+  --amb-d:#8a4d10; --amb-t:#f8efdd; --amb-b:#eeddba;
+  --ink:#1a2330; --ink-fg:#ffffff;
+  --code-bg:#f6f8fa; --code-border:#e5e8ec; --scrim:rgba(16,24,40,.34);
+  --shadow:0 1px 2px rgba(16,24,40,.04);
+  --shadow-2:0 1px 3px rgba(16,24,40,.07),0 1px 2px rgba(16,24,40,.04);
+  --shadow-3:0 12px 32px -8px rgba(16,24,40,.16),0 2px 8px rgba(16,24,40,.06);
+  --ring:rgba(22,163,74,.14); --ring-blue:rgba(37,99,235,.14);
+  --radius:12px; --radius-sm:8px;
+  --dots:rgba(70,83,107,.16);
+  --font:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;
+  --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){ color-scheme:dark;
+  --bg:#12161f; --card:#1a202b; --fill:#212836; --fill-2:#273040;
+  --border:#2b3342; --border-2:#3b4557;
+  --text:#e8ecf3; --text-2:#b4bdcc; --text-3:#8f9aad;
+  --accent:#6d9bfb; --accent-d:#9db9fd; --accent-t:rgba(109,155,251,.15); --accent-b:rgba(109,155,251,.42);
+  --green:#3ecf77; --green-d:#8fe7b1; --green-t:rgba(62,207,119,.13); --green-b:rgba(62,207,119,.38);
+  --red:#ee6b6b; --red-d:#f8a8a8; --red-t:rgba(238,107,107,.14); --red-b:rgba(238,107,107,.42);
+  --purple:#a78bfa; --purple-d:#c8b4fd; --purple-t:rgba(167,139,250,.15); --purple-b:rgba(167,139,250,.42);
+  --amb-d:#e8b06a; --amb-t:rgba(224,164,88,.13); --amb-b:rgba(224,164,88,.40);
+  --ink:#e8ecf3; --ink-fg:#0c111c;
+  --code-bg:#10151f; --code-border:#28303f; --scrim:rgba(0,0,0,.55);
+  --shadow:0 1px 2px rgba(0,0,0,.35); --shadow-2:0 2px 6px rgba(0,0,0,.35); --shadow-3:0 16px 40px -8px rgba(0,0,0,.55);
+  --ring:rgba(62,207,119,.16); --ring-blue:rgba(109,155,251,.18);
+  --dots:rgba(180,189,204,.14);
+}}
+:root[data-theme="dark"]{ color-scheme:dark;
+  --bg:#12161f; --card:#1a202b; --fill:#212836; --fill-2:#273040;
+  --border:#2b3342; --border-2:#3b4557;
+  --text:#e8ecf3; --text-2:#b4bdcc; --text-3:#8f9aad;
+  --accent:#6d9bfb; --accent-d:#9db9fd; --accent-t:rgba(109,155,251,.15); --accent-b:rgba(109,155,251,.42);
+  --green:#3ecf77; --green-d:#8fe7b1; --green-t:rgba(62,207,119,.13); --green-b:rgba(62,207,119,.38);
+  --red:#ee6b6b; --red-d:#f8a8a8; --red-t:rgba(238,107,107,.14); --red-b:rgba(238,107,107,.42);
+  --purple:#a78bfa; --purple-d:#c8b4fd; --purple-t:rgba(167,139,250,.15); --purple-b:rgba(167,139,250,.42);
+  --amb-d:#e8b06a; --amb-t:rgba(224,164,88,.13); --amb-b:rgba(224,164,88,.40);
+  --ink:#e8ecf3; --ink-fg:#0c111c;
+  --code-bg:#10151f; --code-border:#28303f; --scrim:rgba(0,0,0,.55);
+  --shadow:0 1px 2px rgba(0,0,0,.35); --shadow-2:0 2px 6px rgba(0,0,0,.35); --shadow-3:0 16px 40px -8px rgba(0,0,0,.55);
+  --ring:rgba(62,207,119,.16); --ring-blue:rgba(109,155,251,.18);
+  --dots:rgba(180,189,204,.14);
+}
+
+*{box-sizing:border-box;}
+html,body{margin:0; height:100%;}
+body{background:var(--bg); color:var(--text-2);
+  font:15.5px/1.55 var(--font); -webkit-font-smoothing:antialiased; overflow:hidden;}
+.mono{font-family:var(--mono);}
+.tnum{font-variant-numeric:tabular-nums;}
+button{font-family:inherit;}
+::selection{background:var(--accent-t);}
+
+.app{display:flex; flex-direction:column; height:100vh;}
+
+/* ---------- 顶栏 ---------- */
+.topbar{display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+  padding:12px 20px; border-bottom:1px solid var(--border); background:var(--card); z-index:20;}
+.title h1{margin:0; color:var(--text); font-size:19px; font-weight:750; letter-spacing:-.01em;}
+.title p{margin:2px 0 0; color:var(--text-3); font-size:12.5px;}
+.demo-note{display:inline-flex; align-items:center; gap:7px; padding:5px 12px; border-radius:20px;
+  background:var(--amb-t); border:1px solid var(--amb-b); color:var(--amb-d); font-size:12px; font-weight:700;}
+.spacer{flex:1;}
+
+.wf-switch{display:inline-flex; padding:4px; gap:3px; background:var(--fill); border:1px solid var(--border); border-radius:11px;}
+.wf-switch button{appearance:none; border:0; background:transparent; cursor:pointer;
+  padding:8px 15px; border-radius:8px; font-size:14px; font-weight:650; color:var(--text-3);
+  font-family:var(--mono); letter-spacing:-.01em; transition:background .16s,color .16s; white-space:nowrap;}
+.wf-switch button .ro{font-family:var(--font); font-size:11.5px; font-weight:700; margin-left:6px; color:var(--text-3); opacity:.85;}
+.wf-switch button[aria-pressed="true"]{background:var(--card); color:var(--text); box-shadow:var(--shadow);}
+.wf-switch button[aria-pressed="true"] .ro{color:var(--green-d);}
+
+.btn{appearance:none; cursor:pointer; border-radius:9px; font-size:13.5px; font-weight:700;
+  padding:9px 16px; transition:background .16s,border-color .16s,color .16s,opacity .16s;}
+.btn.solid{background:var(--green); color:var(--ink-fg); border:1px solid var(--green);}
+.btn.solid:hover{background:var(--green-d); border-color:var(--green-d);}
+.btn.solid:disabled{opacity:.45; cursor:not-allowed;}
+.chip-dirty{display:none; align-items:center; gap:6px; padding:6px 11px; border-radius:20px;
+  border:1px dashed var(--border-2); background:var(--fill); color:var(--text-2); font-size:12.5px; font-weight:700;}
+.chip-dirty.on{display:inline-flex;}
+.chip-saved{display:none; align-items:center; gap:6px; padding:6px 11px; border-radius:20px;
+  background:var(--green-t); color:var(--green-d); font-size:12.5px; font-weight:700;}
+.chip-saved.on{display:inline-flex;}
+.themebtn{appearance:none; cursor:pointer; width:38px; height:38px; border-radius:10px;
+  border:1px solid var(--border); background:var(--card); color:var(--text-2); font-size:16px;}
+.themebtn:hover{border-color:var(--border-2);}
+
+/* ---------- 图例 ---------- */
+.legendbar{display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+  padding:8px 20px; border-bottom:1px solid var(--border); background:var(--card); z-index:19;}
+.legendbar .lg{display:inline-flex; align-items:center; gap:7px; font-size:12px; color:var(--text-2);}
+.tag{font-size:11.5px; font-weight:800; padding:2.5px 8px; border-radius:20px; white-space:nowrap;}
+.tag.rw{background:var(--green-t); color:var(--green-d); border:1px solid var(--green-b);}
+.tag.ro{background:var(--fill-2); color:var(--text-3); border:1px solid var(--border-2);}
+.tag.derived{background:var(--accent-t); color:var(--accent-d); border:1px solid var(--accent-b);}
+.tag.term{background:var(--code-bg); color:var(--text-3); border:1px solid var(--code-border); font-family:var(--mono);}
+.legendbar .sep{width:1px; height:18px; background:var(--border);}
+
+/* ============ 主区:画布 + 治理轨 ============ */
+.main{flex:1; display:flex; min-height:0;}
+.stage-area{position:relative; flex:1; min-width:0; overflow:hidden;}
+
+/* 无限画布视口 */
+.viewport{position:absolute; inset:0; overflow:hidden; cursor:grab;
+  background-color:var(--bg);
+  background-image:radial-gradient(var(--dots) 1.2px, transparent 1.2px);
+  background-size:26px 26px;}
+.viewport.panning{cursor:grabbing;}
+.viewport.connecting{cursor:crosshair;}
+.world{position:absolute; top:0; left:0; width:1px; height:1px; transform-origin:0 0; will-change:transform;}
+.edges{position:absolute; top:0; left:0; width:5000px; height:2600px; overflow:visible; pointer-events:none; z-index:1;}
+
+/* 节点通用 */
+.node{position:absolute; z-index:2; background:var(--card); border:1px solid var(--border);
+  border-radius:14px; box-shadow:var(--shadow-2); user-select:none;
+  transition:box-shadow .15s, border-color .15s;}
+.node.sel{border-color:var(--green); box-shadow:0 0 0 3px var(--ring), var(--shadow-2);}
+.node .nhead{display:flex; align-items:center; gap:8px; padding:11px 13px 9px; cursor:grab;}
+.node .nhead:active{cursor:grabbing;}
+.node .grip{color:var(--text-3); font-size:15px; line-height:1; letter-spacing:-2px;}
+
+/* 端口 */
+.port{position:absolute; width:15px; height:15px; border-radius:50%;
+  background:var(--card); border:2.5px solid var(--border-2); top:30px; z-index:5; cursor:crosshair;
+  transition:border-color .13s, transform .13s, background .13s;}
+.port.in{left:-8px;}
+.port.out{right:-8px;}
+.port:hover{transform:scale(1.28);}
+.port.pin-green{border-color:var(--green);}
+.port.pin-green:hover, .port.pin-green.hot{background:var(--green); border-color:var(--green);}
+.port.pin-purple{border-color:var(--purple);}
+.port.pin-purple:hover, .port.pin-purple.hot{background:var(--purple); border-color:var(--purple);}
+.port.pin-mute{border-color:var(--border-2); cursor:not-allowed; opacity:.55;}
+
+/* ---- 阶段节点 ---- */
+.node.stage{width:236px;}
+.node.stage .snum{width:26px; height:26px; flex:none; border-radius:50%; display:grid; place-items:center;
+  border:1px solid var(--green-b); background:var(--green-t); color:var(--green-d);
+  font-family:var(--mono); font-size:13px; font-weight:800;}
+.node.stage.locked .snum{border-color:var(--border-2); background:var(--fill-2); color:var(--text-3);}
+.node.stage .snm{min-width:0; flex:1;}
+.node.stage .snm b{display:block; font-family:var(--mono); font-size:15px; font-weight:750; color:var(--text);
+  letter-spacing:-.01em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.node.stage .snm .id{font-family:var(--mono); font-size:11px; color:var(--text-3);}
+.node.stage .gate{margin-left:auto; display:inline-flex; align-items:center; gap:4px; flex:none;
+  padding:3px 9px; border-radius:20px; background:var(--red-t); color:var(--red-d);
+  font-size:11px; font-weight:800; white-space:nowrap;}
+.node.stage .lock{margin-left:auto; flex:none; font-size:13px; color:var(--text-3);}
+.node.stage .nbody{padding:0 13px 12px;}
+.node.stage .meta{display:flex; flex-wrap:wrap; gap:4px 12px; font-family:var(--mono); font-size:11.5px; color:var(--text-3);}
+.node.stage .skpv{display:flex; flex-wrap:wrap; gap:5px; margin-top:9px;}
+.node.stage .skpv .c{max-width:150px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  padding:2px 8px; border-radius:6px; background:var(--purple-t); border:1px solid var(--purple-b);
+  color:var(--purple-d); font-family:var(--mono); font-size:11px; font-weight:600;}
+.node.stage .skpv .more{color:var(--text-3); font-family:var(--mono); font-size:11px; align-self:center;}
+.node.stage .running-sheen{position:absolute; inset:0; border-radius:14px; overflow:hidden; pointer-events:none;}
+.node.stage .running-sheen::after{content:""; position:absolute; top:0; bottom:0; width:56px; left:-56px;
+  background:linear-gradient(105deg,transparent 6%,color-mix(in srgb,var(--green) 34%,transparent) 50%,transparent 94%);}
+@media (prefers-reduced-motion: no-preference){
+  .node.stage.running .running-sheen::after{animation:sheen 2.1s linear infinite;}
+}
+@keyframes sheen{to{transform:translateX(calc(236px + 56px));}}
+/* reduced-motion 全量降级:过渡直达终态、循环不启动 */
+@media (prefers-reduced-motion: reduce){
+  *{ transition-duration:.001ms !important; animation-duration:.001ms !important; animation-iteration-count:1 !important; }
+}
+
+/* ---- 技能节点 ---- */
+.node.skill{width:210px;}
+.node.skill .nhead{padding:9px 12px;}
+.node.skill .sknum{width:22px; height:22px; flex:none; border-radius:50%; display:grid; place-items:center;
+  background:var(--purple-t); border:1px solid var(--purple-b); color:var(--purple-d);
+  font-family:var(--mono); font-size:11.5px; font-weight:800;}
+.node.skill .sknm{min-width:0; flex:1; font-family:var(--mono); font-size:12.5px; font-weight:650; color:var(--text);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.node.skill .inst{flex:none; width:7px; height:7px; border-radius:50%;}
+.node.skill .skx{appearance:none; border:0; background:transparent; cursor:pointer; color:var(--text-3);
+  font-size:16px; line-height:1; padding:0 3px; border-radius:5px; flex:none;}
+.node.skill .skx:hover{background:var(--red-t); color:var(--red-d);}
+.node.skill .skdep{padding:0 12px 9px; font-size:11px; color:var(--text-3); display:flex; align-items:center; gap:6px;}
+.node.skill .skdep b{color:var(--purple-d); font-family:var(--mono); font-weight:700;}
+.node.skill .skdep .clr{cursor:pointer; color:var(--text-3); border:1px solid var(--border-2); border-radius:5px;
+  padding:0 5px; font-size:10.5px;}
+.node.skill .skdep .clr:hover{color:var(--red-d); border-color:var(--red-b);}
+.node.skill .skfree{padding:0 12px 9px; font-size:10.5px; color:var(--text-3); font-family:var(--mono);}
+
+/* + 技能 ghost 节点 */
+.node.addghost{width:210px; border:1.5px dashed var(--border-2); background:transparent; box-shadow:none;
+  display:grid; place-items:center; padding:13px; cursor:pointer; color:var(--text-3);
+  font-size:13px; font-weight:700; text-align:center;}
+.node.addghost:hover{border-color:var(--purple-b); color:var(--purple-d); background:var(--card);}
+.node.addstage{width:150px; border:1.5px dashed var(--border-2); background:transparent; box-shadow:none;
+  display:grid; place-items:center; padding:16px; cursor:pointer; color:var(--text-3); font-size:13.5px; font-weight:700;}
+.node.addstage:hover{border-color:var(--green-b); color:var(--green-d); background:var(--card);}
+
+/* ---- Hook 节点 ---- */
+.node.hook{width:246px;}
+.node.hook .nhead{padding:10px 13px 8px; border-bottom:1px solid var(--border);}
+.node.hook .htiming{font-family:var(--mono); font-size:13px; font-weight:750; color:var(--text);}
+.node.hook .hdot{width:11px; height:11px; border-radius:50%; background:var(--card); border:2.5px solid var(--accent); flex:none;}
+.node.hook .hphase{margin-left:auto; font-size:10.5px; font-weight:700; color:var(--text-3);}
+.node.hook .hloop{margin-left:6px; font-size:10px; font-weight:700; color:var(--amb-d);
+  background:var(--amb-t); border:1px solid var(--amb-b); padding:1px 6px; border-radius:20px;}
+.node.hook .hlist{padding:8px 11px 11px; display:flex; flex-direction:column; gap:6px;}
+.hookrow{display:flex; align-items:center; gap:9px; padding:7px 9px; border-radius:9px;
+  background:var(--fill); border:1px solid var(--border);}
+.hookrow.locked{background:var(--fill-2);}
+.hookrow.pending{opacity:.6;}
+.hookrow .hbody{min-width:0; flex:1;}
+.hookrow .hn{font-family:var(--mono); font-size:12px; font-weight:700; color:var(--text);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.hookrow .hd{font-size:10.5px; color:var(--text-3); margin-top:2px; line-height:1.4;}
+.hookrow .lockbadge{font-size:10px; font-weight:800; padding:2px 7px; border-radius:20px; flex:none;
+  background:var(--fill-2); color:var(--text-3); border:1px solid var(--border-2); white-space:nowrap;}
+.sw{appearance:none; position:relative; width:38px; height:22px; border-radius:12px; cursor:pointer; flex:none;
+  background:var(--border-2); border:0; transition:background .18s;}
+.sw::after{content:""; position:absolute; top:2px; left:2px; width:18px; height:18px; border-radius:50%;
+  background:#fff; box-shadow:var(--shadow); transition:transform .18s;}
+.sw[aria-checked="true"]{background:var(--green);}
+.sw[aria-checked="true"]::after{transform:translateX(16px);}
+.sw:disabled{cursor:not-allowed;}
+.sw.forced{background:var(--green); opacity:.5;}
+
+/* ---------- 画布工具条 ---------- */
+.canvas-toolbar{position:absolute; left:16px; bottom:16px; display:flex; align-items:center; gap:8px; z-index:15;}
+.ctool{display:inline-flex; align-items:center; gap:2px; padding:4px; background:var(--card);
+  border:1px solid var(--border); border-radius:11px; box-shadow:var(--shadow-2);}
+.ctool button{appearance:none; border:0; background:transparent; cursor:pointer; width:34px; height:34px;
+  border-radius:8px; color:var(--text-2); font-size:16px; display:grid; place-items:center;}
+.ctool button:hover{background:var(--fill); color:var(--text);}
+.ctool .zval{min-width:52px; text-align:center; font-family:var(--mono); font-size:12.5px; font-weight:700; color:var(--text-2);}
+.ctool.wide button{width:auto; padding:0 12px; font-size:12.5px; font-weight:700; gap:5px;}
+
+.canvas-help{position:absolute; right:16px; bottom:16px; z-index:15; max-width:270px;
+  padding:10px 13px; background:var(--card); border:1px solid var(--border); border-radius:11px; box-shadow:var(--shadow-2);
+  font-size:11.5px; color:var(--text-3); line-height:1.6;}
+.canvas-help b{color:var(--text-2);}
+.canvas-help .mono{color:var(--text-2);}
+
+/* ---------- 节点 inspector(点节点开配置) ---------- */
+.inspector{position:absolute; left:16px; top:16px; width:308px; max-height:calc(100% - 32px); overflow-y:auto;
+  background:var(--card); border:1px solid var(--border-2); border-radius:16px; box-shadow:var(--shadow-3);
+  z-index:16; display:none;}
+.inspector.on{display:block;}
+.inspector .ih{display:flex; align-items:center; gap:9px; padding:14px 16px 11px; border-bottom:1px solid var(--border);}
+.inspector .ih .ic{width:24px; height:24px; border-radius:7px; display:grid; place-items:center; flex:none;
+  background:var(--ink); color:var(--ink-fg); font-size:12px; font-weight:800; font-family:var(--mono);}
+.inspector .ih b{color:var(--text); font-size:15px; font-weight:750;}
+.inspector .ih .idpill{font-family:var(--mono); font-size:11px; color:var(--text-3);}
+.inspector .ih .close{margin-left:auto; appearance:none; border:0; background:transparent; cursor:pointer;
+  color:var(--text-3); font-size:18px; line-height:1; padding:2px 6px; border-radius:6px;}
+.inspector .ih .close:hover{background:var(--fill); color:var(--text);}
+.inspector .ibody{padding:14px 16px 16px; display:flex; flex-direction:column; gap:15px;}
+.ifield > .lbl{display:flex; align-items:center; gap:7px; font-size:12.5px; font-weight:750; color:var(--text); margin-bottom:7px;}
+.ifield .sub{font-size:11px; color:var(--text-3); line-height:1.5; margin:0 0 8px;}
+.minibadge{font-size:10px; font-weight:800; padding:2px 7px; border-radius:20px; white-space:nowrap;}
+.iname{width:100%; font-family:var(--mono); font-size:13px; color:var(--text); background:var(--fill);
+  border:1px solid var(--border); border-radius:8px; padding:8px 10px;}
+.iname:disabled{opacity:.7; cursor:not-allowed;}
+.seg{display:inline-flex; gap:3px; padding:3px; background:var(--fill); border:1px solid var(--border); border-radius:9px;}
+.seg button{appearance:none; border:0; background:transparent; cursor:pointer; padding:6px 12px; border-radius:6px;
+  font-size:12.5px; font-weight:700; color:var(--text-3);}
+.seg button[aria-pressed="true"]{background:var(--card); color:var(--text); box-shadow:var(--shadow);}
+.seg button:disabled{cursor:not-allowed;}
+.seg.locked button[aria-pressed="true"]{color:var(--text-2);}
+.outs{display:flex; flex-wrap:wrap; gap:7px;}
+.outs .o{display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border-radius:8px;
+  background:var(--fill); border:1px solid var(--border); font-family:var(--mono); font-size:12px; color:var(--text-2);}
+.outs .o .x{cursor:pointer; opacity:.6; font-size:14px;}
+.outs .o .x:hover{opacity:1; color:var(--red-d);}
+.outs .add{padding:4px 11px; border-radius:8px; border:1.5px dashed var(--border-2); background:transparent;
+  color:var(--text-3); cursor:pointer; font-size:12px; font-weight:700;}
+.outs .add:hover{border-color:var(--green-b); color:var(--green-d);}
+.lockline{padding:9px 11px; border-radius:9px; background:var(--code-bg); border:1px solid var(--code-border);
+  font-size:11px; color:var(--text-3); line-height:1.55;}
+.lockline code{font-family:var(--mono); color:var(--text-2); background:var(--fill); padding:1px 5px; border-radius:5px;}
+
+/* ---------- 治理轨(Loop) ---------- */
+.rail{width:328px; flex:none; border-left:1px solid var(--border); background:var(--card);
+  padding:16px 16px 26px; overflow-y:auto; display:flex; flex-direction:column; gap:15px;}
+.rail-h{display:flex; align-items:center; gap:9px;}
+.rail-h .n{width:22px; height:22px; border-radius:7px; display:grid; place-items:center;
+  background:var(--ink); color:var(--ink-fg); font-size:12px; font-weight:800; font-family:var(--mono);}
+.rail-h b{color:var(--text); font-size:15px; font-weight:750;}
+.rail-h .hint{color:var(--text-3); font-size:11.5px;}
+.gcard{background:var(--card); border:1px solid var(--border); border-radius:14px; box-shadow:var(--shadow); padding:14px 15px;}
+.gcard .gh{display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:11px;}
+.gcard .gh b{color:var(--text); font-size:14px; font-weight:750;}
+.levels{display:flex; gap:7px;}
+.levels button{flex:1; appearance:none; cursor:pointer; border:1px solid var(--border-2); background:var(--fill);
+  border-radius:10px; padding:10px 6px; text-align:center; transition:border-color .16s,background .16s;}
+.levels button b{display:block; font-family:var(--mono); font-size:15px; font-weight:800; color:var(--text-2);}
+.levels button small{display:block; font-size:10.5px; color:var(--text-3); margin-top:2px;}
+.levels button[aria-pressed="true"]{border-color:var(--green); background:var(--green-t);}
+.levels button[aria-pressed="true"] b{color:var(--green-d);}
+.levels button:hover{border-color:var(--text-3);}
+.gradnote{margin-top:9px; font-size:11px; color:var(--text-3); line-height:1.5;}
+.gradnote.block{color:var(--red-d); background:var(--red-t); border:1px solid var(--red-b); border-radius:8px; padding:7px 10px; font-weight:600;}
+.gauge .val{display:flex; align-items:baseline; gap:8px;}
+.gauge .val b{font-family:var(--mono); font-size:30px; font-weight:800; color:var(--text); line-height:1;}
+.gauge .val .band{font-size:12px; font-weight:800; padding:2px 9px; border-radius:20px;}
+.band.ready{background:var(--green-t); color:var(--green-d);}
+.band.mostly{background:var(--amb-t); color:var(--amb-d);}
+.band.notready{background:var(--red-t); color:var(--red-d);}
+.bar{height:9px; border-radius:6px; background:var(--fill-2); overflow:hidden; margin-top:9px;}
+.bar i{display:block; height:100%; width:100%; border-radius:6px; background:var(--green);
+  transform:scaleX(0); transform-origin:left center; transition:transform .5s cubic-bezier(.2,.7,.2,1);}
+.drivers{margin-top:11px; display:flex; flex-direction:column; gap:6px;}
+.driver{display:flex; align-items:center; gap:9px; font-size:12px; color:var(--text-2);}
+.driver input{width:16px; height:16px; accent-color:var(--green); cursor:pointer;}
+.driver .pts{margin-left:auto; font-family:var(--mono); font-size:11px; color:var(--text-3);}
+.budget .brow{display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px;}
+.budget .brow .k{font-size:12.5px; color:var(--text-2); font-weight:600;}
+.budget .brow .v{font-family:var(--mono); font-size:13px; font-weight:800; color:var(--accent-d);}
+.budget input[type=range]{width:100%; accent-color:var(--green); cursor:pointer;}
+.budget .breaker{margin-top:12px; display:flex; align-items:center; gap:10px; padding:9px 11px; border-radius:10px; background:var(--fill);}
+.budget .breaker .lamp{width:11px; height:11px; border-radius:50%; flex:none;}
+.lamp.ok{background:var(--green);} .lamp.warn{background:#d4a017;} .lamp.tripped{background:var(--red);}
+.budget .breaker .bk{font-size:12px; color:var(--text-2);}
+.budget .breaker .bk b{font-family:var(--mono); text-transform:uppercase; letter-spacing:.04em;}
+.budget .spent{margin-top:8px; font-size:11px; color:var(--text-3);}
+
+/* toast + popover */
+.toast{position:fixed; left:50%; bottom:28px; transform:translateX(-50%) translateY(20px);
+  background:var(--ink); color:var(--ink-fg); padding:12px 20px; border-radius:11px; box-shadow:var(--shadow-3);
+  font-size:13.5px; font-weight:600; opacity:0; pointer-events:none; z-index:80; max-width:560px; transition:opacity .25s, transform .25s;}
+.toast.on{opacity:1; transform:translateX(-50%) translateY(0);}
+.toast.err{background:var(--red-d);}
+.toast .k{font-family:var(--mono); font-weight:800; margin-right:6px;}
+.pop{position:fixed; z-index:90; background:var(--card); border:1px solid var(--border-2); border-radius:12px;
+  box-shadow:var(--shadow-3); padding:8px; width:288px; max-height:328px; overflow-y:auto; display:none;}
+.pop.on{display:block;}
+.pop .ph{font-size:11px; font-weight:800; color:var(--text-3); text-transform:uppercase; letter-spacing:.05em; padding:6px 8px 8px;}
+.pop button.item{display:flex; align-items:center; gap:9px; width:100%; appearance:none; border:0; background:transparent;
+  cursor:pointer; padding:8px 9px; border-radius:8px; text-align:left; font-family:var(--mono); font-size:12.5px; color:var(--text-2);}
+.pop button.item:hover{background:var(--fill);}
+.pop button.item .dotm{width:7px; height:7px; border-radius:50%; flex:none;}
+.pop button.item .inst{margin-left:auto; font-family:var(--font); font-size:10.5px; font-weight:700;}
+.inst.yes{color:var(--green-d);} .inst.no{color:var(--amb-d);}
+
+@media (max-width:920px){ .rail{width:280px;} }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ============ 顶栏 ============ -->
+  <div class="topbar">
+    <div class="title">
+      <h1>工作台 · 编排画布 <span style="font-weight:600;color:var(--text-3);font-size:13px;">形态 A · 自由节点画布</span></h1>
+      <p>无限画布:阶段 / 技能 / Hook 皆为节点 —— 拖放定位 · 端口连线 · 缩放平移 · 点开配置</p>
+    </div>
+    <span class="demo-note">✦ 这是方向 demo,不是生产代码</span>
+    <span class="spacer"></span>
+    <div class="wf-switch" role="group" aria-label="切换 workflow">
+      <button id="wfCustom" aria-pressed="true" onclick="switchWf('release-train')">release-train<span class="ro">🟢 可编排</span></button>
+      <button id="wfDefault" aria-pressed="false" onclick="switchWf('default')">default<span class="ro">🔒 只读</span></button>
+    </div>
+    <span class="chip-dirty" id="dirtyChip">● 未保存</span>
+    <span class="chip-saved" id="savedChip">✓ 已保存</span>
+    <button class="btn solid" id="saveBtn" onclick="doSave()" disabled>保存</button>
+    <button class="themebtn" onclick="toggleTheme()" title="切换深浅主题" aria-label="切换主题">◐</button>
+  </div>
+
+  <!-- ============ 图例(诚实门) ============ -->
+  <div class="legendbar" aria-label="真实/只读边界图例">
+    <span style="font-size:12px;font-weight:800;color:var(--text-3)">边界图例</span>
+    <span class="lg"><span class="tag rw">🟢 可编排</span>有写端点,真交互</span>
+    <span class="sep"></span>
+    <span class="lg"><span class="tag ro">🔒 运行时固定</span>kernel/manifest 硬编码</span>
+    <span class="sep"></span>
+    <span class="lg"><span class="tag derived">📊 只读派生</span>后端算,不可直接写</span>
+    <span class="sep"></span>
+    <span class="lg"><span class="tag term">⌘ 终端配</span>改文件,无 app 写端点</span>
+  </div>
+
+  <!-- ============ 主区 ============ -->
+  <div class="main">
+    <!-- 画布 -->
+    <div class="stage-area">
+      <div class="viewport" id="viewport">
+        <div class="world" id="world">
+          <svg class="edges" id="edges" aria-hidden="true">
+            <defs>
+              <marker id="ah-green" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto" markerUnits="userSpaceOnUse">
+                <path d="M1,1 L8,4.5 L1,8" fill="none" stroke="var(--green)" stroke-width="1.7"/></marker>
+              <marker id="ah-red" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto" markerUnits="userSpaceOnUse">
+                <path d="M1,1 L8,4.5 L1,8" fill="none" stroke="var(--red)" stroke-width="1.7"/></marker>
+              <marker id="ah-purple" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto" markerUnits="userSpaceOnUse">
+                <path d="M1,1 L8,4.5 L1,8" fill="none" stroke="var(--purple)" stroke-width="1.7"/></marker>
+              <marker id="ah-accent" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto" markerUnits="userSpaceOnUse">
+                <path d="M1,1 L8,4.5 L1,8" fill="none" stroke="var(--accent)" stroke-width="1.7"/></marker>
+            </defs>
+          </svg>
+          <!-- 节点由 JS 注入 -->
+        </div>
+      </div>
+
+      <!-- 工具条 -->
+      <div class="canvas-toolbar">
+        <div class="ctool">
+          <button onclick="zoomBtn(-1)" title="缩小" aria-label="缩小">−</button>
+          <span class="zval" id="zval">100%</span>
+          <button onclick="zoomBtn(1)" title="放大" aria-label="放大">+</button>
+        </div>
+        <div class="ctool wide"><button onclick="fitView()" title="适配全部节点">⤢ 适配</button></div>
+        <div class="ctool wide"><button onclick="resetView()" title="回到初始">⟲ 复位</button></div>
+      </div>
+      <div class="canvas-help">
+        <b>画布操作</b> · 拖<b>空白</b>平移 · <b>滚轮</b>缩放 · 拖<b>节点头</b>移动 ·
+        拖<b class="mono">端口</b>连线(阶段→阶段=流程,技能→技能=依赖) · <b>点节点</b>开配置
+      </div>
+
+      <!-- 节点 inspector -->
+      <div class="inspector" id="inspector">
+        <div class="ih">
+          <span class="ic">◎</span>
+          <b id="inspTitle">阶段</b>
+          <span class="idpill mono" id="inspId"></span>
+          <button class="close" onclick="deselect()" title="关闭" aria-label="关闭">×</button>
+        </div>
+        <div class="ibody" id="inspBody"></div>
+      </div>
+    </div>
+
+    <!-- 治理轨(Loop) -->
+    <aside class="rail">
+      <div class="rail-h"><span class="n">L</span><b>治理轨 · Loop</b><span class="hint">per-root 浮层</span></div>
+      <div class="gcard">
+        <div class="gh"><b>自治级</b><span class="minibadge tag rw">🟢 可写 · 晋升门</span></div>
+        <div class="levels" id="levels"></div>
+        <div class="gradnote" id="gradNote"></div>
+      </div>
+      <div class="gcard gauge">
+        <div class="gh"><b>就绪分</b><span class="minibadge tag derived">📊 只读派生</span></div>
+        <div class="val"><b id="rdVal" class="tnum">0</b><span class="band" id="rdBand">—</span></div>
+        <div class="bar"><i id="rdBar"></i></div>
+        <div class="drivers" id="drivers"></div>
+        <div class="gradnote">阈值 70/90 与权重硬编码(<code class="mono">drift.ts</code>);勾底层字段间接抬分——就绪分本身不可直接写。</div>
+      </div>
+      <div class="gcard budget">
+        <div class="gh"><b>熔断 · Token 预算</b><span class="minibadge tag rw">🟢 阈值可写</span></div>
+        <div class="brow"><span class="k">每日上限</span><span class="v tnum"><span id="budVal">120</span>k</span></div>
+        <input type="range" id="budRange" min="40" max="240" step="10" value="120" oninput="onBudget(this.value)">
+        <div class="breaker"><span class="lamp" id="bkLamp"></span><span class="bk">熔断态 <b id="bkState">ok</b> <span class="minibadge tag derived" style="margin-left:4px;">📊 派生</span></span></div>
+        <div class="spent">当日已花 <b class="mono tnum">74k</b> · 80% warn 线硬编码 · 无 arm/reset 端点(纯派生态)</div>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<div class="pop" id="pop"></div>
+
+<script>
+/* ═══════════════ 数据模型(对齐后端真实能力面 · 见 spec 能力矩阵) ═══════════════ */
+const REGISTRY = [
+  {id:'openspec-propose', installed:true}, {id:'openspec-explore', installed:true},
+  {id:'superpowers:brainstorming', installed:true}, {id:'grill-with-docs', installed:true},
+  {id:'improve-codebase-architecture', installed:true}, {id:'superpowers:test-driven-development', installed:true},
+  {id:'frontend-design', installed:true}, {id:'web-design-guidelines', installed:true},
+  {id:'design-taste-frontend', installed:false}, {id:'codex-review', installed:true},
+  {id:'verification', installed:true}, {id:'changelog-writer', installed:false},
+  {id:'security-review', installed:true}, {id:'huashu-design', installed:true},
+];
+// default:manifest 强制技能矩阵(phase.track)——可写集合,无排序语义;archive/_all 不可配
+const MANIFEST = {
+  'open._all':['openspec-propose'],
+  'explore.backend':['openspec-explore','superpowers:brainstorming','grill-with-docs','improve-codebase-architecture'],
+  'explore.frontend':['openspec-explore','superpowers:brainstorming','huashu-design'],
+  'explore.pm':['openspec-explore','superpowers:brainstorming'],
+  'spec.backend':['openspec-propose'], 'spec.frontend':['openspec-propose'], 'spec.pm':['openspec-propose'],
+  'build.backend':['superpowers:test-driven-development','improve-codebase-architecture'],
+  'build.frontend':['superpowers:test-driven-development','frontend-design','web-design-guidelines'],
+  'build.pm':[],
+  'verify.backend':['codex-review','verification'], 'verify.frontend':['codex-review','verification'], 'verify.pm':['verification'],
+  'ship._all':['changelog-writer'],
+};
+// Hook:8 个固定(hooks.json + HOOK_METAS 硬编码);4 可配 / 2 强制常开安全门 / 2 暂不可配
+const HOOKS = [
+  {id:'session-start', timing:'SessionStart', kind:'config', desc:'注入工作流宪法 + 活动 change 上下文'},
+  {id:'breadcrumb', timing:'UserPromptSubmit', kind:'config', desc:'每轮重发当前阶段面包屑,抗长会话漂移'},
+  {id:'router', timing:'UserPromptSubmit', kind:'config', desc:'FE/BE/PM 打分 + 注入推荐/强制技能'},
+  {id:'gate', timing:'PreToolUse', kind:'locked', desc:'交互安全门:待确认标记在时拦截写类工具'},
+  {id:'skill-tracker', timing:'PostToolUse', kind:'config', desc:'记录每次 Skill 调用进历史'},
+  {id:'interactive-skill-gate', timing:'PostToolUse', kind:'locked', desc:'交互式技能加载时落待交互标记'},
+  {id:'confirm-clear', timing:'PostToolUse', kind:'pending', desc:'AskUserQuestion 后清待确认标记'},
+  {id:'decision-recorder', timing:'PostToolUse', kind:'pending', desc:'AskUserQuestion 问答记入历史'},
+];
+const TIMINGS = ['SessionStart','UserPromptSubmit','PreToolUse','PostToolUse'];
+// workflow 定义
+const WF = {
+  'default': { name:'default', editable:false,
+    steps:[
+      {id:'open',    gate:null,     outputs:[],                      forward:'explore'},
+      {id:'explore', gate:'review', outputs:['design_doc'],          forward:'spec'},
+      {id:'spec',    gate:'review', outputs:['plan'],                forward:'build'},
+      {id:'build',   gate:null,     outputs:['build_sha'],           forward:'verify'},
+      {id:'verify',  gate:'review', outputs:['verification_report'], forward:'ship', back:'build'},
+      {id:'ship',    gate:null,     outputs:[],                      forward:'archive'},
+      {id:'archive', gate:null,     outputs:[],                      forward:null},
+    ],
+  },
+  'release-train': { name:'release-train', editable:true,
+    steps:[
+      {id:'draft',  gate:null,     outputs:['brief'],               forward:'design',
+        skills:[{id:'openspec-propose'}]},
+      {id:'design', gate:'review', outputs:['design_doc'],          forward:'build',
+        skills:[{id:'superpowers:brainstorming'},{id:'grill-with-docs',dep:'superpowers:brainstorming'},{id:'improve-codebase-architecture',dep:'superpowers:brainstorming'}]},
+      {id:'build',  gate:null,     outputs:['build_sha'],           forward:'verify',
+        skills:[{id:'superpowers:test-driven-development'},{id:'frontend-design',dep:'superpowers:test-driven-development'},{id:'web-design-guidelines',dep:'frontend-design'}]},
+      {id:'verify', gate:'review', outputs:['verification_report'], forward:'ship', back:'build',
+        skills:[{id:'codex-review'},{id:'verification',dep:'codex-review'}]},
+      {id:'ship',   gate:null,     outputs:['changelog'],           forward:null,
+        skills:[{id:'changelog-writer'}]},
+    ],
+  },
+};
+const AMBIENT = {'build':{count:2,running:true},'verify':{count:1,running:false},'explore':{count:1,running:false},'design':{count:1,running:false}};
+
+// 初始节点坐标(世界坐标) —— 阶段横向脊,Hook 时机纵列在下方
+const LAYOUT = {
+  'release-train':{
+    stages:{ draft:{x:60,y:110}, design:{x:390,y:110}, build:{x:720,y:110}, verify:{x:1050,y:110}, ship:{x:1380,y:110} },
+  },
+  'default':{
+    stages:{ open:{x:40,y:110}, explore:{x:350,y:110}, spec:{x:660,y:110}, build:{x:970,y:110}, verify:{x:1280,y:110}, ship:{x:1590,y:110}, archive:{x:1900,y:110} },
+  },
+};
+const HOOK_POS = { SessionStart:{x:60,y:760}, UserPromptSubmit:{x:400,y:760}, PreToolUse:{x:740,y:760}, PostToolUse:{x:1080,y:760} };
+
+/* ═══════════════ 运行态 ═══════════════ */
+let S = {
+  wf:'release-train', sel:null, inspOpen:false, track:'backend', dirty:false,
+  hookOff:{},                 // "hook.phase" -> true(禁用)
+  pos:{}, hookPos:{}, skillPos:{},   // 世界坐标
+  loop:{ level:'L2', maxTokens:120, spentToday:74, drivers:{goal:true,kill_criteria:true,human_gates:true,budget:true} },
+};
+let view = { x:0, y:0, scale:1 };
+const el = id => document.getElementById(id);
+const shortName = id => { const i=id.lastIndexOf(':'); return i>=0?id.slice(i+1):id; };
+const clamp = (v,a,b)=>Math.max(a,Math.min(b,v));
+const reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const world = el('world'), viewport = el('viewport'), svg = el('edges');
+const SVGNS = 'http://www.w3.org/2000/svg';
+
+function curWf(){ return WF[S.wf]; }
+function curStep(){ return curWf().steps.find(s=>s.id===S.sel) || null; }
+function setDirty(v){ S.dirty = v && curWf().editable;
+  el('dirtyChip').classList.toggle('on', S.dirty); el('savedChip').classList.remove('on');
+  el('saveBtn').disabled = !S.dirty; }
+
+/* ═══════════════ 坐标系:视图变换 & 屏↔世界 ═══════════════ */
+function applyView(){
+  world.style.transform = `translate(${view.x}px,${view.y}px) scale(${view.scale})`;
+  el('zval').textContent = Math.round(view.scale*100)+'%';
+}
+function screenToWorld(cx, cy){
+  const r = viewport.getBoundingClientRect();
+  return { x:(cx - r.left - view.x)/view.scale, y:(cy - r.top - view.y)/view.scale };
+}
+function posOf(nodeKey){
+  if(nodeKey.startsWith('stage:')) return S.pos[nodeKey.slice(6)];
+  if(nodeKey.startsWith('hook:')) return S.hookPos[nodeKey.slice(5)];
+  if(nodeKey.startsWith('skill:')) return S.skillPos[nodeKey.slice(6)];
+  return {x:0,y:0};
+}
+function nodeRect(nodeKey){
+  const p = posOf(nodeKey); if(!p) return null;
+  const dom = world.querySelector(`[data-node="${cssEsc(nodeKey)}"]`);
+  const w = dom?dom.offsetWidth:220, h = dom?dom.offsetHeight:80;
+  return { x:p.x, y:p.y, w, h };
+}
+function cssEsc(s){ return s.replace(/[^a-zA-Z0-9_-]/g, m=>'\\'+m); }
+
+/* ═══════════════ 缩放/平移/复位/适配 ═══════════════ */
+function zoomAt(cx, cy, factor){
+  const r = viewport.getBoundingClientRect();
+  const before = { x:(cx - r.left - view.x)/view.scale, y:(cy - r.top - view.y)/view.scale };
+  view.scale = clamp(view.scale*factor, 0.3, 1.8);
+  view.x = cx - r.left - before.x*view.scale;
+  view.y = cy - r.top - before.y*view.scale;
+  applyView();
+}
+function zoomBtn(dir){
+  const r = viewport.getBoundingClientRect();
+  zoomAt(r.left + r.width/2, r.top + r.height/2, dir>0?1.18:1/1.18);
+}
+function resetView(){ layoutInitial(); fitView(); }
+function fitView(){
+  const nodes = [...world.querySelectorAll('.node')];
+  if(!nodes.length) return;
+  let minX=1e9,minY=1e9,maxX=-1e9,maxY=-1e9;
+  nodes.forEach(n=>{ const p = posOf(n.dataset.node); if(!p) return;
+    minX=Math.min(minX,p.x); minY=Math.min(minY,p.y);
+    maxX=Math.max(maxX,p.x+n.offsetWidth); maxY=Math.max(maxY,p.y+n.offsetHeight); });
+  const r = viewport.getBoundingClientRect();
+  // inspector 打开时留出左侧宽度,避免节点被浮层遮住(未开则满宽,字号更舒适)
+  const leftInset = S.inspOpen?350:28, rightInset=28, topInset=26, botInset=74;
+  const availW = Math.max(200, r.width-leftInset-rightInset), availH = Math.max(200, r.height-topInset-botInset);
+  const bw = (maxX-minX)||1, bh = (maxY-minY)||1;
+  const s = clamp(Math.min(availW/bw, availH/bh), 0.3, 1.1);
+  view.scale = s;
+  view.x = leftInset + availW/2 - ((minX+maxX)/2)*s;
+  view.y = topInset + availH/2 - ((minY+maxY)/2)*s;
+  applyView();
+}
+
+/* ═══════════════ 布局(把模型坐标写进运行态) ═══════════════ */
+function layoutInitial(){
+  const L = LAYOUT[S.wf];
+  S.pos = {}; Object.entries(L.stages).forEach(([id,p])=>{ S.pos[id]={x:p.x,y:p.y}; });
+  S.hookPos = {}; TIMINGS.forEach(t=>{ S.hookPos[t]={x:HOOK_POS[t].x, y:HOOK_POS[t].y}; });
+}
+// 技能节点自动布局(选中阶段时,依 dep 层级堆在阶段下方)
+function layoutSkills(){
+  S.skillPos = {};
+  const s = curStep(); if(!s) return;
+  const sp = S.pos[s.id]; if(!sp) return;
+  const list = skillList(s);
+  const baseY = sp.y + 232, gapY = 92, colW = 236;
+  // 依 dep 分层:root 在第 0 层,子技能层级 = 父层级+1
+  const idx = {}; list.forEach((k,i)=>idx[k.id]=i);
+  const level = {};
+  const depth = (id, seen)=>{ if(level[id]!==undefined) return level[id];
+    const k = list.find(x=>x.id===id); if(!k||!k.dep||seen.has(id)){ level[id]=0; return 0; }
+    seen.add(id); const d = depth(k.dep, seen)+1; level[id]=d; return d; };
+  list.forEach(k=>depth(k.id,new Set()));
+  const perLevel = {};
+  list.forEach(k=>{ const lv=level[k.id]||0; perLevel[lv]=(perLevel[lv]||0); });
+  const seen2={};
+  list.forEach(k=>{ const lv=level[k.id]||0; const col=(seen2[lv]=(seen2[lv]||0)); seen2[lv]++;
+    S.skillPos[k.id] = { x: sp.x + col*colW, y: baseY + lv*gapY };
+  });
+}
+// 选中阶段的技能列表(release-train:step.skills;default:manifest 强制集)
+function skillList(s){
+  if(curWf().editable) return (s.skills||[]).map(k=>({id:k.id, dep:k.dep||null}));
+  const key = s.id+'.'+S.track, allKey = s.id+'._all';
+  const arr = MANIFEST[key] || MANIFEST[allKey] || [];
+  return arr.map(id=>({id, dep:null, free:true}));  // default 无 dep/排序语义
+}
+function skillEditable(s){ // default:仅 track 专属集且非 archive 可增删
+  if(curWf().editable) return true;
+  const key = s.id+'.'+S.track;
+  return MANIFEST[key]!==undefined && s.id!=='archive';
+}
+
+/* ═══════════════ 渲染节点 ═══════════════ */
+function render(){
+  // 清空(保留 svg)
+  [...world.querySelectorAll('.node')].forEach(n=>n.remove());
+  const wf = curWf(); const s = curStep();
+  layoutSkills();
+
+  // 阶段节点
+  wf.steps.forEach((st,i)=>{
+    const p = S.pos[st.id]; if(!p) return;
+    const amb = AMBIENT[st.id] || {count:0,running:false};
+    const skills = skillList(st);
+    const hooksOn = HOOKS.filter(h=>!(S.hookOff[h.id+'.'+st.id])).length;
+    const chips = skills.slice(0,2).map(k=>`<span class="c" title="${k.id}">${shortName(k.id)}</span>`).join('')
+      + (skills.length>2?`<span class="more">+${skills.length-2}</span>`:'');
+    const n = document.createElement('div');
+    n.className = 'node stage' + (wf.editable?'':' locked') + (st.id===S.sel?' sel':'') + (amb.running?' running':'');
+    n.dataset.node = 'stage:'+st.id;
+    n.style.left = p.x+'px'; n.style.top = p.y+'px';
+    n.innerHTML = `
+      ${amb.running?'<span class="running-sheen"></span>':''}
+      <div class="nhead" data-drag>
+        <span class="grip">⠿</span>
+        <span class="snum">${i+1}</span>
+        <span class="snm"><b title="${st.id}">${st.id}</b><span class="id">阶段</span></span>
+        ${st.gate?`<span class="gate">◆ ${st.gate==='confirm'?'确认门':'复核门'}</span>`
+                 :(wf.editable?'':'<span class="lock" title="default 结构运行时固定">🔒</span>')}
+      </div>
+      <div class="nbody">
+        <div class="meta"><span>◇ ${skills.length} 技能</span><span>⚙ ${hooksOn} hook</span>
+          <span>▤ ${st.outputs.length} 产出</span>${amb.count>0?`<span>● ${amb.count} 在办</span>`:''}</div>
+        ${skills.length?`<div class="skpv">${chips}</div>`:''}
+      </div>
+      <span class="port in ${wf.editable?'pin-green':'pin-mute'}" data-port="in" data-kind="stage" data-id="${st.id}"></span>
+      <span class="port out ${wf.editable?'pin-green':'pin-mute'}" data-port="out" data-kind="stage" data-id="${st.id}"></span>`;
+    world.appendChild(n);
+    wireNode(n, 'stage:'+st.id, ()=>selectStage(st.id));
+  });
+
+  // + 添加阶段 ghost(release-train)
+  if(wf.editable){
+    const last = wf.steps[wf.steps.length-1]; const lp = S.pos[last.id];
+    const g = document.createElement('div'); g.className='node addstage'; g.dataset.node='addstage';
+    g.style.left=(lp.x+300)+'px'; g.style.top=(lp.y+14)+'px'; g.innerHTML='＋ 添加阶段';
+    g.addEventListener('pointerdown', e=>e.stopPropagation());
+    g.addEventListener('click', addStage);
+    world.appendChild(g);
+    S.pos['__addstage']={x:lp.x+300,y:lp.y+14};
+  }
+
+  // 技能子节点(选中阶段)
+  if(s){
+    const skills = skillList(s);
+    const editable = skillEditable(s);
+    skills.forEach((k,i)=>{
+      const p = S.skillPos[k.id]; if(!p) return;
+      const reg = REGISTRY.find(r=>r.id===k.id) || {installed:true};
+      const n = document.createElement('div');
+      n.className='node skill'; n.dataset.node='skill:'+k.id;
+      n.style.left=p.x+'px'; n.style.top=p.y+'px';
+      n.innerHTML = `
+        <div class="nhead" data-drag>
+          <span class="grip">⠿</span>
+          <span class="sknum">${i+1}</span>
+          <span class="inst" style="background:${reg.installed?'var(--green)':'var(--amb-d)'}" title="${reg.installed?'已装':'未装'}"></span>
+          <span class="sknm" title="${k.id}">${shortName(k.id)}</span>
+          ${editable?`<button class="skx" title="移除技能" data-noselect>×</button>`:''}
+        </div>
+        ${k.dep?`<div class="skdep">⟵ depends <b>${shortName(k.dep)}</b>${curWf().editable?'<span class="clr" data-noselect title="清依赖">清依赖</span>':''}</div>`
+               :(k.free?'<div class="skfree">· 无执行顺序语义(集合)</div>':'')}
+        ${curWf().editable?`<span class="port in pin-purple" data-port="in" data-kind="skill" data-id="${k.id}"></span>
+        <span class="port out pin-purple" data-port="out" data-kind="skill" data-id="${k.id}"></span>`:''}`;
+      world.appendChild(n);
+      if(editable){ const x=n.querySelector('.skx'); if(x) x.addEventListener('click', ev=>{ev.stopPropagation(); rmSkill(k.id);}); }
+      const clr=n.querySelector('.clr'); if(clr) clr.addEventListener('click', ev=>{ev.stopPropagation(); setDep(k.id,'');});
+      wireNode(n, 'skill:'+k.id, null);
+    });
+    // + 技能 ghost
+    if(editable){
+      const roots = skills.filter(k=>!k.dep).length;
+      const gx = S.pos[s.id].x, gy = S.pos[s.id].y + 232 + Math.max(1,depthMax(skills)+1)*92;
+      const g = document.createElement('div'); g.className='node addghost'; g.dataset.node='addskill';
+      g.style.left=gx+'px'; g.style.top=gy+'px';
+      g.innerHTML = curWf().editable ? '＋ 添加技能<br><span style="font-size:10.5px;opacity:.8">从 skills/registry</span>'
+        : '＋ 添加强制技能<br><span style="font-size:10.5px;opacity:.8">'+S.track+' track</span>';
+      g.addEventListener('pointerdown', e=>e.stopPropagation());
+      g.addEventListener('click', openSkillPop);
+      world.appendChild(g);
+      S.skillPos['__addskill']={x:gx,y:gy};
+    }
+  }
+
+  // Hook 节点(4 时机)
+  TIMINGS.forEach(tm=>{
+    const p = S.hookPos[tm]; if(!p) return;
+    const hs = HOOKS.filter(h=>h.timing===tm);
+    const phase = s?s.id:null;
+    let rows='';
+    hs.forEach(h=>{
+      const off = phase ? !!S.hookOff[h.id+'.'+phase] : false;
+      if(h.kind==='config'){
+        rows += `<div class="hookrow"><div class="hbody"><div class="hn">${h.id}</div><div class="hd">${h.desc}</div></div>
+          <button class="sw" role="switch" aria-checked="${phase?!off:false}" ${phase?'':'disabled'} data-hook="${h.id}" data-noselect title="${phase?'启用/禁用(逐阶段)':'先选阶段'}"></button></div>`;
+      } else if(h.kind==='locked'){
+        rows += `<div class="hookrow locked"><div class="hbody"><div class="hn">🔒 ${h.id}</div><div class="hd">${h.desc}</div></div>
+          <span class="lockbadge" title="决议#2:安全门强制常开,写端点 400 拒">强制常开</span></div>`;
+      } else {
+        rows += `<div class="hookrow pending"><div class="hbody"><div class="hn">${h.id}</div><div class="hd">${h.desc}</div></div>
+          <span class="lockbadge">暂不可配</span></div>`;
+      }
+    });
+    const n = document.createElement('div');
+    n.className='node hook'; n.dataset.node='hook:'+tm;
+    n.style.left=p.x+'px'; n.style.top=p.y+'px';
+    n.innerHTML = `
+      <div class="nhead" data-drag>
+        <span class="hdot"></span>
+        <span class="htiming">${tm}</span>
+        ${tm==='PreToolUse'?'<span class="hloop">每轮重复</span>':''}
+        <span class="hphase">${phase?('阶段 '+phase):'未选阶段'}</span>
+      </div>
+      <div class="hlist">${rows}</div>
+      <span class="port in pin-mute" data-port="in" data-kind="hook" data-id="${tm}"></span>
+      <span class="port out pin-mute" data-port="out" data-kind="hook" data-id="${tm}"></span>`;
+    world.appendChild(n);
+    n.querySelectorAll('.sw').forEach(b=>b.addEventListener('click', ev=>{ ev.stopPropagation(); toggleHook(b.dataset.hook); }));
+    wireNode(n, 'hook:'+tm, null);
+  });
+
+  drawEdges();
+  renderInspector();
+}
+function depthMax(skills){
+  let m=0; const level={}; const list=skills;
+  const depth=(id,seen)=>{ if(level[id]!==undefined) return level[id];
+    const k=list.find(x=>x.id===id); if(!k||!k.dep||seen.has(id)){level[id]=0;return 0;}
+    seen.add(id); const d=depth(k.dep,seen)+1; level[id]=d; return d; };
+  skills.forEach(k=>{ m=Math.max(m,depth(k.id,new Set())); });
+  return m;
+}
+
+/* ═══════════════ 连线(内联 SVG,世界坐标) ═══════════════ */
+function P(nodeKey, side){ // 端口世界坐标
+  const r = nodeRect(nodeKey); if(!r) return null;
+  if(side==='out') return {x:r.x+r.w, y:r.y+30};
+  if(side==='in')  return {x:r.x, y:r.y+30};
+  if(side==='bottom') return {x:r.x+r.w/2, y:r.y+r.h};
+  if(side==='top') return {x:r.x+r.w/2, y:r.y};
+  return {x:r.x, y:r.y};
+}
+function bezierH(a,b){ const dx=Math.max(40,Math.abs(b.x-a.x)*0.5);
+  return `M ${a.x} ${a.y} C ${a.x+dx} ${a.y}, ${b.x-dx} ${b.y}, ${b.x} ${b.y}`; }
+function bezierV(a,b){ const dy=Math.max(30,Math.abs(b.y-a.y)*0.5);
+  return `M ${a.x} ${a.y} C ${a.x} ${a.y+dy}, ${b.x} ${b.y-dy}, ${b.x} ${b.y}`; }
+function mkPath(d, stroke, opts={}){
+  const p = document.createElementNS(SVGNS,'path');
+  p.setAttribute('d',d); p.setAttribute('fill','none'); p.setAttribute('stroke',stroke);
+  p.setAttribute('stroke-width', opts.w||2.2);
+  if(opts.dash) p.setAttribute('stroke-dasharray', opts.dash);
+  if(opts.marker) p.setAttribute('marker-end', `url(#${opts.marker})`);
+  if(opts.opacity) p.setAttribute('opacity', opts.opacity);
+  return p;
+}
+function drawEdges(){
+  // 清 path/其它(保留 defs)
+  [...svg.querySelectorAll('path,text,rect,.gatemk')].forEach(n=>n.remove());
+  const wf = curWf(); const s = curStep();
+
+  // 阶段 forward 边
+  wf.steps.forEach(st=>{
+    if(st.forward){ const to = wf.steps.find(x=>x.id===st.forward); if(!to) return;
+      const a = P('stage:'+st.id,'out'), b = P('stage:'+st.forward,'in'); if(!a||!b) return;
+      const gated = !!st.gate;
+      svg.appendChild(mkPath(bezierH(a,b), gated?'var(--red)':'var(--green)',
+        {marker: gated?'ah-red':'ah-green', dash: gated?'7 5':null}));
+      if(gated){ // 门菱形标记(边中点)
+        const mx=(a.x+b.x)/2, my=(a.y+b.y)/2;
+        const rc=document.createElementNS(SVGNS,'rect'); rc.setAttribute('class','gatemk');
+        rc.setAttribute('x',mx-8); rc.setAttribute('y',my-8); rc.setAttribute('width',16); rc.setAttribute('height',16);
+        rc.setAttribute('rx',3); rc.setAttribute('transform',`rotate(45 ${mx} ${my})`);
+        rc.setAttribute('fill','var(--red-t)'); rc.setAttribute('stroke','var(--red)'); rc.setAttribute('stroke-width','1.8');
+        svg.appendChild(rc);
+        const tx=document.createElementNS(SVGNS,'text'); tx.setAttribute('x',mx); tx.setAttribute('y',my-16);
+        tx.setAttribute('text-anchor','middle'); tx.setAttribute('fill','var(--red-d)');
+        tx.setAttribute('font-size','11'); tx.setAttribute('font-family','var(--mono)');
+        tx.textContent = st.gate==='confirm'?'确认门':'复核门'; svg.appendChild(tx);
+      }
+    }
+    // 回边(verify⇄build)
+    if(st.back){ const to = wf.steps.find(x=>x.id===st.back); if(!to) return;
+      const a = P('stage:'+st.id,'bottom'), b = P('stage:'+st.back,'bottom'); if(!a||!b) return;
+      const dip = Math.max(a.y,b.y)+56;
+      const d = `M ${a.x} ${a.y} C ${a.x} ${dip}, ${b.x} ${dip}, ${b.x} ${b.y}`;
+      svg.appendChild(mkPath(d,'var(--red)',{dash:'5 5',opacity:.72,marker:'ah-red'}));
+      const tx=document.createElementNS(SVGNS,'text'); tx.setAttribute('x',(a.x+b.x)/2); tx.setAttribute('y',dip+3);
+      tx.setAttribute('text-anchor','middle'); tx.setAttribute('fill','var(--red-d)');
+      tx.setAttribute('font-size','11'); tx.setAttribute('font-family','var(--mono)');
+      tx.textContent='verify-fail → build'; svg.appendChild(tx);
+    }
+  });
+
+  // 技能子图边(选中阶段)
+  if(s){
+    const skills = skillList(s);
+    skills.forEach(k=>{
+      const target = P('skill:'+k.id,'in'); if(!target) return;
+      if(k.dep){ const src = P('skill:'+k.dep,'out'); if(src) svg.appendChild(mkPath(bezierH(src,target),'var(--purple)',{marker:'ah-purple',w:2})); }
+      else { const src = P('stage:'+s.id,'bottom'); if(src) svg.appendChild(mkPath(bezierV(src,target),'var(--purple)',{marker:'ah-purple',w:2,opacity:.85})); }
+    });
+  }
+
+  // Hook 生命周期链(SessionStart→…→PostToolUse,每轮重复回边)
+  for(let i=0;i<TIMINGS.length-1;i++){
+    const a=P('hook:'+TIMINGS[i],'out'), b=P('hook:'+TIMINGS[i+1],'in'); if(!a||!b) continue;
+    svg.appendChild(mkPath(bezierH(a,b),'var(--accent)',{marker:'ah-accent',w:1.8,opacity:.7,dash:'2 4'}));
+  }
+}
+
+/* ═══════════════ 节点交互:拖动 / 选择 / 端口连线 ═══════════════ */
+let drag = null;
+function wireNode(n, key, onSelect){
+  const handle = n.querySelector('[data-drag]') || n;
+  // 端口:起线
+  n.querySelectorAll('.port').forEach(pt=>{
+    pt.addEventListener('pointerdown', e=>{
+      if(pt.dataset.port!=='out') return;            // 仅从 out 起线
+      if(pt.classList.contains('pin-mute')) return;  // mute 端口不可连
+      e.stopPropagation(); e.preventDefault();
+      startConnect(pt, key, e);
+    });
+  });
+  // 拖动 / 点击选择
+  handle.addEventListener('pointerdown', e=>{
+    if(e.target.closest('.port')) return;
+    if(e.target.closest('[data-noselect]')) return;
+    e.stopPropagation();
+    const startX=e.clientX, startY=e.clientY;
+    const p0 = {...posOf(key)};
+    let moved=false;
+    drag = { type:'node', key, startX, startY, p0, moved:false };
+    handle.setPointerCapture && handle.setPointerCapture(e.pointerId);
+    drag.release = ()=>{ handle.releasePointerCapture && handle.releasePointerCapture(e.pointerId); };
+    drag.onClick = onSelect;
+  });
+}
+function setPos(key, x, y){
+  if(key.startsWith('stage:')) S.pos[key.slice(6)]={x,y};
+  else if(key.startsWith('hook:')) S.hookPos[key.slice(5)]={x,y};
+  else if(key.startsWith('skill:')) S.skillPos[key.slice(6)]={x,y};
+  const dom = world.querySelector(`[data-node="${cssEsc(key)}"]`);
+  if(dom){ dom.style.left=x+'px'; dom.style.top=y+'px'; }
+}
+
+// 端口连线
+let connectState=null;
+function startConnect(pt, key, e){
+  const kind=pt.dataset.kind, id=pt.dataset.id;
+  connectState = { kind, id, key };
+  viewport.classList.add('connecting');
+  // 高亮可连目标端口
+  world.querySelectorAll('.port.in').forEach(p=>{ if(p.dataset.kind===kind && p.dataset.id!==id) p.classList.add('hot'); });
+  const tmp = document.createElementNS(SVGNS,'path'); tmp.id='tempEdge';
+  tmp.setAttribute('fill','none'); tmp.setAttribute('stroke', kind==='skill'?'var(--purple)':'var(--green)');
+  tmp.setAttribute('stroke-width','2.4'); tmp.setAttribute('stroke-dasharray','5 4');
+  svg.appendChild(tmp);
+  const a = P(key,'out');
+  const move = ev=>{ const w=screenToWorld(ev.clientX,ev.clientY); tmp.setAttribute('d',bezierH(a,w)); };
+  const up = ev=>{
+    window.removeEventListener('pointermove',move); window.removeEventListener('pointerup',up);
+    viewport.classList.remove('connecting');
+    world.querySelectorAll('.port.hot').forEach(p=>p.classList.remove('hot'));
+    tmp.remove();
+    const tgt = document.elementFromPoint(ev.clientX,ev.clientY);
+    const tp = tgt && tgt.closest('.port');
+    if(tp && tp.dataset.port==='in' && tp.dataset.kind===kind && tp.dataset.id!==id){
+      makeConnection(kind, id, tp.dataset.id);
+    }
+    connectState=null;
+  };
+  window.addEventListener('pointermove',move); window.addEventListener('pointerup',up);
+}
+function makeConnection(kind, fromId, toId){
+  if(kind==='stage'){
+    if(!curWf().editable){ toast('🔒 default 流程运行时固定','阶段/转换硬编码,去 templates/manifest.yaml(终端)改',true); return; }
+    const from = curStep2(fromId); from.forward = toId;
+    setDirty(true); render(); toast('已连流程边 '+fromId+' → '+toId,'写回 transitions · POST /api/workflows/:name');
+  } else if(kind==='skill'){
+    // from → to 表示 to 依赖 from(depends_on)
+    const to = curStep().skills.find(k=>k.id===toId); if(!to) return;
+    if(to.id===fromId) return;
+    if(wouldCycle(toId, fromId)){ toast('拒绝:会成环','kernel validate 会拒绝循环依赖(skillDag)',true); return; }
+    to.dep = fromId; setDirty(true); render(); toast('已连依赖 '+shortName(toId)+' ⟵ '+shortName(fromId),'depends_on · 运行时 isSkillUnlocked 按此解锁');
+  }
+}
+function curStep2(id){ return curWf().steps.find(s=>s.id===id); }
+function wouldCycle(node, newDep){ // node.dep=newDep 是否成环
+  let cur=newDep, guard=0;
+  while(cur && guard++<50){ if(cur===node) return true; const k=curStep().skills.find(x=>x.id===cur); cur=k?k.dep:null; }
+  return false;
+}
+
+/* 全局指针:平移 / 节点拖动收尾 */
+viewport.addEventListener('pointerdown', e=>{
+  if(e.target.closest('.node')) return;
+  drag = { type:'pan', startX:e.clientX, startY:e.clientY, vx:view.x, vy:view.y };
+  viewport.classList.add('panning');
+});
+window.addEventListener('pointermove', e=>{
+  if(!drag) return;
+  if(drag.type==='pan'){ view.x = drag.vx + (e.clientX-drag.startX); view.y = drag.vy + (e.clientY-drag.startY); applyView(); }
+  else if(drag.type==='node'){
+    const dx=(e.clientX-drag.startX)/view.scale, dy=(e.clientY-drag.startY)/view.scale;
+    if(!drag.moved && Math.hypot(e.clientX-drag.startX, e.clientY-drag.startY) > 4) drag.moved=true;
+    if(drag.moved){ setPos(drag.key, drag.p0.x+dx, drag.p0.y+dy); drawEdges(); }
+  }
+});
+window.addEventListener('pointerup', ()=>{
+  if(!drag) return;
+  if(drag.type==='pan') viewport.classList.remove('panning');
+  else if(drag.type==='node'){ if(drag.release) drag.release(); if(!drag.moved && drag.onClick) drag.onClick(); }
+  drag=null;
+});
+// 滚轮缩放
+viewport.addEventListener('wheel', e=>{ e.preventDefault(); zoomAt(e.clientX, e.clientY, e.deltaY<0?1.12:1/1.12); }, {passive:false});
+
+/* ═══════════════ 选择 & inspector ═══════════════ */
+function selectStage(id){ S.sel=id; S.inspOpen=true; render(); }
+function deselect(){ S.sel=null; S.inspOpen=false; render(); }
+function renderInspector(){
+  const insp = el('inspector'), s = curStep();
+  if(!s || !S.inspOpen){ insp.classList.remove('on'); return; }
+  const wf = curWf();
+  insp.classList.add('on');
+  el('inspTitle').textContent = '阶段配置';
+  el('inspId').textContent = s.id;
+  const amb = AMBIENT[s.id]||{count:0};
+  const body = el('inspBody');
+  const gateSeg = `<div class="seg ${wf.editable?'':'locked'}">
+      <button aria-pressed="${!s.gate}" ${wf.editable?'':'disabled'} onclick="setGate(null)">无门</button>
+      <button aria-pressed="${s.gate==='review'}" ${wf.editable?'':'disabled'} onclick="setGate('review')">复核门</button>
+      <button aria-pressed="${s.gate==='confirm'}" ${wf.editable?'':'disabled'} onclick="setGate('confirm')">确认门</button>
+    </div>`;
+  const outs = s.outputs.map(o=>`<span class="o"><span class="mono">${o}</span>${wf.editable?`<span class="x" onclick="rmOut('${o}')">×</span>`:''}</span>`).join('')
+    || '<span style="font-size:12px;color:var(--text-3)">(无)</span>';
+  const trackTabs = (!wf.editable && MANIFEST[s.id+'.'+S.track]!==undefined) ? `
+    <div class="ifield">
+      <div class="lbl">技能 track <span class="minibadge tag rw">🟢 集合可写</span></div>
+      <p class="sub">manifest <span class="mono">mandatory_skills[phase.track]</span> —— 🔒 <b>无执行顺序语义</b>,只增删集合。技能显示在画布(阶段下方)。</p>
+      <div class="seg">${['pm','frontend','backend'].map(t=>`<button aria-pressed="${S.track===t}" onclick="setTrack('${t}')">${t}</button>`).join('')}</div>
+    </div>` : '';
+
+  body.innerHTML = `
+    <div class="ifield">
+      <div class="lbl">阶段名 / id <span class="minibadge ${wf.editable?'tag rw':'tag ro'}">${wf.editable?'🟢 可写':'🔒 硬编码'}</span></div>
+      <input class="iname" id="inpName" value="${s.id}" ${wf.editable?'':'disabled'} onchange="renameStage(this.value)">
+      ${wf.editable?'':'<p class="sub" style="margin-top:7px">default 阶段/顺序=<span class="mono">PHASES</span> 常量 + manifest,运行时不落盘。</p>'}
+    </div>
+    <div class="ifield">
+      <div class="lbl">门 gate <span class="minibadge ${wf.editable?'tag rw':'tag ro'}">${wf.editable?'🟢 可写':'🔒 review_phases 固定'}</span></div>
+      ${gateSeg}
+    </div>
+    <div class="ifield">
+      <div class="lbl">产出 outputs <span class="minibadge ${wf.editable?'tag rw':'tag ro'}">${wf.editable?'🟢 可写':'🔒 硬编码前置'}</span></div>
+      <p class="sub">${wf.editable?'非空产出=过门前置(nonempty-output guard),写回 workflow.yaml。':'default 产出=硬编码转换前置(transition-table.ts),去终端改。'}</p>
+      <div class="outs">${outs}${wf.editable?'<button class="add" onclick="addOut()">＋ 产出</button>':''}</div>
+    </div>
+    ${trackTabs}
+    ${wf.editable?'':`<div class="lockline">🔒 本阶段结构只读 · 唯一可在 app 改的是各 track <b>强制技能集合</b>(上)。改阶段/门/产出请去 <code>templates/manifest.yaml</code>(⌘ 终端)。</div>`}
+    <div class="lockline">⚙ Hook 时机(4 个节点)按<b>本阶段</b>逐阶段开关;◇ 技能子图见画布下方。当前在办 ${amb.count} 个 change。</div>`;
+}
+
+/* ═══════════════ 编排动作 ═══════════════ */
+function setGate(g){ const s=curStep(); if(!curWf().editable) return; s.gate=g; setDirty(true); render();
+  toast('门已设为 '+(g?({review:'复核门',confirm:'确认门'})[g]:'无门'),'写回 StepDef.gate'); }
+function addOut(){ const s=curStep(); const name=prompt('产出字段名(如 design_doc):'); if(!name) return;
+  const v=name.trim().toLowerCase().replace(/[^a-z0-9_]+/g,'_'); if(!v||s.outputs.includes(v)) return;
+  s.outputs.push(v); setDirty(true); render(); }
+function rmOut(o){ const s=curStep(); s.outputs=s.outputs.filter(x=>x!==o); setDirty(true); render(); }
+function renameStage(v){ v=(v||'').trim().toLowerCase().replace(/[^a-z0-9_-]+/g,'-'); const s=curStep();
+  if(!v||v===s.id){ renderInspector(); return; }
+  if(curWf().steps.some(x=>x.id===v)){ toast('id 已存在',null,true); renderInspector(); return; }
+  const old=s.id;
+  curWf().steps.forEach(x=>{ if(x.forward===old)x.forward=v; if(x.back===old)x.back=v; });
+  S.pos[v]=S.pos[old]; delete S.pos[old]; s.id=v; S.sel=v;
+  setDirty(true); render(); toast('阶段已改名 '+old+' → '+v,'写回 StepDef.id + transitions'); }
+function addStage(){
+  const steps=curWf().steps; const ids=steps.map(s=>s.id); let n=1,id='stage'+n; while(ids.includes(id)){n++;id='stage'+n;}
+  const last=steps[steps.length-1]; last.forward=id;
+  steps.push({id, gate:null, outputs:[], forward:null, skills:[]});
+  const lp=S.pos[last.id]; S.pos[id]={x:lp.x+300, y:lp.y};
+  S.sel=id; setDirty(true); render(); fitViewSoft();
+  toast('已加阶段 '+id,'编辑名称/门/产出/技能 · 保存前不落盘'); }
+function rmSkill(id){ const s=curStep();
+  if(curWf().editable){ s.skills=s.skills.filter(k=>k.id!==id); s.skills.forEach(k=>{ if(k.dep===id) delete k.dep; }); }
+  else { const key=s.id+'.'+S.track; MANIFEST[key]=(MANIFEST[key]||[]).filter(v=>v!==id); }
+  setDirty(true); render(); toast('已移除技能 '+shortName(id), curWf().editable?'写回 workflow.yaml':'写回 POST /api/config/mandatory-skills'); }
+function setDep(id,dep){ const k=curStep().skills.find(x=>x.id===id); if(!k) return;
+  if(dep&&dep!==id) k.dep=dep; else delete k.dep; setDirty(true); render(); }
+function setTrack(t){ S.track=t; render(); }
+function toggleHook(id){ const s=curStep(); if(!s) return; const key=id+'.'+s.id;
+  if(S.hookOff[key]) delete S.hookOff[key]; else S.hookOff[key]=true;
+  render(); toast('Hook 开关已切 · '+id,'per-root 逐阶段 · POST /api/hooks(body:root/hook/phase/enabled)'); }
+
+/* ═══════════════ 加技能 popover ═══════════════ */
+let popMode=null;
+function openSkillPop(e){ e.stopPropagation(); const s=curStep();
+  if(curWf().editable){ popMode='skill'; showPop(e.currentTarget, REGISTRY.filter(r=>!(s.skills||[]).some(k=>k.id===r.id))); }
+  else { popMode='mandatory'; const key=s.id+'.'+S.track; showPop(e.currentTarget, REGISTRY.filter(r=>!(MANIFEST[key]||[]).includes(r.id))); }
+}
+function showPop(anchor, items){
+  const pop=el('pop'); const r=anchor.getBoundingClientRect();
+  pop.innerHTML = `<div class="ph">从 skills/registry 选择</div>` + (items.map(it=>`
+    <button class="item" onclick="pickSkill('${it.id}')">
+      <span class="dotm" style="background:${it.installed?'var(--green)':'var(--amb-d)'}"></span>
+      ${shortName(it.id)}<span class="inst ${it.installed?'yes':'no'}">${it.installed?'已装':'未装'}</span></button>`).join('')
+    || '<div class="ph">已全部添加</div>');
+  pop.classList.add('on');
+  let top=r.bottom+6, left=r.left;
+  if(left+296>window.innerWidth) left=window.innerWidth-300;
+  if(top+328>window.innerHeight) top=Math.max(10, r.top-334);
+  pop.style.top=top+'px'; pop.style.left=left+'px';
+}
+function pickSkill(id){
+  const s=curStep();
+  if(popMode==='skill'){ s.skills.push({id}); }
+  else { const key=s.id+'.'+S.track; (MANIFEST[key]=MANIFEST[key]||[]).push(id); }
+  setDirty(true); closePop(); render();
+  toast('已加技能 '+shortName(id), popMode==='skill'?'写回 workflow.yaml':'写回 POST /api/config/mandatory-skills');
+}
+function closePop(){ el('pop').classList.remove('on'); }
+document.addEventListener('pointerdown', e=>{ const pop=el('pop');
+  if(pop.classList.contains('on') && !pop.contains(e.target) && !e.target.closest('.addghost')) closePop(); }, true);
+
+/* ═══════════════ 治理轨(Loop) ═══════════════ */
+const LEVELS=[{id:'L1',t:'仅报告',need:0},{id:'L2',t:'辅助',need:70},{id:'L3',t:'无人值守',need:90}];
+const DRIVERS=[
+  {k:'goal',label:'目标 goal 已声明',pts:20},{k:'kill_criteria',label:'终止条件 kill_criteria',pts:20},
+  {k:'human_gates',label:'人工门 human_gates',pts:20},{k:'budget',label:'预算已设(含 token 上限)',pts:15},
+];
+function readiness(){ let sc=22+10; DRIVERS.forEach(d=>{ if(S.loop.drivers[d.k]) sc+=d.pts; }); return Math.min(100,sc); }
+function band(sc){ return sc>=90?['ready','就绪']:sc>=70?['mostly','大致就绪']:['notready','未就绪']; }
+function renderLoop(){
+  const rd=readiness(); const [bc,bt]=band(rd);
+  el('levels').innerHTML = LEVELS.map(l=>`<button aria-pressed="${S.loop.level===l.id}" onclick="setLevel('${l.id}')"><b>${l.id}</b><small>${l.t}</small></button>`).join('');
+  el('rdVal').textContent=rd; const bd=el('rdBand'); bd.className='band '+bc; bd.textContent=bt;
+  const bar=el('rdBar'); bar.style.transform='scaleX('+(rd/100)+')'; bar.style.background = bc==='ready'?'var(--green)':bc==='mostly'?'#d4a017':'var(--red)';
+  el('drivers').innerHTML = DRIVERS.map(d=>`<label class="driver"><input type="checkbox" ${S.loop.drivers[d.k]?'checked':''} onchange="toggleDriver('${d.k}')"><span>${d.label}</span><span class="pts">+${d.pts}</span></label>`).join('');
+  const gn=el('gradNote'); gn.className='gradnote';
+  gn.innerHTML='逐级晋升:L1→L2 需就绪≥70;L2→L3 需就绪≥90 且 ≥5 次运行。降级恒允许 · 写回 POST /api/loops/level。';
+  onBudget(S.loop.maxTokens, true);
+}
+function setLevel(id){
+  const target=LEVELS.find(l=>l.id===id); const cur=LEVELS.findIndex(l=>l.id===S.loop.level);
+  const ti=LEVELS.findIndex(l=>l.id===id); const rd=readiness();
+  if(ti>cur){ if(ti-cur>1){ blockGrad('跨级晋升被拒 —— 只能逐级(L1→L2→L3)'); return; }
+    if(rd<target.need){ blockGrad(`晋升门拦截:${id} 需就绪≥${target.need},当前 ${rd}。先补齐底层字段抬分。`); return; }
+    if(id==='L3'){ blockGrad('晋升门:L2→L3 还需 ≥5 次 L2 运行(演示:运行数不足)。'); return; } }
+  S.loop.level=id; renderLoop(); toast('自治级已改 '+id, ti>cur?'晋升门通过 · POST /api/loops/level':'降级恒允许 · POST /api/loops/level');
+}
+function blockGrad(msg){ const gn=el('gradNote'); gn.className='gradnote block'; gn.textContent='⛔ '+msg; }
+function toggleDriver(k){ S.loop.drivers[k]=!S.loop.drivers[k]; renderLoop(); toast('就绪分底层字段已改','就绪分为派生值,随字段重算(不可直接写)'); }
+function onBudget(v, silent){ v=+v; S.loop.maxTokens=v; el('budVal').textContent=v; el('budRange').value=v;
+  const ratio=S.loop.spentToday/v; let st=ratio>=1?'tripped':ratio>=0.8?'warn':'ok';
+  el('bkLamp').className='lamp '+st; el('bkState').textContent=st;
+  if(!silent) toast('Token 预算阈值已改','写回 POST /api/loops/update · 熔断态派生跟着算'); }
+
+/* ═══════════════ workflow 切换 / 保存 / 主题 / toast ═══════════════ */
+function switchWf(name){
+  if(S.dirty && curWf().editable && !confirm('有未保存的编排,切换将丢弃。继续?')) return;
+  S.wf=name; S.dirty=false; setDirty(false);
+  el('wfCustom').setAttribute('aria-pressed', name==='release-train');
+  el('wfDefault').setAttribute('aria-pressed', name==='default');
+  layoutInitial(); S.sel = WF[name].steps[0].id; S.inspOpen=false;
+  render(); fitView();
+  toast(name==='default'?'切到 default · 🔒 只读态':'切到 release-train · 🟢 可编排',
+        name==='default'?'阶段/门/产出结构运行时固定;仅强制技能集合可改':'阶段/门/产出/技能 DAG 全量可编排');
+}
+function doSave(){ setDirty(false); el('dirtyChip').classList.remove('on'); el('savedChip').classList.add('on'); el('saveBtn').disabled=true;
+  toast('已保存(演示)','真实链路:kernel validate 校验 → 原子写 workflow.yaml → 失效规则缓存'); }
+function toggleTheme(){ const r=document.documentElement; const cur=r.getAttribute('data-theme');
+  const sysDark=window.matchMedia('(prefers-color-scheme: dark)').matches; const now=cur?cur:(sysDark?'dark':'light');
+  r.setAttribute('data-theme', now==='dark'?'light':'dark'); }
+let toastT=null;
+function toast(title, sub, err){ const t=el('toast'); t.className='toast on'+(err?' err':'');
+  t.innerHTML = `<span class="k">${title}</span>${sub?'<span style="opacity:.85;font-weight:500">'+sub+'</span>':''}`;
+  if(toastT) clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('on'), 2600); }
+function fitViewSoft(){ /* 加节点后轻微保证可见,不强制重排视图 */ }
+
+window.addEventListener('resize', ()=>drawEdges());
+
+/* ═══════════════ 启动 ═══════════════ */
+layoutInitial();
+S.sel = 'design';   // 初始选中 design(3 技能 depends_on 扇形),让首屏展示技能子图
+render(); renderLoop();
+requestAnimationFrame(()=>{ fitView(); });
+</script>
+</body>
+</html>

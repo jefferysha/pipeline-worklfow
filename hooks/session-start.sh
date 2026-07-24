@@ -12,28 +12,63 @@ set -uo pipefail
 
 INPUT="$(cat 2>/dev/null || printf '{}')"
 
-json_get() {
-  local key="$1" rest
-  case "$INPUT" in *"\"$key\""*) ;; *) return 1 ;; esac
-  rest="${INPUT#*\"$key\"}"
-  while true; do
-    case "$rest" in
-      [$' \t\r\n']*) rest="${rest#?}" ;;
-      ':'*) rest="${rest#:}"; break ;;
-      *) return 1 ;;
-    esac
-  done
-  while true; do
-    case "$rest" in
-      [$' \t\r\n']*) rest="${rest#?}" ;;
-      *) break ;;
-    esac
-  done
-  case "$rest" in
-    '"'*) rest="${rest#\"}"; printf '%s' "${rest%%\"*}"; return 0 ;;
-    *) return 1 ;;
+# Codex treats stdout beginning with `[` or `{` as hook JSON.  The injected workflow context
+# intentionally uses bracketed headings, so emitting it as plain stdout makes the host attempt to
+# parse a Markdown heading as JSON and fail the whole SessionStart event.  Accumulate the context
+# and publish the documented SessionStart envelope exactly once at the end instead.
+SESSION_CONTEXT=""
+SESSION_START_FORMAT="${PIPELINE_SESSION_START_FORMAT:-codex-json}"
+
+append_context() {
+  SESSION_CONTEXT="${SESSION_CONTEXT}${1:-}"
+}
+
+append_file() { # $1=file $2=max-lines (0 = all)
+  local file="$1" max_lines="${2:-0}" line="" count=0
+  [ -f "$file" ] || return 0
+  while IFS= read -r line || [ -n "$line" ]; do
+    SESSION_CONTEXT="${SESSION_CONTEXT}${line}"$'\n'
+    count=$((count + 1))
+    [ "$max_lines" = "0" ] || [ "$count" -lt "$max_lines" ] || break
+  done < "$file"
+}
+
+JSON_INPUT_HELPER="$(dirname "${BASH_SOURCE[0]:-$0}")/json-input.sh"
+if [ -r "$JSON_INPUT_HELPER" ]; then
+  # shellcheck source=json-input.sh
+  . "$JSON_INPUT_HELPER"
+else
+  # A verified release always contains the shared helper.  This tiny local path exists only for a
+  # partially copied/corrupt payload: SessionStart must still return a valid envelope and basic
+  # guidance instead of making Codex reject the entire session hook response.
+  pipeline_json_get_string() { return 1; }
+  pipeline_json_escape() {
+    local value="${1:-}"
+    value="${value//\\/\\\\}"
+    value="${value//\"/\\\"}"
+    value="${value//$'\t'/\\t}"
+    value="${value//$'\r'/\\r}"
+    value="${value//$'\n'/\\n}"
+    printf '%s' "$value"
+  }
+fi
+json_escape() { pipeline_json_escape "$1"; }
+
+emit_context() {
+  [ -n "$SESSION_CONTEXT" ] || return 0
+  case "$SESSION_START_FORMAT" in
+    codex-json)
+      printf '{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"%s"}}\n' "$(json_escape "$SESSION_CONTEXT")"
+      ;;
+    # Adapter shims explicitly request the reusable context body, then translate it into their
+    # own native response protocol. This keeps content generation independent from host wire
+    # formats and prevents one host's JSON envelope from being nested inside another's context.
+    plain) printf '%s' "$SESSION_CONTEXT" ;;
+    *) return 0 ;;
   esac
 }
+
+json_get() { pipeline_json_get_string "$INPUT" "$1"; }
 
 PLUGIN_ROOT="${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}}"
 CWD="$(json_get cwd || true)"
@@ -63,6 +98,26 @@ else
   pipeline_state_get() { local v; v="$(grep -m1 "^$2: " "$1" 2>/dev/null || true)"; v="${v#"$2: "}"; case "$v" in '"'*'"') v="${v#\"}"; v="${v%\"}" ;; "'"*"'") v="${v#\'}"; v="${v%\'}" ;; esac; printf '%s' "$v"; }
 fi
 yget() { pipeline_state_get "$1" "$2"; }
+
+# A review marker is a v2 projection of a canonical request, not a global "currently in review"
+# badge.  Session context therefore shows it only when it belongs to the explicitly selected live
+# Change; legacy entry-time markers and another Change's request cannot leak into a new dialog.
+HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || true)"
+REVIEW_HELPER="$HOOK_DIR/review-ack.sh"
+if [ -r "$REVIEW_HELPER" ]; then
+  # shellcheck source=review-ack.sh
+  . "$REVIEW_HELPER"
+fi
+
+review_marker_for_active_change() { # $1=marker
+  local marked active
+  [ -r "$REVIEW_HELPER" ] || return 1
+  pipeline_review_marker_is_v2 "$1" || return 1
+  marked="$(pipeline_review_marker_change "$1" || true)"
+  [ -n "$marked" ] || return 1
+  active="$(pipeline_review_active_change_name "$OS_ROOT" "$HOOK_DIR" || true)"
+  [ -n "$active" ] && [ "$active" = "$marked" ]
+}
 
 # 阶段×hook 开关（v5 T5 / 决议#2）：读 <项目根>/.pipeline/hooks.json（server 写端点落盘，
 # canonical 一键一行 `"<hook>.<阶段>": false`，只存禁用项，见 packages/server/src/hooksConfig.ts）。
@@ -107,17 +162,19 @@ if [ -n "$OS_ROOT" ]; then
 fi
 
 # ── 简短引导（一行相位图 + 项目 GOAL.md 头两行，若有）──
-printf '[pipeline-lite] 7-phase 流水线已加载：open → explore → spec → build ⇄ verify → ship → archive。状态操作一律走 pipeline CLI（status / get / set / transition / check），编排入口 skill：pipeline。\n'
+append_context $'pipeline-lite: 7-phase 流水线已加载：open → explore → spec → build ⇄ verify → ship → archive。状态操作一律走 pipeline CLI（status / get / set / transition / check），编排入口 skill：pipeline。\n'
 if [ -f "$CWD/GOAL.md" ]; then
-  head -2 "$CWD/GOAL.md" 2>/dev/null || true
+  append_file "$CWD/GOAL.md" 2
 fi
 
 # ── 注入①：工作流宪法（templates/workflow.md，相对插件根；缺文件静默跳过）──
 WF="$PLUGIN_ROOT/templates/workflow.md"
 if [ -f "$WF" ]; then
-  printf '\n[pipeline-lite 宪法 — %s]\n' "$WF"
-  cat "$WF" 2>/dev/null || true
-  printf '[宪法完]\n'
+  append_context $'\n[pipeline-lite 宪法 — '
+  append_context "$WF"
+  append_context $']\n'
+  append_file "$WF"
+  append_context $'[宪法完]\n'
 fi
 
 # ── 注入②：当前项目 pipeline 上下文（OS_ROOT/yget 已在文件头定位/定义，开关判定同源复用）──
@@ -142,6 +199,9 @@ if [ -n "$OS_ROOT" ] && [ -d "$OS_ROOT/openspec/changes" ]; then
   for kind in confirm review interaction; do
     m="$OS_ROOT/.pipeline-pending-$kind"
     [ -f "$m" ] || continue
+    if [ "$kind" = review ]; then
+      review_marker_for_active_change "$m" || continue
+    fi
     case "$kind" in confirm) ttl=300 ;; *) ttl=1800 ;; esac
     # GNU `stat -f` 是文件系统状态模式（非 mtime），在 Linux 上会"成功"吐非数字，兜底永不触发
     # ——先试 GNU 语法（-c）+ 数字校验，而非只靠退出码判断。
@@ -151,15 +211,22 @@ if [ -n "$OS_ROOT" ] && [ -d "$OS_ROOT/openspec/changes" ]; then
     [ $((now - mt)) -le "$ttl" ] && GATES="$GATES 等:$kind"
   done
   if [ -n "$CTX" ]; then
-    printf '\n[pipeline 上下文 — %s] 活跃 change：\n%s' "$OS_ROOT" "$CTX"
-    [ -n "$GATES" ] && printf '  待处理交互门：%s（新鲜 marker，写类工具会被 gate.sh 拦，先 AskUserQuestion 解封）\n' "${GATES# }"
-    printf '  上述均为恢复候选，未与本会话自动绑定；只有用户明确说“继续 <change>”或点名 change 才恢复。新目标会独立从 open 创建。\n'
+    append_context $'\n[pipeline 上下文 — '
+    append_context "$OS_ROOT"
+    append_context $'] 活跃 change：\n'
+    append_context "$CTX"
+    if [ -n "$GATES" ]; then
+      append_context '  待处理交互门：'
+      append_context "${GATES# }"
+      append_context $'（新鲜 marker，写类工具会被 gate.sh 拦，先 AskUserQuestion 解封）\n'
+    fi
+    append_context $'  上述均为恢复候选，未与本会话自动绑定；只有用户明确说“继续 <change>”或点名 change 才恢复。新目标会独立从 open 创建。\n'
   fi
 fi
 
 # ── 注入③：openspec 使用提示（openspec 目录存在才输出）──
 if [ -n "$OS_ROOT" ]; then
-  printf '\n[openspec 提示] 本项目使用 openspec：change 唯一状态在 openspec/changes/<name>/.pipeline-run/current.json，.pipeline.yaml 仅兼容投影（两者均勿手改，走 pipeline CLI）；主 spec 在 openspec/specs/<capability>/spec.md，动某能力前先 Read 对应 spec；归档产物沉在 openspec/changes/archive/。\n'
+  append_context $'\n[openspec 提示] 本项目使用 openspec：change 唯一状态在 openspec/changes/<name>/.pipeline-run/current.json，.pipeline.yaml 仅兼容投影（两者均勿手改，走 pipeline CLI）；主 spec 在 openspec/specs/<capability>/spec.md，动某能力前先 Read 对应 spec；归档产物沉在 openspec/changes/archive/。\n'
 fi
 
 # ── v6 T5 / full-install 批2 P2-T2：AFK 首跑 + 技能就绪提示（轻量静态提示，不做真探测）──
@@ -168,7 +235,7 @@ fi
 #    零阻断纪律下探测可能挂起（守零 spawn，只改文案不加探测）。指向 dashboard 就绪三灯（GET
 #    /api/afk/readiness，v6 T4）**并**指向 `pipeline doctor`——批2 A1 已给 doctor 补上缺技能检测与
 #    保障生效面，v6 计划附录矛盾登记 1 的取舍在本批已消解，故回改指向该命令。
-[ -n "$SS_AFK_HIT" ] && printf '\n[pipeline-lite] 检测到 AFK 自动化配置：AFK 就绪状态见 dashboard（就绪三灯）；技能齐全度/保障生效面跑 pipeline doctor 核对。\n'
+[ -n "$SS_AFK_HIT" ] && append_context $'\n[pipeline-lite] 检测到 AFK 自动化配置：AFK 就绪状态见 dashboard（就绪三灯）；技能齐全度/保障生效面跑 pipeline doctor 核对。\n'
 
 # ── 插件资产校验（fail-open：失败仅警告）──
 VS="$PLUGIN_ROOT/tools/verify-skills.sh"
@@ -180,4 +247,5 @@ else
   printf '[pipeline-lite] 警告：未找到 %s，跳过插件资产校验（CONTRACT §5.7 要求安装期校验）。\n' "$VS" >&2
 fi
 
+emit_context
 exit 0

@@ -9,7 +9,7 @@
 ```bash
 adapters/gemini/install.sh --target <项目目录>            # 档 A 全保真（默认）
 adapters/gemini/install.sh --gemini-home <dir>            # 自定义 GEMINI_HOME
-adapters/gemini/install.sh --no-hooks                     # 只提示（无 hook；靠 Unlock sentinel）
+adapters/gemini/install.sh --no-hooks                     # 只提示（无 hook；仍须走 CLI review receipt）
 ```
 
 或经顶层派发器：`adapters/install.sh --gemini --target <dir>`。
@@ -39,13 +39,10 @@ track:
 sub-agent 层无 `inject-subagent-context`（Gemini #18128：BeforeTool 链路受限）——仅影响 sub-agent
 的上下文注入，主会话三能力全 native，故 tier 仍为 A。sub-agent 上下文改 pull-based prelude 补偿。
 
-## Unlock sentinel（HITL 解封）
+## 人工确认（HITL）
 
-review 门放行 = 删项目根 marker（与 CC `AskUserQuestion` 语义等价，contract §2）：
-
-```bash
-rm .pipeline-pending-review     # 或 .pipeline-pending-confirm / .pipeline-pending-interaction
-```
+完成产物并选择 event 后运行 `pipeline review request <change> --event <event>`；人类明确确认后运行
+`pipeline review acknowledge <change>`。不得手动删除 `.pipeline-pending-review`，它只是投影而非授权。
 
 ## stdout 格式（不串格式）
 

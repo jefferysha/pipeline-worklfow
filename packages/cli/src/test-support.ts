@@ -320,6 +320,7 @@ export function mockDoctorProbes(overrides: Partial<DoctorProbes> = {}): DoctorP
     dirExists: () => true,
     env: () => undefined,
     statuslineConfigured: () => true,
+    nativeRuntimeHost: async () => 'claude',
     runVerifySkills: async () => ({ code: 0, output: '[verify-skills] OK' }),
     // 默认 registry 全部 bundled，空的宿主级扫描仍是 packaged workflow 的双绿基线。
     installedSkillNames: () => new Set(),
@@ -387,6 +388,9 @@ export interface MakeDepsOpts {
   resolver?: EffectiveSkillResolver
   /** OpenSpec evidence reader 覆写；缺省为已通过的 test double，真实账本语义由 kernel 集成测试覆盖。 */
   documentEvidence?: CliDeps['documentEvidence']
+  /** Git HEAD / in-place 工作区基线能力覆写；供 transition/check 的真实 barrier 单测使用。 */
+  gitHeadSha?: CliDeps['gitHeadSha']
+  workspaceFingerprint?: CliDeps['workspaceFingerprint']
 }
 
 export const FIXED_CLOCK = '2026-07-06T00:00:00Z'
@@ -402,7 +406,7 @@ export function makeDeps(o: MakeDepsOpts = {}): TestDeps {
   const changes = o.changes ?? (o.states ? Object.keys(o.states) : [])
   const store = mockStore(o.states ?? o.state ?? mockState())
   // Track Registry：单测 cwd（缺省 '/repo'，无 .pipeline/tracks.yaml）→ loadTrackRegistry 返回
-  // 内建四轨 builtin-only，requireTrack/assertWorkflowAllowed 行为与旧写死 TRACKS 校验逐字一致。
+  // 内建 Track builtin-only，requireTrack/assertWorkflowAllowed 行为与旧写死 TRACKS 校验逐字一致。
   // 上下文里 workflowExists/skillProfiles 只在 tracks.yaml 存在时被 validateTrackRegistry 查——
   // 单测 cwd 无该文件，故取内建 skill profile 集合、workflowExists 恒 default 即可（不被消费）。
   const trackCtx: TrackValidationContext = {
@@ -413,7 +417,7 @@ export function makeDeps(o: MakeDepsOpts = {}): TestDeps {
   const deps: TestDeps = {
     store,
     runRepo: mockWorkflowRunRepository(store),
-    // R3：无记忆化（每次 fresh load）。单测 cwd 无 tracks.yaml → 内建四轨，恒新鲜。
+    // R3：无记忆化（每次 fresh load）。单测 cwd 无 tracks.yaml → 内建 Track，恒新鲜。
     loadRegistry: () => loadTrackRegistry(o.cwd ?? '/repo', trackCtx),
     // registry 锁 mock：无 fs，直接以「当前 deps.loadRegistry() 快照」回调（late-bind——fields/init
     // 测试常覆写 deps.loadRegistry 注入自定义轨，故这里读 deps.loadRegistry 而非构造期捕获）。
@@ -442,6 +446,8 @@ export function makeDeps(o: MakeDepsOpts = {}): TestDeps {
       err: (line: string) => errLines.push(line),
     },
     clock: () => FIXED_CLOCK,
+    gitHeadSha: o.gitHeadSha,
+    workspaceFingerprint: o.workspaceFingerprint,
     listChanges: spy(async (_root: string): Promise<string[]> => changes),
     // 严格候选枚举（Track CRUD 引用扫描专用）。mock 世界里所有 change 都有 state（无「目录在但不可读」态），
     // 故与 listChanges 同返 changes 集；且 tracks CRUD 走真 fs 集成测试（mutateRegistry mock 拒调），本值不被消费。

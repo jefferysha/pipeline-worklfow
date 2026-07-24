@@ -49,7 +49,7 @@ export function validateWorkflow(wf: WorkflowDef): string[] {
     errors.push(`workflow name '${wf.name}' 含非法字符（允许中文、字母、数字、- 与 _；不允许空格、点或路径符号）`)
   }
 
-  wf.steps.forEach((step, index) => {
+  wf.steps.forEach((step) => {
     if (!IDENT_RE.test(step.id)) {
       errors.push(`step id '${step.id}' 含非法字符（仅允许 a-zA-Z0-9_-）`)
     }
@@ -95,14 +95,26 @@ export function validateWorkflow(wf: WorkflowDef): string[] {
       }
     }
 
-    // 只有数组里最后一个 step 允许零 transitions（视为终态，如 archive）；中间任何一个
-    // step 零 transitions 意味着一旦真运行到这一步就再也走不出去，是配置错误而非合法终态，
-    // 保存时就该拦，不能留到用户真跑 transition 命令时才发现卡死。
-    const isLastStep = index === wf.steps.length - 1
-    if (!isLastStep && step.transitions.length === 0) {
-      errors.push(`step '${step.id}' 没有声明任何 transitions（不是最后一个 step，会导致走进死路）`)
-    }
   })
+
+  // A workflow may have multiple explicit terminal nodes (for example done and escalated). The
+  // real structural error is an unreachable node, not a terminal's array position.
+  if (wf.steps.length > 0) {
+    const reachable = new Set<string>()
+    const queue = [wf.steps[0]!.id]
+    while (queue.length > 0) {
+      const id = queue.shift()!
+      if (reachable.has(id)) continue
+      reachable.add(id)
+      const step = wf.steps.find((candidate) => candidate.id === id)
+      for (const transition of step?.transitions ?? []) {
+        if (allStepIds.has(transition.to) && !reachable.has(transition.to)) queue.push(transition.to)
+      }
+    }
+    for (const step of wf.steps) {
+      if (!reachable.has(step.id)) errors.push(`step '${step.id}' 从首 step '${wf.steps[0]!.id}' 不可达`)
+    }
+  }
 
   errors.push(...validateOpenSpecContractWorkflow(wf))
 

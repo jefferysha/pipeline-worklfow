@@ -690,7 +690,7 @@ describe('WorkbenchView workflow 下拉（验收①/②）', () => {
     }
     expect(screen.queryByText('离开前复核')).toBeNull()
     expect(within(screen.getByTestId('wb-step-explore')).getByText('调研')).not.toHaveClass('truncate')
-    for (const [phase, output] of [['explore', '调研文档'], ['spec', '实施计划'], ['build', '构建版本'], ['verify', '验证报告']] as const) {
+    for (const [phase, output] of [['explore', '调研文档'], ['spec', '实施计划'], ['build', '构建基线'], ['verify', '验证报告']] as const) {
       fireEvent.click(within(screen.getByTestId(`wb-step-${phase}`)).getByRole('button', { name: new RegExp(`选择阶段`) }))
       expect(within(screen.getByTestId(`wb-lane-outs-${phase}`)).getByText(output)).toBeInTheDocument()
     }

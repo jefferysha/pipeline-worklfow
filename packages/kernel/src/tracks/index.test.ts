@@ -9,8 +9,8 @@ import * as tracks from './index.js'
 describe('tracks 子 barrel', () => {
   test('导出全部公开 API（函数/常量/错误类）', () => {
     expect(tracks.TRACK_ID_RE).toBeInstanceOf(RegExp)
-    expect([...tracks.BUILTIN_TRACK_IDS]).toEqual(['chat', 'pm', 'frontend', 'backend'])
-    expect(tracks.BUILTIN_TRACK_DEFINITIONS).toHaveLength(4)
+    expect([...tracks.BUILTIN_TRACK_IDS]).toEqual(['chat', 'simple', 'pm', 'frontend', 'backend'])
+    expect(tracks.BUILTIN_TRACK_DEFINITIONS).toHaveLength(5)
     expect(typeof tracks.BUILTIN_ROUTER_PATTERNS.frontend).toBe('string')
     expect(typeof tracks.isBuiltinTrackId).toBe('function')
     expect(typeof tracks.builtinTrack).toBe('function')

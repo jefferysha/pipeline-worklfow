@@ -16,13 +16,14 @@ export interface RouterPreviewCandidate {
   readonly priority: number
   readonly score: number
   readonly routable: boolean
+  readonly excluded: boolean
 }
 
 export interface RouterPreviewResult {
   readonly winner: RouterPreviewCandidate | null
   readonly candidates: readonly RouterPreviewCandidate[]
   /** 非空表示 UserPromptSubmit hook 会在评分前跳过；候选分数仍返回，供显式创建 Change 时手选。 */
-  readonly suppressed_reason: 'system-notification' | 'slash-command' | 'l5-override' | 'discussion' | null
+  readonly suppressed_reason: 'system-notification' | 'slash-command' | 'discussion' | null
 }
 
 function object(value: unknown): Record<string, unknown> | null {
@@ -41,6 +42,7 @@ export function parseRouterDraft(value: unknown): TrackDefinition {
   const label = row?.label
   const allowed = workflow?.allowed
   const reviewSeed = policy?.reviewSeed
+  const autoEnqueueOnSpecComplete = policy?.autoEnqueueOnSpecComplete
   const coverageProfile = policy?.coverageProfile
   if (typeof id !== 'string' || !/^[a-z][a-z0-9_-]{0,31}$/.test(id)) throw new Error('draft_track.id 非法')
   if (typeof label !== 'string' || label.trim() === '') throw new Error('draft_track.label 不得为空')
@@ -50,14 +52,25 @@ export function parseRouterDraft(value: unknown): TrackDefinition {
     throw new Error("draft_track.workflow.allowed 须为 '*' 或非空 string[]")
   }
   if (reviewSeed !== 'pending' && reviewSeed !== 'skipped') throw new Error('draft_track.policyProfile.reviewSeed 非法')
+  if (autoEnqueueOnSpecComplete !== undefined && typeof autoEnqueueOnSpecComplete !== 'boolean') {
+    throw new Error('draft_track.policyProfile.autoEnqueueOnSpecComplete 须为 boolean')
+  }
   if (typeof policy?.automationEligible !== 'boolean') throw new Error('draft_track.policyProfile.automationEligible 须为 boolean')
   if (!['none', 'pm', 'frontend', 'backend'].includes(String(coverageProfile))) throw new Error('draft_track.policyProfile.coverageProfile 非法')
   if (typeof routing?.enabled !== 'boolean') throw new Error('draft_track.policyProfile.routing.enabled 须为 boolean')
   const parsedRouting: TrackDefinition['policyProfile']['routing'] = routing.enabled
     ? (() => {
         if (typeof routing.pattern !== 'string' || routing.pattern === '') throw new Error('draft_track routing.pattern 不得为空')
+        if (routing.excludePattern !== undefined && (typeof routing.excludePattern !== 'string' || routing.excludePattern === '')) {
+          throw new Error('draft_track routing.excludePattern 提供时须为非空字符串')
+        }
         if (!Number.isSafeInteger(routing.priority) || Number(routing.priority) < 0) throw new Error('draft_track routing.priority 须为非负整数')
-        return { enabled: true, pattern: routing.pattern, priority: Number(routing.priority) }
+        return {
+          enabled: true,
+          pattern: routing.pattern,
+          ...(routing.excludePattern === undefined ? {} : { excludePattern: routing.excludePattern }),
+          priority: Number(routing.priority),
+        }
       })()
     : { enabled: false }
   if (typeof skills?.matrix !== 'boolean' || typeof skills.profile !== 'string' || skills.profile === '') {
@@ -70,6 +83,7 @@ export function parseRouterDraft(value: unknown): TrackDefinition {
     workflow: { default: workflow.default.trim(), allowed: allowed as '*' | string[] },
     policyProfile: {
       reviewSeed,
+      ...(autoEnqueueOnSpecComplete === undefined ? {} : { autoEnqueueOnSpecComplete }),
       automationEligible: policy.automationEligible,
       coverageProfile: coverageProfile as TrackDefinition['policyProfile']['coverageProfile'],
       routing: parsedRouting,
@@ -87,10 +101,6 @@ export function applyRouterDraft(tracks: readonly TrackDefinition[], draft: Trac
 }
 
 const SYSTEM_MARKERS = ['<task-notification>', '<task-id>', '<output-file>', '<workflow-state>', '<pipeline-router'] as const
-const L5_MARKERS = [
-  '只改', '快速修复', '临时修复', '就这一行', '就改这个', '别想太多',
-  'just fix', 'quick patch', 'typo', 'hotfix only', 'one-liner',
-] as const
 const DISCUSSION_MARKERS = [
   '如何使用', '怎么用', '是什么', '为什么', '解释', '文档在哪', '在哪里', '意思是',
   '我觉得', '我感觉', '你觉得', '是不是', '怎么样', '看法', '聊聊', '讨论一下', '有没有更好',
@@ -99,7 +109,6 @@ const DISCUSSION_MARKERS = [
 export function routerSuppressionReason(prompt: string): RouterPreviewResult['suppressed_reason'] {
   if (SYSTEM_MARKERS.some((marker) => prompt.includes(marker))) return 'system-notification'
   if (prompt.startsWith('/')) return 'slash-command'
-  if (L5_MARKERS.some((marker) => prompt.includes(marker))) return 'l5-override'
   if (DISCUSSION_MARKERS.some((marker) => prompt.includes(marker))) return 'discussion'
   if (/^[\t\n\v\f\r ]*(what|why|how|when|where|who|can you (tell|explain|describe))\b/i.test(prompt)) {
     return 'discussion'
@@ -161,7 +170,10 @@ export async function previewTrackRouting(
 ): Promise<RouterPreviewResult> {
   const candidates = await Promise.all(tracks.map(async (track, order): Promise<RouterPreviewCandidate> => {
     const routing = track.policyProfile.routing
-    const score = routing.enabled ? await scorer(routing.pattern, prompt) : 0
+    const excluded = routing.enabled && routing.excludePattern !== undefined
+      ? await scorer(routing.excludePattern, prompt) > 0
+      : false
+    const score = routing.enabled && !excluded ? await scorer(routing.pattern, prompt) : 0
     if (!Number.isSafeInteger(score) || score < 0) {
       throw new Error(`router scorer 为 track '${track.id}' 返回非法计分 ${String(score)}`)
     }
@@ -171,6 +183,7 @@ export async function previewTrackRouting(
       priority: routing.enabled ? routing.priority : 0,
       score,
       routable: routing.enabled,
+      excluded,
     }
   }))
 

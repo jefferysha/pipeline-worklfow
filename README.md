@@ -59,8 +59,20 @@ pipeline setup --claude
 
 安装时宿主自己管理标准插件目录（Codex: `~/.codex/plugins/...`；Claude: `~/.claude/plugins/...`），
 Pipeline 不猜测也不手改其 cache 布局；只根据宿主 `plugin list --json` 返回的实际安装根校验资产。
-随后会把 launcher 放到 `~/.local/bin/pipeline`。新开一个 Codex/Claude 会话后，包内 skills 与 hooks
-才会被该会话加载。
+校验通过后，Pipeline 会把完整候选复制到本机的**已验证 runtime release**，再原子切换选择指针；
+`~/.local/bin/pipeline` 与 `pipeline-hook` 是稳定启动器，绝不直接指向可变 marketplace checkout。
+macOS 使用 `~/Library/Application Support/pipeline-lite/`，Linux 使用 XDG data/state/config 目录。新开一个
+Codex/Claude 会话后，包内 skills 与 hooks 才会被该会话加载。
+
+如果一次更新或本地文件损坏需要诊断或恢复：
+
+```bash
+pipeline runtime status --json
+pipeline runtime repair --rollback   # 只允许回退到上一份完整校验通过的 release
+```
+
+`repair` 不是绕过 workflow 的后门：runtime 无法加载时，普通项目写操作仍被 gate 阻止；只有这条精确恢复
+命令可达。没有可验证的上一版本时，重新运行 `pipeline setup --codex` 或 `pipeline setup --claude`。
 
 Codex 对第三方 hook 保留一次性本机信任边界：执行 `pipeline setup --codex` 后，在 Codex 输入 `/hooks` 并信任
 `pipeline-lite`。未信任时插件和 skills 已安装，但 SessionStart / UserPromptSubmit 不会运行，因此正常对话不会
@@ -74,12 +86,29 @@ pipeline update --codex                 # 立即更新指定宿主
 ```
 
 启用后，SessionStart 最多每天一次在后台刷新所选宿主的 marketplace 和插件，配置只写在
-`~/.config/pipeline-lite/`；当前会话继续使用已加载版本，下一会话加载新版本。Claude 对应使用
+Pipeline 的平台标准 runtime config 目录（macOS 为 `~/Library/Application Support/pipeline-lite/config/`；
+Linux 为 `$XDG_CONFIG_HOME/pipeline-lite/`）；当前会话继续使用已加载版本，下一会话加载新版本。Claude 对应使用
 `pipeline setup --claude --auto-update` / `pipeline update --claude`。Cursor 等非原生 marketplace
 宿主仍可 `pipeline setup --cursor --target <项目目录>`，但由承载它的 Codex/Claude 插件负责更新。
 
-装完即可用 `pipeline init/inbox/status` 起 change；`pipeline dashboard` 直接启动随包的完整工作台
-（默认 `http://127.0.0.1:8765/`）。
+装完即可用 `pipeline init/inbox/status` 起 change；`pipeline setup --codex` 会从刚发布的不可变
+runtime 启动并在健康检查通过后打开随包的完整工作台（默认 `http://127.0.0.1:18765/`）。
+
+### 正常对话的三种执行路径
+
+启用并信任 hook 后，普通对话不是“一律跑完整流水线”：
+
+- 解释、讨论、`/` 命令和系统通知不创建 Change。
+- 明确的 typo、文案/注释、unused import、单行或单文件值调整，且不涉及 API/公共契约、
+  schema/migration、数据库、认证/安全、并发/事务、依赖、发布/生产数据、跨模块或新功能时，
+  进入内建 `simple`：`change → verify → done`。它只调用随包的 `simple-task` 与
+  `verification-before-completion`，不生成 OpenSpec、Superpowers、ADR 或七阶段 Todo。
+- 其余实现、修复、重构、调研和产品任务进入对应 PM/frontend/backend 的完整 default：
+  `open → explore → spec → build ⇄ verify → ship → archive`。
+
+`simple` 采用“正向证据 + 否决优先”而不是按改动行数猜测。例如“修复一个 `.tsx` 文案 typo”可走
+轻量轨；“只改一行 API schema”仍必须走完整轨。执行中发现范围扩大时，simple Change 会进入
+`escalated` 终态，再创建新的 default Change，并用依赖关系保留审计链，不会原地偷换 workflow。
 
 ### 从源码构建
 
@@ -104,17 +133,18 @@ npx pipeline status
 （不用记 CLI 参数）：
 
 ```bash
-pipeline dashboard                            # 监听 127.0.0.1:8765（已跑同/旧版本会自动让位/被接管）
+pipeline dashboard                            # 监听 127.0.0.1:18765（已跑同/旧版本会自动让位/被接管）
+pipeline dashboard --background --open        # 后台启动，健康后打开浏览器
 ```
 
-生产态只有**一个**前端入口：`pipeline dashboard` 在 `127.0.0.1:8765` 同时提供 API 和已构建的
+生产态只有**一个**前端入口：`pipeline dashboard` 在 `127.0.0.1:18765` 同时提供 API 和已构建的
 `dashboard-app/dist` SPA；不会再额外启动一个生产前端端口。开发时才会有 Vite 的独立 UI 端口
-`5173`，它把 `/api` 代理到 `8765`。旧的 `18765` 不是默认端口、当前也没有监听；如需兼容它，可显式：
+`5173`，它把 `/api` 代理到 `18765`。旧的 `8765` 不是默认端口；如需兼容它，可显式：
 
 ```bash
-pipeline dashboard --port 18765
+pipeline dashboard --port 8765
 # 前端开发时让 Vite 代理到同一后端：
-PIPELINE_DASHBOARD_PORT=18765 npm run dev -w @pipeline-lite/dashboard-app
+PIPELINE_DASHBOARD_PORT=8765 npm run dev -w @pipeline-lite/dashboard-app
 ```
 
 Vite UI 端口如有冲突可另设 `PIPELINE_DASHBOARD_DEV_PORT`（默认仍为 `5173`）。
@@ -123,7 +153,7 @@ Vite UI 端口如有冲突可另设 `PIPELINE_DASHBOARD_DEV_PORT`（默认仍为
 点「注册项目」即可（等价 CLI：页面上有可复制的命令）；多项目时导航栏有**项目切换器**，
 末项「＋ 注册项目…」随时可加。注册表本体仍是 `~/.claude/pipeline-projects.json`，手改也行。
 
-打开 `http://127.0.0.1:8765/` 后：
+打开 `http://127.0.0.1:18765/` 后：
 
 - **收件箱**（默认页）/ **看板**：在等你决策的 change、**按 workflow 分组的看板**
   （default 七相位 + 每个自定义 workflow 各自的独立分组与列集）。行/卡点开**详情卡**——
@@ -140,6 +170,11 @@ Vite UI 端口如有冲突可另设 `PIPELINE_DASHBOARD_DEV_PORT`（默认仍为
   - **AFK 工作台**：无人值守跑批队列（挂队/查看快照与实时日志/取消/重试），docker sandcastle 执行。
   - **自定义 workflow**：见下节（画布上 gate step 直接亮「复核门/确认门」徽章，
     详情侧栏支持 guard 的新增与移除）。
+
+PM 内建轨道把 `spec-complete` 后的 AFK 交接作为一条显式 policy：成功进入 Build 后仅原子写入
+`automation=queued`，默认仍是 L1 report-only；不会自行启动 Docker、runner 或产生外部副作用。
+`automation_eligible` 仍只表示“允许手动 AFK”，不会让 frontend/backend 被自动接管。自定义 Track
+可在工作台用「规格完成后自动进入 AFK」开关写入同名 policy，未启用时保持按需执行。
 
 视觉语言「OpenAI 配色 × Trellis 布局」：蓝色签名承担全部结构性强调（主按钮/选中态/
 聚焦环），绿/红退回纯语义 tint 徽章——**绿=成功，红=需要人出面**（复核门、回退、删除、
@@ -166,8 +201,9 @@ step/guard 定义动态解锁 skill，不再是硬编码的 7 相位判断）。
 编辑第一个已注册项目、guard 只支持移除不支持新增、无撤销重做/多选/minimap 等）见
 [GOAL.md](GOAL.md) 清单 E8 脚注。
 
-dashboard 新建的 workflow 默认带 `openspec_contract: required`，并写入本插件内置的 bare skill
+dashboard 新建的 governed workflow 默认带 `openspec_contract: required`，并写入本插件内置的 bare skill
 ID。它必须保持 seven-phase 结构、review gate 和 OpenSpec skill 组；否则保存时会被校验拒绝。
+插件只读内建的 `simple` workflow 是明确的轻量例外，项目同名文件不能覆盖它。
 默认流程与这类 governed workflow 都会登记 proposal / OpenSpec design / tasks、Superpower design /
 ADR、delta spec / Superpower plan、verification report 与 applied spec。`.pipeline-documents.json`
 记录每份文件的内容 hash、真实 skill 调用证据及后续 phase 的读取收据；缺失、未读取或后来被修改时，

@@ -1,8 +1,9 @@
 import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 
 /** Fallback for library/test use outside an installed plugin root. */
 export const SERVER_VERSION = '0.1.0'
+const RELEASE_ID = /^sha256-[a-f0-9]{64}$/
 
 interface PluginManifestVersion {
   readonly version?: unknown
@@ -31,4 +32,16 @@ export function resolveReleaseVersion(pluginRoot: string): string {
     }
   }
   return SERVER_VERSION
+}
+
+/**
+ * A marketplace semantic version is intentionally not enough to identify an activated managed
+ * payload: users can update a release's content before bumping that version. The immutable
+ * release-store layout gives the server a content-addressed identity without adding a second
+ * mutable version register.
+ */
+export function resolvePayloadReleaseId(pluginRoot: string): string | undefined {
+  if (basename(pluginRoot) !== 'payload') return undefined
+  const releaseId = basename(dirname(pluginRoot))
+  return RELEASE_ID.test(releaseId) ? releaseId : undefined
 }

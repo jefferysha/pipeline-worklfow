@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# skill-tracker.sh — PostToolUse hook（matcher: Skill）。
+# skill-tracker.sh — PostToolUse hook（all tools; script-side narrow filter）。
 #
-# Skill 工具被调用且项目内有活跃 change 时，把该次调用 append 进
+# Skill 工具被调用且 pipeline 已明确选择一个 change 时，把该次调用 append 进
 #   openspec/changes/<name>/.pipeline-history.jsonl（一行一个 JSON，CONTRACT §1）——
-# kind=tool、raw="Skill: <skill 名>"，逐字对齐 pipeline import 老仓 tools_history 的 tool kind
-# 形态（kernel legacy.ts：raw="<tool>: <detail>"），live 与 import 同构，供审计 / 触发率分析。
+# kind=tool、raw="Skill: <skill 名>"（Claude first-class skill）或
+# "CodexSkillRead: <skill 名>"（Codex host-observed bundled SKILL.md read）。二者绝不混称；
+# 后者只接受当前插件根的只读 SKILL.md 命令，供文档账本和自定义 workflow skill DAG 审计。
 # 兼容旁挂：若日后 matcher 扩到 Agent/Task，按 subagent_type 记 raw="<Tool>: <name>"（防御性，不改行为）。
 #
 # 纯 bash 热路径（CONTRACT §5.4：PostToolUse 每次工具后触发）：零解释器 / 外部 JSON 解析器 spawn，
@@ -13,39 +14,14 @@ set -uo pipefail
 
 INPUT="$(cat 2>/dev/null || printf '{}')"
 
-json_get() {
-  local key="$1" rest
-  case "$INPUT" in *"\"$key\""*) ;; *) return 1 ;; esac
-  rest="${INPUT#*\"$key\"}"
-  while true; do
-    case "$rest" in
-      [$' \t\r\n']*) rest="${rest#?}" ;;
-      ':'*) rest="${rest#:}"; break ;;
-      *) return 1 ;;
-    esac
-  done
-  while true; do
-    case "$rest" in
-      [$' \t\r\n']*) rest="${rest#?}" ;;
-      *) break ;;
-    esac
-  done
-  case "$rest" in
-    '"'*) rest="${rest#\"}"; printf '%s' "${rest%%\"*}"; return 0 ;;
-    *) return 1 ;;
-  esac
-}
-
+JSON_INPUT_HELPER="$(dirname "${BASH_SOURCE[0]:-$0}")/json-input.sh"
+[ -r "$JSON_INPUT_HELPER" ] || exit 0
+# shellcheck source=json-input.sh
+. "$JSON_INPUT_HELPER"
+json_get() { pipeline_json_get_string "$INPUT" "$1"; }
+json_command() { pipeline_json_get_command "$INPUT"; }
 # JSON 字符串体转义（单行合法 JSON）——skill 名一般无特殊字符，仍防御性转义防写坏 JSONL
-json_escape() {
-  local s="$1"
-  s="${s//\\/\\\\}"
-  s="${s//\"/\\\"}"
-  s="${s//$'\t'/\\t}"
-  s="${s//$'\r'/\\r}"
-  s="${s//$'\n'/\\n}"
-  printf '%s' "$s"
-}
+json_escape() { pipeline_json_escape "$1"; }
 
 STATE_HELPER="$(dirname "${BASH_SOURCE[0]:-$0}")/canonical-state.sh"
 if [ -r "$STATE_HELPER" ]; then
@@ -71,35 +47,41 @@ CWD="$(json_get cwd || true)"
 [ -d "$CWD" ] || exit 0
 
 TOOL="$(json_get tool_name || true)"
+RAW_TOOL="$TOOL"
+NAMES=""
 case "$TOOL" in
-  Skill)       NAME="$(json_get skill || true)" ;;
-  Agent|Task)  NAME="$(json_get subagent_type || true)" ;;
-  *) exit 0 ;;
+  Skill)
+    NAMES="$(json_get skill || true)"
+    ;;
+  Agent|Task)
+    NAMES="$(json_get subagent_type || true)"
+    ;;
+  *)
+    pipeline_json_is_command_tool "$TOOL" || exit 0
+    EVIDENCE_HELPER="$(dirname "${BASH_SOURCE[0]:-$0}")/skill-evidence.sh"
+    [ -r "$EVIDENCE_HELPER" ] || exit 0
+    # shellcheck source=skill-evidence.sh
+    . "$EVIDENCE_HELPER"
+    COMMAND="$(json_command || true)"
+    # Codex can read several packaged SKILL.md files inside one completed exec.  Preserve every
+    # trusted id so a later phase cannot lose a document/DAG receipt merely because it was second.
+    NAMES="$(pipeline_codex_skill_read_ids "$COMMAND" || true)"
+    RAW_TOOL="CodexSkillRead"
+    ;;
 esac
-[ -z "$NAME" ] && exit 0
+[ -z "$NAMES" ] && exit 0
 
-# ── 定位活跃 change：根边界由共享 helper 统一，禁止误吸收父目录项目。──
+# ── 定位已选择 change：根边界由共享 helper 统一，绝不按 mtime 借用旧 Change。──
 ROOT_HELPER="$(dirname "${BASH_SOURCE[0]:-$0}")/project-root.sh"
 [ -r "$ROOT_HELPER" ] || exit 0
 # shellcheck source=project-root.sh
 . "$ROOT_HELPER"
 PROOT="$(pipeline_project_root "$CWD" existing changes || true)"
 [ -n "$PROOT" ] || exit 0
-
-BEST=0 CHANGE_DIR=""
-for candidate_dir in "$PROOT"/openspec/changes/*; do
-  [ -d "$candidate_dir" ] || continue
-  f="$(pipeline_state_source "$candidate_dir" || true)"
-  [ -n "$f" ] || continue
-  [ "$(yget "$f" archived)" = "true" ] && continue
-  # GNU `stat -f` 是文件系统状态模式（非 mtime），在 Linux 上会"成功"吐非数字，兜底永不触发
-  # ——先试 GNU 语法（-c）+ 数字校验，而非只靠退出码判断。
-  mt="$(stat -c %Y "$f" 2>/dev/null)"
-  case "$mt" in ''|*[!0-9]*) mt="$(stat -f %m "$f" 2>/dev/null)" ;; esac
-  case "$mt" in ''|*[!0-9]*) mt=0 ;; esac
-  [[ "$mt" =~ ^[0-9]+$ ]] || mt=0
-  if [ "$mt" -ge "$BEST" ]; then BEST="$mt"; CHANGE_DIR="$candidate_dir"; fi
-done
+[ -r "$(dirname "${BASH_SOURCE[0]:-$0}")/active-change.sh" ] || exit 0
+# shellcheck source=active-change.sh
+. "$(dirname "${BASH_SOURCE[0]:-$0}")/active-change.sh"
+CHANGE_DIR="$(pipeline_active_change_dir "$PROOT" || true)"
 [ -n "$CHANGE_DIR" ] || exit 0
 
 # ── 阶段×hook 开关（v5 T5 / 决议#2）：当前 change 阶段被配置禁用 → 零副作用退出 ──
@@ -107,7 +89,10 @@ CHANGE_STATE="$(pipeline_state_source "$CHANGE_DIR" || true)"
 hook_disabled "$PROOT" skill-tracker "$(yget "$CHANGE_STATE" phase)" && exit 0
 
 TS="$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
-RAW="$(json_escape "$TOOL: $NAME")"
-printf '{"ts":"%s","kind":"tool","raw":"%s"}\n' "$TS" "$RAW" >> "$CHANGE_DIR/.pipeline-history.jsonl" 2>/dev/null || true
+while IFS= read -r NAME; do
+  [ -n "$NAME" ] || continue
+  RAW="$(json_escape "$RAW_TOOL: $NAME")"
+  printf '{"ts":"%s","kind":"tool","raw":"%s"}\n' "$TS" "$RAW" >> "$CHANGE_DIR/.pipeline-history.jsonl" 2>/dev/null || true
+done <<< "$NAMES"
 
 exit 0

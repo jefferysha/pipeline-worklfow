@@ -1,6 +1,6 @@
 ---
 name: pipeline
-description: "主编排 skill（Decision Core）。识别 Track（chat/pm/frontend/backend）→ 检测 phase（open/explore/spec/build/verify/ship/archive）→ 分发到 pipeline-* 相位子 skill。状态一律经 pipeline CLI 读写；支持断点恢复：重读 canonical current，不依赖对话历史。"
+description: "主编排 skill（Decision Core）。先做风险分级：simple 走 change→verify→done；其余开发任务识别 pm/frontend/backend 后走七阶段 default。状态一律经 pipeline CLI 读写；支持断点恢复。"
 ---
 
 # /pipeline — 主编排入口（Decision Core）
@@ -8,6 +8,15 @@ description: "主编排 skill（Decision Core）。识别 Track（chat/pm/fronte
 > 移植来源：老仓 workflow-plugin `skills/pipeline/SKILL.md`。老仓 bash 脚本面
 > （pipeline-state.sh / pipeline-guard.sh / pipeline-archive.sh）已全部改写为本仓
 > `pipeline` CLI（命令契约见 `docs/CONTRACT.md` §3）。快速入口版见 `pipeline-lite`。
+
+## Codex 打包 Skill 身份（硬规则）
+
+本文件和后续 phase 文件中的裸 id（例如 `prototype`、`openspec-propose`）是 workflow/DAG 和
+CLI `--producer` 使用的**逻辑 id**。在 Codex 中实际加载时，必须调用当前已安装插件的
+`pipeline-lite:<id>`（例如 `pipeline-lite:prototype`），并让宿主读取该插件 cache 内的
+`skills/<id>/SKILL.md`；不得因同名而改读 `~/.agents`、`~/.claude`、项目目录或其他插件的副本。
+已激活 Change 时 hook 会拒绝这类 shadowed read。若该打包 skill 不可用，运行
+`pipeline setup --codex` 或 `pipeline update --codex` 修复，不能用同名外部 skill 代替。
 
 ## 触发场景
 
@@ -21,20 +30,74 @@ description: "主编排 skill（Decision Core）。识别 Track（chat/pm/fronte
 
 ## Normal-chat dispatch contract（必须执行）
 
-当正常开发对话的 hook 注入 `<pipeline-dispatch>` 时，它已经选择了 `default` workflow。**本 skill
-就是该注入要求调用的入口**：不得把它降级为普通建议、不得先生成脱离流程的通用 Todo、不得跳过到某个
-实现 skill。
+当正常开发对话的 hook 注入 `<pipeline-dispatch>` 时，它已经选择了路由模式：`default`、等待用户选择
+`select`，或已绑定 Change 的自定义 workflow。**本 skill 就是该注入要求调用的入口**：不得把它降级为
+普通建议、不得先生成脱离流程的通用 Todo、不得跳过到某个实现 skill。
 
-1. 先读取 `<pipeline-dispatch>` / `<workflow-state>` 中的 `intent`、`track`、`change`、`phase`；再用
+1. 先读取 `<pipeline-dispatch>` / `<workflow-state>` 中的 `intent`、`track`、`change`、`phase`、
+   `continuous_execution`、可选的 `host_session_id`；再用
    `pipeline list --json` 与（仅 `intent: resume` 时的）`pipeline status <name> --json` 复核状态。
 2. `intent: new` 是最高优先级：依据用户原始需求生成 kebab-case change 名，按 default **独立创建**，
    严禁从 `pipeline list`、`.pipeline-active`、旧 phase 或旧 `tasks.md` 推断/复用任何已有 change。
    `intent: resume` 只能恢复注入中点名的 change；`intent: select` 只列候选并让用户点名，严禁猜测。
    只有缺少 `intent` 的手动调用才使用本文件 Step 3 的旧式决策表。用户明确点名 custom workflow 时才偏离 default。
-3. 在宿主的 Todo/plan 中先建立七个一级项：`open → explore → spec → build → verify → ship → archive`。
-   当前 phase 下只可列出 `openspec/changes/<name>/tasks.md` 的 checkbox 任务；不得把原始提示词拆成
-   一组无 phase 归属的一级 Todo。
-4. 紧接着调用本文件 Step 4 对应的 `pipeline-<phase>` skill。Hook 只能注入上下文，
+3. **选择契约优先于创建**：若 dispatch 含 `selection_required: true` 或 `workflow: select`，它已
+   证明当前项目存在 custom Track 或非 default workflow。必须将 `suggested_track` /
+   `suggested_workflow` 作为推荐项，并逐条读取 `candidate: track=<id>;workflow=<id>`；在运行
+   `pipeline init`、创建 Todo、调用任何 phase skill **之前**用宿主交互能力让用户选择一个精确 pair。
+   - 有 `AskUserQuestion` 时，提一个问题，首项标明“推荐”，选项只使用注入的合法 candidate pair；
+     不得合成跨 Track/workflow 的非法组合。
+   - Codex 等没有 `AskUserQuestion` 工具的宿主，直接用一条普通对话询问同一个问题并**停止本轮**；
+     用户回答后才继续。不得把“未回答”当成默认同意。
+   - 用户点名的 pair 仍须用 `pipeline tracks show <track> --json`（或创建 API）复核 workflow
+     allowed 关系；复核失败则重新询问，绝不猜测回退。
+   - 选择完成后，以该 Track 与 workflow 创建**新的** Change；即使 `.pipeline-active` 指向其他
+     Change，也不能把新目标绑回旧状态。
+4. 无 selection 契约时，按注入的 workflow 身份分支：
+   - `workflow: default` 的新目标按注入 Track/default workflow 创建独立 Change；随后才建立七相 Todo
+     并分派当前 phase。
+   - `workflow: simple` 的新目标必须按 `track=simple` 执行
+     `pipeline init <name> --track simple --preset tweak`。它从内建 `change` step 开始，不初始化
+     OpenSpec/Superpowers/ADR 文档链；Todo 一级项来自内建图 `change → verify → done`，并保留
+     `escalated` 终态。立即调用 `simple-task`，完成后仅按图调用
+     `verification-before-completion`。边界扩大时必须走 `scope-expanded`，再创建新的 default
+     Change，并立刻用 `pipeline set <new-change> depends_on <simple-change>` 保留机器可读审计链；
+     不得把 simple Change 原地改 workflow/track。
+   - `intent: resume` 且 `workflow` 非 `default` 时，Change 的 workflow 是不可变身份。先用
+     `pipeline status <change> --json` 与 `pipeline tracks show <track> --json` 复核；再读取
+     `.pipeline/workflows/<workflow>.yaml` 这份项目配置（它不是 canonical state）确认当前 step 的
+     skill DAG。**不得**把 default 的 breadcrumb、recommended/mandatory skill matrix 或 Step 4 的默认
+     技能表套到该 Change；先调用本入口并仅按真实 DAG 分派已解锁 skill。
+   - `workflow: select` 必须停在第 3 条的用户选择，不能臆造 default 或任一 custom workflow。
+5. **精确绑定再读 phase skill**：一旦 new / resume / select 得到精确 Change，必须先运行
+   `pipeline session activate "<change>"` 并确认成功。若 dispatch 带合法 `host_session_id`，先把其值
+   写入本轮 shell 的 `PIPELINE_HOST_SESSION_ID`，并在 activate 上追加
+   `--host-session "$PIPELINE_HOST_SESSION_ID"`；这是仅供 dashboard 判断正常会话是否仍在执行的精确
+   session→Change 绑定，绝不能用 `.pipeline-active` 猜测或替代它。若 dispatch 明确含
+   `continuous_execution: true`，同一条 activate 再追加 `--continuous`（两个 flag 可同时使用）：它会
+   原子写入**仅绑定这个 Change**的互动 skill 连续执行授权与隐私最小化审计行。new 要在 `pipeline init`
+   成功后立刻执行；resume 要在 `pipeline status <change> --json` 复核后执行。这个命令只把已明确选中的目标写为
+   evidence/DAG 的当前绑定；绝不能从旧 `.pipeline-active` 反推新任务，也不得在它成功前创建
+   Todo、读取 phase Skill 或登记文档。`--continuous` 记录该用户对这个 Change 的连续执行与 review
+   委托：每个 review 出口仍须先完成真实 skill / OpenSpec / guard 证据，再用 `review acknowledge
+   --delegated` 写带授权来源的 receipt；它不授权范围/安全/成本/外部状态的实质变更。
+
+   ```bash
+   # 仅当 dispatch 有 host_session_id 时设置该变量；没有时不要编造值。
+   PIPELINE_HOST_SESSION_ID="<pipeline-dispatch 的 host_session_id>"
+   pipeline session activate "$CHANGE_NAME" --host-session "$PIPELINE_HOST_SESSION_ID"
+
+   # 若同一 dispatch 还声明 continuous_execution: true，两个 flag 必须同时保留。
+   pipeline session activate "$CHANGE_NAME" --host-session "$PIPELINE_HOST_SESSION_ID" --continuous
+   ```
+6. Todo 一级项必须来自所绑定 workflow 的真实 step 图：
+   - default：`open → explore → spec → build → verify → ship → archive`，二级任务来自
+     `tasks.md`；
+   - simple：`change → verify → done`，并显示 `escalated` 分支，不创建或读取 `tasks.md`；
+   - 项目 custom：从其已校验的 workflow 定义投影。
+   不得把原始提示词拆成脱离 phase/step 的一级 Todo。
+7. 紧接着调用真实图中当前 step 声明的 skill。default 使用本文件 Step 4 表；
+   simple 的 `change` 调用 `simple-task`，`verify` 调用 `verification-before-completion`。Hook 只能注入上下文，
    不能替宿主实际调用 Skill，因此此调用是入口的强制职责。
 
 阶段 skill 若没有继承 shell 环境变量，必须继续使用本段注入的 `change/track/phase` 与 CLI 复核，不得
@@ -50,20 +113,25 @@ description: "主编排 skill（Decision Core）。识别 Track（chat/pm/fronte
 产出可实施的 OpenSpec delta spec / plan 并在 ship 应用主 spec。
 
 对 default workflow，这张矩阵无条件适用；对 custom workflow，只有声明
-`openspec_contract: required` 时适用。`--producer` 必须等于本轮**实际调用并已被
-PostToolUse history 记录**的 Skill；不能为了通过检查伪造名字。默认 workflow 一律使用本插件
+`openspec_contract: required` 时适用。`--producer` 必须等于本轮**实际调用且已有完成态 history
+证据**的 Skill；不能为了通过检查伪造名字。原生 PostToolUse 是首选证据源；Codex 某些 exec
+路径缺少该回调时，CLI 只会在同一宿主 transcript 已证明该精确 SKILL.md 读取完成后补写同一种
+`CodexSkillRead` 证据。默认 workflow 一律使用本插件
 打包的 bare 名称（`brainstorming` / `writing-plans` / `verification-before-completion`）；ledger 保留旧
 namespace 仅用于读取历史 change，不把它作为新安装的前置条件。
+
+内建 `simple` 明确不受本节文档契约治理：它的审计事实是 canonical Change、step transitions、
+实际 skill 调用和聚焦验证，不生成 proposal/design/delta spec/Superpowers/ADR。
 
 | phase | 进入时先读 | 退出前必须登记的真实产物 |
 |---|---|---|
 | open | 无 | `proposal`、`openspec-design`、`tasks`（`openspec-propose`） |
-| explore | open 的三份文档 | `superpower-design`、`adr`（`brainstorming`） |
-| spec | 前两阶段全部文档 | `delta-spec`（`openspec-propose`）、`superpower-plan` + `plan`（`writing-plans`） |
-| build | 截止 spec 的全部文档 | 只读取；实现仍更新 tasks/代码 |
-| verify | 截止 spec 的全部文档 | `verification-report`（`verification-before-completion`） |
-| ship | 再加 verification report | `applied-spec`（`openspec-apply-change`） |
-| archive | 截止 ship 的全部文档 | 只读取后归档 |
+| explore | open 的三份文档 | `superpower-design`、`adr`（`brainstorming`）；若以调研结论更新 `proposal.md` / `design.md`，由 `pipeline-explore` 重登记当前 SHA，并重新读取上游文档 |
+| spec | 前两阶段全部文档 | `delta-spec`（`openspec-propose`）、`superpower-plan` + `plan`（`writing-plans`）；若因 `requirements-changed` 回退或更新 coverage，由 `pipeline-spec` 重登记 proposal/design/tasks 当前 SHA |
+| build | 截止 spec 的全部文档 | 每次勾选/改写 `tasks.md` 后以 `pipeline-build` 重登记当前 SHA，再补本 phase read receipt |
+| verify | 截止 spec 的全部文档 | `verification-report`（`verification-before-completion`）；完成验证任务后由 `pipeline-verify` 重登记 tasks |
+| ship | 再加 verification report | `applied-spec`（`openspec-apply-change`）；完成交付任务后由 `pipeline-ship` 重登记 tasks |
+| archive | 截止 ship 的全部文档 | 读取后完成归档任务，并由 `pipeline-archive` 重登记最终 tasks |
 
 除 open 外，phase 开始时先执行：
 
@@ -81,6 +149,9 @@ pipeline document status "$PIPELINE_CHANGE_NAME"
 producer 没有真实 Skill evidence 都会拒绝推进。这正是“后续步骤会读取前面生成的 spec/Superpowers/ADR”
 的可验证实现，而非提示词承诺。
 
+`--backfill` 只用于升级旧 Change 时首次收纳**尚未登记**的历史文档；它绝不能覆盖已有 record 或把旧
+skill 冒充为活文档当前 hash 的 producer。活文档更新只能由当前 phase 实际调用的 skill 重登记。
+
 ---
 
 ## Decision Core（决策核心）
@@ -95,7 +166,7 @@ producer 没有真实 Skill evidence 都会拒绝推进。这正是“后续步�
 # pipeline CLI 可用性检查（插件随包的单文件 bundle）
 if ! command -v pipeline >/dev/null 2>&1; then
   echo "[HARD STOP] pipeline CLI 未找到。" >&2
-  echo "  修复：重新从本插件发布包运行 ./install.sh --codex（或 --claude）；它会把已打包的 bundle 链接到 ~/.local/bin/pipeline。" >&2
+  echo "  修复：重新从本插件发布包运行 ./install.sh --codex（或 --claude）；它会验证并发布托管 runtime，再安装稳定 ~/.local/bin/pipeline 启动器。" >&2
   exit 1
 fi
 ```
@@ -112,14 +183,18 @@ fi
 | Track | 关键词（命中任一） | 后续动作 |
 |-------|------------------|---------|
 | **chat** | 问 / 解释 / how / what / why / 怎么用 / 是什么 / 区别 | **跳过 pipeline**，直接对话 |
+| **simple** | typo / 文案 / 注释 / 单行或单文件值调整 / unused import；且不含高风险否决项 | 进入内建轻量流程 |
 | **pm** | 调研 / 竞品 / PRD / 需求 / 用户旅程 / 原型 / market / 立项 | 进入 PM 流程 |
 | **frontend** | 前端 / UI / 页面 / 组件 / React / Vue / Next / Tailwind / 样式 / .tsx / .jsx / .vue | 进入 Frontend 流程 |
 | **backend** | 后端 / API / 接口 / 数据库 / Go / Python / Java / Rust / NestJS / Postgres / endpoint | 进入 Backend 流程 |
 
 **判定规则**：
-1. 若命中且唯一 → 直接确认 Track
-2. 若命中多个（例：'前端+后端联调'）→ **询问用户**：「这是前端还是后端？」
-3. 若一个都不命中 → 显示 4 个选项让用户选
+1. 先评估 simple 否决项：API/公共契约、schema/migration、auth/security、跨模块、多文件、
+   新功能/重构/架构、依赖/部署/发布/生产数据任一命中，simple 必须归零。
+2. simple 有明确正向信号且无否决项 → 直接选择 simple。
+3. 其余任务再按 pm/frontend/backend 匹配；通用“实现/修复/修改”至少进入 backend 完整轨，
+   不得因缺少领域词静默绕过。
+4. 真正领域冲突且会改变执行范围时才询问。
 
 **Track=chat 时**：直接回答用户问题，不进入后续步骤。**禁止**为 chat 类输入创建 change。
 
@@ -138,6 +213,7 @@ pipeline list          # 活跃 change 表（名字 / track / phase）
 | Track | 活跃 change | 用户输入 | 行为 |
 |-------|-------------|---------|------|
 | chat | 任意 | 任意 | 跳过 pipeline，直接对话 |
+| simple | 任意 | 明确局部新目标 | → 创建独立 simple Change，从 `change` 开始 |
 | pm/frontend/backend | 0 | 有描述 | → **pipeline-open**（创建新 change） |
 | pm/frontend/backend | 1 | "继续" / 无描述 | 自动恢复（`pipeline status <name>` 判定 phase） |
 | pm/frontend/backend | 1 | 有描述（与该 change 无关） | → **pipeline-open**（独立新建；不复用旧 change） |
@@ -167,7 +243,10 @@ pipeline list          # 活跃 change 表（名字 / track / phase）
 
 ## Step 4: Phase 分发（自动）
 
-确定 Track + change 名 + phase 后，按下表分发到子 skill：
+确定 Track + change 名 + phase 后，先区分 workflow：下表只定义 **default** workflow 的 phase
+入口。已绑定的 custom workflow 必须以其 `.pipeline/workflows/<workflow>.yaml` 和
+`pipeline internal-skill-gate <change> <skill>` 的实际解锁结果为准：只有图中声明且已解锁的 skill
+可调用，不能从此表补出图外 skill、默认 skill 矩阵或默认依赖。
 
 <!-- 分发表按相位名约定派生（pipeline-<phase>）；相位与合法转换的单一真相源 =
      templates/manifest.yaml（引擎真读，零硬编码）。新增相位改 manifest 一处即可。-->
@@ -200,7 +279,13 @@ done
 > 三注入（工作流宪法 templates/workflow.md + 活跃 change 上下文 + openspec 提示），phase 内
 > 用上面 `pipeline status` + Read 产物文件重建。语义缺口只在"领域词典/产物全索引"。
 
-**立即执行**：先按上面重建上下文（读产物文件本体），再使用 Skill 工具加载对应的 `pipeline-<phase>` 子 skill。**禁止跳过此步骤**。
+**立即执行**：先按上面重建上下文（读产物文件本体）。default workflow 再使用表中对应的
+`pipeline-<phase>` 子 skill；custom workflow 则先读取其真实 DAG，只调用其中已解锁的 phase entry
+skill（若图未声明 `pipeline-<phase>`，不得擅自补调用）。**禁止跳过此步骤**。
+
+内建 `simple` 也是非 default workflow，但不读取项目 `.pipeline/workflows/simple.yaml`；其定义随插件
+版本由 kernel 只读提供，项目同名文件不能覆盖。`change` 只允许 `simple-task`，`verify` 只允许
+`verification-before-completion`，`done` / `escalated` 是终态。
 
 子 skill 的上下文优先级：`<pipeline-dispatch>` 注入 → 已激活 Change / `pipeline status` →
 `PIPELINE_TRACK` 与 `PIPELINE_CHANGE_NAME` 环境变量。环境变量只是兼容快捷方式，不能是唯一真相源：
@@ -224,17 +309,19 @@ Todo。进入 build 前，spec skill 必须将实际实现任务同步到 `## Bu
 ## 阶段衔接规则
 
 <IMPORTANT>
-单次 `/pipeline` 调用从检测到的 phase 开始，但**绝不自动跨 phase 推进**——每个 phase 产出后必须停下、
-把刚产出的文档/产物交用户过目并收反馈，用户说"继续"才手动 `pipeline transition` 进入下一 phase。
-不允许 open→archive 一路自动跑完。
-（硬规则，双重保障：① `pipeline check <name>` **只校验、绝不自动 transition**——校验通过后打印的是
-"用户确认后手动跑"的 transition 命令；② 决策 phase（explore/spec/verify，单一真相源 =
-templates/manifest.yaml 的 review_phases）由 CLI 在 transition 进入时落 `.pipeline-pending-review`
-门 marker + hooks/gate.sh PreToolUse 门联合强制——在你用 AskUserQuestion 把产出拿给用户之前，
-写类工具（Edit/Write/Bash/Skill）被拦（exit 2）；解封唯一正道是 AskUserQuestion 交互，
-用户在下一条正常对话明确回复“确认继续/继续执行”后，Codex UserPromptSubmit hook 才会自动清 marker。
-档 C 静态降级则必须保留这条明确确认事实，**不得**删除 marker 绕过。被拦的那次写操作内容已丢弃，
-解封后须重新发起。）
+单次 `/pipeline` 调用从检测到的 phase 开始。**常规模式**每个 phase 产出后必须停下、把刚产出的
+文档/产物交用户过目并收反馈，用户说"继续"才手动 `pipeline transition`。**持续授权模式**可在同一
+Change 连续处理无 confirm/外部副作用的出边，但绝不跳过检查或伪造证据。
+（双重保障：① `pipeline check <name>` **只校验、绝不自动 transition**；② 决策 phase
+（explore/spec/verify，单一真相源 = templates/manifest.yaml 的 review_phases）在**产物完成且 check
+通过后**必须运行 `pipeline review request <name> --event <event>`。该命令写入 canonical pending receipt，并投影一个
+含 Change identity 与 exact event 的 v2 `.pipeline-pending-review` marker；这时才由 hooks/gate.sh 拦截写类工具。
+先展示产物并让用户确认；常规 Codex 用户下一条明确“确认继续/继续执行”会调用
+`pipeline review acknowledge <name>` 写入 exact phase-and-event approval receipt。若当前 Change 有用户明确
+写入的持续授权，只能在这些真实前置已完成后调用 `pipeline review acknowledge <name> --delegated`，并在
+history 记录委托授权时间；随后才能重发同一 event 的 transition。进入 review
+相位本身绝不落 marker，因此 explore/spec/verify 的实际工作不会自锁。档 C 必须保留确认事实并显式
+acknowledge，**不得**删除 marker 绕过。被拦的那次操作已丢弃，解封后须重新发起。）
 </IMPORTANT>
 
 > ⏳ **待迁移（M1 #13）**：门 marker TTL 当前统一 15 分钟（CONTRACT §3 白名单②）；
@@ -250,7 +337,7 @@ templates/manifest.yaml 的 review_phases）由 CLI 在 transition 进入时落 
    - 用户给了修改意见 → 先改、再复核；用户确认 → 才进入下一 phase。
    绝不允许"全部生成一遍丢给用户"。每一步的文档和技能产出，反馈都不能省略。
 
-其余决策节点（同样必须暂停）：
+其余决策节点（默认必须暂停）：
 1. **brainstorming 确认设计方案**（explore phase 内）
 2. **build_mode / isolation 选择**（build phase 入口）
 3. **设计方向选择**（build phase，PM/前端原型）：借鉴 awesome-design-md 品牌 DESIGN.md，还是用 hue 自定义 —— 见 `pipeline-build`
@@ -258,7 +345,20 @@ templates/manifest.yaml 的 review_phases）由 CLI 在 transition 进入时落 
 5. **finishing-branch 分支处理方式**（ship phase 内）
 6. **preset 升级条件触发**（hotfix/tweak → full）
 
-phase **内部**步骤可连续做（产物靠 Edit/Write 落盘）；**phase 之间一律停下、复核、用户确认后手动 transition**，绝不自动推进。
+**已授权自主执行例外**：当当前用户明确给出“后续无需询问 / 自主执行完成”这类持续授权时，
+不得为了重复确认而停住。Agent 必须采用该 skill 已定义的保守、可审计默认值，把选择与理由
+写入 Change 文档/状态；不得伪造 review receipt，也不得跨过 Explore、Spec、Verify 的真实 review
+证据与 guard。正常对话的新任务由 router 透传 `continuous_execution: true`，并在精确 Change 创建后以
+`pipeline session activate <change> --continuous` 落该授权；已有 Change 的同类确认由 hook 绑定。
+Build 的具体默认与 Git 受限环境处理见 `pipeline-build`。
+
+phase **内部**步骤可连续做（产物靠 Edit/Write 落盘）；常规模式在 phase 边界停下复核，持续授权模式在
+无 confirm/外部副作用边界时可继续。对 review phase 的准确出口顺序是：`pipeline check` → `pipeline review request --event <event>` → 展示产物 → 常规用户确认 / `pipeline review acknowledge`，或已委托 Change 的 `pipeline review acknowledge --delegated` → 重发同一 `pipeline transition`。单出口可省略 `--event`，但 default 的 verify 与任何多出口 custom step 必须显式指定，避免把一种决定借给另一条边。
+
+**Custom workflow 绝不套 default 门**：先读取 `.pipeline/workflows/<workflow>.yaml` 的当前 step。`gate: null`
+在 check/文档证据通过后直接走该 step 的 transition；`gate: review` 走上面的 receipt 协议；`gate: confirm`
+仍等待人类。不得因 default 的 Explore/Spec/Verify 文本而给 custom Build 或 Ship 凭空补 review，也不得因
+持续授权把 `confirm` 或外部发布动作自动化。
 
 ### Preset 升级条件
 

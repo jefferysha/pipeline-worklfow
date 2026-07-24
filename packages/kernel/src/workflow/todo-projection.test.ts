@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_WORKFLOW_TODO_STAGES, projectPipelineTodo } from './todo-projection.js'
+import {
+  DEFAULT_WORKFLOW_TODO_STAGES,
+  incompletePipelineTasksForExit,
+  projectPipelineTodo,
+} from './todo-projection.js'
 
 describe('projectPipelineTodo', () => {
   it('default 顺序来自 default.yaml 的生成步骤，并把带阶段标题的 OpenSpec checkbox 投影到对应阶段', () => {
@@ -52,5 +56,66 @@ describe('projectPipelineTodo', () => {
       { id: 'draft', label: 'Draft', status: 'done', tasks: [] },
       { id: 'review', label: 'Review', status: 'current', tasks: [{ text: 'Review the proposal', completed: true }] },
     ])
+  })
+
+  it('阶段出口只统计截至当前阶段的未完成任务，未来阶段不会反向阻塞', () => {
+    const tasksMarkdown = `# Tasks
+
+## Open
+- [x] Confirm scope
+
+## Build
+- [ ] Implement runtime
+
+## Verify
+- [ ] Run acceptance
+
+## Ship
+- [ ] Publish bundle
+`
+    expect(incompletePipelineTasksForExit({ phase: 'build', tasksMarkdown })).toEqual({
+      structured: true,
+      incomplete: 1,
+    })
+    expect(incompletePipelineTasksForExit({
+      phase: 'build',
+      tasksMarkdown: tasksMarkdown.replace('- [ ] Implement runtime', '- [x] Implement runtime'),
+    })).toEqual({ structured: true, incomplete: 0 })
+  })
+
+  it('无阶段标题的旧 tasks.md 保持兼容：只有 build 沿用全清单完成语义', () => {
+    const tasksMarkdown = '- [x] Existing task\n- [ ] Pending task\n'
+    expect(incompletePipelineTasksForExit({ phase: 'spec', tasksMarkdown })).toEqual({
+      structured: false,
+      incomplete: 0,
+    })
+    expect(incompletePipelineTasksForExit({ phase: 'build', tasksMarkdown })).toEqual({
+      structured: false,
+      incomplete: 1,
+    })
+  })
+})
+
+describe('branched workflow Todo status', () => {
+  const stages = [
+    { id: 'change', label: 'Change', transitions: ['verify', 'escalated'] },
+    { id: 'verify', label: 'Verify', transitions: ['done', 'change', 'escalated'] },
+    { id: 'done', label: 'Done', transitions: [] },
+    { id: 'escalated', label: 'Escalated', transitions: [] },
+  ] as const
+
+  it('marks only dominators complete, so an escalated branch never fabricates verify/done completion', () => {
+    const todo = projectPipelineTodo({ phase: 'escalated', tasksMarkdown: undefined, stages })
+    expect(todo.stages.map((stage) => [stage.id, stage.status])).toEqual([
+      ['change', 'done'],
+      ['verify', 'pending'],
+      ['done', 'pending'],
+      ['escalated', 'current'],
+    ])
+  })
+
+  it('retains the linear successful path for done', () => {
+    const todo = projectPipelineTodo({ phase: 'done', tasksMarkdown: undefined, stages })
+    expect(todo.stages.map((stage) => stage.status)).toEqual(['done', 'done', 'current', 'pending'])
   })
 })

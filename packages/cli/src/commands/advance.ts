@@ -16,7 +16,8 @@
  *   2. 硬门：项目根 `.pipeline-pending-confirm` / `-interaction` 新鲜（age ≤ 分级 TTL）→ 停。
  *      **三门是硬门，--through-gates 也绝不放行**（HITL 红线；review 门经 reviewPhases 判定）。
  *   3. 复核相位（manifest.reviewPhases 单一真相源）：默认停（不自动离开 explore/spec/verify）；
- *      `--through-gates` 显式放行才继续（但仍受 2 的硬门约束）。
+ *      `--through-gates` 仅在已有 exact-phase-and-event approval receipt 时才可继续，绝不伪造或跳过
+ *      `pipeline review request → acknowledge`（仍受 2 的硬门约束）。
  *   4. guard 不过（cmdCheck exit≠0）→ 停（exit 2 沿用 check 口径）。
  *   5. --max-steps 封顶：防失控保险丝（默认 12，足够 open→archive 六步）。
  * `--dry-run`：只报计划、只读不写盘（当前相位 guard 真判，后续步运行时 live-guard）。
@@ -28,7 +29,7 @@
  * 的 step-transitions 图推进（cmdAdvanceCustom，停点规则见该函数头）——此前 advance 只认 default
  * manifest，自定义 workflow 的 change 会被 forwardStep 误判成"终态"而永远无法 auto-advance。
  */
-import { GATE_TTL_MS, loadWorkflow, resolveStep, resolveWorkflowName } from '@pipeline-lite/kernel'
+import { GATE_TTL_MS, loadWorkflow, resolveStep, resolveWorkflowName, reviewGateApprovedFor } from '@pipeline-lite/kernel'
 import type { GateKind, Phase, WorkflowDef } from '@pipeline-lite/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
 import { EVENTS } from '../events.js'
@@ -42,7 +43,7 @@ export interface AdvanceOpts {
   maxSteps?: number
   /** 只报计划、不改盘 */
   dryRun?: boolean
-  /** 显式放行复核相位（默认在复核相位停；但 confirm/interaction 硬门仍绝不跨越） */
+  /** 在已有 review approval receipt 时继续；不创建或绕过任何 review 确认。 */
   throughGates?: boolean
 }
 
@@ -99,6 +100,32 @@ function isReviewPhase(deps: CliDeps, phase: string): boolean {
   return (deps.flow.manifest.reviewPhases as readonly string[]).includes(phase)
 }
 
+/** `--through-gates` 只能消费 review acknowledge 的 exact-phase-and-event canonical receipt，不能自行放行。 */
+async function approvedReviewReceipt(
+  deps: CliDeps,
+  name: string,
+  phase: string,
+  event: string,
+): Promise<boolean | null> {
+  try {
+    const state = await deps.store.read(changeDir(deps.cwd, name))
+    return reviewGateApprovedFor(state, phase, event)
+  } catch (e) {
+    deps.io.err(`ERROR: ${errMsg(e)}`)
+    return null
+  }
+}
+
+function reviewReceiptStop(deps: CliDeps, name: string, phase: string, event: string, dryRun = false): void {
+  const target = dryRun ? phase : `${name} @ ${phase}`
+  const prefix = dryRun ? '  预计停在' : '[STOP]'
+  deps.io.out(
+    `${prefix} ${target}: review 出口 event '${event}' 尚无人工确认回执；先完成 check 并运行 ` +
+      `pipeline review request ${name} --event ${event}，` +
+      `待用户确认后运行 pipeline review acknowledge ${name}`,
+  )
+}
+
 export async function cmdAdvance(deps: CliDeps, name: string, opts: AdvanceOpts = {}): Promise<number> {
   if (!isValidChangeName(name)) {
     deps.io.err(`ERROR: change-name 非法: '${name}' (仅允许 a-z A-Z 0-9 - _)`)
@@ -143,10 +170,18 @@ export async function cmdAdvance(deps: CliDeps, name: string, opts: AdvanceOpts 
       deps.io.out(`[STOP] ${name} @ ${current}: 硬门 .pipeline-pending-${hard} 新鲜存在——三门绝不自动跨越（HITL 红线）`)
       return 0
     }
-    // 复核相位：默认停给人复核，不自动离开 explore/spec/verify（reviewPhases 单一真相源）
-    if (!through && isReviewPhase(deps, current)) {
-      deps.io.out(`[STOP] ${name} @ ${current}: 复核相位（HITL 门），停给人复核——--through-gates 可显式放行`)
-      return 0
+    // 复核相位：默认停；--through-gates 只能消费 CLI/hook 写入的 exact-phase 确认回执，不能自放行。
+    if (isReviewPhase(deps, current)) {
+      if (!through) {
+        deps.io.out(`[STOP] ${name} @ ${current}: 复核相位（HITL 门），停给人复核——确认后可用 --through-gates 继续`)
+        return 0
+      }
+      const approved = await approvedReviewReceipt(deps, name, current, fwd.event)
+      if (approved === null) return 1
+      if (!approved) {
+        reviewReceiptStop(deps, name, current, fwd.event)
+        return 0
+      }
     }
     if (steps >= maxSteps) {
       deps.io.out(`[STOP] ${name} @ ${current}: 达到 --max-steps=${maxSteps} 上限，停（防失控保险丝）`)
@@ -159,7 +194,7 @@ export async function cmdAdvance(deps: CliDeps, name: string, opts: AdvanceOpts 
       for (const l of g.lines) if (l.includes('[FAIL]')) deps.io.out(`  ${l.trim()}`)
       return g.code === 2 ? 2 : 1
     }
-    // 单步推进（复用 cmdTransition，含事件前置校验 + 副作用 + review marker 落盘）
+    // 单步推进（复用 cmdTransition，含事件前置校验 + canonical review receipt 消费）
     const t = await transitionQuietly(deps, name, fwd.event)
     if (t.code !== 0) {
       deps.io.out(`[STOP] ${name} @ ${current}: transition ${fwd.event} 失败，停`)
@@ -186,11 +221,20 @@ async function dryRunPlan(
     deps.io.out(`  预计停在 ${start}: 硬门 .pipeline-pending-${hard} 新鲜存在，绝不自动跨越（HITL 红线）`)
     return 0
   }
-  if (!through && isReviewPhase(deps, start)) {
-    deps.io.out(`  预计停在 ${start}: 复核相位（HITL 门，--through-gates 放行）`)
-    return 0
+  const startForward = forwardStep(deps, start)
+  if (isReviewPhase(deps, start) && startForward !== undefined) {
+    if (!through) {
+      deps.io.out(`  预计停在 ${start}: 复核相位（HITL 门，确认后可用 --through-gates 继续）`)
+      return 0
+    }
+    const approved = await approvedReviewReceipt(deps, name, start, startForward.event)
+    if (approved === null) return 1
+    if (!approved) {
+      reviewReceiptStop(deps, name, start, startForward.event, true)
+      return 0
+    }
   }
-  if (!forwardStep(deps, start)) {
+  if (!startForward) {
     deps.io.out(`  预计停在 ${start}: 已到终态`)
     return 0
   }
@@ -216,8 +260,15 @@ async function dryRunPlan(
     visited.add(current)
     current = fwd.to
     steps += 1
-    if (!through && isReviewPhase(deps, current)) {
-      deps.io.out(`  预计停在 ${current}: 复核相位（HITL 门，--through-gates 放行）`)
+    if (isReviewPhase(deps, current)) {
+      if (!through) {
+        deps.io.out(`  预计停在 ${current}: 复核相位（HITL 门，确认后可用 --through-gates 继续）`)
+      } else {
+        // Dry-run cannot create a future phase's acknowledgement. A real invocation must stop
+        // here until request/acknowledge is completed for the phase it just entered.
+        const next = forwardStep(deps, current)
+        if (next) reviewReceiptStop(deps, name, current, next.event, true)
+      }
       return 0
     }
     if (visited.has(current)) {
@@ -237,10 +288,9 @@ async function dryRunPlan(
  *   2. 硬门 marker：.pipeline-pending-confirm/-interaction 新鲜 → 停——HITL 红线跨轨统一，
  *      --through-gates 也绝不放行（marker 是 hooks 落的"人正被询问"项目级信号，与 workflow 无关）。
  *   3. step.gate 人门（推进前检查，管的是"自动离开"）：gate=confirm 绝不放行（对位 default 轨的
- *      confirm 硬门语义）；gate=review 默认停给人复核、--through-gates 显式放行（对位 default 轨的
- *      reviewPhases）。取舍说明：transition/check 对 gate 不做任何拦截（人手动敲 transition 本身
- *      就是过门动作）——这与 default 轨 reviewPhases 的关系完全一致（manual transition 照走复核
- *      相位，只有 advance 这类自动推进在门前停），gate 是 automation 面约束、不是 transition 面约束。
+ *      confirm 硬门语义）；gate=review 默认停给人复核、--through-gates 仅可消费已存在的 exact-phase
+ *      approval receipt（对位 default 轨的 reviewPhases）。transition 本身也会重验 receipt，gate
+ *      是同一 canonical approval 协议在 automation 面的提前停点，不是可绕过 transition 的旁路。
  *   4. 多条出边：走向分岔，事件选择权在人（HITL）——自动推进只吃"恰 1 条出边"的确定形，停并列出
  *      可选 events。
  *   5. --max-steps 封顶（防失控保险丝，自定义图允许环，这条保险丝更要紧）。
@@ -296,20 +346,29 @@ async function cmdAdvanceCustom(
       deps.io.out(`[STOP] ${name} @ ${current}: 硬门 .pipeline-pending-${hard} 新鲜存在——三门绝不自动跨越（HITL 红线）`)
       return 0
     }
-    // step 自带人门：confirm 绝不自动跨越；review 默认停给人复核（--through-gates 显式放行）
+    // 分岔先停，让人选择确切 event；没有选中的边就不该尝试消费任何 event-bound receipt。
+    if (step.transitions.length > 1) {
+      const events = step.transitions.map((transition) => transition.event).join(', ')
+      deps.io.out(`[STOP] ${name} @ ${current}: 多条出边需人选 event（HITL），手动 transition 其一：${events}`)
+      return 0
+    }
+    const edge = step.transitions[0]!
+    // step 自带人门：confirm 绝不自动跨越；review receipt 必须由 review acknowledge 产生。
     if (step.gate === 'confirm') {
       deps.io.out(`[STOP] ${name} @ ${current}: step gate 'confirm'（human gate）——绝不自动跨越（HITL 红线）`)
       return 0
     }
-    if (step.gate === 'review' && !through) {
-      deps.io.out(`[STOP] ${name} @ ${current}: step gate 'review'（HITL 门），停给人复核——--through-gates 可显式放行`)
-      return 0
-    }
-    // 多条出边 = 走向分岔，事件选择权在人（HITL）
-    if (step.transitions.length > 1) {
-      const events = step.transitions.map((t) => t.event).join(', ')
-      deps.io.out(`[STOP] ${name} @ ${current}: 多条出边需人选 event（HITL），手动 transition 其一：${events}`)
-      return 0
+    if (step.gate === 'review') {
+      if (!through) {
+        deps.io.out(`[STOP] ${name} @ ${current}: step gate 'review'（HITL 门），停给人复核——确认后可用 --through-gates 继续`)
+        return 0
+      }
+      const approved = await approvedReviewReceipt(deps, name, current, edge.event)
+      if (approved === null) return 1
+      if (!approved) {
+        reviewReceiptStop(deps, name, current, edge.event)
+        return 0
+      }
     }
     if (steps >= maxSteps) {
       deps.io.out(`[STOP] ${name} @ ${current}: 达到 --max-steps=${maxSteps} 上限，停（防失控保险丝）`)
@@ -323,7 +382,6 @@ async function cmdAdvanceCustom(
       return g.code === 2 ? 2 : 1
     }
     // 单步推进（复用 cmdTransition 自定义分支：withLock 内读-判-写 + history 落账）
-    const edge = step.transitions[0]!
     const t = await transitionQuietly(deps, name, edge.event)
     if (t.code !== 0) {
       deps.io.out(`[STOP] ${name} @ ${current}: transition ${edge.event} 失败，停`)
@@ -358,14 +416,6 @@ async function dryRunCustomPlan(
     deps.io.err(`ERROR: step '${start}' 不在 workflow '${workflowName}' 里`)
     return 1
   }
-  if (startStep.gate === 'confirm') {
-    deps.io.out(`  预计停在 ${start}: step gate 'confirm'（human gate，绝不自动跨越）`)
-    return 0
-  }
-  if (startStep.gate === 'review' && !through) {
-    deps.io.out(`  预计停在 ${start}: step gate 'review'（HITL 门，--through-gates 放行）`)
-    return 0
-  }
   if (startStep.transitions.length === 0) {
     deps.io.out(`  预计停在 ${start}: 已到终态`)
     return 0
@@ -373,6 +423,23 @@ async function dryRunCustomPlan(
   if (startStep.transitions.length > 1) {
     deps.io.out(`  预计停在 ${start}: 多条出边需人选 event（可选: ${startStep.transitions.map((t) => t.event).join(', ')}）`)
     return 0
+  }
+  const startEdge = startStep.transitions[0]!
+  if (startStep.gate === 'confirm') {
+    deps.io.out(`  预计停在 ${start}: step gate 'confirm'（human gate，绝不自动跨越）`)
+    return 0
+  }
+  if (startStep.gate === 'review') {
+    if (!through) {
+      deps.io.out(`  预计停在 ${start}: step gate 'review'（HITL 门，确认后可用 --through-gates 继续）`)
+      return 0
+    }
+    const approved = await approvedReviewReceipt(deps, name, start, startEdge.event)
+    if (approved === null) return 1
+    if (!approved) {
+      reviewReceiptStop(deps, name, start, startEdge.event, true)
+      return 0
+    }
   }
   // 当前 step guard 真判（只读，cmdCheck 自定义分支）
   const g = await guardQuietly(deps, name)
@@ -410,8 +477,14 @@ async function dryRunCustomPlan(
       deps.io.out(`  预计停在 ${current}: step gate 'confirm'（human gate，绝不自动跨越）`)
       return 0
     }
-    if (entered?.gate === 'review' && !through) {
-      deps.io.out(`  预计停在 ${current}: step gate 'review'（HITL 门，--through-gates 放行）`)
+    if (entered?.gate === 'review') {
+      if (!through) {
+        deps.io.out(`  预计停在 ${current}: step gate 'review'（HITL 门，确认后可用 --through-gates 继续）`)
+      } else if (entered.transitions.length === 1) {
+        reviewReceiptStop(deps, name, current, entered.transitions[0]!.event, true)
+      } else {
+        deps.io.out(`  预计停在 ${current}: review step 有多条出边，须由人选择 event 后 request`)
+      }
       return 0
     }
     if (visited.has(current)) {

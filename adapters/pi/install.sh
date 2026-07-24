@@ -4,7 +4,7 @@
 # 投影产物：
 #   .pi/settings.json#hooks   inject(SessionStart) + track(PostToolUse)（__ADAPTER_DIR__ 定死绝对路径，
 #                             wrapper 从仓库跑，自定位 lite baseline hooks/*.sh）
-#   .pi/rules/pipeline.md     veto 降级 advisory 静态层（pi 无原生 pre-tool 硬拦 → 靠此 + Unlock sentinel）
+#   .pi/rules/pipeline.md     veto 降级 advisory 静态层（pi 无原生 pre-tool 硬拦 → 靠此 + CLI review receipt）
 #
 # 三能力：inject/track native、veto **降级**（不伪装原生硬拦，contract §1）。无 trust 机制、落盘即生效。
 #
@@ -35,7 +35,7 @@ while [ $# -gt 0 ]; do
 done
 [ -n "$PI_HOME_DIR" ] || PI_HOME_DIR="$TARGET/.pi"
 
-# ── veto 降级 advisory 静态层 .pi/rules/pipeline.md（enforcement 走 .pi/extensions 运行时 + Unlock sentinel）──
+# ── veto 降级 advisory 静态层 .pi/rules/pipeline.md（enforcement 走 .pi/extensions 运行时 + CLI review receipt）──
 install_rules() {
   local rdir="$PI_HOME_DIR/rules"
   mkdir -p "$rdir"
@@ -44,17 +44,19 @@ install_rules() {
 
 > Pi 无原生 pre-tool 硬拦 hook——本规则文件是 veto 能力的降级 advisory 层（契约 §1）。
 > inject/track 由 .pi/settings.json#hooks 原生实现；enforcement（veto）为 advisory：
-> 写类工具遇新鲜门 marker 时**应自我暂停**，由 .pi/extensions 运行时提示 + 手动 Unlock sentinel 放行。
+> 写类工具遇新鲜门 marker 时**应自我暂停**；review 的确认由 `pipeline review acknowledge` 写入 canonical receipt，
+> 不能通过删除 marker 伪造放行。
 
 7-phase 流水线：open → explore → spec → build ⇄ verify → ship → archive。
 状态操作一律走 `pipeline` CLI（status / get / set / transition / check），勿手改 .pipeline.yaml。
 
-进入 review phase（explore / spec / verify 出口）须人类显式确认才能 transition。
-放行用 **Unlock sentinel**——确认无误后删除项目根 marker：
+离开 review phase（explore / spec / verify）须对确切 event 取得人类显式确认：
 
-    rm .pipeline-pending-review   # 或 .pipeline-pending-confirm / .pipeline-pending-interaction
+    pipeline review request <change> --event <event>
+    # 人类确认后：
+    pipeline review acknowledge <change>
 
-不得绕过 review-gate（会产生 solo 推进）。
+不得删除 `.pipeline-pending-review` 绕过 review-gate（会产生 solo 推进）。
 EOF
   info "rules/pipeline.md → $rdir/pipeline.md（veto 降级 advisory 静态层）"
 }
@@ -78,6 +80,6 @@ if [ "$WITH_HOOKS" = 1 ]; then
   install_hooks_settings
   info "档 B 完成：inject/track native + veto 降级 advisory（无 trust，落盘即生效）。"
 else
-  warn "--no-hooks：跳过 settings.json#hooks（无 inject/track；靠 rules 静态层 + 手动 Unlock sentinel）。"
+  warn "--no-hooks：跳过 settings.json#hooks（无 inject/track；review 仍须走 pipeline review request/acknowledge）。"
 fi
 exit 0

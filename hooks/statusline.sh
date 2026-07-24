@@ -12,29 +12,12 @@ set -uo pipefail
 
 INPUT="$(cat 2>/dev/null || printf '{}')"
 
-# 与 gate.sh 同款极简 JSON 顶层字符串键提取（cwd / current_dir 两个键名都试）
-json_get() {
-  local key="$1" rest
-  case "$INPUT" in *"\"$key\""*) ;; *) return 1 ;; esac
-  rest="${INPUT#*\"$key\"}"
-  while true; do
-    case "$rest" in
-      [$' \t\r\n']*) rest="${rest#?}" ;;
-      ':'*) rest="${rest#:}"; break ;;
-      *) return 1 ;;
-    esac
-  done
-  while true; do
-    case "$rest" in
-      [$' \t\r\n']*) rest="${rest#?}" ;;
-      *) break ;;
-    esac
-  done
-  case "$rest" in
-    '"'*) rest="${rest#\"}"; printf '%s' "${rest%%\"*}"; return 0 ;;
-    *) return 1 ;;
-  esac
-}
+# All baseline hooks consume host events through one escape-aware, Bash-only parser.
+JSON_INPUT_HELPER="$(dirname "${BASH_SOURCE[0]:-$0}")/json-input.sh"
+[ -r "$JSON_INPUT_HELPER" ] || exit 0
+# shellcheck source=json-input.sh
+. "$JSON_INPUT_HELPER"
+json_get() { pipeline_json_get_string "$INPUT" "$1"; }
 
 CWD="$(json_get cwd || json_get current_dir || true)"
 [ -z "$CWD" ] && CWD="$PWD"
@@ -64,6 +47,26 @@ else
 fi
 yget() { pipeline_state_get "$1" "$2"; }
 
+# review marker is not a generic phase flag.  Only a v2 request bound to the explicitly selected
+# Change may be rendered; an old entry-time marker or a request from another conversation must not
+# make this statusline claim that the currently displayed Change is waiting on review.
+HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || true)"
+REVIEW_HELPER="$HOOK_DIR/review-ack.sh"
+if [ -r "$REVIEW_HELPER" ]; then
+  # shellcheck source=review-ack.sh
+  . "$REVIEW_HELPER"
+fi
+
+review_marker_for_displayed_change() { # $1=marker $2=displayed change name
+  local marked active
+  [ -r "$REVIEW_HELPER" ] || return 1
+  pipeline_review_marker_is_v2 "$1" || return 1
+  marked="$(pipeline_review_marker_change "$1" || true)"
+  [ -n "$marked" ] && [ "$marked" = "$2" ] || return 1
+  active="$(pipeline_review_active_change_name "$ROOT" "$HOOK_DIR" || true)"
+  [ -n "$active" ] && [ "$active" = "$marked" ]
+}
+
 # 最新活跃 change：canonical 存在时按 current.json mtime；仅未迁移 change 才看 YAML。
 NAME="" PHASE="" BEST=0
 for change_dir in "$ROOT"/openspec/changes/*; do
@@ -91,6 +94,9 @@ now="$(date +%s)"
 for kind in confirm review interaction; do
   m="$ROOT/.pipeline-pending-$kind"
   [ -f "$m" ] || continue
+  if [ "$kind" = review ]; then
+    review_marker_for_displayed_change "$m" "$NAME" || continue
+  fi
   case "$kind" in confirm) ttl=300 ;; *) ttl=1800 ;; esac
   # GNU `stat -f` 是文件系统状态模式（非 mtime），在 Linux 上会"成功"吐非数字，兜底永不触发
   # ——先试 GNU 语法（-c）+ 数字校验，而非只靠退出码判断。

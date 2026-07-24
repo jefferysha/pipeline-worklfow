@@ -4,7 +4,7 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { existsSync } from 'node:fs'
-import { mkdir, readFile, readdir, stat, unlink, writeFile } from 'node:fs/promises'
+import { appendFile, mkdir, readFile, readdir, stat, unlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { createDashboardServer } from './server.js'
 import type { DashboardServer } from './types.js'
@@ -15,8 +15,8 @@ import {
 } from './test-support.js'
 import type { FlowEngine, StateStore } from '@pipeline-lite/kernel'
 import {
-  createFlowEngine, createLoopLedgerStore, loadManifest, reviewHint, secretsPath,
-  TRANSITION_EVENTS as KERNEL_EVENTS, eventEdge as kernelEventEdge,
+  createLoopLedgerStore, loadManifest, secretsPath,
+  registerProjectRoot, TRANSITION_EVENTS as KERNEL_EVENTS, eventEdge as kernelEventEdge,
 } from '@pipeline-lite/kernel'
 import { TRANSITION_EVENTS, eventEdge } from './transition.js'
 import type { LoopActivationValidator } from './loops.js'
@@ -56,6 +56,7 @@ interface Harness {
 
 async function start(opts?: {
   version?: string
+  releaseId?: string
   token?: string
   pollIntervalMs?: number
   execDocker?: import('./dockerImages.js').ExecDockerFn
@@ -76,6 +77,7 @@ async function start(opts?: {
   const worktreeDir = await makeWorktreeDir()
   const srv = createDashboardServer({
     version: opts?.version ?? '9.9.9',
+    releaseId: opts?.releaseId,
     token: opts?.token ?? 'secret-token-abc',
     registry: () => [root],
     store,
@@ -107,14 +109,16 @@ async function startWithConfig(opts?: { version?: string; token?: string }): Pro
 }
 
 describe('GET /api/health —— 存活探针 + 本 server 版本（B4）', () => {
-  it('回显 ok/scope/version（version 取注入值，证明报的是本 server 版本非硬编码）', async () => {
-    const h = await start({ version: '3.1.4' })
+  it('回显 ok/scope/version/releaseId（证明版本和已发布 payload 身份都不是硬编码）', async () => {
+    const releaseId = `sha256-${'a'.repeat(64)}`
+    const h = await start({ version: '3.1.4', releaseId })
     const r = await reqGet(h.port, '/api/health')
     expect(r.status).toBe(200)
-    const body = r.json<{ ok: boolean; scope: string; version: string }>()
+    const body = r.json<{ ok: boolean; scope: string; version: string; releaseId?: string }>()
     expect(body.ok).toBe(true)
     expect(body.scope).toBe('global')
     expect(body.version).toBe('3.1.4')
+    expect(body.releaseId).toBe(releaseId)
   })
 })
 
@@ -170,10 +174,10 @@ describe('POST /api/router/preview —— 公共 Track Router 真决策预览', 
       suppressed_reason: string | null
     }>()
     expect(body.suppressed_reason).toBeNull()
-    expect(body.winner).toMatchObject({ track: { id: 'frontend' }, score: 2, priority: 300, order: 2 })
-    expect(body.candidates.map((candidate) => candidate.track.id)).toEqual(['chat', 'pm', 'frontend', 'backend'])
+    expect(body.winner).toMatchObject({ track: { id: 'frontend' }, score: 2, priority: 300, order: 3 })
+    expect(body.candidates.map((candidate) => candidate.track.id)).toEqual(['chat', 'simple', 'pm', 'frontend', 'backend'])
     expect(body.candidates[0]).toMatchObject({ score: 0, routable: false, order: 0 })
-    expect(score).toHaveBeenCalledTimes(3)
+    expect(score).toHaveBeenCalledTimes(5)
   })
 
   it('讨论型 prompt 返回 suppression；空 prompt/root 未注册在执行 scorer 前拒绝', async () => {
@@ -195,7 +199,7 @@ describe('POST /api/router/preview —— 公共 Track Router 真决策预览', 
     const outsider = await makeProject()
     const unknownRoot = await reqPost(h.port, '/api/router/preview', { root: outsider, prompt: 'backend' }, auth)
     expect(unknownRoot.status).toBe(404)
-    expect(score).toHaveBeenCalledTimes(3)
+    expect(score).toHaveBeenCalledTimes(4)
   })
 
   it('draft_track 仅在本次预览追加 custom 候选，生产 scorer 看见未保存 pattern', async () => {
@@ -217,7 +221,7 @@ describe('POST /api/router/preview —— 公共 Track Router 真决策预览', 
     expect(response.status).toBe(200)
     expect(response.json<{ winner: { track: { id: string } }; candidates: Array<{ track: { id: string } }> }>()).toMatchObject({
       winner: { track: { id: 'release' } },
-      candidates: [{ track: { id: 'chat' } }, { track: { id: 'pm' } }, { track: { id: 'frontend' } }, { track: { id: 'backend' } }, { track: { id: 'release' } }],
+      candidates: [{ track: { id: 'chat' } }, { track: { id: 'simple' } }, { track: { id: 'pm' } }, { track: { id: 'frontend' } }, { track: { id: 'backend' } }, { track: { id: 'release' } }],
     })
     expect(score).toHaveBeenCalledWith('draft-only', 'representative intent')
   })
@@ -645,8 +649,8 @@ describe('POST /api/change/<name>/transition —— B5 token 鉴权', () => {
   })
 })
 
-describe('POST /api/change/<name>/transition —— G1 default 轨收尾 parity（breadcrumb + review-marker，修 P1 复核门失效 bug）', () => {
-  it('进入 review 相位（explore）→ 真写 changeDir/.breadcrumb 与该 change 所属 project root 的 .pipeline-pending-review（对齐 CLI cmdTransition 收尾，精确格式）', async () => {
+describe('POST /api/change/<name>/transition —— G1 default 轨收尾（breadcrumb + 显式 review receipt）', () => {
+  it('进入 review 相位（explore）→ 真写 changeDir/.breadcrumb，但不在进入时自锁 review marker', async () => {
     const h = await start()
     const r = await reqPost(h.port, `/api/change/${h.name}/transition`, { root: h.root, event: 'open-complete' }, {
       headers: { Authorization: `Bearer ${h.token}` },
@@ -661,16 +665,20 @@ describe('POST /api/change/<name>/transition —— G1 default 轨收尾 parity�
     expect(existsSync(breadcrumbPath)).toBe(true)
     expect(await readFile(breadcrumbPath, 'utf8')).toBe(`pipeline:${h.name} phase=explore\n`)
 
-    // .pipeline-pending-review：写在该 change 所属 project 的 root（h.root）——server 是多项目
-    // 守护进程，没有单一"当前 cwd"概念，不能照抄 CLI 的 process.cwd() 闭包写法。精确三行格式
-    // （相位/指引/change 名），指引文案复用 kernel reviewHint 而非在测试里重猜一遍字面量。
+    // review marker 只由 `pipeline review request` 在产物准备好后写入 canonical receipt 的 hook
+    // projection；进入 review phase 时写它会把该 phase 的实际工作自身锁死。
     const markerPath = join(h.root, '.pipeline-pending-review')
-    expect(existsSync(markerPath)).toBe(true)
-    expect(await readFile(markerPath, 'utf8')).toBe(`explore\n${reviewHint('explore')}\n${h.name}\n`)
+    expect(existsSync(markerPath)).toBe(false)
   })
 
   it('转换到非 review 相位（build）→ 不写 .pipeline-pending-review，但仍真写 .breadcrumb（两个决策相互独立，非「都跟着 review 走」）', async () => {
     const h = await start()
+    await mkdir(join(h.root, '.pipeline'), { recursive: true })
+    await writeFile(
+      join(h.root, '.pipeline', 'automation.json'),
+      `${JSON.stringify({ version: 1, enabled: true, default_opt_in: true })}\n`,
+      'utf8',
+    )
     // 手动把 change 推到 spec 相位。default 的 PM 轨现在也受 OpenSpec plan 契约治理，
     // 因此填入已由真实 ledger 绑定的 Superpowers plan，聚焦测试 marker 写入条件本身。
     const state = await h.store.read(h.changeDir)
@@ -683,8 +691,10 @@ describe('POST /api/change/<name>/transition —— G1 default 轨收尾 parity�
       headers: { Authorization: `Bearer ${h.token}` },
     })
     expect(r.status).toBe(200)
-    const body = r.json<{ ok: boolean; to: string }>()
+    const body = r.json<{ ok: boolean; to: string; auto_enqueue?: string }>()
     expect(body.to).toBe('build')
+    expect(body.auto_enqueue).toBe('queued')
+    expect((await h.store.read(h.changeDir)).fields.automation).toBe('queued')
 
     expect(existsSync(join(h.root, '.pipeline-pending-review'))).toBe(false)
     // breadcrumb 是「default 轨转换成功即总写」，不受 review 相位判定影响——若实现误把两者
@@ -694,20 +704,6 @@ describe('POST /api/change/<name>/transition —— G1 default 轨收尾 parity�
     expect(await readFile(breadcrumbPath, 'utf8')).toBe(`pipeline:${h.name} phase=build\n`)
   })
 
-  it('review marker 真正配置驱动，非硬编码 explore/spec/verify：reviewPhases 改成空集后，explore 也不写 marker', async () => {
-    // 复制真实 manifest 但清空 reviewPhases——若实现在别处硬编码了相位名而非真读
-    // flow.manifest.reviewPhases，这个 flow 覆盖不会改变行为，本测试就会抓到假的「配置驱动」声称。
-    const manifest = loadManifest(repoManifestPath())
-    const flow: FlowEngine = createFlowEngine({ ...manifest, reviewPhases: [] })
-    const h = await start({ flow })
-
-    const r = await reqPost(h.port, `/api/change/${h.name}/transition`, { root: h.root, event: 'open-complete' }, {
-      headers: { Authorization: `Bearer ${h.token}` },
-    })
-    expect(r.status).toBe(200)
-    expect(r.json<{ to: string }>().to).toBe('explore')
-    expect(existsSync(join(h.root, '.pipeline-pending-review'))).toBe(false)
-  })
 })
 
 describe('POST 写端点纵深防线（老仓安全模型 parity）', () => {
@@ -1212,7 +1208,7 @@ describe('GET /api/config?root= —— G3/T-R5 动态 Track config（本机回�
     expect(r.status).toBe(404)
   })
 
-  it('绑定注册 root，返回 dashboard 所需的完整 effective registry（含第 5 自定义轨）', async () => {
+  it('绑定注册 root，返回 dashboard 所需的完整 effective registry（含第 6 条自定义轨）', async () => {
     const h = await startWithConfig()
     const snap = (await reqGet(h.port, '/api/snapshot')).json<{ capabilities: Record<string, boolean> }>()
     expect(snap.capabilities.config).toBe(true)
@@ -1244,8 +1240,8 @@ tracks:
     expect(body.generated_at).toBe('2026-07-07T00:00:00Z')
     expect(body.source).toBe('project-file')
     expect(body.revision).toMatch(/^[0-9a-f]{16}$/)
-    expect(body.tracks.map((track: { id: string }) => track.id)).toEqual(['chat', 'pm', 'frontend', 'backend', 'qa'])
-    expect(body.tracks[4]).toEqual({
+    expect(body.tracks.map((track: { id: string }) => track.id)).toEqual(['chat', 'simple', 'pm', 'frontend', 'backend', 'qa'])
+    expect(body.tracks.find((track: { id: string }) => track.id === 'qa')).toEqual({
       id: 'qa',
       label: 'Quality',
       builtin: false,
@@ -1263,13 +1259,13 @@ tracks:
     expect(body.mandatory_skills['open._all']).toContain('openspec-propose')
   })
 
-  it('项目无 tracks.yaml → kernel 合法 builtin-only 四轨，不要求迁移文件', async () => {
+  it('项目无 tracks.yaml → kernel 合法 builtin-only 五轨，不要求迁移文件', async () => {
     const h = await startWithConfig()
     const r = await reqGet(h.port, `/api/config?root=${encodeURIComponent(h.root)}`)
     expect(r.status).toBe(200)
     const body = r.json<any>()
     expect(body.source).toBe('builtin-only')
-    expect(body.tracks.map((track: { id: string }) => track.id)).toEqual(['chat', 'pm', 'frontend', 'backend'])
+    expect(body.tracks.map((track: { id: string }) => track.id)).toEqual(['chat', 'simple', 'pm', 'frontend', 'backend'])
   })
 
   it('缺 root → 400；未注册 root → 404', async () => {
@@ -1370,7 +1366,7 @@ describe('GET/POST/PATCH/DELETE /api/tracks —— v3 Studio Track CRUD', () => 
     const initial = await reqGet(h.port, `/api/tracks?root=${encodeURIComponent(h.root)}`)
     expect(initial.status).toBe(200)
     const first = initial.json<any>()
-    expect(first.tracks.map((track: { id: string }) => track.id)).toEqual(['chat', 'pm', 'frontend', 'backend'])
+    expect(first.tracks.map((track: { id: string }) => track.id)).toEqual(['chat', 'simple', 'pm', 'frontend', 'backend'])
 
     const created = await reqPost(h.port, '/api/tracks', {
       root: h.root,
@@ -2108,15 +2104,15 @@ describe('POST /api/afk/:name/enqueue —— 挂入 AFK 队列（afk-workbench �
     expect(await h.store.get(h.changeDir, 'automation')).toBe('running')
   })
 
-  it('PM track → 400（PM 永不入队 AFK，同 automation 包 queue/gate.ts::optedIn 的硬规则）', async () => {
+  it('PM track → 200：显式 AFK 请求进入同一授权队列', async () => {
     // start() 的本地 harness 不接受 track 覆盖（固定走 initChange 默认 backend）——真设置
     // track 字段本身就是本端点要判定的前置状态，这里直接调 store.set 覆盖，同本文件其它
     // "先摆好状态再断言判定"用例的一致写法（如上面 cancel/retry 系列对 automation 字段的做法）。
     const h = await start()
     await h.store.set(h.changeDir, 'track', 'pm')
     const r = await reqPost(h.port, `/api/afk/${h.name}/enqueue`, { root: h.root }, { headers: { Authorization: `Bearer ${h.token}` } })
-    expect(r.status).toBe(400)
-    expect(await h.store.get(h.changeDir, 'automation')).not.toBe('queued')
+    expect(r.status).toBe(200)
+    expect(await h.store.get(h.changeDir, 'automation')).toBe('queued')
   })
 
   it('动态 data track 的 automationEligible=false → 400（与 track id 无关）', async () => {
@@ -2226,7 +2222,7 @@ describe('GET /api/workflows —— 列出自定义 workflow（GOAL E8）', () =
     expect(r.status).toBe(404)
   })
 
-  it('进程外动态新增 registry 条目 → 403，不在首个 workflow 请求上给已换位 pathname 建锚', async () => {
+  it('进程外动态新增 registry 条目 → 首个 workflow 请求一次性捕获可信 inode 锚', async () => {
     const store = newStore()
     const root = await makeProject()
     const roots: string[] = []
@@ -2236,8 +2232,8 @@ describe('GET /api/workflows —— 列出自定义 workflow（GOAL E8）', () =
     roots.push(root)
 
     const r = await reqGet(port, `/api/workflows?root=${encodeURIComponent(root)}`)
-    expect(r.status).toBe(403)
-    expect(r.json<{ error: string }>().error).toContain('启动/显式注册')
+    expect(r.status).toBe(200)
+    expect(r.json<{ names: string[] }>().names).toEqual([])
   })
 
   it('真扫 .pipeline/workflows/*.yaml，排除 default，200 返回 names', async () => {
@@ -2338,6 +2334,25 @@ describe('GET /api/workflows/:name —— 读单个 workflow（GOAL E8）', () =
     const body = r.json<{ name: string; steps: Array<{ id: string }> }>()
     expect(body.name).toBe('onboarding')
     expect(body.steps.map((s) => s.id)).toEqual(['s1'])
+  })
+
+  it('插件内建 simple workflow 无需项目文件，并且项目同名文件不能覆盖它', async () => {
+    const { mkdir, writeFile } = await import('node:fs/promises')
+    const h = await start()
+    const dir = join(h.root, '.pipeline', 'workflows')
+    await mkdir(dir, { recursive: true })
+    await writeFile(
+      join(dir, 'simple.yaml'),
+      'name: simple\nsteps:\n  - id: shadow\n    label: shadow\n    gate: null\n    skills: []\n    inputs: []\n    outputs: []\n    guards: []\n    transitions: []\n',
+      'utf8',
+    )
+
+    const r = await reqGet(h.port, `/api/workflows/simple?root=${encodeURIComponent(h.root)}`)
+    expect(r.status).toBe(200)
+    const body = r.json<{ name: string; steps: Array<{ id: string }> }>()
+    expect(body.name).toBe('simple')
+    expect(body.steps.map((step) => step.id)).toEqual(['change', 'verify', 'done', 'escalated'])
+    expect(r.body).not.toContain('shadow')
   })
 
   it('workflow 不存在 → 404', async () => {
@@ -3501,7 +3516,9 @@ describe('GET /api/automation —— AFK 执行参数（T21）', () => {
     expect(r.status).toBe(200)
     const body = r.json<{ ok: boolean; settings: Record<string, unknown> }>()
     expect(body.ok).toBe(true)
-    expect(body.settings).toEqual({ max_parallel: 4, max_retries: 1, default_opt_in: false, image: '' })
+    expect(body.settings).toEqual({
+      enabled: false, max_parallel: 4, max_retries: 1, default_opt_in: false, image: '',
+    })
   })
 
   it('root 未注册 → 404（信任锚，同兄弟端点）', async () => {
@@ -3512,7 +3529,9 @@ describe('GET /api/automation —— AFK 执行参数（T21）', () => {
 })
 
 describe('POST /api/automation —— AFK 执行参数写回（T21）', () => {
-  const SETTINGS = { max_parallel: 6, max_retries: 2, default_opt_in: true, image: 'ghcr.io/a/b:v1' }
+  const SETTINGS = {
+    enabled: true, max_parallel: 6, max_retries: 2, default_opt_in: true, image: 'ghcr.io/a/b:v1',
+  }
 
   it('无 token → 401（B5 写端点纵深）', async () => {
     const h = await start()
@@ -3634,6 +3653,36 @@ describe('POST /api/projects —— 注册项目进机器级注册表（G18）',
     }, auth)
     expect(created.status).toBe(200)
     expect(existsSync(join(proj, '.pipeline', 'workflows', 'dynamic.yaml'))).toBe(true)
+  })
+
+  it('CLI 在 server 启动后直接登记的 root 首次 workflow 请求会一次性捕获锚，换位后仍拒绝重绑', async () => {
+    const { mkdtemp, rename, symlink } = await import('node:fs/promises')
+    const { tmpdir } = await import('node:os')
+    const h = await startWithHome()
+    const proj = await makeProject()
+    const auth = { headers: { Authorization: `Bearer ${h.token}` } }
+
+    // 同 `pipeline init` 的真实写路径：CLI 直接更新机器级 registry，不会经 dashboard HTTP 端点。
+    expect(await registerProjectRoot(h.registryPath, proj)).toBe(true)
+    const listed = await reqGet(h.port, `/api/workflows?root=${encodeURIComponent(proj)}`)
+    expect(listed.status).toBe(200)
+    expect(listed.json<{ names: string[] }>().names).toEqual([])
+
+    const created = await reqPost(h.port, '/api/workflows/dynamic', {
+      root: proj,
+      name: 'dynamic',
+      steps: [{ id: 'done', label: '', gate: null, skills: [], inputs: [], outputs: [], guards: [], transitions: [] }],
+    }, auth)
+    expect(created.status).toBe(200)
+
+    // 首次捕获后的 inode 是不可替换的；后续 pathname 换位绝不能触发第二次学习。
+    const parked = `${proj}.captured-inode`
+    const outside = await mkdtemp(join(tmpdir(), 'wf-cli-lazy-anchor-outside-'))
+    await rename(proj, parked)
+    await symlink(outside, proj, 'dir')
+    const swapped = await reqGet(h.port, `/api/workflows?root=${encodeURIComponent(proj)}`)
+    expect(swapped.status).toBe(403)
+    expect(swapped.body).not.toContain('dynamic')
   })
 
   it('200：写盘走 kernel 原子原语——内容逐字节（JSON 数组+2 空格缩进+尾换行）且同目录无 *.tmp* 残留（观察项④）', async () => {
@@ -3854,6 +3903,42 @@ describe('POST /api/changes —— pipeline init 的 HTTP 化（G18）', () => {
     const r = await reqPost(h.port, '/api/changes', { root: proj, name: 'fe-x', track: 'frontend' }, { headers: { Authorization: `Bearer ${h.token}` } })
     expect(r.status).toBe(200)
     expect(await h.store.get(join(proj, 'openspec', 'changes', 'fe-x'), 'track')).toBe('frontend')
+  })
+
+  it('simple 的 HTTP transition 也不能绕过当前 step 声明的 skill', async () => {
+    const h = await startWithHome()
+    const proj = await withRegisteredProject(h)
+    const created = await reqPost(
+      h.port,
+      '/api/changes',
+      { root: proj, name: 'simple-http', track: 'simple' },
+      { headers: { Authorization: `Bearer ${h.token}` } },
+    )
+    expect(created.status).toBe(200)
+    const route = '/api/change/simple-http/transition'
+    const blocked = await reqPost(
+      h.port,
+      route,
+      { root: proj, event: 'change-complete' },
+      { headers: { Authorization: `Bearer ${h.token}` } },
+    )
+    expect(blocked.status).toBe(409)
+    expect(blocked.json<{ code?: string }>().code).toBe('step-skills-incomplete')
+
+    const dir = join(proj, 'openspec', 'changes', 'simple-http')
+    await appendFile(
+      join(dir, '.pipeline-history.jsonl'),
+      `${JSON.stringify({ ts: '2026-07-24T00:00:00Z', kind: 'tool', raw: 'Skill: simple-task' })}\n`,
+      'utf8',
+    )
+    const applied = await reqPost(
+      h.port,
+      route,
+      { root: proj, event: 'change-complete' },
+      { headers: { Authorization: `Bearer ${h.token}` } },
+    )
+    expect(applied.status).toBe(200)
+    expect(await h.store.get(dir, 'phase')).toBe('verify')
   })
 
   it('200 自定义 workflow：phase 种到首 step、workflow 字段写入（对齐 cli init --workflow 语义）', async () => {

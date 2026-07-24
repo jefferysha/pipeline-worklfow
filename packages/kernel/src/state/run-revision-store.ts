@@ -12,6 +12,8 @@ import { join } from 'node:path'
 import {
   FIELD_ORDER,
   LIST_FIELDS,
+  REVIEW_GATE_FIELD_DEFAULTS,
+  REVIEW_GATE_FIELDS,
   type FieldName,
   type PipelineState,
   type RunMetadata,
@@ -147,18 +149,49 @@ function canonicalRunMetadata(value: unknown): RunMetadata | undefined {
   }
 }
 
-function canonicalState(value: unknown): PipelineState {
+/**
+ * Canonical schemaVersion stayed at 1 across two review-receipt additions:
+ *
+ * - pre-receipt revisions omitted the complete review-gate suffix;
+ * - the next release wrote the four phase/status/timestamp fields but not the later exact-event
+ *   binding field.
+ *
+ * The first shape is semantically an empty receipt. The second is safe only when all of its old
+ * receipt fields are empty: a non-empty receipt without its exact outgoing event must remain
+ * unreadable rather than being allowed to approve an arbitrary transition. New writes always
+ * publish the complete current shape.
+ */
+function canonicalState(value: unknown, opts: { allowLegacyReviewGateOmission?: boolean } = {}): PipelineState {
   const raw = ownRecord(value)
   if (!raw || Object.keys(raw).some((key) => !['fields', 'runMetadata', 'opaqueTail'].includes(key))) {
     throw new RunStateCorruptError('canonical state 形状非法')
   }
   const rawFields = ownRecord(raw.fields)
-  if (!rawFields || Object.keys(rawFields).length !== FIELD_ORDER.length
-    || Object.keys(rawFields).some((key) => !FIELD_SET.has(key))) {
+  const rawKeys = rawFields ? Object.keys(rawFields) : []
+  const missing = rawFields
+    ? FIELD_ORDER.filter((field) => !Object.prototype.hasOwnProperty.call(rawFields, field))
+    : []
+  const missingReviewGateFields = REVIEW_GATE_FIELDS.filter((field) => missing.includes(field))
+  const isCompleteReviewGateOmission = missingReviewGateFields.length === REVIEW_GATE_FIELDS.length
+  const isEmptyFourFieldReceiptWithoutEvent = missingReviewGateFields.length === 1
+    && missingReviewGateFields[0] === 'review_gate_event'
+    && REVIEW_GATE_FIELDS
+      .filter((field) => field !== 'review_gate_event')
+      .every((field) => rawFields?.[field] === '')
+  const legacyReviewGateDefaults = opts.allowLegacyReviewGateOmission === true
+    && (isCompleteReviewGateOmission || isEmptyFourFieldReceiptWithoutEvent)
+    ? new Set<FieldName>(missingReviewGateFields)
+    : new Set<FieldName>()
+  if (!rawFields || rawKeys.some((key) => !FIELD_SET.has(key))
+    || (legacyReviewGateDefaults.size === 0 && missing.length !== 0)) {
     throw new RunStateCorruptError('canonical state.fields 不是 FIELD_ORDER 闭集')
   }
   const fields = {} as Record<FieldName, string | string[]>
   for (const field of FIELD_ORDER) {
+    if (legacyReviewGateDefaults.has(field)) {
+      fields[field] = REVIEW_GATE_FIELD_DEFAULTS[field as typeof REVIEW_GATE_FIELDS[number]]
+      continue
+    }
     const fieldValue = rawFields[field]
     if (typeof fieldValue === 'string') {
       fields[field] = fieldValue
@@ -288,7 +321,7 @@ function parseRunRevision(raw: string, source: string): RunRevision {
   if (observedDigest !== record.stateDigest) {
     throw new RunStateCorruptError(`${source}: digest 不匹配`)
   }
-  const state = canonicalState(record.state)
+  const state = canonicalState(record.state, { allowLegacyReviewGateOmission: true })
   const effects = mutation.effects.map(canonicalEffect)
   const transitionRecordId = mutation.transitionRecordId as string | undefined
   const transitionRecordDigest = mutation.transitionRecordDigest as string | undefined

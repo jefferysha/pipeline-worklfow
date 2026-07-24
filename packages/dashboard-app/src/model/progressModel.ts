@@ -10,7 +10,7 @@
  * AUTOMATION_STATES 真实字符串为准，server afk.ts laneOf 同一折叠口径）：
  *   running‖scheduled → running；queued → queued；failed‖conflict → failed；
  *   paused → gate（L1/L2 report-only 跑完停住，等人复核放行——demo「等你确认 · 跑完停住」）；
- *   off / merged / 空 / 未知值 → 回到 host 阶段判定：
+ *   off / merged / 空 / 未知值 → 若有新鲜且显式绑定的 terminalActivity 则 running；否则回到 host 阶段判定：
  *     review 门阶段 → 产出/证据齐可拍板 = gate，欠产出 = agent（「等 agent 补产出」）；
  *     其余（含 confirm 门与 rules 缺失）→ agent（活在终端里由 agent 推进）。
  *
@@ -95,6 +95,9 @@ export function changeProgressState(c: ChangeSnapshot, rules: ProgressRules | un
   if (automation === 'queued') return 'queued'
   if (automation === 'failed' || automation === 'conflict') return 'failed'
   if (automation === 'paused') return 'gate'
+  // A terminal heartbeat is emitted only after the pipeline root bound this exact host session to
+  // this exact Change. It is a liveness overlay, never a replacement for canonical phase state.
+  if (c.terminalActivity !== undefined) return 'running'
   // off / merged / 空 / 未知值 → host 阶段判定
   if (isDashboardGate(rules, c.phase)) {
     return missingGateArtifacts(c, rules).length > 0 ? 'agent' : 'gate'

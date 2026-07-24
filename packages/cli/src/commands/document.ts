@@ -12,6 +12,7 @@ import {
   isDocumentKind,
   isOpenSpecDocumentContractRequired,
   loadWorkflow,
+  migrateLegacyDeltaDocument,
   recordDocument,
   recordDocumentReads,
   resolveWorkflowName,
@@ -25,6 +26,7 @@ import type {
 } from '@pipeline-lite/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
 import { changeDir, isValidChangeName } from '../paths.js'
+import { reconcileCodexSkillEvidence } from '../codexSkillReceipt.js'
 
 interface GovernedDocumentContext {
   readonly workflowName: string
@@ -101,8 +103,8 @@ export async function cmdDocumentInit(deps: CliDeps, name: string): Promise<numb
  * `pipeline document record`: bind a real document plus actual Skill invocation evidence.
  *
  * `backfill` is deliberately explicit for an installed-plugin upgrade: an older Change may already
- * have passed the phase that originally owns an existing document. It cannot register a future
- * phase, cannot bypass producer evidence, and cannot bypass the digest/path checks in kernel.
+ * have passed the phase that originally owns an unrecorded document. It cannot overwrite an existing
+ * record, register a future phase, bypass current producer evidence, or bypass digest/path checks.
  */
 export async function cmdDocumentRecord(
   deps: CliDeps,
@@ -122,6 +124,18 @@ export async function cmdDocumentRecord(
     await deps.store.withLock(dir, async () => {
       const context = governedDocumentContext(deps, await deps.store.read(dir))
       const phase = assertGoverned(context)
+      // Native PostToolUse remains the fast path.  On Codex hosts that omit that callback for a
+      // completed `exec` tool call, reconcile the earlier PreToolUse receipt against the
+      // host-owned transcript *inside this same change lock* before the kernel inspects history.
+      // A receipt alone cannot pass this point.
+      await reconcileCodexSkillEvidence({
+        repoRoot: deps.cwd,
+        changeDir: dir,
+        producer,
+        recordedAt: deps.clock(),
+        history: deps.history,
+        evidenceScope: phase,
+      })
       await recordDocument({
         repoRoot: deps.cwd,
         changeDir: dir,
@@ -131,6 +145,33 @@ export async function cmdDocumentRecord(
         producer,
         recordedAt: deps.clock(),
         allowBackfill: backfill,
+      })
+    })
+    return 0
+  } catch (error) {
+    return reject(deps, errMsg(error))
+  }
+}
+
+/** Explicitly map one legacy delta record to its canonical capability path without changing bytes. */
+export async function cmdDocumentMigrateDelta(
+  deps: CliDeps,
+  name: string,
+  legacyPath: string,
+  canonicalPath: string,
+): Promise<number> {
+  const dir = assertChangeName(deps, name)
+  if (!dir) return 1
+  if (!legacyPath || !canonicalPath) return reject(deps, 'legacy-path 与 canonical-path 均不得为空')
+  try {
+    await deps.store.withLock(dir, async () => {
+      const context = governedDocumentContext(deps, await deps.store.read(dir))
+      assertGoverned(context)
+      await migrateLegacyDeltaDocument({
+        repoRoot: deps.cwd,
+        changeDir: dir,
+        legacyPath,
+        canonicalPath,
       })
     })
     return 0

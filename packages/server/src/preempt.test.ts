@@ -5,9 +5,10 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { spawn, type ChildProcess } from 'node:child_process'
 import { writeFile } from 'node:fs/promises'
+import { createServer } from 'node:net'
 import { join } from 'node:path'
 import {
-  compareVersions, decidePreemption, preemptOldServer, probeHealth, readPidfile,
+  compareVersions, decidePreemption, parseListenerPids, preemptOldServer, probeHealth, probePortOpen, readPidfile,
 } from './preempt.js'
 import { createDashboardServer } from './server.js'
 import type { DashboardServer } from './types.js'
@@ -36,6 +37,28 @@ describe('decidePreemption —— bind / reuse / preempt', () => {
   })
   it('既有同版本 → reuse', () => {
     expect(decidePreemption({ ok: true, scope: 'global', version: '0.1.0' }, '0.1.0')).toBe('reuse')
+  })
+  it('同一语义版本但不可变 release 已变化 → preempt，确保每次已发布更新刷新服务', () => {
+    expect(decidePreemption(
+      { ok: true, scope: 'global', version: '0.2.0', releaseId: `sha256-${'a'.repeat(64)}` },
+      '0.2.0',
+      `sha256-${'b'.repeat(64)}`,
+    )).toBe('preempt')
+  })
+  it('同一语义版本且不可变 release 未变化 → reuse', () => {
+    const releaseId = `sha256-${'a'.repeat(64)}`
+    expect(decidePreemption(
+      { ok: true, scope: 'global', version: '0.2.0', releaseId },
+      '0.2.0',
+      releaseId,
+    )).toBe('reuse')
+  })
+  it('同一语义版本但既有服务不能证明 release 身份 → preempt，迁移旧服务', () => {
+    expect(decidePreemption(
+      { ok: true, scope: 'global', version: '0.2.0' },
+      '0.2.0',
+      `sha256-${'a'.repeat(64)}`,
+    )).toBe('preempt')
   })
   it('既有旧版本、我更新 → preempt', () => {
     expect(decidePreemption({ ok: true, scope: 'global', version: '0.1.0' }, '0.2.0')).toBe('preempt')
@@ -66,26 +89,90 @@ describe('readPidfile', () => {
   })
 })
 
+async function freePort(): Promise<number> {
+  const server = createServer()
+  const port = await new Promise<number>((resolve, reject) => {
+    server.once('error', reject)
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address()
+      if (address === null || typeof address === 'string') { reject(new Error('failed to allocate TCP port')); return }
+      resolve(address.port)
+    })
+  })
+  await new Promise<void>((resolve) => server.close(() => resolve()))
+  return port
+}
+
+async function listenerChild(port: number): Promise<ChildProcess> {
+  const script = [
+    "const http = require('node:http')",
+    `http.createServer((_req, res) => res.end('ok')).listen(${port}, '127.0.0.1')`,
+    'setInterval(() => {}, 1 << 30)',
+  ].join(';')
+  const child = spawn(process.execPath, ['-e', script], { stdio: 'ignore' })
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    if (await probePortOpen(port, '127.0.0.1', 100)) return child
+    await new Promise((resolve) => setTimeout(resolve, 25))
+  }
+  throw new Error('listener child did not open its port')
+}
+
+function childPid(child: ChildProcess): number {
+  if (typeof child.pid !== 'number' || child.pid <= 1) throw new Error('listener child has no usable pid')
+  return child.pid
+}
+
+describe('listener PID parsing', () => {
+  it('only admits positive integer listener PIDs and deduplicates them', () => {
+    expect(parseListenerPids('42\n42\n0\n-1\nnot-a-pid\n')).toEqual([42])
+  })
+})
+
 describe('preemptOldServer —— 真读 pidfile + 真 SIGTERM 干掉旧进程', () => {
   it('kill 旧 pid → 子进程真退出、端口空出 → 返回 true', async () => {
     const home = await makeTempHome()
     const pidfile = join(home, '.pipeline-dashboard.server')
-    // 真起一个长活子进程冒充「旧版本 server 进程」
-    const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1 << 30)'], { stdio: 'ignore' })
+    const port = await freePort()
+    // 真起一个 TCP listener。抢占路径必须验证 pid 的确拥有目标端口，不能只信 pidfile。
+    const child = await listenerChild(port)
     children.push(child)
-    await new Promise((r) => setTimeout(r, 100)) // 等 spawn 起来
-    expect(child.pid).toBeGreaterThan(0)
+    const pid = childPid(child)
 
-    // 选一个没人监听的端口号（抢占后「端口空出」判定立刻通过）
-    const freePort = 47653
-    await writeFile(pidfile, JSON.stringify({ pid: child.pid, port: freePort, version: '0.1.0' }), 'utf8')
+    await writeFile(pidfile, JSON.stringify({ pid, port, version: '0.1.0' }), 'utf8')
 
     let exitSignal: NodeJS.Signals | null = null
     const exited = new Promise<void>((resolve) =>
       child.on('exit', (_code, signal) => { exitSignal = signal; resolve() }))
-    const ok = await preemptOldServer(pidfile, freePort, '127.0.0.1', { waitMs: 3000 })
+    const ok = await preemptOldServer(pidfile, port, '127.0.0.1', { waitMs: 3000 })
     expect(ok).toBe(true)
     await exited // 若没真被 kill，这里会挂到测试超时
     expect(exitSignal).toBe('SIGTERM') // 真被我们的 SIGTERM 终结
+  })
+
+  it('legacy server 无 pidfile 时，仅在 health pid 与实际 listener 一致才接管', async () => {
+    const home = await makeTempHome()
+    const pidfile = join(home, '.pipeline-dashboard.server')
+    const port = await freePort()
+    const child = await listenerChild(port)
+    children.push(child)
+    const pid = childPid(child)
+
+    const exited = new Promise<void>((resolve) => child.on('exit', () => resolve()))
+    const ok = await preemptOldServer(pidfile, port, '127.0.0.1', { waitMs: 3000, legacyPid: pid })
+    expect(ok).toBe(true)
+    await exited
+  })
+
+  it('legacy health 报错 pid 不拥有 listener → fail-closed，绝不误杀', async () => {
+    const home = await makeTempHome()
+    const pidfile = join(home, '.pipeline-dashboard.server')
+    const port = await freePort()
+    const child = await listenerChild(port)
+    children.push(child)
+    const pid = childPid(child)
+
+    const ok = await preemptOldServer(pidfile, port, '127.0.0.1', { waitMs: 300, legacyPid: pid - 1 })
+    expect(ok).toBe(false)
+    expect(await probePortOpen(port, '127.0.0.1', 100)).toBe(true)
   })
 })

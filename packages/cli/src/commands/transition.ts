@@ -26,14 +26,14 @@
  * | （全事件）        | L113     | require_phase：当前 phase == 事件 from             | kernel TransitionApplication（planDefaultTransition）✓（本文件收 event-source-mismatch 映射 stderr）|
  * | （全事件）        | L225-226 | phase=to + phase_status（pending/in_progress/done）| kernel flow.transition ✓（相位序泛化）|
  * | （全事件）        | L227     | green [TRANSITION] from → to（stderr）             | 本文件 ✓（lite 用 ASCII "->"，stderr 面 oracle 不比）|
- * | （全事件）        | L239-264 | 进 review 相位落 .pipeline-pending-review 三行     | kernel TransitionApplication（execute 收尾）✓（manifest.reviewPhases 单一真相源）|
+ * | review 出口       | v2       | exact-phase-and-event approval receipt 后才允许离开 review | kernel TransitionApplication（execute 前置）✓ |
  * | （全事件）        | L267     | transitions_history {at,from,to,event}             | history JSONL ✓（event → raw，与 legacy.ts 导入映射同口径；写盘现在也在 kernel 收尾里）|
  * | （全事件）        | L269-300 | lifecycle hooks（manifest pipeline_hooks，ship 受 auto_commit 闸）| 缺 —— 需 kernel/manifest 派生面（BACKLOG #18）+ M2 hooks 接线，本轮不越权 |
  * | explore-complete  | L120-126 | design_doc 非空/非 null/文件存在                   | kernel DefaultEventPolicy guard ✓ |
  * | spec-complete     | L127-138 | track≠pm → plan 非空/非 null/文件存在              | kernel DefaultEventPolicy guard ✓ |
- * | spec-complete     | L231-237 | automation 挂起入队（ac_enabled+opted_in）         | 缺 —— automation 子系统（BACKLOG #29b/M5），本轮不越权 |
+ * | spec-complete     | L231-237 | track 明确授权后 automation 挂起入队               | automation/lifecycle/spec-complete.ts ✓（仅 queued，不启动 runner） |
  * | build-complete    | L144-147 | build_mode/isolation 必须已设                      | kernel DefaultEventPolicy guard ✓ |
- * | build-complete    | L148     | validate_enum isolation ∈ {branch,worktree}        | kernel DefaultEventPolicy guard ✓（set 闸外的纵深防线）|
+ * | build-complete    | current  | validate_enum isolation ∈ {branch,worktree,in-place}| kernel DefaultEventPolicy guard ✓（set 闸外的纵深防线）|
  * | build-complete    | L150-153 | preset=full ∧ build_mode=direct → direct_override=true | kernel DefaultEventPolicy guard ✓ |
  * | build-complete    | L156-161 | build_sha 冻结 = git HEAD stdout；取不到 → WARN 留原值（unborn 仓字面 "HEAD"，T6 怪癖）| kernel DefaultEventPolicy action ✓（WARN 由本文件据 build-sha-missing 警告映射发出）|
  * | verify-pass       | L167-172 | verification_report 非空/非 null/文件存在          | kernel DefaultEventPolicy guard ✓ |
@@ -49,11 +49,14 @@
  * 降级跳过文件面、字段面仍全量——GUARD-RULES §7.2 同款降级口径）。
  */
 import {
-  compileWorkflow, createTransitionApplication, loadRegistry, loadWorkflow, nodeLoopIoStrict,
+  compileWorkflow, completedWorkflowSkillsSinceStepEntry, createTransitionApplication,
+  loadRegistry, loadWorkflow, nodeLoopIoStrict, requireTrack,
 } from '@pipeline-lite/kernel'
 import type { TransitionContext } from '@pipeline-lite/kernel'
+import { enqueueAfterSpecComplete } from '@pipeline-lite/automation'
 import { errMsg, type CliDeps } from '../deps.js'
 import { changeDir, isValidChangeName } from '../paths.js'
+import { reconcileCodexSkillEvidence } from '../codexSkillReceipt.js'
 
 export async function cmdTransition(deps: CliDeps, name: string, event: string): Promise<number> {
   if (!isValidChangeName(name)) {
@@ -62,26 +65,37 @@ export async function cmdTransition(deps: CliDeps, name: string, event: string):
   }
 
   const dir = changeDir(deps.cwd, name)
-  // kernel 单源注入面：文件存在性经 guardCtx（缺省降级跳过文件面），git HEAD 经 deps.gitHeadSha
+  // kernel 单源注入面：文件存在性经 guardCtx（缺省降级跳过文件面）；Git HEAD 与 in-place
+  // 内容基线均由 production deps 绑定当前 Change。
   const context: TransitionContext = {
     fileExists: deps.guardCtx?.(name)?.fileExists,
     gitHeadSha: deps.gitHeadSha,
+    workspaceFingerprint: deps.workspaceFingerprint ? () => deps.workspaceFingerprint!(name) : undefined,
   }
 
-  // breadcrumb/review-marker 端口绑定：与改动前直接喂给 applyBreadcrumbTail/applyReviewMarkerTail
-  // 的绑定逻辑逐字一致，只是现在整体交给 TransitionApplication 编排，不再由本文件逐步调用。
-  // writeReviewMarker 的 root 形参在 CLI 单进程场景被适配掉（CLI 用闭包 cwd，不受传入 root 值
-  // 影响；server 的多项目端口形状才真正需要 root）。
+  // breadcrumb 收尾由 TransitionApplication 统一编排；review marker 不再在“进入”时由
+  // transition 写入，而由 phase 完成后的 `pipeline review request` 专职写入。
   const app = createTransitionApplication({
     runRepository: deps.runRepo,
     flow: deps.flow,
     clock: deps.clock,
     history: deps.history,
     breadcrumb: deps.writeBreadcrumb ? { write: deps.writeBreadcrumb } : undefined,
-    reviewMarker: deps.writeReviewMarker
-      ? { write: (_root, content) => deps.writeReviewMarker!(content) }
-      : undefined,
     documentEvidence: deps.documentEvidence,
+    completedStepSkills: async ({ changeDir: targetDir, stepId, requiredSkillIds }) => {
+      await reconcileCodexSkillEvidence({
+        repoRoot: deps.cwd,
+        changeDir: targetDir,
+        candidateSkillIds: requiredSkillIds,
+        recordedAt: deps.clock(),
+        history: deps.history,
+        evidenceScope: stepId,
+      })
+      return completedWorkflowSkillsSinceStepEntry(
+        (await deps.readHistoryRaw?.(targetDir)) ?? '',
+        stepId,
+      )
+    },
     resolveConstraintContext: async ({ policy }) => {
       const registry = loadRegistry(deps.cwd, nodeLoopIoStrict)
       if (registry.data === null) throw new Error(`loops registry 无法校验：${registry.errors.join('；')}`)
@@ -123,14 +137,32 @@ export async function cmdTransition(deps: CliDeps, name: string, event: string):
                 case 'history':
                   deps.io.err(`WARN: history 写入失败: ${errMsg(w.cause)}`)
                   break
-                case 'review-marker':
-                  deps.io.err(`WARN: review marker 写入失败: ${errMsg(w.cause)}`)
-                  break
               }
               break
           }
         }
         deps.io.err(`[TRANSITION] ${name}: ${result.from} -> ${result.to}`)
+        // TransitionApplication 已完成 canonical commit 后才进入 AFK 后置编排。它严格只认
+        // spec-complete/spec→build，且在同一 change lock 内复核仍为 build；因此队列故障绝不
+        // 回滚已经真实成功的 workflow transition，也不会劫持普通 frontend/backend Build。
+        try {
+          const auto = await enqueueAfterSpecComplete({
+            repoRoot: deps.cwd,
+            store: deps.store,
+            clock: deps.clock,
+            resolveTrackPolicy: (trackId) => requireTrack(deps.loadRegistry(), trackId).policyProfile,
+          }, {
+            changeName: name,
+            event,
+            from: result.from,
+            to: result.to,
+          })
+          if (auto.kind === 'queued') {
+            deps.io.err(`[AFK] ${name} 已由 spec-complete 自动挂队（automation=queued，默认 L1 report-only）`)
+          }
+        } catch (autoError) {
+          deps.io.err(`WARN: ${name} AFK 自动挂队失败（transition 已成功）: ${errMsg(autoError)}`)
+        }
         return 0
       }
       case 'unknown-event':
@@ -162,10 +194,21 @@ export async function cmdTransition(deps: CliDeps, name: string, event: string):
         deps.io.err(`ERROR: step '${result.stepId}' guard 未通过：`)
         for (const line of result.failures) deps.io.err(line)
         return 2
+      case 'step-skills-incomplete':
+        deps.io.err(`ERROR: step '${result.stepId}' 尚未完成声明的 skill：`)
+        for (const skillId of result.missing) deps.io.err(`  - ${skillId}`)
+        return 2
       case 'document-evidence-failed':
         deps.io.err(`ERROR: OpenSpec 文档证据未通过（phase=${result.phase}）：`)
         for (const blocker of result.blockers) deps.io.err(`  - ${blocker}`)
         return 1
+      case 'review-approval-required':
+        deps.io.err(
+          `ERROR: phase '${result.phase}' 的 event '${result.event}' 尚未取得人工确认；先运行 ` +
+          `pipeline review request ${name} --event ${result.event}，` +
+          '展示产物并等待用户“确认继续”，再重发本次 transition',
+        )
+        return 2
       case 'constraint-denied':
         deps.io.err(`ERROR: automation constraint denied transition: ${result.reason}`)
         return 1

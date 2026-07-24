@@ -1,0 +1,88 @@
+{"ts":"2026-07-24T08:41:24Z","kind":"init"}
+{"ts":"2026-07-24T08:41:24Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated"}
+{"ts":"2026-07-24T08:41:35Z","kind":"tool","raw":"CodexSkillRead: openspec-propose"}
+{"ts":"2026-07-24T08:41:58Z","kind":"transition","from":"open","to":"explore","raw":"open-complete","transitionRecordId":"0a28a334-d16a-4a22-b159-66bc59ae74d1"}
+{"ts":"2026-07-24T08:42:04Z","kind":"tool","raw":"CodexSkillRead: pipeline-explore"}
+{"ts":"2026-07-24T08:42:04Z","kind":"tool","raw":"CodexSkillRead: brainstorming"}
+{"ts":"2026-07-24T08:42:30Z","kind":"set","field":"design_doc","to":"docs/superpowers/specs/2026-07-24-multi-capability-document-evidence-design.md"}
+{"ts":"2026-07-24T08:42:40Z","kind":"tool","raw":"review:request phase=explore event=explore-complete"}
+{"ts":"2026-07-24T08:42:40Z","kind":"tool","raw":"review:delegated-ack phase=explore event=explore-complete authority_issued_at=2026-07-24T08:41:24Z"}
+{"ts":"2026-07-24T08:42:40Z","kind":"transition","from":"explore","to":"spec","raw":"explore-complete","transitionRecordId":"e608d876-7839-4ab6-9913-ae0822382ea8"}
+{"ts":"2026-07-24T08:43:05Z","kind":"tool","raw":"CodexSkillRead: pipeline-spec"}
+{"ts":"2026-07-24T08:43:05Z","kind":"tool","raw":"CodexSkillRead: openspec-propose"}
+{"ts":"2026-07-24T08:43:05Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-07-24T08:43:12Z","kind":"set","field":"plan","to":"docs/superpowers/plans/2026-07-24-multi-capability-document-evidence-plan.md"}
+{"ts":"2026-07-24T08:43:13Z","kind":"tool","raw":"review:request phase=spec event=spec-complete"}
+{"ts":"2026-07-24T08:43:13Z","kind":"tool","raw":"review:delegated-ack phase=spec event=spec-complete authority_issued_at=2026-07-24T08:41:24Z"}
+{"ts":"2026-07-24T08:43:13Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"c79796f3-3ab0-40f7-bf27-473e46be820a"}
+{"ts":"2026-07-24T08:43:32Z","kind":"tool","raw":"CodexSkillRead: pipeline-build"}
+{"ts":"2026-07-24T08:43:32Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-24T08:47:48Z","kind":"transition","from":"build","to":"spec","raw":"requirements-changed","transitionRecordId":"d3524a61-c496-47ea-b3ed-9e05163377c9"}
+{"ts":"2026-07-24T08:47:55Z","kind":"tool","raw":"CodexSkillRead: pipeline-spec"}
+{"ts":"2026-07-24T08:48:00Z","kind":"tool","raw":"CodexSkillRead: openspec-propose"}
+{"ts":"2026-07-24T08:48:00Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-07-24T08:48:15Z","kind":"tool","raw":"review:request phase=spec event=spec-complete"}
+{"ts":"2026-07-24T08:48:16Z","kind":"tool","raw":"review:delegated-ack phase=spec event=spec-complete authority_issued_at=2026-07-24T08:41:24Z"}
+{"ts":"2026-07-24T08:48:16Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"ddfef8a0-455f-426c-99dc-0d29f4f1d195"}
+{"ts":"2026-07-24T08:48:22Z","kind":"tool","raw":"CodexSkillRead: pipeline-build"}
+{"ts":"2026-07-24T08:48:22Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-24T08:48:27Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-07-24T08:48:36Z","kind":"set","field":"build_mode","to":"direct"}
+{"ts":"2026-07-24T08:48:36Z","kind":"set","field":"isolation","to":"in-place"}
+{"ts":"2026-07-24T08:48:36Z","kind":"set","field":"direct_override","to":"true"}
+{"ts":"2026-07-24T08:48:36Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"5c462e94-be21-4ca3-b744-286bd9311897"}
+{"ts":"2026-07-24T08:48:41Z","kind":"tool","raw":"CodexSkillRead: pipeline-verify"}
+{"ts":"2026-07-24T08:48:41Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-07-24T08:53:32Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-07-24-multi-capability-document-evidence-verify.md"}
+{"ts":"2026-07-24T08:53:37Z","kind":"tool","raw":"review:request phase=verify event=verify-fail"}
+{"ts":"2026-07-24T08:53:37Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-07-24T08:41:24Z"}
+{"ts":"2026-07-24T08:53:37Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"4bf12549-b482-4442-8ea9-9bfa80d8417f"}
+{"ts":"2026-07-24T08:58:03Z","kind":"transition","from":"build","to":"spec","raw":"requirements-changed","transitionRecordId":"5496dd5d-d997-45c2-8bce-b30cd3682e17"}
+{"ts":"2026-07-24T08:58:27Z","kind":"tool","raw":"CodexSkillRead: openspec-propose"}
+{"ts":"2026-07-24T08:58:27Z","kind":"tool","raw":"CodexSkillRead: pipeline-spec"}
+{"ts":"2026-07-24T08:58:28Z","kind":"tool","raw":"review:request phase=spec event=spec-complete"}
+{"ts":"2026-07-24T08:58:28Z","kind":"tool","raw":"review:delegated-ack phase=spec event=spec-complete authority_issued_at=2026-07-24T08:41:24Z"}
+{"ts":"2026-07-24T08:58:28Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"a0542e23-5ba2-4ff8-a4f4-3b5eb624a279"}
+{"ts":"2026-07-24T08:58:37Z","kind":"tool","raw":"CodexSkillRead: pipeline-build"}
+{"ts":"2026-07-24T08:58:38Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"a102f77a-1af7-442d-9527-c033e1fbae9d"}
+{"ts":"2026-07-24T08:58:58Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-07-24-multi-capability-document-evidence-verify.md"}
+{"ts":"2026-07-24T08:58:58Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-07-24T08:58:59Z","kind":"tool","raw":"review:request phase=verify event=verify-fail"}
+{"ts":"2026-07-24T08:58:59Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-07-24T08:41:24Z"}
+{"ts":"2026-07-24T08:58:59Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"375dd7c3-2b79-4d60-90d4-6765be8a380a"}
+{"ts":"2026-07-24T08:59:12Z","kind":"tool","raw":"CodexSkillRead: pipeline-build"}
+{"ts":"2026-07-24T08:59:13Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"eaeff44e-ba82-416a-b014-465114fafab1"}
+{"ts":"2026-07-24T09:03:18Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-07-24-multi-capability-document-evidence-verify.md"}
+{"ts":"2026-07-24T09:03:18Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-07-24T09:03:18Z","kind":"tool","raw":"review:request phase=verify event=verify-fail"}
+{"ts":"2026-07-24T09:03:18Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-07-24T08:41:24Z"}
+{"ts":"2026-07-24T09:03:19Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"43827018-45dc-47de-9f37-7734828670b9"}
+{"ts":"2026-07-24T09:04:11Z","kind":"tool","raw":"CodexSkillRead: pipeline-build"}
+{"ts":"2026-07-24T09:04:12Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"0082878e-89a3-4246-9823-bb205fce97a5"}
+{"ts":"2026-07-24T09:07:36Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-07-24-multi-capability-document-evidence-verify.md"}
+{"ts":"2026-07-24T09:07:37Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-07-24T09:07:37Z","kind":"tool","raw":"review:request phase=verify event=verify-fail"}
+{"ts":"2026-07-24T09:07:37Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-07-24T08:41:24Z"}
+{"ts":"2026-07-24T09:07:37Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"e956d6d5-0c60-441a-a9d1-e5f0276ac933"}
+{"ts":"2026-07-24T09:07:38Z","kind":"transition","from":"build","to":"spec","raw":"requirements-changed","transitionRecordId":"5a52465d-fe14-42e4-bc37-367eedae16e7"}
+{"ts":"2026-07-24T09:07:56Z","kind":"tool","raw":"CodexSkillRead: pipeline-spec"}
+{"ts":"2026-07-24T09:07:57Z","kind":"tool","raw":"review:request phase=spec event=spec-complete"}
+{"ts":"2026-07-24T09:07:57Z","kind":"tool","raw":"review:delegated-ack phase=spec event=spec-complete authority_issued_at=2026-07-24T08:41:24Z"}
+{"ts":"2026-07-24T09:07:57Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"2e2f163b-c239-4ee5-b8c6-9f28d7bae2bd"}
+{"ts":"2026-07-24T09:08:18Z","kind":"tool","raw":"CodexSkillRead: pipeline-build"}
+{"ts":"2026-07-24T09:08:19Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"de7bff62-fd85-42f3-b319-b8b17daba055"}
+{"ts":"2026-07-24T09:10:52Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-07-24-multi-capability-document-evidence-verify.md"}
+{"ts":"2026-07-24T09:10:52Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-07-24T09:10:53Z","kind":"tool","raw":"CodexSkillRead: pipeline-verify"}
+{"ts":"2026-07-24T09:10:53Z","kind":"set","field":"agent_review_result","to":"pass"}
+{"ts":"2026-07-24T09:10:53Z","kind":"set","field":"codex_review_result","to":"pass"}
+{"ts":"2026-07-24T09:10:53Z","kind":"set","field":"branch_status","to":"handled"}
+{"ts":"2026-07-24T09:10:54Z","kind":"tool","raw":"review:request phase=verify event=verify-pass"}
+{"ts":"2026-07-24T09:10:54Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-pass authority_issued_at=2026-07-24T08:41:24Z"}
+{"ts":"2026-07-24T09:10:54Z","kind":"transition","from":"verify","to":"ship","raw":"verify-pass","transitionRecordId":"14f52a37-7691-47b6-a8f0-f5bd2b7c34ab"}
+{"ts":"2026-07-24T09:10:59Z","kind":"tool","raw":"CodexSkillRead: pipeline-ship"}
+{"ts":"2026-07-24T09:10:59Z","kind":"tool","raw":"CodexSkillRead: openspec-apply-change"}
+{"ts":"2026-07-24T09:11:07Z","kind":"tool","raw":"CodexSkillRead: finishing-a-development-branch"}
+{"ts":"2026-07-24T09:12:38Z","kind":"tool","raw":"CodexSkillRead: pipeline-ship"}
+{"ts":"2026-07-24T09:12:38Z","kind":"tool","raw":"CodexSkillRead: openspec-apply-change"}
+{"ts":"2026-07-24T09:12:38Z","kind":"tool","raw":"CodexSkillRead: finishing-a-development-branch"}

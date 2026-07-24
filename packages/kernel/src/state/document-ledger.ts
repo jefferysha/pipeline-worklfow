@@ -6,23 +6,31 @@
  * producing skill, and exact-hash phase read receipts. Callers must hold the change lock while
  * mutating it; each write is still atomically published to avoid a partially visible ledger.
  */
-import { createHash } from 'node:crypto'
-import { lstat, readFile, realpath } from 'node:fs/promises'
-import { isAbsolute, join, relative, resolve, sep } from 'node:path'
+import { lstat, readFile } from 'node:fs/promises'
+import { join } from 'node:path'
 import {
   DOCUMENT_CONTRACT_PHASES,
+  documentOwnerPhase,
   isAcceptedDocumentProducer,
   isDocumentContractPhase,
   isDocumentKind,
-  outputsRequiredForPhase,
-  producerCandidatesFor,
+  isDocumentProducerAllowedInPhase,
+  isDocumentRecordAllowedInPhase,
+  recordProducerCandidatesFor,
   readsRequiredForPhase,
-  recordsRequiredForPhase,
   type DocumentContractPhase,
   type DocumentKind,
 } from '../workflow/document-contract.js'
 import { atomicLinkPublish, atomicReplaceFile } from './atomic-publish.js'
+import {
+  deltaSpecSlot,
+  documentSlot,
+  DocumentLedgerError,
+  resolveDocument,
+} from './document-path.js'
 import { HISTORY_FILE } from './history.js'
+
+export { DocumentLedgerError } from './document-path.js'
 
 export const DOCUMENT_LEDGER_FILE = '.pipeline-documents.json'
 
@@ -48,31 +56,6 @@ export interface DocumentLedger {
   readonly records: readonly DocumentRecord[]
 }
 
-export type DocumentEvidenceItemStatus = 'recorded' | 'missing' | 'stale' | 'unread'
-
-export interface DocumentEvidenceItem {
-  readonly kind: DocumentKind
-  readonly status: DocumentEvidenceItemStatus
-  readonly requiredRead: boolean
-  readonly paths: readonly string[]
-  readonly producers: readonly string[]
-}
-
-export interface DocumentEvidenceReport {
-  readonly phase: DocumentContractPhase
-  readonly hasLedger: boolean
-  readonly pass: boolean
-  readonly blockers: readonly string[]
-  readonly items: readonly DocumentEvidenceItem[]
-}
-
-export class DocumentLedgerError extends Error {
-  constructor(message: string) {
-    super(message)
-    this.name = 'DocumentLedgerError'
-  }
-}
-
 function errorCode(error: unknown): string | undefined {
   if (typeof error !== 'object' || error === null || !('code' in error)) return undefined
   const code = Reflect.get(error, 'code')
@@ -89,10 +72,6 @@ function object(value: unknown): Record<string, unknown> | undefined {
 
 function string(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined
-}
-
-function sha256(value: Uint8Array): string {
-  return createHash('sha256').update(value).digest('hex')
 }
 
 function validDigest(value: string): boolean {
@@ -209,39 +188,6 @@ async function writeDocumentLedger(changeDir: string, ledger: DocumentLedger): P
   await atomicReplaceFile(join(changeDir, DOCUMENT_LEDGER_FILE), content)
 }
 
-function normalizeRelativePath(path: string): string {
-  return path.split(sep).join('/')
-}
-
-function inside(base: string, candidate: string): boolean {
-  const pathFromBase = relative(base, candidate)
-  return pathFromBase !== ''
-    && pathFromBase !== '..'
-    && !pathFromBase.startsWith(`..${sep}`)
-    && !isAbsolute(pathFromBase)
-}
-
-/** Resolve a ledger document without allowing root escape, symlinks, or empty/non-file records. */
-async function resolveDocument(repoRoot: string, path: string): Promise<{ readonly relativePath: string; readonly digest: string }> {
-  if (!path || isAbsolute(path)) throw new DocumentLedgerError(`document path 必须是项目相对路径: ${path || '(empty)'}`)
-  const lexicalTarget = resolve(repoRoot, path)
-  if (!inside(resolve(repoRoot), lexicalTarget)) throw new DocumentLedgerError(`document path 越出项目根: ${path}`)
-  const relativePath = normalizeRelativePath(relative(resolve(repoRoot), lexicalTarget))
-  if (!relativePath.startsWith('openspec/') && !relativePath.startsWith('docs/')) {
-    throw new DocumentLedgerError(`document path 只能位于 openspec/ 或 docs/: ${relativePath}`)
-  }
-  const info = await lstat(lexicalTarget)
-  if (!info.isFile() || info.isSymbolicLink()) {
-    throw new DocumentLedgerError(`document 必须是非 symlink 普通文件: ${relativePath}`)
-  }
-  const [realRoot, realTarget, content] = await Promise.all([
-    realpath(repoRoot), realpath(lexicalTarget), readFile(lexicalTarget),
-  ])
-  if (!inside(realRoot, realTarget)) throw new DocumentLedgerError(`document realpath 越出项目根: ${relativePath}`)
-  if (content.byteLength === 0) throw new DocumentLedgerError(`document 不得为空: ${relativePath}`)
-  return { relativePath, digest: sha256(content) }
-}
-
 function skillsEquivalent(left: string, right: string): boolean {
   const aliases = (id: string): readonly string[] => {
     const values = new Set<string>([id])
@@ -257,7 +203,12 @@ function skillsEquivalent(left: string, right: string): boolean {
   return aliases(right).some((candidate) => leftAliases.has(candidate))
 }
 
-async function hasSkillEvidence(changeDir: string, producer: string): Promise<boolean> {
+async function hasSkillEvidence(
+  changeDir: string,
+  producer: string,
+  phase: DocumentContractPhase,
+  allowEarlierPhaseEvidence: boolean,
+): Promise<boolean> {
   let text: string
   try {
     text = await readFile(join(changeDir, HISTORY_FILE), 'utf8')
@@ -265,19 +216,41 @@ async function hasSkillEvidence(changeDir: string, producer: string): Promise<bo
     if (errorCode(error) === 'ENOENT') return false
     throw error
   }
+  const entries: Record<string, unknown>[] = []
   for (const line of text.split('\n')) {
     const trimmed = line.trim()
     if (!trimmed) continue
     try {
       const entry = object(JSON.parse(trimmed))
-      if (!entry || entry.kind !== 'tool') continue
-      const raw = string(entry.raw)
-      const match = raw ? /^Skill: (.+)$/.exec(raw) : null
-      if (match && skillsEquivalent(match[1] ?? '', producer)) return true
+      if (entry) entries.push(entry)
     } catch {
       // JSONL history is intentionally append-only and may contain pre-existing malformed lines.
       // A malformed line cannot satisfy evidence, but it must not conceal a later valid Skill row.
     }
+  }
+  // A normal record must be backed by a Skill invocation from the current visit to the phase.
+  // `--backfill` is the sole migration exception because an upgraded Change may already have
+  // crossed the document's owning phase before this ledger existed.
+  let start = 0
+  if (!allowEarlierPhaseEvidence) {
+    for (let index = entries.length - 1; index >= 0; index -= 1) {
+      const entry = entries[index]
+      if (entry?.kind === 'transition' && entry.to === phase) {
+        start = index + 1
+        break
+      }
+    }
+  }
+  for (const entry of entries.slice(start)) {
+    if (entry.kind !== 'tool') continue
+    try {
+      const raw = string(entry.raw)
+      // Claude exposes a first-class Skill event, while Codex exposes a completed, restricted
+      // bundled SKILL.md read as host-observed evidence. The hook records those two provenance
+      // labels distinctly; both are valid proof that the exact packaged producer was loaded.
+      const match = raw ? /^(?:Skill|CodexSkillRead): (.+)$/.exec(raw) : null
+      if (match && skillsEquivalent(match[1] ?? '', producer)) return true
+    } catch { /* malformed legacy tool entry cannot satisfy evidence */ }
   }
   return false
 }
@@ -302,38 +275,59 @@ export interface RecordDocumentInput {
 }
 
 export async function recordDocument(input: RecordDocumentInput): Promise<DocumentLedger> {
-  const ownerPhase = DOCUMENT_CONTRACT_PHASES.find((phase) =>
-    outputsRequiredForPhase(phase).some((requirement) => requirement.kind === input.kind),
-  )
+  const ownerPhase = documentOwnerPhase(input.kind)
   if (!ownerPhase) {
     // `DocumentKind` and the matrix live together, but fail closed if a future edit accidentally
     // adds a kind without assigning its owning phase.
     throw new DocumentLedgerError(`document '${input.kind}' 未声明所属 phase`)
   }
-  if (ownerPhase !== input.phase) {
-    const ownerIndex = DOCUMENT_CONTRACT_PHASES.indexOf(ownerPhase)
-    const currentIndex = DOCUMENT_CONTRACT_PHASES.indexOf(input.phase)
-    if (!input.allowBackfill) {
-      throw new DocumentLedgerError(`'${input.kind}' 只能在其所属 phase 登记（当前 ${input.phase}）`)
-    }
-    if (ownerIndex > currentIndex) {
-      throw new DocumentLedgerError(`'${input.kind}' 属于未来 phase '${ownerPhase}'，不能从当前 ${input.phase} backfill`)
-    }
-  }
-  if (!isAcceptedDocumentProducer(input.kind, input.producer)) {
-    throw new DocumentLedgerError(
-      `document '${input.kind}' 的 producer '${input.producer}' 不合法（允许: ${producerCandidatesFor(input.kind).join(' ')})`,
-    )
-  }
-  if (!await hasSkillEvidence(input.changeDir, input.producer)) {
-    throw new DocumentLedgerError(
-      `缺少 Skill 调用证据: '${input.producer}'；先由宿主实际调用该 skill，确认 PostToolUse history 已记录后再登记 '${input.kind}'`,
-    )
-  }
   const current = await readDocumentLedger(input.changeDir)
   if (!current) throw new DocumentLedgerError(`document ledger 缺失；先执行 pipeline document init`)
   const resolved = await resolveDocument(input.repoRoot, input.path)
-  const old = current.records.find((record) => record.kind === input.kind && record.path === resolved.relativePath)
+  const slot = documentSlot(input.kind, resolved.relativePath, input.changeDir)
+  const oldCandidates = current.records.filter((record) => {
+    if (record.kind !== input.kind) return false
+    if (record.kind !== 'delta-spec') return true
+    return deltaSpecSlot(record.path, input.changeDir) === slot
+  })
+  const old = oldCandidates.find((record) => record.sha256 === resolved.digest) ?? oldCandidates[0]
+  const ownerIndex = DOCUMENT_CONTRACT_PHASES.indexOf(ownerPhase)
+  const currentIndex = DOCUMENT_CONTRACT_PHASES.indexOf(input.phase)
+
+  if (input.allowBackfill) {
+    if (oldCandidates.length > 0) {
+      throw new DocumentLedgerError(
+        `--backfill 只能首次登记历史 document 槽；'${slot}' 已有 record，修改后必须使用当前 phase 的实际 producer 重新登记`,
+      )
+    }
+    if (ownerIndex >= currentIndex) {
+      if (ownerIndex > currentIndex) {
+        throw new DocumentLedgerError(`'${input.kind}' 属于未来 phase '${ownerPhase}'，不能从当前 ${input.phase} backfill`)
+      }
+      throw new DocumentLedgerError(`'${input.kind}' 当前正处于所属 phase '${ownerPhase}'；不得使用 --backfill`)
+    }
+    if (!isDocumentProducerAllowedInPhase(input.kind, ownerPhase, input.producer)) {
+      throw new DocumentLedgerError(
+        `document '${input.kind}' 的历史 producer '${input.producer}' 不合法（允许: ${recordProducerCandidatesFor(input.kind, ownerPhase).join(' ')})`,
+      )
+    }
+  } else {
+    if (!isDocumentRecordAllowedInPhase(input.kind, input.phase)) {
+      throw new DocumentLedgerError(
+        `'${input.kind}' 只能在其所属 phase 或允许的后续更新 phase 登记（当前 ${input.phase}）`,
+      )
+    }
+    if (!isDocumentProducerAllowedInPhase(input.kind, input.phase, input.producer)) {
+      throw new DocumentLedgerError(
+        `document '${input.kind}' 的 producer '${input.producer}' 不合法（当前 ${input.phase} 允许: ${recordProducerCandidatesFor(input.kind, input.phase).join(' ')})`,
+      )
+    }
+  }
+  if (!await hasSkillEvidence(input.changeDir, input.producer, input.phase, input.allowBackfill === true)) {
+    throw new DocumentLedgerError(
+      `缺少 Skill 调用证据（当前 phase）: '${input.producer}'；先由宿主在本 phase 实际调用该 skill，确认完成态证据已写入 history 后再登记 '${input.kind}'`,
+    )
+  }
   const replacement: DocumentRecord = {
     kind: input.kind,
     path: resolved.relativePath,
@@ -342,7 +336,67 @@ export async function recordDocument(input: RecordDocumentInput): Promise<Docume
     recordedAt: input.recordedAt,
     reads: old?.sha256 === resolved.digest ? old.reads : [],
   }
-  const records = current.records.filter((record) => !(record.kind === input.kind && record.path === resolved.relativePath))
+  // Singleton kinds use one named slot. Delta specs use one slot per canonical capability.
+  // Unmapped legacy records remain intact until an explicit, digest-preserving migration.
+  const records = current.records.filter((record) => {
+    if (record.kind !== input.kind) return true
+    if (record.kind !== 'delta-spec') return false
+    const recordSlot = deltaSpecSlot(record.path, input.changeDir)
+    return recordSlot === undefined || recordSlot !== slot
+  })
+  records.push(replacement)
+  const next: DocumentLedger = { ...current, records }
+  await writeDocumentLedger(input.changeDir, next)
+  return next
+}
+
+export interface MigrateLegacyDeltaDocumentInput {
+  readonly repoRoot: string
+  readonly changeDir: string
+  readonly legacyPath: string
+  readonly canonicalPath: string
+}
+
+/** Replace one explicitly named legacy delta path without changing its digest or provenance. */
+export async function migrateLegacyDeltaDocument(
+  input: MigrateLegacyDeltaDocumentInput,
+): Promise<DocumentLedger> {
+  const current = await readDocumentLedger(input.changeDir)
+  if (!current) throw new DocumentLedgerError('document ledger 缺失；先执行 pipeline document init')
+  const canonical = await resolveDocument(input.repoRoot, input.canonicalPath)
+  const slot = documentSlot('delta-spec', canonical.relativePath, input.changeDir)
+  const source = current.records.find((record) =>
+    record.kind === 'delta-spec'
+    && record.path === input.legacyPath
+    && deltaSpecSlot(record.path, input.changeDir) === undefined)
+  const target = current.records.find((record) =>
+    record.kind === 'delta-spec' && deltaSpecSlot(record.path, input.changeDir) === slot)
+  if (!source) {
+    if (target?.path === canonical.relativePath && target.sha256 === canonical.digest) return current
+    throw new DocumentLedgerError(`未找到指定的旧 delta-spec record: ${input.legacyPath}`)
+  }
+  if (source.sha256 !== canonical.digest) {
+    throw new DocumentLedgerError('迁移拒绝：canonical 文件内容与旧 delta-spec digest 不一致')
+  }
+  if (target && target.sha256 !== source.sha256) {
+    throw new DocumentLedgerError(`迁移拒绝：目标槽 '${slot}' 已有不同内容`)
+  }
+  if (target && (target.producer !== source.producer || target.recordedAt !== source.recordedAt)) {
+    throw new DocumentLedgerError(`迁移拒绝：目标槽 '${slot}' 与旧 record 的 provenance 冲突`)
+  }
+  const receipts = new Map<DocumentContractPhase, DocumentReadReceipt>()
+  for (const receipt of target?.reads ?? []) receipts.set(receipt.phase, receipt)
+  for (const receipt of source.reads) {
+    const existing = receipts.get(receipt.phase)
+    if (existing && (existing.sha256 !== receipt.sha256 || existing.readAt !== receipt.readAt)) {
+      throw new DocumentLedgerError(`迁移拒绝：目标槽 '${slot}' 的 ${receipt.phase} read receipt 冲突`)
+    }
+    receipts.set(receipt.phase, receipt)
+  }
+  const replacement: DocumentRecord = target
+    ? { ...target, reads: [...receipts.values()] }
+    : { ...source, path: canonical.relativePath, reads: [...receipts.values()] }
+  const records = current.records.filter((record) => record !== source && record !== target)
   records.push(replacement)
   const next: DocumentLedger = { ...current, records }
   await writeDocumentLedger(input.changeDir, next)
@@ -373,6 +427,13 @@ export async function recordDocumentReads(input: ReadDocumentsInput): Promise<Do
       throw new DocumentLedgerError(`缺少 document '${kind}'；先登记后再读取`)
     }
   }
+  const legacyDelta = selected.filter((record) =>
+    record.kind === 'delta-spec' && deltaSpecSlot(record.path, input.changeDir) === undefined)
+  if (legacyDelta.length > 0) {
+    throw new DocumentLedgerError(
+      `存在旧 delta-spec 记录，必须用 pipeline document migrate-delta 显式迁移: ${legacyDelta.map((record) => record.path).join(', ')}`,
+    )
+  }
   const updated: DocumentRecord[] = []
   for (const record of current.records) {
     if (!kinds.includes(record.kind)) {
@@ -390,84 +451,4 @@ export async function recordDocumentReads(input: ReadDocumentsInput): Promise<Do
   const next: DocumentLedger = { ...current, records: updated }
   await writeDocumentLedger(input.changeDir, next)
   return next
-}
-
-async function currentRecordDigest(repoRoot: string, record: DocumentRecord): Promise<string | undefined> {
-  try {
-    return (await resolveDocument(repoRoot, record.path)).digest
-  } catch {
-    return undefined
-  }
-}
-
-export async function evaluateDocumentEvidence(
-  repoRoot: string,
-  changeDir: string,
-  phase: DocumentContractPhase,
-): Promise<DocumentEvidenceReport> {
-  let ledger: DocumentLedger | undefined
-  try {
-    ledger = await readDocumentLedger(changeDir)
-  } catch (error) {
-    return {
-      phase,
-      hasLedger: true,
-      pass: false,
-      blockers: [`document ledger 不可读取: ${error instanceof Error ? error.message : String(error)}`],
-      items: [],
-    }
-  }
-  if (!ledger) {
-    return {
-      phase,
-      hasLedger: false,
-      pass: false,
-      blockers: ['缺少 .pipeline-documents.json；执行 pipeline document init 后按 phase 重新登记产物'],
-      items: [],
-    }
-  }
-
-  const recordRequirements = recordsRequiredForPhase(phase)
-  const readRequirements = new Set(readsRequiredForPhase(phase))
-  const kinds = new Set<DocumentKind>([
-    ...recordRequirements.map((requirement) => requirement.kind),
-    ...readRequirements,
-  ])
-  const blockers: string[] = []
-  const items: DocumentEvidenceItem[] = []
-
-  for (const kind of kinds) {
-    const records = ledger.records.filter((record) => record.kind === kind)
-    const requiredRead = readRequirements.has(kind)
-    if (records.length === 0) {
-      blockers.push(`缺少 document '${kind}'；执行 pipeline document record <change> ${kind} <path> --producer <skill>`)
-      items.push({ kind, status: 'missing', requiredRead, paths: [], producers: [] })
-      continue
-    }
-    const digests = await Promise.all(records.map((record) => currentRecordDigest(repoRoot, record)))
-    const stale = records.some((record, index) => digests[index] !== record.sha256)
-    if (stale) {
-      blockers.push(`document '${kind}' 已缺失或内容变化；重新执行 pipeline document record 后再继续`)
-      items.push({
-        kind, status: 'stale', requiredRead,
-        paths: records.map((record) => record.path), producers: records.map((record) => record.producer),
-      })
-      continue
-    }
-    if (requiredRead && records.some((record) => !record.reads.some(
-      (receipt) => receipt.phase === phase && receipt.sha256 === record.sha256,
-    ))) {
-      blockers.push(`document '${kind}' 尚未由 ${phase} 读取；执行 pipeline document read <change> ${kind}`)
-      items.push({
-        kind, status: 'unread', requiredRead,
-        paths: records.map((record) => record.path), producers: records.map((record) => record.producer),
-      })
-      continue
-    }
-    items.push({
-      kind, status: 'recorded', requiredRead,
-      paths: records.map((record) => record.path), producers: records.map((record) => record.producer),
-    })
-  }
-  return { phase, hasLedger: true, pass: blockers.length === 0, blockers, items }
 }

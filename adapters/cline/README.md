@@ -81,13 +81,10 @@ Cline 要求在 VSCode 设置里手动勾选一次「Enable Hooks」（Cline 侧
 钩子文件落盘后才会真正生效——这与 Codex 的一次性 trust 步骤同理：contract.md 档 A 的判据是
 "三能力在原生 hook 上等价实现"，不是"零人工步骤"，故不降档。
 
-## Unlock sentinel（HITL 解封）
+## 人工确认（HITL）
 
-review 门放行 = 删项目根 marker（与 CC `AskUserQuestion` 语义等价，contract §2）：
-
-```bash
-rm .pipeline-pending-review     # 或 .pipeline-pending-confirm / .pipeline-pending-interaction
-```
+完成产物并选择 event 后运行 `pipeline review request <change> --event <event>`；人类明确确认后运行
+`pipeline review acknowledge <change>`。不得手动删除 `.pipeline-pending-review`，它只是投影而非授权。
 
 ## 平台支持局限（如实登记，非本 adapter 缺陷）
 

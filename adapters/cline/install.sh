@@ -83,6 +83,6 @@ if [ "$WITH_HOOKS" = 1 ]; then
   note "${B}════════════════════════════════════════════════════${Z}"
   info "档 A 完成：inject（TaskStart/TaskResume）/ veto（PreToolUse cancel:true）/ track（PostToolUse）全 native。"
 else
-  warn "--no-hooks：跳过 hook 安装（无自动强制/注入/留痕；靠手动 Unlock sentinel）。"
+  warn "--no-hooks：跳过 hook 安装（无自动强制/注入/留痕；review 仍须走 pipeline review request/acknowledge）。"
 fi
 exit 0

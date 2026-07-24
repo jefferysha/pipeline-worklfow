@@ -13,7 +13,7 @@ import { IllegalTransitionError } from '../types.js'
 import type { FieldName, FlowEngine, GuardContext, GuardResult, ManifestData, Phase, PipelineState, TransitionResult } from '../types.js'
 import { evaluateGuard } from './guard.js'
 
-/** review-gate 判定面：CLI 据此决定进相位时是否落 .pipeline-pending-review（CONTRACT §2） */
+/** review-gate 判定面：CLI 据此识别当前 phase 是否需要在其出口消费人工确认 receipt（CONTRACT §2） */
 export interface ReviewGate {
   isReviewPhase(phase: Phase): boolean
 }

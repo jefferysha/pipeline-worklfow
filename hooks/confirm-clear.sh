@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# confirm-clear.sh — PostToolUse hook（matcher: AskUserQuestion）。
+# confirm-clear.sh — PostToolUse hook（matcher: AskUserQuestion|request_user_input）。
 #
-# agent 一旦用 AskUserQuestion 跟用户确认/收反馈了，就清掉「待处理交互标记族」——
-# 解封 gate.sh 依赖的三门（语义对齐老仓 pipeline-confirm-clear.sh，逐字保真）：
+# agent 一旦用 AskUserQuestion 跟用户确认/收反馈了，就清掉 confirm / interaction 两类
+# 纯交互 marker：
 #   .pipeline-pending-confirm     解封 confirm 门（走不走 pipeline 的确认）
-#   .pipeline-pending-review      解封 review 门（每个 phase 产出的过目 + 反馈）
 #   .pipeline-pending-interaction 解封 interaction 门（交互式 skill 加载后先问用户）
-# 任务 #21 headline「清 confirm marker」被此三清动作包含；AskUserQuestion 即人已交互，
-# 三门都应解封（缺一则 gate.sh 会在人已确认后仍误挡后续合法操作）。
+# review v2 marker 不可由这个 hook 直接删除：它对应 canonical receipt，只有用户答复中包含
+# 显式批准语义时才调用 `pipeline review acknowledge`。这样“要修改”这类回答不会误放行离开
+# review phase。
 #
 # 清除范围与 gate/router 共用项目根定位：只接受 Git worktree、显式
 # PIPELINE_PROJECT_ROOT 或当前 cwd。这样子目录中的确认仍能解封当前 Git 项目，且绝不会清到
@@ -19,29 +19,13 @@ set -uo pipefail
 
 INPUT="$(cat 2>/dev/null || printf '{}')"
 
-# 从 $INPUT 提取顶层字符串键（逐字复用 gate.sh json_get；纯 bash，不 spawn 解释器/解析器）
-json_get() {
-  local key="$1" rest
-  case "$INPUT" in *"\"$key\""*) ;; *) return 1 ;; esac
-  rest="${INPUT#*\"$key\"}"
-  while true; do
-    case "$rest" in
-      [$' \t\r\n']*) rest="${rest#?}" ;;
-      ':'*) rest="${rest#:}"; break ;;
-      *) return 1 ;;
-    esac
-  done
-  while true; do
-    case "$rest" in
-      [$' \t\r\n']*) rest="${rest#?}" ;;
-      *) break ;;
-    esac
-  done
-  case "$rest" in
-    '"'*) rest="${rest#\"}"; printf '%s' "${rest%%\"*}"; return 0 ;;
-    *) return 1 ;;
-  esac
-}
+# Shared escape-aware parsing keeps quoted host payloads from changing which project marker is
+# cleared. It remains Bash-only and preserves this hook's fail-open behaviour.
+JSON_INPUT_HELPER="$(dirname "${BASH_SOURCE[0]:-$0}")/json-input.sh"
+[ -r "$JSON_INPUT_HELPER" ] || exit 0
+# shellcheck source=json-input.sh
+. "$JSON_INPUT_HELPER"
+json_get() { pipeline_json_get_string "$INPUT" "$1"; }
 
 CWD="$(json_get cwd || true)"
 [ -z "$CWD" ] && CWD="$PWD"
@@ -57,7 +41,25 @@ if [ -r "$ROOT_HELPER" ]; then
 fi
 [ -n "$ROOT" ] || exit 0
 rm -f "$ROOT/.pipeline-pending-confirm" \
-      "$ROOT/.pipeline-pending-review" \
       "$ROOT/.pipeline-pending-interaction" 2>/dev/null || true
+
+# Hosts place AskUserQuestion answers in tool_response.  Inspect only that suffix: question text
+# itself often contains “确认继续” as an option and must never be mistaken for consent.  Unknown or
+# schema-drifted payloads fail closed for review while retaining the historical fail-open exit 0.
+case "$INPUT" in
+  *\"tool_response\"*) RESPONSE_PART="${INPUT#*\"tool_response\"}" ;;
+  *) exit 0 ;;
+esac
+case "$RESPONSE_PART" in
+  *确认继续*|*确认执行*|*确认并继续*|*继续执行*|*全部执行*|*可以继续*|*同意继续*|*请继续执行*|*批准继续*|*自行执行*|*自己执行*|*go\ ahead*|*proceed\ with\ it*|*continue\ execution*)
+    HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || true)"
+    REVIEW_HELPER="$HOOK_DIR/review-ack.sh"
+    if [ -r "$REVIEW_HELPER" ]; then
+      # shellcheck source=review-ack.sh
+      . "$REVIEW_HELPER"
+      pipeline_acknowledge_active_review "$ROOT" "$HOOK_DIR" || true
+    fi
+    ;;
+esac
 
 exit 0

@@ -23,22 +23,22 @@ export interface HookMeta {
   id: string
   event: 'SessionStart' | 'UserPromptSubmit' | 'PreToolUse' | 'PostToolUse'
   matcher: string
-  /** 相对插件根的脚本路径（与 hooks/hooks.json command 对账）。 */
+  /** 已验证 release 内由 bootstrap dispatcher 解析的逻辑脚本路径（用于运维展示）。 */
   script: string
   /** false = 强制常开/未开放：写端点拒绝、读侧过滤（人话文案由前端 translations 提供）。 */
   configurable: boolean
 }
 
-/** 时机归类逐条核实自 hooks/hooks.json（hooksConfig.test.ts 有对账测试钉住，不得凭名字猜）。 */
+/** 时机归类逐条核实自 hooks/hooks.json 的稳定 hook-id ABI（测试钉住，不得凭名字猜）。 */
 export const HOOK_METAS: readonly HookMeta[] = [
   { id: 'session-start', event: 'SessionStart', matcher: '*', script: 'hooks/session-start.sh', configurable: true },
   { id: 'breadcrumb', event: 'UserPromptSubmit', matcher: '*', script: 'hooks/breadcrumb.sh', configurable: true },
   { id: 'router', event: 'UserPromptSubmit', matcher: '*', script: 'hooks/router.sh', configurable: true },
-  { id: 'gate', event: 'PreToolUse', matcher: 'Skill|Bash|Edit|Write|MultiEdit', script: 'hooks/gate.sh', configurable: false },
-  { id: 'confirm-clear', event: 'PostToolUse', matcher: 'AskUserQuestion', script: 'hooks/confirm-clear.sh', configurable: false },
-  { id: 'decision-recorder', event: 'PostToolUse', matcher: 'AskUserQuestion', script: 'hooks/decision-recorder.sh', configurable: false },
-  { id: 'skill-tracker', event: 'PostToolUse', matcher: 'Skill', script: 'hooks/skill-tracker.sh', configurable: true },
-  { id: 'interactive-skill-gate', event: 'PostToolUse', matcher: 'Skill', script: 'hooks/interactive-skill-gate.sh', configurable: false },
+  { id: 'gate', event: 'PreToolUse', matcher: '*', script: 'hooks/gate.sh', configurable: false },
+  { id: 'confirm-clear', event: 'PostToolUse', matcher: 'AskUserQuestion|request_user_input', script: 'hooks/confirm-clear.sh', configurable: false },
+  { id: 'decision-recorder', event: 'PostToolUse', matcher: 'AskUserQuestion|request_user_input', script: 'hooks/decision-recorder.sh', configurable: false },
+  { id: 'skill-tracker', event: 'PostToolUse', matcher: '*', script: 'hooks/skill-tracker.sh', configurable: true },
+  { id: 'interactive-skill-gate', event: 'PostToolUse', matcher: '*', script: 'hooks/interactive-skill-gate.sh', configurable: false },
 ]
 
 const HOOK_BY_ID: ReadonlyMap<string, HookMeta> = new Map(HOOK_METAS.map((h) => [h.id, h]))

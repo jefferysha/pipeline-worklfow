@@ -72,6 +72,12 @@ describe('双跑模式（oracle = 老仓 pipeline-state.sh 实跑）', () => {
     // pm-history 的老内核 base64 历史区在新侧写回后必须逐字保留——corrupt 故意丢弃，必须抓红
     expect(r.out).toMatch(/PRESERVE.*FAIL/)
   })
+
+  it('PM 自动入队声明不是静默白名单：新侧未从 off 进入 queued 时显式失败', () => {
+    const r = runHarness(stubEnv('no-pm-auto-enqueue'), ['pm-history'])
+    expect(r.status).toBe(1)
+    expect(r.out).toContain('PM spec-complete 自动入队断言失败')
+  })
 })
 
 describe('降级模式（契约测试模式）', () => {
@@ -151,6 +157,7 @@ describe('fixtures 生成脚本', () => {
       expect(res.status).toBe(0)
       // stderr 逐字口径 sidecar（run.sh 据此在 transition 拒绝路径逐字比 stderr）
       expect(existsSync(join(target, '.oracle-stderr-check'))).toBe(true)
+      expect(readFileSync(join(target, '.oracle-stderr-divergences'), 'utf8')).toContain('in-place')
       const plan = readFileSync(join(target, '.oracle-plan'), 'utf8')
       expect(plan).toContain('t6-ge')
       // isolation 非法枚举（field-in）绕过 set 闸 → seed 伪命令注脏值
@@ -181,6 +188,8 @@ describe('fixtures 生成脚本', () => {
       expect(sidecar.split('\n')[0]).toBe('t6-pm')
       // 基线块必须是 yaml 的逐字子串（生成期自洽）
       expect(yaml).toContain(sidecar.split('\n').slice(1).join('\n').trimEnd())
+      const extensions = readFileSync(join(target, '.oracle-state-extensions'), 'utf8')
+      expect(extensions).toContain('6\tpm-spec-complete-auto-enqueue\tt6-pm\toff\tqueued')
     } finally {
       rmSync(target, { recursive: true, force: true })
     }

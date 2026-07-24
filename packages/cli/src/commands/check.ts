@@ -136,6 +136,7 @@ async function checkCustomWorkflow(
     changeDirAbs: dir,
     fileExists: deps.guardCtx?.(name)?.fileExists,
     gitHeadSha: deps.gitHeadSha,
+    workspaceFingerprint: deps.workspaceFingerprint ? () => deps.workspaceFingerprint!(name) : undefined,
   })
   let documents: DocumentEvidenceReport | undefined
   try {

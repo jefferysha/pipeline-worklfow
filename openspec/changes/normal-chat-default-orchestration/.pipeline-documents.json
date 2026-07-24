@@ -1,0 +1,250 @@
+{
+  "version": 1,
+  "contract": "openspec-v1",
+  "createdAt": "2026-07-23T15:39:44Z",
+  "records": [
+    {
+      "kind": "adr",
+      "path": "docs/adr/2026-07-23-default-pipeline-document-ledger.md",
+      "sha256": "0cfd4b2710d665a7147721525e2020371a029d9456e77d1d814ad98ba8334f08",
+      "producer": "pipeline-explore",
+      "recordedAt": "2026-07-24T05:28:47Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "0cfd4b2710d665a7147721525e2020371a029d9456e77d1d814ad98ba8334f08",
+          "readAt": "2026-07-24T08:37:18Z"
+        },
+        {
+          "phase": "build",
+          "sha256": "0cfd4b2710d665a7147721525e2020371a029d9456e77d1d814ad98ba8334f08",
+          "readAt": "2026-07-24T08:37:31Z"
+        },
+        {
+          "phase": "verify",
+          "sha256": "0cfd4b2710d665a7147721525e2020371a029d9456e77d1d814ad98ba8334f08",
+          "readAt": "2026-07-24T08:39:13Z"
+        },
+        {
+          "phase": "ship",
+          "sha256": "0cfd4b2710d665a7147721525e2020371a029d9456e77d1d814ad98ba8334f08",
+          "readAt": "2026-07-24T08:49:04Z"
+        }
+      ]
+    },
+    {
+      "kind": "proposal",
+      "path": "openspec/changes/normal-chat-default-orchestration/proposal.md",
+      "sha256": "e07e1c5987648f5a71eed55683297143daf14256c8e8ca292359dcd035b8e85d",
+      "producer": "pipeline-spec",
+      "recordedAt": "2026-07-24T07:32:32Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "e07e1c5987648f5a71eed55683297143daf14256c8e8ca292359dcd035b8e85d",
+          "readAt": "2026-07-24T08:37:18Z"
+        },
+        {
+          "phase": "build",
+          "sha256": "e07e1c5987648f5a71eed55683297143daf14256c8e8ca292359dcd035b8e85d",
+          "readAt": "2026-07-24T08:37:31Z"
+        },
+        {
+          "phase": "verify",
+          "sha256": "e07e1c5987648f5a71eed55683297143daf14256c8e8ca292359dcd035b8e85d",
+          "readAt": "2026-07-24T08:39:13Z"
+        },
+        {
+          "phase": "ship",
+          "sha256": "e07e1c5987648f5a71eed55683297143daf14256c8e8ca292359dcd035b8e85d",
+          "readAt": "2026-07-24T08:49:04Z"
+        }
+      ]
+    },
+    {
+      "kind": "superpower-design",
+      "path": "docs/superpowers/specs/2026-07-23-normal-chat-default-document-contract-design.md",
+      "sha256": "fbd5f3fdd8d4298c2636d2920e4a9143baddcacdf290a33005034e9d0b69350f",
+      "producer": "pipeline-spec",
+      "recordedAt": "2026-07-24T07:32:33Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "fbd5f3fdd8d4298c2636d2920e4a9143baddcacdf290a33005034e9d0b69350f",
+          "readAt": "2026-07-24T08:37:18Z"
+        },
+        {
+          "phase": "build",
+          "sha256": "fbd5f3fdd8d4298c2636d2920e4a9143baddcacdf290a33005034e9d0b69350f",
+          "readAt": "2026-07-24T08:37:31Z"
+        },
+        {
+          "phase": "verify",
+          "sha256": "fbd5f3fdd8d4298c2636d2920e4a9143baddcacdf290a33005034e9d0b69350f",
+          "readAt": "2026-07-24T08:39:13Z"
+        },
+        {
+          "phase": "ship",
+          "sha256": "fbd5f3fdd8d4298c2636d2920e4a9143baddcacdf290a33005034e9d0b69350f",
+          "readAt": "2026-07-24T08:49:04Z"
+        }
+      ]
+    },
+    {
+      "kind": "superpower-plan",
+      "path": "docs/superpowers/plans/2026-07-23-normal-chat-default-document-contract-plan.md",
+      "sha256": "31454c49787a8cde7c9a597ba6e492680fac0b890b9c55492fea7770b98a3dbd",
+      "producer": "writing-plans",
+      "recordedAt": "2026-07-24T07:32:34Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "31454c49787a8cde7c9a597ba6e492680fac0b890b9c55492fea7770b98a3dbd",
+          "readAt": "2026-07-24T08:37:31Z"
+        },
+        {
+          "phase": "verify",
+          "sha256": "31454c49787a8cde7c9a597ba6e492680fac0b890b9c55492fea7770b98a3dbd",
+          "readAt": "2026-07-24T08:39:13Z"
+        },
+        {
+          "phase": "ship",
+          "sha256": "31454c49787a8cde7c9a597ba6e492680fac0b890b9c55492fea7770b98a3dbd",
+          "readAt": "2026-07-24T08:49:04Z"
+        }
+      ]
+    },
+    {
+      "kind": "plan",
+      "path": "docs/superpowers/plans/2026-07-23-normal-chat-default-document-contract-plan.md",
+      "sha256": "31454c49787a8cde7c9a597ba6e492680fac0b890b9c55492fea7770b98a3dbd",
+      "producer": "writing-plans",
+      "recordedAt": "2026-07-24T07:32:34Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "31454c49787a8cde7c9a597ba6e492680fac0b890b9c55492fea7770b98a3dbd",
+          "readAt": "2026-07-24T08:37:31Z"
+        },
+        {
+          "phase": "verify",
+          "sha256": "31454c49787a8cde7c9a597ba6e492680fac0b890b9c55492fea7770b98a3dbd",
+          "readAt": "2026-07-24T08:39:13Z"
+        },
+        {
+          "phase": "ship",
+          "sha256": "31454c49787a8cde7c9a597ba6e492680fac0b890b9c55492fea7770b98a3dbd",
+          "readAt": "2026-07-24T08:49:04Z"
+        }
+      ]
+    },
+    {
+      "kind": "openspec-design",
+      "path": "openspec/changes/normal-chat-default-orchestration/design.md",
+      "sha256": "873038f22a89c63b9f16e894aeeb49721483f562214cdbd75ecba479d704a028",
+      "producer": "pipeline-spec",
+      "recordedAt": "2026-07-24T08:37:17Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "873038f22a89c63b9f16e894aeeb49721483f562214cdbd75ecba479d704a028",
+          "readAt": "2026-07-24T08:37:18Z"
+        },
+        {
+          "phase": "build",
+          "sha256": "873038f22a89c63b9f16e894aeeb49721483f562214cdbd75ecba479d704a028",
+          "readAt": "2026-07-24T08:37:31Z"
+        },
+        {
+          "phase": "verify",
+          "sha256": "873038f22a89c63b9f16e894aeeb49721483f562214cdbd75ecba479d704a028",
+          "readAt": "2026-07-24T08:39:13Z"
+        },
+        {
+          "phase": "ship",
+          "sha256": "873038f22a89c63b9f16e894aeeb49721483f562214cdbd75ecba479d704a028",
+          "readAt": "2026-07-24T08:49:04Z"
+        }
+      ]
+    },
+    {
+      "kind": "delta-spec",
+      "path": "openspec/changes/normal-chat-default-orchestration/specs/simple-task-routing/spec.md",
+      "sha256": "49216791cc90a76735c4ec99ba2c792c7a38d4d13bb7aea94ce9d4dfc05c2f5a",
+      "producer": "openspec-propose",
+      "recordedAt": "2026-07-24T08:37:18Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "49216791cc90a76735c4ec99ba2c792c7a38d4d13bb7aea94ce9d4dfc05c2f5a",
+          "readAt": "2026-07-24T08:37:31Z"
+        },
+        {
+          "phase": "verify",
+          "sha256": "49216791cc90a76735c4ec99ba2c792c7a38d4d13bb7aea94ce9d4dfc05c2f5a",
+          "readAt": "2026-07-24T08:39:13Z"
+        },
+        {
+          "phase": "ship",
+          "sha256": "49216791cc90a76735c4ec99ba2c792c7a38d4d13bb7aea94ce9d4dfc05c2f5a",
+          "readAt": "2026-07-24T08:49:04Z"
+        }
+      ]
+    },
+    {
+      "kind": "verification-report",
+      "path": "docs/superpowers/reports/2026-07-24-normal-chat-default-orchestration-verify.md",
+      "sha256": "dd16246b10de269fb4e981df9a2ddaba886a3b242d0b6474a3c0be5466fcf8c6",
+      "producer": "verification-before-completion",
+      "recordedAt": "2026-07-24T08:39:12Z",
+      "reads": [
+        {
+          "phase": "ship",
+          "sha256": "dd16246b10de269fb4e981df9a2ddaba886a3b242d0b6474a3c0be5466fcf8c6",
+          "readAt": "2026-07-24T08:49:04Z"
+        }
+      ]
+    },
+    {
+      "kind": "tasks",
+      "path": "openspec/changes/normal-chat-default-orchestration/tasks.md",
+      "sha256": "b5db0d0bedbdbcabb9a3347c2a96934bd538392a5cb29c4e60a47db80608254b",
+      "producer": "pipeline-verify",
+      "recordedAt": "2026-07-24T08:39:12Z",
+      "reads": [
+        {
+          "phase": "verify",
+          "sha256": "b5db0d0bedbdbcabb9a3347c2a96934bd538392a5cb29c4e60a47db80608254b",
+          "readAt": "2026-07-24T08:39:13Z"
+        },
+        {
+          "phase": "ship",
+          "sha256": "b5db0d0bedbdbcabb9a3347c2a96934bd538392a5cb29c4e60a47db80608254b",
+          "readAt": "2026-07-24T08:49:04Z"
+        }
+      ]
+    },
+    {
+      "kind": "applied-spec",
+      "path": "openspec/changes/normal-chat-default-orchestration/applied-spec.md",
+      "sha256": "bcb652ec2d135c0fe099cfd16a12b77ab95cd0410037b43904f36c8dba949cd2",
+      "producer": "openspec-apply-change",
+      "recordedAt": "2026-07-24T08:40:36Z",
+      "reads": []
+    },
+    {
+      "kind": "delta-spec",
+      "path": "openspec/changes/normal-chat-default-orchestration/specs/document-evidence-contract/spec.md",
+      "sha256": "a8d2195c96256a37b1d4ce0c670635c46bf869e21ba7074624d6851d09d207db",
+      "producer": "openspec-propose",
+      "recordedAt": "2026-07-24T08:49:04Z",
+      "reads": [
+        {
+          "phase": "ship",
+          "sha256": "a8d2195c96256a37b1d4ce0c670635c46bf869e21ba7074624d6851d09d207db",
+          "readAt": "2026-07-24T08:49:04Z"
+        }
+      ]
+    }
+  ]
+}

@@ -9,7 +9,7 @@
  */
 import { execFile } from 'node:child_process'
 import { accessSync, constants as fsConstants, readdirSync, readFileSync, statSync } from 'node:fs'
-import { readdir, readFile, stat, writeFile } from 'node:fs/promises'
+import { readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -17,7 +17,7 @@ import { CommanderError } from 'commander'
 import {
   BUILTIN_TRACK_DEFINITIONS, createEffectiveSkillResolver, createFlowEngine, createHistoryWriter, createStateStore,
   createTransitionRecordStore, createWorkflowRunRepository, loadManifest, loadTrackRegistry, loadWorkflow,
-  mutateTrackRegistry, projectRegistryPath, readSecrets, registerProjectRoot, secretsPath,
+  fingerprintWorkspace, mutateTrackRegistry, projectRegistryPath, readSecrets, registerProjectRoot, secretsPath,
   stateStorageExistsSync, withTrackRegistryLock,
 } from '@pipeline-lite/kernel'
 import { readAutomationJson } from '@pipeline-lite/automation'
@@ -29,6 +29,7 @@ import { splitPassthroughArgv } from './argv.js'
 import { buildProgram, CliExit } from './program.js'
 import { createProductionTriageRuntime } from './commands/triage.js'
 import { resolveMachineStateHome } from './machineHome.js'
+import { REAL_RUNTIME_INSTALLER } from './runtime/installer.js'
 
 /** ISO8601 UTC 秒级（对齐老内核 date -u +%Y-%m-%dT%H:%M:%SZ 口径） */
 function isoNow(): string {
@@ -145,7 +146,7 @@ function manifestPath(): string {
  * Track Registry 校验上下文（GOAL.md 清单 T · R2）：
  *  - workflowExists 复用 loadWorkflow（'default' 恒存在，其余按 .pipeline/workflows/<id>.yaml 是否可载）；
  *  - skillProfiles = 内建轨 skill profile（pm/frontend/backend，即 manifest 现行 skill 表 track 键）
- *    ∪ manifest 两表已声明的非 '_all' 键。缺 tracks.yaml 时 registry=内建四轨、本上下文不会被查
+ *    ∪ manifest 两表已声明的非 '_all' 键。缺 tracks.yaml 时 registry=内建 Track、本上下文不会被查
  *    （validateTrackRegistry 只在 tracks.yaml 存在时跑），此处仍如实构造，让自定义 tracks.yaml 能过校验。
  * skill profile 键空间改名属清单 T 的 R5 阶段（见 GOAL.md）——R2 不改 manifest 结构，只按现行键派生。
  */
@@ -309,6 +310,10 @@ function makeDoctorProbes(machineStateHome: string): DoctorProbes {
         return false
       }
     },
+    nativeRuntimeHost: async () => {
+      const host = (await REAL_RUNTIME_INSTALLER.inspect(homedir())).active?.source.host
+      return host === 'codex' || host === 'claude' ? host : null
+    },
     runVerifySkills: () =>
       new Promise((resolve) => {
         execFile(
@@ -414,7 +419,9 @@ async function main(): Promise<void> {
       }
     },
     gitHeadSha: () => gitHeadSha(process.cwd()),
+    workspaceFingerprint: () => fingerprintWorkspace(process.cwd()),
     writeReviewMarker: (content) => writeFile(join(process.cwd(), '.pipeline-pending-review'), content, 'utf8'),
+    clearReviewMarker: () => rm(join(process.cwd(), '.pipeline-pending-review'), { force: true }),
     pluginVersion: readPluginVersion(),
     readInstalledPlugins: async () => {
       for (const p of [join(pluginRoot(), '..', 'installed_plugins.json'), join(process.env.HOME ?? '', '.claude', 'installed_plugins.json')]) {

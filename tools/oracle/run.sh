@@ -26,6 +26,10 @@
 #                         0/1。真实 CLI 双跑时默认 1：为 new 侧建立真实的文档 ledger
 #                         证据，使历史 oracle 的状态 guard 仍可与新 OpenSpec 契约逐面比较。
 #                         注入 ORACLE_NEW_CLI（harness stub）时默认 0；需要时可显式置 1。
+#   ORACLE_REVIEW_BOOTSTRAP
+#                         0/1。真实 CLI 双跑时默认 1：在老 oracle 成功离开 review phase 后，
+#                         new 侧以 request → acknowledge 写入同 event 的人工 receipt，再比较原
+#                         transition。注入 stub 时默认 0，避免把产品协议强加给 harness stub。
 #   ORACLE_REPO_ROOT      仓库根覆盖（默认本脚本上两级）
 #   ORACLE_WORKDIR        工作目录（默认 mktemp；保留现场，报告在 <workdir>/report.txt）
 #   ORACLE_FORCE_DEGRADED 置 1 强制降级（契约测试）模式
@@ -70,6 +74,20 @@ case "$DOCUMENT_CONTRACT_BOOTSTRAP" in
   *) echo "ORACLE_DOCUMENT_BOOTSTRAP 仅允许 0 或 1（当前 '$DOCUMENT_CONTRACT_BOOTSTRAP'）" >&2; exit 2 ;;
 esac
 
+if [ -z "${ORACLE_REVIEW_BOOTSTRAP:-}" ]; then
+  if [ -n "${ORACLE_NEW_CLI:-}" ]; then
+    REVIEW_RECEIPT_BOOTSTRAP=0
+  else
+    REVIEW_RECEIPT_BOOTSTRAP=1
+  fi
+else
+  REVIEW_RECEIPT_BOOTSTRAP="$ORACLE_REVIEW_BOOTSTRAP"
+fi
+case "$REVIEW_RECEIPT_BOOTSTRAP" in
+  0|1) ;;
+  *) echo "ORACLE_REVIEW_BOOTSTRAP 仅允许 0 或 1（当前 '$REVIEW_RECEIPT_BOOTSTRAP'）" >&2; exit 2 ;;
+esac
+
 WORKDIR="${ORACLE_WORKDIR:-$(mktemp -d "${TMPDIR:-/tmp}/pipeline-oracle.XXXXXX")}"
 mkdir -p "$WORKDIR"
 MACHINE_HOME="$WORKDIR/.pipeline-dashboard-home"
@@ -107,8 +125,12 @@ is_ts_field() { case "${1:-}" in *_at) return 0 ;; *) return 1 ;; esac; }
 #   · pipeline_state_revision/_id/_digest —— G1 canonical current 的 YAML adapter 指针；
 #                                            业务字段仍须与 oracle 逐字一致。
 #   · automation_current_phase/_cause —— 分叉后 automation 子系统新增字段。
+#   · 已声明的状态演进（目前仅 pm-history 的 `spec-complete` 自动 AFK 入队）：harness 先逐字
+#     验证 old=`off`、new=`queued` 和 new 的入队时间戳，再仅从该单步的 YAML 比较中剥除这两个字段。
+#     这不是泛化豁免；没有 fixture sidecar 的任何 automation 差异仍会失败。
 normalize_yaml() {
-  awk '
+  local omit_declared_automation="${2:-0}"
+  awk -v omit_declared_automation="$omit_declared_automation" '
     /^(tools_history|prompts_history|transitions_history):/ { inhist = 1; next }
     {
       if (inhist) {
@@ -116,10 +138,73 @@ normalize_yaml() {
         inhist = 0
       }
       if ($0 ~ /^(workflow|pipeline_run_id|pipeline_transition_sequence|pipeline_transition_head|pipeline_state_revision|pipeline_state_revision_id|pipeline_state_digest|automation_current_phase|automation_cause):/) next
+      if (omit_declared_automation == "1" && $0 ~ /^(automation|automation_queued_at):/) next
       if ($0 ~ /^[a-z_]+_at:/) { sub(/:.*$/, ": <WHITELISTED>"); print; next }
       print
     }
   ' "$1"
+}
+
+yaml_scalar() {
+  local file="$1" field="$2"
+  awk -v field="$field" '
+    index($0, field ":") == 1 {
+      value = substr($0, length(field) + 2)
+      sub(/^[[:space:]]+/, "", value)
+      if (value ~ /^".*"$/) value = substr(value, 2, length(value) - 2)
+      print value
+      exit
+    }
+  ' "$file"
+}
+
+# 仅允许 fixture 明确声明的一条产品演进跨越老 oracle 的状态投影。该 helper 在归一前
+# 先验证新行为本身，确保“KNOWN”绝不会把错误的自动化状态或时间戳悄悄吞掉。
+# sidecar 行格式：<生效起始 step>\tpm-spec-complete-auto-enqueue\t<change>\t<old automation>\t<new automation>
+# 返回：0=已验证的声明差异，1=本步无声明，2=声明存在但产品行为不符。声明从起始 step 起持续
+# 生效，且每个后续步骤都会重新验证该状态仍然成立，防止一次通过后状态被悄悄改坏。
+declared_state_extension_for_step() {
+  local base="$1" idx="$2" change="$3" old_yaml="$4" new_yaml="$5"
+  local sidecar="$base/new/.oracle-state-extensions"
+  [ -f "$sidecar" ] || return 1
+
+  local step kind declared_change expected_old expected_new
+  while IFS=$'\t' read -r step kind declared_change expected_old expected_new; do
+    case "$step" in ''|'#'*) continue ;; esac
+    case "$step" in *[!0-9]*)
+      printf 'state extension step 非法：%s' "$step"
+      return 2
+      ;;
+    esac
+    [ "$idx" -ge "$step" ] || continue
+    if [ "$kind" != "pm-spec-complete-auto-enqueue" ]; then
+      printf '未知 state extension kind=%s（step=%s）' "$kind" "$idx"
+      return 2
+    fi
+    if [ "$declared_change" != "$change" ]; then
+      printf 'state extension change 不匹配：声明=%s，实际=%s' "$declared_change" "$change"
+      return 2
+    fi
+
+    local old_automation new_automation new_queued_at
+    old_automation="$(yaml_scalar "$old_yaml" automation)"
+    new_automation="$(yaml_scalar "$new_yaml" automation)"
+    new_queued_at="$(yaml_scalar "$new_yaml" automation_queued_at)"
+    if [ "$old_automation" = "$expected_old" ] \
+      && [ "$new_automation" = "$expected_new" ] \
+      && [ -n "$new_queued_at" ] \
+      && [ "$new_queued_at" != "null" ]; then
+      printf 'PM spec-complete 自动入队已验证：old automation=%s，new automation=%s，queued_at 已写入' \
+        "$old_automation" "$new_automation"
+      return 0
+    fi
+    printf 'PM spec-complete 自动入队断言失败：old automation=%s（期望 %s），new automation=%s（期望 %s），new queued_at=%s' \
+      "${old_automation:-<missing>}" "$expected_old" "${new_automation:-<missing>}" "$expected_new" \
+      "${new_queued_at:-<missing>}"
+    return 2
+  done < "$sidecar"
+
+  return 1
 }
 
 # 契约 §1：当前 40 字段或旧版 37 字段按各自 FIELD_ORDER 全量在序（未知行/历史区不计）
@@ -203,6 +288,11 @@ if [ "$DOCUMENT_CONTRACT_BOOTSTRAP" = 1 ]; then
 else
   say "  文档账本: bootstrap 已关闭（stub/显式配置）"
 fi
+if [ "$REVIEW_RECEIPT_BOOTSTRAP" = 1 ]; then
+  say "  review receipt: new 侧对 legacy 成功出口写入同 event 的 request → acknowledge"
+else
+  say "  review receipt: bootstrap 已关闭（stub/显式配置）"
+fi
 say ""
 
 # ---------- new 侧 OpenSpec 文档契约 fixture ----------
@@ -247,6 +337,16 @@ track_oracle_skill() {
     | CLAUDE_PLUGIN_ROOT="$REPO_ROOT" bash "$REPO_ROOT/hooks/skill-tracker.sh" >/dev/null
 }
 
+# Bootstrap runs before every oracle transition/check against the same evolving fixture.  A
+# historical document needs `--backfill` only once; attempting it again is correctly rejected by
+# the product ledger because a backfill must never overwrite an established record.  This harness
+# only creates immutable fixture documents, so an existing kind is exactly the idempotent case.
+oracle_document_recorded() {
+  local dir="$1" change="$2" kind="$3" ledger
+  ledger="$dir/openspec/changes/$change/.pipeline-documents.json"
+  [ -f "$ledger" ] && grep -Fq "\"kind\": \"$kind\"" "$ledger"
+}
+
 record_oracle_document() {
   local dir="$1" change="$2" current="$3" owner="$4" kind="$5" rel="$6" producer="$7"
   local current_rank owner_rank
@@ -254,6 +354,7 @@ record_oracle_document() {
   owner_rank="$(phase_rank "$owner")"
   [ "$current_rank" -ge 0 ] && [ "$owner_rank" -ge 0 ] || return 0
   [ "$owner_rank" -le "$current_rank" ] || return 0
+  oracle_document_recorded "$dir" "$change" "$kind" && return 0
   ensure_oracle_document "$dir" "$rel" "$kind" || return 1
   track_oracle_skill "$dir" "$producer" || return 1
   if [ "$owner_rank" -lt "$current_rank" ]; then
@@ -271,6 +372,10 @@ bootstrap_new_document_contract() {
   change_dir="openspec/changes/$change"
 
   run_new_cli "$dir" document init "$change" || return 1
+  # Hooks no longer infer the newest Change.  Mirror the normal pipeline entry sequence before
+  # producing fixture Skill evidence, so dual-run document setup cannot accidentally bind a
+  # concurrently present old fixture.
+  run_new_cli "$dir" session activate "$change" || return 1
 
   record_oracle_document "$dir" "$change" "$phase" open proposal "$change_dir/proposal.md" openspec-propose || return 1
   record_oracle_document "$dir" "$change" "$phase" open openspec-design "$change_dir/design.md" openspec-propose || return 1
@@ -290,13 +395,41 @@ bootstrap_new_document_contract() {
   fi
 }
 
+# Legacy oracle predates exit-time human review.  Its successful transition is still the expected
+# business effect, so after the old side has proved that an exit succeeds, reproduce the real new
+# protocol only on the new side.  The helper deliberately never runs before a legacy rejection:
+# a failing guard must remain a guard comparison, not become an artificial review request.
+bootstrap_new_review_receipt() {
+  local dir="$1" change="$2" event="$3" phase
+  phase="$(run_new_cli "$dir" get "$change" phase)" || return 1
+  phase="$(printf '%s' "$phase" | tr -d '[:space:]')"
+  case "$phase" in
+    explore|spec|verify) ;;
+    *) return 0 ;;
+  esac
+  run_new_cli "$dir" review request "$change" --event "$event" || return 1
+  run_new_cli "$dir" review acknowledge "$change"
+}
+
 # ---------- 双跑单步 ----------
+stderr_divergence_reason() {
+  local base="$1" idx="$2" file
+  file="$base/new/.oracle-stderr-divergences"
+  [ -f "$file" ] || return 1
+  awk -F '\t' -v wanted="$idx" '
+    $1 == wanted {
+      print substr($0, length(wanted) + 2)
+      exit
+    }
+  ' "$file"
+}
+
 run_step_dual() {
   local fx="$1" idx="$2" cmd="$3" step_dir="$4" base="$5"
   shift 5
   local args=("$@")
   local change="${args[0]}"
-  local old_rc new_rc bootstrap_rc f_out f_exit f_yaml label
+  local old_rc new_rc bootstrap_rc review_bootstrap_rc f_out f_exit f_yaml label
 
   bootstrap_rc=0
   # `check` shares transition's exact document-evidence predicate, so bootstrap it too.  Otherwise
@@ -309,14 +442,25 @@ run_step_dual() {
   (cd "$base/old" && PIPELINE_ASSUME_YES=1 bash "$OLD_SCRIPT" "${OLD_ARGS[@]}") \
     > "$step_dir/old.out" 2> "$step_dir/old.err"
   old_rc=$?
-  if [ "$bootstrap_rc" -eq 0 ]; then
+  review_bootstrap_rc=0
+  if [ "$bootstrap_rc" -eq 0 ] && [ "$old_rc" -eq 0 ] \
+    && [ "$cmd" = transition ] && [ "$REVIEW_RECEIPT_BOOTSTRAP" = 1 ]; then
+    bootstrap_new_review_receipt "$base/new" "$change" "${args[1]:-}" \
+      > "$step_dir/new.review-bootstrap.out" 2> "$step_dir/new.review-bootstrap.err" || review_bootstrap_rc=$?
+  fi
+  if [ "$bootstrap_rc" -eq 0 ] && [ "$review_bootstrap_rc" -eq 0 ]; then
     run_new_cli "$base/new" "${NEW_ARGS[@]}" > "$step_dir/new.out" 2> "$step_dir/new.err"
     new_rc=$?
   else
     : > "$step_dir/new.out"
     {
-      printf 'ERROR: oracle document bootstrap 失败（exit=%s）\n' "$bootstrap_rc"
-      cat "$step_dir/new.document-bootstrap.err"
+      if [ "$bootstrap_rc" -ne 0 ]; then
+        printf 'ERROR: oracle document bootstrap 失败（exit=%s）\n' "$bootstrap_rc"
+        cat "$step_dir/new.document-bootstrap.err"
+      else
+        printf 'ERROR: oracle review receipt bootstrap 失败（exit=%s）\n' "$review_bootstrap_rc"
+        cat "$step_dir/new.review-bootstrap.err"
+      fi
     } > "$step_dir/new.err"
     new_rc=125
   fi
@@ -349,12 +493,26 @@ run_step_dual() {
   if [ ! -f "$oy" ] && [ ! -f "$ny" ]; then
     f_yaml=SKIP
   elif [ -f "$oy" ] && [ -f "$ny" ]; then
-    normalize_yaml "$oy" > "$step_dir/old.norm"
-    normalize_yaml "$ny" > "$step_dir/new.norm"
-    if diff -u "$step_dir/old.norm" "$step_dir/new.norm" > "$step_dir/yaml.diff" 2>&1; then
-      f_yaml=PASS
-    else
-      f_yaml=FAIL
+    local state_extension state_extension_rc omit_declared_automation
+    state_extension="$(declared_state_extension_for_step "$base" "$idx" "$change" "$oy" "$ny")"
+    state_extension_rc=$?
+    omit_declared_automation=0
+    case "$state_extension_rc" in
+      0) omit_declared_automation=1 ;;
+      1) ;;
+      *)
+        f_yaml=FAIL
+        printf '已声明状态演进验证失败：%s\n' "$state_extension" > "$step_dir/yaml.diff"
+        ;;
+    esac
+    normalize_yaml "$oy" "$omit_declared_automation" > "$step_dir/old.norm"
+    normalize_yaml "$ny" "$omit_declared_automation" > "$step_dir/new.norm"
+    if [ "$state_extension_rc" -ne 2 ]; then
+      if diff -u "$step_dir/old.norm" "$step_dir/new.norm" > "$step_dir/yaml.diff" 2>&1; then
+        if [ "$state_extension_rc" -eq 0 ]; then f_yaml=KNOWN; else f_yaml=PASS; fi
+      else
+        f_yaml=FAIL
+      fi
     fi
   else
     f_yaml=FAIL
@@ -370,9 +528,18 @@ run_step_dual() {
   # （[TRANSITION] → vs -> 等）双侧本就不同——不比（SKIP）。
   f_err=SKIP
   if [ -f "$base/new/.oracle-stderr-check" ] && [ "$cmd" = transition ] && [ "$old_rc" != 0 ] && [ "$new_rc" != 0 ]; then
-    strip_ansi "$step_dir/old.err" > "$step_dir/old.err.norm"
-    strip_ansi "$step_dir/new.err" > "$step_dir/new.err.norm"
-    if cmp -s "$step_dir/old.err.norm" "$step_dir/new.err.norm"; then f_err=PASS; else f_err=FAIL; fi
+    local divergence_reason
+    divergence_reason="$(stderr_divergence_reason "$base" "$idx" || true)"
+    if [ -n "$divergence_reason" ]; then
+      # An explicit fixture allow-list is reserved for intentional, documented product extensions.
+      # Exit/state/stdout are still compared; only a stale oracle's human-facing error enumeration
+      # is exempted.  Never add a blanket fixture-level exemption here.
+      f_err=KNOWN
+    else
+      strip_ansi "$step_dir/old.err" > "$step_dir/old.err.norm"
+      strip_ansi "$step_dir/new.err" > "$step_dir/new.err.norm"
+      if cmp -s "$step_dir/old.err.norm" "$step_dir/new.err.norm"; then f_err=PASS; else f_err=FAIL; fi
+    fi
   fi
 
   label="$cmd ${args[*]}"
@@ -389,16 +556,24 @@ run_step_dual() {
     say "  x [$fx #$idx $label] exit 不一致: old=$old_rc new=$new_rc"
     if [ "$bootstrap_rc" -ne 0 ]; then
       say "      new document bootstrap 失败（见 $step_dir/new.document-bootstrap.err）"
+    elif [ "$review_bootstrap_rc" -ne 0 ]; then
+      say "      new review receipt bootstrap 失败（见 $step_dir/new.review-bootstrap.err）"
     fi
   fi
   if [ "$f_yaml" = FAIL ]; then
     say "  x [$fx #$idx $label] .pipeline.yaml 不一致（白名单归一后）："
     head -40 "$step_dir/yaml.diff" | sed 's/^/      /' | tee -a "$REPORT"
   fi
+  if [ "$f_yaml" = KNOWN ]; then
+    say "  i [$fx #$idx $label] YAML 已验证的产品演进: $state_extension"
+  fi
   if [ "$f_err" = FAIL ]; then
     say "  x [$fx #$idx $label] stderr 不一致（剥 ANSI 后逐字）："
     sed 's/^/      old| /' "$step_dir/old.err.norm" | head -6 | tee -a "$REPORT"
     sed 's/^/      new| /' "$step_dir/new.err.norm" | head -6 | tee -a "$REPORT"
+  fi
+  if [ "$f_err" = KNOWN ]; then
+    say "  i [$fx #$idx $label] stderr 已知产品差异: $divergence_reason"
   fi
 }
 

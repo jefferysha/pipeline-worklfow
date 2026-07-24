@@ -251,6 +251,13 @@ export function TaskDetail({
   const showStages = stages.length > 0 && !misaligned
 
   function statusOf(i: number): StageStatus {
+    // StageArtifacts intentionally names the workflow coordinate `step`; use that same canonical
+    // id to join the server-projected OpenSpec task rows.  Reading a non-existent `id` silently
+    // orphaned every real Todo row from its phase.
+    const projected = todoByStage.get(stages[i]?.step ?? '')?.status
+    if (projected === 'done') return 'done'
+    if (projected === 'pending') return 'todo'
+    if (projected === 'current') return state === 'failed' ? 'fail' : 'cur'
     if (i < curIdx) return 'done'
     if (i > curIdx) return 'todo'
     return state === 'failed' ? 'fail' : 'cur'

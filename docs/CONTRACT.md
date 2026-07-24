@@ -76,6 +76,13 @@
   就已经是完整、一致的，不存在任何中间态，`init()` 失败也不会返回一个身份/首态缺失的"半成功"
   结果；随后再生成 YAML adapter。详见
   `packages/kernel/src/state/{run-metadata,run-revision-store,store,workflow-run-repository}.ts`。
+- **review-gate v2 receipt**：`review_gate_phase` / `review_gate_status` / `review_gate_event` /
+  `review_requested_at` / `review_acknowledged_at` 是 `FIELD_ORDER` 的受保护字段。只有
+  `pipeline review request|acknowledge` 与成功的 transition 可以写入/消费它们；通用
+  `set` / `set-many` / `cas` 必须拒绝。它记录的是“离开当前 review phase 前”的 exact-phase-and-event
+  review 确认，而不是“刚进入 phase 就暂停”；例如 `verify-fail` 的确认绝不能授权 `verify-pass`。常规确认
+  由 `acknowledge` 记录；用户明确的 Change 绑定持续授权只能在真实 review 证据完成后经
+  `acknowledge --delegated` 记录来源与授权时间，不能跳过该 receipt 或任何 guard。
 - **不可变 TransitionRecord**（同上）：`openspec/changes/<name>/.pipeline-transitions/
   <sequence 零填充 6 位>-<recordId>.json`，每条记录一个文件，写入用「临时文件 + `link()` +
   `unlink()` 临时文件」而非 rename——`link()` 目标已存在时原子失败（`EEXIST`），存储层强制
@@ -102,7 +109,17 @@
 
 ## 2. 相位与转换
 
-- 相位：`open → explore → spec → build ⇄ verify → ship → archive`。
+- 相位：`open → explore → spec ⇄ build ⇄ verify → ship → archive`。
+- **Requirements rollback**：build 中发现批准后的需求/设计语义变化时，唯一合法路径是
+  `requirements-changed`（build→spec）。该回退不要求先伪造已 stale 的前向文档证据；进入 spec 后
+  必须由 `pipeline-spec` 重登记 proposal/design/tasks 的当前 SHA、补读取收据并重新通过 spec review。
+- **Phase-scoped Todo gate**：有标准阶段标题的 `tasks.md` 在出口只统计截至当前 phase 的未完成项；
+  未来 phase 任务仍由 UI 展示，但不反向阻塞。无阶段标题的历史文件保留“build 全清单完成”兼容语义。
+- **Build→Verify 可复验基线**：状态字段仍命名为 `build_sha` 以兼容既有 state ABI，但它是
+  “构建基线”而非永远的 Git SHA。`isolation=branch|worktree` 冻结 `git rev-parse HEAD`；
+  `isolation=in-place` 冻结 `workspace:sha256:<64 hex>`，即排除 `.git`、依赖、OpenSpec/文档证据、
+  pipeline 控制文件与测试缓存后的源码/配置树内容指纹。in-place 绝不要求或伪造 commit；`verify-pass`
+  在同一排除策略下重算指纹，漂移即拒绝。工作区指纹能力缺失或返回非规范值时 build-complete fail-closed。
 - 合法转换与 `review_phases` 由 `templates/manifest.yaml` 派生（**引擎侧真读该字段**——
   这是对老内核 state-transition.sh 硬编码欠账的构造性修复）。
 - 门 marker 文件（项目根）：`.pipeline-pending-confirm` / `-review` / `-interaction`，
@@ -111,6 +128,25 @@
   `types.ts GATE_TTL_MS`，bash 侧 gate.sh/statusline.sh/session-start.sh 镜像）：
   **confirm 300s**（漏确认安全网，爆炸半径 5min）；**review / interaction 1800s**（跨整个
   决策 phase，缩短会中途误清 → 绕过强制复核）。边界同老内核：age > TTL 才陈旧。
+- **持续交互授权投影（不是第四道 gate）**：用户在正常对话明确说“后续不用问 / 自主执行完成”后，
+  `pipeline session activate <change> --continuous` 或 UserPromptSubmit 会写
+  `.pipeline-interaction-authority`。它是版本化、原子发布、只含 `change/scope/review/issued_at` 的
+  Change 绑定投影，只有 `.pipeline-active` 指向同一 live Change 时 `interactive-skill-gate.sh` 才会
+  识别；格式不完整、换 Change、已归档或撤回均 fail-closed 回到普通 interaction gate。它只避免每次
+  读取 `brainstorming` 等交互式 skill 时重复要求低风险确认，同时在 Change history 留下最小化审计行；
+  **绝不**清 `-review`、不写 canonical approval receipt、不能自动 transition，也不能替代涉及范围、
+  安全、成本或外部状态的实质决策。
+- `review_phases` / custom `gate: review` 都是**出口**门：完成相位产物并选择 event 后运行
+  `pipeline review request <name> --event <event>`，它先原子写 canonical pending receipt、再写
+  `pipeline-review-v2` marker（含 phase/change/event/requested_at）。单出口可省略 event；多出口必须显式指定。
+  展示产物后，用户明确确认会触发
+  `pipeline review acknowledge <name>`，写 approved receipt 并清 marker；`transition` 只消费
+  当前 source phase 与 event 都匹配的 approved receipt。dashboard 的显式真人 transition 点击等价于同一确认，
+  但 CLI/agent 无法伪造该 flag。旧三行 entry-time review marker 被 hook 作为迁移遗留投影清理/忽略，
+  不能绕过 canonical exit check。
+  default 的 `verify-fail` 是内建回退 event：它校验真实 `verification_report` 与受治理的 OpenSpec
+  文档证据，而不错误运行只适用于 `verify-pass` 的成功 guard。自定义多出口 review workflow 必须为每个
+  可选 event 定义在该结果下可满足、可审计的前置证据；CLI 永远要求显式选择 event，不会猜测或复用另一出口的确认。
 
 ## 3. CLI 面（`pipeline <cmd>`）与输出契约
 
@@ -123,6 +159,7 @@
 | cas | `<name> <field> <expect> <new>` | 无输出 | 0；不匹配=3；错误=1 |
 | transition | `<name> <event>` | 无（`[TRANSITION] name: old -> new` 走 stderr） | 0；非法/未知事件=1 |
 | check | `<name>` | guard 报告（人读） | 0 过 / 2 不过 / 1 错误 |
+| review | `request\|acknowledge <name> [--delegated]` | review receipt 状态 | 0 成功；2 投影写/清失败（receipt 已提交）；1 用法/状态错误 |
 | status | `[name] [--json]` | 单 change 摘要 | 0 |
 | list | `[--json]` | 活跃 change 表 | 0 |
 
@@ -142,6 +179,11 @@ get/set/transition 的 stdout 与 exit code 以 **golden-oracle 双跑逐字一�
 > 按当前 step 声明的 step-guard（`evaluateStepGuards`）评估。exit 语义对两轨一致：guard 不过同样
 > `2`、通过 `0`；workflow/step 配置错（文件缺失·非法、当前 step 不在图）`1`。两条路径都是纯预览，
 > 绝不写盘。
+
+> 2026-07-24（PM Spec 后 AFK）：内建 PM track 在 `spec-complete` 成功提交后会按独立的
+> `auto_enqueue_on_spec_complete` 策略将 automation 从 `off` 原子置为 `queued`，并记录入队时间；不启动
+> runner。golden-oracle 的 `pm-history` fixture 用逐步 sidecar 先验证这条精确状态演进，再只忽略该步的
+> `automation` 与 `automation_queued_at` 旧新投影差异；未声明的 automation 差异仍是失败。
 
 ## 4. 目录所有权（并行 agent 只写自己的格子）
 

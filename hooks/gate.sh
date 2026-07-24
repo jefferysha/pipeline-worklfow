@@ -2,8 +2,9 @@
 # gate.sh — PreToolUse 统一交互门（lite 版，语义对齐老内核 pipeline-gate.sh）。
 #
 # 机制：项目根存在新鲜（TTL 分级，CONTRACT §2 / types.ts GATE_TTL_MS）的
-#   .pipeline-pending-{confirm,review,interaction} 任一 marker → exit 2 + stderr 中文指引；
-#   无 marker / 陈旧（顺手清掉）→ exit 0。
+#   .pipeline-pending-{confirm,review,interaction} 任一 marker → 对产出类工具 exit 2 + stderr 中文指引；
+#   原生人类提问工具 AskUserQuestion / request_user_input 是唯一例外：它们只负责把决策交给用户，
+#   不会绕过 marker 或写入产出；无 marker / 陈旧（顺手清掉）→ exit 0。
 # TTL 分级（BACKLOG #13，对齐老内核 pipeline-gate.sh，勿改回统一值）：
 #   - confirm 300s：正常流程同轮 AskUserQuestion 即清（秒级），300s 只是「漏确认」安全网。
 #   - review / interaction 1800s：跨整个决策 phase（常 >5min），缩短会中途误清 → 绕过强制复核。
@@ -11,10 +12,10 @@
 #   绝不从普通父目录猜测项目根，避免共享 /tmp 下的外部 Change 拦截无关会话。
 # 纯 bash 热路径（CONTRACT §5.4）：不 spawn 任何解释器/外部 JSON 解析器，
 #   stdin JSON 只用 bash 字符串提取所需两键（cwd / tool_name）。
-# 例外（Task 9，GOAL 清单 E）：非 default workflow 的 change 调用 Skill 工具时，文件尾段
-#   委托 `node .../pipeline.mjs internal-skill-gate` 做 skill DAG 解锁判定——这是本文件
-#   唯一会 spawn 解释器的分支，且只在该分支触达；workflow==='default'（最高频路径）/
-#   无活跃 change / 非 Skill 调用，三者任一成立就直接跳过，零 spawn，热路径承诺不变。
+# 例外（Task 9，GOAL 清单 E）：非 default workflow 的 change 调用 Claude Skill 工具，或 Codex
+#   读取当前插件内 SKILL.md 时，文件尾段委托 `node .../pipeline.mjs internal-skill-gate` 做 skill DAG
+#   解锁判定——这是本文件唯一会 spawn 解释器的分支。默认 workflow / 无活跃 change / 非技能读取
+#   三者任一成立就直接跳过 node；Codex 读取证据与 Claude Skill 事件保持语义等价但记账类型不同。
 # fail-open（绝不死锁）：stdin 解析失败 / cwd 不存在 / 任何异常 → 放行 exit 0。
 # 强制常开（v5 T5 / 决议#2）：本交互门与 interactive-skill-gate.sh 安全门**不读**
 #   .pipeline/hooks.json 阶段×hook 开关矩阵——配置里手写 "gate.<阶段>": false 一律无效
@@ -29,29 +30,14 @@ set -uo pipefail
 
 INPUT="$(cat 2>/dev/null || printf '{}')"
 
-# 从 $INPUT 提取顶层字符串键（仅支持 "key" : "value" 形态；值含转义引号等奇形 → 返回 1 → fail-open）
-json_get() {
-  local key="$1" rest
-  case "$INPUT" in *"\"$key\""*) ;; *) return 1 ;; esac
-  rest="${INPUT#*\"$key\"}"
-  while true; do
-    case "$rest" in
-      [$' \t\r\n']*) rest="${rest#?}" ;;
-      ':'*) rest="${rest#:}"; break ;;
-      *) return 1 ;;
-    esac
-  done
-  while true; do
-    case "$rest" in
-      [$' \t\r\n']*) rest="${rest#?}" ;;
-      *) break ;;
-    esac
-  done
-  case "$rest" in
-    '"'*) rest="${rest#\"}"; printf '%s' "${rest%%\"*}"; return 0 ;;
-    *) return 1 ;;
-  esac
-}
+# All realtime hooks use the same escape-aware parser. This keeps Codex's quoted
+# `command_execution.command` and `exec.cmd` payloads on the exact same path as regular events.
+JSON_INPUT_HELPER="$(dirname "${BASH_SOURCE[0]:-$0}")/json-input.sh"
+[ -r "$JSON_INPUT_HELPER" ] || exit 0
+# shellcheck source=json-input.sh
+. "$JSON_INPUT_HELPER"
+json_get() { pipeline_json_get_string "$INPUT" "$1"; }
+json_command() { pipeline_json_get_command "$INPUT"; }
 
 CWD="$(json_get cwd || true)"
 [ -z "$CWD" ] && CWD="$PWD"
@@ -107,64 +93,174 @@ resolve_marker() {
   printf '%s' "$PIPELINE_ROOT/$base"
 }
 
+HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || true)"
+REVIEW_HELPER="$HOOK_DIR/review-ack.sh"
+if [ -r "$REVIEW_HELPER" ]; then
+  # shellcheck source=review-ack.sh
+  . "$REVIEW_HELPER"
+fi
+
+# A root-level marker used to be written merely by *entering* explore/spec/verify.  v2 marks an
+# explicit review request and embeds its exact Change.  Retire legacy projections on sight: their
+# old state has no canonical receipt, while transition now independently requires a new receipt to
+# leave a review phase.  A v2 marker only applies to the explicitly selected Change, so an old
+# review in another conversation cannot lock unrelated normal dialogue.
+review_marker_relevant_to_active_change() { # $1=marker → 0=blockable v2 marker
+  local marker="$1" marked_change active_change
+  [ -r "$REVIEW_HELPER" ] || return 1
+  if ! pipeline_review_marker_is_v2 "$marker"; then
+    rm -f "$marker" 2>/dev/null || true
+    return 1
+  fi
+  marked_change="$(pipeline_review_marker_change "$marker" || true)"
+  if [ -z "$marked_change" ]; then
+    rm -f "$marker" 2>/dev/null || true
+    return 1
+  fi
+  active_change="$(pipeline_review_active_change_name "$PIPELINE_ROOT" "$HOOK_DIR" || true)"
+  [ -n "$active_change" ] && [ "$active_change" = "$marked_change" ]
+}
+
+is_review_control_command() {
+  local command="$1"
+  case "$command" in
+    *"pipeline review acknowledge"*|*"pipeline review request"*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 for kind in confirm review interaction; do
   base=".pipeline-pending-$kind"
   m="$(resolve_marker "$base" || true)"
   [ -n "$m" ] || continue
   case "$kind" in confirm) ttl=300 ;; *) ttl=1800 ;; esac
   if fresh "$m" "$ttl"; then
+    if [ "$kind" = "review" ]; then
+      review_marker_relevant_to_active_change "$m" || continue
+      # Acknowledgement is the only state-writing action that may pass a pending v2 gate.  The
+      # command itself validates exact Change/phase/pending state under the canonical lock, so
+      # allowing this narrow control surface cannot open unrelated writes.
+      if pipeline_json_is_command_tool "$TOOL" && is_review_control_command "$(json_command || true)"; then
+        continue
+      fi
+    fi
+    # 交互门的目的正是让 agent 向人提问。若把 AskUserQuestion / Codex 的
+    # request_user_input 也拦住，会形成“必须先问、却不能发问”的自锁；它们的
+    # PostToolUse handler 在拿到真实回答后才会清 marker，故此处只是精确放行，
+    # 绝不删除 marker，也不放行任何写类工具。
+    case "$TOOL" in
+      AskUserQuestion|request_user_input) continue ;;
+    esac
     printf '【pipeline 门】检测到待处理交互标记 %s（%s 已被拦截）：请先把当前决策/产出交用户确认。支持 AskUserQuestion 的宿主可在该交互后解封；Codex 用户在下一条正常对话明确回复“确认继续”或“继续执行”后会自动解封，再重发本次操作。\n' "$base" "$TOOL" >&2
     exit 2
   fi
 done
 
 # ── 非 default workflow 的 skill DAG 解锁判定（Task 9，GOAL 清单 E）：委托进 CLI 判定 ──
-# 只对 Skill 工具调用生效（skill DAG 只约束 skill 调用本身；Bash/Edit/Write/MultiEdit 等其它
-# 工具类型即便当前 change 是非 default workflow 也完全不受影响，不会走进本分支半步）。
-# default workflow 的 change 在这里零改动：找不到活跃 change / workflow 字段缺失或就是
-# "default" → 直接跳过整段，不 spawn 任何进程——本文件"纯 bash 热路径"的承诺只对
-# workflow==='default' 这条最高频路径许诺，这条路径完全不变，仍然零 node/解释器 spawn。
-if [ "$TOOL" = "Skill" ]; then
-  SKILL_ID="$(json_get skill || true)"
-  if [ -n "$SKILL_ID" ]; then
-    # 与其它 hook 共用已验证的项目根，避免跨项目把 Skill DAG 错绑到父目录 Change。
-    SG_PROOT="$PIPELINE_ROOT"
-    if [ -n "$SG_PROOT" ]; then
-      SG_BEST=0 SG_CHANGE_DIR=""
-      for sg_change_dir in "$SG_PROOT"/openspec/changes/*; do
-        [ -d "$sg_change_dir" ] || continue
-        sg_f="$(pipeline_state_source "$sg_change_dir" || true)"
-        [ -n "$sg_f" ] || continue
-        [ "$(yget "$sg_f" archived)" = "true" ] && continue
-        sg_mt="$(stat -c %Y "$sg_f" 2>/dev/null)"
-        case "$sg_mt" in ''|*[!0-9]*) sg_mt="$(stat -f %m "$sg_f" 2>/dev/null)" ;; esac
-        case "$sg_mt" in ''|*[!0-9]*) sg_mt=0 ;; esac
-        [[ "$sg_mt" =~ ^[0-9]+$ ]] || sg_mt=0
-        if [ "$sg_mt" -ge "$SG_BEST" ]; then SG_BEST="$sg_mt"; SG_CHANGE_DIR="$sg_change_dir"; fi
-      done
-      if [ -n "$SG_CHANGE_DIR" ]; then
-        SG_STATE_SOURCE="$(pipeline_state_source "$SG_CHANGE_DIR" || true)"
-        SG_WORKFLOW="$(yget "$SG_STATE_SOURCE" workflow)"
-        if [ -n "$SG_WORKFLOW" ] && [ "$SG_WORKFLOW" != "default" ]; then
-          SG_PLUGIN_ROOT="${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." 2>/dev/null && pwd)}}"
-          SG_BUNDLE="$SG_PLUGIN_ROOT/packages/cli/dist/pipeline.mjs"
-          if [ -f "$SG_BUNDLE" ] && command -v node >/dev/null 2>&1; then
-            SG_CHANGE_NAME="$(basename "$SG_CHANGE_DIR")"
-            # 子 shell 里先 cd 到项目根（SG_PROOT）再 spawn：CLI 的 deps.cwd = process.cwd()
-            # （main.ts），change 定位靠 <cwd>/openspec/changes/<name> 拼出来——不 cd 的话 node
-            # 继承的是 gate.sh 自己的 cwd（可能是任意调用方目录，不是项目根），会把 change 定位
-            # 到错误路径导致 store.read 抛 ENOENT，被内部 catch 静默 fail-open 成误放行。子 shell
-            # 包一层，避免影响本文件后续（虽然此刻后面只剩 exit 0，仍保持这个更安全的写法）。
-            ( cd "$SG_PROOT" && node "$SG_BUNDLE" internal-skill-gate "$SG_CHANGE_NAME" "$SKILL_ID" )
-            sg_rc=$?
-            # fail-open 对齐文件头总纲：只有明确的"拦截"信号（exit 2）才真拦；node/bundle 崩溃
-            # 等其它非零 code 一律不当真、继续放行，绝不因本机制自身故障变相锁死用户。
-            [ "$sg_rc" -eq 2 ] && exit 2
-          fi
-        fi
+# Claude 的 Skill tool 与 Codex 对当前插件 `<root>/skills/<id>/SKILL.md` 的受控读取都走这条
+# 判定；普通 Bash 命令不会命中 helper，因此不被 custom workflow 的 skill DAG 误拦。若 Codex
+# 读取了与本插件 bundled id 同名、但位于全局/项目目录的 SKILL.md，先标为 shadowed：这不是
+# evidence，也不能绕过 DAG；已激活 Change 时必须明确拦下，迫使宿主加载 pipeline-lite 包内版本。
+# Process one resolved skill without making the surrounding command a single-skill bottleneck.
+# A batched Codex read must be blocked if *any* bundled dependency is still locked or any bundled
+# id is loaded from an untrusted global/project path.
+pipeline_enforce_skill_gate() {
+  local skill_id="${1:-}" skill_origin="${2:-}" sg_proot sg_change_dir sg_state_source sg_workflow
+  local sg_plugin_root sg_bundle sg_change_name sg_rc active_helper
+  [ -n "$skill_id" ] || return 0
+
+  # 与其它 hook 共用已验证的项目根和显式选择，避免跨项目或按 mtime 把 Skill DAG
+  # 错绑到旧 Change。没有已选择 target 时不猜测，入口 skill 会在选定/创建后先 activate。
+  sg_proot="$PIPELINE_ROOT"
+  [ -n "$sg_proot" ] || return 0
+  active_helper="$(dirname "${BASH_SOURCE[0]:-$0}")/active-change.sh"
+  if [ -r "$active_helper" ]; then
+    # shellcheck source=active-change.sh
+    . "$active_helper"
+    sg_change_dir="$(pipeline_active_change_dir "$sg_proot" || true)"
+  else
+    sg_change_dir=""
+  fi
+  [ -n "$sg_change_dir" ] || return 0
+
+  sg_state_source="$(pipeline_state_source "$sg_change_dir" || true)"
+  sg_workflow="$(yget "$sg_state_source" workflow)"
+  # The same packaged skill may also exist in ~/.agents or another plugin. A normal Codex command
+  # read from that foreign path is neither a safe completion receipt nor an acceptable substitute
+  # for pipeline-lite's version. Refuse it before the default/custom split so default workflow is
+  # protected too; no active Change means no interception.
+  if [ "$skill_origin" = "shadowed-read" ]; then
+    printf "【pipeline 门】skill '%s' 必须从已安装的 pipeline-lite 插件加载；检测到同名非插件 SKILL.md。Codex 请调用 'pipeline-lite:%s'，不要读取全局或项目副本。\n" "$skill_id" "$skill_id" >&2
+    return 2
+  fi
+
+  [ -n "$sg_workflow" ] && [ "$sg_workflow" != "default" ] || return 0
+  sg_plugin_root="${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." 2>/dev/null && pwd)}}"
+  sg_bundle="$sg_plugin_root/packages/cli/dist/pipeline.mjs"
+  [ -f "$sg_bundle" ] && command -v node >/dev/null 2>&1 || return 0
+  sg_change_name="$(basename "$sg_change_dir")"
+  # 子 shell 里先 cd 到项目根（sg_proot）再 spawn：CLI 的 deps.cwd = process.cwd()
+  # （main.ts），change 定位靠 <cwd>/openspec/changes/<name> 拼出来——不 cd 的话 node
+  # 继承的是 gate.sh 自己的 cwd（可能是任意调用方目录，不是项目根），会把 change 定位
+  # 到错误路径导致 store.read 抛 ENOENT，被内部 catch 静默 fail-open 成误放行。
+  ( cd "$sg_proot" && node "$sg_bundle" internal-skill-gate "$sg_change_name" "$skill_id" )
+  sg_rc=$?
+  # fail-open 对齐文件头总纲：只有明确的"拦截"信号（exit 2）才真拦；node/bundle 崩溃
+  # 等其它非零 code 一律不当真、继续放行，绝不因本机制自身故障变相锁死用户。
+  [ "$sg_rc" -eq 2 ] && return 2
+  return 0
+}
+
+pipeline_list_has_skill_id() {
+  local list="${1:-}" wanted="${2:-}" item
+  [ -n "$wanted" ] || return 1
+  while IFS= read -r item; do
+    [ "$item" = "$wanted" ] && return 0
+  done <<< "$list"
+  return 1
+}
+
+TRUSTED_SKILL_IDS=""
+SHADOW_SKILL_IDS=""
+case "$TOOL" in
+  Skill)
+    SKILL_ID="$(json_get skill || true)"
+    [ -n "$SKILL_ID" ] && pipeline_enforce_skill_gate "$SKILL_ID" "skill-tool"
+    sg_rc=$?
+    [ "$sg_rc" -eq 2 ] && exit 2
+    ;;
+  *)
+    if pipeline_json_is_command_tool "$TOOL"; then
+      EVIDENCE_HELPER="$(dirname "${BASH_SOURCE[0]:-$0}")/skill-evidence.sh"
+      if [ -r "$EVIDENCE_HELPER" ]; then
+        # shellcheck source=skill-evidence.sh
+        . "$EVIDENCE_HELPER"
+        SG_COMMAND="$(json_command || true)"
+        TRUSTED_SKILL_IDS="$(pipeline_codex_skill_read_ids "$SG_COMMAND" || true)"
+        SHADOW_SKILL_IDS="$(pipeline_codex_any_skill_read_ids "$SG_COMMAND" || true)"
       fi
     fi
-  fi
-fi
+    ;;
+esac
 
+# Every trusted asset read in the same command has an independent DAG check.  This is critical for
+# a custom workflow whose parallel batch reads several skills at once: allowing only the first id
+# would silently bypass a locked second id.
+while IFS= read -r SKILL_ID; do
+  [ -n "$SKILL_ID" ] || continue
+  pipeline_enforce_skill_gate "$SKILL_ID" "bundled-read"
+  sg_rc=$?
+  [ "$sg_rc" -eq 2 ] && exit 2
+done <<< "$TRUSTED_SKILL_IDS"
+
+# A non-plugin path that carries any bundled id is a shadow attempt even when the same command also
+# contains a valid bundled read.  Do not let the valid first read mask the untrusted second one.
+while IFS= read -r SKILL_ID; do
+  [ -n "$SKILL_ID" ] || continue
+  pipeline_list_has_skill_id "$TRUSTED_SKILL_IDS" "$SKILL_ID" && continue
+  pipeline_plugin_has_skill_id "$SKILL_ID" || continue
+  pipeline_enforce_skill_gate "$SKILL_ID" "shadowed-read"
+  sg_rc=$?
+  [ "$sg_rc" -eq 2 ] && exit 2
+done <<< "$SHADOW_SKILL_IDS"
 exit 0

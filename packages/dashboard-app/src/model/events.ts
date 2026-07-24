@@ -12,7 +12,7 @@ export interface PlannedTransition {
   event: string
   from: string
   to: string
-  /** 回退边（如 default 的 verify→build verify-fail）——语义上是"打回重做"，UI 需二次确认。 */
+  /** 回退边（如 build→spec / verify→build）——语义上是"打回重做"，UI 需二次确认。 */
   backward: boolean
 }
 

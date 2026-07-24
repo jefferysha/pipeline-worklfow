@@ -342,7 +342,7 @@ describe('H12 Codex production triage provider', () => {
     expect(terminationObserved).toBe(true)
   })
 
-  it('fails loudly on timeout and aborts the in-flight process boundary', async () => {
+  it('starts the process timeout only after the in-flight process boundary, then aborts it loudly', async () => {
     let markStarted: (() => void) | undefined
     const started = new Promise<void>((resolve) => { markStarted = resolve })
     let terminationObserved = false
@@ -351,7 +351,7 @@ describe('H12 Codex production triage provider', () => {
       markStarted?.()
       return new Promise(() => undefined)
     }
-    const pending = createCodexTriageProvider({ exec, timeoutMs: 10 }).classify(
+    const pending = createCodexTriageProvider({ exec, timeoutMs: 1 }).classify(
       request,
       new AbortController().signal,
     )
@@ -370,7 +370,7 @@ describe('H12 Codex production triage provider', () => {
       code: 'timeout',
     })
     expect(terminationObserved).toBe(true)
-  })
+  }, 1_000)
 
   it('the shell-free production ExecFn writes stdin and captures the real process exit code', async () => {
     const result = await nodeCodexTriageExec(

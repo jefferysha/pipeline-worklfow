@@ -9,13 +9,15 @@ import type { PipelineState, GuardResult } from '../types.js'
 /**
  * 自定义 workflow 当前 step 的出口 guard 评估（G2 P2：v1 两变体经 compileStepGuards 下沉后走
  * GUARD_HANDLERS 同一 handler 路径，不再各写一份 if 链）。changeDirAbs = tasks.md 所在 change 目录；
- * fileExists（项目根相对）/gitHeadSha 是新 guard 变体（file-exists / build-head-unchanged）的能力
- * 注入，缺省 = 对应 guard 降级 skipped（视为通过，同 lite/GUARD-RULES §7.2 文件/SHA 面降级口径）。
+ * fileExists（项目根相对）/gitHeadSha/workspaceFingerprint 是 guard 变体（file-exists /
+ * build-head-unchanged）的能力注入，缺省 = 对应 guard 降级 skipped（视为通过，同
+ * lite/GUARD-RULES §7.2 文件/SHA 面降级口径）。
  */
 export interface StepGuardContext {
   readonly changeDirAbs: string
   readonly fileExists?: (repoRelativePath: string) => boolean
   readonly gitHeadSha?: () => Promise<string>
+  readonly workspaceFingerprint?: () => Promise<string>
 }
 
 export type { GuardResult } from '../types.js'
@@ -35,7 +37,7 @@ function readChangeText(changeDirAbs: string, rel: string): string | undefined {
 }
 
 /** 由 state + StepGuardContext 组装 handler 注入面（GuardInput）：readText 绑 changeDir（tasks-at-least
- *  用）、track 取 change 的 track 字段（when 谓词按它生效）、fileExists/gitHeadSha 透传。 */
+ *  用）、track 取 change 的 track 字段（when 谓词按它生效）、fileExists/gitHeadSha/workspaceFingerprint 透传。 */
 export function buildStepGuardInput(state: PipelineState, ctx: StepGuardContext): GuardInput {
   return {
     fields: state.fields,
@@ -43,6 +45,7 @@ export function buildStepGuardInput(state: PipelineState, ctx: StepGuardContext)
     readText: (rel) => readChangeText(ctx.changeDirAbs, rel),
     fileExists: ctx.fileExists,
     gitHeadSha: ctx.gitHeadSha,
+    workspaceFingerprint: ctx.workspaceFingerprint,
   }
 }
 
@@ -73,6 +76,9 @@ export function renderGuardFailure(ev: GuardEvaluation, stepId: string): string 
     case 'full-direct-override':
       return `step '${stepId}' 要求 preset=full 且 build_mode=direct 时 direct_override=true（当前=${d.actual ?? ''}）`
     case 'build-head-unchanged':
+      if ((d.expected?.[0] ?? '').startsWith('workspace:sha256:')) {
+        return `step '${stepId}' 要求当前工作区内容等于 build 冻结基线（build_sha=${d.expected?.[0] ?? ''}，当前=${d.actual ?? ''}）`
+      }
       return `step '${stepId}' 要求当前 HEAD 等于 build 冻结的 SHA（build_sha=${d.expected?.[0] ?? ''}，HEAD=${d.actual ?? ''}）`
     default: {
       const exhaustive: never = g

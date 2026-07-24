@@ -61,9 +61,10 @@ install_static() {
 初始化 OpenSpec 并分派当前 phase skill；Todo 的一级项必须是七个 pipeline phase，任务来自该 Change 的
 `tasks.md`，不得先生成脱离 phase 的通用 Todo。
 
-进入 review phase（explore / spec / verify 出口）须人类显式确认才能 transition。档 A/B 的普通对话中，
-用户下一条明确回复“确认继续”或“继续执行”会自动解封 review marker；档 C 没有 hook 时，必须等待该明确
-确认并在后续操作中保留确认事实，不能用删除 marker 的方式绕过 review-gate。
+离开 review phase（explore / spec / verify）须对确切 transition event 取得人类显式确认：先运行
+`pipeline review request <change> --event <event>`，再由用户确认触发 `pipeline review acknowledge <change>`。
+档 A/B 的普通对话中，用户下一条明确回复“确认继续”或“继续执行”会写入该 receipt；档 C 必须保留确认事实并
+显式 acknowledge，不能删除 marker 绕过 review-gate。verify-fail 与 verify-pass 的确认不可互用。
 EOF
 )"
   local f="$dest/AGENTS.md"

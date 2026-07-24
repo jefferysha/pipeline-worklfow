@@ -55,16 +55,31 @@ async function initGoverned(name: string, track: 'backend' | 'pm' = 'backend', p
   await h.seedGovernedDocumentEvidence(name)
 }
 
+/**
+ * 测试里的真人确认等价物：先让真实 `review request` 通过当前 phase 的完整检查，再用真实
+ * `acknowledge` 写入 exact-phase-and-event receipt。不能用 store 白盒直接塞 approved，否则这组 e2e 会漏掉
+ * CLI 协议与 receipt 消费的接线错误。
+ */
+async function approveReviewExit(name: string, event: string): Promise<void> {
+  const request = await h.run(['review', 'request', name, '--event', event])
+  if (request !== 0) throw new Error(`review request failed (${request}): ${[...h.err, ...h.out].join('\n')}`)
+  const acknowledge = await h.run(['review', 'acknowledge', name])
+  if (acknowledge !== 0) throw new Error(`review acknowledge failed (${acknowledge}): ${[...h.err, ...h.out].join('\n')}`)
+}
+
 /** 按老仓 case 块前置，把 change 从 open 推进到目标相位（步骤对齐 oracle backend-full fixture） */
 async function advanceTo(name: string, phase: 'explore' | 'spec' | 'build' | 'verify' | 'ship'): Promise<void> {
   expect(await h.run(['transition', name, 'open-complete'])).toBe(0)
   if (phase === 'explore') return
-  await seed('docs/design.md')
-  await h.seedArtifact(name, 'design_doc', 'docs/design.md')
+  // Reuse the governed OpenSpec design seeded with the complete coverage block. Review request
+  // runs the real phase check, so a generic placeholder would correctly be rejected at spec exit.
+  await h.seedArtifact(name, 'design_doc', `openspec/changes/${name}/design.md`)
+  await approveReviewExit(name, 'explore-complete')
   expect(await h.run(['transition', name, 'explore-complete'])).toBe(0)
   if (phase === 'spec') return
   await seed('docs/plan.md')
   await h.seedArtifact(name, 'plan', 'docs/plan.md')
+  await approveReviewExit(name, 'spec-complete')
   expect(await h.run(['transition', name, 'spec-complete'])).toBe(0)
   if (phase === 'build') return
   await h.run(['set', name, 'build_mode', 'direct'])
@@ -77,6 +92,7 @@ async function advanceTo(name: string, phase: 'explore' | 'spec' | 'build' | 've
   await h.run(['set', name, 'branch_status', 'handled'])
   await h.run(['set', name, 'agent_review_result', 'pass'])
   await h.run(['set', name, 'codex_review_result', 'pass'])
+  await approveReviewExit(name, 'verify-pass')
   expect(await h.run(['transition', name, 'verify-pass'])).toBe(0)
 }
 
@@ -105,6 +121,7 @@ describe('真实 e2e —— explore-complete 校验（老仓 L120-126）', () =>
     await h.run(['transition', 'demo', 'open-complete'])
     await seed('docs/design.md')
     await h.seedArtifact('demo', 'design_doc', 'docs/design.md')
+    await approveReviewExit('demo', 'explore-complete')
     expect(await h.run(['transition', 'demo', 'explore-complete'])).toBe(0)
     const yaml = await h.read('demo')
     expect(yaml).toMatch(/^phase: spec$/m)
@@ -124,6 +141,7 @@ describe('真实 e2e —— spec-complete 校验（老仓 L127-138）', () => {
   test('pm track 保持原流程的 legacy plan artifact 豁免：无 plan 也可进 build', async () => {
     await initGoverned('pmx', 'pm')
     await advanceTo('pmx', 'spec')
+    await approveReviewExit('pmx', 'spec-complete')
     expect(await h.run(['transition', 'pmx', 'spec-complete'])).toBe(0)
     expect(await h.read('pmx')).toMatch(/^phase: build$/m)
   })
@@ -149,7 +167,7 @@ describe('真实 e2e —— build-complete 校验 + build_sha 冻结（老仓 L1
     await h.run(['set', 'demo', 'direct_override', 'true'])
     await corruptField('demo', 'isolation', 'bogus')
     expect(await h.run(['transition', 'demo', 'build-complete'])).toBe(1)
-    expect(h.err).toContain("ERROR: 非法值 'bogus'，允许: branch worktree")
+    expect(h.err).toContain("ERROR: 非法值 'bogus'，允许: branch worktree in-place")
   })
 
   test('full preset + build_mode=direct 必须显式 direct_override=true，补设后冻结 build_sha', async () => {
@@ -175,6 +193,21 @@ describe('真实 e2e —— build-complete 校验 + build_sha 冻结（老仓 L1
     expect(await h.run(['transition', 'demo', 'build-complete'])).toBe(0)
     expect(await h.read('demo')).toMatch(/^phase: verify$/m)
   })
+
+  test('full preset + direct + in-place + direct_override 可完成构建出口', async () => {
+    await initGoverned('demo')
+    await advanceTo('demo', 'build')
+    await seed('src/app.js', 'export const version = 1\n')
+    await h.run(['set', 'demo', 'build_mode', 'direct'])
+    await h.run(['set', 'demo', 'isolation', 'in-place'])
+    await h.run(['set', 'demo', 'direct_override', 'true'])
+    expect(await h.run(['transition', 'demo', 'build-complete'])).toBe(0)
+    const yaml = await h.read('demo')
+    expect(yaml).toMatch(/^phase: verify$/m)
+    // in-place 没有不可变 Git checkout；必须冻结排除 pipeline 元数据后的工作区内容基线，
+    // 不能把同一个 HEAD 错当成仍未漂移的实现目标。
+    expect(yaml).toMatch(/^build_sha: workspace:sha256:[a-f0-9]{64}$/m)
+  })
 })
 
 describe('真实 e2e —— verify-pass 校验 + 副作用（老仓 L163-205）', () => {
@@ -194,6 +227,7 @@ describe('真实 e2e —— verify-pass 校验 + 副作用（老仓 L163-205）'
     expect(await h.run(['transition', 'demo', 'verify-pass'])).toBe(1)
     expect(h.err).toContain('ERROR: backend track 要求 codex_review_result=pass (当前=pending)')
     await h.run(['set', 'demo', 'codex_review_result', 'pass'])
+    await approveReviewExit('demo', 'verify-pass')
     expect(await h.run(['transition', 'demo', 'verify-pass'])).toBe(0)
     const yaml = await h.read('demo')
     expect(yaml).toMatch(/^phase: ship$/m)
@@ -219,6 +253,30 @@ describe('真实 e2e —— verify-pass 校验 + 副作用（老仓 L163-205）'
     expect(await h.read('demo')).toBe(before)
   })
 
+  test('in-place barrier：源码在 build 后漂移 → verify-pass 真拒（不是同一个 Git HEAD 假绿）', async () => {
+    await initGoverned('demo')
+    await advanceTo('demo', 'build')
+    await seed('src/app.js', 'export const version = 1\n')
+    await h.run(['set', 'demo', 'build_mode', 'direct'])
+    await h.run(['set', 'demo', 'isolation', 'in-place'])
+    await h.run(['set', 'demo', 'direct_override', 'true'])
+    expect(await h.run(['transition', 'demo', 'build-complete'])).toBe(0)
+    expect(await h.read('demo')).toMatch(/^build_sha: workspace:sha256:[a-f0-9]{64}$/m)
+
+    await seed('docs/verify.md')
+    await h.seedArtifact('demo', 'verification_report', 'docs/verify.md')
+    await h.run(['set', 'demo', 'branch_status', 'handled'])
+    await h.run(['set', 'demo', 'agent_review_result', 'pass'])
+    await h.run(['set', 'demo', 'codex_review_result', 'pass'])
+    await approveReviewExit('demo', 'verify-pass')
+
+    await seed('src/app.js', 'export const version = 2\n')
+    const before = await h.read('demo')
+    expect(await h.run(['transition', 'demo', 'verify-pass'])).toBe(1)
+    expect(h.err.join('\n')).toContain('当前工作区内容等于 build 冻结基线')
+    expect(await h.read('demo')).toBe(before)
+  })
+
   test('barrier 退化：build_sha=null（非 git 仓语义）→ 跳过 SHA 校验，exit 0', async () => {
     await initGoverned('demo')
     await advanceTo('demo', 'verify')
@@ -228,6 +286,7 @@ describe('真实 e2e —— verify-pass 校验 + 副作用（老仓 L163-205）'
     await h.run(['set', 'demo', 'agent_review_result', 'pass'])
     await h.run(['set', 'demo', 'codex_review_result', 'pass'])
     await corruptField('demo', 'build_sha', 'null')
+    await approveReviewExit('demo', 'verify-pass')
     expect(await h.run(['transition', 'demo', 'verify-pass'])).toBe(0)
     expect(await h.read('demo')).toMatch(/^phase: ship$/m)
   })
@@ -235,9 +294,10 @@ describe('真实 e2e —— verify-pass 校验 + 副作用（老仓 L163-205）'
   test('pm track 豁免双 review（init 种 skipped 原样通过）', async () => {
     await initGoverned('pmx', 'pm')
     expect(await h.run(['transition', 'pmx', 'open-complete'])).toBe(0)
-    await seed('docs/design.md')
-    await h.seedArtifact('pmx', 'design_doc', 'docs/design.md')
+    await h.seedArtifact('pmx', 'design_doc', 'openspec/changes/pmx/design.md')
+    await approveReviewExit('pmx', 'explore-complete')
     expect(await h.run(['transition', 'pmx', 'explore-complete'])).toBe(0)
+    await approveReviewExit('pmx', 'spec-complete')
     expect(await h.run(['transition', 'pmx', 'spec-complete'])).toBe(0)
     await h.run(['set', 'pmx', 'build_mode', 'direct'])
     await h.run(['set', 'pmx', 'isolation', 'branch'])
@@ -247,6 +307,8 @@ describe('真实 e2e —— verify-pass 校验 + 副作用（老仓 L163-205）'
     await h.seedArtifact('pmx', 'verification_report', 'docs/verify.md')
     await h.run(['set', 'pmx', 'branch_status', 'handled'])
     // agent/codex 保持 init 的 skipped —— pm 不要求 pass
+    await h.run(['set', 'pmx', 'verify_result', 'pass'])
+    await approveReviewExit('pmx', 'verify-pass')
     expect(await h.run(['transition', 'pmx', 'verify-pass'])).toBe(0)
     const yaml = await h.read('pmx')
     expect(yaml).toMatch(/^phase: ship$/m)
@@ -260,6 +322,9 @@ describe('真实 e2e —— verify-fail / archived 副作用（老仓 L206-218�
     await initGoverned('demo')
     await advanceTo('demo', 'verify')
     expect(await h.read('demo')).toMatch(/^build_sha: DEADBEEF$/m) // 冻结在案
+    await seed('docs/verify-fail.md')
+    await h.seedArtifact('demo', 'verification_report', 'docs/verify-fail.md')
+    await approveReviewExit('demo', 'verify-fail')
     expect(await h.run(['transition', 'demo', 'verify-fail'])).toBe(0)
     const yaml = await h.read('demo')
     expect(yaml).toMatch(/^phase: build$/m)
@@ -309,6 +374,9 @@ describe('真实 e2e —— 跨命令串联 + 历史 JSONL（GOAL C10）', () =>
   test('verify-fail 回炉重跑：build-complete 重新冻结新 SHA 后 verify-pass 通过（老仓 barrier 修复路径）', async () => {
     await initGoverned('demo')
     await advanceTo('demo', 'verify')
+    await seed('docs/verify-fail.md')
+    await h.seedArtifact('demo', 'verification_report', 'docs/verify-fail.md')
+    await approveReviewExit('demo', 'verify-fail')
     expect(await h.run(['transition', 'demo', 'verify-fail'])).toBe(0) // → build，build_sha=null
     expect(await h.run(['transition', 'demo', 'build-complete'])).toBe(0) // 前置字段仍在，重新冻结
     expect(await h.read('demo')).toMatch(/^build_sha: DEADBEEF$/m)
@@ -317,6 +385,7 @@ describe('真实 e2e —— 跨命令串联 + 历史 JSONL（GOAL C10）', () =>
     await h.run(['set', 'demo', 'branch_status', 'handled'])
     await h.run(['set', 'demo', 'agent_review_result', 'pass'])
     await h.run(['set', 'demo', 'codex_review_result', 'pass'])
+    await approveReviewExit('demo', 'verify-pass')
     expect(await h.run(['transition', 'demo', 'verify-pass'])).toBe(0)
     expect(await h.read('demo')).toMatch(/^verify_result: pass$/m)
   })

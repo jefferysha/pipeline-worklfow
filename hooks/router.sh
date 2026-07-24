@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # router.sh — UserPromptSubmit：项目级动态 Track 路由 + workflow breadcrumb/skill 注入。
 #
-# 冷路径从 effective Track Registry + manifest profile skills 生成 PIPELINE_ROUTER_V2；默认 cache
-# 位于 <canonical-project-root>/.pipeline/cache/router.v2.data。cache 是严格字段化的 hex 数据，
+# 冷路径从 effective Track Registry + manifest profile skills 生成 PIPELINE_ROUTER_V4；默认 cache
+# 位于 <canonical-project-root>/.pipeline/cache/router.v4.data。cache 是严格字段化的 hex 数据，
 # 本脚本只逐行校验和 builtin 解码，绝不把项目 cache 当 shell 程序执行。
 #
 # fail-open（对 hook 调用方）/fail-closed（对 stale 数据）：任何定位、解析或生成错误都 exit 0；
@@ -16,50 +16,47 @@ while IFS= read -r _input_line || [ -n "$_input_line" ]; do
   _input_line=""
 done
 
-# 从 $INPUT 提取顶层字符串键（与其它 hook 的窄 JSON 接口一致；不做通用 JSON 解析）。
-json_get() {
-  local key="$1" rest
-  case "$INPUT" in *"\"$key\""*) ;; *) return 1 ;; esac
-  rest="${INPUT#*\"$key\"}"
-  while true; do
-    case "$rest" in
-      [$' \t\r\n']*) rest="${rest#?}" ;;
-      ':'*) rest="${rest#:}"; break ;;
-      *) return 1 ;;
-    esac
-  done
-  while true; do
-    case "$rest" in
-      [$' \t\r\n']*) rest="${rest#?}" ;;
-      *) break ;;
-    esac
-  done
-  case "$rest" in
-    '"'*) rest="${rest#\"}"; printf '%s' "${rest%%\"*}"; return 0 ;;
-    *) return 1 ;;
-  esac
-}
+# Keep normal dialogue routing on the same escape-aware parser as the runtime hooks: a quoted
+# user prompt must not be silently truncated before the track scorer sees it.
+JSON_INPUT_HELPER="$(dirname "${BASH_SOURCE[0]:-$0}")/json-input.sh"
+[ -r "$JSON_INPUT_HELPER" ] || exit 0
+# shellcheck source=json-input.sh
+. "$JSON_INPUT_HELPER"
+json_get() { pipeline_json_get_string "$INPUT" "$1"; }
 
 PROMPT="$(json_get prompt || true)"
 [ -n "$PROMPT" ] || exit 0
 CWD="$(json_get cwd || true)"
 [ -n "$CWD" ] || CWD="$PWD"
 [ -d "$CWD" ] || exit 0
+# A normal host conversation may opt into a dashboard liveness binding only through this exact
+# host-provided id. It is not used for routing or workflow state, and malformed/unknown ids stay
+# absent rather than falling back to the repo-global active Change pointer.
+HOST_SESSION_ID="$(json_get session_id || true)"
+case "$HOST_SESSION_ID" in ''|*[!A-Za-z0-9_-]*) HOST_SESSION_ID='' ;; esac
+[ "${#HOST_SESSION_ID}" -le 128 ] || HOST_SESSION_ID=''
 
-# 系统通知、自身回显、显式命令、L5 override、纯讨论均不触发路由。
+# 系统通知、自身回显、显式命令、纯讨论均不触发路由。局部快速修复交给 simple 风险轨，
+# 不再作为绕过 pipeline 的 L5 口子。
 case "$PROMPT" in
   *"<task-notification>"*|*"<task-id>"*|*"<output-file>"*|*"<workflow-state>"*|*"<pipeline-router"*|*"<pipeline-dispatch>"*) exit 0 ;;
 esac
 case "$PROMPT" in /*) exit 0 ;; esac
-case "$PROMPT" in
-  *只改*|*快速修复*|*临时修复*|*就这一行*|*就改这个*|*别想太多*|*just\ fix*|*quick\ patch*|*typo*|*hotfix\ only*|*one-liner*) exit 0 ;;
-esac
 case "$PROMPT" in
   *如何使用*|*怎么用*|*是什么*|*为什么*|*解释*|*文档在哪*|*在哪里*|*意思是*|*我觉得*|*我感觉*|*你觉得*|*是不是*|*怎么样*|*看法*|*聊聊*|*讨论一下*|*有没有更好*) exit 0 ;;
 esac
 if printf '%s' "$PROMPT" | grep -qiE '^[[:space:]]*(what|why|how|when|where|who|can you (tell|explain|describe))\b'; then
   exit 0
 fi
+
+# Carry a strong, explicit continuous-execution authorisation through the normal-chat dispatch.
+# The router does not itself create authority (there may be no Change yet); the pipeline root skill
+# consumes this exact flag only after it has created or re-selected an exact Change and uses
+# `pipeline session activate --continuous` to bind the resulting projection safely.
+CONTINUOUS_EXECUTION='false'
+case "$PROMPT" in
+  *后续不用问*|*后续无需询问*|*后续不需要确认*|*后续自行执行*|*后续自己执行*|*后续自主执行*|*自主执行完成*|*自己执行完成*) CONTINUOUS_EXECUTION='true' ;;
+esac
 
 STATE_HELPER="$(dirname "${BASH_SOURCE[0]:-$0}")/canonical-state.sh"
 if [ -r "$STATE_HELPER" ]; then
@@ -79,19 +76,29 @@ ROOT_HELPER="$(dirname "${BASH_SOURCE[0]:-$0}")/project-root.sh"
 PROOT="$(pipeline_project_root "$CWD" bootstrap changes || true)"
 [ -n "$PROOT" ] || exit 0
 
-CHANGE_NAME="" CHANGE_PHASE="" CHANGE_TRACK=""
-SOLE_CHANGE_NAME="" SOLE_CHANGE_PHASE="" SOLE_CHANGE_TRACK=""
+CHANGE_NAME="" CHANGE_PHASE="" CHANGE_TRACK="" CHANGE_WORKFLOW=""
+SOLE_CHANGE_NAME="" SOLE_CHANGE_PHASE="" SOLE_CHANGE_TRACK="" SOLE_CHANGE_WORKFLOW=""
 ACTIVE_CHANGE_COUNT=0
+ACTIVE_CHANGE_NAMES=() ACTIVE_CHANGE_PHASES=() ACTIVE_CHANGE_TRACKS=() ACTIVE_CHANGE_WORKFLOWS=()
 BEST_MTIME=0
 for _change_dir in "$PROOT"/openspec/changes/*; do
   [ -d "$_change_dir" ] || continue
   f="$(pipeline_state_source "$_change_dir" || true)"
   [ -n "$f" ] || continue
   [ "$(yget "$f" archived)" = "true" ] && continue
+  _change_name="${_change_dir##*/}"
+  # change 名会进入 hook 的结构化输出和动态正则；只接受 CLI/状态机同一份路径契约。
+  case "$_change_name" in ''|*[!A-Za-z0-9_-]*) continue ;; esac
   ACTIVE_CHANGE_COUNT=$((ACTIVE_CHANGE_COUNT + 1))
-  SOLE_CHANGE_NAME="${_change_dir##*/}"
+  SOLE_CHANGE_NAME="$_change_name"
   SOLE_CHANGE_PHASE="$(yget "$f" phase)"
   SOLE_CHANGE_TRACK="$(yget "$f" track)"
+  SOLE_CHANGE_WORKFLOW="$(yget "$f" workflow)"
+  _change_index="${#ACTIVE_CHANGE_NAMES[@]}"
+  ACTIVE_CHANGE_NAMES[$_change_index]="$SOLE_CHANGE_NAME"
+  ACTIVE_CHANGE_PHASES[$_change_index]="$SOLE_CHANGE_PHASE"
+  ACTIVE_CHANGE_TRACKS[$_change_index]="$SOLE_CHANGE_TRACK"
+  ACTIVE_CHANGE_WORKFLOWS[$_change_index]="$SOLE_CHANGE_WORKFLOW"
   mt="$(stat -c %Y "$f" 2>/dev/null)"
   case "$mt" in ''|*[!0-9]*) mt="$(stat -f %m "$f" 2>/dev/null)" ;; esac
   case "$mt" in ''|*[!0-9]*) mt=0 ;; esac
@@ -100,6 +107,7 @@ for _change_dir in "$PROOT"/openspec/changes/*; do
     CHANGE_NAME="${_change_dir##*/}"
     CHANGE_PHASE="$(yget "$f" phase)"
     CHANGE_TRACK="$(yget "$f" track)"
+    CHANGE_WORKFLOW="$(yget "$f" workflow)"
   fi
 done
 
@@ -109,10 +117,12 @@ if [ "$ACTIVE_CHANGE_COUNT" -eq 1 ]; then
   CHANGE_NAME="$SOLE_CHANGE_NAME"
   CHANGE_PHASE="$SOLE_CHANGE_PHASE"
   CHANGE_TRACK="$SOLE_CHANGE_TRACK"
+  CHANGE_WORKFLOW="$SOLE_CHANGE_WORKFLOW"
 else
   CHANGE_NAME=""
   CHANGE_PHASE=""
   CHANGE_TRACK=""
+  CHANGE_WORKFLOW=""
 fi
 
 # Dashboard/CLI `session activate` writes a repo-level recovery candidate here.
@@ -130,6 +140,7 @@ if [ -f "$ACTIVE_POINTER" ] && [ ! -L "$ACTIVE_POINTER" ] && [ -r "$ACTIVE_POINT
         CHANGE_NAME="$ACTIVE_NAME"
         CHANGE_PHASE="$(yget "$ACTIVE_STATE" phase)"
         CHANGE_TRACK="$(yget "$ACTIVE_STATE" track)"
+        CHANGE_WORKFLOW="$(yget "$ACTIVE_STATE" workflow)"
       fi
       ;;
   esac
@@ -145,23 +156,57 @@ DISPATCH_INTENT="new"
 if [ -r "$INTENT_HELPER" ]; then
   # shellcheck source=prompt-intent.sh
   . "$INTENT_HELPER"
-  if [ -n "$CHANGE_NAME" ] && pipeline_prompt_requests_resume "$PROMPT" "$CHANGE_NAME"; then
+  # The root skill already owns a `track / workflow` selection response.  Do not overlay a stale
+  # repository candidate just because the answer also says “继续/上一步”.
+  pipeline_prompt_is_workflow_selection "$PROMPT" && exit 0
+  # 用户在正常对话中完整点名某个活跃 change 时，它比 repo 级指针和泛化“继续”
+  # 都更强。此前多 candidate 会先清空 CHANGE_NAME，导致 `继续 pet-adoption-page`
+  # 退化为 ambiguous select；这里保留候选表并只接受唯一的精确命中。
+  EXPLICIT_CHANGE_COUNT=0
+  EXPLICIT_CHANGE_NAME="" EXPLICIT_CHANGE_PHASE="" EXPLICIT_CHANGE_TRACK="" EXPLICIT_CHANGE_WORKFLOW=""
+  _change_index=0
+  while [ "$_change_index" -lt "${#ACTIVE_CHANGE_NAMES[@]}" ]; do
+    if pipeline_prompt_names_change "$PROMPT" "${ACTIVE_CHANGE_NAMES[$_change_index]}"; then
+      EXPLICIT_CHANGE_COUNT=$((EXPLICIT_CHANGE_COUNT + 1))
+      EXPLICIT_CHANGE_NAME="${ACTIVE_CHANGE_NAMES[$_change_index]}"
+      EXPLICIT_CHANGE_PHASE="${ACTIVE_CHANGE_PHASES[$_change_index]}"
+      EXPLICIT_CHANGE_TRACK="${ACTIVE_CHANGE_TRACKS[$_change_index]}"
+      EXPLICIT_CHANGE_WORKFLOW="${ACTIVE_CHANGE_WORKFLOWS[$_change_index]}"
+    fi
+    _change_index=$(( _change_index + 1 ))
+  done
+  if [ "$EXPLICIT_CHANGE_COUNT" -eq 1 ]; then
+    CHANGE_NAME="$EXPLICIT_CHANGE_NAME"
+    CHANGE_PHASE="$EXPLICIT_CHANGE_PHASE"
+    CHANGE_TRACK="$EXPLICIT_CHANGE_TRACK"
+    CHANGE_WORKFLOW="$EXPLICIT_CHANGE_WORKFLOW"
+    DISPATCH_INTENT="resume"
+  elif [ "$EXPLICIT_CHANGE_COUNT" -gt 1 ]; then
+    DISPATCH_INTENT="select"
+    CHANGE_NAME=""
+    CHANGE_PHASE=""
+    CHANGE_TRACK=""
+    CHANGE_WORKFLOW=""
+  elif [ -n "$CHANGE_NAME" ] && pipeline_prompt_requests_resume "$PROMPT" "$CHANGE_NAME"; then
     DISPATCH_INTENT="resume"
   elif [ "$ACTIVE_CHANGE_COUNT" -gt 1 ] && pipeline_prompt_requests_resume "$PROMPT" ""; then
     DISPATCH_INTENT="select"
     CHANGE_NAME=""
     CHANGE_PHASE=""
     CHANGE_TRACK=""
+    CHANGE_WORKFLOW=""
   else
     CHANGE_NAME=""
     CHANGE_PHASE=""
     CHANGE_TRACK=""
+    CHANGE_WORKFLOW=""
   fi
 else
   # Missing helper is a safety failure: do not leak a repo-level candidate into a new prompt.
   CHANGE_NAME=""
   CHANGE_PHASE=""
   CHANGE_TRACK=""
+  CHANGE_WORKFLOW=""
 fi
 
 hook_disabled() { # $1=root $2=hook $3=phase
@@ -176,15 +221,15 @@ PLUGIN_ROOT="${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE
 MANIFEST="$PLUGIN_ROOT/templates/manifest.yaml"
 TRACKS_FILE="$PROOT/.pipeline/tracks.yaml"
 if [ -f "$TRACKS_FILE" ]; then TRACKS_PRESENT=1; else TRACKS_PRESENT=0; fi
-CACHE="${PIPELINE_ROUTER_CACHE:-$PROOT/.pipeline/cache/router.v2.data}"
+CACHE="${PIPELINE_ROUTER_CACHE:-$PROOT/.pipeline/cache/router.v4.data}"
 _CLI_BUNDLE="$PLUGIN_ROOT/packages/cli/dist/pipeline.mjs"
 _GEN_MJS="$PLUGIN_ROOT/hooks/router-gen.mjs"
 
 # Bash 3.2-compatible parallel arrays（不使用 associative array 或动态变量名）。
 _router_clear_cache() {
   CACHE_ROOT="" CACHE_MANIFEST_SHA="" CACHE_REGISTRY_REV="" CACHE_TRACKS_PRESENT=""
-  ROUTER_ORDERS=() ROUTER_PRIORITIES=() ROUTER_IDS=() ROUTER_PATTERNS=() ROUTER_PROFILES=()
-  ROUTER_MATRICES=() ROUTER_BUILTINS=() ROUTER_LABELS=()
+  ROUTER_ORDERS=() ROUTER_PRIORITIES=() ROUTER_IDS=() ROUTER_PATTERNS=() ROUTER_EXCLUDE_PATTERNS=() ROUTER_PROFILES=()
+  ROUTER_MATRICES=() ROUTER_BUILTINS=() ROUTER_LABELS=() ROUTER_WORKFLOWS=()
   CACHE_BC_PHASES=() CACHE_BC_TEXTS=()
   CACHE_CELL_PHASES=() CACHE_CELL_PROFILES=() CACHE_CELL_KINDS=() CACHE_CELL_SOURCES=()
   CACHE_SKILL_PHASES=() CACHE_SKILL_PROFILES=() CACHE_SKILL_KINDS=() CACHE_SKILL_INDEXES=() CACHE_SKILL_TOKENS=()
@@ -235,6 +280,17 @@ _track_id_ok() {
   esac
 }
 
+# `workflowDefault` 会进入宿主可读的 dispatch 提示，不能让项目配置中的控制符或标签分隔符
+# 打破该数据契约。workflow 定义自身仍由 kernel 校验；这里仅是 shell 边界的防御性收窄。
+_workflow_default_ok() {
+  local value="$1"
+  [ -n "$value" ] && [ "${#value}" -le 160 ] || return 1
+  case "$value" in
+    *[$' \t\r\n']*|*'<'*|*'>'*|*'|'*|*';'*|*'='*) return 1 ;;
+  esac
+  return 0
+}
+
 # PARTS 最后一格永远是 sentinel，因此尾部空字段也不会被 read 吞掉。
 _split_cache_line() {
   PARTS=()
@@ -246,14 +302,14 @@ _split_cache_line() {
 _router_load_cache() { # file expected-root expected-tracks-present
   local file="$1" expected_root="$2" expected_tracks="$3"
   local line line_no=0 metadata_seen=0 previous_order=-1 stage=0 i found count
-  local order priority id pattern profile matrix builtin label phase prose kind cell_source index token
+  local order priority id pattern exclude_pattern profile matrix builtin label workflow phase prose kind cell_source index token
   _router_clear_cache
   [ -f "$file" ] || return 1
 
   while IFS= read -r line || [ -n "$line" ]; do
     line_no=$((line_no + 1))
     if [ "$line_no" -eq 1 ]; then
-      [ "$line" = "PIPELINE_ROUTER_V2" ] || { _router_clear_cache; return 1; }
+      [ "$line" = "PIPELINE_ROUTER_V4" ] || { _router_clear_cache; return 1; }
       continue
     fi
     [ -n "$line" ] || { _router_clear_cache; return 1; }
@@ -278,7 +334,7 @@ _router_load_cache() { # file expected-root expected-tracks-present
         metadata_seen=1
         ;;
       R)
-        [ "$metadata_seen" -eq 1 ] && [ "$stage" -eq 0 ] && [ "${#PARTS[@]}" -eq 10 ] \
+        [ "$metadata_seen" -eq 1 ] && [ "$stage" -eq 0 ] && [ "${#PARTS[@]}" -eq 12 ] \
           || { _router_clear_cache; return 1; }
         order="${PARTS[1]}"; priority="${PARTS[2]}"
         _uint_ok "$order" && _uint_ok "$priority" || { _router_clear_cache; return 1; }
@@ -289,13 +345,16 @@ _router_load_cache() { # file expected-root expected-tracks-present
         _track_id_ok "$id" || { _router_clear_cache; return 1; }
         _hex_decode "${PARTS[4]}" || { _router_clear_cache; return 1; }; pattern="$HEX_VALUE"
         [ -n "$pattern" ] || { _router_clear_cache; return 1; }
-        _hex_decode "${PARTS[5]}" || { _router_clear_cache; return 1; }; profile="$HEX_VALUE"
+        _hex_decode "${PARTS[5]}" || { _router_clear_cache; return 1; }; exclude_pattern="$HEX_VALUE"
+        _hex_decode "${PARTS[6]}" || { _router_clear_cache; return 1; }; profile="$HEX_VALUE"
         [ -n "$profile" ] || { _router_clear_cache; return 1; }
-        matrix="${PARTS[6]}"; builtin="${PARTS[7]}"
+        matrix="${PARTS[7]}"; builtin="${PARTS[8]}"
         case "$matrix" in 0|1) ;; *) _router_clear_cache; return 1 ;; esac
         case "$builtin" in 0|1) ;; *) _router_clear_cache; return 1 ;; esac
-        _hex_decode "${PARTS[8]}" || { _router_clear_cache; return 1; }; label="$HEX_VALUE"
+        _hex_decode "${PARTS[9]}" || { _router_clear_cache; return 1; }; label="$HEX_VALUE"
         [ -n "$label" ] || { _router_clear_cache; return 1; }
+        _hex_decode "${PARTS[10]}" || { _router_clear_cache; return 1; }; workflow="$HEX_VALUE"
+        _workflow_default_ok "$workflow" || { _router_clear_cache; return 1; }
         i=0
         while [ "$i" -lt "${#ROUTER_IDS[@]}" ]; do
           [ "${ROUTER_IDS[$i]}" != "$id" ] || { _router_clear_cache; return 1; }
@@ -303,8 +362,9 @@ _router_load_cache() { # file expected-root expected-tracks-present
         done
         i="${#ROUTER_IDS[@]}"
         ROUTER_ORDERS[$i]="$order"; ROUTER_PRIORITIES[$i]="$priority"; ROUTER_IDS[$i]="$id"
-        ROUTER_PATTERNS[$i]="$pattern"; ROUTER_PROFILES[$i]="$profile"; ROUTER_MATRICES[$i]="$matrix"
-        ROUTER_BUILTINS[$i]="$builtin"; ROUTER_LABELS[$i]="$label"
+        ROUTER_PATTERNS[$i]="$pattern"; ROUTER_EXCLUDE_PATTERNS[$i]="$exclude_pattern"
+        ROUTER_PROFILES[$i]="$profile"; ROUTER_MATRICES[$i]="$matrix"
+        ROUTER_BUILTINS[$i]="$builtin"; ROUTER_LABELS[$i]="$label"; ROUTER_WORKFLOWS[$i]="$workflow"
         ;;
       B)
         [ "$metadata_seen" -eq 1 ] && [ "$stage" -le 1 ] && [ "${#PARTS[@]}" -eq 4 ] \
@@ -387,7 +447,7 @@ _router_regen() { # manifest root output
   cache_dir="${output%/*}"
   [ "$cache_dir" != "$output" ] || cache_dir="."
   mkdir -p -- "$cache_dir" 2>/dev/null || return 1
-  tmp="$(mktemp "$cache_dir/.router.v2.tmp.XXXXXX" 2>/dev/null)" || return 1
+  tmp="$(mktemp "$cache_dir/.router.v4.tmp.XXXXXX" 2>/dev/null)" || return 1
 
   if [ -f "$_CLI_BUNDLE" ] \
     && (cd "$root" && node "$_CLI_BUNDLE" _gen-router-sh "$manifest" "$root") > "$tmp" 2>/dev/null \
@@ -442,10 +502,15 @@ score_track() {
   printf '%s' "$count"
 }
 
-BEST_SCORE=0 BEST_PRIORITY=0 TRACK="" PROFILE=""
+BEST_SCORE=0 BEST_PRIORITY=0 TRACK="" PROFILE="" BEST_WORKFLOW="default"
 i=0
 while [ "$i" -lt "${#ROUTER_IDS[@]}" ]; do
-  SCORE="$(score_track "${ROUTER_PATTERNS[$i]}")"
+  EXCLUDED=0
+  if [ -n "${ROUTER_EXCLUDE_PATTERNS[$i]}" ]; then
+    EXCLUSION_SCORE="$(score_track "${ROUTER_EXCLUDE_PATTERNS[$i]}")"
+    [ "$EXCLUSION_SCORE" -gt 0 ] && EXCLUDED=1
+  fi
+  if [ "$EXCLUDED" -eq 1 ]; then SCORE=0; else SCORE="$(score_track "${ROUTER_PATTERNS[$i]}")"; fi
   if [ "$SCORE" -gt 0 ] && {
     [ "$SCORE" -gt "$BEST_SCORE" ] \
       || { [ "$SCORE" -eq "$BEST_SCORE" ] && [ "${ROUTER_PRIORITIES[$i]}" -gt "$BEST_PRIORITY" ]; }
@@ -454,43 +519,142 @@ while [ "$i" -lt "${#ROUTER_IDS[@]}" ]; do
     BEST_PRIORITY="${ROUTER_PRIORITIES[$i]}"
     TRACK="${ROUTER_IDS[$i]}"
     PROFILE="${ROUTER_PROFILES[$i]}"
+    BEST_WORKFLOW="${ROUTER_WORKFLOWS[$i]}"
   fi
   i=$((i + 1))
 done
-[ "$BEST_SCORE" -gt 0 ] && [ -n "$TRACK" ] || exit 0
+
+# 新任务由本轮文本评分选择 track；恢复已有 Change 时则反过来，以持久化状态中的
+# track 为权威。否则用户只说“继续 pet-adoption-page”而未复述领域关键词，会在这里
+# 被评分 0 静默吞掉，或被错误重算到另一个 track。仅接受当前 effective registry 中
+# 的 id，既得到对应的 skill profile，也不把手改 state 原文透传到宿主上下文。
+RESUME_TRACK_BOUND=0
+if [ "$DISPATCH_INTENT" = "resume" ] && [ -n "$CHANGE_TRACK" ]; then
+  i=0
+  while [ "$i" -lt "${#ROUTER_IDS[@]}" ]; do
+    if [ "${ROUTER_IDS[$i]}" = "$CHANGE_TRACK" ]; then
+      TRACK="${ROUTER_IDS[$i]}"
+      PROFILE="${ROUTER_PROFILES[$i]}"
+      BEST_WORKFLOW="${ROUTER_WORKFLOWS[$i]}"
+      RESUME_TRACK_BOUND=1
+      break
+    fi
+    i=$((i + 1))
+  done
+fi
+
+if [ "$RESUME_TRACK_BOUND" -ne 1 ] && [ "$DISPATCH_INTENT" != "select" ] \
+  && { [ "$BEST_SCORE" -le 0 ] || [ -z "$TRACK" ]; }; then
+  exit 0
+fi
+
+# 多候选的泛化恢复本身就必须进入 pipeline 选择，不应因 prompt 没有领域关键词而
+# 丢失。此时没有可安全猜测的 track，明确标为 unresolved 并禁用 profile skill 注入。
+if [ "$DISPATCH_INTENT" = "select" ] && [ -z "$TRACK" ]; then
+  TRACK="unresolved"
+  PROFILE=""
+fi
+
+# A project-defined routable Track is a real project-level choice. Plugin-owned built-ins, including
+# simple and its non-default workflow, are already versioned policy and do not require another ask.
+# The hook may recommend the winner, but it must not silently replace the user's pipeline choice.
+CUSTOM_SELECTION_AVAILABLE=0
+i=0
+while [ "$i" -lt "${#ROUTER_IDS[@]}" ]; do
+  if [ "${ROUTER_BUILTINS[$i]}" = "0" ]; then
+    CUSTOM_SELECTION_AVAILABLE=1
+    break
+  fi
+  i=$((i + 1))
+done
+SELECTION_REQUIRED=0
+if [ "$DISPATCH_INTENT" = "new" ] && [ "$CUSTOM_SELECTION_AVAILABLE" = "1" ]; then
+  SELECTION_REQUIRED=1
+fi
 
 EFF_PHASE="${CHANGE_PHASE:-open}"
+if [ "$DISPATCH_INTENT" = "new" ] && [ "$BEST_WORKFLOW" = "simple" ]; then EFF_PHASE="change"; fi
 case "$EFF_PHASE" in
   ''|*[!a-zA-Z0-9_-]*) EFF_PHASE=open ;;
 esac
 
+# Default manifest 的 breadcrumb / profile skill matrix 只描述 default workflow。恢复一个
+# custom workflow 时若仍注入它们，宿主会看到一套与真实 DAG 不一致的“强制 skill”，并可能
+# 先尝试错误的 skill；custom 图必须由 pipeline 入口用 CLI/受控读取加载后再分派。
+# router 热路径不解析项目 YAML，因此在这里宁可不臆造，保留 canonical workflow identity。
+NON_DEFAULT_WORKFLOW_DISPATCH=0
+if { [ "$DISPATCH_INTENT" = "resume" ] && [ -n "$CHANGE_NAME" ] \
+    && _workflow_default_ok "$CHANGE_WORKFLOW" && [ "$CHANGE_WORKFLOW" != "default" ]; } \
+  || { [ "$DISPATCH_INTENT" = "new" ] && _workflow_default_ok "$BEST_WORKFLOW" \
+    && [ "$BEST_WORKFLOW" != "default" ]; }; then
+  NON_DEFAULT_WORKFLOW_DISPATCH=1
+fi
+
+# A selection dispatch has no canonical workflow yet.  It must suppress the default matrix just
+# like a bound custom workflow, but it must not claim that an empty or suggested workflow is
+# already the Change's immutable identity.  Keep those two states distinct in the user-facing
+# contract: pipeline owns the selection, then subsequent resume turns own the bound workflow.
+SUPPRESS_DEFAULT_MATRIX="$NON_DEFAULT_WORKFLOW_DISPATCH"
+if [ "$SELECTION_REQUIRED" = "1" ]; then
+  SUPPRESS_DEFAULT_MATRIX=1
+fi
+
 BC="" REC="" MAND=""
-i=0
-while [ "$i" -lt "${#CACHE_BC_PHASES[@]}" ]; do
-  if [ "${CACHE_BC_PHASES[$i]}" = "$EFF_PHASE" ]; then BC="${CACHE_BC_TEXTS[$i]}"; break; fi
-  i=$((i + 1))
-done
-i=0
-while [ "$i" -lt "${#CACHE_SKILL_PHASES[@]}" ]; do
-  if [ "${CACHE_SKILL_PHASES[$i]}" = "$EFF_PHASE" ] && [ "${CACHE_SKILL_PROFILES[$i]}" = "$PROFILE" ]; then
-    if [ "${CACHE_SKILL_KINDS[$i]}" = "R" ]; then
-      if [ -n "$REC" ]; then REC="$REC, ${CACHE_SKILL_TOKENS[$i]}"; else REC="${CACHE_SKILL_TOKENS[$i]}"; fi
-    else
-      if [ -n "$MAND" ]; then MAND="$MAND, ${CACHE_SKILL_TOKENS[$i]}"; else MAND="${CACHE_SKILL_TOKENS[$i]}"; fi
+if [ "$SUPPRESS_DEFAULT_MATRIX" = "0" ]; then
+  i=0
+  while [ "$i" -lt "${#CACHE_BC_PHASES[@]}" ]; do
+    if [ "${CACHE_BC_PHASES[$i]}" = "$EFF_PHASE" ]; then BC="${CACHE_BC_TEXTS[$i]}"; break; fi
+    i=$((i + 1))
+  done
+  i=0
+  while [ "$i" -lt "${#CACHE_SKILL_PHASES[@]}" ]; do
+    if [ "${CACHE_SKILL_PHASES[$i]}" = "$EFF_PHASE" ] && [ "${CACHE_SKILL_PROFILES[$i]}" = "$PROFILE" ]; then
+      if [ "${CACHE_SKILL_KINDS[$i]}" = "R" ]; then
+        if [ -n "$REC" ]; then REC="$REC, ${CACHE_SKILL_TOKENS[$i]}"; else REC="${CACHE_SKILL_TOKENS[$i]}"; fi
+      else
+        if [ -n "$MAND" ]; then MAND="$MAND, ${CACHE_SKILL_TOKENS[$i]}"; else MAND="${CACHE_SKILL_TOKENS[$i]}"; fi
+      fi
     fi
-  fi
-  i=$((i + 1))
-done
+    i=$((i + 1))
+  done
+fi
 
 if [ "$DISPATCH_INTENT" = "resume" ] && [ -n "$CHANGE_NAME" ]; then
-  HDR="change=${CHANGE_NAME} · phase=${EFF_PHASE} · 疑似 track=${TRACK}（评分 ${BEST_SCORE}）"
-  TAIL="本轮疑似 ${TRACK} 相关操作；已在 pipeline 中。必须立即调用 Skill 工具的 pipeline，由它分派当前相位的 OpenSpec 与阶段 skill；先按 tasks.md 的阶段任务建立/更新 Todo，勿先生成通用 Todo、勿绕过 pipeline 直接实现。按 ${EFF_PHASE} 相位纪律推进，勿自动 transition，产出交用户确认后再推进。"
+  HDR="change=${CHANGE_NAME} · phase=${EFF_PHASE} · track=${TRACK}（状态绑定）"
+  if [ "$CHANGE_WORKFLOW" = "simple" ]; then
+    TAIL="已恢复 simple Change。必须立即调用 pipeline，并只按内建 simple DAG 的当前 step 分派 skill；Todo 来自 change/verify/done/escalated，不读取 default tasks.md 或 OpenSpec 文档链。"
+  else
+    TAIL="已恢复 ${TRACK} Change。必须立即调用 Skill 工具的 pipeline，由它分派当前相位的 OpenSpec 与阶段 skill；先按 tasks.md 的阶段任务建立/更新 Todo，勿先生成通用 Todo、勿绕过 pipeline 直接实现。按 ${EFF_PHASE} 相位纪律推进，勿自动 transition，产出交用户确认后再推进。"
+  fi
 elif [ "$DISPATCH_INTENT" = "select" ]; then
   HDR="疑似 track=${TRACK}（评分 ${BEST_SCORE}）· 恢复目标未选择"
   TAIL="用户明确要继续，但项目中有多个未选择的活跃 change。必须立即调用 Skill 工具的 pipeline，让入口 skill 用 pipeline list/status 列出候选并要求用户点名；严禁按 mtime 猜测，也严禁把它当作新任务创建。"
 else
-  HDR="疑似 track=${TRACK}（评分 ${BEST_SCORE}）· 独立新任务"
-  TAIL="疑似 ${TRACK} Track 新任务。项目内已有 change 仅是显式恢复时的候选，严禁把它们绑定到本轮或复用其 phase/tasks。默认选择 default workflow：必须立即调用 Skill 工具的 pipeline，让入口 skill 创建并激活独立 Change、初始化 OpenSpec，并按 open 相位开始；不要先询问是否走工作流，也不要直接执行某个阶段 skill。仅当用户明确指定自定义 workflow 时才改用该 workflow；L5 override（快速修复等）仍可直接跳过。"
+  if [ "$SELECTION_REQUIRED" = "1" ]; then
+    HDR="疑似 track=${TRACK}（评分 ${BEST_SCORE}）· 独立新任务 · 发现项目自定义 pipeline/track"
+    TAIL="疑似 ${TRACK} Track 新任务。项目内已有 change 仅是显式恢复时的候选，严禁把它们绑定到本轮或复用其 phase/tasks。项目已声明自定义 routable Track：必须立即调用 Skill 工具的 pipeline，由入口 skill 先根据下方推荐 pair 与候选 pair 询问用户选择 Track/workflow；在用户选择前严禁创建 Change、严禁假定 default。选定后才创建并激活独立 Change。"
+  else
+    HDR="疑似 track=${TRACK}（评分 ${BEST_SCORE}）· 独立新任务"
+    if [ "$BEST_WORKFLOW" = "simple" ]; then
+      TAIL="已命中严格边界内的 simple 任务。必须立即调用 pipeline，创建并激活独立 simple Change，按 change → verify → done 的轻量 DAG 执行；不得生成 default 的 PM/前后端/OpenSpec 文档链。若执行中边界扩大，必须走 scope-expanded 并升级为新的 default Change。"
+    else
+      TAIL="疑似 ${TRACK} Track 新任务。项目内已有 change 仅是显式恢复时的候选，严禁把它们绑定到本轮或复用其 phase/tasks。默认选择 default workflow：必须立即调用 Skill 工具的 pipeline，让入口 skill 创建并激活独立 Change、初始化 OpenSpec，并按 open 相位开始；不要先询问是否走工作流，也不要直接执行某个阶段 skill。仅当用户明确指定自定义 workflow 时才改用该 workflow。"
+    fi
+  fi
+fi
+
+if [ "$SELECTION_REQUIRED" = "1" ]; then
+  TAIL="$TAIL 尚未选定自定义 workflow：不得把推荐 pair、空值或 default 当作已绑定身份，也不得注入 default 的 breadcrumb 或 skill matrix；必须先由 pipeline 完成明确选择，再按所选图解析真实 DAG、OpenSpec 约束和依赖顺序。"
+elif [ "$NON_DEFAULT_WORKFLOW_DISPATCH" = "1" ]; then
+  if { [ "$DISPATCH_INTENT" = "new" ] && [ "$BEST_WORKFLOW" = "simple" ]; } \
+    || { [ "$DISPATCH_INTENT" = "resume" ] && [ "$CHANGE_WORKFLOW" = "simple" ]; }; then
+    TAIL="$TAIL simple workflow 是插件内建只读图；项目同名文件不可覆盖，router 不注入 default breadcrumb 或 skill matrix。"
+  else
+    TAIL="$TAIL 当前 Change 绑定自定义 workflow '${CHANGE_WORKFLOW}'：此路由器不会用 default 的 breadcrumb 或 skill 矩阵伪造该阶段要求；必须先调用 pipeline，由它以 canonical state 与项目 workflow 图解析本阶段的真实 DAG、OpenSpec 约束和依赖顺序后再分派。"
+  fi
+fi
+if [ "$CONTINUOUS_EXECUTION" = 'true' ]; then
+  TAIL="$TAIL 用户已在本轮明确授权后续连续执行。创建或精确恢复 Change 后，入口必须用 pipeline session activate <change> --continuous 绑定授权；每个 phase 仍须完成真实 OpenSpec/skill/guard 证据，review 出口只能用 --delegated 写审计化确认，绝不跳过验证、发布或外部副作用边界。"
 fi
 
 printf '\n<workflow-state>\nrouter: %s\n' "$HDR"
@@ -498,13 +662,36 @@ printf '\n<workflow-state>\nrouter: %s\n' "$HDR"
 [ -n "$REC" ] && printf '推荐 skill：%s\n' "$REC"
 [ -n "$MAND" ] && printf '本相位强制 skill：%s\n' "$MAND"
 printf '%s\n</workflow-state>\n' "$TAIL"
-printf '<pipeline-dispatch>\naction: invoke-skill\nskill: pipeline\nworkflow: default\ntrack: %s\nintent: %s\n' "$TRACK" "$DISPATCH_INTENT"
+DISPATCH_WORKFLOW="default"
+if [ "$DISPATCH_INTENT" = "resume" ] && _workflow_default_ok "$CHANGE_WORKFLOW"; then
+  # 已建 Change 的 workflow 是其不可变编排身份。恢复时必须从状态读取，而非按
+  # 本轮 track scorer 的 default 重算；否则 custom workflow 会在第二轮被错误降级。
+  DISPATCH_WORKFLOW="$CHANGE_WORKFLOW"
+elif [ "$SELECTION_REQUIRED" = "1" ]; then
+  DISPATCH_WORKFLOW="select"
+elif [ "$DISPATCH_INTENT" = "new" ] && _workflow_default_ok "$BEST_WORKFLOW"; then
+  DISPATCH_WORKFLOW="$BEST_WORKFLOW"
+fi
+printf '<pipeline-dispatch>\naction: invoke-skill\nskill: pipeline\nworkflow: %s\ntrack: %s\nintent: %s\ncontinuous_execution: %s\n' "$DISPATCH_WORKFLOW" "$TRACK" "$DISPATCH_INTENT" "$CONTINUOUS_EXECUTION"
+[ -n "$HOST_SESSION_ID" ] && printf 'host_session_id: %s\n' "$HOST_SESSION_ID"
+if [ "$SELECTION_REQUIRED" = "1" ]; then
+  i=0
+  while [ "$i" -lt "${#ROUTER_IDS[@]}" ]; do
+    printf 'candidate: track=%s;workflow=%s\n' "${ROUTER_IDS[$i]}" "${ROUTER_WORKFLOWS[$i]}"
+    i=$((i + 1))
+  done
+  printf 'selection_required: true\nsuggested_track: %s\nsuggested_workflow: %s\n' "$TRACK" "$BEST_WORKFLOW"
+fi
 if [ "$DISPATCH_INTENT" = "resume" ] && [ -n "$CHANGE_NAME" ]; then
   printf 'change: %s\nphase: %s\ntodo_source: openspec/changes/%s/tasks.md\n' "$CHANGE_NAME" "$EFF_PHASE" "$CHANGE_NAME"
 elif [ "$DISPATCH_INTENT" = "select" ]; then
   printf 'phase: select\ntodo_source: pipeline-active-change-selection\n'
 else
-  printf 'phase: open\ntodo_source: pipeline-phase-template\n'
+  if [ "$DISPATCH_WORKFLOW" = "simple" ]; then
+    printf 'phase: change\ntodo_source: builtin-workflow:simple\n'
+  else
+    printf 'phase: open\ntodo_source: pipeline-phase-template\n'
+  fi
 fi
 printf 'required: true\n</pipeline-dispatch>\n'
 exit 0

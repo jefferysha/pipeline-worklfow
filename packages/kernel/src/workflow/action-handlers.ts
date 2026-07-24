@@ -10,6 +10,11 @@
  * workflow 获得改 phase/workflow 等系统字段的通用脚本能力。
  */
 import type { ActionConfig, ActionInput, ActionOutcome } from './ir.js'
+import { isWorkspaceBaseline } from '../workspace/fingerprint.js'
+
+function fieldString(value: string | string[] | undefined): string {
+  return Array.isArray(value) ? value.join(',') : (value ?? '')
+}
 
 export type ActionHandler<C extends ActionConfig> = (
   config: C,
@@ -21,10 +26,22 @@ export type ActionHandlerRegistry = {
 }
 
 export const ACTION_HANDLERS: ActionHandlerRegistry = Object.freeze({
-  /** 老仓 state-transition.sh build-complete 事件体：HEAD trim 后非空 → 冻结进
-   *  build_sha；空串或 gitHeadSha 未注入（`?? ''` 同一分支）→ 字段不动 + build-sha-missing
-   *  信号（HEAD 取不到，build_sha 未冻结——WARN 与否由调用方决定）。gitHeadSha 抛错原样上抛。 */
+  /** build-complete 的不可变验证靶：
+   *  · branch/worktree 保持老仓语义：HEAD trim 后非空 → 冻结进 build_sha；取不到 → warning。
+   *  · in-place 不能用未变化的 HEAD 伪装实现未漂移：强制冻结内容寻址的 workspace baseline；能力
+   *    缺失或返回非法基线一律 fail-closed，绝不写一个无法复验的假 SHA。
+   */
   'freeze-build-sha': async (_config, input) => {
+    if (fieldString(input.fields.isolation) === 'in-place') {
+      if (!input.workspaceFingerprint) {
+        throw new Error('in-place build requires workspaceFingerprint capability')
+      }
+      const baseline = (await input.workspaceFingerprint()).trim()
+      if (!isWorkspaceBaseline(baseline)) {
+        throw new Error(`workspaceFingerprint 返回了非法基线: ${baseline}`)
+      }
+      return { patch: { build_sha: baseline }, signals: [] }
+    }
     const sha = (await input.gitHeadSha?.())?.trim() ?? ''
     if (sha !== '') return { patch: { build_sha: sha }, signals: [] }
     return { patch: {}, signals: [{ kind: 'build-sha-missing' }] }

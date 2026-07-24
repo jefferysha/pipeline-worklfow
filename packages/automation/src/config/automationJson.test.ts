@@ -42,9 +42,11 @@ describe('readAutomationJson —— fail-open 全默认', () => {
 describe('readAutomationJson —— 逐字段值域（非法字段单独丢弃，不拖垮整文件）', () => {
   it('合法全字段 → 全量读出（snake_case 落盘 → camelCase 消费）', () => {
     const cfg = readAutomationJson(ROOT, fsWith(ROOT, JSON.stringify({
-      version: 1, max_parallel: 8, max_retries: 0, default_opt_in: true, image: 'ghcr.io/acme/sc:v2',
+      version: 1, enabled: true, max_parallel: 8, max_retries: 0, default_opt_in: true, image: 'ghcr.io/acme/sc:v2',
     })))
-    expect(cfg).toEqual({ maxParallel: 8, maxRetries: 0, defaultOptIn: true, image: 'ghcr.io/acme/sc:v2' })
+    expect(cfg).toEqual({
+      enabled: true, maxParallel: 8, maxRetries: 0, defaultOptIn: true, image: 'ghcr.io/acme/sc:v2',
+    })
   })
 
   it('max_parallel 越界（0 / 9 / 小数 / 字符串）→ 该字段丢弃，其余保留', () => {
@@ -78,8 +80,8 @@ describe('readAutomationJson —— 逐字段值域（非法字段单独丢弃�
     expect(cfg).toEqual({ image: 'sandcastle:local' })
   })
 
-  it('enabled / level 手塞进文件也被忽略（双源打架防线：运行入口旗标与 loop 级 autonomy 不进本文件）', () => {
+  it('enabled 是项目总开关，level 仍忽略（autonomy 只归 loop registry）', () => {
     const cfg = readAutomationJson(ROOT, fsWith(ROOT, JSON.stringify({ enabled: true, level: 'L3', max_parallel: 2 })))
-    expect(cfg).toEqual({ maxParallel: 2 })
+    expect(cfg).toEqual({ enabled: true, maxParallel: 2 })
   })
 })

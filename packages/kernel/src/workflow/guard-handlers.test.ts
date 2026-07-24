@@ -14,7 +14,7 @@ import { allFields } from './test-support.js'
 
 function makeInput(
   over: Partial<Record<FieldName, string | string[]>> = {},
-  caps: Partial<Pick<GuardInput, 'track' | 'fileExists' | 'readText' | 'gitHeadSha'>> = {},
+  caps: Partial<Pick<GuardInput, 'track' | 'fileExists' | 'readText' | 'gitHeadSha' | 'workspaceFingerprint'>> = {},
 ): GuardInput {
   return {
     fields: allFields(over),
@@ -22,6 +22,7 @@ function makeInput(
     fileExists: caps.fileExists,
     readText: caps.readText,
     gitHeadSha: caps.gitHeadSha,
+    workspaceFingerprint: caps.workspaceFingerprint,
   }
 }
 
@@ -278,6 +279,31 @@ describe('老仓 state-transition.sh cmd_transition 前置校验语义对照', (
     it('L150：gitHeadSha 未注入 → skipped（`?? ""` 退化跳过，ADR 0005）', async () => {
       const out = await evaluateGuards([BARRIER], makeInput({ build_sha: 'abc123' }))
       expect(out.map((e) => e.decision)).toEqual([{ kind: 'skipped', capability: 'gitHeadSha' }])
+    })
+
+    it('in-place workspace baseline 相等 → passed，且不读取 Git HEAD', async () => {
+      let gitCalls = 0
+      const baseline = 'workspace:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+      const out = await evaluateGuards([BARRIER], makeInput(
+        { build_sha: baseline },
+        {
+          gitHeadSha: async () => { gitCalls++; return 'UNUSED' },
+          workspaceFingerprint: async () => baseline,
+        },
+      ))
+      expect(out.map((entry) => entry.decision)).toEqual([{ kind: 'passed' }])
+      expect(gitCalls).toBe(0)
+    })
+
+    it('in-place workspace baseline 漂移 → failed，expected/actual 都可审计', async () => {
+      const baseline = 'workspace:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+      const current = 'workspace:sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+      const out = await evaluateGuards([BARRIER], makeInput(
+        { build_sha: baseline }, { workspaceFingerprint: async () => current },
+      ))
+      expect(out.map((entry) => entry.decision)).toEqual([
+        { kind: 'failed', guardType: 'build-head-unchanged', field: 'build_sha', actual: current, expected: [baseline] },
+      ])
     })
 
     it('L151：gitHeadSha 注入但 trim 后空串（HEAD 不可取）→ skipped（head!=="" 合取不成立，老代码放行）', async () => {

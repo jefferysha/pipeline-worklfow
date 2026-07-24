@@ -37,24 +37,20 @@ const manifest = loadManifest(TEMPLATE_MANIFEST)
 function makeDeps(overrides: Partial<TransitionApplicationDeps> = {}): TransitionApplicationDeps & {
   historyEntries: Array<[string, HistoryEntry]>
   breadcrumbCalls: Array<[string, string]>
-  markerCalls: Array<[string, string]>
 } {
   const store = createStateStore()
   const recordStore = createTransitionRecordStore()
   const runRepository = createWorkflowRunRepository({ store, recordStore, clock: FIXED_CLOCK })
   const historyEntries: Array<[string, HistoryEntry]> = []
   const breadcrumbCalls: Array<[string, string]> = []
-  const markerCalls: Array<[string, string]> = []
   return {
     runRepository,
     flow: createFlowEngine(manifest),
     clock: FIXED_CLOCK,
     history: { append: async (dir, entry) => { historyEntries.push([dir, entry]) } },
     breadcrumb: { write: async (dir, content) => { breadcrumbCalls.push([dir, content]) } },
-    reviewMarker: { write: async (root, content) => { markerCalls.push([root, content]) } },
     historyEntries,
     breadcrumbCalls,
-    markerCalls,
     ...overrides,
   }
 }
@@ -191,21 +187,86 @@ describe('createTransitionApplication —— 唯一 TransitionApplication 用例
       }
     })
 
-    test('成功转换后收尾顺序 = breadcrumb → history → review-marker（G1 REFACTOR 回归锚：顺序是' +
-      '可观测行为，不是实现细节，此前真的被一次 REFACTOR 悄悄改乱过）', async () => {
+    test('成功转换后收尾顺序 = breadcrumb → history；review projection 不属于 transition', async () => {
       const root = await freshRepoRoot()
       const deps = makeDeps()
       const dir = await initChange(deps, root, 'demo')
       const order: string[] = []
       deps.breadcrumb = { write: async () => { order.push('breadcrumb') } }
       deps.history = { append: async () => { order.push('history') } }
-      deps.reviewMarker = { write: async () => { order.push('reviewMarker') } }
       const app = createTransitionApplication(deps)
       await app.execute({
-        root, changeDir: dir, changeName: 'demo', event: 'open-complete', // -> explore，复核相位，三者都应真写
+        root, changeDir: dir, changeName: 'demo', event: 'open-complete',
         context: {}, loadWorkflow: NEVER_FOUND_WORKFLOW,
       })
-      expect(order).toEqual(['breadcrumb', 'history', 'reviewMarker'])
+      expect(order).toEqual(['breadcrumb', 'history'])
+    })
+
+    test('review 出口必须消费当前 phase 的 canonical approval receipt；进入 review phase 本身不写 marker', async () => {
+      const root = await freshRepoRoot()
+      const deps = makeDeps()
+      const dir = await initChange(deps, root, 'demo')
+      const store = createStateStore()
+      await store.setMany(dir, {
+        phase: 'explore',
+        design_doc: 'openspec/changes/demo/design.md',
+      })
+      const app = createTransitionApplication(deps)
+      const command = {
+        root, changeDir: dir, changeName: 'demo', event: 'explore-complete',
+        context: { fileExists: () => true }, loadWorkflow: NEVER_FOUND_WORKFLOW,
+      }
+      expect(await app.execute(command)).toEqual({
+        kind: 'review-approval-required', phase: 'explore', event: 'explore-complete',
+      })
+      expect((await store.read(dir)).fields.phase).toBe('explore')
+
+      await store.setMany(dir, {
+        review_gate_phase: 'explore',
+        review_gate_status: 'approved',
+        review_gate_event: 'explore-complete',
+        review_requested_at: FIXED_CLOCK(),
+        review_acknowledged_at: FIXED_CLOCK(),
+      })
+      expect((await app.execute(command)).kind).toBe('applied')
+      const state = await store.read(dir)
+      expect(state.fields.phase).toBe('spec')
+      expect(state.fields.review_gate_status).toBe('')
+      expect(state.fields.review_gate_phase).toBe('')
+    })
+
+    test('review receipt 绑定 exact event：verify-fail 的确认不能授权 verify-pass', async () => {
+      const root = await freshRepoRoot()
+      const deps = makeDeps()
+      const dir = await initChange(deps, root, 'demo')
+      const store = createStateStore()
+      await store.setMany(dir, {
+        phase: 'verify',
+        verification_report: 'docs/v.md',
+        branch_status: 'handled',
+        agent_review_result: 'pass',
+        codex_review_result: 'pass',
+        build_sha: 'MATCH',
+        review_gate_phase: 'verify',
+        review_gate_status: 'approved',
+        review_gate_event: 'verify-fail',
+        review_requested_at: FIXED_CLOCK(),
+        review_acknowledged_at: FIXED_CLOCK(),
+      })
+      const app = createTransitionApplication(deps)
+      const blocked = await app.execute({
+        root, changeDir: dir, changeName: 'demo', event: 'verify-pass',
+        context: { fileExists: () => true, gitHeadSha: async () => 'MATCH' }, loadWorkflow: NEVER_FOUND_WORKFLOW,
+      })
+      expect(blocked).toEqual({ kind: 'review-approval-required', phase: 'verify', event: 'verify-pass' })
+      expect((await store.read(dir)).fields.phase).toBe('verify')
+
+      const rollback = await app.execute({
+        root, changeDir: dir, changeName: 'demo', event: 'verify-fail',
+        context: {}, loadWorkflow: NEVER_FOUND_WORKFLOW,
+      })
+      expect(rollback.kind).toBe('applied')
+      expect((await store.read(dir)).fields.phase).toBe('build')
     })
 
     test('未知 event → unknown-event，不提交（commit 未发生：record store 里没有新记录，' +
@@ -264,7 +325,6 @@ describe('createTransitionApplication —— 唯一 TransitionApplication 用例
       expect(state.runMetadata?.transitionSequence).toBe(0)
       expect(deps.historyEntries).toEqual([]) // 零 projection
       expect(deps.breadcrumbCalls).toEqual([])
-      expect(deps.markerCalls).toEqual([])
     })
 
     test('前置校验不满足（explore-complete 缺 design_doc）→ precondition-violated + lines', async () => {
@@ -303,6 +363,24 @@ describe('createTransitionApplication —— 唯一 TransitionApplication 用例
       expect(warning).toEqual({ kind: 'build-sha-missing' })
     })
 
+    test('requirements-changed：即使上游文档已 stale 也可从 build 受控回退 spec，零伪造 receipt', async () => {
+      const root = await freshRepoRoot()
+      const deps = makeDeps()
+      const dir = await initChange(deps, root, 'demo')
+      await createStateStore().set(dir, 'phase', 'build')
+      await writeFile(join(dir, 'proposal.md'), '# revised during build\n', 'utf8')
+
+      const result = await createTransitionApplication(deps).execute({
+        root, changeDir: dir, changeName: 'demo', event: 'requirements-changed',
+        context: {}, loadWorkflow: NEVER_FOUND_WORKFLOW,
+      })
+      expect(result.kind).toBe('applied')
+      expect((await createStateStore().read(dir)).fields).toMatchObject({
+        phase: 'spec',
+        phase_status: 'in_progress',
+      })
+    })
+
     test('projection（breadcrumb）写失败 → 仍是 applied，失败进 warnings 而不是让整体失败（commit' +
       '是不可回退的成功点，projection 只是 commit 之后的 best-effort 兼容投影）', async () => {
       const root = await freshRepoRoot()
@@ -324,9 +402,9 @@ describe('createTransitionApplication —— 唯一 TransitionApplication 用例
       expect(state.fields.phase).toBe('explore')
     })
 
-    test('deps.history/breadcrumb/reviewMarker 全部缺省（测试可不注入）→ applied，零 warnings', async () => {
+    test('deps.history/breadcrumb 全部缺省（测试可不注入）→ applied，零 warnings', async () => {
       const root = await freshRepoRoot()
-      const deps = makeDeps({ history: undefined, breadcrumb: undefined, reviewMarker: undefined })
+      const deps = makeDeps({ history: undefined, breadcrumb: undefined })
       const dir = await initChange(deps, root, 'demo')
       const app = createTransitionApplication(deps)
       const result = await app.execute({
@@ -366,6 +444,9 @@ describe('createTransitionApplication —— 唯一 TransitionApplication 用例
       await createStateStore().setMany(dir, {
         phase: 'verify', verification_report: 'docs/v.md', branch_status: 'handled',
         agent_review_result: 'pass', codex_review_result: 'pass', build_sha: 'MATCH',
+        review_gate_phase: 'verify', review_gate_status: 'approved',
+        review_gate_event: 'verify-pass',
+        review_requested_at: FIXED_CLOCK(), review_acknowledged_at: FIXED_CLOCK(),
       })
       let shaCalls = 0
       const app = createTransitionApplication(deps)
@@ -407,7 +488,6 @@ describe('createTransitionApplication —— 唯一 TransitionApplication 用例
       expect(state.runMetadata?.transitionSequence).toBe(0)
       expect(deps.historyEntries).toEqual([])
       expect(deps.breadcrumbCalls).toEqual([])
-      expect(deps.markerCalls).toEqual([])
     })
 
     test('verify-fail：mark-verification-failed 落 verify_result=fail + build_sha=null（barrier 复位）+' +
@@ -415,7 +495,11 @@ describe('createTransitionApplication —— 唯一 TransitionApplication 用例
       const root = await freshRepoRoot()
       const deps = makeDeps()
       const dir = await initChange(deps, root, 'demo')
-      await createStateStore().setMany(dir, { phase: 'verify', build_sha: 'STALE' })
+      await createStateStore().setMany(dir, {
+        phase: 'verify', build_sha: 'STALE', review_gate_phase: 'verify', review_gate_status: 'approved',
+        review_gate_event: 'verify-fail',
+        review_requested_at: FIXED_CLOCK(), review_acknowledged_at: FIXED_CLOCK(),
+      })
       const app = createTransitionApplication(deps)
       const result = await app.execute({
         root, changeDir: dir, changeName: 'demo', event: 'verify-fail',
@@ -447,7 +531,7 @@ describe('createTransitionApplication —— 唯一 TransitionApplication 用例
       return changeDir
     }
 
-    test('成功转换：applied + from/to = step id，只写 history，不写 breadcrumb/marker', async () => {
+    test('成功转换：applied + from/to = step id，只写 history，不写 breadcrumb', async () => {
       const root = await freshRepoRoot()
       const deps = makeDeps()
       const dir = await initCustomChange(deps, root, 'demo')
@@ -462,7 +546,43 @@ describe('createTransitionApplication —— 唯一 TransitionApplication 用例
       expect(result.to).toBe('done')
       expect(deps.historyEntries).toHaveLength(1)
       expect(deps.breadcrumbCalls).toHaveLength(0)
-      expect(deps.markerCalls).toHaveLength(0)
+    })
+
+    test('声明 skill 的 step 在证据缺失时零提交；当前 visit 证据齐全后才允许退出', async () => {
+      const root = await freshRepoRoot()
+      let completed = new Set<string>()
+      const deps = makeDeps({
+        completedStepSkills: async () => completed,
+      })
+      const dir = await initCustomChange(deps, root, 'demo')
+      const withSkill: WorkflowDef = {
+        ...TWO_STEP_WF,
+        steps: [
+          { ...TWO_STEP_WF.steps[0]!, skills: [{ id: 'simple-task' }] },
+          TWO_STEP_WF.steps[1]!,
+        ],
+      }
+      const command = {
+        root,
+        changeDir: dir,
+        changeName: 'demo',
+        event: 'complete',
+        context: {},
+        loadWorkflow: (name: string) => name === 'onboarding' ? compileWorkflow(withSkill) : null,
+      }
+      await expect(createTransitionApplication(deps).execute(command)).resolves.toEqual({
+        kind: 'step-skills-incomplete',
+        workflowName: 'onboarding',
+        stepId: 'intake',
+        missing: ['simple-task'],
+      })
+      expect((await createStateStore().read(dir)).fields.phase).toBe('intake')
+      completed = new Set(['simple-task'])
+      await expect(createTransitionApplication(deps).execute(command)).resolves.toMatchObject({
+        kind: 'applied',
+        from: 'intake',
+        to: 'done',
+      })
     })
 
     test('workflow 未找到 → workflow-not-found', async () => {
@@ -615,6 +735,71 @@ describe('createTransitionApplication —— 唯一 TransitionApplication 用例
       expect(state.fields.phase).toBe('done')
       expect(state.fields.verify_result).toBe('pass')
       expect(state.fields.verified_at).toBe('2026-07-17T00:00:00Z')
+    })
+
+    test('openspec_contract required 的 custom build/verify 自动继承基线与验证不变量，YAML 漏写 action/guard 也不能降级', async () => {
+      const root = await freshRepoRoot()
+      const deps = makeDeps({
+        documentEvidence: async (_repoRoot, _changeDir, phase) => ({
+          phase, hasLedger: true, pass: true, blockers: [], items: [],
+        }),
+      })
+      const wf: WorkflowDef = {
+        name: 'governed',
+        openspecContract: 'required',
+        steps: [
+          {
+            id: 'build', label: '', gate: null, skills: [], inputs: [],
+            outputs: [{ field: 'build_sha', type: 'string' }], guards: [],
+            transitions: [{ event: 'complete', to: 'verify' }],
+          },
+          {
+            id: 'verify', label: '', gate: 'review', skills: [],
+            inputs: [{ field: 'build_sha', type: 'string' }], outputs: [], guards: [],
+            transitions: [{ event: 'accept', to: 'ship' }, { event: 'reject', to: 'build' }],
+          },
+          { id: 'ship', label: '', gate: null, skills: [], inputs: [], outputs: [], guards: [], transitions: [] },
+        ],
+      }
+      const dir = await initCustom(deps, root, 'governed', 'build')
+      await createStateStore().setMany(dir, {
+        build_mode: 'direct', isolation: 'in-place', direct_override: 'true',
+      })
+      const baseline = 'workspace:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+      let current = baseline
+      const app = createTransitionApplication(deps)
+      const load = (name: string) => (name === 'governed' ? compileWorkflow(wf) : null)
+      expect((await app.execute({
+        root, changeDir: dir, changeName: 'demo', event: 'complete',
+        context: { workspaceFingerprint: async () => current, gitHeadSha: async () => 'UNCHANGED' }, loadWorkflow: load,
+      })).kind).toBe('applied')
+      expect((await createStateStore().read(dir)).fields.build_sha).toBe(baseline)
+
+      await createStateStore().setMany(dir, {
+        verification_report: 'docs/report.md', branch_status: 'handled',
+        agent_review_result: 'pass', codex_review_result: 'pass',
+        review_gate_phase: 'verify', review_gate_status: 'approved', review_gate_event: 'accept',
+        review_requested_at: FIXED_CLOCK(), review_acknowledged_at: FIXED_CLOCK(),
+      })
+      current = 'workspace:sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+      const drifted = await app.execute({
+        root, changeDir: dir, changeName: 'demo', event: 'accept',
+        context: { fileExists: () => true, workspaceFingerprint: async () => current }, loadWorkflow: load,
+      })
+      expect(drifted.kind).toBe('step-guard-failed')
+      if (drifted.kind !== 'step-guard-failed') throw new Error('expected workspace drift rejection')
+      expect(drifted.failures.join('\n')).toContain('当前工作区内容等于 build 冻结基线')
+      expect((await createStateStore().read(dir)).fields.phase).toBe('verify')
+
+      current = baseline
+      const passed = await app.execute({
+        root, changeDir: dir, changeName: 'demo', event: 'accept',
+        context: { fileExists: () => true, workspaceFingerprint: async () => current }, loadWorkflow: load,
+      })
+      expect(passed.kind).toBe('applied')
+      const state = await createStateStore().read(dir)
+      expect(state.fields.phase).toBe('ship')
+      expect(state.fields.verify_result).toBe('pass')
     })
 
     test('edge guard field-equals 真拦截/放行：branch_status≠handled → step-guard-failed 零写盘；=handled → applied', async () => {

@@ -414,7 +414,7 @@ describe('OrchestrationBoard 产出区（空态诚实占位）', () => {
       lanes: [{ ...LANES[0]!, outputs: ['design_doc', 'plan', 'build_sha', 'verification_report'] }],
     })
     const zone = screen.getByTestId('wb-lane-outs-plan')
-    for (const label of ['调研文档', '实施计划', '构建版本', '验证报告']) {
+    for (const label of ['调研文档', '实施计划', '构建基线', '验证报告']) {
       expect(within(zone).getByText(label)).toBeInTheDocument()
     }
     expect(zone).not.toHaveTextContent('design_doc')

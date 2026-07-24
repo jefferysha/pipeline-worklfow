@@ -4,7 +4,7 @@
       {
         "matcher": "*",
         "hooks": [
-          { "type": "command", "command": "bash \"${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-}}/hooks/session-start.sh\"", "timeout": 10 }
+          { "type": "command", "command": "bash \"${HOME}/.local/bin/pipeline-hook\" session-start", "timeout": 10 }
         ]
       }
     ],
@@ -12,33 +12,36 @@
       {
         "matcher": "*",
         "hooks": [
-          { "type": "command", "command": "bash \"${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-}}/hooks/confirm-clear-prompt.sh\"", "timeout": 5 },
-          { "type": "command", "command": "bash \"${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-}}/hooks/breadcrumb.sh\"", "timeout": 5 },
-          { "type": "command", "command": "bash \"${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-}}/hooks/router.sh\"", "timeout": 5 }
+          { "type": "command", "command": "bash \"${HOME}/.local/bin/pipeline-hook\" confirm-clear-prompt", "timeout": 5 },
+          { "type": "command", "command": "bash \"${HOME}/.local/bin/pipeline-hook\" breadcrumb", "timeout": 5 },
+          { "type": "command", "command": "bash \"${HOME}/.local/bin/pipeline-hook\" router", "timeout": 5 }
         ]
       }
     ],
     "PreToolUse": [
       {
-        "matcher": "Skill|Bash|Edit|Write|MultiEdit",
+        "matcher": "*",
         "hooks": [
-          { "type": "command", "command": "bash \"${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-}}/hooks/gate.sh\"", "timeout": 5 }
+          { "type": "command", "command": "bash \"${HOME}/.local/bin/pipeline-hook\" gate", "timeout": 5 },
+          { "type": "command", "command": "bash \"${HOME}/.local/bin/pipeline-hook\" codex-skill-receipt", "timeout": 5 },
+          { "type": "command", "command": "bash \"${HOME}/.local/bin/pipeline-hook\" terminal-activity", "timeout": 5 }
         ]
       }
     ],
     "PostToolUse": [
       {
-        "matcher": "AskUserQuestion",
+        "matcher": "AskUserQuestion|request_user_input",
         "hooks": [
-          { "type": "command", "command": "bash \"${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-}}/hooks/confirm-clear.sh\"", "timeout": 5 },
-          { "type": "command", "command": "bash \"${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-}}/hooks/decision-recorder.sh\"", "timeout": 5 }
+          { "type": "command", "command": "bash \"${HOME}/.local/bin/pipeline-hook\" confirm-clear", "timeout": 5 },
+          { "type": "command", "command": "bash \"${HOME}/.local/bin/pipeline-hook\" decision-recorder", "timeout": 5 }
         ]
       },
       {
-        "matcher": "Skill",
+        "matcher": "*",
         "hooks": [
-          { "type": "command", "command": "bash \"${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-}}/hooks/skill-tracker.sh\"", "timeout": 5 },
-          { "type": "command", "command": "bash \"${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-}}/hooks/interactive-skill-gate.sh\"", "timeout": 5 }
+          { "type": "command", "command": "bash \"${HOME}/.local/bin/pipeline-hook\" skill-tracker", "timeout": 5 },
+          { "type": "command", "command": "bash \"${HOME}/.local/bin/pipeline-hook\" interactive-skill-gate", "timeout": 5 },
+          { "type": "command", "command": "bash \"${HOME}/.local/bin/pipeline-hook\" terminal-activity", "timeout": 5 }
         ]
       }
     ]

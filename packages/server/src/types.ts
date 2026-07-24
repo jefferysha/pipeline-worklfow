@@ -46,6 +46,18 @@ export interface ChangeSnapshot {
   todo?: PipelineTodoProjection
   /** Governed OpenSpec artifact/reader evidence, calculated from the immutable document ledger. */
   documents?: DocumentEvidenceSnapshot
+  /**
+   * Fresh host-hook heartbeat for an explicitly bound terminal session. This is dashboard-only
+   * observability, not canonical workflow state; omitted as soon as its short lease expires.
+   */
+  terminalActivity?: TerminalActivitySnapshot
+}
+
+export interface TerminalActivitySnapshot {
+  sessionId: string
+  heartbeatAt: string
+  expiresAt: string
+  turnId?: string
 }
 
 export interface DocumentEvidenceSnapshot {
@@ -87,6 +99,8 @@ export interface HealthInfo {
   ok: boolean
   scope: 'global'
   version: string
+  /** Present when the server runs from a managed immutable release payload. */
+  releaseId?: string
   pid?: number
 }
 
@@ -101,6 +115,8 @@ export interface Pidfile {
 
 export interface DashboardServerOptions {
   version?: string
+  /** Immutable managed-release identity used to refresh a same-semver dashboard safely. */
+  releaseId?: string
   home?: string
   /** 覆盖注册表读取（默认读 registryPath 的 JSON 字符串数组）。 */
   registry?: () => string[]
@@ -118,6 +134,8 @@ export interface DashboardServerOptions {
   manifestPath?: string
   /** `git rev-parse HEAD` 注入（build-complete 冻结 SHA 用；缺省跳过 SHA 面）。 */
   gitHeadSha?: (cwd: string) => Promise<string>
+  /** in-place build 的内容寻址工作区基线；生产装配为 kernel fingerprintWorkspace。 */
+  workspaceFingerprint?: (cwd: string, changeName: string) => Promise<string>
   /**
    * v6 T3：docker CLI 注入面（GET /api/docker/images 等单机资源探测用；缺省真 execFile docker）。
    * 测试喂 fake（hermetic，不起真 docker）；生产零接线。

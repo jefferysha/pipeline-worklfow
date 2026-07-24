@@ -60,3 +60,23 @@ export function shouldEnqueueOnSpecComplete(input: {
   if (!input.enabled) return false
   return optedIn(input)
 }
+
+/**
+ * 自动 spec-complete 入队的独立策略闸。`automationEligible` 是手动 enqueue 的 capability，
+ * 不能被复用成“自动接管”的授权；auto policy 已显式开启时，仍复用同一 enabled/default-opt-in
+ * 双开关语义，但不要求手动 capability 为 true。
+ */
+export function shouldAutoEnqueueOnSpecComplete(input: {
+  enabled: boolean
+  autoEnqueueOnSpecComplete: boolean
+  automation: string
+  defaultOptIn: boolean
+}): boolean {
+  if (!input.autoEnqueueOnSpecComplete) return false
+  return shouldEnqueueOnSpecComplete({
+    enabled: input.enabled,
+    automationEligible: true,
+    automation: input.automation,
+    defaultOptIn: input.defaultOptIn,
+  })
+}

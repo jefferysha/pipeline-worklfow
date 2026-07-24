@@ -82,9 +82,10 @@ assert_file "adapters/contract.md 存在" "$CONTRACT"
 assert_file "adapters/registry.yaml 存在" "$REG"
 # 契约必须把三能力 + A/B/C 分档 + conformance 写清
 if [ -f "$CONTRACT" ]; then
-  for kw in inject veto track "档 A" "档 B" "档 C" conformance "Unlock sentinel"; do
+  for kw in inject veto track "档 A" "档 B" "档 C" conformance "pipeline review acknowledge"; do
     assert_contains "contract.md 覆盖 [${kw}]" "$(cat "$CONTRACT")" "$kw"
   done
+  assert_not_contains "contract.md 不再把删 marker 当作解封" "$(cat "$CONTRACT")" "Unlock sentinel"
 fi
 # lint-adapter.sh：五处齐全机器校验（加平台是填表，缺字段抓红）
 if [ -x "$LINT" ]; then
@@ -116,7 +117,9 @@ done
 # ③ veto conformance（同输入喂每个适配器，断言与 baseline 决策等价）
 # ════════════════════════════════════════════════════════════════════════════
 # baseline veto 决策：gate.sh 直跑，exit 2 = DENY / exit 0 = ALLOW
-baseline_veto() { printf '%s' "$1" | bash "$GATE" >/dev/null 2>&1; [ "$?" = 2 ] && printf DENY || printf ALLOW; }
+# Review v2 fixture helpers are defined just below the wrapper helpers; functions are resolved at
+# call time, so baseline_veto can normalize legacy test setup into the shipped protocol first.
+baseline_veto() { normalize_review_marker_for_json "$1"; printf '%s' "$1" | bash "$GATE" >/dev/null 2>&1; [ "$?" = 2 ] && printf DENY || printf ALLOW; }
 
 # 归一任意适配器 veto 输出为 DENY/ALLOW（按 registry 声明的 veto_format 解读）
 norm_veto() { # <format> <rc> <stdout>
@@ -138,13 +141,55 @@ norm_veto() { # <format> <rc> <stdout>
 drive_veto_at() { # <wrapper> <format> <json> -> echo DENY/ALLOW
   local w="$1" fmt="$2" json="$3" out rc
   [ -f "$w" ] || { printf MISSING; return; }
+  normalize_review_marker_for_json "$json"
   out="$(printf '%s' "$json" | CLAUDE_PLUGIN_ROOT="$ROOT" bash "$w" veto-event 2>/dev/null)"; rc=$?
   norm_veto "$fmt" "$rc" "$out"
 }
 drive_veto() { drive_veto_at "$ADAPTERS/$1/hooks/veto.sh" "$(reg_field "$1" veto_format)" "$2"; }
 
-# scenario 构造器：最小 Git 项目根。嵌套 cwd 必须经 Git 根定位，不能靠普通父目录上溯。
-mk_proj() { local d="$TMP/$1"; mkdir -p "$d/.git" "$d/openspec/changes"; printf '%s' "$d"; }
+# scenario 构造器：最小 Git 项目根。所有 review fixture 都有一个显式 active Change；普通
+# 空 marker 是已退休的 entry-time 协议，不能再作为 native veto 的测试输入。
+mk_proj() {
+  local d="$TMP/$1"
+  mkdir -p "$d/.git" "$d/openspec/changes/demo-change"
+  printf 'phase: explore\ntrack: backend\nworkflow: default\narchived: false\n' > "$d/openspec/changes/demo-change/.pipeline.yaml"
+  printf 'demo-change\n' > "$d/.pipeline-active"
+  printf '%s' "$d"
+}
+
+write_v2_review_marker() { # <project root> [change=demo-change] [phase=explore]
+  local root="$1" name="${2:-demo-change}" phase="${3:-explore}" dir="$1/openspec/changes/${2:-demo-change}"
+  mkdir -p "$dir"
+  if [ ! -f "$dir/.pipeline.yaml" ]; then
+    printf 'phase: %s\ntrack: backend\nworkflow: default\narchived: false\n' "$phase" > "$dir/.pipeline.yaml"
+  fi
+  printf '%s\n' "$name" > "$root/.pipeline-active"
+  printf 'pipeline-review-v2\nphase=%s\nchange=%s\nrequested_at=2026-07-24T00:00:00Z\n待人工复核\n' "$phase" "$name" \
+    > "$root/.pipeline-pending-review"
+}
+
+# Existing adapter fixtures intentionally use `touch` for marker setup.  Upgrade only fresh,
+# empty legacy review markers immediately before a veto assertion; stale legacy markers remain
+# harmless/allowed and therefore keep their TTL scenario meaning.  The JSON parser is the same
+# pure-Bash implementation used by hooks, so escaped paths cannot point this test at another root.
+# shellcheck source=../hooks/json-input.sh
+. "$ROOT/hooks/json-input.sh"
+normalize_review_marker_for_json() { # <hook JSON>
+  local json="$1" cwd marker first now mt age
+  cwd="$(pipeline_json_get_string "$json" cwd || true)"
+  [ -n "$cwd" ] || return 0
+  marker="$cwd/.pipeline-pending-review"
+  [ -f "$marker" ] || return 0
+  IFS= read -r first < "$marker" 2>/dev/null || true
+  [ "$first" = pipeline-review-v2 ] && return 0
+  mt="$(stat -c %Y "$marker" 2>/dev/null)"
+  case "$mt" in ''|*[!0-9]*) mt="$(stat -f %m "$marker" 2>/dev/null)" ;; esac
+  case "$mt" in ''|*[!0-9]*) return 0 ;; esac
+  now="$(date +%s)"; age=$((now - mt))
+  [ "$age" -le 1800 ] || return 0
+  [ -d "$cwd/openspec/changes/demo-change" ] || return 0
+  write_v2_review_marker "$cwd" demo-change explore
+}
 touch_age() { # <file> <秒龄>（BSD/GNU 双兼容）
   local ts; ts="$(date -v-"$2"S +%Y%m%d%H%M.%S 2>/dev/null || date -d "@$(( $(date +%s) - $2 ))" +%Y%m%d%H%M.%S 2>/dev/null)"
   touch -t "$ts" "$1"
@@ -176,9 +221,13 @@ run_veto_scenario "V4-nested-cwd" "{\"cwd\":\"$p/sub/deep\",\"tool_name\":\"Writ
 # ════════════════════════════════════════════════════════════════════════════
 # ④ inject conformance（native 包 baseline 上下文；degraded 如实降级 + 不伪装）
 # ════════════════════════════════════════════════════════════════════════════
-mk_change_proj() { # <名> -> echo 项目路径（含活跃 change）
+mk_change_proj() { # <名> -> echo 项目路径（含显式选择的 change）
   local d="$TMP/$1"; mkdir -p "$d/openspec/changes/demo-change"
   printf 'phase: explore\ntrack: backend\narchived: false\n' > "$d/openspec/changes/demo-change/.pipeline.yaml"
+  # Runtime evidence never chooses a most-recent Change.  Model-side `pipeline session activate`
+  # creates this pointer in production; fixtures model that explicit binding before they exercise
+  # native adapter tracking.
+  printf 'demo-change\n' > "$d/.pipeline-active"
   printf '%s' "$d"
 }
 
@@ -232,14 +281,20 @@ if [ -f "$cx_prompt" ]; then
   assert_not_contains "route/codex: 正常对话不再先问是否走 workflow" "$out" "要走哪个工作流"
   assert_not_contains "route/codex: 正常对话不列自定义 workflow 供选择" "$out" "landing"
 
-  # Codex 正常对话没有 AskUserQuestion 工具。明确确认必须在 UserPromptSubmit 阶段先清 marker，
-  # 否则下一次 PreToolUse 会把包括“用于解锁”的工具一并拒绝，形成不可恢复的自锁。
+  # Codex 正常对话没有 AskUserQuestion 工具。明确确认必须在 UserPromptSubmit 阶段调用
+  # `pipeline review acknowledge`；hook 本身不得删除 v2 marker 伪造批准。
   p="$(mk_proj codex-prompt-confirm)"
-  touch "$p/.pipeline-pending-review"
+  write_v2_review_marker "$p"
   printf '{"prompt":"为什么需要确认？","cwd":"%s"}' "$p" | CLAUDE_PLUGIN_ROOT="$ROOT" bash "$cx_prompt" UserPromptSubmit >/dev/null 2>&1
   [ -f "$p/.pipeline-pending-review" ] && ok "route/codex: 普通询问不误清 review marker" || bad "route/codex: 普通询问不误清 review marker" "marker 被错误清除"
-  printf '{"prompt":"确认继续，全部执行","cwd":"%s"}' "$p" | CLAUDE_PLUGIN_ROOT="$ROOT" bash "$cx_prompt" UserPromptSubmit >/dev/null 2>&1
-  [ ! -f "$p/.pipeline-pending-review" ] && ok "route/codex: 明确确认在下一次工具前自动解封" || bad "route/codex: 明确确认在下一次工具前自动解封" "marker 仍在"
+  fake_bin="$TMP/codex-prompt-fake-bin"; fake_log="$TMP/codex-prompt-fake.log"; mkdir -p "$fake_bin"
+  printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$*" >> "$PIPELINE_HOOK_LOG"\n' > "$fake_bin/pipeline"
+  chmod +x "$fake_bin/pipeline"
+  printf '{"prompt":"确认继续，全部执行","cwd":"%s"}' "$p" | PATH="$fake_bin:$PATH" PIPELINE_HOOK_LOG="$fake_log" CLAUDE_PLUGIN_ROOT="$ROOT" bash "$cx_prompt" UserPromptSubmit >/dev/null 2>&1
+  [ -f "$p/.pipeline-pending-review" ] && ok "route/codex: 明确确认不直接删除 review marker" || bad "route/codex: 明确确认不直接删除 review marker" "marker 被错误删除"
+  grep -Fq 'review acknowledge demo-change' "$fake_log" 2>/dev/null \
+    && ok "route/codex: 明确确认调用 canonical acknowledge" \
+    || bad "route/codex: 明确确认调用 canonical acknowledge" "未记录 acknowledge 调用"
 else
   bad "route/codex: UserPromptSubmit wrapper 存在" "缺失：$cx_prompt"
 fi
@@ -250,7 +305,7 @@ cx_inst="$ADAPTERS/codex/install.sh"
 if [ -f "$cx_inst" ]; then
   cx_target="$TMP/codex-static-skills"
   if bash "$cx_inst" --static --target "$cx_target" --codex-home "$TMP/codex-static-home" --yes >/dev/null 2>&1; then
-    for skill in pipeline pipeline-open pipeline-explore pipeline-spec pipeline-build pipeline-verify pipeline-ship pipeline-archive brainstorming writing-plans verification-before-completion openspec-propose openspec-apply-change; do
+    for skill in pipeline pipeline-open pipeline-explore pipeline-spec pipeline-build pipeline-verify pipeline-ship pipeline-archive simple-task brainstorming writing-plans verification-before-completion openspec-propose openspec-apply-change; do
       assert_file "codex static install: 投递 $skill skill" "$cx_target/.agents/skills/$skill/SKILL.md"
     done
     [ -L "$cx_target/.agents/skills/pipeline" ] \
@@ -493,7 +548,7 @@ assert_eq "tier/copilot: registry tier=B" B "$(reg_field copilot tier)"
 assert_eq "tier/copilot: veto native"  native "$(reg_field copilot veto_status)"
 assert_eq "tier/copilot: track native" native "$(reg_field copilot track_status)"
 assert_eq "tier/copilot: inject degraded" degraded "$(reg_field copilot inject_status)"
-# pi = 档 B：inject/track native、veto degraded（enforcement 走 .pi/extensions 运行时 + Unlock sentinel，无原生 pre-tool 硬拦）
+# pi = 档 B：inject/track native、veto degraded（enforcement 走 .pi/extensions 运行时 advisory + CLI receipt，无原生 pre-tool 硬拦）
 assert_eq "tier/pi: registry tier=B" B "$(reg_field pi tier)"
 assert_eq "tier/pi: inject native" native "$(reg_field pi inject_status)"
 assert_eq "tier/pi: track native"  native "$(reg_field pi track_status)"
@@ -638,6 +693,7 @@ AIDER_IT="$TMP/aider-it"; mkdir -p "$AIDER_IT"
 ( cd "$AIDER_IT" && git init -q && git config user.email t@t.com && git config user.name t ) 2>/dev/null
 mkdir -p "$AIDER_IT/openspec/changes/demo-change"
 printf 'phase: explore\ntrack: backend\narchived: false\n' > "$AIDER_IT/openspec/changes/demo-change/.pipeline.yaml"
+printf 'demo-change\n' > "$AIDER_IT/.pipeline-active"
 CLAUDE_PLUGIN_ROOT="$ROOT" bash "$ADAPTERS/aider/install.sh" --target "$AIDER_IT" --yes >/dev/null 2>&1
 assert_file "aider install: .aider.conf.yml 落地" "$AIDER_IT/.aider.conf.yml"
 assert_file "aider install: 上下文文件落地且含宪法" "$AIDER_IT/.aider-pipeline-context.md"
@@ -647,7 +703,8 @@ assert_exec "aider install: .git/hooks/post-commit 真落地可执行" "$AIDER_I
 ( cd "$AIDER_IT" && echo hi > f1.txt && git add f1.txt && git commit -q -m t1 </dev/null ) 2>/dev/null
 if [ -f "$AIDER_IT/$HIST" ]; then ok "aider install 端到端：真 commit 后 history 真增（非单测 wrapper，是真装完的 git hook）"
 else bad "aider install 端到端：真 commit 后 history 真增" "缺 $AIDER_IT/$HIST"; fi
-( cd "$AIDER_IT" && touch .pipeline-pending-review && echo hi2 > f2.txt && git add f2.txt )
+write_v2_review_marker "$AIDER_IT" demo-change explore
+( cd "$AIDER_IT" && echo hi2 > f2.txt && git add f2.txt )
 if ( cd "$AIDER_IT" && git commit -q -m t2 </dev/null ) 2>/dev/null; then
   bad "aider install 端到端：真装的 pre-commit 挡住新鲜 marker" "commit 竟然成功了"
 else

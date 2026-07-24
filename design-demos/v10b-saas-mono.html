@@ -1,0 +1,1685 @@
+<!doctype html>
+<!--
+  v10b · Pipeline 控制台 Dashboard 重设计 · 「黑白 · 亮色单色（monochrome）SaaS」
+  骨架与 v10b Railway 画布完全一致（布局 / DOM / 文案 / JS 交互零改动），
+  整套配色换成 Vercel / Geist 亮色语系：白纸底、近黑墨、灰阶做全部层级，黑是唯一品牌色。
+  规则：表面分层靠 1px gray-200 边线（阴影几乎不用）；主动作黑底白字；选中态黑边；
+  状态语义色（成功绿 / 危险红 / 警告琥珀 / 运行蓝 / 中性灰）只出现在小色点、细缘线、
+  相位轨与数据元素上，徽章一律灰底深灰字 + 前置彩色点；终端/日志面保持真·黑底。
+
+  hash 路由（加载读取 + 运行时切换）：
+    #progress（别名 #canvas）  画布 · 在制总览（默认视图）
+    #inbox                     收件箱 · 拍板队列
+    #detail 或 #detail/<id>    画布 + 右侧检查器打开（无 id 默认 dashboard-redesign-v10）
+    #afk                       AFK 指挥面 · 六泳道
+    #workbench                 工作台 · workflow / loop / AFK 参数 / 凭证 / 技能
+    #observe                   观测面 · worker / tap / mem / doctor
+    #onboarding                隐藏视图 · 零项目空态教学（init→setup→doctor）
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pipeline 控制台 · v10b 黑白单色</title>
+<style>
+/* ============ 令牌：黑白单色 · 亮色（Vercel/Geist 语系） ============ */
+:root{
+  --bg:#FAFAFA;            /* 页面底 · 近白纸面 */
+  --bg-dots:#DCDCE0;       /* 画布点阵 · 极淡灰点 */
+  --rail:#FFFFFF;          /* 导航 rail */
+  --srf:#FFFFFF;           /* 卡面 = 白 + 1px gray-200 边 */
+  --srf2:#F4F4F5;          /* 卡内浮起 / hover（gray-100） */
+  --srf3:#0A0A0A;          /* 终端/命令面 · 真黑 */
+  --line:#E4E4E7;          /* gray-200 · 分层主要靠边线 */
+  --line2:#D4D4D8;         /* gray-300 · 强边线 / 连线 */
+  --tx:#111111;            /* 主文字 · 近黑墨 */
+  --tx2:#52525B;           /* 次级 gray-600 */
+  --tx3:#71717A;           /* 三级 gray-500 · 白底 4.7:1 不淡出 */
+  --acc:#111111;           /* 强调 = 黑（唯一品牌色） */
+  --acc2:#0A0A0A;          /* 黑底主按钮 / 选中 / logo */
+  --ok:#16A34A;  --ok-t:#15803D;    /* 成功 · 点线用浅位，文字用 -t */
+  --bad:#DC2626; --bad-t:#B91C1C;   /* 危险 · 保持醒目（白底 6.5:1） */
+  --warn:#D97706;--warn-t:#B45309;  /* 警告 / 琥珀 */
+  --run:#2563EB; --run-t:#1D4ED8;   /* 运行中 · 蓝点闪烁做透 */
+  --wait:#2563EB;--wait-t:#1D4ED8;  /* 等产出 · 空心蓝环点区分 */
+  --idle:#A1A1AA;--idle-t:#52525B;  /* 排队 / 中性 */
+  --mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
+  --sans:"Inter",-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  --sh:0 1px 2px rgba(0,0,0,.05);
+  --shpop:0 1px 3px rgba(0,0,0,.07),0 8px 24px rgba(0,0,0,.09);
+}
+/* 暗色主题未调校：本版定稿为亮色单色，rail 底部主题开关做禁用态 */
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{font-family:var(--sans);font-size:14px;line-height:1.55;color:var(--tx);background:var(--bg);overflow:hidden}
+button{font-family:inherit;cursor:pointer}
+input,select{font-family:inherit;color:inherit}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-thumb{background:var(--line2);border-radius:6px;border:2px solid var(--bg)}
+::-webkit-scrollbar-track{background:transparent}
+::selection{background:#111111;color:#FFFFFF}
+
+.app{display:flex;height:100vh}
+.hidden{display:none!important}
+
+/* ============ 左导航 rail ============ */
+.rail{width:84px;flex:0 0 84px;background:var(--rail);border-right:1px solid var(--line);
+  display:flex;flex-direction:column;align-items:center;padding:12px 6px;gap:4px;z-index:40}
+.rail .logo{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;
+  background:var(--acc2);margin-bottom:6px;flex:0 0 auto}
+.rail .logo svg{display:block}
+.railbtn{position:relative;width:72px;padding:8px 2px 6px;border:1px solid transparent;background:none;
+  border-radius:10px;display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--tx3)}
+.railbtn svg{width:19px;height:19px;stroke:currentColor;fill:none;stroke-width:1.6}
+.railbtn .lb{font-size:12px;line-height:1.2}
+.railbtn:hover{color:var(--tx);background:var(--srf2)}
+.railbtn.on{color:var(--tx);background:var(--srf2);border-color:var(--line2)}
+.railbtn.on .lb{color:var(--acc)}
+.railbtn .nbadge{position:absolute;top:2px;right:10px;min-width:17px;height:17px;padding:0 4px;
+  border-radius:9px;background:var(--bad);color:#fff;font-size:12px;font-weight:700;line-height:17px;text-align:center}
+.railsep{width:56px;border-top:1px solid var(--line);margin:6px 0}
+.railspace{flex:1}
+.railfoot{display:flex;flex-direction:column;align-items:center;gap:6px;padding-bottom:2px}
+.ssebtn{display:flex;align-items:center;gap:5px;border:none;background:none;color:var(--tx3);font-size:12px;padding:3px 6px;border-radius:7px}
+.ssebtn:hover{background:var(--srf2)}
+.ssebtn:disabled{opacity:.45;cursor:not-allowed}
+.ssebtn:disabled:hover{background:none}
+.dotlive{width:8px;height:8px;border-radius:50%;background:var(--ok);flex:0 0 auto}
+.dotlive.off{background:var(--warn)}
+.mini{font-size:12px;color:var(--tx3)}
+.railver{font-family:var(--mono);font-size:12px;color:var(--tx3);text-align:center;line-height:1.5}
+
+/* 项目切换弹层 */
+.projpop{position:fixed;left:90px;top:56px;width:252px;background:var(--srf);border:1px solid var(--line2);
+  border-radius:10px;box-shadow:var(--shpop);padding:8px;z-index:60}
+.projpop h4{font-size:12px;color:var(--tx3);font-weight:600;padding:4px 8px}
+.projitem{display:flex;align-items:center;gap:8px;width:100%;padding:8px;border:none;background:none;
+  border-radius:8px;color:var(--tx);font-size:13.5px;text-align:left}
+.projitem:hover{background:var(--srf2)}
+.projitem.on{background:var(--srf2);outline:1px solid var(--line2)}
+.projitem .pj{font-family:var(--mono);font-size:12.5px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.projitem .pc{min-width:20px;height:20px;padding:0 6px;border-radius:10px;background:var(--srf2);
+  border:1px solid var(--line2);font-size:12px;line-height:18px;text-align:center;color:var(--tx2);font-family:var(--mono)}
+.projpop .foot{border-top:1px solid var(--line);margin-top:6px;padding-top:6px;display:flex;justify-content:space-between}
+.linkbtn{border:none;background:none;color:var(--tx3);font-size:12px;padding:4px 8px;border-radius:6px}
+.linkbtn:hover{color:var(--tx);background:var(--srf2)}
+
+/* ============ 主区 ============ */
+.main{flex:1;min-width:0;display:flex;flex-direction:column;position:relative}
+.offline{background:color-mix(in srgb,var(--warn) 10%,#fff);border-bottom:1px solid color-mix(in srgb,var(--warn) 35%,transparent);
+  color:var(--warn-t);padding:8px 20px;font-size:13.5px;display:flex;gap:10px;align-items:center}
+.offline b{font-weight:700}
+.viewwrap{flex:1;overflow-y:auto;overflow-x:hidden;min-height:0}
+.view{display:none;padding:0 24px 40px}
+.view.on{display:block}
+.vhead{padding:18px 0 4px}
+.vhead h1{font-size:17px;font-weight:700;letter-spacing:.2px}
+.vhead .sub{font-size:13px;color:var(--tx3);margin-top:2px}
+
+/* 画布工具条 */
+.toolbar{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  padding:12px 0 10px;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(8px)}
+.tabs{display:flex;gap:2px;background:var(--srf2);border:1px solid var(--line);border-radius:9px;padding:3px}
+.tab{border:none;background:none;color:var(--tx2);font-size:13px;padding:5px 11px;border-radius:6px;display:flex;gap:6px;align-items:center}
+.tab:hover{color:var(--tx)}
+.tab.on{background:#fff;color:var(--tx);outline:1px solid var(--line);box-shadow:0 1px 2px rgba(0,0,0,.06)}
+.tab .n{font-family:var(--mono);font-size:12px;color:var(--tx2);background:rgba(0,0,0,.06);border-radius:5px;padding:0 5px;line-height:18px}
+.tab.on .n{color:var(--acc)}
+.schedchip{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--tx2);
+  background:var(--srf);border:1px solid var(--line);border-radius:9px;padding:6px 10px}
+.schedchip .d{width:8px;height:8px;border-radius:50%;background:var(--warn)}
+.toolright{margin-left:auto;display:flex;align-items:center;gap:10px}
+.verchip{font-family:var(--mono);font-size:12px;color:var(--tx3)}
+
+.btn{border:1px solid var(--line2);background:var(--srf2);color:var(--tx);font-size:13px;
+  padding:6px 12px;border-radius:8px;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.btn:hover{border-color:var(--acc)}
+.btn.pri{background:var(--acc2);border-color:var(--acc2);color:#fff;font-weight:600}
+.btn.pri:hover{background:var(--acc);border-color:var(--acc)}
+.btn.ghost{background:none}
+.btn.danger{color:var(--bad-t);border-color:color-mix(in srgb,var(--bad) 40%,transparent)}
+.btn.danger:hover{background:color-mix(in srgb,var(--bad) 12%,transparent)}
+.btn.sm{font-size:12px;padding:4px 9px;border-radius:7px}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn:disabled:hover{border-color:var(--line2)}
+
+/* workflow 分组 pills */
+.wfpills{display:flex;gap:8px;align-items:center;padding:2px 0 12px}
+.wfpill{border:1px solid var(--line);background:var(--srf);color:var(--tx2);font-size:12.5px;
+  padding:4px 11px;border-radius:999px}
+.wfpill.on{border-color:var(--acc);color:var(--tx);background:color-mix(in srgb,var(--acc) 12%,var(--srf))}
+.wfpills .hint{font-size:12px;color:var(--tx3);margin-left:4px}
+
+/* ============ 画布 ============ */
+.canvas{position:relative;border:1px solid var(--line);border-radius:10px;
+  background:radial-gradient(circle,var(--bg-dots) 1px,transparent 1.2px) 0 0/22px 22px,
+    color-mix(in srgb,var(--bg) 60%,var(--rail));
+  padding:18px 18px 8px;margin-bottom:22px;overflow-x:auto}
+.wfgroup{position:relative;margin-bottom:18px;padding:34px 6px 10px;min-width:0}
+.wfgroup .gtag{position:absolute;top:0;left:0;display:flex;gap:8px;align-items:center}
+.gtag .gname{font-family:var(--mono);font-size:12.5px;color:var(--tx);background:var(--srf);
+  border:1px solid var(--line2);border-radius:7px;padding:3px 9px}
+.gtag .gmeta{font-size:12px;color:var(--tx3)}
+.gtag .greadonly{font-size:12px;color:var(--tx3);border:1px dashed var(--line2);border-radius:6px;padding:1px 7px}
+.nodes{position:relative;display:flex;gap:22px;align-items:flex-start}
+.edgesvg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:0;overflow:visible}
+.edgesvg path{fill:none;stroke:var(--line2);stroke-width:1.6}
+.edgesvg path.live{stroke:var(--run);stroke-dasharray:6 5;animation:dash 1.1s linear infinite;opacity:.9}
+@keyframes dash{to{stroke-dashoffset:-11}}
+
+.node{position:relative;z-index:1;flex:0 0 156px;width:156px;background:var(--srf);
+  border:1px solid var(--line);border-radius:11px;padding:9px 9px 8px;box-shadow:var(--sh)}
+.node.dim{opacity:.55}
+.node.runnode{border-color:color-mix(in srgb,var(--run) 45%,var(--line))}
+.node .nh{display:flex;align-items:center;gap:5px 6px;margin-bottom:2px;flex-wrap:wrap}
+.node .idx{font-family:var(--mono);font-size:12px;color:var(--tx3)}
+.node .nm{font-size:13.5px;font-weight:650;flex:0 1 auto;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gateb{font-size:12px;color:var(--tx2);border:1px solid var(--line2);border-radius:6px;padding:0 5px;
+  line-height:18px;white-space:nowrap;display:inline-flex;align-items:center;gap:3px}
+.gateb svg{width:10px;height:10px;stroke:currentColor;fill:none;stroke-width:2}
+.node .cnt{font-size:12px;color:var(--tx3);margin-bottom:6px}
+.node .cnt b{color:var(--tx2);font-weight:600}
+.chgstack{display:flex;flex-direction:column;gap:5px}
+.chg{display:flex;align-items:center;gap:6px;padding:5px 7px;border-radius:7px;border:1px solid var(--line);
+  background:var(--srf2);cursor:pointer;width:100%;text-align:left}
+.chg:hover{border-color:var(--line2)}
+.chg.sel{border-color:var(--acc);outline:1px solid var(--acc)}
+.chg .cn{font-family:var(--mono);font-size:12px;color:var(--tx);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chg .cg{font-size:12px;color:var(--tx3);flex:0 0 auto}
+.chg .pj2{font-size:12px;color:var(--tx3)}
+.chg.dimmed{opacity:.32}
+.sdot{width:8px;height:8px;border-radius:50%;flex:0 0 auto}
+.sdot.pulse{animation:blink 1.4s ease-in-out infinite}
+@keyframes blink{50%{opacity:.35}}
+.s-gateok{background:var(--ok)}
+.s-gatejudge{background:var(--bad)}
+.s-running{background:var(--run)}
+.s-failed{background:var(--bad)}
+.s-conflict{background:var(--bad)}
+.s-cancelled{background:var(--warn)}
+.s-queued{background:var(--idle)}
+.s-agent{background:#fff;box-shadow:inset 0 0 0 2px var(--wait)}
+.nodeempty{font-size:12px;color:var(--tx3);border:1px dashed var(--line);border-radius:7px;
+  text-align:center;padding:5px 0}
+
+/* ============ 徽章与 chips ============ */
+.vd{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;border-radius:6px;
+  padding:1.5px 8px;white-space:nowrap;color:var(--tx);background:var(--srf2);border:1px solid var(--line)}
+.vd::before{content:"";width:7px;height:7px;border-radius:50%;flex:0 0 auto;background:var(--idle)}
+.vd-ok::before{background:var(--ok)}
+.vd-bad{color:var(--bad-t)}
+.vd-bad::before{background:var(--bad)}
+.vd-warn::before{background:var(--warn)}
+.vd-run::before{background:var(--run)}
+.vd-wait::before{background:#fff;box-shadow:inset 0 0 0 2px var(--wait)}
+.vd-idle::before{background:var(--idle)}
+.chip{display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--tx2);
+  border:1px solid var(--line);background:var(--srf);border-radius:6px;padding:1px 7px;white-space:nowrap}
+.chip.mono,.eng{font-family:var(--mono);font-size:12px}
+.eng{display:inline-flex;align-items:center;color:var(--tx2);border:1px solid var(--line2);
+  background:var(--srf2);border-radius:6px;padding:1px 7px;white-space:nowrap}
+.chip.cause{color:var(--bad-t);border-color:color-mix(in srgb,var(--bad) 35%,transparent)}
+.chip.cause.amber{color:var(--warn-t);border-color:color-mix(in srgb,var(--warn) 40%,transparent)}
+
+/* 相位轨 */
+.ptrack{display:flex;gap:3px;align-items:center}
+.ptrack .seg{width:15px;height:6px;border-radius:3px;background:var(--line);position:relative}
+.ptrack .seg.done{background:color-mix(in srgb,var(--ok) 55%,var(--line))}
+.ptrack .seg.cur{background:var(--acc)}
+.ptrack .seg.cur.bad{background:var(--bad)}
+.ptrack .seg.cur.warn{background:var(--warn)}
+
+/* ============ 项目分组列表 ============ */
+.listblock{margin-top:6px}
+.listblock>h2,.secth{font-size:13px;font-weight:700;color:var(--tx2);letter-spacing:.4px;margin:14px 0 10px}
+.pgroup{margin-bottom:14px}
+.pghead{display:flex;align-items:center;gap:9px;padding:6px 2px}
+.pghead .pn{font-family:var(--mono);font-size:13px;color:var(--tx)}
+.pghead .pk{font-size:12px;color:var(--tx3)}
+.rows{display:flex;flex-direction:column;gap:6px}
+.row{display:grid;grid-template-columns:minmax(0,1fr) 150px 96px 216px;gap:14px;align-items:center;
+  background:var(--srf);border:1px solid var(--line);border-radius:10px;padding:10px 14px;cursor:pointer}
+.row:hover{border-color:var(--line2)}
+.row.sel{border-color:var(--acc)}
+.row .l1{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
+.row .nm{font-family:var(--mono);font-size:13.5px;color:var(--tx);font-weight:600}
+.row .l2{display:flex;gap:6px;flex-wrap:wrap;margin-top:5px}
+.row .tcol{display:flex;flex-direction:column;gap:5px;align-items:flex-start}
+.row .tm{font-size:12px;color:var(--tx3);text-align:right}
+.row .tm b{display:block;color:var(--tx2);font-weight:600;font-size:12.5px}
+.row .acts{display:flex;flex-direction:column;gap:5px;align-items:stretch}
+.row .acts .btn{justify-content:center}
+.row.ro{cursor:default;opacity:.75}
+.archfold{margin-top:10px;border:1px dashed var(--line2);border-radius:10px;padding:10px 14px;color:var(--tx2)}
+.archfold summary{cursor:pointer;font-size:13px;color:var(--tx2);list-style:none;display:flex;gap:8px;align-items:center}
+.archfold summary::before{content:"▸";color:var(--tx3);transition:transform .15s}
+.archfold[open] summary::before{transform:rotate(90deg)}
+.archrow{display:flex;gap:10px;align-items:center;padding:8px 2px;border-top:1px solid var(--line);margin-top:8px}
+.archrow .nm{font-family:var(--mono);font-size:13px;color:var(--tx2)}
+
+/* ============ 收件箱 ============ */
+.typebar{display:flex;gap:8px;flex-wrap:wrap;padding:10px 0 14px}
+.inboxlist{display:flex;flex-direction:column;gap:10px;max-width:1040px}
+.icard{display:grid;grid-template-columns:86px minmax(0,1fr) auto;gap:16px;align-items:center;
+  background:var(--srf);border:1px solid var(--line);border-radius:10px;padding:14px 18px}
+.icard .wait{font-family:var(--mono);font-size:19px;font-weight:700;color:var(--tx);text-align:center}
+.icard .wait small{display:block;font-size:12px;color:var(--tx3);font-weight:400}
+.icard.hot{box-shadow:inset 3px 0 0 var(--bad)}
+.icard.hot .wait{color:var(--bad-t)}
+.icard .q{font-size:15px;font-weight:650}
+.icard .meta{display:flex;gap:7px;flex-wrap:wrap;margin-top:6px;align-items:center}
+.icard .btns{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+
+/* ============ AFK ============ */
+.lightsbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:var(--srf);
+  border:1px solid var(--line);border-radius:10px;padding:12px 16px;margin-bottom:16px}
+.light{display:flex;align-items:center;gap:7px;font-size:13px;color:var(--tx2)}
+.light .d{width:9px;height:9px;border-radius:50%}
+.d.g{background:var(--ok)}
+.d.r{background:var(--bad)}
+.d.a{background:var(--warn)}
+.lightsbar .sep{width:1px;height:20px;background:var(--line);margin:0 4px}
+.lanes{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;margin-bottom:20px}
+.lane{background:color-mix(in srgb,var(--bg) 55%,var(--srf));border:1px solid var(--line);border-radius:11px;
+  padding:9px;min-height:170px}
+.lane .lh{display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:700;color:var(--tx2);
+  padding:2px 3px 9px}
+.lane .lh .n{margin-left:auto;font-family:var(--mono);font-size:12px;color:var(--tx3)}
+.lcard{background:var(--srf);border:1px solid var(--line);border-radius:9px;padding:8px 9px;margin-bottom:7px;cursor:pointer}
+.lcard:hover{border-color:var(--line2)}
+.lcard .nm{font-family:var(--mono);font-size:12.5px;color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lcard .ds{font-size:12px;color:var(--tx3);margin-top:3px;line-height:1.45}
+.lcard .tagrow{display:flex;gap:5px;flex-wrap:wrap;margin-top:6px}
+.lcard .tagrow .chip{display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.lcard.runcard{border-color:color-mix(in srgb,var(--run) 50%,var(--line))}
+.afkgrid{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:16px;align-items:start}
+.card{background:var(--srf);border:1px solid var(--line);border-radius:10px;padding:16px 18px}
+.card>h3{font-size:14px;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.card>h3 .hnote{font-size:12px;color:var(--tx3);font-weight:400;margin-left:auto}
+.tl{display:flex;flex-direction:column}
+.tlrow{display:grid;grid-template-columns:52px 14px minmax(0,1fr);gap:10px;padding:7px 0;position:relative}
+.tlrow .t{font-family:var(--mono);font-size:12px;color:var(--tx3);padding-top:2px}
+.tlrow .d{width:9px;height:9px;border-radius:50%;margin-top:5px;background:var(--idle)}
+.tlrow .d.g{background:var(--ok)}.tlrow .d.r{background:var(--bad)}.tlrow .d.a{background:var(--warn)}.tlrow .d.p{background:var(--run)}
+.tlrow:not(:last-child)::after{content:"";position:absolute;left:56.5px;top:20px;bottom:-8px;width:1px;background:var(--line)}
+.tlrow .tx{font-size:13.5px;color:var(--tx2)}
+.tlrow .tx b{color:var(--tx);font-weight:600;font-family:var(--mono);font-size:13px}
+
+/* ============ 命令 chip / 终端面 ============ */
+.cmd{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:12.5px;color:#D4D4D4;
+  background:var(--srf3);border:1px solid var(--line2);border-radius:7px;padding:5px 10px;cursor:pointer;
+  max-width:100%;text-align:left}
+.cmd:hover{border-color:var(--acc)}
+.cmd .pr{color:#4ADE80;user-select:none}
+.cmd .ct{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cmd svg{width:13px;height:13px;stroke:#8A8A8A;fill:none;stroke-width:1.8;flex:0 0 auto}
+.cmd:hover svg{stroke:#fff}
+.cmdcol{display:flex;flex-direction:column;gap:7px;align-items:flex-start}
+.cmdlbl{font-size:12px;color:var(--tx3);margin-bottom:-3px}
+
+.logbox{background:var(--srf3);border:1px solid var(--line2);border-radius:9px;padding:10px 12px;
+  font-family:var(--mono);font-size:12.5px;line-height:1.75;color:#D4D4D4;overflow-x:auto}
+.logbox .lt{color:#8A8A8A;margin-right:8px}
+.logbox .cmdln{color:#7DD3FC}
+.logbox .okln{color:#4ADE80}
+.logbox .phln{color:#FFFFFF;font-weight:600}
+.logbox .wl{white-space:nowrap}
+
+/* ============ 检查器（inspector） ============ */
+.insp{position:fixed;top:0;right:0;bottom:0;width:432px;background:var(--srf);border-left:1px solid var(--line2);
+  box-shadow:-12px 0 32px rgba(0,0,0,.07);transform:translateX(102%);transition:transform .22s ease;
+  z-index:50;display:flex;flex-direction:column}
+.insp.open{transform:none}
+.insphead{padding:14px 18px 0;border-bottom:1px solid var(--line);background:var(--srf)}
+.insphead .r1{display:flex;align-items:flex-start;gap:10px}
+.insphead h2{font-family:var(--mono);font-size:15px;font-weight:700;flex:1;word-break:break-all}
+.xbtn{border:1px solid var(--line);background:none;color:var(--tx3);width:26px;height:26px;border-radius:7px;
+  font-size:14px;line-height:1;flex:0 0 auto}
+.xbtn:hover{color:var(--tx);border-color:var(--line2)}
+.insphead .chips{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 10px}
+.inspacts{display:flex;gap:8px;flex-wrap:wrap;padding:0 0 12px}
+.inspbody{flex:1;overflow-y:auto;padding:4px 18px 26px}
+.sect{padding:14px 0;border-bottom:1px solid var(--line)}
+.sect:last-child{border-bottom:none}
+.sect>h5{font-size:12px;font-weight:700;color:var(--tx3);letter-spacing:.6px;margin-bottom:10px}
+.kv{display:flex;gap:8px;font-size:13px;color:var(--tx2);margin-bottom:5px;align-items:baseline;flex-wrap:wrap}
+.kv .k{color:var(--tx3);flex:0 0 auto;font-size:12.5px}
+.kv .v{font-family:var(--mono);font-size:12.5px;color:var(--tx);word-break:break-all}
+
+/* 阶段垂直时间线 */
+.steps{display:flex;flex-direction:column}
+.step{display:grid;grid-template-columns:20px minmax(0,1fr);gap:10px;position:relative;padding-bottom:13px}
+.step:not(:last-child)::before{content:"";position:absolute;left:9.5px;top:20px;bottom:0;width:1px;background:var(--line)}
+.step .ic{width:20px;height:20px;border-radius:50%;display:grid;place-items:center;font-size:11px;
+  border:1.6px solid var(--line2);color:var(--tx3);background:var(--srf);z-index:1}
+.step.done .ic{border-color:var(--ok);color:var(--ok-t)}
+.step.cur .ic{border-color:var(--acc);color:var(--acc)}
+.step.fail .ic{border-color:var(--bad);color:var(--bad-t)}
+.step .sn{font-size:13.5px;font-weight:600;color:var(--tx2);line-height:20px}
+.step.cur .sn{color:var(--tx)}
+.step .outs{display:flex;gap:5px;flex-wrap:wrap;margin-top:5px}
+.outchip{display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:12px;color:var(--tx2);
+  background:var(--srf2);border:1px solid var(--line);border-radius:6px;padding:1px 7px;cursor:copy;max-width:100%}
+.outchip:hover{border-color:var(--acc);color:var(--tx)}
+.outchip .ov{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.outchip.missing{border-style:dashed;color:var(--wait-t);cursor:default}
+
+/* 三轨证据 */
+.evi{display:flex;flex-direction:column;gap:7px}
+.evirow{display:flex;align-items:center;gap:9px;background:var(--srf2);border:1px solid var(--line);
+  border-radius:8px;padding:7px 10px}
+.evirow .en{font-family:var(--mono);font-size:12.5px;color:var(--tx2);flex:1}
+.evirow.f{border-color:color-mix(in srgb,var(--bad) 45%,transparent)}
+.evinote{font-size:12.5px;color:var(--tx3);margin-top:8px;line-height:1.6}
+.evinote b{color:var(--bad-t)}
+
+/* 失败诊断 */
+.diag{border:1px solid color-mix(in srgb,var(--bad) 40%,transparent);border-radius:10px;overflow:hidden}
+.diag.amber{border-color:color-mix(in srgb,var(--warn) 45%,transparent)}
+.diag .dh{background:color-mix(in srgb,var(--bad) 10%,transparent);padding:10px 12px;font-size:14px;font-weight:700;color:var(--bad-t)}
+.diag.amber .dh{background:color-mix(in srgb,var(--warn) 8%,transparent);color:var(--warn-t)}
+.diag .db{padding:10px 12px;font-size:13px;color:var(--tx2);display:flex;flex-direction:column;gap:9px}
+.diag .db p{line-height:1.6}
+.diag details{border-top:1px dashed var(--line2);padding-top:8px}
+.diag summary{font-size:12.5px;color:var(--tx3);cursor:pointer}
+.diag pre{margin-top:8px;font-family:var(--mono);font-size:12px;color:#FCA5A5;background:var(--srf3);
+  border-radius:7px;padding:9px 11px;overflow-x:auto;line-height:1.6}
+.diag .dmeta{display:flex;gap:7px;flex-wrap:wrap}
+
+/* 历史 */
+.hist{display:flex;flex-direction:column;gap:2px}
+.hrow{display:grid;grid-template-columns:48px minmax(0,1fr);gap:10px;padding:5px 0;font-size:13px;color:var(--tx2)}
+.hrow .t{font-family:var(--mono);font-size:12px;color:var(--tx3)}
+.hrow b{font-family:var(--mono);font-size:12.5px;color:var(--tx);font-weight:600}
+
+/* 跟随尾部 / 开关 */
+.tgl{display:inline-flex;align-items:center;gap:8px;font-size:12.5px;color:var(--tx2);cursor:pointer;user-select:none}
+.tgl .tr{width:30px;height:17px;border-radius:9px;background:var(--line2);position:relative;transition:.15s;flex:0 0 auto}
+.tgl .tr::after{content:"";position:absolute;top:2px;left:2px;width:13px;height:13px;border-radius:50%;background:var(--tx2);transition:.15s}
+.tgl.on .tr{background:var(--acc2)}
+.tgl.on .tr::after{left:15px;background:#fff}
+.tgl.lock .tr{background:color-mix(in srgb,var(--warn) 45%,var(--line2));cursor:not-allowed}
+.tgl.lock .tr::after{left:15px;background:#fff}
+.tgl.dis{opacity:.5;cursor:not-allowed}
+
+/* ============ 底部日志 drawer ============ */
+.drawer{flex:0 0 auto;border-top:1px solid var(--line2);background:var(--rail);z-index:30}
+.drawbar{display:flex;align-items:center;gap:12px;padding:7px 20px;cursor:pointer;user-select:none}
+.drawbar .lb{font-size:12.5px;color:var(--tx2);display:flex;gap:8px;align-items:center}
+.drawbar .last{font-family:var(--mono);font-size:12px;color:var(--tx3);overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap;flex:1}
+.drawbar .chev{color:var(--tx3);font-size:12px;transition:transform .2s}
+.drawer.open .chev{transform:rotate(180deg)}
+.drawpanel{display:none;padding:0 20px 14px}
+.drawer.open .drawpanel{display:block}
+.drawtabs{display:flex;gap:6px;align-items:center;padding-bottom:9px}
+.dtab{border:1px solid var(--line);background:none;color:var(--tx2);font-size:12.5px;padding:4px 11px;border-radius:7px}
+.dtab.on{background:var(--srf2);color:var(--tx);border-color:var(--line2)}
+.drawtabs .right{margin-left:auto;display:flex;gap:14px;align-items:center}
+.drawpanel .logbox{max-height:190px;overflow-y:auto}
+
+/* ============ 模态 ============ */
+.modalwrap{position:fixed;inset:0;background:rgba(0,0,0,.42);backdrop-filter:blur(3px);z-index:70;
+  display:none;place-items:center}
+.modalwrap.open{display:grid}
+.modal{width:440px;background:var(--srf);border:1px solid var(--line2);border-radius:10px;box-shadow:var(--shpop);padding:20px 22px}
+.modal h3{font-size:15px;font-weight:700;margin-bottom:4px}
+.modal .ms{font-size:12.5px;color:var(--tx3);margin-bottom:14px}
+.fld{margin-bottom:12px}
+.fld label{display:block;font-size:12.5px;color:var(--tx2);margin-bottom:5px}
+.fld input[type=text],.fld input[type=password],.fld select{width:100%;background:var(--bg);border:1px solid var(--line2);
+  border-radius:8px;padding:7px 10px;font-size:13.5px;color:var(--tx)}
+.fld input:focus,.fld select:focus{outline:none;border-color:var(--acc)}
+.fld .fh{font-size:12px;color:var(--tx3);margin-top:4px}
+.modal .mfoot{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
+
+/* ============ 工作台 ============ */
+.wbbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:4px 0 14px}
+.wbpill{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--srf);
+  color:var(--tx2);font-family:var(--mono);font-size:12.5px;padding:5px 12px;border-radius:999px}
+.wbpill.on{border-color:var(--acc);color:var(--tx);background:color-mix(in srgb,var(--acc) 12%,var(--srf))}
+.wbpill .ro{font-size:12px;font-family:var(--sans);color:var(--tx3);border:1px dashed var(--line2);border-radius:5px;padding:0 5px}
+.wbpill .unsaved{width:7px;height:7px;border-radius:50%;background:var(--warn)}
+.valbanner{display:flex;gap:9px;align-items:flex-start;border:1px solid color-mix(in srgb,var(--bad) 45%,transparent);
+  background:color-mix(in srgb,var(--bad) 9%,transparent);border-radius:10px;padding:10px 14px;
+  font-size:13px;color:var(--tx2);margin-bottom:14px;max-width:880px}
+.valbanner b{color:var(--bad-t)}
+.stageband{position:relative;border:1px solid var(--line);border-radius:10px;margin-bottom:18px;
+  background:radial-gradient(circle,var(--bg-dots) 1px,transparent 1.2px) 0 0/22px 22px,
+    color-mix(in srgb,var(--bg) 60%,var(--rail));
+  padding:16px;overflow-x:auto}
+.stagecard{flex:0 0 176px;width:176px;cursor:pointer}
+.stagecard .meta{display:flex;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--tx3);margin-top:4px}
+.stagecard.sel{border-color:var(--acc);outline:1px solid var(--acc)}
+.stagecard .bub{position:absolute;top:-9px;right:-8px;min-width:21px;height:21px;padding:0 6px;border-radius:11px;
+  background:var(--acc2);color:#fff;font-family:var(--mono);font-size:12px;font-weight:700;line-height:21px;text-align:center}
+.stagecard .bub.run{background:var(--run);animation:blink 1.4s ease-in-out infinite}
+.addstage{flex:0 0 120px;width:120px;border:1.5px dashed var(--line2);border-radius:11px;background:none;
+  color:var(--tx3);font-size:13px;display:grid;place-items:center;min-height:76px}
+.addstage:hover{color:var(--acc);border-color:var(--acc)}
+.wbgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;align-items:start}
+.wbgrid .span2{grid-column:1/-1}
+
+/* Hook 时序线 */
+.hookline{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;position:relative;padding-top:26px}
+.hookline::before{content:"";position:absolute;top:9px;left:4%;right:4%;height:2px;background:var(--line2)}
+.hookmoment{position:relative}
+.hookmoment::before{content:"";position:absolute;top:-21px;left:50%;transform:translateX(-50%);
+  width:10px;height:10px;border-radius:50%;background:var(--srf);border:2px solid var(--acc)}
+.hookmoment>h6{font-size:12.5px;font-weight:700;color:var(--tx2);text-align:center;margin-bottom:9px}
+.hookcard{background:var(--srf2);border:1px solid var(--line);border-radius:8px;padding:7px 9px;margin-bottom:7px}
+.hookcard .hn{font-family:var(--mono);font-size:12px;color:var(--tx);margin-bottom:5px;word-break:break-all}
+.hookcard .hc{display:flex;align-items:center;gap:6px;justify-content:space-between}
+.lockb{display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--warn-t);
+  background:color-mix(in srgb,var(--warn) 10%,transparent);border-radius:5px;padding:1px 7px}
+.lockb svg{width:10px;height:10px;stroke:currentColor;fill:none;stroke-width:2.2}
+.dimtag{font-size:12px;color:var(--tx3)}
+
+/* 矩阵 */
+.mtable{width:100%;border-collapse:collapse;font-size:12.5px}
+.mtable th,.mtable td{border:1px solid var(--line);padding:7px 9px;text-align:left;vertical-align:top}
+.mtable th{color:var(--tx3);font-weight:600;font-size:12px;background:var(--srf2)}
+.mtable td .skl{font-family:var(--mono);font-size:12px;color:var(--tx2);display:inline-block;
+  background:var(--srf2);border:1px solid var(--line);border-radius:5px;padding:0 6px;margin:1.5px 2px 1.5px 0}
+.mtable td.selcell{outline:2px solid var(--acc);outline-offset:-2px;cursor:pointer}
+.mtable td.empty{color:var(--tx3)}
+.shuttle{display:grid;grid-template-columns:1fr 44px 1fr;gap:10px;margin-top:12px;align-items:stretch}
+.shcol{border:1px solid var(--line);border-radius:9px;background:var(--srf2);padding:8px}
+.shcol h6{font-size:12px;color:var(--tx3);font-weight:600;margin-bottom:7px}
+.shitem{display:flex;align-items:center;gap:7px;font-family:var(--mono);font-size:12px;color:var(--tx2);
+  padding:4px 7px;border-radius:6px;border:1px solid transparent}
+.shitem:hover{background:var(--srf);border-color:var(--line)}
+.shitem .miss{font-family:var(--sans);font-size:12px;color:var(--warn-t)}
+.shmid{display:flex;flex-direction:column;gap:8px;justify-content:center}
+.shmid .btn{padding:4px 0;justify-content:center}
+
+/* Loop tiles */
+.looprow{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:14px}
+.looptile{background:var(--srf2);border:1px solid var(--line);border-radius:11px;padding:12px 14px;position:relative}
+.looptile.draft{border-style:dashed;border-color:color-mix(in srgb,var(--warn) 50%,var(--line2))}
+.looptile .ln{font-family:var(--mono);font-size:13.5px;font-weight:700;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.lvl{font-size:12px;font-weight:800;border-radius:5px;padding:0 6px;line-height:18px;background:var(--srf2);border:1px solid var(--line)}
+.lvl.l1{color:var(--wait-t)}
+.lvl.l2{color:var(--run-t)}
+.lvl.l3{color:var(--ok-t)}
+.looptile .lmeta{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0;font-size:12px;color:var(--tx3);align-items:center}
+.ready{display:flex;align-items:baseline;gap:5px;margin:2px 0 6px}
+.ready b{font-family:var(--mono);font-size:22px;font-weight:800}
+.ready span{font-size:12px;color:var(--tx3)}
+.brk{display:inline-flex;align-items:center;gap:5px;font-size:12px;border-radius:6px;padding:1px 8px;background:var(--srf2);border:1px solid var(--line)}
+.brk .d{width:7px;height:7px;border-radius:50%}
+.brk.ok{color:var(--tx2)}.brk.ok .d{background:var(--ok)}
+.brk.warn{color:var(--warn-t)}.brk.warn .d{background:var(--warn)}
+.brk.trip{color:var(--bad-t)}.brk.trip .d{background:var(--bad)}
+.loopdetail{border-top:1px dashed var(--line2);margin-top:10px;padding-top:10px;display:flex;flex-direction:column;gap:9px}
+.sliderrow{display:grid;grid-template-columns:150px 1fr 96px;gap:12px;align-items:center;font-size:12.5px;color:var(--tx2)}
+.sliderrow input[type=range]{width:100%;accent-color:var(--acc2);height:18px}
+.sliderrow .val{font-family:var(--mono);font-size:12px;color:var(--tx);text-align:right}
+.blockers{border:1px solid color-mix(in srgb,var(--bad) 35%,transparent);border-radius:9px;padding:9px 12px;
+  background:color-mix(in srgb,var(--bad) 7%,transparent)}
+.blockers h6{font-size:12.5px;color:var(--bad-t);font-weight:700;margin-bottom:5px}
+.blockers li{font-size:12.5px;color:var(--tx2);margin-left:18px;line-height:1.7}
+.gatechips{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.gatechips .k{font-size:12px;color:var(--tx3);flex:0 0 auto}
+
+/* 凭证 */
+.credrow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:start;
+  border:1px solid var(--line);border-radius:10px;padding:11px 14px;margin-bottom:10px;background:var(--srf2)}
+.credrow .cn{font-family:var(--mono);font-size:13px;font-weight:700}
+.credrow .cv{font-family:var(--mono);font-size:12.5px;color:var(--tx2);margin-top:4px;word-break:break-all}
+.credrow .how{font-size:12px;color:var(--tx3);margin-top:6px;line-height:1.6}
+.credrow .how code{font-family:var(--mono);color:var(--tx2);background:var(--srf);border:1px solid var(--line);border-radius:4px;padding:0 4px}
+.credbtns{display:flex;gap:7px;flex-direction:column;align-items:stretch}
+.wronly{display:flex;gap:7px;margin-top:8px}
+.wronly input{flex:1;background:var(--bg);border:1px solid var(--line2);border-radius:7px;padding:5px 9px;font-size:12.5px;font-family:var(--mono)}
+.bignum{display:flex;gap:26px;align-items:baseline;margin-bottom:10px}
+.bignum .bn b{font-family:var(--mono);font-size:30px;font-weight:800}
+.bignum .bn span{font-size:12.5px;color:var(--tx3);margin-left:6px}
+.bn.miss b{color:var(--warn-t)}
+
+/* ============ 观测面 ============ */
+.obsgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;align-items:start}
+.obsgrid .span2{grid-column:1/-1}
+.wrow{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.wrow:last-child{border-bottom:none}
+.wrow .wn{font-family:var(--mono);font-size:13px;font-weight:600;flex:0 0 auto}
+.wrow .sp{margin-left:auto;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.threadrow{display:flex;align-items:center;gap:9px;padding:7px 0;flex-wrap:wrap;border-bottom:1px solid var(--line)}
+.threadrow:last-child{border-bottom:none}
+.threadrow .tn{font-size:13.5px;font-weight:650}
+.taprec{display:grid;grid-template-columns:minmax(0,1fr) auto auto auto;gap:12px;font-family:var(--mono);
+  font-size:12.5px;color:var(--tx2);padding:6px 0;border-bottom:1px dashed var(--line)}
+.taprec:last-child{border-bottom:none}
+.taprec .m{color:var(--tx);font-weight:600}
+.searchbox{display:flex;gap:8px;margin-bottom:12px}
+.searchbox input{flex:1;background:var(--bg);border:1px solid var(--line2);border-radius:8px;padding:7px 11px;font-size:13.5px;color:var(--tx)}
+.memrow{display:flex;align-items:center;gap:9px;padding:8px 0;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.memrow:last-child{border-bottom:none}
+.memrow .mt{font-size:13.5px;flex:1;min-width:0}
+.memrow .ma{font-size:12px;color:var(--tx3)}
+.doclist{columns:2;column-gap:26px}
+.docitem{display:flex;gap:8px;align-items:baseline;font-size:13px;color:var(--tx2);padding:4px 0;break-inside:avoid}
+.docitem .m{flex:0 0 auto;font-weight:700}
+.docitem .m.ok{color:var(--ok-t)}
+.docitem .m.no{color:var(--bad-t)}
+.docitem .deg{font-size:12px;color:var(--warn-t)}
+
+/* ============ 空态教学 ============ */
+.onb{max-width:620px;margin:60px auto;text-align:center}
+.onb .art{width:74px;height:74px;border-radius:14px;margin:0 auto 18px;display:grid;place-items:center;
+  background:var(--srf);border:1px solid var(--line2)}
+.onb h1{font-size:19px;margin-bottom:8px}
+.onb p{color:var(--tx3);font-size:13.5px;margin-bottom:24px}
+.onbsteps{display:flex;flex-direction:column;gap:12px;text-align:left}
+.onbstep{display:grid;grid-template-columns:34px minmax(0,1fr);gap:14px;background:var(--srf);
+  border:1px solid var(--line);border-radius:10px;padding:14px 16px;align-items:start}
+.onbstep .no{width:26px;height:26px;border-radius:50%;background:var(--srf2);border:1px solid var(--line2);
+  font-family:var(--mono);font-size:13px;font-weight:700;color:var(--acc);display:grid;place-items:center}
+.onbstep h4{font-size:14px;margin-bottom:3px}
+.onbstep p{font-size:12.5px;color:var(--tx3);margin-bottom:9px}
+
+/* ============ 杂项 ============ */
+.toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(18px);opacity:0;
+  background:#111111;color:#fff;border:1px solid #111111;border-radius:10px;box-shadow:var(--shpop);
+  padding:9px 16px;font-size:13px;z-index:90;transition:.2s;pointer-events:none;max-width:640px}
+.toast.show{opacity:1;transform:translateX(-50%)}
+.sig{padding:26px 0 10px;text-align:center;font-size:12px;color:var(--tx3)}
+.notecard{border:1px dashed var(--line2);border-radius:10px;padding:10px 14px;font-size:12.5px;
+  color:var(--tx3);line-height:1.7;margin-top:12px}
+.notecard b{color:var(--tx2)}
+.gatehint{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--warn-t)}
+@media (max-width:1180px){
+  .lanes{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .wbgrid,.obsgrid,.afkgrid{grid-template-columns:1fr}
+  .looprow{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ================= 左导航 rail ================= -->
+  <nav class="rail">
+    <div class="logo" title="Pipeline 控制台">
+      <svg width="18" height="18" viewBox="0 0 18 18"><circle cx="4" cy="9" r="2.4" fill="#fff"/><circle cx="14" cy="4" r="2" fill="#fff" opacity=".85"/><circle cx="14" cy="14" r="2" fill="#fff" opacity=".85"/><path d="M6.2 8.2 12 4.6M6.2 9.8 12 13.4" stroke="#fff" stroke-width="1.5"/></svg>
+    </div>
+
+    <button class="railbtn" id="projBtn" title="项目切换">
+      <svg viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/></svg>
+      <span class="lb" id="projLbl">全部项目</span>
+    </button>
+
+    <div class="railsep"></div>
+
+    <button class="railbtn navb on" data-nav="progress" title="画布 · 在制总览">
+      <svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="2.6"/><circle cx="19" cy="5" r="2.6"/><circle cx="19" cy="19" r="2.6"/><path d="M7.4 11 16.4 5.9M7.4 13 16.4 18.1"/></svg>
+      <span class="lb">画布</span>
+    </button>
+    <button class="railbtn navb" data-nav="inbox" title="收件箱 · 拍板队列">
+      <svg viewBox="0 0 24 24"><path d="M3 13h5l2 3h4l2-3h5"/><path d="M5 4h14l2 9v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-6z"/></svg>
+      <span class="lb">收件箱</span>
+      <span class="nbadge">6</span>
+    </button>
+    <button class="railbtn navb" data-nav="afk" title="AFK 指挥面">
+      <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="4" rx="1.5"/><rect x="3" y="12" width="12" height="4" rx="1.5"/><rect x="3" y="19" width="7" height="2.5" rx="1.2"/></svg>
+      <span class="lb">AFK</span>
+    </button>
+    <button class="railbtn navb" data-nav="workbench" title="工作台 · 编排与配置">
+      <svg viewBox="0 0 24 24"><path d="M4 8h10M18 8h2M4 16h2M10 16h10"/><circle cx="15" cy="8" r="2.4"/><circle cx="7" cy="16" r="2.4"/></svg>
+      <span class="lb">工作台</span>
+    </button>
+    <button class="railbtn navb" data-nav="observe" title="观测面 · worker / tap / mem / doctor">
+      <svg viewBox="0 0 24 24"><path d="M2 12h5l2.5-6 4 12 2.5-6h6"/></svg>
+      <span class="lb">观测</span>
+    </button>
+
+    <div class="railspace"></div>
+
+    <div class="railfoot">
+      <button class="ssebtn" id="sseBtn" title="SSE 连接正常 · 点击演示离线态">
+        <span class="dotlive" id="sseDot"></span><span id="sseLbl">在线</span>
+      </button>
+      <button class="ssebtn" id="themeBtn" disabled title="暗色主题未调校 · 本版定稿为亮色单色（开关禁用）">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z"/></svg>
+        <span>主题</span>
+      </button>
+      <button class="ssebtn" id="langBtn" title="界面语言">中 / EN</button>
+      <div class="railsep"></div>
+      <div class="railver" title="server 版本与进程">v2.0.0<br>pid 48213</div>
+    </div>
+  </nav>
+
+  <!-- 项目切换弹层 -->
+  <div class="projpop hidden" id="projPop">
+    <h4>项目（活跃 change）</h4>
+    <button class="projitem on" data-proj="all"><span class="pj">全部项目 · 聚合</span><span class="pc">11</span></button>
+    <button class="projitem" data-proj="pipeline-worklfow"><span class="pj">pipeline-worklfow</span><span class="pc">8</span></button>
+    <button class="projitem" data-proj="workflow-plugin"><span class="pj">workflow-plugin</span><span class="pc">2</span></button>
+    <button class="projitem" data-proj="sandcastle-images"><span class="pj">sandcastle-images</span><span class="pc">1</span></button>
+    <div class="foot">
+      <button class="linkbtn" id="onbLink">空态教学演示</button>
+      <button class="linkbtn">注销</button>
+    </div>
+  </div>
+
+  <!-- ================= 主区 ================= -->
+  <main class="main">
+    <div class="offline hidden" id="offlineBanner">
+      <span class="dotlive off"></span>
+      <span><b>连接已断开</b>：正在自动重连，画面停留在最后快照（今日 15:00）。写动作已临时禁用。</span>
+    </div>
+
+    <div class="viewwrap" id="viewwrap">
+
+      <!-- ============ 视图：画布（#progress） ============ -->
+      <section class="view on" id="view-progress">
+        <div class="toolbar">
+          <div class="tabs" id="stateTabs">
+            <button class="tab on" data-f="all">全部 <span class="n">11</span></button>
+            <button class="tab" data-f="action">等你动手 <span class="n">5</span></button>
+            <button class="tab" data-f="running">运行中 <span class="n">1</span></button>
+            <button class="tab" data-f="waiting">等待中 <span class="n">5</span></button>
+          </div>
+          <div class="schedchip" title="调度器 attention：1 执行 · 1 排队 · 2 失败 · 并发上限 4">
+            <span class="d"></span>调度器 · 1 执行 · 1 排队 · 2 失败 · 上限 4
+          </div>
+          <div class="toolright">
+            <span class="verchip" title="server 版本 · 进程">v2.0.0 · pid 48213</span>
+            <button class="btn pri" id="newChangeBtn">＋ 新建 change</button>
+          </div>
+        </div>
+
+        <div class="wfpills" id="wfPills">
+          <button class="wfpill on" data-wf="all">全部 workflow</button>
+          <button class="wfpill" data-wf="default">default</button>
+          <button class="wfpill" data-wf="sec-hotfix">sec-hotfix 安全修复流</button>
+          <button class="wfpill" data-wf="content-pipeline">content-pipeline 内容流水线</button>
+          <span class="hint">节点 = 相位；卡内小卡 = 处于该相位的 change，点选开检查器</span>
+        </div>
+
+        <div class="canvas" id="canvasArea"><!-- JS 渲染节点图 --></div>
+
+        <section class="listblock">
+          <h2>在制列表 · 按项目分组</h2>
+          <div id="projList"><!-- JS 渲染 --></div>
+          <details class="archfold" id="archFold">
+            <summary>已归档 · 3 项（pipeline-worklfow）</summary>
+            <div class="archrow"><span class="sdot s-queued"></span><span class="nm">workflow-editor-canvas</span><span class="chip">已归档 · 只读</span></div>
+            <div class="archrow"><span class="sdot s-queued"></span><span class="nm">codex-proxy-mitm</span><span class="chip">已归档 · 只读</span></div>
+            <div class="archrow"><span class="sdot s-queued"></span><span class="nm">i18n-cleanup</span><span class="chip">已归档 · 只读</span></div>
+          </details>
+        </section>
+      </section>
+
+      <!-- ============ 视图：收件箱（#inbox） ============ -->
+      <section class="view" id="view-inbox">
+        <div class="vhead">
+          <h1>收件箱 · 拍板队列</h1>
+          <div class="sub">只收「能拍板的事」：门放行、评审裁决、冲突处置、失败重试、loop 草稿、升档确认。缺产出的在画布里等 agent，不进这里。</div>
+        </div>
+        <div class="typebar">
+          <span class="chip">门放行 2</span>
+          <span class="chip">评审裁决 1</span>
+          <span class="chip">冲突处置 1</span>
+          <span class="chip">失败重试 1</span>
+          <span class="chip">loop 草稿 1</span>
+          <span class="chip" title="最近一次：nightly-refactor 升 L3 被拒（详见工作台 · Loop 治理）">升档确认 0 · 最近一次被拒 → 工作台</span>
+        </div>
+        <div class="inboxlist" id="inboxList"><!-- JS 渲染 --></div>
+      </section>
+
+      <!-- ============ 视图：AFK 指挥面（#afk） ============ -->
+      <section class="view" id="view-afk">
+        <div class="vhead">
+          <h1>AFK 指挥面</h1>
+          <div class="sub">沙箱无人值守执行的全局队列。L1/L2 跑完不合并、停给人工复核；只有 L3 才自动合并。</div>
+        </div>
+
+        <div class="lightsbar">
+          <span class="mini" style="font-weight:700">就绪</span>
+          <span class="light"><span class="d g"></span>docker</span>
+          <span class="light"><span class="d g"></span>镜像 sandcastle:local</span>
+          <span class="light"><span class="d g"></span>凭证 <span class="eng">claude-code</span></span>
+          <span class="light"><span class="d r"></span>凭证 <span class="eng">codex</span> 未配置</span>
+          <span class="sep"></span>
+          <span class="light"><span class="d a"></span>调度器 attention · 上限 4</span>
+          <span class="sep"></span>
+          <button class="btn sm" id="enqueueBtn">＋ 手动入队（enqueue）</button>
+          <span class="mini" title="工作台 · AFK 执行参数里可改">「默认入队」当前为关，新 change 不自动进队，需在此手动挂入</span>
+        </div>
+
+        <div class="lanes" id="afkLanes"><!-- JS 渲染六泳道 --></div>
+
+        <div class="afkgrid">
+          <div class="card">
+            <h3>调度器聚合流水 <span class="hnote">全项目 · 降序</span></h3>
+            <div class="tl">
+              <div class="tlrow"><span class="t">15:00</span><span class="d a"></span><span class="tx">breaker 预警：<b>docs-sync</b> 今日 token 84%</span></div>
+              <div class="tlrow"><span class="t">14:41</span><span class="d p"></span><span class="tx"><b>afk-merge-guard</b> 进入「构建修复」</span></div>
+              <div class="tlrow"><span class="t">14:05</span><span class="d"></span><span class="tx"><b>skill-dag-editor</b> 入队（依赖未清）</span></div>
+              <div class="tlrow"><span class="t">13:30</span><span class="d r"></span><span class="tx"><b>loop-budget-breaker</b> 第 2 次重试失败（verify-fail）落 failed</span></div>
+              <div class="tlrow"><span class="t">11:52</span><span class="d g"></span><span class="tx"><b>tap-ws-reconstruct</b> L2 跑完停人工（+3 commits 待复核）</span></div>
+              <div class="tlrow"><span class="t">09:12</span><span class="d a"></span><span class="tx"><b>legacy-import-fix</b> 被人工终止</span></div>
+              <div class="tlrow"><span class="t">08:47</span><span class="d r"></span><span class="tx"><b>handoff-compress-custom</b> 合并冲突，现场保留</span></div>
+            </div>
+          </div>
+          <div class="card">
+            <h3>放权等级怎么读</h3>
+            <div class="kv"><span class="vd vd-wait">L1</span><span style="font-size:13px;color:var(--tx2);flex:1;min-width:0">report-only · 跑完不合并，产出报告停给人工</span></div>
+            <div class="kv"><span class="vd vd-run">L2</span><span style="font-size:13px;color:var(--tx2);flex:1;min-width:0">跑完不合并 · commits 留在 worktree 等复核（如 tap-ws-reconstruct「暂停」）</span></div>
+            <div class="kv"><span class="vd vd-ok">L3</span><span style="font-size:13px;color:var(--tx2);flex:1;min-width:0">验证全绿即自动合并（如「已合并」泳道两项）</span></div>
+            <div class="notecard">安全边界：强制门 hook（gate / interactive-skill-gate）<b>常开、无开关</b>；任何等级都拦不过安全门。</div>
+          </div>
+        </div>
+      </section>
+      <!-- ============ 视图：工作台（#workbench） ============ -->
+      <section class="view" id="view-workbench">
+        <div class="vhead">
+          <h1>工作台 · pipeline-worklfow</h1>
+          <div class="sub">workflow 编排 / Loop 治理 / AFK 执行参数 / 凭证 / 技能健康。点选下方阶段卡，右侧检查器变成阶段编辑器。</div>
+        </div>
+
+        <!-- F1 workflow 切换器 -->
+        <div class="wbbar">
+          <button class="wbpill" data-wbwf="default">default <span class="ro">只读</span></button>
+          <button class="wbpill on" data-wbwf="sec-hotfix"><span class="unsaved" title="有未保存修改"></span> sec-hotfix 安全修复流</button>
+          <button class="wbpill" data-wbwf="content-pipeline">content-pipeline 内容流水线</button>
+          <span style="flex:1"></span>
+          <button class="btn pri" id="wbSave">保存修改</button>
+          <button class="btn danger sm" id="wbDelete">删除此 workflow</button>
+          <button class="btn sm" id="newChangeBtn2">＋ 新建 change</button>
+        </div>
+        <div class="valbanner" id="valBanner">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--bad)" stroke-width="2" style="flex:0 0 auto;margin-top:2px"><circle cx="12" cy="12" r="10"/><path d="M12 7v6M12 16.6v.4"/></svg>
+          <span><b>校验未过：</b>阶段「双评审」引用了未安装技能 <span class="eng">sec-review</span>。先安装（见下方技能健康）或从 DAG 移除，才能保存。</span>
+        </div>
+
+        <!-- F2 流程带（画布语言复用） -->
+        <div class="stageband" id="stageBand"><!-- JS 渲染阶段卡 + 边线 --></div>
+
+        <div class="wbgrid">
+
+          <!-- F4 Hook 会话时序线 -->
+          <div class="card span2">
+            <h3>Hook · 会话时序<span class="hnote">带「常开」锁标的是强制安全门，没有开关</span></h3>
+            <div class="hookline">
+              <div class="hookmoment">
+                <h6>会话开始</h6>
+                <div class="hookcard"><div class="hn">session-context</div>
+                  <div class="hc"><span class="dimtag">可配</span><span class="tgl on" data-demo="hook"><span class="tr"></span>开</span></div></div>
+              </div>
+              <div class="hookmoment">
+                <h6>你发消息</h6>
+                <div class="hookcard"><div class="hn">prompt-router</div>
+                  <div class="hc"><span class="dimtag">可配</span><span class="tgl on" data-demo="hook"><span class="tr"></span>开</span></div></div>
+              </div>
+              <div class="hookmoment">
+                <h6>agent 调工具</h6>
+                <div class="hookcard"><div class="hn">gate</div>
+                  <div class="hc"><span class="lockb"><svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>常开 · 不可关</span></div></div>
+                <div class="hookcard"><div class="hn">interactive-skill-gate</div>
+                  <div class="hc"><span class="lockb"><svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>常开 · 不可关</span></div></div>
+              </div>
+              <div class="hookmoment">
+                <h6>工具完成</h6>
+                <div class="hookcard"><div class="hn">post-verify</div>
+                  <div class="hc"><span class="dimtag">可配</span><span class="tgl" data-demo="hook"><span class="tr"></span>关</span></div></div>
+                <div class="hookcard" style="opacity:.55"><div class="hn">confirm-clear</div>
+                  <div class="hc"><span class="dimtag">暂不可配</span><span class="tgl dis"><span class="tr"></span></span></div></div>
+                <div class="hookcard" style="opacity:.55"><div class="hn">decision-recorder</div>
+                  <div class="hc"><span class="dimtag">暂不可配</span><span class="tgl dis"><span class="tr"></span></span></div></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- F5 manifest 强制技能矩阵 -->
+          <div class="card span2">
+            <h3>default · manifest 强制技能矩阵<span class="hnote">track × 相位（节选 explore / spec / verify）· 点亮格演示穿梭框编辑</span></h3>
+            <table class="mtable">
+              <thead><tr><th style="width:90px">track</th><th>explore</th><th>spec</th><th>verify</th></tr></thead>
+              <tbody>
+                <tr><th>chat</th>
+                  <td><span class="skl">brainstorming</span></td>
+                  <td><span class="skl">writing-plans</span></td>
+                  <td class="empty">—</td></tr>
+                <tr><th>frontend</th>
+                  <td><span class="skl">frontend-design</span><span class="skl">brainstorming</span></td>
+                  <td><span class="skl">writing-plans</span></td>
+                  <td class="selcell" title="编辑中"><span class="skl">verification</span><span class="skl">visual-check</span></td></tr>
+                <tr><th>backend</th>
+                  <td><span class="skl">brainstorming</span></td>
+                  <td><span class="skl">writing-plans</span></td>
+                  <td><span class="skl">verification</span></td></tr>
+                <tr><th>pm</th>
+                  <td class="empty">—</td>
+                  <td><span class="skl">writing-plans</span></td>
+                  <td class="empty">—</td></tr>
+              </tbody>
+            </table>
+            <div class="shuttle">
+              <div class="shcol">
+                <h6>可用技能（未强制）</h6>
+                <div class="shitem">load-test <span class="miss">未安装</span></div>
+                <div class="shitem">i18n-audit <span class="miss">未安装</span></div>
+                <div class="shitem">dataviz</div>
+                <div class="shitem">tdd</div>
+              </div>
+              <div class="shmid">
+                <button class="btn sm" data-demo="shuttle" title="加入强制">→</button>
+                <button class="btn sm" data-demo="shuttle" title="移出强制">←</button>
+              </div>
+              <div class="shcol">
+                <h6>已强制 · verify × frontend</h6>
+                <div class="shitem">verification</div>
+                <div class="shitem">visual-check</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- F6 Loop 治理 -->
+          <div class="card span2">
+            <h3>Loop 治理<span class="hnote">L1→L3 分级放权 · 毕业制</span></h3>
+            <div class="looprow">
+              <div class="looptile">
+                <div class="ln">nightly-refactor <span class="lvl l2">L2</span><span class="eng">claude-code</span></div>
+                <div class="ready"><b>82</b><span>就绪分</span><span class="brk ok" style="margin-left:auto"><span class="d"></span>breaker ok</span></div>
+                <div class="lmeta"><span class="chip">risk=medium</span><span class="chip">今日 3/8 轮</span><span class="chip mono">rf-* → 4 个匹配</span></div>
+                <div class="gatechips"><span class="k">human_gates</span><span class="chip">verify 复核</span></div>
+                <div class="gatechips" style="margin-top:5px"><span class="k">kill_criteria</span><span class="chip cause">连续 3 次 verify-fail</span></div>
+                <div class="loopdetail">
+                  <div class="sliderrow"><span>节奏（轮间隔）</span><input type="range" min="1" max="12" value="3" data-demo="slider"><span class="val">每 3h 一轮</span></div>
+                  <div class="sliderrow"><span>每日轮次上限</span><input type="range" min="1" max="16" value="8" data-demo="slider"><span class="val">8 轮/日</span></div>
+                  <div class="sliderrow"><span>同时在跑上限</span><input type="range" min="1" max="4" value="1" data-demo="slider"><span class="val">1 个</span></div>
+                  <div class="sliderrow"><span>token 上限</span><input type="range" min="1" max="10" value="5" data-demo="slider"><span class="val">2.5M/日</span></div>
+                  <div class="sliderrow"><span>超限策略</span>
+                    <select style="background:var(--bg);border:1px solid var(--line2);border-radius:7px;padding:4px 8px;font-size:12.5px;color:var(--tx)">
+                      <option>暂停到次日 00:00（不降档）</option><option>立即降一档</option><option>只告警，继续</option>
+                    </select><span class="val"></span></div>
+                  <div class="blockers">
+                    <h6>升 L3 被拒（毕业制）</h6>
+                    <ul><li>就绪分 82 &lt; 90</li><li>L2 无失败轮次 3/5</li></ul>
+                  </div>
+                </div>
+              </div>
+              <div class="looptile">
+                <div class="ln">docs-sync <span class="lvl l3">L3</span><span class="eng">codex</span></div>
+                <div class="ready"><b>96</b><span>就绪分</span><span class="brk warn" style="margin-left:auto"><span class="d"></span>warn · 今日 token 84%</span></div>
+                <div class="lmeta"><span class="chip">risk=low</span><span class="chip">active · 自动合并</span></div>
+                <div class="gatechips"><span class="k">allowlist</span><span class="chip mono">docs/**</span><span class="chip">预留 · 零消费</span></div>
+                <div class="gatechips" style="margin-top:5px"><span class="k">denylist</span><span class="chip mono">packages/kernel/**</span><span class="chip cause amber">真硬消费</span></div>
+                <div class="notecard">breaker 三态：<span class="brk ok"><span class="d"></span>ok</span> 正常 · <span class="brk warn"><span class="d"></span>warn</span> 接近限额 · <span class="brk trip"><span class="d"></span>tripped</span> 熔断停跑</div>
+              </div>
+              <div class="looptile draft">
+                <div class="ln">sec-scan <span class="lvl l1">L1</span><span class="eng">claude-code</span><span class="vd vd-warn">draft 待审阅</span></div>
+                <div class="ready"><b>41</b><span>就绪分</span></div>
+                <div class="lmeta"><span class="chip cause">risk=high</span><span class="chip">report-only</span><span class="chip">agent 起草</span></div>
+                <div style="display:flex;gap:8px;margin-top:10px">
+                  <button class="btn pri sm" data-act="loop-approve">批准并启用</button>
+                  <button class="btn sm" data-act="loop-reject">驳回（转暂停 · 现场保留）</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- F7 AFK 执行参数 -->
+          <div class="card">
+            <h3>AFK 执行参数</h3>
+            <div class="sliderrow" style="margin-bottom:9px"><span>沙箱并发上限</span><input type="range" min="1" max="8" value="4" id="ccSlider"><span class="val" id="ccVal">4 / 8</span></div>
+            <div class="sliderrow" style="margin-bottom:9px"><span>失败自动重试</span><input type="range" min="0" max="3" value="1" id="rtSlider"><span class="val" id="rtVal">1 次</span></div>
+            <div class="sliderrow" style="margin-bottom:9px"><span>新 change 默认入队</span><span class="tgl" data-demo="hook" title="关：需在 AFK 面手动 enqueue"><span class="tr"></span></span><span class="val">关</span></div>
+            <div class="fld" style="margin-top:6px">
+              <label>沙箱镜像</label>
+              <input type="text" list="imgList" value="sandcastle:local" style="font-family:var(--mono);font-size:12.5px">
+              <datalist id="imgList"><option value="sandcastle:local"><option value="sandcastle:test"><option value="node:24-alpine"></datalist>
+              <div class="fh">候选：sandcastle:local / sandcastle:test / node:24-alpine</div>
+            </div>
+          </div>
+
+          <!-- F8 凭证 -->
+          <div class="card">
+            <h3>凭证<span class="hnote">write-only · 界面永不回显明文</span></h3>
+            <div class="credrow">
+              <div>
+                <div class="cn">CLAUDE_CODE_OAUTH_TOKEN <span class="vd vd-ok">已配置</span></div>
+                <div class="cv">sk-ant-oat01-••••f3aa <span class="chip mono" style="margin-left:6px">文件 0600</span></div>
+                <div class="how">怎么拿：终端运行 <code>claude setup-token</code>，把输出整段粘进来。</div>
+              </div>
+              <div class="credbtns"><button class="btn sm" data-act="cred-update">更新</button><button class="btn danger sm" data-act="cred-del">删除</button></div>
+            </div>
+            <div class="credrow">
+              <div>
+                <div class="cn">OPENAI_API_KEY <span class="vd vd-warn">未配置</span></div>
+                <div class="wronly"><input type="password" placeholder="sk-…（只写入 · 不回显）"><button class="btn sm" data-act="cred-set">配置</button></div>
+                <div class="how">怎么拿：platform.openai.com → API Keys 新建；codex 沙箱跑活需要它。</div>
+              </div>
+            </div>
+            <div class="kv"><span class="k">CODEX_HOME</span><span class="v">~/.codex</span><span class="chip">只读 · 挂载进沙箱</span></div>
+            <div class="notecard"><b>优先级：</b>此处凭证写入 0600 文件、容器启动时注入；宿主机已有同名环境变量时以环境变量优先。</div>
+          </div>
+
+          <!-- F9 技能健康 -->
+          <div class="card span2">
+            <h3>技能健康</h3>
+            <div class="bignum">
+              <div class="bn"><b>41</b><span>已安装</span></div>
+              <div class="bn miss"><b>3</b><span>未安装</span></div>
+              <div style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+                <span class="chip mono">sec-review</span><span class="chip mono">load-test</span><span class="chip mono">i18n-audit</span>
+              </div>
+            </div>
+            <div class="cmdcol">
+              <span class="cmdlbl">一键补齐缺失技能（拷回终端执行）</span>
+              <button class="cmd" data-copy="pipeline setup"><span class="pr">$</span><span class="ct">pipeline setup</span><svg viewBox="0 0 24 24"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ 视图：观测面（#observe） ============ -->
+      <section class="view" id="view-observe">
+        <div class="vhead">
+          <h1>观测面</h1>
+          <div class="sub">channel worker 总线 / tap 流量 / mem 会话检索 / doctor 保障面。全部只读，接管走命令 chip。</div>
+        </div>
+        <div class="obsgrid">
+
+          <!-- G1 channel worker 总线 -->
+          <div class="card">
+            <h3>Channel worker 总线<span class="hnote">event-sourced 多 agent 协作</span></h3>
+            <div class="wrow"><span class="sdot s-running pulse"></span><span class="wn">w-explore-01</span><span class="eng">claude-code</span>
+              <span class="sp"><span class="vd vd-run">running · mid-turn</span><span class="chip">频道 feat-mem-search</span></span></div>
+            <div class="wrow"><span class="sdot s-running"></span><span class="wn">w-review-02</span><span class="eng">codex</span>
+              <span class="sp"><span class="vd vd-idle">running · idle</span></span></div>
+            <div class="wrow"><span class="sdot s-failed"></span><span class="wn">w-docs-03</span><span class="eng">claude-code</span>
+              <span class="sp"><span class="vd vd-bad">crashed</span><span class="chip">可 respawn ↓</span></span></div>
+            <div class="secth" style="margin-top:14px">forum threads</div>
+            <div class="threadrow"><span class="tn">#设计评审</span><span class="vd vd-run">opened</span><span class="chip">ui</span><span class="chip">v10</span><span class="chip">@jefferySha</span><span class="mini" style="margin-left:auto">12 评论</span></div>
+            <div class="threadrow"><span class="tn">#发布清单</span><span class="vd vd-idle">processed</span></div>
+            <div class="cmdcol" style="margin-top:12px">
+              <button class="cmd" data-copy="pipeline worker spawn --provider claude-code --channel feat-mem-search"><span class="pr">$</span><span class="ct">pipeline worker spawn --provider claude-code --channel feat-mem-search</span><svg viewBox="0 0 24 24"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button>
+              <button class="cmd" data-copy='pipeline forum send "#设计评审" --msg "…"'><span class="pr">$</span><span class="ct">pipeline forum send "#设计评审" --msg "…"</span><svg viewBox="0 0 24 24"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button>
+            </div>
+          </div>
+
+          <!-- G2 tap 流量 -->
+          <div class="card">
+            <h3>Tap 流量<span class="hnote">forward-MITM 捕获 AI CLI 真实请求</span></h3>
+            <div class="wrow"><span class="sdot s-running pulse"></span><span class="wn">claude-2026-07-14-a</span>
+              <span class="sp"><span class="vd vd-run">active</span><span class="chip">128 条</span><span class="eng">anthropic</span></span></div>
+            <div class="wrow"><span class="sdot s-queued"></span><span class="wn">codex-2026-07-13-b</span>
+              <span class="sp"><span class="vd vd-idle">complete</span><span class="chip">64 条</span><span class="eng">openai</span></span></div>
+            <div style="margin-top:10px">
+              <div class="taprec"><span><span class="m">POST</span> /v1/messages</span><span>200</span><span>1.2s</span><span>4.1k tok</span></div>
+              <div class="taprec"><span><span class="m">POST</span> /v1/responses</span><span>200</span><span>0.8s</span><span>2.3k tok</span></div>
+              <div class="taprec"><span><span class="m">CONNECT</span> api.anthropic.com:443</span><span>tunnel</span><span>—</span><span>—</span></div>
+            </div>
+            <div style="display:flex;gap:10px;align-items:center;margin-top:12px;flex-wrap:wrap">
+              <button class="cmd" data-copy="pipeline tap start"><span class="pr">$</span><span class="ct">pipeline tap start</span><svg viewBox="0 0 24 24"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button>
+              <span class="vd vd-ok">CA 证书 · 已安装</span>
+            </div>
+          </div>
+
+          <!-- G3 mem 会话检索 -->
+          <div class="card">
+            <h3>Mem · 跨平台会话检索</h3>
+            <div class="searchbox"><input type="text" value="ws 帧" placeholder="搜历史会话（claude / codex / opencode）"><button class="btn sm">搜索</button></div>
+            <div class="memrow"><span class="eng">claude</span><span class="chip mono">ses_a1b2</span><span class="mt">「重构 transition 表」</span><span class="ma">昨天</span></div>
+            <div class="memrow"><span class="eng">codex</span><span class="chip mono">c-9f</span><span class="mt">「修 ws 帧重组」</span><span class="ma">3 天前</span></div>
+            <div class="memrow"><span class="eng">opencode</span><span class="chip mono">oc-11</span><span class="mt">「镜像瘦身」</span><span class="ma">上周</span></div>
+            <div class="cmdcol" style="margin-top:12px">
+              <span class="cmdlbl">恢复选中会话</span>
+              <button class="cmd" data-copy="claude --resume ses_a1b2"><span class="pr">$</span><span class="ct">claude --resume ses_a1b2</span><svg viewBox="0 0 24 24"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button>
+            </div>
+          </div>
+
+          <!-- G4 doctor -->
+          <div class="card">
+            <h3>Doctor · 保障面<span class="hnote">11 项 · 10 生效 1 降级</span></h3>
+            <div class="doclist">
+              <div class="docitem"><span class="m ok">✓</span>docker 守护进程可用</div>
+              <div class="docitem"><span class="m ok">✓</span>沙箱镜像 sandcastle:local 就绪</div>
+              <div class="docitem"><span class="m ok">✓</span>凭证文件权限 0600</div>
+              <div class="docitem"><span class="m ok">✓</span>强制门 hook（gate）常开</div>
+              <div class="docitem"><span class="m ok">✓</span>interactive-skill-gate 常开</div>
+              <div class="docitem"><span class="m ok">✓</span>SSE 事件流连通</div>
+              <div class="docitem"><span class="m ok">✓</span>写端点 token 鉴权开启</div>
+              <div class="docitem"><span class="m ok">✓</span>跨进程文件锁可用</div>
+              <div class="docitem"><span class="m ok">✓</span>tap CA 已装（宿主 / claude / codex）</div>
+              <div class="docitem"><span class="m ok">✓</span>worktree 根目录可写</div>
+              <div class="docitem"><span class="m no">✗</span>tap CA 未装进 gemini <span class="deg">降级：gemini 流量不入捕获</span></div>
+            </div>
+            <div class="cmdcol" style="margin-top:12px">
+              <button class="cmd" data-copy="pipeline doctor"><span class="pr">$</span><span class="ct">pipeline doctor</span><svg viewBox="0 0 24 24"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button>
+            </div>
+          </div>
+
+          <!-- G5 最近流转 -->
+          <div class="card">
+            <h3>最近流转<span class="hnote">全项目 · 降序</span></h3>
+            <div class="tl">
+              <div class="tlrow"><span class="t">14:41</span><span class="d p"></span><span class="tx"><b>afk-merge-guard</b> build→verify（沙箱）</span></div>
+              <div class="tlrow"><span class="t">14:05</span><span class="d"></span><span class="tx"><b>skill-dag-editor</b> 入队</span></div>
+              <div class="tlrow"><span class="t">13:30</span><span class="d r"></span><span class="tx"><b>loop-budget-breaker</b> verify-fail 回 build</span></div>
+              <div class="tlrow"><span class="t">13:02</span><span class="d g"></span><span class="tx"><b>dashboard-redesign-v10</b> build→verify</span></div>
+              <div class="tlrow"><span class="t">11:20</span><span class="d"></span><span class="tx"><b>mem-session-search</b> open→explore</span></div>
+              <div class="tlrow"><span class="t">09:12</span><span class="d a"></span><span class="tx"><b>legacy-import-fix</b> 终止</span></div>
+            </div>
+          </div>
+
+          <!-- G6 CLI-only 命令卡 -->
+          <div class="card">
+            <h3>CLI-only 能力<span class="hnote">不做假按钮 · 拷回终端</span></h3>
+            <div class="cmdcol">
+              <span class="cmdlbl">推演下一步流转（不落盘）</span>
+              <button class="cmd" data-copy="pipeline advance --dry-run"><span class="pr">$</span><span class="ct">pipeline advance --dry-run</span><svg viewBox="0 0 24 24"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button>
+              <span class="cmdlbl" style="margin-top:8px">把当前会话上下文压缩移交给下一相位</span>
+              <button class="cmd" data-copy="pipeline handoff"><span class="pr">$</span><span class="ct">pipeline handoff</span><svg viewBox="0 0 24 24"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ 隐藏视图：零项目空态教学（#onboarding） ============ -->
+      <section class="view" id="view-onboarding">
+        <div class="onb">
+          <div class="art">
+            <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="var(--acc)" stroke-width="1.5"><circle cx="5" cy="12" r="2.4"/><circle cx="19" cy="5" r="2.4"/><circle cx="19" cy="19" r="2.4"/><path d="M7.3 11 16.6 5.8M7.3 13 16.6 18.2" stroke-dasharray="3 3"/></svg>
+          </div>
+          <h1>还没有项目接入</h1>
+          <p>把任意一个 git 仓库接进流水线，只要三步，每步都能直接拷进终端。</p>
+          <div class="onbsteps">
+            <div class="onbstep"><span class="no">1</span>
+              <div><h4>在仓库根目录初始化</h4><p>生成 openspec 结构与 default workflow，注册进本机控制台。</p>
+                <button class="cmd" data-copy="pipeline init"><span class="pr">$</span><span class="ct">pipeline init</span><svg viewBox="0 0 24 24"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button></div></div>
+            <div class="onbstep"><span class="no">2</span>
+              <div><h4>安装技能与钩子</h4><p>按 manifest 拉齐强制技能，接上四时机 hook（安全门默认常开）。</p>
+                <button class="cmd" data-copy="pipeline setup"><span class="pr">$</span><span class="ct">pipeline setup</span><svg viewBox="0 0 24 24"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button></div></div>
+            <div class="onbstep"><span class="no">3</span>
+              <div><h4>体检一遍再上路</h4><p>11 项保障逐项自检：docker、镜像、凭证、tap CA、锁、SSE……</p>
+                <button class="cmd" data-copy="pipeline doctor"><span class="pr">$</span><span class="ct">pipeline doctor</span><svg viewBox="0 0 24 24"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button></div></div>
+          </div>
+        </div>
+      </section>
+
+      <div class="sig">v10b · 黑白单色 · 设计提案 · 数据为 spec §5 fixture（2026-07-14 15:00 快照）</div>
+    </div><!-- /viewwrap -->
+
+    <!-- ============ 底部日志 drawer ============ -->
+    <div class="drawer" id="drawer">
+      <div class="drawbar" id="drawbar">
+        <span class="lb"><span class="sdot s-running pulse"></span>日志 · <b style="font-family:var(--mono);font-size:12.5px">afk-merge-guard</b>（沙箱阶段「构建修复」）</span>
+        <span class="last">[14:41:38] $ pnpm build</span>
+        <span class="mini">2.5s 轮询</span>
+        <span class="chev">▲</span>
+      </div>
+      <div class="drawpanel">
+        <div class="drawtabs">
+          <button class="dtab on" data-dtab="tail">运行日志 tail</button>
+          <button class="dtab" data-dtab="afk">AFK 聚合流水</button>
+          <div class="right">
+            <span class="tgl on" id="followTgl"><span class="tr"></span>跟随尾部</span>
+          </div>
+        </div>
+        <div class="logbox" id="drawTail">
+          <div class="wl"><span class="lt">[14:40:58]</span><span class="phln">▶ 阶段「构建修复」开始（attempt 1 · 容器 sandcastle-afk-merge-guard）</span></div>
+          <div class="wl"><span class="lt">[14:41:02]</span><span class="cmdln">$ pnpm install --frozen-lockfile</span></div>
+          <div class="wl"><span class="lt">[14:41:19]</span><span class="okln">✓ 依赖就绪（17s）</span></div>
+          <div class="wl"><span class="lt">[14:41:22]</span><span class="cmdln">$ vitest run --shard 2/4</span></div>
+          <div class="wl"><span class="lt">[14:41:37]</span><span class="okln">✓ 212 passed</span></div>
+          <div class="wl"><span class="lt">[14:41:38]</span><span class="cmdln">$ pnpm build</span></div>
+        </div>
+        <div class="logbox hidden" id="drawAfk">
+          <div class="wl"><span class="lt">[15:00]</span><span style="color:#FBBF24">breaker 预警：docs-sync 今日 token 84%</span></div>
+          <div class="wl"><span class="lt">[14:41]</span><span class="phln">afk-merge-guard 进入「构建修复」</span></div>
+          <div class="wl"><span class="lt">[14:05]</span>skill-dag-editor 入队（依赖未清）</div>
+          <div class="wl"><span class="lt">[13:30]</span><span style="color:#F87171">loop-budget-breaker 第 2 次重试失败（verify-fail）落 failed</span></div>
+          <div class="wl"><span class="lt">[11:52]</span><span class="okln">tap-ws-reconstruct L2 跑完停人工（+3 commits 待复核）</span></div>
+          <div class="wl"><span class="lt">[09:12]</span><span style="color:#FBBF24">legacy-import-fix 被人工终止</span></div>
+          <div class="wl"><span class="lt">[08:47]</span><span style="color:#F87171">handoff-compress-custom 合并冲突，现场保留</span></div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- ============ 右侧检查器 ============ -->
+  <aside class="insp" id="insp"></aside>
+
+  <!-- ============ 新建 change 模态（F10） ============ -->
+  <div class="modalwrap" id="modalNew">
+    <div class="modal">
+      <h3>新建 change</h3>
+      <div class="ms">POST /api/changes · 三个字段就够，其余交给流程。</div>
+      <div class="fld"><label>名称（slug）</label><input type="text" placeholder="例：tap-har-export" style="font-family:var(--mono)"></div>
+      <div class="fld"><label>track</label>
+        <select><option>frontend</option><option>backend</option><option>chat</option><option>pm</option></select></div>
+      <div class="fld"><label>workflow</label>
+        <select><option>default（默认流程）</option><option>sec-hotfix 安全修复流</option><option>content-pipeline 内容流水线</option></select>
+        <div class="fh">「默认入队」当前为关：创建后不会自动进 AFK 队列，可到 AFK 面手动挂入。</div></div>
+      <div class="mfoot">
+        <button class="btn ghost" id="modalCancel">取消</button>
+        <button class="btn pri" id="modalCreate">创建</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+</div><!-- /app -->
+<style>
+/* 阶段编辑器 · 技能 DAG（检查器内） */
+.dagwrap{position:relative;display:grid;grid-template-columns:1fr 1fr;gap:14px 34px;align-items:center;padding:6px 0}
+.dagnode{position:relative;z-index:1;background:var(--srf2);border:1px solid var(--line2);border-radius:9px;padding:8px 10px}
+.dagnode .dn{font-family:var(--mono);font-size:12.5px;font-weight:600;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.dagnode .dno{width:17px;height:17px;border-radius:50%;background:var(--srf);border:1px solid var(--line2);
+  font-size:11px;color:var(--acc);display:inline-grid;place-items:center;font-weight:700;flex:0 0 auto}
+.dagnode .dd{font-size:12px;color:var(--tx3);margin-top:3px}
+.dagnode.miss{border-color:color-mix(in srgb,var(--warn) 55%,var(--line2));border-style:dashed}
+.dagsvg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible}
+.dagsvg path{fill:none;stroke:var(--line2);stroke-width:1.5}
+</style>
+<script>
+/* ============================================================
+   数据（spec §5 fixture 逐字）
+============================================================ */
+const WF = {
+  'default':        {label:'default（默认流程）', ro:true,  steps:['open','explore','spec','build','verify','ship','archive'],
+                     gates:{explore:'复核门',spec:'复核门',verify:'复核门'}},
+  'sec-hotfix':     {label:'sec-hotfix 安全修复流', unsaved:true, steps:['定位漏洞','复现','构建修复','双评审','合并'],
+                     gates:{'构建修复':'confirm','双评审':'review'}},
+  'content-pipeline':{label:'content-pipeline 内容流水线', steps:['素材盘点','成稿','发布'], gates:{'成稿':'review'}}
+};
+const PROJ = [
+  {id:'pipeline-worklfow', n:8, note:'主项目'},
+  {id:'workflow-plugin',   n:2, note:'老仓'},
+  {id:'sandcastle-images', n:1, note:'镜像仓 · 另有归档'}
+];
+const C = [
+ {id:'dashboard-redesign-v10',proj:'pipeline-worklfow',track:'frontend',wf:'default',phase:'verify',sched:'⌨ 终端',
+  state:'gateok',vd:['ok','✓ 可以放行'],time:'13:02',wait:'等了 2h',
+  acts:[{t:'→ 放行进入 ship',k:'pri',msg:'放行 dashboard-redesign-v10 · verify → ship'},{t:'↩ 打回 build',k:'',msg:'打回 dashboard-redesign-v10 → build'}],
+  evi:{v:'pass',a:'pass',c:'pass',rep:'openspec/…/verification.md',sha:'9c83db7'},
+  outs:{build:[['build_sha','9c83db7']],verify:[['verify_result','pass'],['agent_review','pass'],['codex_review','pass'],['report','openspec/…/verification.md']]},
+  cmds:[['恢复会话','pipeline resume dashboard-redesign-v10'],['推演下一步（不落盘）','pipeline advance --dry-run']],
+  hist:[['13:02','build→verify'],['—','更早事件已折叠（只留 transition / init 级）']]},
+ {id:'tap-ws-reconstruct',proj:'pipeline-worklfow',track:'backend',wf:'default',phase:'verify',sched:'▦ 沙箱',
+  state:'gatejudge',vd:['bad','等你判断'],time:'07:00',wait:'等了 8h',autom:'paused · L2 跑完停人工',
+  acts:[{t:'↩ 打回 build',k:'pri',msg:'打回 tap-ws-reconstruct → build'}],
+  gatehint:'「放行」被前置校验拦下：codex 评审未过，需先裁决。',
+  evi:{v:'pass',a:'pass',c:'fail',note:'三轨中 codex_review=fail，放行前需人工裁决：打回重修，或在终端复核后用 CLI 强制推进。'},
+  outs:{verify:[['verify_result','pass'],['agent_review','pass'],['codex_review','fail']]},
+  cmds:[['恢复会话','pipeline resume tap-ws-reconstruct'],['进 worktree','cd ~/.sandcastle/wt/tap-ws'],['改完重跑（挂回队列）','pipeline afk enqueue tap-ws-reconstruct']],
+  hist:[['11:52','L2 跑完停人工（+3 commits 待复核）'],['07:00','codex_review=fail 记录在案']]},
+ {id:'afk-merge-guard',proj:'pipeline-worklfow',track:'backend',wf:'sec-hotfix',phase:'构建修复',sched:'▦ 沙箱',
+  state:'running',vd:['run','运行中 · 构建修复'],time:'14:41',autom:'running · attempts 0',
+  acts:[{t:'⏹ 终止',k:'danger',msg:'终止 afk-merge-guard（容器 sandcastle-afk-merge-guard）'}],
+  log:true,
+  cmds:[['进容器现场','docker exec -it sandcastle-afk-merge-guard zsh'],['终止后重跑','pipeline afk enqueue afk-merge-guard']],
+  hist:[['14:41','进入「构建修复」（沙箱）']]},
+ {id:'loop-budget-breaker',proj:'pipeline-worklfow',track:'backend',wf:'default',phase:'build',sched:'▦ 沙箱',
+  state:'failed',vd:['bad','失败 · attempts 2/2'],cause:'验证未过',time:'13:30',wait:'等 1.5h',autom:'failed · cause=verify-fail',
+  acts:[{t:'重试',k:'pri',msg:'重试 loop-budget-breaker（第 3 次）'},{t:'放弃',k:'',msg:'放弃 loop-budget-breaker（dismiss）'}],
+  rowcmd:'cd ~/.sandcastle/wt/loop-budget',
+  diag:{title:'验证未过（verify-fail）×2 · 已停给你',
+    guide:'两次自动重试均卡在 verify：产物没过验证轨。worktree 现场已保留，建议进现场看最后一次验证报告，改完再挂回队列。',
+    cmds:[['进现场','cd ~/.sandcastle/wt/loop-budget'],['改完重跑','pipeline afk enqueue loop-budget-breaker']],
+    raw:'✗ verify_result=fail\n  expected: budget breaker trips at 100% (hard-stop)\n  received: loop continued 2 rounds after limit\n  at loop-governor.spec.ts:214',
+    meta:['attempts 2/2','cause=verify-fail','worktree ~/.sandcastle/wt/loop-budget']},
+  cmds:[['恢复会话','pipeline resume loop-budget-breaker'],['进 worktree','cd ~/.sandcastle/wt/loop-budget'],['改完重跑','pipeline afk enqueue loop-budget-breaker']],
+  hist:[['13:30','第 2 次重试失败（verify-fail）落 failed'],['—','更早事件已折叠']]},
+ {id:'mem-session-search',proj:'pipeline-worklfow',track:'chat',wf:'default',phase:'explore',sched:'⌨ 终端',
+  state:'agent',vd:['wait','等产出 · 缺 design_doc'],time:'11:20',
+  outs:{explore:[['design_doc','',1]]},
+  cmds:[['恢复会话接管','pipeline resume mem-session-search']],
+  hist:[['11:20','open→explore']]},
+ {id:'skill-dag-editor',proj:'pipeline-worklfow',track:'frontend',wf:'default',phase:'build',sched:'▦ 沙箱',
+  state:'queued',vd:['idle','排队 · 依赖未清'],dep:'depends_on = dashboard-redesign-v10',time:'14:05',autom:'queued',
+  hist:[['14:05','入队（依赖未清）']]},
+ {id:'handoff-compress-custom',proj:'pipeline-worklfow',track:'backend',wf:'default',phase:'ship',sched:'▦ 沙箱',
+  state:'conflict',vd:['bad','冲突'],cause:'合并冲突 · 现场已保留',time:'08:47',wait:'等 6h',autom:'conflict · cause=conflict',
+  acts:[{t:'重试',k:'pri',msg:'重试 handoff-compress-custom（重新变基后合并）'},{t:'放弃',k:'',msg:'放弃 handoff-compress-custom（dismiss）'}],
+  rowcmd:'cd ~/.sandcastle/wt/handoff-c',
+  diag:{title:'合并冲突 · 现场已保留',
+    guide:'自动合并撞上主干新提交。现场保留在 preserved worktree，进去解完冲突可重试，或放弃本次产出。',
+    cmds:[['进 worktree','cd ~/.sandcastle/wt/handoff-c'],['解完重跑','pipeline afk enqueue handoff-compress-custom']],
+    raw:'CONFLICT (content): packages/kernel/src/handoff.ts\nCONFLICT (content): packages/kernel/src/compress.ts\nAutomatic merge failed; fix conflicts and commit.',
+    meta:['cause=conflict','preserved ~/.sandcastle/wt/handoff-c']},
+  cmds:[['进 worktree','cd ~/.sandcastle/wt/handoff-c'],['解完重跑','pipeline afk enqueue handoff-compress-custom']],
+  hist:[['08:47','合并冲突，现场保留']]},
+ {id:'golden-oracle-sync',proj:'workflow-plugin',track:'pm',wf:'default',phase:'spec',sched:'⌨ 终端',
+  state:'gateok',vd:['ok','✓ 可以放行'],time:'—',wait:'等 4h',
+  acts:[{t:'→ 放行进入 build',k:'pri',msg:'放行 golden-oracle-sync · spec → build'},{t:'↩ 打回 explore',k:'',msg:'打回 golden-oracle-sync → explore'}],
+  outs:{spec:[['design_doc','✓'],['plan','✓']]},
+  cmds:[['恢复会话','pipeline resume golden-oracle-sync']],
+  hist:[['—','spec 复核门就绪（design_doc ✓ · plan ✓）']]},
+ {id:'legacy-import-fix',proj:'workflow-plugin',track:'backend',wf:'default',phase:'build',sched:'▦ 沙箱',
+  state:'cancelled',vd:['warn','已取消（人为终止）'],time:'09:12',autom:'off · cause=cancelled',
+  rowcmd:'pipeline afk enqueue legacy-import-fix',
+  diag:{amber:1,title:'已取消（人为终止）',
+    guide:'今晨被人工叫停，不算失败。想续跑就重新挂回队列；不想跑放着即可，不占并发。',
+    cmds:[['重跑（挂回队列）','pipeline afk enqueue legacy-import-fix']],meta:['cause=cancelled']},
+  cmds:[['重跑（挂回队列）','pipeline afk enqueue legacy-import-fix']],
+  hist:[['09:12','被人工终止']]},
+ {id:'alpine-bash-passwd',proj:'sandcastle-images',track:'backend',wf:'default',phase:'ship',sched:'⌨ 终端',
+  state:'agent',vd:['wait','等产出 · 缺 pr_url'],time:'10:44',
+  outs:{ship:[['pr_url','',1]]},
+  cmds:[['恢复会话接管','pipeline resume alpine-bash-passwd']],
+  hist:[['10:44','进入 ship，等 pr_url']]},
+ {id:'i18n-hardcode-audit',proj:'pipeline-worklfow',track:'chat',wf:'content-pipeline',phase:'素材盘点',sched:'⌨ 终端',
+  state:'agent',vd:['wait','等产出'],time:'12:15',
+  cmds:[['恢复会话接管','pipeline resume i18n-hardcode-audit']],
+  hist:[['12:15','进入「素材盘点」']]}
+];
+const FILT = {action:['gateok','gatejudge','failed','conflict'],running:['running'],waiting:['queued','agent','cancelled']};
+const INBOX = [
+ {id:'tap-ws-reconstruct',w:'8h',hot:1,q:'「codex 评审未过，放行还是打回？」',type:'评审裁决',
+  btns:[['打回 build','pri','打回 tap-ws-reconstruct → build'],['查证据','detail']]},
+ {id:'handoff-compress-custom',w:'6h',hot:1,q:'「合并冲突已留现场」',type:'冲突处置',
+  btns:[['重试','pri','重试 handoff-compress-custom'],['放弃','','放弃 handoff-compress-custom'],['进 worktree','copy:cd ~/.sandcastle/wt/handoff-c']]},
+ {id:'sec-scan（loop 草稿）',w:'5h',q:'「agent 起草的 loop 等你审」',type:'loop 草稿',noopen:1,
+  btns:[['批准','pri','批准 loop sec-scan 并启用（L1 · report-only）'],['驳回','','驳回 loop sec-scan（转暂停 · 现场保留）']]},
+ {id:'golden-oracle-sync',w:'4h',q:'「spec 齐了，进 build？」',type:'门放行',
+  btns:[['放行','pri','放行 golden-oracle-sync · spec → build'],['打回','','打回 golden-oracle-sync → explore']]},
+ {id:'dashboard-redesign-v10',w:'2h',q:'「verify 三轨全绿，发船？」',type:'门放行',
+  btns:[['放行 ship','pri','放行 dashboard-redesign-v10 · verify → ship'],['打回','','打回 dashboard-redesign-v10 → build']]},
+ {id:'loop-budget-breaker',w:'1.5h',q:'「重试 2 次仍验证未过」',type:'失败重试',
+  btns:[['重试','pri','重试 loop-budget-breaker'],['放弃','','放弃 loop-budget-breaker'],['回终端','copy:cd ~/.sandcastle/wt/loop-budget']]}
+];
+const LANES = [
+ ['queued','排队',1,[{n:'skill-dag-editor',d:'依赖未清 · depends_on=dashboard-redesign-v10',tags:['14:05 入队']}]],
+ ['running','运行中',1,[{n:'afk-merge-guard',d:'沙箱阶段「构建修复」· attempts 0',run:1,tags:['容器 sandcastle-afk-merge-guard']}]],
+ ['merged','已合并',2,[{n:'codex-proxy-mitm',d:'L3 · 验证全绿自动合并',tags:['已归档']},{n:'i18n-cleanup',d:'L3 · 验证全绿自动合并',tags:['已归档']}]],
+ ['failed','失败',1,[{n:'loop-budget-breaker',d:'verify-fail · attempts 2/2 · 现场保留',bad:1,tags:['等你：重试 / 放弃']}]],
+ ['conflict','冲突',1,[{n:'handoff-compress-custom',d:'合并冲突 · 现场 ~/.sandcastle/wt/handoff-c',bad:1,tags:['等你：处置']}]],
+ ['paused','暂停',1,[{n:'tap-ws-reconstruct',d:'L2 跑完不合并 · +3 commits 停给人工复核',tags:['等你：复核']}]]
+];
+const STAGEMETA = {
+ 'default':[['open',0],['explore',1],['spec',1],['build',3],['verify',2],['ship',2],['archive',0]],
+ 'sec-hotfix':[['定位漏洞'],['复现'],['构建修复',1,'run'],['双评审'],['合并']],
+ 'content-pipeline':[['素材盘点',1],['成稿'],['发布']]
+};
+const STAGEINFO = {
+ 'open':{skills:[],outs:[],hooks:4},
+ 'explore':{skills:[],outs:['design_doc'],hooks:4},
+ 'spec':{skills:[],outs:['plan'],hooks:4},
+ 'build':{skills:[],outs:['build_sha'],hooks:4},
+ 'verify':{skills:[],outs:['verification_report'],hooks:4},
+ 'ship':{skills:[],outs:['pr_url'],hooks:4},
+ 'archive':{skills:[],outs:[],hooks:4},
+ '定位漏洞':{skills:[],outs:[],hooks:4},
+ '复现':{skills:[],outs:['repro.md'],hooks:4},
+ '构建修复':{skills:[],outs:[],hooks:4,gate:'confirm'},
+ '双评审':{skills:['patch-build','sec-review','regression-suite'],outs:[],hooks:4,gate:'review',dag:1},
+ '合并':{skills:[],outs:[],hooks:4}
+};
+
+/* ============================================================
+   工具
+============================================================ */
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const NS='http://www.w3.org/2000/svg';
+const COPYSVG='<svg viewBox="0 0 24 24"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>';
+const LOCKSVG='<svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
+let toastT;
+function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('show');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('show'),2600)}
+function copyText(c){
+  const done=()=>toast('已拷贝：'+c);
+  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(c).then(done,()=>{fallbackCopy(c);done()})}
+  else{fallbackCopy(c);done()}
+}
+function fallbackCopy(c){const ta=document.createElement('textarea');ta.value=c;document.body.appendChild(ta);ta.select();try{document.execCommand('copy')}catch(e){}ta.remove()}
+function cmdBtn(lbl,c){return `${lbl?`<span class="cmdlbl">${lbl}</span>`:''}<button class="cmd" data-copy="${c.replace(/"/g,'&quot;')}"><span class="pr">${c.startsWith('cd ')||c.startsWith('docker')||c.startsWith('claude')||c.startsWith('pipeline')?'$':'$'}</span><span class="ct">${c}</span>${COPYSVG}</button>`}
+function gateBadge(g){if(!g)return '';const t=g==='复核门'?'复核门':g+' 门';return `<span class="gateb">${LOCKSVG}${t}</span>`}
+function connectNodes(wrap){
+  const svg=wrap.querySelector('svg.edgesvg');if(!svg)return;
+  const items=[...wrap.querySelectorAll(':scope > .node')];
+  const wr=wrap.getBoundingClientRect();svg.innerHTML='';
+  for(let i=0;i<items.length-1;i++){
+    const a=items[i].getBoundingClientRect(),b=items[i+1].getBoundingClientRect();
+    const x1=a.right-wr.left,y1=a.top+21-wr.top,x2=b.left-wr.left,y2=b.top+21-wr.top;
+    const dx=Math.max(14,(x2-x1)/2);
+    const p=document.createElementNS(NS,'path');
+    p.setAttribute('d',`M${x1} ${y1} C${x1+dx} ${y1} ${x2-dx} ${y2} ${x2} ${y2}`);
+    if(items[i+1].classList.contains('runnode'))p.classList.add('live');
+    svg.appendChild(p);
+  }
+}
+
+/* ============================================================
+   状态
+============================================================ */
+let projFilter='all', stateFilter='all', wfFilter='all', selId=null, wbWf='sec-hotfix';
+
+/* ============================================================
+   画布渲染
+============================================================ */
+function chgChip(c){
+  const dim=(stateFilter!=='all'&&!(FILT[stateFilter]||[]).includes(c.state))?' dimmed':'';
+  const sel=c.id===selId?' sel':'';
+  const pj=projFilter==='all'?`<span class="pj2" title="项目：${c.proj}">${c.proj==='pipeline-worklfow'?'主':c.proj==='workflow-plugin'?'插':'镜'}</span>`:'';
+  return `<button class="chg${dim}${sel}" data-open="${c.id}" title="${c.id} · ${c.vd[1]}">
+    <span class="sdot s-${cls(c.state)}${c.state==='running'?' pulse':''}"></span>
+    <span class="cn">${c.id}</span>${pj}<span class="cg">${c.sched.slice(0,1)}</span></button>`;
+}
+function cls(s){return {gateok:'gateok',gatejudge:'gatejudge',running:'running',failed:'failed',conflict:'conflict',cancelled:'cancelled',queued:'queued',agent:'agent'}[s]||s}
+function renderCanvas(){
+  const area=$('#canvasArea');area.innerHTML='';
+  const wfs=wfFilter==='all'?Object.keys(WF):[wfFilter];
+  wfs.forEach(k=>{
+    const wf=WF[k];
+    const grp=document.createElement('div');grp.className='wfgroup';
+    const inWf=C.filter(c=>c.wf===k&&(projFilter==='all'||c.proj===projFilter));
+    grp.innerHTML=`<div class="gtag"><span class="gname">${wf.label}</span>
+      ${wf.ro?'<span class="greadonly">只读</span>':''}${wf.unsaved?'<span class="chip cause amber">编辑中 · 未保存</span>':''}
+      <span class="gmeta">${wf.steps.length} 个相位 · 在制 ${inWf.length}</span></div>
+      <div class="nodes"><svg class="edgesvg"></svg>${wf.steps.map((st,i)=>{
+        const here=inWf.filter(c=>c.phase===st);
+        const run=here.some(c=>c.state==='running');
+        const arch=k==='default'&&st==='archive';
+        return `<div class="node${run?' runnode':''}${(!here.length&&!arch)?'':''}">
+          <div class="nh"><span class="idx">${String(i+1).padStart(2,'0')}</span><span class="nm" title="${st}">${st}</span>${gateBadge(wf.gates&&wf.gates[st])}</div>
+          <div class="cnt">${arch?'<b>3</b> 项已归档':here.length?`<b>${here.length}</b> 项在制`:'空'}</div>
+          <div class="chgstack">${here.map(chgChip).join('')||(arch?'<div class="nodeempty">折叠 · 见下方列表</div>':'<div class="nodeempty">—</div>')}</div>
+        </div>`}).join('')}</div>`;
+    area.appendChild(grp);
+  });
+  requestAnimationFrame(()=>$$('#canvasArea .nodes').forEach(connectNodes));
+}
+
+/* ============================================================
+   项目分组列表
+============================================================ */
+function ptrack(c){
+  const wf=WF[c.wf];const ci=wf.steps.indexOf(c.phase);
+  const curCls=c.state==='failed'||c.state==='conflict'||c.state==='gatejudge'?' bad':c.state==='cancelled'?' warn':'';
+  return `<span class="ptrack" title="${wf.label} · 当前：${c.phase}">${wf.steps.map((s,i)=>
+    `<span class="seg${i<ci?' done':i===ci?' cur'+curCls:''}" title="${s}"></span>`).join('')}</span>`;
+}
+function renderList(){
+  const box=$('#projList');box.innerHTML='';
+  PROJ.filter(p=>projFilter==='all'||p.id===projFilter).forEach(p=>{
+    const rows=C.filter(c=>c.proj===p.id&&(stateFilter==='all'||(FILT[stateFilter]||[]).includes(c.state)));
+    if(!rows.length&&projFilter==='all')return;
+    const g=document.createElement('div');g.className='pgroup';
+    g.innerHTML=`<div class="pghead"><span class="pn">${p.id}</span><span class="pk">${rows.length} 件 · ${p.note}</span></div>
+      <div class="rows">${rows.map(c=>`
+      <div class="row${c.id===selId?' sel':''}" data-open="${c.id}">
+        <div>
+          <div class="l1"><span class="sdot s-${cls(c.state)}${c.state==='running'?' pulse':''}"></span>
+            <span class="nm">${c.id}</span><span class="vd vd-${c.vd[0]}">${c.vd[1]}</span>
+            ${c.cause?`<span class="chip cause${c.state==='cancelled'?' amber':''}">${c.cause}</span>`:''}
+            ${c.dep?`<span class="chip mono">${c.dep}</span>`:''}</div>
+          <div class="l2"><span class="chip">${c.track}</span><span class="chip mono">${WF[c.wf].label}</span>
+            <span class="chip">${c.sched}</span>${c.autom?`<span class="chip">automation=${c.autom}</span>`:''}</div>
+        </div>
+        <div class="tcol">${ptrack(c)}<span class="mini">当前 · ${c.phase}</span></div>
+        <div class="tm"><b>${c.time}</b>${c.wait||'更新'}</div>
+        <div class="acts">${(c.acts||[]).map(a=>`<button class="btn sm ${a.k}" data-msg="${a.msg}">${a.t}</button>`).join('')}
+          ${c.rowcmd?`<button class="cmd" data-copy="${c.rowcmd}"><span class="pr">$</span><span class="ct">${c.rowcmd}</span>${COPYSVG}</button>`:''}
+          ${(!c.acts&&!c.rowcmd)?'<span class="mini" style="text-align:center">无动作 · 等产出/队列</span>':''}</div>
+      </div>`).join('')}</div>`;
+    box.appendChild(g);
+  });
+}
+
+/* ============================================================
+   收件箱
+============================================================ */
+function renderInbox(){
+  $('#inboxList').innerHTML=INBOX.map(i=>`
+  <div class="icard${i.hot?' hot':''}">
+    <div class="wait">${i.w}<small>在等</small></div>
+    <div><div class="q">${i.q}</div>
+      <div class="meta"><span class="chip mono">${i.id}</span><span class="chip">${i.type}</span>
+      ${i.noopen?'':`<button class="linkbtn" data-open="${i.id.split('（')[0]}">打开详情 →</button>`}</div></div>
+    <div class="btns">${i.btns.map(b=>{
+      if(b[1]==='detail')return `<button class="btn" data-open="${i.id}">查证据</button>`;
+      if(String(b[1]).startsWith('copy:'))return `<button class="cmd" data-copy="${b[1].slice(5)}"><span class="pr">$</span><span class="ct">${b[0]}</span>${COPYSVG}</button>`;
+      return `<button class="btn ${b[1]}" data-msg="${b[2]}">${b[0]}</button>`}).join('')}</div>
+  </div>`).join('');
+}
+
+/* ============================================================
+   AFK 六泳道
+============================================================ */
+function renderLanes(){
+  $('#afkLanes').innerHTML=LANES.map(([k,lab,n,cards])=>`
+  <div class="lane"><div class="lh"><span class="sdot s-${k==='running'?'running':k==='failed'||k==='conflict'?'failed':k==='merged'?'gateok':k==='paused'?'cancelled':'queued'}"></span>${lab}<span class="n">${n}</span></div>
+    ${cards.map(cd=>`<div class="lcard${cd.run?' runcard':''}" ${C.find(x=>x.id===cd.n)?`data-open="${cd.n}"`:''}>
+      <div class="nm" title="${cd.n}">${cd.n}</div><div class="ds">${cd.d}</div>
+      <div class="tagrow">${(cd.tags||[]).map(t=>`<span class="chip">${t}</span>`).join('')}</div></div>`).join('')}
+  </div>`).join('');
+}
+
+/* ============================================================
+   检查器 · change 深视图
+============================================================ */
+function stepRow(name,st,outs,gate){
+  const ic=st==='done'?'✓':st==='fail'?'×':st==='cur'?'●':'○';
+  return `<div class="step ${st}"><span class="ic">${ic}</span><div>
+    <div class="sn">${name} ${gate?gateBadge(gate):''}</div>
+    ${outs&&outs.length?`<div class="outs">${outs.map(o=>o[2]
+      ?`<span class="outchip missing">缺 ${o[0]}</span>`
+      :`<span class="outchip" data-copy="${o[1]}" title="点击拷贝">${o[0]}${o[1]&&o[1]!=='✓'?` = <span class="ov">${o[1]}</span>`:' ✓'}</span>`).join('')}</div>`:''}
+  </div></div>`;
+}
+function openChange(id,push=true){
+  const c=C.find(x=>x.id===id);if(!c)return;
+  selId=id;
+  const wf=WF[c.wf];const ci=wf.steps.indexOf(c.phase);
+  const failish=['failed','conflict','cancelled'].includes(c.state);
+  const steps=wf.steps.map((s,i)=>{
+    const st=i<ci?'done':i===ci?(failish?'fail':'cur'):'todo';
+    return stepRow(s,st,(c.outs||{})[s],wf.gates&&wf.gates[s]);
+  }).join('');
+  const evi=c.evi?`<div class="sect"><h5>VERIFY 门 · 三轨证据</h5><div class="evi">
+      ${[['verify_result',c.evi.v],['agent_review_result',c.evi.a],['codex_review_result',c.evi.c]].map(([k,v])=>
+      `<div class="evirow${v==='fail'?' f':''}"><span class="sdot s-${v==='pass'?'gateok':'gatejudge'}"></span>
+       <span class="en">${k}</span><span class="vd vd-${v==='pass'?'ok':'bad'}">${v}</span></div>`).join('')}
+      ${c.evi.rep?`<div class="evirow"><span class="en">verification_report</span><span class="outchip" data-copy="${c.evi.rep}"><span class="ov">${c.evi.rep}</span></span></div>`:''}
+      ${c.evi.sha?`<div class="evirow"><span class="en">build_sha</span><span class="outchip" data-copy="${c.evi.sha}">${c.evi.sha}</span></div>`:''}</div>
+      ${c.evi.note?`<div class="evinote"><b>为什么拦：</b>${c.evi.note}</div>`:''}</div>`:'';
+  const diag=c.diag?`<div class="sect"><h5>失败诊断</h5><div class="diag${c.diag.amber?' amber':''}">
+      <div class="dh">${c.diag.title}</div><div class="db"><p>${c.diag.guide}</p>
+      <div class="cmdcol">${c.diag.cmds.map(x=>cmdBtn(x[0],x[1])).join('')}</div>
+      ${c.diag.raw?`<details><summary>报错原文</summary><pre>${c.diag.raw}</pre></details>`:''}
+      <div class="dmeta">${c.diag.meta.map(m=>`<span class="chip mono">${m}</span>`).join('')}</div></div></div></div>`:'';
+  const log=c.log?`<div class="sect"><h5>实时日志 TAIL <span style="float:right;font-weight:400">2.5s 轮询 · <span class="tgl on" style="vertical-align:middle"><span class="tr"></span>跟随尾部</span></span></h5>
+      <div class="logbox">
+      <div class="wl"><span class="lt">[14:40:58]</span><span class="phln">▶ 阶段「构建修复」开始（attempt 1）</span></div>
+      <div class="wl"><span class="lt">[14:41:02]</span><span class="cmdln">$ pnpm install --frozen-lockfile</span></div>
+      <div class="wl"><span class="lt">[14:41:19]</span><span class="okln">✓ 依赖就绪（17s）</span></div>
+      <div class="wl"><span class="lt">[14:41:22]</span><span class="cmdln">$ vitest run --shard 2/4</span></div>
+      <div class="wl"><span class="lt">[14:41:37]</span><span class="okln">✓ 212 passed</span></div>
+      <div class="wl"><span class="lt">[14:41:38]</span><span class="cmdln">$ pnpm build</span></div></div></div>`:'';
+  $('#insp').innerHTML=`
+    <div class="insphead"><div class="r1"><h2>${c.id}</h2><button class="xbtn" id="inspClose" title="关闭">✕</button></div>
+      <div class="chips"><span class="vd vd-${c.vd[0]}">${c.vd[1]}</span><span class="chip">${c.proj}</span>
+        <span class="chip">${c.track}</span><span class="chip mono">${wf.label}</span><span class="chip">${c.sched}</span>
+        ${c.autom?`<span class="chip">automation=${c.autom}</span>`:''}
+        <span class="chip">更新 ${c.time}${c.wait?` · ${c.wait}`:''}</span></div>
+      <div class="inspacts">${(c.acts||[]).map(a=>`<button class="btn ${a.k}" data-msg="${a.msg}">${a.t}</button>`).join('')||'<span class="mini">无人工动作 · 等 agent 产出或队列</span>'}
+        ${c.gatehint?`<span class="gatehint">${LOCKSVG.replace('svg viewBox','svg style="width:11px;height:11px" viewBox')} ${c.gatehint}</span>`:''}</div></div>
+    <div class="inspbody">
+      <div class="sect"><h5>阶段时间线 · ${wf.label}</h5><div class="steps">${steps}</div></div>
+      ${evi}${diag}${log}
+      ${c.cmds?`<div class="sect"><h5>连接现场 · 拷回终端</h5><div class="cmdcol">${c.cmds.map(x=>cmdBtn(x[0],x[1])).join('')}</div></div>`:''}
+      <div class="sect"><h5>流程历史 · 只留 transition / init</h5><div class="hist">${(c.hist||[]).map(h=>
+        `<div class="hrow"><span class="t">${h[0]}</span><span>${h[1].replace(/([a-z0-9-]+→[a-z0-9-]+)/g,'<b>$1</b>')}</span></div>`).join('')}</div></div>
+    </div>`;
+  $('#insp').classList.add('open');
+  renderCanvas();renderList();
+  if(push)history.replaceState(null,'','#detail/'+id);
+}
+function closeInsp(){
+  $('#insp').classList.remove('open');selId=null;
+  if(location.hash.startsWith('#detail'))history.replaceState(null,'','#progress');
+  renderCanvas();renderList();
+}
+
+/* ============================================================
+   工作台 · 流程带 + 阶段编辑器
+============================================================ */
+function renderBand(){
+  const wf=WF[wbWf];const metas=STAGEMETA[wbWf];
+  $('#stageBand').innerHTML=`<div class="nodes"><svg class="edgesvg"></svg>${metas.map(([st,n,run],i)=>{
+    const info=STAGEINFO[st]||{skills:[],outs:st==='verify'?['verification_report']:[],hooks:4};
+    const g=wf.gates&&wf.gates[st];
+    return `<div class="node stagecard${run?' runnode':''}" data-stage="${st}">
+      ${n?`<span class="bub${run?' run':''}" title="处于该阶段的真实 change 数">${n}</span>`:''}
+      <div class="nh"><span class="idx">${String(i+1).padStart(2,'0')}</span><span class="nm" title="${st}">${st}</span>${gateBadge(g==='复核门'?'复核门':g)}</div>
+      <div class="meta"><span>技能 ${info.skills?info.skills.length:0}</span><span>钩子 ${info.hooks||4}</span><span>产出 ${info.outs?info.outs.length:0}</span></div>
+    </div>`}).join('')}
+    ${wf.ro?'':'<button class="addstage" data-msg="添加阶段（拖入流程带任意位置）">＋ 添加阶段</button>'}</div>`;
+  requestAnimationFrame(()=>$$('#stageBand .nodes').forEach(connectNodes));
+}
+function openStage(st){
+  const info=STAGEINFO[st]||{skills:[],outs:[],hooks:4};
+  const wf=WF[wbWf];const g=wf.gates&&wf.gates[st];
+  const dag=info.dag?`
+    <div class="sect"><h5>技能 DAG · 依赖连线</h5>
+      <div class="dagwrap" id="dagWrap"><svg class="dagsvg"></svg>
+        <div class="dagnode" data-dag="a"><div class="dn"><span class="dno">1</span>patch-build</div><div class="dd">无依赖 · 先飞</div></div>
+        <div class="dagnode miss" data-dag="b"><div class="dn"><span class="dno">2</span>sec-review <span class="chip cause amber">未安装</span></div><div class="dd">依赖 patch-build</div></div>
+        <div></div>
+        <div class="dagnode" data-dag="c"><div class="dn"><span class="dno">3</span>regression-suite</div><div class="dd">依赖 patch-build</div></div>
+      </div>
+      <div class="cmdcol" style="margin-top:8px">${cmdBtn('缺失技能安装命令','pipeline setup --skill sec-review')}</div></div>`
+    :`<div class="sect"><h5>技能链</h5><div class="mini">${info.skills.length?info.skills.join(' → '):'本阶段未挂技能 · 从技能库添加'}</div></div>`;
+  $('#insp').innerHTML=`
+    <div class="insphead"><div class="r1"><h2>阶段 · ${st}</h2><button class="xbtn" id="inspClose">✕</button></div>
+      <div class="chips"><span class="chip mono">${wf.label}</span>${wf.ro?'<span class="chip">只读 · default 不可改</span>':'<span class="chip cause amber">编辑中 · 未保存</span>'}</div>
+      <div class="inspacts">${wf.ro?'':'<button class="btn pri" data-msg="保存 workflow（校验先行）">保存修改</button>'}<button class="btn sm" id="backBand">返回流程带</button></div></div>
+    <div class="inspbody">
+      ${dag}
+      <div class="sect"><h5>产出物（artifact）</h5>
+        <div class="outs" style="display:flex;gap:6px;flex-wrap:wrap">${info.outs.length?info.outs.map(o=>`<span class="outchip">${o}</span>`).join(''):'<span class="mini">未声明产出</span>'}
+          ${wf.ro?'':'<button class="btn sm ghost" data-msg="添加产出物声明">＋ 添加</button>'}</div>
+        <div style="margin-top:10px"><span class="tgl ${info.outs.length?'on':''}" ${wf.ro?'':'data-demo="hook"'}><span class="tr"></span>产出非空方可推进</span></div></div>
+      <div class="sect"><h5>门</h5>
+        ${g?`<div class="kv">${gateBadge(g==='复核门'?'复核门':g)}<span style="font-size:13px;color:var(--tx2)">${g==='confirm'?'进入本阶段前需人工 confirm':'完成后停下等人工复核'}</span></div>`:'<div class="mini">本阶段无门</div>'}
+        <div style="margin-top:8px"><span class="tgl ${g?'on':''}" ${wf.ro?'':'data-demo="hook"'}><span class="tr"></span>复核门（完成后停等人工）</span></div>
+        <div class="notecard">与此无关的安全门（gate / interactive-skill-gate hook）<b>常开、不在此处配置</b>。</div></div>
+    </div>`;
+  $('#insp').classList.add('open');
+  $$('#stageBand .stagecard').forEach(el=>el.classList.toggle('sel',el.dataset.stage===st));
+  if(info.dag)requestAnimationFrame(drawDag);
+}
+function drawDag(){
+  const w=$('#dagWrap');if(!w)return;const svg=w.querySelector('svg');svg.innerHTML='';
+  const wr=w.getBoundingClientRect();
+  const a=w.querySelector('[data-dag=a]').getBoundingClientRect();
+  [['b'],['c']].forEach(([k])=>{
+    const b=w.querySelector(`[data-dag=${k}]`).getBoundingClientRect();
+    const x1=a.right-wr.left,y1=a.top+a.height/2-wr.top,x2=b.left-wr.left,y2=b.top+b.height/2-wr.top;
+    const p=document.createElementNS(NS,'path');
+    p.setAttribute('d',`M${x1} ${y1} C${x1+22} ${y1} ${x2-22} ${y2} ${x2} ${y2}`);
+    svg.appendChild(p);
+  });
+}
+
+/* ============================================================
+   路由
+============================================================ */
+const VIEWS=['progress','inbox','afk','workbench','observe','onboarding'];
+function applyHash(){
+  let h=(location.hash||'#progress').slice(1);
+  if(h==='canvas'||h==='')h='progress';
+  let openId=null;
+  if(h.startsWith('detail')){openId=h.split('/')[1]||'dashboard-redesign-v10';h='progress'}
+  if(!VIEWS.includes(h))h='progress';
+  VIEWS.forEach(v=>$('#view-'+v).classList.toggle('on',v===h));
+  $$('.navb').forEach(b=>b.classList.toggle('on',b.dataset.nav===h||(h==='progress'&&b.dataset.nav==='progress')||(h==='onboarding'&&false)));
+  if(h==='workbench'){renderBand()}
+  if(h==='progress'){renderCanvas();renderList()}
+  if(openId){openChange(openId,false)}else if(!location.hash.startsWith('#detail')){$('#insp').classList.remove('open');selId=null}
+}
+window.addEventListener('hashchange',applyHash);
+
+/* ============================================================
+   事件委托
+============================================================ */
+document.addEventListener('click',e=>{
+  const cp=e.target.closest('[data-copy]');if(cp){copyText(cp.dataset.copy);return}
+  const op=e.target.closest('[data-open]');if(op){openChange(op.dataset.open);return}
+  const ms=e.target.closest('[data-msg]');if(ms){toast('演示模式 · 动作已记录：'+ms.dataset.msg);return}
+  const st=e.target.closest('[data-stage]');if(st){openStage(st.dataset.stage);return}
+  if(e.target.closest('#inspClose')){closeInsp();return}
+  if(e.target.closest('#backBand')){$('#insp').classList.remove('open');$$('#stageBand .stagecard').forEach(el=>el.classList.remove('sel'));return}
+  const tg=e.target.closest('.tgl[data-demo]');if(tg){tg.classList.toggle('on');return}
+});
+/* 状态筛选页签 */
+$('#stateTabs').addEventListener('click',e=>{
+  const t=e.target.closest('.tab');if(!t)return;
+  $$('#stateTabs .tab').forEach(x=>x.classList.toggle('on',x===t));
+  stateFilter=t.dataset.f;renderCanvas();renderList();
+});
+/* workflow 分组切换 */
+$('#wfPills').addEventListener('click',e=>{
+  const p=e.target.closest('.wfpill');if(!p)return;
+  $$('#wfPills .wfpill').forEach(x=>x.classList.toggle('on',x===p));
+  wfFilter=p.dataset.wf;renderCanvas();
+});
+/* 项目切换 */
+$('#projBtn').addEventListener('click',e=>{e.stopPropagation();$('#projPop').classList.toggle('hidden')});
+document.addEventListener('click',e=>{if(!e.target.closest('#projPop')&&!e.target.closest('#projBtn'))$('#projPop').classList.add('hidden')});
+$$('#projPop .projitem').forEach(b=>b.addEventListener('click',()=>{
+  $$('#projPop .projitem').forEach(x=>x.classList.toggle('on',x===b));
+  projFilter=b.dataset.proj;
+  $('#projLbl').textContent=projFilter==='all'?'全部项目':projFilter.slice(0,7)+'…';
+  $('#projPop').classList.add('hidden');renderCanvas();renderList();
+}));
+$('#onbLink').addEventListener('click',()=>{location.hash='#onboarding';$('#projPop').classList.add('hidden')});
+/* rail 导航 */
+$$('.navb').forEach(b=>b.addEventListener('click',()=>{location.hash='#'+b.dataset.nav}));
+/* SSE 离线演示 */
+$('#sseBtn').addEventListener('click',()=>{
+  const off=$('#offlineBanner').classList.toggle('hidden');
+  $('#sseDot').classList.toggle('off',!off);
+  $('#sseLbl').textContent=off?'在线':'离线';
+});
+/* 主题 / 语言 */
+$('#themeBtn').addEventListener('click',()=>{
+  const r=document.documentElement;
+  r.dataset.theme=r.dataset.theme==='light'?'dark':'light';
+  requestAnimationFrame(()=>{$$('#canvasArea .nodes').forEach(connectNodes);$$('#stageBand .nodes').forEach(connectNodes)});
+});
+$('#langBtn').addEventListener('click',()=>toast('演示：EN 文案未实装（spec 允许「控件出现即可」）'));
+/* 日志 drawer */
+$('#drawbar').addEventListener('click',()=>$('#drawer').classList.toggle('open'));
+$$('.dtab').forEach(t=>t.addEventListener('click',e=>{e.stopPropagation();
+  $$('.dtab').forEach(x=>x.classList.toggle('on',x===t));
+  $('#drawTail').classList.toggle('hidden',t.dataset.dtab!=='tail');
+  $('#drawAfk').classList.toggle('hidden',t.dataset.dtab!=='afk');
+}));
+$('#followTgl').addEventListener('click',e=>{e.stopPropagation();e.currentTarget.classList.toggle('on')});
+/* 新建 change 模态 */
+[['#newChangeBtn'],['#newChangeBtn2']].forEach(([s])=>{const b=$(s);if(b)b.addEventListener('click',()=>$('#modalNew').classList.add('open'))});
+$('#modalCancel').addEventListener('click',()=>$('#modalNew').classList.remove('open'));
+$('#modalCreate').addEventListener('click',()=>{$('#modalNew').classList.remove('open');toast('演示：POST /api/changes 已记录（默认入队为关，不自动进 AFK 队列）')});
+$('#modalNew').addEventListener('click',e=>{if(e.target.id==='modalNew')$('#modalNew').classList.remove('open')});
+/* AFK 手动入队 */
+$('#enqueueBtn').addEventListener('click',()=>toast('演示：选一个 change 挂入队列（POST /api/afk/enqueue）。「默认入队」为关时这是唯一入口'));
+/* 工作台 */
+$$('.wbpill').forEach(p=>p.addEventListener('click',()=>{
+  $$('.wbpill').forEach(x=>x.classList.toggle('on',x===p));
+  wbWf=p.dataset.wbwf;
+  $('#valBanner').classList.toggle('hidden',wbWf!=='sec-hotfix');
+  $('#wbSave').disabled=wbWf!=='sec-hotfix';
+  $('#wbDelete').disabled=wbWf==='default';
+  $('#wbDelete').title=wbWf==='default'?'default 为内置流程，只读不可删':'DELETE /api/workflows/'+wbWf;
+  renderBand();$('#insp').classList.remove('open');
+}));
+$('#wbSave').addEventListener('click',()=>{$('#valBanner').classList.remove('hidden');toast('校验未过，未保存：「双评审」引用未安装技能 sec-review')});
+$('#wbDelete').addEventListener('click',()=>toast('演示：DELETE /api/workflows/'+wbWf+'（需二次确认）'));
+/* 滑杆 */
+const cc=$('#ccSlider'),rt=$('#rtSlider');
+if(cc)cc.addEventListener('input',()=>$('#ccVal').textContent=cc.value+' / 8');
+if(rt)rt.addEventListener('input',()=>$('#rtVal').textContent=rt.value+' 次');
+window.addEventListener('resize',()=>{$$('#canvasArea .nodes').forEach(connectNodes);$$('#stageBand .nodes').forEach(connectNodes);drawDag()});
+
+/* 初始 */
+$('#wbDelete').disabled=false;
+renderCanvas();renderList();renderInbox();renderLanes();
+applyHash();
+</script>
+</body>
+</html>

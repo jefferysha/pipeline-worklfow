@@ -33,6 +33,7 @@ const RETRIES_MIN = 0
 const RETRIES_MAX = 3
 
 const same = (a: WbAutomationSettings, b: WbAutomationSettings): boolean =>
+  (a.enabled ?? false) === (b.enabled ?? false) &&
   a.max_parallel === b.max_parallel && a.max_retries === b.max_retries &&
   a.default_opt_in === b.default_opt_in && a.image === b.image
 
@@ -221,6 +222,18 @@ export function AutomationCard({ root, refreshToken = 0 }: AutomationCardProps):
             recoFrac={(RECO_RETRIES - RETRIES_MIN) / (RETRIES_MAX - RETRIES_MIN)}
             onValue={(v) => edit({ max_retries: v })}
           />
+        </div>
+
+        <div className={WB_TW.policyRow}>
+          <span className={WB_TW.flabel}>{t('workbench.afk_enabled')}</span>
+          <Switch
+            className={WB_TW.switch}
+            checked={draft.enabled === true}
+            aria-label={t('workbench.afk_enabled')}
+            data-testid="afk-enabled"
+            onCheckedChange={() => edit({ enabled: draft.enabled !== true })}
+          />
+          <span className={WB_TW.note}>{t('workbench.afk_enabled_note')}</span>
         </div>
 
         <div className={WB_TW.policyRow}>

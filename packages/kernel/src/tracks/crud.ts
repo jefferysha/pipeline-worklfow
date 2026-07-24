@@ -45,7 +45,7 @@ export class TrackAlreadyExistsError extends Error {
   constructor(id: string, collidesWith: 'builtin' | 'custom') {
     super(
       collidesWith === 'builtin'
-        ? `track '${id}' 与内建四轨重名（内建轨改配置用 tracks update，不能 create）`
+        ? `track '${id}' 与内建 Track 重名（内建轨改配置用 tracks update，不能 create）`
         : `track '${id}' 已存在（额外 track id 不能重复 create；改配置用 tracks update）`,
     )
     this.name = 'TrackAlreadyExistsError'
@@ -57,7 +57,7 @@ export class TrackAlreadyExistsError extends Error {
 export class BuiltinTrackDeleteError extends Error {
   readonly id: string
   constructor(id: string) {
-    super(`内建 track '${id}' 不可删除（内建四轨恒存在、恒排最前）`)
+    super(`内建 track '${id}' 不可删除（内建 Track 恒存在、恒排最前）`)
     this.name = 'BuiltinTrackDeleteError'
     this.id = id
   }
@@ -115,10 +115,18 @@ function bindingToConfig(w: TrackWorkflowBinding): ProjectWorkflowConfig {
 
 function policyToConfig(p: TrackPolicyProfile): ProjectPolicyProfileConfig {
   const routing: ProjectRoutingConfig = p.routing.enabled
-    ? { enabled: true, pattern: p.routing.pattern, priority: p.routing.priority }
+    ? {
+        enabled: true,
+        pattern: p.routing.pattern,
+        ...(p.routing.excludePattern === undefined ? {} : { excludePattern: p.routing.excludePattern }),
+        priority: p.routing.priority,
+      }
     : { enabled: false }
   return {
     reviewSeed: p.reviewSeed,
+    ...(p.autoEnqueueOnSpecComplete === undefined
+      ? {}
+      : { autoEnqueueOnSpecComplete: p.autoEnqueueOnSpecComplete }),
     automationEligible: p.automationEligible,
     coverageProfile: p.coverageProfile,
     routing,

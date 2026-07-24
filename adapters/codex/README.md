@@ -62,14 +62,16 @@ track:
 | B 全保真·managed/MDM | /etc/codex/managed_hooks | 全 native | **免 trust**（唯一 headless 路径，需 root） |
 | C 静态降级 | 仅 AGENTS.md 静态层 | 无 enforcement hook | 无 hook；靠静态纪律 + 用户下一条明确确认 |
 
-## Unlock sentinel（HITL 确认事实，不是删文件）
+## 人工确认（HITL）
 
 档 A/B 的 Codex 正常对话会在 `UserPromptSubmit` 阶段识别用户的明确继续意图；用户输入
-“确认继续”“继续执行”“全部执行”等，会在下一次工具调用前清除 review marker。普通提问（如
+“确认继续”“继续执行”“全部执行”等，会在下一次工具调用前写入 event-bound approval receipt 并清除其
+hook 投影。普通提问（如
 “为什么需要确认？”）不会误放行。
 
-档 C 没有 hook，因而不能自动清 marker；它也**不允许**通过删除 `.pipeline-pending-*` marker 绕过
-review。必须保留用户已明确确认的对话事实，再执行对应 transition。自动化/CI 只有在显式
+档 C 没有 hook，因而不能自动确认；它也**不允许**通过删除 `.pipeline-pending-*` marker 绕过
+review。必须保留用户已明确确认的对话事实，再执行 `pipeline review acknowledge <change>` 与对应
+transition。自动化/CI 只有在显式
 `PIPELINE_AFK=1` 的受控 AFK 路径才会旁路交互门。
 
 ## 打包 skills 的项目级投递

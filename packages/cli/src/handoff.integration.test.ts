@@ -34,6 +34,12 @@ async function init(h: Harness, name: string): Promise<void> {
   expect(await h.run(['init', name, '--track', 'backend', '--preset', 'full'])).toBe(0)
 }
 
+/** Build handoff needs to traverse two review exits; use the public request/ack protocol, not a state fixture. */
+async function approveReviewExit(h: Harness, name: string, event: string): Promise<void> {
+  expect(await h.run(['review', 'request', name, '--event', event])).toBe(0)
+  expect(await h.run(['review', 'acknowledge', name])).toBe(0)
+}
+
 function changeFile(h: Harness, name: string, rel: string): string {
   return join(h.cwd, 'openspec', 'changes', name, rel)
 }
@@ -183,9 +189,11 @@ describe('真实 e2e —— build handoff（design→build 真转换链 + 压缩
     expect(await h.run(['transition', name, 'open-complete'])).toBe(0)
     // design/tasks were written before their real ledger records so their evidence remains fresh.
     await h.seedArtifact(name, 'design_doc', `openspec/changes/${name}/design.md`) // P6：artifact 白盒预置
+    await approveReviewExit(h, name, 'explore-complete')
     expect(await h.run(['transition', name, 'explore-complete'])).toBe(0)
     await writeFile(changeFile(h, name, 'plan.md'), PLAN_DOC, 'utf8')
     await h.seedArtifact(name, 'plan', `openspec/changes/${name}/plan.md`) // P6：artifact 白盒预置
+    await approveReviewExit(h, name, 'spec-complete')
     expect(await h.run(['transition', name, 'spec-complete'])).toBe(0)
     // 落到 build 相位（真读盘验证）
     expect(await h.read(name)).toContain('phase: build')

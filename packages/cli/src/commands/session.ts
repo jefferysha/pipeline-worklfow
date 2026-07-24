@@ -14,13 +14,15 @@
  *     本仓 activate 的真实副作用是「repo 级 .pipeline-active 平指针」（老仓 state-session.sh:18 记载的
  *     设计意图）：指针是 repo 粒度而非 session 粒度——同一 repo 多个并发 session 共享一个活跃指针，
  *     互相覆盖。因此 Hook 只把它作为「用户明确继续/点名 change」时的恢复候选，绝不自动把它注入新会话。
- *     换粒度的接缝是 SessionFs.bindPointer（注入面已就位，见下方 SessionFs）。
+ *     换粒度的接缝是 SessionFs.bindPointer（注入面已就位，见下方 SessionFs）。可选的
+ *     `--host-session <id>` 另写一个严格 session→Change 的非 canonical 观测投影；它只让
+ *     dashboard 判断原生终端是否仍在执行，绝不参与恢复、guard 或状态转换。
  *   · 老仓 route-context 的「python3/monorepo.py 不可达」降级分支在 TS 侧不适用（无子进程依赖）；
  *     等价降级 = .pipeline-project.yaml 缺失/解析失败 → 视为单仓（packages=null，全未归属），fail-open。
  *   · 老仓 state-session.sh:238-253 三项 [PLACEHOLDER]（package-validation / Cursor ticket 写端 /
  *     init-context-deprecation）是老仓自己都未实现的空占位——本仓同样没有（见 kernel 顶注）。
  */
-import { readFile, writeFile } from 'node:fs/promises'
+import { appendFile, lstat, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import {
   parseProjectPackages,
@@ -28,14 +30,24 @@ import {
   renderRouteContextText,
   routeBucketsToObject,
   routeContext,
+  TERMINAL_SESSION_BINDINGS_DIR,
+  TERMINAL_SESSION_PROTOCOL,
   validateChangeName,
+  isTerminalSessionId,
   type PackageDecl,
 } from '@pipeline-lite/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
 import { changeDir } from '../paths.js'
+import {
+  ACTIVE_POINTER_FILE,
+  INTERACTION_AUTHORITY_FILE,
+  INTERACTION_AUTHORITY_PROTOCOL,
+} from '../continuousAuthority.js'
+
+export { ACTIVE_POINTER_FILE, INTERACTION_AUTHORITY_FILE, INTERACTION_AUTHORITY_PROTOCOL } from '../continuousAuthority.js'
 
 /** repo 级恢复候选指针（不是会话绑定；老仓 state-session.sh:18 记载的 `.pipeline-active`）。 */
-export const ACTIVE_POINTER_FILE = '.pipeline-active'
+/** Change-bound hook projection for explicit normal-chat continuous execution. */
 /** 项目根 package 声明文件（老仓 monorepo.py PROJECT_CONFIG_FILE）。 */
 export const PROJECT_CONFIG_FILE = '.pipeline-project.yaml'
 
@@ -47,6 +59,103 @@ export const PROJECT_CONFIG_FILE = '.pipeline-project.yaml'
 export interface SessionFs {
   loadPackages: (cwd: string) => Promise<PackageDecl[] | null>
   bindPointer: (cwd: string, name: string) => Promise<void>
+  /** Optional for legacy injected test/degraded adapters; missing means --continuous is safely unavailable. */
+  writeInteractionAuthority?: (cwd: string, name: string) => Promise<void>
+  /** Optional host-session binding for dashboard-only terminal liveness. It never mutates workflow state. */
+  bindTerminalSession?: (cwd: string, name: string, sessionId: string) => Promise<void>
+}
+
+function authorityTimestamp(): string {
+  return new Date().toISOString().replace(/\.\d{3}Z$/, 'Z')
+}
+
+async function assertRegularOrMissing(path: string): Promise<void> {
+  try {
+    const entry = await lstat(path)
+    if (!entry.isFile() || entry.isSymbolicLink()) throw new Error('目标不是普通文件')
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return
+    throw error
+  }
+}
+
+/** Create only ordinary directories for the hook-facing, non-canonical session projection. */
+async function ensurePlainDirectory(path: string): Promise<void> {
+  try {
+    const entry = await lstat(path)
+    if (!entry.isDirectory() || entry.isSymbolicLink()) throw new Error('目录不是普通目录')
+    return
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+  }
+  try {
+    await mkdir(path, { recursive: false, mode: 0o700 })
+  } catch (error) {
+    // Another terminal in the same project may create this projection directory between lstat and
+    // mkdir.  Treat only that benign race as success; the lstat below still rejects links/files.
+    if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
+  }
+  const created = await lstat(path)
+  if (!created.isDirectory() || created.isSymbolicLink()) throw new Error('目录不是普通目录')
+}
+
+/**
+ * Bind a native host session to the exact Change selected by the pipeline root skill.  This is an
+ * observability-only projection: it prevents a repo-global `.pipeline-active` pointer from making
+ * an unrelated conversation look as if it were executing an old Change.
+ */
+async function writeTerminalSessionBinding(cwd: string, name: string, sessionId: string): Promise<void> {
+  if (!isTerminalSessionId(sessionId)) throw new Error('host session id 格式非法')
+  const pipelineDir = join(cwd, '.pipeline')
+  const sessionsDir = join(cwd, TERMINAL_SESSION_BINDINGS_DIR)
+  await ensurePlainDirectory(pipelineDir)
+  await ensurePlainDirectory(sessionsDir)
+  const target = join(sessionsDir, `${sessionId}.json`)
+  await assertRegularOrMissing(target)
+  const timestamp = authorityTimestamp()
+  const body = `${JSON.stringify({
+    protocol: TERMINAL_SESSION_PROTOCOL,
+    session_id: sessionId,
+    change: name,
+    bound_at: timestamp,
+  })}\n`
+  const temp = `${target}.tmp-${process.pid}-${Date.now()}`
+  try {
+    await writeFile(temp, body, { encoding: 'utf8', flag: 'wx', mode: 0o600 })
+    await assertRegularOrMissing(target)
+    await rename(temp, target)
+  } finally {
+    await rm(temp, { force: true }).catch(() => {})
+  }
+}
+
+async function writeAuthorityProjection(cwd: string, name: string): Promise<void> {
+  const target = join(cwd, INTERACTION_AUTHORITY_FILE)
+  const timestamp = authorityTimestamp()
+  const body = [
+    INTERACTION_AUTHORITY_PROTOCOL,
+    `change=${name}`,
+    'scope=interactive-skills',
+    'review=delegated',
+    `issued_at=${timestamp}`,
+    '',
+  ].join('\n')
+  await assertRegularOrMissing(target)
+  const temp = `${target}.tmp-${process.pid}-${Date.now()}`
+  try {
+    await writeFile(temp, body, { encoding: 'utf8', flag: 'wx', mode: 0o600 })
+    await assertRegularOrMissing(target)
+    await rename(temp, target)
+  } finally {
+    await rm(temp, { force: true }).catch(() => {})
+  }
+  const history = join(cwd, 'openspec', 'changes', name, '.pipeline-history.jsonl')
+  await assertRegularOrMissing(history)
+  await appendFile(
+    history,
+    `${JSON.stringify({ ts: timestamp, kind: 'prompt', raw: 'interaction-authority:enabled scope=interactive-skills review=delegated' })}\n`,
+    'utf8',
+  )
 }
 
 const REAL_FS: SessionFs = {
@@ -66,6 +175,8 @@ const REAL_FS: SessionFs = {
   bindPointer: async (cwd, name) => {
     await writeFile(join(cwd, ACTIVE_POINTER_FILE), `${name}\n`, 'utf8')
   },
+  writeInteractionAuthority: writeAuthorityProjection,
+  bindTerminalSession: writeTerminalSessionBinding,
 }
 
 /** change 名校验（老仓 validate_change_name）：非法/空 → stderr ERROR + false。 */
@@ -93,7 +204,40 @@ async function ensureState(deps: CliDeps, name: string): Promise<string | null> 
  * activate（老仓 cmd_activate state-session.sh:28-45）：validate 名 + ensure 状态存在 → 写恢复候选指针。
  * degraded-safe：指针写失败仅 WARN、rc=0（绝不 exit 1），绝不动 phase/phase_status/assignee。
  */
-async function cmdActivate(deps: CliDeps, name: string | undefined, fs: SessionFs): Promise<number> {
+interface ActivateOptions {
+  continuous: boolean
+  hostSessionId?: string
+}
+
+function parseActivateOptions(flags: string[]): ActivateOptions | null {
+  let continuous = false
+  let hostSessionId: string | undefined
+  for (let index = 0; index < flags.length; index += 1) {
+    const flag = flags[index]
+    if (flag === '--continuous') {
+      if (continuous) return null
+      continuous = true
+      continue
+    }
+    if (flag === '--host-session') {
+      const value = flags[index + 1]
+      if (hostSessionId !== undefined || value === undefined || !isTerminalSessionId(value)) return null
+      hostSessionId = value
+      index += 1
+      continue
+    }
+    return null
+  }
+  return { continuous, ...(hostSessionId === undefined ? {} : { hostSessionId }) }
+}
+
+async function cmdActivate(deps: CliDeps, args: string[], fs: SessionFs): Promise<number> {
+  const [name, ...flags] = args
+  const options = parseActivateOptions(flags)
+  if (options === null) {
+    deps.io.err('ERROR: session activate 用法: pipeline session activate <change> [--continuous] [--host-session <session-id>]')
+    return 1
+  }
   if (!checkName(deps, name)) return 1
   if ((await ensureState(deps, name)) === null) return 1
   try {
@@ -103,7 +247,35 @@ async function cmdActivate(deps: CliDeps, name: string | undefined, fs: SessionF
     deps.io.err(`[activate] 活跃指针写入失败 → degraded（回退对话上下文），未落 session 指针: ${errMsg(e)}`)
     return 0
   }
-  deps.io.err(`[OK] activate ${name}（已写 .pipeline-active 恢复候选；该指针是 repo 粒度、非 per-session——仅用户明确继续/点名时会被 Hook 使用；phase/phase_status 未改动）`)
+  if (options.hostSessionId !== undefined) {
+    if (fs.bindTerminalSession === undefined) {
+      deps.io.err('[activate] 终端会话绑定未写入 → degraded（当前 fs adapter 不支持 --host-session；不影响 Change 绑定或流程状态）')
+    } else {
+      try {
+        await fs.bindTerminalSession(deps.cwd, name, options.hostSessionId)
+      } catch (e) {
+        deps.io.err(`[activate] 终端会话绑定未写入 → degraded（dashboard 将把该会话显示为等待）：${errMsg(e)}`)
+      }
+    }
+  }
+  if (options.continuous) {
+    if (fs.writeInteractionAuthority === undefined) {
+      deps.io.err('[activate] 持续交互授权未写入 → degraded（当前 fs adapter 不支持 --continuous；普通 confirmation/review 门不受影响）')
+      return 0
+    }
+    try {
+      await fs.writeInteractionAuthority(deps.cwd, name)
+    } catch (e) {
+      deps.io.err(`[activate] 持续交互授权未写入 → degraded（仍已绑定 Change，interaction skill 将按常规提问）：${errMsg(e)}`)
+      return 0
+    }
+    deps.io.err(`[OK] activate ${name}（已写 .pipeline-active 与 Change 绑定的持续交互授权；review 仍须产生证据，并仅可用 --delegated 留下审计回执）`)
+    return 0
+  }
+  const terminalStatus = options.hostSessionId === undefined
+    ? ''
+    : '；已绑定 host session 供 dashboard 识别短时运行心跳'
+  deps.io.err(`[OK] activate ${name}（已写 .pipeline-active 恢复候选；该指针是 repo 粒度、非 per-session——仅用户明确继续/点名时会被 Hook 使用；phase/phase_status 未改动${terminalStatus}）`)
   return 0
 }
 
@@ -147,7 +319,7 @@ export async function cmdSession(
 ): Promise<number> {
   switch (sub) {
     case 'activate':
-      return cmdActivate(deps, args[0], fs)
+      return cmdActivate(deps, args, fs)
     case 'route-context':
       return cmdRouteContext(deps, args, fs)
     default:

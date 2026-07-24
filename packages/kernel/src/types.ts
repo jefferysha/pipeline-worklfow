@@ -5,6 +5,31 @@
 import type { CoverageProfile, ReviewSeed, TrackId } from './tracks/types.js'
 import type { AutomationPolicySnapshot } from './loops/automation-policy.js'
 
+/**
+ * Review-gate v2 fields are append-only state schema additions. Keeping the group named lets the
+ * canonical reader recognise precisely one historical shape written before this feature, without
+ * weakening the closed schema for arbitrary missing fields. The YAML compatibility projection
+ * omits the entire group while every value is blank, then writes all five together for a live
+ * receipt; canonical state always retains the complete group.
+ */
+export const REVIEW_GATE_FIELDS = [
+  'review_gate_phase',
+  'review_gate_status',
+  // The approved decision must bind the exact outgoing edge. `verify` has both a pass and a
+  // rollback edge; phase-only approval would let one human decision authorize the other.
+  'review_gate_event',
+  'review_requested_at',
+  'review_acknowledged_at',
+] as const
+export type ReviewGateField = (typeof REVIEW_GATE_FIELDS)[number]
+export const REVIEW_GATE_FIELD_DEFAULTS: Readonly<Record<ReviewGateField, string>> = {
+  review_gate_phase: '',
+  review_gate_status: '',
+  review_gate_event: '',
+  review_requested_at: '',
+  review_acknowledged_at: '',
+}
+
 export const FIELD_ORDER = [
   'track', 'preset', 'created_by', 'assignee', 'phase', 'phase_status',
   'design_doc', 'plan', 'verification_report', 'build_mode', 'isolation', 'build_sha',
@@ -27,6 +52,12 @@ export const FIELD_ORDER = [
   // **同写同清**（写点见 automation scheduler/lifecycle/sdk），杜绝「消息换了、成因还是旧的」撕裂。
   // 末尾追加理由同 automation_current_phase（老窄解析器 opaqueTail 腐蚀警告见上）。
   'automation_cause',
+  // Review-gate v2：review 是“完成当前相位产出后再由人确认离开”的出口协议，而不是进入
+  // explore/spec/verify 时就阻断相位工作。字段一起记录确切 phase、event、状态和两次时间，令
+  // transition 能拒绝无确认的离开，同时让 UserPromptSubmit 的确认留在 canonical state 中。event
+  // 必须是待离开 phase 的确切出边，不能让 verify-fail 的确认误授权给 verify-pass（反之亦然）。
+  // 必须继续只追加在末尾，原因同上面的 automation_*：旧窄解析器会把未知尾字段原样保留。
+  ...REVIEW_GATE_FIELDS,
 ] as const
 
 export type FieldName = (typeof FIELD_ORDER)[number]
@@ -37,7 +68,7 @@ export const PHASES = ['open', 'explore', 'spec', 'build', 'verify', 'ship', 'ar
 export type Phase = (typeof PHASES)[number]
 
 // track 合法性全集不再是 types.ts 的写死常量：运行时权威改由动态 Track Registry 承载
-// （GOAL.md 清单 T · R2）。内建四轨的 id/默认/排序单一真相源在 tracks/builtins.ts 的
+// （GOAL.md 清单 T · R2）。内建 Track 的 id/默认/排序单一真相源在 tracks/builtins.ts 的
 // BUILTIN_TRACK_IDS；任意 track id 的运行时校验走 registry 的 requireTrack（应用层校验，
 // 见 cli/commands/{fields,init}.ts 与 server POST /api/changes）。故 InitOptions.track
 // 收成开放的 TrackId=string——闭集判定挪到 registry，不再由本类型收窄。

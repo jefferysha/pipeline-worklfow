@@ -1,11 +1,11 @@
 /**
  * Track Registry 载入/合成/写入（GOAL.md 清单 T · T-R1）。
  *
- * - loadTrackRegistry：缺 `<repoRoot>/.pipeline/tracks.yaml` → 纯内建四轨
+ * - loadTrackRegistry：缺 `<repoRoot>/.pipeline/tracks.yaml` → 纯内建 Track
  *   （source:'builtin-only'）——零迁移成本路径，行为与「没有本功能」逐字一致（allowed:'*'
  *   全放行、缺省 workflow 'default'）。文件存在 → parse + validate（任一失败 fail-loud 抛出）
- *   → 合成 effective 模型：内建四轨应用 builtins 覆写的 label/workflow 后恒排最前
- *   （chat/pm/frontend/backend 固定序），额外 track 按文件声明序追加（builtin:false）。
+ *   → 合成 effective 模型：内建 Track 应用 builtins 覆写的 label/workflow 后恒排最前
+ *   （chat/simple/pm/frontend/backend 固定序），额外 track 按文件声明序追加（builtin:false）。
  * - revision：规范化序列化（serialize.ts）的 sha256 前 16 hex——同语义不同排版的手写文件得
  *   同一 revision；缺文件时取空配置 {version:1} 的 revision，从而「读 builtin-only revision
  *   → 首次写入携带它」能顺利通过冲突检查。
@@ -72,6 +72,7 @@ function entryToDefinition(entry: ProjectTrackEntryConfig): TrackDefinition {
       ? {
           enabled: true as const,
           pattern: invariant(routingCfg.pattern, 'routing.pattern'),
+          ...(routingCfg.excludePattern === undefined ? {} : { excludePattern: routingCfg.excludePattern }),
           priority: invariant(routingCfg.priority, 'routing.priority'),
         }
       : { enabled: false as const }
@@ -84,6 +85,9 @@ function entryToDefinition(entry: ProjectTrackEntryConfig): TrackDefinition {
     policyProfile: {
       // 闭集已由校验保证（REVIEW_SEEDS/COVERAGE_PROFILES），此处仅做类型收窄
       reviewSeed: invariant(p.reviewSeed, 'review_seed') as ReviewSeed,
+      ...(p.autoEnqueueOnSpecComplete === undefined
+        ? {}
+        : { autoEnqueueOnSpecComplete: p.autoEnqueueOnSpecComplete }),
       automationEligible: invariant(p.automationEligible, 'automation_eligible'),
       coverageProfile: invariant(p.coverageProfile, 'coverage_profile') as CoverageProfile,
       routing,
@@ -135,7 +139,7 @@ function synthesize(text: string | null, context: TrackValidationContext): Regis
 
 /**
  * 载入 `<repoRoot>/.pipeline/tracks.yaml`：
- * 缺文件（ENOENT）→ builtin-only 四轨；解析失败 → TrackConfigParseError（带行号）；
+ * 缺文件（ENOENT）→ builtin-only 内建 Track；解析失败 → TrackConfigParseError（带行号）；
  * 校验失败 → 聚合错误清单抛出；其余 fs 错误（权限/EISDIR 等）原样上抛，不静默降级。
  * 注意：本函数不带缓存（无记忆化）——每次调用都从盘读，装配层禁止跨命令/跨锁记忆化返回值
  * （codex R3 D4：CRUD 后同进程续用陈旧 registry 是真实竞态源）。

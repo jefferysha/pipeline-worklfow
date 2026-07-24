@@ -338,6 +338,8 @@ export async function postLoopLevel(input: { root: string; id: string; target: s
 
 /** server/automationConfig.ts::AutomationSettings 的跨 HTTP 手抄（同 WbHookMeta 的零耦合纪律）。 */
 export interface WbAutomationSettings {
+  /** 项目级 AFK 总开关；旧 server 缺字段按 false。 */
+  enabled?: boolean
   /** 并发沙箱上限（1-8）。 */
   max_parallel: number
   /** 失败自动重试次数（0-3）。 */
@@ -830,7 +832,7 @@ export function fetchAfkLog(name: string, root: string): Promise<Response> {
 
 /**
  * T-R5 effective track registry 的跨 HTTP 投影。前端只消费 server 已合成的 effective 顺序，
- * 不重算 builtin fallback、override 或 revision；这样自定义第 5+ 轨与 policy profile 不会漂移。
+ * 不重算 builtin fallback、override 或 revision；这样自定义追加轨与 policy profile 不会漂移。
  */
 export interface WbTrackDefinition {
   id: string
@@ -839,11 +841,13 @@ export interface WbTrackDefinition {
   workflow: { default: string; allowed: '*' | string[] }
   policyProfile: {
     reviewSeed: 'pending' | 'skipped'
+    /** 缺席兼容旧 registry；仅 true 时 spec-complete 会自动进入 AFK 队列。 */
+    autoEnqueueOnSpecComplete?: boolean
     automationEligible: boolean
     coverageProfile: 'none' | 'pm' | 'frontend' | 'backend'
     routing:
       | { enabled: false }
-      | { enabled: true; pattern: string; priority: number }
+      | { enabled: true; pattern: string; excludePattern?: string; priority: number }
     skills: { matrix: boolean; profile: string }
   }
 }
@@ -854,6 +858,7 @@ export interface WbRouterPreviewCandidate {
   priority: number
   score: number
   routable: boolean
+  excluded: boolean
 }
 
 export interface WbRouterPreview {
@@ -862,7 +867,7 @@ export interface WbRouterPreview {
   source: 'builtin-only' | 'project-file'
   winner: WbRouterPreviewCandidate | null
   candidates: WbRouterPreviewCandidate[]
-  suppressed_reason: 'system-notification' | 'slash-command' | 'l5-override' | 'discussion' | null
+  suppressed_reason: 'system-notification' | 'slash-command' | 'discussion' | null
 }
 
 /** 公共 Track Router 预览：server 生产实现真执行 grep -ciE，前端不自行解释 ERE。 */

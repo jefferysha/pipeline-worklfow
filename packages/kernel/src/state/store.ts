@@ -8,6 +8,8 @@ import path from 'node:path'
 import { atomicLinkPublish, atomicReplaceFile } from './atomic-publish.js'
 import {
   QuoteGateError,
+  FIELD_ORDER,
+  REVIEW_GATE_FIELDS,
   type FieldName,
   type InitOptions,
   type PipelineState,
@@ -142,6 +144,13 @@ function initialFields(
   if (opts.initialWorkflow) f.workflow = opts.initialWorkflow.workflow
   f.automation_current_phase = ''
   f.automation_cause = '' // 同上——F-b 末尾追加字段,缺省空串(=成因未知),显式列出保持清单完整(评审 nit)
+  // review-gate v2：空串 = 当前没有待确认或已确认但尚未被下一条 transition 消费的 review receipt。
+  // 具体 request/acknowledge 只经 pipeline review 子命令写入，普通 set/cas 不开放这组内部字段。
+  f.review_gate_phase = ''
+  f.review_gate_status = ''
+  f.review_gate_event = ''
+  f.review_requested_at = ''
+  f.review_acknowledged_at = ''
   return f
 }
 
@@ -170,6 +179,45 @@ function stateWithoutProjection(state: PipelineState): PipelineState {
     ...(state.runMetadata === undefined ? {} : { runMetadata: structuredClone(state.runMetadata) }),
     opaqueTail: state.opaqueTail,
   }
+}
+
+const FIELD_SET = new Set<string>(FIELD_ORDER)
+const REVIEW_GATE_FIELD_SET = new Set<string>(REVIEW_GATE_FIELDS)
+
+/**
+ * A release immediately before review-gate v2 wrote an otherwise identical projection without the
+ * four append-only receipt fields. Accept only that exact omission when its projection metadata
+ * still pins it to the current canonical revision and parsing recreates the same semantic state.
+ * This is deliberately narrower than generic "missing YAML field = default" compatibility.
+ */
+function isLegacyReviewGateProjection(
+  raw: string,
+  parsed: PipelineState,
+  current: RunRevision,
+): boolean {
+  const expected = projectionMetadataFor(current)
+  const metadata = parsed.projectionMetadata
+  if (!metadata
+    || metadata.stateRevision !== expected.stateRevision
+    || metadata.stateRevisionId !== expected.stateRevisionId
+    || metadata.stateDigest !== expected.stateDigest) return false
+  try {
+    if (serializePipeline(stateWithoutProjection(parsed)) !== serializePipeline(current.state)) return false
+  } catch {
+    return false
+  }
+
+  const seen = new Set<string>()
+  for (const line of raw.split('\n')) {
+    const match = /^([A-Za-z0-9_]+):/.exec(line)
+    if (!match) continue
+    const key = match[1] ?? ''
+    if (!FIELD_SET.has(key)) break
+    if (seen.has(key)) return false
+    seen.add(key)
+  }
+  return REVIEW_GATE_FIELDS.every((field) => !seen.has(field))
+    && FIELD_ORDER.every((field) => REVIEW_GATE_FIELD_SET.has(field) || seen.has(field))
 }
 
 async function inspectProjectionAgainst(
@@ -207,6 +255,9 @@ async function inspectProjectionAgainst(
       status: 'drift', ...identity,
       reason: 'canonical 存在但 adapter 无 revision 且内容不同',
     }
+  }
+  if (isLegacyReviewGateProjection(raw, parsed, current)) {
+    return { status: 'current', ...identity }
   }
   const referenced = await readImmutableRunRevision(changeDir, metadata.stateRevision, metadata.stateRevisionId)
   if (referenced !== undefined && referenced.stateDigest === metadata.stateDigest

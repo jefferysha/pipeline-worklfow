@@ -33,3 +33,19 @@ coverage/
 # Playwright 真机驱动脚本的临时落脚点（需要在仓内才能解析根 node_modules 的 playwright 包，
 # 内容本身是一次性驱动脚本，不是要保留的项目资产）。
 .playwright-tmp/
+
+# 本机运行态与工具缓存：由 setup / hooks / 浏览器验收按需重建，不属于插件发布包。
+.pipeline/
+.pipeline-interaction-authority
+.playwright-mcp/
+.sandcastle-build/
+e2e-runs/
+.agents/
+.codex/
+.impeccable/
+.github/hooks/
+
+# 根目录真机验收快照；长期设计证据只保留在 design-demos/shots/。
+/dashboard-progress-custom-spec.png
+/pet-adoption-*-tested.png
+/workbench-*.png

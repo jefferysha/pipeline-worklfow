@@ -4,13 +4,12 @@
  * 对齐 hooks.json 先例（server/hooksConfig.ts）：canonical JSON（写侧 null,2 缩进，写侧在
  * server/automationConfig.ts）；缺文件 / 损坏 JSON / 形状不对 → 空配置 fail-open，消费方回落
  * DEFAULT_CONFIG——行为与本文件诞生之前完全一致。非法字段**单独丢弃**（不拖垮整文件），
- * 值域与 UI/server 同一口径：max_parallel 1-8、max_retries 0-3、default_opt_in 布尔、
+ * 值域与 UI/server 同一口径：enabled/default_opt_in 布尔、max_parallel 1-8、max_retries 0-3、
  * image 合法 docker 引用字符集（缺省 = 用内置 sandcastle:local）。
  *
- * 【决策登记】enabled 与 level **不进此文件**：
- *   · enabled 是运行入口的显式旗标（CLI/loop 显式构造 SDK = 已 opt-in，fail-safe OFF 语义
- *     在 DEFAULT_CONFIG）——落成文件会出现「文件说开、入口没跑」的假开关；
- *   · level 已有 loop 级 autonomy_level（毕业制升降档走 /api/loops/level 裁决）——再落一份
+ * 【决策登记】enabled 是项目级 AFK 总开关，缺省 false；level 不进此文件：
+ *   · enabled 与 default_opt_in 构成自动挂队的两层显式授权，不能由“构造 SDK”隐式伪造；
+ *   · level 已有 loop 级 autonomy_level（毕业制升降档走 /api/loops/level 裁决），再落一份
  *     就是双源打架。读侧对手塞进文件的这两个键一律忽略（见 readAutomationJson）。
  *
  * 消费点：sdk.ts::createAutomation 装配（优先级 显式 deps.config > automation.json > DEFAULT）
@@ -28,6 +27,7 @@ export interface AutomationJsonFs {
 
 /** 文件里读出的有效字段（缺省字段 = 消费方吃 DEFAULT_CONFIG / 内置镜像）。 */
 export interface AutomationJsonConfig {
+  readonly enabled?: boolean
   readonly maxParallel?: number
   readonly maxRetries?: number
   readonly defaultOptIn?: boolean
@@ -59,7 +59,7 @@ export function isValidImageRef(v: string): boolean {
 
 /**
  * 读 `<root>/.pipeline/automation.json`。缺文件/损坏/非对象 → {}（fail-open 全默认）；
- * 非法字段单独丢弃；enabled/level 手塞也忽略（见模块头【决策登记】）。
+ * 非法字段单独丢弃；level 手塞仍忽略（见模块头【决策登记】）。
  */
 export function readAutomationJson(root: string, fs: AutomationJsonFs = { readFileSync }): AutomationJsonConfig {
   let parsed: unknown
@@ -70,8 +70,9 @@ export function readAutomationJson(root: string, fs: AutomationJsonFs = { readFi
   }
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return {}
   const raw = parsed as Record<string, unknown>
-  const cfg: { maxParallel?: number; maxRetries?: number; defaultOptIn?: boolean; image?: string } = {}
+  const cfg: { enabled?: boolean; maxParallel?: number; maxRetries?: number; defaultOptIn?: boolean; image?: string } = {}
   const { maxParallel: mp, maxRetries: mr } = AUTOMATION_JSON_LIMITS
+  if (typeof raw.enabled === 'boolean') cfg.enabled = raw.enabled
   if (intIn(raw.max_parallel, mp.min, mp.max)) cfg.maxParallel = raw.max_parallel
   if (intIn(raw.max_retries, mr.min, mr.max)) cfg.maxRetries = raw.max_retries
   if (typeof raw.default_opt_in === 'boolean') cfg.defaultOptIn = raw.default_opt_in

@@ -58,6 +58,14 @@ describe('changeProgressState —— 五态判定（表驱动全覆盖）', () =
     // ── running / queued / failed：automation 态优先于阶段判定 ──
     ['automation=running → running', makeChange('c', 'build', { fields: { automation: 'running' } }), DEFAULT_RULES, 'running'],
     ['automation=scheduled（已认领在飞）→ running', makeChange('c', 'build', { fields: { automation: 'scheduled' } }), DEFAULT_RULES, 'running'],
+    ['显式绑定的终端会话新鲜心跳 + automation=off → running', makeChange('c', 'build', {
+      fields: { automation: 'off' },
+      terminalActivity: {
+        sessionId: '019f92c7-6e66-7290-9352-f9d915266f14',
+        heartbeatAt: '2026-07-24T06:00:00.000Z',
+        expiresAt: '2026-07-24T06:02:00.000Z',
+      },
+    }), DEFAULT_RULES, 'running'],
     ['gate 阶段但 automation=running 仍是 running（automation 优先）', makeChange('c', 'verify', { fields: { ...VERIFY_OK, automation: 'running' } }), DEFAULT_RULES, 'running'],
     ['automation=queued → queued', makeChange('c', 'open', { fields: { automation: 'queued' } }), DEFAULT_RULES, 'queued'],
     ['automation=failed → failed', makeChange('c', 'build', { fields: { automation: 'failed' } }), DEFAULT_RULES, 'failed'],
@@ -66,6 +74,12 @@ describe('changeProgressState —— 五态判定（表驱动全覆盖）', () =
     // ── paused：跑完停住（L1/L2 report-only）归等你确认 ──
     ['automation=paused（非门阶段 build）→ gate（跑完停住等人放行）', makeChange('c', 'build', { fields: { automation: 'paused' } }), DEFAULT_RULES, 'gate'],
     ['automation=paused + rules 缺失 → gate', makeChange('c', 'explore', { fields: { automation: 'paused' } }), undefined, 'gate'],
+    ['automation=paused 压过终端心跳，不能把待人工复核伪装成运行中', makeChange('c', 'build', {
+      fields: { automation: 'paused' },
+      terminalActivity: {
+        sessionId: 'session-paused', heartbeatAt: '2026-07-24T06:00:00.000Z', expiresAt: '2026-07-24T06:02:00.000Z',
+      },
+    }), DEFAULT_RULES, 'gate'],
     // ── 未知 automation 值：回落阶段判定 ──
     ['automation 未知值回落阶段判定（verify 证据齐）→ gate', makeChange('c', 'verify', { fields: { ...VERIFY_OK, automation: 'bogus' } }), DEFAULT_RULES, 'gate'],
   ]

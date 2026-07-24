@@ -1,14 +1,12 @@
 /**
  * setup 命令 —— mock/真临时 fs 混合回归（full-install F3 骨架 + S2 技能安装段）。
- * 覆盖:①--dry-run 零写零软链(spy env 断言零 mutation);②ensurePipelineOnPath 真临时 HOME
- * 建软链/同源跳过/异源覆盖告警/非软链覆盖/缺 ~/.local/bin 建目录;③runtime 占位分派、skills 真实装派;
+ * 覆盖:①--dry-run 零写零发布(spy env 断言零 mutation);②managed runtime 发布只经注入边界、
+ * 从不把启动器直连 marketplace checkout；③runtime 占位分派、skills 真实装派;
  * ④program 装配 flag 解析(--dry-run/--yes 透传);⑤技能安装段 S2 七钉(命令生成/官方第三方标注/幂等/
- * dry-run 零执行/失败容错/engine 附加/禁整装)。软链源解析(pluginRoot 优先 / selfPath 回退)单钉。
+ * dry-run 零执行/失败容错/engine 附加/禁整装)。候选根仅经 managed-runtime 发布边界进入稳定启动器。
  */
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, test } from 'vitest'
+import { describe, expect, test } from 'vitest'
 import { makeDeps } from '../test-support.js'
 import { buildProgram, CliExit } from '../program.js'
 import { readSkillSources, type SkillSource, type SkillSourcesResult } from '../skillSources.js'
@@ -18,45 +16,99 @@ import {
   cmdSetupHost,
   cmdSetupRuntime,
   cmdSetupSkills,
-  ensurePipelineOnPath,
-  REAL_SETUP_ENV,
-  resolvePipelineSource,
+  scrubLegacyCodexAdapterHooks,
   type PlannedCommand,
   type RuntimeEnv,
   type SetupEnv,
 } from './setup.js'
 import type { ExecDockerFn } from '../afkReadiness.js'
+import type { RuntimeInstaller } from '../runtime/installer.js'
+import { resolveRuntimePaths } from '../runtime/paths.js'
+import type { ReleasedDashboardStarter } from './dashboard.js'
 
 // ── spy env:记录全部 fs mutation + exec 调用,断言「零副作用」/「未碰 PATH」/「零执行」──────
 interface SpyCalls {
   mkdirp: string[]
-  makeSymlink: Array<[string, string]>
-  removePath: string[]
-  chmodExec: string[]
   writeText: Array<[string, string]>
   exec: Array<[string, string[]]>
 }
 type ExecStub = (cmd: string, args: string[]) => { code: number; stdout: string; stderr: string }
 function spyEnv(over: Partial<SetupEnv> = {}, exec?: ExecStub, confirmAns = true): { env: SetupEnv; calls: SpyCalls } {
-  const calls: SpyCalls = { mkdirp: [], makeSymlink: [], removePath: [], chmodExec: [], writeText: [], exec: [] }
+  const calls: SpyCalls = { mkdirp: [], writeText: [], exec: [] }
   const env: SetupEnv = {
     homeDir: () => '/home/test',
     pluginRoot: () => '/plugin',
-    selfPath: () => '/plugin/packages/cli/dist/pipeline.mjs',
-    mkdirp: (d) => { calls.mkdirp.push(d) },
-    readSymlink: () => null,
-    pathExists: () => false,
-    commandExists: () => false,
+  selfPath: () => '/plugin/packages/cli/dist/pipeline.mjs',
+  mkdirp: (d) => { calls.mkdirp.push(d) },
+  pathExists: () => false,
+  readText: () => '{}\n',
+  commandExists: () => false,
     listDir: () => [],
-    makeSymlink: (t, l) => { calls.makeSymlink.push([t, l]) },
-    removePath: (p) => { calls.removePath.push(p) },
-    chmodExec: (p) => { calls.chmodExec.push(p) },
     writeText: (p, text) => { calls.writeText.push([p, text]) },
     runCommand: (cmd, args) => { calls.exec.push([cmd, args]); return exec ? exec(cmd, args) : { code: 0, stdout: '', stderr: '' } },
     confirm: () => confirmAns,
     ...over,
   }
   return { env, calls }
+}
+
+interface RuntimeCalls {
+  readonly activations: Array<readonly [string, string, string]>
+}
+
+interface DashboardCalls {
+  readonly starts: Array<readonly [string, { readonly openBrowser?: boolean }]>
+}
+
+function fakeRuntimeInstaller(fail = false): { installer: RuntimeInstaller; calls: RuntimeCalls } {
+  const calls: RuntimeCalls = { activations: [] }
+  const releaseId = `sha256-${'a'.repeat(64)}`
+  const installer: RuntimeInstaller = {
+    activate: async (candidateRoot, host, homeDir) => {
+      calls.activations.push([candidateRoot, host, homeDir])
+      if (fail) throw new Error('candidate rejected')
+      return {
+        release: {
+          version: 1,
+          releaseId,
+          payloadDigest: 'a'.repeat(64),
+          createdAt: '2026-07-24T00:00:00Z',
+          source: { host, pluginVersion: '1.0.0' },
+        },
+        selection: {
+          version: 1,
+          revision: 1,
+          activeRelease: releaseId,
+          previousRelease: null,
+          updatedAt: '2026-07-24T00:00:00Z',
+        },
+        releaseRoot: `/runtime/releases/${releaseId}`,
+      }
+    },
+    inspect: async () => ({
+      selection: { version: 1, revision: 0, activeRelease: null, previousRelease: null, updatedAt: '1970-01-01T00:00:00Z' },
+      active: null,
+      previous: null,
+      activeValid: false,
+      previousValid: false,
+      lastAudit: null,
+    }),
+    rollback: async () => { throw new Error('not used') },
+  }
+  return { installer, calls }
+}
+
+function fakeDashboardStarter(fail = false): { starter: ReleasedDashboardStarter; calls: DashboardCalls } {
+  const calls: DashboardCalls = { starts: [] }
+  return {
+    starter: {
+      start: async (_deps, payloadRoot, opts) => {
+        calls.starts.push([payloadRoot, opts])
+        return fail ? 1 : 0
+      },
+    },
+    calls,
+  }
 }
 
 // ── 运行时段 fake RuntimeEnv（注入 docker exec + hostEnv + image;零真 docker 子进程）──────────
@@ -99,38 +151,7 @@ const codexInstallExec: ExecStub = (cmd, args) => {
   return { code: 0, stdout: '', stderr: '' }
 }
 
-// ── 真 fs env:临时 HOME + 临时源,验证真软链行为 ─────────────────────────────────────
-const tmpDirs: string[] = []
-function mkTmp(prefix: string): string {
-  const d = mkdtempSync(join(tmpdir(), prefix))
-  tmpDirs.push(d)
-  return d
-}
-function realEnv(home: string, source: string): SetupEnv {
-  return { ...REAL_SETUP_ENV, homeDir: () => home, pluginRoot: () => null, selfPath: () => source }
-}
-function mkSource(): string {
-  const dir = mkTmp('setup-src-')
-  const source = join(dir, 'pipeline.mjs')
-  writeFileSync(source, '#!/usr/bin/env node\n')
-  return source
-}
-afterEach(() => {
-  for (const d of tmpDirs.splice(0)) rmSync(d, { recursive: true, force: true })
-})
-
-describe('resolvePipelineSource —— 软链源解析', () => {
-  test('pluginRoot 存在 → $CLAUDE_PLUGIN_ROOT/packages/cli/dist/pipeline.mjs', () => {
-    const { env } = spyEnv({ pluginRoot: () => '/plugin' })
-    expect(resolvePipelineSource(env)).toBe('/plugin/packages/cli/dist/pipeline.mjs')
-  })
-  test('pluginRoot 缺失 → 回退 selfPath()（dev 场景）', () => {
-    const { env } = spyEnv({ pluginRoot: () => null, selfPath: () => '/dev/dist/pipeline.mjs' })
-    expect(resolvePipelineSource(env)).toBe('/dev/dist/pipeline.mjs')
-  })
-})
-
-describe('①--dry-run —— 按宿主打印计划且零写、零软链', () => {
+describe('①--dry-run —— 按宿主打印计划且零写、零发布', () => {
   test('setup --codex --dry-run:骨架含三段 + Phase 锚点,且零 mutation', () => {
     const deps = makeDeps()
     const { env, calls } = spyEnv()
@@ -144,9 +165,6 @@ describe('①--dry-run —— 按宿主打印计划且零写、零软链', () =>
     expect(out).toContain('--dry-run')
     // 零副作用铁律（含技能段:dry-run 零执行）
     expect(calls.mkdirp).toHaveLength(0)
-    expect(calls.makeSymlink).toHaveLength(0)
-    expect(calls.removePath).toHaveLength(0)
-    expect(calls.chmodExec).toHaveLength(0)
     expect(calls.writeText).toHaveLength(0)
     expect(calls.exec).toHaveLength(0)
   })
@@ -159,27 +177,94 @@ describe('①--dry-run —— 按宿主打印计划且零写、零软链', () =>
 })
 
 describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校验后写入用户配置', () => {
-  test('Codex 原生安装验证通过后，--auto-update 写入精确的每日更新偏好', () => {
+  test('Codex 已有完整已验证插件时复用宿主清单根，--auto-update 写入精确每日更新偏好', async () => {
     const deps = makeDeps()
-    const { env, calls } = spyEnv({
-      readSymlink: () => '/installed/pipeline-lite/packages/cli/dist/pipeline.mjs',
-      pathExists: () => true,
-    }, codexInstallExec)
+    const { env, calls } = spyEnv({ pathExists: () => true }, codexInstallExec)
+    const runtime = fakeRuntimeInstaller()
+    const dashboard = fakeDashboardStarter()
 
-    expect(cmdSetupHost(deps, 'codex', { codex: true, autoUpdate: true }, env)).toBe(0)
+    expect(await cmdSetupHost(deps, 'codex', { codex: true, autoUpdate: true }, env, runtime.installer, dashboard.starter)).toBe(0)
     expect(calls.writeText).toEqual([[
-      '/home/test/.config/pipeline-lite/auto-update.conf',
+      join(resolveRuntimePaths({ homeDir: '/home/test' }).configRoot, 'auto-update.conf'),
       'host=codex\nenabled=true\n',
     ]])
-    expect(calls.mkdirp).toContain('/home/test/.config/pipeline-lite')
+    expect(calls.mkdirp).toContain(resolveRuntimePaths({ homeDir: '/home/test' }).configRoot)
     expect(calls.exec.map(([cmd, args]) => [cmd, args.join(' ')])).toEqual([
-      ['codex', 'plugin marketplace add jefferysha/pipeline-worklfow --ref main'],
-      ['codex', 'plugin add pipeline-lite@pipeline-lite --json'],
       ['codex', 'plugin list --json'],
       ['bash', '/installed/pipeline-lite/tools/verify-skills.sh --quiet --root /installed/pipeline-lite'],
     ])
     expect(deps.outLines.join('\n')).toContain('已启用 --codex 自动更新')
     expect(deps.outLines.join('\n')).toContain('输入 /hooks')
+    expect(runtime.calls.activations).toEqual([['/installed/pipeline-lite', 'codex', '/home/test']])
+    expect(dashboard.calls.starts).toEqual([[
+      `/runtime/releases/sha256-${'a'.repeat(64)}/payload`,
+      { openBrowser: true },
+    ]])
+  })
+
+  test('Codex 没有已验证插件时才执行正式 marketplace 安装计划', async () => {
+    const deps = makeDeps()
+    let inventoryReads = 0
+    const exec: ExecStub = (cmd, args) => {
+      if (cmd === 'codex' && args.join(' ') === 'plugin list --json') {
+        inventoryReads += 1
+        return {
+          code: 0,
+          stdout: JSON.stringify({
+            installed: inventoryReads === 1
+              ? []
+              : [{ name: 'pipeline-lite', marketplaceName: 'pipeline-lite', source: { path: '/installed/pipeline-lite' } }],
+          }),
+          stderr: '',
+        }
+      }
+      return { code: 0, stdout: '', stderr: '' }
+    }
+    const { env, calls } = spyEnv({ pathExists: () => true }, exec)
+    const runtime = fakeRuntimeInstaller()
+
+    expect(await cmdSetupHost(deps, 'codex', { codex: true }, env, runtime.installer)).toBe(0)
+    expect(calls.exec.map(([cmd, args]) => [cmd, args.join(' ')])).toEqual([
+      ['codex', 'plugin list --json'],
+      ['codex', 'plugin marketplace add jefferysha/pipeline-worklfow --ref main'],
+      ['codex', 'plugin add pipeline-lite@pipeline-lite --json'],
+      ['codex', 'plugin list --json'],
+      ['bash', '/installed/pipeline-lite/tools/verify-skills.sh --quiet --root /installed/pipeline-lite'],
+    ])
+    expect(runtime.calls.activations).toEqual([['/installed/pipeline-lite', 'codex', '/home/test']])
+  })
+
+  test('Codex 已登记但缺 runtime bootstrap 时拒绝复用，并回到正式安装计划', async () => {
+    const deps = makeDeps()
+    let inventoryReads = 0
+    const exec: ExecStub = (cmd, args) => {
+      if (cmd === 'codex' && args.join(' ') === 'plugin list --json') {
+        inventoryReads += 1
+        return {
+          code: 0,
+          stdout: JSON.stringify({
+            installed: [{
+              name: 'pipeline-lite', marketplaceName: 'pipeline-lite',
+              source: { path: inventoryReads === 1 ? '/stale/pipeline-lite' : '/installed/pipeline-lite' },
+            }],
+          }),
+          stderr: '',
+        }
+      }
+      return { code: 0, stdout: '', stderr: '' }
+    }
+    const { env, calls } = spyEnv({ pathExists: (path) => path !== '/stale/pipeline-lite/runtime/pipeline-bootstrap.mjs' }, exec)
+    const runtime = fakeRuntimeInstaller()
+
+    expect(await cmdSetupHost(deps, 'codex', { codex: true }, env, runtime.installer)).toBe(0)
+    expect(calls.exec.map(([cmd, args]) => [cmd, args.join(' ')])).toEqual([
+      ['codex', 'plugin list --json'],
+      ['codex', 'plugin marketplace add jefferysha/pipeline-worklfow --ref main'],
+      ['codex', 'plugin add pipeline-lite@pipeline-lite --json'],
+      ['codex', 'plugin list --json'],
+      ['bash', '/installed/pipeline-lite/tools/verify-skills.sh --quiet --root /installed/pipeline-lite'],
+    ])
+    expect(deps.outLines.join('\n')).toContain('不完整或未通过校验')
   })
 
   test('adapter 不能借 --auto-update 伪装成有自己的发布通道', () => {
@@ -193,64 +278,82 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
   })
 })
 
-describe('②ensurePipelineOnPath —— 真临时 HOME 软链行为', () => {
-  test('首次:建 ~/.local/bin + 软链指向正确源 + 可执行', () => {
-    const home = mkTmp('setup-home-')
-    const source = mkSource()
-    const deps = makeDeps()
-    ensurePipelineOnPath(deps, realEnv(home, source))
-    const binDir = join(home, '.local', 'bin')
-    const link = join(binDir, 'pipeline')
-    expect(existsSync(binDir)).toBe(true) // 缺 ~/.local/bin 时建目录
-    expect(lstatSync(link).isSymbolicLink()).toBe(true)
-    expect(readlinkSync(link)).toBe(source)
-    expect(deps.outLines.join('\n')).toContain('已把 pipeline 软链到 PATH')
+describe('①b Codex 旧 hook 迁移 —— 插件是唯一 hook 所有者', () => {
+  test('只剥离旧 adapter 的四个精确脚本，保留同组和其他事件中的用户 hooks', () => {
+    const legacy = JSON.stringify({
+      retained_setting: 'keep',
+      hooks: {
+        SessionStart: [{
+          matcher: '*',
+          hooks: [
+            { type: 'command', command: 'bash "/old/pipeline/adapters/codex/hooks/inject.sh" SessionStart' },
+            { type: 'command', command: 'bash "/user/hooks/session-context.sh"' },
+          ],
+        }],
+        UserPromptSubmit: [{
+          hooks: [{ type: 'command', command: 'bash "/old/pipeline/adapters/codex/hooks/prompt.sh" UserPromptSubmit' }],
+        }],
+        PostToolUse: [{
+          hooks: [{ type: 'command', command: 'bash "/user/hooks/audit.sh"' }],
+        }],
+      },
+    })
+
+    const migrated = scrubLegacyCodexAdapterHooks(legacy)
+    expect(migrated.removed).toBe(2)
+    const parsed = JSON.parse(migrated.content) as {
+      retained_setting: string
+      hooks: Record<string, Array<{ hooks: Array<{ command: string }> }>>
+    }
+    expect(parsed.retained_setting).toBe('keep')
+    expect(parsed.hooks.SessionStart?.[0]?.hooks.map((hook) => hook.command)).toEqual([
+      'bash "/user/hooks/session-context.sh"',
+    ])
+    expect(parsed.hooks.UserPromptSubmit).toBeUndefined()
+    expect(parsed.hooks.PostToolUse?.[0]?.hooks.map((hook) => hook.command)).toEqual([
+      'bash "/user/hooks/audit.sh"',
+    ])
   })
 
-  test('已存在同源:跳过（不重建）', () => {
-    const home = mkTmp('setup-home-')
-    const source = mkSource()
-    const binDir = join(home, '.local', 'bin')
-    mkdirSync(binDir, { recursive: true })
-    symlinkSync(source, join(binDir, 'pipeline'))
-    const deps = makeDeps()
-    ensurePipelineOnPath(deps, realEnv(home, source))
-    expect(readlinkSync(join(binDir, 'pipeline'))).toBe(source)
-    expect(deps.outLines.join('\n')).toMatch(/同源|跳过/)
-    expect(deps.errLines.join('\n')).not.toContain('WARN')
+  test('malformed or unrelated global config is not reformatted or overwritten', () => {
+    expect(scrubLegacyCodexAdapterHooks('{not json')).toEqual({ content: '{not json', removed: 0 })
+    const unrelated = '{\n  "hooks": {"SessionStart": [{"hooks": [{"command": "bash /user/adapter.sh"}]}]}\n}\n'
+    expect(scrubLegacyCodexAdapterHooks(unrelated)).toEqual({ content: unrelated, removed: 0 })
   })
 
-  test('已存在异源:告警 + 覆盖为新源', () => {
-    const home = mkTmp('setup-home-')
-    const source = mkSource()
-    const binDir = join(home, '.local', 'bin')
-    mkdirSync(binDir, { recursive: true })
-    symlinkSync('/some/old/pipeline.mjs', join(binDir, 'pipeline'))
+  test('setup migrates old global registration before publishing the native runtime', async () => {
+    const codexHooks = '/home/test/.codex/hooks.json'
+    const legacy = JSON.stringify({
+      hooks: {
+        SessionStart: [{ hooks: [{ type: 'command', command: 'bash "/old/pipeline/adapters/codex/hooks/inject.sh" SessionStart' }] }],
+        PreToolUse: [{ hooks: [{ type: 'command', command: 'bash "/user/hooks/preflight.sh"' }] }],
+      },
+    })
     const deps = makeDeps()
-    ensurePipelineOnPath(deps, realEnv(home, source))
-    expect(readlinkSync(join(binDir, 'pipeline'))).toBe(source)
-    expect(deps.errLines.join('\n')).toContain('WARN')
-    expect(deps.errLines.join('\n')).toContain('/some/old/pipeline.mjs')
-  })
+    const { env, calls } = spyEnv({ pathExists: () => true, readText: (path) => path === codexHooks ? legacy : undefined }, codexInstallExec)
+    const runtime = fakeRuntimeInstaller()
 
-  test('已存在非软链（普通文件）:告警 + 覆盖为软链', () => {
-    const home = mkTmp('setup-home-')
-    const source = mkSource()
-    const binDir = join(home, '.local', 'bin')
-    mkdirSync(binDir, { recursive: true })
-    writeFileSync(join(binDir, 'pipeline'), 'old regular file')
-    const deps = makeDeps()
-    ensurePipelineOnPath(deps, realEnv(home, source))
-    expect(lstatSync(join(binDir, 'pipeline')).isSymbolicLink()).toBe(true)
-    expect(readlinkSync(join(binDir, 'pipeline'))).toBe(source)
-    expect(deps.errLines.join('\n')).toContain('WARN')
+    expect(await cmdSetupHost(deps, 'codex', { codex: true }, env, runtime.installer)).toBe(0)
+    expect(calls.writeText).toHaveLength(1)
+    expect(calls.writeText[0]?.[0]).toBe(codexHooks)
+    const migrated = JSON.parse(calls.writeText[0]?.[1] ?? '{}') as { hooks?: Record<string, unknown> }
+    expect(migrated.hooks?.SessionStart).toBeUndefined()
+    expect(migrated.hooks?.PreToolUse).toBeDefined()
+    expect(runtime.calls.activations).toEqual([['/installed/pipeline-lite', 'codex', '/home/test']])
+    expect(deps.outLines.join('\n')).toContain('已迁移 1 个旧版 Codex hook')
   })
+})
 
-  test('best-effort:mkdirp 抛错只 WARN,不崩', () => {
+describe('②managed runtime 发布边界', () => {
+  test('候选 release 校验/发布失败时，不把宿主 checkout 伪装为可运行入口', async () => {
     const deps = makeDeps()
-    const { env } = spyEnv({ mkdirp: () => { throw new Error('EACCES boom') } })
-    expect(() => ensurePipelineOnPath(deps, env)).not.toThrow()
-    expect(deps.errLines.join('\n')).toContain('WARN')
+    const { env } = spyEnv({ pathExists: () => true }, codexInstallExec)
+    const runtime = fakeRuntimeInstaller(true)
+
+    expect(await cmdSetupHost(deps, 'codex', { codex: true }, env, runtime.installer)).toBe(1)
+    expect(runtime.calls.activations).toEqual([['/installed/pipeline-lite', 'codex', '/home/test']])
+    expect(deps.errLines.join('\n')).toContain('保留当前已验证 release')
+    expect(deps.outLines.join('\n')).not.toContain('已把 pipeline 软链')
   })
 })
 
@@ -263,17 +366,16 @@ describe('③skills/runtime 分派 —— skills 真实装派(dry-run 安全) / 
     expect(out).toContain('技能安装计划')
     expect(out).toContain('--dry-run')
     expect(calls.exec).toHaveLength(0)
-    expect(calls.makeSymlink).toHaveLength(0)
     expect(calls.mkdirp).toHaveLength(0)
   })
 
-  test('setup runtime 分派（注入 fake docker）→ 到达 cmdSetupRuntime，出就绪清单 + exit 0，零软链', async () => {
+  test('setup runtime 分派（注入 fake docker）→ 到达 cmdSetupRuntime，出就绪清单 + exit 0，零 runtime 发布', async () => {
     const deps = makeDeps()
     const { env, calls } = spyEnv()
     const code = await cmdSetup(deps, 'runtime', {}, env, fakeRt())
     expect(code).toBe(0)
     expect(deps.outLines.join('\n')).toContain('就绪清单')
-    expect(calls.makeSymlink).toHaveLength(0) // runtime 段不碰 PATH/软链
+    expect(calls.exec).toHaveLength(0) // runtime 段不走宿主 marketplace/候选发布
   })
 
   test('未知 sub → stderr + exit 1', () => {
@@ -286,18 +388,22 @@ describe('③skills/runtime 分派 —— skills 真实装派(dry-run 安全) / 
 describe('⑨空 sub 全流程 —— 技能段后接运行时就绪清单（dry-run 只提示不真探测,R1 concern#1）', () => {
   test('非 dry-run:技能段之后真跑运行时就绪清单（注入 fakeRt,零真 docker）→ 出清单 + exit 0', async () => {
     const deps = makeDeps()
-    // 全部已装 → 技能段几乎空跑;同源软链 → 跳过。聚焦「运行时段确实被接上」(零真 docker 由 fakeRt 保证)。
-    const { env } = spyEnv({
-      readSymlink: () => '/plugin/packages/cli/dist/pipeline.mjs',
-      pathExists: () => true,
-    }, codexInstallExec)
+    // 全部已装 → 技能段几乎空跑；fake installer 只记录已校验候选发布，聚焦「运行时段确实被接上」。
+    const { env } = spyEnv({ pathExists: () => true }, codexInstallExec)
+    const runtime = fakeRuntimeInstaller()
     const rt = fakeRt({ hostEnv: { CLAUDE_CODE_OAUTH_TOKEN: 'a', OPENAI_API_KEY: 'b' } })
-    const code = await cmdSetup(deps, undefined, { codex: true, yes: true }, env, rt)
+    const dashboard = fakeDashboardStarter()
+    const code = await cmdSetup(deps, undefined, { codex: true, yes: true }, env, rt, runtime.installer, dashboard.starter)
     expect(code).toBe(0)
     const out = deps.outLines.join('\n')
     expect(out).toContain('技能安装计划') // 技能段跑了
     expect(out).toContain('就绪清单') // 运行时段也跑了（一屏）
     expect(out).toContain('docker daemon 可用')
+    expect(runtime.calls.activations).toEqual([['/installed/pipeline-lite', 'codex', '/home/test']])
+    expect(dashboard.calls.starts).toEqual([[
+      `/runtime/releases/sha256-${'a'.repeat(64)}/payload`,
+      { openBrowser: true },
+    ]])
   })
 
   test('--dry-run:运行时段只提示见 pipeline setup runtime,绝不真探测 docker（同步返 number,不碰 rt）', () => {
@@ -317,7 +423,7 @@ describe('⑨空 sub 全流程 —— 技能段后接运行时就绪清单（dry
     const deps = makeDeps()
     // 无已装 + 全 exec 失败 → 真 registry 的 mandatory 命令全败 → 技能段 exit 1。
     const exec: ExecStub = () => ({ code: 1, stdout: '', stderr: 'boom' })
-    const { env } = spyEnv({ readSymlink: () => '/plugin/packages/cli/dist/pipeline.mjs' }, exec)
+    const { env } = spyEnv({}, exec)
     const code = await cmdSetup(deps, undefined, { codex: true, yes: true }, env, fakeRt())
     expect(code).toBe(1)
     expect(deps.errLines.join('\n')).toContain('失败')
@@ -590,7 +696,6 @@ describe('⑤技能安装段 S2 —— 命令生成 / 标注 / 幂等 / dry-run 
     expect(cmdSetupSkills(deps, { dryRun: true }, env, eccSources)).toBe(0)
     expect(calls.exec).toHaveLength(0)
     expect(calls.mkdirp).toHaveLength(0)
-    expect(calls.makeSymlink).toHaveLength(0)
     const out = deps.outLines.join('\n')
     expect(out).toContain('--dry-run')
     expect(out).toContain('技能(15)')

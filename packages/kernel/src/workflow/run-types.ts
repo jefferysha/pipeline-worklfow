@@ -2,7 +2,8 @@
  * WorkflowRun / TransitionRecord —— W1 第二个可交付单元的持久化提交接缝（codex 范围评估
  * 2026-07-16：narrow「扩大 withLock」不足以称为「状态与 audit 原子提交」——.pipeline.yaml 与
  * .pipeline-history.jsonl 是两个文件，历史写失败时 state 已提交，进程在两次写之间崩溃仍会撕裂；
- * review marker 在项目根、锁在 changeDir，不同 change 也不共享锁。本增量建立稳定 run 身份 +
+ * review marker 是项目根的短时 v2 projection、canonical approval receipt 则在 change state；不同
+ * change 不共享 marker。 本增量建立稳定 run 身份 +
  * canonical TransitionRecord + 真正的状态/audit 提交点，但**明确停在唯一 TransitionApplication
  * 之前**——CLI/server 仍各自维护 default/custom 的转换规划逻辑，只是提交方式改为共同调用
  * WorkflowRunRepository.transact。

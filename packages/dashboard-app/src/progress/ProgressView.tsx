@@ -303,11 +303,12 @@ function deckMatch(fr: FlatRow, tab: DeckTab): boolean {
   }
 }
 
-/** 调度标识（demo 小卡调度符 ▦/⌨）：▦ 沙箱=自动化三桶（running/queued/failed 态，与调度灯
- *  schedulerHealth 同折叠口径——running 含 scheduled、failed 含 conflict）；其余（off/无/merged/
- *  paused 等活在终端的）=⌨ 终端。 */
+/** 调度标识（demo 小卡调度符 ▦/⌨）：只看 automation 原始态，不能因普通终端心跳也进入
+ * running 而误画成沙箱。 */
 function inSandbox(fr: FlatRow): boolean {
-  return fr.row.state === 'running' || fr.row.state === 'queued' || fr.row.state === 'failed'
+  const automation = fieldStr(fr.row.change, 'automation')
+  return automation === 'running' || automation === 'scheduled'
+    || automation === 'queued' || automation === 'failed' || automation === 'conflict'
 }
 
 // ── tailwind 类词组（视觉词汇集中一处，行内/抽屉/画布不各写一份）──
@@ -922,7 +923,13 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
           </button>
         )
       }
-      case 'running':
+      case 'running': {
+        // A fresh terminal heartbeat means the user is already working in the native host. Only
+        // AFK's actual runner may be cancelled through the dashboard endpoint.
+        if (
+          fr.row.change.terminalActivity !== undefined
+          && fieldStr(fr.row.change, 'automation') !== 'running'
+        ) return undefined
         return (
           <button
             type="button"
@@ -934,6 +941,7 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
             <Square className="h-3 w-3" aria-hidden="true" /> {t('progress.act_kill')}
           </button>
         )
+      }
       default:
         return undefined
     }
@@ -979,6 +987,14 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
         archivedByPhase.set(row.change.phase, [...(archivedByPhase.get(row.change.phase) ?? []), row])
       }
       const projName = rootBasename(group.root)
+      const linearProgress = group.workflow === 'default' || (rules !== undefined && rules.steps.every((id) => {
+        const outgoing = rules.transitions[id] ?? []
+        const incoming = rules.steps.reduce(
+          (count, from) => count + (rules.transitions[from] ?? []).filter((edge) => edge.to === id).length,
+          0,
+        )
+        return outgoing.length <= 1 && incoming <= 1
+      }))
       const steps: CanvasStep[] = stepIds.map((id) => {
         const arch = [...(archivedByPhase.get(id) ?? [])].sort((a, b) => compareArchived(a.change, b.change))
         const archivedChanges: CanvasArchivedChange[] = arch.map((row) => {
@@ -992,6 +1008,13 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
           gate: rules?.gateByStep[id] ?? null,
           archived: archivedChanges.length,
           archivedChanges,
+          state: group.rows.some((row) =>
+            row.change.todo?.stages.find((stage) => stage.id === id)?.status === 'current')
+            ? 'current'
+            : group.rows.length > 0 && group.rows.every((row) =>
+              row.change.todo?.stages.find((stage) => stage.id === id)?.status === 'done')
+              ? 'done'
+              : 'pending',
         }
       })
       const changes: CanvasChange[] = group.rows.map((row) => {
@@ -1005,13 +1028,23 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
           state: ds.state,
           tone: ds.tone,
           running: row.state === 'running',
+          executionSource: inSandbox(fr)
+            ? 'automation'
+            : row.change.terminalActivity === undefined ? 'none' : 'terminal',
           sandbox: inSandbox(fr),
           dimmed: deckTab !== 'all' && !deckMatch(fr, deckTab),
           selected: drawerKey === fr.key,
           statusLabel: status.text,
         }
       })
-      out.push({ key: `${group.root}::${group.workflow}`, projName, workflow: group.workflow, steps, changes })
+      out.push({
+        key: `${group.root}::${group.workflow}`,
+        projName,
+        workflow: group.workflow,
+        steps,
+        changes,
+        linearProgress,
+      })
     }
     return out
     // eslint-disable-next-line react-hooks/exhaustive-deps -- dotOf/t 随组件重建，实际输入已全列
@@ -1133,7 +1166,9 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
                 onClose={closeDrawer}
                 onToast={onToast}
               />
-              {drawerRow.row.state === 'running' && <RunLogPane root={drawerRow.row.root} change={drawerRow.row.change} />}
+              {drawerRow.row.state === 'running' && fieldStr(drawerRow.row.change, 'automation') === 'running' && (
+                <RunLogPane root={drawerRow.row.root} change={drawerRow.row.change} />
+              )}
             </div>
           </aside>
         </>

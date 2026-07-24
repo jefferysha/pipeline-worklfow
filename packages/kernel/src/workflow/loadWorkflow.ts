@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { parseWorkflow } from './parse.js'
 import { validateWorkflow } from './validate.js'
 import type { WorkflowDef } from './types.js'
+import { builtinWorkflow } from './builtin-workflows.js'
 
 /**
  * 加载并校验一个 workflow 定义文件（GOAL E5：保存时校验的第二个消费点——目前没有独立的
@@ -15,6 +16,14 @@ import type { WorkflowDef } from './types.js'
  *   fail-open（WARN + exit 0，绝不因为 workflow 文件本身写错就把 hook 判定挂死）。
  */
 export function loadWorkflow(repoRoot: string, name: string): WorkflowDef | null {
+  const builtin = builtinWorkflow(name)
+  if (builtin) {
+    const errors = validateWorkflow(builtin)
+    if (errors.length > 0) {
+      throw new Error(`ERROR: 内建 workflow '${name}' 校验失败：\n${errors.map((e) => `  - ${e}`).join('\n')}`)
+    }
+    return builtin
+  }
   const p = join(repoRoot, '.pipeline', 'workflows', `${name}.yaml`)
   if (!existsSync(p)) return null
   const wf = parseWorkflow(readFileSync(p, 'utf8'))

@@ -15,8 +15,9 @@ const CLOCK = '2026-07-17T08:00:00Z'
 function makeInput(
   over: Partial<Record<FieldName, string | string[]>> = {},
   gitHeadSha?: () => Promise<string>,
+  workspaceFingerprint?: () => Promise<string>,
 ): ActionInput {
-  return { fields: allFields(over), clock: () => CLOCK, gitHeadSha }
+  return { fields: allFields(over), clock: () => CLOCK, gitHeadSha, workspaceFingerprint }
 }
 
 describe('老仓 state-transition.sh cmd_transition 副作用体语义对照', () => {
@@ -41,6 +42,29 @@ describe('老仓 state-transition.sh cmd_transition 副作用体语义对照', (
   it('L177：返回纯空白（trim 后空）→ 同空串支（build_sha 留原值语义 = patch 不含它）', async () => {
     const out = await ACTION_HANDLERS['freeze-build-sha']({ type: 'freeze-build-sha' }, makeInput({}, async () => '  \n'))
     expect(out).toEqual({ patch: {}, signals: [{ kind: 'build-sha-missing' }] })
+  })
+
+  it('in-place：即使 Git HEAD 可取也冻结内容基线，且不读取 Git（未提交工作区不是 HEAD）', async () => {
+    let gitCalls = 0
+    const out = await ACTION_HANDLERS['freeze-build-sha'](
+      { type: 'freeze-build-sha' },
+      makeInput(
+        { isolation: 'in-place' },
+        async () => { gitCalls++; return 'UNUSED' },
+        async () => 'workspace:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      ),
+    )
+    expect(out).toEqual({
+      patch: { build_sha: 'workspace:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' },
+      signals: [],
+    })
+    expect(gitCalls).toBe(0)
+  })
+
+  it('in-place：没有内容基线能力时 fail-closed，不能留下不可复验的 build_sha', async () => {
+    await expect(ACTION_HANDLERS['freeze-build-sha'](
+      { type: 'freeze-build-sha' }, makeInput({ isolation: 'in-place' }, async () => 'HEAD'),
+    )).rejects.toThrow('workspaceFingerprint capability')
   })
 
   it("L185-188：mark-verification-passed → verify_result='pass' + verified_at=clock()", async () => {

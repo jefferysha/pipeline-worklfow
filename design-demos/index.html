@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>收件箱重设计 · 方向拍板</title>
+<style>
+  :root { --bg:#f7f7f5; --card:#fff; --border:#e4e4e0; --text:#0d0d0d; --text-2:#40403c; --text-3:#6a6a62; --accent:#0b6cff; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#0d0d0d; --card:#171717; --border:#262626; --text:#f2f2f0; --text-2:#c9c9c4; --text-3:#94948d; --accent:#4d94ff; } }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text-2); font:13px/1.65 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif; }
+  .wrap { max-width:880px; margin:0 auto; padding:48px 24px 80px; }
+  h1 { color:var(--text); font-size:22px; margin:0 0 6px; }
+  .sub { color:var(--text-3); margin:0 0 32px; }
+  h2 { color:var(--text); font-size:15px; margin:36px 0 12px; }
+  a.card { display:block; background:var(--card); border:1px solid var(--border); border-radius:12px; padding:16px 18px; margin-bottom:12px; text-decoration:none; color:inherit; transition:border-color .15s ease; }
+  a.card:hover { border-color:var(--accent); }
+  .name { color:var(--text); font-weight:650; font-size:15px; }
+  .name .tag { color:var(--accent); font-weight:600; font-size:13px; margin-left:8px; }
+  .desc { margin-top:4px; }
+  .font { margin-top:2px; color:var(--text-3); }
+  .hint { margin-top:40px; color:var(--text-3); border-top:1px solid var(--border); padding-top:16px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>收件箱重设计 · 方向拍板</h1>
+  <p class="sub">同一套真实数据(4 件待决事项),7 个方向。每个页面右上角可切换深浅主题;可单选,也可混搭(布局取一家、字体取另一家)。</p>
+
+  <h2>已拍板定稿(v9,生产落地中)</h2>
+  <a class="card" href="v9-flowdeck.html">
+    <div class="name">v9 FlowDeck<span class="tag">进度统一面 · 定稿</span></div>
+    <div class="desc">收件箱退役:进度=唯一面,单列表看所有在制(同一行体),需要动手的行绿 ring 高亮+行内动作。进度条=列车轨(已拍板):轨道生长+列车头进站,在跑才流光,门=红闸菱形,失败=断轨,取消=琥珀。右下角「设计注 7 条」。</div>
+    <div class="font">动效:GSAP + 纯 CSS 状态语义循环;reduced-motion 全量降级</div>
+  </a>
+
+  <h2>上一轮(v8,整合 6 条修改意见;收件箱形态已被 v9 取代)</h2>
+  <a class="card" href="v8-trellis-encore.html">
+    <div class="name">v8 Trellis Encore<span class="tag">6 条意见整合 · GSAP</span></div>
+    <div class="desc">v1-trellis 基调演进:收件箱两泳道降噪卡 + 详情动作置顶/人话报错卡/连接命令卡 + 进度只读浮层 + 工作台阶段卡+sheet 页签 + 下拉收窄。右下角「设计注 6 条」看每条的推荐与备选。</div>
+    <div class="font">动效:GSAP 3.12(本地 bundle,零 CDN);reduced-motion 全量降级;深浅主题三段式</div>
+  </a>
+
+  <h2>本轮新方向(v7,针对现状布局+字体痛点)</h2>
+  <a class="card" href="v7a-dossier.html">
+    <div class="name">v7a 案卷式<span class="tag">比例反转</span></div>
+    <div class="desc">左窄登记簿(两组紧凑行)+ 右全宽案卷,一次摊开一件,决策按钮钉在案卷头右上。</div>
+    <div class="font">字体:衬线标题 × 无衬线正文(决策文书感),14px/1.6</div>
+  </a>
+  <a class="card" href="v7b-controldesk.html">
+    <div class="name">v7b 指挥台<span class="tag">先全局后聚焦</span></div>
+    <div class="desc">顶部 sticky 决策带一屏尽收 4 件事,下方整宽决策面,7 相位横排时间线,方向键可切换。</div>
+    <div class="font">字体:sans + 全数据 tabular mono(仪表感),13.5px</div>
+  </a>
+  <a class="card" href="v7c-stream.html">
+    <div class="name">v7c 流式<span class="tag">零卡片零侧栏</span></div>
+    <div class="desc">760px 单列内容流,点击行内展开、就地拍板,视线不横跳;发丝分隔最安静。</div>
+    <div class="font">字体:15px/1.7 中文阅读态,层级全靠字重与颜色</div>
+  </a>
+  <a class="card" href="v7d-lanes.html">
+    <div class="name">v7d 决策泳道<span class="tag">IA 重构</span></div>
+    <div class="desc">「✓ 可以放行」「✕ 跑挂了」两组分列,卡面右侧直接放按钮——多数拍板不用开详情。</div>
+    <div class="font">字体:现行系统栈提级 14px/1.6(只调排印不换字体)</div>
+  </a>
+
+  <h2>此前已有方向(v1-v3,可一并比对)</h2>
+  <a class="card" href="v1-trellis-faithful.html"><div class="name">v1 Trellis 忠实版</div><div class="desc">现行卡片语言的精修版。</div></a>
+  <a class="card" href="v2-linear-calm.html"><div class="name">v2 Linear 冷静版</div><div class="desc">左侧栏 + 单列高密度行 + 右滑证据抽屉,灰阶细腻单 accent。</div></a>
+  <a class="card" href="v3-stripe-editorial.html"><div class="name">v3 Stripe 编辑风</div><div class="desc">编辑排版取向。</div></a>
+
+  <p class="hint">当前生产实现参照:v4-openai-trellis.html(现状基线)。拍板后落地到 dashboard-app 生产代码。</p>
+</div>
+</body>
+</html>

@@ -1,7 +1,7 @@
 /**
  * B4 全局 server 版本抢占 —— 修老仓欠账 #3（多项目多版本共存时新版本无法接管）。
  *
- * 老仓 bind_server 语义：8765 被占 → /api/health 回显 scope==global 则**无条件复用**既有实例，
+ * 老仓 bind_server 语义：默认 dashboard 端口被占 → /api/health 回显 scope==global 则**无条件复用**既有实例，
  * 与占位者的版本无关 → 旧版本 server 长踞、新版本永远接管不了（架构欠账 #3）。
  *
  * 本仓修法：启动探测既有 /api/health（含 version，见 HealthInfo）：
@@ -10,8 +10,10 @@
  *   · 既有版本 < 我        → preempt：读 pidfile 拿旧 pid → SIGTERM 优雅停 → 等端口空出 → 由调用方 bind
  * 决策纯函数 decidePreemption 可单测；探测/抢占走真 HTTP + 真信号。
  */
+import { execFile } from 'node:child_process'
 import { get as httpGet } from 'node:http'
 import { readFileSync } from 'node:fs'
+import { createConnection } from 'node:net'
 import type { HealthInfo, Pidfile, PreemptDecision } from './types.js'
 
 /** 语义化数值比较（逐段 int，非字典序）：a>b → +1，a<b → -1，相等 → 0。 */
@@ -72,13 +74,71 @@ export function probeHealth(port: number, host = '127.0.0.1', timeoutMs = 500): 
   })
 }
 
-export function decidePreemption(existing: HealthInfo | null, myVersion: string): PreemptDecision {
+export function decidePreemption(existing: HealthInfo | null, myVersion: string, myReleaseId?: string): PreemptDecision {
   if (!existing) return 'bind'
-  return compareVersions(myVersion, existing.version) > 0 ? 'preempt' : 'reuse'
+  const versionOrder = compareVersions(myVersion, existing.version)
+  if (versionOrder !== 0) return versionOrder > 0 ? 'preempt' : 'reuse'
+  // A semantic plugin version can legitimately contain a new runtime payload. The selected
+  // release is authoritative even at equal semver (including an explicit runtime rollback). A
+  // legacy server without releaseId cannot prove it is the selected payload, so the first managed
+  // release takes it over rather than allowing a stale process to survive forever.
+  if (myReleaseId !== undefined) return myReleaseId === existing.releaseId ? 'reuse' : 'preempt'
+  return 'reuse'
 }
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms))
+}
+
+/** Parse the PID-only output of `lsof -t`; invalid lines are never candidates for a signal. */
+export function parseListenerPids(stdout: string): number[] {
+  return [...new Set(stdout.split(/\r?\n/)
+    .map((line) => Number.parseInt(line.trim(), 10))
+    .filter((pid) => Number.isSafeInteger(pid) && pid > 0))]
+}
+
+/**
+ * Resolve the local process which actually owns a TCP listener.  We deliberately
+ * fail closed when lsof is unavailable: a pidfile can be stale/reused, and an
+ * unauthenticated health response alone must never authorize signalling an
+ * arbitrary process.  macOS and the supported Unix development environments
+ * ship lsof; unsupported hosts receive a clear failed takeover instead.
+ */
+function listenerPids(port: number): Promise<number[] | null> {
+  return new Promise((resolve) => {
+    execFile('lsof', ['-nP', '-t', `-iTCP:${port}`, '-sTCP:LISTEN'], { encoding: 'utf8' }, (error, stdout) => {
+      if (error === null) {
+        resolve(parseListenerPids(String(stdout ?? '')))
+        return
+      }
+      const code: unknown = (error as { code?: unknown }).code
+      // lsof uses exit 1 for a successful query that simply found no listeners.
+      if (code === 1) { resolve([]); return }
+      resolve(null)
+    })
+  })
+}
+
+/** TCP-level free-port probe; unlike /api/health it distinguishes an old/non-dashboard listener from a free port. */
+export function probePortOpen(port: number, host = '127.0.0.1', timeoutMs = 250): Promise<boolean> {
+  return new Promise((resolve) => {
+    let done = false
+    const finish = (open: boolean): void => {
+      if (done) return
+      done = true
+      resolve(open)
+    }
+    const socket = createConnection({ host, port })
+    socket.setTimeout(timeoutMs)
+    socket.once('connect', () => { socket.destroy(); finish(true) })
+    socket.once('timeout', () => { socket.destroy(); finish(true) })
+    socket.once('error', (error) => {
+      const code = (error as NodeJS.ErrnoException).code
+      // Only a refused connection proves the port is free.  Other failures are
+      // treated as occupied/unknown so takeover never claims success too early.
+      finish(code !== 'ECONNREFUSED')
+    })
+  })
 }
 
 /**
@@ -90,19 +150,27 @@ export async function preemptOldServer(
   pidfilePath: string,
   port: number,
   host = '127.0.0.1',
-  opts?: { waitMs?: number },
+  opts?: { waitMs?: number; legacyPid?: number },
 ): Promise<boolean> {
   const pf = readPidfile(pidfilePath)
-  if (!pf) return false
+  const expected = new Set<number>()
+  if (pf !== null && pf.port === port) expected.add(pf.pid)
+  const legacyPid = opts?.legacyPid
+  if (typeof legacyPid === 'number' && Number.isSafeInteger(legacyPid) && legacyPid > 0) expected.add(legacyPid)
+
+  const listeners = await listenerPids(port)
+  if (listeners === null) return false
+  if (listeners.length === 0) return !(await probePortOpen(port, host))
+  const target = listeners.find((pid) => expected.has(pid))
+  if (target === undefined) return false
   try {
-    process.kill(pf.pid, 'SIGTERM')
+    process.kill(target, 'SIGTERM')
   } catch {
     // ESRCH：旧进程已不在 → 继续等端口空出即可
   }
   const deadline = Date.now() + (opts?.waitMs ?? 3000)
   while (Date.now() < deadline) {
-    const alive = await probeHealth(port, host, 150)
-    if (!alive) return true
+    if (!(await probePortOpen(port, host, 150))) return true
     await sleep(50)
   }
   return false

@@ -1,7 +1,7 @@
 /**
  * loadTrackRegistry / requireTrack / assertWorkflowAllowed / writeTrackRegistry /
  * registryRevision —— 真实 fs + mkdtemp 集成测试：
- * 缺文件 → builtin-only 四轨（与「没有本功能」逐字一致）；有文件 → effective 合成
+ * 缺文件 → builtin-only 内建 Track（与「没有本功能」逐字一致）；有文件 → effective 合成
  * （覆写只影响 label/workflow）；原子写 + 目录锁 + revision 冲突拒绝；并发写不撕裂。
  * writer 合同（codex R1 review 裁定）：写盘前对 next 强制完整 validateTrackRegistry；
  * 现存文件损坏默认拒绝覆写，重建走显式 { repairCorrupt: true }（与 expectedRevision 互斥）；
@@ -101,11 +101,11 @@ async function seedProjectFile(text: string): Promise<void> {
 }
 
 describe('loadTrackRegistry —— 缺文件 fallback', () => {
-  test('无 .pipeline 目录 → 纯内建四轨 builtin-only，revision = 空配置 hash', () => {
+  test('无 .pipeline 目录 → 纯内建五轨 builtin-only，revision = 空配置 hash', () => {
     const reg = loadTrackRegistry(repoRoot, CTX)
     expect(reg.source).toBe('builtin-only')
     expect(reg.ordered).toEqual(BUILTIN_TRACK_DEFINITIONS)
-    expect(reg.ordered.map((t) => t.id)).toEqual(['chat', 'pm', 'frontend', 'backend'])
+    expect(reg.ordered.map((t) => t.id)).toEqual(['chat', 'simple', 'pm', 'frontend', 'backend'])
     expect(reg.revision).toBe(registryRevision({ version: 1 }))
     expect(reg.revision).toMatch(/^[0-9a-f]{16}$/)
     expect(reg.byId.get('pm')?.policyProfile.reviewSeed).toBe('skipped')
@@ -122,10 +122,10 @@ describe('loadTrackRegistry —— 项目文件合成', () => {
     await seedProjectFile(PROJECT_FILE)
     const reg = loadTrackRegistry(repoRoot, CTX)
     expect(reg.source).toBe('project-file')
-    expect(reg.ordered.map((t) => t.id)).toEqual(['chat', 'pm', 'frontend', 'backend', 'data', 'ops'])
+    expect(reg.ordered.map((t) => t.id)).toEqual(['chat', 'simple', 'pm', 'frontend', 'backend', 'data', 'ops'])
 
     const builtinChat = BUILTIN_TRACK_DEFINITIONS[0]!
-    const builtinPm = BUILTIN_TRACK_DEFINITIONS[1]!
+    const builtinPm = BUILTIN_TRACK_DEFINITIONS.find((track) => track.id === 'pm')!
     expect(reg.byId.get('chat')).toEqual({ ...builtinChat, label: '会话' })
     expect(reg.byId.get('pm')).toEqual({
       ...builtinPm,
@@ -133,7 +133,7 @@ describe('loadTrackRegistry —— 项目文件合成', () => {
     })
     // policyProfile 覆写被 v1 锁死：合成结果必须与内建逐字段一致
     expect(reg.byId.get('pm')?.policyProfile).toEqual(builtinPm.policyProfile)
-    expect(reg.byId.get('frontend')).toEqual(BUILTIN_TRACK_DEFINITIONS[2])
+    expect(reg.byId.get('frontend')).toEqual(BUILTIN_TRACK_DEFINITIONS.find((track) => track.id === 'frontend'))
 
     expect(reg.byId.get('data')).toEqual({
       id: 'data',
@@ -182,7 +182,7 @@ describe('requireTrack / assertWorkflowAllowed', () => {
     const reg = loadTrackRegistry(repoRoot, CTX)
     expect(requireTrack(reg, 'frontend').label).toBe('Frontend')
     expect(() => requireTrack(reg, 'data')).toThrow(/未注册的 track 'data'/)
-    expect(() => requireTrack(reg, 'data')).toThrow(/chat, pm, frontend, backend/)
+    expect(() => requireTrack(reg, 'data')).toThrow(/chat, simple, pm, frontend, backend/)
   })
 
   test("assertWorkflowAllowed：'*' 全放行；数组按 membership；拒绝时列出允许值", async () => {
@@ -202,7 +202,7 @@ describe('writeTrackRegistry —— 原子写 + revision 冲突', () => {
   test('全新仓（无 .pipeline）写入：建目录、落文件、返回 effective，与读回一致', async () => {
     const written = await writeTrackRegistry(repoRoot, NEXT, CTX)
     expect(written.source).toBe('project-file')
-    expect(written.ordered.map((t) => t.id)).toEqual(['chat', 'pm', 'frontend', 'backend', 'data'])
+    expect(written.ordered.map((t) => t.id)).toEqual(['chat', 'simple', 'pm', 'frontend', 'backend', 'data'])
 
     const onDisk = await readFile(trackRegistryPath(repoRoot), 'utf8')
     expect(onDisk).toBe(serializeTrackRegistry(NEXT))

@@ -231,6 +231,49 @@ steps:
     ])
   })
 
+  test('in-place workspace 基线 guard 预览会注入真实指纹能力，漂移时不误报 [PASS]', async () => {
+    const baseline = `workspace:sha256:${'a'.repeat(64)}`
+    const WORKSPACE_GUARD = `name: workspace-check
+steps:
+  - id: s1
+    label: verify-in-place
+    gate: null
+    skills: []
+    inputs: []
+    outputs: []
+    guards:
+      - type: build-head-unchanged
+        field: build_sha
+    transitions:
+      - event: complete
+        to: s2
+  - id: s2
+    label: done
+    gate: null
+    skills: []
+    inputs: []
+    outputs: []
+    guards: []
+    transitions: []
+`
+    await writeFile(join(root, '.pipeline', 'workflows', 'workspace-check.yaml'), WORKSPACE_GUARD, 'utf8')
+    let gitCalls = 0
+    const deps = makeDeps({
+      cwd: root,
+      state: mockState({ workflow: 'workspace-check', phase: 's1', isolation: 'in-place', build_sha: baseline }),
+      workspaceFingerprint: async () => `workspace:sha256:${'b'.repeat(64)}`,
+      gitHeadSha: async () => { gitCalls++; return 'UNUSED' },
+    })
+
+    expect(await cmdCheck(deps, 'demo')).toBe(2)
+    expect(deps.outLines).toEqual([
+      '[CHECK] demo (phase=s1)',
+      `  [FAIL] step 's1' 要求当前工作区内容等于 build 冻结基线（build_sha=${baseline}，当前=workspace:sha256:${'b'.repeat(64)}）`,
+      '  [FAIL] 共 1 项未通过',
+    ])
+    expect(gitCalls).toBe(0)
+  })
+
   test('workflow 文件不存在 → exit 1，stderr 报未找到，不写 stdout', async () => {
     const deps = makeDeps({ cwd: root, state: mockState({ workflow: 'ghost', phase: 's1' }) })
     const code = await cmdCheck(deps, 'demo')

@@ -2,27 +2,29 @@
  * setup 命令 —— 安装后「全功能就绪」引导（full-install F3）。
  *
  * 三段（空 sub 走全流程,亦可单独敲子命令）:
- *   ① ensurePipelineOnPath():把 CLI bundle 软链到 ~/.local/bin/pipeline（让用户终端能敲 pipeline）;
+ *   ① managed runtime:校验 marketplace checkout，发布不可变 release，再写稳定 pipeline/pipeline-hook 启动器;
  *   ② 技能安装段 cmdSetupSkills()（`setup skills`,:468）:读 registry → 分组命令 → 幂等差集 → 计划
  *      → 确认位 → 逐条容错 → 汇总;
  *   ③ 运行时检查段 cmdSetupRuntime()（`setup runtime`,:595）:docker/镜像/两 runner 凭证就绪清单
  *      + 缺镜像一键构建。
  * 退出码:全流程取技能段优先（强制失败),运行时段恒 0 不改判;未知子命令 = 1。
  *
- * 注入面 SetupEnv（home/bin 定位 + fs 原语）:测试注入 fake（临时 HOME/内存 spy），
+ * 注入面 SetupEnv（home/宿主命令/用户配置）:测试注入 fake（临时 HOME/内存 spy），
  * 真实现 REAL_SETUP_ENV 走 node:fs + os.homedir()——对齐 loops.ts InitEnv/REAL_INIT_ENV 先例,
- * 不写死 os.homedir()、不新增 deps.ts 必填字段（软链自带注入面,与 io 注入面正交）。
- * best-effort:软链任何失败只 WARN 不让 setup 崩（对齐 init.ts「注册表故障只 WARN」精神）。
+ * 不写死 os.homedir()、不新增 deps.ts 必填字段。runtime 发布失败是硬失败，绝不让 host 指向未验证 checkout。
  */
 import { execFileSync } from 'node:child_process'
-import { accessSync, chmodSync, constants as fsConstants, lstatSync, mkdirSync, readdirSync, readSync, readlinkSync, realpathSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
+import { accessSync, constants as fsConstants, lstatSync, mkdirSync, readFileSync, readdirSync, readSync, realpathSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { readAutomationJson } from '@pipeline-lite/automation'
 import { PREREQ_HINTS } from '@pipeline-lite/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
 import { nodeExecDocker, probeAfkReadiness, type AfkReadiness, type CredLight, type ExecDockerFn } from '../afkReadiness.js'
+import { REAL_RUNTIME_INSTALLER, type RuntimeInstaller } from '../runtime/installer.js'
+import { resolveRuntimePaths } from '../runtime/paths.js'
 import { loadSkillSources, type SkillSource, type SkillSourcesResult, type SkillTier } from '../skillSources.js'
+import { REAL_RELEASED_DASHBOARD_STARTER, type ReleasedDashboardStarter } from './dashboard.js'
 import {
   hostFlag,
   installedPipelineRoot,
@@ -36,28 +38,22 @@ import {
 
 // ── 注入面（测试注入临时 HOME / spy;真实现 = node:fs + os.homedir）──────────────────
 export interface SetupEnv {
-  /** 用户 home（真实现 os.homedir();~/.local/bin 定位锚）。 */
+  /** 用户 home（真实现 os.homedir();managed runtime 与稳定启动器定位锚）。 */
   homeDir(): string
   /** $PLUGIN_ROOT / $CLAUDE_PLUGIN_ROOT（插件安装根）;未设 → null（dev 回退 selfPath）。 */
   pluginRoot(): string | null
   /** 本 CLI bundle 自身路径（真实现 resolve(process.argv[1]);pluginRoot 缺失时的 dev 回退源）。 */
   selfPath(): string
+  /** lstat 存在性（软链本身也算存在）；用于已安装 skill / marketplace 的只读幂等检查。 */
+  pathExists(path: string): boolean
+  /** 读取用户级配置；缺失或不可读时返回 undefined，调用方不得猜测或覆盖其内容。 */
+  readText(path: string): string | undefined
   /** mkdir -p。 */
   mkdirp(dir: string): void
-  /** 读软链目标;不是软链 / 不存在 → null（EINVAL/ENOENT 均归 null）。 */
-  readSymlink(path: string): string | null
-  /** lstat 存在性（软链本身也算存在,含悬空软链;判「存在但非软链」用）。 */
-  pathExists(path: string): boolean
   /** PATH 中是否已有可执行命令；只读探测，用于全局 npm 工具的幂等差集。 */
   commandExists(name: string): boolean
   /** 列目录直接子项名（仅目录/软链，缺目录/无权限 → []，fail-safe）——plugin-cache 双层扫用。 */
   listDir(dir: string): string[]
-  /** 建软链 target→linkPath。 */
-  makeSymlink(target: string, linkPath: string): void
-  /** 删文件/软链（覆盖异源/非软链前置）。 */
-  removePath(path: string): void
-  /** chmod +x（源 bundle 带 shebang,置可执行位;best-effort 补位）。 */
-  chmodExec(path: string): void
   /** 写入受控的用户级 pipeline 配置（自动更新 opt-in）。 */
   writeText(path: string, text: string): void
   /**
@@ -80,21 +76,13 @@ export const REAL_SETUP_ENV: SetupEnv = {
   },
   selfPath: () => {
     const candidate = resolve(process.argv[1] ?? '')
-    // The user-facing launcher is a symlink under ~/.local/bin.  Follow it before deriving the
-    // packaged root so `pipeline dashboard` and a later `pipeline update` do not mistake ~/.local
-    // for a plugin checkout.
+    // The user-facing launcher is a stable script under ~/.local/bin.  Follow the active process
+    // path before deriving a dev fallback so `pipeline dashboard` / `pipeline update` never
+    // mistake ~/.local for a marketplace candidate root.
     try {
       return realpathSync(candidate)
     } catch {
       return candidate
-    }
-  },
-  mkdirp: (dir) => { mkdirSync(dir, { recursive: true }) },
-  readSymlink: (path) => {
-    try {
-      return readlinkSync(path)
-    } catch {
-      return null // ENOENT（不存在）或 EINVAL（存在但非软链）均归 null,由 pathExists 二次判别
     }
   },
   pathExists: (path) => {
@@ -105,6 +93,14 @@ export const REAL_SETUP_ENV: SetupEnv = {
       return false
     }
   },
+  readText: (path) => {
+    try {
+      return readFileSync(path, 'utf8')
+    } catch {
+      return undefined
+    }
+  },
+  mkdirp: (dir) => { mkdirSync(dir, { recursive: true }) },
   commandExists: (name) => {
     for (const dir of (process.env.PATH ?? '').split(':')) {
       if (dir === '') continue
@@ -126,9 +122,6 @@ export const REAL_SETUP_ENV: SetupEnv = {
       return [] // 缺目录/无权限 → 空（fail-safe，与 main.ts safeReaddirDirs 同口径）
     }
   },
-  makeSymlink: (target, linkPath) => { symlinkSync(target, linkPath) },
-  removePath: (path) => { unlinkSync(path) },
-  chmodExec: (path) => { chmodSync(path, 0o755) },
   writeText: (path, text) => { writeFileSync(path, text, 'utf8') },
   runCommand: (cmd, args) => {
     try {
@@ -159,66 +152,15 @@ export const REAL_SETUP_ENV: SetupEnv = {
   },
 }
 
-// ── 软链源解析 + 上 PATH ────────────────────────────────────────────────────────────
-
 /**
  * 插件根优先取宿主注入；终端直接执行 bundle 时，从 dist/pipeline.mjs 反推仓根。
- * 这样 `pipeline update` 在宿主重新安装后可用刚解析出的安装根刷新 launcher，而不依赖旧 hook env。
+ * 这样 `pipeline update` 在宿主重新安装后可用刚解析出的候选根发布 managed runtime，
+ * 而不依赖旧 hook env 或可变 marketplace checkout。
  */
 export function resolvePipelineRoot(env: SetupEnv): string {
   const root = env.pluginRoot()
   if (root !== null) return root
   return resolve(dirname(env.selfPath()), '..', '..', '..')
-}
-
-/** 软链源:插件根/packages/cli/dist/pipeline.mjs；显式根仅供升级后切换 launcher。 */
-export function resolvePipelineSource(env: SetupEnv, rootOverride?: string): string {
-  const root = rootOverride ?? env.pluginRoot()
-  if (root !== null) return join(root, 'packages', 'cli', 'dist', 'pipeline.mjs')
-  return env.selfPath()
-}
-
-/**
- * 把 CLI bundle 软链到 ~/.local/bin/pipeline（让用户终端能敲 pipeline）。
- * 幂等:已存在且指向同源 → 跳过;指向异源(或存在但非软链)→ 告警覆盖（自定:新装覆盖旧指向）。
- * best-effort:任何失败只 WARN 不让 setup 崩。软链本身不改 $PATH——若 ~/.local/bin 不在 PATH,附一行提示。
- */
-export function ensurePipelineOnPath(deps: CliDeps, env: SetupEnv = REAL_SETUP_ENV, rootOverride?: string): void {
-  try {
-    const source = resolvePipelineSource(env, rootOverride)
-    const binDir = join(env.homeDir(), '.local', 'bin')
-    const link = join(binDir, 'pipeline')
-    env.mkdirp(binDir) // 缺 ~/.local/bin 时建目录
-
-    const existing = env.readSymlink(link)
-    if (existing === source) {
-      chmodExecBestEffort(env, source) // 幂等确保源可执行,失败不阻断
-      deps.io.out(`[setup] pipeline 已在 PATH:${link} → ${source}（同源,跳过）`)
-      return
-    }
-    if (existing !== null) {
-      deps.io.err(`WARN: ${link} 原指向 ${existing},本次覆盖为 ${source}（本次安装的 bundle）。`)
-      env.removePath(link)
-    } else if (env.pathExists(link)) {
-      deps.io.err(`WARN: ${link} 已存在且非软链,本次覆盖为指向 ${source} 的软链。`)
-      env.removePath(link)
-    }
-    env.makeSymlink(source, link)
-    chmodExecBestEffort(env, source)
-    deps.io.out(`[setup] 已把 pipeline 软链到 PATH:${link} → ${source}`)
-    deps.io.out('  若终端仍找不到 pipeline,请确认 ~/.local/bin 在 $PATH（如 export PATH="$HOME/.local/bin:$PATH"）。')
-  } catch (e) {
-    deps.io.err(`WARN: 软链 pipeline 到 PATH 失败（不影响其余安装步骤,可手动软链）:${errMsg(e)}`)
-  }
-}
-
-/** chmod +x 补位:bundle 构建时已 `chmod +x`,此处仅幂等补位——失败不阻断（不掩盖已成功的软链）。 */
-function chmodExecBestEffort(env: SetupEnv, source: string): void {
-  try {
-    env.chmodExec(source)
-  } catch {
-    // 源可执行位无法设置（如只读挂载）也不阻断:bundle 打包时已置 +x
-  }
 }
 
 // ── 全流程开场白（四段预告,纯呈现）─────────────────────────────────────────────────────
@@ -236,15 +178,15 @@ export interface SetupOpts extends PipelineHostFlags {
 function printPlanSkeleton(deps: CliDeps, opts: SetupOpts, host: PipelineHost): void {
   deps.io.out(`[setup] ${hostFlag(host)} 全功能就绪引导 —— 计划骨架`)
   deps.io.out('  1. 宿主安装:只验证/部署所选宿主，不会同时改动其他宿主。')
-  deps.io.out('  2. PATH 入口:把 pipeline 软链到 ~/.local/bin（升级后会切换到新插件 bundle）。')
+  deps.io.out('  2. 稳定入口:把已校验 release 原子发布到本机 runtime，再写 pipeline / pipeline-hook 启动器。')
   deps.io.out('  3. 内置技能:验证本插件随包的 default workflow skills；不拉第三方 marketplace。')
   deps.io.out('  4. 运行时检查:docker/镜像/两 runner 凭证就绪清单（本流程末尾直接跑;--dry-run 只提示见 pipeline setup runtime）。')
   deps.io.out('  5. 全功能红黄绿汇总:安装后运行 pipeline doctor --json 获取全机汇总。')
-  if (opts.dryRun) deps.io.out('  （--dry-run:仅打印计划,未软链、未写任何文件）')
+  if (opts.dryRun) deps.io.out('  （--dry-run:仅打印计划,不发布 runtime、不写任何文件）')
 }
 
 function autoUpdateConfigPath(env: SetupEnv): string {
-  return join(env.homeDir(), '.config', 'pipeline-lite', 'auto-update.conf')
+  return join(resolveRuntimePaths({ homeDir: env.homeDir() }).configRoot, 'auto-update.conf')
 }
 
 /** Native host only: write a tiny explicit preference consumed by hooks/auto-update.sh. */
@@ -272,20 +214,135 @@ function printCodexHookTrust(deps: CliDeps): void {
   deps.io.out('        这是 Codex 的一次性本机安全确认；未信任时 skills 仍可用，但 SessionStart/UserPromptSubmit hooks 不会执行。')
 }
 
-/** Verify a resolved plugin root before mutating PATH or an adapter target. */
-export function verifyPackagedAssets(deps: CliDeps, env: SetupEnv, root: string, dryRun: boolean): number {
+type JsonRecord = Record<string, unknown>
+
+function isJsonRecord(value: unknown): value is JsonRecord {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+/**
+ * Version 0.1 installed Codex hooks directly into ~/.codex/hooks.json and pointed them at the
+ * mutable source checkout. Version 0.2 ships those hooks inside the native plugin and dispatches
+ * through the immutable managed runtime. Keeping both registrations causes every event to fire
+ * twice and lets a stale adapter participate in a new session.
+ *
+ * Match only the four exact legacy adapter scripts. A user command merely mentioning "pipeline"
+ * or a different hook under adapters/ is never touched.
+ */
+const LEGACY_CODEX_ADAPTER_COMMAND = /(?:^|[\s"'])(?:[^\s"']*\/)?adapters\/codex\/hooks\/(?:inject|prompt|veto|track)\.sh(?=$|[\s"'])/
+
+function isLegacyCodexAdapterHook(value: unknown): boolean {
+  if (!isJsonRecord(value) || typeof value.command !== 'string') return false
+  return LEGACY_CODEX_ADAPTER_COMMAND.test(value.command)
+}
+
+export interface LegacyCodexHookCleanup {
+  readonly content: string
+  readonly removed: number
+}
+
+/**
+ * Pure, conservative migration for the old global Codex registration. It understands Codex's
+ * nested hook groups, removes only our obsolete commands, and leaves malformed/unknown shapes
+ * byte-for-byte untouched. The caller writes only when at least one owned command was removed.
+ */
+export function scrubLegacyCodexAdapterHooks(content: string): LegacyCodexHookCleanup {
+  let root: unknown
+  try {
+    root = JSON.parse(content)
+  } catch {
+    return { content, removed: 0 }
+  }
+  if (!isJsonRecord(root) || !isJsonRecord(root.hooks)) return { content, removed: 0 }
+
+  let removed = 0
+  const hooks = root.hooks
+  for (const eventName of Object.keys(hooks)) {
+    const groups = hooks[eventName]
+    if (!Array.isArray(groups)) continue
+
+    const retainedGroups: unknown[] = []
+    for (const group of groups) {
+      if (isLegacyCodexAdapterHook(group)) {
+        removed += 1
+        continue
+      }
+      if (!isJsonRecord(group) || !Array.isArray(group.hooks)) {
+        retainedGroups.push(group)
+        continue
+      }
+
+      const retainedHooks = group.hooks.filter((hook) => {
+        if (!isLegacyCodexAdapterHook(hook)) return true
+        removed += 1
+        return false
+      })
+      if (retainedHooks.length === 0) continue
+      retainedGroups.push(retainedHooks.length === group.hooks.length ? group : { ...group, hooks: retainedHooks })
+    }
+
+    if (retainedGroups.length === 0) delete hooks[eventName]
+    else hooks[eventName] = retainedGroups
+  }
+  if (removed === 0) return { content, removed: 0 }
+  if (Object.keys(hooks).length === 0) delete root.hooks
+  return { content: `${JSON.stringify(root, null, 2)}\n`, removed }
+}
+
+/**
+ * Native Codex owns plugin hook lifecycle. Before publishing a runtime, migrate only obsolete
+ * version-0.1 global registrations so a newly installed plugin never runs a duplicate adapter.
+ */
+function migrateLegacyCodexHooks(deps: CliDeps, env: SetupEnv): number {
+  const configPath = join(env.homeDir(), '.codex', 'hooks.json')
+  if (!env.pathExists(configPath)) return 0
+
+  const current = env.readText(configPath)
+  if (current === undefined) {
+    deps.io.err(`[setup] WARN: 无法读取 ${configPath}；未能确认旧版 pipeline Codex hooks 是否已迁移。`)
+    return 1
+  }
+  const migration = scrubLegacyCodexAdapterHooks(current)
+  if (migration.removed === 0) return 0
+
+  try {
+    env.writeText(configPath, migration.content)
+  } catch (error) {
+    deps.io.err(`ERROR: 无法迁移旧版 Codex hooks；为避免新旧 hooks 重复执行，未发布 runtime：${errMsg(error)}`)
+    return 1
+  }
+  deps.io.out(`[setup] 已迁移 ${migration.removed} 个旧版 Codex hook；保留其余用户 hooks，由 pipeline-lite 插件统一接管。`)
+  return 0
+}
+
+/** Verify a resolved plugin root before publishing it as a managed runtime or mutating an adapter target. */
+export function verifyPackagedAssets(
+  deps: CliDeps,
+  env: SetupEnv,
+  root: string,
+  dryRun: boolean,
+  silent = false,
+): number {
   // The launcher is deliberately usable from any project directory.  Resolve the verifier from
   // the host-owned plugin root, rather than from process.cwd(), or a perfectly valid installed
   // plugin would fail verification whenever the caller was not sitting in this repository.
   const command = [join(root, 'tools', 'verify-skills.sh'), '--quiet', '--root', root]
-  deps.io.out(`[setup] 插件资产校验: bash ${command.join(' ')}`)
+  if (!silent) deps.io.out(`[setup] 插件资产校验: bash ${command.join(' ')}`)
   if (dryRun) return 0
+  // The managed runtime cannot recover from a marketplace checkout which only
+  // contains skills/hooks.  Detect the release bootstrap before publishing so
+  // setup never reports an installed plugin and then fails after mutating user
+  // state with a partial runtime.
+  if (!env.pathExists(join(root, 'runtime', 'pipeline-bootstrap.mjs'))) {
+    if (!silent) deps.io.err('ERROR: 插件资产校验失败：缺少 runtime/pipeline-bootstrap.mjs（该 marketplace release 不是完整可安装包）')
+    return 1
+  }
   const result = env.runCommand('bash', command)
   if (result.code === 0) {
-    deps.io.out('[setup] 插件资产完整：hooks、manifests 与内置 skills 已通过校验。')
+    if (!silent) deps.io.out('[setup] 插件资产完整：hooks、manifests、runtime 与内置 skills 已通过校验。')
     return 0
   }
-  deps.io.err(`ERROR: 插件资产校验失败：${result.stderr.trim() || result.stdout.trim() || `退出码 ${result.code}`}`)
+  if (!silent) deps.io.err(`ERROR: 插件资产校验失败：${result.stderr.trim() || result.stdout.trim() || `退出码 ${result.code}`}`)
   return 1
 }
 
@@ -302,11 +359,45 @@ function isDuplicateMarketplaceResult(result: { stdout: string; stderr: string }
  * Install the single release plugin into the selected native host and resolve the root from the
  * host's own inventory.  Do not infer a cache path: both hosts may change their cache layout.
  */
+interface NativePluginCandidate {
+  readonly root: string
+  /** Existing host inventory was fully verified before reuse. */
+  readonly verified: boolean
+}
+
+/**
+ * `setup` is idempotent: if the host already owns a complete, verified package,
+ * reuse that exact host-resolved root.  `pipeline update --<host>` remains the
+ * explicit release-refresh operation.  An incomplete/corrupt existing package
+ * is never trusted; setup falls through to the release marketplace plan.
+ */
+function verifiedInstalledNativePlugin(
+  deps: CliDeps,
+  env: SetupEnv,
+  host: NativePipelineHost,
+): NativePluginCandidate | null {
+  const inventoryCommand = nativeInstallPlan(host).at(-1)
+  if (inventoryCommand === undefined) return null
+  deps.io.out(`[setup] $ ${commandText(inventoryCommand.cmd, inventoryCommand.args)}`)
+  const inventory = env.runCommand(inventoryCommand.cmd, [...inventoryCommand.args])
+  if (inventory.code !== 0) return null
+  const root = installedPipelineRoot(host, inventory.stdout)
+  if (root === null) return null
+  if (verifyPackagedAssets(deps, env, root, false, true) !== 0) {
+    deps.io.out(`[setup] ${hostFlag(host)} 已登记的 pipeline-lite 不完整或未通过校验；将重新安装正式 release。`)
+    return null
+  }
+  deps.io.out(`[setup] ${hostFlag(host)} 已有完整且已验证的 pipeline-lite；复用宿主登记的安装。`)
+  return { root, verified: true }
+}
+
 function installNativePlugin(
   deps: CliDeps,
   env: SetupEnv,
   host: NativePipelineHost,
-): string | null {
+): NativePluginCandidate | null {
+  const existing = verifiedInstalledNativePlugin(deps, env, host)
+  if (existing !== null) return existing
   const plan = nativeInstallPlan(host)
   let inventory = ''
   for (let index = 0; index < plan.length; index += 1) {
@@ -336,7 +427,7 @@ function installNativePlugin(
         : null
       if (existingRoot !== null) {
         deps.io.out(`[setup] ${hostFlag(host)} 已有 pipeline-lite，复用宿主登记的安装。`)
-        return existingRoot
+        return { root: existingRoot, verified: false }
       }
     }
 
@@ -348,8 +439,38 @@ function installNativePlugin(
   const root = installedPipelineRoot(host, inventory)
   if (root === null) {
     deps.io.err(`ERROR: ${hostFlag(host)} 插件清单中没有 pipeline-lite；未切换 launcher。`)
+    return null
   }
-  return root
+  return { root, verified: false }
+}
+
+function publishManagedRuntime(
+  deps: CliDeps,
+  env: SetupEnv,
+  installer: RuntimeInstaller,
+  candidateRoot: string,
+  host: PipelineHost,
+  dashboardStarter: ReleasedDashboardStarter | undefined,
+  openDashboard: boolean,
+): Promise<number> {
+  const source = isNativePipelineHost(host) ? host : 'adapter'
+  return installer.activate(candidateRoot, source, env.homeDir())
+    .then(async (activation) => {
+      deps.io.out(`[setup] 已发布已验证 runtime: ${activation.release.releaseId}（revision ${activation.selection.revision}）。`)
+      deps.io.out('[setup] 稳定入口已就绪：~/.local/bin/pipeline 与 ~/.local/bin/pipeline-hook 不再直连 marketplace checkout。')
+      if (dashboardStarter !== undefined) {
+        const dashboardCode = await dashboardStarter.start(deps, join(activation.releaseRoot, 'payload'), { openBrowser: openDashboard })
+        if (dashboardCode !== 0) {
+          deps.io.err('ERROR: runtime 已发布，但 dashboard 未能完成受管启动；请运行 pipeline dashboard --background 诊断。')
+          return 1
+        }
+      }
+      return 0
+    })
+    .catch((error: unknown) => {
+      deps.io.err(`ERROR: managed runtime 发布失败；保留当前已验证 release，未切换入口：${errMsg(error)}`)
+      return 1
+    })
 }
 
 /** Host-specific installation that keeps native marketplaces and non-native adapters separate. */
@@ -358,7 +479,10 @@ export function cmdSetupHost(
   host: PipelineHost,
   opts: SetupOpts,
   env: SetupEnv = REAL_SETUP_ENV,
-): number {
+  installer: RuntimeInstaller = REAL_RUNTIME_INSTALLER,
+  dashboardStarter?: ReleasedDashboardStarter,
+  openDashboard = true,
+): number | Promise<number> {
   if (opts.autoUpdate && !isNativePipelineHost(host)) {
     deps.io.err(`ERROR: ${hostFlag(host)} 是 adapter，自动更新由承载它的 Codex 或 Claude 插件负责；请改用 pipeline setup --codex --auto-update 或 --claude --auto-update。`)
     return 1
@@ -368,7 +492,7 @@ export function cmdSetupHost(
     if (isNativePipelineHost(host)) {
       deps.io.out(`[setup] ${hostFlag(host)}:将安装本仓 marketplace 中的唯一 pipeline-lite 插件。`)
       for (const item of nativeInstallPlan(host)) deps.io.out(`[setup] $ ${commandText(item.cmd, item.args)}`)
-      deps.io.out('[setup] 将用宿主插件清单解析安装根，再刷新 ~/.local/bin/pipeline。')
+      deps.io.out('[setup] 将用宿主插件清单解析候选根，校验并原子发布 managed runtime；不会直连可变 checkout。')
       if (host === 'codex') deps.io.out('[setup] 安装后需在 Codex 输入 /hooks 并信任 pipeline-lite，正常对话路由才会启用。')
     } else {
       const root = resolvePipelineRoot(env)
@@ -381,27 +505,37 @@ export function cmdSetupHost(
   }
 
   if (isNativePipelineHost(host)) {
-    const root = installNativePlugin(deps, env, host)
-    if (root === null) return 1
-    const assetCode = verifyPackagedAssets(deps, env, root, false)
+    const candidate = installNativePlugin(deps, env, host)
+    if (candidate === null) return 1
+    const assetCode = candidate.verified ? 0 : verifyPackagedAssets(deps, env, candidate.root, false)
     if (assetCode !== 0) return assetCode
-    ensurePipelineOnPath(deps, env, root)
-    if (host === 'codex') printCodexHookTrust(deps)
+    if (host === 'codex') {
+      const migrationCode = migrateLegacyCodexHooks(deps, env)
+      if (migrationCode !== 0) return migrationCode
+    }
+    return publishManagedRuntime(deps, env, installer, candidate.root, host, dashboardStarter, openDashboard).then((runtimeCode) => {
+      if (runtimeCode !== 0) return runtimeCode
+      if (host === 'codex') printCodexHookTrust(deps)
+      return configureAutoUpdate(deps, env, host, opts.autoUpdate === true)
+    })
   } else {
     const root = resolvePipelineRoot(env)
     const assetCode = verifyPackagedAssets(deps, env, root, false)
     if (assetCode !== 0) return assetCode
-    const adapter = join(root, 'adapters', 'install.sh')
-    const args = [adapter, hostFlag(host), '--target', opts.target ?? deps.cwd, '--yes']
-    deps.io.out(`[setup] $ bash ${args.join(' ')}`)
-    const result = env.runCommand('bash', args)
-    if (result.stdout.trim() !== '') deps.io.out(result.stdout.trimEnd())
-    if (result.code !== 0) {
-      deps.io.err(`ERROR: ${hostFlag(host)} adapter 安装失败：${result.stderr.trim() || `退出码 ${result.code}`}`)
-      return 1
-    }
+    return publishManagedRuntime(deps, env, installer, root, host, dashboardStarter, openDashboard).then((runtimeCode) => {
+      if (runtimeCode !== 0) return runtimeCode
+      const adapter = join(root, 'adapters', 'install.sh')
+      const args = [adapter, hostFlag(host), '--target', opts.target ?? deps.cwd, '--yes']
+      deps.io.out(`[setup] $ bash ${args.join(' ')}`)
+      const result = env.runCommand('bash', args)
+      if (result.stdout.trim() !== '') deps.io.out(result.stdout.trimEnd())
+      if (result.code !== 0) {
+        deps.io.err(`ERROR: ${hostFlag(host)} adapter 安装失败：${result.stderr.trim() || `退出码 ${result.code}`}`)
+        return 1
+      }
+      return configureAutoUpdate(deps, env, host, opts.autoUpdate === true)
+    })
   }
-  return configureAutoUpdate(deps, env, host, opts.autoUpdate === true)
 }
 
 // ── 技能安装段（Phase 2 · S2）:读 registry → 分组命令 → 幂等差集 → 计划 → 逐条容错 → 汇总 ──────
@@ -945,6 +1079,8 @@ export function cmdSetup(
   opts: SetupOpts,
   env: SetupEnv = REAL_SETUP_ENV,
   rt: RuntimeEnv = REAL_RUNTIME_ENV,
+  installer: RuntimeInstaller = REAL_RUNTIME_INSTALLER,
+  dashboardStarter: ReleasedDashboardStarter = REAL_RELEASED_DASHBOARD_STARTER,
 ): number | Promise<number> {
   const o: SetupOpts = { ...opts, dryRun: opts.dryRun ?? false, yes: opts.yes ?? false, autoUpdate: opts.autoUpdate ?? false }
   switch (sub) {
@@ -955,22 +1091,26 @@ export function cmdSetup(
         deps.io.err(`ERROR: ${selection.error}。示例：pipeline setup --codex`)
         return 1
       }
-      const hostCode = cmdSetupHost(deps, selection.host, o, env)
-      if (hostCode !== 0) return hostCode
-      // 全流程一条命令:所选 host → 内置技能验证 → 运行时就绪清单。
-      // 运行时段 dry-run **只提示不真探测**（避免 buildProgram 单测经空 sub 起真 docker 子进程）;
-      // 非 dry-run 才经注入 rt 真探测。技能段先同步跑完再接运行时异步段,故非 dry-run 返 Promise。
-      printPlanSkeleton(deps, o, selection.host)
-      const skillsCode = cmdSetupSkills(deps, o, env)
-      if (o.dryRun) {
-        deps.io.out(
-          '[setup] 运行时就绪检查:--dry-run 跳过真探测（不起 docker）——跑 pipeline setup runtime ' +
-            '看真实 docker/镜像/两 runner 凭证就绪清单',
-        )
-        return skillsCode
+      const host = selection.host
+      const finish = (hostCode: number): number | Promise<number> => {
+        if (hostCode !== 0) return hostCode
+        // 全流程一条命令:所选 host → 内置技能验证 → 运行时就绪清单。
+        // 运行时段 dry-run **只提示不真探测**（避免 buildProgram 单测经空 sub 起真 docker 子进程）;
+        // 非 dry-run 才经注入 rt 真探测。技能段先同步跑完再接运行时异步段,故非 dry-run 返 Promise。
+        printPlanSkeleton(deps, o, host)
+        const skillsCode = cmdSetupSkills(deps, o, env)
+        if (o.dryRun) {
+          deps.io.out(
+            '[setup] 运行时就绪检查:--dry-run 跳过真探测（不起 docker）——跑 pipeline setup runtime ' +
+              '看真实 docker/镜像/两 runner 凭证就绪清单',
+          )
+          return skillsCode
+        }
+        // 非 dry-run:技能段之后真跑运行时就绪清单;退出码取技能段(强制失败)优先,运行时恒 0 不改判。
+        return cmdSetupRuntime(deps, o, rt).then((rtCode) => (skillsCode !== 0 ? skillsCode : rtCode))
       }
-      // 非 dry-run:技能段之后真跑运行时就绪清单;退出码取技能段(强制失败)优先,运行时恒 0 不改判。
-      return cmdSetupRuntime(deps, o, rt).then((rtCode) => (skillsCode !== 0 ? skillsCode : rtCode))
+      const hostCode = cmdSetupHost(deps, host, o, env, installer, dashboardStarter)
+      return typeof hostCode === 'number' ? finish(hostCode) : hostCode.then(finish)
     }
     case 'skills':
       return cmdSetupSkills(deps, o, env)

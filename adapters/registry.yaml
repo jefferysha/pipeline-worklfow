@@ -13,7 +13,7 @@
 # 分档（tier，contract.md §1）：
 #   A 全保真  三能力全 native 等价（codex：与 CC 同构 hook 协议）
 #   B 部分降级 部分 native、部分如实降级（cursor：veto/track native、inject 降 .cursor/rules）
-#   C 静态降级 无 enforcement hook，三能力靠静态注入 + 手动 Unlock sentinel（codex --static / workflow-only 平台）
+#   C 静态降级 无 enforcement hook，三能力靠静态注入 + 保留人工确认事实的 CLI receipt（codex --static / workflow-only 平台）
 #
 # 每平台扁平字段（缺任一 lint-adapter.sh 报错）：
 #   tier            A|B|C
@@ -144,7 +144,7 @@ platforms:
   # pi：Pi Agent（settings.json#hooks 内嵌 + 私有 .pi/skills 根 + .pi/extensions TS 运行时）。
   #   inject/track native（SessionStart 注入 + PostToolUse 留痕，wrapper 薄包 baseline）；
   #   veto **降级**：pi 无原生 pre-tool 硬拦 hook——enforcement 走 .pi/extensions 运行时 advisory
-  #   + 手动 Unlock sentinel（不伪装原生硬拦）。档 B。
+  #   + CLI review receipt（不伪装原生硬拦）。档 B。
   - id: pi
     tier: B
     configDir: .pi
@@ -166,7 +166,7 @@ platforms:
     track_format: history-append
 
   # devin（前 Windsurf）：workflow-only 平台（hasHooks=false，无任何 enforcement hook）。
-  #   三能力**全静态降级**：inject 落 .devin/workflows 静态层、veto 靠手动 Unlock sentinel、
+  #   三能力**全静态降级**：inject 落 .devin/workflows 静态层、veto 靠 CLI review receipt、
   #   track 无自动留痕（如实标注不伪装）。档 C——诚实：devin 确实只能到 C 档。
   #   windsurf 用户经 --devin 派发（Cognition 2026-06 改名，见 adapters/devin/README.md）。
   - id: devin
@@ -183,9 +183,9 @@ platforms:
     inject_event: none
     inject_format: static-workflow-md
     veto_status: degraded
-    veto_fallback: unlock-sentinel
+    veto_fallback: cli-review-receipt
     veto_event: none
-    veto_format: manual-rm-marker
+    veto_format: manual-cli-review-receipt
     track_status: degraded
     track_fallback: manual-note
     track_event: none
@@ -209,9 +209,9 @@ platforms:
     inject_event: none
     inject_format: static-rules-md
     veto_status: degraded
-    veto_fallback: unlock-sentinel
+    veto_fallback: cli-review-receipt
     veto_event: none
-    veto_format: manual-rm-marker
+    veto_format: manual-cli-review-receipt
     track_status: degraded
     track_fallback: manual-note
     track_event: none

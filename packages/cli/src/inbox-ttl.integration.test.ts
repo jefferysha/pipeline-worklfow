@@ -11,6 +11,7 @@
 import { rm, utimes, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
+import { REVIEW_MARKER_PROTOCOL } from '@pipeline-lite/kernel'
 import { freshHarness, type Harness } from './integration-harness.js'
 
 type Kind = 'confirm' | 'review' | 'interaction'
@@ -24,10 +25,13 @@ describe('真实 e2e —— 门 marker TTL 分级（confirm 300s / review·inter
     await rm(h.cwd, { recursive: true, force: true })
   })
 
-  /** 真建 marker（三行格式：相位\n指引\nchange 名）并把 mtime 真设为 now - ageS 秒 */
+  /** 真建 marker；review 使用与 hook 相同的 v2 Change-identity 协议，并把 mtime 真设为 now - ageS 秒。 */
   async function plantMarker(kind: Kind, ageS: number, name = `chg-${kind}`): Promise<void> {
     const p = join(h.cwd, `.pipeline-pending-${kind}`)
-    await writeFile(p, `build\n请处理 ${kind}\n${name}\n`, 'utf8')
+    const raw = kind === 'review'
+      ? `${REVIEW_MARKER_PROTOCOL}\nphase=build\nchange=${name}\nrequested_at=2026-07-07T00:00:00Z\n请处理 review\n`
+      : `build\n请处理 ${kind}\n${name}\n`
+    await writeFile(p, raw, 'utf8')
     const t = new Date(Date.now() - ageS * 1000)
     await utimes(p, t, t)
   }

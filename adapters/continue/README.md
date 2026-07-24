@@ -57,20 +57,24 @@ track:
 ```bash
 adapters/continue/install.sh --target <项目目录>            # 档 A 全保真（默认）
 adapters/continue/install.sh --continue-home <dir>          # 自定义 CONTINUE_GLOBAL_DIR
-adapters/continue/install.sh --no-hooks                     # 只提示（无 hook；靠 Unlock sentinel）
+adapters/continue/install.sh --no-hooks                     # 只提示（无 hook；仍须走 CLI review receipt）
 ```
 
 或经顶层派发器：`adapters/install.sh --continue --target <dir>`。
 
 投影产物：`.continue/settings.json#hooks`（三能力 hook，`__ADAPTER_DIR__` 定死绝对路径）。
 
-## Unlock sentinel（HITL 解封）
+## 人工确认（HITL）
 
-review 门放行 = 删项目根 marker（与 CC `AskUserQuestion` 语义等价，contract §2）：
+review marker 只是 hook 投影，绝不是授权来源。完成本相位产物并选择 event 后，必须运行：
 
 ```bash
-rm .pipeline-pending-review     # 或 .pipeline-pending-confirm / .pipeline-pending-interaction
+pipeline review request <change> --event <event>
+# 人类明确确认后：
+pipeline review acknowledge <change>
 ```
+
+不得手动删除 `.pipeline-pending-review`；删除不会记录确认事实，也不能授权 transition。
 
 ## stdout 格式（不串格式）
 

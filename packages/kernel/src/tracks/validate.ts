@@ -251,6 +251,10 @@ function checkPolicy(p: ProjectPolicyProfileConfig, at: string, profileOk: Profi
     errors.push(`${at}.review_seed: 须为 pending|skipped，得到 '${String(p.reviewSeed)}'`)
   }
 
+  if (p.autoEnqueueOnSpecComplete !== undefined && typeof p.autoEnqueueOnSpecComplete !== 'boolean') {
+    errors.push(`${at}.auto_enqueue_on_spec_complete: 须为布尔`)
+  }
+
   if (typeof p.automationEligible !== 'boolean') errors.push(`${at}.automation_eligible: 缺失或非布尔`)
 
   if (p.coverageProfile === undefined) errors.push(`${at}.coverage_profile: 缺失（须为 none|pm|frontend|backend）`)
@@ -262,8 +266,8 @@ function checkPolicy(p: ProjectPolicyProfileConfig, at: string, profileOk: Profi
   if (r === undefined || r === null || typeof r !== 'object' || typeof r.enabled !== 'boolean') {
     errors.push(`${at}.routing.enabled: 缺失或非布尔`)
   } else if (!r.enabled) {
-    if (r.pattern !== undefined || r.priority !== undefined) {
-      errors.push(`${at}.routing: enabled=false 时不接受 pattern/priority`)
+    if (r.pattern !== undefined || r.excludePattern !== undefined || r.priority !== undefined) {
+      errors.push(`${at}.routing: enabled=false 时不接受 pattern/exclude_pattern/priority`)
     }
   } else {
     if (typeof r.pattern !== 'string' || r.pattern === '') {
@@ -279,6 +283,20 @@ function checkPolicy(p: ProjectPolicyProfileConfig, at: string, profileOk: Profi
         )
       }
       checkRepresentable(r.pattern, `${at}.routing.pattern`, errors)
+    }
+    if (r.excludePattern !== undefined) {
+      if (typeof r.excludePattern !== 'string' || r.excludePattern === '') {
+        errors.push(`${at}.routing.exclude_pattern: 提供时须为非空字符串`)
+      } else {
+        try {
+          void new RegExp(r.excludePattern)
+        } catch (e) {
+          errors.push(
+            `${at}.routing.exclude_pattern: 非法正则——JS RegExp 语法烟测未过（${e instanceof Error ? e.message : String(e)}）`,
+          )
+        }
+        checkRepresentable(r.excludePattern, `${at}.routing.exclude_pattern`, errors)
+      }
     }
     // writer 采用的安全保守子域 [0, MAX_SAFE_INTEGER]（不是 Number.isInteger 的全整数域，
     // 也不是 parse 的原始读取域——parse 能识别 2^53/负数/更大纯十进制数，之后由本校验拒绝）：

@@ -12,7 +12,7 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, test } from 'vitest'
 import {
-  createBreadcrumbWriter, createReviewMarkerWriter, createTransitionRecordStore, createWorkflowRunRepository,
+  createBreadcrumbWriter, createTransitionRecordStore, createWorkflowRunRepository,
 } from '@pipeline-lite/kernel'
 import type { BreadcrumbWriter } from '@pipeline-lite/kernel'
 import { performTransition, type TransitionDeps } from './transition.js'
@@ -59,7 +59,6 @@ describe('真实 e2e —— server 并发 transition 尾部写入严格串行（
       flow: testFlow(),
       clock: () => '2026-07-16T00:00:00Z',
       breadcrumb,
-      reviewMarker: createReviewMarkerWriter(),
     }
 
     const p1 = performTransition(deps, root, name, 'open-complete')

@@ -73,7 +73,7 @@ export interface AutomationDeps {
   readonly repoRoot: string
   readonly store: StateStore
   readonly clock: () => string
-  /** 部分配置覆盖；SDK 默认 enabled/defaultOptIn 为 true（显式构造 SDK + 调 enqueue = 已 opt-in）。 */
+  /** 部分配置覆盖；缺省保持 DEFAULT_CONFIG 的 fail-safe OFF。 */
   readonly config?: Partial<AutomationConfig>
   /** automation.json 读取的 fs 注入面（测试用）；缺省真 node fs。 */
   readonly configFs?: AutomationJsonFs
@@ -96,6 +96,18 @@ export interface AutomationDeps {
    * 在此注入替换；测试可注入 fake 断言编排（同 deps.admission 既有惯例）。
    */
   readonly preparation?: ExecutionPreparationPort
+}
+
+/**
+ * automation 的有效配置唯一装配点。手动 enqueue、spec-complete 自动入队与调度器必须看到
+ * 同一份优先级：调用方显式注入 > 项目 automation.json > SDK 的安全可用默认值。
+ */
+export function resolveAutomationConfig(
+  deps: Pick<AutomationDeps, 'repoRoot' | 'config' | 'configFs'>,
+  entrypointDefaults: Partial<AutomationConfig> = {},
+): AutomationConfig {
+  const { image: _image, ...fileCfg } = readAutomationJson(deps.repoRoot, deps.configFs)
+  return { ...DEFAULT_CONFIG, ...entrypointDefaults, ...fileCfg, ...deps.config }
 }
 
 /** H14 real-run 选择器落地后的单个目标；owner 是观察值，admission 会在锁内重新解析并复核。 */
@@ -143,12 +155,12 @@ export const storeWriter = (store: StateStore, changeDir: (name: string) => stri
 })
 
 export function createAutomation(deps: AutomationDeps): Automation {
-  // T21 装配优先级：显式 deps.config > <root>/.pipeline/automation.json > SDK 内置
-  // （enabled/defaultOptIn=true，显式构造即 opt-in）> DEFAULT_CONFIG。文件缺失/损坏 fail-open
-  // 不改变既有行为；文件里的 image 归 dockerRunChange 装配点消费（cli/commands/afk.ts），
-  // 不属于 AutomationConfig。enabled/level 不进文件（automationJson.ts 头【决策登记】）。
-  const { image: _image, ...fileCfg } = readAutomationJson(deps.repoRoot, deps.configFs)
-  const config: AutomationConfig = { ...DEFAULT_CONFIG, enabled: true, defaultOptIn: true, ...fileCfg, ...deps.config }
+  // T21 装配优先级：显式 deps.config > <root>/.pipeline/automation.json > DEFAULT_CONFIG。
+  // 文件里的 image 归 dockerRunChange 装配点消费（cli/commands/afk.ts）。
+  // Constructing the execution SDK is itself an explicit operator/runtime entrypoint. Preserve
+  // manual AFK behavior here; lifecycle callbacks call resolveAutomationConfig directly and
+  // therefore remain fail-safe unless the project-level enabled/default_opt_in switches are set.
+  const config = resolveAutomationConfig(deps, { enabled: true, defaultOptIn: true })
   const { store, clock } = deps
   const changesDir = join(deps.repoRoot, 'openspec', 'changes')
   const changeDir = (name: string): string => join(changesDir, name)

@@ -255,12 +255,7 @@ export function createCodexTriageProvider(
       const processController = new AbortController()
       const onHostAbort = (): void => processController.abort(abortReason(signal))
       signal.addEventListener('abort', onHostAbort, { once: true })
-      const timeoutError = new CodexTriageProviderError(
-        `Codex triage process timed out after ${timeoutMs}ms`,
-        'timeout',
-      )
-      const timeout = setTimeout(() => processController.abort(timeoutError), timeoutMs)
-      timeout.unref?.()
+      let timeout: ReturnType<typeof setTimeout> | undefined
       let tempDirectory: string | undefined
 
       try {
@@ -269,6 +264,15 @@ export function createCodexTriageProvider(
         const responsePath = join(tempDirectory, 'response.json')
         await writeFile(schemaPath, outputSchema, { encoding: 'utf8', mode: 0o600 })
         if (processController.signal.aborted) throw abortReason(processController.signal)
+        // This is deliberately a process timeout, not a timeout for private workspace setup.
+        // Starting it before the ExecFn boundary could cancel before a child exists and leave
+        // callers waiting forever for their own "process started" observation.
+        const timeoutError = new CodexTriageProviderError(
+          `Codex triage process timed out after ${timeoutMs}ms`,
+          'timeout',
+        )
+        timeout = setTimeout(() => processController.abort(timeoutError), timeoutMs)
+        timeout.unref?.()
         const execution = exec(
           'codex',
           [
@@ -357,7 +361,7 @@ export function createCodexTriageProvider(
           },
         }
       } finally {
-        clearTimeout(timeout)
+        if (timeout !== undefined) clearTimeout(timeout)
         signal.removeEventListener('abort', onHostAbort)
         if (tempDirectory !== undefined) {
           await rm(tempDirectory, { recursive: true, force: true })

@@ -1,0 +1,384 @@
+/**
+ * Codex transcript-backed skill evidence bridge.
+ *
+ * Some Codex App/CLI tool paths invoke PreToolUse but do not emit the paired PostToolUse callback.
+ * A PreToolUse receipt is therefore only a pending pointer to a host-owned transcript.  It never
+ * becomes workflow evidence by itself: document registration and custom-workflow DAG checks first
+ * locate the completed matching `custom_tool_call` plus successful output in that transcript, then
+ * append the normal `CodexSkillRead` history entry under the target change lock.
+ *
+ * This is intentionally CLI adapter infrastructure, not kernel domain logic.  The kernel continues
+ * to consume the same append-only history contract from every host.
+ */
+import { appendFile, lstat, mkdir, readdir, readFile } from 'node:fs/promises'
+import { homedir } from 'node:os'
+import { basename, isAbsolute, join, relative, resolve, sep } from 'node:path'
+import { HISTORY_FILE, TERMINAL_SESSION_BINDINGS_DIR, TERMINAL_SESSION_PROTOCOL, withLock } from '@pipeline-lite/kernel'
+import type { HistoryWriter } from '@pipeline-lite/kernel'
+import { errMsg, type CliDeps } from './deps.js'
+import { isValidChangeName } from './paths.js'
+import { discoverCompletedCodexSkillReads, transcriptConfirmsReceipt } from './codexTranscriptEvidence.js'
+
+export const CODEX_SKILL_RECEIPTS_FILE = join('.pipeline', 'codex-skill-receipts.jsonl')
+
+const RECEIPT_VERSION = 1
+export interface CodexSkillReceipt {
+  readonly version: 1
+  readonly receivedAt: string
+  /** Exact active Change selected for this host session; never infer from journal mtime. */
+  readonly changeName: string
+  readonly skillId: string
+  /** Exact host cache asset that PreToolUse structurally verified as a bundled SKILL.md read. */
+  readonly skillPath: string
+  /** Host-owned, never project-owned transcript pointer. */
+  readonly transcriptPath: string
+  readonly sessionId: string
+  readonly turnId: string
+  readonly toolUseId: string
+}
+
+export interface CodexSkillEvidenceResult {
+  readonly confirmedSkillIds: readonly string[]
+}
+
+export interface CodexSkillEvidenceInput {
+  readonly repoRoot: string
+  readonly changeDir: string
+  /** Exact document producer whose host call may be reconciled. */
+  readonly producer?: string
+  /** Current custom-workflow step's declared skill ids for a DAG reconciliation. */
+  readonly candidateSkillIds?: readonly string[]
+  readonly recordedAt: string
+  readonly history?: HistoryWriter
+  /**
+   * Current canonical phase/step. Evidence is deduplicated only since the latest transition into
+   * this node, so a lawful workflow loop (for example build → spec) must prove the skill again.
+   */
+  readonly evidenceScope?: string
+  /** Injectable for tests; production uses the current process user's Codex home. */
+  readonly homeDir?: string
+  /** Injectable Codex data root.  Production honours CODEX_HOME before falling back to ~/.codex. */
+  readonly codexHomeDir?: string
+}
+
+export interface CodexSkillReceiptCommandEnv {
+  homeDir(): string
+  codexHomeDir?(): string | undefined
+}
+
+export const REAL_CODEX_SKILL_RECEIPT_ENV: CodexSkillReceiptCommandEnv = {
+  homeDir: () => homedir(),
+  codexHomeDir: () => process.env.CODEX_HOME,
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function asString(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined
+}
+
+function isSafeSkillId(value: string): boolean {
+  return /^[A-Za-z0-9_-]{1,160}$/.test(value)
+}
+
+function isSafeOpaqueId(value: string): boolean {
+  return /^[A-Za-z0-9._:-]{1,256}$/.test(value)
+}
+
+function isInside(base: string, candidate: string): boolean {
+  const fromBase = relative(base, candidate)
+  return fromBase !== '' && fromBase !== '..' && !fromBase.startsWith(`..${sep}`) && !isAbsolute(fromBase)
+}
+
+function codexHomeRoot(homeDir: string, configured?: string): string {
+  const candidate = configured?.trim() || process.env.CODEX_HOME?.trim()
+  return candidate && isAbsolute(candidate) ? resolve(candidate) : resolve(homeDir, '.codex')
+}
+
+function codexPluginCacheRoot(homeDir: string, configured?: string): string {
+  return join(codexHomeRoot(homeDir, configured), 'plugins', 'cache', 'pipeline-lite', 'pipeline-lite')
+}
+
+function codexSessionsRoot(homeDir: string, configured?: string): string {
+  return join(codexHomeRoot(homeDir, configured), 'sessions')
+}
+
+/** Only accept the cache layout that the Codex host itself uses to load this plugin's skills. */
+function isTrustedCodexSkillPath(skillPath: string, skillId: string, homeDir: string, configured?: string): boolean {
+  if (!isAbsolute(skillPath)) return false
+  const candidate = resolve(skillPath)
+  const root = codexPluginCacheRoot(homeDir, configured)
+  if (!isInside(root, candidate)) return false
+  const parts = relative(root, candidate).split(sep)
+  return parts.length === 4
+    && parts[0] !== ''
+    && parts[1] === 'skills'
+    && parts[2] === skillId
+    && parts[3] === 'SKILL.md'
+}
+
+function isTrustedTranscriptPath(transcriptPath: string, homeDir: string, configured?: string): boolean {
+  if (!isAbsolute(transcriptPath) || !transcriptPath.endsWith('.jsonl')) return false
+  return isInside(codexSessionsRoot(homeDir, configured), resolve(transcriptPath))
+}
+
+function parseReceipt(value: unknown): CodexSkillReceipt | undefined {
+  if (!isRecord(value) || value.version !== RECEIPT_VERSION) return undefined
+  const receivedAt = asString(value.receivedAt)
+  const changeName = asString(value.changeName)
+  const skillId = asString(value.skillId)
+  const skillPath = asString(value.skillPath)
+  const transcriptPath = asString(value.transcriptPath)
+  const sessionId = asString(value.sessionId)
+  const turnId = asString(value.turnId)
+  const toolUseId = asString(value.toolUseId)
+  if (!receivedAt || !changeName || !skillId || !skillPath || !transcriptPath || !sessionId || !turnId || !toolUseId) return undefined
+  if (!isValidChangeName(changeName) || !isSafeSkillId(skillId) || !isSafeOpaqueId(sessionId) || !isSafeOpaqueId(turnId) || !isSafeOpaqueId(toolUseId)) {
+    return undefined
+  }
+  return {
+    version: RECEIPT_VERSION,
+    receivedAt,
+    changeName,
+    skillId,
+    skillPath,
+    transcriptPath,
+    sessionId,
+    turnId,
+    toolUseId,
+  }
+}
+
+async function regularFile(path: string): Promise<boolean> {
+  try {
+    const info = await lstat(path)
+    return info.isFile() && !info.isSymbolicLink()
+  } catch {
+    return false
+  }
+}
+
+async function validatedReceipt(
+  value: CodexSkillReceipt,
+  homeDir: string,
+  configured?: string,
+): Promise<CodexSkillReceipt | undefined> {
+  if (!isTrustedCodexSkillPath(value.skillPath, value.skillId, homeDir, configured)) return undefined
+  if (!isTrustedTranscriptPath(value.transcriptPath, homeDir, configured)) return undefined
+  if (!await regularFile(value.skillPath)) return undefined
+  return value
+}
+
+async function appendReceipt(repoRoot: string, receipt: CodexSkillReceipt): Promise<void> {
+  const journalDir = join(resolve(repoRoot), '.pipeline')
+  await mkdir(journalDir, { recursive: true })
+  const line = `${JSON.stringify(receipt)}\n`
+  // This receipt journal is append-only.  The existing cross-process mkdir lock serializes writers;
+  // appendFile then emits exactly one complete JSONL record while that lock is held.
+  await withLock(journalDir, async () => {
+    await appendFile(join(journalDir, 'codex-skill-receipts.jsonl'), line, 'utf8')
+  })
+}
+
+async function loadReceipts(repoRoot: string): Promise<readonly CodexSkillReceipt[]> {
+  const path = join(resolve(repoRoot), CODEX_SKILL_RECEIPTS_FILE)
+  if (!await regularFile(path)) return []
+  let text: string
+  try {
+    text = await readFile(path, 'utf8')
+  } catch {
+    return []
+  }
+  const receipts: CodexSkillReceipt[] = []
+  for (const line of text.split(/\r?\n/)) {
+    if (line.trim() === '') continue
+    try {
+      const receipt = parseReceipt(JSON.parse(line) as unknown)
+      if (receipt) receipts.push(receipt)
+    } catch {
+      // A malformed append-only record cannot prove anything.  Keep scanning later records.
+    }
+  }
+  return receipts
+}
+
+function skillAliases(id: string): readonly string[] {
+  const aliases = new Set<string>([id])
+  if (id.startsWith('pipeline-lite:')) aliases.add(id.slice('pipeline-lite:'.length))
+  if (id.startsWith('superpowers:')) aliases.add(id.slice('superpowers:'.length))
+  if (id === 'opsx:propose') aliases.add('openspec-propose')
+  if (id === 'openspec-propose') aliases.add('opsx:propose')
+  if (id === 'opsx:apply') aliases.add('openspec-apply-change')
+  if (id === 'openspec-apply-change') aliases.add('opsx:apply')
+  return [...aliases]
+}
+
+function skillsEquivalent(left: string, right: string): boolean {
+  const leftAliases = new Set(skillAliases(left))
+  return skillAliases(right).some((candidate) => leftAliases.has(candidate))
+}
+
+function completedSkillIds(history: string, evidenceScope?: string): ReadonlySet<string> {
+  const entries: unknown[] = []
+  for (const line of history.split(/\r?\n/)) {
+    if (line.trim() === '') continue
+    try {
+      entries.push(JSON.parse(line) as unknown)
+    } catch {
+      // A malformed old row cannot satisfy evidence or conceal later valid rows.
+    }
+  }
+  let start = 0
+  if (evidenceScope) {
+    for (let index = entries.length - 1; index >= 0; index -= 1) {
+      const entry = entries[index]
+      if (isRecord(entry) && entry.kind === 'transition' && entry.to === evidenceScope) {
+        start = index + 1
+        break
+      }
+    }
+  }
+  const ids = new Set<string>()
+  for (const entry of entries.slice(start)) {
+    if (!isRecord(entry) || entry.kind !== 'tool') continue
+    const raw = asString(entry.raw)
+    const match = raw ? /^(?:Skill|CodexSkillRead): (.+)$/.exec(raw) : null
+    if (match?.[1]) ids.add(match[1])
+  }
+  return ids
+}
+
+async function readHistory(changeDir: string): Promise<string> {
+  try {
+    return await readFile(join(changeDir, HISTORY_FILE), 'utf8')
+  } catch {
+    return ''
+  }
+}
+
+/**
+ * Prefer the exact host conversation bound by the normal-chat router when Codex omitted a
+ * PreToolUse receipt identity. The binding only narrows fallback transcript discovery; it can
+ * neither create evidence nor mutate workflow state.
+ */
+async function latestBoundHostSessionId(repoRoot: string, changeName: string): Promise<string | undefined> {
+  const bindingsDir = join(resolve(repoRoot), TERMINAL_SESSION_BINDINGS_DIR)
+  let entries: readonly string[]
+  try {
+    entries = await readdir(bindingsDir)
+  } catch {
+    return undefined
+  }
+
+  let latest: { readonly sessionId: string; readonly boundAt: string } | undefined
+  for (const entry of entries) {
+    if (!entry.endsWith('.json')) continue
+    const path = join(bindingsDir, entry)
+    if (!await regularFile(path)) continue
+    try {
+      const value = JSON.parse(await readFile(path, 'utf8')) as unknown
+      if (!isRecord(value) || value.protocol !== TERMINAL_SESSION_PROTOCOL || asString(value.change) !== changeName) continue
+      const sessionId = asString(value.session_id)
+      const boundAt = asString(value.bound_at)
+      if (!sessionId || !boundAt || !isSafeOpaqueId(sessionId) || Number.isNaN(Date.parse(boundAt))) continue
+      if (latest === undefined || boundAt > latest.boundAt) latest = { sessionId, boundAt }
+    } catch {
+      // A damaged dashboard projection cannot broaden evidence discovery.
+    }
+  }
+  return latest?.sessionId
+}
+
+/**
+ * Reconcile only host-completed reads into normal history entries.  Callers must already hold the
+ * target change lock, so ledger/DAG evaluation observes the appended proof in the same critical
+ * section rather than racing an asynchronous hook.
+ */
+export async function reconcileCodexSkillEvidence(input: CodexSkillEvidenceInput): Promise<CodexSkillEvidenceResult> {
+  if (!input.history) return { confirmedSkillIds: [] }
+  const homeDir = input.homeDir ?? homedir()
+  const codexHomeDir = input.codexHomeDir
+  const existing = completedSkillIds(await readHistory(input.changeDir), input.evidenceScope)
+  const changeName = basename(resolve(input.changeDir))
+  if (!isValidChangeName(changeName)) return { confirmedSkillIds: [] }
+  const boundHostSessionId = await latestBoundHostSessionId(input.repoRoot, changeName)
+  const receipts = await loadReceipts(input.repoRoot)
+  const confirmed = new Set<string>()
+
+  for (const rawReceipt of receipts) {
+    if (rawReceipt.changeName !== changeName) continue
+    if (input.producer && !skillsEquivalent(rawReceipt.skillId, input.producer)) continue
+    if ([...existing, ...confirmed].some((skill) => skillsEquivalent(skill, rawReceipt.skillId))) continue
+    const receipt = await validatedReceipt(rawReceipt, homeDir, codexHomeDir)
+    if (!receipt) continue
+    if (await transcriptConfirmsReceipt(receipt, homeDir, codexHomeDir)) confirmed.add(receipt.skillId)
+  }
+
+  // Current Codex hook ABI can omit receipt identity for one or more reads in a batched exec.
+  // Always discover the unresolved candidates, not only the all-or-nothing "no receipt" case:
+  // otherwise a strict receipt for the first SKILL.md suppresses transcript proof for later skills
+  // from the same completed host call. Discovery remains bound to this physical project root and
+  // the same trusted plugin cache that supplied the instructions.
+  const candidates = [...new Set([
+    ...(input.producer ? [input.producer] : []),
+    ...(input.candidateSkillIds ?? []),
+  ])]
+  const unresolvedCandidates = candidates.filter(
+    (candidate) => ![...existing, ...confirmed].some((skill) => skillsEquivalent(skill, candidate)),
+  )
+  if (unresolvedCandidates.length > 0) {
+    for (const skillId of await discoverCompletedCodexSkillReads(
+      input.repoRoot, unresolvedCandidates, homeDir, codexHomeDir, boundHostSessionId,
+    )) {
+      if (![...existing, ...confirmed].some((skill) => skillsEquivalent(skill, skillId))) confirmed.add(skillId)
+    }
+  }
+
+  for (const skillId of confirmed) {
+    await input.history.append(input.changeDir, {
+      ts: input.recordedAt,
+      kind: 'tool',
+      raw: `CodexSkillRead: ${skillId}`,
+    })
+  }
+  return { confirmedSkillIds: [...confirmed] }
+}
+
+/** Hidden hook target.  It records only a pending receipt; it never writes skill completion evidence. */
+export async function cmdInternalCodexSkillReceipt(
+  deps: CliDeps,
+  changeName: string,
+  skillId: string,
+  skillPath: string,
+  transcriptPath: string,
+  sessionId: string,
+  turnId: string,
+  toolUseId: string,
+  env: CodexSkillReceiptCommandEnv = REAL_CODEX_SKILL_RECEIPT_ENV,
+): Promise<number> {
+  try {
+    const parsed = parseReceipt({
+      version: RECEIPT_VERSION,
+      receivedAt: deps.clock(),
+      changeName,
+      skillId,
+      skillPath,
+      transcriptPath,
+      sessionId,
+      turnId,
+      toolUseId,
+    })
+    const receipt = parsed ? await validatedReceipt(parsed, env.homeDir(), env.codexHomeDir?.()) : undefined
+    if (!receipt) {
+      deps.io.err('internal-codex-skill-receipt: 收到不可信的 Codex skill receipt')
+      return 1
+    }
+    await appendReceipt(deps.cwd, receipt)
+    return 0
+  } catch (error) {
+    deps.io.err(`internal-codex-skill-receipt: ${errMsg(error)}`)
+    return 1
+  }
+}

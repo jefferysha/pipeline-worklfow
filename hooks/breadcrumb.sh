@@ -12,29 +12,13 @@ set -uo pipefail
 
 INPUT="$(cat 2>/dev/null || printf '{}')"
 
-# 从 $INPUT 提取顶层字符串键（同 gate.sh，保持各 shim 自包含、免 source）
-json_get() {
-  local key="$1" rest
-  case "$INPUT" in *"\"$key\""*) ;; *) return 1 ;; esac
-  rest="${INPUT#*\"$key\"}"
-  while true; do
-    case "$rest" in
-      [$' \t\r\n']*) rest="${rest#?}" ;;
-      ':'*) rest="${rest#:}"; break ;;
-      *) return 1 ;;
-    esac
-  done
-  while true; do
-    case "$rest" in
-      [$' \t\r\n']*) rest="${rest#?}" ;;
-      *) break ;;
-    esac
-  done
-  case "$rest" in
-    '"'*) rest="${rest#\"}"; printf '%s' "${rest%%\"*}"; return 0 ;;
-    *) return 1 ;;
-  esac
-}
+# Share the same decoder as router so quoted normal-dialogue prompts cannot cause breadcrumb and
+# route selection to disagree about the user's intent.
+JSON_INPUT_HELPER="$(dirname "${BASH_SOURCE[0]:-$0}")/json-input.sh"
+[ -r "$JSON_INPUT_HELPER" ] || exit 0
+# shellcheck source=json-input.sh
+. "$JSON_INPUT_HELPER"
+json_get() { pipeline_json_get_string "$INPUT" "$1"; }
 
 CWD="$(json_get cwd || true)"
 [ -z "$CWD" ] && CWD="$PWD"
@@ -97,10 +81,43 @@ INTENT_HELPER="$(dirname "${BASH_SOURCE[0]:-$0}")/prompt-intent.sh"
 # shellcheck source=prompt-intent.sh
 . "$INTENT_HELPER"
 
+# A response choosing the pair offered by router belongs to that pending conversation turn.  It
+# must never turn a generic “继续” in the reply into a repository-wide old-Change breadcrumb.
+pipeline_prompt_is_workflow_selection "$PROMPT" && exit 0
+
 RESUME_NAME=""
 RESUME_DIR=""
 RESUME_STATE=""
-if [ -n "$ACTIVE_NAME" ]; then
+
+# 与 router 共享“完整点名优先”的语义。`.pipeline-active` 只是一条跨会话恢复候选；
+# 用户在当前普通对话中指名另一个活跃 change 时，breadcrumb 也必须跟随该明确选择，
+# 否则两个 UserPromptSubmit hook 会向模型注入相互矛盾的任务上下文。
+EXPLICIT_COUNT=0
+EXPLICIT_NAME=""
+EXPLICIT_DIR=""
+EXPLICIT_STATE=""
+for change_dir in "$CHANGES"/*; do
+  [ -d "$change_dir" ] || continue
+  state="$(pipeline_state_source "$change_dir" || true)"
+  [ -n "$state" ] || continue
+  [ "$(yget "$state" archived)" = "true" ] && continue
+  change_name="${change_dir##*/}"
+  case "$change_name" in ''|*[!A-Za-z0-9_-]*) continue ;; esac
+  if pipeline_prompt_names_change "$PROMPT" "$change_name"; then
+    EXPLICIT_COUNT=$((EXPLICIT_COUNT + 1))
+    EXPLICIT_NAME="$change_name"
+    EXPLICIT_DIR="$change_dir"
+    EXPLICIT_STATE="$state"
+  fi
+done
+
+if [ "$EXPLICIT_COUNT" -eq 1 ]; then
+  RESUME_NAME="$EXPLICIT_NAME"
+  RESUME_DIR="$EXPLICIT_DIR"
+  RESUME_STATE="$EXPLICIT_STATE"
+elif [ "$EXPLICIT_COUNT" -gt 1 ]; then
+  exit 0
+elif [ -n "$ACTIVE_NAME" ]; then
   if pipeline_prompt_requests_resume "$PROMPT" "$ACTIVE_NAME"; then
     RESUME_NAME="$ACTIVE_NAME"
     RESUME_DIR="$ACTIVE_DIR"

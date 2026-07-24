@@ -52,7 +52,7 @@ const SESSION_START = `${PIPELINE_ROOT}/hooks/session-start.sh`;
 const SKILL_TRACKER = `${PIPELINE_ROOT}/hooks/skill-tracker.sh`;
 
 /** 跑 baseline bash 脚本，喂 JSON 到 stdin，取 {status,stdout,stderr}；脚本缺失时视作放行。 */
-function runBaseline(scriptPath, inputJson) {
+function runBaseline(scriptPath, inputJson, extraEnv = {}) {
   if (!existsSync(scriptPath)) {
     return { status: 0, stdout: "", stderr: "" };
   }
@@ -61,6 +61,7 @@ function runBaseline(scriptPath, inputJson) {
       input: inputJson,
       encoding: "utf8",
       timeout: 10_000,
+      env: { ...process.env, ...extraEnv },
     });
     return {
       status: res.status === null || res.status === undefined ? 0 : res.status,
@@ -101,7 +102,7 @@ export function decideToolCall(cwd, toolName) {
 export function buildInjectContext(cwd) {
   try {
     const input = JSON.stringify({ cwd });
-    const r = runBaseline(SESSION_START, input);
+    const r = runBaseline(SESSION_START, input, { PIPELINE_SESSION_START_FORMAT: "plain" });
     const text = (r.stdout || "").trim();
     return text.length > 0 ? r.stdout : null;
   } catch {

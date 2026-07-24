@@ -35,18 +35,25 @@ describe('真实 e2e —— advance auto-transition 中间档（HITL 红线：�
     return { code, out, err }
   }
 
-  /** 用裸 transition（只需事件前置，绕过 guard）把 change 真推到 build 相位 */
+  /** 完成 review 出口所需的真实 check → request → acknowledge，不使用测试侧 marker 删除旁路。 */
+  async function approveReviewExit(name: string, event: string): Promise<void> {
+    expect(await h.run(['review', 'request', name, '--event', event])).toBe(0)
+    expect(await h.run(['review', 'acknowledge', name])).toBe(0)
+  }
+
+  /** 用真实 review receipt + transition 把 change 推到 build 相位。 */
   async function seedToBuild(name: string): Promise<void> {
     await h.run(['init', name, '--track', 'backend', '--preset', 'full'])
     await h.seedGovernedDocumentEvidence(name)
-    await h.run(['transition', name, 'open-complete']) // → explore（复核相位，落 review marker）
+    expect(await h.run(['transition', name, 'open-complete'])).toBe(0) // → explore（可正常工作，不自锁）
     // The seeded OpenSpec design is hash-bound in the document ledger. Reuse it rather than
     // overwriting it here; overwriting correctly makes explore->spec fail as stale evidence.
     await h.seedArtifact(name, 'design_doc', `openspec/changes/${name}/design.md`) // P6：artifact 字段白盒预置
-    await h.run(['transition', name, 'explore-complete']) // → spec
-    await writeFile(join(cd(name), 'plan.md'), '# plan\n', 'utf8')
-    await h.seedArtifact(name, 'plan', `openspec/changes/${name}/plan.md`) // P6：artifact 字段白盒预置
-    await h.run(['transition', name, 'spec-complete']) // → build
+    await approveReviewExit(name, 'explore-complete')
+    expect(await h.run(['transition', name, 'explore-complete'])).toBe(0) // → spec
+    await h.seedArtifact(name, 'plan', `docs/superpowers/plans/${name}.md`) // P6：artifact 字段白盒预置
+    await approveReviewExit(name, 'spec-complete')
+    expect(await h.run(['transition', name, 'spec-complete'])).toBe(0) // → build
   }
 
   /** 让 build 出口 guard 真通过：tasks.md 全勾 + build_mode/isolation/direct_override */
@@ -58,10 +65,9 @@ describe('真实 e2e —— advance auto-transition 中间档（HITL 红线：�
 
   /** 让 verify 出口 guard + verify-pass 事件前置真通过（backend：双 review pass + 报告 + branch_status） */
   async function armVerifyGuard(name: string): Promise<void> {
-    await writeFile(join(cd(name), 'verify.md'), '# verify\n', 'utf8')
-    await h.run(['set-many', name,
-      `verification_report=openspec/changes/${name}/verify.md`,
-      'branch_status=handled', 'agent_review_result=pass', 'codex_review_result=pass'])
+    await h.seedArtifact(name, 'verification_report', `docs/superpowers/reports/${name}.md`)
+    expect(await h.run(['set-many', name,
+      'branch_status=handled', 'agent_review_result=pass', 'codex_review_result=pass'])).toBe(0)
   }
 
   /** 让 ship 出口 guard 真通过（backend：pr_url） */
@@ -84,8 +90,8 @@ describe('真实 e2e —— advance auto-transition 中间档（HITL 红线：�
     expect(await h.read('demo')).toMatch(/^build_sha: DEADBEEF$/m)
     // 停在复核门，绝不自动跑完
     expect(r.out.some((l) => l.includes('[STOP]') && l.includes('复核相位'))).toBe(true)
-    // verify 是复核相位 → transition 真落 .pipeline-pending-review 门 marker
-    expect(await readFile(join(h.cwd, '.pipeline-pending-review'), 'utf8')).toContain('verify')
+    // 进入 verify 不写 marker；只有输出完成后的 review request 才能创建 v2 投影。
+    await expect(readFile(join(h.cwd, '.pipeline-pending-review'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
   })
 
   test('HITL 红线：默认从复核相位（explore）立即停，绝不自动离开——phase 不变', async () => {
@@ -131,15 +137,21 @@ describe('真实 e2e —— advance auto-transition 中间档（HITL 红线：�
     expect(r.out.some((l) => l.includes('复核相位'))).toBe(true)
   })
 
-  test('--through-gates 显式放行复核相位：真跑 build→verify→ship→archive 到终态', async () => {
+  test('--through-gates 不伪造 review 确认：verify request/ack 后才可继续到 archive', async () => {
     await seedToBuild('demo')
     await armBuildGuard('demo')
     await armVerifyGuard('demo')
     await armShipGuard('demo')
 
+    const first = await advance('demo', { throughGates: true })
+    expect(first.code).toBe(0)
+    expect(await phaseOf('demo')).toBe('verify')
+    expect(first.out.some((l) => l.includes('确认回执'))).toBe(true)
+
+    await approveReviewExit('demo', 'verify-pass')
     const r = await advance('demo', { throughGates: true })
     expect(r.code).toBe(0)
-    // 真跨复核相位 verify，一路推进到 archive 终态
+    // 真跨经确认的 verify 出口，再到 archive 终态
     expect(await phaseOf('demo')).toBe('archive')
     // 历史 JSONL 真记满这几步 transition
     const hist = await readFile(join(cd('demo'), '.pipeline-history.jsonl'), 'utf8')

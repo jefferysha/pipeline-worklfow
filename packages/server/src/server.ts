@@ -27,9 +27,10 @@ import { homedir } from 'node:os'
 import { dirname, join, resolve as resolvePath } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
+  builtinWorkflow,
   ABSENT_REGISTRY_EPOCH, applyLevelChange, assertTrackDeletable, assertUpdatePreservesReferences, assertWorkflowAllowed,
   BUILTIN_TRACK_DEFINITIONS, BuiltinTrackDeleteError, BuiltinTrackPolicyError, ChangeScanFailedError, createBreadcrumbWriter, createFlowEngine,
-  createEffectiveSkillResolver, createHistoryWriter, createLoopLedgerStore, createReviewMarkerWriter, createStateStore,
+  createEffectiveSkillResolver, createHistoryWriter, createLoopLedgerStore, createStateStore,
   createTrack, createTransitionRecordStore, createWorkflowRunRepository, deleteTrack, firstStep, listMemSessions, loadManifest,
   listAutomationPolicyTemplates, loadRegistry, loadTrackRegistry, loadWorkflow, mutateTrackRegistry, nodeMemFs, readRegistrySnapshot, RegistryRevisionConflictError,
   requireTrack, TrackAlreadyExistsError, TrackNotFoundError, TrackReferencedError, TrackReferencesInvalidatedError, updateTrack,
@@ -163,6 +164,7 @@ function indexHtml(token: string): string {
 
 export function createDashboardServer(options: DashboardServerOptions = {}): DashboardServer {
   const version = options.version ?? SERVER_VERSION
+  const releaseId = options.releaseId
   const token = options.token ?? generateToken()
   const clock = options.clock ?? isoNow
   const paths = resolveServerPaths({ home: options.home })
@@ -173,7 +175,6 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
   const runRepo = createWorkflowRunRepository({ store, recordStore, clock })
   const history = createHistoryWriter()
   const breadcrumb = createBreadcrumbWriter()
-  const reviewMarker = createReviewMarkerWriter()
   const loadedManifest: ExtendedManifestData | undefined =
     options.manifestPath ? loadManifest(options.manifestPath) : undefined
   const flow: FlowEngine = options.flow
@@ -233,6 +234,7 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
   const pollIntervalMs = options.pollIntervalMs ?? 1000
   const heartbeatMs = options.heartbeatMs ?? 15000
   const gitHeadSha = options.gitHeadSha
+  const workspaceFingerprint = options.workspaceFingerprint
   const traceStore = options.traceStore
   // v9-I：mem 会话检索 fs（只读用户会话历史根，绝不写）；测试注 nodeMemFs(fakeHome) 指 fixture 树。
   const memFs: MemFs = options.memFs ?? nodeMemFs()
@@ -263,7 +265,14 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
     router_preview: true,
     cadence: cadenceScheduler !== null,
   }
-  const snapshotDeps = (): SnapshotDeps => ({ registry, store, version, clock, capabilities })
+  const snapshotDeps = (nowMs?: number): SnapshotDeps => ({
+    registry,
+    store,
+    version,
+    clock,
+    capabilities,
+    ...(nowMs === undefined ? {} : { now: () => nowMs }),
+  })
 
   function trackRegistryBody(trackRegistry: TrackRegistry): Record<string, unknown> {
     return {
@@ -395,9 +404,11 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
     }
   }
 
-  // workflow CRUD 的注册根是能力锚，不是每请求可重新学习的 pathname。启动时只捕获当下已注册、
-  // 且确为非 symlink 目录的 inode；注册表在进程外新增的条目不会在首个业务请求上补锚（那会把
-  // 已被换位的路径误认成可信），须经 POST /api/projects 显式注册或重启 server。
+  // workflow CRUD 的注册根是能力锚，不是每请求可重新学习的 pathname。启动时先捕获当下已注册、
+  // 且确为非 symlink 目录的 inode。CLI `pipeline init` 会直接原子更新同一机器级注册表，因而
+  // server 也允许一个*尚未有锚的、当前仍在可信注册表中的*根在首个 workflow 请求时作一次 TOFU
+  // 捕获；捕获成功后永不重建锚。这样既支持运行中 dashboard 发现 CLI 新建项目，也不会在已经
+  // 绑定的 root 被换位后把新 pathname 重新认作可信。
   const workflowRootAnchors = new Map<string, WorkflowRootAnchor>()
   try {
     for (const root of dedupeRoots(registry())) {
@@ -423,7 +434,13 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
     }
     const anchor = workflowRootAnchors.get(normalized)
     if (!anchor) {
-      return { ok: false, code: 403, error: 'registered root 未在 server 启动/显式注册时建立可信 inode 锚' }
+      try {
+        const captured = captureWorkflowRootAnchor(normalized)
+        workflowRootAnchors.set(normalized, captured)
+        return { ok: true, anchor: captured }
+      } catch (e) {
+        return { ok: false, code: 403, error: errMsg(e) }
+      }
     }
     try {
       assertWorkflowRootAnchor(anchor)
@@ -475,15 +492,16 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
       return
     }
     let fp: string
+    const nowMs = Date.now()
     try {
-      fp = await computeFingerprint(registry())
+      fp = await computeFingerprint(registry(), nowMs)
     } catch {
       return
     }
     if (fp !== lastFp) {
       lastFp = fp
       try {
-        broadcast('snapshot', JSON.stringify(await buildSnapshot(snapshotDeps())))
+        broadcast('snapshot', JSON.stringify(await buildSnapshot(snapshotDeps(nowMs))))
       } catch {
         /* 一次失败下轮再试 */
       }
@@ -553,8 +571,9 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
     })
     clients.add(res)
     try {
-      lastFp = await computeFingerprint(registry())
-      res.write(`event: snapshot\ndata: ${JSON.stringify(await buildSnapshot(snapshotDeps()))}\n\n`)
+      const nowMs = Date.now()
+      lastFp = await computeFingerprint(registry(), nowMs)
+      res.write(`event: snapshot\ndata: ${JSON.stringify(await buildSnapshot(snapshotDeps(nowMs)))}\n\n`)
     } catch {
       /* 初始快照失败不影响后续推送 */
     }
@@ -680,7 +699,13 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
     }
     if (serveAsset(res, path)) return
     if (path === '/api/health') {
-      return sendJson(res, 200, { ok: true, scope: 'global', version, pid: process.pid })
+      return sendJson(res, 200, {
+        ok: true,
+        scope: 'global',
+        version,
+        ...(releaseId === undefined ? {} : { releaseId }),
+        pid: process.pid,
+      })
     }
     // ── DNS 重绑定守卫（Bug 修复）：除落地页 / 静态 /assets / health 探针（以上均已 return）外，
     //    所有 /api 只读数据端点统一挡伪造 Host。此前仅 secrets/docker/readiness 三个端点各自 inline
@@ -950,6 +975,12 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
       const root = new URL(req.url ?? '/', 'http://localhost').searchParams.get('root') ?? ''
       const rootCheck = workflowRootForRequest(root)
       if (!rootCheck.ok) return sendJson(res, rootCheck.code, { ok: false, error: rootCheck.error })
+      const builtin = builtinWorkflow(wfName)
+      if (builtin !== null) {
+        // Built-ins are immutable plugin assets. They are readable by the same client contract as
+        // custom workflows, but never resolved from or shadowed by a project file.
+        return sendJson(res, 200, builtin)
+      }
       try {
         // 先用 G6 安全读区分真 404/结构损坏；目标存在后才准备 project lock，避免 GET ghost
         // 为纯查询凭空创建 `.pipeline`。
@@ -1384,7 +1415,7 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
       const activation = parseChangeSessionActivation(b.activate_session, taskPrompt.value !== null)
       if (!activation.ok) return sendJson(res, 400, { ok: false, error: activation.error })
       // track/workflow 绑定改走 Track Registry（GOAL.md 清单 T · R2）：缺省仍是不可删内建轨 'chat'；
-      // 按 root 现载 registry（缺 tracks.yaml → 内建四轨，requireTrack 与旧 TRACKS 枚举校验等价），
+      // 按 root 现载 registry（缺 tracks.yaml → 内建 Track，requireTrack 与旧 TRACKS 枚举校验等价），
       // 再校验「该 track 是否允许该 workflow」（assertWorkflowAllowed）。全部先于任何落盘。
       const trackId = typeof b.track === 'string' && b.track ? b.track : 'chat'
       const workflowRaw = typeof b.workflow === 'string' && b.workflow ? b.workflow : ''
@@ -1418,7 +1449,7 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
             if (workflowId !== 'default') {
               let workflow: WorkflowDef
               try {
-                workflow = readWorkflowForApi(rootCheck.anchor, workflowId)
+                workflow = builtinWorkflow(workflowId) ?? readWorkflowForApi(rootCheck.anchor, workflowId)
               } catch (e) {
                 return e instanceof WorkflowNotFoundError
                   ? { ok: false, code: 404, error: `workflow '${workflowId}' 未找到（期望 .pipeline/workflows/${workflowId}.yaml）` }
@@ -1858,7 +1889,29 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
     const name = decodeURIComponent(mTr[1]!)
     // history 注入（G20 / v5-T1）：转换成功 → .pipeline-history.jsonl 记账，guard 拒绝零记账。
     const outcome = await performTransition(
-      { store, runRepo, flow, clock, fileExists, gitHeadSha, history, breadcrumb, reviewMarker }, root, name, event,
+      {
+        store,
+        runRepo,
+        flow,
+        clock,
+        fileExists,
+        gitHeadSha,
+        workspaceFingerprint,
+        history,
+        breadcrumb,
+        // 这里用的正是 Dashboard 当前 root 的 effective Track Registry，而不是靠 track id
+        // 写死 PM。自定义 track 也可通过 auto_enqueue_on_spec_complete 显式接入同一条后置编排。
+        resolveTrackPolicy: (trackId) => requireTrack(loadTrackRegistry(root, {
+          workflowExists: (workflowId) => {
+            if (workflowId === 'default') return true
+            try { return loadWorkflow(root, workflowId) !== null } catch { return false }
+          },
+          skillProfiles: trackSkillProfiles,
+        }), trackId).policyProfile,
+      },
+      root,
+      name,
+      event,
     )
     return sendJson(res, outcome.code, outcome.body)
   }

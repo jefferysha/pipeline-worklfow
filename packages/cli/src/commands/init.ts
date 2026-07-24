@@ -86,7 +86,7 @@ async function askPlain(p: InitPrompter, label: string, dflt: string): Promise<s
 
 /**
  * 交互向导：逐项问答收齐 track/preset（+ 可选 user/workflow）。已给 flag 作该项默认（回车即收），
- * track 选项与校验从 registry.ordered 生成（不再手抄枚举；缺 tracks.yaml 时即内建四轨），preset 非空，
+ * track 选项与校验从 registry.ordered 生成（不再手抄枚举；缺 tracks.yaml 时即内建 Track），preset 非空，
  * 校验不过就地重问。返回补齐后的 opts（原字段其余保留）。
  */
 async function runInitWizard(deps: CliDeps, registry: TrackRegistry, flags: InitCmdOpts, env: InitWizardEnv): Promise<InitCmdOpts> {

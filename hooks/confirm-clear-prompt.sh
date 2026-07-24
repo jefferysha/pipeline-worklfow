@@ -4,7 +4,8 @@
 # `confirm-clear.sh` is retained for hosts which expose AskUserQuestion responses.  Codex desktop's
 # normal conversation path does not expose that tool, however, so clearing only on PostToolUse made a
 # review marker self-lock every subsequent tool call.  This hook receives the user's next prompt and
-# clears markers only for an explicit approval phrase, before the next PreToolUse gate runs.
+# turns an explicit approval phrase into the canonical `pipeline review acknowledge` receipt before
+# the next PreToolUse gate runs.  It never deletes a v2 review marker by itself.
 #
 # It intentionally recognises a narrow, auditable set of affirmative phrases.  Questions such as
 # "为什么" or "看看状态" do not clear review evidence.  Fail-open: malformed hook input merely leaves
@@ -13,36 +14,24 @@ set -uo pipefail
 
 INPUT="$(cat 2>/dev/null || printf '{}')"
 
-json_get() {
-  local key="$1" rest
-  case "$INPUT" in *"\"$key\""*) ;; *) return 1 ;; esac
-  rest="${INPUT#*\"$key\"}"
-  while true; do
-    case "$rest" in
-      [$' \t\r\n']*) rest="${rest#?}" ;;
-      ':'*) rest="${rest#:}"; break ;;
-      *) return 1 ;;
-    esac
-  done
-  while true; do
-    case "$rest" in
-      [$' \t\r\n']*) rest="${rest#?}" ;;
-      *) break ;;
-    esac
-  done
-  case "$rest" in
-    '"'*) rest="${rest#\"}"; printf '%s' "${rest%%\"*}"; return 0 ;;
-    *) return 1 ;;
-  esac
-}
+JSON_INPUT_HELPER="$(dirname "${BASH_SOURCE[0]:-$0}")/json-input.sh"
+[ -r "$JSON_INPUT_HELPER" ] || exit 0
+# shellcheck source=json-input.sh
+. "$JSON_INPUT_HELPER"
+json_get() { pipeline_json_get_string "$INPUT" "$1"; }
 
 PROMPT="$(json_get prompt || true)"
 [ -n "$PROMPT" ] || exit 0
 
-# Do not treat a sentence merely mentioning confirmation as consent.  All accepted variants state a
-# concrete continuation/approval intent and are the phrases shown in the injected gate guidance.
+# A one-turn confirmation and durable, Change-bound continuous-execution authority are different
+# intents.  The latter must contain a deliberately strong phrase; a bare “继续执行” still clears
+# only the current short-lived marker.  Revocation is also explicit and never falls through to
+# marker-clearing, so a user can safely restore step-by-step questions.
+INTENT=''
 case "$PROMPT" in
-  *确认继续*|*确认执行*|*确认并继续*|*继续执行*|*全部执行*|*可以继续*|*同意继续*|*请继续执行*|*批准继续*|*自行执行*|*自己执行*|*go\ ahead*|*proceed\ with\ it*|*continue\ execution*) ;;
+  *恢复逐步确认*|*恢复询问*|*停止自主执行*|*撤回自主执行*|*每步确认*) INTENT='revoke' ;;
+  *后续不用问*|*后续无需询问*|*后续不需要确认*|*后续自行执行*|*后续自己执行*|*后续自主执行*|*自主执行完成*|*自己执行完成*) INTENT='authorize' ;;
+  *确认继续*|*确认执行*|*确认并继续*|*继续执行*|*全部执行*|*可以继续*|*同意继续*|*请继续执行*|*批准继续*|*自行执行*|*自己执行*|*go\ ahead*|*proceed\ with\ it*|*continue\ execution*) INTENT='confirm' ;;
   *) exit 0 ;;
 esac
 
@@ -57,11 +46,56 @@ ROOT_HELPER="$(dirname "${BASH_SOURCE[0]:-$0}")/project-root.sh"
 ROOT="$(pipeline_project_root "$CWD" bootstrap changes || true)"
 [ -n "$ROOT" ] || exit 0
 
-# These names are fixed literals, resolved only below a verified project root.  `rm -f` is intentional:
-# acknowledgement is an idempotent state transition and must not fail if a concurrent host cleared a
-# marker first.
+HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || true)"
+
+# Resolve an exact selected live Change before issuing or revoking authority.  No active Change,
+# malformed canonical state, or a missing helper is fail-closed: normal confirmation remains
+# available but no broad repo/session authority is ever created.
+if [ "$INTENT" = 'authorize' ] || [ "$INTENT" = 'revoke' ]; then
+  AUTHORITY_HELPER="$HOOK_DIR/interaction-authority.sh"
+  STATE_HELPER="$HOOK_DIR/canonical-state.sh"
+  ACTIVE_HELPER="$HOOK_DIR/active-change.sh"
+  if [ -r "$AUTHORITY_HELPER" ] && [ -r "$STATE_HELPER" ] && [ -r "$ACTIVE_HELPER" ]; then
+    # shellcheck source=interaction-authority.sh
+    . "$AUTHORITY_HELPER"
+    # shellcheck source=canonical-state.sh
+    . "$STATE_HELPER"
+    # shellcheck source=active-change.sh
+    . "$ACTIVE_HELPER"
+    ACTIVE_DIR="$(pipeline_active_change_dir "$ROOT" || true)"
+    ACTIVE_NAME="${ACTIVE_DIR##*/}"
+    if [ -n "$ACTIVE_DIR" ]; then
+      if [ "$INTENT" = 'authorize' ]; then
+        pipeline_write_interaction_authority "$ROOT" "$ACTIVE_NAME" \
+          && pipeline_record_interaction_authority_event "$ROOT" "$ACTIVE_NAME" enabled || true
+      else
+        pipeline_revoke_interaction_authority "$ROOT" "$ACTIVE_NAME" \
+          && pipeline_record_interaction_authority_event "$ROOT" "$ACTIVE_NAME" revoked || true
+      fi
+    fi
+  fi
+fi
+
+# A revocation only changes the persistent authority projection.  It must not accidentally clear
+# a fresh interaction/review safety marker while the user is asking to return to explicit prompts.
+[ "$INTENT" = 'revoke' ] && exit 0
+
+# Confirm/interaction markers do not carry a canonical review receipt and retain their original
+# idempotent clear-on-explicit-approval semantics.  The review marker is intentionally excluded:
+# the CLI owns both its removal and the durable approval state, preventing a hook-only deletion
+# from bypassing the exit gate.
 rm -f "$ROOT/.pipeline-pending-confirm" \
-      "$ROOT/.pipeline-pending-review" \
       "$ROOT/.pipeline-pending-interaction" 2>/dev/null || true
+
+REVIEW_HELPER="$HOOK_DIR/review-ack.sh"
+if [ -r "$REVIEW_HELPER" ]; then
+  # shellcheck source=review-ack.sh
+  . "$REVIEW_HELPER"
+  if [ "$INTENT" = 'authorize' ]; then
+    pipeline_acknowledge_active_review "$ROOT" "$HOOK_DIR" delegated || true
+  else
+    pipeline_acknowledge_active_review "$ROOT" "$HOOK_DIR" manual || true
+  fi
+fi
 
 exit 0

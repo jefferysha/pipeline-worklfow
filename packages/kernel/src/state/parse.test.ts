@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { FIELD_ORDER, QuoteGateError, type PipelineState } from '../types.js'
+import { FIELD_ORDER, QuoteGateError, REVIEW_GATE_FIELDS, type PipelineState } from '../types.js'
 import { parsePipeline, serializePipeline, unquoteScalar } from './parse.js'
 
 function fixture(name: string): string {
@@ -88,14 +88,32 @@ describe('serializePipeline（严格 FIELD_ORDER 全量写回）', () => {
     })
   }
 
-  it('老 schema 读后写回 → 归一化为全量 40 字段（缺省写空串 ""）', () => {
+  it('老 schema 读后写回 → 归一化为既有字段；空 review receipt 不扰动兼容投影', () => {
     const out = serializePipeline(parsePipeline(fixture('channel-adapter-worker-guard-oldschema.pipeline.yaml')))
     const keys = out
       .split('\n')
       .filter((l) => /^[a-z_]+:/.test(l))
       .map((l) => l.split(':')[0])
-    expect(keys).toEqual([...FIELD_ORDER])
+    expect(keys).toEqual(FIELD_ORDER.filter((field) => !REVIEW_GATE_FIELDS.includes(field as typeof REVIEW_GATE_FIELDS[number])))
     expect(out).toContain('automation: ""\n')
+    for (const field of REVIEW_GATE_FIELDS) expect(out).not.toContain(`${field}:`)
+  })
+
+  it('review receipt 只要有一个值便整组写出，解析后逐字段保持', () => {
+    const state = parsePipeline(fixture('zz-container-e2e.pipeline.yaml'))
+    state.fields.review_gate_phase = 'spec'
+    state.fields.review_gate_status = 'approved'
+    state.fields.review_gate_event = 'spec-complete'
+    state.fields.review_requested_at = '2026-07-24T00:00:00Z'
+    const out = serializePipeline(state)
+    for (const field of REVIEW_GATE_FIELDS) expect(out).toContain(`${field}:`)
+    expect(parsePipeline(out).fields).toMatchObject({
+      review_gate_phase: 'spec',
+      review_gate_status: 'approved',
+      review_gate_event: 'spec-complete',
+      review_requested_at: '2026-07-24T00:00:00Z',
+      review_acknowledged_at: '',
+    })
   })
 
   it('空串标量写为 ""，空列表写为 []', () => {
@@ -134,11 +152,14 @@ describe('parsePipeline/serializePipeline —— 内部提交元数据三行块�
     expect(lines).toContain('pipeline_run_id: run-9')
     expect(lines).toContain('pipeline_transition_sequence: 1')
     expect(lines).toContain('pipeline_transition_head: null')
-    // 元数据三行必须紧跟在最后一个 FIELD_ORDER 字段之后，早于 opaqueTail 内容
-    // （动态取 FIELD_ORDER 最后一个字段名，不硬编码——它随末尾追加的新字段变化，见 types.ts 注释）
-    const lastFieldKey = FIELD_ORDER[FIELD_ORDER.length - 1]!
+    // 元数据三行必须紧跟在最后一个实际投影的字段之后，早于 opaqueTail 内容。
+    // 空 review receipt 是兼容投影的可选组，因此不能机械假定 FIELD_ORDER 尾项一定有一行。
+    const lastFieldKey = [...FIELD_ORDER].reverse().find((field) =>
+      lines.some((line) => line.startsWith(`${field}:`)),
+    )
+    expect(lastFieldKey).toBe('automation_cause')
     const metaIdx = lines.indexOf('pipeline_run_id: run-9')
-    const lastFieldIdx = lines.findIndex((l) => l.startsWith(`${lastFieldKey}:`))
+    const lastFieldIdx = lines.findIndex((l) => l.startsWith(`${lastFieldKey!}:`))
     expect(metaIdx).toBe(lastFieldIdx + 1)
   })
 

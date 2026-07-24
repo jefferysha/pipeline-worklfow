@@ -10,7 +10,7 @@ import { AutomationCard } from './AutomationCard'
 const ROOT = '/tmp/proj-a'
 const GET_URL = `/api/automation?root=${encodeURIComponent(ROOT)}`
 
-let settings: { max_parallel: number; max_retries: number; default_opt_in: boolean; image: string }
+let settings: { enabled?: boolean; max_parallel: number; max_retries: number; default_opt_in: boolean; image: string }
 let postCalls: Array<Record<string, unknown>>
 let postResponse: () => Response
 // v6 T9：单机资源两端点的可变桩(缺省 docker 可用+镜像就绪+凭证未配;用例按需改写)。
@@ -78,8 +78,24 @@ describe('AutomationCard —— 真值渲染', () => {
     await waitFor(() => expect(screen.getByTestId('afk-sld-parallel')).toHaveValue('6'))
     expect(screen.getByTestId('afk-sld-retries')).toHaveValue('3')
     expect(screen.getByTestId('afk-opt-in')).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByTestId('afk-enabled')).toHaveAttribute('aria-checked', 'false')
     expect(screen.getByTestId('afk-image')).toHaveValue('ghcr.io/a/b:v1')
     expect(screen.getByText('这些参数作用于本项目全部 AFK 运行——并发几个沙箱、失败自动重试几次')).toBeInTheDocument()
+  })
+
+  it('项目级 enabled 总开关可见、可编辑并随保存提交', async () => {
+    settings = {
+      enabled: true,
+      max_parallel: 4,
+      max_retries: 1,
+      default_opt_in: false,
+      image: '',
+    }
+    renderCard()
+    await waitFor(() => expect(screen.getByTestId('afk-enabled')).toHaveAttribute('aria-checked', 'true'))
+    fireEvent.click(screen.getByTestId('afk-enabled'))
+    fireEvent.click(screen.getByTestId('afk-save'))
+    await waitFor(() => expect(postCalls).toContainEqual(expect.objectContaining({ enabled: false })))
   })
 
   it('并发沙箱上限滑杆下有一行说明（验收反馈②-④：讲清楚是整机上限）', async () => {

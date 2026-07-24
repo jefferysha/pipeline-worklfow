@@ -120,8 +120,8 @@ describe('WorkflowRunRepository.initChange —— 新 change 的唯一创建入�
       clock: () => '2026-07-16T00:00:00Z',
     }
     const created = await repo.initChange(base)
-    await expect(readFile(join(created.changeDir, 'proposal.md'), 'utf8')).resolves.toContain('TODO(open)')
-    await expect(readFile(join(created.changeDir, 'design.md'), 'utf8')).resolves.toContain('TODO(open)')
+    await expect(readFile(join(created.changeDir, 'proposal.md'), 'utf8')).resolves.toContain('# Proposal')
+    await expect(readFile(join(created.changeDir, 'design.md'), 'utf8')).resolves.toContain('# Design')
     await expect(readFile(join(created.changeDir, 'tasks.md'), 'utf8')).resolves.toContain('- [ ]')
 
     const custom = await repo.initChange({

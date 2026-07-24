@@ -11,13 +11,22 @@ import {
   isDocumentContractPhase,
   isOpenSpecDocumentContractRequired,
   loadWorkflow,
+  liveTerminalActivity,
+  parseTerminalActivityRecord,
   projectPipelineTodo,
   stateStorageSourcePathSync,
+  TERMINAL_ACTIVITY_FILE,
   type WorkflowDef,
   type PipelineTodoStageDefinition,
   type StateStore,
 } from '@pipeline-lite/kernel'
-import type { ChangeSnapshot, DocumentEvidenceSnapshot, ProjectSnapshot, Snapshot } from './types.js'
+import type {
+  ChangeSnapshot,
+  DocumentEvidenceSnapshot,
+  ProjectSnapshot,
+  Snapshot,
+  TerminalActivitySnapshot,
+} from './types.js'
 
 export interface SnapshotDeps {
   registry: () => string[]
@@ -29,6 +38,8 @@ export interface SnapshotDeps {
    * 由 server 按真实接线情况注入（afk 数据端始终 true；traffic 仅注入 traceStore 时 true）。
    */
   capabilities?: Record<string, boolean>
+  /** Epoch source for the short-lived terminal activity lease; injectable so expiry is testable. */
+  now?: () => number
 }
 
 function str(v: string | string[] | undefined): string {
@@ -48,11 +59,46 @@ async function readTasksMarkdown(changeDir: string): Promise<string | undefined>
   }
 }
 
+/**
+ * Read a strictly local, hook-written liveness sidecar.  This is intentionally fail-closed for
+ * display: a symlink, oversized file, malformed payload, stale heartbeat, or mismatched Change
+ * simply means no terminal is currently claimed to be running.
+ */
+async function readTerminalActivity(
+  changeDir: string,
+  changeName: string,
+  nowMs: number,
+): Promise<TerminalActivitySnapshot | undefined> {
+  const target = join(changeDir, TERMINAL_ACTIVITY_FILE)
+  try {
+    const entry = await lstat(target)
+    if (!entry.isFile() || entry.isSymbolicLink() || entry.size > 4096) return undefined
+    const parsed = parseTerminalActivityRecord(JSON.parse(await readFile(target, 'utf8')))
+    if (parsed === null || parsed.change !== changeName) return undefined
+    const live = liveTerminalActivity(parsed, nowMs)
+    if (live === null) return undefined
+    return {
+      sessionId: live.sessionId,
+      heartbeatAt: live.heartbeatAt,
+      expiresAt: live.expiresAt,
+      ...(live.turnId === undefined ? {} : { turnId: live.turnId }),
+    }
+  } catch {
+    return undefined
+  }
+}
+
 function todoStages(root: string, workflowName: string, phase: string): readonly PipelineTodoStageDefinition[] {
   if (workflowName === 'default') return DEFAULT_WORKFLOW_TODO_STAGES
   try {
     const workflow = loadWorkflow(root, workflowName)
-    if (workflow) return workflow.steps.map((step) => ({ id: step.id, label: step.label || step.id }))
+    if (workflow) {
+      return workflow.steps.map((step) => ({
+        id: step.id,
+        label: step.label || step.id,
+        transitions: step.transitions.map((transition) => transition.to),
+      }))
+    }
   } catch {
     // A bad/missing custom definition must not make a default-looking Todo.  Retain just the actual
     // state phase so the snapshot remains usable while the workflow error is surfaced elsewhere.
@@ -124,7 +170,7 @@ export function dedupeRoots(roots: string[]): string[] {
   return out
 }
 
-async function scanProject(store: StateStore, root: string): Promise<ProjectSnapshot> {
+async function scanProject(store: StateStore, root: string, nowMs: number): Promise<ProjectSnapshot> {
   let isDir = false
   try {
     isDir = (await stat(root)).isDirectory()
@@ -176,6 +222,10 @@ async function scanProject(store: StateStore, root: string): Promise<ProjectSnap
         tasksMarkdown: await readTasksMarkdown(changeDir),
         stages: todoStages(root, workflowName, phase),
       })
+      const [documents, terminalActivity] = await Promise.all([
+        documentEvidence(root, changeDir, workflowName, phase, track),
+        readTerminalActivity(changeDir, e.name, nowMs),
+      ])
       changes.push({
         name: e.name,
         path: changeDir,
@@ -187,7 +237,8 @@ async function scanProject(store: StateStore, root: string): Promise<ProjectSnap
         updated_at: str(f.updated_at),
         fields: f,
         todo,
-        documents: await documentEvidence(root, changeDir, workflowName, phase, track),
+        documents,
+        ...(terminalActivity === undefined ? {} : { terminalActivity }),
       })
     } catch (error) {
       errors.push(
@@ -206,7 +257,8 @@ async function scanProject(store: StateStore, root: string): Promise<ProjectSnap
 
 export async function buildSnapshot(deps: SnapshotDeps): Promise<Snapshot> {
   const roots = dedupeRoots(deps.registry())
-  const projects = await Promise.all(roots.map((r) => scanProject(deps.store, r)))
+  const nowMs = deps.now?.() ?? Date.now()
+  const projects = await Promise.all(roots.map((r) => scanProject(deps.store, r, nowMs)))
   const change_count = projects.reduce((n, p) => n + p.changes.length, 0)
   return {
     version: deps.version,
@@ -224,7 +276,7 @@ export async function buildSnapshot(deps: SnapshotDeps): Promise<Snapshot> {
  * legacy YAML），取 path:size:mtimeNs（纳秒精度，挡同毫秒内两次写）拼接排序；任一 canonical
  * commit → 指纹变 → 推新快照。损坏 current 仍拥有优先权，不借 YAML 掩盖。
  */
-export async function computeFingerprint(roots: string[]): Promise<string> {
+export async function computeFingerprint(roots: string[], nowMs = Date.now()): Promise<string> {
   const parts: string[] = []
   for (const root of dedupeRoots(roots)) {
     const changesRoot = join(root, 'openspec', 'changes')
@@ -262,6 +314,17 @@ export async function computeFingerprint(roots: string[]): Promise<string> {
         parts.push(`${documents}:${st.size}:${st.mtimeNs}`)
       } catch {
         // Missing evidence is represented by the snapshot report; a later creation changes fp.
+      }
+      const terminalActivity = join(changesRoot, e.name, TERMINAL_ACTIVITY_FILE)
+      try {
+        const st = await lstat(terminalActivity, { bigint: true })
+        // Liveness has two independently observable transitions: a fresh hook write and TTL expiry.
+        // The fresh/stale suffix causes SSE to publish exactly once when an otherwise unchanged
+        // heartbeat becomes stale, rather than leaving a stopped terminal painted as running.
+        const live = await readTerminalActivity(join(changesRoot, e.name), e.name, nowMs)
+        parts.push(`${terminalActivity}:${st.size}:${st.mtimeNs}:${live === undefined ? 'stale' : 'live'}`)
+      } catch {
+        // No sidecar is the normal idle state.
       }
     }
   }

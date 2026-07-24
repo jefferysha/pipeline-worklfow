@@ -104,12 +104,18 @@ function projectTrack(track: TrackDefinition): TrackDefinition {
     },
     policyProfile: {
       reviewSeed: track.policyProfile.reviewSeed,
+      ...(track.policyProfile.autoEnqueueOnSpecComplete === undefined
+        ? {}
+        : { autoEnqueueOnSpecComplete: track.policyProfile.autoEnqueueOnSpecComplete }),
       automationEligible: track.policyProfile.automationEligible,
       coverageProfile: track.policyProfile.coverageProfile,
       routing: track.policyProfile.routing.enabled
         ? {
             enabled: true,
             pattern: track.policyProfile.routing.pattern,
+            ...(track.policyProfile.routing.excludePattern === undefined
+              ? {}
+              : { excludePattern: track.policyProfile.routing.excludePattern }),
             priority: track.policyProfile.routing.priority,
           }
         : { enabled: false },

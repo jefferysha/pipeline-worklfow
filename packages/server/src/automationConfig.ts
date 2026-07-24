@@ -2,15 +2,13 @@
  * automationConfig —— AFK 执行参数存储 + 校验（T21，工作台「AFK 执行」卡数据面）。
  *
  * 存储：`<root>/.pipeline/automation.json`（per-root，对齐 hooks.json 先例）：
- *   `{ version: 1, max_parallel: 1-8, max_retries: 0-3, default_opt_in: bool, image?: string }`
+ *   `{ version: 1, enabled: bool, max_parallel: 1-8, max_retries: 0-3, default_opt_in: bool, image?: string }`
  *   · canonical 落盘（JSON.stringify null,2 + 尾换行、同目录 tmp+rename 原子写）；
  *   · image 空串（= 用内置 sandcastle:local）不落字段；
  *   · 缺文件 / 损坏 / 单字段越界 → 逐字段回落默认（fail-open，行为与本配置诞生前一致）。
  *
- * 【决策登记】enabled 与 level **不进此文件**（与 automation 包读模块
- * packages/automation/src/config/automationJson.ts 头注释同一决策）：enabled 是运行入口的
- * 显式旗标（CLI/loop 显式构造 SDK 即 opt-in），level 已有 loop 级 autonomy_level 毕业制
- * 裁决（/api/loops/level）——再落一份就是双源打架。读写两侧都不认这两个键。
+ * enabled 是项目级总开关，缺省 false；与 default_opt_in 共同构成自动挂队双层授权。
+ * level 仍由 loop 级 autonomy_level 治理，不在此文件重复持久化。
  *
  * 零依赖镜像纪律：server 对 @pipeline-lite/automation 坚持零运行时依赖（同 afk.ts 头注释 /
  * AUTOMATION_STATES 字面量对位先例），本模块的值域/字段名/fail-open 语义与
@@ -22,6 +20,7 @@ import { join } from 'node:path'
 
 /** AFK 执行参数（HTTP 信封形状 = 落盘形状，snake_case）。image 空串 = 用内置 sandcastle:local。 */
 export interface AutomationSettings {
+  enabled?: boolean
   max_parallel: number
   max_retries: number
   default_opt_in: boolean
@@ -30,6 +29,7 @@ export interface AutomationSettings {
 
 /** 默认值（= automation 包 DEFAULT_CONFIG 的对应子集；image 空串 = 内置镜像）。 */
 export const AUTOMATION_DEFAULTS: AutomationSettings = {
+  enabled: false,
   max_parallel: 4,
   max_retries: 1,
   default_opt_in: false,
@@ -61,6 +61,7 @@ export function readAutomationSettings(root: string): AutomationSettings {
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return { ...AUTOMATION_DEFAULTS }
   const raw = parsed as Record<string, unknown>
   const out = { ...AUTOMATION_DEFAULTS }
+  if (typeof raw.enabled === 'boolean') out.enabled = raw.enabled
   if (intIn(raw.max_parallel, LIMITS.max_parallel.min, LIMITS.max_parallel.max)) out.max_parallel = raw.max_parallel
   if (intIn(raw.max_retries, LIMITS.max_retries.min, LIMITS.max_retries.max)) out.max_retries = raw.max_retries
   if (typeof raw.default_opt_in === 'boolean') out.default_opt_in = raw.default_opt_in
@@ -80,7 +81,10 @@ export function validateAutomationSettingsBody(body: unknown): AutomationSetting
   if (typeof body !== 'object' || body === null || Array.isArray(body)) {
     return { ok: false, error: '请求体须为 JSON 对象' }
   }
-  const { max_parallel, max_retries, default_opt_in, image } = body as Record<string, unknown>
+  const { enabled, max_parallel, max_retries, default_opt_in, image } = body as Record<string, unknown>
+  if (enabled !== undefined && typeof enabled !== 'boolean') {
+    return { ok: false, error: 'enabled 须为布尔值' }
+  }
   if (!intIn(max_parallel, LIMITS.max_parallel.min, LIMITS.max_parallel.max)) {
     return { ok: false, error: `max_parallel 须为 ${LIMITS.max_parallel.min}-${LIMITS.max_parallel.max} 的整数` }
   }
@@ -97,7 +101,10 @@ export function validateAutomationSettingsBody(body: unknown): AutomationSetting
   if (!validImage(trimmed)) {
     return { ok: false, error: `image 非法（仅允许 a-z A-Z 0-9 . _ / : @ -，长度 ≤ ${LIMITS.imageMaxLen}）` }
   }
-  return { ok: true, value: { max_parallel, max_retries, default_opt_in, image: trimmed } }
+  return {
+    ok: true,
+    value: { enabled: enabled === true, max_parallel, max_retries, default_opt_in, image: trimmed },
+  }
 }
 
 /**
@@ -107,6 +114,7 @@ export function validateAutomationSettingsBody(body: unknown): AutomationSetting
 export function writeAutomationSettings(root: string, settings: AutomationSettings): void {
   const payload: Record<string, unknown> = {
     version: 1,
+    enabled: settings.enabled === true,
     max_parallel: settings.max_parallel,
     max_retries: settings.max_retries,
     default_opt_in: settings.default_opt_in,

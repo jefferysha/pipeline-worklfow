@@ -1,5 +1,5 @@
 /**
- * 真实 e2e —— 并发 transition 不再产生逆序 breadcrumb/history/marker（W1 第二增量收口，
+ * 真实 e2e —— 并发 transition 不再产生逆序 breadcrumb/history（W1 第二增量收口，
  * codex 2026-07-16 范围评估指定的送审停止线测试）。
  *
  * 复现的正是此前的真实缺陷：breadcrumb/history/marker 曾经在 store.withLock 锁外写，
@@ -7,11 +7,10 @@
  * （state 已提交到更新的相位），随后第一次转换姗姗来迟的尾部写入才落盘，用**旧相位**覆盖
  * 掉本该反映最新相位的 breadcrumb——hook 热路径因此读到过期相位。
  *
- * runRepo.transact 把锁的持有范围扩大到整个 callback（含 breadcrumb/history/marker），
+ * runRepo.transact 把锁的持有范围扩大到整个 callback（含 breadcrumb/history），
  * 这里直接验证：即使第一次 transition 的 breadcrumb 写入被人为阻塞，第二次 transition
  * 也必须等第一次完全结束（含它的 breadcrumb 写入）才能开始，因此不可能发生覆盖。
  */
-import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, test } from 'vitest'
 import { cmdTransition } from './commands/transition.js'
@@ -19,7 +18,7 @@ import { freshHarness, realDeps, rm } from './integration-harness.js'
 
 describe('真实 e2e —— 并发 transition 尾部写入严格串行（不逆序覆盖）', () => {
   test('第一次 transition 的 breadcrumb 写入被阻塞期间，第二次 transition 无法抢先完成；' +
-    '释放阻塞后两次严格按序结算，最终 breadcrumb/marker/state 全部反映最新相位', async () => {
+    '释放后第二次先被 review receipt 拒绝，确认后重发才写入最新 breadcrumb/state', async () => {
     const h = await freshHarness()
     try {
       expect(await h.run(['init', 'demo', '--track', 'backend', '--preset', 'full'])).toBe(0)
@@ -28,7 +27,7 @@ describe('真实 e2e —— 并发 transition 尾部写入严格串行（不逆�
       // 之间不需要再插入任何 set 步骤。
       // Reuse the hash-bound OpenSpec design seeded above. Rewriting it would correctly make
       // explore->spec fail before this test reaches its serialization assertion.
-      expect(await h.run(['set', 'demo', 'design_doc', 'openspec/changes/demo/design.md'])).toBe(0)
+      await h.seedArtifact('demo', 'design_doc', 'openspec/changes/demo/design.md')
 
       const out: string[] = []
       const err: string[] = []
@@ -67,15 +66,22 @@ describe('真实 e2e —— 并发 transition 尾部写入严格串行（不逆�
       releaseFirst()
       const [code1, code2] = await Promise.all([p1, p2])
       expect(code1).toBe(0)
-      expect(code2).toBe(0)
-      // 严格按序：第一次的 breadcrumb 写完，第二次才可能开始写
-      expect(order).toEqual(['first-breadcrumb-blocked', 'breadcrumb:pipeline:demo phase=explore', 'breadcrumb:pipeline:demo phase=spec'])
+      expect(code2).toBe(2)
+      // 严格按序：第二次只能在第一次 breadcrumb 收尾后读到 explore；未获确认时不写自己的 breadcrumb。
+      expect(order).toEqual(['first-breadcrumb-blocked', 'breadcrumb:pipeline:demo phase=explore'])
 
-      // 最终真相：state/breadcrumb/marker 三者一致反映最新相位 spec，没有被 stale 尾部覆盖
+      expect(await h.run(['review', 'request', 'demo', '--event', 'explore-complete'])).toBe(0)
+      expect(await h.run(['review', 'acknowledge', 'demo'])).toBe(0)
+      expect(await cmdTransition(deps, 'demo', 'explore-complete')).toBe(0)
+      expect(order).toEqual([
+        'first-breadcrumb-blocked',
+        'breadcrumb:pipeline:demo phase=explore',
+        'breadcrumb:pipeline:demo phase=spec',
+      ])
+
+      // 最终真相：state/breadcrumb 一致反映最新相位 spec，没有被 stale 尾部覆盖。
       expect(await h.read('demo')).toMatch(/^phase: spec$/m)
       expect(await h.readIn('demo', '.breadcrumb')).toContain('phase=spec')
-      const marker = await readFile(join(h.cwd, '.pipeline-pending-review'), 'utf8')
-      expect(marker.split('\n')[0]).toBe('spec')
     } finally {
       await rm(h.cwd, { recursive: true, force: true })
     }

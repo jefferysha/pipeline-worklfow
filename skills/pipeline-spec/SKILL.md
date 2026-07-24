@@ -7,6 +7,9 @@ description: "Pipeline Phase 3: Spec · 规格 + 实施计划。所有 Track 产
 
 > 移植来源：老仓 `skills/pipeline-spec/SKILL.md`；脚本面已改写为 `pipeline` CLI。
 
+> **Codex 打包 Skill 身份：** 本文件提到的裸 skill id 是 DAG/ledger 的逻辑 id；在 Codex
+> 必须实际加载 `pipeline-lite:<id>` 的当前插件副本，绝不以同名全局或项目 SKILL.md 替代。
+
 ## 输入
 
 - `$PIPELINE_TRACK` / `$PIPELINE_CHANGE_NAME`
@@ -28,9 +31,9 @@ description: "Pipeline Phase 3: Spec · 规格 + 实施计划。所有 Track 产
 pipeline status "$PIPELINE_CHANGE_NAME"
 ```
 
-> **review 门提示**：spec 是 review 相位，进入时 CLI 已落 `.pipeline-pending-review` marker
-> ——新鲜（15 分钟内）时写类工具被 hooks/gate.sh 拦。先 AskUserQuestion 与用户对齐再动工。
-> `pipeline check` 是出口校验，别在入口跑（必然未过）。
+> **review 门提示**：spec 是 review 相位，但进入时不会写 `.pipeline-pending-review`，所以可正常读取
+> 前序证据、完成 delta spec 与计划。`pipeline check` 是出口校验；通过后才 `pipeline review request --event spec-complete`，
+> 再按常规确认或已委托 Change 的 `acknowledge --delegated` 进入 Build。
 
 ### Step 1: 读上下文
 
@@ -149,18 +152,46 @@ find "openspec/changes/$PIPELINE_CHANGE_NAME/specs" -type f -name spec.md -print
     done
 pipeline document record "$PIPELINE_CHANGE_NAME" superpower-plan "$PLAN_PATH" --producer writing-plans
 pipeline document record "$PIPELINE_CHANGE_NAME" plan "$PLAN_PATH" --producer writing-plans
-pipeline document status "$PIPELINE_CHANGE_NAME"
 ```
 
 ### Step 4: 同步 tasks.md
 
 将 plan 拆出的 todo 同步到 `openspec/changes/<name>/tasks.md`，每项为 `- [ ]`。
 
+`tasks.md` 是活文档：它的内容一旦被 spec 更新，旧的 open-phase `openspec-propose` 哈希和 producer
+都不能继续代表当前内容。必须由**本 phase 已实际调用的 `pipeline-spec`**重新登记，严禁用
+`--backfill` 借用旧 producer：
+
+```bash
+TASKS_PATH="openspec/changes/$PIPELINE_CHANGE_NAME/tasks.md"
+pipeline document record "$PIPELINE_CHANGE_NAME" tasks "$TASKS_PATH" --producer pipeline-spec
+```
+
+若本轮是 `requirements-changed` 从 build 回退，或规格澄清实际改了 proposal/design 语义，还必须由
+当前 phase driver 诚实重登记这两份修订文档；没有改动则不要制造无意义的新 record：
+
+```bash
+CHANGE_DIR="openspec/changes/$PIPELINE_CHANGE_NAME"
+pipeline document record "$PIPELINE_CHANGE_NAME" proposal "$CHANGE_DIR/proposal.md" --producer pipeline-spec
+pipeline document record "$PIPELINE_CHANGE_NAME" openspec-design "$CHANGE_DIR/design.md" --producer pipeline-spec
+```
+
 ### Step 4.5: 补全覆盖块 + 人确认
 
 1. 在 design_doc 的 `coverage` 块补齐**形式层 L1/L2/L5/L6/L8**（每层 `filled -> 锚点` 或 `waived -> 理由`）。
 2. 若改动触及 auth，在 `touches:` 写 `auth` → L6 安全层**不可 waive**（🔒，hotfix 也不豁免）。
 3. **暂停，把 coverage 块整块念给用户确认**（骑在既有设计确认那一拍上，不另起签字仪式）。
+
+design_doc 是 explore 生成的 Superpowers 设计文档；当 spec 更新其 coverage 块时，也必须以当前
+`pipeline-spec` evidence 重新绑定新 SHA。原始 brainstorming evidence 保留在 history，但不得再被
+伪装成当前 digest 的 producer：
+
+```bash
+pipeline document record "$PIPELINE_CHANGE_NAME" superpower-design "$DESIGN_DOC" --producer pipeline-spec
+# 任一活文档重登记都会清掉旧 hash 的 read receipt；重新读取全部前序资料后再做出口校验。
+pipeline document read "$PIPELINE_CHANGE_NAME" all
+pipeline document status "$PIPELINE_CHANGE_NAME"
+```
 
 > ⏳ **待迁移（M1 #12 证据面）**：老仓在此 `set coverage_confirmed_by <user>` 留确认痕。
 > lite 的 `.pipeline.yaml` 契约字段（CONTRACT §1）**无 `coverage_confirmed_by`**，`pipeline set`
@@ -178,15 +209,17 @@ guard 通过条件（GUARD-RULES §3）：
 - 全栈 Spec 覆盖块：适用层无 blank（填或 waive）、🔒 锁满足（hotfix/tweak 时 required 降级 WARN，锁仍硬拦）
 
 guard **只校验、不自动 transition**。校验通过后：
-1. 把 plan / 用户旅程 / delta spec 交用户过目、**逐项**收反馈（不能替用户拍板）；
-2. 用户说"继续"后，手动推进：
-   `pipeline transition "$PIPELINE_CHANGE_NAME" spec-complete`
-   （spec 是 review 相位——`.pipeline-pending-review` 门会挡住未经 AskUserQuestion 复核的推进）
+1. 运行 `pipeline review request "$PIPELINE_CHANGE_NAME" --event spec-complete`，把 canonical exact-phase-and-event pending receipt 与 v2 marker
+   落下；
+2. 把 plan / 用户旅程 / delta spec 交用户过目、**逐项**收反馈（不能替用户拍板）；
+3. 常规模式等待明确确认，由 hook 执行 `pipeline review acknowledge "$PIPELINE_CHANGE_NAME"`；已明确持续授权时，
+   在真实产物与 guard 完成后执行 `pipeline review acknowledge "$PIPELINE_CHANGE_NAME" --delegated`；再推进：
+   `pipeline transition "$PIPELINE_CHANGE_NAME" spec-complete`。
 
 ## 出口
 
 - 事件：`spec-complete`
-- 下一 phase：`build`（**用户确认后手动进入**，不自动 chaining）
+- 下一 phase：`build`（常规确认或已委托 review receipt 后进入）
 
 ## 打包 skill 依赖（随 pipeline-lite 插件安装）
 

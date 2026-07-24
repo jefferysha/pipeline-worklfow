@@ -16,7 +16,7 @@
   没有任何用户可配置的钩子能拦截或响应工具调用。
 
 档 A/B 要求至少一项能力在原生 hook 上等价实现；Zed 没有 hook 系统（只有静态 `.rules`/AGENTS.md），
-故三能力全靠**静态注入 + 手动 Unlock sentinel**——这正是 contract §1 的档 C 定义。如实标注为 C，
+故三能力全靠**静态注入 + 保留人工确认事实的 CLI receipt**——这正是 contract §1 的档 C 定义。如实标注为 C，
 不为对齐其它平台而伪装原生（GOAL C9/C10 无伪测试 + contract §1 红线）。若上述 hooks 提案未来落地，
 应重新 spike 并可能升档（届时更新本文件与 registry.yaml）。
 
@@ -28,7 +28,7 @@ inject:
   fallback: static-rules            # .rules（项目根，哨兵块幂等合并，不覆盖用户已有内容）
 veto:
   status: degraded
-  fallback: unlock-sentinel         # 无硬拦；手动 rm .pipeline-pending-<kind> 放行
+  fallback: cli-review-receipt      # 无硬拦；仍以 CLI 记录 review 的人工确认
 track:
   status: degraded
   fallback: manual-note             # 无自动留痕（无 hook 触发点）——如实标注
@@ -42,12 +42,8 @@ adapters/zed/install.sh --target <项目目录>   # 默认 $PWD
 
 或经顶层派发器：`adapters/install.sh --zed --target <dir>`。
 
-## Unlock sentinel（唯一 HITL 解封路径）
+## 人工确认（HITL）
 
-Zed 无 hook、无 `AskUserQuestion` 等价物——review 门唯一放行 = 手动删项目根 marker：
-
-```bash
-rm .pipeline-pending-review     # 或 .pipeline-pending-confirm / .pipeline-pending-interaction
-```
-
-与 CC `AskUserQuestion` 语义等价（contract §2）。
+Zed 无 hook、无 `AskUserQuestion` 等价物；仍须在完成产物并选择 event 后运行
+`pipeline review request <change> --event <event>`，把用户的明确确认保留为事实后运行
+`pipeline review acknowledge <change>`。不得以删除 marker 替代确认。

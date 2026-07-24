@@ -4,12 +4,12 @@
  * G1 单一 TransitionApplication 用例（2026-07-17）：CLI（cli/commands/transition.ts）与 server
  * 现在共调同一个 kernel 用例——@pipeline-lite/kernel 的 createTransitionApplication。default/
  * custom 双轨分流、前置校验、flow.transition/planStepTransition、副作用、
- * runRepository.transact() 原子提交、breadcrumb→history→review-marker 收尾，全部下沉进
+ * runRepository.transact() 原子提交、breadcrumb→history 收尾，全部下沉进
  * kernel/workflow/transition-application.ts 单一实现（GOAL.md G1 验收目标：消灭 cli/server 两处
  * 复制真相源）。本文件不再自己编排这些步骤，职责收窄为四步 server 接线壳：
  *   1. change 名合法性校验（CHANGE_NAME_RE）+ canonical-or-legacy state 是否存在——kernel 用例的输入契约
  *      假定 change 已确认存在，这两项属于 transition 域之外的纯 HTTP 前置校验，留在本文件。
- *   2. 把 TransitionDeps 的 fs/git 原语（fileExists/gitHeadSha）绑成 TransitionContext。
+ *   2. 把 TransitionDeps 的 fs/Git/workspace 原语（fileExists/gitHeadSha/workspaceFingerprint）绑成 TransitionContext。
  *   3. 构造 TransitionCommand（含已绑定 root 的 loadWorkflow 柯里化）并调用
  *      TransitionApplication.execute()。
  *   4. 把 TransitionApplicationResult 精确映射成 HTTP code + JSON body：warnings 里的
@@ -25,6 +25,7 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import {
   compileWorkflow,
+  completedWorkflowSkillsSinceStepEntry,
   createTransitionApplication,
   HISTORY_FILE,
   loadRegistry,
@@ -35,9 +36,10 @@ import {
   validateCanonicalRevisionHistory,
 } from '@pipeline-lite/kernel'
 import type {
-  BreadcrumbWriter, FlowEngine, HistoryEntry, HistoryWriter, ReviewMarkerWriter, StateStore,
-  TransitionApplicationResult, TransitionContext, TransitionRecordStore, WorkflowRunRepository,
+  BreadcrumbWriter, FlowEngine, HistoryEntry, HistoryWriter, StateStore,
+  TrackPolicyProfile, TransitionApplicationResult, TransitionContext, TransitionRecordStore, WorkflowRunRepository,
 } from '@pipeline-lite/kernel'
+import { enqueueAfterSpecComplete } from '@pipeline-lite/automation'
 
 // 事件 → 转移边表：re-export kernel 单一真相源（server/index.ts 对外沿用同名）。
 export { TRANSITION_EVENTS, eventEdge } from '@pipeline-lite/kernel'
@@ -58,6 +60,8 @@ export interface TransitionDeps {
   fileExists?: (root: string, relPath: string) => boolean
   /** `git rev-parse HEAD`（build-complete 冻结 SHA + verify-pass barrier；缺省跳过 SHA 面）。 */
   gitHeadSha?: (cwd: string) => Promise<string>
+  /** in-place build 的内容寻址工作区基线；缺省时 workspace barrier 降级跳过。 */
+  workspaceFingerprint?: (cwd: string, changeName: string) => Promise<string>
   /**
    * .pipeline-history.jsonl 记账（G20 / v5-T1）：转换成功后追加一行，形状对齐 CLI 侧
    * cli/commands/transition.ts 的既有口径——kind='transition' + raw=触发它的 event 名
@@ -67,13 +71,16 @@ export interface TransitionDeps {
    */
   history?: HistoryWriter
   /**
-   * default 轨收尾（G1 修复）：changeDir/.breadcrumb + 进 review 相位时 <root>/
-   * .pipeline-pending-review，对齐 cli/commands/transition.ts 的既有收尾（此前 server 完全没有，
-   * 是已核实的 P1 bug——dashboard 放行推进到 review 相位，人工复核门在 gate.sh 直接失效）。
-   * best-effort：写失败仅 WARN，不影响主写已成功的 200。缺省 = 不写（测试可不注入）。
+   * default/governed custom 的 breadcrumb 收尾。review marker 不属于 transition：相位完成后
+   * 由 `pipeline review request` 写入 versioned hook projection，避免刚进入 review phase 就锁住
+   * 该 phase 的实际工作。best-effort：写失败仅 WARN，不影响主写已成功的 200。
    */
   breadcrumb?: BreadcrumbWriter
-  reviewMarker?: ReviewMarkerWriter
+  /**
+   * HTTP adapter 提供的 effective track policy 解析器。存在时，已提交的 spec-complete 会走
+   * automation 的独立 auto-enqueue policy；缺席只用于低层 transition 单测，绝不伪造配置。
+   */
+  resolveTrackPolicy?: (trackId: string) => TrackPolicyProfile
 }
 
 export interface TransitionOutcome {
@@ -116,9 +123,6 @@ function mapTransitionResult(name: string, event: string, result: TransitionAppl
             break
           case 'history':
             process.stderr.write(`WARN: history 写入失败: ${errText(warning.cause)}\n`)
-            break
-          case 'review-marker':
-            process.stderr.write(`WARN: review marker 写入失败: ${errText(warning.cause)}\n`)
             break
         }
       }
@@ -163,10 +167,26 @@ function mapTransitionResult(name: string, event: string, result: TransitionAppl
       const lines = [`step '${result.stepId}' guard 未通过`, ...result.failures]
       return { code: 409, body: { ok: false, error: lines[0], detail: lines } }
     }
+    case 'step-skills-incomplete': {
+      const lines = [`step '${result.stepId}' 尚未完成声明的 skill`, ...result.missing]
+      return {
+        code: 409,
+        body: { ok: false, error: lines[0], detail: lines, code: 'step-skills-incomplete' },
+      }
+    }
     case 'document-evidence-failed': {
       const lines = [`OpenSpec 文档证据未通过（phase=${result.phase}）`, ...result.blockers]
       return { code: 409, body: { ok: false, error: lines[0], detail: lines, code: 'document-evidence-failed' } }
     }
+    case 'review-approval-required':
+      return {
+        code: 409,
+        body: {
+          ok: false,
+          error: `phase '${result.phase}' 的产物尚未取得人工确认`,
+          code: 'review-approval-required',
+        },
+      }
     case 'constraint-denied':
       return { code: 409, body: { ok: false, error: `automation constraint denied transition: ${result.reason}` } }
   }
@@ -189,6 +209,9 @@ export async function performTransition(
   const ctx: TransitionContext = {
     fileExists: deps.fileExists ? (p: string): boolean => deps.fileExists!(root, p) : undefined,
     gitHeadSha: deps.gitHeadSha ? (): Promise<string> => deps.gitHeadSha!(root) : undefined,
+    workspaceFingerprint: deps.workspaceFingerprint
+      ? (): Promise<string> => deps.workspaceFingerprint!(root, name)
+      : undefined,
   }
   const app = createTransitionApplication({
     runRepository: deps.runRepo,
@@ -196,7 +219,15 @@ export async function performTransition(
     clock: deps.clock,
     history: deps.history,
     breadcrumb: deps.breadcrumb,
-    reviewMarker: deps.reviewMarker,
+    completedStepSkills: async ({ changeDir: targetDir, stepId }) => {
+      let historyRaw = ''
+      try {
+        historyRaw = await readFile(join(targetDir, HISTORY_FILE), 'utf8')
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+      }
+      return completedWorkflowSkillsSinceStepEntry(historyRaw, stepId)
+    },
     resolveConstraintContext: async ({ policy }) => {
       const registry = loadRegistry(root, nodeLoopIoStrict)
       if (registry.data === null) throw new Error(`loops registry 无法校验：${registry.errors.join('；')}`)
@@ -211,6 +242,9 @@ export async function performTransition(
       changeName: name,
       event,
       context: ctx,
+      // POST dashboard transition is a concrete user click in an authenticated browser flow.  It
+      // is the host-bound approval surface for a review exit; CLI/agent paths cannot set this bit.
+      humanReviewApproved: true,
       // loadWorkflow→compileWorkflow：TransitionApplication 收编译产物 WorkflowIR；编译错误
       // （= 基础设施错误）经 execute 抛出，落 performTransition 的 catch → 500（同既有非法 workflow 语义）。
       loadWorkflow: (wfName) => {
@@ -218,7 +252,29 @@ export async function performTransition(
         return def ? compileWorkflow(def) : null
       },
     })
-    return mapTransitionResult(name, event, result)
+    let autoEnqueue: string | undefined
+    if (result.kind === 'applied' && deps.resolveTrackPolicy !== undefined) {
+      try {
+        const auto = await enqueueAfterSpecComplete({
+          repoRoot: root,
+          store: deps.store,
+          clock: deps.clock,
+          resolveTrackPolicy: deps.resolveTrackPolicy,
+        }, {
+          changeName: name,
+          event,
+          from: result.from,
+          to: result.to,
+        })
+        autoEnqueue = auto.kind
+      } catch (autoError) {
+        // 状态迁移已 canonical commit；AFK 后置故障只能警告，绝不能把成功的 transition 回报为 500。
+        process.stderr.write(`WARN: ${name} AFK 自动挂队失败（transition 已成功）: ${errText(autoError)}\n`)
+      }
+    }
+    const outcome = mapTransitionResult(name, event, result)
+    if (autoEnqueue === undefined) return outcome
+    return { ...outcome, body: { ...outcome.body, auto_enqueue: autoEnqueue } }
   } catch (e) {
     if (e instanceof NotFoundError) return { code: 404, body: { ok: false, error: '找不到该 change' } }
     return { code: 500, body: { ok: false, error: errText(e) } }

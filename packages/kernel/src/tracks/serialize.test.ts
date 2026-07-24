@@ -18,9 +18,15 @@ const SAMPLE: ProjectTrackConfig = {
       workflow: { default: 'data-pipeline', allowed: ['data-pipeline', 'default'] },
       policyProfile: {
         reviewSeed: 'pending',
+        autoEnqueueOnSpecComplete: true,
         automationEligible: true,
         coverageProfile: 'backend',
-        routing: { enabled: true, pattern: '(数据|ETL|warehouse)', priority: 150 },
+        routing: {
+          enabled: true,
+          pattern: '(数据|ETL|warehouse)',
+          excludePattern: '(API|schema)',
+          priority: 150,
+        },
         skills: { matrix: true, profile: 'backend' },
       },
     },
@@ -42,11 +48,13 @@ tracks:
       allowed: [data-pipeline, default]
     policy_profile:
       review_seed: pending
+      auto_enqueue_on_spec_complete: true
       automation_eligible: true
       coverage_profile: backend
       routing:
         enabled: true
         pattern: '(数据|ETL|warehouse)'
+        exclude_pattern: '(API|schema)'
         priority: 150
       skills:
         matrix: true
@@ -62,7 +70,7 @@ describe('serializeTrackRegistry', () => {
     expect(serializeTrackRegistry(SAMPLE)).toBe(serializeTrackRegistry(SAMPLE))
   })
 
-  test('键序 canonical：builtins 插入序不同 → 输出相同（内建固定序 chat/pm/frontend/backend）', () => {
+  test('键序 canonical：builtins 插入序不同 → 输出相同（按内建声明顺序）', () => {
     const a: ProjectTrackConfig = { version: 1, builtins: { pm: { label: 'P' }, chat: { label: 'C' } } }
     const b: ProjectTrackConfig = { version: 1, builtins: { chat: { label: 'C' }, pm: { label: 'P' } } }
     const out = serializeTrackRegistry(a)

@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, test } from 'vitest'
-import { SERVER_VERSION, resolveReleaseVersion } from './version.js'
+import { SERVER_VERSION, resolvePayloadReleaseId, resolveReleaseVersion } from './version.js'
 
 describe('resolveReleaseVersion', () => {
   test('takes the Codex plugin manifest as the runtime release and takeover version', async () => {
@@ -21,5 +21,14 @@ describe('resolveReleaseVersion', () => {
 
     await writeFile(join(root, '.claude-plugin', 'plugin.json'), '{ bad json', 'utf8')
     expect(resolveReleaseVersion(root)).toBe(SERVER_VERSION)
+  })
+})
+
+describe('resolvePayloadReleaseId', () => {
+  test('recognizes only the immutable managed payload parent directory', () => {
+    expect(resolvePayloadReleaseId(`/runtime/releases/sha256-${'a'.repeat(64)}/payload`))
+      .toBe(`sha256-${'a'.repeat(64)}`)
+    expect(resolvePayloadReleaseId('/workspace/pipeline-lite')).toBeUndefined()
+    expect(resolvePayloadReleaseId('/runtime/releases/not-a-release/payload')).toBeUndefined()
   })
 })

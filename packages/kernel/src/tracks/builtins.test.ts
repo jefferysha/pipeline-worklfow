@@ -1,5 +1,5 @@
 /**
- * 内建四轨默认值逐字段断言（codex 2026-07-17 裁决钉死的默认值表）。路由默认值只来自
+ * 内建 Track 默认值逐字段断言（codex 2026-07-17 裁决钉死的默认值表）。路由默认值只来自
  * BUILTIN_ROUTER_PATTERNS；模板不得再声明旧路由字段。
  */
 import { readFileSync } from 'node:fs'
@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, test } from 'vitest'
 import type { TrackDefinition } from './types.js'
 import {
+  BUILTIN_ROUTER_EXCLUDE_PATTERNS,
   BUILTIN_ROUTER_PATTERNS,
   BUILTIN_TRACK_DEFINITIONS,
   BUILTIN_TRACK_IDS,
@@ -20,14 +21,18 @@ function byId(id: string): TrackDefinition {
   return def
 }
 
-describe('内建四轨定义', () => {
-  test('顺序固定 chat/pm/frontend/backend；全部 builtin:true；workflow 缺省 default + allowed *', () => {
-    expect(BUILTIN_TRACK_DEFINITIONS.map((t) => t.id)).toEqual(['chat', 'pm', 'frontend', 'backend'])
-    expect([...BUILTIN_TRACK_IDS]).toEqual(['chat', 'pm', 'frontend', 'backend'])
-    for (const t of BUILTIN_TRACK_DEFINITIONS) {
+describe('内建 Track 定义', () => {
+  test('顺序固定 chat/simple/pm/frontend/backend；simple 绑定轻量 workflow，其余保持 default', () => {
+    expect(BUILTIN_TRACK_DEFINITIONS.map((t) => t.id)).toEqual(['chat', 'simple', 'pm', 'frontend', 'backend'])
+    expect([...BUILTIN_TRACK_IDS]).toEqual(['chat', 'simple', 'pm', 'frontend', 'backend'])
+    for (const t of BUILTIN_TRACK_DEFINITIONS.filter((item) => item.id !== 'simple')) {
       expect(t.builtin, t.id).toBe(true)
       expect(t.workflow, t.id).toEqual({ default: 'default', allowed: '*' })
     }
+    expect(byId('simple')).toMatchObject({
+      builtin: true,
+      workflow: { default: 'simple', allowed: ['simple'] },
+    })
   })
 
   test('chat：pending / automation 可 / coverage none / 不路由 / 不进矩阵、profile _all', () => {
@@ -46,7 +51,28 @@ describe('内建四轨定义', () => {
     })
   })
 
-  test('pm：skipped / automation 不可 / coverage pm / 路由 priority 100 / 矩阵 profile pm', () => {
+  test('simple：严格正向与否决分类、最高优先级、非 AFK、无完整 skill matrix', () => {
+    expect(byId('simple')).toEqual({
+      id: 'simple',
+      label: 'Simple',
+      builtin: true,
+      workflow: { default: 'simple', allowed: ['simple'] },
+      policyProfile: {
+        reviewSeed: 'pending',
+        automationEligible: false,
+        coverageProfile: 'none',
+        routing: {
+          enabled: true,
+          pattern: BUILTIN_ROUTER_PATTERNS.simple,
+          excludePattern: BUILTIN_ROUTER_EXCLUDE_PATTERNS.simple,
+          priority: 1000,
+        },
+        skills: { matrix: false, profile: '_all' },
+      },
+    })
+  })
+
+  test('pm：skipped / spec-complete 自动 AFK、保留手动 capability / coverage pm / 路由 priority 100 / 矩阵 profile pm', () => {
     expect(byId('pm')).toEqual({
       id: 'pm',
       label: 'PM',
@@ -54,7 +80,8 @@ describe('内建四轨定义', () => {
       workflow: { default: 'default', allowed: '*' },
       policyProfile: {
         reviewSeed: 'skipped',
-        automationEligible: false,
+        autoEnqueueOnSpecComplete: true,
+        automationEligible: true,
         coverageProfile: 'pm',
         routing: { enabled: true, pattern: BUILTIN_ROUTER_PATTERNS.pm, priority: 100 },
         skills: { matrix: true, profile: 'pm' },
@@ -105,13 +132,14 @@ describe('内建四轨定义', () => {
   })
 
   test('内建 routing 常量是默认真相源，templates manifest 不再镜像路由字段', () => {
-    expect(BUILTIN_ROUTER_PATTERNS).toEqual({
+    expect(BUILTIN_ROUTER_PATTERNS).toMatchObject({
+      simple: expect.stringContaining('typo'),
       frontend:
         '(前端|UI|页面|组件|React|Vue|Next|Tailwind|样式|shadcn|\\.tsx|\\.jsx|\\.vue|web 设计|响应式|button|form|layout)',
-      backend:
-        '(后端|backend|API|接口|数据库|Go |Python |Java |Rust |NestJS|Postgres|endpoint|service|微服务|REST|GraphQL|gRPC|migration|server|controller|schema)',
+      backend: expect.stringContaining('修复'),
       pm: '(调研|竞品|市场|竞争对手|对标|商业模式|PRD|需求|用户旅程|原型|market|立项|产品|user persona|流程图)',
     })
+    expect(BUILTIN_ROUTER_EXCLUDE_PATTERNS.simple).toContain('API')
 
     const manifestPath = fileURLToPath(new URL('../../../../templates/manifest.yaml', import.meta.url))
     const manifest = readFileSync(manifestPath, 'utf8')

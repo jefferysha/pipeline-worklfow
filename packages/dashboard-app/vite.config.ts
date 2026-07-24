@@ -4,7 +4,7 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
 const apiPort = Number(process.env.PIPELINE_DASHBOARD_PORT)
-const dashboardApiPort = Number.isInteger(apiPort) && apiPort >= 1 && apiPort <= 65_535 ? apiPort : 8765
+const dashboardApiPort = Number.isInteger(apiPort) && apiPort >= 1 && apiPort <= 65_535 ? apiPort : 18765
 const configuredDevPort = Number(process.env.PIPELINE_DASHBOARD_DEV_PORT)
 const dashboardDevPort = Number.isInteger(configuredDevPort) && configuredDevPort >= 1 && configuredDevPort <= 65_535
   ? configuredDevPort

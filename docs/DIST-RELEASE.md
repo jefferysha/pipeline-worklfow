@@ -2,22 +2,23 @@
 
 ## 是什么
 
-插件发布的运行时产物共有三组，全部由 `npm run build` 生成并提交：
+插件发布的运行时产物有四组，前三组由 `npm run build` 生成并提交，第四组是受版本控制的最小稳定 bootstrap：
 
 - `packages/cli/dist/pipeline.mjs`：单文件 ESM CLI bundle，带 `#!/usr/bin/env node` shebang；
 - `packages/server/dist/dashboard.mjs`：单文件 dashboard server bundle；
 - `packages/dashboard-app/dist/`：同源 dashboard SPA 静态产物。
+- `runtime/pipeline-bootstrap.mjs`：不从 payload import 的稳定 dispatcher；它只选择已验证的本地 release，
+  并保留精确的 `pipeline runtime repair --rollback` 恢复能力。
 
 其余所有 tsc 中间产物（例如 `packages/cli/dist/` 下的 `main.js`/`commands/`/`*.d.ts`）仍被 `.gitignore` 忽略，不入库。
 
 ## 为什么要入库
 
 Codex 与 Claude 的原生插件都通过 marketplace clone 整仓落地，**装完即用、没有 build 步**。新用户
-本机没有仓库的 `node_modules`，因此不能把 dashboard 留成待编译源码：CLI/hook 直接引用 CLI bundle，
-`pipeline dashboard` 直接执行 server bundle，server 再同源托管随包 SPA：
-
-- `hooks/router.sh` 的 `_CLI_BUNDLE` → `$PLUGIN_ROOT/packages/cli/dist/pipeline.mjs`
-- `hooks/gate.sh` 的 `SG_BUNDLE` → `$SG_PLUGIN_ROOT/packages/cli/dist/pipeline.mjs`
+本机没有仓库的 `node_modules`，因此不能把 dashboard 留成待编译源码。安装期会把 marketplace checkout
+作为候选输入，完整校验后复制到本机 managed runtime 的不可变 release；host manifest 只调用稳定的
+`pipeline-hook` ABI，bootstrap 再把已选 payload 注入为 `PLUGIN_ROOT` 并执行 CLI/hook。`pipeline dashboard`
+直接执行随 release 打包的 server bundle，server 再同源托管随包 SPA。
 
 若任一产物不随 clone 带上，hooks 会断，或 dashboard 会退化为无法启动/无页面。`tools/verify-skills.sh`
 会把三组资产都作为安装期硬校验项；校验失败不得切换 launcher。
@@ -72,11 +73,14 @@ pipeline setup --codex --auto-update
 ```
 
 更新实现先让宿主刷新 marketplace/插件，再用宿主 `plugin list --json` 返回的安装根运行资产校验；只有
-校验通过才把 `~/.local/bin/pipeline` 切到新 bundle。校验同时检查内置 skills、CLI、dashboard server 和
-SPA；失败必须保留旧 launcher。自动更新是用户 opt-in，当前会话不热替换 skills/hooks，新会话才加载新
-版本。Codex 的第三方 hook 必须由用户在 `/hooks` 完成一次性信任；新发布物改变 hook hash 时，宿主可能要求
-重新信任，不能用安装脚本绕过这一安全边界。完整工作台固定通过 `pipeline dashboard` 启动，默认端口 8765；旧端口需显式
-`pipeline dashboard --port 18765`。
+校验通过才会 stage → 完整验证 → 原子切换 managed release。稳定 `~/.local/bin/pipeline` / `pipeline-hook`
+本身不改指向；失败必须保留当前 active release 与启动器。selection、audit、bootstrap slot 都放在平台标准
+runtime 目录，且仅保留 active/previous 为恢复候选。`pipeline runtime repair --rollback` 会再次校验 previous
+release digest 后才切换，绝不把任意 marketplace checkout 当作恢复源。自动更新是用户 opt-in，当前会话不热替换
+skills/hooks，新会话才加载新版本。每次成功 setup 会从刚发布的不可变 payload 启动受管 dashboard，健康检查
+通过后自动打开本机页面；后台自动更新只刷新同一受管服务，不会打断或主动打开浏览器。Codex 的第三方 hook 必须由用户在
+`/hooks` 完成一次性信任；新发布物改变 hook hash 时，宿主可能要求重新信任，不能用安装脚本绕过这一安全边界。完整工作台
+固定通过 `pipeline dashboard` 启动，默认端口 18765；旧端口需显式 `pipeline dashboard --port 8765`。
 
 每次发布至少执行：
 

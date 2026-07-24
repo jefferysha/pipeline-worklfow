@@ -14,7 +14,7 @@ function customTrack(pattern = "'$(touch /tmp/router-owned)`printf pwn`|mobile-r
     id: 'designer-mobile',
     label: 'Designer $(inert)',
     builtin: false,
-    workflow: { default: 'default', allowed: '*' },
+    workflow: { default: 'pet-adoption', allowed: ['pet-adoption'] },
     policyProfile: {
       reviewSeed: 'pending',
       automationEligible: true,
@@ -55,7 +55,7 @@ describe('_gen-router-sh project data-cache command', () => {
     await rm(root, { recursive: true, force: true })
   })
 
-  test('emits PIPELINE_ROUTER_V2 from the effective registry with canonical identity and inert hex data', async () => {
+  test('emits PIPELINE_ROUTER_V4 from the effective registry with canonical identity and inert hex data', async () => {
     const out: string[] = []
     const err: string[] = []
     const loadCalls: number[] = []
@@ -77,7 +77,7 @@ describe('_gen-router-sh project data-cache command', () => {
 
     const cache = `${out[0]}\n`
     const lines = cache.trimEnd().split('\n')
-    expect(lines[0]).toBe('PIPELINE_ROUTER_V2')
+    expect(lines[0]).toBe('PIPELINE_ROUTER_V4')
     const metadata = lines[1]?.split('|') ?? []
     expect(metadata).toEqual([
       'M',
@@ -89,8 +89,10 @@ describe('_gen-router-sh project data-cache command', () => {
     const route = lines.find((line) => line.startsWith('R|'))?.split('|') ?? []
     expect(Buffer.from(route[3] ?? '', 'hex').toString('utf8')).toBe('designer-mobile')
     expect(Buffer.from(route[4] ?? '', 'hex').toString('utf8')).toContain('mobile-route-token')
-    expect(Buffer.from(route[5] ?? '', 'hex').toString('utf8')).toBe('frontend')
-    expect(route.slice(6, 8)).toEqual(['0', '0']) // matrix=false 仍进入 router；custom 不是 builtin
+    expect(Buffer.from(route[5] ?? '', 'hex').toString('utf8')).toBe('')
+    expect(Buffer.from(route[6] ?? '', 'hex').toString('utf8')).toBe('frontend')
+    expect(route.slice(7, 9)).toEqual(['0', '0']) // matrix=false 仍进入 router；custom 不是 builtin
+    expect(Buffer.from(route[10] ?? '', 'hex').toString('utf8')).toBe('pet-adoption')
     expect(cache).not.toContain('FE_PATTERN=')
     expect(cache).not.toContain('$(')
     expect(cache).not.toContain('`')

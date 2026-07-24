@@ -33,5 +33,5 @@ export CLAUDE_PLUGIN_ROOT="$_ROOT"
 CC_INJECTOR="${PIPELINE_CC_INJECTOR:-$_ROOT/hooks/session-start.sh}"
 [ -f "$CC_INJECTOR" ] || exit 0
 
-printf '%s' "$INPUT" | bash "$CC_INJECTOR" 2>/dev/null || true
+printf '%s' "$INPUT" | PIPELINE_SESSION_START_FORMAT=plain bash "$CC_INJECTOR" 2>/dev/null || true
 exit 0

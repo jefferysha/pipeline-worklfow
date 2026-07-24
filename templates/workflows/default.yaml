@@ -64,6 +64,8 @@ steps:
     transitions:
       - event: build-complete
         to: verify
+      - event: requirements-changed
+        to: spec
   - id: verify
     label: 验证
     gate: review

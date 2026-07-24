@@ -1,0 +1,598 @@
+<!doctype html>
+<!--
+  v7c · 流式行内展开(Stream)—— Pipeline 收件箱「在等你决定」(高保真单文件)
+  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ■ 设计逻辑
+    去侧栏、去卡片:整页只有一条垂直通道——顶栏、页头、4 个决策条目共用同一内容列
+    (max-width 760px,≈47 个中文字/行,65–75ch 纪律),点击整行在条目下方推开详情,
+    决策动作就地完成,视线不再向右侧 1/3 窄栏横跳。条目间用 1px 发丝分隔而非卡片框,
+    这是与现行卡片风(v4/v6)的核心差异:列表是「流」,不是「墙」。
+    · 收起态两行:名称 + track·phase + 判定徽章 + 时间 / 15px 摘要一句(至多两行,
+      保住句尾的「重试还是放弃?」问句)。工程徽章(automation=failed 等)全部收进展开态。
+    · 排序 = 紧急度降序:三件自动化停摆置顶(损失正在发生:现场挂起、任务不前进,
+      每分钟都有成本),gate-demo 置底(零风险确认,晚一分钟无损失);置顶的
+      cause-fallback 默认展开,打开页面视线直接落在焦点上,绿色「可以放行」压轴
+      还给扫描一个正反馈终点。三件故障内部再按影响面:环境级(Docker)>单任务级
+      (verify 失败)>人为终止(非故障,琥珀)。
+    · 展开互斥(accordion 单开):展开区内容重(原文框/动作/相位/历史),单开保证
+      收起态 4 件一屏可扫;且「一次只裁决一件」,决策按钮永远只有一组在屏上,无误点。
+      再点已展开条目可全收。展开 200ms 高度过渡(grid-rows 0fr→1fr),reduced-motion 直切。
+    · 相位压缩条:7 相位横排微点,只有停点带彩(红=故障停点/绿=完成待放行),
+      已过=实心灰点、未来=空心点;一条线只讲一件事:停在哪。
+  ■ form 来自内容的哪里(一句话)
+    收件箱本质是「等人拍板的队列」,每件事只需一次裁决:读成因 → 按钮拍板。
+    故 form 取「邮件流」而非卡片墙:收起态两行是信封摘要,行内展开是拆开信
+    读全文并当场写回执,拆信不用把信拿到另一张桌子上(侧栏)。
+  ■ 字体方案(签名:阅读态排版)
+    一族 sans:-apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei"。
+    字号少而拉开:15px/1.7 中文阅读基准(摘要与说明)· 16px/650 条目名 ·
+    12.5px 微信息(时间/track/历史)· 12px/500 展开区标签(中文不作 uppercase,
+    仅重量与颜色降位);层级主要靠重量(650/600/500/400)与颜色(text/2/3)表达。
+    mono 仅用于 last_error 原文、build_sha、verification_report 与 attempts 工程键值行;
+    控件(按钮/导航)自持 13px(与副题同档),不计入阅读三档。
+  ■ 主题与色板
+    现行单色系基线(v4/styles.ts 同源):浅 #fff·#f7f7f5·#0d0d0d·电光蓝 #0b6cff,
+    暗 #0d0d0d·#171717·#f2f2f0·#4d94ff;绿 #1f9d51 红 #d92d20;琥珀按 dashboard
+    cancelled 徽章先例自「红绿 oklch 取中」派生后手调对比(浅 #7c4f04/#a16207,
+    暗 #e3b341)。默认跟随系统(prefers-color-scheme),右上按钮三态循环
+    跟随→浅→深,显式选择两向覆盖系统(同 styles.ts 惯例)。正文对比全部 ≥4.5:1
+    (15px 正文一律 text-2 级以上;暗色主按钮底加深至 #1f6feb 使白字达 4.6:1)。
+-->
+<html lang="zh-CN" data-thememode="auto">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Pipeline 控制台 · v7c 流式行内展开</title>
+<script>
+/* 防闪:CSS 解析前恢复上次显式主题选择 */
+try{var m=localStorage.getItem('v7c-theme');
+if(m==='light'||m==='dark'){document.documentElement.setAttribute('data-theme',m);document.documentElement.setAttribute('data-thememode',m);}}catch(e){}
+</script>
+<style>
+/* ============ tokens ============ */
+:root{
+  color-scheme: light;
+  --bg:#ffffff; --bg-soft:#f7f7f5; --fill:#f4f4f2; --fill-2:#ececea;
+  --hov:rgba(13,13,13,.035); --press:rgba(13,13,13,.06);
+  --border:#e4e4e0; --border-2:#d2d2cc; --hairline:rgba(13,13,13,.09);
+  --text:#0d0d0d; --text-2:#40403c; --text-3:#6a6a62;
+  --accent:#0b6cff; --accent-d:#0a5ce0; --accent-t:#eaf2ff; --accent-b:#c5daff;
+  --green:#1f9d51; --green-d:#187339; --green-t:#e9f6ee; --green-b:#c8e8d2;
+  --red:#d92d20;   --red-d:#b42318;   --red-t:#fdf0ee;   --red-b:#f3cfc9;
+  --amber:#a16207; --amber-d:#7c4f04; --amber-t:#faf3e2; --amber-b:#e8d6a4;
+  --btn-bg:#0b6cff; --btn-fg:#ffffff; --btn-hover:#0a5ce0;
+  --code-bg:#f7f7f5; --code-border:#e4e4e0;
+  --ring:rgba(11,108,255,.14);
+  --z-sticky:30;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme: dark;
+    --bg:#0d0d0d; --bg-soft:#171717; --fill:#1e1e1d; --fill-2:#262624;
+    --hov:rgba(255,255,255,.05); --press:rgba(255,255,255,.085);
+    --border:#262626; --border-2:#3a3a37; --hairline:rgba(255,255,255,.095);
+    --text:#f2f2f0; --text-2:#c9c9c4; --text-3:#94948d;
+    --accent:#4d94ff; --accent-d:#7fb2ff; --accent-t:rgba(77,148,255,.13); --accent-b:rgba(77,148,255,.38);
+    --green:#3fb950; --green-d:#55c368; --green-t:rgba(63,185,80,.13); --green-b:rgba(63,185,80,.35);
+    --red:#e5534b;   --red-d:#f2867e;   --red-t:rgba(229,83,75,.14);   --red-b:rgba(229,83,75,.40);
+    --amber:#d29922; --amber-d:#e3b341; --amber-t:rgba(210,153,34,.13); --amber-b:rgba(210,153,34,.42);
+    --btn-bg:#1f6feb; --btn-fg:#ffffff; --btn-hover:#1a63d8;
+    --code-bg:#111110; --code-border:#2a2a28;
+    --ring:rgba(77,148,255,.22);
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --bg:#0d0d0d; --bg-soft:#171717; --fill:#1e1e1d; --fill-2:#262624;
+  --hov:rgba(255,255,255,.05); --press:rgba(255,255,255,.085);
+  --border:#262626; --border-2:#3a3a37; --hairline:rgba(255,255,255,.095);
+  --text:#f2f2f0; --text-2:#c9c9c4; --text-3:#94948d;
+  --accent:#4d94ff; --accent-d:#7fb2ff; --accent-t:rgba(77,148,255,.13); --accent-b:rgba(77,148,255,.38);
+  --green:#3fb950; --green-d:#55c368; --green-t:rgba(63,185,80,.13); --green-b:rgba(63,185,80,.35);
+  --red:#e5534b;   --red-d:#f2867e;   --red-t:rgba(229,83,75,.14);   --red-b:rgba(229,83,75,.40);
+  --amber:#d29922; --amber-d:#e3b341; --amber-t:rgba(210,153,34,.13); --amber-b:rgba(210,153,34,.42);
+  --btn-bg:#1f6feb; --btn-fg:#ffffff; --btn-hover:#1a63d8;
+  --code-bg:#111110; --code-border:#2a2a28;
+  --ring:rgba(77,148,255,.22);
+}
+
+/* ============ base ============ */
+*{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-text-size-adjust:100%}
+body{
+  font-family:-apple-system,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  font-size:15px;line-height:1.7;color:var(--text-2);background:var(--bg);
+}
+.mono{font-family:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,"JetBrains Mono",monospace}
+a{color:var(--accent-d);text-decoration:none}
+a:hover{text-decoration:underline}
+button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
+:is(button,a,[tabindex]):focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:8px}
+.col{max-width:760px;margin:0 auto;padding:0 24px}
+.i{width:16px;height:16px;flex:none;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.i.sm{width:13px;height:13px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+::selection{background:var(--accent-t)}
+
+/* ============ topbar(与内容同列宽:整页一条垂直通道)============ */
+.topbar{position:sticky;top:0;z-index:var(--z-sticky);background:var(--bg);border-bottom:1px solid var(--hairline)}
+.tb{display:flex;align-items:center;gap:10px;height:54px}
+.brand{display:flex;align-items:center;gap:8px;color:var(--text)}
+.brand:hover{text-decoration:none}
+.brand .mark{width:25px;height:25px;border-radius:8px;background:var(--text);display:grid;place-items:center}
+.brand .mark svg{width:15px;height:15px;stroke:var(--bg);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.brand b{font-size:13px;font-weight:650;letter-spacing:.01em;white-space:nowrap}
+.switcher{display:inline-flex;align-items:center;gap:5px;height:30px;padding:0 9px;border-radius:8px;font-size:13px;font-weight:600;color:var(--text-2);white-space:nowrap}
+.switcher:hover{background:var(--hov);color:var(--text)}
+.switcher .i{width:12px;height:12px;color:var(--text-3)}
+.nav{display:flex;align-items:center;gap:2px;min-width:0}
+.nav a{display:inline-flex;align-items:center;gap:6px;padding:5px 9px;border-radius:8px;font-size:13px;color:var(--text-3);white-space:nowrap}
+.nav a:hover{background:var(--hov);color:var(--text);text-decoration:none}
+.nav a.on{color:var(--text);font-weight:600}
+.nav .cnt{font-size:11px;line-height:1;padding:2.5px 6px;border-radius:999px;background:var(--red-t);color:var(--red-d);font-weight:700;border:1px solid var(--red-b);font-variant-numeric:tabular-nums}
+.tb .sp{flex:1}
+.conn{display:inline-flex;align-items:center;padding:4px}
+.conn i{width:7px;height:7px;border-radius:999px;background:var(--green)}
+.tbtn{height:30px;min-width:30px;padding:0 7px;border-radius:8px;display:inline-grid;place-items:center;color:var(--text-3);font-size:12.5px;font-weight:600}
+.tbtn:hover{background:var(--hov);color:var(--text)}
+.tbtn svg{display:none;width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+[data-thememode="auto"]  .tbtn .ic-auto{display:block}
+[data-thememode="light"] .tbtn .ic-sun{display:block}
+[data-thememode="dark"]  .tbtn .ic-moon{display:block}
+[data-thememode="dark"] .tbtn .ic-moon *,[data-thememode="auto"] .tbtn .ic-auto .half{fill:currentColor}
+[data-thememode="dark"] .tbtn .ic-moon path{fill:none}
+
+/* ============ 页头(降噪:小标题 + 13px 副题 + ghost 新建)============ */
+.pagehead{display:flex;align-items:flex-end;gap:16px;margin:38px 0 20px}
+.pagehead h1{font-size:18px;font-weight:650;color:var(--text);letter-spacing:.005em;line-height:1.4;text-wrap:balance}
+.pagehead .sub{margin-top:5px;font-size:13px;color:var(--text-3)}
+.pagehead .sub b{font-weight:600;color:var(--text-2)}
+.pagehead .sp{flex:1}
+
+/* ============ buttons ============ */
+.btn{display:inline-flex;align-items:center;gap:6px;height:34px;padding:0 14px;border-radius:9px;font-size:13px;font-weight:600;border:1px solid transparent;transition:background .15s ease-out,border-color .15s ease-out,color .15s ease-out}
+.btn:active{transform:translateY(.5px)}
+.btn.primary{background:var(--btn-bg);color:var(--btn-fg)}
+.btn.primary:hover{background:var(--btn-hover)}
+.btn.ghost{border-color:var(--border);color:var(--text-2)}
+.btn.ghost:hover{background:var(--hov);border-color:var(--border-2);color:var(--text)}
+.btn.tint-red{background:var(--red-t);color:var(--red-d);border-color:var(--red-b)}
+.btn.tint-red:hover{border-color:var(--red-d)}
+.btn.sm{height:30px;padding:0 11px;border-radius:8px;gap:5px}
+
+/* ============ 决策条目流(无卡:1px 发丝分隔)============ */
+.stream{list-style:none;border-bottom:1px solid var(--hairline);margin-bottom:64px}
+.item{border-top:1px solid var(--hairline);scroll-margin-top:68px}
+.row{display:block;width:100%;text-align:left;padding:17px 2px 18px;border-radius:8px;transition:background .15s ease-out}
+.row:hover{background:var(--hov)}
+.row:active{background:var(--press)}
+.row:focus-visible{outline-offset:-2px}
+.l1{display:flex;align-items:center;gap:10px;flex-wrap:wrap;min-width:0}
+.name{font-size:16px;font-weight:650;color:var(--text);letter-spacing:.005em;line-height:1.45}
+.meta{font-size:12.5px;color:var(--text-3);white-space:nowrap}
+.verdict{display:inline-flex;align-items:center;gap:4px;height:21px;padding:0 8px;border-radius:999px;font-size:12px;font-weight:600;line-height:1;border:1px solid transparent;white-space:nowrap}
+.verdict svg{width:11px;height:11px;stroke:currentColor;fill:none;stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round}
+.verdict.red{background:var(--red-t);color:var(--red-d);border-color:var(--red-b)}
+.verdict.amber{background:var(--amber-t);color:var(--amber-d);border-color:var(--amber-b)}
+.verdict.green{background:var(--green-t);color:var(--green-d);border-color:var(--green-b)}
+.wing{margin-left:auto;display:inline-flex;align-items:center;gap:8px}
+.time{font-size:12.5px;color:var(--text-3);font-variant-numeric:tabular-nums;white-space:nowrap}
+.chev{width:15px;height:15px;color:var(--text-3);stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;transition:transform .2s cubic-bezier(.22,1,.36,1)}
+.item.open .chev{transform:rotate(180deg)}
+.l2{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;margin-top:6px;font-size:15px;line-height:1.7;color:var(--text-2);transition:color .15s ease-out}
+.item.open .l2{color:var(--text-3)} /* selected 态:详情已展开,摘要退位 */
+
+/* ============ 行内展开区(200ms 高度过渡)============ */
+.fold{display:grid;grid-template-rows:0fr;transition:grid-template-rows .2s cubic-bezier(.22,1,.36,1)}
+.item.open .fold{grid-template-rows:1fr}
+.fold-in{overflow:hidden;min-height:0}
+.fold-body{padding:6px 2px 30px;opacity:0;transition:opacity .15s ease-out}
+.item.open .fold-body{opacity:1;transition-delay:.05s}
+.fb + .fb{margin-top:22px}
+.flabel{font-size:12px;font-weight:500;color:var(--text-3);margin-bottom:8px}
+.flabel em{font-style:normal;font-weight:600}
+.flabel em.red{color:var(--red-d)}
+.flabel em.green{color:var(--green-d)}
+.cause-line{font-size:15px;line-height:1.7;color:var(--text)}
+.guide{font-size:15px;line-height:1.7;color:var(--text-2);margin-top:8px}
+.guide b{font-weight:600;color:var(--text)}
+.errbox{margin-top:12px;padding:11px 14px;border:1px solid var(--code-border);border-radius:9px;background:var(--code-bg);font-size:12.5px;line-height:1.65;color:var(--text-2);white-space:pre-wrap;word-break:break-word;overflow-x:auto}
+.kv{margin-top:8px;font-size:12.5px;color:var(--text-3)}
+
+/* gate 证据行 */
+.proof{list-style:none;display:flex;flex-direction:column;gap:7px}
+.proof li{display:flex;align-items:baseline;gap:9px;font-size:15px;line-height:1.6}
+.proof .ok{align-self:center;width:16px;height:16px;flex:none;border-radius:999px;background:var(--green-t);border:1px solid var(--green-b);display:grid;place-items:center}
+.proof .ok svg{width:9px;height:9px;stroke:var(--green-d);fill:none;stroke-width:2.8;stroke-linecap:round;stroke-linejoin:round}
+.proof .what{color:var(--text)}
+.proof .how{font-size:12.5px;color:var(--text-3)}
+.artifacts{margin-top:12px;padding:11px 14px;border:1px solid var(--code-border);border-radius:9px;background:var(--code-bg);font-size:12.5px;line-height:1.9;color:var(--text-2)}
+.artifacts .k{color:var(--text-3)}
+
+/* 决定动作行(就地拍板) */
+.actrow{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+
+/* 相位压缩条:7 微点横排,仅停点带彩 */
+.phases{display:flex;align-items:center;flex-wrap:wrap;row-gap:8px}
+.ph{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--text-3);white-space:nowrap}
+.ph .dot{width:6px;height:6px;border-radius:999px;background:var(--border-2);flex:none}
+.ph.todo .dot{background:transparent;border:1.5px solid var(--border-2);width:7px;height:7px}
+.ph.cur{font-weight:600}
+.ph.cur .dot{width:8px;height:8px}
+.ph.cur.red{color:var(--red-d)}   .ph.cur.red .dot{background:var(--red)}
+.ph.cur.green{color:var(--green-d)} .ph.cur.green .dot{background:var(--green)}
+.ln{width:16px;height:1px;background:var(--hairline);margin:0 6px;flex:none}
+
+/* 历史 4 行小字 */
+.hist{list-style:none;display:flex;flex-direction:column;gap:5px}
+.hist li{display:flex;gap:12px;font-size:12.5px;line-height:1.6;color:var(--text-3)}
+.hist .t{flex:none;font-variant-numeric:tabular-nums}
+.hist .x2{font-weight:600;color:var(--text-2)}
+
+/* ============ 响应式(单列天然适配,只调内边距与折行)============ */
+@media (max-width:700px){
+  .col{padding:0 20px}
+  .pagehead{margin:30px 0 16px}
+}
+@media (max-width:600px){
+  .col{padding:0 16px}
+  .brand b{display:none}
+  .lang{display:none}
+  .nav a{padding:5px 7px}
+  .ph:not(.cur) .phname{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+  .ln{width:12px;margin:0 5px}
+  .pagehead{flex-direction:column;align-items:flex-start;gap:12px}
+  .pagehead .sp{display:none}
+}
+
+/* ============ reduced motion:一律直切 ============ */
+@media (prefers-reduced-motion:reduce){
+  .fold,.fold-body,.chev,.row,.btn,.l2{transition:none}
+}
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-flow" viewBox="0 0 24 24"><path d="M3 12h4l2.5-6 4.5 12 2.5-6H21"/></symbol>
+  <symbol id="i-chevron" viewBox="0 0 24 24"><path d="M6 9.5l6 6 6-6"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M4.5 12.8l5 5L19.5 6.5"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5.5v13M5.5 12h13"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.4"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M4.9 4.9l1.6 1.6M17.5 17.5l1.6 1.6M19.1 4.9l-1.6 1.6M6.5 17.5l-1.6 1.6"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20.2 13.6A8.4 8.4 0 1 1 10.4 3.8a6.8 6.8 0 0 0 9.8 9.8z"/></symbol>
+  <symbol id="i-auto" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.4"/><path class="half" d="M12 3.6a8.4 8.4 0 0 1 0 16.8z" stroke="none"/></symbol>
+</svg>
+
+<header class="topbar">
+  <div class="col tb">
+    <a class="brand" href="#" aria-label="Pipeline 控制台 首页">
+      <span class="mark"><svg aria-hidden="true"><use href="#i-flow"/></svg></span>
+      <b>Pipeline 控制台</b>
+    </a>
+    <button class="switcher" type="button" aria-haspopup="listbox" title="切换项目">
+      proj-a <svg class="i" aria-hidden="true"><use href="#i-chevron"/></svg>
+    </button>
+    <nav class="nav" aria-label="主导航">
+      <a class="on" href="#" aria-current="page">收件箱 <span class="cnt">4</span></a>
+      <a href="#">进度</a>
+      <a href="#">工作台</a>
+    </nav>
+    <span class="sp"></span>
+    <span class="conn" title="实时连接正常"><i aria-hidden="true"></i><span class="sr">实时连接正常</span></span>
+    <button class="tbtn lang" type="button" title="Switch to English(演示占位)">EN</button>
+    <button class="tbtn" id="themeBtn" type="button" aria-label="主题:跟随系统(点击切换)">
+      <svg class="ic-auto" aria-hidden="true"><use href="#i-auto"/></svg>
+      <svg class="ic-sun"  aria-hidden="true"><use href="#i-sun"/></svg>
+      <svg class="ic-moon" aria-hidden="true"><use href="#i-moon"/></svg>
+    </button>
+  </div>
+</header>
+
+<main class="col">
+  <header class="pagehead">
+    <div>
+      <h1>在等你决定</h1>
+      <p class="sub"><b>4 件</b>在排队:3 件自动化停摆等你处置,1 件验证完成等你放行。</p>
+    </div>
+    <span class="sp"></span>
+    <button class="btn ghost sm" type="button"><svg class="i sm" aria-hidden="true"><use href="#i-plus"/></svg>新建 change</button>
+  </header>
+
+  <ol class="stream">
+
+    <!-- 条目 cause-fallback:环境级故障,紧急度最高,默认展开 -->
+    <li class="item open" data-item>
+      <button class="row" type="button" aria-expanded="true" aria-controls="fold-1">
+        <span class="l1">
+          <span class="name">cause-fallback</span>
+          <span class="meta">backend · open</span>
+          <span class="verdict red">Docker 未运行</span>
+          <span class="wing">
+            <span class="time">07-13 03:14</span>
+            <svg class="chev" aria-hidden="true"><use href="#i-chevron"/></svg>
+          </span>
+        </span>
+        <span class="l2">自动化跑挂了:Cannot connect to the Docker daemon (unix /var/run/docker.sock),已自动重试 0 次——重试还是放弃?</span>
+      </button>
+      <div class="fold" id="fold-1" role="region" aria-label="cause-fallback 详情">
+        <div class="fold-in"><div class="fold-body">
+          <section class="fb">
+            <p class="flabel">成因</p>
+            <p class="cause-line">automation 第一步就没起来:执行环境的 Docker daemon 未运行,容器无法创建,任务还没有跑过任何一步。</p>
+            <p class="guide"><b>重试</b>会清零重试计数并重新挂队,适合在恢复 Docker 之后走;<b>放弃</b>会退出自动化,change 停在原地,现场与 worktree 完整保留,可转手工继续。</p>
+            <pre class="errbox mono">Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?</pre>
+            <p class="kv mono">cause=fallback · automation=failed · attempts=0</p>
+          </section>
+          <section class="fb">
+            <p class="flabel">语义说明</p>
+            <p class="guide">cause=fallback 表示故障发生在<b>环境层</b>而不是你的实现:automation 撞上基础设施问题后回退停下,等人恢复环境再定。本条的直接原因是本机 Docker 服务未启动,先把 Docker 跑起来,重试的成功率最高。</p>
+          </section>
+          <section class="fb">
+            <p class="flabel">决定</p>
+            <div class="actrow">
+              <button class="btn primary" type="button">重试</button>
+              <button class="btn tint-red" type="button">放弃</button>
+            </div>
+          </section>
+          <section class="fb">
+            <p class="flabel">相位 · 停在 <em class="red">实现</em>(open)</p>
+            <div class="phases" role="img" aria-label="七个相位:立项、调研、规格已完成,停在实现,验证、交付、归档未开始">
+              <span class="ph done"><i class="dot"></i><span class="phname">立项</span></span><i class="ln"></i>
+              <span class="ph done"><i class="dot"></i><span class="phname">调研</span></span><i class="ln"></i>
+              <span class="ph done"><i class="dot"></i><span class="phname">规格</span></span><i class="ln"></i>
+              <span class="ph cur red"><i class="dot"></i><span class="phname">实现</span></span><i class="ln"></i>
+              <span class="ph todo"><i class="dot"></i><span class="phname">验证</span></span><i class="ln"></i>
+              <span class="ph todo"><i class="dot"></i><span class="phname">交付</span></span><i class="ln"></i>
+              <span class="ph todo"><i class="dot"></i><span class="phname">归档</span></span>
+            </div>
+          </section>
+          <section class="fb">
+            <p class="flabel">历史</p>
+            <ol class="hist">
+              <li><span class="t">07-13 03:12</span><span>change 创建,进入 open</span></li>
+              <li><span class="t">07-13 03:13</span><span>automation 已更新:排队 → 运行</span></li>
+              <li><span class="t">07-13 03:14</span><span>automation_last_error 已更新</span></li>
+              <li><span class="t">07-13 03:14</span><span>automation_last_error 已更新 <span class="x2">×2</span>,automation 停下等你决定</span></li>
+            </ol>
+          </section>
+        </div></div>
+      </div>
+    </li>
+
+    <!-- 条目 cause-verifyfail:单任务级故障 -->
+    <li class="item" data-item>
+      <button class="row" type="button" aria-expanded="false" aria-controls="fold-2">
+        <span class="l1">
+          <span class="name">cause-verifyfail</span>
+          <span class="meta">frontend · open</span>
+          <span class="verdict red">验证未通过</span>
+          <span class="wing">
+            <span class="time">07-13 02:47</span>
+            <svg class="chev" aria-hidden="true"><use href="#i-chevron"/></svg>
+          </span>
+        </span>
+        <span class="l2">自动化验证未通过:verify 2 failed · auth.test.ts,已自动重试 2 次——重试还是放弃?</span>
+      </button>
+      <div class="fold" id="fold-2" role="region" aria-label="cause-verifyfail 详情">
+        <div class="fold-in"><div class="fold-body">
+          <section class="fb">
+            <p class="flabel">成因</p>
+            <p class="cause-line">实现产物没通过自动验证:verify 共 43 项,2 项失败,全部集中在 auth.test.ts。</p>
+            <p class="guide"><b>重试</b>会清零计数重新挂队,适合疑似偶发;两次都倒在同一处,更可能是实现真有问题,<b>放弃</b>后现场与 worktree 保留,可进工作台手工修。</p>
+            <pre class="errbox mono">verify failed: 2 of 43 tests failed
+FAIL  src/auth/auth.test.ts › refresh token rotation — expected 401, got 500
+FAIL  src/auth/auth.test.ts › session expiry after logout — token still valid</pre>
+            <p class="kv mono">cause=verify-fail · automation=failed · attempts=2</p>
+          </section>
+          <section class="fb">
+            <p class="flabel">语义说明</p>
+            <p class="guide">cause=verify-fail 表示 automation 本身运行正常,是<b>产物质量</b>没过线被验证拦下,决策依据在上面的失败用例,而不是环境。</p>
+          </section>
+          <section class="fb">
+            <p class="flabel">决定</p>
+            <div class="actrow">
+              <button class="btn primary" type="button">重试</button>
+              <button class="btn tint-red" type="button">放弃</button>
+            </div>
+          </section>
+          <section class="fb">
+            <p class="flabel">相位 · 停在 <em class="red">实现</em>(open)</p>
+            <div class="phases" role="img" aria-label="七个相位:立项、调研、规格已完成,停在实现,验证、交付、归档未开始">
+              <span class="ph done"><i class="dot"></i><span class="phname">立项</span></span><i class="ln"></i>
+              <span class="ph done"><i class="dot"></i><span class="phname">调研</span></span><i class="ln"></i>
+              <span class="ph done"><i class="dot"></i><span class="phname">规格</span></span><i class="ln"></i>
+              <span class="ph cur red"><i class="dot"></i><span class="phname">实现</span></span><i class="ln"></i>
+              <span class="ph todo"><i class="dot"></i><span class="phname">验证</span></span><i class="ln"></i>
+              <span class="ph todo"><i class="dot"></i><span class="phname">交付</span></span><i class="ln"></i>
+              <span class="ph todo"><i class="dot"></i><span class="phname">归档</span></span>
+            </div>
+          </section>
+          <section class="fb">
+            <p class="flabel">历史</p>
+            <ol class="hist">
+              <li><span class="t">07-13 02:31</span><span>change 创建,进入 open</span></li>
+              <li><span class="t">07-13 02:39</span><span>automation 已更新:运行 verify</span></li>
+              <li><span class="t">07-13 02:42</span><span>automation_last_error 已更新(第 1 次失败,自动重试)</span></li>
+              <li><span class="t">07-13 02:47</span><span>automation_last_error 已更新(第 2 次失败,停下等你决定)</span></li>
+            </ol>
+          </section>
+        </div></div>
+      </div>
+    </li>
+
+    <!-- 条目 cause-cancelled:人为终止,非故障 → 琥珀 -->
+    <li class="item" data-item>
+      <button class="row" type="button" aria-expanded="false" aria-controls="fold-3">
+        <span class="l1">
+          <span class="name">cause-cancelled</span>
+          <span class="meta">backend · open</span>
+          <span class="verdict amber">已取消</span>
+          <span class="wing">
+            <span class="time">07-12 23:05</span>
+            <svg class="chev" aria-hidden="true"><use href="#i-chevron"/></svg>
+          </span>
+        </span>
+        <span class="l2">自动化已被终止:aborted — cancel requested via dashboard,现场原样保留——重试还是放弃?</span>
+      </button>
+      <div class="fold" id="fold-3" role="region" aria-label="cause-cancelled 详情">
+        <div class="fold-in"><div class="fold-body">
+          <section class="fb">
+            <p class="flabel">成因</p>
+            <p class="cause-line">不是故障:automation 收到来自控制台的取消请求,按指令停在了实现相位。</p>
+            <p class="guide"><b>重试</b>会清零计数重新挂队,从头再跑一遍;<b>放弃</b>则维持终止,现场与 worktree 保留,可转手工继续。</p>
+            <pre class="errbox mono">aborted — cancel requested via dashboard</pre>
+            <p class="kv mono">cause=cancelled · automation=aborted · attempts=0</p>
+          </section>
+          <section class="fb">
+            <p class="flabel">语义说明</p>
+            <p class="guide">cause=cancelled 是<b>人为终止</b>,不计入失败;判定用琥珀而不是红,就是提醒你:这里没有坏掉的东西,只有一个等确认的决定。</p>
+          </section>
+          <section class="fb">
+            <p class="flabel">决定</p>
+            <div class="actrow">
+              <button class="btn primary" type="button">重试</button>
+              <button class="btn tint-red" type="button">放弃</button>
+            </div>
+          </section>
+          <section class="fb">
+            <p class="flabel">相位 · 停在 <em class="red">实现</em>(open)</p>
+            <div class="phases" role="img" aria-label="七个相位:立项、调研、规格已完成,停在实现,验证、交付、归档未开始">
+              <span class="ph done"><i class="dot"></i><span class="phname">立项</span></span><i class="ln"></i>
+              <span class="ph done"><i class="dot"></i><span class="phname">调研</span></span><i class="ln"></i>
+              <span class="ph done"><i class="dot"></i><span class="phname">规格</span></span><i class="ln"></i>
+              <span class="ph cur red"><i class="dot"></i><span class="phname">实现</span></span><i class="ln"></i>
+              <span class="ph todo"><i class="dot"></i><span class="phname">验证</span></span><i class="ln"></i>
+              <span class="ph todo"><i class="dot"></i><span class="phname">交付</span></span><i class="ln"></i>
+              <span class="ph todo"><i class="dot"></i><span class="phname">归档</span></span>
+            </div>
+          </section>
+          <section class="fb">
+            <p class="flabel">历史</p>
+            <ol class="hist">
+              <li><span class="t">07-12 22:48</span><span>change 创建,进入 open</span></li>
+              <li><span class="t">07-12 22:52</span><span>automation 已更新:运行中</span></li>
+              <li><span class="t">07-12 23:04</span><span>收到取消请求(via dashboard)</span></li>
+              <li><span class="t">07-12 23:05</span><span>automation 已终止,现场保留</span></li>
+            </ol>
+          </section>
+        </div></div>
+      </div>
+    </li>
+
+    <!-- 条目 gate-demo:零风险确认,置底收尾(绿色正反馈终点) -->
+    <li class="item" data-item>
+      <button class="row" type="button" aria-expanded="false" aria-controls="fold-4">
+        <span class="l1">
+          <span class="name">gate-demo</span>
+          <span class="meta">backend · verify</span>
+          <span class="verdict green"><svg aria-hidden="true"><use href="#i-check"/></svg>可以放行</span>
+          <span class="wing">
+            <span class="time">07-12 21:40</span>
+            <svg class="chev" aria-hidden="true"><use href="#i-chevron"/></svg>
+          </span>
+        </span>
+        <span class="l2">验证阶段完成:自动验证、agent review、codex review 全部通过——确认无误就放行进入交付。</span>
+      </button>
+      <div class="fold" id="fold-4" role="region" aria-label="gate-demo 详情">
+        <div class="fold-in"><div class="fold-body">
+          <section class="fb">
+            <p class="flabel">证据</p>
+            <ul class="proof">
+              <li><span class="ok"><svg aria-hidden="true"><use href="#i-check"/></svg></span><span class="what">自动验证 pass</span><span class="how">verify 43 项全过</span></li>
+              <li><span class="ok"><svg aria-hidden="true"><use href="#i-check"/></svg></span><span class="what">agent review pass</span><span class="how">无阻塞意见</span></li>
+              <li><span class="ok"><svg aria-hidden="true"><use href="#i-check"/></svg></span><span class="what">codex review pass</span><span class="how">2 条 nit 已收录报告</span></li>
+            </ul>
+            <p class="artifacts mono"><span class="k">verification_report</span> = <a href="#">docs/verify.md</a><br><span class="k">build_sha</span> = 201453d…</p>
+          </section>
+          <section class="fb">
+            <p class="flabel">语义说明</p>
+            <p class="guide">三道验证互相独立、全部通过,产物与报告已归档;<b>放行</b>会 transition 进交付相位,<b>打回</b>会退回实现并要求附上理由。</p>
+          </section>
+          <section class="fb">
+            <p class="flabel">决定</p>
+            <div class="actrow">
+              <button class="btn primary" type="button">放行进入交付</button>
+              <button class="btn tint-red" type="button">打回</button>
+            </div>
+          </section>
+          <section class="fb">
+            <p class="flabel">相位 · 停在 <em class="green">验证</em>(verify,完成待放行)</p>
+            <div class="phases" role="img" aria-label="七个相位:立项、调研、规格、实现已完成,验证完成待放行,交付、归档未开始">
+              <span class="ph done"><i class="dot"></i><span class="phname">立项</span></span><i class="ln"></i>
+              <span class="ph done"><i class="dot"></i><span class="phname">调研</span></span><i class="ln"></i>
+              <span class="ph done"><i class="dot"></i><span class="phname">规格</span></span><i class="ln"></i>
+              <span class="ph done"><i class="dot"></i><span class="phname">实现</span></span><i class="ln"></i>
+              <span class="ph cur green"><i class="dot"></i><span class="phname">验证</span></span><i class="ln"></i>
+              <span class="ph todo"><i class="dot"></i><span class="phname">交付</span></span><i class="ln"></i>
+              <span class="ph todo"><i class="dot"></i><span class="phname">归档</span></span>
+            </div>
+          </section>
+          <section class="fb">
+            <p class="flabel">历史</p>
+            <ol class="hist">
+              <li><span class="t">07-12 21:08</span><span>进入验证相位(自 实现)</span></li>
+              <li><span class="t">07-12 21:22</span><span>自动验证通过(verify 43 项)</span></li>
+              <li><span class="t">07-12 21:31</span><span>agent review 通过</span></li>
+              <li><span class="t">07-12 21:40</span><span>codex review 通过,停在放行门</span></li>
+            </ol>
+          </section>
+        </div></div>
+      </div>
+    </li>
+
+  </ol>
+</main>
+
+<script>
+(function(){
+  'use strict';
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+  /* ── 主题:三态循环 跟随系统 → 浅 → 深(显式选择两向覆盖系统)── */
+  var root = document.documentElement,
+      btn  = document.getElementById('themeBtn'),
+      MODES = ['auto','light','dark'],
+      NAMES = {auto:'跟随系统', light:'浅色', dark:'深色'},
+      cur = root.getAttribute('data-thememode') || 'auto';
+  function applyTheme(m){
+    cur = m;
+    root.setAttribute('data-thememode', m);
+    if (m === 'auto') root.removeAttribute('data-theme');
+    else root.setAttribute('data-theme', m);
+    var label = '主题:' + NAMES[m] + '(点击切换)';
+    btn.setAttribute('aria-label', label);
+    btn.title = label;
+    try { localStorage.setItem('v7c-theme', m); } catch(e){}
+  }
+  btn.addEventListener('click', function(){
+    applyTheme(MODES[(MODES.indexOf(cur) + 1) % MODES.length]);
+  });
+  applyTheme(cur);
+
+  /* ── 决策条目:行内展开,accordion 互斥(一次只裁决一件)── */
+  var items = Array.prototype.slice.call(document.querySelectorAll('[data-item]'));
+  function setOpen(item, open){
+    item.classList.toggle('open', open);
+    item.querySelector('.row').setAttribute('aria-expanded', String(open));
+  }
+  items.forEach(function(item){
+    item.querySelector('.row').addEventListener('click', function(){
+      var wasOpen = item.classList.contains('open');
+      items.forEach(function(other){ if (other !== item) setOpen(other, false); });
+      setOpen(item, !wasOpen);
+      if (!wasOpen){
+        /* 展开后若详情探出视口底,把条目头顶到 topbar 下,保证动作钮「展开即见」 */
+        window.setTimeout(function(){
+          var r = item.getBoundingClientRect();
+          if (r.bottom > window.innerHeight && r.top > 72){
+            item.scrollIntoView({ block:'start', behavior: reduce.matches ? 'auto' : 'smooth' });
+          }
+        }, reduce.matches ? 0 : 210);
+      }
+    });
+  });
+})();
+</script>
+</body>
+</html>

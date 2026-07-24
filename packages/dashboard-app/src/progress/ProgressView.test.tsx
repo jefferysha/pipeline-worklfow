@@ -362,6 +362,36 @@ describe('ProgressView 相位画布（画布 v3 WorkflowCanvas 集成）', () =>
     }
   })
 
+  it('正常 Codex 会话的显式新鲜心跳 → 运行中页签，但仍标为终端且不给 AFK 日志/终止按钮', async () => {
+    renderView({
+      snapshot: makeSnapshot([
+        makeProject(ROOT_A, [
+          makeChange('codex-live', 'build', {
+            fields: { automation: 'off' },
+            terminalActivity: {
+              sessionId: '019f92c7-6e66-7290-9352-f9d915266f14',
+              heartbeatAt: '2026-07-24T06:00:00.000Z',
+              expiresAt: '2026-07-24T06:02:00.000Z',
+            },
+          }),
+        ]),
+      ]),
+    })
+    expect(screen.getByTestId('prg9t-n-run').textContent).toBe('1')
+    fireEvent.click(screen.getByTestId('prg9t-tab-run'))
+    const chip = screen.getByTestId('prg-cv-chg-codex-live')
+    expect(chip).toHaveAttribute('data-state', 'running')
+    expect(chip.getAttribute('data-sbx')).toBeNull()
+    expect(chip.querySelector('svg.lucide-terminal')).not.toBeNull()
+    expect(chip).toHaveTextContent('终端运行中')
+    expect(chip).not.toHaveTextContent('自动运行中')
+
+    await openDrawer('codex-live')
+    expect(screen.getByTestId('prg9-dw-badge')).toHaveAttribute('data-tone', 'blue')
+    expect(screen.queryByTestId('prg9-dw-kill-codex-live')).toBeNull()
+    expect(screen.queryByTestId('prg-log-codex-live')).toBeNull()
+  })
+
   it('change 名称完整渲染（禁 ellipsis）；单项目语境无项目缩写 chip', async () => {
     const longName = 'refactor-legacy-payment-gateway-reconciliation-pipeline-v2'
     renderView({
@@ -568,6 +598,23 @@ describe('ProgressView 抽屉动作：终止 = afk 端点', () => {
     })
     await openDrawer('sched-demo')
     expect(screen.getByTestId('prg9-dw-kill-sched-demo')).toBeDisabled()
+  })
+
+  it('automation runner 与 terminal heartbeat 同时存在时仍保留真实 AFK cancel', async () => {
+    renderView({
+      snapshot: makeSnapshot([
+        makeProject(ROOT_A, [makeChange('mixed-runner', 'build', {
+          fields: { automation: 'running' },
+          terminalActivity: {
+            sessionId: '019f92c7-6e66-7290-9352-f9d915266f14',
+            heartbeatAt: '2026-07-24T06:00:00.000Z',
+            expiresAt: '2026-07-24T06:02:00.000Z',
+          },
+        })]),
+      ]),
+    })
+    await openDrawer('mixed-runner')
+    expect(screen.getByTestId('prg9-dw-kill-mixed-runner')).toBeEnabled()
   })
 
   it('排队/等产出行抽屉无放行/终止/命令钮（能力面之外不给按钮）', async () => {
@@ -925,7 +972,7 @@ describe('ProgressView 空态', () => {
             skills: { matrix: true, profile: 'frontend' },
           },
         },
-        order: 0, priority: 300, score: 1, routable: true,
+        order: 0, priority: 300, score: 1, routable: true, excluded: false,
       },
       candidates: [] as unknown[],
       suppressed_reason: null,

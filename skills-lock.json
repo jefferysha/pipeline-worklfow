@@ -1,0 +1,185 @@
+{
+  "version": 1,
+  "skills": {
+    "banner-design": {
+      "source": "nextlevelbuilder/ui-ux-pro-max-skill",
+      "sourceType": "github",
+      "skillPath": ".claude/skills/banner-design/SKILL.md",
+      "computedHash": "82c86217829268afd1f86e89390270e35cb3a1761854a0bbe6180929614ae022"
+    },
+    "brand": {
+      "source": "nextlevelbuilder/ui-ux-pro-max-skill",
+      "sourceType": "github",
+      "skillPath": ".claude/skills/brand/SKILL.md",
+      "computedHash": "3c7acb846082f9e4cc873f1cf85bd57ade027206e18c7c050797f815e3a56af7"
+    },
+    "browser-qa": {
+      "source": "affaan-m/ECC",
+      "sourceType": "github",
+      "skillPath": "skills/browser-qa/SKILL.md",
+      "computedHash": "52f96649546a642899d9eab90046691b9f9d394a0b00056dcc72cdd61b37dbd9"
+    },
+    "code-tour": {
+      "source": "affaan-m/ECC",
+      "sourceType": "github",
+      "skillPath": "skills/code-tour/SKILL.md",
+      "computedHash": "0af97828c16a847b1b25f290db8cc7d10fc86276549e4ab0d88e24ae40f7c964"
+    },
+    "deep-research": {
+      "source": "affaan-m/ECC",
+      "sourceType": "github",
+      "skillPath": "skills/deep-research/SKILL.md",
+      "computedHash": "a077ae15135e506490458ac6dacaf17be9dfa61600f1712c6b7dc79a7cef249e"
+    },
+    "deployment-patterns": {
+      "source": "affaan-m/ECC",
+      "sourceType": "github",
+      "skillPath": "skills/deployment-patterns/SKILL.md",
+      "computedHash": "fc7934c45176f56f0f2ddc1bd1aea50de7518772abac67bc66d301d99ef7405d"
+    },
+    "design": {
+      "source": "nextlevelbuilder/ui-ux-pro-max-skill",
+      "sourceType": "github",
+      "skillPath": ".claude/skills/design/SKILL.md",
+      "computedHash": "4e0412d29df74e6153e4944b367459a28cf52e3e81c7f45c1ecf4c2a8b21907c"
+    },
+    "design-system": {
+      "source": "nextlevelbuilder/ui-ux-pro-max-skill",
+      "sourceType": "github",
+      "skillPath": ".claude/skills/design-system/SKILL.md",
+      "computedHash": "a05715299135276628f53519484e1267ec8ad111e6355a09c2da1cf66aee2cc3"
+    },
+    "docker-patterns": {
+      "source": "affaan-m/ECC",
+      "sourceType": "github",
+      "skillPath": "skills/docker-patterns/SKILL.md",
+      "computedHash": "b9b2764274bb4e4d1c398bf0214b528b547edc4847690b861b0b1ef5d8900934"
+    },
+    "e2e-testing": {
+      "source": "affaan-m/ECC",
+      "sourceType": "github",
+      "skillPath": "skills/e2e-testing/SKILL.md",
+      "computedHash": "98eabe06f213ad8c7f8446988f9a9603aa6e251d20e157dbdb69a5785f11fcf4"
+    },
+    "frontend-patterns": {
+      "source": "affaan-m/ECC",
+      "sourceType": "github",
+      "skillPath": "skills/frontend-patterns/SKILL.md",
+      "computedHash": "f5cc422ee17ead99553f253a83ffadade138abc4e0834aa67fb887ee66d14d63"
+    },
+    "github-ops": {
+      "source": "affaan-m/ECC",
+      "sourceType": "github",
+      "skillPath": "skills/github-ops/SKILL.md",
+      "computedHash": "297f0eee98e3ecc5092266545f9fb9fb869bcf0fe8ed271e88c83629abb3d174"
+    },
+    "hallmark": {
+      "source": "nutlope/hallmark",
+      "sourceType": "github",
+      "skillPath": "skills/hallmark/SKILL.md",
+      "computedHash": "8a8ecafd613f09e701330b5aa4a591ac539abb2605596df4a2394f03628d1d76"
+    },
+    "hue": {
+      "source": "dominikmartn/hue",
+      "sourceType": "github",
+      "skillPath": "SKILL.md",
+      "computedHash": "1a6fe0cd4f620d5486608703f022abd8a7f145b918c605f8d0bd0f5263a84887"
+    },
+    "market-research": {
+      "source": "affaan-m/ECC",
+      "sourceType": "github",
+      "skillPath": "skills/market-research/SKILL.md",
+      "computedHash": "9c2f1153dcceb70df1c8e99603ab7d972a67ffe0cc4d1653fb420af0dc904a25"
+    },
+    "nestjs-patterns": {
+      "source": "affaan-m/ECC",
+      "sourceType": "github",
+      "skillPath": "skills/nestjs-patterns/SKILL.md",
+      "computedHash": "b0ba81185468f7c6e950b4de91fae8004a5d56501a31ea63caa5f7cc3854e6a7"
+    },
+    "postgres-patterns": {
+      "source": "affaan-m/ECC",
+      "sourceType": "github",
+      "skillPath": "skills/postgres-patterns/SKILL.md",
+      "computedHash": "ccf7be21533b50c43a821f8f6d415938d5e33a768029efd2c15ab14d670bf119"
+    },
+    "prototype": {
+      "source": "mattpocock/skills",
+      "sourceType": "github",
+      "skillPath": "skills/engineering/prototype/SKILL.md",
+      "computedHash": "faba901c53a6ca245174c4ba5db3929d14253232b3050fdbd46539720adf1ab8"
+    },
+    "python-patterns": {
+      "source": "affaan-m/ECC",
+      "sourceType": "github",
+      "skillPath": "skills/python-patterns/SKILL.md",
+      "computedHash": "3f4ccececee9c3144436666aed86417aa03fcfd0f976e606953adcc9c9b420b4"
+    },
+    "python-testing": {
+      "source": "affaan-m/ECC",
+      "sourceType": "github",
+      "skillPath": "skills/python-testing/SKILL.md",
+      "computedHash": "b93e0777d979c500ce0cd81557d49129aa3c110905e0e98e0cf1f47892821440"
+    },
+    "react-patterns": {
+      "source": "affaan-m/ECC",
+      "sourceType": "github",
+      "skillPath": "skills/react-patterns/SKILL.md",
+      "computedHash": "44d2c6304ff7ea20643a0203b74de9c7a42e1f70a2b73a5762500dea385dfc44"
+    },
+    "search-first": {
+      "source": "affaan-m/ECC",
+      "sourceType": "github",
+      "skillPath": "skills/search-first/SKILL.md",
+      "computedHash": "c82ffe228acdc70bb4d641d391f811d3d3ea5ba467b9ffe88e6dc4cd71c7b416"
+    },
+    "slides": {
+      "source": "nextlevelbuilder/ui-ux-pro-max-skill",
+      "sourceType": "github",
+      "skillPath": ".claude/skills/slides/SKILL.md",
+      "computedHash": "c72a8bcd2ee98a7caab8f00a816c7e7ccfa46bba6682539db2186e71220155f1"
+    },
+    "to-spec": {
+      "source": "mattpocock/skills",
+      "sourceType": "github",
+      "skillPath": "skills/engineering/to-spec/SKILL.md",
+      "computedHash": "0f544cd0c099c06f0dd0b7b9ee98b4237218e7e95fd3d3c02e791efbaf74bacb"
+    },
+    "to-tickets": {
+      "source": "mattpocock/skills",
+      "sourceType": "github",
+      "skillPath": "skills/engineering/to-tickets/SKILL.md",
+      "computedHash": "5d79577541b5cf6dade61c69844432ea20ce7b12527cdda1dd4d6fe8d59a135d"
+    },
+    "triage": {
+      "source": "mattpocock/skills",
+      "sourceType": "github",
+      "skillPath": "skills/engineering/triage/SKILL.md",
+      "computedHash": "7c923b6a677cfe689500721f08307e2a4c46797ff169dc55ef6c34a431a0d533"
+    },
+    "ui-styling": {
+      "source": "nextlevelbuilder/ui-ux-pro-max-skill",
+      "sourceType": "github",
+      "skillPath": ".claude/skills/ui-styling/SKILL.md",
+      "computedHash": "c5263c6dd5078d826da829036c2abd3249685e38dae40991a4763b3157017c27"
+    },
+    "ui-ux-pro-max": {
+      "source": "nextlevelbuilder/ui-ux-pro-max-skill",
+      "sourceType": "github",
+      "skillPath": ".claude/skills/ui-ux-pro-max/SKILL.md",
+      "computedHash": "f0916ca326ad6dbde1d0770b46956a213406b8ea4a19ed931bb4f2dc7d04c16d"
+    },
+    "web-artifacts-builder": {
+      "source": "anthropics/skills",
+      "sourceType": "github",
+      "skillPath": "skills/web-artifacts-builder/SKILL.md",
+      "computedHash": "d52d422ead3fa26859a6af129609841a8536b230a2d649f86e61771d063e05e2"
+    },
+    "web-design-guidelines": {
+      "source": "vercel-labs/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/web-design-guidelines/SKILL.md",
+      "computedHash": "f3bc47f890f42a44db1007ab390709ec368e4b8c089baee6b0007182236ac474"
+    }
+  }
+}

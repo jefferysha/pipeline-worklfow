@@ -31,7 +31,24 @@ printf '# proposal\n\nT6 oracle fixture: default 轨 guard 失败分支 stderr �
 printf '# design\n\nfixture design doc.\n' > "$target/openspec/changes/t6-ge/design.md"
 printf -- '- [ ] t1\n- [x] t2\n- [x] t3\n' > "$target/openspec/changes/t6-ge/tasks.md"
 # 字段指向的「存在」目标（fix 步用）；docs/missing.md 刻意不建（file-exists 失败分支用）。
-printf '# design\n' > "$target/docs/design.md"
+# 成功走到 spec 出口时需要真实 coverage gate，因此稳定的 design fixture 带 backend 的完整覆盖块；
+# 前两条 explore 失败仍由空字段/不存在文件精确触发，不受该准备文件影响。
+cat > "$target/docs/design.md" <<'DESIGN'
+# design
+
+```coverage
+touches:
+L1_api: filled
+L2_data: filled
+L3_rules: filled
+L4_state: filled
+L5_errors: filled
+L6_security: filled
+L7_perf: filled
+L8_deps: filled
+L10_terms: filled
+```
+DESIGN
 printf '# plan\n' > "$target/docs/plan.md"
 printf '# verification report\n' > "$target/docs/verify.md"
 
@@ -41,6 +58,10 @@ printf '# verification report\n' > "$target/docs/verify.md"
 
 # 声明本 fixture 走 stderr 逐字口径（run.sh 据此在 transition 拒绝路径逐字比 stderr）。
 : > "$target/.oracle-stderr-check"
+# 旧版 oracle 枚举 isolation 仅 branch/worktree；新默认工作流有意新增 in-place，供受限 Codex
+# 沙盒如实声明未创建 Git 隔离。第 17 步仍比较 exit/stdout/YAML，只把这个过期错误枚举列为已知差异。
+printf '17\tin-place 是受限 agent 的显式 isolation 产品扩展；旧 oracle 无此枚举\n' \
+  > "$target/.oracle-stderr-divergences"
 
 # 竖线转 TAB（计划值不含竖线）
 tr '|' '\t' > "$target/.oracle-plan" <<'PLAN'

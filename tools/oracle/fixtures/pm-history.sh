@@ -7,6 +7,9 @@
 #   · 对含历史区的既有 change 做 get/set/transition/check（不 init）
 #   · 新内核写回时历史尾块必须逐字保留 —— 基线写入 <target>/.oracle-preserve
 #     （首行 change 名，其余 = 历史区块），run.sh 全程跑完后在新侧做逐字子串校验
+#   · PM 内建策略在项目显式开启 automation + default_opt_in 后，于 spec-complete 自动入 AFK
+#     队列是新产品能力；用精确 sidecar 声明并由 harness 验证 old=off → new=queued +
+#     queued_at，绝不以宽泛 YAML 白名单掩盖它。
 #
 # 用法: pm-history.sh <target-dir>
 # 计划行格式: <expected_new_exit>\t<cmd>\t<args...>（expected 列仅降级模式使用）
@@ -14,8 +17,13 @@ set -euo pipefail
 
 target="${1:?usage: pm-history.sh <target-dir>}"
 chdir="$target/openspec/changes/t6-pm"
-mkdir -p "$chdir" "$target/docs"
+mkdir -p "$chdir" "$target/docs" "$target/.pipeline"
 (cd "$target" && git init -q -b main 2>/dev/null || git init -q 2>/dev/null || true)
+
+# 自动挂队是双层显式授权：项目总开关和 default opt-in 缺一不可。旧 oracle 不消费该文件，
+# 新实现必须消费它；因此 fixture 仍能精确验证“显式启用后”的产品演进，而不是依赖隐式默认。
+printf '%s\n' '{"version":1,"enabled":true,"default_opt_in":true}' \
+  > "$target/.pipeline/automation.json"
 
 printf '# proposal\n\nT6 oracle fixture: pm + history region.\n' > "$chdir/proposal.md"
 # check build 要求 tasks.md 任务数 >= 3（pm 不要求 plan）
@@ -100,3 +108,10 @@ tr '|' '\t' > "$target/.oracle-plan" <<'PLAN'
 0|get|t6-pm|phase
 0|get|t6-pm|updated_at
 PLAN
+
+# <生效起始 step>\t<kind>\t<change>\t<old automation>\t<new automation>
+# 第 6 条是 spec-complete。run.sh 从该步起持续断言这个明确演进，再仅忽略 automation/queued_at 的
+# 旧新投影差异；其余字段和后续步骤仍逐字双跑。
+tr '|' '\t' > "$target/.oracle-state-extensions" <<'EXTENSIONS'
+6|pm-spec-complete-auto-enqueue|t6-pm|off|queued
+EXTENSIONS

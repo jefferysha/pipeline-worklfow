@@ -1,0 +1,714 @@
+<!doctype html>
+<!--
+  v7a · 案卷式(Dossier)—— Pipeline 控制台「在等你决定」高保真单文件
+  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ■ 设计逻辑
+    对现行 v4(收件箱列表占 2/3 却稀疏、详情挤 356px 右栏、动作钮沉在侧栏底部)做 IA 比例反转:
+    一次只裁决一件。左侧 322px 登记簿(紧凑行式队列,行=状态点+名称+判定徽章+时间,
+    分「可以放行 1 / 跑挂了 3」两组,顶部计数+新建入口);右侧全部宽度给「案卷」——
+    正在裁决的这一件摊开成文书:案卷头(衬线大标题+track/phase/判定徽章+决策动作钮钉死右上,绝不折叠)、
+    摘要 lede、成因区(错误标题+处置指引徽章+last_error 原文框+attempts+重试/放弃语义说明)
+    或证据区(pass 三连+verification_report/build_sha 引用行)、压缩阶段时间线
+    (已发生的详细列,未开始相位收成一行小点链)、历史折叠区。
+    四件事纯 JS 真实可切换,默认选中 cause-fallback;「已取消」用琥珀中性(人为终止非故障,说明不建议 doctor)。
+  ■ form 来自内容的哪里(一句话)
+    收件箱的本质是「一次只能拍板一件」:判读要读 last_error 原文、比三项证据,是文书级阅读量,
+    故 form 取「左登记簿 + 右案卷」——队列压成登记行只承担导航,被裁决的那件独占主舞台,动作与成因同屏。
+  ■ 字体方案(本方向签名)
+    衬线对比轴:Georgia / "Times New Roman" / "Songti SC" / "STSong"(决策文书感),
+    只进 h1「在等你决定」、案卷名、队列组头三处;所有 label/按钮/正文/徽章仍 system sans
+    (product 纪律:display/衬线不入 labels)。正文 sans 14px/1.6,队列行 13px 密度档;
+    数据(sha/路径/字段名/attempts/时间)一律 mono ui-monospace/"SF Mono"/Menlo + tabular-nums。
+    字号阶梯 1.2 比例、固定 rem:11.7 → 14 → 16.8 → 20.2 → 24.2(另设 13px 单档密度补充,只用于队列行等紧凑处;
+    1.2 而非 1.25 是 product register 的既定选择——工具界面型面多,过大反差成噪音,层级由衬线/字重/颜色共同承担)。
+  ■ 色板与对比度
+    延续 OpenAI 单色系(v4 / packages/dashboard-app/src/styles.ts 同源):
+    浅 --bg#f7f7f5 --card#fff --text#0d0d0d --accent#0b6cff,绿#1f9d51 红#d92d20;
+    琥珀自调(降饱和 tint 底+深字):浅 #8a5310 on #faf1df = 5.63:1,暗 #e0b25f on tint-over-card = 7.21:1。
+    主操作=近黑 ink 实底(浅 19.4:1 / 暗 17.4:1),语义色只做徽章/状态点小面积。
+    全部关键色对经脚本核算 ≥4.5:1(text-3 on card 浅 5.45 / 暗 5.87;红徽章浅 5.91 / 暗 6.24;绿 5.32 / 6.58)。
+  ■ 主题机制
+    :root 浅色基线;@media (prefers-color-scheme: dark) 对 :root:not([data-theme="light"]) 跟随系统;
+    :root[data-theme="dark"|"light"] 显式切换恒胜(源序在后)。右上角 ☀/☾ 真可用,localStorage 记忆。
+  ■ 交互清单
+    hover/focus-visible/active/selected/disabled 全态齐备;过渡 150-250ms ease-out;
+    prefers-reduced-motion 全量降级;≤900px 队列上移到案卷之上(结构性响应,非流式字号)。
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pipeline 控制台 · v7a 案卷式</title>
+<style>
+/* ───────────────────────── tokens ───────────────────────── */
+:root{
+  color-scheme: light;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --serif: Georgia, "Times New Roman", "Songti SC", "STSong", serif;
+  --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* 阶梯 ×1.2 固定 rem(11.7→14→16.8→20.2→24.2)+ 13px 单档密度补充(队列行,任务指定) */
+  --fs-xs: .729rem;   /* 11.7 徽章/元数据/点链标签(阶梯步) */
+  --fs-dense: .8125rem; /* 13 队列行/字段值/按钮(密度档) */
+  --fs-0: .875rem;    /* 14   正文 */
+  --fs-1: 1.05rem;    /* 16.8 错误标题 */
+  --fs-2: 1.26rem;    /* 20.2 页 h1 */
+  --fs-3: 1.512rem;   /* 24.2 案卷名 */
+
+  --bg:#f7f7f5; --card:#ffffff; --fill:#f2f2ef; --fill-2:#ececea;
+  --border:#e4e4e0; --border-2:#d2d2cc;
+  --text:#0d0d0d; --text-2:#40403c; --text-3:#6a6a62;
+  --accent:#0b6cff; --accent-d:#0a5ce0; --accent-t:#eaf2ff; --accent-b:#c5daff;
+  --green:#1f9d51; --green-d:#187339; --green-t:#e9f6ee; --green-b:#c8e8d2;
+  --red:#d92d20;   --red-d:#b42318;   --red-t:#fdf0ee;   --red-b:#f3cfc9;
+  --amber:#b45309; --amber-d:#8a5310; --amber-t:#faf1df; --amber-b:#ecd9b4;
+  --ink:#0d0d0d; --ink-fg:#ffffff; --ink-hover:#2e2e2c;
+  --code-bg:#f6f6f4; --code-border:#e4e4e0;
+  --shadow:0 1px 2px rgba(0,0,0,.04);
+  --shadow-2:0 1px 3px rgba(0,0,0,.06),0 1px 2px rgba(0,0,0,.04);
+  --ring:rgba(11,108,255,.13);
+  --radius:12px; --radius-sm:8px;
+  --nav-h:53px;
+  --z-nav:20; --z-skip:30; /* 语义 z 阶,全站仅此两级 */
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme: dark;
+    --bg:#0d0d0d; --card:#171717; --fill:#1e1e1d; --fill-2:#262624;
+    --border:#262626; --border-2:#3a3a37;
+    --text:#f2f2f0; --text-2:#c9c9c4; --text-3:#94948d;
+    --accent:#4d94ff; --accent-d:#7fb2ff; --accent-t:rgba(77,148,255,.13); --accent-b:rgba(77,148,255,.38);
+    --green:#3fb950; --green-d:#55c368; --green-t:rgba(63,185,80,.13); --green-b:rgba(63,185,80,.35);
+    --red:#e5534b;   --red-d:#f2867e;   --red-t:rgba(229,83,75,.14);   --red-b:rgba(229,83,75,.40);
+    --amber:#d6a03c; --amber-d:#e0b25f; --amber-t:rgba(214,160,60,.14); --amber-b:rgba(214,160,60,.38);
+    --ink:#f2f2f2; --ink-fg:#0d0d0d; --ink-hover:#d8d8d5;
+    --code-bg:#111110; --code-border:#2a2a28;
+    --shadow:0 1px 2px rgba(0,0,0,.35);
+    --shadow-2:0 2px 6px rgba(0,0,0,.35);
+    --ring:rgba(77,148,255,.20);
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --bg:#0d0d0d; --card:#171717; --fill:#1e1e1d; --fill-2:#262624;
+  --border:#262626; --border-2:#3a3a37;
+  --text:#f2f2f0; --text-2:#c9c9c4; --text-3:#94948d;
+  --accent:#4d94ff; --accent-d:#7fb2ff; --accent-t:rgba(77,148,255,.13); --accent-b:rgba(77,148,255,.38);
+  --green:#3fb950; --green-d:#55c368; --green-t:rgba(63,185,80,.13); --green-b:rgba(63,185,80,.35);
+  --red:#e5534b;   --red-d:#f2867e;   --red-t:rgba(229,83,75,.14);   --red-b:rgba(229,83,75,.40);
+  --amber:#d6a03c; --amber-d:#e0b25f; --amber-t:rgba(214,160,60,.14); --amber-b:rgba(214,160,60,.38);
+  --ink:#f2f2f2; --ink-fg:#0d0d0d; --ink-hover:#d8d8d5;
+  --code-bg:#111110; --code-border:#2a2a28;
+  --shadow:0 1px 2px rgba(0,0,0,.35);
+  --shadow-2:0 2px 6px rgba(0,0,0,.35);
+  --ring:rgba(77,148,255,.20);
+}
+
+/* ───────────────────────── base ───────────────────────── */
+*{ box-sizing:border-box; margin:0; padding:0 }
+body{
+  font:var(--fs-0)/1.6 var(--sans);
+  color:var(--text); background:var(--bg);
+  -webkit-font-smoothing:antialiased;
+}
+h1,h2,h3{ text-wrap:balance }
+button{ font:inherit; color:inherit; background:none; border:0; cursor:pointer }
+a{ color:var(--accent-d); text-decoration:none }
+a:hover{ text-decoration:underline }
+.mono{ font-family:var(--mono); font-variant-numeric:tabular-nums; letter-spacing:0 }
+.serif{ font-family:var(--serif); font-weight:600; letter-spacing:.01em }
+:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; border-radius:6px }
+::selection{ background:var(--accent-t) }
+.sr-only{ position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap }
+.skip{
+  position:fixed; top:8px; left:8px; z-index:var(--z-skip);
+  background:var(--card); color:var(--text); border:1px solid var(--border-2);
+  border-radius:var(--radius-sm); padding:6px 12px; font-size:var(--fs-dense);
+  transform:translateY(-56px); transition:transform .15s ease-out;
+}
+.skip:focus-visible{ transform:none }
+
+/* ───────────────────────── nav(装饰性,视觉完整) ───────────────────────── */
+.nav{
+  position:sticky; top:0; z-index:var(--z-nav);
+  height:var(--nav-h);
+  display:flex; align-items:center; gap:16px; padding:0 20px;
+  background:var(--card); border-bottom:1px solid var(--border);
+}
+.brand{ display:flex; align-items:center; gap:9px; font-weight:700; font-size:var(--fs-0); white-space:nowrap }
+.brand .mark{
+  width:26px; height:26px; border-radius:8px; flex:none;
+  background:var(--ink); color:var(--ink-fg);
+  display:inline-flex; align-items:center; justify-content:center; font-size:12px;
+}
+.proj-btn{
+  font-family:var(--mono); font-size:var(--fs-xs); color:var(--text-2);
+  border:1px solid var(--border); border-radius:7px; padding:4px 10px;
+  transition:border-color .15s ease-out;
+}
+.proj-btn:hover{ border-color:var(--text-3) }
+.nav-items{ display:flex; gap:2px }
+.nav-item{
+  position:relative; font-size:var(--fs-dense); color:var(--text-3);
+  padding:6px 12px; border-radius:7px;
+  transition:color .15s ease-out, background .15s ease-out;
+}
+.nav-item:hover{ color:var(--text) }
+.nav-item[aria-current="page"]{ background:var(--accent-t); color:var(--accent-d); font-weight:700 }
+.nav-count{
+  display:inline-block; margin-left:6px; min-width:17px; height:17px; line-height:15px;
+  padding:0 5px; text-align:center; border-radius:9px;
+  font-family:var(--mono); font-size:10.5px; font-weight:700;
+  color:var(--red-d); background:var(--red-t); border:1px solid var(--red-b);
+}
+.nav-right{ margin-left:auto; display:flex; align-items:center; gap:10px }
+.conn{ color:var(--green); font-size:10px }
+.lang-btn{
+  font-size:var(--fs-xs); color:var(--text-2);
+  border:1px solid var(--border); border-radius:7px; padding:4px 9px;
+  transition:border-color .15s ease-out, color .15s ease-out;
+}
+.lang-btn:hover{ border-color:var(--text-3); color:var(--text) }
+.theme-btn{
+  width:30px; height:30px; border:1px solid var(--border); border-radius:var(--radius-sm);
+  background:var(--card); box-shadow:var(--shadow);
+  display:inline-flex; align-items:center; justify-content:center; font-size:14px;
+  transition:background .15s ease-out, border-color .15s ease-out;
+}
+.theme-btn:hover{ background:var(--fill) }
+.theme-btn:active{ background:var(--fill-2) }
+
+/* ───────────────────────── 骨架:左登记簿 + 右案卷 ───────────────────────── */
+.split{ display:grid; grid-template-columns:322px minmax(0,1fr) }
+
+/* 队列(登记簿) */
+.queue{
+  position:sticky; top:var(--nav-h); height:calc(100vh - var(--nav-h));
+  overflow-y:auto; border-right:1px solid var(--border);
+  padding:20px 14px 28px;
+}
+.queue-head{ padding:0 8px 4px }
+.queue-title{ display:flex; align-items:baseline; gap:10px }
+.queue-title h1{ font-family:var(--serif); font-weight:600; font-size:var(--fs-2); letter-spacing:.01em; color:var(--text) }
+.queue-total{
+  font-family:var(--mono); font-variant-numeric:tabular-nums; font-size:var(--fs-dense); font-weight:700;
+  color:var(--accent-d); background:var(--accent-t); border:1px solid var(--accent-b);
+  border-radius:999px; padding:0 8px; line-height:20px;
+}
+.queue-sub{ margin-top:6px; font-size:var(--fs-xs); line-height:1.6; color:var(--text-3) }
+.queue-new{
+  margin-top:12px; width:100%;
+  display:flex; align-items:center; justify-content:center; gap:6px;
+  font-size:var(--fs-dense); font-weight:600; color:var(--text-2);
+  border:1px solid var(--border-2); border-radius:var(--radius-sm); padding:6px 10px;
+  transition:border-color .15s ease-out, background .15s ease-out, color .15s ease-out;
+}
+.queue-new:hover{ border-color:var(--text-3); background:var(--fill); color:var(--text) }
+.queue-new:active{ background:var(--fill-2) }
+
+.q-group{ margin-top:18px }
+.q-group-h{
+  display:flex; align-items:baseline; gap:8px;
+  padding:0 8px 6px;
+  font-family:var(--serif); font-weight:600; font-size:var(--fs-0); letter-spacing:.01em;
+  color:var(--text-2);
+}
+.q-group-h .n{ font-family:var(--mono); font-variant-numeric:tabular-nums; font-size:var(--fs-xs); font-weight:400; color:var(--text-3) }
+.q-list{ list-style:none; display:flex; flex-direction:column; gap:2px }
+.qrow{
+  width:100%; display:flex; align-items:center; gap:8px;
+  padding:8px 8px; border:1px solid transparent; border-radius:var(--radius-sm);
+  text-align:left; font-size:var(--fs-dense);
+  transition:background .15s ease-out, border-color .15s ease-out;
+}
+.qrow:hover{ background:var(--fill) }
+.qrow:active{ background:var(--fill-2) }
+.qrow[aria-current="true"]{ background:var(--accent-t); border-color:var(--accent-b) }
+.qrow[aria-current="true"] .q-name{ font-weight:700 }
+.q-dot{ width:8px; height:8px; border-radius:50%; flex:none }
+.q-dot.red{ background:var(--red) }
+.q-dot.amber{ background:var(--amber) }
+.q-dot.green{ background:var(--green) }
+.q-name{
+  font-family:var(--mono); font-variant-numeric:tabular-nums; color:var(--text);
+  min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.q-time{ margin-left:auto; flex:none; font-family:var(--mono); font-variant-numeric:tabular-nums; font-size:var(--fs-xs); color:var(--text-3) }
+
+/* 徽章(语义色唯一的家) */
+.badge{
+  display:inline-flex; align-items:center; gap:4px; flex:none;
+  font-size:var(--fs-xs); font-weight:600; line-height:1;
+  padding:3px 8px; border-radius:999px; border:1px solid;
+  white-space:nowrap;
+}
+.badge.red{ color:var(--red-d); background:var(--red-t); border-color:var(--red-b) }
+.badge.green{ color:var(--green-d); background:var(--green-t); border-color:var(--green-b) }
+.badge.amber{ color:var(--amber-d); background:var(--amber-t); border-color:var(--amber-b) }
+.qrow .badge{ padding:2px 7px }
+
+/* 中性 chip:track/phase 等数据值 */
+.chip{
+  font-family:var(--mono); font-variant-numeric:tabular-nums; font-size:var(--fs-xs);
+  color:var(--text-2); background:var(--fill); border:1px solid var(--border);
+  border-radius:6px; padding:2px 7px; line-height:1.5; white-space:nowrap;
+}
+
+/* ───────────────────────── 案卷(主舞台) ───────────────────────── */
+.stage{ padding:24px 28px 56px; min-width:0 }
+.dossier{
+  max-width:960px; margin:0 auto;
+  background:var(--card); border:1px solid var(--border); border-radius:var(--radius);
+  box-shadow:var(--shadow-2);
+  padding:26px 32px 30px;
+}
+.d-enter{ animation:d-rise .2s cubic-bezier(.22,1,.36,1) }
+@keyframes d-rise{ from{ opacity:0; transform:translateY(5px) } }
+
+.d-head{ display:flex; align-items:flex-start; gap:20px; flex-wrap:wrap }
+.d-id{ min-width:0; flex:1 1 380px }
+.d-title-row{ display:flex; align-items:center; gap:12px; flex-wrap:wrap }
+.d-name{
+  font-family:var(--serif); font-weight:600; font-size:var(--fs-3);
+  letter-spacing:.005em; color:var(--text); overflow-wrap:anywhere;
+}
+.d-meta{
+  margin-top:9px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+  font-size:var(--fs-xs); color:var(--text-3);
+}
+.d-meta .sep{ color:var(--border-2) }
+.d-fails{ font-family:var(--mono); font-variant-numeric:tabular-nums }
+.d-fails.hot{ color:var(--red-d); font-weight:700 }
+.d-actions{ display:flex; gap:8px; flex:none; padding-top:2px }
+
+/* 按钮:主=近黑 ink 实底;次=灰 ghost(危险语义只在 hover 小面积浮现) */
+.btn{
+  font-size:var(--fs-dense); font-weight:600; line-height:1;
+  padding:9px 16px; border-radius:var(--radius-sm);
+  border:1px solid transparent;
+  transition:background .15s ease-out, border-color .15s ease-out, color .15s ease-out, transform .1s ease-out;
+}
+.btn:active{ transform:translateY(1px) }
+.btn:disabled{ opacity:.45; cursor:not-allowed; transform:none }
+.btn-primary{ background:var(--ink); color:var(--ink-fg) }
+.btn-primary:hover{ background:var(--ink-hover) }
+.btn-ghost{ border-color:var(--border-2); color:var(--text-2); background:transparent }
+.btn-ghost:hover{ border-color:var(--text-3); color:var(--text); background:var(--fill) }
+.btn-ghost.danger:hover{ border-color:var(--red-b); color:var(--red-d); background:var(--red-t) }
+
+.d-lede{
+  margin-top:16px; max-width:68ch;
+  font-size:var(--fs-0); line-height:1.7; color:var(--text);
+  text-wrap:pretty;
+}
+
+/* 案卷分节 */
+.d-sec{ margin-top:22px; padding-top:18px; border-top:1px solid var(--border) }
+.sec-head{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:12px }
+.sec-head h3{ font-size:var(--fs-dense); font-weight:700; color:var(--text-2) }
+
+/* 成因区 */
+.err-title{ font-size:var(--fs-1); font-weight:600; color:var(--text); overflow-wrap:anywhere }
+.code{
+  margin-top:10px;
+  font-family:var(--mono); font-variant-numeric:tabular-nums;
+  font-size:var(--fs-xs); line-height:1.65; color:var(--text-2);
+  background:var(--code-bg); border:1px solid var(--code-border); border-radius:var(--radius-sm);
+  padding:10px 13px; overflow-x:auto;
+  white-space:pre-wrap; word-break:break-word;
+}
+.field-row{
+  margin-top:10px; display:flex; align-items:baseline; gap:10px; flex-wrap:wrap;
+  font-size:var(--fs-dense);
+}
+.f-label{ font-family:var(--mono); font-size:var(--fs-xs); color:var(--text-3) }
+.f-val{ font-family:var(--mono); font-variant-numeric:tabular-nums; color:var(--text); font-weight:600 }
+.f-note{ font-size:var(--fs-xs); color:var(--text-3) }
+.sem{
+  margin-top:14px; background:var(--fill); border-radius:var(--radius-sm);
+  padding:11px 14px; display:flex; flex-direction:column; gap:7px;
+  max-width:66ch;
+}
+.sem-row{ font-size:var(--fs-dense); line-height:1.6; color:var(--text-2) }
+.sem-row b{ color:var(--text); font-weight:700; margin-right:6px }
+
+/* 证据区(gate) */
+.ev-list{ list-style:none; display:flex; flex-direction:column; gap:6px }
+.ev{
+  display:flex; align-items:center; gap:10px;
+  background:var(--green-t); border:1px solid var(--green-b); border-radius:var(--radius-sm);
+  padding:8px 12px;
+}
+.ev .k{ font-family:var(--mono); font-variant-numeric:tabular-nums; font-size:var(--fs-dense); color:var(--text-2) }
+.ev .eq{ color:var(--text-3); font-size:var(--fs-xs) }
+.ev .v{ font-family:var(--mono); font-size:var(--fs-dense); font-weight:700; color:var(--green-d); margin-left:auto }
+.refs{ margin-top:12px; display:flex; flex-direction:column; gap:2px }
+a.f-val{ color:var(--accent-d) } /* 引用行链接可供性:类特异性会盖掉 a 的默认色,这里显式还原 */
+
+/* 阶段时间线:已发生详细列 + 未开始一行点链 */
+.tl-list{ position:relative; display:flex; flex-direction:column; gap:2px }
+.tl-list.multi::before{
+  content:""; position:absolute; left:7px; top:12px; bottom:12px;
+  width:1px; background:var(--border-2);
+}
+.tl-row{
+  position:relative; display:flex; align-items:baseline; gap:10px;
+  padding:5px 0 5px 26px; font-size:var(--fs-dense);
+}
+.tl-dot{
+  position:absolute; left:3px; top:50%; transform:translateY(-50%);
+  width:9px; height:9px; border-radius:50%;
+  background:var(--card); border:1.5px solid var(--border-2);
+}
+.tl-row.done .tl-dot{ background:var(--border-2); border-color:var(--border-2) }
+.tl-row.cur .tl-dot{ border-color:var(--accent); background:var(--accent-t); box-shadow:0 0 0 3px var(--ring) }
+.tl-row.halt .tl-dot{ border-color:var(--red); background:var(--red-t) }
+.tl-row.halt-amber .tl-dot{ border-color:var(--amber); background:var(--amber-t) }
+.tl-phase{ font-weight:600; color:var(--text-2); flex:none; min-width:3.5em }
+.tl-row.cur .tl-phase{ color:var(--accent-d) }
+.tl-row.halt .tl-phase{ color:var(--red-d) }
+.tl-row.halt-amber .tl-phase{ color:var(--amber-d) }
+.tl-note{ color:var(--text-3); font-size:var(--fs-xs); min-width:0 }
+.tl-time{ margin-left:auto; flex:none; font-family:var(--mono); font-variant-numeric:tabular-nums; font-size:var(--fs-xs); color:var(--text-3) }
+.tl-rest{ display:flex; align-items:flex-start; margin:10px 0 2px 26px; overflow-x:auto; padding-bottom:2px }
+.cnode{ display:flex; flex-direction:column; align-items:center; gap:5px; flex:none }
+.cdot{ width:7px; height:7px; border-radius:50%; border:1.5px solid var(--border-2); background:transparent }
+.clab{ font-size:var(--fs-xs); color:var(--text-3); line-height:1 }
+.cbar{ height:1px; width:16px; background:var(--border-2); margin-top:3px; flex:none }
+
+/* 历史折叠区 */
+.d-hist summary{
+  display:flex; align-items:center; gap:8px; cursor:pointer; list-style:none;
+  font-size:var(--fs-dense); font-weight:700; color:var(--text-2);
+  border-radius:6px; width:max-content; padding:2px 4px; margin-left:-4px;
+}
+.d-hist summary::-webkit-details-marker{ display:none }
+.d-hist summary::before{
+  content:"▸"; font-size:11px; color:var(--text-3);
+  transition:transform .15s ease-out;
+}
+.d-hist[open] summary::before{ transform:rotate(90deg) }
+.d-hist summary:hover{ color:var(--text) }
+.d-hist summary .n{ font-family:var(--mono); font-variant-numeric:tabular-nums; font-weight:400; font-size:var(--fs-xs); color:var(--text-3) }
+.hist-list{ list-style:none; margin-top:10px; display:flex; flex-direction:column; gap:6px }
+.hist-list li{ display:flex; align-items:baseline; gap:12px; font-size:var(--fs-dense); color:var(--text-2) }
+.hist-time{ font-family:var(--mono); font-variant-numeric:tabular-nums; font-size:var(--fs-xs); color:var(--text-3); flex:none }
+.hist-mult{
+  font-family:var(--mono); font-variant-numeric:tabular-nums; font-size:var(--fs-xs); color:var(--text-3);
+  background:var(--fill); border:1px solid var(--border); border-radius:999px; padding:1px 7px;
+}
+
+/* ───────────────────────── 响应式(结构性) ───────────────────────── */
+@media (max-width: 900px){
+  .split{ grid-template-columns:1fr }
+  .queue{
+    position:static; height:auto; overflow:visible;
+    border-right:0; border-bottom:1px solid var(--border);
+    padding:16px 16px 20px;
+  }
+  .stage{ padding:20px 16px 48px }
+  .dossier{ padding:20px 18px 24px }
+  .nav{ gap:10px; padding:0 14px }
+  .nav-items{ display:none } /* 窄屏收进汉堡的占位简化:demo 直接隐藏次级入口 */
+}
+@media (max-width: 640px){
+  .d-head{ flex-direction:column; gap:14px }
+  .d-id{ flex:0 0 auto } /* column 轴下 380px 的 flex-basis 会变成高度,必须重置 */
+  .d-actions{ width:100%; padding-top:0 }
+  .d-actions .btn{ flex:1 1 auto; text-align:center }
+  .tl-time{ display:none }
+}
+
+/* ───────────────────────── 动效纪律 ───────────────────────── */
+@media (prefers-reduced-motion: reduce){
+  *, *::before, *::after{ animation:none !important; transition:none !important }
+}
+</style>
+<script>
+/* 防主题闪烁:CSS 解析后立即回放 localStorage 的显式选择 */
+try{
+  var t = localStorage.getItem("v7a-theme");
+  if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+}catch(e){}
+</script>
+</head>
+<body>
+<a class="skip" href="#dossier">跳到案卷</a>
+
+<header class="nav">
+  <span class="brand"><span class="mark" aria-hidden="true">◆</span>Pipeline 控制台</span>
+  <button class="proj-btn" type="button" title="演示占位">proj-a ▾</button>
+  <nav class="nav-items" aria-label="主导航">
+    <a class="nav-item" href="#dossier" aria-current="page">收件箱<span class="nav-count">4</span></a>
+    <a class="nav-item" href="#dossier" title="演示占位">进度</a>
+    <a class="nav-item" href="#dossier" title="演示占位">工作台</a>
+  </nav>
+  <div class="nav-right">
+    <span class="conn" title="已连接">●</span>
+    <button class="lang-btn" type="button" title="演示占位">EN</button>
+    <button class="theme-btn" type="button" id="themeBtn" aria-label="切换主题">☀</button>
+  </div>
+</header>
+
+<div class="split">
+  <!-- 左:登记簿队列 -->
+  <aside class="queue" aria-label="待裁决队列">
+    <div class="queue-head">
+      <div class="queue-title">
+        <h1>在等你决定</h1>
+        <span class="queue-total" aria-label="共 4 件">4</span>
+      </div>
+      <p class="queue-sub">只收你现在就能拍板的事——放行、打回、重试、放弃;缺产出的活在进度里等产出。</p>
+      <button class="queue-new" type="button" title="演示占位"><span aria-hidden="true">+</span>新建 change</button>
+    </div>
+
+    <section class="q-group" aria-labelledby="g-gate">
+      <h2 class="q-group-h" id="g-gate">可以放行 <span class="n">1</span></h2>
+      <ul class="q-list" id="list-gate"></ul>
+    </section>
+
+    <section class="q-group" aria-labelledby="g-halt">
+      <h2 class="q-group-h" id="g-halt">跑挂了 <span class="n">3</span></h2>
+      <ul class="q-list" id="list-halt"></ul>
+    </section>
+  </aside>
+
+  <!-- 右:案卷主舞台 -->
+  <main class="stage" id="dossier">
+    <div class="sr-only" aria-live="polite" id="srStatus"></div>
+    <article class="dossier" id="dossierBody"><!-- JS 渲染 --></article>
+  </main>
+</div>
+
+<script>
+/* ═════════ 数据(截图真实转录) ═════════ */
+const PHASES = ["立项","调研","规格","实现","验证","交付","归档"];
+
+const ITEMS = {
+  "cause-fallback": {
+    group:"halt", dot:"red", track:"backend", phase:"open", fails:0,
+    time:"03:14", created:"07-13 03:14",
+    verdict:{ text:"Docker 未运行", tone:"red" },
+    summary:"自动化跑挂了:Cannot connect to the Docker daemon (unix /var/run/docker.sock),已自动重试 0 次——重试还是放弃?",
+    actions:[ ["重试","primary"], ["放弃","ghost danger"] ],
+    cause:{
+      guidance:{ text:"环境故障 · 先启动 Docker 再重试", tone:"red" },
+      errTitle:"Cannot connect to the Docker daemon",
+      lastError:"Cannot connect to the Docker daemon (unix /var/run/docker.sock)",
+      attempts:0, attemptsNote:"已自动重试 0 次",
+      sem:[
+        ["重试","清零重试计数,重新挂回自动化队列,从当前相位继续跑。"],
+        ["放弃","退出自动化;现场与 worktree 原样保留,可到工作台手工接管。"]
+      ]
+    },
+    timeline:{ done:[], current:["立项","automation 在此相位挂起,尚未产出","07-13 03:14"], rest:PHASES.slice(1) },
+    histCount:4,
+    history:[ ["07-13 03:14","创建",1], ["07-13 03:14","automation 已更新",1], ["07-13 03:15","automation_last_error 已更新",2] ]
+  },
+
+  "cause-verifyfail": {
+    group:"halt", dot:"red", track:"backend", phase:"open", fails:1,
+    time:"02:47", created:"07-13 02:31",
+    verdict:{ text:"验证未通过", tone:"red" },
+    summary:"自动化跑挂了:verify 未过 2 failed · auth.test.ts,已自动重试 1 次——重试还是放弃?",
+    actions:[ ["重试","primary"], ["放弃","ghost danger"] ],
+    cause:{
+      guidance:{ text:"代码问题 · 修复失败用例后重试", tone:"red" },
+      errTitle:"verify 未过:2 failed",
+      lastError:"verify: 2 failed · auth.test.ts\n  ✕ refresh token rotates on login\n  ✕ session cookie is httpOnly",
+      attempts:1, attemptsNote:"已自动重试 1 次",
+      sem:[
+        ["重试","清零重试计数,重新挂回自动化队列,从当前相位继续跑。"],
+        ["放弃","退出自动化;现场与 worktree 原样保留,可到工作台手工接管。"]
+      ]
+    },
+    timeline:{ done:[], current:["立项","automation 在此相位挂起,尚未产出","07-13 02:31"], rest:PHASES.slice(1) },
+    histCount:4,
+    history:[ ["07-13 02:31","创建",1], ["07-13 02:33","automation 已更新",1], ["07-13 02:47","automation_last_error 已更新",2] ]
+  },
+
+  "cause-cancelled": {
+    group:"halt", dot:"amber", track:"backend", phase:"open", fails:0,
+    time:"02:09", created:"07-13 01:58",
+    verdict:{ text:"已取消", tone:"amber" },
+    summary:"自动化跑挂了:aborted — cancel requested via dashboard,已自动重试 0 次——重试还是放弃?",
+    actions:[ ["重试","primary"], ["放弃","ghost danger"] ],
+    cause:{
+      guidance:{ text:"人为终止 · 非故障,不建议 doctor", tone:"amber" },
+      errTitle:"aborted — 人为取消",
+      lastError:"aborted — cancel requested via dashboard",
+      attempts:0, attemptsNote:"已自动重试 0 次",
+      sem:[
+        ["重试","清零重试计数,重新挂回自动化队列,从当前相位继续跑。"],
+        ["放弃","退出自动化;现场与 worktree 原样保留,可到工作台手工接管。"],
+        ["提示","这是从 dashboard 发起的人为终止,不是环境故障——不建议跑 doctor;要继续的话直接重试即可。"]
+      ]
+    },
+    timeline:{ done:[], current:["立项","automation 在此相位被人为终止","07-13 01:58"], rest:PHASES.slice(1) },
+    histCount:3,
+    history:[ ["07-13 01:58","创建",1], ["07-13 02:06","automation 已更新",1], ["07-13 02:09","automation_last_error 已更新",1] ]
+  },
+
+  "gate-demo": {
+    group:"gate", dot:"green", track:"backend", phase:"verify", fails:null,
+    time:"03:02", created:"07-12 21:05",
+    verdict:{ text:"✓ 可以放行", tone:"green" },
+    summary:"验证阶段完成:自动验证、agent review、codex review 全部通过——确认无误就放行进入交付。",
+    actions:[ ["放行进入交付","primary"], ["打回","ghost danger"] ],
+    evidence:{
+      note:{ text:"三项检查全部通过", tone:"green" },
+      checks:[ ["verify_result","pass"], ["agent_review_result","pass"], ["codex_review_result","pass"] ],
+      refs:[ ["verification_report","docs/verify.md", true], ["build_sha","201453d…", false] ]
+    },
+    timeline:{
+      done:[ ["立项","07-12 21:05"], ["调研","07-12 22:40"], ["规格","07-12 23:58"], ["实现","07-13 01:47"] ],
+      current:["验证","三项检查已通过,等你放行","07-13 03:02"],
+      rest:["交付","归档"]
+    },
+    histCount:7,
+    history:[ ["07-12 21:05","创建",1], ["07-12 21:07","automation 已更新",1], ["07-13 01:47","相位已推进",4], ["07-13 03:02","verification_report 已更新",1] ]
+  }
+};
+
+const ORDER = { gate:["gate-demo"], halt:["cause-fallback","cause-verifyfail","cause-cancelled"] };
+let selected = "cause-fallback";
+
+/* ═════════ 渲染 ═════════ */
+const badge = (b) => `<span class="badge ${b.tone}">${b.text}</span>`;
+
+function renderQueue(){
+  for (const g of ["gate","halt"]){
+    document.getElementById("list-" + g).innerHTML = ORDER[g].map(id => {
+      const it = ITEMS[id];
+      const cur = id === selected;
+      return `<li><button type="button" class="qrow" data-id="${id}" ${cur ? 'aria-current="true"' : ""}>
+        <span class="q-dot ${it.dot}" aria-hidden="true"></span>
+        <span class="q-name">${id}</span>
+        ${badge(it.verdict)}
+        <time class="q-time">${it.time}</time>
+      </button></li>`;
+    }).join("");
+  }
+}
+
+function renderTimeline(t){
+  const doneRows = t.done.map(([p, ts]) =>
+    `<div class="tl-row done"><span class="tl-dot" aria-hidden="true"></span>
+      <span class="tl-phase">${p}</span><span class="tl-note">已完成</span>
+      <time class="tl-time">${ts}</time></div>`).join("");
+  const it = ITEMS[selected];
+  /* 停点色调:gate=推进蓝;故障=红;人为取消=琥珀(非故障,与队列点一致) */
+  const curTone = it.group === "gate" ? "cur" : (it.dot === "amber" ? "halt-amber" : "halt");
+  const curRow = `<div class="tl-row ${curTone}"><span class="tl-dot" aria-hidden="true"></span>
+      <span class="tl-phase">${t.current[0]}</span><span class="tl-note">${t.current[1]}</span>
+      <time class="tl-time">${t.current[2]}</time></div>`;
+  const multi = t.done.length > 0 ? " multi" : "";
+  const chain = t.rest.map((p, i) =>
+    (i ? '<i class="cbar" aria-hidden="true"></i>' : "") +
+    `<span class="cnode"><i class="cdot" aria-hidden="true"></i><span class="clab">${p}</span></span>`).join("");
+  return `<section class="d-sec" aria-label="阶段">
+    <div class="sec-head"><h3>阶段</h3><span class="f-note">${PHASES.join(" → ")}</span></div>
+    <div class="tl-list${multi}">${doneRows}${curRow}</div>
+    <div class="tl-rest" role="img" aria-label="未开始:${t.rest.join("、")}">${chain}</div>
+  </section>`;
+}
+
+function renderCause(c){
+  return `<section class="d-sec" aria-label="成因">
+    <div class="sec-head"><h3>成因</h3>${badge(c.guidance)}</div>
+    <p class="err-title">${c.errTitle}</p>
+    <pre class="code">${c.lastError}</pre>
+    <div class="field-row">
+      <span class="f-label">attempts</span><span class="f-val">${c.attempts}</span>
+      <span class="f-note">${c.attemptsNote}</span>
+    </div>
+    <div class="sem">${c.sem.map(([k, v]) => `<p class="sem-row"><b>${k}</b>${v}</p>`).join("")}</div>
+  </section>`;
+}
+
+function renderEvidence(e){
+  return `<section class="d-sec" aria-label="证据">
+    <div class="sec-head"><h3>证据</h3>${badge(e.note)}</div>
+    <ul class="ev-list">${e.checks.map(([k, v]) =>
+      `<li class="ev"><span class="k">${k}</span><span class="eq">=</span><span class="v">${v}</span></li>`).join("")}
+    </ul>
+    <div class="refs">${e.refs.map(([k, v, link]) =>
+      `<div class="field-row"><span class="f-label">${k}</span>` +
+      (link ? `<a class="f-val" href="#dossier" title="演示占位">${v}</a>`
+            : `<span class="f-val" title="201453d9e2f7c41b8a05(演示)">${v}</span>`) +
+      `</div>`).join("")}
+    </div>
+  </section>`;
+}
+
+function renderDossier(){
+  const it = ITEMS[selected];
+  const failsChip = it.fails === null ? "" :
+    `<span class="sep" aria-hidden="true">·</span><span class="d-fails${it.fails > 0 ? " hot" : ""}">失败×${it.fails}</span>`;
+  const body = `
+    <header class="d-head">
+      <div class="d-id">
+        <div class="d-title-row"><h2 class="d-name">${selected}</h2>${badge(it.verdict)}</div>
+        <div class="d-meta">
+          <span class="chip">${it.track}</span><span class="chip">${it.phase}</span>${failsChip}
+          <span class="sep" aria-hidden="true">·</span>
+          <span class="mono">创建 ${it.created}</span>
+        </div>
+      </div>
+      <div class="d-actions">${it.actions.map(([label, kind]) =>
+        `<button type="button" class="btn btn-${kind}" title="高保真演示:动作未接线">${label}</button>`).join("")}
+      </div>
+    </header>
+    <p class="d-lede">${it.summary}</p>
+    ${it.cause ? renderCause(it.cause) : renderEvidence(it.evidence)}
+    ${renderTimeline(it.timeline)}
+    <details class="d-sec d-hist">
+      <summary>历史 <span class="n">${it.histCount} 条</span></summary>
+      <ul class="hist-list">${it.history.map(([ts, label, n]) =>
+        `<li><time class="hist-time">${ts}</time><span>${label}</span>${n > 1 ? `<span class="hist-mult">×${n}</span>` : ""}</li>`).join("")}
+      </ul>
+    </details>`;
+  const el = document.getElementById("dossierBody");
+  el.innerHTML = body;
+  el.classList.remove("d-enter");
+  void el.offsetWidth;
+  el.classList.add("d-enter");
+}
+
+function select(id){
+  if (!ITEMS[id] || id === selected) return;
+  selected = id;
+  renderQueue(); renderDossier();
+  document.getElementById("srStatus").textContent = "已打开案卷 " + id;
+}
+
+document.querySelector(".queue").addEventListener("click", (ev) => {
+  const row = ev.target.closest(".qrow");
+  if (row) select(row.dataset.id);
+});
+
+renderQueue(); renderDossier();
+
+/* ═════════ 主题切换:显式选择恒胜,未选择时跟随系统 ═════════ */
+(function(){
+  const KEY = "v7a-theme", root = document.documentElement,
+        btn = document.getElementById("themeBtn"),
+        mq = matchMedia("(prefers-color-scheme: dark)");
+  const eff = () => root.getAttribute("data-theme") || (mq.matches ? "dark" : "light");
+  const paint = () => {
+    const dark = eff() === "dark";
+    btn.textContent = dark ? "☾" : "☀";
+    btn.setAttribute("aria-label", dark ? "切换到浅色主题" : "切换到深色主题");
+  };
+  btn.addEventListener("click", () => {
+    const next = eff() === "dark" ? "light" : "dark";
+    root.setAttribute("data-theme", next);
+    try{ localStorage.setItem(KEY, next); }catch(e){}
+    paint();
+  });
+  mq.addEventListener("change", paint);
+  paint();
+})();
+</script>
+</body>
+</html>

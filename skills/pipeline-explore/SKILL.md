@@ -7,6 +7,9 @@ description: "Pipeline Phase 2: Explore · 调研 + 深度设计。PM Track 做�
 
 > 移植来源：老仓 `skills/pipeline-explore/SKILL.md`；脚本面已改写为 `pipeline` CLI。
 
+> **Codex 打包 Skill 身份：** 本文件提到的裸 skill id 是 DAG/ledger 的逻辑 id；在 Codex
+> 必须实际加载 `pipeline-lite:<id>` 的当前插件副本，绝不以同名全局或项目 SKILL.md 替代。
+
 ## 输入
 
 - `$PIPELINE_TRACK` ∈ {pm, frontend, backend}
@@ -33,9 +36,9 @@ pipeline status "$PIPELINE_CHANGE_NAME"    # 相位/字段摘要，绝不 FAIL
 > 待产出/待用 skill/待问决策，exit 0）未迁移——`pipeline check` 是**出口校验**，在入口跑
 > 必然全红，**别在入口跑**。入口用上面 `pipeline status` 定位即可。
 >
-> **review 门提示**：进入 explore（review 相位）时 CLI 已落 `.pipeline-pending-review`
-> marker——写类工具会被 hooks/gate.sh 拦（15 分钟内新鲜时）。先用 AskUserQuestion 与用户
-> 对齐本相位计划/上相位产出复核，再动工。
+> **review 门提示**：进入 explore 不会落 review marker，因此可以完整完成调研、brainstorming、ADR
+> 和文档登记。只有出口 guard 通过后才运行 `pipeline review request --event explore-complete`；它才会锁住后续写操作，直到
+> 用户明确确认并产生 canonical approval receipt。
 
 ### Step 1: 读已有上下文
 
@@ -60,6 +63,14 @@ pipeline document read "$PIPELINE_CHANGE_NAME" all
 > explore 专属补充（只在 explore 适用）：
 > - **外部调研走隔离 sub-agent（结构性还原不对称）**：deep-research / market-research / search-first 的"拉取"部分，优先用 **Agent 工具** dispatch `pipeline-researcher` 子 agent（本仓 agents/pipeline-researcher.md）——产出落盘、只回传路径+摘要+开放问题，主线**当外部输入读**。这样研究不是主线的"自有产物"，brainstorming 才不会背书自己刚写的结论。PM track 见下方 step 1 完整写法。
 
+> **持续自主执行例外（优先于本节的重复交互要求）**：若当前 dispatch / hook 已表明用户对这个
+> exact Change 授予持续执行权，`brainstorming`、`grill-with-docs` 仍必须实际加载、实际产出和实际
+> 留证，但不应再次为低风险细节停住。已有用户指定的调研维度必须照用；未指定时选择与 topic 最贴近的
+> 三个可审计维度（例如直接竞品、技术/开源生态、目标用户/需求）并在 research/requirements 与 ADR
+> 中写明理由。把 grill 的追问转换为 Assumptions / Decision Log 的自检与保守结论。**此例外不适用**
+> 于范围、安全、成本或外部发布；explore 出口仍严格走 `check → review request → 真实 review 证据 →
+> 常规确认/acknowledge 或已委托 Change 的 acknowledge --delegated → transition`。
+
 #### 📋 Track = pm（调研 + 定需求）
 
 **对应 PM 6 步法中的 01 RESEARCH + 02 DEFINE。**
@@ -67,7 +78,7 @@ pipeline document read "$PIPELINE_CHANGE_NAME" all
 **立即执行**（按顺序）：
 
 1. **调研走隔离 sub-agent（关键：治 brainstorm 变浅的根）——先问维度、再并行多路**：
-   - **1a. 先用 AskUserQuestion（`multiSelect: true` 多选）问用户：本次从哪些维度调研。** 按 topic 给 4~N 个相关维度选项（如：直接竞品 / 间接竞品·替代方案 / 技术架构与实现 / 商业模式与定价 / 目标用户与需求 / 开源生态与社区 / 合规与安全…，按主题定、别写死），让用户多选。**禁止跳过此问、禁止 agent 自己替用户定维度。**
+   - **1a. 常规模式先用 AskUserQuestion（`multiSelect: true` 多选）问用户：本次从哪些维度调研。** 按 topic 给 4~N 个相关维度选项（如：直接竞品 / 间接竞品·替代方案 / 技术架构与实现 / 商业模式与定价 / 目标用户与需求 / 开源生态与社区 / 合规与安全…，按主题定、别写死），让用户多选。持续自主执行模式则按上面的窄例外处理：尊重已给维度，或选择三项保守默认并记入产物，**不得**把“没有再问一次”伪造成用户选择。
    - **1b. 为用户选定的每个维度，并行 dispatch 一个 `pipeline-researcher` 子 agent**——**同一条 Agent 消息内并行 dispatch（一维度一个），不许一个子 agent 串行包揽所有维度**。每个 dispatch prompt 必含：该维度的调研焦点 + 产出路径 `docs/superpowers/specs/<DATE>-<topic>-<维度>-research.md` + `track=pm`。
    - 各子 agent 在隔离上下文里（可自行加载 deep-research / market-research 取方法论）拉真实源、写报告到盘，**各自只回传 路径 + ≤10 行摘要 + 3-5 个待用户决断的开放问题**。
    - 主线**不**把全文吸进来污染上下文，也**不**在主线直接加载 deep-research / market-research——下一步 brainstorming 才把各份报告当**外部输入**读。
@@ -143,7 +154,31 @@ pipeline artifact register "$PIPELINE_CHANGE_NAME" design_doc \
   "docs/superpowers/specs/$(date +%Y-%m-%d)-<topic>-design.md" --producer brainstorming
 ```
 
-### Step 3.25: 登记 Superpowers 设计与 ADR（受治理 workflow 强制）
+### Step 3.25: 回填 OpenSpec 活文档并登记当前 digest（受治理 workflow 强制）
+
+Open phase 只创建 proposal / initial design 骨架；Explore 的调研、brainstorming 与 grill 结论必须由
+**当前 phase driver `pipeline-explore`** 汇总回这两份 OpenSpec 活文档。不要把交互式 `brainstorming`
+的产出者身份借给它们：它负责 Superpowers design / ADR，而本步骤负责被验证过的立项与初始设计。
+
+若没有改变文件，不重复登记；一旦回填或修正了任一文件，必须在本 phase 以 `pipeline-explore`
+重新登记。新 digest 会刻意清掉旧 read receipt，因此随后必须重新读取全部上游文档，不能拿进入
+Explore 时的旧读取冒充新内容已经被消费。
+
+```bash
+CHANGE_DIR="openspec/changes/$PIPELINE_CHANGE_NAME"
+# 先用 Edit/Write 将调研结论回填 proposal.md / design.md，再按实际变更逐个执行：
+pipeline document record "$PIPELINE_CHANGE_NAME" proposal "$CHANGE_DIR/proposal.md" --producer pipeline-explore
+pipeline document record "$PIPELINE_CHANGE_NAME" openspec-design "$CHANGE_DIR/design.md" --producer pipeline-explore
+```
+
+Explore 不得把尚未形成的实施计划提前写入 `tasks.md`；但本文件已经是七阶段 Todo 的唯一来源，
+所以完成 Explore 自己的 checkbox 后必须由 `pipeline-explore` 重登记当前 digest：
+
+```bash
+pipeline document record "$PIPELINE_CHANGE_NAME" tasks "$CHANGE_DIR/tasks.md" --producer pipeline-explore
+```
+
+### Step 3.5: 登记 Superpowers 设计与 ADR（受治理 workflow 强制）
 
 `brainstorming` 必须产出技术设计文档，且至少落一份 ADR：即使结论是“不引入新架构决策”，也要把该结论、
 替代方案和后果写成 ADR，避免后续 spec/build 只能猜测。默认统一调用本插件打包的 bare
@@ -155,10 +190,12 @@ ADR_PATH="docs/adr/$(date +%Y-%m-%d)-${PIPELINE_CHANGE_NAME}-explore.md"
 # 用 Edit/Write 写 ADR（Context / Decision / Alternatives / Consequences），再登记；不可登记空文件。
 pipeline document record "$PIPELINE_CHANGE_NAME" superpower-design "$DESIGN_DOC" --producer brainstorming
 pipeline document record "$PIPELINE_CHANGE_NAME" adr "$ADR_PATH" --producer brainstorming
+# proposal / design / tasks 若在 Step 3.25 更新，先完成对应 record；此处重新消费所有当前 digest。
+pipeline document read "$PIPELINE_CHANGE_NAME" all
 pipeline document status "$PIPELINE_CHANGE_NAME"
 ```
 
-### Step 3.5: 在 design_doc 写入全栈 Spec 覆盖块
+### Step 3.75: 在 design_doc 写入全栈 Spec 覆盖块
 
 design_doc **必须**包含一个 `coverage` 围栏块（spec 出口 guard 的 S5 覆盖 gate 会校验它，
 见 packages/kernel/src/flow/GUARD-RULES.md §3）。本 phase 至少填齐**领域层 L3/L4/L10**，形式层留给 spec phase：
@@ -190,20 +227,22 @@ guard 通过条件（GUARD-RULES §2）：
 - `design_doc` 字段非空
 - `design_doc` 指向的文件存在（路径相对项目根）
 
-guard **只校验、不自动 transition**（本 pipeline 永不自动推进）。校验通过后：
-1. **brainstorming / grill 必须是真和用户做完的多轮对话**（按上面「硬姿态」），不是 solo 写完 design 给个摘要；
-2. 把 design_doc（含关键决策 / 调研结论 / 落的 ADR）交用户过目、**逐项**收反馈；
-3. 用户确认设计后，手动推进：
-   `pipeline transition "$PIPELINE_CHANGE_NAME" explore-complete`
+guard **只校验、不自动 transition**。校验通过后：
+1. **常规模式下 brainstorming / grill 必须是真和用户做完的多轮对话**（按上面「硬姿态」），不是 solo 写完 design 给个摘要；持续自主执行模式可将低风险追问改为有理由的 Assumptions / Decision Log 与红队自检，但不得省略真实 skill、真实调研、ADR 或出口 review；
+2. 运行 `pipeline review request "$PIPELINE_CHANGE_NAME" --event explore-complete`，把 exact-phase-and-event pending receipt 与 v2 hook
+   投影写入；随后把 design_doc（含关键决策 / 调研结论 / 落的 ADR）交用户过目、**逐项**收反馈；
+3. 常规模式等待用户确认，由 hook 运行 `pipeline review acknowledge "$PIPELINE_CHANGE_NAME"`；已明确持续授权时，
+   在上列证据均真实完成后运行 `pipeline review acknowledge "$PIPELINE_CHANGE_NAME" --delegated`。确认 receipt 已写入后，
+   推进：`pipeline transition "$PIPELINE_CHANGE_NAME" explore-complete`。
 
 ## 出口
 
 - 事件：`explore-complete`
-- 下一 phase：`spec`（**用户确认设计后手动进入**，不自动 chaining）
+- 下一 phase：`spec`（常规模式确认后进入；已授权模式在委托 review receipt 后进入）
 
 > 决策节点（HARD）：explore 是 review 相位（templates/manifest.yaml `review_phases` 单一真相源）——
-> CLI 在进入时落 `.pipeline-pending-review` 门，hooks/gate.sh 会挡住未经 AskUserQuestion 复核
-> 就继续写产出/推进的动作，"solo 一个 turn 跑完 brainstorming + transition" 在结构上不可能。
+> **出口**必须 `check → review request --event explore-complete → 展示产物 → 用户确认 / acknowledge → transition`。marker 不会
+> 在入口阻断调研，但 canonical receipt 会拒绝任何未经确认的 explore-complete。
 > 别为过 phase 草草收尾：终态是**用户在硬取舍上做了承诺**，不是"文档写出来了"。
 
 ## 打包 skill 依赖（随 pipeline-lite 插件安装）

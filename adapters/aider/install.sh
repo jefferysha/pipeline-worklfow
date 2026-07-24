@@ -105,7 +105,7 @@ if [ "$WITH_GIT_HOOKS" = 1 ]; then
   install_git_hook post-commit "$ADAPTER_DIR/hooks/track.sh"
   info "档 B 完成：inject/track 走 aider 原语（read: + git commit）+ veto 降级 commit-gate。"
 else
-  warn "--no-git-hooks：跳过 pre-commit/post-commit（veto/track 均不生效；靠手动 Unlock sentinel + 无留痕）。"
+  warn "--no-git-hooks：跳过 pre-commit/post-commit（veto/track 均不生效；review 仍须走 pipeline review request/acknowledge）。"
 fi
 note ""
 note "提示：项目 phase/门状态变化后如需刷新会话上下文，重跑本脚本即可（幂等，覆盖 context 文件与自管 git hook）。"

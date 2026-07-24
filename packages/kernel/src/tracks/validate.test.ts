@@ -235,6 +235,42 @@ describe('validateTrackRegistry —— policy_profile 闭集与类型', () => {
     ).toEqual([])
   })
 
+  test('routing.exclude_pattern：可选；空串、非法正则和不可表示值被拒', () => {
+    const p = VALID_ENTRY.policyProfile!
+    expect(
+      validateTrackRegistry(
+        cfg({
+          tracks: [entry({
+            policyProfile: {
+              ...p,
+              routing: { enabled: true, pattern: 'x', excludePattern: '(API|schema)', priority: 1 },
+            },
+          })],
+        }),
+        CTX,
+      ),
+    ).toEqual([])
+    expectError(
+      cfg({ tracks: [entry({ policyProfile: { ...p, routing: { enabled: true, pattern: 'x', excludePattern: '', priority: 1 } } })] }),
+      'exclude_pattern: 提供时须为非空字符串',
+    )
+    expectError(
+      cfg({ tracks: [entry({ policyProfile: { ...p, routing: { enabled: true, pattern: 'x', excludePattern: '(', priority: 1 } } })] }),
+      'exclude_pattern: 非法正则',
+    )
+    expectError(
+      cfg({
+        tracks: [entry({
+          policyProfile: {
+            ...p,
+            routing: { enabled: true, pattern: 'x', excludePattern: `x'y"z`, priority: 1 },
+          },
+        })],
+      }),
+      '单双引号',
+    )
+  })
+
   test('priority 数域=非负安全整数：1e21（isInteger 放行但 String() 成科学计数法）与 2^53 被拒；MAX_SAFE_INTEGER 合法', () => {
     const p = VALID_ENTRY.policyProfile!
     // codex 探针实证的自毁值：旧 Number.isInteger 闸放行 → serialize 写出 'priority: 1e+21'
@@ -276,11 +312,11 @@ describe('validateTrackRegistry —— policy_profile 闭集与类型', () => {
     ).toEqual([])
   })
 
-  test('routing.enabled=false 却带 pattern/priority → 被拒', () => {
+  test('routing.enabled=false 却带 pattern/exclude_pattern/priority → 被拒', () => {
     const p = VALID_ENTRY.policyProfile!
     expectError(
       cfg({ tracks: [entry({ policyProfile: { ...p, routing: { enabled: false, pattern: 'x' } } })] }),
-      'enabled=false 时不接受 pattern/priority',
+      'enabled=false 时不接受 pattern/exclude_pattern/priority',
     )
   })
 
@@ -356,9 +392,9 @@ describe('validateTrackRegistry —— 总量上限', () => {
     return Array.from({ length: n }, (_, i) => entry({ id: `extra-${i}` }))
   }
 
-  test('内建 4 + 额外 28 = 32 → 合法；额外 29 → 超上限被拒', () => {
-    expect(validateTrackRegistry(cfg({ tracks: manyTracks(28) }), CTX)).toEqual([])
-    expectError(cfg({ tracks: manyTracks(29) }), `超过上限 ${MAX_TRACKS}`)
+  test('内建 5 + 额外 27 = 32 → 合法；额外 28 → 超上限被拒', () => {
+    expect(validateTrackRegistry(cfg({ tracks: manyTracks(27) }), CTX)).toEqual([])
+    expectError(cfg({ tracks: manyTracks(28) }), `超过上限 ${MAX_TRACKS}`)
   })
 })
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# decision-recorder.sh — PostToolUse hook（matcher: AskUserQuestion）。
+# decision-recorder.sh — PostToolUse hook（matcher: AskUserQuestion|request_user_input）。
 #
-# 捕获每次 AskUserQuestion 的「问 + 答」，append 进当前活跃 change 的
+# 捕获每次 AskUserQuestion / Codex request_user_input 的「问 + 答」，append 进已明确选择的 change 的
 #   openspec/changes/<name>/.pipeline-history.jsonl（一行一个 JSON，CONTRACT §1）。
 # lite 用 JSONL 侧文件（非老仓 base64 塞 YAML），kind=prompt、raw="Q: <q> | A: <a>"——
 # 逐字对齐 pipeline import 老仓历史迁移的 prompt kind 形态（kernel legacy.ts），live 与 import 同构。
@@ -9,34 +9,17 @@
 #
 # 纯 bash 热路径（CONTRACT §5.4：PostToolUse 每次工具后触发）：零解释器 / 外部 JSON 解析器 spawn，
 # stdin JSON 全用 bash 字符串扫描提取。JSON 构造严格转义（\ " \t \r \n）——绝不写坏 JSONL。
-# Fire & forget：无活跃 change / 解析空 / 任何异常一律静默 exit 0，绝不阻塞主流程。
+# Fire & forget：无明确选择的 change / 解析空 / 任何异常一律静默 exit 0，绝不阻塞主流程。
 set -uo pipefail
 
 INPUT="$(cat 2>/dev/null || printf '{}')"
 
-# ── 顶层字符串键（cwd）：逐字复用 gate.sh json_get ──
-json_get() {
-  local key="$1" rest
-  case "$INPUT" in *"\"$key\""*) ;; *) return 1 ;; esac
-  rest="${INPUT#*\"$key\"}"
-  while true; do
-    case "$rest" in
-      [$' \t\r\n']*) rest="${rest#?}" ;;
-      ':'*) rest="${rest#:}"; break ;;
-      *) return 1 ;;
-    esac
-  done
-  while true; do
-    case "$rest" in
-      [$' \t\r\n']*) rest="${rest#?}" ;;
-      *) break ;;
-    esac
-  done
-  case "$rest" in
-    '"'*) rest="${rest#\"}"; printf '%s' "${rest%%\"*}"; return 0 ;;
-    *) return 1 ;;
-  esac
-}
+# ── 顶层字符串键（cwd）：与其它实时 hook 共用 escape-aware Bash decoder ──
+JSON_INPUT_HELPER="$(dirname "${BASH_SOURCE[0]:-$0}")/json-input.sh"
+[ -r "$JSON_INPUT_HELPER" ] || exit 0
+# shellcheck source=json-input.sh
+. "$JSON_INPUT_HELPER"
+json_get() { pipeline_json_get_string "$INPUT" "$1"; }
 
 # ── 某键的所有字符串值（多问一答场景全保留），以 " | " 连接 ──
 # 朴素捕获到下一个 '"'（不处理值内转义引号）→ 遇转义引号即截断，仍是合法（虽截断）审计串；fail-safe。
@@ -73,15 +56,7 @@ json_colon_values() { # $1=haystack
 }
 
 # ── JSON 字符串体转义（单物理行、合法 JSON）：反斜杠→\\、引号→\"、Tab/CR/LF→\t\r\n ──
-json_escape() {
-  local s="$1"
-  s="${s//\\/\\\\}"
-  s="${s//\"/\\\"}"
-  s="${s//$'\t'/\\t}"
-  s="${s//$'\r'/\\r}"
-  s="${s//$'\n'/\\n}"
-  printf '%s' "$s"
-}
+json_escape() { pipeline_json_escape "$1"; }
 
 # ── yaml 顶层键读取（archived 判活跃）：grep 首个 '^key: '，剥一层同款引号（同 router.sh yget）──
 STATE_HELPER="$(dirname "${BASH_SOURCE[0]:-$0}")/canonical-state.sh"
@@ -106,28 +81,17 @@ case "$INPUT" in
 esac
 [ -z "$Q" ] && [ -z "$A" ] && exit 0
 
-# ── 定位活跃 change：根边界由共享 helper 统一，禁止误吸收父目录项目。──
+# ── 定位已选择 change：根边界由共享 helper 统一，绝不按 mtime 借用旧 Change。──
 ROOT_HELPER="$(dirname "${BASH_SOURCE[0]:-$0}")/project-root.sh"
 [ -r "$ROOT_HELPER" ] || exit 0
 # shellcheck source=project-root.sh
 . "$ROOT_HELPER"
 PROOT="$(pipeline_project_root "$CWD" existing changes || true)"
 [ -n "$PROOT" ] || exit 0
-
-BEST=0 CHANGE_DIR=""
-for candidate_dir in "$PROOT"/openspec/changes/*; do
-  [ -d "$candidate_dir" ] || continue
-  f="$(pipeline_state_source "$candidate_dir" || true)"
-  [ -n "$f" ] || continue
-  [ "$(yget "$f" archived)" = "true" ] && continue
-  # GNU `stat -f` 是文件系统状态模式（非 mtime），在 Linux 上会"成功"吐非数字，兜底永不触发
-  # ——先试 GNU 语法（-c）+ 数字校验，而非只靠退出码判断。
-  mt="$(stat -c %Y "$f" 2>/dev/null)"
-  case "$mt" in ''|*[!0-9]*) mt="$(stat -f %m "$f" 2>/dev/null)" ;; esac
-  case "$mt" in ''|*[!0-9]*) mt=0 ;; esac
-  [[ "$mt" =~ ^[0-9]+$ ]] || mt=0
-  if [ "$mt" -ge "$BEST" ]; then BEST="$mt"; CHANGE_DIR="$candidate_dir"; fi
-done
+[ -r "$(dirname "${BASH_SOURCE[0]:-$0}")/active-change.sh" ] || exit 0
+# shellcheck source=active-change.sh
+. "$(dirname "${BASH_SOURCE[0]:-$0}")/active-change.sh"
+CHANGE_DIR="$(pipeline_active_change_dir "$PROOT" || true)"
 [ -n "$CHANGE_DIR" ] || exit 0
 
 TS="$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"

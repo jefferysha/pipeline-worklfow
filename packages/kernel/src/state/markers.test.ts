@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { reviewHint } from './markers.js'
+import { formatReviewMarker, parseReviewMarker, REVIEW_MARKER_PROTOCOL, reviewHint } from './markers.js'
 
 /**
  * reviewHint 的逐字映射独立锚定（G1 REFACTOR 第二轮 codex review 指出：server.test.ts 的
@@ -21,5 +21,29 @@ describe('reviewHint —— review 相位的 marker 指引文案（老内核 sta
     expect(reviewHint('build')).toBe('（待复核）')
     expect(reviewHint('ship')).toBe('（待复核）')
     expect(reviewHint('archive')).toBe('（待复核）')
+  })
+})
+
+describe('review marker v2 —— canonical review request 的短时 hook projection', () => {
+  test('格式化与解析保留 exact phase / Change identity / request timestamp', () => {
+    const raw = formatReviewMarker({
+      phase: 'custom-review', event: 'accept', changeName: 'pet-adoption', requestedAt: '2026-07-24T12:00:00Z',
+    })
+    expect(raw).toMatch(new RegExp(`^${REVIEW_MARKER_PROTOCOL}\\n`))
+    expect(parseReviewMarker(raw)).toEqual({
+      phase: 'custom-review', event: 'accept', changeName: 'pet-adoption', requestedAt: '2026-07-24T12:00:00Z',
+    })
+  })
+
+  test('旧三行 entry-time marker 与缺少 identity 的伪 v2 一律不能成为 receipt', () => {
+    expect(parseReviewMarker('explore\n旧提示\ndemo\n')).toBeNull()
+    expect(parseReviewMarker(`${REVIEW_MARKER_PROTOCOL}\nphase=explore\nchange=\nrequested_at=x\n`)).toBeNull()
+    expect(parseReviewMarker(`${REVIEW_MARKER_PROTOCOL}\nphase=explore\nchange=demo\n`)).toBeNull()
+  })
+
+  test('旧 v2 marker 仍可识别 Change identity，但没有 event 不能授权转换', () => {
+    expect(parseReviewMarker(`${REVIEW_MARKER_PROTOCOL}\nphase=verify\nchange=demo\nrequested_at=x\n提示\n`)).toEqual({
+      phase: 'verify', changeName: 'demo', event: '', requestedAt: 'x',
+    })
   })
 })

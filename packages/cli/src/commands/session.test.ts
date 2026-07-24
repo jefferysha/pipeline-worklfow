@@ -15,12 +15,20 @@ const MONO: PackageDecl[] = [
 
 function fakeFs(over: Partial<SessionFs> = {}): SessionFs & {
   bind: ReturnType<typeof spy<[string, string], Promise<void>>>
+  grant: ReturnType<typeof spy<[string, string], Promise<void>>>
+  bindTerminal: ReturnType<typeof spy<[string, string, string], Promise<void>>>
 } {
   const bind = spy(async (_cwd: string, _name: string): Promise<void> => {})
+  const grant = spy(async (_cwd: string, _name: string): Promise<void> => {})
+  const bindTerminal = spy(async (_cwd: string, _name: string, _sessionId: string): Promise<void> => {})
   return {
     loadPackages: async () => null,
     bindPointer: bind,
+    writeInteractionAuthority: grant,
+    bindTerminalSession: bindTerminal,
     bind,
+    grant,
+    bindTerminal,
     ...over,
   }
 }
@@ -71,6 +79,39 @@ describe('activate（老仓 cmd_activate state-session.sh:33-45）', () => {
     const fs = fakeFs({ bindPointer: async () => { throw new Error('EACCES') } })
     expect(await cmdSession(deps, 'activate', ['chg'], fs)).toBe(0)
     expect(deps.errLines.join('\n')).toContain('degraded')
+  })
+
+  test('activate --continuous → 只为刚绑定的 Change 写持续交互授权投影', async () => {
+    const deps = makeDeps({ state: mockState() })
+    const fs = fakeFs()
+    expect(await cmdSession(deps, 'activate', ['chg', '--continuous'], fs)).toBe(0)
+    expect(fs.bind.calls).toEqual([['/repo', 'chg']])
+    expect(fs.grant.calls).toEqual([['/repo', 'chg']])
+    expect(deps.errLines.join('\n')).toContain('持续交互授权')
+  })
+
+  test('activate --host-session 仅绑定精确 host session，不改 phase 或复用 repo 级指针推断', async () => {
+    const deps = makeDeps({ state: mockState() })
+    const fs = fakeFs()
+    expect(await cmdSession(deps, 'activate', ['chg', '--host-session', '019f92c7-6e66-7290-9352-f9d915266f14'], fs)).toBe(0)
+    expect(fs.bind.calls).toEqual([['/repo', 'chg']])
+    expect(fs.bindTerminal.calls).toEqual([['/repo', 'chg', '019f92c7-6e66-7290-9352-f9d915266f14']])
+    expect(fs.grant.calls).toEqual([])
+  })
+
+  test('host session id 非法、缺值或重复 flag → 用法错误且不绑定', async () => {
+    const cases = [
+      ['chg', '--host-session'],
+      ['chg', '--host-session', 'escape/../x'],
+      ['chg', '--host-session', 'one', '--host-session', 'two'],
+    ]
+    for (const args of cases) {
+      const deps = makeDeps({ state: mockState() })
+      const fs = fakeFs()
+      expect(await cmdSession(deps, 'activate', args, fs)).toBe(1)
+      expect(fs.bind.calls).toEqual([])
+      expect(fs.bindTerminal.calls).toEqual([])
+    }
   })
 })
 

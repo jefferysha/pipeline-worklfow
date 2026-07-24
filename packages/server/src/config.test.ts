@@ -25,7 +25,7 @@ const TRACK_CONTEXT: TrackValidationContext = {
 }
 
 describe('readConfigSnapshot（manifest + kernel effective track registry 的 dashboard 契约）', () => {
-  it('缺 tracks.yaml 时返回 builtin-only 四轨、matrix/policy profile 与真实写能力', async () => {
+  it('缺 tracks.yaml 时返回 builtin-only 五轨、matrix/policy profile 与真实写能力', async () => {
     const repoRoot = await mkdtemp(join(tmpdir(), 'pl-cfg-builtin-tracks-'))
 
     const snapshot = readConfigSnapshot({
@@ -39,7 +39,7 @@ describe('readConfigSnapshot（manifest + kernel effective track registry 的 da
     expect(snapshot.generated_at).toBe('2026-07-19T00:00:00Z')
     expect(snapshot.source).toBe('builtin-only')
     expect(snapshot.revision).toMatch(/^[0-9a-f]{16}$/)
-    expect(snapshot.tracks.map((track) => track.id)).toEqual(['chat', 'pm', 'frontend', 'backend'])
+    expect(snapshot.tracks.map((track) => track.id)).toEqual(['chat', 'simple', 'pm', 'frontend', 'backend'])
     expect(snapshot.tracks[0]).toMatchObject({
       id: 'chat',
       builtin: true,
@@ -52,9 +52,10 @@ describe('readConfigSnapshot（manifest + kernel effective track registry 的 da
         skills: { matrix: false, profile: '_all' },
       },
     })
-    expect(snapshot.tracks[1]?.policyProfile).toMatchObject({
+    expect(snapshot.tracks.find((track) => track.id === 'pm')?.policyProfile).toMatchObject({
       reviewSeed: 'skipped',
-      automationEligible: false,
+      autoEnqueueOnSpecComplete: true,
+      automationEligible: true,
       coverageProfile: 'pm',
       skills: { matrix: true, profile: 'pm' },
     })
@@ -62,7 +63,7 @@ describe('readConfigSnapshot（manifest + kernel effective track registry 的 da
     expect(snapshot.mandatory_skills_writable_profiles).toEqual(['pm', 'frontend', 'backend'])
   })
 
-  it('项目 registry 的第 5 轨按声明序返回，保留 workflow、routing/policy 与 skills profile 继承', async () => {
+  it('项目 registry 的追加轨按声明序返回，保留 workflow、routing/policy 与 skills profile 继承', async () => {
     const repoRoot = await mkdtemp(join(tmpdir(), 'pl-cfg-custom-tracks-'))
     await mkdir(join(repoRoot, '.pipeline'))
     await writeFile(join(repoRoot, '.pipeline', 'tracks.yaml'), `version: 1
@@ -79,6 +80,7 @@ tracks:
       routing:
         enabled: true
         pattern: '(qa|test)'
+        exclude_pattern: '(API|schema)'
         priority: 250
       skills:
         matrix: true
@@ -93,8 +95,8 @@ tracks:
     })
 
     expect(snapshot.source).toBe('project-file')
-    expect(snapshot.tracks.map((track) => track.id)).toEqual(['chat', 'pm', 'frontend', 'backend', 'qa'])
-    expect(snapshot.tracks[4]).toEqual({
+    expect(snapshot.tracks.map((track) => track.id)).toEqual(['chat', 'simple', 'pm', 'frontend', 'backend', 'qa'])
+    expect(snapshot.tracks.find((track) => track.id === 'qa')).toEqual({
       id: 'qa',
       label: 'Quality',
       builtin: false,
@@ -103,7 +105,7 @@ tracks:
         reviewSeed: 'pending',
         automationEligible: true,
         coverageProfile: 'backend',
-        routing: { enabled: true, pattern: '(qa|test)', priority: 250 },
+        routing: { enabled: true, pattern: '(qa|test)', excludePattern: '(API|schema)', priority: 250 },
         skills: { matrix: true, profile: 'frontend' },
       },
     })

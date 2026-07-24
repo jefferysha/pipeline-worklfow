@@ -44,12 +44,13 @@ install_rules() {
 7-phase 流水线：open → explore → spec → build ⇄ verify → ship → archive。
 状态操作一律走 `pipeline` CLI（status / get / set / transition / check），勿手改 .pipeline.yaml。
 
-进入 review phase（explore / spec / verify 出口）须人类显式确认才能 transition。
-放行用 Unlock sentinel——确认无误后删除项目根 marker：
+离开 review phase（explore / spec / verify）须对确切 event 取得人类显式确认：
 
-    rm .pipeline-pending-review   # 或 .pipeline-pending-confirm / .pipeline-pending-interaction
+    pipeline review request <change> --event <event>
+    # 人类确认后：
+    pipeline review acknowledge <change>
 
-不得绕过 review-gate（会产生 solo 推进）。命令前缀为 /pipeline-（如 /pipeline-explore）。
+不得删除 `.pipeline-pending-review` 绕过 review-gate（会产生 solo 推进）。命令前缀为 /pipeline-（如 /pipeline-explore）。
 EOF
   info "rules/pipeline.md → $rdir/pipeline.md（inject 降级静态层）"
 }
@@ -75,7 +76,7 @@ install_rules
 if [ "$WITH_HOOKS" = 1 ]; then
   install_hooks
 else
-  warn "--no-hooks：跳过 hooks.json（无自动强制；靠 .cursor/rules 静态层 + 手动 Unlock sentinel）。"
+  warn "--no-hooks：跳过 hooks.json（无自动强制；review 仍须走 pipeline review request/acknowledge）。"
 fi
 info "Cursor 适配器安装完成（无 trust 机制，落盘即生效）。"
 exit 0

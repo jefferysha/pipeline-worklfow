@@ -1,5 +1,5 @@
 /**
- * 内建四轨的精确定义（codex 2026-07-17 裁决钉死的默认值表）。
+ * 内建 Track 的精确定义（codex 2026-07-17 裁决钉死的默认值表）。
  *
  * BUILTIN_TRACK_IDS 只在 tracks/ 模块及其消费方内定义使用——kernel/src/types.ts 的 TRACKS
  * 常量仍是现行运行时全集来源，切换属于清单 T 的 R2 阶段（见 GOAL.md）。
@@ -15,20 +15,28 @@
  */
 import type { TrackDefinition, TrackWorkflowBinding } from './types.js'
 
-export const BUILTIN_TRACK_IDS = ['chat', 'pm', 'frontend', 'backend'] as const
+export const BUILTIN_TRACK_IDS = ['chat', 'simple', 'pm', 'frontend', 'backend'] as const
 export type BuiltinTrackId = (typeof BUILTIN_TRACK_IDS)[number]
 
 export function isBuiltinTrackId(id: string): id is BuiltinTrackId {
   return (BUILTIN_TRACK_IDS as readonly string[]).includes(id)
 }
 
-/** 内建三条路由正则的唯一默认真相源（grep -E 方言）。 */
+/** 内建启用轨的路由正则唯一默认真相源（grep -E 方言）。 */
 export const BUILTIN_ROUTER_PATTERNS = {
+  simple:
+    '((错别字|拼写|typo|文案|注释|comment|快速修复|quick patch|移除未使用|unused import|格式化|formatting|配置值|小改|微调).*(README|CHANGELOG|文档|docs/|文件|[A-Za-z0-9_./-]+\\.(md|txt|json|ya?ml|toml|tsx?|jsx?|vue|css|scss|html|py|go|rs|java)|组件|页面|按钮|标题|标签|字段|键|key|一行|单行)|(README|CHANGELOG|文档|docs/|文件|[A-Za-z0-9_./-]+\\.(md|txt|json|ya?ml|toml|tsx?|jsx?|vue|css|scss|html|py|go|rs|java)|组件|页面|按钮|标题|标签|字段|键|key|一行|单行).*(错别字|拼写|typo|文案|注释|comment|快速修复|quick patch|移除未使用|unused import|格式化|formatting|配置值|小改|微调))',
   frontend:
     '(前端|UI|页面|组件|React|Vue|Next|Tailwind|样式|shadcn|\\.tsx|\\.jsx|\\.vue|web 设计|响应式|button|form|layout)',
   backend:
-    '(后端|backend|API|接口|数据库|Go |Python |Java |Rust |NestJS|Postgres|endpoint|service|微服务|REST|GraphQL|gRPC|migration|server|controller|schema)',
+    '(后端|backend|API|接口|数据库|Go |Python |Java |Rust |NestJS|Postgres|endpoint|service|微服务|REST|GraphQL|gRPC|migration|server|controller|schema|修复|修改|实现|添加|重构|bug|feature|微调|版本号|格式化|formatting|错别字|拼写|typo|文案|注释)',
   pm: '(调研|竞品|市场|竞争对手|对标|商业模式|PRD|需求|用户旅程|原型|market|立项|产品|user persona|流程图)',
+} as const
+
+/** Exclusion is evaluated before score/priority; it is never a negative score heuristic. */
+export const BUILTIN_ROUTER_EXCLUDE_PATTERNS = {
+  simple:
+    '(跨模块|多模块|多文件|整个项目|全项目|全仓|所有文件|批量|新功能|feature|重构|架构|算法|业务逻辑|核心逻辑|行为变更|API|接口|公共契约|contract|协议|schema|migration|数据库|登录|认证|鉴权|权限|auth|security|安全|并发|事务|transaction|依赖|dependency|package|npm|pnpm|yarn|bun|升级|升到|更新版本|生产数据|部署|发布|release|外部副作用|多端|前后端|全栈)',
 } as const
 
 const WORKFLOW_ANY: TrackWorkflowBinding = { default: 'default', allowed: '*' }
@@ -48,13 +56,36 @@ export const BUILTIN_TRACK_DEFINITIONS: readonly TrackDefinition[] = [
     },
   },
   {
+    id: 'simple',
+    label: 'Simple',
+    builtin: true,
+    workflow: { default: 'simple', allowed: ['simple'] },
+    policyProfile: {
+      reviewSeed: 'pending',
+      automationEligible: false,
+      coverageProfile: 'none',
+      routing: {
+        enabled: true,
+        pattern: BUILTIN_ROUTER_PATTERNS.simple,
+        excludePattern: BUILTIN_ROUTER_EXCLUDE_PATTERNS.simple,
+        priority: 1000,
+      },
+      skills: { matrix: false, profile: '_all' },
+    },
+  },
+  {
     id: 'pm',
     label: 'PM',
     builtin: true,
     workflow: WORKFLOW_ANY,
     policyProfile: {
       reviewSeed: 'skipped',
-      automationEligible: false,
+      // PM 的默认产物是调研/规格；当 Spec 已完成时交给 AFK 队列继续执行。该位与
+      // automationEligible 分开，避免前端/后端的“可手动 AFK”被误解成“自动接管 Build”。
+      autoEnqueueOnSpecComplete: true,
+      // 手动 AFK capability 与自动入队保持两条独立授权：两者都仍会经过 normal loop
+      // admission、skill bundle、verification 与 L1/L2/L3 执行闸。
+      automationEligible: true,
       coverageProfile: 'pm',
       routing: { enabled: true, pattern: BUILTIN_ROUTER_PATTERNS.pm, priority: 100 },
       skills: { matrix: true, profile: 'pm' },

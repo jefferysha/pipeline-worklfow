@@ -52,6 +52,14 @@ if [ -f "$BUNDLE" ]; then
   phase="$(cd "$TMP" && node "$BUNDLE" get t8-smoke phase 2>/dev/null)"
   [ "$phase" = "open" ] && ok "bundle: get phase = open" || bad "bundle: get phase = open" "得到 '$phase'"
 
+  # Evidence is intentionally attached only after an explicit target selection.  This is the same
+  # `pipeline` entry-skill sequence used by normal conversations, and prevents an mtime-selected
+  # old Change from satisfying this new bundle smoke Change.
+  ( cd "$TMP" && node "$BUNDLE" session activate t8-smoke ) >/dev/null 2>&1
+  [ "$?" -eq 0 ] \
+    && ok "bundle: session activate 绑定 t8-smoke" \
+    || bad "bundle: session activate 绑定 t8-smoke" "activate 失败"
+
   # default workflow 的 OpenSpec 文档契约要求 open 阶段先登记 proposal/design/tasks。它们是 init
   # 创建的最小骨架；这里通过真实 CLI 绑定产物 hash 和 openspec-propose skill 证据，证明入库 bundle
   # 同时包含新文档链路，而不是把冒烟测试回退成历史上的无证据直转。先调用同包的 PostToolUse

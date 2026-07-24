@@ -10,6 +10,7 @@
  * 命中「伪测试」判据即不算数：断言 mock 返回 / 真实路径未执行 / 伪造 pass。本文件全程摸真盘。
  */
 import { execFileSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { readFile, rm, stat, unlink, writeFile } from 'node:fs/promises'
 import { statSync } from 'node:fs'
 import { join } from 'node:path'
@@ -99,13 +100,13 @@ describe('真实 e2e —— 全命令驱动真 kernel + 真 fs（GOAL C9）', ()
     expect(await h.run(['cas', 'demo', 'automation', 'queued', 'off'])).toBe(3) // 现值已是 running
   })
 
-  test('transition 真改相位 + 真落 review marker + 真记历史', async () => {
+  test('transition 真改相位且不在进入 review 时自锁 + 真记历史', async () => {
     await h.run(['init', 'demo', '--track', 'backend', '--preset', 'full'])
     await h.seedGovernedDocumentEvidence('demo')
     expect(await h.run(['transition', 'demo', 'open-complete'])).toBe(0)
     expect(await h.read('demo')).toMatch(/^phase: explore$/m)
-    // explore 是复核相位 → 真落 .pipeline-pending-review
-    await expect(stat(join(h.cwd, '.pipeline-pending-review'))).resolves.toBeTruthy()
+    // explore 是 review 相位，但 entry 不写 marker；产物完成后的 `review request` 才会写 v2 投影。
+    await expect(stat(join(h.cwd, '.pipeline-pending-review'))).rejects.toMatchObject({ code: 'ENOENT' })
     const hist = await readFile(join(h.cwd, 'openspec/changes/demo/.pipeline-history.jsonl'), 'utf8')
     expect(hist).toContain('"kind":"transition"')
     expect(hist).toContain('"to":"explore"')
@@ -123,13 +124,15 @@ describe('真实 e2e —— 全命令驱动真 kernel + 真 fs（GOAL C9）', ()
     // explore 出口：使用已记录的 OpenSpec design 并登记字段（不得改写 hash-bound 文档）。
     await h.seedArtifact('demo', 'design_doc', 'openspec/changes/demo/design.md') // P6：artifact 白盒预置
     await h.run(['transition', 'demo', 'open-complete'])
-    await rm(join(h.cwd, '.pipeline-pending-review'), { force: true })
-    await h.run(['transition', 'demo', 'explore-complete'])
-    await rm(join(h.cwd, '.pipeline-pending-review'), { force: true })
+    expect(await h.run(['review', 'request', 'demo', '--event', 'explore-complete'])).toBe(0)
+    expect(await h.run(['review', 'acknowledge', 'demo'])).toBe(0)
+    expect(await h.run(['transition', 'demo', 'explore-complete'])).toBe(0)
     // spec 出口（backend）：真建 plan 并指向它（老仓 L127-138）
     await writeFile(join(h.cwd, 'openspec/changes/demo/plan.md'), '# plan\n', 'utf8')
     await h.seedArtifact('demo', 'plan', 'openspec/changes/demo/plan.md') // P6：artifact 白盒预置
-    await h.run(['transition', 'demo', 'spec-complete'])
+    expect(await h.run(['review', 'request', 'demo', '--event', 'spec-complete'])).toBe(0)
+    expect(await h.run(['review', 'acknowledge', 'demo'])).toBe(0)
+    expect(await h.run(['transition', 'demo', 'spec-complete'])).toBe(0)
     // build 出口：build_mode + isolation 必设；full+direct 须显式 direct_override=true（老仓 L144-151）
     await h.run(['set-many', 'demo', 'build_mode=direct', 'isolation=worktree', 'direct_override=true'])
     expect(await h.run(['transition', 'demo', 'build-complete'])).toBe(0)
@@ -137,10 +140,12 @@ describe('真实 e2e —— 全命令驱动真 kernel + 真 fs（GOAL C9）', ()
     expect(await h.read('demo')).toMatch(/^build_sha: DEADBEEF$/m)
   })
 
-  test('inbox 真读复核相位 change（--json schema）', async () => {
+  test('inbox 真读 canonical pending review request（--json schema）', async () => {
     await h.run(['init', 'demo', '--track', 'backend', '--preset', 'full'])
     await h.seedGovernedDocumentEvidence('demo')
     await h.run(['transition', 'demo', 'open-complete']) // → explore（复核相位）
+    await h.seedArtifact('demo', 'design_doc', 'openspec/changes/demo/design.md')
+    expect(await h.run(['review', 'request', 'demo', '--event', 'explore-complete'])).toBe(0)
     expect(await h.run(['inbox', '--json'])).toBe(0)
     const payload = JSON.parse(h.out.join('\n')) as { inbox: Array<{ name: string; waiting_on: string }> }
     expect(payload.inbox.some((i) => i.name === 'demo')).toBe(true)
@@ -174,6 +179,83 @@ describe('真实 e2e —— 全命令驱动真 kernel + 真 fs（GOAL C9）', ()
     expect(await h.read('auth')).toMatch(/^spec_scope: login,billing$/m)
   })
 
+  test('document：真实 CLI 为多个 capability delta 分别登记并读取证据', async () => {
+    await h.run(['init', 'multi', '--track', 'backend', '--preset', 'full'])
+    await h.seedGovernedDocumentEvidence('multi')
+    await h.seedArtifact('multi', 'design_doc', 'openspec/changes/multi/design.md')
+    expect(await h.run(['transition', 'multi', 'open-complete'])).toBe(0)
+    expect(await h.run(['review', 'request', 'multi', '--event', 'explore-complete'])).toBe(0)
+    expect(await h.run(['review', 'acknowledge', 'multi'])).toBe(0)
+    expect(await h.run(['transition', 'multi', 'explore-complete'])).toBe(0)
+
+    const alpha = 'openspec/changes/multi/specs/alpha/spec.md'
+    const beta = 'openspec/changes/multi/specs/beta/spec.md'
+    for (const path of [alpha, beta]) {
+      const target = join(h.cwd, path)
+      await import('node:fs/promises').then((fs) => fs.mkdir(join(target, '..'), { recursive: true }))
+      await writeFile(target, `# ${path}\n`, 'utf8')
+    }
+    await writeFile(
+      join(h.cwd, 'openspec/changes/multi/.pipeline-history.jsonl'),
+      `${JSON.stringify({ kind: 'tool', raw: 'Skill: openspec-propose' })}\n`,
+      { encoding: 'utf8', flag: 'a' },
+    )
+    expect(await h.run(['document', 'record', 'multi', 'delta-spec', alpha, '--producer', 'openspec-propose'])).toBe(0)
+    expect(await h.run(['document', 'record', 'multi', 'delta-spec', beta, '--producer', 'openspec-propose'])).toBe(0)
+
+    await h.seedArtifact('multi', 'plan', 'docs/superpowers/plans/multi.md')
+    expect(await h.run(['review', 'request', 'multi', '--event', 'spec-complete'])).toBe(0)
+    expect(await h.run(['review', 'acknowledge', 'multi'])).toBe(0)
+    expect(await h.run(['transition', 'multi', 'spec-complete'])).toBe(0)
+    expect(await h.run(['document', 'read', 'multi', 'delta-spec'])).toBe(0)
+    expect(await h.run(['document', 'status', 'multi', '--json'])).toBe(0)
+    const status = JSON.parse(h.out.join('\n')) as {
+      items: Array<{ kind: string; paths: string[]; status: string }>
+    }
+    expect(status.items.find((item) => item.kind === 'delta-spec')).toMatchObject({
+      status: 'recorded',
+      paths: expect.arrayContaining([
+        'openspec/changes/multi/specs/capability/spec.md',
+        alpha,
+        beta,
+      ]),
+    })
+  })
+
+  test('document migrate-delta：真实 CLI 仅按显式路径做同 digest 幂等迁移', async () => {
+    await h.run(['init', 'legacy-doc', '--track', 'backend', '--preset', 'full'])
+    const legacy = 'docs/legacy-doc-delta.md'
+    const canonical = 'openspec/changes/legacy-doc/specs/capability/spec.md'
+    const content = '# unchanged legacy delta\n'
+    for (const path of [legacy, canonical]) {
+      const target = join(h.cwd, path)
+      await import('node:fs/promises').then((fs) => fs.mkdir(join(target, '..'), { recursive: true }))
+      await writeFile(target, content, 'utf8')
+    }
+    const ledgerPath = join(h.cwd, 'openspec/changes/legacy-doc/.pipeline-documents.json')
+    await writeFile(ledgerPath, `${JSON.stringify({
+      version: 1,
+      contract: 'openspec-v1',
+      createdAt: '2026-07-24T00:00:00Z',
+      records: [{
+        kind: 'delta-spec',
+        path: legacy,
+        sha256: createHash('sha256').update(content).digest('hex'),
+        producer: 'openspec-propose',
+        recordedAt: '2026-07-24T00:00:00Z',
+        reads: [],
+      }],
+    }, null, 2)}\n`, 'utf8')
+
+    expect(await h.run(['document', 'migrate-delta', 'legacy-doc', legacy, canonical])).toBe(0)
+    expect(await h.run(['document', 'migrate-delta', 'legacy-doc', legacy, canonical])).toBe(0)
+    const ledger = JSON.parse(await readFile(ledgerPath, 'utf8')) as {
+      records: Array<{ kind: string; path: string }>
+    }
+    expect(ledger.records).toEqual([{ kind: 'delta-spec', path: canonical, sha256: expect.any(String),
+      producer: 'openspec-propose', recordedAt: '2026-07-24T00:00:00Z', reads: [] }])
+  })
+
   test('session：activate 真落 .pipeline-active（走 buildProgram，不动 phase）', async () => {
     await h.run(['init', 'demo', '--track', 'backend', '--preset', 'full'])
     const before = await h.read('demo')
@@ -182,6 +264,17 @@ describe('真实 e2e —— 全命令驱动真 kernel + 真 fs（GOAL C9）', ()
     expect(await h.read('demo')).toBe(before) // activate 不碰 .pipeline.yaml
     // 缺 change → exit 1
     expect(await h.run(['session', 'activate', 'nonesuch'])).toBe(1)
+  })
+
+  test('session：activate --continuous 经真实 Commander 参数层到达 Change 绑定授权', async () => {
+    await h.run(['init', 'continuous', '--track', 'backend', '--preset', 'full'])
+    expect(await h.run(['session', 'activate', 'continuous', '--continuous'])).toBe(0)
+    const authority = await readFile(join(h.cwd, '.pipeline-interaction-authority'), 'utf8')
+    expect(authority).toContain('pipeline-interaction-authority-v1')
+    expect(authority).toContain('change=continuous')
+    expect(authority).toContain('review=delegated')
+    const history = await readFile(join(h.cwd, 'openspec/changes/continuous/.pipeline-history.jsonl'), 'utf8')
+    expect(history).toContain('interaction-authority:enabled')
   })
 
   test('status/list 真枚举活跃 change（含 YAML projection 缺失的 canonical-only change）', async () => {
@@ -224,9 +317,14 @@ describe('真实 e2e —— 全命令驱动真 kernel + 真 fs（GOAL C9）', ()
     await h.run(['init', 'e2e', '--track', 'backend', '--preset', 'full', '--user', 'conv'])
     await h.seedGovernedDocumentEvidence('e2e')
     const clearGates = async () => {
-      for (const k of ['confirm', 'review', 'interaction']) await rm(join(h.cwd, `.pipeline-pending-${k}`), { force: true })
+      // review projection must only be consumed by `pipeline review acknowledge`, never deleted by a test bypass.
+      for (const k of ['confirm', 'interaction']) await rm(join(h.cwd, `.pipeline-pending-${k}`), { force: true })
     }
     const step = async (ev: string) => {
+      if (ev === 'explore-complete' || ev === 'spec-complete' || ev === 'verify-pass' || ev === 'verify-fail') {
+        expect(await h.run(['review', 'request', 'e2e', '--event', ev])).toBe(0)
+        expect(await h.run(['review', 'acknowledge', 'e2e'])).toBe(0)
+      }
       const code = await h.run(['transition', 'e2e', ev])
       expect(code, `事件 ${ev} 应成功；stderr=${h.err.join('|')}`).toBe(0)
       await clearGates()
@@ -242,8 +340,7 @@ describe('真实 e2e —— 全命令驱动真 kernel + 真 fs（GOAL C9）', ()
     await h.run(['set-many', 'e2e', 'build_mode=direct', 'isolation=worktree', 'direct_override=true'])
     await step('build-complete')
     // verify 出口：报告 + branch_status + 双 review pass + barrier（build_sha 已=DEADBEEF）
-    await writeFile(join(cd, 'verify.md'), '# verify\n', 'utf8')
-    await h.seedArtifact('e2e', 'verification_report', 'openspec/changes/e2e/verify.md') // P6：verify 相位 verification_report 是有效 artifact，白盒预置
+    await h.seedArtifact('e2e', 'verification_report', 'docs/superpowers/reports/e2e.md') // P6：复用 hash-bound verification report
     await h.run(['set-many', 'e2e', 'branch_status=handled', 'agent_review_result=pass', 'codex_review_result=pass'])
     await step('verify-pass')
     await step('ship-complete')

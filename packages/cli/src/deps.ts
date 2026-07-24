@@ -36,6 +36,12 @@ export interface DoctorProbes {
   env: (name: string) => string | undefined
   /** 用户 settings 是否已把 statusline.sh 接入 statusLine */
   statuslineConfigured: () => boolean
+  /**
+   * 当前已验证 managed runtime 的原生宿主。statusline 是 Claude Code 的可选终端能力，
+   * Codex 没有与其等价的接入点；诊断必须以实际发布来源判定是否适用，不能把 Claude
+   * 的缺省配置误报给纯 Codex 安装。
+   */
+  nativeRuntimeHost: () => Promise<'codex' | 'claude' | null>
   /** 子进程跑 tools/verify-skills.sh；spawn 失败也折算为非 0 code */
   runVerifySkills: () => Promise<{ code: number; output: string }>
   /** tap 流量代理状态（BACKLOG #34e：敏感能力 doctor 明示）。main.ts 注入 @pipeline-lite/tap tapStatus */
@@ -106,7 +112,7 @@ export interface CliDeps {
   ) => Promise<DocumentEvidenceReport>
   /**
    * 载入项目 Track Registry（GOAL.md 清单 T · R2 校验面切换）：缺 `<cwd>/.pipeline/tracks.yaml`
-   * → 内建四轨（builtin-only，行为与「没有本功能」逐字一致）；坏文件 fail-loud。装配处
+   * → 内建 Track（builtin-only，行为与「没有本功能」逐字一致）；坏文件 fail-loud。装配处
    * （main.ts / integration-harness realDeps）用 loadTrackRegistry(cwd, ctx) 落地，**每次都从盘读、
    * 不跨命令记忆化**（R3 D4：CRUD 后同进程续用陈旧 registry 是真实竞态源）。**只读用途**
    * （tracks list/show 等）走它；需要「与 change 写原子」的组合校验（init/set track|workflow/
@@ -183,10 +189,14 @@ export interface CliDeps {
    */
   gitHeadSha?: () => Promise<string>
   /**
-   * 进入 review 相位（manifest.reviewPhases）时写 <cwd>/.pipeline-pending-review 门 marker
-   * （老内核 state-transition.sh 语义：三行 = 相位\n指引\nchange 名）。best-effort。
+   * in-place build 的内容寻址工作区基线。按 change 名保留调用上下文，防未来基线策略需要排除
+   * 当前 change 的控制面；production 由 kernel fingerprintWorkspace 落地。
    */
+  workspaceFingerprint?: (changeName: string) => Promise<string>
+  /** `pipeline review request` 成功后写 versioned <cwd>/.pipeline-pending-review hook 投影。 */
   writeReviewMarker?: (content: string) => Promise<void>
+  /** `pipeline review acknowledge` 在 canonical approval receipt 成功后移除 hook 投影。 */
+  clearReviewMarker?: () => Promise<void>
   /**
    * check 命令的 guard 文件面注入（BACKLOG #12 guard 全量校验面）：按 change 名构造
    * GuardFileContext——fileExists/fileNonempty/readFile/dirExists/changeArchived 相对 cwd 解析，

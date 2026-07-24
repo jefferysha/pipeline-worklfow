@@ -18,6 +18,15 @@ export interface ChangeSnapshot {
   todo?: PipelineTodoProjection
   /** Server-evaluated OpenSpec document contract evidence. */
   documents?: DocumentEvidenceSnapshot
+  /** Fresh, explicitly bound native terminal heartbeat; never a workflow-state field. */
+  terminalActivity?: TerminalActivitySnapshot
+}
+
+export interface TerminalActivitySnapshot {
+  sessionId: string
+  heartbeatAt: string
+  expiresAt: string
+  turnId?: string
 }
 
 export interface DocumentEvidenceSnapshot {
@@ -82,12 +91,12 @@ export type Phase = (typeof PHASES)[number]
  */
 export const REVIEW_PHASES = ['explore', 'spec', 'verify'] as const
 
-/** from → 合法目标阶段（manifest transitions 镜像；verify 双出口 = ship/build 回退）。 */
+/** from → 合法目标阶段（manifest transitions 镜像；build/verify 都有受控回退出口）。 */
 export const TRANSITIONS: Record<Phase, readonly Phase[]> = {
   open: ['explore'],
   explore: ['spec'],
   spec: ['build'],
-  build: ['verify'],
+  build: ['verify', 'spec'],
   verify: ['ship', 'build'],
   ship: ['archive'],
   archive: ['archive'],
@@ -99,6 +108,7 @@ export const EVENT_BY_EDGE: Record<string, string> = {
   'explore->spec': 'explore-complete',
   'spec->build': 'spec-complete',
   'build->verify': 'build-complete',
+  'build->spec': 'requirements-changed',
   'verify->ship': 'verify-pass',
   'verify->build': 'verify-fail',
   'ship->archive': 'ship-complete',

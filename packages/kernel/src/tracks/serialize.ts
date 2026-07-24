@@ -1,7 +1,7 @@
 /**
  * ProjectTrackConfig → 规范化 YAML 文本。确定性：键序固定（version → builtins（内建固定序
- * chat/pm/frontend/backend）→ tracks（声明序）；子键 label → workflow{default→allowed} →
- * policy_profile{review_seed→automation_eligible→coverage_profile→routing{enabled→pattern→
+ * chat/simple/pm/frontend/backend）→ tracks（声明序）；子键 label → workflow{default→allowed} →
+ * policy_profile{review_seed→auto_enqueue_on_spec_complete→automation_eligible→coverage_profile→routing{enabled→pattern→
  * priority}→skills{matrix→profile}}）、引号规则固定。与 parse.ts 往返稳定：
  * parse(serialize(x)) 与 x 结构相等，其中空 section/空对象规范化为省略（serialize∘parse 幂等）。
  * registryRevision 的哈希输入就是本函数输出，规范化同时定义了 revision 的等价类。
@@ -90,12 +90,14 @@ function pushPolicy(lines: string[], pad: string, p: ProjectPolicyProfileConfig)
   const sub: string[] = []
   const inner = `${pad}  `
   if (p.reviewSeed !== undefined) sub.push(`${inner}review_seed: ${emitString(p.reviewSeed)}`)
+  if (p.autoEnqueueOnSpecComplete !== undefined) sub.push(`${inner}auto_enqueue_on_spec_complete: ${String(p.autoEnqueueOnSpecComplete)}`)
   if (p.automationEligible !== undefined) sub.push(`${inner}automation_eligible: ${String(p.automationEligible)}`)
   if (p.coverageProfile !== undefined) sub.push(`${inner}coverage_profile: ${emitString(p.coverageProfile)}`)
   if (p.routing !== undefined) {
     const r: string[] = []
     if (p.routing.enabled !== undefined) r.push(`${inner}  enabled: ${String(p.routing.enabled)}`)
     if (p.routing.pattern !== undefined) r.push(`${inner}  pattern: ${emitString(p.routing.pattern)}`)
+    if (p.routing.excludePattern !== undefined) r.push(`${inner}  exclude_pattern: ${emitString(p.routing.excludePattern)}`)
     if (p.routing.priority !== undefined) r.push(`${inner}  priority: ${emitInteger(p.routing.priority)}`)
     if (r.length > 0) sub.push(`${inner}routing:`, ...r)
   }

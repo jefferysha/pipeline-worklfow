@@ -176,7 +176,8 @@ fi
 # EXEMPT —— 领域例外（精确文件 → 预期条数）：关键词是**被处理/被生成的数据**，不是欠债。
 #    · compress/：该模块的领域功能**就是识别并压缩 TODO 关键词**（markdown.ts 的 TODO_KEYWORD
 #      正则、compress.ts 的 `## Open TODOs` 章节标题）。这里的 TODO 是**被处理的数据**。
-#    · scaffold/doc-scaffold.ts：它**生成**带 TODO 占位的空文档 stub，占位符是给用户填的产品输出。
+#    · scaffold/doc-scaffold.ts 与 state/default-openspec-scaffold.ts：它们**生成**带 TODO 占位的
+#      空文档 stub，占位符是给用户填的产品输出。
 #    · 上述两者的 *.test.ts 断言的正是这些领域数据，同理。
 #    · commands/migrateWorkflow.ts：「待补齐」是给**数据状态**起的名字（`undefined` 与 `'default'`
 #      是同一个「字段没填」的信号），描述的是用户 change 文件的当下状态，不是本文件欠的工程债。
@@ -188,9 +189,10 @@ EXEMPT_FILES=(
   'packages/kernel/src/compress/compress.ts'
   'packages/kernel/src/scaffold/doc-scaffold.ts'
   'packages/kernel/src/scaffold/doc-scaffold.test.ts'
+  'packages/kernel/src/state/default-openspec-scaffold.ts'
   'packages/cli/src/commands/migrateWorkflow.ts'
 )
-EXEMPT_COUNTS=(2 2 1 2 2 1)
+EXEMPT_COUNTS=(2 2 1 2 2 2 1)
 
 
 # ── 失败收集（bash 3.2 兼容：普通数组 + 下标循环，避免 set -u 下空数组展开）──

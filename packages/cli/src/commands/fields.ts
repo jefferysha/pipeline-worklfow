@@ -27,15 +27,20 @@ export async function recordHistory(deps: CliDeps, dir: string, entry: HistoryEn
  * 枚举字段校验表 —— 逐字对齐老内核 state-fields.sh cmd_set 的 case 块
  * （phase 走 manifest 单一真相源）。track/workflow 都不在本表：合法性不再是写死枚举，
  * 改由动态 Track Registry 在运行时按「最终 {track,workflow} 组合」校验（checkTrackWorkflow，
- * 落地在 runComboWrite 的锁内路径）；缺 tracks.yaml 时 registry = 内建四轨，校验行为与旧
+ * 落地在 runComboWrite 的锁内路径）；缺 tracks.yaml 时 registry = 内建 Track，校验行为与旧
  * STATIC_ENUMS.track 逐字一致（allowed='*' 恒放行）。
  */
 const REVIEWISH = ['pending', 'pass', 'fail', 'handled', 'skipped'] as const
+const REVIEW_GATE_FIELDS = new Set<FieldName>([
+  'review_gate_phase', 'review_gate_status', 'review_gate_event', 'review_requested_at', 'review_acknowledged_at',
+])
 const STATIC_ENUMS: Partial<Record<FieldName, readonly string[]>> = {
   preset: ['full', 'hotfix', 'tweak'],
   phase_status: ['pending', 'in_progress', 'done', 'failed'],
   build_mode: ['direct', 'subagent-driven-development', 'parallel-team', 'prototype'],
-  isolation: ['branch', 'worktree'],
+  // `in-place` is an explicit, truthful mode for a constrained agent that can write project
+  // files but cannot mutate .git metadata.  It must never be represented as a branch/worktree.
+  isolation: ['branch', 'worktree', 'in-place'],
   agent_review_result: REVIEWISH,
   codex_review_result: REVIEWISH,
   verify_result: REVIEWISH,
@@ -71,7 +76,7 @@ function scalarOf(v: string | string[] | undefined, fallback: string): string {
  * （requireTrack）、workflow 必须在该 track 的 allowed 白名单内（assertWorkflowAllowed）。
  * set track / set workflow / cas track / cas workflow / set-many 全部按「更新后的最终组合」
  * 走这一个 helper——不再有「set track 只 requireTrack」「cas workflow 零校验」之类的旁路
- * （codex R2 阻断）。缺 tracks.yaml 时 registry=内建四轨（allowed='*' 恒放行，零回归）。
+ * （codex R2 阻断）。缺 tracks.yaml 时 registry=内建 Track（allowed='*' 恒放行，零回归）。
  * 不通过 → stderr 报错 + 返回 false。
  */
 function checkTrackWorkflow(deps: CliDeps, registry: TrackRegistry, track: string, workflow: string): boolean {
@@ -263,6 +268,13 @@ function asField(deps: CliDeps, field: string): FieldName | undefined {
   return undefined
 }
 
+/** Review receipt 是 transition 安全边界，不能经通用状态写入口伪造。 */
+function rejectReviewGateField(deps: CliDeps, field: FieldName): boolean {
+  if (!REVIEW_GATE_FIELDS.has(field)) return false
+  deps.io.err(`ERROR: 字段 '${field}' 由 pipeline review request|acknowledge 管理，禁止通过 set/set-many/cas 写入`)
+  return true
+}
+
 function checkName(deps: CliDeps, name: string): boolean {
   if (isValidChangeName(name)) return true
   deps.io.err(`ERROR: change-name 非法: '${name}' (仅允许 a-z A-Z 0-9 - _)`)
@@ -305,6 +317,7 @@ export async function cmdSet(deps: CliDeps, name: string, field: string, value: 
   if (!checkName(deps, name)) return 1
   const f = asField(deps, field)
   if (!f) return 1
+  if (rejectReviewGateField(deps, f)) return 1
   const v = coerceValue(f, value)
   if (!enumOk(deps, f, v)) return 1
   const dir = changeDir(deps.cwd, name)
@@ -348,6 +361,7 @@ export async function cmdSetMany(deps: CliDeps, name: string, pairs: string[]): 
     }
     const f = asField(deps, pair.slice(0, i))
     if (!f) return 1
+    if (rejectReviewGateField(deps, f)) return 1
     if (Object.hasOwn(kv, f)) {
       // 同字段重复 key：拒写（旧行为静默 last-wins，如 `phase=build phase=spec` 只留后者）
       deps.io.err(`ERROR: set-many 重复字段 '${f}'（同键多次赋值，拒写以免静默 last-wins）`)
@@ -401,6 +415,7 @@ export async function cmdCas(
   if (!checkName(deps, name)) return 1
   const f = asField(deps, field)
   if (!f) return 1
+  if (rejectReviewGateField(deps, f)) return 1
   // 老内核 cmd_cas 仅对 automation 复用枚举校验（state-fields.sh）
   if (f === 'automation' && !enumOk(deps, f, next)) return 1
   const dir = changeDir(deps.cwd, name)

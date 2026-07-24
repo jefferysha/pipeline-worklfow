@@ -208,7 +208,7 @@ export function RunAuditPanel({ root, change, refreshKey = '' }: RunAuditPanelPr
           <div className="mt-2 grid grid-cols-2 gap-2">
             <div className={factCard}><div className={factLabel}>结果</div><div className={factValue}>{resultLabel(terminalResult)}{terminalReason ? ` · ${reasonLabel(terminalReason)}` : ''}</div></div>
             <div className={factCard}><div className={factLabel}>代码分支</div><div className={factValue}>{str(terminalArtifacts?.branch) || '未生成'}</div></div>
-            <div className={factCard}><div className={factLabel}>代码版本</div><div className={factValue}>{short(terminalArtifacts?.build_sha)}</div></div>
+            <div className={factCard}><div className={factLabel}>构建基线</div><div className={factValue}>{short(terminalArtifacts?.build_sha)}</div></div>
             <div className={factCard}><div className={factLabel}>提交数量</div><div className={factValue}>{terminalCommits.length} 个提交</div></div>
           </div>
         </div>

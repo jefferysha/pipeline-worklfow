@@ -21,7 +21,10 @@ import {
  */
 
 function chg(over: Partial<CanvasChange> & { key: string; name: string; phase: string }): CanvasChange {
-  return { state: 'agent', tone: 'gray', running: false, sandbox: false, dimmed: false, selected: false, statusLabel: '等待处理', ...over }
+  return {
+    state: 'agent', tone: 'gray', running: false, executionSource: 'none', sandbox: false,
+    dimmed: false, selected: false, statusLabel: '等待处理', ...over,
+  }
 }
 
 function arch(over: Partial<CanvasArchivedChange> & { key: string; name: string }): CanvasArchivedChange {
@@ -29,7 +32,8 @@ function arch(over: Partial<CanvasArchivedChange> & { key: string; name: string 
 }
 
 function step(id: string, over: Partial<CanvasStep> = {}): CanvasStep {
-  return { id, label: id, gate: null, archived: 0, archivedChanges: [], ...over }
+  const state = id === 'draft' ? 'done' : id === 'review' ? 'current' : 'pending'
+  return { id, label: id, gate: null, archived: 0, archivedChanges: [], state, ...over }
 }
 
 /** 缺省组：proj-a 的 flow-x（3 相位，draft running·sandbox / review gatejudge，ship 空站）。 */
@@ -38,6 +42,7 @@ function makeGroup(over: Partial<CanvasGroup> = {}): CanvasGroup {
     key: '/tmp/proj-a::flow-x',
     projName: 'proj-a',
     workflow: 'flow-x',
+    linearProgress: true,
     steps: [step('draft', { label: '起草' }), step('review', { label: '复核', gate: 'review' }), step('ship', { label: '发布' })],
     changes: [
       chg({ key: 'a1@/tmp/proj-a', name: 'a1', phase: 'draft', state: 'running', tone: 'blue', running: true, sandbox: true }),

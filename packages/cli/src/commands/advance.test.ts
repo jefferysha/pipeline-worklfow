@@ -30,6 +30,17 @@ const READY: Partial<Record<FieldName, string | string[]>> = {
   codex_review_result: 'pass',
 }
 
+const approvedReview = (
+  phase: string,
+  event = phase === 'explore' ? 'explore-complete' : phase === 'spec' ? 'spec-complete' : 'verify-pass',
+): Partial<Record<FieldName, string | string[]>> => ({
+  review_gate_phase: phase,
+  review_gate_status: 'approved',
+  review_gate_event: event,
+  review_requested_at: FIXED_CLOCK,
+  review_acknowledged_at: FIXED_CLOCK,
+})
+
 /** 有状态 store：write 落进 holder，read 读回 holder —— 让 advance 循环能逐步推进 */
 function statefulStore(initial: PipelineState) {
   let s = initial
@@ -161,20 +172,29 @@ describe('advance —— auto-transition 中间档停点规则（B14/D12，快�
     expect(a.out.some((l) => l.includes('tasks.md 仍有未勾项'))).toBe(true)
   })
 
-  test('--through-gates：显式放行复核相位，真跑完 open→archive（6 步）', async () => {
+  test('--through-gates 不能跳过首个 review receipt：从 open 只推进到 explore 后停', async () => {
     const a = makeAdv({ phase: 'open' })
     expect(await cmdAdvance(a.deps, 'demo', { throughGates: true })).toBe(0)
-    expect(a.store.phase()).toBe('archive')
-    expect(a.store.write.calls).toHaveLength(6) // open→explore→spec→build→verify→ship→archive
-    expect(a.out.some((l) => l.includes('[STOP]') && l.includes('终态'))).toBe(true)
+    expect(a.store.phase()).toBe('explore')
+    expect(a.store.write.calls).toHaveLength(1)
+    expect(a.out.some((l) => l.includes('[STOP]') && l.includes('确认回执'))).toBe(true)
   })
 
-  test('--through-gates 也放行"从复核相位离开"（explore 起可继续推进）', async () => {
+  test('--through-gates 从 review 相位起步但无 receipt 时仍停在原地', async () => {
     const a = makeAdv({ phase: 'explore' })
     expect(await cmdAdvance(a.deps, 'demo', { throughGates: true })).toBe(0)
-    // 越过 explore（不再停在复核相位）
-    expect(a.store.phase()).not.toBe('explore')
-    expect(a.store.write.calls.length).toBeGreaterThan(0)
+    expect(a.store.phase()).toBe('explore')
+    expect(a.store.write.calls).toHaveLength(0)
+    expect(a.out.some((l) => l.includes('确认回执'))).toBe(true)
+  })
+
+  test('--through-gates 只消费 exact approved receipt：离开 explore 后立即在未确认的 spec 停住', async () => {
+    const a = makeAdv({ phase: 'explore', fields: approvedReview('explore') })
+    expect(await cmdAdvance(a.deps, 'demo', { throughGates: true })).toBe(0)
+    expect(a.store.phase()).toBe('spec')
+    expect(a.store.write.calls).toHaveLength(1)
+    expect(await a.store.get('/repo/openspec/changes/demo', 'review_gate_status')).toBe('')
+    expect(a.out.some((l) => l.includes('确认回执'))).toBe(true)
   })
 
   test('硬门（confirm marker 新鲜）→ 即便 --through-gates 也停，零推进（HITL 红线）', async () => {
@@ -216,11 +236,11 @@ describe('advance —— auto-transition 中间档停点规则（B14/D12，快�
     expect(a.out.some((l) => l.includes('复核相位'))).toBe(true)
   })
 
-  test('--max-steps 封顶（防失控）：through-gates 下只推进 N 步', async () => {
+  test('--max-steps 封顶（防失控）：0 步预算在首个非 review phase 立即停住', async () => {
     const a = makeAdv({ phase: 'open' })
-    expect(await cmdAdvance(a.deps, 'demo', { throughGates: true, maxSteps: 2 })).toBe(0)
-    expect(a.store.write.calls).toHaveLength(2) // open→explore→spec 后封顶
-    expect(a.store.phase()).toBe('spec')
+    expect(await cmdAdvance(a.deps, 'demo', { throughGates: true, maxSteps: 0 })).toBe(0)
+    expect(a.store.write.calls).toHaveLength(0)
+    expect(a.store.phase()).toBe('open')
     expect(a.out.some((l) => l.includes('[STOP]') && l.includes('max-steps'))).toBe(true)
   })
 
@@ -516,8 +536,16 @@ describe('advance —— 非 default workflow（自定义 step 图，快速回�
     expect(a.out.some((l) => l.includes('[STOP]') && l.includes('review'))).toBe(true)
   })
 
-  test('step gate=review + --through-gates → 显式放行，推进到终态', async () => {
+  test('step gate=review + --through-gates 无 receipt 时也不能放行', async () => {
     const a = makeCustomAdv({ phase: 'gr1', workflow: 'gater' })
+    expect(await cmdAdvance(a.deps, 'demo', { throughGates: true })).toBe(0)
+    expect(a.store.phase()).toBe('gr1')
+    expect(a.store.write.calls).toHaveLength(0)
+    expect(a.out.some((l) => l.includes('确认回执'))).toBe(true)
+  })
+
+  test('step gate=review + --through-gates 只消费对应 step 的 approved receipt', async () => {
+    const a = makeCustomAdv({ phase: 'gr1', workflow: 'gater', fields: approvedReview('gr1', 'go') })
     expect(await cmdAdvance(a.deps, 'demo', { throughGates: true })).toBe(0)
     expect(a.store.phase()).toBe('gr2')
     expect(a.store.write.calls).toHaveLength(1)

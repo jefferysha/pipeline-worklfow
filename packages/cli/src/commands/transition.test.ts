@@ -8,6 +8,24 @@ import { cmdTransition } from './transition.js'
 import { EVENTS, eventEdge } from '../events.js'
 import { FIXED_CLOCK, makeDeps, mockState, spy } from '../test-support.js'
 
+function approvedReviewState(fields: Parameters<typeof mockState>[0]): PipelineState {
+  const phase = String(fields.phase ?? 'explore')
+  const event = fields.review_gate_event ?? (
+    phase === 'explore' ? 'explore-complete'
+      : phase === 'spec' ? 'spec-complete'
+        : phase === 'verify' ? 'verify-pass'
+          : ''
+  )
+  return mockState({
+    ...fields,
+    review_gate_phase: phase,
+    review_gate_status: 'approved',
+    review_gate_event: event,
+    review_requested_at: FIXED_CLOCK,
+    review_acknowledged_at: FIXED_CLOCK,
+  })
+}
+
 /** 接线级：cli 真消费 kernel 单一真相源（BACKLOG #25b / GOAL B2）——events.ts 已无本地镜像，
  * 只是 kernel TRANSITION_EVENTS/eventEdge 的稳定别名（引用同一对象=同一真相源）。 */
 describe('接线 —— cli 事件表 = kernel 单源（无本地镜像）', () => {
@@ -30,7 +48,7 @@ describe('transition —— [TRANSITION] 走 stderr / 非法 exit 1（oracle 实
 
   test('事件映射目标相位并透传注入时钟给 flow.transition', async () => {
     // PM 保持原流程的 legacy plan artifact 豁免；本测只关注边映射。
-    const deps = makeDeps({ state: mockState({ phase: 'spec', track: 'pm', plan: 'null' }) })
+    const deps = makeDeps({ state: approvedReviewState({ phase: 'spec', track: 'pm', plan: 'null' }) })
     await cmdTransition(deps, 'demo', 'spec-complete')
     const call = deps.flow.transition.calls[0]
     expect(call?.[1]).toBe('build')
@@ -47,7 +65,7 @@ describe('transition —— [TRANSITION] 走 stderr / 非法 exit 1（oracle 实
   })
 
   test('verify-fail 回退边：verify -> build（stderr），且 build_sha 清 null', async () => {
-    const deps = makeDeps({ state: mockState({ phase: 'verify' }) })
+    const deps = makeDeps({ state: approvedReviewState({ phase: 'verify', review_gate_event: 'verify-fail' }) })
     const code = await cmdTransition(deps, 'demo', 'verify-fail')
     expect(code).toBe(0)
     expect(deps.outLines).toEqual([])
@@ -133,12 +151,10 @@ describe('transition —— [TRANSITION] 走 stderr / 非法 exit 1（oracle 实
     ])
   })
 
-  test('收尾三个副作用的真实调用顺序 = breadcrumb → history → review-marker（G1 REFACTOR 回归锚：' +
-    '第二轮 codex review 抓到过一次 REFACTOR 把这个顺序悄悄改乱——history 延迟/中断时先落 ' +
-    'breadcrumb 能缩短 hook 热路径读到的相位缓存过期窗口，顺序本身是可观测行为，不是实现细节）', async () => {
+  test('transition 收尾顺序 = breadcrumb → history；review projection 只能由 review request 写入', async () => {
     const deps = makeDeps({ state: mockState({ phase: 'open' }) })
-    await cmdTransition(deps, 'demo', 'open-complete') // open -> explore，explore 是复核相位，三者都应真写
-    expect(deps.tailCallOrder).toEqual(['breadcrumb', 'history', 'reviewMarker'])
+    await cmdTransition(deps, 'demo', 'open-complete')
+    expect(deps.tailCallOrder).toEqual(['breadcrumb', 'history'])
   })
 
   test('breadcrumb 写失败仅 WARN，不影响 exit 0', async () => {
@@ -172,13 +188,13 @@ describe('transition —— [TRANSITION] 走 stderr / 非法 exit 1（oracle 实
     expect(deps.errLines.join('\n')).toContain('WARN: breadcrumb 写入失败')
   })
 
-  test('review marker 写抛出 falsy 值（如 throw \'\'）仍算失败、仍输出 WARN（同上，marker 路径的' +
-    '判别联合修复）', async () => {
+  test('进入 review phase 不调用 review marker writer（由 review request 专职写入）', async () => {
     const deps = makeDeps({ state: mockState({ phase: 'open' }) })
-    deps.writeReviewMarker = async () => { throw '' }
-    const code = await cmdTransition(deps, 'demo', 'open-complete') // -> explore，复核相位，会真触发 marker 写
+    let called = false
+    deps.writeReviewMarker = async () => { called = true; throw '' }
+    const code = await cmdTransition(deps, 'demo', 'open-complete')
     expect(code).toBe(0)
-    expect(deps.errLines.join('\n')).toContain('WARN: review marker 写入失败')
+    expect(called).toBe(false)
   })
 
   test('非法 change 名：exit 1', async () => {
@@ -210,7 +226,7 @@ describe('transition —— 事件前置校验（老仓 case 块，exit 1 + ERRO
 
   test('explore-complete：design_doc 文件不存在（guardCtx 注入 false）→ exit 1', async () => {
     const deps = makeDeps({
-      state: mockState({ phase: 'explore', design_doc: 'docs/d.md' }),
+      state: approvedReviewState({ phase: 'explore', design_doc: 'docs/d.md' }),
       guardCtx: ctxAllFiles(false),
     })
     expect(await cmdTransition(deps, 'demo', 'explore-complete')).toBe(1)
@@ -219,7 +235,7 @@ describe('transition —— 事件前置校验（老仓 case 块，exit 1 + ERRO
 
   test('explore-complete：design_doc 存在 → exit 0', async () => {
     const deps = makeDeps({
-      state: mockState({ phase: 'explore', design_doc: 'docs/d.md' }),
+      state: approvedReviewState({ phase: 'explore', design_doc: 'docs/d.md' }),
       guardCtx: ctxAllFiles(true),
     })
     expect(await cmdTransition(deps, 'demo', 'explore-complete')).toBe(0)
@@ -229,7 +245,7 @@ describe('transition —— 事件前置校验（老仓 case 块，exit 1 + ERRO
     const be = makeDeps({ state: mockState({ phase: 'spec', track: 'backend', plan: 'null' }) })
     expect(await cmdTransition(be, 'demo', 'spec-complete')).toBe(1)
     expect(be.errLines).toContain('ERROR: backend track spec-complete 要求 plan 字段非空且文件存在 (当前=null)')
-    const pmMissing = makeDeps({ state: mockState({ phase: 'spec', track: 'pm', plan: 'null' }) })
+    const pmMissing = makeDeps({ state: approvedReviewState({ phase: 'spec', track: 'pm', plan: 'null' }) })
     expect(await cmdTransition(pmMissing, 'demo', 'spec-complete')).toBe(0)
   })
 
@@ -242,10 +258,10 @@ describe('transition —— 事件前置校验（老仓 case 块，exit 1 + ERRO
     expect(noIso.errLines).toContain('ERROR: isolation 必须设置')
   })
 
-  test('build-complete：isolation 非法枚举防线（老仓 validate_enum L148）', async () => {
+  test('build-complete：isolation 非法枚举防线（保留受限 agent 的 in-place 扩展）', async () => {
     const deps = makeDeps({ state: mockState({ phase: 'build', build_mode: 'direct', isolation: 'bogus' }) })
     expect(await cmdTransition(deps, 'demo', 'build-complete')).toBe(1)
-    expect(deps.errLines).toContain("ERROR: 非法值 'bogus'，允许: branch worktree")
+    expect(deps.errLines).toContain("ERROR: 非法值 'bogus'，允许: branch worktree in-place")
   })
 
   test('build-complete：full+direct 必须 direct_override=true（老仓 L150-153）', async () => {
@@ -285,7 +301,7 @@ describe('transition —— 事件前置校验（老仓 case 块，exit 1 + ERRO
 
   test('verify-pass：pm track 豁免双 review（skipped 通过，老仓 L180 分支）', async () => {
     const deps = makeDeps({
-      state: mockState({
+      state: approvedReviewState({
         phase: 'verify',
         track: 'pm',
         verification_report: 'docs/v.md',
@@ -323,7 +339,7 @@ describe('transition —— 事件前置校验（老仓 case 块，exit 1 + ERRO
 
   test('verify-pass barrier 退化：build_sha=null 或 HEAD 取不到 → 跳过校验（老仓 L196 条件）', async () => {
     const nullSha = makeDeps({
-      state: mockState({
+      state: approvedReviewState({
         phase: 'verify', track: 'pm', verification_report: 'docs/v.md',
         branch_status: 'handled', build_sha: 'null',
       }),
@@ -332,7 +348,7 @@ describe('transition —— 事件前置校验（老仓 case 块，exit 1 + ERRO
     nullSha.gitHeadSha = async () => 'DEADBEEF'
     expect(await cmdTransition(nullSha, 'demo', 'verify-pass')).toBe(0)
     const noHead = makeDeps({
-      state: mockState({
+      state: approvedReviewState({
         phase: 'verify', track: 'pm', verification_report: 'docs/v.md',
         branch_status: 'handled', build_sha: 'CAFEBABE',
       }),
@@ -343,7 +359,9 @@ describe('transition —— 事件前置校验（老仓 case 块，exit 1 + ERRO
   })
 
   test('verify-fail：无前置校验，verify_result=fail + build_sha=null 落写（老仓 L206-211）', async () => {
-    const deps = makeDeps({ state: mockState({ phase: 'verify', build_sha: 'DEADBEEF' }) })
+    const deps = makeDeps({ state: approvedReviewState({
+      phase: 'verify', build_sha: 'DEADBEEF', review_gate_event: 'verify-fail',
+    }) })
     expect(await cmdTransition(deps, 'demo', 'verify-fail')).toBe(0)
     const written = deps.store.write.calls[0]?.[1] as PipelineState
     expect(written.fields.verify_result).toBe('fail')

@@ -4,7 +4,7 @@
  * packages/cli/src/events.ts + commands/transition.ts 与 packages/server/src/transition.ts 逐条对位）。
  *
  * 语义源（老仓 workflow-plugin，严格只读）：事件表 = skills/pipeline/scripts/manifest.py::
- * _DEFAULT_TRANSITIONS（前向 7 边 + verify-fail 回退边 + archive 终态自环）。
+ * _DEFAULT_TRANSITIONS（前向边 + requirements-changed / verify-fail 回退边 + archive 终态自环）。
  *
  * 集成接缝：本表只做「事件名 → 目标相位」的命名翻译；转移「合法性」+ phase/phase_status/updated_at
  * 变换以 FlowEngine.transition（manifest 单一真相源）为准。default 轨的**事件前置 guard 与状态
@@ -25,6 +25,7 @@ export const TRANSITION_EVENTS = {
   'open-complete': { from: 'open', to: 'explore' },
   'explore-complete': { from: 'explore', to: 'spec' },
   'spec-complete': { from: 'spec', to: 'build' },
+  'requirements-changed': { from: 'build', to: 'spec' },
   'build-complete': { from: 'build', to: 'verify' },
   'verify-pass': { from: 'verify', to: 'ship' },
   'verify-fail': { from: 'verify', to: 'build' },
@@ -43,13 +44,15 @@ export function eventEdge(event: string): EventEdge | undefined {
 /**
  * default 轨事件前置 guard / 状态副作用的注入面（DefaultEventPolicy 与 cli/server 绑定项目根后
  * 注入；全部可选）。路径 / cwd 由调用方绑定项目根：
- *   · cli   —— fileExists = guardCtx(name)?.fileExists；gitHeadSha = deps.gitHeadSha。
- *   · server —— fileExists = (p) => deps.fileExists(root, p)；gitHeadSha = () => deps.gitHeadSha(root)。
- * 未注入某能力时依赖它的 guard 降级跳过（文件面视为存在；SHA 面跳过）。
+ *   · cli   —— fileExists = guardCtx(name)?.fileExists；gitHeadSha / workspaceFingerprint = deps 绑定当前项目根。
+ *   · server —— fileExists = (p) => deps.fileExists(root, p)；gitHeadSha / workspaceFingerprint 绑定 root。
+ * 未注入某能力时依赖它的 guard 降级跳过（文件面视为存在；Git SHA / workspace baseline 面跳过）。
  */
 export interface TransitionContext {
   /** 文件存在（相对项目根，已绑定）；缺省 = 降级跳过文件面（视为存在），字段面不降级。 */
   fileExists?: (relPath: string) => boolean
   /** `git rev-parse HEAD` stdout（trim 前；已绑定 cwd）；缺省 = 跳过 SHA 面。 */
   gitHeadSha?: () => Promise<string>
+  /** `isolation=in-place` 的内容寻址工作区基线；缺省 = workspace guard 跳过。 */
+  workspaceFingerprint?: () => Promise<string>
 }

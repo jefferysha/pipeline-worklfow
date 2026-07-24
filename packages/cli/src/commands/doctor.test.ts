@@ -144,6 +144,22 @@ describe('doctor —— 统一健康面（BACKLOG #26b，GOAL B8 降级可见 / 
     expect(c.hint).toContain('statusline.sh')
   })
 
+  test('guard:statusline：Codex runtime 不把 Claude 专属 statusline 误报为降级', async () => {
+    const deps = makeDeps({
+      doctor: {
+        statuslineConfigured: () => false,
+        nativeRuntimeHost: async () => 'codex',
+      },
+    })
+    const { code, payload } = await runJson(deps)
+    expect(code).toBe(0)
+    const c = byId(payload, 'guard:statusline')
+    expect(c.status).toBe('green')
+    expect(c.detail).toContain('Codex')
+    expect(c.detail).toContain('不适用')
+    expect(c.hint).toBe('')
+  })
+
   test('security:tap 黄灯：tap 正在拦截 → 明示提醒（#34e 敏感能力可见）', async () => {
     const deps = makeDeps({
       doctor: { tapStatus: () => ({ intercepting: true, captureEnabled: true, message: 'tap 正在拦截流量：2 个端口' }) },
@@ -194,7 +210,7 @@ describe('doctor —— 统一健康面（BACKLOG #26b，GOAL B8 降级可见 / 
     expect(c.detail).not.toContain('ok-change')
   })
 
-  test('project:markers 黄灯：陈旧门 marker（age > 分级 TTL）→ 清理指引；新鲜 marker → 绿灯', async () => {
+  test('project:markers 黄灯：陈旧门 marker（age > 分级 TTL）→ 自动清理/重新请求指引；新鲜 marker → 绿灯', async () => {
     const stale = makeDeps({
       // review 分级 TTL=1800s；超一点即陈旧（#13 分级，非旧统一 15min）
       gateMarkers: [{ kind: 'review', ageMs: GATE_TTL_MS.review + 1, raw: 'spec\nx\ndemo\n' }],
@@ -204,7 +220,8 @@ describe('doctor —— 统一健康面（BACKLOG #26b，GOAL B8 降级可见 / 
     const c = byId(payload, 'project:markers')
     expect(c.status).toBe('yellow')
     expect(c.detail).toContain('.pipeline-pending-review')
-    expect(c.hint).toContain('rm')
+    expect(c.hint).toContain('自动清理')
+    expect(c.hint).toContain('不要手动删除')
 
     const fresh = makeDeps({
       gateMarkers: [{ kind: 'confirm', ageMs: 60_000, raw: 'build\nx\ndemo\n' }],

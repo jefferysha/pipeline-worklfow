@@ -3,7 +3,7 @@
 #
 # devin 是 workflow-only 平台（hasHooks=false，无任何 enforcement hook）——三能力**全静态降级**：
 #   inject → .devin/workflows/pipeline.md 静态层（无会话级注入原语）
-#   veto   → 无硬拦；靠手动 Unlock sentinel `rm .pipeline-pending-<kind>`
+#   veto   → 无硬拦；review 仍靠保留人工确认事实的 CLI receipt
 #   track  → 无自动留痕；如实标注（tier C 无 hook 触发点）
 #
 # 诚实：devin 确实只能到 C 档，不伪装 hook 强制（本目录无 hooks/）。windsurf 用户经 --devin 派发
@@ -47,19 +47,20 @@ install_workflow() {
 # Pipeline Workflow（Devin workflow-only 静态层，档 C）
 
 > Devin 是 workflow-only 平台，无 enforcement hook——本 workflow 是 pipeline 三能力的全静态降级层（契约 §1）。
-> inject=本文件；veto=手动 Unlock sentinel；track=无自动留痕（如实标注）。
+> inject=本文件；veto=静态 advisory；track=无自动留痕（如实标注）。review 仍以 CLI canonical receipt 为准。
 
 7-phase 流水线：open → explore → spec → build ⇄ verify → ship → archive。
 状态操作一律走 `pipeline` CLI（status / get / set / transition / check），勿手改 .pipeline.yaml。
 
-进入 review phase（explore / spec / verify 出口）须人类显式确认才能 transition。
-Devin 无 hook 硬拦——**放行=手动删除项目根 marker（Unlock sentinel）**：
+离开 review phase（explore / spec / verify）须对确切 event 取得人类显式确认。Devin 无 hook 硬拦时仍须：
 
-    rm .pipeline-pending-review   # 或 .pipeline-pending-confirm / .pipeline-pending-interaction
+    pipeline review request <change> --event <event>
+    # 记录人类确认后：
+    pipeline review acknowledge <change>
 
-不得绕过 review-gate（会产生 solo 推进）。命令前缀 /pipeline-（如 /pipeline-explore）。
+不得删除 `.pipeline-pending-review` 绕过 review-gate（会产生 solo 推进）。命令前缀 /pipeline-（如 /pipeline-explore）。
 EOF
-  info "workflow → $dst/pipeline.md（inject 降级静态层；无 hook，靠 Unlock sentinel）"
+  info "workflow → $dst/pipeline.md（inject 降级静态层；无 hook，review 仍走 CLI acknowledgement）"
 }
 
 note "${B}Devin（前 Windsurf）pipeline 适配器安装${Z}  target=${TARGET}"

@@ -31,7 +31,7 @@ fi
 CC_INJECTOR="${PIPELINE_CC_INJECTOR:-$_ROOT/hooks/session-start.sh}"
 ctx=""
 if [ -f "$CC_INJECTOR" ]; then
-  ctx="$(printf '%s' "$INPUT" | bash "$CC_INJECTOR" 2>/dev/null || true)"
+  ctx="$(printf '%s' "$INPUT" | PIPELINE_SESSION_START_FORMAT=plain bash "$CC_INJECTOR" 2>/dev/null || true)"
 fi
 
 if [ -n "$ctx" ]; then

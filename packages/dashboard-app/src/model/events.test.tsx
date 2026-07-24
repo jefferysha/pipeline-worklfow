@@ -32,6 +32,15 @@ describe('plannedTransition（default 规则下行为与旧常量版逐字一致
     expect(p?.backward).toBe(true)
   })
 
+  it('build→spec 是需求变更回退 requirements-changed（backward=true）', () => {
+    expect(plannedTransition(DEFAULT_RULES, 'build', 'spec')).toEqual({
+      event: 'requirements-changed',
+      from: 'build',
+      to: 'spec',
+      backward: true,
+    })
+  })
+
   it('非法跳跃（open→verify）→ null', () => {
     expect(plannedTransition(DEFAULT_RULES, 'open', 'verify')).toBeNull()
   })
@@ -67,8 +76,8 @@ describe('legalTargets', () => {
   it('default：verify 可去 ship / build（双出口）', () => {
     expect(legalTargets(DEFAULT_RULES, 'verify')).toEqual(['ship', 'build'])
   })
-  it('default：build 可去 verify', () => {
-    expect(legalTargets(DEFAULT_RULES, 'build')).toEqual(['verify'])
+  it('default：build 可去 verify，也可因需求变化回退 spec', () => {
+    expect(legalTargets(DEFAULT_RULES, 'build')).toEqual(['verify', 'spec'])
   })
   it('自定义：review 可去 ship / draft；未知 step → 空数组', () => {
     expect(legalTargets(REL_RULES, 'review')).toEqual(['ship', 'draft'])

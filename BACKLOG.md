@@ -2,7 +2,11 @@
 
 > loop-lite 每轮从队首取一项。完成 → 移入下方「已收编」。发现新缺口 → 按优先级插入。
 
-## 队列（按序）
+## 当前队列
+
+**空。** 下表只是已经收编的历史工作分组索引，不是待办列表。
+
+### 历史分组索引（均已收编）
 
 | # | 项 | 对应 plan 任务 | 预算 |
 |---|---|---|---|
@@ -14,7 +18,7 @@
 | **M7** 平台矩阵（GOAL D7/D14） | | | |
 | **M8** tap 流量代理（2026-07-07 用户确认进正式队列，human gate 解除） | | | |
 
-队列空。#29-wire/#34-wire（iteration-30）+ G6 full agent-in-sandbox（iteration-32）+ G4/G5/长尾适配器/
+#29-wire/#34-wire（iteration-30）+ G6 full agent-in-sandbox（iteration-32）+ G4/G5/长尾适配器/
 dashboard config 端点（iteration-33）均已收编——**无任何登记在册的诚实缺口**。CI（`.github/workflows/ci.yml`）
 已补齐；sandcastle 镜像发布仅停留在 `tools/sandcastle/build.sh`+README 记录手动步骤，实际推送到某
 registry 待仓库所有者决定（非代码缺口，是运维决策）。

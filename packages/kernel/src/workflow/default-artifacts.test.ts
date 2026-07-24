@@ -128,7 +128,10 @@ describe('结构锚：artifact declaration 表与 DEFAULT_EVENT_POLICY 是两个
   it('default-artifacts 只读生成表，不涉足 transition 政策：DEFAULT_EVENT_POLICY 事件键集不受 artifact 表影响', () => {
     // 锚 DEFAULT_EVENT_POLICY 的事件闭集不变（P3 收官形状）；artifact 表新增/改动不得越界改它。
     expect(Object.keys(DEFAULT_EVENT_POLICY).sort()).toEqual(
-      ['open-complete', 'explore-complete', 'spec-complete', 'build-complete', 'verify-pass', 'verify-fail', 'ship-complete', 'archived'].sort(),
+      [
+        'open-complete', 'explore-complete', 'spec-complete', 'requirements-changed',
+        'build-complete', 'verify-pass', 'verify-fail', 'ship-complete', 'archived',
+      ].sort(),
     )
   })
 })

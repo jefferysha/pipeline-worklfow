@@ -22,6 +22,7 @@ import {
   createTransitionRecordStore,
   createWorkflowRunRepository,
   ensureDocumentLedger,
+  fingerprintWorkspace,
   loadManifest,
   loadTrackRegistry,
   loadWorkflow,
@@ -260,7 +261,9 @@ export function realDeps(cwd: string, out: string[], err: string[]): CliDeps {
     writeBreadcrumb: (dir, content) => writeFile(join(dir, '.breadcrumb'), content, 'utf8'),
     history: createHistoryWriter(),
     gitHeadSha: async () => 'DEADBEEF',
+    workspaceFingerprint: () => fingerprintWorkspace(cwd),
     writeReviewMarker: (content) => writeFile(join(cwd, '.pipeline-pending-review'), content, 'utf8'),
+    clearReviewMarker: () => rm(join(cwd, '.pipeline-pending-review'), { force: true }),
     pluginVersion: '0.1.0',
     readInstalledPlugins: async () => undefined,
     doctor: {
@@ -273,6 +276,7 @@ export function realDeps(cwd: string, out: string[], err: string[]): CliDeps {
       dirExists: (p) => { try { return statSync(p).isDirectory() } catch { return false } },
       env: (name) => process.env[name],
       statuslineConfigured: () => false,
+      nativeRuntimeHost: async () => 'claude',
       runVerifySkills: async () => {
         try {
           const output = execFileSync('bash', [join(REPO_ROOT, 'tools', 'verify-skills.sh')], { encoding: 'utf8' })

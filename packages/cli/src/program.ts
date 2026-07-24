@@ -10,7 +10,13 @@ import { cmdDashboard, type DashboardOpts, type DashboardRuntime } from './comma
 import { cmdDoctor } from './commands/doctor.js'
 import { cmdCas, cmdGet, cmdSet, cmdSetMany } from './commands/fields.js'
 import { cmdArtifactRegister } from './commands/artifact.js'
-import { cmdDocumentInit, cmdDocumentRead, cmdDocumentRecord, cmdDocumentStatus } from './commands/document.js'
+import {
+  cmdDocumentInit,
+  cmdDocumentMigrateDelta,
+  cmdDocumentRead,
+  cmdDocumentRecord,
+  cmdDocumentStatus,
+} from './commands/document.js'
 import { cmdImport } from './commands/import.js'
 import { cmdInbox } from './commands/inbox.js'
 import { cmdAdvance } from './commands/advance.js'
@@ -25,6 +31,7 @@ import { cmdScaffold } from './commands/scaffold.js'
 import { cmdSession } from './commands/session.js'
 import { cmdSetup, type SetupOpts } from './commands/setup.js'
 import { cmdUpdate, type UpdateOpts } from './commands/update.js'
+import { cmdRuntime, type RuntimeCommandOpts } from './commands/runtime.js'
 import { cmdSpec } from './commands/spec.js'
 import { cmdSync } from './commands/sync.js'
 import { cmdTap } from './commands/tap.js'
@@ -32,9 +39,11 @@ import { cmdTask } from './commands/task.js'
 import { cmdUninstall } from './commands/uninstall.js'
 import { cmdList, cmdStatus } from './commands/status.js'
 import { cmdTransition } from './commands/transition.js'
+import { cmdReview } from './commands/review.js'
 import { cmdInternalSkillGate } from './commands/internalSkillGate.js'
 import { cmdInternalConstraintGate } from './commands/internalConstraintGate.js'
 import { cmdInternalCodexJsonl } from './commands/internalCodexJsonl.js'
+import { cmdInternalCodexSkillReceipt } from './codexSkillReceipt.js'
 import { cmdMigrateWorkflow } from './commands/migrateWorkflow.js'
 import { cmdStateProjection } from './commands/state-projection.js'
 import { cmdTriage, type TriageCommandRuntime } from './commands/triage.js'
@@ -130,9 +139,18 @@ export function buildProgram(deps: CliDeps, runtimes: ProgramRuntimes = {}): Com
     .action(async (opts: UpdateOpts) => bail(await cmdUpdate(deps, opts)))
 
   program
+    .command('runtime <sub>')
+    .description('查看 managed runtime，或仅回滚到上一份完整校验通过的 release')
+    .option('--rollback', '仅 runtime repair 使用：切换到上一份已验证 release')
+    .option('--json', '机器可读输出')
+    .action(async (sub: string, opts: RuntimeCommandOpts) => bail(await cmdRuntime(deps, sub, opts)))
+
+  program
     .command('dashboard')
-    .description('启动插件内置的单一 dashboard SPA/API 入口（默认 127.0.0.1:8765）')
-    .option('--port <port>', '覆盖监听端口（例如 18765）')
+    .description('启动插件内置的单一 dashboard SPA/API 入口（默认 127.0.0.1:18765）')
+    .option('--port <port>', '覆盖监听端口（例如旧端口 8765）')
+    .option('--background', '以受管后台服务启动，并等待本机健康检查')
+    .option('--open', '健康检查通过后自动打开本机 dashboard（隐含 --background）')
     .option('--dry-run', '验证已发布 dashboard 资产并打印启动计划，不启动 server')
     .action(async (opts: DashboardOpts) => bail(await cmdDashboard(deps, opts, runtimes.dashboard)))
 
@@ -176,9 +194,9 @@ export function buildProgram(deps: CliDeps, runtimes: ProgramRuntimes = {}): Com
 
   const document = program
     .command('document')
-    .description('OpenSpec 文档证据：init / record / read / status（治理 workflow 的可验证产物与读取收据）')
+    .description('OpenSpec 文档证据：init / record / migrate-delta / read / status')
     .action(() => {
-      deps.io.err('用法：pipeline document init|record|read|status <change> ...')
+      deps.io.err('用法：pipeline document init|record|migrate-delta|read|status <change> ...')
       bail(1)
     })
   document
@@ -187,11 +205,16 @@ export function buildProgram(deps: CliDeps, runtimes: ProgramRuntimes = {}): Com
     .action(async (change: string) => bail(await cmdDocumentInit(deps, change)))
   document
     .command('record <change> <kind> <path>')
-    .description('登记当前 phase 产出的文档和实际 Skill 调用证据；旧 Change 可显式 --backfill 补登记前序既有文档')
+    .description('登记当前 phase 产出或允许更新的文档和实际 Skill 调用证据；旧 Change 可显式 --backfill 首次补登记前序文档')
     .requiredOption('--producer <skill-id>', '实际生成该文档的具体 skill id')
-    .option('--backfill', '仅升级旧 Change 时补登记此前 phase 的既有文档；仍须有真实 skill 证据，不能登记未来 phase')
+    .option('--backfill', '仅升级旧 Change 时首次补登记此前 phase 的未登记文档；不得覆盖已有 record，仍须有真实 skill 证据')
     .action(async (change: string, kind: string, path: string, opts: { producer: string; backfill?: boolean }) =>
       bail(await cmdDocumentRecord(deps, change, kind, path, opts.producer, opts.backfill === true)))
+  document
+    .command('migrate-delta <change> <legacy-path> <canonical-path>')
+    .description('显式迁移一个旧 delta record；仅当 canonical 文件与旧 digest 完全一致时原子替换，可幂等重试')
+    .action(async (change: string, legacyPath: string, canonicalPath: string) =>
+      bail(await cmdDocumentMigrateDelta(deps, change, legacyPath, canonicalPath)))
   document
     .command('read <change> <kind>')
     .description("登记当前 phase 已读取文档（kind 可为 'all'）")
@@ -207,6 +230,14 @@ export function buildProgram(deps: CliDeps, runtimes: ProgramRuntimes = {}): Com
     .command('transition <name> <event>')
     .description('状态机转换（stdout 无输出，[TRANSITION] 走 stderr；非法/未知事件 exit 1）')
     .action(async (name: string, event: string) => bail(await cmdTransition(deps, name, event)))
+
+  program
+    .command('review <sub> [name]')
+    .description('review 出口确认：request <change> --event <event>（请求 review）/ acknowledge <change> [--delegated]（写精确 receipt）')
+    .option('--event <event>', 'request 时绑定的确切 transition event；多出口 review step 必填')
+    .option('--delegated', '仅用户已明确委托当前 Change 连续执行时，按该委托写审计化 review receipt')
+    .action(async (sub: string, name: string | undefined, opts: { event?: string; delegated?: boolean }) =>
+      bail(await cmdReview(deps, sub, name, opts)))
 
   program
     .command('check <name>')
@@ -264,10 +295,17 @@ export function buildProgram(deps: CliDeps, runtimes: ProgramRuntimes = {}): Com
 
   program
     .command('session <sub> [args...]')
-    .description('session：activate <name> · route-context <name> [--json]')
+    .description('session：activate <name> [--continuous] [--host-session <id>] · route-context <name> [--json]')
     .option('--json', 'JSON 输出（route-context）')
-    .action(async (sub: string, args: string[], opts: { json?: boolean }) =>
-      bail(await cmdSession(deps, sub, opts.json ? [...args, '--json'] : args)))
+    .option('--continuous', '仅 activate：绑定当前 Change 的持续交互授权')
+    .option('--host-session <id>', '仅 activate：绑定原生 host session，供 dashboard 判断普通会话是否仍在执行')
+    .action(async (sub: string, args: string[], opts: { json?: boolean; continuous?: boolean; hostSession?: string }) => {
+      const forwarded = [...args]
+      if (opts.json) forwarded.push('--json')
+      if (opts.continuous) forwarded.push('--continuous')
+      if (opts.hostSession !== undefined) forwarded.push('--host-session', opts.hostSession)
+      bail(await cmdSession(deps, sub, forwarded))
+    })
 
   program
     .command('inbox')
@@ -414,6 +452,15 @@ loops init 非交互 flags（agent/CI；缺 TTY 或 --yes 走默认）:
       bail(await cmdInternalCodexJsonl(deps, mode, jsonlPath)))
 
   program
+    .command('internal-codex-skill-receipt <changeName> <skillId> <skillPath> <transcriptPath> <sessionId> <turnId> <toolUseId>')
+    .description('[内部] 仅登记 Codex PreToolUse 的待核验 skill receipt；不会直接写完成证据')
+    .action(async (
+      changeName: string, skillId: string, skillPath: string, transcriptPath: string, sessionId: string, turnId: string, toolUseId: string,
+    ) => bail(await cmdInternalCodexSkillReceipt(
+      deps, changeName, skillId, skillPath, transcriptPath, sessionId, turnId, toolUseId,
+    )))
+
+  program
     .command('migrate-workflow <name>')
     .description('[一次性] 老格式 change 补齐/确认 workflow 字段为 default（真实自定义 workflow 不覆盖）')
     .action(async (name: string) => bail(await cmdMigrateWorkflow(deps, name)))
@@ -440,7 +487,7 @@ loops init 非交互 flags（agent/CI；缺 TTY 或 --yes 走默认）:
     })
   tracks
     .command('list')
-    .description('列出全部 track（内建四轨在前，固定列 ID LABEL BUILTIN DEFAULT ALLOWED POLICY）')
+    .description('列出全部 track（内建 Track 在前，固定列 ID LABEL BUILTIN DEFAULT ALLOWED POLICY）')
     .option('--json', 'JSON array 输出')
     .action(async (opts: { json?: boolean }) => bail(await cmdTracksList(deps, opts)))
   tracks
@@ -455,7 +502,7 @@ loops init 非交互 flags（agent/CI；缺 TTY 或 --yes 走默认）:
     .option('--workflow-default <id>', '缺省 workflow')
     .option('--workflow-allowed <ids...>', '允许的 workflow 白名单（可多值）')
     .option('--workflow-any', "允许任意 workflow（'*'，不必输裸 *）")
-    .option('--policy <preset>', 'policy 模板 chat|pm|frontend|backend（深拷贝该内建 policy 落完整结构）')
+    .option('--policy <preset>', 'policy 模板 chat|simple|pm|frontend|backend（深拷贝该内建 policy 落完整结构）')
     .option('--json', 'JSON 返回更新后的 effective definition')
     .action(async (id: string, opts: TracksCreateOpts) => bail(await cmdTracksCreate(deps, id, opts)))
   tracks

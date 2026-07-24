@@ -2,7 +2,7 @@
  * router-gen.mjs <manifest> <repo-root>
  *
  * router.sh 的安装态冷生成 fallback。与 CLI `_gen-router-sh` 一样，从项目 effective registry
- * 构建投影，再由 kernel `encodeRouterDataCache` 输出 `PIPELINE_ROUTER_V2`。这里绝不生成 shell
+ * 构建投影，再由 kernel `encodeRouterDataCache` 输出 `PIPELINE_ROUTER_V4`。这里绝不生成 shell
  * assignment；项目可写 cache 永远只是 hex 编码的数据。
  */
 import { spawnSync } from 'node:child_process'
@@ -51,17 +51,20 @@ function trackValidationContext(kernel, repoRoot, manifest) {
 
 function assertTargetGrepPatterns(projection) {
   for (const track of projection.tracks) {
-    const probe = spawnSync('grep', ['-E', '--', track.pattern], {
-      input: '',
-      encoding: 'utf8',
-      stdio: ['pipe', 'ignore', 'pipe'],
-    })
-    if (probe.error) {
-      throw new Error(`track '${track.id}' routing pattern 无法用目标 grep -E 校验：${probe.error.message}`)
-    }
-    if (probe.status !== 0 && probe.status !== 1) {
-      const detail = String(probe.stderr ?? '').trim()
-      throw new Error(`track '${track.id}' routing pattern 不兼容目标 grep -E${detail ? `：${detail}` : ''}`)
+    for (const [kind, pattern] of [['pattern', track.pattern], ['exclude_pattern', track.excludePattern]]) {
+      if (pattern === undefined) continue
+      const probe = spawnSync('grep', ['-E', '--', pattern], {
+        input: '',
+        encoding: 'utf8',
+        stdio: ['pipe', 'ignore', 'pipe'],
+      })
+      if (probe.error) {
+        throw new Error(`track '${track.id}' routing ${kind} 无法用目标 grep -E 校验：${probe.error.message}`)
+      }
+      if (probe.status !== 0 && probe.status !== 1) {
+        const detail = String(probe.stderr ?? '').trim()
+        throw new Error(`track '${track.id}' routing ${kind} 不兼容目标 grep -E${detail ? `：${detail}` : ''}`)
+      }
     }
   }
 }

@@ -7,22 +7,32 @@ export type { StateStoreOptions } from './store.js'
 export { ensureDefaultOpenSpecScaffold } from './default-openspec-scaffold.js'
 export type { DefaultOpenSpecScaffoldResult } from './default-openspec-scaffold.js'
 export {
-  DOCUMENT_LEDGER_FILE, DocumentLedgerError, ensureDocumentLedger, evaluateDocumentEvidence,
-  readDocumentLedger, recordDocument, recordDocumentReads,
+  DOCUMENT_LEDGER_FILE, DocumentLedgerError, ensureDocumentLedger,
+  migrateLegacyDeltaDocument, readDocumentLedger, recordDocument, recordDocumentReads,
 } from './document-ledger.js'
 export type {
-  DocumentEvidenceItem, DocumentEvidenceItemStatus, DocumentEvidenceReport, DocumentLedger,
-  DocumentReadReceipt, DocumentRecord, ReadDocumentsInput, RecordDocumentInput,
+  DocumentLedger, DocumentReadReceipt, DocumentRecord, MigrateLegacyDeltaDocumentInput,
+  ReadDocumentsInput, RecordDocumentInput,
 } from './document-ledger.js'
+export { evaluateDocumentEvidence } from './document-evidence.js'
+export type {
+  DocumentEvidenceItem, DocumentEvidenceItemStatus, DocumentEvidenceReport, DocumentEvidenceScope,
+} from './document-evidence.js'
 export { parsePipeline, serializePipeline, quoteGate, unquoteScalar, emptyFields } from './parse.js'
 export { withLock, LOCK_DIR_NAME, STALE_LOCK_MS } from './lock.js'
 export { createHistoryWriter, HISTORY_FILE, transitionRecordToHistoryEntry } from './history.js'
 export {
-  createBreadcrumbWriter, createReviewMarkerWriter, reviewHint, BREADCRUMB_FILE, REVIEW_MARKER_FILE,
+  createBreadcrumbWriter, formatReviewMarker, parseReviewMarker, reviewHint,
+  BREADCRUMB_FILE, REVIEW_MARKER_FILE, REVIEW_MARKER_PROTOCOL,
 } from './markers.js'
-export type { BreadcrumbWriter, ReviewMarkerWriter } from './markers.js'
-export { applyBreadcrumbTail, applyReviewMarkerTail } from './transitionTail.js'
-export type { BreadcrumbTailArgs, ReviewMarkerTailArgs, TailWriteOutcome } from './transitionTail.js'
+export type { BreadcrumbWriter, ReviewMarkerReceipt } from './markers.js'
+export {
+  clearReviewGatePatch, reviewGateApprovedFor, reviewGateApprovalPatch, reviewGateEvent, reviewGateMatches,
+  reviewGatePendingFor, reviewGateRequestPatch, reviewGateStatus, REVIEW_GATE_APPROVED, REVIEW_GATE_PENDING,
+} from './review-gate.js'
+export type { ReviewGateStatus } from './review-gate.js'
+export { applyBreadcrumbTail } from './transitionTail.js'
+export type { BreadcrumbTailArgs, TailWriteOutcome } from './transitionTail.js'
 // WorkflowRun 持久化提交接缝（W1 第二增量，2026-07-16 codex 范围评估）
 export { diffFieldsToEffects, parseRunMetadataLines, serializeRunMetadataLines } from './run-metadata.js'
 export {

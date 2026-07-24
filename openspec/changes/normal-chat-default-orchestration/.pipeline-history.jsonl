@@ -1,0 +1,58 @@
+{"ts":"2026-07-23T13:45:45Z","kind":"init"}
+{"ts":"2026-07-23T13:50:18Z","kind":"transition","from":"open","to":"explore","raw":"open-complete","transitionRecordId":"bcad9e38-ea91-4ed2-a19c-ff83be50cc20"}
+{"ts":"2026-07-23T14:15:24Z","kind":"set","field":"design_doc","to":"openspec/changes/normal-chat-default-orchestration/design.md"}
+{"ts":"2026-07-23T14:28:45Z","kind":"transition","from":"explore","to":"spec","raw":"explore-complete","transitionRecordId":"f951fa76-152d-4cd9-a5f9-34fb19b72c46"}
+{"ts":"2026-07-24T05:16:27Z","kind":"tool","raw":"CodexSkillRead: openspec-propose"}
+{"ts":"2026-07-24T05:20:01Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=required"}
+{"ts":"2026-07-24T05:28:05Z","kind":"tool","raw":"CodexSkillRead: brainstorming"}
+{"ts":"2026-07-24T05:28:23Z","kind":"tool","raw":"CodexSkillRead: pipeline-explore"}
+{"ts":"2026-07-24T05:28:26Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-07-24T05:28:32Z","kind":"tool","raw":"CodexSkillRead: pipeline-spec"}
+{"ts":"2026-07-24T05:28:49Z","kind":"set","field":"plan","to":"docs/superpowers/plans/2026-07-23-normal-chat-default-document-contract-plan.md"}
+{"ts":"2026-07-24T05:35:20Z","kind":"tool","raw":"review:request phase=spec event=spec-complete"}
+{"ts":"2026-07-24T05:37:22Z","kind":"tool","raw":"review:acknowledge phase=spec event=spec-complete"}
+{"ts":"2026-07-24T05:37:40Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"51d947cf-a02e-42b0-8df2-2ca51e8da215"}
+{"ts":"2026-07-24T05:38:04Z","kind":"tool","raw":"CodexSkillRead: pipeline-build"}
+{"ts":"2026-07-24T05:38:16Z","kind":"tool","raw":"CodexSkillRead: pipeline-build"}
+{"ts":"2026-07-24T05:38:32Z","kind":"set","field":"build_mode","to":"direct"}
+{"ts":"2026-07-24T05:38:32Z","kind":"set","field":"isolation","to":"in-place"}
+{"ts":"2026-07-24T05:38:32Z","kind":"set","field":"direct_override","to":"true"}
+{"ts":"2026-07-24T05:38:42Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-07-24T05:39:14Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated"}
+{"ts":"2026-07-24T07:23:31Z","kind":"transition","from":"build","to":"spec","raw":"requirements-changed","transitionRecordId":"609524c9-98c7-4478-82f3-f9ff95c0abc5"}
+{"ts":"2026-07-24T07:32:32Z","kind":"tool","raw":"CodexSkillRead: pipeline-spec"}
+{"ts":"2026-07-24T07:32:33Z","kind":"tool","raw":"CodexSkillRead: openspec-propose"}
+{"ts":"2026-07-24T07:32:33Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-07-24T07:32:43Z","kind":"tool","raw":"review:request phase=spec event=spec-complete"}
+{"ts":"2026-07-24T07:32:43Z","kind":"tool","raw":"review:delegated-ack phase=spec event=spec-complete authority_issued_at=2026-07-24T05:39:14Z"}
+{"ts":"2026-07-24T07:32:43Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"eac1db7f-a1c2-4cd4-a642-3cf46e1f0c81"}
+{"ts":"2026-07-24T07:33:04Z","kind":"set","field":"build_mode","to":"direct"}
+{"ts":"2026-07-24T07:33:04Z","kind":"set","field":"isolation","to":"in-place"}
+{"ts":"2026-07-24T07:33:04Z","kind":"set","field":"direct_override","to":"true"}
+{"ts":"2026-07-24T07:55:22Z","kind":"tool","raw":"CodexSkillRead: pipeline-build"}
+{"ts":"2026-07-24T07:55:24Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"99a2688f-8157-4910-9fbe-5e60f5fc779e"}
+{"ts":"2026-07-24T08:29:52Z","kind":"tool","raw":"CodexSkillRead: pipeline-spec"}
+{"ts":"2026-07-24T08:35:07Z","kind":"tool","raw":"CodexSkillRead: pipeline-verify"}
+{"ts":"2026-07-24T08:36:51Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-07-24T08:36:52Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-07-24-normal-chat-default-orchestration-verify.md"}
+{"ts":"2026-07-24T08:36:52Z","kind":"tool","raw":"review:request phase=verify event=verify-fail"}
+{"ts":"2026-07-24T08:36:52Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-07-24T05:39:14Z"}
+{"ts":"2026-07-24T08:36:52Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"0327669c-ee67-4515-ae38-7307248185e9"}
+{"ts":"2026-07-24T08:37:00Z","kind":"transition","from":"build","to":"spec","raw":"requirements-changed","transitionRecordId":"b45ff8f6-4c2e-4f7c-b524-e09a8b5dc6b2"}
+{"ts":"2026-07-24T08:37:17Z","kind":"tool","raw":"CodexSkillRead: pipeline-spec"}
+{"ts":"2026-07-24T08:37:17Z","kind":"tool","raw":"CodexSkillRead: openspec-propose"}
+{"ts":"2026-07-24T08:37:25Z","kind":"tool","raw":"review:request phase=spec event=spec-complete"}
+{"ts":"2026-07-24T08:37:26Z","kind":"tool","raw":"review:delegated-ack phase=spec event=spec-complete authority_issued_at=2026-07-24T05:39:14Z"}
+{"ts":"2026-07-24T08:37:26Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"497d36f2-8f60-4eda-81f5-7fc11a5f911d"}
+{"ts":"2026-07-24T08:37:36Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"feac5e80-ea01-4c91-be41-f9bbe01e9f57"}
+{"ts":"2026-07-24T08:37:52Z","kind":"tool","raw":"CodexSkillRead: pipeline-verify"}
+{"ts":"2026-07-24T08:37:52Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-07-24T08:39:12Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-07-24-normal-chat-default-orchestration-verify.md"}
+{"ts":"2026-07-24T08:39:13Z","kind":"set","field":"agent_review_result","to":"pass"}
+{"ts":"2026-07-24T08:39:13Z","kind":"set","field":"codex_review_result","to":"pass"}
+{"ts":"2026-07-24T08:39:13Z","kind":"set","field":"branch_status","to":"handled"}
+{"ts":"2026-07-24T08:39:18Z","kind":"tool","raw":"review:request phase=verify event=verify-pass"}
+{"ts":"2026-07-24T08:39:18Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-pass authority_issued_at=2026-07-24T05:39:14Z"}
+{"ts":"2026-07-24T08:39:18Z","kind":"transition","from":"verify","to":"ship","raw":"verify-pass","transitionRecordId":"535ab8db-280a-40fa-bd7a-5363fb3d3ee1"}
+{"ts":"2026-07-24T08:40:36Z","kind":"tool","raw":"CodexSkillRead: openspec-apply-change"}
+{"ts":"2026-07-24T08:49:03Z","kind":"tool","raw":"CodexSkillRead: openspec-propose"}

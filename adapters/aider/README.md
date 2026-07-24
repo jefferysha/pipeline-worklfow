@@ -63,13 +63,11 @@ adapters/aider/install.sh --no-git-hooks        # 只装 .aider.conf.yml + 上�
 刷新时机：phase/门状态变化后，`.aider-pipeline-context.md` 不会自动更新——重跑
 `adapters/aider/install.sh`（幂等）即可刷新内容与 git hook 绝对路径。
 
-## Unlock sentinel（HITL 解封 · veto 降级路径）
+## 人工确认（HITL · veto 降级路径）
 
-veto 降级为 commit-gate——放行 = 删项目根 marker（与 CC `AskUserQuestion` 语义等价，contract §2）：
-
-```bash
-rm .pipeline-pending-review     # 或 .pipeline-pending-confirm / .pipeline-pending-interaction
-```
+veto 降级为 commit-gate 不会改变 review 的授权语义：完成产物并选择 event 后运行
+`pipeline review request <change> --event <event>`，人类明确确认后运行
+`pipeline review acknowledge <change>`。不得手动删除 `.pipeline-pending-review`。
 
 ## 已知局限（诚实登记）
 

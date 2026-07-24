@@ -4,14 +4,15 @@
  *
  * 两类来源，按等待时长降序：
  *   1. 项目根新鲜（age ≤ GATE_TTL_MS[kind]，分级 TTL 同 gate.sh，BACKLOG #13
- *      对齐老内核：confirm 300s / review·interaction 1800s）三门 marker → gate:<kind>
- *      （marker 三行格式：相位\n指引\nchange 名，transition 落、老内核同款）
- *   2. 复核相位（manifest.reviewPhases 单一真相源）且 phase_status ≠ done 的活跃
- *      change → phase-review（同名已有 marker 时 marker 优先，不重复列）
+ *      对齐老内核：confirm 300s / review·interaction 1800s）marker → gate:<kind>。
+ *      review 只接受带 Change identity 的 v2 projection；旧“进入 phase 即写”的三行 marker
+ *      已被迁移为非权威投影，不能把无关 Change 重新塞回收件箱。
+ *   2. canonical review receipt（review_gate_status=pending）→ review-request。它独立于 marker
+ *      TTL，所以短时 hook 投影过期/丢失也不会把真正等待人类确认的 Change 隐藏掉。
  * 坏 change 跳过 + WARN（fail-open）；exit 恒 0。
  */
 import { join } from 'node:path'
-import { GATE_TTL_MS } from '@pipeline-lite/kernel'
+import { GATE_TTL_MS, parseReviewMarker, reviewGatePendingFor } from '@pipeline-lite/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
 import { str } from '../render.js'
 
@@ -31,7 +32,7 @@ function fmtDuration(s: number): string {
   return `${Math.floor(m / 60)}h${m % 60 ? `${m % 60}m` : ''}`
 }
 
-const REVIEW_HINT = '完成该相位产出后用 AskUserQuestion 交用户复核'
+const REVIEW_HINT = '已请求人工复核：查看该相位产出并明确“确认继续”'
 
 function escapeHtml(s: string): string {
   return s
@@ -82,6 +83,21 @@ export async function cmdInbox(deps: CliDeps, opts: { json?: boolean; html?: boo
   const markers = (await deps.readGateMarkers?.()) ?? []
   for (const m of markers) {
     if (m.ageMs > GATE_TTL_MS[m.kind]) continue
+    if (m.kind === 'review') {
+      const receipt = parseReviewMarker(m.raw)
+      // v1 marker was an entry-time lock.  Its only safe migration is to ignore it here; the
+      // canonical review receipt now governs whether a transition may leave the phase.
+      if (!receipt) continue
+      items.push({
+        name: receipt.changeName,
+        phase: receipt.phase,
+        waiting_on: 'gate:review',
+        waiting_s: Math.floor(m.ageMs / 1000),
+        hint: REVIEW_HINT,
+      })
+      seen.add(receipt.changeName)
+      continue
+    }
     const [phase = '?', hint = '', name = '?'] = m.raw.split('\n')
     items.push({
       name,
@@ -93,25 +109,25 @@ export async function cmdInbox(deps: CliDeps, opts: { json?: boolean; html?: boo
     seen.add(name)
   }
 
-  // 2. 复核相位停留的活跃 change（manifest.reviewPhases 单一真相源）
+  // 2. Canonical review receipt (default and custom workflows share the same state protocol).
   const now = Date.parse(deps.clock())
   const changesRoot = join(deps.cwd, 'openspec', 'changes')
   for (const name of await deps.listChanges(changesRoot)) {
     if (seen.has(name)) continue
-    let fields
+    let state
     try {
-      fields = (await deps.store.read(join(changesRoot, name))).fields
+      state = await deps.store.read(join(changesRoot, name))
     } catch (e) {
       deps.io.err(`WARN: 跳过坏 change ${name}: ${errMsg(e)}`)
       continue
     }
+    const fields = state.fields
     if (str(fields.archived) === 'true') continue
     const phase = str(fields.phase)
-    if (!(deps.flow.manifest.reviewPhases as readonly string[]).includes(phase)) continue
-    if (str(fields.phase_status) === 'done') continue
-    const updated = Date.parse(str(fields.updated_at))
-    const waitingS = Number.isNaN(updated) ? 0 : Math.max(0, Math.floor((now - updated) / 1000))
-    items.push({ name, phase, waiting_on: 'phase-review', waiting_s: waitingS, hint: REVIEW_HINT })
+    if (!reviewGatePendingFor(state, phase)) continue
+    const requested = Date.parse(str(fields.review_requested_at))
+    const waitingS = Number.isNaN(requested) ? 0 : Math.max(0, Math.floor((now - requested) / 1000))
+    items.push({ name, phase, waiting_on: 'review-request', waiting_s: waitingS, hint: REVIEW_HINT })
   }
 
   items.sort((a, b) => b.waiting_s - a.waiting_s)

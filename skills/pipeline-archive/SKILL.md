@@ -8,6 +8,9 @@ description: "Pipeline Phase 7: Archive · 归档 + 学习沉淀。所有 Track 
 > 移植来源：老仓 `skills/pipeline-archive/SKILL.md`。老仓 `pipeline-archive.sh` 一体化脚本
 > 未迁移为独立命令——本 skill 把其步骤改写为「`pipeline` CLI + 显式文件操作」的等价序列。
 
+> **Codex 打包 Skill 身份：** 本文件提到的裸 skill id 是 DAG/ledger 的逻辑 id；在 Codex
+> 必须实际加载 `pipeline-lite:<id>` 的当前插件副本，绝不以同名全局或项目 SKILL.md 替代。
+
 ## 输入
 
 - `$PIPELINE_TRACK` / `$PIPELINE_CHANGE_NAME`
@@ -28,6 +31,9 @@ description: "Pipeline Phase 7: Archive · 归档 + 学习沉淀。所有 Track 
 ```bash
 pipeline status "$PIPELINE_CHANGE_NAME"
 # Archive 是最后一次证明确实消费了 applied spec 及此前所有文档的机会；必须在 check/transition 前写 receipt。
+TASKS_PATH="openspec/changes/$PIPELINE_CHANGE_NAME/tasks.md"
+# 完成 Archive 自己的 checkbox 后登记最终 Todo digest。
+pipeline document record "$PIPELINE_CHANGE_NAME" tasks "$TASKS_PATH" --producer pipeline-archive
 pipeline document read "$PIPELINE_CHANGE_NAME" all
 pipeline document status "$PIPELINE_CHANGE_NAME"
 pipeline check "$PIPELINE_CHANGE_NAME"     # archive 出口：verify_result=pass 等（0 过 / 2 不过）

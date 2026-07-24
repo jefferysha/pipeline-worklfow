@@ -50,7 +50,7 @@ export interface TracksUpdateOpts extends TracksCommonOpts {
   setPolicy?: string
 }
 
-/** --policy <chat|pm|frontend|backend>：深拷贝对应 builtin 的 policy 作**初始化模板**（非引用；
+/** --policy <chat|simple|pm|frontend|backend>：深拷贝对应 builtin 的 policy 作**初始化模板**（非引用；
  *  落盘完整结构）。未知 preset → undefined（调用方报 usage error）。 */
 function expandPolicy(preset: string): TrackPolicyProfile | undefined {
   if (!isBuiltinTrackId(preset)) return undefined
@@ -245,7 +245,7 @@ export async function cmdTracksCreate(deps: CliDeps, id: string, opts: TracksCre
   }
   const policyProfile = expandPolicy(opts.policy!)
   if (!policyProfile) {
-    deps.io.err(`ERROR: 未知 --policy '${opts.policy}'（只支持 chat|pm|frontend|backend 作模板）`)
+    deps.io.err(`ERROR: 未知 --policy '${opts.policy}'（只支持 chat|simple|pm|frontend|backend 作模板）`)
     return 1
   }
   const workflow: TrackWorkflowBinding = {
@@ -282,7 +282,7 @@ export async function cmdTracksUpdate(deps: CliDeps, id: string, opts: TracksUpd
   if (opts.setPolicy !== undefined) {
     const p = expandPolicy(opts.setPolicy)
     if (!p) {
-      deps.io.err(`ERROR: 未知 --set-policy '${opts.setPolicy}'（只支持 chat|pm|frontend|backend）`)
+      deps.io.err(`ERROR: 未知 --set-policy '${opts.setPolicy}'（只支持 chat|simple|pm|frontend|backend）`)
       return 1
     }
     patch.policyProfile = p

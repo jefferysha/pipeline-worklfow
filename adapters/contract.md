@@ -29,7 +29,7 @@ pipeline 内核依赖三类 Claude Code hook 能力。适配器须对每一项�
   （硬拦 veto、会话级 inject、真留痕 track）。例：**codex**（与 CC 同构 hook 协议，wrapper 薄包 baseline 三 hook）。
 - **档 B — 部分降级（partial）**：部分能力原生等价，部分**如实声明降级** fallback。例：**cursor**
   （veto/track native、inject 无 SessionStart 原语 → 降级 `.cursor/rules` 静态层 + `postToolUse.additional_context` 动态补）。
-- **档 C — 静态降级（static-only）**：无 enforcement hook，三能力全靠**静态注入 + 手动 Unlock sentinel**。
+- **档 C — 静态降级（static-only）**：无 enforcement hook，三能力全靠**静态注入 + 保留人工确认事实的 CLI receipt**。
   例：**codex `--static`**、workflow-only 平台（devin，`hasHooks=false`）。
 
 > **档位必须与实际行为一致**：声明 native 的能力，conformance 断言其产出与 baseline 等价；
@@ -51,23 +51,22 @@ veto:
 
 ---
 
-## 2. Unlock sentinel（HITL 解封路径）
+## 2. Human acknowledgement（HITL 解封路径）
 
 review/interaction/confirm 三门由项目根 `.pipeline-pending-{review,interaction,confirm}` marker 驱动
-（`hooks/gate.sh` 命中新鲜 marker 即拦）。解封（人类确认后放行）有两条等价路径：
+（`hooks/gate.sh` 命中新鲜 marker 即拦）。marker 是短时 hook 投影，**不是授权本身**：
 
-| 路径 | 机制 |
+| 场景 | 正确机制 |
 |------|------|
-| Claude Code 原生 | `PostToolUse:AskUserQuestion` → `hooks/confirm-clear.sh` 清 marker（人已交互即解封） |
-| 工具无关（Unlock sentinel）| **删除项目根 `.pipeline-pending-<kind>` marker 文件**即放行（`gate.sh` stderr 指引明示此路径） |
+| review 出口 | `pipeline review request <change> --event <event>` → 人类确认 → `pipeline review acknowledge <change>`；CLI 原子写 canonical approval receipt 后清 review marker |
+| confirm / interaction | 宿主的真实问答完成 hook 记录确认事实并清对应投影；无该能力的静态宿主必须保留确认事实、重新发起操作，不得把删除 marker 当作确认 |
 
-- 任一路径清除 marker 即触发 `gate.sh` 放行，两者语义等价。
-- 无 `AskUserQuestion` 等价的工具（Codex/Cursor headless）走 **Unlock sentinel**：`rm .pipeline-pending-<kind>`。
-- 不得绕过 review-gate（会产生 solo 推进）。marker 由内核在进入 review 相位时落
-  （`pipeline transition` → `.pipeline-pending-review`），**不得**直接编辑 `.pipeline.yaml` 状态。
+- `verify-fail` 与 `verify-pass` 是不同的人类决定；receipt 必须绑定 exact event，不能互相复用。
+- 不得绕过 review-gate（会产生 solo 推进）。review marker 只由 `pipeline review request` 在产物完成后
+  写入；**不得**直接删除 v2 marker 或直接编辑 `.pipeline.yaml` 状态。
 
-> lite 现实：内核是 TS CLI（`pipeline` 命令），**无老仓 `pipeline-state.sh confirm` 子命令**；
-> 解封即「清 marker」（AskUserQuestion 自动清 / 手动 `rm` sentinel）。状态写一律走 `pipeline` CLI。
+> lite 现实：内核是 TS CLI（`pipeline` 命令），review 的唯一解封写路径是 `pipeline review acknowledge`；
+> 状态写一律走 `pipeline` CLI。
 
 ---
 
@@ -98,7 +97,7 @@ review/interaction/confirm 三门由项目根 `.pipeline-pending-{review,interac
 - [ ] `configure` 脚本（install 入口）存在
 - [ ] inject/veto/track 各实现或声明降级（wrapper 薄包 baseline 三 hook，或降级落静态层）
 - [ ] stdout/exit 格式与目标工具匹配（不串格式）
-- [ ] Unlock sentinel 已在 Adapter README 说明为 HITL 解封路径
+- [ ] Adapter README 已说明 `pipeline review request --event` → 人工确认 → `pipeline review acknowledge` 的 HITL 路径
 - [ ] **进 conformance**：`tools/test-adapters.sh` 里对该平台跑同一组输入场景，断言等价/如实降级
 - [ ] 状态写一律经 `pipeline` CLI（不直接编辑 `.pipeline.yaml`）
 

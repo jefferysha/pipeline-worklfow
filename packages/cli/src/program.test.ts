@@ -33,10 +33,18 @@ describe('program —— commander 装配与 exit code 逐格对齐', () => {
     expect(out).toContain('未刷新 marketplace')
   })
 
+  test('runtime 是稳定启动器的可诊断和精确恢复入口', () => {
+    const deps = makeDeps()
+    const runtime = buildProgram(deps).commands.find((command) => command.name() === 'runtime')
+    expect(runtime?.description()).toContain('managed runtime')
+    expect(runtime?.options.some((option) => option.long === '--rollback')).toBe(true)
+    expect(runtime?.options.some((option) => option.long === '--json')).toBe(true)
+  })
+
   test('dashboard 是完整插件的一等入口，声明单端口与显式兼容端口参数', () => {
     const deps = makeDeps()
     const dashboard = buildProgram(deps).commands.find((command) => command.name() === 'dashboard')
-    expect(dashboard?.description()).toContain('8765')
+    expect(dashboard?.description()).toContain('18765')
     expect(dashboard?.options.some((option) => option.long === '--port')).toBe(true)
     expect(dashboard?.options.some((option) => option.long === '--dry-run')).toBe(true)
   })

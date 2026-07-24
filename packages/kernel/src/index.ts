@@ -1,6 +1,15 @@
 export * from './types.js'
 export * from './state/index.js'
 export * from './flow/index.js'
+// in-place 构建不以未变化的 Git HEAD 冒充验证靶；提供内容寻址的工作区基线给 CLI/server 注入。
+export { fingerprintWorkspace, isWorkspaceBaseline, WORKSPACE_BASELINE_PREFIX } from './workspace/fingerprint.js'
+// Native terminal sessions are a dashboard-only liveness projection, never workflow state.
+export {
+  TERMINAL_ACTIVITY_FILE, TERMINAL_ACTIVITY_PROTOCOL, TERMINAL_ACTIVITY_TTL_MS,
+  TERMINAL_SESSION_BINDINGS_DIR, TERMINAL_SESSION_PROTOCOL,
+  isTerminalActivityChangeName, isTerminalSessionId, liveTerminalActivity, parseTerminalActivityRecord,
+} from './workspace/terminal-activity.js'
+export type { LiveTerminalActivity, TerminalActivityRecord } from './workspace/terminal-activity.js'
 // 动态 Track Registry 公开面（GOAL.md 清单 T · R2 校验面切换）——tracks/ 是 R1 落地的叶子 barrel，
 // 本行把它接进根 barrel，使 cli/server 的 track 校验面从 types.ts 的写死 TRACKS 常量切到 registry
 // 驱动（requireTrack/assertWorkflowAllowed/loadTrackRegistry）。tracks/index.ts 已自做具名导出，
@@ -25,6 +34,13 @@ export * from './skills/index.js'
 // step 间转换与 skill DAG 解锁判定（Task 8/9）。仅具名导出这三个函数，不整体 re-export
 // ./workflow/types.js（其 GateKind 会与既有 barrel 导出撞名）。
 export { loadWorkflow } from './workflow/loadWorkflow.js'
+export { BUILTIN_WORKFLOW_IDS, builtinWorkflow } from './workflow/builtin-workflows.js'
+export type { BuiltinWorkflowId } from './workflow/builtin-workflows.js'
+export {
+  canonicalWorkflowSkillId,
+  completedWorkflowSkillsSinceStepEntry,
+  missingWorkflowStepSkills,
+} from './workflow/skill-evidence.js'
 export { evaluateStepGuards } from './workflow/stepGuard.js'
 // step 编排层（Wave 2 下沉）：解析 step/找边/评 guard/算下相位的单一真相源，
 // cli transition/check 与 server transition 塌成 adapter（消息模板与错误分类学留 adapter）。
@@ -37,9 +53,11 @@ export { validateWorkflow } from './workflow/validate.js'
 export { validateWorkflowTrackReferences } from './workflow/track-reference-validation.js'
 export type { StepDef, StepTransition, WorkflowActionConfig, WorkflowDef, WorkflowGuardConfig } from './workflow/types.js'
 export {
-  DOCUMENT_CONTRACT_PHASES, DOCUMENT_KINDS, isAcceptedDocumentProducer, isDocumentContractPhase,
-  isDocumentKind, isOpenSpecDocumentContractRequired, isOutputAllowedInPhase, outputsRequiredForPhase,
-  producerCandidatesFor, readsRequiredForPhase, recordsRequiredForPhase,
+  DOCUMENT_CONTRACT_PHASES, DOCUMENT_KINDS, documentOwnerPhase, isAcceptedDocumentProducer,
+  isDocumentContractPhase, isDocumentKind, isDocumentProducerAllowedInPhase,
+  isDocumentRecordAllowedInPhase, isOpenSpecDocumentContractRequired, isOutputAllowedInPhase,
+  outputsRequiredForPhase, producerCandidatesFor, readsRequiredForPhase, recordProducerCandidatesFor,
+  recordsRequiredForPhase,
   shouldEnforceDocumentEvidenceOnTransition, validateOpenSpecContractWorkflow,
 } from './workflow/document-contract.js'
 export type {
@@ -63,7 +81,9 @@ export type {
   EffectiveSkillResolver, EffectiveSkillSlot, EffectiveSkillResolverManifest, EffectiveSkillResolverOptions,
 } from './workflow/effective-skill-resolver.js'
 // OpenSpec tasks.md → ordered workflow stages 的只读 Todo 投影（dashboard/native Todo 共用）。
-export { DEFAULT_WORKFLOW_TODO_STAGES, projectPipelineTodo } from './workflow/todo-projection.js'
+export {
+  DEFAULT_WORKFLOW_TODO_STAGES, incompletePipelineTasksForExit, projectPipelineTodo,
+} from './workflow/todo-projection.js'
 export type {
   PipelineTodoItem, PipelineTodoProjection, PipelineTodoStage, PipelineTodoStageDefinition, PipelineTodoStageStatus,
 } from './workflow/todo-projection.js'

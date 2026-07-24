@@ -6,7 +6,7 @@
  *   1. 解析机器级路径（~/.claude/...，可经 PIPELINE_DASHBOARD_HOME 覆盖）。
  *   2. 探测既有 :port 的 /api/health（含 version）→ decidePreemption：
  *        bind → 直接监听；reuse → 让位退出 0；preempt → SIGTERM 旧实例后监听。
- *   3. listen 固定端口（PIPELINE_DASHBOARD_PORT ?? 8765，绑 127.0.0.1）。
+ *   3. listen 固定端口（PIPELINE_DASHBOARD_PORT ?? 18765，绑 127.0.0.1）。
  *   4. 写 0600 token 握手文件（B5）+ pidfile（pid/port/version，供后来者抢占判定）。
  *   5. SIGTERM/SIGINT 优雅停：关 server + 清 pidfile。
  */
@@ -15,11 +15,12 @@ import { unlinkSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createTraceStore } from '@pipeline-lite/tap'
+import { fingerprintWorkspace } from '@pipeline-lite/kernel'
 import { createDashboardServer } from './server.js'
 import { resolveServerPaths } from './paths.js'
 import { decidePreemption, preemptOldServer, probeHealth } from './preempt.js'
 import { generateToken, writeTokenHandshake } from './token.js'
-import { resolveReleaseVersion } from './version.js'
+import { resolvePayloadReleaseId, resolveReleaseVersion } from './version.js'
 import { resolveDashboardPort } from './port.js'
 
 function serverPort(): number {
@@ -52,18 +53,26 @@ async function main(): Promise<void> {
   const port = serverPort()
   // Use the marketplace plugin manifest as the release truth.  This lets a freshly auto-updated
   // bundle preempt an older dashboard process instead of falsely reusing it under a stale constant.
-  const version = resolveReleaseVersion(pluginRoot())
+  const root = pluginRoot()
+  const version = resolveReleaseVersion(root)
+  const releaseId = resolvePayloadReleaseId(root)
 
   // ── B4 版本抢占 ──
   const existing = await probeHealth(port, host, 400)
-  const decision = decidePreemption(existing, version)
+  const decision = decidePreemption(existing, version, releaseId)
   if (decision === 'reuse') {
     process.stdout.write(`[dashboard-server] 复用既有 Global server :${port}（版本 ${existing?.version} ≥ ${version}）\n`)
     return
   }
   if (decision === 'preempt') {
     process.stdout.write(`[dashboard-server] 抢占旧版本 ${existing?.version} → 本版本 ${version}\n`)
-    const freed = await preemptOldServer(paths.pidfilePath, port, host, { waitMs: 4000 })
+    // 0.1.x wrote no pidfile.  Its health endpoint still exposes its own pid;
+    // preemptOldServer additionally verifies that pid owns this TCP listener
+    // before signalling it, so the legacy migration path remains fail-closed.
+    const freed = await preemptOldServer(paths.pidfilePath, port, host, {
+      waitMs: 4000,
+      legacyPid: existing?.pid,
+    })
     if (!freed) {
       process.stderr.write('[dashboard-server] 旧实例未在期限内让出端口，启动失败\n')
       process.exitCode = 1
@@ -74,9 +83,11 @@ async function main(): Promise<void> {
   const token = generateToken()
   const srv = createDashboardServer({
     version,
+    releaseId,
     token,
     manifestPath: manifestPath(),
     gitHeadSha,
+    workspaceFingerprint: (cwd) => fingerprintWorkspace(cwd),
     // dashboard-app 构建产物（BACKLOG #26c）：存在则服务真 SPA，否则回退最小落地页
     webRoot: join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'dashboard-app', 'dist'),
     // tap 流量查看器数据源（BACKLOG #34d）：只读 listSessions/readRecords，capabilities.traffic=true。
@@ -104,7 +115,10 @@ async function main(): Promise<void> {
     writeFileSync(paths.pidfilePath, JSON.stringify({ pid: process.pid, port, version, started: Date.now() }), 'utf8')
   } catch { /* best-effort */ }
 
-  process.stdout.write(`[dashboard-server] Global server http://${host}:${port}  version=${version}\n`)
+  process.stdout.write(
+    `[dashboard-server] Global server http://${host}:${port}  version=${version}` +
+    `${releaseId === undefined ? '' : ` release=${releaseId}`}\n`,
+  )
 
   const shutdown = (): void => {
     void srv.close().finally(() => {

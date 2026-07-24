@@ -65,7 +65,7 @@ contract.md §1 对档 A 的定义是**能力保真度**（硬拦 veto / 会话�
   advisory）；`tool.result` 是真实存在的执行后钩子；`agent.start` 的 messages 注入是真实
   会话内容投递，不是静态文件兜底。
 
-这与 pi（真降级——Pi 压根没有 pre-tool 硬拦原语，只能退化成 advisory + Unlock sentinel）、
+这与 pi（真降级——Pi 压根没有 pre-tool 硬拦原语，只能退化成 advisory + CLI review receipt）、
 cursor/copilot（真降级——真的没有会话级 inject 原语，只能退化成静态文件）性质不同：Amp 是
 "载体形状不同、能力不打折"，pi/cursor/copilot 是"能力本身有真实缺口"。故如实判定为档 A，
 不因载体形状不同而降档，也不因"载体不同"就假装是同构而简化描述。
@@ -133,10 +133,8 @@ adapters/amp/install.sh --global              # 改装 ~/.config/amp/plugins/（
 或经顶层派发器：`adapters/install.sh --amp --target <dir>`。装完后需要在 Amp TUI 里跑一次
 `plugins: reload`（或重启 amp）。
 
-## Unlock sentinel（HITL 解封）
+## 人工确认（HITL）
 
-review 门放行 = 删项目根 marker（与 CC `AskUserQuestion` 语义等价，contract §2）：
-
-```bash
-rm .pipeline-pending-review     # 或 .pipeline-pending-confirm / .pipeline-pending-interaction
-```
+review marker 仅是 hook 投影。完成产物并选择 event 后，运行
+`pipeline review request <change> --event <event>`；人类明确确认后运行
+`pipeline review acknowledge <change>`。不得手动删除 `.pipeline-pending-review` 绕过 gate。

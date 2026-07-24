@@ -13,7 +13,7 @@ const OUTPUTS: Record<string, { label: string; description: string }> = {
     description: '记录关键技术方案、取舍原因与影响。',
   },
   branch: { label: '代码分支', description: '标识本轮实现所在的代码分支。' },
-  build_sha: { label: '构建版本', description: '标识本轮实现所对应的代码版本。' },
+  build_sha: { label: '构建基线', description: '标识本轮实现的可复验基线：Git 隔离环境为提交 SHA，in-place 为工作区内容指纹。' },
   sha: { label: '代码版本', description: '标识本轮交付对应的代码版本。' },
   release_notes: { label: '发布说明', description: '说明本轮交付内容、影响与使用方式。' },
   evidence: { label: '验证证据', description: '保存可用于复核结论的证据。' },

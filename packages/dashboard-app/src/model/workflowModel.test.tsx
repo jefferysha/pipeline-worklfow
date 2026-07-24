@@ -40,13 +40,16 @@ afterEach(() => {
 })
 
 describe('DEFAULT_RULES —— types.ts 四常量的 WorkflowRules 投影', () => {
-  it('7 阶段顺序 + verify 双出口（ship=verify-pass / build=verify-fail）', () => {
+  it('7 阶段顺序 + build 需求回退 + verify 双出口', () => {
     expect(DEFAULT_RULES.steps).toEqual(['open', 'explore', 'spec', 'build', 'verify', 'ship', 'archive'])
     expect(DEFAULT_RULES.transitions['verify']).toEqual([
       { event: 'verify-pass', to: 'ship' },
       { event: 'verify-fail', to: 'build' },
     ])
-    expect(DEFAULT_RULES.transitions['build']).toEqual([{ event: 'build-complete', to: 'verify' }])
+    expect(DEFAULT_RULES.transitions['build']).toEqual([
+      { event: 'build-complete', to: 'verify' },
+      { event: 'requirements-changed', to: 'spec' },
+    ])
   })
 
   it('gateByStep：REVIEW_PHASES 三阶段 = review，其余 null', () => {

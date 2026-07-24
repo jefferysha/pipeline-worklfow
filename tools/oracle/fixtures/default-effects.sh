@@ -24,7 +24,22 @@ printf '# proposal\n\nT6 oracle fixture: default 轨副作用 + barrier。\n' > 
 printf '# design\n\nfixture design doc.\n' > "$target/openspec/changes/t6-de/design.md"
 printf -- '- [ ] t1\n- [x] t2\n- [x] t3\n' > "$target/openspec/changes/t6-de/tasks.md"
 # 字段指向的文件（explore/spec/verify-pass 前置要求「字段非空且文件存在」）
-printf '# design\n' > "$target/docs/design.md"
+cat > "$target/docs/design.md" <<'DESIGN'
+# design
+
+```coverage
+touches:
+L1_api: filled
+L2_data: filled
+L3_rules: filled
+L4_state: filled
+L5_errors: filled
+L6_security: filled
+L7_perf: filled
+L8_deps: filled
+L10_terms: filled
+```
+DESIGN
 printf '# plan\n' > "$target/docs/plan.md"
 printf '# verification report\n' > "$target/docs/verify.md"
 

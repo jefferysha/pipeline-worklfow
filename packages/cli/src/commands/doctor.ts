@@ -109,7 +109,10 @@ function checkGateEffective(p: DoctorProbes): DoctorCheck {
   return green('guard:gate', 'PreToolUse 三门会真拦（hooks.json 注册 + gate.sh 可执行）')
 }
 
-function checkStatusline(p: DoctorProbes): DoctorCheck {
+async function checkStatusline(p: DoctorProbes): Promise<DoctorCheck> {
+  if (await p.nativeRuntimeHost() === 'codex') {
+    return green('guard:statusline', '当前 runtime 为 Codex；Claude 专属 statusline 不适用（不影响 Dashboard 或 pipeline hooks）')
+  }
   if (p.statuslineConfigured()) return green('guard:statusline', 'statusline 已接入 settings（终端零开销状态生效）')
   return yellow(
     'guard:statusline',
@@ -169,7 +172,7 @@ async function checkMarkers(deps: CliDeps): Promise<DoctorCheck> {
       `陈旧门 marker（已过各自分级 TTL，不再拦截）: ${stale
         .map((m) => `.pipeline-pending-${m.kind}（${Math.round(GATE_TTL_MS[m.kind] / 60_000)}min）`)
         .join('、')}`,
-      'rm 对应 marker 即可（下次工具调用 gate.sh 也会顺手清掉）',
+      '重新发起对应 pipeline 操作即可自动清理陈旧投影；review 若仍待决，重新执行 pipeline review request <change> --event <event>，不要手动删除 marker',
     )
   }
   if (markers.length > 0) return green('project:markers', `${markers.length} 个新鲜门 marker（三门拦截生效中）`)

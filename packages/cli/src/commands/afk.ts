@@ -42,7 +42,14 @@ export async function cmdAfk(deps: CliDeps, sub: string, name: string | undefine
     deps.io.err(`ERROR: --level 需 L1|L2|L3，收到 '${opts.level}'`)
     return 1
   }
-  const auto = createAutomation({ repoRoot: deps.cwd, store: deps.store, clock: deps.clock, config: { level } })
+  // `pipeline afk ...` is an explicit operator entrypoint. It alone opts this invocation into
+  // queue mutation; lifecycle callbacks that omit these flags remain fail-safe OFF.
+  const auto = createAutomation({
+    repoRoot: deps.cwd,
+    store: deps.store,
+    clock: deps.clock,
+    config: { level, enabled: true, defaultOptIn: true },
+  })
 
   switch (sub) {
     case 'enqueue': {
@@ -76,7 +83,7 @@ export async function cmdAfk(deps: CliDeps, sub: string, name: string | undefine
         }
         if (opts.json) deps.io.out(JSON.stringify({ change: name, queued, loop: opts.loop ?? null, bound }))
         else {
-          deps.io.err(queued ? `[AFK] ${name} 已挂队（automation=queued，默认 L1 report-only）` : `[AFK] ${name} 未挂队（非 spec-complete / PM 轨 / 已在队 / 未 opt-in）`)
+          deps.io.err(queued ? `[AFK] ${name} 已挂队（automation=queued，默认 L1 report-only）` : `[AFK] ${name} 未挂队（策略未授权 / 非 spec-complete / 已在队 / 未 opt-in）`)
           if (bound) deps.io.err(`[AFK] ${name} 已显式绑定 loop '${opts.loop}'（explicit change-loop-binding）`)
         }
         return queued ? 0 : 3 // 3=未入队（非错误，可判别）

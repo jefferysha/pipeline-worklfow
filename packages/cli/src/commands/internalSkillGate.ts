@@ -15,6 +15,7 @@ import { isSkillUnlocked, loadWorkflow, resolveStep, resolveWorkflowName } from 
 import { errMsg, type CliDeps } from '../deps.js'
 import { changeDir, isValidChangeName } from '../paths.js'
 import { str } from '../render.js'
+import { reconcileCodexSkillEvidence } from '../codexSkillReceipt.js'
 
 interface HistLine {
   readonly kind: string
@@ -36,12 +37,30 @@ function parseHistoryLines(raw: string): HistLine[] {
   return out
 }
 
-/** hooks/skill-tracker.sh 落的 tool 记录 raw 形如 "Skill: <skill-id>"（$TOOL: $NAME，见该文件
- *  第 97 行）——本函数只认 "Skill: " 前缀，Agent/Task 等其它 tool kind 与 skill DAG 无关（不同
- *  命名空间，不会出现在任何 SkillRef.id / depends_on 里，天然不匹配，无需额外排除）。 */
+/** hooks/skill-tracker.sh 落的 skill 完成记录有两种可信宿主形态：Claude 的
+ * "Skill: <skill-id>" 与 Codex 对当前插件已打包 SKILL.md 的受控读取
+ * "CodexSkillRead: <skill-id>"。二者都由同一 hook 写入，且后者已通过
+ * skill-evidence.sh 限制为插件根内实际存在的 skill；因此它们都可以满足 DAG 依赖。
+ * Agent/Task 等其它 tool kind 仍不属于 skill DAG 命名空间，不能误算为已完成。 */
 function skillIdFromToolRaw(raw: string): string | null {
-  const m = /^Skill: (.+)$/.exec(raw)
-  return m ? m[1]! : null
+  const m = /^(?:Skill|CodexSkillRead): (.+)$/.exec(raw)
+  return m?.[1] ?? null
+}
+
+/** Pipeline-owned skills are presented by Codex as `pipeline-lite:<id>`, while workflow YAML and
+ * immutable cache receipts use their bare id. Canonicalize this one plugin namespace before DAG
+ * membership and prior-completion comparisons; leave third-party namespaces intact so custom
+ * workflows can still model them explicitly. */
+function canonicalPipelineLiteSkillId(skillId: string): string {
+  return skillId.startsWith('pipeline-lite:') ? skillId.slice('pipeline-lite:'.length) : skillId
+}
+
+/** `pipeline` is the normal-chat orchestration entrypoint, not a phase work item.  Every custom
+ * workflow reaches it before the selected step's own DAG can run, so enforcing per-step membership
+ * here would prevent the workflow from starting. Keep this allowlist deliberately exact: phase
+ * skills such as `pipeline-open` remain subject to the declared DAG. */
+function isPipelineOrchestratorSkill(skillId: string): boolean {
+  return canonicalPipelineLiteSkillId(skillId) === 'pipeline'
 }
 
 /**
@@ -66,7 +85,7 @@ function completedSkillsSinceStepEntry(lines: readonly HistLine[], currentStepId
   for (const line of lines.slice(enteredAt + 1)) {
     if (line.kind !== 'tool') continue
     const id = skillIdFromToolRaw(line.raw ?? '')
-    if (id) completed.add(id)
+    if (id) completed.add(canonicalPipelineLiteSkillId(id))
   }
   return completed
 }
@@ -77,50 +96,78 @@ export async function cmdInternalSkillGate(deps: CliDeps, name: string, skillId:
       deps.io.err(`WARN: internal-skill-gate 收到非法 change 名 '${name}'，fail-open 放行`)
       return 0
     }
+    if (isPipelineOrchestratorSkill(skillId)) return 0
+    const canonicalSkillId = canonicalPipelineLiteSkillId(skillId)
 
     const dir = changeDir(deps.cwd, name)
-    const state = await deps.store.read(dir)
-    // 双轨分岔同 transition.ts（Task 8）：'' 历史遗留兜 'default' 的 `||` 习语单源在 kernel
-    // resolveWorkflowName（Wave 2 下沉；`??` 只挡 null/undefined、不挡空串的语义原样继承）。
-    const workflowName = resolveWorkflowName(state)
-    if (workflowName === 'default') return 0 // default workflow 不受本机制管辖
+    // Reconciliation is deliberately synchronous and under the same change lock as this DAG
+    // read.  A Codex PreToolUse receipt still has no effect unless the host transcript proves the
+    // matching exec call completed; after that proof is appended, this invocation immediately sees
+    // it instead of requiring an unreliable PostToolUse callback or a second user turn.
+    return await deps.store.withLock(dir, async () => {
+      const state = await deps.store.read(dir)
+      // 双轨分岔同 transition.ts（Task 8）：'' 历史遗留兜 'default' 的 `||` 习语单源在 kernel
+      // resolveWorkflowName（Wave 2 下沉；`??` 只挡 null/undefined、不挡空串的语义原样继承）。
+      const workflowName = resolveWorkflowName(state)
+      if (workflowName === 'default') return 0 // default workflow 不受本机制管辖
 
-    const wf = loadWorkflow(deps.cwd, workflowName)
-    if (!wf) {
-      deps.io.err(`WARN: workflow '${workflowName}' 未找到，fail-open 放行`)
-      return 0
-    }
+      const wf = loadWorkflow(deps.cwd, workflowName)
+      if (!wf) {
+        deps.io.err(`WARN: workflow '${workflowName}' 未找到，fail-open 放行`)
+        return 0
+      }
 
-    const currentStepId = str(state.fields.phase)
-    const step = resolveStep(wf, currentStepId)
-    if (!step) {
-      deps.io.err(`WARN: step '${currentStepId}' 不在 workflow '${workflowName}' 里，fail-open 放行`)
-      return 0
-    }
+      const currentStepId = str(state.fields.phase)
+      const step = resolveStep(wf, currentStepId)
+      if (!step) {
+        deps.io.err(`WARN: step '${currentStepId}' 不在 workflow '${workflowName}' 里，fail-open 放行`)
+        return 0
+      }
 
-    // step 声明了 skills: []（未声明任何 skill）时的"视为不使用 DAG，任意 skillId 放行"这条
-    // opt-in 语义现在是 isSkillUnlocked 自己契约的一部分（见该函数上方注释），本层不再需要
-    // 重复这条判断——统一交给下面的 isSkillUnlocked 调用处理，避免同一条契约在两处漂移。
-    const historyRaw = (await deps.readHistoryRaw?.(dir)) ?? ''
-    const lines = parseHistoryLines(historyRaw)
-    const completedSinceEntry = completedSkillsSinceStepEntry(lines, currentStepId)
+      await reconcileCodexSkillEvidence({
+        repoRoot: deps.cwd,
+        changeDir: dir,
+        // A missing Codex PostToolUse callback must not force a user retry: reconcile every
+        // declared node in this exact step before checking the next node's dependencies.  The
+        // transcript bridge remains bounded to trusted plugin paths and this physical project.
+        candidateSkillIds: step.skills.map((ref) => canonicalPipelineLiteSkillId(ref.id)),
+        recordedAt: deps.clock(),
+        history: deps.history,
+        evidenceScope: currentStepId,
+      })
 
-    if (isSkillUnlocked(skillId, step.skills, completedSinceEntry)) return 0
+      // step 声明了 skills: []（未声明任何 skill）时的"视为不使用 DAG，任意 skillId 放行"这条
+      // opt-in 语义现在是 isSkillUnlocked 自己契约的一部分（见该函数上方注释），本层不再需要
+      // 重复这条判断——统一交给下面的 isSkillUnlocked 调用处理，避免同一条契约在两处漂移。
+      const historyRaw = (await deps.readHistoryRaw?.(dir)) ?? ''
+      const lines = parseHistoryLines(historyRaw)
+      const completedSinceEntry = completedSkillsSinceStepEntry(lines, currentStepId)
+      // Workflow YAML may retain the historical `pipeline-lite:<id>` spelling while Codex uses
+      // its namespace at invocation time and cache receipts use bare ids. Normalize only our own
+      // namespace, including dependencies, before delegating to the single kernel DAG predicate.
+      const canonicalStepSkills = step.skills.map((ref) => ({
+        ...ref,
+        id: canonicalPipelineLiteSkillId(ref.id),
+        depends_on: ref.depends_on?.map(canonicalPipelineLiteSkillId),
+      }))
 
-    // 判定为锁定：区分"根本没声明这个 skill"和"声明了但依赖没完成"两种情形，给出更具体的指引。
-    const ref = step.skills.find((s) => s.id === skillId)
-    if (!ref) {
-      deps.io.err(
-        `【pipeline 门】skill '${skillId}' 不在 step '${currentStepId}'（workflow '${workflowName}'）声明的 skills 列表里，暂不可用`,
-      )
-    } else {
-      const missing = (ref.depends_on ?? []).filter((d) => !completedSinceEntry.has(d))
-      deps.io.err(
-        `【pipeline 门】skill '${skillId}' 在 step '${currentStepId}'（workflow '${workflowName}'）未解锁：` +
-          `还需先完成 ${missing.join(', ')}（本次进入该 step 之后）`,
-      )
-    }
-    return 2
+      if (isSkillUnlocked(canonicalSkillId, canonicalStepSkills, completedSinceEntry)) return 0
+
+      // 判定为锁定：区分"根本没声明这个 skill"和"声明了但依赖没完成"两种情形，给出更具体的指引。
+      const ref = canonicalStepSkills.find((s) => s.id === canonicalSkillId)
+      if (!ref) {
+        deps.io.err(
+          `【pipeline 门】skill '${skillId}' 不在 step '${currentStepId}'（workflow '${workflowName}'）声明的 skills 列表里，暂不可用`,
+        )
+      } else {
+        const missing = (ref.depends_on ?? []).filter((d) => !completedSinceEntry.has(d))
+        deps.io.err(
+          `【pipeline 门】skill '${skillId}' 在 step '${currentStepId}'（workflow '${workflowName}'）未解锁：` +
+            `还需先完成 ${missing.join(', ')}（本次进入该 step 之后）`,
+        )
+      }
+      return 2
+    })
   } catch (e) {
     deps.io.err(`WARN: internal-skill-gate 内部异常，fail-open 放行: ${errMsg(e)}`)
     return 0

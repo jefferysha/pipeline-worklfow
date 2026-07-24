@@ -48,6 +48,7 @@ track:
 - `postToolUse` → `additional_context`。
 - matcher 是 **JS 正则**（非 POSIX）；**无 trust 机制**、落盘即生效（部署优势 vs Codex）。
 
-## Unlock sentinel（HITL 解封）
+## 人工确认（HITL）
 
-review 门放行 = 删项目根 marker（`rm .pipeline-pending-review`），与 CC `AskUserQuestion` 语义等价（contract §2）。
+完成产物并选择 event 后运行 `pipeline review request <change> --event <event>`；人类明确确认后运行
+`pipeline review acknowledge <change>`。不得手动删除 `.pipeline-pending-review`，它只是投影而非授权。

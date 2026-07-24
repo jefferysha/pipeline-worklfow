@@ -8,6 +8,8 @@
  */
 import { join } from 'node:path'
 import type { CliDeps } from '../deps.js'
+import { REAL_RUNTIME_INSTALLER, type RuntimeInstaller } from '../runtime/installer.js'
+import { REAL_RELEASED_DASHBOARD_STARTER, type ReleasedDashboardStarter } from './dashboard.js'
 import {
   hostFlag,
   installedPipelineRoot,
@@ -19,7 +21,7 @@ import {
   type PipelineHost,
   type PipelineHostFlags,
 } from './plugin-host.js'
-import { cmdSetupHost, ensurePipelineOnPath, type SetupEnv, REAL_SETUP_ENV } from './setup.js'
+import { cmdSetupHost, type SetupEnv, REAL_SETUP_ENV } from './setup.js'
 
 export interface UpdateOpts extends PipelineHostFlags {
   dryRun?: boolean
@@ -53,6 +55,17 @@ function isAlreadyInstalledResult(result: { readonly stdout: string; readonly st
   return /already|exists|installed|duplicate/i.test(`${result.stdout}\n${result.stderr}`)
 }
 
+/**
+ * Codex exposes one refresh command for Git marketplaces only.  A configured local marketplace
+ * is already reading its source directory, so the correct equivalent is to skip that fetch and
+ * let the following `plugin add` rebuild Codex's installed plugin cache.  Do not treat any other
+ * marketplace error as a success: auth, network, and malformed-registry failures must still keep
+ * the current managed runtime selected.
+ */
+function isLocalCodexMarketplaceUpgradeNoop(result: { readonly stdout: string; readonly stderr: string }): boolean {
+  return /not configured as a Git marketplace/i.test(`${result.stdout}\n${result.stderr}`)
+}
+
 function verifyUpdatedRoot(deps: CliDeps, env: SetupEnv, root: string): boolean {
   // `pipeline` is a user-level launcher and its cwd is normally the target project, not the
   // plugin checkout.  Verify the freshly installed package using its own absolute asset path.
@@ -62,7 +75,13 @@ function verifyUpdatedRoot(deps: CliDeps, env: SetupEnv, root: string): boolean 
   return false
 }
 
-export function cmdUpdate(deps: CliDeps, opts: UpdateOpts, env: SetupEnv = REAL_SETUP_ENV): number {
+export function cmdUpdate(
+  deps: CliDeps,
+  opts: UpdateOpts,
+  env: SetupEnv = REAL_SETUP_ENV,
+  installer: RuntimeInstaller = REAL_RUNTIME_INSTALLER,
+  dashboardStarter: ReleasedDashboardStarter = REAL_RELEASED_DASHBOARD_STARTER,
+): number | Promise<number> {
   const selection = selectPipelineHost(opts)
   if (selection.host === null) {
     deps.io.err(`ERROR: ${selection.error}。示例：pipeline update --codex`)
@@ -71,7 +90,7 @@ export function cmdUpdate(deps: CliDeps, opts: UpdateOpts, env: SetupEnv = REAL_
   const host = selection.host
   if (!isNativePipelineHost(host)) {
     deps.io.out(`[update] ${hostFlag(host)} 没有独立 marketplace；从当前已更新的 pipeline 包重新部署 adapter。`)
-    return cmdSetupHost(deps, host, { ...opts, autoUpdate: false }, env)
+    return cmdSetupHost(deps, host, { ...opts, autoUpdate: false }, env, installer, dashboardStarter, opts.auto !== true)
   }
 
   const plan = nativeUpdatePlan(host)
@@ -87,6 +106,10 @@ export function cmdUpdate(deps: CliDeps, opts: UpdateOpts, env: SetupEnv = REAL_
     const result = env.runCommand(item.cmd, [...item.args])
     if (result.stdout.trim() !== '' && !opts.auto) deps.io.out(result.stdout.trimEnd())
     if (result.code !== 0) {
+      if (host === 'codex' && index === 0 && isLocalCodexMarketplaceUpgradeNoop(result)) {
+        deps.io.out('[update] Codex 本地 marketplace 不需要 Git fetch；继续刷新 pipeline-lite 插件缓存。')
+        continue
+      }
       // `plugin add` is the host's only cross-version reinstall primitive.  Some host releases
       // return a non-zero "already installed" result instead of treating it as idempotent.  In
       // that narrow case, inventory is the authoritative confirmation; network/auth/update errors
@@ -113,14 +136,30 @@ export function cmdUpdate(deps: CliDeps, opts: UpdateOpts, env: SetupEnv = REAL_
     return 1
   }
   if (!verifyUpdatedRoot(deps, env, root)) return 1
-  ensurePipelineOnPath(deps, env, root)
-  if (opts.auto) {
-    deps.io.out(`[update] ${hostFlag(host)} 已在后台刷新；当前会话继续使用已加载版本，新会话将加载新 skills/hooks。`)
-  } else {
-    deps.io.out(`[update] ${hostFlag(host)} 已更新并刷新 pipeline launcher。请新开会话，让新 skills 与 hooks 生效。`)
-  }
-  if (host === 'codex') {
-    deps.io.out('[update] 若 Codex 将新版本 pipeline hook 标为未信任或已变更，请在 Codex 输入 /hooks 后重新信任；这是宿主的安全边界。')
-  }
-  return 0
+  return installer.activate(root, host, env.homeDir())
+    .then(async (activation) => {
+      deps.io.out(`[update] 已原子切换至已验证 runtime: ${activation.release.releaseId}（revision ${activation.selection.revision}）。`)
+      const dashboardCode = await dashboardStarter.start(
+        deps,
+        join(activation.releaseRoot, 'payload'),
+        { openBrowser: opts.auto !== true },
+      )
+      if (dashboardCode !== 0) {
+        deps.io.err('ERROR: runtime 已切换，但 dashboard 未能完成受管刷新；请运行 pipeline dashboard --background 诊断。')
+        return 1
+      }
+      if (opts.auto) {
+        deps.io.out(`[update] ${hostFlag(host)} 已在后台刷新；当前会话继续使用已加载版本，新会话将加载新 skills/hooks。`)
+      } else {
+        deps.io.out(`[update] ${hostFlag(host)} 已更新；稳定 pipeline launcher 已保持不变，新会话将加载新 skills/hooks。`)
+      }
+      if (host === 'codex') {
+        deps.io.out('[update] 若 Codex 将新版本 pipeline hook 标为未信任或已变更，请在 Codex 输入 /hooks 后重新信任；这是宿主的安全边界。')
+      }
+      return 0
+    })
+    .catch((error: unknown) => {
+      deps.io.err(`ERROR: 新版本 runtime 校验/发布失败，保留当前已验证 release：${error instanceof Error ? error.message : String(error)}`)
+      return 1
+    })
 }

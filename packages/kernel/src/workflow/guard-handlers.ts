@@ -14,6 +14,7 @@
  * 改 ir.ts 联合，此处随之编译报错；刻意没有运行时注册/替换 API。
  */
 import { taskCount } from '../flow/guard.js'
+import { isWorkspaceBaseline } from '../workspace/fingerprint.js'
 import { matchesTrackPredicate } from './predicates.js'
 import type { FieldName } from '../types.js'
 import type { WorkflowGuardConfig } from './types.js'
@@ -111,7 +112,7 @@ export const GUARD_HANDLERS: GuardHandlerRegistry = Object.freeze({
     return PASSED
   },
 
-  /** 老仓 state-transition.sh build-complete 的枚举面（isolation ∈ {branch, worktree}），expected 带全量合法值。 */
+  /** build-complete 的隔离枚举面（branch/worktree，或受限 agent 的显式 in-place），expected 带全量合法值。 */
   'field-in': (config, input) => {
     const v = scalarValue(input.fields, config.field)
     if (!config.values.includes(v)) {
@@ -130,9 +131,11 @@ export const GUARD_HANDLERS: GuardHandlerRegistry = Object.freeze({
     return PASSED
   },
 
-  /** 老仓 state-transition.sh verify-pass barrier（ADR 0005）：verify 审的必须是 build 冻结的 SHA。
+  /** 老仓 state-transition.sh verify-pass barrier（ADR 0005）：verify 审的必须是 build 冻结的基线。
    *  IO 序镜像老代码：L149 先读 bsha，L150 gitHeadSha 注入即调用（HEAD 取值与异常都发生在
    *  build_sha 判空之前；抛错原样上抛，老代码不 catch——build_sha 未设时同样先经历这次调用）。
+   *  `workspace:sha256:<digest>` 是 in-place 的强语义扩展：这种构建没有不可变 checkout，故改用
+   *  工作区内容基线而非同一个 Git HEAD。它走独立能力，绝不再调用 gitHeadSha。
    *  L151 合取的三态映射：
    *    · build_sha 未设 → passed（首个合取不成立 → 老代码放行，barrier 不适用）；
    *    · gitHeadSha 未注入 / 注入但 trim 后空串（HEAD 不可取，非 git 仓）→ skipped
@@ -140,6 +143,19 @@ export const GUARD_HANDLERS: GuardHandlerRegistry = Object.freeze({
    *    · head≠bsha → failed；相等 → passed。 */
   'build-head-unchanged': async (config, input) => {
     const bsha = scalarValue(input.fields, config.field)
+    if (isWorkspaceBaseline(bsha)) {
+      const current = input.workspaceFingerprint ? (await input.workspaceFingerprint()).trim() : undefined
+      if (current === undefined || current === '') return { kind: 'skipped', capability: 'workspaceFingerprint' }
+      if (!isWorkspaceBaseline(current)) {
+        throw new Error(`workspaceFingerprint 返回了非法基线: ${current}`)
+      }
+      if (current !== bsha) {
+        return {
+          kind: 'failed', guardType: 'build-head-unchanged', field: config.field, actual: current, expected: [bsha],
+        }
+      }
+      return PASSED
+    }
     const head = input.gitHeadSha ? (await input.gitHeadSha()).trim() : undefined
     if (isUnset(bsha)) return PASSED
     if (head === undefined || head === '') return { kind: 'skipped', capability: 'gitHeadSha' }

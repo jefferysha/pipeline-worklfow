@@ -1,9 +1,18 @@
 import { describe, expect, test } from 'vitest'
-import { GATE_TTL_MS } from '@pipeline-lite/kernel'
+import { GATE_TTL_MS, REVIEW_MARKER_PROTOCOL } from '@pipeline-lite/kernel'
 import { cmdInbox } from './inbox.js'
 import { makeDeps, mockState } from '../test-support.js'
 
 describe('inbox —— 等待人工决策的 change 清单（BACKLOG #9a）', () => {
+  const reviewMarker = (phase: string, name: string, requestedAt = '2026-07-06T00:00:00Z'): string => [
+    REVIEW_MARKER_PROTOCOL,
+    `phase=${phase}`,
+    `change=${name}`,
+    `requested_at=${requestedAt}`,
+    '已请求人工复核',
+    '',
+  ].join('\n')
+
   test('空收件箱：友好空态一行，exit 0；--json 输出 {"inbox":[]}', async () => {
     const deps = makeDeps()
     const code = await cmdInbox(deps, {})
@@ -33,7 +42,7 @@ describe('inbox —— 等待人工决策的 change 清单（BACKLOG #9a）', ()
     const deps = makeDeps({
       gateMarkers: [
         { kind: 'confirm', ageMs: GATE_TTL_MS.confirm + 1, raw: 'open\nx\nc1\n' },
-        { kind: 'review', ageMs: GATE_TTL_MS.review + 1, raw: 'spec\nx\ndemo\n' },
+        { kind: 'review', ageMs: GATE_TTL_MS.review + 1, raw: reviewMarker('spec', 'demo') },
         { kind: 'interaction', ageMs: GATE_TTL_MS.interaction + 1, raw: 'build\nx\ni1\n' },
       ],
     })
@@ -49,7 +58,7 @@ describe('inbox —— 等待人工决策的 change 清单（BACKLOG #9a）', ()
     const deps = makeDeps({
       gateMarkers: [
         { kind: 'confirm', ageMs: 301_000, raw: 'open\n请确认\nc1\n' },
-        { kind: 'review', ageMs: 301_000, raw: 'spec\n复核\nr1\n' },
+        { kind: 'review', ageMs: 301_000, raw: reviewMarker('spec', 'r1') },
         { kind: 'interaction', ageMs: 1_000_000, raw: 'build\n交互\ni1\n' }, // 1000s > 老 15min 统一 TTL
       ],
     })
@@ -69,15 +78,17 @@ describe('inbox —— 等待人工决策的 change 清单（BACKLOG #9a）', ()
     expect(payload.inbox[0]?.waiting_s).toBe(300)
   })
 
-  test('复核相位（manifest.reviewPhases 单一真相源）且未 done 的 change 列为 phase-review', async () => {
+  test('canonical pending review receipt 列为 review-request；单纯进入 review phase 不入列', async () => {
     const deps = makeDeps({
       states: {
         r1: mockState({
           phase: 'explore',
           phase_status: 'pending',
-          updated_at: '2026-07-05T23:58:00Z', // FIXED_CLOCK 前 2min
+          review_gate_phase: 'explore',
+          review_gate_status: 'pending',
+          review_requested_at: '2026-07-05T23:58:00Z', // FIXED_CLOCK 前 2min
         }),
-        b1: mockState({ phase: 'build', phase_status: 'pending' }), // build 非复核相位 → 不列
+        unrequested: mockState({ phase: 'verify', phase_status: 'pending' }),
       },
     })
     expect(await cmdInbox(deps, { json: true })).toBe(0)
@@ -85,13 +96,18 @@ describe('inbox —— 等待人工决策的 change 清单（BACKLOG #9a）', ()
       inbox: Array<Record<string, unknown>>
     }
     expect(payload.inbox).toHaveLength(1)
-    expect(payload.inbox[0]).toMatchObject({ name: 'r1', phase: 'explore', waiting_on: 'phase-review', waiting_s: 120 })
+    expect(payload.inbox[0]).toMatchObject({ name: 'r1', phase: 'explore', waiting_on: 'review-request', waiting_s: 120 })
   })
 
-  test('同名 change 的 marker 与复核相位不重复列（marker 优先）', async () => {
+  test('同名 change 的 v2 marker 与 canonical pending receipt 不重复列（marker 优先）', async () => {
     const deps = makeDeps({
-      states: { r1: mockState({ phase: 'explore', phase_status: 'pending' }) },
-      gateMarkers: [{ kind: 'review', ageMs: 60_000, raw: 'explore\n复核 design_doc\nr1\n' }],
+      states: {
+        r1: mockState({
+          phase: 'explore', phase_status: 'pending', review_gate_phase: 'explore',
+          review_gate_status: 'pending', review_requested_at: '2026-07-05T23:59:00Z',
+        }),
+      },
+      gateMarkers: [{ kind: 'review', ageMs: 60_000, raw: reviewMarker('explore', 'r1') }],
     })
     await cmdInbox(deps, { json: true })
     const payload = JSON.parse(deps.outLines.join('\n')) as { inbox: Array<{ waiting_on: string }> }
@@ -117,7 +133,7 @@ describe('inbox —— 等待人工决策的 change 清单（BACKLOG #9a）', ()
 
   test('--html：内容经 HTML 转义（marker 注入不破页面）', async () => {
     const deps = makeDeps({
-      gateMarkers: [{ kind: 'review', ageMs: 1000, raw: 'spec\n<script>alert(1)</script>\nx\n' }],
+      gateMarkers: [{ kind: 'confirm', ageMs: 1000, raw: 'spec\n<script>alert(1)</script>\nx\n' }],
     })
     await cmdInbox(deps, { html: true })
     const html = deps.outLines.join('\n')
@@ -135,7 +151,10 @@ describe('inbox —— 等待人工决策的 change 清单（BACKLOG #9a）', ()
     const deps = makeDeps({
       states: {
         gone: mockState({ phase: 'explore', phase_status: 'pending', archived: 'true' }),
-        r1: mockState({ phase: 'verify', phase_status: 'pending', updated_at: '2026-07-05T23:00:00Z' }),
+        r1: mockState({
+          phase: 'verify', phase_status: 'pending', updated_at: '2026-07-05T23:00:00Z',
+          review_gate_phase: 'verify', review_gate_status: 'pending', review_requested_at: '2026-07-05T23:00:00Z',
+        }),
       },
     })
     expect(await cmdInbox(deps, {})).toBe(0)

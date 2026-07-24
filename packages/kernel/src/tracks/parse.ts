@@ -299,6 +299,7 @@ interface MutableWorkflow {
 interface MutableRouting {
   enabled?: boolean
   pattern?: string
+  excludePattern?: string
   priority?: number
 }
 interface MutableSkills {
@@ -307,6 +308,7 @@ interface MutableSkills {
 }
 interface MutablePolicy {
   reviewSeed?: string
+  autoEnqueueOnSpecComplete?: boolean
   automationEligible?: boolean
   coverageProfile?: string
   routing?: MutableRouting
@@ -337,12 +339,14 @@ function walkWorkflow(n: Node, at: string): MutableWorkflow {
 function walkRouting(n: Node, at: string): MutableRouting {
   if (isNullScalar(n)) return {}
   const map = expectMap(n, `${at}.routing`)
-  checkKeys(map, ['enabled', 'pattern', 'priority'], `${at}.routing`)
+  checkKeys(map, ['enabled', 'pattern', 'exclude_pattern', 'priority'], `${at}.routing`)
   const out: MutableRouting = {}
   const e = getEntry(map, 'enabled')
   if (e) out.enabled = expectBoolean(e.node, `${at}.routing.enabled`)
   const p = getEntry(map, 'pattern')
   if (p) out.pattern = expectString(p.node, `${at}.routing.pattern`)
+  const ep = getEntry(map, 'exclude_pattern')
+  if (ep) out.excludePattern = expectString(ep.node, `${at}.routing.exclude_pattern`)
   const pr = getEntry(map, 'priority')
   if (pr) out.priority = expectInteger(pr.node, `${at}.routing.priority`)
   return out
@@ -363,10 +367,12 @@ function walkSkills(n: Node, at: string): MutableSkills {
 function walkPolicy(n: Node, at: string): MutablePolicy {
   if (isNullScalar(n)) return {}
   const map = expectMap(n, `${at}.policy_profile`)
-  checkKeys(map, ['review_seed', 'automation_eligible', 'coverage_profile', 'routing', 'skills'], `${at}.policy_profile`)
+  checkKeys(map, ['review_seed', 'auto_enqueue_on_spec_complete', 'automation_eligible', 'coverage_profile', 'routing', 'skills'], `${at}.policy_profile`)
   const out: MutablePolicy = {}
   const rs = getEntry(map, 'review_seed')
   if (rs) out.reviewSeed = expectString(rs.node, `${at}.policy_profile.review_seed`)
+  const aes = getEntry(map, 'auto_enqueue_on_spec_complete')
+  if (aes) out.autoEnqueueOnSpecComplete = expectBoolean(aes.node, `${at}.policy_profile.auto_enqueue_on_spec_complete`)
   const ae = getEntry(map, 'automation_eligible')
   if (ae) out.automationEligible = expectBoolean(ae.node, `${at}.policy_profile.automation_eligible`)
   const cp = getEntry(map, 'coverage_profile')

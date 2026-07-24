@@ -14,10 +14,13 @@ export type RouterSkillSource = 'profile' | '_all' | 'empty'
 export interface RouterTrackProjection {
   readonly id: string
   readonly label: string
+  /** Effective binding used when a new Change is created from this routed Track. */
+  readonly workflowDefault: string
   /** effective registry declaration order；tie 的最后一维，不能压缩成 enabled 子集下标。 */
   readonly order: number
   readonly priority: number
   readonly pattern: string
+  readonly excludePattern?: string
   readonly profile: string
   readonly matrix: boolean
   readonly builtin: boolean
@@ -69,9 +72,11 @@ export function buildRouterProjection(
     tracks.push({
       id: track.id,
       label: track.label,
+      workflowDefault: track.workflow.default,
       order,
       priority: routing.priority,
       pattern: routing.pattern,
+      ...(routing.excludePattern === undefined ? {} : { excludePattern: routing.excludePattern }),
       profile: track.policyProfile.skills.profile,
       matrix: track.policyProfile.skills.matrix,
       builtin: track.builtin,
@@ -141,13 +146,15 @@ function sourceCode(source: RouterSkillSource): 'P' | 'A' | 'E' {
 export function encodeRouterDataCache(input: RouterDataCacheInput): string {
   assertCacheMetadata(input)
   const lines = [
-    'PIPELINE_ROUTER_V2',
+    'PIPELINE_ROUTER_V4',
     `M|${hex(input.projectRoot)}|${input.manifestSha256}|${input.registryRevision}|${input.tracksPresent ? '1' : '0'}`,
   ]
   for (const track of input.projection.tracks) {
     lines.push([
       'R', String(track.order), String(track.priority), hex(track.id), hex(track.pattern),
+      hex(track.excludePattern ?? ''),
       hex(track.profile), track.matrix ? '1' : '0', track.builtin ? '1' : '0', hex(track.label),
+      hex(track.workflowDefault),
     ].join('|'))
   }
   for (const breadcrumb of input.projection.breadcrumbs) {

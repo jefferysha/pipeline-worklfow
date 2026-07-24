@@ -13,6 +13,8 @@ export type PipelineTodoStageStatus = 'done' | 'current' | 'pending'
 export interface PipelineTodoStageDefinition {
   readonly id: string
   readonly label: string
+  /** Optional graph edges. When present, completion is inferred by dominance instead of array order. */
+  readonly transitions?: readonly string[]
 }
 
 export interface PipelineTodoItem {
@@ -34,6 +36,45 @@ export interface PipelineTodoProjection {
 export const DEFAULT_WORKFLOW_TODO_STAGES: readonly PipelineTodoStageDefinition[] = DEFAULT_WORKFLOW_STEPS.map(
   (step) => ({ id: step.id, label: step.label }),
 )
+
+function definitelyCompletedStageIds(
+  stages: readonly PipelineTodoStageDefinition[],
+  currentStage: string,
+): ReadonlySet<string> | undefined {
+  if (!stages.some((stage) => stage.transitions !== undefined)) return undefined
+  const ids = stages.map((stage) => stage.id)
+  const all = new Set(ids)
+  const entry = ids[0]
+  if (entry === undefined || !all.has(currentStage)) return new Set()
+  const predecessors = new Map(ids.map((id) => [id, [] as string[]]))
+  for (const stage of stages) {
+    for (const target of stage.transitions ?? []) {
+      if (predecessors.has(target)) predecessors.get(target)!.push(stage.id)
+    }
+  }
+  const dominators = new Map<string, Set<string>>()
+  for (const id of ids) dominators.set(id, id === entry ? new Set([id]) : new Set(all))
+  let changed = true
+  while (changed) {
+    changed = false
+    for (const id of ids) {
+      if (id === entry) continue
+      const incoming = predecessors.get(id) ?? []
+      const next = incoming.length === 0
+        ? new Set([id])
+        : new Set([...all].filter((candidate) => incoming.every((from) => dominators.get(from)?.has(candidate))))
+      next.add(id)
+      const prior = dominators.get(id)!
+      if (next.size !== prior.size || [...next].some((candidate) => !prior.has(candidate))) {
+        dominators.set(id, next)
+        changed = true
+      }
+    }
+  }
+  const completed = new Set(dominators.get(currentStage) ?? [])
+  completed.delete(currentStage)
+  return completed
+}
 
 function normalized(value: string): string {
   return value
@@ -59,14 +100,22 @@ function parseTasks(
   markdown: string | undefined,
   currentStage: string,
   stages: readonly PipelineTodoStageDefinition[],
-): ReadonlyMap<string, readonly PipelineTodoItem[]> {
+): {
+  readonly byStage: ReadonlyMap<string, readonly PipelineTodoItem[]>
+  readonly structured: boolean
+} {
   const byStage = new Map<string, PipelineTodoItem[]>()
-  if (markdown === undefined) return byStage
+  if (markdown === undefined) return { byStage, structured: false }
   let target = stages.some((stage) => stage.id === currentStage) ? currentStage : stages[0]?.id
+  let structured = false
   for (const line of markdown.split(/\r?\n/)) {
     const heading = /^\s{0,3}#{1,6}\s+(.+?)\s*#*\s*$/.exec(line)
     if (heading) {
-      target = stageForHeading(heading[1] ?? '', stages) ?? target
+      const headingStage = stageForHeading(heading[1] ?? '', stages)
+      if (headingStage !== undefined) {
+        target = headingStage
+        structured = true
+      }
       continue
     }
     const task = /^\s*[-*+]\s+\[([ xX])\]\s+(.+?)\s*$/.exec(line)
@@ -77,7 +126,7 @@ function parseTasks(
     items.push({ text, completed: (task[1] ?? '').toLowerCase() === 'x' })
     byStage.set(target, items)
   }
-  return byStage
+  return { byStage, structured }
 }
 
 /**
@@ -96,13 +145,57 @@ export function projectPipelineTodo(input: {
     stage.id !== '' && stage.label !== '' && declared.findIndex((other) => other.id === stage.id) === index,
   )
   const currentIndex = stages.findIndex((stage) => stage.id === input.phase)
-  const tasks = parseTasks(input.tasksMarkdown, input.phase, stages)
+  const definitelyCompleted = definitelyCompletedStageIds(stages, input.phase)
+  const tasks = parseTasks(input.tasksMarkdown, input.phase, stages).byStage
   return {
     hasTaskSource: input.tasksMarkdown !== undefined,
     stages: stages.map((stage, index) => ({
-      ...stage,
-      status: currentIndex === -1 ? 'pending' : index < currentIndex ? 'done' : index === currentIndex ? 'current' : 'pending',
+      id: stage.id,
+      label: stage.label,
+      status: currentIndex === -1
+        ? 'pending'
+        : stage.id === input.phase
+          ? 'current'
+          : (definitelyCompleted?.has(stage.id) ?? index < currentIndex)
+            ? 'done'
+            : 'pending',
       tasks: tasks.get(stage.id) ?? [],
     })),
   }
+}
+
+/**
+ * Count unfinished tasks that are due by the requested phase. Future-stage
+ * checkboxes remain visible in the seven-stage Todo projection, but cannot
+ * block an earlier phase exit.
+ *
+ * Legacy files without recognised phase headings retain their historical
+ * compatibility rule: their whole checklist belongs to build.
+ */
+export function incompletePipelineTasksForExit(input: {
+  readonly phase: string
+  readonly tasksMarkdown: string
+  readonly stages?: readonly PipelineTodoStageDefinition[]
+}): { readonly structured: boolean; readonly incomplete: number } {
+  const declared = input.stages ?? DEFAULT_WORKFLOW_TODO_STAGES
+  const stages = declared.filter((stage, index) =>
+    stage.id !== '' && stage.label !== '' && declared.findIndex((other) => other.id === stage.id) === index,
+  )
+  const parsed = parseTasks(input.tasksMarkdown, input.phase, stages)
+
+  if (!parsed.structured) {
+    const incomplete = input.phase === 'build'
+      ? [...parsed.byStage.values()].flat().filter((task) => !task.completed).length
+      : 0
+    return { structured: false, incomplete }
+  }
+
+  const phaseIndex = stages.findIndex((stage) => stage.id === input.phase)
+  if (phaseIndex < 0) return { structured: true, incomplete: 0 }
+
+  const incomplete = stages
+    .slice(0, phaseIndex + 1)
+    .flatMap((stage) => parsed.byStage.get(stage.id) ?? [])
+    .filter((task) => !task.completed).length
+  return { structured: true, incomplete }
 }

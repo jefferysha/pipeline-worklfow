@@ -5,7 +5,7 @@ import { cmdCas, cmdGet, cmdSet, cmdSetMany } from './fields.js'
 import { FIXED_CLOCK, makeDeps, mockState, spy } from '../test-support.js'
 
 /**
- * 旁路测试用的自定义轨 registry（R2）：makeDeps 缺省 loadRegistry 只有内建四轨（allowed='*'
+ * 旁路测试用的自定义轨 registry（R2）：makeDeps 缺省 loadRegistry 只有内建 Track（allowed='*'
  * 恒放行，无法证明「最终组合校验」真的拦得住旁路）。这里直接构造一条 allowed 受限的额外 track，
  * 经 deps.loadRegistry 覆写注入——registry 的消费方（requireTrack/assertWorkflowAllowed）只读
  * ordered/byId/workflow.allowed，与「从 tracks.yaml load 出来的 project-file registry」同构。
@@ -153,6 +153,15 @@ describe('set-many —— k=v 批量原子写', () => {
     expect(w?.isolation).toBe('branch')
   })
 
+  test('direct 模式可显式声明 in-place：不伪称创建了 branch 或 worktree', async () => {
+    const deps = makeDeps()
+    const code = await cmdSetMany(deps, 'demo', ['build_mode=direct', 'isolation=in-place'])
+    expect(code).toBe(0)
+    const w = deps.store.write.calls[0]?.[1].fields
+    expect(w?.build_mode).toBe('direct')
+    expect(w?.isolation).toBe('in-place')
+  })
+
   test('值可含 =（只在第一个 = 处切分）', async () => {
     const deps = makeDeps()
     await cmdSetMany(deps, 'demo', ['pr_url=https://x/pr?a=b'])
@@ -284,7 +293,7 @@ describe('cas —— 0 成功 / 3 不匹配 / 1 错误', () => {
 
 /**
  * track/workflow —— 动态 Track Registry 驱动校验（GOAL.md 清单 T · R2）。
- * makeDeps 的 loadRegistry 缺 tracks.yaml → 内建四轨 builtin-only（allowed='*' 恒放行）。
+ * makeDeps 的 loadRegistry 缺 tracks.yaml → 内建 Track builtin-only（allowed='*' 恒放行）。
  * R2 关 TOCTOU：track/workflow 四写入口都在 store.withLock 内 read→校验最终组合→store.write，
  * 不再走 store.set/setMany/cas（那三者各自 withLock、无法与校验同锁）。故这些用例断言「锁内落盘
  * 的最终 state」（store.write），而非旧的 store.set/cas/setMany 旁路调用。

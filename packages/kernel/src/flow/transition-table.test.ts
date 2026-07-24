@@ -10,13 +10,14 @@
 import { describe, expect, test } from 'vitest'
 import { eventEdge, TRANSITION_EVENTS } from './transition-table.js'
 
-describe('事件 → 转移边表（逐边对齐老仓 _DEFAULT_TRANSITIONS）', () => {
-  test('8 条边逐字', () => {
+describe('事件 → 转移边表（default workflow 单一真相源）', () => {
+  test('9 条边逐字（含 Build 发现规格漂移后的受控回退）', () => {
     expect(TRANSITION_EVENTS).toEqual({
       'open-complete': { from: 'open', to: 'explore' },
       'explore-complete': { from: 'explore', to: 'spec' },
       'spec-complete': { from: 'spec', to: 'build' },
       'build-complete': { from: 'build', to: 'verify' },
+      'requirements-changed': { from: 'build', to: 'spec' },
       'verify-pass': { from: 'verify', to: 'ship' },
       'verify-fail': { from: 'verify', to: 'build' },
       'ship-complete': { from: 'ship', to: 'archive' },
@@ -26,6 +27,7 @@ describe('事件 → 转移边表（逐边对齐老仓 _DEFAULT_TRANSITIONS）',
 
   test('eventEdge 命中已知事件', () => {
     expect(eventEdge('build-complete')).toEqual({ from: 'build', to: 'verify' })
+    expect(eventEdge('requirements-changed')).toEqual({ from: 'build', to: 'spec' })
     expect(eventEdge('verify-fail')).toEqual({ from: 'verify', to: 'build' })
     expect(eventEdge('archived')).toEqual({ from: 'archive', to: 'archive' })
   })

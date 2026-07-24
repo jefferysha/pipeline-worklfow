@@ -8,6 +8,9 @@ description: "Pipeline Phase 1: Open · 开启 Change。创建 change 骨架（p
 > 移植来源：老仓 `skills/pipeline-open/SKILL.md`；`pipeline-state.sh init/set/get/transition`
 > 与 `pipeline-guard.sh` 已改写为本仓 `pipeline` CLI（CONTRACT §3）。
 
+> **Codex 打包 Skill 身份：** 本文件提到的裸 skill id 是 DAG/ledger 的逻辑 id；在 Codex
+> 必须实际加载 `pipeline-lite:<id>` 的当前插件副本，绝不以同名全局或项目 SKILL.md 替代。
+
 ## 输入
 
 从 /pipeline 主入口接收：
@@ -56,7 +59,9 @@ triage 是面向 **issue tracker 的状态机**——只在「对**既有项目*
 
 #### 🌐 所有 Track 共用：openspec-propose（强制）
 
-**立即执行**：使用 Skill 工具加载 `openspec-propose`。**禁止跳过此步骤**。
+**严格顺序**：先完成 Step 2 的 `pipeline init` 和 Step 2.1 的 `pipeline session activate`，**再**
+使用 Skill 工具加载 `openspec-propose`。**禁止跳过此步骤**，也不得在绑定目标前读取该 phase Skill；
+这样每条 Codex/Claude 完成态证据都会归属当前 change，而不会借用旧 change。
 
 按 Track 提示生成不同的产物模板：
 
@@ -72,7 +77,7 @@ triage 是面向 **issue tracker 的状态机**——只在「对**既有项目*
 > proposal 是**活文档**：open 立骨架、explore 充实——openspec 的 `proposal→design→specs→tasks` 是**文档依赖**、不是写作时序，proposal 节点先存在即可。
 
 若 `openspec-propose` 不可用：只可手动补齐骨架以保留需求，**不得**把 open 视为完成；document ledger 会因
-缺少真实 Skill history 拒绝登记/transition。修复 skill 可用性后必须重新实际调用它。
+缺少真实完成态 Skill evidence 拒绝登记/transition。修复 skill 可用性后必须重新实际调用它。
 
 ### Step 1.5: 选 preset 规模（强制 AskUserQuestion，决定 guard 强度）
 
@@ -113,6 +118,24 @@ case "$PIPELINE_PRESET" in full|tweak|hotfix) ;; *) PIPELINE_PRESET=full ;; esac
 pipeline init "$PIPELINE_CHANGE_NAME" --track "$PIPELINE_TRACK" --preset "$PIPELINE_PRESET"
 ```
 
+### Step 2.1: 明确激活本次选中的 Change（强制）
+
+```bash
+pipeline session activate "$PIPELINE_CHANGE_NAME"
+```
+
+若 root dispatch 明确含 `continuous_execution: true`，改为：
+
+```bash
+pipeline session activate "$PIPELINE_CHANGE_NAME" --continuous
+```
+
+这只绑定当前 Change 的交互式 skill 连续执行授权；不得把它当作 review approval 或 phase transition。
+
+只有此命令成功后才加载 `openspec-propose` 或任何 phase skill。它是当前会话的显式工作目标，
+不是从 `.pipeline-active` 猜回的旧任务；后续 Skill evidence、文档账本和 custom workflow DAG 都只
+消费这个确切目标。
+
 可选入参：
 
 ```bash
@@ -141,8 +164,8 @@ pipeline get "$PIPELINE_CHANGE_NAME" preset         # 应返回 $PIPELINE_PRESET
 ### Step 2.5: 登记 OpenSpec 初始文档证据（受治理 workflow 强制）
 
 default 的全部 track，以及 `openspec_contract: required` 的自定义 workflow，必须把本 phase
-真实由 `openspec-propose` 生成的三份文档登记进 ledger。先确认该 Skill 调用已完成（PostToolUse
-history 会记证据），再运行；不能用手工写文档或伪造 `--producer` 替代。
+真实由 `openspec-propose` 生成的三份文档登记进 ledger。先确认该 Skill 调用已有完成态 evidence，
+再运行；不能用手工写文档或伪造 `--producer` 替代。
 
 ```bash
 CHANGE_DIR="openspec/changes/$PIPELINE_CHANGE_NAME"

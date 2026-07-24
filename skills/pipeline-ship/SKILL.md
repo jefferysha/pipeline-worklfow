@@ -7,6 +7,9 @@ description: "Pipeline Phase 6: Ship · 发布。PM Track 沉淀 PRD + handoff�
 
 > 移植来源：老仓 `skills/pipeline-ship/SKILL.md`；脚本面已改写为 `pipeline` CLI。
 
+> **Codex 打包 Skill 身份：** 本文件提到的裸 skill id 是 DAG/ledger 的逻辑 id；在 Codex
+> 必须实际加载 `pipeline-lite:<id>` 的当前插件副本，绝不以同名全局或项目 SKILL.md 替代。
+
 ## 输入
 
 - `$PIPELINE_TRACK` / `$PIPELINE_CHANGE_NAME`
@@ -122,6 +125,9 @@ find "openspec/changes/$PIPELINE_CHANGE_NAME/specs" -type f -name spec.md -print
       applied="openspec/specs/$capability/spec.md"
       pipeline document record "$PIPELINE_CHANGE_NAME" applied-spec "$applied" --producer openspec-apply-change
     done
+TASKS_PATH="openspec/changes/$PIPELINE_CHANGE_NAME/tasks.md"
+pipeline document record "$PIPELINE_CHANGE_NAME" tasks "$TASKS_PATH" --producer pipeline-ship
+pipeline document read "$PIPELINE_CHANGE_NAME" all
 pipeline document status "$PIPELINE_CHANGE_NAME"
 ```
 

@@ -1,0 +1,77 @@
+/**
+ * Change-bound continuous-execution authority projection.
+ *
+ * The projection is written only after a user explicitly delegates continued execution for an
+ * exact Change.  It is policy metadata rather than a privilege boundary (the workspace belongs to
+ * the user), but strict parsing keeps an incomplete, stale, or cross-Change file fail-closed.
+ */
+import { lstat, readFile } from 'node:fs/promises'
+import { join } from 'node:path'
+
+export const ACTIVE_POINTER_FILE = '.pipeline-active'
+export const INTERACTION_AUTHORITY_FILE = '.pipeline-interaction-authority'
+export const INTERACTION_AUTHORITY_PROTOCOL = 'pipeline-interaction-authority-v1'
+
+export type ContinuousReviewMode = 'required' | 'delegated'
+
+export interface ContinuousAuthority {
+  readonly changeName: string
+  readonly review: ContinuousReviewMode
+  readonly issuedAt: string
+}
+
+function isValidChangeName(value: string): boolean {
+  return /^[A-Za-z0-9_-]+$/.test(value)
+}
+
+async function readRegularFile(path: string): Promise<string | null> {
+  try {
+    const entry = await lstat(path)
+    if (!entry.isFile() || entry.isSymbolicLink()) return null
+    return await readFile(path, 'utf8')
+  } catch {
+    return null
+  }
+}
+
+/** Parse exactly the same compact v1 grammar as hooks/interaction-authority.sh. */
+export function parseContinuousAuthority(raw: string): ContinuousAuthority | null {
+  const lines = raw.endsWith('\n') ? raw.slice(0, -1).split('\n') : raw.split('\n')
+  if (lines.length !== 5 || lines[0] !== INTERACTION_AUTHORITY_PROTOCOL) return null
+
+  const fields = new Map<string, string>()
+  for (const line of lines.slice(1)) {
+    const separator = line.indexOf('=')
+    if (separator <= 0) return null
+    const key = line.slice(0, separator)
+    const value = line.slice(separator + 1)
+    if (!['change', 'scope', 'review', 'issued_at'].includes(key) || fields.has(key)) return null
+    fields.set(key, value)
+  }
+
+  const changeName = fields.get('change') ?? ''
+  const scope = fields.get('scope') ?? ''
+  const review = fields.get('review') ?? ''
+  const issuedAt = fields.get('issued_at') ?? ''
+  if (!isValidChangeName(changeName) || scope !== 'interactive-skills') return null
+  if (review !== 'required' && review !== 'delegated') return null
+  if (!/^[0-9TZ:.-]+$/.test(issuedAt)) return null
+  return { changeName, review, issuedAt }
+}
+
+/**
+ * A delegated review acknowledgement is valid only for the exact Change currently selected by
+ * `.pipeline-active`.  A stale authority for a previous Change cannot unlock its review exit.
+ */
+export async function readDelegatedReviewAuthority(cwd: string, name: string): Promise<ContinuousAuthority | null> {
+  if (!isValidChangeName(name)) return null
+  const [rawAuthority, activePointer] = await Promise.all([
+    readRegularFile(join(cwd, INTERACTION_AUTHORITY_FILE)),
+    readRegularFile(join(cwd, ACTIVE_POINTER_FILE)),
+  ])
+  if (rawAuthority === null || activePointer === null) return null
+  const authority = parseContinuousAuthority(rawAuthority)
+  if (authority === null || authority.review !== 'delegated' || authority.changeName !== name) return null
+  if (activePointer !== name && activePointer !== `${name}\n`) return null
+  return authority
+}

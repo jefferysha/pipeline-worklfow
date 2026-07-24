@@ -2,6 +2,7 @@
 import { describe, expect, it } from 'vitest'
 import { symlink, unlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { TERMINAL_ACTIVITY_TTL_MS } from '@pipeline-lite/kernel'
 import { buildSnapshot, computeFingerprint } from './snapshot.js'
 import { readRegistry } from './registry.js'
 import { initChange, makeProject, makeTempHome, newStore, sleep } from './test-support.js'
@@ -79,6 +80,35 @@ describe('buildSnapshot —— 真读多项目 .pipeline.yaml', () => {
     expect(snap1.projects[0].changes[0].fields.automation_current_phase).toBe('verify')
   })
 
+  it('显式绑定的 host heartbeat 才投影为终端运行中；过期、错 change 或链接一律不显示', async () => {
+    const store = newStore()
+    const root = await makeProject()
+    const dir = await initChange(store, root, 'terminal-live')
+    const now = Date.parse('2026-07-24T06:00:00.000Z')
+    const sidecar = join(dir, '.pipeline-terminal-activity.json')
+    await writeFile(sidecar, JSON.stringify({
+      protocol: 'pipeline-terminal-activity-v1',
+      change: 'terminal-live',
+      session_id: '019f92c7-6e66-7290-9352-f9d915266f14',
+      heartbeat_at: '2026-07-24T05:59:30.000Z',
+      turn_id: 'turn-live',
+    }), 'utf8')
+
+    const live = await buildSnapshot({ registry: () => [root], store, version: '1', clock: () => 't', now: () => now })
+    expect(live.projects[0].changes[0].terminalActivity).toMatchObject({
+      sessionId: '019f92c7-6e66-7290-9352-f9d915266f14', turnId: 'turn-live',
+    })
+    const stale = await buildSnapshot({
+      registry: () => [root], store, version: '1', clock: () => 't', now: () => now + TERMINAL_ACTIVITY_TTL_MS,
+    })
+    expect(stale.projects[0].changes[0].terminalActivity).toBeUndefined()
+
+    await unlink(sidecar)
+    await symlink('outside.json', sidecar)
+    const linked = await buildSnapshot({ registry: () => [root], store, version: '1', clock: () => 't', now: () => now })
+    expect(linked.projects[0].changes[0].terminalActivity).toBeUndefined()
+  })
+
   it('OpenSpec tasks.md 按 default 七阶段投影到 snapshot，而不是由原始会话提示词另造 Todo', async () => {
     const store = newStore()
     const root = await makeProject()
@@ -99,6 +129,37 @@ describe('buildSnapshot —— 真读多项目 .pipeline.yaml', () => {
     expect(todo?.stages.map((stage) => stage.id)).toEqual(['open', 'explore', 'spec', 'build', 'verify', 'ship', 'archive'])
     expect(todo?.stages.find((stage) => stage.id === 'open')?.tasks).toEqual([{ text: 'Confirm scope', completed: true }])
     expect(todo?.stages.find((stage) => stage.id === 'build')?.tasks).toEqual([{ text: 'Implement the endpoint', completed: false }])
+  })
+
+  it('simple workflow 投影自己的 change→verify→done/escalated 骨架，不伪造七阶段或 OpenSpec 文档', async () => {
+    const store = newStore()
+    const root = await makeProject()
+    await initChange(store, root, 'tiny-fix', { track: 'simple', preset: 'tweak' })
+
+    const snapshot = await buildSnapshot({ registry: () => [root], store, version: '1', clock: () => 't' })
+    const change = snapshot.projects[0]?.changes[0]
+    expect(change?.phase).toBe('change')
+    expect(change?.fields.workflow).toBe('simple')
+    expect(change?.todo).toEqual({
+      hasTaskSource: false,
+      stages: [
+        { id: 'change', label: 'Change', status: 'current', tasks: [] },
+        { id: 'verify', label: 'Verify', status: 'pending', tasks: [] },
+        { id: 'done', label: 'Done', status: 'pending', tasks: [] },
+        { id: 'escalated', label: 'Escalated', status: 'pending', tasks: [] },
+      ],
+    })
+    expect(change?.documents).toEqual({ governed: false, blockers: [], items: [] })
+
+    const dir = join(root, 'openspec', 'changes', 'tiny-fix')
+    await store.set(dir, 'phase', 'escalated')
+    const escalated = await buildSnapshot({ registry: () => [root], store, version: '1', clock: () => 't' })
+    expect(escalated.projects[0]?.changes[0]?.todo?.stages.map((stage) => [stage.id, stage.status])).toEqual([
+      ['change', 'done'],
+      ['verify', 'pending'],
+      ['done', 'pending'],
+      ['escalated', 'current'],
+    ])
   })
 
   it('不存在的注册路径 → ok:false 不炸', async () => {
@@ -159,5 +220,21 @@ describe('computeFingerprint —— 变更检测', () => {
     await writeFile(tasks, '- [x] First task\n', 'utf8')
     const fp1 = await computeFingerprint([root])
     expect(fp1).not.toBe(fp0)
+  })
+
+  it('terminal activity 到 TTL 会令指纹切换，SSE 不会把停止的普通会话永久显示为运行中', async () => {
+    const store = newStore()
+    const root = await makeProject()
+    const dir = await initChange(store, root, 'terminal-expiry')
+    const heartbeat = Date.parse('2026-07-24T06:00:00.000Z')
+    await writeFile(join(dir, '.pipeline-terminal-activity.json'), JSON.stringify({
+      protocol: 'pipeline-terminal-activity-v1',
+      change: 'terminal-expiry',
+      session_id: 'session-expiry',
+      heartbeat_at: '2026-07-24T06:00:00.000Z',
+    }), 'utf8')
+    const fresh = await computeFingerprint([root], heartbeat)
+    const expired = await computeFingerprint([root], heartbeat + TERMINAL_ACTIVITY_TTL_MS)
+    expect(fresh).not.toBe(expired)
   })
 })

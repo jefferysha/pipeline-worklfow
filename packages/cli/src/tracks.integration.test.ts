@@ -3,7 +3,7 @@
  * 覆盖：list builtin-only 顺序 / show 三 source / create·update·delete 人读+JSON / option 互斥·
  * 无 patch·未知 id·builtin 禁改删 exit 1 / 引用完整性（有引用拒·fail-closed·缩 allowed 拒·改 label
  * 放行·archive 排除）/ CRUD 后同进程下次 init 看到新 registry（防 memoization 回归）/ 首次 create
- * 生成 version:1 且四轨不必完整写入。
+ * 生成 version:1 且内建轨不必完整写入。
  */
 import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
@@ -50,19 +50,19 @@ describe('pipeline tracks —— list/show（只读）', () => {
   beforeEach(async () => { h = await freshHarness() })
   afterEach(async () => { await rm(h.cwd, { recursive: true, force: true }) })
 
-  test('list（无 tracks.yaml）：固定列 + 内建四轨固定序，纯 stdout', async () => {
+  test('list（无 tracks.yaml）：固定列 + 内建五轨固定序，纯 stdout', async () => {
     expect(await h.run(['tracks', 'list'])).toBe(0)
     expect(h.out[0]).toMatch(/^ID\s+LABEL\s+BUILTIN\s+DEFAULT\s+ALLOWED\s+POLICY/)
-    expect(h.out.slice(1).map((l) => l.split(/\s+/)[0])).toEqual(['chat', 'pm', 'frontend', 'backend'])
+    expect(h.out.slice(1).map((l) => l.split(/\s+/)[0])).toEqual(['chat', 'simple', 'pm', 'frontend', 'backend'])
     expect(h.err).toEqual([])
   })
 
-  test('list --json：array 4 条、schema 完整、纯 stdout', async () => {
+  test('list --json：array 5 条、schema 完整、纯 stdout', async () => {
     expect(await h.run(['tracks', 'list', '--json'])).toBe(0)
     expect(h.out).toHaveLength(1)
     const arr = JSON.parse(h.out[0]!)
-    expect(arr).toHaveLength(4)
-    expect(arr.map((t: { id: string }) => t.id)).toEqual(['chat', 'pm', 'frontend', 'backend'])
+    expect(arr).toHaveLength(5)
+    expect(arr.map((t: { id: string }) => t.id)).toEqual(['chat', 'simple', 'pm', 'frontend', 'backend'])
     for (const t of arr) {
       expect(t).toMatchObject({ builtin: true, source: 'builtin' })
       expect(Object.keys(t)).toEqual(expect.arrayContaining(['id', 'label', 'builtin', 'workflow', 'policyProfile', 'revision']))
@@ -92,16 +92,16 @@ describe('pipeline tracks —— create', () => {
   beforeEach(async () => { h = await freshHarness() })
   afterEach(async () => { await rm(h.cwd, { recursive: true, force: true }) })
 
-  test('首次 create：exit 0、stdout `created data`、tracks.yaml version:1 且四轨不必完整写入', async () => {
+  test('首次 create：exit 0、stdout `created data`、tracks.yaml version:1 且内建轨不必完整写入', async () => {
     expect(await h.run(CREATE_DATA)).toBe(0)
     expect(h.out).toContain('created data')
     const yaml = await readFile(join(h.cwd, '.pipeline', 'tracks.yaml'), 'utf8')
     expect(yaml.startsWith('version: 1\n')).toBe(true)
     expect(yaml).not.toContain('chat') // 内建轨无需完整复制进文件
     expect(yaml).toContain('id: data')
-    // list 现 5 条、data 在末尾、source custom
+    // list 现 6 条、data 在末尾、source custom
     expect(await h.run(['tracks', 'list'])).toBe(0)
-    expect(h.out.slice(1).map((l) => l.split(/\s+/)[0])).toEqual(['chat', 'pm', 'frontend', 'backend', 'data'])
+    expect(h.out.slice(1).map((l) => l.split(/\s+/)[0])).toEqual(['chat', 'simple', 'pm', 'frontend', 'backend', 'data'])
     expect(await h.run(['tracks', 'show', 'data'])).toBe(0)
     expect(h.out).toContain('source: custom')
   })
@@ -176,7 +176,7 @@ describe('pipeline tracks —— delete + 引用完整性', () => {
   beforeEach(async () => { h = await freshHarness() })
   afterEach(async () => { await rm(h.cwd, { recursive: true, force: true }) })
 
-  test('无引用 custom delete → exit 0 `deleted data`；--json {deleted,revision}；list 回 4 条', async () => {
+  test('无引用 custom delete → exit 0 `deleted data`；--json {deleted,revision}；list 回 5 条', async () => {
     expect(await h.run(CREATE_DATA)).toBe(0)
     expect(await h.run(['tracks', 'delete', 'data'])).toBe(0)
     expect(h.out).toContain('deleted data')
@@ -185,7 +185,7 @@ describe('pipeline tracks —— delete + 引用完整性', () => {
     expect(JSON.parse(h.out[0]!)).toMatchObject({ deleted: 'data' })
     expect(JSON.parse(h.out[0]!).revision).toBeTruthy()
     expect(await h.run(['tracks', 'list'])).toBe(0)
-    expect(h.out.slice(1)).toHaveLength(4)
+    expect(h.out.slice(1)).toHaveLength(5)
   })
 
   test('删内建 → exit 1', async () => {

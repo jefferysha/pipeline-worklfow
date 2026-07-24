@@ -22,6 +22,7 @@ export interface CanvasChange {
   state: string
   tone: CanvasDotTone
   running: boolean
+  executionSource: 'automation' | 'terminal' | 'none'
   sandbox: boolean
   dimmed: boolean
   selected: boolean
@@ -41,6 +42,7 @@ export interface CanvasStep {
   gate: string | null
   archived: number
   archivedChanges: readonly CanvasArchivedChange[]
+  state: StageState
 }
 
 export interface CanvasGroup {
@@ -49,6 +51,7 @@ export interface CanvasGroup {
   workflow: string
   steps: CanvasStep[]
   changes: CanvasChange[]
+  linearProgress: boolean
 }
 
 export interface WorkflowCanvasProps {
@@ -83,12 +86,6 @@ function gridStyleOf(n: number): CSSProperties {
 
 function stateMetaOf(change: CanvasChange): StateMeta {
   return STATE_META[change.state] ?? FALLBACK_META
-}
-
-function stageState(i: number, frontier: number): StageState {
-  if (i < frontier) return 'done'
-  if (i === frontier) return 'current'
-  return 'pending'
 }
 
 function stageStateLabel(state: StageState): string {
@@ -183,11 +180,10 @@ export function WorkflowCanvas({ groups, onOpen }: WorkflowCanvasProps): JSX.Ele
         const n = group.steps.length
         const byStep = new Map<string, CanvasChange[]>()
         for (const change of group.changes) byStep.set(change.phase, [...(byStep.get(change.phase) ?? []), change])
-        let frontier = -1
-        group.steps.forEach((step, i) => {
-          if ((byStep.get(step.id)?.length ?? 0) > 0) frontier = i
-        })
-        const currentIndex = Math.max(frontier, 0)
+        const currentIndex = Math.max(
+          group.steps.reduce((latest, step, index) => step.state === 'pending' ? latest : index, -1),
+          0,
+        )
         const edge = 100 / Math.max(n, 1) / 2
         const fillPct = n <= 1 ? 0 : (currentIndex / (n - 1)) * 100
         const openStep = group.steps.find((step) => openArchive === `${group.key}::${step.id}`)
@@ -235,16 +231,18 @@ export function WorkflowCanvas({ groups, onOpen }: WorkflowCanvasProps): JSX.Ele
                     {n >= 2 && (
                       <>
                         <span className="absolute top-1/2 h-1 -translate-y-1/2 rounded-full bg-fill" style={{ left: `${edge}%`, right: `${edge}%` }} aria-hidden="true" />
-                        <span
-                          className="absolute top-1/2 h-1 -translate-y-1/2 rounded-full bg-(--accent)"
-                          style={{ left: `${edge}%`, width: `calc((100% - ${edge * 2}%) * ${fillPct / 100})` }}
-                          aria-hidden="true"
-                        />
+                        {group.linearProgress && (
+                          <span
+                            className="absolute top-1/2 h-1 -translate-y-1/2 rounded-full bg-(--accent)"
+                            style={{ left: `${edge}%`, width: `calc((100% - ${edge * 2}%) * ${fillPct / 100})` }}
+                            aria-hidden="true"
+                          />
+                        )}
                       </>
                     )}
                     <div className="relative grid" style={gridStyleOf(n)}>
-                      {group.steps.map((step, i) => {
-                        const state = stageState(i, currentIndex)
+                      {group.steps.map((step) => {
+                        const state = step.state
                         const gateLabel = step.gate ? t('progress.canvas_gate', { gate: step.gate }) : stageStateLabel(state)
                         return (
                           <span
@@ -279,13 +277,13 @@ export function WorkflowCanvas({ groups, onOpen }: WorkflowCanvasProps): JSX.Ele
                         >
                           <div className="flex min-h-[42px] flex-col items-center gap-1 text-center">
                             <div className="flex items-center gap-1.5">
-                              <span className={`font-mono text-[10px] font-semibold ${i <= currentIndex ? 'text-(--accent)' : 'text-text-3'}`}>
+                              <span className={`font-mono text-[10px] font-semibold ${step.state !== 'pending' ? 'text-(--accent)' : 'text-text-3'}`}>
                                 {String(i + 1).padStart(2, '0')}
                               </span>
-                              <span className={`text-[13px] font-semibold ${i <= currentIndex ? 'text-text' : 'text-text-3'}`}>{step.label}</span>
+                              <span className={`text-[13px] font-semibold ${step.state !== 'pending' ? 'text-text' : 'text-text-3'}`}>{step.label}</span>
                             </div>
                             {here.length > 0 ? (
-                              <span className={`inline-flex min-w-5 items-center justify-center rounded-full px-1.5 text-[10px] font-semibold ${i === currentIndex ? 'bg-amb-t text-amb-d' : 'bg-fill text-text-3'}`} title={t('progress.canvas_node_count', { n: here.length })}>
+                              <span className={`inline-flex min-w-5 items-center justify-center rounded-full px-1.5 text-[10px] font-semibold ${step.state === 'current' ? 'bg-amb-t text-amb-d' : 'bg-fill text-text-3'}`} title={t('progress.canvas_node_count', { n: here.length })}>
                                 {here.length} 项
                               </span>
                             ) : (
@@ -338,7 +336,13 @@ export function WorkflowCanvas({ groups, onOpen }: WorkflowCanvasProps): JSX.Ele
                                     <span className="mt-auto flex items-center justify-between gap-3 pt-4">
                                       <span className={`inline-flex items-center gap-1.5 text-[10px] font-medium ${meta.attention ? 'text-amb-d' : 'text-text-3'}`}>
                                         {meta.attention && <span className="h-1.5 w-1.5 rounded-full bg-amb-d" aria-hidden="true" />}
-                                        {meta.attention ? '需要处理' : change.running ? '自动运行中' : change.statusLabel}
+                                        {meta.attention
+                                          ? '需要处理'
+                                          : change.executionSource === 'automation'
+                                            ? '自动运行中'
+                                            : change.executionSource === 'terminal'
+                                              ? '终端运行中'
+                                              : change.statusLabel}
                                       </span>
                                       <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-text-3 group-hover:text-(--accent)">
                                         打开 <ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" />

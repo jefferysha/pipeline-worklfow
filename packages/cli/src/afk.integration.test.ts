@@ -21,11 +21,10 @@ describe('afk 真 e2e —— automation 子系统 CLI 可达性（iteration-29 �
     expect(payload.lanes.queued).toContain('a1')
   })
 
-  test('enqueue PM 轨真拒（PM 永不闸）exit 3，automation 不变', async () => {
+  test('enqueue PM 轨真入队：显式请求仍由同一 AFK 授权链保护', async () => {
     await h.run(['init', 'pm1', '--track', 'pm', '--preset', 'full'])
-    const before = await h.read('pm1')
-    expect(await h.run(['afk', 'enqueue', 'pm1'])).toBe(3) // 未入队
-    expect(await h.read('pm1')).toBe(before) // 字节不变
+    expect(await h.run(['afk', 'enqueue', 'pm1'])).toBe(0)
+    expect(await h.read('pm1')).toMatch(/^automation: queued$/m)
   })
 
   test('scan 真扫就绪队列（build+queued+deps 满足才就绪）', async () => {

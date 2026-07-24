@@ -313,6 +313,27 @@ describe('build 出口（GG3 + B1-B6；B8 build_sha 投影撤销）', () => {
     expect(fails(evaluateGuard(be(), ctxOf(files)), '全部勾选')).toHaveLength(1)
   })
 
+  it('B2 七阶段 tasks.md 只要求截至 Build 的任务完成，Verify/Ship/Archive 待办不阻塞', () => {
+    const tasks = `# Tasks
+
+## Open
+- [x] scope
+
+## Build
+- [x] implementation
+
+## Verify
+- [ ] acceptance
+
+## Ship
+- [ ] release
+
+## Archive
+- [ ] archive
+`
+    expect(evaluateGuard(be(), ctxOf(buildFiles(tasks)))).toEqual({ pass: true, failures: [] })
+  })
+
   it('B5 full+direct 要求 direct_override=true；tweak+direct 与 full+worktree 不查', () => {
     const bad = evaluateGuard(be({ build_mode: 'direct' }), ctxOf(buildFiles()))
     expect(fails(bad, 'direct_override')).toHaveLength(1)

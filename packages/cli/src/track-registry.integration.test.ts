@@ -1,10 +1,10 @@
 /**
  * 动态 Track Registry 校验面切换 e2e（GOAL.md 清单 T · R2）——真 kernel + 真临时 fs，零 mock。
- * 证明 track 合法性全集由 `.pipeline/tracks.yaml` 驱动（而非写死四轨）：
+ * 证明 track 合法性全集由 `.pipeline/tracks.yaml` 驱动（而非写死内建 Track）：
  *  - 自定义 track（data）经 registry 注册后，init/set 放行、workflow 绑定按其 policy 生效；
  *  - workflow.allowed 白名单真拦截（不在白名单的 workflow 在落盘前被拒）；
  *  - 未注册 track 在 init/set 一律 fail-loud，不落盘。
- * 缺 tracks.yaml 的内建四轨行为另由 init.test / fields.test 覆盖（builtin-only=旧行为逐字一致）。
+ * 缺 tracks.yaml 的内建 Track 行为另由 init.test / fields.test 覆盖（builtin-only=旧行为逐字一致）。
  */
 import { mkdir, rm, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'

@@ -59,12 +59,12 @@ export async function makeWorktreeDir(): Promise<string> {
   return mkdtemp(join(tmpdir(), 'pl-dash-worktree-'))
 }
 
-/** 真 init 一个 change → 落 openspec/changes/<name>/.pipeline.yaml（phase=open）。 */
+/** 真 init 一个 change；simple 轨从内建 workflow 的 change step 开始，其余缺省 phase=open。 */
 export async function initChange(
   store: StateStore,
   root: string,
   name: string,
-  opts?: { track?: 'chat' | 'pm' | 'frontend' | 'backend'; preset?: string },
+  opts?: { track?: 'chat' | 'simple' | 'pm' | 'frontend' | 'backend'; preset?: string },
 ): Promise<string> {
   const track = opts?.track ?? 'backend'
   return store.init({
@@ -74,6 +74,9 @@ export async function initChange(
     reviewSeed: builtinTrack(track).policyProfile.reviewSeed,
     preset: opts?.preset ?? 'full',
     clock: () => '2026-07-07T00:00:00Z',
+    ...(track === 'simple'
+      ? { initialWorkflow: { workflow: 'simple', phase: 'change', openspecContract: false } }
+      : {}),
   })
 }
 

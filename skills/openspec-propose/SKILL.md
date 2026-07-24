@@ -33,10 +33,19 @@ them to select; never guess based on modification time.
    ledger, and canonical state atomically. Do not call `openspec new`, `openspec init`, or install
    a global dependency.
 
-2. Read the current `proposal.md`, `design.md`, and `tasks.md` before changing them. Preserve any
+2. Bind the exact target before continuing.  The root pipeline skill must already have done this
+   before loading `openspec-propose`; this repeated command makes a direct recovery deterministic:
+
+   ```bash
+   pipeline session activate "<change>"
+   ```
+
+   Never infer a target from a pre-existing `.pipeline-active` file or its modification time.
+
+3. Read the current `proposal.md`, `design.md`, and `tasks.md` before changing them. Preserve any
    user-written or previously approved content; replace only explicit open-phase scaffold text.
 
-3. Write the three open artifacts:
+4. Write the three open artifacts:
 
    - `proposal.md`: problem, intended outcome, scope, non-goals, and acceptance signal.
    - `design.md`: initial architecture or interaction hypothesis, risks, and questions that explore
@@ -44,7 +53,7 @@ them to select; never guess based on modification time.
    - `tasks.md`: seven phase headings (`Open`, `Explore`, `Spec`, `Build`, `Verify`, `Ship`,
      `Archive`) with open work first. Implementation checkboxes belong in `Build` only after spec.
 
-4. Verify that all three files are non-empty, then register their evidence with the real skill name:
+5. Verify that all three files are non-empty, then register their evidence with the real skill name:
 
    ```bash
    CHANGE="<change>"
@@ -54,10 +63,11 @@ them to select; never guess based on modification time.
    pipeline document status "$CHANGE"
    ```
 
-   A record can succeed only after the host has observed this Skill invocation. Do not invent a
-   producer name to bypass that evidence check.
+   A record can succeed only after this Skill has a completion-state host evidence record.  On a
+   Codex exec path that omitted PostToolUse, the CLI validates the matching host transcript before
+   it appends the evidence. Do not invent a producer name to bypass that check.
 
-5. Present the three artifacts to the user and stop at the phase boundary. The pipeline entry skill
+6. Present the three artifacts to the user and stop at the phase boundary. The pipeline entry skill
    owns the later explore/spec/build dispatch; do not implement application code from this skill.
 
 ## Guardrails

@@ -31,6 +31,7 @@ const LEGAL_EDGES: ReadonlyArray<readonly [Phase, Phase]> = [
   ['explore', 'spec'],
   ['spec', 'build'],
   ['build', 'verify'],
+  ['build', 'spec'],
   ['verify', 'ship'],
   ['verify', 'build'],
   ['ship', 'archive'],
@@ -49,9 +50,9 @@ describe('loadManifest(templates/manifest.yaml)', () => {
     expect(m.phases).toEqual(['open', 'explore', 'spec', 'build', 'verify', 'ship', 'archive'])
   })
 
-  it('transitions 含 build⇄verify 双向与 archive 终态自环', () => {
+  it('transitions 含需求回退、build⇄verify 双向与 archive 终态自环', () => {
     const m = loadManifest(TEMPLATE_MANIFEST)
-    expect(m.transitions.build).toEqual(['verify'])
+    expect(m.transitions.build).toEqual(['verify', 'spec'])
     expect(m.transitions.verify).toEqual(['ship', 'build'])
     expect(m.transitions.archive).toEqual(['archive'])
     expect(m.transitions.open).toEqual(['explore'])

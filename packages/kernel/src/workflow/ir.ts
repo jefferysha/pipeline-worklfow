@@ -64,10 +64,12 @@ export interface GuardInput {
   readonly readText?: (changeRelativePath: string) => string | undefined
   /** `git rev-parse HEAD` stdout（trim 前）；缺省 = SHA 面降级跳过。 */
   readonly gitHeadSha?: () => Promise<string>
+  /** in-place build 的内容寻址工作区基线；缺省 = workspace baseline guard 降级跳过。 */
+  readonly workspaceFingerprint?: () => Promise<string>
 }
 
-/** skipped.capability 的闭集 = GuardInput 三个可选注入点，一一对应（新增注入点先扩这里）。 */
-export type GuardCapability = 'readText' | 'fileExists' | 'gitHeadSha'
+/** skipped.capability 的闭集 = GuardInput 四个可选注入点，一一对应（新增注入点先扩这里）。 */
+export type GuardCapability = 'readText' | 'fileExists' | 'gitHeadSha' | 'workspaceFingerprint'
 
 /**
  * guard 判定结果（结构化，零文案）：
@@ -96,6 +98,8 @@ export interface ActionInput {
   readonly fields: Readonly<Record<FieldName, string | string[]>>
   readonly clock: () => string
   readonly gitHeadSha?: () => Promise<string>
+  /** in-place build 的内容寻址工作区基线；此能力缺失时 freeze 必须拒绝，不能降级为假 SHA。 */
+  readonly workspaceFingerprint?: () => Promise<string>
 }
 
 /** action 产出：字段增量（不原地 mutate）+ IO 信号。 */

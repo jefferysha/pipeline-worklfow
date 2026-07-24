@@ -66,7 +66,7 @@ class FsWorkflowRunRepository implements WorkflowRunRepository {
     // store.init 的 wx 独占创建一次性写入 runId（见 store.ts），不是"先创建后补身份"两步——
     // init 失败（含 change 已存在）直接抛错，不会出现"目录建了但身份没建成"的中间态。
     const changeDir = await this.deps.store.init({ ...opts, runId })
-    // default 的正常入口先由 OpenSpec skill 写入真实文档；这里仅补最小、显式 TODO 的 `wx`
+    // default 的正常入口由 OpenSpec skill 写入真实文档；这里仅补最小、显式标记 open 阶段的 `wx`
     // scaffold，使 state-first/中断恢复的 init 也有可继续的 OpenSpec 与 tasks 真相源。custom
     // workflow 的文档契约由它自己定义，不能擅自注入 default 文件。
     const defaultWorkflow = (opts.initialWorkflow?.workflow ?? 'default') === 'default'
