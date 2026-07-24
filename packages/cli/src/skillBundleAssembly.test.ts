@@ -380,6 +380,28 @@ describe('createProductionSkillContentLocator（H10 r1 复审阻断4：唯一生
     expect(located.contentDir).toBe(await realpath(bundled))
   })
 
+  it('selected bundle authority：bundle 命中时不枚举损坏的 lower-trust Codex cache', async () => {
+    const home = join(root, 'home')
+    const pluginRoot = join(root, 'plugin')
+    const bundled = await makeSkillDir(join(pluginRoot, 'skills'), 'brainstorming', '# bundled')
+    let lowerTierReads = 0
+    const locator = createProductionSkillContentLocator({
+      home,
+      pluginRoot,
+      readdirDirNames: () => {
+        lowerTierReads += 1
+        throw new SkillCacheSchemaError('damaged lower-trust cache')
+      },
+      readInstalledPluginsJson: () => null,
+    })
+
+    await expect(locator.locate('brainstorming')).resolves.toEqual({
+      skillId: 'brainstorming',
+      contentDir: await realpath(bundled),
+    })
+    expect(lowerTierReads).toBe(0)
+  })
+
   it('Codex tier 有候选时不读取损坏的 Claude fallback registry', async () => {
     const home = join(root, 'home')
     const codexDir = await makeSkillDir(join(home, '.codex', 'skills'), 'codex-only', '# codex')

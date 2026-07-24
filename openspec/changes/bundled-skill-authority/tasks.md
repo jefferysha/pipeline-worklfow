@@ -17,14 +17,16 @@
 - [x] Add failing regression tests for bundled/global content divergence.
 - [x] Split bundled lookup from runner-native and fallback lookup.
 - [x] Rebuild production bundles and rerun AFK wiring.
+- [x] Delay lower-trust discovery until the authoritative bundle returns not-found.
+- [x] Split execution-coordinate assembly out of the oversized CLI adapter.
 
 ## Verify
 
-- [ ] Run focused and full regression checks against a frozen target.
+- [x] Run focused and full regression checks against a frozen target.
 
 ## Ship
 
-- [ ] Apply the capability spec and record delivery evidence.
+- [x] Apply the capability spec and record delivery evidence.
 
 ## Archive
 

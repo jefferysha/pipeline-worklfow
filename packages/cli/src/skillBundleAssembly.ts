@@ -28,18 +28,17 @@
  *     `resolveStep` 的异常/本函数的 throw 原样冒出（未捕获，交给调用方 `createExecutionPreparation`
  *     所在的 scheduler.ts::handlePreparationThrow 兜底，同 activate() 对 ledger I/O 的既有处置）。
  */
-import { createHash } from 'node:crypto'
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { isAbsolute, join } from 'node:path'
-import {
-  compileWorkflow, loadWorkflow, parseSkillSources, resolveStep, resolveWorkflowName,
-  type FieldName, type PipelineState, type StateStore, type StepIR,
-} from '@pipeline-lite/kernel'
+import { parseSkillSources } from '@pipeline-lite/kernel'
 import {
   createFsSkillContentLocator, createRunnerSkillContentLocator, SkillContentNotFoundError,
-  type CapturedExecutionCoordinate, type ExecutionContext, type ExecutionCoordinatePort, type SkillContentLocator,
+  type SkillContentLocator,
 } from '@pipeline-lite/automation'
-import { changeDir } from './paths.js'
+export {
+  createExecutionCoordinatePort,
+  type ExecutionCoordinatePortDeps,
+} from './executionCoordinatePort.js'
 
 // ── productionSkillContentRoots ─────────────────────────────────────────────────
 
@@ -398,27 +397,40 @@ export function createProductionSkillContentLocator(opts: ProductionSkillContent
       readdirDirNames: opts.readdirDirNames,
     }), aliases)
   }
-  const codexPluginRoots = codexPluginSkillRoots(opts)
   const bundledRoot = opts.pluginRoot === undefined ? undefined : join(opts.pluginRoot, 'skills')
   const bundledLocator = bundledRoot === undefined
     ? undefined
     : createFsSkillContentLocator([bundledRoot])
-  const codexFlatRoots = [
-    join(opts.home, '.codex', 'skills'),
-    join(opts.home, '.codex', 'skills', '.system'),
-    ...flattenPluginRoots(codexPluginRoots),
-  ]
-  const codexFlatLocator = createFsSkillContentLocator(codexFlatRoots)
+  let cachedCodexPluginRoots: Map<string, string[]> | undefined
+  let cachedCodexFlatRoots: string[] | undefined
+  let cachedCodexFlatLocator: SkillContentLocator | undefined
   let cachedClaudePluginRoots: Map<string, string[]> | undefined
   let cachedFallbackFlatLocator: SkillContentLocator | undefined
+  const getCodexPluginRoots = (): Map<string, string[]> => {
+    cachedCodexPluginRoots ??= codexPluginSkillRoots(opts)
+    return cachedCodexPluginRoots
+  }
+  const getCodexFlatRoots = (): string[] => {
+    cachedCodexFlatRoots ??= [
+      join(opts.home, '.codex', 'skills'),
+      join(opts.home, '.codex', 'skills', '.system'),
+      ...flattenPluginRoots(getCodexPluginRoots()),
+    ]
+    return cachedCodexFlatRoots
+  }
+  const getCodexFlatLocator = (): SkillContentLocator => {
+    cachedCodexFlatLocator ??= createFsSkillContentLocator(getCodexFlatRoots())
+    return cachedCodexFlatLocator
+  }
   const getClaudePluginRoots = (): Map<string, string[]> => {
     cachedClaudePluginRoots ??= claudePluginSkillRoots(opts)
     return cachedClaudePluginRoots
   }
   const getFallbackFlatLocator = (): SkillContentLocator => {
+    const codexFlatRoots = getCodexFlatRoots()
     cachedFallbackFlatLocator ??= createFsSkillContentLocator(
       [...new Set([
-        ...productionSkillContentRoots(opts).filter((root) => !codexFlatRoots.includes(root)),
+        ...productionSkillContentRoots(opts).filter((root) => root !== bundledRoot && !codexFlatRoots.includes(root)),
         ...flattenPluginRoots(getClaudePluginRoots()),
       ])],
     )
@@ -436,7 +448,7 @@ export function createProductionSkillContentLocator(opts: ProductionSkillContent
           }
         }
         try {
-          return await codexFlatLocator.locate(skillId)
+          return await getCodexFlatLocator().locate(skillId)
         } catch (e) {
           if (!(e instanceof SkillContentNotFoundError)) throw e
           return getFallbackFlatLocator().locate(skillId)
@@ -445,7 +457,7 @@ export function createProductionSkillContentLocator(opts: ProductionSkillContent
 
       const pluginName = skillId.slice(0, colonIdx)
       const leaf = skillId.slice(colonIdx + 1)
-      const codexRoots = codexPluginRoots.get(pluginName)
+      const codexRoots = getCodexPluginRoots().get(pluginName)
       if (codexRoots !== undefined && codexRoots.length > 0) {
         try {
           const located = await createFsSkillContentLocator(codexRoots).locate(leaf)
@@ -466,85 +478,4 @@ export function createProductionSkillContentLocator(opts: ProductionSkillContent
     },
   }
   return withLogicalSkillAliases(locator, aliases)
-}
-
-// ── createExecutionCoordinatePort ───────────────────────────────────────────────
-
-function scalarField(state: PipelineState, f: FieldName): string {
-  const v = state.fields[f]
-  return Array.isArray(v) ? v.join(',') : (v ?? '')
-}
-
-function sha256Hex(s: string): string {
-  return createHash('sha256').update(s).digest('hex')
-}
-
-/** 无对应 workflow 文件时的空声明 step（同 effective-artifacts.ts 既有口径：无文件=无声明，非 fail-loud）。 */
-function emptyDeclaredStep(stepId: string): StepIR {
-  return { id: stepId, label: '', gate: null, skills: [], inputs: [], outputs: [], guards: [], artifacts: [], transitions: [] }
-}
-
-/** capture()/readCurrentInputsDigest() 共用的「读一次坐标 + 算 digest 输入」——两处必须算出同一份
- *  digest 才能让步骤7 的 TOCTOU 复核有意义（状态未变 → 两次 digest 相等）。 */
-async function readCoordinateSnapshot(
-  store: StateStore, repoRoot: string, dir: string,
-): Promise<{ resolution: CapturedExecutionCoordinate['resolution']; workflow: string; track: string; workflowRunId?: string; digestInput: string } > {
-  const state = await store.read(dir)
-  const workflowName = resolveWorkflowName(state)
-  const stepId = scalarField(state, 'phase')
-  const track = scalarField(state, 'track')
-  const automation = scalarField(state, 'automation')
-  const runId = state.runMetadata?.runId ?? ''
-  if (workflowName === 'default') {
-    return {
-      resolution: { kind: 'default', stepId }, workflow: workflowName, track, workflowRunId: runId || undefined,
-      digestInput: JSON.stringify({ workflowName, stepId, track, automation, runId }),
-    }
-  }
-  const def = loadWorkflow(repoRoot, workflowName)
-  if (def === null) {
-    // 文件缺失：无声明可内省（同 effective-artifacts.ts 既有口径），不是 fail-loud 对象。
-    return {
-      resolution: { kind: 'custom', step: emptyDeclaredStep(stepId) }, workflow: workflowName, track, workflowRunId: runId || undefined,
-      digestInput: JSON.stringify({ workflowName, stepId, track, automation, runId, def: null }),
-    }
-  }
-  const step = resolveStep(compileWorkflow(def), stepId)
-  if (step === null) {
-    throw new Error(`custom workflow '${workflowName}' 未声明 step '${stepId}'（workflow 文件存在但 step 不在图里，数据完整性问题）`)
-  }
-  return {
-    resolution: { kind: 'custom', step }, workflow: workflowName, track, workflowRunId: runId || undefined,
-    digestInput: JSON.stringify({ workflowName, stepId, track, automation, runId, def }),
-  }
-}
-
-export interface ExecutionCoordinatePortDeps {
-  readonly store: StateStore
-  /** change 目录定位的项目根（= `changeDir(repoRoot, change)`，同 afk.ts/dockerRunChange.ts 既有约定）。 */
-  readonly repoRoot: string
-}
-
-/**
- * `ExecutionCoordinatePort` 的生产实现（设计 §3 步骤2/步骤7）：`capture()` 在 change lock
- * （`store.withLock`）内读取并固定 workflow 归属，回调返回即释放锁——本函数往后
- * （`createExecutionPreparation` 的解析/定位/物化）全程无锁。`readCurrentInputsDigest()` 供步骤7
- * 单独调用，不重新持锁（避免锁临界区不必要地扩大，同 execution-context.ts 头注）。
- */
-export function createExecutionCoordinatePort(deps: ExecutionCoordinatePortDeps): ExecutionCoordinatePort {
-  const { store, repoRoot } = deps
-  return {
-    async capture(ctx: ExecutionContext): Promise<CapturedExecutionCoordinate> {
-      const dir = changeDir(repoRoot, ctx.change)
-      return store.withLock(dir, async () => {
-        const snap = await readCoordinateSnapshot(store, repoRoot, dir)
-        return { resolution: snap.resolution, workflow: snap.workflow, track: snap.track, workflowRunId: snap.workflowRunId, inputsDigest: sha256Hex(snap.digestInput) }
-      })
-    },
-    async readCurrentInputsDigest(ctx: ExecutionContext): Promise<string> {
-      const dir = changeDir(repoRoot, ctx.change)
-      const snap = await readCoordinateSnapshot(store, repoRoot, dir)
-      return sha256Hex(snap.digestInput)
-    },
-  }
 }

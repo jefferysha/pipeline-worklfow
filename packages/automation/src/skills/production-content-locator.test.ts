@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, test, vi } from 'vitest'
 import { SkillContentNotFoundError } from './content-locator.js'
-import { createRunnerSkillContentLocator } from './production-content-locator.js'
+import { createRunnerSkillContentLocator, SkillRootRegistryError } from './production-content-locator.js'
 
 const roots: string[] = []
 
@@ -85,6 +85,27 @@ describe('createRunnerSkillContentLocator', () => {
       skillId: 'brainstorming',
       contentDir: bundled,
     })
+  })
+
+  test('selected bundle authority：bundle 命中时不枚举损坏的 lower-trust Codex cache', async () => {
+    const root = await home()
+    const bundled = await skill(root, 'release/skills', 'brainstorming')
+    let lowerTierReads = 0
+    const locator = createRunnerSkillContentLocator({
+      runner: 'codex',
+      home: root,
+      bundledRoot: join(root, 'release/skills'),
+      readdirDirNames: () => {
+        lowerTierReads += 1
+        throw new SkillRootRegistryError('damaged lower-trust cache')
+      },
+    })
+
+    await expect(locator.locate('brainstorming')).resolves.toEqual({
+      skillId: 'brainstorming',
+      contentDir: bundled,
+    })
+    expect(lowerTierReads).toBe(0)
   })
 
   test('runner=claude-code：保留 Claude flat 兼容根', async () => {

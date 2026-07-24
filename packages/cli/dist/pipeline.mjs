@@ -25406,18 +25406,26 @@ function isNotFound(error) {
 function createRunnerSkillContentLocator(options) {
   const runner = assertLoopRunner(options.runner);
   const readDirs = options.readdirDirNames ?? realDirNames;
-  const codexPlugins = codexPluginRoots(options.home, readDirs);
   const bundled = options.bundledRoot === void 0 ? void 0 : createFsSkillContentLocator([options.bundledRoot]);
-  const codexFlat = createFsSkillContentLocator([
-    join35(options.home, ".codex", "skills"),
-    join35(options.home, ".codex", "skills", ".system"),
-    // skills CLI 的 Codex/global 安装真落点是 agent-neutral ~/.agents/skills；它不属于
-    // Claude 私有面，Codex runner 必须可读，否则 setup/doctor 绿而 H10 readiness 必红。
-    join35(options.home, ".agents", "skills"),
-    ...flatten(codexPlugins)
-  ]);
+  let codexPlugins;
+  let codexFlat;
   let claudePlugins;
   let claudeFlat;
+  const getCodexPlugins = () => {
+    codexPlugins ??= codexPluginRoots(options.home, readDirs);
+    return codexPlugins;
+  };
+  const getCodexFlat = () => {
+    codexFlat ??= createFsSkillContentLocator([
+      join35(options.home, ".codex", "skills"),
+      join35(options.home, ".codex", "skills", ".system"),
+      // skills CLI 的 Codex/global 安装真落点是 agent-neutral ~/.agents/skills；它不属于
+      // Claude 私有面，Codex runner 必须可读，否则 setup/doctor 绿而 H10 readiness 必红。
+      join35(options.home, ".agents", "skills"),
+      ...flatten(getCodexPlugins())
+    ]);
+    return codexFlat;
+  };
   const getClaudePlugins = () => {
     claudePlugins ??= claudeInstalledRoots((options.readInstalledPluginsJson ?? realInstalledJson)(join35(options.home, ".claude", "plugins", "installed_plugins.json")));
     return claudePlugins;
@@ -25450,7 +25458,7 @@ function createRunnerSkillContentLocator(options) {
           }
         }
         try {
-          return await codexFlat.locate(skillId);
+          return await getCodexFlat().locate(skillId);
         } catch (error) {
           if (!isNotFound(error) || runner === "codex")
             throw error;
@@ -25459,7 +25467,7 @@ function createRunnerSkillContentLocator(options) {
       }
       const plugin = skillId.slice(0, colon);
       const leaf = skillId.slice(colon + 1);
-      const codexRoots = codexPlugins.get(plugin) ?? [];
+      const codexRoots = getCodexPlugins().get(plugin) ?? [];
       if (codexRoots.length > 0) {
         try {
           const located2 = await createFsSkillContentLocator(codexRoots).locate(leaf);
@@ -31100,9 +31108,96 @@ import { join as join50 } from "node:path";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
 
 // packages/cli/src/skillBundleAssembly.ts
-import { createHash as createHash24 } from "node:crypto";
 import { readdirSync as readdirSync4, readFileSync as readFileSync19, statSync as statSync3 } from "node:fs";
 import { isAbsolute as isAbsolute6, join as join49 } from "node:path";
+
+// packages/cli/src/executionCoordinatePort.ts
+import { createHash as createHash24 } from "node:crypto";
+function scalarField3(state, field2) {
+  const value = state.fields[field2];
+  return Array.isArray(value) ? value.join(",") : value ?? "";
+}
+function sha256Hex2(value) {
+  return createHash24("sha256").update(value).digest("hex");
+}
+function emptyDeclaredStep(stepId) {
+  return {
+    id: stepId,
+    label: "",
+    gate: null,
+    skills: [],
+    inputs: [],
+    outputs: [],
+    guards: [],
+    artifacts: [],
+    transitions: []
+  };
+}
+async function readCoordinateSnapshot(store2, repoRoot, dir) {
+  const state = await store2.read(dir);
+  const workflowName = resolveWorkflowName(state);
+  const stepId = scalarField3(state, "phase");
+  const track = scalarField3(state, "track");
+  const automation = scalarField3(state, "automation");
+  const runId = state.runMetadata?.runId ?? "";
+  if (workflowName === "default") {
+    return {
+      resolution: { kind: "default", stepId },
+      workflow: workflowName,
+      track,
+      workflowRunId: runId || void 0,
+      digestInput: JSON.stringify({ workflowName, stepId, track, automation, runId })
+    };
+  }
+  const definition = loadWorkflow(repoRoot, workflowName);
+  if (definition === null) {
+    return {
+      resolution: { kind: "custom", step: emptyDeclaredStep(stepId) },
+      workflow: workflowName,
+      track,
+      workflowRunId: runId || void 0,
+      digestInput: JSON.stringify({ workflowName, stepId, track, automation, runId, def: null })
+    };
+  }
+  const step = resolveStep(compileWorkflow(definition), stepId);
+  if (step === null) {
+    throw new Error(
+      `custom workflow '${workflowName}' \u672A\u58F0\u660E step '${stepId}'\uFF08workflow \u6587\u4EF6\u5B58\u5728\u4F46 step \u4E0D\u5728\u56FE\u91CC\uFF0C\u6570\u636E\u5B8C\u6574\u6027\u95EE\u9898\uFF09`
+    );
+  }
+  return {
+    resolution: { kind: "custom", step },
+    workflow: workflowName,
+    track,
+    workflowRunId: runId || void 0,
+    digestInput: JSON.stringify({ workflowName, stepId, track, automation, runId, def: definition })
+  };
+}
+function createExecutionCoordinatePort(deps) {
+  const { store: store2, repoRoot } = deps;
+  return {
+    async capture(ctx) {
+      const dir = changeDir(repoRoot, ctx.change);
+      return store2.withLock(dir, async () => {
+        const snapshot = await readCoordinateSnapshot(store2, repoRoot, dir);
+        return {
+          resolution: snapshot.resolution,
+          workflow: snapshot.workflow,
+          track: snapshot.track,
+          workflowRunId: snapshot.workflowRunId,
+          inputsDigest: sha256Hex2(snapshot.digestInput)
+        };
+      });
+    },
+    async readCurrentInputsDigest(ctx) {
+      const dir = changeDir(repoRoot, ctx.change);
+      const snapshot = await readCoordinateSnapshot(store2, repoRoot, dir);
+      return sha256Hex2(snapshot.digestInput);
+    }
+  };
+}
+
+// packages/cli/src/skillBundleAssembly.ts
 var SkillCacheAccessError = class extends Error {
   name = "SkillCacheAccessError";
   _tag = "SkillCacheAccessError";
@@ -31350,25 +31445,38 @@ function createProductionSkillContentLocator(opts) {
       readdirDirNames: opts.readdirDirNames
     }), aliases);
   }
-  const codexPluginRoots2 = codexPluginSkillRoots(opts);
   const bundledRoot = opts.pluginRoot === void 0 ? void 0 : join49(opts.pluginRoot, "skills");
   const bundledLocator = bundledRoot === void 0 ? void 0 : createFsSkillContentLocator([bundledRoot]);
-  const codexFlatRoots = [
-    join49(opts.home, ".codex", "skills"),
-    join49(opts.home, ".codex", "skills", ".system"),
-    ...flattenPluginRoots(codexPluginRoots2)
-  ];
-  const codexFlatLocator = createFsSkillContentLocator(codexFlatRoots);
+  let cachedCodexPluginRoots;
+  let cachedCodexFlatRoots;
+  let cachedCodexFlatLocator;
   let cachedClaudePluginRoots;
   let cachedFallbackFlatLocator;
+  const getCodexPluginRoots = () => {
+    cachedCodexPluginRoots ??= codexPluginSkillRoots(opts);
+    return cachedCodexPluginRoots;
+  };
+  const getCodexFlatRoots = () => {
+    cachedCodexFlatRoots ??= [
+      join49(opts.home, ".codex", "skills"),
+      join49(opts.home, ".codex", "skills", ".system"),
+      ...flattenPluginRoots(getCodexPluginRoots())
+    ];
+    return cachedCodexFlatRoots;
+  };
+  const getCodexFlatLocator = () => {
+    cachedCodexFlatLocator ??= createFsSkillContentLocator(getCodexFlatRoots());
+    return cachedCodexFlatLocator;
+  };
   const getClaudePluginRoots = () => {
     cachedClaudePluginRoots ??= claudePluginSkillRoots(opts);
     return cachedClaudePluginRoots;
   };
   const getFallbackFlatLocator = () => {
+    const codexFlatRoots = getCodexFlatRoots();
     cachedFallbackFlatLocator ??= createFsSkillContentLocator(
       [.../* @__PURE__ */ new Set([
-        ...productionSkillContentRoots(opts).filter((root) => !codexFlatRoots.includes(root)),
+        ...productionSkillContentRoots(opts).filter((root) => root !== bundledRoot && !codexFlatRoots.includes(root)),
         ...flattenPluginRoots(getClaudePluginRoots())
       ])]
     );
@@ -31386,7 +31494,7 @@ function createProductionSkillContentLocator(opts) {
           }
         }
         try {
-          return await codexFlatLocator.locate(skillId);
+          return await getCodexFlatLocator().locate(skillId);
         } catch (e) {
           if (!(e instanceof SkillContentNotFoundError)) throw e;
           return getFallbackFlatLocator().locate(skillId);
@@ -31394,7 +31502,7 @@ function createProductionSkillContentLocator(opts) {
       }
       const pluginName = skillId.slice(0, colonIdx);
       const leaf = skillId.slice(colonIdx + 1);
-      const codexRoots = codexPluginRoots2.get(pluginName);
+      const codexRoots = getCodexPluginRoots().get(pluginName);
       if (codexRoots !== void 0 && codexRoots.length > 0) {
         try {
           const located2 = await createFsSkillContentLocator(codexRoots).locate(leaf);
@@ -31414,71 +31522,6 @@ function createProductionSkillContentLocator(opts) {
     }
   };
   return withLogicalSkillAliases(locator, aliases);
-}
-function scalarField3(state, f) {
-  const v = state.fields[f];
-  return Array.isArray(v) ? v.join(",") : v ?? "";
-}
-function sha256Hex2(s) {
-  return createHash24("sha256").update(s).digest("hex");
-}
-function emptyDeclaredStep(stepId) {
-  return { id: stepId, label: "", gate: null, skills: [], inputs: [], outputs: [], guards: [], artifacts: [], transitions: [] };
-}
-async function readCoordinateSnapshot(store2, repoRoot, dir) {
-  const state = await store2.read(dir);
-  const workflowName = resolveWorkflowName(state);
-  const stepId = scalarField3(state, "phase");
-  const track = scalarField3(state, "track");
-  const automation = scalarField3(state, "automation");
-  const runId = state.runMetadata?.runId ?? "";
-  if (workflowName === "default") {
-    return {
-      resolution: { kind: "default", stepId },
-      workflow: workflowName,
-      track,
-      workflowRunId: runId || void 0,
-      digestInput: JSON.stringify({ workflowName, stepId, track, automation, runId })
-    };
-  }
-  const def = loadWorkflow(repoRoot, workflowName);
-  if (def === null) {
-    return {
-      resolution: { kind: "custom", step: emptyDeclaredStep(stepId) },
-      workflow: workflowName,
-      track,
-      workflowRunId: runId || void 0,
-      digestInput: JSON.stringify({ workflowName, stepId, track, automation, runId, def: null })
-    };
-  }
-  const step = resolveStep(compileWorkflow(def), stepId);
-  if (step === null) {
-    throw new Error(`custom workflow '${workflowName}' \u672A\u58F0\u660E step '${stepId}'\uFF08workflow \u6587\u4EF6\u5B58\u5728\u4F46 step \u4E0D\u5728\u56FE\u91CC\uFF0C\u6570\u636E\u5B8C\u6574\u6027\u95EE\u9898\uFF09`);
-  }
-  return {
-    resolution: { kind: "custom", step },
-    workflow: workflowName,
-    track,
-    workflowRunId: runId || void 0,
-    digestInput: JSON.stringify({ workflowName, stepId, track, automation, runId, def })
-  };
-}
-function createExecutionCoordinatePort(deps) {
-  const { store: store2, repoRoot } = deps;
-  return {
-    async capture(ctx) {
-      const dir = changeDir(repoRoot, ctx.change);
-      return store2.withLock(dir, async () => {
-        const snap = await readCoordinateSnapshot(store2, repoRoot, dir);
-        return { resolution: snap.resolution, workflow: snap.workflow, track: snap.track, workflowRunId: snap.workflowRunId, inputsDigest: sha256Hex2(snap.digestInput) };
-      });
-    },
-    async readCurrentInputsDigest(ctx) {
-      const dir = changeDir(repoRoot, ctx.change);
-      const snap = await readCoordinateSnapshot(store2, repoRoot, dir);
-      return sha256Hex2(snap.digestInput);
-    }
-  };
 }
 
 // packages/cli/src/commands/afk-executor.ts

@@ -23,7 +23,17 @@
         {
           "phase": "build",
           "sha256": "378c9d2600d5bfc1d5ae3f378e0b56fb7af89ae463d84d8d266bfc783e7572ed",
-          "readAt": "2026-07-24T16:57:01Z"
+          "readAt": "2026-07-24T17:05:26Z"
+        },
+        {
+          "phase": "verify",
+          "sha256": "378c9d2600d5bfc1d5ae3f378e0b56fb7af89ae463d84d8d266bfc783e7572ed",
+          "readAt": "2026-07-24T17:15:03Z"
+        },
+        {
+          "phase": "ship",
+          "sha256": "378c9d2600d5bfc1d5ae3f378e0b56fb7af89ae463d84d8d266bfc783e7572ed",
+          "readAt": "2026-07-24T17:15:40Z"
         }
       ]
     },
@@ -42,7 +52,17 @@
         {
           "phase": "build",
           "sha256": "c3d12cf0afb70b7a57c017bb6ff3fdfdb29e6de918cb6d12c7cffe5e728393ae",
-          "readAt": "2026-07-24T16:57:01Z"
+          "readAt": "2026-07-24T17:05:26Z"
+        },
+        {
+          "phase": "verify",
+          "sha256": "c3d12cf0afb70b7a57c017bb6ff3fdfdb29e6de918cb6d12c7cffe5e728393ae",
+          "readAt": "2026-07-24T17:15:03Z"
+        },
+        {
+          "phase": "ship",
+          "sha256": "c3d12cf0afb70b7a57c017bb6ff3fdfdb29e6de918cb6d12c7cffe5e728393ae",
+          "readAt": "2026-07-24T17:15:40Z"
         }
       ]
     },
@@ -66,7 +86,17 @@
         {
           "phase": "build",
           "sha256": "946e6e5c5c45c7b92ea527bbc8eefb45e4d7d69d35994f864cdc666fd0148a3d",
-          "readAt": "2026-07-24T16:57:01Z"
+          "readAt": "2026-07-24T17:05:26Z"
+        },
+        {
+          "phase": "verify",
+          "sha256": "946e6e5c5c45c7b92ea527bbc8eefb45e4d7d69d35994f864cdc666fd0148a3d",
+          "readAt": "2026-07-24T17:15:03Z"
+        },
+        {
+          "phase": "ship",
+          "sha256": "946e6e5c5c45c7b92ea527bbc8eefb45e4d7d69d35994f864cdc666fd0148a3d",
+          "readAt": "2026-07-24T17:15:40Z"
         }
       ]
     },
@@ -80,7 +110,17 @@
         {
           "phase": "build",
           "sha256": "7e8f1c9d1c4350ea08c325f7c42ad1c3dd10b4d23b15c6fa5bb8799790c703f3",
-          "readAt": "2026-07-24T16:57:01Z"
+          "readAt": "2026-07-24T17:05:26Z"
+        },
+        {
+          "phase": "verify",
+          "sha256": "7e8f1c9d1c4350ea08c325f7c42ad1c3dd10b4d23b15c6fa5bb8799790c703f3",
+          "readAt": "2026-07-24T17:15:03Z"
+        },
+        {
+          "phase": "ship",
+          "sha256": "7e8f1c9d1c4350ea08c325f7c42ad1c3dd10b4d23b15c6fa5bb8799790c703f3",
+          "readAt": "2026-07-24T17:15:40Z"
         }
       ]
     },
@@ -94,7 +134,17 @@
         {
           "phase": "build",
           "sha256": "862713ff8deec1fcc8345e45bb97e5a672b72ef4487fc9646602560fab0fdc15",
-          "readAt": "2026-07-24T16:57:01Z"
+          "readAt": "2026-07-24T17:05:26Z"
+        },
+        {
+          "phase": "verify",
+          "sha256": "862713ff8deec1fcc8345e45bb97e5a672b72ef4487fc9646602560fab0fdc15",
+          "readAt": "2026-07-24T17:15:03Z"
+        },
+        {
+          "phase": "ship",
+          "sha256": "862713ff8deec1fcc8345e45bb97e5a672b72ef4487fc9646602560fab0fdc15",
+          "readAt": "2026-07-24T17:15:40Z"
         }
       ]
     },
@@ -108,7 +158,17 @@
         {
           "phase": "build",
           "sha256": "862713ff8deec1fcc8345e45bb97e5a672b72ef4487fc9646602560fab0fdc15",
-          "readAt": "2026-07-24T16:57:01Z"
+          "readAt": "2026-07-24T17:05:26Z"
+        },
+        {
+          "phase": "verify",
+          "sha256": "862713ff8deec1fcc8345e45bb97e5a672b72ef4487fc9646602560fab0fdc15",
+          "readAt": "2026-07-24T17:15:03Z"
+        },
+        {
+          "phase": "ship",
+          "sha256": "862713ff8deec1fcc8345e45bb97e5a672b72ef4487fc9646602560fab0fdc15",
+          "readAt": "2026-07-24T17:15:40Z"
         }
       ]
     },
@@ -127,21 +187,53 @@
         {
           "phase": "build",
           "sha256": "358f8651db30118dbe563eb255243b87fc93f969a3695efa03525a2afd0ed16f",
-          "readAt": "2026-07-24T16:57:01Z"
+          "readAt": "2026-07-24T17:05:26Z"
+        },
+        {
+          "phase": "verify",
+          "sha256": "358f8651db30118dbe563eb255243b87fc93f969a3695efa03525a2afd0ed16f",
+          "readAt": "2026-07-24T17:15:03Z"
+        },
+        {
+          "phase": "ship",
+          "sha256": "358f8651db30118dbe563eb255243b87fc93f969a3695efa03525a2afd0ed16f",
+          "readAt": "2026-07-24T17:15:40Z"
         }
       ]
     },
     {
-      "kind": "tasks",
-      "path": "openspec/changes/bundled-skill-authority/tasks.md",
-      "sha256": "8f7afa66e52117a600ac711756e2ea2cdf11257364e57fa537ac58194f9b893f",
-      "producer": "pipeline-build",
-      "recordedAt": "2026-07-24T16:57:01Z",
+      "kind": "verification-report",
+      "path": "docs/superpowers/reports/2026-07-24-bundled-skill-authority-verify.md",
+      "sha256": "dd680aa64d22e76b03b417c4b2383301456f9302cb95a757d4255424f2950e47",
+      "producer": "verification-before-completion",
+      "recordedAt": "2026-07-24T17:15:02Z",
       "reads": [
         {
-          "phase": "build",
-          "sha256": "8f7afa66e52117a600ac711756e2ea2cdf11257364e57fa537ac58194f9b893f",
-          "readAt": "2026-07-24T16:57:01Z"
+          "phase": "ship",
+          "sha256": "dd680aa64d22e76b03b417c4b2383301456f9302cb95a757d4255424f2950e47",
+          "readAt": "2026-07-24T17:15:40Z"
+        }
+      ]
+    },
+    {
+      "kind": "applied-spec",
+      "path": "openspec/changes/bundled-skill-authority/applied-spec.md",
+      "sha256": "f3f8288c10bdd35c53834cf64acdf3bccd38aac4c3a1bfb00975c163f6fd253e",
+      "producer": "openspec-apply-change",
+      "recordedAt": "2026-07-24T17:15:39Z",
+      "reads": []
+    },
+    {
+      "kind": "tasks",
+      "path": "openspec/changes/bundled-skill-authority/tasks.md",
+      "sha256": "560a880902b6e5872a1022cf70a67904da44ae7393b1f856605cf0a6e0ccadcd",
+      "producer": "pipeline-ship",
+      "recordedAt": "2026-07-24T17:15:39Z",
+      "reads": [
+        {
+          "phase": "ship",
+          "sha256": "560a880902b6e5872a1022cf70a67904da44ae7393b1f856605cf0a6e0ccadcd",
+          "readAt": "2026-07-24T17:15:40Z"
         }
       ]
     }

@@ -11395,18 +11395,26 @@ function isNotFound(error) {
 function createRunnerSkillContentLocator(options) {
   const runner = assertLoopRunner(options.runner);
   const readDirs = options.readdirDirNames ?? realDirNames;
-  const codexPlugins = codexPluginRoots(options.home, readDirs);
   const bundled = options.bundledRoot === void 0 ? void 0 : createFsSkillContentLocator([options.bundledRoot]);
-  const codexFlat = createFsSkillContentLocator([
-    join26(options.home, ".codex", "skills"),
-    join26(options.home, ".codex", "skills", ".system"),
-    // skills CLI 的 Codex/global 安装真落点是 agent-neutral ~/.agents/skills；它不属于
-    // Claude 私有面，Codex runner 必须可读，否则 setup/doctor 绿而 H10 readiness 必红。
-    join26(options.home, ".agents", "skills"),
-    ...flatten(codexPlugins)
-  ]);
+  let codexPlugins;
+  let codexFlat;
   let claudePlugins;
   let claudeFlat;
+  const getCodexPlugins = () => {
+    codexPlugins ??= codexPluginRoots(options.home, readDirs);
+    return codexPlugins;
+  };
+  const getCodexFlat = () => {
+    codexFlat ??= createFsSkillContentLocator([
+      join26(options.home, ".codex", "skills"),
+      join26(options.home, ".codex", "skills", ".system"),
+      // skills CLI 的 Codex/global 安装真落点是 agent-neutral ~/.agents/skills；它不属于
+      // Claude 私有面，Codex runner 必须可读，否则 setup/doctor 绿而 H10 readiness 必红。
+      join26(options.home, ".agents", "skills"),
+      ...flatten(getCodexPlugins())
+    ]);
+    return codexFlat;
+  };
   const getClaudePlugins = () => {
     claudePlugins ??= claudeInstalledRoots((options.readInstalledPluginsJson ?? realInstalledJson)(join26(options.home, ".claude", "plugins", "installed_plugins.json")));
     return claudePlugins;
@@ -11439,7 +11447,7 @@ function createRunnerSkillContentLocator(options) {
           }
         }
         try {
-          return await codexFlat.locate(skillId);
+          return await getCodexFlat().locate(skillId);
         } catch (error) {
           if (!isNotFound(error) || runner === "codex")
             throw error;
@@ -11448,7 +11456,7 @@ function createRunnerSkillContentLocator(options) {
       }
       const plugin = skillId.slice(0, colon);
       const leaf = skillId.slice(colon + 1);
-      const codexRoots = codexPlugins.get(plugin) ?? [];
+      const codexRoots = getCodexPlugins().get(plugin) ?? [];
       if (codexRoots.length > 0) {
         try {
           const located2 = await createFsSkillContentLocator(codexRoots).locate(leaf);

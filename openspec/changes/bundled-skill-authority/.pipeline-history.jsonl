@@ -23,3 +23,28 @@
 {"ts":"2026-07-24T16:55:43Z","kind":"tool","raw":"CodexSkillRead: openspec-propose"}
 {"ts":"2026-07-24T16:57:01Z","kind":"set","field":"build_mode","to":"direct"}
 {"ts":"2026-07-24T16:57:01Z","kind":"set","field":"isolation","to":"in-place"}
+{"ts":"2026-07-24T17:05:06Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated"}
+{"ts":"2026-07-24T17:05:06Z","kind":"tool","raw":"CodexSkillRead: pipeline-build"}
+{"ts":"2026-07-24T17:05:26Z","kind":"set","field":"automation","to":"off"}
+{"ts":"2026-07-24T17:05:27Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"0e128807-2ed4-4f1b-a5e0-dbda0b37f852"}
+{"ts":"2026-07-24T17:05:37Z","kind":"tool","raw":"CodexSkillRead: pipeline-verify"}
+{"ts":"2026-07-24T17:05:38Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-07-24T17:08:09Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-07-24-bundled-skill-authority-verify.md"}
+{"ts":"2026-07-24T17:08:10Z","kind":"tool","raw":"review:request phase=verify event=verify-fail"}
+{"ts":"2026-07-24T17:08:10Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-07-24T17:05:06Z"}
+{"ts":"2026-07-24T17:08:11Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"8c509faf-e0cf-4477-9d24-ec003fa2534e"}
+{"ts":"2026-07-24T17:08:19Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-24T17:12:22Z","kind":"tool","raw":"CodexSkillRead: pipeline-build"}
+{"ts":"2026-07-24T17:12:23Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"49ced2cf-d005-44da-9607-b514f3f2cb4c"}
+{"ts":"2026-07-24T17:15:01Z","kind":"set","field":"agent_review_result","to":"pass"}
+{"ts":"2026-07-24T17:15:01Z","kind":"set","field":"codex_review_result","to":"pass"}
+{"ts":"2026-07-24T17:15:01Z","kind":"set","field":"branch_status","to":"handled"}
+{"ts":"2026-07-24T17:15:01Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-07-24-bundled-skill-authority-verify.md"}
+{"ts":"2026-07-24T17:15:01Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-07-24T17:15:02Z","kind":"tool","raw":"CodexSkillRead: pipeline-verify"}
+{"ts":"2026-07-24T17:15:03Z","kind":"tool","raw":"review:request phase=verify event=verify-pass"}
+{"ts":"2026-07-24T17:15:03Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-pass authority_issued_at=2026-07-24T17:05:06Z"}
+{"ts":"2026-07-24T17:15:04Z","kind":"transition","from":"verify","to":"ship","raw":"verify-pass","transitionRecordId":"c62faa46-7e43-4e54-8337-05f3b5cb5d57"}
+{"ts":"2026-07-24T17:15:16Z","kind":"tool","raw":"CodexSkillRead: finishing-a-development-branch"}
+{"ts":"2026-07-24T17:15:38Z","kind":"tool","raw":"CodexSkillRead: openspec-apply-change"}
+{"ts":"2026-07-24T17:15:39Z","kind":"tool","raw":"CodexSkillRead: pipeline-ship"}
