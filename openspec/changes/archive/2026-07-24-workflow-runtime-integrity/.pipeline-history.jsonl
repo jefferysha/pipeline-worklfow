@@ -80,3 +80,7 @@
 {"ts":"2026-07-24T15:01:45Z","kind":"transition","from":"verify","to":"ship","raw":"verify-pass","transitionRecordId":"30d6d57c-979a-4b7b-ab78-c8ecc42f7a97"}
 {"ts":"2026-07-24T15:02:16Z","kind":"tool","raw":"CodexSkillRead: pipeline-ship"}
 {"ts":"2026-07-24T15:02:16Z","kind":"tool","raw":"CodexSkillRead: openspec-apply-change"}
+{"ts":"2026-07-24T15:03:26Z","kind":"set","field":"pr_url","to":"https://github.com/jefferysha/pipeline-worklfow/commit/3d98cd5bcc0cdf6186b7e53b1d1327ce7df0a9d0"}
+{"ts":"2026-07-24T15:03:26Z","kind":"transition","from":"ship","to":"archive","raw":"ship-complete","transitionRecordId":"6d141e67-7c5f-4a17-84d6-db4e583f2fd1"}
+{"ts":"2026-07-24T15:03:40Z","kind":"tool","raw":"CodexSkillRead: pipeline-archive"}
+{"ts":"2026-07-24T15:03:47Z","kind":"transition","from":"archive","to":"archive","raw":"archived","transitionRecordId":"0ca7a446-9112-48ef-8ed4-404219be7b05"}

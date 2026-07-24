@@ -55,4 +55,4 @@
 
 ## Archive
 
-- [ ] Archive the completed Change with retained decisions and evidence.
+- [x] Archive the completed Change with retained decisions and evidence.
