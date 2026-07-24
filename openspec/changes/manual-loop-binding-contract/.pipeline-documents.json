@@ -1,0 +1,231 @@
+{
+  "version": 1,
+  "contract": "openspec-v1",
+  "createdAt": "2026-07-24T16:13:08Z",
+  "records": [
+    {
+      "kind": "adr",
+      "path": "docs/adr/2026-07-24-manual-loop-binding-contract.md",
+      "sha256": "73f00bb7718c9b7c3d6e1642ee37522f931d0b65b61d276316216580215b7752",
+      "producer": "brainstorming",
+      "recordedAt": "2026-07-24T16:14:19Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "73f00bb7718c9b7c3d6e1642ee37522f931d0b65b61d276316216580215b7752",
+          "readAt": "2026-07-24T16:18:36Z"
+        },
+        {
+          "phase": "build",
+          "sha256": "73f00bb7718c9b7c3d6e1642ee37522f931d0b65b61d276316216580215b7752",
+          "readAt": "2026-07-24T16:37:31Z"
+        },
+        {
+          "phase": "verify",
+          "sha256": "73f00bb7718c9b7c3d6e1642ee37522f931d0b65b61d276316216580215b7752",
+          "readAt": "2026-07-24T16:39:57Z"
+        },
+        {
+          "phase": "ship",
+          "sha256": "73f00bb7718c9b7c3d6e1642ee37522f931d0b65b61d276316216580215b7752",
+          "readAt": "2026-07-24T16:41:32Z"
+        }
+      ]
+    },
+    {
+      "kind": "proposal",
+      "path": "openspec/changes/manual-loop-binding-contract/proposal.md",
+      "sha256": "7535235908eb6f688b0cb5d0ae6411f6eae01a925475b633c5a6ca2f3aa12bf2",
+      "producer": "pipeline-spec",
+      "recordedAt": "2026-07-24T16:18:11Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "7535235908eb6f688b0cb5d0ae6411f6eae01a925475b633c5a6ca2f3aa12bf2",
+          "readAt": "2026-07-24T16:18:36Z"
+        },
+        {
+          "phase": "build",
+          "sha256": "7535235908eb6f688b0cb5d0ae6411f6eae01a925475b633c5a6ca2f3aa12bf2",
+          "readAt": "2026-07-24T16:37:31Z"
+        },
+        {
+          "phase": "verify",
+          "sha256": "7535235908eb6f688b0cb5d0ae6411f6eae01a925475b633c5a6ca2f3aa12bf2",
+          "readAt": "2026-07-24T16:39:57Z"
+        },
+        {
+          "phase": "ship",
+          "sha256": "7535235908eb6f688b0cb5d0ae6411f6eae01a925475b633c5a6ca2f3aa12bf2",
+          "readAt": "2026-07-24T16:41:32Z"
+        }
+      ]
+    },
+    {
+      "kind": "openspec-design",
+      "path": "openspec/changes/manual-loop-binding-contract/design.md",
+      "sha256": "b41528ca3716ab1f2b759b8497911564e683d35308f3aa8f38a721c7ff93e3fb",
+      "producer": "pipeline-spec",
+      "recordedAt": "2026-07-24T16:18:11Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "b41528ca3716ab1f2b759b8497911564e683d35308f3aa8f38a721c7ff93e3fb",
+          "readAt": "2026-07-24T16:18:36Z"
+        },
+        {
+          "phase": "build",
+          "sha256": "b41528ca3716ab1f2b759b8497911564e683d35308f3aa8f38a721c7ff93e3fb",
+          "readAt": "2026-07-24T16:37:31Z"
+        },
+        {
+          "phase": "verify",
+          "sha256": "b41528ca3716ab1f2b759b8497911564e683d35308f3aa8f38a721c7ff93e3fb",
+          "readAt": "2026-07-24T16:39:57Z"
+        },
+        {
+          "phase": "ship",
+          "sha256": "b41528ca3716ab1f2b759b8497911564e683d35308f3aa8f38a721c7ff93e3fb",
+          "readAt": "2026-07-24T16:41:32Z"
+        }
+      ]
+    },
+    {
+      "kind": "superpower-design",
+      "path": "docs/superpowers/specs/2026-07-24-manual-loop-binding-contract-design.md",
+      "sha256": "b4e1684adbbf9edc35acd366806739d014c4c696e8d6452cac22d8edef82fb3a",
+      "producer": "pipeline-spec",
+      "recordedAt": "2026-07-24T16:18:11Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "b4e1684adbbf9edc35acd366806739d014c4c696e8d6452cac22d8edef82fb3a",
+          "readAt": "2026-07-24T16:18:36Z"
+        },
+        {
+          "phase": "build",
+          "sha256": "b4e1684adbbf9edc35acd366806739d014c4c696e8d6452cac22d8edef82fb3a",
+          "readAt": "2026-07-24T16:37:31Z"
+        },
+        {
+          "phase": "verify",
+          "sha256": "b4e1684adbbf9edc35acd366806739d014c4c696e8d6452cac22d8edef82fb3a",
+          "readAt": "2026-07-24T16:39:57Z"
+        },
+        {
+          "phase": "ship",
+          "sha256": "b4e1684adbbf9edc35acd366806739d014c4c696e8d6452cac22d8edef82fb3a",
+          "readAt": "2026-07-24T16:41:32Z"
+        }
+      ]
+    },
+    {
+      "kind": "delta-spec",
+      "path": "openspec/changes/manual-loop-binding-contract/specs/automation-loop-init/spec.md",
+      "sha256": "c2804d4927e48da4866371a3f7e9df904e6f57926b5c5fdf8a2160f8c961980d",
+      "producer": "openspec-propose",
+      "recordedAt": "2026-07-24T16:18:13Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "c2804d4927e48da4866371a3f7e9df904e6f57926b5c5fdf8a2160f8c961980d",
+          "readAt": "2026-07-24T16:37:31Z"
+        },
+        {
+          "phase": "verify",
+          "sha256": "c2804d4927e48da4866371a3f7e9df904e6f57926b5c5fdf8a2160f8c961980d",
+          "readAt": "2026-07-24T16:39:57Z"
+        },
+        {
+          "phase": "ship",
+          "sha256": "c2804d4927e48da4866371a3f7e9df904e6f57926b5c5fdf8a2160f8c961980d",
+          "readAt": "2026-07-24T16:41:32Z"
+        }
+      ]
+    },
+    {
+      "kind": "superpower-plan",
+      "path": "docs/superpowers/plans/2026-07-24-manual-loop-binding-contract.md",
+      "sha256": "f9731c2f4961e470f8f8298a7676fd9d9d6cd14f8eafeb951c52876f99662d29",
+      "producer": "writing-plans",
+      "recordedAt": "2026-07-24T16:18:13Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "f9731c2f4961e470f8f8298a7676fd9d9d6cd14f8eafeb951c52876f99662d29",
+          "readAt": "2026-07-24T16:37:31Z"
+        },
+        {
+          "phase": "verify",
+          "sha256": "f9731c2f4961e470f8f8298a7676fd9d9d6cd14f8eafeb951c52876f99662d29",
+          "readAt": "2026-07-24T16:39:57Z"
+        },
+        {
+          "phase": "ship",
+          "sha256": "f9731c2f4961e470f8f8298a7676fd9d9d6cd14f8eafeb951c52876f99662d29",
+          "readAt": "2026-07-24T16:41:32Z"
+        }
+      ]
+    },
+    {
+      "kind": "plan",
+      "path": "docs/superpowers/plans/2026-07-24-manual-loop-binding-contract.md",
+      "sha256": "f9731c2f4961e470f8f8298a7676fd9d9d6cd14f8eafeb951c52876f99662d29",
+      "producer": "writing-plans",
+      "recordedAt": "2026-07-24T16:18:13Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "f9731c2f4961e470f8f8298a7676fd9d9d6cd14f8eafeb951c52876f99662d29",
+          "readAt": "2026-07-24T16:37:31Z"
+        },
+        {
+          "phase": "verify",
+          "sha256": "f9731c2f4961e470f8f8298a7676fd9d9d6cd14f8eafeb951c52876f99662d29",
+          "readAt": "2026-07-24T16:39:57Z"
+        },
+        {
+          "phase": "ship",
+          "sha256": "f9731c2f4961e470f8f8298a7676fd9d9d6cd14f8eafeb951c52876f99662d29",
+          "readAt": "2026-07-24T16:41:32Z"
+        }
+      ]
+    },
+    {
+      "kind": "verification-report",
+      "path": "docs/superpowers/reports/2026-07-24-manual-loop-binding-contract-verify.md",
+      "sha256": "0264bb484f6e2adae8e9f9d2e002cf94be3d07df4d1e4b0bcc6d3d9527af73b3",
+      "producer": "verification-before-completion",
+      "recordedAt": "2026-07-24T16:39:56Z",
+      "reads": [
+        {
+          "phase": "ship",
+          "sha256": "0264bb484f6e2adae8e9f9d2e002cf94be3d07df4d1e4b0bcc6d3d9527af73b3",
+          "readAt": "2026-07-24T16:41:32Z"
+        }
+      ]
+    },
+    {
+      "kind": "tasks",
+      "path": "openspec/changes/manual-loop-binding-contract/tasks.md",
+      "sha256": "66dfc5b57c4ed9f2882e49d00060327692c275c96fe7caa700ec4bb0dfe0b2e9",
+      "producer": "pipeline-ship",
+      "recordedAt": "2026-07-24T16:41:31Z",
+      "reads": [
+        {
+          "phase": "ship",
+          "sha256": "66dfc5b57c4ed9f2882e49d00060327692c275c96fe7caa700ec4bb0dfe0b2e9",
+          "readAt": "2026-07-24T16:41:32Z"
+        }
+      ]
+    },
+    {
+      "kind": "applied-spec",
+      "path": "openspec/changes/manual-loop-binding-contract/applied-spec.md",
+      "sha256": "7e3ef3b2e7c9b0d2ff928ba3055604821baedb28819ffeebd2f986f405080650",
+      "producer": "openspec-apply-change",
+      "recordedAt": "2026-07-24T16:41:32Z",
+      "reads": []
+    }
+  ]
+}

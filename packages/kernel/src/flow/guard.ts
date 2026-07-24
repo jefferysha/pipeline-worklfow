@@ -386,7 +386,9 @@ export function evaluateGuard(state: PipelineState, ctx?: GuardContext): GuardRe
         if (ctx?.dirExists === undefined || ctx.changeArchived === undefined) break
         for (const dep of depsOf(state.fields.depends_on)) {
           if (ctx.dirExists(`openspec/changes/${dep}`)) {
-            failures.push(`${phase} 出口：依赖 change '${dep}' 必须先归档（当前活跃）`)
+            if (ctx.activeChangeArchived?.(dep) !== true) {
+              failures.push(`${phase} 出口：依赖 change '${dep}' 必须先归档（当前活跃）`)
+            }
           } else if (!ctx.changeArchived(dep)) {
             failures.push(`${phase} 出口：依赖 change '${dep}' 不存在（既不在活跃也不在归档）`)
           }

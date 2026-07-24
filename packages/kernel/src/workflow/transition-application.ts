@@ -11,14 +11,8 @@
  * 如果调用方仍各自持有 runRepo.transact()，它们仍然可能各自遗漏 await、漏写某段收尾、或悄悄
  * 在 callback 里插入自己的逻辑，"唯一"就名不副实（2026-07-17 codex 架构评估明确建议）。
  *
- * 分层：
- *   - planDefaultTransition / planCustomTransition —— 锁内规划阶段：判定 + 状态变换，**无任何
- *     持久化写**，但不是严格意义的纯函数（第 1 轮 review 纠正过这个措辞）——default 轨的
- *     DefaultEventPolicy typed guard/action（G2 P3 起，与 custom 轨共用 guard-handlers/action-handlers
- *     引擎）经 TransitionContext 按 event 条件性读文件/git，custom 轨的 stepGuard 读 tasks.md，
- *     这些读取是既有 kernel 单一真相源的职责；
- *     把它们预物化到 planner 之外需要在编排层复制一份「哪个 event 需要哪些事实」的知识，恰是
- *     transition-table 单源要消灭的重复，且 review 明确警告不要为纯度把这些读取移出锁外。
+ * 分层：两个 planner 在锁内判定和变换，但不持久化；它们保留 guard
+ * 所需的文件/Git 读取，避免编排层复制事件事实映射。
  *     planner 的输入面从类型上收窄：只收 state 与（custom 轨）已加载并编译的 WorkflowIR，不接收
  *     带 commit 能力的 WorkflowRunTransaction——规划途中在结构上就不可能提交。
  *   - execute() —— 编排层：调 runRepository.transact() → 锁内物化 workflow 定义 → 选对应
@@ -374,8 +368,9 @@ async function planCustomTransition(
   // from+event 查表——规划即选边的单一真相，无「选一条边、执行另查一条」的语义漂移面。
   const nextState = applyStepTransition(state, plan.to, clock)
   const actions = mergeLifecycleActions(plan.actions, lifecycle?.actions)
+  const closesRun = terminalArchive || actions.some((action) => action.type === 'archive-run')
   const warnings: TransitionApplicationWarning[] = []
-  let nextFields = terminalArchive
+  let nextFields = closesRun
     ? { ...nextState.fields, phase_status: 'done' as const }
     : nextState.fields
   if (actions.length > 0) {

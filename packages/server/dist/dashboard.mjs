@@ -3434,7 +3434,9 @@ function evaluateGuard(state, ctx) {
           break;
         for (const dep of depsOf(state.fields.depends_on)) {
           if (ctx.dirExists(`openspec/changes/${dep}`)) {
-            failures.push(`${phase} \u51FA\u53E3\uFF1A\u4F9D\u8D56 change '${dep}' \u5FC5\u987B\u5148\u5F52\u6863\uFF08\u5F53\u524D\u6D3B\u8DC3\uFF09`);
+            if (ctx.activeChangeArchived?.(dep) !== true) {
+              failures.push(`${phase} \u51FA\u53E3\uFF1A\u4F9D\u8D56 change '${dep}' \u5FC5\u987B\u5148\u5F52\u6863\uFF08\u5F53\u524D\u6D3B\u8DC3\uFF09`);
+            }
           } else if (!ctx.changeArchived(dep)) {
             failures.push(`${phase} \u51FA\u53E3\uFF1A\u4F9D\u8D56 change '${dep}' \u4E0D\u5B58\u5728\uFF08\u65E2\u4E0D\u5728\u6D3B\u8DC3\u4E5F\u4E0D\u5728\u5F52\u6863\uFF09`);
           }
@@ -10190,7 +10192,7 @@ var SIMPLE_WORKFLOW = {
       guards: [],
       transitions: [
         { event: "change-complete", to: "verify" },
-        { event: "scope-expanded", to: "escalated" }
+        { event: "scope-expanded", to: "escalated", actions: [{ type: "archive-run" }] }
       ]
     },
     {
@@ -10202,9 +10204,13 @@ var SIMPLE_WORKFLOW = {
       outputs: [],
       guards: [],
       transitions: [
-        { event: "verify-pass", to: "done", actions: [{ type: "mark-verification-passed" }] },
+        {
+          event: "verify-pass",
+          to: "done",
+          actions: [{ type: "mark-verification-passed" }, { type: "archive-run" }]
+        },
         { event: "verify-fail", to: "change", actions: [{ type: "mark-verification-failed" }] },
-        { event: "scope-expanded", to: "escalated" }
+        { event: "scope-expanded", to: "escalated", actions: [{ type: "archive-run" }] }
       ]
     },
     {
@@ -10680,8 +10686,9 @@ async function planCustomTransition(state, ir, workflowName, command, clock, com
     throw new Error(`workflow '${workflowName}' \u5728\u5DF2\u89C4\u5212 step '${plan.from}' \u540E\u65E0\u6CD5\u91CD\u53D6\u5F53\u524D step`);
   const nextState = applyStepTransition(state, plan.to, clock);
   const actions = mergeLifecycleActions(plan.actions, lifecycle?.actions);
+  const closesRun = terminalArchive || actions.some((action) => action.type === "archive-run");
   const warnings = [];
-  let nextFields = terminalArchive ? { ...nextState.fields, phase_status: "done" } : nextState.fields;
+  let nextFields = closesRun ? { ...nextState.fields, phase_status: "done" } : nextState.fields;
   if (actions.length > 0) {
     const outcome = await applyActions(actions, {
       fields: nextState.fields,

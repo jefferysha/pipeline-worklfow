@@ -13,6 +13,8 @@ steps:
         to: verify
       - event: scope-expanded
         to: escalated
+        actions:
+          - type: archive-run
   - id: verify
     label: Verify
     gate: null
@@ -26,12 +28,15 @@ steps:
         to: done
         actions:
           - type: mark-verification-passed
+          - type: archive-run
       - event: verify-fail
         to: change
         actions:
           - type: mark-verification-failed
       - event: scope-expanded
         to: escalated
+        actions:
+          - type: archive-run
   - id: done
     label: Done
     gate: null

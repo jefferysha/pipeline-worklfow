@@ -19,7 +19,7 @@ const SIMPLE_WORKFLOW: WorkflowDef = {
       guards: [],
       transitions: [
         { event: 'change-complete', to: 'verify' },
-        { event: 'scope-expanded', to: 'escalated' },
+        { event: 'scope-expanded', to: 'escalated', actions: [{ type: 'archive-run' }] },
       ],
     },
     {
@@ -31,9 +31,13 @@ const SIMPLE_WORKFLOW: WorkflowDef = {
       outputs: [],
       guards: [],
       transitions: [
-        { event: 'verify-pass', to: 'done', actions: [{ type: 'mark-verification-passed' }] },
+        {
+          event: 'verify-pass',
+          to: 'done',
+          actions: [{ type: 'mark-verification-passed' }, { type: 'archive-run' }],
+        },
         { event: 'verify-fail', to: 'change', actions: [{ type: 'mark-verification-failed' }] },
-        { event: 'scope-expanded', to: 'escalated' },
+        { event: 'scope-expanded', to: 'escalated', actions: [{ type: 'archive-run' }] },
       ],
     },
     {

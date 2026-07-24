@@ -679,6 +679,30 @@ describe('loops init —— 非交互结构化通道（真 fs 临时目录）', 
     expect(l.autonomy_level).toBe('L1') // loadRegistry 派生
   })
 
+  test('手动 loop：显式 workflow 与 skill bundle 不依赖 starter template 也会持久化', async () => {
+    const deps = makeDeps({ cwd: root })
+
+    expect(await cmdInit(deps, [
+      '--yes',
+      '--id', 'manual-bound-loop',
+      '--goal', GOAL_OK,
+      '--workflow', 'default',
+      '--skill-bundle', 'pm',
+    ])).toBe(0)
+
+    const { data, errors } = loadRegistry(root)
+    expect(errors).toEqual([])
+    expect(data!.loops[0]).toMatchObject({
+      id: 'manual-bound-loop',
+      workflow_id: 'default',
+      skill_bundle_id: 'pm',
+    })
+    const yaml = await readFile(join(root, '.pipeline', 'loops.yaml'), 'utf8')
+    expect(yaml).toContain('    workflow_id: default\n')
+    expect(yaml).toContain('    skill_bundle_id: pm\n')
+    expect(yaml).not.toContain('    template_id:')
+  })
+
   test('H11 starter：已知 v1 template 编译 policy 并持久化 binding，技能 profile 未显式绑定时仍 paused/unwired', async () => {
     const deps = makeDeps({ cwd: root })
 

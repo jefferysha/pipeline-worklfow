@@ -27,6 +27,7 @@ import {
   loadTrackRegistry,
   loadWorkflow,
   mutateTrackRegistry,
+  readCurrentRunRevisionSync,
   recordDocument,
   recordDocumentReads,
   stateStorageExistsSync,
@@ -199,6 +200,14 @@ export function realDeps(cwd: string, out: string[], err: string[]): CliDeps {
     fileNonempty: (p) => { try { const s = statSync(abs(p)); return s.isFile() && s.size > 0 } catch { return false } },
     readFile: (p) => { try { return readFileSync(abs(p), 'utf8') } catch { return undefined } },
     dirExists: (p) => { try { return statSync(abs(p)).isDirectory() } catch { return false } },
+    activeChangeArchived: (dep) => {
+      try {
+        const current = readCurrentRunRevisionSync(join(cwd, 'openspec', 'changes', dep))
+        return current?.state.fields.archived === 'true'
+      } catch {
+        return false
+      }
+    },
     changeArchived: (dep) => {
       try {
         return readdirSync(abs('openspec/changes/archive'), { withFileTypes: true })

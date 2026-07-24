@@ -146,7 +146,9 @@ describe('真实 e2e —— init --workflow 落地自定义 workflow 的首个 s
     expect(await h.run(['transition', 'tiny-done', 'verify-pass'])).toBe(0)
     const completed = await h.read('tiny-done')
     expect(completed).toMatch(/^phase: done$/m)
+    expect(completed).toMatch(/^phase_status: done$/m)
     expect(completed).toMatch(/^verify_result: pass$/m)
+    expect(completed).toMatch(/^archived: true$/m)
 
     expect(await h.run(['init', 'tiny-expanded', '--track', 'simple', '--preset', 'tweak'])).toBe(0)
     await appendFile(
@@ -155,7 +157,17 @@ describe('真实 e2e —— init --workflow 落地自定义 workflow 的首个 s
       'utf8',
     )
     expect(await h.run(['transition', 'tiny-expanded', 'scope-expanded'])).toBe(0)
-    expect((await h.read('tiny-expanded'))).toMatch(/^phase: escalated$/m)
+    const escalated = await h.read('tiny-expanded')
+    expect(escalated).toMatch(/^phase: escalated$/m)
+    expect(escalated).toMatch(/^phase_status: done$/m)
+    expect(escalated).toMatch(/^archived: true$/m)
+
+    expect(await h.run(['list', '--json'])).toBe(0)
+    const active = JSON.parse(h.out[0]!) as {
+      changes: Array<{ name: string }>
+    }
+    expect(active.changes.map((change) => change.name)).not.toContain('tiny-done')
+    expect(active.changes.map((change) => change.name)).not.toContain('tiny-expanded')
   }, 15_000)
 
   test('--workflow onboarding：真落 workflow=onboarding + phase=intake（workflow 首个 step 的 id，不是硬编码 open）', async () => {

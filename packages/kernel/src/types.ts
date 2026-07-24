@@ -314,6 +314,8 @@ export interface GuardContext {
   dirExists?: (relPath: string) => boolean
   /** dep 已归档：openspec/changes/archive/*-<dep> 目录存在（老 guard find -name "*-$dep"） */
   changeArchived?: (dep: string) => boolean
+  /** Active dependency directories must be judged by their canonical state only. */
+  activeChangeArchived?: (dep: string) => boolean
   /** 当前 change 目录相对项目根（openspec/changes/<name>）；change 内产物检查的路径锚点 */
   changeDirRel?: string
   /** PIPELINE_AUTOMATION_RUNNER=1 调度器旁路（build 相位 automation=queued 闸的逃生口） */

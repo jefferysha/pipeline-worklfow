@@ -3031,10 +3031,10 @@ var require_commander = __commonJS({
 
 // packages/cli/src/main.ts
 import { execFile as execFile4 } from "node:child_process";
-import { accessSync as accessSync4, constants as fsConstants4, readdirSync as readdirSync8, readFileSync as readFileSync26, statSync as statSync6 } from "node:fs";
-import { readdir as readdir11, readFile as readFile23, rm as rm8, stat as stat13, writeFile as writeFile13 } from "node:fs/promises";
+import { accessSync as accessSync4, constants as fsConstants4, readdirSync as readdirSync9, readFileSync as readFileSync27, statSync as statSync7 } from "node:fs";
+import { readFile as readFile23, rm as rm8, stat as stat13, writeFile as writeFile13 } from "node:fs/promises";
 import { homedir as homedir19 } from "node:os";
-import { dirname as dirname14, join as join67 } from "node:path";
+import { dirname as dirname14, join as join68 } from "node:path";
 import { fileURLToPath as fileURLToPath3 } from "node:url";
 
 // node_modules/commander/esm.mjs
@@ -6475,7 +6475,9 @@ function evaluateGuard(state, ctx) {
           break;
         for (const dep of depsOf(state.fields.depends_on)) {
           if (ctx.dirExists(`openspec/changes/${dep}`)) {
-            failures.push(`${phase} \u51FA\u53E3\uFF1A\u4F9D\u8D56 change '${dep}' \u5FC5\u987B\u5148\u5F52\u6863\uFF08\u5F53\u524D\u6D3B\u8DC3\uFF09`);
+            if (ctx.activeChangeArchived?.(dep) !== true) {
+              failures.push(`${phase} \u51FA\u53E3\uFF1A\u4F9D\u8D56 change '${dep}' \u5FC5\u987B\u5148\u5F52\u6863\uFF08\u5F53\u524D\u6D3B\u8DC3\uFF09`);
+            }
           } else if (!ctx.changeArchived(dep)) {
             failures.push(`${phase} \u51FA\u53E3\uFF1A\u4F9D\u8D56 change '${dep}' \u4E0D\u5B58\u5728\uFF08\u65E2\u4E0D\u5728\u6D3B\u8DC3\u4E5F\u4E0D\u5728\u5F52\u6863\uFF09`);
           }
@@ -9522,36 +9524,36 @@ function emitMapKey(key) {
   }
   return key;
 }
-function pushAllowed(lines, pad2, allowed) {
+function pushAllowed(lines, pad3, allowed) {
   if (allowed === "*") {
-    lines.push(`${pad2}allowed: '*'`);
+    lines.push(`${pad3}allowed: '*'`);
     return;
   }
   if (allowed.length === 0) {
-    lines.push(`${pad2}allowed: []`);
+    lines.push(`${pad3}allowed: []`);
     return;
   }
   const items = allowed.map(emitString);
   if (items.every((it) => !/[,[\]]/.test(it))) {
-    lines.push(`${pad2}allowed: [${items.join(", ")}]`);
+    lines.push(`${pad3}allowed: [${items.join(", ")}]`);
     return;
   }
-  lines.push(`${pad2}allowed:`);
+  lines.push(`${pad3}allowed:`);
   for (const it of items)
-    lines.push(`${pad2}  - ${it}`);
+    lines.push(`${pad3}  - ${it}`);
 }
-function pushWorkflow(lines, pad2, wf) {
+function pushWorkflow(lines, pad3, wf) {
   if (wf.default === void 0 && wf.allowed === void 0)
     return;
-  lines.push(`${pad2}workflow:`);
+  lines.push(`${pad3}workflow:`);
   if (wf.default !== void 0)
-    lines.push(`${pad2}  default: ${emitString(wf.default)}`);
+    lines.push(`${pad3}  default: ${emitString(wf.default)}`);
   if (wf.allowed !== void 0)
-    pushAllowed(lines, `${pad2}  `, wf.allowed);
+    pushAllowed(lines, `${pad3}  `, wf.allowed);
 }
-function pushPolicy(lines, pad2, p) {
+function pushPolicy(lines, pad3, p) {
   const sub = [];
-  const inner = `${pad2}  `;
+  const inner = `${pad3}  `;
   if (p.reviewSeed !== void 0)
     sub.push(`${inner}review_seed: ${emitString(p.reviewSeed)}`);
   if (p.autoEnqueueOnSpecComplete !== void 0)
@@ -9584,7 +9586,7 @@ function pushPolicy(lines, pad2, p) {
   }
   if (sub.length === 0)
     return;
-  lines.push(`${pad2}policy_profile:`, ...sub);
+  lines.push(`${pad3}policy_profile:`, ...sub);
 }
 function orderedOverrideKeys(builtins) {
   const keys = Object.keys(builtins);
@@ -13155,8 +13157,8 @@ function patchBudgetScalar(lines, block, field2, value) {
   }
 }
 function patchArray(lines, block, field2, values) {
-  const pad2 = " ".repeat(block.fieldIndent);
-  const rendered = values.length === 0 ? [`${pad2}${field2}: []`] : [`${pad2}${field2}:`, ...values.map((v) => `${pad2}  - ${formatString(v, field2, true)}`)];
+  const pad3 = " ".repeat(block.fieldIndent);
+  const rendered = values.length === 0 ? [`${pad3}${field2}: []`] : [`${pad3}${field2}:`, ...values.map((v) => `${pad3}  - ${formatString(v, field2, true)}`)];
   const at = findFieldLine(lines, block.start + 1, block.end, block.fieldIndent, field2);
   if (at === -1) {
     lines.splice(insertPointAtBlockEnd(lines, block.start, block.end), 0, ...rendered);
@@ -17940,7 +17942,7 @@ var SIMPLE_WORKFLOW = {
       guards: [],
       transitions: [
         { event: "change-complete", to: "verify" },
-        { event: "scope-expanded", to: "escalated" }
+        { event: "scope-expanded", to: "escalated", actions: [{ type: "archive-run" }] }
       ]
     },
     {
@@ -17952,9 +17954,13 @@ var SIMPLE_WORKFLOW = {
       outputs: [],
       guards: [],
       transitions: [
-        { event: "verify-pass", to: "done", actions: [{ type: "mark-verification-passed" }] },
+        {
+          event: "verify-pass",
+          to: "done",
+          actions: [{ type: "mark-verification-passed" }, { type: "archive-run" }]
+        },
         { event: "verify-fail", to: "change", actions: [{ type: "mark-verification-failed" }] },
-        { event: "scope-expanded", to: "escalated" }
+        { event: "scope-expanded", to: "escalated", actions: [{ type: "archive-run" }] }
       ]
     },
     {
@@ -18304,8 +18310,9 @@ async function planCustomTransition(state, ir, workflowName, command, clock, com
     throw new Error(`workflow '${workflowName}' \u5728\u5DF2\u89C4\u5212 step '${plan.from}' \u540E\u65E0\u6CD5\u91CD\u53D6\u5F53\u524D step`);
   const nextState = applyStepTransition(state, plan.to, clock);
   const actions = mergeLifecycleActions(plan.actions, lifecycle?.actions);
+  const closesRun = terminalArchive || actions.some((action) => action.type === "archive-run");
   const warnings = [];
-  let nextFields = terminalArchive ? { ...nextState.fields, phase_status: "done" } : nextState.fields;
+  let nextFields = closesRun ? { ...nextState.fields, phase_status: "done" } : nextState.fields;
   if (actions.length > 0) {
     const outcome = await applyActions(actions, {
       fields: nextState.fields,
@@ -34903,9 +34910,7 @@ async function cmdInit(deps, name2, opts, env = REAL_INIT_WIZARD_ENV) {
 
 // packages/cli/src/commands/loops.ts
 import { readFileSync as readFileSync22, readdirSync as readdirSync6 } from "node:fs";
-import { homedir as homedir12 } from "node:os";
 import { isAbsolute as isAbsolute8, join as join55 } from "node:path";
-import { createInterface as createInterface4 } from "node:readline/promises";
 
 // packages/cli/src/commands/loop-admission-view.ts
 import { existsSync as existsSync10 } from "node:fs";
@@ -35572,225 +35577,21 @@ async function cmdLoopSync(deps, args, runtime = REAL_LOOP_SYNC_RUNTIME) {
   }
 }
 
-// packages/cli/src/commands/loops.ts
-function readTopLevelScalars(absPath) {
-  let text;
-  try {
-    text = readFileSync22(absPath, "utf8");
-  } catch {
-    return null;
-  }
-  const out = {};
-  for (const rawLine of text.split("\n")) {
-    const line = rawLine.replace(/\r$/, "");
-    if (line === "" || /^\s/.test(line) || line.trimStart().startsWith("#")) continue;
-    const m = line.match(/^([A-Za-z_][\w.-]*):\s*(.*)$/);
-    if (!m) continue;
-    let v = m[2].trim();
-    if (!(v.startsWith('"') || v.startsWith("'"))) {
-      const cm = v.match(/^(.*?)\s+#.*$/);
-      if (cm) v = cm[1].trimEnd();
-    } else if (v.length >= 2 && v[0] === v[v.length - 1]) {
-      v = v.slice(1, -1);
-    }
-    out[m[1]] = v;
-  }
-  return out;
-}
-function readStateFields(changeDir2) {
-  try {
-    const current = readCurrentRunRevisionSync(changeDir2);
-    if (current !== void 0) {
-      const fields = current.state.fields;
-      return Object.fromEntries(Object.entries(fields).map(([field2, value]) => [
-        field2,
-        Array.isArray(value) ? value.join(",") : value
-      ]));
-    }
-    return readTopLevelScalars(join55(changeDir2, ".pipeline.yaml"));
-  } catch {
-    return null;
-  }
-}
-function sandboxChangeDir(repoRoot, name2, worktree) {
-  let base;
-  if (worktree && worktree.trim() !== "") {
-    const w = worktree.trim();
-    base = isAbsolute8(w) ? w : join55(repoRoot, w);
-  } else {
-    base = join55(repoRoot, ".sandcastle", "worktrees", `sandcastle-pipeline-${name2}`);
-  }
-  return join55(base, "openspec", "changes", name2);
-}
-var REAL_LOOPS_FS = {
-  loadRegistry: (repoRoot) => loadRegistry(repoRoot),
-  readProgress: (repoRoot) => {
-    try {
-      return readFileSync22(join55(repoRoot, ".superpowers", "loops", "progress.md"), "utf8");
-    } catch {
-      return null;
-    }
-  },
-  listChanges: (repoRoot, changePrefix) => {
-    try {
-      return readdirSync6(join55(repoRoot, "openspec", "changes"), { withFileTypes: true }).filter((e) => e.isDirectory() && e.name !== "archive" && e.name.startsWith(changePrefix)).map((e) => e.name).sort();
-    } catch {
-      return [];
-    }
-  },
-  readChangeFields: (repoRoot, name2) => readStateFields(join55(repoRoot, "openspec", "changes", name2)),
-  readSandboxFields: (repoRoot, name2, worktree) => readStateFields(sandboxChangeDir(repoRoot, name2, worktree))
-};
-var REAL_DRIFT_FS = {
-  loadRegistry: (repoRoot) => loadRegistry(repoRoot),
-  readRunLog: (repoRoot) => REAL_LOOPS_FS.readProgress(repoRoot),
-  readLoopDoc: (repoRoot) => {
-    try {
-      return readFileSync22(join55(repoRoot, "LOOP.md"), "utf8");
-    } catch {
-      return null;
-    }
-  }
-};
-var REAL_GRADUATION_FS = {
-  loadRegistry: (repoRoot) => loadRegistry(repoRoot),
-  readRunLog: (repoRoot) => REAL_LOOPS_FS.readProgress(repoRoot),
-  readLoopDoc: (repoRoot) => REAL_DRIFT_FS.readLoopDoc(repoRoot),
-  readRegistrySnapshot: async (repoRoot) => {
-    const snap = await readRegistrySnapshot(repoRoot);
-    return snap.epoch === ABSENT_REGISTRY_EPOCH ? null : { text: snap.text, epoch: snap.epoch };
-  },
-  writeRegistryGoverned: async (repoRoot, expectedEpoch, produce) => {
-    const r = await writeRegistryWithGovernance(repoRoot, expectedEpoch, (cur) => produce(cur));
-    return { ok: r.ok, error: r.ok ? null : r.error };
-  }
-};
+// packages/cli/src/commands/loops-governance.ts
 function parseArgs2(args) {
   let json = false;
   let loop = null;
   for (let i = 0; i < args.length; i++) {
-    const a = args[i];
-    if (a === "--json") json = true;
-    else if (a === "--loop") loop = args[++i] ?? null;
+    if (args[i] === "--json") json = true;
+    else if (args[i] === "--loop") loop = args[++i] ?? null;
   }
   return { json, loop };
 }
-var pad = (s, n) => s.length >= n ? s : s + " ".repeat(n - s.length);
-function loopSummaryLine(l) {
-  const prefix = l.change_prefix === null ? "(none)" : l.change_prefix;
-  return `  ${pad(l.id, 16)} ${pad(l.kind, 13)} ${pad(l.cadence, 11)} status=${pad(l.status, 8)} ${l.autonomy_level}/${enforcementFor(l.autonomy_level)}  budget=${l.budget.max_runs_per_day}/${l.budget.max_in_flight}  prefix=${prefix}`;
-}
-function printRegistryTable(deps, reg) {
-  deps.io.out(`[LOOPS] ${reg.loops.length} registered`);
-  for (const l of reg.loops) deps.io.out(loopSummaryLine(l));
-}
-function printReportTable(deps, report) {
-  deps.io.out(`${pad("id", 20)} ${pad("verdict", 6)} ${pad("enforce", 13)} rules`);
-  for (const v of report.verdicts) {
-    const rules = v.reasons.map((r) => r.rule).join(",") || "-";
-    deps.io.out(`${pad(v.id, 20)} ${pad(v.verdict, 6)} ${pad(v.enforcement, 13)} ${rules}`);
-  }
-  for (const s of report.skipped) deps.io.out(`${pad(s.id, 20)} ${pad("skip", 6)} ${pad("-", 13)} ${s.reason}`);
-  if (report.notes.length > 0) {
-    deps.io.out("notes:");
-    for (const n of report.notes) deps.io.out(`  ${n}`);
-  }
-}
-function cmdList2(deps, p, fs) {
-  const { data, errors } = fs.loadRegistry(deps.cwd);
-  if (errors.length > 0) {
-    for (const e of errors) deps.io.err(`ERROR: ${e}`);
-    return 1;
-  }
-  if (data === null) {
-    deps.io.out("(no loops registry) .pipeline/loops.yaml \u672A\u627E\u5230\u2014\u2014\u672C\u9879\u76EE\u65E0\u767B\u8BB0 loop\uFF08\u5E38\u6001\uFF0C\u975E\u9519\u8BEF\uFF09");
-    return 0;
-  }
-  if (p.json) {
-    deps.io.out(JSON.stringify(data, null, 2));
-    return 0;
-  }
-  printRegistryTable(deps, data);
-  return 0;
-}
-function cmdEnforce(deps, p, fs) {
-  const now = new Date(deps.clock());
-  const { report, errors, exitCode } = buildReport(deps.cwd, { onlyLoop: p.loop, now }, fs);
-  if (errors.length > 0 || report === null) {
-    for (const e of errors) deps.io.err(`ERROR: ${e}`);
-    return exitCode;
-  }
-  if (p.json) {
-    deps.io.out(JSON.stringify(report, null, 2));
-    return exitCode;
-  }
-  printReportTable(deps, report);
-  return exitCode;
-}
-async function cmdStatus(deps, args, fs, starterWiringDeps) {
-  const { data, errors } = fs.loadRegistry(deps.cwd);
-  if (errors.length > 0) {
-    for (const e of errors) deps.io.err(`ERROR: ${e}`);
-    return 1;
-  }
-  if (data === null) {
-    deps.io.out(args.json ? JSON.stringify({ loops: [] }) : "(no loops registry) .pipeline/loops.yaml \u672A\u627E\u5230");
-    return 0;
-  }
-  const now = new Date(deps.clock());
-  const { report } = buildReport(deps.cwd, { now }, fs);
-  const verdictById = new Map((report?.verdicts ?? []).map((v) => [v.id, v.verdict]));
-  const { byId, missing: missing3 } = await ledgerProjections(deps.cwd, data.loops.map((l) => l.id), now);
-  const starterReports = await Promise.all(data.loops.map((loop) => loop.template_id === void 0 ? Promise.resolve(null) : buildLoopStarterWiringReport(loop.template_id, data.loops, starterWiringDeps)));
-  if (args.json) {
-    deps.io.out(JSON.stringify({
-      loops: data.loops.map((loop, index) => {
-        const projection = byId.get(loop.id);
-        const starter = starterReports[index];
-        return {
-          id: loop.id,
-          status: loop.status,
-          verdict: verdictById.get(loop.id) ?? null,
-          autonomy_level: loop.autonomy_level,
-          enforcement: enforcementFor(loop.autonomy_level),
-          ledger: {
-            health: missing3 ? "missing" : projection.health,
-            admission: admissionProbe(loop, projection),
-            in_flight: projection.inFlight,
-            runs_today: projection.runsToday,
-            last_result: projection.lastResult
-          },
-          template: loop.template_id === void 0 ? null : { id: loop.template_id, version: loop.template_version ?? null },
-          binding: starter?.binding ?? null,
-          wiring: starter?.wiring ?? null,
-          runnable: starter?.runnable ?? null
-        };
-      })
-    }, null, 2));
-    return 0;
-  }
-  deps.io.out("[LOOPS status]");
-  for (const [index, l] of data.loops.entries()) {
-    const verdict = verdictById.get(l.id) ?? "-(skip)";
-    deps.io.out(`  ${pad(l.id, 16)} status=${pad(l.status, 8)} verdict=${pad(verdict, 8)} ${l.autonomy_level}/${enforcementFor(l.autonomy_level)}`);
-    const p = byId.get(l.id);
-    const health = missing3 ? "missing" : p.health;
-    deps.io.out(`    ledger=${pad(health, 8)} admit=${pad(admissionProbe(l, p), 24)} inflight=${p.inFlight} runs_today=${p.runsToday} last=${p.lastResult ?? "-"}`);
-    const starter = starterReports[index] ?? null;
-    if (starter === null) {
-      deps.io.out("    template=(manual) binding=n/a wiring=n/a runnable=n/a");
-    } else {
-      deps.io.out(
-        `    template=${l.template_id}@${l.template_version ?? "?"} binding=${starter.binding.status} wiring=${starter.wiring.status} runnable=${String(starter.runnable)}`
-      );
-      if (starter.wiring.reason !== null) deps.io.out(`      reason=${starter.wiring.reason}`);
-    }
-  }
-  return 0;
-}
+var pad = (value, width) => value.length >= width ? value : value + " ".repeat(width - value.length);
 function positionalLoop(args) {
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
+    if (a === void 0) continue;
     if (a === "--loop") {
       i++;
       continue;
@@ -35840,11 +35641,15 @@ async function cmdBudget(deps, args, fs) {
   const { byId, missing: missing3 } = await ledgerProjections(deps.cwd, report.statuses.map((s) => s.id), now);
   if (p.json) {
     const loopById = new Map((fs.loadRegistry(deps.cwd).data?.loops ?? []).map((l) => [l.id, l]));
-    const statuses = report.statuses.map((s) => ({
-      ...s,
-      breaker_source: "legacy-progress",
-      admission: buildAdmissionJson(loopById.get(s.id), byId.get(s.id), missing3)
-    }));
+    const statuses = report.statuses.map((s) => {
+      const projection = byId.get(s.id);
+      if (projection === void 0) throw new Error(`ledger projection missing for loop '${s.id}'`);
+      return {
+        ...s,
+        breaker_source: "legacy-progress",
+        admission: buildAdmissionJson(loopById.get(s.id), projection, missing3)
+      };
+    });
     deps.io.out(JSON.stringify({ ...report, statuses }, null, 2));
     return exitCode;
   }
@@ -35929,6 +35734,7 @@ function positionals(args) {
   const out = [];
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
+    if (a === void 0) continue;
     if (a === "--loop") {
       i++;
       continue;
@@ -35996,6 +35802,10 @@ async function cmdLevel(deps, args, fs) {
       return exitCode;
     }
     const v = report.verdicts[0];
+    if (v === void 0) {
+      deps.io.err(`ERROR: loop '${loopId}' \u6CA1\u6709\u6BD5\u4E1A\u5236\u88C1\u51B3`);
+      return 3;
+    }
     if (p.json) {
       deps.io.out(JSON.stringify(v, null, 2));
       return 0;
@@ -36030,6 +35840,12 @@ async function cmdLevel(deps, args, fs) {
   );
   return 0;
 }
+
+// packages/cli/src/commands/loops-init.ts
+import { homedir as homedir12 } from "node:os";
+import { createInterface as createInterface4 } from "node:readline/promises";
+
+// packages/cli/src/commands/loops-init-input.ts
 var RISK_CADENCE = { low: "4h", medium: "2h", high: "1h" };
 var RISK_MAX_RUNS = { low: 48, medium: 24, high: 8 };
 var DEFAULT_KILL_CRITERIA = ["no-change-3", "budget-burn-2d"];
@@ -36075,6 +35891,7 @@ function parseInitArgs(args) {
   };
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
+    if (a === void 0) continue;
     switch (a) {
       case "--yes":
         out.yes = true;
@@ -36186,15 +36003,19 @@ function compileStarter(flags) {
 }
 function resolveDefaults(flags) {
   const missing3 = [];
-  if (flags.id === void 0) missing3.push("--id");
-  if (flags.goal === void 0) missing3.push("--goal");
-  if (missing3.length > 0) return { raw: null, missing: missing3 };
   const id = flags.id;
+  const goal = flags.goal;
+  if (id === void 0) missing3.push("--id");
+  if (goal === void 0) missing3.push("--goal");
+  if (missing3.length > 0) return { raw: null, missing: missing3 };
+  if (id === void 0 || goal === void 0) return { raw: null, missing: ["--id", "--goal"] };
   const risk = flags.risk ?? "low";
   const raw = {
     id,
     name: flags.name ?? id,
-    goal: flags.goal,
+    goal,
+    workflowId: flags.workflow,
+    skillBundleId: flags.skillBundle,
     designDoc: flags.doc ?? `docs/loops/${id}.md`,
     prefix: flags.prefix === void 0 ? derivePrefix(id) : flags.prefix === "none" ? null : flags.prefix,
     kind: flags.kind ?? "orchestrator",
@@ -36218,6 +36039,7 @@ function assembleEntry(raw, starter = null) {
     on_exceed: "skip",
     max_tokens_per_day: DEFAULT_MAX_TOKENS_PER_DAY
   };
+  const workflowId = raw.workflowId ?? starter?.workflowId;
   const entry = {
     id: raw.id,
     name: raw.name,
@@ -36236,13 +36058,15 @@ function assembleEntry(raw, starter = null) {
     kill_criteria: raw.kill,
     ...starter === null ? {} : {
       template_id: starter.templateId,
-      template_version: starter.templateVersion,
-      workflow_id: starter.workflowId,
-      skill_bundle_id: starter.skillBundleId
-    }
+      template_version: starter.templateVersion
+    },
+    ...workflowId === void 0 ? {} : { workflow_id: workflowId },
+    ...starter === null && raw.skillBundleId === void 0 ? {} : { skill_bundle_id: raw.skillBundleId ?? starter?.skillBundleId ?? null }
   };
   return { entry, error: null };
 }
+
+// packages/cli/src/commands/loops-init.ts
 var REAL_INIT_ENV = {
   readSnapshot: async (repoRoot) => {
     const snap = await readRegistrySnapshot(repoRoot);
@@ -36300,7 +36124,22 @@ async function runWizard(deps, flags, env) {
     const risk = await askValidated2(p, deps, "\u98CE\u9669\u6863\uFF08low|medium|high\uFF09", flags.risk ?? "low", validateRisk2, false);
     const cadence = await askValidated2(p, deps, "\u8282\u594F cadence", flags.cadence ?? RISK_CADENCE[risk], validateCadence, false);
     const phases = await askCsv(p, "\u9636\u6BB5\uFF08CSV\uFF09", flags.phases ?? PHASES);
-    return { id, name: flags.name ?? id, goal, designDoc, prefix, kind, runner, gates, kill, risk, cadence, phases };
+    return {
+      id,
+      name: flags.name ?? id,
+      goal,
+      workflowId: flags.workflow,
+      skillBundleId: flags.skillBundle,
+      designDoc,
+      prefix,
+      kind,
+      runner,
+      gates,
+      kill,
+      risk,
+      cadence,
+      phases
+    };
   } finally {
     p.close();
   }
@@ -36423,27 +36262,254 @@ async function cmdInit2(deps, args, env = REAL_INIT_ENV, starterWiringDeps = def
     starterReport = await buildLoopStarterWiringReport(starter.templateId, loaded.data.loops, starterWiringDeps);
   }
   if (flags.json) {
-    deps.io.out(JSON.stringify(starter === null ? { ok: true, id: entry.id, path: loopsPath, draft: true } : {
-      ok: true,
-      id: entry.id,
-      path: loopsPath,
-      draft: true,
-      status: entry.status,
-      template: starter.policy,
-      template_error: starter.compileError,
-      binding: starterReport.binding,
-      wiring: starterReport.wiring,
-      runnable: starterReport.runnable
-    }));
+    if (starter === null) {
+      deps.io.out(JSON.stringify({ ok: true, id: entry.id, path: loopsPath, draft: true }));
+    } else if (starterReport === null) {
+      return initFail(deps, true, "starter \u5DF2\u843D\u76D8\u4F46 wiring report \u7F3A\u5931");
+    } else {
+      deps.io.out(JSON.stringify({
+        ok: true,
+        id: entry.id,
+        path: loopsPath,
+        draft: true,
+        status: entry.status,
+        template: starter.policy,
+        template_error: starter.compileError,
+        binding: starterReport.binding,
+        wiring: starterReport.wiring,
+        runnable: starterReport.runnable
+      }));
+    }
   } else {
     deps.io.out(`[loops init] \u5DF2\u767B\u8BB0\u8349\u7A3F loop\u300C${entry.id}\u300D\u2192 ${loopsPath}`);
-    if (starter !== null) printStarterInitReport(deps, starter, starterReport);
+    if (starter !== null) {
+      if (starterReport === null) return initFail(deps, false, "starter \u5DF2\u843D\u76D8\u4F46 wiring report \u7F3A\u5931");
+      printStarterInitReport(deps, starter, starterReport);
+    }
     deps.io.out("\u5DF2\u4F5C\u4E3A\u8349\u7A3F\uFF08\u5DF2\u6682\u505C\uFF09\u767B\u8BB0\uFF1B\u6253\u5F00 dashboard \u5DE5\u4F5C\u53F0\u5BA1\u9605\uFF0C\u6279\u51C6\u540E\u542F\u7528\uFF1B\u9884\u7B97\u4E0E\u81EA\u4E3B\u7EA7\u522B\u5728\u5BA1\u9605\u9762\u8C03\u6574\uFF08\u5347\u6863\u8D70\u6BD5\u4E1A\u5236\uFF09\u3002");
   }
   return 0;
 }
+
+// packages/cli/src/commands/loops.ts
+function readTopLevelScalars(absPath) {
+  let text;
+  try {
+    text = readFileSync22(absPath, "utf8");
+  } catch {
+    return null;
+  }
+  const out = {};
+  for (const rawLine of text.split("\n")) {
+    const line = rawLine.replace(/\r$/, "");
+    if (line === "" || /^\s/.test(line) || line.trimStart().startsWith("#")) continue;
+    const m = line.match(/^([A-Za-z_][\w.-]*):\s*(.*)$/);
+    if (!m) continue;
+    let v = (m[2] ?? "").trim();
+    if (!(v.startsWith('"') || v.startsWith("'"))) {
+      const cm = v.match(/^(.*?)\s+#.*$/);
+      if (cm) v = (cm[1] ?? "").trimEnd();
+    } else if (v.length >= 2 && v[0] === v[v.length - 1]) {
+      v = v.slice(1, -1);
+    }
+    out[m[1]] = v;
+  }
+  return out;
+}
+function readStateFields(changeDir2) {
+  try {
+    const current = readCurrentRunRevisionSync(changeDir2);
+    if (current !== void 0) {
+      const fields = current.state.fields;
+      return Object.fromEntries(Object.entries(fields).map(([field2, value]) => [
+        field2,
+        Array.isArray(value) ? value.join(",") : value
+      ]));
+    }
+    return readTopLevelScalars(join55(changeDir2, ".pipeline.yaml"));
+  } catch {
+    return null;
+  }
+}
+function sandboxChangeDir(repoRoot, name2, worktree) {
+  let base;
+  if (worktree && worktree.trim() !== "") {
+    const w = worktree.trim();
+    base = isAbsolute8(w) ? w : join55(repoRoot, w);
+  } else {
+    base = join55(repoRoot, ".sandcastle", "worktrees", `sandcastle-pipeline-${name2}`);
+  }
+  return join55(base, "openspec", "changes", name2);
+}
+var REAL_LOOPS_FS = {
+  loadRegistry: (repoRoot) => loadRegistry(repoRoot),
+  readProgress: (repoRoot) => {
+    try {
+      return readFileSync22(join55(repoRoot, ".superpowers", "loops", "progress.md"), "utf8");
+    } catch {
+      return null;
+    }
+  },
+  listChanges: (repoRoot, changePrefix) => {
+    try {
+      return readdirSync6(join55(repoRoot, "openspec", "changes"), { withFileTypes: true }).filter((e) => e.isDirectory() && e.name !== "archive" && e.name.startsWith(changePrefix)).map((e) => e.name).sort();
+    } catch {
+      return [];
+    }
+  },
+  readChangeFields: (repoRoot, name2) => readStateFields(join55(repoRoot, "openspec", "changes", name2)),
+  readSandboxFields: (repoRoot, name2, worktree) => readStateFields(sandboxChangeDir(repoRoot, name2, worktree))
+};
+var REAL_DRIFT_FS = {
+  loadRegistry: (repoRoot) => loadRegistry(repoRoot),
+  readRunLog: (repoRoot) => REAL_LOOPS_FS.readProgress(repoRoot),
+  readLoopDoc: (repoRoot) => {
+    try {
+      return readFileSync22(join55(repoRoot, "LOOP.md"), "utf8");
+    } catch {
+      return null;
+    }
+  }
+};
+var REAL_GRADUATION_FS = {
+  loadRegistry: (repoRoot) => loadRegistry(repoRoot),
+  readRunLog: (repoRoot) => REAL_LOOPS_FS.readProgress(repoRoot),
+  readLoopDoc: (repoRoot) => REAL_DRIFT_FS.readLoopDoc(repoRoot),
+  readRegistrySnapshot: async (repoRoot) => {
+    const snap = await readRegistrySnapshot(repoRoot);
+    return snap.epoch === ABSENT_REGISTRY_EPOCH ? null : { text: snap.text, epoch: snap.epoch };
+  },
+  writeRegistryGoverned: async (repoRoot, expectedEpoch, produce) => {
+    const r = await writeRegistryWithGovernance(repoRoot, expectedEpoch, (cur) => produce(cur));
+    return { ok: r.ok, error: r.ok ? null : r.error };
+  }
+};
+function parseArgs3(args) {
+  let json = false;
+  let loop = null;
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === void 0) continue;
+    if (a === "--json") json = true;
+    else if (a === "--loop") loop = args[++i] ?? null;
+  }
+  return { json, loop };
+}
+var pad2 = (s, n) => s.length >= n ? s : s + " ".repeat(n - s.length);
+function loopSummaryLine(l) {
+  const prefix = l.change_prefix === null ? "(none)" : l.change_prefix;
+  return `  ${pad2(l.id, 16)} ${pad2(l.kind, 13)} ${pad2(l.cadence, 11)} status=${pad2(l.status, 8)} ${l.autonomy_level}/${enforcementFor(l.autonomy_level)}  budget=${l.budget.max_runs_per_day}/${l.budget.max_in_flight}  prefix=${prefix}`;
+}
+function printRegistryTable(deps, reg) {
+  deps.io.out(`[LOOPS] ${reg.loops.length} registered`);
+  for (const l of reg.loops) deps.io.out(loopSummaryLine(l));
+}
+function printReportTable(deps, report) {
+  deps.io.out(`${pad2("id", 20)} ${pad2("verdict", 6)} ${pad2("enforce", 13)} rules`);
+  for (const v of report.verdicts) {
+    const rules = v.reasons.map((r) => r.rule).join(",") || "-";
+    deps.io.out(`${pad2(v.id, 20)} ${pad2(v.verdict, 6)} ${pad2(v.enforcement, 13)} ${rules}`);
+  }
+  for (const s of report.skipped) deps.io.out(`${pad2(s.id, 20)} ${pad2("skip", 6)} ${pad2("-", 13)} ${s.reason}`);
+  if (report.notes.length > 0) {
+    deps.io.out("notes:");
+    for (const n of report.notes) deps.io.out(`  ${n}`);
+  }
+}
+function cmdList2(deps, p, fs) {
+  const { data, errors } = fs.loadRegistry(deps.cwd);
+  if (errors.length > 0) {
+    for (const e of errors) deps.io.err(`ERROR: ${e}`);
+    return 1;
+  }
+  if (data === null) {
+    deps.io.out("(no loops registry) .pipeline/loops.yaml \u672A\u627E\u5230\u2014\u2014\u672C\u9879\u76EE\u65E0\u767B\u8BB0 loop\uFF08\u5E38\u6001\uFF0C\u975E\u9519\u8BEF\uFF09");
+    return 0;
+  }
+  if (p.json) {
+    deps.io.out(JSON.stringify(data, null, 2));
+    return 0;
+  }
+  printRegistryTable(deps, data);
+  return 0;
+}
+function cmdEnforce(deps, p, fs) {
+  const now = new Date(deps.clock());
+  const { report, errors, exitCode } = buildReport(deps.cwd, { onlyLoop: p.loop, now }, fs);
+  if (errors.length > 0 || report === null) {
+    for (const e of errors) deps.io.err(`ERROR: ${e}`);
+    return exitCode;
+  }
+  if (p.json) {
+    deps.io.out(JSON.stringify(report, null, 2));
+    return exitCode;
+  }
+  printReportTable(deps, report);
+  return exitCode;
+}
+async function cmdStatus(deps, args, fs, starterWiringDeps) {
+  const { data, errors } = fs.loadRegistry(deps.cwd);
+  if (errors.length > 0) {
+    for (const e of errors) deps.io.err(`ERROR: ${e}`);
+    return 1;
+  }
+  if (data === null) {
+    deps.io.out(args.json ? JSON.stringify({ loops: [] }) : "(no loops registry) .pipeline/loops.yaml \u672A\u627E\u5230");
+    return 0;
+  }
+  const now = new Date(deps.clock());
+  const { report } = buildReport(deps.cwd, { now }, fs);
+  const verdictById = new Map((report?.verdicts ?? []).map((v) => [v.id, v.verdict]));
+  const { byId, missing: missing3 } = await ledgerProjections(deps.cwd, data.loops.map((l) => l.id), now);
+  const starterReports = await Promise.all(data.loops.map((loop) => loop.template_id === void 0 ? Promise.resolve(null) : buildLoopStarterWiringReport(loop.template_id, data.loops, starterWiringDeps)));
+  if (args.json) {
+    deps.io.out(JSON.stringify({
+      loops: data.loops.map((loop, index) => {
+        const projection = byId.get(loop.id);
+        const starter = starterReports[index];
+        return {
+          id: loop.id,
+          status: loop.status,
+          verdict: verdictById.get(loop.id) ?? null,
+          autonomy_level: loop.autonomy_level,
+          enforcement: enforcementFor(loop.autonomy_level),
+          ledger: {
+            health: missing3 ? "missing" : projection.health,
+            admission: admissionProbe(loop, projection),
+            in_flight: projection.inFlight,
+            runs_today: projection.runsToday,
+            last_result: projection.lastResult
+          },
+          template: loop.template_id === void 0 ? null : { id: loop.template_id, version: loop.template_version ?? null },
+          binding: starter?.binding ?? null,
+          wiring: starter?.wiring ?? null,
+          runnable: starter?.runnable ?? null
+        };
+      })
+    }, null, 2));
+    return 0;
+  }
+  deps.io.out("[LOOPS status]");
+  for (const [index, l] of data.loops.entries()) {
+    const verdict = verdictById.get(l.id) ?? "-(skip)";
+    deps.io.out(`  ${pad2(l.id, 16)} status=${pad2(l.status, 8)} verdict=${pad2(verdict, 8)} ${l.autonomy_level}/${enforcementFor(l.autonomy_level)}`);
+    const p = byId.get(l.id);
+    const health = missing3 ? "missing" : p.health;
+    deps.io.out(`    ledger=${pad2(health, 8)} admit=${pad2(admissionProbe(l, p), 24)} inflight=${p.inFlight} runs_today=${p.runsToday} last=${p.lastResult ?? "-"}`);
+    const starter = starterReports[index] ?? null;
+    if (starter === null) {
+      deps.io.out("    template=(manual) binding=n/a wiring=n/a runnable=n/a");
+    } else {
+      deps.io.out(
+        `    template=${l.template_id}@${l.template_version ?? "?"} binding=${starter.binding.status} wiring=${starter.wiring.status} runnable=${String(starter.runnable)}`
+      );
+      if (starter.wiring.reason !== null) deps.io.out(`      reason=${starter.wiring.reason}`);
+    }
+  }
+  return 0;
+}
 async function cmdLoops(deps, sub, args, fs = REAL_LOOPS_FS, driftFs = REAL_DRIFT_FS, graduationFs = REAL_GRADUATION_FS, initEnv = REAL_INIT_ENV, starterWiringDeps = defaultStarterWiringDeps(deps)) {
-  const p = parseArgs2(args);
+  const p = parseArgs3(args);
   switch (sub || "list") {
     case "list":
       return cmdList2(deps, p, fs);
@@ -40770,6 +40836,83 @@ loops init \u975E\u4EA4\u4E92 flags\uFF08agent/CI\uFF1B\u7F3A TTY \u6216 --yes \
   return program2;
 }
 
+// packages/cli/src/guardContext.ts
+import { readdirSync as readdirSync8, readFileSync as readFileSync26, statSync as statSync6 } from "node:fs";
+import { readdir as readdir11 } from "node:fs/promises";
+import { join as join67 } from "node:path";
+async function listChanges(changesRoot2) {
+  let entries;
+  try {
+    entries = await readdir11(changesRoot2, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  return entries.filter((entry) => entry.isDirectory() && entry.name !== "archive").filter((entry) => stateStorageExistsSync(join67(changesRoot2, entry.name))).map((entry) => entry.name).sort();
+}
+async function listChangeDirs(changesRoot2) {
+  let entries;
+  try {
+    entries = await readdir11(changesRoot2, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  return entries.filter((entry) => entry.isDirectory() && entry.name !== "archive").map((entry) => entry.name).sort();
+}
+function activeCanonicalArchived(cwd, dep) {
+  try {
+    const current = readCurrentRunRevisionSync(join67(cwd, "openspec", "changes", dep));
+    return current?.state.fields.archived === "true";
+  } catch {
+    return false;
+  }
+}
+function physicallyArchived(cwd, dep) {
+  try {
+    return readdirSync8(join67(cwd, "openspec", "changes", "archive"), { withFileTypes: true }).some((entry) => entry.isDirectory() && entry.name.endsWith(`-${dep}`));
+  } catch {
+    return false;
+  }
+}
+function makeGuardCtx(cwd) {
+  const abs = (relativePath) => join67(cwd, relativePath);
+  return (name2) => ({
+    changeDirRel: `openspec/changes/${name2}`,
+    stateExists: (changeDirRel) => stateStorageExistsSync(abs(changeDirRel)),
+    fileExists: (path7) => {
+      try {
+        return statSync6(abs(path7)).isFile();
+      } catch {
+        return false;
+      }
+    },
+    fileNonempty: (path7) => {
+      try {
+        const state = statSync6(abs(path7));
+        return state.isFile() && state.size > 0;
+      } catch {
+        return false;
+      }
+    },
+    readFile: (path7) => {
+      try {
+        return readFileSync26(abs(path7), "utf8");
+      } catch {
+        return void 0;
+      }
+    },
+    dirExists: (path7) => {
+      try {
+        return statSync6(abs(path7)).isDirectory();
+      } catch {
+        return false;
+      }
+    },
+    activeChangeArchived: (dep) => activeCanonicalArchived(cwd, dep),
+    changeArchived: (dep) => physicallyArchived(cwd, dep),
+    automationRunner: process.env.PIPELINE_AUTOMATION_RUNNER === "1"
+  });
+}
+
 // packages/cli/src/main.ts
 function isoNow() {
   return (/* @__PURE__ */ new Date()).toISOString().replace(/\.\d{3}Z$/, "Z");
@@ -40781,34 +40924,11 @@ function gitHeadSha(cwd) {
     });
   });
 }
-async function listChanges(changesRoot2) {
-  let entries;
-  try {
-    entries = await readdir11(changesRoot2, { withFileTypes: true });
-  } catch {
-    return [];
-  }
-  const names = [];
-  for (const entry of entries) {
-    if (!entry.isDirectory() || entry.name === "archive") continue;
-    if (stateStorageExistsSync(join67(changesRoot2, entry.name))) names.push(entry.name);
-  }
-  return names.sort();
-}
-async function listChangeDirs(changesRoot2) {
-  let entries;
-  try {
-    entries = await readdir11(changesRoot2, { withFileTypes: true });
-  } catch {
-    return [];
-  }
-  return entries.filter((entry) => entry.isDirectory() && entry.name !== "archive").map((entry) => entry.name).sort();
-}
 async function readGateMarkers(cwd) {
   const out = [];
   for (const kind of ["confirm", "review", "interaction"]) {
     try {
-      const p = join67(cwd, `.pipeline-pending-${kind}`);
+      const p = join68(cwd, `.pipeline-pending-${kind}`);
       const st = await stat13(p);
       out.push({ kind, ageMs: Date.now() - st.mtimeMs, raw: await readFile23(p, "utf8") });
     } catch {
@@ -40816,57 +40936,11 @@ async function readGateMarkers(cwd) {
   }
   return out;
 }
-function makeGuardCtx(cwd) {
-  const abs = (relPath) => join67(cwd, relPath);
-  return (name2) => ({
-    changeDirRel: `openspec/changes/${name2}`,
-    stateExists: (changeDirRel) => stateStorageExistsSync(abs(changeDirRel)),
-    fileExists: (p) => {
-      try {
-        return statSync6(abs(p)).isFile();
-      } catch {
-        return false;
-      }
-    },
-    fileNonempty: (p) => {
-      try {
-        const st = statSync6(abs(p));
-        return st.isFile() && st.size > 0;
-      } catch {
-        return false;
-      }
-    },
-    readFile: (p) => {
-      try {
-        return readFileSync26(abs(p), "utf8");
-      } catch {
-        return void 0;
-      }
-    },
-    dirExists: (p) => {
-      try {
-        return statSync6(abs(p)).isDirectory();
-      } catch {
-        return false;
-      }
-    },
-    // 老 guard：find openspec/changes/archive -mindepth 1 -maxdepth 1 -type d -name "*-<dep>"
-    changeArchived: (dep) => {
-      try {
-        return readdirSync8(abs("openspec/changes/archive"), { withFileTypes: true }).some((e) => e.isDirectory() && e.name.endsWith(`-${dep}`));
-      } catch {
-        return false;
-      }
-    },
-    // 调度器执行路径旁路（老 guard PIPELINE_AUTOMATION_RUNNER=1 语义）
-    automationRunner: process.env.PIPELINE_AUTOMATION_RUNNER === "1"
-  });
-}
 function pluginRoot() {
-  return join67(dirname14(fileURLToPath3(import.meta.url)), "..", "..", "..");
+  return join68(dirname14(fileURLToPath3(import.meta.url)), "..", "..", "..");
 }
 function manifestPath() {
-  return join67(pluginRoot(), "templates", "manifest.yaml");
+  return join68(pluginRoot(), "templates", "manifest.yaml");
 }
 function trackValidationContext(repoRoot, manifest) {
   const skillProfiles = /* @__PURE__ */ new Set();
@@ -40896,7 +40970,7 @@ function readPluginVersion() {
     [".claude-plugin", "plugin.json"]
   ]) {
     try {
-      const raw = readFileSync26(join67(pluginRoot(), ...rel), "utf8");
+      const raw = readFileSync27(join68(pluginRoot(), ...rel), "utf8");
       const version = JSON.parse(raw).version;
       if (typeof version === "string" && version.trim() !== "") return version;
     } catch {
@@ -40906,7 +40980,7 @@ function readPluginVersion() {
 }
 function safeReaddirDirs(dir) {
   try {
-    return readdirSync8(dir, { withFileTypes: true }).filter((e) => e.isDirectory() || e.isSymbolicLink()).map((e) => e.name);
+    return readdirSync9(dir, { withFileTypes: true }).filter((e) => e.isDirectory() || e.isSymbolicLink()).map((e) => e.name);
   } catch {
     return [];
   }
@@ -40914,7 +40988,7 @@ function safeReaddirDirs(dir) {
 function readDisabledPluginKeys() {
   const disabled = /* @__PURE__ */ new Set();
   try {
-    const raw = readFileSync26(join67(homedir19(), ".claude", "settings.json"), "utf8");
+    const raw = readFileSync27(join68(homedir19(), ".claude", "settings.json"), "utf8");
     const ep = JSON.parse(raw).enabledPlugins;
     if (ep !== null && typeof ep === "object") {
       for (const [key, val] of Object.entries(ep)) if (val === false) disabled.add(key);
@@ -40926,26 +41000,26 @@ function readDisabledPluginKeys() {
 function scanInstalledSkillNames() {
   const home = homedir19();
   const names = /* @__PURE__ */ new Set();
-  for (const n of safeReaddirDirs(join67(home, ".claude", "skills"))) names.add(n);
-  for (const n of safeReaddirDirs(join67(home, ".agents", "skills"))) names.add(n);
-  const cache2 = join67(home, ".claude", "plugins", "cache");
+  for (const n of safeReaddirDirs(join68(home, ".claude", "skills"))) names.add(n);
+  for (const n of safeReaddirDirs(join68(home, ".agents", "skills"))) names.add(n);
+  const cache2 = join68(home, ".claude", "plugins", "cache");
   const disabledPlugins = readDisabledPluginKeys();
   for (const marketplace of safeReaddirDirs(cache2)) {
-    const mktDir = join67(cache2, marketplace);
+    const mktDir = join68(cache2, marketplace);
     for (const plugin of safeReaddirDirs(mktDir)) {
       if (disabledPlugins.has(`${plugin}@${marketplace}`)) continue;
       names.add(plugin);
-      for (const skill of safeReaddirDirs(join67(mktDir, plugin, "skills"))) names.add(skill);
+      for (const skill of safeReaddirDirs(join68(mktDir, plugin, "skills"))) names.add(skill);
     }
   }
   return names;
 }
 function scanCodexProjectSkillNames(cwd, root) {
   const names = /* @__PURE__ */ new Set();
-  for (const skillsRoot of [join67(root, "skills"), join67(cwd, ".agents", "skills")]) {
+  for (const skillsRoot of [join68(root, "skills"), join68(cwd, ".agents", "skills")]) {
     for (const name2 of safeReaddirDirs(skillsRoot)) {
       try {
-        if (statSync6(join67(skillsRoot, name2, "SKILL.md")).isFile()) names.add(name2);
+        if (statSync7(join68(skillsRoot, name2, "SKILL.md")).isFile()) names.add(name2);
       } catch {
       }
     }
@@ -40970,7 +41044,7 @@ function makeDoctorProbes(machineStateHome) {
     },
     fileExists: (p) => {
       try {
-        return statSync6(p).isFile();
+        return statSync7(p).isFile();
       } catch {
         return false;
       }
@@ -40985,7 +41059,7 @@ function makeDoctorProbes(machineStateHome) {
     },
     dirExists: (p) => {
       try {
-        return statSync6(p).isDirectory();
+        return statSync7(p).isDirectory();
       } catch {
         return false;
       }
@@ -40994,7 +41068,7 @@ function makeDoctorProbes(machineStateHome) {
     // 接入判定与 statusline.sh 头注释的接入方式同口径：settings.json 里引用了该脚本即算接入
     statuslineConfigured: () => {
       try {
-        return readFileSync26(join67(homedir19(), ".claude", "settings.json"), "utf8").includes("statusline.sh");
+        return readFileSync27(join68(homedir19(), ".claude", "settings.json"), "utf8").includes("statusline.sh");
       } catch {
         return false;
       }
@@ -41006,7 +41080,7 @@ function makeDoctorProbes(machineStateHome) {
     runVerifySkills: () => new Promise((resolve21) => {
       execFile4(
         "bash",
-        [join67(root, "tools", "verify-skills.sh"), "--quiet"],
+        [join68(root, "tools", "verify-skills.sh"), "--quiet"],
         { timeout: 3e4 },
         (err, stdout, stderr) => {
           const errCode = err?.code;
@@ -41039,7 +41113,7 @@ function makeDoctorProbes(machineStateHome) {
       image: readAutomationJson(process.cwd()).image ?? "sandcastle:local",
       secretsEnv: readSecrets(secretsPath(machineStateHome)).keys,
       hostEnv: process.env,
-      defaultCodexHome: join67(homedir19(), ".codex")
+      defaultCodexHome: join68(homedir19(), ".codex")
     })
   };
 }
@@ -41087,7 +41161,7 @@ async function main() {
     guardCtx: makeGuardCtx(process.cwd()),
     doctor: makeDoctorProbes(machineStateHome),
     readGateMarkers: () => readGateMarkers(process.cwd()),
-    writeBreadcrumb: (dir, content) => writeFile13(join67(dir, ".breadcrumb"), content, "utf8"),
+    writeBreadcrumb: (dir, content) => writeFile13(join68(dir, ".breadcrumb"), content, "utf8"),
     history: createHistoryWriter(),
     // 决策 D（v5 T2）：init 成功后 best-effort 登记项目根到 ~/.claude/pipeline-projects.json
     registerProject: async (repoRoot) => {
@@ -41098,18 +41172,18 @@ async function main() {
     readSecretsEnv: async () => readSecrets(secretsPath(machineStateHome)).keys,
     readHistoryRaw: async (dir) => {
       try {
-        return await readFile23(join67(dir, ".pipeline-history.jsonl"), "utf8");
+        return await readFile23(join68(dir, ".pipeline-history.jsonl"), "utf8");
       } catch {
         return "";
       }
     },
     gitHeadSha: () => gitHeadSha(process.cwd()),
     workspaceFingerprint: () => fingerprintWorkspace(process.cwd()),
-    writeReviewMarker: (content) => writeFile13(join67(process.cwd(), ".pipeline-pending-review"), content, "utf8"),
-    clearReviewMarker: () => rm8(join67(process.cwd(), ".pipeline-pending-review"), { force: true }),
+    writeReviewMarker: (content) => writeFile13(join68(process.cwd(), ".pipeline-pending-review"), content, "utf8"),
+    clearReviewMarker: () => rm8(join68(process.cwd(), ".pipeline-pending-review"), { force: true }),
     pluginVersion: readPluginVersion(),
     readInstalledPlugins: async () => {
-      for (const p of [join67(pluginRoot(), "..", "installed_plugins.json"), join67(process.env.HOME ?? "", ".claude", "installed_plugins.json")]) {
+      for (const p of [join68(pluginRoot(), "..", "installed_plugins.json"), join68(process.env.HOME ?? "", ".claude", "installed_plugins.json")]) {
         try {
           return await readFile23(p, "utf8");
         } catch {

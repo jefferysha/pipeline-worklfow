@@ -9,7 +9,7 @@
  */
 import { execFile } from 'node:child_process'
 import { accessSync, constants as fsConstants, readdirSync, readFileSync, statSync } from 'node:fs'
-import { readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -18,16 +18,17 @@ import {
   BUILTIN_TRACK_DEFINITIONS, createEffectiveSkillResolver, createFlowEngine, createHistoryWriter, createStateStore,
   createTransitionRecordStore, createWorkflowRunRepository, loadManifest, loadTrackRegistry, loadWorkflow,
   fingerprintWorkspace, mutateTrackRegistry, projectRegistryPath, readSecrets, registerProjectRoot, secretsPath,
-  stateStorageExistsSync, withTrackRegistryLock,
+  withTrackRegistryLock,
 } from '@pipeline-lite/kernel'
 import { readAutomationJson } from '@pipeline-lite/automation'
 import { tapStatus } from '@pipeline-lite/tap'
 import type { ExtendedManifestData, TrackRegistry, TrackValidationContext } from '@pipeline-lite/kernel'
-import type { CliDeps, DoctorProbes, GateMarkerInfo, GuardFileContext } from './deps.js'
+import type { CliDeps, DoctorProbes, GateMarkerInfo } from './deps.js'
 import { probeAfkReadiness } from './afkReadiness.js'
 import { splitPassthroughArgv } from './argv.js'
 import { buildProgram, CliExit } from './program.js'
 import { createProductionTriageRuntime } from './commands/triage.js'
+import { listChangeDirs, listChanges, makeGuardCtx } from './guardContext.js'
 import { resolveMachineStateHome } from './machineHome.js'
 import { REAL_RUNTIME_INSTALLER } from './runtime/installer.js'
 
@@ -48,39 +49,6 @@ function gitHeadSha(cwd: string): Promise<string> {
   })
 }
 
-async function listChanges(changesRoot: string): Promise<string[]> {
-  let entries
-  try {
-    entries = await readdir(changesRoot, { withFileTypes: true })
-  } catch {
-    return []
-  }
-  const names: string[] = []
-  for (const entry of entries) {
-    if (!entry.isDirectory() || entry.name === 'archive') continue
-    if (stateStorageExistsSync(join(changesRoot, entry.name))) names.push(entry.name)
-  }
-  return names.sort()
-}
-
-/**
- * 严格候选枚举（Track CRUD 引用扫描专用，codex R3 阻断 D 修复）：只保留目录、排除 archive，
- * **不做 .pipeline.yaml 存在性过滤**——刻意区别于 listChanges。缺文件/EACCES/半成品目录也进候选，
- * 交由 scanActiveChanges 逐个 store.read 判可读性（读不了归 unreadable）→ fail-closed 真实生效。
- */
-async function listChangeDirs(changesRoot: string): Promise<string[]> {
-  let entries
-  try {
-    entries = await readdir(changesRoot, { withFileTypes: true })
-  } catch {
-    return []
-  }
-  return entries
-    .filter((entry) => entry.isDirectory() && entry.name !== 'archive')
-    .map((entry) => entry.name)
-    .sort()
-}
-
 /** 项目根三门 marker（缺失即不在收件箱；新鲜判定归 inbox 命令） */
 async function readGateMarkers(cwd: string): Promise<GateMarkerInfo[]> {
   const out: GateMarkerInfo[] = []
@@ -94,40 +62,6 @@ async function readGateMarkers(cwd: string): Promise<GateMarkerInfo[]> {
     }
   }
   return out
-}
-
-/**
- * check 命令的 guard 文件面（BACKLOG #12）：GuardContext 的 node:fs 落地。
- * 老 guard 在项目根跑 bash `[ -f ]` 等谓词——此处以 cwd 为根做同义解析；
- * 谓词为同步纯读（guardCheck 是纯函数签名），任何 fs 异常一律按「不存在」处理。
- */
-function makeGuardCtx(cwd: string): (name: string) => GuardFileContext {
-  const abs = (relPath: string) => join(cwd, relPath)
-  return (name: string): GuardFileContext => ({
-    changeDirRel: `openspec/changes/${name}`,
-    stateExists: (changeDirRel) => stateStorageExistsSync(abs(changeDirRel)),
-    fileExists: (p) => {
-      try { return statSync(abs(p)).isFile() } catch { return false }
-    },
-    fileNonempty: (p) => {
-      try { const st = statSync(abs(p)); return st.isFile() && st.size > 0 } catch { return false }
-    },
-    readFile: (p) => {
-      try { return readFileSync(abs(p), 'utf8') } catch { return undefined }
-    },
-    dirExists: (p) => {
-      try { return statSync(abs(p)).isDirectory() } catch { return false }
-    },
-    // 老 guard：find openspec/changes/archive -mindepth 1 -maxdepth 1 -type d -name "*-<dep>"
-    changeArchived: (dep) => {
-      try {
-        return readdirSync(abs('openspec/changes/archive'), { withFileTypes: true })
-          .some((e) => e.isDirectory() && e.name.endsWith(`-${dep}`))
-      } catch { return false }
-    },
-    // 调度器执行路径旁路（老 guard PIPELINE_AUTOMATION_RUNNER=1 语义）
-    automationRunner: process.env.PIPELINE_AUTOMATION_RUNNER === '1',
-  })
 }
 
 /**

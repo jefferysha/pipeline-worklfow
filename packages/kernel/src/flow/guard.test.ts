@@ -32,6 +32,7 @@ function makeState(overrides: Partial<Record<FieldName, string | string[]>> = {}
 interface CtxOpts {
   activeDirs?: string[]
   archived?: string[]
+  activeArchived?: string[]
   automationRunner?: boolean
   changeDirRel?: string
   coverageProfile?: CoverageProfile
@@ -47,6 +48,7 @@ function ctxOf(files: Record<string, string>, opts: CtxOpts = {}): GuardContext 
     fileNonempty: (p) => has(p) && files[p]!.length > 0,
     readFile: (p) => (has(p) ? files[p] : undefined),
     dirExists: (p) => (opts.activeDirs ?? []).includes(p),
+    activeChangeArchived: (dep) => (opts.activeArchived ?? []).includes(dep),
     changeArchived: (dep) => (opts.archived ?? []).includes(dep),
     automationRunner: opts.automationRunner,
   }
@@ -357,6 +359,32 @@ describe('build 出口（GG3 + B1-B6；B8 build_sha 投影撤销）', () => {
     expect(fails(gone, "依赖 change 'dep-c' 不存在（既不在活跃也不在归档）")).toHaveLength(1)
     const ok = evaluateGuard(be({ depends_on: ['dep-b'] }), ctxOf(buildFiles(), { archived: ['dep-b'] }))
     expect(ok.pass).toBe(true)
+    const canonicallyArchivedInPlace = evaluateGuard(
+      be({ depends_on: ['dep-b'] }),
+      ctxOf(buildFiles(), {
+        activeDirs: ['openspec/changes/dep-b'],
+        archived: ['dep-b'],
+        activeArchived: ['dep-b'],
+      }),
+    )
+    expect(canonicallyArchivedInPlace.pass).toBe(true)
+    const staleSameNameArchive = evaluateGuard(
+      be({ depends_on: ['dep-b'] }),
+      ctxOf(buildFiles(), {
+        activeDirs: ['openspec/changes/dep-b'],
+        archived: ['dep-b'],
+      }),
+    )
+    expect(fails(staleSameNameArchive, "'dep-b' 必须先归档")).toHaveLength(1)
+    const damagedActiveCanonical = evaluateGuard(
+      be({ depends_on: ['dep-b'] }),
+      ctxOf(buildFiles(), {
+        activeDirs: ['openspec/changes/dep-b'],
+        archived: ['dep-b'],
+        activeArchived: [],
+      }),
+    )
+    expect(fails(damagedActiveCanonical, "'dep-b' 必须先归档")).toHaveLength(1)
   })
 
   it('B6 老式逗号标量也认（"a, b" → 逐项 trim）；"null"/空跳过', () => {
