@@ -28,7 +28,12 @@
         {
           "phase": "ship",
           "sha256": "0cfd4b2710d665a7147721525e2020371a029d9456e77d1d814ad98ba8334f08",
-          "readAt": "2026-07-24T08:49:04Z"
+          "readAt": "2026-07-24T09:15:20Z"
+        },
+        {
+          "phase": "archive",
+          "sha256": "0cfd4b2710d665a7147721525e2020371a029d9456e77d1d814ad98ba8334f08",
+          "readAt": "2026-07-24T09:16:12Z"
         }
       ]
     },
@@ -57,7 +62,12 @@
         {
           "phase": "ship",
           "sha256": "e07e1c5987648f5a71eed55683297143daf14256c8e8ca292359dcd035b8e85d",
-          "readAt": "2026-07-24T08:49:04Z"
+          "readAt": "2026-07-24T09:15:20Z"
+        },
+        {
+          "phase": "archive",
+          "sha256": "e07e1c5987648f5a71eed55683297143daf14256c8e8ca292359dcd035b8e85d",
+          "readAt": "2026-07-24T09:16:12Z"
         }
       ]
     },
@@ -86,7 +96,12 @@
         {
           "phase": "ship",
           "sha256": "fbd5f3fdd8d4298c2636d2920e4a9143baddcacdf290a33005034e9d0b69350f",
-          "readAt": "2026-07-24T08:49:04Z"
+          "readAt": "2026-07-24T09:15:20Z"
+        },
+        {
+          "phase": "archive",
+          "sha256": "fbd5f3fdd8d4298c2636d2920e4a9143baddcacdf290a33005034e9d0b69350f",
+          "readAt": "2026-07-24T09:16:12Z"
         }
       ]
     },
@@ -110,7 +125,12 @@
         {
           "phase": "ship",
           "sha256": "31454c49787a8cde7c9a597ba6e492680fac0b890b9c55492fea7770b98a3dbd",
-          "readAt": "2026-07-24T08:49:04Z"
+          "readAt": "2026-07-24T09:15:20Z"
+        },
+        {
+          "phase": "archive",
+          "sha256": "31454c49787a8cde7c9a597ba6e492680fac0b890b9c55492fea7770b98a3dbd",
+          "readAt": "2026-07-24T09:16:12Z"
         }
       ]
     },
@@ -134,7 +154,12 @@
         {
           "phase": "ship",
           "sha256": "31454c49787a8cde7c9a597ba6e492680fac0b890b9c55492fea7770b98a3dbd",
-          "readAt": "2026-07-24T08:49:04Z"
+          "readAt": "2026-07-24T09:15:20Z"
+        },
+        {
+          "phase": "archive",
+          "sha256": "31454c49787a8cde7c9a597ba6e492680fac0b890b9c55492fea7770b98a3dbd",
+          "readAt": "2026-07-24T09:16:12Z"
         }
       ]
     },
@@ -163,7 +188,12 @@
         {
           "phase": "ship",
           "sha256": "873038f22a89c63b9f16e894aeeb49721483f562214cdbd75ecba479d704a028",
-          "readAt": "2026-07-24T08:49:04Z"
+          "readAt": "2026-07-24T09:15:20Z"
+        },
+        {
+          "phase": "archive",
+          "sha256": "873038f22a89c63b9f16e894aeeb49721483f562214cdbd75ecba479d704a028",
+          "readAt": "2026-07-24T09:16:12Z"
         }
       ]
     },
@@ -187,7 +217,12 @@
         {
           "phase": "ship",
           "sha256": "49216791cc90a76735c4ec99ba2c792c7a38d4d13bb7aea94ce9d4dfc05c2f5a",
-          "readAt": "2026-07-24T08:49:04Z"
+          "readAt": "2026-07-24T09:15:20Z"
+        },
+        {
+          "phase": "archive",
+          "sha256": "49216791cc90a76735c4ec99ba2c792c7a38d4d13bb7aea94ce9d4dfc05c2f5a",
+          "readAt": "2026-07-24T09:16:12Z"
         }
       ]
     },
@@ -201,26 +236,12 @@
         {
           "phase": "ship",
           "sha256": "dd16246b10de269fb4e981df9a2ddaba886a3b242d0b6474a3c0be5466fcf8c6",
-          "readAt": "2026-07-24T08:49:04Z"
-        }
-      ]
-    },
-    {
-      "kind": "tasks",
-      "path": "openspec/changes/normal-chat-default-orchestration/tasks.md",
-      "sha256": "b5db0d0bedbdbcabb9a3347c2a96934bd538392a5cb29c4e60a47db80608254b",
-      "producer": "pipeline-verify",
-      "recordedAt": "2026-07-24T08:39:12Z",
-      "reads": [
-        {
-          "phase": "verify",
-          "sha256": "b5db0d0bedbdbcabb9a3347c2a96934bd538392a5cb29c4e60a47db80608254b",
-          "readAt": "2026-07-24T08:39:13Z"
+          "readAt": "2026-07-24T09:15:20Z"
         },
         {
-          "phase": "ship",
-          "sha256": "b5db0d0bedbdbcabb9a3347c2a96934bd538392a5cb29c4e60a47db80608254b",
-          "readAt": "2026-07-24T08:49:04Z"
+          "phase": "archive",
+          "sha256": "dd16246b10de269fb4e981df9a2ddaba886a3b242d0b6474a3c0be5466fcf8c6",
+          "readAt": "2026-07-24T09:16:12Z"
         }
       ]
     },
@@ -230,7 +251,13 @@
       "sha256": "bcb652ec2d135c0fe099cfd16a12b77ab95cd0410037b43904f36c8dba949cd2",
       "producer": "openspec-apply-change",
       "recordedAt": "2026-07-24T08:40:36Z",
-      "reads": []
+      "reads": [
+        {
+          "phase": "archive",
+          "sha256": "bcb652ec2d135c0fe099cfd16a12b77ab95cd0410037b43904f36c8dba949cd2",
+          "readAt": "2026-07-24T09:16:12Z"
+        }
+      ]
     },
     {
       "kind": "delta-spec",
@@ -242,7 +269,26 @@
         {
           "phase": "ship",
           "sha256": "a8d2195c96256a37b1d4ce0c670635c46bf869e21ba7074624d6851d09d207db",
-          "readAt": "2026-07-24T08:49:04Z"
+          "readAt": "2026-07-24T09:15:20Z"
+        },
+        {
+          "phase": "archive",
+          "sha256": "a8d2195c96256a37b1d4ce0c670635c46bf869e21ba7074624d6851d09d207db",
+          "readAt": "2026-07-24T09:16:12Z"
+        }
+      ]
+    },
+    {
+      "kind": "tasks",
+      "path": "openspec/changes/normal-chat-default-orchestration/tasks.md",
+      "sha256": "d35d34f54850d32e3be2c10466737fff31234d93a2f7d090f34f30a0de2cb8b0",
+      "producer": "pipeline-archive",
+      "recordedAt": "2026-07-24T09:16:12Z",
+      "reads": [
+        {
+          "phase": "archive",
+          "sha256": "d35d34f54850d32e3be2c10466737fff31234d93a2f7d090f34f30a0de2cb8b0",
+          "readAt": "2026-07-24T09:16:12Z"
         }
       ]
     }

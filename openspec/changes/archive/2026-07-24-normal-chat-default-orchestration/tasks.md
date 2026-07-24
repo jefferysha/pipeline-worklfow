@@ -40,8 +40,8 @@
 
 ## Ship
 
-- [ ] 在 verify 通过并得到 ship 确认后，生成/登记 applied spec，发布可安装 bundle，并只推送经用户授权的目标分支与远程。
+- [x] 在 verify 通过并得到 ship 确认后，生成/登记 applied spec，发布可安装 bundle，并只推送经用户授权的目标分支与远程。
 
 ## Archive
 
-- [ ] 在发布验收后归档 change，保留最终文档账本、验证报告和 applied spec 作为可追溯证据。
+- [x] 在发布验收后归档 change，保留最终文档账本、验证报告和 applied spec 作为可追溯证据。

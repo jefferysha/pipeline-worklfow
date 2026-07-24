@@ -27,8 +27,8 @@
 
 ## Ship
 
-- [ ] Apply the delta to the main document-evidence specification and publish the verified commit.
+- [x] Apply the delta to the main document-evidence specification and publish the verified commit.
 
 ## Archive
 
-- [ ] Archive the change with its final ledger, report, and applied-spec receipt.
+- [x] Archive the change with its final ledger, report, and applied-spec receipt.

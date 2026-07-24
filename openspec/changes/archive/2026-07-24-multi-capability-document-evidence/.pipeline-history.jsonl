@@ -86,3 +86,10 @@
 {"ts":"2026-07-24T09:12:38Z","kind":"tool","raw":"CodexSkillRead: pipeline-ship"}
 {"ts":"2026-07-24T09:12:38Z","kind":"tool","raw":"CodexSkillRead: openspec-apply-change"}
 {"ts":"2026-07-24T09:12:38Z","kind":"tool","raw":"CodexSkillRead: finishing-a-development-branch"}
+{"ts":"2026-07-24T09:15:08Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated"}
+{"ts":"2026-07-24T09:15:08Z","kind":"set","field":"pr_url","to":"https://github.com/jefferysha/pipeline-worklfow/commit/cd67e5b"}
+{"ts":"2026-07-24T09:15:18Z","kind":"set","field":"pr_url","to":"https://github.com/jefferysha/pipeline-worklfow/commit/cd67e5b"}
+{"ts":"2026-07-24T09:15:19Z","kind":"transition","from":"ship","to":"archive","raw":"ship-complete","transitionRecordId":"a34418f4-2d7c-4db8-9925-1f7c08256853"}
+{"ts":"2026-07-24T09:16:13Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated"}
+{"ts":"2026-07-24T09:16:20Z","kind":"tool","raw":"CodexSkillRead: pipeline-archive"}
+{"ts":"2026-07-24T09:16:28Z","kind":"transition","from":"archive","to":"archive","raw":"archived","transitionRecordId":"952248c6-6fdd-4352-9d6e-89e77eaf43f5"}

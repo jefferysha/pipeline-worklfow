@@ -28,7 +28,12 @@
         {
           "phase": "ship",
           "sha256": "92174ad733e3f0a08f3ee865c3d1030959c6e03b9ae22b82583ad145a3d1273e",
-          "readAt": "2026-07-24T09:11:24Z"
+          "readAt": "2026-07-24T09:15:18Z"
+        },
+        {
+          "phase": "archive",
+          "sha256": "92174ad733e3f0a08f3ee865c3d1030959c6e03b9ae22b82583ad145a3d1273e",
+          "readAt": "2026-07-24T09:16:27Z"
         }
       ]
     },
@@ -57,7 +62,12 @@
         {
           "phase": "ship",
           "sha256": "da6026f9fa086d739b72ae22c9dab5663c0d185fdd600ade8971566ea0ee64ad",
-          "readAt": "2026-07-24T09:11:24Z"
+          "readAt": "2026-07-24T09:15:18Z"
+        },
+        {
+          "phase": "archive",
+          "sha256": "da6026f9fa086d739b72ae22c9dab5663c0d185fdd600ade8971566ea0ee64ad",
+          "readAt": "2026-07-24T09:16:27Z"
         }
       ]
     },
@@ -81,7 +91,12 @@
         {
           "phase": "ship",
           "sha256": "d3b332c15e6fc3d84243529abe8559ad386c57c17c4681d7b4f7e6e3ef822319",
-          "readAt": "2026-07-24T09:11:24Z"
+          "readAt": "2026-07-24T09:15:18Z"
+        },
+        {
+          "phase": "archive",
+          "sha256": "d3b332c15e6fc3d84243529abe8559ad386c57c17c4681d7b4f7e6e3ef822319",
+          "readAt": "2026-07-24T09:16:27Z"
         }
       ]
     },
@@ -105,7 +120,12 @@
         {
           "phase": "ship",
           "sha256": "d3b332c15e6fc3d84243529abe8559ad386c57c17c4681d7b4f7e6e3ef822319",
-          "readAt": "2026-07-24T09:11:24Z"
+          "readAt": "2026-07-24T09:15:18Z"
+        },
+        {
+          "phase": "archive",
+          "sha256": "d3b332c15e6fc3d84243529abe8559ad386c57c17c4681d7b4f7e6e3ef822319",
+          "readAt": "2026-07-24T09:16:27Z"
         }
       ]
     },
@@ -129,7 +149,12 @@
         {
           "phase": "ship",
           "sha256": "4e0d161bf59495198594696b885947b3c75e5059e7a180e48cb21ced5b3b2f36",
-          "readAt": "2026-07-24T09:11:24Z"
+          "readAt": "2026-07-24T09:15:18Z"
+        },
+        {
+          "phase": "archive",
+          "sha256": "4e0d161bf59495198594696b885947b3c75e5059e7a180e48cb21ced5b3b2f36",
+          "readAt": "2026-07-24T09:16:27Z"
         }
       ]
     },
@@ -158,7 +183,12 @@
         {
           "phase": "ship",
           "sha256": "f76fcbf01d1fb78937c2144905da60e63fb25e3d815b46a731e288407441c4fb",
-          "readAt": "2026-07-24T09:11:24Z"
+          "readAt": "2026-07-24T09:15:18Z"
+        },
+        {
+          "phase": "archive",
+          "sha256": "f76fcbf01d1fb78937c2144905da60e63fb25e3d815b46a731e288407441c4fb",
+          "readAt": "2026-07-24T09:16:27Z"
         }
       ]
     },
@@ -187,7 +217,12 @@
         {
           "phase": "ship",
           "sha256": "1b18a2e7440df3ac01fc605a7e3c83d5fbcf8f21b3555a95c66eff7af9b58c2f",
-          "readAt": "2026-07-24T09:11:24Z"
+          "readAt": "2026-07-24T09:15:18Z"
+        },
+        {
+          "phase": "archive",
+          "sha256": "1b18a2e7440df3ac01fc605a7e3c83d5fbcf8f21b3555a95c66eff7af9b58c2f",
+          "readAt": "2026-07-24T09:16:27Z"
         }
       ]
     },
@@ -201,26 +236,12 @@
         {
           "phase": "ship",
           "sha256": "556d4943e53630d1f9e14c1871d946f4763e9f15ad4971938ac1969d9d9e884a",
-          "readAt": "2026-07-24T09:11:24Z"
-        }
-      ]
-    },
-    {
-      "kind": "tasks",
-      "path": "openspec/changes/multi-capability-document-evidence/tasks.md",
-      "sha256": "99e21df5fae7a8610b46a4ef978137d1a60582935da799bd718f7ffd994dd4be",
-      "producer": "pipeline-verify",
-      "recordedAt": "2026-07-24T09:10:53Z",
-      "reads": [
-        {
-          "phase": "verify",
-          "sha256": "99e21df5fae7a8610b46a4ef978137d1a60582935da799bd718f7ffd994dd4be",
-          "readAt": "2026-07-24T09:10:53Z"
+          "readAt": "2026-07-24T09:15:18Z"
         },
         {
-          "phase": "ship",
-          "sha256": "99e21df5fae7a8610b46a4ef978137d1a60582935da799bd718f7ffd994dd4be",
-          "readAt": "2026-07-24T09:11:24Z"
+          "phase": "archive",
+          "sha256": "556d4943e53630d1f9e14c1871d946f4763e9f15ad4971938ac1969d9d9e884a",
+          "readAt": "2026-07-24T09:16:27Z"
         }
       ]
     },
@@ -230,7 +251,27 @@
       "sha256": "b6c5c282ab5fe382b066a33378e0bb51d622e4b1fb2315299fb7321e3b229b0b",
       "producer": "openspec-apply-change",
       "recordedAt": "2026-07-24T09:11:24Z",
-      "reads": []
+      "reads": [
+        {
+          "phase": "archive",
+          "sha256": "b6c5c282ab5fe382b066a33378e0bb51d622e4b1fb2315299fb7321e3b229b0b",
+          "readAt": "2026-07-24T09:16:27Z"
+        }
+      ]
+    },
+    {
+      "kind": "tasks",
+      "path": "openspec/changes/multi-capability-document-evidence/tasks.md",
+      "sha256": "54ecbea4a74fed499980c6949c8f065be117d40cce45a2ce192c859c9f4daca1",
+      "producer": "pipeline-archive",
+      "recordedAt": "2026-07-24T09:16:27Z",
+      "reads": [
+        {
+          "phase": "archive",
+          "sha256": "54ecbea4a74fed499980c6949c8f065be117d40cce45a2ce192c859c9f4daca1",
+          "readAt": "2026-07-24T09:16:27Z"
+        }
+      ]
     }
   ]
 }
