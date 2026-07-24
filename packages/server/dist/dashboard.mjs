@@ -4632,6 +4632,18 @@ async function checkDefaultEventPreconditions(event, state, ctx) {
   return renderPreconditionViolation(event, failed, track);
 }
 
+// packages/kernel/dist/machine-state-scope.js
+import { createHash as createHash5 } from "node:crypto";
+import { resolve as resolve3 } from "node:path";
+var STATE_SCOPE_NAMESPACE = "pipeline-lite:machine-state-scope:v1\0";
+function canonicalMachineStateHome(home) {
+  return resolve3(home);
+}
+function machineStateScopeId(home) {
+  const digest = createHash5("sha256").update(STATE_SCOPE_NAMESPACE).update(canonicalMachineStateHome(home)).digest("hex");
+  return `sha256-v1-${digest}`;
+}
+
 // packages/kernel/dist/workspace/terminal-activity.js
 var TERMINAL_ACTIVITY_FILE = ".pipeline-terminal-activity.json";
 var TERMINAL_ACTIVITY_PROTOCOL = "pipeline-terminal-activity-v1";
@@ -5546,7 +5558,7 @@ function serializeTrackRegistry(config) {
 }
 
 // packages/kernel/dist/tracks/registry.js
-import { createHash as createHash5 } from "node:crypto";
+import { createHash as createHash6 } from "node:crypto";
 import { readFileSync as readFileSync7 } from "node:fs";
 import { mkdir as mkdir8, readFile as readFile8 } from "node:fs/promises";
 import path4 from "node:path";
@@ -5557,7 +5569,7 @@ function trackRegistryPath(repoRoot) {
   return path4.join(repoRoot, PIPELINE_DIR, TRACKS_FILE);
 }
 function registryRevision(config) {
-  return createHash5("sha256").update(serializeTrackRegistry(config), "utf8").digest("hex").slice(0, 16);
+  return createHash6("sha256").update(serializeTrackRegistry(config), "utf8").digest("hex").slice(0, 16);
 }
 var RegistryRevisionConflictError = class extends Error {
   expected;
@@ -5954,7 +5966,7 @@ function escapeRe(s) {
 var TAG_RES = INJECTION_TAGS.map((t) => new RegExp("<" + escapeRe(t) + "[^>]*>[\\s\\S]*?</" + escapeRe(t) + ">", "gi"));
 
 // packages/kernel/dist/mem/filter.js
-import { resolve as resolve3, sep as sep2 } from "node:path";
+import { resolve as resolve4, sep as sep2 } from "node:path";
 function parseIso(iso) {
   if (!iso)
     return null;
@@ -5983,8 +5995,8 @@ function sameProject(sessionCwd, target) {
     return true;
   if (!sessionCwd)
     return false;
-  const a = resolve3(sessionCwd);
-  const b = resolve3(target);
+  const a = resolve4(sessionCwd);
+  const b = resolve4(target);
   return a === b || a.startsWith(b + sep2);
 }
 
@@ -6113,7 +6125,7 @@ function findInJsonl(text, predicate, maxLines = 200) {
 }
 
 // packages/kernel/dist/mem/paths.js
-import { join as join14, resolve as resolve4 } from "node:path";
+import { join as join14, resolve as resolve5 } from "node:path";
 var SEP_RE = /[/\\:_.]/g;
 var PI_SEP_RE = /[/\\:]/g;
 var PI_LEAD_RE = /^[/\\]/;
@@ -6138,7 +6150,7 @@ function piAgentDir(fs) {
   return expandHome(fs, env || join14(fs.home, ".pi", "agent"));
 }
 function piProjectDirFromCwd(fs, cwd) {
-  const resolved = resolve4(cwd);
+  const resolved = resolve5(cwd);
   const safe = "--" + resolved.replace(PI_LEAD_RE, "").replace(PI_SEP_RE, "-") + "--";
   return join14(piAgentDir(fs), "sessions", safe);
 }
@@ -6170,7 +6182,7 @@ function piSessionRoots(fs) {
   const seen = /* @__PURE__ */ new Set();
   const out = [];
   for (const root of roots) {
-    const normalized2 = resolve4(root);
+    const normalized2 = resolve5(root);
     if (seen.has(normalized2))
       continue;
     seen.add(normalized2);
@@ -6296,7 +6308,7 @@ function codexListSessions(fs, f) {
 }
 
 // packages/kernel/dist/mem/adapters/pi.js
-import { basename as basename3, join as join16, resolve as resolve5 } from "node:path";
+import { basename as basename3, join as join16, resolve as resolve6 } from "node:path";
 function piListSessions(fs, f) {
   const out = [];
   for (const filePath of candidateFiles(fs, f)) {
@@ -6350,7 +6362,7 @@ function candidateFiles(fs, f) {
     for (const file of walkDir(fs, root)) {
       if (!file.endsWith(".jsonl"))
         continue;
-      const normalized2 = resolve5(file);
+      const normalized2 = resolve6(file);
       if (seen.has(normalized2))
         continue;
       seen.add(normalized2);
@@ -6358,7 +6370,7 @@ function candidateFiles(fs, f) {
     }
   };
   for (const root of piSessionRoots(fs)) {
-    if (f.cwd && resolve5(root) === resolve5(defaultRoot))
+    if (f.cwd && resolve6(root) === resolve6(defaultRoot))
       pushJsonl(piProjectDirFromCwd(fs, f.cwd));
     else
       pushJsonl(root);
@@ -8826,9 +8838,9 @@ function decodeLedgerLine(line) {
 
 // packages/kernel/dist/loops/ledger-store.js
 import { AsyncLocalStorage } from "node:async_hooks";
-import { createHash as createHash6 } from "node:crypto";
+import { createHash as createHash7 } from "node:crypto";
 import { mkdir as mkdir10, open, readFile as readFile9 } from "node:fs/promises";
-import { join as join19, resolve as resolve6 } from "node:path";
+import { join as join19, resolve as resolve7 } from "node:path";
 var LEDGER_DIR = [".pipeline", "loops"];
 var LEDGER_FILE = "ledger.jsonl";
 function ledgerDirPath(repoRoot) {
@@ -8874,11 +8886,11 @@ var ReservationAppendError = class extends Error {
 };
 var heldLedgerDirs = new AsyncLocalStorage();
 function shortHash(raw) {
-  return createHash6("sha256").update(raw, "utf8").digest("hex").slice(0, 12);
+  return createHash7("sha256").update(raw, "utf8").digest("hex").slice(0, 12);
 }
 function createLoopLedgerStore() {
   function withLedgerLock(repoRoot, fn) {
-    const key = resolve6(ledgerDirPath(repoRoot));
+    const key = resolve7(ledgerDirPath(repoRoot));
     const currentToken = heldLedgerDirs.getStore()?.get(key);
     if (currentToken?.active === true) {
       const p = fn();
@@ -9033,9 +9045,9 @@ function createLoopLedgerStore() {
 }
 
 // packages/kernel/dist/loops/governance.js
-import { createHash as createHash7, randomBytes as randomBytes2 } from "node:crypto";
+import { createHash as createHash8, randomBytes as randomBytes2 } from "node:crypto";
 import { mkdir as mkdir11, open as open2, readFile as readFile10, rename as rename6 } from "node:fs/promises";
-import { join as join20, resolve as resolve7 } from "node:path";
+import { join as join20, resolve as resolve8 } from "node:path";
 var LOOPS_REL = [".pipeline", "loops.yaml"];
 var GOVERNANCE_LOCK_BASE = [".pipeline", "loops", "governance"];
 var ABSENT_REGISTRY_EPOCH = "absent";
@@ -9046,7 +9058,7 @@ function governanceLockBase(repoRoot) {
   return join20(repoRoot, ...GOVERNANCE_LOCK_BASE);
 }
 async function withRegistryGovernanceLock(repoRoot, fn) {
-  const base = resolve7(governanceLockBase(repoRoot));
+  const base = resolve8(governanceLockBase(repoRoot));
   await mkdir11(base, { recursive: true });
   return withLock(base, fn);
 }
@@ -9060,7 +9072,7 @@ async function readRegistrySnapshot(repoRoot) {
     }
     throw new RegistryReadError(`loops.yaml \u8BFB\u5931\u8D25\uFF08${e.code ?? "IO"}\uFF09\uFF1A${e instanceof Error ? e.message : String(e)}`);
   }
-  const epoch = createHash7("sha256").update(text, "utf8").digest("hex");
+  const epoch = createHash8("sha256").update(text, "utf8").digest("hex");
   const { data, errors } = loadRegistry(repoRoot, { readText: () => text });
   return { text, epoch, registry: data, errors };
 }
@@ -10829,7 +10841,7 @@ var DEFAULT_VERIFIER_ISSUER_IDENTITY = Object.freeze({
 var DEFAULT_VERIFIER_ISSUER_KIND = DEFAULT_VERIFIER_ISSUER_IDENTITY.kind;
 
 // packages/automation/dist/skills/snapshot-store.js
-import { createHash as createHash8, randomUUID as randomUUID5 } from "node:crypto";
+import { createHash as createHash9, randomUUID as randomUUID5 } from "node:crypto";
 import { constants } from "node:fs";
 import { chmod, lstat as lstat6, mkdir as mkdir12, open as open3, readdir as readdir2, realpath as realpath2, rm as rm2, rmdir, stat as stat3, writeFile as writeFile8 } from "node:fs/promises";
 import { dirname as dirname6, join as join22, relative as relative2, sep as sep3 } from "node:path";
@@ -10846,7 +10858,7 @@ var SkillContentInvalidError = class extends Error {
 };
 var EXEC_BITS = 73;
 function sha256Hex(data) {
-  return createHash8("sha256").update(data).digest("hex");
+  return createHash9("sha256").update(data).digest("hex");
 }
 var EMPTY_FILE_SHA256 = sha256Hex(Buffer.alloc(0));
 function byRelativePath(a, b) {
@@ -11827,8 +11839,8 @@ async function cancelAfkRun(store, changeDir) {
       error: `\u65E0\u6CD5\u5728 automation_worktree \u76EE\u5F55\u843D\u53D6\u6D88\u6807\u8BB0\uFF08${code}\uFF09\uFF1Aworktree \u76EE\u5F55\u53EF\u80FD\u5DF2\u88AB\u6E05\u7406\uFF0C\u6216\u5B57\u6BB5\u503C\u66FE\u88AB\u65E7\u7248\u622A\u65AD\u635F\u574F\u2014\u2014\u82E5\u4EFB\u52A1\u5B9E\u9645\u5DF2\u4E0D\u5728\u8DD1\uFF0C\u53EF\u76F4\u63A5\u91CD\u8BD5/\u653E\u5F03\u8BE5\u4EFB\u52A1`
     };
   }
-  await new Promise((resolve9) => {
-    execFile("docker", ["kill", sandbox], () => resolve9());
+  await new Promise((resolve10) => {
+    execFile("docker", ["kill", sandbox], () => resolve10());
   });
   return { ok: true };
 }
@@ -12449,7 +12461,7 @@ function writeHookToggle(root, toggle) {
 import { homedir as homedir3 } from "node:os";
 import { join as join31 } from "node:path";
 function resolveServerPaths(opts) {
-  const home = opts?.home ?? process.env.PIPELINE_DASHBOARD_HOME ?? homedir3();
+  const home = canonicalMachineStateHome(opts?.home ?? process.env.PIPELINE_DASHBOARD_HOME ?? homedir3());
   const claudeDir = join31(home, ".claude");
   return {
     home,
@@ -12467,7 +12479,7 @@ import { resolve as resolvePath2 } from "node:path";
 
 // packages/server/src/snapshot.ts
 import { lstat as lstat8, readFile as readFile13, readdir as readdir3, stat as stat5 } from "node:fs/promises";
-import { join as join32, resolve as resolve8 } from "node:path";
+import { join as join32, resolve as resolve9 } from "node:path";
 function str2(v) {
   if (Array.isArray(v)) return v.join(",");
   return v ?? "";
@@ -12562,7 +12574,7 @@ function dedupeRoots(roots) {
   const out = [];
   for (const r of roots) {
     if (!r) continue;
-    const rp = resolve8(r);
+    const rp = resolve9(r);
     if (seen.has(rp)) continue;
     seen.add(rp);
     out.push(rp);
@@ -13771,11 +13783,11 @@ import { join as join35 } from "node:path";
 
 // packages/server/src/dockerImages.ts
 import { execFile as execFile2 } from "node:child_process";
-var nodeExecDocker = (args) => new Promise((resolve9) => {
+var nodeExecDocker = (args) => new Promise((resolve10) => {
   execFile2("docker", [...args], (err, stdout, stderr) => {
     const code = err?.code;
     const exitCode = err === null ? 0 : typeof code === "number" ? code : 1;
-    resolve9({ stdout: String(stdout ?? ""), stderr: String(stderr ?? ""), exitCode });
+    resolve10({ stdout: String(stdout ?? ""), stderr: String(stderr ?? ""), exitCode });
   });
 });
 async function execDocker(args, opts) {
@@ -13783,8 +13795,8 @@ async function execDocker(args, opts) {
   const timeoutMs = opts?.timeoutMs ?? 5e3;
   let timer;
   try {
-    const timeout = new Promise((resolve9) => {
-      timer = setTimeout(() => resolve9(null), timeoutMs);
+    const timeout = new Promise((resolve10) => {
+      timer = setTimeout(() => resolve10(null), timeoutMs);
     });
     const result = await Promise.race([exec(args).catch(() => null), timeout]);
     return result;
@@ -14338,7 +14350,7 @@ function pipelineCliBundlePath() {
 function pipelineCliAvailable() {
   return existsSync7(pipelineCliBundlePath());
 }
-var runPipelineCli = (repoRoot, args) => new Promise((resolve9, reject) => {
+var runPipelineCli = (repoRoot, args) => new Promise((resolve10, reject) => {
   const bundle = pipelineCliBundlePath();
   if (!existsSync7(bundle)) {
     reject(new Error(`pipeline CLI bundle \u4E0D\u5B58\u5728\uFF1A${bundle}\uFF1B\u8BF7\u5148\u6267\u884C npm run bundle`));
@@ -14356,12 +14368,12 @@ var runPipelineCli = (repoRoot, args) => new Promise((resolve9, reject) => {
     },
     (error, stdout, stderr) => {
       if (error === null) {
-        resolve9({ exitCode: 0, stdout, stderr });
+        resolve10({ exitCode: 0, stdout, stderr });
         return;
       }
       const code = typeof error.code === "number" ? error.code : 1;
       if (typeof error.code === "number") {
-        resolve9({ exitCode: code, stdout, stderr });
+        resolve10({ exitCode: code, stdout, stderr });
         return;
       }
       reject(error);
@@ -14488,7 +14500,7 @@ function routerSuppressionReason(prompt) {
   return null;
 }
 function scoreRouterPatternWithGrep(pattern, prompt) {
-  return new Promise((resolve9, reject) => {
+  return new Promise((resolve10, reject) => {
     const child = spawn("grep", ["-ciE", "--", pattern], {
       env: { ...process.env, LC_ALL: "C" },
       stdio: ["pipe", "pipe", "pipe"]
@@ -14521,12 +14533,12 @@ function scoreRouterPatternWithGrep(pattern, prompt) {
         if (signal !== null) return reject(new Error(`router grep \u88AB\u4FE1\u53F7 ${signal} \u7EC8\u6B62`));
         if (code !== 0 && code !== 1) return reject(new Error(`router grep exit ${String(code)}\uFF1A${stderr.trim() || "unknown error"}`));
         if (stdinError !== null) return reject(new Error(`router grep stdin \u5931\u8D25\uFF1A${stdinError.message}`));
-        if (code === 1) return resolve9(0);
+        if (code === 1) return resolve10(0);
         const score = Number(stdout.trim());
         if (!Number.isSafeInteger(score) || score < 0) {
           return reject(new Error(`router grep \u8FD4\u56DE\u975E\u6CD5\u8BA1\u5206\uFF1A${JSON.stringify(stdout.trim())}`));
         }
-        return resolve9(score);
+        return resolve10(score);
       });
     });
     child.stdin.on("error", (error) => {
@@ -14824,6 +14836,7 @@ function createDashboardServer(options = {}) {
   const token = options.token ?? generateToken();
   const clock = options.clock ?? isoNow;
   const paths = resolveServerPaths({ home: options.home });
+  const stateScopeId = machineStateScopeId(paths.home);
   const registry = options.registry ?? (() => readProjectRegistry(paths.registryPath));
   const store = options.store ?? createStateStore();
   const recordStore = createTransitionRecordStore();
@@ -15145,12 +15158,12 @@ data: ${data}
     res.end(body);
   }
   function readJsonBody(req) {
-    return new Promise((resolve9) => {
+    return new Promise((resolve10) => {
       let done = false;
       const finish = (v) => {
         if (!done) {
           done = true;
-          resolve9(v);
+          resolve10(v);
         }
       };
       const len = Number.parseInt(String(req.headers["content-length"] ?? ""), 10);
@@ -15290,6 +15303,7 @@ data: ${JSON.stringify(await buildSnapshot(snapshotDeps(nowMs)))}
         scope: "global",
         version,
         ...releaseId === void 0 ? {} : { releaseId },
+        stateScopeId,
         pid: process.pid
       });
     }
@@ -16497,19 +16511,19 @@ data: ${JSON.stringify(await buildSnapshot(snapshotDeps(nowMs)))}
     version,
     httpServer,
     listen(port = 0, host = "127.0.0.1") {
-      return new Promise((resolve9, reject) => {
+      return new Promise((resolve10, reject) => {
         const onError = (e) => reject(e);
         httpServer.once("error", onError);
         httpServer.listen(port, host, () => {
           httpServer.removeListener("error", onError);
           boundPort = httpServer.address().port;
           cadenceScheduler?.start();
-          resolve9({ port: boundPort, host });
+          resolve10({ port: boundPort, host });
         });
       });
     },
     close() {
-      return new Promise((resolve9) => {
+      return new Promise((resolve10) => {
         stopPoll();
         cadenceScheduler?.stop();
         for (const anchor of workflowRootAnchors.values()) closeWorkflowRootAnchor(anchor);
@@ -16521,7 +16535,7 @@ data: ${JSON.stringify(await buildSnapshot(snapshotDeps(nowMs)))}
           }
         }
         clients.clear();
-        httpServer.close(() => resolve9());
+        httpServer.close(() => resolve10());
         httpServer.closeAllConnections?.();
       });
     }
@@ -16559,12 +16573,12 @@ function readPidfile(pidfilePath) {
   }
 }
 function probeHealth(port, host = "127.0.0.1", timeoutMs = 500) {
-  return new Promise((resolve9) => {
+  return new Promise((resolve10) => {
     let done = false;
     const finish = (v) => {
       if (done) return;
       done = true;
-      resolve9(v);
+      resolve10(v);
     };
     const req = httpGet({ host, port, path: "/api/health", timeout: timeoutMs }, (res) => {
       let body = "";
@@ -16586,8 +16600,9 @@ function probeHealth(port, host = "127.0.0.1", timeoutMs = 500) {
     req.on("error", () => finish(null));
   });
 }
-function decidePreemption(existing, myVersion, myReleaseId) {
+function decidePreemption(existing, myVersion, myReleaseId, myStateScopeId) {
   if (!existing) return "bind";
+  if (existing.stateScopeId !== myStateScopeId) return "preempt";
   const versionOrder = compareVersions(myVersion, existing.version);
   if (versionOrder !== 0) return versionOrder > 0 ? "preempt" : "reuse";
   if (myReleaseId !== void 0) return myReleaseId === existing.releaseId ? "reuse" : "preempt";
@@ -16600,28 +16615,28 @@ function parseListenerPids(stdout) {
   return [...new Set(stdout.split(/\r?\n/).map((line) => Number.parseInt(line.trim(), 10)).filter((pid) => Number.isSafeInteger(pid) && pid > 0))];
 }
 function listenerPids(port) {
-  return new Promise((resolve9) => {
+  return new Promise((resolve10) => {
     execFile4("lsof", ["-nP", "-t", `-iTCP:${port}`, "-sTCP:LISTEN"], { encoding: "utf8" }, (error, stdout) => {
       if (error === null) {
-        resolve9(parseListenerPids(String(stdout ?? "")));
+        resolve10(parseListenerPids(String(stdout ?? "")));
         return;
       }
       const code = error.code;
       if (code === 1) {
-        resolve9([]);
+        resolve10([]);
         return;
       }
-      resolve9(null);
+      resolve10(null);
     });
   });
 }
 function probePortOpen(port, host = "127.0.0.1", timeoutMs = 250) {
-  return new Promise((resolve9) => {
+  return new Promise((resolve10) => {
     let done = false;
     const finish = (open4) => {
       if (done) return;
       done = true;
-      resolve9(open4);
+      resolve10(open4);
     };
     const socket = createConnection({ host, port });
     socket.setTimeout(timeoutMs);
@@ -16685,8 +16700,8 @@ function manifestPath() {
   return join41(pluginRoot(), "templates", "manifest.yaml");
 }
 function gitHeadSha(cwd) {
-  return new Promise((resolve9) => {
-    execFile5("git", ["rev-parse", "HEAD"], { cwd }, (_err, stdout) => resolve9((stdout ?? "").trim()));
+  return new Promise((resolve10) => {
+    execFile5("git", ["rev-parse", "HEAD"], { cwd }, (_err, stdout) => resolve10((stdout ?? "").trim()));
   });
 }
 async function main() {
@@ -16696,8 +16711,9 @@ async function main() {
   const root = pluginRoot();
   const version = resolveReleaseVersion(root);
   const releaseId = resolvePayloadReleaseId(root);
+  const stateScopeId = machineStateScopeId(paths.home);
   const existing = await probeHealth(port, host, 400);
-  const decision = decidePreemption(existing, version, releaseId);
+  const decision = decidePreemption(existing, version, releaseId, stateScopeId);
   if (decision === "reuse") {
     process.stdout.write(`[dashboard-server] \u590D\u7528\u65E2\u6709 Global server :${port}\uFF08\u7248\u672C ${existing?.version} \u2265 ${version}\uFF09
 `);
@@ -16720,6 +16736,7 @@ async function main() {
   const srv = createDashboardServer({
     version,
     releaseId,
+    home: paths.home,
     token,
     manifestPath: manifestPath(),
     gitHeadSha,

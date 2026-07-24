@@ -7,11 +7,19 @@ interface Calls {
   detached: Array<{ serverBundle: string; env: NodeJS.ProcessEnv }>
   healthPorts: number[]
   expectedReleaseIds: Array<string | undefined>
+  expectedStateScopeIds: string[]
   openedUrls: string[]
 }
 
 function runtime(overrides: Partial<DashboardRuntime> = {}): { runtime: DashboardRuntime; calls: Calls } {
-  const calls: Calls = { launches: [], detached: [], healthPorts: [], expectedReleaseIds: [], openedUrls: [] }
+  const calls: Calls = {
+    launches: [],
+    detached: [],
+    healthPorts: [],
+    expectedReleaseIds: [],
+    expectedStateScopeIds: [],
+    openedUrls: [],
+  }
   return {
     runtime: {
       resolveRoot: () => '/plugin/pipeline-lite',
@@ -24,9 +32,11 @@ function runtime(overrides: Partial<DashboardRuntime> = {}): { runtime: Dashboar
         calls.detached.push({ serverBundle, env })
         return true
       },
-      waitForHealthyServer: async (port, expectedReleaseId) => {
+      resolveStateScopeId: () => `sha256-v1-${'1'.repeat(64)}`,
+      waitForHealthyServer: async (port, expectedReleaseId, expectedStateScopeId) => {
         calls.healthPorts.push(port)
         calls.expectedReleaseIds.push(expectedReleaseId)
+        calls.expectedStateScopeIds.push(expectedStateScopeId)
         return true
       },
       openBrowser: async (url) => {
@@ -72,6 +82,7 @@ describe('pipeline dashboard', () => {
     expect(calls.detached[0]?.env.PIPELINE_DASHBOARD_PORT).toBe('18765')
     expect(calls.healthPorts).toEqual([18765])
     expect(calls.expectedReleaseIds).toEqual([undefined])
+    expect(calls.expectedStateScopeIds).toEqual([`sha256-v1-${'1'.repeat(64)}`])
     expect(calls.openedUrls).toEqual(['http://127.0.0.1:18765/'])
     expect(deps.outLines.join('\n')).toContain('健康检查通过')
   })
@@ -88,6 +99,7 @@ describe('pipeline dashboard', () => {
       dashboard,
     )).toBe(0)
     expect(calls.expectedReleaseIds).toEqual([releaseId])
+    expect(calls.expectedStateScopeIds).toEqual([`sha256-v1-${'1'.repeat(64)}`])
   })
 
   test('managed startup rejects a payload path without a release identity before spawning', async () => {

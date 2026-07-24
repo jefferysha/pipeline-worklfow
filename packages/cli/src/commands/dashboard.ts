@@ -8,8 +8,11 @@
 import { spawn } from 'node:child_process'
 import { accessSync, constants as fsConstants, realpathSync } from 'node:fs'
 import { get as httpGet } from 'node:http'
+import { homedir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
+import { machineStateScopeId } from '@pipeline-lite/kernel'
 import type { CliDeps } from '../deps.js'
+import { resolveMachineStateHome } from '../machineHome.js'
 
 /** One production endpoint for the bundled SPA and its API. */
 export const DEFAULT_DASHBOARD_PORT = 18765
@@ -28,7 +31,12 @@ export interface DashboardRuntime {
   fileExists(path: string): boolean
   launch(serverBundle: string, env: NodeJS.ProcessEnv): Promise<number>
   launchDetached(serverBundle: string, env: NodeJS.ProcessEnv): Promise<boolean>
-  waitForHealthyServer(port: number, expectedReleaseId?: string): Promise<boolean>
+  resolveStateScopeId(): string
+  waitForHealthyServer(
+    port: number,
+    expectedReleaseId: string | undefined,
+    expectedStateScopeId: string,
+  ): Promise<boolean>
   openBrowser(url: string): Promise<boolean>
 }
 
@@ -74,7 +82,11 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolveWait) => setTimeout(resolveWait, ms))
 }
 
-function isHealthyDashboard(value: unknown, expectedReleaseId?: string): boolean {
+function isHealthyDashboard(
+  value: unknown,
+  expectedReleaseId: string | undefined,
+  expectedStateScopeId: string,
+): boolean {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return false
   const body = value as Record<string, unknown>
   return body.ok === true
@@ -82,9 +94,14 @@ function isHealthyDashboard(value: unknown, expectedReleaseId?: string): boolean
     && typeof body.version === 'string'
     && body.version !== ''
     && (expectedReleaseId === undefined || body.releaseId === expectedReleaseId)
+    && body.stateScopeId === expectedStateScopeId
 }
 
-function probeHealthyDashboard(port: number, expectedReleaseId?: string): Promise<boolean> {
+function probeHealthyDashboard(
+  port: number,
+  expectedReleaseId: string | undefined,
+  expectedStateScopeId: string,
+): Promise<boolean> {
   return new Promise((resolveProbe) => {
     let settled = false
     const finish = (healthy: boolean): void => {
@@ -102,7 +119,7 @@ function probeHealthyDashboard(port: number, expectedReleaseId?: string): Promis
           return
         }
         try {
-          finish(isHealthyDashboard(JSON.parse(text), expectedReleaseId))
+          finish(isHealthyDashboard(JSON.parse(text), expectedReleaseId, expectedStateScopeId))
         } catch {
           finish(false)
         }
@@ -116,11 +133,15 @@ function probeHealthyDashboard(port: number, expectedReleaseId?: string): Promis
   })
 }
 
-async function waitForHealthyServer(port: number, expectedReleaseId?: string): Promise<boolean> {
+async function waitForHealthyServer(
+  port: number,
+  expectedReleaseId: string | undefined,
+  expectedStateScopeId: string,
+): Promise<boolean> {
   // A release can first have to gracefully preempt a previous dashboard.  Keep the readiness
   // budget longer than that server's four-second handoff, without making setup block indefinitely.
   for (let attempt = 0; attempt < 65; attempt += 1) {
-    if (await probeHealthyDashboard(port, expectedReleaseId)) return true
+    if (await probeHealthyDashboard(port, expectedReleaseId, expectedStateScopeId)) return true
     await sleep(100)
   }
   return false
@@ -166,6 +187,8 @@ export const REAL_DASHBOARD_RUNTIME: DashboardRuntime = {
   fileExists,
   launch,
   launchDetached,
+  resolveStateScopeId: () =>
+    machineStateScopeId(resolveMachineStateHome(process.env, homedir())),
   waitForHealthyServer,
   openBrowser,
 }
@@ -228,7 +251,8 @@ async function startManagedDashboard(
     deps.io.err('[dashboard] 受管 server 进程无法启动；runtime 已保留，可运行 pipeline dashboard 诊断。')
     return 1
   }
-  if (!(await runtime.waitForHealthyServer(port, expectedReleaseId))) {
+  const expectedStateScopeId = runtime.resolveStateScopeId()
+  if (!(await runtime.waitForHealthyServer(port, expectedReleaseId, expectedStateScopeId))) {
     deps.io.err(`[dashboard] 受管 server 在 http://127.0.0.1:${port}/ 未通过健康检查；未打开浏览器。`)
     return 1
   }

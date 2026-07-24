@@ -1,3 +1,5 @@
+import { canonicalMachineStateHome } from '@pipeline-lite/kernel'
+
 /**
  * Resolve the home used only for pipeline's machine-level state.
  *
@@ -10,5 +12,5 @@ export function resolveMachineStateHome(
   defaultHome: string,
 ): string {
   const overridden = env.PIPELINE_DASHBOARD_HOME?.trim()
-  return overridden === undefined || overridden === '' ? defaultHome : overridden
+  return canonicalMachineStateHome(overridden === undefined || overridden === '' ? defaultHome : overridden)
 }

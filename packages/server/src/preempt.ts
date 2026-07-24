@@ -6,8 +6,9 @@
  *
  * 本仓修法：启动探测既有 /api/health（含 version，见 HealthInfo）：
  *   · 无既有 server        → bind（直接监听）
- *   · 既有版本 ≥ 我        → reuse（让位，不降级抢占——避免旧实例被新装但更旧的包顶掉）
- *   · 既有版本 < 我        → preempt：读 pidfile 拿旧 pid → SIGTERM 优雅停 → 等端口空出 → 由调用方 bind
+ *   · 状态域不同/未知       → preempt（禁止串用另一 registry/secrets 域）
+ *   · 同状态域且既有版本 ≥ 我 → reuse（让位，不降级抢占）
+ *   · 同状态域且既有版本 < 我 → preempt：验证 listener PID 后优雅接管
  * 决策纯函数 decidePreemption 可单测；探测/抢占走真 HTTP + 真信号。
  */
 import { execFile } from 'node:child_process'
@@ -74,8 +75,17 @@ export function probeHealth(port: number, host = '127.0.0.1', timeoutMs = 500): 
   })
 }
 
-export function decidePreemption(existing: HealthInfo | null, myVersion: string, myReleaseId?: string): PreemptDecision {
+export function decidePreemption(
+  existing: HealthInfo | null,
+  myVersion: string,
+  myReleaseId: string | undefined,
+  myStateScopeId: string,
+): PreemptDecision {
   if (!existing) return 'bind'
+  // Code identity cannot prove registry/secrets identity. A legacy response without the field is
+  // intentionally taken over once; a mismatched field must never be reused, even if its code is
+  // newer, because it serves a different machine-state domain.
+  if (existing.stateScopeId !== myStateScopeId) return 'preempt'
   const versionOrder = compareVersions(myVersion, existing.version)
   if (versionOrder !== 0) return versionOrder > 0 ? 'preempt' : 'reuse'
   // A semantic plugin version can legitimately contain a new runtime payload. The selected

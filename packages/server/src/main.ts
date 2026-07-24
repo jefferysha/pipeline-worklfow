@@ -15,7 +15,7 @@ import { unlinkSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createTraceStore } from '@pipeline-lite/tap'
-import { fingerprintWorkspace } from '@pipeline-lite/kernel'
+import { fingerprintWorkspace, machineStateScopeId } from '@pipeline-lite/kernel'
 import { createDashboardServer } from './server.js'
 import { resolveServerPaths } from './paths.js'
 import { decidePreemption, preemptOldServer, probeHealth } from './preempt.js'
@@ -56,10 +56,11 @@ async function main(): Promise<void> {
   const root = pluginRoot()
   const version = resolveReleaseVersion(root)
   const releaseId = resolvePayloadReleaseId(root)
+  const stateScopeId = machineStateScopeId(paths.home)
 
   // ── B4 版本抢占 ──
   const existing = await probeHealth(port, host, 400)
-  const decision = decidePreemption(existing, version, releaseId)
+  const decision = decidePreemption(existing, version, releaseId, stateScopeId)
   if (decision === 'reuse') {
     process.stdout.write(`[dashboard-server] 复用既有 Global server :${port}（版本 ${existing?.version} ≥ ${version}）\n`)
     return
@@ -84,6 +85,7 @@ async function main(): Promise<void> {
   const srv = createDashboardServer({
     version,
     releaseId,
+    home: paths.home,
     token,
     manifestPath: manifestPath(),
     gitHeadSha,

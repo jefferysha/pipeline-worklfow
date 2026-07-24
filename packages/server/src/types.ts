@@ -101,6 +101,8 @@ export interface HealthInfo {
   version: string
   /** Present when the server runs from a managed immutable release payload. */
   releaseId?: string
+  /** Opaque identity of the canonical machine-state Home served by this process. */
+  stateScopeId?: string
   pid?: number
 }
 

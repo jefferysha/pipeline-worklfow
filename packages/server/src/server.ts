@@ -30,7 +30,7 @@ import {
   builtinWorkflow,
   ABSENT_REGISTRY_EPOCH, applyLevelChange, assertTrackDeletable, assertUpdatePreservesReferences, assertWorkflowAllowed,
   BUILTIN_TRACK_DEFINITIONS, BuiltinTrackDeleteError, BuiltinTrackPolicyError, ChangeScanFailedError, createBreadcrumbWriter, createFlowEngine,
-  createEffectiveSkillResolver, createHistoryWriter, createLoopLedgerStore, createStateStore,
+  createEffectiveSkillResolver, createHistoryWriter, createLoopLedgerStore, createStateStore, machineStateScopeId,
   createTrack, createTransitionRecordStore, createWorkflowRunRepository, deleteTrack, firstStep, listMemSessions, loadManifest,
   listAutomationPolicyTemplates, loadRegistry, loadTrackRegistry, loadWorkflow, mutateTrackRegistry, nodeMemFs, readRegistrySnapshot, RegistryRevisionConflictError,
   requireTrack, TrackAlreadyExistsError, TrackNotFoundError, TrackReferencedError, TrackReferencesInvalidatedError, updateTrack,
@@ -168,6 +168,7 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
   const token = options.token ?? generateToken()
   const clock = options.clock ?? isoNow
   const paths = resolveServerPaths({ home: options.home })
+  const stateScopeId = machineStateScopeId(paths.home)
   const registry: () => string[] = options.registry ?? (() => readRegistry(paths.registryPath))
   const store: StateStore = options.store ?? createStateStore()
   const recordStore = createTransitionRecordStore()
@@ -704,6 +705,7 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
         scope: 'global',
         version,
         ...(releaseId === undefined ? {} : { releaseId }),
+        stateScopeId,
         pid: process.pid,
       })
     }

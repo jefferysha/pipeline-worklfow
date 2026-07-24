@@ -3033,7 +3033,7 @@ var require_commander = __commonJS({
 import { execFile as execFile4 } from "node:child_process";
 import { accessSync as accessSync4, constants as fsConstants4, readdirSync as readdirSync8, readFileSync as readFileSync26, statSync as statSync6 } from "node:fs";
 import { readdir as readdir11, readFile as readFile23, rm as rm8, stat as stat13, writeFile as writeFile13 } from "node:fs/promises";
-import { homedir as homedir18 } from "node:os";
+import { homedir as homedir19 } from "node:os";
 import { dirname as dirname14, join as join67 } from "node:path";
 import { fileURLToPath as fileURLToPath3 } from "node:url";
 
@@ -8734,6 +8734,18 @@ async function checkDefaultEventPreconditions(event, state, ctx) {
   return renderPreconditionViolation(event, failed, track);
 }
 
+// packages/kernel/dist/machine-state-scope.js
+import { createHash as createHash6 } from "node:crypto";
+import { resolve as resolve2 } from "node:path";
+var STATE_SCOPE_NAMESPACE = "pipeline-lite:machine-state-scope:v1\0";
+function canonicalMachineStateHome(home) {
+  return resolve2(home);
+}
+function machineStateScopeId(home) {
+  const digest = createHash6("sha256").update(STATE_SCOPE_NAMESPACE).update(canonicalMachineStateHome(home)).digest("hex");
+  return `sha256-v1-${digest}`;
+}
+
 // packages/kernel/dist/workspace/terminal-activity.js
 var TERMINAL_SESSION_BINDINGS_DIR = ".pipeline/terminal-sessions";
 var TERMINAL_SESSION_PROTOCOL = "pipeline-terminal-session-v1";
@@ -9598,7 +9610,7 @@ function serializeTrackRegistry(config) {
 }
 
 // packages/kernel/dist/tracks/registry.js
-import { createHash as createHash6 } from "node:crypto";
+import { createHash as createHash7 } from "node:crypto";
 import { readFileSync as readFileSync6 } from "node:fs";
 import { mkdir as mkdir8, readFile as readFile10 } from "node:fs/promises";
 import path6 from "node:path";
@@ -9609,7 +9621,7 @@ function trackRegistryPath(repoRoot) {
   return path6.join(repoRoot, PIPELINE_DIR, TRACKS_FILE);
 }
 function registryRevision(config) {
-  return createHash6("sha256").update(serializeTrackRegistry(config), "utf8").digest("hex").slice(0, 16);
+  return createHash7("sha256").update(serializeTrackRegistry(config), "utf8").digest("hex").slice(0, 16);
 }
 function invariant(v, what) {
   if (v === void 0)
@@ -10126,7 +10138,7 @@ function stripInjectionTags(text) {
 }
 
 // packages/kernel/dist/mem/filter.js
-import { resolve as resolve2, sep as sep2 } from "node:path";
+import { resolve as resolve3, sep as sep2 } from "node:path";
 function parseIso(iso) {
   if (!iso)
     return null;
@@ -10155,8 +10167,8 @@ function sameProject(sessionCwd, target) {
     return true;
   if (!sessionCwd)
     return false;
-  const a = resolve2(sessionCwd);
-  const b = resolve2(target);
+  const a = resolve3(sessionCwd);
+  const b = resolve3(target);
   return a === b || a.startsWith(b + sep2);
 }
 
@@ -10619,7 +10631,7 @@ function findInJsonl(text, predicate, maxLines = 200) {
 }
 
 // packages/kernel/dist/mem/paths.js
-import { join as join12, resolve as resolve3 } from "node:path";
+import { join as join12, resolve as resolve4 } from "node:path";
 var SEP_RE = /[/\\:_.]/g;
 var PI_SEP_RE = /[/\\:]/g;
 var PI_LEAD_RE = /^[/\\]/;
@@ -10644,7 +10656,7 @@ function piAgentDir(fs) {
   return expandHome(fs, env || join12(fs.home, ".pi", "agent"));
 }
 function piProjectDirFromCwd(fs, cwd) {
-  const resolved = resolve3(cwd);
+  const resolved = resolve4(cwd);
   const safe = "--" + resolved.replace(PI_LEAD_RE, "").replace(PI_SEP_RE, "-") + "--";
   return join12(piAgentDir(fs), "sessions", safe);
 }
@@ -10676,7 +10688,7 @@ function piSessionRoots(fs) {
   const seen = /* @__PURE__ */ new Set();
   const out = [];
   for (const root of roots) {
-    const normalized2 = resolve3(root);
+    const normalized2 = resolve4(root);
     if (seen.has(normalized2))
       continue;
     seen.add(normalized2);
@@ -11058,7 +11070,7 @@ ${turn2.text}` });
 }
 
 // packages/kernel/dist/mem/adapters/pi.js
-import { basename as basename3, join as join14, resolve as resolve4 } from "node:path";
+import { basename as basename3, join as join14, resolve as resolve5 } from "node:path";
 function piListSessions(fs, f) {
   const out = [];
   for (const filePath of candidateFiles(fs, f)) {
@@ -11112,7 +11124,7 @@ function candidateFiles(fs, f) {
     for (const file of walkDir(fs, root)) {
       if (!file.endsWith(".jsonl"))
         continue;
-      const normalized2 = resolve4(file);
+      const normalized2 = resolve5(file);
       if (seen.has(normalized2))
         continue;
       seen.add(normalized2);
@@ -11120,7 +11132,7 @@ function candidateFiles(fs, f) {
     }
   };
   for (const root of piSessionRoots(fs)) {
-    if (f.cwd && resolve4(root) === resolve4(defaultRoot))
+    if (f.cwd && resolve5(root) === resolve5(defaultRoot))
       pushJsonl(piProjectDirFromCwd(fs, f.cwd));
     else
       pushJsonl(root);
@@ -14629,9 +14641,9 @@ function decodeLedgerLine(line) {
 
 // packages/kernel/dist/loops/ledger-store.js
 import { AsyncLocalStorage } from "node:async_hooks";
-import { createHash as createHash7 } from "node:crypto";
+import { createHash as createHash8 } from "node:crypto";
 import { mkdir as mkdir10, open, readFile as readFile11 } from "node:fs/promises";
-import { join as join17, resolve as resolve5 } from "node:path";
+import { join as join17, resolve as resolve6 } from "node:path";
 var LEDGER_DIR = [".pipeline", "loops"];
 var LEDGER_FILE = "ledger.jsonl";
 function ledgerDirPath(repoRoot) {
@@ -14677,11 +14689,11 @@ var ReservationAppendError = class extends Error {
 };
 var heldLedgerDirs = new AsyncLocalStorage();
 function shortHash(raw) {
-  return createHash7("sha256").update(raw, "utf8").digest("hex").slice(0, 12);
+  return createHash8("sha256").update(raw, "utf8").digest("hex").slice(0, 12);
 }
 function createLoopLedgerStore() {
   function withLedgerLock(repoRoot, fn) {
-    const key = resolve5(ledgerDirPath(repoRoot));
+    const key = resolve6(ledgerDirPath(repoRoot));
     const currentToken = heldLedgerDirs.getStore()?.get(key);
     if (currentToken?.active === true) {
       const p = fn();
@@ -14836,9 +14848,9 @@ function createLoopLedgerStore() {
 }
 
 // packages/kernel/dist/loops/governance.js
-import { createHash as createHash8, randomBytes as randomBytes2 } from "node:crypto";
+import { createHash as createHash9, randomBytes as randomBytes2 } from "node:crypto";
 import { mkdir as mkdir11, open as open2, readFile as readFile12, rename as rename5 } from "node:fs/promises";
-import { join as join18, resolve as resolve6 } from "node:path";
+import { join as join18, resolve as resolve7 } from "node:path";
 var LOOPS_REL = [".pipeline", "loops.yaml"];
 var GOVERNANCE_LOCK_BASE = [".pipeline", "loops", "governance"];
 var ABSENT_REGISTRY_EPOCH = "absent";
@@ -14877,7 +14889,7 @@ var BaseRefCasError = class extends Error {
   }
 };
 async function withRegistryGovernanceLock(repoRoot, fn) {
-  const base = resolve6(governanceLockBase(repoRoot));
+  const base = resolve7(governanceLockBase(repoRoot));
   await mkdir11(base, { recursive: true });
   return withLock(base, fn);
 }
@@ -14891,7 +14903,7 @@ async function readRegistrySnapshot(repoRoot) {
     }
     throw new RegistryReadError(`loops.yaml \u8BFB\u5931\u8D25\uFF08${e.code ?? "IO"}\uFF09\uFF1A${e instanceof Error ? e.message : String(e)}`);
   }
-  const epoch = createHash8("sha256").update(text, "utf8").digest("hex");
+  const epoch = createHash9("sha256").update(text, "utf8").digest("hex");
   const { data, errors } = loadRegistry(repoRoot, { readText: () => text });
   return { text, epoch, registry: data, errors };
 }
@@ -14973,7 +14985,7 @@ async function withLoopMergePermit(repoRoot, loopId, prepared, fn, verifyBase) {
 function registryContentEpoch(registry) {
   if (registry === null)
     return ABSENT_REGISTRY_EPOCH;
-  return createHash8("sha256").update(JSON.stringify(registry), "utf8").digest("hex");
+  return createHash9("sha256").update(JSON.stringify(registry), "utf8").digest("hex");
 }
 function loopMaterialUnchanged(a, b) {
   return a.status === b.status && a.runner === b.runner && a.change_prefix === b.change_prefix && (a.skill_bundle_id ?? null) === (b.skill_bundle_id ?? null) && a.budget.max_runs_per_day === b.budget.max_runs_per_day && a.budget.max_in_flight === b.budget.max_in_flight && a.budget.max_tokens_per_day === b.budget.max_tokens_per_day && a.budget.tokens_per_run === b.budget.tokens_per_run && a.budget.on_exceed === b.budget.on_exceed;
@@ -15241,7 +15253,7 @@ function compileAutomationPolicyTemplate(id, override = {}, version = AUTOMATION
 }
 
 // packages/kernel/dist/loops/reconciliation.js
-import { createHash as createHash9 } from "node:crypto";
+import { createHash as createHash10 } from "node:crypto";
 var RECONCILIATION_PLAN_KIND = "loop-reconciliation-plan";
 var RECONCILIATION_PLAN_SCHEMA_VERSION = 1;
 var RECONCILIATION_TARGET = "LOOP.md";
@@ -15273,7 +15285,7 @@ function concatBytes(...parts) {
 function resourceEpoch(bytes) {
   if (bytes === null)
     return { kind: "absent" };
-  return { kind: "sha256", value: createHash9("sha256").update(bytes).digest("hex") };
+  return { kind: "sha256", value: createHash10("sha256").update(bytes).digest("hex") };
 }
 function copyEpoch(epoch) {
   return epoch.kind === "absent" ? { kind: "absent" } : { kind: "sha256", value: epoch.value };
@@ -15295,7 +15307,7 @@ function canonicalJson(value) {
   throw new TypeError(`canonical JSON does not support ${typeof value}`);
 }
 function reconciliationPlanId(payload) {
-  return createHash9("sha256").update(canonicalJson(payload), "utf8").digest("hex");
+  return createHash10("sha256").update(canonicalJson(payload), "utf8").digest("hex");
 }
 var ReconciliationPlanCodecError = class extends Error {
   errors;
@@ -15841,7 +15853,7 @@ function buildReconciliationPlan(input) {
 }
 
 // packages/kernel/dist/loops/reconciliation-store.js
-import { createHash as createHash10, randomBytes as randomBytes3 } from "node:crypto";
+import { createHash as createHash11, randomBytes as randomBytes3 } from "node:crypto";
 import { constants } from "node:fs";
 import { lstat as lstat6, open as open3, rename as rename6, unlink as unlink3 } from "node:fs/promises";
 import { join as join19 } from "node:path";
@@ -15997,8 +16009,8 @@ async function publishLoopDoc(repoRoot, bytes) {
     if (readback === null) {
       warnings.push({ stage: "readback", message: "LOOP.md was absent after atomic publish" });
     } else if (!bytesEqual2(readback, bytes)) {
-      const expected = createHash10("sha256").update(bytes).digest("hex");
-      const actual = createHash10("sha256").update(readback).digest("hex");
+      const expected = createHash11("sha256").update(bytes).digest("hex");
+      const actual = createHash11("sha256").update(readback).digest("hex");
       warnings.push({ stage: "readback", message: `LOOP.md readback mismatch (${expected} != ${actual})` });
     }
   } catch (error) {
@@ -16278,14 +16290,14 @@ function renderHandoffSummary(doc, label) {
 }
 
 // packages/kernel/dist/compress/attempt-context.js
-import { createHash as createHash11 } from "node:crypto";
+import { createHash as createHash12 } from "node:crypto";
 var FAILURE_RESULTS = /* @__PURE__ */ new Set(["failed", "retry-queued", "conflict"]);
 function normalizeAttemptError(input) {
   const source = input instanceof Error ? input.message : typeof input === "string" ? input : String(input);
   const message2 = source.replace(/^\s*(?:(?:[A-Za-z][A-Za-z0-9_.]*Error|Error):\s*)/i, "").replace(/\b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z\b/g, "<timestamp>").replace(/\breq_[A-Za-z0-9_-]+\b/g, "<request-id>").replace(/(?:\/private)?\/tmp\/[^/\s]+/g, "<tmp>").replace(/:(\d+)(?::\d+)?\b/g, ":<line>").replace(/\s+/g, " ").trim();
   return {
     message: message2,
-    fingerprint: createHash11("sha256").update(message2).digest("hex")
+    fingerprint: createHash12("sha256").update(message2).digest("hex")
   };
 }
 function failureFingerprint(record) {
@@ -18418,7 +18430,7 @@ function codexOnlyProcessEnv(...layers) {
   }
   return result;
 }
-var nodeCodexTriageExec = (file, args, options) => new Promise((resolve20) => {
+var nodeCodexTriageExec = (file, args, options) => new Promise((resolve21) => {
   const detached = process.platform !== "win32";
   const child = spawn(file, args, {
     cwd: options.cwd,
@@ -18438,7 +18450,7 @@ var nodeCodexTriageExec = (file, args, options) => new Promise((resolve20) => {
     options.signal.removeEventListener("abort", onAbort);
     if (forceKillTimer !== void 0)
       clearTimeout(forceKillTimer);
-    resolve20(result);
+    resolve21(result);
   };
   const killProcessTree = (signal) => {
     if (detached && child.pid !== void 0) {
@@ -18540,7 +18552,7 @@ function abortReason(signal) {
 function awaitExecWithAbort(execution, signal) {
   if (signal.aborted)
     return Promise.reject(abortReason(signal));
-  return new Promise((resolve20, reject3) => {
+  return new Promise((resolve21, reject3) => {
     let settled = false;
     const finish = (complete) => {
       if (settled)
@@ -18551,7 +18563,7 @@ function awaitExecWithAbort(execution, signal) {
     };
     const onAbort = () => finish(() => reject3(abortReason(signal)));
     signal.addEventListener("abort", onAbort, { once: true });
-    execution.then((result) => finish(() => resolve20(result)), (error) => finish(() => reject3(error)));
+    execution.then((result) => finish(() => resolve21(result)), (error) => finish(() => reject3(error)));
   });
 }
 function createCodexTriageProvider(options = {}) {
@@ -18670,13 +18682,13 @@ function createCodexTriageProvider(options = {}) {
 }
 
 // packages/automation/dist/triage/connectors/git-commits.js
-import { createHash as createHash12 } from "node:crypto";
+import { createHash as createHash13 } from "node:crypto";
 
 // packages/automation/dist/runner/exec.js
 import { execFile, spawn as spawn2 } from "node:child_process";
 import { createInterface } from "node:readline";
 var mergedEnv = (env) => env ? { ...process.env, ...env } : process.env;
-var spawnStreaming = (file, args, opts) => new Promise((resolve20) => {
+var spawnStreaming = (file, args, opts) => new Promise((resolve21) => {
   const maxTail = opts.maxTailChars ?? MAX_TAIL_CHARS;
   const proc = spawn2(file, args, {
     cwd: opts.cwd,
@@ -18709,19 +18721,19 @@ var spawnStreaming = (file, args, opts) => new Promise((resolve20) => {
   }
   proc.on("error", (err) => {
     stderrTail.push(String(err.message ?? err));
-    resolve20({ stdout: stdoutTail.toString(), stderr: stderrTail.toString(), exitCode: 127 });
+    resolve21({ stdout: stdoutTail.toString(), stderr: stderrTail.toString(), exitCode: 127 });
   });
   proc.on("close", (code) => {
-    resolve20({ stdout: stdoutTail.toString(), stderr: stderrTail.toString(), exitCode: code ?? 0 });
+    resolve21({ stdout: stdoutTail.toString(), stderr: stderrTail.toString(), exitCode: code ?? 0 });
   });
 });
 var nodeExec = (file, args, opts) => {
   if (opts?.onLine || opts?.input !== void 0)
     return spawnStreaming(file, args, opts);
-  return new Promise((resolve20) => {
+  return new Promise((resolve21) => {
     execFile(file, args, { cwd: opts?.cwd, env: mergedEnv(opts?.env), maxBuffer: 64 * 1024 * 1024, encoding: "utf-8" }, (error, stdout, stderr) => {
       const code = error && typeof error.code === "number" ? error.code : error ? 1 : 0;
-      resolve20({ stdout: String(stdout), stderr: String(stderr), exitCode: code });
+      resolve21({ stdout: String(stdout), stderr: String(stderr), exitCode: code });
     });
   });
 };
@@ -18759,7 +18771,7 @@ var CursorStaleError = class extends Error {
 };
 var SHA_RE = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
 var SAFE_SOURCE_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/;
-var sha256 = (canonical) => createHash12("sha256").update(JSON.stringify(canonical), "utf8").digest("hex");
+var sha256 = (canonical) => createHash13("sha256").update(JSON.stringify(canonical), "utf8").digest("hex");
 var cursorDigest = (sourceId, cursor) => sha256([
   2,
   "git-commits-cursor",
@@ -19049,7 +19061,7 @@ function createGitCommitsConnector(options) {
 }
 
 // packages/automation/dist/triage/connectors/loop-run-terminals.js
-import { createHash as createHash13 } from "node:crypto";
+import { createHash as createHash14 } from "node:crypto";
 var LoopRunTerminalsSourceError = class extends Error {
   reason;
   _tag = "LoopRunTerminalsSourceError";
@@ -19065,7 +19077,7 @@ var OBSERVED_RUN_RESULTS = /* @__PURE__ */ new Set([
   "conflict",
   "retry-queued"
 ]);
-var sha2562 = (canonical) => createHash13("sha256").update(JSON.stringify(canonical), "utf8").digest("hex");
+var sha2562 = (canonical) => createHash14("sha256").update(JSON.stringify(canonical), "utf8").digest("hex");
 var assertPositiveLimit2 = (value, name2) => {
   if (!Number.isSafeInteger(value) || value <= 0) {
     throw new RangeError(`${name2} must be a positive safe integer`);
@@ -19178,7 +19190,7 @@ function createLoopRunTerminalsConnector(options) {
 }
 
 // packages/automation/dist/triage/workflow-run-materializer.js
-import { createHash as createHash14 } from "node:crypto";
+import { createHash as createHash15 } from "node:crypto";
 var WorkflowRunMaterializationError = class extends Error {
   issues;
   _tag = "WorkflowRunMaterializationError";
@@ -19275,7 +19287,7 @@ function idempotencyKeyFor(source, actionIdentity) {
     source.observationId,
     actionIdentity
   ]);
-  const digest = createHash14("sha256").update(canonical, "utf8").digest("hex");
+  const digest = createHash15("sha256").update(canonical, "utf8").digest("hex");
   return `triage-workflow-run:v1:${digest}`;
 }
 function sameCreateRequest(left, right) {
@@ -19422,8 +19434,8 @@ function createWorkflowRunMaterializer(deps) {
 }
 
 // packages/automation/dist/triage/workflow-run-create-repository.js
-import { createHash as createHash15 } from "node:crypto";
-import { join as join23, resolve as resolve7 } from "node:path";
+import { createHash as createHash16 } from "node:crypto";
+import { join as join23, resolve as resolve8 } from "node:path";
 var TOP_LEVEL_KEYS = /* @__PURE__ */ new Set([
   "schemaVersion",
   "kind",
@@ -19576,7 +19588,7 @@ function runIdFor(request) {
     request.workflowId,
     request.initialStep
   ]);
-  return `triage-run-v1-${createHash15("sha256").update(canonical, "utf8").digest("hex")}`;
+  return `triage-run-v1-${createHash16("sha256").update(canonical, "utf8").digest("hex")}`;
 }
 function errnoCode(error) {
   if (typeof error !== "object" || error === null || !("code" in error))
@@ -19640,7 +19652,7 @@ function createWorkflowRunCreateIfAbsentRepository(deps) {
         runId: expectedRunId,
         initialWorkflow: { workflow: request.workflowId, phase: request.initialStep }
       };
-      const changeDir2 = join23(resolve7(deps.repoRoot), "openspec", "changes", request.changeName);
+      const changeDir2 = join23(resolve8(deps.repoRoot), "openspec", "changes", request.changeName);
       let createdDir;
       try {
         createdDir = await deps.store.init(init);
@@ -19668,9 +19680,9 @@ function createWorkflowRunCreateIfAbsentRepository(deps) {
 }
 
 // packages/automation/dist/triage/checkpoint-store.js
-import { createHash as createHash16 } from "node:crypto";
+import { createHash as createHash17 } from "node:crypto";
 import { mkdir as mkdir12, readFile as readFile14 } from "node:fs/promises";
-import { dirname as dirname6, join as join24, resolve as resolve8 } from "node:path";
+import { dirname as dirname6, join as join24, resolve as resolve9 } from "node:path";
 var TriageCheckpointStoreError = class extends Error {
   reason;
   _tag = "TriageCheckpointStoreError";
@@ -19721,9 +19733,9 @@ function checkpointForKey(input, key) {
   }
   return validated.value;
 }
-var keyDigest = (key) => createHash16("sha256").update(JSON.stringify([1, key.sourceId, key.actionKind]), "utf8").digest("hex");
+var keyDigest = (key) => createHash17("sha256").update(JSON.stringify([1, key.sourceId, key.actionKind]), "utf8").digest("hex");
 function slotDirectory(repoRoot, key) {
-  return join24(resolve8(repoRoot), ".pipeline", "triage", "checkpoints", keyDigest(key));
+  return join24(resolve9(repoRoot), ".pipeline", "triage", "checkpoints", keyDigest(key));
 }
 function triageCheckpointFilePath(repoRoot, input) {
   const key = canonicalKey(input);
@@ -19813,7 +19825,7 @@ var encodeRecord = (key, revision, checkpoint) => `${JSON.stringify({
 })}
 `;
 function createTriageCheckpointStore(options) {
-  const repoRoot = resolve8(options.repoRoot);
+  const repoRoot = resolve9(options.repoRoot);
   return {
     async read(input) {
       const key = canonicalKey(input);
@@ -19852,7 +19864,7 @@ function createTriageCheckpointStore(options) {
 }
 
 // packages/automation/dist/triage/orchestrator.js
-import { createHash as createHash17 } from "node:crypto";
+import { createHash as createHash18 } from "node:crypto";
 var frozenEmptyMaterializations = Object.freeze([]);
 function emptyProgress(retryable = false) {
   return Object.freeze({
@@ -19951,7 +19963,7 @@ function assertNonNegativeSafeInteger(value, name2) {
   }
 }
 function deriveStableTriageCandidateIdentity(input) {
-  const digest = createHash17("sha256").update(JSON.stringify([
+  const digest = createHash18("sha256").update(JSON.stringify([
     1,
     "triage-workflow-run",
     input.observation.sourceId,
@@ -20445,7 +20457,7 @@ var createSemaphore = (maxParallel) => {
       running++;
       return Promise.resolve();
     }
-    return new Promise((resolve20) => queue.push(resolve20));
+    return new Promise((resolve21) => queue.push(resolve21));
   };
   const release2 = () => {
     if (running <= 0)
@@ -20596,14 +20608,14 @@ function makeIdGen() {
 }
 
 // packages/automation/dist/verifier/verifier.js
-import { createHash as createHash18 } from "node:crypto";
+import { createHash as createHash19 } from "node:crypto";
 function automationPolicySubjectFor(policy) {
   if (policy === void 0)
     return void 0;
   return Object.freeze({
     policy_id: policy.policy_id,
     policy_version: policy.policy_version,
-    goal_sha256: createHash18("sha256").update(policy.goal).digest("hex")
+    goal_sha256: createHash19("sha256").update(policy.goal).digest("hex")
   });
 }
 function freezeVerifierInput(input) {
@@ -21524,7 +21536,7 @@ var createScheduler = (deps) => {
 };
 
 // packages/automation/dist/skills/snapshot-store.js
-import { createHash as createHash19, randomUUID as randomUUID5 } from "node:crypto";
+import { createHash as createHash20, randomUUID as randomUUID5 } from "node:crypto";
 import { constants as constants2 } from "node:fs";
 import { chmod, lstat as lstat7, mkdir as mkdir13, open as open4, readdir as readdir6, realpath as realpath2, rm as rm4, rmdir as rmdir2, stat as stat7, writeFile as writeFile8 } from "node:fs/promises";
 import { dirname as dirname7, join as join26, relative as relative2, sep as sep3 } from "node:path";
@@ -21556,7 +21568,7 @@ var SKILL_SNAPSHOT_COMMIT_MARKER = ".snapshot-committed";
 var PUBLISH_LOCK_RETRY_MS = 5;
 var PUBLISH_LOCK_TIMEOUT_MS = 5e3;
 function sha256Hex(data) {
-  return createHash19("sha256").update(data).digest("hex");
+  return createHash20("sha256").update(data).digest("hex");
 }
 var EMPTY_FILE_SHA256 = sha256Hex(Buffer.alloc(0));
 function byRelativePath(a, b) {
@@ -21892,7 +21904,7 @@ async function withDigestPublishLock(casRoot, digest, publish) {
       if (Date.now() >= deadline) {
         throw new SkillSnapshotIoError(`CAS \u53D1\u5E03\u9501\u7B49\u5F85\u8D85\u65F6\uFF08digest ${digest}\uFF09\uFF0C\u62D2\u7EDD\u8BFB\u53D6\u53EF\u80FD\u672A\u63D0\u4EA4\u7684\u76EE\u6807\u76EE\u5F55`);
       }
-      await new Promise((resolve20) => setTimeout(resolve20, PUBLISH_LOCK_RETRY_MS));
+      await new Promise((resolve21) => setTimeout(resolve21, PUBLISH_LOCK_RETRY_MS));
     }
   }
   try {
@@ -23238,7 +23250,7 @@ var buildAfkRunCommand = (name2, runner, expectation = {}) => {
 // packages/automation/dist/lifecycle/mergeback.js
 import { randomUUID as randomUUID6 } from "node:crypto";
 import { mkdir as mkdir15, rmdir as rmdir3, stat as stat8 } from "node:fs/promises";
-import { join as join28, resolve as resolve9 } from "node:path";
+import { join as join28, resolve as resolve10 } from "node:path";
 
 // packages/automation/dist/lifecycle/worktree.js
 import { access, mkdir as mkdir14 } from "node:fs/promises";
@@ -23411,7 +23423,7 @@ var diffNamesReal = async (exec, input) => {
 var resolveLockDir = async (exec, hostRepoDir) => {
   const r = await exec("git", ["rev-parse", "--git-common-dir"], { cwd: hostRepoDir, env: GIT_ENV2 });
   const out = r.exitCode === 0 ? r.stdout.trim() : ".git";
-  return join28(resolve9(hostRepoDir, out || ".git"), "sandcastle-mergeback.lock.d");
+  return join28(resolve10(hostRepoDir, out || ".git"), "sandcastle-mergeback.lock.d");
 };
 var acquireMergeLock = async (exec, hostRepoDir, preservedPath) => {
   const lockdir = await resolveLockDir(exec, hostRepoDir);
@@ -24229,14 +24241,14 @@ var runChangeInSandbox = async (ports, cfg2, signal) => {
 };
 
 // packages/automation/dist/verifier/git-revision-verifier.js
-import { createHash as createHash20 } from "node:crypto";
+import { createHash as createHash21 } from "node:crypto";
 var GIT_REVISION_VERIFIER_ISSUER_IDENTITY = Object.freeze({
   kind: "host-verifier",
   verifier: "pipeline-git-integrity",
   version: "1"
 });
 var defaultNewId2 = (prefix) => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-var sha2563 = (value) => createHash20("sha256").update(value).digest("hex");
+var sha2563 = (value) => createHash21("sha256").update(value).digest("hex");
 var errorText = (error) => {
   if (error instanceof Error)
     return error.message;
@@ -24664,7 +24676,7 @@ var randomName = () => `${Date.now().toString(36)}-${Math.random().toString(16).
 
 // packages/automation/dist/runner/gitMounts.js
 import { readFile as fsReadFile, stat as fsStat } from "node:fs/promises";
-import { resolve as resolve10 } from "node:path";
+import { resolve as resolve11 } from "node:path";
 var resolveGitMounts = async (gitPath, deps) => {
   const stat14 = deps?.stat ?? ((p) => fsStat(p));
   const readFile24 = deps?.readFile ?? ((p) => fsReadFile(p, "utf-8"));
@@ -24678,7 +24690,7 @@ var resolveGitMounts = async (gitPath, deps) => {
     return [{ hostPath: gitPath, sandboxPath: gitPath }];
   }
   const gitdirPath = match[1];
-  const parentGitDir = resolve10(gitdirPath, "..", "..");
+  const parentGitDir = resolve11(gitdirPath, "..", "..");
   return [
     { hostPath: gitPath, sandboxPath: gitPath },
     { hostPath: parentGitDir, sandboxPath: parentGitDir }
@@ -24695,7 +24707,7 @@ var AgentIdleTimeoutError = class extends Error {
 };
 var detectsCompletion = (accumulated, signals) => signals.some((sig) => accumulated.includes(sig));
 var armDecision = (completionDetected, idleMs, graceMs) => completionDetected ? { ms: graceMs, onExpiry: "resolve" } : { ms: idleMs, onExpiry: "reject-idle" };
-var invokeWithRace = (runExec, opts) => new Promise((resolve20, reject3) => {
+var invokeWithRace = (runExec, opts) => new Promise((resolve21, reject3) => {
   const { idleMs, graceMs, completionSignals, signal } = opts;
   let settled = false;
   let accumulated = "";
@@ -24717,7 +24729,7 @@ var invokeWithRace = (runExec, opts) => new Promise((resolve20, reject3) => {
       return;
     settled = true;
     cleanup2();
-    resolve20(v);
+    resolve21(v);
   };
   const settleReject = (e) => {
     if (settled)
@@ -25760,7 +25772,7 @@ async function enforceActiveLoopExecutionWiring(loopIds, deps) {
 // packages/tap/dist/paths.js
 import { homedir as homedir3, tmpdir as tmpdir2 } from "node:os";
 import { mkdirSync } from "node:fs";
-import { join as join36, dirname as dirname8, resolve as resolve11 } from "node:path";
+import { join as join36, dirname as dirname8, resolve as resolve12 } from "node:path";
 function safeHome() {
   const h = homedir3();
   if (h && h.length > 0)
@@ -25775,26 +25787,26 @@ function safeHome() {
 }
 function resolveTapDir(opts = {}) {
   if (opts.dir)
-    return resolve11(opts.dir);
+    return resolve12(opts.dir);
   const env = opts.env ?? process.env;
   const explicit = (env.PIPELINE_TAP_DIR ?? "").trim();
   if (explicit)
-    return resolve11(explicit);
+    return resolve12(explicit);
   const db = (env.PIPELINE_TAP_DB ?? "").trim();
   if (db)
-    return resolve11(dirname8(resolve11(db)));
+    return resolve12(dirname8(resolve12(db)));
   const xdg = (env.XDG_DATA_HOME ?? "").trim();
   if (xdg)
-    return resolve11(join36(xdg, "pipeline-tap"));
-  return resolve11(join36(safeHome(), ".local", "share", "pipeline-tap"));
+    return resolve12(join36(xdg, "pipeline-tap"));
+  return resolve12(join36(safeHome(), ".local", "share", "pipeline-tap"));
 }
 function resolveStateDir(opts = {}) {
   if (opts.dir)
-    return resolve11(opts.dir);
+    return resolve12(opts.dir);
   const env = opts.env ?? process.env;
   const override = (env.PIPELINE_TAP_STATE_DIR ?? "").trim();
   if (override)
-    return resolve11(override);
+    return resolve12(override);
   return resolveTapDir(opts);
 }
 
@@ -26434,13 +26446,13 @@ function serve(opts) {
       }
     }
   });
-  return new Promise((resolve20, reject3) => {
+  return new Promise((resolve21, reject3) => {
     server.once("error", reject3);
     server.listen(opts.port ?? 0, host, () => {
       server.removeAllListeners("error");
       const boundPort = server.address().port;
       const unregister = registerIntercept({ kind: "reverse", port: boundPort, client, target: opts.target });
-      resolve20({
+      resolve21({
         port: boundPort,
         host,
         target: opts.target,
@@ -27496,13 +27508,13 @@ function serveForward(opts = {}) {
     upstream.on("close", cleanup2);
     clientSocket.on("close", cleanup2);
   });
-  return new Promise((resolve20, reject3) => {
+  return new Promise((resolve21, reject3) => {
     server.once("error", reject3);
     server.listen(opts.port ?? 0, host, () => {
       server.removeAllListeners("error");
       const boundPort = server.address().port;
       const unregister = registerIntercept({ kind: "forward", port: boundPort, client, tls: !!ca });
-      resolve20({
+      resolve21({
         port: boundPort,
         host,
         client,
@@ -27583,7 +27595,7 @@ async function stopHandles(handles) {
 }
 
 // packages/tap/dist/certs.js
-import { X509Certificate, createPublicKey, createPrivateKey, createHash as createHash21, generateKeyPairSync, randomBytes as randomBytes5, sign as cryptoSign } from "node:crypto";
+import { X509Certificate, createPublicKey, createPrivateKey, createHash as createHash22, generateKeyPairSync, randomBytes as randomBytes5, sign as cryptoSign } from "node:crypto";
 import { chmodSync, closeSync, existsSync as existsSync7, mkdirSync as mkdirSync4, openSync, readFileSync as readFileSync16, renameSync as renameSync3, rmSync, statSync as statSync2, writeFileSync as writeFileSync3 } from "node:fs";
 import { homedir as homedir4 } from "node:os";
 import { join as join39 } from "node:path";
@@ -27701,7 +27713,7 @@ function spkiPublicKeyBits(spkiDer) {
   return spkiDer.subarray(bits.contentStart + 1, bits.contentEnd);
 }
 function subjectKeyIdentifier(spkiDer) {
-  return createHash21("sha1").update(spkiPublicKeyBits(spkiDer)).digest();
+  return createHash22("sha1").update(spkiPublicKeyBits(spkiDer)).digest();
 }
 function extractSubjectDn(certDer) {
   const cert = readTlv(certDer, 0);
@@ -28322,11 +28334,11 @@ async function launchTap(opts) {
 import { execFile as execFile2 } from "node:child_process";
 import { accessSync, constants as fsConstants } from "node:fs";
 import { join as join41 } from "node:path";
-var nodeExecDocker = (args) => new Promise((resolve20) => {
+var nodeExecDocker = (args) => new Promise((resolve21) => {
   execFile2("docker", [...args], (err, stdout, stderr) => {
     const code = err?.code;
     const exitCode = err === null ? 0 : typeof code === "number" ? code : 1;
-    resolve20({ stdout: String(stdout ?? ""), stderr: String(stderr ?? ""), exitCode });
+    resolve21({ stdout: String(stdout ?? ""), stderr: String(stderr ?? ""), exitCode });
   });
 });
 async function execDocker(args, opts) {
@@ -28334,8 +28346,8 @@ async function execDocker(args, opts) {
   const timeoutMs = opts?.timeoutMs ?? 5e3;
   let timer;
   try {
-    const timeout = new Promise((resolve20) => {
-      timer = setTimeout(() => resolve20(null), timeoutMs);
+    const timeout = new Promise((resolve21) => {
+      timer = setTimeout(() => resolve21(null), timeoutMs);
     });
     return await Promise.race([exec(args).catch(() => null), timeout]);
   } finally {
@@ -28566,7 +28578,16 @@ async function checkCustomWorkflow(deps, name2, dir, state, workflowName) {
 import { spawn as spawn3 } from "node:child_process";
 import { accessSync as accessSync2, constants as fsConstants2, realpathSync } from "node:fs";
 import { get as httpGet } from "node:http";
-import { basename as basename4, dirname as dirname9, join as join43, resolve as resolve12 } from "node:path";
+import { homedir as homedir6 } from "node:os";
+import { basename as basename4, dirname as dirname9, join as join43, resolve as resolve13 } from "node:path";
+
+// packages/cli/src/machineHome.ts
+function resolveMachineStateHome(env, defaultHome) {
+  const overridden = env.PIPELINE_DASHBOARD_HOME?.trim();
+  return canonicalMachineStateHome(overridden === void 0 || overridden === "" ? defaultHome : overridden);
+}
+
+// packages/cli/src/commands/dashboard.ts
 var DEFAULT_DASHBOARD_PORT = 18765;
 function fileExists(path7) {
   try {
@@ -28602,12 +28623,12 @@ function launchDetached(serverBundle, env) {
 function sleep3(ms) {
   return new Promise((resolveWait) => setTimeout(resolveWait, ms));
 }
-function isHealthyDashboard(value, expectedReleaseId) {
+function isHealthyDashboard(value, expectedReleaseId, expectedStateScopeId) {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
   const body = value;
-  return body.ok === true && body.scope === "global" && typeof body.version === "string" && body.version !== "" && (expectedReleaseId === void 0 || body.releaseId === expectedReleaseId);
+  return body.ok === true && body.scope === "global" && typeof body.version === "string" && body.version !== "" && (expectedReleaseId === void 0 || body.releaseId === expectedReleaseId) && body.stateScopeId === expectedStateScopeId;
 }
-function probeHealthyDashboard(port, expectedReleaseId) {
+function probeHealthyDashboard(port, expectedReleaseId, expectedStateScopeId) {
   return new Promise((resolveProbe) => {
     let settled = false;
     const finish = (healthy) => {
@@ -28627,7 +28648,7 @@ function probeHealthyDashboard(port, expectedReleaseId) {
           return;
         }
         try {
-          finish(isHealthyDashboard(JSON.parse(text), expectedReleaseId));
+          finish(isHealthyDashboard(JSON.parse(text), expectedReleaseId, expectedStateScopeId));
         } catch {
           finish(false);
         }
@@ -28640,9 +28661,9 @@ function probeHealthyDashboard(port, expectedReleaseId) {
     request.once("error", () => finish(false));
   });
 }
-async function waitForHealthyServer(port, expectedReleaseId) {
+async function waitForHealthyServer(port, expectedReleaseId, expectedStateScopeId) {
   for (let attempt = 0; attempt < 65; attempt += 1) {
-    if (await probeHealthyDashboard(port, expectedReleaseId)) return true;
+    if (await probeHealthyDashboard(port, expectedReleaseId, expectedStateScopeId)) return true;
     await sleep3(100);
   }
   return false;
@@ -28667,11 +28688,11 @@ function openBrowser(url) {
 function resolveDashboardRoot() {
   const declared = process.env.PLUGIN_ROOT ?? process.env.CLAUDE_PLUGIN_ROOT;
   if (declared !== void 0 && declared.trim() !== "") return declared;
-  const candidate = resolve12(process.argv[1] ?? "");
+  const candidate = resolve13(process.argv[1] ?? "");
   try {
-    return resolve12(dirname9(realpathSync(candidate)), "..", "..", "..");
+    return resolve13(dirname9(realpathSync(candidate)), "..", "..", "..");
   } catch {
-    return resolve12(dirname9(candidate), "..", "..", "..");
+    return resolve13(dirname9(candidate), "..", "..", "..");
   }
 }
 var REAL_DASHBOARD_RUNTIME = {
@@ -28679,6 +28700,7 @@ var REAL_DASHBOARD_RUNTIME = {
   fileExists,
   launch,
   launchDetached,
+  resolveStateScopeId: () => machineStateScopeId(resolveMachineStateHome(process.env, homedir6())),
   waitForHealthyServer,
   openBrowser
 };
@@ -28713,7 +28735,8 @@ async function startManagedDashboard(deps, payloadRoot, opts, runtime, expectedR
     deps.io.err("[dashboard] \u53D7\u7BA1 server \u8FDB\u7A0B\u65E0\u6CD5\u542F\u52A8\uFF1Bruntime \u5DF2\u4FDD\u7559\uFF0C\u53EF\u8FD0\u884C pipeline dashboard \u8BCA\u65AD\u3002");
     return 1;
   }
-  if (!await runtime.waitForHealthyServer(port, expectedReleaseId)) {
+  const expectedStateScopeId = runtime.resolveStateScopeId();
+  if (!await runtime.waitForHealthyServer(port, expectedReleaseId, expectedStateScopeId)) {
     deps.io.err(`[dashboard] \u53D7\u7BA1 server \u5728 http://127.0.0.1:${port}/ \u672A\u901A\u8FC7\u5065\u5EB7\u68C0\u67E5\uFF1B\u672A\u6253\u5F00\u6D4F\u89C8\u5668\u3002`);
     return 1;
   }
@@ -29560,14 +29583,14 @@ async function cmdArtifactRegister(deps, name2, field2, path7, producer) {
 
 // packages/cli/src/codexSkillReceipt.ts
 import { appendFile as appendFile2, lstat as lstat11, mkdir as mkdir17, readdir as readdir9, readFile as readFile16 } from "node:fs/promises";
-import { homedir as homedir7 } from "node:os";
-import { basename as basename5, isAbsolute as isAbsolute5, join as join47, relative as relative4, resolve as resolve14, sep as sep5 } from "node:path";
+import { homedir as homedir8 } from "node:os";
+import { basename as basename5, isAbsolute as isAbsolute5, join as join47, relative as relative4, resolve as resolve15, sep as sep5 } from "node:path";
 
 // packages/cli/src/codexTranscriptEvidence.ts
 import { createReadStream } from "node:fs";
 import { lstat as lstat10, readdir as readdir8, realpath as realpath4, stat as stat10 } from "node:fs/promises";
-import { homedir as homedir6 } from "node:os";
-import { isAbsolute as isAbsolute4, join as join46, relative as relative3, resolve as resolve13, sep as sep4 } from "node:path";
+import { homedir as homedir7 } from "node:os";
+import { isAbsolute as isAbsolute4, join as join46, relative as relative3, resolve as resolve14, sep as sep4 } from "node:path";
 import { createInterface as createInterface2 } from "node:readline";
 var MAX_RECEIPT_TRANSCRIPT_BYTES = 64 * 1024 * 1024;
 var MAX_DISCOVERY_TRANSCRIPT_BYTES = 512 * 1024 * 1024;
@@ -29585,7 +29608,7 @@ function isInside(base, candidate) {
 }
 function codexHomeRoot(homeDir, configured) {
   const candidate = configured?.trim() || process.env.CODEX_HOME?.trim();
-  return candidate && isAbsolute4(candidate) ? resolve13(candidate) : resolve13(homeDir, ".codex");
+  return candidate && isAbsolute4(candidate) ? resolve14(candidate) : resolve14(homeDir, ".codex");
 }
 function codexPluginCacheRoot(homeDir, configured) {
   return join46(codexHomeRoot(homeDir, configured), "plugins", "cache", "pipeline-lite", "pipeline-lite");
@@ -29595,7 +29618,7 @@ function codexSessionsRoot2(homeDir, configured) {
 }
 function isTrustedTranscriptPath(transcriptPath, homeDir, configured) {
   if (!isAbsolute4(transcriptPath) || !transcriptPath.endsWith(".jsonl")) return false;
-  return isInside(codexSessionsRoot2(homeDir, configured), resolve13(transcriptPath));
+  return isInside(codexSessionsRoot2(homeDir, configured), resolve14(transcriptPath));
 }
 function receiptTurnId(payload) {
   const metadata = payload.internal_chat_message_metadata_passthrough;
@@ -29622,9 +29645,9 @@ function functionExecCommand(payload) {
     return void 0;
   }
 }
-async function transcriptConfirmsReceipt(receipt, homeDir = homedir6(), configured) {
+async function transcriptConfirmsReceipt(receipt, homeDir = homedir7(), configured) {
   const sessionsRoot = codexSessionsRoot2(homeDir, configured);
-  const candidate = resolve13(receipt.transcriptPath);
+  const candidate = resolve14(receipt.transcriptPath);
   if (!isTrustedTranscriptPath(receipt.transcriptPath, homeDir, configured)) return false;
   let physicalRoot;
   let physicalTranscript;
@@ -29828,7 +29851,7 @@ async function recentHostTranscripts(sessionsRoot) {
 function confirmsEveryCandidate(confirmed, candidates) {
   return candidates.every((candidate) => [...confirmed].some((found) => skillsEquivalent2(candidate, found)));
 }
-async function discoverCompletedCodexSkillReads(repoRoot, candidateSkillIds, homeDir = homedir6(), configured, hostSessionId) {
+async function discoverCompletedCodexSkillReads(repoRoot, candidateSkillIds, homeDir = homedir7(), configured, hostSessionId) {
   const aliases = [...new Set(candidateSkillIds.flatMap(skillAliases))].filter((id) => /^[A-Za-z0-9_-]{1,160}$/.test(id));
   if (aliases.length === 0) return [];
   const transcripts = await recentHostTranscripts(codexSessionsRoot2(homeDir, configured));
@@ -29901,7 +29924,7 @@ async function discoverCompletedCodexSkillReads(repoRoot, candidateSkillIds, hom
 var CODEX_SKILL_RECEIPTS_FILE = join47(".pipeline", "codex-skill-receipts.jsonl");
 var RECEIPT_VERSION = 1;
 var REAL_CODEX_SKILL_RECEIPT_ENV = {
-  homeDir: () => homedir7(),
+  homeDir: () => homedir8(),
   codexHomeDir: () => process.env.CODEX_HOME
 };
 function isRecord8(value) {
@@ -29922,7 +29945,7 @@ function isInside2(base, candidate) {
 }
 function codexHomeRoot2(homeDir, configured) {
   const candidate = configured?.trim() || process.env.CODEX_HOME?.trim();
-  return candidate && isAbsolute5(candidate) ? resolve14(candidate) : resolve14(homeDir, ".codex");
+  return candidate && isAbsolute5(candidate) ? resolve15(candidate) : resolve15(homeDir, ".codex");
 }
 function codexPluginCacheRoot2(homeDir, configured) {
   return join47(codexHomeRoot2(homeDir, configured), "plugins", "cache", "pipeline-lite", "pipeline-lite");
@@ -29932,7 +29955,7 @@ function codexSessionsRoot3(homeDir, configured) {
 }
 function isTrustedCodexSkillPath(skillPath, skillId, homeDir, configured) {
   if (!isAbsolute5(skillPath)) return false;
-  const candidate = resolve14(skillPath);
+  const candidate = resolve15(skillPath);
   const root = codexPluginCacheRoot2(homeDir, configured);
   if (!isInside2(root, candidate)) return false;
   const parts = relative4(root, candidate).split(sep5);
@@ -29940,7 +29963,7 @@ function isTrustedCodexSkillPath(skillPath, skillId, homeDir, configured) {
 }
 function isTrustedTranscriptPath2(transcriptPath, homeDir, configured) {
   if (!isAbsolute5(transcriptPath) || !transcriptPath.endsWith(".jsonl")) return false;
-  return isInside2(codexSessionsRoot3(homeDir, configured), resolve14(transcriptPath));
+  return isInside2(codexSessionsRoot3(homeDir, configured), resolve15(transcriptPath));
 }
 function parseReceipt2(value) {
   if (!isRecord8(value) || value.version !== RECEIPT_VERSION) return void 0;
@@ -29983,7 +30006,7 @@ async function validatedReceipt(value, homeDir, configured) {
   return value;
 }
 async function appendReceipt(repoRoot, receipt) {
-  const journalDir = join47(resolve14(repoRoot), ".pipeline");
+  const journalDir = join47(resolve15(repoRoot), ".pipeline");
   await mkdir17(journalDir, { recursive: true });
   const line = `${JSON.stringify(receipt)}
 `;
@@ -29992,7 +30015,7 @@ async function appendReceipt(repoRoot, receipt) {
   });
 }
 async function loadReceipts(repoRoot) {
-  const path7 = join47(resolve14(repoRoot), CODEX_SKILL_RECEIPTS_FILE);
+  const path7 = join47(resolve15(repoRoot), CODEX_SKILL_RECEIPTS_FILE);
   if (!await regularFile(path7)) return [];
   let text;
   try {
@@ -30061,7 +30084,7 @@ async function readHistory(changeDir2) {
   }
 }
 async function latestBoundHostSessionId(repoRoot, changeName) {
-  const bindingsDir = join47(resolve14(repoRoot), TERMINAL_SESSION_BINDINGS_DIR);
+  const bindingsDir = join47(resolve15(repoRoot), TERMINAL_SESSION_BINDINGS_DIR);
   let entries;
   try {
     entries = await readdir9(bindingsDir);
@@ -30087,10 +30110,10 @@ async function latestBoundHostSessionId(repoRoot, changeName) {
 }
 async function reconcileCodexSkillEvidence(input) {
   if (!input.history) return { confirmedSkillIds: [] };
-  const homeDir = input.homeDir ?? homedir7();
+  const homeDir = input.homeDir ?? homedir8();
   const codexHomeDir = input.codexHomeDir;
   const existing = completedSkillIds(await readHistory(input.changeDir), input.evidenceScope);
-  const changeName = basename5(resolve14(input.changeDir));
+  const changeName = basename5(resolve15(input.changeDir));
   if (!isValidChangeName(changeName)) return { confirmedSkillIds: [] };
   const boundHostSessionId = await latestBoundHostSessionId(input.repoRoot, changeName);
   const receipts = await loadReceipts(input.repoRoot);
@@ -30996,15 +31019,15 @@ import { writeFile as writeFile10 } from "node:fs/promises";
 import { join as join51 } from "node:path";
 
 // packages/cli/src/commands/afk-executor.ts
-import { createHash as createHash23 } from "node:crypto";
+import { createHash as createHash24 } from "node:crypto";
 import { constants as constants4 } from "node:fs";
 import { access as access2, readFile as readFile17, realpath as realpath5 } from "node:fs/promises";
-import { homedir as homedir8 } from "node:os";
+import { homedir as homedir9 } from "node:os";
 import { join as join50 } from "node:path";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
 
 // packages/cli/src/skillBundleAssembly.ts
-import { createHash as createHash22 } from "node:crypto";
+import { createHash as createHash23 } from "node:crypto";
 import { readdirSync as readdirSync4, readFileSync as readFileSync19, statSync as statSync3 } from "node:fs";
 import { isAbsolute as isAbsolute6, join as join49 } from "node:path";
 var SkillCacheAccessError = class extends Error {
@@ -31316,7 +31339,7 @@ function scalarField3(state, f) {
   return Array.isArray(v) ? v.join(",") : v ?? "";
 }
 function sha256Hex2(s) {
-  return createHash22("sha256").update(s).digest("hex");
+  return createHash23("sha256").update(s).digest("hex");
 }
 function emptyDeclaredStep(stepId) {
   return { id: stepId, label: "", gate: null, skills: [], inputs: [], outputs: [], guards: [], artifacts: [], transitions: [] };
@@ -31421,7 +31444,7 @@ async function resolveBundledCliDistSha256(moduleUrl = import.meta.url) {
     throw new BundledCliDigestUnavailableError(resolved);
   }
   try {
-    return createHash23("sha256").update(await readFile17(resolved)).digest("hex");
+    return createHash24("sha256").update(await readFile17(resolved)).digest("hex");
   } catch (error) {
     throw new BundledCliDigestUnavailableError(resolved, `\u8BFB\u53D6 bundle \u5931\u8D25\uFF1A${messageOf(error)}`);
   }
@@ -31443,7 +31466,7 @@ var selectedReady = (ready, targets2) => {
   const selected = new Set(targets2.map((target) => target.change));
   return ready.filter((change) => selected.has(change));
 };
-async function enforceProductionLoopWiring(deps, loopIds, home = homedir8()) {
+async function enforceProductionLoopWiring(deps, loopIds, home = homedir9()) {
   let selected = loopIds;
   if (selected === void 0) {
     const snapshot = await readRegistrySnapshot(deps.cwd);
@@ -31480,7 +31503,7 @@ async function runAfkRound(deps, options, runtime = {}) {
   const dockerAvailableFn = runtime.dockerAvailable ?? dockerAvailable;
   const currentBranchFn = runtime.currentBranch ?? ((cwd) => branchWith(cwd, exec));
   const resolveCliDistSha256 = runtime.resolveCliDistSha256 ?? (() => resolveBundledCliDistSha256());
-  const homeDir = runtime.homeDir ?? homedir8;
+  const homeDir = runtime.homeDir ?? homedir9;
   const canReadFile2 = runtime.canReadFile ?? ((path7) => access2(path7, constants4.R_OK));
   const { level } = options;
   const image = options.image ?? readAutomationJson(deps.cwd).image ?? DEFAULT_SANDCASTLE_IMAGE;
@@ -31947,7 +31970,7 @@ async function cmdAfk(deps, sub, name2, opts) {
 
 // packages/cli/src/commands/channel.ts
 import { rmSync as rmSync3 } from "node:fs";
-import { homedir as homedir9 } from "node:os";
+import { homedir as homedir10 } from "node:os";
 
 // packages/channel/dist/events.js
 var CHANNEL_EVENT_KINDS = [
@@ -32093,7 +32116,7 @@ function nextSeq(lastSeq) {
 }
 
 // packages/channel/dist/paths.js
-import { isAbsolute as isAbsolute7, join as join52, resolve as resolve15 } from "node:path";
+import { isAbsolute as isAbsolute7, join as join52, resolve as resolve16 } from "node:path";
 var GLOBAL_BUCKET = "_global";
 function resolveRoot(home, envRoot) {
   const env = (envRoot ?? "").trim();
@@ -32109,7 +32132,7 @@ function projectKey(env) {
   const override = (env.projectOverride ?? "").trim();
   if (override)
     return sanitizeBucket(override);
-  const base = isAbsolute7(env.cwd) ? env.cwd : resolve15(env.cwd);
+  const base = isAbsolute7(env.cwd) ? env.cwd : resolve16(env.cwd);
   return sanitizeBucket(base);
 }
 function bucketFor(env, scope) {
@@ -33131,8 +33154,8 @@ function readNewEvents(fs, path7, state) {
   return parseEventsText(lines.join("\n"));
 }
 function defaultSleep(ms) {
-  return new Promise((resolve20) => {
-    const t = setTimeout(resolve20, ms);
+  return new Promise((resolve21) => {
+    const t = setTimeout(resolve21, ms);
     if (typeof t.unref === "function")
       t.unref();
   });
@@ -33375,7 +33398,7 @@ var ShutdownController = class {
   awaitKilled() {
     if (this.killedDone || !this.killedStarted)
       return Promise.resolve();
-    return new Promise((resolve20) => this.killedWaiters.push(resolve20));
+    return new Promise((resolve21) => this.killedWaiters.push(resolve21));
   }
   // kill ladder：close stdin → grace → SIGTERM → grace → SIGKILL（shutdown.py:93）。
   startKillLadder() {
@@ -33583,12 +33606,12 @@ async function startSupervisor(channelName, workerName, config, deps) {
   log(`[supervisor] starting ${adapter.provider} ${args.join(" ")}
 `);
   const child = proc.spawn(adapter.provider, args, { cwd: config.cwd, env: childEnv });
-  const settled = new Promise((resolve20) => {
-    child.onSpawn(() => resolve20(true));
+  const settled = new Promise((resolve21) => {
+    child.onSpawn(() => resolve21(true));
     child.onError((err) => {
       log(`[supervisor] worker error: ${err.message}
 `);
-      resolve20(false);
+      resolve21(false);
     });
   });
   child.onStderr((chunk) => log(chunk));
@@ -33815,7 +33838,7 @@ function echoOnlyAdapters(provider) {
 
 // packages/cli/src/commands/channel.ts
 function nodeChannelHost(cwd, clock) {
-  const root = resolveRoot(homedir9(), process.env.TRELLIS_CHANNEL_ROOT);
+  const root = resolveRoot(homedir10(), process.env.TRELLIS_CHANNEL_ROOT);
   const override = process.env.PIPELINE_CHANNEL_PROJECT;
   const env = { root, cwd, ...override ? { projectOverride: override } : {} };
   return { store: createChannelStore(env, void 0, clock), env };
@@ -34518,7 +34541,7 @@ async function cmdChannel(deps, sub, args, host = nodeChannelHost(deps.cwd)) {
 
 // packages/cli/src/commands/gen-router.ts
 import { spawnSync as spawnSync2 } from "node:child_process";
-import { createHash as createHash24 } from "node:crypto";
+import { createHash as createHash25 } from "node:crypto";
 import { existsSync as existsSync9, readFileSync as readFileSync21, realpathSync as realpathSync2 } from "node:fs";
 import { join as join53 } from "node:path";
 function assertTargetGrepPatterns(projection) {
@@ -34562,7 +34585,7 @@ async function cmdGenRouterSh(deps, manifestPath2, repoRoot) {
     assertTargetGrepPatterns(projection);
     const cache2 = encodeRouterDataCache({
       projectRoot: canonicalRoot,
-      manifestSha256: createHash24("sha256").update(manifestBytes).digest("hex"),
+      manifestSha256: createHash25("sha256").update(manifestBytes).digest("hex"),
       registryRevision: registry.revision,
       tracksPresent: existsSync9(join53(canonicalRoot, ".pipeline", "tracks.yaml")),
       projection
@@ -34821,7 +34844,7 @@ async function cmdInit(deps, name2, opts, env = REAL_INIT_WIZARD_ENV) {
 
 // packages/cli/src/commands/loops.ts
 import { readFileSync as readFileSync22, readdirSync as readdirSync6 } from "node:fs";
-import { homedir as homedir11 } from "node:os";
+import { homedir as homedir12 } from "node:os";
 import { isAbsolute as isAbsolute8, join as join55 } from "node:path";
 import { createInterface as createInterface4 } from "node:readline/promises";
 
@@ -34877,7 +34900,7 @@ function buildAdmissionJson(loop, p, missing3) {
 }
 
 // packages/cli/src/commands/loop-run.ts
-import { homedir as homedir10 } from "node:os";
+import { homedir as homedir11 } from "node:os";
 
 // packages/cli/src/commands/loop-run-selection.ts
 function selectTargetedRunCandidates(input) {
@@ -35045,7 +35068,7 @@ function defaultSkillBundleWiringDeps(deps, runner) {
     resolver: deps.resolver,
     locator: createProductionSkillContentLocator({
       pluginRoot: deps.doctor?.pluginRoot,
-      home: homedir10(),
+      home: homedir11(),
       runner
     })
   };
@@ -36234,7 +36257,7 @@ function defaultStarterWiringDeps(deps) {
     resolver: deps.resolver,
     locator: createProductionSkillContentLocator({
       pluginRoot: deps.doctor?.pluginRoot,
-      home: homedir11(),
+      home: homedir12(),
       runner
     })
   });
@@ -36394,7 +36417,7 @@ async function cmdLoops(deps, sub, args, fs = REAL_LOOPS_FS, driftFs = REAL_DRIF
 }
 
 // packages/cli/src/commands/mem.ts
-import { resolve as resolve16 } from "node:path";
+import { resolve as resolve17 } from "node:path";
 var VALID_PLATFORMS = ["claude", "codex", "opencode", "pi", "all"];
 var MemDie = class extends Error {
 };
@@ -36430,7 +36453,7 @@ function buildFilter(deps, flags) {
     cwd = null;
   } else {
     const cwdFlag = typeof flags.cwd === "string" ? flags.cwd : deps.cwd;
-    cwd = resolve16(cwdFlag);
+    cwd = resolve17(cwdFlag);
   }
   const limit = parseOptionalNumberFlag(flags.limit, "--limit", 50);
   return { platform: platformRaw, since, until, cwd, limit };
@@ -37169,15 +37192,15 @@ async function cmdSession(deps, sub, args, fs = REAL_FS2) {
 // packages/cli/src/commands/setup.ts
 import { execFileSync } from "node:child_process";
 import { accessSync as accessSync3, constants as fsConstants3, lstatSync as lstatSync2, mkdirSync as mkdirSync6, readFileSync as readFileSync23, readdirSync as readdirSync7, readSync as readSync2, realpathSync as realpathSync3, writeFileSync as writeFileSync5 } from "node:fs";
-import { homedir as homedir15 } from "node:os";
-import { dirname as dirname13, join as join63, resolve as resolve19 } from "node:path";
+import { homedir as homedir16 } from "node:os";
+import { dirname as dirname13, join as join63, resolve as resolve20 } from "node:path";
 
 // packages/cli/src/runtime/installer.ts
-import { homedir as homedir14 } from "node:os";
+import { homedir as homedir15 } from "node:os";
 
 // packages/cli/src/runtime/launchers.ts
 import { chmod as chmod2, mkdir as mkdir20 } from "node:fs/promises";
-import { homedir as homedir12 } from "node:os";
+import { homedir as homedir13 } from "node:os";
 import { join as join59 } from "node:path";
 function shellQuote(value) {
   return `'${value.replace(/'/g, `'"'"'`)}'`;
@@ -37194,7 +37217,7 @@ export PIPELINE_RUNTIME_CONFIG_ROOT=${shellQuote(paths.configRoot)}
 exec node ${shellQuote(bootstrap)} ${mode} "$@"
 `;
 }
-async function writeStableLaunchers(paths, homeDir = homedir12()) {
+async function writeStableLaunchers(paths, homeDir = homedir13()) {
   const binDir = join59(homeDir, ".local", "bin");
   const pipeline = join59(binDir, "pipeline");
   const hook = join59(binDir, "pipeline-hook");
@@ -37206,19 +37229,19 @@ async function writeStableLaunchers(paths, homeDir = homedir12()) {
 }
 
 // packages/cli/src/runtime/paths.ts
-import { homedir as homedir13 } from "node:os";
-import { isAbsolute as isAbsolute9, join as join60, resolve as resolve17 } from "node:path";
+import { homedir as homedir14 } from "node:os";
+import { isAbsolute as isAbsolute9, join as join60, resolve as resolve18 } from "node:path";
 function usableAbsolute(value) {
   if (value === void 0) return null;
   const trimmed = value.trim();
-  return trimmed !== "" && isAbsolute9(trimmed) ? resolve17(trimmed) : null;
+  return trimmed !== "" && isAbsolute9(trimmed) ? resolve18(trimmed) : null;
 }
 function linuxRoot(homeDir, env, key, fallback) {
   return usableAbsolute(env[key]) ?? join60(homeDir, fallback, "pipeline-lite");
 }
 function resolveRuntimePaths(input = {}) {
   const env = input.env ?? process.env;
-  const homeDir = input.homeDir ?? homedir13();
+  const homeDir = input.homeDir ?? homedir14();
   const platform = input.platform ?? process.platform;
   const overridden = usableAbsolute(env.PIPELINE_RUNTIME_HOME);
   let dataRoot;
@@ -37256,7 +37279,7 @@ function resolveRuntimePaths(input = {}) {
 }
 
 // packages/cli/src/runtime/release-store.ts
-import { createHash as createHash25, randomUUID as randomUUID8 } from "node:crypto";
+import { createHash as createHash26, randomUUID as randomUUID8 } from "node:crypto";
 import { execFile as execFile3 } from "node:child_process";
 import {
   chmod as chmod3,
@@ -37269,7 +37292,7 @@ import {
   rm as rm7,
   stat as stat12
 } from "node:fs/promises";
-import { basename as basename6, dirname as dirname12, join as join62, relative as relative5, resolve as resolve18, sep as sep6 } from "node:path";
+import { basename as basename6, dirname as dirname12, join as join62, relative as relative5, resolve as resolve19, sep as sep6 } from "node:path";
 
 // packages/cli/src/runtime/types.ts
 var RuntimeFailure = class extends Error {
@@ -37429,8 +37452,8 @@ function isWithin(root, candidate) {
   return rel === "" || !rel.startsWith(`..${sep6}`) && rel !== ".." && !rel.includes(`${sep6}..${sep6}`);
 }
 function candidatePath(root, entry) {
-  const path7 = resolve18(root, entry);
-  if (!isWithin(resolve18(root), path7)) throw new RuntimeFailure("candidate-invalid", `\u5019\u9009\u53D1\u5E03\u8DEF\u5F84\u8D8A\u754C: ${entry}`);
+  const path7 = resolve19(root, entry);
+  if (!isWithin(resolve19(root), path7)) throw new RuntimeFailure("candidate-invalid", `\u5019\u9009\u53D1\u5E03\u8DEF\u5F84\u8D8A\u754C: ${entry}`);
   return path7;
 }
 async function copyEntry(source, target) {
@@ -37460,7 +37483,7 @@ async function copyPayload(candidateRoot, payloadRoot) {
   }
 }
 async function hashTree(root) {
-  const hash = createHash25("sha256");
+  const hash = createHash26("sha256");
   async function visit(dir, rel) {
     const entries = await readdir10(dir, { withFileTypes: true });
     entries.sort((left, right) => left.name.localeCompare(right.name));
@@ -37600,7 +37623,7 @@ var RuntimeReleaseStore = class {
     this.auditWriter = options.auditWriter ?? writeAudit;
   }
   async stageAndActivate(candidateRoot, host) {
-    const absoluteCandidate = resolve18(candidateRoot);
+    const absoluteCandidate = resolve19(candidateRoot);
     await this.prepareRoots();
     try {
       return await withLock(this.paths.stateRoot, async () => this.stageAndActivateUnderLock(absoluteCandidate, host));
@@ -37820,22 +37843,22 @@ function storeFor(homeDir) {
   return new RuntimeReleaseStore({ paths: resolveRuntimePaths({ homeDir }) });
 }
 var REAL_RUNTIME_INSTALLER = {
-  async activate(candidateRoot, host, homeDir = homedir14()) {
+  async activate(candidateRoot, host, homeDir = homedir15()) {
     const paths = resolveRuntimePaths({ homeDir });
     const activation = await new RuntimeReleaseStore({ paths }).stageAndActivate(candidateRoot, host);
     await writeStableLaunchers(paths, homeDir);
     return activation;
   },
-  inspect(homeDir = homedir14()) {
+  inspect(homeDir = homedir15()) {
     return storeFor(homeDir).inspect();
   },
-  async rollback(homeDir = homedir14()) {
+  async rollback(homeDir = homedir15()) {
     const paths = resolveRuntimePaths({ homeDir });
     const activation = await new RuntimeReleaseStore({ paths }).rollbackToPrevious();
     await writeStableLaunchers(paths, homeDir);
     return activation;
   },
-  recordUpdateFailure(homeDir = homedir14(), detail) {
+  recordUpdateFailure(homeDir = homedir15(), detail) {
     return storeFor(homeDir).recordUpdateFailure(detail);
   }
 };
@@ -37922,13 +37945,13 @@ function installedPipelineRoot(host, stdout) {
 
 // packages/cli/src/commands/setup.ts
 var REAL_SETUP_ENV = {
-  homeDir: () => homedir15(),
+  homeDir: () => homedir16(),
   pluginRoot: () => {
     const r = process.env.PLUGIN_ROOT ?? process.env.CLAUDE_PLUGIN_ROOT;
     return r !== void 0 && r.trim() !== "" ? r : null;
   },
   selfPath: () => {
-    const candidate = resolve19(process.argv[1] ?? "");
+    const candidate = resolve20(process.argv[1] ?? "");
     try {
       return realpathSync3(candidate);
     } catch {
@@ -38002,7 +38025,7 @@ var REAL_SETUP_ENV = {
 function resolvePipelineRoot(env) {
   const root = env.pluginRoot();
   if (root !== null) return root;
-  return resolve19(dirname13(env.selfPath()), "..", "..", "..");
+  return resolve20(dirname13(env.selfPath()), "..", "..", "..");
 }
 function printPlanSkeleton(deps, opts, host) {
   deps.io.out(`[setup] ${hostFlag(host)} \u5168\u529F\u80FD\u5C31\u7EEA\u5F15\u5BFC \u2014\u2014 \u8BA1\u5212\u9AA8\u67B6`);
@@ -38612,7 +38635,7 @@ function cmdSetupSkills(deps, opts, env = REAL_SETUP_ENV, sources, loadSources =
 var REAL_RUNTIME_ENV = {
   exec: nodeExecDocker,
   hostEnv: process.env,
-  defaultCodexHome: join63(homedir15(), ".codex"),
+  defaultCodexHome: join63(homedir16(), ".codex"),
   canReadFile: (path7) => {
     try {
       accessSync3(path7, fsConstants3.R_OK);
@@ -38831,9 +38854,9 @@ function cmdUpdate(deps, opts, env = REAL_SETUP_ENV, installer = REAL_RUNTIME_IN
 }
 
 // packages/cli/src/commands/runtime.ts
-import { homedir as homedir16 } from "node:os";
+import { homedir as homedir17 } from "node:os";
 var REAL_RUNTIME_COMMAND_ENV = {
-  homeDir: () => homedir16()
+  homeDir: () => homedir17()
 };
 function statusPayload(inspection) {
   return {
@@ -39140,21 +39163,21 @@ async function cmdTap(deps, sub, args) {
       if (command.length > 0) {
         const merged = {};
         for (const c of result.clients) Object.assign(merged, c.env);
-        const code = await new Promise((resolve20) => {
+        const code = await new Promise((resolve21) => {
           const child = spawn5(command[0], command.slice(1), {
             stdio: "inherit",
             env: { ...process.env, ...merged }
           });
-          child.on("exit", (exitCode, signal) => resolve20(exitCode ?? (signal ? 1 : 0)));
-          child.on("error", () => resolve20(1));
+          child.on("exit", (exitCode, signal) => resolve21(exitCode ?? (signal ? 1 : 0)));
+          child.on("error", () => resolve21(1));
         });
         await result.daemon.stop();
         return code;
       }
       for (const line of envLines(result.clients)) deps.io.out(line);
-      await new Promise((resolve20) => {
+      await new Promise((resolve21) => {
         const stop = () => {
-          void result.daemon.stop().then(resolve20);
+          void result.daemon.stop().then(resolve21);
         };
         process.once("SIGINT", stop);
         process.once("SIGTERM", stop);
@@ -40092,7 +40115,7 @@ async function cmdStateProjection(deps, sub, name2, opts = {}) {
 }
 
 // packages/cli/src/commands/triage.ts
-import { homedir as homedir17 } from "node:os";
+import { homedir as homedir18 } from "node:os";
 import { join as join66 } from "node:path";
 var TRIAGE_SOURCE_KINDS = ["git-commits", "loop-run-terminals"];
 var isTriageSourceKind = (value) => TRIAGE_SOURCE_KINDS.includes(value);
@@ -40144,7 +40167,7 @@ function createCodexFirstTriageProvider(options) {
   const execute = options.exec ?? nodeCodexTriageExec;
   const hostEnv = options.env ?? process.env;
   const configuredHome = hostEnv.CODEX_HOME?.trim();
-  const codexHome = configuredHome === void 0 || configuredHome === "" ? join66((options.homeDir ?? homedir17)(), ".codex") : configuredHome;
+  const codexHome = configuredHome === void 0 || configuredHome === "" ? join66((options.homeDir ?? homedir18)(), ".codex") : configuredHome;
   return createCodexTriageProvider({
     model: options.model,
     exec: (file, args, execOptions) => execute(file, args, {
@@ -40688,20 +40711,14 @@ loops init \u975E\u4EA4\u4E92 flags\uFF08agent/CI\uFF1B\u7F3A TTY \u6216 --yes \
   return program2;
 }
 
-// packages/cli/src/machineHome.ts
-function resolveMachineStateHome(env, defaultHome) {
-  const overridden = env.PIPELINE_DASHBOARD_HOME?.trim();
-  return overridden === void 0 || overridden === "" ? defaultHome : overridden;
-}
-
 // packages/cli/src/main.ts
 function isoNow() {
   return (/* @__PURE__ */ new Date()).toISOString().replace(/\.\d{3}Z$/, "Z");
 }
 function gitHeadSha(cwd) {
-  return new Promise((resolve20) => {
+  return new Promise((resolve21) => {
     execFile4("git", ["rev-parse", "HEAD"], { cwd }, (_err, stdout) => {
-      resolve20((stdout ?? "").trim());
+      resolve21((stdout ?? "").trim());
     });
   });
 }
@@ -40838,7 +40855,7 @@ function safeReaddirDirs(dir) {
 function readDisabledPluginKeys() {
   const disabled = /* @__PURE__ */ new Set();
   try {
-    const raw = readFileSync26(join67(homedir18(), ".claude", "settings.json"), "utf8");
+    const raw = readFileSync26(join67(homedir19(), ".claude", "settings.json"), "utf8");
     const ep = JSON.parse(raw).enabledPlugins;
     if (ep !== null && typeof ep === "object") {
       for (const [key, val] of Object.entries(ep)) if (val === false) disabled.add(key);
@@ -40848,7 +40865,7 @@ function readDisabledPluginKeys() {
   return disabled;
 }
 function scanInstalledSkillNames() {
-  const home = homedir18();
+  const home = homedir19();
   const names = /* @__PURE__ */ new Set();
   for (const n of safeReaddirDirs(join67(home, ".claude", "skills"))) names.add(n);
   for (const n of safeReaddirDirs(join67(home, ".agents", "skills"))) names.add(n);
@@ -40880,8 +40897,8 @@ function makeDoctorProbes(machineStateHome) {
   const root = pluginRoot();
   return {
     nodeVersion: () => process.version,
-    gitAvailable: () => new Promise((resolve20) => {
-      execFile4("git", ["--version"], (err) => resolve20(!err));
+    gitAvailable: () => new Promise((resolve21) => {
+      execFile4("git", ["--version"], (err) => resolve21(!err));
     }),
     pluginRoot: root,
     manifestError: () => {
@@ -40918,16 +40935,16 @@ function makeDoctorProbes(machineStateHome) {
     // 接入判定与 statusline.sh 头注释的接入方式同口径：settings.json 里引用了该脚本即算接入
     statuslineConfigured: () => {
       try {
-        return readFileSync26(join67(homedir18(), ".claude", "settings.json"), "utf8").includes("statusline.sh");
+        return readFileSync26(join67(homedir19(), ".claude", "settings.json"), "utf8").includes("statusline.sh");
       } catch {
         return false;
       }
     },
     nativeRuntimeHost: async () => {
-      const host = (await REAL_RUNTIME_INSTALLER.inspect(homedir18())).active?.source.host;
+      const host = (await REAL_RUNTIME_INSTALLER.inspect(homedir19())).active?.source.host;
       return host === "codex" || host === "claude" ? host : null;
     },
-    runVerifySkills: () => new Promise((resolve20) => {
+    runVerifySkills: () => new Promise((resolve21) => {
       execFile4(
         "bash",
         [join67(root, "tools", "verify-skills.sh"), "--quiet"],
@@ -40935,7 +40952,7 @@ function makeDoctorProbes(machineStateHome) {
         (err, stdout, stderr) => {
           const errCode = err?.code;
           const code = err ? typeof errCode === "number" ? errCode : 1 : 0;
-          resolve20({ code, output: `${stdout ?? ""}${stderr ?? ""}` });
+          resolve21({ code, output: `${stdout ?? ""}${stderr ?? ""}` });
         }
       );
     }),
@@ -40963,12 +40980,12 @@ function makeDoctorProbes(machineStateHome) {
       image: readAutomationJson(process.cwd()).image ?? "sandcastle:local",
       secretsEnv: readSecrets(secretsPath(machineStateHome)).keys,
       hostEnv: process.env,
-      defaultCodexHome: join67(homedir18(), ".codex")
+      defaultCodexHome: join67(homedir19(), ".codex")
     })
   };
 }
 async function main() {
-  const machineStateHome = resolveMachineStateHome(process.env, homedir18());
+  const machineStateHome = resolveMachineStateHome(process.env, homedir19());
   const manifest = loadManifest(manifestPath());
   const { toParse, passthrough } = splitPassthroughArgv(process.argv);
   const store2 = createStateStore();

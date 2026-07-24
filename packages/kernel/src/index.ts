@@ -1,6 +1,7 @@
 export * from './types.js'
 export * from './state/index.js'
 export * from './flow/index.js'
+export { canonicalMachineStateHome, machineStateScopeId } from './machine-state-scope.js'
 // in-place 构建不以未变化的 Git HEAD 冒充验证靶；提供内容寻址的工作区基线给 CLI/server 注入。
 export { fingerprintWorkspace, isWorkspaceBaseline, WORKSPACE_BASELINE_PREFIX } from './workspace/fingerprint.js'
 // Native terminal sessions are a dashboard-only liveness projection, never workflow state.

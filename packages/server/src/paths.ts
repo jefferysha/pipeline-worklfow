@@ -4,10 +4,11 @@
  */
 import { homedir } from 'node:os'
 import { join } from 'node:path'
+import { canonicalMachineStateHome } from '@pipeline-lite/kernel'
 import type { ServerPaths } from './types.js'
 
 export function resolveServerPaths(opts?: { home?: string }): ServerPaths {
-  const home = opts?.home ?? process.env.PIPELINE_DASHBOARD_HOME ?? homedir()
+  const home = canonicalMachineStateHome(opts?.home ?? process.env.PIPELINE_DASHBOARD_HOME ?? homedir())
   const claudeDir = join(home, '.claude')
   return {
     home,

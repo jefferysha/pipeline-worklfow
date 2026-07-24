@@ -15,7 +15,7 @@ import {
 } from './test-support.js'
 import type { FlowEngine, StateStore } from '@pipeline-lite/kernel'
 import {
-  createLoopLedgerStore, loadManifest, secretsPath,
+  createLoopLedgerStore, loadManifest, machineStateScopeId, secretsPath,
   registerProjectRoot, TRANSITION_EVENTS as KERNEL_EVENTS, eventEdge as kernelEventEdge,
 } from '@pipeline-lite/kernel'
 import { TRANSITION_EVENTS, eventEdge } from './transition.js'
@@ -57,6 +57,7 @@ interface Harness {
 async function start(opts?: {
   version?: string
   releaseId?: string
+  home?: string
   token?: string
   pollIntervalMs?: number
   execDocker?: import('./dockerImages.js').ExecDockerFn
@@ -78,6 +79,7 @@ async function start(opts?: {
   const srv = createDashboardServer({
     version: opts?.version ?? '9.9.9',
     releaseId: opts?.releaseId,
+    home: opts?.home,
     token: opts?.token ?? 'secret-token-abc',
     registry: () => [root],
     store,
@@ -109,16 +111,25 @@ async function startWithConfig(opts?: { version?: string; token?: string }): Pro
 }
 
 describe('GET /api/health —— 存活探针 + 本 server 版本（B4）', () => {
-  it('回显 ok/scope/version/releaseId（证明版本和已发布 payload 身份都不是硬编码）', async () => {
+  it('回显 ok/scope/version/releaseId/stateScopeId 且不泄露 state home', async () => {
     const releaseId = `sha256-${'a'.repeat(64)}`
-    const h = await start({ version: '3.1.4', releaseId })
+    const stateHome = '/tmp/private-dashboard-state-home'
+    const h = await start({ version: '3.1.4', releaseId, home: stateHome })
     const r = await reqGet(h.port, '/api/health')
     expect(r.status).toBe(200)
-    const body = r.json<{ ok: boolean; scope: string; version: string; releaseId?: string }>()
+    const body = r.json<{
+      ok: boolean
+      scope: string
+      version: string
+      releaseId?: string
+      stateScopeId?: string
+    }>()
     expect(body.ok).toBe(true)
     expect(body.scope).toBe('global')
     expect(body.version).toBe('3.1.4')
     expect(body.releaseId).toBe(releaseId)
+    expect(body.stateScopeId).toBe(machineStateScopeId(stateHome))
+    expect(JSON.stringify(body)).not.toContain(stateHome)
   })
 })
 

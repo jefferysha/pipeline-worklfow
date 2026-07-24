@@ -32,39 +32,77 @@ describe('compareVersions —— 语义化数值比较', () => {
 })
 
 describe('decidePreemption —— bind / reuse / preempt', () => {
+  const stateScopeId = `sha256-v1-${'1'.repeat(64)}`
+  const otherStateScopeId = `sha256-v1-${'2'.repeat(64)}`
+
   it('无既有 server → bind', () => {
-    expect(decidePreemption(null, '0.1.0')).toBe('bind')
+    expect(decidePreemption(null, '0.1.0', undefined, stateScopeId)).toBe('bind')
   })
   it('既有同版本 → reuse', () => {
-    expect(decidePreemption({ ok: true, scope: 'global', version: '0.1.0' }, '0.1.0')).toBe('reuse')
+    expect(decidePreemption(
+      { ok: true, scope: 'global', version: '0.1.0', stateScopeId },
+      '0.1.0',
+      undefined,
+      stateScopeId,
+    )).toBe('reuse')
+  })
+  it('同 release 但 machine-state scope 不同 → preempt，绝不串 registry', () => {
+    const releaseId = `sha256-${'a'.repeat(64)}`
+    expect(decidePreemption(
+      { ok: true, scope: 'global', version: '0.2.0', releaseId, stateScopeId },
+      '0.2.0',
+      releaseId,
+      otherStateScopeId,
+    )).toBe('preempt')
+  })
+  it('legacy health 缺 machine-state scope → preempt 一次完成迁移', () => {
+    expect(decidePreemption(
+      { ok: true, scope: 'global', version: '0.2.0' },
+      '0.2.0',
+      undefined,
+      stateScopeId,
+    )).toBe('preempt')
   })
   it('同一语义版本但不可变 release 已变化 → preempt，确保每次已发布更新刷新服务', () => {
     expect(decidePreemption(
-      { ok: true, scope: 'global', version: '0.2.0', releaseId: `sha256-${'a'.repeat(64)}` },
+      { ok: true, scope: 'global', version: '0.2.0', releaseId: `sha256-${'a'.repeat(64)}`, stateScopeId },
       '0.2.0',
       `sha256-${'b'.repeat(64)}`,
+      stateScopeId,
     )).toBe('preempt')
   })
   it('同一语义版本且不可变 release 未变化 → reuse', () => {
     const releaseId = `sha256-${'a'.repeat(64)}`
     expect(decidePreemption(
-      { ok: true, scope: 'global', version: '0.2.0', releaseId },
+      { ok: true, scope: 'global', version: '0.2.0', releaseId, stateScopeId },
       '0.2.0',
       releaseId,
+      stateScopeId,
     )).toBe('reuse')
   })
   it('同一语义版本但既有服务不能证明 release 身份 → preempt，迁移旧服务', () => {
     expect(decidePreemption(
-      { ok: true, scope: 'global', version: '0.2.0' },
+      { ok: true, scope: 'global', version: '0.2.0', stateScopeId },
       '0.2.0',
       `sha256-${'a'.repeat(64)}`,
+      stateScopeId,
     )).toBe('preempt')
   })
   it('既有旧版本、我更新 → preempt', () => {
-    expect(decidePreemption({ ok: true, scope: 'global', version: '0.1.0' }, '0.2.0')).toBe('preempt')
+    expect(decidePreemption(
+      { ok: true, scope: 'global', version: '0.1.0', stateScopeId },
+      '0.2.0',
+      undefined,
+      stateScopeId,
+    )).toBe('preempt')
   })
   it('既有更新版本 → reuse（让位，不降级抢占）', () => {
-    expect(decidePreemption({ ok: true, scope: 'global', version: '0.3.0' }, '0.2.0')).toBe('reuse')
+    expect(decidePreemption(
+      { ok: true, scope: 'global', version: '0.3.0', stateScopeId },
+      '0.2.0',
+      undefined,
+      stateScopeId,
+    )).toBe('reuse')
   })
 })
 
