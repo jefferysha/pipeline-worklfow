@@ -35,3 +35,8 @@
 {"ts":"2026-07-24T12:59:12Z","kind":"tool","raw":"CodexSkillRead: openspec-apply-change"}
 {"ts":"2026-07-24T12:59:12Z","kind":"tool","raw":"CodexSkillRead: finishing-a-development-branch"}
 {"ts":"2026-07-24T12:59:12Z","kind":"tool","raw":"CodexSkillRead: pipeline-ship"}
+{"ts":"2026-07-24T13:00:03Z","kind":"set","field":"pr_url","to":"https://github.com/jefferysha/pipeline-worklfow/commit/734196abb9875c7528a9afed8068be31a49c440d"}
+{"ts":"2026-07-24T13:00:04Z","kind":"transition","from":"ship","to":"archive","raw":"ship-complete","transitionRecordId":"1a3ee573-7541-42d8-ac15-b1ccabc7182e"}
+{"ts":"2026-07-24T13:00:14Z","kind":"tool","raw":"CodexSkillRead: openspec-archive-change"}
+{"ts":"2026-07-24T13:00:14Z","kind":"tool","raw":"CodexSkillRead: pipeline-archive"}
+{"ts":"2026-07-24T13:01:07Z","kind":"transition","from":"archive","to":"archive","raw":"archived","transitionRecordId":"9602823c-93f0-4b86-9e4f-6d3c1cdacd9c"}

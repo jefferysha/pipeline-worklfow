@@ -33,7 +33,12 @@
         {
           "phase": "ship",
           "sha256": "430978f210245e78dda3fbec3ff1ac91fe0ff5aa4b726e98709e3c5e2aec6f28",
-          "readAt": "2026-07-24T12:59:34Z"
+          "readAt": "2026-07-24T13:00:03Z"
+        },
+        {
+          "phase": "archive",
+          "sha256": "430978f210245e78dda3fbec3ff1ac91fe0ff5aa4b726e98709e3c5e2aec6f28",
+          "readAt": "2026-07-24T13:01:06Z"
         }
       ]
     },
@@ -62,7 +67,12 @@
         {
           "phase": "ship",
           "sha256": "b7fa37bff5ce1754c7f33aa0ec132076304cd038a9797611f5899d4811107695",
-          "readAt": "2026-07-24T12:59:34Z"
+          "readAt": "2026-07-24T13:00:03Z"
+        },
+        {
+          "phase": "archive",
+          "sha256": "b7fa37bff5ce1754c7f33aa0ec132076304cd038a9797611f5899d4811107695",
+          "readAt": "2026-07-24T13:01:06Z"
         }
       ]
     },
@@ -96,7 +106,12 @@
         {
           "phase": "ship",
           "sha256": "586b5e39d737a575fceeaa3598252e50e4d3edc7691700423699dc7a7c54e43f",
-          "readAt": "2026-07-24T12:59:34Z"
+          "readAt": "2026-07-24T13:00:03Z"
+        },
+        {
+          "phase": "archive",
+          "sha256": "586b5e39d737a575fceeaa3598252e50e4d3edc7691700423699dc7a7c54e43f",
+          "readAt": "2026-07-24T13:01:06Z"
         }
       ]
     },
@@ -120,7 +135,12 @@
         {
           "phase": "ship",
           "sha256": "88e012af2fc0836e9a4a4c33ae95a47b7eac4ed7ccd6ea581f785a9fbcb74537",
-          "readAt": "2026-07-24T12:59:34Z"
+          "readAt": "2026-07-24T13:00:03Z"
+        },
+        {
+          "phase": "archive",
+          "sha256": "88e012af2fc0836e9a4a4c33ae95a47b7eac4ed7ccd6ea581f785a9fbcb74537",
+          "readAt": "2026-07-24T13:01:06Z"
         }
       ]
     },
@@ -144,7 +164,12 @@
         {
           "phase": "ship",
           "sha256": "0339100c3f0e52891d5f1b6a4f1e1cd6cd00c69304b2a16409c5fe3e864247d6",
-          "readAt": "2026-07-24T12:59:34Z"
+          "readAt": "2026-07-24T13:00:03Z"
+        },
+        {
+          "phase": "archive",
+          "sha256": "0339100c3f0e52891d5f1b6a4f1e1cd6cd00c69304b2a16409c5fe3e864247d6",
+          "readAt": "2026-07-24T13:01:06Z"
         }
       ]
     },
@@ -168,7 +193,12 @@
         {
           "phase": "ship",
           "sha256": "0339100c3f0e52891d5f1b6a4f1e1cd6cd00c69304b2a16409c5fe3e864247d6",
-          "readAt": "2026-07-24T12:59:34Z"
+          "readAt": "2026-07-24T13:00:03Z"
+        },
+        {
+          "phase": "archive",
+          "sha256": "0339100c3f0e52891d5f1b6a4f1e1cd6cd00c69304b2a16409c5fe3e864247d6",
+          "readAt": "2026-07-24T13:01:06Z"
         }
       ]
     },
@@ -197,7 +227,12 @@
         {
           "phase": "ship",
           "sha256": "997762dee30d72def43c5b97f0b2ee61f9c17713d9b18e67ca68567777fe5494",
-          "readAt": "2026-07-24T12:59:34Z"
+          "readAt": "2026-07-24T13:00:03Z"
+        },
+        {
+          "phase": "archive",
+          "sha256": "997762dee30d72def43c5b97f0b2ee61f9c17713d9b18e67ca68567777fe5494",
+          "readAt": "2026-07-24T13:01:06Z"
         }
       ]
     },
@@ -211,7 +246,12 @@
         {
           "phase": "ship",
           "sha256": "4aa0e4407be3974754591aa50bff25290c4e1f6cca3efda127f3cd2318165f9b",
-          "readAt": "2026-07-24T12:59:34Z"
+          "readAt": "2026-07-24T13:00:03Z"
+        },
+        {
+          "phase": "archive",
+          "sha256": "4aa0e4407be3974754591aa50bff25290c4e1f6cca3efda127f3cd2318165f9b",
+          "readAt": "2026-07-24T13:01:06Z"
         }
       ]
     },
@@ -221,19 +261,25 @@
       "sha256": "baf4b3a6882d00c661f1518227bf88525c81068d491a09ff066d4da9b359f728",
       "producer": "openspec-apply-change",
       "recordedAt": "2026-07-24T12:59:34Z",
-      "reads": []
+      "reads": [
+        {
+          "phase": "archive",
+          "sha256": "baf4b3a6882d00c661f1518227bf88525c81068d491a09ff066d4da9b359f728",
+          "readAt": "2026-07-24T13:01:06Z"
+        }
+      ]
     },
     {
       "kind": "tasks",
       "path": "openspec/changes/dashboard-state-scope-isolation/tasks.md",
-      "sha256": "e0dbdc5a4b1a28fccd965f32a66e701744165ecbf1b0b27aa5923c48e9e075c1",
-      "producer": "pipeline-ship",
-      "recordedAt": "2026-07-24T12:59:34Z",
+      "sha256": "c95046cb1e445882cac95c04c2b6e90f2750a8cbdb0149b29f368ccc5df3ab16",
+      "producer": "pipeline-archive",
+      "recordedAt": "2026-07-24T13:01:06Z",
       "reads": [
         {
-          "phase": "ship",
-          "sha256": "e0dbdc5a4b1a28fccd965f32a66e701744165ecbf1b0b27aa5923c48e9e075c1",
-          "readAt": "2026-07-24T12:59:34Z"
+          "phase": "archive",
+          "sha256": "c95046cb1e445882cac95c04c2b6e90f2750a8cbdb0149b29f368ccc5df3ab16",
+          "readAt": "2026-07-24T13:01:06Z"
         }
       ]
     }

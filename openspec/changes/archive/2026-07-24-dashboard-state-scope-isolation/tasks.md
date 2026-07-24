@@ -33,8 +33,8 @@
 ## Ship
 
 - [x] Apply the delta to the main spec and record document evidence.
-- [ ] Commit and push the verified change to remote main.
+- [x] Commit and push the verified change to remote main.
 
 ## Archive
 
-- [ ] Re-read all governed artifacts and archive the completed Change.
+- [x] Re-read all governed artifacts and archive the completed Change.
