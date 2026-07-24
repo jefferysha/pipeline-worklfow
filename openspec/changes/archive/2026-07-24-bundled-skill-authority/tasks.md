@@ -30,4 +30,4 @@
 
 ## Archive
 
-- [ ] Archive the governed change.
+- [x] Archive the governed change.
