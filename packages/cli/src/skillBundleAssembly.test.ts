@@ -363,6 +363,23 @@ describe('createProductionSkillContentLocator（H10 r1 复审阻断4：唯一生
     expect(located.contentDir).toBe(await realpath(codexDir))
   })
 
+  it('selected bundle authority：pluginRoot 与 Codex global 同名内容不同时采用 bundle', async () => {
+    const home = join(root, 'home')
+    const pluginRoot = join(root, 'plugin')
+    const bundled = await makeSkillDir(join(pluginRoot, 'skills'), 'brainstorming', '# bundled')
+    await makeSkillDir(join(home, '.codex', 'skills'), 'brainstorming', '# divergent global')
+    const locator = createProductionSkillContentLocator({
+      home,
+      pluginRoot,
+      readdirDirNames: () => [],
+      readInstalledPluginsJson: () => null,
+    })
+
+    const located = await locator.locate('brainstorming')
+
+    expect(located.contentDir).toBe(await realpath(bundled))
+  })
+
   it('Codex tier 有候选时不读取损坏的 Claude fallback registry', async () => {
     const home = join(root, 'home')
     const codexDir = await makeSkillDir(join(home, '.codex', 'skills'), 'codex-only', '# codex')

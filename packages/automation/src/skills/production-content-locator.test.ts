@@ -69,6 +69,24 @@ describe('createRunnerSkillContentLocator', () => {
     await expect(locator.locate('grill-with-docs')).resolves.toMatchObject({ contentDir: installed })
   })
 
+  test('selected bundle authority：bundled 与 runner-native 同名内容不同时采用 bundled', async () => {
+    const root = await home()
+    const bundled = await skill(root, 'release/skills', 'brainstorming')
+    const globalDir = join(root, '.agents/skills/brainstorming')
+    await mkdir(globalDir, { recursive: true })
+    await writeFile(join(globalDir, 'SKILL.md'), '# divergent global content\n', 'utf8')
+    const locator = createRunnerSkillContentLocator({
+      runner: 'codex',
+      home: root,
+      bundledRoot: join(root, 'release/skills'),
+    })
+
+    await expect(locator.locate('brainstorming')).resolves.toEqual({
+      skillId: 'brainstorming',
+      contentDir: bundled,
+    })
+  })
+
   test('runner=claude-code：保留 Claude flat 兼容根', async () => {
     const root = await home()
     const dir = await skill(root, '.claude/skills', 'compat')

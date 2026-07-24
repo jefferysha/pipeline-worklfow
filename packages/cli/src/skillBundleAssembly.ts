@@ -399,8 +399,11 @@ export function createProductionSkillContentLocator(opts: ProductionSkillContent
     }), aliases)
   }
   const codexPluginRoots = codexPluginSkillRoots(opts)
+  const bundledRoot = opts.pluginRoot === undefined ? undefined : join(opts.pluginRoot, 'skills')
+  const bundledLocator = bundledRoot === undefined
+    ? undefined
+    : createFsSkillContentLocator([bundledRoot])
   const codexFlatRoots = [
-    ...(opts.pluginRoot === undefined ? [] : [join(opts.pluginRoot, 'skills')]),
     join(opts.home, '.codex', 'skills'),
     join(opts.home, '.codex', 'skills', '.system'),
     ...flattenPluginRoots(codexPluginRoots),
@@ -425,6 +428,13 @@ export function createProductionSkillContentLocator(opts: ProductionSkillContent
     async locate(skillId) {
       const colonIdx = skillId.indexOf(':')
       if (colonIdx < 0) {
+        if (bundledLocator !== undefined) {
+          try {
+            return await bundledLocator.locate(skillId)
+          } catch (e) {
+            if (!(e instanceof SkillContentNotFoundError)) throw e
+          }
+        }
         try {
           return await codexFlatLocator.locate(skillId)
         } catch (e) {

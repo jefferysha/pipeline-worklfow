@@ -1,0 +1,149 @@
+{
+  "version": 1,
+  "contract": "openspec-v1",
+  "createdAt": "2026-07-24T16:45:36Z",
+  "records": [
+    {
+      "kind": "proposal",
+      "path": "openspec/changes/bundled-skill-authority/proposal.md",
+      "sha256": "378c9d2600d5bfc1d5ae3f378e0b56fb7af89ae463d84d8d266bfc783e7572ed",
+      "producer": "openspec-propose",
+      "recordedAt": "2026-07-24T16:46:04Z",
+      "reads": [
+        {
+          "phase": "explore",
+          "sha256": "378c9d2600d5bfc1d5ae3f378e0b56fb7af89ae463d84d8d266bfc783e7572ed",
+          "readAt": "2026-07-24T16:47:06Z"
+        },
+        {
+          "phase": "spec",
+          "sha256": "378c9d2600d5bfc1d5ae3f378e0b56fb7af89ae463d84d8d266bfc783e7572ed",
+          "readAt": "2026-07-24T16:48:13Z"
+        },
+        {
+          "phase": "build",
+          "sha256": "378c9d2600d5bfc1d5ae3f378e0b56fb7af89ae463d84d8d266bfc783e7572ed",
+          "readAt": "2026-07-24T16:57:01Z"
+        }
+      ]
+    },
+    {
+      "kind": "adr",
+      "path": "docs/adr/2026-07-24-bundled-skill-authority.md",
+      "sha256": "c3d12cf0afb70b7a57c017bb6ff3fdfdb29e6de918cb6d12c7cffe5e728393ae",
+      "producer": "brainstorming",
+      "recordedAt": "2026-07-24T16:47:05Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "c3d12cf0afb70b7a57c017bb6ff3fdfdb29e6de918cb6d12c7cffe5e728393ae",
+          "readAt": "2026-07-24T16:48:13Z"
+        },
+        {
+          "phase": "build",
+          "sha256": "c3d12cf0afb70b7a57c017bb6ff3fdfdb29e6de918cb6d12c7cffe5e728393ae",
+          "readAt": "2026-07-24T16:57:01Z"
+        }
+      ]
+    },
+    {
+      "kind": "openspec-design",
+      "path": "openspec/changes/bundled-skill-authority/design.md",
+      "sha256": "946e6e5c5c45c7b92ea527bbc8eefb45e4d7d69d35994f864cdc666fd0148a3d",
+      "producer": "pipeline-explore",
+      "recordedAt": "2026-07-24T16:47:05Z",
+      "reads": [
+        {
+          "phase": "explore",
+          "sha256": "946e6e5c5c45c7b92ea527bbc8eefb45e4d7d69d35994f864cdc666fd0148a3d",
+          "readAt": "2026-07-24T16:47:06Z"
+        },
+        {
+          "phase": "spec",
+          "sha256": "946e6e5c5c45c7b92ea527bbc8eefb45e4d7d69d35994f864cdc666fd0148a3d",
+          "readAt": "2026-07-24T16:48:13Z"
+        },
+        {
+          "phase": "build",
+          "sha256": "946e6e5c5c45c7b92ea527bbc8eefb45e4d7d69d35994f864cdc666fd0148a3d",
+          "readAt": "2026-07-24T16:57:01Z"
+        }
+      ]
+    },
+    {
+      "kind": "delta-spec",
+      "path": "openspec/changes/bundled-skill-authority/specs/skill-content-resolution/spec.md",
+      "sha256": "7e8f1c9d1c4350ea08c325f7c42ad1c3dd10b4d23b15c6fa5bb8799790c703f3",
+      "producer": "openspec-propose",
+      "recordedAt": "2026-07-24T16:48:13Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "7e8f1c9d1c4350ea08c325f7c42ad1c3dd10b4d23b15c6fa5bb8799790c703f3",
+          "readAt": "2026-07-24T16:57:01Z"
+        }
+      ]
+    },
+    {
+      "kind": "superpower-plan",
+      "path": "docs/superpowers/plans/2026-07-24-bundled-skill-authority.md",
+      "sha256": "862713ff8deec1fcc8345e45bb97e5a672b72ef4487fc9646602560fab0fdc15",
+      "producer": "writing-plans",
+      "recordedAt": "2026-07-24T16:48:13Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "862713ff8deec1fcc8345e45bb97e5a672b72ef4487fc9646602560fab0fdc15",
+          "readAt": "2026-07-24T16:57:01Z"
+        }
+      ]
+    },
+    {
+      "kind": "plan",
+      "path": "docs/superpowers/plans/2026-07-24-bundled-skill-authority.md",
+      "sha256": "862713ff8deec1fcc8345e45bb97e5a672b72ef4487fc9646602560fab0fdc15",
+      "producer": "writing-plans",
+      "recordedAt": "2026-07-24T16:48:13Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "862713ff8deec1fcc8345e45bb97e5a672b72ef4487fc9646602560fab0fdc15",
+          "readAt": "2026-07-24T16:57:01Z"
+        }
+      ]
+    },
+    {
+      "kind": "superpower-design",
+      "path": "docs/superpowers/specs/2026-07-24-bundled-skill-authority-design.md",
+      "sha256": "358f8651db30118dbe563eb255243b87fc93f969a3695efa03525a2afd0ed16f",
+      "producer": "pipeline-spec",
+      "recordedAt": "2026-07-24T16:48:13Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "358f8651db30118dbe563eb255243b87fc93f969a3695efa03525a2afd0ed16f",
+          "readAt": "2026-07-24T16:48:13Z"
+        },
+        {
+          "phase": "build",
+          "sha256": "358f8651db30118dbe563eb255243b87fc93f969a3695efa03525a2afd0ed16f",
+          "readAt": "2026-07-24T16:57:01Z"
+        }
+      ]
+    },
+    {
+      "kind": "tasks",
+      "path": "openspec/changes/bundled-skill-authority/tasks.md",
+      "sha256": "8f7afa66e52117a600ac711756e2ea2cdf11257364e57fa537ac58194f9b893f",
+      "producer": "pipeline-build",
+      "recordedAt": "2026-07-24T16:57:01Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "8f7afa66e52117a600ac711756e2ea2cdf11257364e57fa537ac58194f9b893f",
+          "readAt": "2026-07-24T16:57:01Z"
+        }
+      ]
+    }
+  ]
+}

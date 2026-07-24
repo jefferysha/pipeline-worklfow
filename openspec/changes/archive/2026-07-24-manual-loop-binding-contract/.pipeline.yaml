@@ -2,8 +2,8 @@ track: backend
 preset: tweak
 created_by: unknown
 assignee: null
-phase: ship
-phase_status: pending
+phase: archive
+phase_status: done
 design_doc: docs/superpowers/specs/2026-07-24-manual-loop-binding-contract-design.md
 plan: docs/superpowers/plans/2026-07-24-manual-loop-binding-contract.md
 verification_report: docs/superpowers/reports/2026-07-24-manual-loop-binding-contract-verify.md
@@ -16,7 +16,7 @@ verify_result: pass
 branch_status: handled
 direct_override: false
 prd_path: null
-pr_url: null
+pr_url: https://github.com/jefferysha/pipeline-worklfow/commit/0b0c0334667daf499c06547f1e845fccb1a34e41
 automation: off
 automation_queued_at: ""
 automation_sandbox: ""
@@ -32,16 +32,16 @@ spec_scope: null
 depends_on:
   - manual-loop-binding-preservation
 created_at: 2026-07-24T16:13:08Z
-updated_at: 2026-07-24T16:39:58Z
+updated_at: 2026-07-24T16:43:05Z
 verified_at: 2026-07-24T16:39:58Z
-archived_at: null
-archived: false
+archived_at: 2026-07-24T16:43:05Z
+archived: true
 workflow: default
 automation_current_phase: ""
 automation_cause: ""
 pipeline_run_id: 9eab4ba6-c8ac-4702-87f9-086ff3045bd5
-pipeline_transition_sequence: 11
-pipeline_transition_head: 4b796a41-ed7f-4864-9b02-a8477748798d
-pipeline_state_revision: 40
-pipeline_state_revision_id: 134f792e-4ef0-4f29-a2ca-dcbb4be57fe0
-pipeline_state_digest: 1aac20d43754193f1f0ead1b418a5cb7867269f4249ff4f335ff8c425ebe2fc5
+pipeline_transition_sequence: 13
+pipeline_transition_head: 9baf2977-56e6-45e1-abb4-2feccd652825
+pipeline_state_revision: 43
+pipeline_state_revision_id: 26caf9c6-1609-45f5-afb3-680525115984
+pipeline_state_digest: 94823d51a028e466a94dbe1fa4af3ce14cf49ab9951d106704e515bea2d5d0e1

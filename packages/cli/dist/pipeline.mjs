@@ -25407,8 +25407,8 @@ function createRunnerSkillContentLocator(options) {
   const runner = assertLoopRunner(options.runner);
   const readDirs = options.readdirDirNames ?? realDirNames;
   const codexPlugins = codexPluginRoots(options.home, readDirs);
+  const bundled = options.bundledRoot === void 0 ? void 0 : createFsSkillContentLocator([options.bundledRoot]);
   const codexFlat = createFsSkillContentLocator([
-    ...options.bundledRoot === void 0 ? [] : [options.bundledRoot],
     join35(options.home, ".codex", "skills"),
     join35(options.home, ".codex", "skills", ".system"),
     // skills CLI 的 Codex/global 安装真落点是 agent-neutral ~/.agents/skills；它不属于
@@ -25441,6 +25441,14 @@ function createRunnerSkillContentLocator(options) {
     async locate(skillId) {
       const colon = skillId.indexOf(":");
       if (colon < 0) {
+        if (bundled !== void 0) {
+          try {
+            return await bundled.locate(skillId);
+          } catch (error) {
+            if (!isNotFound(error))
+              throw error;
+          }
+        }
         try {
           return await codexFlat.locate(skillId);
         } catch (error) {
@@ -31343,8 +31351,9 @@ function createProductionSkillContentLocator(opts) {
     }), aliases);
   }
   const codexPluginRoots2 = codexPluginSkillRoots(opts);
+  const bundledRoot = opts.pluginRoot === void 0 ? void 0 : join49(opts.pluginRoot, "skills");
+  const bundledLocator = bundledRoot === void 0 ? void 0 : createFsSkillContentLocator([bundledRoot]);
   const codexFlatRoots = [
-    ...opts.pluginRoot === void 0 ? [] : [join49(opts.pluginRoot, "skills")],
     join49(opts.home, ".codex", "skills"),
     join49(opts.home, ".codex", "skills", ".system"),
     ...flattenPluginRoots(codexPluginRoots2)
@@ -31369,6 +31378,13 @@ function createProductionSkillContentLocator(opts) {
     async locate(skillId) {
       const colonIdx = skillId.indexOf(":");
       if (colonIdx < 0) {
+        if (bundledLocator !== void 0) {
+          try {
+            return await bundledLocator.locate(skillId);
+          } catch (e) {
+            if (!(e instanceof SkillContentNotFoundError)) throw e;
+          }
+        }
         try {
           return await codexFlatLocator.locate(skillId);
         } catch (e) {

@@ -1,0 +1,25 @@
+{"ts":"2026-07-24T16:45:36Z","kind":"init"}
+{"ts":"2026-07-24T16:45:37Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated"}
+{"ts":"2026-07-24T16:45:43Z","kind":"tool","raw":"CodexSkillRead: pipeline-open"}
+{"ts":"2026-07-24T16:45:43Z","kind":"tool","raw":"CodexSkillRead: openspec-propose"}
+{"ts":"2026-07-24T16:46:24Z","kind":"transition","from":"open","to":"explore","raw":"open-complete","transitionRecordId":"8f66a302-bb3e-4748-a483-197e34ad10ee"}
+{"ts":"2026-07-24T16:47:04Z","kind":"set","field":"design_doc","to":"docs/superpowers/specs/2026-07-24-bundled-skill-authority-design.md"}
+{"ts":"2026-07-24T16:47:04Z","kind":"tool","raw":"CodexSkillRead: brainstorming"}
+{"ts":"2026-07-24T16:47:05Z","kind":"tool","raw":"CodexSkillRead: pipeline-explore"}
+{"ts":"2026-07-24T16:47:06Z","kind":"tool","raw":"review:request phase=explore event=explore-complete"}
+{"ts":"2026-07-24T16:47:06Z","kind":"tool","raw":"review:delegated-ack phase=explore event=explore-complete authority_issued_at=2026-07-24T16:45:37Z"}
+{"ts":"2026-07-24T16:47:07Z","kind":"transition","from":"explore","to":"spec","raw":"explore-complete","transitionRecordId":"c615c47c-ee09-41e4-8a82-d72409a479cd"}
+{"ts":"2026-07-24T16:47:14Z","kind":"tool","raw":"CodexSkillRead: pipeline-spec"}
+{"ts":"2026-07-24T16:47:14Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-07-24T16:47:14Z","kind":"tool","raw":"CodexSkillRead: openspec-propose"}
+{"ts":"2026-07-24T16:48:12Z","kind":"set","field":"plan","to":"docs/superpowers/plans/2026-07-24-bundled-skill-authority.md"}
+{"ts":"2026-07-24T16:48:14Z","kind":"tool","raw":"review:request phase=spec event=spec-complete"}
+{"ts":"2026-07-24T16:48:14Z","kind":"tool","raw":"review:delegated-ack phase=spec event=spec-complete authority_issued_at=2026-07-24T16:45:37Z"}
+{"ts":"2026-07-24T16:48:14Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"69e25803-d2fb-40aa-b926-47303877471e"}
+{"ts":"2026-07-24T16:48:21Z","kind":"tool","raw":"CodexSkillRead: pipeline-build"}
+{"ts":"2026-07-24T16:48:21Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-07-24T16:48:21Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-24T16:55:01Z","kind":"tool","raw":"CodexSkillRead: openspec-propose"}
+{"ts":"2026-07-24T16:55:43Z","kind":"tool","raw":"CodexSkillRead: openspec-propose"}
+{"ts":"2026-07-24T16:57:01Z","kind":"set","field":"build_mode","to":"direct"}
+{"ts":"2026-07-24T16:57:01Z","kind":"set","field":"isolation","to":"in-place"}
