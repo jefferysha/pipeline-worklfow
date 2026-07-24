@@ -5,3 +5,6 @@
 {"ts":"2026-07-24T13:07:02Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
 {"ts":"2026-07-24T13:07:13Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
 {"ts":"2026-07-24T13:07:30Z","kind":"transition","from":"verify","to":"done","raw":"verify-pass","transitionRecordId":"f23315c5-ff8f-4dc7-9787-6c827fd6f1b9"}
+{"ts":"2026-07-24T17:17:17Z","kind":"set","field":"phase_status","to":"done"}
+{"ts":"2026-07-24T17:17:17Z","kind":"set","field":"archived","to":"true"}
+{"ts":"2026-07-24T17:17:17Z","kind":"set","field":"archived_at","to":"2026-07-24T17:17:17Z"}

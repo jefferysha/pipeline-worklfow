@@ -29004,9 +29004,11 @@ async function checkChanges(deps) {
   const root = changesRoot(deps.cwd);
   const names = await deps.listChanges(root);
   const bad = [];
+  let activeCount = 0;
   for (const name2 of names) {
     try {
-      await deps.store.read(join45(root, name2));
+      const state = await deps.store.read(join45(root, name2));
+      if (state.fields.archived !== "true") activeCount += 1;
     } catch (e) {
       bad.push(`${name2}\uFF08${errMsg(e)}\uFF09`);
     }
@@ -29018,7 +29020,7 @@ async function checkChanges(deps) {
       "\u4FEE\u590D\u6216\u79FB\u9664\u5BF9\u5E94 openspec/changes/<name>/.pipeline.yaml"
     );
   }
-  return green("project:changes", `${names.length} \u4E2A\u6D3B\u8DC3 change\uFF0C.pipeline.yaml \u5168\u90E8\u53EF\u89E3\u6790`);
+  return green("project:changes", `${activeCount} \u4E2A\u6D3B\u8DC3 change\uFF0C.pipeline.yaml \u5168\u90E8\u53EF\u89E3\u6790`);
 }
 async function checkMarkers(deps) {
   const markers = await deps.readGateMarkers?.() ?? [];

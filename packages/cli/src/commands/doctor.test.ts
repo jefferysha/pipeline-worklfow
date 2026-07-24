@@ -190,7 +190,12 @@ describe('doctor —— 统一健康面（BACKLOG #26b，GOAL B8 降级可见 / 
   })
 
   test('project:changes 绿灯：活跃 change 计数进 detail', async () => {
-    const deps = makeDeps({ states: { 'ok-change': mockState({ phase: 'build' }) } })
+    const deps = makeDeps({
+      states: {
+        'ok-change': mockState({ phase: 'build' }),
+        'archived-change': mockState({ phase: 'done', archived: 'true' }),
+      },
+    })
     const { payload } = await runJson(deps)
     const c = byId(payload, 'project:changes')
     expect(c.status).toBe('green')

@@ -145,9 +145,11 @@ async function checkChanges(deps: CliDeps): Promise<DoctorCheck> {
   const root = changesRoot(deps.cwd)
   const names = await deps.listChanges(root)
   const bad: string[] = []
+  let activeCount = 0
   for (const name of names) {
     try {
-      await deps.store.read(join(root, name))
+      const state = await deps.store.read(join(root, name))
+      if (state.fields.archived !== 'true') activeCount += 1
     } catch (e) {
       bad.push(`${name}（${errMsg(e)}）`)
     }
@@ -159,7 +161,7 @@ async function checkChanges(deps: CliDeps): Promise<DoctorCheck> {
       '修复或移除对应 openspec/changes/<name>/.pipeline.yaml',
     )
   }
-  return green('project:changes', `${names.length} 个活跃 change，.pipeline.yaml 全部可解析`)
+  return green('project:changes', `${activeCount} 个活跃 change，.pipeline.yaml 全部可解析`)
 }
 
 async function checkMarkers(deps: CliDeps): Promise<DoctorCheck> {

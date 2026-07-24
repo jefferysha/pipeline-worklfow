@@ -1,0 +1,6 @@
+{"ts":"2026-07-24T17:18:04Z","kind":"init"}
+{"ts":"2026-07-24T17:18:32Z","kind":"tool","raw":"CodexSkillRead: simple-task"}
+{"ts":"2026-07-24T17:18:33Z","kind":"transition","from":"change","to":"verify","raw":"change-complete","transitionRecordId":"ed84a58b-8bdd-4224-add4-cc8b15433ef6"}
+{"ts":"2026-07-24T17:18:33Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-07-24T17:19:03Z","kind":"set","field":"verification_report","to":"openspec/changes/doctor-active-change-count/verification-report.md"}
+{"ts":"2026-07-24T17:19:03Z","kind":"transition","from":"verify","to":"done","raw":"verify-pass","transitionRecordId":"12353903-8d67-4955-a9d0-2d248f85b5bc"}
