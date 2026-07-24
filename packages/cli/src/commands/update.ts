@@ -75,6 +75,16 @@ function verifyUpdatedRoot(deps: CliDeps, env: SetupEnv, root: string): boolean 
   return false
 }
 
+function rejectUpdate(
+  installer: RuntimeInstaller,
+  env: SetupEnv,
+  detail: string,
+): number | Promise<number> {
+  const record = installer.recordUpdateFailure?.(env.homeDir(), detail)
+  if (record === undefined) return 1
+  return record.then(() => 1).catch(() => 1)
+}
+
 export function cmdUpdate(
   deps: CliDeps,
   opts: UpdateOpts,
@@ -125,17 +135,21 @@ export function cmdUpdate(
           break
         }
       }
-      deps.io.err(`ERROR: ${item.cmd} ${item.args.join(' ')} 失败：${result.stderr.trim() || `退出码 ${result.code}`}`)
-      return 1
+      const detail = `${item.cmd} ${item.args.join(' ')} 失败：${result.stderr.trim() || `退出码 ${result.code}`}`
+      deps.io.err(`ERROR: ${detail}`)
+      return rejectUpdate(installer, env, detail)
     }
     inventory = result.stdout
   }
   const root = installedPipelineRoot(host, inventory)
   if (root === null) {
-    deps.io.err(`ERROR: ${hostFlag(host)} 更新后未在宿主插件清单中找到 pipeline-lite；未切换 launcher。`)
-    return 1
+    const detail = `${hostFlag(host)} 更新后未在宿主插件清单中找到 pipeline-lite；未切换 launcher。`
+    deps.io.err(`ERROR: ${detail}`)
+    return rejectUpdate(installer, env, detail)
   }
-  if (!verifyUpdatedRoot(deps, env, root)) return 1
+  if (!verifyUpdatedRoot(deps, env, root)) {
+    return rejectUpdate(installer, env, '宿主刷新后的 pipeline-lite 候选未通过打包资产校验')
+  }
   return installer.activate(root, host, env.homeDir())
     .then(async (activation) => {
       deps.io.out(`[update] 已原子切换至已验证 runtime: ${activation.release.releaseId}（revision ${activation.selection.revision}）。`)
@@ -145,8 +159,9 @@ export function cmdUpdate(
         { openBrowser: opts.auto !== true },
       )
       if (dashboardCode !== 0) {
-        deps.io.err('ERROR: runtime 已切换，但 dashboard 未能完成受管刷新；请运行 pipeline dashboard --background 诊断。')
-        return 1
+        const detail = 'runtime 已切换，但 dashboard 未能完成受管刷新；请运行 pipeline dashboard --background 诊断。'
+        deps.io.err(`ERROR: ${detail}`)
+        return rejectUpdate(installer, env, detail)
       }
       if (opts.auto) {
         deps.io.out(`[update] ${hostFlag(host)} 已在后台刷新；当前会话继续使用已加载版本，新会话将加载新 skills/hooks。`)

@@ -1,7 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { execFile } from 'node:child_process'
 import {
-  appendFile,
   chmod,
   copyFile,
   lstat,
@@ -24,31 +23,18 @@ import type {
   RuntimeSelection,
 } from './types.js'
 import { RuntimeFailure } from './types.js'
-
-const EMPTY_SELECTION: RuntimeSelection = {
-  version: 1,
-  revision: 0,
-  activeRelease: null,
-  previousRelease: null,
-  updatedAt: '1970-01-01T00:00:00Z',
-}
-
-const PAYLOAD_ENTRIES = [
-  '.agents/plugins/marketplace.json',
-  '.claude-plugin/plugin.json',
-  '.codex-plugin/plugin.json',
-  'adapters',
-  'hooks',
-  'packages/cli/dist/pipeline.mjs',
-  'packages/dashboard-app/dist',
-  'packages/server/dist/dashboard.mjs',
-  'runtime/pipeline-bootstrap.mjs',
-  'skills',
-  'templates',
-  'tools/verify-skills.sh',
-] as const
-
-const RELEASE_ID = /^sha256-[a-f0-9]{64}$/
+import {
+  isExistingReleaseCollision,
+  isRecord,
+  lastAudit,
+  nonEmptyString,
+  PAYLOAD_ENTRIES,
+  readReleaseManifest,
+  readSelection,
+  stableJson,
+  validReleaseId,
+  writeAudit,
+} from './release-store-codecs.js'
 
 interface CommandResult {
   readonly code: number
@@ -60,114 +46,16 @@ export interface RuntimeCommandRunner {
   run(file: string, args: readonly string[], cwd: string): Promise<CommandResult>
 }
 
+export type RuntimeAuditWriter = (paths: RuntimePaths, entry: RuntimeAuditEntry) => Promise<void>
+
 export interface RuntimeReleaseStoreOptions {
   readonly paths: RuntimePaths
   readonly now?: () => string
   readonly runner?: RuntimeCommandRunner
   readonly retainedReleases?: number
+  readonly auditWriter?: RuntimeAuditWriter
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-function nonEmptyString(value: unknown): string | null {
-  return typeof value === 'string' && value.trim() !== '' ? value : null
-}
-
-function validReleaseId(value: unknown): value is string {
-  return typeof value === 'string' && RELEASE_ID.test(value)
-}
-
-// POSIX implementations do not agree on the errno for `rename(stage, existing-nonempty-dir)`:
-// Linux commonly reports EEXIST while macOS reports ENOTEMPTY. Both mean an idempotent publisher
-// raced (or retried) onto the same content-addressed release id; validate and reuse that release
-// rather than misreporting a failed update after another invocation has already published it.
-function isExistingReleaseCollision(error: unknown): boolean {
-  const code = (error as NodeJS.ErrnoException | undefined)?.code
-  return code === 'EEXIST' || code === 'ENOTEMPTY'
-}
-
-function sourceFromUnknown(value: unknown): RuntimeReleaseSource | null {
-  if (!isRecord(value)) return null
-  const host = value.host
-  const pluginVersion = nonEmptyString(value.pluginVersion)
-  if ((host !== 'codex' && host !== 'claude' && host !== 'adapter' && host !== 'manual') || pluginVersion === null) {
-    return null
-  }
-  return { host, pluginVersion }
-}
-
-function parseManifest(raw: string): RuntimeReleaseManifest | null {
-  let value: unknown
-  try {
-    value = JSON.parse(raw)
-  } catch {
-    return null
-  }
-  if (!isRecord(value) || value.version !== 1 || !validReleaseId(value.releaseId)) return null
-  const payloadDigest = nonEmptyString(value.payloadDigest)
-  const createdAt = nonEmptyString(value.createdAt)
-  const source = sourceFromUnknown(value.source)
-  if (payloadDigest === null || !/^[a-f0-9]{64}$/.test(payloadDigest) || createdAt === null || source === null) return null
-  if (value.releaseId !== `sha256-${payloadDigest}`) return null
-  return { version: 1, releaseId: value.releaseId, payloadDigest, createdAt, source }
-}
-
-function parseSelection(raw: string): RuntimeSelection | null {
-  let value: unknown
-  try {
-    value = JSON.parse(raw)
-  } catch {
-    return null
-  }
-  if (!isRecord(value)) return null
-  const revision = value.revision
-  if (value.version !== 1 || typeof revision !== 'number' || !Number.isSafeInteger(revision) || revision < 0) return null
-  const activeRelease = value.activeRelease
-  const previousRelease = value.previousRelease
-  const updatedAt = nonEmptyString(value.updatedAt)
-  if ((activeRelease !== null && !validReleaseId(activeRelease))
-    || (previousRelease !== null && !validReleaseId(previousRelease)) || updatedAt === null) return null
-  return {
-    version: 1,
-    revision,
-    activeRelease,
-    previousRelease,
-    updatedAt,
-  }
-}
-
-function parseAudit(raw: string): RuntimeAuditEntry | null {
-  let value: unknown
-  try {
-    value = JSON.parse(raw)
-  } catch {
-    return null
-  }
-  if (!isRecord(value) || value.version !== 1) return null
-  const at = nonEmptyString(value.at)
-  const detail = nonEmptyString(value.detail)
-  const kind = value.kind
-  const releaseId = value.releaseId
-  const previousRelease = value.previousRelease
-  if (at === null || detail === null
-    || (kind !== 'activated' && kind !== 'activation-rejected' && kind !== 'rolled-back' && kind !== 'pruned')
-    || (releaseId !== undefined && !validReleaseId(releaseId))
-    || (previousRelease !== undefined && previousRelease !== null && !validReleaseId(previousRelease))) return null
-  return {
-    version: 1,
-    at,
-    kind,
-    ...(releaseId === undefined ? {} : { releaseId }),
-    ...(previousRelease === undefined ? {} : { previousRelease }),
-    detail,
-  }
-}
-
-function stableJson(value: object): string {
-  return `${JSON.stringify(value, null, 2)}\n`
-}
 
 function isWithin(root: string, candidate: string): boolean {
   const rel = relative(root, candidate)
@@ -355,55 +243,19 @@ async function candidateVersion(candidateRoot: string): Promise<string> {
   return 'unknown'
 }
 
-async function readReleaseManifest(releaseRoot: string): Promise<RuntimeReleaseManifest | null> {
-  try {
-    return parseManifest(await readFile(join(releaseRoot, 'release.json'), 'utf8'))
-  } catch {
-    return null
-  }
-}
-
-async function readSelection(paths: RuntimePaths): Promise<RuntimeSelection> {
-  try {
-    const parsed = parseSelection(await readFile(paths.selectionPath, 'utf8'))
-    if (parsed !== null) return parsed
-    throw new RuntimeFailure('runtime-corrupt', 'managed runtime selection.json 格式无效')
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return EMPTY_SELECTION
-    throw error
-  }
-}
-
-async function lastAudit(paths: RuntimePaths): Promise<RuntimeAuditEntry | null> {
-  try {
-    const lines = (await readFile(paths.auditPath, 'utf8')).trim().split(/\r?\n/)
-    for (let index = lines.length - 1; index >= 0; index -= 1) {
-      const line = lines[index]
-      if (line === undefined || line === '') continue
-      const parsed = parseAudit(line)
-      if (parsed !== null) return parsed
-    }
-    return null
-  } catch {
-    return null
-  }
-}
-
-async function writeAudit(paths: RuntimePaths, entry: RuntimeAuditEntry): Promise<void> {
-  await appendFile(paths.auditPath, `${JSON.stringify(entry)}\n`, 'utf8')
-}
-
 export class RuntimeReleaseStore {
   private readonly paths: RuntimePaths
   private readonly now: () => string
   private readonly runner: RuntimeCommandRunner
   private readonly retainedReleases: number
+  private readonly auditWriter: RuntimeAuditWriter
 
   constructor(options: RuntimeReleaseStoreOptions) {
     this.paths = options.paths
     this.now = options.now ?? (() => new Date().toISOString().replace(/\.\d{3}Z$/, 'Z'))
     this.runner = options.runner ?? commandRunner()
     this.retainedReleases = Math.max(2, options.retainedReleases ?? 3)
+    this.auditWriter = options.auditWriter ?? writeAudit
   }
 
   async stageAndActivate(candidateRoot: string, host: RuntimeReleaseSource['host']): Promise<RuntimeActivation> {
@@ -444,7 +296,6 @@ export class RuntimeReleaseStore {
         throw new RuntimeFailure('no-recovery-release', 'previous runtime release 无法通过完整性校验；请重新运行 pipeline setup --<host>')
       }
       const previousRoot = this.releaseRoot(manifest.releaseId)
-      await this.installBootstrap(previousRoot)
       const next: RuntimeSelection = {
         version: 1,
         revision: selection.revision + 1,
@@ -452,16 +303,42 @@ export class RuntimeReleaseStore {
         previousRelease: selection.activeRelease,
         updatedAt: this.now(),
       }
-      await atomicWriteFile(this.paths.selectionPath, stableJson(next))
-      await writeAudit(this.paths, {
+      try {
+        // Write-ahead audit: an audit failure must occur before either bootstrap or selection moves.
+        await this.auditWriter(this.paths, {
+          version: 1,
+          at: this.now(),
+          kind: 'rolled-back',
+          releaseId: manifest.releaseId,
+          previousRelease: selection.activeRelease,
+          detail: 'verified rollback prepared; selection publication follows under the same lock',
+        })
+        await this.installBootstrap(previousRoot)
+        await atomicWriteFile(this.paths.selectionPath, stableJson(next))
+        return { selection: next, release: manifest, releaseRoot: previousRoot }
+      } catch (error) {
+        await this.auditWriter(this.paths, {
+          version: 1,
+          at: this.now(),
+          kind: 'rollback-rejected',
+          releaseId: manifest.releaseId,
+          previousRelease: selection.activeRelease,
+          detail: error instanceof Error ? error.message : String(error),
+        }).catch(() => {})
+        throw error
+      }
+    })
+  }
+
+  async recordUpdateFailure(detail: string): Promise<void> {
+    await this.prepareRoots()
+    await withLock(this.paths.stateRoot, async () => {
+      await this.auditWriter(this.paths, {
         version: 1,
         at: this.now(),
-        kind: 'rolled-back',
-        releaseId: manifest.releaseId,
-        previousRelease: selection.activeRelease,
-        detail: 'runtime repair selected the previous verified release',
+        kind: 'update-rejected',
+        detail,
       })
-      return { selection: next, release: manifest, releaseRoot: previousRoot }
     })
   }
 
@@ -497,7 +374,6 @@ export class RuntimeReleaseStore {
       }
 
       const selection = await readSelection(this.paths)
-      await this.installBootstrap(finalRoot)
       const next: RuntimeSelection = {
         version: 1,
         revision: selection.revision + 1,
@@ -505,20 +381,24 @@ export class RuntimeReleaseStore {
         previousRelease: selection.activeRelease === releaseId ? selection.previousRelease : selection.activeRelease,
         updatedAt: this.now(),
       }
-      await atomicWriteFile(this.paths.selectionPath, stableJson(next))
-      await writeAudit(this.paths, {
+      // Write-ahead audit: do not return an activation failure after selection already changed.
+      await this.auditWriter(this.paths, {
         version: 1,
         at: this.now(),
         kind: 'activated',
         releaseId,
         previousRelease: selection.activeRelease,
-        detail: `verified ${host} candidate activated`,
+        detail: `verified ${host} candidate activation prepared; publication follows under the same lock`,
       })
-      await this.prune(next)
+      await this.installBootstrap(finalRoot)
+      await atomicWriteFile(this.paths.selectionPath, stableJson(next))
+      // Retention is post-commit housekeeping. A pruning/audit problem must not turn a successful
+      // activation into a reported failure after the canonical selection has already changed.
+      await this.prune(next).catch(() => {})
       return { selection: next, release: effectiveManifest, releaseRoot: finalRoot }
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error)
-      await writeAudit(this.paths, {
+      await this.auditWriter(this.paths, {
         version: 1,
         at: this.now(),
         kind: 'activation-rejected',
@@ -595,7 +475,7 @@ export class RuntimeReleaseStore {
     const keep = Math.max(0, this.retainedReleases - protectedIds.size)
     for (const candidate of candidates.slice(keep)) {
       await rm(this.releaseRoot(candidate.id), { recursive: true, force: true })
-      await writeAudit(this.paths, {
+      await this.auditWriter(this.paths, {
         version: 1,
         at: this.now(),
         kind: 'pruned',

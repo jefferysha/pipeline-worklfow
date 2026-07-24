@@ -108,7 +108,6 @@ describe('stable runtime bootstrap', () => {
       previousRelease,
       updatedAt: '2026-07-24T00:00:00Z',
     })}\n`, 'utf8')
-
     const result = await runBootstrap(root, bootstrap, ['cli', 'runtime', 'repair', '--rollback'])
 
     expect(result.code).toBe(0)
@@ -141,8 +140,45 @@ describe('stable runtime bootstrap', () => {
     const result = await runBootstrap(root, bootstrap, ['cli', 'runtime', 'repair', '--rollback'])
 
     expect(result.code).toBe(1)
-    expect(result.stderr).toContain('digest check failed')
+    expect(result.stderr).toContain('integrity check failed')
     expect(JSON.parse(await readFile(join(state, 'selection.json'), 'utf8'))).toMatchObject({ activeRelease, previousRelease })
+  })
+
+  it('refuses to execute an active payload whose content no longer matches its manifest digest', async () => {
+    const root = await freshRoot('active-tamper')
+    const activeRelease = await createRelease(root, 'VERIFIED_ACTIVE')
+    const bootstrap = await installBootstrap(root)
+    const state = join(root, 'state')
+    await mkdir(state, { recursive: true })
+    await writeFile(join(state, 'selection.json'), `${JSON.stringify({
+      version: 1,
+      revision: 1,
+      activeRelease,
+      previousRelease: null,
+      updatedAt: '2026-07-24T00:00:00Z',
+    })}\n`, 'utf8')
+    await writeFile(join(state, 'audit.jsonl'), `${JSON.stringify({
+      version: 1,
+      at: '2026-07-24T00:00:00Z',
+      kind: 'update-rejected',
+      detail: 'host refresh failed',
+    })}\n`, 'utf8')
+    await writeFile(
+      join(root, 'data', 'releases', activeRelease, 'payload', 'packages', 'cli', 'dist', 'pipeline.mjs'),
+      'process.stdout.write("UNVERIFIED_ACTIVE_EXECUTED")\n',
+      'utf8',
+    )
+
+    const result = await runBootstrap(root, bootstrap, ['cli', '--help'])
+    const status = await runBootstrap(root, bootstrap, ['cli', 'runtime', 'status', '--json'])
+
+    expect(result.code).toBe(1)
+    expect(result.stdout).not.toContain('UNVERIFIED_ACTIVE_EXECUTED')
+    expect(result.stderr).toContain('runtime is unavailable')
+    expect(JSON.parse(status.stdout)).toMatchObject({
+      activeValid: false,
+      lastAudit: { kind: 'update-rejected', detail: 'host refresh failed' },
+    })
   })
 
   it('blocks only project mutation through gate while the runtime is unavailable, leaving the exact repair command reachable', async () => {
@@ -150,8 +186,10 @@ describe('stable runtime bootstrap', () => {
     const bootstrap = await installBootstrap(root)
     const mutation = JSON.stringify({ tool_name: 'Bash', command: 'touch src/app.ts' })
     const recovery = JSON.stringify({ tool_name: 'Bash', command: 'pipeline runtime repair --rollback' })
+    const attacker = JSON.stringify({ tool_name: 'Bash', command: '/tmp/evil/pipeline runtime repair --rollback' })
 
     expect((await runBootstrap(root, bootstrap, ['hook', 'gate'], mutation)).code).toBe(2)
     expect((await runBootstrap(root, bootstrap, ['hook', 'gate'], recovery)).code).toBe(0)
+    expect((await runBootstrap(root, bootstrap, ['hook', 'gate'], attacker)).code).toBe(2)
   })
 })

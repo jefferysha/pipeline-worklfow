@@ -1,6 +1,7 @@
 # Single-plugin host installation and release updates
 
 > Change: `single-plugin-host-install-updates`
+> Design doc: `docs/superpowers/specs/2026-07-24-single-plugin-host-install-updates-design.md`
 > Status: approved for inline implementation — the user explicitly requested full execution.
 
 ## Goal
@@ -47,42 +48,101 @@ pipeline update --codex|--claude
         └── marketplace refresh → plugin reinstall → launcher refresh → new session
 ```
 
-## Implementation tasks
+## Build plan
 
-1. Add the Codex manifest and repository marketplace, align the Claude/Codex version metadata,
-   and extend packaging checks so both manifests, the shared hook config, and every declared
-   bundled skill are validated.
-2. Replace setup's cross-host external installer with a strict selected-host command surface:
-   `pipeline setup --codex`, `--claude`, or one of the registered adapter flags. Reject zero or
-   multiple host selectors; preserve `setup skills` and `setup runtime` as compatibility commands.
-3. Generate a stable launcher under `~/.local/bin/pipeline` from the selected plugin root. It must
-   be refreshable after a host plugin upgrade and support opt-in, bounded automatic update checks.
-4. Add `pipeline update --codex|--claude` using each host's native marketplace refresh/install
-   commands, parse the host's plugin inventory to resolve the newly installed root, then verify
-   packaged assets and refresh the launcher. For non-native adapters, reapply the adapter from the
-   already-updated package instead of pretending it can update a marketplace it does not own.
-5. Create first-party versions of every skill that the default workflow treats as mandatory;
-   update the default manifest, phase instructions, source registry, document contract, and skill
-   verification so no mandatory default step relies on `npx skills`, a Claude-only plugin, or an
-   unlicensed local copy. Keep external integrations marked optional.
-6. Add a checked-in bootstrap script for fresh Codex/Claude installations. It is only an installer
-   for this plugin repository; it does not introduce a second product or a global npm package.
-7. Update README and distribution/release documentation with exact first install, host selection,
-   automatic-update opt-in, manual update, restart, and multi-host adapter behavior.
-8. Add/extend unit and integration coverage for option parsing, host exclusivity, launcher updates,
-   marketplace command plans, Codex/Claude plugin manifests, bundled skill completeness, and the
-   existing hooks/adapters/bundle smoke tests.
-9. Build the committed CLI bundle, run the relevant test suite, stage only this change and the
-   already-approved related pipeline fixes, then commit and push `main` after inspecting the
-   staged diff for unrelated files.
+### Stage 1 — tracer bullet: clean Codex install to a healthy active release
+
+Implement the smallest complete vertical path first:
+
+1. Declare the Codex native plugin and marketplace metadata.
+2. Parse exactly one `setup --codex` host selector.
+3. Resolve the Codex-reported plugin root, validate/stage it, publish the immutable runtime, and
+   write stable launchers.
+4. Start the dashboard from that active release and assert `/api/health` returns the same release
+   ID.
+5. Cover the path in `packages/cli/src/commands/setup.test.ts`, runtime integration tests, and an
+   isolated temporary-home E2E.
+
+Expected behavior: one command installs the full packaged product for Codex without modifying
+Claude or requiring another skill installer.
+
+Verification: focused setup/runtime tests, CLI bundle smoke, and isolated health check.
+
+**Context boundary — 此处建议 /clear**
+
+### Stage 2 — complete host-selection and adapter ownership
+
+1. Align Claude native metadata with the same package version and payload.
+2. Reject zero or multiple selectors and reject native auto-update options for non-native adapters.
+3. Preserve all adapter registry entries and reapply only the selected adapter.
+4. Add parser, selection, native-host, and adapter regression tests.
+
+Expected behavior: distribution stays complete, while one invocation mutates only the selected
+host.
+
+Verification: program/setup tests plus `tools/test-adapters.sh`.
+
+**Context boundary — 此处建议 /clear**
+
+### Stage 3 — updates, rollback, and diagnostics
+
+1. Add `pipeline update --codex|--claude` using the selected host's native inventory/update API.
+2. Route manual and opt-in daily automatic update through the stable launcher.
+3. Preserve the active release on refresh or candidate failure and surface `update-rejected`.
+4. Bind recovery to exact `pipeline runtime repair --rollback` and validate the previous release.
+5. Cover concurrency, interruption, tamper, audit failure, and rollback paths.
+
+Expected behavior: every release has deterministic manual/automatic refresh and failure-safe
+recovery, with no mutable checkout execution.
+
+Verification: update/runtime/doctor tests and negative failure injection.
+
+**Context boundary — 此处建议 /clear**
+
+### Stage 4 — bundled skills and OpenSpec evidence continuity
+
+1. Package first-party versions of every mandatory default-workflow skill.
+2. Update workflow declarations, phase instructions, and installer verification so mandatory
+   tokens cannot resolve externally.
+3. Verify proposal/design/tasks, Superpowers design/plan, ADR, delta spec, verification report, and
+   applied-spec receipts are generated and read by their later phases.
+4. Add skill registry, hook, bundle, and document-ledger regression coverage.
+
+Expected behavior: a clean install runs the complete seven-phase default pipeline without a second
+skill marketplace.
+
+Verification: `tools/verify-skills.sh`, hook/bundle suites, and workflow/document tests.
+
+**Context boundary — 此处建议 /clear**
+
+### Stage 5 — release documentation and direct-main delivery
+
+1. Document install, host trust, port `18765`, manual/automatic update, restart, runtime status,
+   rollback, and adapter reapply behavior.
+2. Build the committed CLI bundle and run the full verification matrix.
+3. Inspect every staged path, commit the governed changes, and push the user-authorized `main`
+   branch.
+
+Expected behavior: the repository and installed runtime describe and execute the same release.
+
+Verification: full tests, build, hooks, adapters, skills, bundle, oracle, doctor, live setup, remote
+SHA comparison, and clean worktree.
+
+## Prototype decision
+
+A disposable prototype is not inserted. The uncertain seams—host inventory, runtime publication,
+stable launchers, and dashboard handoff—already have production implementations plus focused and
+isolated E2E coverage. A separate prototype would duplicate those tests without reducing an
+unresolved data-model or state-machine risk.
 
 ## Verification matrix
 
-- `npm test -- --run packages/cli/src/commands/setup.test.ts packages/cli/src/commands/update.test.ts packages/cli/src/program.test.ts`
+- `npx vitest run packages/cli/src/commands/setup.test.ts packages/cli/src/commands/update.test.ts packages/cli/src/program.test.ts`
 - native manifest/marketplace tests and bundled-skill registry tests
 - `bash tools/verify-skills.sh`
 - `bash tools/test-hooks.sh`
 - `bash tools/test-adapters.sh`
 - `npm run build` followed by `bash tools/test-bundle.sh`
 - `pipeline setup --dry-run --codex` and `pipeline update --dry-run --codex` command-plan smoke
-- review the staged path list before commit; never use `git add -A` in this dirty worktree
+- review the complete staged path list before commit and verify every path belongs to the governed
+  delivery.

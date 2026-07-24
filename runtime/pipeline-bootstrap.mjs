@@ -132,6 +132,9 @@ async function releasePayload(paths, releaseId) {
     const cli = join(payload, 'packages', 'cli', 'dist', 'pipeline.mjs')
     const bootstrap = join(payload, 'runtime', 'pipeline-bootstrap.mjs')
     if (!await normalFile(cli) || !await normalFile(bootstrap)) return null
+    // Selection and manifest shape are not integrity proof. Recompute the immutable tree before
+    // every execution boundary so a locally forged active payload enters recovery-only mode.
+    if (await hashPayload(payload) !== manifest.payloadDigest) return null
     return { releaseRoot, payload }
   } catch {
     return null
@@ -196,6 +199,22 @@ async function installBootstrap(paths, releaseRoot) {
 async function appendAudit(paths, entry) {
   await mkdir(dirname(paths.auditPath), { recursive: true })
   await appendFile(paths.auditPath, `${JSON.stringify(entry)}\n`, 'utf8')
+}
+
+async function readLastAudit(paths) {
+  try {
+    const lines = (await readFile(paths.auditPath, 'utf8')).trim().split(/\r?\n/)
+    for (let index = lines.length - 1; index >= 0; index -= 1) {
+      const line = lines[index]
+      if (line === undefined || line === '') continue
+      const parsed = JSON.parse(line)
+      if (isRecord(parsed) && parsed.version === 1 && typeof parsed.kind === 'string'
+        && typeof parsed.at === 'string' && typeof parsed.detail === 'string') return parsed
+    }
+  } catch {
+    // Missing or malformed audit history is reported as no last event; it never authorizes runtime.
+  }
+  return null
 }
 
 function delay(ms) {
@@ -279,7 +298,6 @@ async function rollback(paths) {
     throw new Error('previous release digest check failed; reinstall the selected host package')
   }
   await mkdir(paths.stateRoot, { recursive: true })
-  await installBootstrap(paths, previous.releaseRoot)
   const next = {
     version: 1,
     revision: selection.revision + 1,
@@ -287,16 +305,30 @@ async function rollback(paths) {
     previousRelease: selection.activeRelease,
     updatedAt: now(),
   }
-  await atomicWrite(paths.selectionPath, `${JSON.stringify(next, null, 2)}\n`)
-  await appendAudit(paths, {
-    version: 1,
-    at: now(),
-    kind: 'rolled-back',
-    releaseId: next.activeRelease,
-    previousRelease: next.previousRelease,
-    detail: 'bootstrap recovery selected previous verified runtime release',
-  })
-  return next
+  try {
+    // Write-ahead audit: an audit append failure must leave bootstrap and selection untouched.
+    await appendAudit(paths, {
+      version: 1,
+      at: now(),
+      kind: 'rolled-back',
+      releaseId: next.activeRelease,
+      previousRelease: next.previousRelease,
+      detail: 'verified bootstrap rollback prepared; selection publication follows under lock',
+    })
+    await installBootstrap(paths, previous.releaseRoot)
+    await atomicWrite(paths.selectionPath, `${JSON.stringify(next, null, 2)}\n`)
+    return next
+  } catch (error) {
+    await appendAudit(paths, {
+      version: 1,
+      at: now(),
+      kind: 'rollback-rejected',
+      releaseId: next.activeRelease,
+      previousRelease: next.previousRelease,
+      detail: error instanceof Error ? error.message : String(error),
+    }).catch(() => {})
+    throw error
+  }
   })
 }
 
@@ -305,7 +337,9 @@ function recoveryCommand(input) {
   try { parsed = JSON.parse(input) } catch { return false }
   if (!isRecord(parsed) || (parsed.tool_name !== 'Bash' && parsed.tool_name !== 'command_execution')
     || typeof parsed.command !== 'string') return false
-  return /^(?:pipeline|(?:\/[^\s]+)*\/pipeline)\s+runtime\s+repair\s+--rollback\s*$/.test(parsed.command.trim())
+  // The gate authorizes the stable PATH command identity only. A matching basename at an
+  // attacker-controlled absolute path is not the managed launcher and must remain denied.
+  return parsed.command.trim() === 'pipeline runtime repair --rollback'
 }
 
 async function childEnv(payload, paths) {
@@ -339,6 +373,7 @@ async function emitBootstrapStatus(paths, asJson) {
     activeValid: active !== null,
     previousValid: previous !== null,
     bootstrap: join(paths.bootstrapRoot, 'active.mjs'),
+    lastAudit: await readLastAudit(paths),
   }
   if (asJson) process.stdout.write(`${JSON.stringify(payload)}\n`)
   else {

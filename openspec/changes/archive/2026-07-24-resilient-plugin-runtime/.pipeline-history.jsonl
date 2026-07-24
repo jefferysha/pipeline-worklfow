@@ -1,0 +1,53 @@
+{"ts":"2026-07-24T00:45:35Z","kind":"init"}
+{"ts":"2026-07-24T09:37:42Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated"}
+{"ts":"2026-07-24T09:37:46Z","kind":"tool","raw":"CodexSkillRead: openspec-propose"}
+{"ts":"2026-07-24T09:37:46Z","kind":"tool","raw":"CodexSkillRead: pipeline-open"}
+{"ts":"2026-07-24T09:37:55Z","kind":"transition","from":"open","to":"explore","raw":"open-complete","transitionRecordId":"d07033be-7b31-429e-8e82-007ff61dbae6"}
+{"ts":"2026-07-24T09:38:02Z","kind":"tool","raw":"CodexSkillRead: openspec-explore"}
+{"ts":"2026-07-24T09:38:02Z","kind":"tool","raw":"CodexSkillRead: brainstorming"}
+{"ts":"2026-07-24T09:38:02Z","kind":"tool","raw":"CodexSkillRead: improve-codebase-architecture"}
+{"ts":"2026-07-24T09:38:03Z","kind":"tool","raw":"CodexSkillRead: grill-with-docs"}
+{"ts":"2026-07-24T09:38:03Z","kind":"tool","raw":"CodexSkillRead: pipeline-explore"}
+{"ts":"2026-07-24T09:38:20Z","kind":"set","field":"design_doc","to":"docs/superpowers/specs/2026-07-24-resilient-plugin-runtime-design.md"}
+{"ts":"2026-07-24T09:38:21Z","kind":"tool","raw":"review:request phase=explore event=explore-complete"}
+{"ts":"2026-07-24T09:38:21Z","kind":"tool","raw":"review:delegated-ack phase=explore event=explore-complete authority_issued_at=2026-07-24T09:37:42Z"}
+{"ts":"2026-07-24T09:38:21Z","kind":"transition","from":"explore","to":"spec","raw":"explore-complete","transitionRecordId":"5b7afeb7-e1fe-4601-9cd5-d1d1c4acd903"}
+{"ts":"2026-07-24T09:38:28Z","kind":"tool","raw":"CodexSkillRead: openspec-propose"}
+{"ts":"2026-07-24T09:38:28Z","kind":"tool","raw":"CodexSkillRead: pipeline-spec"}
+{"ts":"2026-07-24T09:38:28Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-07-24T09:38:40Z","kind":"set","field":"plan","to":"docs/superpowers/plans/2026-07-24-resilient-plugin-runtime-plan.md"}
+{"ts":"2026-07-24T09:38:42Z","kind":"tool","raw":"review:request phase=spec event=spec-complete"}
+{"ts":"2026-07-24T09:38:42Z","kind":"tool","raw":"review:delegated-ack phase=spec event=spec-complete authority_issued_at=2026-07-24T09:37:42Z"}
+{"ts":"2026-07-24T09:38:42Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"5ae247b6-b1fa-48c0-a9e8-b75fd5d30472"}
+{"ts":"2026-07-24T09:38:48Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-07-24T09:38:48Z","kind":"tool","raw":"CodexSkillRead: pipeline-build"}
+{"ts":"2026-07-24T09:38:48Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-24T09:38:58Z","kind":"set","field":"build_mode","to":"direct"}
+{"ts":"2026-07-24T09:38:58Z","kind":"set","field":"isolation","to":"in-place"}
+{"ts":"2026-07-24T09:38:58Z","kind":"set","field":"direct_override","to":"true"}
+{"ts":"2026-07-24T09:38:59Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"399b1066-c5a9-4384-b5b0-61c03d4e041c"}
+{"ts":"2026-07-24T09:39:06Z","kind":"tool","raw":"CodexSkillRead: pipeline-verify"}
+{"ts":"2026-07-24T09:39:06Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-07-24T09:42:22Z","kind":"set","field":"agent_review_result","to":"fail"}
+{"ts":"2026-07-24T09:42:22Z","kind":"set","field":"codex_review_result","to":"pass"}
+{"ts":"2026-07-24T09:42:22Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-07-24-resilient-plugin-runtime-verify.md"}
+{"ts":"2026-07-24T09:42:23Z","kind":"tool","raw":"review:request phase=verify event=verify-fail"}
+{"ts":"2026-07-24T09:42:23Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-07-24T09:37:42Z"}
+{"ts":"2026-07-24T09:42:23Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"931a2c5a-ba3d-4264-9680-99951b0ed6f5"}
+{"ts":"2026-07-24T09:50:36Z","kind":"tool","raw":"CodexSkillRead: pipeline-build"}
+{"ts":"2026-07-24T09:50:37Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"45baa22f-3939-403f-8939-7d3242bdad83"}
+{"ts":"2026-07-24T09:54:27Z","kind":"tool","raw":"CodexSkillRead: pipeline-verify"}
+{"ts":"2026-07-24T09:54:28Z","kind":"set","field":"agent_review_result","to":"pass"}
+{"ts":"2026-07-24T09:54:28Z","kind":"set","field":"codex_review_result","to":"pass"}
+{"ts":"2026-07-24T09:54:28Z","kind":"set","field":"verify_result","to":"pass"}
+{"ts":"2026-07-24T09:54:28Z","kind":"set","field":"branch_status","to":"handled"}
+{"ts":"2026-07-24T09:54:28Z","kind":"tool","raw":"review:request phase=verify event=verify-pass"}
+{"ts":"2026-07-24T09:54:29Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-pass authority_issued_at=2026-07-24T09:37:42Z"}
+{"ts":"2026-07-24T09:54:29Z","kind":"transition","from":"verify","to":"ship","raw":"verify-pass","transitionRecordId":"42ed2eeb-599c-486f-a5b6-395f40d096d8"}
+{"ts":"2026-07-24T09:54:35Z","kind":"tool","raw":"CodexSkillRead: finishing-a-development-branch"}
+{"ts":"2026-07-24T09:55:02Z","kind":"tool","raw":"CodexSkillRead: openspec-apply-change"}
+{"ts":"2026-07-24T09:55:02Z","kind":"tool","raw":"CodexSkillRead: pipeline-ship"}
+{"ts":"2026-07-24T09:55:03Z","kind":"set","field":"pr_url","to":"direct-main:pending"}
+{"ts":"2026-07-24T09:55:04Z","kind":"transition","from":"ship","to":"archive","raw":"ship-complete","transitionRecordId":"9afde19f-fdef-40ef-bdbc-dc7385505b73"}
+{"ts":"2026-07-24T09:55:17Z","kind":"tool","raw":"CodexSkillRead: pipeline-archive"}
+{"ts":"2026-07-24T09:55:18Z","kind":"transition","from":"archive","to":"archive","raw":"archived","transitionRecordId":"1dbdeff3-c4d2-4653-b453-ef09243c1caa"}

@@ -555,13 +555,16 @@ if [ "$DISPATCH_INTENT" = "select" ] && [ -z "$TRACK" ]; then
   PROFILE=""
 fi
 
-# A project-defined routable Track is a real project-level choice. Plugin-owned built-ins, including
-# simple and its non-default workflow, are already versioned policy and do not require another ask.
-# The hook may recommend the winner, but it must not silently replace the user's pipeline choice.
+# A project-defined routable Track or a project-selected non-default workflow is a real
+# project-level choice. The plugin-owned simple→simple pair is the only non-default built-in pair
+# that is versioned policy rather than project configuration, so it must keep the direct lightweight
+# route. The hook may recommend every other winner, but it must not silently bind that choice.
 CUSTOM_SELECTION_AVAILABLE=0
 i=0
 while [ "$i" -lt "${#ROUTER_IDS[@]}" ]; do
-  if [ "${ROUTER_BUILTINS[$i]}" = "0" ]; then
+  if [ "${ROUTER_BUILTINS[$i]}" = "0" ] \
+    || { [ "${ROUTER_WORKFLOWS[$i]}" != "default" ] \
+      && ! { [ "${ROUTER_IDS[$i]}" = "simple" ] && [ "${ROUTER_WORKFLOWS[$i]}" = "simple" ]; }; }; then
     CUSTOM_SELECTION_AVAILABLE=1
     break
   fi

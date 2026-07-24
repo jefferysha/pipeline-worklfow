@@ -35,7 +35,13 @@ export interface RuntimeSelection {
 export interface RuntimeAuditEntry {
   readonly version: 1
   readonly at: string
-  readonly kind: 'activated' | 'activation-rejected' | 'rolled-back' | 'pruned'
+  readonly kind:
+    | 'activated'
+    | 'activation-rejected'
+    | 'rolled-back'
+    | 'rollback-rejected'
+    | 'update-rejected'
+    | 'pruned'
   readonly releaseId?: string
   readonly previousRelease?: string | null
   readonly detail: string

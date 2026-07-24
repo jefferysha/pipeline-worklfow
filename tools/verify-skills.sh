@@ -2,7 +2,7 @@
 # verify-skills.sh — 插件资产零悬空引用校验（CONTRACT §5.7，安装/CI 期硬失败）。
 #
 # 校验面：
-#   1. Codex/Claude manifests、Codex marketplace、hooks/hooks.json、CLI/dashboard 发布产物与 canonical helpers 存在；
+#   1. Codex/Claude manifests、两套 marketplace、hooks/hooks.json、CLI/dashboard 发布产物与 canonical helpers 存在；
 #   2. hook command 必须调用用户级稳定 pipeline-hook ABI，不能直连可变 marketplace checkout；
 #   3. skills/ 下每个 skill 目录都含 SKILL.md；
 #   4. skills/**/SKILL.md、hooks/hooks.json、templates/manifest.yaml（若有）中形如
@@ -54,6 +54,7 @@ N_SKILL=0
 N_EXT=0
 
 PLUGIN_JSON="$ROOT/.claude-plugin/plugin.json"
+CLAUDE_MARKETPLACE_JSON="$ROOT/.claude-plugin/marketplace.json"
 CODEX_PLUGIN_JSON="$ROOT/.codex-plugin/plugin.json"
 CODEX_MARKETPLACE_JSON="$ROOT/.agents/plugins/marketplace.json"
 HOOKS_JSON="$ROOT/hooks/hooks.json"
@@ -73,6 +74,14 @@ if [ ! -f "$PLUGIN_JSON" ]; then
 else
   grep -q '"name"[[:space:]]*:' "$PLUGIN_JSON" \
     || add_fail "plugin.json 缺少 name 字段" ".claude-plugin/plugin.json" "补充 \"name\": \"<插件名>\""
+fi
+[ -f "$CLAUDE_MARKETPLACE_JSON" ] \
+  || add_fail "缺失 Claude marketplace .claude-plugin/marketplace.json" "Claude marketplace 规范（远程安装必需）" "创建 marketplace.json 并登记 pipeline-lite"
+if [ -f "$CLAUDE_MARKETPLACE_JSON" ]; then
+  grep -q '"name"[[:space:]]*:[[:space:]]*"pipeline-lite"' "$CLAUDE_MARKETPLACE_JSON" \
+    || add_fail "Claude marketplace 未登记 pipeline-lite" ".claude-plugin/marketplace.json" "补充 pipeline-lite 插件条目"
+  grep -q '"source"[[:space:]]*:[[:space:]]*"\./"' "$CLAUDE_MARKETPLACE_JSON" \
+    || add_fail "Claude marketplace 未指向插件仓根" ".claude-plugin/marketplace.json" "把 source 设为 ./"
 fi
 [ -f "$CODEX_PLUGIN_JSON" ] \
   || add_fail "缺失 Codex 插件清单 .codex-plugin/plugin.json" "Codex 插件规范（原生插件必需）" "在 $ROOT/.codex-plugin/ 下创建 plugin.json，并声明 skills/hooks"

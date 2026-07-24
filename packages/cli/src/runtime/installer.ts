@@ -15,6 +15,7 @@ export interface RuntimeInstaller {
   activate(candidateRoot: string, host: RuntimeReleaseSource['host'], homeDir: string): Promise<RuntimeActivation>
   inspect(homeDir: string): Promise<RuntimeInspection>
   rollback(homeDir: string): Promise<RuntimeActivation>
+  recordUpdateFailure?(homeDir: string, detail: string): Promise<void>
 }
 
 function storeFor(homeDir: string): RuntimeReleaseStore {
@@ -36,5 +37,8 @@ export const REAL_RUNTIME_INSTALLER: RuntimeInstaller = {
     const activation = await new RuntimeReleaseStore({ paths }).rollbackToPrevious()
     await writeStableLaunchers(paths, homeDir)
     return activation
+  },
+  recordUpdateFailure(homeDir = homedir(), detail) {
+    return storeFor(homeDir).recordUpdateFailure(detail)
   },
 }

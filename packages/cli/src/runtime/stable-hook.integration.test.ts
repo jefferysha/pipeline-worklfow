@@ -23,6 +23,7 @@ async function candidateCopy(root: string): Promise<string> {
   const candidate = join(root, 'candidate')
   const entries = [
     '.agents/plugins/marketplace.json',
+    '.claude-plugin/marketplace.json',
     '.claude-plugin/plugin.json',
     '.codex-plugin/plugin.json',
     'adapters',

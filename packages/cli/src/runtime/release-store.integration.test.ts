@@ -21,6 +21,7 @@ async function candidateCopy(root: string, suffix = ''): Promise<string> {
   const candidate = join(root, `candidate${suffix}`)
   const entries = [
     '.agents/plugins/marketplace.json',
+    '.claude-plugin/marketplace.json',
     '.claude-plugin/plugin.json',
     '.codex-plugin/plugin.json',
     'adapters',
@@ -45,6 +46,10 @@ function storeFor(root: string): RuntimeReleaseStore {
     now: () => '2026-07-24T00:00:00Z',
     retainedReleases: 3,
   })
+}
+
+function pathsFor(root: string) {
+  return resolveRuntimePaths({ env: { PIPELINE_RUNTIME_HOME: join(root, 'runtime') }, homeDir: root, platform: 'linux' })
 }
 
 describe('RuntimeReleaseStore', () => {
@@ -89,6 +94,19 @@ describe('RuntimeReleaseStore', () => {
     expect((await store.inspect()).selection.activeRelease).toBe(first.release.releaseId)
   }, 30_000)
 
+  it('rejects a candidate missing the Claude marketplace manifest without replacing selection', async () => {
+    const root = await freshRoot('missing-claude-marketplace')
+    const healthy = await candidateCopy(root, '-healthy')
+    const broken = await candidateCopy(root, '-broken')
+    const store = storeFor(root)
+    const first = await store.stageAndActivate(healthy, 'codex')
+    await rm(join(broken, '.claude-plugin', 'marketplace.json'))
+
+    await expect(store.stageAndActivate(broken, 'codex')).rejects.toThrow(/marketplace\.json|插件资产/i)
+
+    expect((await store.inspect()).selection.activeRelease).toBe(first.release.releaseId)
+  }, 30_000)
+
   it('rolls back only to a fully verified previous release', async () => {
     const root = await freshRoot('rollback')
     const firstCandidate = await candidateCopy(root, '-one')
@@ -117,4 +135,47 @@ describe('RuntimeReleaseStore', () => {
 
     await expect(storeFor(root).stageAndActivate(candidate, 'codex')).rejects.toThrow(/符号链接/i)
   }, 30_000)
+
+  it('never changes activation or rollback selection after an audit append failure', async () => {
+    const root = await freshRoot('audit-failure')
+    const firstCandidate = await candidateCopy(root, '-one')
+    const secondCandidate = await candidateCopy(root, '-two')
+    await writeFile(
+      join(secondCandidate, 'runtime', 'pipeline-bootstrap.mjs'),
+      `${await readFile(join(secondCandidate, 'runtime', 'pipeline-bootstrap.mjs'), 'utf8')}\n// second\n`,
+      'utf8',
+    )
+    const healthy = storeFor(root)
+    const first = await healthy.stageAndActivate(firstCandidate, 'codex')
+    const second = await healthy.stageAndActivate(secondCandidate, 'codex')
+    const failingAudit = new RuntimeReleaseStore({
+      paths: pathsFor(root),
+      auditWriter: async () => { throw new Error('injected audit append failure') },
+    })
+
+    await expect(failingAudit.rollbackToPrevious()).rejects.toThrow(/audit append failure/)
+    expect((await healthy.inspect()).selection).toEqual(second.selection)
+
+    const thirdCandidate = await candidateCopy(root, '-three')
+    await writeFile(
+      join(thirdCandidate, 'runtime', 'pipeline-bootstrap.mjs'),
+      `${await readFile(join(thirdCandidate, 'runtime', 'pipeline-bootstrap.mjs'), 'utf8')}\n// third\n`,
+      'utf8',
+    )
+    await expect(failingAudit.stageAndActivate(thirdCandidate, 'codex')).rejects.toThrow(/audit append failure/)
+    expect((await healthy.inspect()).selection).toEqual(second.selection)
+    expect(first.release.releaseId).not.toBe(second.release.releaseId)
+  }, 60_000)
+
+  it('persists a host refresh failure for runtime status diagnostics', async () => {
+    const root = await freshRoot('update-diagnostic')
+    const store = storeFor(root)
+
+    await store.recordUpdateFailure('host marketplace refresh failed')
+
+    expect((await store.inspect()).lastAudit).toMatchObject({
+      kind: 'update-rejected',
+      detail: 'host marketplace refresh failed',
+    })
+  })
 })

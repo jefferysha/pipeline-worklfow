@@ -31,3 +31,17 @@ usual.  No selection is shown for a project that exposes only built-in/default p
 - A hostile workflow value cannot escape the emitted dispatch contract.
 - A custom adoption Track bound to a pet-adoption flow produces an interaction requirement.
 - Built-in frontend/default routing preserves the prior no-picker behavior in a clean project.
+
+## Coverage
+
+```coverage
+touches:
+L1_api:      filled -> normal-chat dispatch fields and canonical pipeline init arguments
+L2_data:     filled -> versioned Track router projection and bounded candidate-pair cache
+L3_rules:    filled -> exclusion-first routing and explicit selection-before-creation invariants
+L4_state:    filled -> intent new/select/resume state transitions and immutable Change identity
+L5_errors:   filled -> incompatible cache rejection and fail-closed hostile value handling
+L6_security: filled -> validated data-only projection, bounded input, and shell-safe dispatch encoding
+L7_ui:       filled -> host selection prompt appears only when a custom candidate is available
+L8_deps:     waived -> no new runtime dependency
+```

@@ -664,6 +664,18 @@ if command -v node >/dev/null 2>&1; then
   assert_not_contains "router: custom pair 选择前不伪造空 workflow 绑定" "$ROUT" "当前 Change 绑定自定义 workflow ''"
   assert_not_contains "router: custom pair 选择前不注入 default breadcrumb" "$ROUT" "TDD"
 
+  # 内建 Track 也允许被项目配置覆盖 workflow。它仍是 builtin:true，但非 default 绑定是项目选择，
+  # 必须和额外 Track 一样在创建 Change 前确认，不能因 builtin 身份静默直达 custom workflow。
+  builtinselectproj="$TMP/router-builtin-workflow-selection"; builtinselectcache="$TMP/router-builtin-workflow-selection.v4.data"
+  mkdir -p "$builtinselectproj/.pipeline/workflows" "$builtinselectproj/openspec/changes"
+  sed -e 's/^name: default$/name: pet-adoption/' -e 's/effective-phase-skills/effective-step-skills/g' "$ROOT/templates/workflows/default.yaml" > "$builtinselectproj/.pipeline/workflows/pet-adoption.yaml"
+  printf "version: 1\nbuiltins:\n  frontend:\n    workflow:\n      default: pet-adoption\n      allowed:\n        - pet-adoption\n" > "$builtinselectproj/.pipeline/tracks.yaml"
+  run_router "{\"prompt\":\"请实现宠物领养 React HTML 页面\",\"cwd\":\"$builtinselectproj\"}" "$builtinselectcache"
+  assert_contains "router: builtin Track 非 default workflow 触发选择契约" "$ROUT" "workflow: select"
+  assert_contains "router: builtin Track 覆写进入候选" "$ROUT" "candidate: track=frontend;workflow=pet-adoption"
+  assert_contains "router: builtin Track 覆写在 Change 创建前要求选择" "$ROUT" "selection_required: true"
+  assert_contains "router: builtin Track 覆写保留推荐 workflow" "$ROUT" "suggested_workflow: pet-adoption"
+
   # 根隔离回归：/tmp 父目录恰好有另一个 OpenSpec 时，非 Git 子目录必须把自己当 bootstrap
   # 根，正常对话仍走 default dispatch，但绝不能借用父项目的 change/phase/tasks。
   foreign_root="$TMP/router-foreign-parent"

@@ -13,6 +13,7 @@ interface Calls {
 
 interface RuntimeCalls {
   readonly activations: Array<readonly [string, string, string]>
+  readonly failures: Array<readonly [string, string]>
 }
 
 interface DashboardCalls {
@@ -20,7 +21,7 @@ interface DashboardCalls {
 }
 
 function fakeRuntimeInstaller(fail = false): { installer: RuntimeInstaller; calls: RuntimeCalls } {
-  const calls: RuntimeCalls = { activations: [] }
+  const calls: RuntimeCalls = { activations: [], failures: [] }
   const releaseId = `sha256-${'b'.repeat(64)}`
   const installer: RuntimeInstaller = {
     activate: async (candidateRoot, host, homeDir) => {
@@ -41,6 +42,9 @@ function fakeRuntimeInstaller(fail = false): { installer: RuntimeInstaller; call
       lastAudit: null,
     }),
     rollback: async () => { throw new Error('not used') },
+    recordUpdateFailure: async (homeDir, detail) => {
+      calls.failures.push([homeDir, detail])
+    },
   }
   return { installer, calls }
 }
@@ -185,7 +189,7 @@ describe('pipeline update', () => {
     ]])
   })
 
-  test('a failed package verification never publishes the unverified release', () => {
+  test('a failed package verification never publishes the unverified release and is runtime-audited', async () => {
     const deps = makeDeps()
     const { env, calls } = updateEnv((cmd, args) => {
       if (cmd === 'codex' && args.join(' ') === 'plugin list --json') return { code: 0, stdout: CODEX_INVENTORY, stderr: '' }
@@ -194,8 +198,12 @@ describe('pipeline update', () => {
     })
 
     const runtime = fakeRuntimeInstaller()
-    expect(cmdUpdate(deps, { codex: true }, env, runtime.installer)).toBe(1)
+    expect(await cmdUpdate(deps, { codex: true }, env, runtime.installer)).toBe(1)
     expect(runtime.calls.activations).toEqual([])
+    expect(runtime.calls.failures).toEqual([[
+      '/home/update-test',
+      '宿主刷新后的 pipeline-lite 候选未通过打包资产校验',
+    ]])
     expect(deps.errLines.join('\n')).toContain('保持原 launcher')
   })
 

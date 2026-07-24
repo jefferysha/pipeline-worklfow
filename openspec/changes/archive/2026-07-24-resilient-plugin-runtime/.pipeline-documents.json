@@ -1,0 +1,287 @@
+{
+  "version": 1,
+  "contract": "openspec-v1",
+  "createdAt": "2026-07-24T00:45:35Z",
+  "records": [
+    {
+      "kind": "proposal",
+      "path": "openspec/changes/resilient-plugin-runtime/proposal.md",
+      "sha256": "7e38d8998d50f23fb0aaddb505d9002888c002e69462b54acdf9a0104703522d",
+      "producer": "openspec-propose",
+      "recordedAt": "2026-07-24T09:37:54Z",
+      "reads": [
+        {
+          "phase": "explore",
+          "sha256": "7e38d8998d50f23fb0aaddb505d9002888c002e69462b54acdf9a0104703522d",
+          "readAt": "2026-07-24T09:38:20Z"
+        },
+        {
+          "phase": "spec",
+          "sha256": "7e38d8998d50f23fb0aaddb505d9002888c002e69462b54acdf9a0104703522d",
+          "readAt": "2026-07-24T09:38:41Z"
+        },
+        {
+          "phase": "build",
+          "sha256": "7e38d8998d50f23fb0aaddb505d9002888c002e69462b54acdf9a0104703522d",
+          "readAt": "2026-07-24T09:50:36Z"
+        },
+        {
+          "phase": "verify",
+          "sha256": "7e38d8998d50f23fb0aaddb505d9002888c002e69462b54acdf9a0104703522d",
+          "readAt": "2026-07-24T09:54:28Z"
+        },
+        {
+          "phase": "ship",
+          "sha256": "7e38d8998d50f23fb0aaddb505d9002888c002e69462b54acdf9a0104703522d",
+          "readAt": "2026-07-24T09:55:03Z"
+        },
+        {
+          "phase": "archive",
+          "sha256": "7e38d8998d50f23fb0aaddb505d9002888c002e69462b54acdf9a0104703522d",
+          "readAt": "2026-07-24T09:55:17Z"
+        }
+      ]
+    },
+    {
+      "kind": "openspec-design",
+      "path": "openspec/changes/resilient-plugin-runtime/design.md",
+      "sha256": "4318db74de3e4c6469cdf75da9a996482e1f21159b2153c12995bb34bd6c5e25",
+      "producer": "openspec-propose",
+      "recordedAt": "2026-07-24T09:37:54Z",
+      "reads": [
+        {
+          "phase": "explore",
+          "sha256": "4318db74de3e4c6469cdf75da9a996482e1f21159b2153c12995bb34bd6c5e25",
+          "readAt": "2026-07-24T09:38:20Z"
+        },
+        {
+          "phase": "spec",
+          "sha256": "4318db74de3e4c6469cdf75da9a996482e1f21159b2153c12995bb34bd6c5e25",
+          "readAt": "2026-07-24T09:38:41Z"
+        },
+        {
+          "phase": "build",
+          "sha256": "4318db74de3e4c6469cdf75da9a996482e1f21159b2153c12995bb34bd6c5e25",
+          "readAt": "2026-07-24T09:50:36Z"
+        },
+        {
+          "phase": "verify",
+          "sha256": "4318db74de3e4c6469cdf75da9a996482e1f21159b2153c12995bb34bd6c5e25",
+          "readAt": "2026-07-24T09:54:28Z"
+        },
+        {
+          "phase": "ship",
+          "sha256": "4318db74de3e4c6469cdf75da9a996482e1f21159b2153c12995bb34bd6c5e25",
+          "readAt": "2026-07-24T09:55:03Z"
+        },
+        {
+          "phase": "archive",
+          "sha256": "4318db74de3e4c6469cdf75da9a996482e1f21159b2153c12995bb34bd6c5e25",
+          "readAt": "2026-07-24T09:55:17Z"
+        }
+      ]
+    },
+    {
+      "kind": "superpower-design",
+      "path": "docs/superpowers/specs/2026-07-24-resilient-plugin-runtime-design.md",
+      "sha256": "ccbe561365453b9892894f56612d0224a1c4798ac07aef3022dc2f1e1d0a7126",
+      "producer": "brainstorming",
+      "recordedAt": "2026-07-24T09:38:20Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "ccbe561365453b9892894f56612d0224a1c4798ac07aef3022dc2f1e1d0a7126",
+          "readAt": "2026-07-24T09:38:41Z"
+        },
+        {
+          "phase": "build",
+          "sha256": "ccbe561365453b9892894f56612d0224a1c4798ac07aef3022dc2f1e1d0a7126",
+          "readAt": "2026-07-24T09:50:36Z"
+        },
+        {
+          "phase": "verify",
+          "sha256": "ccbe561365453b9892894f56612d0224a1c4798ac07aef3022dc2f1e1d0a7126",
+          "readAt": "2026-07-24T09:54:28Z"
+        },
+        {
+          "phase": "ship",
+          "sha256": "ccbe561365453b9892894f56612d0224a1c4798ac07aef3022dc2f1e1d0a7126",
+          "readAt": "2026-07-24T09:55:03Z"
+        },
+        {
+          "phase": "archive",
+          "sha256": "ccbe561365453b9892894f56612d0224a1c4798ac07aef3022dc2f1e1d0a7126",
+          "readAt": "2026-07-24T09:55:17Z"
+        }
+      ]
+    },
+    {
+      "kind": "adr",
+      "path": "docs/adr/2026-07-24-resilient-plugin-runtime-explore.md",
+      "sha256": "99e693e0e0e760119435826ea0375ca223942e12b70f6e1d776ec8f84338b93d",
+      "producer": "brainstorming",
+      "recordedAt": "2026-07-24T09:38:20Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "99e693e0e0e760119435826ea0375ca223942e12b70f6e1d776ec8f84338b93d",
+          "readAt": "2026-07-24T09:38:41Z"
+        },
+        {
+          "phase": "build",
+          "sha256": "99e693e0e0e760119435826ea0375ca223942e12b70f6e1d776ec8f84338b93d",
+          "readAt": "2026-07-24T09:50:36Z"
+        },
+        {
+          "phase": "verify",
+          "sha256": "99e693e0e0e760119435826ea0375ca223942e12b70f6e1d776ec8f84338b93d",
+          "readAt": "2026-07-24T09:54:28Z"
+        },
+        {
+          "phase": "ship",
+          "sha256": "99e693e0e0e760119435826ea0375ca223942e12b70f6e1d776ec8f84338b93d",
+          "readAt": "2026-07-24T09:55:03Z"
+        },
+        {
+          "phase": "archive",
+          "sha256": "99e693e0e0e760119435826ea0375ca223942e12b70f6e1d776ec8f84338b93d",
+          "readAt": "2026-07-24T09:55:17Z"
+        }
+      ]
+    },
+    {
+      "kind": "delta-spec",
+      "path": "openspec/changes/resilient-plugin-runtime/specs/plugin-runtime/spec.md",
+      "sha256": "5f7daf902eda53840dfdc01927ea40189bbf9d48c2b3c5b3a5edb8e4d269a381",
+      "producer": "openspec-propose",
+      "recordedAt": "2026-07-24T09:38:41Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "5f7daf902eda53840dfdc01927ea40189bbf9d48c2b3c5b3a5edb8e4d269a381",
+          "readAt": "2026-07-24T09:50:36Z"
+        },
+        {
+          "phase": "verify",
+          "sha256": "5f7daf902eda53840dfdc01927ea40189bbf9d48c2b3c5b3a5edb8e4d269a381",
+          "readAt": "2026-07-24T09:54:28Z"
+        },
+        {
+          "phase": "ship",
+          "sha256": "5f7daf902eda53840dfdc01927ea40189bbf9d48c2b3c5b3a5edb8e4d269a381",
+          "readAt": "2026-07-24T09:55:03Z"
+        },
+        {
+          "phase": "archive",
+          "sha256": "5f7daf902eda53840dfdc01927ea40189bbf9d48c2b3c5b3a5edb8e4d269a381",
+          "readAt": "2026-07-24T09:55:17Z"
+        }
+      ]
+    },
+    {
+      "kind": "superpower-plan",
+      "path": "docs/superpowers/plans/2026-07-24-resilient-plugin-runtime-plan.md",
+      "sha256": "9c04a2671d3bf5adfdce5294dcb9d1dccfc2b070be83a3fc122532ce7a94cedf",
+      "producer": "writing-plans",
+      "recordedAt": "2026-07-24T09:38:41Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "9c04a2671d3bf5adfdce5294dcb9d1dccfc2b070be83a3fc122532ce7a94cedf",
+          "readAt": "2026-07-24T09:50:36Z"
+        },
+        {
+          "phase": "verify",
+          "sha256": "9c04a2671d3bf5adfdce5294dcb9d1dccfc2b070be83a3fc122532ce7a94cedf",
+          "readAt": "2026-07-24T09:54:28Z"
+        },
+        {
+          "phase": "ship",
+          "sha256": "9c04a2671d3bf5adfdce5294dcb9d1dccfc2b070be83a3fc122532ce7a94cedf",
+          "readAt": "2026-07-24T09:55:03Z"
+        },
+        {
+          "phase": "archive",
+          "sha256": "9c04a2671d3bf5adfdce5294dcb9d1dccfc2b070be83a3fc122532ce7a94cedf",
+          "readAt": "2026-07-24T09:55:17Z"
+        }
+      ]
+    },
+    {
+      "kind": "plan",
+      "path": "docs/superpowers/plans/2026-07-24-resilient-plugin-runtime-plan.md",
+      "sha256": "9c04a2671d3bf5adfdce5294dcb9d1dccfc2b070be83a3fc122532ce7a94cedf",
+      "producer": "writing-plans",
+      "recordedAt": "2026-07-24T09:38:41Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "9c04a2671d3bf5adfdce5294dcb9d1dccfc2b070be83a3fc122532ce7a94cedf",
+          "readAt": "2026-07-24T09:50:36Z"
+        },
+        {
+          "phase": "verify",
+          "sha256": "9c04a2671d3bf5adfdce5294dcb9d1dccfc2b070be83a3fc122532ce7a94cedf",
+          "readAt": "2026-07-24T09:54:28Z"
+        },
+        {
+          "phase": "ship",
+          "sha256": "9c04a2671d3bf5adfdce5294dcb9d1dccfc2b070be83a3fc122532ce7a94cedf",
+          "readAt": "2026-07-24T09:55:03Z"
+        },
+        {
+          "phase": "archive",
+          "sha256": "9c04a2671d3bf5adfdce5294dcb9d1dccfc2b070be83a3fc122532ce7a94cedf",
+          "readAt": "2026-07-24T09:55:17Z"
+        }
+      ]
+    },
+    {
+      "kind": "verification-report",
+      "path": "docs/superpowers/reports/2026-07-24-resilient-plugin-runtime-verify.md",
+      "sha256": "ff52fe392eded5a4125cff5f6ee0c1dfd950b78908f4456cdc77df278bc9d084",
+      "producer": "pipeline-verify",
+      "recordedAt": "2026-07-24T09:54:28Z",
+      "reads": [
+        {
+          "phase": "ship",
+          "sha256": "ff52fe392eded5a4125cff5f6ee0c1dfd950b78908f4456cdc77df278bc9d084",
+          "readAt": "2026-07-24T09:55:03Z"
+        },
+        {
+          "phase": "archive",
+          "sha256": "ff52fe392eded5a4125cff5f6ee0c1dfd950b78908f4456cdc77df278bc9d084",
+          "readAt": "2026-07-24T09:55:17Z"
+        }
+      ]
+    },
+    {
+      "kind": "applied-spec",
+      "path": "openspec/changes/resilient-plugin-runtime/applied-spec.md",
+      "sha256": "24615f31dcb7e74846cd95502ecb399257dd3e85b754acb0770803fa70064ee6",
+      "producer": "openspec-apply-change",
+      "recordedAt": "2026-07-24T09:55:02Z",
+      "reads": [
+        {
+          "phase": "archive",
+          "sha256": "24615f31dcb7e74846cd95502ecb399257dd3e85b754acb0770803fa70064ee6",
+          "readAt": "2026-07-24T09:55:17Z"
+        }
+      ]
+    },
+    {
+      "kind": "tasks",
+      "path": "openspec/changes/resilient-plugin-runtime/tasks.md",
+      "sha256": "f663d1c3c5d27e994600b13dad0c0840b05dca1fc8db5b4a91aba37e1b676009",
+      "producer": "pipeline-archive",
+      "recordedAt": "2026-07-24T09:55:17Z",
+      "reads": [
+        {
+          "phase": "archive",
+          "sha256": "f663d1c3c5d27e994600b13dad0c0840b05dca1fc8db5b4a91aba37e1b676009",
+          "readAt": "2026-07-24T09:55:17Z"
+        }
+      ]
+    }
+  ]
+}
