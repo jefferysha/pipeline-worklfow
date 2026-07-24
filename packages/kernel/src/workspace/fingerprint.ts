@@ -21,10 +21,17 @@ export const WORKSPACE_BASELINE_PREFIX = 'workspace:sha256:'
 
 const EXCLUDED_TOP_LEVEL = new Set([
   '.git',
+  '.pipeline',
+  '.agents',
+  '.codex',
+  '.impeccable',
+  '.superpowers',
+  '.worktrees',
   'openspec',
   'docs',
   '.turbo',
   '.playwright-mcp',
+  '.playwright-tmp',
   '.sandcastle-build',
   'e2e-runs',
 ])
@@ -51,6 +58,13 @@ const EXCLUDED_BASENAMES = new Set([
   '.pipeline-pending-review',
 ])
 
+const EXCLUDED_RELATIVE_ROOTS = ['.github/hooks'] as const
+const EXCLUDED_ROOT_ARTIFACTS = [
+  /^dashboard-progress-custom-spec\.png$/,
+  /^pet-adoption-.*-tested\.png$/,
+  /^workbench-.*\.png$/,
+] as const
+
 function sortNames(names: string[]): string[] {
   return names.sort((left, right) => (left < right ? -1 : left > right ? 1 : 0))
 }
@@ -74,6 +88,8 @@ function isExcluded(relativePath: string): boolean {
   return EXCLUDED_TOP_LEVEL.has(parts[0] ?? '')
     || parts.some((part) => EXCLUDED_ANY_SEGMENT.has(part))
     || EXCLUDED_BASENAMES.has(parts.at(-1) ?? '')
+    || EXCLUDED_RELATIVE_ROOTS.some((root) => relativePath === root || relativePath.startsWith(`${root}/`))
+    || (!relativePath.includes('/') && EXCLUDED_ROOT_ARTIFACTS.some((pattern) => pattern.test(relativePath)))
 }
 
 function writeRecord(hash: ReturnType<typeof createHash>, kind: 'D' | 'F' | 'L', relativePath: string, details = ''): void {

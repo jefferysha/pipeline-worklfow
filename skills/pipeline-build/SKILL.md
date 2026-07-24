@@ -231,7 +231,22 @@ pipeline document read "$PIPELINE_CHANGE_NAME" all
 - build_mode = subagent-driven / parallel-team 时：**每个 task/端点/服务 dispatch 一个 `pipeline-builder` agent**（隔离 worktree，同消息并行实现），只回传 diff 摘要+测试结果；主线汇总、不内联逐个实现。
 - 构建失败时保留同一任务的测试输出和最小复现，按 `test-driven-development` 与对应打包 pattern skill 修复；不依赖未打包 agent。
 
-### Step 3: 按子阶段执行 + 紧反馈循环 + 增量勾选/提交（frontend/backend；PM Track 走上方原型流程，不适用）
+#### 🕊️ Track = free（中性实现）
+
+**强制 Skill**（禁止跳过）：
+
+1. 使用本插件打包的 Skill `writing-plans`，全文恢复已批准的中性 plan。
+2. 使用本插件打包的 Skill `test-driven-development`，对每个行为变更完整执行
+   红→绿→重构。
+
+只根据 Change 自己的 plan、OpenSpec delta 和仓库规则选择实现手段；不得因为
+`free` 猜测或注入 PM、前端、后端 pattern skill。若任务本身明确涉及某项技术，
+可以按 plan 加载对应条件 skill，但这属于 Workflow 任务需要，不是 Track 覆盖。
+
+`build_mode`、`isolation`、full/direct override、逐任务测试、tasks 勾选、文档重读
+和 `build-complete` 冻结基线全部照常执行。
+
+### Step 3: 按子阶段执行 + 紧反馈循环 + 增量勾选/提交（frontend/backend/free；PM Track 走上方原型流程，不适用）
 
 #### Step 3.0: 按 plan 标注的「子阶段」逐个执行
 

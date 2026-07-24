@@ -76,7 +76,7 @@ export interface TrackDefinition {
   readonly policyProfile: TrackPolicyProfile
 }
 
-/** 合成后的 registry：内建 Track 恒排最前（chat/simple/pm/frontend/backend 固定序），额外 track 按文件声明序。 */
+/** 合成后的 registry：内建 Track 恒排最前（chat/simple/pm/frontend/backend/free 固定序），额外 track 按文件声明序。 */
 export interface TrackRegistry {
   readonly ordered: readonly TrackDefinition[]
   readonly byId: ReadonlyMap<TrackId, TrackDefinition>

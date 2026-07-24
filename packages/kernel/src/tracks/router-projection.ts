@@ -6,7 +6,9 @@
  * 必须把它当数据逐行校验/解码。routing 只来自 effective registry，manifest 不承载
  * 路由规则，避免双真相源。
  */
+import { createHash } from 'node:crypto'
 import type { ExtendedManifestData, SkillTable } from '../flow/manifest.js'
+import { BUILTIN_TRACK_DEFINITIONS } from './builtins.js'
 import type { TrackRegistry } from './types.js'
 
 export type RouterSkillSource = 'profile' | '_all' | 'empty'
@@ -18,8 +20,10 @@ export interface RouterTrackProjection {
   readonly workflowDefault: string
   /** effective registry declaration order；tie 的最后一维，不能压缩成 enabled 子集下标。 */
   readonly order: number
+  /** Manual availability and content scoring are separate contracts. */
+  readonly routable: boolean
   readonly priority: number
-  readonly pattern: string
+  readonly pattern?: string
   readonly excludePattern?: string
   readonly profile: string
   readonly matrix: boolean
@@ -41,6 +45,39 @@ export interface RouterProjection {
   readonly breadcrumbs: readonly { readonly phase: string; readonly prose: string }[]
 }
 
+/**
+ * Router cache revision covers both project Track configuration and the effective built-in
+ * projection. A plugin release can change a builtin without touching `.pipeline/tracks.yaml`;
+ * hashing only the project registry revision would then leave a valid-looking stale cache.
+ */
+export function effectiveRouterRevision(
+  registryRevision: string,
+  projection: RouterProjection,
+): string {
+  return createHash('sha256')
+    .update(JSON.stringify({ registryRevision, tracks: projection.tracks }), 'utf8')
+    .digest('hex')
+}
+
+/**
+ * Release-owned router contract. Unlike the effective registry revision, this value excludes
+ * project Track overrides, so the bash hot path can compare it without parsing project YAML or
+ * spawning Node. A builtin Track, phase skill table, or breadcrumb change necessarily changes
+ * this digest and invalidates an otherwise fresh project cache.
+ */
+export function routerContractRevision(manifest: ExtendedManifestData): string {
+  const byId = new Map(BUILTIN_TRACK_DEFINITIONS.map((track) => [track.id, track]))
+  const projection = buildRouterProjection({
+    ordered: BUILTIN_TRACK_DEFINITIONS,
+    byId,
+    revision: 'builtin-contract',
+    source: 'builtin-only',
+  }, manifest)
+  return createHash('sha256')
+    .update(JSON.stringify(projection), 'utf8')
+    .digest('hex')
+}
+
 function own(object: object, key: PropertyKey): boolean {
   return Object.prototype.hasOwnProperty.call(object, key)
 }
@@ -58,7 +95,8 @@ function skillsWithSource(
 }
 
 /**
- * effective registry 的 enabled routing 行保持原声明序。技能只按 track.skills.profile 求值：
+ * effective registry 的全部行保持原声明序。禁用 routing 的行仍可作为显式手选候选，但
+ * 没有 pattern/priority，消费方绝不能把它送入 scorer。技能只按 track.skills.profile 求值：
  * profile -> `_all` -> []，绝不把动态 track id 猜成 manifest profile。
  */
 export function buildRouterProjection(
@@ -68,15 +106,17 @@ export function buildRouterProjection(
   const tracks: RouterTrackProjection[] = []
   for (const [order, track] of registry.ordered.entries()) {
     const routing = track.policyProfile.routing
-    if (!routing.enabled) continue
     tracks.push({
       id: track.id,
       label: track.label,
       workflowDefault: track.workflow.default,
       order,
-      priority: routing.priority,
-      pattern: routing.pattern,
-      ...(routing.excludePattern === undefined ? {} : { excludePattern: routing.excludePattern }),
+      routable: routing.enabled,
+      priority: routing.enabled ? routing.priority : 0,
+      ...(routing.enabled ? { pattern: routing.pattern } : {}),
+      ...(routing.enabled && routing.excludePattern !== undefined
+        ? { excludePattern: routing.excludePattern }
+        : {}),
       profile: track.policyProfile.skills.profile,
       matrix: track.policyProfile.skills.matrix,
       builtin: track.builtin,
@@ -113,6 +153,7 @@ export interface RouterDataCacheInput {
   readonly manifestSha256: string
   readonly tracksPresent: boolean
   readonly registryRevision: string
+  readonly contractRevision: string
   readonly projection: RouterProjection
 }
 
@@ -130,6 +171,9 @@ function assertCacheMetadata(input: RouterDataCacheInput): void {
   if (!/^[0-9a-f]{16,64}$/.test(input.registryRevision)) {
     throw new Error('router cache registryRevision 必须为 16..64 位小写 hex')
   }
+  if (!/^[0-9a-f]{64}$/.test(input.contractRevision)) {
+    throw new Error('router cache contractRevision 必须为 64 位小写 hex')
+  }
 }
 
 function sourceCode(source: RouterSkillSource): 'P' | 'A' | 'E' {
@@ -146,12 +190,13 @@ function sourceCode(source: RouterSkillSource): 'P' | 'A' | 'E' {
 export function encodeRouterDataCache(input: RouterDataCacheInput): string {
   assertCacheMetadata(input)
   const lines = [
-    'PIPELINE_ROUTER_V4',
-    `M|${hex(input.projectRoot)}|${input.manifestSha256}|${input.registryRevision}|${input.tracksPresent ? '1' : '0'}`,
+    'PIPELINE_ROUTER_V5',
+    `M|${hex(input.projectRoot)}|${input.manifestSha256}|${input.registryRevision}|${input.tracksPresent ? '1' : '0'}|${input.contractRevision}`,
   ]
   for (const track of input.projection.tracks) {
     lines.push([
-      'R', String(track.order), String(track.priority), hex(track.id), hex(track.pattern),
+      'R', String(track.order), String(track.priority), hex(track.id), track.routable ? '1' : '0',
+      hex(track.pattern ?? ''),
       hex(track.excludePattern ?? ''),
       hex(track.profile), track.matrix ? '1' : '0', track.builtin ? '1' : '0', hex(track.label),
       hex(track.workflowDefault),

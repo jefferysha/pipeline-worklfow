@@ -2978,6 +2978,7 @@ function matchesTrackPredicate(predicate, track) {
   return predicate.kind === "track-in" ? listed : !listed;
 }
 var NON_PM = { kind: "track-not-in", values: ["pm"] };
+var NON_PM_OR_FREE = { kind: "track-not-in", values: ["pm", "free"] };
 
 // packages/kernel/dist/workflow/default-workflow.generated.js
 var DEFAULT_WORKFLOW_STEPS = [
@@ -3150,8 +3151,8 @@ var EXIT_RULES = {
     { kind: "nonempty", field: "verification_report" },
     { kind: "field-file-exists", field: "verification_report", desc: "verification_report \u6587\u4EF6\u5B58\u5728" },
     { kind: "eq", field: "branch_status", value: "handled" },
-    { kind: "eq", field: "agent_review_result", value: "pass", when: NON_PM },
-    { kind: "eq", field: "codex_review_result", value: "pass", when: NON_PM },
+    { kind: "eq", field: "agent_review_result", value: "pass", when: NON_PM_OR_FREE },
+    { kind: "eq", field: "codex_review_result", value: "pass", when: NON_PM_OR_FREE },
     { kind: "eq", field: "verify_result", value: "pass", when: PM_ONLY },
     { kind: "tasks-through-phase" }
   ],
@@ -3160,7 +3161,7 @@ var EXIT_RULES = {
     { kind: "statefile" },
     { kind: "nonempty", field: "prd_path", when: PM_ONLY },
     { kind: "field-file-exists", field: "prd_path", desc: "prd_path \u6587\u4EF6\u5B58\u5728", when: PM_ONLY },
-    { kind: "nonempty", field: "pr_url", when: NON_PM },
+    { kind: "nonempty", field: "pr_url", when: NON_PM_OR_FREE },
     { kind: "tasks-through-phase" }
   ],
   // archive 出口（manifest.yaml:272-274）
@@ -3455,10 +3456,17 @@ import { join as join10 } from "node:path";
 var WORKSPACE_BASELINE_PREFIX = "workspace:sha256:";
 var EXCLUDED_TOP_LEVEL = /* @__PURE__ */ new Set([
   ".git",
+  ".pipeline",
+  ".agents",
+  ".codex",
+  ".impeccable",
+  ".superpowers",
+  ".worktrees",
   "openspec",
   "docs",
   ".turbo",
   ".playwright-mcp",
+  ".playwright-tmp",
   ".sandcastle-build",
   "e2e-runs"
 ]);
@@ -3479,6 +3487,12 @@ var EXCLUDED_BASENAMES = /* @__PURE__ */ new Set([
   ".pipeline-pending-interaction",
   ".pipeline-pending-review"
 ]);
+var EXCLUDED_RELATIVE_ROOTS = [".github/hooks"];
+var EXCLUDED_ROOT_ARTIFACTS = [
+  /^dashboard-progress-custom-spec\.png$/,
+  /^pet-adoption-.*-tested\.png$/,
+  /^workbench-.*\.png$/
+];
 function sortNames(names) {
   return names.sort((left, right) => left < right ? -1 : left > right ? 1 : 0);
 }
@@ -3490,7 +3504,7 @@ function sameFileIdentity(before, after) {
 }
 function isExcluded(relativePath) {
   const parts = relativePath.split("/");
-  return EXCLUDED_TOP_LEVEL.has(parts[0] ?? "") || parts.some((part) => EXCLUDED_ANY_SEGMENT.has(part)) || EXCLUDED_BASENAMES.has(parts.at(-1) ?? "");
+  return EXCLUDED_TOP_LEVEL.has(parts[0] ?? "") || parts.some((part) => EXCLUDED_ANY_SEGMENT.has(part)) || EXCLUDED_BASENAMES.has(parts.at(-1) ?? "") || EXCLUDED_RELATIVE_ROOTS.some((root) => relativePath === root || relativePath.startsWith(`${root}/`)) || !relativePath.includes("/") && EXCLUDED_ROOT_ARTIFACTS.some((pattern) => pattern.test(relativePath));
 }
 function writeRecord(hash, kind, relativePath, details = "") {
   hash.update(kind);
@@ -4033,7 +4047,7 @@ var ManifestError = class extends Error {
   }
 };
 var PHASE_SET = new Set(PHASES);
-var SKILL_TRACK_SET = /* @__PURE__ */ new Set(["pm", "frontend", "backend", "_all"]);
+var SKILL_TRACK_SET = /* @__PURE__ */ new Set(["pm", "frontend", "backend", "free", "_all"]);
 function skillsFor(table, phase, track) {
   const row = table[phase];
   if (!row)
@@ -4389,7 +4403,7 @@ function deriveSkillTable(raw, declared, section) {
     if (!declared.has(phase))
       throw new ManifestError(`${section}.${pt} \u76F8\u4F4D '${phaseName}' \u672A\u5728 phases \u58F0\u660E`);
     if (!SKILL_TRACK_SET.has(track)) {
-      throw new ManifestError(`${section}.${pt} \u542B\u672A\u77E5 track '${track}'\uFF08\u5408\u6CD5\uFF1Apm/frontend/backend/_all\uFF09`);
+      throw new ManifestError(`${section}.${pt} \u542B\u672A\u77E5 profile '${track}'\uFF08\u5408\u6CD5\uFF1Apm/frontend/backend/free/_all\uFF09`);
     }
     table[phase][track] = list;
   }
@@ -4534,8 +4548,8 @@ var DEFAULT_EVENT_POLICY = {
     guards: [
       { type: "file-exists", path: { kind: "field", field: "verification_report" } },
       { type: "field-equals", field: "branch_status", value: "handled" },
-      { type: "field-equals", field: "agent_review_result", value: "pass", when: NON_PM },
-      { type: "field-equals", field: "codex_review_result", value: "pass", when: NON_PM },
+      { type: "field-equals", field: "agent_review_result", value: "pass", when: NON_PM_OR_FREE },
+      { type: "field-equals", field: "codex_review_result", value: "pass", when: NON_PM_OR_FREE },
       { type: "build-head-unchanged", field: "build_sha" }
     ],
     // 老仓 L201-204：verify_result=pass + verified_at=now。
@@ -4703,7 +4717,7 @@ function liveTerminalActivity(record, nowMs) {
 var TRACK_ID_RE = /^[a-z][a-z0-9_-]{0,31}$/;
 
 // packages/kernel/dist/tracks/builtins.js
-var BUILTIN_TRACK_IDS = ["chat", "simple", "pm", "frontend", "backend"];
+var BUILTIN_TRACK_IDS = ["chat", "simple", "pm", "frontend", "backend", "free"];
 function isBuiltinTrackId(id) {
   return BUILTIN_TRACK_IDS.includes(id);
 }
@@ -4791,6 +4805,19 @@ var BUILTIN_TRACK_DEFINITIONS = [
       coverageProfile: "backend",
       routing: { enabled: true, pattern: BUILTIN_ROUTER_PATTERNS.backend, priority: 200 },
       skills: { matrix: true, profile: "backend" }
+    }
+  },
+  {
+    id: "free",
+    label: "Free",
+    builtin: true,
+    workflow: WORKFLOW_ANY,
+    policyProfile: {
+      reviewSeed: "pending",
+      automationEligible: false,
+      coverageProfile: "none",
+      routing: { enabled: false },
+      skills: { matrix: false, profile: "free" }
     }
   }
 ];
@@ -5184,7 +5211,8 @@ function stringUnrepresentableReason2(s) {
 }
 
 // packages/kernel/dist/tracks/validate.js
-var MAX_TRACKS = 32;
+var MAX_CUSTOM_TRACKS = 27;
+var MAX_TRACKS = BUILTIN_TRACK_IDS.length + MAX_CUSTOM_TRACKS;
 var REVIEW_SEEDS = /* @__PURE__ */ new Set(["pending", "skipped"]);
 var COVERAGE_PROFILES = /* @__PURE__ */ new Set(["none", "pm", "frontend", "backend"]);
 function checkRepresentable(value, at, errors) {
@@ -5223,8 +5251,8 @@ function collect(config, context) {
     checkEntry(tracks[i], `tracks[${i}]`, seen, workflowOk, profileOk, errors);
   }
   const total = BUILTIN_TRACK_IDS.length + tracks.length;
-  if (total > MAX_TRACKS) {
-    errors.push(`track \u603B\u6570 ${total} \u8D85\u8FC7\u4E0A\u9650 ${MAX_TRACKS}\uFF08\u5185\u5EFA ${BUILTIN_TRACK_IDS.length} + \u989D\u5916 ${tracks.length}\uFF09`);
+  if (tracks.length > MAX_CUSTOM_TRACKS) {
+    errors.push(`\u989D\u5916 track \u6570 ${tracks.length} \u8D85\u8FC7\u4E0A\u9650 ${MAX_CUSTOM_TRACKS}\uFF08\u5F53\u524D\u603B\u6570 ${total} = \u5185\u5EFA ${BUILTIN_TRACK_IDS.length} + \u989D\u5916 ${tracks.length}\uFF1B\u603B\u4E0A\u9650 ${MAX_TRACKS}\uFF09`);
   }
   return errors;
 }
@@ -10595,7 +10623,20 @@ async function planDefaultTransition(state, command, flow, clock) {
 }
 async function planCustomTransition(state, ir, workflowName, command, clock, completedStepSkills) {
   const currentBeforePlan = resolveStep(ir, fieldStr4(state.fields.phase));
-  const edgeBeforePlan = currentBeforePlan?.transitions.find((candidate) => candidate.event === command.event);
+  const terminalArchive = currentBeforePlan?.id === "archive" && currentBeforePlan.transitions.length === 0 && command.event === "archived";
+  const planningIr = terminalArchive ? {
+    ...ir,
+    steps: ir.steps.map((step) => step.id === "archive" ? {
+      ...step,
+      transitions: [{
+        event: "archived",
+        to: "archive",
+        guards: [],
+        actions: [{ type: "archive-run" }]
+      }]
+    } : step)
+  } : ir;
+  const edgeBeforePlan = terminalArchive ? planningIr.steps.find((step) => step.id === "archive")?.transitions[0] : currentBeforePlan?.transitions.find((candidate) => candidate.event === command.event);
   const governed = isOpenSpecDocumentContractRequired(workflowName, fieldStr4(state.fields.track), ir);
   const lifecycle = currentBeforePlan && edgeBeforePlan ? governedLifecyclePolicy(governed, currentBeforePlan.id, edgeBeforePlan.to) : void 0;
   if (currentBeforePlan && currentBeforePlan.skills.length > 0 && completedStepSkills !== void 0) {
@@ -10614,7 +10655,7 @@ async function planCustomTransition(state, ir, workflowName, command, clock, com
       };
     }
   }
-  const plan = await planStepTransition(ir, state, command.event, {
+  const plan = await planStepTransition(planningIr, state, command.event, {
     changeDirAbs: command.changeDir,
     fileExists: command.context.fileExists,
     gitHeadSha: command.context.gitHeadSha,
@@ -10634,13 +10675,13 @@ async function planCustomTransition(state, ir, workflowName, command, clock, com
     }
     return { kind: "step-guard-failed", workflowName, stepId: plan.stepId, failures: plan.failures };
   }
-  const currentStep = resolveStep(ir, plan.from);
+  const currentStep = resolveStep(planningIr, plan.from);
   if (!currentStep)
     throw new Error(`workflow '${workflowName}' \u5728\u5DF2\u89C4\u5212 step '${plan.from}' \u540E\u65E0\u6CD5\u91CD\u53D6\u5F53\u524D step`);
   const nextState = applyStepTransition(state, plan.to, clock);
   const actions = mergeLifecycleActions(plan.actions, lifecycle?.actions);
   const warnings = [];
-  let nextFields = nextState.fields;
+  let nextFields = terminalArchive ? { ...nextState.fields, phase_status: "done" } : nextState.fields;
   if (actions.length > 0) {
     const outcome = await applyActions(actions, {
       fields: nextState.fields,
@@ -10648,7 +10689,7 @@ async function planCustomTransition(state, ir, workflowName, command, clock, com
       gitHeadSha: command.context.gitHeadSha,
       workspaceFingerprint: command.context.workspaceFingerprint
     });
-    nextFields = { ...nextState.fields, ...outcome.patch };
+    nextFields = { ...nextFields, ...outcome.patch };
     for (const signal of outcome.signals)
       warnings.push({ kind: signal.kind });
   }

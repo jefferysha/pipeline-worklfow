@@ -3,7 +3,7 @@
  *
  * 职责边界：本模块只做「ProjectTrackConfig → next ProjectTrackConfig」的纯变换 + builtin 可变面
  * 裁决 + 领域错误，**不做 I/O、不做完整校验、不做 CLI 输出**：
- * - 完整校验（id 词法/_all/上限 32/label/workflow 存在性/policy 闭集）由 mutateTrackRegistry
+ * - 完整校验（id 词法/_all/额外 Track 上限 27/label/workflow 存在性/policy 闭集）由 mutateTrackRegistry
  *   落盘前的 validateTrackRegistry 统一守住——本模块只负责结构上「配置怎么变」与撞名/不存在/
  *   builtin 禁改这类**从 config 自身即可判定**的领域错误。
  * - 引用扫描是 I/O，故经 callback（ScanActiveChanges）注入：kernel 不依赖 CLI 的 change 路径
@@ -138,7 +138,7 @@ function policyToConfig(p: TrackPolicyProfile): ProjectPolicyProfileConfig {
 
 /**
  * create 一个额外 track：撞内建/撞已有 custom → 领域错误；否则把完整声明追加到 tracks 尾部
- * （保留声明序）。id 词法/_all/上限 32/label/workflow 存在性/policy 闭集等由落盘前完整校验兜住。
+ * （保留声明序）。id 词法/_all/额外 Track 上限 27/label/workflow 存在性/policy 闭集等由落盘前完整校验兜住。
  */
 export function createTrack(config: ProjectTrackConfig, spec: CreateTrackSpec): ProjectTrackConfig {
   if (isBuiltinTrackId(spec.id)) throw new TrackAlreadyExistsError(spec.id, 'builtin')

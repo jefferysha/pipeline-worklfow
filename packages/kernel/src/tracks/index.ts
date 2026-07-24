@@ -33,7 +33,7 @@ export {
 } from './builtins.js'
 export type { BuiltinTrackId } from './builtins.js'
 export { parseTrackRegistry, TrackConfigParseError } from './parse.js'
-export { MAX_TRACKS, validateTrackConfigStructure, validateTrackRegistry } from './validate.js'
+export { MAX_CUSTOM_TRACKS, MAX_TRACKS, validateTrackConfigStructure, validateTrackRegistry } from './validate.js'
 export { serializeTrackRegistry } from './serialize.js'
 export {
   assertWorkflowAllowed,
@@ -63,7 +63,12 @@ export {
   updateTrack,
 } from './crud.js'
 export type { ActiveChangeRef, ChangeRefScan, ScanActiveChanges } from './crud.js'
-export { buildRouterProjection, encodeRouterDataCache } from './router-projection.js'
+export {
+  buildRouterProjection,
+  effectiveRouterRevision,
+  encodeRouterDataCache,
+  routerContractRevision,
+} from './router-projection.js'
 export type {
   RouterDataCacheInput,
   RouterProjection,

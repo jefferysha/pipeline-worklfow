@@ -239,6 +239,11 @@ describe('FlowEngine · guardCheck（lite 相位出口必填字段表）', () =>
         makeState({ ...ok, track: 'backend', agent_review_result: 'pass', codex_review_result: 'pass' }),
       ),
     ).toEqual({ pass: true, failures: [] })
+    expect(
+      engine.guardCheck(
+        makeState({ ...ok, track: 'free', agent_review_result: 'skipped', codex_review_result: 'skipped' }),
+      ),
+    ).toEqual({ pass: true, failures: [] })
     // verify_result 非 pass → fail（verify→ship 需 verify_result=pass）
     expect(
       engine.guardCheck(makeState({ ...ok, track: 'pm', verify_result: 'fail' })).pass,
@@ -258,6 +263,7 @@ describe('FlowEngine · guardCheck（lite 相位出口必填字段表）', () =>
     expect(
       engine.guardCheck(makeState({ phase: 'ship', track: 'backend', pr_url: 'https://x/pr/1' })).pass,
     ).toBe(true)
+    expect(engine.guardCheck(makeState({ phase: 'ship', track: 'free' })).pass).toBe(true)
   })
 
   it('archive 出口：verify_result=pass', () => {

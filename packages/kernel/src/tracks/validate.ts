@@ -4,7 +4,7 @@
  *
  * 分两档：
  * - validateTrackConfigStructure：上下文无关子集（id 词法/'_all' 保留字/与内建重名/彼此重名/
- *   闭集/正则过 JS RegExp 语法烟测/priority 非负整数/上限 32/额外 track 的 allowed 显式声明/
+ *   闭集/正则过 JS RegExp 语法烟测/priority 非负整数/额外 Track 上限 27/allowed 显式声明/
  *   builtins 覆写限制）。它只是子集、不是完整校验：引用存在性它看不到。写盘前的强制校验是
  *   完整档（writeTrackRegistry 必填 context，见 registry.ts）；本函数服务于拿不到上下文的
  *   纯形状 lint 场景。
@@ -27,8 +27,9 @@ import {
 import { BUILTIN_TRACK_IDS, builtinTrack, isBuiltinTrackId, type BuiltinTrackId } from './builtins.js'
 import { stringUnrepresentableReason } from './representable.js'
 
-/** track 总数上限（内建 + 额外合计）。 */
-export const MAX_TRACKS = 32
+/** 保持历史上最多 27 个项目 Track；新增 builtin 不得挤占既有合法配置。 */
+export const MAX_CUSTOM_TRACKS = 27
+export const MAX_TRACKS = BUILTIN_TRACK_IDS.length + MAX_CUSTOM_TRACKS
 
 const REVIEW_SEEDS: ReadonlySet<string> = new Set(['pending', 'skipped'])
 const COVERAGE_PROFILES: ReadonlySet<string> = new Set(['none', 'pm', 'frontend', 'backend'])
@@ -90,8 +91,11 @@ function collect(config: ProjectTrackConfig, context: TrackValidationContext | n
   }
 
   const total = BUILTIN_TRACK_IDS.length + tracks.length
-  if (total > MAX_TRACKS) {
-    errors.push(`track 总数 ${total} 超过上限 ${MAX_TRACKS}（内建 ${BUILTIN_TRACK_IDS.length} + 额外 ${tracks.length}）`)
+  if (tracks.length > MAX_CUSTOM_TRACKS) {
+    errors.push(
+      `额外 track 数 ${tracks.length} 超过上限 ${MAX_CUSTOM_TRACKS}`
+      + `（当前总数 ${total} = 内建 ${BUILTIN_TRACK_IDS.length} + 额外 ${tracks.length}；总上限 ${MAX_TRACKS}）`,
+    )
   }
   return errors
 }

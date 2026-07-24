@@ -12,7 +12,7 @@ description: "Pipeline Phase 2: Explore · 调研 + 深度设计。PM Track 做�
 
 ## 输入
 
-- `$PIPELINE_TRACK` ∈ {pm, frontend, backend}
+- `$PIPELINE_TRACK` ∈ {pm, frontend, backend, free}
 - `$PIPELINE_CHANGE_NAME`
 
 **上下文恢复（强制）**：优先读取 `<pipeline-dispatch>` 的 `change/track/phase`，再跑
@@ -143,6 +143,24 @@ pipeline document read "$PIPELINE_CHANGE_NAME" all
 - 使用 Skill 工具加载 `find-skills`
 - OpenSpec 目录结构由本插件创建和维护，不需要外部 CLI。
 - 使用 Skill 工具加载 `zoom-out`
+
+#### 🕊️ Track = free（中性探索）
+
+`free` 不猜测前端、后端或 PM 领域，也不继承它们的技能矩阵。它仍完整执行
+default Workflow 的 Explore 治理：
+
+1. 使用本插件打包的 Skill `brainstorming`。**禁止跳过此步骤**。
+   - 全文读取 proposal、已有 main specs 和用户明确指定的目标。
+   - 产出 `docs/superpowers/specs/<DATE>-<topic>-design.md`，明确范围、约束、
+     可选方案、风险和 Decision Log。
+2. 仅当目标本身需要外部事实时，使用 `search-first` / `deep-research`；不因
+   `free` 而自动叠加领域调研。
+3. 产出 ADR；没有架构变化时也记录“不引入新架构”的理由与后果。
+4. 按 Step 3–4 登记 `design_doc`、回填 OpenSpec 活文档、登记
+   Superpowers design/ADR、完成文档读取和 review 出口。
+
+`coverageProfile=none` 表示不套 PM/前端/后端覆盖矩阵，不表示跳过设计、
+OpenSpec、文档证据或 review phase。
 
 ### Step 3: 记录 design_doc 路径
 

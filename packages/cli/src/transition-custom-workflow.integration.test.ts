@@ -74,6 +74,28 @@ steps:
     transitions: []
 `
 
+const ARCHIVE_TERMINAL_WF = `name: archive-terminal
+steps:
+  - id: start
+    label: start
+    gate: null
+    skills: []
+    inputs: []
+    outputs: []
+    guards: []
+    transitions:
+      - event: complete
+        to: archive
+  - id: archive
+    label: archive
+    gate: null
+    skills: []
+    inputs: []
+    outputs: []
+    guards: []
+    transitions: []
+`
+
 interface HistLine { kind: string; from?: string; to?: string; raw?: string }
 
 describe('真实 e2e —— transition 非 default workflow 的真实 step 间转换（Task 8）', () => {
@@ -147,5 +169,27 @@ describe('真实 e2e —— transition 非 default workflow 的真实 step 间�
     const err = h.err.join('\n')
     expect(err).toContain('bogus-event')
     expect(err).toContain('complete')
+  })
+
+  test('archive 终点以保留 archived 事件完成 canonical 归档，普通零出边仍不伪造转换', async () => {
+    await setupCustomChange('archive-terminal', ARCHIVE_TERMINAL_WF)
+    expect(await h.run(['transition', CHANGE, 'complete'])).toBe(0)
+    expect(await h.read(CHANGE)).toMatch(/^phase: archive$/m)
+    expect(await h.read(CHANGE)).toMatch(/^archived: false$/m)
+
+    expect(await h.run(['transition', CHANGE, 'archived'])).toBe(0)
+    const completed = await h.read(CHANGE)
+    expect(completed).toMatch(/^phase: archive$/m)
+    expect(completed).toMatch(/^phase_status: done$/m)
+    expect(completed).toMatch(/^archived: true$/m)
+    expect(completed).toMatch(/^archived_at: \d{4}-\d{2}-\d{2}T/m)
+
+    const hist = await historyLines()
+    expect(hist.some((line) => (
+      line.kind === 'transition'
+      && line.from === 'archive'
+      && line.to === 'archive'
+      && line.raw === 'archived'
+    ))).toBe(true)
   })
 })

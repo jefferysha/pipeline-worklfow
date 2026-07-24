@@ -177,6 +177,23 @@ fi
 
 **【轨道 3】Codex CLI（并行）**：同 frontend 轨道 3 的降级写法。
 
+#### 🕊️ Track = free（中性验证）
+
+1. 使用本插件打包的 Skill `verification-before-completion`。**禁止跳过此步骤**。
+2. 全文读取冻结基线、Change 文档、delta spec 和 plan；按目标本身运行最新的
+   build、类型、测试、lint 与行为 smoke，不自动叠加前端、后端或 PM 验证矩阵。
+3. 对 UI/API/安全等仅在 Change 实际涉及该面时运行相应验证，报告必须列出运行项、
+   未运行项和残余风险。
+4. 完成下方逐文件 spec 回读与 delta→main 即时回灌，生成 verification report，
+   登记文档证据，并设置：
+
+```bash
+pipeline set "$PIPELINE_CHANGE_NAME" branch_status handled
+```
+
+`free` 保留冻结基线、报告、tasks、文档读取、review receipt 与
+`verify-pass` barrier；它不继承工程 Track 的强制双 reviewer 字段。
+
 ### Step 1.5: Quality Check — git diff 逐文件回读规范（HARD RULE · 硬门）
 
 ⚡ **HARD RULE**：spec/stack 规范的注入是**软的**；本步用 `git diff --name-only` 把改动
@@ -205,7 +222,7 @@ find openspec/specs -name spec.md 2>/dev/null    # 每 capability → spec.md �
 |---------|------------------------|----------------------|
 | （git diff --name-only 逐行填）| openspec/specs/<cap>/spec.md | ☐ |
 
-### Step 1.6: Spec 即时回灌 — delta → main 增量合并（HARD RULE · 硬门，frontend/backend）
+### Step 1.6: Spec 即时回灌 — delta → main 增量合并（HARD RULE · 硬门，frontend/backend/free）
 
 ⚡ **HARD RULE（update-spec-on-change 闭环）**：spec 回灌**不再推迟到 archive**——本 change
 一旦在开发中改了 spec，verify 通过**前**必须把 delta 即时增量合并进 main spec（archive 仍做
@@ -291,6 +308,11 @@ guard 通过条件（GUARD-RULES §5，按 Track 不同）：
 - `codex_review_result=pass`
 - `verification_report` 字段非空且文件存在
 - `branch_status=handled`
+
+**free Track**:
+- `verification_report` 字段非空且文件存在
+- `branch_status=handled`
+- 不要求工程 Track 的 `agent_review_result` / `codex_review_result`
 
 guard **只校验、不自动 transition**。若验证通过，先运行：
 

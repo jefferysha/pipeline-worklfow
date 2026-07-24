@@ -67,18 +67,23 @@ mandatory_skills:
   explore.pm: [brainstorming, grill-with-docs]
   explore.frontend: [openspec-explore, brainstorming, grill-with-docs]
   explore.backend: [openspec-explore, brainstorming, grill-with-docs, improve-codebase-architecture]
+  explore.free: [brainstorming]
   spec.pm: [openspec-propose, brainstorming, writing-plans, grill-with-docs]
   spec.frontend: [openspec-propose, writing-plans]
   spec.backend: [openspec-propose, writing-plans]
+  spec.free: [openspec-propose, writing-plans]
   build.pm: [prototype, frontend-design, design-taste-frontend]
   build.frontend: [test-driven-development, frontend-design, web-design-guidelines, design-taste-frontend]
   build.backend: [writing-plans, test-driven-development]
+  build.free: [writing-plans, test-driven-development]
   verify.pm: [browser-qa, web-design-guidelines, design-taste-frontend, verification-before-completion, handoff]
   verify.frontend: [verification-before-completion, e2e-testing, browser-qa, web-design-guidelines, design-taste-frontend]
   verify.backend: [verification-before-completion]
+  verify.free: [verification-before-completion]
   ship.pm: [openspec-apply-change, to-spec, to-tickets]
   ship.frontend: [openspec-apply-change, openspec-archive-change, finishing-a-development-branch]
   ship.backend: [openspec-apply-change, finishing-a-development-branch]
+  ship.free: [openspec-apply-change, finishing-a-development-branch]
   # archive 无强制 skill（归档不 gate skill）——不声明即空表
 
 # —— phase × track 推荐 skill 表（老 evidence 派生；缺只 WARN、不阻断）——
@@ -94,12 +99,12 @@ recommended_skills:
 # 末尾换行 rstrip（对齐老 CLI `bc.rstrip("\n")`）；内部换行/空行逐字保留。
 breadcrumb:
   open: |
-    立项中。使用 router 已选的 track（pm/frontend/backend）创建独立 Change，产出 proposal.md + tasks.md 骨架，init .pipeline.yaml；只有 dispatch 明确 unresolved/select 或用户点名自定义 workflow 时才请求选择。
+    立项中。使用 router 已选的 track（pm/frontend/backend，或用户显式选择的 free）创建独立 Change，产出 proposal.md + tasks.md 骨架，init canonical state；只有 dispatch 明确 unresolved/select 或用户点名自定义 workflow 时才请求选择。
     别跳到实现。常规模式骨架齐后交用户过目、用户说"继续"再 transition open→explore；已绑定持续授权时，仍须完成真实 OpenSpec 文档证据和 pipeline check，再按既有 guard 继续，绝不跳过验证。
   explore: |
     调研 + 深度设计：research 先用 AskUserQuestion 多选调研维度 → 每维度并行 dispatch 隔离 sub-agent
     pipeline-researcher（同消息内并行、各自落盘）→ brainstorming（必做）→ grill（必做，禁自判跳过）。
-    backend 额外 improve-codebase-architecture 架构扫描（必做）。任何 gap 用 AskUserQuestion 批量问、
+    backend 额外 improve-codebase-architecture 架构扫描（必做）；free 只运行 free profile，不叠加领域轨技能。任何 gap 用 AskUserQuestion 批量问、
     迭代到清零；硬取舍落 ADR。产出 design_doc（含 coverage 块）后停下等用户逐项确认，说"继续"才 transition。
   spec: |
     规格 + 实施计划：所有 track 先产出 OpenSpec delta spec + 可执行 plan；pm 额外产出用户旅程图。
@@ -107,17 +112,17 @@ breadcrumb:
     plan 里显式标注子阶段边界 + 何处 /clear。产出 plan + 填齐 coverage 块后停下等确认，说"继续"才 transition。
   build: |
     实现（与 verify 是 barrier、不并行）。完成一个 task 立即把 tasks.md 的 [ ] 改 [x]。
-    fe·be：TDD 完整红-绿-重构——先写测试 → 运行确认按预期失败(红) → 最小实现到绿 → 重构。
+    fe·be·free：TDD 完整红-绿-重构——先写测试 → 运行确认按预期失败(红) → 最小实现到绿 → 重构。
     build 内紧反馈循环（必做）：每 task 自跑类型检查 + 测试 + lint、读输出、失败当场自纠，绿了才算完成。
     fe 含 UI 改动额外过 frontend-design + web-design-guidelines + taste 评→修→复评循环，证据落 REVIEW.md。
     全 task 自测绿后 build-complete 冻结可复验 build_sha 基线：branch/worktree 为 Git HEAD，in-place 为工作区内容 SHA-256；之后才进 verify。verify 跑完停下等复核。
   verify: |
-    三轨验证。fe·be：同消息并行 dispatch 三轨——reviewer agent + e2e-runner + codex exec（同读冻结 build_sha 基线；in-place 不得把它当 Git revision）。
+    标准轨验证。fe·be：同消息并行 dispatch 三轨——reviewer agent + e2e-runner + codex exec（同读冻结 build_sha 基线；in-place 不得把它当 Git revision）；free 只执行 free profile 的验证技能与 Workflow 门禁。
     verify 是对 build 已自测产物的独立对抗式二次把关，非替代 build 自测。
     fe 含 UI 改动额外视觉轨：web-design-guidelines + taste 对跑起来的 app 视觉审查，结论并入 verification_report。
     pm：跳过三轨，人工走查原型。产出 verification_report、set verify_result 后停下等复核；verify-fail → 回 build。
   ship: |
-    发布。pm：产出 PRD（set prd_path）+ handoff。fe·be：sync spec + 建 PR（set pr_url）。
+    发布。pm：产出 PRD（set prd_path）+ handoff。fe·be：sync spec + 建 PR（set pr_url）。free 按所选 Workflow 与 free profile 应用 spec，不补领域交付物。
     verify_result≠pass 不许 ship。ship 完停下，用户确认后再手动 transition 进 archive——不自动推进。
   archive: |
     归档 + 沉淀。用 pipeline archive 归档（别手动改 .pipeline.yaml）。

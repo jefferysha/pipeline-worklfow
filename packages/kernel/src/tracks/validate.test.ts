@@ -8,7 +8,7 @@
  */
 import { describe, expect, test } from 'vitest'
 import type { ProjectTrackConfig, ProjectTrackEntryConfig, TrackValidationContext } from './types.js'
-import { MAX_TRACKS, validateTrackConfigStructure, validateTrackRegistry } from './validate.js'
+import { MAX_CUSTOM_TRACKS, MAX_TRACKS, validateTrackConfigStructure, validateTrackRegistry } from './validate.js'
 
 const CTX: TrackValidationContext = {
   workflowExists: (id) => ['default', 'data-pipeline', 'wf-a', 'wf-b'].includes(id),
@@ -392,9 +392,10 @@ describe('validateTrackRegistry —— 总量上限', () => {
     return Array.from({ length: n }, (_, i) => entry({ id: `extra-${i}` }))
   }
 
-  test('内建 5 + 额外 27 = 32 → 合法；额外 28 → 超上限被拒', () => {
+  test('内建 6 + 额外 27 = 33 → 合法；新增 builtin 不挤占历史 27 个额外名额', () => {
     expect(validateTrackRegistry(cfg({ tracks: manyTracks(27) }), CTX)).toEqual([])
-    expectError(cfg({ tracks: manyTracks(28) }), `超过上限 ${MAX_TRACKS}`)
+    expect(MAX_TRACKS).toBe(33)
+    expectError(cfg({ tracks: manyTracks(28) }), `超过上限 ${MAX_CUSTOM_TRACKS}`)
   })
 })
 

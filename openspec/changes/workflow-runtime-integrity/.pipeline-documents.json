@@ -1,0 +1,265 @@
+{
+  "version": 1,
+  "contract": "openspec-v1",
+  "createdAt": "2026-07-24T13:54:54Z",
+  "records": [
+    {
+      "kind": "proposal",
+      "path": "openspec/changes/workflow-runtime-integrity/proposal.md",
+      "sha256": "b324e7ceda85a3d9bb70a3ffc72e529cc6c1311a3e89c6358428eef46df28e31",
+      "producer": "pipeline-explore",
+      "recordedAt": "2026-07-24T13:58:31Z",
+      "reads": [
+        {
+          "phase": "explore",
+          "sha256": "b324e7ceda85a3d9bb70a3ffc72e529cc6c1311a3e89c6358428eef46df28e31",
+          "readAt": "2026-07-24T13:58:33Z"
+        },
+        {
+          "phase": "spec",
+          "sha256": "b324e7ceda85a3d9bb70a3ffc72e529cc6c1311a3e89c6358428eef46df28e31",
+          "readAt": "2026-07-24T14:52:59Z"
+        },
+        {
+          "phase": "build",
+          "sha256": "b324e7ceda85a3d9bb70a3ffc72e529cc6c1311a3e89c6358428eef46df28e31",
+          "readAt": "2026-07-24T14:55:36Z"
+        },
+        {
+          "phase": "verify",
+          "sha256": "b324e7ceda85a3d9bb70a3ffc72e529cc6c1311a3e89c6358428eef46df28e31",
+          "readAt": "2026-07-24T15:01:39Z"
+        },
+        {
+          "phase": "ship",
+          "sha256": "b324e7ceda85a3d9bb70a3ffc72e529cc6c1311a3e89c6358428eef46df28e31",
+          "readAt": "2026-07-24T15:02:17Z"
+        }
+      ]
+    },
+    {
+      "kind": "openspec-design",
+      "path": "openspec/changes/workflow-runtime-integrity/design.md",
+      "sha256": "8b4413e39eb5714562121e7cc5b0fc60442c81b3db3e29fda8f8f887e362af3f",
+      "producer": "pipeline-explore",
+      "recordedAt": "2026-07-24T13:58:31Z",
+      "reads": [
+        {
+          "phase": "explore",
+          "sha256": "8b4413e39eb5714562121e7cc5b0fc60442c81b3db3e29fda8f8f887e362af3f",
+          "readAt": "2026-07-24T13:58:33Z"
+        },
+        {
+          "phase": "spec",
+          "sha256": "8b4413e39eb5714562121e7cc5b0fc60442c81b3db3e29fda8f8f887e362af3f",
+          "readAt": "2026-07-24T14:52:59Z"
+        },
+        {
+          "phase": "build",
+          "sha256": "8b4413e39eb5714562121e7cc5b0fc60442c81b3db3e29fda8f8f887e362af3f",
+          "readAt": "2026-07-24T14:55:36Z"
+        },
+        {
+          "phase": "verify",
+          "sha256": "8b4413e39eb5714562121e7cc5b0fc60442c81b3db3e29fda8f8f887e362af3f",
+          "readAt": "2026-07-24T15:01:39Z"
+        },
+        {
+          "phase": "ship",
+          "sha256": "8b4413e39eb5714562121e7cc5b0fc60442c81b3db3e29fda8f8f887e362af3f",
+          "readAt": "2026-07-24T15:02:17Z"
+        }
+      ]
+    },
+    {
+      "kind": "adr",
+      "path": "docs/adr/2026-07-24-workflow-runtime-integrity-explore.md",
+      "sha256": "bbeb60c95d522acc616c0c2410ed9512b1682d7d2f280608c67eadf619157878",
+      "producer": "brainstorming",
+      "recordedAt": "2026-07-24T13:58:33Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "bbeb60c95d522acc616c0c2410ed9512b1682d7d2f280608c67eadf619157878",
+          "readAt": "2026-07-24T14:52:59Z"
+        },
+        {
+          "phase": "build",
+          "sha256": "bbeb60c95d522acc616c0c2410ed9512b1682d7d2f280608c67eadf619157878",
+          "readAt": "2026-07-24T14:55:36Z"
+        },
+        {
+          "phase": "verify",
+          "sha256": "bbeb60c95d522acc616c0c2410ed9512b1682d7d2f280608c67eadf619157878",
+          "readAt": "2026-07-24T15:01:39Z"
+        },
+        {
+          "phase": "ship",
+          "sha256": "bbeb60c95d522acc616c0c2410ed9512b1682d7d2f280608c67eadf619157878",
+          "readAt": "2026-07-24T15:02:17Z"
+        }
+      ]
+    },
+    {
+      "kind": "superpower-plan",
+      "path": "docs/superpowers/plans/2026-07-24-workflow-runtime-integrity.md",
+      "sha256": "f2374bd4524db9d25c55bef2fc6a897ad3807cda29f07291de450ba9ade4b851",
+      "producer": "writing-plans",
+      "recordedAt": "2026-07-24T14:00:32Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "f2374bd4524db9d25c55bef2fc6a897ad3807cda29f07291de450ba9ade4b851",
+          "readAt": "2026-07-24T14:55:36Z"
+        },
+        {
+          "phase": "verify",
+          "sha256": "f2374bd4524db9d25c55bef2fc6a897ad3807cda29f07291de450ba9ade4b851",
+          "readAt": "2026-07-24T15:01:39Z"
+        },
+        {
+          "phase": "ship",
+          "sha256": "f2374bd4524db9d25c55bef2fc6a897ad3807cda29f07291de450ba9ade4b851",
+          "readAt": "2026-07-24T15:02:17Z"
+        }
+      ]
+    },
+    {
+      "kind": "plan",
+      "path": "docs/superpowers/plans/2026-07-24-workflow-runtime-integrity.md",
+      "sha256": "f2374bd4524db9d25c55bef2fc6a897ad3807cda29f07291de450ba9ade4b851",
+      "producer": "writing-plans",
+      "recordedAt": "2026-07-24T14:00:32Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "f2374bd4524db9d25c55bef2fc6a897ad3807cda29f07291de450ba9ade4b851",
+          "readAt": "2026-07-24T14:55:36Z"
+        },
+        {
+          "phase": "verify",
+          "sha256": "f2374bd4524db9d25c55bef2fc6a897ad3807cda29f07291de450ba9ade4b851",
+          "readAt": "2026-07-24T15:01:39Z"
+        },
+        {
+          "phase": "ship",
+          "sha256": "f2374bd4524db9d25c55bef2fc6a897ad3807cda29f07291de450ba9ade4b851",
+          "readAt": "2026-07-24T15:02:17Z"
+        }
+      ]
+    },
+    {
+      "kind": "superpower-design",
+      "path": "docs/superpowers/specs/2026-07-24-workflow-runtime-integrity-design.md",
+      "sha256": "7073dcb665bd90096aefa8c1712eabd0d733f5acffc800a4d0791854c027bcc5",
+      "producer": "pipeline-spec",
+      "recordedAt": "2026-07-24T14:52:58Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "7073dcb665bd90096aefa8c1712eabd0d733f5acffc800a4d0791854c027bcc5",
+          "readAt": "2026-07-24T14:52:59Z"
+        },
+        {
+          "phase": "build",
+          "sha256": "7073dcb665bd90096aefa8c1712eabd0d733f5acffc800a4d0791854c027bcc5",
+          "readAt": "2026-07-24T14:55:36Z"
+        },
+        {
+          "phase": "verify",
+          "sha256": "7073dcb665bd90096aefa8c1712eabd0d733f5acffc800a4d0791854c027bcc5",
+          "readAt": "2026-07-24T15:01:39Z"
+        },
+        {
+          "phase": "ship",
+          "sha256": "7073dcb665bd90096aefa8c1712eabd0d733f5acffc800a4d0791854c027bcc5",
+          "readAt": "2026-07-24T15:02:17Z"
+        }
+      ]
+    },
+    {
+      "kind": "delta-spec",
+      "path": "openspec/changes/workflow-runtime-integrity/specs/normal-chat-routing/spec.md",
+      "sha256": "b34738384f8d13017aa5acc3d166d1b61105802dbd6e356930cb9115af364365",
+      "producer": "openspec-propose",
+      "recordedAt": "2026-07-24T14:52:59Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "b34738384f8d13017aa5acc3d166d1b61105802dbd6e356930cb9115af364365",
+          "readAt": "2026-07-24T14:55:36Z"
+        },
+        {
+          "phase": "verify",
+          "sha256": "b34738384f8d13017aa5acc3d166d1b61105802dbd6e356930cb9115af364365",
+          "readAt": "2026-07-24T15:01:39Z"
+        },
+        {
+          "phase": "ship",
+          "sha256": "b34738384f8d13017aa5acc3d166d1b61105802dbd6e356930cb9115af364365",
+          "readAt": "2026-07-24T15:02:17Z"
+        }
+      ]
+    },
+    {
+      "kind": "delta-spec",
+      "path": "openspec/changes/workflow-runtime-integrity/specs/workspace-verification-integrity/spec.md",
+      "sha256": "915d3ca6dc8da35cf83d941166f50efd60ad71061847d20a9a8e9016fcc692ff",
+      "producer": "openspec-propose",
+      "recordedAt": "2026-07-24T14:52:59Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "915d3ca6dc8da35cf83d941166f50efd60ad71061847d20a9a8e9016fcc692ff",
+          "readAt": "2026-07-24T14:55:36Z"
+        },
+        {
+          "phase": "verify",
+          "sha256": "915d3ca6dc8da35cf83d941166f50efd60ad71061847d20a9a8e9016fcc692ff",
+          "readAt": "2026-07-24T15:01:39Z"
+        },
+        {
+          "phase": "ship",
+          "sha256": "915d3ca6dc8da35cf83d941166f50efd60ad71061847d20a9a8e9016fcc692ff",
+          "readAt": "2026-07-24T15:02:17Z"
+        }
+      ]
+    },
+    {
+      "kind": "verification-report",
+      "path": "docs/superpowers/reports/2026-07-24-workflow-runtime-integrity-verify.md",
+      "sha256": "edc3edaf5c6e0c56bf807b0e116ea6fac8c69e5f60d159a74d7fd070ed317925",
+      "producer": "verification-before-completion",
+      "recordedAt": "2026-07-24T15:01:39Z",
+      "reads": [
+        {
+          "phase": "ship",
+          "sha256": "edc3edaf5c6e0c56bf807b0e116ea6fac8c69e5f60d159a74d7fd070ed317925",
+          "readAt": "2026-07-24T15:02:17Z"
+        }
+      ]
+    },
+    {
+      "kind": "tasks",
+      "path": "openspec/changes/workflow-runtime-integrity/tasks.md",
+      "sha256": "d5ae1b0cbef1461179ee887131b1d2cab7938903c87aa8940d4748735b4c70af",
+      "producer": "pipeline-ship",
+      "recordedAt": "2026-07-24T15:02:16Z",
+      "reads": [
+        {
+          "phase": "ship",
+          "sha256": "d5ae1b0cbef1461179ee887131b1d2cab7938903c87aa8940d4748735b4c70af",
+          "readAt": "2026-07-24T15:02:17Z"
+        }
+      ]
+    },
+    {
+      "kind": "applied-spec",
+      "path": "openspec/changes/workflow-runtime-integrity/applied-spec.md",
+      "sha256": "c6d4da2ce0138ad10d59a1962f9897893e59636fa4f06165c13c0551c05ae390",
+      "producer": "openspec-apply-change",
+      "recordedAt": "2026-07-24T15:02:17Z",
+      "reads": []
+    }
+  ]
+}

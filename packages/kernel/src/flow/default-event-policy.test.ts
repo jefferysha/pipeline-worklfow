@@ -188,6 +188,15 @@ describe('checkDefaultEventPreconditions —— verify-pass（老仓 L163-199，
     expect(r).toBeNull()
   })
 
+  test('free track 走中性验证分支，不继承工程 Track 的双 review', async () => {
+    const r = await checkDefaultEventPreconditions(
+      'verify-pass',
+      mkState({ track: 'free', verification_report: 'docs/v.md', branch_status: 'handled', agent_review_result: 'skipped', codex_review_result: 'skipped' }),
+      filesExist(true),
+    )
+    expect(r).toBeNull()
+  })
+
   test('barrier：build_sha≠HEAD → 双行 ERROR 拒（逐字，含 build_sha= / HEAD= 值）', async () => {
     const ctx: TransitionContext = { fileExists: () => true, gitHeadSha: async () => 'DEADBEEF\n' }
     const r = await checkDefaultEventPreconditions('verify-pass', mkState({ ...base, track: 'pm', build_sha: 'CAFEBABE' }), ctx)

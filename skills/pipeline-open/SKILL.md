@@ -1,6 +1,6 @@
 ---
 name: pipeline-open
-description: "Pipeline Phase 1: Open · 开启 Change。创建 change 骨架（proposal/design/tasks），用 pipeline init 初始化 .pipeline.yaml。三个 Track（pm/frontend/backend）都生成 OpenSpec design.md。"
+description: "Pipeline Phase 1: Open · 开启 Change。创建 proposal/design/tasks，用 pipeline init 初始化 canonical state。default 的 pm/frontend/backend/free 都生成 OpenSpec design.md。"
 ---
 
 # /pipeline-open — Phase 1: 开启 Change
@@ -15,6 +15,7 @@ description: "Pipeline Phase 1: Open · 开启 Change。创建 change 骨架（p
 
 从 /pipeline 主入口接收：
 - `<pipeline-dispatch>` 的 `track` 与（新建时）由入口根据用户需求生成的 `change` 短名（kebab-case）
+- 精确 `workflow`；未指定才是 `default`。`free` 可绑定任意已存在且 allowed 的 Workflow。
 - 兼容快捷方式：`$PIPELINE_TRACK`、`$PIPELINE_CHANGE_NAME`
 
 **上下文恢复（强制）**：Skill 工具调用不保证继承此前 Bash 的 export。环境变量为空时，读取本轮
@@ -70,6 +71,7 @@ triage 是面向 **issue tracker 的状态机**——只在「对**既有项目*
 | pm | 目标/受众/动机 | 初始产品/交互假设（explore 会补足证据与决策） | PM 推进任务 |
 | frontend | 用户痛点/UI 范围 | 组件结构/状态管理 | TDD 任务清单 |
 | backend | 业务问题/API 范围 | 数据模型/架构决策 | 实现任务清单 |
+| free | 目标/边界，不预设领域角色 | 所选 Workflow 所需的中性设计假设 | 按 Workflow step/phase 组织 |
 
 > **proposal 只写骨架，别写满。** open 的 proposal = 目标/受众/动机 + 一句话意图 +（可选）一句话需求归类。
 > **禁止前置实质**：能力清单 / 竞品对标 / 定位 / 差异点 / 详细范围——这些留给 explore 的 research→brainstorming→grill 之后回填。
@@ -115,8 +117,17 @@ case "$PIPELINE_PRESET" in full|tweak|hotfix) ;; *) PIPELINE_PRESET=full ;; esac
 ### Step 2: 初始化 .pipeline.yaml
 
 ```bash
-pipeline init "$PIPELINE_CHANGE_NAME" --track "$PIPELINE_TRACK" --preset "$PIPELINE_PRESET"
+PIPELINE_WORKFLOW="${PIPELINE_WORKFLOW:-default}"
+if [ "$PIPELINE_WORKFLOW" = "default" ]; then
+  pipeline init "$PIPELINE_CHANGE_NAME" --track "$PIPELINE_TRACK" --preset "$PIPELINE_PRESET"
+else
+  pipeline init "$PIPELINE_CHANGE_NAME" --track "$PIPELINE_TRACK" \
+    --workflow "$PIPELINE_WORKFLOW" --preset "$PIPELINE_PRESET"
+fi
 ```
+
+创建前必须先用 `pipeline tracks show "$PIPELINE_TRACK" --json` 复核 Workflow allowed 关系；
+`free` 的 `allowed: '*'` 只代表可绑定任意存在的 Workflow，不代表可以跳过该 Workflow。
 
 ### Step 2.1: 明确激活本次选中的 Change（强制）
 
@@ -163,7 +174,7 @@ pipeline get "$PIPELINE_CHANGE_NAME" preset         # 应返回 $PIPELINE_PRESET
 
 ### Step 2.5: 登记 OpenSpec 初始文档证据（受治理 workflow 强制）
 
-default 的全部 track，以及 `openspec_contract: required` 的自定义 workflow，必须把本 phase
+default 的全部可执行 track（含 free），以及 `openspec_contract: required` 的自定义 workflow，必须把本 phase
 真实由 `openspec-propose` 生成的三份文档登记进 ledger。先确认该 Skill 调用已有完成态 evidence，
 再运行；不能用手工写文档或伪造 `--producer` 替代。
 

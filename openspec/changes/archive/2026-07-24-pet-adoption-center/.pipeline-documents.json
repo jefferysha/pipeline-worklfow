@@ -1,0 +1,282 @@
+{
+  "version": 1,
+  "contract": "openspec-v1",
+  "createdAt": "2026-07-24T13:14:53Z",
+  "records": [
+    {
+      "kind": "adr",
+      "path": "docs/adr/2026-07-24-pet-adoption-center-explore.md",
+      "sha256": "ead83449891dec2f3bf0a63620f3ee0a019be62ece8a1ac1ad51b5a9d8ec3dff",
+      "producer": "brainstorming",
+      "recordedAt": "2026-07-24T13:18:32Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "ead83449891dec2f3bf0a63620f3ee0a019be62ece8a1ac1ad51b5a9d8ec3dff",
+          "readAt": "2026-07-24T13:26:42Z"
+        },
+        {
+          "phase": "build",
+          "sha256": "ead83449891dec2f3bf0a63620f3ee0a019be62ece8a1ac1ad51b5a9d8ec3dff",
+          "readAt": "2026-07-24T13:51:33Z"
+        },
+        {
+          "phase": "verify",
+          "sha256": "ead83449891dec2f3bf0a63620f3ee0a019be62ece8a1ac1ad51b5a9d8ec3dff",
+          "readAt": "2026-07-24T14:23:27Z"
+        },
+        {
+          "phase": "ship",
+          "sha256": "ead83449891dec2f3bf0a63620f3ee0a019be62ece8a1ac1ad51b5a9d8ec3dff",
+          "readAt": "2026-07-24T14:46:44Z"
+        },
+        {
+          "phase": "archive",
+          "sha256": "ead83449891dec2f3bf0a63620f3ee0a019be62ece8a1ac1ad51b5a9d8ec3dff",
+          "readAt": "2026-07-24T14:49:51Z"
+        }
+      ]
+    },
+    {
+      "kind": "proposal",
+      "path": "openspec/changes/pet-adoption-center/proposal.md",
+      "sha256": "3bb5552c4818dbe2f698b6c97f1b5d206ae6816d231f71e4065118048de6abc1",
+      "producer": "pipeline-explore",
+      "recordedAt": "2026-07-24T13:19:54Z",
+      "reads": [
+        {
+          "phase": "explore",
+          "sha256": "3bb5552c4818dbe2f698b6c97f1b5d206ae6816d231f71e4065118048de6abc1",
+          "readAt": "2026-07-24T13:19:55Z"
+        },
+        {
+          "phase": "spec",
+          "sha256": "3bb5552c4818dbe2f698b6c97f1b5d206ae6816d231f71e4065118048de6abc1",
+          "readAt": "2026-07-24T13:26:42Z"
+        },
+        {
+          "phase": "build",
+          "sha256": "3bb5552c4818dbe2f698b6c97f1b5d206ae6816d231f71e4065118048de6abc1",
+          "readAt": "2026-07-24T13:51:33Z"
+        },
+        {
+          "phase": "verify",
+          "sha256": "3bb5552c4818dbe2f698b6c97f1b5d206ae6816d231f71e4065118048de6abc1",
+          "readAt": "2026-07-24T14:23:27Z"
+        },
+        {
+          "phase": "ship",
+          "sha256": "3bb5552c4818dbe2f698b6c97f1b5d206ae6816d231f71e4065118048de6abc1",
+          "readAt": "2026-07-24T14:46:44Z"
+        },
+        {
+          "phase": "archive",
+          "sha256": "3bb5552c4818dbe2f698b6c97f1b5d206ae6816d231f71e4065118048de6abc1",
+          "readAt": "2026-07-24T14:49:51Z"
+        }
+      ]
+    },
+    {
+      "kind": "delta-spec",
+      "path": "openspec/changes/pet-adoption-center/specs/pet-adoption-center/spec.md",
+      "sha256": "090f8d436f29c6c87e8ffb480abf6139b0139db9cfc398e66dc5c55cd8b36ae0",
+      "producer": "openspec-propose",
+      "recordedAt": "2026-07-24T13:21:14Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "090f8d436f29c6c87e8ffb480abf6139b0139db9cfc398e66dc5c55cd8b36ae0",
+          "readAt": "2026-07-24T13:51:33Z"
+        },
+        {
+          "phase": "verify",
+          "sha256": "090f8d436f29c6c87e8ffb480abf6139b0139db9cfc398e66dc5c55cd8b36ae0",
+          "readAt": "2026-07-24T14:23:27Z"
+        },
+        {
+          "phase": "ship",
+          "sha256": "090f8d436f29c6c87e8ffb480abf6139b0139db9cfc398e66dc5c55cd8b36ae0",
+          "readAt": "2026-07-24T14:46:44Z"
+        },
+        {
+          "phase": "archive",
+          "sha256": "090f8d436f29c6c87e8ffb480abf6139b0139db9cfc398e66dc5c55cd8b36ae0",
+          "readAt": "2026-07-24T14:49:51Z"
+        }
+      ]
+    },
+    {
+      "kind": "superpower-plan",
+      "path": "docs/superpowers/plans/2026-07-24-pet-adoption-center.md",
+      "sha256": "8f4272881cb4c444871688b6f0a30a2518e8e240c585d658fd918fd214b8abca",
+      "producer": "writing-plans",
+      "recordedAt": "2026-07-24T13:26:24Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "8f4272881cb4c444871688b6f0a30a2518e8e240c585d658fd918fd214b8abca",
+          "readAt": "2026-07-24T13:51:33Z"
+        },
+        {
+          "phase": "verify",
+          "sha256": "8f4272881cb4c444871688b6f0a30a2518e8e240c585d658fd918fd214b8abca",
+          "readAt": "2026-07-24T14:23:27Z"
+        },
+        {
+          "phase": "ship",
+          "sha256": "8f4272881cb4c444871688b6f0a30a2518e8e240c585d658fd918fd214b8abca",
+          "readAt": "2026-07-24T14:46:44Z"
+        },
+        {
+          "phase": "archive",
+          "sha256": "8f4272881cb4c444871688b6f0a30a2518e8e240c585d658fd918fd214b8abca",
+          "readAt": "2026-07-24T14:49:51Z"
+        }
+      ]
+    },
+    {
+      "kind": "plan",
+      "path": "docs/superpowers/plans/2026-07-24-pet-adoption-center.md",
+      "sha256": "8f4272881cb4c444871688b6f0a30a2518e8e240c585d658fd918fd214b8abca",
+      "producer": "writing-plans",
+      "recordedAt": "2026-07-24T13:26:24Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "8f4272881cb4c444871688b6f0a30a2518e8e240c585d658fd918fd214b8abca",
+          "readAt": "2026-07-24T13:51:33Z"
+        },
+        {
+          "phase": "verify",
+          "sha256": "8f4272881cb4c444871688b6f0a30a2518e8e240c585d658fd918fd214b8abca",
+          "readAt": "2026-07-24T14:23:27Z"
+        },
+        {
+          "phase": "ship",
+          "sha256": "8f4272881cb4c444871688b6f0a30a2518e8e240c585d658fd918fd214b8abca",
+          "readAt": "2026-07-24T14:46:44Z"
+        },
+        {
+          "phase": "archive",
+          "sha256": "8f4272881cb4c444871688b6f0a30a2518e8e240c585d658fd918fd214b8abca",
+          "readAt": "2026-07-24T14:49:51Z"
+        }
+      ]
+    },
+    {
+      "kind": "openspec-design",
+      "path": "openspec/changes/pet-adoption-center/design.md",
+      "sha256": "ac7728218fb5429059db8c3ea861b2e848c521e0a716576378cd721ceec5c563",
+      "producer": "pipeline-spec",
+      "recordedAt": "2026-07-24T13:26:24Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "ac7728218fb5429059db8c3ea861b2e848c521e0a716576378cd721ceec5c563",
+          "readAt": "2026-07-24T13:26:42Z"
+        },
+        {
+          "phase": "build",
+          "sha256": "ac7728218fb5429059db8c3ea861b2e848c521e0a716576378cd721ceec5c563",
+          "readAt": "2026-07-24T13:51:33Z"
+        },
+        {
+          "phase": "verify",
+          "sha256": "ac7728218fb5429059db8c3ea861b2e848c521e0a716576378cd721ceec5c563",
+          "readAt": "2026-07-24T14:23:27Z"
+        },
+        {
+          "phase": "ship",
+          "sha256": "ac7728218fb5429059db8c3ea861b2e848c521e0a716576378cd721ceec5c563",
+          "readAt": "2026-07-24T14:46:44Z"
+        },
+        {
+          "phase": "archive",
+          "sha256": "ac7728218fb5429059db8c3ea861b2e848c521e0a716576378cd721ceec5c563",
+          "readAt": "2026-07-24T14:49:51Z"
+        }
+      ]
+    },
+    {
+      "kind": "superpower-design",
+      "path": "docs/superpowers/specs/2026-07-24-pet-adoption-center-design.md",
+      "sha256": "ac5cd2ced7fa2d4c2df7e6c33482123167255a5d67b2161c4394370cbe0bfefc",
+      "producer": "pipeline-spec",
+      "recordedAt": "2026-07-24T13:26:25Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "ac5cd2ced7fa2d4c2df7e6c33482123167255a5d67b2161c4394370cbe0bfefc",
+          "readAt": "2026-07-24T13:26:42Z"
+        },
+        {
+          "phase": "build",
+          "sha256": "ac5cd2ced7fa2d4c2df7e6c33482123167255a5d67b2161c4394370cbe0bfefc",
+          "readAt": "2026-07-24T13:51:33Z"
+        },
+        {
+          "phase": "verify",
+          "sha256": "ac5cd2ced7fa2d4c2df7e6c33482123167255a5d67b2161c4394370cbe0bfefc",
+          "readAt": "2026-07-24T14:23:27Z"
+        },
+        {
+          "phase": "ship",
+          "sha256": "ac5cd2ced7fa2d4c2df7e6c33482123167255a5d67b2161c4394370cbe0bfefc",
+          "readAt": "2026-07-24T14:46:44Z"
+        },
+        {
+          "phase": "archive",
+          "sha256": "ac5cd2ced7fa2d4c2df7e6c33482123167255a5d67b2161c4394370cbe0bfefc",
+          "readAt": "2026-07-24T14:49:51Z"
+        }
+      ]
+    },
+    {
+      "kind": "verification-report",
+      "path": "docs/superpowers/reports/2026-07-24-pet-adoption-center-verify.md",
+      "sha256": "a89cc6e744d67d1be30a1311b3d2b1f8c638e3545d3f2b8d4d0285343f32fe2c",
+      "producer": "verification-before-completion",
+      "recordedAt": "2026-07-24T14:23:26Z",
+      "reads": [
+        {
+          "phase": "ship",
+          "sha256": "a89cc6e744d67d1be30a1311b3d2b1f8c638e3545d3f2b8d4d0285343f32fe2c",
+          "readAt": "2026-07-24T14:46:44Z"
+        },
+        {
+          "phase": "archive",
+          "sha256": "a89cc6e744d67d1be30a1311b3d2b1f8c638e3545d3f2b8d4d0285343f32fe2c",
+          "readAt": "2026-07-24T14:49:51Z"
+        }
+      ]
+    },
+    {
+      "kind": "applied-spec",
+      "path": "openspec/specs/pet-adoption-center/spec.md",
+      "sha256": "bbaf484ac40ee549581760e7567d053173d8c781bcd8114925f7358c8485ae2c",
+      "producer": "openspec-apply-change",
+      "recordedAt": "2026-07-24T14:46:43Z",
+      "reads": [
+        {
+          "phase": "archive",
+          "sha256": "bbaf484ac40ee549581760e7567d053173d8c781bcd8114925f7358c8485ae2c",
+          "readAt": "2026-07-24T14:49:51Z"
+        }
+      ]
+    },
+    {
+      "kind": "tasks",
+      "path": "openspec/changes/pet-adoption-center/tasks.md",
+      "sha256": "749dc1f16607939d0d007b6b0d64a78f3a234f4e0bfe4ad7d874a31c39f23a1b",
+      "producer": "pipeline-archive",
+      "recordedAt": "2026-07-24T14:49:13Z",
+      "reads": [
+        {
+          "phase": "archive",
+          "sha256": "749dc1f16607939d0d007b6b0d64a78f3a234f4e0bfe4ad7d874a31c39f23a1b",
+          "readAt": "2026-07-24T14:49:51Z"
+        }
+      ]
+    }
+  ]
+}

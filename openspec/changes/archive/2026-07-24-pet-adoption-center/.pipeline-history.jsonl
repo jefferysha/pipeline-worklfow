@@ -1,0 +1,105 @@
+{"ts":"2026-07-24T13:14:53Z","kind":"init"}
+{"ts":"2026-07-24T13:14:53Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated"}
+{"ts":"2026-07-24T13:15:19Z","kind":"tool","raw":"CodexSkillRead: pipeline-open"}
+{"ts":"2026-07-24T13:16:14Z","kind":"tool","raw":"CodexSkillRead: openspec-propose"}
+{"ts":"2026-07-24T13:16:53Z","kind":"tool","raw":"CodexSkillRead: search-first"}
+{"ts":"2026-07-24T13:17:11Z","kind":"transition","from":"open","to":"explore","raw":"open-complete","transitionRecordId":"6e12fbeb-4443-4017-83fa-6ae2732f5cfb"}
+{"ts":"2026-07-24T13:17:26Z","kind":"tool","raw":"CodexSkillRead: pipeline-explore"}
+{"ts":"2026-07-24T13:18:31Z","kind":"set","field":"design_doc","to":"docs/superpowers/specs/2026-07-24-pet-adoption-center-design.md"}
+{"ts":"2026-07-24T13:18:32Z","kind":"tool","raw":"CodexSkillRead: brainstorming"}
+{"ts":"2026-07-24T13:20:01Z","kind":"tool","raw":"review:request phase=explore event=explore-complete"}
+{"ts":"2026-07-24T13:20:11Z","kind":"tool","raw":"review:delegated-ack phase=explore event=explore-complete authority_issued_at=2026-07-24T13:14:53Z"}
+{"ts":"2026-07-24T13:20:12Z","kind":"tool","raw":"CodexSkillRead: deep-research"}
+{"ts":"2026-07-24T13:20:12Z","kind":"transition","from":"explore","to":"spec","raw":"explore-complete","transitionRecordId":"2d7590ba-8114-4a8f-a56a-3a6921f7a5d5"}
+{"ts":"2026-07-24T13:20:19Z","kind":"tool","raw":"CodexSkillRead: openspec-propose"}
+{"ts":"2026-07-24T13:20:50Z","kind":"tool","raw":"CodexSkillRead: pipeline-spec"}
+{"ts":"2026-07-24T13:22:23Z","kind":"set","field":"plan","to":"docs/superpowers/plans/2026-07-24-pet-adoption-center.md"}
+{"ts":"2026-07-24T13:22:23Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-07-24T13:23:01Z","kind":"tool","raw":"review:request phase=spec event=spec-complete"}
+{"ts":"2026-07-24T13:23:06Z","kind":"tool","raw":"review:delegated-ack phase=spec event=spec-complete authority_issued_at=2026-07-24T13:14:53Z"}
+{"ts":"2026-07-24T13:23:06Z","kind":"tool","raw":"CodexSkillRead: grill-with-docs"}
+{"ts":"2026-07-24T13:23:07Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"09033ed7-1e5c-415b-8a68-f11f4409e8e4"}
+{"ts":"2026-07-24T13:23:27Z","kind":"set","field":"build_mode","to":"direct"}
+{"ts":"2026-07-24T13:23:27Z","kind":"set","field":"isolation","to":"in-place"}
+{"ts":"2026-07-24T13:23:27Z","kind":"set","field":"direct_override","to":"true"}
+{"ts":"2026-07-24T13:23:40Z","kind":"tool","raw":"CodexSkillRead: pipeline-build"}
+{"ts":"2026-07-24T13:24:56Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-24T13:25:33Z","kind":"tool","raw":"CodexSkillRead: frontend-design"}
+{"ts":"2026-07-24T13:25:33Z","kind":"transition","from":"build","to":"spec","raw":"requirements-changed","transitionRecordId":"540c6c1d-3887-4992-bb3f-2efbb419bea4"}
+{"ts":"2026-07-24T13:25:52Z","kind":"tool","raw":"CodexSkillRead: openspec-propose"}
+{"ts":"2026-07-24T13:25:52Z","kind":"tool","raw":"CodexSkillRead: pipeline-spec"}
+{"ts":"2026-07-24T13:25:52Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-07-24T13:25:52Z","kind":"tool","raw":"CodexSkillRead: grill-with-docs"}
+{"ts":"2026-07-24T13:26:24Z","kind":"set","field":"plan","to":"docs/superpowers/plans/2026-07-24-pet-adoption-center.md"}
+{"ts":"2026-07-24T13:26:46Z","kind":"tool","raw":"review:request phase=spec event=spec-complete"}
+{"ts":"2026-07-24T13:26:51Z","kind":"tool","raw":"review:delegated-ack phase=spec event=spec-complete authority_issued_at=2026-07-24T13:14:53Z"}
+{"ts":"2026-07-24T13:26:52Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"60d8581a-a4cf-49a2-a5a6-5bf9192cfaa9"}
+{"ts":"2026-07-24T13:27:04Z","kind":"tool","raw":"CodexSkillRead: pipeline-build"}
+{"ts":"2026-07-24T13:27:04Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-24T13:27:04Z","kind":"tool","raw":"CodexSkillRead: frontend-design"}
+{"ts":"2026-07-24T13:36:47Z","kind":"tool","raw":"CodexSkillRead: frontend-design"}
+{"ts":"2026-07-24T13:39:30Z","kind":"tool","raw":"CodexSkillRead: pipeline-build"}
+{"ts":"2026-07-24T13:39:30Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-24T13:40:42Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"c226a042-746d-425f-82a9-fff3ab412be9"}
+{"ts":"2026-07-24T13:40:49Z","kind":"tool","raw":"CodexSkillRead: frontend-design"}
+{"ts":"2026-07-24T13:40:49Z","kind":"tool","raw":"CodexSkillRead: pipeline-build"}
+{"ts":"2026-07-24T13:40:49Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-24T13:40:51Z","kind":"tool","raw":"CodexSkillRead: pipeline-verify"}
+{"ts":"2026-07-24T13:40:51Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-07-24T13:41:08Z","kind":"tool","raw":"CodexSkillRead: browser-qa"}
+{"ts":"2026-07-24T13:43:25Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-07-24-pet-adoption-center-verify.md"}
+{"ts":"2026-07-24T13:43:50Z","kind":"tool","raw":"review:request phase=verify event=verify-pass"}
+{"ts":"2026-07-24T13:43:54Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-pass authority_issued_at=2026-07-24T13:14:53Z"}
+{"ts":"2026-07-24T13:51:16Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-07-24-pet-adoption-center-verify.md"}
+{"ts":"2026-07-24T13:51:19Z","kind":"tool","raw":"review:request phase=verify event=verify-fail replaced=true"}
+{"ts":"2026-07-24T13:51:24Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-07-24T13:14:53Z"}
+{"ts":"2026-07-24T13:51:24Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"671f91c4-c8c1-4624-bd87-f77195464d51"}
+{"ts":"2026-07-24T13:51:32Z","kind":"tool","raw":"CodexSkillRead: frontend-design"}
+{"ts":"2026-07-24T13:51:32Z","kind":"tool","raw":"CodexSkillRead: pipeline-build"}
+{"ts":"2026-07-24T13:51:32Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-24T13:51:32Z","kind":"tool","raw":"CodexSkillRead: pipeline-verify"}
+{"ts":"2026-07-24T13:51:32Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-07-24T13:51:32Z","kind":"tool","raw":"CodexSkillRead: browser-qa"}
+{"ts":"2026-07-24T13:51:33Z","kind":"tool","raw":"CodexSkillRead: pipeline-build"}
+{"ts":"2026-07-24T13:51:33Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-24T13:51:33Z","kind":"tool","raw":"CodexSkillRead: frontend-design"}
+{"ts":"2026-07-24T14:22:13Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"f722f07b-71cd-45e5-9129-534c8290c088"}
+{"ts":"2026-07-24T14:23:26Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-07-24-pet-adoption-center-verify.md"}
+{"ts":"2026-07-24T14:23:26Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-07-24T14:23:27Z","kind":"tool","raw":"CodexSkillRead: pipeline-verify"}
+{"ts":"2026-07-24T14:23:27Z","kind":"set","field":"agent_review_result","to":"pass"}
+{"ts":"2026-07-24T14:23:27Z","kind":"set","field":"codex_review_result","to":"pass"}
+{"ts":"2026-07-24T14:23:27Z","kind":"set","field":"branch_status","to":"handled"}
+{"ts":"2026-07-24T14:23:37Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated"}
+{"ts":"2026-07-24T14:23:37Z","kind":"tool","raw":"review:request phase=verify event=verify-pass"}
+{"ts":"2026-07-24T14:23:37Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-pass authority_issued_at=2026-07-24T14:23:37Z"}
+{"ts":"2026-07-24T14:23:38Z","kind":"tool","raw":"CodexSkillRead: frontend-design"}
+{"ts":"2026-07-24T14:23:38Z","kind":"tool","raw":"CodexSkillRead: pipeline-build"}
+{"ts":"2026-07-24T14:23:38Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-24T14:23:38Z","kind":"tool","raw":"CodexSkillRead: browser-qa"}
+{"ts":"2026-07-24T14:23:38Z","kind":"transition","from":"verify","to":"ship","raw":"verify-pass","transitionRecordId":"c5a19cd0-e741-4c9d-9823-163089d0309c"}
+{"ts":"2026-07-24T14:38:11Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated"}
+{"ts":"2026-07-24T14:38:32Z","kind":"tool","raw":"CodexSkillRead: frontend-design"}
+{"ts":"2026-07-24T14:38:32Z","kind":"tool","raw":"CodexSkillRead: pipeline-build"}
+{"ts":"2026-07-24T14:38:32Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-24T14:38:32Z","kind":"tool","raw":"CodexSkillRead: pipeline-verify"}
+{"ts":"2026-07-24T14:38:32Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-07-24T14:38:32Z","kind":"tool","raw":"CodexSkillRead: browser-qa"}
+{"ts":"2026-07-24T14:38:33Z","kind":"tool","raw":"CodexSkillRead: openspec-apply-change"}
+{"ts":"2026-07-24T14:38:49Z","kind":"tool","raw":"CodexSkillRead: pipeline-ship"}
+{"ts":"2026-07-24T14:46:43Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated"}
+{"ts":"2026-07-24T14:48:25Z","kind":"tool","raw":"CodexSkillRead: github-ops"}
+{"ts":"2026-07-24T14:48:25Z","kind":"transition","from":"ship","to":"archive","raw":"ship-complete","transitionRecordId":"3ae12311-90ac-4a0e-9b52-9add0ef28d03"}
+{"ts":"2026-07-24T14:48:40Z","kind":"tool","raw":"CodexSkillRead: frontend-design"}
+{"ts":"2026-07-24T14:48:40Z","kind":"tool","raw":"CodexSkillRead: pipeline-build"}
+{"ts":"2026-07-24T14:48:40Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-24T14:48:40Z","kind":"tool","raw":"CodexSkillRead: pipeline-verify"}
+{"ts":"2026-07-24T14:48:40Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-07-24T14:48:40Z","kind":"tool","raw":"CodexSkillRead: browser-qa"}
+{"ts":"2026-07-24T14:48:41Z","kind":"tool","raw":"CodexSkillRead: pipeline-archive"}
+{"ts":"2026-07-24T14:49:13Z","kind":"tool","raw":"CodexSkillRead: pipeline-archive"}
+{"ts":"2026-07-24T14:49:33Z","kind":"tool","raw":"CodexSkillRead: openspec-archive-change"}
+{"ts":"2026-07-24T14:49:40Z","kind":"tool","raw":"CodexSkillRead: openspec-archive-change"}
+{"ts":"2026-07-24T14:49:46Z","kind":"tool","raw":"CodexSkillRead: learn-record"}
+{"ts":"2026-07-24T14:49:50Z","kind":"tool","raw":"CodexSkillRead: learn-record"}
+{"ts":"2026-07-24T14:53:10Z","kind":"transition","from":"archive","to":"archive","raw":"archived","transitionRecordId":"959f2c3c-f15c-419e-adb4-51ae8d3f34cf"}

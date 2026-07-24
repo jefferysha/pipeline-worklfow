@@ -798,6 +798,7 @@ function trackDisplayName(track: WbTrackDefinition): string {
     pm: '产品',
     frontend: '前端',
     backend: '后端',
+    free: '自由模式',
   }
   return builtin[track.id] ?? track.label
 }

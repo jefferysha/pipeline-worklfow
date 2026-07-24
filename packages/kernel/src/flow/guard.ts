@@ -30,7 +30,7 @@
  */
 import type { FieldName, GuardContext, GuardResult, Phase, PipelineState } from '../types.js'
 // 具体文件路径而非 barrel（同 transition-table.ts）：predicates.ts 零 import，物理上无环。
-import { matchesTrackPredicate, NON_PM, type TrackPredicate } from '../workflow/predicates.js'
+import { matchesTrackPredicate, NON_PM, NON_PM_OR_FREE, type TrackPredicate } from '../workflow/predicates.js'
 import { incompletePipelineTasksForExit } from '../workflow/todo-projection.js'
 
 type GuardRule =
@@ -97,8 +97,8 @@ const EXIT_RULES: Readonly<Record<Phase, readonly GuardRule[]>> = {
     { kind: 'nonempty', field: 'verification_report' },
     { kind: 'field-file-exists', field: 'verification_report', desc: 'verification_report 文件存在' },
     { kind: 'eq', field: 'branch_status', value: 'handled' },
-    { kind: 'eq', field: 'agent_review_result', value: 'pass', when: NON_PM },
-    { kind: 'eq', field: 'codex_review_result', value: 'pass', when: NON_PM },
+    { kind: 'eq', field: 'agent_review_result', value: 'pass', when: NON_PM_OR_FREE },
+    { kind: 'eq', field: 'codex_review_result', value: 'pass', when: NON_PM_OR_FREE },
     { kind: 'eq', field: 'verify_result', value: 'pass', when: PM_ONLY },
     { kind: 'tasks-through-phase' },
   ],
@@ -107,7 +107,7 @@ const EXIT_RULES: Readonly<Record<Phase, readonly GuardRule[]>> = {
     { kind: 'statefile' },
     { kind: 'nonempty', field: 'prd_path', when: PM_ONLY },
     { kind: 'field-file-exists', field: 'prd_path', desc: 'prd_path 文件存在', when: PM_ONLY },
-    { kind: 'nonempty', field: 'pr_url', when: NON_PM },
+    { kind: 'nonempty', field: 'pr_url', when: NON_PM_OR_FREE },
     { kind: 'tasks-through-phase' },
   ],
   // archive 出口（manifest.yaml:272-274）

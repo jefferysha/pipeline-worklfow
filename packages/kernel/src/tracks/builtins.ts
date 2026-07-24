@@ -15,7 +15,7 @@
  */
 import type { TrackDefinition, TrackWorkflowBinding } from './types.js'
 
-export const BUILTIN_TRACK_IDS = ['chat', 'simple', 'pm', 'frontend', 'backend'] as const
+export const BUILTIN_TRACK_IDS = ['chat', 'simple', 'pm', 'frontend', 'backend', 'free'] as const
 export type BuiltinTrackId = (typeof BUILTIN_TRACK_IDS)[number]
 
 export function isBuiltinTrackId(id: string): id is BuiltinTrackId {
@@ -115,6 +115,19 @@ export const BUILTIN_TRACK_DEFINITIONS: readonly TrackDefinition[] = [
       coverageProfile: 'backend',
       routing: { enabled: true, pattern: BUILTIN_ROUTER_PATTERNS.backend, priority: 200 },
       skills: { matrix: true, profile: 'backend' },
+    },
+  },
+  {
+    id: 'free',
+    label: 'Free',
+    builtin: true,
+    workflow: WORKFLOW_ANY,
+    policyProfile: {
+      reviewSeed: 'pending',
+      automationEligible: false,
+      coverageProfile: 'none',
+      routing: { enabled: false },
+      skills: { matrix: false, profile: 'free' },
     },
   },
 ]

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { ExtendedManifestData } from '../flow/manifest.js'
 import type { TrackDefinition, TrackRegistry } from './types.js'
-import { buildRouterProjection, encodeRouterDataCache } from './router-projection.js'
+import { buildRouterProjection, effectiveRouterRevision, encodeRouterDataCache } from './router-projection.js'
 
 function track(input: Partial<TrackDefinition> & Pick<TrackDefinition, 'id'>): TrackDefinition {
   return {
@@ -46,7 +46,18 @@ function manifest(): ExtendedManifestData {
 }
 
 describe('dynamic track router projection', () => {
-  it('uses every enabled registry track in declaration order; disabled tracks are absent', () => {
+  it('changes the cache revision when an effective builtin changes without a project revision change', () => {
+    const first = buildRouterProjection(registry([track({ id: 'free', builtin: true })]), manifest())
+    const changed = buildRouterProjection(
+      registry([track({ id: 'free', builtin: true, label: 'Neutral' })]),
+      manifest(),
+    )
+    expect(effectiveRouterRevision('0123456789abcdef', first)).toMatch(/^[a-f0-9]{64}$/)
+    expect(effectiveRouterRevision('0123456789abcdef', changed))
+      .not.toBe(effectiveRouterRevision('0123456789abcdef', first))
+  })
+
+  it('carries every registry track in declaration order and marks disabled tracks as manual-only candidates', () => {
     const r = registry([
       track({ id: 'mobile', policyProfile: {
         reviewSeed: 'pending', automationEligible: true, coverageProfile: 'frontend',
@@ -70,11 +81,19 @@ describe('dynamic track router projection', () => {
     ])
 
     const p = buildRouterProjection(r, manifest())
-    expect(p.tracks.map((item) => ({ id: item.id, order: item.order, priority: item.priority, workflowDefault: item.workflowDefault }))).toEqual([
-      { id: 'mobile', order: 0, priority: 900, workflowDefault: 'default' },
-      { id: 'ops', order: 2, priority: 700, workflowDefault: 'default' },
+    expect(p.tracks.map((item) => ({
+      id: item.id,
+      order: item.order,
+      routable: item.routable,
+      priority: item.priority,
+      workflowDefault: item.workflowDefault,
+    }))).toEqual([
+      { id: 'mobile', order: 0, routable: true, priority: 900, workflowDefault: 'default' },
+      { id: 'silent', order: 1, routable: false, priority: 0, workflowDefault: 'default' },
+      { id: 'ops', order: 2, routable: true, priority: 700, workflowDefault: 'default' },
     ])
-    expect(p.tracks[1]).toMatchObject({ matrix: false, profile: 'backend' })
+    expect(p.tracks[1]).toMatchObject({ matrix: false, profile: '_all' })
+    expect(p.tracks[1]).not.toHaveProperty('pattern')
     expect(p.tracks[0]?.excludePattern).toBe('(API|schema)')
   })
 
@@ -105,7 +124,7 @@ describe('dynamic track router projection', () => {
   })
 })
 
-describe('router v4 data cache encoding', () => {
+describe('router v5 data cache encoding', () => {
   it('is deterministic data-only hex: hostile shell text never appears executable or raw', () => {
     const hostile = track({ id: 'safe-id', policyProfile: {
       reviewSeed: 'pending', automationEligible: true, coverageProfile: 'backend',
@@ -120,10 +139,11 @@ describe('router v4 data cache encoding', () => {
       manifestSha256: 'a'.repeat(64),
       tracksPresent: true,
       registryRevision: '0123456789abcdef',
+      contractRevision: 'b'.repeat(64),
       projection,
     })
 
-    expect(cache).toMatch(/^PIPELINE_ROUTER_V4\nM\|/)
+    expect(cache).toMatch(/^PIPELINE_ROUTER_V5\nM\|/)
     expect(cache).not.toContain('$(')
     expect(cache).not.toContain('`')
     expect(cache).not.toContain('/tmp/router-owned')
@@ -133,11 +153,12 @@ describe('router v4 data cache encoding', () => {
       manifestSha256: 'a'.repeat(64),
       tracksPresent: true,
       registryRevision: '0123456789abcdef',
+      contractRevision: 'b'.repeat(64),
       projection,
     }))
   })
 
-  it('encodes exclusion patterns as the sixth routing field', () => {
+  it('encodes routability before pattern fields so disabled rows cannot be guessed as enabled', () => {
     const excluded = track({ id: 'simple', policyProfile: {
       reviewSeed: 'skipped', automationEligible: false, coverageProfile: 'none',
       routing: { enabled: true, pattern: '(typo|copy)', excludePattern: '(API|schema)', priority: 1000 },
@@ -148,21 +169,48 @@ describe('router v4 data cache encoding', () => {
       manifestSha256: 'c'.repeat(64),
       tracksPresent: false,
       registryRevision: '0123456789abcdef',
+      contractRevision: 'b'.repeat(64),
       projection: buildRouterProjection(registry([excluded]), manifest()),
     })
     const route = cache.split('\n').find((line) => line.startsWith('R|'))
-    expect(route?.split('|')[5]).toBe(Buffer.from('(API|schema)', 'utf8').toString('hex'))
+    expect(route?.split('|')[4]).toBe('1')
+    expect(route?.split('|')[6]).toBe(Buffer.from('(API|schema)', 'utf8').toString('hex'))
+
+    const disabled = track({
+      id: 'free',
+      policyProfile: {
+        reviewSeed: 'pending',
+        automationEligible: false,
+        coverageProfile: 'none',
+        routing: { enabled: false },
+        skills: { matrix: false, profile: '_all' },
+      },
+    })
+    const disabledCache = encodeRouterDataCache({
+      projectRoot: '/repo',
+      manifestSha256: 'd'.repeat(64),
+      tracksPresent: false,
+      registryRevision: '0123456789abcdef',
+      contractRevision: 'b'.repeat(64),
+      projection: buildRouterProjection(registry([disabled]), manifest()),
+    })
+    const disabledRoute = disabledCache.split('\n').find((line) => line.startsWith('R|'))
+    expect(disabledRoute?.split('|').slice(4, 7)).toEqual(['0', '', ''])
   })
 
   it('rejects malformed cache identity metadata instead of emitting an ambiguous cache', () => {
     const projection = buildRouterProjection(registry([track({ id: 'ops' })]), manifest())
     expect(() => encodeRouterDataCache({
       projectRoot: '/repo', manifestSha256: 'not-a-sha', tracksPresent: false,
-      registryRevision: '0123456789abcdef', projection,
+      registryRevision: '0123456789abcdef', contractRevision: 'b'.repeat(64), projection,
     })).toThrow(/manifestSha256/)
     expect(() => encodeRouterDataCache({
       projectRoot: '/repo', manifestSha256: 'b'.repeat(64), tracksPresent: false,
-      registryRevision: 'bad|revision', projection,
+      registryRevision: 'bad|revision', contractRevision: 'b'.repeat(64), projection,
     })).toThrow(/registryRevision/)
+    expect(() => encodeRouterDataCache({
+      projectRoot: '/repo', manifestSha256: 'b'.repeat(64), tracksPresent: false,
+      registryRevision: '0123456789abcdef', contractRevision: 'bad-contract', projection,
+    })).toThrow(/contractRevision/)
   })
 })

@@ -28,7 +28,7 @@ import type { FieldName, PipelineState } from '../types.js'
 import type { EventName, TransitionContext } from './transition-table.js'
 import type { ActionConfig, CompiledGuardConfig } from '../workflow/ir.js'
 import { evaluateGuards, type GuardEvaluation } from '../workflow/guard-handlers.js'
-import { NON_PM } from '../workflow/predicates.js'
+import { NON_PM, NON_PM_OR_FREE } from '../workflow/predicates.js'
 
 /** 一个 default 事件的转换政策：前置 guard（首错优先评估）+ 走边后的状态副作用 action。 */
 export interface DefaultEventPolicy {
@@ -78,8 +78,8 @@ export const DEFAULT_EVENT_POLICY = {
     guards: [
       { type: 'file-exists', path: { kind: 'field', field: 'verification_report' } },
       { type: 'field-equals', field: 'branch_status', value: 'handled' },
-      { type: 'field-equals', field: 'agent_review_result', value: 'pass', when: NON_PM },
-      { type: 'field-equals', field: 'codex_review_result', value: 'pass', when: NON_PM },
+      { type: 'field-equals', field: 'agent_review_result', value: 'pass', when: NON_PM_OR_FREE },
+      { type: 'field-equals', field: 'codex_review_result', value: 'pass', when: NON_PM_OR_FREE },
       { type: 'build-head-unchanged', field: 'build_sha' },
     ],
     // 老仓 L201-204：verify_result=pass + verified_at=now。

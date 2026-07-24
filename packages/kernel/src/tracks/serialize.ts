@@ -1,6 +1,6 @@
 /**
  * ProjectTrackConfig → 规范化 YAML 文本。确定性：键序固定（version → builtins（内建固定序
- * chat/simple/pm/frontend/backend）→ tracks（声明序）；子键 label → workflow{default→allowed} →
+ * chat/simple/pm/frontend/backend/free）→ tracks（声明序）；子键 label → workflow{default→allowed} →
  * policy_profile{review_seed→auto_enqueue_on_spec_complete→automation_eligible→coverage_profile→routing{enabled→pattern→
  * priority}→skills{matrix→profile}}）、引号规则固定。与 parse.ts 往返稳定：
  * parse(serialize(x)) 与 x 结构相等，其中空 section/空对象规范化为省略（serialize∘parse 幂等）。

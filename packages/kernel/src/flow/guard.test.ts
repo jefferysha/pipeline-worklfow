@@ -416,6 +416,19 @@ describe('verify 出口（V3 + V7 pm-only 回对齐）', () => {
     expect(evaluateGuard(makeState({ ...okFields, track: 'pm', verify_result: 'pass' }), ctxOf(files())).pass).toBe(true)
   })
 
+  it('free：保留报告与 branch_status 门，但不继承工程 Track 双 review', () => {
+    const r = evaluateGuard(
+      makeState({
+        ...okFields,
+        track: 'free',
+        agent_review_result: 'skipped',
+        codex_review_result: 'skipped',
+      }),
+      ctxOf(files()),
+    )
+    expect(r).toEqual({ pass: true, failures: [] })
+  })
+
   it('V3 verification_report 指向缺失文件 → fail「verification_report 文件存在」', () => {
     const s = makeState({ ...okFields, track: 'backend', verification_report: 'docs/nope.md' })
     const r = evaluateGuard(s, ctxOf(files()))
@@ -434,6 +447,8 @@ describe('ship 出口（P3）与 archive 出口（A1）', () => {
     expect(evaluateGuard(pm, withFile)).toEqual({ pass: true, failures: [] })
     const be = makeState({ phase: 'ship', track: 'backend', pr_url: 'https://x/pr/1' })
     expect(evaluateGuard(be, noFile).pass).toBe(true)
+    const free = makeState({ phase: 'ship', track: 'free', pr_url: 'null' })
+    expect(evaluateGuard(free, noFile).pass).toBe(true)
   })
 
   it('A1 archive：状态文件缺失 → fail；全合规 → pass', () => {

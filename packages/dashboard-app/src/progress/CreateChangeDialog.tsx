@@ -82,6 +82,7 @@ export function CreateChangeDialog({ root, onClose, onCreated, onToast }: Create
           setPreview(result)
           setPreviewState('ready')
           const suggested = result.winner?.track.id
+            ?? result.candidates.find((candidate) => candidate.track.id === 'free')?.track.id
             ?? result.candidates.find((candidate) => candidate.track.id === 'chat')?.track.id
             ?? result.candidates[0]?.track.id
             ?? ''
@@ -287,29 +288,36 @@ export function CreateChangeDialog({ root, onClose, onCreated, onToast }: Create
               </div>
 
               {selectedCandidate && (
-                <div className="mt-3 grid gap-3 border-t border-border pt-3 sm:grid-cols-2">
-                  <div className="rounded-lg bg-card p-2.5" data-testid="route-policy">
-                    <div className="text-[10px] font-bold uppercase tracking-wider text-text-3">{t('change_create.policy')}</div>
-                    <div className="mt-1 text-xs leading-5 text-text-2">
-                      {selectedCandidate.track.policyProfile.coverageProfile} · {selectedCandidate.track.policyProfile.skills.profile}<br />
-                      {selectedCandidate.track.policyProfile.automationEligible ? t('change_create.afk_yes') : t('change_create.afk_no')} · review {selectedCandidate.track.policyProfile.reviewSeed}
+                <>
+                  {selectedCandidate.track.id === 'free' && (
+                    <div className="mt-3 rounded-lg border border-accent-b bg-accent-t px-3 py-2 text-xs leading-5 text-accent-d" data-testid="route-free-note">
+                      {t('change_create.free_note')}
                     </div>
+                  )}
+                  <div className="mt-3 grid gap-3 border-t border-border pt-3 sm:grid-cols-2">
+                    <div className="rounded-lg bg-card p-2.5" data-testid="route-policy">
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-text-3">{t('change_create.policy')}</div>
+                      <div className="mt-1 text-xs leading-5 text-text-2">
+                        {selectedCandidate.track.policyProfile.coverageProfile} · {selectedCandidate.track.policyProfile.skills.profile}<br />
+                        {selectedCandidate.track.policyProfile.automationEligible ? t('change_create.afk_yes') : t('change_create.afk_no')} · review {selectedCandidate.track.policyProfile.reviewSeed}
+                      </div>
+                    </div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-text-3">
+                      {t('change_create.workflow')}
+                      <select
+                        className={`${INPUT} mt-1.5 font-mono text-xs`}
+                        data-testid="change-workflow"
+                        value={selectedWorkflow}
+                        onChange={(event) => setSelectedWorkflow(event.target.value)}
+                      >
+                        {workflows.map((workflow) => <option key={workflow} value={workflow}>{workflow}</option>)}
+                      </select>
+                      <span className="mt-1.5 block normal-case tracking-normal text-text-3" data-testid="route-first-step">
+                        {firstStepState === 'loading' ? t('change_create.step_loading') : t('change_create.first_step', { step: firstStep || '—' })}
+                      </span>
+                    </label>
                   </div>
-                  <label className="block text-[10px] font-bold uppercase tracking-wider text-text-3">
-                    {t('change_create.workflow')}
-                    <select
-                      className={`${INPUT} mt-1.5 font-mono text-xs`}
-                      data-testid="change-workflow"
-                      value={selectedWorkflow}
-                      onChange={(event) => setSelectedWorkflow(event.target.value)}
-                    >
-                      {workflows.map((workflow) => <option key={workflow} value={workflow}>{workflow}</option>)}
-                    </select>
-                    <span className="mt-1.5 block normal-case tracking-normal text-text-3" data-testid="route-first-step">
-                      {firstStepState === 'loading' ? t('change_create.step_loading') : t('change_create.first_step', { step: firstStep || '—' })}
-                    </span>
-                  </label>
-                </div>
+                </>
               )}
             </>
           )}

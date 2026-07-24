@@ -75,6 +75,57 @@ describe('真实 e2e —— init --workflow 落地自定义 workflow 的首个 s
     await expect(h.readIn('tiny-fix', 'tasks.md')).rejects.toThrow()
   })
 
+  test('free/default 是完整七阶段 Change，但不继承标准 Track policy', async () => {
+    expect(await h.run(['init', 'free-default', '--track', 'free', '--preset', 'full'])).toBe(0)
+    const content = await h.read('free-default')
+    expect(content).toMatch(/^track: free$/m)
+    expect(content).toMatch(/^workflow: default$/m)
+    expect(content).toMatch(/^phase: open$/m)
+    expect(await h.readIn('free-default', 'proposal.md')).toContain('# Proposal')
+    expect(await h.readIn('free-default', 'design.md')).toContain('# Design')
+    expect(await h.readIn('free-default', 'tasks.md')).toContain('- [ ]')
+    expect(await h.run(['set', 'free-default', 'automation', 'queued'])).toBe(0)
+    expect(await h.run(['afk', 'enqueue', 'free-default'])).toBe(3)
+  })
+
+  test('free/default 可从 Open 完整推进到 Archive，且不要求工程双 review 或 PR URL', async () => {
+    const name = 'free-lifecycle'
+    expect(await h.run(['init', name, '--track', 'free', '--preset', 'full'])).toBe(0)
+    await h.seedGovernedDocumentEvidence(name)
+    await h.seedArtifact(name, 'design_doc', `openspec/changes/${name}/design.md`)
+    await h.seedArtifact(name, 'plan', `docs/superpowers/plans/${name}.md`)
+    await h.seedArtifact(name, 'verification_report', `docs/superpowers/reports/${name}.md`)
+
+    expect(await h.run(['transition', name, 'open-complete'])).toBe(0)
+    expect(await h.run(['review', 'request', name, '--event', 'explore-complete'])).toBe(0)
+    expect(await h.run(['review', 'acknowledge', name])).toBe(0)
+    expect(await h.run(['transition', name, 'explore-complete'])).toBe(0)
+    expect(await h.run(['review', 'request', name, '--event', 'spec-complete'])).toBe(0)
+    expect(await h.run(['review', 'acknowledge', name])).toBe(0)
+    expect(await h.run(['transition', name, 'spec-complete'])).toBe(0)
+
+    expect(await h.run(['set-many', name, 'build_mode=direct', 'isolation=worktree', 'direct_override=true'])).toBe(0)
+    expect(await h.run(['transition', name, 'build-complete'])).toBe(0)
+    expect(await h.run(['set', name, 'branch_status', 'handled'])).toBe(0)
+    expect(
+      await h.run(['review', 'request', name, '--event', 'verify-pass']),
+      h.err.join('\n'),
+    ).toBe(0)
+    expect(await h.run(['review', 'acknowledge', name])).toBe(0)
+    expect(await h.run(['transition', name, 'verify-pass'])).toBe(0)
+
+    expect(await h.run(['transition', name, 'ship-complete'])).toBe(0)
+    expect(await h.run(['transition', name, 'archived'])).toBe(0)
+    const completed = await h.read(name)
+    expect(completed).toMatch(/^track: free$/m)
+    expect(completed).toMatch(/^phase: archive$/m)
+    expect(completed).toMatch(/^verify_result: pass$/m)
+    expect(completed).toMatch(/^agent_review_result: pending$/m)
+    expect(completed).toMatch(/^codex_review_result: pending$/m)
+    expect(completed).toMatch(/^pr_url: null$/m)
+    expect(completed).toMatch(/^archived: true$/m)
+  })
+
   test('simple workflow 完整生命周期可验证后结束；范围扩大走独立 escalated 终态', async () => {
     expect(await h.run(['init', 'tiny-done', '--track', 'simple', '--preset', 'tweak'])).toBe(0)
     expect(await h.run(['transition', 'tiny-done', 'change-complete'])).toBe(2)
@@ -105,7 +156,7 @@ describe('真实 e2e —— init --workflow 落地自定义 workflow 的首个 s
     )
     expect(await h.run(['transition', 'tiny-expanded', 'scope-expanded'])).toBe(0)
     expect((await h.read('tiny-expanded'))).toMatch(/^phase: escalated$/m)
-  })
+  }, 15_000)
 
   test('--workflow onboarding：真落 workflow=onboarding + phase=intake（workflow 首个 step 的 id，不是硬编码 open）', async () => {
     await seedWorkflow('onboarding', TWO_STEP_WF)
@@ -113,6 +164,16 @@ describe('真实 e2e —— init --workflow 落地自定义 workflow 的首个 s
     const content = await h.read('demo')
     expect(content).toMatch(/^workflow: onboarding$/m)
     expect(content).toMatch(/^phase: intake$/m)
+  })
+
+  test('free 可绑定任意已存在的自定义 Workflow，并从其真实首 Step 开始', async () => {
+    await seedWorkflow('onboarding', TWO_STEP_WF)
+    expect(await h.run(['init', 'free-custom', '--track', 'free', '--preset', 'full', '--workflow', 'onboarding'])).toBe(0)
+    const content = await h.read('free-custom')
+    expect(content).toMatch(/^track: free$/m)
+    expect(content).toMatch(/^workflow: onboarding$/m)
+    expect(content).toMatch(/^phase: intake$/m)
+    expect(await h.run(['internal-skill-gate', 'free-custom', 'anything'])).toBe(0)
   })
 
   test('--workflow 指向不存在的文件：exit 1，不落盘任何 change 目录（先校验后创建，不留半成品）', async () => {

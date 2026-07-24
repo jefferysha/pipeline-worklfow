@@ -8,7 +8,7 @@ import { defaultArtifactDeclaredForField, defaultArtifactForField, defaultArtifa
 import { DEFAULT_ARTIFACT_DECLARATIONS } from './default-workflow.generated.js'
 import { DEFAULT_EVENT_POLICY } from '../flow/default-event-policy.js'
 
-const TRACKS = ['backend', 'frontend', 'chat', 'pm', 'some-unknown-track']
+const TRACKS = ['backend', 'frontend', 'chat', 'pm', 'free', 'some-unknown-track']
 
 describe('generated table exact-shape', () => {
   it('DEFAULT_ARTIFACT_DECLARATIONS 逐字段等于 default.yaml 的三条显式 artifact（键 = 有 artifact 的 step；键序 = 声明序）', () => {

@@ -90,7 +90,7 @@ export function buildProgram(deps: CliDeps, runtimes: ProgramRuntimes = {}): Com
     .description('初始化 change（stdout 无输出，路径信息走 stderr）')
     // track/preset 非 requiredOption：缺省时 TTY 下走交互向导补齐、非交互 fail-loud（见 cmdInit）；
     // 若用 requiredOption，commander 会抢在 action 前就报错，向导没机会跑。
-    .option('--track <track>', 'chat | pm | frontend | backend')
+    .option('--track <track>', 'chat | simple | pm | frontend | backend | free | custom')
     .option('--preset <preset>', 'full | hotfix | tweak')
     .option('--user <user>', 'created_by')
     .option('--workflow <workflow>', '自定义 workflow 名（.pipeline/workflows/<name>.yaml），缺省 default')
@@ -502,7 +502,7 @@ loops init 非交互 flags（agent/CI；缺 TTY 或 --yes 走默认）:
     .option('--workflow-default <id>', '缺省 workflow')
     .option('--workflow-allowed <ids...>', '允许的 workflow 白名单（可多值）')
     .option('--workflow-any', "允许任意 workflow（'*'，不必输裸 *）")
-    .option('--policy <preset>', 'policy 模板 chat|simple|pm|frontend|backend（深拷贝该内建 policy 落完整结构）')
+    .option('--policy <preset>', 'policy 模板 chat|simple|pm|frontend|backend|free（深拷贝该内建 policy 落完整结构）')
     .option('--json', 'JSON 返回更新后的 effective definition')
     .action(async (id: string, opts: TracksCreateOpts) => bail(await cmdTracksCreate(deps, id, opts)))
   tracks

@@ -186,7 +186,7 @@ describe('POST /api/router/preview —— 公共 Track Router 真决策预览', 
     }>()
     expect(body.suppressed_reason).toBeNull()
     expect(body.winner).toMatchObject({ track: { id: 'frontend' }, score: 2, priority: 300, order: 3 })
-    expect(body.candidates.map((candidate) => candidate.track.id)).toEqual(['chat', 'simple', 'pm', 'frontend', 'backend'])
+    expect(body.candidates.map((candidate) => candidate.track.id)).toEqual(['chat', 'simple', 'pm', 'frontend', 'backend', 'free'])
     expect(body.candidates[0]).toMatchObject({ score: 0, routable: false, order: 0 })
     expect(score).toHaveBeenCalledTimes(5)
   })
@@ -232,7 +232,7 @@ describe('POST /api/router/preview —— 公共 Track Router 真决策预览', 
     expect(response.status).toBe(200)
     expect(response.json<{ winner: { track: { id: string } }; candidates: Array<{ track: { id: string } }> }>()).toMatchObject({
       winner: { track: { id: 'release' } },
-      candidates: [{ track: { id: 'chat' } }, { track: { id: 'simple' } }, { track: { id: 'pm' } }, { track: { id: 'frontend' } }, { track: { id: 'backend' } }, { track: { id: 'release' } }],
+      candidates: [{ track: { id: 'chat' } }, { track: { id: 'simple' } }, { track: { id: 'pm' } }, { track: { id: 'frontend' } }, { track: { id: 'backend' } }, { track: { id: 'free' } }, { track: { id: 'release' } }],
     })
     expect(score).toHaveBeenCalledWith('draft-only', 'representative intent')
   })
@@ -1251,7 +1251,7 @@ tracks:
     expect(body.generated_at).toBe('2026-07-07T00:00:00Z')
     expect(body.source).toBe('project-file')
     expect(body.revision).toMatch(/^[0-9a-f]{16}$/)
-    expect(body.tracks.map((track: { id: string }) => track.id)).toEqual(['chat', 'simple', 'pm', 'frontend', 'backend', 'qa'])
+    expect(body.tracks.map((track: { id: string }) => track.id)).toEqual(['chat', 'simple', 'pm', 'frontend', 'backend', 'free', 'qa'])
     expect(body.tracks.find((track: { id: string }) => track.id === 'qa')).toEqual({
       id: 'qa',
       label: 'Quality',
@@ -1270,13 +1270,13 @@ tracks:
     expect(body.mandatory_skills['open._all']).toContain('openspec-propose')
   })
 
-  it('项目无 tracks.yaml → kernel 合法 builtin-only 五轨，不要求迁移文件', async () => {
+  it('项目无 tracks.yaml → kernel 合法 builtin-only 六轨，不要求迁移文件', async () => {
     const h = await startWithConfig()
     const r = await reqGet(h.port, `/api/config?root=${encodeURIComponent(h.root)}`)
     expect(r.status).toBe(200)
     const body = r.json<any>()
     expect(body.source).toBe('builtin-only')
-    expect(body.tracks.map((track: { id: string }) => track.id)).toEqual(['chat', 'simple', 'pm', 'frontend', 'backend'])
+    expect(body.tracks.map((track: { id: string }) => track.id)).toEqual(['chat', 'simple', 'pm', 'frontend', 'backend', 'free'])
   })
 
   it('缺 root → 400；未注册 root → 404', async () => {
@@ -1377,7 +1377,7 @@ describe('GET/POST/PATCH/DELETE /api/tracks —— v3 Studio Track CRUD', () => 
     const initial = await reqGet(h.port, `/api/tracks?root=${encodeURIComponent(h.root)}`)
     expect(initial.status).toBe(200)
     const first = initial.json<any>()
-    expect(first.tracks.map((track: { id: string }) => track.id)).toEqual(['chat', 'simple', 'pm', 'frontend', 'backend'])
+    expect(first.tracks.map((track: { id: string }) => track.id)).toEqual(['chat', 'simple', 'pm', 'frontend', 'backend', 'free'])
 
     const created = await reqPost(h.port, '/api/tracks', {
       root: h.root,

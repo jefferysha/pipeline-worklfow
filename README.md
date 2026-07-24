@@ -94,7 +94,7 @@ Linux 为 `$XDG_CONFIG_HOME/pipeline-lite/`）；当前会话继续使用已加�
 装完即可用 `pipeline init/inbox/status` 起 change；`pipeline setup --codex` 会从刚发布的不可变
 runtime 启动并在健康检查通过后打开随包的完整工作台（默认 `http://127.0.0.1:18765/`）。
 
-### 正常对话的三种执行路径
+### 正常对话的四种执行路径
 
 启用并信任 hook 后，普通对话不是“一律跑完整流水线”：
 
@@ -105,6 +105,10 @@ runtime 启动并在健康检查通过后打开随包的完整工作台（默认
   `verification-before-completion`，不生成 OpenSpec、Superpowers、ADR 或七阶段 Todo。
 - 其余实现、修复、重构、调研和产品任务进入对应 PM/frontend/backend 的完整 default：
   `open → explore → spec → build ⇄ verify → ship → archive`。
+- 用户显式选择“自由模式 / free mode”时进入内建 `free` Track。它可绑定 default 或任意项目
+  Workflow，不叠加 PM/frontend/backend 的 coverage、AFK 与技能矩阵；但所选 Workflow 自己的
+  阶段、Skill、Hook、门禁、OpenSpec/Superpowers/ADR 和后续读取收据仍完整执行。`free` 永不作为
+  关键词评分的自动兜底；Dashboard 在没有自动 winner 时把它作为默认手选入口。
 
 `simple` 采用“正向证据 + 否决优先”而不是按改动行数猜测。例如“修复一个 `.tsx` 文案 typo”可走
 轻量轨；“只改一行 API schema”仍必须走完整轨。执行中发现范围扩大时，simple Change 会进入

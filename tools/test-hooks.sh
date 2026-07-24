@@ -556,7 +556,7 @@ assert_contains "三注入: fail-open 时基础引导仍输出" "$out" "pipeline
 
 # ═══════════════ 9. router.sh（T-R5：动态 registry + 项目级 data-only cache） ═══════════════
 # 真实 e2e：真跑 router.sh 喂真 stdin JSON + 真 manifest/effective registry 派生
-# PIPELINE_ROUTER_V4；覆盖动态排序、profile、失效、项目隔离与不执行项目 cache。
+# PIPELINE_ROUTER_V5；覆盖动态排序、手选候选、profile、失效、项目隔离与不执行项目 cache。
 R="$ROOT/hooks/router.sh"
 RGEN="$ROOT/hooks/router-gen.mjs"
 [ -f "$R" ]    && ok "router: hooks/router.sh 存在"          || bad "router: hooks/router.sh 存在" "缺文件"
@@ -564,7 +564,7 @@ RGEN="$ROOT/hooks/router-gen.mjs"
 [ -f "$RGEN" ] && ok "router: hooks/router-gen.mjs 存在（派生缓存生成器）" || bad "router: hooks/router-gen.mjs 存在（派生缓存生成器）" "缺文件"
 
 # run_router：喂 stdin JSON，隔离缓存路径，用真实 plugin root（含 templates/manifest.yaml）
-RCACHE="$TMP/router-cache.v4.data"
+RCACHE="$TMP/router-cache.v5.data"
 run_router() { # $1=stdin-json [$2=cache-override] → 设 ROUT / RRC
   local cache="${2:-$RCACHE}"
   ROUT="$(printf '%s' "$1" | PIPELINE_ROUTER_CACHE="$cache" CLAUDE_PLUGIN_ROOT="$ROOT" bash "$R" 2>/dev/null)"
@@ -602,8 +602,8 @@ assert_exit "router: 空 prompt → fail-safe exit 0" 0 "$RRC"; assert_empty "ro
 assert_exit "router: 非 JSON stdin → fail-open exit 0" 0 "$?"
 
 # ── 9c. fail-safe：畸形 cache + manifest/generator 都不可用 → 不消费 cache、非阻断 exit 0 ──
-EMPTY_CACHE="$TMP/router-empty.v4.data"
-printf 'PIPELINE_ROUTER_V4\n# malformed\n' > "$EMPTY_CACHE"
+EMPTY_CACHE="$TMP/router-empty.v5.data"
+printf 'PIPELINE_ROUTER_V5\n# malformed\n' > "$EMPTY_CACHE"
 BROKEN_PLUGIN="$TMP/router-broken-plugin"; mkdir -p "$BROKEN_PLUGIN/templates"
 ROUT="$(printf '%s' "{\"prompt\":\"帮我写个 React 组件响应式页面 UI\",\"cwd\":\"$rproj\"}" | PIPELINE_ROUTER_CACHE="$EMPTY_CACHE" CLAUDE_PLUGIN_ROOT="$BROKEN_PLUGIN" bash "$R" 2>/dev/null)"
 RRC=$?
@@ -622,9 +622,21 @@ if command -v node >/dev/null 2>&1; then
   run_router "{\"prompt\":\"用户已明确授权后续自主执行；请实现一个 React 响应式页面\",\"cwd\":\"$rproj\"}"
   assert_contains "router: 常用措辞后续自主执行同样透传持续授权" "$ROUT" "continuous_execution: true"
   [ -f "$RCACHE" ] && ok "router: 首轮无缓存 → 派生缓存已生成" || bad "router: 首轮无缓存 → 派生缓存已生成" "缓存未生成"
-  assert_contains "router: 缓存 schema 为 PIPELINE_ROUTER_V4" "$(cat "$RCACHE" 2>/dev/null)" "PIPELINE_ROUTER_V4"
+  assert_contains "router: 缓存 schema 为 PIPELINE_ROUTER_V5" "$(cat "$RCACHE" 2>/dev/null)" "PIPELINE_ROUTER_V5"
   assert_not_contains "router: data cache 不含可 source 的 FE_PATTERN 赋值" "$(cat "$RCACHE" 2>/dev/null)" "FE_PATTERN="
   assert_not_contains "router: 自由字符串 hex 编码，缓存不裸露 manifest token" "$(cat "$RCACHE" 2>/dev/null)" "响应式"
+  # 插件 release 的 builtin/skill/breadcrumb contract 必须按内容失效，不能依赖 mtime。
+  # 将 cache contract 改成结构合法的旧值并把 mtime 放到未来；仍应拒绝旧 cache、冷生成并修复。
+  awk 'BEGIN { FS=OFS="|" } NR == 2 { $6="0000000000000000000000000000000000000000000000000000000000000000" } { print }' \
+    "$RCACHE" > "$RCACHE.stale-contract"
+  mv "$RCACHE.stale-contract" "$RCACHE"
+  touch -t 203001010000 "$RCACHE"
+  run_router "{\"prompt\":\"帮我实现一个 React 组件，做个响应式页面 UI\",\"cwd\":\"$rproj\"}"
+  assert_contains "router: release contract 不匹配且 cache mtime 更新也会重生成" "$ROUT" "track=frontend"
+  contract_field="$(sed -n '2p' "$RCACHE" | cut -d'|' -f6)"
+  [ "$contract_field" != "0000000000000000000000000000000000000000000000000000000000000000" ] \
+    && ok "router: 重生成写回当前 release contract" \
+    || bad "router: 重生成写回当前 release contract" "cache 仍保留旧 contract"
   # 稳定 bootstrap 会将 active payload 作为 PLUGIN_ROOT 注入；在 payload 级验证该契约，
   # 同时避免测试直接把 host manifest 绑回可变 marketplace checkout。
   ROUT="$(printf '%s' "{\"prompt\":\"帮我实现一个 React 组件，做个响应式页面 UI\",\"cwd\":\"$rproj\"}" | PIPELINE_ROUTER_CACHE="$RCACHE" PLUGIN_ROOT="$ROOT" CLAUDE_PLUGIN_ROOT='' bash -c 'bash "${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-}}/hooks/router.sh"' 2>/dev/null)"
@@ -646,11 +658,18 @@ if command -v node >/dev/null 2>&1; then
   assert_contains "router: 依赖升级使用 default workflow" "$ROUT" "workflow: default"
   run_router "{\"prompt\":\"帮我做竞品调研，写 PRD 需求文档，梳理用户旅程\",\"cwd\":\"$rproj\"}"
   assert_contains "router: PM 特征 prompt → 选 pm Track" "$ROUT" "track=pm"
+  run_router "{\"prompt\":\"请用自由模式执行这个任务\",\"cwd\":\"$rproj\"}"
+  assert_contains "router: 显式自由模式命中 free Track" "$ROUT" "track: free"
+  assert_contains "router: 自由模式在普通项目绑定 default Workflow" "$ROUT" "workflow: default"
+  assert_contains "router: 自由模式仍要求执行所选 Workflow" "$ROUT" "只执行所选 Workflow 自己的 DAG"
+  assert_not_contains "router: 自由模式不注入标准 Track 技能矩阵" "$ROUT" "本相位强制 skill"
+  run_router "{\"prompt\":\"请处理这个任务\",\"cwd\":\"$rproj\"}"
+  assert_empty "router: free 永不靠兜底或评分自动命中" "$ROUT"
 
   # 项目自定义 Track/workflow 是正常对话的真实选择，不得被 hook 偷换成 workflow: default。
-  # 这里用真实 kernel cold-path 载入一份有效的 custom workflow，再验证 V4 cache → bash hot-path
+  # 这里用真实 kernel cold-path 载入一份有效的 custom workflow，再验证 V5 cache → bash hot-path
   # → dispatch contract 的闭环；不是手写 cache fixture。
-  selectproj="$TMP/router-workflow-selection"; selectcache="$TMP/router-workflow-selection.v4.data"
+  selectproj="$TMP/router-workflow-selection"; selectcache="$TMP/router-workflow-selection.v5.data"
   mkdir -p "$selectproj/.pipeline/workflows" "$selectproj/openspec/changes"
   sed -e 's/^name: default$/name: pet-adoption/' -e 's/effective-phase-skills/effective-step-skills/g' "$ROOT/templates/workflows/default.yaml" > "$selectproj/.pipeline/workflows/pet-adoption.yaml"
   printf "version: 1\ntracks:\n  - id: adoption\n    label: Pet Adoption\n    workflow:\n      default: pet-adoption\n      allowed:\n        - pet-adoption\n    policy_profile:\n      review_seed: pending\n      automation_eligible: true\n      coverage_profile: frontend\n      routing:\n        enabled: true\n        pattern: '(宠物|领养|pet adoption)'\n        priority: 980\n      skills:\n        matrix: true\n        profile: frontend\n" > "$selectproj/.pipeline/tracks.yaml"
@@ -666,7 +685,7 @@ if command -v node >/dev/null 2>&1; then
 
   # 内建 Track 也允许被项目配置覆盖 workflow。它仍是 builtin:true，但非 default 绑定是项目选择，
   # 必须和额外 Track 一样在创建 Change 前确认，不能因 builtin 身份静默直达 custom workflow。
-  builtinselectproj="$TMP/router-builtin-workflow-selection"; builtinselectcache="$TMP/router-builtin-workflow-selection.v4.data"
+  builtinselectproj="$TMP/router-builtin-workflow-selection"; builtinselectcache="$TMP/router-builtin-workflow-selection.v5.data"
   mkdir -p "$builtinselectproj/.pipeline/workflows" "$builtinselectproj/openspec/changes"
   sed -e 's/^name: default$/name: pet-adoption/' -e 's/effective-phase-skills/effective-step-skills/g' "$ROOT/templates/workflows/default.yaml" > "$builtinselectproj/.pipeline/workflows/pet-adoption.yaml"
   printf "version: 1\nbuiltins:\n  frontend:\n    workflow:\n      default: pet-adoption\n      allowed:\n        - pet-adoption\n" > "$builtinselectproj/.pipeline/tracks.yaml"
@@ -835,7 +854,7 @@ if command -v node >/dev/null 2>&1; then
 
   # 动态评分：同 score 先比 priority；score/priority 都同则 registry 声明在前者胜。
   tieproj="$TMP/router-tie"
-  tiecache="$TMP/router-tie.v4.data"
+  tiecache="$TMP/router-tie.v5.data"
   write_router_tie_tracks "$tieproj" 700 701
   run_router "{\"prompt\":\"tie-route-token\",\"cwd\":\"$tieproj\"}" "$tiecache"
   assert_contains "router: 同 score 时 priority 高的 beta 胜" "$ROUT" "track=beta-lane"
@@ -846,7 +865,7 @@ if command -v node >/dev/null 2>&1; then
 
   # 任意合法 id + profile 继承；matrix=false 只影响矩阵展示，不得禁 router。
   profileproj="$TMP/router-profile"
-  profilecache="$TMP/router-profile.v4.data"
+  profilecache="$TMP/router-profile.v5.data"
   write_router_track "$profileproj" designer-mobile '(mobile-route-token)' 901 backend false
   mkdir -p "$profileproj/openspec/changes/demo"
   printf 'track: designer-mobile\nphase: explore\narchived: \n' > "$profileproj/openspec/changes/demo/.pipeline.yaml"
@@ -857,7 +876,7 @@ if command -v node >/dev/null 2>&1; then
 
   # stale + 生成失败必须 fail-closed：旧 cache 留盘也不得在本轮消费。
   staleproj="$TMP/router-stale-failure"
-  stalecache="$TMP/router-stale-failure.v4.data"
+  stalecache="$TMP/router-stale-failure.v5.data"
   write_router_track "$staleproj" stale-lane '(stale-route-token)' 950 backend true
   run_router "{\"prompt\":\"stale-route-token\",\"cwd\":\"$staleproj\"}" "$stalecache"
   assert_contains "router: stale-failure 前置 cache 真含旧 custom route" "$ROUT" "track=stale-lane"
@@ -873,7 +892,7 @@ if command -v node >/dev/null 2>&1; then
 
   # tracks.yaml 删除也是 stale（存在性位变化），须回到 builtin 内建轨，不能沿用 custom。
   deleteproj="$TMP/router-tracks-delete"
-  deletecache="$TMP/router-tracks-delete.v4.data"
+  deletecache="$TMP/router-tracks-delete.v5.data"
   write_router_track "$deleteproj" deleted-lane '(deleted-route-token)' 960 backend true
   run_router "{\"prompt\":\"deleted-route-token\",\"cwd\":\"$deleteproj\"}" "$deletecache"
   assert_contains "router: tracks 删除前 custom route 可命中" "$ROUT" "track=deleted-lane"
@@ -889,20 +908,20 @@ if command -v node >/dev/null 2>&1; then
   mkdir -p "$bproj/openspec/changes" "$TMP/router-home"
   ROUT="$(printf '{"prompt":"security-route-token","cwd":"%s"}' "$aproj" | (unset PIPELINE_ROUTER_CACHE; HOME="$TMP/router-home" CLAUDE_PLUGIN_ROOT="$ROOT" bash "$R") 2>/dev/null)"
   assert_contains "router: 项目 A custom route 可命中" "$ROUT" "track=security-lane"
-  [ -f "$aproj/.pipeline/cache/router.v4.data" ] && ok "router: 默认 cache 落项目 A 内" || bad "router: 默认 cache 落项目 A 内" "项目 cache 缺失"
+  [ -f "$aproj/.pipeline/cache/router.v5.data" ] && ok "router: 默认 cache 落项目 A 内" || bad "router: 默认 cache 落项目 A 内" "项目 cache 缺失"
   ROUT="$(printf '{"prompt":"security-route-token","cwd":"%s"}' "$bproj" | (unset PIPELINE_ROUTER_CACHE; HOME="$TMP/router-home" CLAUDE_PLUGIN_ROOT="$ROOT" bash "$R") 2>/dev/null)"
   assert_empty "router: 项目 B 从未消费项目 A custom cache" "$ROUT"
-  [ -f "$bproj/.pipeline/cache/router.v4.data" ] && ok "router: 项目 B 有独立 cache" || bad "router: 项目 B 有独立 cache" "B cache 缺失"
+  [ -f "$bproj/.pipeline/cache/router.v5.data" ] && ok "router: 项目 B 有独立 cache" || bad "router: 项目 B 有独立 cache" "B cache 缺失"
 
   # 即使测试显式复用同一 override 槽，metadata canonical root mismatch 也必须使 B 重生成。
-  sharedcache="$TMP/router-shared-root.v4.data"
+  sharedcache="$TMP/router-shared-root.v5.data"
   run_router "{\"prompt\":\"security-route-token\",\"cwd\":\"$aproj\"}" "$sharedcache"
   assert_contains "router: shared override 先绑定项目 A canonical root" "$ROUT" "track=security-lane"
   run_router "{\"prompt\":\"security-route-token\",\"cwd\":\"$bproj\"}" "$sharedcache"
   assert_empty "router: shared override 的 root mismatch 不消费 A 数据" "$ROUT"
 
   # 无 tracks 的 builtin cache 之后首次创建 tracks.yaml：存在性位变化必须立即失效。
-  createproj="$TMP/router-tracks-create"; createcache="$TMP/router-tracks-create.v4.data"
+  createproj="$TMP/router-tracks-create"; createcache="$TMP/router-tracks-create.v5.data"
   mkdir -p "$createproj/openspec/changes"
   run_router "{\"prompt\":\"React 页面组件\",\"cwd\":\"$createproj\"}" "$createcache"
   assert_contains "router: tracks 创建前 builtin cache 可用" "$ROUT" "track=frontend"
@@ -911,9 +930,9 @@ if command -v node >/dev/null 2>&1; then
   assert_contains "router: tracks.yaml 首次创建使 builtin cache stale" "$ROUT" "track=created-lane"
 
   # 直接篡改项目 cache 放 command substitution：只能成为畸形数据，不得执行。
-  injectproj="$TMP/router-cache-injection"; injectcache="$TMP/router-injection.v4.data"
+  injectproj="$TMP/router-cache-injection"; injectcache="$TMP/router-injection.v5.data"
   mkdir -p "$injectproj/openspec/changes"
-  printf 'PIPELINE_ROUTER_V4\nM|00|%064d|0123456789abcdef|0\n$(touch "%s")\n' 0 "$TMP/CACHE_PWNED" > "$injectcache"
+  printf 'PIPELINE_ROUTER_V5\nM|00|%064d|0123456789abcdef|0\n$(touch "%s")\n' 0 "$TMP/CACHE_PWNED" > "$injectcache"
   touch "$injectcache"
   INTERP_FB="$TMP/router-interpreter-fakebin"; mkdir -p "$INTERP_FB"
   for interp in node python python3 jq; do
@@ -926,7 +945,7 @@ if command -v node >/dev/null 2>&1; then
   assert_empty "router 安全: 畸形 cache 且重生成失败时零注入" "$ROUT"
 
   # 真 cache-hit 同时 shadow node/python/python3/jq：四者都不得触达，路由仍工作。
-  hitproj="$TMP/router-cache-hit"; hitcache="$TMP/router-cache-hit.v4.data"
+  hitproj="$TMP/router-cache-hit"; hitcache="$TMP/router-cache-hit.v5.data"
   mkdir -p "$hitproj/openspec/changes"
   run_router "{\"prompt\":\"React 页面组件\",\"cwd\":\"$hitproj\"}" "$hitcache"
   assert_contains "router: interpreter sentinel 前置 cache 已生成" "$ROUT" "track=frontend"

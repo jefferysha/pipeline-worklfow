@@ -118,7 +118,7 @@ describe('真实 e2e —— 完整多相位 workflow × skill 编排一体化闭
     changeDir = join(h.cwd, 'openspec/changes', CHANGE)
     historyPath = join(changeDir, '.pipeline-history.jsonl')
     // 隔离缓存路径：避免撞车开发机真实 ~/.claude 缓存，也避免与并行跑的其它测试文件/agent 竞争
-    routerCache = join(h.cwd, '.router-cache.v4.data')
+    routerCache = join(h.cwd, '.router-cache.v5.data')
     unlockCount = 0
     toolCount = 0
   })

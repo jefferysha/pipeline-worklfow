@@ -113,7 +113,22 @@ pipeline document read "$PIPELINE_CHANGE_NAME" all
 **可选**：
 - 使用 Skill 工具加载 `to-tickets`
 
-#### 🧱 fe/be plan 硬约束（HARD RULE，仅 frontend/backend Track 适用；PM 旅程图不受此约束）
+#### 🕊️ Track = free（中性规格与计划）
+
+**立即执行**（按顺序）：
+
+1. 使用 Skill 工具加载 `openspec-propose`。**禁止跳过此步骤**。
+   - 根据中性 Explore design 生成所有受影响 capability 的 delta spec。
+2. 使用本插件打包的 Skill `writing-plans`。**禁止跳过此步骤**。
+   - 计划只按目标本身拆解，不补 PM、前端或后端模板任务。
+   - 每项仍须给出文件/行为落点、验证方式和回滚边界。
+3. 按 Step 3–5 登记 plan/delta/tasks，全文重读当前 digest，并走
+   `spec-complete` 的 review receipt。
+
+`free` 的 `coverageProfile=none` 跳过领域覆盖矩阵，但 OpenSpec delta、
+Superpowers plan、tasks 唯一 Todo 源和 review 门全部保留。
+
+#### 🧱 fe/be plan 硬约束（HARD RULE，仅 frontend/backend Track 适用；PM/free 不受此领域模板约束）
 
 > 下面三条针对本插件 `writing-plans` 产出的 plan。写完 plan 按这三条自检，缺哪条补哪条。
 

@@ -29,3 +29,10 @@ export function matchesTrackPredicate(predicate: TrackPredicate, track: string):
  * 任意 track 的豁免判定同源——chat 与未知 track 在两层都不豁免，只有 pm 豁免。
  */
 export const NON_PM: TrackPredicate = { kind: 'track-not-in', values: ['pm'] }
+
+/**
+ * Default workflow 的领域交付/双 reviewer 契约适用于除 PM 与中性 free 之外的 Track。
+ * `free` 仍执行 default Workflow 的文档、测试、基线和 review phase 门，但不继承
+ * PM PRD 或工程 Track 的双 reviewer / PR URL 交付物。
+ */
+export const NON_PM_OR_FREE: TrackPredicate = { kind: 'track-not-in', values: ['pm', 'free'] }

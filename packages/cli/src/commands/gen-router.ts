@@ -1,7 +1,7 @@
 /**
  * `_gen-router-sh <manifest> <repo-root>` —— router.sh 的项目感知冷生成命令。
  *
- * 输出不是 shell 程序，而是 `PIPELINE_ROUTER_V4` data-only cache。routing 只来自
+ * 输出不是 shell 程序，而是 `PIPELINE_ROUTER_V5` data-only cache。routing 只来自
  * `deps.loadRegistry()` 返回的 effective registry；manifest 仅提供 phase/profile skill 与
  * breadcrumb。所有自由字符串由 kernel encoder 以 UTF-8 hex 写出，项目 cache 不可 source/eval。
  */
@@ -11,8 +11,10 @@ import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { join } from 'node:path'
 import {
   buildRouterProjection,
+  effectiveRouterRevision,
   encodeRouterDataCache,
   loadManifest,
+  routerContractRevision,
   type RouterProjection,
 } from '@pipeline-lite/kernel'
 import type { CliDeps } from '../deps.js'
@@ -68,7 +70,8 @@ export async function cmdGenRouterSh(
     const cache = encodeRouterDataCache({
       projectRoot: canonicalRoot,
       manifestSha256: createHash('sha256').update(manifestBytes).digest('hex'),
-      registryRevision: registry.revision,
+      registryRevision: effectiveRouterRevision(registry.revision, projection),
+      contractRevision: routerContractRevision(manifest),
       tracksPresent: existsSync(join(canonicalRoot, '.pipeline', 'tracks.yaml')),
       projection,
     })

@@ -669,7 +669,7 @@ describe('TrackSelector §4.12 看板级轨道镜头（切 track → 各列集�
     await waitFor(() => expect(screen.getByTestId('wb-track-pm')).toBeInTheDocument())
   })
 
-  it('selector 来自 effective registry：自定义第 5 轨 qa 出现，matrix=false 的 chat/observer 不作为矩阵列', async () => {
+  it('selector 来自 effective registry：自定义 qa 出现，matrix=false 的 chat/free/observer 不作为矩阵列', async () => {
     await renderMatrix(['build', 'spec'])
     const tabs = screen.getByTestId('wb-track-tabs')
     expect(tabs).toHaveAttribute('role', 'radiogroup')

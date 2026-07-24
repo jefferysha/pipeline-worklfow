@@ -50,19 +50,19 @@ describe('pipeline tracks —— list/show（只读）', () => {
   beforeEach(async () => { h = await freshHarness() })
   afterEach(async () => { await rm(h.cwd, { recursive: true, force: true }) })
 
-  test('list（无 tracks.yaml）：固定列 + 内建五轨固定序，纯 stdout', async () => {
+  test('list（无 tracks.yaml）：固定列 + 内建六轨固定序，纯 stdout', async () => {
     expect(await h.run(['tracks', 'list'])).toBe(0)
     expect(h.out[0]).toMatch(/^ID\s+LABEL\s+BUILTIN\s+DEFAULT\s+ALLOWED\s+POLICY/)
-    expect(h.out.slice(1).map((l) => l.split(/\s+/)[0])).toEqual(['chat', 'simple', 'pm', 'frontend', 'backend'])
+    expect(h.out.slice(1).map((l) => l.split(/\s+/)[0])).toEqual(['chat', 'simple', 'pm', 'frontend', 'backend', 'free'])
     expect(h.err).toEqual([])
   })
 
-  test('list --json：array 5 条、schema 完整、纯 stdout', async () => {
+  test('list --json：array 6 条、schema 完整、纯 stdout', async () => {
     expect(await h.run(['tracks', 'list', '--json'])).toBe(0)
     expect(h.out).toHaveLength(1)
     const arr = JSON.parse(h.out[0]!)
-    expect(arr).toHaveLength(5)
-    expect(arr.map((t: { id: string }) => t.id)).toEqual(['chat', 'simple', 'pm', 'frontend', 'backend'])
+    expect(arr).toHaveLength(6)
+    expect(arr.map((t: { id: string }) => t.id)).toEqual(['chat', 'simple', 'pm', 'frontend', 'backend', 'free'])
     for (const t of arr) {
       expect(t).toMatchObject({ builtin: true, source: 'builtin' })
       expect(Object.keys(t)).toEqual(expect.arrayContaining(['id', 'label', 'builtin', 'workflow', 'policyProfile', 'revision']))
@@ -99,9 +99,9 @@ describe('pipeline tracks —— create', () => {
     expect(yaml.startsWith('version: 1\n')).toBe(true)
     expect(yaml).not.toContain('chat') // 内建轨无需完整复制进文件
     expect(yaml).toContain('id: data')
-    // list 现 6 条、data 在末尾、source custom
+    // list 现 7 条、data 在末尾、source custom
     expect(await h.run(['tracks', 'list'])).toBe(0)
-    expect(h.out.slice(1).map((l) => l.split(/\s+/)[0])).toEqual(['chat', 'simple', 'pm', 'frontend', 'backend', 'data'])
+    expect(h.out.slice(1).map((l) => l.split(/\s+/)[0])).toEqual(['chat', 'simple', 'pm', 'frontend', 'backend', 'free', 'data'])
     expect(await h.run(['tracks', 'show', 'data'])).toBe(0)
     expect(h.out).toContain('source: custom')
   })
@@ -176,7 +176,7 @@ describe('pipeline tracks —— delete + 引用完整性', () => {
   beforeEach(async () => { h = await freshHarness() })
   afterEach(async () => { await rm(h.cwd, { recursive: true, force: true }) })
 
-  test('无引用 custom delete → exit 0 `deleted data`；--json {deleted,revision}；list 回 5 条', async () => {
+  test('无引用 custom delete → exit 0 `deleted data`；--json {deleted,revision}；list 回 6 条', async () => {
     expect(await h.run(CREATE_DATA)).toBe(0)
     expect(await h.run(['tracks', 'delete', 'data'])).toBe(0)
     expect(h.out).toContain('deleted data')
@@ -185,7 +185,7 @@ describe('pipeline tracks —— delete + 引用完整性', () => {
     expect(JSON.parse(h.out[0]!)).toMatchObject({ deleted: 'data' })
     expect(JSON.parse(h.out[0]!).revision).toBeTruthy()
     expect(await h.run(['tracks', 'list'])).toBe(0)
-    expect(h.out.slice(1)).toHaveLength(5)
+    expect(h.out.slice(1)).toHaveLength(6)
   })
 
   test('删内建 → exit 1', async () => {

@@ -52,6 +52,11 @@ describe('派生面 · mandatory / recommended skills（evidence 派生，对齐
       'writing-plans',
       'test-driven-development',
     ])
+    expect(m.mandatorySkills.explore.free).toEqual(['brainstorming'])
+    expect(m.mandatorySkills.spec.free).toEqual(['openspec-propose', 'writing-plans'])
+    expect(m.mandatorySkills.build.free).toEqual(['writing-plans', 'test-driven-development'])
+    expect(m.mandatorySkills.verify.free).toEqual(['verification-before-completion'])
+    expect(m.mandatorySkills.ship.free).toEqual(['openspec-apply-change', 'finishing-a-development-branch'])
     // 默认 workflow 只引用插件内置 skill，archive 无强制 skill。
     expect(m.mandatorySkills.verify.frontend).toContain('verification-before-completion')
     expect(m.mandatorySkills.archive).toEqual({})
@@ -72,6 +77,7 @@ describe('派生面 · mandatory / recommended skills（evidence 派生，对齐
     // open 只声明 _all，任一 track 都命中 _all 兜底
     expect(skillsFor(m.mandatorySkills, 'open', 'backend')).toEqual(['openspec-propose'])
     expect(skillsFor(m.mandatorySkills, 'open', 'pm')).toEqual(['openspec-propose'])
+    expect(skillsFor(m.mandatorySkills, 'open', 'free')).toEqual(['openspec-propose'])
     // per-track 优先于 _all
     expect(skillsFor(m.mandatorySkills, 'explore', 'pm')).toEqual(['brainstorming', 'grill-with-docs'])
     // 无声明 → 空

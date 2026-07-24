@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="A local, accessible pet adoption center demonstration with sample companion profiles."
+    />
+    <title>Hearth &amp; Home | Meet your companion</title>
+    <link rel="stylesheet" href="pet-adoption-center.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">Skip to the adoption center</a>
+
+    <header class="site-header">
+      <a class="brand" href="#top" aria-label="Hearth and Home adoption center home">
+        <span class="brand-mark" aria-hidden="true">✦</span>
+        <span>Hearth <em>&amp;</em> Home</span>
+      </a>
+      <nav aria-label="Primary navigation">
+        <a href="#meet">Meet the pets</a>
+        <a href="#how-it-works">How it works</a>
+        <a class="nav-apply" href="#apply">Apply</a>
+      </nav>
+    </header>
+
+    <main id="main-content">
+      <section class="hero section-shell" id="top" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          <p class="eyebrow"><span aria-hidden="true">●</span> A softer start, together</p>
+          <h1 id="hero-title">Find your companion for the next chapter.</h1>
+          <p class="hero-intro">
+            Meet a few of the warm, curious personalities waiting for a calm home. Every profile
+            below is sample content for this local adoption-center experience.
+          </p>
+          <div class="hero-actions">
+            <a class="button button-primary" href="#meet">Meet the companions <span aria-hidden="true">↓</span></a>
+            <a class="button button-quiet" href="#how-it-works">See the process</a>
+          </div>
+          <dl class="hero-facts">
+            <div>
+              <dt>Small steps</dt>
+              <dd>One gentle match at a time</dd>
+            </div>
+            <div>
+              <dt>Kindly clear</dt>
+              <dd>A simple three-part journey</dd>
+            </div>
+          </dl>
+        </div>
+
+        <div class="hero-portrait" aria-label="Illustration of a dog and a cat resting together" role="img">
+          <div class="sun-disc" aria-hidden="true"></div>
+          <div class="hero-sprig sprig-left" aria-hidden="true">❋</div>
+          <div class="hero-sprig sprig-right" aria-hidden="true">✢</div>
+          <div class="portrait-pet portrait-dog" aria-hidden="true">
+            <span class="pet-ear ear-left"></span><span class="pet-ear ear-right"></span>
+            <span class="pet-face">•ᴥ•</span>
+          </div>
+          <div class="portrait-pet portrait-cat" aria-hidden="true">
+            <span class="pet-ear ear-left"></span><span class="pet-ear ear-right"></span>
+            <span class="pet-face">=^.^=</span>
+          </div>
+          <p class="portrait-caption"><span aria-hidden="true">✦</span> A good match starts with a hello.</p>
+        </div>
+      </section>
+
+      <section class="meet-section section-shell" id="meet" aria-labelledby="meet-title">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow"><span aria-hidden="true">●</span> Find your companion</p>
+            <h2 id="meet-title">A little closer to the right hello.</h2>
+          </div>
+          <p>
+            Use the filters to explore the sample profiles. They update right here—no search
+            account or live inventory is involved.
+          </p>
+        </div>
+
+        <form class="filter-panel" id="filters-form" aria-describedby="filter-hint">
+          <fieldset>
+            <legend>Filter companion profiles</legend>
+            <p id="filter-hint">Choose any combination. You can reset at any time.</p>
+            <div class="filter-grid">
+              <div class="field">
+                <label for="species-filter">Companion type</label>
+                <select id="species-filter" name="species">
+                  <option value="all">All companions</option>
+                  <option value="dog">Dogs</option>
+                  <option value="cat">Cats</option>
+                  <option value="small">Small companions</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="age-filter">Life stage</label>
+                <select id="age-filter" name="age">
+                  <option value="all">Any life stage</option>
+                  <option value="kitten">Kitten</option>
+                  <option value="young">Young</option>
+                  <option value="adult">Adult</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="energy-filter">Home energy</label>
+                <select id="energy-filter" name="energy">
+                  <option value="all">Any rhythm</option>
+                  <option value="gentle">Gentle and unhurried</option>
+                  <option value="playful">Playful and bright</option>
+                  <option value="active">Curious and active</option>
+                </select>
+              </div>
+              <button class="reset-button" id="reset-filters" type="button">Reset filters <span aria-hidden="true">↺</span></button>
+            </div>
+          </fieldset>
+        </form>
+
+        <p class="results-status" id="results-status" role="status" aria-live="polite" aria-atomic="true"></p>
+        <div class="pet-grid" id="pet-grid" aria-live="off"></div>
+        <section class="empty-state" id="empty-state" hidden aria-labelledby="empty-title">
+          <div class="empty-mark" aria-hidden="true">⌁</div>
+          <div>
+            <h3 id="empty-title">No sample companions match that combination yet.</h3>
+            <p>Try opening up one filter, or return to all companion profiles.</p>
+            <button class="button button-primary" id="empty-reset" type="button">Show all companions</button>
+          </div>
+        </section>
+      </section>
+
+      <section class="process-section" id="how-it-works" aria-labelledby="process-title">
+        <div class="section-shell">
+          <div class="process-intro">
+            <p class="eyebrow"><span aria-hidden="true">●</span> How it works</p>
+            <h2 id="process-title">A considered path to a shared home.</h2>
+            <p>
+              A good adoption journey leaves room for questions. This demonstration keeps the
+              steps visible, human, and easy to return to.
+            </p>
+          </div>
+          <ol class="process-list">
+            <li>
+              <span class="step-number" aria-hidden="true">01</span>
+              <h3>Notice the fit</h3>
+              <p>Read the everyday details: pace, personality, and the kind of home that helps each pet settle.</p>
+            </li>
+            <li>
+              <span class="step-number" aria-hidden="true">02</span>
+              <h3>Start a conversation</h3>
+              <p>Share a little about your rhythm and what you are hoping to build together.</p>
+            </li>
+            <li>
+              <span class="step-number" aria-hidden="true">03</span>
+              <h3>Make room for home</h3>
+              <p>Take the next step with care, questions, and support from the people who know them best.</p>
+            </li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="apply-section section-shell" id="apply" aria-labelledby="application-title">
+        <div class="application-aside">
+          <p class="eyebrow"><span aria-hidden="true">●</span> Apply with confidence</p>
+          <h2 id="application-title">Start with a small, honest introduction.</h2>
+          <p>
+            This is a local demonstration form. It helps you explore the experience, but it never
+            sends an application to a shelter or stores your details.
+          </p>
+          <button class="text-action" id="start-general-application" type="button">Start a general introduction <span aria-hidden="true">↗</span></button>
+        </div>
+
+        <div class="application-card">
+          <p class="application-context" id="application-context">Choose a companion or begin a general introduction.</p>
+          <form id="application-form" novalidate>
+            <div class="error-summary" id="application-errors" role="alert" tabindex="-1" hidden></div>
+            <div class="form-grid">
+              <div class="field field-wide">
+                <label for="applicant-name">Your name <span aria-hidden="true">*</span></label>
+                <input id="applicant-name" name="name" autocomplete="name" required />
+              </div>
+              <div class="field field-wide">
+                <label for="applicant-email">Email address <span aria-hidden="true">*</span></label>
+                <input id="applicant-email" name="email" autocomplete="email" type="email" required />
+              </div>
+              <div class="field field-wide">
+                <label for="home-rhythm">What does home feel like? <span aria-hidden="true">*</span></label>
+                <select id="home-rhythm" name="rhythm" required>
+                  <option value="">Choose a rhythm</option>
+                  <option value="quiet">Quiet and restful</option>
+                  <option value="playful">Playful and social</option>
+                  <option value="outdoors">Outdoors and on the move</option>
+                </select>
+              </div>
+            </div>
+            <p class="required-note"><span aria-hidden="true">*</span> Required for this local practice form only.</p>
+            <button class="button button-primary form-submit" type="submit">Finish local introduction <span aria-hidden="true">→</span></button>
+            <p class="success-message" id="application-success" role="status" aria-live="polite" tabindex="-1" hidden></p>
+          </form>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <p><span aria-hidden="true">✦</span> Hearth &amp; Home is a local adoption-center demonstration.</p>
+      <a href="#top">Back to top</a>
+    </footer>
+
+    <script src="pet-adoption-center.js" defer></script>
+  </body>
+</html>

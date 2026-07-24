@@ -3,11 +3,19 @@ import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promi
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
-import type { TrackDefinition, TrackRegistry } from '@pipeline-lite/kernel'
+import {
+  buildRouterProjection,
+  effectiveRouterRevision,
+  loadManifest,
+  routerContractRevision,
+  type TrackDefinition,
+  type TrackRegistry,
+} from '@pipeline-lite/kernel'
 import type { CliDeps } from '../deps.js'
 import { cmdGenRouterSh } from './gen-router.js'
 
 const MANIFEST = new URL('../../../../templates/manifest.yaml', import.meta.url)
+const ROUTER_HOOK = new URL('../../../../hooks/router.sh', import.meta.url)
 
 function customTrack(pattern = "'$(touch /tmp/router-owned)`printf pwn`|mobile-route-token"): TrackDefinition {
   return {
@@ -55,7 +63,13 @@ describe('_gen-router-sh project data-cache command', () => {
     await rm(root, { recursive: true, force: true })
   })
 
-  test('emits PIPELINE_ROUTER_V4 from the effective registry with canonical identity and inert hex data', async () => {
+  test('pins the bash hot-path contract to the current builtin and manifest projection', async () => {
+    const hook = await readFile(ROUTER_HOOK, 'utf8')
+    const pinned = hook.match(/^ROUTER_CONTRACT_REV="([0-9a-f]{64})"$/m)?.[1]
+    expect(pinned).toBe(routerContractRevision(loadManifest(MANIFEST.pathname)))
+  })
+
+  test('emits PIPELINE_ROUTER_V5 from the effective registry with canonical identity and inert hex data', async () => {
     const out: string[] = []
     const err: string[] = []
     const loadCalls: number[] = []
@@ -77,22 +91,27 @@ describe('_gen-router-sh project data-cache command', () => {
 
     const cache = `${out[0]}\n`
     const lines = cache.trimEnd().split('\n')
-    expect(lines[0]).toBe('PIPELINE_ROUTER_V4')
+    expect(lines[0]).toBe('PIPELINE_ROUTER_V5')
     const metadata = lines[1]?.split('|') ?? []
     expect(metadata).toEqual([
       'M',
       Buffer.from(await realpath(root), 'utf8').toString('hex'),
       createHash('sha256').update(await readFile(MANIFEST)).digest('hex'),
-      '0123456789abcdef',
+      effectiveRouterRevision(
+        '0123456789abcdef',
+        buildRouterProjection(registry(), loadManifest(MANIFEST.pathname)),
+      ),
       '1',
+      routerContractRevision(loadManifest(MANIFEST.pathname)),
     ])
     const route = lines.find((line) => line.startsWith('R|'))?.split('|') ?? []
     expect(Buffer.from(route[3] ?? '', 'hex').toString('utf8')).toBe('designer-mobile')
-    expect(Buffer.from(route[4] ?? '', 'hex').toString('utf8')).toContain('mobile-route-token')
-    expect(Buffer.from(route[5] ?? '', 'hex').toString('utf8')).toBe('')
-    expect(Buffer.from(route[6] ?? '', 'hex').toString('utf8')).toBe('frontend')
-    expect(route.slice(7, 9)).toEqual(['0', '0']) // matrix=false 仍进入 router；custom 不是 builtin
-    expect(Buffer.from(route[10] ?? '', 'hex').toString('utf8')).toBe('pet-adoption')
+    expect(route[4]).toBe('1')
+    expect(Buffer.from(route[5] ?? '', 'hex').toString('utf8')).toContain('mobile-route-token')
+    expect(Buffer.from(route[6] ?? '', 'hex').toString('utf8')).toBe('')
+    expect(Buffer.from(route[7] ?? '', 'hex').toString('utf8')).toBe('frontend')
+    expect(route.slice(8, 10)).toEqual(['0', '0']) // matrix=false 仍进入 router；custom 不是 builtin
+    expect(Buffer.from(route[11] ?? '', 'hex').toString('utf8')).toBe('pet-adoption')
     expect(cache).not.toContain('FE_PATTERN=')
     expect(cache).not.toContain('$(')
     expect(cache).not.toContain('`')

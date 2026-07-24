@@ -51,9 +51,9 @@ export class ManifestError extends Error {
 
 const PHASE_SET: ReadonlySet<string> = new Set(PHASES)
 
-/** skill 表的 track 键：三真 track + `_all` 全 track 兜底哨兵（对齐老 evidence 的 _VALID_TRACKS） */
-export type SkillTrackKey = 'pm' | 'frontend' | 'backend' | '_all'
-const SKILL_TRACK_SET: ReadonlySet<string> = new Set<SkillTrackKey>(['pm', 'frontend', 'backend', '_all'])
+/** skill 表的 profile 键：三种标准矩阵 + free 产物 profile + `_all` 全 track 兜底哨兵。 */
+export type SkillTrackKey = 'pm' | 'frontend' | 'backend' | 'free' | '_all'
+const SKILL_TRACK_SET: ReadonlySet<string> = new Set<SkillTrackKey>(['pm', 'frontend', 'backend', 'free', '_all'])
 
 /** phase → track → skill token 列表（a|b 备选逐字保留，消费方自择其一） */
 export type SkillTable = Readonly<Record<Phase, Readonly<Partial<Record<SkillTrackKey, readonly string[]>>>>>
@@ -431,7 +431,7 @@ function deriveSkillTable(
     const phase = assertPhase(phaseName, section)
     if (!declared.has(phase)) throw new ManifestError(`${section}.${pt} 相位 '${phaseName}' 未在 phases 声明`)
     if (!SKILL_TRACK_SET.has(track)) {
-      throw new ManifestError(`${section}.${pt} 含未知 track '${track}'（合法：pm/frontend/backend/_all）`)
+      throw new ManifestError(`${section}.${pt} 含未知 profile '${track}'（合法：pm/frontend/backend/free/_all）`)
     }
     table[phase][track as SkillTrackKey] = list
   }

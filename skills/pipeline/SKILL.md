@@ -1,6 +1,6 @@
 ---
 name: pipeline
-description: "主编排 skill（Decision Core）。先做风险分级：simple 走 change→verify→done；其余开发任务识别 pm/frontend/backend 后走七阶段 default。状态一律经 pipeline CLI 读写；支持断点恢复。"
+description: "主编排 skill（Decision Core）。chat 纯对话；simple 走轻量图；free 显式绑定任意 Workflow 且不叠加领域 Track；其余任务识别 pm/frontend/backend。状态一律经 pipeline CLI 读写；支持断点恢复。"
 ---
 
 # /pipeline — 主编排入口（Decision Core）
@@ -25,6 +25,7 @@ CLI `--producer` 使用的**逻辑 id**。在 Codex 中实际加载时，必须�
 - 含 PM 关键词（"调研 / 竞品 / PRD / 需求 ..."）
 - 显式 `/pipeline` 命令
 - 显式 `/pipeline 继续` 进行断点恢复
+- 显式“自由模式 / free mode”，以不叠加领域 Track 的方式执行所选 Workflow
 
 **Chat 类输入（"问 / 解释 / how / what"）不应触发本 skill** — 直接对话即可。
 
@@ -56,6 +57,11 @@ CLI `--producer` 使用的**逻辑 id**。在 Codex 中实际加载时，必须�
 4. 无 selection 契约时，按注入的 workflow 身份分支：
    - `workflow: default` 的新目标按注入 Track/default workflow 创建独立 Change；随后才建立七相 Todo
      并分派当前 phase。
+   - `track: free` 是显式可执行模式，不是 `chat` 的别名。先用
+     `pipeline tracks show free --json` 复核其 `allowed: '*'`，再以精确 Workflow 创建 Change。
+     `free/default` 仍完整执行 default 七阶段、OpenSpec、Superpowers、ADR、review 与文档读取收据；
+     `free/<custom>` 则只执行该 custom Workflow 声明的 DAG、Skill、Hook、gate 与
+     `openspec_contract`。两者都不得叠加 PM/frontend/backend 的 coverage、AFK 或技能矩阵。
    - `workflow: simple` 的新目标必须按 `track=simple` 执行
      `pipeline init <name> --track simple --preset tweak`。它从内建 `change` step 开始，不初始化
      OpenSpec/Superpowers/ADR 文档链；Todo 一级项来自内建图 `change → verify → done`，并保留
@@ -107,7 +113,7 @@ CLI `--producer` 使用的**逻辑 id**。在 Codex 中实际加载时，必须�
 
 ## Governed OpenSpec document contract（default 的真实闭环）
 
-默认 workflow 的**全部 track（包括 PM）**，以及声明了 `openspec_contract: required` 的自定义 workflow，
+默认 workflow 的**全部可执行 track（包括 PM 与 free）**，以及声明了 `openspec_contract: required` 的自定义 workflow，
 都不是“有文件即可”的松散流程。它们必须在 `.pipeline-documents.json` 中留下：**真实 Skill 调用证据 →
 文档内容 SHA-256 → 后续 phase 对该精确版本的读取收据**。PM 的 PRD、用户旅程和原型交付仍保留，但也必须
 产出可实施的 OpenSpec delta spec / plan 并在 ship 应用主 spec。
@@ -184,6 +190,7 @@ fi
 |-------|------------------|---------|
 | **chat** | 问 / 解释 / how / what / why / 怎么用 / 是什么 / 区别 | **跳过 pipeline**，直接对话 |
 | **simple** | typo / 文案 / 注释 / 单行或单文件值调整 / unused import；且不含高风险否决项 | 进入内建轻量流程 |
+| **free** | 用户显式说“自由模式 / free mode / track=free” | 不参与关键词评分；复核精确 Workflow 后执行，不叠加领域 Track |
 | **pm** | 调研 / 竞品 / PRD / 需求 / 用户旅程 / 原型 / market / 立项 | 进入 PM 流程 |
 | **frontend** | 前端 / UI / 页面 / 组件 / React / Vue / Next / Tailwind / 样式 / .tsx / .jsx / .vue | 进入 Frontend 流程 |
 | **backend** | 后端 / API / 接口 / 数据库 / Go / Python / Java / Rust / NestJS / Postgres / endpoint | 进入 Backend 流程 |
@@ -192,9 +199,10 @@ fi
 1. 先评估 simple 否决项：API/公共契约、schema/migration、auth/security、跨模块、多文件、
    新功能/重构/架构、依赖/部署/发布/生产数据任一命中，simple 必须归零。
 2. simple 有明确正向信号且无否决项 → 直接选择 simple。
-3. 其余任务再按 pm/frontend/backend 匹配；通用“实现/修复/修改”至少进入 backend 完整轨，
+3. free 只能由用户显式选择，永远不能成为评分兜底或自动 winner。
+4. 其余任务再按 pm/frontend/backend 匹配；通用“实现/修复/修改”至少进入 backend 完整轨，
    不得因缺少领域词静默绕过。
-4. 真正领域冲突且会改变执行范围时才询问。
+5. 真正领域冲突且会改变执行范围时才询问。
 
 **Track=chat 时**：直接回答用户问题，不进入后续步骤。**禁止**为 chat 类输入创建 change。
 
@@ -214,6 +222,8 @@ pipeline list          # 活跃 change 表（名字 / track / phase）
 |-------|-------------|---------|------|
 | chat | 任意 | 任意 | 跳过 pipeline，直接对话 |
 | simple | 任意 | 明确局部新目标 | → 创建独立 simple Change，从 `change` 开始 |
+| free | 任意 | 显式新目标 + 精确 Workflow | → 校验 `free/Workflow` 后创建独立 Change |
+| free | 任意 | 明确恢复已绑定 Change | → 按 canonical Workflow 当前 step 恢复，不套标准 Track |
 | pm/frontend/backend | 0 | 有描述 | → **pipeline-open**（创建新 change） |
 | pm/frontend/backend | 1 | "继续" / 无描述 | 自动恢复（`pipeline status <name>` 判定 phase） |
 | pm/frontend/backend | 1 | 有描述（与该 change 无关） | → **pipeline-open**（独立新建；不复用旧 change） |
@@ -224,7 +234,7 @@ pipeline list          # 活跃 change 表（名字 / track / phase）
 
 #### 建新 change 前的归档软提醒（提醒强制、不阻断并行）
 
-当 Track∈{pm,frontend,backend} 且**手动调用的决策结果是「新建 change」**（用户有新描述）且活跃 change **非空**时——在调 `pipeline-open` **之前**，**先用 AskUserQuestion** 列出每个未归档活跃 change（`名 + phase + updated_at 陈旧度`，数据来自 `pipeline status <name>`），三选项：
+当 Track∈{free,pm,frontend,backend} 且**手动调用的决策结果是「新建 change」**（用户有新描述）且活跃 change **非空**时——在调 `pipeline-open` **之前**，**先用 AskUserQuestion** 列出每个未归档活跃 change（`名 + phase + updated_at 陈旧度`，数据来自 `pipeline status <name>`），三选项：
 
 | 选项 | 行为 |
 |------|------|
@@ -286,6 +296,10 @@ skill（若图未声明 `pipeline-<phase>`，不得擅自补调用）。**禁止
 内建 `simple` 也是非 default workflow，但不读取项目 `.pipeline/workflows/simple.yaml`；其定义随插件
 版本由 kernel 只读提供，项目同名文件不能覆盖。`change` 只允许 `simple-task`，`verify` 只允许
 `verification-before-completion`，`done` / `escalated` 是终态。
+
+`free` 不是另一张 workflow 图：它只是中性的执行 Track。若绑定 default，仍使用上表七阶段子 skill，
+但有效 profile 是 `free`，只提供文档产物所需的最小 phase Skill；若绑定 custom，则完全按 custom
+图解析，既不补 default skill，也不跳过该图自己的 gate/Hook/OpenSpec contract。
 
 子 skill 的上下文优先级：`<pipeline-dispatch>` 注入 → 已激活 Change / `pipeline status` →
 `PIPELINE_TRACK` 与 `PIPELINE_CHANGE_NAME` 环境变量。环境变量只是兼容快捷方式，不能是唯一真相源：

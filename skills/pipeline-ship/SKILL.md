@@ -101,6 +101,18 @@ pipeline document read "$PIPELINE_CHANGE_NAME" all
 - 使用 Skill 工具加载 `docker-patterns` — Docker 镜像构建
 - 使用 Skill 工具加载 `github-ops` — GitHub Actions 触发
 
+#### 🕊️ Track = free（中性交付）
+
+1. 使用 Skill 工具加载 `openspec-apply-change`。**禁止跳过此步骤**。
+   - 幂等复核 Verify 已即时回灌的每份 main spec。
+2. 使用本插件打包的 Skill `finishing-a-development-branch`。**禁止跳过此步骤**。
+   - 只处理当前工作区实际采用的分支策略；没有远程 PR 交付要求时可保留本地
+     handled 结果，不伪造 PR URL。
+3. 按 Step 2.5 登记 applied spec，全文读取当前文档 digest，再运行 Ship 出口检查。
+
+`free` 不产出 PM PRD，也不继承 frontend/backend 的强制 push/PR URL；若用户选择的
+Workflow 或当前任务本身明确声明发布/PR 动作，则仍按该声明执行。
+
 ### Step 2: 记录 PR / PRD 关键信息
 
 ```bash
@@ -111,6 +123,8 @@ pipeline set "$PIPELINE_CHANGE_NAME" pr_url "$PR_URL"
 # PM Track：记录 PRD 路径
 PRD_PATH="docs/PRD/$(date +%Y-%m-%d)-<topic>.md"
 pipeline set "$PIPELINE_CHANGE_NAME" prd_path "$PRD_PATH"
+
+# free Track：无领域交付字段；不得伪造 pr_url/prd_path。
 ```
 
 ### Step 2.5: 登记已应用的主 spec（受治理 workflow 强制）
@@ -146,6 +160,10 @@ guard 通过条件（GUARD-RULES §6，按 Track 不同）：
 **frontend/backend Track**:
 - `pr_url` 字段非空（或 git 本地有 commit 等待 push）
 
+**free Track**:
+- applied spec 与当前文档读取证据完整
+- 不要求 `pr_url` 或 `prd_path`
+
 同时人工确认：main spec 已同步（`openspec/specs/<capability>/spec.md` 内容包含本 change 的 delta）。
 
 guard **只校验、不自动 transition**。校验通过后，确认 PR / PRD 已交付，手动推进：
@@ -164,7 +182,7 @@ guard **只校验、不自动 transition**。校验通过后，确认 PR / PRD �
 
 - bundled-skill: to-spec / to-tickets · 强制（pm）
 - bundled-skill: openspec-apply-change · 强制（所有 Track）
-- bundled-skill: finishing-a-development-branch · 强制（frontend/backend）
+- bundled-skill: finishing-a-development-branch · 强制（frontend/backend/free）
 - bundled-skill: handoff / code-tour / github-ops · PM 推荐或可选
 - bundled-skill: deployment-patterns / docker-patterns · backend 推荐或可选
 

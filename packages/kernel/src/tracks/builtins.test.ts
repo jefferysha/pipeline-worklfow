@@ -22,9 +22,9 @@ function byId(id: string): TrackDefinition {
 }
 
 describe('内建 Track 定义', () => {
-  test('顺序固定 chat/simple/pm/frontend/backend；simple 绑定轻量 workflow，其余保持 default', () => {
-    expect(BUILTIN_TRACK_DEFINITIONS.map((t) => t.id)).toEqual(['chat', 'simple', 'pm', 'frontend', 'backend'])
-    expect([...BUILTIN_TRACK_IDS]).toEqual(['chat', 'simple', 'pm', 'frontend', 'backend'])
+  test('既有顺序不变并在末尾追加 free；simple 绑定轻量 workflow，其余保持 default', () => {
+    expect(BUILTIN_TRACK_DEFINITIONS.map((t) => t.id)).toEqual(['chat', 'simple', 'pm', 'frontend', 'backend', 'free'])
+    expect([...BUILTIN_TRACK_IDS]).toEqual(['chat', 'simple', 'pm', 'frontend', 'backend', 'free'])
     for (const t of BUILTIN_TRACK_DEFINITIONS.filter((item) => item.id !== 'simple')) {
       expect(t.builtin, t.id).toBe(true)
       expect(t.workflow, t.id).toEqual({ default: 'default', allowed: '*' })
@@ -68,6 +68,22 @@ describe('内建 Track 定义', () => {
           priority: 1000,
         },
         skills: { matrix: false, profile: '_all' },
+      },
+    })
+  })
+
+  test('free：全 Workflow 手选、非 AFK、无 coverage/矩阵且永不自动路由', () => {
+    expect(byId('free')).toEqual({
+      id: 'free',
+      label: 'Free',
+      builtin: true,
+      workflow: { default: 'default', allowed: '*' },
+      policyProfile: {
+        reviewSeed: 'pending',
+        automationEligible: false,
+        coverageProfile: 'none',
+        routing: { enabled: false },
+        skills: { matrix: false, profile: 'free' },
       },
     })
   })

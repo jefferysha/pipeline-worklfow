@@ -5,7 +5,7 @@
  *   （source:'builtin-only'）——零迁移成本路径，行为与「没有本功能」逐字一致（allowed:'*'
  *   全放行、缺省 workflow 'default'）。文件存在 → parse + validate（任一失败 fail-loud 抛出）
  *   → 合成 effective 模型：内建 Track 应用 builtins 覆写的 label/workflow 后恒排最前
- *   （chat/simple/pm/frontend/backend 固定序），额外 track 按文件声明序追加（builtin:false）。
+ *   （chat/simple/pm/frontend/backend/free 固定序），额外 track 按文件声明序追加（builtin:false）。
  * - revision：规范化序列化（serialize.ts）的 sha256 前 16 hex——同语义不同排版的手写文件得
  *   同一 revision；缺文件时取空配置 {version:1} 的 revision，从而「读 builtin-only revision
  *   → 首次写入携带它」能顺利通过冲突检查。

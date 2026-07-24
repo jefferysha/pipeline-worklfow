@@ -302,7 +302,33 @@ async function planCustomTransition(
   completedStepSkills: TransitionApplicationDeps['completedStepSkills'],
 ): Promise<PreparedTransition | TransitionRejection> {
   const currentBeforePlan = resolveStep(ir, fieldStr(state.fields.phase))
-  const edgeBeforePlan = currentBeforePlan?.transitions.find((candidate) => candidate.event === command.event)
+  // `archive` is the governed terminal used by the bundled archive skill. Custom workflow files
+  // correctly model terminal nodes with `transitions: []`, but they still need one canonical
+  // completion operation after the terminal step's skills/guards/documents have run. Treat the
+  // reserved `archived` event as an implicit archive self-edge only for that exact terminal id;
+  // ordinary terminal nodes and arbitrary unsupported events remain closed.
+  const terminalArchive = currentBeforePlan?.id === 'archive'
+    && currentBeforePlan.transitions.length === 0
+    && command.event === 'archived'
+  const planningIr: WorkflowIR = terminalArchive
+    ? {
+        ...ir,
+        steps: ir.steps.map((step) => step.id === 'archive'
+          ? {
+              ...step,
+              transitions: [{
+                event: 'archived',
+                to: 'archive',
+                guards: [],
+                actions: [{ type: 'archive-run' }],
+              }],
+            }
+          : step),
+      }
+    : ir
+  const edgeBeforePlan = terminalArchive
+    ? planningIr.steps.find((step) => step.id === 'archive')?.transitions[0]
+    : currentBeforePlan?.transitions.find((candidate) => candidate.event === command.event)
   const governed = isOpenSpecDocumentContractRequired(workflowName, fieldStr(state.fields.track), ir)
   const lifecycle = currentBeforePlan && edgeBeforePlan
     ? governedLifecyclePolicy(governed, currentBeforePlan.id, edgeBeforePlan.to)
@@ -323,7 +349,7 @@ async function planCustomTransition(
       }
     }
   }
-  const plan = await planStepTransition(ir, state, command.event, {
+  const plan = await planStepTransition(planningIr, state, command.event, {
     changeDirAbs: command.changeDir,
     fileExists: command.context.fileExists,
     gitHeadSha: command.context.gitHeadSha,
@@ -338,7 +364,7 @@ async function planCustomTransition(
     }
     return { kind: 'step-guard-failed', workflowName, stepId: plan.stepId, failures: plan.failures }
   }
-  const currentStep = resolveStep(ir, plan.from)
+  const currentStep = resolveStep(planningIr, plan.from)
   if (!currentStep) throw new Error(`workflow '${workflowName}' 在已规划 step '${plan.from}' 后无法重取当前 step`)
   // 计划通过：先算 phase 推进（applyStepTransition），再跑该边 edge actions——patch 合并进
   // nextFields **在 commit 之前**（对照 default 轨 typed action（applyActions）在 commit 前改 fields
@@ -349,7 +375,9 @@ async function planCustomTransition(
   const nextState = applyStepTransition(state, plan.to, clock)
   const actions = mergeLifecycleActions(plan.actions, lifecycle?.actions)
   const warnings: TransitionApplicationWarning[] = []
-  let nextFields = nextState.fields
+  let nextFields = terminalArchive
+    ? { ...nextState.fields, phase_status: 'done' as const }
+    : nextState.fields
   if (actions.length > 0) {
     const outcome = await applyActions(actions, {
       fields: nextState.fields,
@@ -357,7 +385,7 @@ async function planCustomTransition(
       gitHeadSha: command.context.gitHeadSha,
       workspaceFingerprint: command.context.workspaceFingerprint,
     })
-    nextFields = { ...nextState.fields, ...outcome.patch }
+    nextFields = { ...nextFields, ...outcome.patch }
     for (const signal of outcome.signals) warnings.push({ kind: signal.kind })
   }
   return {

@@ -68,6 +68,44 @@ function renderDialog(over?: Partial<Parameters<typeof CreateChangeDialog>[0]>) 
 }
 
 describe('CreateChangeDialog —— Route Lock 主旅程', () => {
+  it('无自动 winner 时默认选择 free，并允许自由模式绑定任意 Workflow', async () => {
+    const free = track('free', {
+      label: 'Free',
+      workflow: { default: 'default', allowed: '*' },
+      policyProfile: {
+        reviewSeed: 'pending',
+        automationEligible: false,
+        coverageProfile: 'none',
+        routing: { enabled: false },
+        skills: { matrix: false, profile: 'free' },
+      },
+    })
+    const noWinner = {
+      ...preview,
+      winner: null,
+      candidates: [
+        ...preview.candidates,
+        { track: free, order: 2, priority: 0, score: 0, routable: false, excluded: false },
+      ],
+    }
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url.startsWith('/api/workflows?')) return okJson({ names: ['release'] })
+      if (url === '/api/router/preview') return okJson(noWinner)
+      if (url.startsWith('/api/workflows/release?')) {
+        return okJson({ name: 'release', steps: [{ id: 'draft', label: 'Draft', transitions: [] }] })
+      }
+      throw new Error(`unexpected fetch ${url}`)
+    }))
+    renderDialog()
+
+    fireEvent.change(screen.getByTestId('change-intent'), { target: { value: 'Handle this without a standard track' } })
+    await waitFor(() => expect(screen.getByTestId('route-candidate-free')).toHaveAttribute('aria-pressed', 'true'))
+    expect(screen.getByTestId('route-free-note')).toHaveTextContent('仍完整执行所选 Workflow')
+    expect(screen.getByTestId('change-workflow')).toHaveValue('default')
+    fireEvent.change(screen.getByTestId('change-workflow'), { target: { value: 'release' } })
+    expect(await screen.findByTestId('route-first-step')).toHaveTextContent('draft')
+  })
+
   it('意图输入后自动调用真实 router preview，并显示 winner 的 score/priority/policy', async () => {
     const fetchMock = vi.fn(async (url: string, _init?: RequestInit) => {
       if (url.startsWith('/api/workflows?')) return okJson({ names: ['release'] })

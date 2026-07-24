@@ -21,11 +21,11 @@ import { makeTempManifest, repoManifestPath } from './test-support.js'
 
 const TRACK_CONTEXT: TrackValidationContext = {
   workflowExists: (id) => id === 'default',
-  skillProfiles: new Set(['pm', 'frontend', 'backend']),
+  skillProfiles: new Set(['pm', 'frontend', 'backend', 'free']),
 }
 
 describe('readConfigSnapshot（manifest + kernel effective track registry 的 dashboard 契约）', () => {
-  it('缺 tracks.yaml 时返回 builtin-only 五轨、matrix/policy profile 与真实写能力', async () => {
+  it('缺 tracks.yaml 时返回 builtin-only 六轨、matrix/policy profile 与真实写能力', async () => {
     const repoRoot = await mkdtemp(join(tmpdir(), 'pl-cfg-builtin-tracks-'))
 
     const snapshot = readConfigSnapshot({
@@ -39,7 +39,7 @@ describe('readConfigSnapshot（manifest + kernel effective track registry 的 da
     expect(snapshot.generated_at).toBe('2026-07-19T00:00:00Z')
     expect(snapshot.source).toBe('builtin-only')
     expect(snapshot.revision).toMatch(/^[0-9a-f]{16}$/)
-    expect(snapshot.tracks.map((track) => track.id)).toEqual(['chat', 'simple', 'pm', 'frontend', 'backend'])
+    expect(snapshot.tracks.map((track) => track.id)).toEqual(['chat', 'simple', 'pm', 'frontend', 'backend', 'free'])
     expect(snapshot.tracks[0]).toMatchObject({
       id: 'chat',
       builtin: true,
@@ -58,6 +58,12 @@ describe('readConfigSnapshot（manifest + kernel effective track registry 的 da
       automationEligible: true,
       coverageProfile: 'pm',
       skills: { matrix: true, profile: 'pm' },
+    })
+    expect(snapshot.tracks.find((track) => track.id === 'free')?.policyProfile).toMatchObject({
+      automationEligible: false,
+      coverageProfile: 'none',
+      routing: { enabled: false },
+      skills: { matrix: false, profile: 'free' },
     })
     expect(snapshot.mandatory_skills['build.backend']).toContain('test-driven-development')
     expect(snapshot.mandatory_skills_writable_profiles).toEqual(['pm', 'frontend', 'backend'])
@@ -95,7 +101,7 @@ tracks:
     })
 
     expect(snapshot.source).toBe('project-file')
-    expect(snapshot.tracks.map((track) => track.id)).toEqual(['chat', 'simple', 'pm', 'frontend', 'backend', 'qa'])
+    expect(snapshot.tracks.map((track) => track.id)).toEqual(['chat', 'simple', 'pm', 'frontend', 'backend', 'free', 'qa'])
     expect(snapshot.tracks.find((track) => track.id === 'qa')).toEqual({
       id: 'qa',
       label: 'Quality',

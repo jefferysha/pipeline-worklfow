@@ -6043,6 +6043,7 @@ function matchesTrackPredicate(predicate, track) {
   return predicate.kind === "track-in" ? listed : !listed;
 }
 var NON_PM = { kind: "track-not-in", values: ["pm"] };
+var NON_PM_OR_FREE = { kind: "track-not-in", values: ["pm", "free"] };
 
 // packages/kernel/dist/workflow/default-workflow.generated.js
 var DEFAULT_WORKFLOW_STEPS = [
@@ -6191,8 +6192,8 @@ var EXIT_RULES = {
     { kind: "nonempty", field: "verification_report" },
     { kind: "field-file-exists", field: "verification_report", desc: "verification_report \u6587\u4EF6\u5B58\u5728" },
     { kind: "eq", field: "branch_status", value: "handled" },
-    { kind: "eq", field: "agent_review_result", value: "pass", when: NON_PM },
-    { kind: "eq", field: "codex_review_result", value: "pass", when: NON_PM },
+    { kind: "eq", field: "agent_review_result", value: "pass", when: NON_PM_OR_FREE },
+    { kind: "eq", field: "codex_review_result", value: "pass", when: NON_PM_OR_FREE },
     { kind: "eq", field: "verify_result", value: "pass", when: PM_ONLY },
     { kind: "tasks-through-phase" }
   ],
@@ -6201,7 +6202,7 @@ var EXIT_RULES = {
     { kind: "statefile" },
     { kind: "nonempty", field: "prd_path", when: PM_ONLY },
     { kind: "field-file-exists", field: "prd_path", desc: "prd_path \u6587\u4EF6\u5B58\u5728", when: PM_ONLY },
-    { kind: "nonempty", field: "pr_url", when: NON_PM },
+    { kind: "nonempty", field: "pr_url", when: NON_PM_OR_FREE },
     { kind: "tasks-through-phase" }
   ],
   // archive 出口（manifest.yaml:272-274）
@@ -6496,10 +6497,17 @@ import { join as join7 } from "node:path";
 var WORKSPACE_BASELINE_PREFIX = "workspace:sha256:";
 var EXCLUDED_TOP_LEVEL = /* @__PURE__ */ new Set([
   ".git",
+  ".pipeline",
+  ".agents",
+  ".codex",
+  ".impeccable",
+  ".superpowers",
+  ".worktrees",
   "openspec",
   "docs",
   ".turbo",
   ".playwright-mcp",
+  ".playwright-tmp",
   ".sandcastle-build",
   "e2e-runs"
 ]);
@@ -6520,6 +6528,12 @@ var EXCLUDED_BASENAMES = /* @__PURE__ */ new Set([
   ".pipeline-pending-interaction",
   ".pipeline-pending-review"
 ]);
+var EXCLUDED_RELATIVE_ROOTS = [".github/hooks"];
+var EXCLUDED_ROOT_ARTIFACTS = [
+  /^dashboard-progress-custom-spec\.png$/,
+  /^pet-adoption-.*-tested\.png$/,
+  /^workbench-.*\.png$/
+];
 function sortNames(names) {
   return names.sort((left, right) => left < right ? -1 : left > right ? 1 : 0);
 }
@@ -6531,7 +6545,7 @@ function sameFileIdentity(before, after) {
 }
 function isExcluded(relativePath) {
   const parts = relativePath.split("/");
-  return EXCLUDED_TOP_LEVEL.has(parts[0] ?? "") || parts.some((part) => EXCLUDED_ANY_SEGMENT.has(part)) || EXCLUDED_BASENAMES.has(parts.at(-1) ?? "");
+  return EXCLUDED_TOP_LEVEL.has(parts[0] ?? "") || parts.some((part) => EXCLUDED_ANY_SEGMENT.has(part)) || EXCLUDED_BASENAMES.has(parts.at(-1) ?? "") || EXCLUDED_RELATIVE_ROOTS.some((root) => relativePath === root || relativePath.startsWith(`${root}/`)) || !relativePath.includes("/") && EXCLUDED_ROOT_ARTIFACTS.some((pattern) => pattern.test(relativePath));
 }
 function writeRecord(hash, kind, relativePath, details = "") {
   hash.update(kind);
@@ -8135,7 +8149,7 @@ var ManifestError = class extends Error {
   }
 };
 var PHASE_SET = new Set(PHASES);
-var SKILL_TRACK_SET = /* @__PURE__ */ new Set(["pm", "frontend", "backend", "_all"]);
+var SKILL_TRACK_SET = /* @__PURE__ */ new Set(["pm", "frontend", "backend", "free", "_all"]);
 function skillsFor(table, phase, track) {
   const row = table[phase];
   if (!row)
@@ -8491,7 +8505,7 @@ function deriveSkillTable(raw, declared, section) {
     if (!declared.has(phase))
       throw new ManifestError(`${section}.${pt} \u76F8\u4F4D '${phaseName}' \u672A\u5728 phases \u58F0\u660E`);
     if (!SKILL_TRACK_SET.has(track)) {
-      throw new ManifestError(`${section}.${pt} \u542B\u672A\u77E5 track '${track}'\uFF08\u5408\u6CD5\uFF1Apm/frontend/backend/_all\uFF09`);
+      throw new ManifestError(`${section}.${pt} \u542B\u672A\u77E5 profile '${track}'\uFF08\u5408\u6CD5\uFF1Apm/frontend/backend/free/_all\uFF09`);
     }
     table[phase][track] = list;
   }
@@ -8636,8 +8650,8 @@ var DEFAULT_EVENT_POLICY = {
     guards: [
       { type: "file-exists", path: { kind: "field", field: "verification_report" } },
       { type: "field-equals", field: "branch_status", value: "handled" },
-      { type: "field-equals", field: "agent_review_result", value: "pass", when: NON_PM },
-      { type: "field-equals", field: "codex_review_result", value: "pass", when: NON_PM },
+      { type: "field-equals", field: "agent_review_result", value: "pass", when: NON_PM_OR_FREE },
+      { type: "field-equals", field: "codex_review_result", value: "pass", when: NON_PM_OR_FREE },
       { type: "build-head-unchanged", field: "build_sha" }
     ],
     // 老仓 L201-204：verify_result=pass + verified_at=now。
@@ -8758,7 +8772,7 @@ function isTerminalSessionId(value) {
 var TRACK_ID_RE = /^[a-z][a-z0-9_-]{0,31}$/;
 
 // packages/kernel/dist/tracks/builtins.js
-var BUILTIN_TRACK_IDS = ["chat", "simple", "pm", "frontend", "backend"];
+var BUILTIN_TRACK_IDS = ["chat", "simple", "pm", "frontend", "backend", "free"];
 function isBuiltinTrackId(id) {
   return BUILTIN_TRACK_IDS.includes(id);
 }
@@ -8846,6 +8860,19 @@ var BUILTIN_TRACK_DEFINITIONS = [
       coverageProfile: "backend",
       routing: { enabled: true, pattern: BUILTIN_ROUTER_PATTERNS.backend, priority: 200 },
       skills: { matrix: true, profile: "backend" }
+    }
+  },
+  {
+    id: "free",
+    label: "Free",
+    builtin: true,
+    workflow: WORKFLOW_ANY,
+    policyProfile: {
+      reviewSeed: "pending",
+      automationEligible: false,
+      coverageProfile: "none",
+      routing: { enabled: false },
+      skills: { matrix: false, profile: "free" }
     }
   }
 ];
@@ -9239,7 +9266,8 @@ function stringUnrepresentableReason2(s) {
 }
 
 // packages/kernel/dist/tracks/validate.js
-var MAX_TRACKS = 32;
+var MAX_CUSTOM_TRACKS = 27;
+var MAX_TRACKS = BUILTIN_TRACK_IDS.length + MAX_CUSTOM_TRACKS;
 var REVIEW_SEEDS = /* @__PURE__ */ new Set(["pending", "skipped"]);
 var COVERAGE_PROFILES = /* @__PURE__ */ new Set(["none", "pm", "frontend", "backend"]);
 function checkRepresentable(value, at, errors) {
@@ -9275,8 +9303,8 @@ function collect(config, context) {
     checkEntry(tracks[i], `tracks[${i}]`, seen, workflowOk, profileOk, errors);
   }
   const total = BUILTIN_TRACK_IDS.length + tracks.length;
-  if (total > MAX_TRACKS) {
-    errors.push(`track \u603B\u6570 ${total} \u8D85\u8FC7\u4E0A\u9650 ${MAX_TRACKS}\uFF08\u5185\u5EFA ${BUILTIN_TRACK_IDS.length} + \u989D\u5916 ${tracks.length}\uFF09`);
+  if (tracks.length > MAX_CUSTOM_TRACKS) {
+    errors.push(`\u989D\u5916 track \u6570 ${tracks.length} \u8D85\u8FC7\u4E0A\u9650 ${MAX_CUSTOM_TRACKS}\uFF08\u5F53\u524D\u603B\u6570 ${total} = \u5185\u5EFA ${BUILTIN_TRACK_IDS.length} + \u989D\u5916 ${tracks.length}\uFF1B\u603B\u4E0A\u9650 ${MAX_TRACKS}\uFF09`);
   }
   return errors;
 }
@@ -9936,6 +9964,20 @@ async function assertUpdatePreservesReferences(next, id, scan) {
 }
 
 // packages/kernel/dist/tracks/router-projection.js
+import { createHash as createHash8 } from "node:crypto";
+function effectiveRouterRevision(registryRevision2, projection) {
+  return createHash8("sha256").update(JSON.stringify({ registryRevision: registryRevision2, tracks: projection.tracks }), "utf8").digest("hex");
+}
+function routerContractRevision(manifest) {
+  const byId = new Map(BUILTIN_TRACK_DEFINITIONS.map((track) => [track.id, track]));
+  const projection = buildRouterProjection({
+    ordered: BUILTIN_TRACK_DEFINITIONS,
+    byId,
+    revision: "builtin-contract",
+    source: "builtin-only"
+  }, manifest);
+  return createHash8("sha256").update(JSON.stringify(projection), "utf8").digest("hex");
+}
 function own(object2, key) {
   return Object.prototype.hasOwnProperty.call(object2, key);
 }
@@ -9953,16 +9995,15 @@ function buildRouterProjection(registry, manifest) {
   const tracks = [];
   for (const [order, track] of registry.ordered.entries()) {
     const routing = track.policyProfile.routing;
-    if (!routing.enabled)
-      continue;
     tracks.push({
       id: track.id,
       label: track.label,
       workflowDefault: track.workflow.default,
       order,
-      priority: routing.priority,
-      pattern: routing.pattern,
-      ...routing.excludePattern === void 0 ? {} : { excludePattern: routing.excludePattern },
+      routable: routing.enabled,
+      priority: routing.enabled ? routing.priority : 0,
+      ...routing.enabled ? { pattern: routing.pattern } : {},
+      ...routing.enabled && routing.excludePattern !== void 0 ? { excludePattern: routing.excludePattern } : {},
       profile: track.policyProfile.skills.profile,
       matrix: track.policyProfile.skills.matrix,
       builtin: track.builtin
@@ -10003,6 +10044,9 @@ function assertCacheMetadata(input) {
   if (!/^[0-9a-f]{16,64}$/.test(input.registryRevision)) {
     throw new Error("router cache registryRevision \u5FC5\u987B\u4E3A 16..64 \u4F4D\u5C0F\u5199 hex");
   }
+  if (!/^[0-9a-f]{64}$/.test(input.contractRevision)) {
+    throw new Error("router cache contractRevision \u5FC5\u987B\u4E3A 64 \u4F4D\u5C0F\u5199 hex");
+  }
 }
 function sourceCode(source) {
   if (source === "profile")
@@ -10014,8 +10058,8 @@ function sourceCode(source) {
 function encodeRouterDataCache(input) {
   assertCacheMetadata(input);
   const lines = [
-    "PIPELINE_ROUTER_V4",
-    `M|${hex(input.projectRoot)}|${input.manifestSha256}|${input.registryRevision}|${input.tracksPresent ? "1" : "0"}`
+    "PIPELINE_ROUTER_V5",
+    `M|${hex(input.projectRoot)}|${input.manifestSha256}|${input.registryRevision}|${input.tracksPresent ? "1" : "0"}|${input.contractRevision}`
   ];
   for (const track of input.projection.tracks) {
     lines.push([
@@ -10023,7 +10067,8 @@ function encodeRouterDataCache(input) {
       String(track.order),
       String(track.priority),
       hex(track.id),
-      hex(track.pattern),
+      track.routable ? "1" : "0",
+      hex(track.pattern ?? ""),
       hex(track.excludePattern ?? ""),
       hex(track.profile),
       track.matrix ? "1" : "0",
@@ -14641,7 +14686,7 @@ function decodeLedgerLine(line) {
 
 // packages/kernel/dist/loops/ledger-store.js
 import { AsyncLocalStorage } from "node:async_hooks";
-import { createHash as createHash8 } from "node:crypto";
+import { createHash as createHash9 } from "node:crypto";
 import { mkdir as mkdir10, open, readFile as readFile11 } from "node:fs/promises";
 import { join as join17, resolve as resolve6 } from "node:path";
 var LEDGER_DIR = [".pipeline", "loops"];
@@ -14689,7 +14734,7 @@ var ReservationAppendError = class extends Error {
 };
 var heldLedgerDirs = new AsyncLocalStorage();
 function shortHash(raw) {
-  return createHash8("sha256").update(raw, "utf8").digest("hex").slice(0, 12);
+  return createHash9("sha256").update(raw, "utf8").digest("hex").slice(0, 12);
 }
 function createLoopLedgerStore() {
   function withLedgerLock(repoRoot, fn) {
@@ -14848,7 +14893,7 @@ function createLoopLedgerStore() {
 }
 
 // packages/kernel/dist/loops/governance.js
-import { createHash as createHash9, randomBytes as randomBytes2 } from "node:crypto";
+import { createHash as createHash10, randomBytes as randomBytes2 } from "node:crypto";
 import { mkdir as mkdir11, open as open2, readFile as readFile12, rename as rename5 } from "node:fs/promises";
 import { join as join18, resolve as resolve7 } from "node:path";
 var LOOPS_REL = [".pipeline", "loops.yaml"];
@@ -14903,7 +14948,7 @@ async function readRegistrySnapshot(repoRoot) {
     }
     throw new RegistryReadError(`loops.yaml \u8BFB\u5931\u8D25\uFF08${e.code ?? "IO"}\uFF09\uFF1A${e instanceof Error ? e.message : String(e)}`);
   }
-  const epoch = createHash9("sha256").update(text, "utf8").digest("hex");
+  const epoch = createHash10("sha256").update(text, "utf8").digest("hex");
   const { data, errors } = loadRegistry(repoRoot, { readText: () => text });
   return { text, epoch, registry: data, errors };
 }
@@ -14985,7 +15030,7 @@ async function withLoopMergePermit(repoRoot, loopId, prepared, fn, verifyBase) {
 function registryContentEpoch(registry) {
   if (registry === null)
     return ABSENT_REGISTRY_EPOCH;
-  return createHash9("sha256").update(JSON.stringify(registry), "utf8").digest("hex");
+  return createHash10("sha256").update(JSON.stringify(registry), "utf8").digest("hex");
 }
 function loopMaterialUnchanged(a, b) {
   return a.status === b.status && a.runner === b.runner && a.change_prefix === b.change_prefix && (a.skill_bundle_id ?? null) === (b.skill_bundle_id ?? null) && a.budget.max_runs_per_day === b.budget.max_runs_per_day && a.budget.max_in_flight === b.budget.max_in_flight && a.budget.max_tokens_per_day === b.budget.max_tokens_per_day && a.budget.tokens_per_run === b.budget.tokens_per_run && a.budget.on_exceed === b.budget.on_exceed;
@@ -15253,7 +15298,7 @@ function compileAutomationPolicyTemplate(id, override = {}, version = AUTOMATION
 }
 
 // packages/kernel/dist/loops/reconciliation.js
-import { createHash as createHash10 } from "node:crypto";
+import { createHash as createHash11 } from "node:crypto";
 var RECONCILIATION_PLAN_KIND = "loop-reconciliation-plan";
 var RECONCILIATION_PLAN_SCHEMA_VERSION = 1;
 var RECONCILIATION_TARGET = "LOOP.md";
@@ -15285,7 +15330,7 @@ function concatBytes(...parts) {
 function resourceEpoch(bytes) {
   if (bytes === null)
     return { kind: "absent" };
-  return { kind: "sha256", value: createHash10("sha256").update(bytes).digest("hex") };
+  return { kind: "sha256", value: createHash11("sha256").update(bytes).digest("hex") };
 }
 function copyEpoch(epoch) {
   return epoch.kind === "absent" ? { kind: "absent" } : { kind: "sha256", value: epoch.value };
@@ -15307,7 +15352,7 @@ function canonicalJson(value) {
   throw new TypeError(`canonical JSON does not support ${typeof value}`);
 }
 function reconciliationPlanId(payload) {
-  return createHash10("sha256").update(canonicalJson(payload), "utf8").digest("hex");
+  return createHash11("sha256").update(canonicalJson(payload), "utf8").digest("hex");
 }
 var ReconciliationPlanCodecError = class extends Error {
   errors;
@@ -15853,7 +15898,7 @@ function buildReconciliationPlan(input) {
 }
 
 // packages/kernel/dist/loops/reconciliation-store.js
-import { createHash as createHash11, randomBytes as randomBytes3 } from "node:crypto";
+import { createHash as createHash12, randomBytes as randomBytes3 } from "node:crypto";
 import { constants } from "node:fs";
 import { lstat as lstat6, open as open3, rename as rename6, unlink as unlink3 } from "node:fs/promises";
 import { join as join19 } from "node:path";
@@ -16009,8 +16054,8 @@ async function publishLoopDoc(repoRoot, bytes) {
     if (readback === null) {
       warnings.push({ stage: "readback", message: "LOOP.md was absent after atomic publish" });
     } else if (!bytesEqual2(readback, bytes)) {
-      const expected = createHash11("sha256").update(bytes).digest("hex");
-      const actual = createHash11("sha256").update(readback).digest("hex");
+      const expected = createHash12("sha256").update(bytes).digest("hex");
+      const actual = createHash12("sha256").update(readback).digest("hex");
       warnings.push({ stage: "readback", message: `LOOP.md readback mismatch (${expected} != ${actual})` });
     }
   } catch (error) {
@@ -16290,14 +16335,14 @@ function renderHandoffSummary(doc, label) {
 }
 
 // packages/kernel/dist/compress/attempt-context.js
-import { createHash as createHash12 } from "node:crypto";
+import { createHash as createHash13 } from "node:crypto";
 var FAILURE_RESULTS = /* @__PURE__ */ new Set(["failed", "retry-queued", "conflict"]);
 function normalizeAttemptError(input) {
   const source = input instanceof Error ? input.message : typeof input === "string" ? input : String(input);
   const message2 = source.replace(/^\s*(?:(?:[A-Za-z][A-Za-z0-9_.]*Error|Error):\s*)/i, "").replace(/\b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z\b/g, "<timestamp>").replace(/\breq_[A-Za-z0-9_-]+\b/g, "<request-id>").replace(/(?:\/private)?\/tmp\/[^/\s]+/g, "<tmp>").replace(/:(\d+)(?::\d+)?\b/g, ":<line>").replace(/\s+/g, " ").trim();
   return {
     message: message2,
-    fingerprint: createHash12("sha256").update(message2).digest("hex")
+    fingerprint: createHash13("sha256").update(message2).digest("hex")
   };
 }
 function failureFingerprint(record) {
@@ -18202,7 +18247,20 @@ async function planDefaultTransition(state, command, flow, clock) {
 }
 async function planCustomTransition(state, ir, workflowName, command, clock, completedStepSkills) {
   const currentBeforePlan = resolveStep(ir, fieldStr4(state.fields.phase));
-  const edgeBeforePlan = currentBeforePlan?.transitions.find((candidate) => candidate.event === command.event);
+  const terminalArchive = currentBeforePlan?.id === "archive" && currentBeforePlan.transitions.length === 0 && command.event === "archived";
+  const planningIr = terminalArchive ? {
+    ...ir,
+    steps: ir.steps.map((step) => step.id === "archive" ? {
+      ...step,
+      transitions: [{
+        event: "archived",
+        to: "archive",
+        guards: [],
+        actions: [{ type: "archive-run" }]
+      }]
+    } : step)
+  } : ir;
+  const edgeBeforePlan = terminalArchive ? planningIr.steps.find((step) => step.id === "archive")?.transitions[0] : currentBeforePlan?.transitions.find((candidate) => candidate.event === command.event);
   const governed = isOpenSpecDocumentContractRequired(workflowName, fieldStr4(state.fields.track), ir);
   const lifecycle = currentBeforePlan && edgeBeforePlan ? governedLifecyclePolicy(governed, currentBeforePlan.id, edgeBeforePlan.to) : void 0;
   if (currentBeforePlan && currentBeforePlan.skills.length > 0 && completedStepSkills !== void 0) {
@@ -18221,7 +18279,7 @@ async function planCustomTransition(state, ir, workflowName, command, clock, com
       };
     }
   }
-  const plan = await planStepTransition(ir, state, command.event, {
+  const plan = await planStepTransition(planningIr, state, command.event, {
     changeDirAbs: command.changeDir,
     fileExists: command.context.fileExists,
     gitHeadSha: command.context.gitHeadSha,
@@ -18241,13 +18299,13 @@ async function planCustomTransition(state, ir, workflowName, command, clock, com
     }
     return { kind: "step-guard-failed", workflowName, stepId: plan.stepId, failures: plan.failures };
   }
-  const currentStep = resolveStep(ir, plan.from);
+  const currentStep = resolveStep(planningIr, plan.from);
   if (!currentStep)
     throw new Error(`workflow '${workflowName}' \u5728\u5DF2\u89C4\u5212 step '${plan.from}' \u540E\u65E0\u6CD5\u91CD\u53D6\u5F53\u524D step`);
   const nextState = applyStepTransition(state, plan.to, clock);
   const actions = mergeLifecycleActions(plan.actions, lifecycle?.actions);
   const warnings = [];
-  let nextFields = nextState.fields;
+  let nextFields = terminalArchive ? { ...nextState.fields, phase_status: "done" } : nextState.fields;
   if (actions.length > 0) {
     const outcome = await applyActions(actions, {
       fields: nextState.fields,
@@ -18255,7 +18313,7 @@ async function planCustomTransition(state, ir, workflowName, command, clock, com
       gitHeadSha: command.context.gitHeadSha,
       workspaceFingerprint: command.context.workspaceFingerprint
     });
-    nextFields = { ...nextState.fields, ...outcome.patch };
+    nextFields = { ...nextFields, ...outcome.patch };
     for (const signal of outcome.signals)
       warnings.push({ kind: signal.kind });
   }
@@ -18682,7 +18740,7 @@ function createCodexTriageProvider(options = {}) {
 }
 
 // packages/automation/dist/triage/connectors/git-commits.js
-import { createHash as createHash13 } from "node:crypto";
+import { createHash as createHash14 } from "node:crypto";
 
 // packages/automation/dist/runner/exec.js
 import { execFile, spawn as spawn2 } from "node:child_process";
@@ -18771,7 +18829,7 @@ var CursorStaleError = class extends Error {
 };
 var SHA_RE = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
 var SAFE_SOURCE_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/;
-var sha256 = (canonical) => createHash13("sha256").update(JSON.stringify(canonical), "utf8").digest("hex");
+var sha256 = (canonical) => createHash14("sha256").update(JSON.stringify(canonical), "utf8").digest("hex");
 var cursorDigest = (sourceId, cursor) => sha256([
   2,
   "git-commits-cursor",
@@ -19061,7 +19119,7 @@ function createGitCommitsConnector(options) {
 }
 
 // packages/automation/dist/triage/connectors/loop-run-terminals.js
-import { createHash as createHash14 } from "node:crypto";
+import { createHash as createHash15 } from "node:crypto";
 var LoopRunTerminalsSourceError = class extends Error {
   reason;
   _tag = "LoopRunTerminalsSourceError";
@@ -19077,7 +19135,7 @@ var OBSERVED_RUN_RESULTS = /* @__PURE__ */ new Set([
   "conflict",
   "retry-queued"
 ]);
-var sha2562 = (canonical) => createHash14("sha256").update(JSON.stringify(canonical), "utf8").digest("hex");
+var sha2562 = (canonical) => createHash15("sha256").update(JSON.stringify(canonical), "utf8").digest("hex");
 var assertPositiveLimit2 = (value, name2) => {
   if (!Number.isSafeInteger(value) || value <= 0) {
     throw new RangeError(`${name2} must be a positive safe integer`);
@@ -19190,7 +19248,7 @@ function createLoopRunTerminalsConnector(options) {
 }
 
 // packages/automation/dist/triage/workflow-run-materializer.js
-import { createHash as createHash15 } from "node:crypto";
+import { createHash as createHash16 } from "node:crypto";
 var WorkflowRunMaterializationError = class extends Error {
   issues;
   _tag = "WorkflowRunMaterializationError";
@@ -19287,7 +19345,7 @@ function idempotencyKeyFor(source, actionIdentity) {
     source.observationId,
     actionIdentity
   ]);
-  const digest = createHash15("sha256").update(canonical, "utf8").digest("hex");
+  const digest = createHash16("sha256").update(canonical, "utf8").digest("hex");
   return `triage-workflow-run:v1:${digest}`;
 }
 function sameCreateRequest(left, right) {
@@ -19434,7 +19492,7 @@ function createWorkflowRunMaterializer(deps) {
 }
 
 // packages/automation/dist/triage/workflow-run-create-repository.js
-import { createHash as createHash16 } from "node:crypto";
+import { createHash as createHash17 } from "node:crypto";
 import { join as join23, resolve as resolve8 } from "node:path";
 var TOP_LEVEL_KEYS = /* @__PURE__ */ new Set([
   "schemaVersion",
@@ -19588,7 +19646,7 @@ function runIdFor(request) {
     request.workflowId,
     request.initialStep
   ]);
-  return `triage-run-v1-${createHash16("sha256").update(canonical, "utf8").digest("hex")}`;
+  return `triage-run-v1-${createHash17("sha256").update(canonical, "utf8").digest("hex")}`;
 }
 function errnoCode(error) {
   if (typeof error !== "object" || error === null || !("code" in error))
@@ -19680,7 +19738,7 @@ function createWorkflowRunCreateIfAbsentRepository(deps) {
 }
 
 // packages/automation/dist/triage/checkpoint-store.js
-import { createHash as createHash17 } from "node:crypto";
+import { createHash as createHash18 } from "node:crypto";
 import { mkdir as mkdir12, readFile as readFile14 } from "node:fs/promises";
 import { dirname as dirname6, join as join24, resolve as resolve9 } from "node:path";
 var TriageCheckpointStoreError = class extends Error {
@@ -19733,7 +19791,7 @@ function checkpointForKey(input, key) {
   }
   return validated.value;
 }
-var keyDigest = (key) => createHash17("sha256").update(JSON.stringify([1, key.sourceId, key.actionKind]), "utf8").digest("hex");
+var keyDigest = (key) => createHash18("sha256").update(JSON.stringify([1, key.sourceId, key.actionKind]), "utf8").digest("hex");
 function slotDirectory(repoRoot, key) {
   return join24(resolve9(repoRoot), ".pipeline", "triage", "checkpoints", keyDigest(key));
 }
@@ -19864,7 +19922,7 @@ function createTriageCheckpointStore(options) {
 }
 
 // packages/automation/dist/triage/orchestrator.js
-import { createHash as createHash18 } from "node:crypto";
+import { createHash as createHash19 } from "node:crypto";
 var frozenEmptyMaterializations = Object.freeze([]);
 function emptyProgress(retryable = false) {
   return Object.freeze({
@@ -19963,7 +20021,7 @@ function assertNonNegativeSafeInteger(value, name2) {
   }
 }
 function deriveStableTriageCandidateIdentity(input) {
-  const digest = createHash18("sha256").update(JSON.stringify([
+  const digest = createHash19("sha256").update(JSON.stringify([
     1,
     "triage-workflow-run",
     input.observation.sourceId,
@@ -20608,14 +20666,14 @@ function makeIdGen() {
 }
 
 // packages/automation/dist/verifier/verifier.js
-import { createHash as createHash19 } from "node:crypto";
+import { createHash as createHash20 } from "node:crypto";
 function automationPolicySubjectFor(policy) {
   if (policy === void 0)
     return void 0;
   return Object.freeze({
     policy_id: policy.policy_id,
     policy_version: policy.policy_version,
-    goal_sha256: createHash19("sha256").update(policy.goal).digest("hex")
+    goal_sha256: createHash20("sha256").update(policy.goal).digest("hex")
   });
 }
 function freezeVerifierInput(input) {
@@ -21536,7 +21594,7 @@ var createScheduler = (deps) => {
 };
 
 // packages/automation/dist/skills/snapshot-store.js
-import { createHash as createHash20, randomUUID as randomUUID5 } from "node:crypto";
+import { createHash as createHash21, randomUUID as randomUUID5 } from "node:crypto";
 import { constants as constants2 } from "node:fs";
 import { chmod, lstat as lstat7, mkdir as mkdir13, open as open4, readdir as readdir6, realpath as realpath2, rm as rm4, rmdir as rmdir2, stat as stat7, writeFile as writeFile8 } from "node:fs/promises";
 import { dirname as dirname7, join as join26, relative as relative2, sep as sep3 } from "node:path";
@@ -21568,7 +21626,7 @@ var SKILL_SNAPSHOT_COMMIT_MARKER = ".snapshot-committed";
 var PUBLISH_LOCK_RETRY_MS = 5;
 var PUBLISH_LOCK_TIMEOUT_MS = 5e3;
 function sha256Hex(data) {
-  return createHash20("sha256").update(data).digest("hex");
+  return createHash21("sha256").update(data).digest("hex");
 }
 var EMPTY_FILE_SHA256 = sha256Hex(Buffer.alloc(0));
 function byRelativePath(a, b) {
@@ -24241,14 +24299,14 @@ var runChangeInSandbox = async (ports, cfg2, signal) => {
 };
 
 // packages/automation/dist/verifier/git-revision-verifier.js
-import { createHash as createHash21 } from "node:crypto";
+import { createHash as createHash22 } from "node:crypto";
 var GIT_REVISION_VERIFIER_ISSUER_IDENTITY = Object.freeze({
   kind: "host-verifier",
   verifier: "pipeline-git-integrity",
   version: "1"
 });
 var defaultNewId2 = (prefix) => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-var sha2563 = (value) => createHash21("sha256").update(value).digest("hex");
+var sha2563 = (value) => createHash22("sha256").update(value).digest("hex");
 var errorText = (error) => {
   if (error instanceof Error)
     return error.message;
@@ -27595,7 +27653,7 @@ async function stopHandles(handles) {
 }
 
 // packages/tap/dist/certs.js
-import { X509Certificate, createPublicKey, createPrivateKey, createHash as createHash22, generateKeyPairSync, randomBytes as randomBytes5, sign as cryptoSign } from "node:crypto";
+import { X509Certificate, createPublicKey, createPrivateKey, createHash as createHash23, generateKeyPairSync, randomBytes as randomBytes5, sign as cryptoSign } from "node:crypto";
 import { chmodSync, closeSync, existsSync as existsSync7, mkdirSync as mkdirSync4, openSync, readFileSync as readFileSync16, renameSync as renameSync3, rmSync, statSync as statSync2, writeFileSync as writeFileSync3 } from "node:fs";
 import { homedir as homedir4 } from "node:os";
 import { join as join39 } from "node:path";
@@ -27713,7 +27771,7 @@ function spkiPublicKeyBits(spkiDer) {
   return spkiDer.subarray(bits.contentStart + 1, bits.contentEnd);
 }
 function subjectKeyIdentifier(spkiDer) {
-  return createHash22("sha1").update(spkiPublicKeyBits(spkiDer)).digest();
+  return createHash23("sha1").update(spkiPublicKeyBits(spkiDer)).digest();
 }
 function extractSubjectDn(certDer) {
   const cert = readTlv(certDer, 0);
@@ -31019,7 +31077,7 @@ import { writeFile as writeFile10 } from "node:fs/promises";
 import { join as join51 } from "node:path";
 
 // packages/cli/src/commands/afk-executor.ts
-import { createHash as createHash24 } from "node:crypto";
+import { createHash as createHash25 } from "node:crypto";
 import { constants as constants4 } from "node:fs";
 import { access as access2, readFile as readFile17, realpath as realpath5 } from "node:fs/promises";
 import { homedir as homedir9 } from "node:os";
@@ -31027,7 +31085,7 @@ import { join as join50 } from "node:path";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
 
 // packages/cli/src/skillBundleAssembly.ts
-import { createHash as createHash23 } from "node:crypto";
+import { createHash as createHash24 } from "node:crypto";
 import { readdirSync as readdirSync4, readFileSync as readFileSync19, statSync as statSync3 } from "node:fs";
 import { isAbsolute as isAbsolute6, join as join49 } from "node:path";
 var SkillCacheAccessError = class extends Error {
@@ -31339,7 +31397,7 @@ function scalarField3(state, f) {
   return Array.isArray(v) ? v.join(",") : v ?? "";
 }
 function sha256Hex2(s) {
-  return createHash23("sha256").update(s).digest("hex");
+  return createHash24("sha256").update(s).digest("hex");
 }
 function emptyDeclaredStep(stepId) {
   return { id: stepId, label: "", gate: null, skills: [], inputs: [], outputs: [], guards: [], artifacts: [], transitions: [] };
@@ -31444,7 +31502,7 @@ async function resolveBundledCliDistSha256(moduleUrl = import.meta.url) {
     throw new BundledCliDigestUnavailableError(resolved);
   }
   try {
-    return createHash24("sha256").update(await readFile17(resolved)).digest("hex");
+    return createHash25("sha256").update(await readFile17(resolved)).digest("hex");
   } catch (error) {
     throw new BundledCliDigestUnavailableError(resolved, `\u8BFB\u53D6 bundle \u5931\u8D25\uFF1A${messageOf(error)}`);
   }
@@ -34541,7 +34599,7 @@ async function cmdChannel(deps, sub, args, host = nodeChannelHost(deps.cwd)) {
 
 // packages/cli/src/commands/gen-router.ts
 import { spawnSync as spawnSync2 } from "node:child_process";
-import { createHash as createHash25 } from "node:crypto";
+import { createHash as createHash26 } from "node:crypto";
 import { existsSync as existsSync9, readFileSync as readFileSync21, realpathSync as realpathSync2 } from "node:fs";
 import { join as join53 } from "node:path";
 function assertTargetGrepPatterns(projection) {
@@ -34585,8 +34643,9 @@ async function cmdGenRouterSh(deps, manifestPath2, repoRoot) {
     assertTargetGrepPatterns(projection);
     const cache2 = encodeRouterDataCache({
       projectRoot: canonicalRoot,
-      manifestSha256: createHash25("sha256").update(manifestBytes).digest("hex"),
-      registryRevision: registry.revision,
+      manifestSha256: createHash26("sha256").update(manifestBytes).digest("hex"),
+      registryRevision: effectiveRouterRevision(registry.revision, projection),
+      contractRevision: routerContractRevision(manifest),
       tracksPresent: existsSync9(join53(canonicalRoot, ".pipeline", "tracks.yaml")),
       projection
     });
@@ -37279,7 +37338,7 @@ function resolveRuntimePaths(input = {}) {
 }
 
 // packages/cli/src/runtime/release-store.ts
-import { createHash as createHash26, randomUUID as randomUUID8 } from "node:crypto";
+import { createHash as createHash27, randomUUID as randomUUID8 } from "node:crypto";
 import { execFile as execFile3 } from "node:child_process";
 import {
   chmod as chmod3,
@@ -37483,7 +37542,7 @@ async function copyPayload(candidateRoot, payloadRoot) {
   }
 }
 async function hashTree(root) {
-  const hash = createHash26("sha256");
+  const hash = createHash27("sha256");
   async function visit(dir, rel) {
     const entries = await readdir10(dir, { withFileTypes: true });
     entries.sort((left, right) => left.name.localeCompare(right.name));
@@ -40509,7 +40568,7 @@ async function cmdTracksCreate(deps, id, opts) {
   }
   const policyProfile = expandPolicy(opts.policy);
   if (!policyProfile) {
-    deps.io.err(`ERROR: \u672A\u77E5 --policy '${opts.policy}'\uFF08\u53EA\u652F\u6301 chat|simple|pm|frontend|backend \u4F5C\u6A21\u677F\uFF09`);
+    deps.io.err(`ERROR: \u672A\u77E5 --policy '${opts.policy}'\uFF08\u53EA\u652F\u6301 ${BUILTIN_TRACK_IDS.join("|")} \u4F5C\u6A21\u677F\uFF09`);
     return 1;
   }
   const workflow = {
@@ -40540,7 +40599,7 @@ async function cmdTracksUpdate(deps, id, opts) {
   if (opts.setPolicy !== void 0) {
     const p = expandPolicy(opts.setPolicy);
     if (!p) {
-      deps.io.err(`ERROR: \u672A\u77E5 --set-policy '${opts.setPolicy}'\uFF08\u53EA\u652F\u6301 chat|simple|pm|frontend|backend\uFF09`);
+      deps.io.err(`ERROR: \u672A\u77E5 --set-policy '${opts.setPolicy}'\uFF08\u53EA\u652F\u6301 ${BUILTIN_TRACK_IDS.join("|")}\uFF09`);
       return 1;
     }
     patch.policyProfile = p;
@@ -40593,7 +40652,7 @@ function buildProgram(deps, runtimes = {}) {
     writeOut: (s) => deps.io.out(stripNl(s)),
     writeErr: (s) => deps.io.err(stripNl(s))
   });
-  program2.command("init <name>").description("\u521D\u59CB\u5316 change\uFF08stdout \u65E0\u8F93\u51FA\uFF0C\u8DEF\u5F84\u4FE1\u606F\u8D70 stderr\uFF09").option("--track <track>", "chat | pm | frontend | backend").option("--preset <preset>", "full | hotfix | tweak").option("--user <user>", "created_by").option("--workflow <workflow>", "\u81EA\u5B9A\u4E49 workflow \u540D\uFF08.pipeline/workflows/<name>.yaml\uFF09\uFF0C\u7F3A\u7701 default").action(async (name2, opts) => bail(await cmdInit(deps, name2, opts)));
+  program2.command("init <name>").description("\u521D\u59CB\u5316 change\uFF08stdout \u65E0\u8F93\u51FA\uFF0C\u8DEF\u5F84\u4FE1\u606F\u8D70 stderr\uFF09").option("--track <track>", "chat | simple | pm | frontend | backend | free | custom").option("--preset <preset>", "full | hotfix | tweak").option("--user <user>", "created_by").option("--workflow <workflow>", "\u81EA\u5B9A\u4E49 workflow \u540D\uFF08.pipeline/workflows/<name>.yaml\uFF09\uFF0C\u7F3A\u7701 default").action(async (name2, opts) => bail(await cmdInit(deps, name2, opts)));
   program2.command("setup [sub]").description("\u5B89\u88C5\u5B8C\u6574 pipeline\uFF1A\u5FC5\u987B\u9009\u62E9\u4E00\u4E2A\u5BBF\u4E3B\uFF08\u5982 --codex\uFF09\uFF1B\u4E0D\u4F1A\u540C\u65F6\u4FEE\u6539 Codex \u4E0E Claude").option("--codex", "\u5B89\u88C5/\u9A8C\u8BC1 Codex \u539F\u751F\u63D2\u4EF6").option("--claude", "\u5B89\u88C5/\u9A8C\u8BC1 Claude \u539F\u751F\u63D2\u4EF6").option("--cursor", "\u90E8\u7F72 Cursor adapter").option("--gemini", "\u90E8\u7F72 Gemini adapter").option("--copilot", "\u90E8\u7F72 Copilot adapter").option("--pi", "\u90E8\u7F72 Pi adapter").option("--devin", "\u90E8\u7F72 Devin adapter").option("--zed", "\u90E8\u7F72 Zed adapter").option("--aider", "\u90E8\u7F72 Aider adapter").option("--continue", "\u90E8\u7F72 Continue adapter").option("--cline", "\u90E8\u7F72 Cline adapter").option("--amp", "\u90E8\u7F72 Amp adapter").option("--target <dir>", "\u975E\u539F\u751F adapter \u7684\u9879\u76EE\u76EE\u6807\u76EE\u5F55\uFF08\u7F3A\u7701\u5F53\u524D\u76EE\u5F55\uFF09").option("--auto-update", "\u4E3A\u6240\u9009\u539F\u751F\u5BBF\u4E3B\u542F\u7528\u6BCF\u65E5\u4E00\u6B21\u7684\u81EA\u52A8\u5347\u7EA7\u68C0\u67E5").option("--dry-run", "\u4EC5\u6253\u5370\u6240\u9009\u5BBF\u4E3B\u5B89\u88C5\u8BA1\u5212\uFF0C\u4E0D\u5199\u6587\u4EF6\u3001\u4E0D\u6267\u884C adapter \u6216 marketplace \u64CD\u4F5C").option("-y, --yes", "\u8DF3\u8FC7\u517C\u5BB9 skills/setup \u7684 y/N \u786E\u8BA4\u4F4D").action(async (sub, opts) => bail(await cmdSetup(deps, sub, opts)));
   program2.command("update").description("\u5237\u65B0\u4E00\u4E2A\u5DF2\u5B89\u88C5\u7684\u539F\u751F pipeline \u63D2\u4EF6\uFF1B\u5347\u7EA7\u540E\u8BF7\u65B0\u5F00\u4F1A\u8BDD\u52A0\u8F7D skills \u548C hooks").option("--codex", "\u66F4\u65B0 Codex marketplace \u4E2D\u7684 pipeline-lite").option("--claude", "\u66F4\u65B0 Claude marketplace \u4E2D\u7684 pipeline-lite").option("--cursor", "\u4ECE\u5F53\u524D\u5DF2\u66F4\u65B0\u7684\u5305\u91CD\u65B0\u90E8\u7F72 Cursor adapter").option("--gemini", "\u4ECE\u5F53\u524D\u5DF2\u66F4\u65B0\u7684\u5305\u91CD\u65B0\u90E8\u7F72 Gemini adapter").option("--copilot", "\u4ECE\u5F53\u524D\u5DF2\u66F4\u65B0\u7684\u5305\u91CD\u65B0\u90E8\u7F72 Copilot adapter").option("--pi", "\u4ECE\u5F53\u524D\u5DF2\u66F4\u65B0\u7684\u5305\u91CD\u65B0\u90E8\u7F72 Pi adapter").option("--devin", "\u4ECE\u5F53\u524D\u5DF2\u66F4\u65B0\u7684\u5305\u91CD\u65B0\u90E8\u7F72 Devin adapter").option("--zed", "\u4ECE\u5F53\u524D\u5DF2\u66F4\u65B0\u7684\u5305\u91CD\u65B0\u90E8\u7F72 Zed adapter").option("--aider", "\u4ECE\u5F53\u524D\u5DF2\u66F4\u65B0\u7684\u5305\u91CD\u65B0\u90E8\u7F72 Aider adapter").option("--continue", "\u4ECE\u5F53\u524D\u5DF2\u66F4\u65B0\u7684\u5305\u91CD\u65B0\u90E8\u7F72 Continue adapter").option("--cline", "\u4ECE\u5F53\u524D\u5DF2\u66F4\u65B0\u7684\u5305\u91CD\u65B0\u90E8\u7F72 Cline adapter").option("--amp", "\u4ECE\u5F53\u524D\u5DF2\u66F4\u65B0\u7684\u5305\u91CD\u65B0\u90E8\u7F72 Amp adapter").option("--target <dir>", "\u975E\u539F\u751F adapter \u7684\u9879\u76EE\u76EE\u6807\u76EE\u5F55\uFF08\u7F3A\u7701\u5F53\u524D\u76EE\u5F55\uFF09").option("--dry-run", "\u4EC5\u6253\u5370\u5347\u7EA7\u8BA1\u5212\uFF0C\u4E0D\u6267\u884C marketplace \u6216 adapter \u64CD\u4F5C").option("-y, --yes", "\u4F9B\u81EA\u52A8\u66F4\u65B0\u8C03\u7528\u7684\u975E\u4EA4\u4E92\u786E\u8BA4").option("--auto", "\u7531\u5DF2\u660E\u786E\u542F\u7528\u7684\u81EA\u52A8\u66F4\u65B0\u4EFB\u52A1\u8C03\u7528\uFF08\u4E0D\u6539\u53D8\u7528\u6237\u7684 opt-in \u72B6\u6001\uFF09").action(async (opts) => bail(await cmdUpdate(deps, opts)));
   program2.command("runtime <sub>").description("\u67E5\u770B managed runtime\uFF0C\u6216\u4EC5\u56DE\u6EDA\u5230\u4E0A\u4E00\u4EFD\u5B8C\u6574\u6821\u9A8C\u901A\u8FC7\u7684 release").option("--rollback", "\u4EC5 runtime repair \u4F7F\u7528\uFF1A\u5207\u6362\u5230\u4E0A\u4E00\u4EFD\u5DF2\u9A8C\u8BC1 release").option("--json", "\u673A\u5668\u53EF\u8BFB\u8F93\u51FA").action(async (sub, opts) => bail(await cmdRuntime(deps, sub, opts)));
@@ -40701,7 +40760,7 @@ loops init \u975E\u4EA4\u4E92 flags\uFF08agent/CI\uFF1B\u7F3A TTY \u6216 --yes \
   });
   tracks.command("list").description("\u5217\u51FA\u5168\u90E8 track\uFF08\u5185\u5EFA Track \u5728\u524D\uFF0C\u56FA\u5B9A\u5217 ID LABEL BUILTIN DEFAULT ALLOWED POLICY\uFF09").option("--json", "JSON array \u8F93\u51FA").action(async (opts) => bail(await cmdTracksList(deps, opts)));
   tracks.command("show <id>").description("\u663E\u793A\u67D0 track \u8BE6\u60C5\uFF08\u6807 source: builtin | builtin-override | custom\uFF09").option("--json", "JSON object \u8F93\u51FA").action(async (id, opts) => bail(await cmdTracksShow(deps, id, opts)));
-  tracks.command("create <id>").description("\u65B0\u5EFA\u989D\u5916 track\uFF08\u56DB\u7EC4\u5FC5\u586B\uFF1A--label /--workflow-default /(--workflow-allowed|--workflow-any) /--policy\uFF09").option("--label <text>", "track \u5C55\u793A\u540D").option("--workflow-default <id>", "\u7F3A\u7701 workflow").option("--workflow-allowed <ids...>", "\u5141\u8BB8\u7684 workflow \u767D\u540D\u5355\uFF08\u53EF\u591A\u503C\uFF09").option("--workflow-any", "\u5141\u8BB8\u4EFB\u610F workflow\uFF08'*'\uFF0C\u4E0D\u5FC5\u8F93\u88F8 *\uFF09").option("--policy <preset>", "policy \u6A21\u677F chat|simple|pm|frontend|backend\uFF08\u6DF1\u62F7\u8D1D\u8BE5\u5185\u5EFA policy \u843D\u5B8C\u6574\u7ED3\u6784\uFF09").option("--json", "JSON \u8FD4\u56DE\u66F4\u65B0\u540E\u7684 effective definition").action(async (id, opts) => bail(await cmdTracksCreate(deps, id, opts)));
+  tracks.command("create <id>").description("\u65B0\u5EFA\u989D\u5916 track\uFF08\u56DB\u7EC4\u5FC5\u586B\uFF1A--label /--workflow-default /(--workflow-allowed|--workflow-any) /--policy\uFF09").option("--label <text>", "track \u5C55\u793A\u540D").option("--workflow-default <id>", "\u7F3A\u7701 workflow").option("--workflow-allowed <ids...>", "\u5141\u8BB8\u7684 workflow \u767D\u540D\u5355\uFF08\u53EF\u591A\u503C\uFF09").option("--workflow-any", "\u5141\u8BB8\u4EFB\u610F workflow\uFF08'*'\uFF0C\u4E0D\u5FC5\u8F93\u88F8 *\uFF09").option("--policy <preset>", "policy \u6A21\u677F chat|simple|pm|frontend|backend|free\uFF08\u6DF1\u62F7\u8D1D\u8BE5\u5185\u5EFA policy \u843D\u5B8C\u6574\u7ED3\u6784\uFF09").option("--json", "JSON \u8FD4\u56DE\u66F4\u65B0\u540E\u7684 effective definition").action(async (id, opts) => bail(await cmdTracksCreate(deps, id, opts)));
   tracks.command("update <id>").description("\u6539 track\uFF08\u22651 \u4E2A --set-*\uFF1B\u5185\u5EFA\u4EC5 label/workflow \u53EF\u6539\uFF0Cpolicy/id \u9501\u6B7B\u4E0D\u53EF\u5220\uFF09").option("--set-label <text>", "\u6539\u5C55\u793A\u540D").option("--set-workflow-default <id>", "\u6539\u7F3A\u7701 workflow").option("--set-workflow-allowed <ids...>", "\u6539 workflow \u767D\u540D\u5355\uFF08\u53EF\u591A\u503C\uFF09").option("--set-workflow-any", "\u6539\u4E3A\u5141\u8BB8\u4EFB\u610F workflow\uFF08'*'\uFF09").option("--set-policy <preset>", "\u6539 policy \u6A21\u677F\uFF08\u4EC5\u989D\u5916 track\uFF1B\u5185\u5EFA\u4F20\u5B83\u62D2\uFF09").option("--json", "JSON \u8FD4\u56DE\u66F4\u65B0\u540E\u7684 effective definition").action(async (id, opts) => bail(await cmdTracksUpdate(deps, id, opts)));
   tracks.command("delete <id>").description("\u5220\u989D\u5916 track\uFF08\u5185\u5EFA\u62D2\uFF1B\u88AB\u6D3B\u8DC3 change \u5F15\u7528\u62D2+\u5217\u540D\uFF0Cfail-closed\uFF09").option("--json", "JSON \u8FD4\u56DE {deleted,revision}").action(async (id, opts) => bail(await cmdTracksDelete(deps, id, opts)));
   program2.addHelpText(

@@ -2,7 +2,7 @@
  * router-gen.mjs <manifest> <repo-root>
  *
  * router.sh 的安装态冷生成 fallback。与 CLI `_gen-router-sh` 一样，从项目 effective registry
- * 构建投影，再由 kernel `encodeRouterDataCache` 输出 `PIPELINE_ROUTER_V4`。这里绝不生成 shell
+ * 构建投影，再由 kernel `encodeRouterDataCache` 输出 `PIPELINE_ROUTER_V5`。这里绝不生成 shell
  * assignment；项目可写 cache 永远只是 hex 编码的数据。
  */
 import { spawnSync } from 'node:child_process'
@@ -91,7 +91,8 @@ async function main() {
   process.stdout.write(kernel.encodeRouterDataCache({
     projectRoot: canonicalRoot,
     manifestSha256: createHash('sha256').update(manifestBytes).digest('hex'),
-    registryRevision: registry.revision,
+    registryRevision: kernel.effectiveRouterRevision(registry.revision, projection),
+    contractRevision: kernel.routerContractRevision(manifest),
     tracksPresent: existsSync(join(canonicalRoot, '.pipeline', 'tracks.yaml')),
     projection,
   }))

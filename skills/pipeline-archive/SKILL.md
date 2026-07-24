@@ -22,7 +22,8 @@ description: "Pipeline Phase 7: Archive · 归档 + 学习沉淀。所有 Track 
 ## 前置条件
 
 - `phase=archive`（`ship-complete` 已推进）
-- PR 已开（frontend/backend）或 PRD 已交付（PM）
+- PR 已开（frontend/backend）、PRD 已交付（PM），或 free 已完成所选 Workflow
+  声明的中性交付并登记 applied spec
 
 ## 步骤
 
