@@ -16,6 +16,7 @@
     "bundle": "esbuild packages/cli/src/main.ts --bundle --platform=node --format=esm --target=node22 --banner:js=\"import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);\" --outfile=packages/cli/dist/pipeline.mjs && chmod +x packages/cli/dist/pipeline.mjs",
     "check:comments": "bash tools/check-comment-honesty.sh",
     "check:architecture": "node tools/check-architecture.mjs",
+    "check:docs": "node --test tools/check-docs.node-test.mjs && node tools/check-docs.mjs",
     "test": "vitest run",
     "test:web": "vitest run --config packages/dashboard-app/vitest.config.ts",
     "test:hooks": "bash tools/test-hooks.sh",

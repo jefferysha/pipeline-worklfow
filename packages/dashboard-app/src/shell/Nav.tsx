@@ -15,7 +15,7 @@ import { Icon } from './Icon'
  * 徽标）→ 弹性空档 → 分隔线 → 底部单一「设置」入口；连接、主题和语言收进锚定浮层。
  * 窄屏（<720px）收为纯图标窄列。
  */
-export type View = 'projects' | 'progress' | 'afk' | 'workbench' | 'machine'
+export type View = 'overview' | 'projects' | 'progress' | 'afk' | 'workbench' | 'machine'
 
 /** rail 竖排渲染的一级导航项——显式枚举白名单，顺序=项目/进度/AFK/工作台/机器。 */
 export type RailView = 'projects' | 'progress' | 'afk' | 'workbench' | 'machine'
@@ -62,12 +62,20 @@ export function Nav({ view, onView, lang, onLang, theme, onTheme, connected, dec
       role="banner"
     >
       {/* 品牌 logo 标（demo .rail .logo 对位）：品牌名收成图标，全名走 title 悬浮。 */}
-      <div
-        className="mb-1.5 grid h-[34px] w-[34px] flex-none place-items-center rounded-[9px] bg-ink text-ink-fg"
-        title={t('app.title')}
+      <button
+        type="button"
+        data-testid="nav-overview"
+        aria-label={t('solution.nav_label')}
+        aria-current={view === 'overview' ? 'page' : undefined}
+        className="mb-1.5 grid h-10 w-10 flex-none cursor-pointer place-items-center rounded-[11px] border border-transparent bg-ink text-ink-fg outline-none transition-colors motion-reduce:transition-none hover:bg-ink-hover focus-visible:border-(--accent) focus-visible:ring-[3px] focus-visible:ring-(--ring-blue) aria-[current=page]:border-(--accent)"
+        title={t('solution.nav_label')}
+        onClick={() => {
+          setSettingsOpen(false)
+          onView('overview')
+        }}
       >
         <Icon name="flow" size={16} />
-      </div>
+      </button>
 
       <div className="my-1.5 w-14 flex-none border-t border-border max-[720px]:w-9" aria-hidden="true" />
 

@@ -50,6 +50,9 @@ jobs:
       - name: 校验入库完整插件 runtime 与当前 src 一致 (release freshness)
         run: git diff --exit-code -- packages/cli/dist/pipeline.mjs packages/server/dist/dashboard.mjs packages/dashboard-app/dist
 
+      - name: 文档链接与产品声明门禁 (documentation drift)
+        run: npm run check:docs
+
       - name: Build CLI bundle for required real-Codex
         run: npm run bundle
 
