@@ -168,7 +168,7 @@ function unquotedObjectSessionScopedEventLines(sessionCwd: string): string {
 }
 
 /** Current Codex Desktop ABI: function_call(exec_command) + function_call_output. */
-function functionCallSessionScopedEventLines(sessionCwd: string): string {
+function functionCallSessionScopedEventLines(sessionCwd: string, workdir?: string): string {
   const command = `wc -l ${skillPath} && sed -n '1,120p' ${skillPath}`
   const events: unknown[] = [
     {
@@ -183,7 +183,7 @@ function functionCallSessionScopedEventLines(sessionCwd: string): string {
         type: 'function_call',
         call_id: 'call-function-skill-read',
         name: 'exec_command',
-        arguments: JSON.stringify({ cmd: command }),
+        arguments: JSON.stringify({ cmd: command, ...(workdir === undefined ? {} : { workdir }) }),
         internal_chat_message_metadata_passthrough: { turn_id: turnId },
       },
     },
@@ -905,6 +905,74 @@ describe('Codex transcript skill receipt', () => {
 
     expect(result.confirmedSkillIds).toEqual(['openspec-propose'])
     expect(await readFile(join(changeDir, '.pipeline-history.jsonl'), 'utf8')).toContain('CodexSkillRead: openspec-propose')
+  })
+
+  it('accepts an explicit sibling-worktree read from the same Git common directory', async () => {
+    const linkedRoot = join(root, 'linked-worktree')
+    const linkedGitDir = join(root, '.git', 'worktrees', 'linked-worktree')
+    const linkedChangeDir = join(linkedRoot, 'openspec', 'changes', 'receipt-proof')
+    await mkdir(linkedGitDir, { recursive: true })
+    await mkdir(linkedChangeDir, { recursive: true })
+    await writeFile(join(linkedRoot, '.git'), `gitdir: ${linkedGitDir}\n`, 'utf8')
+    await writeFile(join(linkedGitDir, 'commondir'), '../..\n', 'utf8')
+    await writeFile(transcript, functionCallSessionScopedEventLines(root, linkedRoot), 'utf8')
+    const bindingsDir = join(linkedRoot, '.pipeline', 'terminal-sessions')
+    await mkdir(bindingsDir, { recursive: true })
+    await writeFile(join(bindingsDir, `${sessionId}.json`), `${JSON.stringify({
+      protocol: 'pipeline-terminal-session-v1',
+      session_id: sessionId,
+      change: 'receipt-proof',
+      bound_at: '2026-07-24T00:01:00Z',
+    })}\n`, 'utf8')
+
+    const result = await reconcileCodexSkillEvidence({
+      repoRoot: linkedRoot,
+      changeDir: linkedChangeDir,
+      producer: 'openspec-propose',
+      recordedAt: '2026-07-24T00:03:00Z',
+      history: historyWriter,
+      homeDir: home,
+      codexHomeDir: join(home, '.codex'),
+      selectedPluginRoot,
+    })
+
+    expect(result.confirmedSkillIds).toEqual(['openspec-propose'])
+    expect(await readFile(join(linkedChangeDir, '.pipeline-history.jsonl'), 'utf8'))
+      .toContain('CodexSkillRead: openspec-propose')
+  })
+
+  it('rejects a sibling-worktree session when the skill read omits the target workdir', async () => {
+    const linkedRoot = join(root, 'linked-worktree-no-target')
+    const linkedGitDir = join(root, '.git', 'worktrees', 'linked-worktree-no-target')
+    const linkedChangeDir = join(linkedRoot, 'openspec', 'changes', 'receipt-proof')
+    await mkdir(linkedGitDir, { recursive: true })
+    await mkdir(linkedChangeDir, { recursive: true })
+    await writeFile(join(linkedRoot, '.git'), `gitdir: ${linkedGitDir}\n`, 'utf8')
+    await writeFile(join(linkedGitDir, 'commondir'), '../..\n', 'utf8')
+    await writeFile(transcript, functionCallSessionScopedEventLines(root), 'utf8')
+    const bindingsDir = join(linkedRoot, '.pipeline', 'terminal-sessions')
+    await mkdir(bindingsDir, { recursive: true })
+    await writeFile(join(bindingsDir, `${sessionId}.json`), `${JSON.stringify({
+      protocol: 'pipeline-terminal-session-v1',
+      session_id: sessionId,
+      change: 'receipt-proof',
+      bound_at: '2026-07-24T00:01:00Z',
+    })}\n`, 'utf8')
+
+    const result = await reconcileCodexSkillEvidence({
+      repoRoot: linkedRoot,
+      changeDir: linkedChangeDir,
+      producer: 'openspec-propose',
+      recordedAt: '2026-07-24T00:03:00Z',
+      history: historyWriter,
+      homeDir: home,
+      codexHomeDir: join(home, '.codex'),
+      selectedPluginRoot,
+    })
+
+    expect(result.confirmedSkillIds).toEqual([])
+    await expect(readFile(join(linkedChangeDir, '.pipeline-history.jsonl'), 'utf8'))
+      .rejects.toMatchObject({ code: 'ENOENT' })
   })
 
   it('uses the exact router-bound host session when fallback discovery has no receipt identity', async () => {

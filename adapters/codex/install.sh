@@ -102,7 +102,7 @@ EOF
   info "AGENTS.md 静态层 → ${f}（哨兵块幂等）"
 }
 
-# ── 项目技能部署（三档共用）───────────────────────────────────────────────
+# ── 项目技能部署（native/static 互斥）─────────────────────────────────────
 # 这是非原生 adapter 的兼容投影：`pipeline setup --codex` 走 Codex marketplace 原生插件，
 # 不会调用本脚本。仅当用户明确需要把 pipeline 投递到某个项目时，才软链**本插件完整自带**的
 # skills 到目标 `.agents/skills/`。不读取 Claude/Codex 的第三方 cache，也不安装任何外部 skill。
@@ -149,6 +149,83 @@ install_project_skills() {
   info "项目 pipeline/OpenSpec skills → ${skills_dest}（新增 ${installed} 个，已存在同源链接保持不变）"
 }
 
+# Native Codex discovery must be selected by the host/stable launcher.  Never enumerate cache
+# directories here: an old cache is rollback material, not evidence that its Skills are active.
+selected_native_plugin_root() {
+  local candidate physical manifest
+  for candidate in "${PIPELINE_CODEX_PLUGIN_ROOT:-}" "${PIPELINE_HOST_PLUGIN_ROOT:-}"; do
+    [ -n "$candidate" ] || continue
+    physical="$(cd -P "$candidate" 2>/dev/null && pwd -P)" || continue
+    manifest="$physical/.codex-plugin/plugin.json"
+    [ -f "$manifest" ] || continue
+    [ -d "$physical/skills" ] || continue
+    grep -Eq '"name"[[:space:]]*:[[:space:]]*"pipeline-lite"' "$manifest" 2>/dev/null || continue
+    printf '%s' "$physical"
+    return 0
+  done
+  return 1
+}
+
+# Remove only links this exact adapter can prove it owns: each link must still resolve to the
+# corresponding canonical source directory beside this installer.  Real directories, files,
+# dangling links and foreign links are preserved and reported as a shadow conflict.
+converge_project_skills_to_native() { # $1=project $2=selected native root
+  local dest="$1" native_root="$2"
+  local source_root skills_dest source name target linked removed=0 conflicts=0
+  local -a owned_targets
+  source_root="$(cd -P "$ADAPTER_DIR/../../skills" 2>/dev/null && pwd -P)" \
+    || { err "找不到插件 skills 目录"; return 1; }
+  skills_dest="$dest/.agents/skills"
+  [ -d "$skills_dest" ] || {
+    info "Selected Skill Root → ${native_root}/skills（项目无旧 Skill 投影）"
+    return 0
+  }
+
+  owned_targets=()
+  for source in "$source_root"/*; do
+    [ -d "$source" ] || continue
+    [ -f "$source/SKILL.md" ] || { err "插件 skill 缺 SKILL.md: $source"; return 1; }
+    name="${source##*/}"
+    target="$skills_dest/$name"
+    if [ -L "$target" ]; then
+      linked="$(cd -P "$target" 2>/dev/null && pwd -P)" || {
+        err "shadow-conflict: 保留悬空项目 Skill 链接: $target"
+        conflicts=$((conflicts + 1))
+        continue
+      }
+      if [ "$linked" = "$source" ]; then
+        owned_targets+=("$target")
+      else
+        err "shadow-conflict: 保留非 pipeline-lite 所有的项目 Skill 链接: $target → $linked"
+        conflicts=$((conflicts + 1))
+      fi
+    elif [ -e "$target" ]; then
+      err "shadow-conflict: 保留用户所有的项目 Skill 路径: $target"
+      conflicts=$((conflicts + 1))
+    fi
+  done
+
+  [ "$conflicts" -eq 0 ] || {
+    err "检测到 ${conflicts} 个同名 Skill 冲突；未删除任何项目 Skill。"
+    return 1
+  }
+  for target in "${owned_targets[@]}"; do
+    rm "$target" || { err "无法移除 adapter-owned Skill 链接: $target"; return 1; }
+    removed=$((removed + 1))
+  done
+  info "Selected Skill Root → ${native_root}/skills（已安全收敛 ${removed} 个旧项目链接）"
+}
+
+install_or_converge_project_skills() {
+  local dest="$1" native_root
+  native_root="$(selected_native_plugin_root || true)"
+  if [ -n "$native_root" ]; then
+    converge_project_skills_to_native "$dest" "$native_root"
+  else
+    install_project_skills "$dest"
+  fi
+}
+
 # ── hooks.json 投递（档 A）：占位替换为绝对适配器路径 ──
 install_hooks_codex_home() {
   mkdir -p "$CODEX_HOME_DIR" || { err "无法创建 CODEX_HOME: $CODEX_HOME_DIR"; exit 1; }
@@ -185,25 +262,26 @@ install_managed() {
     note "  cat $staged_req ; cat $staged_hooks"
     note "  sudo mkdir -p $mdir && sudo cp $staged_hooks $mdir/hooks.json"
     note "  sudo cp $staged_req $req   # 若已存在改为手动合并 [hooks] 段"
-    install_static "$TARGET"; install_project_skills "$TARGET"
+    install_static "$TARGET"; install_or_converge_project_skills "$TARGET" || exit 1
     return 0
   fi
   confirm "确认以 root 写入 ${req} 与 ${mdir}？" || { warn "已取消，未改动系统。"; return 0; }
   mkdir -p "$mdir"; cp "$staged_hooks" "$mdir/hooks.json"
   [ -f "$req" ] && warn "$req 已存在——请手动并 [hooks] 段。" || { cp "$staged_req" "$req"; info "requirements.toml → $req"; }
   info "managed hooks → $mdir/hooks.json（always-on、免 trust）"
-  install_static "$TARGET"; install_project_skills "$TARGET"
+  install_static "$TARGET"; install_or_converge_project_skills "$TARGET" || exit 1
 }
 
 # ════════════════ 主流程 ════════════════
 note "${B}Codex pipeline 适配器安装${Z}  mode=${MODE}  target=${TARGET}"
 case "$MODE" in
   static)
-    install_static "$TARGET"; install_project_skills "$TARGET"
-    info "档 C（静态降级）完成：AGENTS.md 与本地 skills 已落地，${B}未装 hooks${Z}（无自动强制；review 仍必须等用户下一条明确确认，不能删 marker 绕过）。"
+    install_static "$TARGET"; install_or_converge_project_skills "$TARGET" || exit 1
+    info "档 C（静态降级）完成：AGENTS.md 已落地；无 native selected root 时才投递项目 skills，${B}未装 hooks${Z}（无自动强制；review 仍必须等用户下一条明确确认，不能删 marker 绕过）。"
     ;;
   full)
-    install_static "$TARGET"; install_project_skills "$TARGET"; install_hooks_codex_home; print_trust_instructions
+    install_static "$TARGET"; install_or_converge_project_skills "$TARGET" || exit 1
+    install_hooks_codex_home; print_trust_instructions
     ;;
   managed)
     install_managed

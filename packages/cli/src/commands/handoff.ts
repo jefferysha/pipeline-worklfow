@@ -12,10 +12,21 @@
  */
 import {
   buildHandoff,
+  compileContextBundle,
+  compressDocument,
+  isDocumentContractPhase,
   nodeHandoffFs,
+  readDocumentLedger,
+  readsRequiredForPhase,
+  renderHandoffSummary,
+  type ContextBundleInputV1,
+  type ContextBundleMode,
+  type DocumentKind,
   type HandoffFs,
   type HandoffResult,
 } from '@pipeline-lite/kernel'
+import { createHash } from 'node:crypto'
+import { join } from 'node:path'
 import type { PipelineState } from '@pipeline-lite/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
 import { changeDir, isValidChangeName } from '../paths.js'
@@ -26,6 +37,11 @@ export interface HandoffOpts {
   json?: boolean
   /** 覆写要压缩的相位产出（缺省 = change 当前 phase） */
   phase?: string
+  /** Opt-in Context Bundle v1; legacy handoff remains the default. */
+  bundle?: boolean
+  /** Exact consumer phase/role for bundle policy selection. */
+  target?: string
+  budgetBytes?: number
 }
 
 function scalarField(v: string | string[] | undefined): string {
@@ -78,6 +94,95 @@ function renderText(deps: CliDeps, result: HandoffResult): void {
   }
 }
 
+const DEFAULT_BUNDLE_BUDGET = 120_000
+
+const DOCUMENT_REASONS: Readonly<Record<DocumentKind, string>> = {
+  proposal: '定义目标、范围、非目标与验收信号',
+  'openspec-design': '冻结 OpenSpec 设计决策、风险和边界',
+  tasks: '提供当前七阶段可执行任务和完成状态',
+  'superpower-design': '提供深层架构规则、不变量与方案取舍',
+  adr: '提供已接受的长期架构决策',
+  'delta-spec': '提供能力级新增、修改和删除需求',
+  'superpower-plan': '提供逐文件实施顺序、测试和回滚策略',
+  plan: '提供当前 Build 执行计划入口',
+  'verification-report': '提供冻结基线上的验证结果和失败分类',
+  'applied-spec': '证明 delta spec 已应用到主规格',
+}
+
+function materializationMode(kind: DocumentKind): Exclude<ContextBundleMode, 'reference'> {
+  return kind === 'proposal' || kind === 'tasks' || kind === 'delta-spec' ? 'full' : 'summary'
+}
+
+function sourceDigest(text: string): string {
+  return createHash('sha256').update(text, 'utf8').digest('hex')
+}
+
+async function compileBundle(
+  deps: CliDeps,
+  name: string,
+  from: string,
+  target: string | undefined,
+  budgetBytes: number | undefined,
+  fs: HandoffFs,
+): Promise<ReturnType<typeof compileContextBundle>> {
+  if (target === undefined || !isDocumentContractPhase(target)) {
+    throw new Error(`Context Bundle --target 必须是 canonical phase: ${target ?? '(missing)'}`)
+  }
+  const dir = changeDir(deps.cwd, name)
+  const ledger = await readDocumentLedger(dir)
+  if (ledger === undefined) throw new Error('Context Bundle missing document ledger; run pipeline document init')
+
+  const bundleInputs: ContextBundleInputV1[] = []
+  const materializedPaths = new Set<string>()
+  for (const kind of readsRequiredForPhase(target)) {
+    const records = ledger.records
+      .filter((record) => record.kind === kind)
+      .sort((left, right) => left.path.localeCompare(right.path, 'en'))
+    if (records.length === 0) {
+      throw new Error(
+        `Context Bundle missing document '${kind}'; run pipeline document record ${name} ${kind} <path> --producer <skill>`,
+      )
+    }
+    for (const record of records) {
+      const text = fs.readText(join(deps.cwd, record.path))
+      if (text === undefined) {
+        throw new Error(`Context Bundle missing document '${kind}': ${record.path}; restore or re-record it`)
+      }
+      const actual = sourceDigest(text)
+      if (actual !== record.sha256) {
+        throw new Error(
+          `Context Bundle stale document '${kind}': ${record.path}; run pipeline document record ${name} ${kind} ${record.path} --producer <skill>, then pipeline document read ${name} all`,
+        )
+      }
+
+      const duplicatePath = materializedPaths.has(record.path)
+      const mode: ContextBundleMode = duplicatePath ? 'reference' : materializationMode(kind)
+      if (!duplicatePath) materializedPaths.add(record.path)
+      const content = mode === 'reference'
+        ? undefined
+        : mode === 'full'
+          ? text
+          : renderHandoffSummary(compressDocument(text), `${name}/${kind}`)
+      bundleInputs.push({
+        kind,
+        path: record.path,
+        digest: `sha256:${record.sha256}`,
+        reason: DOCUMENT_REASONS[kind],
+        mode,
+        ...(content === undefined ? {} : { content }),
+      })
+    }
+  }
+  return compileContextBundle({
+    change: name,
+    from,
+    to: target,
+    tier: 'strong',
+    maxBytes: budgetBytes ?? DEFAULT_BUNDLE_BUDGET,
+    inputs: bundleInputs,
+  })
+}
+
 /**
  * handoff 命令（纯函数 + deps 注入，风格同 task.ts）。
  * fs 缺省真 fs（nodeHandoffFs，integration 走真路径）；mock 层注入 fake HandoffFs 快速回归。
@@ -102,6 +207,16 @@ export async function cmdHandoff(
   }
 
   const phase = opts.phase ?? scalarField(state.fields.phase)
+  if (opts.bundle) {
+    try {
+      const bundle = await compileBundle(deps, name, phase, opts.target, opts.budgetBytes, fs)
+      deps.io.out(opts.json ? JSON.stringify(bundle) : JSON.stringify(bundle, null, 2))
+      return 0
+    } catch (error) {
+      deps.io.err(`ERROR: ${errMsg(error)}`)
+      return 1
+    }
+  }
   const result = buildHandoff(
     {
       name,

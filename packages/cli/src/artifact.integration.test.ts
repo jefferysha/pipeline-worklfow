@@ -119,6 +119,26 @@ tracks:
     expect(await h.read(CH)).not.toMatch(/^plan: p\.md$/m)
   })
 
+  test('default free：matrix=false 只关闭自动编排，不抹掉 verification_report producer allowlist', async () => {
+    expect(await h.run(['init', CH, '--track', 'free', '--preset', 'full'])).toBe(0)
+    expect(await h.run(['set', CH, 'phase', 'verify'])).toBe(0)
+
+    expect(
+      await h.run([
+        'artifact',
+        'register',
+        CH,
+        'verification_report',
+        'reports/verify.md',
+        '--producer',
+        'verification-before-completion',
+      ]),
+      h.err.join('\n'),
+    ).toBe(0)
+    expect(h.err).toEqual([])
+    expect(await h.read(CH)).toMatch(/^verification_report: reports\/verify\.md$/m)
+  })
+
   // ── custom 轨 ──
   test('custom 轨：draft step 声明的 skill-alpha 作 producer → 真写 design_doc', async () => {
     await writeWorkflow('cwf', CUSTOM_WF)

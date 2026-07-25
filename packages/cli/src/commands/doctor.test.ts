@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest'
 import { GATE_TTL_MS } from '@pipeline-lite/kernel'
 import { cmdDoctor, type DoctorCheck } from './doctor.js'
 import { buildProgram, CliExit } from '../program.js'
-import { makeDeps, mockState, type TestDeps } from '../test-support.js'
+import { makeDeps, mockDoctorProbes, mockState, type TestDeps } from '../test-support.js'
 
 /** --json 稳定 schema（BACKLOG #26b）：{checks:[{id,status,detail,hint}],summary:{green,yellow,red}} */
 interface DoctorJson {
@@ -262,6 +262,62 @@ describe('doctor —— 统一健康面（BACKLOG #26b，GOAL B8 降级可见 / 
     expect(c.detail).toContain('openspec-propose')
     expect(c.detail).toContain('全局 cache 不算')
     expect(c.hint).toContain('pipeline setup --codex')
+  })
+
+  test('Codex native selected root 单独满足 contract，不要求项目 Skill 投影', async () => {
+    const contract = mockDoctorProbes().codexProjectSkillNames?.() ?? new Set<string>()
+    const selected = new Map([...contract].map((id) => [id, `digest-${id}`]))
+    const deps = makeDeps({ doctor: {
+      codexSkillDiscovery: () => ({
+        selectedRoot: '/native/pipeline-lite',
+        projectRoot: '/repo/.agents/skills',
+        selected,
+        project: new Map(),
+      }),
+    } })
+    const { payload } = await runJson(deps)
+    const c = byId(payload, 'integration:codex-project-skills')
+    expect(c.status).toBe('green')
+    expect(c.detail).toContain('Selected Skill Root')
+    expect(c.detail).toContain('/native/pipeline-lite')
+  })
+
+  test('Codex 同摘要多根报告 duplicate-projection，不误称 healthy', async () => {
+    const contract = mockDoctorProbes().codexProjectSkillNames?.() ?? new Set<string>()
+    const selected = new Map([...contract].map((id) => [id, `digest-${id}`]))
+    const deps = makeDeps({ doctor: {
+      codexSkillDiscovery: () => ({
+        selectedRoot: '/native/pipeline-lite',
+        projectRoot: '/repo/.agents/skills',
+        selected,
+        project: new Map([['pipeline', 'digest-pipeline']]),
+      }),
+    } })
+    const { code, payload } = await runJson(deps)
+    expect(code).toBe(0)
+    const c = byId(payload, 'integration:codex-project-skills')
+    expect(c.status).toBe('yellow')
+    expect(c.detail).toContain('duplicate-projection')
+    expect(c.detail).toContain('pipeline')
+  })
+
+  test('Codex 同 ID 不同摘要报告 shadow-conflict 并 fail closed', async () => {
+    const contract = mockDoctorProbes().codexProjectSkillNames?.() ?? new Set<string>()
+    const selected = new Map([...contract].map((id) => [id, `digest-${id}`]))
+    const deps = makeDeps({ doctor: {
+      codexSkillDiscovery: () => ({
+        selectedRoot: '/native/pipeline-lite',
+        projectRoot: '/repo/.agents/skills',
+        selected,
+        project: new Map([['pipeline', 'user-digest']]),
+      }),
+    } })
+    const { code, payload } = await runJson(deps)
+    expect(code).toBe(1)
+    const c = byId(payload, 'integration:codex-project-skills')
+    expect(c.status).toBe('red')
+    expect(c.detail).toContain('shadow-conflict')
+    expect(c.detail).toContain('pipeline')
   })
 
   test('探针自身异常不炸命令：该项折算 red（fail-loud 可见），其余检查照常', async () => {

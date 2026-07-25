@@ -125,6 +125,57 @@ const CODEX_PROJECT_CONTRACT_SKILLS = [
 ] as const
 
 export function checkCodexProjectSkills(p: DoctorProbes): DoctorCheck {
+  if (p.codexSkillDiscovery !== undefined) {
+    const discovery = p.codexSkillDiscovery()
+    const native = discovery.selectedRoot !== undefined
+    const active = native ? discovery.selected : discovery.project
+    const missing = CODEX_PROJECT_CONTRACT_SKILLS.filter((name) => !active.has(name))
+    const duplicates: string[] = []
+    const shadows: string[] = []
+    if (native) {
+      for (const [id, projectDigest] of discovery.project) {
+        const selectedDigest = discovery.selected.get(id)
+        if (selectedDigest === undefined) continue
+        if (selectedDigest === projectDigest) duplicates.push(id)
+        else shadows.push(id)
+      }
+    }
+
+    if (shadows.length > 0) {
+      return red(
+        'integration:codex-project-skills',
+        `shadow-conflict: ${shadows.join('、')} 在 Selected Skill Root 与项目投影内容不同；Selected Skill Root=${discovery.selectedRoot}`,
+        `保留用户文件并移除/改名冲突来源；不要覆盖 ${discovery.projectRoot} 中的用户 Skill`,
+      )
+    }
+    if (missing.length > 0) {
+      const source = native ? `Selected Skill Root=${discovery.selectedRoot}` : `static root=${discovery.projectRoot}`
+      return yellow(
+        'integration:codex-project-skills',
+        `Codex 唯一发现根缺 ${missing.length} 个 pipeline skills：${missing.join('、')}（${source}；历史 cache 不算）`,
+        native
+          ? '运行 pipeline setup --codex 重新校验完整插件'
+          : '在无原生插件的宿主中重跑 static adapter；不要同时启用 native 与项目投影',
+      )
+    }
+    if (duplicates.length > 0) {
+      return yellow(
+        'integration:codex-project-skills',
+        `duplicate-projection: ${duplicates.join('、')} 同时出现在 Selected Skill Root=${discovery.selectedRoot} 与 ${discovery.projectRoot}`,
+        '运行 Codex adapter 的 native 收敛路径；只会清理由 exact source ownership 证明的旧软链',
+      )
+    }
+    return native
+      ? green(
+          'integration:codex-project-skills',
+          `Codex contract skills 完整；Selected Skill Root=${discovery.selectedRoot}，无项目重复投影`,
+        )
+      : green(
+          'integration:codex-project-skills',
+          `Codex contract skills 完整；static-only Skill root=${discovery.projectRoot}`,
+        )
+  }
+
   if (p.codexProjectSkillNames === undefined) {
     return yellow(
       'integration:codex-project-skills',
