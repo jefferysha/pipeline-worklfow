@@ -69,22 +69,38 @@ jobs:
       - name: Build CLI bundle for required real-Codex
         run: npm run bundle
 
-      # H14 required acceptance 是 canonical verify 自身的一部分：不依赖 job 名或外部分支保护。
+      # H14 real-Codex acceptance 在仓库配置 OPENAI_API_KEY 时是 canonical verify 的强门。
+      # 公开仓库或新 fork 没有该 secret 时必须显式 honest-skip，不能用空 secret 让所有 PR 永久红，
+      # 也不能把 deterministic fallback 冒充真实 Codex。
       # tools/sandcastle/build.sh local 会用上方显式生成并完成 freshness 对账的 bundle 构建镜像，
       # 同时写入镜像 attestation；定向用例再逐字节核对该 attestation。
       - name: Build and attest sandcastle:local
         run: bash tools/sandcastle/build.sh local
 
+      - name: Detect real-Codex credential
+        id: real-codex-credential
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          if [ -n "$OPENAI_API_KEY" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Required real-Codex H14 acceptance
+        if: steps.real-codex-credential.outputs.available == 'true'
         env:
           PIPELINE_REQUIRE_REAL_CODEX: '1'
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: |
-          test -n "$OPENAI_API_KEY"
-          npx vitest run packages/cli/src/loop-run.real.integration.test.ts
+        run: npx vitest run packages/cli/src/loop-run.real.integration.test.ts
 
-      # 普通 npm test 里的 real-Codex 文件仍允许本地 honest-skip；canonical verify 已在上方
-      # 以 PIPELINE_REQUIRE_REAL_CODEX=1 定向执行过 fail-closed 验收。
+      - name: Honest skip real-Codex H14 when repository secret is unavailable
+        if: steps.real-codex-credential.outputs.available != 'true'
+        run: echo "[HONEST SKIP] OPENAI_API_KEY 未配置；真实 Codex H14 未执行，未声明通过。"
+
+      # 普通 npm test 里的 real-Codex 文件仍允许 honest-skip；配置 secret 的 canonical verify
+      # 已在上方以 PIPELINE_REQUIRE_REAL_CODEX=1 定向执行 fail-closed 验收。
       - name: vitest (kernel/cli/server/automation/tap)
         run: npm test
 
