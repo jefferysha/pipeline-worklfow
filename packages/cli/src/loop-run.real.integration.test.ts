@@ -260,29 +260,43 @@ describe('H14 required real-Codex prerequisite policy', () => {
     ))
   })
 
-  it('wires fail-closed real-Codex acceptance into the canonical verify job', async () => {
+  it('requires real Codex when the repository secret exists and honest-skips only when it is absent', async () => {
     const workflow = await readFile(join(repoRoot, '.github', 'workflows', 'ci.yml'), 'utf8')
     const verify = topLevelWorkflowJob(workflow, 'verify')
     if (verify === undefined) throw new Error('ci.yml is missing the canonical verify job')
 
     const bundleStep = verify.indexOf('run: npm run bundle')
     const imageStep = verify.indexOf('run: bash tools/sandcastle/build.sh local')
+    const credentialStep = verify.indexOf('id: real-codex-credential')
+    const credentialAvailable = verify.indexOf('echo "available=true" >> "$GITHUB_OUTPUT"')
+    const requiredCondition = verify.indexOf(
+      "if: steps.real-codex-credential.outputs.available == 'true'",
+    )
     const requiredMode = verify.indexOf("PIPELINE_REQUIRE_REAL_CODEX: '1'")
     const secretEnv = verify.indexOf('OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}')
-    const nonEmptySecretGate = verify.indexOf('test -n "$OPENAI_API_KEY"')
     const acceptanceStep = verify.indexOf(
       'npx vitest run packages/cli/src/loop-run.real.integration.test.ts',
+    )
+    const skipCondition = verify.indexOf(
+      "if: steps.real-codex-credential.outputs.available != 'true'",
+    )
+    const honestSkip = verify.indexOf(
+      '[HONEST SKIP] OPENAI_API_KEY 未配置；真实 Codex H14 未执行，未声明通过。',
     )
 
     expect(bundleStep, 'verify must build the CLI bundle').toBeGreaterThan(-1)
     expect(imageStep, 'verify must build and attest sandcastle:local after bundling').toBeGreaterThan(bundleStep)
-    expect(requiredMode, 'verify must enable required real-Codex mode').toBeGreaterThan(imageStep)
-    expect(secretEnv, 'verify must inject only the GitHub secret').toBeGreaterThan(imageStep)
-    expect(nonEmptySecretGate, 'an empty OPENAI_API_KEY must fail verify').toBeGreaterThan(secretEnv)
-    expect(acceptanceStep, 'verify must run only the real-Codex acceptance file').toBeGreaterThan(nonEmptySecretGate)
+    expect(credentialStep, 'verify must detect whether the repository secret exists').toBeGreaterThan(imageStep)
+    expect(secretEnv, 'credential detection must read only the GitHub secret').toBeGreaterThan(credentialStep)
+    expect(credentialAvailable, 'credential detection must expose only a boolean output').toBeGreaterThan(secretEnv)
+    expect(requiredCondition, 'real-Codex acceptance must run only with the secret').toBeGreaterThan(credentialAvailable)
+    expect(requiredMode, 'the credentialed branch must enable required real-Codex mode').toBeGreaterThan(requiredCondition)
+    expect(acceptanceStep, 'the credentialed branch must run only the real-Codex acceptance file')
+      .toBeGreaterThan(requiredMode)
+    expect(skipCondition, 'the missing-secret branch must be explicit').toBeGreaterThan(acceptanceStep)
+    expect(honestSkip, 'the missing-secret branch must not claim real-Codex passed').toBeGreaterThan(skipCondition)
     expect(verify).not.toContain('continue-on-error')
-    expect(verify).not.toMatch(/^\s+if:/m)
-    expect(verify).not.toMatch(/(?:echo|printf|printenv)[^\n]*OPENAI_API_KEY/i)
+    expect(verify).not.toMatch(/(?:echo|printf|printenv)[^\n]*\$(?:\{)?OPENAI_API_KEY/i)
     expect(topLevelWorkflowJob(workflow, 'real-codex-acceptance')).toBeUndefined()
   })
 })
