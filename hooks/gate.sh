@@ -129,6 +129,53 @@ is_review_control_command() {
   esac
 }
 
+# Strict ActionEffect tracer bullet.  This is intentionally an allowlist rather than a
+# denylist: pending interaction may not turn an unknown tool or shell expression into a write.
+# Shell metacharacters are rejected before command matching; quoted metacharacters may therefore
+# produce a conservative false negative (blocked read), never a false positive write.
+pipeline_command_is_strict_read_only() { # $1=decoded command
+  local command="${1:-}"
+  [ -n "$command" ] || return 1
+  case "$command" in
+    *$'\n'*|*$'\r'*|*'>'*|*'<'*|*'|'*|*';'*|*'&'*|*'`'*|*'$('*)
+      return 1 ;;
+  esac
+  while [ "${command# }" != "$command" ]; do command="${command# }"; done
+  while [ "${command#	}" != "$command" ]; do command="${command#	}"; done
+
+  case "$command" in
+    pwd|pwd\ *|ls|ls\ *|rg\ *|grep\ *|head\ *|tail\ *|wc\ *|cat\ *|stat\ *|file\ *|realpath\ *|\
+    test\ *|'['\ *|command\ -v\ *)
+      return 0 ;;
+    sed\ -n\ *|sed\ --quiet\ *|sed\ --silent\ *)
+      return 0 ;;
+    find\ *)
+      case "$command" in
+        *" -delete"*|*" -exec"*|*" -execdir"*|*" -ok"*|*" -okdir"*|*" -fprint"*|*" -fls"*)
+          return 1 ;;
+      esac
+      return 0 ;;
+    git\ status|git\ status\ *|git\ diff|git\ diff\ *|git\ log|git\ log\ *|git\ show|git\ show\ *|\
+    git\ rev-parse\ *|git\ branch\ --show-current|git\ worktree\ list|git\ worktree\ list\ *)
+      return 0 ;;
+    pipeline\ list|pipeline\ list\ *|pipeline\ status\ *|pipeline\ get\ *|pipeline\ inbox|\
+    pipeline\ inbox\ *|pipeline\ document\ status\ *)
+      return 0 ;;
+  esac
+  return 1
+}
+
+pipeline_tool_is_read_only() { # $1=tool name
+  local tool="${1:-}" command
+  case "$tool" in
+    Read|Glob|Grep|Search|WebSearch|web_search|view_image|list_mcp_resources|read_mcp_resource)
+      return 0 ;;
+  esac
+  pipeline_json_is_command_tool "$tool" || return 1
+  command="$(json_command || true)"
+  pipeline_command_is_strict_read_only "$command"
+}
+
 for kind in confirm review interaction; do
   base=".pipeline-pending-$kind"
   m="$(resolve_marker "$base" || true)"
@@ -151,7 +198,10 @@ for kind in confirm review interaction; do
     case "$TOOL" in
       AskUserQuestion|request_user_input) continue ;;
     esac
-    printf '【pipeline 门】检测到待处理交互标记 %s（%s 已被拦截）：请先把当前决策/产出交用户确认。支持 AskUserQuestion 的宿主可在该交互后解封；Codex 用户在下一条正常对话明确回复“确认继续”或“继续执行”后会自动解封，再重发本次操作。\n' "$base" "$TOOL" >&2
+    # 读取不会扩大权限，也不清 marker。允许它能让 Agent 在等待决定时继续核对事实，
+    # 同时 state transition、外部副作用和任何未知动作仍 fail closed。
+    pipeline_tool_is_read_only "$TOOL" && continue
+    printf '【pipeline 门】检测到待处理交互标记 %s（%s 已被拦截）：请先把当前决策/产出交用户确认。支持 AskUserQuestion 的宿主可在该交互后解封；Codex 用户可用自然语言明确同意当前问题，系统会绑定当前待办并解封，再重发本次操作。\n' "$base" "$TOOL" >&2
     exit 2
   fi
 done

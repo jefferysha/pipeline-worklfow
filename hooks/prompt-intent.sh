@@ -76,9 +76,14 @@ pipeline_prompt_approval_intent() { # $1=prompt; stdout=intent; 0=matched, 1=unr
       printf 'revoke'; return 0 ;;
     *后续不用问*|*后续无需询问*|*后续不需要确认*|*后续自行执行*|*后续自己执行*|*后续自主执行*|*自主执行完成*|*自己执行完成*)
       printf 'authorize'; return 0 ;;
+    *不可以*|*不同意*|*不批准*|*不要继续*|*别继续*|*不要执行*|*别执行*|*暂停执行*)
+      printf 'reject'; return 0 ;;
+    *继续*但*|*继续*但是*|*继续*不过*|*继续*先别*|*可以*但*|*可以*但是*|*同意*但*)
+      printf 'modify'; return 0 ;;
     *确认继续*|*确认执行*|*确认并继续*|*继续执行*|*全部执行*|*可以继续*|*同意继续*|*请继续执行*|*批准继续*|*自行执行*|*自己执行*|*go\ ahead*|*proceed\ with\ it*|*continue\ execution*)
       printf 'confirm'; return 0 ;;
-    继续|继续。|继续！|接着|接着。|continue|Continue)
+    继续|继续。|继续！|接着|接着。|可以|可以。|可以！|同意|同意。|好|好的|没问题|按推荐|按推荐方案|按你的推荐|按照你的推荐|\
+    *继续，按照你的推荐*|*继续，按你的推荐*|*继续按照你的推荐*|*继续按推荐*|continue|Continue)
       printf 'contextual-confirm'; return 0 ;;
   esac
   return 1

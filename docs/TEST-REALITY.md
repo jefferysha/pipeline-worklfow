@@ -56,6 +56,7 @@
 | tap 流量代理 | ✅ packages/tap 116+ 例（13 真 socket + bedrock CRC32 交叉校验 + **真 crypto 本地 CA 真自签真 X509 验签 + 真 TLS MITM 终结解密**(node v24 真跑 0 skip) + 13 runtime clients；源码级扫描断言 certs 零 outbound + CA 私钥 0600）+ doctor tap 灯真跑 + **#34-wire（iteration-30）**：daemon.ts 真接 CertificateAuthority.fromDir→serveForward({ca})（2 真 TLS MITM 例，走 daemon 装配非直调）+ launch.ts 真装配 detectTarget/reverseEnvMap/forwardEnvMap（7 例，含真绑端口+真转发）+ forward-proxy 响应体真接 decodeBedrockEventstreamEvents（1 例，非流式装配 converse body）+ **全新 ws-proxy.ts**：WsFrameAccumulator 增量帧合并 + wss:// 真中继（CONNECT→TLS MITM→upgrade→真握手透传→reconstructWsRequestBody/ResponseBody 首次接活，7 例，含 prompt-bearing 门控/capture OFF 门控）+ security.ts InterceptEntry.tls 供 doctor「正在解密」披露（2 例） | ✅ 默认 OFF 真不监听 / capture OFF 不解密 / 8766 隔离 / forward 缺 ca 拒绝而非盲隧道误导 | ✅ `pipeline tap start` CLI（见下）|
 | automation AFK | ✅ packages/automation 113+ 例（纯逻辑真状态机/race idle·grace·abort/boundedTail 64KiB/git 双挂载/merge-back 冲突判定 + 真 kernel fs 集成 + **真 git 集成**：worktree add/remove、merge-back 干净交付+冲突留现场、barrier 派生+drift）+ **#29-wire（iteration-30）**：createDockerRunChange 真接 createLifecyclePorts+runChangeInSandbox，dockerRunChange.integration.test.ts 3 例真跑 sandcastle:test 镜像（L3 真容器+真 worktree+真 merge-back+真 barrier build_sha；L1 report-only 真验证不 merge）；docker.integration.test.ts/container.integration.test.ts 原 4 处 honest-skip 中 2 处（非 token 门控）已真跑通过 + **RunChangeConfig.extraEnv（iteration-31）**：真流到 docker run -e argv（dockerRunChange.test.ts 2 例 fake exec 断言 + lifecycle.test.ts 1 例），此前无任何通道能把凭证/代理地址传进沙箱是真实遗漏，本轮真 token 验证时发现并补齐 | ✅ L1→paused/L3→merged/conflict 留现场（真 SyncError→worktree 不清+preserved_path） | ✅ enqueue→scan→run（真容器）+ **真 token 全链路（iteration-31）**：容器内自起 tap reverse proxy（放弃 host.docker.internal 方案，该方案在本环境对宿主监听端口真实静默丢包，已用真 http server+真 docker run 探测证实）→ claude CLI 走代理连真 api.anthropic.com，tap trace_store 真记录 4 条完整请求（含真实 User-Agent/系统提示词/Bearer 头）——证明代理路由约束成立；该次提供的 token 被 Anthropic 真服务端拒绝（401 Invalid bearer token，未耗真实 API 额度），故 agent 编码成功这一步本身仍未验证，待有效凭证 |
 | 上下文压缩 | ✅ handoff.integration.test.ts 7 例（真建长文档 → 真压缩 → 断言压缩率≥25% + 决策/约束保留 + 样板去除）；确定性零 LLM 可 oracle | ✅ 无文档/缺 change | ✅ 达 build 相位 handoff |
+| Context Bundle v1 | ✅ context-bundle.test.ts 8 例 + context-bundle.integration.test.ts 3 例（真 ledger、真 SHA-256、确定性聚合摘要、UTF-8 预算、缺失/漂移 fail-closed）；legacy handoff 7 例保持兼容 | ✅ 非法路径/digest、重复 slot、reference 夹带内容、缺文档、内容漂移、超预算均拒绝 | ✅ `pipeline handoff <change> --bundle --target <phase> --json` 从 document ledger 编译下游输入 |
 | auto-transition advance | ✅ advance.integration.test.ts 6 例（真推进到复核相位即停 + guard 不过不推进 + dry-run 不改盘）；**HITL 红线**：verify/ship guard 预备仍停 verify、硬门 --through-gates 也不跨 | ✅ guard-fail exit2 | ✅ 多步推进 |
 | 适配器 conformance | ✅ tools/test-adapters.sh 58 断言（真跑各适配器归一 canonical 决策 + 反例哨兵 + **真适配器变异测试**：改坏 codex veto 立即抓红、还原回绿）；claude/codex(A)/cursor(B) active | ✅ 判别力自证 | — |
 | loop 预算/熔断 | ✅ loops-budget.integration.test.ts 16 例（真建 run-log → 真熔断 ok/warn/tripped + 成本估算 within/over）+ 真 bundle e2e | ✅ 超阈值 tripped exit2 | ✅ budget→cost |
@@ -170,7 +171,9 @@ iteration-35）**：
 - **G12**：若干 Minor 级别发现（测试覆盖不够全、命名不完全一致、文档措辞小瑕疵等）——完整
   列表在四个 worktree 当时的 `.superpowers/sdd/progress.md` 里（已随 worktree 清理，摘要
   见 `docs/loops/progress.md` iteration-35），不在此处逐条复述。
-- **G13**（本轮集成时新发现，非四份计划任务列表里的已知项）：GOAL.md E3 字面要求
+- **G13**（legacy handoff 的已知限制；2026-07-26 新增的 ledger-bound Context Bundle v1
+  已覆盖 canonical 七阶段，但尚未把任意 custom step 的声明式 `inputs`/`outputs` 接入）：
+  GOAL.md E3 字面要求
   workflow step 的 `inputs`/`outputs` 契约"驱动现有相位 handoff 压缩机制
   （`packages/kernel/src/compress/handoff.ts`）"，但 `handoff.ts` 的 `PHASE_DOCS` 仍是
   按 7 个固定相位名写死的映射表，未读取 step 级 `inputs`/`outputs` 声明；11 个任务的

@@ -286,7 +286,10 @@ const TEST_MANDATORY_SKILLS = {
     frontend: ['opsx:propose|openspec-propose', 'superpowers:writing-plans'],
     backend: ['superpowers:writing-plans'],
   },
-  verify: { frontend: ['superpowers:verification-before-completion'] },
+  verify: {
+    frontend: ['superpowers:verification-before-completion'],
+    free: ['superpowers:verification-before-completion'],
+  },
 } as unknown as SkillTable
 const TEST_RECOMMENDED_SKILLS = {
   explore: { frontend: ['search-first'] },

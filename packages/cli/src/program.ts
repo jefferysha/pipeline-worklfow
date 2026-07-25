@@ -183,8 +183,17 @@ export function buildProgram(deps: CliDeps, runtimes: ProgramRuntimes = {}): Com
     .command('handoff <name>')
     .description('相位 handoff 上下文压缩（对标 Comet CONTEXT-COMPRESSION，D11）')
     .option('--phase <p>', '覆写相位（默认当前相位）')
+    .option('--bundle', '生成 ledger-bound Context Bundle v1（legacy handoff 默认行为不变）')
+    .option('--target <phase>', 'Context Bundle 的确切消费 phase')
+    .option('--budget-bytes <n>', 'Context Bundle 最大内嵌 UTF-8 bytes（默认 120000）', (v: string) => Number.parseInt(v, 10))
     .option('--json', 'JSON 输出（含压缩率）')
-    .action(async (name: string, opts: { phase?: string; json?: boolean }) =>
+    .action(async (name: string, opts: {
+      phase?: string
+      bundle?: boolean
+      target?: string
+      budgetBytes?: number
+      json?: boolean
+    }) =>
       bail(await cmdHandoff(deps, name, opts)))
 
   program

@@ -74,6 +74,8 @@ if [ ! -f "$PLUGIN_JSON" ]; then
 else
   grep -q '"name"[[:space:]]*:' "$PLUGIN_JSON" \
     || add_fail "plugin.json 缺少 name 字段" ".claude-plugin/plugin.json" "补充 \"name\": \"<插件名>\""
+  grep -q '"skills"[[:space:]]*:[[:space:]]*"\./skills/"' "$PLUGIN_JSON" \
+    || add_fail "Claude plugin.json 未声明 canonical skills 根" ".claude-plugin/plugin.json" "把 skills 设为 ./skills/，与 Codex 共用同一份 Skill"
 fi
 [ -f "$CLAUDE_MARKETPLACE_JSON" ] \
   || add_fail "缺失 Claude marketplace .claude-plugin/marketplace.json" "Claude marketplace 规范（远程安装必需）" "创建 marketplace.json 并登记 pipeline-lite"
@@ -211,6 +213,23 @@ if [ -d "$ROOT/skills" ]; then
       || add_fail "skill 目录缺少 SKILL.md: ${d#"$ROOT"/}" "skills/ 目录约定（每个 skill 目录必须含 SKILL.md）" "在 ${d#"$ROOT"/} 下创建 SKILL.md，或删除该空目录"
   done
 fi
+
+# 插件源码只维护 ROOT/skills 这一棵 Skill 内容树。Host adapter 可以在安装目标创建
+# 投影，但插件包内出现第二份 SKILL.md 会形成双写和版本漂移，必须在 CI/安装期拒绝。
+while IFS= read -r duplicate_skill; do
+  [ -n "$duplicate_skill" ] || continue
+  case "$duplicate_skill" in
+    "$ROOT/skills/"*) continue ;;
+  esac
+  add_fail \
+    "发现重复 Skill 内容树: ${duplicate_skill#"$ROOT"/}" \
+    "单一 canonical Skill 根约束" \
+    "删除复制内容并让 host manifest/adapter 指向 $ROOT/skills；安装投影不得回写进插件包"
+done < <(
+  find "$ROOT" \
+    \( -path "$ROOT/.git" -o -path "$ROOT/node_modules" \) -prune -o \
+    -type f -name 'SKILL.md' -print 2>/dev/null | sort
+)
 
 # ── 4. 外部 skill 引用必须在 skills/EXTERNAL-SKILLS.md 声明 ──
 EXT_MANIFEST="$ROOT/skills/EXTERNAL-SKILLS.md"
