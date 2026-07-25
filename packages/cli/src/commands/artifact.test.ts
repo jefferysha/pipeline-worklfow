@@ -51,6 +51,18 @@ describe('cmdArtifactRegister —— default 轨成功写入', () => {
     expect(await cmdArtifactRegister(deps, CH, 'verification_report', 'r.md', 'superpowers:verification-before-completion')).toBe(0)
     expect(deps.store.write.calls[0]![1].fields.verification_report).toBe('r.md')
   })
+
+  test('verify/free 的 orchestration matrix 关闭时，artifact 仍使用声明 profile 校验 producer', async () => {
+    const deps = makeDeps({ state: mockState({ phase: 'verify', track: 'free' }) })
+    expect(await cmdArtifactRegister(
+      deps,
+      CH,
+      'verification_report',
+      'r.md',
+      'superpowers:verification-before-completion',
+    )).toBe(0)
+    expect(deps.store.write.calls[0]![1].fields.verification_report).toBe('r.md')
+  })
 })
 
 describe('cmdArtifactRegister —— declaration 判定拒绝（state 不变）', () => {

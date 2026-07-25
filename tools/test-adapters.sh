@@ -324,6 +324,44 @@ if [ -f "$cx_inst" ]; then
   else
     bad "codex static install: 完成 AGENTS 与项目 skills 投递" "安装命令失败"
   fi
+
+  # 原生插件和 static project projection 必须互斥。selected root 由宿主/稳定 launcher
+  # 显式传入；adapter 不扫描历史 cache 猜版本。
+  cx_native_target="$TMP/codex-native-skills"
+  if PIPELINE_CODEX_PLUGIN_ROOT="$ROOT" bash "$cx_inst" --static --target "$cx_native_target" \
+    --codex-home "$TMP/codex-native-home" --yes >/dev/null 2>&1; then
+    [ ! -e "$cx_native_target/.agents/skills/pipeline" ] \
+      && ok "codex native install: selected plugin root 存在时不创建项目 Skill 重复投影" \
+      || bad "codex native install: selected plugin root 存在时不创建项目 Skill 重复投影" "发现重复 pipeline Skill"
+  else
+    bad "codex native install: selected root 检测成功" "安装命令失败"
+  fi
+
+  cx_migrate_target="$TMP/codex-native-migrate"
+  bash "$cx_inst" --static --target "$cx_migrate_target" --codex-home "$TMP/codex-migrate-home" --yes >/dev/null 2>&1
+  [ -L "$cx_migrate_target/.agents/skills/pipeline" ] \
+    && ok "codex native migrate: 夹具先有 adapter-owned legacy link" \
+    || bad "codex native migrate: 夹具先有 adapter-owned legacy link" "旧链接未建立"
+  if PIPELINE_CODEX_PLUGIN_ROOT="$ROOT" bash "$cx_inst" --static --target "$cx_migrate_target" \
+    --codex-home "$TMP/codex-migrate-home" --yes >/dev/null 2>&1; then
+    [ ! -e "$cx_migrate_target/.agents/skills/pipeline" ] \
+      && ok "codex native migrate: 只清理同源 adapter-owned legacy link" \
+      || bad "codex native migrate: 只清理同源 adapter-owned legacy link" "旧链接仍可发现"
+  else
+    bad "codex native migrate: ownership-safe 收敛成功" "迁移命令失败"
+  fi
+
+  cx_foreign_target="$TMP/codex-native-foreign"
+  mkdir -p "$cx_foreign_target/.agents/skills/pipeline"
+  printf '%s\n' '# user-owned pipeline skill' > "$cx_foreign_target/.agents/skills/pipeline/SKILL.md"
+  if PIPELINE_CODEX_PLUGIN_ROOT="$ROOT" bash "$cx_inst" --static --target "$cx_foreign_target" \
+    --codex-home "$TMP/codex-foreign-home" --yes >/dev/null 2>&1; then
+    bad "codex native migrate: 用户目录产生 shadow-conflict 并拒绝" "命令意外成功"
+  else
+    ok "codex native migrate: 用户目录产生 shadow-conflict 并拒绝"
+  fi
+  assert_file "codex native migrate: shadow-conflict 保留用户 SKILL.md" \
+    "$cx_foreign_target/.agents/skills/pipeline/SKILL.md"
 else
   bad "codex static install.sh 存在" "缺失：$cx_inst"
 fi

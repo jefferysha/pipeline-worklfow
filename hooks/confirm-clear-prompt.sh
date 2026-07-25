@@ -34,6 +34,13 @@ INTENT_HELPER="$(dirname "${BASH_SOURCE[0]:-$0}")/prompt-intent.sh"
 INTENT="$(pipeline_prompt_approval_intent "$PROMPT" || true)"
 [ -n "$INTENT" ] || exit 0
 
+# 拒绝或带约束的混合表达不是一次无条件 unlock。当前 v1 marker 还不能持久化细粒度
+# constraints，因此安全行为是保留 exact pending target，让调用方展示约束后的下一动作；
+# 绝不能因为文本里同时出现“继续/可以”就清掉整道门。
+case "$INTENT" in
+  reject|modify) exit 0 ;;
+esac
+
 CWD="$(json_get cwd || true)"
 [ -n "$CWD" ] || CWD="$PWD"
 [ -d "$CWD" ] || exit 0

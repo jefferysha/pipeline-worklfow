@@ -87,11 +87,23 @@ async function runRegister(
       `artifact '${field}' 的 producerPolicy '${decl.producerPolicy}' 与 workflow skill policy '${skillCapability.source}' 不相容（应 ${expectedPolicy}）`,
     )
   }
-  const slots: readonly EffectiveSkillSlot[] = resolveAvailableSkillSlots(
+  let slots: readonly EffectiveSkillSlot[] = resolveAvailableSkillSlots(
     deps.resolver,
     skillCapability,
     stepId,
   )
+  // matrix=false disables automatic orchestration/gating for lightweight/free Tracks; it does not
+  // erase the profile's producer allowlist for an explicitly declared artifact.  Otherwise a
+  // document contract can require a report produced by verification-before-completion while the
+  // only sanctioned writer (`artifact register`) deterministically sees an empty producer set.
+  if (
+    slots.length === 0
+    && skillCapability.source === 'manifest-overlay'
+    && !skillCapability.trackOverlay.matrix
+  ) {
+    slots = deps.resolver.resolveDefaultProfile?.(stepId, skillCapability.trackOverlay.profile)
+      ?? deps.resolver.resolveDefault(stepId, skillCapability.trackOverlay.profile)
+  }
 
   // 空 effective skill 集必须拒绝（不退化成任意 producer 入口，D5）。
   if (slots.length === 0) {

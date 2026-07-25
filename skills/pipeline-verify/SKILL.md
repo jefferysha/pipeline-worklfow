@@ -38,6 +38,10 @@ pipeline status "$PIPELINE_CHANGE_NAME"
 
 # Verify 的判断只能基于已被本 phase 实际读取的冻结文档版本，不能凭上一轮对话记忆。
 pipeline document read "$PIPELINE_CHANGE_NAME" all
+
+# 支持 Context Bundle v1 的 runtime 应从 ledger 编译 verify 上下文，消费精确冻结输入。
+# 旧 runtime 没有 --bundle 时继续以上述 document read receipt 为准。
+pipeline handoff "$PIPELINE_CHANGE_NAME" --bundle --target verify --json
 ```
 
 > **review 门提示**：verify 是 review 相位，但进入时不会落 marker；三轨验证、报告生成和文档读取必须

@@ -20,6 +20,15 @@ export interface GateMarkerInfo {
  * doctor 命令的环境/fs 探针面（BACKLOG #26b，全部由 main.ts 落地、测试全 mock）。
  * 探针只回答事实（存在/可执行/版本），绿黄红裁决是 cmdDoctor 的职责。
  */
+export interface CodexSkillDiscovery {
+  /** Exact native immutable/plugin root selected for this process; absent means static-only mode. */
+  readonly selectedRoot?: string
+  readonly projectRoot: string
+  /** canonical skill id -> SHA-256 hex */
+  readonly selected: ReadonlyMap<string, string>
+  readonly project: ReadonlyMap<string, string>
+}
+
 export interface DoctorProbes {
   /** process.version 形如 'v22.1.0' */
   nodeVersion: () => string
@@ -60,6 +69,8 @@ export interface DoctorProbes {
    * 缺省 undefined 时 doctor 把 Codex 就绪面标为 yellow，而不是把缓存误报为可调用。
    */
   codexProjectSkillNames?: () => ReadonlySet<string>
+  /** Selected-root aware discovery used to diagnose duplicate projections and shadow conflicts. */
+  codexSkillDiscovery?: () => CodexSkillDiscovery
   /**
    * manifest 强制/推荐 skill 两表（full-install 批2 A1）。main.ts 用 loadManifest(manifestPath())
    * 派生落地（它持有 bundle 里唯一正确的模板路径锚，故两表走探针注入而非 doctor 侧自读——

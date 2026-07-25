@@ -1,5 +1,10 @@
 # Document Evidence Contract Specification
 
+## Purpose
+
+Define how governed Changes prove document production, exact content,
+phase-scoped consumption, and observable evidence health.
+
 ## Requirements
 
 ### Requirement: Governed changes SHALL initialize an OpenSpec document ledger
@@ -86,15 +91,54 @@ For governed changes, both `pipeline check` and transition application SHALL enf
 - **THEN** the server returns its existing compatible error shape and leaves the canonical run state unchanged
 
 ### Requirement: Evidence status SHALL be observable in the dashboard and health checks
-The change snapshot SHALL include a read-only document-evidence projection with required records, current/stale status, producer, and phase read receipts. The dashboard SHALL present this projection next to a change's phase Todo without inventing completed artifacts. Doctor and the Codex adapter SHALL distinguish a skill merely present in a Claude plugin cache from a skill actually exposed to the Codex project target.
+
+The change snapshot SHALL include a read-only document-evidence projection with
+required records, current/stale status, producer, and phase read receipts. The
+dashboard SHALL present this projection next to a Change's phase Todo without
+inventing completed artifacts.
+
+Doctor and host adapters SHALL report the exact Selected Skill Root used for
+execution and evidence. They SHALL distinguish a Skill available from that
+native immutable root, a static-only project projection, a same-digest
+duplicate projection, a different-digest shadow conflict, and an inactive
+historical cache. They SHALL NOT require project `.agents/skills` links when
+native plugin discovery is authoritative.
 
 #### Scenario: Dashboard shows missing document evidence
+
 - **WHEN** a governed change has not registered a required artifact for its current exit
 - **THEN** the Dashboard labels the artifact as missing and names the phase that requires it
 
-#### Scenario: Codex adapter exposes required Superpowers skills
-- **WHEN** the Codex adapter is installed in a project with the Superpowers source available
-- **THEN** the project skill directory contains conflict-safe links for the required Superpowers skills and doctor reports target discoverability accurately
+#### Scenario: Native Codex discovery is sufficient
+
+- **GIVEN** Codex has one verified native pipeline-lite Selected Skill Root
+- **WHEN** doctor evaluates mandatory Skill discoverability
+- **THEN** it reports the mandatory Skills discoverable from that root
+- **AND** it does not require or create project `.agents/skills` links.
+
+#### Scenario: Static adapter is the only available discovery mechanism
+
+- **GIVEN** no native pipeline-lite Selected Skill Root exists
+- **WHEN** an explicitly selected static adapter exposes conflict-safe project
+  links
+- **THEN** doctor reports the project projection as the sole active Skill root.
+
+### Requirement: Artifact producer authorization SHALL survive disabled automatic orchestration
+
+A Track MAY disable automatic Skill matrix injection while retaining a named
+Skill profile for explicit document and artifact production. In that case,
+`artifact register` SHALL validate its producer against the profile's
+phase-specific allowlist. It SHALL NOT treat `matrix=false` as an empty
+authorization set, and it SHALL NOT enable automatic Skill gating as a side
+effect.
+
+#### Scenario: Free Verify registers its governed report
+
+- **GIVEN** the free Track has `matrix=false` and profile `free`
+- **AND** the Verify profile allows `verification-before-completion`
+- **WHEN** that Skill registers `verification_report`
+- **THEN** artifact registration succeeds
+- **AND** ordinary free-Track Skill orchestration remains disabled.
 
 ### Requirement: Review confirmation SHALL persist an exact event receipt and never self-lock
 The review gate SHALL represent a pending review as a canonical, project-scoped receipt containing the exact current phase and requested transition event. After the user has seen the artifacts and explicitly confirms, `pipeline review acknowledge` SHALL persist an approval receipt and clear only its matching short-lived marker projection. `pipeline transition` SHALL consume only that exact approved receipt. It SHALL not require an unavailable host-specific question event, shall not treat read-only inspection as a blocked write, and shall fail closed for unrelated or unconfirmed prompts. Direct marker deletion SHALL never be an approval mechanism.

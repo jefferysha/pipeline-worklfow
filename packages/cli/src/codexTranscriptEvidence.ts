@@ -18,6 +18,7 @@ import {
   type CodexSkillTrustRoots,
 } from './codexSkillTrust.js'
 import { transcriptExecCommands } from './codexToolProgram.js'
+import { explicitSiblingWorktreeTarget } from './codexProjectIdentity.js'
 
 // Long-lived Codex Desktop tasks can legitimately exceed 64 MiB. Exact receipts are still
 // session/project/turn/tool/path bound and streamed rather than buffered, so use the same bounded
@@ -98,14 +99,20 @@ function successfulOutput(value: unknown): boolean {
   if (scriptStates.includes('completed')) return true
   return exitCodes.length > 0
 }
-function functionExecCommand(payload: Record<string, unknown>): string | undefined {
+interface FunctionExecInvocation {
+  readonly command: string
+  readonly workdir?: string
+}
+
+function functionExecInvocation(payload: Record<string, unknown>): FunctionExecInvocation | undefined {
   if (payload.type !== 'function_call' || asString(payload.name) !== 'exec_command') return undefined
   const argumentsText = asString(payload.arguments)
   if (!argumentsText) return undefined
   try {
     const args = JSON.parse(argumentsText) as unknown
     if (!isRecord(args)) return undefined
-    return asString(args.cmd) ?? asString(args.command)
+    const command = asString(args.cmd) ?? asString(args.command)
+    return command === undefined ? undefined : { command, workdir: asString(args.workdir) }
   } catch {
     return undefined
   }
@@ -146,6 +153,7 @@ export async function transcriptConfirmsReceipt(
 
   let matchesSession = false
   let matchesProject = false
+  let sessionRoot: string | undefined
   try {
     const input = createReadStream(physicalTranscript, { encoding: 'utf8' })
     const lines = createInterface({ input, crlfDelay: Infinity })
@@ -163,27 +171,32 @@ export async function transcriptConfirmsReceipt(
           const sessionId = asString(session.session_id) ?? asString(session.id)
           matchesSession = sessionId === receipt.sessionId
           const cwd = asString(session.cwd)
+          sessionRoot = cwd
           matchesProject = cwd !== undefined && await isSamePhysicalDirectory(cwd, repoRoot)
         }
         continue
       }
       if (
         !matchesSession
-        || !matchesProject
         || event.type !== 'response_item'
         || !responseItemAtOrAfter(event, notBefore)
       ) continue
       const payload = event.payload
       if (!isRecord(payload) || receiptTurnId(payload) !== receipt.turnId) continue
-      const functionCommand = functionExecCommand(payload)
-      if (functionCommand !== undefined) {
+      const functionInvocation = functionExecInvocation(payload)
+      if (functionInvocation !== undefined) {
         const callId = asString(payload.call_id)
         if (
           callId === receipt.toolUseId
-          && commandReadsTrustedSkill(functionCommand, receipt.skillPath)
+          && (
+            matchesProject
+            || await explicitSiblingWorktreeTarget(sessionRoot, functionInvocation.workdir, repoRoot)
+          )
+          && commandReadsTrustedSkill(functionInvocation.command, receipt.skillPath)
         ) return await matchingSuccessfulOutput(lines, receipt)
         continue
       }
+      if (!matchesProject) continue
       if (payload.type === 'custom_tool_call') {
         const callId = asString(payload.call_id)
         const name = asString(payload.name)
@@ -393,6 +406,7 @@ export async function discoverCompletedCodexSkillReads(
     const readsByCall = new Map<string, readonly string[]>()
     let matchesRepo = false
     let matchesHostSession = hostSessionId === undefined
+    let sessionRoot: string | undefined
     try {
       const stream = createReadStream(transcript, { encoding: 'utf8' })
       const lines = createInterface({ input: stream, crlfDelay: Infinity })
@@ -408,6 +422,7 @@ export async function discoverCompletedCodexSkillReads(
           const payload = event.payload
           if (isRecord(payload)) {
             const cwd = asString(payload.cwd)
+            sessionRoot = cwd
             if (cwd) matchesRepo = await isSamePhysicalDirectory(cwd, repoRoot)
             if (hostSessionId !== undefined) {
               const sessionId = asString(payload.session_id) ?? asString(payload.id)
@@ -417,27 +432,31 @@ export async function discoverCompletedCodexSkillReads(
           continue
         }
         if (
-          !matchesRepo
-          || !matchesHostSession
+          !matchesHostSession
           || event.type !== 'response_item'
           || !responseItemAtOrAfter(event, notBefore)
         ) continue
         const payload = event.payload
         if (!isRecord(payload)) continue
-        const functionCommand = functionExecCommand(payload)
-        if (functionCommand !== undefined) {
+        const functionInvocation = functionExecInvocation(payload)
+        if (functionInvocation !== undefined) {
           const callId = asString(payload.call_id)
           if (!callId) continue
+          if (
+            !matchesRepo
+            && !await explicitSiblingWorktreeTarget(sessionRoot, functionInvocation.workdir, repoRoot)
+          ) continue
           const readIds = aliases.filter(
             (id) => {
               const path = selectedSkillPaths.get(id)
-              return path !== undefined && commandReadsTrustedSkill(functionCommand, path)
+              return path !== undefined && commandReadsTrustedSkill(functionInvocation.command, path)
             },
           )
           if (readIds.length > 0) readsByCall.set(callId, readIds)
           continue
         }
         if (payload.type === 'custom_tool_call') {
+          if (!matchesRepo) continue
           const callId = asString(payload.call_id)
           const name = asString(payload.name)
           const status = asString(payload.status)

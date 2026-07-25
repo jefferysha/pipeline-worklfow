@@ -108,6 +108,10 @@ DESIGN_DOC=$(pipeline get "$PIPELINE_CHANGE_NAME" design_doc)
 
 # 受治理 workflow：对截至 spec 的全部文档生成本 phase 的 hash-bound read receipt。
 pipeline document read "$PIPELINE_CHANGE_NAME" all
+
+# 支持 Context Bundle v1 的 runtime 可额外编译本 phase 的确定性上下文包。
+# 它从 ledger 派生，不替代 canonical 文档；任一源文件 digest 漂移都会失败并要求先重登记。
+pipeline handoff "$PIPELINE_CHANGE_NAME" --bundle --target build --json
 ```
 
 ### Step 2: Track 分支调用

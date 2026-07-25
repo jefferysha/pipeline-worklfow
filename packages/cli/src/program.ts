@@ -24,7 +24,6 @@ import { cmdAdvance } from './commands/advance.js'
 import { cmdAfk } from './commands/afk.js'
 import { cmdChannel } from './commands/channel.js'
 import { cmdGenRouterSh } from './commands/gen-router.js'
-import { cmdHandoff } from './commands/handoff.js'
 import { cmdInit, type InitCmdOpts } from './commands/init.js'
 import { cmdLoops } from './commands/loops.js'
 import { cmdMem } from './commands/mem.js'
@@ -48,7 +47,7 @@ import { cmdTriage, type TriageCommandRuntime } from './commands/triage.js'
 import { bail, stripNl } from './program-exit.js'
 import { registerInstallCommands } from './program-install.js'
 import { registerTrackCommands } from './program-tracks.js'
-import { registerWorkflowCommands } from './program-workflows.js'
+import { registerHandoffCommand, registerWorkflowCommands } from './program-workflows.js'
 import { LOOPS_HELP } from './program-help.js'
 export { CliExit } from './program-exit.js'
 
@@ -188,13 +187,7 @@ export function buildProgram(deps: CliDeps, runtimes: ProgramRuntimes = {}): Com
     .action(async (name: string, opts: { maxSteps?: number; dryRun?: boolean; throughGates?: boolean }) =>
       bail(await cmdAdvance(deps, name, opts)))
 
-  program
-    .command('handoff <name>')
-    .description('相位 handoff 上下文压缩（对标 Comet CONTEXT-COMPRESSION，D11）')
-    .option('--phase <p>', '覆写相位（默认当前相位）')
-    .option('--json', 'JSON 输出（含压缩率）')
-    .action(async (name: string, opts: { phase?: string; json?: boolean }) =>
-      bail(await cmdHandoff(deps, name, opts)))
+  registerHandoffCommand(program, deps)
 
   program
     .command('import <name>')

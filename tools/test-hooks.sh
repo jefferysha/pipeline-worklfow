@@ -131,6 +131,35 @@ for tool in AskUserQuestion request_user_input; do
   [ -f "$proj/.pipeline-pending-interaction" ] && ok "gate: 放行提问不自行删除 interaction marker（${tool}）" || bad "gate: 放行提问不自行删除 interaction marker（${tool}）" "marker 被错误删除"
 done
 
+# Pending 决策不能阻断已知只读检查；放行只读动作既不清 marker，也不扩大为写权限。
+proj="$TMP/gate-read-only"
+mkdir -p "$proj"
+touch "$proj/.pipeline-pending-interaction"
+for tool in Read Glob Grep; do
+  run_gate "{\"cwd\":\"$proj\",\"tool_name\":\"$tool\"}"
+  assert_exit "gate: interaction marker 放行只读工具（${tool}）" 0 "$RC"
+done
+for command in \
+  'rg -n pipeline .' \
+  'git diff --check' \
+  'pipeline status demo' \
+  'pipeline document status demo'; do
+  run_gate "{\"cwd\":\"$proj\",\"tool_name\":\"command_execution\",\"command\":\"$command\"}"
+  assert_exit "gate: interaction marker 放行只读命令（${command}）" 0 "$RC"
+done
+[ -f "$proj/.pipeline-pending-interaction" ] \
+  && ok "gate: 放行只读动作不清 pending marker" \
+  || bad "gate: 放行只读动作不清 pending marker" "marker 被错误删除"
+for command in \
+  'rg -n pipeline . > report.txt' \
+  'rg -n pipeline .; touch changed' \
+  'pipeline transition demo build-complete' \
+  'unknown-inspector --dry-run'; do
+  run_gate "{\"cwd\":\"$proj\",\"tool_name\":\"command_execution\",\"command\":\"$command\"}"
+  assert_exit "gate: interaction marker 阻断非只读/未知命令（${command}）" 2 "$RC"
+done
+rm -f "$proj/.pipeline-pending-interaction"
+
 proj="$TMP/gate-stale"
 mkdir -p "$proj"
 write_v2_review_marker "$proj" stale-demo explore
@@ -397,6 +426,11 @@ assert_empty "verify-skills: --quiet 成功时无输出" "$out"
 SB="$TMP/sandbox"
 mkdir -p "$SB/.claude-plugin" "$SB/hooks" "$SB/skills/broken-skill" "$SB/skills/ok-skill" "$SB/tools"
 printf '{ "name": "sandbox-plugin", "description": "t", "version": "0.0.0" }\n' > "$SB/.claude-plugin/plugin.json"
+mkdir -p "$SB/.codex-plugin/skills/duplicate"
+printf '%s\n' '# duplicate projection' > "$SB/.codex-plugin/skills/duplicate/SKILL.md"
+mkdir -p "$SB/.agents/skills/installed-projection" "$SB/.pipeline/loops/skill-snapshots/example/skills/frozen"
+printf '%s\n' '# installed host projection' > "$SB/.agents/skills/installed-projection/SKILL.md"
+printf '%s\n' '# immutable loop snapshot' > "$SB/.pipeline/loops/skill-snapshots/example/skills/frozen/SKILL.md"
 cat > "$SB/hooks/hooks.json" <<'EOF'
 {
   "hooks": {
@@ -429,6 +463,9 @@ assert_contains "verify-skills: 列出缺失共享 JSON helper" "$out" "json-inp
 assert_contains "verify-skills: 列出不可执行 noexec.sh" "$out" "noexec.sh"
 assert_contains "verify-skills: 列出缺 SKILL.md 的 broken-skill" "$out" "broken-skill"
 assert_contains "verify-skills: 列出未声明外部 skill" "$out" "superpowers:nonexistent-thing"
+assert_contains "verify-skills: 列出重复 Skill 内容树" "$out" ".codex-plugin/skills/duplicate/SKILL.md"
+assert_not_contains "verify-skills: 不把 host 安装投影当成插件源码" "$out" ".agents/skills/installed-projection"
+assert_not_contains "verify-skills: 不把 Loop Skill 快照当成插件源码" "$out" ".pipeline/loops/skill-snapshots"
 assert_contains "verify-skills: 给出修复指引（怎么修）" "$out" "修"
 
 # ─────────────── 6. 插件清单 JSON 语法（plan ③，测试脚本可用 node）───────────────
@@ -1052,6 +1089,25 @@ printf '%s' "{\"cwd\":\"$proj\",\"prompt\":\"继续\"}" | PATH="$FAKE_PIPELINE_B
 [ ! -f "$proj/.pipeline-pending-confirm" ] \
   && ok "confirm-clear-prompt: 无 pending 时 bare 继续不制造副作用" \
   || bad "confirm-clear-prompt: 无 pending 时 bare 继续不制造副作用" "出现意外 marker"
+
+# 自然短回复只在 exact pending context 中成为确认；拒绝和带约束的混合表达不能清门。
+for prompt in 可以 同意 按推荐 '继续，按照你的推荐'; do
+  touch "$proj/.pipeline-pending-interaction"
+  printf '%s' "{\"cwd\":\"$proj\",\"prompt\":\"$prompt\"}" \
+    | PATH="$FAKE_PIPELINE_BIN:$PATH" PIPELINE_HOOK_LOG="$FAKE_PIPELINE_LOG" bash "$CP" >/dev/null 2>&1
+  [ ! -f "$proj/.pipeline-pending-interaction" ] \
+    && ok "confirm-clear-prompt: 自然确认「${prompt}」清 exact pending interaction" \
+    || bad "confirm-clear-prompt: 自然确认「${prompt}」清 exact pending interaction" "marker 仍在"
+done
+for prompt in 不可以 不同意 '继续，但先别改代码'; do
+  touch "$proj/.pipeline-pending-interaction"
+  printf '%s' "{\"cwd\":\"$proj\",\"prompt\":\"$prompt\"}" \
+    | PATH="$FAKE_PIPELINE_BIN:$PATH" PIPELINE_HOOK_LOG="$FAKE_PIPELINE_LOG" bash "$CP" >/dev/null 2>&1
+  [ -f "$proj/.pipeline-pending-interaction" ] \
+    && ok "confirm-clear-prompt: 拒绝/约束「${prompt}」保留 pending interaction" \
+    || bad "confirm-clear-prompt: 拒绝/约束「${prompt}」保留 pending interaction" "marker 被错误清除"
+  rm -f "$proj/.pipeline-pending-interaction"
+done
 
 # ── 10a''. 持续自主执行：明确授权只绑定当前 live Change，并可审计地委托已完成证据后的 review 确认。──
 # 这覆盖真实 Codex 正常对话的自锁回归：UserPromptSubmit 已清一次 interaction marker，随后读取

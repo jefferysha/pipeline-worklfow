@@ -53,7 +53,9 @@ pipeline cas <name> <field> <expect> <next>
 pipeline transition <name> <event>
 pipeline check <name>
 pipeline advance <name>
-pipeline handoff <name>
+pipeline handoff <name> [--phase <phase>] [--json]
+pipeline handoff <name> --bundle --target <phase> \
+  [--budget-bytes <bytes>] [--json]
 pipeline session activate <name> [--continuous] [--host-session <id>]
 pipeline session route-context <name> [--json]
 pipeline state status|repair-projection|import-legacy <name> [--json]
@@ -69,6 +71,15 @@ for an in-flight Change. It returns the immutable plan captured when the
 WorkflowRun started, including steps, Skills, gates, guards, artifacts, and
 transitions. Editing or deleting `.pipeline/workflows/<workflow>.yaml` affects
 new runs only; it does not rewrite the Todo or Skill DAG of an existing run.
+
+`handoff --bundle` compiles a deterministic `context-bundle/v1` from the
+authoritative document ledger for the target phase. Each input carries its
+document kind, path, recorded SHA-256, materialization mode, and policy reason;
+the bundle itself carries an aggregate SHA-256. Missing files, digest drift,
+duplicate slots, or an exceeded UTF-8 byte budget fail closed. The bundle is a
+derived handoff artifact, not a replacement canonical document; repair stale
+inputs with `pipeline document record` under an allowed producer and then
+re-run the handoff.
 
 ## Documents, artifacts, and review
 

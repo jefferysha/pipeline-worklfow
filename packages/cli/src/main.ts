@@ -8,6 +8,7 @@
  * 命令模块与测试不受影响。
  */
 import { execFile } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { accessSync, constants as fsConstants, readdirSync, readFileSync, statSync } from 'node:fs'
 import { readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
@@ -211,6 +212,20 @@ function scanCodexProjectSkillNames(cwd: string, root: string): Set<string> {
   return names
 }
 
+function scanSkillDigests(skillsRoot: string): Map<string, string> {
+  const digests = new Map<string, string>()
+  for (const name of safeReaddirDirs(skillsRoot)) {
+    try {
+      const skillPath = join(skillsRoot, name, 'SKILL.md')
+      if (!statSync(skillPath).isFile()) continue
+      digests.set(name, createHash('sha256').update(readFileSync(skillPath)).digest('hex'))
+    } catch {
+      // Unreadable/dangling entries are not active Skills; missing coverage remains visible.
+    }
+  }
+  return digests
+}
+
 /**
  * doctor 探针（BACKLOG #26b）：环境/fs 事实采集的 node 落地，裁决归 cmdDoctor。
  * 各探针独立 fail-safe（fs 异常按「不存在/不可执行」处理）——doctor 要能在坏环境里跑完。
@@ -275,6 +290,12 @@ function makeDoctorProbes(machineStateHome: string): DoctorProbes {
     // 缺技能检测（批2 A1）：本机安装位扫描 + manifest 两表派生（bundle 里正确路径锚在此）
     installedSkillNames: () => scanInstalledSkillNames(),
     codexProjectSkillNames: () => scanCodexProjectSkillNames(process.cwd(), root),
+    codexSkillDiscovery: () => ({
+      selectedRoot: root,
+      projectRoot: join(process.cwd(), '.agents', 'skills'),
+      selected: scanSkillDigests(join(root, 'skills')),
+      project: scanSkillDigests(join(process.cwd(), '.agents', 'skills')),
+    }),
     manifestSkills: () => {
       try {
         const m = loadManifest(manifestPath())

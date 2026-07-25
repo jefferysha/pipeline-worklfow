@@ -25,6 +25,17 @@ export {
   type RunAttemptRecord,
 } from './attempt-context.js'
 export {
+  compileContextBundle,
+  contextBundleAggregateDigest,
+  ContextBundleError,
+  verifyContextBundleAggregate,
+  type CompileContextBundleInput,
+  type ContextBundleInputV1,
+  type ContextBundleMode,
+  type ContextBundleTier,
+  type ContextBundleV1,
+} from './context-bundle.js'
+export {
   buildHandoff,
   nodeHandoffFs,
   phaseHandoffDocs,
