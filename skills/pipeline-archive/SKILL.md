@@ -66,10 +66,7 @@ pipeline check "$PIPELINE_CHANGE_NAME"     # archive 出口：verify_result=pass
    （Read + Edit 工具）。default 的全部 Track（包括 PM）都必须已有 delta spec；缺失时先回到 spec/ship
    补齐，不得把 PRD 当成 applied spec 的替代品。
 
-4. **标注产物 frontmatter**：给 `design_doc` / `plan` 指向的文件头部加
-   `archived-with: <name>`（Edit 工具）。
-
-5. **落终态字段**（必须在移动目录**之前**做——CLI 只读活跃区）：
+4. **落终态字段**（必须在移动目录**之前**做——CLI 只读活跃区）：
 
    ```bash
    pipeline transition "$PIPELINE_CHANGE_NAME" archived
@@ -77,7 +74,11 @@ pipeline check "$PIPELINE_CHANGE_NAME"     # archive 出口：verify_result=pass
    pipeline get "$PIPELINE_CHANGE_NAME" archived   # 应返回 "true"
    ```
 
-6. **移动到归档区**：
+   已登记的 `design_doc` / `plan` 是 digest-bound 审计证据，归档阶段不得再给它们
+   追加 `archived-with` frontmatter；否则会在 terminal transition 前把刚读过的收据变 stale。
+   归档身份由 canonical `archived/archived_at` 字段与下面带日期的归档目录共同表达。
+
+5. **移动到归档区**：
 
    ```bash
    mkdir -p openspec/changes/archive
