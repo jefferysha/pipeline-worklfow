@@ -194,7 +194,7 @@ pipeline_enforce_skill_gate() {
     return 2
   fi
 
-  [ -n "$sg_workflow" ] && [ "$sg_workflow" != "default" ] || return 0
+  [ -n "$sg_workflow" ] || return 0
   sg_plugin_root="${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." 2>/dev/null && pwd)}}"
   sg_bundle="$sg_plugin_root/packages/cli/dist/pipeline.mjs"
   [ -f "$sg_bundle" ] && command -v node >/dev/null 2>&1 || return 0

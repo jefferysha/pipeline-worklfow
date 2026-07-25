@@ -13,15 +13,12 @@
  * 异常转 exit 1。纯只读判定：不写 state、不校验 producer（producer 校验是 artifact register 的职责）。
  */
 import {
-  compileWorkflow,
-  defaultArtifactsForStep,
-  loadWorkflow,
   matchesTrackPredicate,
   resolveStep,
-  resolveWorkflowName,
 } from '@pipeline-lite/kernel'
 import type { FieldName, PipelineState } from '@pipeline-lite/kernel'
 import type { CliDeps } from '../deps.js'
+import { effectiveWorkflowForState } from './effective-workflow.js'
 
 /** 标量字段值（列表按逗号连接；缺键 → 空串）。只读 phase/track 两个标量。 */
 function scalar(state: PipelineState, f: FieldName): string {
@@ -30,23 +27,20 @@ function scalar(state: PipelineState, f: FieldName): string {
 }
 
 export function effectiveArtifactFields(deps: CliDeps, state: PipelineState): ReadonlySet<FieldName> {
-  const workflow = resolveWorkflowName(state)
+  const workflow = effectiveWorkflowForState(deps, state)
   const stepId = scalar(state, 'phase')
   const track = scalar(state, 'track')
-  if (workflow === 'default') {
-    return new Set(defaultArtifactsForStep(stepId, track).map((d) => d.field))
-  }
-  const def = loadWorkflow(deps.cwd, workflow)
-  if (!def) {
+  if (!workflow) {
     // workflow 名无对应文件 → 无 artifact 声明可内省 → 空集（该 change 无 file-artifact cutover）。
     // 这不是「降级放行坏 workflow」：真正 corrupted 的文件（存在但解析/编译失败）走下面
     // compileWorkflow/resolveStep 的 fail-loud（throw → 调用方 exit 1）。workflow 仅作 registry 名
     // （无文件）时，set/cas track/workflow 由 checkTrackWorkflow 组合校验，不应被此处 fail-loud 误伤。
     return new Set()
   }
-  const step = resolveStep(compileWorkflow(def), stepId)
+  const step = resolveStep(workflow.workflow, stepId)
   if (!step) {
-    throw new Error(`step '${stepId}' 不在 workflow '${workflow}' 里`)
+    if (workflow.capabilities.execution.model === 'phase-manifest') return new Set()
+    throw new Error(`step '${stepId}' 不在 workflow '${workflow.id}' 里`)
   }
   return new Set(
     step.artifacts

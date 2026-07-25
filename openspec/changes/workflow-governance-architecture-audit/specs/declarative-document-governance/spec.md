@@ -1,0 +1,99 @@
+# Declarative Document Governance Specification
+
+## MODIFIED Requirements
+
+### Requirement: A Workflow SHALL select document governance independently of graph length
+
+The Workflow schema SHALL support three document-governance states:
+
+1. absent/none, which imposes no document ledger;
+2. legacy `openspec_contract: required`, which SHALL retain the current full
+   seven-phase OpenSpec/Superpowers/ADR contract unchanged;
+3. a versioned declarative profile that assigns supported document kinds,
+   allowed producers, and exact-digest read obligations to authored step IDs.
+
+The declarative profile SHALL NOT require canonical default phase names or a
+fixed step count. Unknown versions, document kinds, producers, duplicate
+singleton owners, missing steps, or impossible read ordering SHALL fail
+closed.
+
+#### Scenario: Legacy required stays compatible
+
+- **WHEN** an existing custom Workflow declares
+  `openspec_contract: required`
+- **THEN** it is still required to contain the canonical seven-phase graph
+- **AND** its existing document ledger, producers, reads, reviews, and errors
+  retain their meaning.
+
+#### Scenario: Short Workflow selects compact governance
+
+- **GIVEN** a three-step Workflow has `shape`, `implement`, and `verify`
+- **WHEN** its versioned profile assigns proposal and plan production to
+  `shape` and exact reads to `implement` and `verify`
+- **THEN** parsing, compilation, save, initialization, CLI checks, HTTP
+  transitions, and dashboard evidence accept and enforce that contract
+- **AND** no Superpowers design, ADR, or seven-phase-only document is required
+  unless the profile explicitly declares it.
+
+#### Scenario: Short Workflow omits governance
+
+- **WHEN** a short Workflow has no document profile
+- **THEN** it does not initialize or require a document ledger
+- **AND** declared step Skills and gates remain enforced independently.
+
+### Requirement: Document ownership and reads SHALL use authored step identity
+
+For a declarative profile, every registered document SHALL have one supported
+kind, one owner step, at least one allowed producer, and a project-relative
+safe path. A later step's read receipt SHALL be bound to that step visit and
+the document's exact current digest. Re-recording content SHALL invalidate
+stale receipts without altering other document slots.
+
+#### Scenario: Producer does not match the owner step
+
+- **WHEN** a caller records a document with an undeclared producer or outside
+  its owner step
+- **THEN** registration fails without changing the ledger
+- **AND** the error identifies the allowed step and producers.
+
+#### Scenario: Document changes after implement read
+
+- **WHEN** a recorded plan changes after `implement` read it
+- **THEN** the next governed exit fails until the new digest is registered and
+  read by the required current step
+- **AND** an old receipt cannot satisfy the new digest.
+
+### Requirement: Governance profile identity SHALL persist without eager migration
+
+Canonical run state and API projections SHALL retain the selected document
+profile identity. Readers SHALL interpret the legacy boolean OpenSpec field as
+the full legacy profile. New writes SHALL use the current versioned identity
+on existing authorized mutation paths and SHALL NOT perform a destructive
+startup migration.
+
+#### Scenario: Old state uses the boolean
+
+- **WHEN** an upgraded release reads a Change with
+  `openspecContract: true`
+- **THEN** it compiles the full legacy document profile
+- **AND** the Change can continue without rewriting unrelated state.
+
+#### Scenario: New declarative state is read by an old release
+
+- **WHEN** an old release cannot understand the profile schema
+- **THEN** it fails closed rather than treating the Change as ungoverned
+- **AND** managed rollback remains available through the existing release
+  mechanism.
+
+### Requirement: Document evidence errors SHALL remain compatible and actionable
+
+CLI and HTTP SHALL preserve their existing exit/status/error envelopes while
+including the missing/stale kind, owner step, required producer/read step, and
+repair command where applicable.
+
+#### Scenario: HTTP cannot bypass a missing compact-profile read
+
+- **WHEN** a dashboard transition attempts to leave `implement` without its
+  declared plan read
+- **THEN** the request returns the existing compatible transition-error shape
+- **AND** canonical state and ledger remain unchanged.

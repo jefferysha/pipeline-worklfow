@@ -350,6 +350,10 @@ async function childEnv(payload, paths) {
     PIPELINE_RUNTIME_DATA_ROOT: paths.dataRoot,
     PIPELINE_RUNTIME_STATE_ROOT: paths.stateRoot,
     PIPELINE_RUNTIME_CONFIG_ROOT: paths.configRoot,
+    // `payload` has just passed releasePayload()'s full content digest verification. Propagate
+    // that exact immutable execution identity so Codex Skill provenance can accept the active
+    // managed release without trusting an arbitrary PLUGIN_ROOT supplied by the caller.
+    PIPELINE_ACTIVE_RELEASE_ROOT: payload,
   }
   if (HOST_PLUGIN_ROOT === null) delete env.PIPELINE_HOST_PLUGIN_ROOT
   else env.PIPELINE_HOST_PLUGIN_ROOT = HOST_PLUGIN_ROOT

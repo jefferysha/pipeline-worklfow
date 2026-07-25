@@ -176,7 +176,7 @@ export function HookTimeline({ phase, config }: HookTimelineProps): JSX.Element 
                 <div className="mb-1.5 text-[10.5px] text-text-3" aria-hidden="true"><span>{t('workbench.hk_loop')}</span></div>
               )}
               <div className="flex min-w-0 flex-col gap-2" data-testid={`wb-hk-stack-${ev}`}>
-                {config.hooks!.filter((h) => h.event === ev).map((h) => {
+                {(config.hooks ?? []).filter((h) => h.event === ev).map((h) => {
                 const key = `${h.id}.${phase}`
                 const enabled = !(key in config.matrix)
                 const locked = !h.configurable && LOCKED_IDS.has(h.id)

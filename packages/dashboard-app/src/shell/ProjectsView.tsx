@@ -3,9 +3,9 @@ import gsap from 'gsap'
 import { useGSAP } from '@gsap/react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { useT } from '../i18n'
-import { changeWorkflowName, selectProgress } from '../model/progressModel'
-import { DEFAULT_RULES, rulesKey, type WorkflowRules } from '../model/workflowModel'
-import type { ChangeSnapshot, Snapshot } from '../types'
+import type { WorkflowRules } from '../model/workflowModel'
+import type { Snapshot } from '../types'
+import { buildProjectRows, compareProjectRows, type PhaseCell, type ProjectRow } from './projectsModel'
 
 gsap.registerPlugin(useGSAP)
 
@@ -38,124 +38,6 @@ export interface ProjectsViewProps {
   rulesByKey: ReadonlyMap<string, WorkflowRules>
   /** 点行钻进单项目进度页（App 侧 = setCurrentRoot(root) + setView('progress')）。 */
   onOpenProject: (root: string) => void
-}
-
-type CellState = 'done' | 'current' | 'todo'
-
-interface PhaseCell {
-  phase: string
-  /** 相位展示名（自定义 workflow 走 labelByStep，default 走 phases.* i18n，兜底 = 相位 id）。 */
-  label: string
-  count: number
-  state: CellState
-}
-
-interface ProjectRow {
-  root: string
-  basename: string
-  ok: boolean
-  /** 流程中 = 非归档 change 总数（selectProgress.total，各态之和）。 */
-  wip: number
-  /** 需你动手 = 可拍板门 + 失败自动化（counts.gate + counts.failed，都要人来推）。 */
-  need: number
-  /** 运行中 = 自动化在跑（counts.running，含 scheduled 折叠）。 */
-  running: number
-  /** 迷你相位轨（ok=false 时为空数组）。 */
-  cells: PhaseCell[]
-}
-
-/** root 尾段目录名（同 App.navProjects 口径：过滤空段取末尾）。 */
-function basenameOf(root: string): string {
-  return root.split('/').filter(Boolean).pop() ?? root
-}
-
-/** 相位展示名：自定义 workflow 优先 labelByStep；default 走 phases.* i18n；缺键兜底相位 id。 */
-function phaseLabel(t: (k: string) => string, rules: WorkflowRules, phase: string): string {
-  const custom = rules.labelByStep?.[phase]
-  if (custom) return custom
-  const resolved = t(`phases.${phase}`)
-  return resolved === `phases.${phase}` ? phase : resolved
-}
-
-/** 该项目主 workflow（非归档 change 里出现最多的 wf 名；并列偏好 default，再按名 asc）。 */
-function dominantRules(
-  changes: readonly ChangeSnapshot[],
-  root: string,
-  rulesByKey: ReadonlyMap<string, WorkflowRules>,
-): WorkflowRules {
-  const byWf = new Map<string, number>()
-  for (const c of changes) {
-    if (c.archived === 'true') continue
-    const wf = changeWorkflowName(c)
-    byWf.set(wf, (byWf.get(wf) ?? 0) + 1)
-  }
-  let best = 'default'
-  let bestN = 0
-  for (const [wf, n] of byWf) {
-    if (n > bestN) {
-      best = wf
-      bestN = n
-    } else if (n === bestN && best !== 'default' && (wf === 'default' || wf < best)) {
-      best = wf
-    }
-  }
-  return rulesByKey.get(rulesKey(root, best)) ?? DEFAULT_RULES
-}
-
-/** 迷你相位轨：steps 相位序上按落点计算 done/current/todo 三态。 */
-function buildCells(
-  changes: readonly ChangeSnapshot[],
-  rules: WorkflowRules,
-  t: (k: string) => string,
-): PhaseCell[] {
-  // 末端 archive 是终态（归档 change 已排除），不入轨——default 七相→六节，视觉更干净。
-  const steps = (rules.steps ?? []).filter((s) => s !== 'archive')
-  const byPhase = new Map<string, number>()
-  for (const c of changes) {
-    if (c.archived === 'true') continue
-    byPhase.set(c.phase, (byPhase.get(c.phase) ?? 0) + 1)
-  }
-  let frontier = -1
-  steps.forEach((s, i) => {
-    if ((byPhase.get(s) ?? 0) > 0) frontier = i
-  })
-  return steps.map((s, i) => {
-    const count = byPhase.get(s) ?? 0
-    const state: CellState = count > 0 ? 'current' : i < frontier ? 'done' : 'todo'
-    return { phase: s, label: phaseLabel(t, rules, s), count, state }
-  })
-}
-
-/** 行序：need desc → running desc → wip desc → 名称 asc（越需关注越靠前）。 */
-function compareRows(a: ProjectRow, b: ProjectRow): number {
-  if (a.need !== b.need) return b.need - a.need
-  if (a.running !== b.running) return b.running - a.running
-  if (a.wip !== b.wip) return b.wip - a.wip
-  return a.basename < b.basename ? -1 : a.basename > b.basename ? 1 : 0
-}
-
-function buildRows(
-  snapshot: Snapshot | null,
-  rulesByKey: ReadonlyMap<string, WorkflowRules>,
-  t: (k: string) => string,
-): ProjectRow[] {
-  if (!snapshot) return []
-  return snapshot.projects.map((p) => {
-    if (!p.ok) {
-      return { root: p.root, basename: basenameOf(p.root), ok: false, wip: 0, need: 0, running: 0, cells: [] }
-    }
-    const sel = selectProgress(snapshot, p.root, rulesByKey)
-    const rules = dominantRules(p.changes, p.root, rulesByKey)
-    return {
-      root: p.root,
-      basename: basenameOf(p.root),
-      ok: true,
-      wip: sel.total,
-      need: sel.counts.gate + sel.counts.failed,
-      running: sel.counts.running,
-      cells: buildCells(p.changes, rules, t),
-    }
-  })
 }
 
 /**
@@ -314,11 +196,11 @@ export function ProjectsView({ snapshot, rulesByKey, onOpenProject }: ProjectsVi
   const rootRef = useRef<HTMLElement>(null)
   const [unreachableOpen, setUnreachableOpen] = useState(false)
 
-  const rows = useMemo(() => buildRows(snapshot, rulesByKey, t), [snapshot, rulesByKey, t])
+  const rows = useMemo(() => buildProjectRows(snapshot, rulesByKey, t), [snapshot, rulesByKey, t])
   const { needRows, restRows, unreachable, needCount } = useMemo(() => {
     const reachable = rows.filter((r) => r.ok)
-    const need = reachable.filter((r) => r.need > 0).sort(compareRows)
-    const rest = reachable.filter((r) => r.need === 0).sort(compareRows)
+    const need = reachable.filter((r) => r.need > 0).sort(compareProjectRows)
+    const rest = reachable.filter((r) => r.need === 0).sort(compareProjectRows)
     const unreach = rows.filter((r) => !r.ok)
     return { needRows: need, restRows: rest, unreachable: unreach, needCount: need.length }
   }, [rows])

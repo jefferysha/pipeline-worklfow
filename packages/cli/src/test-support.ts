@@ -293,10 +293,17 @@ const TEST_RECOMMENDED_SKILLS = {
 } as unknown as SkillTable
 
 /** 缺省 EffectiveSkillResolver（artifact register 单测用）；makeDeps 可经 opts.resolver 覆写注入自定义 resolver。 */
-export const testEffectiveSkillResolver: EffectiveSkillResolver = createEffectiveSkillResolver({
+const testEffectiveSkillResolverBase = createEffectiveSkillResolver({
   mandatorySkills: TEST_MANDATORY_SKILLS,
   recommendedSkills: TEST_RECOMMENDED_SKILLS,
 })
+export const testEffectiveSkillResolver: EffectiveSkillResolver = {
+  ...testEffectiveSkillResolverBase,
+  // Transition unit tests isolate event/guard mapping. Real mandatory-Skill enforcement is covered
+  // by integration tests using the production manifest-backed resolver.
+  resolveRequired: () => [],
+  resolveDefaultMandatory: () => [],
+}
 
 // === DoctorProbes mock：缺省全健康（全绿基线），单测按检查面逐项覆写 ===
 

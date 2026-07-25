@@ -23,7 +23,7 @@
  */
 import type { ChangeSnapshot, Snapshot } from '../types'
 import { DEFAULT_RULES, rulesKey, type StepOutputRules, type WorkflowRules } from './workflowModel'
-import { gateEvidence, VERIFY_STATUS_FIELDS } from '../inbox/evidence'
+import { gateEvidence, VERIFY_STATUS_FIELDS } from './evidence'
 
 /** 五态字典（顺序即筛选条 chips 顺序，键对齐 demo v5 的 data-f-state）。 */
 export const PROGRESS_STATES = ['gate', 'agent', 'running', 'queued', 'failed'] as const

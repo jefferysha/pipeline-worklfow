@@ -14,7 +14,14 @@ import { afterAll, beforeAll, describe, expect, test } from 'vitest'
 import { BUILTIN_TRACK_DEFINITIONS, GATE_TTL_MS } from '@pipeline-lite/kernel'
 import type { FieldName, GuardResult, HistoryEntry, Phase, PipelineState, TrackRegistry } from '@pipeline-lite/kernel'
 import type { CliDeps, GateMarkerInfo } from '../deps.js'
-import { FIXED_CLOCK, mockFlow, mockState, mockWorkflowRunRepository, spy } from '../test-support.js'
+import {
+  FIXED_CLOCK,
+  mockFlow,
+  mockState,
+  mockWorkflowRunRepository,
+  spy,
+  testEffectiveSkillResolver,
+} from '../test-support.js'
 import { cmdAdvance } from './advance.js'
 
 /** 满足全程事件前置的字段基线（backend track：verify-pass 需 agent/codex pass） */
@@ -95,6 +102,7 @@ function makeAdv(opts: {
     store,
     runRepo: mockWorkflowRunRepository(store, () => FIXED_CLOCK),
     flow,
+    resolver: testEffectiveSkillResolver,
     // cmdCheck 的 default 路径从 effective registry 取 coverageProfile；测试显式注入内建 registry，
     // 不再靠旧的 track-id 静态分支或缺依赖 TypeError 偶然通过。
     loadRegistry: () => registry,

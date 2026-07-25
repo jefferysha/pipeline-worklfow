@@ -16,48 +16,48 @@
  * `hostSynced:false` receipt 并把失败细节再次 durable 落账，绝不误报 conflict、绝不覆盖用户改动。
  * AFK loop L3 merge-back 的语义就是把 sandbox 产物真的合进 base 让用户在 host 工作树看到。
  *
- * 三个 git 协议阻断（codex round3）由此逐条消：
- *   1) update-ref CAS 失败不再退化成「无 baseAdvanced 的普通 SyncError」——抛 SyncError{baseAdvanced:true}，
- *      lifecycle 原样透传、scheduler 据此 report.ok=false（fail-loud，CLI 非零，绝不假报「跑完一轮」）。
- *   2) 纯算阶段不碰 host → CAS 失败**无需任何清理**（天然干净，read-tree 同步只在 CAS 成功后跑，失败路走不到）
- *      → 根本不存在「`git merge --abort` (≈reset --merge ORIG_HEAD=A) 把外部推进值 B 覆盖回 A」这个阻断——
- *      base 停在外部值 B，绝不被覆盖。
- *   3) 纯算不产生 MERGE_HEAD / 脏 index → 没有 abort/reset 清理动作可吞退出码——不会「报 merged 却留脏 host」。
+ * CAS/冲突语义：内容冲突保留现场；base 或已核验 branch 漂移携 `baseAdvanced=true`
+ * fail-loud；失败前纯算路径不触碰工作树。Git <2.38 的 fallback 仍用双 ref 原子
+ * transaction，清理时读取当前 base，绝不以 merge-abort 覆盖外部推进。
  *
- * baseTip = 冻结时读到的 base SHA（= expectedBaseSha，barrier 验证正是针对它）；branchTip = 命名分支 tip。
- * merge-tree 报冲突（exit 1）→ content-conflict：抛 SyncError（**无 baseAdvanced**），既有 conflict+preserve
- * 路由不变（classify 归 conflict、留现场），**全程不碰 host**。
- *
- * git < 2.38（`merge-tree --write-tree` 不可用）fallback：退回 `git merge --no-ff --no-commit`（合进 HEAD，
- * 会碰工作树/index）+ write-tree + commit-tree + `update-ref --stdin` 双 ref 原子事务，但**清理绝不用
- * `git merge --abort`**（那会
- * reset 到 ORIG_HEAD=A、覆盖外部推进 B，正是阻断 2）——改读「当时实际 base ref 值」`git reset --hard <it>`
- * 保留外部推进，且所有 git 操作核验非零退出 fail-loud（消阻断 3）。生产/测试环境 git ≥ 2.38 时永走纯算路径。
- *
- * DELIVERY-only merge（R2 reviewer HIGH）：命名分支 `git` 语义 merge（**非 cherry-pick**——命名分支可能带
- * merge commit，cherry-pick 会断）回 host base；权威 build_sha 仍锚不可变命名分支 tip（barrier.ts 派生），
- * 不锚 merge 后的 base HEAD。
- *
- * 冲突 / CAS 失败留现场（§7-item4「失败/冲突绝不清沙箱」）：抛 SyncError（_tag，携 preservedWorktreePath =
- * worktree 现场路径）→ classify 归 conflict（绝不重试，automation_preserved_path 供人工接管）。命名分支
- * explicit 模式绝不删。
- *
- * 并发安全（BUG-C1）：host mkdir 锁（原子、跨进程）串行化 merge-into-base，stale 锁按 mtime 回收。纯算路径
- * 本不抢 .git/index.lock（merge-tree 不碰 index），此锁只作 belt-and-suspenders 串行；**git 原生 ref CAS 才
- * 是并发正确性根基**——两个同 base 并发 merge，先到者 CAS 成功推进、后到者 CAS 失败标 base-advanced。
+ * 命名分支按真实 merge（不是 cherry-pick）回主线；跨进程目录锁只负责串行，ref 的
+ * expected-old CAS 才是最终并发正确性边界。
  */
 import { randomUUID } from 'node:crypto'
-import { mkdir, rmdir, stat } from 'node:fs/promises'
-import { join, resolve } from 'node:path'
+import { rmdir } from 'node:fs/promises'
 import type { ExecFn, ExecResult } from '../runner/exec.js'
-import type { GitFace } from './barrier.js'
 import { NO_CONFIG_LOCK_FLAGS } from './worktree.js'
+import {
+  acquireMergeLock,
+  collectCommitsReal,
+  diffNamesReal,
+  mergeTreeSupported,
+  parseMergeResult,
+  realGitFace,
+} from './mergeback-git.js'
+import {
+  MergeJournalError,
+  safeMergeJournalMessage,
+  SyncError,
+  type MergeBackReceipt,
+  type MergeIntentDraft,
+} from './mergeback-types.js'
+
+export {
+  collectCommitsReal,
+  diffNamesReal,
+  mergeTreeSupported,
+  parseMergeResult,
+  realGitFace,
+} from './mergeback-git.js'
+export {
+  MergeJournalError,
+  SyncError,
+  type MergeBackReceipt,
+  type MergeIntentDraft,
+} from './mergeback-types.js'
 
 const GIT_ENV = { LC_ALL: 'C' } as const
-const LOCK_TIMEOUT_MS = 300_000
-const LOCK_STALE_MS = 120_000
-const LOCK_POLL_MS = 25
-const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
 
 /**
  * merge-back 冲突 / CAS 失败时抛（classify 归 conflict，留现场）。
@@ -67,50 +67,6 @@ const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms
  * content-conflict 为 false（正常 settle、round 仍 ok）。与 lifecycle BaseAdvancedError 同款信号
  * （_tag='SyncError' + baseAdvanced=true），使 update-ref CAS 失败与 permit 预检 CAS 失败殊途同归到 fail-loud。
  */
-export class SyncError extends Error {
-  override readonly name = 'SyncError'
-  readonly _tag = 'SyncError'
-  readonly preservedWorktreePath: string
-  readonly baseAdvanced: boolean
-  constructor(message: string, preservedWorktreePath: string, opts?: { baseAdvanced?: boolean }) {
-    super(message)
-    this.preservedWorktreePath = preservedWorktreePath
-    this.baseAdvanced = opts?.baseAdvanced === true
-  }
-}
-
-export interface MergeBackReceipt {
-  readonly landed: true
-  readonly hostSynced: boolean
-  readonly mergedCommit: string
-  readonly baseBefore: string
-  readonly branchTip: string
-  readonly hostSyncError?: string
-  readonly landedJournalError?: string
-}
-
-
-export interface MergeIntentDraft {
-  readonly baseRef: string
-  readonly baseBefore: string
-  readonly branchRef: string
-  readonly branchTip: string
-  readonly mergedCommit: string
-}
-
-export class MergeJournalError extends Error {
-  override readonly name = 'MergeJournalError'
-  readonly _tag = 'MergeJournalError'
-  readonly landed = false
-}
-
-const safeMessage = (error: unknown): string => {
-  try {
-    if (error instanceof Error && typeof error.message === 'string') return error.message
-  } catch { /* fallback below */ }
-  try { return String(error) } catch { return 'unknown merge journal error' }
-}
-
 /**
  * `update-ref --stdin` 的返回码也有不确定结果窗口：transaction 已 commit，但调用进程在把 exit 0
  * 传回前被中断。仅查 base==mergedCommit 不够：onIntent 已暴露 mergedCommit，外部可自行把 base
@@ -205,107 +161,6 @@ const cleanupTransactionMarker = async (
 }
 
 /** `git merge` 结果判定（fallback 路径用）：exit 0 = 干净交付；非零 = 冲突（settled，绝不重试）。 */
-export const parseMergeResult = (r: { exitCode: number; stdout: string; stderr: string }): { conflict: boolean } => ({
-  conflict: r.exitCode !== 0,
-})
-
-/** git 只读注入面（barrier 需 rev-parse 一个 ref）。非零退出抛错（barrier 会转 BarrierDriftError）。 */
-export const realGitFace = (exec: ExecFn, cwd: string): GitFace => ({
-  async revParse(ref) {
-    const r = await exec('git', ['rev-parse', ref], { cwd, env: GIT_ENV })
-    if (r.exitCode !== 0) throw new Error(`git rev-parse ${ref} failed: ${r.stderr.slice(0, 200)}`)
-    return r.stdout.trim()
-  },
-})
-
-/**
- * 收集命名分支相对 base 的 commits（FIFO；last = build HEAD）。范围 `<base>..refs/heads/<branch>`
- * 读**不可变命名 ref**（sibling-proof，不受并发 merge-into-base 串味）。空/出错 → [] (no-op run)。
- */
-export const collectCommitsReal = async (
-  exec: ExecFn,
-  input: { hostRepoDir: string; branch: string; base: string },
-): Promise<{ sha: string }[]> => {
-  const r = await exec(
-    'git',
-    ['rev-list', `${input.base}..refs/heads/${input.branch}`, '--reverse'],
-    { cwd: input.hostRepoDir, env: GIT_ENV },
-  )
-  if (r.exitCode !== 0) return []
-  const lines = r.stdout.trim()
-  if (!lines) return []
-  return lines.split('\n').map((sha) => ({ sha: sha.trim() }))
-}
-
-/**
- * 本次 run 触碰的文件清单（T4 决议 #12 denylist 结算检查的数据源）：
- * `git diff --name-only <base>...refs/heads/<branch>`（三点号 = 相对 merge-base 的分支侧改动，
- * 不把 base 上并行推进的文件算到本 run 头上）。读**不可变命名 ref**（sibling-proof，同
- * collectCommitsReal）。空/出错 → []（容错口径同 collectCommitsReal——git 故障不误判成违规）。
- */
-export const diffNamesReal = async (
-  exec: ExecFn,
-  input: { hostRepoDir: string; branch: string; base: string },
-): Promise<string[]> => {
-  const r = await exec(
-    'git',
-    // B6：git 默认 core.quotePath=true，非 ASCII 路径输出成 "\346..." 八进制转义双引号串，下游
-    // denylist glob 匹配不到 → 中文/emoji 文件名越界产出逃检（L3 自动 merge）。-c core.quotePath=false
-    // 关掉转义 → 输出 literal UTF-8 路径，denylist 真命中。
-    ['-c', 'core.quotePath=false', 'diff', '--name-only', `${input.base}...refs/heads/${input.branch}`],
-    { cwd: input.hostRepoDir, env: GIT_ENV },
-  )
-  if (r.exitCode !== 0) return []
-  const lines = r.stdout.trim()
-  if (!lines) return []
-  return lines.split('\n').map((f) => f.trim()).filter((f) => f !== '')
-}
-
-/** git-common-dir 解析（worktree 的 .git 是 gitfile stub，锁必须落真 .git 公共目录）。 */
-const resolveLockDir = async (exec: ExecFn, hostRepoDir: string): Promise<string> => {
-  const r = await exec('git', ['rev-parse', '--git-common-dir'], { cwd: hostRepoDir, env: GIT_ENV })
-  const out = r.exitCode === 0 ? r.stdout.trim() : '.git'
-  return join(resolve(hostRepoDir, out || '.git'), 'sandcastle-mergeback.lock.d')
-}
-
-const acquireMergeLock = async (exec: ExecFn, hostRepoDir: string, preservedPath: string): Promise<string> => {
-  const lockdir = await resolveLockDir(exec, hostRepoDir)
-  const deadline = Date.now() + LOCK_TIMEOUT_MS
-  for (;;) {
-    try {
-      await mkdir(lockdir, { recursive: false })
-      return lockdir
-    } catch {
-      // stale 锁（crash 的 merge，mtime 老于阈值）回收。
-      try {
-        const s = await stat(lockdir)
-        if (Date.now() - s.mtimeMs > LOCK_STALE_MS) await rmdir(lockdir).catch(() => {})
-      } catch {
-        /* 已消失 — 重试 mkdir */
-      }
-      if (Date.now() >= deadline) {
-        throw new SyncError(`host merge-back lock not acquired within ${LOCK_TIMEOUT_MS}ms (${lockdir})`, preservedPath)
-      }
-      await sleep(LOCK_POLL_MS)
-    }
-  }
-}
-
-/**
- * git ≥ 2.38 → `git merge-tree --write-tree` 可用（纯算 merge tree OID + 冲突退出码，零 host 副作用）。
- * `git --version` 探测；解析失败 / 版本旧 → { ok:false }（走 fallback）。version 原样带回供报告。
- */
-export const mergeTreeSupported = async (exec: ExecFn, hostRepoDir: string): Promise<{ ok: boolean; version: string }> => {
-  const r = await exec('git', ['--version'], { cwd: hostRepoDir, env: GIT_ENV })
-  const version = r.stdout.trim()
-  if (r.exitCode !== 0) return { ok: false, version }
-  const m = /(\d+)\.(\d+)(?:\.(\d+))?/.exec(version)
-  if (!m) return { ok: false, version }
-  const major = Number(m[1])
-  const minor = Number(m[2])
-  return { ok: major > 2 || (major === 2 && minor >= 38), version }
-}
-
 /**
  * 把命名分支 DELIVERY-merge 回 host base（host 锁串行）。纯算路径零 host 副作用（见文件头）；冲突 / CAS
  * 失败 → 抛 SyncError（留现场），CAS 失败额外携 baseAdvanced=true（fail-loud）。仅 L3（autoMerge=true）调。
@@ -412,7 +267,7 @@ export const mergeBackToBase = async (
       try {
         await onIntent?.(intent)
       } catch (error) {
-        throw new MergeJournalError(`merge intent 持久化失败，base ref 未推进：${safeMessage(error)}`)
+        throw new MergeJournalError(`merge intent 持久化失败，base ref 未推进：${safeMergeJournalMessage(error)}`)
       }
 
       // 3) expected-old-SHA 原子 CAS 推进 base ref（merge 落地的原子 host 变更；工作树同步在下面第 4 步）。base 被
@@ -456,7 +311,7 @@ export const mergeBackToBase = async (
       try {
         await onLanded?.(landedReceipt)
       } catch (error) {
-        landedJournalError = safeMessage(error)
+        landedJournalError = safeMergeJournalMessage(error)
       }
 
       // 4) 阻断1（第五轮返工）：CAS 成功 → base ref 已原子推进到 merge commit（HEAD→base→merge）。同步 host
@@ -477,7 +332,7 @@ export const mergeBackToBase = async (
           })
           landedJournalError = undefined
         } catch (error) {
-          landedJournalError = safeMessage(error)
+          landedJournalError = safeMergeJournalMessage(error)
         }
         return {
           landed: true, hostSynced: false, mergedCommit, baseBefore: baseTip, branchTip,
@@ -490,7 +345,7 @@ export const mergeBackToBase = async (
         await onLanded?.({ landed: true, hostSynced: true, mergedCommit, baseBefore: baseTip, branchTip })
         landedJournalError = undefined
       } catch (error) {
-        landedJournalError = safeMessage(error)
+        landedJournalError = safeMergeJournalMessage(error)
       }
       return { landed: true, hostSynced: true, mergedCommit, baseBefore: baseTip, branchTip, landedJournalError }
     }
@@ -567,7 +422,7 @@ const mergeBackFallback = async (
       branchRef: `refs/heads/${branch}`, branchTip, mergedCommit,
     })
   } catch (error) {
-    await failCleanup(`merge intent 持久化失败，base ref 未推进：${safeMessage(error)}.`)
+    await failCleanup(`merge intent 持久化失败，base ref 未推进：${safeMergeJournalMessage(error)}.`)
   }
   // 3) 双 ref 原子事务：`verify branch <branchTip>` 与 `update base <merged> <expected-old>` 在同一
   //    transaction 中持锁并提交。update 命令的 old-value 就是对 base==casExpectedOld 的原子 verify；Git 不允许
@@ -604,7 +459,7 @@ const mergeBackFallback = async (
   try {
     await onLanded?.({ landed: true, hostSynced: false, mergedCommit, baseBefore: casExpectedOld, branchTip })
   } catch (error) {
-    landedJournalError = safeMessage(error)
+    landedJournalError = safeMergeJournalMessage(error)
   }
   // 4) 成功：清 merge-in-progress 标记（MERGE_HEAD），工作树/index 已是合并结果不动它；核验退出（消阻断 3：
   //    绝不吞 reset 退出码报 merged 却留脏 host）。
@@ -617,7 +472,7 @@ const mergeBackFallback = async (
       })
       landedJournalError = undefined
     } catch (error) {
-      landedJournalError = safeMessage(error)
+      landedJournalError = safeMergeJournalMessage(error)
     }
     return {
       landed: true, hostSynced: false, mergedCommit, baseBefore: casExpectedOld, branchTip,
@@ -629,7 +484,7 @@ const mergeBackFallback = async (
     await onLanded?.({ landed: true, hostSynced: true, mergedCommit, baseBefore: casExpectedOld, branchTip })
     landedJournalError = undefined
   } catch (error) {
-    landedJournalError = safeMessage(error)
+    landedJournalError = safeMergeJournalMessage(error)
   }
   return { landed: true, hostSynced: true, mergedCommit, baseBefore: casExpectedOld, branchTip, landedJournalError }
 }

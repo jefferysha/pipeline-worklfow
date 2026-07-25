@@ -8,7 +8,7 @@ import {
   type WbRouterPreviewCandidate,
 } from '../api/client'
 import { useT } from '../i18n'
-import { Dialog } from '../shell/Dialog'
+import { Dialog } from '../shared/Dialog'
 
 export interface CreateChangeDialogProps {
   root: string
@@ -22,6 +22,16 @@ const INPUT = 'w-full rounded-lg border border-border bg-bg px-3 py-2 text-[13px
 
 function readError(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
+}
+
+function firstWorkflowStep(value: unknown): string | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null
+  const steps = Reflect.get(value, 'steps')
+  if (!Array.isArray(steps) || steps.length === 0) return null
+  const first = steps[0]
+  if (typeof first !== 'object' || first === null || Array.isArray(first)) return null
+  const id = Reflect.get(first, 'id')
+  return typeof id === 'string' && id !== '' ? id : null
 }
 
 function workflowOptions(candidate: WbRouterPreviewCandidate | undefined, names: readonly string[]): string[] {
@@ -133,9 +143,9 @@ export function CreateChangeDialog({ root, onClose, onCreated, onToast }: Create
     void fetchWorkflow(selectedWorkflow, root)
       .then(async (response) => {
         if (!response.ok) throw new Error(`Workflow ${selectedWorkflow} ${response.status}`)
-        const body = (await response.json()) as { steps?: Array<{ id?: unknown }> }
-        const first = body.steps?.[0]?.id
-        if (typeof first !== 'string' || first === '') throw new Error(`Workflow ${selectedWorkflow} 没有首 Step`)
+        const body: unknown = await response.json()
+        const first = firstWorkflowStep(body)
+        if (first === null) throw new Error(`Workflow ${selectedWorkflow} 没有首 Step`)
         if (active) {
           setFirstStep(first)
           setFirstStepState('ready')

@@ -419,6 +419,29 @@ automation_cause: ""
     expect(await store.get(dir, 'workflow')).toBe('default')
     expect(await store.get(dir, 'phase')).toBe('open')
   })
+
+  it('兼容调用方只提供旧 document booleans 时，新 run 仍写入 canonical profile identity', async () => {
+    const fingerprint = 'b'.repeat(64)
+    const legacy = await store.init({
+      repoRoot, name: 'wf-legacy-profile', track: 'backend', reviewSeed: 'pending', preset: 'full',
+      runId: 'run-legacy-profile', clock: CLOCK,
+      initialWorkflow: { workflow: 'legacy-governed', phase: 'open', openspecContract: true },
+    })
+    const declarative = await store.init({
+      repoRoot, name: 'wf-document-profile', track: 'backend', reviewSeed: 'pending', preset: 'full',
+      runId: 'run-document-profile', clock: CLOCK,
+      initialWorkflow: {
+        workflow: 'compact-governed',
+        phase: 'shape',
+        documentContract: true,
+        documentGovernanceFingerprint: fingerprint,
+      },
+    })
+
+    expect((await store.read(legacy)).runMetadata?.documentProfile).toBe('legacy-full')
+    expect((await store.read(declarative)).runMetadata?.documentProfile).toBe('document-v1')
+    expect((await store.read(declarative)).runMetadata?.documentGovernanceFingerprint).toBe(fingerprint)
+  })
 })
 
 describe('并发（20 写锁零丢失）', () => {

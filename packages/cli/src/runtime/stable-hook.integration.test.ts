@@ -175,10 +175,19 @@ describe('stable host-hook ABI', () => {
     const skillPath = join(hostCache, 'skills', 'openspec-propose', 'SKILL.md')
     const transcript = join(home, '.codex', 'sessions', '2026', '07', '24', 'receipt.jsonl')
     const turnId = 'turn-receipt-1'
+    // Current-visit evidence is intentionally fail-closed: real Codex response_item rows carry
+    // top-level timestamps, and a timestamp-less historical row must not be reusable after init.
+    const eventTimestamp = new Date().toISOString()
     await mkdir(dirname(transcript), { recursive: true })
     await writeFile(transcript, [
       JSON.stringify({
+        type: 'session_meta',
+        timestamp: eventTimestamp,
+        payload: { cwd: project, session_id: 'session-receipt-1', id: 'session-receipt-1' },
+      }),
+      JSON.stringify({
         type: 'response_item',
+        timestamp: eventTimestamp,
         payload: {
           type: 'custom_tool_call',
           status: 'completed',
@@ -190,10 +199,11 @@ describe('stable host-hook ABI', () => {
       }),
       JSON.stringify({
         type: 'response_item',
+        timestamp: eventTimestamp,
         payload: {
           type: 'custom_tool_call_output',
           call_id: 'call-skill-read',
-          output: 'Script completed\\nWall time 0.1 seconds\\nOutput:\\n',
+          output: 'Process exited with code 0\\nWall time 0.1 seconds\\nOutput:\\n',
           internal_chat_message_metadata_passthrough: { turn_id: turnId },
         },
       }),
@@ -208,7 +218,7 @@ describe('stable host-hook ABI', () => {
       transcript_path: transcript,
       session_id: 'session-receipt-1',
       turn_id: turnId,
-      tool_use_id: 'exec-receipt-1',
+      tool_use_id: 'call-skill-read',
     })
     expect((await run('bash', [launchers.hook, 'codex-skill-receipt'], skillEvent, env, project)).code).toBe(0)
     for (const [kind, path] of [['proposal', proposal], ['openspec-design', design], ['tasks', tasks]] as const) {

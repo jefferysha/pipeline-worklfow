@@ -84,9 +84,11 @@ export function buildThreadAliasResolver(events: ChannelEvent[]): ThreadAliasRes
   const currentFor = (key: string): string => {
     let cur = aliasToCurrent.get(key) ?? key
     const seen = new Set<string>()
-    while (aliasToCurrent.has(cur) && !seen.has(cur)) {
+    while (!seen.has(cur)) {
+      const next = aliasToCurrent.get(cur)
+      if (next === undefined) break
       seen.add(cur)
-      cur = aliasToCurrent.get(cur)!
+      cur = next
     }
     return cur
   }
@@ -115,9 +117,11 @@ export function buildThreadAliasResolver(events: ChannelEvent[]): ThreadAliasRes
     resolve(key: string): string {
       let cur = aliasToCurrent.get(key) ?? key
       const seen = new Set<string>()
-      while (aliasToCurrent.has(cur) && !seen.has(cur)) {
+      while (!seen.has(cur)) {
+        const next = aliasToCurrent.get(cur)
+        if (next === undefined) break
         seen.add(cur)
-        cur = aliasToCurrent.get(cur)!
+        cur = next
       }
       return cur
     },
@@ -180,8 +184,11 @@ export function reduceThreads(events: ChannelEvent[]): ThreadState[] {
   const states = new Map<string, ThreadAccum>()
 
   const ensure = (key: string, seq: number): ThreadAccum => {
-    if (!states.has(key)) states.set(key, newState(key, seq))
-    return states.get(key)!
+    const existing = states.get(key)
+    if (existing) return existing
+    const created = newState(key, seq)
+    states.set(key, created)
+    return created
   }
 
   for (const ev of events) {

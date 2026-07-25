@@ -27,13 +27,12 @@ PROMPT="$(json_get prompt || true)"
 # intents.  The latter must contain a deliberately strong phrase; a bare “继续执行” still clears
 # only the current short-lived marker.  Revocation is also explicit and never falls through to
 # marker-clearing, so a user can safely restore step-by-step questions.
-INTENT=''
-case "$PROMPT" in
-  *恢复逐步确认*|*恢复询问*|*停止自主执行*|*撤回自主执行*|*每步确认*) INTENT='revoke' ;;
-  *后续不用问*|*后续无需询问*|*后续不需要确认*|*后续自行执行*|*后续自己执行*|*后续自主执行*|*自主执行完成*|*自己执行完成*) INTENT='authorize' ;;
-  *确认继续*|*确认执行*|*确认并继续*|*继续执行*|*全部执行*|*可以继续*|*同意继续*|*请继续执行*|*批准继续*|*自行执行*|*自己执行*|*go\ ahead*|*proceed\ with\ it*|*continue\ execution*) INTENT='confirm' ;;
-  *) exit 0 ;;
-esac
+INTENT_HELPER="$(dirname "${BASH_SOURCE[0]:-$0}")/prompt-intent.sh"
+[ -r "$INTENT_HELPER" ] || exit 0
+# shellcheck source=prompt-intent.sh
+. "$INTENT_HELPER"
+INTENT="$(pipeline_prompt_approval_intent "$PROMPT" || true)"
+[ -n "$INTENT" ] || exit 0
 
 CWD="$(json_get cwd || true)"
 [ -n "$CWD" ] || CWD="$PWD"
@@ -45,6 +44,18 @@ ROOT_HELPER="$(dirname "${BASH_SOURCE[0]:-$0}")/project-root.sh"
 . "$ROOT_HELPER"
 ROOT="$(pipeline_project_root "$CWD" bootstrap changes || true)"
 [ -n "$ROOT" ] || exit 0
+
+# A bare “继续” is both a resume phrase and, in an exact pending context, the user's natural
+# approval.  It must not become a repository-wide unlock: without a pending marker in this exact
+# project it remains resume-only and this hook exits without mutation.
+if [ "$INTENT" = 'contextual-confirm' ]; then
+  if [ ! -f "$ROOT/.pipeline-pending-confirm" ] \
+    && [ ! -f "$ROOT/.pipeline-pending-interaction" ] \
+    && [ ! -f "$ROOT/.pipeline-pending-review" ]; then
+    exit 0
+  fi
+  INTENT='confirm'
+fi
 
 HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || true)"
 

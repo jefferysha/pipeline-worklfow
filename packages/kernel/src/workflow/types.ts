@@ -142,5 +142,28 @@ export interface WorkflowDef {
   readonly name: string
   /** Explicit opt-in: this custom workflow must retain the canonical OpenSpec seven-phase contract. */
   readonly openspecContract?: 'required'
+  /**
+   * Graph-independent document governance.  The legacy `openspecContract` field remains the
+   * compatibility alias for the canonical seven-phase profile; new short workflows use this
+   * bounded, versioned declaration instead of borrowing default phase names.
+   */
+  readonly documentContract?: WorkflowDocumentContractV1
   readonly steps: readonly StepDef[]
+}
+
+export interface WorkflowDocumentSlot {
+  readonly kind: string
+  readonly ownerStep: string
+  readonly producers: readonly string[]
+}
+
+export interface WorkflowDocumentRead {
+  readonly step: string
+  readonly kinds: readonly string[]
+}
+
+export interface WorkflowDocumentContractV1 {
+  readonly version: 'v1'
+  readonly slots: readonly WorkflowDocumentSlot[]
+  readonly reads: readonly WorkflowDocumentRead[]
 }

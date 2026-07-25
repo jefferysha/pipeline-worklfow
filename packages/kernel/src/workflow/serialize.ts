@@ -10,7 +10,8 @@
  * `never` 报错、运行期 throw（fail-loud），保存不再静默丢真相。
  */
 import type {
-  FieldRef, SkillRef, StepDef, StepTransition, WorkflowActionConfig, WorkflowArtifactConfig, WorkflowDef, WorkflowGuardConfig,
+  FieldRef, SkillRef, StepDef, StepTransition, WorkflowActionConfig, WorkflowArtifactConfig, WorkflowDef,
+  WorkflowDocumentContractV1, WorkflowGuardConfig,
 } from './types.js'
 import type { TrackPredicate } from './predicates.js'
 
@@ -123,10 +124,36 @@ function serializeStep(step: StepDef): string[] {
   return lines
 }
 
+function serializeDocumentContract(contract: WorkflowDocumentContractV1): string[] {
+  return [
+    'document_contract:',
+    `  version: ${contract.version}`,
+    '  slots:',
+    ...contract.slots.flatMap((slot) => [
+      `    - kind: ${slot.kind}`,
+      `      owner_step: ${slot.ownerStep}`,
+      `      producers: [${slot.producers.join(', ')}]`,
+    ]),
+    ...(contract.reads.length === 0
+      ? ['  reads: []']
+      : [
+          '  reads:',
+          ...contract.reads.flatMap((read) => [
+            `    - step: ${read.step}`,
+            `      kinds: [${read.kinds.join(', ')}]`,
+          ]),
+        ]),
+  ]
+}
+
 export function serializeWorkflow(wf: WorkflowDef): string {
+  if (wf.openspecContract !== undefined && wf.documentContract !== undefined) {
+    throw new Error('serializeWorkflow: openspecContract 与 documentContract 不得同时声明')
+  }
   const lines = [
     `name: ${wf.name}`,
     ...(wf.openspecContract === undefined ? [] : [`openspec_contract: ${wf.openspecContract}`]),
+    ...(wf.documentContract === undefined ? [] : serializeDocumentContract(wf.documentContract)),
     'steps:',
     ...wf.steps.flatMap(serializeStep),
   ]

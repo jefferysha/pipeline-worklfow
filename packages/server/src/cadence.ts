@@ -197,16 +197,18 @@ export function createCadenceScheduler(options: CadenceSchedulerOptions): Cadenc
     }
 
     await Promise.all(due.map(async (item) => {
+      const current = rows[item.rowIndex]
+      if (current === undefined) return
       let result: PipelineCliResult
       try {
         result = await options.runPipelineCli(item.root, ['loops', 'run', item.loopId, '--json'])
       } catch (error) {
-        rows[item.rowIndex] = { ...rows[item.rowIndex]!, state: 'failed', error: errorMessage(error) }
+        rows[item.rowIndex] = { ...current, state: 'failed', error: errorMessage(error) }
         return
       }
       rows[item.rowIndex] = result.exitCode === 0
-        ? { ...rows[item.rowIndex]!, state: 'succeeded', exit_code: 0 }
-        : { ...rows[item.rowIndex]!, state: 'failed', exit_code: result.exitCode, error: resultError(result) }
+        ? { ...current, state: 'succeeded', exit_code: 0 }
+        : { ...current, state: 'failed', exit_code: result.exitCode, error: resultError(result) }
     }))
 
     latest = { ...latest, running: false, loops: rows }

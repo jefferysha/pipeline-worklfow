@@ -10,10 +10,8 @@ import {
   formatReviewMarker,
   evaluateDocumentEvidence,
   isDocumentContractPhase,
-  isOpenSpecDocumentContractRequired,
-  loadWorkflow,
+  isDocumentPolicyStep,
   resolveStep,
-  resolveWorkflowName,
   reviewGateApprovalPatch,
   reviewGateApprovedFor,
   reviewGateEvent,
@@ -21,7 +19,6 @@ import {
   reviewGatePendingFor,
   reviewGateRequestPatch,
   reviewGateStatus,
-  TRANSITION_EVENTS,
 } from '@pipeline-lite/kernel'
 import type { PipelineState } from '@pipeline-lite/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
@@ -29,10 +26,12 @@ import { changeDir, isValidChangeName } from '../paths.js'
 import { readDelegatedReviewAuthority, type ContinuousAuthority } from '../continuousAuthority.js'
 import { cmdCheck } from './check.js'
 import { recordHistory } from './fields.js'
+import { effectiveWorkflowForState } from './effective-workflow.js'
 
 type ReviewStep = {
   readonly phase: string
   readonly workflow: string
+  readonly executionModel: 'phase-manifest' | 'step-graph'
   readonly events: readonly string[]
 }
 
@@ -49,22 +48,17 @@ function scalar(state: PipelineState, field: keyof PipelineState['fields']): str
 
 function resolveReviewStep(deps: CliDeps, state: PipelineState): ReviewStep {
   const phase = scalar(state, 'phase')
-  const workflow = resolveWorkflowName(state)
-  if (workflow === 'default') {
-    if ((deps.flow.manifest.reviewPhases as readonly string[]).includes(phase)) {
-      const events = Object.entries(TRANSITION_EVENTS)
-        .filter(([, edge]) => edge.from === phase)
-        .map(([event]) => event)
-      if (events.length > 0) return { phase, workflow, events }
-    }
-    throw new Error(`当前 phase '${phase}' 不是 default workflow 的 review 出口`)
+  const plan = effectiveWorkflowForState(deps, state)
+  if (!plan) throw new Error(`workflow '${String(state.fields.workflow ?? '')}' 未找到或不可编译`)
+  const step = resolveStep(plan.workflow, phase)
+  if (!step) throw new Error(`step '${phase}' 不在 workflow '${plan.id}' 里`)
+  if (step.gate !== 'review') throw new Error(`workflow '${plan.id}' 的 step '${phase}' 未声明 gate=review`)
+  return {
+    phase,
+    workflow: plan.id,
+    executionModel: plan.capabilities.execution.model,
+    events: step.transitions.map((transition) => transition.event),
   }
-  const definition = loadWorkflow(deps.cwd, workflow)
-  if (!definition) throw new Error(`workflow '${workflow}' 未找到（期望 .pipeline/workflows/${workflow}.yaml）`)
-  const step = resolveStep(definition, phase)
-  if (!step) throw new Error(`step '${phase}' 不在 workflow '${workflow}' 里`)
-  if (step.gate !== 'review') throw new Error(`workflow '${workflow}' 的 step '${phase}' 未声明 gate=review`)
-  return { phase, workflow, events: step.transitions.map((transition) => transition.event) }
 }
 
 function resolveReviewEvent(step: ReviewStep, requestedEvent: string | undefined): string {
@@ -81,7 +75,9 @@ function resolveReviewEvent(step: ReviewStep, requestedEvent: string | undefined
       `phase '${step.phase}' 有多个 review 出口；必须指定 --event ${step.events.join('|')}`,
     )
   }
-  return step.events[0]!
+  const event = step.events[0]
+  if (event === undefined) throw new Error(`phase '${step.phase}' 没有 review 出口`)
+  return event
 }
 
 async function writeMarker(
@@ -122,11 +118,11 @@ async function checkVerifyFailReadiness(
     blockers.push(`verify-fail 决策要求 verification_report 文件存在（当前='${report}'）`)
   }
 
-  const workflow = resolveWorkflowName(state)
-  const track = scalar(state, 'track')
-  if (isOpenSpecDocumentContractRequired(workflow, track)) {
+  const plan = effectiveWorkflowForState(deps, state)
+  const documentPolicy = plan?.capabilities.documents.policy
+  if (documentPolicy) {
     const phase = scalar(state, 'phase')
-    if (!isDocumentContractPhase(phase)) {
+    if (!isDocumentPolicyStep(documentPolicy, phase) || !isDocumentContractPhase(phase)) {
       blockers.push(`受 OpenSpec 文档契约治理的 workflow 当前 phase 非法（当前='${phase || '空'}'）`)
     } else {
       // A failure exit must remain possible precisely when implementation or upstream documents
@@ -161,7 +157,7 @@ async function checkReviewRequestReadiness(
   step: ReviewStep,
   event: string,
 ): Promise<number> {
-  if (step.workflow === 'default' && step.phase === 'verify' && event === 'verify-fail') {
+  if (step.executionModel === 'phase-manifest' && step.phase === 'verify' && event === 'verify-fail') {
     return checkVerifyFailReadiness(deps, name, dir, state)
   }
   // A successful outgoing edge must satisfy the same public exit check that transition will

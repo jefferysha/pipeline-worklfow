@@ -14,6 +14,7 @@ import type { LoopEntry } from '../loops/types.js'
 import { createTransitionApplication } from './transition-application.js'
 import type { TransitionApplicationDeps, TransitionApplicationWarning } from './transition-application.js'
 import { compileWorkflow } from './compile.js'
+import { compileEffectiveWorkflowPlan, documentGovernanceFingerprint } from './effective-plan.js'
 import type { WorkflowDef } from './types.js'
 import type { WorkflowIR } from './ir.js'
 import type { HistoryEntry } from '../types.js'
@@ -552,7 +553,10 @@ describe('createTransitionApplication —— 唯一 TransitionApplication 用例
       const root = await freshRepoRoot()
       let completed = new Set<string>()
       const deps = makeDeps({
-        completedStepSkills: async () => completed,
+        missingStepSkills: async ({ capability, stepId }) => {
+          const required = capability.steps.find((step) => step.stepId === stepId)?.requiredSkillIds ?? []
+          return required.filter((skillId) => !completed.has(skillId))
+        },
       })
       const dir = await initCustomChange(deps, root, 'demo')
       const withSkill: WorkflowDef = {
@@ -595,6 +599,59 @@ describe('createTransitionApplication —— 唯一 TransitionApplication 用例
         context: {}, loadWorkflow: NEVER_FOUND_WORKFLOW,
       })
       expect(result).toEqual({ kind: 'workflow-not-found', workflowName: 'onboarding' })
+    })
+
+    test('初始化时绑定的 document contract 被移除后 transition fail-closed 且零提交', async () => {
+      const root = await freshRepoRoot()
+      const deps = makeDeps()
+      const governed: WorkflowDef = {
+        name: 'governed',
+        documentContract: {
+          version: 'v1',
+          slots: [{ kind: 'proposal', ownerStep: 'intake', producers: ['writer'] }],
+          reads: [],
+        },
+        steps: [
+          {
+            id: 'intake', label: 'intake', gate: null, skills: [{ id: 'writer' }],
+            inputs: [], outputs: [], guards: [], transitions: [{ event: 'complete', to: 'done' }],
+          },
+          {
+            id: 'done', label: 'done', gate: null, skills: [],
+            inputs: [], outputs: [], guards: [], transitions: [],
+          },
+        ],
+      }
+      const policy = compileEffectiveWorkflowPlan('governed', governed).documentPolicy
+      if (!policy) throw new Error('expected document policy')
+      const { changeDir } = await deps.runRepository.initChange({
+        repoRoot: root, name: 'demo', track: 'backend', reviewSeed: 'pending', preset: 'full', clock: FIXED_CLOCK,
+        initialWorkflow: {
+          workflow: 'governed',
+          phase: 'intake',
+          documentProfile: 'document-v1',
+          documentGovernanceFingerprint: documentGovernanceFingerprint(policy),
+        },
+      })
+
+      const result = await createTransitionApplication(deps).execute({
+        root,
+        changeDir,
+        changeName: 'demo',
+        event: 'complete',
+        context: {},
+        loadWorkflow: (name) => name === 'governed'
+          ? compileWorkflow({ name: 'governed', steps: governed.steps })
+          : null,
+      })
+
+      expect(result).toMatchObject({
+        kind: 'document-governance-invalid',
+        workflowName: 'governed',
+      })
+      const state = await createStateStore().read(changeDir)
+      expect(state.fields.phase).toBe('intake')
+      expect(state.runMetadata?.transitionSequence).toBe(0)
     })
 
     test('event 在当前 step 不支持 → event-unsupported + available', async () => {

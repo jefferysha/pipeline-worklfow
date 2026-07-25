@@ -31,6 +31,9 @@ jobs:
       - name: 注释可信度门禁 (comment honesty)
         run: npm run check:comments
 
+      - name: 架构边界门禁 (architecture boundaries)
+        run: npm run check:architecture
+
       # default workflow artifact declaration 真相源 codegen 新鲜度门（G2 P4）——纯 Node 从
       # templates/workflows/default.yaml 重新生成 default-workflow.generated.ts，再**只 diff 生成文件**
       # （不裸 git diff：工作树存在并行改动，裸 diff 会误报）。放在 comment gate 后、build 前：codegen

@@ -12,7 +12,7 @@
  * 没有版本；policyId/policyVersion/iterationId/loopId——W5 才有真实绑定；goal/budget/skill
  * bundle——同理）本增量不填 null 或假字符串，等对应工作包真正接线时再加。
  */
-import type { FieldName, InitOptions, PipelineState, StateWriteResult } from '../types.js'
+import type { DocumentProfileId, FieldName, InitOptions, PipelineState, StateWriteResult } from '../types.js'
 import type { AutomationPolicySnapshot } from '../loops/automation-policy.js'
 
 export interface WorkflowRun {
@@ -30,6 +30,9 @@ export interface WorkflowRun {
   /** 最新一条已提交 TransitionRecord 的 id；尚未发生过任何 canonical transition 时为 undefined
    * （新 init 的 change 有 run 身份但还没有 transition 记录，这是合法的中间态，不是缺陷）。 */
   readonly transitionHead?: string
+  readonly documentProfile?: DocumentProfileId
+  readonly documentGovernanceFingerprint?: string
+  readonly workflowPlanFingerprint?: string
   readonly createdAt: string
   readonly updatedAt: string
   /** Governed runs carry the exact immutable policy used by admission and execution. */
@@ -126,7 +129,16 @@ export interface WorkflowRunRepository {
    * 重复落盘。不是一次 transition，不产生 TransitionRecord，只新增 runMetadata。新 change
    * 应该走 initChange，不需要再调这个方法。
    */
-  establishRun(changeDir: string): Promise<WorkflowRun>
+  establishRun(
+    changeDir: string,
+    governance?: {
+      readonly openspecContract?: boolean
+      readonly documentContract?: boolean
+      readonly documentProfile?: DocumentProfileId
+      readonly documentGovernanceFingerprint?: string
+      readonly workflowPlanFingerprint?: string
+    },
+  ): Promise<WorkflowRun>
   /** Policy/loop are immutable; rebinding the same run to a later iteration advances its current pointer. */
   bindAutomationPolicy(
     changeDir: string,

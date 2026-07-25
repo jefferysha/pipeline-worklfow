@@ -26,324 +26,41 @@ import { eventsPath, workerFile } from './paths.js'
 import type { ProcessFace, WorkerProcess } from './process.js'
 import { nodeTailFs, tailEvents, type TailFs } from './watcher.js'
 import { TurnTracker } from './turns.js'
-import { matchesInboxPolicy } from './filters.js'
 import type { ChannelEvent, EventPartial, InboxPolicy, Scope } from './types.js'
+import {
+  defaultSupervisorScheduler,
+  IdleTimer,
+  ShutdownController,
+  type Scheduler,
+} from './supervisor-lifecycle.js'
+import {
+  applyParseResult,
+  EchoAdapter,
+  inboxEventEligible,
+  type AdapterView,
+  type ParseResult,
+  type WorkerAdapter,
+} from './supervisor-adapter.js'
+
+export {
+  IdleTimer,
+  ShutdownController,
+  type Scheduler,
+  type ShutdownDeps,
+} from './supervisor-lifecycle.js'
+export {
+  applyParseResult,
+  EchoAdapter,
+  inboxEventEligible,
+  type AdapterView,
+  type ParseResult,
+  type WorkerAdapter,
+} from './supervisor-adapter.js'
 
 export type ShutdownReason = 'explicit-kill' | 'timeout' | 'crash' | 'idle-timeout'
 export const SHUTDOWN_REASONS: readonly ShutdownReason[] = ['explicit-kill', 'timeout', 'crash', 'idle-timeout']
 
-const SHUTDOWN_GRACE_MS = 3000
 const DEFAULT_INBOX_POLICY: InboxPolicy = 'explicitOnly'
-
-// ═══════════════════════ adapter 契约 + echo 落地 ═══════════════════════
-
-/** adapter.parse_line 的产物（stdout_pump.py apply_parse_result 消费）。 */
-export interface ParseResult {
-  events: { kind: string; payload?: Record<string, unknown> }[]
-  side?: {
-    reply?: string[]
-    persistSessionId?: string
-    persistThreadId?: string
-  } | null
-}
-
-/** worker adapter：把某 provider 的进程协议翻成 channel 语义（adapters/__init__.py）。 */
-export interface WorkerAdapter<Ctx = unknown> {
-  /** 进程二进制名（spawn 用）。 */
-  readonly provider: string
-  createCtx(): Ctx
-  /** argv（不含二进制名）。 */
-  buildArgs(view: AdapterView): string[]
-  isReady(ctx: Ctx): boolean
-  encodeUserMessage(text: string, ctx: Ctx): string
-  encodeInterruptMessage(text: string, ctx: Ctx): string
-  parseLine(line: string, ctx: Ctx): ParseResult
-  handshake?(child: WorkerProcess, ctx: Ctx, view: AdapterView): void
-}
-
-export interface AdapterView {
-  resume?: unknown
-  model?: unknown
-  systemPrompt?: unknown
-  cwd?: string
-}
-
-/** echo adapter：spawn `cat -u`（unbuffered 行回显），验证三循环桥接不依赖真 LLM（echo.py:18）。 */
-export class EchoAdapter implements WorkerAdapter<{ ready: boolean }> {
-  readonly provider = 'cat'
-  createCtx(): { ready: boolean } {
-    return { ready: true }
-  }
-  buildArgs(): string[] {
-    return ['-u'] // cat -u：unbuffered 行回显
-  }
-  isReady(): boolean {
-    return true
-  }
-  encodeUserMessage(text: string): string {
-    return text + '\n'
-  }
-  encodeInterruptMessage(text: string): string {
-    return text + '\n'
-  }
-  parseLine(line: string): ParseResult {
-    // 回显行 → done 事件（携回显文本），让 wait --kind done 醒。
-    return { events: [{ kind: 'done', payload: { text: line.trim() } }], side: null }
-  }
-}
-
-// ═══════════════════════ ShutdownController 幂等漏斗 ═══════════════════════
-
-/** 定时器注入面（默认 setTimeout+unref = daemon Timer；测试注入手动步进）。 */
-export type Scheduler = (fn: () => void, ms: number) => () => void
-
-const defaultScheduler: Scheduler = (fn, ms) => {
-  const t = setTimeout(fn, ms)
-  if (typeof t.unref === 'function') t.unref()
-  return () => clearTimeout(t)
-}
-
-export interface ShutdownDeps {
-  worker: string
-  append: (partial: EventPartial) => void
-  child: () => WorkerProcess
-  graceMs?: number
-  timeoutMs?: number
-  idleTimeoutMs?: number
-  schedule?: Scheduler
-  log?: (s: string) => void
-}
-
-/**
- * 唯一收口「worker 要走了」所有触发源（explicit-kill/timeout/crash/idle-timeout/信号/child exit）。
- * 铁律（shutdown.py:17）：① 幂等首调用胜；② kill ladder 一次性（killedStarted 守卫）；③ 冷退出合成
- * 只在无 reason（有显式 shutdown 时 killed 已 terminal）；④ 合成 synthesized=true、by=worker 名；
- * ⑤ finalize_on_exit await 在途 killed 才 exit（防事件 race 进程死）。
- */
-export class ShutdownController {
-  private reason: string | undefined
-  private signal: string | undefined
-  private terminalEmitted = false
-  private killedStarted = false
-  private killedDone = false
-  private killedWaiters: (() => void)[] = []
-  private readonly ladderCancels: (() => void)[] = []
-  private readonly schedule: Scheduler
-  private readonly graceMs: number
-  private readonly log: (s: string) => void
-
-  constructor(private readonly deps: ShutdownDeps) {
-    this.schedule = deps.schedule ?? defaultScheduler
-    this.graceMs = deps.graceMs ?? SHUTDOWN_GRACE_MS
-    this.log = deps.log ?? (() => {})
-  }
-
-  isShuttingDown(): boolean {
-    return this.reason !== undefined
-  }
-  markTerminalEmitted(): void {
-    this.terminalEmitted = true
-  }
-  hasTerminalEvent(): boolean {
-    return this.terminalEmitted
-  }
-  /** 首占返 true；已占返 false（幂等首调用胜，shutdown.py:72）。 */
-  claim(reason: string): boolean {
-    if (this.reason !== undefined) return false
-    this.reason = reason
-    return true
-  }
-
-  private settleKilled(): void {
-    this.killedDone = true
-    const waiters = this.killedWaiters.splice(0)
-    for (const w of waiters) w()
-  }
-
-  private awaitKilled(): Promise<void> {
-    if (this.killedDone || !this.killedStarted) return Promise.resolve()
-    return new Promise((resolve) => this.killedWaiters.push(resolve))
-  }
-
-  // kill ladder：close stdin → grace → SIGTERM → grace → SIGKILL（shutdown.py:93）。
-  private startKillLadder(): void {
-    const child = this.deps.child()
-    child.closeStdin()
-    const step3 = (): void => {
-      if (!child.exited()) {
-        this.log('[supervisor] still alive, SIGKILL worker\n')
-        child.kill('SIGKILL')
-      }
-    }
-    const step2 = (): void => {
-      if (!child.exited()) {
-        this.log('[supervisor] grace expired, SIGTERM worker\n')
-        child.kill('SIGTERM')
-        this.ladderCancels.push(this.schedule(step3, this.graceMs))
-      }
-    }
-    this.ladderCancels.push(this.schedule(step2, this.graceMs))
-  }
-
-  private writeKilled(reason: string, signal: string): void {
-    const partial: EventPartial = { kind: 'killed', by: `supervisor:${this.deps.worker}`, reason, signal }
-    if (reason === 'timeout' && this.deps.timeoutMs) partial.timeout_ms = this.deps.timeoutMs
-    if (reason === 'idle-timeout' && this.deps.idleTimeoutMs) partial.idle_timeout_ms = this.deps.idleTimeoutMs
-    try {
-      this.deps.append(partial)
-    } finally {
-      this.settleKilled()
-    }
-  }
-
-  /** 幂等漏斗：起 kill ladder + 写 killed（一次性，shutdown.py:142）。 */
-  async request(signalName: string, reason: string): Promise<void> {
-    let already: boolean
-    if (this.killedStarted) {
-      already = true
-    } else {
-      already = false
-      this.killedStarted = true
-      if (this.reason === undefined) this.reason = reason
-      if (this.signal === undefined) this.signal = signalName
-    }
-    if (already) {
-      await this.awaitKilled() // 已有在途/完成的 ladder——等它落地（保排序）。
-      return
-    }
-    this.log(`[supervisor] shutting down worker (reason=${this.reason}, signal=${this.signal})\n`)
-    this.startKillLadder()
-    this.writeKilled(this.reason!, this.signal!)
-  }
-
-  /** child exit 时调：冷退出合成 fallback + 等在途 killed 落地（shutdown.py:164）。 */
-  async finalizeOnExit(code: number | null, signalObj: string | null): Promise<void> {
-    this.log(`[supervisor] worker exit code=${code ?? 'null'} signal=${signalObj ?? 'null'}\n`)
-    let synth = false
-    if (!this.terminalEmitted && this.reason === undefined) {
-      this.terminalEmitted = true
-      synth = true
-    }
-    if (synth) {
-      if (code === 0) {
-        this.deps.append({ kind: 'done', by: this.deps.worker, synthesized: true, exit_code: code })
-      } else {
-        this.deps.append({
-          kind: 'error',
-          by: this.deps.worker,
-          message: `worker exited without terminal event (code=${code}, signal=${signalObj})`,
-          synthesized: true,
-          exit_code: code,
-          exit_signal: signalObj,
-        })
-      }
-    }
-    if (this.killedStarted) await this.awaitKilled()
-  }
-
-  /** supervisor 收尾：取消在途 ladder timer（防泄漏）。 */
-  dispose(): void {
-    for (const c of this.ladderCancels.splice(0)) c()
-  }
-}
-
-// ═══════════════════════ idle timer（OOM 护栏）═══════════════════════
-
-/** idle 超时自杀计时器（idle.py:32）。绑 TurnTracker：mid-turn pause / idle reset。fire 三重护栏。 */
-export class IdleTimer {
-  private cancel: (() => void) | undefined
-  private cancelled = false
-  constructor(
-    private readonly idleTimeoutMs: number,
-    private readonly shutdown: ShutdownController,
-    private readonly isChildExited: () => boolean,
-    private readonly schedule: Scheduler = defaultScheduler,
-  ) {
-    if (idleTimeoutMs > 0) this.reset()
-  }
-  private clear(): void {
-    if (this.cancel) {
-      this.cancel()
-      this.cancel = undefined
-    }
-  }
-  private fire(): void {
-    this.cancel = undefined
-    if (this.cancelled) return
-    // 三重护栏（纵深防御，idle.py:53）。
-    if (this.shutdown.isShuttingDown() || this.shutdown.hasTerminalEvent() || this.isChildExited()) return
-    void this.shutdown.request('SIGTERM', 'idle-timeout')
-  }
-  reset(): void {
-    if (this.cancelled || this.idleTimeoutMs <= 0) return
-    this.clear()
-    this.cancel = this.schedule(() => this.fire(), this.idleTimeoutMs)
-  }
-  pause(): void {
-    this.clear()
-  }
-  dispose(): void {
-    this.cancelled = true
-    this.clear()
-  }
-}
-
-// ═══════════════════════ stdout pump 核心（apply_parse_result）═══════════════════════
-
-/** worker stdout 行的 adapter 产物 → channel 事件 + 副作用（stdout_pump.py:66）。 */
-export function applyParseResult(
-  worker: string,
-  result: ParseResult,
-  child: WorkerProcess,
-  shutdown: ShutdownController,
-  append: (partial: EventPartial) => void,
-  persist: (suffix: string, value: string) => void,
-  turnTracker?: TurnTracker,
-): void {
-  for (const ev of result.events ?? []) {
-    const kind = ev.kind
-    // 同步先占 terminal slot（防 racing child exit→finalizeOnExit 看到 false 双合成）。
-    if (kind === 'done' || kind === 'error') shutdown.markTerminalEmitted()
-    append({ kind, by: worker, ...(ev.payload ?? {}) })
-    if (kind === 'done' || kind === 'error') {
-      const turn = turnTracker?.finish()
-      if (turn) {
-        append({
-          kind: 'turn_finished',
-          by: worker,
-          worker,
-          inputSeq: turn.inputSeq,
-          turnId: turn.turnId,
-          outcome: kind === 'done' ? 'done' : 'error',
-        })
-      }
-    }
-  }
-  const side = result.side
-  if (side) {
-    if (side.persistSessionId) persist('session-id', side.persistSessionId)
-    if (side.persistThreadId) persist('thread-id', side.persistThreadId)
-    if (side.reply) {
-      for (const r of side.reply) {
-        try {
-          child.write(r)
-        } catch {
-          /* stdin 关——supervisor 即将退 */
-        }
-      }
-    }
-  }
-}
-
-// ═══════════════════════ inbox watcher 事件资格（inbox_watcher.py 过滤）═══════════════════════
-
-/** 这条事件该不该被 <worker> 的 inbox watcher 处理（inbox_watcher.py:86 + matches_inbox_policy）。 */
-export function inboxEventEligible(ev: ChannelEvent, worker: string, policy: InboxPolicy): boolean {
-  if (ev.by === worker) return false // 忽略自己发的
-  if (ev.kind === 'message') return matchesInboxPolicy(ev, worker, policy)
-  if (ev.kind === 'interrupt_requested') return ev.worker === worker
-  return false
-}
 
 // ═══════════════════════ SupervisorConfig + startSupervisor ═══════════════════════
 
@@ -418,7 +135,7 @@ export async function startSupervisor(
   const scope: Scope = deps.scope ?? 'project'
   const { store, proc, fs, env } = deps
   const log = deps.log ?? (() => {})
-  const schedule = deps.schedule ?? defaultScheduler
+  const schedule = deps.schedule ?? defaultSupervisorScheduler
   const tailFs = deps.tailFs ?? nodeTailFs()
   const pollMs = deps.pollMs ?? 25
   const sleep = deps.sleep ?? sleepReal
@@ -517,8 +234,8 @@ export async function startSupervisor(
   // 13. idle timer + TurnTracker（hooks 互绑：mid-turn pause / idle reset）。
   idleTimer = new IdleTimer(config.idleTimeoutMs ?? 0, shutdown, () => child.exited(), schedule)
   const turnTracker = new TurnTracker(
-    () => idleTimer!.pause(),
-    () => idleTimer!.reset(),
+    () => idleTimer?.pause(),
+    () => idleTimer?.reset(),
   )
 
   // 14. 循环1 stdout pump（事件驱动）。

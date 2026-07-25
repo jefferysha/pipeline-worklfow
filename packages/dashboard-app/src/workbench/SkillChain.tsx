@@ -1,20 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import gsap from 'gsap'
 import { useGSAP } from '@gsap/react'
-import { LockKeyhole } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { fetchSkillsRegistry, postMandatorySkills, type WbSkillEntry } from '../api/client'
+import { fetchSkillsRegistry, type WbSkillEntry } from '../api/client'
 import { useT } from '../i18n'
-import {
-  loadMandatoryConfig,
-  isValidMandatorySkillList,
-  peekMandatoryConfig,
-  primeMandatoryConfig,
-  resolveMandatoryCell,
-  type MandatoryConfig,
-} from './mandatorySkills'
-import { SkillTransferModal } from './SkillTransferModal'
+import { DefaultSkillChain } from './DefaultSkillChain'
 import type { WbSkillRef, WbStepDef } from './WorkbenchView'
 import './workbench.css'
 
@@ -50,149 +41,23 @@ gsap.registerPlugin(useGSAP)
  * 依赖链语义、添加面板、default 轨道 tab 全部不动，纯展示升级；reduced-motion 直显。
  */
 
-// 同 kernel validate.ts IDENT_RE / StepEditor FIELD_RE 一条规则：自定义 workflow 的 skill id
-// 字符集越界（如外部技能的 `plugin:skill` 冒号名）会被 kernel validate 在保存时拒绝——
-// 添加面板对这类候选直接禁用并给原因，不让用户「加了却存不进去」。
-const SKILL_ID_RE = /^[a-zA-Z0-9_-]+$/
-
-// ── W3 tailwind 迁移：原 styles.ts wb-* 规则的等值原子类串（颜色全走 token / var(--*)，
-//    状态由 data-* / aria-* 属性承载，tailwind data-/aria- 变体挂样式）。──
-/** 原 .wb-note。 */
-const NOTE_CLS = 'text-xs leading-[1.55] text-text-3'
-/** 原 .view__note.view__note--error。 */
-const ERR_CLS = 'p-5 text-[13px] text-red'
-/** 原 .wb-ed-sec-h 区头 与 .hint。 */
-const SEC_H_CLS = 'mb-2.5 flex items-center gap-1.5 text-[13px] font-bold'
-const HINT_CLS = 'text-xs font-normal text-text-3'
-/** 原 .wb-empty。 */
-const EMPTY_CLS = 'text-[12.5px] text-text-3'
-/** 原 .wb-chip；未安装态（原 .wb-chip--uninstalled）由 data-uninstalled 属性驱动。 */
-const CHIP_CLS =
-  'inline-flex h-6 items-center gap-1 rounded-[7px] border border-border bg-fill px-[9px] font-mono text-xs text-text-2 data-uninstalled:opacity-62'
-/** 原 .wb-chip-badge：未安装小徽章（琥珀 = 红绿 color-mix 派生，决议 #9 禁新原色的既有表达）。 */
-const CHIP_BADGE_CLS =
-  'ml-1 flex-none whitespace-nowrap rounded-full border-0 bg-[color-mix(in_oklch,var(--red)_52%,var(--green))] px-1.5 py-px text-[10px] font-bold text-card'
-/** 原 .wb-addchip：虚线「添加/编辑」小钮。 */
-const ADDCHIP_CLS =
-  'h-6 cursor-pointer rounded-[7px] border border-dashed border-border-2 bg-transparent px-[9px] text-xs font-semibold text-text-3 transition-colors hover:bg-fill hover:text-text-2'
-/** 原 .wb-sk-actions。 */
-const ACTIONS_CLS = 'flex items-center gap-2 pt-[9px]'
-/** 原 .wb-chain 链行（行间虚线分隔由容器 divide-* 承担，对位原 .wb-chain + .wb-chain）与 .wb-chain-k 行头。 */
-const CHAIN_CLS = 'flex flex-wrap items-center gap-1.5 py-[7px]'
-const CHAIN_K_CLS = 'mr-1 flex-none text-[11px] font-bold tracking-[.04em] text-text-3'
-
-/** 原 .wb8-skconn：紫流动虚线连接件（GSAP/测试锚点换 data-anim="skconn"；keyframes 在 workbench.css，
- *  reduced-motion 停帧走 motion-reduce: 变体）。纯展示元素，可安全复用同一 JSX 常量。 */
-const skConn = (
-  <span
-    aria-hidden="true"
-    data-anim="skconn"
-    className="relative mx-0.5 inline-block h-3.5 w-[26px] flex-none before:absolute before:left-0.5 before:right-[7px] before:top-1.5 before:h-0.5 before:animate-[wb-flowsk_1.6s_linear_infinite] before:bg-[repeating-linear-gradient(90deg,var(--purple)_0_5px,transparent_5px_10px)] before:content-[''] after:absolute after:right-px after:top-[3px] after:h-2 after:w-[5px] after:bg-purple after:content-[''] after:[clip-path:polygon(0_0,100%_50%,0_100%)] motion-reduce:before:animate-none"
-  />
-)
-
-interface ErrorBody {
-  error?: string
-}
-
-/** 非 2xx 响应尽量读出 server 的 { error } 文案（同 WorkbenchView.readErrorDetail 的既有模式）。 */
-async function readErrorDetail(res: Response): Promise<string> {
-  try {
-    const body = (await res.json()) as ErrorBody
-    if (typeof body?.error === 'string') return body.error
-  } catch {
-    /* 无 JSON 体 */
-  }
-  return ''
-}
-
-// ── 依赖链投影（demo chainsHTML 的 React 移植，depends_on 数组化）──
-
-interface ChainRow {
-  /** 链头悬空依赖（指向 step 外的 skill id / 分叉未随首链走掉的父节点），null = 干净链头。 */
-  ghost: string | null
-  ids: string[]
-}
-
-interface ChainProjection {
-  chains: ChainRow[]
-  solos: string[]
-}
-
-function buildChains(skills: readonly WbSkillRef[]): ChainProjection {
-  const byId = new Set(skills.map((s) => s.id))
-  const inListDeps = (s: WbSkillRef): string[] => (s.depends_on ?? []).filter((d) => byId.has(d))
-  const kids = new Map<string, string[]>()
-  for (const s of skills) {
-    for (const dep of inListDeps(s)) {
-      const list = kids.get(dep) ?? []
-      list.push(s.id)
-      kids.set(dep, list)
-    }
-  }
-  const used = new Set<string>()
-  function walk(start: string): string[] {
-    const ch = [start]
-    used.add(start)
-    let cur = start
-    for (;;) {
-      const next = (kids.get(cur) ?? []).find((k) => !used.has(k))
-      if (!next) return ch
-      ch.push(next)
-      used.add(next)
-      cur = next
-    }
-  }
-  const chains: ChainRow[] = []
-  const solos: string[] = []
-  // 第一遍（声明序）：完全未声明依赖的节点起链；长度 1 且无后继 = 无依赖独立项。
-  // （只声明了悬空依赖的节点不算「无依赖」——留给第二遍以幽灵 chip 呈现它挂在谁下面。）
-  for (const s of skills) {
-    if (used.has(s.id) || (s.depends_on ?? []).length > 0) continue
-    const ch = walk(s.id)
-    if (ch.length === 1) solos.push(s.id)
-    else chains.push({ ghost: null, ids: ch })
-  }
-  // 第二遍：剩余节点（悬空依赖/分叉支/循环）——链头带幽灵 chip 指明它挂在谁下面。
-  for (const s of skills) {
-    if (used.has(s.id)) continue
-    chains.push({ ghost: s.depends_on?.[0] ?? null, ids: walk(s.id) })
-  }
-  return { chains, solos }
-}
-
-// ── default 模式：manifest 强制技能矩阵的模块级探测缓存 ──
-// P1 任务 B 搬迁：MandatoryConfig / loadMandatoryConfig / cfgCache / cfgInflight /
-// invalidateMandatoryConfig 原是本模块私有物，已**逐字**移入 ./mandatorySkills（行为零改动，
-// 含「res.ok 必须在 res.json() 之前」那条教训注释一并搬走）。理由：编排画布的 default 泳道
-// 技能区与本组件（仍挂在 WorkbenchView 高级设置 sheet 里）同屏共存、读写同一份 manifest 矩阵——
-// 两份缓存 = 两发 GET /api/config + 写入后状态分叉（画布改完，sheet 还显示旧集合）。故一份缓存两处用。
-// 跨模块后只有两处适配（非行为变更）：读 cfgCache → peekMandatoryConfig()，写 cfgCache → primeMandatoryConfig()，
-// 因为 ES module 的 import 绑定不可赋值。invalidateMandatoryConfig 是既有 export（测试依赖），
-// 于此原样 re-export 保持对外可见性不变。
+import { ACTIONS_CLS, ADDCHIP_CLS, CHIP_BADGE_CLS, CHIP_CLS, CHAIN_CLS, CHAIN_K_CLS, EMPTY_CLS, ERR_CLS, HINT_CLS, NOTE_CLS, SEC_H_CLS, SKILL_ID_RE, buildChains, readErrorDetail, skConn } from './skillChainModel'
 export { invalidateMandatoryConfig } from './mandatorySkills'
-
-/** POST /api/config/mandatory-skills 的成功响应体形状（自 旧设置视图 迁移）。 */
-interface MandatorySkillsPostResponse {
-  ok?: boolean
-  error?: string
-  skills?: string[]
-}
 
 export interface SkillChainProps {
   step: WbStepDef
   /** 项目根必须由宿主显式传入；default config/cache/write 全部以它隔离。 */
   root: string
-  /** 所属 workflow 名：'default' 走 manifest 强制技能矩阵模式，其余为 step.skills DAG 编辑。 */
-  workflow?: string
+  /** 显式能力模式；不从 workflow 名称反推可编辑的数据面。 */
+  mode?: 'step-dag' | 'manifest-matrix'
   /** 自定义 workflow 只读镜像：隐藏移除 × 与添加面板（default 模式忽略此项，见头注释）。 */
   readonly?: boolean
   onChange: (updated: WbStepDef) => void
 }
 
-export function SkillChain({ step, root, workflow = '', readonly = false, onChange }: SkillChainProps): JSX.Element {
+export function SkillChain({ step, root, mode = 'step-dag', readonly = false, onChange }: SkillChainProps): JSX.Element {
   const { t } = useT()
-  const isDefault = workflow === 'default'
+  const isDefault = mode === 'manifest-matrix'
 
   // ── 自定义模式：添加面板态 ──
   const [panelOpen, setPanelOpen] = useState(false)
@@ -201,15 +66,6 @@ export function SkillChain({ step, root, workflow = '', readonly = false, onChan
   const [candidate, setCandidate] = useState<string | null>(null)
   const [dep, setDep] = useState('')
 
-  // ── default 模式：矩阵态（探测/轨道/穿梭框/保存）──
-  const [requestedTrack, setTrack] = useState<string | null>(null)
-  const [cfg, setCfg] = useState<MandatoryConfig | null>(() => peekMandatoryConfig(root))
-  const [editing, setEditing] = useState(false)
-  const [saveError, setSaveError] = useState<string | null>(null)
-  // 保存操作绑定发起时的项目；token 防止旧项目的 finally 干扰切换项目后的新保存。
-  const rootRef = useRef(root)
-  rootRef.current = root
-  const savingOpRef = useRef<{ token: symbol; root: string; cellKey: string } | null>(null)
 
   // ── v8-E（用户点名）：依赖链动态入场——编号节点逐个弹入 + 紫流动虚线连线生长
   //    （demo v8 animChain 对位：节点 back.out stagger .07、连线 scaleX 0→1 origin left）。
@@ -242,21 +98,6 @@ export function SkillChain({ step, root, workflow = '', readonly = false, onChan
     { scope: chainsRef, dependencies: [chainKey], revertOnUpdate: true },
   )
 
-  useEffect(() => {
-    if (!isDefault) return
-    let cancelled = false
-    const cached = peekMandatoryConfig(root)
-    setCfg(cached)
-    setEditing(false)
-    setSaveError(null)
-    if (cached !== null) return
-    void loadMandatoryConfig(root).then((r) => {
-      if (!cancelled) setCfg(r)
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [isDefault, root])
 
   // ── 自定义模式动作 ──
 
@@ -340,184 +181,7 @@ export function SkillChain({ step, root, workflow = '', readonly = false, onChan
     setDep('')
   }
 
-  // ── default 模式动作（探测/保存逻辑自 旧设置视图 saveCellWith/requestSave/requestCancel 迁移）──
-
-  const phase = step.id
-  const matrixTracks = cfg?.tracks.filter((candidate) => candidate.policyProfile.skills.matrix) ?? []
-  const selectedTrack = matrixTracks.find((candidate) => candidate.id === requestedTrack) ?? matrixTracks[0] ?? null
-  const track = selectedTrack?.id ?? ''
-  function effectiveSkills(tr: string): string[] {
-    if (cfg === null) return []
-    const definition = matrixTracks.find((candidate) => candidate.id === tr)
-    return definition ? resolveMandatoryCell(cfg.table, definition, phase, cfg.writableProfiles).skills : []
-  }
-
-  async function saveMandatory(skills: string[]): Promise<void> {
-    if (selectedTrack === null) return
-    const cellKey = `${phase}.${track}`
-    const requestRoot = root
-    const requestCfg = cfg
-    const op = { token: Symbol(cellKey), root: requestRoot, cellKey }
-    savingOpRef.current = op
-    setSaveError(null)
-    try {
-      const res = await postMandatorySkills({ phase, track, skills, root: requestRoot })
-      let body: MandatorySkillsPostResponse = {}
-      try {
-        body = (await res.json()) as MandatorySkillsPostResponse
-      } catch {
-        /* 无 JSON 体：走下方通用错误文案 */
-      }
-      if (!res.ok || body.ok !== true) {
-        throw new Error(body.error || t('workbench.sk_save_failed', { status: res.status }))
-      }
-      if (body.skills !== undefined && !isValidMandatorySkillList(body.skills)) {
-        throw new Error(t('workbench.mand_save_invalid'))
-      }
-      const saved = body.skills ?? skills
-      const base = peekMandatoryConfig(requestRoot) ?? requestCfg
-      if (base !== null) {
-        const next: MandatoryConfig = { ...base, table: { ...base.table, [cellKey]: saved } }
-        primeMandatoryConfig(next, requestRoot)
-        if (rootRef.current === requestRoot) {
-          setCfg(next)
-          setEditing(false)
-        }
-      }
-    } catch (e) {
-      if (rootRef.current === requestRoot) setSaveError(e instanceof Error ? e.message : String(e))
-    } finally {
-      if (savingOpRef.current?.token === op.token) savingOpRef.current = null
-    }
-  }
-
-  function requestSave(skills: string[]): void {
-    const active = savingOpRef.current
-    if (active?.root === root && active.cellKey === `${phase}.${track}`) return
-    void saveMandatory(skills)
-  }
-
-  function requestCancel(): void {
-    const active = savingOpRef.current
-    if (active?.root === root && active.cellKey === `${phase}.${track}`) return
-    setEditing(false)
-    setSaveError(null)
-  }
-
-  // ── default 模式渲染 ──
-  if (isDefault) {
-    const skills = effectiveSkills(track)
-    // archive 无强制技能（manifest 约定，POST 端点亦拒 archive）——不给编辑钮。
-    const cell = cfg !== null && selectedTrack !== null
-      ? resolveMandatoryCell(cfg.table, selectedTrack, phase, cfg.writableProfiles)
-      : null
-    const canEdit = cfg?.capable === true && cell?.editable === true && cell.source === 'explicit' && phase !== 'archive'
-    return (
-      // wb-ed-sec 保留为语义骨架类（StepEditor/wb8-pane 的相邻分隔上下文仍以它为锚，样式已原子化）。
-      <div className="wb-ed-sec pt-3.5 pb-1" data-testid="wb-sk-sec">
-        <div className={SEC_H_CLS}>
-          {t('workbench.sk_sec')}
-          <span className={HINT_CLS}>{t('workbench.sk_hint_default', { phase })}</span>
-        </div>
-        {cfg === null ? (
-          <p className={NOTE_CLS}>{t('common.loading')}</p>
-        ) : (
-          <>
-            {matrixTracks.length === 0 ? (
-              <p className={NOTE_CLS}>{t('workbench.track_empty')}</p>
-            ) : (
-            <div className="mb-2.5 flex gap-1" data-testid="wb-sk-tracks">
-              {matrixTracks.map((definition) => {
-                const tr = definition.id
-                const n = effectiveSkills(tr).length
-                return (
-                  <button
-                    key={tr}
-                    type="button"
-                    className="h-[26px] cursor-pointer rounded-md px-[11px] font-mono text-[12.5px] font-semibold text-text-3 transition-colors not-aria-pressed:hover:bg-fill not-aria-pressed:hover:text-text-2 aria-pressed:bg-fill-2 aria-pressed:text-text"
-                    aria-pressed={tr === track}
-                    data-testid={`wb-sk-track-${tr}`}
-                    onClick={() => setTrack(tr)}
-                  >
-                    {definition.builtin && <LockKeyhole className="mr-1 inline size-3" aria-hidden="true" />}{definition.label}
-                    {definition.policyProfile.skills.profile !== tr && ` · inherits ${definition.policyProfile.skills.profile}`}
-                    {n > 0 && <b className="ml-[3px] font-bold text-(--accent)">{n}</b>}
-                  </button>
-                )
-              })}
-            </div>
-            )}
-            {/* v6 T10：manifest 缺失黄条——当前 阶段×轨道 任一 token 的全部 a|b 备选都未装才触发
-                (部分已装即满足);capable:false(静态镜像兜底)或 registry 未就绪 → 不可判,保守不显示。 */}
-            {(() => {
-              if (cfg.capable !== true || registry === null) return null
-              const rawTokens = cell?.skills ?? []
-              const missing = rawTokens.filter((tok) =>
-                tok.split('|').every((alt) => installedMap.get(alt)?.installed !== true),
-              )
-              if (missing.length === 0) return null
-              const firstCmd = missing
-                .flatMap((tok) => tok.split('|'))
-                .map((alt) => installedMap.get(alt)?.installCmd)
-                .find((c) => c !== undefined)
-              return (
-                <p
-                  className={cn(
-                    NOTE_CLS,
-                    'flex flex-wrap items-center gap-2 rounded-[10px] border border-[color-mix(in_srgb,color-mix(in_oklch,var(--red)_52%,var(--green))_45%,var(--border))] bg-[color-mix(in_srgb,color-mix(in_oklch,var(--red)_52%,var(--green))_14%,var(--card))] px-2.5 py-2',
-                  )}
-                  data-testid="wb-sk-banner"
-                >
-                  {t('workbench.sk_banner', { tokens: missing.join('、') })}
-                  {firstCmd && (
-                    <button
-                      type="button"
-                      className={cn(CHIP_BADGE_CLS, 'cursor-pointer')}
-                      data-testid="wb-sk-banner-copy"
-                      title={firstCmd}
-                      onClick={() => void navigator.clipboard?.writeText(firstCmd)}
-                    >
-                      {t('workbench.sk_banner_copy')}
-                    </button>
-                  )}
-                </p>
-              )
-            })()}
-            <div className="flex flex-wrap items-center gap-2" data-testid="wb-sk-mand">
-              {skills.length === 0 && <span className={EMPTY_CLS}>{t('workbench.sk_empty_default')}</span>}
-              {skills.map((s) => (
-                <span
-                  key={s}
-                  data-chip=""
-                  data-uninstalled={installedMap.get(s)?.installed === false ? '' : undefined}
-                  className={CHIP_CLS}
-                  title={s}
-                >
-                  {s}
-                  {uninstBadge(s)}
-                </span>
-              ))}
-            </div>
-            <div className={ACTIONS_CLS}>
-              {canEdit && (
-                <button type="button" className={ADDCHIP_CLS} data-testid="wb-sk-edit" onClick={() => { setEditing(true); setSaveError(null) }}>
-                  {t('workbench.sk_edit')}
-                </button>
-              )}
-              {cfg.capable === false && (
-                <p className={NOTE_CLS} data-testid="wb-sk-cfg-ro">{t('workbench.sk_cfg_readonly')}</p>
-              )}
-            </div>
-            {saveError && (
-              <p className={cn(ERR_CLS, 'mt-2')} data-testid="wb-sk-save-error">{saveError}</p>
-            )}
-            {editing && <SkillTransferModal selected={skills} onSave={requestSave} onCancel={requestCancel} />}
-          </>
-        )}
-        <p className={cn(NOTE_CLS, 'mt-2.5')}>{t('workbench.sk_mand_note')}</p>
-      </div>
-    )
-  }
+  if (isDefault) return <DefaultSkillChain step={step} root={root} registry={registry} />
 
   // ── 自定义模式渲染 ──
   const { chains, solos } = buildChains(step.skills)

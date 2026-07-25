@@ -42,7 +42,7 @@ export {
   completedWorkflowSkillsSinceStepEntry,
   missingWorkflowStepSkills,
 } from './workflow/skill-evidence.js'
-export { evaluateStepGuards } from './workflow/stepGuard.js'
+export { evaluateStepGuards, evaluateWorkflowIrStepGuards } from './workflow/stepGuard.js'
 // step 编排层（Wave 2 下沉）：解析 step/找边/评 guard/算下相位的单一真相源，
 // cli transition/check 与 server transition 塌成 adapter（消息模板与错误分类学留 adapter）。
 export { applyStepTransition, firstStep, planStepTransition, resolveStep, resolveWorkflowName } from './workflow/engine.js'
@@ -52,23 +52,36 @@ export { parseWorkflow } from './workflow/parse.js'
 export { serializeWorkflow } from './workflow/serialize.js'
 export { validateWorkflow } from './workflow/validate.js'
 export { validateWorkflowTrackReferences } from './workflow/track-reference-validation.js'
-export type { StepDef, StepTransition, WorkflowActionConfig, WorkflowDef, WorkflowGuardConfig } from './workflow/types.js'
+export type {
+  StepDef, StepTransition, WorkflowActionConfig, WorkflowDef, WorkflowDocumentContractV1,
+  WorkflowDocumentRead, WorkflowDocumentSlot, WorkflowGuardConfig,
+} from './workflow/types.js'
 export {
-  DOCUMENT_CONTRACT_PHASES, DOCUMENT_KINDS, documentOwnerPhase, isAcceptedDocumentProducer,
+  DOCUMENT_CONTRACT_PHASES, DOCUMENT_KINDS, LEGACY_DOCUMENT_GOVERNANCE_POLICY,
+  documentGovernancePolicy, documentOwnerPhase, documentOwnerPolicyStep, isAcceptedDocumentProducer,
   isDocumentContractPhase, isDocumentKind, isDocumentProducerAllowedInPhase,
-  isDocumentRecordAllowedInPhase, isOpenSpecDocumentContractRequired, isOutputAllowedInPhase,
-  outputsRequiredForPhase, producerCandidatesFor, readsRequiredForPhase, recordProducerCandidatesFor,
-  recordsRequiredForPhase,
-  shouldEnforceDocumentEvidenceOnTransition, validateOpenSpecContractWorkflow,
+  isDocumentPolicyStep, isDocumentProducerAllowedInPolicyStep, isDocumentRecordAllowedInPhase,
+  isDocumentRecordAllowedInPolicyStep, isOpenSpecDocumentContractRequired, isOutputAllowedInPhase,
+  outputsRequiredForPhase, outputsRequiredForPolicyStep, producerCandidatesFor,
+  readsRequiredForPhase, readsRequiredForPolicyStep, recordProducerCandidatesFor,
+  recordProducerCandidatesForPolicyStep, recordsRequiredForPhase, recordsRequiredForPolicyStep,
+  shouldEnforceDocumentEvidenceOnTransition, shouldEnforceDocumentPolicyOnTransition,
+  validateOpenSpecContractWorkflow,
 } from './workflow/document-contract.js'
 export type {
-  DocumentContractPhase, DocumentKind, DocumentOutputRequirement, OpenSpecContract,
+  DocumentContractPhase, DocumentGovernancePolicy, DocumentKind, DocumentOutputRequirement, OpenSpecContract,
 } from './workflow/document-contract.js'
 // Workflow IR 编译（G2）：v1 WorkflowDef → 归一化 WorkflowIR（含默认值/深冻结/字段闭集校验）。
 // custom 轨 transition adapter 在 loadWorkflow 后柯里化调用它拿运行层 IR；类型供 adapter/测试引用。
 // compileWorkflow=custom 契约（拒 effective-phase-skills，A 契约）；compileDefaultWorkflow=default 生成
 // 校验专用（允许 phase policy）——见 workflow/compile.ts。
-export { compileWorkflow, compileDefaultWorkflow } from './workflow/compile.js'
+export { compileWorkflow, compileDefaultWorkflow, decodeWorkflowDef } from './workflow/compile.js'
+export {
+  compileEffectiveWorkflowPlan, effectiveWorkflowPlanFromIr, loadEffectiveWorkflowPlan,
+  documentGovernanceFingerprint, DocumentGovernanceBindingError, effectiveWorkflowPlanBinding,
+  resolveBoundEffectiveWorkflowPlan, resolveEffectiveWorkflowPlan,
+} from './workflow/effective-plan.js'
+export type { EffectiveWorkflowPlan, PersistedDocumentGovernanceBinding } from './workflow/effective-plan.js'
 export type { CompiledGuardConfig, StepIR, StepTransitionIR, WorkflowIR } from './workflow/ir.js'
 // default workflow artifact declaration 查询层（G2 P4/P5）：只读生成表 default-workflow.generated.ts 的
 // track-aware 查询接缝——P5 artifact register 经本 API 取 default declaration，不再读 YAML/复制字段表。
@@ -77,7 +90,9 @@ export type { DefaultArtifactDeclaration } from './workflow/default-artifacts.js
 export type { ArtifactProducerPolicy, WorkflowArtifactConfig } from './workflow/types.js'
 // EffectiveSkillResolver（G2 P5）：artifact register 校验具体 producer 的接缝（default=manifest
 // mandatory+recommended / custom=step.skills；a|b 备选拆 alternatives）。artifact command 只依赖本接口。
-export { createEffectiveSkillResolver } from './workflow/effective-skill-resolver.js'
+export {
+  createEffectiveSkillResolver, resolveAvailableSkillSlots, resolveRequiredSkillSlots,
+} from './workflow/effective-skill-resolver.js'
 export type {
   EffectiveSkillResolver, EffectiveSkillSlot, EffectiveSkillResolverManifest, EffectiveSkillResolverOptions,
 } from './workflow/effective-skill-resolver.js'

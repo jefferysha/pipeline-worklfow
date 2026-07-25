@@ -33,168 +33,35 @@
  * exact-phase-and-event approval receipt。StateStore 已以 canonical current 为真相并把 `.pipeline.yaml`
  * 作为兼容投影，本用例只消费该抽象，不自行读任一格式。
  */
-import type { FieldName, FlowEngine, HistoryWriter, Phase, PipelineState } from '../types.js'
+import type { FieldName, FlowEngine, Phase, PipelineState } from '../types.js'
 import { IllegalTransitionError } from '../types.js'
 import { applyBreadcrumbTail, clearReviewGatePatch, reviewGateApprovedFor, transitionRecordToHistoryEntry } from '../state/index.js'
 import { evaluateDocumentEvidence } from '../state/document-evidence.js'
 import type { DocumentEvidenceReport } from '../state/document-evidence.js'
-import type { BreadcrumbWriter } from '../state/index.js'
 import { eventEdge } from '../flow/index.js'
 import type { EventName, TransitionContext } from '../flow/index.js'
 import { checkDefaultEventPreconditions, DEFAULT_EVENT_POLICY } from '../flow/default-event-policy.js'
 import { applyStepTransition, planStepTransition, resolveStep } from './engine.js'
 import { applyActions } from './action-handlers.js'
 import { evaluateConstraintPolicy, type ConstraintDecision } from '../loops/automation-policy.js'
-import type { AutomationPolicySnapshot } from '../loops/automation-policy.js'
 import type { ActionConfig, CompiledGuardConfig, WorkflowIR } from './ir.js'
-import type { TransitionRecord, WorkflowRunRepository } from './run-types.js'
 import {
-  isDocumentContractPhase, isOpenSpecDocumentContractRequired, shouldEnforceDocumentEvidenceOnTransition,
+  isDocumentContractPhase, isDocumentPolicyStep, shouldEnforceDocumentPolicyOnTransition,
 } from './document-contract.js'
-import type { DocumentContractPhase } from './document-contract.js'
-import { missingWorkflowStepSkills } from './skill-evidence.js'
-
-export interface TransitionApplicationDeps {
-  runRepository: WorkflowRunRepository
-  flow: FlowEngine
-  clock: () => string
-  /** best-effort：缺省 = 不记账/不写（测试可不注入，同 cli/server 既有 deps 约定）。 */
-  history?: HistoryWriter
-  breadcrumb?: BreadcrumbWriter
-  /**
-   * Resolve host-proven Skill completions for the current visit to a custom workflow step.
-   * Production CLI/server adapters must inject this; omission is reserved for lower-level tests.
-   */
-  completedStepSkills?: (input: {
-    readonly changeDir: string
-    readonly stepId: string
-    readonly requiredSkillIds: readonly string[]
-  }) => Promise<ReadonlySet<string>>
-  /**
-   * OpenSpec evidence ledger read port. Production leaves this unset so the use case always reads
-   * the authoritative filesystem ledger; adapters may inject it only to isolate their own unit
-   * tests from filesystem persistence.
-   */
-  documentEvidence?: (
-    root: string,
-    changeDir: string,
-    phase: DocumentContractPhase,
-  ) => Promise<DocumentEvidenceReport>
-  /** Resolve current kill-switch and authenticated human-gate facts inside the transaction. */
-  resolveConstraintContext?: (input: {
-    readonly policy: AutomationPolicySnapshot
-    readonly command: TransitionCommand
-    readonly target: string
-  }) => Promise<{ readonly active: boolean; readonly humanGateSatisfied: boolean }>
-}
-
-export interface TransitionCommand {
-  /** 项目根（OpenSpec ledger 和 workflow 配置的锚点）。 */
-  root: string
-  /** change 目录绝对路径。 */
-  changeDir: string
-  /** 裸 change 名（不是路径）——breadcrumb 内容用。 */
-  changeName: string
-  event: string
-  /** default 轨 DefaultEventPolicy typed guard/action 用；custom 轨 P2 起也复用它
-   * 的 fileExists/gitHeadSha 注入 edge/step guard 的 file-exists/build-head-unchanged 能力面
-   * （custom 轨的 tasks.md IO 仍走 changeDir 本身，见 planCustomTransition 组装的 StepGuardContext）。 */
-  context: TransitionContext
-  /** 已绑定根路径的 workflow 加载器，返回**编译产物** WorkflowIR（adapter 柯里化处
-   * loadWorkflow→compileWorkflow，见 cli/server transition.ts）。编译错误 = 基础设施错误，沿
-   * 既有 throw→exit 1/500 路径由 adapter 处理，不进本模块判别联合。 */
-  loadWorkflow: (name: string) => WorkflowIR | null
-  /**
-   * 仅 dashboard 的显式“继续/放行”点击可传 true；CLI/agent 路径必须经过 canonical
-   * `pipeline review acknowledge` receipt。它把 Web UI 的真人点击接到同一出口 gate，而不是
-   * 让进入 review phase 时就出现的 marker 锁住 agent。
-   */
-  humanReviewApproved?: boolean
-}
-
-export type TransitionApplicationWarning =
-  | { readonly kind: 'build-sha-missing' }
-  | {
-      readonly kind: 'projection-write-failed'
-      readonly projection: 'state-yaml' | 'breadcrumb' | 'history'
-      readonly cause: unknown
-    }
-
-export type TransitionApplicationResult =
-  | {
-      readonly kind: 'applied'
-      readonly from: string
-      readonly to: string
-      readonly record: TransitionRecord
-      readonly warnings: readonly TransitionApplicationWarning[]
-    }
-  | { readonly kind: 'unknown-event'; readonly event: string }
-  | {
-      readonly kind: 'event-source-mismatch'
-      readonly event: string
-      readonly current: string
-      readonly expected: Phase
-      readonly to: Phase
-    }
-  | { readonly kind: 'illegal-transition'; readonly from: Phase; readonly to: Phase }
-  | { readonly kind: 'precondition-violated'; readonly lines: readonly string[] }
-  | { readonly kind: 'workflow-not-found'; readonly workflowName: string }
-  | { readonly kind: 'step-not-in-graph'; readonly workflowName: string; readonly stepId: string }
-  | {
-      readonly kind: 'event-unsupported'
-      readonly workflowName: string
-      readonly stepId: string
-      readonly event: string
-      readonly available: readonly string[]
-    }
-  | {
-      readonly kind: 'step-guard-failed'
-      readonly workflowName: string
-      readonly stepId: string
-      readonly failures: readonly string[]
-    }
-  | {
-      readonly kind: 'step-skills-incomplete'
-      readonly workflowName: string
-      readonly stepId: string
-      readonly missing: readonly string[]
-    }
-  | {
-      readonly kind: 'document-evidence-failed'
-      readonly phase: string
-      readonly blockers: readonly string[]
-    }
-  | { readonly kind: 'review-approval-required'; readonly phase: string; readonly event: string }
-  | { readonly kind: 'constraint-denied'; readonly reason: Exclude<ConstraintDecision, { allowed: true }>['reason'] }
-
-export interface TransitionApplication {
-  execute(command: TransitionCommand): Promise<TransitionApplicationResult>
-}
-
-/** execute() 内部用的"待提交"结果——不是 TransitionApplicationResult 的一部分（那个只在真正
- * commit 之后才产生），two variant 各自携带 default/custom 轨真实的 from/to 类型（default 轨
- * 的 to 是 Phase，供 breadcrumb 直接使用，不需要在调用点 cast）。 */
-type PreparedTransition =
-  | {
-      readonly mode: 'default'
-      readonly governedDocumentContract: boolean
-      readonly requiresReviewApproval: boolean
-      readonly from: Phase
-      readonly to: Phase
-      readonly nextFields: Record<FieldName, string | string[]>
-      readonly warnings: TransitionApplicationWarning[]
-    }
-  | {
-      readonly mode: 'custom'
-      readonly governedDocumentContract: boolean
-      readonly requiresReviewApproval: boolean
-      readonly from: string
-      readonly to: string
-      readonly nextFields: Record<FieldName, string | string[]>
-      readonly warnings: TransitionApplicationWarning[]
-    }
-
-type TransitionRejection = Exclude<TransitionApplicationResult, { kind: 'applied' }>
+import type { DocumentGovernancePolicy } from './document-contract.js'
+import {
+  DocumentGovernanceBindingError,
+  resolveBoundEffectiveWorkflowPlan,
+} from './effective-plan.js'
+import type { EffectiveWorkflowPlan } from './effective-plan.js'
+import type {
+  PreparedTransition, TransitionApplication, TransitionApplicationDeps, TransitionApplicationResult,
+  TransitionApplicationWarning, TransitionCommand, TransitionRejection,
+} from './transition-application-types.js'
+export type {
+  TransitionApplication, TransitionApplicationDeps, TransitionApplicationResult,
+  TransitionApplicationWarning, TransitionCommand,
+} from './transition-application-types.js'
 
 function isRejection(x: PreparedTransition | TransitionRejection): x is TransitionRejection {
   return 'kind' in x
@@ -233,7 +100,11 @@ function mergeLifecycleActions(
 // projection writer，收整包等于 planner 在类型上仍可间接提交/写盘（第 2 轮 review 抓到：从
 // "直接持有 tx" 变成 "间接可达" 不算收窄）。
 async function planDefaultTransition(
-  state: PipelineState, command: TransitionCommand, flow: FlowEngine, clock: () => string,
+  state: PipelineState,
+  command: TransitionCommand,
+  flow: FlowEngine,
+  clock: () => string,
+  effectivePlan: EffectiveWorkflowPlan,
 ): Promise<PreparedTransition | TransitionRejection> {
   const edge = eventEdge(command.event)
   if (!edge) return { kind: 'unknown-event', event: command.event }
@@ -280,21 +151,23 @@ async function planDefaultTransition(
     for (const signal of outcome.signals) warnings.push({ kind: signal.kind })
   }
   return {
-    mode: 'default',
-    governedDocumentContract: isOpenSpecDocumentContractRequired('default', fieldStr(state.fields.track)),
-    requiresReviewApproval: flow.manifest.reviewPhases.includes(result.from),
+    governedDocumentContract: effectivePlan.capabilities.documents.governed,
+    ...(effectivePlan.capabilities.documents.policy === undefined
+      ? {}
+      : { documentPolicy: effectivePlan.capabilities.documents.policy }),
+    requiresReviewApproval: effectivePlan.capabilities.review.steps.includes(result.from),
     from: result.from, to: result.to, nextFields, warnings,
   }
 }
 
 async function planCustomTransition(
   state: PipelineState,
-  ir: WorkflowIR,
-  workflowName: string,
+  effectivePlan: EffectiveWorkflowPlan,
   command: TransitionCommand,
   clock: () => string,
-  completedStepSkills: TransitionApplicationDeps['completedStepSkills'],
 ): Promise<PreparedTransition | TransitionRejection> {
+  const ir = effectivePlan.workflow
+  const workflowName = effectivePlan.id
   const currentBeforePlan = resolveStep(ir, fieldStr(state.fields.phase))
   // `archive` is the governed terminal used by the bundled archive skill. Custom workflow files
   // correctly model terminal nodes with `transitions: []`, but they still need one canonical
@@ -323,26 +196,11 @@ async function planCustomTransition(
   const edgeBeforePlan = terminalArchive
     ? planningIr.steps.find((step) => step.id === 'archive')?.transitions[0]
     : currentBeforePlan?.transitions.find((candidate) => candidate.event === command.event)
-  const governed = isOpenSpecDocumentContractRequired(workflowName, fieldStr(state.fields.track), ir)
+  const documentPolicy = effectivePlan.capabilities.documents.policy
+  const governed = documentPolicy !== undefined
   const lifecycle = currentBeforePlan && edgeBeforePlan
     ? governedLifecyclePolicy(governed, currentBeforePlan.id, edgeBeforePlan.to)
     : undefined
-  if (currentBeforePlan && currentBeforePlan.skills.length > 0 && completedStepSkills !== undefined) {
-    const completed = await completedStepSkills({
-      changeDir: command.changeDir,
-      stepId: currentBeforePlan.id,
-      requiredSkillIds: currentBeforePlan.skills.map((skill) => skill.id),
-    })
-    const missing = missingWorkflowStepSkills(currentBeforePlan.skills, completed)
-    if (missing.length > 0) {
-      return {
-        kind: 'step-skills-incomplete',
-        workflowName,
-        stepId: currentBeforePlan.id,
-        missing,
-      }
-    }
-  }
   const plan = await planStepTransition(planningIr, state, command.event, {
     changeDirAbs: command.changeDir,
     fileExists: command.context.fileExists,
@@ -384,9 +242,9 @@ async function planCustomTransition(
     for (const signal of outcome.signals) warnings.push({ kind: signal.kind })
   }
   return {
-    mode: 'custom',
     governedDocumentContract: governed,
-    requiresReviewApproval: currentStep.gate === 'review',
+    ...(documentPolicy ? { documentPolicy } : {}),
+    requiresReviewApproval: effectivePlan.capabilities.review.steps.includes(currentStep.id),
     from: plan.from, to: plan.to, nextFields, warnings,
   }
 }
@@ -399,22 +257,44 @@ export function createTransitionApplication(deps: TransitionApplicationDeps): Tr
         // 已加载并编译的 WorkflowIR，不把带 commit 能力的整个 tx 交给 planner（第 1 轮 review：
         // planner 拿到 tx 就有能力在规划途中提交，类型上就不该给这个权力）。
         const workflowName = tx.run.workflowId
+        let effectivePlan: EffectiveWorkflowPlan | null
+        try {
+          const trackId = fieldStr(tx.state.fields.track)
+          const track = trackId === '' ? undefined : deps.resolveTrack?.(trackId)
+          effectivePlan = resolveBoundEffectiveWorkflowPlan(workflowName, {
+            documentProfile: tx.run.documentProfile,
+            documentGovernanceFingerprint: tx.run.documentGovernanceFingerprint,
+            workflowPlanFingerprint: tx.run.workflowPlanFingerprint,
+          }, command.loadWorkflow, track)
+        } catch (error) {
+          if (error instanceof DocumentGovernanceBindingError) {
+            return { kind: 'document-governance-invalid', workflowName, reason: error.message }
+          }
+          throw error
+        }
+        if (!effectivePlan) return { kind: 'workflow-not-found', workflowName }
         let prepared: PreparedTransition | TransitionRejection
-        if (workflowName === 'default') {
-          prepared = await planDefaultTransition(tx.state, command, deps.flow, deps.clock)
+        if (effectivePlan.capabilities.execution.model === 'phase-manifest') {
+          prepared = await planDefaultTransition(tx.state, command, deps.flow, deps.clock, effectivePlan)
         } else {
-          const wf = command.loadWorkflow(workflowName)
-          if (!wf) return { kind: 'workflow-not-found', workflowName }
-          prepared = await planCustomTransition(
-            tx.state,
-            wf,
-            workflowName,
-            command,
-            deps.clock,
-            deps.completedStepSkills,
-          )
+          prepared = await planCustomTransition(tx.state, effectivePlan, command, deps.clock)
         }
         if (isRejection(prepared)) return prepared
+        if (deps.missingStepSkills !== undefined) {
+          const missing = await deps.missingStepSkills({
+            changeDir: command.changeDir,
+            stepId: prepared.from,
+            capability: effectivePlan.capabilities.skills,
+          })
+          if (missing.length > 0) {
+            return {
+              kind: 'step-skills-incomplete',
+              workflowName,
+              stepId: prepared.from,
+              missing,
+            }
+          }
+        }
 
         const policy = tx.run.automationPolicy
         if (policy !== undefined) {
@@ -428,19 +308,36 @@ export function createTransitionApplication(deps: TransitionApplicationDeps): Tr
           if (!decision.allowed) return { kind: 'constraint-denied', reason: decision.reason }
         }
 
-        if (prepared.governedDocumentContract && shouldEnforceDocumentEvidenceOnTransition(prepared.from, prepared.to)) {
-          if (!isDocumentContractPhase(prepared.from)) {
+        if (
+          prepared.documentPolicy
+          && shouldEnforceDocumentPolicyOnTransition(prepared.documentPolicy, prepared.from, prepared.to)
+        ) {
+          if (!isDocumentPolicyStep(prepared.documentPolicy, prepared.from)) {
             return {
               kind: 'document-evidence-failed',
               phase: prepared.from,
-              blockers: [`受 OpenSpec 文档契约治理的 workflow 使用了非法 phase '${prepared.from}'`],
+              blockers: [`受 document contract 治理的 workflow 使用了非法 step '${prepared.from}'`],
             }
           }
-          const evidence = await (deps.documentEvidence ?? evaluateDocumentEvidence)(
-            command.root,
-            command.changeDir,
-            prepared.from,
-          )
+          let evidence: DocumentEvidenceReport
+          if (prepared.documentPolicy.id === 'openspec-v1' && deps.documentEvidence) {
+            if (!isDocumentContractPhase(prepared.from)) {
+              return {
+                kind: 'document-evidence-failed',
+                phase: prepared.from,
+                blockers: [`legacy document contract 使用了非法 phase '${prepared.from}'`],
+              }
+            }
+            evidence = await deps.documentEvidence(command.root, command.changeDir, prepared.from)
+          } else {
+            evidence = await evaluateDocumentEvidence(
+              command.root,
+              command.changeDir,
+              prepared.from,
+              {},
+              prepared.documentPolicy,
+            )
+          }
           if (!evidence.pass) {
             return { kind: 'document-evidence-failed', phase: prepared.from, blockers: evidence.blockers }
           }
@@ -475,11 +372,9 @@ export function createTransitionApplication(deps: TransitionApplicationDeps): Tr
         // （history 延迟/中断时先落 breadcrumb，缩短 hook 热路径读到的相位缓存过期窗口——此前
         // 一次 REFACTOR 曾把这个顺序悄悄改乱，顺序本身是可观测行为，不是实现细节）。custom 轨
         // 普通 custom 保留原有 history-only 行为；显式 governed custom 复用 default 的 breadcrumb。
-        const canonicalTarget = isDocumentContractPhase(prepared.to) ? prepared.to : undefined
-        const shouldWriteGovernedTails = prepared.mode === 'default' || prepared.governedDocumentContract
-        if (shouldWriteGovernedTails && canonicalTarget !== undefined) {
+        if (prepared.governedDocumentContract) {
           const breadcrumbTail = await applyBreadcrumbTail(
-            deps.breadcrumb, { changeDir: command.changeDir, name: command.changeName, to: canonicalTarget },
+            deps.breadcrumb, { changeDir: command.changeDir, name: command.changeName, to: prepared.to },
           )
           if (!breadcrumbTail.ok) {
             warnings.push({ kind: 'projection-write-failed', projection: 'breadcrumb', cause: breadcrumbTail.error })

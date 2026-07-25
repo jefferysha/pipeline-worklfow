@@ -38,6 +38,19 @@ describe('serializeRunMetadataLines / parseRunMetadataLines —— 内部提交�
     expect(consumedLines).toBe(3)
   })
 
+  test('文档治理 profile 作为可选不可变 run metadata 往返', () => {
+    const fingerprint = 'a'.repeat(64)
+    const original = {
+      runId: 'run-doc', transitionSequence: 0, transitionHead: undefined,
+      documentProfile: 'document-v1' as const,
+      documentGovernanceFingerprint: fingerprint,
+    }
+    const lines = serializeRunMetadataLines(original)
+    expect(lines[3]).toBe('pipeline_document_profile: document-v1')
+    expect(lines[4]).toBe(`pipeline_document_governance_fingerprint: ${fingerprint}`)
+    expect(parseRunMetadataLines(lines)).toEqual({ metadata: original, consumedLines: 5 })
+  })
+
   test('H4：AutomationPolicySnapshot 作为第四行完整往返，不只存 policy id', () => {
     const original = { runId: 'run-policy', transitionSequence: 0, transitionHead: undefined, automationPolicy: policy }
     const lines = serializeRunMetadataLines(original)

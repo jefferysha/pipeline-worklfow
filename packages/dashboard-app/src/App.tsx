@@ -1,4 +1,4 @@
-import { Component, useCallback, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { I18nProvider, useT } from './i18n'
 import type { Lang } from './i18n/translations'
 import { changeWorkflow, selectInbox } from './inbox/inbox'
@@ -15,6 +15,9 @@ import { WorkbenchView } from './workbench/WorkbenchView'
 import { toastIn } from './shared/motion'
 import { MachineView } from './machine/MachineView'
 import { dashboardSearch, parseDashboardLocation, resolveDashboardRoot } from './shell/dashboardLocation'
+import { ErrorBoundary } from './AppErrorBoundary'
+
+export { ErrorBoundary } from './AppErrorBoundary'
 
 type Theme = 'light' | 'dark'
 const THEME_KEY = 'pipeline-dashboard-theme'
@@ -363,52 +366,6 @@ function AppShell(): JSX.Element {
       </div>
     </div>
   )
-}
-
-/** ErrorBoundary 兜底 UI（函数式，处于 I18nProvider 内 → 可用 useT 本地化文案）。 */
-function ErrorFallback(): JSX.Element {
-  const { t } = useT()
-  return (
-    <div role="alert" data-testid="app-error-boundary">
-      <p className="p-5 text-[13px] text-red">{t('common.app_error')}</p>
-      <button
-        type="button"
-        className="cursor-pointer rounded-md bg-btn-bg px-4 py-2 text-[12.5px] font-bold text-btn-fg transition-colors hover:bg-btn-hover"
-        onClick={() => { try { location.reload() } catch { /* ignore */ } }}
-      >
-        {t('common.app_error_reload')}
-      </button>
-    </div>
-  )
-}
-
-/**
- * 顶层 ErrorBoundary（Bug3 配套）：任意子树 render 抛错时局部降级兜底，不再整页白屏。client.ts 的
- * readiness 形状校验是第一道，本 boundary 是兜底第二道——任何未预期的 render 抛错都被接住，退化为
- * 一屏可读的错误 + 刷新入口。React ErrorBoundary 必须是类组件（getDerivedStateFromError）。
- */
-interface ErrorBoundaryState {
-  hasError: boolean
-}
-export class ErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryState> {
-  state: ErrorBoundaryState = { hasError: false }
-
-  static getDerivedStateFromError(): ErrorBoundaryState {
-    return { hasError: true }
-  }
-
-  componentDidCatch(error: Error, info: ErrorInfo): void {
-    // 诊断留痕（不吞错）：daemon/浏览器 console 可见，不影响降级 UI。
-    try {
-      console.error('[dashboard] render 抛错，已被顶层 ErrorBoundary 兜底：', error, info.componentStack)
-    } catch {
-      /* ignore */
-    }
-  }
-
-  render(): ReactNode {
-    return this.state.hasError ? <ErrorFallback /> : this.props.children
-  }
 }
 
 export function App(): JSX.Element {

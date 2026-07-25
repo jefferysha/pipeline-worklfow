@@ -2,93 +2,30 @@ import { createHash } from 'node:crypto'
 import type {
   Observation,
   ObservationPage,
-  ObserveAction,
   SourceCheckpoint,
 } from '@pipeline-lite/kernel'
-import { nodeExec, type ExecFn, type ExecResult } from '../../runner/exec.js'
-import type { SourceConnector } from '../source.js'
+import { nodeExec, type ExecResult } from '../../runner/exec.js'
+import {
+  CursorStaleError,
+  GitCommandError,
+  type GitCommitBody,
+  type GitCommitsAction,
+  type GitCommitsConnector,
+  type GitCommitsConnectorOptions,
+  type GitCommitsCursor,
+  type GitCommitsSourceConfig,
+} from './git-commits-types.js'
 
-export type GitCommitsAction = Extract<ObserveAction, { readonly kind: 'git-commits' }>
-
-export interface GitCommitsSourceConfig {
-  /** Host-owned repository root. It is never read from an action or checkpoint. */
-  readonly repoRoot: string
-  /** Host-owned revision to observe (for example refs/heads/main). */
-  readonly ref: string
-  /** Host-owned Git pathspecs. Every value is passed after Git's `--` separator. */
-  readonly pathspec?: readonly string[]
-}
-
-export interface GitCommitsConnectorOptions {
-  /** A host-owned sourceId -> repository mapping, snapshotted when the connector is built. */
-  readonly sources: Readonly<Record<string, GitCommitsSourceConfig>>
-  readonly maxItems?: number
-  readonly exec?: ExecFn
-}
-
-/** Canonical Git facts carried inside the provider-safe Observation.body JSON. */
-export interface GitCommitBody {
-  readonly sourceKey: string
-  readonly sha: string
-  readonly parents: readonly string[]
-  readonly occurredAt: string
-  readonly subject: string
-  readonly changedPaths: readonly string[]
-}
-
-/**
- * Opaque SourceCheckpoint.cursor payload issued only after a whole page is materialized.
- * `pageDigest` detects accidental/stale state corruption; it is not an authentication token.
- * Production obtains this cursor only from the host-owned durable checkpoint store—neither the
- * model nor CLI arguments can supply it. A process allowed to rewrite that store already controls
- * whether triage runs and is outside the connector's trust boundary.
- */
-export interface GitCommitsCursor {
-  readonly schemaVersion: 2
-  /** Fully consumed snapshot tip; null only while consuming the initial repository snapshot. */
-  readonly baseSha: string | null
-  /** Frozen tip whose deterministic rev-list is being consumed. */
-  readonly snapshotTipSha: string
-  /** Number of entries already consumed from baseSha..snapshotTipSha. */
-  readonly consumed: number
-  /** Last observation emitted, or snapshotTipSha for a completed snapshot marker. */
-  readonly lastCommitSha: string
-  readonly pageDigest: string
-}
-
-export type GitCommitsConnector = SourceConnector<GitCommitsAction, SourceCheckpoint, ObservationPage>
-
-export class GitCommandError extends Error {
-  readonly name = 'GitCommandError'
-
-  constructor(
-    readonly args: readonly string[],
-    readonly exitCode: number,
-    readonly stderr: string,
-  ) {
-    const detail = stderr === '' ? '(no stderr)' : stderr
-    super(`git ${args.join(' ')} failed with exit code ${exitCode}: ${detail}`)
-  }
-}
-
-export class CursorStaleError extends Error {
-  readonly _tag = 'CursorStaleError'
-  readonly name = 'CursorStaleError'
-  readonly code = 'CURSOR_STALE' as const
-  readonly observations = Object.freeze([]) as readonly []
-
-  constructor(
-    readonly sourceId: string,
-    readonly lastCommitSha: string,
-    readonly currentRefSha: string,
-    readonly reason: string,
-  ) {
-    super(
-      `git-commits cursor '${lastCommitSha}' is stale for source '${sourceId}' `
-      + `(current ref ${currentRefSha}): ${reason}`,
-    )
-  }
-}
+export {
+  CursorStaleError,
+  GitCommandError,
+  type GitCommitBody,
+  type GitCommitsAction,
+  type GitCommitsConnector,
+  type GitCommitsConnectorOptions,
+  type GitCommitsCursor,
+  type GitCommitsSourceConfig,
+} from './git-commits-types.js'
 
 interface HostSource {
   readonly repoRoot: string

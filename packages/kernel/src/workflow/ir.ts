@@ -19,7 +19,10 @@
  * 及其单测引用；transition-application.ts 经 engine/handler 间接消费编译产物。
  */
 import type { FieldName } from '../types.js'
-import type { ArtifactProducerPolicy, FieldRef, GateKind, SkillRef, WorkflowActionConfig, WorkflowConditional, WorkflowGuardConfig } from './types.js'
+import type {
+  ArtifactProducerPolicy, FieldRef, GateKind, SkillRef, WorkflowActionConfig, WorkflowConditional,
+  WorkflowDocumentContractV1, WorkflowGuardConfig,
+} from './types.js'
 import type { TrackPredicate } from './predicates.js'
 
 /**
@@ -151,5 +154,6 @@ export interface WorkflowIR {
   readonly name: string
   /** Preserved from WorkflowDef after compile-time validation; absent means an ordinary custom workflow. */
   readonly openspecContract?: 'required'
+  readonly documentContract?: WorkflowDocumentContractV1
   readonly steps: readonly StepIR[]
 }

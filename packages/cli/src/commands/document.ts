@@ -6,32 +6,32 @@
  * phase cannot move between "checked" and "recorded/read".
  */
 import {
+  effectiveWorkflowPlanBinding,
   ensureDocumentLedger,
   evaluateDocumentEvidence,
-  isDocumentContractPhase,
   isDocumentKind,
-  isOpenSpecDocumentContractRequired,
-  loadWorkflow,
+  isDocumentPolicyStep,
   migrateLegacyDeltaDocument,
   recordDocument,
   recordDocumentReads,
-  resolveWorkflowName,
 } from '@pipeline-lite/kernel'
 import type {
   DocumentContractPhase,
   DocumentEvidenceReport,
+  DocumentGovernancePolicy,
   DocumentKind,
   PipelineState,
-  WorkflowDef,
 } from '@pipeline-lite/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
 import { changeDir, isValidChangeName } from '../paths.js'
 import { reconcileCodexSkillEvidence } from '../codexSkillReceipt.js'
+import { effectiveWorkflowForState } from './effective-workflow.js'
 
 interface GovernedDocumentContext {
   readonly workflowName: string
-  readonly phase: DocumentContractPhase
+  readonly phase: string
   readonly governed: boolean
+  readonly policy?: DocumentGovernancePolicy
 }
 
 function reject(deps: CliDeps, message: string): number {
@@ -44,30 +44,25 @@ function scalar(state: PipelineState, field: 'phase' | 'track'): string {
   return Array.isArray(value) ? value.join(',') : (value ?? '')
 }
 
-function workflowForState(deps: CliDeps, state: PipelineState, workflowName: string): WorkflowDef | undefined {
-  if (workflowName === 'default') return undefined
-  const workflow = loadWorkflow(deps.cwd, workflowName)
-  if (!workflow) {
-    throw new Error(`workflow '${workflowName}' 未找到（期望 .pipeline/workflows/${workflowName}.yaml）`)
-  }
-  return workflow
-}
-
 /** Resolve governance from the actual persisted workflow definition, never a caller-supplied flag. */
 export function governedDocumentContext(deps: CliDeps, state: PipelineState): GovernedDocumentContext {
-  const workflowName = resolveWorkflowName(state)
-  const workflow = workflowForState(deps, state, workflowName)
-  const governed = isOpenSpecDocumentContractRequired(workflowName, scalar(state, 'track'), workflow)
+  const plan = effectiveWorkflowForState(deps, state)
+  if (!plan) {
+    throw new Error(`workflow '${String(state.fields.workflow ?? '')}' 未找到或不可编译`)
+  }
+  const workflowName = plan.id
+  const policy = plan.capabilities.documents.policy
+  const governed = policy !== undefined
   const phase = scalar(state, 'phase')
   if (!governed) {
     // A non-governed workflow may use arbitrary step ids.  The phase is intentionally not narrowed
     // or validated here because `document status` should correctly explain that no contract applies.
     return { workflowName, phase: 'open', governed: false }
   }
-  if (!isDocumentContractPhase(phase)) {
-    throw new Error(`受 OpenSpec 文档契约治理的 workflow 当前 phase 必须是标准阶段（当前 '${phase || '空'}'）`)
+  if (!isDocumentPolicyStep(policy, phase)) {
+    throw new Error(`受 document contract 治理的 workflow 当前 step 非法（当前 '${phase || '空'}'）`)
   }
-  return { workflowName, phase, governed: true }
+  return { workflowName, phase, governed: true, policy }
 }
 
 function assertChangeName(deps: CliDeps, name: string): string | undefined {
@@ -76,11 +71,14 @@ function assertChangeName(deps: CliDeps, name: string): string | undefined {
   return undefined
 }
 
-function assertGoverned(context: GovernedDocumentContext): DocumentContractPhase {
-  if (!context.governed) {
-    throw new Error(`workflow '${context.workflowName}' 未声明 openspec_contract: required；此 Change 不适用 document ledger`)
+function assertGoverned(context: GovernedDocumentContext): {
+  readonly phase: string
+  readonly policy: DocumentGovernancePolicy
+} {
+  if (!context.governed || !context.policy) {
+    throw new Error(`workflow '${context.workflowName}' 未声明 document contract；此 Change 不适用 document ledger`)
   }
-  return context.phase
+  return { phase: context.phase, policy: context.policy }
 }
 
 /** `pipeline document init <change>`: create the ledger for a governed existing change (migration-safe). */
@@ -88,11 +86,18 @@ export async function cmdDocumentInit(deps: CliDeps, name: string): Promise<numb
   const dir = assertChangeName(deps, name)
   if (!dir) return 1
   try {
-    await deps.store.withLock(dir, async () => {
-      const context = governedDocumentContext(deps, await deps.store.read(dir))
-      assertGoverned(context)
-      await ensureDocumentLedger(dir, deps.clock())
-    })
+    const state = await deps.store.read(dir)
+    const plan = effectiveWorkflowForState(deps, state)
+    if (!plan) {
+      throw new Error(`workflow '${String(state.fields.workflow ?? '')}' 未找到或不可编译`)
+    }
+    assertGoverned(governedDocumentContext(deps, state))
+    // `document init` is the explicit migration boundary for a pre-WorkflowRun Change. Establish
+    // its canonical visit identity and immutable governance binding before any read receipt can be
+    // written. The repository mutation is independently locked; do not nest it under StateStore's
+    // non-reentrant change lock.
+    await deps.runRepo.establishRun(dir, effectiveWorkflowPlanBinding(plan))
+    await ensureDocumentLedger(dir, deps.clock())
     return 0
   } catch (error) {
     return reject(deps, errMsg(error))
@@ -123,7 +128,7 @@ export async function cmdDocumentRecord(
   try {
     await deps.store.withLock(dir, async () => {
       const context = governedDocumentContext(deps, await deps.store.read(dir))
-      const phase = assertGoverned(context)
+      const { phase, policy } = assertGoverned(context)
       // Native PostToolUse remains the fast path.  On Codex hosts that omit that callback for a
       // completed `exec` tool call, reconcile the earlier PreToolUse receipt against the
       // host-owned transcript *inside this same change lock* before the kernel inspects history.
@@ -140,6 +145,7 @@ export async function cmdDocumentRecord(
         repoRoot: deps.cwd,
         changeDir: dir,
         phase,
+        policy,
         kind: kind as DocumentKind,
         path,
         producer,
@@ -192,11 +198,12 @@ export async function cmdDocumentRead(
   try {
     await deps.store.withLock(dir, async () => {
       const context = governedDocumentContext(deps, await deps.store.read(dir))
-      const phase = assertGoverned(context)
+      const { phase, policy } = assertGoverned(context)
       await recordDocumentReads({
         repoRoot: deps.cwd,
         changeDir: dir,
         phase,
+        policy,
         kind: kind === 'all' ? 'all' : kind,
         readAt: deps.clock(),
       })
@@ -228,11 +235,11 @@ export async function cmdDocumentStatus(deps: CliDeps, name: string, json: boole
       if (json) deps.io.out(JSON.stringify(value))
       else {
         deps.io.out(`[DOCUMENT] ${name} (workflow=${context.workflowName})`)
-        deps.io.out('  [SKIP] 当前 workflow 未声明 openspec_contract: required')
+        deps.io.out('  [SKIP] 当前 workflow 未声明文档治理契约（自由模式）')
       }
       return 0
     }
-    const report = await evaluateDocumentEvidence(deps.cwd, dir, context.phase)
+    const report = await evaluateDocumentEvidence(deps.cwd, dir, context.phase, {}, context.policy)
     if (json) {
       deps.io.out(JSON.stringify({ change: name, workflow: context.workflowName, governed: true, ...report }))
     } else {

@@ -1,8 +1,14 @@
 /** snapshot.test —— 真 fs：注册表读取 / 聚合 build / 指纹变化检测。 */
 import { describe, expect, it } from 'vitest'
-import { symlink, unlink, writeFile } from 'node:fs/promises'
+import { mkdir, symlink, unlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { TERMINAL_ACTIVITY_TTL_MS } from '@pipeline-lite/kernel'
+import {
+  builtinTrack,
+  documentGovernanceFingerprint,
+  ensureDocumentLedger,
+  loadEffectiveWorkflowPlan,
+  TERMINAL_ACTIVITY_TTL_MS,
+} from '@pipeline-lite/kernel'
 import { buildSnapshot, computeFingerprint } from './snapshot.js'
 import { readRegistry } from './registry.js'
 import { initChange, makeProject, makeTempHome, newStore, sleep } from './test-support.js'
@@ -127,8 +133,139 @@ describe('buildSnapshot —— 真读多项目 .pipeline.yaml', () => {
     const todo = snapshot.projects[0]?.changes[0]?.todo
     expect(todo?.hasTaskSource).toBe(true)
     expect(todo?.stages.map((stage) => stage.id)).toEqual(['open', 'explore', 'spec', 'build', 'verify', 'ship', 'archive'])
-    expect(todo?.stages.find((stage) => stage.id === 'open')?.tasks).toEqual([{ text: 'Confirm scope', completed: true }])
+    expect(todo?.stages.find((stage) => stage.id === 'open')?.tasks).toEqual([
+      { text: '[document] proposal', completed: false },
+      { text: '[document] openspec-design', completed: false },
+      { text: '[document] tasks', completed: false },
+      { text: 'Confirm scope', completed: true },
+    ])
     expect(todo?.stages.find((stage) => stage.id === 'build')?.tasks).toEqual([{ text: 'Implement the endpoint', completed: false }])
+  })
+
+  it('三步 document-v1 workflow 只投影真实 step，并把文档挂到声明的 owner step', async () => {
+    const store = newStore()
+    const root = await makeProject()
+    await mkdir(join(root, '.pipeline', 'workflows'), { recursive: true })
+    await writeFile(join(root, '.pipeline', 'workflows', 'compact-governed.yaml'), `name: compact-governed
+document_contract:
+  version: v1
+  slots:
+    - kind: proposal
+      owner_step: shape
+      producers: [writer]
+  reads:
+    - step: implement
+      kinds: [proposal]
+steps:
+  - id: shape
+    label: Shape
+    gate: null
+    skills:
+      - id: writer
+    inputs: []
+    outputs: []
+    guards: []
+    transitions:
+      - event: shaped
+        to: implement
+  - id: implement
+    label: Implement
+    gate: null
+    skills: []
+    inputs: []
+    outputs: []
+    guards: []
+    transitions:
+      - event: implemented
+        to: verify
+  - id: verify
+    label: Verify
+    gate: review
+    skills: []
+    inputs: []
+    outputs: []
+    guards: []
+    transitions: []
+`, 'utf8')
+    const changeDir = await store.init({
+      repoRoot: root,
+      name: 'compact-change',
+      track: 'backend',
+      reviewSeed: builtinTrack('backend').policyProfile.reviewSeed,
+      preset: 'full',
+      runId: 'compact-run',
+      clock: () => '2026-07-07T00:00:00Z',
+      initialWorkflow: {
+        workflow: 'compact-governed',
+        phase: 'shape',
+        documentContract: true,
+        documentProfile: 'document-v1',
+      },
+    })
+    await ensureDocumentLedger(changeDir, '2026-07-07T00:00:00Z')
+
+    const snapshot = await buildSnapshot({ registry: () => [root], store, version: '1', clock: () => 't' })
+    const change = snapshot.projects[0]?.changes[0]
+    expect(change?.todo?.stages.map((stage) => stage.id)).toEqual(['shape', 'implement', 'verify'])
+    expect(change?.todo?.stages[0]?.tasks).toEqual([{ text: '[document] proposal', completed: false }])
+    expect(change?.todo?.stages.some((stage) => stage.id === 'open')).toBe(false)
+    expect(change?.documents).toMatchObject({
+      governed: true,
+      phase: 'shape',
+      ledgerPresent: true,
+      pass: false,
+    })
+  })
+
+  it('已绑定 document-v1 的 workflow 删除 contract 后 snapshot fail-closed', async () => {
+    const store = newStore()
+    const root = await makeProject()
+    const workflows = join(root, '.pipeline', 'workflows')
+    await mkdir(workflows, { recursive: true })
+    const target = join(workflows, 'bound.yaml')
+    const governed = `name: bound
+document_contract:
+  version: v1
+  slots:
+    - kind: proposal
+      owner_step: shape
+      producers: [writer]
+  reads: []
+steps:
+  - id: shape
+    label: Shape
+    gate: null
+    skills:
+      - id: writer
+    inputs: []
+    outputs: []
+    guards: []
+    transitions: []
+`
+    await writeFile(target, governed, 'utf8')
+    const policy = loadEffectiveWorkflowPlan(root, 'bound').documentPolicy
+    if (!policy) throw new Error('expected document policy')
+    await store.init({
+      repoRoot: root,
+      name: 'bound-change',
+      track: 'backend',
+      reviewSeed: builtinTrack('backend').policyProfile.reviewSeed,
+      preset: 'full',
+      runId: 'bound-run',
+      clock: () => '2026-07-07T00:00:00Z',
+      initialWorkflow: {
+        workflow: 'bound',
+        phase: 'shape',
+        documentProfile: 'document-v1',
+        documentGovernanceFingerprint: documentGovernanceFingerprint(policy),
+      },
+    })
+    await writeFile(target, governed.replace(/document_contract:[\s\S]*?(?=steps:)/, ''), 'utf8')
+
+    const snapshot = await buildSnapshot({ registry: () => [root], store, version: '1', clock: () => 't' })
+    expect(snapshot.projects[0]?.ok).toBe(false)
+    expect(snapshot.projects[0]?.error).toContain('不可降级为自由模式')
+    expect(snapshot.change_count).toBe(0)
   })
 
   it('simple workflow 投影自己的 change→verify→done/escalated 骨架，不伪造七阶段或 OpenSpec 文档', async () => {

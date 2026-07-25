@@ -14,6 +14,8 @@
 #   · check 的 stdout 是人读 guard 报告（CONTRACT §3），stdout 面记 SKIP、exit 面照比。
 #   · G1 canonical cutover 的 `pipeline_state_revision/_id/_digest` 是 YAML adapter 指向唯一
 #     current 的投影元数据；老内核没有 canonical store，三行整行剥除后再比业务投影。
+#   · `pipeline_document_profile` 是新版显式持久化的治理 profile 身份；老内核只有隐式
+#     default/full 语义。Oracle 仍逐面验证文档行为，只从 YAML 兼容比较中剥除这一新投影字段。
 #
 # 用法:
 #   bash tools/oracle/run.sh [fixture ...]      # 缺省跑基础兼容 fixtures；npm run oracle 跑全量
@@ -124,6 +126,8 @@ is_ts_field() { case "${1:-}" in *_at) return 0 ;; *) return 1 ;; esac; }
 #                                     即使想比也比不了）。
 #   · pipeline_state_revision/_id/_digest —— G1 canonical current 的 YAML adapter 指针；
 #                                            业务字段仍须与 oracle 逐字一致。
+#   · pipeline_document_governance_fingerprint / pipeline_workflow_plan_fingerprint
+#       —— 新 CLI 对初始化时文档契约与有效工作流计划的不可变绑定；老 oracle 无此安全能力。
 #   · automation_current_phase/_cause —— 分叉后 automation 子系统新增字段。
 #   · 已声明的状态演进（目前仅 pm-history 的 `spec-complete` 自动 AFK 入队）：harness 先逐字
 #     验证 old=`off`、new=`queued` 和 new 的入队时间戳，再仅从该单步的 YAML 比较中剥除这两个字段。
@@ -137,7 +141,7 @@ normalize_yaml() {
         if ($0 ~ /^[[:space:]]+- /) next
         inhist = 0
       }
-      if ($0 ~ /^(workflow|pipeline_run_id|pipeline_transition_sequence|pipeline_transition_head|pipeline_state_revision|pipeline_state_revision_id|pipeline_state_digest|automation_current_phase|automation_cause):/) next
+      if ($0 ~ /^(workflow|pipeline_document_profile|pipeline_document_governance_fingerprint|pipeline_workflow_plan_fingerprint|pipeline_run_id|pipeline_transition_sequence|pipeline_transition_head|pipeline_state_revision|pipeline_state_revision_id|pipeline_state_digest|automation_current_phase|automation_cause):/) next
       if (omit_declared_automation == "1" && $0 ~ /^(automation|automation_queued_at):/) next
       if ($0 ~ /^[a-z_]+_at:/) { sub(/:.*$/, ": <WHITELISTED>"); print; next }
       print
@@ -337,6 +341,31 @@ track_oracle_skill() {
     | CLAUDE_PLUGIN_ROOT="$REPO_ROOT" bash "$REPO_ROOT/hooks/skill-tracker.sh" >/dev/null
 }
 
+# Default transitions now enforce every mandatory Skill on the current phase visit. Oracle fixtures
+# compare the legacy state machine rather than agent execution, so derive the exact current
+# phase/Track slots from the production router projection and record them through the real hook.
+# This is evidence construction, not a transition bypass: stale previous-visit rows still cannot
+# satisfy a later visit because the product gate reads history after the latest transition record.
+bootstrap_new_phase_skills() {
+  local dir="$1" change="$2" phase track phase_hex track_hex cache skill_hex skill
+  phase="$(run_new_cli "$dir" get "$change" phase)" || return 1
+  track="$(run_new_cli "$dir" get "$change" track)" || return 1
+  phase="$(printf '%s' "$phase" | tr -d '[:space:]')"
+  track="$(printf '%s' "$track" | tr -d '[:space:]')"
+  phase_hex="$(printf '%s' "$phase" | xxd -p -c 999)"
+  track_hex="$(printf '%s' "$track" | xxd -p -c 999)"
+  cache="$dir/.oracle-router-data"
+  run_new_cli "$dir" _gen-router-sh "$REPO_ROOT/templates/manifest.yaml" "$dir" > "$cache" || return 1
+  while IFS= read -r skill_hex; do
+    [ -n "$skill_hex" ] || continue
+    skill="$(printf '%s' "$skill_hex" | xxd -r -p)" || return 1
+    track_oracle_skill "$dir" "$skill" || return 1
+  done < <(
+    awk -F '|' -v phase="$phase_hex" -v track="$track_hex" \
+      '$1 == "S" && $2 == phase && $3 == track && $4 == "M" { print $6 }' "$cache"
+  )
+}
+
 # Bootstrap runs before every oracle transition/check against the same evolving fixture.  A
 # historical document needs `--backfill` only once; attempting it again is correctly rejected by
 # the product ledger because a backfill must never overwrite an established record.  This harness
@@ -437,6 +466,10 @@ run_step_dual() {
   if { [ "$cmd" = transition ] || [ "$cmd" = check ]; } && [ "$DOCUMENT_CONTRACT_BOOTSTRAP" = 1 ]; then
     bootstrap_new_document_contract "$base/new" "$change" \
       > "$step_dir/new.document-bootstrap.out" 2> "$step_dir/new.document-bootstrap.err" || bootstrap_rc=$?
+  fi
+  if [ "$cmd" = transition ] && [ "$DOCUMENT_CONTRACT_BOOTSTRAP" = 1 ] && [ "$bootstrap_rc" -eq 0 ]; then
+    bootstrap_new_phase_skills "$base/new" "$change" \
+      > "$step_dir/new.skill-bootstrap.out" 2> "$step_dir/new.skill-bootstrap.err" || bootstrap_rc=$?
   fi
 
   (cd "$base/old" && PIPELINE_ASSUME_YES=1 bash "$OLD_SCRIPT" "${OLD_ARGS[@]}") \

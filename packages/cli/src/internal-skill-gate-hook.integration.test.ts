@@ -1,5 +1,5 @@
 /**
- * 真实 e2e —— hooks/gate.sh 对非 default workflow 的 skill DAG 委托分支（Task 9，GOAL 清单 E）。
+ * 真实 e2e —— hooks/gate.sh 对所有 workflow 的 skill DAG 委托分支（Task 9，GOAL 清单 E）。
  *
  * 只验证 gate.sh 这条新分支本身的接线是否正确（真 bash 子进程 + 真 dist bundle + 真 CLI 落盘 +
  * 真 skill-tracker.sh 记账），不重复 internalSkillGate.test.ts 已经用 mock deps 覆盖过的
@@ -125,14 +125,19 @@ describe('真实 e2e —— hooks/gate.sh 委托 internal-skill-gate（Task 9）
     expect(await h.read(CHANGE)).toMatch(/^workflow: default$/m)
   })
 
-  test('workflow=default + Skill 调用 → gate 直接放行，不受本机制影响', async () => {
+  test('workflow=default + 当前首个 mandatory Skill → 委托统一 DAG gate 后放行', async () => {
     expect(await h.run(['init', CHANGE, '--track', 'backend', '--preset', 'full'])).toBe(0)
-    const gate = runHook('gate.sh', { cwd: h.cwd, tool_name: 'Skill', tool_input: { skill: 'needs-a' } })
+    expect(await h.run(['session', 'activate', CHANGE])).toBe(0)
+    const gate = runHook(
+      'gate.sh',
+      { cwd: h.cwd, tool_name: 'Skill', tool_input: { skill: 'openspec-propose' } },
+    )
     expect(gate.code, `stderr=${gate.stderr}`).toBe(0)
   })
 
-  test('workflow=default → 全程零 spawn node（PATH 换成"毒丸" node，真调用会被立刻抓到）', async () => {
+  test('workflow=default → 真实委托 node；委托进程自身异常仍按 hook 总纲 fail-open', async () => {
     expect(await h.run(['init', CHANGE, '--track', 'backend', '--preset', 'full'])).toBe(0)
+    expect(await h.run(['session', 'activate', CHANGE])).toBe(0)
     const poisonDir = await mkdtemp(join(tmpdir(), 'poison-node-'))
     await writeFile(join(poisonDir, 'node'), '#!/usr/bin/env bash\nprintf \'POISONED\\n\' >&2\nexit 99\n', 'utf8')
     await chmod(join(poisonDir, 'node'), 0o755)
@@ -142,7 +147,7 @@ describe('真实 e2e —— hooks/gate.sh 委托 internal-skill-gate（Task 9）
       { PATH: `${poisonDir}:${process.env.PATH ?? ''}` },
     )
     expect(gate.code, `stderr=${gate.stderr}`).toBe(0)
-    expect(gate.stderr).not.toContain('POISONED')
+    expect(gate.stderr).toContain('POISONED')
     await rm(poisonDir, { recursive: true, force: true })
   })
 
@@ -231,24 +236,32 @@ describe('真实 e2e —— hooks/gate.sh 委托 internal-skill-gate（Task 9）
     // transcript before it writes CodexSkillRead.
     const transcript = join(home, '.codex', 'sessions', '2026', '07', '24', 'dag-receipt.jsonl')
     await mkdir(dirname(transcript), { recursive: true })
+    const transcriptTimestamp = new Date().toISOString()
     await writeFile(transcript, [
       JSON.stringify({
+        type: 'session_meta',
+        timestamp: transcriptTimestamp,
+        payload: { cwd: h.cwd, session_id: 'session-dag-1', id: 'session-dag-1' },
+      }),
+      JSON.stringify({
         type: 'response_item',
+        timestamp: transcriptTimestamp,
         payload: {
           type: 'custom_tool_call',
           status: 'completed',
           call_id: 'call-pipeline-open',
           name: 'exec',
-          input: `const r = await tools.exec_command({"cmd":"${batchedReceiptRead}"});`,
+          input: `const r = await tools.exec_command(${JSON.stringify({ cmd: batchedReceiptRead })});`,
           internal_chat_message_metadata_passthrough: { turn_id: 'turn-dag-1' },
         },
       }),
       JSON.stringify({
         type: 'response_item',
+        timestamp: transcriptTimestamp,
         payload: {
           type: 'custom_tool_call_output',
           call_id: 'call-pipeline-open',
-          output: 'Script completed\\nWall time 0.1 seconds\\nOutput:\\n',
+          output: 'Process exited with code 0\\nWall time 0.1 seconds\\nOutput:\\n',
           internal_chat_message_metadata_passthrough: { turn_id: 'turn-dag-1' },
         },
       }),
@@ -260,7 +273,7 @@ describe('真实 e2e —— hooks/gate.sh 委托 internal-skill-gate（Task 9）
       transcript_path: transcript,
       session_id: 'session-dag-1',
       turn_id: 'turn-dag-1',
-      tool_use_id: 'exec-dag-1',
+      tool_use_id: 'call-pipeline-open',
     }, commonEnv)
     expect(receipt.code, `stderr=${receipt.stderr}`).toBe(0)
     const receiptJournal = join(h.cwd, '.pipeline', 'codex-skill-receipts.jsonl')
@@ -298,10 +311,16 @@ describe('真实 e2e —— hooks/gate.sh 委托 internal-skill-gate（Task 9）
     const browserQaRead = `/bin/zsh -lc "sed -n '1,40p' ${hostCache}/skills/browser-qa/SKILL.md"`
     const transcript = join(home, '.codex', 'sessions', '2026', '07', '24', 'abi-omitted.jsonl')
     await mkdir(dirname(transcript), { recursive: true })
+    const transcriptTimestamp = new Date().toISOString()
     await writeFile(transcript, [
-      JSON.stringify({ type: 'session_meta', payload: { cwd: h.cwd } }),
+      JSON.stringify({
+        type: 'session_meta',
+        timestamp: transcriptTimestamp,
+        payload: { cwd: h.cwd, session_id: 'session-omitted-1', id: 'session-omitted-1' },
+      }),
       JSON.stringify({
         type: 'response_item',
+        timestamp: transcriptTimestamp,
         payload: {
           type: 'custom_tool_call',
           status: 'completed',
@@ -312,13 +331,22 @@ describe('真实 e2e —— hooks/gate.sh 委托 internal-skill-gate（Task 9）
       }),
       JSON.stringify({
         type: 'response_item',
+        timestamp: transcriptTimestamp,
         payload: {
           type: 'custom_tool_call_output',
           call_id: 'call-pipeline-open',
-          output: 'Script completed\\nWall time 0.1 seconds\\nOutput:\\n',
+          output: 'Process exited with code 0\\nWall time 0.1 seconds\\nOutput:\\n',
         },
       }),
     ].join('\n') + '\n', 'utf8')
+    const bindingsDir = join(h.cwd, '.pipeline', 'terminal-sessions')
+    await mkdir(bindingsDir, { recursive: true })
+    await writeFile(join(bindingsDir, 'session-omitted-1.json'), `${JSON.stringify({
+      protocol: 'pipeline-terminal-session-v1',
+      session_id: 'session-omitted-1',
+      change: CHANGE,
+      bound_at: transcriptTimestamp,
+    })}\n`, 'utf8')
 
     // There is deliberately no call to codex-skill-receipt.sh: this mirrors the current host ABI
     // that gives PreToolUse only cwd/tool_input.  The next serial gate must reconcile the same

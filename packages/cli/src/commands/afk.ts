@@ -18,7 +18,7 @@
 import { writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import {
-  CANCEL_MARKER_FILE, createAutomation, dockerAvailable, makeIdGen, nodeExec,
+  AUTOMATION_STATES, CANCEL_MARKER_FILE, createAutomation, dockerAvailable, makeIdGen, nodeExec,
   AUTOMATION_LEVELS, type AutomationLevel,
 } from '@pipeline-lite/automation'
 import { createLoopLedgerStore, loadRegistry, requireTrack } from '@pipeline-lite/kernel'
@@ -29,7 +29,6 @@ import { runAfkRound } from './afk-executor.js'
 
 export { probeGitCommitAncestry } from './afk-executor.js'
 
-const AUTOMATION_STATES = ['off', 'queued', 'scheduled', 'running', 'merged', 'failed', 'conflict', 'paused'] as const
 interface AfkOpts { json?: boolean; level?: string; image?: string; loop?: string }
 
 function isAutomationLevel(v: string): v is AutomationLevel {
@@ -114,7 +113,8 @@ export async function cmdAfk(deps: CliDeps, sub: string, name: string | undefine
         try {
           const fields = (await deps.store.read(changeDir(deps.cwd, n))).fields
           const a = str(fields.automation) || 'off'
-          if (a in lanes) lanes[a]!.push(n)
+          const lane = lanes[a]
+          if (lane) lane.push(n)
         } catch { /* 坏 change 跳过 */ }
       }
       const active = Object.fromEntries(Object.entries(lanes).filter(([, v]) => v.length > 0))
@@ -142,6 +142,10 @@ export async function cmdAfk(deps: CliDeps, sub: string, name: string | undefine
           return 1
         }
         const report = result.report
+        if (report === undefined) {
+          deps.io.err('[AFK] run 未返回执行报告（不宣称跑完）')
+          return 1
+        }
         if (!report.ok) {
           deps.io.err(`[AFK] run 一轮遇故障（不宣称跑完）：${report.failures.length} 项 failure${report.ledgerDegraded ? '、账本坏行 fail-closed' : ''}。已 admit ${report.admitted}/${report.candidates}。`)
           for (const failure of report.failures) {

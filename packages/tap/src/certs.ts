@@ -20,10 +20,18 @@
  *      `security verify-cert`），绝不自动写钥匙串；实际信任由上层显式发起。
  */
 import { X509Certificate, createPublicKey, createPrivateKey, createHash, generateKeyPairSync, randomBytes, sign as cryptoSign, type KeyObject } from 'node:crypto'
-import { chmodSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
+
+export {
+  CertificateAuthority,
+  ensureCa,
+  resolveCaDir,
+  type CaDirOptions,
+  type EnsureCaResult,
+  type SecureContextOptions,
+} from './certificate-store.js'
 
 // certs.py:42/44 —— CA 5 年、host 1 年
 const CA_VALIDITY_DAYS = 5 * 365
@@ -60,7 +68,7 @@ function derInt(unsigned: Buffer): Buffer {
   while (i < b.length - 1 && b[i] === 0) i++
   b = b.subarray(i)
   if (b.length === 0) b = Buffer.from([0])
-  if (b[0]! & 0x80) b = Buffer.concat([Buffer.from([0]), b])
+  if ((b[0] ?? 0) & 0x80) b = Buffer.concat([Buffer.from([0]), b])
   return tlv(0x02, b)
 }
 function derIntNum(n: number): Buffer {
@@ -75,9 +83,15 @@ function derIntNum(n: number): Buffer {
 }
 function encodeOid(oid: string): Buffer {
   const parts = oid.split('.').map(Number)
-  const bytes: number[] = [40 * parts[0]! + parts[1]!]
+  const first = parts[0]
+  const second = parts[1]
+  if (first === undefined || second === undefined || parts.some((part) => !Number.isSafeInteger(part) || part < 0)) {
+    throw new Error(`invalid OID '${oid}'`)
+  }
+  const bytes: number[] = [40 * first + second]
   for (let i = 2; i < parts.length; i++) {
-    let v = parts[i]!
+    let v = parts[i]
+    if (v === undefined) throw new Error(`invalid OID '${oid}'`)
     const stack = [v & 0x7f]
     v = Math.floor(v / 128)
     while (v > 0) {
@@ -124,15 +138,21 @@ function extension(oid: string, critical: boolean, valueDer: Buffer): Buffer {
 // ── 极简 DER 读取（从落盘 CA 证书抽取 subject DN + 从 SPKI 抽公钥位）──────────────
 interface Tlv { tag: number; start: number; contentStart: number; contentEnd: number; totalEnd: number }
 function readTlv(buf: Buffer, offset: number): Tlv {
-  const tag = buf[offset]!
+  if (offset < 0 || offset + 2 > buf.length) throw new Error('truncated DER TLV')
+  const tag = buf.readUInt8(offset)
   let p = offset + 1
-  let len = buf[p]!
+  let len = buf.readUInt8(p)
   p += 1
   if (len & 0x80) {
     const n = len & 0x7f
     len = 0
-    for (let i = 0; i < n; i++) len = len * 256 + buf[p++]!
+    if (p + n > buf.length) throw new Error('truncated DER length')
+    for (let i = 0; i < n; i++) {
+      len = len * 256 + buf.readUInt8(p)
+      p += 1
+    }
   }
+  if (p + len > buf.length) throw new Error('truncated DER content')
   return { tag, start: offset, contentStart: p, contentEnd: p + len, totalEnd: p + len }
 }
 
@@ -228,7 +248,7 @@ function toPem(der: Buffer, label: string): string {
 }
 function randomSerial(): Buffer {
   const b = randomBytes(16)
-  b[0] = b[0]! & 0x7f // 保持正数
+  b[0] = (b[0] ?? 0) & 0x7f // 保持正数
   return b
 }
 
@@ -326,212 +346,6 @@ function loadPrivateKey(keyPem: string): KeyObject {
   return createPrivateKey(keyPem)
 }
 
-// ── CA 目录解析 + 持久化 ────────────────────────────────────────────────────────
-export interface CaDirOptions {
-  dir?: string
-  env?: NodeJS.ProcessEnv
-  home?: string
-}
-
-/** CA 落盘目录：PIPELINE_TAP_CA_DIR 覆盖，否则 ~/.pipeline-tap。certs.py:35 _default_ca_dir。 */
-export function resolveCaDir(opts: CaDirOptions = {}): string {
-  if (opts.dir) return opts.dir
-  const env = opts.env ?? process.env
-  const override = (env.PIPELINE_TAP_CA_DIR ?? '').trim()
-  if (override) return override
-  const home = opts.home ?? homedir()
-  return join(home, '.pipeline-tap')
-}
-
-export interface EnsureCaResult {
-  caCertPath: string
-  caKeyPath: string
-  certPem: string
-  keyPem: string
-}
-
-const LOCK_WAIT_MS = 10_000
-/** 夺锁竞争的有界重试轮数（codex review P1）：每轮 = openSync(wx) + waitForPair + 原子 stealLock。 */
-const STEAL_MAX_ATTEMPTS = 5
-
-/**
- * 读回落盘 CA 并**校验配对**（cert 公钥须与私钥匹配）。返回 null 表示缺文件/损坏/**不配对**——
- * 后者是 B5 的核心防线：老 ensureCa 只各自校验 cert 可解析 + key 可加载，两并发进程的 cert 与 key
- * 交错落盘（ca.pem 来自 A 代、ca-key.pem 来自 B 代）时会当成"完好"原样复用 → MITM 全线 TLS 失败。
- */
-function tryLoadPair(caCertPath: string, caKeyPath: string): { certPem: string; keyPem: string } | null {
-  if (!existsSync(caCertPath) || !existsSync(caKeyPath)) return null
-  try {
-    const certPem = readFileSync(caCertPath, 'utf8')
-    const keyPem = readFileSync(caKeyPath, 'utf8')
-    const cert = new X509Certificate(certPem)
-    const key = loadPrivateKey(keyPem)
-    if (!cert.checkPrivateKey(key)) return null // 配对校验：cert 公钥 ↔ 私钥
-    chmodSync(caKeyPath, 0o600) // 二次收紧（防外部放宽）
-    return { certPem, keyPem }
-  } catch {
-    return null
-  }
-}
-
-/** 有界同步等待另一进程落出配对的 CA（持锁进程正在写）。 */
-function waitForPair(caCertPath: string, caKeyPath: string, timeoutMs: number): { certPem: string; keyPem: string } | null {
-  const deadline = Date.now() + timeoutMs
-  for (;;) {
-    const pair = tryLoadPair(caCertPath, caKeyPath)
-    if (pair) return pair
-    if (Date.now() >= deadline) return null
-    napSync(50)
-  }
-}
-
-/** 同步小睡 ms 毫秒（Atomics.wait 阻塞本线程，不 peg CPU）；SAB 不可用则退化为立即返回（忙等）。 */
-function napSync(ms: number): void {
-  try { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms) } catch { /* 忙等兜底 */ }
-}
-
-/**
- * 夺取疑似陈旧锁（持有者疑似崩溃：等待超时仍无配对 CA）。两道原子护栏（codex review P1 深化）:
- *   ① **mtime 复检陈旧**:若锁其实很新（别的进程刚夺到并新建,mtime 在 LOCK_WAIT_MS 内）→ 不夺、返 null,
- *      回调用方等它写配对对。消除旧实现"rmSync 无条件抹掉别人刚建的新锁"的洞（CA 生成 <1s,活持有者
- *      的锁创建时间必在 LOCK_WAIT_MS 内;超 LOCK_WAIT_MS 才真陈旧）。
- *   ② **原子 rename 夺取**:把陈锁 rename 到唯一坟墓名——rename 原子,只一个进程能移走该 inode,其余
- *      ENOENT→null,绝不像"先 rmSync 再 openSync"那样先删后建给第三者可乘之机。移走后独占创建新锁。
- * 输了任一步 → 返 null,调用方回去重等/重抢赢家的配对对（绝不各自生成不配对的 CA 对）。
- */
-function stealLock(lockPath: string): number | null {
-  try {
-    const st = statSync(lockPath)
-    if (Date.now() - st.mtimeMs < LOCK_WAIT_MS) return null // 新锁,不夺
-  } catch {
-    return null // 锁已消失 → 回调用方重抢 openSync(wx)
-  }
-  const grave = `${lockPath}.stale.${process.pid}.${randomBytes(4).toString('hex')}`
-  try {
-    renameSync(lockPath, grave) // 原子移走陈锁(输者 ENOENT)
-  } catch {
-    return null
-  }
-  try { rmSync(grave) } catch { /* ignore */ }
-  try {
-    return openSync(lockPath, 'wx') // 独占创建新锁;极罕见移走后被抢建 → EEXIST→null
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'EEXIST') return null
-    throw err
-  }
-}
-
-/**
- * 确保 CA 落盘存在（ca.pem + ca-key.pem，私钥 0600）；幂等复用。certs.py:51 ensure_ca。
- *
- * B5 跨进程锁：CA 首次生成用 **O_EXCL 独占锁文件（ca.lock）** 串行化"生成+落盘"。两个并发
- * `tap start --ca` 曾各自 createCa（不同 keypair）写同一 .tmp，rename 交错 → ca.pem 与 ca-key.pem
- * 可能来自不同代 → 不配对 → MITM 全线 TLS 失败。现在：抢到锁的进程独家生成并落盘；抢不到的同步
- * 等它写出**配对的**对再读回（waitForPair），绝不各自生成。叠加 tryLoadPair 的配对校验 + writeAtomic
- * 的唯一 .tmp 名，确保读到的 pem 对永远配对。
- */
-export function ensureCa(opts: CaDirOptions = {}): EnsureCaResult {
-  const caDir = resolveCaDir(opts)
-  mkdirSync(caDir, { recursive: true })
-  const caCertPath = join(caDir, 'ca.pem')
-  const caKeyPath = join(caDir, 'ca-key.pem')
-  const lockPath = join(caDir, 'ca.lock')
-
-  // 幂等快路径：已落盘且配对 → 复用（绝大多数调用走这里，零锁开销）。
-  const fast = tryLoadPair(caCertPath, caKeyPath)
-  if (fast) return { caCertPath, caKeyPath, ...fast }
-
-  // 抢锁：O_EXCL 原子独占创建 ca.lock。抢到 → 本进程负责生成；EEXIST → 别的进程在写，等它落配对对再读回。
-  // 夺锁竞争(codex review P1)：等超时判陈旧后夺锁,若竞争输了(stealLock 返 null,别的进程先夺到)不再各自
-  // 生成,回到循环顶部重抢/重等赢家的配对对。有界 STEAL_MAX_ATTEMPTS 轮防病态无限。
-  let lockFd: number | undefined
-  for (let attempt = 0; attempt < STEAL_MAX_ATTEMPTS; attempt++) {
-    try {
-      lockFd = openSync(lockPath, 'wx') // 抢到锁 → 本进程负责生成
-      break
-    } catch (err) {
-      if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err
-    }
-    const waited = waitForPair(caCertPath, caKeyPath, LOCK_WAIT_MS)
-    if (waited) return { caCertPath, caKeyPath, ...waited } // 采用持锁进程写的配对对（不自己另生成）
-    const stolen = stealLock(lockPath) // 超时 → 判定陈旧锁 → 原子夺锁
-    if (stolen !== null) { lockFd = stolen; break } // 夺锁成功,本进程独家生成
-    // stolen===null：夺锁竞争输了,别的进程正持新锁生成 → 下一轮回顶部 openSync(wx) EEXIST → 再 waitForPair
-  }
-  if (lockFd === undefined) {
-    throw new Error(`ensureCa: CA 锁 ${lockPath} 经 ${STEAL_MAX_ATTEMPTS} 轮夺取竞争仍未取得且始终无配对 CA 落盘——疑似持续争用或磁盘异常`)
-  }
-  try {
-    // 二次检查：拿到/夺到锁后别的进程可能刚写完配对对。
-    const again = tryLoadPair(caCertPath, caKeyPath)
-    if (again) return { caCertPath, caKeyPath, ...again }
-    const ca = createCa()
-    // 证书公开，普通权限；私钥 0600（仅属主可读写）——本地不外发硬护栏。
-    writeAtomic(caCertPath, ca.certPem, 0o644)
-    writeAtomic(caKeyPath, ca.keyPem, 0o600)
-    chmodSync(caKeyPath, 0o600)
-    return { caCertPath, caKeyPath, certPem: ca.certPem, keyPem: ca.keyPem }
-  } finally {
-    // 只有本进程持锁时才走到这里（waited 分支已 return）；释放锁。
-    try { closeSync(lockFd) } catch { /* ignore */ }
-    try { rmSync(lockPath) } catch { /* ignore */ }
-  }
-}
-
-function writeAtomic(path: string, data: string, mode: number): void {
-  // 唯一 .tmp 名（pid+随机）：即便极端双持锁场景两写手并存，也不互相 clobber 同一 .tmp（B5 加固）。
-  const tmp = `${path}.${process.pid}.${randomBytes(4).toString('hex')}.tmp`
-  writeFileSync(tmp, data, { mode })
-  renameSync(tmp, path)
-  chmodSync(path, mode)
-}
-
-// ── CertificateAuthority：进程内逐 host 签发 + 缓存 ─────────────────────────────
-export interface SecureContextOptions {
-  key: string
-  cert: string
-}
-
-export class CertificateAuthority {
-  private readonly ca: KeyCertPair
-  private readonly cache = new Map<string, KeyCertPair>()
-
-  private constructor(ca: KeyCertPair) {
-    this.ca = ca
-  }
-
-  /** 从内存中的 createCa() 结果构造。 */
-  static fromCa(ca: KeyCertPair): CertificateAuthority {
-    return new CertificateAuthority(ca)
-  }
-
-  /** 从落盘目录装载（缺则 ensureCa 生成）。certs.py:197 CertificateAuthority.__init__。 */
-  static fromDir(opts: CaDirOptions = {}): CertificateAuthority {
-    const res = ensureCa(opts)
-    return new CertificateAuthority({ certPem: res.certPem, keyPem: res.keyPem })
-  }
-
-  /** 返回本地 CA 证书 PEM（可供上层写入信任链；不含私钥）。 */
-  caCertPem(): string {
-    return this.ca.certPem
-  }
-
-  /** 逐 host 证书（进程内缓存）。certs.py:207 get_host_cert_pem。 */
-  getHostCert(hostname: string): KeyCertPair {
-    const hit = this.cache.get(hostname)
-    if (hit) return hit
-    const pair = issueHostCert(this.ca, hostname)
-    this.cache.set(hostname, pair)
-    return pair
-  }
-
-  /** tls.createSecureContext 所需 { key, cert }。certs.py:270 make_ssl_context。 */
-  secureContextOptions(hostname: string): SecureContextOptions {
-    const pair = this.getHostCert(hostname)
-    return { key: pair.keyPem, cert: pair.certPem }
-  }
-}
-
 /** 能否做真 TLS MITM（环境能否生成有效本地 CA 链）——honest-skip 门控用（同步）。 */
 export function tlsMitmSupported(): boolean {
   try {
@@ -566,6 +380,8 @@ export function buildMacosTrustCaCommand(caCertPath: string, keychainPath?: stri
 /** macOS 是否已信任该 CA（非改动 verify-cert）。certs.py:165 is_macos_ca_trusted。 */
 export function isMacosCaTrusted(caCertPath: string, keychainPath?: string): boolean {
   const cmd = buildMacosVerifyCaCommand(caCertPath, keychainPath)
-  const res = spawnSync(cmd[0]!, cmd.slice(1), { encoding: 'utf8' })
+  const executable = cmd[0]
+  if (!executable) return false
+  const res = spawnSync(executable, cmd.slice(1), { encoding: 'utf8' })
   return res.status === 0
 }

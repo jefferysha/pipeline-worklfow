@@ -3,7 +3,6 @@ import { validateObservationPage } from '@pipeline-lite/kernel'
 import type {
   ObservationPage,
   ObserveActionKind,
-  TriageResult,
   WorkflowRun,
 } from '@pipeline-lite/kernel'
 
@@ -117,7 +116,10 @@ function requiredString(
   return value
 }
 
-function validateEnvelope(input: unknown): { readonly result: TriageResult; readonly page: ObservationPage } {
+function validateEnvelope(input: unknown): {
+  readonly decisions: readonly unknown[]
+  readonly page: ObservationPage
+} {
   const issues: string[] = []
   if (!isRecord(input)) {
     throw new WorkflowRunMaterializationError(['triageResult: expected an object'])
@@ -148,7 +150,7 @@ function validateEnvelope(input: unknown): { readonly result: TriageResult; read
   if (issues.length > 0 || !pageValidation.ok || !Array.isArray(input.decisions)) {
     throw new WorkflowRunMaterializationError(issues)
   }
-  return { result: input as unknown as TriageResult, page: pageValidation.value }
+  return { decisions: input.decisions, page: pageValidation.value }
 }
 
 function idempotencyKeyFor(
@@ -192,7 +194,7 @@ export function createWorkflowRunMaterializer(
           'triageResult: expected a recursively frozen canonical TriageResult',
         ])
       }
-      const { result, page } = validateEnvelope(triageResult)
+      const { decisions, page } = validateEnvelope(triageResult)
       const observations = new Map(
         page.observations.map((observation) => [observation.observationId, observation]),
       )
@@ -201,7 +203,7 @@ export function createWorkflowRunMaterializer(
       const decidedObservationIds = new Set<string>()
       const classificationByObservationId = new Map<string, 'high' | 'watch' | 'noise'>()
       const issues: string[] = []
-      for (const [index, rawDecision] of (result.decisions as readonly unknown[]).entries()) {
+      for (const [index, rawDecision] of decisions.entries()) {
         if (!isRecord(rawDecision)) {
           issues.push(`triageResult.decisions[${index}]: expected an object`)
           continue

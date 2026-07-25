@@ -39,6 +39,7 @@ import {
 import { enforcementFor, FAIL_STREAK_WARN } from './enforce.js'
 import type { AutonomyLevel, Enforcement, LoopEntry, LoopRegistry } from './types.js'
 import { insertPointAtBlockEnd, locateLoop } from './yamlBlock.js'
+import { required } from '../required.js'
 
 // ── 阈值常量 ───────────────────────────────────────────────────────────────────
 
@@ -48,10 +49,10 @@ export const MIN_L2_RUNS_FOR_L3 = 5
 const ORDER: readonly AutonomyLevel[] = ['L1', 'L2', 'L3']
 
 function nextUp(level: AutonomyLevel): AutonomyLevel {
-  return ORDER[Math.min(ORDER.indexOf(level) + 1, ORDER.length - 1)]!
+  return required(ORDER[Math.min(ORDER.indexOf(level) + 1, ORDER.length - 1)])
 }
 function nextDown(level: AutonomyLevel): AutonomyLevel {
-  return ORDER[Math.max(ORDER.indexOf(level) - 1, 0)]!
+  return required(ORDER[Math.max(ORDER.indexOf(level) - 1, 0)])
 }
 
 // ── run-log 运行历史（轮次 + 连败；契约同 enforce/budget 5 列表格）──────────────
@@ -80,7 +81,7 @@ export function parseRunHistory(text: string | null, loopId: string): Graduation
     if (!line.startsWith('|')) continue
     const cols = line.replace(/^\|+/, '').replace(/\|+$/, '').split('|').map((c) => c.trim())
     if (cols.length < 2 || cols[1] !== loopId) continue
-    if (!HIST_TS_RE.test(cols[0]!)) continue
+    if (!HIST_TS_RE.test(required(cols[0]))) continue
     const rm = line.match(HIST_RESULT_RE)
     results.push(rm ? rm[1]! : null)
   }
@@ -271,7 +272,7 @@ export function setAutonomyLevelInYaml(text: string, loopId: string, level: Auto
 
   const levelRe = /^(\s*)autonomy_level:\s*.*$/
   for (let i = block.start; i < block.end; i++) {
-    const m = lines[i]!.match(levelRe)
+    const m = required(lines[i]).match(levelRe)
     if (m) {
       lines[i] = `${m[1]!}autonomy_level: ${level}`
       return { text: lines.join('\n'), error: null }
@@ -404,7 +405,11 @@ export async function applyLevelChange(
     return { plan, verdict, applied: false, errors: [`CAS 失败：loops.yaml 在改档写回期间被删除，已如实拒绝（未落盘，${yamlPath}）`], exitCode: 3 }
   }
   // governance 锁内 epoch-CAS + atomic 写回：produce 对锁内当前文本做 surgical 改档。epoch 不符（并发写）→ ok:false。
-  const res = await fs.writeRegistryGoverned(repoRoot, snap.epoch, (cur) => setAutonomyLevelInYaml(cur, loopId, plan.to!))
+  const res = await fs.writeRegistryGoverned(
+    repoRoot,
+    snap.epoch,
+    (cur) => setAutonomyLevelInYaml(cur, loopId, required(plan.to ?? undefined)),
+  )
   if (!res.ok) {
     return {
       plan, verdict, applied: false,

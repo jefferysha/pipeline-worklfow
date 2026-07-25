@@ -33,10 +33,14 @@ async function revisionChain(changeDir: string, current: RunRevision | undefined
   const result = [current]
   let cursor = current
   while (cursor.revision > 0) {
+    const previousRevisionId = cursor.previousRevisionId
+    if (previousRevisionId === undefined) {
+      throw new Error(`canonical history revision ${cursor.revision} 缺 previousRevisionId`)
+    }
     const previous = await readImmutableRunRevision(
       changeDir,
       cursor.revision - 1,
-      cursor.previousRevisionId!,
+      previousRevisionId,
     )
     if (!previous) throw new Error(`canonical history revision ${cursor.revision - 1} 缺失`)
     result.unshift(previous)
@@ -46,7 +50,7 @@ async function revisionChain(changeDir: string, current: RunRevision | undefined
 }
 
 function stringProp(record: LedgerRecord, key: string): string | undefined {
-  const value = (record as unknown as Record<string, unknown>)[key]
+  const value = Reflect.get(record, key) as unknown
   return typeof value === 'string' ? value : undefined
 }
 
@@ -79,7 +83,7 @@ function relatedLedgerRecords(
     if (usage) usageIds.add(usage)
     if (recordId) recordIds.add(recordId)
     if (intentId) intentIds.add(intentId)
-    const referencedUsage = (record as unknown as { usage_record_ids?: unknown }).usage_record_ids
+    const referencedUsage = Reflect.get(record, 'usage_record_ids') as unknown
     if (Array.isArray(referencedUsage)) {
       for (const id of referencedUsage) if (typeof id === 'string') usageIds.add(id)
     }

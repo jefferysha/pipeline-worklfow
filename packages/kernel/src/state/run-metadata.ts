@@ -15,6 +15,9 @@ const HEAD_KEY = 'pipeline_transition_head'
 const POLICY_KEY = 'pipeline_automation_policy_b64'
 const LOOP_ID_KEY = 'pipeline_loop_id'
 const ITERATION_ID_KEY = 'pipeline_iteration_id'
+const DOCUMENT_PROFILE_KEY = 'pipeline_document_profile'
+const DOCUMENT_GOVERNANCE_FINGERPRINT_KEY = 'pipeline_document_governance_fingerprint'
+const WORKFLOW_PLAN_FINGERPRINT_KEY = 'pipeline_workflow_plan_fingerprint'
 const STATE_REVISION_KEY = 'pipeline_state_revision'
 const STATE_REVISION_ID_KEY = 'pipeline_state_revision_id'
 const STATE_DIGEST_KEY = 'pipeline_state_digest'
@@ -34,12 +37,30 @@ export function serializeRunMetadataLines(metadata: RunMetadata | undefined): st
       lines.push(`${ITERATION_ID_KEY}: ${metadata.iterationId}`)
     }
   }
+  if (metadata.documentProfile !== undefined) {
+    lines.push(`${DOCUMENT_PROFILE_KEY}: ${metadata.documentProfile}`)
+  }
+  if (metadata.documentGovernanceFingerprint !== undefined) {
+    if (!/^[0-9a-f]{64}$/.test(metadata.documentGovernanceFingerprint)) {
+      throw new Error('document governance fingerprint 必须是 64 位小写 SHA-256')
+    }
+    if (metadata.documentProfile === undefined) {
+      throw new Error('document governance fingerprint 缺少 document profile')
+    }
+    lines.push(`${DOCUMENT_GOVERNANCE_FINGERPRINT_KEY}: ${metadata.documentGovernanceFingerprint}`)
+  }
+  if (metadata.workflowPlanFingerprint !== undefined) {
+    if (!/^[0-9a-f]{64}$/.test(metadata.workflowPlanFingerprint)) {
+      throw new Error('workflow plan fingerprint 必须是 64 位小写 SHA-256')
+    }
+    lines.push(`${WORKFLOW_PLAN_FINGERPRINT_KEY}: ${metadata.workflowPlanFingerprint}`)
+  }
   return lines
 }
 
 export interface ParseRunMetadataResult {
   metadata?: RunMetadata
-  /** 成功解析时为 3、4 或 6，未识别核心三行时为 0。 */
+  /** 成功解析时为核心 3 行加可选 policy/loop/profile 行数；未识别核心块时为 0。 */
   consumedLines: number
 }
 
@@ -61,7 +82,9 @@ export function parseRunMetadataLines(lines: readonly string[]): ParseRunMetadat
     transitionSequence,
     transitionHead: headRaw === NULL_LITERAL ? undefined : headRaw,
   }
-  const policyRaw = lines[3] === undefined ? undefined : matchLine(lines[3], POLICY_KEY)
+  let consumedLines = 3
+  const policyLine = lines[consumedLines]
+  const policyRaw = policyLine === undefined ? undefined : matchLine(policyLine, POLICY_KEY)
   if (policyRaw !== undefined) {
     try {
       metadata.automationPolicy = validateAutomationPolicySnapshot(
@@ -73,14 +96,43 @@ export function parseRunMetadataLines(lines: readonly string[]): ParseRunMetadat
         && loopId === metadata.automationPolicy.loop_id && iterationId.length > 0) {
         metadata.loopId = loopId
         metadata.iterationId = iterationId
-        return { metadata, consumedLines: 6 }
+        consumedLines = 6
+      } else {
+        consumedLines = 4
       }
-      return { metadata, consumedLines: 4 }
     } catch {
       // Leave a malformed fourth line untouched in opaqueTail.
     }
   }
-  return { metadata, consumedLines: 3 }
+  const profileLine = lines[consumedLines]
+  const profileRaw = profileLine === undefined ? undefined : matchLine(profileLine, DOCUMENT_PROFILE_KEY)
+  if (profileRaw === 'legacy-full' || profileRaw === 'document-v1') {
+    metadata.documentProfile = profileRaw
+    consumedLines += 1
+  }
+  const fingerprintLine = lines[consumedLines]
+  const fingerprintRaw = fingerprintLine === undefined
+    ? undefined
+    : matchLine(fingerprintLine, DOCUMENT_GOVERNANCE_FINGERPRINT_KEY)
+  if (fingerprintRaw !== undefined) {
+    if (metadata.documentProfile === undefined || !/^[0-9a-f]{64}$/.test(fingerprintRaw)) {
+      throw new Error('pipeline document governance fingerprint 损坏')
+    }
+    metadata.documentGovernanceFingerprint = fingerprintRaw
+    consumedLines += 1
+  }
+  const workflowFingerprintLine = lines[consumedLines]
+  const workflowFingerprintRaw = workflowFingerprintLine === undefined
+    ? undefined
+    : matchLine(workflowFingerprintLine, WORKFLOW_PLAN_FINGERPRINT_KEY)
+  if (workflowFingerprintRaw !== undefined) {
+    if (!/^[0-9a-f]{64}$/.test(workflowFingerprintRaw)) {
+      throw new Error('pipeline workflow plan fingerprint 损坏')
+    }
+    metadata.workflowPlanFingerprint = workflowFingerprintRaw
+    consumedLines += 1
+  }
+  return { metadata, consumedLines }
 }
 
 export function serializeProjectionMetadataLines(metadata: StateProjectionMetadata | undefined): string[] {

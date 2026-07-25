@@ -48,12 +48,12 @@ function skillDescriptionFrom(path: string): string | undefined {
 
 function installedPluginRoots(claudeDir: string): string[] {
   try {
-    const parsed = JSON.parse(readFileSync(join(claudeDir, 'plugins', 'installed_plugins.json'), 'utf8')) as {
-      plugins?: Record<string, Array<{ installPath?: unknown }>>
-    }
-    return Object.values(parsed.plugins ?? {})
+    const parsed: unknown = JSON.parse(readFileSync(join(claudeDir, 'plugins', 'installed_plugins.json'), 'utf8'))
+    const plugins = typeof parsed === 'object' && parsed !== null ? Reflect.get(parsed, 'plugins') : undefined
+    if (typeof plugins !== 'object' || plugins === null || Array.isArray(plugins)) return []
+    return Object.values(plugins)
       .flat()
-      .map((entry) => entry.installPath)
+      .map((entry) => typeof entry === 'object' && entry !== null ? Reflect.get(entry, 'installPath') : undefined)
       .filter((path): path is string => typeof path === 'string' && path.trim() !== '')
   } catch {
     return []
@@ -169,22 +169,31 @@ export function detectInstalled(claudeDir: string): { skills: Set<string>; plugi
   // 源②:installed_plugins.json(v2:{version, plugins: {"name@mkt": [{installPath,…}]}})
   try {
     const raw = readFileSync(join(claudeDir, 'plugins', 'installed_plugins.json'), 'utf8')
-    const parsed = JSON.parse(raw) as { plugins?: Record<string, Array<{ installPath?: string }>> }
+    const parsed: unknown = JSON.parse(raw)
     let disabled: Record<string, unknown> = {}
     try {
-      const settings = JSON.parse(readFileSync(join(claudeDir, 'settings.json'), 'utf8')) as {
-        enabledPlugins?: Record<string, unknown>
+      const settings: unknown = JSON.parse(readFileSync(join(claudeDir, 'settings.json'), 'utf8'))
+      if (typeof settings === 'object' && settings !== null) {
+        const candidate = Reflect.get(settings, 'enabledPlugins')
+        if (typeof candidate === 'object' && candidate !== null && !Array.isArray(candidate)) {
+          disabled = candidate as Record<string, unknown>
+        }
       }
-      disabled = settings.enabledPlugins ?? {}
     } catch {
       /* settings 缺失/损坏 → 视为无禁用项(fail-open) */
     }
-    for (const [key, entries] of Object.entries(parsed.plugins ?? {})) {
+    const plugins = typeof parsed === 'object' && parsed !== null ? Reflect.get(parsed, 'plugins') : undefined
+    if (typeof plugins !== 'object' || plugins === null || Array.isArray(plugins)) return { skills, pluginBases, codexPluginBases }
+    for (const [key, entries] of Object.entries(plugins)) {
       if (disabled[key] === false) continue // 装了但被关掉 ≠ 已装
-      pluginBases.add(key.split('@')[0]!)
-      for (const entry of entries ?? []) {
-        if (!entry?.installPath) continue
-        for (const name of skillDirsIn(join(entry.installPath, 'skills'))) skills.add(name)
+      const pluginBase = key.split('@')[0]
+      if (pluginBase !== undefined) pluginBases.add(pluginBase)
+      if (!Array.isArray(entries)) continue
+      for (const entry of entries) {
+        if (typeof entry !== 'object' || entry === null) continue
+        const installPath = Reflect.get(entry, 'installPath')
+        if (typeof installPath !== 'string') continue
+        for (const name of skillDirsIn(join(installPath, 'skills'))) skills.add(name)
       }
     }
   } catch {
@@ -204,7 +213,8 @@ function sourceRegistry(repoRoot: string): Map<string, SkillSourceDefinition> {
 }
 
 function metadataFor(registry: ReadonlyMap<string, SkillSourceDefinition>, name: string): SkillSourceDefinition | undefined {
-  return registry.get(name) ?? (name.includes(':') ? registry.get(name.split(':')[0]!) : undefined)
+  const plugin = name.split(':')[0]
+  return registry.get(name) ?? (name.includes(':') && plugin !== undefined ? registry.get(plugin) : undefined)
 }
 
 function executableOnPath(bin: string): boolean {
@@ -264,10 +274,11 @@ export function listAllSkillsDetailed(repoRoot: string, claudeDir: string): Skil
     } else if (meta?.tool === 'npm') {
       installed = meta.bin !== undefined && executableOnPath(meta.bin)
     } else if (meta?.tool === 'claude-plugin') {
-      const plugin = meta.skill ?? name.split(':')[0]!
+      const plugin = meta.skill ?? name.split(':')[0] ?? name
       installed = detected.codexPluginBases.has(plugin) || detected.skills.has(plugin) || detected.skills.has(name)
     } else if (name.includes(':')) {
-      installed = detected.codexPluginBases.has(name.split(':')[0]!) || detected.skills.has(meta?.skill ?? name)
+      const plugin = name.split(':')[0] ?? name
+      installed = detected.codexPluginBases.has(plugin) || detected.skills.has(meta?.skill ?? name)
     } else {
       installed = detected.skills.has(meta?.skill ?? name)
     }

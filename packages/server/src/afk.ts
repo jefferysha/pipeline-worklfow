@@ -12,15 +12,12 @@
  *   ⑥ readAfkRunLog（afk-workbench Task 6）：GET /api/afk/:name/log 的读取逻辑——原样读出
  *     宿主侧持久化的 .sandcastle-run.log 原始文本，见该函数头注释。
  *
- * server 零第三方依赖：本模块只消费已构造的 Snapshot（kernel 读出的字段），**不 import
- * @pipeline-lite/automation 运行时**——automation 的 AUTOMATION_STATES 是语义真相源，此处以
- * 字面量对位并注释指明，避免把 server 的 tsc 构建耦合到 automation 包（只读语义，不建依赖）。
- * automation 字段生命周期与 8 态枚举见 packages/automation/src/types.ts（AUTOMATION_STATES）。
- * 同一零依赖原则延伸到 cancelAfkRun 的取消标记文件名——见下方 CANCEL_MARKER_FILE 常量注释。
+ * server 通过 automation 包公共出口消费跨上下文常量，不复制运行时协议。
  */
 import { execFile } from 'node:child_process'
 import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { AUTOMATION_STATES, CANCEL_MARKER_FILE, type AutomationState } from '@pipeline-lite/automation'
 import { stateStorageExistsSync, type StateStore } from '@pipeline-lite/kernel'
 import type { Snapshot } from './types.js'
 
@@ -82,6 +79,10 @@ export interface AfkLog {
   entries: AfkLogEntry[]
 }
 
+function isAutomationState(value: string): value is AutomationState {
+  return (AUTOMATION_STATES as readonly string[]).includes(value)
+}
+
 function str(v: string | string[] | undefined): string {
   if (Array.isArray(v)) return v.join(',')
   return v ?? ''
@@ -89,6 +90,7 @@ function str(v: string | string[] | undefined): string {
 
 /** automation 态 → 泳道。off / 空 / 未知 → null（不入板）；scheduled（已认领在飞）→ running。 */
 export function laneOf(automation: string): AfkLane | null {
+  if (!isAutomationState(automation)) return null
   switch (automation) {
     case 'queued':
       return 'queued'
@@ -206,19 +208,6 @@ export function buildAfkLog(snapshot: Snapshot, clock: () => string): AfkLog {
   entries.sort((a, b) => (a.ts < b.ts ? 1 : a.ts > b.ts ? -1 : 0))
   return { generated_at: now, entries }
 }
-
-/**
- * 取消标记文件名——**必须**与 packages/automation/src/lifecycle/worktree.ts 导出的
- * `CANCEL_MARKER_FILE` 字面量保持一致（`runChangeInSandbox` 结算时探测的正是这个文件名）。
- * 本应直接 import 该常量，但 server 对 automation 包坚持零运行时依赖（同上方模块头注释 /
- * AUTOMATION_STATES 的既有先例）：packages/server/package.json 未把 @pipeline-lite/automation
- * 列为 dependency，packages/server/tsconfig.json 的 `references` 也未包含 `../automation`——
- * 即便 npm workspace 会把 automation hoist 进根 node_modules 使得 import 在运行时"能用"，
- * 那也是绕开声明依赖图的隐式耦合，且会让 server 的 `tsc -b` 构建顺序悄悄依赖一个未声明的
- * project reference。故沿用文件头已定的字面量对位模式，而非在此开一个例外。
- * 两侧字面量的漂移风险由 automation 侧 worktree.test.ts 断言 CANCEL_MARKER_FILE 的字面量值兜底。
- */
-const CANCEL_MARKER_FILE = '.cancel-requested'
 
 /**
  * afk-workbench Task 4：POST /api/afk/:name/cancel 的写回逻辑。

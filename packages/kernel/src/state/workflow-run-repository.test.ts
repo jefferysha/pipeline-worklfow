@@ -9,6 +9,10 @@ import { readCurrentRunRevision } from './run-revision-store.js'
 import type { FieldName, InitOptions, PipelineState, StateStore, StateWriteIntent } from '../types.js'
 import { compileAutomationPolicySnapshot } from '../loops/automation-policy.js'
 import type { LoopEntry } from '../loops/types.js'
+import {
+  compileEffectiveWorkflowPlan,
+  effectiveWorkflowPlanBinding,
+} from '../workflow/effective-plan.js'
 
 const governedPolicy = compileAutomationPolicySnapshot({
   id: 'loop-a', name: 'Loop A', kind: 'executor', goal: 'Keep green', cadence: 'manual', risk: 'low',
@@ -109,7 +113,14 @@ describe('WorkflowRunRepository.initChange —— 新 change 的唯一创建入�
     expect(run.transitionSequence).toBe(0)
     const state = await store.read(changeDir)
     expect(state.fields.track).toBe('backend')
-    expect(state.runMetadata).toEqual({ runId: 'id-1', transitionSequence: 0, transitionHead: undefined })
+    expect(state.runMetadata).toEqual({
+      runId: 'id-1',
+      transitionSequence: 0,
+      documentProfile: 'legacy-full',
+      documentGovernanceFingerprint:
+        effectiveWorkflowPlanBinding(compileEffectiveWorkflowPlan('default')).documentGovernanceFingerprint,
+      workflowPlanFingerprint: compileEffectiveWorkflowPlan('default').workflowFingerprint,
+    })
   })
 
   test('default init 同时补最小 OpenSpec 文档与 tasks.md 来源；custom workflow 不被注入 default 骨架', async () => {
@@ -208,6 +219,84 @@ describe('WorkflowRunRepository.establishRun —— 新 change 在 init 时钉�
     await repo.establishRun(dir)
     const after = await store.read(dir)
     expect(after.fields).toEqual(before.fields)
+  })
+
+  test('旧 openspecContract boolean 在 establishRun 时恢复 legacy-full 治理绑定', async () => {
+    const root = await freshRepoRoot()
+    const { repo, store } = makeRepo()
+    const dir = await store.init({
+      repoRoot: root,
+      name: 'legacy-governed',
+      track: 'backend',
+      reviewSeed: 'pending',
+      preset: 'full',
+      clock: () => '2026-07-16T00:00:00Z',
+      initialWorkflow: {
+        workflow: 'default',
+        phase: 'open',
+        openspecContract: true,
+      },
+    })
+    expect((await store.read(dir)).runMetadata).toBeUndefined()
+
+    const run = await repo.establishRun(dir, { openspecContract: true })
+    const defaultBinding = effectiveWorkflowPlanBinding(compileEffectiveWorkflowPlan('default'))
+
+    expect(run).toMatchObject(defaultBinding)
+    expect((await store.read(dir)).runMetadata).toMatchObject(defaultBinding)
+  })
+
+  test('已有 run identity 但缺治理绑定时原子补齐，保留 transition 坐标且重复调用幂等', async () => {
+    const root = await freshRepoRoot()
+    const { repo, store } = makeRepo()
+    const dir = await initChange(store, root)
+    await repo.establishRun(dir)
+    await store.withLock(dir, async () => {
+      const state = await store.read(dir)
+      const metadata = state.runMetadata
+      if (!metadata) throw new Error('fixture runMetadata missing')
+      await store.writeUnderLock(dir, {
+        ...state,
+        runMetadata: {
+          runId: metadata.runId,
+          transitionSequence: 7,
+          transitionHead: 'record-7',
+        },
+      })
+    })
+    const binding = effectiveWorkflowPlanBinding(compileEffectiveWorkflowPlan('default'))
+
+    const upgraded = await repo.establishRun(dir, binding)
+    expect(upgraded).toMatchObject({
+      id: 'id-1',
+      transitionSequence: 7,
+      transitionHead: 'record-7',
+      ...binding,
+    })
+    expect(await repo.establishRun(dir, binding)).toEqual(upgraded)
+    expect(idSeq).toBe(1)
+  })
+
+  test('已有治理绑定与请求不一致时拒绝覆盖并保持原值', async () => {
+    const root = await freshRepoRoot()
+    const { repo, store } = makeRepo()
+    const dir = await initChange(store, root)
+    await repo.establishRun(dir, {
+      documentProfile: 'document-v1',
+      documentGovernanceFingerprint: 'a'.repeat(64),
+      workflowPlanFingerprint: 'b'.repeat(64),
+    })
+
+    await expect(repo.establishRun(dir, {
+      documentProfile: 'legacy-full',
+      documentGovernanceFingerprint: 'c'.repeat(64),
+      workflowPlanFingerprint: 'd'.repeat(64),
+    })).rejects.toThrow('拒绝覆盖已有 documentProfile')
+    expect((await store.read(dir)).runMetadata).toMatchObject({
+      documentProfile: 'document-v1',
+      documentGovernanceFingerprint: 'a'.repeat(64),
+      workflowPlanFingerprint: 'b'.repeat(64),
+    })
   })
 })
 
@@ -365,6 +454,63 @@ describe('WorkflowRunRepository.transact —— commit() 真提交', () => {
       transitionRecordId: committedRecordId,
     })
     expect(current?.state.runMetadata?.transitionHead).toBe(committedRecordId)
+  })
+
+  test('commit 保留初始化时绑定的 document profile 与 fingerprint', async () => {
+    const root = await freshRepoRoot()
+    const { repo, store } = makeRepo()
+    const fingerprint = 'c'.repeat(64)
+    const { changeDir } = await repo.initChange({
+      repoRoot: root,
+      name: 'bound-docs',
+      track: 'backend',
+      reviewSeed: 'pending',
+      preset: 'full',
+      clock: () => '2026-07-16T00:00:00Z',
+      initialWorkflow: {
+        workflow: 'compact',
+        phase: 'shape',
+        documentProfile: 'document-v1',
+        documentGovernanceFingerprint: fingerprint,
+      },
+    })
+    await repo.transact(changeDir, async (tx) => {
+      await tx.commit(withPhase(tx.state, 'done'), { event: 'complete', from: 'shape', to: 'done' })
+    })
+
+    expect((await store.read(changeDir)).runMetadata).toMatchObject({
+      documentProfile: 'document-v1',
+      documentGovernanceFingerprint: fingerprint,
+    })
+  })
+
+  test('commit 保留初始化时绑定的完整 workflow plan fingerprint', async () => {
+    const root = await freshRepoRoot()
+    const { repo, store } = makeRepo()
+    const plan = compileEffectiveWorkflowPlan('default')
+    const { changeDir } = await repo.initChange({
+      repoRoot: root,
+      name: 'bound-plan',
+      track: 'backend',
+      reviewSeed: 'pending',
+      preset: 'full',
+      clock: () => '2026-07-16T00:00:00Z',
+      initialWorkflow: {
+        workflow: 'default',
+        phase: 'open',
+        ...effectiveWorkflowPlanBinding(plan),
+      },
+    })
+    await repo.transact(changeDir, async (tx) => {
+      await tx.commit(withPhase(tx.state, 'explore'), {
+        event: 'open-complete',
+        from: 'open',
+        to: 'explore',
+      })
+    })
+
+    expect((await store.read(changeDir)).runMetadata?.workflowPlanFingerprint)
+      .toBe(plan.workflowFingerprint)
   })
 
   test('第二次 commit：sequence 从已存在的 metadata 继续递增，previousRecordId 指向上一条 head', async () => {

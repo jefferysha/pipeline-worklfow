@@ -10,13 +10,15 @@
  * enabled 是项目级总开关，缺省 false；与 default_opt_in 共同构成自动挂队双层授权。
  * level 仍由 loop 级 autonomy_level 治理，不在此文件重复持久化。
  *
- * 零依赖镜像纪律：server 对 @pipeline-lite/automation 坚持零运行时依赖（同 afk.ts 头注释 /
- * AUTOMATION_STATES 字面量对位先例），本模块的值域/字段名/fail-open 语义与
- * automationJson.ts 逐条对齐——真消费方（sdk.ts 装配点 + cli afk run 的 image）读的是
- * automation 包那份，两侧漂移 = UI 保存的参数不生效，改任一侧必须同步另一侧。
+ * 值域与读取逻辑直接消费 automation 包的公共配置契约，避免 server 镜像一份协议。
  */
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import {
+  AUTOMATION_JSON_LIMITS,
+  isValidImageRef,
+  readAutomationJson,
+} from '@pipeline-lite/automation'
 
 /** AFK 执行参数（HTTP 信封形状 = 落盘形状，snake_case）。image 空串 = 用内置 sandcastle:local。 */
 export interface AutomationSettings {
@@ -36,11 +38,6 @@ export const AUTOMATION_DEFAULTS: AutomationSettings = {
   image: '',
 }
 
-/** 值域（与 automationJson.ts::AUTOMATION_JSON_LIMITS 同一口径）。 */
-const LIMITS = { max_parallel: { min: 1, max: 8 }, max_retries: { min: 0, max: 3 }, imageMaxLen: 200 } as const
-/** docker 镜像引用字符集（同 automationJson.ts::AUTOMATION_IMAGE_RE）。 */
-const IMAGE_RE = /^[a-zA-Z0-9._/:@-]+$/
-
 export function automationConfigPath(root: string): string {
   return join(root, '.pipeline', 'automation.json')
 }
@@ -48,28 +45,18 @@ export function automationConfigPath(root: string): string {
 const intIn = (v: unknown, min: number, max: number): v is number =>
   typeof v === 'number' && Number.isInteger(v) && v >= min && v <= max
 
-const validImage = (v: string): boolean => v.length <= LIMITS.imageMaxLen && (v === '' || IMAGE_RE.test(v))
+const validImage = (v: string): boolean => v === '' || isValidImageRef(v)
 
 /** 生效参数（默认已填齐，UI 滑杆直接吃）。缺文件/损坏/字段越界 → 逐字段回落默认（fail-open）。 */
 export function readAutomationSettings(root: string): AutomationSettings {
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(readFileSync(automationConfigPath(root), 'utf8'))
-  } catch {
-    return { ...AUTOMATION_DEFAULTS }
+  const config = readAutomationJson(root, { readFileSync })
+  return {
+    enabled: config.enabled ?? AUTOMATION_DEFAULTS.enabled,
+    max_parallel: config.maxParallel ?? AUTOMATION_DEFAULTS.max_parallel,
+    max_retries: config.maxRetries ?? AUTOMATION_DEFAULTS.max_retries,
+    default_opt_in: config.defaultOptIn ?? AUTOMATION_DEFAULTS.default_opt_in,
+    image: config.image ?? AUTOMATION_DEFAULTS.image,
   }
-  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return { ...AUTOMATION_DEFAULTS }
-  const raw = parsed as Record<string, unknown>
-  const out = { ...AUTOMATION_DEFAULTS }
-  if (typeof raw.enabled === 'boolean') out.enabled = raw.enabled
-  if (intIn(raw.max_parallel, LIMITS.max_parallel.min, LIMITS.max_parallel.max)) out.max_parallel = raw.max_parallel
-  if (intIn(raw.max_retries, LIMITS.max_retries.min, LIMITS.max_retries.max)) out.max_retries = raw.max_retries
-  if (typeof raw.default_opt_in === 'boolean') out.default_opt_in = raw.default_opt_in
-  if (typeof raw.image === 'string') {
-    const image = raw.image.trim()
-    if (image !== '' && validImage(image)) out.image = image
-  }
-  return out
 }
 
 export type AutomationSettingsValidation =
@@ -85,11 +72,11 @@ export function validateAutomationSettingsBody(body: unknown): AutomationSetting
   if (enabled !== undefined && typeof enabled !== 'boolean') {
     return { ok: false, error: 'enabled 须为布尔值' }
   }
-  if (!intIn(max_parallel, LIMITS.max_parallel.min, LIMITS.max_parallel.max)) {
-    return { ok: false, error: `max_parallel 须为 ${LIMITS.max_parallel.min}-${LIMITS.max_parallel.max} 的整数` }
+  if (!intIn(max_parallel, AUTOMATION_JSON_LIMITS.maxParallel.min, AUTOMATION_JSON_LIMITS.maxParallel.max)) {
+    return { ok: false, error: `max_parallel 须为 ${AUTOMATION_JSON_LIMITS.maxParallel.min}-${AUTOMATION_JSON_LIMITS.maxParallel.max} 的整数` }
   }
-  if (!intIn(max_retries, LIMITS.max_retries.min, LIMITS.max_retries.max)) {
-    return { ok: false, error: `max_retries 须为 ${LIMITS.max_retries.min}-${LIMITS.max_retries.max} 的整数` }
+  if (!intIn(max_retries, AUTOMATION_JSON_LIMITS.maxRetries.min, AUTOMATION_JSON_LIMITS.maxRetries.max)) {
+    return { ok: false, error: `max_retries 须为 ${AUTOMATION_JSON_LIMITS.maxRetries.min}-${AUTOMATION_JSON_LIMITS.maxRetries.max} 的整数` }
   }
   if (typeof default_opt_in !== 'boolean') {
     return { ok: false, error: 'default_opt_in 须为布尔值' }
@@ -99,7 +86,7 @@ export function validateAutomationSettingsBody(body: unknown): AutomationSetting
   }
   const trimmed = image.trim()
   if (!validImage(trimmed)) {
-    return { ok: false, error: `image 非法（仅允许 a-z A-Z 0-9 . _ / : @ -，长度 ≤ ${LIMITS.imageMaxLen}）` }
+    return { ok: false, error: `image 非法（仅允许 a-z A-Z 0-9 . _ / : @ -，长度 ≤ ${AUTOMATION_JSON_LIMITS.imageMaxLen}）` }
   }
   return {
     ok: true,

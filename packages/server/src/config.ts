@@ -257,7 +257,8 @@ export async function writeMandatorySkills(
 
     let sectionStart = -1
     for (let i = 0; i < lines.length; i++) {
-      if (SECTION_HEADER_RE.test(lines[i]!)) {
+      const line = lines[i]
+      if (line !== undefined && SECTION_HEADER_RE.test(line)) {
         sectionStart = i
         break
       }
@@ -267,7 +268,8 @@ export async function writeMandatorySkills(
     }
     let sectionEnd = lines.length
     for (let i = sectionStart + 1; i < lines.length; i++) {
-      const raw = lines[i]!
+      const raw = lines[i]
+      if (raw === undefined) continue
       if (raw.trim() === '') continue
       if (!/^\s/.test(raw)) {
         sectionEnd = i
@@ -279,7 +281,9 @@ export async function writeMandatorySkills(
     let found = false
     let lastEntryIdx = sectionStart
     for (let i = sectionStart + 1; i < sectionEnd; i++) {
-      const stripped = stripComment(lines[i]!)
+      const line = lines[i]
+      if (line === undefined) continue
+      const stripped = stripComment(line)
       if (stripped.trim() === '') continue // 空行 / 纯注释行：透传保留，不视为数据行
       const m = ENTRY_RE.exec(stripped)
       if (!m) {

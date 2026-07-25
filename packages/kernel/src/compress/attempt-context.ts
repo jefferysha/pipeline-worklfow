@@ -7,6 +7,7 @@
  */
 import { createHash } from 'node:crypto'
 import type { RunResult } from '../loops/ledger-types.js'
+import { required } from '../required.js'
 
 export interface RunAttemptRecord {
   readonly attempt_id: string
@@ -78,13 +79,13 @@ export function detectAttemptStagnation(
 ): AttemptStagnation {
   const threshold = Math.max(2, Math.floor(options.threshold ?? 3))
   if (records.length === 0) return { stagnant: false, repeatedAttempts: [] }
-  const newest = records[records.length - 1]!
+  const newest = required(records[records.length - 1])
   const fingerprint = failureFingerprint(newest)
   if (fingerprint === null) return { stagnant: false, repeatedAttempts: [] }
 
   const repeated: string[] = []
   for (let i = records.length - 1; i >= 0; i -= 1) {
-    const record = records[i]!
+    const record = required(records[i])
     if (failureFingerprint(record) !== fingerprint) break
     repeated.unshift(record.attempt_id)
   }
@@ -147,28 +148,28 @@ export function buildAttemptContext(
   const maxChars = Math.max(1, Math.floor(options.maxChars ?? 8_000))
   const selected = new Set<number>([0, records.length - 1])
   for (let i = 1; i < records.length; i += 1) {
-    if (signalChanged(records[i - 1]!, records[i]!)) selected.add(i)
+    if (signalChanged(required(records[i - 1]), required(records[i]))) selected.add(i)
   }
   for (let i = Math.max(0, records.length - tail); i < records.length; i += 1) selected.add(i)
 
   let indexes = [...selected].sort((a, b) => a - b)
-  const loopId = records[0]!.loop_id
-  const change = records[0]!.change
+  const loopId = required(records[0]).loop_id
+  const change = required(records[0]).change
   const omittedFor = (kept: readonly number[]): string[] => records
     .filter((_record, index) => !kept.includes(index))
     .map((record) => record.attempt_id)
 
   let omitted = omittedFor(indexes)
-  let rendered = render(loopId, change, indexes.map((index) => records[index]!), omitted)
+  let rendered = render(loopId, change, indexes.map((index) => required(records[index])), omitted)
   while (rendered.length > maxChars && indexes.length > 1) {
     indexes = indexes.slice(1)
     omitted = omittedFor(indexes)
-    rendered = render(loopId, change, indexes.map((index) => records[index]!), omitted)
+    rendered = render(loopId, change, indexes.map((index) => required(records[index])), omitted)
   }
   if (rendered.length > maxChars) {
     // A single newest detail may itself exceed the budget. Keep the complete record identity and
     // result, but omit its optional detail as one whole field rather than slicing arbitrary bytes.
-    const newest = records[indexes[indexes.length - 1]!]!
+    const newest = required(records[required(indexes[indexes.length - 1])])
     const compact = { ...newest, detail: undefined }
     const compactRendered = render(loopId, change, [compact], omittedFor([records.length - 1]))
     rendered = compactRendered.length <= maxChars ? compactRendered : recordLine(compact)
@@ -179,7 +180,7 @@ export function buildAttemptContext(
   return {
     loop_id: loopId,
     change,
-    attempts: indexes.map((index) => records[index]!),
+    attempts: indexes.map((index) => required(records[index])),
     omittedAttemptIds: omitted,
     stagnation: detectAttemptStagnation(records, { threshold: options.stagnationThreshold }),
     rendered,

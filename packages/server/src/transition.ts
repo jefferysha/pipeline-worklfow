@@ -31,12 +31,11 @@ import {
   loadRegistry,
   loadWorkflow,
   nodeLoopIoStrict,
+  resolveRequiredSkillSlots,
   stateStorageExistsSync,
-  transitionRecordToHistoryEntry,
-  validateCanonicalRevisionHistory,
 } from '@pipeline-lite/kernel'
 import type {
-  BreadcrumbWriter, FlowEngine, HistoryEntry, HistoryWriter, StateStore,
+  BreadcrumbWriter, EffectiveSkillResolver, FlowEngine, HistoryWriter, StateStore, TrackDefinition,
   TrackPolicyProfile, TransitionApplicationResult, TransitionContext, TransitionRecordStore, WorkflowRunRepository,
 } from '@pipeline-lite/kernel'
 import { enqueueAfterSpecComplete } from '@pipeline-lite/automation'
@@ -44,6 +43,8 @@ import { enqueueAfterSpecComplete } from '@pipeline-lite/automation'
 // 事件 → 转移边表：re-export kernel 单一真相源（server/index.ts 对外沿用同名）。
 export { TRANSITION_EVENTS, eventEdge } from '@pipeline-lite/kernel'
 export type { EventEdge } from '@pipeline-lite/kernel'
+export { readChangeHistory } from './transitionHistory.js'
+export type { ChangeHistoryDeps } from './transitionHistory.js'
 
 export interface TransitionDeps {
   store: StateStore
@@ -81,6 +82,8 @@ export interface TransitionDeps {
    * automation 的独立 auto-enqueue policy；缺席只用于低层 transition 单测，绝不伪造配置。
    */
   resolveTrackPolicy?: (trackId: string) => TrackPolicyProfile
+  resolveTrack?: (trackId: string) => TrackDefinition
+  skillResolver?: EffectiveSkillResolver
 }
 
 export interface TransitionOutcome {
@@ -150,6 +153,11 @@ function mapTransitionResult(name: string, event: string, result: TransitionAppl
           error: `workflow '${result.workflowName}' 未找到（期望 .pipeline/workflows/${result.workflowName}.yaml）`,
         },
       }
+    case 'document-governance-invalid':
+      return {
+        code: 409,
+        body: { ok: false, error: result.reason, code: 'document-governance-invalid' },
+      }
     case 'step-not-in-graph':
       return { code: 409, body: { ok: false, error: `step '${result.stepId}' 不在 workflow '${result.workflowName}' 里` } }
     case 'event-unsupported':
@@ -206,11 +214,14 @@ export async function performTransition(
     return { code: 404, body: { ok: false, error: '找不到该 change（无 canonical/legacy 状态）' } }
   }
   // kernel 单源注入面：把 server 的 (root,path)/(cwd) 签名绑成已锚定项目根的 TransitionContext。
+  const fileExists = deps.fileExists
+  const gitHeadSha = deps.gitHeadSha
+  const workspaceFingerprint = deps.workspaceFingerprint
   const ctx: TransitionContext = {
-    fileExists: deps.fileExists ? (p: string): boolean => deps.fileExists!(root, p) : undefined,
-    gitHeadSha: deps.gitHeadSha ? (): Promise<string> => deps.gitHeadSha!(root) : undefined,
-    workspaceFingerprint: deps.workspaceFingerprint
-      ? (): Promise<string> => deps.workspaceFingerprint!(root, name)
+    fileExists: fileExists ? (p: string): boolean => fileExists(root, p) : undefined,
+    gitHeadSha: gitHeadSha ? (): Promise<string> => gitHeadSha(root) : undefined,
+    workspaceFingerprint: workspaceFingerprint
+      ? (): Promise<string> => workspaceFingerprint(root, name)
       : undefined,
   }
   const app = createTransitionApplication({
@@ -219,14 +230,19 @@ export async function performTransition(
     clock: deps.clock,
     history: deps.history,
     breadcrumb: deps.breadcrumb,
-    completedStepSkills: async ({ changeDir: targetDir, stepId }) => {
+    resolveTrack: deps.resolveTrack,
+    missingStepSkills: async ({ changeDir: targetDir, stepId, capability }) => {
+      const slots = resolveRequiredSkillSlots(deps.skillResolver, capability, stepId)
       let historyRaw = ''
       try {
         historyRaw = await readFile(join(targetDir, HISTORY_FILE), 'utf8')
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
       }
-      return completedWorkflowSkillsSinceStepEntry(historyRaw, stepId)
+      const completed = completedWorkflowSkillsSinceStepEntry(historyRaw, stepId)
+      return slots
+        .filter((slot) => !slot.alternatives.some((candidate) => completed.has(candidate)))
+        .map((slot) => slot.token)
     },
     resolveConstraintContext: async ({ policy }) => {
       const registry = loadRegistry(root, nodeLoopIoStrict)
@@ -279,133 +295,4 @@ export async function performTransition(
     if (e instanceof NotFoundError) return { code: 404, body: { ok: false, error: '找不到该 change' } }
     return { code: 500, body: { ok: false, error: errText(e) } }
   }
-}
-
-/**
- * 读 changeDir/.pipeline-history.jsonl → 按 ts 升序的 HistoryEntry 数组。宽容读仅限于「内容
- * 局部污染」：文件不存在（ENOENT）→ []；损坏行（非 JSON / 非对象 / 缺 ts）逐行跳过不抛错——
- * 调用方（readChangeHistory）面对历史文件的任何局部污染都应尽量交付可用部分。但文件级别的
- * 其它读取错误（权限不足、EISDIR、磁盘 I/O 等）必须原样抛出，不能被误判成「还没有历史」而
- * 静默降级成 []——那会在真正的故障发生时把调用方导向一条空的假时间线。legacy opaqueTail 里的
- * transitions_history 不合并读（决议登记 #10：老 change 时间线由前端显示「早期记录不可用」）。
- */
-async function readJsonlHistory(changeDir: string): Promise<HistoryEntry[]> {
-  let text: string
-  try {
-    text = await readFile(join(changeDir, HISTORY_FILE), 'utf8')
-  } catch (e) {
-    if ((e as NodeJS.ErrnoException).code === 'ENOENT') return [] // 文件不存在（还没任何记账）→ 空时间线，不是错误
-    throw e // 权限/EISDIR/磁盘 I/O 等其它错误 fail-loud，不能伪装成「没有历史」
-  }
-  const entries: HistoryEntry[] = []
-  for (const line of text.split('\n')) {
-    const trimmed = line.trim()
-    if (!trimmed) continue
-    try {
-      const parsed: unknown = JSON.parse(trimmed)
-      if (typeof parsed === 'object' && parsed !== null && typeof (parsed as { ts?: unknown }).ts === 'string') {
-        entries.push(parsed as HistoryEntry)
-      }
-    } catch {
-      /* 损坏行跳过（宽容读） */
-    }
-  }
-  return entries
-}
-
-export interface ChangeHistoryDeps {
-  store: StateStore
-  recordStore: TransitionRecordStore
-}
-
-/**
- * GET /api/change/:name/history 数据源（G21 / v5-T1，供详情卡阶段时间线消费；W1 第二增量
- * 必须修 #2：canonical TransitionRecord 链此前只写不读，JSONL 事实上仍是 transition 审计
- * 真相源，不满足"JSONL 不再是真相源"这条停止线）。
- *
- * 合并策略（W1 第二增量收尾：从时间戳比较改成逐条来源标记——2026-07-16 codex 架构评估否决了
- * 「canonical 链首条记录 observedAt vs JSONL 条目 ts 字符串比较」的原方案：同秒冲突判定不出
- * 先后、时钟回拨会让"更晚"的遗留记录被误判成"链建立之后的重复"从而丢弃、head 文件缺失时
- * 链为空导致"最早时间戳"取不到值从而把所有遗留 transition 一并清空、以及晚于链建立才执行的
- * `pipeline import` 追加进 JSONL 的老 transitions_history——任何"前 N 条"或"早于时间 X"的
- * 边界判定在这些场景下都会判错。新方案完全不比较任何时间戳，也不维护任何全局计数/边界，只看
- * 每条 JSONL 记录自身是否带 transitionRecordId 标记）：
- *   - kind≠'transition' 的条目（set/init/tool/prompt/import）——JSONL 永远是它们的真相源，
- *     canonical 链不覆盖这些 kind，原样保留。
- *   - kind='transition' 且带 transitionRecordId 的条目——这是某条 canonical TransitionRecord
- *     的兼容投影（唯一构造点见 transitionRecordToHistoryEntry），视为已被链上记录取代，不计入
- *     结果（哪怕 JSONL 里这一行的内容被篡改也不影响结果——真相只有链，这行的存在只是标记）。
- *   - kind='transition' 但不带 transitionRecordId 的条目——legacy/import/非 canonical writer
- *     产生的 transition，不论 canonical 链是否存在、链上对应记录是否可达都原样保留。
- *   - change 完全没有 canonical 链（runMetadata 缺失或 transitionHead 未设置）→ 全部 JSONL
- *     transition 条目原样保留，兼容 fallback（老 change 现状不变）。
- *   - canonical 侧用 recordStore.readChain() 从 head 沿 previousRecordId 回溯；中途缺祖先文件
- *     时只返回从 head 起仍可达的后缀（不抛错），本函数不做额外补偿——结果自然是「遗留 JSONL +
- *     可达的 canonical 后缀」，断裂处的中间记录不会被 JSONL 静默补齐。
- */
-export async function readChangeHistory(changeDir: string, deps: ChangeHistoryDeps): Promise<HistoryEntry[]> {
-  const jsonlEntries = await readJsonlHistory(changeDir)
-  const state = await deps.store.read(changeDir)
-  const metadata = state.runMetadata
-  if (!metadata?.transitionHead) {
-    return sortByTs(jsonlEntries) // 无 canonical 链：JSONL 是唯一来源，行为与升级前逐字一致
-  }
-  const chain = await deps.recordStore.readChain(
-    changeDir, metadata.transitionSequence, metadata.transitionHead, metadata.runId,
-  )
-  // readChain 先取得本次响应要使用的对象快照，再核完整 immutable revision/record digest 链；
-  // 任一 post-cutover 祖先损坏都 fail-loud，绝不把带来源标记的 JSONL 当替身补回。
-  await validateCanonicalRevisionHistory(changeDir)
-  // chain 已是 sequence 升序（TransitionRecordStore.readChain 保证的因果顺序），不可再排序——
-  // 下面用 mergeCanonicalAndLegacy 两指针合并，而不是拼接后整体 sortByTs，原因见该函数头注释。
-  const canonicalEntries = chain.map(transitionRecordToHistoryEntry)
-  const legacyOrNonTransition = jsonlEntries.filter(
-    (e) => e.kind !== 'transition' || e.transitionRecordId === undefined,
-  )
-  return mergeCanonicalAndLegacy(canonicalEntries, sortByTs(legacyOrNonTransition))
-}
-
-function sortByTs(entries: HistoryEntry[]): HistoryEntry[] {
-  // ISO-8601 字符串序 = 时间序；Array#sort 稳定，同 ts 记录保持相对顺序。
-  return entries.sort((a, b) => (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0))
-}
-
-/**
- * 两指针合并（mergesort 的合并步骤）：canonicalSorted（.pipeline-transitions/ 链回溯出的记录，
- * 调用方保证已是 sequence 升序）与 legacySorted（.pipeline-history.jsonl 里的遗留/非 transition
- * 条目，调用方保证已按 ts 升序）合并成一份展示顺序的结果。
- *
- * 为什么不能像旧实现那样把两个数组拼接后整体调用一次 sortByTs：canonical 链的顺序真相是
- * sequence——TransitionRecordStore.readChain() 沿 previousRecordId 回溯出的因果顺序，权威、
- * 不该被推翻。但 sequence 只隐含在数组顺序里，不体现在 ts 字段上；系统时钟一旦在两次真实转换
- * 之间发生过回拨，后一次转换（sequence 更大、因果上更晚）的 ts 反而可能比前一次更早。对拼接后
- * 的整个数组做一次全局字符串时间戳排序，会把这条 ts 异常的记录排到它前一条 canonical 记录前面
- * ——一次不可靠的时间戳比较就此打乱了本该权威、不可动摇的因果顺序。
- *
- * 两指针合并从不让 canonicalSorted 内部的两个元素互相比较——每一步只拿 legacySorted 当前指针
- * 与 canonicalSorted 当前指针比较，取 ts 较小（更早）的一个放进结果、对应指针前移；哪个序列先
- * 耗尽，另一个序列剩余的部分整批追加到结果末尾。因此无论 canonical 内部的 ts 是否因时钟异常而
- * 显得"顺序颠倒"，它们在结果里的相对顺序必然与传入的 canonicalSorted 顺序（即 sequence 顺序）
- * 一致，不会被打乱。这跟"整体排序一次"在绝大多数情况下产出相同结果，唯独在 canonical 内部因
- * 时钟异常导致 ts 顺序颠倒时行为不同（两指针合并正确，整体排序错误）。
- *
- * ts 相同（打平）时优先取 legacySorted 一侧：对齐旧实现里 legacy 段本来拼接在 canonical 段前面、
- * 稳定排序打平时 legacy 排前的既有观感——这不是正确性要求，只是不必要地改变现有行为。
- */
-function mergeCanonicalAndLegacy(canonicalSorted: HistoryEntry[], legacySorted: HistoryEntry[]): HistoryEntry[] {
-  const merged: HistoryEntry[] = []
-  let i = 0 // canonicalSorted 指针
-  let j = 0 // legacySorted 指针
-  while (i < canonicalSorted.length && j < legacySorted.length) {
-    if (legacySorted[j]!.ts <= canonicalSorted[i]!.ts) {
-      merged.push(legacySorted[j]!)
-      j++
-    } else {
-      merged.push(canonicalSorted[i]!)
-      i++
-    }
-  }
-  while (i < canonicalSorted.length) merged.push(canonicalSorted[i++]!) // canonical 剩余部分整批追加，相对顺序不变
-  while (j < legacySorted.length) merged.push(legacySorted[j++]!)
-  return merged
 }

@@ -20,7 +20,12 @@
  * oracle 覆盖的 default workflow 主线）。
  */
 import { createInterface } from 'node:readline/promises'
-import { assertWorkflowAllowed, firstStep, loadWorkflow, requireTrack } from '@pipeline-lite/kernel'
+import {
+  assertWorkflowAllowed,
+  effectiveWorkflowPlanBinding,
+  loadEffectiveWorkflowPlan,
+  requireTrack,
+} from '@pipeline-lite/kernel'
 import type { TrackDefinition, TrackRegistry } from '@pipeline-lite/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
 import { recordHistory } from './fields.js'
@@ -178,30 +183,34 @@ export async function cmdInit(
         deps.io.err(`ERROR: ${errMsg(e)}`)
         return 1
       }
-      let customStart: { workflow: string; phase: string; openspecContract?: boolean } | undefined
-      if (workflowId !== 'default') {
-        let wf: ReturnType<typeof loadWorkflow>
-        try {
-          wf = loadWorkflow(deps.cwd, workflowId)
-        } catch (e) {
-          deps.io.err(errMsg(e))
-          return 1
-        }
-        if (!wf) {
-          deps.io.err(`ERROR: workflow '${workflowId}' 未找到（期望 .pipeline/workflows/${workflowId}.yaml）`)
-          return 1
-        }
-        // 首 step 习语单源在 kernel firstStep（Wave 2 下沉；空 steps → null，错误消息逐字不变）
-        const first = firstStep(wf)
-        if (!first) {
-          deps.io.err(`ERROR: workflow '${workflowId}' 未声明任何 step`)
-          return 1
-        }
-        customStart = {
-          workflow: workflowId,
-          phase: first.id,
-          ...(wf.openspecContract === 'required' ? { openspecContract: true } : {}),
-        }
+      let initialWorkflow: {
+        workflow: string
+        phase: string
+        openspecContract?: boolean
+        documentContract?: boolean
+        documentProfile?: 'legacy-full' | 'document-v1'
+        documentGovernanceFingerprint?: string
+        workflowPlanFingerprint?: string
+      }
+      let plan
+      try {
+        plan = loadEffectiveWorkflowPlan(deps.cwd, workflowId, track)
+      } catch (e) {
+        deps.io.err(`ERROR: ${errMsg(e)}`)
+        return 1
+      }
+      const first = plan.workflow.steps[0]
+      if (first === undefined) {
+        deps.io.err(`ERROR: workflow '${workflowId}' 未声明任何 step`)
+        return 1
+      }
+      const binding = effectiveWorkflowPlanBinding(plan)
+      initialWorkflow = {
+        workflow: workflowId,
+        phase: first.id,
+        ...binding,
+        ...(plan.capabilities.documents.policy?.id === 'openspec-v1' ? { openspecContract: true } : {}),
+        ...(plan.capabilities.documents.policy?.id === 'document-v1' ? { documentContract: true } : {}),
       }
 
       try {
@@ -215,7 +224,7 @@ export async function cmdInit(
           preset: opts.preset,
           user: opts.user,
           clock: deps.clock,
-          initialWorkflow: customStart,
+          initialWorkflow,
         })
         await recordHistory(deps, created, {
           ts: deps.clock(),

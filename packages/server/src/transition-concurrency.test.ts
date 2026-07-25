@@ -16,7 +16,14 @@ import {
 } from '@pipeline-lite/kernel'
 import type { BreadcrumbWriter } from '@pipeline-lite/kernel'
 import { performTransition, type TransitionDeps } from './transition.js'
-import { initChange, makeProject, newStore, seedGovernedDocumentEvidence, testFlow } from './test-support.js'
+import {
+  initChange,
+  makeProject,
+  newStore,
+  readGovernedDocumentsForCurrentVisit,
+  seedGovernedDocumentEvidence,
+  testFlow,
+} from './test-support.js'
 
 describe('真实 e2e —— server 并发 transition 尾部写入严格串行（不逆序覆盖）', () => {
   test('第一次 transition 的 breadcrumb 写入被阻塞期间，第二次 transition（同一 change）无法' +
@@ -64,6 +71,9 @@ describe('真实 e2e —— server 并发 transition 尾部写入严格串行（
     const p1 = performTransition(deps, root, name, 'open-complete')
     await firstEntered
     expect(order).toEqual(['first-breadcrumb-blocked']) // 确认真的卡住了
+    // The first transition has committed its canonical explore visit before its breadcrumb tail.
+    // Simulate the agent reading governed inputs in that exact visit before the next exit attempt.
+    await readGovernedDocumentsForCurrentVisit(root, changeDir)
 
     const p2 = performTransition(deps, root, name, 'explore-complete')
     await new Promise((r) => setTimeout(r, 30))

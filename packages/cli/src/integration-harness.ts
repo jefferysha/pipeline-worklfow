@@ -8,7 +8,7 @@
  * 注意：文件名 *-harness.ts 不带 .test.，不会被 vitest 当测试收集（无用例）。
  */
 import { execFileSync } from 'node:child_process'
-import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { appendFile, mkdtemp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -16,11 +16,13 @@ import { fileURLToPath } from 'node:url'
 import {
   BUILTIN_TRACK_DEFINITIONS,
   createEffectiveSkillResolver,
+  completedWorkflowSkillsSinceStepEntry,
   createFlowEngine,
   createHistoryWriter,
   createStateStore,
   createTransitionRecordStore,
   createWorkflowRunRepository,
+  DocumentLedgerError,
   ensureDocumentLedger,
   fingerprintWorkspace,
   loadManifest,
@@ -90,7 +92,11 @@ export interface Harness {
    */
   seedGovernedDocumentEvidence: (
     name: string,
-    overrides?: { readonly design?: string; readonly tasks?: string },
+    overrides?: {
+      readonly design?: string
+      readonly tasks?: string
+      readonly autoSkills?: boolean
+    },
   ) => Promise<void>
 }
 
@@ -120,7 +126,11 @@ export async function seedGovernedDocumentEvidence(
   root: string,
   changeDir: string,
   name: string,
-  overrides: { readonly design?: string; readonly tasks?: string } = {},
+  overrides: {
+    readonly design?: string
+    readonly tasks?: string
+    readonly autoSkills?: boolean
+  } = {},
 ): Promise<void> {
   const docs = {
     proposal: `openspec/changes/${name}/proposal.md`,
@@ -177,9 +187,7 @@ export async function seedGovernedDocumentEvidence(
     await recordDocument({ repoRoot: root, changeDir, phase: 'spec', kind: 'plan', path: docs.plan, producer: 'writing-plans', recordedAt })
     await recordDocument({ repoRoot: root, changeDir, phase: 'verify', kind: 'verification-report', path: docs.report, producer: 'verification-before-completion', recordedAt })
     await recordDocument({ repoRoot: root, changeDir, phase: 'ship', kind: 'applied-spec', path: docs.applied, producer: 'openspec-apply-change', recordedAt })
-    for (const phase of ['explore', 'spec', 'build', 'verify', 'ship', 'archive'] as const) {
-      await recordDocumentReads({ repoRoot: root, changeDir, phase, kind: 'all', readAt: recordedAt })
-    }
+    await readGovernedDocumentsForCurrentVisit(root, changeDir, recordedAt)
   } finally {
     if (originalHistory === undefined) {
       await rm(historyPath, { force: true })
@@ -187,6 +195,21 @@ export async function seedGovernedDocumentEvidence(
       await writeFile(historyPath, originalHistory, 'utf8')
     }
   }
+}
+
+async function readGovernedDocumentsForCurrentVisit(
+  root: string,
+  changeDir: string,
+  readAt = FIXED_CLOCK,
+): Promise<void> {
+  const state = await createStateStore().read(changeDir)
+  await recordDocumentReads({
+    repoRoot: root,
+    changeDir,
+    phase: String(state.fields.phase),
+    kind: 'all',
+    readAt,
+  })
 }
 
 /** 真实 deps：与 main.ts 同款 fs 副作用，只把 io 收进数组、clock 固定、gitHeadSha 定桩。 */
@@ -314,13 +337,43 @@ export function realDeps(cwd: string, out: string[], err: string[]): CliDeps {
 export function makeHarness(cwd: string): Harness {
   const out: string[] = []
   const err: string[] = []
+  const governedFixtures = new Set<string>()
   return {
     cwd, out, err,
     run: async (args) => {
       out.length = 0
       err.length = 0
+      const deps = realDeps(cwd, out, err)
+      // Transition-centric suites opt in explicitly. Refresh only the current canonical visit;
+      // dedicated evidence suites never enter governedFixtures and retain fail-closed coverage.
+      for (const name of governedFixtures) {
+        const changeDir = join(cwd, 'openspec', 'changes', name)
+        const state = await deps.store.read(changeDir)
+        const phase = String(state.fields.phase)
+        const track = String(state.fields.track)
+        const historyPath = join(changeDir, '.pipeline-history.jsonl')
+        const history = await readFile(historyPath, 'utf8').catch(() => '')
+        const completed = completedWorkflowSkillsSinceStepEntry(history, phase)
+        const lines = deps.resolver.resolveDefaultMandatory(phase, track)
+          .filter((slot) => !slot.alternatives.some((skill) => completed.has(skill)))
+          .map((slot) => slot.alternatives[0])
+          .filter((skill): skill is string => skill !== undefined)
+          .map((skill) => `${JSON.stringify({ kind: 'tool', raw: `Skill: ${skill}` })}\n`)
+          .join('')
+        if (lines !== '') await appendFile(historyPath, lines, 'utf8')
+        try {
+          await readGovernedDocumentsForCurrentVisit(cwd, changeDir)
+        } catch (error) {
+          // A test may intentionally remove or stale a document. Let the command under test expose
+          // that real ledger failure instead of failing inside fixture preparation.
+          const code = typeof error === 'object' && error !== null && 'code' in error
+            ? String(error.code)
+            : ''
+          if (!(error instanceof DocumentLedgerError) && code !== 'ENOENT') throw error
+        }
+      }
       try {
-        await buildProgram(realDeps(cwd, out, err)).parseAsync(args, { from: 'user' })
+        await buildProgram(deps).parseAsync(args, { from: 'user' })
         return 0
       } catch (e) {
         if (e instanceof CliExit) return e.code
@@ -331,12 +384,15 @@ export function makeHarness(cwd: string): Harness {
     readIn: (name, rel) => readFile(join(cwd, 'openspec', 'changes', name, rel), 'utf8'),
     seedArtifact: (name, field, value) =>
       createStateStore().set(join(cwd, 'openspec', 'changes', name), field as FieldName, value),
-    seedGovernedDocumentEvidence: async (name, overrides) => seedGovernedDocumentEvidence(
-      cwd,
-      join(cwd, 'openspec', 'changes', name),
-      name,
-      overrides,
-    ),
+    seedGovernedDocumentEvidence: async (name, overrides) => {
+      await seedGovernedDocumentEvidence(
+        cwd,
+        join(cwd, 'openspec', 'changes', name),
+        name,
+        overrides,
+      )
+      if (overrides?.autoSkills !== false) governedFixtures.add(name)
+    },
   }
 }
 

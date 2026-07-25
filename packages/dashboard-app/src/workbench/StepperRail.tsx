@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
 import { useT } from '../i18n'
-import { Icon } from '../shell/Icon'
+import { Icon } from '../shared/Icon'
 import './workbench.css'
 
 /**

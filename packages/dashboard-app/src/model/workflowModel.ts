@@ -61,7 +61,10 @@ function buildDefaultRules(): WorkflowRules {
   for (const from of PHASES) {
     transitions[from] = TRANSITIONS[from]
       .filter((to) => to !== from) // archive→archive 自环不是可操作出边
-      .map((to) => ({ event: EVENT_BY_EDGE[`${from}->${to}`]!, to }))
+      .flatMap((to) => {
+        const event = EVENT_BY_EDGE[`${from}->${to}`]
+        return event === undefined ? [] : [{ event, to }]
+      })
     gateByStep[from] = (REVIEW_PHASES as readonly string[]).includes(from) ? 'review' : null
   }
   return { steps: PHASES, transitions, gateByStep }
@@ -222,7 +225,7 @@ function encodePairsKey(pairs: readonly { root: string; names: readonly string[]
     byRoot.set(root, set)
   }
   const roots = [...byRoot.keys()].sort()
-  return JSON.stringify(roots.map((root) => [root, [...byRoot.get(root)!].sort()] as const))
+  return JSON.stringify(roots.map((root) => [root, [...(byRoot.get(root) ?? [])].sort()] as const))
 }
 
 function decodePairsKey(key: string): { root: string; name: string }[] {

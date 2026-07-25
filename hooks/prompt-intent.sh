@@ -64,3 +64,22 @@ pipeline_prompt_requests_resume() { # $1=prompt $2=候选 change 名；0=允许�
   esac
   return 1
 }
+
+# Shared approval/authority vocabulary for UserPromptSubmit consumers.  The caller still owns the
+# context check: `contextual-confirm` is valid only when the exact project has a pending
+# confirm/interaction/review receipt.  Keeping classification here prevents router and unlock hooks
+# from accepting different Chinese/English phrases.
+pipeline_prompt_approval_intent() { # $1=prompt; stdout=intent; 0=matched, 1=unrelated
+  local prompt="${1:-}"
+  case "$prompt" in
+    *恢复逐步确认*|*恢复询问*|*停止自主执行*|*撤回自主执行*|*每步确认*)
+      printf 'revoke'; return 0 ;;
+    *后续不用问*|*后续无需询问*|*后续不需要确认*|*后续自行执行*|*后续自己执行*|*后续自主执行*|*自主执行完成*|*自己执行完成*)
+      printf 'authorize'; return 0 ;;
+    *确认继续*|*确认执行*|*确认并继续*|*继续执行*|*全部执行*|*可以继续*|*同意继续*|*请继续执行*|*批准继续*|*自行执行*|*自己执行*|*go\ ahead*|*proceed\ with\ it*|*continue\ execution*)
+      printf 'confirm'; return 0 ;;
+    继续|继续。|继续！|接着|接着。|continue|Continue)
+      printf 'contextual-confirm'; return 0 ;;
+  esac
+  return 1
+}

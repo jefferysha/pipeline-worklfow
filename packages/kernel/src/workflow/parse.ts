@@ -7,10 +7,12 @@
 import { GUARD_DATA_KEYS } from './types.js'
 import type {
   ArtifactProducerPolicy, FieldRef, FieldType, GateKind, SkillRef, StepDef, StepTransition,
-  WorkflowActionConfig, WorkflowArtifactConfig, WorkflowConditional, WorkflowDef, WorkflowGuardConfig,
+  WorkflowActionConfig, WorkflowArtifactConfig, WorkflowConditional, WorkflowDef,
+  WorkflowDocumentContractV1, WorkflowGuardConfig,
 } from './types.js'
 import type { FieldName } from '../types.js'
 import type { TrackPredicate } from './predicates.js'
+import { parseDocumentContract, type WorkflowParseCursor as Cursor } from './parse-document-contract.js'
 
 function parseInlineList(raw: string): string[] {
   const trimmed = raw.trim()
@@ -23,11 +25,6 @@ function parseInlineList(raw: string): string[] {
     .split(',')
     .map((s) => s.trim())
     .filter((s) => s.length > 0)
-}
-
-interface Cursor {
-  lines: string[]
-  i: number
 }
 
 function indentOf(line: string): number {
@@ -58,15 +55,16 @@ function parseSkillsBlock(cur: Cursor, baseIndent: number): SkillRef[] {
     if (indentOf(line) < baseIndent) break
     const idMatch = /^\s*-\s+id:\s*(\S+)\s*$/.exec(line)
     if (!idMatch) break
+    const id = idMatch[1] ?? ''
     cur.i++
     let depends_on: string[] | undefined
     const next = cur.lines[cur.i] ?? ''
     const depMatch = /^\s*depends_on:\s*(\[.*\])\s*$/.exec(next)
     if (depMatch && indentOf(next) > baseIndent) {
-      depends_on = parseInlineList(depMatch[1]!)
+      depends_on = parseInlineList(depMatch[1] ?? '')
       cur.i++
     }
-    skills.push(depends_on ? { id: idMatch[1]!, depends_on } : { id: idMatch[1]! })
+    skills.push(depends_on ? { id, depends_on } : { id })
   }
   return skills
 }
@@ -84,7 +82,7 @@ function parseFieldRefBlock(cur: Cursor, baseIndent: number): FieldRef[] {
     const typeMatch = /^\s*type:\s*(string|file_path|boolean)\s*$/.exec(typeLine)
     if (!typeMatch) throw new Error(`workflow 解析错误：field '${fieldMatch[1]}' 缺 type`)
     cur.i++
-    refs.push({ field: fieldMatch[1]!, type: typeMatch[1] as FieldType })
+    refs.push({ field: fieldMatch[1] ?? '', type: typeMatch[1] as FieldType })
   }
   return refs
 }
@@ -101,7 +99,7 @@ function parseWhenBlock(cur: Cursor, whenIndent: number): TrackPredicate {
   const m = /^\s*(track_in|track_not_in):\s*(\[.*\])\s*$/.exec(line)
   if (!m) throw new Error(`workflow 解析错误：when 谓词只支持 'track_in: [..]' 或 'track_not_in: [..]'，实际 '${line.trim()}'`)
   cur.i++
-  return { kind: m[1] === 'track_in' ? 'track-in' : 'track-not-in', values: parseInlineList(m[2]!) }
+  return { kind: m[1] === 'track_in' ? 'track-in' : 'track-not-in', values: parseInlineList(m[2] ?? '') }
 }
 
 /** 显式 artifact 声明块（G2 P4）：每项 `- field: X` 后跟 `type: file_path`、`producer_policy: <token>`
@@ -165,7 +163,7 @@ function parseGuardEntry(cur: Cursor, type: string, itemIndent: number): Workflo
     // (\S+)，否则 serialize 写出的含空格 value 会成为 parse 读不回的行（往返破坏）。首尾空白按全仓
     // 窄解析器惯例 trim（无引号语义）；逗号仍受 [a,b] 内联列表分隔约束，同 depends_on/scope。
     if ((m = /^\s*value:\s*(.+?)\s*$/.exec(line))) { f.value = m[1]; cur.i++; continue }
-    if ((m = /^\s*values:\s*(\[.*\])\s*$/.exec(line))) { f.values = parseInlineList(m[1]!); cur.i++; continue }
+    if ((m = /^\s*values:\s*(\[.*\])\s*$/.exec(line))) { f.values = parseInlineList(m[1] ?? ''); cur.i++; continue }
     if (/^\s*when:\s*$/.test(line)) { const wi = indentOf(line); cur.i++; f.when = parseWhenBlock(cur, wi); continue }
     throw new Error(`workflow 解析错误：guard '${type}' 出现未知字段行 '${line.trim()}'`)
   }
@@ -242,7 +240,7 @@ function parseGuardsBlock(cur: Cursor, baseIndent: number): WorkflowGuardConfig[
     if (!m) break
     const itemIndent = indentOf(line)
     cur.i++
-    guards.push(parseGuardEntry(cur, m[1]!, itemIndent))
+    guards.push(parseGuardEntry(cur, m[1] ?? '', itemIndent))
   }
   return guards
 }
@@ -258,7 +256,7 @@ function parseActionsBlock(cur: Cursor, baseIndent: number): WorkflowActionConfi
     if (indentOf(line) < baseIndent) break
     const m = /^\s*-\s+type:\s*(\S+)\s*$/.exec(line)
     if (!m) break
-    const type = m[1]!
+    const type = m[1] ?? ''
     cur.i++
     if (!(ACTION_TYPES as readonly string[]).includes(type)) {
       throw new Error(`workflow 解析错误：未知 action type '${type}'（闭集见 types.ts WorkflowActionConfig）`)
@@ -296,7 +294,7 @@ function parseTransitionsBlock(cur: Cursor, baseIndent: number): StepTransition[
       throw new Error(`workflow 解析错误：transition event '${eventMatch[1]}' 出现未知字段行 '${l.trim()}'`)
     }
     transitions.push({
-      event: eventMatch[1]!, to: toMatch[1]!,
+      event: eventMatch[1] ?? '', to: toMatch[1] ?? '',
       ...(guards !== undefined ? { guards } : {}),
       ...(actions !== undefined ? { actions } : {}),
     })
@@ -308,6 +306,7 @@ function parseStep(cur: Cursor): StepDef {
   const idLine = cur.lines[cur.i] ?? ''
   const idMatch = /^\s*-\s+id:\s*(\S+)\s*$/.exec(idLine)
   if (!idMatch) throw new Error(`workflow 解析错误：期望 '- id: <name>'，实际 '${idLine}'`)
+  const id = idMatch[1] ?? ''
   const baseIndent = indentOf(idLine) + 2 // step 内字段比 "- id:" 多缩进 2
   cur.i++
 
@@ -325,9 +324,11 @@ function parseStep(cur: Cursor): StepDef {
     const line = cur.lines[cur.i] ?? ''
     if (line.trim() === '') { cur.i++; continue }
     if (indentOf(line) < baseIndent - 2) break
-    if (/^\s*label:\s*(.+)$/.test(line)) { label = /^\s*label:\s*(.+)$/.exec(line)![1]!.trim(); cur.i++; continue }
-    if (/^\s*gate:\s*(review|confirm|null)\s*$/.test(line)) {
-      const v = /^\s*gate:\s*(review|confirm|null)\s*$/.exec(line)![1]!
+    const labelMatch = /^\s*label:\s*(.+)$/.exec(line)
+    if (labelMatch) { label = (labelMatch[1] ?? '').trim(); cur.i++; continue }
+    const gateMatch = /^\s*gate:\s*(review|confirm|null)\s*$/.exec(line)
+    if (gateMatch) {
+      const v = gateMatch[1] ?? ''
       gate = v === 'null' ? null : (v as GateKind)
       cur.i++
       continue
@@ -354,7 +355,7 @@ function parseStep(cur: Cursor): StepDef {
   }
 
   return {
-    id: idMatch[1]!, label, gate, skills, inputs, outputs, guards, transitions,
+    id, label, gate, skills, inputs, outputs, guards, transitions,
     ...(prompt !== undefined ? { prompt } : {}),
     ...(artifacts !== undefined ? { artifacts } : {}),
   }
@@ -366,6 +367,7 @@ export function parseWorkflow(content: string): WorkflowDef {
   if (!nameMatch) throw new Error("workflow 解析错误：第一行必须是 'name: <name>'")
   let stepLine = 1
   let openspecContract: 'required' | undefined
+  let documentContract: WorkflowDocumentContractV1 | undefined
   const contractLine = /^openspec_contract:\s*(\S+)\s*$/.exec(lines[stepLine] ?? '')
   if (contractLine) {
     if (contractLine[1] !== 'required') {
@@ -374,8 +376,16 @@ export function parseWorkflow(content: string): WorkflowDef {
     openspecContract = 'required'
     stepLine++
   }
+  if ((lines[stepLine] ?? '').trim() === 'document_contract:') {
+    const cur: Cursor = { lines, i: stepLine + 1 }
+    documentContract = parseDocumentContract(cur, indentOf(lines[stepLine] ?? ''))
+    stepLine = cur.i
+  }
+  if (openspecContract && documentContract) {
+    throw new Error('workflow 解析错误：openspec_contract 与 document_contract 不得同时声明')
+  }
   if ((lines[stepLine] ?? '').trim() !== 'steps:') {
-    throw new Error("workflow 解析错误：name 后必须是 'steps:' 或 'openspec_contract: required'")
+    throw new Error("workflow 解析错误：name 后必须是 'steps:'、'openspec_contract: required' 或 document_contract")
   }
 
   const cur: Cursor = { lines, i: stepLine + 1 }
@@ -387,5 +397,10 @@ export function parseWorkflow(content: string): WorkflowDef {
     }
     steps.push(parseStep(cur))
   }
-  return { name: nameMatch[1]!, ...(openspecContract ? { openspecContract } : {}), steps }
+  return {
+    name: nameMatch[1] ?? '',
+    ...(openspecContract ? { openspecContract } : {}),
+    ...(documentContract ? { documentContract } : {}),
+    steps,
+  }
 }

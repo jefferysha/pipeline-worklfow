@@ -12,6 +12,12 @@ import { homedir } from 'node:os'
 import { isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { createInterface } from 'node:readline'
 import type { CodexSkillReceipt } from './codexSkillReceipt.js'
+import {
+  codexHomeRoot,
+  trustedCodexSkillPath,
+  type CodexSkillTrustRoots,
+} from './codexSkillTrust.js'
+import { transcriptExecCommands } from './codexToolProgram.js'
 
 const MAX_RECEIPT_TRANSCRIPT_BYTES = 64 * 1024 * 1024
 const MAX_DISCOVERY_TRANSCRIPT_BYTES = 512 * 1024 * 1024
@@ -31,15 +37,6 @@ function isInside(base: string, candidate: string): boolean {
   return fromBase !== '' && fromBase !== '..' && !fromBase.startsWith(`..${sep}`) && !isAbsolute(fromBase)
 }
 
-function codexHomeRoot(homeDir: string, configured?: string): string {
-  const candidate = configured?.trim() || process.env.CODEX_HOME?.trim()
-  return candidate && isAbsolute(candidate) ? resolve(candidate) : resolve(homeDir, '.codex')
-}
-
-function codexPluginCacheRoot(homeDir: string, configured?: string): string {
-  return join(codexHomeRoot(homeDir, configured), 'plugins', 'cache', 'pipeline-lite', 'pipeline-lite')
-}
-
 function codexSessionsRoot(homeDir: string, configured?: string): string {
   return join(codexHomeRoot(homeDir, configured), 'sessions')
 }
@@ -49,21 +46,50 @@ function isTrustedTranscriptPath(transcriptPath: string, homeDir: string, config
   return isInside(codexSessionsRoot(homeDir, configured), resolve(transcriptPath))
 }
 
+function responseItemAtOrAfter(event: Record<string, unknown>, notBefore?: string): boolean {
+  if (notBefore === undefined) return true
+  const timestamp = asString(event.timestamp)
+  if (!timestamp) return false
+  const eventTime = Date.parse(timestamp)
+  const lowerBound = Date.parse(notBefore)
+  return !Number.isNaN(eventTime) && !Number.isNaN(lowerBound) && eventTime >= lowerBound
+}
 function receiptTurnId(payload: Record<string, unknown>): string | undefined {
   const metadata = payload.internal_chat_message_metadata_passthrough
   if (!isRecord(metadata)) return undefined
   return asString(metadata.turn_id)
 }
+function explicitExitCode(value: unknown): number | undefined {
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = explicitExitCode(item)
+      if (found !== undefined) return found
+    }
+    return undefined
+  }
+  if (!isRecord(value)) return undefined
+  if (typeof value.exit_code === 'number') return value.exit_code
+  for (const item of Object.values(value)) {
+    const found = explicitExitCode(item)
+    if (found !== undefined) return found
+  }
+  return undefined
+}
 
 function successfulOutput(value: unknown): boolean {
+  const exitCode = explicitExitCode(value)
+  if (exitCode !== undefined) return exitCode === 0
   if (typeof value === 'string') {
-    return value.includes('Script completed') || /(?:Process exited with code|exit_code["']?\s*:)\s*0\b/.test(value)
+    const statuses = [...value.matchAll(
+      /(?:Process exited with code|exit_code["']?\s*:)\s*(\d+)\b/g,
+    )].map((match) => Number(match[1]))
+    return statuses.length > 0 && statuses.every((status) => status === 0)
   }
   if (Array.isArray(value)) return value.some((item) => successfulOutput(item))
   if (!isRecord(value)) return false
+  if (typeof value.exit_code === 'number') return value.exit_code === 0
   return Object.values(value).some((item) => successfulOutput(item))
 }
-
 function functionExecCommand(payload: Record<string, unknown>): string | undefined {
   if (payload.type !== 'function_call' || asString(payload.name) !== 'exec_command') return undefined
   const argumentsText = asString(payload.arguments)
@@ -76,13 +102,22 @@ function functionExecCommand(payload: Record<string, unknown>): string | undefin
     return undefined
   }
 }
-
 /** Verify an exact PreToolUse receipt against its completed host call. */
 export async function transcriptConfirmsReceipt(
   receipt: CodexSkillReceipt,
+  trustRoots: CodexSkillTrustRoots,
+  repoRoot: string,
   homeDir = homedir(),
   configured?: string,
+  notBefore?: string,
 ): Promise<boolean> {
+  const expectedSkillPath = await trustedCodexSkillPath(
+    trustRoots,
+    receipt.skillId,
+    homeDir,
+    configured,
+  )
+  if (expectedSkillPath !== resolve(receipt.skillPath)) return false
   const sessionsRoot = codexSessionsRoot(homeDir, configured)
   const candidate = resolve(receipt.transcriptPath)
   if (!isTrustedTranscriptPath(receipt.transcriptPath, homeDir, configured)) return false
@@ -101,7 +136,8 @@ export async function transcriptConfirmsReceipt(
     return false
   }
 
-  const matchingCalls = new Set<string>()
+  let matchesSession = false
+  let matchesProject = false
   try {
     const input = createReadStream(physicalTranscript, { encoding: 'utf8' })
     const lines = createInterface({ input, crlfDelay: Infinity })
@@ -112,13 +148,32 @@ export async function transcriptConfirmsReceipt(
       } catch {
         continue
       }
-      if (!isRecord(event) || event.type !== 'response_item') continue
+      if (!isRecord(event)) continue
+      if (event.type === 'session_meta') {
+        const session = event.payload
+        if (isRecord(session)) {
+          const sessionId = asString(session.session_id) ?? asString(session.id)
+          matchesSession = sessionId === receipt.sessionId
+          const cwd = asString(session.cwd)
+          matchesProject = cwd !== undefined && await isSamePhysicalDirectory(cwd, repoRoot)
+        }
+        continue
+      }
+      if (
+        !matchesSession
+        || !matchesProject
+        || event.type !== 'response_item'
+        || !responseItemAtOrAfter(event, notBefore)
+      ) continue
       const payload = event.payload
       if (!isRecord(payload) || receiptTurnId(payload) !== receipt.turnId) continue
       const functionCommand = functionExecCommand(payload)
       if (functionCommand !== undefined) {
         const callId = asString(payload.call_id)
-        if (callId && functionCommand.includes(receipt.skillPath)) matchingCalls.add(callId)
+        if (
+          callId === receipt.toolUseId
+          && commandReadsTrustedSkill(functionCommand, receipt.skillPath)
+        ) return await matchingSuccessfulOutput(lines, receipt)
         continue
       }
       if (payload.type === 'custom_tool_call') {
@@ -126,12 +181,15 @@ export async function transcriptConfirmsReceipt(
         const name = asString(payload.name)
         const status = asString(payload.status)
         const command = asString(payload.input)
-        if (callId && name === 'exec' && status === 'completed' && command?.includes(receipt.skillPath)) matchingCalls.add(callId)
+        if (
+          callId === receipt.toolUseId
+          && name === 'exec'
+          && status === 'completed'
+          && command !== undefined
+          && transcriptInputReadsTrustedSkill(command, receipt.skillPath)
+        ) return await matchingSuccessfulOutput(lines, receipt)
         continue
       }
-      if (payload.type !== 'custom_tool_call_output' && payload.type !== 'function_call_output') continue
-      const callId = asString(payload.call_id)
-      if (callId && matchingCalls.has(callId) && successfulOutput(payload.output)) return true
     }
   } catch {
     return false
@@ -139,75 +197,32 @@ export async function transcriptConfirmsReceipt(
   return false
 }
 
-function escapeRegex(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+async function matchingSuccessfulOutput(
+  lines: AsyncIterable<string>,
+  receipt: CodexSkillReceipt,
+): Promise<boolean> {
+  for await (const line of lines) {
+    let event: unknown
+    try {
+      event = JSON.parse(line) as unknown
+    } catch {
+      continue
+    }
+    if (!isRecord(event) || event.type !== 'response_item') continue
+    const payload = event.payload
+    if (
+      !isRecord(payload)
+      || receiptTurnId(payload) !== receipt.turnId
+      || (payload.type !== 'custom_tool_call_output' && payload.type !== 'function_call_output')
+      || asString(payload.call_id) !== receipt.toolUseId
+    ) continue
+    return successfulOutput(payload.output)
+  }
+  return false
 }
 
-/**
- * The host transcript stores JavaScript source for the custom tool call, not the command itself.
- * Extract only the JSON object actually passed to `tools.exec_command` before inspecting `cmd`.
- * In particular, a multiline command is represented there as the two source characters `\\n`;
- * matching the raw program text makes a real later `sed` look like the suffix of that `n`.
- */
-function transcriptExecCommands(input: string): readonly string[] {
-  const marker = 'tools.exec_command('
-  const commands: string[] = []
-  let cursor = 0
-
-  while (cursor < input.length) {
-    const markerAt = input.indexOf(marker, cursor)
-    if (markerAt < 0) break
-    let objectStart = markerAt + marker.length
-    while (/\s/.test(input[objectStart] ?? '')) objectStart += 1
-    if (input[objectStart] !== '{') {
-      cursor = markerAt + marker.length
-      continue
-    }
-
-    let depth = 0
-    let inString = false
-    let escaped = false
-    let objectEnd: number | undefined
-    for (let index = objectStart; index < input.length; index += 1) {
-      const char = input[index]
-      if (inString) {
-        if (escaped) escaped = false
-        else if (char === '\\') escaped = true
-        else if (char === '"') inString = false
-        continue
-      }
-      if (char === '"') {
-        inString = true
-        continue
-      }
-      if (char === '{') depth += 1
-      else if (char === '}') {
-        depth -= 1
-        if (depth === 0) {
-          objectEnd = index + 1
-          break
-        }
-        if (depth < 0) break
-      }
-    }
-
-    if (objectEnd === undefined) {
-      cursor = markerAt + marker.length
-      continue
-    }
-    try {
-      const args = JSON.parse(input.slice(objectStart, objectEnd)) as unknown
-      if (isRecord(args)) {
-        const command = asString(args.cmd) ?? asString(args.command)
-        if (command) commands.push(command)
-      }
-    } catch {
-      // The host has emitted non-JSON JavaScript arguments.  Discovery deliberately declines
-      // that ambiguous source instead of treating a string mention as completed skill evidence.
-    }
-    cursor = objectEnd
-  }
-  return commands
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
 function unwrapReadCommand(segment: string): string | undefined {
@@ -226,27 +241,36 @@ function finalReadPath(command: string): string | undefined {
 }
 
 /** The decoded command must structurally be a supported read of this exact host-cache asset. */
-function commandReadsTrustedSkill(command: string, skillId: string, homeDir: string, configured?: string): boolean {
-  const cacheRoot = codexPluginCacheRoot(homeDir, configured)
-  const suffix = join('skills', skillId, 'SKILL.md')
-  const trustedPath = new RegExp(
-    `^${escapeRegex(cacheRoot)}${escapeRegex(sep)}[A-Za-z0-9._-]+${escapeRegex(sep)}${escapeRegex(suffix)}$`,
-  )
-  // Keep the same deliberately conservative grammar as the hot hook: separator handling inside
-  // exotic quoted sed expressions fails closed, while normal multiline/&& Codex reads work.
-  return command
-    .split(/&&|\|\||;|\r?\n/)
-    .some((segment) => {
-      const read = unwrapReadCommand(segment)
-      const path = read ? finalReadPath(read) : undefined
-      return path !== undefined && trustedPath.test(path)
-    })
+function commandReadsTrustedSkill(command: string, skillPath: string): boolean {
+  if (command.includes('||')) return false
+  const trustedPath = new RegExp(`^${escapeRegex(skillPath)}$`)
+  const unwrapped = unwrapReadCommand(command) ?? command
+  const hasAnd = unwrapped.includes('&&')
+  const hasSequence = /;|\r?\n/.test(unwrapped)
+  if (hasAnd && hasSequence) return false
+  const segments = unwrapped.split(hasAnd ? /&&/ : /;|\r?\n/).filter((segment) => segment.trim() !== '')
+  const skillsRoot = resolve(skillPath, '..', '..')
+  let observedRead = false
+  for (const segment of segments) {
+    const commandSegment = unwrapReadCommand(segment) ?? segment.trim()
+    const path = commandSegment ? finalReadPath(commandSegment) : undefined
+    if (path === undefined) return false
+    const sibling = relative(skillsRoot, resolve(path)).split(sep)
+    if (sibling.length !== 2 || sibling[0] === '' || sibling[1] !== 'SKILL.md') return false
+    if (/^(?:cat|sed|head|tail)(?:\s|$)/.test(commandSegment)) {
+      if (trustedPath.test(path)) observedRead = true
+      continue
+    }
+    if (/^wc\s+-(?:l|c|w)(?:\s|$)/.test(commandSegment)) continue
+    return false
+  }
+  return observedRead
 }
 
 /** The transcript stores tool-program source, so inspect only its decoded, executed command values. */
-function transcriptInputReadsTrustedSkill(input: string, skillId: string, homeDir: string, configured?: string): boolean {
-  return transcriptExecCommands(input)
-    .some((command) => commandReadsTrustedSkill(command, skillId, homeDir, configured))
+function transcriptInputReadsTrustedSkill(input: string, skillPath: string): boolean {
+  const commands = transcriptExecCommands(input)
+  return commands.length === 1 && commandReadsTrustedSkill(commands[0] ?? '', skillPath)
 }
 
 function skillAliases(id: string): readonly string[] {
@@ -338,13 +362,21 @@ function confirmsEveryCandidate(confirmed: ReadonlySet<string>, candidates: read
 export async function discoverCompletedCodexSkillReads(
   repoRoot: string,
   candidateSkillIds: readonly string[],
+  trustRoots: CodexSkillTrustRoots,
   homeDir = homedir(),
   configured?: string,
   hostSessionId?: string,
+  notBefore?: string,
 ): Promise<readonly string[]> {
   const aliases = [...new Set(candidateSkillIds.flatMap(skillAliases))]
     .filter((id) => /^[A-Za-z0-9_-]{1,160}$/.test(id))
   if (aliases.length === 0) return []
+  const selectedSkillPaths = new Map<string, string>()
+  for (const alias of aliases) {
+    const path = await trustedCodexSkillPath(trustRoots, alias, homeDir, configured)
+    if (path) selectedSkillPaths.set(alias, path)
+  }
+  if (selectedSkillPaths.size === 0) return []
   const transcripts = await recentHostTranscripts(codexSessionsRoot(homeDir, configured))
   const confirmed = new Set<string>()
 
@@ -376,7 +408,12 @@ export async function discoverCompletedCodexSkillReads(
           }
           continue
         }
-        if (!matchesRepo || !matchesHostSession || event.type !== 'response_item') continue
+        if (
+          !matchesRepo
+          || !matchesHostSession
+          || event.type !== 'response_item'
+          || !responseItemAtOrAfter(event, notBefore)
+        ) continue
         const payload = event.payload
         if (!isRecord(payload)) continue
         const functionCommand = functionExecCommand(payload)
@@ -384,7 +421,10 @@ export async function discoverCompletedCodexSkillReads(
           const callId = asString(payload.call_id)
           if (!callId) continue
           const readIds = aliases.filter(
-            (id) => commandReadsTrustedSkill(functionCommand, id, homeDir, configured),
+            (id) => {
+              const path = selectedSkillPaths.get(id)
+              return path !== undefined && commandReadsTrustedSkill(functionCommand, path)
+            },
           )
           if (readIds.length > 0) readsByCall.set(callId, readIds)
           continue
@@ -395,7 +435,10 @@ export async function discoverCompletedCodexSkillReads(
           const status = asString(payload.status)
           const toolInput = asString(payload.input)
           if (!callId || name !== 'exec' || status !== 'completed' || !toolInput) continue
-          const readIds = aliases.filter((id) => transcriptInputReadsTrustedSkill(toolInput, id, homeDir, configured))
+          const readIds = aliases.filter((id) => {
+            const path = selectedSkillPaths.get(id)
+            return path !== undefined && transcriptInputReadsTrustedSkill(toolInput, path)
+          })
           if (readIds.length > 0) readsByCall.set(callId, readIds)
           continue
         }

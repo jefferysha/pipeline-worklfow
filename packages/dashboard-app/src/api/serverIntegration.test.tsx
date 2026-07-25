@@ -14,6 +14,8 @@ import { createDashboardServer } from '@pipeline-lite/server'
 import {
   createFlowEngine,
   createStateStore,
+  createTransitionRecordStore,
+  createWorkflowRunRepository,
   ensureDocumentLedger,
   loadManifest,
   recordDocument,
@@ -60,6 +62,11 @@ async function seedGovernedDocumentEvidence(root: string, changeDir: string, nam
   await writeDocument(applied, '# Applied spec\n')
 
   const recordedAt = clock()
+  await createWorkflowRunRepository({
+    store: createStateStore(),
+    recordStore: createTransitionRecordStore(),
+    clock: () => recordedAt,
+  }).establishRun(changeDir)
   await ensureDocumentLedger(changeDir, recordedAt)
   await writeFile(
     join(changeDir, '.pipeline-history.jsonl'),
@@ -82,12 +89,7 @@ async function seedGovernedDocumentEvidence(root: string, changeDir: string, nam
   await recordDocument({ repoRoot: root, changeDir, phase: 'spec', kind: 'plan', path: plan, producer: 'writing-plans', recordedAt })
   await recordDocument({ repoRoot: root, changeDir, phase: 'verify', kind: 'verification-report', path: report, producer: 'verification-before-completion', recordedAt })
   await recordDocument({ repoRoot: root, changeDir, phase: 'ship', kind: 'applied-spec', path: applied, producer: 'openspec-apply-change', recordedAt })
-  await recordDocumentReads({ repoRoot: root, changeDir, phase: 'explore', kind: 'all', readAt: recordedAt })
-  await recordDocumentReads({ repoRoot: root, changeDir, phase: 'spec', kind: 'all', readAt: recordedAt })
-  await recordDocumentReads({ repoRoot: root, changeDir, phase: 'build', kind: 'all', readAt: recordedAt })
-  await recordDocumentReads({ repoRoot: root, changeDir, phase: 'verify', kind: 'all', readAt: recordedAt })
-  await recordDocumentReads({ repoRoot: root, changeDir, phase: 'ship', kind: 'all', readAt: recordedAt })
-  await recordDocumentReads({ repoRoot: root, changeDir, phase: 'archive', kind: 'all', readAt: recordedAt })
+  await recordDocumentReads({ repoRoot: root, changeDir, phase: 'open', kind: 'all', readAt: recordedAt })
 }
 
 interface Started {

@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { compileStepGuards } from './compile.js'
 import { evaluateGuards, type GuardEvaluation } from './guard-handlers.js'
-import type { CompiledGuardConfig, GuardInput } from './ir.js'
+import type { CompiledGuardConfig, GuardInput, StepIR } from './ir.js'
 import type { StepDef } from './types.js'
 import type { PipelineState, GuardResult } from '../types.js'
 
@@ -112,4 +112,14 @@ export async function evaluateCompiledGuards(
 export async function evaluateStepGuards(state: PipelineState, step: StepDef, ctx: StepGuardContext): Promise<GuardResult> {
   const guards = compileStepGuards(step)
   return evaluateCompiledGuards(guards, step.id, buildStepGuardInput(state, ctx))
+}
+
+/** EffectiveWorkflowPlan consumers already hold compiled StepIR and must not rebuild definition
+ * semantics in an adapter. */
+export async function evaluateWorkflowIrStepGuards(
+  state: PipelineState,
+  step: StepIR,
+  ctx: StepGuardContext,
+): Promise<GuardResult> {
+  return evaluateCompiledGuards(step.guards, step.id, buildStepGuardInput(state, ctx))
 }

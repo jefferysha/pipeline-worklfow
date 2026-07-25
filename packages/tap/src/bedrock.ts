@@ -32,7 +32,10 @@ const CRC_TABLE: Uint32Array = (() => {
 /** IEEE CRC32（无符号 32 位）。等价 node:zlib.crc32 / python zlib.crc32。 */
 export function crc32(buf: Buffer): number {
   let crc = 0xffffffff
-  for (let i = 0; i < buf.length; i++) crc = CRC_TABLE[(crc ^ buf[i]!) & 0xff]! ^ (crc >>> 8)
+  for (let i = 0; i < buf.length; i++) {
+    const byte = buf.readUInt8(i)
+    crc = (CRC_TABLE[(crc ^ byte) & 0xff] ?? 0) ^ (crc >>> 8)
+  }
   return (crc ^ 0xffffffff) >>> 0
 }
 
@@ -47,7 +50,7 @@ const BEDROCK_MODEL_PATH_RE = /\/model\/(.+)\/(?:invoke|invoke-with-response-str
 
 /** Bedrock 是否返回 AWS EventStream 的流式路由。bedrock.py:57。 */
 export function isBedrockEventstreamPath(path: string): boolean {
-  const cleanPath = path.split('?', 1)[0]!.replace(/\/+$/, '')
+  const cleanPath = (path.split('?', 1)[0] ?? '').replace(/\/+$/, '')
   return BEDROCK_STREAM_SUFFIXES.some((s) => cleanPath.endsWith(s))
 }
 
@@ -55,10 +58,11 @@ export function isBedrockEventstreamPath(path: string): boolean {
 export function bedrockModelFromPath(path: string): string {
   const m = BEDROCK_MODEL_PATH_RE.exec(path)
   if (!m) return ''
+  const encoded = m[1] ?? ''
   try {
-    return decodeURIComponent(m[1]!)
+    return decodeURIComponent(encoded)
   } catch {
-    return m[1]!
+    return encoded
   }
 }
 
@@ -75,14 +79,14 @@ function decodeHeaders(data: Buffer): Record<string, string> {
   let pos = 0
   while (pos < data.length) {
     if (pos + 1 > data.length) break
-    const nameLen = data[pos]!
+    const nameLen = data.readUInt8(pos)
     pos += 1
     if (pos + nameLen > data.length) break
     const name = data.subarray(pos, pos + nameLen).toString('utf8')
     pos += nameLen
 
     if (pos + 1 > data.length) break
-    const hdrType = data[pos]!
+    const hdrType = data.readUInt8(pos)
     pos += 1
 
     if (hdrType === 7) {
@@ -178,7 +182,8 @@ export function bedrockErrorEvents(events: BedrockEvent[]): Array<Record<string,
 export function attachBedrockErrors(body: unknown, events: BedrockEvent[]): unknown {
   const errors = bedrockErrorEvents(events)
   if (errors.length === 0) return body
-  const first = errors[0]!
+  const first = errors[0]
+  if (!first) return body
   const annotated: Record<string, unknown> =
     typeof body === 'object' && body !== null && !Array.isArray(body) ? { ...(body as Record<string, unknown>) } : { raw_body: body }
   if (!('error' in annotated)) annotated.error = first
@@ -241,8 +246,9 @@ export function assembleBedrockConverseBody(events: BedrockEvent[]): BedrockConv
       if (typeof text === 'string') {
         if (blockKind.get(idx) !== 'tool_use') {
           if (!blockKind.has(idx)) blockKind.set(idx, 'text')
-          if (!blockTextParts.has(idx)) blockTextParts.set(idx, [])
-          blockTextParts.get(idx)!.push(text)
+          const parts = blockTextParts.get(idx) ?? []
+          parts.push(text)
+          blockTextParts.set(idx, parts)
         }
       } else if (typeof toolDelta === 'object' && toolDelta !== null && !Array.isArray(toolDelta)) {
         if (!blockKind.has(idx)) {
@@ -252,14 +258,19 @@ export function assembleBedrockConverseBody(events: BedrockEvent[]): BedrockConv
         }
         const partial = (toolDelta as Record<string, unknown>).input
         if (typeof partial === 'string') {
-          if (!blockToolInputParts.has(idx)) blockToolInputParts.set(idx, [])
-          blockToolInputParts.get(idx)!.push(partial)
+          const parts = blockToolInputParts.get(idx) ?? []
+          parts.push(partial)
+          blockToolInputParts.set(idx, parts)
         }
       } else if (typeof reasoningDelta === 'object' && reasoningDelta !== null && !Array.isArray(reasoningDelta)) {
         if (!blockKind.has(idx)) blockKind.set(idx, 'reasoning')
         if (!blockReasoningParts.has(idx)) blockReasoningParts.set(idx, [])
         const rtext = (reasoningDelta as Record<string, unknown>).text
-        if (typeof rtext === 'string') blockReasoningParts.get(idx)!.push(rtext)
+        if (typeof rtext === 'string') {
+          const parts = blockReasoningParts.get(idx) ?? []
+          parts.push(rtext)
+          blockReasoningParts.set(idx, parts)
+        }
         const sig = (reasoningDelta as Record<string, unknown>).signature
         if (typeof sig === 'string' && sig) blockReasoningSig.set(idx, sig)
       }

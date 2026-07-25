@@ -294,7 +294,9 @@ export function serveForward(opts: ForwardProxyOptions = {}): Promise<ForwardPro
               store.finalizeSession(sessionId, { api_calls: row?.record_count ?? 0, has_error: false })
             } catch { /* best-effort */ }
             server.close(() => res())
-            ;(server as unknown as { closeAllConnections?: () => void }).closeAllConnections?.()
+            if ('closeAllConnections' in server && typeof server.closeAllConnections === 'function') {
+              server.closeAllConnections()
+            }
           })
         },
       })

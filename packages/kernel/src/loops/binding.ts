@@ -19,6 +19,7 @@
 import { PATTERN_TOKENS_PER_RUN } from './budget.js'
 import type { BudgetExceedAction, ChangeLoopBindingRecord, LedgerRecord } from './ledger-types.js'
 import type { LoopEntry, LoopRisk } from './types.js'
+import { required } from '../required.js'
 
 /**
  * 从已按 ledger 文件序排列的事实流中选出指定 change 的最新归属绑定。
@@ -31,7 +32,7 @@ export function latestChangeLoopBinding(
   change: string,
 ): ChangeLoopBindingRecord | undefined {
   for (let index = records.length - 1; index >= 0; index -= 1) {
-    const record = records[index]!
+    const record = required(records[index])
     if (record.kind === 'change-loop-binding' && record.change === change) return record
   }
   return undefined
@@ -103,7 +104,7 @@ export function resolveLoopBinding(input: {
   if (uniq.length > 1) {
     return { ok: false, reason: 'ambiguous-prefix', detail: `change「${change}」被等长前缀（len=${best.len}）多个 loop 命中：${uniq.join(', ')}` }
   }
-  return { ok: true, loopId: uniq[0]!, materialize: { source: 'longest-prefix' } }
+  return { ok: true, loopId: required(uniq[0]), materialize: { source: 'longest-prefix' } }
 }
 
 /**

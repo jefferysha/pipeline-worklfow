@@ -27,7 +27,7 @@ const CHAIN_SKILLS: WbStepDef['skills'] = [
 
 function renderChain(
   overrides: Partial<WbStepDef> = {},
-  opts: { workflow?: string; readonly?: boolean; root?: string } = {},
+  opts: { mode?: 'step-dag' | 'manifest-matrix'; readonly?: boolean; root?: string } = {},
 ) {
   const onChange = vi.fn()
   const step = { ...BASE, ...overrides }
@@ -35,7 +35,7 @@ function renderChain(
     <I18nProvider>
       <SkillChain
         step={step}
-        workflow={opts.workflow ?? 'release-train'}
+        mode={opts.mode ?? 'step-dag'}
         readonly={opts.readonly}
         root={opts.root ?? '/repo/default'}
         onChange={onChange}
@@ -250,7 +250,7 @@ function mockDefaultFetch(overrides: Record<string, () => Response | Promise<Res
 describe('SkillChain default workflow：轨道 tab × 强制技能矩阵', () => {
   it('内置轨道用矢量锁图标标识，不把 emoji 混进名称', async () => {
     mockDefaultFetch()
-    renderChain({}, { workflow: 'default', readonly: true })
+    renderChain({}, { mode: 'manifest-matrix', readonly: true })
     const pm = await screen.findByTestId('wb-sk-track-pm')
     expect(pm).not.toHaveTextContent('🔒')
     expect(pm.querySelector('svg')).not.toBeNull()
@@ -258,7 +258,7 @@ describe('SkillChain default workflow：轨道 tab × 强制技能矩阵', () =>
 
   it('项目 root 显式贯穿 GET、POST 与缓存，不保留空 root 的第二套旁路', async () => {
     const fetchMock = mockDefaultFetch()
-    renderChain({}, { workflow: 'default', readonly: true, root: '/repo with space' })
+    renderChain({}, { mode: 'manifest-matrix', readonly: true, root: '/repo with space' })
     await screen.findByTestId('wb-sk-tracks')
     expect(fetchMock).toHaveBeenCalledWith('/api/config?root=%2Frepo%20with%20space', {
       headers: { Accept: 'application/json' },
@@ -273,7 +273,7 @@ describe('SkillChain default workflow：轨道 tab × 强制技能矩阵', () =>
 
   it('探测 /api/config 成功 → 轨道 tab 渲染；pm 走 _all 兜底、frontend 显示 per-track 强制技能', async () => {
     mockDefaultFetch()
-    const { onChange } = renderChain({}, { workflow: 'default', readonly: true })
+    const { onChange } = renderChain({}, { mode: 'manifest-matrix', readonly: true })
     await screen.findByTestId('wb-sk-tracks')
     // 默认 pm 轨道：build.pm 未声明 → _all 兜底
     expect(within(screen.getByTestId('wb-sk-mand')).getByText('fallback-skill')).toBeInTheDocument()
@@ -289,7 +289,7 @@ describe('SkillChain default workflow：轨道 tab × 强制技能矩阵', () =>
 
   it('编辑 → 穿梭框选入技能 → 保存 POST /api/config/mandatory-skills 真写回并联动刷新', async () => {
     const fetchMock = mockDefaultFetch()
-    renderChain({}, { workflow: 'default', readonly: true })
+    renderChain({}, { mode: 'manifest-matrix', readonly: true })
     await screen.findByTestId('wb-sk-tracks')
     fireEvent.click(screen.getByTestId('wb-sk-track-frontend'))
     fireEvent.click(screen.getByTestId('wb-sk-edit'))
@@ -314,7 +314,7 @@ describe('SkillChain default workflow：轨道 tab × 强制技能矩阵', () =>
     mockDefaultFetch({
       'POST /api/config/mandatory-skills': () => new Response(JSON.stringify({ ok: false, error: 'manifest 只读' }), { status: 500 }),
     })
-    renderChain({}, { workflow: 'default', readonly: true })
+    renderChain({}, { mode: 'manifest-matrix', readonly: true })
     await screen.findByTestId('wb-sk-tracks')
     fireEvent.click(screen.getByTestId('wb-sk-track-frontend'))
     fireEvent.click(screen.getByTestId('wb-sk-edit'))
@@ -329,7 +329,7 @@ describe('SkillChain default workflow：轨道 tab × 强制技能矩阵', () =>
       'POST /api/config/mandatory-skills': () =>
         new Response(JSON.stringify({ ok: false, error: 'revision 已变化' }), { status: 200 }),
     })
-    renderChain({}, { workflow: 'default', readonly: true })
+    renderChain({}, { mode: 'manifest-matrix', readonly: true })
     await screen.findByTestId('wb-sk-tracks')
     fireEvent.click(screen.getByTestId('wb-sk-track-frontend'))
     fireEvent.click(screen.getByTestId('wb-sk-edit'))
@@ -360,7 +360,7 @@ describe('SkillChain default workflow：轨道 tab × 强制技能矩阵', () =>
     const onChange = vi.fn()
     const view = render(
       <I18nProvider>
-        <SkillChain step={BASE} workflow="default" readonly root="/repo-a" onChange={onChange} />
+        <SkillChain step={BASE} mode="manifest-matrix" readonly root="/repo-a" onChange={onChange} />
       </I18nProvider>,
     )
     await screen.findByTestId('wb-sk-tracks')
@@ -369,7 +369,7 @@ describe('SkillChain default workflow：轨道 tab × 强制技能矩阵', () =>
     fireEvent.click(screen.getByRole('button', { name: '保存' }))
     view.rerender(
       <I18nProvider>
-        <SkillChain step={BASE} workflow="default" readonly root="/repo-b" onChange={onChange} />
+        <SkillChain step={BASE} mode="manifest-matrix" readonly root="/repo-b" onChange={onChange} />
       </I18nProvider>,
     )
     const rootBMandatory = await screen.findByTestId('wb-sk-mand')
@@ -381,7 +381,7 @@ describe('SkillChain default workflow：轨道 tab × 强制技能矩阵', () =>
     view.unmount()
     render(
       <I18nProvider>
-        <SkillChain step={BASE} workflow="default" readonly root="/repo-a" onChange={onChange} />
+        <SkillChain step={BASE} mode="manifest-matrix" readonly root="/repo-a" onChange={onChange} />
       </I18nProvider>,
     )
     fireEvent.click(await screen.findByTestId('wb-sk-track-frontend'))
@@ -390,7 +390,7 @@ describe('SkillChain default workflow：轨道 tab × 强制技能矩阵', () =>
 
   it('探测不到 runtime config（GET /api/config 非 2xx）→ 不退回静态轨道/技能，无编辑钮', async () => {
     mockDefaultFetch({ '/api/config': () => new Response(JSON.stringify({ ok: false, error: 'config 数据端未装' }), { status: 404 }) })
-    renderChain({}, { workflow: 'default', readonly: true })
+    renderChain({}, { mode: 'manifest-matrix', readonly: true })
     await screen.findByText('没有可用于技能矩阵的轨道')
     expect(screen.getByTestId('wb-sk-cfg-ro')).toBeInTheDocument()
     expect(screen.queryByTestId('wb-sk-edit')).toBeNull()
@@ -400,7 +400,7 @@ describe('SkillChain default workflow：轨道 tab × 强制技能矩阵', () =>
 
   it('archive 阶段：无强制技能约定 → 不给编辑钮（端点拒 archive）', async () => {
     mockDefaultFetch()
-    renderChain({ id: 'archive' }, { workflow: 'default', readonly: true })
+    renderChain({ id: 'archive' }, { mode: 'manifest-matrix', readonly: true })
     await screen.findByTestId('wb-sk-tracks')
     expect(screen.queryByTestId('wb-sk-edit')).toBeNull()
     expect(within(screen.getByTestId('wb-sk-mand')).getByText(/未强制技能/)).toBeInTheDocument()
@@ -491,7 +491,7 @@ describe('SkillChain v6 T10：manifest 缺失黄条(default 模式)', () => {
     const writeText = vi.fn(async () => {})
     vi.stubGlobal('navigator', { ...globalThis.navigator, clipboard: { writeText } })
     mockDefaultFetch({ '/api/config': GHOST_CONFIG, '/api/skills/registry': GHOST_REGISTRY })
-    renderChain({}, { workflow: 'default', readonly: true })
+    renderChain({}, { mode: 'manifest-matrix', readonly: true })
     await screen.findByTestId('wb-sk-tracks')
     fireEvent.click(screen.getByTestId('wb-sk-track-frontend'))
     const banner = await screen.findByTestId('wb-sk-banner')
@@ -502,7 +502,7 @@ describe('SkillChain v6 T10：manifest 缺失黄条(default 模式)', () => {
 
   it('全部 token 都有已装备选 → 不渲染(部分已装即满足)', async () => {
     mockDefaultFetch({ '/api/skills/registry': GHOST_REGISTRY })
-    renderChain({}, { workflow: 'default', readonly: true })
+    renderChain({}, { mode: 'manifest-matrix', readonly: true })
     await screen.findByTestId('wb-sk-tracks')
     fireEvent.click(screen.getByTestId('wb-sk-track-frontend'))
     expect(screen.queryByTestId('wb-sk-banner')).toBeNull()
@@ -510,7 +510,7 @@ describe('SkillChain v6 T10：manifest 缺失黄条(default 模式)', () => {
 
   it('/api/config 探测失败(capable:false)→ 黄条不渲染(installed 不可判,保守不显示)', async () => {
     mockDefaultFetch({ '/api/config': () => new Response('boom', { status: 500 }) })
-    renderChain({}, { workflow: 'default', readonly: true })
+    renderChain({}, { mode: 'manifest-matrix', readonly: true })
     await screen.findByText('没有可用于技能矩阵的轨道')
     expect(screen.queryByTestId('wb-sk-banner')).toBeNull()
   })

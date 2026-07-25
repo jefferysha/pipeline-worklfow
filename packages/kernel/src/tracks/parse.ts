@@ -21,16 +21,9 @@ import type {
   ProjectTrackConfig,
   ProjectTrackEntryConfig,
 } from './types.js'
+import { TrackConfigParseError } from './parse-error.js'
 
-export class TrackConfigParseError extends Error {
-  readonly line: number | null
-
-  constructor(line: number | null, detail: string) {
-    super(line === null ? `tracks.yaml: ${detail}` : `tracks.yaml:${line}: ${detail}`)
-    this.name = 'TrackConfigParseError'
-    this.line = line
-  }
-}
+export { TrackConfigParseError } from './parse-error.js'
 
 // ── 词法（loops/registry.ts tokenize 的带行号版）────────────────────────────────
 

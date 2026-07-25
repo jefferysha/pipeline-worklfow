@@ -28,100 +28,15 @@ import {
   updateLoopInYaml,
   validateSchema,
   writeRegistryWithGovernance,
-  type AutonomyLevel,
-  type BudgetStatus,
   type GraduationFs,
-  type GraduationVerdict,
   type LedgerRecord,
-  type LoopBudget,
   type LoopEntry,
   type LoopRegistry,
-  type LoopRisk,
-  type ReadinessScore,
-  type RunResult,
 } from '@pipeline-lite/kernel'
-
-export interface LoopRow {
-  root: string
-  id: string
-  name: string
-  autonomy_level: AutonomyLevel
-  status: string
-  // ── v5 T16：编排页「自动运行」卡的编辑面回显——T3 扩进 schema 的 allowlist/denylist 与
-  //    其余可 patch 字段（kernel loops/update.ts 全集）逐一透出，滑杆/紧凑行/chips 的初值
-  //    都从这里来（T3 登记过「存储侧已就绪、快照未透出」，本处即闭合）──
-  cadence: string
-  goal: string
-  design_doc: string
-  change_prefix: string | null
-  risk: LoopRisk
-  runner: string
-  human_gates: string[]
-  kill_criteria: string[]
-  allowlist: string[]
-  denylist: string[]
-  /** 原始预算声明（loops.yaml budget 块原值，滑杆初值）；区别于下面 budget=computeBudgetStatus 的计算结果。 */
-  budget_decl: LoopBudget
-  readiness: ReadinessScore
-  budget: BudgetStatus
-  // ── T7（loop 卡审阅面重构）：三方关系条数据面 ──
-  /** change_prefix 实际匹配到的 openspec/changes 目录名（已保存真值，不随草稿实时重算）；
-   *  change_prefix 为 null 时恒为 []（不做「空前缀匹配一切」的危险默认）。 */
-  matched_changes: string[]
-  /** 登记表原值透传——全仓无运行时消费者，纯声明标签（decisions.md 关系条不得暗示它会做 workflow join 校验）。 */
-  phases: string[]
-  // ── loop-init L4（P2 草稿审阅协议）：sidecar 纯展示元数据 ──
-  /** 该 loop 是否在 .pipeline/loops.drafts.json 标记集中（「agent 草稿·待你审阅」）；fail-open——
-   *  标记文件缺失/坏 JSON 一律 false，仅现有行判 draft（标记里多出的 id 不产生幽灵行）。 */
-  draft: boolean
-  /** H11 starter 来源与冻结 schema 版本；旧 loop 可缺席。 */
-  template_id?: string
-  template_version?: 1
-  /** H11 编译后绑定的 workflow；旧 loop 可缺席。 */
-  workflow_id?: string
-  /** H10 skill profile/bundle 接线；null = 明确未接线，real-run 必须拒绝。 */
-  skill_bundle_id: string | null
-  /**
-   * GOAL H · Stage C 读面：typed durable ledger 投影（与 admission 硬判定**同源**——用户看到的
-   * budget 与硬 admission 不再矛盾）。不另开 endpoint，随现有 row 一并透出。ledger 文件缺失 →
-   * health='missing'、各计数为 0（不当报错，常态）；坏行 → health='degraded'（admission fail-closed）。
-   */
-  ledger: LedgerSnapshot
-  /** 与 POST /api/loops/level 使用同一 kernel graduation 裁决；null = 本轮读取无法形成权威预检。 */
-  graduation: GraduationVerdict | null
-}
-
-export interface LedgerSnapshot {
-  /** missing/degraded 必须与下方证据位一起解释；证据位 false 只表示“未观察到”，不表示配置关闭。 */
-  health: 'ok' | 'degraded' | 'missing'
-  rejected_records: number
-  /** true 仅表示 ledger 中观察到本 loop 经原子 admission 后写下的 reservation；结算后仍保留，配置存在不算证据。 */
-  admission_enforced: boolean
-  /** true 仅表示 ledger 中观察到本 loop 的 reservation 通过 activate 闸；结算后仍保留，不等同于当前仍在运行。 */
-  inflight_enforced: boolean
-  runs_today: number
-  /** 所有未关闭 reservation（含 reserve→activate 窗口）。 */
-  in_flight: number
-  /** 未关闭且已有 reservation-activated 事实的 reservation。 */
-  activated_in_flight: number
-  settled_tokens_actual: number
-  settled_tokens_estimated: number
-  reserved_tokens: number
-  /** max_tokens_per_day − 已结算 − 未关闭预占；无 token 预算 → null。 */
-  remaining_tokens: number | null
-  last_result: RunResult | null
-  last_finished_at: string | null
-}
-
-export interface LoopsSnapshot {
-  generated_at: string
-  rows: LoopRow[]
-}
-
-export interface LoopsSnapshotDeps {
-  registry: () => string[]
-  now: () => Date
-}
+import type { LedgerSnapshot, LoopRow, LoopsSnapshot, LoopsSnapshotDeps } from './loopsTypes.js'
+export type {
+  LedgerSnapshot, LoopRow, LoopsSnapshot, LoopsSnapshotDeps,
+} from './loopsTypes.js'
 
 function readRunLogText(root: string): string | null {
   try {

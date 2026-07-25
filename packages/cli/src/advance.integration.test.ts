@@ -8,7 +8,7 @@
  * 说明：advance 尚未接入 program（收编由主会话统一接线），故用 h.run 做 init/set/transition 铺场，
  * 再用 realDeps 直调 cmdAdvance —— 与 main.ts 同一条 fs 副作用装配路径，只把 io 收进数组。
  */
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { appendFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
 import { freshHarness, realDeps, type Harness } from './integration-harness.js'
@@ -41,6 +41,22 @@ describe('真实 e2e —— advance auto-transition 中间档（HITL 红线：�
     expect(await h.run(['review', 'acknowledge', name])).toBe(0)
   }
 
+  /** cmdAdvance only advances state; it never fabricates host Skill calls. Record the phase work
+   * explicitly when this suite wants to exercise the next transition rather than the Skill gate. */
+  async function recordMandatorySkills(name: string): Promise<void> {
+    const deps = realDeps(h.cwd, [], [])
+    const dir = cd(name)
+    const state = await deps.store.read(dir)
+    const phase = String(state.fields.phase)
+    const track = String(state.fields.track)
+    const lines = deps.resolver.resolveDefaultMandatory(phase, track)
+      .map((slot) => slot.alternatives[0])
+      .filter((skill): skill is string => skill !== undefined)
+      .map((skill) => `${JSON.stringify({ kind: 'tool', raw: `Skill: ${skill}` })}\n`)
+      .join('')
+    if (lines !== '') await appendFile(join(dir, '.pipeline-history.jsonl'), lines, 'utf8')
+  }
+
   /** 用真实 review receipt + transition 把 change 推到 build 相位。 */
   async function seedToBuild(name: string): Promise<void> {
     await h.run(['init', name, '--track', 'backend', '--preset', 'full'])
@@ -54,6 +70,7 @@ describe('真实 e2e —— advance auto-transition 中间档（HITL 红线：�
     await h.seedArtifact(name, 'plan', `docs/superpowers/plans/${name}.md`) // P6：artifact 字段白盒预置
     await approveReviewExit(name, 'spec-complete')
     expect(await h.run(['transition', name, 'spec-complete'])).toBe(0) // → build
+    await recordMandatorySkills(name)
   }
 
   /** 让 build 出口 guard 真通过：tasks.md 全勾 + build_mode/isolation/direct_override */
@@ -148,7 +165,14 @@ describe('真实 e2e —— advance auto-transition 中间档（HITL 红线：�
     expect(await phaseOf('demo')).toBe('verify')
     expect(first.out.some((l) => l.includes('确认回执'))).toBe(true)
 
+    await recordMandatorySkills('demo')
     await approveReviewExit('demo', 'verify-pass')
+    const verifyExit = await advance('demo', { throughGates: true, maxSteps: 1 })
+    expect(verifyExit.code).toBe(0)
+    expect(await phaseOf('demo')).toBe('ship')
+    // A new canonical visit was created by the direct advance call. Re-enter through the shared
+    // harness so that this exact ship visit receives its real Skill/read evidence.
+    expect(await h.run(['check', 'demo'])).toBe(0)
     const r = await advance('demo', { throughGates: true })
     expect(r.code).toBe(0)
     // 真跨经确认的 verify 出口，再到 archive 终态
@@ -358,7 +382,7 @@ steps:
     const r = await advance('cw', {})
     expect(r.code).toBe(1)
     expect(await h.read('cw')).toBe(before)
-    expect(r.err.join('\n')).toContain("workflow 'chain' 未找到")
+    expect(r.err.join('\n')).toContain("workflow 'chain' 已绑定 workflow plan fingerprint，定义缺失时拒绝运行")
   })
 
   test('--dry-run 真不改盘（自定义轨）：报计划、phase 与字节均不变', async () => {

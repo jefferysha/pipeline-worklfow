@@ -29,7 +29,8 @@ export const TRANSITION_LINE_RE = /^\[TRANSITION\] (\S+): (\S+) -> (\S+)\s*$/
 export const parseTransitionLine = (line: string): TransitionLine | null => {
   const m = TRANSITION_LINE_RE.exec(line)
   if (!m) return null
-  return { name: m[1]!, from: m[2]!, to: m[3]! }
+  const [, name, from, to] = m
+  return name && from && to ? { name, from, to } : null
 }
 
 /** 逐行观察器：onLine 喂日志行；settle 在 run 结算（完成/失败/取消）时清理字段。 */

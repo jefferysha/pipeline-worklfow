@@ -1,37 +1,40 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import gsap from 'gsap'
 import { useGSAP } from '@gsap/react'
 import { useT } from '../i18n'
-import type { ChangeSnapshot, Snapshot } from '../types'
-import { isPhase } from '../types'
+import type { Snapshot } from '../types'
 import type { WorkflowRules } from '../model/workflowModel'
-import { plannedTransition, type PlannedTransition } from '../model/events'
+import type { PlannedTransition } from '../model/events'
 import { fetchSessionLinks, postAfkCommand, postTransition, type SessionLink } from '../api/client'
-import { TaskDetail } from '../shared/TaskDetail'
-import { Switch } from '@/components/ui/switch'
-import { diagnoseFailureWithCause } from '../shared/failureDiagnosis'
-import { shellQuote } from '../shared/shellQuote'
-import { gateEvidence, VERIFY_STATUS_FIELDS, type EvidenceChip } from '../inbox/evidence'
-import { changeWorkflow, decisionKind } from '../inbox/inbox'
-import { useAfkLog } from './useAfkLog'
+import { gateEvidence, type EvidenceChip } from '../model/evidence'
 import {
   WorkflowCanvas,
-  type CanvasArchivedChange,
-  type CanvasChange,
   type CanvasDotTone,
-  type CanvasGroup,
-  type CanvasStep,
 } from './WorkflowCanvas'
-import {
-  missingGateArtifacts,
-  selectProgress,
-  type ProgressRow,
-  type ProgressRules,
-  type ProgressState,
-} from '../model/progressModel'
+import { missingGateArtifacts, selectProgress, type ProgressRules } from '../model/progressModel'
 import './progress.css'
 import { CreateChangeDialog } from './CreateChangeDialog'
-import { ChevronDown, Plus, Square } from 'lucide-react'
+import { useProgressDrawer } from './useProgressDrawer'
+import { buildCanvasGroups } from './progressCanvasModel'
+import { ProgressToolbar } from './ProgressToolbar'
+import { ProgressDrawer } from './ProgressDrawer'
+import { ProgressActions } from './ProgressActions'
+import {
+  BADGE_TONE_CLS,
+  deckMatch,
+  fieldStr,
+  patchLanded,
+  patchMovedFromBase,
+  readErrorDetail,
+  rowKeyOf,
+  rowSemantics,
+  stepLabel,
+  toFlatRow,
+  type DeckTab,
+  type FlatRow,
+  type RowBadge,
+  type RowPatch,
+} from './progressViewModel'
 
 gsap.registerPlugin(useGSAP)
 
@@ -83,262 +86,11 @@ export interface ProgressViewProps {
   onSelectedChange?: (name: string | null) => void
 }
 
-/** 行级键（busy/抽屉/乐观 patch 共用）：name 字符集受 server 校验限死 [a-zA-Z0-9_-]，'@' 不会撞。 */
-function rowKeyOf(root: string, name: string): string {
-  return `${name}@${root}`
-}
-
-/** 乐观 patch：动作发出即叠加到 snapshot 投影上，成功等 SSE/refresh 落地，失败回滚。 */
-interface RowPatch {
-  phase?: string
-  fields?: Record<string, string>
-  /** Bug4：patch 施加时该 change 的真值基线——区分「server 尚未处理该动作（保留 patch）」vs
-   *  「已推进（无论是否恰达 patch 目标都清）」，避免被无关项目的帧整清导致回弹抖动。 */
-  base: { phase: string; fields: Record<string, string> }
-}
-
-/** patch 是否已在 snapshot 落地（真值恰达 patch 目标）。 */
-function patchLanded(patch: RowPatch, change: ChangeSnapshot): boolean {
-  if (patch.phase !== undefined && change.phase !== patch.phase) return false
-  if (patch.fields) {
-    for (const [k, v] of Object.entries(patch.fields)) if (fieldStr(change, k) !== v) return false
-  }
-  return true
-}
-
-/** patch 施加后真值是否已离开基线（server 已处理该动作，即便未恰达 patch 目标，也该让位真值）。 */
-function patchMovedFromBase(patch: RowPatch, change: ChangeSnapshot): boolean {
-  if (patch.phase !== undefined && change.phase !== patch.base.phase) return true
-  if (patch.fields) {
-    for (const k of Object.keys(patch.fields)) if (fieldStr(change, k) !== (patch.base.fields[k] ?? '')) return true
-  }
-  return false
-}
-
-/** 非 2xx 响应尽量读出 server 的 { error } 文案（同 useAfkLog.ts 的局部拷贝先例）。 */
-async function readErrorDetail(res: Response): Promise<string> {
-  try {
-    const body = (await res.json()) as { error?: string }
-    if (body && typeof body.error === 'string') return body.error
-  } catch {
-    /* 无 JSON 体 */
-  }
-  return ''
-}
-
-/** root → 尾段项目名（同 inbox.ts projectName 口径，这里入参是裸 root 串）。 */
-function rootBasename(root: string): string {
-  const parts = root.split('/').filter(Boolean)
-  return parts[parts.length - 1] ?? root
-}
-
-function fieldStr(c: ChangeSnapshot, key: string): string {
-  const v = c.fields[key]
-  return typeof v === 'string' ? v : ''
-}
-
-type Tr = (key: string, vars?: Record<string, string | number>) => string
-
-/**
- * 步 id → 展示名：自定义步优先用用户设置的 label（rules.labelByStep），缺键/空 label 回退
- * step id；default 七相（labelByStep 缺省）走 phases.* i18n——行为逐字沿旧 ChevronFlow（观察项①）。
- */
-function stepLabel(step: string, labelByStep: Record<string, string> | undefined, t: Tr): string {
-  const custom = labelByStep?.[step]
-  if (custom) return custom
-  return isPhase(step) ? t(`phases.${step}`) : step
-}
-
-// ── 行语义（自 InboxView 搬运，该文件随收件箱退役删除；判定口径逐字保留）──
-
-/** 行/抽屉共用的结论式语义（demo v5 三情形口径）：badge 一句结论 + lead 一句人话（lead 自
- *  v10b 起不再在行内渲染——处置指引在抽屉 TaskDetail，函数形状保留供 tone/badge 同源判定）。 */
-interface RowSemantics {
-  tone: 'green' | 'red'
-  badgeText: string
-  lead: string
-}
-
-/**
- * 行语义判定（搬运自 InboxView rowSemantics，T9 demo v5 三情形口径）：
- *   · failed（automation ∈ {failed, conflict}）→「失败 ×N · 等你决定」；
- *   · gate 且证据里有未过判定（verify 三轨白名单——产物没产出不等于验证没过，Important-1
- *     教训沿用）或根本没有任何自动证据（自定义门/纯人判）→「等你判断」；
- *   · gate 且证据齐 →「✓ 可以放行」。
- * 纯函数（t 注入），行体与抽屉头部 badge 同源消费，两处不漂移。
- */
-function rowSemantics(change: ChangeSnapshot, state: ProgressState, evidence: EvidenceChip[], t: Tr): RowSemantics {
-  if (state === 'failed') {
-    const attempts = fieldStr(change, 'automation_attempts')
-    const err = fieldStr(change, 'automation_last_error') || t('detail.fail_generic')
-    return {
-      tone: 'red',
-      badgeText: attempts !== '' ? t('inbox.badge_failed', { n: attempts }) : t('inbox.badge_failed_plain'),
-      lead: attempts !== '' ? t('inbox.lead_failed', { err, n: attempts }) : t('inbox.lead_failed_plain', { err }),
-    }
-  }
-  const hasJudgment = evidence.some((c) => !c.unset)
-  if (!hasJudgment) {
-    return { tone: 'red', badgeText: t('inbox.badge_judge'), lead: t('inbox.lead_judge', { wf: changeWorkflow(change) }) }
-  }
-  const kind = decisionKind(change)
-  const failedTracks = evidence.filter(
-    (c) => (VERIFY_STATUS_FIELDS as readonly string[]).includes(c.key) && c.tone !== 'pass',
-  )
-  if (kind === 'verify' && failedTracks.length > 0) {
-    return {
-      tone: 'red',
-      badgeText: t('inbox.badge_judge'),
-      lead: t('detail.why_gate', { names: failedTracks.map((c) => c.key.replace(/_result$/, '')).join('、') }),
-    }
-  }
-  return {
-    tone: 'green',
-    badgeText: t('inbox.badge_pass'),
-    lead: kind === 'verify' ? t('inbox.lead_verify_pass') : t(`inbox.awaiting.${kind}`),
-  }
-}
-
-/** 一枚人话判定徽章的渲染数据：绿/红=rowSemantics 同源；蓝=运行中；琥珀=已取消；中性=排队/等产出。 */
-interface RowBadge {
-  tone: 'green' | 'red' | 'blue' | 'amb' | 'neutral'
-  text: string
-}
-
-// ── running 行抽屉内日志区（testid 沿用 prg-log*；样式 tailwind 化）──
-
-/**
- * afk 型 running 行的日志尾部：useAfkLog（2.5s 轮询——status 传 automation 原始值，仅
- * 'running' 时轮询）+ 跟随开关 +「沙箱内阶段」行（automation_current_phase）。挂在抽屉内
- * TaskDetail 之下；抽屉关闭即组件卸载，轮询随之停止（useAfkLog cleanup）。
- */
-function RunLogPane({ root, change }: { root: string; change: ChangeSnapshot }): JSX.Element {
-  const { t } = useT()
-  const { log, follow, setFollow } = useAfkLog(change.name, fieldStr(change, 'automation'), root)
-  const sandboxPhase = fieldStr(change, 'automation_current_phase')
-  return (
-    <div className="mt-4 border-t border-border pt-3" data-testid={`prg-log-${change.name}`}>
-      <div className="mb-2 flex items-center justify-between gap-3">
-        <span className="font-mono text-xs text-text-3">{t('progress.log_label')}</span>
-        <span className="flex items-center gap-2 text-xs text-text-2">
-          {t('progress.follow_tail')}
-          <Switch
-            checked={follow}
-            onCheckedChange={setFollow}
-            size="sm"
-            aria-label={t('progress.follow_tail')}
-            data-testid={`prg-follow-${change.name}`}
-          />
-        </span>
-      </div>
-      <pre
-        className="max-h-[220px] overflow-auto rounded-lg border border-code-border bg-code-bg p-2.5 font-mono text-xs leading-relaxed text-text-2"
-        data-testid={`prg-logtext-${change.name}`}
-      >
-        {log}
-      </pre>
-      {sandboxPhase !== '' && (
-        <p className="mt-2 text-xs text-text-3" data-testid={`prg-sandbox-phase-${change.name}`}>
-          {t('progress.sandbox_phase', { phase: sandboxPhase })}
-        </p>
-      )}
-    </div>
-  )
-}
-
-// ── 视图 ──
-
-/** 统一列表的行投影：state/rules/need 一次算好，渲染与动效共用。 */
-interface FlatRow {
-  key: string
-  row: ProgressRow
-  rules: ProgressRules | undefined
-  workflow: string
-  /** 需要人动手（gate/failed，含 cancelled）——分色 ring 高亮（gate 绿/fail 红/cxl 琥珀）+ 排前 + 行内动作。 */
-  need: boolean
-  /** failed 且结构化/regex 判为 cancelled（人为终止非故障）→ 琥珀徽章 + warn 轨。 */
-  cancelled: boolean
-}
-
-/** ProgressRow → FlatRow 投影（need/cancelled 一次算好）：live 行与 #2 归档只读行共用同一份
- *  判定——归档行渲染走 renderRow(fr, true) 时会强制只读/mute 轨，state 判定本身不因归档而变。 */
-function toFlatRow(row: ProgressRow, rules: ProgressRules | undefined, workflow: string): FlatRow {
-  const need = row.state === 'gate' || row.state === 'failed'
-  const cancelled =
-    row.state === 'failed' &&
-    diagnoseFailureWithCause(fieldStr(row.change, 'automation_cause'), fieldStr(row.change, 'automation_last_error')).cause === 'cancelled'
-  return { key: rowKeyOf(row.root, row.change.name), row, rules, workflow, need, cancelled }
-}
-
-/** 归档 change 展示序（画布相位小站折叠面）：updated_at 倒序、并列 name 升序。 */
-function compareArchived(a: ChangeSnapshot, b: ChangeSnapshot): number {
-  if (a.updated_at !== b.updated_at) return a.updated_at < b.updated_at ? 1 : -1
-  return a.name < b.name ? -1 : a.name > b.name ? 1 : 0
-}
-
-// ── 状态页签 + 调度标识（纯谓词，渲染与计数共用同一口径不漂移）──
-
-/** 页签字典（顺序即渲染序，demo .tabs：全部/等你动手/运行中/等待中）。 */
-const DECK_TABS = ['all', 'need', 'run', 'queue'] as const
-type DeckTab = (typeof DECK_TABS)[number]
-
-// #3 抽屉焦点陷阱（评审 P3 登记项，无障碍）：标准可聚焦元素白名单——同 WAI-ARIA APG focus-trap
-// 惯用判据，disabled 的 button 天然不可聚焦故排除，tabindex="-1" 显式退出 tab 序也排除。
-const DRAWER_FOCUSABLE_SEL = 'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])'
-
-/** 页签分类口径（五态同源谓词——不在视图层摸 automation 原始字段，T6 纪律）：
- *  need=现有 need 判定（gate/failed，失败/取消归此不单列）；run=running 态（progressModel
- *  已折叠 scheduled）；queue=等待中（v10b §4.1 语义微调：queued+agent——排队与等产出都在等
- *  系统/agent，修复 agent 行只在「全部」可见的孤儿态，demo waiting 口径）；all=全部。 */
-function deckMatch(fr: FlatRow, tab: DeckTab): boolean {
-  switch (tab) {
-    case 'all':
-      return true
-    case 'need':
-      return fr.need
-    case 'run':
-      return fr.row.state === 'running'
-    case 'queue':
-      return fr.row.state === 'queued' || fr.row.state === 'agent'
-  }
-}
-
-/** 调度标识（demo 小卡调度符 ▦/⌨）：只看 automation 原始态，不能因普通终端心跳也进入
- * running 而误画成沙箱。 */
-function inSandbox(fr: FlatRow): boolean {
-  const automation = fieldStr(fr.row.change, 'automation')
-  return automation === 'running' || automation === 'scheduled'
-    || automation === 'queued' || automation === 'failed' || automation === 'conflict'
-}
-
-// ── tailwind 类词组（视觉词汇集中一处，行内/抽屉/画布不各写一份）──
-
-/** 前进（放行）钮：绿实底（v8 主按钮 token）。 */
-const BTN_GO_CLS =
-  'inline-flex items-center justify-center gap-1 whitespace-nowrap rounded-lg bg-btn-bg px-3 py-1.5 text-xs font-semibold text-btn-fg hover:bg-btn-hover disabled:opacity-50'
-/** 反向（打回/终止）钮：中性边 + 红字。 */
-const BTN_NEG_CLS =
-  'inline-flex items-center justify-center gap-1 whitespace-nowrap rounded-lg border border-border bg-card px-3 py-1.5 text-xs text-red-d hover:border-red-b hover:bg-red-t disabled:opacity-50'
-/** 判定徽章 tone 配色（token 家族 -t 底 + -d 字）。 */
-const BADGE_TONE_CLS: Record<RowBadge['tone'], string> = {
-  green: 'bg-green-t text-green-d',
-  red: 'bg-red-t text-red-d',
-  blue: 'bg-accent-t text-accent-d',
-  amb: 'bg-amb-t text-amb-d',
-  neutral: 'bg-fill-2 text-text-2',
-}
-
 export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey, onToast, onRefresh, selectedChange, onSelectedChange }: ProgressViewProps): JSX.Element {
   const { t } = useT()
   const rootRef = useRef<HTMLElement>(null)
-  const drawerRef = useRef<HTMLElement>(null)
-  const scrimRef = useRef<HTMLDivElement>(null)
-  // #3 抽屉焦点陷阱：打开前记住触发元素（行名按钮/画布小卡），关闭时归还焦点。
-  const triggerElRef = useRef<HTMLElement | null>(null)
   const [busyRows, setBusyRows] = useState<ReadonlySet<string>>(new Set())
   const [patches, setPatches] = useState<ReadonlyMap<string, RowPatch>>(new Map())
-  // 详情抽屉：行名/画布小卡点击打开；Esc/scrim/关闭钮关闭。行离场（归档/换项目）→ 引用失配自动收起。
-  const [drawerKey, setDrawerKey] = useState<string | null>(null)
   // 状态页签（默认全部）。
   const [deckTab, setDeckTab] = useState<DeckTab>('all')
   // 工作流筛选保持为单一 select，避免工作流增多后横向堆满筛选栏。
@@ -397,17 +149,20 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
   }, [base, rulesByKey])
   const frByKey = useMemo(() => new Map(flatRows.map((fr) => [fr.key, fr])), [flatRows])
 
-  // URL 首次进入 / 浏览器前进后退：等 snapshot 与 workflow 投影准备好，再按 root+name 精确开抽屉。
-  // selectedChange=undefined 保持旧的非受控组件契约，既有独立测试与嵌入方不受影响。
-  useEffect(() => {
-    if (selectedChange === undefined) return
-    if (selectedChange === null) {
-      if (drawerKey !== null) setDrawerKey(null)
-      return
-    }
-    const key = rowKeyOf(currentRoot, selectedChange)
-    if (frByKey.has(key) && drawerKey !== key) setDrawerKey(key)
-  }, [currentRoot, drawerKey, frByKey, selectedChange])
+  const {
+    drawerRef,
+    scrimRef,
+    drawerKey,
+    drawerRow,
+    openDrawer,
+    closeDrawer,
+  } = useProgressDrawer({
+    rootRef,
+    currentRoot,
+    rows: flatRows,
+    selectedChange,
+    onSelectedChange,
+  })
 
   // 页签计数=各分类总数（不随当前筛选变）。
   const deckCounts = useMemo(
@@ -628,134 +383,6 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
     { scope: rootRef, dependencies: [deckTab, animKey] },
   )
 
-  // ── 抽屉开合：滚动锁 + Esc + GSAP 右滑入场/滑出退场（reduce 直达终态）──
-  const drawerRow = drawerKey !== null ? (flatRows.find((fr) => fr.key === drawerKey) ?? null) : null
-  const drawerOpen = drawerRow !== null
-
-  /** 退场补间：滑回场外 x:103%（~.24s power3.in）+ scrim 淡出，onComplete 才卸载；
-   *  reduced/无 matchMedia 直接卸载。closingRef 双守门：退场中再点退路不重复补间、
-   *  退场中点行名不重开。 */
-  const closingRef = useRef(false)
-  const closeDrawer = useCallback((): void => {
-    if (closingRef.current) return
-    const drawer = drawerRef.current
-    const scrim = scrimRef.current
-    const motion =
-      typeof window.matchMedia === 'function' && !window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    if (!motion || !drawer || !scrim) {
-      setDrawerKey(null)
-      onSelectedChange?.(null)
-      return
-    }
-    closingRef.current = true
-    gsap.to(scrim, { autoAlpha: 0, duration: 0.2, ease: 'power1.in' })
-    gsap.to(drawer, {
-      xPercent: 103,
-      duration: 0.24,
-      ease: 'power3.in',
-      onComplete: () => {
-        closingRef.current = false
-        setDrawerKey(null)
-        onSelectedChange?.(null)
-      },
-    })
-  }, [onSelectedChange])
-  /** #3：trigger 优先取调用点显式传入的元素（行名按钮/画布小卡 click 事件的 e.currentTarget
-   *  ——jsdom 下 fireEvent.click 不会像真实浏览器那样把焦点先移到被点元素，
-   *  document.activeElement 在合成点击时仍是先前焦点，故不能只靠它；真实浏览器场景下两者
-   *  通常一致）；未传时退化取当前 document.activeElement，保底不留 undefined。 */
-  const openDrawer = useCallback((key: string, trigger?: HTMLElement | null): void => {
-    if (closingRef.current) return
-    triggerElRef.current = trigger ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null)
-    setDrawerKey(key)
-    const separator = key.indexOf('@')
-    onSelectedChange?.(separator === -1 ? key : key.slice(0, separator))
-  }, [onSelectedChange])
-
-  useEffect(() => {
-    if (!drawerOpen) return
-    document.documentElement.classList.add('prg9-lock')
-    /** #3 焦点陷阱：Tab/Shift+Tab 在抽屉内可聚焦元素集合里循环——首/末边界手动拦截+
-     *  focus()（jsdom 无原生 tab 序移动，中间元素交给浏览器默认行为处理，这里只收口两端
-     *  绕出抽屉的情形）；焦点若已经跑到抽屉外（比如脚本式 .focus() 或极端时序竞态），
-     *  按 Tab 方向拉回对应一端，不放它留在外面。 */
-    function onKey(e: KeyboardEvent): void {
-      if (e.key === 'Escape') {
-        closeDrawer()
-        return
-      }
-      if (e.key !== 'Tab') return
-      const drawer = drawerRef.current
-      if (!drawer) return
-      const focusables = Array.from(drawer.querySelectorAll<HTMLElement>(DRAWER_FOCUSABLE_SEL))
-      if (focusables.length === 0) return
-      const first = focusables[0]!
-      const last = focusables[focusables.length - 1]!
-      const active = document.activeElement
-      const inside = active instanceof HTMLElement && drawer.contains(active)
-      if (!inside) {
-        e.preventDefault()
-        ;(e.shiftKey ? last : first).focus()
-      } else if (e.shiftKey && active === first) {
-        e.preventDefault()
-        last.focus()
-      } else if (!e.shiftKey && active === last) {
-        e.preventDefault()
-        first.focus()
-      }
-    }
-    document.addEventListener('keydown', onKey)
-    return () => {
-      // 卸载兜底重置：抽屉若因数据变化直接消失（行被归档等），退场守门不悬挂；同一时机把焦点
-      // 还给触发它的元素（#3：drawerOpen true→false 的唯一收口点，覆盖 closeDrawer 的两条退场
-      // 分支 + 数据消失直接卸载的兜底路径）。元素可能已随数据变化被移出 DOM——isConnected 判假
-      // 就静默跳过，不勉强 focus 也不抛错。
-      closingRef.current = false
-      document.documentElement.classList.remove('prg9-lock')
-      document.removeEventListener('keydown', onKey)
-      const trigger = triggerElRef.current
-      if (trigger?.isConnected) trigger.focus()
-    }
-  }, [drawerOpen, closeDrawer])
-
-  // #3：抽屉打开后焦点移入抽屉内关闭钮（TaskDetail 渲染的 detail-close，抽屉内唯一关闭钮）——
-  // 与滚动锁/Esc 的 effect 分开一个更聚焦：依赖 [drawerOpen]，抽屉挂载与本效果同一次 commit，
-  // drawerRef.current 此时已就位（DOM 已提交，effect 才跑），不需要额外等一帧。
-  useEffect(() => {
-    if (!drawerOpen) return
-    const closeBtn = drawerRef.current?.querySelector<HTMLElement>('[data-testid="detail-close"]')
-    closeBtn?.focus()
-  }, [drawerOpen])
-
-  useGSAP(
-    () => {
-      const drawer = drawerRef.current
-      const scrim = scrimRef.current
-      if (!drawer || !scrim) return
-      if (typeof window.matchMedia !== 'function') {
-        // 无 matchMedia：直达可见（CSS 缺省停在场外 translateX(103%)，这里必须归零）。
-        gsap.set(drawer, { x: 0, xPercent: 0 })
-        gsap.set(scrim, { autoAlpha: 1 })
-        return
-      }
-      const mm = gsap.matchMedia()
-      mm.add(
-        { reduce: '(prefers-reduced-motion: reduce)', motion: '(prefers-reduced-motion: no-preference)' },
-        (ctx) => {
-          const reduce = Boolean((ctx.conditions as { reduce?: boolean } | undefined)?.reduce)
-          if (reduce) {
-            gsap.set(drawer, { x: 0, xPercent: 0 })
-            gsap.set(scrim, { autoAlpha: 1 })
-            return
-          }
-          gsap.fromTo(scrim, { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.2, ease: 'power1.out' })
-          gsap.fromTo(drawer, { x: 0, xPercent: 103 }, { xPercent: 0, duration: 0.3, ease: 'expo.out' })
-        },
-      )
-    },
-    { scope: rootRef, dependencies: [drawerKey] },
-  )
-
   // ── change 投影：徽章/状态点（抽屉徽章 + 画布小卡共用同源判定）──
 
   /** 当前相位展示名（自定义步用 labelByStep，default 走 phases.* i18n）——抽屉徽章 running 文案用。 */
@@ -827,295 +454,53 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
     )
   }
 
-  /** fail/cxl 行「回终端」命令 chip 数据（真机验收 G）：v9-J 批量预取命中真恢复会话
-   *  （session-link found + resumeCmd 非 null）→ 优先给真恢复命令，直接可拷贝执行接回原会话；
-   *  否则落回现状：cxl=重跑命令（人为终止后重新入队）；fail 有 worktree 现场→cd 接管（与
-   *  TaskDetail 的 worktreeCmd 同款 shellQuote 转义，codex review P2-2 同族），缺现场回落
-   *  重跑命令。 */
-  function cmdChipOf(fr: FlatRow): { label: string; cmd: string } {
-    const link = sessionLinks.get(fr.key)
-    if (link?.found && link.resumeCmd) return { label: t('progress.cmd_resume'), cmd: link.resumeCmd }
-    // #6 按名重跑走 `pipeline afk enqueue <name>`：afk run 忽略 name、跑整轮；enqueue 才是唯一能把
-    // 该 change 按名重新摆进 AFK 队列的命令（server afk.ts::enqueueAfkRun 同源），是正确的按名重跑。
-    const rerun = `pipeline afk enqueue ${shellQuote(fr.row.change.name)}`
-    if (fr.cancelled) return { label: t('progress.cmd_rerun_cxl'), cmd: rerun }
-    const worktree = fieldStr(fr.row.change, 'automation_worktree')
-    if (worktree !== '') return { label: t('progress.cmd_takeover'), cmd: `cd ${shellQuote(worktree)}` }
-    return { label: t('progress.cmd_rerun'), cmd: rerun }
+  function drawerActionsFor(row: FlatRow): JSX.Element {
+    return (
+      <ProgressActions
+        row={row}
+        busy={busyRows.has(row.key)}
+        sessionLink={sessionLinks.get(row.key)}
+        t={t}
+        onTransition={(root, name, transition) => {
+          void transitionAction(root, name, transition)
+        }}
+        onKill={(root, name) => {
+          void killAction(root, name)
+        }}
+        onToast={onToast}
+      />
+    )
   }
 
-  /** 命令 chip 点击=拷贝+toast（沿 TaskDetail copy 姿势：clipboard 可选链，成功才报）。 */
-  function copyCmd(cmd: string): void {
-    void navigator.clipboard?.writeText(cmd).then(() => {
-      onToast?.(t('detail.copied', { value: cmd }))
-    })
-  }
-
-  /**
-   * change 动作（画布卡点开 → 抽屉动作条消费）：gate=放行（带目标相位）/打回；failed/cancelled=
-   * 「回终端」命令 chip（v9-J 批量预取命中真恢复会话优先，否则重跑/接管兜底——诚实缺省）；
-   * running=终止（仅 automation==='running' 可点）；排队/等产出=无动作 → undefined。
-   * 2+ 条同向出边一条不落（旧 InboxView 纪律回归）：前进边逐条渲染（首选边保持「放行进入
-   * {目标相位}」，其余以事件名呈现 inbox.act_forward）；回退边逐条渲染，一律带目标相位
-   * （inbox.act_backward——多回退边只写「打回」无从分辨去处）。
-   * dw 参数保留 testid 前缀契约（抽屉挂 prg9-dw-）——列表退役后仅抽屉调用（dw=true）。
-   */
-  function actionsFor(fr: FlatRow, dw = false): ReactNode | undefined {
-    const name = fr.row.change.name
-    const busy = busyRows.has(fr.key)
-    const tid = (act: string): string => `prg9-${dw ? 'dw-' : ''}${act}-${name}`
-    switch (fr.row.state) {
-      case 'gate': {
-        const rules = fr.rules
-        if (!rules) return undefined
-        const edges = (rules.transitions[fr.row.change.phase] ?? [])
-          .map((e) => plannedTransition(rules, fr.row.change.phase, e.to))
-          .filter((p): p is PlannedTransition => p !== null)
-        const forwards = edges.filter((p) => !p.backward)
-        const backwards = edges.filter((p) => p.backward)
-        if (forwards.length === 0 && backwards.length === 0) return undefined
-        return (
-          <>
-            {forwards.map((p, i) => (
-              <button
-                key={`fw-${p.event}`}
-                type="button"
-                className={BTN_GO_CLS}
-                data-testid={i === 0 ? tid('pass') : tid(`fw-${p.event}`)}
-                disabled={busy}
-                onClick={() => void transitionAction(fr.row.root, name, p)}
-              >
-                {i === 0
-                  ? <>→ {t('progress.act_pass_to', { to: stepLabel(p.to, rules.labelByStep, t) })}</>
-                  : t('inbox.act_forward', { to: p.event })}
-              </button>
-            ))}
-            {backwards.map((p, i) => (
-              <button
-                key={`bw-${p.event}`}
-                type="button"
-                className={BTN_NEG_CLS}
-                data-testid={i === 0 ? tid('reject') : tid(`bw-${p.event}`)}
-                disabled={busy}
-                onClick={() => void transitionAction(fr.row.root, name, p)}
-              >
-                {t('inbox.act_backward', { to: stepLabel(p.to, rules.labelByStep, t) })}
-              </button>
-            ))}
-          </>
-        )
-      }
-      case 'failed': {
-        // 真机验收 G：重试/放弃不在进度上点——给一枚可拷贝的终端命令 chip（抽屉动作条内，作为
-        // 显眼的一键恢复 CTA；TaskDetail 另有完整连接现场命令卡兜底更多字段）。
-        const chip = cmdChipOf(fr)
-        return (
-          <button
-            type="button"
-            className="inline-flex max-w-full items-center gap-2 rounded-[7px] border border-code-border bg-code-bg px-2.5 py-[5px] text-left text-xs text-text-2 hover:border-(--accent)"
-            data-testid={tid('cmd')}
-            title={chip.cmd}
-            aria-label={`${chip.label}：${chip.cmd}`}
-            onClick={() => copyCmd(chip.cmd)}
-          >
-            {chip.label}
-            <span className="truncate font-mono">{chip.cmd}</span>
-          </button>
-        )
-      }
-      case 'running': {
-        // A fresh terminal heartbeat means the user is already working in the native host. Only
-        // AFK's actual runner may be cancelled through the dashboard endpoint.
-        if (
-          fr.row.change.terminalActivity !== undefined
-          && fieldStr(fr.row.change, 'automation') !== 'running'
-        ) return undefined
-        return (
-          <button
-            type="button"
-            className={BTN_NEG_CLS}
-            data-testid={tid('kill')}
-            disabled={busy || fieldStr(fr.row.change, 'automation') !== 'running'}
-            onClick={() => void killAction(fr.row.root, name)}
-          >
-            <Square className="h-3 w-3" aria-hidden="true" /> {t('progress.act_kill')}
-          </button>
-        )
-      }
-      default:
-        return undefined
-    }
-  }
-
-  /** 抽屉动作条：与行内同组；fail/cxl 的引导承接面是 TaskDetail 连接现场命令卡（注释句
-   *  acts_terminal_note 已退役，§4.5）；等产出仅在有欠账时点名缺什么（note_queued/note_agent
-   *  两句无动作注释随 §4.5 退役——排队/等产出本身无动作，无需一句话解释）。 */
-  function drawerActionsFor(fr: FlatRow): ReactNode | undefined {
-    const acts = actionsFor(fr, true)
-    if (acts) return acts
-    if (fr.row.state === 'agent') {
-      const missing = missingGateArtifacts(fr.row.change, fr.rules)
-      if (missing.length > 0) {
-        return (
-          <span className="text-xs text-text-3" data-testid={`prg9-note-${fr.row.change.name}`}>
-            {t('progress.note_agent_missing', { fields: missing.join(' ') })}
-          </span>
-        )
-      }
-    }
-    return undefined
-  }
-
-  // ── 画布投影（画布 v3 · 单项目）：base.groups 是当前项目的各 workflow 组，一组一条站台线
-  //    （无跨项目合并）。stepIds = rules.steps（缺失回退在制行出现过的 phase 序）+ 追加在制相位
-  //    +追加归档相位（G17 底线卡不消失 + 归档不失联：每条归档 change 都落到它相位的小站）。
-  //    change 小卡 = FlatRow 同源判定（状态点 tone / 沙箱谓词 / 页签未命中淡出 / 抽屉选中）。
-  //    归档 change 只读投影按相位挂到 CanvasStep.archivedChanges（小站点开只读列出）。空组
-  //    （零在制）不占画布。──
-  const canvasGroups: CanvasGroup[] = useMemo(() => {
-    const out: CanvasGroup[] = []
-    for (const group of base.groups) {
-      if (group.rows.length === 0) continue
-      if (effectiveWf !== 'all' && group.workflow !== effectiveWf) continue
-      const rules = rulesByKey.get(group.key) as ProgressRules | undefined
-      const stepIds: string[] = rules ? [...rules.steps] : []
-      for (const row of group.rows) if (!stepIds.includes(row.change.phase)) stepIds.push(row.change.phase)
-      for (const row of group.archived) if (!stepIds.includes(row.change.phase)) stepIds.push(row.change.phase)
-      if (stepIds.length === 0) continue
-      const archivedByPhase = new Map<string, ProgressRow[]>()
-      for (const row of group.archived) {
-        archivedByPhase.set(row.change.phase, [...(archivedByPhase.get(row.change.phase) ?? []), row])
-      }
-      const projName = rootBasename(group.root)
-      const linearProgress = group.workflow === 'default' || (rules !== undefined && rules.steps.every((id) => {
-        const outgoing = rules.transitions[id] ?? []
-        const incoming = rules.steps.reduce(
-          (count, from) => count + (rules.transitions[from] ?? []).filter((edge) => edge.to === id).length,
-          0,
-        )
-        return outgoing.length <= 1 && incoming <= 1
-      }))
-      const steps: CanvasStep[] = stepIds.map((id) => {
-        const arch = [...(archivedByPhase.get(id) ?? [])].sort((a, b) => compareArchived(a.change, b.change))
-        const archivedChanges: CanvasArchivedChange[] = arch.map((row) => {
-          const fr = toFlatRow(row, rules, group.workflow)
-          const ds = dotOf(fr)
-          return { key: fr.key, name: row.change.name, tone: ds.tone, state: ds.state }
-        })
-        return {
-          id,
-          label: stepLabel(id, rules?.labelByStep, t),
-          gate: rules?.gateByStep[id] ?? null,
-          archived: archivedChanges.length,
-          archivedChanges,
-          state: group.rows.some((row) =>
-            row.change.todo?.stages.find((stage) => stage.id === id)?.status === 'current')
-            ? 'current'
-            : group.rows.length > 0 && group.rows.every((row) =>
-              row.change.todo?.stages.find((stage) => stage.id === id)?.status === 'done')
-              ? 'done'
-              : 'pending',
-        }
-      })
-      const changes: CanvasChange[] = group.rows.map((row) => {
-        const fr = frByKey.get(rowKeyOf(row.root, row.change.name))!
-        const ds = dotOf(fr)
-        const status = judge(fr, row.state === 'gate' ? gateEvidence(row.change, fr.rules) : [], phaseLabelOf(fr))
-        return {
-          key: fr.key,
-          name: row.change.name,
-          phase: row.change.phase,
-          state: ds.state,
-          tone: ds.tone,
-          running: row.state === 'running',
-          executionSource: inSandbox(fr)
-            ? 'automation'
-            : row.change.terminalActivity === undefined ? 'none' : 'terminal',
-          sandbox: inSandbox(fr),
-          dimmed: deckTab !== 'all' && !deckMatch(fr, deckTab),
-          selected: drawerKey === fr.key,
-          statusLabel: status.text,
-        }
-      })
-      out.push({
-        key: `${group.root}::${group.workflow}`,
-        projName,
-        workflow: group.workflow,
-        steps,
-        changes,
-        linearProgress,
-      })
-    }
-    return out
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- dotOf/t 随组件重建，实际输入已全列
-  }, [base, rulesByKey, frByKey, effectiveWf, deckTab, drawerKey])
+  const canvasGroups = useMemo(() => buildCanvasGroups({
+    selection: base,
+    rulesByKey,
+    rowsByKey: frByKey,
+    workflowFilter: effectiveWf,
+    deckTab,
+    selectedKey: drawerKey,
+    t,
+    dotOf,
+    statusOf: (row) => judge(
+      row,
+      row.row.state === 'gate' ? gateEvidence(row.row.change, row.rules) : [],
+      phaseLabelOf(row),
+    ).text,
+  }), [base, rulesByKey, frByKey, effectiveWf, deckTab, drawerKey, t])
 
   return (
     <section className="relative mx-auto w-full max-w-[1088px] pt-7 pb-5" data-testid="progress-view" ref={rootRef}>
-      <div className="mb-8 flex flex-wrap items-end justify-between gap-4" data-anim="prg-chrome" data-testid="prg-hero">
-        <div>
-          <div className="flex flex-wrap items-center gap-2.5">
-            <h1 className="text-[30px] font-bold leading-none tracking-[-0.025em] text-text">进度</h1>
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-1 text-[11px] font-medium text-text-3">
-              <span className="h-1.5 w-1.5 rounded-full bg-green" aria-hidden="true" />
-              {t('progress.realtime_sync')}
-            </span>
-          </div>
-          <p className="mt-2 text-[13px] leading-5 text-text-3">沿工作流查看每个任务所处阶段，需要处理的事项会优先显示</p>
-        </div>
-        <button
-          type="button"
-          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-(--accent) px-4 text-sm font-semibold text-white shadow-sm transition-[transform,box-shadow] hover:shadow-md active:translate-y-px motion-reduce:transform-none"
-          data-testid="progress-new-change"
-          onClick={() => setCreateOpen(true)}
-        >
-          <Plus className="h-4 w-4" aria-hidden="true" /> {t('change_create.create')}
-        </button>
-      </div>
-
-      {flatRows.length > 0 && (
-        <div className="mb-5 flex flex-wrap items-center justify-between gap-4" data-anim="prg-chrome" data-testid="prg-filterbar">
-            <div
-              className="inline-flex items-center gap-1 rounded-xl bg-fill p-1"
-              role="tablist"
-              aria-label={t('progress.tabs_label')}
-              data-testid="prg9t-tabs"
-            >
-              {DECK_TABS.map((tabId) => (
-                <button
-                  key={tabId}
-                  type="button"
-                  role="tab"
-                  className="group flex min-h-9 items-center gap-1.5 rounded-lg px-3 text-[13px] font-semibold text-text-3 transition-colors hover:text-text aria-selected:bg-card aria-selected:text-text aria-selected:shadow-sm"
-                  aria-selected={deckTab === tabId}
-                  data-testid={`prg9t-tab-${tabId}`}
-                  onClick={() => setDeckTab(tabId)}
-                >
-                  {t(`progress.tab_${tabId}`)}
-                  <span className="inline-flex min-w-[18px] items-center justify-center rounded-full bg-card px-1.5 font-mono text-[11px] leading-[18px] text-text-3 group-aria-selected:bg-(--accent) group-aria-selected:text-white" data-testid={`prg9t-n-${tabId}`}>
-                    {deckCounts[tabId]}
-                  </span>
-                </button>
-              ))}
-            </div>
-
-            {wfNames.length > 0 && (
-              <label className="relative max-[760px]:basis-full">
-                <span className="sr-only">按工作流筛选</span>
-                <select
-                  className="h-10 min-w-[180px] appearance-none rounded-xl border border-border bg-card py-2 pr-9 pl-3 text-[13px] font-semibold text-text outline-none transition-shadow focus:border-(--accent) focus:ring-3 focus:ring-accent-t max-[760px]:w-full"
-                  data-testid="prg-workflow-select"
-                  value={effectiveWf}
-                  onChange={(event) => setWfFilter(event.target.value)}
-                >
-                  <option value="all">{t('progress.wf_all')}</option>
-                  {wfNames.map((wf) => <option key={wf} value={wf}>{wf}</option>)}
-                </select>
-                <ChevronDown className="pointer-events-none absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2 text-text-3" aria-hidden="true" />
-              </label>
-            )}
-        </div>
-      )}
+      <ProgressToolbar
+        t={t}
+        rowCount={flatRows.length}
+        deckTab={deckTab}
+        deckCounts={deckCounts}
+        workflows={wfNames}
+        workflow={effectiveWf}
+        onDeckTab={setDeckTab}
+        onWorkflow={setWfFilter}
+        onCreate={() => setCreateOpen(true)}
+      />
 
       {error && <p className="py-2 text-[13px] text-red-d" data-testid="prg-error">{error}</p>}
       {loading && !snapshot && <p className="py-2 text-[13px] text-text-3">{t('common.loading')}</p>}
@@ -1144,34 +529,26 @@ export function ProgressView({ snapshot, loading, error, currentRoot, rulesByKey
       )}
 
       {drawerRow && (
-        <>
-          <div className="fixed inset-0 z-40 bg-scrim" data-testid="prg9-scrim" ref={scrimRef} onClick={closeDrawer} />
-          <aside
-            className="fixed top-0 right-0 bottom-0 z-50 flex w-[560px] max-w-[94vw] flex-col border-l border-border-2 bg-card shadow-lg"
-            data-anim="prg-drawer"
-            role="dialog"
-            aria-modal="true"
-            aria-label={drawerRow.row.change.name}
-            data-testid="prg9-drawer"
-            ref={drawerRef}
-          >
-            <div className="min-h-0 flex-1 overflow-y-auto p-4">
-              <TaskDetail
-                root={drawerRow.row.root}
-                change={drawerRow.row.change}
-                rules={drawerRow.rules}
-                badge={badgeEl(drawerRow, judge(drawerRow, drawerRow.row.state === 'gate' ? gateEvidence(drawerRow.row.change, drawerRow.rules) : [], phaseLabelOf(drawerRow)), 'prg9-dw-badge')}
-                actions={drawerActionsFor(drawerRow)}
-                collapseTechnical
-                onClose={closeDrawer}
-                onToast={onToast}
-              />
-              {drawerRow.row.state === 'running' && fieldStr(drawerRow.row.change, 'automation') === 'running' && (
-                <RunLogPane root={drawerRow.row.root} change={drawerRow.row.change} />
-              )}
-            </div>
-          </aside>
-        </>
+        <ProgressDrawer
+          row={drawerRow}
+          drawerRef={drawerRef}
+          scrimRef={scrimRef}
+          badge={badgeEl(
+            drawerRow,
+            judge(
+              drawerRow,
+              drawerRow.row.state === 'gate'
+                ? gateEvidence(drawerRow.row.change, drawerRow.rules)
+                : [],
+              phaseLabelOf(drawerRow),
+            ),
+            'prg9-dw-badge',
+          )}
+          actions={drawerActionsFor(drawerRow)}
+          onClose={closeDrawer}
+          onToast={onToast}
+        />
+
       )}
     </section>
   )

@@ -66,6 +66,8 @@ export const LIST_FIELDS = ['scope', 'related_files', 'spec_scope', 'depends_on'
 
 export const PHASES = ['open', 'explore', 'spec', 'build', 'verify', 'ship', 'archive'] as const
 export type Phase = (typeof PHASES)[number]
+export const DOCUMENT_PROFILE_IDS = ['legacy-full', 'document-v1'] as const
+export type DocumentProfileId = (typeof DOCUMENT_PROFILE_IDS)[number]
 
 // track 合法性全集不再是 types.ts 的写死常量：运行时权威改由动态 Track Registry 承载
 // （GOAL.md 清单 T · R2）。内建 Track 的 id/默认/排序单一真相源在 tracks/builtins.ts 的
@@ -129,6 +131,12 @@ export interface RunMetadata {
   transitionSequence: number
   /** 尚未发生过任何 canonical transition 的新 change 合法地没有 head。 */
   transitionHead?: string
+  /** Immutable document-governance identity selected when the Change was created. */
+  documentProfile?: DocumentProfileId
+  /** SHA-256 of the canonical document policy selected at initialization. */
+  documentGovernanceFingerprint?: string
+  /** SHA-256 of the complete workflow-owned effective plan selected at initialization. */
+  workflowPlanFingerprint?: string
   /** Immutable policy snapshot bound before an autonomous attempt starts. */
   automationPolicy?: AutomationPolicySnapshot
   /** H9 governed identity；两者只在 automationPolicy 已绑定时成对存在。 */
@@ -185,6 +193,14 @@ export interface InitOptions {
     phase: string
     /** Custom workflow declared `openspec_contract: required`; initialize its evidence ledger with state. */
     openspecContract?: boolean
+    /** Custom workflow declared any versioned document contract; initialize its evidence ledger atomically. */
+    documentContract?: boolean
+    /** Canonical identity persisted with the run; booleans above remain compatibility assembly hints. */
+    documentProfile?: DocumentProfileId
+    /** Exact canonical policy identity; omitted only by profile-only runs written by older versions. */
+    documentGovernanceFingerprint?: string
+    /** Exact workflow graph/Skill/document/review capability identity. */
+    workflowPlanFingerprint?: string
   }
 }
 

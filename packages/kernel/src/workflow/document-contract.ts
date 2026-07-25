@@ -36,6 +36,14 @@ export interface DocumentOutputRequirement {
   readonly producerCandidates: readonly string[]
 }
 
+export interface DocumentGovernancePolicy {
+  readonly id: 'openspec-v1' | 'document-v1'
+  readonly steps: readonly string[]
+  readonly outputsByStep: Readonly<Record<string, readonly DocumentOutputRequirement[]>>
+  readonly mutableByStep: Readonly<Record<string, readonly DocumentOutputRequirement[]>>
+  readonly readsByStep: Readonly<Record<string, readonly DocumentKind[]>>
+}
+
 const OUTPUTS_BY_PHASE: Readonly<Record<DocumentContractPhase, readonly DocumentOutputRequirement[]>> = {
   open: [
     { kind: 'proposal', producerCandidates: ['openspec-propose', 'opsx:propose'] },
@@ -123,78 +131,12 @@ const READS_BY_PHASE: Readonly<Record<DocumentContractPhase, readonly DocumentKi
   ],
 }
 
-const CANONICAL_TRANSITIONS: Readonly<Record<DocumentContractPhase, readonly DocumentContractPhase[]>> = {
-  open: ['explore'],
-  explore: ['spec'],
-  spec: ['build'],
-  build: ['verify', 'spec'],
-  verify: ['ship', 'build'],
-  ship: ['archive'],
-  archive: [],
-}
-
-const REVIEW_PHASES: ReadonlySet<DocumentContractPhase> = new Set(['explore', 'spec', 'verify'])
-
-/**
- * A governed custom workflow is not merely a seven-node drawing.  Its runtime must expose the
- * build target as an explicit output and consume it during verification, otherwise a later step
- * cannot truthfully read the immutable target that OpenSpec evidence refers to.
- */
-const REQUIRED_RUNTIME_REFS: Readonly<Partial<Record<DocumentContractPhase, {
-  readonly inputs?: readonly { readonly field: string; readonly type: string }[]
-  readonly outputs?: readonly { readonly field: string; readonly type: string }[]
-}>>> = {
-  build: { outputs: [{ field: 'build_sha', type: 'string' }] },
-  verify: {
-    inputs: [{ field: 'build_sha', type: 'string' }],
-    outputs: [{ field: 'verification_report', type: 'file_path' }],
-  },
-}
-
-function hasFieldRef(
-  refs: readonly { readonly field: string; readonly type: string }[],
-  required: { readonly field: string; readonly type: string },
-): boolean {
-  return refs.some((ref) => ref.field === required.field && ref.type === required.type)
-}
-
-/**
- * A custom workflow may opt into the document contract only when it also declares the phase skills
- * that make each receipt meaningful.  This is intentionally a small role-based matrix rather than
- * a giant copy of the default manifest: the packaged bare IDs are canonical, while legacy host
- * namespaces remain accepted for existing custom workflows. This still prevents a workflow from
- * claiming OpenSpec governance with seven empty lanes.
- */
-const REQUIRED_SKILL_GROUPS: Readonly<Record<DocumentContractPhase, readonly {
-  readonly label: string
-  readonly alternatives: readonly string[]
-}[]>> = {
-  open: [
-    { label: 'OpenSpec proposal', alternatives: ['openspec-propose', 'opsx:propose'] },
-    { label: 'pipeline open', alternatives: ['pipeline-open', 'pipeline-lite:pipeline-open'] },
-  ],
-  explore: [
-    { label: 'pipeline explore', alternatives: ['pipeline-explore', 'pipeline-lite:pipeline-explore'] },
-    { label: 'Superpower brainstorming', alternatives: ['brainstorming', 'superpowers:brainstorming'] },
-  ],
-  spec: [
-    { label: 'pipeline spec', alternatives: ['pipeline-spec', 'pipeline-lite:pipeline-spec'] },
-    { label: 'OpenSpec delta proposal', alternatives: ['openspec-propose', 'opsx:propose'] },
-    { label: 'Superpower plan', alternatives: ['writing-plans', 'superpowers:writing-plans'] },
-  ],
-  build: [{ label: 'pipeline build', alternatives: ['pipeline-build', 'pipeline-lite:pipeline-build'] }],
-  verify: [
-    { label: 'pipeline verify', alternatives: ['pipeline-verify', 'pipeline-lite:pipeline-verify'] },
-    {
-      label: 'Superpower verification',
-      alternatives: ['verification-before-completion', 'superpowers:verification-before-completion'],
-    },
-  ],
-  ship: [
-    { label: 'pipeline ship', alternatives: ['pipeline-ship', 'pipeline-lite:pipeline-ship'] },
-    { label: 'OpenSpec apply', alternatives: ['openspec-apply-change', 'opsx:apply'] },
-  ],
-  archive: [{ label: 'pipeline archive', alternatives: ['pipeline-archive', 'pipeline-lite:pipeline-archive'] }],
+export const LEGACY_DOCUMENT_GOVERNANCE_POLICY: DocumentGovernancePolicy = {
+  id: 'openspec-v1',
+  steps: DOCUMENT_CONTRACT_PHASES,
+  outputsByStep: OUTPUTS_BY_PHASE,
+  mutableByStep: MUTABLE_RECORDS_BY_PHASE,
+  readsByStep: READS_BY_PHASE,
 }
 
 function includes<T extends readonly string[]>(values: T, value: string): value is T[number] {
@@ -207,6 +149,142 @@ export function isDocumentContractPhase(value: string): value is DocumentContrac
 
 export function isDocumentKind(value: string): value is DocumentKind {
   return includes(DOCUMENT_KINDS, value)
+}
+
+export function documentGovernancePolicy(
+  workflowName: string,
+  workflow?: {
+    readonly openspecContract?: WorkflowDef['openspecContract']
+    readonly documentContract?: WorkflowDef['documentContract']
+    readonly steps: readonly { readonly id: string }[]
+  },
+): DocumentGovernancePolicy | undefined {
+  if (workflowName === 'default' || workflow?.openspecContract === 'required') {
+    return LEGACY_DOCUMENT_GOVERNANCE_POLICY
+  }
+  const contract = workflow?.documentContract
+  if (!contract) return undefined
+  const outputsByStep: Record<string, DocumentOutputRequirement[]> = Object.fromEntries(
+    workflow.steps.map((step) => [step.id, []]),
+  )
+  for (const slot of contract.slots) {
+    if (!isDocumentKind(slot.kind)) continue
+    outputsByStep[slot.ownerStep]?.push({ kind: slot.kind, producerCandidates: slot.producers })
+  }
+  const readsByStep: Record<string, readonly DocumentKind[]> = Object.fromEntries(
+    workflow.steps.map((step) => [step.id, []]),
+  )
+  for (const read of contract.reads) {
+    readsByStep[read.step] = read.kinds.filter(isDocumentKind)
+  }
+  return {
+    id: 'document-v1',
+    steps: workflow.steps.map((step) => step.id),
+    outputsByStep,
+    mutableByStep: Object.fromEntries(workflow.steps.map((step) => [step.id, []])),
+    readsByStep,
+  }
+}
+
+export function isDocumentPolicyStep(policy: DocumentGovernancePolicy, value: string): boolean {
+  return policy.steps.includes(value)
+}
+
+export function outputsRequiredForPolicyStep(
+  policy: DocumentGovernancePolicy,
+  step: string,
+): readonly DocumentOutputRequirement[] {
+  return policy.outputsByStep[step] ?? []
+}
+
+export function readsRequiredForPolicyStep(
+  policy: DocumentGovernancePolicy,
+  step: string,
+): readonly DocumentKind[] {
+  return policy.readsByStep[step] ?? []
+}
+
+export function recordsRequiredForPolicyStep(
+  policy: DocumentGovernancePolicy,
+  step: string,
+): readonly DocumentOutputRequirement[] {
+  const required: DocumentOutputRequirement[] = []
+  for (const candidate of policy.steps) {
+    required.push(...outputsRequiredForPolicyStep(policy, candidate))
+    if (candidate === step) break
+  }
+  return required
+}
+
+export function documentOwnerPolicyStep(
+  policy: DocumentGovernancePolicy,
+  kind: DocumentKind,
+): string | undefined {
+  return policy.steps.find((step) =>
+    outputsRequiredForPolicyStep(policy, step).some((requirement) => requirement.kind === kind),
+  )
+}
+
+function recordRequirementForPolicy(
+  policy: DocumentGovernancePolicy,
+  kind: DocumentKind,
+  step: string,
+): DocumentOutputRequirement | undefined {
+  return [
+    ...outputsRequiredForPolicyStep(policy, step),
+    ...(policy.mutableByStep[step] ?? []),
+  ].find((requirement) => requirement.kind === kind)
+}
+
+export function isDocumentRecordAllowedInPolicyStep(
+  policy: DocumentGovernancePolicy,
+  kind: DocumentKind,
+  step: string,
+): boolean {
+  return recordRequirementForPolicy(policy, kind, step) !== undefined
+}
+
+export function isDocumentProducerAllowedInPolicyStep(
+  policy: DocumentGovernancePolicy,
+  kind: DocumentKind,
+  step: string,
+  producer: string,
+): boolean {
+  const requirement = recordRequirementForPolicy(policy, kind, step)
+  if (!requirement) return false
+  const supplied = new Set(aliasesForSkill(producer))
+  return requirement.producerCandidates.some((candidate) =>
+    aliasesForSkill(candidate).some((alias) => supplied.has(alias)),
+  )
+}
+
+/**
+ * Validate the producer stored on the latest ledger record at a later workflow step.
+ *
+ * Living documents may be re-recorded by a phase-local producer after their owner step. The
+ * ledger intentionally stores only the latest digest/producer pair, so evidence validation must
+ * accept any producer that was authorized for this document from its owner through the current
+ * step. Checking only the owner would incorrectly stale every legitimate mutable record.
+ */
+export function isRecordedDocumentProducerAllowedThroughPolicyStep(
+  policy: DocumentGovernancePolicy,
+  kind: DocumentKind,
+  currentStep: string,
+  producer: string,
+): boolean {
+  for (const step of policy.steps) {
+    if (isDocumentProducerAllowedInPolicyStep(policy, kind, step, producer)) return true
+    if (step === currentStep) break
+  }
+  return false
+}
+
+export function recordProducerCandidatesForPolicyStep(
+  policy: DocumentGovernancePolicy,
+  kind: DocumentKind,
+  step: string,
+): readonly string[] {
+  return recordRequirementForPolicy(policy, kind, step)?.producerCandidates ?? []
 }
 
 export function outputsRequiredForPhase(phase: DocumentContractPhase): readonly DocumentOutputRequirement[] {
@@ -311,10 +389,13 @@ export function isOutputAllowedInPhase(kind: DocumentKind, phase: DocumentContra
 export function isOpenSpecDocumentContractRequired(
   workflowName: string,
   _track: string,
-  workflow?: { readonly openspecContract?: WorkflowDef['openspecContract'] },
+  workflow?: {
+    readonly openspecContract?: WorkflowDef['openspecContract']
+    readonly documentContract?: WorkflowDef['documentContract']
+  },
 ): boolean {
   if (workflowName === 'default') return true
-  return workflow?.openspecContract === 'required'
+  return workflow?.openspecContract === 'required' || workflow?.documentContract !== undefined
 }
 
 /** A rollback remains available even when forward evidence is stale or incomplete. */
@@ -324,61 +405,14 @@ export function shouldEnforceDocumentEvidenceOnTransition(from: string, to: stri
   return !(fromIndex >= 0 && toIndex >= 0 && toIndex < fromIndex)
 }
 
-/** Strict structural validation for a custom workflow declaring OpenSpec governance. */
-export function validateOpenSpecContractWorkflow(workflow: WorkflowDef): readonly string[] {
-  if (workflow.openspecContract !== 'required') return []
-
-  const errors: string[] = []
-  const actualIds = workflow.steps.map((step) => step.id)
-  if (actualIds.length !== DOCUMENT_CONTRACT_PHASES.length) {
-    errors.push(`openspec_contract: required 必须恰好声明 ${DOCUMENT_CONTRACT_PHASES.length} 个标准阶段`)
-  }
-  for (const [index, expected] of DOCUMENT_CONTRACT_PHASES.entries()) {
-    const actual = actualIds[index]
-    if (actual !== expected) {
-      errors.push(`openspec_contract: required 的第 ${index + 1} 阶段必须是 '${expected}'（当前 '${actual ?? '缺失'}'）`)
-    }
-  }
-
-  for (const phase of DOCUMENT_CONTRACT_PHASES) {
-    const step = workflow.steps.find((candidate) => candidate.id === phase)
-    if (!step) continue
-    const expectedTargets = CANONICAL_TRANSITIONS[phase]
-    for (const target of expectedTargets) {
-      if (!step.transitions.some((transition) => transition.to === target)) {
-        errors.push(`openspec_contract: required 要求 '${phase}' 可转换到 '${target}'`)
-      }
-    }
-    if (REVIEW_PHASES.has(phase) && step.gate !== 'review') {
-      errors.push(`openspec_contract: required 要求 '${phase}' 的 gate=review`)
-    }
-    for (const group of REQUIRED_SKILL_GROUPS[phase]) {
-      const declared = step.skills.map((skill) => skill.id)
-      const satisfied = declared.some((skill) => {
-        const aliases = new Set(aliasesForSkill(skill))
-        return group.alternatives.some((candidate) => aliasesForSkill(candidate).some((alias) => aliases.has(alias)))
-      })
-      if (!satisfied) {
-        errors.push(
-          `openspec_contract: required 要求 '${phase}' 声明 ${group.label} skill（允许: ${group.alternatives.join(' | ')}）`,
-        )
-      }
-    }
-    const runtimeRefs = REQUIRED_RUNTIME_REFS[phase]
-    for (const required of runtimeRefs?.inputs ?? []) {
-      if (!hasFieldRef(step.inputs, required)) {
-        errors.push(
-          `openspec_contract: required 要求 '${phase}' 声明 input '${required.field}'（type=${required.type}）以读取构建基线`,
-        )
-      }
-    }
-    for (const required of runtimeRefs?.outputs ?? []) {
-      if (!hasFieldRef(step.outputs, required)) {
-        errors.push(
-          `openspec_contract: required 要求 '${phase}' 声明 output '${required.field}'（type=${required.type}）以留下可验证证据`,
-        )
-      }
-    }
-  }
-  return errors
+export function shouldEnforceDocumentPolicyOnTransition(
+  policy: DocumentGovernancePolicy,
+  from: string,
+  to: string,
+): boolean {
+  const fromIndex = policy.steps.indexOf(from)
+  const toIndex = policy.steps.indexOf(to)
+  return !(fromIndex >= 0 && toIndex >= 0 && toIndex < fromIndex)
 }
+
+export { validateOpenSpecContractWorkflow } from './document-contract-validation.js'

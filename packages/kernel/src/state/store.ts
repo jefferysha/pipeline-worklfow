@@ -3,7 +3,7 @@
  * 官方读写以 `.pipeline-run/current.json` 为真相；YAML 只在 current 从未出现时兼容读取，并在每次
  * canonical commit 后 best-effort 投影。互斥走 mkdir 原子锁，kernel 零第三方运行时依赖。
  */
-import { mkdir, readFile, stat } from 'node:fs/promises'
+import { mkdir, readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { atomicLinkPublish, atomicReplaceFile } from './atomic-publish.js'
 import {
@@ -21,12 +21,20 @@ import {
   type StateWriteResult,
 } from '../types.js'
 import { withLock } from './lock.js'
-import { emptyFields, parsePipeline, quoteGate, serializePipeline } from './parse.js'
+import { parsePipeline, quoteGate, serializePipeline } from './parse.js'
 import {
   projectionMetadataFor, publishInitialRunRevision, publishRunRevision,
   readCurrentRunRevision, readImmutableRunRevision,
   type RunRevision,
 } from './run-revision-store.js'
+import {
+  defaultStateClock,
+  detectBaseBranch,
+  initialDocumentGovernanceFingerprint,
+  initialDocumentProfile,
+  initialFields,
+  initialWorkflowPlanFingerprint,
+} from './state-init.js'
 
 export const STATE_FILE_NAME = '.pipeline.yaml'
 
@@ -41,11 +49,6 @@ export interface StateStoreOptions {
 
 /** 对齐老内核 validate_change_name：非空、仅 [a-zA-Z0-9_-]、禁 ..（path traversal） */
 const CHANGE_NAME_RE = /^[a-zA-Z0-9_-]+$/
-
-/** 缺省时钟：ISO8601 UTC 秒级精度，对齐老内核 `date -u +%Y-%m-%dT%H:%M:%SZ` */
-function defaultClock(): string {
-  return new Date().toISOString().replace(/\.\d+Z$/, 'Z')
-}
 
 function stateFilePath(changeDir: string): string {
   return path.join(changeDir, STATE_FILE_NAME)
@@ -64,95 +67,6 @@ function alreadyInitialized(pathname: string): NodeJS.ErrnoException {
  * 无法表达"不可变"（同 sequence+id 两次写会悄悄改写第一次内容），那里改用自己的
  * tmp + link + unlink（见该文件头部注释）。 */
 export const atomicWriteFile = atomicReplaceFile
-
-/**
- * base_branch 探测：读 `<gitdir>/HEAD` 的 `ref: refs/heads/<branch>`（纯 fs、零 spawn）。
- * git worktree/submodule 内 `.git` 是**文件**（`gitdir: <path>` 指针）而非目录——直接
- * readFile(`.git/HEAD`) 会 ENOTDIR 静默回退 main（automation 恰用 worktree）；此处先辨 .git
- * 类型，为文件则解析指针定位真 gitdir 再读 HEAD。
- * detached / 无 git / 读失败 → 回退 "main"（一等态，绝不阻断 init——对齐老内核）。
- */
-async function detectBaseBranch(repoRoot: string): Promise<string> {
-  try {
-    const gitPath = path.join(repoRoot, '.git')
-    let gitDir = gitPath
-    const st = await stat(gitPath)
-    if (!st.isDirectory()) {
-      // worktree/submodule：`.git` 文件内为 `gitdir: <path>`（可为绝对或相对仓根）
-      const pointer = await readFile(gitPath, 'utf8')
-      const pm = /^gitdir:\s*(.+)$/m.exec(pointer)
-      if (!pm) return 'main'
-      gitDir = path.resolve(repoRoot, pm[1]!.trim())
-    }
-    const head = await readFile(path.join(gitDir, 'HEAD'), 'utf8')
-    const m = /^ref: refs\/heads\/(\S+)$/.exec(head.trim())
-    const branch = m?.[1]
-    if (branch) return branch
-  } catch {
-    // 无 git / 指针坏 / 读失败 —— 走回退
-  }
-  return 'main'
-}
-
-/** 老仓 state-init.sh heredoc 的逐字段初值（双 review 由 effective track policy 显式注入）。 */
-function initialFields(
-  opts: InitOptions, ts: string, baseBranch: string, createdBy: string,
-): Record<FieldName, string | string[]> {
-  const f = emptyFields()
-  f.track = opts.track
-  f.preset = opts.preset
-  f.created_by = createdBy
-  f.assignee = 'null'
-  // 缺省 open；custom workflow 首态（opts.initialWorkflow）随这次构造直接生效，不是 init 独占
-  // 创建之后再补一次 setMany（见 init() 内的 P1 修复注释）。
-  f.phase = opts.initialWorkflow?.phase ?? 'open'
-  f.phase_status = 'pending'
-  f.design_doc = 'null'
-  f.plan = 'null'
-  f.verification_report = 'null'
-  f.build_mode = 'null'
-  f.isolation = 'null'
-  f.build_sha = 'null'
-  f.agent_review_result = opts.reviewSeed
-  f.codex_review_result = opts.reviewSeed
-  f.verify_result = 'pending'
-  f.branch_status = 'pending'
-  f.direct_override = 'false'
-  f.prd_path = 'null'
-  f.pr_url = 'null'
-  f.automation = 'off'
-  f.automation_queued_at = ''
-  f.automation_sandbox = ''
-  f.automation_worktree = ''
-  f.automation_attempts = '0'
-  f.automation_last_error = ''
-  f.automation_preserved_path = ''
-  f.branch = 'null'
-  f.base_branch = baseBranch
-  f.scope = 'null'
-  f.related_files = 'null'
-  f.spec_scope = 'null'
-  f.depends_on = 'null'
-  f.created_at = ts
-  f.updated_at = ts
-  f.verified_at = 'null'
-  f.archived_at = 'null'
-  f.archived = 'false'
-  // workflow 缺省走 emptyFields() 的 'default'；custom workflow 首态显式覆盖（同 phase）。
-  // automation_current_phase 缺省空串（run 外无沙箱内阶段，v5 T4），同样由 emptyFields() 覆盖
-  // ——这里显式写一遍以对齐「heredoc 逐字段初值」的可读清单。
-  if (opts.initialWorkflow) f.workflow = opts.initialWorkflow.workflow
-  f.automation_current_phase = ''
-  f.automation_cause = '' // 同上——F-b 末尾追加字段,缺省空串(=成因未知),显式列出保持清单完整(评审 nit)
-  // review-gate v2：空串 = 当前没有待确认或已确认但尚未被下一条 transition 消费的 review receipt。
-  // 具体 request/acknowledge 只经 pipeline review 子命令写入，普通 set/cas 不开放这组内部字段。
-  f.review_gate_phase = ''
-  f.review_gate_status = ''
-  f.review_gate_event = ''
-  f.review_requested_at = ''
-  f.review_acknowledged_at = ''
-  return f
-}
 
 function gateValue(field: FieldName, value: string | string[]): void {
   if (Array.isArray(value)) {
@@ -301,7 +215,7 @@ class FsStateStore implements StateStore {
     let current = await readCurrentRunRevision(changeDir)
     if (current === undefined) {
       const legacy = parsePipeline(await readFile(stateFilePath(changeDir), 'utf8'))
-      current = await publishInitialRunRevision(changeDir, legacy, defaultClock(), 'migration')
+      current = await publishInitialRunRevision(changeDir, legacy, defaultStateClock(), 'migration')
     } else {
       const status = await inspectProjectionAgainst(changeDir, current)
       if (status.status === 'drift') {
@@ -310,7 +224,7 @@ class FsStateStore implements StateStore {
     }
     const next = await publishRunRevision(changeDir, current, nextState, {
       kind: mutation.kind,
-      observedAt: defaultClock(),
+      observedAt: defaultStateClock(),
       ...(mutation.transitionRecordId === undefined ? {} : { transitionRecordId: mutation.transitionRecordId }),
     })
     try {
@@ -421,7 +335,7 @@ class FsStateStore implements StateStore {
       serializePipeline(imported)
       const next = await publishRunRevision(changeDir, current, imported, {
         kind: 'legacy-import',
-        observedAt: defaultClock(),
+        observedAt: defaultStateClock(),
       })
       try {
         await this.writeProjection(stateFilePath(changeDir), projectionContent(next))
@@ -437,7 +351,7 @@ class FsStateStore implements StateStore {
     if (!CHANGE_NAME_RE.test(name) || name.includes('..')) {
       throw new Error(`init: 非法 change 名 '${name}'（仅允许 a-zA-Z0-9_-，禁 ..）`)
     }
-    const clock = opts.clock ?? defaultClock
+    const clock = opts.clock ?? defaultStateClock
     const changeDir = path.join(path.resolve(opts.repoRoot), 'openspec', 'changes', name)
     await mkdir(changeDir, { recursive: true })
 
@@ -478,7 +392,20 @@ class FsStateStore implements StateStore {
     // 成功则身份、custom 首态与其余字段同时可见，没有中间态。
     const state: PipelineState = {
       fields: initialFields(opts, ts, baseBranch, createdBy),
-      runMetadata: opts.runId ? { runId: opts.runId, transitionSequence: 0, transitionHead: undefined } : undefined,
+      runMetadata: opts.runId ? {
+        runId: opts.runId,
+        transitionSequence: 0,
+        transitionHead: undefined,
+        ...(initialDocumentProfile(opts) === undefined
+          ? {}
+          : { documentProfile: initialDocumentProfile(opts) }),
+        ...(initialDocumentGovernanceFingerprint(opts) === undefined
+          ? {}
+          : { documentGovernanceFingerprint: initialDocumentGovernanceFingerprint(opts) }),
+        ...(initialWorkflowPlanFingerprint(opts) === undefined
+          ? {}
+          : { workflowPlanFingerprint: initialWorkflowPlanFingerprint(opts) }),
+      } : undefined,
       opaqueTail: '',
     }
     // 独占创建的原子性硬化（第 7/8/9 轮 codex review）：wx 只保证"创建时不覆盖已有文件"，不

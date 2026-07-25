@@ -21,6 +21,7 @@
 import { LOOPS_SCHEMA, parseLoopsYaml, validateSchema } from './registry.js'
 import type { LoopBudget, LoopKind, LoopRisk, LoopStatus } from './types.js'
 import { indentOf, insertPointAtBlockEnd, locateLoop, type LoopBlock } from './yamlBlock.js'
+import { required } from '../required.js'
 
 /** loop 顶层可 patch 标量字段（schema 同名约束在写回后由调用方整文档校验）。
  * v5 T20：+runner（双 runner 数据面——编排页 runner 下拉走 POST /api/loops/update 落盘）。
@@ -77,7 +78,7 @@ function formatScalar(v: string | number | null, field: string): string {
 function findFieldLine(lines: string[], from: number, to: number, indent: number, field: string): number {
   const re = new RegExp(`^\\s{${indent}}${field}:(\\s|$)`)
   for (let i = from; i < to; i++) {
-    if (re.test(lines[i]!)) return i
+    if (re.test(required(lines[i]))) return i
   }
   return -1
 }
@@ -100,7 +101,7 @@ function patchBudgetScalar(lines: string[], block: LoopBlock, field: string, val
   // budget 子块：其后缩进 > fieldIndent 的连续区（空行跳过）
   let subEnd = block.end
   for (let i = budgetAt + 1; i < block.end; i++) {
-    const line = lines[i]!
+    const line = required(lines[i])
     if (line.trim() === '') continue
     if (indentOf(line) <= block.fieldIndent) {
       subEnd = i
@@ -110,8 +111,8 @@ function patchBudgetScalar(lines: string[], block: LoopBlock, field: string, val
   // 子字段缩进：取子块内首个非空行的缩进；空 budget 块（schema 不允许，防御）回落 +2
   let childIndent = block.fieldIndent + 2
   for (let i = budgetAt + 1; i < subEnd; i++) {
-    if (lines[i]!.trim() !== '') {
-      childIndent = indentOf(lines[i]!)
+    if (required(lines[i]).trim() !== '') {
+      childIndent = indentOf(required(lines[i]))
       break
     }
   }
@@ -138,14 +139,14 @@ function patchArray(lines: string[], block: LoopBlock, field: string, values: re
   // 既有块范围：[at, extentEnd)——其后缩进 > fieldIndent 的连续区，收尾回缩到最后一个非空行
   let extentEnd = block.end
   for (let i = at + 1; i < block.end; i++) {
-    const line = lines[i]!
+    const line = required(lines[i])
     if (line.trim() === '') continue
     if (indentOf(line) <= block.fieldIndent) {
       extentEnd = i
       break
     }
   }
-  while (extentEnd > at + 1 && lines[extentEnd - 1]!.trim() === '') extentEnd--
+  while (extentEnd > at + 1 && required(lines[extentEnd - 1]).trim() === '') extentEnd--
   lines.splice(at, extentEnd - at, ...rendered)
 }
 

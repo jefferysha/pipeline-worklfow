@@ -284,7 +284,7 @@ run_gate "{\"cwd\":\"$proj/sub/deep\",\"tool_name\":\"Write\"}"
 assert_exit "gate: Git 项目子目录读取项目根 marker → exit 2" 2 "$RC"
 
 # ───────────────────────── 3. 红线自证：热路径纯 bash ─────────────────────────
-# gate.sh 例外（Task 9，GOAL 清单 E）：非 default workflow 的 skill DAG 判定合法委托 CLI（spawn
+# gate.sh 例外（Task 9，GOAL 清单 E）：所有 workflow 的 skill DAG 判定合法委托 CLI（spawn
 # node），但**只**在该分支——workflow==='default' 这条最高频路径的零 spawn 承诺不变。文本 grep
 # 只能证明"提到了 node"，证明不了"只在该分支才真 spawn"；后者由
 # internal-skill-gate-hook.integration.test.ts 用真 bash 子进程 + 真 fixture 黑盒验证
@@ -297,9 +297,9 @@ for f in "$BC" "$SS" "$SL"; do
 done
 gate_node_n="$(grep -c "node" "$GATE" || true)"
 if [ "$gate_node_n" -gt 0 ] 2>/dev/null; then
-  ok "gate.sh 合法引用 node（仅非 default workflow 的 skill DAG 委托分支，Task 9；零 spawn 承诺见 internal-skill-gate-hook.integration.test.ts）"
+  ok "gate.sh 合法引用 node（统一 workflow skill DAG 委托分支，Task 9；精确 spawn 行为见 internal-skill-gate-hook.integration.test.ts）"
 else
-  bad "gate.sh 合法引用 node（仅非 default workflow 的 skill DAG 委托分支，Task 9）" "实得 0 行——是否误删了 Task 9 分支？"
+  bad "gate.sh 合法引用 node（统一 workflow skill DAG 委托分支，Task 9）" "实得 0 行——是否误删了 Task 9 分支？"
 fi
 for f in "$GATE" "$BC" "$SS" "$SL"; do
   base="$(basename "$f")"
@@ -1033,6 +1033,17 @@ printf '%s' "{\"cwd\":\"$proj\",\"prompt\":\"确认继续，全部执行\"}" | P
 grep -Fq 'review acknowledge review-demo' "$FAKE_PIPELINE_LOG" 2>/dev/null \
   && ok "confirm-clear-prompt: 明确确认调用 pipeline review acknowledge" \
   || bad "confirm-clear-prompt: 明确确认调用 pipeline review acknowledge" "未记录 acknowledge 调用"
+# Bare “继续” only unlocks when this exact project has a pending marker; this is the normal-chat
+# regression that previously resumed the Change while leaving the interaction gate self-locked.
+touch "$proj/.pipeline-pending-interaction"
+printf '%s' "{\"cwd\":\"$proj\",\"prompt\":\"继续\"}" | PATH="$FAKE_PIPELINE_BIN:$PATH" PIPELINE_HOOK_LOG="$FAKE_PIPELINE_LOG" bash "$CP" >/dev/null 2>&1
+[ ! -f "$proj/.pipeline-pending-interaction" ] \
+  && ok "confirm-clear-prompt: bare 继续清 exact pending interaction" \
+  || bad "confirm-clear-prompt: bare 继续清 exact pending interaction" "interaction marker 仍在"
+printf '%s' "{\"cwd\":\"$proj\",\"prompt\":\"继续\"}" | PATH="$FAKE_PIPELINE_BIN:$PATH" PIPELINE_HOOK_LOG="$FAKE_PIPELINE_LOG" bash "$CP" >/dev/null 2>&1
+[ ! -f "$proj/.pipeline-pending-confirm" ] \
+  && ok "confirm-clear-prompt: 无 pending 时 bare 继续不制造副作用" \
+  || bad "confirm-clear-prompt: 无 pending 时 bare 继续不制造副作用" "出现意外 marker"
 
 # ── 10a''. 持续自主执行：明确授权只绑定当前 live Change，并可审计地委托已完成证据后的 review 确认。──
 # 这覆盖真实 Codex 正常对话的自锁回归：UserPromptSubmit 已清一次 interaction marker，随后读取
@@ -1180,8 +1191,8 @@ printf '%s' "$CODEX_READ_WITH_PATH_MENTION" | CLAUDE_PLUGIN_ROOT="$ROOT" bash "$
 line="$(tail -1 "$JL" 2>/dev/null)"
 assert_contains "skill-tracker: 最终 read 段仍保留真实 skill" "$line" "pipeline-spec"
 assert_not_contains "skill-tracker: 非 read 路径不被误记" "$line" "openspec-propose"
-# Codex command hook 可能既不传 plugin root，也不传正确的 CODEX_HOME。此时只能接受本插件的
-# host-owned cache，不能把任意项目或全局同名 skill 当作证据；gate 与 tracker 共用该解析路径。
+# Codex command hook 未传 exact selected plugin root 时，不得枚举历史 cache 猜当前版本。
+# 同一 host-owned cache 只有被 bootstrap 明确传为 PIPELINE_HOST_PLUGIN_ROOT 后才可留证。
 codex_home="$TMP/ptu-codex-home"
 codex_skill="$codex_home/.codex/plugins/cache/pipeline-lite/pipeline-lite/0.2.0/skills/openspec-propose"
 mkdir -p "$codex_skill"
@@ -1189,13 +1200,15 @@ cp "$ROOT/skills/openspec-propose/SKILL.md" "$codex_skill/SKILL.md"
 CODEX_CACHE_SKILL_READ="{\"cwd\":\"$proj\",\"tool_name\":\"exec\",\"tool_input\":{\"cmd\":\"/bin/zsh -lc \\\"sed -n '1,120p' $codex_skill/SKILL.md\\\"\"}}"
 before="$(count_lines "$JL")"
 printf '%s' "$CODEX_CACHE_SKILL_READ" | HOME="$codex_home" CODEX_HOME='' PIPELINE_HOST_PLUGIN_ROOT='' PIPELINE_CODEX_PLUGIN_ROOT='' PLUGIN_ROOT='' CLAUDE_PLUGIN_ROOT='' bash "$ST" >/dev/null 2>&1
-[ "$(count_lines "$JL")" = "$((before + 1))" ] && ok "skill-tracker: 缺 plugin root 时仍识别 Codex 自身 cache" || bad "skill-tracker: 缺 plugin root 时仍识别 Codex 自身 cache" "没有写入 host-cache Skill 证据"
+[ "$(count_lines "$JL")" = "$before" ] && ok "skill-tracker: 缺 selected root 时拒绝历史 cache" || bad "skill-tracker: 缺 selected root 时拒绝历史 cache" "错误写入了未选择 cache 的 Skill 证据"
+printf '%s' "$CODEX_CACHE_SKILL_READ" | HOME="$codex_home" CODEX_HOME='' PIPELINE_HOST_PLUGIN_ROOT="${codex_skill%/skills/openspec-propose}" PIPELINE_CODEX_PLUGIN_ROOT='' PLUGIN_ROOT='' CLAUDE_PLUGIN_ROOT='' bash "$ST" >/dev/null 2>&1
+[ "$(count_lines "$JL")" = "$((before + 1))" ] && ok "skill-tracker: exact selected Codex root 可留证" || bad "skill-tracker: exact selected Codex root 可留证" "没有写入 selected-root Skill 证据"
 line="$(tail -1 "$JL" 2>/dev/null)"
-assert_contains "skill-tracker: host cache 证据含 skill id" "$line" "openspec-propose"
-GATE_ERR="$(printf '%s' "$CODEX_CACHE_SKILL_READ" | HOME="$codex_home" CODEX_HOME='' PIPELINE_HOST_PLUGIN_ROOT='' PIPELINE_CODEX_PLUGIN_ROOT='' PLUGIN_ROOT='' CLAUDE_PLUGIN_ROOT='' bash "$GATE" 2>&1 >/dev/null)"
+assert_contains "skill-tracker: selected cache 证据含 skill id" "$line" "openspec-propose"
+GATE_ERR="$(printf '%s' "$CODEX_CACHE_SKILL_READ" | HOME="$codex_home" CODEX_HOME='' PIPELINE_HOST_PLUGIN_ROOT="${codex_skill%/skills/openspec-propose}" PIPELINE_CODEX_PLUGIN_ROOT='' PLUGIN_ROOT='' CLAUDE_PLUGIN_ROOT='' bash "$GATE" 2>&1 >/dev/null)"
 GATE_RC=$?
-assert_exit "gate: 缺 plugin root 时不将 Codex 自身 cache 误判为 shadowed" 0 "$GATE_RC"
-assert_not_contains "gate: host cache 读取不报 shadowed" "$GATE_ERR" "同名非插件 SKILL.md"
+assert_exit "gate: exact selected Codex root 不误判为 shadowed" 0 "$GATE_RC"
+assert_not_contains "gate: selected cache 读取不报 shadowed" "$GATE_ERR" "同名非插件 SKILL.md"
 # `/bin/zsh -lc` is an envelope, not blanket evidence.  A non-read payload must stay invisible.
 before="$(count_lines "$JL")"
 printf '%s' "{\"cwd\":\"$proj\",\"tool_name\":\"command_execution\",\"tool_input\":{\"command\":\"/bin/zsh -lc \\\"printf not-a-skill-read\\\"\"}}" | CLAUDE_PLUGIN_ROOT="$ROOT" bash "$ST" >/dev/null 2>&1

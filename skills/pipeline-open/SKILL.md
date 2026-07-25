@@ -174,9 +174,12 @@ pipeline get "$PIPELINE_CHANGE_NAME" preset         # 应返回 $PIPELINE_PRESET
 
 ### Step 2.5: 登记 OpenSpec 初始文档证据（受治理 workflow 强制）
 
-default 的全部可执行 track（含 free），以及 `openspec_contract: required` 的自定义 workflow，必须把本 phase
+default 的全部可执行 track（含 free）和 `openspec_contract: required` 的自定义 workflow，必须把本 phase
 真实由 `openspec-propose` 生成的三份文档登记进 ledger。先确认该 Skill 调用已有完成态 evidence，
 再运行；不能用手工写文档或伪造 `--producer` 替代。
+
+`document_contract: v1` 的短 workflow 不套用这三份固定清单；它只登记当前 owner step 声明的
+slot，并使用 slot 的 producer 白名单。未声明文档契约的自由 workflow 跳过本节。
 
 ```bash
 CHANGE_DIR="openspec/changes/$PIPELINE_CHANGE_NAME"

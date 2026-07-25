@@ -217,10 +217,13 @@ export function OperationsPanel({ root, onToast, onOpenChange, activeTool, compa
             className={`${button} mt-3`}
             data-testid="ops-create-loop"
             disabled={busy !== null || template === null || !/^[a-z][a-z0-9-]{1,63}$/.test(loopId)}
-            onClick={() => void perform('init', () => postLoopStarterInit({
-              root, id: loopId, template: template!.id, workflow, skill_bundle: skillBundle,
-              runner, goal: template!.goal,
-            }), true)}
+            onClick={() => {
+              if (template === null) return
+              void perform('init', () => postLoopStarterInit({
+                root, id: loopId, template: template.id, workflow, skill_bundle: skillBundle,
+                runner, goal: template.goal,
+              }), true)
+            }}
           >{busy === 'init' ? t('operations.running') : t('operations.create_draft')}</button>
         </article>}
 

@@ -35,6 +35,7 @@
  */
 import { mkdir, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { FIELD_ORDER } from '../types.js'
 import type { TransitionRecord } from '../workflow/run-types.js'
 import { atomicLinkPublish } from './atomic-publish.js'
 
@@ -69,6 +70,37 @@ export interface TransitionRecordStore {
 
 /** 仅允许出现在文件名里的安全字符：字母数字/连字符/下划线（record.id 目前是 UUID，天然满足）。 */
 const SAFE_RECORD_ID_RE = /^[A-Za-z0-9_-]+$/
+const TRANSITION_KEYS = new Set([
+  'schemaVersion', 'id', 'runId', 'policyId', 'policyVersion', 'loopId', 'iterationId',
+  'sequence', 'previousRecordId', 'workflowId', 'event', 'from', 'to', 'effects', 'actor', 'observedAt',
+])
+const EFFECT_KEYS = new Set(['kind', 'field', 'from', 'to'])
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+function isStringValue(value: unknown): value is string | readonly string[] {
+  return typeof value === 'string' || (Array.isArray(value) && value.every((item) => typeof item === 'string'))
+}
+
+function isTransitionRecord(value: unknown): value is TransitionRecord {
+  if (!isRecord(value) || Object.keys(value).some((key) => !TRANSITION_KEYS.has(key))) return false
+  if (value.schemaVersion !== 1 || typeof value.id !== 'string' || typeof value.runId !== 'string'
+    || !Number.isSafeInteger(value.sequence) || typeof value.sequence !== 'number' || value.sequence < 1
+    || typeof value.workflowId !== 'string' || typeof value.event !== 'string'
+    || typeof value.from !== 'string' || typeof value.to !== 'string'
+    || typeof value.observedAt !== 'string' || !Array.isArray(value.effects)) return false
+  for (const key of ['policyId', 'policyVersion', 'loopId', 'iterationId', 'previousRecordId', 'actor']) {
+    if (value[key] !== undefined && typeof value[key] !== 'string') return false
+  }
+  const fields = new Set<string>(FIELD_ORDER)
+  return value.effects.every((effect) => isRecord(effect)
+    && Object.keys(effect).every((key) => EFFECT_KEYS.has(key))
+    && effect.kind === 'state-field-change'
+    && typeof effect.field === 'string' && fields.has(effect.field)
+    && isStringValue(effect.from) && isStringValue(effect.to))
+}
 
 function assertValidIdentity(sequence: number, recordId: string): void {
   if (!Number.isInteger(sequence) || sequence < 1) {
@@ -103,7 +135,9 @@ class FsTransitionRecordStore implements TransitionRecordStore {
   async read(changeDir: string, sequence: number, recordId: string): Promise<TransitionRecord | undefined> {
     try {
       const raw = await readFile(recordPath(changeDir, sequence, recordId), 'utf8')
-      return JSON.parse(raw) as TransitionRecord
+      const parsed: unknown = JSON.parse(raw)
+      if (!isTransitionRecord(parsed)) throw new SyntaxError('TransitionRecord schema invalid')
+      return parsed
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code === 'ENOENT') return undefined
       throw e

@@ -60,6 +60,18 @@ loops:
       - .sandcastle-build/**
 `
 
+const CUSTOM_BUILD_WORKFLOW = `name: h7s3-custom-workflow
+steps:
+  - id: build
+    label: Build
+    gate: null
+    skills: []
+    inputs: []
+    outputs: []
+    guards: []
+    transitions: []
+`
+
 async function seedLoops(cwd: string): Promise<void> {
   await mkdir(join(cwd, '.pipeline'), { recursive: true })
   await writeFile(join(cwd, '.pipeline', 'loops.yaml'), AFK_LOOPS_YAML)
@@ -175,18 +187,18 @@ describe('afk run —— 真调 docker 执行接线（#29-wire 落地到 CLI）'
    * H7+H10：custom workflow change 走真实 `pipeline afk run` 全链（生产装配，非 SDK 直调）——
    * admission preparation 冻结 workflow/step/coordinate digest，Git verifier 必须把同一坐标签进
    * workflow-transition binding；只有该 binding 经 lifecycle 与 scheduler 双门复核后才可 merge。
-   * `pipeline set x2 workflow <id>` 对内建 track（workflow.allowed==='*'）合法：写入
-   * 不要求该 workflow id 有真实 .pipeline/workflows/<id>.yaml 定义文件（effectiveArtifactFields
-   * 对缺文件的 workflow 名返回空集，不 fail-loud，见 effective-artifacts.ts），本用例只需要
-   * resolveWorkflowName(state) 不再是 'default'。无声明文件按生产 `createExecutionCoordinatePort`
-   * 的既有契约冻结为 `def:null` 的空声明 step，仍有确定性 digest，并非“坐标缺失”。真正缺少
-   * prepared custom 坐标的 fail-closed 反例由 dockerRunChange.integration.test.ts 保留。
+   * 通过受支持的 `init --workflow` 原子绑定真实定义；运行中再用通用 field setter 把 default
+   * Change 改成 custom 会破坏冻结的文档治理身份，因此必须 fail-closed。真正缺少 prepared
+   * custom 坐标的反例由 dockerRunChange.integration.test.ts 保留。
    */
   it('custom workflow change + L3 --image：冻结坐标与 Git verifier binding 一致 → 真 merge，ledger 留完整 workflow-transition 证据', async (ctx) => {
     if (!hasImage) { ctx.skip(); return }
-    await h.run(['init', 'x2', '--track', 'backend', '--preset', 'full'])
-    await h.run(['set', 'x2', 'phase', 'build'])
-    expect(await h.run(['set', 'x2', 'workflow', 'h7s3-custom-workflow'])).toBe(0) // resolveWorkflowName≠'default' → workflowKind='custom'
+    await mkdir(join(h.cwd, '.pipeline', 'workflows'), { recursive: true })
+    await writeFile(join(h.cwd, '.pipeline', 'workflows', 'h7s3-custom-workflow.yaml'), CUSTOM_BUILD_WORKFLOW)
+    expect(await h.run([
+      'init', 'x2', '--track', 'backend', '--preset', 'full',
+      '--workflow', 'h7s3-custom-workflow',
+    ])).toBe(0)
     await seedLoops(h.cwd)
     await git(h.cwd, ['add', '-A'])
     await git(h.cwd, ['commit', '-q', '-m', 'seed'])

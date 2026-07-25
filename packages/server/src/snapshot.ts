@@ -6,17 +6,18 @@
 import { lstat, readFile, readdir, stat } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import {
-  DEFAULT_WORKFLOW_TODO_STAGES,
+  builtinWorkflow,
+  compileWorkflow,
   evaluateDocumentEvidence,
-  isDocumentContractPhase,
-  isOpenSpecDocumentContractRequired,
+  isDocumentPolicyStep,
   loadWorkflow,
   liveTerminalActivity,
   parseTerminalActivityRecord,
   projectPipelineTodo,
+  resolveBoundEffectiveWorkflowPlan,
   stateStorageSourcePathSync,
   TERMINAL_ACTIVITY_FILE,
-  type WorkflowDef,
+  type EffectiveWorkflowPlan,
   type PipelineTodoStageDefinition,
   type StateStore,
 } from '@pipeline-lite/kernel'
@@ -88,58 +89,54 @@ async function readTerminalActivity(
   }
 }
 
-function todoStages(root: string, workflowName: string, phase: string): readonly PipelineTodoStageDefinition[] {
-  if (workflowName === 'default') return DEFAULT_WORKFLOW_TODO_STAGES
-  try {
-    const workflow = loadWorkflow(root, workflowName)
-    if (workflow) {
-      return workflow.steps.map((step) => ({
-        id: step.id,
-        label: step.label || step.id,
-        transitions: step.transitions.map((transition) => transition.to),
-      }))
-    }
-  } catch {
-    // A bad/missing custom definition must not make a default-looking Todo.  Retain just the actual
-    // state phase so the snapshot remains usable while the workflow error is surfaced elsewhere.
+function effectivePlan(
+  root: string,
+  workflowName: string,
+  binding: {
+    readonly documentProfile?: 'legacy-full' | 'document-v1'
+    readonly documentGovernanceFingerprint?: string
+    readonly workflowPlanFingerprint?: string
+  },
+): EffectiveWorkflowPlan {
+  const plan = resolveBoundEffectiveWorkflowPlan(workflowName, binding, (name) => {
+    const definition = builtinWorkflow(name) ?? loadWorkflow(root, name)
+    return definition === null ? null : compileWorkflow(definition)
+  })
+  if (plan === null) throw new Error(`workflow '${workflowName}' 未找到`)
+  return plan
+}
+
+function todoStages(plan: EffectiveWorkflowPlan | undefined, phase: string): readonly PipelineTodoStageDefinition[] {
+  if (plan) {
+    return plan.workflow.steps.map((step) => ({
+      id: step.id,
+      label: step.label || step.id,
+      transitions: step.transitions.map((transition) => transition.to),
+    }))
   }
+  // A bad/missing custom definition must not make a default-looking Todo. Retain the actual step.
   return phase === '' ? [] : [{ id: phase, label: phase }]
 }
 
 async function documentEvidence(
   root: string,
   changeDir: string,
-  workflowName: string,
+  plan: EffectiveWorkflowPlan | undefined,
   phase: string,
-  track: string,
 ): Promise<DocumentEvidenceSnapshot> {
-  let workflow: WorkflowDef | undefined
-  if (workflowName !== 'default') {
-    try {
-      workflow = loadWorkflow(root, workflowName) ?? undefined
-    } catch (error) {
-      // The workflow endpoint surfaces the malformed definition separately.  Snapshot stays readable
-      // and explicitly says why it cannot truthfully assert document governance.
-      return {
-        governed: false,
-        blockers: [`workflow '${workflowName}' 不可读取，无法评估文档契约: ${error instanceof Error ? error.message : String(error)}`],
-        items: [],
-      }
-    }
-  }
-  const governed = isOpenSpecDocumentContractRequired(workflowName, track, workflow)
-  if (!governed) return { governed: false, blockers: [], items: [] }
-  if (!isDocumentContractPhase(phase)) {
+  const policy = plan?.capabilities.documents.policy
+  if (!policy) return { governed: false, blockers: [], items: [] }
+  if (!isDocumentPolicyStep(policy, phase)) {
     return {
       governed: true,
       phase,
       ledgerPresent: false,
       pass: false,
-      blockers: [`受 OpenSpec 文档契约治理的 workflow 当前 phase 必须是标准阶段（当前 '${phase || '空'}'）`],
+      blockers: [`受 document contract 治理的 workflow 当前 step 非法（当前 '${phase || '空'}'）`],
       items: [],
     }
   }
-  const report = await evaluateDocumentEvidence(root, changeDir, phase)
+  const report = await evaluateDocumentEvidence(root, changeDir, phase, {}, policy)
   return {
     governed: true,
     phase,
@@ -154,6 +151,22 @@ async function documentEvidence(
       producers: [...item.producers],
     })),
   }
+}
+
+function documentTodoItems(
+  plan: EffectiveWorkflowPlan | undefined,
+  evidence: DocumentEvidenceSnapshot,
+): Readonly<Record<string, readonly { text: string; completed: boolean }[]>> {
+  const policy = plan?.capabilities.documents.policy
+  if (!policy) return {}
+  const status = new Map(evidence.items.map((item) => [item.kind, item.status]))
+  return Object.fromEntries(policy.steps.map((step) => [
+    step,
+    (policy.outputsByStep[step] ?? []).map((requirement) => ({
+      text: `[document] ${requirement.kind}`,
+      completed: status.get(requirement.kind) === 'recorded',
+    })),
+  ]))
 }
 
 /** 去重（按规范化路径，保序）。 */
@@ -217,15 +230,21 @@ async function scanProject(store: StateStore, root: string, nowMs: number): Prom
       const phase = str(f.phase)
       const workflowName = str(f.workflow) || 'default'
       const track = str(f.track)
+      const plan = effectivePlan(root, workflowName, {
+        documentProfile: state.runMetadata?.documentProfile,
+        documentGovernanceFingerprint: state.runMetadata?.documentGovernanceFingerprint,
+        workflowPlanFingerprint: state.runMetadata?.workflowPlanFingerprint,
+      })
+      const [documents, terminalActivity] = await Promise.all([
+        documentEvidence(root, changeDir, plan, phase),
+        readTerminalActivity(changeDir, e.name, nowMs),
+      ])
       const todo = projectPipelineTodo({
         phase,
         tasksMarkdown: await readTasksMarkdown(changeDir),
-        stages: todoStages(root, workflowName, phase),
+        stages: todoStages(plan, phase),
+        additionalItemsByStage: documentTodoItems(plan, documents),
       })
-      const [documents, terminalActivity] = await Promise.all([
-        documentEvidence(root, changeDir, workflowName, phase, track),
-        readTerminalActivity(changeDir, e.name, nowMs),
-      ])
       changes.push({
         name: e.name,
         path: changeDir,

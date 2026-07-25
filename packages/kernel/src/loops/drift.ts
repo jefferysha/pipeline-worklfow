@@ -32,6 +32,7 @@
  */
 import { cadenceMinutes } from './enforce.js'
 import type { LoopEntry, LoopRegistry } from './types.js'
+import { required } from '../required.js'
 
 // ── 阈值常量 ───────────────────────────────────────────────────────────────────
 
@@ -60,9 +61,9 @@ function mkUTC(y: number, mo: number, d: number, hh: number, mm: number): Date |
 function parseTimestamp(raw: string, now: Date): Date | null {
   const s = raw.trim()
   const full = s.match(TS_FULL_RE)
-  if (full) return mkUTC(+full[1]!, +full[2]!, +full[3]!, +full[4]!, +full[5]!)
+  if (full) return mkUTC(+required(full[1]), +required(full[2]), +required(full[3]), +required(full[4]), +required(full[5]))
   const short = s.match(TS_SHORT_RE)
-  if (short) return mkUTC(now.getUTCFullYear(), +short[1]!, +short[2]!, +short[3]!, +short[4]!)
+  if (short) return mkUTC(now.getUTCFullYear(), +required(short[1]), +required(short[2]), +required(short[3]), +required(short[4]))
   return null
 }
 
@@ -80,9 +81,11 @@ export function extractDocLoopIds(docText: string | null): string[] {
   const out: string[] = []
   for (const rawLine of docText.split('\n')) {
     const m = rawLine.match(DOC_HEADING_RE)
-    if (m && !seen.has(m[1]!)) {
-      seen.add(m[1]!)
-      out.push(m[1]!)
+    if (m) {
+      const id = required(m[1])
+      if (seen.has(id)) continue
+      seen.add(id)
+      out.push(id)
     }
   }
   return out
@@ -108,9 +111,9 @@ function parseRunLog(text: string | null, now: Date): Map<string, LoopRunFacts> 
     if (!line.startsWith('|')) continue
     const cols = line.replace(/^\|+/, '').replace(/\|+$/, '').split('|').map((c) => c.trim())
     if (cols.length < 2) continue
-    const ts = parseTimestamp(cols[0]!, now)
+    const ts = parseTimestamp(required(cols[0]), now)
     if (ts === null) continue
-    const id = cols[1]!
+    const id = required(cols[1])
     if (!ID_RE.test(id)) continue
     let f = map.get(id)
     if (!f) {
@@ -120,7 +123,7 @@ function parseRunLog(text: string | null, now: Date): Map<string, LoopRunFacts> 
     f.runs++
     if (sameUTCDate(ts, now)) f.runsToday++
     if (f.lastRunAt === null || ts.getTime() > f.lastRunAt.getTime()) f.lastRunAt = ts
-    for (const cm of line.matchAll(CHANGE_RE)) f.changeRefs.push(cm[1]!)
+    for (const cm of line.matchAll(CHANGE_RE)) f.changeRefs.push(required(cm[1]))
   }
   return map
 }
@@ -241,7 +244,8 @@ export function detectDrift(
 
     // change-prefix：run-log change=<name> 与声明 prefix 不符
     if (l.change_prefix !== null && l.change_prefix !== '' && facts !== null) {
-      const mismatched = [...new Set(facts.changeRefs.filter((c) => !c.startsWith(l.change_prefix!)))]
+      const changePrefix = required(l.change_prefix)
+      const mismatched = [...new Set(facts.changeRefs.filter((c) => !c.startsWith(changePrefix)))]
       if (mismatched.length > 0) {
         items.push({
           loop: l.id, dimension: 'change-prefix', severity: 'warn',

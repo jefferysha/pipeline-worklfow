@@ -25,16 +25,11 @@
 import { homedir } from 'node:os'
 import {
   createLoopLedgerStore,
-  reservedTokensFor,
-  type AutonomyLevel,
   type LedgerReadResult,
   type LoopEntry,
-  type LoopStatus,
 } from '@pipeline-lite/kernel'
 import {
-  AUTOMATION_LEVELS,
   createAutomation,
-  settleSuccess,
   type AutomationLevel,
   type LoopExecutionGuardResult,
 } from '@pipeline-lite/automation'
@@ -42,7 +37,7 @@ import type { CliDeps } from '../deps.js'
 import { createProductionSkillContentLocator } from '../skillBundleAssembly.js'
 import {
   admissionProbe, evaluateSkillBundleWiring, ledgerProjections,
-  type LedgerProjector, type SkillBundleWiringDeps, type SkillBundleWiringResult,
+  type LedgerProjector, type SkillBundleWiringDeps,
 } from './loop-admission-view.js'
 import {
   enforceProductionLoopWiring,
@@ -52,38 +47,20 @@ import {
 } from './afk-executor.js'
 import { selectTargetedRunCandidates, type TargetedRunCandidate } from './loop-run-selection.js'
 import type { LoopsFs } from './loops.js'
+import {
+  buildPreview,
+  COMMIT_NOTE,
+  isAutomationLevel,
+  parseLoopRunArgs,
+  renderExecutionGroup,
+  renderPreview,
+  resultOk,
+  selectLoops,
+  type ExecutionGroup,
+  type LoopRunPreviewJson,
+} from './loop-run-view.js'
 
-const IMAGE_NOTE = 'image 非 loop 级字段；afk run 时由 --image / .pipeline/automation.json / 默认 sandcastle:local 决定'
-const COMMIT_NOTE = '--commit 仅 real-run 生效；dry-run 预览忽略它'
-
-/** 单个命中 loop 的 dry-run 预览（--json 结构；照 loops.ts buildAdmissionJson 的信封风格）。 */
-export interface LoopRunPreviewJson {
-  loop_id: string
-  status: LoopStatus
-  /** 'allowed' 或 'blocked:<维度>'（同 loops status admit 列——admissionDecision 同源）。 */
-  admission: string
-  level: AutomationLevel
-  level_source: 'flag' | 'loop-default'
-  runner: string
-  /** LoopEntry 无 image 字段 → 恒 null（见 notes 的 IMAGE_NOTE）。 */
-  image: null
-  /** L3→merge-back / L1|L2→paused（automation settleSuccess 语义）。 */
-  settlement: 'merge-back' | 'paused'
-  reserved_tokens: { tokens: number; basis: 'budget.tokens_per_run' | 'risk-default' }
-  ledger_health: 'ok' | 'degraded' | 'missing'
-  /** H10 §6：唯一 wiring 判定（evaluateSkillBundleWiring）——unwired/invalid/ready + bundle id + 阻断 reason。 */
-  skill_bundle: { status: SkillBundleWiringResult['status']; bundle_id: string | null; blocking_reason: string | null }
-  notes: string[]
-}
-
-interface LoopRunArgs {
-  selector: string | null
-  dryRun: boolean
-  json: boolean
-  commit: boolean
-  level?: string
-  error?: string
-}
+export type { LoopRunPreviewJson } from './loop-run-view.js'
 
 export interface LoopRunRuntime {
   /** H11 active starter 的 scan 前 fresh wiring + governance pause backstop。 */
@@ -113,129 +90,6 @@ const DEFAULT_LOOP_RUN_RUNTIME: LoopRunRuntime = {
   runAfkRound,
 }
 
-type ExecutionGroup =
-  | {
-      readonly level: AutomationLevel
-      readonly targets: readonly TargetedRunCandidate[]
-      readonly result: AfkRoundExecutionResult
-    }
-  | {
-      readonly level: AutomationLevel
-      readonly targets: readonly TargetedRunCandidate[]
-      readonly error: string
-    }
-
-function resultOk(result: AfkRoundExecutionResult): boolean {
-  if (result.report !== undefined && !result.report.ok) return false
-  return result.status === 'completed' || result.status === 'empty'
-}
-
-function renderExecutionGroup(deps: CliDeps, group: ExecutionGroup): void {
-  if ('error' in group) {
-    deps.io.err(`[loops run] level=${group.level} executor 抛错：${group.error}`)
-    return
-  }
-  const { result } = group
-  deps.io.out(
-    `[loops run] level=${group.level} status=${result.status} image=${result.image} ` +
-    `targets=${group.targets.length} fresh-ready=${result.ready.length}`,
-  )
-  if (result.report !== undefined) {
-    for (const entry of result.report.entries) {
-      deps.io.out(
-        `  · ${entry.change} disposition=${entry.disposition}` +
-        `${entry.result === undefined ? '' : ` result=${entry.result}`}` +
-        `${entry.reason === undefined ? '' : ` reason=${entry.reason}`}`,
-      )
-    }
-    for (const failure of result.report.failures) {
-      deps.io.err(`  · ${failure.change} [${failure.phase}/${failure.kind}]: ${failure.message}`)
-    }
-  }
-  if (result.status === 'docker-unavailable' || result.status === 'configuration-error') {
-    deps.io.err(`[loops run] level=${group.level} ${result.status}: ${result.message}`)
-  }
-}
-
-function parseLoopRunArgs(args: string[]): LoopRunArgs {
-  const out: LoopRunArgs = { selector: null, dryRun: false, json: false, commit: false }
-  for (let i = 0; i < args.length; i++) {
-    const a = args[i]!
-    if (a === '--dry-run') out.dryRun = true
-    else if (a === '--json') out.json = true
-    else if (a === '--commit') out.commit = true
-    else if (a === '--level') {
-      const value = args[i + 1]
-      if (value === undefined || value.startsWith('-')) {
-        out.error = '--level 缺少值（需 L1|L2|L3）'
-        return out
-      }
-      out.level = value
-      i++
-    } else if (a.startsWith('-')) {
-      out.error = `未知 flag「${a}」`
-      return out
-    } else if (out.selector === null) {
-      out.selector = a
-    } else {
-      out.error = `额外位置参数「${a}」`
-      return out
-    }
-  }
-  return out
-}
-
-function isAutomationLevel(v: string): v is AutomationLevel {
-  return (AUTOMATION_LEVELS as readonly string[]).includes(v)
-}
-
-/** 正则元字符转义（selector 非 `*` 段按字面匹配，`.`/`-` 等不当通配）。 */
-const escapeRegExp = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-
-/** selector → 命中 loop 列表：含 `*` 走 glob（`*`→`.*`，锚定全串），否则 id 完全相等。 */
-function selectLoops(loops: readonly LoopEntry[], selector: string): LoopEntry[] {
-  if (selector.includes('*')) {
-    const re = new RegExp(`^${selector.split('*').map(escapeRegExp).join('.*')}$`)
-    return loops.filter((l) => re.test(l.id))
-  }
-  return loops.filter((l) => l.id === selector)
-}
-
-/** LoopEntry + ledger 投影 + --level/--commit + skill bundle wiring → 单条 dry-run 预览。 */
-function buildPreview(
-  l: LoopEntry,
-  admission: string,
-  ledgerHealth: LoopRunPreviewJson['ledger_health'],
-  explicitLevel: AutomationLevel | undefined,
-  wiring: SkillBundleWiringResult,
-): LoopRunPreviewJson {
-  const level: AutomationLevel = explicitLevel ?? (l.autonomy_level as AutonomyLevel)
-  const settlement = settleSuccess(level) === 'merged' ? 'merge-back' : 'paused'
-  const reserved = reservedTokensFor(l)
-  return {
-    loop_id: l.id,
-    status: l.status,
-    admission,
-    level,
-    level_source: explicitLevel ? 'flag' : 'loop-default',
-    runner: l.runner,
-    image: null,
-    settlement,
-    reserved_tokens: { tokens: reserved.tokens, basis: reserved.basis },
-    ledger_health: ledgerHealth,
-    skill_bundle: { status: wiring.status, bundle_id: wiring.bundleId, blocking_reason: wiring.reason },
-    notes: [IMAGE_NOTE],
-  }
-}
-
-function renderPreview(deps: CliDeps, pv: LoopRunPreviewJson): void {
-  deps.io.out(`  ${pv.loop_id}  status=${pv.status}  admission=${pv.admission}`)
-  deps.io.out(`    level=${pv.level}（${pv.level_source}）  runner=${pv.runner}  settlement=${pv.settlement}`)
-  deps.io.out(`    reserved-tokens=${pv.reserved_tokens.tokens}（${pv.reserved_tokens.basis}）  ledger=${pv.ledger_health}  image=(afk run 时决定)`)
-  const sb = pv.skill_bundle
-  deps.io.out(`    skill-bundle=${sb.status}${sb.bundle_id !== null ? `（${sb.bundle_id}）` : ''}${sb.blocking_reason !== null ? `：${sb.blocking_reason}` : ''}`)
-  for (const n of pv.notes) deps.io.out(`    · ${n}`)
-}
 
 /**
  * `wiringDeps` 缺省真装配（H10 §8任务7）：resolver=deps.resolver（G2 P5 同一 EffectiveSkillResolver，
@@ -441,7 +295,10 @@ export async function cmdLoopRun(
   // H10 §6：skill bundle wiring 判定（evaluateSkillBundleWiring 是本函数唯一消费点，见其头注
   // 「H11 只消费该 evaluator，不复制判断逻辑」）——纯读、逐 loop 静态解析 + locator 只读探测。
   const previews = await Promise.all(matched.map(async (l) => {
-    const proj = byId.get(l.id)!
+    const proj = byId.get(l.id)
+    if (proj === undefined) {
+      throw new Error(`loop '${l.id}' 缺 ledger projection`)
+    }
     const admission = admissionProbe(l, proj)
     const ledgerHealth: LoopRunPreviewJson['ledger_health'] = missing ? 'missing' : proj.health
     const wiring = await evaluateSkillBundleWiring(

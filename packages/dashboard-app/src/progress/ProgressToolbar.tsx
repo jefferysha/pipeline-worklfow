@@ -1,0 +1,93 @@
+import { ChevronDown, Plus } from 'lucide-react'
+import { DECK_TABS, type DeckTab, type Tr } from './progressViewModel'
+
+export interface ProgressToolbarProps {
+  t: Tr
+  rowCount: number
+  deckTab: DeckTab
+  deckCounts: Record<DeckTab, number>
+  workflows: readonly string[]
+  workflow: string
+  onDeckTab: (tab: DeckTab) => void
+  onWorkflow: (workflow: string) => void
+  onCreate: () => void
+}
+
+export function ProgressToolbar({
+  t,
+  rowCount,
+  deckTab,
+  deckCounts,
+  workflows,
+  workflow,
+  onDeckTab,
+  onWorkflow,
+  onCreate,
+}: ProgressToolbarProps): JSX.Element {
+  return (
+    <>
+      <div className="mb-8 flex flex-wrap items-end justify-between gap-4" data-anim="prg-chrome" data-testid="prg-hero">
+        <div>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <h1 className="text-[30px] font-bold leading-none tracking-[-0.025em] text-text">进度</h1>
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-1 text-[11px] font-medium text-text-3">
+              <span className="h-1.5 w-1.5 rounded-full bg-green" aria-hidden="true" />
+              {t('progress.realtime_sync')}
+            </span>
+          </div>
+          <p className="mt-2 text-[13px] leading-5 text-text-3">沿工作流查看每个任务所处阶段，需要处理的事项会优先显示</p>
+        </div>
+        <button
+          type="button"
+          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-(--accent) px-4 text-sm font-semibold text-white shadow-sm transition-[transform,box-shadow] hover:shadow-md active:translate-y-px motion-reduce:transform-none"
+          data-testid="progress-new-change"
+          onClick={onCreate}
+        >
+          <Plus className="h-4 w-4" aria-hidden="true" /> {t('change_create.create')}
+        </button>
+      </div>
+      {rowCount > 0 && (
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-4" data-anim="prg-chrome" data-testid="prg-filterbar">
+          <div
+            className="inline-flex items-center gap-1 rounded-xl bg-fill p-1"
+            role="tablist"
+            aria-label={t('progress.tabs_label')}
+            data-testid="prg9t-tabs"
+          >
+            {DECK_TABS.map((tab) => (
+              <button
+                key={tab}
+                type="button"
+                role="tab"
+                className="group flex min-h-9 items-center gap-1.5 rounded-lg px-3 text-[13px] font-semibold text-text-3 transition-colors hover:text-text aria-selected:bg-card aria-selected:text-text aria-selected:shadow-sm"
+                aria-selected={deckTab === tab}
+                data-testid={`prg9t-tab-${tab}`}
+                onClick={() => onDeckTab(tab)}
+              >
+                {t(`progress.tab_${tab}`)}
+                <span className="inline-flex min-w-[18px] items-center justify-center rounded-full bg-card px-1.5 font-mono text-[11px] leading-[18px] text-text-3 group-aria-selected:bg-(--accent) group-aria-selected:text-white" data-testid={`prg9t-n-${tab}`}>
+                  {deckCounts[tab]}
+                </span>
+              </button>
+            ))}
+          </div>
+          {workflows.length > 0 && (
+            <label className="relative max-[760px]:basis-full">
+              <span className="sr-only">按工作流筛选</span>
+              <select
+                className="h-10 min-w-[180px] appearance-none rounded-xl border border-border bg-card py-2 pr-9 pl-3 text-[13px] font-semibold text-text outline-none transition-shadow focus:border-(--accent) focus:ring-3 focus:ring-accent-t max-[760px]:w-full"
+                data-testid="prg-workflow-select"
+                value={workflow}
+                onChange={(event) => onWorkflow(event.target.value)}
+              >
+                <option value="all">{t('progress.wf_all')}</option>
+                {workflows.map((name) => <option key={name} value={name}>{name}</option>)}
+              </select>
+              <ChevronDown className="pointer-events-none absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2 text-text-3" aria-hidden="true" />
+            </label>
+          )}
+        </div>
+      )}
+    </>
+  )
+}

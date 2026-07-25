@@ -179,6 +179,12 @@ get/set/transition 的 stdout 与 exit code 以 **golden-oracle 双跑逐字一�
 > 按当前 step 声明的 step-guard（`evaluateStepGuards`）评估。exit 语义对两轨一致：guard 不过同样
 > `2`、通过 `0`；workflow/step 配置错（文件缺失·非法、当前 step 不在图）`1`。两条路径都是纯预览，
 > 绝不写盘。
+>
+> 2026-07-25：自定义 Workflow 的 step 图与文档治理解耦。`openspec_contract: required` 保留为
+> default 七阶段文档矩阵的兼容别名；短图通过 `document_contract.version: v1` 声明 slot 的
+> owner/producers 和逐 step 读取集合；未声明任一契约的 Workflow 是自由模式。两种契约同时出现、
+> owner/read 引用不存在或读取发生在 owner 之前均在 compile/validate 阶段失败。CLI、server 与
+> dashboard 投影消费同一编译结果，不按 workflow 名猜测文档策略。
 
 > 2026-07-24（PM Spec 后 AFK）：内建 PM track 在 `spec-complete` 成功提交后会按独立的
 > `auto_enqueue_on_spec_complete` 策略将 automation 从 `off` 原子置为 `queued`，并记录入队时间；不启动

@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { ChevronRight } from 'lucide-react'
 import { useT } from '../i18n'
-import { Dialog } from '../shell/Dialog'
+import { Dialog } from '../shared/Dialog'
 import { AutomationCard } from './AutomationCard'
 import { GovernanceRail } from './GovernanceRail'
 import { LoopCard, WB_TW, type LoopsState } from './LoopCard'

@@ -41,7 +41,8 @@ function parseStartArgs(own: string[]): ParsedStart {
   let forward = false
   let i = 0
   while (i < own.length) {
-    const a = own[i]!
+    const a = own[i]
+    if (a === undefined) break
     if (a === '--ca') {
       caRequested = true
       const nxt = own[i + 1]
@@ -97,10 +98,15 @@ export async function cmdTap(deps: CliDeps, sub: string, args: string[]): Promis
       }
 
       if (command.length > 0) {
+        const executable = command[0]
+        if (executable === undefined) {
+          await result.daemon.stop()
+          return 1
+        }
         const merged: Record<string, string> = {}
         for (const c of result.clients) Object.assign(merged, c.env)
         const code = await new Promise<number>((resolve) => {
-          const child = spawn(command[0]!, command.slice(1), {
+          const child = spawn(executable, command.slice(1), {
             stdio: 'inherit',
             env: { ...process.env, ...merged },
           })

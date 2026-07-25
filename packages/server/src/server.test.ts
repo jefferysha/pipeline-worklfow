@@ -11,11 +11,13 @@ import type { DashboardServer } from './types.js'
 import {
   initChange, makeProject, makeTempHome, makeTempManifest, makeWorktreeDir, newStore, openSSE, repoManifestPath, reqDelete, reqGet,
   reqPatch, reqPost, testFlow,
+  readGovernedDocumentsForCurrentVisit,
   seedGovernedDocumentEvidence,
 } from './test-support.js'
 import type { FlowEngine, StateStore } from '@pipeline-lite/kernel'
 import {
-  createLoopLedgerStore, loadManifest, machineStateScopeId, secretsPath,
+  createLoopLedgerStore, effectiveWorkflowPlanBinding, loadEffectiveWorkflowPlan, loadManifest,
+  machineStateScopeId, secretsPath,
   registerProjectRoot, TRANSITION_EVENTS as KERNEL_EVENTS, eventEdge as kernelEventEdge,
 } from '@pipeline-lite/kernel'
 import { TRANSITION_EVENTS, eventEdge } from './transition.js'
@@ -69,12 +71,18 @@ async function start(opts?: {
   scoreRouterPattern?: RouterPatternScorer
   clock?: () => string
   cadence?: false | Omit<CadenceSchedulerOptions, 'roots' | 'clock' | 'runPipelineCli'>
+  legacyWithoutRunIdentity?: boolean
+  seedGovernedEvidence?: boolean
 }): Promise<Harness> {
   const store = opts?.store ?? newStore()
   const root = await makeProject()
   const name = 'my-change'
-  const changeDir = await initChange(store, root, name)
-  await seedGovernedDocumentEvidence(root, changeDir, name)
+  const changeDir = await initChange(store, root, name, {
+    legacyWithoutRunIdentity: opts?.legacyWithoutRunIdentity,
+  })
+  if (opts?.seedGovernedEvidence !== false) {
+    await seedGovernedDocumentEvidence(root, changeDir, name)
+  }
   const worktreeDir = await makeWorktreeDir()
   const srv = createDashboardServer({
     version: opts?.version ?? '9.9.9',
@@ -697,6 +705,7 @@ describe('POST /api/change/<name>/transition —— G1 default 轨收尾（bread
       ...state,
       fields: { ...state.fields, phase: 'spec', track: 'pm', plan: `docs/superpowers/plans/${h.name}.md` },
     })
+    await readGovernedDocumentsForCurrentVisit(h.root, h.changeDir)
 
     const r = await reqPost(h.port, `/api/change/${h.name}/transition`, { root: h.root, event: 'spec-complete' }, {
       headers: { Authorization: `Bearer ${h.token}` },
@@ -804,6 +813,9 @@ describe('POST /api/change/<name>/transition —— .pipeline-history.jsonl 记�
         headers: { Authorization: `Bearer ${h.token}` },
       })
       expect(r.status).toBe(200)
+      if (event === 'open-complete') {
+        await readGovernedDocumentsForCurrentVisit(h.root, h.changeDir)
+      }
     }
     const text = await readFile(join(h.changeDir, '.pipeline-history.jsonl'), 'utf8')
     const rows = text.trim().split('\n').map((l) => JSON.parse(l) as { from: string; to: string })
@@ -1021,6 +1033,7 @@ describe('GET /api/change/:name/history —— transitionRecordId 来源判定�
       headers: { Authorization: `Bearer ${h.token}` },
     }) // sequence 1: open -> explore
     expect(w1.status).toBe(200)
+    await readGovernedDocumentsForCurrentVisit(h.root, h.changeDir)
     const w2 = await reqPost(h.port, `/api/change/${h.name}/transition`, { root: h.root, event: 'explore-complete' }, {
       headers: { Authorization: `Bearer ${h.token}` },
     }) // sequence 2: explore -> spec
@@ -1036,7 +1049,7 @@ describe('GET /api/change/:name/history —— transitionRecordId 来源判定�
   })
 
   it('完全没有 runMetadata 的老 change → 全部 JSONL 原样返回（回归防护：本次改动不应波及这条既有 fallback）', async () => {
-    const h = await start()
+    const h = await start({ legacyWithoutRunIdentity: true, seedGovernedEvidence: false })
     const { writeFile } = await import('node:fs/promises')
     const rows = [
       { ts: '2026-07-01T00:00:00Z', kind: 'transition', from: 'open', to: 'explore', raw: 'open-complete' },
@@ -1111,6 +1124,7 @@ describe('GET /api/change/:name/history —— transitionRecordId 来源判定�
       headers: { Authorization: `Bearer ${h.token}` },
     }) // sequence 1: open -> explore
     expect(w1.status).toBe(200)
+    await readGovernedDocumentsForCurrentVisit(h.root, h.changeDir)
     observedAt = '2020-01-01T00:00:00Z' // 系统时钟在第二次真实 commit 前回拨
     const w2 = await reqPost(h.port, `/api/change/${h.name}/transition`, { root: h.root, event: 'explore-complete' }, {
       headers: { Authorization: `Bearer ${h.token}` },
@@ -1134,6 +1148,9 @@ describe('GET /api/change/:name/history —— transitionRecordId 来源判定�
         headers: { Authorization: `Bearer ${h.token}` },
       })
       expect(w.status).toBe(200)
+      if (event === 'open-complete') {
+        await readGovernedDocumentsForCurrentVisit(h.root, h.changeDir)
+      }
     }
     const recordsDir = join(h.changeDir, '.pipeline-transitions')
     const seq1File = (await readdir(recordsDir)).find((file) => file.startsWith('000001-'))!
@@ -1161,6 +1178,7 @@ describe('GET /api/change/:name/history —— transitionRecordId 来源判定�
       headers: { Authorization: `Bearer ${h.token}` },
     }) // sequence 1: open -> explore，ts = fixed clock '2026-07-07T00:00:00Z'
     expect(w1.status).toBe(200)
+    await readGovernedDocumentsForCurrentVisit(h.root, h.changeDir)
     const w2 = await reqPost(h.port, `/api/change/${h.name}/transition`, { root: h.root, event: 'explore-complete' }, {
       headers: { Authorization: `Bearer ${h.token}` },
     }) // sequence 2: explore -> spec，ts 同样是 fixed clock '2026-07-07T00:00:00Z'
@@ -2611,6 +2629,126 @@ describe('POST /api/workflows/:name —— 新建/覆盖自定义 workflow（GOA
     expect(r.status).toBe(200)
     const content = await readFile(join(h.root, '.pipeline', 'workflows', 'onboarding.yaml'), 'utf8')
     expect(content).toContain('name: onboarding')
+  })
+
+  it('三步 workflow 的 declarative document contract 经 POST/GET 完整往返，不被扩成七阶段', async () => {
+    const h = await start()
+    const body = {
+      name: 'short-governed',
+      root: h.root,
+      documentContract: {
+        version: 'v1',
+        slots: [{ kind: 'proposal', ownerStep: 'shape', producers: ['writer'] }],
+        reads: [
+          { step: 'implement', kinds: ['proposal'] },
+          { step: 'prove', kinds: ['proposal'] },
+        ],
+      },
+      steps: [
+        {
+          id: 'shape', label: 'Shape', gate: null,
+          skills: [{ id: 'writer' }], inputs: [], outputs: [], guards: [],
+          transitions: [{ event: 'shaped', to: 'implement' }],
+        },
+        {
+          id: 'implement', label: 'Implement', gate: null,
+          skills: [{ id: 'builder' }], inputs: [], outputs: [], guards: [],
+          transitions: [{ event: 'built', to: 'prove' }],
+        },
+        {
+          id: 'prove', label: 'Prove', gate: 'review',
+          skills: [{ id: 'verifier' }], inputs: [], outputs: [], guards: [], transitions: [],
+        },
+      ],
+    }
+    const saved = await reqPost(h.port, '/api/workflows/short-governed', body, {
+      headers: { Authorization: `Bearer ${h.token}` },
+    })
+    expect(saved.status, saved.body).toBe(200)
+
+    const loaded = await reqGet(h.port, `/api/workflows/short-governed?root=${encodeURIComponent(h.root)}`)
+    expect(loaded.status).toBe(200)
+    expect(loaded.json()).toEqual({
+      name: body.name,
+      documentContract: body.documentContract,
+      steps: body.steps,
+    })
+  })
+
+  it('畸形 workflow 嵌套 DTO → 400 decoder 错误，不落盘且不抛 500', async () => {
+    const h = await start()
+    const saved = await reqPost(
+      h.port,
+      '/api/workflows/malformed',
+      { name: 'malformed', root: h.root, steps: [{ id: 'shape', skills: 'writer' }] },
+      { headers: { Authorization: `Bearer ${h.token}` } },
+    )
+    expect(saved.status).toBe(400)
+    expect(existsSync(join(h.root, '.pipeline', 'workflows', 'malformed.yaml'))).toBe(false)
+  })
+
+  it('Workflow DTO 任意层级未知键 → 400 且原子拒绝，不创建 workflow 文件', async () => {
+    const h = await start()
+    const governed = {
+      name: 'closed-dto',
+      root: h.root,
+      documentContract: {
+        version: 'v1',
+        slots: [{ kind: 'proposal', ownerStep: 'shape', producers: ['writer'] }],
+        reads: [{ step: 'done', kinds: ['proposal'] }],
+      },
+      steps: [
+        {
+          id: 'shape', label: 'Shape', gate: null,
+          skills: [{ id: 'writer' }], inputs: [], outputs: [], guards: [],
+          transitions: [{ event: 'done', to: 'done' }],
+        },
+        { id: 'done', label: 'Done', gate: null, skills: [], inputs: [], outputs: [], guards: [], transitions: [] },
+      ],
+    }
+    const variants = [
+      { label: 'workflow', body: { ...governed, extra: true } },
+      {
+        label: 'step',
+        body: { ...governed, steps: [{ ...governed.steps[0], extra: true }, governed.steps[1]] },
+      },
+      {
+        label: 'document_contract',
+        body: { ...governed, documentContract: { ...governed.documentContract, extra: true } },
+      },
+      {
+        label: 'slot',
+        body: {
+          ...governed,
+          documentContract: {
+            ...governed.documentContract,
+            slots: [{ ...governed.documentContract.slots[0], extra: true }],
+          },
+        },
+      },
+      {
+        label: 'read',
+        body: {
+          ...governed,
+          documentContract: {
+            ...governed.documentContract,
+            reads: [{ ...governed.documentContract.reads[0], extra: true }],
+          },
+        },
+      },
+    ]
+
+    for (const variant of variants) {
+      const name = `closed-${variant.label.replace('_', '-')}`
+      const response = await reqPost(
+        h.port,
+        `/api/workflows/${name}`,
+        { ...variant.body, name },
+        { headers: { Authorization: `Bearer ${h.token}` } },
+      )
+      expect(response.status, `${variant.label}: ${response.body}`).toBe(400)
+      expect(existsSync(join(h.root, '.pipeline', 'workflows', `${name}.yaml`))).toBe(false)
+    }
   })
 
   it('完整 Step IR（多行 prompt + contracts/artifact + step/edge guards + actions）→ 保存后 GET 逐字段读回', async () => {
@@ -4118,8 +4256,14 @@ steps:
     guards: []
     transitions: []
 `, 'utf8')
-    const relDir = await initChange(h.store, h.root, 'rel-x')
-    await h.store.setMany(relDir, { workflow: 'rel', phase: 'draft' })
+    const plan = loadEffectiveWorkflowPlan(h.root, 'rel')
+    const relDir = await initChange(h.store, h.root, 'rel-x', {
+      initialWorkflow: {
+        workflow: 'rel',
+        phase: 'draft',
+        ...effectiveWorkflowPlanBinding(plan),
+      },
+    })
     return { ...h, relDir }
   }
 

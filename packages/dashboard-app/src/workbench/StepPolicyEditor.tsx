@@ -114,7 +114,15 @@ function GuardRow({ guard, readonly, label, onChange, onRemove }: {
         {guard.when && (
           <label className="grid gap-1 text-[11.5px] font-semibold text-text-3">
             {t('workbench.step_tracks')}
-            <input className={INPUT} value={guard.when.values.join(', ')} disabled={readonly} onChange={(event) => onChange(withWhen(guard, { ...guard.when!, values: csv(event.target.value) }))} />
+            <input
+              className={INPUT}
+              value={guard.when.values.join(', ')}
+              disabled={readonly}
+              onChange={(event) => {
+                const when = guard.when
+                if (when) onChange(withWhen(guard, { kind: when.kind, values: csv(event.target.value) }))
+              }}
+            />
           </label>
         )}
       </div>

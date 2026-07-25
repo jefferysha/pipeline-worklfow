@@ -132,19 +132,24 @@ export function createFsSkillContentLocator(roots: readonly string[]): SkillCont
         throw new SkillContentNotFoundError(`skill '${skillId}' 在给定的 ${roots.length} 个根目录里都不存在`)
       }
       if (candidates.length === 1) {
-        return { skillId, contentDir: candidates[0]!.dir }
+        const onlyCandidate = candidates[0]
+        if (!onlyCandidate) throw new SkillContentNotFoundError(`skill '${skillId}' 候选消失`)
+        return { skillId, contentDir: onlyCandidate.dir }
       }
 
       // 多候选：内容 hash 全同才可折叠；一旦分歧，禁止依赖隐含搜索顺序静默择一。
       const manifests = await Promise.all(candidates.map((c) => buildCanonicalManifest(skillId, c.dir)))
-      const first = manifests[0]!
+      const first = manifests[0]
+      if (!first) throw new SkillContentNotFoundError(`skill '${skillId}' 未生成内容清单`)
       const allSame = manifests.every((m) => m.treeSha256 === first.treeSha256)
       if (!allSame) {
         throw new SkillContentSourceAmbiguousError(
           `skill '${skillId}' 在多个根目录内容不一致（来源歧义）：${candidates.map((c) => `${c.root} → ${c.dir}`).join('; ')}`,
         )
       }
-      return { skillId, contentDir: candidates[0]!.dir }
+      const selected = candidates[0]
+      if (!selected) throw new SkillContentNotFoundError(`skill '${skillId}' 候选消失`)
+      return { skillId, contentDir: selected.dir }
     },
   }
 }

@@ -13,6 +13,23 @@ import { sanitizeVerificationResultForEncode, validateVerificationResult } from 
 // H10 §3/§8任务3：skill-bundle-snapshot.skill_bundle_id 复用既有 profile 词法校验器（同一 loops
 // 域内的同目录文件，不另造正则——对齐 H10 设计定稿 §2「复用 T 线现有 profile 校验器」）。
 import { SKILL_BUNDLE_ID_RE } from './registry.js'
+import {
+  checkBool,
+  checkEnum,
+  checkKnownKeys,
+  checkLit,
+  checkNum,
+  checkPattern,
+  checkSha256,
+  checkSlotArray,
+  checkStr,
+  checkStrArray,
+  isObj,
+  missing,
+  subObj,
+  type Obj,
+  typeName,
+} from './ledger-codec-primitives.js'
 
 export type LedgerDecodeResult = { ok: true; record: LedgerRecord } | { ok: false; error: string }
 
@@ -33,150 +50,6 @@ export function encodeLedgerRecord(record: LedgerRecord): string {
   }
   const sanitizedVerification = sanitizeVerificationResultForEncode(record.verification) as VerificationResult
   return JSON.stringify({ ...record, verification: sanitizedVerification })
-}
-
-// ── 窄校验小工具（错误推入 errors，路径形如 `run.verify.trusted`）────────────────
-
-type Obj = Record<string, unknown>
-
-function isObj(v: unknown): v is Obj {
-  return typeof v === 'object' && v !== null && !Array.isArray(v)
-}
-
-function typeName(v: unknown): string {
-  if (v === null) return 'null'
-  if (Array.isArray(v)) return 'array'
-  return typeof v
-}
-
-function missing(o: Obj, key: string): boolean {
-  return !(key in o) || o[key] === undefined
-}
-
-function checkStr(o: Obj, key: string, path: string, errors: string[], optional = false): void {
-  if (missing(o, key)) {
-    if (!optional) errors.push(`${path}.${key}: 缺失（必填 string）`)
-    return
-  }
-  if (typeof o[key] !== 'string') errors.push(`${path}.${key}: 应为 string，实得 ${typeName(o[key])}`)
-}
-
-function checkNum(o: Obj, key: string, path: string, errors: string[], optional = false): void {
-  if (missing(o, key)) {
-    if (!optional) errors.push(`${path}.${key}: 缺失（必填 number）`)
-    return
-  }
-  if (typeof o[key] !== 'number') errors.push(`${path}.${key}: 应为 number，实得 ${typeName(o[key])}`)
-}
-
-function checkBool(o: Obj, key: string, path: string, errors: string[], optional = false): void {
-  if (missing(o, key)) {
-    if (!optional) errors.push(`${path}.${key}: 缺失（必填 boolean）`)
-    return
-  }
-  if (typeof o[key] !== 'boolean') errors.push(`${path}.${key}: 应为 boolean，实得 ${typeName(o[key])}`)
-}
-
-/** 新增 durable merge facts 采用闭字段 schema：未知键必须显式升级 codec，不能静默丢失恢复事实。 */
-function checkKnownKeys(o: Obj, allowed: readonly string[], path: string, errors: string[]): void {
-  const known = new Set(allowed)
-  for (const key of Object.keys(o)) {
-    if (!known.has(key)) errors.push(`${path}.${key}: 未知字段`)
-  }
-}
-
-function checkEnum(o: Obj, key: string, allowed: readonly string[], path: string, errors: string[], optional = false): void {
-  if (missing(o, key)) {
-    if (!optional) errors.push(`${path}.${key}: 缺失（必填，闭集 ${allowed.join('|')}）`)
-    return
-  }
-  const v = o[key]
-  if (typeof v !== 'string' || !allowed.includes(v)) {
-    errors.push(`${path}.${key}: 应在闭集 [${allowed.join('|')}] 内，实得 ${JSON.stringify(v)}`)
-  }
-}
-
-/** 精确字面量字段（schema_version: 1 / reserved_runs: 1 / trusted: false / source 单值等）。 */
-function checkLit(o: Obj, key: string, literal: unknown, path: string, errors: string[], optional = false): void {
-  if (missing(o, key)) {
-    if (!optional) errors.push(`${path}.${key}: 缺失（必填字面量 ${JSON.stringify(literal)}）`)
-    return
-  }
-  if (o[key] !== literal) {
-    errors.push(`${path}.${key}: 应为字面量 ${JSON.stringify(literal)}，实得 ${JSON.stringify(o[key])}`)
-  }
-}
-
-function checkStrArray(o: Obj, key: string, path: string, errors: string[], optional = false): void {
-  if (missing(o, key)) {
-    if (!optional) errors.push(`${path}.${key}: 缺失（必填 string[]）`)
-    return
-  }
-  const v = o[key]
-  if (!Array.isArray(v)) {
-    errors.push(`${path}.${key}: 应为 string[]，实得 ${typeName(v)}`)
-    return
-  }
-  v.forEach((item, i) => {
-    if (typeof item !== 'string') errors.push(`${path}.${key}[${i}]: 应为 string，实得 ${typeName(item)}`)
-  })
-}
-
-/** 必填/可选的嵌套对象字段：对象性不成立时报错并返回 null（调用方跳过子字段校验）。 */
-function subObj(o: Obj, key: string, path: string, errors: string[], optional = false): Obj | null {
-  if (missing(o, key)) {
-    if (!optional) errors.push(`${path}.${key}: 缺失（必填对象）`)
-    return null
-  }
-  const v = o[key]
-  if (!isObj(v)) {
-    errors.push(`${path}.${key}: 应为对象，实得 ${typeName(v)}`)
-    return null
-  }
-  return v
-}
-
-// H10 §3/§8任务3：skill-bundle-snapshot 新增字段的窄校验小工具（本文件自包含，不跨包引入
-// verification/validate.ts 的同名私有校验——两处口径一致：64 位小写十六进制。）
-const SHA256_HEX_RE = /^[0-9a-f]{64}$/
-
-/** 内容 sha256 = 64 位小写十六进制。optional 时缺席放行、存在仍校格式。 */
-function checkSha256(o: Obj, key: string, path: string, errors: string[], optional = false): void {
-  if (missing(o, key)) {
-    if (!optional) errors.push(`${path}.${key}: 缺失（必填 sha256）`)
-    return
-  }
-  const v = o[key]
-  if (typeof v !== 'string') { errors.push(`${path}.${key}: 应为 string，实得 ${typeName(v)}`); return }
-  if (!SHA256_HEX_RE.test(v)) errors.push(`${path}.${key}: 应为 64 位小写十六进制 sha256，实得 ${JSON.stringify(v)}`)
-}
-
-/** 必填 string 且须匹配给定词法（如 skill_bundle_id 复用 registry.ts::SKILL_BUNDLE_ID_RE）。 */
-function checkPattern(o: Obj, key: string, pattern: RegExp, path: string, errors: string[]): void {
-  if (missing(o, key)) { errors.push(`${path}.${key}: 缺失（必填，须匹配 ${pattern.source}）`); return }
-  const v = o[key]
-  if (typeof v !== 'string') { errors.push(`${path}.${key}: 应为 string，实得 ${typeName(v)}`); return }
-  if (!pattern.test(v)) errors.push(`${path}.${key}: 不匹配词法 ${pattern.source}，实得 ${JSON.stringify(v)}`)
-}
-
-/** skill-bundle-snapshot.slots 元素窄校验：token/concrete_skill_id 为 string，alternatives 为
- *  string[]（H10 r1 阻断2/D4 补全字段：token 按声明顺序拆出的全部候选 skill id，见
- *  ledger-types.ts::SkillBundleSnapshotRecord.slots 头注；本层只校验其自身是 string[]，不核对
- *  concrete_skill_id 是否确实是其中之一——跨字段一致性由写入方保证），tree_sha256 为 64 位小写
- *  十六进制 sha256。slots 空数组合法（对应「profile 合法但本 step 解析为空」的合法空快照，
- *  见 ledger-types.ts::SkillBundleSnapshotRecord 头注），故本函数不设 minItems。 */
-function checkSlotArray(o: Obj, key: string, path: string, errors: string[]): void {
-  if (missing(o, key)) { errors.push(`${path}.${key}: 缺失（必填数组，允许为空）`); return }
-  const v = o[key]
-  if (!Array.isArray(v)) { errors.push(`${path}.${key}: 应为数组，实得 ${typeName(v)}`); return }
-  v.forEach((item, i) => {
-    const ip = `${path}.${key}[${i}]`
-    if (!isObj(item)) { errors.push(`${ip}: 应为对象，实得 ${typeName(item)}`); return }
-    checkStr(item, 'token', ip, errors)
-    checkStrArray(item, 'alternatives', ip, errors)
-    checkStr(item, 'concrete_skill_id', ip, errors)
-    checkSha256(item, 'tree_sha256', ip, errors)
-  })
 }
 
 // ── 各 kind 的字段校验（与 ledger-types.ts 判别联合一一对应）───────────────────────
@@ -536,7 +409,10 @@ export function decodeLedgerLine(line: string): LedgerDecodeResult {
   }
   validate(parsed, errors)
 
-  if (errors.length > 0) return { ok: false, error: errors.join('; ') }
-  // 窄校验全部通过后的唯一收口断言（对齐 registry.ts deriveRegistry 的校验后收口做法）
-  return { ok: true, record: parsed as unknown as LedgerRecord }
+  if (!isValidatedLedgerRecord(parsed, errors)) return { ok: false, error: errors.join('; ') }
+  return { ok: true, record: parsed }
+}
+
+function isValidatedLedgerRecord(value: unknown, errors: readonly string[]): value is LedgerRecord {
+  return isObj(value) && errors.length === 0
 }

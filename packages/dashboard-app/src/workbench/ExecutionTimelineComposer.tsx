@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type DragEvent, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type DragEvent } from 'react'
 import {
   AlertTriangle,
   ArrowRight,
@@ -9,159 +9,19 @@ import {
   Eye,
   GripVertical,
   LockKeyhole,
-  LogIn,
   LogOut,
   X,
   Plus,
   ShieldCheck,
   Trash2,
-  Wrench,
 } from 'lucide-react'
-import type { WbSkillEntry } from '../api/client'
-import { useT } from '../i18n'
-import type { HooksConfigState } from './HookTimeline'
-import type { BoardLane, LanePatch } from './OrchestrationBoard'
 import { outputPresentation } from '../shared/outputPresentation'
 import { SkillExecutionTopology } from './SkillExecutionTopology'
 import { skillPresentation } from './skillPresentation'
-
-export interface TimelineSkillMove {
-  skillId: string
-  fromStage: string
-  toStage: string
-  refSkillId: string | null
-  after: boolean
-}
-
-export interface ExecutionTimelineComposerProps {
-  workflowName: string
-  lanes: BoardLane[]
-  selectedId: string | null
-  readonly: boolean
-  hooks: HooksConfigState
-  skillRegistry?: WbSkillEntry[] | null
-  selectedSkillZone?: ReactNode
-  prompt?: string
-  onSelect: (id: string) => void
-  onSkillMove?: (move: TimelineSkillMove) => void
-  onSkillAdd?: (stageId: string, skillId: string) => void
-  onSkillRemove?: (stageId: string, skillId: string) => void
-  onPromptChange?: (prompt: string) => void
-  onLaneEdit?: (stageId: string, patch: LanePatch) => void
-  onLaneGuard?: (stageId: string, enabled: boolean) => void
-  onRemoveStage?: (stageId: string) => void
-  onAddStage?: () => void
-  onStageReorder?: (fromId: string, toId: string, after: boolean) => void
-  onOpenAdvanced?: () => void
-  onOpenSkillEditor?: () => void
-}
-
-const EVENT_META = {
-  SessionStart: { title: '进入阶段', hint: '初始化当前任务', icon: LogIn },
-  UserPromptSubmit: { title: '准备输入', hint: '每次提交任务', icon: ArrowRight },
-  PreToolUse: { title: '工具调用前', hint: '执行动作之前', icon: Wrench },
-  PostToolUse: { title: '工具调用后', hint: '取得结果之后', icon: Wrench },
-} as const
-
-const EVENT_ORDER = ['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse'] as const
-
-function sourceLabel(source: WbSkillEntry['source']): string {
-  if (source === 'builtin') return '内置'
-  if (source === 'local-plugin') return '本地插件'
-  if (source === 'external-marketplace') return '扩展市场'
-  return '用户目录'
-}
-
-function statusTone(installed: boolean | undefined): string {
-  if (installed === true) return 'text-green'
-  if (installed === false) return 'text-amb-d'
-  return 'text-text-3'
-}
-
-function HookRows({
-  event,
-  stageId,
-  config,
-  readonly,
-}: {
-  event: (typeof EVENT_ORDER)[number]
-  stageId: string
-  config: HooksConfigState
-  readonly: boolean
-}): JSX.Element {
-  const { t } = useT()
-  const metas = config.hooks?.filter((hook) => hook.event === event) ?? []
-  if (config.hooks === null) {
-    return <span className="text-xs text-text-3">Hook 配置读取中…</span>
-  }
-  if (metas.length === 0) {
-    return <span className="text-xs text-text-3">此时点没有已注册 Hook</span>
-  }
-  return (
-    <div className="flex min-w-0 flex-1 flex-col divide-y divide-border">
-      {metas.map((hook) => {
-        const key = `${hook.id}.${stageId}`
-        const enabled = !(key in config.matrix)
-        const locked = !hook.configurable
-        const nameKey = `workbench.hk_name_${hook.id}`
-        const translatedName = t(nameKey)
-        const descKey = `workbench.hk_desc_${hook.id}`
-        const translatedDescription = t(descKey)
-        const fallback = hook.id === 'guard-write-scope'
-          ? { name: '写入范围保护', description: '在工具执行前检查写入是否越界。' }
-          : hook.id === 'collect-evidence'
-            ? { name: '收集验证证据', description: '工具完成后归集可复核的结果与证据。' }
-            : hook.id === 'load-context'
-              ? { name: '加载任务上下文', description: '进入阶段时注入当前目标、限制与可用能力。' }
-              : { name: hook.id, description: '在这一执行时点运行预先配置的自动化处理。' }
-        const name = translatedName === nameKey ? fallback.name : translatedName
-        const description = translatedDescription === descKey ? fallback.description : translatedDescription
-        const kind = '内置 Hook'
-        return (
-          <div
-            key={hook.id}
-            className="flex min-h-14 items-center gap-3 py-2"
-            data-testid={`wb-timeline-hook-${hook.id}`}
-            title={`技术详情：${hook.id} · ${hook.event} · 匹配 ${hook.matcher || '*'} · ${hook.script}`}
-          >
-            {locked || readonly ? (
-              <LockKeyhole className="h-4 w-4 flex-none text-text-3" aria-hidden="true" />
-            ) : (
-              <button
-                type="button"
-                role="switch"
-                aria-checked={enabled}
-                aria-label={`${name}（${hook.id}） · ${EVENT_META[event].title}`}
-                data-testid={`wb-lane-hk-sw-${stageId}-${hook.id}`}
-                disabled={config.busyKeys.has(key)}
-                className="relative h-[22px] w-9 flex-none rounded-full bg-fill-2 transition-colors duration-150 aria-checked:bg-green disabled:opacity-50 motion-reduce:transition-none after:absolute after:top-[3px] after:left-[3px] after:h-4 after:w-4 after:rounded-full after:bg-card after:shadow-sm after:transition-transform after:duration-150 after:content-[''] aria-checked:after:translate-x-[14px] motion-reduce:after:transition-none"
-                onClick={() => config.toggle(hook.id, stageId, !enabled)}
-              />
-            )}
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <span className="truncate text-[13px] font-semibold text-text">{name}</span>
-                <span className="rounded-full bg-fill-2 px-2 py-0.5 text-[10px] font-semibold text-text-3">{kind}</span>
-              </div>
-              <p className="mt-0.5 text-[11px] leading-4 text-text-3">{description}</p>
-            </div>
-            <span className={`text-xs font-semibold ${enabled ? 'text-green' : 'text-text-3'}`}>{enabled ? '启用' : '停用'}</span>
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
-function PreviewRow({ label, value, ready }: { label: string; value: string; ready: boolean }): JSX.Element {
-  return (
-    <div className="flex items-start gap-3 rounded-lg bg-card px-3 py-2.5">
-      <span className={`mt-1.5 h-2 w-2 flex-none rounded-full ${ready ? 'bg-green' : 'bg-amb'}`} aria-hidden="true" />
-      <span className="min-w-0 flex-1"><strong className="block font-semibold text-text">{label}</strong><span className="mt-0.5 block leading-4 text-text-3">{value}</span></span>
-    </div>
-  )
-}
-
+import type { ExecutionTimelineComposerProps } from './executionTimelineTypes'
+export type { TimelineSkillMove } from './executionTimelineTypes'
+import { EVENT_ORDER, PreviewRow, TimelineHookNodes, sourceLabel, statusTone } from './TimelineHookRows'
+import { TimelineStageStrip } from './TimelineStageStrip'
 export function ExecutionTimelineComposer({
   workflowName,
   lanes,
@@ -188,7 +48,6 @@ export function ExecutionTimelineComposer({
   const [editingName, setEditingName] = useState(false)
   const [nameDraft, setNameDraft] = useState('')
   const [confirmRemove, setConfirmRemove] = useState(false)
-  const [draggingStage, setDraggingStage] = useState<string | null>(null)
 
   const registryByName = useMemo(
     () => new Map((skillRegistry ?? []).map((entry) => [entry.name, entry])),
@@ -241,82 +100,15 @@ export function ExecutionTimelineComposer({
 
   return (
     <div data-testid="wb-timeline-composer" className="space-y-5">
-      <section aria-label={`${workflowName} 阶段`} className="overflow-x-auto rounded-2xl border border-border bg-card px-3 py-3 shadow-sm">
-        <div
-          data-testid="wb-stages"
-          className="flex min-w-max items-center"
-        >
-          {lanes.map((lane, index) => {
-            const isSelected = lane.id === selected.id
-            return (
-              <div
-                key={lane.id}
-                className="relative flex flex-none items-center"
-                data-testid={`wb-step-${lane.id}`}
-                data-state={isSelected ? 'current' : 'idle'}
-                aria-current={isSelected ? 'step' : undefined}
-                onClick={() => onSelect(lane.id)}
-                draggable={!readonly && Boolean(onStageReorder)}
-                onDragStart={(event) => {
-                  if (!onStageReorder) return
-                  setDraggingStage(lane.id)
-                  event.dataTransfer.effectAllowed = 'move'
-                  event.dataTransfer.setData('text/plain', lane.id)
-                }}
-                onDragOver={(event) => {
-                  if (draggingStage && draggingStage !== lane.id) event.preventDefault()
-                }}
-                onDrop={(event) => {
-                  if (!draggingStage || draggingStage === lane.id || !onStageReorder) return
-                  event.preventDefault()
-                  const rect = event.currentTarget.getBoundingClientRect()
-                  onStageReorder(draggingStage, lane.id, event.clientX > rect.left + rect.width / 2)
-                  setDraggingStage(null)
-                }}
-                onDragEnd={() => setDraggingStage(null)}
-              >
-                <button
-                  type="button"
-                  aria-current={isSelected ? 'step' : undefined}
-                  aria-label={`选择阶段 ${lane.name}`}
-                  aria-pressed={isSelected}
-                  className="group relative z-10 flex min-h-12 w-max min-w-[112px] items-center gap-2 rounded-xl px-2.5 py-2 text-left transition-[background-color,box-shadow,transform] duration-200 hover:bg-fill active:scale-[.98] aria-[current=step]:bg-accent-t aria-[current=step]:shadow-[inset_0_0_0_1px_var(--accent)] motion-reduce:transition-none"
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    onSelect(lane.id)
-                  }}
-                >
-                  {!readonly && onStageReorder && <GripVertical data-testid={`wb-lane-grip-${lane.id}`} className="h-4 w-4 flex-none cursor-grab text-text-3" aria-hidden="true" />}
-                  <span className="grid h-7 w-7 flex-none place-items-center rounded-full border border-border-2 bg-card font-mono text-xs font-semibold text-text-3 group-aria-[current=step]:border-(--accent) group-aria-[current=step]:bg-(--accent) group-aria-[current=step]:text-white">
-                    {index + 1}
-                  </span>
-                  <span className="whitespace-nowrap text-sm font-semibold text-text group-aria-[current=step]:text-accent-d">{lane.name}</span>
-                  {lane.running && <span className="size-1.5 flex-none animate-pulse rounded-full bg-green motion-reduce:animate-none" data-testid={`wb-flow-gloss-${lane.id}`} aria-hidden="true" />}
-                </button>
-                {index < lanes.length - 1 && (
-                  <div className="relative flex h-12 w-9 flex-none items-center justify-center" aria-hidden="true">
-                    <span className={`absolute inset-x-0 top-1/2 h-px -translate-y-1/2 ${isSelected || lanes[index + 1]?.id === selected.id ? 'bg-(--accent)' : 'bg-border-2'}`} />
-                  </div>
-                )}
-              </div>
-            )
-          })}
-          {!readonly && onAddStage && (
-            <div className="relative min-w-0 px-1">
-              <button
-                type="button"
-                aria-label="+ 添加阶段"
-                data-testid="wb-add-stage-open"
-                className="relative z-10 flex min-h-14 w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border-2 bg-card px-3 text-sm font-semibold text-accent-d hover:border-(--accent) hover:bg-accent-t/30"
-                onClick={onAddStage}
-              >
-                <Plus className="h-4 w-4" aria-hidden="true" /> 添加阶段
-              </button>
-            </div>
-          )}
-        </div>
-      </section>
-
+      <TimelineStageStrip
+        workflowName={workflowName}
+        lanes={lanes}
+        selectedId={selected.id}
+        readonly={readonly}
+        onSelect={onSelect}
+        onAddStage={onAddStage}
+        onStageReorder={onStageReorder}
+      />
       <section data-testid="step-policy-editor" className="rounded-2xl border border-border bg-card p-5 shadow-sm">
         <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -398,24 +190,7 @@ export function ExecutionTimelineComposer({
 
         <div className="grid grid-cols-[minmax(0,1fr)_260px] items-start gap-5 max-[1000px]:grid-cols-1">
           <div data-testid={`wb-lane-hooks-${selected.id}`} className="relative min-w-0 pl-12 before:absolute before:top-5 before:bottom-5 before:left-[19px] before:w-px before:bg-border-2 before:content-['']">
-            {EVENT_ORDER.slice(0, 2).map((event) => {
-              const meta = EVENT_META[event]
-              const Icon = meta.icon
-              return (
-                <div key={event} className="relative mb-2 rounded-xl border border-border bg-card px-4 py-2.5" data-testid={`wb-timeline-node-${event}`}>
-                  <span className="absolute top-3 -left-[47px] z-10 grid h-8 w-8 place-items-center rounded-full border border-border-2 bg-card text-text-3">
-                    <Icon className="h-4 w-4" aria-hidden="true" />
-                  </span>
-                  <div className="flex min-w-0 items-start gap-4 max-[720px]:flex-col">
-                    <div className="w-32 flex-none pt-1">
-                      <h3 className="text-sm font-semibold text-text">{meta.title}</h3>
-                      <p className="mt-0.5 font-mono text-[10px] text-text-3">{meta.hint}</p>
-                    </div>
-                    <HookRows event={event} stageId={selected.id} config={hooks} readonly={readonly} />
-                  </div>
-                </div>
-              )
-            })}
+            <TimelineHookNodes events={EVENT_ORDER.slice(0, 2)} stageId={selected.id} config={hooks} readonly={readonly} />
 
             <div className="relative mb-2 rounded-2xl border border-accent-b bg-accent-t/35 p-4 shadow-[0_8px_28px_-24px_var(--accent)]" data-testid="wb-timeline-node-codex">
               <span className="absolute top-4 -left-[47px] z-10 grid h-8 w-8 place-items-center rounded-full border border-(--accent) bg-(--accent) text-white">
@@ -534,24 +309,7 @@ export function ExecutionTimelineComposer({
               )}
             </div>
 
-            {EVENT_ORDER.slice(2).map((event) => {
-              const meta = EVENT_META[event]
-              const Icon = meta.icon
-              return (
-                <div key={event} className="relative mb-2 rounded-xl border border-border bg-card px-4 py-2.5" data-testid={`wb-timeline-node-${event}`}>
-                  <span className="absolute top-3 -left-[47px] z-10 grid h-8 w-8 place-items-center rounded-full border border-border-2 bg-card text-text-3">
-                    <Icon className="h-4 w-4" aria-hidden="true" />
-                  </span>
-                  <div className="flex min-w-0 items-start gap-4 max-[720px]:flex-col">
-                    <div className="w-32 flex-none pt-1">
-                      <h3 className="text-sm font-semibold text-text">{meta.title}</h3>
-                      <p className="mt-0.5 font-mono text-[10px] text-text-3">{meta.hint}</p>
-                    </div>
-                    <HookRows event={event} stageId={selected.id} config={hooks} readonly={readonly} />
-                  </div>
-                </div>
-              )
-            })}
+            <TimelineHookNodes events={EVENT_ORDER.slice(2)} stageId={selected.id} config={hooks} readonly={readonly} />
 
             <div className="relative mb-2 rounded-xl border border-border bg-card px-4 py-3" data-testid="wb-timeline-node-guard">
               <span className="absolute top-3 -left-[47px] z-10 grid h-8 w-8 place-items-center rounded-full border border-border-2 bg-card text-text-3"><ShieldCheck className="h-4 w-4" aria-hidden="true" /></span>

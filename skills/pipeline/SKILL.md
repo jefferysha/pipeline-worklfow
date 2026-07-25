@@ -113,20 +113,21 @@ CLI `--producer` 使用的**逻辑 id**。在 Codex 中实际加载时，必须�
 
 ## Governed OpenSpec document contract（default 的真实闭环）
 
-默认 workflow 的**全部可执行 track（包括 PM 与 free）**，以及声明了 `openspec_contract: required` 的自定义 workflow，
+默认 workflow 的**全部可执行 track（包括 PM 与 free）**、声明了 `openspec_contract: required` 的自定义 workflow，
+以及声明了 `document_contract: v1` 的短 workflow，
 都不是“有文件即可”的松散流程。它们必须在 `.pipeline-documents.json` 中留下：**真实 Skill 调用证据 →
 文档内容 SHA-256 → 后续 phase 对该精确版本的读取收据**。PM 的 PRD、用户旅程和原型交付仍保留，但也必须
 产出可实施的 OpenSpec delta spec / plan 并在 ship 应用主 spec。
 
-对 default workflow，这张矩阵无条件适用；对 custom workflow，只有声明
-`openspec_contract: required` 时适用。`--producer` 必须等于本轮**实际调用且已有完成态 history
+对 default/legacy-full workflow，下表完整适用；对 `document_contract: v1`，只执行该 profile
+为当前 step 声明的 outputs/reads，不得擅自扩成七阶段矩阵。`--producer` 必须等于本轮**实际调用且已有完成态 history
 证据**的 Skill；不能为了通过检查伪造名字。原生 PostToolUse 是首选证据源；Codex 某些 exec
 路径缺少该回调时，CLI 只会在同一宿主 transcript 已证明该精确 SKILL.md 读取完成后补写同一种
 `CodexSkillRead` 证据。默认 workflow 一律使用本插件
 打包的 bare 名称（`brainstorming` / `writing-plans` / `verification-before-completion`）；ledger 保留旧
 namespace 仅用于读取历史 change，不把它作为新安装的前置条件。
 
-内建 `simple` 明确不受本节文档契约治理：它的审计事实是 canonical Change、step transitions、
+未声明任一 document contract 的 workflow（包括内建 `simple`）明确不受本节文档契约治理：它的审计事实是 canonical Change、step transitions、
 实际 skill 调用和聚焦验证，不生成 proposal/design/delta spec/Superpowers/ADR。
 
 | phase | 进入时先读 | 退出前必须登记的真实产物 |

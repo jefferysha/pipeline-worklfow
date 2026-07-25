@@ -118,7 +118,10 @@ function readPluginVersion(): string {
   ]) {
     try {
       const raw = readFileSync(join(pluginRoot(), ...rel), 'utf8')
-      const version = (JSON.parse(raw) as { version?: unknown }).version
+      const parsed: unknown = JSON.parse(raw)
+      const version = typeof parsed === 'object' && parsed !== null && 'version' in parsed
+        ? parsed.version
+        : undefined
       if (typeof version === 'string' && version.trim() !== '') return version
     } catch {
       // Try the compatibility manifest before falling back to unknown.
@@ -149,7 +152,10 @@ function readDisabledPluginKeys(): Set<string> {
   const disabled = new Set<string>()
   try {
     const raw = readFileSync(join(homedir(), '.claude', 'settings.json'), 'utf8')
-    const ep = (JSON.parse(raw) as { enabledPlugins?: Record<string, unknown> }).enabledPlugins
+    const parsed: unknown = JSON.parse(raw)
+    const ep = typeof parsed === 'object' && parsed !== null && 'enabledPlugins' in parsed
+      ? parsed.enabledPlugins
+      : undefined
     if (ep !== null && typeof ep === 'object') {
       for (const [key, val] of Object.entries(ep)) if (val === false) disabled.add(key)
     }

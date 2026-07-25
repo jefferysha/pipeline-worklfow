@@ -1,11 +1,21 @@
 import {
+  isAcceptedDocumentProducer,
+  isRecordedDocumentProducerAllowedThroughPolicyStep,
+  isDocumentContractPhase,
+  recordsRequiredForPolicyStep,
+  readsRequiredForPolicyStep,
   readsRequiredForPhase,
   recordsRequiredForPhase,
   type DocumentContractPhase,
+  type DocumentGovernancePolicy,
   type DocumentKind,
 } from '../workflow/document-contract.js'
 import { deltaSpecSlot, resolveDocument } from './document-path.js'
-import { readDocumentLedger, type DocumentRecord } from './document-ledger.js'
+import {
+  currentDocumentStepVisitId,
+  readDocumentLedger,
+  type DocumentRecord,
+} from './document-ledger.js'
 
 export type DocumentEvidenceItemStatus = 'recorded' | 'missing' | 'stale' | 'unread'
 
@@ -18,7 +28,7 @@ export interface DocumentEvidenceItem {
 }
 
 export interface DocumentEvidenceReport {
-  readonly phase: DocumentContractPhase
+  readonly phase: string
   readonly hasLedger: boolean
   readonly pass: boolean
   readonly blockers: readonly string[]
@@ -53,11 +63,23 @@ function item(
   }
 }
 
+function receiptMatchesVisit(
+  receipt: DocumentRecord['reads'][number],
+  phase: string,
+  digest: string,
+  visitId: string,
+): boolean {
+  return receipt.phase === phase
+    && receipt.sha256 === digest
+    && receipt.visitId === visitId
+}
+
 export async function evaluateDocumentEvidence(
   repoRoot: string,
   changeDir: string,
-  phase: DocumentContractPhase,
+  phase: string,
   scope: DocumentEvidenceScope = {},
+  policy?: DocumentGovernancePolicy,
 ): Promise<DocumentEvidenceReport> {
   let ledger
   try {
@@ -81,11 +103,28 @@ export async function evaluateDocumentEvidence(
     }
   }
 
-  const recordKinds = scope.recordKinds ?? recordsRequiredForPhase(phase).map((requirement) => requirement.kind)
-  const readRequirements = new Set(scope.readKinds ?? readsRequiredForPhase(phase))
+  const recordRequirements = policy
+    ? recordsRequiredForPolicyStep(policy, phase)
+    : isDocumentContractPhase(phase) ? recordsRequiredForPhase(phase) : []
+  const recordKinds = scope.recordKinds ?? recordRequirements.map((requirement) => requirement.kind)
+  const readRequirements = new Set(scope.readKinds ?? (
+    policy
+      ? readsRequiredForPolicyStep(policy, phase)
+      : isDocumentContractPhase(phase) ? readsRequiredForPhase(phase) : []
+  ))
   const kinds = new Set<DocumentKind>([...recordKinds, ...readRequirements])
   const blockers: string[] = []
   const items: DocumentEvidenceItem[] = []
+  let currentVisitId: string | undefined
+  if (readRequirements.size > 0) {
+    try {
+      currentVisitId = await currentDocumentStepVisitId(changeDir)
+    } catch (error) {
+      blockers.push(
+        `current step visit 不可验证: ${error instanceof Error ? error.message : String(error)}`,
+      )
+    }
+  }
 
   for (const kind of kinds) {
     const records = ledger.records.filter((record) => record.kind === kind)
@@ -93,6 +132,15 @@ export async function evaluateDocumentEvidence(
     if (records.length === 0) {
       blockers.push(`缺少 document '${kind}'；执行 pipeline document record <change> ${kind} <path> --producer <skill>`)
       items.push(item(kind, 'missing', requiredRead, records))
+      continue
+    }
+    if (records.some((record) => {
+      return policy
+        ? !isRecordedDocumentProducerAllowedThroughPolicyStep(policy, kind, phase, record.producer)
+        : !isAcceptedDocumentProducer(kind, record.producer)
+    })) {
+      blockers.push(`document '${kind}' 的 producer 不符合当前 document contract`)
+      items.push(item(kind, 'stale', requiredRead, records))
       continue
     }
     const legacyDelta = kind === 'delta-spec'
@@ -111,10 +159,17 @@ export async function evaluateDocumentEvidence(
       items.push(item(kind, 'stale', requiredRead, records))
       continue
     }
-    if (requiredRead && records.some((record) => !record.reads.some(
-      (receipt) => receipt.phase === phase && receipt.sha256 === record.sha256,
-    ))) {
-      blockers.push(`document '${kind}' 尚未由 ${phase} 读取；执行 pipeline document read <change> ${kind}`)
+    if (requiredRead && (
+      currentVisitId === undefined
+      || records.some((record) => !record.reads.some(
+        (receipt) => receiptMatchesVisit(receipt, phase, record.sha256, currentVisitId),
+      ))
+    )) {
+      if (currentVisitId !== undefined) {
+        blockers.push(
+          `document '${kind}' 尚未由 ${phase} 的当前 step visit 读取；执行 pipeline document read <change> ${kind}`,
+        )
+      }
       items.push(item(kind, 'unread', requiredRead, records))
       continue
     }

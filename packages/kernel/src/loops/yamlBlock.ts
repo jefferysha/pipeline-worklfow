@@ -1,3 +1,5 @@
+import { required } from '../required.js'
+
 /**
  * loops yamlBlock —— `.pipeline/loops.yaml` 条目块定位共享内件（**包内私有**：不进 loops/index.ts
  * 亦即不进 kernel 公共出口；只供 update.ts / graduation.ts 直接 import）。
@@ -33,13 +35,13 @@ export function indentOf(line: string): number {
 export function locateLoop(lines: string[], loopId: string): LoopBlock | null {
   const idRe = /^(\s*)-(\s+)id:\s+(.+?)\s*(?:#.*)?$/
   for (let i = 0; i < lines.length; i++) {
-    const m = lines[i]!.match(idRe)
-    if (!m || m[3]!.trim() !== loopId) continue
-    const dashIndent = m[1]!.length
-    const fieldIndent = dashIndent + 1 + m[2]!.length
+    const m = required(lines[i]).match(idRe)
+    if (!m || required(m[3]).trim() !== loopId) continue
+    const dashIndent = required(m[1]).length
+    const fieldIndent = dashIndent + 1 + required(m[2]).length
     let end = lines.length
     for (let j = i + 1; j < lines.length; j++) {
-      const line = lines[j]!
+      const line = required(lines[j])
       if (line.trim() === '') continue
       if (indentOf(line) <= dashIndent) {
         end = j
@@ -54,7 +56,7 @@ export function locateLoop(lines: string[], loopId: string): LoopBlock | null {
 /** 块尾插入点：(start, end) 内最后一个非空行之后；全空 → end。子块同样适用（start 传子块头行）。 */
 export function insertPointAtBlockEnd(lines: string[], start: number, end: number): number {
   for (let i = end - 1; i > start; i--) {
-    if (lines[i]!.trim() !== '') return i + 1
+    if (required(lines[i]).trim() !== '') return i + 1
   }
   return end
 }

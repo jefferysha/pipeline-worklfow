@@ -233,7 +233,7 @@ export function extractRealSessionId(headers: HeaderMap, bodyBytes: Buffer | nul
           const uid = (meta as Record<string, unknown>).user_id
           if (typeof uid === 'string') {
             const m = SESSION_IN_STRING_RE.exec(uid)
-            if (m) return m[1]!
+            if (m) return m[1] ?? ''
           }
           const nested = (meta as Record<string, unknown>).session_id
           if (typeof nested === 'string' && looksLikeUuid(nested.trim())) return nested.trim()
@@ -267,9 +267,9 @@ export function shouldSkipTraceRecord(p: SkipParams): boolean {
   let hostname = ''
   try { hostname = new URL(p.upstreamUrl).hostname.toLowerCase() } catch { hostname = '' }
   if (IGNORED_HOSTS.has(hostname)) return true
-  const cleanPath = (p.path || '/').split('?', 1)[0]!.toLowerCase()
+  const cleanPath = ((p.path || '/').split('?', 1)[0] ?? '').toLowerCase()
   if (IGNORED_PATH_PREFIXES.some((pre) => cleanPath === pre || cleanPath.startsWith(pre + '/'))) return true
-  const media = headerValueToString(headerLookup(p.responseHeaders, 'content-type')).split(';', 1)[0]!.trim().toLowerCase()
+  const media = (headerValueToString(headerLookup(p.responseHeaders, 'content-type')).split(';', 1)[0] ?? '').trim().toLowerCase()
   const ua = headerValueToString(headerLookup(p.requestHeaders ?? {}, 'user-agent')).toLowerCase()
   const method = (p.method ?? 'GET').toUpperCase()
   if ((method === 'GET' || method === 'HEAD') && PKG_UA_MARKERS.some((m) => ua.includes(m)) && IGNORED_PKG_METADATA_CTYPES.has(media)) {

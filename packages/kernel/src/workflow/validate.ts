@@ -1,4 +1,4 @@
-import { compileWorkflow } from './compile.js'
+import { compileDefaultWorkflow, compileWorkflow } from './compile.js'
 import { validateOpenSpecContractWorkflow } from './document-contract.js'
 import type { WorkflowDef } from './types.js'
 
@@ -40,7 +40,10 @@ const WORKFLOW_NAME_RE = /^[\p{L}\p{N}\p{M}_-]+$/u
  */
 const SKILL_IDENT_RE = /^[a-zA-Z0-9_-]+(?::[a-zA-Z0-9_-]+)*$/
 
-export function validateWorkflow(wf: WorkflowDef): string[] {
+export function validateWorkflow(
+  wf: WorkflowDef,
+  options: { readonly origin?: 'custom' | 'default' } = {},
+): string[] {
   const errors: string[] = []
   const producedByEarlierStep = new Set<string>()
   const allStepIds = new Set(wf.steps.map((s) => s.id))
@@ -100,10 +103,13 @@ export function validateWorkflow(wf: WorkflowDef): string[] {
   // A workflow may have multiple explicit terminal nodes (for example done and escalated). The
   // real structural error is an unreachable node, not a terminal's array position.
   if (wf.steps.length > 0) {
+    const entryStep = wf.steps[0]
+    if (!entryStep) return errors
     const reachable = new Set<string>()
-    const queue = [wf.steps[0]!.id]
+    const queue = [entryStep.id]
     while (queue.length > 0) {
-      const id = queue.shift()!
+      const id = queue.shift()
+      if (id === undefined) break
       if (reachable.has(id)) continue
       reachable.add(id)
       const step = wf.steps.find((candidate) => candidate.id === id)
@@ -112,7 +118,7 @@ export function validateWorkflow(wf: WorkflowDef): string[] {
       }
     }
     for (const step of wf.steps) {
-      if (!reachable.has(step.id)) errors.push(`step '${step.id}' 从首 step '${wf.steps[0]!.id}' 不可达`)
+      if (!reachable.has(step.id)) errors.push(`step '${step.id}' 从首 step '${entryStep.id}' 不可达`)
     }
   }
 
@@ -124,7 +130,8 @@ export function validateWorkflow(wf: WorkflowDef): string[] {
   // 在既有图/标识符校验之后（既有错误恒先收齐，不被 compile 首错抢断），loadWorkflow 据此拒含
   // 畸形新字段的文件。合法 workflow 编译无错 → 不追加，行为逐字不变。
   try {
-    compileWorkflow(wf)
+    if (options.origin === 'default') compileDefaultWorkflow(wf)
+    else compileWorkflow(wf)
   } catch (e) {
     errors.push(e instanceof Error ? e.message : String(e))
   }

@@ -46,8 +46,20 @@ export interface PlanResult {
  * reverse 对它是假捕获；唯一能真拦的是 forward-MITM（HTTPS_PROXY + CA）。调用方（如沙箱 codex
  * 分支 / `pipeline tap start codex --forward`）据此把 codex 抬成 forward。
  */
+function clientConfig(client: string) {
+  const config = CLIENT_CONFIGS[client]
+  if (!config) throw new Error(`未知 client: ${client}`)
+  return config
+}
+
+function targetFor(targets: Readonly<Record<string, string>>, client: string): string {
+  const target = targets[client]
+  if (target === undefined) throw new Error(`client '${client}' 缺少已解析上游`)
+  return target
+}
+
 const modeOf = (client: string, forceForward?: ReadonlySet<string>): 'reverse' | 'forward' =>
-  forceForward?.has(client) ? 'forward' : (CLIENT_CONFIGS[client]!.defaultProxyMode ?? 'reverse')
+  forceForward?.has(client) ? 'forward' : (clientConfig(client).defaultProxyMode ?? 'reverse')
 
 /**
  * 生效代理模式（B6）：在 modeOf 基础上，对**解析出的真实 target** 再 consult requiresForwardForUrl——
@@ -70,7 +82,7 @@ export function planBindings(clients: readonly string[], detect?: DetectOptions,
   let needForward = false
 
   for (const client of clients) {
-    const cfg = CLIENT_CONFIGS[client]!
+    const cfg = clientConfig(client)
     const target = detectTarget(client, detect)
     targets[client] = target
     if (effectiveMode(client, target, forced) === 'reverse') {
@@ -132,7 +144,8 @@ export async function launchTap(opts: LaunchOptions): Promise<LaunchResult> {
   const forced = new Set(opts.forceForward ?? [])
   const { bindings, targets } = planBindings(opts.clients, opts.detect, opts.forceForward)
   // 与 planBindings 同口径：Bedrock target 隐式抬 forward 的 client 也算 forward（否则下方取 reverse handle 落空）。
-  const forwardClients = opts.clients.filter((c) => effectiveMode(c, targets[c]!, forced) === 'forward')
+  const forwardClients = opts.clients.filter((client) =>
+    effectiveMode(client, targetFor(targets, client), forced) === 'forward')
 
   let authority: CertificateAuthority | undefined
   let caCertPath: string | undefined
@@ -150,11 +163,20 @@ export async function launchTap(opts: LaunchOptions): Promise<LaunchResult> {
   const daemon = await startDaemon({ bindings, store: opts.store, host: opts.host, ca: authority })
 
   const clients: ClientLaunchInfo[] = opts.clients.map((client) => {
-    const cfg = CLIENT_CONFIGS[client]!
-    const mode = effectiveMode(client, targets[client]!, forced)
-    const handle = mode === 'reverse' ? daemon.handles[client]! : daemon.handles[FORWARD_BINDING_NAME]!
-    const env = mode === 'reverse' ? reverseEnvMap(cfg, handle.port) : forwardEnvMap(handle.port, caCertPath!)
-    return { client, mode, port: handle.port, target: targets[client]!, env }
+    const cfg = clientConfig(client)
+    const target = targetFor(targets, client)
+    const mode = effectiveMode(client, target, forced)
+    const handleName = mode === 'reverse' ? client : FORWARD_BINDING_NAME
+    const handle = daemon.handles[handleName]
+    if (!handle) throw new Error(`daemon 未返回 '${handleName}' 绑定`)
+    let env: Record<string, string>
+    if (mode === 'reverse') {
+      env = reverseEnvMap(cfg, handle.port)
+    } else {
+      if (!caCertPath) throw new Error(`forward client '${client}' 缺少 CA 证书路径`)
+      env = forwardEnvMap(handle.port, caCertPath)
+    }
+    return { client, mode, port: handle.port, target, env }
   })
 
   return { daemon, clients, caCertPath }

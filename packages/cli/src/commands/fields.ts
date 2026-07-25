@@ -7,11 +7,19 @@
  *   set-many 无输出，同 set
  *   cas      无输出，0；不匹配=3；错误=1
  */
-import { assertWorkflowAllowed, FIELD_ORDER, LIST_FIELDS, requireTrack, resolveWorkflowName } from '@pipeline-lite/kernel'
+import { FIELD_ORDER, LIST_FIELDS, resolveWorkflowName } from '@pipeline-lite/kernel'
 import type { FieldName, HistoryEntry, PipelineState, TrackRegistry } from '@pipeline-lite/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
 import { effectiveArtifactFields } from './effective-artifacts.js'
 import { changeDir, isValidChangeName } from '../paths.js'
+import {
+  enumValueAllowed,
+  fieldPatch,
+  REVIEW_GATE_FIELDS,
+  scalarField,
+  scalarValue,
+  trackWorkflowAllowed,
+} from './field-values.js'
 
 /** history 记账 best-effort（CONTRACT §1：失败仅 WARN，绝不影响主写已成功的 exit） */
 export async function recordHistory(deps: CliDeps, dir: string, entry: HistoryEntry): Promise<void> {
@@ -20,72 +28,6 @@ export async function recordHistory(deps: CliDeps, dir: string, entry: HistoryEn
     await deps.history.append(dir, entry)
   } catch (e) {
     deps.io.err(`WARN: history 写入失败: ${errMsg(e)}`)
-  }
-}
-
-/**
- * 枚举字段校验表 —— 逐字对齐老内核 state-fields.sh cmd_set 的 case 块
- * （phase 走 manifest 单一真相源）。track/workflow 都不在本表：合法性不再是写死枚举，
- * 改由动态 Track Registry 在运行时按「最终 {track,workflow} 组合」校验（checkTrackWorkflow，
- * 落地在 runComboWrite 的锁内路径）；缺 tracks.yaml 时 registry = 内建 Track，校验行为与旧
- * STATIC_ENUMS.track 逐字一致（allowed='*' 恒放行）。
- */
-const REVIEWISH = ['pending', 'pass', 'fail', 'handled', 'skipped'] as const
-const REVIEW_GATE_FIELDS = new Set<FieldName>([
-  'review_gate_phase', 'review_gate_status', 'review_gate_event', 'review_requested_at', 'review_acknowledged_at',
-])
-const STATIC_ENUMS: Partial<Record<FieldName, readonly string[]>> = {
-  preset: ['full', 'hotfix', 'tweak'],
-  phase_status: ['pending', 'in_progress', 'done', 'failed'],
-  build_mode: ['direct', 'subagent-driven-development', 'parallel-team', 'prototype'],
-  // `in-place` is an explicit, truthful mode for a constrained agent that can write project
-  // files but cannot mutate .git metadata.  It must never be represented as a branch/worktree.
-  isolation: ['branch', 'worktree', 'in-place'],
-  agent_review_result: REVIEWISH,
-  codex_review_result: REVIEWISH,
-  verify_result: REVIEWISH,
-  branch_status: REVIEWISH,
-  direct_override: ['true', 'false'],
-  archived: ['true', 'false'],
-  automation: ['off', 'queued', 'scheduled', 'running', 'merged', 'failed', 'conflict', 'paused'],
-}
-
-/** 枚举校验：不通过 → stderr 报错（老内核 validate_enum 口径）+ 返回 false */
-function enumOk(deps: CliDeps, field: FieldName, value: string | string[]): boolean {
-  if (Array.isArray(value)) return true // 列表字段无枚举
-  const allowed = field === 'phase' ? deps.flow.manifest.phases : STATIC_ENUMS[field]
-  if (!allowed || allowed.includes(value as never)) return true
-  deps.io.err(`ERROR: 非法值 '${value}'，允许: ${allowed.join(' ')}`)
-  return false
-}
-
-/** state 里 track/workflow 等标量字段的读取（非列表字段恒 string；缺键 → 空串）。 */
-function scalarField(state: PipelineState, f: FieldName): string {
-  const v = state.fields[f]
-  return Array.isArray(v) ? v.join(',') : (v ?? '')
-}
-
-/** kv 里某标量字段的最终值：kv 提供则用之，否则回落旧 state 值（set-many 组合校验用）。 */
-function scalarOf(v: string | string[] | undefined, fallback: string): string {
-  if (v === undefined) return fallback
-  return Array.isArray(v) ? v.join(',') : v
-}
-
-/**
- * 最终 {track, workflow} 组合校验（R2 · 四写入口的唯一 gate）：track 必须已注册
- * （requireTrack）、workflow 必须在该 track 的 allowed 白名单内（assertWorkflowAllowed）。
- * set track / set workflow / cas track / cas workflow / set-many 全部按「更新后的最终组合」
- * 走这一个 helper——不再有「set track 只 requireTrack」「cas workflow 零校验」之类的旁路
- * （codex R2 阻断）。缺 tracks.yaml 时 registry=内建 Track（allowed='*' 恒放行，零回归）。
- * 不通过 → stderr 报错 + 返回 false。
- */
-function checkTrackWorkflow(deps: CliDeps, registry: TrackRegistry, track: string, workflow: string): boolean {
-  try {
-    assertWorkflowAllowed(requireTrack(registry, track), workflow)
-    return true
-  } catch (e) {
-    deps.io.err(`ERROR: ${errMsg(e)}`)
-    return false
   }
 }
 
@@ -98,13 +40,6 @@ type ComboPlan =
       readonly finalWorkflow: string
       readonly patch: Partial<Record<FieldName, string | string[]>>
     }
-
-/** 单字段 patch（显式 Partial + 索引赋值，避开计算键 `{ [f]: v }` 的类型推断坑）。 */
-function fieldPatch(f: FieldName, v: string | string[]): Partial<Record<FieldName, string | string[]>> {
-  const patch: Partial<Record<FieldName, string | string[]>> = {}
-  patch[f] = v
-  return patch
-}
 
 /** P6 · artifact 字段被旧写入口拒绝时的统一 stderr 文案（含改用指引）。 */
 function artifactRejectMsg(field: FieldName, ctx: PipelineState): string {
@@ -187,7 +122,7 @@ async function runComboWrite(
           return 1
         }
         if (plan.kind === 'cas-miss') return 3
-        if (!checkTrackWorkflow(deps, registry, plan.finalTrack, plan.finalWorkflow)) return 1
+        if (!trackWorkflowAllowed(deps, registry, plan.finalTrack, plan.finalWorkflow)) return 1
         await deps.store.writeUnderLock(dir, { ...cur, fields: { ...cur.fields, ...plan.patch } }, {
           kind: Object.keys(plan.patch).length === 1 ? 'set' : 'set-many',
         })
@@ -319,7 +254,7 @@ export async function cmdSet(deps: CliDeps, name: string, field: string, value: 
   if (!f) return 1
   if (rejectReviewGateField(deps, f)) return 1
   const v = coerceValue(f, value)
-  if (!enumOk(deps, f, v)) return 1
+  if (!enumValueAllowed(deps, f, v)) return 1
   const dir = changeDir(deps.cwd, name)
   // track/workflow：锁内按「更新后的最终 {track,workflow} 组合」校验 + 落盘（R2 · 关 TOCTOU、堵旁路）。
   //  - set track    → finalTrack=新值、finalWorkflow=旧 workflow（读 state 补齐）；
@@ -368,7 +303,7 @@ export async function cmdSetMany(deps: CliDeps, name: string, pairs: string[]): 
       return 1
     }
     const v = coerceValue(f, pair.slice(i + 1))
-    if (!enumOk(deps, f, v)) return 1
+    if (!enumValueAllowed(deps, f, v)) return 1
     kv[f] = v
   }
   if (Object.keys(kv).length === 0) {
@@ -383,8 +318,8 @@ export async function cmdSetMany(deps: CliDeps, name: string, pairs: string[]): 
   if (Object.hasOwn(kv, 'track') || Object.hasOwn(kv, 'workflow')) {
     const code = await runComboWrite(deps, dir, (cur) => ({
       kind: 'write',
-      finalTrack: scalarOf(kv.track, scalarField(cur, 'track')),
-      finalWorkflow: scalarOf(kv.workflow, scalarField(cur, 'workflow')),
+      finalTrack: scalarValue(kv.track, scalarField(cur, 'track')),
+      finalWorkflow: scalarValue(kv.workflow, scalarField(cur, 'workflow')),
       patch: kv,
     }))
     if (code !== 0) return code
@@ -417,7 +352,7 @@ export async function cmdCas(
   if (!f) return 1
   if (rejectReviewGateField(deps, f)) return 1
   // 老内核 cmd_cas 仅对 automation 复用枚举校验（state-fields.sh）
-  if (f === 'automation' && !enumOk(deps, f, next)) return 1
+  if (f === 'automation' && !enumValueAllowed(deps, f, next)) return 1
   const dir = changeDir(deps.cwd, name)
   // track/workflow：锁内 read + 比对 expect + 最终组合校验 + 条件写（R2 · 关 TOCTOU、堵 cas 旁路）。
   //  - cas track    → finalTrack=next、finalWorkflow=旧 workflow；

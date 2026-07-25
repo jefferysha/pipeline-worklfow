@@ -227,7 +227,7 @@ function renderDefaultStep(step) {
 }
 
 /** 规范化表 + 默认步骤元数据 → generated TS 文本（DO NOT EDIT 头 + 来源路径 + as const）。 */
-export function renderGenerated(table, steps) {
+export function renderGenerated(table, steps, yamlText) {
   const out = []
   out.push('/**')
   out.push(' * DO NOT EDIT —— 生成文件。')
@@ -240,6 +240,8 @@ export function renderGenerated(table, steps) {
   out.push(' * 门禁逐字节校验）。')
   out.push(' */')
   out.push("import type { DefaultArtifactDeclaration } from './default-artifacts.js'")
+  out.push('')
+  out.push(`export const DEFAULT_WORKFLOW_SOURCE = ${JSON.stringify(yamlText)}`)
   out.push('')
   out.push('export const DEFAULT_WORKFLOW_STEPS = [')
   for (const step of steps) out.push(renderDefaultStep(step))
@@ -260,7 +262,7 @@ export function generate(yamlText, typesText) {
   const fieldOrder = extractFieldOrder(typesText)
   const parsed = parseDefaultWorkflow(yamlText)
   const table = validateAndNormalize(parsed, fieldOrder)
-  return renderGenerated(table, parsed.steps)
+  return renderGenerated(table, parsed.steps, yamlText)
 }
 
 function main() {

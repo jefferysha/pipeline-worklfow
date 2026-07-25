@@ -47,7 +47,8 @@ function parseArgs(args: readonly string[]): ParsedLoopSyncArgs {
   let expectedRegistrySha: string | null = null
   let expectedWorkflowSha: string | null = null
   for (let i = 0; i < args.length; i++) {
-    const arg = args[i]!
+    const arg = args[i]
+    if (arg === undefined) break
     if (arg === '--dry-run') dryRun = true
     else if (arg === '--apply') apply = true
     else if (arg === '--json') json = true
@@ -325,7 +326,7 @@ export async function cmdLoopSync(
         deps.io.out(`  NOT-APPLICABLE ${item.dimension} loop=${item.loop_id}: ${item.detail}`)
       }
       if (current.mode === 'dry-run') deps.io.out('  DRY-RUN：零写入；使用 --apply 才会执行计划。')
-      else deps.io.out(`  result=${result!.status}`)
+      else if (result) deps.io.out(`  result=${result.status}`)
     }
     if (result?.status === 'conflict') return 3
     return unsupported.length === 0 ? 0 : 1

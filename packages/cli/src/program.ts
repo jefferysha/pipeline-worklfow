@@ -6,7 +6,7 @@
 import { Command } from 'commander'
 import type { CliDeps } from './deps.js'
 import { cmdCheck } from './commands/check.js'
-import { cmdDashboard, type DashboardOpts, type DashboardRuntime } from './commands/dashboard.js'
+import type { DashboardRuntime } from './commands/dashboard.js'
 import { cmdDoctor } from './commands/doctor.js'
 import { cmdCas, cmdGet, cmdSet, cmdSetMany } from './commands/fields.js'
 import { cmdArtifactRegister } from './commands/artifact.js'
@@ -29,9 +29,6 @@ import { cmdLoops } from './commands/loops.js'
 import { cmdMem } from './commands/mem.js'
 import { cmdScaffold } from './commands/scaffold.js'
 import { cmdSession } from './commands/session.js'
-import { cmdSetup, type SetupOpts } from './commands/setup.js'
-import { cmdUpdate, type UpdateOpts } from './commands/update.js'
-import { cmdRuntime, type RuntimeCommandOpts } from './commands/runtime.js'
 import { cmdSpec } from './commands/spec.js'
 import { cmdSync } from './commands/sync.js'
 import { cmdTap } from './commands/tap.js'
@@ -47,27 +44,12 @@ import { cmdInternalCodexSkillReceipt } from './codexSkillReceipt.js'
 import { cmdMigrateWorkflow } from './commands/migrateWorkflow.js'
 import { cmdStateProjection } from './commands/state-projection.js'
 import { cmdTriage, type TriageCommandRuntime } from './commands/triage.js'
-import {
-  cmdTracksCreate,
-  cmdTracksDelete,
-  cmdTracksList,
-  cmdTracksShow,
-  cmdTracksUpdate,
-  type TracksCreateOpts,
-  type TracksUpdateOpts,
-} from './commands/tracks.js'
+import { bail, stripNl } from './program-exit.js'
+import { registerInstallCommands } from './program-install.js'
+import { registerTrackCommands } from './program-tracks.js'
+import { LOOPS_HELP } from './program-help.js'
 
-export class CliExit extends Error {
-  constructor(public readonly code: number) {
-    super(`exit ${code}`)
-  }
-}
-
-function bail(code: number): void {
-  if (code !== 0) throw new CliExit(code)
-}
-
-const stripNl = (s: string): string => s.replace(/\n$/, '')
+export { CliExit } from './program-exit.js'
 
 export interface ProgramRuntimes {
   readonly triage?: TriageCommandRuntime
@@ -96,63 +78,7 @@ export function buildProgram(deps: CliDeps, runtimes: ProgramRuntimes = {}): Com
     .option('--workflow <workflow>', '自定义 workflow 名（.pipeline/workflows/<name>.yaml），缺省 default')
     .action(async (name: string, opts: InitCmdOpts) => bail(await cmdInit(deps, name, opts)))
 
-  program
-    .command('setup [sub]')
-    .description('安装完整 pipeline：必须选择一个宿主（如 --codex）；不会同时修改 Codex 与 Claude')
-    .option('--codex', '安装/验证 Codex 原生插件')
-    .option('--claude', '安装/验证 Claude 原生插件')
-    .option('--cursor', '部署 Cursor adapter')
-    .option('--gemini', '部署 Gemini adapter')
-    .option('--copilot', '部署 Copilot adapter')
-    .option('--pi', '部署 Pi adapter')
-    .option('--devin', '部署 Devin adapter')
-    .option('--zed', '部署 Zed adapter')
-    .option('--aider', '部署 Aider adapter')
-    .option('--continue', '部署 Continue adapter')
-    .option('--cline', '部署 Cline adapter')
-    .option('--amp', '部署 Amp adapter')
-    .option('--target <dir>', '非原生 adapter 的项目目标目录（缺省当前目录）')
-    .option('--auto-update', '为所选原生宿主启用每日一次的自动升级检查')
-    .option('--dry-run', '仅打印所选宿主安装计划，不写文件、不执行 adapter 或 marketplace 操作')
-    .option('-y, --yes', '跳过兼容 skills/setup 的 y/N 确认位')
-    .action(async (sub: string | undefined, opts: SetupOpts) => bail(await cmdSetup(deps, sub, opts)))
-
-  program
-    .command('update')
-    .description('刷新一个已安装的原生 pipeline 插件；升级后请新开会话加载 skills 和 hooks')
-    .option('--codex', '更新 Codex marketplace 中的 pipeline-lite')
-    .option('--claude', '更新 Claude marketplace 中的 pipeline-lite')
-    .option('--cursor', '从当前已更新的包重新部署 Cursor adapter')
-    .option('--gemini', '从当前已更新的包重新部署 Gemini adapter')
-    .option('--copilot', '从当前已更新的包重新部署 Copilot adapter')
-    .option('--pi', '从当前已更新的包重新部署 Pi adapter')
-    .option('--devin', '从当前已更新的包重新部署 Devin adapter')
-    .option('--zed', '从当前已更新的包重新部署 Zed adapter')
-    .option('--aider', '从当前已更新的包重新部署 Aider adapter')
-    .option('--continue', '从当前已更新的包重新部署 Continue adapter')
-    .option('--cline', '从当前已更新的包重新部署 Cline adapter')
-    .option('--amp', '从当前已更新的包重新部署 Amp adapter')
-    .option('--target <dir>', '非原生 adapter 的项目目标目录（缺省当前目录）')
-    .option('--dry-run', '仅打印升级计划，不执行 marketplace 或 adapter 操作')
-    .option('-y, --yes', '供自动更新调用的非交互确认')
-    .option('--auto', '由已明确启用的自动更新任务调用（不改变用户的 opt-in 状态）')
-    .action(async (opts: UpdateOpts) => bail(await cmdUpdate(deps, opts)))
-
-  program
-    .command('runtime <sub>')
-    .description('查看 managed runtime，或仅回滚到上一份完整校验通过的 release')
-    .option('--rollback', '仅 runtime repair 使用：切换到上一份已验证 release')
-    .option('--json', '机器可读输出')
-    .action(async (sub: string, opts: RuntimeCommandOpts) => bail(await cmdRuntime(deps, sub, opts)))
-
-  program
-    .command('dashboard')
-    .description('启动插件内置的单一 dashboard SPA/API 入口（默认 127.0.0.1:18765）')
-    .option('--port <port>', '覆盖监听端口（例如旧端口 8765）')
-    .option('--background', '以受管后台服务启动，并等待本机健康检查')
-    .option('--open', '健康检查通过后自动打开本机 dashboard（隐含 --background）')
-    .option('--dry-run', '验证已发布 dashboard 资产并打印启动计划，不启动 server')
-    .action(async (opts: DashboardOpts) => bail(await cmdDashboard(deps, opts, runtimes.dashboard)))
+  registerInstallCommands(program, deps, runtimes.dashboard)
 
   program
     .command('get <name> <field>')
@@ -381,33 +307,7 @@ export function buildProgram(deps: CliDeps, runtimes: ProgramRuntimes = {}): Com
     .allowUnknownOption()
     // 子命令是手解析的（loops <sub> [args...] 单命令），commander 的 --help 只显父用法看不到 init 的
     // --id/--goal 等（小白无法从 --help 发现）。补一段 after-help 列出子命令 + init 关键 flags + 示例。
-    .addHelpText('after', `
-子命令:
-  init [flags]              起草一个 paused 草稿 loop（TTY 下无 flags → 交互向导；非交互见下）
-  list [--json]             登记表
-  status [--json]           各 loop 分级放权状态（L1 报告 / L2 辅助 / L3 无人值守）
-  enforce [--loop <id>]     跑 R1-R11 裁决出 verdict
-  budget|cost [loop]        token 预算 / 成本估算
-  graduate [loop]          升降档裁决（毕业制）
-  level <loop> [set <L1|L2|L3>] [--confirm]   查看/改档（升档须准入 + --confirm）
-  run <loop-id|pattern> [--dry-run] [--level L1|L2|L3] [--commit] [--json]   定向真跑；--dry-run 为零写/零 Docker 预览
-  sync <loop-id> <--dry-run|--apply> [--expected-registry-sha <sha>] [--expected-workflow-sha <sha>] [--json]
-                            对账 registry/LOOP.md；必须显式二选一：--dry-run 零写入，--apply 执行双 CAS 计划
-
-loops init 非交互 flags（agent/CI；缺 TTY 或 --yes 走默认）:
-  --id <id>       *必填  loop 标识（kebab-case）
-  --goal <text>   手工 init 必填；starter 模式下可省略或覆写模板 goal
-  --template <id> 选用 H3 v1 starter：pr-babysitter | daily-triage | ci-sweeper | post-merge-cleanup |
-                  dependency-sweeper | changelog-drafter | issue-triage
-  --workflow <id> 显式 workflow binding（starter 缺省取 recommended workflow）
-  --skill-bundle <profile>   显式 H10 skill profile binding（缺省 null/unwired，不把具体推荐 skill 冒充 profile）
-  --runner <claude-code|codex>   执行 agent（缺省 codex）
-  --kind <orchestrator|executor> · --prefix <change 前缀> · --cadence <4h> · --risk <low|medium|high> · --yes
-
-示例:
-  pipeline loops init                                   # TTY 交互向导
-  pipeline loops init --id nightly-fix --goal "夜间修 flaky 测试" --runner codex --yes
-  pipeline loops init --id ci-loop --template ci-sweeper --skill-bundle backend --yes`)
+    .addHelpText('after', LOOPS_HELP)
     .action(async (sub: string, args: string[]) => bail(await cmdLoops(deps, sub, args)))
 
   program
@@ -476,50 +376,7 @@ loops init 非交互 flags（agent/CI；缺 TTY 或 --yes 走默认）:
       opts: { json?: boolean; forceCanonical?: boolean },
     ) => bail(await cmdStateProjection(deps, sub, name, opts)))
 
-  // ── tracks：动态 Track Registry CRUD（T-R3）——Commander 真子命令树（不手解析 [args...]）。
-  // 装配在 Stage B 的 loops 命令之上追加，不改其行。exitOverride/configureOutput 由父命令继承。
-  const tracks = program
-    .command('tracks')
-    .description('动态 Track Registry：list / show <id> / create <id> / update <id> / delete <id>（--json 稳定输出）')
-    .action(() => {
-      deps.io.err('用法：pipeline tracks <list|show|create|update|delete> …（详见 pipeline tracks --help）')
-      bail(1)
-    })
-  tracks
-    .command('list')
-    .description('列出全部 track（内建 Track 在前，固定列 ID LABEL BUILTIN DEFAULT ALLOWED POLICY）')
-    .option('--json', 'JSON array 输出')
-    .action(async (opts: { json?: boolean }) => bail(await cmdTracksList(deps, opts)))
-  tracks
-    .command('show <id>')
-    .description('显示某 track 详情（标 source: builtin | builtin-override | custom）')
-    .option('--json', 'JSON object 输出')
-    .action(async (id: string, opts: { json?: boolean }) => bail(await cmdTracksShow(deps, id, opts)))
-  tracks
-    .command('create <id>')
-    .description('新建额外 track（四组必填：--label /--workflow-default /(--workflow-allowed|--workflow-any) /--policy）')
-    .option('--label <text>', 'track 展示名')
-    .option('--workflow-default <id>', '缺省 workflow')
-    .option('--workflow-allowed <ids...>', '允许的 workflow 白名单（可多值）')
-    .option('--workflow-any', "允许任意 workflow（'*'，不必输裸 *）")
-    .option('--policy <preset>', 'policy 模板 chat|simple|pm|frontend|backend|free（深拷贝该内建 policy 落完整结构）')
-    .option('--json', 'JSON 返回更新后的 effective definition')
-    .action(async (id: string, opts: TracksCreateOpts) => bail(await cmdTracksCreate(deps, id, opts)))
-  tracks
-    .command('update <id>')
-    .description('改 track（≥1 个 --set-*；内建仅 label/workflow 可改，policy/id 锁死不可删）')
-    .option('--set-label <text>', '改展示名')
-    .option('--set-workflow-default <id>', '改缺省 workflow')
-    .option('--set-workflow-allowed <ids...>', '改 workflow 白名单（可多值）')
-    .option('--set-workflow-any', "改为允许任意 workflow（'*'）")
-    .option('--set-policy <preset>', '改 policy 模板（仅额外 track；内建传它拒）')
-    .option('--json', 'JSON 返回更新后的 effective definition')
-    .action(async (id: string, opts: TracksUpdateOpts) => bail(await cmdTracksUpdate(deps, id, opts)))
-  tracks
-    .command('delete <id>')
-    .description('删额外 track（内建拒；被活跃 change 引用拒+列名，fail-closed）')
-    .option('--json', 'JSON 返回 {deleted,revision}')
-    .action(async (id: string, opts: { json?: boolean }) => bail(await cmdTracksDelete(deps, id, opts)))
+  registerTrackCommands(program, deps)
 
   program.addHelpText(
     'after',

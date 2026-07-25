@@ -14,6 +14,7 @@ import { parseTaskPyCommandsAll } from '../phase.js'
 import { searchInDialogue } from '../search.js'
 import { parseJsonlLines, readJsonlFirst } from '../jsonl.js'
 import { codexSessionsRoot, walkDir } from '../paths.js'
+import { required } from '../../required.js'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Json = any
@@ -68,7 +69,7 @@ export function codexListSessions(fs: MemFs, f: MemFilter): MemSession[] {
     const m = ROLLOUT_RE.exec(base)
     let tsFromName: string | null = null
     if (m) {
-      const fixed = m[1]!.replace(TS_FIX_RE, 'T$1:$2:$3') + 'Z'
+      const fixed = required(m[1]).replace(TS_FIX_RE, 'T$1:$2:$3') + 'Z'
       tsFromName = normalizeIso(fixed)
     }
 

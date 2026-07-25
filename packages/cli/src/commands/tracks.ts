@@ -138,8 +138,10 @@ function renderList(deps: CliDeps, registry: TrackRegistry): void {
     d.policyProfile.coverageProfile,
   ])
   // 列宽取 header 与各行的最大值——不截断、不省略（名称一律完整显示，排版规整）。
-  const widths = header.map((h, c) => Math.max(h.length, ...rows.map((r) => r[c]!.length)))
-  const fmt = (cells: string[]) => cells.map((v, c) => v.padEnd(widths[c]!)).join('  ').trimEnd()
+  const widths = header.map((heading, column) =>
+    Math.max(heading.length, ...rows.map((row) => (row[column] ?? '').length)))
+  const fmt = (cells: string[]) =>
+    cells.map((value, column) => value.padEnd(widths[column] ?? value.length)).join('  ').trimEnd()
   deps.io.out(fmt(header))
   for (const r of rows) deps.io.out(fmt(r))
 }
@@ -176,7 +178,8 @@ function renderShow(deps: CliDeps, def: TrackDefinition, source: TrackSource, re
 /** 写命令成功回显：--json 返回 effective definition，否则 `<verb> <id>`。 */
 function emitWrite(deps: CliDeps, verb: string, id: string, registry: TrackRegistry, json?: boolean): number {
   if (json) {
-    const def = registry.byId.get(id)!
+    const def = registry.byId.get(id)
+    if (!def) return fail(deps, `track '${id}' 写入后未出现在 effective registry`)
     deps.io.out(JSON.stringify(trackJson(def, sourceOf(def), registry.revision)))
   } else {
     deps.io.out(`${verb} ${id}`)
@@ -244,16 +247,24 @@ export async function cmdTracksCreate(deps: CliDeps, id: string, opts: TracksCre
     deps.io.err(`ERROR: create 缺少必填项：${missing.join('、')}（四组信息全部必填，无隐式默认）`)
     return 1
   }
-  const policyProfile = expandPolicy(opts.policy!)
+  const label = opts.label
+  const workflowDefault = opts.workflowDefault
+  const workflowAllowed = opts.workflowAllowed
+  const policy = opts.policy
+  if (!label || !workflowDefault || !policy || (!opts.workflowAny && (!workflowAllowed || workflowAllowed.length === 0))) {
+    deps.io.err('ERROR: create 参数在校验后丢失')
+    return 1
+  }
+  const policyProfile = expandPolicy(policy)
   if (!policyProfile) {
     deps.io.err(`ERROR: 未知 --policy '${opts.policy}'（只支持 ${BUILTIN_TRACK_IDS.join('|')} 作模板）`)
     return 1
   }
-  const workflow: TrackWorkflowBinding = {
-    default: opts.workflowDefault!,
-    allowed: opts.workflowAny ? '*' : opts.workflowAllowed!,
-  }
-  const spec: CreateTrackSpec = { id, label: opts.label!, workflow, policyProfile }
+  const allowed: TrackWorkflowBinding['allowed'] = opts.workflowAny
+    ? '*'
+    : workflowAllowed ?? []
+  const workflow: TrackWorkflowBinding = { default: workflowDefault, allowed }
+  const spec: CreateTrackSpec = { id, label, workflow, policyProfile }
   try {
     const { registry } = await deps.mutateRegistry(async ({ config }) => ({
       next: createTrack(config, spec),

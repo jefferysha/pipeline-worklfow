@@ -74,8 +74,10 @@ export function parsePipelineCliJson(stdout: string): unknown | null {
   } catch {
     const lines = trimmed.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
     for (let index = lines.length - 1; index >= 0; index -= 1) {
+      const line = lines[index]
+      if (line === undefined) continue
       try {
-        return JSON.parse(lines[index]!) as unknown
+        return JSON.parse(line) as unknown
       } catch {
         // Keep searching: human-readable prelude lines are allowed.
       }

@@ -53,6 +53,115 @@ function governedWorkflow(overrides: Partial<WorkflowDef> = {}): WorkflowDef {
 }
 
 describe('validateWorkflow', () => {
+  it('三步 declarative document contract 不要求七阶段且校验 owner/read 顺序', () => {
+    const compact = wf({
+      documentContract: {
+        version: 'v1',
+        slots: [
+          { kind: 'proposal', ownerStep: 'shape', producers: ['writer'] },
+          { kind: 'plan', ownerStep: 'shape', producers: ['planner'] },
+        ],
+        reads: [
+          { step: 'build', kinds: ['proposal', 'plan'] },
+          { step: 'verify', kinds: ['proposal', 'plan'] },
+        ],
+      },
+      steps: [
+        {
+          id: 'shape', label: 'shape', gate: null, inputs: [], outputs: [], guards: [],
+          skills: [{ id: 'writer' }, { id: 'planner' }],
+          transitions: [{ event: 'shaped', to: 'build' }],
+        },
+        {
+          id: 'build', label: 'build', gate: null, inputs: [], outputs: [], guards: [], skills: [],
+          transitions: [{ event: 'built', to: 'verify' }],
+        },
+        {
+          id: 'verify', label: 'verify', gate: null, inputs: [], outputs: [], guards: [], skills: [],
+          transitions: [],
+        },
+      ],
+    })
+    expect(validateWorkflow(compact)).toEqual([])
+    expect(validateWorkflow({
+      ...compact,
+      documentContract: {
+        ...compact.documentContract!,
+        reads: [{ step: 'shape', kinds: ['proposal'] }],
+      },
+    }).some((error) => error.includes('只能读取更早 step'))).toBe(true)
+  })
+
+  it('declarative document reader 的所有入口路径都必须经过 owner step', () => {
+    const branched = wf({
+      documentContract: {
+        version: 'v1',
+        slots: [{ kind: 'proposal', ownerStep: 'shape', producers: ['writer'] }],
+        reads: [{ step: 'verify', kinds: ['proposal'] }],
+      },
+      steps: [
+        {
+          id: 'start', label: 'start', gate: null, inputs: [], outputs: [], guards: [], skills: [],
+          transitions: [
+            { event: 'shape', to: 'shape' },
+            { event: 'bypass', to: 'build' },
+          ],
+        },
+        {
+          id: 'shape', label: 'shape', gate: null, inputs: [], outputs: [], guards: [],
+          skills: [{ id: 'writer' }],
+          transitions: [{ event: 'shaped', to: 'build' }],
+        },
+        {
+          id: 'build', label: 'build', gate: null, inputs: [], outputs: [], guards: [], skills: [],
+          transitions: [{ event: 'built', to: 'verify' }],
+        },
+        {
+          id: 'verify', label: 'verify', gate: null, inputs: [], outputs: [], guards: [], skills: [],
+          transitions: [],
+        },
+      ],
+    })
+
+    expect(validateWorkflow(branched)).toContain(
+      "document_contract document 'proposal' 的 owner_step 'shape' 不支配 reader step 'verify'",
+    )
+  })
+
+  it('owner 支配 reader 时允许 reader 之后回环到 owner', () => {
+    const looped = wf({
+      documentContract: {
+        version: 'v1',
+        slots: [{ kind: 'proposal', ownerStep: 'shape', producers: ['writer'] }],
+        reads: [{ step: 'verify', kinds: ['proposal'] }],
+      },
+      steps: [
+        {
+          id: 'start', label: 'start', gate: null, inputs: [], outputs: [], guards: [], skills: [],
+          transitions: [{ event: 'shape', to: 'shape' }],
+        },
+        {
+          id: 'shape', label: 'shape', gate: null, inputs: [], outputs: [], guards: [],
+          skills: [{ id: 'writer' }],
+          transitions: [{ event: 'shaped', to: 'verify' }],
+        },
+        {
+          id: 'verify', label: 'verify', gate: null, inputs: [], outputs: [], guards: [], skills: [],
+          transitions: [
+            { event: 'revise', to: 'shape' },
+            { event: 'done', to: 'done' },
+          ],
+        },
+        {
+          id: 'done', label: 'done', gate: null, inputs: [], outputs: [], guards: [], skills: [],
+          transitions: [],
+        },
+      ],
+    })
+
+    expect(validateWorkflow(looped)).toEqual([])
+  })
+
   it('openspec_contract: required 只有 canonical 7 phases、边、review gate 和所需 skills 全齐才可保存', () => {
     expect(validateWorkflow(governedWorkflow())).toEqual([])
     const broken = governedWorkflow({

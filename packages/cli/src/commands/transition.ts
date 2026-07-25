@@ -50,13 +50,17 @@
  */
 import {
   compileWorkflow, completedWorkflowSkillsSinceStepEntry, createTransitionApplication,
-  loadRegistry, loadWorkflow, nodeLoopIoStrict, requireTrack,
+  loadRegistry, loadWorkflow, nodeLoopIoStrict, requireTrack, resolveRequiredSkillSlots,
 } from '@pipeline-lite/kernel'
 import type { TransitionContext } from '@pipeline-lite/kernel'
 import { enqueueAfterSpecComplete } from '@pipeline-lite/automation'
 import { errMsg, type CliDeps } from '../deps.js'
 import { changeDir, isValidChangeName } from '../paths.js'
 import { reconcileCodexSkillEvidence } from '../codexSkillReceipt.js'
+
+function canonicalPipelineSkillId(skillId: string): string {
+  return skillId.startsWith('pipeline-lite:') ? skillId.slice('pipeline-lite:'.length) : skillId
+}
 
 export async function cmdTransition(deps: CliDeps, name: string, event: string): Promise<number> {
   if (!isValidChangeName(name)) {
@@ -70,7 +74,12 @@ export async function cmdTransition(deps: CliDeps, name: string, event: string):
   const context: TransitionContext = {
     fileExists: deps.guardCtx?.(name)?.fileExists,
     gitHeadSha: deps.gitHeadSha,
-    workspaceFingerprint: deps.workspaceFingerprint ? () => deps.workspaceFingerprint!(name) : undefined,
+    workspaceFingerprint: deps.workspaceFingerprint
+      ? (() => {
+          const fingerprint = deps.workspaceFingerprint
+          return fingerprint ? fingerprint(name) : Promise.reject(new Error('workspace fingerprint capability unavailable'))
+        })
+      : undefined,
   }
 
   // breadcrumb 收尾由 TransitionApplication 统一编排；review marker 不再在“进入”时由
@@ -82,19 +91,25 @@ export async function cmdTransition(deps: CliDeps, name: string, event: string):
     history: deps.history,
     breadcrumb: deps.writeBreadcrumb ? { write: deps.writeBreadcrumb } : undefined,
     documentEvidence: deps.documentEvidence,
-    completedStepSkills: async ({ changeDir: targetDir, stepId, requiredSkillIds }) => {
+    resolveTrack: (trackId) => requireTrack(deps.loadRegistry(), trackId),
+    missingStepSkills: async ({ changeDir: targetDir, stepId, capability }) => {
+      const slots = resolveRequiredSkillSlots(deps.resolver, capability, stepId)
+      const candidates = slots.flatMap((slot) => slot.alternatives.map(canonicalPipelineSkillId))
       await reconcileCodexSkillEvidence({
         repoRoot: deps.cwd,
         changeDir: targetDir,
-        candidateSkillIds: requiredSkillIds,
+        candidateSkillIds: candidates,
         recordedAt: deps.clock(),
         history: deps.history,
         evidenceScope: stepId,
       })
-      return completedWorkflowSkillsSinceStepEntry(
+      const completed = completedWorkflowSkillsSinceStepEntry(
         (await deps.readHistoryRaw?.(targetDir)) ?? '',
         stepId,
       )
+      return slots
+        .filter((slot) => !slot.alternatives.some((candidate) => completed.has(canonicalPipelineSkillId(candidate))))
+        .map((slot) => slot.token)
     },
     resolveConstraintContext: async ({ policy }) => {
       const registry = loadRegistry(deps.cwd, nodeLoopIoStrict)
@@ -181,6 +196,9 @@ export async function cmdTransition(deps: CliDeps, name: string, event: string):
         deps.io.err(
           `ERROR: workflow '${result.workflowName}' 未找到（期望 .pipeline/workflows/${result.workflowName}.yaml）`,
         )
+        return 1
+      case 'document-governance-invalid':
+        deps.io.err(`ERROR: ${result.reason}`)
         return 1
       case 'step-not-in-graph':
         deps.io.err(`ERROR: step '${result.stepId}' 不在 workflow '${result.workflowName}' 里`)

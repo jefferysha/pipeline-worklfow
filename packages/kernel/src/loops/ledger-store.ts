@@ -35,6 +35,7 @@ import { createHash } from 'node:crypto'
 import { mkdir, open, readFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { withLock } from '../state/lock.js'
+import { required } from '../required.js'
 import { decodeLedgerLine, encodeLedgerRecord } from './ledger-codec.js'
 import { indexSkillBundleSnapshots } from './ledger-projection.js'
 import type {
@@ -271,7 +272,7 @@ export function createLoopLedgerStore(): LoopLedgerStore {
       if (reservations.length > 1) {
         throw new ReservationCorruptionError(`loops ledger closeReservationIfOpen: reservation「${reservationId}」有 ${reservations.length} 条同 ID 预占记录（账本损坏）`)
       }
-      const reservation = reservations[0]!
+      const reservation = required(reservations[0])
       const terminals = records.filter((r): r is RunRecord => r.kind === 'run' && r.reservation_id === reservationId)
       if (terminals.length === 1) {
         return { status: 'already-closed', existing: terminals[0]! } // 幂等成功：已关闭，不追加第二条
@@ -306,7 +307,7 @@ export function createLoopLedgerStore(): LoopLedgerStore {
     const rejected: LedgerReadResult['rejected'] = []
     const lines = text.split('\n')
     for (let i = 0; i < lines.length; i++) {
-      const raw = lines[i]!
+      const raw = required(lines[i])
       if (raw.trim() === '') {
         // 空段唯二豁免（见顶注）：完全空文件、末尾换行的收尾空段——都只能是最后一个空串段。
         // 其余位置的空白行（含尾部无换行的纯空白半行）不是合法 JSONL，按损坏进 rejected。
@@ -353,7 +354,7 @@ export function createLoopLedgerStore(): LoopLedgerStore {
     })
     const runs = [...runsByLoop.values()]
       .flatMap((bucket) => (opts.limit > 0 ? bucket.slice(-opts.limit) : [])) // slice(-0) 是全量，limit<=0 必须显式空窗
-      .sort((a, b) => fileIndex.get(a)! - fileIndex.get(b)!)
+      .sort((a, b) => required(fileIndex.get(a)) - required(fileIndex.get(b)))
 
     const openReservations = records.filter(
       (rec): rec is BudgetReservationRecord =>

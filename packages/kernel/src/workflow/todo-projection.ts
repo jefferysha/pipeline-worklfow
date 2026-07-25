@@ -49,7 +49,8 @@ function definitelyCompletedStageIds(
   const predecessors = new Map(ids.map((id) => [id, [] as string[]]))
   for (const stage of stages) {
     for (const target of stage.transitions ?? []) {
-      if (predecessors.has(target)) predecessors.get(target)!.push(stage.id)
+      const incoming = predecessors.get(target)
+      if (incoming) incoming.push(stage.id)
     }
   }
   const dominators = new Map<string, Set<string>>()
@@ -139,6 +140,7 @@ export function projectPipelineTodo(input: {
   readonly phase: string
   readonly tasksMarkdown: string | undefined
   readonly stages?: readonly PipelineTodoStageDefinition[]
+  readonly additionalItemsByStage?: Readonly<Record<string, readonly PipelineTodoItem[]>>
 }): PipelineTodoProjection {
   const declared = input.stages ?? DEFAULT_WORKFLOW_TODO_STAGES
   const stages = declared.filter((stage, index) =>
@@ -159,7 +161,10 @@ export function projectPipelineTodo(input: {
           : (definitelyCompleted?.has(stage.id) ?? index < currentIndex)
             ? 'done'
             : 'pending',
-      tasks: tasks.get(stage.id) ?? [],
+      tasks: [
+        ...(input.additionalItemsByStage?.[stage.id] ?? []),
+        ...(tasks.get(stage.id) ?? []),
+      ],
     })),
   }
 }

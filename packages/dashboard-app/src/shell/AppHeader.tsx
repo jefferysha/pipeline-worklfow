@@ -193,9 +193,9 @@ export function AppHeader({ view, onView, projects, currentRoot, onRoot, onUnreg
             </div>
           )}
           {projects && projects.length === 1 && (
-            <span className="flex items-center gap-2 px-2 py-1.5" data-testid="project-label" title={projects[0]!.root}>
+            <span className="flex items-center gap-2 px-2 py-1.5" data-testid="project-label" title={projects[0]?.root}>
               <span className="flex-none text-text-3"><Icon name="folder" size={16} /></span>
-              <span className="truncate font-mono text-[14px] font-semibold text-text">{projects[0]!.name}</span>
+              <span className="truncate font-mono text-[14px] font-semibold text-text">{projects[0]?.name}</span>
             </span>
           )}
 

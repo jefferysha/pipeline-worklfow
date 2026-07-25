@@ -11,18 +11,22 @@
  */
 import {
   evaluateDocumentEvidence,
-  evaluateStepGuards,
+  evaluateWorkflowIrStepGuards,
   isDocumentContractPhase,
-  isOpenSpecDocumentContractRequired,
-  loadWorkflow,
-  requireTrack,
+  isDocumentPolicyStep,
   resolveStep,
   resolveWorkflowName,
 } from '@pipeline-lite/kernel'
-import type { DocumentEvidenceReport, PipelineState, WorkflowDef } from '@pipeline-lite/kernel'
+import type {
+  DocumentEvidenceReport,
+  DocumentGovernancePolicy,
+  EffectiveWorkflowPlan,
+  PipelineState,
+} from '@pipeline-lite/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
 import { changeDir, isValidChangeName } from '../paths.js'
 import { display, str } from '../render.js'
+import { effectiveWorkflowForState } from './effective-workflow.js'
 
 export async function cmdCheck(deps: CliDeps, name: string): Promise<number> {
   if (!isValidChangeName(name)) {
@@ -38,24 +42,29 @@ export async function cmdCheck(deps: CliDeps, name: string): Promise<number> {
     return 1
   }
 
-  const workflowName = resolveWorkflowName(state)
-  if (workflowName !== 'default') {
-    return checkCustomWorkflow(deps, name, dir, state, workflowName)
-  }
-
-  // ── default workflow：coverage policy 必须来自当前项目 effective registry。registry 损坏或
-  // state.track 已成 orphan 都 fail-loud，不回退按 track id 的旧静态矩阵。
-  let coverageProfile
+  let plan: EffectiveWorkflowPlan | null
   try {
-    coverageProfile = requireTrack(deps.loadRegistry(), str(state.fields.track)).policyProfile.coverageProfile
+    plan = effectiveWorkflowForState(deps, state)
   } catch (e) {
     deps.io.err(`ERROR: ${errMsg(e)}`)
     return 1
   }
+  if (!plan) {
+    const workflowName = resolveWorkflowName(state)
+    deps.io.err(`ERROR: workflow '${workflowName}' 未找到（期望 .pipeline/workflows/${workflowName}.yaml）`)
+    return 1
+  }
+  if (plan.capabilities.execution.model === 'step-graph') {
+    return checkGraphWorkflow(deps, name, dir, state, plan)
+  }
+
+  // ── default workflow：coverage policy 必须来自当前项目 effective registry。registry 损坏或
+  // state.track 已成 orphan 都 fail-loud，不回退按 track id 的旧静态矩阵。
+  const coverageProfile = plan.capabilities.track.coverageProfile
   const result = deps.flow.guardCheck(state, { ...deps.guardCtx?.(name), coverageProfile })
   let documents: DocumentEvidenceReport | undefined
   try {
-    documents = await governedDocumentEvidence(deps, dir, state, workflowName)
+    documents = await governedDocumentEvidence(deps, dir, state, plan.capabilities.documents.policy)
   } catch (e) {
     deps.io.err(`ERROR: ${errMsg(e)}`)
     return 1
@@ -88,16 +97,18 @@ async function governedDocumentEvidence(
   deps: CliDeps,
   dir: string,
   state: PipelineState,
-  workflowName: string,
-  workflow?: WorkflowDef,
+  policy: DocumentGovernancePolicy | undefined,
 ): Promise<DocumentEvidenceReport | undefined> {
-  const track = str(state.fields.track)
-  if (!isOpenSpecDocumentContractRequired(workflowName, track, workflow)) return undefined
+  if (!policy) return undefined
   const phase = str(state.fields.phase)
-  if (!isDocumentContractPhase(phase)) {
-    throw new Error(`受 OpenSpec 文档契约治理的 workflow 当前 phase 必须是标准阶段（当前 '${phase || '空'}'）`)
+  if (!isDocumentPolicyStep(policy, phase)) {
+    throw new Error(`受 document contract 治理的 workflow 当前 step 非法（当前 '${phase || '空'}'）`)
   }
-  return (deps.documentEvidence ?? evaluateDocumentEvidence)(deps.cwd, dir, phase)
+  if (policy.id === 'openspec-v1' && deps.documentEvidence) {
+    if (!isDocumentContractPhase(phase)) throw new Error(`legacy document contract step 非法: '${phase}'`)
+    return deps.documentEvidence(deps.cwd, dir, phase)
+  }
+  return evaluateDocumentEvidence(deps.cwd, dir, phase, {}, policy)
 }
 
 /**
@@ -105,42 +116,35 @@ async function governedDocumentEvidence(
  * （evaluateStepGuards——同 transition.ts 求值「正在退出的」当前 step 的 guard，单一真相源）。
  * 纯预览、零写盘。exit：guard 全过 0 / guard 不过 2（与 default 不过同码）/ 配置错 1。
  */
-async function checkCustomWorkflow(
+async function checkGraphWorkflow(
   deps: CliDeps,
   name: string,
   dir: string,
   state: PipelineState,
-  workflowName: string,
+  plan: EffectiveWorkflowPlan,
 ): Promise<number> {
-  let wf
-  try {
-    // loadWorkflow 对非法 workflow 文件 fail-loud 抛错（解析/校验），捕获后转成 exit 1 配置错。
-    wf = loadWorkflow(deps.cwd, workflowName)
-  } catch (e) {
-    deps.io.err(`ERROR: ${errMsg(e)}`)
-    return 1
-  }
-  if (!wf) {
-    deps.io.err(`ERROR: workflow '${workflowName}' 未找到（期望 .pipeline/workflows/${workflowName}.yaml）`)
-    return 1
-  }
   const currentStepId = str(state.fields.phase)
-  const step = resolveStep(wf, currentStepId)
+  const step = resolveStep(plan.workflow, currentStepId)
   if (!step) {
-    deps.io.err(`ERROR: step '${currentStepId}' 不在 workflow '${workflowName}' 里`)
+    deps.io.err(`ERROR: step '${currentStepId}' 不在 workflow '${plan.id}' 里`)
     return 1
   }
   // 能力注入让 file-exists/build-head-unchanged 类新 guard 在预览里也忠实评估（缺注入 = 降级
   // skipped）；tasks-at-least/nonempty-output 只用 readText/字段面，不受此影响。
-  const result = await evaluateStepGuards(state, step, {
+  const result = await evaluateWorkflowIrStepGuards(state, step, {
     changeDirAbs: dir,
     fileExists: deps.guardCtx?.(name)?.fileExists,
     gitHeadSha: deps.gitHeadSha,
-    workspaceFingerprint: deps.workspaceFingerprint ? () => deps.workspaceFingerprint!(name) : undefined,
+    workspaceFingerprint: deps.workspaceFingerprint
+      ? (() => {
+          const fingerprint = deps.workspaceFingerprint
+          return fingerprint ? fingerprint(name) : Promise.reject(new Error('workspace fingerprint capability unavailable'))
+        })
+      : undefined,
   })
   let documents: DocumentEvidenceReport | undefined
   try {
-    documents = await governedDocumentEvidence(deps, dir, state, workflowName, wf)
+    documents = await governedDocumentEvidence(deps, dir, state, plan.capabilities.documents.policy)
   } catch (e) {
     deps.io.err(`ERROR: ${errMsg(e)}`)
     return 1

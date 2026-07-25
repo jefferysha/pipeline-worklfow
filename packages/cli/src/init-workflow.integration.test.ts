@@ -37,6 +37,50 @@ steps:
     transitions: []
 `
 
+const THREE_STEP_GOVERNED_WF = `name: compact-governed
+document_contract:
+  version: v1
+  slots:
+    - kind: proposal
+      owner_step: shape
+      producers: [writer]
+  reads:
+    - step: implement
+      kinds: [proposal]
+    - step: verify
+      kinds: [proposal]
+steps:
+  - id: shape
+    label: shape
+    gate: null
+    skills:
+      - id: writer
+    inputs: []
+    outputs: []
+    guards: []
+    transitions:
+      - event: shape-complete
+        to: implement
+  - id: implement
+    label: implement
+    gate: null
+    skills: []
+    inputs: []
+    outputs: []
+    guards: []
+    transitions:
+      - event: implement-complete
+        to: verify
+  - id: verify
+    label: verify
+    gate: review
+    skills: []
+    inputs: []
+    outputs: []
+    guards: []
+    transitions: []
+`
+
 describe('真实 e2e —— init --workflow 落地自定义 workflow 的首个 step', () => {
   let h: Harness
 
@@ -59,6 +103,7 @@ describe('真实 e2e —— init --workflow 落地自定义 workflow 的首个 s
     const content = await h.read('demo')
     expect(content).toMatch(/^workflow: default$/m)
     expect(content).toMatch(/^phase: open$/m)
+    expect(content).toMatch(/^pipeline_document_profile: legacy-full$/m)
     // state-first CLI init 也必须留下 OpenSpec 继续点；正常入口中 richer openspec-propose 若已先
     // 写这些文件，repository 的 wx scaffold 会保留它们，这里覆盖无 OpenSpec skill 的恢复路径。
     expect(await h.readIn('demo', 'proposal.md')).toContain('# Proposal')
@@ -66,11 +111,28 @@ describe('真实 e2e —— init --workflow 落地自定义 workflow 的首个 s
     expect(await h.readIn('demo', 'tasks.md')).toContain('- [ ]')
   })
 
+  test('default phase 出口要求当前 visit 的 mandatory Skill 证据', async () => {
+    const name = 'default-skill-gate'
+    expect(await h.run(['init', name, '--track', 'backend', '--preset', 'full'])).toBe(0)
+    await h.seedGovernedDocumentEvidence(name, { autoSkills: false })
+    expect(await h.run(['transition', name, 'open-complete'])).toBe(2)
+    expect(h.err.join('\n')).toContain('openspec-propose')
+    await appendFile(
+      join(h.cwd, 'openspec', 'changes', name, '.pipeline-history.jsonl'),
+      `${JSON.stringify({
+        ts: '2026-07-25T00:00:00Z', kind: 'tool', raw: 'Skill: openspec-propose',
+      })}\n`,
+      'utf8',
+    )
+    expect(await h.run(['transition', name, 'open-complete'])).toBe(0)
+  })
+
   test('simple Track 默认绑定内建 simple workflow，从 change 开始且不生成完整 OpenSpec 文档链', async () => {
     expect(await h.run(['init', 'tiny-fix', '--track', 'simple', '--preset', 'tweak'])).toBe(0)
     const content = await h.read('tiny-fix')
     expect(content).toMatch(/^workflow: simple$/m)
     expect(content).toMatch(/^phase: change$/m)
+    expect(content).not.toMatch(/^pipeline_document_profile:/m)
     await expect(h.readIn('tiny-fix', 'proposal.md')).rejects.toThrow()
     await expect(h.readIn('tiny-fix', 'tasks.md')).rejects.toThrow()
   })
@@ -95,18 +157,39 @@ describe('真实 e2e —— init --workflow 落地自定义 workflow 的首个 s
     await h.seedArtifact(name, 'design_doc', `openspec/changes/${name}/design.md`)
     await h.seedArtifact(name, 'plan', `docs/superpowers/plans/${name}.md`)
     await h.seedArtifact(name, 'verification_report', `docs/superpowers/reports/${name}.md`)
+    const recordSkills = async (...skills: string[]): Promise<void> => {
+      await appendFile(
+        join(h.cwd, 'openspec', 'changes', name, '.pipeline-history.jsonl'),
+        `${skills.map((skill) => JSON.stringify({
+          ts: '2026-07-25T00:00:00Z', kind: 'tool', raw: `Skill: ${skill}`,
+        })).join('\n')}\n`,
+        'utf8',
+      )
+    }
 
+    await recordSkills('openspec-propose')
     expect(await h.run(['transition', name, 'open-complete'])).toBe(0)
-    expect(await h.run(['review', 'request', name, '--event', 'explore-complete'])).toBe(0)
+    await recordSkills('brainstorming')
+    expect(await h.run(['document', 'read', name, 'all'])).toBe(0)
+    expect(
+      await h.run(['review', 'request', name, '--event', 'explore-complete']),
+      h.err.join('\n'),
+    ).toBe(0)
     expect(await h.run(['review', 'acknowledge', name])).toBe(0)
     expect(await h.run(['transition', name, 'explore-complete'])).toBe(0)
+    await recordSkills('openspec-propose', 'writing-plans')
+    expect(await h.run(['document', 'read', name, 'all'])).toBe(0)
     expect(await h.run(['review', 'request', name, '--event', 'spec-complete'])).toBe(0)
     expect(await h.run(['review', 'acknowledge', name])).toBe(0)
     expect(await h.run(['transition', name, 'spec-complete'])).toBe(0)
 
     expect(await h.run(['set-many', name, 'build_mode=direct', 'isolation=worktree', 'direct_override=true'])).toBe(0)
+    await recordSkills('writing-plans', 'test-driven-development')
+    expect(await h.run(['document', 'read', name, 'all'])).toBe(0)
     expect(await h.run(['transition', name, 'build-complete'])).toBe(0)
     expect(await h.run(['set', name, 'branch_status', 'handled'])).toBe(0)
+    await recordSkills('verification-before-completion')
+    expect(await h.run(['document', 'read', name, 'all'])).toBe(0)
     expect(
       await h.run(['review', 'request', name, '--event', 'verify-pass']),
       h.err.join('\n'),
@@ -114,7 +197,10 @@ describe('真实 e2e —— init --workflow 落地自定义 workflow 的首个 s
     expect(await h.run(['review', 'acknowledge', name])).toBe(0)
     expect(await h.run(['transition', name, 'verify-pass'])).toBe(0)
 
+    await recordSkills('openspec-apply-change', 'finishing-a-development-branch')
+    expect(await h.run(['document', 'read', name, 'all'])).toBe(0)
     expect(await h.run(['transition', name, 'ship-complete'])).toBe(0)
+    expect(await h.run(['document', 'read', name, 'all'])).toBe(0)
     expect(await h.run(['transition', name, 'archived'])).toBe(0)
     const completed = await h.read(name)
     expect(completed).toMatch(/^track: free$/m)
@@ -186,6 +272,71 @@ describe('真实 e2e —— init --workflow 落地自定义 workflow 的首个 s
     expect(content).toMatch(/^workflow: onboarding$/m)
     expect(content).toMatch(/^phase: intake$/m)
     expect(await h.run(['internal-skill-gate', 'free-custom', 'anything'])).toBe(0)
+  })
+
+  test('三步 workflow 可执行声明式 document contract，不继承七阶段文档矩阵', async () => {
+    await seedWorkflow('compact-governed', THREE_STEP_GOVERNED_WF)
+    expect(
+      await h.run([
+        'init', 'compact-run', '--track', 'free', '--preset', 'full',
+        '--workflow', 'compact-governed',
+      ]),
+    ).toBe(0)
+    expect((await h.read('compact-run'))).toMatch(/^phase: shape$/m)
+    expect((await h.read('compact-run'))).toMatch(/^pipeline_document_profile: document-v1$/m)
+
+    expect(await h.run(['document', 'status', 'compact-run'])).toBe(2)
+    expect(h.out.join('\n')).toContain("proposal")
+    expect(h.out.join('\n')).not.toContain('superpower-design')
+
+    const documentPath = join(h.cwd, 'docs', 'compact-run-proposal.md')
+    await mkdir(join(h.cwd, 'docs'), { recursive: true })
+    await writeFile(documentPath, '# Compact proposal\n', 'utf8')
+    await appendFile(
+      join(h.cwd, 'openspec', 'changes', 'compact-run', '.pipeline-history.jsonl'),
+      `${JSON.stringify({ ts: '2026-07-25T00:00:00Z', kind: 'tool', raw: 'Skill: writer' })}\n`,
+      'utf8',
+    )
+    expect(
+      await h.run([
+        'document', 'record', 'compact-run', 'proposal', 'docs/compact-run-proposal.md',
+        '--producer', 'writer',
+      ]),
+    ).toBe(0)
+    expect(await h.run(['transition', 'compact-run', 'shape-complete'])).toBe(0)
+    expect((await h.read('compact-run'))).toMatch(/^phase: implement$/m)
+
+    expect(await h.run(['check', 'compact-run'])).toBe(2)
+    expect(h.out.join('\n')).toContain("尚未由 implement 的当前 step visit 读取")
+    expect(await h.run(['document', 'read', 'compact-run', 'all'])).toBe(0)
+    expect(await h.run(['check', 'compact-run'])).toBe(0)
+    expect(await h.run(['transition', 'compact-run', 'implement-complete'])).toBe(0)
+    expect((await h.read('compact-run'))).toMatch(/^phase: verify$/m)
+
+    expect(await h.run(['check', 'compact-run'])).toBe(2)
+    expect(h.out.join('\n')).toContain("尚未由 verify 的当前 step visit 读取")
+    expect(h.out.join('\n')).not.toContain('delta-spec')
+    expect(await h.run(['document', 'read', 'compact-run', 'all'])).toBe(0)
+    expect(await h.run(['check', 'compact-run'])).toBe(0)
+  })
+
+  test('document-v1 初始化绑定 fingerprint，后续删除 contract 时 document 命令 fail-closed', async () => {
+    await seedWorkflow('compact-governed', THREE_STEP_GOVERNED_WF)
+    const initCode = await h.run([
+      'init', 'bound-docs', '--track', 'free', '--preset', 'full',
+      '--workflow', 'compact-governed',
+    ])
+    expect(initCode, h.err.join('\n')).toBe(0)
+    expect(await h.read('bound-docs')).toMatch(
+      /^pipeline_document_governance_fingerprint: [0-9a-f]{64}$/m,
+    )
+
+    await seedWorkflow(
+      'compact-governed',
+      THREE_STEP_GOVERNED_WF.replace(/document_contract:[\s\S]*?(?=steps:)/, ''),
+    )
+    expect(await h.run(['document', 'status', 'bound-docs'])).toBe(1)
+    expect(h.err.join('\n')).toContain('不可降级为自由模式')
   })
 
   test('--workflow 指向不存在的文件：exit 1，不落盘任何 change 目录（先校验后创建，不留半成品）', async () => {

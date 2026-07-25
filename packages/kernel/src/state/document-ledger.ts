@@ -11,14 +11,19 @@ import { join } from 'node:path'
 import {
   DOCUMENT_CONTRACT_PHASES,
   documentOwnerPhase,
-  isAcceptedDocumentProducer,
+  documentOwnerPolicyStep,
   isDocumentContractPhase,
   isDocumentKind,
   isDocumentProducerAllowedInPhase,
+  isDocumentProducerAllowedInPolicyStep,
   isDocumentRecordAllowedInPhase,
+  isDocumentRecordAllowedInPolicyStep,
+  recordProducerCandidatesForPolicyStep,
   recordProducerCandidatesFor,
+  readsRequiredForPolicyStep,
   readsRequiredForPhase,
   type DocumentContractPhase,
+  type DocumentGovernancePolicy,
   type DocumentKind,
 } from '../workflow/document-contract.js'
 import { atomicLinkPublish, atomicReplaceFile } from './atomic-publish.js'
@@ -29,15 +34,16 @@ import {
   resolveDocument,
 } from './document-path.js'
 import { HISTORY_FILE } from './history.js'
+import { readCurrentRunRevision } from './run-revision-store.js'
 
 export { DocumentLedgerError } from './document-path.js'
 
 export const DOCUMENT_LEDGER_FILE = '.pipeline-documents.json'
-
 export interface DocumentReadReceipt {
-  readonly phase: DocumentContractPhase
+  readonly phase: string
   readonly sha256: string
   readonly readAt: string
+  readonly visitId?: string
 }
 
 export interface DocumentRecord {
@@ -84,15 +90,18 @@ function parseReceipt(value: unknown, recordIndex: number, receiptIndex: number)
   const phase = string(item.phase)
   const digest = string(item.sha256)
   const readAt = string(item.readAt)
-  if (!phase || !isDocumentContractPhase(phase)) {
+  const visitId = item.visitId === undefined ? undefined : string(item.visitId)
+  if (!phase || !/^[A-Za-z0-9_-]+$/.test(phase)) {
     throw new DocumentLedgerError(`document ledger records[${recordIndex}].reads[${receiptIndex}].phase 非法`)
   }
   if (!digest || !validDigest(digest)) {
     throw new DocumentLedgerError(`document ledger records[${recordIndex}].reads[${receiptIndex}].sha256 非法`)
   }
   if (!readAt) throw new DocumentLedgerError(`document ledger records[${recordIndex}].reads[${receiptIndex}].readAt 必须是非空字符串`)
-  return { phase, sha256: digest, readAt }
+  if (item.visitId !== undefined && !visitId) throw new DocumentLedgerError(`document ledger records[${recordIndex}].reads[${receiptIndex}].visitId 非法`)
+  return { phase, sha256: digest, readAt, ...(visitId === undefined ? {} : { visitId }) }
 }
+function receiptKey(receipt: DocumentReadReceipt): string { return JSON.stringify([receipt.phase, receipt.visitId ?? 'legacy']) }
 
 function parseRecord(value: unknown, index: number): DocumentRecord {
   const item = object(value)
@@ -105,20 +114,27 @@ function parseRecord(value: unknown, index: number): DocumentRecord {
   if (!kind || !isDocumentKind(kind)) throw new DocumentLedgerError(`document ledger records[${index}].kind 非法`)
   if (!path) throw new DocumentLedgerError(`document ledger records[${index}].path 必须是非空字符串`)
   if (!digest || !validDigest(digest)) throw new DocumentLedgerError(`document ledger records[${index}].sha256 非法`)
-  if (!producer || !isAcceptedDocumentProducer(kind, producer)) {
-    throw new DocumentLedgerError(`document ledger records[${index}].producer 不属于 '${kind}' 的允许 skill`)
+  if (!producer || !/^[A-Za-z0-9_-]+(?::[A-Za-z0-9_-]+)*$/.test(producer)) {
+    throw new DocumentLedgerError(`document ledger records[${index}].producer 非法`)
   }
   if (!recordedAt) throw new DocumentLedgerError(`document ledger records[${index}].recordedAt 必须是非空字符串`)
   if (!Array.isArray(item.reads)) throw new DocumentLedgerError(`document ledger records[${index}].reads 必须是数组`)
   const reads = item.reads.map((receipt, receiptIndex) => parseReceipt(receipt, index, receiptIndex))
-  const readPhases = new Set<string>()
+  const readVisits = new Set<string>()
   for (const receipt of reads) {
-    if (readPhases.has(receipt.phase)) {
-      throw new DocumentLedgerError(`document ledger records[${index}] 对 phase '${receipt.phase}' 有重复 read receipt`)
-    }
-    readPhases.add(receipt.phase)
+    const key = receiptKey(receipt)
+    if (readVisits.has(key)) throw new DocumentLedgerError(`document ledger records[${index}] 对 phase '${receipt.phase}' 的同一 visit 有重复 read receipt`)
+    readVisits.add(key)
   }
   return { kind, path, sha256: digest, producer, recordedAt, reads }
+}
+/** Stable authored-step visit identity; legacy YAML-only Changes fail closed until canonicalized. */
+export async function currentDocumentStepVisitId(changeDir: string): Promise<string> {
+  const metadata = (await readCurrentRunRevision(changeDir))?.state.runMetadata
+  if (metadata === undefined) throw new DocumentLedgerError(
+    '缺少 canonical WorkflowRun visit identity；旧 Change 必须先通过受控 state mutation 建立 run identity，再重新读取 document',
+  )
+  return JSON.stringify([metadata.runId, metadata.transitionSequence])
 }
 
 function parseLedger(raw: string): DocumentLedger {
@@ -206,7 +222,7 @@ function skillsEquivalent(left: string, right: string): boolean {
 async function hasSkillEvidence(
   changeDir: string,
   producer: string,
-  phase: DocumentContractPhase,
+  phase: string,
   allowEarlierPhaseEvidence: boolean,
 ): Promise<boolean> {
   let text: string
@@ -258,7 +274,8 @@ async function hasSkillEvidence(
 export interface RecordDocumentInput {
   readonly repoRoot: string
   readonly changeDir: string
-  readonly phase: DocumentContractPhase
+  readonly phase: string
+  readonly policy?: DocumentGovernancePolicy
   readonly kind: DocumentKind
   readonly path: string
   readonly producer: string
@@ -275,7 +292,9 @@ export interface RecordDocumentInput {
 }
 
 export async function recordDocument(input: RecordDocumentInput): Promise<DocumentLedger> {
-  const ownerPhase = documentOwnerPhase(input.kind)
+  const ownerPhase = input.policy
+    ? documentOwnerPolicyStep(input.policy, input.kind)
+    : documentOwnerPhase(input.kind)
   if (!ownerPhase) {
     // `DocumentKind` and the matrix live together, but fail closed if a future edit accidentally
     // adds a kind without assigning its owning phase.
@@ -291,8 +310,12 @@ export async function recordDocument(input: RecordDocumentInput): Promise<Docume
     return deltaSpecSlot(record.path, input.changeDir) === slot
   })
   const old = oldCandidates.find((record) => record.sha256 === resolved.digest) ?? oldCandidates[0]
-  const ownerIndex = DOCUMENT_CONTRACT_PHASES.indexOf(ownerPhase)
-  const currentIndex = DOCUMENT_CONTRACT_PHASES.indexOf(input.phase)
+  const policySteps = input.policy?.steps ?? DOCUMENT_CONTRACT_PHASES
+  const ownerIndex = policySteps.indexOf(ownerPhase)
+  const currentIndex = policySteps.indexOf(input.phase)
+  if (currentIndex < 0) {
+    throw new DocumentLedgerError(`当前 step '${input.phase}' 不属于 document contract`)
+  }
 
   if (input.allowBackfill) {
     if (oldCandidates.length > 0) {
@@ -306,20 +329,35 @@ export async function recordDocument(input: RecordDocumentInput): Promise<Docume
       }
       throw new DocumentLedgerError(`'${input.kind}' 当前正处于所属 phase '${ownerPhase}'；不得使用 --backfill`)
     }
-    if (!isDocumentProducerAllowedInPhase(input.kind, ownerPhase, input.producer)) {
+    const producerAllowed = input.policy
+      ? isDocumentProducerAllowedInPolicyStep(input.policy, input.kind, ownerPhase, input.producer)
+      : isDocumentProducerAllowedInPhase(input.kind, ownerPhase as DocumentContractPhase, input.producer)
+    const producerCandidates = input.policy
+      ? recordProducerCandidatesForPolicyStep(input.policy, input.kind, ownerPhase)
+      : recordProducerCandidatesFor(input.kind, ownerPhase as DocumentContractPhase)
+    if (!producerAllowed) {
       throw new DocumentLedgerError(
-        `document '${input.kind}' 的历史 producer '${input.producer}' 不合法（允许: ${recordProducerCandidatesFor(input.kind, ownerPhase).join(' ')})`,
+        `document '${input.kind}' 的历史 producer '${input.producer}' 不合法（允许: ${producerCandidates.join(' ')})`,
       )
     }
   } else {
-    if (!isDocumentRecordAllowedInPhase(input.kind, input.phase)) {
+    const recordAllowed = input.policy
+      ? isDocumentRecordAllowedInPolicyStep(input.policy, input.kind, input.phase)
+      : isDocumentContractPhase(input.phase) && isDocumentRecordAllowedInPhase(input.kind, input.phase)
+    if (!recordAllowed) {
       throw new DocumentLedgerError(
         `'${input.kind}' 只能在其所属 phase 或允许的后续更新 phase 登记（当前 ${input.phase}）`,
       )
     }
-    if (!isDocumentProducerAllowedInPhase(input.kind, input.phase, input.producer)) {
+    const producerAllowed = input.policy
+      ? isDocumentProducerAllowedInPolicyStep(input.policy, input.kind, input.phase, input.producer)
+      : isDocumentContractPhase(input.phase) && isDocumentProducerAllowedInPhase(input.kind, input.phase, input.producer)
+    const candidates = input.policy
+      ? recordProducerCandidatesForPolicyStep(input.policy, input.kind, input.phase)
+      : isDocumentContractPhase(input.phase) ? recordProducerCandidatesFor(input.kind, input.phase) : []
+    if (!producerAllowed) {
       throw new DocumentLedgerError(
-        `document '${input.kind}' 的 producer '${input.producer}' 不合法（当前 ${input.phase} 允许: ${recordProducerCandidatesFor(input.kind, input.phase).join(' ')})`,
+        `document '${input.kind}' 的 producer '${input.producer}' 不合法（当前 ${input.phase} 允许: ${candidates.join(' ')})`,
       )
     }
   }
@@ -384,14 +422,15 @@ export async function migrateLegacyDeltaDocument(
   if (target && (target.producer !== source.producer || target.recordedAt !== source.recordedAt)) {
     throw new DocumentLedgerError(`迁移拒绝：目标槽 '${slot}' 与旧 record 的 provenance 冲突`)
   }
-  const receipts = new Map<DocumentContractPhase, DocumentReadReceipt>()
-  for (const receipt of target?.reads ?? []) receipts.set(receipt.phase, receipt)
+  const receipts = new Map<string, DocumentReadReceipt>()
+  for (const receipt of target?.reads ?? []) receipts.set(receiptKey(receipt), receipt)
   for (const receipt of source.reads) {
-    const existing = receipts.get(receipt.phase)
-    if (existing && (existing.sha256 !== receipt.sha256 || existing.readAt !== receipt.readAt)) {
+    const key = receiptKey(receipt)
+    const existing = receipts.get(key)
+    if (existing && JSON.stringify(existing) !== JSON.stringify(receipt)) {
       throw new DocumentLedgerError(`迁移拒绝：目标槽 '${slot}' 的 ${receipt.phase} read receipt 冲突`)
     }
-    receipts.set(receipt.phase, receipt)
+    receipts.set(key, receipt)
   }
   const replacement: DocumentRecord = target
     ? { ...target, reads: [...receipts.values()] }
@@ -406,7 +445,8 @@ export async function migrateLegacyDeltaDocument(
 export interface ReadDocumentsInput {
   readonly repoRoot: string
   readonly changeDir: string
-  readonly phase: DocumentContractPhase
+  readonly phase: string
+  readonly policy?: DocumentGovernancePolicy
   readonly kind: DocumentKind | 'all'
   readonly readAt: string
 }
@@ -414,7 +454,10 @@ export interface ReadDocumentsInput {
 export async function recordDocumentReads(input: ReadDocumentsInput): Promise<DocumentLedger> {
   const current = await readDocumentLedger(input.changeDir)
   if (!current) throw new DocumentLedgerError(`document ledger 缺失；先执行 pipeline document init`)
-  const requiredKinds = readsRequiredForPhase(input.phase)
+  const visitId = await currentDocumentStepVisitId(input.changeDir)
+  const requiredKinds = input.policy
+    ? readsRequiredForPolicyStep(input.policy, input.phase)
+    : isDocumentContractPhase(input.phase) ? readsRequiredForPhase(input.phase) : []
   const kinds = input.kind === 'all' ? [...requiredKinds] : [input.kind]
   for (const kind of kinds) {
     if (!requiredKinds.includes(kind)) {
@@ -444,8 +487,10 @@ export async function recordDocumentReads(input: ReadDocumentsInput): Promise<Do
     if (resolved.digest !== record.sha256) {
       throw new DocumentLedgerError(`document '${record.kind}' 已变更: ${record.path}；先重新 record 后再 read`)
     }
-    const reads = record.reads.filter((receipt) => receipt.phase !== input.phase)
-    reads.push({ phase: input.phase, sha256: resolved.digest, readAt: input.readAt })
+    const reads = record.reads.filter(
+      (receipt) => receipt.phase !== input.phase || receipt.visitId !== visitId,
+    )
+    reads.push({ phase: input.phase, sha256: resolved.digest, readAt: input.readAt, visitId })
     updated.push({ ...record, reads })
   }
   const next: DocumentLedger = { ...current, records: updated }

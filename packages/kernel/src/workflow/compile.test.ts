@@ -25,6 +25,29 @@ function rawDef(def: unknown): WorkflowDef {
 }
 
 describe('v1 → IR 下沉', () => {
+  it('document contract 经过 unknown 边界校验并被深冻结', () => {
+    const ir = compileWorkflow(rawDef({
+      name: 'compact',
+      documentContract: {
+        version: 'v1',
+        slots: [{ kind: 'proposal', ownerStep: 'shape', producers: ['writer'] }],
+        reads: [{ step: 'build', kinds: ['proposal'] }],
+      },
+      steps: [v1Step({ id: 'shape' }), v1Step({ id: 'build' })],
+    }))
+    expect(ir.documentContract?.version).toBe('v1')
+    expect(Object.isFrozen(ir.documentContract)).toBe(true)
+    expect(Object.isFrozen(ir.documentContract?.slots[0])).toBe(true)
+  })
+
+  it('malformed document contract 在编译边界 fail-loud', () => {
+    expect(() => compileWorkflow(rawDef({
+      name: 'bad',
+      documentContract: { version: 'v2', slots: [], reads: [] },
+      steps: [v1Step()],
+    }))).toThrow(/documentContract.version/)
+  })
+
   it('nonempty-output 按 outputs 逐字段展开为 field-nonempty（顺序=outputs 声明序）；tasks-at-least 原样保留', () => {
     const ir = compileWorkflow(
       v1Def([
@@ -518,6 +541,112 @@ describe('阻断 3：结构化输入的 guard 附加键闭集（绕过 parse 也
       ),
     ).not.toThrow()
   })
+})
+
+describe('结构化 Workflow DTO 全树键闭集（未知键不得被 serialize 静默吞掉）', () => {
+  const base = (): Record<string, unknown> => ({
+    name: 'closed-dto',
+    documentContract: {
+      version: 'v1',
+      slots: [{ kind: 'proposal', ownerStep: 'draft', producers: ['writer'] }],
+      reads: [{ step: 'done', kinds: ['proposal'] }],
+    },
+    steps: [
+      {
+        ...v1Step({
+          skills: [{ id: 'writer', depends_on: [] }],
+          inputs: [{ field: 'plan', type: 'file_path' }],
+          outputs: [{ field: 'design_doc', type: 'file_path' }],
+          artifacts: [{ field: 'design_doc', producerPolicy: 'effective-step-skills' }] as never,
+          transitions: [{
+            event: 'go',
+            to: 'done',
+            actions: [{ type: 'mark-verification-passed' }],
+          }] as never,
+        }),
+      },
+      v1Step({ id: 'done' }),
+    ],
+  })
+
+  const mutations: Array<{ label: string; mutate: (value: Record<string, unknown>) => void; path: RegExp }> = [
+    { label: 'workflow', mutate: (value) => { value.extra = true }, path: /workflow.*附加键 'extra'/ },
+    {
+      label: 'step',
+      mutate: (value) => { (value.steps as Array<Record<string, unknown>>)[0]!.extra = true },
+      path: /steps\[0\].*附加键 'extra'/,
+    },
+    {
+      label: 'skill',
+      mutate: (value) => {
+        const step = (value.steps as Array<Record<string, unknown>>)[0]!
+        ;(step.skills as Array<Record<string, unknown>>)[0]!.extra = true
+      },
+      path: /steps\[0\]\.skills\[0\].*附加键 'extra'/,
+    },
+    {
+      label: 'input',
+      mutate: (value) => {
+        const step = (value.steps as Array<Record<string, unknown>>)[0]!
+        ;(step.inputs as Array<Record<string, unknown>>)[0]!.extra = true
+      },
+      path: /steps\[0\]\.inputs\[0\].*附加键 'extra'/,
+    },
+    {
+      label: 'artifact',
+      mutate: (value) => {
+        const step = (value.steps as Array<Record<string, unknown>>)[0]!
+        ;(step.artifacts as Array<Record<string, unknown>>)[0]!.extra = true
+      },
+      path: /steps\[0\]\.artifacts\[0\].*附加键 'extra'/,
+    },
+    {
+      label: 'transition',
+      mutate: (value) => {
+        const step = (value.steps as Array<Record<string, unknown>>)[0]!
+        ;(step.transitions as Array<Record<string, unknown>>)[0]!.extra = true
+      },
+      path: /steps\[0\]\.transitions\[0\].*附加键 'extra'/,
+    },
+    {
+      label: 'action',
+      mutate: (value) => {
+        const step = (value.steps as Array<Record<string, unknown>>)[0]!
+        const transition = (step.transitions as Array<Record<string, unknown>>)[0]!
+        ;(transition.actions as Array<Record<string, unknown>>)[0]!.extra = true
+      },
+      path: /steps\[0\]\.transitions\[0\]\.actions\[0\].*附加键 'extra'/,
+    },
+    {
+      label: 'document contract',
+      mutate: (value) => { (value.documentContract as Record<string, unknown>).extra = true },
+      path: /documentContract.*附加键 'extra'/,
+    },
+    {
+      label: 'document slot',
+      mutate: (value) => {
+        const contract = value.documentContract as Record<string, unknown>
+        ;(contract.slots as Array<Record<string, unknown>>)[0]!.extra = true
+      },
+      path: /documentContract\.slots\[0\].*附加键 'extra'/,
+    },
+    {
+      label: 'document read',
+      mutate: (value) => {
+        const contract = value.documentContract as Record<string, unknown>
+        ;(contract.reads as Array<Record<string, unknown>>)[0]!.extra = true
+      },
+      path: /documentContract\.reads\[0\].*附加键 'extra'/,
+    },
+  ]
+
+  for (const mutation of mutations) {
+    it(`拒绝 ${mutation.label} 未知键`, () => {
+      const value = base()
+      mutation.mutate(value)
+      expect(() => compileWorkflow(value)).toThrow(mutation.path)
+    })
+  }
 })
 
 // ── G2 P2 兼容回退（codex review 返工）：pre-P2 的 FieldRef.field 是 string，声明非 FIELD_ORDER

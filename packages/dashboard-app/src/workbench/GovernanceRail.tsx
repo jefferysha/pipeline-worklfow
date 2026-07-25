@@ -1,185 +1,24 @@
 import { useEffect, useRef, useState } from 'react'
-import { postLoopLevel, postLoopUpdate, type WbLoopRow } from '../api/client'
+import { postLoopLevel, postLoopUpdate } from '../api/client'
 import { useT } from '../i18n'
-import { Dialog } from '../shell/Dialog'
 import { LpSlider, WB_TW, type LoopsState } from './LoopCard'
-import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { ChartNoAxesColumn, CircleAlert, Pencil } from 'lucide-react'
-
-/**
- * GovernanceRail（P3 任务 B）——编排画布右侧常驻的「治理轨 · Loop」三件套。
- * 视觉真相源 design-demos/v11b-prod-lanes.html 的 `.rail`（三张 .gcard：自治级 / 就绪分 /
- * 熔断·token 预算）；真假边界真相源 design-demos/v11-workbench-orchestration-spec.md §1.1
- * 能力矩阵的 Loop 四行。数据面复用 LoopCard 的 useLoops/LoopsState（宿主 WorkbenchView 持有
- * 同一份 rows——「数据住共同祖先」纪律），本组件不自拉快照。
- *
- * ── 与 LoopCard 的分工（P3 阶段两者并存，LoopCard P4 才退役）──
- * LoopCard = sheet 里的**全量表单**（15 个字段的完整编辑面，含 goal/kill_criteria/human_gates…）；
- * 本轨 = 画布上的**治理摘要 + 三个高频治理动作**。本文件**只 import** LoopCard 的既有导出
- * （LoopsState/LpSlider/WB_TW），不改它一行。
- *
- * ── 诚实门（本组件最容易做错的三处，逐条钉死）──
- * ① **就绪分是 📊 只读派生**：8 维加权纯函数，阈值 70/90 与权重硬编码在 kernel/src/loops/drift.ts，
- *    **无任何写端点**。所以本卡**零可写控件**——定稿 demo 里那 4 个「勾底层字段抬分」的 checkbox
- *    （`.drivers` / `toggleDriver`）是**演示用的假控件**（demo 的 readiness() 是 `sc=32` 起步的
- *    捏造算式，不是后端那个 8 维函数），**刻意不复刻**。真实的抬分路径是改 goal/kill_criteria/
- *    预算——那些字段的编辑面在 LoopCard 的完整表单里，本卡只附一句说明指路。
- * ② **熔断态 ok/warn/tripped 是 📊 只读派生**：纯按当日 token 花费算（80% warn 线硬编码，
- *    kernel budget.ts/enforce.ts），**无 arm/trip/reset 端点**。所以只画只读态灯，**绝不做
- *    arm/reset 按钮**。可写的只有 token 预算**阈值**（POST /api/loops/update）。
- * ③ **自治级晋升门以 server 为准**：真正的裁决是 kernel graduation.ts::decideGraduation，它吃
- *    readiness/drift/breaker/failStreak/**runs** 五路输入。/api/loops/snapshot 现在透出同一份
- *    graduation verdict，本卡在点击前完整展示输入与 blockers；旧 server 缺该字段时才回落到
- *    readiness 单向必要条件提示。因此本卡：
- *      · **不 disable 任何级别按钮**（disable = 前端替 server 下判决 = 假装权威）；升档过确认
- *        Dialog、降档直发（见下「风险不对称」），确认后就真发，server 拒绝时把 plan.reason/
- *        blockers **原文**摆出来（wb-gov-level-error）。
- *      · 预判提示**只做单向**，且这个单向是**逻辑上站得住**的：仅当「就绪分已知 && 低于该级门槛」
- *        时才提示会被拒——graduation.ts 里 `score < minScore` 是**无条件** push blocker，而
- *        `canGraduate` 要求 blockers 为空，故**单条已知不满足的必要条件即可确证被拒**，措辞不必
- *        含糊（写成「可能/预计」反而是把确定的事说软了）。**永不**反向断言「可以升」——那要求
- *        五路 blocker 全不存在，而 drift/连败/runs 三路我根本没有，说「可以升」就是谎报。
- *        注意这**不是**把判决权拿回前端：按钮照样能点、照样真发，server 的裁决照样原文展示。
- *
- * ── 风险不对称：升档过确认、降档直发（LoopsPanel Task 13 / LoopCard 既有纪律）──
- * 升档 → 确认 Dialog；降档 → 直发无摩擦（降档是**降低**风险，不该加摩擦）。
- * 这条**不能**因为「server 有晋升门兜底」而省掉——恰恰相反：**server 的门只拦不够格的**，
- * 就绪分一旦够了，在治理轨上误点一下就直接进 **L3 无人值守**，此时 server 不会拦，「兜底」
- * 在这个场景根本不成立；且同一动作在 sheet 的 LoopCard 里要确认、在本轨不用 =
- * inconsistent vocabulary（product register 明禁），用户会以为两处是不同的东西。
- * 文案复用 LoopsPanel/LoopCard 既有 `loops.promote_*` 键——同一决策同一话术，零新增键。
- *
- * ── 其余口径 ──
- * · 无 loop → 空态照 LoopCard 既有 lp-empty 的「去终端生成」引导（复用其 i18n 键，不自造文案；
- *   窄轨里省去 prompt 示例块与复制钮——那是 sheet 里教学位的活）。
- * · 数据未就绪（score/spent 非有限数）→ 回落 '—'，**不谎报数字**、不拿 0 冒充。
- * · 阈值/门槛常量走 kernel 纯数据镜像（dashboard 是浏览器 bundle，直接 import
- *   @pipeline-lite/kernel 会拉进 node:fs 破坏构建——同 LoopCard::LOOP_RUNNERS 的既有纪律）；
- *   镜像导出供测试做跨边界单源相等断言。
- * · 样式：tailwind v4 原子类 + token 语义类（无 dark:/无裸 shadow/无 side-stripe 彩色边框）；
- *   状态走 data-* 属性与 aria；名称零截断（无 truncate/ellipsis）；base ≥14px、徽章 ≥11.5px。
- */
-
-// ── kernel 常量的纯数据镜像（单源守卫见 GovernanceRail.test.tsx 的跨边界相等断言）──
-/** kernel loops/drift.ts::READY_THRESHOLD 镜像——≥70 mostly-ready；升 L2 的就绪门槛。 */
-export const READY_THRESHOLD = 70
-/** kernel loops/drift.ts::READY_STRONG 镜像——≥90 ready；升 L3 的就绪门槛。 */
-export const READY_STRONG = 90
-/** kernel loops/graduation.ts::MIN_L2_RUNS_FOR_L3 镜像——升 L3 另需 ≥5 轮 L2 运行（**前端无此数据，只用于文案**）。 */
-export const MIN_L2_RUNS_FOR_L3 = 5
-/** kernel loops/enforce.ts::BUDGET_WARN_RATIO 镜像——0.8 减速线（熔断 warn 态的硬编码比例）。 */
-export const BUDGET_WARN_RATIO = 0.8
-
-const LEVELS = ['L1', 'L2', 'L3'] as const
-type Level = (typeof LEVELS)[number]
-
-/**
- * 升到该级所需的最低就绪分（graduation.ts 的 `minScore = current==='L1' ? READY_THRESHOLD : READY_STRONG`
- * 按**目标级**改写的等价表达：升 L2 需 ≥70、升 L3 需 ≥90）。L1 是最低档，无就绪门。
- * 注意这**只是晋升门的其中一路条件**——drift/breaker/failStreak/runs 四路前端拿不到，见文件头诚实门③。
- */
-const LEVEL_MIN_SCORE: Record<Level, number> = { L1: 0, L2: READY_THRESHOLD, L3: READY_STRONG }
-
-const LEVEL_SHORT_KEY: Record<Level, string> = {
-  L1: 'workbench.gov_lv1_s',
-  L2: 'workbench.gov_lv2_s',
-  L3: 'workbench.gov_lv3_s',
-}
-
-// ── token 预算滑杆网格：与 LoopCard 的 lp-sld-tokens 逐参数同口径（10k-500k / 步进 10k / 推荐 100k）
-//    ——同一个字段在两处 UI 必须是同一张网格，否则两卡互相「取整弹回」。 ──
-const TOKENS_K_MIN = 10
-const TOKENS_K_MAX = 500
-const TOKENS_K_STEP = 10
-const RECO_TOKENS_K = 100
-
-/**
- * 滑杆停拖 → 落盘的去抖窗口（ms）。原生 range 在拖拽中会连发 change，逐拍直发
- * POST /api/loops/update 等于对 loops.yaml 连做几十次「文本手术 + 整文档 schema 重校验 + CAS」
- * ——既打 server 也会让 CAS 互相打架。故：值即时回显（不卡手），落盘等停手。
- * 测试侧注意：断言 POST body 需 `await waitFor(...)`（默认 1000ms 窗口 > 350ms，足够）。
- */
-const BUDGET_COMMIT_MS = 350
-
-const clamp = (v: number, min: number, max: number): number => Math.min(max, Math.max(min, v))
-
-/** 有限数才算「数据就绪」；否则回落 '—'（不拿 0 冒充——0 分与「没数据」是两回事）。 */
-const finiteOrNull = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null)
-
-/** token 计数 → 「{n}k」（demo 同款单位）；非有限数 → '—'。 */
-function fmtK(v: unknown): string {
-  const n = finiteOrNull(v)
-  return n === null ? '—' : `${Math.round(n / 1000)}k`
-}
-
-/** row 的 token 上限 → 滑杆 k 档位（LoopCard tokensK 同式）；未声明预算 → 停在推荐位（显示仍是「未设置」）。 */
-function tokensKOf(row: WbLoopRow): number {
-  const max = row.budget_decl?.max_tokens_per_day
-  return max === null || max === undefined ? RECO_TOKENS_K : clamp(Math.round(max / 10000) * 10, TOKENS_K_MIN, TOKENS_K_MAX)
-}
-
-// ── 视觉底座（demo .rail/.gcard/.gh/.minibadge 对位，全 token 语义类）──
-const RAIL_TW = 'flex w-full flex-col gap-3.5'
-/** demo .gcard：card 底 + border + 14px 圆角 + shadow-sm（卡片级阴影，非裸 shadow）。 */
-const GCARD_TW = 'rounded-[14px] border border-border bg-card px-4 py-[15px] shadow-sm'
-/** demo .gcard .gh：卡头（标题 + 能力徽章分列两端）。 */
-const GH_TW = 'mb-[11px] flex items-center justify-between gap-2'
-const GH_B_TW = 'text-[14.5px] font-[750] text-text'
-/** demo .minibadge（11.5px = 徽章字号下限）。 */
-const MINIBADGE_TW = 'inline-block rounded-full border px-2 py-0.5 text-[11.5px] font-extrabold whitespace-nowrap'
-/** demo .tag.rw（🟢 可写）/ .tag.derived（📊 只读派生）。 */
-const TAG_RW_TW = 'border-green-b bg-green-t text-green-d'
-const TAG_DERIVED_TW = 'border-accent-b bg-accent-t text-accent-d'
-/** demo .gradnote：卡内解释行（12px < base 14px 的下限？——note 是解释性副文，沿 WB_TW.note 的既有 12px 口径）。 */
-const GNOTE_TW = 'mt-2.5 text-xs leading-[1.55] text-text-3'
-/** demo .gradnote.block：⛔ 拦截/失败块（语义=错误，由 data-tone="error" 承载）。 */
-const GNOTE_ERR_TW = 'mt-2.5 rounded-[9px] border border-red-b bg-red-t px-2.5 py-2 text-xs leading-[1.55] font-semibold text-red-d'
-/** 单向预判提示（见文件头诚实门③）：amber 语义 = 「事前提醒」，区别于 server 原文判决的 red。 */
-const GNOTE_HINT_TW = 'mt-2.5 rounded-[9px] border border-amb-b bg-amb-t px-2.5 py-2 text-xs leading-[1.55] font-semibold text-amb-d'
-
-/** demo .band.ready/.mostly/.notready —— server 的 ReadinessBand 枚举 → 档位 chip 配色。 */
-const BAND_TW: Record<string, string> = {
-  ready: 'bg-green-t text-green-d',
-  'mostly-ready': 'bg-amb-t text-amb-d',
-  'not-ready': 'bg-red-t text-red-d',
-}
-const BAND_KEY: Record<string, string> = {
-  ready: 'workbench.gov_band_ready',
-  'mostly-ready': 'workbench.gov_band_mostly',
-  'not-ready': 'workbench.gov_band_not',
-}
-/** demo rdBar 填充色随档位（ready 绿 / mostly amber / not-ready 红）。demo 的 #d4a017 裸色改走 --amb-d token。 */
-const BAR_TW: Record<string, string> = {
-  ready: 'bg-green',
-  'mostly-ready': 'bg-amb-d',
-  'not-ready': 'bg-red',
-}
-/** demo .lamp.ok/.warn/.tripped —— 熔断态只读态灯（无 arm/reset，见诚实门②）。 */
-const LAMP_TW: Record<string, string> = {
-  ok: 'bg-green',
-  warn: 'bg-amb-d',
-  tripped: 'bg-red',
-}
-
+import { GovernancePromoteDialog } from './GovernancePromoteDialog'
+import { GovernanceRailHead } from './GovernanceRailHead'
+import {
+  BAND_KEY, BAND_TW, BAR_TW, BUDGET_COMMIT_MS, BUDGET_WARN_RATIO, GCARD_TW,
+  GH_B_TW, GH_TW, GNOTE_ERR_TW, GNOTE_HINT_TW, GNOTE_TW, LAMP_TW, LEVELS,
+  LEVEL_MIN_SCORE, LEVEL_SHORT_KEY, MINIBADGE_TW, MIN_L2_RUNS_FOR_L3, RAIL_TW,
+  READY_STRONG, READY_THRESHOLD, RECO_TOKENS_K, TAG_DERIVED_TW, TAG_RW_TW,
+  TOKENS_K_MAX, TOKENS_K_MIN, TOKENS_K_STEP, clamp, finiteOrNull, fmtK, tokensKOf,
+  type GovernanceLevel,
+} from './governanceModel'
+export { BUDGET_WARN_RATIO, MIN_L2_RUNS_FOR_L3, READY_STRONG, READY_THRESHOLD } from './governanceModel'
 export interface GovernanceRailProps {
   root: string
   /** 从 './LoopCard' import 的既有 useLoops 返回类型——宿主已持有，本组件不重复拉快照。 */
   loops: LoopsState
-}
-
-/** 轨头（三分支：加载/空态/正常都挂它，位置恒定不跳）。 */
-function RailHead(): JSX.Element {
-  const { t } = useT()
-  return (
-    <div className="mx-0.5 mt-0.5 flex items-center gap-2.5">
-      <span className="grid size-[23px] flex-none place-items-center rounded-[7px] bg-ink font-mono text-[12.5px] font-extrabold text-ink-fg" aria-hidden="true">
-        L
-      </span>
-      <b className="text-[15.5px] font-[750] text-text">{t('workbench.gov_title')}</b>
-      <span className="ml-auto font-mono text-[11.5px] text-text-3">{t('workbench.gov_per_root')}</span>
-    </div>
-  )
 }
 
 export function GovernanceRail({ root, loops }: GovernanceRailProps): JSX.Element {
@@ -189,7 +28,7 @@ export function GovernanceRail({ root, loops }: GovernanceRailProps): JSX.Elemen
   const [levelBusy, setLevelBusy] = useState(false)
   const [levelError, setLevelError] = useState<string | null>(null)
   /** 待确认的升档目标（null = 无弹窗）——只有升档会落到这里，降档直发。 */
-  const [confirmLevel, setConfirmLevel] = useState<Level | null>(null)
+  const [confirmLevel, setConfirmLevel] = useState<GovernanceLevel | null>(null)
   /** token 上限草稿（k 单位）；null = 未拖动，跟随 server 真值。 */
   const [tokK, setTokK] = useState<number | null>(null)
   const [budgetError, setBudgetError] = useState<string | null>(null)
@@ -217,7 +56,7 @@ export function GovernanceRail({ root, loops }: GovernanceRailProps): JSX.Elemen
    * 级别按钮的入口：**风险不对称**分流（见文件头）——升档先出确认 Dialog，降档直发。
    * 注意这里**不做任何门控判定**：够不够格是 server 的活（诚实门③），本函数只区分「升 vs 降」。
    */
-  function requestLevel(target: Level): void {
+  function requestLevel(target: GovernanceLevel): void {
     if (!row || levelBusy || target === row.autonomy_level) return
     if (LEVELS.indexOf(target) > LEVELS.indexOf(row.autonomy_level)) {
       setConfirmLevel(target)
@@ -226,7 +65,7 @@ export function GovernanceRail({ root, loops }: GovernanceRailProps): JSX.Elemen
     }
   }
 
-  async function applyLevel(target: Level): Promise<void> {
+  async function applyLevel(target: GovernanceLevel): Promise<void> {
     if (!row || levelBusy || target === row.autonomy_level) return
     setLevelBusy(true)
     setLevelError(null)
@@ -266,7 +105,7 @@ export function GovernanceRail({ root, loops }: GovernanceRailProps): JSX.Elemen
   if (loops.loadError) {
     return (
       <aside className={RAIL_TW} data-testid="wb-gov-rail">
-        <RailHead />
+        <GovernanceRailHead />
         <div className={GCARD_TW}>
           <p className={WB_TW.loadError} data-tone="error" data-testid="wb-gov-load-error">
             {loops.loadError}
@@ -278,7 +117,7 @@ export function GovernanceRail({ root, loops }: GovernanceRailProps): JSX.Elemen
   if (loops.rows === null) {
     return (
       <aside className={RAIL_TW} data-testid="wb-gov-rail">
-        <RailHead />
+        <GovernanceRailHead />
         <div className={GCARD_TW}>
           <p className={WB_TW.loading}>{t('common.loading')}</p>
         </div>
@@ -290,7 +129,7 @@ export function GovernanceRail({ root, loops }: GovernanceRailProps): JSX.Elemen
     // 配置的生产者是 agent/系统，不是人从空白手填——不渲染任何编辑控件，不谎报可配。
     return (
       <aside className={RAIL_TW} data-testid="wb-gov-rail">
-        <RailHead />
+        <GovernanceRailHead />
         <div className={GCARD_TW} data-testid="wb-gov-empty">
           <p className="mb-1 text-[14px] font-bold text-text">{t('workbench.lp_empty_title')}</p>
           <p className={WB_TW.note}>{t('workbench.lp_empty_go')}</p>
@@ -309,7 +148,7 @@ export function GovernanceRail({ root, loops }: GovernanceRailProps): JSX.Elemen
 
   // 单向预判（诚实门③）：只在「就绪分已知 && 低于下一档门槛」时提示会被拒；条件满足时**不说任何话**
   //   ——drift/连败/runs 三路输入前端没有，说「可以升」就是谎报。
-  const nextLv = curIdx >= 0 && curIdx < LEVELS.length - 1 ? LEVELS[curIdx + 1]! : null
+  const nextLv = curIdx >= 0 && curIdx < LEVELS.length - 1 ? LEVELS[curIdx + 1] ?? null : null
   const nextNeed = nextLv === null ? 0 : LEVEL_MIN_SCORE[nextLv]
   const predictBlocked = nextLv !== null && score !== null && score < nextNeed
 
@@ -330,7 +169,7 @@ export function GovernanceRail({ root, loops }: GovernanceRailProps): JSX.Elemen
 
   return (
     <aside className={RAIL_TW} data-testid="wb-gov-rail">
-      <RailHead />
+      <GovernanceRailHead />
 
       {/* ── ① 自治级 L1/L2/L3 —— 🟢 POST /api/loops/level（逐级晋升门，裁决权在 server）── */}
       <section className={GCARD_TW} data-testid="wb-gov-level">
@@ -543,52 +382,16 @@ export function GovernanceRail({ root, loops }: GovernanceRailProps): JSX.Elemen
       {/* ── 升档确认（风险不对称，见文件头）——文案全复用 LoopsPanel/LoopCard 既有 loops.promote_* 键：
           同一决策同一话术，零新增键。降档不经过这里（直发）。 ── */}
       {confirmLevel !== null && (
-        <Dialog
-          title={t('loops.promote_confirm_title', { level: confirmLevel })}
+        <GovernancePromoteDialog
+          target={confirmLevel}
+          row={row}
+          bandText={bandText}
           onClose={() => setConfirmLevel(null)}
-          testid="wb-gov-promote-confirm"
-          actions={
-            <>
-              <Button
-                variant="ghost"
-                size="sm"
-                className={WB_TW.btnGhost}
-                data-testid="wb-gov-promote-cancel"
-                onClick={() => setConfirmLevel(null)}
-              >
-                {t('loops.promote_confirm_no')}
-              </Button>
-              <Button
-                size="sm"
-                className={WB_TW.btnSolid}
-                data-testid="wb-gov-promote-ok"
-                onClick={() => {
-                  // 乐观关闭再真 POST（LoopCard confirmPromoteNow 的既有先例）
-                  const target = confirmLevel
-                  setConfirmLevel(null)
-                  void applyLevel(target)
-                }}
-              >
-                {t('loops.promote_confirm_yes')}
-              </Button>
-            </>
-          }
-        >
-          <p className="mb-4 text-[12.5px] leading-[1.6] text-text-2">
-            {t('loops.promote_confirm_desc', {
-              // 就绪档位走与 chip 同一条本地化路径；数据未就绪时是 '—'，不谎报
-              band: bandText,
-              budget: row.budget?.hasBudget
-                ? t('loops.budget_summary', {
-                    spent: row.budget.spentToday,
-                    max: row.budget.maxTokensPerDay ?? 0,
-                    remaining: row.budget.remaining ?? 0,
-                  })
-                : t('loops.no_budget'),
-              level: confirmLevel,
-            })}
-          </p>
-        </Dialog>
+          onConfirm={(target) => {
+            setConfirmLevel(null)
+            void applyLevel(target)
+          }}
+        />
       )}
     </aside>
   )

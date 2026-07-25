@@ -6,7 +6,7 @@
  * 必须把它当数据逐行校验/解码。routing 只来自 effective registry，manifest 不承载
  * 路由规则，避免双真相源。
  */
-import { createHash } from 'node:crypto'
+import { sha256Hex } from '../sha256.js'
 import type { ExtendedManifestData, SkillTable } from '../flow/manifest.js'
 import { BUILTIN_TRACK_DEFINITIONS } from './builtins.js'
 import type { TrackRegistry } from './types.js'
@@ -54,9 +54,7 @@ export function effectiveRouterRevision(
   registryRevision: string,
   projection: RouterProjection,
 ): string {
-  return createHash('sha256')
-    .update(JSON.stringify({ registryRevision, tracks: projection.tracks }), 'utf8')
-    .digest('hex')
+  return sha256Hex(JSON.stringify({ registryRevision, tracks: projection.tracks }))
 }
 
 /**
@@ -73,9 +71,7 @@ export function routerContractRevision(manifest: ExtendedManifestData): string {
     revision: 'builtin-contract',
     source: 'builtin-only',
   }, manifest)
-  return createHash('sha256')
-    .update(JSON.stringify(projection), 'utf8')
-    .digest('hex')
+  return sha256Hex(JSON.stringify(projection))
 }
 
 function own(object: object, key: PropertyKey): boolean {

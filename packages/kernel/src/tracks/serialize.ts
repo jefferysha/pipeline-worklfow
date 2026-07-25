@@ -22,6 +22,7 @@ import type {
 } from './types.js'
 import { BUILTIN_TRACK_IDS } from './builtins.js'
 import { stringUnrepresentableReason } from './representable.js'
+import { required } from '../required.js'
 
 /** 可裸写（无引号）的标量形态：不会被 parse 误读成 int/bool/null/注释/流式结构的保守闭集。 */
 const BARE_RE = /^[A-Za-z0-9_][A-Za-z0-9_.-]*$/
@@ -126,7 +127,7 @@ export function serializeTrackRegistry(config: ProjectTrackConfig): string {
   if (builtins !== undefined) {
     const emitted: string[] = []
     for (const key of orderedOverrideKeys(builtins)) {
-      const ov: ProjectBuiltinOverrideConfig = builtins[key]!
+      const ov: ProjectBuiltinOverrideConfig = required(builtins[key])
       const sub: string[] = []
       if (ov.label !== undefined) sub.push(`    label: ${emitString(ov.label)}`)
       if (ov.workflow !== undefined) pushWorkflow(sub, '    ', ov.workflow)
@@ -152,7 +153,7 @@ export function serializeTrackRegistry(config: ProjectTrackConfig): string {
         lines.push('  -')
         continue
       }
-      lines.push(`  - ${sub[0]!.slice(4)}`, ...sub.slice(1))
+      lines.push(`  - ${required(sub[0]).slice(4)}`, ...sub.slice(1))
     }
   }
 

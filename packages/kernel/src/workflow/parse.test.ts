@@ -75,6 +75,72 @@ steps:
 `
 
 describe('parseWorkflow', () => {
+  it('三步 workflow 可声明与图长度解耦的 v1 document contract', () => {
+    const wf = parseWorkflow(`name: compact-governed
+document_contract:
+  version: v1
+  slots:
+    - kind: proposal
+      owner_step: shape
+      producers: [openspec-propose]
+    - kind: plan
+      owner_step: shape
+      producers: [writing-plans]
+  reads:
+    - step: implement
+      kinds: [proposal, plan]
+    - step: verify
+      kinds: [proposal, plan]
+steps:
+  - id: shape
+    label: 定义
+    gate: review
+    skills:
+      - id: openspec-propose
+      - id: writing-plans
+    inputs: []
+    outputs: []
+    guards: []
+    transitions:
+      - event: shaped
+        to: implement
+  - id: implement
+    label: 实现
+    gate: null
+    skills: []
+    inputs: []
+    outputs: []
+    guards: []
+    transitions:
+      - event: implemented
+        to: verify
+  - id: verify
+    label: 验证
+    gate: review
+    skills: []
+    inputs: []
+    outputs: []
+    guards: []
+    transitions: []
+`)
+    expect(wf.documentContract).toEqual({
+      version: 'v1',
+      slots: [
+        { kind: 'proposal', ownerStep: 'shape', producers: ['openspec-propose'] },
+        { kind: 'plan', ownerStep: 'shape', producers: ['writing-plans'] },
+      ],
+      reads: [
+        { step: 'implement', kinds: ['proposal', 'plan'] },
+        { step: 'verify', kinds: ['proposal', 'plan'] },
+      ],
+    })
+  })
+
+  it('document contract 未知 version 与 legacy+v1 双声明均 fail-loud', () => {
+    expect(() => parseWorkflow('name: bad\ndocument_contract:\n  version: v2\n  slots:\n    - kind: proposal\n      owner_step: one\n      producers: [writer]\n  reads: []\nsteps:\n')).toThrow(/version/)
+    expect(() => parseWorkflow('name: bad\nopenspec_contract: required\ndocument_contract:\n  version: v1\n  slots:\n    - kind: proposal\n      owner_step: one\n      producers: [writer]\n  reads: []\nsteps:\n')).toThrow(/不得同时声明/)
+  })
+
   it('Step prompt 使用 YAML literal block，保留多行、引号与模板字符', () => {
     const wf = parseWorkflow(`name: prompted
 steps:

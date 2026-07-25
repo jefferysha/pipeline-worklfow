@@ -1,3 +1,5 @@
+import { required } from '../required.js'
+
 /**
  * skill source registry 的纯解析契约。
  *
@@ -157,7 +159,7 @@ export function parseSkillSources(text: string): SkillSourceDefinition[] {
   let inSkills = false
 
   for (let i = 0; i < lines.length; i++) {
-    const line = stripComment(lines[i]!)
+    const line = stripComment(required(lines[i]))
     if (line.trim() === '') continue
     const indented = /^\s/.test(line)
     if (!inSkills) {

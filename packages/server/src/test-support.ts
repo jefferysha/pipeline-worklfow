@@ -11,12 +11,14 @@ import {
   builtinTrack,
   createFlowEngine,
   createStateStore,
+  createTransitionRecordStore,
+  createWorkflowRunRepository,
   ensureDocumentLedger,
   loadManifest,
   recordDocument,
   recordDocumentReads,
 } from '@pipeline-lite/kernel'
-import type { FlowEngine, StateStore } from '@pipeline-lite/kernel'
+import type { FlowEngine, InitOptions, StateStore } from '@pipeline-lite/kernel'
 
 /** 新仓根 templates/manifest.yaml（src 下运行时：src → server → packages → 根）。 */
 export function repoManifestPath(): string {
@@ -64,20 +66,33 @@ export async function initChange(
   store: StateStore,
   root: string,
   name: string,
-  opts?: { track?: 'chat' | 'simple' | 'pm' | 'frontend' | 'backend'; preset?: string },
+  opts?: {
+    track?: 'chat' | 'simple' | 'pm' | 'frontend' | 'backend'
+    preset?: string
+    legacyWithoutRunIdentity?: boolean
+    initialWorkflow?: InitOptions['initialWorkflow']
+  },
 ): Promise<string> {
   const track = opts?.track ?? 'backend'
-  return store.init({
+  const init = {
     repoRoot: root,
     name,
     track,
     reviewSeed: builtinTrack(track).policyProfile.reviewSeed,
     preset: opts?.preset ?? 'full',
     clock: () => '2026-07-07T00:00:00Z',
-    ...(track === 'simple'
+    ...(opts?.initialWorkflow !== undefined
+      ? { initialWorkflow: opts.initialWorkflow }
+      : track === 'simple'
       ? { initialWorkflow: { workflow: 'simple', phase: 'change', openspecContract: false } }
       : {}),
-  })
+  }
+  if (opts?.legacyWithoutRunIdentity === true) return store.init(init)
+  return (await createWorkflowRunRepository({
+    store,
+    recordStore: createTransitionRecordStore(),
+    clock: () => '2026-07-07T00:00:00Z',
+  }).initChange(init)).changeDir
 }
 
 const GOVERNED_DESIGN = `# governed design
@@ -132,6 +147,11 @@ export async function seedGovernedDocumentEvidence(root: string, changeDir: stri
   await writeFile(historyPath, `${originalHistory ?? ''}${skillLines}\n`, 'utf8')
   try {
     const recordedAt = '2026-07-07T00:00:00Z'
+    await createWorkflowRunRepository({
+      store: createStateStore(),
+      recordStore: createTransitionRecordStore(),
+      clock: () => recordedAt,
+    }).establishRun(changeDir)
     // StateStore.init is intentionally storage-only. The CLI's `init` command creates this
     // migration-safe sidecar, but server fixtures use StateStore directly, so establish the
     // same real ledger before registering hash-bound documents.
@@ -146,13 +166,27 @@ export async function seedGovernedDocumentEvidence(root: string, changeDir: stri
     await recordDocument({ repoRoot: root, changeDir, phase: 'spec', kind: 'plan', path: docs.plan, producer: 'writing-plans', recordedAt })
     await recordDocument({ repoRoot: root, changeDir, phase: 'verify', kind: 'verification-report', path: docs.report, producer: 'verification-before-completion', recordedAt })
     await recordDocument({ repoRoot: root, changeDir, phase: 'ship', kind: 'applied-spec', path: docs.applied, producer: 'openspec-apply-change', recordedAt })
-    for (const phase of ['explore', 'spec', 'build', 'verify', 'ship', 'archive'] as const) {
-      await recordDocumentReads({ repoRoot: root, changeDir, phase, kind: 'all', readAt: recordedAt })
-    }
+    await readGovernedDocumentsForCurrentVisit(root, changeDir, recordedAt)
   } finally {
     if (originalHistory === undefined) await rm(historyPath, { force: true })
     else await writeFile(historyPath, originalHistory, 'utf8')
   }
+}
+
+/** Test-only current-visit read; callers invoke it after a real transition before the next exit. */
+export async function readGovernedDocumentsForCurrentVisit(
+  root: string,
+  changeDir: string,
+  readAt = '2026-07-07T00:00:00Z',
+): Promise<void> {
+  const state = await createStateStore().read(changeDir)
+  await recordDocumentReads({
+    repoRoot: root,
+    changeDir,
+    phase: String(state.fields.phase),
+    kind: 'all',
+    readAt,
+  })
 }
 
 export interface HttpResult {

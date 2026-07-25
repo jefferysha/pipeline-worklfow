@@ -1,26 +1,37 @@
 /**
- * pipeline internal-skill-gate <name> <skillId> —— 隐藏命令，非 default workflow 的 skill DAG
- * 解锁判定，从 hooks/gate.sh 委托过来（GOAL 清单 E Task 9）。
- *
- * workflow==='default' 的 change 完全不受本机制管辖，直接放行——gate.sh 只在自己判定"非
- * default workflow + Skill 工具调用"时才 spawn node 走到这里；本命令内部再兜底判一次同样的
- * 条件（双重防线：即便未来 gate.sh 的调用条件写错，也不会误伤 default workflow 的 change）。
+ * pipeline internal-skill-gate <name> <skillId> —— 隐藏命令，所有 workflow 的 effective Skill
+ * DAG 解锁判定，从 hooks/gate.sh 委托过来（GOAL 清单 E Task 9）。default 的 manifest overlay
+ * 与 custom 的 step graph 都先编译为 EffectiveWorkflowPlan capability，再在本入口统一判定。
  *
  * exit 口径（同 gate.sh 契约）：0=放行，2=拦截。本命令绝不让 0/2 之外的 code 泄漏出去——任何
  * 内部异常（state 读不到 / workflow 文件损坏 / history 行损坏等）一律 catch 到顶层，WARN +
  * fail-open 放行，呼应 hooks/gate.sh 文件头总纲："fail-open（绝不死锁）：... 任何异常 → 放行
  * exit 0"——这条硬承诺对本命令同样成立，不因为判定逻辑挪进了 CLI 就打折扣。
  */
-import { isSkillUnlocked, loadWorkflow, resolveStep, resolveWorkflowName } from '@pipeline-lite/kernel'
+import { isSkillUnlocked, resolveAvailableSkillSlots } from '@pipeline-lite/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
 import { changeDir, isValidChangeName } from '../paths.js'
 import { str } from '../render.js'
 import { reconcileCodexSkillEvidence } from '../codexSkillReceipt.js'
+import { effectiveWorkflowForState } from './effective-workflow.js'
 
 interface HistLine {
   readonly kind: string
   readonly to?: string
   readonly raw?: string
+}
+
+function decodeHistoryLine(value: unknown): HistLine | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null
+  const record = value as Record<string, unknown>
+  if (typeof record.kind !== 'string') return null
+  if (record.to !== undefined && typeof record.to !== 'string') return null
+  if (record.raw !== undefined && typeof record.raw !== 'string') return null
+  return {
+    kind: record.kind,
+    ...(typeof record.to === 'string' ? { to: record.to } : {}),
+    ...(typeof record.raw === 'string' ? { raw: record.raw } : {}),
+  }
 }
 
 /** 容错解析 .pipeline-history.jsonl 原文——单行损坏不该拖垮整条 gate 判定，跳过即可（fail-open 精神）。 */
@@ -29,7 +40,8 @@ function parseHistoryLines(raw: string): HistLine[] {
   for (const line of raw.split('\n')) {
     if (!line) continue
     try {
-      out.push(JSON.parse(line) as HistLine)
+      const decoded = decodeHistoryLine(JSON.parse(line))
+      if (decoded) out.push(decoded)
     } catch {
       // 损坏行跳过，不拖垮整体判定
     }
@@ -108,20 +120,48 @@ export async function cmdInternalSkillGate(deps: CliDeps, name: string, skillId:
       const state = await deps.store.read(dir)
       // 双轨分岔同 transition.ts（Task 8）：'' 历史遗留兜 'default' 的 `||` 习语单源在 kernel
       // resolveWorkflowName（Wave 2 下沉；`??` 只挡 null/undefined、不挡空串的语义原样继承）。
-      const workflowName = resolveWorkflowName(state)
-      if (workflowName === 'default') return 0 // default workflow 不受本机制管辖
-
-      const wf = loadWorkflow(deps.cwd, workflowName)
-      if (!wf) {
-        deps.io.err(`WARN: workflow '${workflowName}' 未找到，fail-open 放行`)
+      const plan = effectiveWorkflowForState(deps, state)
+      if (!plan) {
+        deps.io.err(`WARN: workflow '${String(state.fields.workflow ?? '')}' 未找到，fail-open 放行`)
         return 0
       }
-
       const currentStepId = str(state.fields.phase)
-      const step = resolveStep(wf, currentStepId)
-      if (!step) {
-        deps.io.err(`WARN: step '${currentStepId}' 不在 workflow '${workflowName}' 里，fail-open 放行`)
+      const skillCapability = plan.capabilities.skills
+      const capabilityStep = skillCapability.steps.find((candidate) => candidate.stepId === currentStepId)
+      if (!capabilityStep) {
+        deps.io.err(`WARN: step '${currentStepId}' 不在 workflow '${plan.id}' 里，fail-open 放行`)
         return 0
+      }
+      if (skillCapability.source === 'manifest-overlay') {
+        const slots = resolveAvailableSkillSlots(deps.resolver, skillCapability, currentStepId)
+        const canonicalSlots = slots.map((slot) => ({
+          token: slot.token,
+          alternatives: slot.alternatives.map(canonicalPipelineLiteSkillId),
+        }))
+        const slotIndex = canonicalSlots.findIndex((slot) => slot.alternatives.includes(canonicalSkillId))
+        // Default profiles enumerate mandatory/recommended orchestration Skills, not every useful
+        // optional tool. Optional undeclared Skills remain available; declared slots keep order.
+        if (slotIndex < 0) return 0
+        await reconcileCodexSkillEvidence({
+          repoRoot: deps.cwd,
+          changeDir: dir,
+          candidateSkillIds: canonicalSlots.flatMap((slot) => slot.alternatives),
+          recordedAt: deps.clock(),
+          history: deps.history,
+          evidenceScope: currentStepId,
+        })
+        const lines = parseHistoryLines((await deps.readHistoryRaw?.(dir)) ?? '')
+        const completed = completedSkillsSinceStepEntry(lines, currentStepId)
+        const missing = canonicalSlots
+          .slice(0, slotIndex)
+          .filter((slot) => !slot.alternatives.some((candidate) => completed.has(candidate)))
+          .map((slot) => slot.token)
+        if (missing.length === 0) return 0
+        deps.io.err(
+          `【pipeline 门】skill '${skillId}' 在 default step '${currentStepId}' 未解锁：` +
+          `还需先完成 ${missing.join(', ')}（本次进入该 step 之后）`,
+        )
+        return 2
       }
 
       await reconcileCodexSkillEvidence({
@@ -130,7 +170,7 @@ export async function cmdInternalSkillGate(deps: CliDeps, name: string, skillId:
         // A missing Codex PostToolUse callback must not force a user retry: reconcile every
         // declared node in this exact step before checking the next node's dependencies.  The
         // transcript bridge remains bounded to trusted plugin paths and this physical project.
-        candidateSkillIds: step.skills.map((ref) => canonicalPipelineLiteSkillId(ref.id)),
+          candidateSkillIds: capabilityStep.declared.map((ref) => canonicalPipelineLiteSkillId(ref.id)),
         recordedAt: deps.clock(),
         history: deps.history,
         evidenceScope: currentStepId,
@@ -145,10 +185,9 @@ export async function cmdInternalSkillGate(deps: CliDeps, name: string, skillId:
       // Workflow YAML may retain the historical `pipeline-lite:<id>` spelling while Codex uses
       // its namespace at invocation time and cache receipts use bare ids. Normalize only our own
       // namespace, including dependencies, before delegating to the single kernel DAG predicate.
-      const canonicalStepSkills = step.skills.map((ref) => ({
-        ...ref,
+      const canonicalStepSkills = capabilityStep.declared.map((ref) => ({
         id: canonicalPipelineLiteSkillId(ref.id),
-        depends_on: ref.depends_on?.map(canonicalPipelineLiteSkillId),
+        depends_on: ref.dependsOn.map(canonicalPipelineLiteSkillId),
       }))
 
       if (isSkillUnlocked(canonicalSkillId, canonicalStepSkills, completedSinceEntry)) return 0
@@ -157,12 +196,12 @@ export async function cmdInternalSkillGate(deps: CliDeps, name: string, skillId:
       const ref = canonicalStepSkills.find((s) => s.id === canonicalSkillId)
       if (!ref) {
         deps.io.err(
-          `【pipeline 门】skill '${skillId}' 不在 step '${currentStepId}'（workflow '${workflowName}'）声明的 skills 列表里，暂不可用`,
+          `【pipeline 门】skill '${skillId}' 不在 step '${currentStepId}'（workflow '${plan.id}'）声明的 skills 列表里，暂不可用`,
         )
       } else {
         const missing = (ref.depends_on ?? []).filter((d) => !completedSinceEntry.has(d))
         deps.io.err(
-          `【pipeline 门】skill '${skillId}' 在 step '${currentStepId}'（workflow '${workflowName}'）未解锁：` +
+          `【pipeline 门】skill '${skillId}' 在 step '${currentStepId}'（workflow '${plan.id}'）未解锁：` +
             `还需先完成 ${missing.join(', ')}（本次进入该 step 之后）`,
         )
       }

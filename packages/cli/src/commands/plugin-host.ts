@@ -43,7 +43,8 @@ export interface HostSelection {
 /** Exactly one host is required for a mutating setup/update action. */
 export function selectPipelineHost(flags: PipelineHostFlags): HostSelection {
   const selected = PIPELINE_HOSTS.filter((host) => flags[host] === true)
-  if (selected.length === 1) return { host: selected[0]!, error: null }
+  const host = selected[0]
+  if (selected.length === 1 && host) return { host, error: null }
   if (selected.length === 0) {
     return {
       host: null,

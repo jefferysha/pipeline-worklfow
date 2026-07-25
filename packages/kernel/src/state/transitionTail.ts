@@ -8,7 +8,6 @@
  * 的 io.err，是 adapter 的责任，不是这层决策逻辑的责任。
  */
 import type { BreadcrumbWriter } from './markers.js'
-import type { Phase } from '../types.js'
 
 /**
  * 判别联合而非 `{error?: unknown}`：JS 允许 `throw undefined/null/0/''` 这类 falsy 值，
@@ -23,7 +22,7 @@ export type TailWriteOutcome =
 export interface BreadcrumbTailArgs {
   changeDir: string
   name: string
-  to: Phase
+  to: string
 }
 
 export async function applyBreadcrumbTail(

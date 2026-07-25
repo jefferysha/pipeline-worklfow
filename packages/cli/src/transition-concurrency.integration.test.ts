@@ -12,6 +12,7 @@
  * 也必须等第一次完全结束（含它的 breadcrumb 写入）才能开始，因此不可能发生覆盖。
  */
 import { join } from 'node:path'
+import { appendFile } from 'node:fs/promises'
 import { describe, expect, test } from 'vitest'
 import { cmdTransition } from './commands/transition.js'
 import { freshHarness, realDeps, rm } from './integration-harness.js'
@@ -28,6 +29,15 @@ describe('真实 e2e —— 并发 transition 尾部写入严格串行（不逆�
       // Reuse the hash-bound OpenSpec design seeded above. Rewriting it would correctly make
       // explore->spec fail before this test reaches its serialization assertion.
       await h.seedArtifact('demo', 'design_doc', 'openspec/changes/demo/design.md')
+      const historyPath = join(h.cwd, 'openspec', 'changes', 'demo', '.pipeline-history.jsonl')
+      const recordSkills = async (...skills: string[]): Promise<void> => {
+        await appendFile(
+          historyPath,
+          `${skills.map((skill) => JSON.stringify({ kind: 'tool', raw: `Skill: ${skill}` })).join('\n')}\n`,
+          'utf8',
+        )
+      }
+      await recordSkills('openspec-propose')
 
       const out: string[] = []
       const err: string[] = []
@@ -70,6 +80,7 @@ describe('真实 e2e —— 并发 transition 尾部写入严格串行（不逆�
       // 严格按序：第二次只能在第一次 breadcrumb 收尾后读到 explore；未获确认时不写自己的 breadcrumb。
       expect(order).toEqual(['first-breadcrumb-blocked', 'breadcrumb:pipeline:demo phase=explore'])
 
+      await recordSkills('openspec-explore', 'brainstorming', 'grill-with-docs', 'improve-codebase-architecture')
       expect(await h.run(['review', 'request', 'demo', '--event', 'explore-complete'])).toBe(0)
       expect(await h.run(['review', 'acknowledge', 'demo'])).toBe(0)
       expect(await cmdTransition(deps, 'demo', 'explore-complete')).toBe(0)

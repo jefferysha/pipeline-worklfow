@@ -26,6 +26,7 @@ import {
 } from './types.js'
 import { BUILTIN_TRACK_IDS, builtinTrack, isBuiltinTrackId, type BuiltinTrackId } from './builtins.js'
 import { stringUnrepresentableReason } from './representable.js'
+import { required } from '../required.js'
 
 /** 保持历史上最多 27 个项目 Track；新增 builtin 不得挤占既有合法配置。 */
 export const MAX_CUSTOM_TRACKS = 27
@@ -87,7 +88,7 @@ function collect(config: ProjectTrackConfig, context: TrackValidationContext | n
       errors.push(`tracks[${i}]: 数组空槽（稀疏数组不可表示）`)
       continue
     }
-    checkEntry(tracks[i]!, `tracks[${i}]`, seen, workflowOk, profileOk, errors)
+    checkEntry(required(tracks[i]), `tracks[${i}]`, seen, workflowOk, profileOk, errors)
   }
 
   const total = BUILTIN_TRACK_IDS.length + tracks.length

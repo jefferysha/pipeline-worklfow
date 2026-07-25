@@ -62,8 +62,9 @@ export function createTlsMitm(deps: TlsMitmDeps): TlsMitmHandle {
   const { ca, store, sessionId, counter, tunnels, connectTimeoutMs, forwardAndRecord } = deps
   let mitmServer: Server | null = null
   interface MitmTarget { hostname: string; port: number }
+  const targets = new WeakMap<object, MitmTarget>()
   const resolveMitmTarget = (req: IncomingMessage): MitmTarget =>
-    (req.socket as unknown as { __mitmTarget?: MitmTarget }).__mitmTarget ?? { hostname: String(req.headers.host ?? '').split(':')[0] || '', port: 443 }
+    targets.get(req.socket) ?? { hostname: String(req.headers.host ?? '').split(':')[0] || '', port: 443 }
 
   function getMitmServer(): Server {
     if (mitmServer) return mitmServer
@@ -85,7 +86,7 @@ export function createTlsMitm(deps: TlsMitmDeps): TlsMitmHandle {
       if (head && head.length) clientSocket.unshift(head)
       const { key, cert } = ca.secureContextOptions(hostname)
       const tlsSocket = new TLSSocket(clientSocket, { isServer: true, secureContext: createSecureContext({ key, cert }) })
-      ;(tlsSocket as unknown as { __mitmTarget: MitmTarget }).__mitmTarget = { hostname, port }
+      targets.set(tlsSocket, { hostname, port })
       tunnels.add(clientSocket)
       tunnels.add(tlsSocket)
       const drop = (): void => { tunnels.delete(clientSocket); tunnels.delete(tlsSocket) }

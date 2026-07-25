@@ -6,6 +6,19 @@ interface WorkflowHistoryLine {
   readonly raw?: string
 }
 
+function decodeHistoryLine(value: unknown): WorkflowHistoryLine | undefined {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined
+  const record = value as Record<string, unknown>
+  if (record.kind !== undefined && typeof record.kind !== 'string') return undefined
+  if (record.to !== undefined && typeof record.to !== 'string') return undefined
+  if (record.raw !== undefined && typeof record.raw !== 'string') return undefined
+  return {
+    ...(typeof record.kind === 'string' ? { kind: record.kind } : {}),
+    ...(typeof record.to === 'string' ? { to: record.to } : {}),
+    ...(typeof record.raw === 'string' ? { raw: record.raw } : {}),
+  }
+}
+
 /** Pipeline-owned skills may be presented by Codex with the plugin namespace. */
 export function canonicalWorkflowSkillId(skillId: string): string {
   return skillId.startsWith('pipeline-lite:') ? skillId.slice('pipeline-lite:'.length) : skillId
@@ -28,7 +41,8 @@ export function completedWorkflowSkillsSinceStepEntry(
   for (const line of historyRaw.split('\n')) {
     if (line.trim() === '') continue
     try {
-      lines.push(JSON.parse(line) as WorkflowHistoryLine)
+      const decoded = decodeHistoryLine(JSON.parse(line))
+      if (decoded) lines.push(decoded)
     } catch {
       // A damaged compatibility-history line cannot manufacture or erase another valid receipt.
     }

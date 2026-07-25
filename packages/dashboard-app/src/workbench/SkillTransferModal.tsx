@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { fetchSkillsRegistry, type WbSkillEntry } from '../api/client'
 import { useT } from '../i18n'
-import { Dialog } from '../shell/Dialog'
+import { Dialog } from '../shared/Dialog'
 
 export interface SkillTransferModalProps {
   selected: string[]

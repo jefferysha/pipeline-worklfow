@@ -27,6 +27,7 @@
  */
 import { budgetWarnThreshold, cadenceMinutes } from './enforce.js'
 import type { LoopBudget, LoopEntry, LoopRegistry, LoopRisk } from './types.js'
+import { required } from '../required.js'
 
 // ── pattern 预设：每轮 token 足迹（loop-cost 的 pattern 面；risk 作为 loop「形状」代理）──────
 export const PATTERN_TOKENS_PER_RUN: Record<LoopRisk, number> = {
@@ -52,9 +53,9 @@ function mkUTC(y: number, mo: number, d: number, hh: number, mm: number): Date |
 function parseTimestamp(raw: string, now: Date): Date | null {
   const s = raw.trim()
   const full = s.match(TS_FULL_RE)
-  if (full) return mkUTC(+full[1]!, +full[2]!, +full[3]!, +full[4]!, +full[5]!)
+  if (full) return mkUTC(+required(full[1]), +required(full[2]), +required(full[3]), +required(full[4]), +required(full[5]))
   const short = s.match(TS_SHORT_RE)
-  if (short) return mkUTC(now.getUTCFullYear(), +short[1]!, +short[2]!, +short[3]!, +short[4]!)
+  if (short) return mkUTC(now.getUTCFullYear(), +required(short[1]), +required(short[2]), +required(short[3]), +required(short[4]))
   return null
 }
 
@@ -77,7 +78,7 @@ export function sumRunLogTokens(text: string | null, loopId: string, now: Date):
     const cols = line.replace(/^\|+/, '').replace(/\|+$/, '').split('|').map((c) => c.trim())
     if (cols.length < 2) continue
     if (cols[1] !== loopId) continue
-    const ts = parseTimestamp(cols[0]!, now)
+    const ts = parseTimestamp(required(cols[0]), now)
     if (ts === null || !sameUTCDate(ts, now)) continue
     runsToday++
     const tm = line.match(TOKENS_RE)

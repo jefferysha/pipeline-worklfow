@@ -15,7 +15,7 @@
 import { useEffect, useState } from 'react'
 import { useT } from '../i18n'
 import { fetchSessionLink, type SessionLink } from '../api/client'
-import { Icon } from '../shell/Icon'
+import { Icon } from './Icon'
 import { shellQuote } from './shellQuote'
 
 /** conn 命令卡行族（旧 .dt8-conn-row/-k/-v/-note 对位）——TaskDetail 同源导入复用。 */

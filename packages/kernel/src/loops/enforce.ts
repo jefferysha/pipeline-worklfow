@@ -27,6 +27,7 @@ import type {
   Verdict,
   VerdictReason,
 } from './types.js'
+import { required } from '../required.js'
 
 // ── 阈值常量（老 51-60；干涸阈值与 registry kill_criteria 散文一致）─────────────
 export const FAIL_STREAK_KILL = 3
@@ -71,9 +72,9 @@ function mkUTC(y: number, mo: number, d: number, hh: number, mm: number): Date |
 function parseTimestamp(raw: string, now: Date): Date | null {
   const s = raw.trim()
   const full = s.match(TS_FULL_RE)
-  if (full) return mkUTC(+full[1]!, +full[2]!, +full[3]!, +full[4]!, +full[5]!)
+  if (full) return mkUTC(+required(full[1]), +required(full[2]), +required(full[3]), +required(full[4]), +required(full[5]))
   const short = s.match(TS_SHORT_RE)
-  if (short) return mkUTC(now.getUTCFullYear(), +short[1]!, +short[2]!, +short[3]!, +short[4]!)
+  if (short) return mkUTC(now.getUTCFullYear(), +required(short[1]), +required(short[2]), +required(short[3]), +required(short[4]))
   return null
 }
 
@@ -106,13 +107,13 @@ export function parseProgress(text: string | null, loopIds: string[], now: Date)
     if (!line.startsWith('|')) continue
     const cols = line.replace(/^\|+/, '').replace(/\|+$/, '').split('|').map((c) => c.trim())
     if (cols.length !== 5) continue
-    const loopCol = cols[1]!
+    const loopCol = required(cols[1])
     if (!known.has(loopCol)) continue
     const rowText = cols.join('|')
     const rm = rowText.match(RESULT_RE)
     const dm = rowText.match(DRY_COUNT_RE)
-    rowsByLoop.get(loopCol)!.push({
-      ts: parseTimestamp(cols[0]!, now),
+    required(rowsByLoop.get(loopCol)).push({
+      ts: parseTimestamp(required(cols[0]), now),
       result: rm ? rm[1]! : null,
       dryCount: dm ? Number(dm[1]) : null,
     })
@@ -120,7 +121,7 @@ export function parseProgress(text: string | null, loopIds: string[], now: Date)
 
   for (const [id, rows] of rowsByLoop) {
     if (rows.length === 0) continue
-    const pl = result.get(id)!
+    const pl = required(result.get(id))
 
     const parseableTs = rows.map((r) => r.ts).filter((t): t is Date => t !== null)
     pl.runsToday = parseableTs.filter((t) => sameUTCDate(t, now)).length
@@ -128,7 +129,7 @@ export function parseProgress(text: string | null, loopIds: string[], now: Date)
 
     let failStreak = 0
     for (let i = rows.length - 1; i >= 0; i--) {
-      if (rows[i]!.result !== 'fail') break
+      if (required(rows[i]).result !== 'fail') break
       failStreak++
     }
     pl.failStreak = failStreak
@@ -140,13 +141,13 @@ export function parseProgress(text: string | null, loopIds: string[], now: Date)
     } else {
       let dryStreak = 0
       for (let i = rows.length - 1; i >= 0; i--) {
-        if (rows[i]!.result !== 'dry') break
+        if (required(rows[i]).result !== 'dry') break
         dryStreak++
       }
       pl.dryRounds = dryStreak
     }
 
-    const last = rows[rows.length - 1]!
+    const last = required(rows[rows.length - 1])
     pl.latestRowOk = last.ts !== null && last.result !== null
   }
 
@@ -161,7 +162,7 @@ export function cadenceMinutes(cadence: string): number | null {
   const upper = cadence.split('-').pop() ?? cadence
   const m = upper.match(CADENCE_RE)
   if (!m) return null
-  return Number(m[1]) * CADENCE_UNIT_MINUTES[m[2]!]!
+  return Number(required(m[1])) * required(CADENCE_UNIT_MINUTES[required(m[2])])
 }
 
 /** ceil(0.8 × max_runs)（老 _budget_warn_threshold 312-315 的整数实现）。 */
@@ -349,7 +350,7 @@ export function buildReport(
     const { count, notes: ifNotes } = countInFlight(fs, repoRoot, loop.change_prefix)
     for (const n of ifNotes) notes.push(`${loop.id}: ${n}`)
     const misaccounted = auditShipBarrier(fs, repoRoot, loop.change_prefix)
-    const p = parsed.get(loop.id)!
+    const p = required(parsed.get(loop.id))
     const facts: RunFacts = {
       runsToday: p.runsToday,
       failStreak: p.failStreak,

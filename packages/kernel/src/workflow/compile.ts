@@ -40,22 +40,21 @@
  * 冻结面：产出全部是新建对象（输入 def 的任何对象引用都不进 IR），深冻结只作用于产物；
  * 调用方的 def 不被本函数冻结或改动。
  */
-import { FIELD_ORDER, LIST_FIELDS, type FieldName } from '../types.js'
-import { GUARD_DATA_KEYS } from './types.js'
-import type { ArtifactProducerPolicy, FieldRef, GateKind, SkillRef, StepDef, StepTransition, WorkflowDef } from './types.js'
-import type { TrackPredicate } from './predicates.js'
-import { fieldEqualsValueUnrepresentableReason } from './representable.js'
+import { FIELD_ORDER, type FieldName } from '../types.js'
+import type {
+  ArtifactProducerPolicy, FieldRef, GateKind, SkillRef, StepDef, StepTransition, WorkflowDef,
+  WorkflowDocumentContractV1, WorkflowDocumentRead, WorkflowDocumentSlot,
+} from './types.js'
+import { compileGuards, compileStepGuards, compileWhen } from './compile-guards.js'
 import type {
   ActionConfig,
   ArtifactDeclaration,
-  CompiledGuardConfig,
   StepIR,
   StepTransitionIR,
   WorkflowIR,
 } from './ir.js'
 
 const KNOWN_FIELDS: ReadonlySet<string> = new Set<string>(FIELD_ORDER)
-const LIST_FIELD_SET: ReadonlySet<string> = new Set<string>(LIST_FIELDS)
 const FIELD_TYPES = ['string', 'file_path', 'boolean'] as const
 const ACTION_TYPES: ReadonlySet<string> = new Set<ActionConfig['type']>([
   'freeze-build-sha',
@@ -74,11 +73,18 @@ const PRODUCER_POLICIES: ReadonlySet<string> = new Set<ArtifactProducerPolicy>([
 //     effective-step-skills）。default 运行时 artifact 走 P4 codegen 表，本入口只服务生成校验/内部测试。
 const CUSTOM_PRODUCER_POLICIES: ReadonlySet<string> = new Set<ArtifactProducerPolicy>(['effective-step-skills'])
 const DEFAULT_PRODUCER_POLICIES: ReadonlySet<string> = new Set<ArtifactProducerPolicy>(['effective-step-skills', 'effective-phase-skills'])
-// 阻断 3 的嵌套对象闭集：when 只允许 kind/values，file-exists 的 path 只允许 kind/field。
-// 顶层 guard 键的闭集在 compileGuard 现算（type + when + GUARD_DATA_KEYS[type]）。
-const WHEN_ALLOWED_KEYS: ReadonlySet<string> = new Set(['kind', 'values'])
-const PATH_ALLOWED_KEYS: ReadonlySet<string> = new Set(['kind', 'field'])
-
+const WORKFLOW_KEYS: ReadonlySet<string> = new Set(['name', 'openspecContract', 'documentContract', 'steps'])
+const STEP_KEYS: ReadonlySet<string> = new Set([
+  'id', 'label', 'gate', 'prompt', 'skills', 'inputs', 'outputs', 'artifacts', 'guards', 'transitions',
+])
+const SKILL_KEYS: ReadonlySet<string> = new Set(['id', 'depends_on'])
+const FIELD_REF_KEYS: ReadonlySet<string> = new Set(['field', 'type'])
+const ARTIFACT_KEYS: ReadonlySet<string> = new Set(['field', 'type', 'kind', 'producerPolicy', 'requiredWhen'])
+const TRANSITION_KEYS: ReadonlySet<string> = new Set(['event', 'to', 'guards', 'actions'])
+const ACTION_KEYS: ReadonlySet<string> = new Set(['type'])
+const DOCUMENT_CONTRACT_KEYS: ReadonlySet<string> = new Set(['version', 'slots', 'reads'])
+const DOCUMENT_SLOT_KEYS: ReadonlySet<string> = new Set(['kind', 'ownerStep', 'producers'])
+const DOCUMENT_READ_KEYS: ReadonlySet<string> = new Set(['step', 'kinds'])
 function compileError(path: string, msg: string): never {
   throw new Error(`compileWorkflow: ${path}: ${msg}`)
 }
@@ -118,135 +124,18 @@ function stringArray(v: unknown, path: string): string[] {
   })
 }
 
-function knownField(v: unknown, path: string): FieldName {
-  if (typeof v !== 'string' || !KNOWN_FIELDS.has(v)) {
-    compileError(path, `'${String(v)}' 不是已知状态字段（../types.ts FIELD_ORDER 闭集）`)
+function knownField(value: unknown, path: string): FieldName {
+  if (typeof value !== 'string' || !KNOWN_FIELDS.has(value)) {
+    compileError(path, `'${String(value)}' 不是已知状态字段（../types.ts FIELD_ORDER 闭集）`)
   }
-  return v as FieldName
+  return value as FieldName
 }
 
-/** scalar guard 的 field 位：已知字段且非列表字段。两个旧口径对列表互斥——stepGuard.scalar
- *  恒 ''（nonempty 永 fail）、transition 层 fstr join(',')（非空列表即过），语义对照没有可继承
- *  的单一真值，IR 层裁决为编译期拒绝（列表语义不属于 scalar guard 闭集）。 */
-function scalarField(v: unknown, path: string): FieldName {
-  const field = knownField(v, path)
-  if (LIST_FIELD_SET.has(field)) {
-    compileError(path, `'${field}' 是列表字段（../types.ts LIST_FIELDS），scalar guard 不定义列表语义`)
-  }
-  return field
-}
-
-function compileWhen(v: unknown, path: string): TrackPredicate | undefined {
-  if (v === undefined) return undefined
-  const rec = asRecord(v, path)
-  if (rec.kind !== 'track-in' && rec.kind !== 'track-not-in') {
-    compileError(`${path}.kind`, `必须是 'track-in' | 'track-not-in'（实际 ${JSON.stringify(rec.kind)}）`)
-  }
-  const values = stringArray(rec.values, `${path}.values`)
-  rejectExtraKeys(rec, WHEN_ALLOWED_KEYS, path) // 闭集：when 只允许 kind/values（阻断 3，覆盖嵌套 when）
-  return { kind: rec.kind, values }
-}
-
-/** when 存在才落键——IR 里不留 `when: undefined` 的悬挂键（冻结产物形状可预期）。 */
-function withWhen<T extends object>(config: T, when: TrackPredicate | undefined): T & { when?: TrackPredicate } {
-  return when === undefined ? config : { ...config, when }
-}
-
-/** 单个 guard 编译。nonempty-output 是一对多展开，故返回数组。 */
-function compileGuard(raw: unknown, path: string, outputs: readonly FieldRef[]): CompiledGuardConfig[] {
-  const rec = asRecord(raw, path)
-  // 阻断 3（覆盖顶层）：结构化输入（server workflows 直调、绕过 parse）里变体白名单外的附加顶层键
-  // 此前能过 compile、再被 serialize 静默丢弃（如 {type:'nonempty-output', n:2}、
-  // {type:'tasks-at-least', n:1, field:'plan'}）；这里 fail-loud。允许键 = type + 可选 when + 本变体
-  // GUARD_DATA_KEYS（与 parse 共用同一张表）。未知 type 不在表里 → 跳过本闸，留给下面 switch 的
-  // default 报「未知 guard type」（错误定位到 .type，不被本闸抢走）。
-  // hasOwnProperty（非 `in`）：避开原型链上的 'toString' 等——那些应落到 switch default 报「未知
-  // guard type」，而非在此把继承成员当 data 键去 spread。
-  if (typeof rec.type === 'string' && Object.prototype.hasOwnProperty.call(GUARD_DATA_KEYS, rec.type)) {
-    const dataKeys = GUARD_DATA_KEYS[rec.type as keyof typeof GUARD_DATA_KEYS]
-    rejectExtraKeys(rec, new Set<string>(['type', 'when', ...dataKeys]), path)
-  }
-  const when = compileWhen(rec.when, `${path}.when`)
-  switch (rec.type) {
-    case 'tasks-at-least': {
-      const n = rec.n
-      if (typeof n !== 'number' || !Number.isInteger(n) || n < 0) {
-        compileError(`${path}.n`, `必须是非负整数（parse.ts 的 \\d+ 口径；实际 ${JSON.stringify(n)}）`)
-      }
-      return [withWhen({ type: 'tasks-at-least' as const, n }, when)]
-    }
-    case 'nonempty-output':
-      // v1 兼容 guard 下沉（G2 P2 兼容回退）：逐 output 分流——
-      //   · 已知非列表字段 → field-nonempty（真求值 typed guard，运行期读标量）；
-      //   · 列表字段 / 未知惰性字段 → output-present（保留 v1 旧运行期失败语义：数组/未设 → ''
-      //     → 普通 guard failure，见 ir.ts OutputPresentGuard）。
-      // 刻意不走 scalarField（那会对列表/未知字段编译期拒）——nonempty-output 是 v1 兼容 guard，
-      // 其列表/惰性下沉走旧运行期失败，与「新 scalar guard 引用列表字段编译期拒」（P1，仍生效于
-      // field-nonempty 等 typed guard）分道。
-      return outputs.map((o) =>
-        KNOWN_FIELDS.has(o.field) && !LIST_FIELD_SET.has(o.field)
-          ? withWhen({ type: 'field-nonempty' as const, field: o.field as FieldName }, when)
-          : withWhen({ type: 'output-present' as const, field: o.field }, when),
-      )
-    case 'field-nonempty':
-      return [withWhen({ type: 'field-nonempty' as const, field: scalarField(rec.field, `${path}.field`) }, when)]
-    case 'file-exists': {
-      const p = asRecord(rec.path, `${path}.path`)
-      if (p.kind !== 'field') {
-        compileError(`${path}.path.kind`, `必须是 'field'（实际 ${JSON.stringify(p.kind)}）`)
-      }
-      const field = scalarField(p.field, `${path}.path.field`)
-      rejectExtraKeys(p, PATH_ALLOWED_KEYS, `${path}.path`) // 闭集：path 只允许 kind/field（阻断 3，覆盖嵌套 path）
-      return [withWhen({ type: 'file-exists' as const, path: { kind: 'field' as const, field } }, when)]
-    }
-    case 'field-equals': {
-      const value = rec.value
-      if (typeof value !== 'string') compileError(`${path}.value`, `必须是字符串（实际 ${JSON.stringify(value)}）`)
-      // 阻断 2：value 必须经 serialize→parse 往返域（representable.ts 委托 text/representable 通用面
-      // + 叠加 U+2028/U+2029 行解析限制），否则「保存成功、下次 loadWorkflow 打不开」——compile
-      // fail-loud。与 tracks/representable 对「lone surrogate + 控制字符」通用域一致（cross-check 守）。
-      const unrep = fieldEqualsValueUnrepresentableReason(value)
-      if (unrep) compileError(`${path}.value`, unrep)
-      return [withWhen({ type: 'field-equals' as const, field: scalarField(rec.field, `${path}.field`), value }, when)]
-    }
-    case 'field-in': {
-      const values = stringArray(rec.values, `${path}.values`)
-      if (values.length === 0) compileError(`${path}.values`, '不得是空数组（至少一个合法值）')
-      return [
-        withWhen(
-          { type: 'field-in' as const, field: scalarField(rec.field, `${path}.field`), values: values as [string, ...string[]] },
-          when,
-        ),
-      ]
-    }
-    case 'full-direct-override':
-      return [withWhen({ type: 'full-direct-override' as const }, when)]
-    case 'build-head-unchanged': {
-      if (rec.field !== 'build_sha') {
-        compileError(`${path}.field`, `必须是 'build_sha'（barrier 只定义在 build 冻结 SHA 上；实际 ${JSON.stringify(rec.field)}）`)
-      }
-      return [withWhen({ type: 'build-head-unchanged' as const, field: 'build_sha' as const }, when)]
-    }
-    default:
-      compileError(`${path}.type`, `未知 guard type ${JSON.stringify(rec.type)}（闭集见 types.ts WorkflowGuardConfig）`)
-  }
-}
-
-function compileGuards(raw: unknown, path: string, outputs: readonly FieldRef[]): CompiledGuardConfig[] {
-  if (raw === undefined) return []
-  return asArray(raw, path).flatMap((g, j) => compileGuard(g, `${path}[${j}]`, outputs))
-}
-
-/** 单 step 的 guard 下沉（stepGuard.evaluateStepGuards / check 预览复用）：等价 compileStep 里
- *  guards 的编译，但不编译 step 其它面。nonempty-output 按 step.outputs 展开为 field-nonempty，
- *  malformed guard/字段闭集越界一律 fail-loud（与整表编译同口径）。 */
-export function compileStepGuards(step: StepDef): CompiledGuardConfig[] {
-  const rec = asRecord(step, 'step')
-  return compileGuards(rec.guards, 'step.guards', asArray(rec.outputs, 'step.outputs') as readonly FieldRef[])
-}
+export { compileStepGuards }
 
 function compileAction(raw: unknown, path: string): ActionConfig {
   const rec = asRecord(raw, path)
+  rejectExtraKeys(rec, ACTION_KEYS, path)
   if (typeof rec.type !== 'string' || !ACTION_TYPES.has(rec.type)) {
     compileError(`${path}.type`, `未知 action type ${JSON.stringify(rec.type)}（闭集见 ir.ts ActionConfig）`)
   }
@@ -273,6 +162,7 @@ function compileActions(raw: unknown, path: string): ActionConfig[] {
  */
 function compileFieldRef(raw: FieldRef, path: string): FieldRef {
   const rec = asRecord(raw, path)
+  rejectExtraKeys(rec, FIELD_REF_KEYS, path)
   const type = rec.type
   if (type !== 'string' && type !== 'file_path' && type !== 'boolean') {
     compileError(`${path}.type`, `必须是 ${FIELD_TYPES.join(' | ')}（实际 ${JSON.stringify(type)}）`)
@@ -288,6 +178,7 @@ function compileFieldRef(raw: FieldRef, path: string): FieldRef {
 
 function compileSkillRef(raw: SkillRef, path: string): SkillRef {
   const rec = asRecord(raw, path)
+  rejectExtraKeys(rec, SKILL_KEYS, path)
   const id = nonemptyString(rec.id, `${path}.id`)
   if (rec.depends_on === undefined) return { id }
   return { id, depends_on: stringArray(rec.depends_on, `${path}.depends_on`) }
@@ -298,6 +189,10 @@ function compileSkillRef(raw: SkillRef, path: string): SkillRef {
  *  'effective-phase-skills'）。 */
 function compileArtifact(raw: unknown, path: string, outputs: readonly FieldRef[], allowedPolicies: ReadonlySet<string>): ArtifactDeclaration {
   const rec = asRecord(raw, path)
+  rejectExtraKeys(rec, ARTIFACT_KEYS, path)
+  if (rec.type !== undefined && rec.type !== 'file_path') {
+    compileError(`${path}.type`, `必须是 'file_path'（实际 ${JSON.stringify(rec.type)}）`)
+  }
   if (rec.kind !== undefined && rec.kind !== 'file') {
     compileError(`${path}.kind`, `必须是 'file'（实际 ${JSON.stringify(rec.kind)}）`)
   }
@@ -365,6 +260,7 @@ function compileArtifacts(
 
 function compileTransition(raw: StepTransition, path: string, outputs: readonly FieldRef[]): StepTransitionIR {
   const rec = asRecord(raw, path)
+  rejectExtraKeys(rec, TRANSITION_KEYS, path)
   return {
     event: nonemptyString(rec.event, `${path}.event`),
     to: nonemptyString(rec.to, `${path}.to`),
@@ -373,9 +269,10 @@ function compileTransition(raw: StepTransition, path: string, outputs: readonly 
   }
 }
 
-function compileStep(step: StepDef, index: number, allowedPolicies: ReadonlySet<string>): StepIR {
+function compileStep(step: unknown, index: number, allowedPolicies: ReadonlySet<string>): StepIR {
   const path = `steps[${index}]`
   const rec = asRecord(step, path)
+  rejectExtraKeys(rec, STEP_KEYS, path)
   const id = nonemptyString(rec.id, `${path}.id`)
   if (typeof rec.label !== 'string') compileError(`${path}.label`, `必须是字符串（实际 ${JSON.stringify(rec.label)}）`)
   const gate = rec.gate
@@ -407,6 +304,40 @@ function compileStep(step: StepDef, index: number, allowedPolicies: ReadonlySet<
   }
 }
 
+function compileNonemptyStringArray(value: unknown, path: string): string[] {
+  return asArray(value, path).map((item, index) => nonemptyString(item, `${path}[${index}]`))
+}
+
+function compileDocumentContract(value: unknown): WorkflowDocumentContractV1 | undefined {
+  if (value === undefined) return undefined
+  const rec = asRecord(value, 'documentContract')
+  rejectExtraKeys(rec, DOCUMENT_CONTRACT_KEYS, 'documentContract')
+  if (rec.version !== 'v1') {
+    compileError('documentContract.version', `必须是 'v1'（实际 ${JSON.stringify(rec.version)}）`)
+  }
+  const slots: WorkflowDocumentSlot[] = asArray(rec.slots, 'documentContract.slots').map((slot, index) => {
+    const item = asRecord(slot, `documentContract.slots[${index}]`)
+    rejectExtraKeys(item, DOCUMENT_SLOT_KEYS, `documentContract.slots[${index}]`)
+    return {
+      kind: nonemptyString(item.kind, `documentContract.slots[${index}].kind`),
+      ownerStep: nonemptyString(item.ownerStep, `documentContract.slots[${index}].ownerStep`),
+      producers: compileNonemptyStringArray(item.producers, `documentContract.slots[${index}].producers`),
+    }
+  })
+  if (slots.length === 0) compileError('documentContract.slots', '不得为空')
+  const reads: WorkflowDocumentRead[] = asArray(rec.reads, 'documentContract.reads').map((read, index) => {
+    const item = asRecord(read, `documentContract.reads[${index}]`)
+    rejectExtraKeys(item, DOCUMENT_READ_KEYS, `documentContract.reads[${index}]`)
+    const kinds = compileNonemptyStringArray(item.kinds, `documentContract.reads[${index}].kinds`)
+    if (kinds.length === 0) compileError(`documentContract.reads[${index}].kinds`, '不得为空')
+    return {
+      step: nonemptyString(item.step, `documentContract.reads[${index}].step`),
+      kinds,
+    }
+  })
+  return { version: 'v1', slots, reads }
+}
+
 /** 产物全是本文件新建的纯数据树（无环、无函数键），直接后序递归冻结。 */
 function deepFreeze<T>(value: T): T {
   if (value !== null && typeof value === 'object') {
@@ -418,15 +349,25 @@ function deepFreeze<T>(value: T): T {
   return value
 }
 
-function compileWith(def: WorkflowDef, allowedPolicies: ReadonlySet<string>): WorkflowIR {
+function compileWith(def: unknown, allowedPolicies: ReadonlySet<string>): WorkflowIR {
   const rec = asRecord(def, 'workflow')
+  rejectExtraKeys(rec, WORKFLOW_KEYS, 'workflow')
   const name = nonemptyString(rec.name, 'name')
   const openspecContract = rec.openspecContract
   if (openspecContract !== undefined && openspecContract !== 'required') {
     compileError('openspecContract', `必须是 'required'（实际 ${JSON.stringify(openspecContract)}）`)
   }
-  const steps = asArray(rec.steps, 'steps').map((s, i) => compileStep(s as StepDef, i, allowedPolicies))
-  return deepFreeze({ name, ...(openspecContract === undefined ? {} : { openspecContract }), steps })
+  const documentContract = compileDocumentContract(rec.documentContract)
+  if (openspecContract !== undefined && documentContract !== undefined) {
+    compileError('documentContract', '不得与 openspecContract 同时声明')
+  }
+  const steps = asArray(rec.steps, 'steps').map((s, i) => compileStep(s, i, allowedPolicies))
+  return deepFreeze({
+    name,
+    ...(openspecContract === undefined ? {} : { openspecContract }),
+    ...(documentContract === undefined ? {} : { documentContract }),
+    steps,
+  })
 }
 
 /**
@@ -435,8 +376,17 @@ function compileWith(def: WorkflowDef, allowedPolicies: ReadonlySet<string>): Wo
  * transition adapter 全走此入口——它们加载的都是 custom workflow。default 运行时 artifact 走 P4
  * codegen 表、不经本函数；default 生成校验/内部测试走下方 compileDefaultWorkflow。
  */
-export function compileWorkflow(def: WorkflowDef): WorkflowIR {
+export function compileWorkflow(def: unknown): WorkflowIR {
   return compileWith(def, CUSTOM_PRODUCER_POLICIES)
+}
+
+/**
+ * HTTP/JSON 等结构化边界的定义层 decoder。compileWorkflow 已完整校验所有必填键、嵌套
+ * 变体和值域；校验成功后保留原始定义层形状，避免把编译后的 artifact IR 误当作可序列化 DTO。
+ */
+export function decodeWorkflowDef(value: unknown): WorkflowDef {
+  compileWorkflow(value)
+  return value as WorkflowDef
 }
 
 /**
@@ -444,6 +394,6 @@ export function compileWorkflow(def: WorkflowDef): WorkflowIR {
  * phase policy 声明）。**绝不以 def.name==='default' 猜 origin**——本入口是显式的、内部/生成验证专用
  * 边界；default 运行时 artifact 消费 P4 codegen 表，不由通用 compileWorkflow 承担 default 运行。
  */
-export function compileDefaultWorkflow(def: WorkflowDef): WorkflowIR {
+export function compileDefaultWorkflow(def: unknown): WorkflowIR {
   return compileWith(def, DEFAULT_PRODUCER_POLICIES)
 }

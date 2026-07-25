@@ -18,6 +18,11 @@ import type { HistoryWriter } from '@pipeline-lite/kernel'
 import { errMsg, type CliDeps } from './deps.js'
 import { isValidChangeName } from './paths.js'
 import { discoverCompletedCodexSkillReads, transcriptConfirmsReceipt } from './codexTranscriptEvidence.js'
+import {
+  productionCodexSkillTrustRoots,
+  trustedCodexSkillPath,
+  type CodexSkillTrustRoots,
+} from './codexSkillTrust.js'
 
 export const CODEX_SKILL_RECEIPTS_FILE = join('.pipeline', 'codex-skill-receipts.jsonl')
 
@@ -59,16 +64,24 @@ export interface CodexSkillEvidenceInput {
   readonly homeDir?: string
   /** Injectable Codex data root.  Production honours CODEX_HOME before falling back to ~/.codex. */
   readonly codexHomeDir?: string
+  /** Exact plugin payload selected by Codex bootstrap for this host process. */
+  readonly selectedPluginRoot?: string
+  /** Exact process-provided trust roots; tests inject all three canonical root classes here. */
+  readonly trustRoots?: CodexSkillTrustRoots
 }
 
 export interface CodexSkillReceiptCommandEnv {
   homeDir(): string
   codexHomeDir?(): string | undefined
+  selectedPluginRoot?(): string | undefined
+  trustRoots?(): CodexSkillTrustRoots
 }
 
 export const REAL_CODEX_SKILL_RECEIPT_ENV: CodexSkillReceiptCommandEnv = {
   homeDir: () => homedir(),
   codexHomeDir: () => process.env.CODEX_HOME,
+  selectedPluginRoot: () => process.env.PIPELINE_CODEX_PLUGIN_ROOT,
+  trustRoots: productionCodexSkillTrustRoots,
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -92,31 +105,10 @@ function isInside(base: string, candidate: string): boolean {
   return fromBase !== '' && fromBase !== '..' && !fromBase.startsWith(`..${sep}`) && !isAbsolute(fromBase)
 }
 
-function codexHomeRoot(homeDir: string, configured?: string): string {
-  const candidate = configured?.trim() || process.env.CODEX_HOME?.trim()
-  return candidate && isAbsolute(candidate) ? resolve(candidate) : resolve(homeDir, '.codex')
-}
-
-function codexPluginCacheRoot(homeDir: string, configured?: string): string {
-  return join(codexHomeRoot(homeDir, configured), 'plugins', 'cache', 'pipeline-lite', 'pipeline-lite')
-}
-
 function codexSessionsRoot(homeDir: string, configured?: string): string {
-  return join(codexHomeRoot(homeDir, configured), 'sessions')
-}
-
-/** Only accept the cache layout that the Codex host itself uses to load this plugin's skills. */
-function isTrustedCodexSkillPath(skillPath: string, skillId: string, homeDir: string, configured?: string): boolean {
-  if (!isAbsolute(skillPath)) return false
-  const candidate = resolve(skillPath)
-  const root = codexPluginCacheRoot(homeDir, configured)
-  if (!isInside(root, candidate)) return false
-  const parts = relative(root, candidate).split(sep)
-  return parts.length === 4
-    && parts[0] !== ''
-    && parts[1] === 'skills'
-    && parts[2] === skillId
-    && parts[3] === 'SKILL.md'
+  const candidate = configured?.trim() || process.env.CODEX_HOME?.trim()
+  const codexHome = candidate ? resolve(candidate) : resolve(homeDir, '.codex')
+  return join(codexHome, 'sessions')
 }
 
 function isTrustedTranscriptPath(transcriptPath: string, homeDir: string, configured?: string): boolean {
@@ -160,14 +152,24 @@ async function regularFile(path: string): Promise<boolean> {
   }
 }
 
+async function trustedSelectedSkillPath(
+  skillPath: string,
+  skillId: string,
+  trustRoots: CodexSkillTrustRoots,
+  homeDir: string,
+  configured?: string,
+): Promise<boolean> {
+  return await trustedCodexSkillPath(trustRoots, skillId, homeDir, configured) === resolve(skillPath)
+}
+
 async function validatedReceipt(
   value: CodexSkillReceipt,
+  trustRoots: CodexSkillTrustRoots,
   homeDir: string,
   configured?: string,
 ): Promise<CodexSkillReceipt | undefined> {
-  if (!isTrustedCodexSkillPath(value.skillPath, value.skillId, homeDir, configured)) return undefined
+  if (!await trustedSelectedSkillPath(value.skillPath, value.skillId, trustRoots, homeDir, configured)) return undefined
   if (!isTrustedTranscriptPath(value.transcriptPath, homeDir, configured)) return undefined
-  if (!await regularFile(value.skillPath)) return undefined
   return value
 }
 
@@ -220,7 +222,18 @@ function skillsEquivalent(left: string, right: string): boolean {
   return skillAliases(right).some((candidate) => leftAliases.has(candidate))
 }
 
-function completedSkillIds(history: string, evidenceScope?: string): ReadonlySet<string> {
+interface CurrentVisitEvidence {
+  readonly completedSkillIds: ReadonlySet<string>
+  readonly startedAt?: string
+  readonly valid: boolean
+}
+
+function validTimestamp(value: unknown): string | undefined {
+  const timestamp = asString(value)
+  return timestamp !== undefined && !Number.isNaN(Date.parse(timestamp)) ? timestamp : undefined
+}
+
+function currentVisitEvidence(history: string, evidenceScope?: string): CurrentVisitEvidence {
   const entries: unknown[] = []
   for (const line of history.split(/\r?\n/)) {
     if (line.trim() === '') continue
@@ -231,12 +244,30 @@ function completedSkillIds(history: string, evidenceScope?: string): ReadonlySet
     }
   }
   let start = 0
+  let startedAt: string | undefined
+  let valid = evidenceScope === undefined
   if (evidenceScope) {
     for (let index = entries.length - 1; index >= 0; index -= 1) {
       const entry = entries[index]
       if (isRecord(entry) && entry.kind === 'transition' && entry.to === evidenceScope) {
         start = index + 1
+        startedAt = validTimestamp(entry.ts)
+        valid = startedAt !== undefined
         break
+      }
+    }
+    const hasAnyTransition = entries.some(
+      (entry) => isRecord(entry) && entry.kind === 'transition',
+    )
+    if (!valid && !hasAnyTransition) {
+      for (let index = entries.length - 1; index >= 0; index -= 1) {
+        const entry = entries[index]
+        if (isRecord(entry) && entry.kind === 'init') {
+          start = index + 1
+          startedAt = validTimestamp(entry.ts)
+          valid = startedAt !== undefined
+          break
+        }
       }
     }
   }
@@ -247,7 +278,7 @@ function completedSkillIds(history: string, evidenceScope?: string): ReadonlySet
     const match = raw ? /^(?:Skill|CodexSkillRead): (.+)$/.exec(raw) : null
     if (match?.[1]) ids.add(match[1])
   }
-  return ids
+  return { completedSkillIds: ids, startedAt, valid }
 }
 
 async function readHistory(changeDir: string): Promise<string> {
@@ -300,20 +331,40 @@ export async function reconcileCodexSkillEvidence(input: CodexSkillEvidenceInput
   if (!input.history) return { confirmedSkillIds: [] }
   const homeDir = input.homeDir ?? homedir()
   const codexHomeDir = input.codexHomeDir
-  const existing = completedSkillIds(await readHistory(input.changeDir), input.evidenceScope)
+  const selectedPluginRoot = input.selectedPluginRoot ?? process.env.PIPELINE_CODEX_PLUGIN_ROOT
+  const trustRoots = input.trustRoots
+    ?? (selectedPluginRoot ? { selectedCacheRoot: selectedPluginRoot } : productionCodexSkillTrustRoots())
+  const visitEvidence = currentVisitEvidence(await readHistory(input.changeDir), input.evidenceScope)
+  if (!visitEvidence.valid) return { confirmedSkillIds: [] }
+  const existing = visitEvidence.completedSkillIds
   const changeName = basename(resolve(input.changeDir))
   if (!isValidChangeName(changeName)) return { confirmedSkillIds: [] }
   const boundHostSessionId = await latestBoundHostSessionId(input.repoRoot, changeName)
   const receipts = await loadReceipts(input.repoRoot)
   const confirmed = new Set<string>()
+  const receiptBoundSkills = new Set<string>()
 
   for (const rawReceipt of receipts) {
     if (rawReceipt.changeName !== changeName) continue
+    if (
+      visitEvidence.startedAt !== undefined
+      && Date.parse(rawReceipt.receivedAt) < Date.parse(visitEvidence.startedAt)
+    ) continue
     if (input.producer && !skillsEquivalent(rawReceipt.skillId, input.producer)) continue
     if ([...existing, ...confirmed].some((skill) => skillsEquivalent(skill, rawReceipt.skillId))) continue
-    const receipt = await validatedReceipt(rawReceipt, homeDir, codexHomeDir)
+    receiptBoundSkills.add(rawReceipt.skillId)
+    const receipt = await validatedReceipt(rawReceipt, trustRoots, homeDir, codexHomeDir)
     if (!receipt) continue
-    if (await transcriptConfirmsReceipt(receipt, homeDir, codexHomeDir)) confirmed.add(receipt.skillId)
+    if (
+      await transcriptConfirmsReceipt(
+        receipt,
+        trustRoots,
+        input.repoRoot,
+        homeDir,
+        codexHomeDir,
+        visitEvidence.startedAt,
+      )
+    ) confirmed.add(receipt.skillId)
   }
 
   // Current Codex hook ABI can omit receipt identity for one or more reads in a batched exec.
@@ -326,11 +377,19 @@ export async function reconcileCodexSkillEvidence(input: CodexSkillEvidenceInput
     ...(input.candidateSkillIds ?? []),
   ])]
   const unresolvedCandidates = candidates.filter(
-    (candidate) => ![...existing, ...confirmed].some((skill) => skillsEquivalent(skill, candidate)),
+    (candidate) =>
+      ![...existing, ...confirmed].some((skill) => skillsEquivalent(skill, candidate))
+      && ![...receiptBoundSkills].some((skill) => skillsEquivalent(skill, candidate)),
   )
-  if (unresolvedCandidates.length > 0) {
+  if (unresolvedCandidates.length > 0 && boundHostSessionId !== undefined) {
     for (const skillId of await discoverCompletedCodexSkillReads(
-      input.repoRoot, unresolvedCandidates, homeDir, codexHomeDir, boundHostSessionId,
+      input.repoRoot,
+      unresolvedCandidates,
+      trustRoots,
+      homeDir,
+      codexHomeDir,
+      boundHostSessionId,
+      visitEvidence.startedAt,
     )) {
       if (![...existing, ...confirmed].some((skill) => skillsEquivalent(skill, skillId))) confirmed.add(skillId)
     }
@@ -370,7 +429,12 @@ export async function cmdInternalCodexSkillReceipt(
       turnId,
       toolUseId,
     })
-    const receipt = parsed ? await validatedReceipt(parsed, env.homeDir(), env.codexHomeDir?.()) : undefined
+    const selectedPluginRoot = env.selectedPluginRoot?.() ?? process.env.PIPELINE_CODEX_PLUGIN_ROOT
+    const trustRoots = env.trustRoots?.()
+      ?? (selectedPluginRoot ? { selectedCacheRoot: selectedPluginRoot } : productionCodexSkillTrustRoots())
+    const receipt = parsed
+      ? await validatedReceipt(parsed, trustRoots, env.homeDir(), env.codexHomeDir?.())
+      : undefined
     if (!receipt) {
       deps.io.err('internal-codex-skill-receipt: 收到不可信的 Codex skill receipt')
       return 1

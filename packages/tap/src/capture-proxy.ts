@@ -74,7 +74,7 @@ export function serve(opts: CaptureProxyOptions): Promise<CaptureProxyHandle> {
 
     async function handle(body: Buffer): Promise<void> {
       const path = req.url ?? '/'
-      const cleanPath = path.split('?', 1)[0]!
+      const cleanPath = path.split('?', 1)[0] ?? ''
       const method = (req.method ?? 'GET').toUpperCase()
       const recorded = method === 'POST' && recordedSet.has(cleanPath) && isCaptureEnabled({ dir: store.dir })
 
@@ -207,7 +207,9 @@ export function serve(opts: CaptureProxyOptions): Promise<CaptureProxyHandle> {
               store.finalizeSession(sessionId, { api_calls: row?.record_count ?? 0, has_error: false })
             } catch { /* best-effort */ }
             server.close(() => res())
-            ;(server as unknown as { closeAllConnections?: () => void }).closeAllConnections?.()
+            if ('closeAllConnections' in server && typeof server.closeAllConnections === 'function') {
+              server.closeAllConnections()
+            }
           })
         },
       })

@@ -14,16 +14,12 @@
 import type { ChangeSnapshot, ProjectSnapshot, Snapshot } from '../types'
 import { rulesKey, type WorkflowRules } from '../model/workflowModel'
 import { changeProgressState, type ProgressRules } from '../model/progressModel'
+import { changeWorkflow } from '../model/changeModel'
+export { changeWorkflow, decisionKind } from '../model/changeModel'
 
 /** 老内核 cmd_get 口径：字面 'null'（init heredoc）或空串都算未设。 */
 function truthy(v: string): boolean {
   return v === 'true'
-}
-
-/** 该 change 声明的 workflow 名（未设/空 → 'default'）。 */
-export function changeWorkflow(c: ChangeSnapshot): string {
-  const wf = c.fields['workflow']
-  return typeof wf === 'string' && wf ? wf : 'default'
 }
 
 /**
@@ -74,13 +70,6 @@ export function selectInbox(
     return a.change.name < b.change.name ? -1 : a.change.name > b.change.name ? 1 : 0
   })
   return items
-}
-
-/** 该 change 在等哪一类决定（i18n key 后缀）：default 三阶段保留细分文案，其余（含自定义 step）一律 other。 */
-export function decisionKind(c: ChangeSnapshot): 'explore' | 'spec' | 'verify' | 'other' {
-  if (changeWorkflow(c) !== 'default') return 'other'
-  if (c.phase === 'explore' || c.phase === 'spec' || c.phase === 'verify') return c.phase
-  return 'other'
 }
 
 export function projectName(p: ProjectSnapshot): string {

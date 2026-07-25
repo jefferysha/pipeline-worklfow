@@ -1,0 +1,228 @@
+import type {
+  ChangeHistoryEntry,
+  CreatedChange,
+  WbHooksConfig,
+  WbRouterPreview,
+  WbTrackDefinition,
+} from './governanceTypes'
+import {
+  decodeCreatedChange,
+  decodeHistory,
+  decodeHooksConfig,
+  decodeNames,
+  decodeRoot,
+  decodeRouterPreview,
+} from './governanceDecoders'
+import { ApiError, getToken, readJson, throwApiError, wrapNetwork } from './transport'
+
+async function readOrThrow<T>(
+  response: Response,
+  decode: (value: unknown) => T | null,
+  invalidMessage: string,
+): Promise<T> {
+  const decoded = decode(await readJson(response))
+  if (!decoded) throw new ApiError(invalidMessage, response.status)
+  return decoded
+}
+
+export async function registerProject(root: string): Promise<{ root: string }> {
+  let response: Response
+  try {
+    response = await fetch('/api/projects', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
+      body: JSON.stringify({ root }),
+    })
+  } catch (error) {
+    wrapNetwork(error)
+  }
+  if (!response.ok) await throwApiError(response, '注册项目失败')
+  return readOrThrow(response, decodeRoot, '注册项目响应形状无效')
+}
+
+export async function unregisterProject(root: string): Promise<void> {
+  let response: Response
+  try {
+    response = await fetch(`/api/projects?root=${encodeURIComponent(root)}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${getToken()}` },
+    })
+  } catch (error) {
+    wrapNetwork(error)
+  }
+  if (!response.ok) await throwApiError(response, '注销项目失败')
+}
+
+export async function fetchWorkflowNames(root: string): Promise<string[]> {
+  let response: Response
+  try {
+    response = await fetch(`/api/workflows?root=${encodeURIComponent(root)}`, {
+      headers: { Accept: 'application/json' },
+    })
+  } catch (error) {
+    wrapNetwork(error)
+  }
+  if (!response.ok) await throwApiError(response, 'workflow 列表获取失败')
+  return readOrThrow(response, decodeNames, 'workflow 列表响应形状无效')
+}
+
+export async function fetchHooksConfig(root: string): Promise<WbHooksConfig> {
+  let response: Response
+  try {
+    response = await fetch(`/api/hooks?root=${encodeURIComponent(root)}`, {
+      headers: { Accept: 'application/json' },
+    })
+  } catch (error) {
+    wrapNetwork(error)
+  }
+  if (!response.ok) await throwApiError(response, '钩子配置获取失败')
+  return readOrThrow(response, decodeHooksConfig, '钩子配置响应形状无效')
+}
+
+export async function postHookToggle(input: {
+  root: string
+  hook: string
+  phase: string
+  enabled: boolean
+}): Promise<void> {
+  let response: Response
+  try {
+    response = await fetch('/api/hooks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
+      body: JSON.stringify(input),
+    })
+  } catch (error) {
+    wrapNetwork(error)
+  }
+  if (!response.ok) await throwApiError(response, '钩子开关写回失败')
+}
+
+export async function getHistory(name: string, root: string): Promise<ChangeHistoryEntry[]> {
+  let response: Response
+  try {
+    response = await fetch(`/api/change/${encodeURIComponent(name)}/history?root=${encodeURIComponent(root)}`, {
+      headers: { Accept: 'application/json' },
+    })
+  } catch (error) {
+    wrapNetwork(error)
+  }
+  if (!response.ok) await throwApiError(response, '历史获取失败')
+  return readOrThrow(response, decodeHistory, '历史响应形状无效')
+}
+
+export async function postRouterPreview(
+  root: string,
+  prompt: string,
+  draftTrack?: WbTrackDefinition,
+): Promise<WbRouterPreview> {
+  let response: Response
+  try {
+    response = await fetch('/api/router/preview', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
+      body: JSON.stringify({ root, prompt, ...(draftTrack === undefined ? {} : { draft_track: draftTrack }) }),
+    })
+  } catch (error) {
+    wrapNetwork(error)
+  }
+  if (!response.ok) await throwApiError(response, '路由预览失败')
+  return readOrThrow(response, decodeRouterPreview, '路由预览响应形状无效')
+}
+
+export async function postCreateChange(input: {
+  root: string
+  name: string
+  track: string
+  workflow: string
+  task_prompt?: string
+  activate_session?: boolean
+}): Promise<CreatedChange> {
+  let response: Response
+  try {
+    response = await fetch('/api/changes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
+      body: JSON.stringify(input),
+    })
+  } catch (error) {
+    wrapNetwork(error)
+  }
+  if (!response.ok) await throwApiError(response, 'Change 创建失败')
+  return readOrThrow(response, decodeCreatedChange, 'Change 创建响应形状无效')
+}
+
+export function fetchSkillsRegistry(): Promise<Response> {
+  return fetch('/api/skills/registry', { headers: { Accept: 'application/json' } })
+}
+
+export function fetchWorkflow(name: string, root: string): Promise<Response> {
+  return fetch(`/api/workflows/${encodeURIComponent(name)}?root=${encodeURIComponent(root)}`, {
+    headers: { Accept: 'application/json' },
+  })
+}
+
+export function fetchConfig(root: string): Promise<Response> {
+  return fetch(`/api/config?root=${encodeURIComponent(root)}`, { headers: { Accept: 'application/json' } })
+}
+
+export function postWorkflowDef(name: string, payload: Record<string, unknown>): Promise<Response> {
+  return fetch(`/api/workflows/${encodeURIComponent(name)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
+    body: JSON.stringify(payload),
+  })
+}
+
+export function deleteWorkflowDef(name: string, root: string): Promise<Response> {
+  return fetch(`/api/workflows/${encodeURIComponent(name)}?root=${encodeURIComponent(root)}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${getToken()}` },
+  })
+}
+
+export function postMandatorySkills(input: {
+  phase: string
+  track: string
+  skills: string[]
+  root: string
+}): Promise<Response> {
+  return fetch('/api/config/mandatory-skills', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
+    body: JSON.stringify(input),
+  })
+}
+
+export function postTrackDefinition(input: {
+  root: string
+  revision: string
+  track: WbTrackDefinition
+}): Promise<Response> {
+  const { builtin: _builtin, ...track } = input.track
+  return fetch('/api/tracks', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
+    body: JSON.stringify({ root: input.root, revision: input.revision, track }),
+  })
+}
+
+export function patchTrackDefinition(
+  root: string,
+  revision: string,
+  id: string,
+  patch: Record<string, unknown>,
+): Promise<Response> {
+  return fetch(`/api/tracks/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
+    body: JSON.stringify({ root, revision, patch }),
+  })
+}
+
+export function deleteTrackDefinition(root: string, revision: string, id: string): Promise<Response> {
+  return fetch(
+    `/api/tracks/${encodeURIComponent(id)}?root=${encodeURIComponent(root)}&revision=${encodeURIComponent(revision)}`,
+    { method: 'DELETE', headers: { Authorization: `Bearer ${getToken()}` } },
+  )
+}

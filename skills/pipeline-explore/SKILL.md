@@ -47,8 +47,8 @@ pipeline status "$PIPELINE_CHANGE_NAME"    # 相位/字段摘要，绝不 FAIL
 - `openspec/changes/$PIPELINE_CHANGE_NAME/design.md`（若存在）— 高层架构
 - `openspec/specs/<capability>/spec.md`（若有主 spec）— 已有能力
 
-受治理 workflow（default 的全部 track 或 `openspec_contract: required`）还必须留下“本阶段确实读了
-open 产物”的 hash 收据。先全文读取上述文件，再执行命令；这不是单纯的状态标记。
+受治理 workflow 还必须按生效 document profile 留下当前 step 所要求的 hash 读取收据；legacy-full
+在 Explore 读取 Open 产物，`document_contract: v1` 只读取其 `reads` 声明。先全文读取真实文件再执行命令。
 
 ```bash
 pipeline document read "$PIPELINE_CHANGE_NAME" all

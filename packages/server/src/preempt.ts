@@ -23,11 +23,32 @@ export function compareVersions(a: string, b: string): number {
   const pb = b.split('.').map((x) => parseInt(x, 10))
   const n = Math.max(pa.length, pb.length)
   for (let i = 0; i < n; i++) {
-    const x = Number.isFinite(pa[i]) ? (pa[i] as number) : 0
-    const y = Number.isFinite(pb[i]) ? (pb[i] as number) : 0
+    const candidateA = pa[i]
+    const candidateB = pb[i]
+    const x = typeof candidateA === 'number' && Number.isFinite(candidateA) ? candidateA : 0
+    const y = typeof candidateB === 'number' && Number.isFinite(candidateB) ? candidateB : 0
     if (x !== y) return x > y ? 1 : -1
   }
   return 0
+}
+
+function decodeHealthInfo(value: unknown): HealthInfo | null {
+  if (typeof value !== 'object' || value === null) return null
+  const version = Reflect.get(value, 'version')
+  const scope = Reflect.get(value, 'scope')
+  const ok = Reflect.get(value, 'ok')
+  if (typeof version !== 'string' || scope !== 'global' || typeof ok !== 'boolean') return null
+  const releaseId = Reflect.get(value, 'releaseId')
+  const stateScopeId = Reflect.get(value, 'stateScopeId')
+  const pid = Reflect.get(value, 'pid')
+  return {
+    ok,
+    scope,
+    version,
+    ...(typeof releaseId === 'string' ? { releaseId } : {}),
+    ...(typeof stateScopeId === 'string' ? { stateScopeId } : {}),
+    ...(typeof pid === 'number' ? { pid } : {}),
+  }
 }
 
 export function readPidfile(pidfilePath: string): Pidfile | null {
@@ -60,8 +81,7 @@ export function probeHealth(port: number, host = '127.0.0.1', timeoutMs = 500): 
       res.on('data', (c) => (body += c))
       res.on('end', () => {
         try {
-          const j = JSON.parse(body) as HealthInfo
-          finish(j && typeof j.version === 'string' ? j : null)
+          finish(decodeHealthInfo(JSON.parse(body) as unknown))
         } catch {
           finish(null)
         }

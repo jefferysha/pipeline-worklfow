@@ -27,11 +27,18 @@ import {
   type MemFs,
   type MemPhase,
   type MemPlatformFilter,
-  type MemSession,
-  type SearchMatch,
 } from '@pipeline-lite/kernel'
 import { splitFlags } from '../argv.js'
 import type { CliDeps } from '../deps.js'
+import {
+  memIsoDate,
+  padMemLeft,
+  padMemRight,
+  printMemSessions,
+  searchMatchJson,
+  shortMemDate,
+  shortMemPath,
+} from './mem-render.js'
 
 // 供 mock/集成测试构造 fake 树 / 真 fs 指向 fixture home
 export type { MemDirent, MemFs } from '@pipeline-lite/kernel'
@@ -107,58 +114,6 @@ function maybeWarnOpencode(deps: CliDeps, f: MemFilter): void {
   }
 }
 
-// ---------- formatting ----------
-
-const iso10 = (ms: number): string => new Date(ms).toISOString().slice(0, 10)
-
-function ljust(s: string, n: number): string {
-  return s.length >= n ? s : s + ' '.repeat(n - s.length)
-}
-function rjust(s: string, n: number): string {
-  return s.length >= n ? s : ' '.repeat(n - s.length) + s
-}
-
-function shortDate(iso: string | null | undefined): string {
-  if (!iso) return ' '.repeat(9)
-  return iso.slice(0, 16).replace('T', ' ')
-}
-
-function shortPath(fs: MemFs, p: string | null | undefined): string {
-  if (!p) return '(no cwd)'
-  return p.split(fs.home).join('~')
-}
-
-function printSessions(deps: CliDeps, fs: MemFs, rows: MemSession[]): void {
-  if (!rows.length) {
-    deps.io.out('(no sessions)')
-    return
-  }
-  for (const s of rows) {
-    const sid = s.id.length > 12 ? s.id.slice(0, 12) : ljust(s.id, 12)
-    const parentTag = s.parent_id ? `  ↳ child of ${s.parent_id.slice(0, 12)}` : ''
-    const title = s.title ? `  — ${s.title}` : ''
-    deps.io.out(
-      `[${ljust(s.platform, 8)}] ${shortDate(s.updated || s.created)}  ${sid}  ${shortPath(fs, s.cwd)}${title}${parentTag}`,
-    )
-  }
-}
-
-// ---------- json mappers ----------
-
-function searchMatchToJson(m: SearchMatch, includeChildren: boolean): unknown {
-  const hit = m.hit
-  return {
-    session: m.session,
-    score: Math.round(m.score * 10000) / 10000,
-    hit_count: hit.count,
-    user_count: hit.userCount,
-    asst_count: hit.asstCount,
-    total_turns: hit.totalTurns,
-    descendants_merged: includeChildren ? m.descendantsMerged : 0,
-    excerpts: hit.excerpts,
-  }
-}
-
 // ---------- commands ----------
 
 function cmdList(deps: CliDeps, p: ParsedArgs, fs: MemFs): number {
@@ -169,12 +124,12 @@ function cmdList(deps: CliDeps, p: ParsedArgs, fs: MemFs): number {
     deps.io.out(JSON.stringify(rows, null, 2))
     return 0
   }
-  const scope = f.cwd ? `project=${shortPath(fs, f.cwd)}` : 'global'
+  const scope = f.cwd ? `project=${shortMemPath(fs, f.cwd)}` : 'global'
   let line = `scope: ${scope}  platform=${f.platform}`
-  if (f.since != null) line += `  since=${iso10(f.since)}`
-  if (f.until != null) line += `  until=${iso10(f.until)}`
+  if (f.since != null) line += `  since=${memIsoDate(f.since)}`
+  if (f.until != null) line += `  until=${memIsoDate(f.until)}`
   deps.io.out(line)
-  printSessions(deps, fs, rows)
+  printMemSessions(deps, fs, rows)
   deps.io.out(`\n${rows.length} session(s)`)
   return 0
 }
@@ -189,10 +144,10 @@ function cmdSearch(deps: CliDeps, p: ParsedArgs, fs: MemFs): number {
   const top = result.matches
 
   if (p.flags.json) {
-    deps.io.out(JSON.stringify(top.map((m) => searchMatchToJson(m, includeChildren)), null, 2))
+    deps.io.out(JSON.stringify(top.map((m) => searchMatchJson(m, includeChildren)), null, 2))
     return 0
   }
-  const scope = f.cwd ? `project=${shortPath(fs, f.cwd)}` : 'global'
+  const scope = f.cwd ? `project=${shortMemPath(fs, f.cwd)}` : 'global'
   let head = `scope: ${scope}  keyword="${kw}"  platform=${f.platform}`
   if (includeChildren) head += '  include-children=on'
   deps.io.out(head)
@@ -208,7 +163,7 @@ function cmdSearch(deps: CliDeps, p: ParsedArgs, fs: MemFs): number {
     const title = s.title ? `  — ${s.title}` : ''
     const hit = m.hit
     deps.io.out(
-      `\n[${ljust(s.platform, 8)}] ${shortDate(s.updated || s.created)}  ${idShort}  ${shortPath(fs, s.cwd)}` +
+      `\n[${padMemRight(s.platform, 8)}] ${shortMemDate(s.updated || s.created)}  ${idShort}  ${shortMemPath(fs, s.cwd)}` +
         `  score=${score}  hits=${hit.count} (u=${hit.userCount},a=${hit.asstCount})  turns=${hit.totalTurns}${childTag}${title}`,
     )
     for (const ex of hit.excerpts) deps.io.out(`    [${ex.role}] ${ex.snippet}`)
@@ -230,8 +185,8 @@ function cmdProjects(deps: CliDeps, p: ParsedArgs, fs: MemFs): number {
     return 0
   }
   let head = 'active projects'
-  if (f.since != null) head += `  since=${iso10(f.since)}`
-  if (f.until != null) head += `  until=${iso10(f.until)}`
+  if (f.since != null) head += `  since=${memIsoDate(f.since)}`
+  if (f.until != null) head += `  until=${memIsoDate(f.until)}`
   deps.io.out(head)
   if (!top.length) {
     deps.io.out('(none)')
@@ -242,7 +197,7 @@ function cmdProjects(deps: CliDeps, p: ParsedArgs, fs: MemFs): number {
       .filter(([, n]) => n > 0)
       .map(([pl, n]) => `${pl}:${n}`)
       .join(' ')
-    deps.io.out(`${shortDate(r.last_active)}  sessions=${rjust(String(r.sessions), 3)} (${parts})  ${shortPath(fs, r.cwd)}`)
+    deps.io.out(`${shortMemDate(r.last_active)}  sessions=${padMemLeft(String(r.sessions), 3)} (${parts})  ${shortMemPath(fs, r.cwd)}`)
   }
   const extra = rows.length > top.length ? ` (of ${rows.length})` : ''
   deps.io.out(`\n${top.length} project(s)${extra}`)
@@ -294,7 +249,7 @@ function cmdContext(deps: CliDeps, p: ParsedArgs, fs: MemFs): number {
   const shown = grep ? Math.min(result.totalHitTurns, nTurns) : Math.min(nTurns, result.totalTurns)
   deps.io.out(`# context: [${s.platform}] ${s.id}`)
   if (s.title) deps.io.out(`# title: ${s.title}`)
-  if (s.cwd) deps.io.out(`# cwd:   ${shortPath(fs, s.cwd)}`)
+  if (s.cwd) deps.io.out(`# cwd:   ${shortMemPath(fs, s.cwd)}`)
   if (grep) deps.io.out(`# query: "${grep}"  hit_turns=${result.totalHitTurns}  showing top ${shown}`)
   else deps.io.out(`# no grep — showing first ${shown} turns of ${result.totalTurns}`)
   if (result.mergedChildren > 0) deps.io.out(`# merged_children: ${result.mergedChildren}`)
@@ -342,8 +297,8 @@ function cmdExtract(deps: CliDeps, p: ParsedArgs, fs: MemFs): number {
 
   deps.io.out(`# session: [${s.platform}] ${s.id}`)
   if (s.title) deps.io.out(`# title: ${s.title}`)
-  if (s.cwd) deps.io.out(`# cwd:   ${shortPath(fs, s.cwd)}`)
-  if (s.created) deps.io.out(`# date:  ${shortDate(s.created)}`)
+  if (s.cwd) deps.io.out(`# cwd:   ${shortMemPath(fs, s.cwd)}`)
+  if (s.created) deps.io.out(`# date:  ${shortMemDate(s.created)}`)
   let line = `# phase: ${result.phase}  turns: ${result.turns.length}/${result.totalTurns}`
   if (grep) line += ` (filtered by /${grep}/)`
   if (result.windows.length > 0) line += `  windows: ${result.windows.length}`

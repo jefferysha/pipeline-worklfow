@@ -1,7 +1,7 @@
 import { useMemo, useState, type DragEvent, type KeyboardEvent } from 'react'
 import { ArrowRight, Boxes, GitBranch, GripVertical, Search, Trash2 } from 'lucide-react'
 import type { WbSkillEntry } from '../api/client'
-import { Dialog } from '../shell/Dialog'
+import { Dialog } from '../shared/Dialog'
 import type { BoardLane } from './OrchestrationBoard'
 import { SkillExecutionTopology } from './SkillExecutionTopology'
 import { skillPresentation } from './skillPresentation'

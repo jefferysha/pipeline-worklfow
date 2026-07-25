@@ -13,23 +13,18 @@
  */
 import { join } from 'node:path'
 import { GATE_TTL_MS, PREREQ_HINTS } from '@pipeline-lite/kernel'
-import type { SkillTable } from '@pipeline-lite/kernel'
 import { errMsg, type CliDeps, type DoctorProbes } from '../deps.js'
 import { changesRoot } from '../paths.js'
-import { readSkillSources, type SkillSource } from '../skillSources.js'
+import {
+  green,
+  red,
+  yellow,
+  type DoctorCheck,
+  type DoctorStatus,
+} from './doctor-check.js'
+import { checkCodexProjectSkills, checkSkills } from './doctor-skills.js'
 
-export type DoctorStatus = 'green' | 'yellow' | 'red'
-
-export interface DoctorCheck {
-  id: string
-  status: DoctorStatus
-  detail: string
-  hint: string
-}
-
-const green = (id: string, detail: string): DoctorCheck => ({ id, status: 'green', detail, hint: '' })
-const yellow = (id: string, detail: string, hint: string): DoctorCheck => ({ id, status: 'yellow', detail, hint })
-const red = (id: string, detail: string, hint: string): DoctorCheck => ({ id, status: 'red', detail, hint })
+export type { DoctorCheck, DoctorStatus } from './doctor-check.js'
 
 /** hooks/ 四脚本（gate/breadcrumb/session-start/statusline）——存在且可执行才算资产齐全 */
 const HOOK_SCRIPTS = ['gate.sh', 'breadcrumb.sh', 'session-start.sh', 'statusline.sh'] as const
@@ -189,147 +184,6 @@ async function checkVerifySkills(p: DoctorProbes): Promise<DoctorCheck> {
     'quality:verify-skills',
     `verify-skills 失败（exit ${code}）: ${summary}`,
     `bash ${join(p.pluginRoot, 'tools', 'verify-skills.sh')} 查看逐条修复指引`,
-  )
-}
-
-// ── 缺技能检测（full-install 批2 A1，设计 spec §Phase2 A1）─────────────────────────
-
-/**
- * 单项技能（manifest 列表里的一个 token，可含 `a|b` 备选）是否在位。
- * · bundled（本插件自带）→ 恒在位，不需另装。
- * · 命名空间 token（superpowers:brainstorming / commit-commands:commit-push-pr / opsx:propose）：
- *   查 installedSkillNames 的 前缀(插件名)/后缀(skill 名)/registry.skill(实际安装名) 任一命中即在位。
- * · `a|b`：任一侧在位即满足该项（消费方自择其一，同 manifest 语义）。
- */
-function skillInPlace(entry: string, byToken: Map<string, SkillSource>, installed: ReadonlySet<string>): boolean {
-  for (const raw of entry.split('|')) {
-    const alt = raw.trim()
-    if (alt === '') continue
-    const src = byToken.get(alt)
-    if (src && (src.tool === 'builtin' || src.tool === 'bundled')) return true // 恒在位
-    if (installed.has(alt)) return true
-    if (src?.skill !== undefined && installed.has(src.skill)) return true
-    const colon = alt.indexOf(':')
-    if (colon > 0) {
-      const prefix = alt.slice(0, colon) // 命名空间插件（superpowers / commit-commands / opsx）
-      const suffix = alt.slice(colon + 1) // 命名空间内 skill 名（brainstorming / commit-push-pr）
-      if (installed.has(prefix) || installed.has(suffix)) return true
-      const pluginSkill = byToken.get(prefix)?.skill // 前缀在 registry 里对应插件的实际安装名
-      if (pluginSkill !== undefined && installed.has(pluginSkill)) return true
-    }
-  }
-  return false
-}
-
-/** 展平 SkillTable（跨所有 phase.track）→ 去重后逐项判在位，收集缺失项（原始 token 串，含 a|b） */
-function collectMissingSkills(table: SkillTable, byToken: Map<string, SkillSource>, installed: ReadonlySet<string>): string[] {
-  const seen = new Set<string>()
-  const missing: string[] = []
-  for (const row of Object.values(table)) {
-    for (const list of Object.values(row)) {
-      for (const entry of list ?? []) {
-        if (seen.has(entry)) continue
-        seen.add(entry)
-        if (!skillInPlace(entry, byToken, installed)) missing.push(entry)
-      }
-    }
-  }
-  return missing
-}
-
-/**
- * 缺技能双检（skills:mandatory 红阻断 / skills:recommended 黄降级）。
- * registry 走本地 readSkillSources 真读（其自带 bundle 安全路径锚，src/dist 同深）+ fileExists 探针
- * 独立判在否（S1 concern #3：缺/空 → yellow，绝不因空表误报 green）；manifest 两表走探针注入
- * （main.ts 持 bundle 里唯一正确的模板路径锚）。返回两灯，cmdDoctor 尾部装配。
- */
-function checkSkills(p: DoctorProbes): [DoctorCheck, DoctorCheck] {
-  const tables = p.manifestSkills()
-  if (tables === null) {
-    return [
-      yellow('skills:mandatory', 'manifest 不可用——无法核强制技能齐全度（不误报 green）', '先修复 asset:manifest（templates/manifest.yaml）后重跑 pipeline doctor'),
-      yellow('skills:recommended', 'manifest 不可用——无法核推荐技能齐全度', '先修复 asset:manifest 后重跑 pipeline doctor'),
-    ]
-  }
-  // registry 独立判在否（fileExists 探针）+ 真读；缺/空 → yellow（concern #3：绝不空表误报 green）
-  const registry = p.fileExists(join(p.pluginRoot, 'templates', 'skill-sources.yaml')) ? readSkillSources() : []
-  if (registry.length === 0) {
-    return [
-      yellow('skills:mandatory', 'registry 未就绪（templates/skill-sources.yaml 缺失/空）——无法核强制技能齐全度（不误报 green）', '确认插件安装完整（skill-sources.yaml 应随插件分发）后重跑 pipeline doctor'),
-      yellow('skills:recommended', 'registry 未就绪（templates/skill-sources.yaml 缺失/空）——无法核推荐技能齐全度', '确认插件安装完整后重跑 pipeline doctor'),
-    ]
-  }
-  const byToken = new Map(registry.map((s) => [s.token, s]))
-  const installed = p.installedSkillNames()
-  const missMand = collectMissingSkills(tables.mandatory, byToken, installed)
-  const missRec = collectMissingSkills(tables.recommended, byToken, installed)
-
-  const mandatory = missMand.length === 0
-    ? green('skills:mandatory', '所有 manifest 强制技能均随当前 pipeline 插件打包并可用')
-    : red(
-        'skills:mandatory',
-        `自定义 workflow 缺 ${missMand.length} 个非打包强制技能：${missMand.join('、')}`,
-        `安装或随自定义插件打包这些技能（${missMand.join('、')}）；pipeline setup --<host> 只安装本插件默认流程资产`,
-      )
-  const recommended = missRec.length === 0
-    ? green('skills:recommended', '所有 manifest 推荐技能均随当前 pipeline 插件打包并可用')
-    : yellow(
-        'skills:recommended',
-        `自定义 workflow 缺 ${missRec.length} 个非打包推荐技能：${missRec.join('、')}`,
-        '安装或随自定义插件打包这些推荐技能（默认 pipeline 不会下载第三方技能）',
-      )
-  return [mandatory, recommended]
-}
-
-/**
- * The broad installed-skill scanner deliberately accepts other hosts' plugin caches. This separate
- * light answers the narrower question that caused the normal-chat regression: can the active
- * Codex context discover the seven phase skills plus this package's OpenSpec document contract?
- */
-const CODEX_PROJECT_CONTRACT_SKILLS = [
-  'pipeline',
-  'pipeline-open',
-  'pipeline-explore',
-  'pipeline-spec',
-  'pipeline-build',
-  'pipeline-verify',
-  'pipeline-ship',
-  'pipeline-archive',
-  'openspec-propose',
-  'openspec-explore',
-  'openspec-apply-change',
-  'openspec-archive-change',
-  'brainstorming',
-  'grill-with-docs',
-  'improve-codebase-architecture',
-  'writing-plans',
-  'test-driven-development',
-  'verification-before-completion',
-  'finishing-a-development-branch',
-  'browser-qa',
-  'e2e-testing',
-] as const
-
-function checkCodexProjectSkills(p: DoctorProbes): DoctorCheck {
-  if (p.codexProjectSkillNames === undefined) {
-    return yellow(
-      'integration:codex-project-skills',
-      '未装配 Codex skill 探针——无法证明 normal-chat router 的包内 skill 可调用（不以 cache 假装 green）',
-      '使用包含该探针的 pipeline CLI，或运行 pipeline setup --codex 后重试',
-    )
-  }
-  const installed = p.codexProjectSkillNames()
-  const missing = CODEX_PROJECT_CONTRACT_SKILLS.filter((name) => !installed.has(name))
-  if (missing.length === 0) {
-    return green(
-      'integration:codex-project-skills',
-      'Codex 可发现 pipeline/OpenSpec/设计/验证 contract skills 全部来自当前插件（normal-chat 可实际调用）',
-    )
-  }
-  return yellow(
-    'integration:codex-project-skills',
-    `Codex 可发现的 pipeline skills 缺 ${missing.length} 个：${missing.join('、')}（全局 cache 不算）`,
-    '运行 pipeline setup --codex 重新安装并校验完整插件；若使用非原生 adapter，再加 --target <项目目录>',
   )
 }
 

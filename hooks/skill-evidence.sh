@@ -14,26 +14,6 @@
 # This file is sourced by hot-path hooks. Keep it Bash-only: no node, python, jq, grep, or external
 # JSON parser is introduced here.
 
-pipeline_codex_host_cache_roots() {
-  local codex_home base root version seen=''
-  # Command hooks may omit both PLUGIN_ROOT and PIPELINE_CODEX_PLUGIN_ROOT.  The only fallback
-  # accepted here is this plugin's own host-owned Codex cache layout; project/global skill paths
-  # remain outside the trust boundary.  Keep it Bash-only because this runs on the hot hook path.
-  for codex_home in "${CODEX_HOME:-}" "${HOME:-}/.codex"; do
-    case "$codex_home" in /*) ;; *) continue ;; esac
-    base="$codex_home/plugins/cache/pipeline-lite/pipeline-lite"
-    [ -d "$base" ] || continue
-    for root in "$base"/*; do
-      [ -d "$root/skills" ] || continue
-      version="${root##*/}"
-      case "$version" in ''|*[!A-Za-z0-9._-]*) continue ;; esac
-      case ":$seen:" in *":$root:"*) continue ;; esac
-      seen="${seen}:$root"
-      printf '%s\n' "$root"
-    done
-  done
-}
-
 pipeline_plugin_roots() {
   local root fallback
   # First choice is the host cache captured by the bootstrap. The remaining roots are the
@@ -42,8 +22,6 @@ pipeline_plugin_roots() {
   for root in "${PIPELINE_HOST_PLUGIN_ROOT:-}" "${PIPELINE_CODEX_PLUGIN_ROOT:-}" "${PLUGIN_ROOT:-}" "${CLAUDE_PLUGIN_ROOT:-}"; do
     [ -n "$root" ] && [ -d "$root/skills" ] && printf '%s\n' "$root"
   done
-
-  pipeline_codex_host_cache_roots
 
   fallback="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." 2>/dev/null && pwd -P)" || return 0
   [ -d "$fallback/skills" ] && printf '%s\n' "$fallback"

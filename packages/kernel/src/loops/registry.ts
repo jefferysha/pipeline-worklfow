@@ -20,6 +20,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { TRACK_ID_RE } from '../tracks/types.js'
 import type { LoopEntry, LoopRegistry } from './types.js'
+import { required } from '../required.js'
 
 // ── 窄 YAML 解析器（块式，缩进决定层级；零第三方）─────────────────────────────
 
@@ -54,7 +55,7 @@ function tokenize(text: string): Token[] {
       tokens.push({ indent, kind: 'dash' })
       if (after !== '') {
         const km = after.match(KEY_RE)
-        if (km) tokens.push({ indent: itemCol, kind: 'kv', key: km[1]!, rest: km[2] ?? '' })
+        if (km) tokens.push({ indent: itemCol, kind: 'kv', key: required(km[1]), rest: km[2] ?? '' })
         else tokens.push({ indent: itemCol, kind: 'scalar', raw: after })
       }
       continue
@@ -62,7 +63,7 @@ function tokenize(text: string): Token[] {
 
     const km = content.match(KEY_RE)
     if (km) {
-      tokens.push({ indent, kind: 'kv', key: km[1]!, rest: km[2] ?? '' })
+      tokens.push({ indent, kind: 'kv', key: required(km[1]), rest: km[2] ?? '' })
     } else {
       tokens.push({ indent, kind: 'scalar', raw: content })
     }
@@ -77,7 +78,7 @@ function parseScalar(raw: string): YamlValue {
   // 引号/内联列表内部不裁注释；裸标量裁行尾 ` #...`
   if (!(s.startsWith('"') || s.startsWith("'") || s.startsWith('['))) {
     const cm = s.match(/^(.*?)\s+#.*$/)
-    if (cm) s = cm[1]!.trimEnd()
+    if (cm) s = required(cm[1]).trimEnd()
   }
   if (s === '') return null
   if (s.startsWith('[') && s.endsWith(']')) {
@@ -97,19 +98,19 @@ function parseScalar(raw: string): YamlValue {
 function parseMapping(tokens: Token[], start: number, indent: number): { value: YamlValue; next: number } {
   const map: { [k: string]: YamlValue } = {}
   let i = start
-  while (i < tokens.length && tokens[i]!.indent === indent && tokens[i]!.kind === 'kv') {
-    const t = tokens[i]!
+  while (i < tokens.length && required(tokens[i]).indent === indent && required(tokens[i]).kind === 'kv') {
+    const t = required(tokens[i])
     i++
     if ((t.rest ?? '') === '') {
-      if (i < tokens.length && tokens[i]!.indent > indent) {
-        const r = parseValue(tokens, i, tokens[i]!.indent)
-        map[t.key!] = r.value
+      if (i < tokens.length && required(tokens[i]).indent > indent) {
+        const r = parseValue(tokens, i, required(tokens[i]).indent)
+        map[required(t.key)] = r.value
         i = r.next
       } else {
-        map[t.key!] = null
+        map[required(t.key)] = null
       }
     } else {
-      map[t.key!] = parseScalar(t.rest!)
+      map[required(t.key)] = parseScalar(required(t.rest))
     }
   }
   return { value: map, next: i }
@@ -118,10 +119,10 @@ function parseMapping(tokens: Token[], start: number, indent: number): { value: 
 function parseSequence(tokens: Token[], start: number, indent: number): { value: YamlValue; next: number } {
   const arr: YamlValue[] = []
   let i = start
-  while (i < tokens.length && tokens[i]!.indent === indent && tokens[i]!.kind === 'dash') {
+  while (i < tokens.length && required(tokens[i]).indent === indent && required(tokens[i]).kind === 'dash') {
     i++ // 吃掉 dash
-    if (i < tokens.length && tokens[i]!.indent > indent) {
-      const r = parseValue(tokens, i, tokens[i]!.indent)
+    if (i < tokens.length && required(tokens[i]).indent > indent) {
+      const r = parseValue(tokens, i, required(tokens[i]).indent)
       arr.push(r.value)
       i = r.next
     } else {
@@ -132,10 +133,10 @@ function parseSequence(tokens: Token[], start: number, indent: number): { value:
 }
 
 function parseValue(tokens: Token[], i: number, indent: number): { value: YamlValue; next: number } {
-  const t = tokens[i]!
+  const t = required(tokens[i])
   if (t.kind === 'dash') return parseSequence(tokens, i, indent)
   if (t.kind === 'kv') return parseMapping(tokens, i, indent)
-  return { value: parseScalar(t.raw!), next: i + 1 }
+  return { value: parseScalar(required(t.raw)), next: i + 1 }
 }
 
 /**
@@ -146,7 +147,7 @@ export function parseLoopsYaml(text: string): { data: YamlValue | null; error: s
   try {
     const tokens = tokenize(text)
     if (tokens.length === 0) return { data: null, error: '空文档（无内容）' }
-    const first = tokens[0]!
+    const first = required(tokens[0])
     if (first.indent !== 0) throw new YamlParseError(`顶层意外缩进（第一个 token indent=${first.indent}）`)
     let result: { value: YamlValue; next: number }
     if (first.kind === 'kv') result = parseMapping(tokens, 0, 0)
@@ -405,14 +406,25 @@ const LOOPS_REL_PATH = ['.pipeline', 'loops.yaml']
  * allowlist/denylist 缺省填 []，决议 #12 存储侧；H10 §1：skill_bundle_id 缺省/null 归一化填 null，
  * 语义是 unwired，不是空 bundle）。 */
 function deriveRegistry(data: Record<string, unknown>): LoopRegistry {
-  const loops = (data.loops as Record<string, unknown>[]).map((l) => ({
-    ...l,
-    autonomy_level: (l.autonomy_level as string | undefined) ?? 'L1',
-    allowlist: (l.allowlist as string[] | undefined) ?? [],
-    denylist: (l.denylist as string[] | undefined) ?? [],
-    skill_bundle_id: (l.skill_bundle_id as string | null | undefined) ?? null,
-  })) as unknown as LoopEntry[]
+  const errors = validateSchema(data, LOOPS_SCHEMA)
+  if (!isValidatedLoopRegistry(data, errors)) {
+    throw new Error(`validated loop registry expected: ${errors.join('; ')}`)
+  }
+  const loops = data.loops.map((loop) => ({
+    ...loop,
+    autonomy_level: loop.autonomy_level ?? 'L1',
+    allowlist: loop.allowlist ?? [],
+    denylist: loop.denylist ?? [],
+    skill_bundle_id: loop.skill_bundle_id ?? null,
+  }))
   return { version: 1, loops }
+}
+
+function isValidatedLoopRegistry(
+  value: unknown,
+  errors: readonly string[],
+): value is { readonly version: 1; readonly loops: readonly LoopEntry[] } {
+  return errors.length === 0
 }
 
 /**

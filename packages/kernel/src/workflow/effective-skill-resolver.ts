@@ -23,6 +23,7 @@
 import { skillsFor, skillTokenAlternatives, type SkillTable } from '../flow/manifest.js'
 import type { TrackRegistry } from '../tracks/types.js'
 import type { Phase } from '../types.js'
+import type { EffectiveWorkflowPlan } from './effective-plan.js'
 import type { StepIR } from './ir.js'
 
 /** 一个「有效 skill 槽」：token 是原始 manifest/step 记法，alternatives 是其具体可选 skill id
@@ -33,6 +34,22 @@ export interface EffectiveSkillSlot {
 }
 
 export interface EffectiveSkillResolver {
+  /**
+   * Resolve the mandatory exit requirements declared by an EffectiveWorkflowPlan.  Runtime
+   * consumers use this one entrypoint for every execution model; source dispatch is contained
+   * inside the resolver and is driven exclusively by the frozen capability.
+   */
+  resolveRequired?(
+    capability: EffectiveWorkflowPlan['capabilities']['skills'],
+    stepId: string,
+  ): readonly EffectiveSkillSlot[]
+  /** Resolve every declared producer/orchestration slot (mandatory plus recommended overlays). */
+  resolveAvailable?(
+    capability: EffectiveWorkflowPlan['capabilities']['skills'],
+    stepId: string,
+  ): readonly EffectiveSkillSlot[]
+  /** default 轨当前 step 的硬阻断 skill 槽；不含 recommended。 */
+  resolveDefaultMandatory(stepId: string, track: string): readonly EffectiveSkillSlot[]
   /** default 轨 step/track 的有效 skill 槽（manifest mandatory＋recommended，稳定去重＋a|b 拆分）。 */
   resolveDefault(stepId: string, track: string): readonly EffectiveSkillSlot[]
   /** 已解析 profile 的入口（H10 skill bundle）；缺省仅供兼容手写 resolver，由适配层回退 resolveDefault。 */
@@ -52,6 +69,39 @@ export interface EffectiveSkillResolverOptions {
   /** CLI 传 fresh loader；短生命周期/不可变上下文也可传快照。 */
   readonly registry: TrackRegistry | (() => TrackRegistry)
   readonly manifest: EffectiveSkillResolverManifest
+}
+
+/**
+ * Compatibility bridge for injected resolvers created before EffectiveWorkflowPlan existed.
+ * Capability dispatch remains centralized here; transition/check adapters never reconstruct it.
+ */
+export function resolveRequiredSkillSlots(
+  resolver: EffectiveSkillResolver | undefined,
+  capability: EffectiveWorkflowPlan['capabilities']['skills'],
+  stepId: string,
+): readonly EffectiveSkillSlot[] {
+  if (resolver?.resolveRequired !== undefined) return resolver.resolveRequired(capability, stepId)
+  if (capability.source === 'manifest-overlay') {
+    if (!capability.trackOverlay.matrix || resolver === undefined) return []
+    return resolver.resolveDefaultMandatory(stepId, capability.trackOverlay.profile)
+  }
+  const step = capability.steps.find((candidate) => candidate.stepId === stepId)
+  return (step?.requiredSkillIds ?? []).map((id) => ({ token: id, alternatives: [id] }))
+}
+
+export function resolveAvailableSkillSlots(
+  resolver: EffectiveSkillResolver,
+  capability: EffectiveWorkflowPlan['capabilities']['skills'],
+  stepId: string,
+): readonly EffectiveSkillSlot[] {
+  if (resolver.resolveAvailable !== undefined) return resolver.resolveAvailable(capability, stepId)
+  if (capability.source === 'manifest-overlay') {
+    if (!capability.trackOverlay.matrix) return []
+    return resolver.resolveDefaultProfile?.(stepId, capability.trackOverlay.profile)
+      ?? resolver.resolveDefault(stepId, capability.trackOverlay.profile)
+  }
+  const step = capability.steps.find((candidate) => candidate.stepId === stepId)
+  return (step?.requiredSkillIds ?? []).map((id) => ({ token: id, alternatives: [id] }))
 }
 
 /** 稳定去重（保留首次出现顺序）。 */
@@ -83,6 +133,35 @@ export function createEffectiveSkillResolver(
     }))
   }
   return {
+    resolveRequired(capability, stepId) {
+      if (capability.source === 'manifest-overlay') {
+        if (!capability.trackOverlay.matrix) return []
+        const profile = capability.trackOverlay.profile
+        return dedupeStable(skillsFor(manifest.mandatorySkills, stepId as Phase, profile)).map((token) => ({
+          token,
+          alternatives: skillTokenAlternatives(token),
+        }))
+      }
+      const step = capability.steps.find((candidate) => candidate.stepId === stepId)
+      return dedupeStable(step?.requiredSkillIds ?? []).map((id) => ({ token: id, alternatives: [id] }))
+    },
+    resolveAvailable(capability, stepId) {
+      if (capability.source === 'manifest-overlay') {
+        if (!capability.trackOverlay.matrix) return []
+        return resolveProfile(stepId, capability.trackOverlay.profile)
+      }
+      const step = capability.steps.find((candidate) => candidate.stepId === stepId)
+      return dedupeStable(step?.requiredSkillIds ?? []).map((id) => ({ token: id, alternatives: [id] }))
+    },
+    resolveDefaultMandatory(stepId, track) {
+      const currentRegistry = typeof registry === 'function' ? registry() : registry
+      const profile = currentRegistry === undefined ? track : currentRegistry.byId.get(track)?.policyProfile.skills.profile
+      if (profile === undefined) throw new Error(`unknown track '${track}' in effective skill resolver`)
+      return dedupeStable(skillsFor(manifest.mandatorySkills, stepId as Phase, profile)).map((token) => ({
+        token,
+        alternatives: skillTokenAlternatives(token),
+      }))
+    },
     resolveDefault(stepId, track) {
       const currentRegistry = typeof registry === 'function' ? registry() : registry
       const profile = currentRegistry === undefined ? track : currentRegistry.byId.get(track)?.policyProfile.skills.profile

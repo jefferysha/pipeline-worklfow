@@ -96,7 +96,11 @@ export function validateHookToggleBody(body: unknown): HookToggleValidation {
   if (typeof hook !== 'string' || !HOOK_BY_ID.has(hook)) {
     return { ok: false, error: `未知 hook（可配置项：${CONFIGURABLE_IDS.join(' / ')}）` }
   }
-  if (!HOOK_BY_ID.get(hook)!.configurable) {
+  const hookMeta = HOOK_BY_ID.get(hook)
+  if (hookMeta === undefined) {
+    return { ok: false, error: `未知 hook（可配置项：${CONFIGURABLE_IDS.join(' / ')}）` }
+  }
+  if (!hookMeta.configurable) {
     return { ok: false, error: `hook '${hook}' 强制常开，不可通过配置关闭（决议#2 安全门/交互门纪律）` }
   }
   if (typeof phase !== 'string' || !PHASE_RE.test(phase)) {

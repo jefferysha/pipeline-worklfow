@@ -1,5 +1,5 @@
 /** Versioned automation policy snapshot and its single typed constraint evaluator (GOAL H4-H8). */
-import { createHash } from 'node:crypto'
+import { sha256Hex } from '../sha256.js'
 import type { BudgetExceedAction } from './ledger-types.js'
 import type { LoopEntry } from './types.js'
 
@@ -148,7 +148,7 @@ export function compileAutomationPolicySnapshot(
   options: { readonly capturedAt: string },
 ): AutomationPolicySnapshot {
   const payload = policyPayload(loop)
-  const policy_version = createHash('sha256').update(JSON.stringify(payload)).digest('hex')
+  const policy_version = sha256Hex(JSON.stringify(payload))
   return deepFreeze({ ...payload, policy_version, captured_at: options.capturedAt })
 }
 
@@ -242,7 +242,7 @@ export function validateAutomationPolicySnapshot(input: unknown): AutomationPoli
     verifier_binding: { kind: 'runtime-verifier', verifier: 'pipeline-git-integrity', version: '1' },
     skill_bundle_id: stringAt(input.skill_bundle_id, 'AutomationPolicy.skill_bundle_id'),
   }
-  const expectedVersion = createHash('sha256').update(JSON.stringify(payload)).digest('hex')
+  const expectedVersion = sha256Hex(JSON.stringify(payload))
   if (input.policy_version !== expectedVersion) throw new Error('AutomationPolicy.policy_version: content digest mismatch')
   const capturedAt = stringAt(input.captured_at, 'AutomationPolicy.captured_at')
   if (!Number.isFinite(Date.parse(capturedAt))) throw new Error('AutomationPolicy.captured_at: invalid timestamp')

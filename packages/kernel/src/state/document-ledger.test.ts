@@ -11,6 +11,12 @@ import {
   recordDocumentReads,
 } from './document-ledger.js'
 import { evaluateDocumentEvidence } from './document-evidence.js'
+import { emptyFields } from './parse.js'
+import {
+  publishInitialRunRevision,
+  publishRunRevision,
+  readCurrentRunRevision,
+} from './run-revision-store.js'
 
 const NOW = '2026-07-23T00:00:00Z'
 const dirs: string[] = []
@@ -21,6 +27,18 @@ async function fixture(): Promise<{ root: string; changeDir: string; name: strin
   const name = 'governed-change'
   const changeDir = join(root, 'openspec', 'changes', name)
   await mkdir(changeDir, { recursive: true })
+  const fields = emptyFields()
+  fields.phase = 'open'
+  fields.workflow = 'default'
+  await publishInitialRunRevision(changeDir, {
+    fields,
+    runMetadata: {
+      runId: 'run-governed-change',
+      transitionSequence: 0,
+      transitionHead: undefined,
+    },
+    opaqueTail: '',
+  }, NOW)
   await ensureDocumentLedger(changeDir, NOW)
   return { root, changeDir, name }
 }
@@ -36,11 +54,124 @@ async function appendSkillHistory(changeDir: string, ...skills: string[]): Promi
   await appendFile(join(changeDir, '.pipeline-history.jsonl'), `${jsonl}\n`, 'utf8')
 }
 
+async function enterVisit(changeDir: string, phase: string, transitionSequence: number): Promise<void> {
+  const current = await readCurrentRunRevision(changeDir)
+  if (!current?.state.runMetadata) throw new Error('fixture canonical run identity missing')
+  await publishRunRevision(changeDir, current, {
+    ...current.state,
+    fields: { ...current.state.fields, phase },
+    runMetadata: { ...current.state.runMetadata, transitionSequence },
+  }, {
+    kind: 'set',
+    observedAt: NOW,
+  })
+}
+
 afterEach(async () => {
   await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })))
 })
 
 describe('OpenSpec document ledger', () => {
+  test('read receipt 只满足当前 step visit；verify→build→verify 时旧 digest 回执不可重放', async () => {
+    const { root, changeDir, name } = await fixture()
+    const proposal = `openspec/changes/${name}/proposal.md`
+    await writeDoc(root, proposal, '# stable proposal\n')
+    await appendSkillHistory(changeDir, 'openspec-propose')
+    await recordDocument({
+      repoRoot: root,
+      changeDir,
+      phase: 'open',
+      kind: 'proposal',
+      path: proposal,
+      producer: 'openspec-propose',
+      recordedAt: NOW,
+    })
+
+    await enterVisit(changeDir, 'verify', 1)
+    await recordDocumentReads({
+      repoRoot: root,
+      changeDir,
+      phase: 'verify',
+      kind: 'proposal',
+      readAt: NOW,
+    })
+    expect(await evaluateDocumentEvidence(root, changeDir, 'verify', {
+      recordKinds: [],
+      readKinds: ['proposal'],
+    })).toMatchObject({ pass: true, blockers: [] })
+
+    await enterVisit(changeDir, 'build', 2)
+    await enterVisit(changeDir, 'verify', 3)
+    const replayed = await evaluateDocumentEvidence(root, changeDir, 'verify', {
+      recordKinds: [],
+      readKinds: ['proposal'],
+    })
+    expect(replayed.pass).toBe(false)
+    expect(replayed.items).toContainEqual(expect.objectContaining({
+      kind: 'proposal',
+      status: 'unread',
+    }))
+
+    await recordDocumentReads({
+      repoRoot: root,
+      changeDir,
+      phase: 'verify',
+      kind: 'proposal',
+      readAt: '2026-07-23T00:03:00Z',
+    })
+    expect(await evaluateDocumentEvidence(root, changeDir, 'verify', {
+      recordKinds: [],
+      readKinds: ['proposal'],
+    })).toMatchObject({ pass: true, blockers: [] })
+  })
+
+  test('旧 ledger 中没有 visit identity 的 read receipt 可审计读取但必须 fail-closed', async () => {
+    const { root, changeDir, name } = await fixture()
+    const proposal = `openspec/changes/${name}/proposal.md`
+    await writeDoc(root, proposal, '# legacy receipt\n')
+    await appendSkillHistory(changeDir, 'openspec-propose')
+    const recorded = await recordDocument({
+      repoRoot: root,
+      changeDir,
+      phase: 'open',
+      kind: 'proposal',
+      path: proposal,
+      producer: 'openspec-propose',
+      recordedAt: NOW,
+    })
+    const proposalRecord = recorded.records.find((record) => record.kind === 'proposal')
+    if (!proposalRecord) throw new Error('fixture proposal record missing')
+    await writeFile(join(changeDir, '.pipeline-documents.json'), `${JSON.stringify({
+      ...recorded,
+      records: [{
+        ...proposalRecord,
+        reads: [{ phase: 'verify', sha256: proposalRecord.sha256, readAt: NOW }],
+      }],
+    }, null, 2)}\n`, 'utf8')
+    await enterVisit(changeDir, 'verify', 1)
+
+    const legacy = await evaluateDocumentEvidence(root, changeDir, 'verify', {
+      recordKinds: [],
+      readKinds: ['proposal'],
+    })
+    expect(legacy).toMatchObject({
+      pass: false,
+      items: [expect.objectContaining({ kind: 'proposal', status: 'unread' })],
+    })
+
+    await recordDocumentReads({
+      repoRoot: root,
+      changeDir,
+      phase: 'verify',
+      kind: 'proposal',
+      readAt: '2026-07-23T00:01:00Z',
+    })
+    expect(await evaluateDocumentEvidence(root, changeDir, 'verify', {
+      recordKinds: [],
+      readKinds: ['proposal'],
+    })).toMatchObject({ pass: true, blockers: [] })
+  })
+
   test('真实 producer history + hash-bound read receipt 使 explore 通过；文件变更立即变 stale', async () => {
     const { root, changeDir, name } = await fixture()
     const paths = {
@@ -507,6 +638,8 @@ describe('OpenSpec document ledger', () => {
     expect(afterRead.pass).toBe(false)
     expect(afterRead.items.find((item) => item.kind === 'proposal')?.status).toBe('recorded')
     expect(afterRead.items.find((item) => item.kind === 'openspec-design')?.status).toBe('recorded')
+    expect(afterRead.blockers).not.toContain("document 'proposal' 的 producer 不符合当前 document contract")
+    expect(afterRead.blockers).not.toContain("document 'openspec-design' 的 producer 不符合当前 document contract")
   })
 
   test('normal re-record evidence must come after the latest entry into the phase', async () => {

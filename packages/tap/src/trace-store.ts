@@ -17,6 +17,7 @@ import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { resolveTapDir, type TapDirOptions } from './paths.js'
 import type { TraceRecord } from './record.js'
+import { decodeSessionRow, decodeTraceRecord } from './trace-codecs.js'
 
 export type { TraceRecord }
 
@@ -83,7 +84,7 @@ class FileTraceStore implements TraceStore {
     const f = this.sessionFile(id)
     if (!existsSync(f)) return null
     try {
-      return JSON.parse(readFileSync(f, 'utf8')) as SessionRow
+      return decodeSessionRow(JSON.parse(readFileSync(f, 'utf8')))
     } catch {
       return null
     }
@@ -131,7 +132,8 @@ class FileTraceStore implements TraceStore {
     if (!row) {
       // 防御：记录先于 session 到达（路由场景），补建。
       this.getOrCreateSession(id)
-      row = this.loadSessionRow(id)!
+      row = this.loadSessionRow(id)
+      if (!row) throw new Error(`failed to create trace session '${id}'`)
     }
     appendFileSync(this.recordsFile(id), JSON.stringify(record) + '\n', 'utf8')
     row.record_count += 1
@@ -162,10 +164,17 @@ class FileTraceStore implements TraceStore {
   readRecords(id: string): TraceRecord[] {
     const f = this.recordsFile(id)
     if (!existsSync(f)) return []
-    return readFileSync(f, 'utf8')
-      .split('\n')
-      .filter((line) => line.trim().length > 0)
-      .map((line) => JSON.parse(line) as TraceRecord)
+    const records: TraceRecord[] = []
+    for (const line of readFileSync(f, 'utf8').split('\n')) {
+      if (line.trim().length === 0) continue
+      try {
+        const record = decodeTraceRecord(JSON.parse(line))
+        if (record) records.push(record)
+      } catch {
+        // A malformed append-only line is ignored just like a damaged session sidecar.
+      }
+    }
+    return records
   }
 
   listSessions(): SessionRow[] {
@@ -174,7 +183,8 @@ class FileTraceStore implements TraceStore {
     for (const name of readdirSync(this.sessionsDir)) {
       if (!name.endsWith('.json')) continue
       try {
-        out.push(JSON.parse(readFileSync(join(this.sessionsDir, name), 'utf8')) as SessionRow)
+        const row = decodeSessionRow(JSON.parse(readFileSync(join(this.sessionsDir, name), 'utf8')))
+        if (row) out.push(row)
       } catch {
         /* 跳过损坏文件 */
       }

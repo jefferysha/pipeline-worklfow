@@ -19,7 +19,14 @@
  * CLI/server 的转换编排已统一到 TransitionApplication；`.pipeline.yaml` 已降为兼容 adapter。
  */
 import { randomUUID } from 'node:crypto'
-import type { FieldName, InitOptions, PipelineState, RunMetadata, StateStore } from '../types.js'
+import type {
+  DocumentProfileId,
+  FieldName,
+  InitOptions,
+  PipelineState,
+  RunMetadata,
+  StateStore,
+} from '../types.js'
 import { validateAutomationPolicySnapshot, type AutomationPolicySnapshot } from '../loops/automation-policy.js'
 import { resolveWorkflowName } from '../workflow/engine.js'
 import type {
@@ -29,6 +36,15 @@ import { diffFieldsToEffects } from './run-metadata.js'
 import type { TransitionRecordStore } from './transition-record-store.js'
 import { ensureDefaultOpenSpecScaffold } from './default-openspec-scaffold.js'
 import { ensureDocumentLedger } from './document-ledger.js'
+import { required } from '../required.js'
+import {
+  compileEffectiveWorkflowPlan,
+  effectiveWorkflowPlanBinding,
+  resolveEffectiveWorkflowPlan,
+} from '../workflow/effective-plan.js'
+
+const DEFAULT_PLAN = compileEffectiveWorkflowPlan('default')
+const DEFAULT_PLAN_BINDING = effectiveWorkflowPlanBinding(DEFAULT_PLAN)
 
 export interface WorkflowRunRepositoryDeps {
   store: StateStore
@@ -47,6 +63,9 @@ function deriveRun(fields: Record<FieldName, string | string[]>, metadata: RunMe
     lifecycle: str(fields.archived) === 'true' ? 'archived' : 'active',
     transitionSequence: metadata.transitionSequence,
     transitionHead: metadata.transitionHead,
+    documentProfile: metadata.documentProfile,
+    documentGovernanceFingerprint: metadata.documentGovernanceFingerprint,
+    workflowPlanFingerprint: metadata.workflowPlanFingerprint,
     createdAt: str(fields.created_at),
     updatedAt: str(fields.updated_at),
     automationPolicy: metadata.automationPolicy,
@@ -69,25 +88,97 @@ class FsWorkflowRunRepository implements WorkflowRunRepository {
     // default 的正常入口由 OpenSpec skill 写入真实文档；这里仅补最小、显式标记 open 阶段的 `wx`
     // scaffold，使 state-first/中断恢复的 init 也有可继续的 OpenSpec 与 tasks 真相源。custom
     // workflow 的文档契约由它自己定义，不能擅自注入 default 文件。
-    const defaultWorkflow = (opts.initialWorkflow?.workflow ?? 'default') === 'default'
-    if (defaultWorkflow) {
+    const workflowId = opts.initialWorkflow?.workflow ?? DEFAULT_PLAN.id
+    const packagedPlan = resolveEffectiveWorkflowPlan(workflowId, () => null)
+    const usesPackagedOpenSpec = packagedPlan?.capabilities.documents.profile === 'legacy-full'
+    if (usesPackagedOpenSpec) {
       await ensureDefaultOpenSpecScaffold(changeDir)
     }
-    if (defaultWorkflow || opts.initialWorkflow?.openspecContract === true) {
+    if (
+      usesPackagedOpenSpec
+      || opts.initialWorkflow?.documentProfile !== undefined
+      || opts.initialWorkflow?.openspecContract === true
+      || opts.initialWorkflow?.documentContract === true
+    ) {
       await ensureDocumentLedger(changeDir, this.deps.clock())
     }
     const state = await this.deps.store.read(changeDir)
     // state.runMetadata 在这里必然存在（刚用 runId 创建的），非空断言有 store.init 的实现保证。
-    return { changeDir, run: deriveRun(state.fields, state.runMetadata!) }
+    return { changeDir, run: deriveRun(state.fields, required(state.runMetadata)) }
   }
 
-  async establishRun(changeDir: string): Promise<WorkflowRun> {
+  async establishRun(
+    changeDir: string,
+    governance: {
+      readonly openspecContract?: boolean
+      readonly documentContract?: boolean
+      readonly documentProfile?: DocumentProfileId
+      readonly documentGovernanceFingerprint?: string
+      readonly workflowPlanFingerprint?: string
+    } = {},
+  ): Promise<WorkflowRun> {
     const { store } = this.deps
     const newId = this.deps.newId ?? randomUUID
     return store.withLock(changeDir, async () => {
       const state = await store.read(changeDir)
-      if (state.runMetadata) return deriveRun(state.fields, state.runMetadata) // 幂等：已有身份，原样返回
-      const metadata: RunMetadata = { runId: newId(), transitionSequence: 0, transitionHead: undefined }
+      const workflowId = resolveWorkflowName(state)
+      const documentProfile = governance.documentProfile
+        ?? (governance.openspecContract === true
+          ? 'legacy-full'
+          : governance.documentContract === true
+            ? 'document-v1'
+            : undefined)
+      const documentGovernanceFingerprint = governance.documentGovernanceFingerprint
+        ?? (documentProfile === 'legacy-full'
+          ? DEFAULT_PLAN_BINDING.documentGovernanceFingerprint
+          : undefined)
+      const workflowPlanFingerprint = governance.workflowPlanFingerprint
+        ?? resolveEffectiveWorkflowPlan(workflowId, () => null)?.workflowFingerprint
+      if (state.runMetadata) {
+        const existing = state.runMetadata
+        const asserted = [
+          ['documentProfile', documentProfile],
+          ['documentGovernanceFingerprint', documentGovernanceFingerprint],
+          ['workflowPlanFingerprint', workflowPlanFingerprint],
+        ] as const
+        for (const [field, expected] of asserted) {
+          const observed = existing[field]
+          if (observed !== undefined && expected !== undefined && observed !== expected) {
+            throw new Error(
+              `establishRun 拒绝覆盖已有 ${field}：observed='${observed}' expected='${expected}'`,
+            )
+          }
+        }
+        const metadata: RunMetadata = {
+          ...existing,
+          ...(existing.documentProfile === undefined && documentProfile !== undefined
+            ? { documentProfile }
+            : {}),
+          ...(existing.documentGovernanceFingerprint === undefined
+            && documentGovernanceFingerprint !== undefined
+            ? { documentGovernanceFingerprint }
+            : {}),
+          ...(existing.workflowPlanFingerprint === undefined && workflowPlanFingerprint !== undefined
+            ? { workflowPlanFingerprint }
+            : {}),
+        }
+        if (
+          metadata.documentProfile !== existing.documentProfile
+          || metadata.documentGovernanceFingerprint !== existing.documentGovernanceFingerprint
+          || metadata.workflowPlanFingerprint !== existing.workflowPlanFingerprint
+        ) {
+          await store.writeUnderLock(changeDir, { ...state, runMetadata: metadata })
+        }
+        return deriveRun(state.fields, metadata)
+      }
+      const metadata: RunMetadata = {
+        runId: newId(),
+        transitionSequence: 0,
+        transitionHead: undefined,
+        ...(documentProfile === undefined ? {} : { documentProfile }),
+        ...(documentGovernanceFingerprint === undefined ? {} : { documentGovernanceFingerprint }),
+        ...(workflowPlanFingerprint === undefined ? {} : { workflowPlanFingerprint }),
+      }
       await store.writeUnderLock(changeDir, { ...state, runMetadata: metadata })
       return deriveRun(state.fields, metadata)
     })
@@ -200,6 +291,9 @@ class FsWorkflowRunRepository implements WorkflowRunRepository {
             runId: metadata.runId,
             transitionSequence: sequence,
             transitionHead: recordId,
+            documentProfile: metadata.documentProfile,
+            documentGovernanceFingerprint: metadata.documentGovernanceFingerprint,
+            workflowPlanFingerprint: metadata.workflowPlanFingerprint,
             automationPolicy: metadata.automationPolicy,
             loopId: metadata.loopId,
             iterationId: metadata.iterationId,

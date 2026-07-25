@@ -40,6 +40,7 @@ import {
   loadRegistry as kernelLoadRegistry,
   loopsYamlPath,
   LOOP_RUNNERS,
+  parsePipeline,
   PHASES,
   readCurrentRunRevisionSync,
   readRegistrySnapshot as kernelReadRegistrySnapshot,
@@ -88,30 +89,11 @@ export type LoopsFs = EnforceFs
 
 // ── 真 node fs 实现（默认；integration 走此真路径）─────────────────────────────
 
-/** 读 .pipeline.yaml 顶层标量 `key: value` → Record（缺文件 → null；只取顶层，无缩进）。 */
-function readTopLevelScalars(absPath: string): Record<string, string> | null {
-  let text: string
-  try {
-    text = readFileSync(absPath, 'utf8')
-  } catch {
-    return null
-  }
-  const out: Record<string, string> = {}
-  for (const rawLine of text.split('\n')) {
-    const line = rawLine.replace(/\r$/, '')
-    if (line === '' || /^\s/.test(line) || line.trimStart().startsWith('#')) continue
-    const m = line.match(/^([A-Za-z_][\w.-]*):\s*(.*)$/)
-    if (!m) continue
-    let v = (m[2] ?? '').trim()
-    if (!(v.startsWith('"') || v.startsWith("'"))) {
-      const cm = v.match(/^(.*?)\s+#.*$/)
-      if (cm) v = (cm[1] ?? '').trimEnd()
-    } else if (v.length >= 2 && (v[0] === v[v.length - 1])) {
-      v = v.slice(1, -1)
-    }
-    out[m[1]!] = v
-  }
-  return out
+function scalarStateFields(fields: Readonly<Record<string, string | readonly string[]>>): Record<string, string> {
+  return Object.fromEntries(Object.entries(fields).map(([field, value]) => [
+    field,
+    typeof value === 'string' ? value : value.join(','),
+  ]))
 }
 
 /** canonical-first 状态读取；current 存在但损坏时返回 null，绝不回退 YAML projection。 */
@@ -119,12 +101,10 @@ function readStateFields(changeDir: string): Record<string, string> | null {
   try {
     const current = readCurrentRunRevisionSync(changeDir)
     if (current !== undefined) {
-      const fields = current.state.fields as Record<string, string | string[]>
-      return Object.fromEntries(Object.entries(fields).map(([field, value]) => [
-        field, Array.isArray(value) ? value.join(',') : value,
-      ]))
+      return scalarStateFields(current.state.fields)
     }
-    return readTopLevelScalars(join(changeDir, '.pipeline.yaml'))
+    const legacy = readFileSync(join(changeDir, '.pipeline.yaml'), 'utf8')
+    return scalarStateFields(parsePipeline(legacy).fields)
   } catch {
     return null
   }

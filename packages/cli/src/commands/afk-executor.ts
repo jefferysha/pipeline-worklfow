@@ -5,19 +5,16 @@
  * durable merge journal、host verifier 与 Docker RunChange。函数只返回结构化结果；终端渲染与
  * exit code 仍由命令层负责。
  */
-import { createHash } from 'node:crypto'
 import { constants } from 'node:fs'
-import { access, readFile, realpath } from 'node:fs/promises'
+import { access } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import {
   createAutomation,
   createDockerRunChange,
   createExecutionPreparation,
   createGitRevisionVerifier,
   createLoopAdmission,
-  enforceActiveLoopExecutionWiring,
   pathPolicyForLoop,
   dockerAvailable,
   getAutomation,
@@ -29,7 +26,6 @@ import {
   type Automation,
   type AutomationLevel,
   type DockerRunChangeOptions,
-  type ExecFn,
   type ExecutionLiveness,
   type ExecutionPreparationPort,
   type LoopExecutionGuardResult,
@@ -53,192 +49,32 @@ import type { CliDeps } from '../deps.js'
 import { changeDir } from '../paths.js'
 import { str } from '../render.js'
 import { createExecutionCoordinatePort, createProductionSkillContentLocator } from '../skillBundleAssembly.js'
+import {
+  AfkConfigurationError,
+  assertBundledCliDigest,
+  branchWith,
+  DockerUnavailableError,
+  messageOf,
+  probeGitCommitAncestry,
+  resolveBundledCliDistSha256,
+  selectedReady,
+  type AfkExecutorRuntime,
+  type AfkRoundExecutionResult,
+  type RunAfkRoundOptions,
+} from './afk-executor-contract.js'
+import { enforceProductionLoopWiring } from './afk-loop-wiring.js'
+
+export {
+  BundledCliDigestUnavailableError,
+  probeGitCommitAncestry,
+  resolveBundledCliDistSha256,
+  type AfkExecutorRuntime,
+  type AfkRoundExecutionResult,
+  type RunAfkRoundOptions,
+} from './afk-executor-contract.js'
+export { enforceProductionLoopWiring } from './afk-loop-wiring.js'
 
 const DEFAULT_SANDCASTLE_IMAGE = 'sandcastle:local'
-const SHA256_HEX = /^[0-9a-f]{64}$/
-const BUNDLED_CLI_SUFFIX = '/packages/cli/dist/pipeline.mjs'
-
-export class BundledCliDigestUnavailableError extends Error {
-  override readonly name = 'BundledCliDigestUnavailableError'
-  readonly _tag = 'BundledCliDigestUnavailableError'
-
-  constructor(path: string, detail = '运行文件不是可确认的 packages/cli/dist/pipeline.mjs') {
-    super(`无法取得可信 pipeline CLI bundle digest（${path}）：${detail}`)
-  }
-}
-
-class DockerUnavailableError extends Error {
-  override readonly name = 'DockerUnavailableError'
-  readonly _tag = 'DockerUnavailableError'
-}
-
-class AfkConfigurationError extends Error {
-  override readonly name = 'AfkConfigurationError'
-  readonly _tag = 'AfkConfigurationError'
-}
-
-const messageOf = (error: unknown): string =>
-  error instanceof Error ? error.message : (() => {
-    try { return String(error) } catch { return 'unknown error' }
-  })()
-
-/**
- * 只对当前运行文件确认为 `packages/cli/dist/pipeline.mjs` 的 bundle 取摘要。源码、测试文件、
- * 任意同名字节都不接受，避免把 host 源码 SHA 当成镜像内 CLI 的期望值。
- */
-export async function resolveBundledCliDistSha256(moduleUrl: string = import.meta.url): Promise<string> {
-  let candidate: string
-  try {
-    candidate = fileURLToPath(moduleUrl)
-  } catch (error) {
-    throw new BundledCliDigestUnavailableError(moduleUrl, messageOf(error))
-  }
-
-  let resolved: string
-  try {
-    resolved = await realpath(candidate)
-  } catch (error) {
-    throw new BundledCliDigestUnavailableError(candidate, `realpath/read 失败：${messageOf(error)}`)
-  }
-  const normalized = resolved.replaceAll('\\', '/')
-  if (!normalized.endsWith(BUNDLED_CLI_SUFFIX)) {
-    throw new BundledCliDigestUnavailableError(resolved)
-  }
-  try {
-    return createHash('sha256').update(await readFile(resolved)).digest('hex')
-  } catch (error) {
-    throw new BundledCliDigestUnavailableError(resolved, `读取 bundle 失败：${messageOf(error)}`)
-  }
-}
-
-export interface RunAfkRoundOptions {
-  readonly level: AutomationLevel
-  readonly image?: string
-  readonly targets?: readonly TargetedRunCandidate[]
-}
-
-export type AfkRoundExecutionResult =
-  | {
-      readonly status: 'empty'
-      readonly level: AutomationLevel
-      readonly image: string
-      readonly ready: readonly string[]
-      readonly report?: RoundReport
-    }
-  | {
-      readonly status: 'completed'
-      readonly level: AutomationLevel
-      readonly image: string
-      readonly ready: readonly string[]
-      readonly report: RoundReport
-    }
-  | {
-      readonly status: 'docker-unavailable'
-      readonly level: AutomationLevel
-      readonly image: string
-      readonly ready: readonly string[]
-      readonly report?: RoundReport
-      readonly message: string
-    }
-  | {
-      readonly status: 'configuration-error'
-      readonly level: AutomationLevel
-      readonly image: string
-      readonly ready: readonly string[]
-      readonly report?: RoundReport
-      readonly message: string
-    }
-
-/**
- * 明确的生产依赖面。所有字段都只供 hermetic 测试显式替换；缺省值严格是生产实现。
- * `resolveCliDistSha256` 是测试注入可信 digest 的唯一通道，生产永远走 import.meta.url 自证。
- */
-export interface AfkExecutorRuntime {
-  exec?: ExecFn
-  currentBranch?: (cwd: string) => Promise<string>
-  dockerAvailable?: typeof dockerAvailable
-  resolveCliDistSha256?: () => Promise<string>
-  createAutomation?: typeof createAutomation
-  createDockerRunChange?: typeof createDockerRunChange
-  createGitRevisionVerifier?: typeof createGitRevisionVerifier
-  homeDir?: () => string
-  canReadFile?: (path: string) => Promise<void>
-  /** H11 hermetic seam；缺省走下面的真实 registry/evaluator/governance-CAS guard。 */
-  enforceLoopWiring?: (
-    deps: CliDeps,
-    loopIds: readonly string[] | undefined,
-  ) => Promise<LoopExecutionGuardResult>
-}
-
-const branchWith = async (cwd: string, exec: ExecFn): Promise<string> => {
-  const result = await exec('git', ['branch', '--show-current'], { cwd })
-  return result.exitCode === 0 ? result.stdout.trim() : ''
-}
-
-/** 真 Git ancestry probe；只信 `git merge-base --is-ancestor` 的 exit code。 */
-export async function probeGitCommitAncestry(
-  cwd: string,
-  ancestorCommit: string,
-  descendantCommit: string,
-  exec: ExecFn = nodeExec,
-): Promise<boolean> {
-  const result = await exec('git', ['merge-base', '--is-ancestor', ancestorCommit, descendantCommit], { cwd })
-  if (result.exitCode === 0) return true
-  if (result.exitCode === 1) return false
-  throw new Error(
-    `git merge-base --is-ancestor failed (exit ${result.exitCode}): ${result.stderr.slice(0, 160)}`,
-  )
-}
-
-const selectedReady = (
-  ready: readonly string[],
-  targets: readonly TargetedRunCandidate[] | undefined,
-): readonly string[] => {
-  if (targets === undefined) return ready
-  const selected = new Set(targets.map((target) => target.change))
-  return ready.filter((change) => selected.has(change))
-}
-
-/**
- * 普通 AFK 未指定 loop 时检查当前 registry 的全部 active loops；targeted run 只检查 selector 已冻结的
- * expected loop。缺 registry 代表非 loop AFK，合法放行；坏 registry 则 fail-loud。
- */
-export async function enforceProductionLoopWiring(
-  deps: CliDeps,
-  loopIds: readonly string[] | undefined,
-  home = homedir(),
-): Promise<LoopExecutionGuardResult> {
-  let selected = loopIds
-  if (selected === undefined) {
-    const snapshot = await readRegistrySnapshot(deps.cwd)
-    if (snapshot.registry === null) {
-      if (snapshot.errors.length === 0) return { blocked: [] }
-      throw new Error(`loops registry 无法校验：${snapshot.errors.join('；')}`)
-    }
-    selected = snapshot.registry.loops
-      .filter((loop) => loop.status === 'active')
-      .map((loop) => loop.id)
-  }
-  if (selected.length === 0) return { blocked: [] }
-
-  const wiringForRunner = (runner: string) => ({
-    resolver: deps.resolver,
-    locator: createProductionSkillContentLocator({
-      pluginRoot: deps.doctor?.pluginRoot,
-      home,
-      runner,
-    }),
-    isSkillProfileKnown: deps.isSkillProfileKnown,
-  })
-  return enforceActiveLoopExecutionWiring(selected, {
-    repoRoot: deps.cwd,
-    wiring: {
-      repoRoot: deps.cwd,
-      skillBundleWiring: wiringForRunner('codex'),
-      skillBundleWiringForLoop: (loop) => wiringForRunner(loop.runner),
-    },
-  })
-}
 
 /**
  * 跑一轮 AFK。Docker 探针、base 分支与 bundle digest 都在第一次 `RunChange` 调用时才初始化；
@@ -423,9 +259,7 @@ export async function runAfkRound(
         )
       }
       const cliDistSha256 = await resolveCliDistSha256()
-      if (!SHA256_HEX.test(cliDistSha256)) {
-        throw new BundledCliDigestUnavailableError('injected/runtime digest', '必须是 64 位小写 sha256')
-      }
+      assertBundledCliDigest(cliDistSha256)
 
       const verifier: VerifierPort | undefined = level === 'L3'
         ? createGitRevisionVerifierFn(exec)

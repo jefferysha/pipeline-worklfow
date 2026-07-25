@@ -278,18 +278,23 @@ export const createDockerRunChange = (opts: DockerRunChangeOptions): RunChange =
     const credEnv = runner === 'codex' ? codexCredentialEnv(hostEnv) : claudeCredentialEnv(hostEnv)
     const extraEnv = { ...credEnv, ...filterRunnerEnvironment(runner, opts.extraEnv) }
     // kill-switch 接缝③：把 admission.isActive 绑定到本 run 的 loop_id 传给 lifecycle（L3 merge 前重查）。
-    const checkActive = opts.checkActive ? (): Promise<boolean> => opts.checkActive!(loopId) : undefined
+    const checkActivePort = opts.checkActive
+    const checkActive = checkActivePort
+      ? (): Promise<boolean> => checkActivePort(loopId)
+      : undefined
     // Stage B 返工 #3：start/merge permit 绑定本 run 的 loop_id（governance 锁 kill-switch 原子性）。
     // H10 §1（复审阻断1修复）：真传 context 里 admission/prepare 阶段冻结的 policy_epoch/
     // skill_bundle_id——本闭包持有的 context 就是那份真实 PreparedExecutionContext（非手写伪造），
     // withLoopStartPermit 据此在 governance 锁内复核这两值此刻是否仍与 registry 一致。
-    const withStartPermit = opts.startPermit
+    const startPermit = opts.startPermit
+    const withStartPermit = startPermit
       ? <T>(fn: () => Promise<T>): Promise<T> =>
-          opts.startPermit!(loopId, { policy_epoch: context.policy_epoch, skill_bundle_id: context.skill_bundle_id }, fn)
+          startPermit(loopId, { policy_epoch: context.policy_epoch, skill_bundle_id: context.skill_bundle_id }, fn)
       : undefined
-    const withMergePermit = opts.mergePermit
+    const mergePermit = opts.mergePermit
+    const withMergePermit = mergePermit
       ? <T>(fn: () => Promise<T>, verifyBase: () => Promise<boolean>): Promise<T> =>
-          opts.mergePermit!(
+          mergePermit(
             loopId,
             { policy_epoch: context.policy_epoch, skill_bundle_id: context.skill_bundle_id },
             fn,

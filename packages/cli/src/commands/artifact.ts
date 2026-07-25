@@ -20,18 +20,15 @@
  * Registry；T-R6 已在生产装配把 default resolver 接到 effective track profile，本命令保持只依赖接口。
  */
 import {
-  compileWorkflow,
-  defaultArtifactDeclaredForField,
-  defaultArtifactForField,
-  loadWorkflow,
   matchesTrackPredicate,
+  resolveAvailableSkillSlots,
   resolveStep,
-  resolveWorkflowName,
 } from '@pipeline-lite/kernel'
-import type { EffectiveSkillSlot, FieldName, PipelineState, StepIR } from '@pipeline-lite/kernel'
+import type { EffectiveSkillSlot, FieldName, PipelineState } from '@pipeline-lite/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
 import { recordHistory } from './fields.js'
 import { changeDir, isValidChangeName } from '../paths.js'
+import { effectiveWorkflowForState } from './effective-workflow.js'
 
 /** 拒绝：stderr 记 ERROR + 返回 exit 1（统一口径，state 一律不写）。 */
 function reject(deps: CliDeps, msg: string): number {
@@ -63,54 +60,38 @@ async function runRegister(
   producer: string,
 ): Promise<number> {
   const cur = await deps.store.read(dir)
-  const workflow = resolveWorkflowName(cur)
+  const plan = effectiveWorkflowForState(deps, cur)
   const stepId = scalar(cur, 'phase')
   const track = scalar(cur, 'track')
   const f = field as FieldName // 仅当某 declaration 命中该 field 才写；declaration 恒用 FieldName，未命中即拒。
 
-  let slots: readonly EffectiveSkillSlot[]
-  if (workflow === 'default') {
-    // default 轨：P4 codegen 查询层（不读 YAML/不复制字段表）。
-    const decl = defaultArtifactForField(stepId, f, track)
-    if (!decl) {
-      return defaultArtifactDeclaredForField(stepId, f)
-        ? reject(deps, `artifact '${field}' 对 track '${track}' 不适用（required_when 排除；step '${stepId}'）`)
-        : reject(deps, `step '${stepId}' 未声明 artifact '${field}'（default 轨）`)
-    }
-    // producerPolicy ⟷ origin 相容（D5）：default 只允 effective-phase-skills。
-    if (decl.producerPolicy !== 'effective-phase-skills') {
-      return reject(deps, `default artifact '${field}' 的 producerPolicy '${decl.producerPolicy}' 与 default 轨不相容（应 effective-phase-skills）`)
-    }
-    slots = deps.resolver.resolveDefault(stepId, track)
-  } else {
-    // custom 轨：loadWorkflow + compileWorkflow（custom 契约，A 契约已拒 effective-phase-skills）→ 找当前 step。
-    let step: StepIR | null
-    try {
-      const def = loadWorkflow(deps.cwd, workflow)
-      if (!def) {
-        return reject(deps, `workflow '${workflow}' 不存在（.pipeline/workflows/${workflow}.yaml 缺失）`)
-      }
-      step = resolveStep(compileWorkflow(def), stepId)
-    } catch (e) {
-      // 损坏/非法 workflow（parse/validate/compile fail-loud）→ 拒。
-      return reject(deps, `workflow '${workflow}' 加载/编译失败: ${errMsg(e)}`)
-    }
-    if (!step) {
-      return reject(deps, `step '${stepId}' 不在 workflow '${workflow}' 里`)
-    }
-    const decl = step.artifacts.find((a) => a.field === field)
-    if (!decl) {
-      return reject(deps, `step '${stepId}' 未声明 artifact '${field}'（custom workflow '${workflow}'）`)
-    }
-    if (decl.requiredWhen && !matchesTrackPredicate(decl.requiredWhen, track)) {
-      return reject(deps, `artifact '${field}' 对 track '${track}' 不适用（required_when 排除；step '${stepId}'）`)
-    }
-    // producerPolicy ⟷ origin 相容（D5）：custom 只允 effective-step-skills（A 契约防线，compile 已保证）。
-    if (decl.producerPolicy !== 'effective-step-skills') {
-      return reject(deps, `custom artifact '${field}' 的 producerPolicy '${decl.producerPolicy}' 与 custom 轨不相容（应 effective-step-skills；A 契约禁 effective-phase-skills）`)
-    }
-    slots = deps.resolver.resolveCustom(step, track)
+  if (!plan) {
+    return reject(deps, `workflow '${String(cur.fields.workflow ?? '')}' 不存在或不可编译`)
   }
+  const step = resolveStep(plan.workflow, stepId)
+  if (!step) {
+    return reject(deps, `step '${stepId}' 不在 workflow '${plan.id}' 里`)
+  }
+  const decl = step.artifacts.find((artifact) => artifact.field === field)
+  if (!decl) return reject(deps, `step '${stepId}' 未声明 artifact '${field}'（workflow '${plan.id}'）`)
+  if (decl.requiredWhen && !matchesTrackPredicate(decl.requiredWhen, track)) {
+    return reject(deps, `artifact '${field}' 对 track '${track}' 不适用（required_when 排除；step '${stepId}'）`)
+  }
+  const skillCapability = plan.capabilities.skills
+  const expectedPolicy = skillCapability.source === 'manifest-overlay'
+    ? 'effective-phase-skills'
+    : 'effective-step-skills'
+  if (decl.producerPolicy !== expectedPolicy) {
+    return reject(
+      deps,
+      `artifact '${field}' 的 producerPolicy '${decl.producerPolicy}' 与 workflow skill policy '${skillCapability.source}' 不相容（应 ${expectedPolicy}）`,
+    )
+  }
+  const slots: readonly EffectiveSkillSlot[] = resolveAvailableSkillSlots(
+    deps.resolver,
+    skillCapability,
+    stepId,
+  )
 
   // 空 effective skill 集必须拒绝（不退化成任意 producer 入口，D5）。
   if (slots.length === 0) {

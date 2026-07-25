@@ -205,20 +205,41 @@ step/guard 定义动态解锁 skill，不再是硬编码的 7 相位判断）。
 编辑第一个已注册项目、guard 只支持移除不支持新增、无撤销重做/多选/minimap 等）见
 [GOAL.md](GOAL.md) 清单 E8 脚注。
 
-dashboard 新建的 governed workflow 默认带 `openspec_contract: required`，并写入本插件内置的 bare skill
-ID。它必须保持 seven-phase 结构、review gate 和 OpenSpec skill 组；否则保存时会被校验拒绝。
-插件只读内建的 `simple` workflow 是明确的轻量例外，项目同名文件不能覆盖它。
-默认流程与这类 governed workflow 都会登记 proposal / OpenSpec design / tasks、Superpower design /
-ADR、delta spec / Superpower plan、verification report 与 applied spec。`.pipeline-documents.json`
-记录每份文件的内容 hash、真实 skill 调用证据及后续 phase 的读取收据；缺失、未读取或后来被修改时，
-`pipeline check` / `pipeline transition` 会拒绝推进。
+Workflow 的图与文档治理现在独立组合：
+
+- `openspec_contract: required` 是旧兼容别名，只用于完整 seven-phase OpenSpec 图；它会登记
+  proposal / design / tasks、Superpower design / ADR、delta spec / plan、verification report
+  与 applied spec。
+- 任意短图可声明 `document_contract.version: v1`，只列出这张图真正产出的文档、owner step、
+  producer Skill，以及后续哪些 step 必须先读它。例如三步流程可以只治理 proposal：
+
+  ```yaml
+  document_contract:
+    version: v1
+    slots:
+      - kind: proposal
+        owner_step: shape
+        producers: [writer]
+    reads:
+      - step: implement
+        kinds: [proposal]
+      - step: prove
+        kinds: [proposal]
+  ```
+
+- 两者都不声明就是自由模式，不生成或强迫读取 OpenSpec 文档。内建 `simple` workflow 使用该模式，
+  且项目同名文件不能覆盖它。
+
+两种文档契约互斥。受治理文档统一由 `.pipeline-documents.json` 记录内容 hash、真实 Skill 证据和
+读取收据；缺失、未读取或后来被修改时，`pipeline check` / `pipeline transition` 会拒绝推进。
 
 ## 开发
 
 ```bash
 npm test                        # vitest 全量（kernel/cli/server/automation/tap）
 npm run test:web                # dashboard-app 前端测试（vitest + jsdom + testing-library）
-bash tools/test-hooks.sh        # hook shim 断言
+npm run test:hooks              # hook shim 断言
+npm run check:architecture      # 包边界、codec、跨域协议单源门禁
 bash tools/verify-skills.sh     # 插件资产零悬空引用（CONTRACT §5.7）
 bash tools/test-bundle.sh       # 单文件分发冒烟
 npm run oracle                  # golden-oracle 双跑（vs 老内核）
