@@ -1,7 +1,7 @@
 # Workflow Governance Architecture Audit
 
-Status: Explore decision record
-Change: `workflow-governance-architecture-audit`
+Status: Explore decision record  
+Change: `workflow-governance-architecture-audit`  
 Scope: kernel, automation, CLI, server, dashboard, hooks, packaged Skills,
 schemas, generated assets, tests, documentation, and repository Agent Rules.
 

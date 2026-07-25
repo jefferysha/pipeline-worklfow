@@ -107,5 +107,5 @@
 
 ## Archive
 
-- [ ] Re-read all registered evidence, archive the completed Change, and verify
+- [x] Re-read all registered evidence, archive the completed Change, and verify
   it no longer appears as active.

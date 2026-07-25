@@ -1,7 +1,7 @@
 # ADR: Compile composable workflow governance into one effective plan
 
-Status: Accepted for specification
-Date: 2026-07-25
+Status: Accepted for specification  
+Date: 2026-07-25  
 Change: `workflow-governance-architecture-audit`
 
 ## Context

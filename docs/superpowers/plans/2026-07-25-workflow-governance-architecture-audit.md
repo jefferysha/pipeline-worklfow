@@ -1,7 +1,7 @@
 # Workflow Governance Architecture Audit Implementation Plan
 
-change: workflow-governance-architecture-audit
-design-doc: docs/superpowers/specs/2026-07-25-workflow-governance-architecture-audit-design.md
+change: workflow-governance-architecture-audit  
+design-doc: docs/superpowers/specs/2026-07-25-workflow-governance-architecture-audit-design.md  
 adr: docs/adr/2026-07-25-workflow-governance-architecture-audit-explore.md
 
 ## Constraints

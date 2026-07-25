@@ -81,8 +81,14 @@
         {
           "phase": "ship",
           "sha256": "25eadc3c016316ea4e192767197c392f28bd3b662d76d6cdc7af3d2677aafb47",
-          "readAt": "2026-07-25T04:10:58Z",
+          "readAt": "2026-07-25T04:13:04Z",
           "visitId": "[\"9d65d6ca-f430-4ff6-af12-298073cc53e4\",17]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "25eadc3c016316ea4e192767197c392f28bd3b662d76d6cdc7af3d2677aafb47",
+          "readAt": "2026-07-25T04:14:14Z",
+          "visitId": "[\"9d65d6ca-f430-4ff6-af12-298073cc53e4\",18]"
         }
       ]
     },
@@ -164,8 +170,14 @@
         {
           "phase": "ship",
           "sha256": "9a88c0489b5d933f44e3ba757d38b28102a6abd91d107e8d93e53f26edeb4594",
-          "readAt": "2026-07-25T04:10:58Z",
+          "readAt": "2026-07-25T04:13:04Z",
           "visitId": "[\"9d65d6ca-f430-4ff6-af12-298073cc53e4\",17]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "9a88c0489b5d933f44e3ba757d38b28102a6abd91d107e8d93e53f26edeb4594",
+          "readAt": "2026-07-25T04:14:14Z",
+          "visitId": "[\"9d65d6ca-f430-4ff6-af12-298073cc53e4\",18]"
         }
       ]
     },
@@ -242,8 +254,14 @@
         {
           "phase": "ship",
           "sha256": "126d1c92828b78835c8b890601813ef8a2a68e9f10743c3e155fdc75acbb4c64",
-          "readAt": "2026-07-25T04:10:58Z",
+          "readAt": "2026-07-25T04:13:04Z",
           "visitId": "[\"9d65d6ca-f430-4ff6-af12-298073cc53e4\",17]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "126d1c92828b78835c8b890601813ef8a2a68e9f10743c3e155fdc75acbb4c64",
+          "readAt": "2026-07-25T04:14:14Z",
+          "visitId": "[\"9d65d6ca-f430-4ff6-af12-298073cc53e4\",18]"
         }
       ]
     },
@@ -315,8 +333,14 @@
         {
           "phase": "ship",
           "sha256": "58c1d0f4a5f814c9b7b2c7816773da962fcfa66c33126f7d55ea8af7ea180fd3",
-          "readAt": "2026-07-25T04:10:58Z",
+          "readAt": "2026-07-25T04:13:04Z",
           "visitId": "[\"9d65d6ca-f430-4ff6-af12-298073cc53e4\",17]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "58c1d0f4a5f814c9b7b2c7816773da962fcfa66c33126f7d55ea8af7ea180fd3",
+          "readAt": "2026-07-25T04:14:14Z",
+          "visitId": "[\"9d65d6ca-f430-4ff6-af12-298073cc53e4\",18]"
         }
       ]
     },
@@ -388,8 +412,14 @@
         {
           "phase": "ship",
           "sha256": "84500a9ae5769afc80afdaf6ea9c1fe6c3971a02f768a5108ae8f75f485a59bf",
-          "readAt": "2026-07-25T04:10:58Z",
+          "readAt": "2026-07-25T04:13:04Z",
           "visitId": "[\"9d65d6ca-f430-4ff6-af12-298073cc53e4\",17]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "84500a9ae5769afc80afdaf6ea9c1fe6c3971a02f768a5108ae8f75f485a59bf",
+          "readAt": "2026-07-25T04:14:14Z",
+          "visitId": "[\"9d65d6ca-f430-4ff6-af12-298073cc53e4\",18]"
         }
       ]
     },
@@ -461,8 +491,14 @@
         {
           "phase": "ship",
           "sha256": "5af9a89991378bdda8efbddc6557fc163994ca09c20c30b6cee4a561e7829916",
-          "readAt": "2026-07-25T04:10:58Z",
+          "readAt": "2026-07-25T04:13:04Z",
           "visitId": "[\"9d65d6ca-f430-4ff6-af12-298073cc53e4\",17]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "5af9a89991378bdda8efbddc6557fc163994ca09c20c30b6cee4a561e7829916",
+          "readAt": "2026-07-25T04:14:14Z",
+          "visitId": "[\"9d65d6ca-f430-4ff6-af12-298073cc53e4\",18]"
         }
       ]
     },
@@ -534,8 +570,14 @@
         {
           "phase": "ship",
           "sha256": "5f38686ce63c1e45715721a68f597b89d934e297c5977aa94d7c67e4c6d6bc2e",
-          "readAt": "2026-07-25T04:10:58Z",
+          "readAt": "2026-07-25T04:13:04Z",
           "visitId": "[\"9d65d6ca-f430-4ff6-af12-298073cc53e4\",17]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "5f38686ce63c1e45715721a68f597b89d934e297c5977aa94d7c67e4c6d6bc2e",
+          "readAt": "2026-07-25T04:14:14Z",
+          "visitId": "[\"9d65d6ca-f430-4ff6-af12-298073cc53e4\",18]"
         }
       ]
     },
@@ -607,8 +649,14 @@
         {
           "phase": "ship",
           "sha256": "0373c4956410f7de2c1392995a78beba63b3d9d9f4b6d7012dd98c618d7c5ae0",
-          "readAt": "2026-07-25T04:10:58Z",
+          "readAt": "2026-07-25T04:13:04Z",
           "visitId": "[\"9d65d6ca-f430-4ff6-af12-298073cc53e4\",17]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "0373c4956410f7de2c1392995a78beba63b3d9d9f4b6d7012dd98c618d7c5ae0",
+          "readAt": "2026-07-25T04:14:14Z",
+          "visitId": "[\"9d65d6ca-f430-4ff6-af12-298073cc53e4\",18]"
         }
       ]
     },
@@ -680,8 +728,14 @@
         {
           "phase": "ship",
           "sha256": "0373c4956410f7de2c1392995a78beba63b3d9d9f4b6d7012dd98c618d7c5ae0",
-          "readAt": "2026-07-25T04:10:58Z",
+          "readAt": "2026-07-25T04:13:04Z",
           "visitId": "[\"9d65d6ca-f430-4ff6-af12-298073cc53e4\",17]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "0373c4956410f7de2c1392995a78beba63b3d9d9f4b6d7012dd98c618d7c5ae0",
+          "readAt": "2026-07-25T04:14:14Z",
+          "visitId": "[\"9d65d6ca-f430-4ff6-af12-298073cc53e4\",18]"
         }
       ]
     },
@@ -758,8 +812,14 @@
         {
           "phase": "ship",
           "sha256": "7b370cf3c48652eeb0fdb3b7bcd4939e353af33991df56ebcd724a04dc412074",
-          "readAt": "2026-07-25T04:10:58Z",
+          "readAt": "2026-07-25T04:13:04Z",
           "visitId": "[\"9d65d6ca-f430-4ff6-af12-298073cc53e4\",17]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "7b370cf3c48652eeb0fdb3b7bcd4939e353af33991df56ebcd724a04dc412074",
+          "readAt": "2026-07-25T04:14:14Z",
+          "visitId": "[\"9d65d6ca-f430-4ff6-af12-298073cc53e4\",18]"
         }
       ]
     },
@@ -773,8 +833,14 @@
         {
           "phase": "ship",
           "sha256": "d58f6221f09c3a62aa4be8764867caca9dbdd6530d484bdb5d3052943b8c56ee",
-          "readAt": "2026-07-25T04:10:58Z",
+          "readAt": "2026-07-25T04:13:04Z",
           "visitId": "[\"9d65d6ca-f430-4ff6-af12-298073cc53e4\",17]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "d58f6221f09c3a62aa4be8764867caca9dbdd6530d484bdb5d3052943b8c56ee",
+          "readAt": "2026-07-25T04:14:14Z",
+          "visitId": "[\"9d65d6ca-f430-4ff6-af12-298073cc53e4\",18]"
         }
       ]
     },
@@ -784,20 +850,27 @@
       "sha256": "44deffab334c42705aade7d65be06753379035c6367d13b09189ef58c04e350b",
       "producer": "openspec-apply-change",
       "recordedAt": "2026-07-25T04:10:57Z",
-      "reads": []
+      "reads": [
+        {
+          "phase": "archive",
+          "sha256": "44deffab334c42705aade7d65be06753379035c6367d13b09189ef58c04e350b",
+          "readAt": "2026-07-25T04:14:14Z",
+          "visitId": "[\"9d65d6ca-f430-4ff6-af12-298073cc53e4\",18]"
+        }
+      ]
     },
     {
       "kind": "tasks",
       "path": "openspec/changes/workflow-governance-architecture-audit/tasks.md",
-      "sha256": "9c93f10be151622a1dde83abcd5a0ff32966b890316dbe1f5eff878e43d57ab5",
-      "producer": "pipeline-ship",
-      "recordedAt": "2026-07-25T04:10:58Z",
+      "sha256": "80eca367065b63458a8eb235c9eef13efce1d308b532035afe8c3dbfaf8b13ee",
+      "producer": "pipeline-archive",
+      "recordedAt": "2026-07-25T04:14:14Z",
       "reads": [
         {
-          "phase": "ship",
-          "sha256": "9c93f10be151622a1dde83abcd5a0ff32966b890316dbe1f5eff878e43d57ab5",
-          "readAt": "2026-07-25T04:10:58Z",
-          "visitId": "[\"9d65d6ca-f430-4ff6-af12-298073cc53e4\",17]"
+          "phase": "archive",
+          "sha256": "80eca367065b63458a8eb235c9eef13efce1d308b532035afe8c3dbfaf8b13ee",
+          "readAt": "2026-07-25T04:14:14Z",
+          "visitId": "[\"9d65d6ca-f430-4ff6-af12-298073cc53e4\",18]"
         }
       ]
     }
