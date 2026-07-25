@@ -48,4 +48,4 @@
 
 ## Archive
 
-- [ ] Re-read the complete evidence chain and archive the completed Change.
+- [x] Re-read the complete evidence chain and archive the completed Change.

@@ -232,3 +232,4 @@ in public Issues, and avoid an invented response SLA.
   when available
 - **AND** told not to disclose exploit details, credentials, prompts, tokens, or
   local traces in a public Issue.
+

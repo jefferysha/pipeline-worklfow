@@ -120,3 +120,11 @@
 {"ts":"2026-07-25T06:18:41Z","kind":"tool","raw":"CodexSkillRead: openspec-archive-change"}
 {"ts":"2026-07-25T06:18:41Z","kind":"tool","raw":"CodexSkillRead: finishing-a-development-branch"}
 {"ts":"2026-07-25T06:18:42Z","kind":"set","field":"branch_status","to":"handled"}
+{"ts":"2026-07-25T06:19:31Z","kind":"set","field":"pr_url","to":"local-commit:3d062e008e049d0c26988bd47a64661cb81ec927 (verified; push/PR excluded by Change boundary)"}
+{"ts":"2026-07-25T06:19:32Z","kind":"transition","from":"ship","to":"archive","raw":"ship-complete","transitionRecordId":"b4537a85-a24c-43d9-91ac-b661345242d8"}
+{"ts":"2026-07-25T06:19:39Z","kind":"tool","raw":"CodexSkillRead: pipeline-archive"}
+{"ts":"2026-07-25T06:19:39Z","kind":"tool","raw":"CodexSkillRead: openspec-archive-change"}
+{"ts":"2026-07-25T06:19:39Z","kind":"tool","raw":"CodexSkillRead: learn-record"}
+{"ts":"2026-07-25T06:20:25Z","kind":"tool","raw":"CodexSkillRead: pipeline-archive"}
+{"ts":"2026-07-25T06:20:25Z","kind":"tool","raw":"CodexSkillRead: openspec-archive-change"}
+{"ts":"2026-07-25T06:20:34Z","kind":"transition","from":"archive","to":"archive","raw":"archived","transitionRecordId":"006d6c98-0521-4cca-af16-83aee8815d96"}

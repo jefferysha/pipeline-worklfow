@@ -73,8 +73,14 @@
         {
           "phase": "ship",
           "sha256": "ec88b120b196ca1748ff57680ea9185a1bf5cc0a5f766e4969b8665bb460bf83",
-          "readAt": "2026-07-25T06:18:41Z",
+          "readAt": "2026-07-25T06:19:32Z",
           "visitId": "[\"ed2aaba3-5425-4b99-890f-c1a281b5771e\",11]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "ec88b120b196ca1748ff57680ea9185a1bf5cc0a5f766e4969b8665bb460bf83",
+          "readAt": "2026-07-25T06:20:25Z",
+          "visitId": "[\"ed2aaba3-5425-4b99-890f-c1a281b5771e\",12]"
         }
       ]
     },
@@ -148,8 +154,14 @@
         {
           "phase": "ship",
           "sha256": "2c8fa91f09870e5bb6e37f458d509cb86f52de010c807c78fe54ecee9f5f6c2f",
-          "readAt": "2026-07-25T06:18:41Z",
+          "readAt": "2026-07-25T06:19:32Z",
           "visitId": "[\"ed2aaba3-5425-4b99-890f-c1a281b5771e\",11]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "2c8fa91f09870e5bb6e37f458d509cb86f52de010c807c78fe54ecee9f5f6c2f",
+          "readAt": "2026-07-25T06:20:25Z",
+          "visitId": "[\"ed2aaba3-5425-4b99-890f-c1a281b5771e\",12]"
         }
       ]
     },
@@ -217,8 +229,14 @@
         {
           "phase": "ship",
           "sha256": "d9b47c474180fa37a95e6fbf1202f9da6a40998f09be5b81a352ad725af40b15",
-          "readAt": "2026-07-25T06:18:41Z",
+          "readAt": "2026-07-25T06:19:32Z",
           "visitId": "[\"ed2aaba3-5425-4b99-890f-c1a281b5771e\",11]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "d9b47c474180fa37a95e6fbf1202f9da6a40998f09be5b81a352ad725af40b15",
+          "readAt": "2026-07-25T06:20:25Z",
+          "visitId": "[\"ed2aaba3-5425-4b99-890f-c1a281b5771e\",12]"
         }
       ]
     },
@@ -286,8 +304,14 @@
         {
           "phase": "ship",
           "sha256": "52d7ac91d579ad92538f1c974e073b09c2e0bbe399a3791bbb96d3b3510449de",
-          "readAt": "2026-07-25T06:18:41Z",
+          "readAt": "2026-07-25T06:19:32Z",
           "visitId": "[\"ed2aaba3-5425-4b99-890f-c1a281b5771e\",11]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "52d7ac91d579ad92538f1c974e073b09c2e0bbe399a3791bbb96d3b3510449de",
+          "readAt": "2026-07-25T06:20:25Z",
+          "visitId": "[\"ed2aaba3-5425-4b99-890f-c1a281b5771e\",12]"
         }
       ]
     },
@@ -349,8 +373,14 @@
         {
           "phase": "ship",
           "sha256": "7a4e4245f6a4965731061ac35280249a289f9e61c7b1f27f63f9717ca6ac3bfc",
-          "readAt": "2026-07-25T06:18:41Z",
+          "readAt": "2026-07-25T06:19:32Z",
           "visitId": "[\"ed2aaba3-5425-4b99-890f-c1a281b5771e\",11]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "7a4e4245f6a4965731061ac35280249a289f9e61c7b1f27f63f9717ca6ac3bfc",
+          "readAt": "2026-07-25T06:20:25Z",
+          "visitId": "[\"ed2aaba3-5425-4b99-890f-c1a281b5771e\",12]"
         }
       ]
     },
@@ -412,8 +442,14 @@
         {
           "phase": "ship",
           "sha256": "455cecd00e3edd9b51d2f8f909bba0d8929ddb68bb266cf6481cf477388a17c0",
-          "readAt": "2026-07-25T06:18:41Z",
+          "readAt": "2026-07-25T06:19:32Z",
           "visitId": "[\"ed2aaba3-5425-4b99-890f-c1a281b5771e\",11]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "455cecd00e3edd9b51d2f8f909bba0d8929ddb68bb266cf6481cf477388a17c0",
+          "readAt": "2026-07-25T06:20:25Z",
+          "visitId": "[\"ed2aaba3-5425-4b99-890f-c1a281b5771e\",12]"
         }
       ]
     },
@@ -475,8 +511,14 @@
         {
           "phase": "ship",
           "sha256": "455cecd00e3edd9b51d2f8f909bba0d8929ddb68bb266cf6481cf477388a17c0",
-          "readAt": "2026-07-25T06:18:41Z",
+          "readAt": "2026-07-25T06:19:32Z",
           "visitId": "[\"ed2aaba3-5425-4b99-890f-c1a281b5771e\",11]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "455cecd00e3edd9b51d2f8f909bba0d8929ddb68bb266cf6481cf477388a17c0",
+          "readAt": "2026-07-25T06:20:25Z",
+          "visitId": "[\"ed2aaba3-5425-4b99-890f-c1a281b5771e\",12]"
         }
       ]
     },
@@ -490,8 +532,14 @@
         {
           "phase": "ship",
           "sha256": "f98b0b5bc3e1f3002f8ff93f191079303014aa6e47e0bab23c3747bf416e930e",
-          "readAt": "2026-07-25T06:18:41Z",
+          "readAt": "2026-07-25T06:19:32Z",
           "visitId": "[\"ed2aaba3-5425-4b99-890f-c1a281b5771e\",11]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "f98b0b5bc3e1f3002f8ff93f191079303014aa6e47e0bab23c3747bf416e930e",
+          "readAt": "2026-07-25T06:20:25Z",
+          "visitId": "[\"ed2aaba3-5425-4b99-890f-c1a281b5771e\",12]"
         }
       ]
     },
@@ -501,20 +549,27 @@
       "sha256": "0ece0a0dedb1d7bff3ddad32b01393e456e6155ab7f59622671e25da5dee35d1",
       "producer": "openspec-apply-change",
       "recordedAt": "2026-07-25T06:18:41Z",
-      "reads": []
+      "reads": [
+        {
+          "phase": "archive",
+          "sha256": "0ece0a0dedb1d7bff3ddad32b01393e456e6155ab7f59622671e25da5dee35d1",
+          "readAt": "2026-07-25T06:20:25Z",
+          "visitId": "[\"ed2aaba3-5425-4b99-890f-c1a281b5771e\",12]"
+        }
+      ]
     },
     {
       "kind": "tasks",
       "path": "openspec/changes/open-source-docs-solution-site/tasks.md",
-      "sha256": "4e161dbd2bd880af366d5f9ca6d7a096f7b7fc133e835df9f6fdd25ee0befa2b",
-      "producer": "pipeline-ship",
-      "recordedAt": "2026-07-25T06:18:41Z",
+      "sha256": "6965d9b96d4e11d9dcbbbb96abeac175be925d0fd86f5a714ede4b9bf308f255",
+      "producer": "pipeline-archive",
+      "recordedAt": "2026-07-25T06:20:25Z",
       "reads": [
         {
-          "phase": "ship",
-          "sha256": "4e161dbd2bd880af366d5f9ca6d7a096f7b7fc133e835df9f6fdd25ee0befa2b",
-          "readAt": "2026-07-25T06:18:41Z",
-          "visitId": "[\"ed2aaba3-5425-4b99-890f-c1a281b5771e\",11]"
+          "phase": "archive",
+          "sha256": "6965d9b96d4e11d9dcbbbb96abeac175be925d0fd86f5a714ede4b9bf308f255",
+          "readAt": "2026-07-25T06:20:25Z",
+          "visitId": "[\"ed2aaba3-5425-4b99-890f-c1a281b5771e\",12]"
         }
       ]
     }
