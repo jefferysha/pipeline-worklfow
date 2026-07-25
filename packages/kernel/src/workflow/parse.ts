@@ -225,6 +225,8 @@ function buildGuard(type: string, f: GuardFields): WorkflowGuardConfig {
       return { type: 'full-direct-override', ...cond }
     case 'build-head-unchanged':
       return { type: 'build-head-unchanged', field: requireGuardField(f, type) as 'build_sha', ...cond }
+    case 'spec-migration-applied':
+      return { type: 'spec-migration-applied', ...cond }
     default:
       throw new Error(`workflow 解析错误：未知 guard type '${type}'（闭集见 types.ts WorkflowGuardConfig）`)
   }

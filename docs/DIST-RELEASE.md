@@ -12,6 +12,12 @@
 
 其余所有 tsc 中间产物（例如 `packages/cli/dist/` 下的 `main.js`/`commands/`/`*.d.ts`）仍被 `.gitignore` 忽略，不入库。
 
+`tools/reconcile-spec-application.mjs`、`tools/spec-migration-cas.mjs` 与其 POSIX helper 是本仓
+历史规格修复的 release-maintenance 工具，不是插件用户运行时，也不进入 managed release
+`PAYLOAD_ENTRIES`。打包 Skill 和稳定 launcher 不得引用它们；历史迁移必须在发布前由仓库 CI/维护者
+完成并提交 typed result，安装后的 Ship 只用 bundle 内的 `spec-migration-applied` guard 验证证据。
+因此普通 Codex/Claude/Windows 用户无需 C 编译器，也不会在项目目录寻找本仓 `tools/`。
+
 ## 为什么要入库
 
 Codex 与 Claude 的原生插件都通过 marketplace clone 整仓落地，**装完即用、没有 build 步**。新用户
@@ -92,6 +98,12 @@ bash tools/test-hooks.sh
 bash tools/test-adapters.sh
 npm run check:default-workflow-freshness
 ```
+
+`bash tools/test-bundle.sh` 还必须用不依赖本机缓存的冻结 N-1 严格读取器读取当前 bundle 新建的
+canonical Change。CI 另外根据 `tools/fixtures/n-minus-one-release.json` 的固定 commit 和 payload
+闭集，通过 `tools/prepare-n-minus-one-release.sh` 重建完整上一发行版（CLI、templates、skills、
+hooks、adapters、server/SPA 与 bootstrap），校验 CLI digest 后从该真实 payload 路径运行读取。
+开发机存在 managed `previousRelease` 时可再交叉验证，但不能代替 CI 的完整固定 payload。
 
 ## CI 新鲜度门（2026-07-17 补）
 

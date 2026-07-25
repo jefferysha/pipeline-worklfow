@@ -7,6 +7,9 @@ import { describe, expect, test } from 'vitest'
 import { makeDeps, mockState } from '../test-support.js'
 import { cmdHandoff, type HandoffFs } from './handoff.js'
 
+const zhLocale = async () => 'zh-CN' as const
+const enLocale = async () => 'en' as const
+
 function fakeFs(map: Record<string, string>): HandoffFs {
   return {
     exists: (p) => Object.prototype.hasOwnProperty.call(map, p),
@@ -76,10 +79,10 @@ describe('text 输出 —— 压缩摘要 + 压缩率', () => {
 
   test('header + 压缩率行 + 逐文档摘要（决策/约束保留，样板去除）', async () => {
     const d = deps()
-    expect(await cmdHandoff(d, 'chg', {}, fs)).toBe(0)
+    expect(await cmdHandoff(d, 'chg', {}, fs, zhLocale)).toBe(0)
     const out = d.outLines.join('\n')
-    expect(out).toContain('# Handoff: chg (phase build)')
-    expect(out).toMatch(/# Compression: \d+% \(\d+ → \d+ chars, 2 doc\(s\)\)/)
+    expect(out).toContain('# 交接摘要: chg（阶段 build）')
+    expect(out).toMatch(/# 压缩率: \d+%（\d+ → \d+ 字符，2 份文档）/)
     // 关键决策/约束保留
     expect(out).toContain('We decided to compress upstream docs at phase handoff.')
     expect(out).toContain('The kernel MUST stay zero-dependency.')
@@ -92,9 +95,19 @@ describe('text 输出 —— 压缩摘要 + 压缩率', () => {
 
   test('无文档（字段未设）→ 提示行 + exit 0', async () => {
     const d = makeDeps({ state: mockState({ phase: 'build' }) })
-    expect(await cmdHandoff(d, 'chg', {}, fakeFs({}))).toBe(0)
-    expect(d.outLines.join('\n')).toContain('No handoff documents')
+    expect(await cmdHandoff(d, 'chg', {}, fakeFs({}), zhLocale)).toBe(0)
+    expect(d.outLines.join('\n')).toContain('当前阶段没有可交接文档')
     expect(d.errLines.join('\n')).toContain('无可压缩产出文档')
+  })
+
+  test('显式 en Change 保留英文输出', async () => {
+    const state = mockState({ phase: 'build', design_doc: 'docs/design.md' })
+    const d = makeDeps({ state })
+    expect(await cmdHandoff(d, 'chg', {}, fakeFs({ '/repo/docs/design.md': DESIGN }), enLocale)).toBe(0)
+    const out = d.outLines.join('\n')
+    expect(out).toContain('# Handoff: chg (phase build)')
+    expect(out).toContain('# Compression:')
+    expect(out).toContain('## Decisions (2)')
   })
 })
 
@@ -102,7 +115,7 @@ describe('--json 输出 —— 结构化信封', () => {
   test('change/phase/aggregate/docs 结构 + 压缩率数值 + 决策数组', async () => {
     const d = makeDeps({ state: mockState({ phase: 'build', design_doc: 'docs/design.md' }) })
     const fs = fakeFs({ '/repo/docs/design.md': DESIGN })
-    expect(await cmdHandoff(d, 'chg', { json: true }, fs)).toBe(1 - 1) // 0
+    expect(await cmdHandoff(d, 'chg', { json: true }, fs, zhLocale)).toBe(1 - 1) // 0
     expect(d.outLines).toHaveLength(1)
     const env = JSON.parse(d.outLines[0]!)
     expect(env.change).toBe('chg')
@@ -123,7 +136,7 @@ describe('--phase 覆写 —— 压不同相位的产出', () => {
   test('phase=build 的 change，--phase verify 压 verification_report', async () => {
     const d = makeDeps({ state: mockState({ phase: 'build', verification_report: 'reports/vr.md' }) })
     const fs = fakeFs({ '/repo/reports/vr.md': VR })
-    expect(await cmdHandoff(d, 'chg', { phase: 'verify', json: true }, fs)).toBe(0)
+    expect(await cmdHandoff(d, 'chg', { phase: 'verify', json: true }, fs, zhLocale)).toBe(0)
     const env = JSON.parse(d.outLines[0]!)
     expect(env.phase).toBe('verify')
     expect(env.docs).toHaveLength(1)

@@ -43,7 +43,8 @@
  * | verify-pass       | L201-204 | verify_result=pass + verified_at=now               | kernel DefaultEventPolicy action ✓ |
  * | verify-fail       | L207-210 | verify_result=fail + build_sha=null + phase_status=in_progress | kernel DefaultEventPolicy action ✓（phase_status 在 flow）|
  * | archived          | L213-217 | archived=true + archived_at=now + phase_status=done | kernel DefaultEventPolicy action ✓（phase_status 在 flow）|
- * | 其它事件          | L219-221 | 无专属校验（open-complete/ship-complete/自定义相位事件）| kernel default 通行 ✓ |
+ * | ship-complete     | current  | 主规格迁移 receipt 存在时机器应用结果必须身份/摘要一致 | kernel DefaultEventPolicy guard ✓ |
+ * | 其它事件          | L219-221 | 无专属校验（open-complete/自定义相位事件）| kernel default 通行 ✓ |
  * 校验失败 = 任何写盘之前 exit 1（老仓 case 校验先于 cmd_set phase），ERROR 文案逐字对齐。
  * 文件存在性经 deps.guardCtx 注入（main.ts/harness 全量注入 = 真实校验；未注入 = lite
  * 降级跳过文件面、字段面仍全量——GUARD-RULES §7.2 同款降级口径）。
@@ -52,7 +53,7 @@ import {
   compileWorkflow, completedWorkflowSkillsSinceStepEntry, createTransitionApplication,
   loadRegistry, loadWorkflow, nodeLoopIoStrict, requireTrack, resolveRequiredSkillSlots,
 } from '@pipeline-lite/kernel'
-import type { TransitionContext } from '@pipeline-lite/kernel'
+import { evaluateSpecMigrationEvidence, type TransitionContext } from '@pipeline-lite/kernel'
 import { enqueueAfterSpecComplete } from '@pipeline-lite/automation'
 import { errMsg, type CliDeps } from '../deps.js'
 import { changeDir, isValidChangeName } from '../paths.js'
@@ -80,6 +81,7 @@ export async function cmdTransition(deps: CliDeps, name: string, event: string):
           return fingerprint ? fingerprint(name) : Promise.reject(new Error('workspace fingerprint capability unavailable'))
         })
       : undefined,
+    specMigrationStatus: () => evaluateSpecMigrationEvidence(deps.cwd, dir, name),
   }
 
   // breadcrumb 收尾由 TransitionApplication 统一编排；review marker 不再在“进入”时由

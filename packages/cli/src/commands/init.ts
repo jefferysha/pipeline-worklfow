@@ -25,8 +25,10 @@ import {
   effectiveWorkflowPlanBinding,
   loadEffectiveWorkflowPlan,
   requireTrack,
+  workflowPlanSnapshot,
 } from '@pipeline-lite/kernel'
 import type { TrackDefinition, TrackRegistry } from '@pipeline-lite/kernel'
+import type { DocumentLocale } from '@pipeline-lite/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
 import { recordHistory } from './fields.js'
 import { isValidChangeName } from '../paths.js'
@@ -38,6 +40,7 @@ export interface InitCmdOpts {
   preset?: string
   user?: string
   workflow?: string
+  documentLocale?: string
 }
 
 // ── 交互向导的注入面（真实现 = REAL_INIT_WIZARD_ENV；测试注入 fake，命名避开 loops 的 InitEnv/Prompter）──
@@ -172,6 +175,12 @@ export async function cmdInit(
         deps.io.err('ERROR: preset 不能为空')
         return 1
       }
+      if (opts.documentLocale !== undefined
+        && opts.documentLocale !== 'zh-CN'
+        && opts.documentLocale !== 'en') {
+        deps.io.err(`ERROR: document locale 非法: '${opts.documentLocale}'（允许: zh-CN | en）`)
+        return 1
+      }
 
       // workflow 绑定（codex 设计 §5）：workflowId = 显式 --workflow ?? track.workflow.default；
       // 校验它在该 track 的 allowed 白名单内、且真实存在可加载。default 走 store.init 老首态（open），
@@ -191,6 +200,7 @@ export async function cmdInit(
         documentProfile?: 'legacy-full' | 'document-v1'
         documentGovernanceFingerprint?: string
         workflowPlanFingerprint?: string
+        workflowPlanSnapshot?: ReturnType<typeof workflowPlanSnapshot>
       }
       let plan
       try {
@@ -209,6 +219,7 @@ export async function cmdInit(
         workflow: workflowId,
         phase: first.id,
         ...binding,
+        workflowPlanSnapshot: workflowPlanSnapshot(plan),
         ...(plan.capabilities.documents.policy?.id === 'openspec-v1' ? { openspecContract: true } : {}),
         ...(plan.capabilities.documents.policy?.id === 'document-v1' ? { documentContract: true } : {}),
       }
@@ -224,6 +235,7 @@ export async function cmdInit(
           preset: opts.preset,
           user: opts.user,
           clock: deps.clock,
+          documentLocale: (opts.documentLocale ?? 'zh-CN') as DocumentLocale,
           initialWorkflow,
         })
         await recordHistory(deps, created, {

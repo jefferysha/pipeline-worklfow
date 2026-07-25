@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "kind": "spec-migration-application",
+  "change": "trellis-style-documentation-site",
+  "capability": "open-source-documentation-experience",
+  "receiptDigest": "0e656cd993abe9df0a64dad61d79d9b185e1c59b137a1a1babe34997a5b3b614",
+  "effect": "no-op",
+  "targetPath": "openspec/specs/open-source-documentation-experience/spec.md",
+  "beforeDigest": "bce48df61787d8d9960b3b133dde538eb6417446f01dd9a17157329622ca0789",
+  "expectedAfterDigest": "bce48df61787d8d9960b3b133dde538eb6417446f01dd9a17157329622ca0789",
+  "afterDigest": "bce48df61787d8d9960b3b133dde538eb6417446f01dd9a17157329622ca0789"
+}

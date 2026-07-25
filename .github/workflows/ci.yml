@@ -14,6 +14,9 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The compatibility gate extracts the exact CLI bytes from the pinned N-1 release commit.
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
@@ -50,25 +53,54 @@ jobs:
       - name: 校验入库完整插件 runtime 与当前 src 一致 (release freshness)
         run: git diff --exit-code -- packages/cli/dist/pipeline.mjs packages/server/dist/dashboard.mjs packages/dashboard-app/dist
 
+      - name: 文档链接与产品声明门禁 (documentation drift)
+        run: npm run check:docs
+
+      - name: 治理文档模板与中英文结构门禁
+        run: npm run check:document-templates
+
+      - name: 正式文档站双语、构建与 Pages 子路径门禁
+        run: |
+          npm run docs:sync
+          npm run docs:check
+          npm run docs:build
+          npm run docs:smoke
+
       - name: Build CLI bundle for required real-Codex
         run: npm run bundle
 
-      # H14 required acceptance 是 canonical verify 自身的一部分：不依赖 job 名或外部分支保护。
+      # H14 real-Codex acceptance 在仓库配置 OPENAI_API_KEY 时是 canonical verify 的强门。
+      # 公开仓库或新 fork 没有该 secret 时必须显式 honest-skip，不能用空 secret 让所有 PR 永久红，
+      # 也不能把 deterministic fallback 冒充真实 Codex。
       # tools/sandcastle/build.sh local 会用上方显式生成并完成 freshness 对账的 bundle 构建镜像，
       # 同时写入镜像 attestation；定向用例再逐字节核对该 attestation。
       - name: Build and attest sandcastle:local
         run: bash tools/sandcastle/build.sh local
 
+      - name: Detect real-Codex credential
+        id: real-codex-credential
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          if [ -n "$OPENAI_API_KEY" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Required real-Codex H14 acceptance
+        if: steps.real-codex-credential.outputs.available == 'true'
         env:
           PIPELINE_REQUIRE_REAL_CODEX: '1'
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: |
-          test -n "$OPENAI_API_KEY"
-          npx vitest run packages/cli/src/loop-run.real.integration.test.ts
+        run: npx vitest run packages/cli/src/loop-run.real.integration.test.ts
 
-      # 普通 npm test 里的 real-Codex 文件仍允许本地 honest-skip；canonical verify 已在上方
-      # 以 PIPELINE_REQUIRE_REAL_CODEX=1 定向执行过 fail-closed 验收。
+      - name: Honest skip real-Codex H14 when repository secret is unavailable
+        if: steps.real-codex-credential.outputs.available != 'true'
+        run: echo "[HONEST SKIP] OPENAI_API_KEY 未配置；真实 Codex H14 未执行，未声明通过。"
+
+      # 普通 npm test 里的 real-Codex 文件仍允许 honest-skip；配置 secret 的 canonical verify
+      # 已在上方以 PIPELINE_REQUIRE_REAL_CODEX=1 定向执行 fail-closed 验收。
       - name: vitest (kernel/cli/server/automation/tap)
         run: npm test
 
@@ -83,6 +115,20 @@ jobs:
 
       - name: verify-skills (dangling-reference check)
         run: bash tools/verify-skills.sh
+
+      - name: 主规格迁移原子 CAS
+        run: npm run test:migration-cas
+
+      - name: 准备真实 N-1 已发布 bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          meta=tools/fixtures/n-minus-one-release.json
+          release="$(node -p "require('./$meta').releaseId + ' plugin@' + require('./$meta').pluginVersion")"
+          output="$RUNNER_TEMP/pipeline-n-minus-one"
+          bash tools/prepare-n-minus-one-release.sh "$output"
+          echo "PIPELINE_N_MINUS_ONE_CLI=$output/payload/packages/cli/dist/pipeline.mjs" >> "$GITHUB_ENV"
+          echo "PIPELINE_N_MINUS_ONE_RELEASE=$release" >> "$GITHUB_ENV"
 
       - name: bundle smoke test
         run: bash tools/test-bundle.sh

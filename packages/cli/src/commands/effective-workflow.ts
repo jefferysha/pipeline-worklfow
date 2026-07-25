@@ -30,5 +30,5 @@ export function effectiveWorkflowForState(
   }, (name) => {
     const definition = loadWorkflow(deps.cwd, name)
     return definition === null ? null : compileWorkflow(definition)
-  }, track)
+  }, track, state.runMetadata?.workflowPlanSnapshot)
 }

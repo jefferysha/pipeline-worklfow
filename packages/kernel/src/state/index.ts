@@ -3,11 +3,27 @@
  * 本 barrel 由根 src/index.ts re-export（见 CONTRACT §4）。
  */
 export { atomicWriteFile, createStateStore, StateProjectionDriftError, STATE_FILE_NAME } from './store.js'
+export { atomicLinkPublish, atomicReplaceFile } from './atomic-publish.js'
+export { ensureTrustedProjectDirectory } from './trusted-project-path.js'
 export type { StateStoreOptions } from './store.js'
-export { ensureDefaultOpenSpecScaffold } from './default-openspec-scaffold.js'
-export type { DefaultOpenSpecScaffoldResult } from './default-openspec-scaffold.js'
+export { defaultOpenSpecScaffoldFiles } from './default-openspec-scaffold.js'
+export type { DefaultOpenSpecScaffoldFile } from './default-openspec-scaffold.js'
 export {
-  DOCUMENT_LEDGER_FILE, DocumentLedgerError, ensureDocumentLedger,
+  DOCUMENT_LOCALE_FILE, ensureDocumentLocalePin, readDocumentLocalePin,
+} from './document-locale.js'
+export type { DocumentLocalePin } from './document-locale.js'
+export {
+  WORKFLOW_GOVERNANCE_BINDING_FILE, attachWorkflowGovernanceBinding,
+  ensureWorkflowGovernanceBinding, readWorkflowGovernanceBinding,
+  withoutWorkflowGovernanceBinding,
+} from './workflow-governance-binding.js'
+export type { WorkflowGovernanceBinding } from './workflow-governance-binding.js'
+export {
+  WORKFLOW_PLAN_SNAPSHOT_FILE, attachWorkflowPlanSnapshot, ensureWorkflowPlanSnapshot,
+  readWorkflowPlanSnapshot, workflowPlanSnapshotContent,
+} from './workflow-plan-snapshot.js'
+export {
+  DOCUMENT_LEDGER_FILE, DocumentLedgerError, ensureDocumentLedger, initialDocumentLedgerContent,
   migrateLegacyDeltaDocument, readDocumentLedger, recordDocument, recordDocumentReads,
 } from './document-ledger.js'
 export type {
@@ -18,6 +34,7 @@ export { evaluateDocumentEvidence } from './document-evidence.js'
 export type {
   DocumentEvidenceItem, DocumentEvidenceItemStatus, DocumentEvidenceReport, DocumentEvidenceScope,
 } from './document-evidence.js'
+export { evaluateSpecMigrationEvidence } from './spec-migration-evidence.js'
 export { parsePipeline, serializePipeline, quoteGate, unquoteScalar, emptyFields } from './parse.js'
 export { withLock, LOCK_DIR_NAME, STALE_LOCK_MS } from './lock.js'
 export { createHistoryWriter, HISTORY_FILE, transitionRecordToHistoryEntry } from './history.js'

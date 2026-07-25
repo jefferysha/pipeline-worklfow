@@ -18,6 +18,7 @@ export interface StepGuardContext {
   readonly fileExists?: (repoRelativePath: string) => boolean
   readonly gitHeadSha?: () => Promise<string>
   readonly workspaceFingerprint?: () => Promise<string>
+  readonly specMigrationStatus?: GuardInput['specMigrationStatus']
 }
 
 export type { GuardResult } from '../types.js'
@@ -46,6 +47,7 @@ export function buildStepGuardInput(state: PipelineState, ctx: StepGuardContext)
     fileExists: ctx.fileExists,
     gitHeadSha: ctx.gitHeadSha,
     workspaceFingerprint: ctx.workspaceFingerprint,
+    specMigrationStatus: ctx.specMigrationStatus,
   }
 }
 
@@ -80,6 +82,8 @@ export function renderGuardFailure(ev: GuardEvaluation, stepId: string): string 
         return `step '${stepId}' 要求当前工作区内容等于 build 冻结基线（build_sha=${d.expected?.[0] ?? ''}，当前=${d.actual ?? ''}）`
       }
       return `step '${stepId}' 要求当前 HEAD 等于 build 冻结的 SHA（build_sha=${d.expected?.[0] ?? ''}，HEAD=${d.actual ?? ''}）`
+    case 'spec-migration-applied':
+      return `step '${stepId}' 要求主规格迁移已由机器证据确认（当前=${d.actual ?? '未知'}）`
     default: {
       const exhaustive: never = g
       return `step '${stepId}' guard 未通过：${JSON.stringify(exhaustive)}`

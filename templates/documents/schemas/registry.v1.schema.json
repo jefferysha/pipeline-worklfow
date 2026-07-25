@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pipeline-lite.local/schemas/document-presentation-registry.v1.json",
+  "title": "Pipeline Lite Document Presentation Registry v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "default_locale", "locales", "workflow_steps", "templates"],
+  "properties": {
+    "version": {"const": "v1"},
+    "default_locale": {"enum": ["zh-CN", "en"]},
+    "locales": {
+      "type": "array",
+      "items": {"enum": ["zh-CN", "en"]},
+      "minItems": 2,
+      "uniqueItems": true
+    },
+    "workflow_steps": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^[a-z][a-z0-9-]*$"},
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "templates": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "kind", "path", "sections", "layout", "creation"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^[a-z0-9-]+$"},
+          "kind": {"type": "string", "pattern": "^[a-z0-9-]+$"},
+          "path": {
+            "type": "string",
+            "pattern": "^(openspec/changes/\\{change\\}/|docs/(superpowers/(specs|plans|reports)|adr)/)"
+          },
+          "sections": {
+            "type": "array",
+            "items": {"type": "string", "pattern": "^[A-Za-z][A-Za-z0-9]*$"},
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "layout": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^(frontmatter|task-pending|scenario-pending|(h[1-4](-pending)?|quote|text|prompt-placeholder|workflow-steps):[A-Za-z][A-Za-z0-9]*)$"
+            },
+            "minItems": 1
+          },
+          "creation": {"const": "missing-only"}
+        }
+      }
+    }
+  }
+}

@@ -342,7 +342,6 @@ export async function reconcileCodexSkillEvidence(input: CodexSkillEvidenceInput
   const boundHostSessionId = await latestBoundHostSessionId(input.repoRoot, changeName)
   const receipts = await loadReceipts(input.repoRoot)
   const confirmed = new Set<string>()
-  const receiptBoundSkills = new Set<string>()
 
   for (const rawReceipt of receipts) {
     if (rawReceipt.changeName !== changeName) continue
@@ -352,7 +351,6 @@ export async function reconcileCodexSkillEvidence(input: CodexSkillEvidenceInput
     ) continue
     if (input.producer && !skillsEquivalent(rawReceipt.skillId, input.producer)) continue
     if ([...existing, ...confirmed].some((skill) => skillsEquivalent(skill, rawReceipt.skillId))) continue
-    receiptBoundSkills.add(rawReceipt.skillId)
     const receipt = await validatedReceipt(rawReceipt, trustRoots, homeDir, codexHomeDir)
     if (!receipt) continue
     if (
@@ -378,8 +376,7 @@ export async function reconcileCodexSkillEvidence(input: CodexSkillEvidenceInput
   ])]
   const unresolvedCandidates = candidates.filter(
     (candidate) =>
-      ![...existing, ...confirmed].some((skill) => skillsEquivalent(skill, candidate))
-      && ![...receiptBoundSkills].some((skill) => skillsEquivalent(skill, candidate)),
+      ![...existing, ...confirmed].some((skill) => skillsEquivalent(skill, candidate)),
   )
   if (unresolvedCandidates.length > 0 && boundHostSessionId !== undefined) {
     for (const skillId of await discoverCompletedCodexSkillReads(

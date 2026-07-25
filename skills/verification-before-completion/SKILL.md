@@ -8,6 +8,9 @@ metadata:
 
 # Verification Before Completion
 
+Write new verification reports in the Change-pinned locale (Chinese by default). Preserve exact
+commands, paths, test names, exit codes, identifiers, and error text.
+
 Before reporting completion:
 
 1. Re-read the requested outcome and acceptance criteria.

@@ -163,7 +163,7 @@ if [ "${CANARY:-0}" -lt 5 ]; then
 fi
 
 # ── 领域例外：**精确文件 + 预期命中数**（不是整棵子树、不是整文件无条件放行）─────────
-# 旧版豁免 `^packages/kernel/src/compress/` **整棵子树** + doc-scaffold.ts **整文件** +
+# 旧版豁免 `^packages/kernel/src/compress/` **整棵子树** + scaffold 文件 **整文件** +
 # `*.test.*` **整类**。前两者意味着「往该目录新增任意文件即可藏债务」，第三者是最大的盲区。
 # 现在改成逐文件钉死条数：**新增文件 → 红；已豁免文件里多写一条 → 红；少写一条也 → 红**
 # （逼人回来改数字并解释，而不是让豁免额度自己长大）。
@@ -176,9 +176,6 @@ fi
 # EXEMPT —— 领域例外（精确文件 → 预期条数）：关键词是**被处理/被生成的数据**，不是欠债。
 #    · compress/：该模块的领域功能**就是识别并压缩 TODO 关键词**（markdown.ts 的 TODO_KEYWORD
 #      正则、compress.ts 的 `## Open TODOs` 章节标题）。这里的 TODO 是**被处理的数据**。
-#    · scaffold/doc-scaffold.ts 与 state/default-openspec-scaffold.ts：它们**生成**带 TODO 占位的
-#      空文档 stub，占位符是给用户填的产品输出。
-#    · 上述两者的 *.test.ts 断言的正是这些领域数据，同理。
 #    · commands/migrateWorkflow.ts：「待补齐」是给**数据状态**起的名字（`undefined` 与 `'default'`
 #      是同一个「字段没填」的信号），描述的是用户 change 文件的当下状态，不是本文件欠的工程债。
 #      注意它**不是**代码里的字面量字符串（真字面量是 `'default'`）——这是词表的系统性盲点：
@@ -187,12 +184,9 @@ EXEMPT_FILES=(
   'packages/kernel/src/compress/markdown.ts'
   'packages/kernel/src/compress/markdown.test.ts'
   'packages/kernel/src/compress/compress.ts'
-  'packages/kernel/src/scaffold/doc-scaffold.ts'
-  'packages/kernel/src/scaffold/doc-scaffold.test.ts'
-  'packages/kernel/src/state/default-openspec-scaffold.ts'
   'packages/cli/src/commands/migrateWorkflow.ts'
 )
-EXEMPT_COUNTS=(2 2 1 2 2 2 1)
+EXEMPT_COUNTS=(2 2 1 1)
 
 
 # ── 失败收集（bash 3.2 兼容：普通数组 + 下标循环，避免 set -u 下空数组展开）──

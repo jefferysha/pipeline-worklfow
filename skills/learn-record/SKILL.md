@@ -5,6 +5,10 @@ description: "学习沉淀聚合 skill（替代 ECC 的 /learn）：提取本次
 
 # /learn-record — 学习沉淀（三重落地）
 
+> 新增经验记录沿用 Change 固定 locale（默认使用中文标题和正文，显式 `en` 时使用英文）；
+> 代码标识、路径、命令、错误原文和协议字段保持原样。
+> 历史记录不因模板升级被自动翻译。
+
 > 移植来源：老仓 `skills/learn-record/SKILL.md`（含 `scripts/sync-to-wiki.sh`，已随迁本目录）。
 
 ## 定位

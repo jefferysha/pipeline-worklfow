@@ -1,0 +1,86 @@
+{
+  "locale": "en",
+  "workflow_steps": {
+    "open": "Open",
+    "explore": "Explore",
+    "spec": "Spec",
+    "build": "Build",
+    "verify": "Verify",
+    "ship": "Ship",
+    "archive": "Archive"
+  },
+  "templates": {
+    "openspec-proposal": {
+      "title": "Proposal",
+      "why": "Why",
+      "whyPrompt": "[pending:open] Explain the problem or opportunity and why it matters now.",
+      "whatChanges": "What Changes",
+      "whatChangesPrompt": "[pending:open] List concrete changes, scope, non-goals, and verifiable outcomes.",
+      "capabilities": "Capabilities",
+      "newCapabilities": "New Capabilities",
+      "newCapabilitiesPrompt": "[pending:open] List new capabilities, or state None.",
+      "modifiedCapabilities": "Modified Capabilities",
+      "modifiedCapabilitiesPrompt": "[pending:open] List existing capabilities with requirement changes, or state None.",
+      "impact": "Impact",
+      "impactPrompt": "[pending:open] Describe affected code, contracts, dependencies, compatibility, and systems."
+    },
+    "openspec-design": {
+      "title": "Design",
+      "hypothesis": "Initial hypothesis",
+      "hypothesisPrompt": "[pending:open] Capture the initial architecture or interaction hypothesis. Explore replaces this prompt with evidence and decisions.",
+      "risks": "Risks",
+      "questions": "Questions to validate"
+    },
+    "workflow-tasks": {
+      "title": "Tasks",
+      "taskPrompt": "Break this phase goal into verifiable tasks."
+    },
+    "superpower-design": {
+      "title": "Technical design",
+      "context": "Context",
+      "decision": "Decision",
+      "alternatives": "Alternatives",
+      "risks": "Risks"
+    },
+    "architecture-decision-record": {
+      "title": "Architecture decision record",
+      "context": "Context",
+      "decision": "Decision",
+      "alternatives": "Alternatives",
+      "consequences": "Consequences"
+    },
+    "openspec-delta-spec": {
+      "title": "OpenSpec delta specification",
+      "operations": "ADDED Requirements",
+      "requirement": "Requirement",
+      "scenario": "Scenario",
+      "prompt": "[pending:spec] Write the requirement and scenarios while preserving OpenSpec machine tokens."
+    },
+    "superpower-plan": {
+      "title": "Implementation plan",
+      "tasks": "Tasks",
+      "verification": "Verification",
+      "rollback": "Rollback"
+    },
+    "implementation-plan": {
+      "title": "Implementation plan",
+      "tasks": "Tasks",
+      "verification": "Verification",
+      "rollback": "Rollback"
+    },
+    "verification-report": {
+      "title": "Verification report",
+      "scope": "Scope",
+      "commands": "Commands run",
+      "results": "Results",
+      "failures": "Failures and blockers",
+      "risks": "Residual risks"
+    },
+    "applied-spec": {
+      "title": "Applied specification",
+      "summary": "Change summary",
+      "requirements": "Applied requirements",
+      "evidence": "Delivery evidence"
+    }
+  }
+}

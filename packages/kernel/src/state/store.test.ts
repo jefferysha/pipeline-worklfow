@@ -1,10 +1,17 @@
-import { copyFile, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
+import {
+  copyFile, lstat, mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile,
+} from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { QuoteGateError, type StateStore } from '../types.js'
-import { atomicWriteFile, createStateStore } from './index.js'
+import {
+  WORKFLOW_GOVERNANCE_BINDING_FILE,
+  atomicWriteFile,
+  createStateStore,
+  ensureDocumentLocalePin,
+} from './index.js'
 
 const FIXTURES = fileURLToPath(new URL('./fixtures', import.meta.url))
 const CLOCK = () => '2026-07-06T00:00:00Z'
@@ -36,6 +43,55 @@ afterEach(async () => {
 })
 
 describe('read / write / get', () => {
+  it('init 提交点出现空目录竞态时 fail-loud，且不得用 POSIX rename 静默替换竞态方目录', async () => {
+    const raced = createStateStore({
+      beforeInitialPublish: async (_staging, finalChangeDir) => {
+        await mkdir(finalChangeDir)
+      },
+    })
+
+    await expect(raced.init({
+      repoRoot,
+      name: 'empty-directory-race',
+      track: 'backend',
+      reviewSeed: 'pending',
+      preset: 'full',
+      clock: CLOCK,
+      initialFiles: [{ relativePath: 'proposal.md', content: '# 不得发布\n' }],
+    })).rejects.toThrow(/已存在|拒绝覆盖/)
+
+    expect(await readdir(path.join(
+      repoRoot, 'openspec', 'changes', 'empty-directory-race',
+    ))).toEqual([])
+  })
+
+  it('init 完整候选遇到提交点竞态 symlink 时 fail-loud，外部目录保持零写入', async () => {
+    const outside = await mkdtemp(path.join(tmpdir(), 'pl-store-outside-'))
+    const raced = createStateStore({
+      beforeInitialPublish: async (_staging, finalChangeDir) => {
+        await symlink(outside, finalChangeDir)
+      },
+    })
+
+    await expect(raced.init({
+      repoRoot,
+      name: 'atomic-envelope',
+      track: 'backend',
+      reviewSeed: 'pending',
+      preset: 'full',
+      clock: CLOCK,
+      initialFiles: [
+        { relativePath: 'proposal.md', content: '# 提案\n' },
+        { relativePath: 'nested/tasks.md', content: '# 任务\n' },
+      ],
+    })).rejects.toThrow(/已存在|拒绝覆盖/)
+
+    expect((await lstat(path.join(repoRoot, 'openspec', 'changes', 'atomic-envelope')))
+      .isSymbolicLink()).toBe(true)
+    expect(await readdir(outside)).toEqual([])
+    await rm(outside, { recursive: true, force: true })
+  })
+
   it('read 解析 legacy 文件；write 迁入 canonical 后除三行 adapter metadata 外与原文件逐字节等价', async () => {
     const dir = await seedChange('rt', 'dashboard-interaction-fixes.pipeline.yaml')
     const before = await readFile(path.join(dir, '.pipeline.yaml'), 'utf8')
@@ -387,7 +443,7 @@ automation_cause: ""
   it('G1 独占创建：成功后只有 canonical 目录与 YAML projection，current/revision 均无临时文件残留', async () => {
     const dir = await store.init({ repoRoot, name: 'clean-tmp', track: 'backend', reviewSeed: 'pending', preset: 'full', clock: CLOCK })
     const files = await readdir(dir)
-    expect(files.sort()).toEqual(['.pipeline-run', '.pipeline.yaml'])
+    expect(files.sort()).toEqual(['.pipeline-document-locale.json', '.pipeline-run', '.pipeline.yaml'])
     expect((await readdir(path.join(dir, '.pipeline-run'))).sort()).toEqual(['current.json', 'revisions'])
     expect(await readdir(path.join(dir, '.pipeline-run', 'revisions'))).toHaveLength(1)
   })
@@ -399,7 +455,7 @@ automation_cause: ""
     ).rejects.toThrow()
     const dir = path.join(repoRoot, 'openspec', 'changes', 'dup-tmp')
     const files = await readdir(dir)
-    expect(files.sort()).toEqual(['.pipeline-run', '.pipeline.yaml'])
+    expect(files.sort()).toEqual(['.pipeline-document-locale.json', '.pipeline-run', '.pipeline.yaml'])
     expect(await readdir(path.join(dir, '.pipeline-run', 'revisions'))).toHaveLength(1)
   })
 
@@ -420,7 +476,39 @@ automation_cause: ""
     expect(await store.get(dir, 'phase')).toBe('open')
   })
 
-  it('兼容调用方只提供旧 document booleans 时，新 run 仍写入 canonical profile identity', async () => {
+  it('旧版残留的 locale-only Change 无论 locale 是否相同都 fail-closed，不覆盖既有目录', async () => {
+    const reserved = path.join(repoRoot, 'openspec', 'changes', 'reserved-en')
+    await mkdir(reserved, { recursive: true })
+    await ensureDocumentLocalePin(reserved, 'en')
+    await expect(store.init({
+      repoRoot,
+      name: 'reserved-en',
+      track: 'backend',
+      reviewSeed: 'pending',
+      preset: 'full',
+      documentLocale: 'en',
+      clock: CLOCK,
+    })).rejects.toMatchObject({ code: 'EEXIST' })
+    await expect(readFile(path.join(reserved, '.pipeline-run', 'current.json'), 'utf8'))
+      .rejects.toMatchObject({ code: 'ENOENT' })
+
+    const mismatch = path.join(repoRoot, 'openspec', 'changes', 'reserved-mismatch')
+    await mkdir(mismatch, { recursive: true })
+    await ensureDocumentLocalePin(mismatch, 'en')
+    await expect(store.init({
+      repoRoot,
+      name: 'reserved-mismatch',
+      track: 'backend',
+      reviewSeed: 'pending',
+      preset: 'full',
+      documentLocale: 'zh-CN',
+      clock: CLOCK,
+    })).rejects.toMatchObject({ code: 'EEXIST' })
+    await expect(readFile(path.join(mismatch, '.pipeline-run', 'current.json'), 'utf8'))
+      .rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
+  it('document booleans 生成回滚兼容 sidecar；运行时合并身份但 canonical 保持 N-1 闭集', async () => {
     const fingerprint = 'b'.repeat(64)
     const legacy = await store.init({
       repoRoot, name: 'wf-legacy-profile', track: 'backend', reviewSeed: 'pending', preset: 'full',
@@ -441,6 +529,23 @@ automation_cause: ""
     expect((await store.read(legacy)).runMetadata?.documentProfile).toBe('legacy-full')
     expect((await store.read(declarative)).runMetadata?.documentProfile).toBe('document-v1')
     expect((await store.read(declarative)).runMetadata?.documentGovernanceFingerprint).toBe(fingerprint)
+    const current = JSON.parse(await readFile(
+      path.join(declarative, '.pipeline-run', 'current.json'),
+      'utf8',
+    )) as { state: { runMetadata: Record<string, unknown> } }
+    expect(current.state.runMetadata).toEqual({
+      runId: 'run-document-profile',
+      transitionSequence: 0,
+    })
+    expect(JSON.parse(await readFile(
+      path.join(declarative, WORKFLOW_GOVERNANCE_BINDING_FILE),
+      'utf8',
+    ))).toMatchObject({
+      version: 1,
+      run_id: 'run-document-profile',
+      document_profile: 'document-v1',
+      document_governance_fingerprint: fingerprint,
+    })
   })
 })
 

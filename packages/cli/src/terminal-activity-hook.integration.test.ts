@@ -4,7 +4,7 @@
  * host session to an exact Change.  A repo-global recovery pointer must never be enough.
  */
 import { spawnSync } from 'node:child_process'
-import { readFile } from 'node:fs/promises'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
 import { freshHarness, REPO_ROOT, rm, type Harness } from './integration-harness.js'
@@ -68,5 +68,30 @@ describe('真实 e2e —— terminal-activity host hook', () => {
     expect(activity.code, activity.stderr).toBe(0)
     await expect(readFile(join(h.cwd, 'openspec/changes/old-change/.pipeline-terminal-activity.json'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
     await expect(readFile(join(h.cwd, 'openspec/changes/new-change/.pipeline-terminal-activity.json'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
+  test('同仓多会话恢复优先使用 host session 精确绑定，不受另一个会话覆盖 repo 指针影响', async () => {
+    expect(await h.run(['init', 'trellis-docs', '--track', 'frontend', '--preset', 'full'])).toBe(0)
+    expect(await h.run(['session', 'activate', 'trellis-docs', '--host-session', SESSION_ID])).toBe(0)
+    expect(await h.run(['init', 'comet-research', '--track', 'pm', '--preset', 'full'])).toBe(0)
+    expect(await h.run(['session', 'activate', 'comet-research'])).toBe(0)
+
+    const trellisDir = join(h.cwd, 'openspec/changes/trellis-docs')
+    const cometDir = join(h.cwd, 'openspec/changes/comet-research')
+    await mkdir(trellisDir, { recursive: true })
+    await writeFile(join(trellisDir, '.breadcrumb'), 'TRELLIS_BREADCRUMB\n', 'utf8')
+    await writeFile(join(cometDir, '.breadcrumb'), 'COMET_BREADCRUMB\n', 'utf8')
+
+    const payload = { prompt: '继续执行', cwd: h.cwd, session_id: SESSION_ID }
+    const routed = runHook('router.sh', payload, { PIPELINE_ROUTER_CACHE: join(h.cwd, '.router-cache') })
+    expect(routed.code, routed.stderr).toBe(0)
+    expect(routed.stdout).toContain('intent: resume')
+    expect(routed.stdout).toContain('change: trellis-docs')
+    expect(routed.stdout).not.toContain('change: comet-research')
+
+    const breadcrumb = runHook('breadcrumb.sh', payload)
+    expect(breadcrumb.code, breadcrumb.stderr).toBe(0)
+    expect(breadcrumb.stdout).toContain('TRELLIS_BREADCRUMB')
+    expect(breadcrumb.stdout).not.toContain('COMET_BREADCRUMB')
   })
 })

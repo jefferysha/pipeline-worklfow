@@ -15,9 +15,15 @@
  * stdout/exit 对齐仓内风格（session.ts）：数据（写入清单/解析结果）走 stdout；状态/指引/错误走 stderr。
  *   exit：成功=0；非法参数/未知 id（无 --fallback-native）/未知子命令=1；缺省冲突需决策=2（信号）。
  */
-import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
-import { OWNED_MANIFEST, parseOwnedManifest, serializeOwnedManifest } from '@pipeline-lite/kernel'
+import { lstat, mkdir, readFile, rm, stat, unlink, writeFile } from 'node:fs/promises'
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
+import {
+  atomicLinkPublish,
+  OWNED_MANIFEST,
+  parseOwnedManifest,
+  serializeOwnedManifest,
+} from '@pipeline-lite/kernel'
+import type { DocumentLocale } from '@pipeline-lite/kernel'
 import {
   DEFAULT_SPEC_DIR,
   DOC_STRATEGIES,
@@ -37,6 +43,8 @@ import {
 } from '@pipeline-lite/kernel'
 import { splitFlags } from '../argv.js'
 import { errMsg, type CliDeps } from '../deps.js'
+import { ensureSafeDocumentParent, ordinaryDocumentFile } from './documentScaffoldSafety.js'
+import { publishSpecScaffoldTransaction } from './specScaffoldTransaction.js'
 
 /**
  * scaffold fs 注入面（默认真 fs；mock 层注入 fake，见 scaffold.test.ts）。
@@ -81,6 +89,52 @@ export const REAL_FS: ScaffoldFs = {
 
 const SPEC_STRATEGY_SIGNAL = 'PIPELINE_SPEC_STRATEGY'
 
+function safeSpecDir(cwd: string, specDir: string): boolean {
+  if (isAbsolute(specDir)) return false
+  const rel = relative(resolve(cwd), resolve(cwd, specDir))
+  return rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel)
+}
+
+async function assertExistingParentsSafe(cwd: string, target: string): Promise<void> {
+  const root = resolve(cwd)
+  const parent = dirname(target)
+  const rel = relative(root, parent)
+  if (rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel)) {
+    throw new Error(`scaffold 路径越过项目根: ${target}`)
+  }
+  let cursor = root
+  for (const segment of rel.split(sep).filter(Boolean)) {
+    cursor = resolve(cursor, segment)
+    try {
+      const info = await lstat(cursor)
+      if (!info.isDirectory() || info.isSymbolicLink()) {
+        throw new Error(`scaffold 父路径必须是非 symlink 目录: ${cursor}`)
+      }
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return
+      throw error
+    }
+  }
+}
+
+async function removeScaffoldFile(cwd: string, target: string): Promise<void> {
+  await assertExistingParentsSafe(cwd, target)
+  try {
+    const info = await lstat(target)
+    if (!ordinaryDocumentFile(info)) {
+      throw new Error(`scaffold overwrite 目标必须是非 symlink 普通文件: ${target}`)
+    }
+    await unlink(target)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+  }
+}
+
+async function publishScaffoldFile(cwd: string, target: string, content: string): Promise<void> {
+  const parent = await ensureSafeDocumentParent(cwd, target)
+  await atomicLinkPublish(parent, '.pipeline-spec-scaffold.tmp', target, content)
+}
+
 /** 三选一指引（对标 reinit-fast-path 的三选一指引，替代 AskUserQuestion picker）。 */
 function conflictGuidance(deps: CliDeps, specDir: string): void {
   deps.io.err(`[SPEC-CONFLICT] ${specDir} 已存在文件——需选择模板策略（缺省冲突，未弹交互 picker）：`)
@@ -100,15 +154,49 @@ async function cmdScaffoldSpec(deps: CliDeps, args: string[], fs: ScaffoldFs): P
   }
   // typeof 守卫（非 || falsy）：带值取值；裸 --spec-dir（true）/缺省/空值 → 回落默认，行为同旧 '' 哨兵。
   const specDir = typeof flags['spec-dir'] === 'string' && flags['spec-dir'] !== '' ? flags['spec-dir'] : DEFAULT_SPEC_DIR
+  if (!safeSpecDir(deps.cwd, specDir)) {
+    deps.io.err(`ERROR: --spec-dir 必须位于项目根内: '${specDir}'`)
+    return 1
+  }
+  if (flags['document-locale'] === true || flags['document-locale'] === '') {
+    deps.io.err('ERROR: --document-locale 必须提供 zh-CN 或 en')
+    return 1
+  }
+  const locale = typeof flags['document-locale'] === 'string' && flags['document-locale'] !== ''
+    ? flags['document-locale']
+    : 'zh-CN'
+  if (locale !== 'zh-CN' && locale !== 'en') {
+    deps.io.err(`ERROR: document locale 非法: '${locale}'（允许: zh-CN | en）`)
+    return 1
+  }
   // 策略信号：--strategy > PIPELINE_SPEC_STRATEGY env > 未定（裸 --strategy 视同未给，回落 env——同旧行为）
   const rawStrategy =
     typeof flags['strategy'] === 'string' && flags['strategy'] !== '' ? flags['strategy'] : fs.env(SPEC_STRATEGY_SIGNAL) || ''
-  const files = buildSpecScaffold(type, specDir)
-  const abs = (rel: string) => join(deps.cwd, rel)
+  const files = buildSpecScaffold(type, specDir, locale as DocumentLocale)
+  const abs = (rel: string) => resolve(deps.cwd, rel)
 
   // 探测冲突（哪些目标已存在）
   const existing = new Set<string>()
   for (const f of files) {
+    if (fs === REAL_FS) {
+      try {
+        const target = abs(f.rel)
+        await assertExistingParentsSafe(deps.cwd, target)
+        try {
+          const info = await lstat(target)
+          if (!ordinaryDocumentFile(info)) {
+            throw new Error(`scaffold 目标必须是非 symlink 普通文件: ${target}`)
+          }
+          existing.add(f.rel)
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+        }
+      } catch (error) {
+        deps.io.err(`ERROR: scaffold 路径不安全: ${errMsg(error)}`)
+        return 1
+      }
+      continue
+    }
     if (await fs.exists(abs(f.rel))) existing.add(f.rel)
   }
 
@@ -130,8 +218,23 @@ async function cmdScaffoldSpec(deps: CliDeps, args: string[], fs: ScaffoldFs): P
 
   const plan = planDocScaffold(files, existing, strategy)
   try {
-    for (const rel of plan.removes) await fs.rmrf(abs(rel))
-    for (const f of plan.writes) await fs.writeText(abs(f.rel), f.content)
+    if (fs === REAL_FS && strategy === 'overwrite') {
+      const specRoot = resolve(deps.cwd, specDir)
+      await publishSpecScaffoldTransaction({
+        repoRoot: deps.cwd,
+        specDirectory: specRoot,
+        files: plan.writes.map((file) => ({
+          relativePath: relative(specRoot, abs(file.rel)),
+          content: file.content,
+        })),
+      })
+    } else if (fs === REAL_FS) {
+      for (const rel of plan.removes) await removeScaffoldFile(deps.cwd, abs(rel))
+      for (const f of plan.writes) await publishScaffoldFile(deps.cwd, abs(f.rel), f.content)
+    } else {
+      for (const rel of plan.removes) await fs.rmrf(abs(rel))
+      for (const f of plan.writes) await fs.writeText(abs(f.rel), f.content)
+    }
   } catch (e) {
     deps.io.err(`ERROR: scaffold 写盘失败: ${errMsg(e)}`)
     return 1

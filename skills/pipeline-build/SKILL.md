@@ -5,6 +5,9 @@ description: "Pipeline Phase 4: Build · 实现。PM Track 生成原型，fronte
 
 # /pipeline-build — Phase 4: Build
 
+> **语言：** Build 新增或更新的任务、原型说明、REVIEW.md 和实现记录沿用 Change 固定 locale，
+> 默认使用中文，显式固定为 `en` 的 Change 使用英文；命令、路径、测试名、phase/event、kind/producer 和协议字段保持原样。
+
 > 移植来源：老仓 `skills/pipeline-build/SKILL.md`；脚本面已改写为 `pipeline` CLI。
 > build→verify barrier（冻结 build_sha）语义见 `docs/CONTRACT.md` §3 与
 > packages/cli/src/commands/transition.ts 的 build-complete 副作用。

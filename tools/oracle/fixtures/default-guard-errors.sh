@@ -25,11 +25,12 @@
 set -euo pipefail
 
 target="${1:?usage: default-guard-errors.sh <target-dir>}"
-mkdir -p "$target/openspec/changes/t6-ge" "$target/docs"
+fixture_change="$target/.oracle-post-init/t6-ge"
+mkdir -p "$fixture_change" "$target/docs"
 
-printf '# proposal\n\nT6 oracle fixture: default 轨 guard 失败分支 stderr 双跑。\n' > "$target/openspec/changes/t6-ge/proposal.md"
-printf '# design\n\nfixture design doc.\n' > "$target/openspec/changes/t6-ge/design.md"
-printf -- '- [ ] t1\n- [x] t2\n- [x] t3\n' > "$target/openspec/changes/t6-ge/tasks.md"
+printf '# proposal\n\nT6 oracle fixture: default 轨 guard 失败分支 stderr 双跑。\n' > "$fixture_change/proposal.md"
+printf '# design\n\nfixture design doc.\n' > "$fixture_change/design.md"
+printf -- '- [ ] t1\n- [x] t2\n- [x] t3\n' > "$fixture_change/tasks.md"
 # 字段指向的「存在」目标（fix 步用）；docs/missing.md 刻意不建（file-exists 失败分支用）。
 # 成功走到 spec 出口时需要真实 coverage gate，因此稳定的 design fixture 带 backend 的完整覆盖块；
 # 前两条 explore 失败仍由空字段/不存在文件精确触发，不受该准备文件影响。

@@ -32,13 +32,13 @@ describe('project type / strategy 枚举守卫', () => {
   })
 })
 
-describe('renderScaffoldDoc —— 空文档 stub（含 scaffold marker + 标题 + TODO）', () => {
-  test('渲染含 marker/标题/summary/TODO', () => {
+describe('renderScaffoldDoc —— 空文档 stub（含 scaffold marker + 标题 + 待填写提示）', () => {
+  test('默认渲染中文 marker/标题/summary/待填写提示', () => {
     const md = renderScaffoldDoc({ rel: 'x/y.md', title: 'API 契约', summary: '描述对外 API' })
     expect(md).toContain(SCAFFOLD_MARKER)
     expect(md).toContain('# API 契约')
     expect(md).toContain('描述对外 API')
-    expect(md.toLowerCase()).toContain('todo')
+    expect(md).toContain('[待填写:explore]')
     expect(md.endsWith('\n')).toBe(true)
   })
 })
@@ -54,6 +54,15 @@ describe('buildSpecScaffold —— 按类型预写分层空文档集', () => {
     expect(rels.every((r) => r.startsWith(`${DEFAULT_SPEC_DIR}/`))).toBe(true)
     // 每个文件真有 stub 内容（非空、含 marker）
     expect(files.every((f) => f.content.includes(SCAFFOLD_MARKER))).toBe(true)
+    expect(files.find((f) => f.rel.endsWith('/backend/api.md'))?.content).toContain('# API 契约')
+  })
+
+  test('显式 en 使用英文标题与提示，路径和层级保持不变', () => {
+    const chinese = buildSpecScaffold('web')
+    const english = buildSpecScaffold('web', DEFAULT_SPEC_DIR, 'en')
+    expect(english.map((file) => file.rel)).toEqual(chinese.map((file) => file.rel))
+    expect(english.find((file) => file.rel.endsWith('/backend/api.md'))?.content).toContain('# API Contracts')
+    expect(english[0]?.content).toContain('[pending:explore]')
   })
 
   test('cli / lib 各有自己的分层集，且都含 guides 层', () => {

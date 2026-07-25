@@ -149,10 +149,15 @@ describe('init --workflow（GOAL E，自定义 workflow 首个 step 落点）', 
       // setMany({workflow:'onboarding', phase:'intake'}) 调用记录——两次写的第二次）。
       expect(deps.store.setMany.calls).toHaveLength(0)
       expect(deps.store.init.calls).toHaveLength(1)
-      expect(deps.store.init.calls[0]?.[0]?.initialWorkflow).toEqual({
+      expect(deps.store.init.calls[0]?.[0]?.initialWorkflow).toMatchObject({
         workflow: 'onboarding',
         phase: 'intake',
         workflowPlanFingerprint: expect.stringMatching(/^[0-9a-f]{64}$/),
+        workflowPlanSnapshot: {
+          version: 1,
+          workflowId: 'onboarding',
+          workflowFingerprint: expect.stringMatching(/^[0-9a-f]{64}$/),
+        },
       })
     } finally {
       await rm(cwd, { recursive: true, force: true })

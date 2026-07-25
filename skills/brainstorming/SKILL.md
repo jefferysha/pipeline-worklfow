@@ -8,6 +8,9 @@ metadata:
 
 # Brainstorming
 
+Write newly created design and research artifacts in the Change-pinned locale, which defaults to
+Chinese. Keep commands, paths, identifiers, protocol tokens, and quoted error text unchanged.
+
 Turn an ambiguous request into an agreed problem statement before design or code.
 
 1. Read the active change's proposal, design, tasks, and project rules.

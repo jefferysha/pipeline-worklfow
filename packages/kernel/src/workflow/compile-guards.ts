@@ -140,6 +140,8 @@ function compileGuard(raw: unknown, path: string, outputs: readonly FieldRef[]):
         )
       }
       return [withWhen({ type: 'build-head-unchanged' as const, field: 'build_sha' as const }, when)]
+    case 'spec-migration-applied':
+      return [withWhen({ type: 'spec-migration-applied' as const }, when)]
     default:
       compileError(
         `${path}.type`,

@@ -16,6 +16,7 @@ import { toastIn } from './shared/motion'
 import { MachineView } from './machine/MachineView'
 import { dashboardSearch, parseDashboardLocation, resolveDashboardRoot } from './shell/dashboardLocation'
 import { ErrorBoundary } from './AppErrorBoundary'
+import { SolutionView } from './solution/SolutionView'
 
 export { ErrorBoundary } from './AppErrorBoundary'
 
@@ -87,7 +88,9 @@ function AppShell(): JSX.Element {
     setViewState(v)
     if (v !== 'progress') setSelectedChange(null)
     try {
-      localStorage.setItem(VIEW_KEY, v)
+      // Overview 是品牌级只读入口，不是运营工作区；保留上一次运营视图记忆，
+      // 使无 view 深链的下次启动仍回到用户的工作上下文。
+      if (PRIMARY_VIEWS.some((primary) => primary === v)) localStorage.setItem(VIEW_KEY, v)
     } catch {
       /* ignore */
     }
@@ -275,7 +278,9 @@ function AppShell(): JSX.Element {
         {/* G18 教学空状态（T17 起纯教学态：pipeline init 自动登记，无注册表单）：
             零项目 → 全视图 onboarding；有项目零 change → 进度替换为新建引导
             （工作台不替换——它是配置面，零 change 也有事可做）。 */}
-        {snapshot && snapshot.project_count === 0 && view !== 'machine' ? (
+        {view === 'overview' ? (
+          <SolutionView />
+        ) : snapshot && snapshot.project_count === 0 && view !== 'machine' ? (
           <Onboarding kind="no-project" />
         ) : snapshot && currentProject && currentProject.changes.length === 0 && view === 'progress' ? (
           <Onboarding

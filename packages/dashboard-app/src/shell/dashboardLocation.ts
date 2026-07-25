@@ -1,6 +1,6 @@
 import type { View } from './Nav'
 
-const VIEWS = new Set<View>(['projects', 'progress', 'afk', 'workbench', 'machine'])
+const VIEWS = new Set<View>(['overview', 'projects', 'progress', 'afk', 'workbench', 'machine'])
 
 export interface DashboardLocation {
   view?: View

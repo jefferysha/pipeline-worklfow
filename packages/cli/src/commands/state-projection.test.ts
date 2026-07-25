@@ -28,4 +28,10 @@ describe('pipeline state · G1 YAML projection 运维面', () => {
     expect(await cmdStateProjection(deps, 'import-legacy', 'demo')).toBe(2)
     expect(deps.outLines).toEqual(['demo: imported (pending)'])
   })
+
+  test('pin-workflow-snapshot 未提供 workflow file 时失败关闭', async () => {
+    const deps = makeDeps()
+    expect(await cmdStateProjection(deps, 'pin-workflow-snapshot', 'demo')).toBe(1)
+    expect(deps.errLines).toContain('ERROR: pin-workflow-snapshot 必须提供 --workflow-file')
+  })
 })

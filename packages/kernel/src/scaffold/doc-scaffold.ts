@@ -15,6 +15,7 @@
  *
  * kernel 零第三方依赖：本文件纯字符串/集合逻辑，fs 副作用全在 CLI 注入（ScaffoldFs）。
  */
+import type { DocumentLocale } from '../types.js'
 
 // ── 项目类型 ─────────────────────────────────────────────────────────────
 export type ProjectType = 'web' | 'cli' | 'lib'
@@ -58,35 +59,62 @@ export interface DocFile {
  */
 export const SPEC_DOC_LAYOUTS: Record<ProjectType, readonly DocSpec[]> = {
   web: [
-    { rel: 'frontend/README.md', title: 'Frontend Spec', summary: '前端范围、页面/路由、组件契约。' },
-    { rel: 'frontend/components.md', title: 'Component Contracts', summary: '关键组件的 props/状态/交互契约。' },
-    { rel: 'backend/README.md', title: 'Backend Spec', summary: '后端范围、服务边界、职责划分。' },
-    { rel: 'backend/api.md', title: 'API Contracts', summary: '对外 HTTP/RPC 接口的请求/响应契约。' },
-    { rel: 'backend/data-model.md', title: 'Data Model', summary: '实体、关系、持久化与迁移约束。' },
-    { rel: 'guides/getting-started.md', title: 'Getting Started', summary: '本地起步、运行、调试路径。' },
-    { rel: 'guides/architecture.md', title: 'Architecture', summary: '系统分层、依赖方向、关键决策。' },
+    { rel: 'frontend/README.md', title: '前端规格', summary: '前端范围、页面/路由、组件契约。' },
+    { rel: 'frontend/components.md', title: '组件契约', summary: '关键组件的 props/状态/交互契约。' },
+    { rel: 'backend/README.md', title: '后端规格', summary: '后端范围、服务边界、职责划分。' },
+    { rel: 'backend/api.md', title: 'API 契约', summary: '对外 HTTP/RPC 接口的请求/响应契约。' },
+    { rel: 'backend/data-model.md', title: '数据模型', summary: '实体、关系、持久化与迁移约束。' },
+    { rel: 'guides/getting-started.md', title: '入门指南', summary: '本地起步、运行、调试路径。' },
+    { rel: 'guides/architecture.md', title: '架构', summary: '系统分层、依赖方向、关键决策。' },
   ],
   cli: [
-    { rel: 'commands/README.md', title: 'Command Surface', summary: '命令/子命令清单与总体心智模型。' },
-    { rel: 'commands/reference.md', title: 'Command Reference', summary: '逐命令 flag、退出码、stdout/stderr 契约。' },
-    { rel: 'guides/getting-started.md', title: 'Getting Started', summary: '安装、一行上手、5 分钟心智模型。' },
-    { rel: 'guides/architecture.md', title: 'Architecture', summary: '内核/命令分层、依赖注入面、可移植性。' },
+    { rel: 'commands/README.md', title: '命令面', summary: '命令/子命令清单与总体心智模型。' },
+    { rel: 'commands/reference.md', title: '命令参考', summary: '逐命令 flag、退出码、stdout/stderr 契约。' },
+    { rel: 'guides/getting-started.md', title: '入门指南', summary: '安装、一行上手、5 分钟心智模型。' },
+    { rel: 'guides/architecture.md', title: '架构', summary: '内核/命令分层、依赖注入面、可移植性。' },
   ],
   lib: [
-    { rel: 'api/README.md', title: 'Public API', summary: '对外导出面、稳定性承诺、版本策略。' },
-    { rel: 'api/reference.md', title: 'API Reference', summary: '逐符号签名、参数/返回契约、错误语义。' },
-    { rel: 'guides/getting-started.md', title: 'Getting Started', summary: '安装、最小可用示例、集成路径。' },
-    { rel: 'guides/architecture.md', title: 'Architecture', summary: '内部分层、纯逻辑/副作用边界、扩展点。' },
+    { rel: 'api/README.md', title: '公共 API', summary: '对外导出面、稳定性承诺、版本策略。' },
+    { rel: 'api/reference.md', title: 'API 参考', summary: '逐符号签名、参数/返回契约、错误语义。' },
+    { rel: 'guides/getting-started.md', title: '入门指南', summary: '安装、最小可用示例、集成路径。' },
+    { rel: 'guides/architecture.md', title: '架构', summary: '内部分层、纯逻辑/副作用边界、扩展点。' },
   ],
 }
 
-/** 渲染一份空文档 stub：marker + 标题 + summary + TODO 占位（explore 阶段填充）。 */
-export function renderScaffoldDoc(spec: DocSpec): string {
+const EN_SPEC_DOC_LAYOUTS: Record<ProjectType, readonly DocSpec[]> = {
+  web: [
+    { rel: 'frontend/README.md', title: 'Frontend Spec', summary: 'Frontend scope, pages/routes, and component contracts.' },
+    { rel: 'frontend/components.md', title: 'Component Contracts', summary: 'Props, state, and interaction contracts for key components.' },
+    { rel: 'backend/README.md', title: 'Backend Spec', summary: 'Backend scope, service boundaries, and responsibilities.' },
+    { rel: 'backend/api.md', title: 'API Contracts', summary: 'Request and response contracts for external HTTP/RPC interfaces.' },
+    { rel: 'backend/data-model.md', title: 'Data Model', summary: 'Entities, relationships, persistence, and migration constraints.' },
+    { rel: 'guides/getting-started.md', title: 'Getting Started', summary: 'Local setup, execution, and debugging paths.' },
+    { rel: 'guides/architecture.md', title: 'Architecture', summary: 'System layers, dependency direction, and key decisions.' },
+  ],
+  cli: [
+    { rel: 'commands/README.md', title: 'Command Surface', summary: 'Commands, subcommands, and the overall mental model.' },
+    { rel: 'commands/reference.md', title: 'Command Reference', summary: 'Flags, exit codes, and stdout/stderr contracts by command.' },
+    { rel: 'guides/getting-started.md', title: 'Getting Started', summary: 'Installation, first command, and a five-minute mental model.' },
+    { rel: 'guides/architecture.md', title: 'Architecture', summary: 'Kernel/command layers, dependency injection, and portability.' },
+  ],
+  lib: [
+    { rel: 'api/README.md', title: 'Public API', summary: 'Exports, stability commitments, and versioning policy.' },
+    { rel: 'api/reference.md', title: 'API Reference', summary: 'Symbol signatures, parameters, return contracts, and errors.' },
+    { rel: 'guides/getting-started.md', title: 'Getting Started', summary: 'Installation, a minimal example, and integration paths.' },
+    { rel: 'guides/architecture.md', title: 'Architecture', summary: 'Internal layers, pure/effect boundaries, and extension points.' },
+  ],
+}
+
+/** 渲染一份空文档 stub：marker + 标题 + summary + 待填写占位（explore 阶段填充）。 */
+export function renderScaffoldDoc(spec: DocSpec, locale: DocumentLocale = 'zh-CN'): string {
+  const prompt = locale === 'zh-CN'
+    ? '[待填写:explore] 在 explore/spec 阶段补全本文档；完成后删除本行与 scaffold marker。'
+    : '[pending:explore] Complete this document during explore/spec, then remove this line and the scaffold marker.'
   return (
     `${SCAFFOLD_MARKER}\n` +
     `# ${spec.title}\n\n` +
     `${spec.summary}\n\n` +
-    `> TODO(explore): 在 explore/spec 阶段补全本文档。删除本行与 scaffold marker 表示已认领。\n`
+    `> ${prompt}\n`
   )
 }
 
@@ -94,11 +122,16 @@ export function renderScaffoldDoc(spec: DocSpec): string {
  * 按项目类型构建分层空文档集（DocFile[]，rel 含 spec 目录前缀）。
  * specDir 缺省 openspec/specs；rel 顺序 = SPEC_DOC_LAYOUTS 声明序（可复现）。
  */
-export function buildSpecScaffold(type: ProjectType, specDir: string = DEFAULT_SPEC_DIR): DocFile[] {
+export function buildSpecScaffold(
+  type: ProjectType,
+  specDir: string = DEFAULT_SPEC_DIR,
+  locale: DocumentLocale = 'zh-CN',
+): DocFile[] {
   const base = specDir.replace(/\/+$/, '')
-  return SPEC_DOC_LAYOUTS[type].map((spec) => ({
+  const layout = locale === 'zh-CN' ? SPEC_DOC_LAYOUTS[type] : EN_SPEC_DOC_LAYOUTS[type]
+  return layout.map((spec) => ({
     rel: `${base}/${spec.rel}`,
-    content: renderScaffoldDoc(spec),
+    content: renderScaffoldDoc(spec, locale),
   }))
 }
 

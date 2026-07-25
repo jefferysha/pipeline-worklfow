@@ -374,15 +374,14 @@ steps:
     expect(r.out.some((l) => l.includes('[STOP]') && l.includes('max-steps'))).toBe(true)
   })
 
-  test('workflow 文件事后被删（未找到）→ exit 1 同 transition 措辞，零写盘', async () => {
+  test('workflow 文件事后被删仍按初始化快照推进，不让插件更新锁死在途 Change', async () => {
     await setupCustomChange('cw', 'chain', CHAIN_WF)
     await rm(join(h.cwd, '.pipeline', 'workflows', 'chain.yaml'))
-    const before = await h.read('cw')
 
     const r = await advance('cw', {})
-    expect(r.code).toBe(1)
-    expect(await h.read('cw')).toBe(before)
-    expect(r.err.join('\n')).toContain("workflow 'chain' 已绑定 workflow plan fingerprint，定义缺失时拒绝运行")
+    expect(r.code).toBe(0)
+    expect(await phaseOf('cw')).toBe('c3')
+    expect(r.err.join('\n')).not.toContain('workflow plan fingerprint')
   })
 
   test('--dry-run 真不改盘（自定义轨）：报计划、phase 与字节均不变', async () => {

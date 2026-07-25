@@ -12,6 +12,7 @@ import {
 import type { StateFieldEffect } from '../workflow/run-types.js'
 import { validateAutomationPolicySnapshot } from '../loops/automation-policy.js'
 import { diffFieldsToEffects } from './run-metadata.js'
+import { withoutWorkflowGovernanceBinding } from './workflow-governance-binding.js'
 
 const SAFE_ID_RE = /^[A-Za-z0-9_-]+$/
 const FIELD_SET = new Set<string>(FIELD_ORDER)
@@ -237,7 +238,9 @@ export function createRunRevision(input: {
   // closed-schema 规范化，保证任何成功写出的 revision 都能被本实现重新读取。
   const state = canonicalState({
     fields: structuredClone(input.state.fields),
-    ...(input.state.runMetadata === undefined ? {} : { runMetadata: structuredClone(input.state.runMetadata) }),
+    ...(input.state.runMetadata === undefined
+      ? {}
+      : { runMetadata: withoutWorkflowGovernanceBinding(structuredClone(input.state.runMetadata)) }),
     opaqueTail: input.state.opaqueTail,
   })
   const body = revisionBody({

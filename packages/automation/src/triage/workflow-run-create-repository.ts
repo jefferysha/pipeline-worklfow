@@ -1,7 +1,10 @@
 import { createHash } from 'node:crypto'
 import { join, resolve } from 'node:path'
 import {
+  effectiveWorkflowPlanBinding,
   OBSERVE_ACTION_KINDS,
+  workflowPlanSnapshot,
+  type EffectiveWorkflowPlan,
   type InitOptions,
   type PipelineState,
   type StateStore,
@@ -38,7 +41,11 @@ export type WorkflowRunCreateTrustedInit = Omit<
 export interface WorkflowRunCreateRepositoryDeps {
   readonly repoRoot: string
   readonly store: StateStore
-  readonly runRepository: Pick<WorkflowRunRepository, 'establishRun'>
+  readonly runRepository: Pick<WorkflowRunRepository, 'initChange'>
+  /** Host resolves the trusted route to the exact immutable plan frozen into the new run. */
+  readonly resolveWorkflowPlan: (
+    request: WorkflowRunCreateRequest,
+  ) => EffectiveWorkflowPlan | Promise<EffectiveWorkflowPlan>
   /** Host-owned policy. Request identity, location, and workflow coordinates are not delegable. */
   readonly resolveInit: (
     request: WorkflowRunCreateRequest,
@@ -276,8 +283,17 @@ function runFromValidatedState(state: PipelineState): WorkflowRun {
     lifecycle: stringField('archived') === 'true' ? 'archived' : 'active',
     transitionSequence: metadata.transitionSequence,
     transitionHead: metadata.transitionHead,
+    documentProfile: metadata.documentProfile,
+    documentGovernanceFingerprint: metadata.documentGovernanceFingerprint,
+    workflowPlanFingerprint: metadata.workflowPlanFingerprint,
+    workflowPlanSnapshot: metadata.workflowPlanSnapshot,
     createdAt: stringField('created_at'),
     updatedAt: stringField('updated_at'),
+    automationPolicy: metadata.automationPolicy,
+    policyId: metadata.automationPolicy?.policy_id,
+    policyVersion: metadata.automationPolicy?.policy_version,
+    loopId: metadata.loopId,
+    iterationId: metadata.iterationId,
   }
 }
 
@@ -288,7 +304,43 @@ export function createWorkflowRunCreateIfAbsentRepository(
     async createIfAbsent(input): Promise<WorkflowRunCreateIfAbsentResult> {
       const request = snapshotRequest(input)
       const expectedRunId = runIdFor(request)
+      const changeDir = join(
+        resolve(deps.repoRoot),
+        'openspec',
+        'changes',
+        request.changeName,
+      )
+      const readExisting = async (): Promise<WorkflowRun | undefined> => {
+        try {
+          // Read-only probe avoids creating `.pipeline.lock` inside a competing initializer's
+          // not-yet-committed directory. Once canonical state exists, lock and validate one snapshot.
+          await deps.store.read(changeDir)
+          return await deps.store.withLock(changeDir, async () => {
+            const state = await deps.store.read(changeDir)
+            assertExistingIdentity(changeDir, expectedRunId, request, {
+              runId: state.runMetadata?.runId,
+              workflowId: stateString(state.fields.workflow),
+              initialStep: stateString(state.fields.phase),
+            })
+            return runFromValidatedState(state)
+          })
+        } catch (error) {
+          if (errnoCode(error) === 'ENOENT') return undefined
+          throw error
+        }
+      }
+      const existing = await readExisting()
+      if (existing !== undefined) return { status: 'existing', run: existing }
+
       const trusted = await deps.resolveInit(request)
+      const plan = await deps.resolveWorkflowPlan(request)
+      if (plan.id !== request.workflowId
+        || !plan.workflow.steps.some((step) => step.id === request.initialStep)) {
+        throw new WorkflowRunCreateRequestError([
+          'request workflow/initialStep does not match the host-resolved workflow plan',
+        ])
+      }
+      const planBinding = effectiveWorkflowPlanBinding(plan)
       // Explicit projection is intentional: even an unsound host implementation cannot smuggle
       // repoRoot/name/runId/initialWorkflow through object spread and override request identity.
       const init: InitOptions = {
@@ -300,43 +352,32 @@ export function createWorkflowRunCreateIfAbsentRepository(
         user: trusted.user,
         clock: trusted.clock,
         runId: expectedRunId,
-        initialWorkflow: { workflow: request.workflowId, phase: request.initialStep },
+        initialWorkflow: {
+          workflow: request.workflowId,
+          phase: request.initialStep,
+          ...planBinding,
+          workflowPlanSnapshot: workflowPlanSnapshot(plan),
+          openspecContract: plan.capabilities.documents.profile === 'legacy-full',
+          documentContract: plan.capabilities.documents.governed,
+        },
       }
-      const changeDir = join(
-        resolve(deps.repoRoot),
-        'openspec',
-        'changes',
-        request.changeName,
-      )
-
-      let createdDir: string | undefined
+      let created: { changeDir: string; run: WorkflowRun } | undefined
       try {
-        createdDir = await deps.store.init(init)
+        created = await deps.runRepository.initChange(init)
       } catch (error) {
         if (errnoCode(error) !== 'EEXIST') throw error
       }
-      if (createdDir !== undefined) {
-        // Deliberately outside the init catch: an EEXIST from establishRun is its own I/O/domain
-        // failure, not evidence that this call lost StateStore.init's exclusive-create race.
-        const run = await deps.runRepository.establishRun(createdDir)
-        assertEstablishedRun(createdDir, expectedRunId, request, run)
-        return { status: 'created', run }
+      if (created !== undefined) {
+        assertEstablishedRun(created.changeDir, expectedRunId, request, created.run)
+        return { status: 'created', run: created.run }
       }
 
-      // EEXIST is the linearization loser (or a genuine name collision). Validate before calling
-      // establishRun so an unrelated legacy change with no runMetadata is never silently upgraded.
-      const run = await deps.store.withLock(changeDir, async () => {
-        const state = await deps.store.read(changeDir)
-        assertExistingIdentity(changeDir, expectedRunId, request, {
-          runId: state.runMetadata?.runId,
-          workflowId: stateString(state.fields.workflow),
-          initialStep: stateString(state.fields.phase),
-        })
-        // Build the read result while the same lock and snapshot are still authoritative. Calling
-        // establishRun here would deadlock on its nested lock; calling it after unlock would reopen
-        // the exact validation→write TOCTOU this branch must avoid.
-        return runFromValidatedState(state)
-      })
+      // The name-level init lock releases only after current is committed, so an EEXIST loser can
+      // now converge through the same immutable existing-state path without observing half init.
+      const run = await readExisting()
+      if (run === undefined) {
+        throw new Error(`WorkflowRun init reported EEXIST but no committed Change exists: ${changeDir}`)
+      }
       return { status: 'existing', run }
     },
   }

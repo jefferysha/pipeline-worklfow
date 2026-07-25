@@ -1,5 +1,6 @@
 export * from './types.js'
 export * from './state/index.js'
+export * from './documents/index.js'
 export * from './flow/index.js'
 export { canonicalMachineStateHome, machineStateScopeId } from './machine-state-scope.js'
 // in-place 构建不以未变化的 Git HEAD 冒充验证靶；提供内容寻址的工作区基线给 CLI/server 注入。
@@ -79,9 +80,12 @@ export { compileWorkflow, compileDefaultWorkflow, decodeWorkflowDef } from './wo
 export {
   compileEffectiveWorkflowPlan, effectiveWorkflowPlanFromIr, loadEffectiveWorkflowPlan,
   documentGovernanceFingerprint, DocumentGovernanceBindingError, effectiveWorkflowPlanBinding,
-  resolveBoundEffectiveWorkflowPlan, resolveEffectiveWorkflowPlan,
+  effectiveWorkflowPlanFromSnapshot, resolveBoundEffectiveWorkflowPlan, resolveEffectiveWorkflowPlan,
+  workflowPlanSnapshot,
 } from './workflow/effective-plan.js'
-export type { EffectiveWorkflowPlan, PersistedDocumentGovernanceBinding } from './workflow/effective-plan.js'
+export type {
+  EffectiveWorkflowPlan, PersistedDocumentGovernanceBinding, WorkflowPlanSnapshot,
+} from './workflow/effective-plan.js'
 export type { CompiledGuardConfig, StepIR, StepTransitionIR, WorkflowIR } from './workflow/ir.js'
 // default workflow artifact declaration 查询层（G2 P4/P5）：只读生成表 default-workflow.generated.ts 的
 // track-aware 查询接缝——P5 artifact register 经本 API 取 default declaration，不再读 YAML/复制字段表。

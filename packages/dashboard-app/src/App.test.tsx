@@ -87,6 +87,42 @@ describe('App 默认落地 = 进度（v9-flowdeck：收件箱退役，进度=唯
 })
 
 describe('App URL 深链路（可复制的视图 / 项目 / Change 现场）', () => {
+  it('零项目也能通过 view=overview 打开完整概览，不被 onboarding 替换', async () => {
+    window.history.replaceState({}, '', '/?view=overview')
+    ;(global.fetch as ReturnType<typeof vi.fn>).mockImplementation(async (url: string) => {
+      if (url === '/api/snapshot') return { ok: true, json: async () => makeSnapshot([]) }
+      throw new Error(`unexpected fetch ${url}`)
+    })
+
+    render(<App />)
+
+    expect(await screen.findByTestId('solution-view')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('让 coding agents 按可验证流程交付')
+    expect(screen.queryByTestId('onboard-no-project')).toBeNull()
+    expect(new URLSearchParams(window.location.search).get('view')).toBe('overview')
+  })
+
+  it('Overview 如实保留本机只读 snapshot 连接，不宣称整页零请求', async () => {
+    window.history.replaceState({}, '', '/?view=overview')
+    render(<App />)
+
+    expect(await screen.findByTestId('solution-view')).toBeInTheDocument()
+    expect(global.fetch).toHaveBeenCalledWith('/api/snapshot', expect.anything())
+    expect(screen.getByText(/概览页不写入项目状态/)).toBeInTheDocument()
+    expect(screen.queryByText(/本页不发请求/)).toBeNull()
+  })
+
+  it('语言切换同步更新文档 lang 元数据', async () => {
+    window.history.replaceState({}, '', '/?view=overview')
+    render(<App />)
+    await screen.findByTestId('solution-view')
+
+    expect(document.documentElement).toHaveAttribute('lang', 'zh')
+    fireEvent.click(screen.getByTestId('nav-settings'))
+    fireEvent.click(screen.getByTestId('lang-toggle'))
+    await waitFor(() => expect(document.documentElement).toHaveAttribute('lang', 'en'))
+  })
+
   it('带 view/root/change 首次进入：直接打开对应项目的 Change 抽屉', async () => {
     window.history.replaceState({}, '', '/?view=progress&root=%2Frepo&change=seed-c')
     render(<App />)
@@ -174,6 +210,17 @@ describe('App 视图记忆（localStorage 旧值兜底回 progress，收件箱�
     await screen.findByTestId('progress-view')
     fireEvent.click(screen.getByTestId('nav-workbench'))
     expect(localStorage.getItem('pipeline-dashboard-view')).toBe('workbench')
+  })
+
+  it('品牌 Overview 不覆盖上一次运营视图记忆', async () => {
+    render(<App />)
+    await screen.findByTestId('progress-view')
+    fireEvent.click(screen.getByTestId('nav-projects'))
+    expect(localStorage.getItem('pipeline-dashboard-view')).toBe('projects')
+
+    fireEvent.click(screen.getByTestId('nav-overview'))
+    expect(await screen.findByTestId('solution-view')).toBeInTheDocument()
+    expect(localStorage.getItem('pipeline-dashboard-view')).toBe('projects')
   })
 })
 

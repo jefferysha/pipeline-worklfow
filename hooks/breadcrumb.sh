@@ -117,6 +117,21 @@ if [ "$EXPLICIT_COUNT" -eq 1 ]; then
   RESUME_STATE="$EXPLICIT_STATE"
 elif [ "$EXPLICIT_COUNT" -gt 1 ]; then
   exit 0
+elif [ -n "$(json_get session_id || true)" ]; then
+  SESSION_BINDING_HELPER="$(dirname "${BASH_SOURCE[0]:-$0}")/host-session-binding.sh"
+  if [ -r "$SESSION_BINDING_HELPER" ]; then
+    # shellcheck source=host-session-binding.sh
+    . "$SESSION_BINDING_HELPER"
+    HOST_SESSION_ID="$(json_get session_id || true)"
+    SESSION_CHANGE_NAME="$(pipeline_host_session_change_name "$PROOT" "$HOST_SESSION_ID" || true)"
+    if [ -n "$SESSION_CHANGE_NAME" ] && pipeline_prompt_requests_resume "$PROMPT" "$SESSION_CHANGE_NAME"; then
+      RESUME_NAME="$SESSION_CHANGE_NAME"
+      RESUME_DIR="$CHANGES/$SESSION_CHANGE_NAME"
+      RESUME_STATE="$(pipeline_state_source "$RESUME_DIR" || true)"
+    fi
+  fi
+  # A host session id is a conversation boundary. If it has no valid binding, generic resume
+  # remains unbound; only the explicit Change-name branch above may cross that boundary.
 elif [ -n "$ACTIVE_NAME" ]; then
   if pipeline_prompt_requests_resume "$PROMPT" "$ACTIVE_NAME"; then
     RESUME_NAME="$ACTIVE_NAME"

@@ -343,6 +343,37 @@ describe('createTransitionApplication —— 唯一 TransitionApplication 用例
       expect(result.lines.length).toBeGreaterThan(0)
     })
 
+    test('ship-complete 由运行时 typed guard 强制迁移证据，缺失能力/非法证据零提交，有效状态才推进', async () => {
+      const root = await freshRepoRoot()
+      const deps = makeDeps()
+      const dir = await initChange(deps, root, 'demo')
+      await createStateStore().set(dir, 'phase', 'ship')
+      const app = createTransitionApplication(deps)
+
+      const missing = await app.execute({
+        root, changeDir: dir, changeName: 'demo', event: 'ship-complete',
+        context: {}, loadWorkflow: NEVER_FOUND_WORKFLOW,
+      })
+      expect(missing.kind).toBe('precondition-violated')
+      expect((await createStateStore().read(dir)).fields.phase).toBe('ship')
+
+      const invalid = await app.execute({
+        root, changeDir: dir, changeName: 'demo', event: 'ship-complete',
+        context: { specMigrationStatus: async () => ({ kind: 'invalid', reason: 'receipt-mismatch' }) },
+        loadWorkflow: NEVER_FOUND_WORKFLOW,
+      })
+      expect(invalid.kind).toBe('precondition-violated')
+      expect((await createStateStore().read(dir)).fields.phase).toBe('ship')
+
+      const applied = await app.execute({
+        root, changeDir: dir, changeName: 'demo', event: 'ship-complete',
+        context: { specMigrationStatus: async () => ({ kind: 'not-required' }) },
+        loadWorkflow: NEVER_FOUND_WORKFLOW,
+      })
+      expect(applied.kind).toBe('applied')
+      expect((await createStateStore().read(dir)).fields.phase).toBe('archive')
+    })
+
     test('build-complete 且 gitHeadSha 未注入 → applied 但 warnings 含 build-sha-missing', async () => {
       const root = await freshRepoRoot()
       const deps = makeDeps()

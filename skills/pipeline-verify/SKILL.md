@@ -5,6 +5,10 @@ description: "Pipeline Phase 5: Verify · 三轨并行验证。PM Track 做原�
 
 # /pipeline-verify — Phase 5: Verify
 
+> **语言：** verification report 沿用 Change 固定 locale（默认中文，显式 `en` 时使用英文）；验证范围、结果、失败和剩余
+> 风险使用同一 locale，命令、路径、测试名、退出码、kind/producer 和协议字段保持原样。模板只提供结构，
+> 未执行的验证不得写成通过。
+
 > 移植来源：老仓 `skills/pipeline-verify/SKILL.md`；脚本面已改写为 `pipeline` CLI。
 
 > **Codex 打包 Skill 身份：** 本文件提到的裸 skill id 是 DAG/ledger 的逻辑 id；在 Codex
@@ -188,7 +192,7 @@ fi
    build、类型、测试、lint 与行为 smoke，不自动叠加前端、后端或 PM 验证矩阵。
 3. 对 UI/API/安全等仅在 Change 实际涉及该面时运行相应验证，报告必须列出运行项、
    未运行项和残余风险。
-4. 完成下方逐文件 spec 回读与 delta→main 即时回灌，生成 verification report，
+4. 完成下方逐文件 spec 回读与隔离副本 delta 应用演练，生成 verification report，
    登记文档证据，并设置：
 
 ```bash
@@ -226,31 +230,24 @@ find openspec/specs -name spec.md 2>/dev/null    # 每 capability → spec.md �
 |---------|------------------------|----------------------|
 | （git diff --name-only 逐行填）| openspec/specs/<cap>/spec.md | ☐ |
 
-### Step 1.6: Spec 即时回灌 — delta → main 增量合并（HARD RULE · 硬门，frontend/backend/free）
+### Step 1.6: OpenSpec 隔离应用演练（HARD RULE · 硬门，frontend/backend/free）
 
-⚡ **HARD RULE（update-spec-on-change 闭环）**：spec 回灌**不再推迟到 archive**——本 change
-一旦在开发中改了 spec，verify 通过**前**必须把 delta 即时增量合并进 main spec（archive 仍做
-最终兜底，操作幂等、两处不冲突）。对标 Trellis 的 `[required · once]` spec-update 必经步。
-
-**三触发条件**（映射 OpenSpec delta 三操作；命中任一即必须回灌）：① 新增 capability
-（`## ADDED Requirements`）② 改既有 requirement（`## MODIFIED Requirements`）③ 删 scenario
-（`## REMOVED Requirements`）。判定：本 change 的 `openspec/changes/<name>/specs/**/spec.md`
-存在/有改动即触发。
-
-回灌操作（用 Read + Edit 工具逐 capability 做增量合并，**只读 delta + 写 main spec**）：
+⚡ **HARD RULE（固定靶 + 单一应用边界）**：Verify 不得写真实 `openspec/specs/`。将完整工作区复制到
+隔离临时目录，在副本中运行官方 `openspec show`、strict validate 和 archive/apply 演练；记录命令、
+版本、退出码和主规格前后 digest。Ship 是唯一真实应用边界，负责幂等写主规格并生成 applied-spec
+receipt；Archive 对已应用 Change 使用 `--skip-specs`，不得第三次合并。
 
 ```bash
-# 列出全部 delta spec
-find "openspec/changes/$PIPELINE_CHANGE_NAME/specs" -type f -name spec.md 2>/dev/null
+openspec show "$PIPELINE_CHANGE_NAME" --json --deltas-only
+openspec validate "$PIPELINE_CHANGE_NAME" --strict
+VERIFY_COPY="$(mktemp -d)"
+# 用保留 symlink/权限的仓库复制方式建立隔离副本后，在副本运行：
+openspec archive "$PIPELINE_CHANGE_NAME" --yes --json
 ```
 
-对每个 delta：`openspec/changes/<name>/specs/<cap>/spec.md` → 合并进 `openspec/specs/<cap>/spec.md`
-（ADDED=追加 requirement 段；MODIFIED=替换同名 requirement 段；REMOVED=删除对应 scenario；
-目标不存在则整建）。**不动实现/配置、不重新 build**——符合 verify「审固定靶」语义（Git `BUILD_SHA` 或 in-place 内容基线均不受影响）。
-
-> 命中三触发但未回灌 / 回灌失败 → **HARD STOP**，不得 verify-pass。
-> ⏳ **待迁移（M1 #16）**：老仓 `spec_merge.py` 幂等合并器未迁移，上面是 Edit 工具的等价
-> 手工合并流程；#16 落地后改回脚本化。
+演练前后真实工作区的冻结 fingerprint 与 `openspec/specs/**/spec.md` digest 必须相同；临时副本中的
+archive 必须成功且产出的 main spec 通过 strict validate。缺少官方 CLI、show/validate/archive 失败、
+真实主规格被修改或 digest 漂移均为 **HARD STOP**，不得 verify-pass。
 
 ### Step 2: 聚合 review 结果
 
@@ -265,7 +262,7 @@ pipeline set "$PIPELINE_CHANGE_NAME" codex_review_result pass
 
 # 生成聚合报告
 REPORT_PATH="docs/superpowers/reports/$(date +%Y-%m-%d)-${PIPELINE_CHANGE_NAME}-verify.md"
-# ... 写报告（含三/四轨结论 + Step 1.5 勾选表 + Step 1.6 回灌记录）...
+# ... 写报告（含三/四轨结论 + Step 1.5 勾选表 + Step 1.6 隔离演练记录）...
 pipeline artifact register "$PIPELINE_CHANGE_NAME" verification_report "$REPORT_PATH" \
   --producer verification-before-completion
 ```

@@ -67,6 +67,10 @@ CLI_BUNDLE="$ROOT/packages/cli/dist/pipeline.mjs"
 DASHBOARD_SERVER_BUNDLE="$ROOT/packages/server/dist/dashboard.mjs"
 DASHBOARD_WEB_INDEX="$ROOT/packages/dashboard-app/dist/index.html"
 SIMPLE_WORKFLOW_TEMPLATE="$ROOT/templates/workflows/simple.yaml"
+DOCUMENT_TEMPLATE_REGISTRY="$ROOT/templates/documents/registry.v1.yaml"
+DOCUMENT_TEMPLATE_ZH="$ROOT/templates/documents/locales/zh-CN.yaml"
+DOCUMENT_TEMPLATE_EN="$ROOT/templates/documents/locales/en.yaml"
+DOCUMENT_TEMPLATE_SCHEMA="$ROOT/templates/documents/schemas/registry.v1.schema.json"
 
 # ── 1. 清单文件本体 ──
 if [ ! -f "$PLUGIN_JSON" ]; then
@@ -131,6 +135,16 @@ fi
   || add_fail "缺失内建轻量 workflow 模板: templates/workflows/simple.yaml" \
               "simple Track 的发行资产" \
               "把 templates/workflows/simple.yaml 纳入发布包，并与 kernel 内建定义保持一致"
+for document_asset in \
+  "$DOCUMENT_TEMPLATE_REGISTRY" \
+  "$DOCUMENT_TEMPLATE_ZH" \
+  "$DOCUMENT_TEMPLATE_EN" \
+  "$DOCUMENT_TEMPLATE_SCHEMA"; do
+  [ -f "$document_asset" ] && [ -r "$document_asset" ] \
+    || add_fail "缺失治理文档模板资产: ${document_asset#"$ROOT"/}" \
+                "中文默认文档 Registry 的发行资产" \
+                "把 templates/documents/ 完整纳入发布包，并运行 npm run check:document-templates"
+done
 
 # index.html 是 server 同源托管的入口；仅目录存在不足以保证哈希资源也随 release 进入仓库。
 if [ -f "$DASHBOARD_WEB_INDEX" ]; then
@@ -214,8 +228,22 @@ if [ -d "$ROOT/skills" ]; then
   done
 fi
 
-# 插件源码只维护 ROOT/skills 这一棵 Skill 内容树。Host adapter 可以在安装目标创建
-# 投影，但插件包内出现第二份 SKILL.md 会形成双写和版本漂移，必须在 CI/安装期拒绝。
+# 插件发行内容只维护 ROOT/skills 这一棵 Skill 内容树。Host adapter 可以在工作区的
+# .agents/ 创建安装投影，Loop 也会在 .pipeline/ 保存不可变快照；两者都是被忽略的运行态，
+# 不能被误判为插件源码。Git 仓只检查 tracked 与未忽略候选；无 Git 的发行包显式排除运行态目录。
+list_release_skill_files() {
+  local git_root
+  git_root="$(git -C "$ROOT" rev-parse --show-toplevel 2>/dev/null || true)"
+  if [ "$git_root" = "$ROOT" ]; then
+    git -C "$ROOT" ls-files --cached --others --exclude-standard -- '*SKILL.md' \
+      | sed "s|^|$ROOT/|"
+    return
+  fi
+  find "$ROOT" \
+    \( -path "$ROOT/.git" -o -path "$ROOT/node_modules" -o -path "$ROOT/.agents" -o -path "$ROOT/.pipeline" \) -prune -o \
+    -type f -name 'SKILL.md' -print 2>/dev/null
+}
+
 while IFS= read -r duplicate_skill; do
   [ -n "$duplicate_skill" ] || continue
   case "$duplicate_skill" in
@@ -226,9 +254,7 @@ while IFS= read -r duplicate_skill; do
     "单一 canonical Skill 根约束" \
     "删除复制内容并让 host manifest/adapter 指向 $ROOT/skills；安装投影不得回写进插件包"
 done < <(
-  find "$ROOT" \
-    \( -path "$ROOT/.git" -o -path "$ROOT/node_modules" \) -prune -o \
-    -type f -name 'SKILL.md' -print 2>/dev/null | sort
+  list_release_skill_files | sort
 )
 
 # ── 4. 外部 skill 引用必须在 skills/EXTERNAL-SKILLS.md 声明 ──
@@ -297,6 +323,31 @@ if [ -f "$REGISTRY" ]; then
         "创建 skills/${physical}/SKILL.md，或把 content_skill 改为已有 first-party skill"
     fi
   done < "$REGISTRY"
+fi
+
+# ── 6. OpenSpec Ship/Archive 收据语义 ──
+# 主 spec 是应用结果；ledger 的 applied-spec kind 必须绑定 Change 自己的审计 receipt。若这里
+# 漂移回 openspec/specs/**，Archive 就失去 changed/no-op 与 digest 证据。
+PIPELINE_SHIP_SKILL="$ROOT/skills/pipeline-ship/SKILL.md"
+if [ -f "$PIPELINE_SHIP_SKILL" ]; then
+  grep -Fq 'APPLIED_RECEIPT="openspec/changes/$PIPELINE_CHANGE_NAME/applied-spec.md"' "$PIPELINE_SHIP_SKILL" \
+    || add_fail "pipeline-ship 未登记 Change applied-spec receipt" \
+                "skills/pipeline-ship/SKILL.md" \
+                "把 applied-spec document record 固定到 openspec/changes/<change>/applied-spec.md"
+  if grep -Fq 'applied="openspec/specs/' "$PIPELINE_SHIP_SKILL"; then
+    add_fail "pipeline-ship 把主 spec 冒充 applied-spec receipt" \
+             "skills/pipeline-ship/SKILL.md" \
+             "主 spec 只作为应用结果；ledger 登记 Change applied-spec.md 收据"
+  fi
+  if grep -Fq 'node tools/reconcile-spec-application.mjs' "$PIPELINE_SHIP_SKILL"; then
+    add_fail "pipeline-ship 引用了 managed release 未分发的一次性仓库迁移工具" \
+             "skills/pipeline-ship/SKILL.md" \
+             "打包 Skill 只消费 spec-migration-applied typed evidence；仓库维护工具不得成为用户运行时依赖"
+  fi
+  grep -Fq '`spec-migration-applied` typed guard' "$PIPELINE_SHIP_SKILL" \
+    || add_fail "pipeline-ship 未声明主规格迁移 typed evidence 门" \
+                "skills/pipeline-ship/SKILL.md" \
+                "存在 migration receipt 时必须由 spec-migration-applied guard 复核 result 与 after digest"
 fi
 
 # ── 汇总 ──

@@ -7,7 +7,8 @@
     "node": ">=22"
   },
   "workspaces": [
-    "packages/*"
+    "packages/*",
+    "docs-site"
   ],
   "scripts": {
     "build": "tsc -b packages/kernel packages/channel packages/tap packages/automation packages/cli packages/server && npm run build:web && npm run build:server && npm run bundle",
@@ -16,17 +17,26 @@
     "bundle": "esbuild packages/cli/src/main.ts --bundle --platform=node --format=esm --target=node22 --banner:js=\"import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);\" --outfile=packages/cli/dist/pipeline.mjs && chmod +x packages/cli/dist/pipeline.mjs",
     "check:comments": "bash tools/check-comment-honesty.sh",
     "check:architecture": "node tools/check-architecture.mjs",
+    "check:docs": "node --test tools/check-docs.node-test.mjs && node tools/check-docs.mjs",
+    "check:document-templates": "node tools/check-document-templates.mjs && npx vitest run packages/kernel/src/documents/document-template-renderer.test.ts",
+    "docs:sync": "npm run sync -w @pipeline-lite/docs-site",
+    "docs:check": "npm run check -w @pipeline-lite/docs-site",
+    "docs:build": "npm run build -w @pipeline-lite/docs-site",
+    "docs:smoke": "npm run smoke -w @pipeline-lite/docs-site",
     "test": "vitest run",
     "test:web": "vitest run --config packages/dashboard-app/vitest.config.ts",
     "test:hooks": "bash tools/test-hooks.sh",
+    "test:migration-cas": "node --test tools/spec-migration-cas.node-test.mjs tools/reconcile-spec-application.node-test.mjs",
     "test:all": "npm run test && npm run test:web",
     "build:web": "npm run build -w @pipeline-lite/dashboard-app",
     "oracle": "bash tools/oracle/run.sh backend-full default-effects default-guard-errors frontend-quotegate pm-history",
     "generate:default-workflow": "node tools/generate-default-workflow.mjs",
+    "generate:document-presentation": "node tools/generate-document-presentation.mjs",
     "check:default-workflow-freshness": "npm run generate:default-workflow && git diff --exit-code -- packages/kernel/src/workflow/default-workflow.generated.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
+    "ajv": "^8.17.1",
     "esbuild": "^0.28.1",
     "playwright": "^1.61.1",
     "typescript": "^5.6.0",

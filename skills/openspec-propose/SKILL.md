@@ -9,6 +9,28 @@ metadata:
 
 # OpenSpec Propose
 
+## Document language
+
+New Changes default to `zh-CN`. Before authoring a missing governed file, use
+`pipeline document scaffold <change> <kind>` so the shared presentation registry supplies the
+Change-pinned structure. Write reader-facing headings, requirements, scenarios, tasks, and
+explanations in that pinned locale (`zh-CN` by default; English when explicitly pinned to `en`).
+Keep file names, phase/event ids, document kinds, producers,
+frontmatter/coverage keys, commands, and `ADDED/MODIFIED/REMOVED Requirements` as stable English
+machine tokens.
+
+For a delta spec, always pass the real capability explicitly:
+
+```bash
+pipeline document scaffold <change> delta-spec --capability <capability>
+```
+
+Never infer the capability from the Change name or a default scope.
+
+The scaffold is missing-only and never counts as Skill completion or document evidence. Existing
+or archived files retain their language unless the user explicitly requests a digest-changing
+translation.
+
 Create or complete the OpenSpec artifacts owned by the active default pipeline change. This is a
 packaged workflow skill; it never requires the separately distributed `openspec` CLI.
 
@@ -47,11 +69,12 @@ them to select; never guess based on modification time.
 
 4. Write the three open artifacts:
 
-   - `proposal.md`: problem, intended outcome, scope, non-goals, and acceptance signal.
-   - `design.md`: initial architecture or interaction hypothesis, risks, and questions that explore
-     must validate. Do not fake a final architecture in open.
-   - `tasks.md`: seven phase headings (`Open`, `Explore`, `Spec`, `Build`, `Verify`, `Ship`,
-     `Archive`) with open work first. Implementation checkboxes belong in `Build` only after spec.
+   - `proposal.md`: 保留 OpenSpec 必需的 `Why`、`What Changes`、`Capabilities`、`Impact`
+     机器标题；标题下按 Change-pinned locale 记录问题、变化、能力与影响。
+   - `design.md`: 按 Change-pinned locale 记录初始架构/交互假设、风险和 Explore 必须验证的问题；
+     Open 不伪造最终架构。
+   - `tasks.md`: 阶段标题来自真实 workflow 的 label/id；default 使用固定 locale 对应的七阶段 label。
+     Open 任务在前，实施 checkbox 只能在 Spec 后进入 Build。
 
 5. Verify that all three files are non-empty, then register their evidence with the real skill name:
 

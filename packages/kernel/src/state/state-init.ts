@@ -1,6 +1,8 @@
 import { readFile, stat } from 'node:fs/promises'
 import path from 'node:path'
-import type { DocumentProfileId, FieldName, InitOptions } from '../types.js'
+import type {
+  DocumentProfileId, FieldName, InitOptions, RunMetadata,
+} from '../types.js'
 import { emptyFields } from './parse.js'
 import {
   compileEffectiveWorkflowPlan,
@@ -60,6 +62,22 @@ export function initialWorkflowPlanFingerprint(opts: InitOptions): string | unde
   if (explicit !== undefined) return explicit
   const workflowId = opts.initialWorkflow?.workflow ?? DEFAULT_PLAN.id
   return resolveEffectiveWorkflowPlan(workflowId, () => null)?.workflowFingerprint
+}
+
+export function initialRunMetadata(opts: InitOptions): RunMetadata | undefined {
+  if (!opts.runId) return undefined
+  const documentProfile = initialDocumentProfile(opts)
+  const documentGovernanceFingerprint = initialDocumentGovernanceFingerprint(opts)
+  const workflowPlanFingerprint = initialWorkflowPlanFingerprint(opts)
+  const workflowPlanSnapshot = opts.initialWorkflow?.workflowPlanSnapshot
+  return {
+    runId: opts.runId,
+    transitionSequence: 0,
+    ...(documentProfile === undefined ? {} : { documentProfile }),
+    ...(documentGovernanceFingerprint === undefined ? {} : { documentGovernanceFingerprint }),
+    ...(workflowPlanFingerprint === undefined ? {} : { workflowPlanFingerprint }),
+    ...(workflowPlanSnapshot === undefined ? {} : { workflowPlanSnapshot }),
+  }
 }
 
 /** Canonical initial aggregate fields; persistence publication remains owned by StateStore. */

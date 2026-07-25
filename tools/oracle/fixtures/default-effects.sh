@@ -18,11 +18,12 @@
 set -euo pipefail
 
 target="${1:?usage: default-effects.sh <target-dir>}"
-mkdir -p "$target/openspec/changes/t6-de" "$target/docs"
+fixture_change="$target/.oracle-post-init/t6-de"
+mkdir -p "$fixture_change" "$target/docs"
 
-printf '# proposal\n\nT6 oracle fixture: default 轨副作用 + barrier。\n' > "$target/openspec/changes/t6-de/proposal.md"
-printf '# design\n\nfixture design doc.\n' > "$target/openspec/changes/t6-de/design.md"
-printf -- '- [ ] t1\n- [x] t2\n- [x] t3\n' > "$target/openspec/changes/t6-de/tasks.md"
+printf '# proposal\n\nT6 oracle fixture: default 轨副作用 + barrier。\n' > "$fixture_change/proposal.md"
+printf '# design\n\nfixture design doc.\n' > "$fixture_change/design.md"
+printf -- '- [ ] t1\n- [x] t2\n- [x] t3\n' > "$fixture_change/tasks.md"
 # 字段指向的文件（explore/spec/verify-pass 前置要求「字段非空且文件存在」）
 cat > "$target/docs/design.md" <<'DESIGN'
 # design

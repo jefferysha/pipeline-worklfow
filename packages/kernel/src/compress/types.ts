@@ -9,6 +9,7 @@
  * 超越判据（D11 vs Comet）：① 确定性（同输入同输出，可回归 oracle）；② 结构化产出（headings/
  * decisions/constraints/openTodos/keyFields 分桶，非纯文本 blob）；③ 压缩率逐文档 + 聚合量化。
  */
+import type { DocumentLocale } from '../types.js'
 
 /** front-matter / key:value 键值对 */
 export interface KeyField {
@@ -52,4 +53,6 @@ export interface CompressedDoc {
 export interface CompressOptions {
   /** 标题骨架最大深度（默认 6，即全保留） */
   maxHeadingDepth?: number
+  /** 人读摘要语言；缺省跟随插件中文默认。 */
+  documentLocale?: DocumentLocale
 }

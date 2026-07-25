@@ -101,31 +101,42 @@ describe('renderHandoffSummary —— 下游可读结构化摘要', () => {
   test('保留决策/约束/待办；空段省略', () => {
     const doc = compressDocument(DOC)
     const s = renderHandoffSummary(doc)
-    expect(s).toContain('# Handoff: Sample Design')
-    expect(s).toContain('## Structure')
-    expect(s).toContain('## Decisions (2)')
+    expect(s).toContain('# 交接摘要: Sample Design')
+    expect(s).toContain('## 结构')
+    expect(s).toContain('## 决策 (2)')
     expect(s).toContain('- We decided to use a JSONL side-file for history storage.')
-    expect(s).toContain('## Constraints (2)')
+    expect(s).toContain('## 约束 (2)')
     expect(s).toContain('- 禁止引入通用 yaml 解析器。')
-    expect(s).toContain('## Open TODOs (2)')
+    expect(s).toContain('## 待办 (2)')
     expect(s).toContain('- [ ] wire handoff into transition')
-    expect(s).toContain('## Key Fields')
+    expect(s).toContain('## 关键字段')
     // 关键：样板正文不出现
     expect(s).not.toContain('background context')
   })
 
   test('label 覆写标题', () => {
     const doc = compressDocument(DOC)
-    expect(renderHandoffSummary(doc, 'chg/design')).toContain('# Handoff: chg/design')
+    expect(renderHandoffSummary(doc, 'chg/design')).toContain('# 交接摘要: chg/design')
   })
 
   test('空段（无 decisions）不产出该 section 头', () => {
     const doc = compressDocument('# Only Heading\n\nplain prose only\n')
     const s = renderHandoffSummary(doc)
+    expect(s).toContain('## 结构')
+    expect(s).not.toContain('## 决策')
+    expect(s).not.toContain('## 约束')
+    expect(s).not.toContain('## 待办')
+  })
+
+  test('显式 en 保留英文摘要', () => {
+    const doc = compressDocument(DOC, { documentLocale: 'en' })
+    const s = renderHandoffSummary(doc, undefined, 'en')
+    expect(s).toContain('# Handoff: Sample Design')
     expect(s).toContain('## Structure')
-    expect(s).not.toContain('## Decisions')
-    expect(s).not.toContain('## Constraints')
-    expect(s).not.toContain('## Open TODOs')
+    expect(s).toContain('## Decisions (2)')
+    expect(s).toContain('## Constraints (2)')
+    expect(s).toContain('## Open TODOs (2)')
+    expect(s).toContain('## Key Fields')
   })
 })
 

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, within } from '@testing-library/react'
 import { I18nProvider } from '../i18n'
-import { Nav } from './Nav'
+import { Nav, PRIMARY_VIEWS } from './Nav'
 
 beforeEach(() => {
   localStorage.clear()
@@ -31,6 +31,25 @@ function renderNav(over: Partial<Parameters<typeof Nav>[0]> = {}) {
 // 2026-07-15 外壳 IA 重构：rail 放视图导航——项目 / 进度 / AFK / 工作台（四枚 lucide 图标 + 小字）。
 // 项目页承担自动发现与选择；rail 不重复展示当前项目名或项目切换器。
 describe('Nav 一级导航（rail 五视图：项目 / 进度 / AFK / 工作台 / 机器）', () => {
+  it('品牌是独立的可访问 Overview 入口，不计入五个运营导航项', () => {
+    const props = renderNav()
+    const brand = screen.getByRole('button', { name: 'Pipeline Lite 概览' })
+    expect(brand).toHaveAttribute('data-testid', 'nav-overview')
+    expect(brand).toHaveClass('motion-reduce:transition-none')
+    expect(brand).not.toHaveAttribute('aria-current')
+    fireEvent.click(brand)
+    expect(props.onView).toHaveBeenCalledWith('overview')
+    expect(within(screen.getByTestId('primary-nav')).getAllByRole('button')).toHaveLength(5)
+  })
+
+  it('Overview 激活时只有品牌标记 aria-current=page，五个运营项仍未选中', () => {
+    renderNav({ view: 'overview' })
+    expect(screen.getByTestId('nav-overview')).toHaveAttribute('aria-current', 'page')
+    for (const operational of PRIMARY_VIEWS) {
+      expect(screen.getByTestId(`nav-${operational}`)).not.toHaveAttribute('aria-current')
+    }
+  })
+
   it('一级导航恰 5 个按钮，并包含机器就绪入口', () => {
     renderNav()
     const nav = screen.getByTestId('primary-nav')
@@ -191,6 +210,18 @@ describe('Nav rail 底部：连接、主题与语言收进设置浮层', () => {
     const conn = screen.getByTestId('conn-indicator')
     expect(conn).toHaveAttribute('data-on', 'false')
     expect(conn.textContent).toContain('离线')
+  })
+
+  it('英文模式的设置入口、浮层、主题和语言控件不混入中文', () => {
+    localStorage.setItem('pipeline-dashboard-lang', 'en')
+    renderNav({ lang: 'en', theme: 'dark' })
+    fireEvent.click(screen.getByTestId('nav-settings'))
+    const panel = screen.getByTestId('nav-settings-panel')
+    expect(screen.getByTestId('nav-settings')).toHaveTextContent('Settings')
+    expect(panel).toHaveTextContent('Settings')
+    expect(screen.getByTestId('theme-toggle')).toHaveTextContent('Dark')
+    expect(screen.getByTestId('lang-toggle')).toHaveTextContent('Chinese')
+    expect(panel.textContent).not.toMatch(/[设置深色浅色中文]/)
   })
 
   it('设置浮层打开后切换主页面会自动收起，不遮挡新页面', () => {

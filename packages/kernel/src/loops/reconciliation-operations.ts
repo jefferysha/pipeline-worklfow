@@ -31,9 +31,9 @@ function renderManagedLoopSection(loop: LoopEntry): Uint8Array {
   const markers = managedLoopSectionMarkers(loop.id)
   return encoder.encode([
     markers.start,
-    `### \`${loop.id}\` — pipeline-managed loop mirror`,
+    `### \`${loop.id}\` — Pipeline 管理的 Loop 镜像`,
     '',
-    '> Source of truth: `.pipeline/loops.yaml`. Edit the registry, not this managed section.',
+    '> 真相源：`.pipeline/loops.yaml`。请修改登记表，不要直接编辑这个受管段落。',
     markers.end,
     '',
   ].join('\n'))
@@ -121,11 +121,9 @@ export function applyReconciliationOperations(
       }
       const scan = scanManagedSections(current)
       if (!scan.ok) return { ok: false, reason: 'managed-section-corrupt', detail: scan.detail }
-      const section = renderManagedLoopSection(loop)
       const range = scan.sections.get(operation.loop_id)
-      const next = range === undefined
-        ? appendSection(current, section)
-        : concatBytes(current.subarray(0, range.start), section, current.subarray(range.end))
+      if (range !== undefined) continue
+      const next = appendSection(current, renderManagedLoopSection(loop))
       if (!bytesEqual(current, next)) changed = true
       current = next
       continue

@@ -1,0 +1,92 @@
+# Default 七阶段工作流
+
+Default workflow 是 Pipeline Lite 的完整治理路径。每个阶段都有明确输入、产出、允许的回边和出口条件。
+
+## Open
+
+创建独立 Change，写 proposal、initial design 和 tasks。这里不提前实现代码，也不把未来任务伪装成已确认计划。
+
+## Explore
+
+读取 Open 当前 digest，进行外部研究、现有能力检查、方案比较、技术设计和 ADR。出口必须具备 design artifact、文档登记和 review receipt。
+
+## Spec
+
+把设计转成 OpenSpec delta requirement/scenario 和可执行计划。计划必须列文件、行为、测试、回滚和上下文切分；前端/后端 full 任务先设计纵向 tracer bullet。
+
+## Build
+
+真实实现遵循项目规则和测试先行。每完成一个任务立即运行窄测试，再扩大验证范围。Build 完成后冻结 `build_sha`，防止 Verify 验收移动目标。
+
+## Verify
+
+独立检查测试、类型、构建、浏览器、安装和安全边界。Verify 不修改实现；失败走 `verify-fail` 返回 Build，返工后重新冻结基线。
+
+## Ship
+
+应用已经验证的 delta spec，形成 applied spec，准备真实交付。若 Change 带主规格迁移 receipt，
+必须先生成身份和摘要绑定的机器应用结果；`pipeline check` 与 `ship-complete` 的运行时 typed guard
+都会复核它。代码合并、push、Pages 上线等外部动作必须以实际成功为准。
+
+## Archive
+
+重读 proposal、design、ADR、spec、plan、verification report 和 applied spec，确认任务清零后归档。Archive 之后自动更新不得改写历史字节。
+
+## 两条回边
+
+- `requirements-changed`：Build → Spec，用于需求或设计语义改变；
+- `verify-fail`：Verify → Build，用于实现或验收失败。
+
+## Review 边界
+
+Explore、Spec、Verify 的 review 必须绑定 exact phase 和 exact event。同一份确认不能同时授权 `verify-pass` 与 `verify-fail`。持续授权只改变确认记录方式，不改变 guard。
+
+## 阶段产物总览
+
+| Phase | 关键产物 | 主要出口条件 |
+| --- | --- | --- |
+| open | proposal、initial design、tasks | 身份与范围明确 |
+| explore | 技术设计、研究、ADR | 取舍完成并 review |
+| spec | delta spec、实施计划 | 需求可验证并 review |
+| build | 实现、测试、冻结基线 | 当前任务完成 |
+| verify | 独立验证报告 | exact-event review |
+| ship | applied spec、交付准备 | 已验证规格已应用 |
+| archive | 不可变历史 | 全部证据可读取 |
+
+Open 创建状态、默认 OpenSpec 骨架和文档账本。模板只是待填写结构，不代表对应 Skill 已执行。
+
+Explore 的研究结论必须回到产品事实、仓库实现或一手资料。方案比较要写清选择、拒绝项、风险和验证方法。
+
+Spec 使用稳定英文 OpenSpec 操作词，但 requirement、scenario 和说明正文默认中文。设计语义变化必须回到 Spec 修订并重新 review。
+
+Build 可以修改实现和测试，但不能在 Verify 中边验边改。受治理文档改变后要重新登记 digest。
+
+Verify 至少回答：运行了什么、结果是什么、基线是哪一版、失败如何复现。前端交付必须使用真实浏览器。
+
+Ship 不重新解释需求，也不引入新实现。应用 delta 时发现主 spec 冲突，应返回受控修订路径。
+
+Archive 保留最终状态与证据链。插件自动更新不能批量翻译或格式化历史归档。
+
+## Review 顺序
+
+```text
+check → review request --event <event> → acknowledge → transition
+```
+
+持续授权允许 CLI 写入 delegated acknowledgement，但前提仍是产物、Skill 证据、文档读取和 guard 全部真实通过。
+
+回边不是删除失败记录。旧报告、receipt 和 transition history 应保留，新一轮基线和结果追加到同一个 Change 的历史。
+
+## Todo 与阶段所有权
+
+`tasks.md` 是唯一 Todo 真相源。一级标题对应七个 phase，未来阶段任务可以展示，但不会反向阻塞当前出口。每个 phase 只能勾选自己的任务并重新登记文档。
+
+## 查看当前事实
+
+```bash
+pipeline status <change> --json
+pipeline document status <change>
+pipeline check <change>
+```
+
+三条命令分别回答状态、文档证据和出口 guard；任何一条通过都不等于自动推进。

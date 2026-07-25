@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "kind": "historical-spec-application-migration",
+  "change": "trellis-style-documentation-site",
+  "capability": "open-source-documentation-experience",
+  "baseCommit": "547632980e09074fde86dca08850723180e69def",
+  "mainSpecPath": "openspec/specs/open-source-documentation-experience/spec.md",
+  "deltaSpecPath": "openspec/changes/trellis-style-documentation-site/specs/open-source-documentation-experience/spec.md",
+  "rawBeforeDigest": "7a4e4245f6a4965731061ac35280249a289f9e61c7b1f27f63f9717ca6ac3bfc",
+  "normalizedBeforeDigest": "59db11f878ad3c6b6bdcc94f5ade92a93c6ce19cabd089f1758e2e767038b295",
+  "observedCurrentDigest": "62550f310eb541f07f8bc2af2916e64a270cfb1ab794f806b4352dd9d9bf920f",
+  "expectedAfterDigest": "bce48df61787d8d9960b3b133dde538eb6417446f01dd9a17157329622ca0789",
+  "deltaDigest": "2ece9bfa6d8ade5515a2a366ccdebfbb3ff4fc152448a9c5f96871601da1ed52",
+  "baseNormalization": {
+    "fromHeader": "## ADDED Requirements",
+    "purpose": "定义 Pipeline Lite 的开源入口、公开文档、Dashboard 概览、双语可访问性、事实校验与社区维护要求。"
+  },
+  "officialCommand": "openspec archive trellis-style-documentation-site --yes",
+  "expectedOperations": {
+    "added": 9,
+    "modified": 4,
+    "removed": 0
+  },
+  "shipPolicy": "cas-reconcile-then-record-applied-spec",
+  "archivePolicy": "openspec-archive-skip-specs"
+}

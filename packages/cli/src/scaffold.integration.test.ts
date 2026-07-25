@@ -10,7 +10,7 @@
  *   overwrite/append/skip（真删/真补/真保留）+ env 信号 + 非法参数；resolve-workflow native + 源命中 +
  *   未知 id + fallback + marker 真写 + apply-hash 真改 manifest（native 记 / 非 native 删）。
  */
-import { mkdir, readFile, stat, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, stat, symlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
 import { freshHarness, realDeps, rm, type Harness } from './integration-harness.js'
@@ -61,8 +61,8 @@ describe('真实 e2e —— scaffold 按类型铺分层空文档集（真落盘�
     }
     const api = await readFile(join(h.cwd, 'openspec/specs/backend/api.md'), 'utf8')
     expect(api).toContain('<!-- pipeline:scaffold -->')
-    expect(api).toContain('# API Contracts')
-    expect(api.toLowerCase()).toContain('todo')
+    expect(api).toContain('# API 契约')
+    expect(api).toContain('[待填写:explore]')
     // stdout 列出真实写入的 rel
     expect(r.out).toContain('openspec/specs/backend/api.md')
   })
@@ -79,6 +79,67 @@ describe('真实 e2e —— scaffold 按类型铺分层空文档集（真落盘�
     const r = await scaffold(h, 'scaffold', ['mobile'])
     expect(r.code).toBe(1)
     expect(await exists(join(h.cwd, 'openspec/specs'))).toBe(false)
+  })
+
+  test('显式 --document-locale en 生成英文；非法 locale fail-loud', async () => {
+    const english = await scaffold(h, 'scaffold', ['web', '--document-locale', 'en'])
+    expect(english.code).toBe(0)
+    await expect(readFile(join(h.cwd, 'openspec/specs/backend/api.md'), 'utf8')).resolves.toContain('# API Contracts')
+
+    const invalidRoot = await freshHarness()
+    try {
+      const invalid = await scaffold(invalidRoot, 'scaffold', ['web', '--document-locale', 'fr'])
+      expect(invalid.code).toBe(1)
+      expect(invalid.err.join('\n')).toContain('document locale 非法')
+      expect(await exists(join(invalidRoot.cwd, 'openspec/specs'))).toBe(false)
+    } finally {
+      await rm(invalidRoot.cwd, { recursive: true, force: true })
+    }
+  })
+
+  test('裸 --document-locale 缺值时 fail-loud，不静默写中文', async () => {
+    const result = await scaffold(h, 'scaffold', ['web', '--document-locale'])
+    expect(result.code).toBe(1)
+    expect(result.err.join('\n')).toContain('--document-locale')
+    expect(await exists(join(h.cwd, 'openspec/specs'))).toBe(false)
+  })
+
+  test('--spec-dir 拒绝绝对路径、父级穿越与父目录 symlink', async () => {
+    const outside = `${h.cwd}-outside`
+    await mkdir(outside, { recursive: true })
+    try {
+      for (const specDir of [outside, '../outside-specs']) {
+        const result = await scaffold(h, 'scaffold', ['web', '--spec-dir', specDir])
+        expect(result.code).toBe(1)
+        expect(result.err.join('\n')).toMatch(/spec-dir|项目根|路径/)
+      }
+
+      await mkdir(join(h.cwd, 'docs'), { recursive: true })
+      await symlink(outside, join(h.cwd, 'docs', 'linked-specs'))
+      const symlinked = await scaffold(h, 'scaffold', [
+        'web', '--spec-dir', 'docs/linked-specs',
+      ])
+      expect(symlinked.code).toBe(1)
+      expect(symlinked.err.join('\n')).toMatch(/symlink|路径/)
+      expect(await exists(join(outside, 'frontend', 'README.md'))).toBe(false)
+    } finally {
+      await rm(outside, { recursive: true, force: true })
+    }
+  })
+
+  test('目标文件本身是 symlink 时 fail-loud，不按冲突策略跟随或保留', async () => {
+    const outside = `${h.cwd}-target-outside.md`
+    await writeFile(outside, '外部内容', 'utf8')
+    try {
+      await mkdir(join(h.cwd, 'openspec', 'specs', 'backend'), { recursive: true })
+      await symlink(outside, join(h.cwd, 'openspec', 'specs', 'backend', 'api.md'))
+      const result = await scaffold(h, 'scaffold', ['web', '--strategy', 'append'])
+      expect(result.code).toBe(1)
+      expect(result.err.join('\n')).toMatch(/symlink|普通文件/)
+      await expect(readFile(outside, 'utf8')).resolves.toBe('外部内容')
+    } finally {
+      await rm(outside, { force: true })
+    }
   })
 })
 
@@ -108,7 +169,7 @@ describe('真实 e2e —— scaffold 三态冲突（真删/真补/真保留）',
     expect(r.code).toBe(0)
     const api = await readFile(join(h.cwd, CONFLICT), 'utf8')
     expect(api).not.toBe('USER OWNED CONTENT')
-    expect(api).toContain('# API Contracts')
+    expect(api).toContain('# API 契约')
   })
 
   test('--strategy append → 用户文件真保留、缺失文件真补', async () => {

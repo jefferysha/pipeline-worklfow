@@ -90,7 +90,7 @@ export const DEFAULT_EVENT_POLICY = {
     // 老仓 L207-210：verify_result=fail + build_sha=null（barrier 复位；phase_status 在 flow）。
     actions: [{ type: 'mark-verification-failed' }],
   },
-  'ship-complete': { guards: [], actions: [] },
+  'ship-complete': { guards: [{ type: 'spec-migration-applied' }], actions: [] },
   archived: {
     guards: [],
     // 老仓 L213-217：archived=true + archived_at=now（phase_status=done 在 flow）。
@@ -188,6 +188,11 @@ export function renderPreconditionViolation(
         ]
       }
       break
+    case 'ship-complete':
+      if (guard.type === 'spec-migration-applied') {
+        return [`ERROR: ship-complete 要求主规格迁移机器证据有效（当前=${actual}）`]
+      }
+      break
     default:
       break
   }
@@ -217,6 +222,7 @@ export async function checkDefaultEventPreconditions(
     fileExists: ctx?.fileExists,
     gitHeadSha: ctx?.gitHeadSha,
     workspaceFingerprint: ctx?.workspaceFingerprint,
+    specMigrationStatus: ctx?.specMigrationStatus,
   })
   const failed = evaluations.find((e) => e.decision.kind === 'failed')
   if (!failed) return null

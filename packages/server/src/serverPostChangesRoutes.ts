@@ -17,6 +17,7 @@ import {
   stateStorageExistsSync,
   validateWorkflow,
   validateWorkflowTrackReferences,
+  workflowPlanSnapshot,
   withTrackRegistryLock,
   type CreateTrackSpec,
   type ExtendedManifestData,
@@ -194,6 +195,7 @@ export async function handlePostChangesRoutes(
               documentProfile?: 'legacy-full' | 'document-v1'
               documentGovernanceFingerprint?: string
               workflowPlanFingerprint?: string
+              workflowPlanSnapshot?: ReturnType<typeof workflowPlanSnapshot>
             }
             let plan
             try {
@@ -223,6 +225,7 @@ export async function handlePostChangesRoutes(
               workflow: workflowId,
               phase: first.id,
               ...effectiveWorkflowPlanBinding(plan),
+              workflowPlanSnapshot: workflowPlanSnapshot(plan),
               ...(plan.capabilities.documents.policy?.id === 'openspec-v1' ? { openspecContract: true } : {}),
               ...(plan.capabilities.documents.policy?.id === 'document-v1' ? { documentContract: true } : {}),
             }

@@ -14,8 +14,10 @@
 #   · check 的 stdout 是人读 guard 报告（CONTRACT §3），stdout 面记 SKIP、exit 面照比。
 #   · G1 canonical cutover 的 `pipeline_state_revision/_id/_digest` 是 YAML adapter 指向唯一
 #     current 的投影元数据；老内核没有 canonical store，三行整行剥除后再比业务投影。
-#   · `pipeline_document_profile` 是新版显式持久化的治理 profile 身份；老内核只有隐式
-#     default/full 语义。Oracle 仍逐面验证文档行为，只从 YAML 兼容比较中剥除这一新投影字段。
+#   · 早期开发快照曾把 `pipeline_document_profile` 等治理身份写入 YAML；当前正式实现把它们
+#     移到回滚兼容 sidecar。Oracle 仍剥除这些历史字段，以验证旧 fixture 的迁移读路径。
+#   · `.pipeline-document-locale.json` 固定新 Change 的人读文档语言；老内核没有文档呈现层。
+#     中文默认、显式英文和回滚兼容由模板、init 和 bundle 测试独立验证，不修改严格 YAML 投影。
 #
 # 用法:
 #   bash tools/oracle/run.sh [fixture ...]      # 缺省跑基础兼容 fixtures；npm run oracle 跑全量
@@ -126,8 +128,9 @@ is_ts_field() { case "${1:-}" in *_at) return 0 ;; *) return 1 ;; esac; }
 #                                     即使想比也比不了）。
 #   · pipeline_state_revision/_id/_digest —— G1 canonical current 的 YAML adapter 指针；
 #                                            业务字段仍须与 oracle 逐字一致。
-#   · pipeline_document_governance_fingerprint / pipeline_workflow_plan_fingerprint
-#       —— 新 CLI 对初始化时文档契约与有效工作流计划的不可变绑定；老 oracle 无此安全能力。
+#   · pipeline_document_* / pipeline_workflow_plan_fingerprint
+#       —— 仅兼容早期开发快照；新 Change 的不可变绑定在独立 sidecar。
+#   · pipeline_document_locale —— 仅为兼容曾短暂产出该字段的开发快照；正式实现使用独立 sidecar。
 #   · automation_current_phase/_cause —— 分叉后 automation 子系统新增字段。
 #   · 已声明的状态演进（目前仅 pm-history 的 `spec-complete` 自动 AFK 入队）：harness 先逐字
 #     验证 old=`off`、new=`queued` 和 new 的入队时间戳，再仅从该单步的 YAML 比较中剥除这两个字段。
@@ -141,7 +144,7 @@ normalize_yaml() {
         if ($0 ~ /^[[:space:]]+- /) next
         inhist = 0
       }
-      if ($0 ~ /^(workflow|pipeline_document_profile|pipeline_document_governance_fingerprint|pipeline_workflow_plan_fingerprint|pipeline_run_id|pipeline_transition_sequence|pipeline_transition_head|pipeline_state_revision|pipeline_state_revision_id|pipeline_state_digest|automation_current_phase|automation_cause):/) next
+      if ($0 ~ /^(workflow|pipeline_document_profile|pipeline_document_locale|pipeline_document_governance_fingerprint|pipeline_workflow_plan_fingerprint|pipeline_run_id|pipeline_transition_sequence|pipeline_transition_head|pipeline_state_revision|pipeline_state_revision_id|pipeline_state_digest|automation_current_phase|automation_cause):/) next
       if (omit_declared_automation == "1" && $0 ~ /^(automation|automation_queued_at):/) next
       if ($0 ~ /^[a-z_]+_at:/) { sub(/:.*$/, ": <WHITELISTED>"); print; next }
       print
@@ -312,6 +315,15 @@ say ""
 run_new_cli() {
   local dir="$1"; shift
   (cd "$dir" && PIPELINE_DASHBOARD_HOME="$MACHINE_HOME" "${NEW_CMD[@]}" "$@")
+}
+
+install_post_init_fixture() {
+  local dir="$1" change="$2" source target
+  source="$dir/.oracle-post-init/$change"
+  target="$dir/openspec/changes/$change"
+  [ -d "$source" ] || return 0
+  [ -d "$target" ] || return 1
+  cp -R "$source/." "$target/"
 }
 
 phase_rank() {
@@ -496,6 +508,10 @@ run_step_dual() {
       fi
     } > "$step_dir/new.err"
     new_rc=125
+  fi
+  if [ "$cmd" = init ] && [ "$old_rc" -eq 0 ] && [ "$new_rc" -eq 0 ]; then
+    install_post_init_fixture "$base/old" "$change"
+    install_post_init_fixture "$base/new" "$change"
   fi
 
   # exit 面
@@ -744,7 +760,7 @@ run_step_seed() {
   # seed 是 harness 造脏值注入，不入四面比较（全 "-"）；写失败/字段行缺失则计一处 FAIL。
   row "$fx" "$idx" "seed $field=$value" "-" "-" "-" "-"
   count_fail "$ok"
-  [ "$ok" = FAIL ] && say "  x [$fx #$idx seed $field=$value] 状态文件写入失败或字段行缺失（见 $step_dir）"
+  [ "$ok" = FAIL ] && say "  x [$fx #$idx seed $field=$value] 状态文件写入失败或字段行缺失（见 ${step_dir}）"
 }
 
 # ---------- 历史尾块 PRESERVE 校验（新侧，逐字子串） ----------

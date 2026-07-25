@@ -3,10 +3,10 @@
  * + 编译产物（已补默认值、深冻结）的 step/transition/artifact 形态。
  *
  * 与定义层（./types.ts）的分工（G2 P2 落地）：
- *   · 定义层 WorkflowGuardConfig（8 变体，含 nonempty-output）= parse 产出 / serialize 写回 /
+ *   · 定义层 WorkflowGuardConfig（9 变体，含 nonempty-output）= parse 产出 / serialize 写回 /
  *     validate 校验的形状，变体清单单一真相源在 types.ts。
  *   · 运行层 CompiledGuardConfig = 严格 typed guard（WorkflowGuardConfig **Exclude 掉
- *     nonempty-output**，7 变体）+ output-present。compileWorkflow 按 step.outputs 把 nonempty-output
+ *     nonempty-output**，8 变体）+ output-present。compileWorkflow 按 step.outputs 把 nonempty-output
  *     逐字段下沉：已知非列表字段 → field-nonempty，列表/未知惰性字段 → output-present（G2 P2
  *     兼容回退，见 OutputPresentGuard）。经编译产出的 IR 里不存在定义层 nonempty-output（已展开）。
  *     运行期注册表（guard-handlers.ts）仍保留一枚 nonempty-output fail-loud handler 作纵深防线
@@ -26,7 +26,7 @@ import type {
 import type { TrackPredicate } from './predicates.js'
 
 /**
- * 运行/编译层严格 guard 闭集：定义层 8 变体去掉 nonempty-output（后者编译期已按 outputs 下沉）。
+ * 运行/编译层严格 guard 闭集：定义层 9 变体去掉 nonempty-output（后者编译期已按 outputs 下沉）。
  * 这些是「真求值 typed guard」——其 field 一律 ∈ FIELD_ORDER 且非列表字段（compileWorkflow 的
  * scalarField 闸保证），运行期 handler 只对绕过编译器的越界（列表/未知字段）输入留 fail-loud 兜底。
  */
@@ -46,7 +46,7 @@ export interface OutputPresentGuard extends WorkflowConditional {
 }
 
 /**
- * 运行/编译层 guard 闭集 = 严格 typed guard（7 变体）+ output-present（v1 nonempty-output 的
+ * 运行/编译层 guard 闭集 = 严格 typed guard（8 变体）+ output-present（v1 nonempty-output 的
  * 列表/惰性下沉产物）。经本编译器产出的 IR guards[] 永不含定义层的 nonempty-output（已展开）。
  */
 export type CompiledGuardConfig = StrictCompiledGuardConfig | OutputPresentGuard
@@ -69,9 +69,16 @@ export interface GuardInput {
   readonly gitHeadSha?: () => Promise<string>
   /** in-place build 的内容寻址工作区基线；缺省 = workspace baseline guard 降级跳过。 */
   readonly workspaceFingerprint?: () => Promise<string>
+  /** 当前 Change 的主规格迁移机器证据；Ship 门禁缺少能力时必须失败关闭。 */
+  readonly specMigrationStatus?: () => Promise<SpecMigrationGuardStatus>
 }
 
-/** skipped.capability 的闭集 = GuardInput 四个可选注入点，一一对应（新增注入点先扩这里）。 */
+export type SpecMigrationGuardStatus =
+  | { readonly kind: 'not-required' }
+  | { readonly kind: 'applied' }
+  | { readonly kind: 'invalid'; readonly reason: string }
+
+/** skipped.capability 的闭集 = 可降级的 GuardInput 注入点；迁移门禁不允许降级，故不在本闭集。 */
 export type GuardCapability = 'readText' | 'fileExists' | 'gitHeadSha' | 'workspaceFingerprint'
 
 /**

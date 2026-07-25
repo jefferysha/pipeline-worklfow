@@ -1,11 +1,4 @@
-/**
- * OpenSpec document evidence sidecar.
- *
- * `.pipeline.yaml` remains canonical workflow state. This sidecar is an independently rebuildable
- * evidence ledger: it records only safe project-relative documents, their content digest, intended
- * producing skill, and exact-hash phase read receipts. Callers must hold the change lock while
- * mutating it; each write is still atomically published to avoid a partially visible ledger.
- */
+/** OpenSpec document evidence sidecar; callers hold the Change lock while mutating it. */
 import { lstat, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import {
@@ -180,13 +173,18 @@ export async function readDocumentLedger(changeDir: string): Promise<DocumentLed
   return raw === undefined ? undefined : parseLedger(raw)
 }
 
+export function initialDocumentLedgerContent(createdAt: string): string {
+  const ledger: DocumentLedger = { version: 1, contract: 'openspec-v1', createdAt, records: [] }
+  return `${JSON.stringify(ledger, null, 2)}\n`
+}
+
 export async function ensureDocumentLedger(changeDir: string, createdAt: string): Promise<DocumentLedger> {
   const existing = await readDocumentLedger(changeDir)
   if (existing) return existing
   const ledger: DocumentLedger = { version: 1, contract: 'openspec-v1', createdAt, records: [] }
   const target = join(changeDir, DOCUMENT_LEDGER_FILE)
   try {
-    await atomicLinkPublish(changeDir, '.pipeline-documents.tmp', target, `${JSON.stringify(ledger, null, 2)}\n`)
+    await atomicLinkPublish(changeDir, '.pipeline-documents.tmp', target, initialDocumentLedgerContent(createdAt))
     return ledger
   } catch (error) {
     if (errorCode(error) !== 'EEXIST') throw error

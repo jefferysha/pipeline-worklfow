@@ -14,7 +14,7 @@ import { allFields } from './test-support.js'
 
 function makeInput(
   over: Partial<Record<FieldName, string | string[]>> = {},
-  caps: Partial<Pick<GuardInput, 'track' | 'fileExists' | 'readText' | 'gitHeadSha' | 'workspaceFingerprint'>> = {},
+  caps: Partial<Pick<GuardInput, 'track' | 'fileExists' | 'readText' | 'gitHeadSha' | 'workspaceFingerprint' | 'specMigrationStatus'>> = {},
 ): GuardInput {
   return {
     fields: allFields(over),
@@ -23,6 +23,7 @@ function makeInput(
     readText: caps.readText,
     gitHeadSha: caps.gitHeadSha,
     workspaceFingerprint: caps.workspaceFingerprint,
+    specMigrationStatus: caps.specMigrationStatus,
   }
 }
 
@@ -350,7 +351,7 @@ describe('老仓 state-transition.sh cmd_transition 前置校验语义对照', (
     })
   })
 
-  it('L159-160：无专属校验的事件（open-complete/ship-complete）≙ 零 guard → 空输出通行', async () => {
+  it('无专属校验的事件（例如 open-complete）≙ 零 guard → 空输出通行', async () => {
     expect(await evaluateGuards([], makeInput())).toEqual([])
   })
 })
@@ -429,6 +430,36 @@ describe('handler 读值口径（编译产物保证 scalar guard 的 field 非�
 })
 
 describe('evaluateGuards 组合语义', () => {
+  it('spec-migration-applied 缺能力或证据非法时失败关闭，明确不需要或已应用时通过', async () => {
+    const guard: CompiledGuardConfig = { type: 'spec-migration-applied' }
+    await expect(evaluateGuards([guard], makeInput())).resolves.toEqual([{
+      guard,
+      decision: {
+        kind: 'failed',
+        guardType: 'spec-migration-applied',
+        actual: 'capability-unavailable',
+        expected: ['not-required', 'applied'],
+      },
+    }])
+    await expect(evaluateGuards([guard], makeInput({}, {
+      specMigrationStatus: async () => ({ kind: 'invalid', reason: 'receipt-mismatch' }),
+    }))).resolves.toEqual([{
+      guard,
+      decision: {
+        kind: 'failed',
+        guardType: 'spec-migration-applied',
+        actual: 'receipt-mismatch',
+        expected: ['not-required', 'applied'],
+      },
+    }])
+    await expect(evaluateGuards([guard], makeInput({}, {
+      specMigrationStatus: async () => ({ kind: 'not-required' }),
+    }))).resolves.toEqual([{ guard, decision: { kind: 'passed' } }])
+    await expect(evaluateGuards([guard], makeInput({}, {
+      specMigrationStatus: async () => ({ kind: 'applied' }),
+    }))).resolves.toEqual([{ guard, decision: { kind: 'passed' } }])
+  })
+
   it('首个 failed 即停：后续 guard 不评估、不触发其能力 IO（旧 case 体首个违反立即 return 的等价）', async () => {
     const gitSpy = vi.fn(async () => 'abc123')
     const out = await evaluateGuards(

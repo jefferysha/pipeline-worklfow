@@ -34,15 +34,17 @@ import type {
 } from '../workflow/run-types.js'
 import { diffFieldsToEffects } from './run-metadata.js'
 import type { TransitionRecordStore } from './transition-record-store.js'
-import { ensureDefaultOpenSpecScaffold } from './default-openspec-scaffold.js'
-import { ensureDocumentLedger } from './document-ledger.js'
+import { defaultOpenSpecScaffoldFiles } from './default-openspec-scaffold.js'
+import { DOCUMENT_LEDGER_FILE, initialDocumentLedgerContent } from './document-ledger.js'
 import { required } from '../required.js'
+import { ensureWorkflowGovernanceBinding } from './workflow-governance-binding.js'
 import {
   compileEffectiveWorkflowPlan,
+  effectiveWorkflowPlanFromSnapshot,
   effectiveWorkflowPlanBinding,
   resolveEffectiveWorkflowPlan,
+  workflowPlanSnapshot,
 } from '../workflow/effective-plan.js'
-
 const DEFAULT_PLAN = compileEffectiveWorkflowPlan('default')
 const DEFAULT_PLAN_BINDING = effectiveWorkflowPlanBinding(DEFAULT_PLAN)
 
@@ -66,6 +68,7 @@ function deriveRun(fields: Record<FieldName, string | string[]>, metadata: RunMe
     documentProfile: metadata.documentProfile,
     documentGovernanceFingerprint: metadata.documentGovernanceFingerprint,
     workflowPlanFingerprint: metadata.workflowPlanFingerprint,
+    workflowPlanSnapshot: metadata.workflowPlanSnapshot,
     createdAt: str(fields.created_at),
     updatedAt: str(fields.updated_at),
     automationPolicy: metadata.automationPolicy,
@@ -81,27 +84,64 @@ class FsWorkflowRunRepository implements WorkflowRunRepository {
 
   async initChange(opts: InitOptions): Promise<{ changeDir: string; run: WorkflowRun }> {
     const newId = this.deps.newId ?? randomUUID
-    const runId = newId()
-    // store.init 的 wx 独占创建一次性写入 runId（见 store.ts），不是"先创建后补身份"两步——
-    // init 失败（含 change 已存在）直接抛错，不会出现"目录建了但身份没建成"的中间态。
-    const changeDir = await this.deps.store.init({ ...opts, runId })
-    // default 的正常入口由 OpenSpec skill 写入真实文档；这里仅补最小、显式标记 open 阶段的 `wx`
-    // scaffold，使 state-first/中断恢复的 init 也有可继续的 OpenSpec 与 tasks 真相源。custom
-    // workflow 的文档契约由它自己定义，不能擅自注入 default 文件。
+    // Trusted adapters such as triage derive an idempotent run id from a canonical request. They
+    // still use this single creation boundary; ordinary CLI/server callers omit it and get UUID.
+    const runId = opts.runId ?? newId()
     const workflowId = opts.initialWorkflow?.workflow ?? DEFAULT_PLAN.id
     const packagedPlan = resolveEffectiveWorkflowPlan(workflowId, () => null)
-    const usesPackagedOpenSpec = packagedPlan?.capabilities.documents.profile === 'legacy-full'
-    if (usesPackagedOpenSpec) {
-      await ensureDefaultOpenSpecScaffold(changeDir)
+    const snapshot = opts.initialWorkflow?.workflowPlanSnapshot
+      ?? (packagedPlan === null ? undefined : workflowPlanSnapshot(packagedPlan))
+    if (snapshot !== undefined) {
+      const validated = effectiveWorkflowPlanFromSnapshot(snapshot)
+      const boundFingerprint = opts.initialWorkflow?.workflowPlanFingerprint
+      if (validated.id !== workflowId
+        || (boundFingerprint !== undefined && validated.workflowFingerprint !== boundFingerprint)) {
+        throw new Error('init workflow plan snapshot 与 workflow identity/fingerprint 不一致')
+      }
     }
-    if (
+    const usesPackagedOpenSpec = packagedPlan?.capabilities.documents.profile === 'legacy-full'
+    const governed = (
       usesPackagedOpenSpec
       || opts.initialWorkflow?.documentProfile !== undefined
       || opts.initialWorkflow?.openspecContract === true
       || opts.initialWorkflow?.documentContract === true
-    ) {
-      await ensureDocumentLedger(changeDir, this.deps.clock())
-    }
+    )
+    const initialFiles = [
+      ...(usesPackagedOpenSpec
+        ? defaultOpenSpecScaffoldFiles(
+          opts.name,
+          opts.documentLocale ?? 'zh-CN',
+          packagedPlan.workflow.steps.map((step) => ({ id: step.id, label: step.label })),
+          packagedPlan.projection.stepLabelSource,
+        )
+        : []),
+      ...(governed
+        ? [{
+          relativePath: DOCUMENT_LEDGER_FILE,
+          content: initialDocumentLedgerContent(this.deps.clock()),
+        }]
+        : []),
+    ]
+    // State, immutable run identity, locale/governance sidecars, ledger, and default OpenSpec files
+    // are prepared in one private candidate, then published no-replace with canonical current last.
+    const changeDir = await this.deps.store.init({
+      ...opts,
+      runId,
+      initialFiles,
+      ...(snapshot === undefined
+        ? {}
+        : {
+          initialWorkflow: {
+            ...(opts.initialWorkflow ?? {
+              workflow: workflowId,
+              phase: packagedPlan?.workflow.steps[0]?.id ?? 'open',
+            }),
+            workflowPlanFingerprint: opts.initialWorkflow?.workflowPlanFingerprint
+              ?? snapshot.workflowFingerprint,
+            workflowPlanSnapshot: snapshot,
+          },
+        }),
+    })
     const state = await this.deps.store.read(changeDir)
     // state.runMetadata 在这里必然存在（刚用 runId 创建的），非空断言有 store.init 的实现保证。
     return { changeDir, run: deriveRun(state.fields, required(state.runMetadata)) }
@@ -167,7 +207,16 @@ class FsWorkflowRunRepository implements WorkflowRunRepository {
           || metadata.documentGovernanceFingerprint !== existing.documentGovernanceFingerprint
           || metadata.workflowPlanFingerprint !== existing.workflowPlanFingerprint
         ) {
-          await store.writeUnderLock(changeDir, { ...state, runMetadata: metadata })
+          await ensureWorkflowGovernanceBinding(changeDir, metadata)
+        } else if (
+          metadata.documentProfile !== undefined
+          || metadata.documentGovernanceFingerprint !== undefined
+          || metadata.workflowPlanFingerprint !== undefined
+        ) {
+          // Migrate older canonical revisions lazily without rewriting immutable history. The next
+          // real state commit drops these fields from canonical runMetadata; this sidecar already
+          // preserves the effective governance identity for the current release.
+          await ensureWorkflowGovernanceBinding(changeDir, metadata)
         }
         return deriveRun(state.fields, metadata)
       }
@@ -178,6 +227,13 @@ class FsWorkflowRunRepository implements WorkflowRunRepository {
         ...(documentProfile === undefined ? {} : { documentProfile }),
         ...(documentGovernanceFingerprint === undefined ? {} : { documentGovernanceFingerprint }),
         ...(workflowPlanFingerprint === undefined ? {} : { workflowPlanFingerprint }),
+      }
+      if (
+        metadata.documentProfile !== undefined
+        || metadata.documentGovernanceFingerprint !== undefined
+        || metadata.workflowPlanFingerprint !== undefined
+      ) {
+        await ensureWorkflowGovernanceBinding(changeDir, metadata)
       }
       await store.writeUnderLock(changeDir, { ...state, runMetadata: metadata })
       return deriveRun(state.fields, metadata)
@@ -294,6 +350,7 @@ class FsWorkflowRunRepository implements WorkflowRunRepository {
             documentProfile: metadata.documentProfile,
             documentGovernanceFingerprint: metadata.documentGovernanceFingerprint,
             workflowPlanFingerprint: metadata.workflowPlanFingerprint,
+            workflowPlanSnapshot: metadata.workflowPlanSnapshot,
             automationPolicy: metadata.automationPolicy,
             loopId: metadata.loopId,
             iterationId: metadata.iterationId,

@@ -1,0 +1,86 @@
+{
+  "locale": "zh-CN",
+  "workflow_steps": {
+    "open": "立项",
+    "explore": "调研",
+    "spec": "规格",
+    "build": "实现",
+    "verify": "验证",
+    "ship": "交付",
+    "archive": "归档"
+  },
+  "templates": {
+    "openspec-proposal": {
+      "title": "提案",
+      "why": "Why",
+      "whyPrompt": "[待填写:open] 用中文说明问题、机会和现在必须改变的原因。",
+      "whatChanges": "What Changes",
+      "whatChangesPrompt": "[待填写:open] 用中文列出具体变化、范围、非目标和可验证结果。",
+      "capabilities": "Capabilities",
+      "newCapabilities": "New Capabilities",
+      "newCapabilitiesPrompt": "[待填写:open] 列出新增 capability；没有则写“无”。",
+      "modifiedCapabilities": "Modified Capabilities",
+      "modifiedCapabilitiesPrompt": "[待填写:open] 列出 requirement 会变化的现有 capability；没有则写“无”。",
+      "impact": "Impact",
+      "impactPrompt": "[待填写:open] 用中文说明受影响的代码、契约、依赖、兼容和系统边界。"
+    },
+    "openspec-design": {
+      "title": "设计",
+      "hypothesis": "初始假设",
+      "hypothesisPrompt": "[待填写:open] 记录初始架构或交互假设；Explore 用证据和决策替换本提示。",
+      "risks": "风险",
+      "questions": "待验证问题"
+    },
+    "workflow-tasks": {
+      "title": "任务",
+      "taskPrompt": "将本阶段目标拆成可验证任务。"
+    },
+    "superpower-design": {
+      "title": "技术设计",
+      "context": "背景",
+      "decision": "决策",
+      "alternatives": "备选方案",
+      "risks": "风险"
+    },
+    "architecture-decision-record": {
+      "title": "架构决策记录",
+      "context": "背景",
+      "decision": "决策",
+      "alternatives": "备选方案",
+      "consequences": "后果"
+    },
+    "openspec-delta-spec": {
+      "title": "OpenSpec 增量规格",
+      "operations": "ADDED Requirements",
+      "requirement": "Requirement",
+      "scenario": "Scenario",
+      "prompt": "[待填写:spec] 使用中文编写需求与场景；保留 OpenSpec 机器操作词。"
+    },
+    "superpower-plan": {
+      "title": "实施计划",
+      "tasks": "任务",
+      "verification": "验证",
+      "rollback": "回滚"
+    },
+    "implementation-plan": {
+      "title": "实施计划",
+      "tasks": "任务",
+      "verification": "验证",
+      "rollback": "回滚"
+    },
+    "verification-report": {
+      "title": "验证报告",
+      "scope": "验证范围",
+      "commands": "执行命令",
+      "results": "结果",
+      "failures": "失败与阻塞",
+      "risks": "剩余风险"
+    },
+    "applied-spec": {
+      "title": "已应用规格",
+      "summary": "变更摘要",
+      "requirements": "已应用需求",
+      "evidence": "交付证据"
+    }
+  }
+}

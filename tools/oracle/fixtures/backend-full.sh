@@ -3,7 +3,7 @@
 #
 # 用法: backend-full.sh <target-dir>
 # 产物:
-#   <target>/openspec/changes/t6-be/{proposal.md,design.md,tasks.md}  # check 前置产物
+#   <target>/.oracle-post-init/t6-be/{proposal.md,design.md,tasks.md} # init 后覆盖的 check fixture
 #   <target>/docs/{design.md,plan.md,verify.md}                       # 字段指向的文件
 #   <target>/.oracle-plan                                             # 命令计划（TSV）
 #
@@ -12,16 +12,17 @@
 set -euo pipefail
 
 target="${1:?usage: backend-full.sh <target-dir>}"
-mkdir -p "$target/openspec/changes/t6-be" "$target/docs"
+fixture_change="$target/.oracle-post-init/t6-be"
+mkdir -p "$fixture_change" "$target/docs"
 
 # 独立 git 仓（无 commit）：老 init 的 base_branch 探测走 `git branch --show-current` → main，
 # 且 build-complete 的 `git rev-parse HEAD` 失败 → build_sha 保持 null。双侧确定性。
 (cd "$target" && git init -q -b main 2>/dev/null || git init -q 2>/dev/null || true)
 
-printf '# proposal\n\nT6 oracle fixture: backend 全生命周期。\n' > "$target/openspec/changes/t6-be/proposal.md"
-printf '# design\n\nfixture design doc.\n' > "$target/openspec/changes/t6-be/design.md"
+printf '# proposal\n\nT6 oracle fixture: backend 全生命周期。\n' > "$fixture_change/proposal.md"
+printf '# design\n\nfixture design doc.\n' > "$fixture_change/design.md"
 # check explore 要求存在未勾任务；check build 要求任务数 >= 3
-printf -- '- [ ] t1\n- [x] t2\n- [x] t3\n' > "$target/openspec/changes/t6-be/tasks.md"
+printf -- '- [ ] t1\n- [x] t2\n- [x] t3\n' > "$fixture_change/tasks.md"
 # docs/design.md 携带 coverage 块（backend full 的 required 层全 filled）：
 # 新 CLI check = guard 出口全语义（BACKLOG #12），spec 出口有 M1 覆盖 gate；
 # 老 cmd_check 是入相位前置面、不读该块——两侧文件一致，exit 面保持可比。

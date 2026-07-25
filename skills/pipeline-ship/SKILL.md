@@ -5,6 +5,9 @@ description: "Pipeline Phase 6: Ship · 发布。PM Track 沉淀 PRD + handoff�
 
 # /pipeline-ship — Phase 6: Ship
 
+> **语言：** applied spec、handoff 和发布说明沿用 Change 固定 locale，默认中文；版本、路径、
+> 命令、hash、kind/producer 和 OpenSpec 机器 token 保持原样。未真实发布的 URL 不得写成已上线。
+
 > 移植来源：老仓 `skills/pipeline-ship/SKILL.md`；脚本面已改写为 `pipeline` CLI。
 
 > **Codex 打包 Skill 身份：** 本文件提到的裸 skill id 是 DAG/ledger 的逻辑 id；在 Codex
@@ -66,7 +69,7 @@ pipeline document read "$PIPELINE_CHANGE_NAME" all
 
 1. 使用 Skill 工具加载 `openspec-apply-change`。**禁止跳过此步骤**。
    - 用于：把 `openspec/changes/<name>/specs/` 的 delta spec 同步覆盖到 `openspec/specs/` 的 main spec
-   - （verify Step 1.6 已做过即时回灌的，本步做幂等复核——两处不冲突）
+   - Verify 只在隔离副本演练；Ship 是唯一真实应用边界，重复执行必须是 byte-preserving no-op。
 
 2. 使用 Skill 工具加载 `openspec-archive-change`。**禁止跳过此步骤**。
    - 用于：准备归档（标注 frontmatter / 状态字段）
@@ -104,7 +107,7 @@ pipeline document read "$PIPELINE_CHANGE_NAME" all
 #### 🕊️ Track = free（中性交付）
 
 1. 使用 Skill 工具加载 `openspec-apply-change`。**禁止跳过此步骤**。
-   - 幂等复核 Verify 已即时回灌的每份 main spec。
+   - 应用 Verify 已在隔离副本演练通过的每份 delta；重复执行保持幂等。
 2. 使用本插件打包的 Skill `finishing-a-development-branch`。**禁止跳过此步骤**。
    - 只处理当前工作区实际采用的分支策略；没有远程 PR 交付要求时可保留本地
      handled 结果，不伪造 PR URL。
@@ -127,18 +130,30 @@ pipeline set "$PIPELINE_CHANGE_NAME" prd_path "$PRD_PATH"
 # free Track：无领域交付字段；不得伪造 pr_url/prd_path。
 ```
 
+### Step 2.4: 校验登记过的历史主规格迁移证据
+
+`migration/spec-application.json` 与 `migration/spec-application-result.json` 是仓库维护者在发布前
+完成并审查的一次性历史迁移证据，不是安装后面向插件用户的运行时能力。打包 Skill **不得**调用
+项目仓库的 `tools/reconcile-spec-application.mjs`：managed release 不分发该维护工具，也不应让
+Windows 或没有本地 C toolchain 的普通用户承担仓库修复依赖。
+
+若当前 Change 含 migration receipt，直接运行 `pipeline check`，并由
+`pipeline transition ... ship-complete` 的 `spec-migration-applied` typed guard 重新读取 receipt、
+result、delta 和当前主规格。缺结果、Change/能力/路径身份不一致、receipt digest 或主规格 after
+digest 漂移都必须失败关闭；此时停止 Ship，交由仓库维护流程补齐经代码审查的迁移结果，不能在 Agent
+会话里临时复制主规格、覆盖 result 文件或调用未分发脚本绕过。
+
 ### Step 2.5: 登记已应用的主 spec（受治理 workflow 强制）
 
-`openspec-apply-change` 必须先真实运行；本步只登记由当前 change 的 delta 对应的主 spec，避免把仓库中
-无关 capability 当成已应用。一个 change 影响多份 spec 时必须逐份登记。
+`openspec-apply-change` 必须先真实运行。主规格是持久结果，不是 document ledger 的审计收据；
+本步登记该 Skill 生成的单一 `applied-spec.md`，其中逐份列出所有 delta、主规格目标、
+before/after digest 与 `changed`/`no-op`。不得把 `openspec/specs/**/spec.md` 冒充
+`applied-spec` document kind，否则 Archive 无法证明本次 Change 的应用决策。
 
 ```bash
-find "openspec/changes/$PIPELINE_CHANGE_NAME/specs" -type f -name spec.md -print 2>/dev/null \
-  | while IFS= read -r delta; do
-      capability="$(basename "$(dirname "$delta")")"
-      applied="openspec/specs/$capability/spec.md"
-      pipeline document record "$PIPELINE_CHANGE_NAME" applied-spec "$applied" --producer openspec-apply-change
-    done
+APPLIED_RECEIPT="openspec/changes/$PIPELINE_CHANGE_NAME/applied-spec.md"
+pipeline document record "$PIPELINE_CHANGE_NAME" applied-spec "$APPLIED_RECEIPT" \
+  --producer openspec-apply-change
 TASKS_PATH="openspec/changes/$PIPELINE_CHANGE_NAME/tasks.md"
 pipeline document record "$PIPELINE_CHANGE_NAME" tasks "$TASKS_PATH" --producer pipeline-ship
 pipeline document read "$PIPELINE_CHANGE_NAME" all
@@ -165,6 +180,8 @@ guard 通过条件（GUARD-RULES §6，按 Track 不同）：
 - 不要求 `pr_url` 或 `prd_path`
 
 同时人工确认：main spec 已同步（`openspec/specs/<capability>/spec.md` 内容包含本 change 的 delta）。
+存在 migration receipt 时，还须确认 Step 2.4 的程序化 CAS 结果为 `changed` 或 `no-op`，且
+`afterDigest == expectedAfterDigest`；口头声明或只运行无 `--apply` 的检查不能替代。
 
 guard **只校验、不自动 transition**。校验通过后，确认 PR / PRD 已交付，手动推进：
 `pipeline transition "$PIPELINE_CHANGE_NAME" ship-complete`

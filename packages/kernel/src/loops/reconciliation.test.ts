@@ -120,7 +120,8 @@ describe('buildReconciliationPlan / applyReconciliationOperations', () => {
     const text = decoder.decode(applied.bytes)
     expect(text.startsWith(decoder.decode(before))).toBe(true)
     expect(text).toContain('<!-- PIPELINE:LOOP-MIRROR-V1:START loop-a -->')
-    expect(text).toContain('### `loop-a`')
+    expect(text).toContain('### `loop-a` — Pipeline 管理的 Loop 镜像')
+    expect(text).toContain('> 真相源：`.pipeline/loops.yaml`。请修改登记表，不要直接编辑这个受管段落。')
     expect(text).toContain('<!-- PIPELINE:LOOP-MIRROR-V1:END loop-a -->')
     expect(plan.expected_loop_doc_epoch).toEqual(applied.epoch)
   })
@@ -298,7 +299,7 @@ describe('buildReconciliationPlan / applyReconciliationOperations', () => {
     expect(plan.expected_loop_doc_epoch).toEqual(resourceEpoch(before))
   })
 
-  test('ensure is idempotent and repairs an owned section in place without duplicating markers', () => {
+  test('ensure is idempotent and preserves an existing managed section byte-for-byte', () => {
     const operation = { kind: 'ensure-managed-loop-section', target: 'LOOP.md', loop_id: 'loop-a' } as const
     const first = applyReconciliationOperations({
       loop_doc_bytes: null,
@@ -326,11 +327,8 @@ describe('buildReconciliationPlan / applyReconciliationOperations', () => {
     })
     expect(repaired.ok).toBe(true)
     if (!repaired.ok) return
-    const repairedText = decoder.decode(repaired.bytes)
-    expect(repaired.changed).toBe(true)
-    expect(repairedText).toContain('### `loop-a`')
-    expect(repairedText.match(/PIPELINE:LOOP-MIRROR-V1:START/g)).toHaveLength(1)
-    expect(repairedText.match(/PIPELINE:LOOP-MIRROR-V1:END/g)).toHaveLength(1)
+    expect(repaired.changed).toBe(false)
+    expect(repaired.bytes).toEqual(edited)
   })
 })
 

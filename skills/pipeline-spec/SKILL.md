@@ -5,6 +5,13 @@ description: "Pipeline Phase 3: Spec · 规格 + 实施计划。所有 Track 产
 
 # /pipeline-spec — Phase 3: Spec / Plan
 
+> **语言：** 沿用 Change 在 `.pipeline-document-locale.json` 固定的 locale，新 Change 默认中文。delta spec 的
+> requirement/scenario 正文与实施计划沿用固定 locale（默认中文，显式 `en` 时使用英文）；`ADDED/MODIFIED/REMOVED Requirements`、
+> frontmatter key、coverage key、路径、kind、producer 和命令保持英文协议 token。缺失文档先用
+> `pipeline document scaffold` 建立结构，scaffold 本身不登记 producer。delta spec 必须使用
+> `pipeline document scaffold <change> delta-spec --capability <capability>`，真实 capability
+> 不得用 Change 名或默认 scope 猜测。
+
 > 移植来源：老仓 `skills/pipeline-spec/SKILL.md`；脚本面已改写为 `pipeline` CLI。
 
 > **Codex 打包 Skill 身份：** 本文件提到的裸 skill id 是 DAG/ledger 的逻辑 id；在 Codex
