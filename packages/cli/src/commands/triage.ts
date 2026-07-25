@@ -24,6 +24,7 @@ import type {
   TriageRoute,
   WorkflowRunRepository,
 } from '@pipeline-lite/kernel'
+import { loadEffectiveWorkflowPlan } from '@pipeline-lite/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
 
 export type TriageSourceKind = 'git-commits' | 'loop-run-terminals'
@@ -110,7 +111,7 @@ async function withTerminationSignal<T>(
 export interface CreateProductionTriageRuntimeOptions {
   readonly repoRoot: string
   readonly store: StateStore
-  readonly runRepository: Pick<WorkflowRunRepository, 'establishRun'>
+  readonly runRepository: Pick<WorkflowRunRepository, 'initChange'>
   readonly clock: () => string
   readonly providerFactory?: (model: CodexTriageModel) => ProductionTriageProvider
   /** Hermetic test seam. Production omits it and receives a process-lifetime signal per invocation. */
@@ -163,6 +164,10 @@ export function createProductionTriageRuntime(
     repoRoot: options.repoRoot,
     store: options.store,
     runRepository: options.runRepository,
+    resolveWorkflowPlan: (request) => loadEffectiveWorkflowPlan(
+      options.repoRoot,
+      request.workflowId,
+    ),
     resolveInit: () => ({
       track: 'backend',
       reviewSeed: 'pending',

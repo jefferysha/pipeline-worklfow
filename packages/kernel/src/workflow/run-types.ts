@@ -12,8 +12,11 @@
  * 没有版本；policyId/policyVersion/iterationId/loopId——W5 才有真实绑定；goal/budget/skill
  * bundle——同理）本增量不填 null 或假字符串，等对应工作包真正接线时再加。
  */
-import type { DocumentProfileId, FieldName, InitOptions, PipelineState, StateWriteResult } from '../types.js'
+import type {
+  DocumentProfileId, FieldName, InitOptions, PipelineState, StateWriteResult,
+} from '../types.js'
 import type { AutomationPolicySnapshot } from '../loops/automation-policy.js'
+import type { WorkflowPlanSnapshot } from './effective-plan.js'
 
 export interface WorkflowRun {
   /** 稳定 run 身份：新 change 在 init 时生成；已存在但缺身份的老 change 在首次经
@@ -33,6 +36,7 @@ export interface WorkflowRun {
   readonly documentProfile?: DocumentProfileId
   readonly documentGovernanceFingerprint?: string
   readonly workflowPlanFingerprint?: string
+  readonly workflowPlanSnapshot?: WorkflowPlanSnapshot
   readonly createdAt: string
   readonly updatedAt: string
   /** Governed runs carry the exact immutable policy used by admission and execution. */

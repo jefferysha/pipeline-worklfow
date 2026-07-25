@@ -212,6 +212,18 @@ describe('Nav rail 底部：连接、主题与语言收进设置浮层', () => {
     expect(conn.textContent).toContain('离线')
   })
 
+  it('英文模式的设置入口、浮层、主题和语言控件不混入中文', () => {
+    localStorage.setItem('pipeline-dashboard-lang', 'en')
+    renderNav({ lang: 'en', theme: 'dark' })
+    fireEvent.click(screen.getByTestId('nav-settings'))
+    const panel = screen.getByTestId('nav-settings-panel')
+    expect(screen.getByTestId('nav-settings')).toHaveTextContent('Settings')
+    expect(panel).toHaveTextContent('Settings')
+    expect(screen.getByTestId('theme-toggle')).toHaveTextContent('Dark')
+    expect(screen.getByTestId('lang-toggle')).toHaveTextContent('Chinese')
+    expect(panel.textContent).not.toMatch(/[设置深色浅色中文]/)
+  })
+
   it('设置浮层打开后切换主页面会自动收起，不遮挡新页面', () => {
     renderNav()
     fireEvent.click(screen.getByTestId('nav-settings'))

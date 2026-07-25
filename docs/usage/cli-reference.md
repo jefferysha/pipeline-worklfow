@@ -45,6 +45,7 @@ Host flags:
 pipeline init <name> --track <track> --preset <preset> [--workflow <name>]
 pipeline list [--json]
 pipeline status [name] [--json]
+pipeline workflow plan <name> [--json]
 pipeline get <name> <field>
 pipeline set <name> <field> <value>
 pipeline set-many <name> <key=value...>
@@ -63,6 +64,12 @@ mismatch exits `3`; failed guard check exits `2`; invalid transitions exit `1`.
 Use command help and machine-readable output before scripting additional
 assumptions.
 
+`pipeline workflow plan <name> --json` is the Agent-facing orchestration source
+for an in-flight Change. It returns the immutable plan captured when the
+WorkflowRun started, including steps, Skills, gates, guards, artifacts, and
+transitions. Editing or deleting `.pipeline/workflows/<workflow>.yaml` affects
+new runs only; it does not rewrite the Todo or Skill DAG of an existing run.
+
 ## Documents, artifacts, and review
 
 ```text
@@ -74,6 +81,23 @@ pipeline artifact register <change> <field> <path> --producer <skill-id>
 pipeline review request <change> --event <event>
 pipeline review acknowledge <change> [--delegated]
 ```
+
+Document structures and project-level spec scaffolds default to Chinese. English
+is explicit:
+
+```text
+pipeline init <name> ... --document-locale en
+pipeline document scaffold <change> <kind>
+pipeline document scaffold <change> delta-spec --capability <capability>
+pipeline scaffold spec web [--document-locale zh-CN|en] [--strategy skip|overwrite|append]
+```
+
+The Change locale is pinned in `.pipeline-document-locale.json`, outside the
+strict canonical state schema so an older release can roll back safely.
+The `overwrite` scaffold strategy stages the complete top-level project envelope beside the target
+and commits it with a persistent transaction receipt. A later invocation first recovers an
+interrupted directory switch. A live writer, or an unknown path occupying the target after the old
+envelope moved, causes a fail-closed error while preserving recovery evidence.
 
 ## Tracks and custom workflow use
 
@@ -88,7 +112,8 @@ pipeline init <change> --workflow <workflow> --track <track> --preset <preset>
 ```
 
 Custom Workflow authoring is file/Dashboard based; there is no public
-`pipeline workflow create` command in the current CLI.
+`pipeline workflow create` command in the current CLI. `pipeline workflow plan`
+is a read-only runtime introspection command, not a workflow authoring command.
 
 ## AFK and loops
 

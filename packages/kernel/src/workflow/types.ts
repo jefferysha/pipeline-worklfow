@@ -4,7 +4,7 @@
  * 才会加载、解析、消费这里定义的形状。
  *
  * 分层（G2 P2，2026-07-17）：本文件是**定义层**——parse 产出、serialize 写回、validate 校验、
- * 编辑器/测试夹具直接构造的形状（guard 的 8 变体闭集 + 4 action 变体 + edge 级 guards/actions +
+ * 编辑器/测试夹具直接构造的形状（guard 的 9 变体闭集 + 4 action 变体 + edge 级 guards/actions +
  * when 谓词）。运行层（归一化、编译期展开 nonempty-output、字段收窄进 FIELD_ORDER 闭集）是
  * ./ir.ts 的 CompiledGuardConfig / WorkflowIR，由 compileWorkflow（./compile.ts）从本层翻译产出。
  * 运行层的 CompiledGuardConfig 从本层 WorkflowGuardConfig 派生（Exclude 掉 nonempty-output），
@@ -34,7 +34,7 @@ export interface WorkflowConditional {
 }
 
 /**
- * guard 定义层闭集（8 变体）。前两个是 v1 变体（tasks-at-least / nonempty-output）；后六个是
+ * guard 定义层闭集。前两个是 v1 变体（tasks-at-least / nonempty-output）；其余是
  * flow/transition-table.ts 事件前置校验下沉出的基础 guard。nonempty-output 是纯定义层变体——
  * compileWorkflow 按 step.outputs 展开成 field-nonempty 集合，运行层 CompiledGuardConfig 不含它。
  * 刻意没有任意 set-field/自由脚本类变体（防 custom workflow 获得改 phase/workflow 等系统字段的
@@ -52,6 +52,8 @@ export type WorkflowGuardConfig =
   | ({ readonly type: 'full-direct-override' } & WorkflowConditional)
   /** barrier：HEAD 必须等于 build 冻结的 SHA（老仓 state-transition.sh verify-pass barrier，ADR 0005）。 */
   | ({ readonly type: 'build-head-unchanged'; readonly field: 'build_sha' } & WorkflowConditional)
+  /** Ship 硬门禁：存在主规格迁移输入时，必须有身份/摘要绑定且与当前主规格一致的应用结果。 */
+  | ({ readonly type: 'spec-migration-applied' } & WorkflowConditional)
 
 /**
  * 每个 guard 变体在定义层允许的**顶层 data 键**（不含通用的 `type` 与可选 `when`）——附加字段闭集
@@ -73,6 +75,7 @@ export const GUARD_DATA_KEYS = {
   'field-in': ['field', 'values'],
   'full-direct-override': [],
   'build-head-unchanged': ['field'],
+  'spec-migration-applied': [],
 } as const satisfies Record<WorkflowGuardConfig['type'], readonly string[]>
 
 /**

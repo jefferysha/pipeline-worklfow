@@ -1,0 +1,18 @@
+{
+  "version": "v1",
+  "default_locale": "zh-CN",
+  "locales": ["zh-CN", "en"],
+  "workflow_steps": ["open", "explore", "spec", "build", "verify", "ship", "archive"],
+  "templates": [
+    {"id":"openspec-proposal","kind":"proposal","path":"openspec/changes/{change}/proposal.md","sections":["title","why","whyPrompt","whatChanges","whatChangesPrompt","capabilities","newCapabilities","newCapabilitiesPrompt","modifiedCapabilities","modifiedCapabilitiesPrompt","impact","impactPrompt"],"layout":["h1:title","h2:why","quote:whyPrompt","h2:whatChanges","quote:whatChangesPrompt","h2:capabilities","h3:newCapabilities","quote:newCapabilitiesPrompt","h3:modifiedCapabilities","quote:modifiedCapabilitiesPrompt","h2:impact","quote:impactPrompt"],"creation":"missing-only"},
+    {"id":"openspec-design","kind":"openspec-design","path":"openspec/changes/{change}/design.md","sections":["title","hypothesis","hypothesisPrompt","risks","questions"],"layout":["h1:title","h2:hypothesis","quote:hypothesisPrompt","h2:risks","h2:questions"],"creation":"missing-only"},
+    {"id":"workflow-tasks","kind":"tasks","path":"openspec/changes/{change}/tasks.md","sections":["title","taskPrompt"],"layout":["h1:title","workflow-steps:taskPrompt"],"creation":"missing-only"},
+    {"id":"superpower-design","kind":"superpower-design","path":"docs/superpowers/specs/{change}-design.md","sections":["title","context","decision","alternatives","risks"],"layout":["h1:title","h2:context","prompt-placeholder:context","h2:decision","prompt-placeholder:decision","h2:alternatives","prompt-placeholder:alternatives","h2:risks","prompt-placeholder:risks"],"creation":"missing-only"},
+    {"id":"architecture-decision-record","kind":"adr","path":"docs/adr/{change}.md","sections":["title","context","decision","alternatives","consequences"],"layout":["h1:title","h2:context","prompt-placeholder:context","h2:decision","prompt-placeholder:decision","h2:alternatives","prompt-placeholder:alternatives","h2:consequences","prompt-placeholder:consequences"],"creation":"missing-only"},
+    {"id":"openspec-delta-spec","kind":"delta-spec","path":"openspec/changes/{change}/specs/{capability}/spec.md","sections":["title","operations","requirement","prompt","scenario"],"layout":["h1:title","h2:operations","h3-pending:requirement","text:prompt","h4-pending:scenario","scenario-pending"],"creation":"missing-only"},
+    {"id":"superpower-plan","kind":"superpower-plan","path":"docs/superpowers/plans/{change}.md","sections":["title","tasks","verification","rollback"],"layout":["frontmatter","h1:title","h2:tasks","task-pending","h2:verification","h2:rollback"],"creation":"missing-only"},
+    {"id":"implementation-plan","kind":"plan","path":"docs/superpowers/plans/{change}.md","sections":["title","tasks","verification","rollback"],"layout":["frontmatter","h1:title","h2:tasks","task-pending","h2:verification","h2:rollback"],"creation":"missing-only"},
+    {"id":"verification-report","kind":"verification-report","path":"docs/superpowers/reports/{change}-verify.md","sections":["title","scope","commands","results","failures","risks"],"layout":["h1:title","h2:scope","prompt-placeholder:scope","h2:commands","prompt-placeholder:commands","h2:results","prompt-placeholder:results","h2:failures","prompt-placeholder:failures","h2:risks","prompt-placeholder:risks"],"creation":"missing-only"},
+    {"id":"applied-spec","kind":"applied-spec","path":"openspec/changes/{change}/applied-spec.md","sections":["title","summary","requirements","evidence"],"layout":["h1:title","h2:summary","prompt-placeholder:summary","h2:requirements","prompt-placeholder:requirements","h2:evidence","prompt-placeholder:evidence"],"creation":"missing-only"}
+  ]
+}

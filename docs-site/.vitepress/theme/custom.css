@@ -1,0 +1,85 @@
+:root {
+  --vp-c-brand-1: #08715d;
+  --vp-c-brand-2: #076a57;
+  --vp-c-brand-3: #075f4f;
+  --vp-c-brand-soft: rgba(13, 127, 104, 0.14);
+  --pipeline-code-language: #56565c;
+  --vp-font-family-base: "Inter", "PingFang SC", "Noto Sans CJK SC", system-ui, sans-serif;
+  --vp-font-family-mono: "SFMono-Regular", "Cascadia Code", ui-monospace, monospace;
+}
+
+.dark {
+  --vp-c-brand-1: #6cebd0;
+  --vp-c-brand-2: #58d9bd;
+  --vp-c-brand-3: #42c5a9;
+  --vp-c-brand-soft: rgba(108, 235, 208, 0.16);
+  --pipeline-code-language: #c7c7cc;
+  --vp-button-brand-bg: #0b6f5d;
+  --vp-button-brand-hover-bg: #0d806b;
+  --vp-button-brand-active-bg: #095f50;
+  --vp-button-brand-text: #ffffff;
+}
+
+.VPHomeHero .name {
+  letter-spacing: -0.035em;
+}
+
+.VPHomeHero .text {
+  max-width: 760px;
+  letter-spacing: -0.025em;
+}
+
+.VPDoc h2 {
+  border-top: 0;
+  margin-top: 2.5rem;
+}
+
+.vp-doc div[class*="language-"] > span.lang {
+  color: var(--pipeline-code-language);
+  opacity: 1;
+}
+
+.vp-doc a:focus-visible,
+.VPButton:focus-visible,
+button:focus-visible {
+  outline: 3px solid var(--vp-c-brand-1);
+  outline-offset: 3px;
+}
+
+@media (max-width: 640px) {
+  .vp-doc table {
+    display: block;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
+.pl-breadcrumb {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-block: 0 1.5rem;
+  color: var(--vp-c-text-2);
+  font-size: 0.875rem;
+}
+
+.pl-breadcrumb a {
+  color: var(--vp-c-brand-1);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.pl-breadcrumb a:hover {
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}

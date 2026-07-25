@@ -49,6 +49,13 @@ describe('program —— commander 装配与 exit code 逐格对齐', () => {
     expect(dashboard?.options.some((option) => option.long === '--dry-run')).toBe(true)
   })
 
+  test('workflow plan 是在途 Change 的冻结编排读取入口', () => {
+    const deps = makeDeps()
+    const workflow = buildProgram(deps).commands.find((command) => command.name() === 'workflow')
+    expect(workflow?.description()).toContain('冻结快照')
+    expect(workflow?.commands.find((command) => command.name() === 'plan')).toBeDefined()
+  })
+
   test('get 走通：stdout 裸值，code 0', async () => {
     const deps = makeDeps({ state: mockState({ phase: 'build' }) })
     const code = await run(deps, ['get', 'demo', 'phase'])

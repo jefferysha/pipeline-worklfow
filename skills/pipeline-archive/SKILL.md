@@ -1,9 +1,12 @@
 ---
 name: pipeline-archive
-description: "Pipeline Phase 7: Archive · 归档 + 学习沉淀。所有 Track 共用：check 过 → 同步 spec → transition archived → 移入 archive/，可选触发 learn-record。"
+description: "Pipeline Phase 7: Archive · 归档 + 学习沉淀。所有 Track 共用：check 过 → 校验 applied spec → transition archived → 官方跳过规格更新归档，可选触发 learn-record。"
 ---
 
 # /pipeline-archive — Phase 7: Archive
+
+> **语言：** 新增的归档摘要与学习记录沿用 Change 固定 locale，默认中文；Archive 内既有文档
+> 不因 setup/update 或模板升级被自动翻译、覆盖或重哈希。
 
 > 移植来源：老仓 `skills/pipeline-archive/SKILL.md`。老仓 `pipeline-archive.sh` 一体化脚本
 > 未迁移为独立命令——本 skill 把其步骤改写为「`pipeline` CLI + 显式文件操作」的等价序列。
@@ -61,10 +64,10 @@ pipeline check "$PIPELINE_CHANGE_NAME"     # archive 出口：verify_result=pass
    > ⏳ **待迁移（M1 #15 task lifecycle）**：老仓 `pipeline-state.sh cascade/children --json`
    > 结构化反查未迁移，上面 grep 是等价降级写法。
 
-3. **同步 delta spec → main spec**（幂等兜底；verify Step 1.6 / ship 已做过则本步为空操作）：
-   逐个把 `openspec/changes/<name>/specs/<cap>/spec.md` 合并进 `openspec/specs/<cap>/spec.md`
-   （Read + Edit 工具）。default 的全部 Track（包括 PM）都必须已有 delta spec；缺失时先回到 spec/ship
-   补齐，不得把 PRD 当成 applied spec 的替代品。
+3. **校验 applied spec，不再应用 delta**：
+   逐个读取 `openspec/changes/<name>/specs/<cap>/spec.md`、`openspec/specs/<cap>/spec.md` 和
+   `applied-spec` receipt，确认 Ship 已记录 `changed` 或 `no-op` 结果、目标 digest 与当前主规格一致。
+   缺失或不一致时回到 Ship 修复；Archive 不承担规格写入兜底，避免重复应用。
 
 4. **落终态字段**（必须在移动目录**之前**做——CLI 只读活跃区）：
 
@@ -78,12 +81,14 @@ pipeline check "$PIPELINE_CHANGE_NAME"     # archive 出口：verify_result=pass
    追加 `archived-with` frontmatter；否则会在 terminal transition 前把刚读过的收据变 stale。
    归档身份由 canonical `archived/archived_at` 字段与下面带日期的归档目录共同表达。
 
-5. **移动到归档区**：
+5. **使用官方 OpenSpec 移入归档区，并显式跳过已完成的规格应用**：
 
    ```bash
-   mkdir -p openspec/changes/archive
-   mv "openspec/changes/$PIPELINE_CHANGE_NAME" "openspec/changes/archive/$(date +%Y-%m-%d)-$PIPELINE_CHANGE_NAME"
+   openspec archive "$PIPELINE_CHANGE_NAME" --skip-specs --yes --json
    ```
+
+   该命令只负责官方目录结构与归档校验；如果失败，保留已落的 pipeline 终态并报告恢复命令，
+   不得改写 canonical state 或手工伪造成功。
 
 ### Step 2: 触发 learn-record（**主动询问，每次必问**）
 

@@ -15,6 +15,7 @@ import {
   cmdDocumentMigrateDelta,
   cmdDocumentRead,
   cmdDocumentRecord,
+  cmdDocumentScaffold,
   cmdDocumentStatus,
 } from './commands/document.js'
 import { cmdImport } from './commands/import.js'
@@ -47,8 +48,8 @@ import { cmdTriage, type TriageCommandRuntime } from './commands/triage.js'
 import { bail, stripNl } from './program-exit.js'
 import { registerInstallCommands } from './program-install.js'
 import { registerTrackCommands } from './program-tracks.js'
+import { registerWorkflowCommands } from './program-workflows.js'
 import { LOOPS_HELP } from './program-help.js'
-
 export { CliExit } from './program-exit.js'
 
 export interface ProgramRuntimes {
@@ -76,6 +77,7 @@ export function buildProgram(deps: CliDeps, runtimes: ProgramRuntimes = {}): Com
     .option('--preset <preset>', 'full | hotfix | tweak')
     .option('--user <user>', 'created_by')
     .option('--workflow <workflow>', '自定义 workflow 名（.pipeline/workflows/<name>.yaml），缺省 default')
+    .option('--document-locale <locale>', '治理文档语言：zh-CN（默认）| en')
     .action(async (name: string, opts: InitCmdOpts) => bail(await cmdInit(deps, name, opts)))
 
   registerInstallCommands(program, deps, runtimes.dashboard)
@@ -120,7 +122,7 @@ export function buildProgram(deps: CliDeps, runtimes: ProgramRuntimes = {}): Com
 
   const document = program
     .command('document')
-    .description('OpenSpec 文档证据：init / record / migrate-delta / read / status')
+    .description('OpenSpec 文档证据：init / scaffold / record / migrate-delta / read / status')
     .action(() => {
       deps.io.err('用法：pipeline document init|record|migrate-delta|read|status <change> ...')
       bail(1)
@@ -129,6 +131,13 @@ export function buildProgram(deps: CliDeps, runtimes: ProgramRuntimes = {}): Com
     .command('init <change>')
     .description('为既有受治理 Change 创建 .pipeline-documents.json（新建 Change 已自动创建）')
     .action(async (change: string) => bail(await cmdDocumentInit(deps, change)))
+  document
+    .command('scaffold <change> <kind>')
+    .description('按 Change 固定 locale 幂等创建受 contract 声明的文档结构；不登记 producer 或读取证据')
+    .option('--locale <locale>', '仅旧 Change 可显式选择 zh-CN | en；已固定 Change 必须一致')
+    .option('--capability <name>', 'delta-spec 的真实 capability；不得用 Change 名代替')
+    .action(async (change: string, kind: string, opts: { locale?: string; capability?: string }) =>
+      bail(await cmdDocumentScaffold(deps, change, kind, opts.locale, opts.capability)))
   document
     .command('record <change> <kind> <path>')
     .description('登记当前 phase 产出或允许更新的文档和实际 Skill 调用证据；旧 Change 可显式 --backfill 首次补登记前序文档')
@@ -246,6 +255,8 @@ export function buildProgram(deps: CliDeps, runtimes: ProgramRuntimes = {}): Com
     .option('--json', 'JSON 输出（schema 稳定）')
     .action(async (name: string | undefined, opts: { json?: boolean }) =>
       bail(await cmdStatus(deps, name, opts)))
+
+  registerWorkflowCommands(program, deps)
 
   program
     .command('list')
@@ -367,13 +378,14 @@ export function buildProgram(deps: CliDeps, runtimes: ProgramRuntimes = {}): Com
 
   program
     .command('state <sub> <name>')
-    .description('canonical state 运维：status | repair-projection | import-legacy')
+    .description('canonical state 运维：status | repair-projection | import-legacy | pin-workflow-snapshot')
     .option('--json', '稳定 JSON 输出')
     .option('--force-canonical', 'repair-projection：明确用 canonical 覆盖未知 YAML drift')
+    .option('--workflow-file <path>', 'pin-workflow-snapshot：必须与已绑定 fingerprint 完全一致的旧 workflow 文件')
     .action(async (
       sub: string,
       name: string,
-      opts: { json?: boolean; forceCanonical?: boolean },
+      opts: { json?: boolean; forceCanonical?: boolean; workflowFile?: string },
     ) => bail(await cmdStateProjection(deps, sub, name, opts)))
 
   registerTrackCommands(program, deps)

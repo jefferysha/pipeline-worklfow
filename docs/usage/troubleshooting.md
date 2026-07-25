@@ -57,6 +57,10 @@ mtime is not selection authority. Explicitly activate the intended Change:
 pipeline session activate <change-name>
 ```
 
+When the host provides a session id, a generic “continue” from an unbound new
+conversation must not fall back to repository-wide `.pipeline-active`. Name the
+Change explicitly or activate an exact host-session binding.
+
 ### Everything takes the default seven phases
 
 Inspect Track/Workflow identity and simple exclusions. Simple requires positive
@@ -97,6 +101,21 @@ pipeline check <change-name>
 
 Confirm producer Skill, current phase visit, digest, and required read receipt.
 File existence is not evidence.
+
+### New documents use the wrong language
+
+New Changes default to Chinese and persist that choice as an immutable
+`.pipeline-document-locale.json` sidecar. Keeping presentation metadata
+outside the strict canonical schema preserves rollback compatibility. Inspect
+the pinned value before changing any content:
+
+```bash
+cat openspec/changes/<change-name>/.pipeline-document-locale.json
+```
+
+Use `--document-locale en` only when creating a new Change or project scaffold
+that must remain English. Setup and update deliberately do not translate
+existing or archived Markdown.
 
 ### Port 18765 shows the wrong application
 
@@ -159,4 +178,3 @@ health identity changed for the intended reason.
 
 Use [Support](../../SUPPORT.md) for a sanitized non-sensitive report, or
 [Security](../../SECURITY.md) for a vulnerability.
-

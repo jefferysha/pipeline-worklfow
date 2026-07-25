@@ -4,6 +4,7 @@
  */
 import type { CoverageProfile, ReviewSeed, TrackId } from './tracks/types.js'
 import type { AutomationPolicySnapshot } from './loops/automation-policy.js'
+import type { WorkflowPlanSnapshot } from './workflow/effective-plan.js'
 
 /**
  * Review-gate v2 fields are append-only state schema additions. Keeping the group named lets the
@@ -68,6 +69,8 @@ export const PHASES = ['open', 'explore', 'spec', 'build', 'verify', 'ship', 'ar
 export type Phase = (typeof PHASES)[number]
 export const DOCUMENT_PROFILE_IDS = ['legacy-full', 'document-v1'] as const
 export type DocumentProfileId = (typeof DOCUMENT_PROFILE_IDS)[number]
+export const DOCUMENT_LOCALES = ['zh-CN', 'en'] as const
+export type DocumentLocale = (typeof DOCUMENT_LOCALES)[number]
 
 // track 合法性全集不再是 types.ts 的写死常量：运行时权威改由动态 Track Registry 承载
 // （GOAL.md 清单 T · R2）。内建 Track 的 id/默认/排序单一真相源在 tracks/builtins.ts 的
@@ -131,12 +134,14 @@ export interface RunMetadata {
   transitionSequence: number
   /** 尚未发生过任何 canonical transition 的新 change 合法地没有 head。 */
   transitionHead?: string
-  /** Immutable document-governance identity selected when the Change was created. */
+  /** Runtime-merged document governance identity; persisted in a rollback-compatible sidecar. */
   documentProfile?: DocumentProfileId
   /** SHA-256 of the canonical document policy selected at initialization. */
   documentGovernanceFingerprint?: string
   /** SHA-256 of the complete workflow-owned effective plan selected at initialization. */
   workflowPlanFingerprint?: string
+  /** Runtime-only immutable plan; persisted in a separate rollback-compatible sidecar. */
+  workflowPlanSnapshot?: WorkflowPlanSnapshot
   /** Immutable policy snapshot bound before an autonomous attempt starts. */
   automationPolicy?: AutomationPolicySnapshot
   /** H9 governed identity；两者只在 automationPolicy 已绑定时成对存在。 */
@@ -181,6 +186,17 @@ export interface InitOptions {
    * 依赖 WorkflowRunRepository，不自己生成 ID）。
    */
   runId?: string
+  /** Presentation locale pinned in a rollback-safe Change sidecar; omitted callers receive the product default. */
+  documentLocale?: DocumentLocale
+  /**
+   * Files that must become visible in the same directory publication as the initial canonical
+   * state. Paths are project-internal, relative to the new Change root, and published only after
+   * the complete private candidate has been prepared.
+   */
+  initialFiles?: readonly {
+    readonly relativePath: string
+    readonly content: string
+  }[]
   /**
    * custom workflow 首态覆盖（W1 第二增量收口，第 7 轮 codex review P1）：提供时，init 的独占
    * 创建一次性把 workflow/phase 写成这里给的值，不是先建 default/open 再补一次 setMany——
@@ -195,12 +211,14 @@ export interface InitOptions {
     openspecContract?: boolean
     /** Custom workflow declared any versioned document contract; initialize its evidence ledger atomically. */
     documentContract?: boolean
-    /** Canonical identity persisted with the run; booleans above remain compatibility assembly hints. */
+    /** Governance identity pinned beside the run; booleans above remain compatibility assembly hints. */
     documentProfile?: DocumentProfileId
     /** Exact canonical policy identity; omitted only by profile-only runs written by older versions. */
     documentGovernanceFingerprint?: string
     /** Exact workflow graph/Skill/document/review capability identity. */
     workflowPlanFingerprint?: string
+    /** Exact immutable execution plan published with the Change. */
+    workflowPlanSnapshot?: WorkflowPlanSnapshot
   }
 }
 

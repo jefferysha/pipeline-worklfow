@@ -32,7 +32,7 @@ function reconcileCodexSkillEvidence(
 }
 
 function eventLines(
-  output?: string,
+  output?: unknown,
   outputTurn = turnId,
   skillPaths: readonly string[] = [skillPath],
   timestamp = '2026-07-24T00:02:00Z',
@@ -397,6 +397,82 @@ describe('Codex transcript skill receipt', () => {
     })
     expect(confirmed.confirmedSkillIds).toEqual(['openspec-propose'])
     expect(await readFile(join(changeDir, '.pipeline-history.jsonl'), 'utf8')).toContain('CodexSkillRead: openspec-propose')
+  })
+
+  it('accepts the current Codex content-array ABI when the host reports Script completed', async () => {
+    await writeFile(transcript, eventLines([
+      { type: 'input_text', text: 'Script completed\nWall time 0.1 seconds\nOutput:\n' },
+      { type: 'input_text', text: '# skill body\n' },
+    ]), 'utf8')
+    await recordPendingReceipt()
+
+    const result = await reconcileCodexSkillEvidence({
+      repoRoot: root,
+      changeDir,
+      producer: 'openspec-propose',
+      recordedAt: '2026-07-24T00:03:00Z',
+      history: historyWriter,
+      homeDir: home,
+      codexHomeDir: join(home, '.codex'),
+    })
+    expect(result.confirmedSkillIds).toEqual(['openspec-propose'])
+  })
+
+  it('rejects Script failed even when a later content block contains exit=0', async () => {
+    await writeFile(transcript, eventLines([
+      { type: 'input_text', text: 'Script failed\nWall time 0.1 seconds\nOutput:\n' },
+      { type: 'input_text', text: 'nested diagnostic exit=0\n' },
+    ]), 'utf8')
+    await recordPendingReceipt()
+
+    const result = await reconcileCodexSkillEvidence({
+      repoRoot: root,
+      changeDir,
+      producer: 'openspec-propose',
+      recordedAt: '2026-07-24T00:03:00Z',
+      history: historyWriter,
+      homeDir: home,
+      codexHomeDir: join(home, '.codex'),
+    })
+    expect(result.confirmedSkillIds).toEqual([])
+  })
+
+  it('rejects Script failed even when a structured sibling reports exit_code=0', async () => {
+    await writeFile(transcript, eventLines([
+      { type: 'input_text', text: 'Script failed\nWall time 0.1 seconds\nOutput:\n' },
+      { type: 'execution_result', exit_code: 0 },
+    ]), 'utf8')
+    await recordPendingReceipt()
+
+    const result = await reconcileCodexSkillEvidence({
+      repoRoot: root,
+      changeDir,
+      producer: 'openspec-propose',
+      recordedAt: '2026-07-24T00:03:00Z',
+      history: historyWriter,
+      homeDir: home,
+      codexHomeDir: join(home, '.codex'),
+    })
+    expect(result.confirmedSkillIds).toEqual([])
+  })
+
+  it('rejects conflicting structured exit codes even when one reports zero', async () => {
+    await writeFile(transcript, eventLines([
+      { type: 'execution_result', exit_code: 0 },
+      { type: 'execution_result', exit_code: 9 },
+    ]), 'utf8')
+    await recordPendingReceipt()
+
+    const result = await reconcileCodexSkillEvidence({
+      repoRoot: root,
+      changeDir,
+      producer: 'openspec-propose',
+      recordedAt: '2026-07-24T00:03:00Z',
+      history: historyWriter,
+      homeDir: home,
+      codexHomeDir: join(home, '.codex'),
+    })
+    expect(result.confirmedSkillIds).toEqual([])
   })
 
   it('rejects outer custom-tool completion when the nested exec failed before the Skill read', async () => {
@@ -973,8 +1049,8 @@ describe('Codex transcript skill receipt', () => {
   it('reconciles a current host session larger than the direct-receipt cap', async () => {
     await writeFile(transcript, sessionScopedEventLines(root), 'utf8')
     await bindHostSession()
-    // A long-lived Codex task can legitimately pass the strict 64 MiB direct-receipt cap.  The
-    // discovery route must still accept its host-owned, completed read within its larger budget.
+    // A long-lived Codex task can legitimately pass the legacy 64 MiB cap. The current exact
+    // receipt/discovery routes must still accept its host-owned, completed read within 512 MiB.
     await truncate(transcript, LEGACY_RECEIPT_TRANSCRIPT_LIMIT + 1)
 
     const result = await reconcileCodexSkillEvidence({
@@ -982,6 +1058,26 @@ describe('Codex transcript skill receipt', () => {
       changeDir,
       producer: 'openspec-propose',
       recordedAt: '2026-07-24T00:00:00Z',
+      history: historyWriter,
+      homeDir: home,
+      codexHomeDir: join(home, '.codex'),
+    })
+
+    expect(result.confirmedSkillIds).toEqual(['openspec-propose'])
+    expect(await readFile(join(changeDir, '.pipeline-history.jsonl'), 'utf8')).toContain('CodexSkillRead: openspec-propose')
+  })
+
+  it('falls back to the exact bound host session when a pending receipt points at a long transcript', async () => {
+    await writeFile(transcript, sessionScopedEventLines(root), 'utf8')
+    await bindHostSession()
+    await recordPendingReceipt()
+    await truncate(transcript, LEGACY_RECEIPT_TRANSCRIPT_LIMIT + 1)
+
+    const result = await reconcileCodexSkillEvidence({
+      repoRoot: root,
+      changeDir,
+      producer: 'openspec-propose',
+      recordedAt: '2026-07-24T00:03:00Z',
       history: historyWriter,
       homeDir: home,
       codexHomeDir: join(home, '.codex'),

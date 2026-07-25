@@ -1,0 +1,18 @@
+{
+  "name": "@pipeline-lite/docs-site",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "sync": "node scripts/sync-content.mjs",
+    "check": "node scripts/check-determinism.mjs && node scripts/check-content.mjs && node --test scripts/artifact-allowlist.node-test.mjs scripts/locale-labels.node-test.mjs",
+    "build": "npm run sync && vitepress build .",
+    "smoke": "node scripts/smoke.mjs"
+  },
+  "devDependencies": {
+    "vitepress": "1.6.4"
+  }
+}

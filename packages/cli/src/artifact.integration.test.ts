@@ -137,20 +137,21 @@ tracks:
     expect(await h.read(CH)).not.toMatch(/^design_doc: d\.md$/m)
   })
 
-  test('custom 轨：初始化后改写 workflow 图 → fingerprint fail-loud（exit 1）', async () => {
+  test('custom 轨：初始化后改写 workflow 图仍按不可变快照登记', async () => {
     await writeWorkflow('cwf', CUSTOM_WF)
     expect(await h.run(['init', CH, '--track', 'backend', '--preset', 'full', '--workflow', 'cwf'])).toBe(0)
     // 改写 workflow：首 step 重命名为 draft2，原 phase 'draft' 不再在图里
     await writeWorkflow('cwf', CUSTOM_WF.replace('id: draft\n', 'id: draft2\n'))
-    expect(await h.run(['artifact', 'register', CH, 'design_doc', 'd.md', '--producer', 'skill-alpha'])).toBe(1)
-    expect(h.err.join('\n')).toContain('workflow plan fingerprint 与初始化绑定不一致')
+    expect(await h.run(['artifact', 'register', CH, 'design_doc', 'd.md', '--producer', 'skill-alpha'])).toBe(0)
+    expect(await h.read(CH)).toMatch(/^design_doc: d\.md$/m)
   })
 
-  test('custom 轨：workflow 文件损坏（非法 YAML）→ fail-loud（exit 1）', async () => {
+  test('custom 轨：workflow 文件损坏不影响已初始化 Change 的冻结快照', async () => {
     await writeWorkflow('cwf', CUSTOM_WF)
     expect(await h.run(['init', CH, '--track', 'backend', '--preset', 'full', '--workflow', 'cwf'])).toBe(0)
     await writeWorkflow('cwf', 'name: cwf\nsteps:\n  - not-a-valid-step: true\n')
-    expect(await h.run(['artifact', 'register', CH, 'design_doc', 'd.md', '--producer', 'skill-alpha'])).toBe(1)
+    expect(await h.run(['artifact', 'register', CH, 'design_doc', 'd.md', '--producer', 'skill-alpha'])).toBe(0)
+    expect(await h.read(CH)).toMatch(/^design_doc: d\.md$/m)
   })
 
   // ── program 装配 / usage ──

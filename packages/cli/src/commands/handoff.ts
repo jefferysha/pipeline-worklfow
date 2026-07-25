@@ -17,7 +17,9 @@ import {
   type HandoffResult,
 } from '@pipeline-lite/kernel'
 import type { PipelineState } from '@pipeline-lite/kernel'
+import type { DocumentLocale } from '@pipeline-lite/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
+import { resolveChangeDocumentLocale } from '../documentLocale.js'
 import { changeDir, isValidChangeName } from '../paths.js'
 
 export type { HandoffFs } from '@pipeline-lite/kernel'
@@ -27,6 +29,8 @@ export interface HandoffOpts {
   /** 覆写要压缩的相位产出（缺省 = change 当前 phase） */
   phase?: string
 }
+
+export type HandoffLocaleResolver = (changeDirPath: string) => Promise<DocumentLocale>
 
 function scalarField(v: string | string[] | undefined): string {
   if (v === undefined) return ''
@@ -61,19 +65,24 @@ function pct(ratio: number): number {
 
 /** 人读输出：header + 压缩率 + 逐文档摘要（下游可直接读的压缩产物）。 */
 function renderText(deps: CliDeps, result: HandoffResult): void {
-  deps.io.out(`# Handoff: ${result.name} (phase ${result.phase})`)
+  const chinese = result.documentLocale === 'zh-CN'
+  deps.io.out(chinese
+    ? `# 交接摘要: ${result.name}（阶段 ${result.phase}）`
+    : `# Handoff: ${result.name} (phase ${result.phase})`)
   if (result.docs.length === 0) {
-    deps.io.out('# No handoff documents found for this phase.')
+    deps.io.out(chinese ? '# 当前阶段没有可交接文档。' : '# No handoff documents found for this phase.')
     deps.io.err(`[HANDOFF] ${result.name} @ ${result.phase}: 无可压缩产出文档（相位无 upstream doc 或文件缺失/空）`)
     return
   }
   const agg = result.aggregate
-  deps.io.out(
-    `# Compression: ${pct(agg.ratio)}% (${agg.originalChars} → ${agg.compressedChars} chars, ${result.docs.length} doc(s))`,
-  )
+  deps.io.out(chinese
+    ? `# 压缩率: ${pct(agg.ratio)}%（${agg.originalChars} → ${agg.compressedChars} 字符，${result.docs.length} 份文档）`
+    : `# Compression: ${pct(agg.ratio)}% (${agg.originalChars} → ${agg.compressedChars} chars, ${result.docs.length} doc(s))`)
   for (const d of result.docs) {
     deps.io.out('')
-    deps.io.out(`## ${d.path} — ${pct(d.doc.stats.ratio)}% (${d.doc.stats.originalChars} → ${d.doc.stats.compressedChars} chars)`)
+    deps.io.out(chinese
+      ? `## ${d.path} — ${pct(d.doc.stats.ratio)}%（${d.doc.stats.originalChars} → ${d.doc.stats.compressedChars} 字符）`
+      : `## ${d.path} — ${pct(d.doc.stats.ratio)}% (${d.doc.stats.originalChars} → ${d.doc.stats.compressedChars} chars)`)
     for (const line of d.summary.split('\n')) deps.io.out(line)
   }
 }
@@ -87,6 +96,7 @@ export async function cmdHandoff(
   name: string | undefined,
   opts: HandoffOpts,
   fs: HandoffFs = nodeHandoffFs(),
+  localeResolver: HandoffLocaleResolver = resolveChangeDocumentLocale,
 ): Promise<number> {
   if (name === undefined || name === '' || !isValidChangeName(name)) {
     deps.io.err(`ERROR: change-name 非法: '${name ?? ''}' (仅允许 a-z A-Z 0-9 - _)`)
@@ -102,6 +112,13 @@ export async function cmdHandoff(
   }
 
   const phase = opts.phase ?? scalarField(state.fields.phase)
+  let documentLocale: 'zh-CN' | 'en'
+  try {
+    documentLocale = await localeResolver(dir)
+  } catch (error) {
+    deps.io.err(`ERROR: ${errMsg(error)}`)
+    return 1
+  }
   const result = buildHandoff(
     {
       name,
@@ -109,6 +126,7 @@ export async function cmdHandoff(
       cwd: deps.cwd,
       changeDirRel: `openspec/changes/${name}`,
       fields: state.fields,
+      documentLocale,
     },
     fs,
   )

@@ -33,6 +33,11 @@ Transitions:
 
 Explore, Spec, and Verify are review-gated.
 
+Ship also has a machine-enforced migration guard. When the Change contains
+`migration/spec-application.json`, the managed apply tool must produce a result bound to the
+Change, input receipt, delta, target path, and final digest. Both `pipeline check` and
+`pipeline transition ... ship-complete` revalidate that evidence and fail closed on drift.
+
 ## Phase operation
 
 ### 1. Inspect current truth
@@ -139,4 +144,3 @@ Verify must inspect the frozen baseline. A correction belongs on the
 
 Read [documents, Skills, and evidence](documents-skills-and-evidence.md) or
 [Dashboard status semantics](dashboard-and-local-api.md).
-

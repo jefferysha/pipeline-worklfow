@@ -14,6 +14,9 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The compatibility gate extracts the exact CLI bytes from the pinned N-1 release commit.
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
@@ -53,6 +56,16 @@ jobs:
       - name: 文档链接与产品声明门禁 (documentation drift)
         run: npm run check:docs
 
+      - name: 治理文档模板与中英文结构门禁
+        run: npm run check:document-templates
+
+      - name: 正式文档站双语、构建与 Pages 子路径门禁
+        run: |
+          npm run docs:sync
+          npm run docs:check
+          npm run docs:build
+          npm run docs:smoke
+
       - name: Build CLI bundle for required real-Codex
         run: npm run bundle
 
@@ -86,6 +99,20 @@ jobs:
 
       - name: verify-skills (dangling-reference check)
         run: bash tools/verify-skills.sh
+
+      - name: 主规格迁移原子 CAS
+        run: npm run test:migration-cas
+
+      - name: 准备真实 N-1 已发布 bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          meta=tools/fixtures/n-minus-one-release.json
+          release="$(node -p "require('./$meta').releaseId + ' plugin@' + require('./$meta').pluginVersion")"
+          output="$RUNNER_TEMP/pipeline-n-minus-one"
+          bash tools/prepare-n-minus-one-release.sh "$output"
+          echo "PIPELINE_N_MINUS_ONE_CLI=$output/payload/packages/cli/dist/pipeline.mjs" >> "$GITHUB_ENV"
+          echo "PIPELINE_N_MINUS_ONE_RELEASE=$release" >> "$GITHUB_ENV"
 
       - name: bundle smoke test
         run: bash tools/test-bundle.sh

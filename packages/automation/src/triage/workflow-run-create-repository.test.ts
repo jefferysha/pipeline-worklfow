@@ -1,8 +1,9 @@
 import { createHash } from 'node:crypto'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
+  compileEffectiveWorkflowPlan,
   createStateStore,
   createTransitionRecordStore,
   createWorkflowRunRepository,
@@ -72,6 +73,23 @@ function trustedInit(): Omit<InitOptions, 'repoRoot' | 'name' | 'runId' | 'initi
   }
 }
 
+function resolvedPlan(input: WorkflowRunCreateRequest) {
+  if (input.workflowId === 'default') return compileEffectiveWorkflowPlan('default')
+  return compileEffectiveWorkflowPlan(input.workflowId, {
+    name: input.workflowId,
+    steps: [{
+      id: input.initialStep,
+      label: input.initialStep,
+      gate: null,
+      skills: [],
+      inputs: [],
+      outputs: [],
+      guards: [],
+      transitions: [],
+    }],
+  })
+}
+
 async function makeHarness(
   options: {
     readonly store?: StateStore
@@ -86,6 +104,7 @@ async function makeHarness(
     repoRoot,
     store,
     runRepository,
+    resolveWorkflowPlan: resolvedPlan,
     resolveInit: options.resolveInit ?? trustedInit,
   })
   return { repoRoot, store, runRepository, repository }
@@ -124,11 +143,20 @@ describe('WorkflowRunCreateIfAbsentRepository production adapter', () => {
       transitionSequence: 0,
     })
     const state = await store.read(join(repoRoot, 'openspec', 'changes', input.changeName))
-    expect(state.runMetadata).toEqual({
+    expect(state.runMetadata).toMatchObject({
       runId: expectedRunId(input),
       transitionSequence: 0,
-      transitionHead: undefined,
+      workflowPlanFingerprint: expect.stringMatching(/^[0-9a-f]{64}$/),
+      workflowPlanSnapshot: {
+        version: 1,
+        workflowId: 'incident-response',
+        workflowFingerprint: expect.stringMatching(/^[0-9a-f]{64}$/),
+      },
     })
+    await expect(readFile(
+      join(repoRoot, 'openspec', 'changes', input.changeName, '.pipeline-document-locale.json'),
+      'utf8',
+    )).resolves.toContain('"locale":"zh-CN"')
     expect(state.fields).toMatchObject({
       track: 'backend',
       preset: 'full',
@@ -159,6 +187,7 @@ describe('WorkflowRunCreateIfAbsentRepository production adapter', () => {
       repoRoot,
       store,
       runRepository,
+      resolveWorkflowPlan: resolvedPlan,
       resolveInit: () => ({
         ...trustedInit(),
         repoRoot: evilRoot,
@@ -190,23 +219,24 @@ describe('WorkflowRunCreateIfAbsentRepository production adapter', () => {
       name: input.changeName,
       initialWorkflow: { workflow: input.workflowId, phase: input.initialStep },
     })
-    let establishCalls = 0
+    let initCalls = 0
     const realRunRepository = makeRunRepository(store)
     const repository = createWorkflowRunCreateIfAbsentRepository({
       repoRoot,
       store,
       runRepository: {
         ...realRunRepository,
-        establishRun: async (dir) => {
-          establishCalls += 1
-          return realRunRepository.establishRun(dir)
+        initChange: async (options) => {
+          initCalls += 1
+          return realRunRepository.initChange(options)
         },
       },
+      resolveWorkflowPlan: resolvedPlan,
       resolveInit: trustedInit,
     })
 
     await expect(repository.createIfAbsent(input)).rejects.toBeInstanceOf(WorkflowRunCreateConflictError)
-    expect(establishCalls).toBe(0)
+    expect(initCalls).toBe(0)
     expect((await store.read(changeDir)).runMetadata).toBeUndefined()
   })
 
@@ -226,24 +256,26 @@ describe('WorkflowRunCreateIfAbsentRepository production adapter', () => {
     expect(state.fields).toMatchObject({ workflow: 'default', phase: 'open' })
   })
 
-  it('recovers after init succeeded but establishRun crashed: retry returns existing from the durable identity', async () => {
+  it('recovers when the caller crashes after atomic initChange returns: retry returns existing identity', async () => {
     const repoRoot = await freshRoot()
     const store = createStateStore()
     const realRunRepository = makeRunRepository(store)
-    let establishCalls = 0
-    const crash = new Error('simulated process crash after atomic init')
+    let initCalls = 0
+    const crash = new Error('simulated caller crash after atomic initChange')
     const runRepository: WorkflowRunRepository = {
       ...realRunRepository,
-      establishRun: async (changeDir) => {
-        establishCalls += 1
-        if (establishCalls === 1) throw crash
-        return realRunRepository.establishRun(changeDir)
+      initChange: async (options) => {
+        initCalls += 1
+        const created = await realRunRepository.initChange(options)
+        if (initCalls === 1) throw crash
+        return created
       },
     }
     const repository = createWorkflowRunCreateIfAbsentRepository({
       repoRoot,
       store,
       runRepository,
+      resolveWorkflowPlan: resolvedPlan,
       resolveInit: trustedInit,
     })
     const input = request()
@@ -258,30 +290,31 @@ describe('WorkflowRunCreateIfAbsentRepository production adapter', () => {
     })
   })
 
-  it('never reclassifies establishRun EEXIST as init contention: the original error escapes unchanged', async () => {
+  it('never reclassifies a non-EEXIST initChange failure as init contention', async () => {
     const repoRoot = await freshRoot()
     const store = createStateStore()
     const realRunRepository = makeRunRepository(store)
-    const establishFailure = Object.assign(new Error('record collision inside establishRun'), {
-      code: 'EEXIST',
+    const initFailure = Object.assign(new Error('I/O failure inside initChange'), {
+      code: 'EIO',
     })
-    let establishCalls = 0
+    let initCalls = 0
     const repository = createWorkflowRunCreateIfAbsentRepository({
       repoRoot,
       store,
       runRepository: {
         ...realRunRepository,
-        establishRun: async (changeDir) => {
-          establishCalls += 1
-          if (establishCalls === 1) throw establishFailure
-          return realRunRepository.establishRun(changeDir)
+        initChange: async (options) => {
+          initCalls += 1
+          if (initCalls === 1) throw initFailure
+          return realRunRepository.initChange(options)
         },
       },
+      resolveWorkflowPlan: resolvedPlan,
       resolveInit: trustedInit,
     })
 
-    await expect(repository.createIfAbsent(request())).rejects.toBe(establishFailure)
-    expect(establishCalls).toBe(1)
+    await expect(repository.createIfAbsent(request())).rejects.toBe(initFailure)
+    expect(initCalls).toBe(1)
   })
 
   it('checks workflow and phase as well as run id before accepting EEXIST', async () => {
@@ -301,7 +334,35 @@ describe('WorkflowRunCreateIfAbsentRepository production adapter', () => {
     })
   })
 
-  it('accepts EEXIST from one locked snapshot without calling a write-capable establishRun afterward', async () => {
+  it('idempotent retry reads the frozen existing run without resolving a mutable upgraded workflow', async () => {
+    const { repoRoot, store, runRepository, repository } = await makeHarness()
+    const input = request()
+    await repository.createIfAbsent(input)
+    let planResolutionCalls = 0
+    const retry = createWorkflowRunCreateIfAbsentRepository({
+      repoRoot,
+      store,
+      runRepository,
+      resolveWorkflowPlan: () => {
+        planResolutionCalls += 1
+        throw new Error('current workflow definition was removed by an update')
+      },
+      resolveInit: trustedInit,
+    })
+
+    await expect(retry.createIfAbsent(input)).resolves.toMatchObject({
+      status: 'existing',
+      run: {
+        id: expectedRunId(input),
+        workflowId: 'default',
+        currentStep: 'open',
+        workflowPlanSnapshot: { workflowId: 'default' },
+      },
+    })
+    expect(planResolutionCalls).toBe(0)
+  })
+
+  it('accepts EEXIST from one locked snapshot without a second write-capable init afterward', async () => {
     const repoRoot = await freshRoot()
     const store = createStateStore()
     const input = request()
@@ -310,11 +371,12 @@ describe('WorkflowRunCreateIfAbsentRepository production adapter', () => {
       repoRoot,
       store,
       runRepository: originalRunRepository,
+      resolveWorkflowPlan: resolvedPlan,
       resolveInit: trustedInit,
     })
     await creator.createIfAbsent(input)
 
-    let establishCalls = 0
+    let initCalls = 0
     const hijackingRunRepository = createWorkflowRunRepository({
       store,
       recordStore: createTransitionRecordStore(),
@@ -325,15 +387,12 @@ describe('WorkflowRunCreateIfAbsentRepository production adapter', () => {
       repoRoot,
       store,
       runRepository: {
-        establishRun: async (changeDir) => {
-          establishCalls += 1
-          // Models the r2 race: the first repository read already validated the original identity,
-          // then another writer removes metadata before establishRun performs its own locked read.
-          const state = await store.read(changeDir)
-          await store.write(changeDir, { ...state, runMetadata: undefined })
-          return hijackingRunRepository.establishRun(changeDir)
+        initChange: async (options) => {
+          initCalls += 1
+          return hijackingRunRepository.initChange(options)
         },
       },
+      resolveWorkflowPlan: resolvedPlan,
       resolveInit: trustedInit,
     })
 
@@ -341,7 +400,7 @@ describe('WorkflowRunCreateIfAbsentRepository production adapter', () => {
       status: 'existing',
       run: { id: expectedRunId(input), workflowId: 'default', currentStep: 'open' },
     })
-    expect(establishCalls).toBe(0)
+    expect(initCalls).toBe(0)
     expect((await store.read(join(repoRoot, 'openspec', 'changes', input.changeName))).runMetadata?.runId)
       .toBe(expectedRunId(input))
   })
@@ -357,6 +416,7 @@ describe('WorkflowRunCreateIfAbsentRepository production adapter', () => {
       repoRoot,
       store: initFailStore,
       runRepository: makeRunRepository(initFailStore),
+      resolveWorkflowPlan: resolvedPlan,
       resolveInit: trustedInit,
     })
     await expect(initFailRepository.createIfAbsent(request())).rejects.toBe(initFailure)
@@ -377,6 +437,7 @@ describe('WorkflowRunCreateIfAbsentRepository production adapter', () => {
       repoRoot,
       store: existsStore,
       runRepository: makeRunRepository(existsStore),
+      resolveWorkflowPlan: resolvedPlan,
       resolveInit: trustedInit,
     })
     await expect(existsRepository.createIfAbsent(request())).rejects.toBe(readFailure)
@@ -416,7 +477,6 @@ describe('WorkflowRunCreateIfAbsentRepository production adapter', () => {
       request({ changeName: 'triage_fix_bbbbbbbb' }),
       request({ routeId: 'security-fix' }),
       request({ workflowId: 'security-fix' }),
-      request({ initialStep: 'triage' }),
     ]
     for (const mutation of mutations) {
       const harness = await makeHarness()
@@ -447,6 +507,7 @@ describe('WorkflowRunCreateIfAbsentRepository production adapter', () => {
       repoRoot,
       store,
       runRepository: makeRunRepository(store),
+      resolveWorkflowPlan: resolvedPlan,
       resolveInit: () => {
         policyCalls += 1
         return trustedInit()

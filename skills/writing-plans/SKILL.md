@@ -8,6 +8,10 @@ metadata:
 
 # Writing Plans
 
+Write the plan's reader-facing headings, tasks, rationale, verification, and rollback guidance in
+the Change-pinned locale (Chinese by default). Keep frontmatter keys, paths, commands, identifiers,
+and coverage keys stable.
+
 Write an implementation plan that another engineer can execute without reconstructing context.
 
 - Read all recorded OpenSpec inputs and ADRs before planning.

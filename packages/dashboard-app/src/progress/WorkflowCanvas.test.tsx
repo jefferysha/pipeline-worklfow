@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '../i18n'
 import {
   WorkflowCanvas,
@@ -60,6 +60,17 @@ function renderCanvas(groups: CanvasGroup[], onOpen = vi.fn()): ReturnType<typeo
   )
   return onOpen
 }
+
+function renderCanvasInEnglish(groups: CanvasGroup[]): void {
+  localStorage.setItem('pipeline-dashboard-lang', 'en')
+  render(
+    <I18nProvider>
+      <WorkflowCanvas groups={groups} onOpen={vi.fn()} />
+    </I18nProvider>,
+  )
+}
+
+afterEach(() => localStorage.removeItem('pipeline-dashboard-lang'))
 
 describe('WorkflowCanvas 组与站点（单项目）', () => {
   it('空 groups → 不渲染画布容器', () => {
@@ -130,6 +141,118 @@ describe('WorkflowCanvas 组与站点（单项目）', () => {
     expect(screen.getByTestId('prg-cv-node-proj-a-flow-x-draft')).toHaveAttribute('data-run', 'true')
     expect(screen.getByTestId('prg-cv-node-proj-a-flow-x-review').getAttribute('data-run')).toBeNull()
     expect(screen.getByTestId('prg-cv-node-proj-a-flow-x-ship').getAttribute('data-run')).toBeNull()
+  })
+
+  it('首次呈现长阶段轨时把 current phase 定位到横向可视区', () => {
+    const originalScrollTo = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollTo')
+    const originalClientWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientWidth')
+    const originalOffsetLeft = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetLeft')
+    const originalOffsetWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetWidth')
+    const scrollTo = vi.fn()
+    Object.defineProperty(HTMLElement.prototype, 'scrollTo', { configurable: true, value: scrollTo })
+    Object.defineProperty(HTMLElement.prototype, 'clientWidth', {
+      configurable: true,
+      get() { return this.getAttribute('data-testid')?.startsWith('prg-cv-scroll-') ? 1_000 : 0 },
+    })
+    Object.defineProperty(HTMLElement.prototype, 'offsetLeft', {
+      configurable: true,
+      get() { return this.getAttribute('data-stage-state') === 'current' ? 1_300 : 0 },
+    })
+    Object.defineProperty(HTMLElement.prototype, 'offsetWidth', {
+      configurable: true,
+      get() { return this.getAttribute('data-stage-state') === 'current' ? 260 : 0 },
+    })
+    try {
+      const steps = ['open', 'explore', 'spec', 'build', 'verify', 'ship', 'archive']
+        .map((id, index) => step(id, {
+          label: id,
+          state: index < 4 ? 'done' : index === 4 ? 'current' : 'pending',
+        }))
+      renderCanvas([makeGroup({
+        steps,
+        changes: [chg({
+          key: 'current@/tmp/proj-a',
+          name: 'current',
+          phase: 'verify',
+          state: 'running',
+          running: true,
+        })],
+      })])
+
+      expect(scrollTo).toHaveBeenCalledWith({ left: 930, behavior: 'auto' })
+    } finally {
+      if (originalScrollTo) Object.defineProperty(HTMLElement.prototype, 'scrollTo', originalScrollTo)
+      else Reflect.deleteProperty(HTMLElement.prototype, 'scrollTo')
+      if (originalClientWidth) Object.defineProperty(HTMLElement.prototype, 'clientWidth', originalClientWidth)
+      else Reflect.deleteProperty(HTMLElement.prototype, 'clientWidth')
+      if (originalOffsetLeft) Object.defineProperty(HTMLElement.prototype, 'offsetLeft', originalOffsetLeft)
+      else Reflect.deleteProperty(HTMLElement.prototype, 'offsetLeft')
+      if (originalOffsetWidth) Object.defineProperty(HTMLElement.prototype, 'offsetWidth', originalOffsetWidth)
+      else Reflect.deleteProperty(HTMLElement.prototype, 'offsetWidth')
+    }
+  })
+
+  it('一个 workflow 的 phase 变化只重定位自己的 viewport，不抢走其他 workflow 的用户滚动', () => {
+    const originalScrollTo = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollTo')
+    const originalClientWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientWidth')
+    const originalOffsetLeft = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetLeft')
+    const originalOffsetWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetWidth')
+    const scrollTo = vi.fn()
+    Object.defineProperty(HTMLElement.prototype, 'scrollTo', { configurable: true, value: scrollTo })
+    Object.defineProperty(HTMLElement.prototype, 'clientWidth', {
+      configurable: true,
+      get() { return this.hasAttribute('data-canvas-scroll') ? 600 : 0 },
+    })
+    Object.defineProperty(HTMLElement.prototype, 'offsetLeft', {
+      configurable: true,
+      get() { return this.getAttribute('data-stage-state') === 'current' ? 900 : 0 },
+    })
+    Object.defineProperty(HTMLElement.prototype, 'offsetWidth', {
+      configurable: true,
+      get() { return this.getAttribute('data-stage-state') === 'current' ? 200 : 0 },
+    })
+    const groupA = makeGroup()
+    const groupB = makeGroup({
+      key: '/tmp/proj-b::flow-y',
+      projName: 'proj-b',
+      workflow: 'flow-y',
+      changes: [chg({ key: 'b1@/tmp/proj-b', name: 'b1', phase: 'review' })],
+    })
+    try {
+      const view = render(
+        <I18nProvider>
+          <WorkflowCanvas groups={[groupA, groupB]} onOpen={vi.fn()} />
+        </I18nProvider>,
+      )
+      expect(scrollTo).toHaveBeenCalledTimes(2)
+      scrollTo.mockClear()
+
+      const advancedB = {
+        ...groupB,
+        steps: groupB.steps.map((candidate) => ({
+          ...candidate,
+          state: candidate.id === 'ship' ? 'current' as const : 'done' as const,
+        })),
+        changes: [chg({ key: 'b1@/tmp/proj-b', name: 'b1', phase: 'ship' })],
+      }
+      view.rerender(
+        <I18nProvider>
+          <WorkflowCanvas groups={[groupA, advancedB]} onOpen={vi.fn()} />
+        </I18nProvider>,
+      )
+
+      expect(scrollTo).toHaveBeenCalledTimes(1)
+      expect(scrollTo.mock.instances[0]).toBe(screen.getByTestId('prg-cv-scroll-proj-b-flow-y'))
+    } finally {
+      if (originalScrollTo) Object.defineProperty(HTMLElement.prototype, 'scrollTo', originalScrollTo)
+      else Reflect.deleteProperty(HTMLElement.prototype, 'scrollTo')
+      if (originalClientWidth) Object.defineProperty(HTMLElement.prototype, 'clientWidth', originalClientWidth)
+      else Reflect.deleteProperty(HTMLElement.prototype, 'clientWidth')
+      if (originalOffsetLeft) Object.defineProperty(HTMLElement.prototype, 'offsetLeft', originalOffsetLeft)
+      else Reflect.deleteProperty(HTMLElement.prototype, 'offsetLeft')
+      if (originalOffsetWidth) Object.defineProperty(HTMLElement.prototype, 'offsetWidth', originalOffsetWidth)
+      else Reflect.deleteProperty(HTMLElement.prototype, 'offsetWidth')
+    }
   })
 })
 
@@ -202,6 +325,35 @@ describe('WorkflowCanvas change 小卡', () => {
     expect(card).toHaveTextContent('工作流')
     expect(card).toHaveTextContent('flow-x')
     expect(card).toHaveTextContent('打开')
+  })
+
+  it('英文模式完整翻译画布标题、状态、元信息和运行来源，不读取中文静态常量', () => {
+    renderCanvasInEnglish([
+      makeGroup({
+        changes: [
+          chg({
+            key: 'a1@/tmp/proj-a',
+            name: 'a1',
+            phase: 'draft',
+            state: 'running',
+            tone: 'blue',
+            running: true,
+            executionSource: 'terminal',
+            statusLabel: 'Running Build',
+          }),
+        ],
+      }),
+    ])
+    const group = screen.getByTestId('prg-cv-group-proj-a-flow-x')
+    expect(group).toHaveTextContent('Project · proj-a')
+    expect(group).toHaveTextContent('Process')
+    const card = screen.getByTestId('prg-cv-chg-a1')
+    expect(card).toHaveTextContent('Running')
+    expect(card).toHaveTextContent('Stage')
+    expect(card).toHaveTextContent('Workflow')
+    expect(card).toHaveTextContent('Terminal running')
+    expect(card).toHaveTextContent('Open')
+    expect(group.textContent).not.toMatch(/[项目流程运行中阶段工作流终端打开项]/)
   })
 
   it('小卡：状态点 data-pulse（running）/data-state/data-sbx；dim 小卡 data-dim；选中小卡 data-on；单项目无项目缩写', () => {

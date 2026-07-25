@@ -1,0 +1,972 @@
+{
+  "version": 1,
+  "contract": "openspec-v1",
+  "createdAt": "2026-07-25T08:49:48Z",
+  "records": [
+    {
+      "kind": "adr",
+      "path": "docs/adr/2026-07-25-trellis-style-documentation-site-explore.md",
+      "sha256": "fe8f249b89a6932727e484280e47b0aa20b13a91ad860bea3ef6245e401949d0",
+      "producer": "brainstorming",
+      "recordedAt": "2026-07-25T09:20:07Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "fe8f249b89a6932727e484280e47b0aa20b13a91ad860bea3ef6245e401949d0",
+          "readAt": "2026-07-25T09:26:43Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "fe8f249b89a6932727e484280e47b0aa20b13a91ad860bea3ef6245e401949d0",
+          "readAt": "2026-07-25T09:27:50Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",3]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "fe8f249b89a6932727e484280e47b0aa20b13a91ad860bea3ef6245e401949d0",
+          "readAt": "2026-07-25T10:36:35Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",4]"
+        },
+        {
+          "phase": "build",
+          "sha256": "fe8f249b89a6932727e484280e47b0aa20b13a91ad860bea3ef6245e401949d0",
+          "readAt": "2026-07-25T11:00:17Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",5]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "fe8f249b89a6932727e484280e47b0aa20b13a91ad860bea3ef6245e401949d0",
+          "readAt": "2026-07-25T11:19:31Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",6]"
+        },
+        {
+          "phase": "build",
+          "sha256": "fe8f249b89a6932727e484280e47b0aa20b13a91ad860bea3ef6245e401949d0",
+          "readAt": "2026-07-25T11:20:20Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",7]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "fe8f249b89a6932727e484280e47b0aa20b13a91ad860bea3ef6245e401949d0",
+          "readAt": "2026-07-25T12:14:46Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",8]"
+        },
+        {
+          "phase": "build",
+          "sha256": "fe8f249b89a6932727e484280e47b0aa20b13a91ad860bea3ef6245e401949d0",
+          "readAt": "2026-07-25T12:28:31Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",9]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "fe8f249b89a6932727e484280e47b0aa20b13a91ad860bea3ef6245e401949d0",
+          "readAt": "2026-07-25T12:52:11Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",10]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "fe8f249b89a6932727e484280e47b0aa20b13a91ad860bea3ef6245e401949d0",
+          "readAt": "2026-07-25T13:04:39Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",12]"
+        },
+        {
+          "phase": "build",
+          "sha256": "fe8f249b89a6932727e484280e47b0aa20b13a91ad860bea3ef6245e401949d0",
+          "readAt": "2026-07-25T14:15:49Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",13]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "fe8f249b89a6932727e484280e47b0aa20b13a91ad860bea3ef6245e401949d0",
+          "readAt": "2026-07-25T14:32:26Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",14]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "fe8f249b89a6932727e484280e47b0aa20b13a91ad860bea3ef6245e401949d0",
+          "readAt": "2026-07-25T14:46:43Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",16]"
+        },
+        {
+          "phase": "build",
+          "sha256": "fe8f249b89a6932727e484280e47b0aa20b13a91ad860bea3ef6245e401949d0",
+          "readAt": "2026-07-25T15:43:21Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",17]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "fe8f249b89a6932727e484280e47b0aa20b13a91ad860bea3ef6245e401949d0",
+          "readAt": "2026-07-25T16:01:44Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",18]"
+        },
+        {
+          "phase": "build",
+          "sha256": "fe8f249b89a6932727e484280e47b0aa20b13a91ad860bea3ef6245e401949d0",
+          "readAt": "2026-07-25T16:24:47Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",19]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "fe8f249b89a6932727e484280e47b0aa20b13a91ad860bea3ef6245e401949d0",
+          "readAt": "2026-07-25T16:38:24Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",20]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "fe8f249b89a6932727e484280e47b0aa20b13a91ad860bea3ef6245e401949d0",
+          "readAt": "2026-07-25T17:32:28Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",22]"
+        },
+        {
+          "phase": "build",
+          "sha256": "fe8f249b89a6932727e484280e47b0aa20b13a91ad860bea3ef6245e401949d0",
+          "readAt": "2026-07-25T17:35:58Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",23]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "fe8f249b89a6932727e484280e47b0aa20b13a91ad860bea3ef6245e401949d0",
+          "readAt": "2026-07-25T17:48:53Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",24]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "fe8f249b89a6932727e484280e47b0aa20b13a91ad860bea3ef6245e401949d0",
+          "readAt": "2026-07-25T18:11:49Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",26]"
+        },
+        {
+          "phase": "build",
+          "sha256": "fe8f249b89a6932727e484280e47b0aa20b13a91ad860bea3ef6245e401949d0",
+          "readAt": "2026-07-25T18:20:41Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",27]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "fe8f249b89a6932727e484280e47b0aa20b13a91ad860bea3ef6245e401949d0",
+          "readAt": "2026-07-25T18:29:07Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",28]"
+        },
+        {
+          "phase": "build",
+          "sha256": "fe8f249b89a6932727e484280e47b0aa20b13a91ad860bea3ef6245e401949d0",
+          "readAt": "2026-07-25T18:32:43Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",29]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "fe8f249b89a6932727e484280e47b0aa20b13a91ad860bea3ef6245e401949d0",
+          "readAt": "2026-07-25T18:35:41Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",30]"
+        },
+        {
+          "phase": "build",
+          "sha256": "fe8f249b89a6932727e484280e47b0aa20b13a91ad860bea3ef6245e401949d0",
+          "readAt": "2026-07-25T18:45:54Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",31]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "fe8f249b89a6932727e484280e47b0aa20b13a91ad860bea3ef6245e401949d0",
+          "readAt": "2026-07-25T19:00:31Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",32]"
+        },
+        {
+          "phase": "build",
+          "sha256": "fe8f249b89a6932727e484280e47b0aa20b13a91ad860bea3ef6245e401949d0",
+          "readAt": "2026-07-25T19:38:15Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",33]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "fe8f249b89a6932727e484280e47b0aa20b13a91ad860bea3ef6245e401949d0",
+          "readAt": "2026-07-25T19:53:37Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",34]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "fe8f249b89a6932727e484280e47b0aa20b13a91ad860bea3ef6245e401949d0",
+          "readAt": "2026-07-25T20:10:53Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",36]"
+        },
+        {
+          "phase": "build",
+          "sha256": "fe8f249b89a6932727e484280e47b0aa20b13a91ad860bea3ef6245e401949d0",
+          "readAt": "2026-07-25T20:21:29Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",37]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "fe8f249b89a6932727e484280e47b0aa20b13a91ad860bea3ef6245e401949d0",
+          "readAt": "2026-07-25T20:32:18Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",38]"
+        },
+        {
+          "phase": "build",
+          "sha256": "fe8f249b89a6932727e484280e47b0aa20b13a91ad860bea3ef6245e401949d0",
+          "readAt": "2026-07-25T20:47:16Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",39]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "fe8f249b89a6932727e484280e47b0aa20b13a91ad860bea3ef6245e401949d0",
+          "readAt": "2026-07-25T20:57:50Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",40]"
+        },
+        {
+          "phase": "build",
+          "sha256": "fe8f249b89a6932727e484280e47b0aa20b13a91ad860bea3ef6245e401949d0",
+          "readAt": "2026-07-25T21:09:44Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",41]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "fe8f249b89a6932727e484280e47b0aa20b13a91ad860bea3ef6245e401949d0",
+          "readAt": "2026-07-25T21:20:24Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",42]"
+        },
+        {
+          "phase": "build",
+          "sha256": "fe8f249b89a6932727e484280e47b0aa20b13a91ad860bea3ef6245e401949d0",
+          "readAt": "2026-07-25T21:28:59Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",43]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "fe8f249b89a6932727e484280e47b0aa20b13a91ad860bea3ef6245e401949d0",
+          "readAt": "2026-07-25T21:38:38Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",44]"
+        },
+        {
+          "phase": "build",
+          "sha256": "fe8f249b89a6932727e484280e47b0aa20b13a91ad860bea3ef6245e401949d0",
+          "readAt": "2026-07-25T21:39:25Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",45]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "fe8f249b89a6932727e484280e47b0aa20b13a91ad860bea3ef6245e401949d0",
+          "readAt": "2026-07-25T21:43:07Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",46]"
+        },
+        {
+          "phase": "ship",
+          "sha256": "fe8f249b89a6932727e484280e47b0aa20b13a91ad860bea3ef6245e401949d0",
+          "readAt": "2026-07-25T21:44:18Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",47]"
+        }
+      ]
+    },
+    {
+      "kind": "proposal",
+      "path": "openspec/changes/trellis-style-documentation-site/proposal.md",
+      "sha256": "9f3ebdf1a0f81841644c86aba9f1b6fb31bff41af09cf419854a0d0423b1549d",
+      "producer": "pipeline-spec",
+      "recordedAt": "2026-07-25T14:46:42Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "9f3ebdf1a0f81841644c86aba9f1b6fb31bff41af09cf419854a0d0423b1549d",
+          "readAt": "2026-07-25T14:46:43Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",16]"
+        },
+        {
+          "phase": "build",
+          "sha256": "9f3ebdf1a0f81841644c86aba9f1b6fb31bff41af09cf419854a0d0423b1549d",
+          "readAt": "2026-07-25T15:43:21Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",17]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "9f3ebdf1a0f81841644c86aba9f1b6fb31bff41af09cf419854a0d0423b1549d",
+          "readAt": "2026-07-25T16:01:44Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",18]"
+        },
+        {
+          "phase": "build",
+          "sha256": "9f3ebdf1a0f81841644c86aba9f1b6fb31bff41af09cf419854a0d0423b1549d",
+          "readAt": "2026-07-25T16:24:47Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",19]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "9f3ebdf1a0f81841644c86aba9f1b6fb31bff41af09cf419854a0d0423b1549d",
+          "readAt": "2026-07-25T16:38:24Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",20]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "9f3ebdf1a0f81841644c86aba9f1b6fb31bff41af09cf419854a0d0423b1549d",
+          "readAt": "2026-07-25T17:32:28Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",22]"
+        },
+        {
+          "phase": "build",
+          "sha256": "9f3ebdf1a0f81841644c86aba9f1b6fb31bff41af09cf419854a0d0423b1549d",
+          "readAt": "2026-07-25T17:35:58Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",23]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "9f3ebdf1a0f81841644c86aba9f1b6fb31bff41af09cf419854a0d0423b1549d",
+          "readAt": "2026-07-25T17:48:53Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",24]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "9f3ebdf1a0f81841644c86aba9f1b6fb31bff41af09cf419854a0d0423b1549d",
+          "readAt": "2026-07-25T18:11:49Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",26]"
+        },
+        {
+          "phase": "build",
+          "sha256": "9f3ebdf1a0f81841644c86aba9f1b6fb31bff41af09cf419854a0d0423b1549d",
+          "readAt": "2026-07-25T18:20:41Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",27]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "9f3ebdf1a0f81841644c86aba9f1b6fb31bff41af09cf419854a0d0423b1549d",
+          "readAt": "2026-07-25T18:29:07Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",28]"
+        },
+        {
+          "phase": "build",
+          "sha256": "9f3ebdf1a0f81841644c86aba9f1b6fb31bff41af09cf419854a0d0423b1549d",
+          "readAt": "2026-07-25T18:32:43Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",29]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "9f3ebdf1a0f81841644c86aba9f1b6fb31bff41af09cf419854a0d0423b1549d",
+          "readAt": "2026-07-25T18:35:41Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",30]"
+        },
+        {
+          "phase": "build",
+          "sha256": "9f3ebdf1a0f81841644c86aba9f1b6fb31bff41af09cf419854a0d0423b1549d",
+          "readAt": "2026-07-25T18:45:54Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",31]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "9f3ebdf1a0f81841644c86aba9f1b6fb31bff41af09cf419854a0d0423b1549d",
+          "readAt": "2026-07-25T19:00:31Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",32]"
+        },
+        {
+          "phase": "build",
+          "sha256": "9f3ebdf1a0f81841644c86aba9f1b6fb31bff41af09cf419854a0d0423b1549d",
+          "readAt": "2026-07-25T19:38:15Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",33]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "9f3ebdf1a0f81841644c86aba9f1b6fb31bff41af09cf419854a0d0423b1549d",
+          "readAt": "2026-07-25T19:53:37Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",34]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "9f3ebdf1a0f81841644c86aba9f1b6fb31bff41af09cf419854a0d0423b1549d",
+          "readAt": "2026-07-25T20:10:53Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",36]"
+        },
+        {
+          "phase": "build",
+          "sha256": "9f3ebdf1a0f81841644c86aba9f1b6fb31bff41af09cf419854a0d0423b1549d",
+          "readAt": "2026-07-25T20:21:29Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",37]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "9f3ebdf1a0f81841644c86aba9f1b6fb31bff41af09cf419854a0d0423b1549d",
+          "readAt": "2026-07-25T20:32:18Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",38]"
+        },
+        {
+          "phase": "build",
+          "sha256": "9f3ebdf1a0f81841644c86aba9f1b6fb31bff41af09cf419854a0d0423b1549d",
+          "readAt": "2026-07-25T20:47:16Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",39]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "9f3ebdf1a0f81841644c86aba9f1b6fb31bff41af09cf419854a0d0423b1549d",
+          "readAt": "2026-07-25T20:57:50Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",40]"
+        },
+        {
+          "phase": "build",
+          "sha256": "9f3ebdf1a0f81841644c86aba9f1b6fb31bff41af09cf419854a0d0423b1549d",
+          "readAt": "2026-07-25T21:09:44Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",41]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "9f3ebdf1a0f81841644c86aba9f1b6fb31bff41af09cf419854a0d0423b1549d",
+          "readAt": "2026-07-25T21:20:24Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",42]"
+        },
+        {
+          "phase": "build",
+          "sha256": "9f3ebdf1a0f81841644c86aba9f1b6fb31bff41af09cf419854a0d0423b1549d",
+          "readAt": "2026-07-25T21:28:59Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",43]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "9f3ebdf1a0f81841644c86aba9f1b6fb31bff41af09cf419854a0d0423b1549d",
+          "readAt": "2026-07-25T21:38:38Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",44]"
+        },
+        {
+          "phase": "build",
+          "sha256": "9f3ebdf1a0f81841644c86aba9f1b6fb31bff41af09cf419854a0d0423b1549d",
+          "readAt": "2026-07-25T21:39:25Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",45]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "9f3ebdf1a0f81841644c86aba9f1b6fb31bff41af09cf419854a0d0423b1549d",
+          "readAt": "2026-07-25T21:43:07Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",46]"
+        },
+        {
+          "phase": "ship",
+          "sha256": "9f3ebdf1a0f81841644c86aba9f1b6fb31bff41af09cf419854a0d0423b1549d",
+          "readAt": "2026-07-25T21:44:18Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",47]"
+        }
+      ]
+    },
+    {
+      "kind": "openspec-design",
+      "path": "openspec/changes/trellis-style-documentation-site/design.md",
+      "sha256": "02df4d6d7184d51da9584c014f4bcd6e62268293e240a3acc758a7ce55883d95",
+      "producer": "pipeline-spec",
+      "recordedAt": "2026-07-25T18:35:39Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "02df4d6d7184d51da9584c014f4bcd6e62268293e240a3acc758a7ce55883d95",
+          "readAt": "2026-07-25T18:35:41Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",30]"
+        },
+        {
+          "phase": "build",
+          "sha256": "02df4d6d7184d51da9584c014f4bcd6e62268293e240a3acc758a7ce55883d95",
+          "readAt": "2026-07-25T18:45:54Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",31]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "02df4d6d7184d51da9584c014f4bcd6e62268293e240a3acc758a7ce55883d95",
+          "readAt": "2026-07-25T19:00:31Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",32]"
+        },
+        {
+          "phase": "build",
+          "sha256": "02df4d6d7184d51da9584c014f4bcd6e62268293e240a3acc758a7ce55883d95",
+          "readAt": "2026-07-25T19:38:15Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",33]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "02df4d6d7184d51da9584c014f4bcd6e62268293e240a3acc758a7ce55883d95",
+          "readAt": "2026-07-25T19:53:37Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",34]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "02df4d6d7184d51da9584c014f4bcd6e62268293e240a3acc758a7ce55883d95",
+          "readAt": "2026-07-25T20:10:53Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",36]"
+        },
+        {
+          "phase": "build",
+          "sha256": "02df4d6d7184d51da9584c014f4bcd6e62268293e240a3acc758a7ce55883d95",
+          "readAt": "2026-07-25T20:21:29Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",37]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "02df4d6d7184d51da9584c014f4bcd6e62268293e240a3acc758a7ce55883d95",
+          "readAt": "2026-07-25T20:32:18Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",38]"
+        },
+        {
+          "phase": "build",
+          "sha256": "02df4d6d7184d51da9584c014f4bcd6e62268293e240a3acc758a7ce55883d95",
+          "readAt": "2026-07-25T20:47:16Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",39]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "02df4d6d7184d51da9584c014f4bcd6e62268293e240a3acc758a7ce55883d95",
+          "readAt": "2026-07-25T20:57:50Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",40]"
+        },
+        {
+          "phase": "build",
+          "sha256": "02df4d6d7184d51da9584c014f4bcd6e62268293e240a3acc758a7ce55883d95",
+          "readAt": "2026-07-25T21:09:44Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",41]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "02df4d6d7184d51da9584c014f4bcd6e62268293e240a3acc758a7ce55883d95",
+          "readAt": "2026-07-25T21:20:24Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",42]"
+        },
+        {
+          "phase": "build",
+          "sha256": "02df4d6d7184d51da9584c014f4bcd6e62268293e240a3acc758a7ce55883d95",
+          "readAt": "2026-07-25T21:28:59Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",43]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "02df4d6d7184d51da9584c014f4bcd6e62268293e240a3acc758a7ce55883d95",
+          "readAt": "2026-07-25T21:38:38Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",44]"
+        },
+        {
+          "phase": "build",
+          "sha256": "02df4d6d7184d51da9584c014f4bcd6e62268293e240a3acc758a7ce55883d95",
+          "readAt": "2026-07-25T21:39:25Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",45]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "02df4d6d7184d51da9584c014f4bcd6e62268293e240a3acc758a7ce55883d95",
+          "readAt": "2026-07-25T21:43:07Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",46]"
+        },
+        {
+          "phase": "ship",
+          "sha256": "02df4d6d7184d51da9584c014f4bcd6e62268293e240a3acc758a7ce55883d95",
+          "readAt": "2026-07-25T21:44:18Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",47]"
+        }
+      ]
+    },
+    {
+      "kind": "delta-spec",
+      "path": "openspec/changes/trellis-style-documentation-site/specs/open-source-documentation-experience/spec.md",
+      "sha256": "2ece9bfa6d8ade5515a2a366ccdebfbb3ff4fc152448a9c5f96871601da1ed52",
+      "producer": "openspec-propose",
+      "recordedAt": "2026-07-25T18:35:40Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "2ece9bfa6d8ade5515a2a366ccdebfbb3ff4fc152448a9c5f96871601da1ed52",
+          "readAt": "2026-07-25T18:45:54Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",31]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "2ece9bfa6d8ade5515a2a366ccdebfbb3ff4fc152448a9c5f96871601da1ed52",
+          "readAt": "2026-07-25T19:00:31Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",32]"
+        },
+        {
+          "phase": "build",
+          "sha256": "2ece9bfa6d8ade5515a2a366ccdebfbb3ff4fc152448a9c5f96871601da1ed52",
+          "readAt": "2026-07-25T19:38:15Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",33]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "2ece9bfa6d8ade5515a2a366ccdebfbb3ff4fc152448a9c5f96871601da1ed52",
+          "readAt": "2026-07-25T19:53:37Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",34]"
+        },
+        {
+          "phase": "build",
+          "sha256": "2ece9bfa6d8ade5515a2a366ccdebfbb3ff4fc152448a9c5f96871601da1ed52",
+          "readAt": "2026-07-25T20:21:29Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",37]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "2ece9bfa6d8ade5515a2a366ccdebfbb3ff4fc152448a9c5f96871601da1ed52",
+          "readAt": "2026-07-25T20:32:18Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",38]"
+        },
+        {
+          "phase": "build",
+          "sha256": "2ece9bfa6d8ade5515a2a366ccdebfbb3ff4fc152448a9c5f96871601da1ed52",
+          "readAt": "2026-07-25T20:47:16Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",39]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "2ece9bfa6d8ade5515a2a366ccdebfbb3ff4fc152448a9c5f96871601da1ed52",
+          "readAt": "2026-07-25T20:57:50Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",40]"
+        },
+        {
+          "phase": "build",
+          "sha256": "2ece9bfa6d8ade5515a2a366ccdebfbb3ff4fc152448a9c5f96871601da1ed52",
+          "readAt": "2026-07-25T21:09:44Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",41]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "2ece9bfa6d8ade5515a2a366ccdebfbb3ff4fc152448a9c5f96871601da1ed52",
+          "readAt": "2026-07-25T21:20:24Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",42]"
+        },
+        {
+          "phase": "build",
+          "sha256": "2ece9bfa6d8ade5515a2a366ccdebfbb3ff4fc152448a9c5f96871601da1ed52",
+          "readAt": "2026-07-25T21:28:59Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",43]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "2ece9bfa6d8ade5515a2a366ccdebfbb3ff4fc152448a9c5f96871601da1ed52",
+          "readAt": "2026-07-25T21:38:38Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",44]"
+        },
+        {
+          "phase": "build",
+          "sha256": "2ece9bfa6d8ade5515a2a366ccdebfbb3ff4fc152448a9c5f96871601da1ed52",
+          "readAt": "2026-07-25T21:39:25Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",45]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "2ece9bfa6d8ade5515a2a366ccdebfbb3ff4fc152448a9c5f96871601da1ed52",
+          "readAt": "2026-07-25T21:43:07Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",46]"
+        },
+        {
+          "phase": "ship",
+          "sha256": "2ece9bfa6d8ade5515a2a366ccdebfbb3ff4fc152448a9c5f96871601da1ed52",
+          "readAt": "2026-07-25T21:44:18Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",47]"
+        }
+      ]
+    },
+    {
+      "kind": "superpower-plan",
+      "path": "docs/superpowers/plans/2026-07-25-trellis-style-documentation-site.md",
+      "sha256": "bf2b5375965a193830a4a0ec9fd77ad33cadf29496cb74d7aeb6bb6e737393bc",
+      "producer": "writing-plans",
+      "recordedAt": "2026-07-25T18:35:40Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "bf2b5375965a193830a4a0ec9fd77ad33cadf29496cb74d7aeb6bb6e737393bc",
+          "readAt": "2026-07-25T18:45:54Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",31]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "bf2b5375965a193830a4a0ec9fd77ad33cadf29496cb74d7aeb6bb6e737393bc",
+          "readAt": "2026-07-25T19:00:31Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",32]"
+        },
+        {
+          "phase": "build",
+          "sha256": "bf2b5375965a193830a4a0ec9fd77ad33cadf29496cb74d7aeb6bb6e737393bc",
+          "readAt": "2026-07-25T19:38:15Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",33]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "bf2b5375965a193830a4a0ec9fd77ad33cadf29496cb74d7aeb6bb6e737393bc",
+          "readAt": "2026-07-25T19:53:37Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",34]"
+        },
+        {
+          "phase": "build",
+          "sha256": "bf2b5375965a193830a4a0ec9fd77ad33cadf29496cb74d7aeb6bb6e737393bc",
+          "readAt": "2026-07-25T20:21:29Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",37]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "bf2b5375965a193830a4a0ec9fd77ad33cadf29496cb74d7aeb6bb6e737393bc",
+          "readAt": "2026-07-25T20:32:18Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",38]"
+        },
+        {
+          "phase": "build",
+          "sha256": "bf2b5375965a193830a4a0ec9fd77ad33cadf29496cb74d7aeb6bb6e737393bc",
+          "readAt": "2026-07-25T20:47:16Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",39]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "bf2b5375965a193830a4a0ec9fd77ad33cadf29496cb74d7aeb6bb6e737393bc",
+          "readAt": "2026-07-25T20:57:50Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",40]"
+        },
+        {
+          "phase": "build",
+          "sha256": "bf2b5375965a193830a4a0ec9fd77ad33cadf29496cb74d7aeb6bb6e737393bc",
+          "readAt": "2026-07-25T21:09:44Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",41]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "bf2b5375965a193830a4a0ec9fd77ad33cadf29496cb74d7aeb6bb6e737393bc",
+          "readAt": "2026-07-25T21:20:24Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",42]"
+        },
+        {
+          "phase": "build",
+          "sha256": "bf2b5375965a193830a4a0ec9fd77ad33cadf29496cb74d7aeb6bb6e737393bc",
+          "readAt": "2026-07-25T21:28:59Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",43]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "bf2b5375965a193830a4a0ec9fd77ad33cadf29496cb74d7aeb6bb6e737393bc",
+          "readAt": "2026-07-25T21:38:38Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",44]"
+        },
+        {
+          "phase": "build",
+          "sha256": "bf2b5375965a193830a4a0ec9fd77ad33cadf29496cb74d7aeb6bb6e737393bc",
+          "readAt": "2026-07-25T21:39:25Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",45]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "bf2b5375965a193830a4a0ec9fd77ad33cadf29496cb74d7aeb6bb6e737393bc",
+          "readAt": "2026-07-25T21:43:07Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",46]"
+        },
+        {
+          "phase": "ship",
+          "sha256": "bf2b5375965a193830a4a0ec9fd77ad33cadf29496cb74d7aeb6bb6e737393bc",
+          "readAt": "2026-07-25T21:44:18Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",47]"
+        }
+      ]
+    },
+    {
+      "kind": "plan",
+      "path": "docs/superpowers/plans/2026-07-25-trellis-style-documentation-site.md",
+      "sha256": "bf2b5375965a193830a4a0ec9fd77ad33cadf29496cb74d7aeb6bb6e737393bc",
+      "producer": "writing-plans",
+      "recordedAt": "2026-07-25T18:35:41Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "bf2b5375965a193830a4a0ec9fd77ad33cadf29496cb74d7aeb6bb6e737393bc",
+          "readAt": "2026-07-25T18:45:54Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",31]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "bf2b5375965a193830a4a0ec9fd77ad33cadf29496cb74d7aeb6bb6e737393bc",
+          "readAt": "2026-07-25T19:00:31Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",32]"
+        },
+        {
+          "phase": "build",
+          "sha256": "bf2b5375965a193830a4a0ec9fd77ad33cadf29496cb74d7aeb6bb6e737393bc",
+          "readAt": "2026-07-25T19:38:15Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",33]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "bf2b5375965a193830a4a0ec9fd77ad33cadf29496cb74d7aeb6bb6e737393bc",
+          "readAt": "2026-07-25T19:53:37Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",34]"
+        },
+        {
+          "phase": "build",
+          "sha256": "bf2b5375965a193830a4a0ec9fd77ad33cadf29496cb74d7aeb6bb6e737393bc",
+          "readAt": "2026-07-25T20:21:29Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",37]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "bf2b5375965a193830a4a0ec9fd77ad33cadf29496cb74d7aeb6bb6e737393bc",
+          "readAt": "2026-07-25T20:32:18Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",38]"
+        },
+        {
+          "phase": "build",
+          "sha256": "bf2b5375965a193830a4a0ec9fd77ad33cadf29496cb74d7aeb6bb6e737393bc",
+          "readAt": "2026-07-25T20:47:16Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",39]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "bf2b5375965a193830a4a0ec9fd77ad33cadf29496cb74d7aeb6bb6e737393bc",
+          "readAt": "2026-07-25T20:57:50Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",40]"
+        },
+        {
+          "phase": "build",
+          "sha256": "bf2b5375965a193830a4a0ec9fd77ad33cadf29496cb74d7aeb6bb6e737393bc",
+          "readAt": "2026-07-25T21:09:44Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",41]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "bf2b5375965a193830a4a0ec9fd77ad33cadf29496cb74d7aeb6bb6e737393bc",
+          "readAt": "2026-07-25T21:20:24Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",42]"
+        },
+        {
+          "phase": "build",
+          "sha256": "bf2b5375965a193830a4a0ec9fd77ad33cadf29496cb74d7aeb6bb6e737393bc",
+          "readAt": "2026-07-25T21:28:59Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",43]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "bf2b5375965a193830a4a0ec9fd77ad33cadf29496cb74d7aeb6bb6e737393bc",
+          "readAt": "2026-07-25T21:38:38Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",44]"
+        },
+        {
+          "phase": "build",
+          "sha256": "bf2b5375965a193830a4a0ec9fd77ad33cadf29496cb74d7aeb6bb6e737393bc",
+          "readAt": "2026-07-25T21:39:25Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",45]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "bf2b5375965a193830a4a0ec9fd77ad33cadf29496cb74d7aeb6bb6e737393bc",
+          "readAt": "2026-07-25T21:43:07Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",46]"
+        },
+        {
+          "phase": "ship",
+          "sha256": "bf2b5375965a193830a4a0ec9fd77ad33cadf29496cb74d7aeb6bb6e737393bc",
+          "readAt": "2026-07-25T21:44:18Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",47]"
+        }
+      ]
+    },
+    {
+      "kind": "superpower-design",
+      "path": "docs/superpowers/specs/2026-07-25-trellis-style-documentation-site-design.md",
+      "sha256": "3492719fa6cd4289cf59c3708c6152548d0ee2661207437e8b2cbef42163db39",
+      "producer": "pipeline-spec",
+      "recordedAt": "2026-07-25T20:10:53Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "3492719fa6cd4289cf59c3708c6152548d0ee2661207437e8b2cbef42163db39",
+          "readAt": "2026-07-25T20:10:53Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",36]"
+        },
+        {
+          "phase": "build",
+          "sha256": "3492719fa6cd4289cf59c3708c6152548d0ee2661207437e8b2cbef42163db39",
+          "readAt": "2026-07-25T20:21:29Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",37]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "3492719fa6cd4289cf59c3708c6152548d0ee2661207437e8b2cbef42163db39",
+          "readAt": "2026-07-25T20:32:18Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",38]"
+        },
+        {
+          "phase": "build",
+          "sha256": "3492719fa6cd4289cf59c3708c6152548d0ee2661207437e8b2cbef42163db39",
+          "readAt": "2026-07-25T20:47:16Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",39]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "3492719fa6cd4289cf59c3708c6152548d0ee2661207437e8b2cbef42163db39",
+          "readAt": "2026-07-25T20:57:50Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",40]"
+        },
+        {
+          "phase": "build",
+          "sha256": "3492719fa6cd4289cf59c3708c6152548d0ee2661207437e8b2cbef42163db39",
+          "readAt": "2026-07-25T21:09:44Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",41]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "3492719fa6cd4289cf59c3708c6152548d0ee2661207437e8b2cbef42163db39",
+          "readAt": "2026-07-25T21:20:24Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",42]"
+        },
+        {
+          "phase": "build",
+          "sha256": "3492719fa6cd4289cf59c3708c6152548d0ee2661207437e8b2cbef42163db39",
+          "readAt": "2026-07-25T21:28:59Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",43]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "3492719fa6cd4289cf59c3708c6152548d0ee2661207437e8b2cbef42163db39",
+          "readAt": "2026-07-25T21:38:38Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",44]"
+        },
+        {
+          "phase": "build",
+          "sha256": "3492719fa6cd4289cf59c3708c6152548d0ee2661207437e8b2cbef42163db39",
+          "readAt": "2026-07-25T21:39:25Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",45]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "3492719fa6cd4289cf59c3708c6152548d0ee2661207437e8b2cbef42163db39",
+          "readAt": "2026-07-25T21:43:07Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",46]"
+        },
+        {
+          "phase": "ship",
+          "sha256": "3492719fa6cd4289cf59c3708c6152548d0ee2661207437e8b2cbef42163db39",
+          "readAt": "2026-07-25T21:44:18Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",47]"
+        }
+      ]
+    },
+    {
+      "kind": "verification-report",
+      "path": "docs/superpowers/reports/trellis-style-documentation-site-verify.md",
+      "sha256": "cd7e12c48aaf89fcbaa5742bae889c79a3ae68562529da0afc59c8cac2bb2803",
+      "producer": "pipeline-verify",
+      "recordedAt": "2026-07-25T21:43:07Z",
+      "reads": [
+        {
+          "phase": "ship",
+          "sha256": "cd7e12c48aaf89fcbaa5742bae889c79a3ae68562529da0afc59c8cac2bb2803",
+          "readAt": "2026-07-25T21:44:18Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",47]"
+        }
+      ]
+    },
+    {
+      "kind": "applied-spec",
+      "path": "openspec/changes/trellis-style-documentation-site/applied-spec.md",
+      "sha256": "c4f35ac723ea7cd36f2e5c7cc53692e1c037fc03766e84b1bff8bcdc922123ff",
+      "producer": "openspec-apply-change",
+      "recordedAt": "2026-07-25T21:44:18Z",
+      "reads": []
+    },
+    {
+      "kind": "tasks",
+      "path": "openspec/changes/trellis-style-documentation-site/tasks.md",
+      "sha256": "357ba33449413adab7f1c862bc9026690f3f85f825b8ec671aedbb8cf6a08823",
+      "producer": "pipeline-ship",
+      "recordedAt": "2026-07-25T21:44:18Z",
+      "reads": [
+        {
+          "phase": "ship",
+          "sha256": "357ba33449413adab7f1c862bc9026690f3f85f825b8ec671aedbb8cf6a08823",
+          "readAt": "2026-07-25T21:44:18Z",
+          "visitId": "[\"e9dfdbd4-ff91-493e-a4cc-d6f99f66822f\",47]"
+        }
+      ]
+    }
+  ]
+}

@@ -20,6 +20,7 @@ const usageFiles = [
   'updates-recovery-and-uninstall.md',
   'troubleshooting.md',
   'security-model.md',
+  'release-notes.md',
   'contributor-development.md',
   'cli-reference.md',
 ]
@@ -77,7 +78,7 @@ async function fixture() {
 
   const communityLinks = [
     '[Usage](docs/usage/README.md)',
-    '[中文](README.zh-CN.md)',
+    '[English](README.en.md)',
     '[Contributing](CONTRIBUTING.md)',
     '[Code of Conduct](CODE_OF_CONDUCT.md)',
     '[Security](SECURITY.md)',
@@ -91,11 +92,11 @@ async function fixture() {
   )
   await write(
     root,
-    'README.zh-CN.md',
+    'README.en.md',
     [
       '# Pipeline Lite',
       '',
-      '[English](README.md) · [Usage](docs/usage/README.md) · [贡献](CONTRIBUTING.md) · [行为准则](CODE_OF_CONDUCT.md) · [安全](SECURITY.md) · [支持](SUPPORT.md) · [许可证](LICENSE)',
+      '[中文](README.md) · [Usage](docs/usage/README.md) · [Contributing](CONTRIBUTING.md) · [Code of Conduct](CODE_OF_CONDUCT.md) · [Security](SECURITY.md) · [Support](SUPPORT.md) · [License](LICENSE)',
       '',
       '需要 Node.js 22+。Dashboard：127.0.0.1:18765。',
       '',
@@ -104,6 +105,7 @@ async function fixture() {
       '`pipeline dashboard --open`',
     ].join('\n'),
   )
+  await write(root, 'README.zh-CN.md', '# 中文说明\n\n[README](README.md)\n')
   for (const file of ['CONTRIBUTING.md', 'CODE_OF_CONDUCT.md', 'SECURITY.md', 'SUPPORT.md']) {
     await write(root, file, `# ${file}\n`)
   }
@@ -111,6 +113,11 @@ async function fixture() {
 
   for (const file of usageFiles) {
     await write(root, `docs/usage/${file}`, `# ${file}\n`)
+    await write(
+      root,
+      `docs/usage/zh-CN/${file === 'README.md' ? 'index.md' : file}`,
+      `# ${file}\n`,
+    )
   }
   await write(
     root,
@@ -166,6 +173,51 @@ async function fixture() {
       '`pipeline dashboard --open`',
     ].join('\n\n'),
   )
+  await write(
+    root,
+    'docs/usage/zh-CN/installation.md',
+    [
+      '# 安装',
+      '需要 Node.js 22+。',
+      '`pipeline setup --codex`',
+      '`pipeline update --codex`',
+      '`pipeline runtime status`',
+      '`pipeline runtime repair --rollback`',
+      '`pipeline dashboard --open`',
+    ].join('\n\n'),
+  )
+  await write(
+    root,
+    'docs/usage/zh-CN/routing-and-workflows.md',
+    '# 路由\n\nSimple: change → verify → done → escalated。\n',
+  )
+  await write(
+    root,
+    'docs/usage/zh-CN/default-workflow.md',
+    '# 默认流程\n\nopen → explore → spec ⇄ build ⇄ verify → ship → archive\n',
+  )
+  await write(
+    root,
+    'docs/usage/zh-CN/dashboard-and-local-api.md',
+    '# Dashboard\n\nProjects → Progress → AFK → Workbench → Machine 是五个操作视图，Overview 独立。使用 127.0.0.1:18765 和 `pipeline dashboard --open`。\n',
+  )
+  await write(
+    root,
+    'docs/usage/zh-CN/updates-recovery-and-uninstall.md',
+    '# 更新\n\n`pipeline update --codex`\n\n`pipeline runtime status`\n\n`pipeline runtime repair --rollback`\n',
+  )
+  await write(
+    root,
+    'docs/usage/zh-CN/cli-reference.md',
+    [
+      '# CLI',
+      '`pipeline setup --codex`',
+      '`pipeline update --codex`',
+      '`pipeline runtime status`',
+      '`pipeline runtime repair --rollback`',
+      '`pipeline dashboard --open`',
+    ].join('\n\n'),
+  )
   return root
 }
 
@@ -187,6 +239,13 @@ test('rejects a Markdown link that escapes the repository', async (t) => {
   t.after(() => rm(root, { recursive: true, force: true }))
   await write(root, 'docs/usage/quickstart.md', '# Quickstart\n\n[Outside](../../../outside.md)\n')
   assert.match(checkRepository(root).join('\n'), /escapes repository/)
+})
+
+test('rejects a repository-relative Markdown link with a missing fragment', async (t) => {
+  const root = await fixture()
+  t.after(() => rm(root, { recursive: true, force: true }))
+  await write(root, 'docs/usage/quickstart.md', '# Quickstart\n\n[Broken](installation.md#missing-heading)\n')
+  assert.match(checkRepository(root).join('\n'), /missing Markdown fragment #missing-heading/)
 })
 
 test('detects a production-port claim that drifted from the exported source constant', async (t) => {
@@ -237,6 +296,6 @@ test('requires README language and community links', async (t) => {
   t.after(() => rm(root, { recursive: true, force: true }))
   await write(root, 'README.md', '# Pipeline Lite\n\nRequires Node.js 22+. Dashboard: 127.0.0.1:18765.\n')
   const failures = checkRepository(root).join('\n')
-  assert.match(failures, /README\.md.*README\.zh-CN\.md/)
+  assert.match(failures, /README\.md.*README\.en\.md/)
   assert.match(failures, /README\.md.*SECURITY\.md/)
 })

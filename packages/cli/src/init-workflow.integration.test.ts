@@ -10,7 +10,7 @@
  * workflow/phase 字段，并链式验证创建出的 change 立即可被其它真实命令（internal-skill-gate/
  * transition）消费，不需要任何手工改写状态文件。
  */
-import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises'
+import { appendFile, lstat, mkdir, readFile, readdir, rename, symlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
 import { freshHarness, rm, type Harness } from './integration-harness.js'
@@ -103,12 +103,143 @@ describe('真实 e2e —— init --workflow 落地自定义 workflow 的首个 s
     const content = await h.read('demo')
     expect(content).toMatch(/^workflow: default$/m)
     expect(content).toMatch(/^phase: open$/m)
-    expect(content).toMatch(/^pipeline_document_profile: legacy-full$/m)
+    expect(JSON.parse(await h.readIn('demo', '.pipeline-workflow-governance.json')))
+      .toMatchObject({ document_profile: 'legacy-full' })
     // state-first CLI init 也必须留下 OpenSpec 继续点；正常入口中 richer openspec-propose 若已先
     // 写这些文件，repository 的 wx scaffold 会保留它们，这里覆盖无 OpenSpec skill 的恢复路径。
-    expect(await h.readIn('demo', 'proposal.md')).toContain('# Proposal')
-    expect(await h.readIn('demo', 'design.md')).toContain('# Design')
+    expect(await h.readIn('demo', 'proposal.md')).toContain('# 提案')
+    expect(await h.readIn('demo', 'design.md')).toContain('# 设计')
     expect(await h.readIn('demo', 'tasks.md')).toContain('- [ ]')
+  })
+
+  test('治理文档默认中文，显式 --document-locale en 固定英文且非法值 fail-loud', async () => {
+    expect(await h.run([
+      'init', 'english-docs', '--track', 'backend', '--preset', 'full',
+      '--document-locale', 'en',
+    ])).toBe(0)
+    expect(await h.readIn('english-docs', 'proposal.md')).toContain('# Proposal')
+    expect(JSON.parse(await h.readIn('english-docs', '.pipeline-document-locale.json')))
+      .toEqual({ version: 1, locale: 'en' })
+    expect(await h.read('english-docs')).not.toMatch(/^pipeline_document_locale:/m)
+    expect(await h.run([
+      'document', 'scaffold', 'english-docs', 'superpower-design',
+    ])).toBe(0)
+    expect(await h.readIn(
+      'english-docs',
+      '../../../docs/superpowers/specs/english-docs-design.md',
+    )).toContain('# Technical design')
+
+    await h.seedGovernedDocumentEvidence('english-docs')
+    await appendFile(
+      join(h.cwd, 'openspec', 'changes', 'english-docs', '.pipeline-history.jsonl'),
+      `${JSON.stringify({
+        ts: '2026-07-25T00:00:00Z', kind: 'tool', raw: 'Skill: openspec-propose',
+      })}\n`,
+      'utf8',
+    )
+    expect(await h.run(['transition', 'english-docs', 'open-complete'])).toBe(0)
+    expect(JSON.parse(await h.readIn('english-docs', '.pipeline-document-locale.json')))
+      .toEqual({ version: 1, locale: 'en' })
+
+    expect(await h.run([
+      'init', 'bad-locale', '--track', 'backend', '--preset', 'full',
+      '--document-locale', 'fr',
+    ])).toBe(1)
+    await expect(h.readIn('bad-locale', 'proposal.md')).rejects.toThrow()
+  })
+
+  test('document scaffold 只补 contract 声明的缺失结构，不伪造 document record', async () => {
+    expect(await h.run(['init', 'scaffold-docs', '--track', 'frontend', '--preset', 'full'])).toBe(0)
+    expect(await h.run([
+      'document', 'scaffold', 'scaffold-docs', 'verification-report',
+    ])).toBe(0)
+    expect(await h.readIn(
+      'scaffold-docs',
+      '../../../docs/superpowers/reports/scaffold-docs-verify.md',
+    )).toContain('# 验证报告')
+    const ledger = JSON.parse(await h.readIn('scaffold-docs', '.pipeline-documents.json')) as {
+      records: unknown[]
+    }
+    expect(ledger.records).toHaveLength(0)
+  })
+
+  test('document scaffold 拒绝父目录 symlink 逃逸项目根', async () => {
+    const outside = `${h.cwd}-outside`
+    await mkdir(outside, { recursive: true })
+    try {
+      expect(await h.run(['init', 'safe-docs', '--track', 'frontend', '--preset', 'full'])).toBe(0)
+      await mkdir(join(h.cwd, 'docs'), { recursive: true })
+      await symlink(outside, join(h.cwd, 'docs', 'superpowers'))
+      expect(await h.run([
+        'document', 'scaffold', 'safe-docs', 'verification-report',
+      ])).toBe(1)
+      await expect(lstat(join(outside, 'reports'))).rejects.toMatchObject({ code: 'ENOENT' })
+      await expect(readFile(join(outside, 'reports', 'safe-docs-verify.md'), 'utf8')).rejects.toThrow()
+      expect(h.err.join('\n')).toContain('路径')
+    } finally {
+      await rm(outside, { recursive: true, force: true })
+    }
+  })
+
+  test('document scaffold 在 locale pin 前拒绝 symlink Change 根', async () => {
+    const outside = `${h.cwd}-change-outside`
+    await mkdir(outside, { recursive: true })
+    try {
+      expect(await h.run(['init', 'safe-root', '--track', 'frontend', '--preset', 'full'])).toBe(0)
+      await rename(
+        join(h.cwd, 'openspec', 'changes', 'safe-root'),
+        join(h.cwd, 'openspec', 'changes', 'safe-root-real'),
+      )
+      await symlink(outside, join(h.cwd, 'openspec', 'changes', 'safe-root'))
+      expect(await h.run([
+        'document', 'scaffold', 'safe-root', 'verification-report',
+      ])).toBe(1)
+      await expect(readFile(join(outside, '.pipeline-document-locale.json'), 'utf8'))
+        .rejects.toMatchObject({ code: 'ENOENT' })
+      expect(h.err.join('\n')).toMatch(/symlink|Change 根/)
+    } finally {
+      await rm(outside, { recursive: true, force: true })
+    }
+  })
+
+  test('pipeline init 在预置 Change symlink 时零外部写入且不留下半状态', async () => {
+    const outside = `${h.cwd}-init-outside`
+    await mkdir(outside, { recursive: true })
+    await writeFile(join(outside, 'marker.txt'), 'unchanged\n', 'utf8')
+    try {
+      await mkdir(join(h.cwd, 'openspec', 'changes'), { recursive: true })
+      await symlink(outside, join(h.cwd, 'openspec', 'changes', 'symlink-init'))
+
+      expect(await h.run([
+        'init', 'symlink-init', '--track', 'backend', '--preset', 'full',
+      ])).toBe(1)
+
+      expect(await readdir(outside)).toEqual(['marker.txt'])
+      expect(await readFile(join(outside, 'marker.txt'), 'utf8')).toBe('unchanged\n')
+      expect(h.err.join('\n')).toMatch(/symlink|Change 根|可信/)
+    } finally {
+      await rm(outside, { recursive: true, force: true })
+    }
+  })
+
+  test('delta spec scaffold 要求真实 capability，不把 Change 名当 capability', async () => {
+    expect(await h.run(['init', 'capability-docs', '--track', 'backend', '--preset', 'full'])).toBe(0)
+    expect(await h.run([
+      'document', 'scaffold', 'capability-docs', 'delta-spec',
+    ])).toBe(1)
+    expect(h.err.join('\n')).toContain('--capability')
+    expect(await h.run([
+      'document', 'scaffold', 'capability-docs', 'delta-spec',
+      '--capability', 'runtime-documents',
+    ])).toBe(0)
+    expect(await h.readIn(
+      'capability-docs',
+      'specs/runtime-documents/spec.md',
+    )).toContain('# OpenSpec 增量规格')
+    await expect(h.readIn(
+      'capability-docs',
+      'specs/capability-docs/spec.md',
+    )).rejects.toThrow()
   })
 
   test('default phase 出口要求当前 visit 的 mandatory Skill 证据', async () => {
@@ -143,8 +274,8 @@ describe('真实 e2e —— init --workflow 落地自定义 workflow 的首个 s
     expect(content).toMatch(/^track: free$/m)
     expect(content).toMatch(/^workflow: default$/m)
     expect(content).toMatch(/^phase: open$/m)
-    expect(await h.readIn('free-default', 'proposal.md')).toContain('# Proposal')
-    expect(await h.readIn('free-default', 'design.md')).toContain('# Design')
+    expect(await h.readIn('free-default', 'proposal.md')).toContain('# 提案')
+    expect(await h.readIn('free-default', 'design.md')).toContain('# 设计')
     expect(await h.readIn('free-default', 'tasks.md')).toContain('- [ ]')
     expect(await h.run(['set', 'free-default', 'automation', 'queued'])).toBe(0)
     expect(await h.run(['afk', 'enqueue', 'free-default'])).toBe(3)
@@ -199,7 +330,7 @@ describe('真实 e2e —— init --workflow 落地自定义 workflow 的首个 s
 
     await recordSkills('openspec-apply-change', 'finishing-a-development-branch')
     expect(await h.run(['document', 'read', name, 'all'])).toBe(0)
-    expect(await h.run(['transition', name, 'ship-complete'])).toBe(0)
+    expect(await h.run(['transition', name, 'ship-complete']), h.err.join('\n')).toBe(0)
     expect(await h.run(['document', 'read', name, 'all'])).toBe(0)
     expect(await h.run(['transition', name, 'archived'])).toBe(0)
     const completed = await h.read(name)
@@ -283,7 +414,8 @@ describe('真实 e2e —— init --workflow 落地自定义 workflow 的首个 s
       ]),
     ).toBe(0)
     expect((await h.read('compact-run'))).toMatch(/^phase: shape$/m)
-    expect((await h.read('compact-run'))).toMatch(/^pipeline_document_profile: document-v1$/m)
+    expect(JSON.parse(await h.readIn('compact-run', '.pipeline-workflow-governance.json')))
+      .toMatchObject({ document_profile: 'document-v1' })
 
     expect(await h.run(['document', 'status', 'compact-run'])).toBe(2)
     expect(h.out.join('\n')).toContain("proposal")
@@ -320,23 +452,24 @@ describe('真实 e2e —— init --workflow 落地自定义 workflow 的首个 s
     expect(await h.run(['check', 'compact-run'])).toBe(0)
   })
 
-  test('document-v1 初始化绑定 fingerprint，后续删除 contract 时 document 命令 fail-closed', async () => {
+  test('document-v1 初始化绑定完整快照，后续删除 contract 仍按原 contract 治理', async () => {
     await seedWorkflow('compact-governed', THREE_STEP_GOVERNED_WF)
     const initCode = await h.run([
       'init', 'bound-docs', '--track', 'free', '--preset', 'full',
       '--workflow', 'compact-governed',
     ])
     expect(initCode, h.err.join('\n')).toBe(0)
-    expect(await h.read('bound-docs')).toMatch(
-      /^pipeline_document_governance_fingerprint: [0-9a-f]{64}$/m,
-    )
+    expect(JSON.parse(
+      await h.readIn('bound-docs', '.pipeline-workflow-governance.json'),
+    ).document_governance_fingerprint).toMatch(/^[0-9a-f]{64}$/)
 
     await seedWorkflow(
       'compact-governed',
       THREE_STEP_GOVERNED_WF.replace(/document_contract:[\s\S]*?(?=steps:)/, ''),
     )
-    expect(await h.run(['document', 'status', 'bound-docs'])).toBe(1)
-    expect(h.err.join('\n')).toContain('不可降级为自由模式')
+    expect(await h.run(['document', 'status', 'bound-docs'])).toBe(2)
+    expect(h.err.join('\n')).not.toContain('不可降级为自由模式')
+    expect(h.out.join('\n')).toContain('workflow=compact-governed')
   })
 
   test('--workflow 指向不存在的文件：exit 1，不落盘任何 change 目录（先校验后创建，不留半成品）', async () => {

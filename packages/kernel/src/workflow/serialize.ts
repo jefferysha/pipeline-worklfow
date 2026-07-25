@@ -4,7 +4,7 @@
  * 不是字面字符串匹配；字段/缩进写法逐条对齐 parse.ts 的读入期望，改动前先读一遍
  * parse.ts 各 parse*Block 函数确认没有漂移。
  *
- * G2 P2：guard 定义层扩到 8 变体（+ edge 级 guards/actions + when 谓词）后，serializeGuard 改成
+ * G2 P2：guard 定义层扩为闭集（+ edge 级 guards/actions + when 谓词）后，serializeGuard 改成
  * **exhaustive switch**——旧实现对「非 tasks-at-least」一律兜底写 `- type: nonempty-output`，
  * 联合扩宽后会把任何新变体静默腐蚀成 nonempty-output；现在闭集 exhaustive，未覆盖变体编译期
  * `never` 报错、运行期 throw（fail-loud），保存不再静默丢真相。
@@ -73,6 +73,7 @@ function serializeGuard(g: WorkflowGuardConfig, pad: string): string[] {
     case 'field-in': lines.push(`${sub}field: ${g.field}`, `${sub}values: [${g.values.join(', ')}]`); break
     case 'full-direct-override': break
     case 'build-head-unchanged': lines.push(`${sub}field: ${g.field}`); break
+    case 'spec-migration-applied': break
     default: {
       const exhaustive: never = g
       throw new Error(`serializeWorkflow: 未知 guard 变体 ${JSON.stringify(exhaustive)}（闭集见 types.ts WorkflowGuardConfig）`)

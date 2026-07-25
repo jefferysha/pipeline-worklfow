@@ -55,4 +55,6 @@ export interface TransitionContext {
   gitHeadSha?: () => Promise<string>
   /** `isolation=in-place` 的内容寻址工作区基线；缺省 = workspace guard 跳过。 */
   workspaceFingerprint?: () => Promise<string>
+  /** 当前 Change 的主规格迁移证据；Ship 出口硬门禁，不注入时失败关闭。 */
+  specMigrationStatus?: import('../workflow/ir.js').GuardInput['specMigrationStatus']
 }

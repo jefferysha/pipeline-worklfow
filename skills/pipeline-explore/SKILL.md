@@ -5,6 +5,11 @@ description: "Pipeline Phase 2: Explore · 调研 + 深度设计。PM Track 做�
 
 # /pipeline-explore — Phase 2: 调研 + 深度设计
 
+> **语言：** 沿用 Change 在 `.pipeline-document-locale.json` 固定的 locale，新 Change 默认中文。研究报告、
+> Superpowers design 与 ADR 的读者标题和正文沿用固定 locale（默认中文，显式 `en` 时使用英文）；路径、producer、phase/event、coverage key
+> 与命令保持稳定英文。缺失结构先用 `pipeline document scaffold` 创建，不能把 scaffold 当成
+> brainstorming/grill 或 document record 的证据。
+
 > 移植来源：老仓 `skills/pipeline-explore/SKILL.md`；脚本面已改写为 `pipeline` CLI。
 
 > **Codex 打包 Skill 身份：** 本文件提到的裸 skill id 是 DAG/ledger 的逻辑 id；在 Codex
@@ -205,7 +210,7 @@ pipeline document record "$PIPELINE_CHANGE_NAME" tasks "$CHANGE_DIR/tasks.md" --
 ```bash
 DESIGN_DOC="$(pipeline get "$PIPELINE_CHANGE_NAME" design_doc)"
 ADR_PATH="docs/adr/$(date +%Y-%m-%d)-${PIPELINE_CHANGE_NAME}-explore.md"
-# 用 Edit/Write 写 ADR（Context / Decision / Alternatives / Consequences），再登记；不可登记空文件。
+# 用 Edit/Write 写 ADR（背景 / 决策 / 备选方案 / 后果），再登记；不可登记空文件。
 pipeline document record "$PIPELINE_CHANGE_NAME" superpower-design "$DESIGN_DOC" --producer brainstorming
 pipeline document record "$PIPELINE_CHANGE_NAME" adr "$ADR_PATH" --producer brainstorming
 # proposal / design / tasks 若在 Step 3.25 更新，先完成对应 record；此处重新消费所有当前 digest。

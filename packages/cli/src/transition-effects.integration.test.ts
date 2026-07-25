@@ -336,7 +336,7 @@ describe('真实 e2e —— verify-fail / archived 副作用（老仓 L206-218�
   test('archived：archived=true + archived_at=now + phase_status=done', async () => {
     await initGoverned('demo')
     await advanceTo('demo', 'ship')
-    expect(await h.run(['transition', 'demo', 'ship-complete'])).toBe(0)
+    expect(await h.run(['transition', 'demo', 'ship-complete']), h.err.join('\n')).toBe(0)
     expect(await h.run(['transition', 'demo', 'archived'])).toBe(0)
     const yaml = await h.read('demo')
     expect(yaml).toMatch(/^phase: archive$/m)
@@ -350,7 +350,7 @@ describe('真实 e2e —— 跨命令串联 + 历史 JSONL（GOAL C10）', () =>
   test('七相位全程（前置全喂足）：每条 transition 历史带事件名 raw（对齐老仓 transitions_history.event）', async () => {
     await initGoverned('e2e')
     await advanceTo('e2e', 'ship')
-    expect(await h.run(['transition', 'e2e', 'ship-complete'])).toBe(0)
+    expect(await h.run(['transition', 'e2e', 'ship-complete']), h.err.join('\n')).toBe(0)
     expect(await h.run(['transition', 'e2e', 'archived'])).toBe(0)
     const yaml = await h.read('e2e')
     expect(yaml).toMatch(/^phase: archive$/m)

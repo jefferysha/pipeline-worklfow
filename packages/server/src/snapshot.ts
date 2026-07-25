@@ -20,6 +20,7 @@ import {
   type EffectiveWorkflowPlan,
   type PipelineTodoStageDefinition,
   type StateStore,
+  type WorkflowPlanSnapshot,
 } from '@pipeline-lite/kernel'
 import type {
   ChangeSnapshot,
@@ -96,12 +97,13 @@ function effectivePlan(
     readonly documentProfile?: 'legacy-full' | 'document-v1'
     readonly documentGovernanceFingerprint?: string
     readonly workflowPlanFingerprint?: string
+    readonly workflowPlanSnapshot?: WorkflowPlanSnapshot
   },
 ): EffectiveWorkflowPlan {
   const plan = resolveBoundEffectiveWorkflowPlan(workflowName, binding, (name) => {
     const definition = builtinWorkflow(name) ?? loadWorkflow(root, name)
     return definition === null ? null : compileWorkflow(definition)
-  })
+  }, undefined, binding.workflowPlanSnapshot)
   if (plan === null) throw new Error(`workflow '${workflowName}' 未找到`)
   return plan
 }
@@ -234,6 +236,7 @@ async function scanProject(store: StateStore, root: string, nowMs: number): Prom
         documentProfile: state.runMetadata?.documentProfile,
         documentGovernanceFingerprint: state.runMetadata?.documentGovernanceFingerprint,
         workflowPlanFingerprint: state.runMetadata?.workflowPlanFingerprint,
+        workflowPlanSnapshot: state.runMetadata?.workflowPlanSnapshot,
       })
       const [documents, terminalActivity] = await Promise.all([
         documentEvidence(root, changeDir, plan, phase),

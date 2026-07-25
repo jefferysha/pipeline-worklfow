@@ -7,6 +7,8 @@
 #   4. 端到端上手路径：临时目录 init → .pipeline.yaml 落盘 → get phase = open
 #      → 登记随 init 生成的 OpenSpec proposal/design/tasks 的真实 skill 证据
 #      → transition open-complete → get phase = explore → history JSONL 有 init+transition
+#   5. 冻结 N-1 严格读取器必须接受当前新 Change；本机有 managed previous release 时再用真实
+#      上一发行版 CLI 交叉验证。CI 不依赖用户缓存也不会静默丢掉兼容门。
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BUNDLE="$ROOT/packages/cli/dist/pipeline.mjs"
@@ -25,6 +27,14 @@ else bad "bundle: 首行 shebang" "$(head -1 "$BUNDLE" 2>/dev/null || echo 缺�
   || bad "bundle: dashboard.mjs 存在" "先 npm run build"
 [ -f "$DASHBOARD_INDEX" ] && ok "bundle: dashboard SPA index.html 存在" \
   || bad "bundle: dashboard SPA index.html 存在" "先 npm run build"
+for asset in \
+  templates/documents/registry.v1.yaml \
+  templates/documents/locales/zh-CN.yaml \
+  templates/documents/locales/en.yaml \
+  templates/documents/schemas/registry.v1.schema.json; do
+  [ -f "$ROOT/$asset" ] && ok "bundle: $asset 存在" \
+    || bad "bundle: $asset 存在" "治理文档 Registry 必须随完整插件发布"
+done
 
 # 2. 自足性：不残留对 npm 包的运行时 import（node: 内建豁免）
 if [ -f "$BUNDLE" ]; then
@@ -49,6 +59,13 @@ if [ -f "$BUNDLE" ]; then
   ( cd "$TMP" && PIPELINE_DASHBOARD_HOME="$TMP/.pipeline-dashboard-home" node "$BUNDLE" init t8-smoke --track backend --preset full --user smoke ) 2>/dev/null
   [ -f "$TMP/openspec/changes/t8-smoke/.pipeline.yaml" ] \
     && ok "bundle: init 落盘 .pipeline.yaml" || bad "bundle: init 落盘 .pipeline.yaml" "文件缺失"
+  grep -q '"locale":"zh-CN"' "$TMP/openspec/changes/t8-smoke/.pipeline-document-locale.json" \
+    && ! grep -q '^pipeline_document_locale:' "$TMP/openspec/changes/t8-smoke/.pipeline.yaml" \
+    && ok "bundle: 新 Change 以回滚兼容 sidecar 固定中文文档语言" \
+    || bad "bundle: 新 Change 以回滚兼容 sidecar 固定中文文档语言" "sidecar 缺失或 locale 泄漏到 canonical projection"
+  grep -q '^# 提案$' "$TMP/openspec/changes/t8-smoke/proposal.md" \
+    && ok "bundle: 默认 proposal 使用中文模板" \
+    || bad "bundle: 默认 proposal 使用中文模板" "$(head -1 "$TMP/openspec/changes/t8-smoke/proposal.md" 2>/dev/null)"
   phase="$(cd "$TMP" && node "$BUNDLE" get t8-smoke phase 2>/dev/null)"
   [ "$phase" = "open" ] && ok "bundle: get phase = open" || bad "bundle: get phase = open" "得到 '$phase'"
 
@@ -87,6 +104,41 @@ if [ -f "$BUNDLE" ]; then
   if [ -f "$hist" ] && grep -q '"kind":"init"' "$hist" && grep -q '"kind":"transition"' "$hist"; then
     ok "bundle: history JSONL 记 init+transition"
   else bad "bundle: history JSONL 记 init+transition" "$(cat "$hist" 2>/dev/null | head -2 || echo 缺文件)"; fi
+
+  # 5. N-1 兼容。冻结 reader 是可离线、可重复的硬门；真实 previous runtime 是可用时的第二证据，
+  # 不把某台开发机的 managed cache 变成 CI 前置条件。
+  current_json="$TMP/openspec/changes/t8-smoke/.pipeline-run/current.json"
+  n_minus_phase="$(node "$ROOT/tools/fixtures/n-minus-one-canonical-reader.mjs" "$current_json" 2>&1)"
+  [ "$?" -eq 0 ] && [ "$n_minus_phase" = "explore" ] \
+    && ok "bundle: 冻结 N-1 严格读取器可读当前 canonical Change" \
+    || bad "bundle: 冻结 N-1 严格读取器可读当前 canonical Change" "$n_minus_phase"
+
+  explicit_n_minus_cli="${PIPELINE_N_MINUS_ONE_CLI:-}"
+  N_MINUS_CLI="$explicit_n_minus_cli"
+  if [ -z "$N_MINUS_CLI" ]; then
+    managed_home="${PIPELINE_MANAGED_HOME:-$HOME/Library/Application Support/pipeline-lite}"
+    selection="$managed_home/state/selection.json"
+    if [ -f "$selection" ]; then
+      previous_release="$(node -e '
+        const fs = require("fs")
+        const value = JSON.parse(fs.readFileSync(process.argv[1], "utf8"))
+        if (typeof value.previousRelease === "string") process.stdout.write(value.previousRelease)
+      ' "$selection" 2>/dev/null || true)"
+      candidate="$managed_home/releases/$previous_release/payload/packages/cli/dist/pipeline.mjs"
+      [ -n "$previous_release" ] && [ -f "$candidate" ] && N_MINUS_CLI="$candidate"
+    fi
+  fi
+  if [ -n "$explicit_n_minus_cli" ] && [ ! -f "$explicit_n_minus_cli" ]; then
+    bad "bundle: 显式 N-1 bundle 存在" "$explicit_n_minus_cli"
+  elif [ -n "$N_MINUS_CLI" ] && [ -f "$N_MINUS_CLI" ]; then
+    n_minus_release="${PIPELINE_N_MINUS_ONE_RELEASE:-未标注版本}"
+    n_minus_real="$(cd "$TMP" && node "$N_MINUS_CLI" status t8-smoke --json 2>&1)"
+    [ "$?" -eq 0 ] && printf '%s' "$n_minus_real" | grep -q '"phase":"explore"' \
+      && ok "bundle: 真实上一发行版 CLI（${n_minus_release}）可读当前新 Change" \
+      || bad "bundle: 真实上一发行版 CLI（${n_minus_release}）可读当前新 Change" "$n_minus_real"
+  else
+    printf 'info - 真实上一发行版 CLI 未安装；已执行可离线冻结严格读取器\n'
+  fi
 fi
 
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"

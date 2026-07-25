@@ -85,6 +85,7 @@ function governedLifecyclePolicy(
   if (from === 'build' && to === 'verify') return DEFAULT_EVENT_POLICY['build-complete']
   if (from === 'verify' && to === 'ship') return DEFAULT_EVENT_POLICY['verify-pass']
   if (from === 'verify' && to === 'build') return DEFAULT_EVENT_POLICY['verify-fail']
+  if (from === 'ship' && to === 'archive') return DEFAULT_EVENT_POLICY['ship-complete']
   return undefined
 }
 
@@ -206,6 +207,7 @@ async function planCustomTransition(
     fileExists: command.context.fileExists,
     gitHeadSha: command.context.gitHeadSha,
     workspaceFingerprint: command.context.workspaceFingerprint,
+    specMigrationStatus: command.context.specMigrationStatus,
   }, lifecycle?.guards)
   if (!plan.ok) {
     if (plan.kind === 'step-not-in-graph') return { kind: 'step-not-in-graph', workflowName, stepId: plan.stepId }
@@ -265,7 +267,7 @@ export function createTransitionApplication(deps: TransitionApplicationDeps): Tr
             documentProfile: tx.run.documentProfile,
             documentGovernanceFingerprint: tx.run.documentGovernanceFingerprint,
             workflowPlanFingerprint: tx.run.workflowPlanFingerprint,
-          }, command.loadWorkflow, track)
+          }, command.loadWorkflow, track, tx.run.workflowPlanSnapshot)
         } catch (error) {
           if (error instanceof DocumentGovernanceBindingError) {
             return { kind: 'document-governance-invalid', workflowName, reason: error.message }

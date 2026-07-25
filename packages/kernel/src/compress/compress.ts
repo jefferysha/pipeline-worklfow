@@ -13,6 +13,7 @@
  */
 import { isConstraint, isDecision, isDoneTodo, isHeading, openTodoText, parseFrontMatter, stripLeadMarkers } from './markdown.js'
 import type { CompressOptions, CompressStats, CompressedDoc } from './types.js'
+import type { DocumentLocale } from '../types.js'
 
 /** 压缩率：1 - 压缩/原（4 位小数）。原 ≤ 0 → 0。短文档膨胀可为负（诚实）。 */
 export function ratioOf(originalChars: number, compressedChars: number): number {
@@ -93,7 +94,12 @@ export function compressDocument(text: string, opts: CompressOptions = {}): Comp
     keyFields: fm.keyFields,
     stats: emptyStats(),
   }
-  doc.stats = statsFor(text, rawLines.length, renderHandoffSummary(doc), doc)
+  doc.stats = statsFor(
+    text,
+    rawLines.length,
+    renderHandoffSummary(doc, undefined, opts.documentLocale ?? 'zh-CN'),
+    doc,
+  )
   return doc
 }
 
@@ -136,27 +142,50 @@ export function statsFor(
  * 渲染下游 handoff 摘要（结构化 markdown，空段省略）。label 覆写标题（缺省用 doc.title）。
  * 顺序：标题 → 结构骨架 → 决策 → 约束 → 开 todo → key fields。
  */
-export function renderHandoffSummary(doc: CompressedDoc, label?: string): string {
+export function renderHandoffSummary(
+  doc: CompressedDoc,
+  label?: string,
+  locale: DocumentLocale = 'zh-CN',
+): string {
+  const text = locale === 'zh-CN'
+    ? {
+        handoff: '交接摘要',
+        summary: '摘要',
+        structure: '结构',
+        decisions: '决策',
+        constraints: '约束',
+        todos: '待办',
+        fields: '关键字段',
+      }
+    : {
+        handoff: 'Handoff',
+        summary: 'summary',
+        structure: 'Structure',
+        decisions: 'Decisions',
+        constraints: 'Constraints',
+        todos: 'Open TODOs',
+        fields: 'Key Fields',
+      }
   const out: string[] = []
-  out.push(`# Handoff: ${label ?? doc.title ?? 'summary'}`)
+  out.push(`# ${text.handoff}: ${label ?? doc.title ?? text.summary}`)
   if (doc.headings.length > 0) {
-    out.push('', '## Structure')
+    out.push('', `## ${text.structure}`)
     for (const h of doc.headings) out.push(`- ${h}`)
   }
   if (doc.decisions.length > 0) {
-    out.push('', `## Decisions (${doc.decisions.length})`)
+    out.push('', `## ${text.decisions} (${doc.decisions.length})`)
     for (const d of doc.decisions) out.push(`- ${d}`)
   }
   if (doc.constraints.length > 0) {
-    out.push('', `## Constraints (${doc.constraints.length})`)
+    out.push('', `## ${text.constraints} (${doc.constraints.length})`)
     for (const c of doc.constraints) out.push(`- ${c}`)
   }
   if (doc.openTodos.length > 0) {
-    out.push('', `## Open TODOs (${doc.openTodos.length})`)
+    out.push('', `## ${text.todos} (${doc.openTodos.length})`)
     for (const t of doc.openTodos) out.push(`- [ ] ${t}`)
   }
   if (doc.keyFields.length > 0) {
-    out.push('', '## Key Fields')
+    out.push('', `## ${text.fields}`)
     for (const k of doc.keyFields) out.push(`- ${k.key}: ${k.value}`)
   }
   return out.join('\n')

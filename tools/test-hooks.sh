@@ -350,6 +350,11 @@ esac
 out="$(printf '{"prompt":"我现在想要调研一个 SkillHub 项目","cwd":"%s"}' "$proj" | bash "$BC" 2>/dev/null)"
 assert_empty "breadcrumb: 独立新主题不泄漏 repo 级旧任务" "$out"
 
+# 宿主提供 session_id 时，只有精确 session binding 或显式 change 名能恢复。未绑定的新会话
+# 即使泛化说“继续”也不能借仓库级 `.pipeline-active` 注入另一个会话的任务。
+out="$(printf '{"prompt":"继续执行","cwd":"%s","session_id":"unbound-new-conversation"}' "$proj" | bash "$BC" 2>/dev/null)"
+assert_empty "breadcrumb: 未绑定的新会话泛化继续不借 repo 级 active" "$out"
+
 # router 提示的 `track / workflow` 选择回复本身不是恢复旧 Change。真实选择句常同时含
 # “上一步/继续”；若这里泄漏 selected 的 breadcrumb，新 custom workflow 会被旧任务污染。
 out="$(printf '{"prompt":"选择 pet-adoption / pet-adoption-launch，作为上一步所要求的路线选择；继续执行。","cwd":"%s"}' "$proj" | bash "$BC" 2>/dev/null)"
@@ -727,6 +732,9 @@ if command -v node >/dev/null 2>&1; then
   assert_contains "router: 明确新调研主题从 open 分派" "$ROUT" "phase: open"
   assert_contains "router: 明确新调研主题标记 new intent" "$ROUT" "intent: new"
   assert_not_contains "router: 明确新调研主题不绑定 repo 级旧 change" "$ROUT" "change: normal-chat-default-orchestration"
+  run_router "{\"prompt\":\"继续执行\",\"cwd\":\"$rc_new_topic\",\"session_id\":\"unbound-new-conversation\"}"
+  assert_not_contains "router: 未绑定的新会话泛化继续不恢复 repo 级旧 change" "$ROUT" "change: normal-chat-default-orchestration"
+  assert_not_contains "router: 未绑定的新会话泛化继续不产生 resume intent" "$ROUT" "intent: resume"
 
   # 明确 session 指针必须覆盖 mtime 选择；这是 dashboard “创建并开始会话”真正接上
   # UserPromptSubmit 路由的回归钉子，不依赖人工观察 UI。

@@ -92,7 +92,8 @@ steps:
     skills: []
     inputs: []
     outputs: []
-    guards: []
+    guards:
+      - type: spec-migration-applied
     transitions:
       - event: ship-complete
         to: archive

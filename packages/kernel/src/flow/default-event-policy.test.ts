@@ -44,12 +44,13 @@ describe('DEFAULT_EVENT_POLICY 表结构（穷尽 9 事件 + action 一一映射
     }
   })
 
-  test('guard 映射：仅 explore/spec/build/verify-pass 有前置 guard，其余空', () => {
+  test('guard 映射：explore/spec/build/verify-pass 与 Ship 迁移门禁有前置 guard，其余空', () => {
     expect(DEFAULT_EVENT_POLICY['explore-complete'].guards.length).toBe(1)
     expect(DEFAULT_EVENT_POLICY['spec-complete'].guards.length).toBe(1)
     expect(DEFAULT_EVENT_POLICY['build-complete'].guards.length).toBe(4)
     expect(DEFAULT_EVENT_POLICY['verify-pass'].guards.length).toBe(5)
-    for (const ev of ['open-complete', 'requirements-changed', 'verify-fail', 'ship-complete', 'archived'] as const) {
+    expect(DEFAULT_EVENT_POLICY['ship-complete'].guards).toEqual([{ type: 'spec-migration-applied' }])
+    for (const ev of ['open-complete', 'requirements-changed', 'verify-fail', 'archived'] as const) {
       expect(DEFAULT_EVENT_POLICY[ev].guards).toEqual([])
     }
   })
@@ -245,9 +246,28 @@ describe('checkDefaultEventPreconditions —— verify-pass（老仓 L163-199，
   })
 })
 
-describe('checkDefaultEventPreconditions —— 无前置 guard 的事件通行（open/verify-fail/ship/archived）', () => {
-  test.each(['open-complete', 'verify-fail', 'ship-complete', 'archived'] as const)('%s → null', async (ev) => {
+describe('checkDefaultEventPreconditions —— 无前置 guard 的事件通行（open/verify-fail/archived）', () => {
+  test.each(['open-complete', 'verify-fail', 'archived'] as const)('%s → null', async (ev) => {
     expect(await checkDefaultEventPreconditions(ev, mkState({}))).toBeNull()
+  })
+})
+
+describe('checkDefaultEventPreconditions —— ship-complete 主规格迁移硬门禁', () => {
+  test('缺能力失败关闭；not-required/applied 通过；invalid 输出稳定原因', async () => {
+    expect(await checkDefaultEventPreconditions('ship-complete', mkState({}))).toEqual([
+      'ERROR: ship-complete 要求主规格迁移机器证据有效（当前=capability-unavailable）',
+    ])
+    expect(await checkDefaultEventPreconditions('ship-complete', mkState({}), {
+      specMigrationStatus: async () => ({ kind: 'not-required' }),
+    })).toBeNull()
+    expect(await checkDefaultEventPreconditions('ship-complete', mkState({}), {
+      specMigrationStatus: async () => ({ kind: 'applied' }),
+    })).toBeNull()
+    expect(await checkDefaultEventPreconditions('ship-complete', mkState({}), {
+      specMigrationStatus: async () => ({ kind: 'invalid', reason: 'receipt-mismatch' }),
+    })).toEqual([
+      'ERROR: ship-complete 要求主规格迁移机器证据有效（当前=receipt-mismatch）',
+    ])
   })
 })
 

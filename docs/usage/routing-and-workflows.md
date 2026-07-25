@@ -102,6 +102,16 @@ pipeline session activate <change-name>
 
 When multiple candidates exist and none was selected, do not guess.
 
+`pipeline session activate <change-name> --host-session <id>` creates an exact
+host-session binding. A later “continue” in that conversation resolves this
+binding before the repository-wide `.pipeline-active` candidate, so another
+conversation cannot hijack the resume target. If a host supplies a session id
+but that new conversation has no valid binding, generic “continue” fails closed
+instead of falling back to repository-wide `.pipeline-active`. An explicitly
+named Change still has the highest priority. This sidecar identifies the
+conversation and powers liveness only; it never participates in canonical
+guards or transitions.
+
 ## Expected result
 
 The selected mode has a stable Workflow/Track identity and every surface derives

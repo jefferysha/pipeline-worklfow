@@ -113,14 +113,21 @@ describe('WorkflowRunRepository.initChange —— 新 change 的唯一创建入�
     expect(run.transitionSequence).toBe(0)
     const state = await store.read(changeDir)
     expect(state.fields.track).toBe('backend')
-    expect(state.runMetadata).toEqual({
+    expect(state.runMetadata).toMatchObject({
       runId: 'id-1',
       transitionSequence: 0,
       documentProfile: 'legacy-full',
       documentGovernanceFingerprint:
         effectiveWorkflowPlanBinding(compileEffectiveWorkflowPlan('default')).documentGovernanceFingerprint,
       workflowPlanFingerprint: compileEffectiveWorkflowPlan('default').workflowFingerprint,
+      workflowPlanSnapshot: {
+        version: 1,
+        workflowId: 'default',
+        workflowFingerprint: compileEffectiveWorkflowPlan('default').workflowFingerprint,
+      },
     })
+    await expect(readFile(join(changeDir, '.pipeline-document-locale.json'), 'utf8'))
+      .resolves.toBe('{"version":1,"locale":"zh-CN"}\n')
   })
 
   test('default init 同时补最小 OpenSpec 文档与 tasks.md 来源；custom workflow 不被注入 default 骨架', async () => {
@@ -131,9 +138,15 @@ describe('WorkflowRunRepository.initChange —— 新 change 的唯一创建入�
       clock: () => '2026-07-16T00:00:00Z',
     }
     const created = await repo.initChange(base)
-    await expect(readFile(join(created.changeDir, 'proposal.md'), 'utf8')).resolves.toContain('# Proposal')
-    await expect(readFile(join(created.changeDir, 'design.md'), 'utf8')).resolves.toContain('# Design')
+    await expect(readFile(join(created.changeDir, 'proposal.md'), 'utf8')).resolves.toContain('# 提案')
+    await expect(readFile(join(created.changeDir, 'design.md'), 'utf8')).resolves.toContain('# 设计')
     await expect(readFile(join(created.changeDir, 'tasks.md'), 'utf8')).resolves.toContain('- [ ]')
+
+    const english = await repo.initChange({ ...base, name: 'english-change', documentLocale: 'en' })
+    await expect(readFile(join(english.changeDir, 'proposal.md'), 'utf8')).resolves.toContain('# Proposal')
+    await expect(readFile(join(english.changeDir, 'design.md'), 'utf8')).resolves.toContain('# Design')
+    await expect(readFile(join(english.changeDir, '.pipeline-document-locale.json'), 'utf8'))
+      .resolves.toBe('{"version":1,"locale":"en"}\n')
 
     const custom = await repo.initChange({
       ...base,
@@ -264,6 +277,7 @@ describe('WorkflowRunRepository.establishRun —— 新 change 在 init 时钉�
         },
       })
     })
+    await rm(join(dir, '.pipeline-workflow-governance.json'))
     const binding = effectiveWorkflowPlanBinding(compileEffectiveWorkflowPlan('default'))
 
     const upgraded = await repo.establishRun(dir, binding)
@@ -511,6 +525,12 @@ describe('WorkflowRunRepository.transact —— commit() 真提交', () => {
 
     expect((await store.read(changeDir)).runMetadata?.workflowPlanFingerprint)
       .toBe(plan.workflowFingerprint)
+    expect((await store.read(changeDir)).runMetadata?.workflowPlanSnapshot)
+      .toMatchObject({
+        version: 1,
+        workflowId: 'default',
+        workflowFingerprint: plan.workflowFingerprint,
+      })
   })
 
   test('第二次 commit：sequence 从已存在的 metadata 继续递增，previousRecordId 指向上一条 head', async () => {

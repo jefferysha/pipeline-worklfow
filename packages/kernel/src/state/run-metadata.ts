@@ -4,7 +4,8 @@
  * 传入，repository 自己 diff，避免两处各自实现一份再悄悄漂移）。
  *
  * 核心三行固定顺序、要么全有要么全无；policy 是第四行，governed identity 是与 policy 绑定的
- * 第五/六行。损坏的可选尾部不获授权语义，仍交给 opaqueTail 保留。
+ * 第五/六行。document/workflow governance 三项只为读取早期开发快照保留；新 Change 将其写入
+ * rollback-compatible sidecar。损坏的可选尾部不获授权语义，仍交给 opaqueTail 保留。
  */
 import type { FieldName, RunMetadata, StateProjectionMetadata } from '../types.js'
 import { validateAutomationPolicySnapshot } from '../loops/automation-policy.js'

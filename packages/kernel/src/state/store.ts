@@ -3,7 +3,7 @@
  * 官方读写以 `.pipeline-run/current.json` 为真相；YAML 只在 current 从未出现时兼容读取，并在每次
  * canonical commit 后 best-effort 投影。互斥走 mkdir 原子锁，kernel 零第三方运行时依赖。
  */
-import { mkdir, readFile } from 'node:fs/promises'
+import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { atomicLinkPublish, atomicReplaceFile } from './atomic-publish.js'
 import {
@@ -30,11 +30,29 @@ import {
 import {
   defaultStateClock,
   detectBaseBranch,
-  initialDocumentGovernanceFingerprint,
-  initialDocumentProfile,
   initialFields,
-  initialWorkflowPlanFingerprint,
+  initialRunMetadata,
 } from './state-init.js'
+import { ensureDocumentLocalePin } from './document-locale.js'
+import {
+  attachWorkflowGovernanceBinding,
+  ensureWorkflowGovernanceBinding,
+  readWorkflowGovernanceBinding,
+  withoutWorkflowGovernanceBinding,
+} from './workflow-governance-binding.js'
+import {
+  attachWorkflowPlanSnapshot,
+  ensureWorkflowPlanSnapshot,
+  readWorkflowPlanSnapshot,
+} from './workflow-plan-snapshot.js'
+import {
+  assertValidChangeName,
+  discardInitialChangeCandidate,
+  prepareInitialChangePublication,
+  publishInitialChange,
+  releaseInitialChangePublication,
+  writeInitialChangeFiles,
+} from './initial-change-publish.js'
 
 export const STATE_FILE_NAME = '.pipeline.yaml'
 
@@ -45,21 +63,23 @@ export class StateProjectionDriftError extends Error {
 export interface StateStoreOptions {
   /** 崩溃点/IO 故障注入；生产缺省仍是同目录 tmp+rename。 */
   readonly writeProjection?: (target: string, content: string) => Promise<void>
+  /** Test-only boundary after the complete private Change candidate is ready. */
+  readonly beforeInitialPublish?: (
+    stagingChangeDir: string,
+    finalChangeDir: string,
+  ) => void | Promise<void>
 }
-
-/** 对齐老内核 validate_change_name：非空、仅 [a-zA-Z0-9_-]、禁 ..（path traversal） */
-const CHANGE_NAME_RE = /^[a-zA-Z0-9_-]+$/
 
 function stateFilePath(changeDir: string): string {
   return path.join(changeDir, STATE_FILE_NAME)
 }
 
-function alreadyInitialized(pathname: string): NodeJS.ErrnoException {
-  const error = new Error(`init: change 已存在，拒绝覆盖: ${pathname}`) as NodeJS.ErrnoException
-  error.code = 'EEXIST'
-  error.path = pathname
-  return error
+function errorCode(error: unknown): string | undefined {
+  if (typeof error !== 'object' || error === null || !('code' in error)) return undefined
+  const code = Reflect.get(error, 'code')
+  return typeof code === 'string' ? code : undefined
 }
+
 
 /** 同目录 tmp + rename，写入原子可见（对齐老内核 `> tmp && mv`）。导出为公开原语，但目前
  * 唯一真实消费方是本文件下方 `.pipeline.yaml` 自己的 write()——W1 第二增量的
@@ -90,7 +110,9 @@ function projectionContent(revision: RunRevision): string {
 function stateWithoutProjection(state: PipelineState): PipelineState {
   return {
     fields: structuredClone(state.fields),
-    ...(state.runMetadata === undefined ? {} : { runMetadata: structuredClone(state.runMetadata) }),
+    ...(state.runMetadata === undefined
+      ? {}
+      : { runMetadata: withoutWorkflowGovernanceBinding(structuredClone(state.runMetadata)) }),
     opaqueTail: state.opaqueTail,
   }
 }
@@ -184,14 +206,28 @@ async function inspectProjectionAgainst(
 
 class FsStateStore implements StateStore {
   private readonly writeProjection: (target: string, content: string) => Promise<void>
+  private readonly beforeInitialPublish?: StateStoreOptions['beforeInitialPublish']
 
   constructor(options: StateStoreOptions = {}) {
     this.writeProjection = options.writeProjection ?? atomicWriteFile
+    this.beforeInitialPublish = options.beforeInitialPublish
   }
 
   async read(changeDir: string): Promise<PipelineState> {
     const current = await readCurrentRunRevision(changeDir)
-    if (current !== undefined) return structuredClone(current.state)
+    if (current !== undefined) {
+      const state = structuredClone(current.state)
+      const binding = await readWorkflowGovernanceBinding(changeDir)
+      const governedMetadata = attachWorkflowGovernanceBinding(state.runMetadata, binding)
+      const metadata = attachWorkflowPlanSnapshot(
+        governedMetadata,
+        await readWorkflowPlanSnapshot(changeDir),
+      )
+      return {
+        ...state,
+        ...(metadata === undefined ? {} : { runMetadata: metadata }),
+      }
+    }
     return parsePipeline(await readFile(stateFilePath(changeDir), 'utf8'))
   }
 
@@ -208,6 +244,20 @@ class FsStateStore implements StateStore {
     state: PipelineState,
     mutation: StateWriteIntent = { kind: 'replace' },
   ): Promise<StateWriteResult> {
+    if (state.runMetadata !== undefined && (
+      state.runMetadata.documentProfile !== undefined
+      || state.runMetadata.documentGovernanceFingerprint !== undefined
+      || state.runMetadata.workflowPlanFingerprint !== undefined
+    )) {
+      await ensureWorkflowGovernanceBinding(changeDir, state.runMetadata)
+    }
+    if (state.runMetadata?.workflowPlanSnapshot !== undefined) {
+      await ensureWorkflowPlanSnapshot(
+        changeDir,
+        state.runMetadata.runId,
+        state.runMetadata.workflowPlanSnapshot,
+      )
+    }
     const nextState = stateWithoutProjection(state)
     // current 是唯一提交点；所有可预见的 adapter 表示错误必须在它之前失败，不能先提交再因
     // quote gate 等确定性问题留下永久 pending projection。
@@ -348,87 +398,83 @@ class FsStateStore implements StateStore {
 
   async init(opts: InitOptions): Promise<string> {
     const { name } = opts
-    if (!CHANGE_NAME_RE.test(name) || name.includes('..')) {
-      throw new Error(`init: 非法 change 名 '${name}'（仅允许 a-zA-Z0-9_-，禁 ..）`)
-    }
+    assertValidChangeName(name)
     const clock = opts.clock ?? defaultStateClock
-    const changeDir = path.join(path.resolve(opts.repoRoot), 'openspec', 'changes', name)
-    await mkdir(changeDir, { recursive: true })
-
-    // 快速拒绝顺序/旧版重复 init，避免明知 current/YAML 已存在仍先发布一份不可达 revision。
-    // 真并发的两个首次 init 仍由 current 的 no-replace link 决胜；输家可能留下不可达 revision，
-    // 与崩溃在 revision 发布后、current 提交前的恢复规则一致，永远不会被官方读路径采用。
-    if (await readCurrentRunRevision(changeDir) !== undefined) {
-      throw alreadyInitialized(path.join(changeDir, '.pipeline-run', 'current.json'))
-    }
+    const publication = await prepareInitialChangePublication(opts.repoRoot, name)
+    const { candidateChangeDir: changeDir, finalChangeDir } = publication
+    let published = false
     try {
-      await readFile(stateFilePath(changeDir), 'utf8')
-      throw alreadyInitialized(stateFilePath(changeDir))
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
-    }
+      const requestedDocumentLocale = opts.documentLocale ?? 'zh-CN'
 
-    const ts = clock()
-    const baseBranch = await detectBaseBranch(opts.repoRoot)
-    // created_by 是不可信入参：四闸校验挪到构造 fields 之前、纯内存判定——命中闸就地降级回安全
-    // 占位 'unknown'，不阻断 init（身份是软信息，绝不允许它写坏状态文件），也不再需要独占创建
-    // 之后再补一次 write 才能落这个字段（第 7 轮 codex review P1：那样的两步之间有竞态窗口，
-    // 第二步失败还会被调用方吞掉、init 仍报成功）。
-    let createdBy = 'unknown'
-    if (opts.user !== undefined && opts.user !== '' && opts.user !== 'unknown') {
-      try {
-        quoteGate('created_by', opts.user)
-        createdBy = opts.user
-      } catch (err) {
-        if (!(err instanceof QuoteGateError)) throw err
+      const ts = clock()
+      const baseBranch = await detectBaseBranch(opts.repoRoot)
+      // created_by 是不可信入参：四闸校验挪到构造 fields 之前、纯内存判定——命中闸就地降级回安全
+      // 占位 'unknown'，不阻断 init（身份是软信息，绝不允许它写坏状态文件），也不再需要独占创建
+      // 之后再补一次 write 才能落这个字段（第 7 轮 codex review P1：那样的两步之间有竞态窗口，
+      // 第二步失败还会被调用方吞掉、init 仍报成功）。
+      let createdBy = 'unknown'
+      if (opts.user !== undefined && opts.user !== '' && opts.user !== 'unknown') {
+        try {
+          quoteGate('created_by', opts.user)
+          createdBy = opts.user
+        } catch (err) {
+          if (!(err instanceof QuoteGateError)) throw err
+        }
       }
-    }
-    // runId 提供时随独占创建一次性写入 runMetadata（W1 第二增量）；custom workflow 首态
-    // （opts.initialWorkflow）同理——这一整个 state 对象在下面同一次原子发布里落盘，不存在
-    // "先创建 default/open、再 setMany 改成 custom/首 step"两步竞态（第 7 轮 codex review 另一个
-    // P1：两步之间的并发 transition 会对 provisional default/open 提交 canonical record，第二次
-    // 写入后 canonical head 与实际 workflow/state 不一致；第二步写失败还会留下一个错误的
-    // default change）。写入本身失败则 init 直接抛错（fail-loud，调用方不能吞掉后仍报成功），
-    // 成功则身份、custom 首态与其余字段同时可见，没有中间态。
-    const state: PipelineState = {
-      fields: initialFields(opts, ts, baseBranch, createdBy),
-      runMetadata: opts.runId ? {
-        runId: opts.runId,
-        transitionSequence: 0,
-        transitionHead: undefined,
-        ...(initialDocumentProfile(opts) === undefined
+      // runId 提供时随独占创建一次性写入 runMetadata（W1 第二增量）；custom workflow 首态
+      // （opts.initialWorkflow）同理——这一整个 state 对象在下面同一次原子发布里落盘，不存在
+      // "先创建 default/open、再 setMany 改成 custom/首 step"两步竞态（第 7 轮 codex review 另一个
+      // P1：两步之间的并发 transition 会对 provisional default/open 提交 canonical record，第二次
+      // 写入后 canonical head 与实际 workflow/state 不一致；第二步写失败还会留下一个错误的
+      // default change）。写入本身失败则 init 直接抛错（fail-loud，调用方不能吞掉后仍报成功），
+      // 成功则身份、custom 首态与其余字段同时可见，没有中间态。
+      const fullRunMetadata = initialRunMetadata(opts)
+      const state: PipelineState = {
+        fields: initialFields(opts, ts, baseBranch, createdBy),
+        ...(fullRunMetadata === undefined
           ? {}
-          : { documentProfile: initialDocumentProfile(opts) }),
-        ...(initialDocumentGovernanceFingerprint(opts) === undefined
-          ? {}
-          : { documentGovernanceFingerprint: initialDocumentGovernanceFingerprint(opts) }),
-        ...(initialWorkflowPlanFingerprint(opts) === undefined
-          ? {}
-          : { workflowPlanFingerprint: initialWorkflowPlanFingerprint(opts) }),
-      } : undefined,
-      opaqueTail: '',
+          : { runMetadata: withoutWorkflowGovernanceBinding(fullRunMetadata) }),
+        opaqueTail: '',
+      }
+      // 所有 canonical、projection、locale、governance 与初始文档先写入私有 Change 候选目录。
+      // 发布先用 mkdir 独占最终名称，再以 no-replace hard-link 复制，canonical current 最后成为
+      // 官方读取提交点；任何层级的竞态对象都不会被覆盖。
+      await ensureDocumentLocalePin(changeDir, requestedDocumentLocale)
+      if (fullRunMetadata !== undefined && (
+        fullRunMetadata.documentProfile !== undefined
+        || fullRunMetadata.documentGovernanceFingerprint !== undefined
+        || fullRunMetadata.workflowPlanFingerprint !== undefined
+      )) {
+        await ensureWorkflowGovernanceBinding(changeDir, fullRunMetadata)
+      }
+      if (fullRunMetadata?.workflowPlanSnapshot !== undefined) {
+        if (fullRunMetadata.workflowPlanFingerprint === undefined) {
+          throw new Error('init workflow plan snapshot 缺少 workflow plan fingerprint')
+        }
+        await ensureWorkflowPlanSnapshot(
+          changeDir,
+          fullRunMetadata.runId,
+          fullRunMetadata.workflowPlanSnapshot,
+        )
+      }
+      const revision = await publishInitialRunRevision(changeDir, state, ts)
+      try {
+        await atomicLinkPublish(
+          changeDir, '.pipeline.yaml.tmp', stateFilePath(changeDir), projectionContent(revision),
+        )
+      } catch {
+        // current 已经是提交点，不能把 projection 故障伪装成 init 未发生。官方读路径仍可立即使用；
+        // inspect/repair-projection 会把缺失 adapter 显式暴露并幂等修复。
+      }
+      await writeInitialChangeFiles(changeDir, opts.initialFiles)
+      await this.beforeInitialPublish?.(changeDir, finalChangeDir)
+      await publishInitialChange(publication)
+      published = true
+      return finalChangeDir
+    } finally {
+      if (!published) await discardInitialChangeCandidate(changeDir)
+      await releaseInitialChangePublication(publication)
     }
-    // 独占创建的原子性硬化（第 7/8/9 轮 codex review）：wx 只保证"创建时不覆盖已有文件"，不
-    // 保证内容整体原子可见——目标路径在 open() 成功的那一刻就已经可被并发 reader 看到，写入
-    // 过程中读到空文件/半截内容、或写到一半崩溃留下损坏 target 都是真实风险。发布用共享原语
-    // atomicLinkPublish（第 9 轮 codex review：此前这里与 transition-record-store.ts 各自
-    // 维护一份几乎相同的 tmp+link+unlink，其中一处的 try/finally 范围漏包了 writeFile 那一步
-    // 而另一处没漏，提炼成一份共享实现避免两处继续各自漂移，见该文件头部注释）：link() 目标
-    // 已存在时原子失败，与旧版 writeFile(wx) 撞已存在文件同属 EEXIST 错误分类
-    // （`.code === 'EEXIST'`），但不是同一种错误——syscall 分别是 open/link，path/message
-    // 也不同，全仓没有调用方按这些字段分支，故控制流零回归，但用户可见的报错文本会变化。
-    // G1 cutover：完整 revision + current 先提交，YAML 只在 canonical commit 之后投影。
-    // current 的独占发布是新 change 的唯一提交点；revision 已发布而 current 未发布时只是孤儿。
-    const revision = await publishInitialRunRevision(changeDir, state, ts)
-    try {
-      await atomicLinkPublish(
-        changeDir, '.pipeline.yaml.tmp', stateFilePath(changeDir), projectionContent(revision),
-      )
-    } catch {
-      // current 已经是提交点，不能把 projection 故障伪装成 init 未发生。官方读路径仍可立即使用；
-      // inspect/repair-projection 会把缺失 adapter 显式暴露并幂等修复。
-    }
-    return changeDir
   }
 
   async withLock<T>(changeDir: string, fn: () => Promise<T>): Promise<T> {

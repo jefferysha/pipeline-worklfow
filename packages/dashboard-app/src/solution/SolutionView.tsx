@@ -84,6 +84,9 @@ export function SolutionView(): JSX.Element {
               </a>
             </Button>
           </div>
+          <p className="mt-4 max-w-2xl text-sm leading-6 text-muted-foreground">
+            {t('solution.document_language_note')}
+          </p>
         </div>
         <div className="min-w-0 w-full max-w-full self-end rounded-2xl border border-code-border bg-code-bg p-5">
           <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-text">

@@ -29,13 +29,13 @@ export function ProgressToolbar({
       <div className="mb-8 flex flex-wrap items-end justify-between gap-4" data-anim="prg-chrome" data-testid="prg-hero">
         <div>
           <div className="flex flex-wrap items-center gap-2.5">
-            <h1 className="text-[30px] font-bold leading-none tracking-[-0.025em] text-text">进度</h1>
+            <h1 className="text-[30px] font-bold leading-none tracking-[-0.025em] text-text">{t('progress.title')}</h1>
             <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-1 text-[11px] font-medium text-text-3">
               <span className="h-1.5 w-1.5 rounded-full bg-green" aria-hidden="true" />
               {t('progress.realtime_sync')}
             </span>
           </div>
-          <p className="mt-2 text-[13px] leading-5 text-text-3">沿工作流查看每个任务所处阶段，需要处理的事项会优先显示</p>
+          <p className="mt-2 text-[13px] leading-5 text-text-3">{t('progress.subtitle')}</p>
         </div>
         <button
           type="button"
@@ -48,32 +48,34 @@ export function ProgressToolbar({
       </div>
       {rowCount > 0 && (
         <div className="mb-5 flex flex-wrap items-center justify-between gap-4" data-anim="prg-chrome" data-testid="prg-filterbar">
-          <div
-            className="inline-flex items-center gap-1 rounded-xl bg-fill p-1"
-            role="tablist"
-            aria-label={t('progress.tabs_label')}
-            data-testid="prg9t-tabs"
-          >
-            {DECK_TABS.map((tab) => (
-              <button
-                key={tab}
-                type="button"
-                role="tab"
-                className="group flex min-h-9 items-center gap-1.5 rounded-lg px-3 text-[13px] font-semibold text-text-3 transition-colors hover:text-text aria-selected:bg-card aria-selected:text-text aria-selected:shadow-sm"
-                aria-selected={deckTab === tab}
-                data-testid={`prg9t-tab-${tab}`}
-                onClick={() => onDeckTab(tab)}
-              >
-                {t(`progress.tab_${tab}`)}
-                <span className="inline-flex min-w-[18px] items-center justify-center rounded-full bg-card px-1.5 font-mono text-[11px] leading-[18px] text-text-3 group-aria-selected:bg-(--accent) group-aria-selected:text-white" data-testid={`prg9t-n-${tab}`}>
-                  {deckCounts[tab]}
-                </span>
-              </button>
-            ))}
+          <div className="min-w-0 max-w-full overflow-x-auto pb-1 [scrollbar-width:thin]">
+            <div
+              className="inline-flex w-max items-center gap-1 rounded-xl bg-fill p-1"
+              role="tablist"
+              aria-label={t('progress.tabs_label')}
+              data-testid="prg9t-tabs"
+            >
+              {DECK_TABS.map((tab) => (
+                <button
+                  key={tab}
+                  type="button"
+                  role="tab"
+                  className="group flex min-h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-[13px] font-semibold text-text-3 transition-colors hover:text-text aria-selected:bg-card aria-selected:text-text aria-selected:shadow-sm"
+                  aria-selected={deckTab === tab}
+                  data-testid={`prg9t-tab-${tab}`}
+                  onClick={() => onDeckTab(tab)}
+                >
+                  {t(`progress.tab_${tab}`)}
+                  <span className="inline-flex min-w-[18px] items-center justify-center rounded-full bg-card px-1.5 font-mono text-[11px] leading-[18px] text-text-3 group-aria-selected:bg-(--accent) group-aria-selected:text-white" data-testid={`prg9t-n-${tab}`}>
+                    {deckCounts[tab]}
+                  </span>
+                </button>
+              ))}
+            </div>
           </div>
           {workflows.length > 0 && (
             <label className="relative max-[760px]:basis-full">
-              <span className="sr-only">按工作流筛选</span>
+              <span className="sr-only">{t('progress.workflow_filter')}</span>
               <select
                 className="h-10 min-w-[180px] appearance-none rounded-xl border border-border bg-card py-2 pr-9 pl-3 text-[13px] font-semibold text-text outline-none transition-shadow focus:border-(--accent) focus:ring-3 focus:ring-accent-t max-[760px]:w-full"
                 data-testid="prg-workflow-select"

@@ -11,6 +11,7 @@
  */
 import {
   evaluateDocumentEvidence,
+  evaluateSpecMigrationEvidence,
   evaluateWorkflowIrStepGuards,
   isDocumentContractPhase,
   isDocumentPolicyStep,
@@ -62,6 +63,9 @@ export async function cmdCheck(deps: CliDeps, name: string): Promise<number> {
   // state.track 已成 orphan 都 fail-loud，不回退按 track id 的旧静态矩阵。
   const coverageProfile = plan.capabilities.track.coverageProfile
   const result = deps.flow.guardCheck(state, { ...deps.guardCtx?.(name), coverageProfile })
+  const migration = str(state.fields.phase) === 'ship'
+    ? await evaluateSpecMigrationEvidence(deps.cwd, dir, name)
+    : undefined
   let documents: DocumentEvidenceReport | undefined
   try {
     documents = await governedDocumentEvidence(deps, dir, state, plan.capabilities.documents.policy)
@@ -73,7 +77,7 @@ export async function cmdCheck(deps: CliDeps, name: string): Promise<number> {
   for (const warning of result.warnings ?? []) {
     deps.io.out(`  [WARN] ${warning}`)
   }
-  if (result.pass && (documents?.pass ?? true)) {
+  if (result.pass && (documents?.pass ?? true) && migration?.kind !== 'invalid') {
     deps.io.out('  [PASS] 所有检查通过')
     return 0
   }
@@ -83,7 +87,12 @@ export async function cmdCheck(deps: CliDeps, name: string): Promise<number> {
   for (const blocker of documents?.blockers ?? []) {
     deps.io.out(`  [FAIL] document: ${blocker}`)
   }
-  const total = result.failures.length + (documents?.blockers.length ?? 0)
+  if (migration?.kind === 'invalid') {
+    deps.io.out(`  [FAIL] migration: ${migration.reason}`)
+  }
+  const total = result.failures.length
+    + (documents?.blockers.length ?? 0)
+    + (migration?.kind === 'invalid' ? 1 : 0)
   deps.io.out(`  [FAIL] 共 ${total} 项未通过`)
   return 2
 }
@@ -141,7 +150,12 @@ async function checkGraphWorkflow(
           return fingerprint ? fingerprint(name) : Promise.reject(new Error('workspace fingerprint capability unavailable'))
         })
       : undefined,
+    specMigrationStatus: () => evaluateSpecMigrationEvidence(deps.cwd, dir, name),
   })
+  const migration = str(state.fields.phase) === 'ship'
+    && plan.capabilities.documents.governed
+    ? await evaluateSpecMigrationEvidence(deps.cwd, dir, name)
+    : undefined
   let documents: DocumentEvidenceReport | undefined
   try {
     documents = await governedDocumentEvidence(deps, dir, state, plan.capabilities.documents.policy)
@@ -150,7 +164,7 @@ async function checkGraphWorkflow(
     return 1
   }
   deps.io.out(`[CHECK] ${name} (phase=${display(state.fields.phase)})`)
-  if (result.pass && (documents?.pass ?? true)) {
+  if (result.pass && (documents?.pass ?? true) && migration?.kind !== 'invalid') {
     deps.io.out('  [PASS] 所有检查通过')
     return 0
   }
@@ -160,7 +174,12 @@ async function checkGraphWorkflow(
   for (const blocker of documents?.blockers ?? []) {
     deps.io.out(`  [FAIL] document: ${blocker}`)
   }
-  const total = result.failures.length + (documents?.blockers.length ?? 0)
+  if (migration?.kind === 'invalid') {
+    deps.io.out(`  [FAIL] migration: ${migration.reason}`)
+  }
+  const total = result.failures.length
+    + (documents?.blockers.length ?? 0)
+    + (migration?.kind === 'invalid' ? 1 : 0)
   deps.io.out(`  [FAIL] 共 ${total} 项未通过`)
   return 2
 }

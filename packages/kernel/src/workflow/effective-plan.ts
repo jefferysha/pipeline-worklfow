@@ -60,7 +60,23 @@ export interface EffectiveWorkflowPlan {
   }
   readonly projection: {
     readonly steps: readonly { readonly id: string; readonly label: string }[]
+    readonly stepLabelSource: 'localized-builtin' | 'workflow-defined'
   }
+}
+
+/**
+ * Immutable, data-only execution snapshot bound to one WorkflowRun.
+ *
+ * A fingerprint alone detects drift but cannot keep an in-flight run executable after a plugin
+ * upgrade. Persisting the compiled IR lets old runs continue with their original semantics while
+ * newly initialized runs adopt the new workflow definition.
+ */
+export interface WorkflowPlanSnapshot {
+  readonly version: 1
+  readonly workflowId: string
+  readonly executionModel: EffectiveWorkflowPlan['executionModel']
+  readonly workflow: WorkflowIR
+  readonly workflowFingerprint: string
 }
 
 export interface PersistedDocumentGovernanceBinding {
@@ -137,6 +153,7 @@ function planFromIr(
   const skillPolicy = executionModel === 'phase-manifest' ? 'manifest-overlay' : 'step-declared'
   const reviewSteps = workflow.steps.filter((step) => step.gate === 'review').map((step) => step.id)
   const projectionSteps = workflow.steps.map((step) => ({ id: step.id, label: step.label }))
+  const stepLabelSource = executionModel === 'phase-manifest' ? 'localized-builtin' : 'workflow-defined'
   const workflowFingerprint = sha256Hex(JSON.stringify({
     schema: 'effective-workflow-plan-v1',
     id,
@@ -197,8 +214,41 @@ function planFromIr(
     },
     projection: {
       steps: projectionSteps,
+      stepLabelSource,
     },
   })
+}
+
+export function workflowPlanSnapshot(plan: EffectiveWorkflowPlan): WorkflowPlanSnapshot {
+  return freeze({
+    version: 1,
+    workflowId: plan.id,
+    executionModel: plan.executionModel,
+    workflow: structuredClone(plan.workflow),
+    workflowFingerprint: plan.workflowFingerprint,
+  })
+}
+
+export function effectiveWorkflowPlanFromSnapshot(
+  snapshot: WorkflowPlanSnapshot,
+  track?: TrackDefinition,
+): EffectiveWorkflowPlan {
+  if (snapshot.version !== 1
+    || snapshot.workflowId === ''
+    || (snapshot.executionModel !== 'phase-manifest' && snapshot.executionModel !== 'step-graph')
+    || !/^[0-9a-f]{64}$/.test(snapshot.workflowFingerprint)) {
+    throw new DocumentGovernanceBindingError('workflow plan snapshot 形状非法')
+  }
+  const plan = planFromIr(
+    snapshot.workflowId,
+    snapshot.executionModel,
+    structuredClone(snapshot.workflow),
+    track,
+  )
+  if (plan.workflowFingerprint !== snapshot.workflowFingerprint) {
+    throw new DocumentGovernanceBindingError('workflow plan snapshot 内容与 fingerprint 不一致')
+  }
+  return plan
 }
 
 /** Compile a built-in or project Workflow into the single runtime capability model. */
@@ -208,7 +258,7 @@ export function compileEffectiveWorkflowPlan(
   track?: TrackDefinition,
 ): EffectiveWorkflowPlan {
   if (id === 'default') {
-    const definition = parseWorkflow(DEFAULT_WORKFLOW_SOURCE)
+    const definition = provided ?? parseWorkflow(DEFAULT_WORKFLOW_SOURCE)
     assertValid(definition, 'default')
     return planFromIr(id, 'phase-manifest', compileDefaultWorkflow(definition), track)
   }
@@ -272,8 +322,19 @@ export function resolveBoundEffectiveWorkflowPlan(
   binding: PersistedDocumentGovernanceBinding,
   loadCompiled: (name: string) => WorkflowIR | null,
   track?: TrackDefinition,
+  snapshot?: WorkflowPlanSnapshot,
 ): EffectiveWorkflowPlan | null {
-  const plan = resolveEffectiveWorkflowPlan(id, loadCompiled, track)
+  let plan: EffectiveWorkflowPlan | null
+  if (snapshot !== undefined) {
+    if (snapshot.workflowId !== id) {
+      throw new DocumentGovernanceBindingError(
+        `workflow plan snapshot identity 不一致：已绑定 '${snapshot.workflowId}'，当前 '${id}'`,
+      )
+    }
+    plan = effectiveWorkflowPlanFromSnapshot(snapshot, track)
+  } else {
+    plan = resolveEffectiveWorkflowPlan(id, loadCompiled, track)
+  }
   const boundProfile = binding.documentProfile
   const boundFingerprint = binding.documentGovernanceFingerprint
   const boundWorkflowFingerprint = binding.workflowPlanFingerprint

@@ -1,8 +1,10 @@
 import { useRef, useState, type CSSProperties } from 'react'
-import { ArrowUpRight, Check, Coffee, LayoutGrid, MoveHorizontal, SlidersHorizontal, Terminal } from 'lucide-react'
+import { ArrowUpRight, Coffee, LayoutGrid, MoveHorizontal, SlidersHorizontal, Terminal } from 'lucide-react'
 import gsap from 'gsap'
 import { useGSAP } from '@gsap/react'
 import { useT } from '../i18n'
+import { useCurrentStagePosition } from './useCurrentStagePosition'
+import { StageNode, type StageState } from './WorkflowCanvasStage'
 
 gsap.registerPlugin(useGSAP)
 
@@ -59,26 +61,24 @@ export interface WorkflowCanvasProps {
   onOpen: (key: string, trigger: HTMLElement | null) => void
 }
 
-type StageState = 'done' | 'current' | 'pending'
-
 interface StateMeta {
-  label: string
+  labelKey: string
   chip: string
   accent: string
   attention: boolean
 }
 
 const STATE_META: Record<string, StateMeta> = {
-  running: { label: '运行中', chip: 'bg-green-t text-green-d', accent: 'bg-green', attention: false },
-  failed: { label: '失败', chip: 'bg-red-t text-red-d', accent: 'bg-red', attention: true },
-  queued: { label: '等待中', chip: 'bg-accent-t text-accent-d', accent: 'bg-(--accent)', attention: true },
-  gatejudge: { label: '待判断', chip: 'bg-amb-t text-amb-d', accent: 'bg-amb-d', attention: true },
-  gateok: { label: '可放行', chip: 'bg-green-t text-green-d', accent: 'bg-green', attention: false },
-  cancelled: { label: '已取消', chip: 'bg-red-t text-red-d', accent: 'bg-red', attention: true },
-  agent: { label: '待推进', chip: 'bg-fill text-text-3', accent: 'bg-border-2', attention: false },
+  running: { labelKey: 'state_running', chip: 'bg-green-t text-green-d', accent: 'bg-green', attention: false },
+  failed: { labelKey: 'state_failed', chip: 'bg-red-t text-red-d', accent: 'bg-red', attention: true },
+  queued: { labelKey: 'state_waiting', chip: 'bg-accent-t text-accent-d', accent: 'bg-(--accent)', attention: true },
+  gatejudge: { labelKey: 'state_decision', chip: 'bg-amb-t text-amb-d', accent: 'bg-amb-d', attention: true },
+  gateok: { labelKey: 'state_approvable', chip: 'bg-green-t text-green-d', accent: 'bg-green', attention: false },
+  cancelled: { labelKey: 'state_cancelled', chip: 'bg-red-t text-red-d', accent: 'bg-red', attention: true },
+  agent: { labelKey: 'state_pending', chip: 'bg-fill text-text-3', accent: 'bg-border-2', attention: false },
 }
 
-const FALLBACK_META: StateMeta = { label: '待推进', chip: 'bg-fill text-text-3', accent: 'bg-border-2', attention: false }
+const FALLBACK_META: StateMeta = { labelKey: 'state_pending', chip: 'bg-fill text-text-3', accent: 'bg-border-2', attention: false }
 
 function gridStyleOf(n: number): CSSProperties {
   return { gridTemplateColumns: `repeat(${Math.max(n, 1)}, minmax(0, 1fr))` }
@@ -86,37 +86,6 @@ function gridStyleOf(n: number): CSSProperties {
 
 function stateMetaOf(change: CanvasChange): StateMeta {
   return STATE_META[change.state] ?? FALLBACK_META
-}
-
-function stageStateLabel(state: StageState): string {
-  if (state === 'done') return '已完成'
-  if (state === 'current') return '进行中'
-  return '待处理'
-}
-
-function StageNode({ state }: { state: StageState }): JSX.Element {
-  if (state === 'done') {
-    return (
-      <span className="relative z-10 flex h-8 w-8 items-center justify-center rounded-full bg-(--accent) text-white shadow-sm">
-        <Check className="h-4 w-4" strokeWidth={3} aria-hidden="true" />
-      </span>
-    )
-  }
-  if (state === 'current') {
-    return (
-      <span className="relative z-10 flex h-8 w-8 items-center justify-center">
-        <span className="absolute h-10 w-10 rounded-full bg-amb-t" aria-hidden="true" />
-        <span className="relative flex h-8 w-8 items-center justify-center rounded-full border-2 border-amb-b bg-card">
-          <span className="h-3 w-3 rounded-full bg-amb-d" aria-hidden="true" />
-        </span>
-      </span>
-    )
-  }
-  return (
-    <span className="relative z-10 flex h-8 w-8 items-center justify-center rounded-full border-2 border-border-2 bg-card">
-      <span className="h-2 w-2 rounded-full bg-border-2" aria-hidden="true" />
-    </span>
-  )
 }
 
 function MetaRow({ label, value }: { label: string; value: string }): JSX.Element {
@@ -135,6 +104,9 @@ export function WorkflowCanvas({ groups, onOpen }: WorkflowCanvasProps): JSX.Ele
   const shown = groups.filter((group) => group.changes.length > 0)
   const animKey = shown
     .map((group) => `${group.key}#${group.steps.map((step) => step.id).join(',')}#${group.changes.map((change) => change.key).join(',')}`)
+    .join('|')
+  const currentPositionKey = shown
+    .map((group) => `${group.key}#${group.steps.find((step) => step.state === 'current')?.id ?? ''}`)
     .join('|')
 
   useGSAP(
@@ -172,6 +144,8 @@ export function WorkflowCanvas({ groups, onOpen }: WorkflowCanvasProps): JSX.Ele
     { scope: rootRef, dependencies: [animKey], revertOnUpdate: true },
   )
 
+  useCurrentStagePosition(rootRef, currentPositionKey)
+
   if (shown.length === 0) return null
 
   return (
@@ -207,7 +181,7 @@ export function WorkflowCanvas({ groups, onOpen }: WorkflowCanvasProps): JSX.Ele
                 <header className="mb-6 flex flex-wrap items-center justify-between gap-4">
                   <div className="flex min-w-0 items-center gap-3">
                     <span className="max-w-full break-words text-[18px] font-black tracking-[-0.015em] text-text" data-testid={`prg-cv-project-${group.projName}-${group.workflow}`} title={group.projName}>
-                      项目 · {group.projName}
+                      {t('progress.canvas_project')} · {group.projName}
                     </span>
                     <span className="inline-flex items-center gap-2 rounded-lg border border-border bg-fill px-3 py-1.5 font-mono text-[13px] font-semibold text-text">
                       <LayoutGrid className="h-3.5 w-3.5 text-text-3" aria-hidden="true" />
@@ -217,11 +191,16 @@ export function WorkflowCanvas({ groups, onOpen }: WorkflowCanvasProps): JSX.Ele
                   </div>
                   <span className="inline-flex items-center gap-1.5 font-mono text-[10px] tracking-[.16em] text-text-3 uppercase">
                     <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
-                    流程
+                    {t('progress.canvas_process')}
                   </span>
                 </header>
 
-                <div data-testid={`prg-cv-scroll-${group.projName}-${group.workflow}`} className="overflow-x-auto pb-2 [scrollbar-width:thin]">
+                <div
+                  data-testid={`prg-cv-scroll-${group.projName}-${group.workflow}`}
+                  data-canvas-scroll
+                  data-current-position-key={`${group.key}#${group.steps.find((step) => step.state === 'current')?.id ?? ''}`}
+                  className="overflow-x-auto pb-2 [scrollbar-width:thin]"
+                >
                   <div
                     data-testid={`prg-cv-track-${group.projName}-${group.workflow}`}
                     className="relative"
@@ -243,7 +222,9 @@ export function WorkflowCanvas({ groups, onOpen }: WorkflowCanvasProps): JSX.Ele
                     <div className="relative grid" style={gridStyleOf(n)}>
                       {group.steps.map((step) => {
                         const state = step.state
-                        const gateLabel = step.gate ? t('progress.canvas_gate', { gate: step.gate }) : stageStateLabel(state)
+                        const gateLabel = step.gate
+                          ? t('progress.canvas_gate', { gate: step.gate })
+                          : t(`progress.stage_${state}`)
                         return (
                           <span
                             key={step.id}
@@ -284,7 +265,7 @@ export function WorkflowCanvas({ groups, onOpen }: WorkflowCanvasProps): JSX.Ele
                             </div>
                             {here.length > 0 ? (
                               <span className={`inline-flex min-w-5 items-center justify-center rounded-full px-1.5 text-[10px] font-semibold ${step.state === 'current' ? 'bg-amb-t text-amb-d' : 'bg-fill text-text-3'}`} title={t('progress.canvas_node_count', { n: here.length })}>
-                                {here.length} 项
+                                {t('progress.canvas_items', { n: here.length })}
                               </span>
                             ) : (
                               <span className="h-[18px]" aria-hidden="true" />
@@ -311,7 +292,7 @@ export function WorkflowCanvas({ groups, onOpen }: WorkflowCanvasProps): JSX.Ele
                                     <span className="flex items-center justify-between gap-2">
                                       <span className={`inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[9px] font-bold tracking-[.08em] ${meta.chip}`}>
                                         <span className={`h-1.5 w-1.5 rounded-full ${DOT_TONE_CLS[change.tone]}`} data-pulse={change.running || undefined} aria-hidden="true" />
-                                        {meta.label}
+                                        {t(`progress.${meta.labelKey}`)}
                                       </span>
                                       <span className="flex items-center gap-2">
                                         {change.sandbox && (
@@ -329,23 +310,23 @@ export function WorkflowCanvas({ groups, onOpen }: WorkflowCanvasProps): JSX.Ele
                                     <span className="mt-1 text-[11px] text-text-3">{change.statusLabel}</span>
 
                                     <span className="mt-4 flex flex-col gap-2 border-t border-dashed border-border pt-3">
-                                      <MetaRow label="阶段" value={`${String(i + 1).padStart(2, '0')} · ${step.label}`} />
-                                      <MetaRow label="工作流" value={group.workflow} />
+                                      <MetaRow label={t('progress.meta_stage')} value={`${String(i + 1).padStart(2, '0')} · ${step.label}`} />
+                                      <MetaRow label={t('progress.meta_workflow')} value={group.workflow} />
                                     </span>
 
                                     <span className="mt-auto flex items-center justify-between gap-3 pt-4">
                                       <span className={`inline-flex items-center gap-1.5 text-[10px] font-medium ${meta.attention ? 'text-amb-d' : 'text-text-3'}`}>
                                         {meta.attention && <span className="h-1.5 w-1.5 rounded-full bg-amb-d" aria-hidden="true" />}
                                         {meta.attention
-                                          ? '需要处理'
+                                          ? t('progress.needs_attention')
                                           : change.executionSource === 'automation'
-                                            ? '自动运行中'
+                                            ? t('progress.automation_running')
                                             : change.executionSource === 'terminal'
-                                              ? '终端运行中'
+                                              ? t('progress.terminal_running')
                                               : change.statusLabel}
                                       </span>
                                       <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-text-3 group-hover:text-(--accent)">
-                                        打开 <ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" />
+                                        {t('progress.open')} <ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" />
                                       </span>
                                     </span>
                                   </button>

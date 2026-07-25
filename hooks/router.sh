@@ -87,6 +87,7 @@ PROOT="$(pipeline_project_root "$CWD" bootstrap changes || true)"
 [ -n "$PROOT" ] || exit 0
 
 CHANGE_NAME="" CHANGE_PHASE="" CHANGE_TRACK="" CHANGE_WORKFLOW=""
+SESSION_CHANGE_NAME="" SESSION_CHANGE_PHASE="" SESSION_CHANGE_TRACK="" SESSION_CHANGE_WORKFLOW=""
 SOLE_CHANGE_NAME="" SOLE_CHANGE_PHASE="" SOLE_CHANGE_TRACK="" SOLE_CHANGE_WORKFLOW=""
 ACTIVE_CHANGE_COUNT=0
 ACTIVE_CHANGE_NAMES=() ACTIVE_CHANGE_PHASES=() ACTIVE_CHANGE_TRACKS=() ACTIVE_CHANGE_WORKFLOWS=()
@@ -166,6 +167,24 @@ DISPATCH_INTENT="new"
 if [ -r "$INTENT_HELPER" ]; then
   # shellcheck source=prompt-intent.sh
   . "$INTENT_HELPER"
+  SESSION_BINDING_HELPER="$(dirname "${BASH_SOURCE[0]:-$0}")/host-session-binding.sh"
+  if [ -n "$HOST_SESSION_ID" ] && [ -r "$SESSION_BINDING_HELPER" ]; then
+    # shellcheck source=host-session-binding.sh
+    . "$SESSION_BINDING_HELPER"
+    SESSION_CHANGE_NAME="$(pipeline_host_session_change_name "$PROOT" "$HOST_SESSION_ID" || true)"
+    if [ -n "$SESSION_CHANGE_NAME" ]; then
+      _change_index=0
+      while [ "$_change_index" -lt "${#ACTIVE_CHANGE_NAMES[@]}" ]; do
+        if [ "${ACTIVE_CHANGE_NAMES[$_change_index]}" = "$SESSION_CHANGE_NAME" ]; then
+          SESSION_CHANGE_PHASE="${ACTIVE_CHANGE_PHASES[$_change_index]}"
+          SESSION_CHANGE_TRACK="${ACTIVE_CHANGE_TRACKS[$_change_index]}"
+          SESSION_CHANGE_WORKFLOW="${ACTIVE_CHANGE_WORKFLOWS[$_change_index]}"
+          break
+        fi
+        _change_index=$(( _change_index + 1 ))
+      done
+    fi
+  fi
   # The root skill already owns a `track / workflow` selection response.  Do not overlay a stale
   # repository candidate just because the answer also says “继续/上一步”.
   pipeline_prompt_is_workflow_selection "$PROMPT" && exit 0
@@ -197,9 +216,19 @@ if [ -r "$INTENT_HELPER" ]; then
     CHANGE_PHASE=""
     CHANGE_TRACK=""
     CHANGE_WORKFLOW=""
-  elif [ -n "$CHANGE_NAME" ] && pipeline_prompt_requests_resume "$PROMPT" "$CHANGE_NAME"; then
+  elif [ -n "$SESSION_CHANGE_NAME" ] && pipeline_prompt_requests_resume "$PROMPT" "$SESSION_CHANGE_NAME"; then
+    # A host session binding has conversation identity and therefore wins over the repo-wide
+    # pointer.  This prevents another conversation's `session activate` from hijacking “继续执行”.
+    CHANGE_NAME="$SESSION_CHANGE_NAME"
+    CHANGE_PHASE="$SESSION_CHANGE_PHASE"
+    CHANGE_TRACK="$SESSION_CHANGE_TRACK"
+    CHANGE_WORKFLOW="$SESSION_CHANGE_WORKFLOW"
     DISPATCH_INTENT="resume"
-  elif [ "$ACTIVE_CHANGE_COUNT" -gt 1 ] && pipeline_prompt_requests_resume "$PROMPT" ""; then
+  elif [ -z "$HOST_SESSION_ID" ] && [ -n "$CHANGE_NAME" ] \
+    && pipeline_prompt_requests_resume "$PROMPT" "$CHANGE_NAME"; then
+    DISPATCH_INTENT="resume"
+  elif [ -z "$HOST_SESSION_ID" ] && [ "$ACTIVE_CHANGE_COUNT" -gt 1 ] \
+    && pipeline_prompt_requests_resume "$PROMPT" ""; then
     DISPATCH_INTENT="select"
     CHANGE_NAME=""
     CHANGE_PHASE=""

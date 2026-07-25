@@ -13,6 +13,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { isAbsolute, join } from 'node:path'
 import { compressDocument, ratioOf, renderHandoffSummary, statsFor } from './compress.js'
 import type { CompressStats, CompressedDoc } from './types.js'
+import type { DocumentLocale } from '../types.js'
 
 /** 文档读取注入面（缺失 → undefined，静默跳过）。 */
 export interface HandoffFs {
@@ -94,6 +95,8 @@ export interface HandoffInput {
   changeDirRel: string
   /** .pipeline.yaml 字段（读 design_doc / plan / verification_report 值） */
   fields: Record<string, string | string[]>
+  /** Change 固定的文档语言；旧 Change 缺省中文。 */
+  documentLocale?: DocumentLocale
   /** 覆写候选文档清单（缺省 phaseHandoffDocs(phase)） */
   specs?: HandoffDocSpec[]
 }
@@ -110,6 +113,7 @@ export interface HandoffDocResult {
 export interface HandoffResult {
   name: string
   phase: string
+  documentLocale: DocumentLocale
   docs: HandoffDocResult[]
   /** 跨文档聚合压缩率 */
   aggregate: CompressStats
@@ -161,6 +165,7 @@ function emptyAggregate(): CompressStats {
  */
 export function buildHandoff(input: HandoffInput, fs: HandoffFs): HandoffResult {
   const specs = input.specs ?? phaseHandoffDocs(input.phase)
+  const documentLocale = input.documentLocale ?? 'zh-CN'
   const docs: HandoffDocResult[] = []
   const seen = new Set<string>()
 
@@ -170,15 +175,15 @@ export function buildHandoff(input: HandoffInput, fs: HandoffFs): HandoffResult 
     seen.add(r.abs)
     const text = fs.readText(r.abs)
     if (text === undefined || text.trim() === '') continue
-    const doc = compressDocument(text)
-    const summary = renderHandoffSummary(doc, `${input.name}/${spec.label}`)
+    const doc = compressDocument(text, { documentLocale })
+    const summary = renderHandoffSummary(doc, `${input.name}/${spec.label}`, documentLocale)
     // 摘要带 label（比 doc 内部无 label 渲染略长）→ 用带 label 的摘要重算压缩字符，压缩率不失真
     doc.stats = statsFor(text, doc.stats.originalLines, summary, doc)
     docs.push({ label: spec.label, path: r.display, doc, summary })
   }
 
   if (docs.length === 0) {
-    return { name: input.name, phase: input.phase, docs, aggregate: emptyAggregate() }
+    return { name: input.name, phase: input.phase, documentLocale, docs, aggregate: emptyAggregate() }
   }
 
   const sum = (pick: (s: CompressStats) => number): number => docs.reduce((a, d) => a + pick(d.doc.stats), 0)
@@ -193,5 +198,5 @@ export function buildHandoff(input: HandoffInput, fs: HandoffFs): HandoffResult 
     droppedLines: sum((s) => s.droppedLines),
     ratio: ratioOf(originalChars, compressedChars),
   }
-  return { name: input.name, phase: input.phase, docs, aggregate }
+  return { name: input.name, phase: input.phase, documentLocale, docs, aggregate }
 }

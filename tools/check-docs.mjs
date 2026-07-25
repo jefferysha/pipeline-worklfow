@@ -23,12 +23,14 @@ const CANONICAL_USAGE_FILES = [
   'updates-recovery-and-uninstall.md',
   'troubleshooting.md',
   'security-model.md',
+  'release-notes.md',
   'contributor-development.md',
   'cli-reference.md',
 ]
 
 const ROOT_DOCUMENTS = [
   'README.md',
+  'README.en.md',
   'README.zh-CN.md',
   'CONTRIBUTING.md',
   'CODE_OF_CONDUCT.md',
@@ -111,6 +113,33 @@ function withoutQueryOrFragment(target) {
   return ends.length === 0 ? target : target.slice(0, Math.min(...ends))
 }
 
+function decodedFragment(target) {
+  const index = target.indexOf('#')
+  if (index < 0) return ''
+  try {
+    return decodeURIComponent(target.slice(index + 1))
+  } catch {
+    return ''
+  }
+}
+
+function markdownHeadingSlugs(markdown) {
+  const counts = new Map()
+  const slugs = new Set()
+  for (const match of blankFencedCode(markdown).matchAll(/^#{1,6}\s+(.+?)\s*#*\s*$/gmu)) {
+    const base = match[1]
+      .replace(/`([^`]+)`/gu, '$1')
+      .replace(/[^\p{Letter}\p{Number}\s_-]/gu, '')
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/gu, '-')
+    const count = counts.get(base) ?? 0
+    counts.set(base, count + 1)
+    slugs.add(count === 0 ? base : `${base}-${count}`)
+  }
+  return slugs
+}
+
 function isRemoteOrRuntimeTarget(target) {
   return (
     target === ''
@@ -151,6 +180,14 @@ function checkLink(root, sourceRelative, link, failures) {
   const candidateReal = realpathSync(candidate)
   if (!isWithin(rootReal, candidateReal)) {
     failures.push(`${sourceRelative}:${link.line}: Markdown target resolves outside repository: ${link.target}`)
+    return
+  }
+  const fragment = decodedFragment(link.target)
+  if (fragment !== '' && lstatSync(candidateReal).isFile() && candidateReal.endsWith('.md')) {
+    const headings = markdownHeadingSlugs(readFileSync(candidateReal, 'utf8'))
+    if (!headings.has(fragment.toLowerCase())) {
+      failures.push(`${sourceRelative}:${link.line}: missing Markdown fragment #${fragment} in ${slash(relative(rootReal, candidateReal))}`)
+    }
   }
 }
 
@@ -218,7 +255,12 @@ function checkSourceBoundedClaims(root, contents, failures) {
     if (!Number.isInteger(major)) {
       failures.push('package.json: engines.node must expose a numeric minimum for documentation')
     } else {
-      for (const document of ['README.md', 'README.zh-CN.md', 'docs/usage/installation.md']) {
+      for (const document of [
+        'README.md',
+        'README.en.md',
+        'docs/usage/installation.md',
+        'docs/usage/zh-CN/installation.md',
+      ]) {
         const text = contents.get(document)
         if (text !== undefined && !hasNodeMinimum(text, major)) {
           failures.push(`${document}: missing Node.js ${major}+ claim from package.json engines.node`)
@@ -232,7 +274,12 @@ function checkSourceBoundedClaims(root, contents, failures) {
   if (port === undefined) {
     failures.push('packages/server/src/port.ts: cannot find exported DEFAULT_DASHBOARD_PORT')
   } else {
-    for (const document of ['README.md', 'README.zh-CN.md', 'docs/usage/dashboard-and-local-api.md']) {
+    for (const document of [
+      'README.md',
+      'README.en.md',
+      'docs/usage/dashboard-and-local-api.md',
+      'docs/usage/zh-CN/dashboard-and-local-api.md',
+    ]) {
       const text = contents.get(document)
       if (text !== undefined && !new RegExp(`\\b${port}\\b`, 'u').test(text)) {
         failures.push(`${document}: missing production Dashboard port ${port} from packages/server/src/port.ts`)
@@ -267,11 +314,15 @@ function checkSourceBoundedClaims(root, contents, failures) {
     }
     const commandDocuments = new Map([
       ['README.md', ['setup', 'dashboard']],
-      ['README.zh-CN.md', ['setup', 'dashboard']],
+      ['README.en.md', ['setup', 'dashboard']],
       ['docs/usage/installation.md', ['setup']],
       ['docs/usage/updates-recovery-and-uninstall.md', ['update', 'runtime', 'runtime-repair']],
       ['docs/usage/dashboard-and-local-api.md', ['dashboard']],
       ['docs/usage/cli-reference.md', ['setup', 'update', 'runtime', 'runtime-repair', 'dashboard']],
+      ['docs/usage/zh-CN/installation.md', ['setup']],
+      ['docs/usage/zh-CN/updates-recovery-and-uninstall.md', ['update', 'runtime', 'runtime-repair']],
+      ['docs/usage/zh-CN/dashboard-and-local-api.md', ['dashboard']],
+      ['docs/usage/zh-CN/cli-reference.md', ['setup', 'update', 'runtime', 'runtime-repair', 'dashboard']],
     ])
     for (const [document, keys] of commandDocuments) {
       const text = contents.get(document)
@@ -296,10 +347,11 @@ function checkSourceBoundedClaims(root, contents, failures) {
   if (defaultSteps.length === 0) {
     failures.push('templates/workflows/default.yaml: cannot extract top-level workflow steps')
   } else {
-    const document = 'docs/usage/default-workflow.md'
-    const text = contents.get(document)
-    if (text !== undefined && !includesOrderedTokens(text, defaultSteps)) {
-      failures.push(`${document}: workflow steps must follow source order: ${defaultSteps.join(' -> ')}`)
+    for (const document of ['docs/usage/default-workflow.md', 'docs/usage/zh-CN/default-workflow.md']) {
+      const text = contents.get(document)
+      if (text !== undefined && !includesOrderedTokens(text, defaultSteps)) {
+        failures.push(`${document}: workflow steps must follow source order: ${defaultSteps.join(' -> ')}`)
+      }
     }
   }
 
@@ -307,17 +359,18 @@ function checkSourceBoundedClaims(root, contents, failures) {
   if (simpleSteps.length === 0) {
     failures.push('templates/workflows/simple.yaml: cannot extract top-level workflow steps')
   } else {
-    const document = 'docs/usage/routing-and-workflows.md'
-    const text = contents.get(document)
-    if (text !== undefined) {
-      for (const step of simpleSteps) {
-        if (!new RegExp(`\\b${step}\\b`, 'iu').test(text)) {
-          failures.push(`${document}: simple workflow is missing source step ${step}`)
+    for (const document of ['docs/usage/routing-and-workflows.md', 'docs/usage/zh-CN/routing-and-workflows.md']) {
+      const text = contents.get(document)
+      if (text !== undefined) {
+        for (const step of simpleSteps) {
+          if (!new RegExp(`\\b${step}\\b`, 'iu').test(text)) {
+            failures.push(`${document}: simple workflow is missing source step ${step}`)
+          }
         }
-      }
-      const mainPath = simpleSteps.filter((step) => step !== 'escalated')
-      if (!includesOrderedTokens(text, mainPath)) {
-        failures.push(`${document}: simple workflow main path must follow source order: ${mainPath.join(' -> ')}`)
+        const mainPath = simpleSteps.filter((step) => step !== 'escalated')
+        if (!includesOrderedTokens(text, mainPath)) {
+          failures.push(`${document}: simple workflow main path must follow source order: ${mainPath.join(' -> ')}`)
+        }
       }
     }
   }
@@ -335,13 +388,14 @@ function checkSourceBoundedClaims(root, contents, failures) {
     if (!viewUnion.includes('overview')) {
       failures.push('packages/dashboard-app/src/shell/Nav.tsx: View must include the separate overview view')
     }
-    const document = 'docs/usage/dashboard-and-local-api.md'
-    const text = contents.get(document)
-    if (text !== undefined) {
-      if (!includesOrderedTokens(text, primaryViews)) {
-        failures.push(`${document}: operational views must follow PRIMARY_VIEWS source order: ${primaryViews.join(' -> ')}`)
+    for (const document of ['docs/usage/dashboard-and-local-api.md', 'docs/usage/zh-CN/dashboard-and-local-api.md']) {
+      const text = contents.get(document)
+      if (text !== undefined) {
+        if (!includesOrderedTokens(text, primaryViews)) {
+          failures.push(`${document}: operational views must follow PRIMARY_VIEWS source order: ${primaryViews.join(' -> ')}`)
+        }
+        if (!/\boverview\b/iu.test(text)) failures.push(`${document}: missing separate overview view`)
       }
-      if (!/\boverview\b/iu.test(text)) failures.push(`${document}: missing separate overview view`)
     }
   }
 }
@@ -353,6 +407,9 @@ export function checkRepository(rootInput) {
   const canonicalDocuments = [
     ...ROOT_DOCUMENTS,
     ...CANONICAL_USAGE_FILES.map((file) => `docs/usage/${file}`),
+    ...CANONICAL_USAGE_FILES.map((file) =>
+      `docs/usage/zh-CN/${file === 'README.md' ? 'index.md' : file}`,
+    ),
   ]
   for (const relativePath of [...TRUTH_SOURCES, ...canonicalDocuments]) {
     const content = requiredContent(root, relativePath, failures)
@@ -379,13 +436,19 @@ export function checkRepository(rootInput) {
   checkRequiredLinks(
     'README.md',
     contents.get('README.md'),
-    ['README.zh-CN.md', ...communityTargets],
+    ['README.en.md', ...communityTargets],
+    failures,
+  )
+  checkRequiredLinks(
+    'README.en.md',
+    contents.get('README.en.md'),
+    ['README.md', ...communityTargets],
     failures,
   )
   checkRequiredLinks(
     'README.zh-CN.md',
     contents.get('README.zh-CN.md'),
-    ['README.md', ...communityTargets],
+    ['README.md'],
     failures,
   )
   checkSourceBoundedClaims(root, contents, failures)
@@ -401,7 +464,7 @@ if (invokedPath === fileURLToPath(import.meta.url)) {
     for (const failure of failures) console.error(`- ${failure}`)
     process.exitCode = 1
   } else {
-    const count = ROOT_DOCUMENTS.length + CANONICAL_USAGE_FILES.length
+    const count = ROOT_DOCUMENTS.length + (CANONICAL_USAGE_FILES.length * 2)
     console.log(`documentation check passed (${count} canonical Markdown files; bounded claims and repository-relative links verified)`)
   }
 }

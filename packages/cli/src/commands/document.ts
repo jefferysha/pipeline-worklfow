@@ -6,6 +6,7 @@
  * phase cannot move between "checked" and "recorded/read".
  */
 import {
+  atomicLinkPublish,
   effectiveWorkflowPlanBinding,
   ensureDocumentLedger,
   evaluateDocumentEvidence,
@@ -14,6 +15,9 @@ import {
   migrateLegacyDeltaDocument,
   recordDocument,
   recordDocumentReads,
+  renderDocumentTemplate,
+  documentPathForKind,
+  documentTemplateIdForKind,
 } from '@pipeline-lite/kernel'
 import type {
   DocumentContractPhase,
@@ -21,10 +25,20 @@ import type {
   DocumentGovernancePolicy,
   DocumentKind,
   PipelineState,
+  DocumentLocale,
 } from '@pipeline-lite/kernel'
+import { lstat } from 'node:fs/promises'
+import { relative, resolve } from 'node:path'
 import { errMsg, type CliDeps } from '../deps.js'
 import { changeDir, isValidChangeName } from '../paths.js'
 import { reconcileCodexSkillEvidence } from '../codexSkillReceipt.js'
+import { resolveChangeDocumentLocale } from '../documentLocale.js'
+import {
+  assertSafeChangeRoot,
+  ensureSafeDocumentParent,
+  ordinaryDocumentFile,
+  requiredDeltaCapability,
+} from './documentScaffoldSafety.js'
 import { effectiveWorkflowForState } from './effective-workflow.js'
 
 interface GovernedDocumentContext {
@@ -42,6 +56,78 @@ function reject(deps: CliDeps, message: string): number {
 function scalar(state: PipelineState, field: 'phase' | 'track'): string {
   const value = state.fields[field]
   return Array.isArray(value) ? value.join(',') : (value ?? '')
+}
+
+export async function cmdDocumentScaffold(
+  deps: CliDeps,
+  name: string,
+  kind: string,
+  requestedLocale?: string,
+  requestedCapability?: string,
+): Promise<number> {
+  const dir = assertChangeName(deps, name)
+  if (!dir) return 1
+  if (!isDocumentKind(kind)) return reject(deps, `未知 document kind: '${kind}'`)
+  try {
+    await assertSafeChangeRoot(deps.cwd, dir)
+    const state = await deps.store.read(dir)
+    const context = governedDocumentContext(deps, state)
+    const { policy } = assertGoverned(context)
+    const declared = Object.values(policy.outputsByStep)
+      .some((outputs) => outputs.some((output) => output.kind === kind))
+    if (!declared) {
+      throw new Error(`document kind '${kind}' 未在 workflow '${context.workflowName}' 的 contract 中声明`)
+    }
+    const capability = kind === 'delta-spec'
+      ? requiredDeltaCapability(requestedCapability)
+      : undefined
+    if (kind !== 'delta-spec' && requestedCapability !== undefined) {
+      throw new Error('--capability 只适用于 delta-spec')
+    }
+    await assertSafeChangeRoot(deps.cwd, dir)
+    const locale = await resolveChangeDocumentLocale(dir, requestedLocale, true)
+    const targetRelative = documentPathForKind(kind, { change: name, capability })
+    const target = resolve(deps.cwd, targetRelative)
+    const escaped = relative(resolve(deps.cwd), target)
+    if (escaped === '..' || escaped.startsWith('../') || escaped.startsWith('..\\')) {
+      throw new Error(`document scaffold 路径越界: ${targetRelative}`)
+    }
+    const parent = await ensureSafeDocumentParent(deps.cwd, target)
+    await assertSafeChangeRoot(deps.cwd, dir)
+    try {
+      const info = await lstat(target)
+      if (!ordinaryDocumentFile(info)) throw new Error(`document scaffold 目标必须是非 symlink 普通文件: ${targetRelative}`)
+      deps.io.out(targetRelative)
+      return 0
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+    }
+    const plan = effectiveWorkflowForState(deps, state)
+    const workflowSteps = plan?.workflow.steps.map((step) => ({ id: step.id, label: step.label }))
+    const designDoc = scalar(state, 'phase') === 'open'
+      ? undefined
+      : String(state.fields.design_doc ?? '')
+    const content = renderDocumentTemplate(documentTemplateIdForKind(kind), locale as DocumentLocale, {
+      change: name,
+      workflowStepLabelSource: plan?.projection.stepLabelSource,
+      workflowSteps,
+      ...(designDoc && designDoc !== 'null' ? { designDoc } : {}),
+    })
+    try {
+      await assertSafeChangeRoot(deps.cwd, dir)
+      await atomicLinkPublish(parent, '.pipeline-document-scaffold.tmp', target, content)
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
+      const info = await lstat(target)
+      if (!ordinaryDocumentFile(info)) {
+        throw new Error(`document scaffold 目标必须是非 symlink 普通文件: ${targetRelative}`)
+      }
+    }
+    deps.io.out(targetRelative)
+    return 0
+  } catch (error) {
+    return reject(deps, errMsg(error))
+  }
 }
 
 /** Resolve governance from the actual persisted workflow definition, never a caller-supplied flag. */

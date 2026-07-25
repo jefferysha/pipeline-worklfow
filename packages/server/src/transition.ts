@@ -27,6 +27,7 @@ import {
   compileWorkflow,
   completedWorkflowSkillsSinceStepEntry,
   createTransitionApplication,
+  evaluateSpecMigrationEvidence,
   HISTORY_FILE,
   loadRegistry,
   loadWorkflow,
@@ -223,6 +224,7 @@ export async function performTransition(
     workspaceFingerprint: workspaceFingerprint
       ? (): Promise<string> => workspaceFingerprint(root, name)
       : undefined,
+    specMigrationStatus: () => evaluateSpecMigrationEvidence(root, dir, name),
   }
   const app = createTransitionApplication({
     runRepository: deps.runRepo,

@@ -1,13 +1,14 @@
 /** snapshot.test —— 真 fs：注册表读取 / 聚合 build / 指纹变化检测。 */
 import { describe, expect, it } from 'vitest'
-import { mkdir, symlink, unlink, writeFile } from 'node:fs/promises'
+import { mkdir, readdir, symlink, unlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import {
   builtinTrack,
-  documentGovernanceFingerprint,
+  effectiveWorkflowPlanBinding,
   ensureDocumentLedger,
   loadEffectiveWorkflowPlan,
   TERMINAL_ACTIVITY_TTL_MS,
+  workflowPlanSnapshot,
 } from '@pipeline-lite/kernel'
 import { buildSnapshot, computeFingerprint } from './snapshot.js'
 import { readRegistry } from './registry.js'
@@ -217,7 +218,7 @@ steps:
     })
   })
 
-  it('已绑定 document-v1 的 workflow 删除 contract 后 snapshot fail-closed', async () => {
+  it('已冻结 document-v1 workflow 后删除当前定义，snapshot 仍按初始化快照投影', async () => {
     const store = newStore()
     const root = await makeProject()
     const workflows = join(root, '.pipeline', 'workflows')
@@ -243,9 +244,8 @@ steps:
     transitions: []
 `
     await writeFile(target, governed, 'utf8')
-    const policy = loadEffectiveWorkflowPlan(root, 'bound').documentPolicy
-    if (!policy) throw new Error('expected document policy')
-    await store.init({
+    const plan = loadEffectiveWorkflowPlan(root, 'bound')
+    const changeDir = await store.init({
       repoRoot: root,
       name: 'bound-change',
       track: 'backend',
@@ -256,16 +256,19 @@ steps:
       initialWorkflow: {
         workflow: 'bound',
         phase: 'shape',
-        documentProfile: 'document-v1',
-        documentGovernanceFingerprint: documentGovernanceFingerprint(policy),
+        ...effectiveWorkflowPlanBinding(plan),
+        workflowPlanSnapshot: workflowPlanSnapshot(plan),
       },
     })
+    expect(await readdir(changeDir)).toContain('.pipeline-workflow-plan.json')
+    expect((await store.read(changeDir)).runMetadata?.workflowPlanSnapshot).toBeDefined()
     await writeFile(target, governed.replace(/document_contract:[\s\S]*?(?=steps:)/, ''), 'utf8')
 
     const snapshot = await buildSnapshot({ registry: () => [root], store, version: '1', clock: () => 't' })
-    expect(snapshot.projects[0]?.ok).toBe(false)
-    expect(snapshot.projects[0]?.error).toContain('不可降级为自由模式')
-    expect(snapshot.change_count).toBe(0)
+    expect(snapshot.projects[0]?.ok, JSON.stringify(snapshot.projects[0])).toBe(true)
+    expect(snapshot.projects[0]?.changes[0]?.todo?.stages.map((stage) => stage.id)).toEqual(['shape'])
+    expect(snapshot.projects[0]?.changes[0]?.documents?.governed).toBe(true)
+    expect(snapshot.change_count).toBe(1)
   })
 
   it('simple workflow 投影自己的 change→verify→done/escalated 骨架，不伪造七阶段或 OpenSpec 文档', async () => {

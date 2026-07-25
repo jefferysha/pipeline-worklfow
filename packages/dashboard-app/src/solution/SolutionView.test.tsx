@@ -30,6 +30,7 @@ describe('SolutionView 开源产品概览', () => {
     for (const heading of ['选择正确的执行路径', '默认七阶段', '可追溯的证据链', '一个插件，完整控制面', '明确选择安装宿主', '本地优先的安全边界', '从这里继续']) {
       expect(screen.getByRole('heading', { name: heading })).toBeInTheDocument()
     }
+    expect(screen.getByText(/Dashboard 的语言只影响本地界面/)).toHaveTextContent('新治理文档默认使用中文')
     expect(screen.queryByText(/当前.*运行|live status/i)).toBeNull()
   })
 
@@ -91,6 +92,7 @@ describe('SolutionView 开源产品概览', () => {
     expect(screen.getByTestId('solution-mode-discussion')).not.toHaveTextContent('research')
     expect(screen.getByTestId('solution-mode-simple')).toHaveTextContent('scope-expanded → escalated')
     expect(screen.getByTestId('solution-optional')).toHaveTextContent('Docker and agent credentials are only required for AFK execution')
+    expect(screen.getByText(/Dashboard language affects only this local UI/)).toHaveTextContent('default to Chinese')
 
     const links = within(screen.getByTestId('solution-community')).getAllByRole('link')
     expect(links.length).toBeGreaterThanOrEqual(6)

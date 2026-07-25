@@ -5,6 +5,7 @@ import {
   DocumentGovernanceBindingError,
   effectiveWorkflowPlanBinding,
   resolveBoundEffectiveWorkflowPlan,
+  workflowPlanSnapshot,
 } from './effective-plan.js'
 import { builtinTrack } from '../tracks/builtins.js'
 
@@ -168,6 +169,16 @@ describe('compileEffectiveWorkflowPlan', () => {
       binding,
       () => drifted.workflow,
     )).toThrow(/workflow plan fingerprint/)
+
+    const pinned = resolveBoundEffectiveWorkflowPlan(
+      'compact',
+      binding,
+      () => drifted.workflow,
+      undefined,
+      workflowPlanSnapshot(original),
+    )
+    expect(pinned?.workflowFingerprint).toBe(original.workflowFingerprint)
+    expect(pinned?.capabilities.review.steps).toEqual([])
   })
 
   it('profile-only old runs retain compatibility but still cannot downgrade to ungoverned', () => {

@@ -67,15 +67,45 @@
   生成）；单靠 `transact()` 访问（不落到 `commit()`）不会持久化——本次 callback 内生成的临时
   身份只存在于这次调用的内存里，callback 若不提交就直接返回，下次再 `transact()` 会重新生成
   一个不同的临时 id，**不能**把"调用过一次 transact()"等同于"身份已落盘"。新 change 由
-  `WorkflowRunRepository.initChange()` 负责：canonical revision 0 的独占创建里同时嵌入
-  `runMetadata` 与（若提供）custom workflow 首态（`InitOptions.initialWorkflow`）——不是
-  "先建 default/open、后补身份/改首态"两步，写入内容在同目录随机命名的临时文件里以 `wx`
-  完整落盘之后，才用 `link()` 原子发布到目标路径（不用裸 `wx` 直接开在目标路径上——那只保证
-  "创建时不覆盖已有文件"，不保证目标内容整体原子可见，写入过程中并发 reader 可能读到空/半截
-  文件，2026-07-17 codex 架构评估 P1），身份、custom 首态与其余字段从目标文件出现的第一时刻起
-  就已经是完整、一致的，不存在任何中间态，`init()` 失败也不会返回一个身份/首态缺失的"半成功"
-  结果；随后再生成 YAML adapter。详见
+  `WorkflowRunRepository.initChange()` 负责：在 `openspec/changes/` 下的私有 sibling 中一次性构建
+  canonical revision 0、YAML adapter、locale、governance、document ledger、default OpenSpec
+  proposal/design/tasks 与（若提供）custom workflow 首态。同名初始化先经独立名称锁串行化；
+  发布再以原子 `mkdir` 独占最终 Change 名称，逐项使用 hard-link no-replace，
+  `.pipeline-run/current.json` 最后成为官方读取
+  提交点；任何内部写入或校验失败只回滚本次创建且 inode 身份未变化的目录项，不会
+  暴露可读的缺文档、缺 ledger、缺身份或 provisional default/open Change。最终路径若被
+  并发创建为普通目录或 symlink，发布必须 fail-loud 并保留竞争方目录项，绝不删除、替换或沿
+  symlink 写入仓库外。详见
   `packages/kernel/src/state/{run-metadata,run-revision-store,store,workflow-run-repository}.ts`。
+- **治理身份 sidecar**：`documentProfile`、`documentGovernanceFingerprint` 与
+  `workflowPlanFingerprint` 不再写进 strict canonical `runMetadata`，而是固定在
+  `openspec/changes/<name>/.pipeline-workflow-governance.json`。新 runtime 在读状态时校验
+  `run_id` 后合并这三项；旧 runtime 会忽略 sidecar，仍能读取 canonical Change。旧 canonical
+  revision 曾写入这三项时，新 runtime 保持只读兼容，并在下一次真实 state commit 发布不含这些
+  扩展字段的新 current；不可变历史不回写。这样 workflow/document policy 身份继续 fail-loud，
+  同时真实 N-1 runtime rollback 不会因未知 `runMetadata` 字段把整个 Change 判损坏。
+- **Document Presentation Registry**：`templates/documents/registry.v1.yaml` 同时声明文档模板、
+  kind/path/section/layout 与 default workflow 的稳定 step id；`locales/{zh-CN,en}.yaml` 提供对应
+  标题和 step label。运行时只能消费 `document-presentation.generated.ts` 并解释其 layout 指令，
+  不得在 renderer、CLI 或 Skill 再维护第二份 section 图或默认阶段标签。
+  `check:document-templates` 必须校验 schema、layout 引用、locale parity 与生成物新鲜度。
+- **overwrite scaffold 可恢复提交**：事务所有权精确到目标 spec directory，stage、backup 和
+  持久 transaction receipt 都锚定在可信项目根内；receipt 记录 owner pid 与提交状态。目标父目录
+  在提交前复核普通目录 identity，symlink 或父级替换不能把提交重定向到仓库外。正常异常立即回滚，
+  进程崩溃后下一次调用先独占恢复；
+  若旧 envelope 移走后正式路径被第三方占用，则 fail-closed 并保留 lock/stage/backup，不覆盖
+  未知内容也不丢失恢复证据。复制前冻结目标目录摘要与 identity，stage 必须与快照一致；
+  original 移到 backup 后再次做 CAS 校验。事务期间目标目录内未受管文件发生 open-FD 更新时，
+  新字节同步进 stage，并保留原 inode backup；目标目录外 sibling 命名空间从不移动。活跃 owner
+  同样 fail-closed。
+- **Ship 主规格迁移硬门禁**：`spec-migration-applied` typed guard 属于 default 与受 OpenSpec
+  治理 custom workflow 的 Ship 出口政策。存在 `migration/spec-application.json` 时，仓库维护者在
+  发布前以 owner-lock/inode 绑定的目录 FD 事务应用历史迁移：observed 内容先形成独立恢复快照，
+  rename 线性化后再次核验移走 inode，再用 hard-link no-replace 发布 expected bytes；竞争方抢占
+  正式路径、同 inode 漂移或 lock owner 更换时都拒绝覆盖。经代码审查的成功 result 绑定 Change、
+  receipt digest、delta、目标路径和 after digest。该一次性维护工具不属于 managed plugin release，
+  打包 Skill 不在用户项目调用它；`pipeline check` 与 `pipeline transition` 只读取已提交的同一机器
+  证据。能力缺失、结果缺失、身份或摘要漂移均失败关闭。
 - **review-gate v2 receipt**：`review_gate_phase` / `review_gate_status` / `review_gate_event` /
   `review_requested_at` / `review_acknowledged_at` 是 `FIELD_ORDER` 的受保护字段。只有
   `pipeline review request|acknowledge` 与成功的 transition 可以写入/消费它们；通用
@@ -175,10 +205,13 @@ get/set/transition 的 stdout 与 exit code 以 **golden-oracle 双跑逐字一�
 
 > 2026-07-13（workflow-customization-engine）：`check <name>` 现同时支持 default 相位与自定义 workflow
 > ——读 `.pipeline.yaml` 的 `workflow` 字段分流（同 `transition` 的双轨分岔）：`default`（含历史遗留
-> 空串）走相位出口全量规则表（`guardCheck`）；非 `default` 则加载 `.pipeline/workflows/<workflow>.yaml`、
-> 按当前 step 声明的 step-guard（`evaluateStepGuards`）评估。exit 语义对两轨一致：guard 不过同样
-> `2`、通过 `0`；workflow/step 配置错（文件缺失·非法、当前 step 不在图）`1`。两条路径都是纯预览，
-> 绝不写盘。
+> 空串）走相位出口全量规则表（`guardCheck`）；非 `default` 优先读取 WorkflowRun 初始化时原子冻结的
+> `workflowPlanSnapshot`，按冻结 step 声明的 step-guard（`evaluateStepGuards`）评估，不在运行途中
+> 重新绑定可变 `.pipeline/workflows/<workflow>.yaml`。仅没有快照的兼容 Change 才解析当前 YAML，并
+> 要求其指纹与既有绑定完全一致；文件缺失、非法或指纹漂移均失败关闭。exit 语义对两轨一致：guard
+> 不过为 `2`、通过为 `0`；workflow/step 配置错或当前 step 不在冻结图为 `1`。两条路径都是纯预览，
+> 绝不写盘；`pipeline workflow plan <change> --json` 是 Agent、CLI 与 Dashboard 读取同一冻结计划的
+> 公共入口。
 >
 > 2026-07-25：自定义 Workflow 的 step 图与文档治理解耦。`openspec_contract: required` 保留为
 > default 七阶段文档矩阵的兼容别名；短图通过 `document_contract.version: v1` 声明 slot 的

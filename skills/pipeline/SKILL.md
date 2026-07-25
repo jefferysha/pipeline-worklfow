@@ -5,6 +5,14 @@ description: "主编排 skill（Decision Core）。chat 纯对话；simple 走�
 
 # /pipeline — 主编排入口（Decision Core）
 
+## 文档语言契约
+
+- 新 Change 的治理文档默认使用 `zh-CN`，并沿用创建时固定在
+  `.pipeline-document-locale.json` 的 locale；不要从 Dashboard 语言或全局偏好覆盖它。
+- 编写 proposal、design、tasks、spec、ADR、plan、research、verification report 或 applied spec 前，缺失结构先运行 `pipeline document scaffold <change> <kind>`；模板只补缺失文件，不代表 Skill 已执行或文档已登记。
+- 可见标题、说明、任务和场景叙述沿用固定 locale（默认中文，显式 `en` 时使用英文）；phase/event id、DocumentKind、producer、文件名、frontmatter/coverage key、命令和 OpenSpec 的 `ADDED/MODIFIED/REMOVED Requirements` 等机器 token 保持英文。
+- 已有 Change 没有 locale metadata 时沿用现有文档语言；setup/update 不自动翻译或改写现有 Change/Archive。
+
 > 移植来源：老仓 workflow-plugin `skills/pipeline/SKILL.md`。老仓 bash 脚本面
 > （pipeline-state.sh / pipeline-guard.sh / pipeline-archive.sh）已全部改写为本仓
 > `pipeline` CLI（命令契约见 `docs/CONTRACT.md` §3）。快速入口版见 `pipeline-lite`。
@@ -70,10 +78,12 @@ CLI `--producer` 使用的**逻辑 id**。在 Codex 中实际加载时，必须�
      Change，并立刻用 `pipeline set <new-change> depends_on <simple-change>` 保留机器可读审计链；
      不得把 simple Change 原地改 workflow/track。
    - `intent: resume` 且 `workflow` 非 `default` 时，Change 的 workflow 是不可变身份。先用
-     `pipeline status <change> --json` 与 `pipeline tracks show <track> --json` 复核；再读取
-     `.pipeline/workflows/<workflow>.yaml` 这份项目配置（它不是 canonical state）确认当前 step 的
-     skill DAG。**不得**把 default 的 breadcrumb、recommended/mandatory skill matrix 或 Step 4 的默认
-     技能表套到该 Change；先调用本入口并仅按真实 DAG 分派已解锁 skill。
+     `pipeline status <change> --json` 与 `pipeline tracks show <track> --json` 复核；再运行
+     `pipeline workflow plan <change> --json` 读取该 WorkflowRun 初始化时冻结的完整运行计划，并从
+     `plan.workflow.steps` 确认当前 step、Skill DAG、门禁与转换。**不得**直接读取后来可能被修改或删除的
+     `.pipeline/workflows/<workflow>.yaml` 来编排在途 Change，也不得把 default 的 breadcrumb、
+     recommended/mandatory skill matrix 或 Step 4 的默认技能表套到该 Change；先调用本入口并仅按
+     冻结 DAG 分派已解锁 Skill。
    - `workflow: select` 必须停在第 3 条的用户选择，不能臆造 default 或任一 custom workflow。
 5. **精确绑定再读 phase skill**：一旦 new / resume / select 得到精确 Change，必须先运行
    `pipeline session activate "<change>"` 并确认成功。若 dispatch 带合法 `host_session_id`，先把其值
@@ -100,7 +110,7 @@ CLI `--producer` 使用的**逻辑 id**。在 Codex 中实际加载时，必须�
    - default：`open → explore → spec → build → verify → ship → archive`，二级任务来自
      `tasks.md`；
    - simple：`change → verify → done`，并显示 `escalated` 分支，不创建或读取 `tasks.md`；
-   - 项目 custom：从其已校验的 workflow 定义投影。
+   - 项目 custom：从 `pipeline workflow plan <change> --json` 返回的冻结计划投影。
    不得把原始提示词拆成脱离 phase/step 的一级 Todo。
 7. 紧接着调用真实图中当前 step 声明的 skill。default 使用本文件 Step 4 表；
    simple 的 `change` 调用 `simple-task`，`verify` 调用 `verification-before-completion`。Hook 只能注入上下文，
@@ -255,7 +265,7 @@ pipeline list          # 活跃 change 表（名字 / track / phase）
 ## Step 4: Phase 分发（自动）
 
 确定 Track + change 名 + phase 后，先区分 workflow：下表只定义 **default** workflow 的 phase
-入口。已绑定的 custom workflow 必须以其 `.pipeline/workflows/<workflow>.yaml` 和
+入口。已绑定的 custom workflow 必须以 `pipeline workflow plan <change> --json` 返回的冻结运行计划和
 `pipeline internal-skill-gate <change> <skill>` 的实际解锁结果为准：只有图中声明且已解锁的 skill
 可调用，不能从此表补出图外 skill、默认 skill 矩阵或默认依赖。
 
@@ -291,7 +301,7 @@ done
 > 用上面 `pipeline status` + Read 产物文件重建。语义缺口只在"领域词典/产物全索引"。
 
 **立即执行**：先按上面重建上下文（读产物文件本体）。default workflow 再使用表中对应的
-`pipeline-<phase>` 子 skill；custom workflow 则先读取其真实 DAG，只调用其中已解锁的 phase entry
+`pipeline-<phase>` 子 skill；custom workflow 则先读取冻结 DAG，只调用其中已解锁的 phase entry
 skill（若图未声明 `pipeline-<phase>`，不得擅自补调用）。**禁止跳过此步骤**。
 
 内建 `simple` 也是非 default workflow，但不读取项目 `.pipeline/workflows/simple.yaml`；其定义随插件
@@ -370,7 +380,7 @@ Build 的具体默认与 Git 受限环境处理见 `pipeline-build`。
 phase **内部**步骤可连续做（产物靠 Edit/Write 落盘）；常规模式在 phase 边界停下复核，持续授权模式在
 无 confirm/外部副作用边界时可继续。对 review phase 的准确出口顺序是：`pipeline check` → `pipeline review request --event <event>` → 展示产物 → 常规用户确认 / `pipeline review acknowledge`，或已委托 Change 的 `pipeline review acknowledge --delegated` → 重发同一 `pipeline transition`。单出口可省略 `--event`，但 default 的 verify 与任何多出口 custom step 必须显式指定，避免把一种决定借给另一条边。
 
-**Custom workflow 绝不套 default 门**：先读取 `.pipeline/workflows/<workflow>.yaml` 的当前 step。`gate: null`
+**Custom workflow 绝不套 default 门**：先读取 `pipeline workflow plan <change> --json` 的当前 step。`gate: null`
 在 check/文档证据通过后直接走该 step 的 transition；`gate: review` 走上面的 receipt 协议；`gate: confirm`
 仍等待人类。不得因 default 的 Explore/Spec/Verify 文本而给 custom Build 或 Ship 凭空补 review，也不得因
 持续授权把 `confirm` 或外部发布动作自动化。

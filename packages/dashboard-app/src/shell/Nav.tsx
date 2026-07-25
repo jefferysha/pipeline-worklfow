@@ -131,18 +131,18 @@ export function Nav({ view, onView, lang, onLang, theme, onTheme, connected, dec
           onClick={() => setSettingsOpen((open) => !open)}
         >
           <Settings size={18} strokeWidth={1.75} aria-hidden="true" />
-          <span className={RAIL_LB_CLS}>设置</span>
+          <span className={RAIL_LB_CLS}>{t('common.settings')}</span>
         </button>
 
         {settingsOpen && (
           <section
             role="dialog"
-            aria-label="设置"
+            aria-label={t('common.settings')}
             data-testid="nav-settings-panel"
             className="absolute bottom-0 left-[calc(100%+12px)] z-50 w-[248px] rounded-2xl border border-border bg-card/95 p-3.5 text-left shadow-[0_18px_55px_rgba(15,23,42,.2)] backdrop-blur-2xl"
           >
             <div className="mb-3 flex items-center justify-between gap-3 border-b border-border pb-3">
-              <h2 className="text-sm font-bold text-text">设置</h2>
+              <h2 className="text-sm font-bold text-text">{t('common.settings')}</h2>
               <span
                 className="inline-flex items-center gap-1.5 text-xs font-semibold text-text-2"
                 data-on={connected ? 'true' : 'false'}
@@ -162,7 +162,7 @@ export function Nav({ view, onView, lang, onLang, theme, onTheme, connected, dec
                 onClick={() => onTheme(theme === 'dark' ? 'light' : 'dark')}
               >
                 {theme === 'dark' ? <Moon className="h-4 w-4" aria-hidden="true" /> : <Sun className="h-4 w-4" aria-hidden="true" />}
-                {theme === 'dark' ? '深色' : '浅色'}
+                {theme === 'dark' ? t('common.theme_dark') : t('common.theme_light')}
               </button>
               <button
                 type="button"
@@ -170,7 +170,7 @@ export function Nav({ view, onView, lang, onLang, theme, onTheme, connected, dec
                 data-testid="lang-toggle"
                 onClick={() => onLang(lang === 'zh' ? 'en' : 'zh')}
               >
-                {lang === 'zh' ? 'English' : '中文'}
+                {lang === 'zh' ? t('common.switch_to_english') : t('common.switch_to_chinese')}
               </button>
             </div>
           </section>

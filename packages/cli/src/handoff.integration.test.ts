@@ -207,7 +207,7 @@ describe('真实 e2e —— build handoff（design→build 真转换链 + 压缩
     const r = await handoff(h, name)
     expect(r.code).toBe(0)
     const out = r.out.join('\n')
-    expect(out).toContain(`# Handoff: ${name} (phase build)`)
+    expect(out).toContain(`# 交接摘要: ${name}（阶段 build）`)
     // 关键决策逐字保留
     expect(out).toContain('We decided to compress upstream documents deterministically at phase handoff.')
     expect(out).toContain('Decision: keep the compressor pure and zero-LLM so the output is oracle-verifiable.')
@@ -304,9 +304,20 @@ describe('真实 e2e —— 边界与错误路径', () => {
     await init(h, 'fresh')
     const r = await handoff(h, 'fresh')
     expect(r.code).toBe(0)
-    expect(r.out.join('\n')).toContain('# Handoff: fresh (phase open)')
+    expect(r.out.join('\n')).toContain('# 交接摘要: fresh（阶段 open）')
     expect(r.out.join('\n')).toContain('openspec/changes/fresh/proposal.md')
     expect(r.err).toEqual([])
+  })
+
+  test('显式英文 Change 的 handoff 保持英文', async () => {
+    expect(await h.run([
+      'init', 'english-handoff', '--track', 'backend', '--preset', 'full',
+      '--document-locale', 'en',
+    ])).toBe(0)
+    const r = await handoff(h, 'english-handoff')
+    expect(r.code).toBe(0)
+    expect(r.out.join('\n')).toContain('# Handoff: english-handoff (phase open)')
+    expect(r.out.join('\n')).toContain('# Compression:')
   })
 
   test('非法 change 名 → exit 1', async () => {

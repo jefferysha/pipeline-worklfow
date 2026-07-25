@@ -19,7 +19,10 @@ import {
 } from './codexSkillTrust.js'
 import { transcriptExecCommands } from './codexToolProgram.js'
 
-const MAX_RECEIPT_TRANSCRIPT_BYTES = 64 * 1024 * 1024
+// Long-lived Codex Desktop tasks can legitimately exceed 64 MiB. Exact receipts are still
+// session/project/turn/tool/path bound and streamed rather than buffered, so use the same bounded
+// ceiling as fallback discovery instead of making valid long conversations deadlock themselves.
+const MAX_RECEIPT_TRANSCRIPT_BYTES = 512 * 1024 * 1024
 const MAX_DISCOVERY_TRANSCRIPT_BYTES = 512 * 1024 * 1024
 const MAX_DISCOVERY_TOTAL_BYTES = 512 * 1024 * 1024
 const MAX_DISCOVERED_TRANSCRIPTS = 32
@@ -59,36 +62,41 @@ function receiptTurnId(payload: Record<string, unknown>): string | undefined {
   if (!isRecord(metadata)) return undefined
   return asString(metadata.turn_id)
 }
-function explicitExitCode(value: unknown): number | undefined {
+function explicitExitCodes(value: unknown): number[] {
   if (Array.isArray(value)) {
-    for (const item of value) {
-      const found = explicitExitCode(item)
-      if (found !== undefined) return found
-    }
-    return undefined
+    return value.flatMap((item) => explicitExitCodes(item))
   }
-  if (!isRecord(value)) return undefined
-  if (typeof value.exit_code === 'number') return value.exit_code
-  for (const item of Object.values(value)) {
-    const found = explicitExitCode(item)
-    if (found !== undefined) return found
-  }
-  return undefined
+  if (!isRecord(value)) return []
+  const nested = Object.entries(value)
+    .filter(([key]) => key !== 'exit_code')
+    .flatMap(([, item]) => explicitExitCodes(item))
+  return typeof value.exit_code === 'number' ? [value.exit_code, ...nested] : nested
+}
+
+function outputStrings(value: unknown): string[] {
+  if (typeof value === 'string') return [value]
+  if (Array.isArray(value)) return value.flatMap((item) => outputStrings(item))
+  if (!isRecord(value)) return []
+  return Object.values(value).flatMap((item) => outputStrings(item))
 }
 
 function successfulOutput(value: unknown): boolean {
-  const exitCode = explicitExitCode(value)
-  if (exitCode !== undefined) return exitCode === 0
-  if (typeof value === 'string') {
-    const statuses = [...value.matchAll(
+  const strings = outputStrings(value)
+  const scriptStates = strings.flatMap((text) =>
+    [...text.matchAll(/(?:^|\n)Script (completed|failed)(?=\n|$)/g)]
+      .map((match) => match[1]),
+  )
+  if (scriptStates.includes('failed')) return false
+  const textExitCodes = strings.flatMap((text) =>
+    [...text.matchAll(
       /(?:Process exited with code|exit_code["']?\s*:)\s*(\d+)\b/g,
-    )].map((match) => Number(match[1]))
-    return statuses.length > 0 && statuses.every((status) => status === 0)
-  }
-  if (Array.isArray(value)) return value.some((item) => successfulOutput(item))
-  if (!isRecord(value)) return false
-  if (typeof value.exit_code === 'number') return value.exit_code === 0
-  return Object.values(value).some((item) => successfulOutput(item))
+    )].map((match) => Number(match[1])),
+  )
+  const exitCodes = [...explicitExitCodes(value), ...textExitCodes]
+  if (exitCodes.some((status) => status !== 0)) return false
+  if (new Set(exitCodes).size > 1) return false
+  if (scriptStates.includes('completed')) return true
+  return exitCodes.length > 0
 }
 function functionExecCommand(payload: Record<string, unknown>): string | undefined {
   if (payload.type !== 'function_call' || asString(payload.name) !== 'exec_command') return undefined

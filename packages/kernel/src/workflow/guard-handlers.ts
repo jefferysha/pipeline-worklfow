@@ -164,6 +164,26 @@ export const GUARD_HANDLERS: GuardHandlerRegistry = Object.freeze({
     }
     return PASSED
   },
+
+  /** Ship 迁移门禁是 fail-closed 能力：adapter 未绑定、证据损坏或目标摘要漂移都拒绝。 */
+  'spec-migration-applied': async (_config, input) => {
+    if (!input.specMigrationStatus) {
+      return {
+        kind: 'failed',
+        guardType: 'spec-migration-applied',
+        actual: 'capability-unavailable',
+        expected: ['not-required', 'applied'],
+      }
+    }
+    const status = await input.specMigrationStatus()
+    if (status.kind === 'not-required' || status.kind === 'applied') return PASSED
+    return {
+      kind: 'failed',
+      guardType: 'spec-migration-applied',
+      actual: status.reason,
+      expected: ['not-required', 'applied'],
+    }
+  },
 })
 
 /**

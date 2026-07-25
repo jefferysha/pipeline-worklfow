@@ -90,7 +90,7 @@ describe('scaffold —— 类型守卫 + 三态', () => {
     const fs = fakeFs({ files: { [P('openspec/specs/backend/api.md')]: 'old' } })
     expect(await cmdScaffold(deps, 'scaffold', ['web', '--strategy', 'overwrite'], fs)).toBe(0)
     expect(fs.removed).toContain(P('openspec/specs/backend/api.md'))
-    expect(fs.map.get(P('openspec/specs/backend/api.md'))).toContain('# API Contracts')
+    expect(fs.map.get(P('openspec/specs/backend/api.md'))).toContain('# API 契约')
   })
 
   test('--strategy skip + 冲突 → 整体保留、不写、exit 0', async () => {

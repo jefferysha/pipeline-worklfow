@@ -142,6 +142,7 @@ conditions rather than duplicate agent instructions.
 
 ```bash
 pipeline status <change-name> --json
+pipeline workflow plan <change-name> --json
 pipeline tracks show <track-id> --json
 pipeline document status <change-name> --json
 pipeline check <change-name>
@@ -171,4 +172,3 @@ or migrate through an explicit supported operation first.
 
 Read [documents, Skills, and evidence](documents-skills-and-evidence.md) and
 [CLI reference](cli-reference.md).
-

@@ -15,8 +15,9 @@
  *     设计意图）：指针是 repo 粒度而非 session 粒度——同一 repo 多个并发 session 共享一个活跃指针，
  *     互相覆盖。因此 Hook 只把它作为「用户明确继续/点名 change」时的恢复候选，绝不自动把它注入新会话。
  *     换粒度的接缝是 SessionFs.bindPointer（注入面已就位，见下方 SessionFs）。可选的
- *     `--host-session <id>` 另写一个严格 session→Change 的非 canonical 观测投影；它只让
- *     dashboard 判断原生终端是否仍在执行，绝不参与恢复、guard 或状态转换。
+ *     `--host-session <id>` 另写一个严格 session→Change 的非 canonical 会话投影；正常对话
+ *     明确要求恢复时，Hook 优先使用它解析当前 Change，dashboard 也用它识别终端活动。它绝不参与
+ *     canonical guard 或状态转换。
  *   · 老仓 route-context 的「python3/monorepo.py 不可达」降级分支在 TS 侧不适用（无子进程依赖）；
  *     等价降级 = .pipeline-project.yaml 缺失/解析失败 → 视为单仓（packages=null，全未归属），fail-open。
  *   · 老仓 state-session.sh:238-253 三项 [PLACEHOLDER]（package-validation / Cursor ticket 写端 /
@@ -61,7 +62,7 @@ export interface SessionFs {
   bindPointer: (cwd: string, name: string) => Promise<void>
   /** Optional for legacy injected test/degraded adapters; missing means --continuous is safely unavailable. */
   writeInteractionAuthority?: (cwd: string, name: string) => Promise<void>
-  /** Optional host-session binding for dashboard-only terminal liveness. It never mutates workflow state. */
+  /** Optional host-session identity for exact resume routing and terminal liveness. It never mutates workflow state. */
   bindTerminalSession?: (cwd: string, name: string, sessionId: string) => Promise<void>
 }
 
@@ -101,8 +102,8 @@ async function ensurePlainDirectory(path: string): Promise<void> {
 
 /**
  * Bind a native host session to the exact Change selected by the pipeline root skill.  This is an
- * observability-only projection: it prevents a repo-global `.pipeline-active` pointer from making
- * an unrelated conversation look as if it were executing an old Change.
+ * non-canonical session identity projection: it prevents a repo-global `.pipeline-active` pointer
+ * from routing or displaying an unrelated conversation as an old Change.
  */
 async function writeTerminalSessionBinding(cwd: string, name: string, sessionId: string): Promise<void> {
   if (!isTerminalSessionId(sessionId)) throw new Error('host session id 格式非法')
