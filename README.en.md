@@ -4,7 +4,8 @@ Local-first workflow governance for coding agents: explicit state, real Skill
 provenance, review receipts, and a dashboard that reflects the workflow actually
 being run.
 
-[简体中文](README.md) · [Usage guide](docs/usage/README.md) ·
+[Online documentation](https://jefferysha.github.io/pipeline-worklfow/en/) ·
+[简体中文](README.md) · [Repository guide](docs/usage/README.md) ·
 [Security](SECURITY.md) · [Contributing](CONTRIBUTING.md) · [MIT License](LICENSE)
 
 Pipeline Lite is one packaged plugin, not a CLI plus a list of Skills to install

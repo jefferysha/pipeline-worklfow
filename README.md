@@ -2,7 +2,8 @@
 
 面向 coding agent 的本地优先工作流治理：显式状态、真实 Skill 来源证据、精确复核收据，以及始终展示实际 Workflow 的 Dashboard。
 
-[English](README.en.md) · [正式中文文档](docs/usage/zh-CN/index.md) · [English guide](docs/usage/README.md) ·
+[在线中文文档](https://jefferysha.github.io/pipeline-worklfow/) · [English](README.en.md) ·
+[仓库内中文文档](docs/usage/zh-CN/index.md) · [English guide](docs/usage/README.md) ·
 [安全](SECURITY.md) · [参与贡献](CONTRIBUTING.md) · [MIT License](LICENSE)
 
 Pipeline Lite 是一个完整打包的插件，不是“CLI 加一份需要手工安装的 Skills 清单”。发布包包含声明式 Workflow、OpenSpec 证据规则、分阶段 Skills、hooks、CLI、本地 Dashboard、自动化控制和多宿主 adapters。
