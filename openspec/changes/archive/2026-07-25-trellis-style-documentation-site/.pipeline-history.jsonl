@@ -545,3 +545,10 @@
 {"ts":"2026-07-25T21:43:18Z","kind":"transition","from":"verify","to":"ship","raw":"verify-pass","transitionRecordId":"1495d744-d17e-4f15-b5af-6960db4336f5"}
 {"ts":"2026-07-25T21:43:33Z","kind":"tool","raw":"CodexSkillRead: pipeline-ship"}
 {"ts":"2026-07-25T21:43:33Z","kind":"tool","raw":"CodexSkillRead: openspec-apply-change"}
+{"ts":"2026-07-25T21:51:48Z","kind":"set","field":"pr_url","to":"https://github.com/jefferysha/pipeline-worklfow/pull/2"}
+{"ts":"2026-07-25T21:52:10Z","kind":"tool","raw":"CodexSkillRead: finishing-a-development-branch"}
+{"ts":"2026-07-25T21:52:10Z","kind":"tool","raw":"CodexSkillRead: openspec-archive-change"}
+{"ts":"2026-07-25T21:52:22Z","kind":"transition","from":"ship","to":"archive","raw":"ship-complete","transitionRecordId":"0665b501-322a-4ad8-abd0-24ef30b079c4"}
+{"ts":"2026-07-25T21:52:39Z","kind":"tool","raw":"CodexSkillRead: pipeline-archive"}
+{"ts":"2026-07-25T21:52:39Z","kind":"tool","raw":"CodexSkillRead: openspec-archive-change"}
+{"ts":"2026-07-25T21:53:21Z","kind":"transition","from":"archive","to":"archive","raw":"archived","transitionRecordId":"1c80e76b-e499-41e9-8c87-8c64851ad241"}
