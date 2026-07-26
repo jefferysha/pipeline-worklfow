@@ -49,4 +49,4 @@
 
 ## 归档
 
-- [ ] 归档 Change 并恢复主发布 Change 的 Ship 流程。
+- [x] 归档 Change 并恢复主发布 Change 的 Ship 流程。

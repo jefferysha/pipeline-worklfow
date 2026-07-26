@@ -142,3 +142,7 @@
 {"ts":"2026-07-26T13:18:55Z","kind":"tool","raw":"CodexSkillRead: finishing-a-development-branch"}
 {"ts":"2026-07-26T13:23:12Z","kind":"set","field":"pr_url","to":"https://github.com/jefferysha/tenon/pull/3"}
 {"ts":"2026-07-26T13:23:12Z","kind":"tool","raw":"CodexSkillRead: tenon-ship"}
+{"ts":"2026-07-26T13:24:07Z","kind":"transition","from":"ship","to":"archive","raw":"ship-complete","transitionRecordId":"0baf24eb-ac69-43f7-9495-468d8a9e44bd"}
+{"ts":"2026-07-26T13:24:49Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated"}
+{"ts":"2026-07-26T13:25:38Z","kind":"tool","raw":"CodexSkillRead: tenon-archive"}
+{"ts":"2026-07-26T13:25:40Z","kind":"transition","from":"archive","to":"archive","raw":"archived","transitionRecordId":"dcc6d615-cee0-46ea-b313-4c9a1e869978"}
