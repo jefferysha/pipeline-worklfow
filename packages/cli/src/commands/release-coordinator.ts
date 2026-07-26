@@ -1,6 +1,10 @@
 import { join } from 'node:path'
 import type { CliDeps } from '../deps.js'
-import type { RuntimeInstaller } from '../runtime/installer.js'
+import {
+  ManagedRuntimeIndeterminateError,
+  type ManagedRuntimeTransaction,
+  type RuntimeInstaller,
+} from '../runtime/installer.js'
 import type { NativeRuntimeHost, RuntimeActivation } from '../runtime/types.js'
 import {
   restorePreviousReleasedDashboard,
@@ -41,14 +45,45 @@ export async function publishManagedRelease(
   installer: RuntimeInstaller,
   dashboardStarter: ReleasedDashboardStarter | undefined,
 ): Promise<ManagedReleaseOutcome> {
-  let activation: RuntimeActivation
   try {
-    activation = await installer.activate(request.candidateRoot, request.source, request.homeDir)
+    return await installer.withManagedTransaction(
+      request.homeDir,
+      (transaction) => publishWithinManagedTransaction(
+        deps,
+        request,
+        transaction,
+        dashboardStarter,
+      ),
+    )
   } catch (error) {
+    const indeterminate = error instanceof ManagedRuntimeIndeterminateError
     return {
       ok: false,
-      state: 'unchanged',
-      detail: `managed runtime 校验/发布失败，当前已验证 runtime 保持不变：${error instanceof Error ? error.message : String(error)}`,
+      state: indeterminate ? 'indeterminate' : 'unchanged',
+      detail: indeterminate
+        ? `managed runtime 事务状态无法证明：${error.message}`
+        : `managed runtime 事务未开始或锁定失败，当前已验证 runtime 保持不变：${error instanceof Error ? error.message : String(error)}`,
+    }
+  }
+}
+
+async function publishWithinManagedTransaction(
+  deps: CliDeps,
+  request: ManagedReleaseRequest,
+  transaction: ManagedRuntimeTransaction,
+  dashboardStarter: ReleasedDashboardStarter | undefined,
+): Promise<ManagedReleaseOutcome> {
+  let activation: RuntimeActivation
+  try {
+    activation = await transaction.activate(request.candidateRoot, request.source)
+  } catch (error) {
+    const indeterminate = error instanceof ManagedRuntimeIndeterminateError
+    return {
+      ok: false,
+      state: indeterminate ? 'indeterminate' : 'unchanged',
+      detail: indeterminate
+        ? `managed runtime 发布后的补偿状态无法证明：${error.message}`
+        : `managed runtime 校验/发布失败，当前已验证 runtime 保持不变：${error instanceof Error ? error.message : String(error)}`,
     }
   }
 
@@ -57,27 +92,39 @@ export async function publishManagedRelease(
   }
 
   let dashboardFailure = '新 runtime 的 dashboard readiness 失败'
-  let dashboardCode = 1
   try {
-    dashboardCode = await dashboardStarter.start(
+    const dashboardOutcome = await dashboardStarter.start(
       deps,
       join(activation.releaseRoot, 'payload'),
       { openBrowser: request.openBrowser },
     )
+    if (dashboardOutcome.state === 'ready') {
+      return { ok: true, state: 'ready', activation }
+    }
+    if (dashboardOutcome.state === 'indeterminate') {
+      return {
+        ok: false,
+        state: 'indeterminate',
+        detail: `新 runtime 的 Dashboard 未就绪，且候选进程终止未被确认；`
+          + `为避免与仍可能占用端口的进程并发，未补偿 selection 或启动 previous Dashboard：${dashboardOutcome.detail}`,
+      }
+    }
+    dashboardFailure = `${dashboardFailure}：${dashboardOutcome.detail}`
   } catch (error) {
-    dashboardFailure = `${dashboardFailure}：${error instanceof Error ? error.message : String(error)}`
-  }
-  if (dashboardCode === 0) {
-    return { ok: true, state: 'ready', activation }
+    return {
+      ok: false,
+      state: 'indeterminate',
+      detail: `Dashboard starter 未返回可证明状态；未补偿 selection 或启动 previous Dashboard：`
+        + `${error instanceof Error ? error.message : String(error)}`,
+    }
   }
 
   try {
-    if (installer.revertActivation === undefined) {
-      throw new Error('runtime installer 不支持精确 activation 补偿')
-    }
-    await installer.revertActivation(request.homeDir, activation)
+    await transaction.revertActivation(activation)
     const dashboardRestored = await restorePreviousReleasedDashboard(deps, activation, dashboardStarter)
-    if (!dashboardRestored) throw new Error('previous Dashboard 恢复后未通过 readiness')
+    if (dashboardRestored.state !== 'ready') {
+      throw new Error(`previous Dashboard 恢复状态为 ${dashboardRestored.state}：${dashboardRestored.detail}`)
+    }
     return {
       ok: false,
       state: 'restored',

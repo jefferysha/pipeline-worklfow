@@ -73,6 +73,12 @@ Claude Code 用户只替换宿主参数：
 curl -fsSL https://raw.githubusercontent.com/jefferysha/tenon/main/install.sh | bash -s -- --claude
 ```
 
+先预览 Codex 的完整 Marketplace 与包内 setup 计划、且不调用宿主或写入用户目录：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/jefferysha/tenon/main/install.sh | bash -s -- --codex --dry-run
+```
+
 Bootstrap 注册 Tenon Marketplace、安装同一个完整插件、校验发行 payload，并执行
 `tenon setup --<host>`。已经安装后的维护入口仍是 `tenon setup --codex`、`tenon update --codex`
 与 `tenon runtime status`。

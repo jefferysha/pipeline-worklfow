@@ -28,6 +28,13 @@ For Claude:
 curl -fsSL https://raw.githubusercontent.com/jefferysha/tenon/main/install.sh | bash -s -- --claude
 ```
 
+Preview the complete Codex Marketplace and packaged setup plan without invoking
+the host or writing user/project state:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/jefferysha/tenon/main/install.sh | bash -s -- --codex --dry-run
+```
+
 The bootstrap adds the selected native marketplace plugin, resolves the install
 root from the host's own inventory, and invokes the same
 `tenon setup --<host>` operation. Tenon does not guess private host

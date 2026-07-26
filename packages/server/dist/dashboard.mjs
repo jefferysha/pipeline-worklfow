@@ -7694,7 +7694,8 @@ function resolveProductPaths(input = {}) {
     registryPath: paths.join(configRoot, "projects.json"),
     secretsPath: paths.join(configRoot, "secrets.json"),
     dashboardTokenPath: paths.join(stateRoot, "dashboard-token.json"),
-    dashboardPidfilePath: paths.join(stateRoot, "dashboard-server.json")
+    dashboardPidfilePath: paths.join(stateRoot, "dashboard-server.json"),
+    managedTransactionRoot: paths.join(stateRoot, "managed-release-transaction")
   };
 }
 

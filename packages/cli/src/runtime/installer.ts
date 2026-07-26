@@ -1,4 +1,6 @@
+import { mkdir } from 'node:fs/promises'
 import { homedir } from 'node:os'
+import { withLock } from '@tenon/kernel'
 import {
   captureStableLaunchers,
   expectedStableLaunchers,
@@ -7,7 +9,12 @@ import {
 } from './launchers.js'
 import { resolveRuntimePaths } from './paths.js'
 import { RuntimeReleaseStore } from './release-store.js'
-import type { RuntimeActivation, RuntimeInspection, RuntimeReleaseSource } from './types.js'
+import type {
+  RuntimeActivation,
+  RuntimeInspection,
+  RuntimePaths,
+  RuntimeReleaseSource,
+} from './types.js'
 
 /**
  * Boundary between the mutable marketplace checkout and the managed local runtime.
@@ -16,62 +23,144 @@ import type { RuntimeActivation, RuntimeInspection, RuntimeReleaseSource } from 
  * executable release.  The release store verifies a staged copy before atomically publishing the
  * selection; stable launchers are written only after that publication succeeds.
  */
+export interface ManagedRuntimeTransaction {
+  activate(candidateRoot: string, host: RuntimeReleaseSource['host']): Promise<RuntimeActivation>
+  revertActivation(activation: RuntimeActivation): Promise<void>
+}
+
 export interface RuntimeInstaller {
-  activate(candidateRoot: string, host: RuntimeReleaseSource['host'], homeDir: string): Promise<RuntimeActivation>
+  withManagedTransaction<T>(
+    homeDir: string,
+    operation: (transaction: ManagedRuntimeTransaction) => Promise<T>,
+  ): Promise<T>
   inspect(homeDir: string): Promise<RuntimeInspection>
   rollback(homeDir: string): Promise<RuntimeActivation>
-  revertActivation?(homeDir: string, activation: RuntimeActivation): Promise<void>
   recordUpdateFailure?(homeDir: string, detail: string): Promise<void>
+}
+
+export class ManagedRuntimeIndeterminateError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'ManagedRuntimeIndeterminateError'
+  }
 }
 
 function storeFor(homeDir: string): RuntimeReleaseStore {
   return new RuntimeReleaseStore({ paths: resolveRuntimePaths({ homeDir }) })
 }
 
-export const REAL_RUNTIME_INSTALLER: RuntimeInstaller = {
-  async activate(candidateRoot, host, homeDir = homedir()) {
-    const paths = resolveRuntimePaths({ homeDir })
-    const store = new RuntimeReleaseStore({ paths })
-    const launcherSnapshot = await captureStableLaunchers(paths, homeDir)
-    const launcherCommitted = expectedStableLaunchers(paths, homeDir)
-    const activation = await store.stageAndActivate(candidateRoot, host)
-    try {
-      await writeStableLaunchers(paths, homeDir)
-      return { ...activation, launcherSnapshot, launcherCommitted }
-    } catch (error) {
-      const rollbackErrors: string[] = []
-      await store.revertActivation(activation.selection).catch((rollbackError: unknown) => {
-        rollbackErrors.push(`selection=${String(rollbackError)}`)
-      })
-      await restoreStableLaunchers(launcherSnapshot, launcherCommitted).catch((rollbackError: unknown) => {
-        rollbackErrors.push(`launcher=${String(rollbackError)}`)
-      })
-      if (rollbackErrors.length > 0) {
-        throw new Error(
-          `稳定 launcher 写入失败且 activation 补偿失败：${String(error)}；rollback=${rollbackErrors.join('；')}`,
-        )
-      }
-      throw new Error(`稳定 launcher 写入失败，已恢复 activation 前 runtime：${String(error)}`)
-    }
-  },
-  inspect(homeDir = homedir()) {
-    return storeFor(homeDir).inspect()
-  },
-  async rollback(homeDir = homedir()) {
-    const paths = resolveRuntimePaths({ homeDir })
-    const activation = await new RuntimeReleaseStore({ paths }).rollbackToPrevious()
+async function activateWithinTransaction(
+  paths: RuntimePaths,
+  homeDir: string,
+  candidateRoot: string,
+  host: RuntimeReleaseSource['host'],
+): Promise<RuntimeActivation> {
+  const store = new RuntimeReleaseStore({ paths })
+  const launcherSnapshot = await captureStableLaunchers(paths, homeDir)
+  const launcherCommitted = expectedStableLaunchers(paths, homeDir)
+  const activation = await store.stageAndActivate(candidateRoot, host)
+  try {
     await writeStableLaunchers(paths, homeDir)
-    return activation
-  },
-  async revertActivation(homeDir = homedir(), activation) {
-    const paths = resolveRuntimePaths({ homeDir })
-    await new RuntimeReleaseStore({ paths }).revertActivation(activation.selection)
+    return { ...activation, launcherSnapshot, launcherCommitted }
+  } catch (error) {
+    try {
+      await store.revertActivation(activation.selection)
+    } catch (rollbackError) {
+      throw new ManagedRuntimeIndeterminateError(
+        `稳定 launcher 写入失败，且 selection CAS 补偿失败；为避免覆盖并发事务，未恢复 launcher：`
+        + `${String(error)}；selection=${String(rollbackError)}`,
+      )
+    }
+    try {
+      await restoreStableLaunchers(launcherSnapshot, launcherCommitted)
+    } catch (rollbackError) {
+      throw new ManagedRuntimeIndeterminateError(
+        `稳定 launcher 写入失败；selection 已恢复，但 launcher 精确恢复失败：`
+        + `${String(error)}；launcher=${String(rollbackError)}`,
+      )
+    }
+    throw new Error(`稳定 launcher 写入失败，已恢复 activation 前 runtime：${String(error)}`)
+  }
+}
+
+async function revertWithinTransaction(
+  paths: RuntimePaths,
+  homeDir: string,
+  activation: RuntimeActivation,
+): Promise<void> {
+  await new RuntimeReleaseStore({ paths }).revertActivation(activation.selection)
+  try {
     if (activation.launcherSnapshot !== undefined) {
       await restoreStableLaunchers(activation.launcherSnapshot, activation.launcherCommitted)
       return
     }
     const inspection = await new RuntimeReleaseStore({ paths }).inspect()
     if (inspection.selection.activeRelease !== null) await writeStableLaunchers(paths, homeDir)
+  } catch (error) {
+    throw new ManagedRuntimeIndeterminateError(
+      `selection 已补偿，但稳定 launcher 状态无法证明：${String(error)}`,
+    )
+  }
+}
+
+async function rollbackWithinTransaction(
+  paths: RuntimePaths,
+  homeDir: string,
+): Promise<RuntimeActivation> {
+  const store = new RuntimeReleaseStore({ paths })
+  const launcherSnapshot = await captureStableLaunchers(paths, homeDir)
+  const launcherCommitted = expectedStableLaunchers(paths, homeDir)
+  const activation = await store.rollbackToPrevious()
+  try {
+    await writeStableLaunchers(paths, homeDir)
+    return { ...activation, launcherSnapshot, launcherCommitted }
+  } catch (error) {
+    try {
+      await store.revertActivation(activation.selection)
+    } catch (rollbackError) {
+      throw new ManagedRuntimeIndeterminateError(
+        `runtime repair 的 launcher 提交失败，且 selection CAS 补偿失败；未覆盖 launcher：`
+        + `${String(error)}；selection=${String(rollbackError)}`,
+      )
+    }
+    try {
+      await restoreStableLaunchers(launcherSnapshot, launcherCommitted)
+    } catch (rollbackError) {
+      throw new ManagedRuntimeIndeterminateError(
+        `runtime repair 的 selection 已恢复，但 launcher 精确恢复失败：`
+        + `${String(error)}；launcher=${String(rollbackError)}`,
+      )
+    }
+    throw new Error(`runtime repair 的 launcher 提交失败，已恢复 repair 前状态：${String(error)}`)
+  }
+}
+
+async function withExclusiveRuntimeTransaction<T>(
+  homeDir: string,
+  operation: (transaction: ManagedRuntimeTransaction) => Promise<T>,
+): Promise<T> {
+  const paths = resolveRuntimePaths({ homeDir })
+  await mkdir(paths.managedTransactionRoot, { recursive: true })
+  return withLock(paths.managedTransactionRoot, () => operation({
+    activate: (candidateRoot, host) =>
+      activateWithinTransaction(paths, homeDir, candidateRoot, host),
+    revertActivation: (activation) =>
+      revertWithinTransaction(paths, homeDir, activation),
+  }))
+}
+
+export const REAL_RUNTIME_INSTALLER: RuntimeInstaller = {
+  async withManagedTransaction(homeDir = homedir(), operation) {
+    return withExclusiveRuntimeTransaction(homeDir, operation)
+  },
+  inspect(homeDir = homedir()) {
+    return storeFor(homeDir).inspect()
+  },
+  async rollback(homeDir = homedir()) {
+    return withExclusiveRuntimeTransaction(homeDir, async () => {
+      const paths = resolveRuntimePaths({ homeDir })
+      return rollbackWithinTransaction(paths, homeDir)
+    })
   },
   recordUpdateFailure(homeDir = homedir(), detail) {
     return storeFor(homeDir).recordUpdateFailure(detail)

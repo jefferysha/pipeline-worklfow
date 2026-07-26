@@ -11753,7 +11753,8 @@ function resolveProductPaths(input = {}) {
     registryPath: paths.join(configRoot, "projects.json"),
     secretsPath: paths.join(configRoot, "secrets.json"),
     dashboardTokenPath: paths.join(stateRoot, "dashboard-token.json"),
-    dashboardPidfilePath: paths.join(stateRoot, "dashboard-server.json")
+    dashboardPidfilePath: paths.join(stateRoot, "dashboard-server.json"),
+    managedTransactionRoot: paths.join(stateRoot, "managed-release-transaction")
   };
 }
 
@@ -42702,7 +42703,7 @@ function bail(code) {
 var stripNl = (value) => value.replace(/\n$/, "");
 
 // packages/cli/src/commands/dashboard.ts
-import { spawn as spawn5 } from "node:child_process";
+import { spawn as spawn6 } from "node:child_process";
 import { accessSync as accessSync2, constants as fsConstants2, realpathSync as realpathSync2 } from "node:fs";
 import { get as httpGet } from "node:http";
 import { homedir as homedir16 } from "node:os";
@@ -42711,6 +42712,89 @@ import { basename as basename6, dirname as dirname14, join as join64, resolve as
 // packages/cli/src/runtime/paths.ts
 function resolveRuntimePaths(input = {}) {
   return resolveProductPaths(input);
+}
+
+// packages/cli/src/commands/dashboard-process.ts
+import { spawn as spawn5 } from "node:child_process";
+var DashboardTerminationUnconfirmedError = class extends Error {
+  constructor(message2) {
+    super(message2);
+    this.name = "DashboardTerminationUnconfirmedError";
+  }
+};
+var DASHBOARD_TERMINATION_GRACE_MS = 2e3;
+function confirmedTermination(child) {
+  return new Promise((resolveTerminated, rejectTerminated) => {
+    let settled = false;
+    let forceTimer;
+    let proofTimer;
+    const cleanup2 = () => {
+      if (forceTimer !== void 0) clearTimeout(forceTimer);
+      if (proofTimer !== void 0) clearTimeout(proofTimer);
+      child.off("exit", onExit);
+    };
+    const finish = (error) => {
+      if (settled) return;
+      settled = true;
+      cleanup2();
+      if (error === void 0) resolveTerminated();
+      else rejectTerminated(error);
+    };
+    const onExit = () => finish();
+    const signal = (name2) => {
+      try {
+        return child.kill(name2);
+      } catch (error) {
+        finish(new DashboardTerminationUnconfirmedError(
+          `\u5411\u5019\u9009 Dashboard \u53D1\u9001 ${name2} \u5931\u8D25\uFF0C\u4E14\u672A\u89C2\u5BDF\u5230 exit\uFF1A${error instanceof Error ? error.message : String(error)}`
+        ));
+        return false;
+      }
+    };
+    if (child.exitCode !== null || child.signalCode !== null) {
+      finish();
+      return;
+    }
+    child.once("exit", onExit);
+    if (!signal("SIGTERM")) {
+      finish(new DashboardTerminationUnconfirmedError(
+        "\u5411\u5019\u9009 Dashboard \u53D1\u9001 SIGTERM \u672A\u6210\u529F\uFF0C\u4E14\u672A\u89C2\u5BDF\u5230 exit"
+      ));
+      return;
+    }
+    forceTimer = setTimeout(() => {
+      if (settled) return;
+      if (!signal("SIGKILL")) {
+        finish(new DashboardTerminationUnconfirmedError(
+          "\u5411\u5019\u9009 Dashboard \u53D1\u9001 SIGKILL \u672A\u6210\u529F\uFF0C\u4E14\u672A\u89C2\u5BDF\u5230 exit"
+        ));
+        return;
+      }
+      proofTimer = setTimeout(() => {
+        finish(new DashboardTerminationUnconfirmedError(
+          "\u5019\u9009 Dashboard \u6536\u5230 SIGKILL \u540E\u4ECD\u672A\u5728\u671F\u9650\u5185\u4EA7\u751F exit \u4E8B\u4EF6"
+        ));
+      }, DASHBOARD_TERMINATION_GRACE_MS);
+    }, DASHBOARD_TERMINATION_GRACE_MS);
+  });
+}
+function launchDetachedDashboardProcess(serverBundle, env) {
+  return new Promise((resolveStarted) => {
+    let settled = false;
+    const finish = (started) => {
+      if (settled) return;
+      settled = true;
+      resolveStarted(started);
+    };
+    const child = spawn5(process.execPath, [serverBundle], { detached: true, stdio: "ignore", env });
+    child.once("error", () => finish(null));
+    child.once("spawn", () => {
+      child.unref();
+      finish({
+        terminate: () => confirmedTermination(child)
+      });
+    });
+  });
 }
 
 // packages/cli/src/commands/dashboard.ts
@@ -42725,49 +42809,9 @@ function fileExists(path9) {
 }
 function launch(serverBundle, env) {
   return new Promise((resolveCode) => {
-    const child = spawn5(process.execPath, [serverBundle], { stdio: "inherit", env });
+    const child = spawn6(process.execPath, [serverBundle], { stdio: "inherit", env });
     child.once("error", () => resolveCode(1));
     child.once("exit", (code) => resolveCode(code ?? 1));
-  });
-}
-function launchDetached(serverBundle, env) {
-  return new Promise((resolveStarted) => {
-    let settled = false;
-    const finish = (started) => {
-      if (settled) return;
-      settled = true;
-      resolveStarted(started);
-    };
-    const child = spawn5(process.execPath, [serverBundle], { detached: true, stdio: "ignore", env });
-    child.once("error", () => finish(null));
-    child.once("spawn", () => {
-      child.unref();
-      finish({
-        terminate: () => new Promise((resolveTerminated) => {
-          if (child.exitCode !== null || child.signalCode !== null) {
-            resolveTerminated();
-            return;
-          }
-          const timeout = setTimeout(() => {
-            try {
-              child.kill("SIGKILL");
-            } catch {
-            }
-            resolveTerminated();
-          }, 2e3);
-          child.once("exit", () => {
-            clearTimeout(timeout);
-            resolveTerminated();
-          });
-          try {
-            child.kill("SIGTERM");
-          } catch {
-            clearTimeout(timeout);
-            resolveTerminated();
-          }
-        })
-      });
-    });
   });
 }
 function sleep3(ms) {
@@ -42827,7 +42871,7 @@ function openBrowser(url) {
       settled = true;
       resolveOpened(opened);
     };
-    const child = spawn5(command.file, command.args, { detached: true, stdio: "ignore" });
+    const child = spawn6(command.file, command.args, { detached: true, stdio: "ignore" });
     child.once("error", () => finish(false));
     child.once("spawn", () => {
       child.unref();
@@ -42849,7 +42893,7 @@ var REAL_DASHBOARD_RUNTIME = {
   resolveRoot: resolveDashboardRoot,
   fileExists,
   launch,
-  launchDetached,
+  launchDetached: launchDetachedDashboardProcess,
   resolveStateScopeId: () => machineStateScopeId(resolveRuntimePaths({ env: process.env, homeDir: homedir16() }).stateRoot),
   waitForHealthyServer,
   openBrowser
@@ -42879,32 +42923,40 @@ async function startManagedDashboard(deps, payloadRoot, opts, runtime, expectedR
     deps.io.err(
       `ERROR: \u5F53\u524D Tenon \u63D2\u4EF6\u7F3A\u5C11\u5DF2\u53D1\u5E03 dashboard \u8D44\u4EA7\uFF1A${assets.join("\u3001")}\u3002\u8BF7\u8FD0\u884C tenon update --codex\uFF08\u6216 --claude\uFF09\u6062\u590D\u5B8C\u6574\u63D2\u4EF6\u5305\u3002`
     );
-    return 1;
+    return { state: "failed", detail: "released Dashboard assets are incomplete" };
   }
   const child = await runtime.launchDetached(assets.serverBundle, dashboardEnvironment(port));
   if (child === null) {
     deps.io.err("[dashboard] \u53D7\u7BA1 server \u8FDB\u7A0B\u65E0\u6CD5\u542F\u52A8\uFF1Bruntime \u5DF2\u4FDD\u7559\uFF0C\u53EF\u8FD0\u884C tenon dashboard \u8BCA\u65AD\u3002");
-    return 1;
+    return { state: "failed", detail: "candidate Dashboard process could not be spawned" };
   }
   const expectedStateScopeId = runtime.resolveStateScopeId();
   if (!await runtime.waitForHealthyServer(port, expectedReleaseId, expectedStateScopeId)) {
-    await child.terminate().catch(() => {
-    });
+    try {
+      await child.terminate();
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      deps.io.err(`[dashboard] \u5019\u9009 server \u672A\u901A\u8FC7\u5065\u5EB7\u68C0\u67E5\uFF0C\u4E14\u7EC8\u6B62\u72B6\u6001\u65E0\u6CD5\u786E\u8BA4\uFF1A${detail}`);
+      return {
+        state: "indeterminate",
+        detail: error instanceof DashboardTerminationUnconfirmedError ? error.message : new DashboardTerminationUnconfirmedError(detail).message
+      };
+    }
     deps.io.err(`[dashboard] \u53D7\u7BA1 server \u5728 http://127.0.0.1:${port}/ \u672A\u901A\u8FC7\u5065\u5EB7\u68C0\u67E5\uFF1B\u672A\u6253\u5F00\u6D4F\u89C8\u5668\u3002`);
-    return 1;
+    return { state: "failed", detail: "candidate Dashboard failed readiness after confirmed termination" };
   }
   const url = `http://127.0.0.1:${port}/`;
   deps.io.out(`[dashboard] \u53D7\u7BA1\u670D\u52A1\u5065\u5EB7\u68C0\u67E5\u901A\u8FC7\uFF1A${url}`);
   if (opts.openBrowser === true && !await runtime.openBrowser(url)) {
     deps.io.err(`[dashboard] \u65E0\u6CD5\u81EA\u52A8\u6253\u5F00\u6D4F\u89C8\u5668\uFF1B\u8BF7\u5728\u6D4F\u89C8\u5668\u8BBF\u95EE ${url}`);
   }
-  return 0;
+  return { state: "ready" };
 }
 async function startReleasedDashboard(deps, payloadRoot, opts, runtime = REAL_DASHBOARD_RUNTIME) {
   const expectedReleaseId = basename6(payloadRoot) === "payload" ? basename6(dirname14(payloadRoot)) : "";
   if (!/^sha256-[a-f0-9]{64}$/.test(expectedReleaseId)) {
     deps.io.err("[dashboard] \u53D7\u7BA1 payload \u7F3A\u5C11\u5408\u6CD5 content-addressed release identity\uFF1B\u62D2\u7EDD\u542F\u52A8\u3002");
-    return 1;
+    return { state: "failed", detail: "managed payload has no content-addressed release identity" };
   }
   return startManagedDashboard(deps, payloadRoot, opts, runtime, expectedReleaseId);
 }
@@ -42913,9 +42965,9 @@ var REAL_RELEASED_DASHBOARD_STARTER = {
 };
 async function restorePreviousReleasedDashboard(deps, activation, starter) {
   const previousRelease = activation.selection.previousRelease;
-  if (previousRelease === null) return true;
+  if (previousRelease === null) return { state: "ready" };
   const payloadRoot = join64(dirname14(activation.releaseRoot), previousRelease, "payload");
-  return await starter.start(deps, payloadRoot, { openBrowser: false }) === 0;
+  return starter.start(deps, payloadRoot, { openBrowser: false });
 }
 async function cmdDashboard(deps, opts, runtime = REAL_DASHBOARD_RUNTIME) {
   const explicitPort = opts.port === void 0 ? null : parsePort(opts.port);
@@ -42941,7 +42993,12 @@ async function cmdDashboard(deps, opts, runtime = REAL_DASHBOARD_RUNTIME) {
     return 0;
   }
   if (opts.background === true || opts.open === true) {
-    return startManagedDashboard(deps, root, { port, openBrowser: opts.open === true }, runtime);
+    return (await startManagedDashboard(
+      deps,
+      root,
+      { port, openBrowser: opts.open === true },
+      runtime
+    )).state === "ready" ? 0 : 1;
   }
   const code = await runtime.launch(assets.serverBundle, dashboardEnvironment(port));
   if (code !== 0) deps.io.err(`[dashboard] server \u9000\u51FA\uFF0Ccode=${code}`);
@@ -42952,6 +43009,7 @@ async function cmdDashboard(deps, opts, runtime = REAL_DASHBOARD_RUNTIME) {
 import { homedir as homedir19 } from "node:os";
 
 // packages/cli/src/runtime/installer.ts
+import { mkdir as mkdir25 } from "node:fs/promises";
 import { homedir as homedir18 } from "node:os";
 
 // packages/cli/src/runtime/launchers.ts
@@ -43686,53 +43744,102 @@ var RuntimeReleaseStore = class {
 };
 
 // packages/cli/src/runtime/installer.ts
+var ManagedRuntimeIndeterminateError = class extends Error {
+  constructor(message2) {
+    super(message2);
+    this.name = "ManagedRuntimeIndeterminateError";
+  }
+};
 function storeFor(homeDir) {
   return new RuntimeReleaseStore({ paths: resolveRuntimePaths({ homeDir }) });
 }
-var REAL_RUNTIME_INSTALLER = {
-  async activate(candidateRoot, host, homeDir = homedir18()) {
-    const paths = resolveRuntimePaths({ homeDir });
-    const store2 = new RuntimeReleaseStore({ paths });
-    const launcherSnapshot = await captureStableLaunchers(paths, homeDir);
-    const launcherCommitted = expectedStableLaunchers(paths, homeDir);
-    const activation = await store2.stageAndActivate(candidateRoot, host);
-    try {
-      await writeStableLaunchers(paths, homeDir);
-      return { ...activation, launcherSnapshot, launcherCommitted };
-    } catch (error) {
-      const rollbackErrors = [];
-      await store2.revertActivation(activation.selection).catch((rollbackError) => {
-        rollbackErrors.push(`selection=${String(rollbackError)}`);
-      });
-      await restoreStableLaunchers(launcherSnapshot, launcherCommitted).catch((rollbackError) => {
-        rollbackErrors.push(`launcher=${String(rollbackError)}`);
-      });
-      if (rollbackErrors.length > 0) {
-        throw new Error(
-          `\u7A33\u5B9A launcher \u5199\u5165\u5931\u8D25\u4E14 activation \u8865\u507F\u5931\u8D25\uFF1A${String(error)}\uFF1Brollback=${rollbackErrors.join("\uFF1B")}`
-        );
-      }
-      throw new Error(`\u7A33\u5B9A launcher \u5199\u5165\u5931\u8D25\uFF0C\u5DF2\u6062\u590D activation \u524D runtime\uFF1A${String(error)}`);
-    }
-  },
-  inspect(homeDir = homedir18()) {
-    return storeFor(homeDir).inspect();
-  },
-  async rollback(homeDir = homedir18()) {
-    const paths = resolveRuntimePaths({ homeDir });
-    const activation = await new RuntimeReleaseStore({ paths }).rollbackToPrevious();
+async function activateWithinTransaction(paths, homeDir, candidateRoot, host) {
+  const store2 = new RuntimeReleaseStore({ paths });
+  const launcherSnapshot = await captureStableLaunchers(paths, homeDir);
+  const launcherCommitted = expectedStableLaunchers(paths, homeDir);
+  const activation = await store2.stageAndActivate(candidateRoot, host);
+  try {
     await writeStableLaunchers(paths, homeDir);
-    return activation;
-  },
-  async revertActivation(homeDir = homedir18(), activation) {
-    const paths = resolveRuntimePaths({ homeDir });
-    await new RuntimeReleaseStore({ paths }).revertActivation(activation.selection);
+    return { ...activation, launcherSnapshot, launcherCommitted };
+  } catch (error) {
+    try {
+      await store2.revertActivation(activation.selection);
+    } catch (rollbackError) {
+      throw new ManagedRuntimeIndeterminateError(
+        `\u7A33\u5B9A launcher \u5199\u5165\u5931\u8D25\uFF0C\u4E14 selection CAS \u8865\u507F\u5931\u8D25\uFF1B\u4E3A\u907F\u514D\u8986\u76D6\u5E76\u53D1\u4E8B\u52A1\uFF0C\u672A\u6062\u590D launcher\uFF1A${String(error)}\uFF1Bselection=${String(rollbackError)}`
+      );
+    }
+    try {
+      await restoreStableLaunchers(launcherSnapshot, launcherCommitted);
+    } catch (rollbackError) {
+      throw new ManagedRuntimeIndeterminateError(
+        `\u7A33\u5B9A launcher \u5199\u5165\u5931\u8D25\uFF1Bselection \u5DF2\u6062\u590D\uFF0C\u4F46 launcher \u7CBE\u786E\u6062\u590D\u5931\u8D25\uFF1A${String(error)}\uFF1Blauncher=${String(rollbackError)}`
+      );
+    }
+    throw new Error(`\u7A33\u5B9A launcher \u5199\u5165\u5931\u8D25\uFF0C\u5DF2\u6062\u590D activation \u524D runtime\uFF1A${String(error)}`);
+  }
+}
+async function revertWithinTransaction(paths, homeDir, activation) {
+  await new RuntimeReleaseStore({ paths }).revertActivation(activation.selection);
+  try {
     if (activation.launcherSnapshot !== void 0) {
       await restoreStableLaunchers(activation.launcherSnapshot, activation.launcherCommitted);
       return;
     }
     const inspection = await new RuntimeReleaseStore({ paths }).inspect();
     if (inspection.selection.activeRelease !== null) await writeStableLaunchers(paths, homeDir);
+  } catch (error) {
+    throw new ManagedRuntimeIndeterminateError(
+      `selection \u5DF2\u8865\u507F\uFF0C\u4F46\u7A33\u5B9A launcher \u72B6\u6001\u65E0\u6CD5\u8BC1\u660E\uFF1A${String(error)}`
+    );
+  }
+}
+async function rollbackWithinTransaction(paths, homeDir) {
+  const store2 = new RuntimeReleaseStore({ paths });
+  const launcherSnapshot = await captureStableLaunchers(paths, homeDir);
+  const launcherCommitted = expectedStableLaunchers(paths, homeDir);
+  const activation = await store2.rollbackToPrevious();
+  try {
+    await writeStableLaunchers(paths, homeDir);
+    return { ...activation, launcherSnapshot, launcherCommitted };
+  } catch (error) {
+    try {
+      await store2.revertActivation(activation.selection);
+    } catch (rollbackError) {
+      throw new ManagedRuntimeIndeterminateError(
+        `runtime repair \u7684 launcher \u63D0\u4EA4\u5931\u8D25\uFF0C\u4E14 selection CAS \u8865\u507F\u5931\u8D25\uFF1B\u672A\u8986\u76D6 launcher\uFF1A${String(error)}\uFF1Bselection=${String(rollbackError)}`
+      );
+    }
+    try {
+      await restoreStableLaunchers(launcherSnapshot, launcherCommitted);
+    } catch (rollbackError) {
+      throw new ManagedRuntimeIndeterminateError(
+        `runtime repair \u7684 selection \u5DF2\u6062\u590D\uFF0C\u4F46 launcher \u7CBE\u786E\u6062\u590D\u5931\u8D25\uFF1A${String(error)}\uFF1Blauncher=${String(rollbackError)}`
+      );
+    }
+    throw new Error(`runtime repair \u7684 launcher \u63D0\u4EA4\u5931\u8D25\uFF0C\u5DF2\u6062\u590D repair \u524D\u72B6\u6001\uFF1A${String(error)}`);
+  }
+}
+async function withExclusiveRuntimeTransaction(homeDir, operation) {
+  const paths = resolveRuntimePaths({ homeDir });
+  await mkdir25(paths.managedTransactionRoot, { recursive: true });
+  return withLock(paths.managedTransactionRoot, () => operation({
+    activate: (candidateRoot, host) => activateWithinTransaction(paths, homeDir, candidateRoot, host),
+    revertActivation: (activation) => revertWithinTransaction(paths, homeDir, activation)
+  }));
+}
+var REAL_RUNTIME_INSTALLER = {
+  async withManagedTransaction(homeDir = homedir18(), operation) {
+    return withExclusiveRuntimeTransaction(homeDir, operation);
+  },
+  inspect(homeDir = homedir18()) {
+    return storeFor(homeDir).inspect();
+  },
+  async rollback(homeDir = homedir18()) {
+    return withExclusiveRuntimeTransaction(homeDir, async () => {
+      const paths = resolveRuntimePaths({ homeDir });
+      return rollbackWithinTransaction(paths, homeDir);
+    });
   },
   recordUpdateFailure(homeDir = homedir18(), detail) {
     return storeFor(homeDir).recordUpdateFailure(detail);
@@ -44089,40 +44196,71 @@ import { join as join71 } from "node:path";
 // packages/cli/src/commands/release-coordinator.ts
 import { join as join70 } from "node:path";
 async function publishManagedRelease(deps, request, installer, dashboardStarter) {
-  let activation;
   try {
-    activation = await installer.activate(request.candidateRoot, request.source, request.homeDir);
+    return await installer.withManagedTransaction(
+      request.homeDir,
+      (transaction) => publishWithinManagedTransaction(
+        deps,
+        request,
+        transaction,
+        dashboardStarter
+      )
+    );
   } catch (error) {
+    const indeterminate = error instanceof ManagedRuntimeIndeterminateError;
     return {
       ok: false,
-      state: "unchanged",
-      detail: `managed runtime \u6821\u9A8C/\u53D1\u5E03\u5931\u8D25\uFF0C\u5F53\u524D\u5DF2\u9A8C\u8BC1 runtime \u4FDD\u6301\u4E0D\u53D8\uFF1A${error instanceof Error ? error.message : String(error)}`
+      state: indeterminate ? "indeterminate" : "unchanged",
+      detail: indeterminate ? `managed runtime \u4E8B\u52A1\u72B6\u6001\u65E0\u6CD5\u8BC1\u660E\uFF1A${error.message}` : `managed runtime \u4E8B\u52A1\u672A\u5F00\u59CB\u6216\u9501\u5B9A\u5931\u8D25\uFF0C\u5F53\u524D\u5DF2\u9A8C\u8BC1 runtime \u4FDD\u6301\u4E0D\u53D8\uFF1A${error instanceof Error ? error.message : String(error)}`
+    };
+  }
+}
+async function publishWithinManagedTransaction(deps, request, transaction, dashboardStarter) {
+  let activation;
+  try {
+    activation = await transaction.activate(request.candidateRoot, request.source);
+  } catch (error) {
+    const indeterminate = error instanceof ManagedRuntimeIndeterminateError;
+    return {
+      ok: false,
+      state: indeterminate ? "indeterminate" : "unchanged",
+      detail: indeterminate ? `managed runtime \u53D1\u5E03\u540E\u7684\u8865\u507F\u72B6\u6001\u65E0\u6CD5\u8BC1\u660E\uFF1A${error.message}` : `managed runtime \u6821\u9A8C/\u53D1\u5E03\u5931\u8D25\uFF0C\u5F53\u524D\u5DF2\u9A8C\u8BC1 runtime \u4FDD\u6301\u4E0D\u53D8\uFF1A${error instanceof Error ? error.message : String(error)}`
     };
   }
   if (dashboardStarter === void 0) {
     return { ok: true, state: "ready", activation };
   }
   let dashboardFailure = "\u65B0 runtime \u7684 dashboard readiness \u5931\u8D25";
-  let dashboardCode = 1;
   try {
-    dashboardCode = await dashboardStarter.start(
+    const dashboardOutcome = await dashboardStarter.start(
       deps,
       join70(activation.releaseRoot, "payload"),
       { openBrowser: request.openBrowser }
     );
+    if (dashboardOutcome.state === "ready") {
+      return { ok: true, state: "ready", activation };
+    }
+    if (dashboardOutcome.state === "indeterminate") {
+      return {
+        ok: false,
+        state: "indeterminate",
+        detail: `\u65B0 runtime \u7684 Dashboard \u672A\u5C31\u7EEA\uFF0C\u4E14\u5019\u9009\u8FDB\u7A0B\u7EC8\u6B62\u672A\u88AB\u786E\u8BA4\uFF1B\u4E3A\u907F\u514D\u4E0E\u4ECD\u53EF\u80FD\u5360\u7528\u7AEF\u53E3\u7684\u8FDB\u7A0B\u5E76\u53D1\uFF0C\u672A\u8865\u507F selection \u6216\u542F\u52A8 previous Dashboard\uFF1A${dashboardOutcome.detail}`
+      };
+    }
+    dashboardFailure = `${dashboardFailure}\uFF1A${dashboardOutcome.detail}`;
   } catch (error) {
-    dashboardFailure = `${dashboardFailure}\uFF1A${error instanceof Error ? error.message : String(error)}`;
-  }
-  if (dashboardCode === 0) {
-    return { ok: true, state: "ready", activation };
+    return {
+      ok: false,
+      state: "indeterminate",
+      detail: `Dashboard starter \u672A\u8FD4\u56DE\u53EF\u8BC1\u660E\u72B6\u6001\uFF1B\u672A\u8865\u507F selection \u6216\u542F\u52A8 previous Dashboard\uFF1A${error instanceof Error ? error.message : String(error)}`
+    };
   }
   try {
-    if (installer.revertActivation === void 0) {
-      throw new Error("runtime installer \u4E0D\u652F\u6301\u7CBE\u786E activation \u8865\u507F");
-    }
-    await installer.revertActivation(request.homeDir, activation);
+    await transaction.revertActivation(activation);
     const dashboardRestored = await restorePreviousReleasedDashboard(deps, activation, dashboardStarter);
-    if (!dashboardRestored) throw new Error("previous Dashboard \u6062\u590D\u540E\u672A\u901A\u8FC7 readiness");
+    if (dashboardRestored.state !== "ready") {
+      throw new Error(`previous Dashboard \u6062\u590D\u72B6\u6001\u4E3A ${dashboardRestored.state}\uFF1A${dashboardRestored.detail}`);
+    }
     return {
       ok: false,
       state: "restored",

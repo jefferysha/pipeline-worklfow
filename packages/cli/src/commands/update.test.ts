@@ -29,15 +29,20 @@ function fakeRuntimeInstaller(
   const calls: RuntimeCalls = { activations: [], failures: [], reverts: [] }
   const releaseId = `sha256-${'b'.repeat(64)}`
   const installer: RuntimeInstaller = {
-    activate: async (candidateRoot, host, homeDir) => {
-      calls.activations.push([candidateRoot, host, homeDir])
-      if (fail) throw new Error('candidate rejected')
-      return {
-        release: { version: 1, releaseId, payloadDigest: 'b'.repeat(64), createdAt: '2026-07-24T00:00:00Z', source: { host, pluginVersion: '1.0.0' } },
-        selection: { version: 1, revision: 2, activeRelease: releaseId, previousRelease, updatedAt: '2026-07-24T00:00:00Z' },
-        releaseRoot: `/runtime/releases/${releaseId}`,
-      }
-    },
+    withManagedTransaction: async (homeDir, operation) => operation({
+      activate: async (candidateRoot, host) => {
+        calls.activations.push([candidateRoot, host, homeDir])
+        if (fail) throw new Error('candidate rejected')
+        return {
+          release: { version: 1, releaseId, payloadDigest: 'b'.repeat(64), createdAt: '2026-07-24T00:00:00Z', source: { host, pluginVersion: '1.0.0' } },
+          selection: { version: 1, revision: 2, activeRelease: releaseId, previousRelease, updatedAt: '2026-07-24T00:00:00Z' },
+          releaseRoot: `/runtime/releases/${releaseId}`,
+        }
+      },
+      revertActivation: async (activation) => {
+        calls.reverts.push([homeDir, activation.release.releaseId])
+      },
+    }),
     inspect: async () => ({
       selection: { version: 1, revision: 0, activeRelease: null, previousRelease: null, updatedAt: '1970-01-01T00:00:00Z' },
       active: null,
@@ -47,9 +52,6 @@ function fakeRuntimeInstaller(
       lastAudit: null,
     }),
     rollback: async () => { throw new Error('not used') },
-    revertActivation: async (homeDir, activation) => {
-      calls.reverts.push([homeDir, activation.release.releaseId])
-    },
     recordUpdateFailure: async (homeDir, detail) => {
       calls.failures.push([homeDir, detail])
     },
@@ -63,7 +65,9 @@ function fakeDashboardStarter(failures: readonly boolean[] = []): { starter: Rel
     starter: {
       start: async (_deps, payloadRoot, opts) => {
         calls.starts.push([payloadRoot, opts])
-        return failures[calls.starts.length - 1] === true ? 1 : 0
+        return failures[calls.starts.length - 1] === true
+          ? { state: 'failed', detail: 'injected readiness failure' }
+          : { state: 'ready' }
       },
     },
     calls,

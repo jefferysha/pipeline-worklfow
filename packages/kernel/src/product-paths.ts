@@ -25,6 +25,8 @@ export interface ProductPaths {
   readonly secretsPath: string
   readonly dashboardTokenPath: string
   readonly dashboardPidfilePath: string
+  /** Outer lock root for the complete managed release transaction. */
+  readonly managedTransactionRoot: string
 }
 
 interface ProductRootContract {
@@ -147,5 +149,6 @@ export function resolveProductPaths(input: ProductPathInput = {}): ProductPaths 
     secretsPath: paths.join(configRoot, 'secrets.json'),
     dashboardTokenPath: paths.join(stateRoot, 'dashboard-token.json'),
     dashboardPidfilePath: paths.join(stateRoot, 'dashboard-server.json'),
+    managedTransactionRoot: paths.join(stateRoot, 'managed-release-transaction'),
   }
 }

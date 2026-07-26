@@ -9,7 +9,7 @@ const previousRelease = `sha256-${'d'.repeat(64)}`
 function fakeInstaller(): { installer: RuntimeInstaller; calls: string[] } {
   const calls: string[] = []
   const installer: RuntimeInstaller = {
-    activate: async () => { throw new Error('not used') },
+    withManagedTransaction: async () => { throw new Error('not used') },
     inspect: async () => ({
       selection: {
         version: 1,

@@ -1,6 +1,14 @@
+import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, test } from 'vitest'
 import { makeDeps } from '../test-support.js'
-import { cmdDashboard, startReleasedDashboard, type DashboardRuntime } from './dashboard.js'
+import {
+  cmdDashboard,
+  REAL_DASHBOARD_RUNTIME,
+  startReleasedDashboard,
+  type DashboardRuntime,
+} from './dashboard.js'
 
 interface Calls {
   launches: Array<{ serverBundle: string; env: NodeJS.ProcessEnv }>
@@ -103,7 +111,7 @@ describe('tenon dashboard', () => {
       `/runtime/releases/${releaseId}/payload`,
       {},
       dashboard,
-    )).toBe(0)
+    )).toEqual({ state: 'ready' })
     expect(calls.expectedReleaseIds).toEqual([releaseId])
     expect(calls.expectedStateScopeIds).toEqual([`sha256-v1-${'1'.repeat(64)}`])
   })
@@ -112,7 +120,9 @@ describe('tenon dashboard', () => {
     const deps = makeDeps()
     const { runtime: dashboard, calls } = runtime()
 
-    expect(await startReleasedDashboard(deps, '/mutable/plugin', {}, dashboard)).toBe(1)
+    expect(await startReleasedDashboard(deps, '/mutable/plugin', {}, dashboard)).toMatchObject({
+      state: 'failed',
+    })
     expect(calls.detached).toEqual([])
     expect(deps.errLines.join('\n')).toContain('release identity')
   })
@@ -126,6 +136,65 @@ describe('tenon dashboard', () => {
     expect(calls.terminated).toBe(1)
     expect(deps.errLines.join('\n')).toContain('未通过健康检查')
   })
+
+  test('managed startup exposes unconfirmed candidate termination instead of reporting a compensatable readiness failure', async () => {
+    const deps = makeDeps()
+    const releaseId = `sha256-${'a'.repeat(64)}`
+    const { runtime: dashboard } = runtime({
+      waitForHealthyServer: async () => false,
+      launchDetached: async () => ({
+        terminate: async () => {
+          throw new Error('process still owns the port')
+        },
+      }),
+    })
+
+    expect(await startReleasedDashboard(
+      deps,
+      `/runtime/releases/${releaseId}/payload`,
+      {},
+      dashboard,
+    )).toMatchObject({
+      state: 'indeterminate',
+      detail: 'process still owns the port',
+    })
+  })
+
+  test('real detached termination resolves only after a SIGTERM-resistant process has exited', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'tenon-dashboard-termination-'))
+    const pidPath = join(root, 'pid')
+    const bundle = join(root, 'server.mjs')
+    try {
+      await writeFile(bundle, `
+import { writeFileSync } from 'node:fs'
+writeFileSync(process.env.TENON_TEST_PID_PATH, String(process.pid))
+process.on('SIGTERM', () => {})
+setInterval(() => {}, 1000)
+`, 'utf8')
+      await chmod(bundle, 0o755)
+      const handle = await REAL_DASHBOARD_RUNTIME.launchDetached(bundle, {
+        ...process.env,
+        TENON_TEST_PID_PATH: pidPath,
+      })
+      expect(handle).not.toBeNull()
+
+      let pid = 0
+      for (let attempt = 0; attempt < 100; attempt += 1) {
+        try {
+          pid = Number.parseInt(await readFile(pidPath, 'utf8'), 10)
+          break
+        } catch {
+          await new Promise((resolve) => setTimeout(resolve, 20))
+        }
+      }
+      expect(pid).toBeGreaterThan(0)
+
+      await handle?.terminate()
+      expect(() => process.kill(pid, 0)).toThrow()
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  }, 10_000)
 
   test('dry-run verifies the released assets without launching a child process', async () => {
     const deps = makeDeps()

@@ -29,6 +29,14 @@ test('builds a release-pinned thin package without repository or test payload', 
     assert.match(bootstrap, /createHash/)
     assert.doesNotMatch(bootstrap, /__TENON_/)
     const generated = await import(`${pathToFileURL(join(output, 'bin', 'tenon-bootstrap.mjs')).href}?test=${Date.now()}`)
+    assert.deepEqual(generated.parseArgs(['setup', '--codex', '--dry-run']), {
+      help: false,
+      installerArgs: ['--codex', '--dry-run'],
+    })
+    assert.throws(
+      () => generated.parseArgs(['setup', '--codex', '--unknown']),
+      /unsupported option/,
+    )
     await assert.rejects(
       generated.verifyInstaller('#!/usr/bin/env bash\necho tampered\n'),
       /digest mismatch/,

@@ -9,14 +9,16 @@ MARKETPLACE_SOURCE="jefferysha/tenon"
 MARKETPLACE_NAME="tenon"
 HOST=""
 AUTO_UPDATE=0
+DRY_RUN=0
 
 usage() {
   cat <<'USAGE'
-Usage: install.sh --codex|--claude [--auto-update]
+Usage: install.sh --codex|--claude [--auto-update] [--dry-run]
 
 Installs the complete Tenon plugin into the selected native marketplace, then runs the packaged
 `tenon setup --<host>`. Other hosts are adapters and should be deployed from an
 already installed Codex or Claude package with `tenon setup --cursor` (and similar flags).
+`--dry-run` prints the complete host and packaged setup plan without invoking either host.
 USAGE
 }
 
@@ -27,12 +29,34 @@ while [ $# -gt 0 ]; do
       HOST="${1#--}"
       ;;
     --auto-update) AUTO_UPDATE=1 ;;
+    --dry-run) DRY_RUN=1 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "install.sh: unsupported argument $1" >&2; usage >&2; exit 2 ;;
   esac
   shift
 done
 [ -n "$HOST" ] || { usage >&2; exit 2; }
+
+if [ "$DRY_RUN" = 1 ]; then
+  echo "[dry-run] Tenon --${HOST} 一步安装计划："
+  case "$HOST" in
+    codex)
+      echo "  codex plugin marketplace add ${MARKETPLACE_SOURCE} --ref main"
+      echo "  codex plugin add tenon@${MARKETPLACE_NAME} --json"
+      echo "  codex plugin list --json"
+      ;;
+    claude)
+      echo "  claude plugin marketplace add ${MARKETPLACE_SOURCE}"
+      echo "  claude plugin install tenon@${MARKETPLACE_NAME}"
+      echo "  claude plugin list --json"
+      ;;
+  esac
+  SETUP_PLAN="tenon setup --${HOST} --yes --dry-run"
+  [ "$AUTO_UPDATE" = 1 ] && SETUP_PLAN="${SETUP_PLAN} --auto-update"
+  echo "  ${SETUP_PLAN}"
+  echo "[dry-run] 未调用宿主命令，未写入 Tenon 或项目状态。"
+  exit 0
+fi
 
 find_codex_root() {
   codex plugin list --json | node -e '

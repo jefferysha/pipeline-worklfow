@@ -38,6 +38,13 @@ curl -fsSL https://raw.githubusercontent.com/jefferysha/tenon/main/install.sh | 
 curl -fsSL https://raw.githubusercontent.com/jefferysha/tenon/main/install.sh | bash -s -- --claude
 ```
 
+首次安装前可执行零写入预览。它会列出完整的宿主 Marketplace 命令和包内 setup 计划，但不会调用
+Codex/Claude，也不会写 Tenon、宿主或项目状态：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/jefferysha/tenon/main/install.sh | bash -s -- --codex --dry-run
+```
+
 脚本只负责注册 Tenon Marketplace、安装并验证完整 payload，然后调用包内
 `tenon setup --<host>`。已经安装的用户可以直接再次运行 `tenon setup --codex`
 修复宿主接线；更新时运行 `tenon update --codex`（或 `--claude`）。手动更新和显式启用的

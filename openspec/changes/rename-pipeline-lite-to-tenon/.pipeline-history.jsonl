@@ -126,3 +126,29 @@
 {"ts":"2026-07-26T06:59:34Z","kind":"tool","raw":"review:request phase=spec event=spec-complete"}
 {"ts":"2026-07-26T06:59:35Z","kind":"tool","raw":"review:delegated-ack phase=spec event=spec-complete authority_issued_at=2026-07-26T02:54:33Z"}
 {"ts":"2026-07-26T06:59:35Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"d030bf11-af6f-4da2-9aa3-0560ea39476c"}
+{"ts":"2026-07-26T07:09:26Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-26T07:09:26Z","kind":"tool","raw":"CodexSkillRead: frontend-design"}
+{"ts":"2026-07-26T07:09:26Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-26T07:09:26Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-26T07:09:35Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"65dec100-a629-45a3-9e92-157f747b69ef"}
+{"ts":"2026-07-26T07:09:48Z","kind":"tool","raw":"CodexSkillRead: pipeline-verify"}
+{"ts":"2026-07-26T07:09:48Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-07-26T07:09:48Z","kind":"tool","raw":"CodexSkillRead: browser-qa"}
+{"ts":"2026-07-26T07:09:48Z","kind":"tool","raw":"CodexSkillRead: code-review"}
+{"ts":"2026-07-26T07:10:29Z","kind":"tool","raw":"CodexSkillRead: code-review"}
+{"ts":"2026-07-26T07:10:32Z","kind":"tool","raw":"CodexSkillRead: e2e-testing"}
+{"ts":"2026-07-26T07:10:32Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-07-26T07:10:32Z","kind":"tool","raw":"CodexSkillRead: deployment-patterns"}
+{"ts":"2026-07-26T07:13:21Z","kind":"tool","raw":"CodexSkillRead: code-review"}
+{"ts":"2026-07-26T07:15:41Z","kind":"tool","raw":"review:request phase=verify event=verify-fail"}
+{"ts":"2026-07-26T07:15:41Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-07-26T02:54:33Z"}
+{"ts":"2026-07-26T07:15:55Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-26T07:15:55Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-26T07:16:11Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"c8c63f88-44f9-4de9-be87-3c03f87094c8"}
+{"ts":"2026-07-26T07:20:31Z","kind":"tool","raw":"CodexSkillRead: pipeline"}
+{"ts":"2026-07-26T07:20:32Z","kind":"tool","raw":"CodexSkillRead: pipeline"}
+{"ts":"2026-07-26T07:20:32Z","kind":"tool","raw":"CodexSkillRead: pipeline-build"}
+{"ts":"2026-07-26T07:20:33Z","kind":"tool","raw":"CodexSkillRead: pipeline-build"}
+{"ts":"2026-07-26T07:20:50Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated"}
+{"ts":"2026-07-26T07:38:43Z","kind":"tool","raw":"CodexSkillRead: frontend-design"}
+{"ts":"2026-07-26T07:38:43Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}

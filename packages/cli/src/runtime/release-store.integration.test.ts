@@ -54,6 +54,31 @@ function pathsFor(root: string) {
 }
 
 describe('RuntimeReleaseStore', () => {
+  it('holds one product-scoped transaction lock across the caller-defined managed release lifecycle', async () => {
+    const root = await freshRoot('managed-transaction-lock')
+    const home = join(root, 'home')
+    const events: string[] = []
+    let releaseFirst!: () => void
+    const firstGate = new Promise<void>((resolve) => { releaseFirst = resolve })
+
+    const first = REAL_RUNTIME_INSTALLER.withManagedTransaction(home, async () => {
+      events.push('first:start')
+      await firstGate
+      events.push('first:end')
+    })
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    const second = REAL_RUNTIME_INSTALLER.withManagedTransaction(home, async () => {
+      events.push('second:start')
+      events.push('second:end')
+    })
+    await new Promise((resolve) => setTimeout(resolve, 20))
+
+    expect(events).toEqual(['first:start'])
+    releaseFirst()
+    await Promise.all([first, second])
+    expect(events).toEqual(['first:start', 'first:end', 'second:start', 'second:end'])
+  })
+
   it('stages, verifies, and atomically selects a complete candidate release', async () => {
     const root = await freshRoot('activate')
     const candidate = await candidateCopy(root)
@@ -208,10 +233,16 @@ describe('RuntimeReleaseStore', () => {
     await chmod(tenon, 0o750)
     await chmod(hook, 0o700)
 
-    const activation = await REAL_RUNTIME_INSTALLER.activate(candidate, 'codex', home)
+    const activation = await REAL_RUNTIME_INSTALLER.withManagedTransaction(
+      home,
+      (transaction) => transaction.activate(candidate, 'codex'),
+    )
     expect(await readFile(tenon, 'utf8')).toContain('TENON_RUNTIME_DATA_ROOT')
 
-    await REAL_RUNTIME_INSTALLER.revertActivation?.(home, activation)
+    await REAL_RUNTIME_INSTALLER.withManagedTransaction(
+      home,
+      (transaction) => transaction.revertActivation(activation),
+    )
 
     expect(await readFile(tenon, 'utf8')).toBe('#!/bin/sh\necho previous-tenon\n')
     expect(await readFile(hook, 'utf8')).toBe('#!/bin/sh\necho previous-hook\n')

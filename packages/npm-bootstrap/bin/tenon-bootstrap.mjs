@@ -14,8 +14,8 @@ function usage() {
   process.stdout.write(`Tenon npm bootstrap
 
 Usage:
-  tenon setup --codex [--auto-update]
-  tenon setup --claude [--auto-update]
+  tenon setup --codex [--auto-update] [--dry-run]
+  tenon setup --claude [--auto-update] [--dry-run]
 
 This thin package downloads the release-pinned Marketplace installer and enters
 the same verified Tenon installation transaction. It does not install a second
@@ -30,14 +30,14 @@ function installerUrl() {
   return `https://raw.githubusercontent.com/${repository}/${releaseRef}/install.sh`
 }
 
-function parseArgs(argv) {
+export function parseArgs(argv) {
   if (argv.includes('--help') || argv.includes('-h')) return { help: true, installerArgs: [] }
   const [command, ...options] = argv
   if (command !== 'setup') throw new Error('first argument must be setup')
   const hosts = options.filter((option) => allowedHosts.has(option))
   if (hosts.length !== 1) throw new Error('choose exactly one host: --codex or --claude')
   for (const option of options) {
-    if (!allowedHosts.has(option) && option !== '--auto-update') {
+    if (!allowedHosts.has(option) && option !== '--auto-update' && option !== '--dry-run') {
       throw new Error(`unsupported option: ${option}`)
     }
   }

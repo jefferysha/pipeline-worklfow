@@ -81,6 +81,18 @@
           "sha256": "036a9dca1bdba766abd18af506a2dc525078750dd49b0bd6180728370897debe",
           "readAt": "2026-07-26T06:59:35Z",
           "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",15]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "036a9dca1bdba766abd18af506a2dc525078750dd49b0bd6180728370897debe",
+          "readAt": "2026-07-26T07:15:41Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",16]"
+        },
+        {
+          "phase": "build",
+          "sha256": "036a9dca1bdba766abd18af506a2dc525078750dd49b0bd6180728370897debe",
+          "readAt": "2026-07-26T07:20:51Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",17]"
         }
       ]
     },
@@ -162,16 +174,20 @@
           "sha256": "a37bc90c676345a4f444e9878114d5d0cf590ef8731668d09c046c09c238073f",
           "readAt": "2026-07-26T06:59:35Z",
           "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",15]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "a37bc90c676345a4f444e9878114d5d0cf590ef8731668d09c046c09c238073f",
+          "readAt": "2026-07-26T07:15:41Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",16]"
+        },
+        {
+          "phase": "build",
+          "sha256": "a37bc90c676345a4f444e9878114d5d0cf590ef8731668d09c046c09c238073f",
+          "readAt": "2026-07-26T07:20:51Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",17]"
         }
       ]
-    },
-    {
-      "kind": "verification-report",
-      "path": "docs/superpowers/reports/2026-07-26-rename-pipeline-lite-to-tenon-verify.md",
-      "sha256": "98f87fbf141a5e464a2abf323331ec798de8b01237802af44c6d9913c6c17947",
-      "producer": "verification-before-completion",
-      "recordedAt": "2026-07-26T05:54:09Z",
-      "reads": []
     },
     {
       "kind": "delta-spec",
@@ -227,6 +243,18 @@
           "sha256": "619908fbe517beaa391c26c5a7911024e4e7ba40bfa06bfd85b445d648b88b5d",
           "readAt": "2026-07-26T06:59:35Z",
           "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",15]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "619908fbe517beaa391c26c5a7911024e4e7ba40bfa06bfd85b445d648b88b5d",
+          "readAt": "2026-07-26T07:15:41Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",16]"
+        },
+        {
+          "phase": "build",
+          "sha256": "619908fbe517beaa391c26c5a7911024e4e7ba40bfa06bfd85b445d648b88b5d",
+          "readAt": "2026-07-26T07:20:51Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",17]"
         }
       ]
     },
@@ -284,6 +312,18 @@
           "sha256": "97e79511d1005b10b263f6201c11fd4c6f7c743e5e1ad3d0a4e919834c4a6bbf",
           "readAt": "2026-07-26T06:59:35Z",
           "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",15]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "97e79511d1005b10b263f6201c11fd4c6f7c743e5e1ad3d0a4e919834c4a6bbf",
+          "readAt": "2026-07-26T07:15:41Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",16]"
+        },
+        {
+          "phase": "build",
+          "sha256": "97e79511d1005b10b263f6201c11fd4c6f7c743e5e1ad3d0a4e919834c4a6bbf",
+          "readAt": "2026-07-26T07:20:51Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",17]"
         }
       ]
     },
@@ -341,6 +381,18 @@
           "sha256": "49cfb34dfe83f4b488e48195f86deb0d599859b2459f71c98594e41a973f4b93",
           "readAt": "2026-07-26T06:59:35Z",
           "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",15]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "49cfb34dfe83f4b488e48195f86deb0d599859b2459f71c98594e41a973f4b93",
+          "readAt": "2026-07-26T07:15:41Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",16]"
+        },
+        {
+          "phase": "build",
+          "sha256": "49cfb34dfe83f4b488e48195f86deb0d599859b2459f71c98594e41a973f4b93",
+          "readAt": "2026-07-26T07:20:51Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",17]"
         }
       ]
     },
@@ -398,6 +450,18 @@
           "sha256": "723c47284a1e79a6e44af1a5fd6a185bcf89b3d724675260114375bbc9f3d723",
           "readAt": "2026-07-26T06:59:35Z",
           "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",15]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "723c47284a1e79a6e44af1a5fd6a185bcf89b3d724675260114375bbc9f3d723",
+          "readAt": "2026-07-26T07:15:41Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",16]"
+        },
+        {
+          "phase": "build",
+          "sha256": "723c47284a1e79a6e44af1a5fd6a185bcf89b3d724675260114375bbc9f3d723",
+          "readAt": "2026-07-26T07:20:51Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",17]"
         }
       ]
     },
@@ -425,6 +489,18 @@
           "sha256": "1fc4e967e43d11aec04967ae188cf0e78ef248bbd17b255170274a2f2e28ab69",
           "readAt": "2026-07-26T06:59:35Z",
           "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",15]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "1fc4e967e43d11aec04967ae188cf0e78ef248bbd17b255170274a2f2e28ab69",
+          "readAt": "2026-07-26T07:15:41Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",16]"
+        },
+        {
+          "phase": "build",
+          "sha256": "1fc4e967e43d11aec04967ae188cf0e78ef248bbd17b255170274a2f2e28ab69",
+          "readAt": "2026-07-26T07:20:51Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",17]"
         }
       ]
     },
@@ -440,6 +516,18 @@
           "sha256": "7b0fc0f7a34f323d9fb4bd18324622bdb892d16604c487761851255baa00b276",
           "readAt": "2026-07-26T06:59:35Z",
           "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",15]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "7b0fc0f7a34f323d9fb4bd18324622bdb892d16604c487761851255baa00b276",
+          "readAt": "2026-07-26T07:15:41Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",16]"
+        },
+        {
+          "phase": "build",
+          "sha256": "7b0fc0f7a34f323d9fb4bd18324622bdb892d16604c487761851255baa00b276",
+          "readAt": "2026-07-26T07:20:51Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",17]"
         }
       ]
     },
@@ -455,6 +543,18 @@
           "sha256": "447ae4f01d8b75aeb2550410e808116f602d65cd3974c57860f263a8e6b5f2ea",
           "readAt": "2026-07-26T06:59:35Z",
           "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",15]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "447ae4f01d8b75aeb2550410e808116f602d65cd3974c57860f263a8e6b5f2ea",
+          "readAt": "2026-07-26T07:15:41Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",16]"
+        },
+        {
+          "phase": "build",
+          "sha256": "447ae4f01d8b75aeb2550410e808116f602d65cd3974c57860f263a8e6b5f2ea",
+          "readAt": "2026-07-26T07:20:51Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",17]"
         }
       ]
     },
@@ -470,6 +570,18 @@
           "sha256": "447ae4f01d8b75aeb2550410e808116f602d65cd3974c57860f263a8e6b5f2ea",
           "readAt": "2026-07-26T06:59:35Z",
           "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",15]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "447ae4f01d8b75aeb2550410e808116f602d65cd3974c57860f263a8e6b5f2ea",
+          "readAt": "2026-07-26T07:15:41Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",16]"
+        },
+        {
+          "phase": "build",
+          "sha256": "447ae4f01d8b75aeb2550410e808116f602d65cd3974c57860f263a8e6b5f2ea",
+          "readAt": "2026-07-26T07:20:51Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",17]"
         }
       ]
     },
@@ -491,6 +603,18 @@
           "sha256": "88e618c83d51ad65f7dac1b7eaddc0d961cb4b753d0e9e3d41e88eecc58fed44",
           "readAt": "2026-07-26T06:59:35Z",
           "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",15]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "88e618c83d51ad65f7dac1b7eaddc0d961cb4b753d0e9e3d41e88eecc58fed44",
+          "readAt": "2026-07-26T07:15:41Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",16]"
+        },
+        {
+          "phase": "build",
+          "sha256": "88e618c83d51ad65f7dac1b7eaddc0d961cb4b753d0e9e3d41e88eecc58fed44",
+          "readAt": "2026-07-26T07:20:51Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",17]"
         }
       ]
     },
@@ -512,8 +636,28 @@
           "sha256": "1f53c186621b58c3b01d9a68d4ccf8faf3f1932fb0191b4912f36cec5e1b78e5",
           "readAt": "2026-07-26T06:59:35Z",
           "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",15]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "1f53c186621b58c3b01d9a68d4ccf8faf3f1932fb0191b4912f36cec5e1b78e5",
+          "readAt": "2026-07-26T07:15:41Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",16]"
+        },
+        {
+          "phase": "build",
+          "sha256": "1f53c186621b58c3b01d9a68d4ccf8faf3f1932fb0191b4912f36cec5e1b78e5",
+          "readAt": "2026-07-26T07:20:51Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",17]"
         }
       ]
+    },
+    {
+      "kind": "verification-report",
+      "path": "docs/superpowers/reports/2026-07-26-rename-pipeline-lite-to-tenon-verify.md",
+      "sha256": "1e3622866b532380d7bd538d8cf6c56b42a91bd31bf3953b2f1b138c36290227",
+      "producer": "verification-before-completion",
+      "recordedAt": "2026-07-26T07:15:40Z",
+      "reads": []
     }
   ]
 }

@@ -1,9 +1,9 @@
 # Tenon 冻结构建逐文件 Spec 回读清单
 
 > Change：`rename-pipeline-lite-to-tenon`
-> 冻结构建：`3bf189576542a572b71c10d2bc2118bd5f62f2c2`
+> 冻结构建：`f450a87a5bb6ae69e843815315748b9906cd24e1`
 > 比对基线：`6c874963`
-> 文件数：786
+> 文件数：821
 
 每一行均已回读对应 capability 主规格，并将冻结 diff 与其 requirement/scenario 逐项比对。重命名行同时覆盖旧路径删除与新路径新增；删除文件按替代后的现行能力契约核对。
 
@@ -795,3 +795,39 @@
 | D | `workflow-governance-desktop.png` | `openspec/specs/repository-architecture-compliance/spec.md` | ☑ |
 | D | `workflow-governance-mobile-dark.png` | `openspec/specs/repository-architecture-compliance/spec.md` | ☑ |
 | D | `workflow-governance-mobile.png` | `openspec/specs/repository-architecture-compliance/spec.md` | ☑ |
+| M | `docs/TEST-REALITY.md` | `openspec/specs/plugin-distribution/spec.md` | ☑ |
+| M | `docs/adr/2026-07-24-dashboard-state-scope-identity.md` | `openspec/specs/plugin-distribution/spec.md` | ☑ |
+| A | `docs/adr/2026-07-26-tenon-update-transaction-ownership.md` | `openspec/specs/plugin-distribution/spec.md` | ☑ |
+| A | `docs/superpowers/reports/2026-07-26-rename-pipeline-lite-to-tenon-file-spec-map.md` | `openspec/specs/repository-architecture-compliance/spec.md` | ☑ |
+| A | `openspec/changes/rename-pipeline-lite-to-tenon/.pipeline-run/revisions/000027-b38d583a-5060-4781-a664-ca407643007b.json` | `openspec/specs/tenon-product-identity/spec.md` | ☑ |
+| A | `openspec/changes/rename-pipeline-lite-to-tenon/.pipeline-run/revisions/000028-3e77c97b-2387-4213-8e4d-da7ebf211ab0.json` | `openspec/specs/tenon-product-identity/spec.md` | ☑ |
+| A | `openspec/changes/rename-pipeline-lite-to-tenon/.pipeline-run/revisions/000029-fffdc255-3ad7-4132-94bc-ed9e44d3aa85.json` | `openspec/specs/tenon-product-identity/spec.md` | ☑ |
+| A | `openspec/changes/rename-pipeline-lite-to-tenon/.pipeline-run/revisions/000030-af8836c5-0c5e-4763-a422-420f124a4c4b.json` | `openspec/specs/tenon-product-identity/spec.md` | ☑ |
+| A | `openspec/changes/rename-pipeline-lite-to-tenon/.pipeline-run/revisions/000031-1454adc8-9227-42be-bdd7-490190c168e1.json` | `openspec/specs/tenon-product-identity/spec.md` | ☑ |
+| A | `openspec/changes/rename-pipeline-lite-to-tenon/.pipeline-run/revisions/000032-cf6b7a04-b1b9-432a-8955-2f95b9edad5a.json` | `openspec/specs/tenon-product-identity/spec.md` | ☑ |
+| A | `openspec/changes/rename-pipeline-lite-to-tenon/.pipeline-run/revisions/000033-038e18e3-e75d-454d-b7f7-5599c96dbe89.json` | `openspec/specs/tenon-product-identity/spec.md` | ☑ |
+| A | `openspec/changes/rename-pipeline-lite-to-tenon/.pipeline-run/revisions/000034-b750aed0-befe-4a27-b0b5-d4d3f5c08367.json` | `openspec/specs/tenon-product-identity/spec.md` | ☑ |
+| A | `openspec/changes/rename-pipeline-lite-to-tenon/.pipeline-run/revisions/000035-0f363bb2-b418-44d1-83d7-1ca6f8924ad9.json` | `openspec/specs/tenon-product-identity/spec.md` | ☑ |
+| A | `openspec/changes/rename-pipeline-lite-to-tenon/.pipeline-run/revisions/000036-79c60def-122c-4f0f-927d-829d432116d4.json` | `openspec/specs/tenon-product-identity/spec.md` | ☑ |
+| A | `openspec/changes/rename-pipeline-lite-to-tenon/.pipeline-run/revisions/000037-335fac40-63ef-40c2-90a4-c42d19f199d8.json` | `openspec/specs/tenon-product-identity/spec.md` | ☑ |
+| A | `openspec/changes/rename-pipeline-lite-to-tenon/.pipeline-run/revisions/000038-46fece7b-eac1-4143-969d-41af0259f028.json` | `openspec/specs/tenon-product-identity/spec.md` | ☑ |
+| A | `openspec/changes/rename-pipeline-lite-to-tenon/.pipeline-run/revisions/000039-3fe04e34-26f9-493f-8a24-b66f9255d353.json` | `openspec/specs/tenon-product-identity/spec.md` | ☑ |
+| A | `openspec/changes/rename-pipeline-lite-to-tenon/.pipeline-run/revisions/000040-ba47efff-b0d3-4bc1-8fa7-874544311c4e.json` | `openspec/specs/tenon-product-identity/spec.md` | ☑ |
+| A | `openspec/changes/rename-pipeline-lite-to-tenon/.pipeline-run/revisions/000041-699bb375-7c6b-4046-befa-c0d2904f2527.json` | `openspec/specs/tenon-product-identity/spec.md` | ☑ |
+| A | `openspec/changes/rename-pipeline-lite-to-tenon/.pipeline-transitions/000010-bce919a9-7fbe-478e-b1ec-aa9d22087373.json` | `openspec/specs/tenon-product-identity/spec.md` | ☑ |
+| A | `openspec/changes/rename-pipeline-lite-to-tenon/.pipeline-transitions/000011-23e703bd-17fc-4ba8-a8c6-34235cfa6a2e.json` | `openspec/specs/tenon-product-identity/spec.md` | ☑ |
+| A | `openspec/changes/rename-pipeline-lite-to-tenon/.pipeline-transitions/000012-c2b5ea42-1d6b-4963-9497-16df93345ceb.json` | `openspec/specs/tenon-product-identity/spec.md` | ☑ |
+| A | `openspec/changes/rename-pipeline-lite-to-tenon/.pipeline-transitions/000013-fd1d6308-4543-46d4-b000-b5ecfc53f315.json` | `openspec/specs/tenon-product-identity/spec.md` | ☑ |
+| A | `openspec/changes/rename-pipeline-lite-to-tenon/.pipeline-transitions/000014-68c529be-7049-4f01-b967-f9eea4e827dd.json` | `openspec/specs/tenon-product-identity/spec.md` | ☑ |
+| A | `openspec/changes/rename-pipeline-lite-to-tenon/.pipeline-transitions/000015-d030bf11-af6f-4da2-9aa3-0560ea39476c.json` | `openspec/specs/tenon-product-identity/spec.md` | ☑ |
+| A | `packages/cli/src/commands/release-coordinator.ts` | `openspec/specs/plugin-distribution/spec.md` | ☑ |
+| M | `packages/cli/src/runtime/types.ts` | `openspec/specs/plugin-distribution/spec.md` | ☑ |
+| A | `packages/dashboard-app/dist/assets/index-DJdQov39.js` | `openspec/specs/tenon-product-identity/spec.md` | ☑ |
+| M | `packages/dashboard-app/src/workbench/SecretsCard.tsx` | `openspec/specs/tenon-product-identity/spec.md` | ☑ |
+| A | `packages/kernel/src/product-paths.test.ts` | `openspec/specs/plugin-distribution/spec.md` | ☑ |
+| A | `packages/kernel/src/product-paths.ts` | `openspec/specs/plugin-distribution/spec.md` | ☑ |
+| M | `packages/kernel/src/state/index.ts` | `openspec/specs/plugin-distribution/spec.md` | ☑ |
+| M | `packages/kernel/src/state/projectRegistry.test.ts` | `openspec/specs/plugin-distribution/spec.md` | ☑ |
+| M | `packages/kernel/src/state/projectRegistry.ts` | `openspec/specs/plugin-distribution/spec.md` | ☑ |
+| M | `packages/server/src/afkReadiness.test.ts` | `openspec/specs/plugin-distribution/spec.md` | ☑ |
+| A | `packages/server/src/paths.test.ts` | `openspec/specs/plugin-distribution/spec.md` | ☑ |

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -9,6 +9,40 @@ import { promisify } from 'node:util'
 
 const exec = promisify(execFile)
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+
+test('one-line dry-run prints the complete host and packaged setup plan without invoking the host or writing HOME', async () => {
+  const fixture = await mkdtemp(join(tmpdir(), 'tenon-install-bootstrap-dry-run-'))
+  try {
+    const bin = join(fixture, 'bin')
+    const home = join(fixture, 'home')
+    const hostLog = join(fixture, 'host.log')
+    await mkdir(bin, { recursive: true })
+    await mkdir(home, { recursive: true })
+    await writeFile(join(bin, 'codex'), `#!/usr/bin/env bash
+printf 'unexpected host invocation\\n' >> "$TENON_TEST_HOST_LOG"
+exit 97
+`)
+    await chmod(join(bin, 'codex'), 0o755)
+
+    const result = await exec('bash', [join(root, 'install.sh'), '--codex', '--dry-run'], {
+      cwd: fixture,
+      env: {
+        ...process.env,
+        HOME: home,
+        PATH: `${bin}:${process.env.PATH ?? ''}`,
+        TENON_TEST_HOST_LOG: hostLog,
+      },
+    })
+
+    assert.match(result.stdout, /codex plugin marketplace add jefferysha\/tenon --ref main/)
+    assert.match(result.stdout, /codex plugin add tenon@tenon --json/)
+    assert.match(result.stdout, /tenon setup --codex --yes --dry-run/)
+    await assert.rejects(readFile(hostLog, 'utf8'), /ENOENT/)
+    assert.deepEqual(await readdir(home), [])
+  } finally {
+    await rm(fixture, { recursive: true, force: true })
+  }
+})
 
 test('Codex one-line bootstrap registers Marketplace and invokes the packaged Tenon setup', async () => {
   const fixture = await mkdtemp(join(tmpdir(), 'tenon-install-bootstrap-'))
