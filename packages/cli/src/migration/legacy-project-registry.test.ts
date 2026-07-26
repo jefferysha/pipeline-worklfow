@@ -9,6 +9,8 @@ import {
 } from './legacy-project-registry.js'
 
 describe('legacy project registry migration', () => {
+  const isolatedEnv = {}
+
   test.each([
     ['darwin' as const, '/Users/demo', [
       '/Users/demo/.claude/pipeline-projects.json',
@@ -30,12 +32,13 @@ describe('legacy project registry migration', () => {
     const homeDir = await mkdtemp(join(tmpdir(), 'tenon-project-migration-'))
     const projectOne = join(homeDir, 'project-one')
     const projectTwo = join(homeDir, 'project-two')
-    const current = resolveProductPaths({ homeDir, platform: 'darwin' }).registryPath
+    const current = resolveProductPaths({ homeDir, platform: 'darwin', env: isolatedEnv }).registryPath
     const legacy = JSON.stringify([projectOne, projectTwo, projectTwo])
 
     const result = await migrateLegacyProjectRegistry({
       homeDir,
       platform: 'darwin',
+      env: isolatedEnv,
       readText: (path) => path === join(homeDir, '.claude', 'pipeline-projects.json') ? legacy : undefined,
       pathExists: (path) => path === projectOne || path === projectTwo,
       pathIsDirectory: (path) => path === projectOne || path === projectTwo,
@@ -48,6 +51,7 @@ describe('legacy project registry migration', () => {
     const second = await migrateLegacyProjectRegistry({
       homeDir,
       platform: 'darwin',
+      env: isolatedEnv,
       readText: () => {
         throw new Error('completed migration must never read a host registry again')
       },
@@ -66,13 +70,18 @@ describe('legacy project registry migration', () => {
     const result = await migrateLegacyProjectRegistry({
       homeDir,
       platform: 'darwin',
+      env: isolatedEnv,
       readText: (path) => path.endsWith('pipeline-projects.json') ? legacy : undefined,
       pathExists: () => false,
       pathIsDirectory: () => false,
     })
 
     expect(result).toEqual({ status: 'completed', discovered: 0, imported: 0, rejected: 6 })
-    expect(readProjectRegistry(resolveProductPaths({ homeDir, platform: 'darwin' }).registryPath)).toEqual([])
+    expect(readProjectRegistry(resolveProductPaths({
+      homeDir,
+      platform: 'darwin',
+      env: isolatedEnv,
+    }).registryPath)).toEqual([])
   })
 
   test('serializes concurrent first setup and publishes exactly one durable receipt', async () => {
@@ -81,6 +90,7 @@ describe('legacy project registry migration', () => {
     const input = {
       homeDir,
       platform: 'linux' as const,
+      env: isolatedEnv,
       readText: (path: string) => path.endsWith('pipeline-projects.json')
         ? JSON.stringify([project])
         : undefined,
@@ -94,19 +104,24 @@ describe('legacy project registry migration', () => {
     ])
 
     expect(results.map((result) => result.status).sort()).toEqual(['already-complete', 'completed'])
-    expect(readProjectRegistry(resolveProductPaths({ homeDir, platform: 'linux' }).registryPath)).toEqual([project])
+    expect(readProjectRegistry(resolveProductPaths({
+      homeDir,
+      platform: 'linux',
+      env: isolatedEnv,
+    }).registryPath)).toEqual([project])
   })
 
   test('resumes an interrupted partial import from its durable snapshot without rereading host files', async () => {
     const homeDir = await mkdtemp(join(tmpdir(), 'tenon-project-migration-resume-'))
     const projectOne = join(homeDir, 'project-one')
     const projectTwo = join(homeDir, 'project-two')
-    const paths = resolveProductPaths({ homeDir, platform: 'linux' })
+    const paths = resolveProductPaths({ homeDir, platform: 'linux', env: isolatedEnv })
     let writes = 0
 
     await expect(migrateLegacyProjectRegistry({
       homeDir,
       platform: 'linux',
+      env: isolatedEnv,
       readText: (path) => path.endsWith('pipeline-projects.json')
         ? JSON.stringify([projectOne, projectTwo])
         : undefined,
@@ -125,6 +140,7 @@ describe('legacy project registry migration', () => {
     const resumed = await migrateLegacyProjectRegistry({
       homeDir,
       platform: 'linux',
+      env: isolatedEnv,
       readText: () => {
         throw new Error('resume must use the durable pending snapshot')
       },
@@ -147,7 +163,7 @@ describe('legacy project registry migration', () => {
 
   test('fails closed when the versioned receipt is corrupt instead of re-importing host data', async () => {
     const homeDir = await mkdtemp(join(tmpdir(), 'tenon-project-migration-corrupt-'))
-    const paths = resolveProductPaths({ homeDir, platform: 'linux' })
+    const paths = resolveProductPaths({ homeDir, platform: 'linux', env: isolatedEnv })
     const receiptPath = join(paths.migrationsRoot, 'host-project-registry-v1', 'receipt.json')
     await mkdir(join(paths.migrationsRoot, 'host-project-registry-v1'), { recursive: true })
     await writeFile(receiptPath, '{broken', 'utf8')
@@ -155,6 +171,7 @@ describe('legacy project registry migration', () => {
     await expect(migrateLegacyProjectRegistry({
       homeDir,
       platform: 'linux',
+      env: isolatedEnv,
       readText: () => JSON.stringify(['/must-not-import']),
       pathExists: () => true,
       pathIsDirectory: () => true,
@@ -164,7 +181,7 @@ describe('legacy project registry migration', () => {
 
   test('fails closed when a receipt contains impossible imported and ensured counts', async () => {
     const homeDir = await mkdtemp(join(tmpdir(), 'tenon-project-migration-invalid-counts-'))
-    const paths = resolveProductPaths({ homeDir, platform: 'linux' })
+    const paths = resolveProductPaths({ homeDir, platform: 'linux', env: isolatedEnv })
     const receiptPath = join(paths.migrationsRoot, 'host-project-registry-v1', 'receipt.json')
     await mkdir(join(paths.migrationsRoot, 'host-project-registry-v1'), { recursive: true })
     await writeFile(receiptPath, JSON.stringify({
@@ -180,6 +197,7 @@ describe('legacy project registry migration', () => {
     await expect(migrateLegacyProjectRegistry({
       homeDir,
       platform: 'linux',
+      env: isolatedEnv,
       readText: () => {
         throw new Error('an invalid receipt must fail before reading host data')
       },
@@ -190,7 +208,7 @@ describe('legacy project registry migration', () => {
 
   test('accepts a valid v1 receipt written before the ensured field was introduced', async () => {
     const homeDir = await mkdtemp(join(tmpdir(), 'tenon-project-migration-old-receipt-'))
-    const paths = resolveProductPaths({ homeDir, platform: 'linux' })
+    const paths = resolveProductPaths({ homeDir, platform: 'linux', env: isolatedEnv })
     const receiptPath = join(paths.migrationsRoot, 'host-project-registry-v1', 'receipt.json')
     await mkdir(join(paths.migrationsRoot, 'host-project-registry-v1'), { recursive: true })
     await writeFile(receiptPath, JSON.stringify({
@@ -205,6 +223,7 @@ describe('legacy project registry migration', () => {
     await expect(migrateLegacyProjectRegistry({
       homeDir,
       platform: 'linux',
+      env: isolatedEnv,
       readText: () => {
         throw new Error('a valid completed receipt must suppress host reads')
       },

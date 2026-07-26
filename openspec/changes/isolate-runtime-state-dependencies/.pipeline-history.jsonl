@@ -1,0 +1,33 @@
+{"ts":"2026-07-26T10:36:02Z","kind":"init"}
+{"ts":"2026-07-26T10:36:02Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated"}
+{"ts":"2026-07-26T10:39:00Z","kind":"tool","raw":"CodexSkillRead: openspec-propose"}
+{"ts":"2026-07-26T10:39:11Z","kind":"transition","from":"open","to":"explore","raw":"open-complete","transitionRecordId":"d1e30ac6-bef5-47d7-a857-b4402763b564"}
+{"ts":"2026-07-26T10:41:15Z","kind":"set","field":"design_doc","to":"docs/superpowers/specs/isolate-runtime-state-dependencies-design.md"}
+{"ts":"2026-07-26T10:43:34Z","kind":"set","field":"design_doc","to":"docs/superpowers/specs/isolate-runtime-state-dependencies-design.md"}
+{"ts":"2026-07-26T10:43:50Z","kind":"set","field":"design_doc","to":"docs/superpowers/specs/isolate-runtime-state-dependencies-design.md"}
+{"ts":"2026-07-26T10:44:32Z","kind":"set","field":"design_doc","to":"docs/superpowers/specs/isolate-runtime-state-dependencies-design.md"}
+{"ts":"2026-07-26T10:45:38Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated"}
+{"ts":"2026-07-26T10:46:40Z","kind":"tool","raw":"CodexSkillRead: tenon-explore"}
+{"ts":"2026-07-26T10:49:39Z","kind":"tool","raw":"CodexSkillRead: brainstorming"}
+{"ts":"2026-07-26T10:49:39Z","kind":"tool","raw":"CodexSkillRead: grill-with-docs"}
+{"ts":"2026-07-26T10:49:39Z","kind":"tool","raw":"CodexSkillRead: search-first"}
+{"ts":"2026-07-26T10:49:39Z","kind":"tool","raw":"CodexSkillRead: openspec-explore"}
+{"ts":"2026-07-26T10:49:39Z","kind":"tool","raw":"CodexSkillRead: improve-codebase-architecture"}
+{"ts":"2026-07-26T10:49:52Z","kind":"tool","raw":"review:request phase=explore event=explore-complete"}
+{"ts":"2026-07-26T10:49:52Z","kind":"tool","raw":"review:delegated-ack phase=explore event=explore-complete authority_issued_at=2026-07-26T10:45:38Z"}
+{"ts":"2026-07-26T10:49:52Z","kind":"transition","from":"explore","to":"spec","raw":"explore-complete","transitionRecordId":"908e7d90-0555-4b69-a15b-4033fdf82fb5"}
+{"ts":"2026-07-26T10:51:49Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated"}
+{"ts":"2026-07-26T10:53:18Z","kind":"set","field":"plan","to":"docs/superpowers/plans/isolate-runtime-state-dependencies.md"}
+{"ts":"2026-07-26T10:53:40Z","kind":"tool","raw":"CodexSkillRead: openspec-propose"}
+{"ts":"2026-07-26T10:53:45Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-07-26T10:55:58Z","kind":"tool","raw":"CodexSkillRead: tenon-spec"}
+{"ts":"2026-07-26T10:56:07Z","kind":"tool","raw":"review:request phase=spec event=spec-complete"}
+{"ts":"2026-07-26T10:56:08Z","kind":"tool","raw":"review:delegated-ack phase=spec event=spec-complete authority_issued_at=2026-07-26T10:51:49Z"}
+{"ts":"2026-07-26T10:56:08Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"8360cc22-d342-4306-be32-db7af98e2168"}
+{"ts":"2026-07-26T10:56:31Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-07-26T10:56:37Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-26T10:56:45Z","kind":"set","field":"build_mode","to":"direct"}
+{"ts":"2026-07-26T10:56:45Z","kind":"set","field":"isolation","to":"branch"}
+{"ts":"2026-07-26T10:56:45Z","kind":"set","field":"direct_override","to":"true"}
+{"ts":"2026-07-26T11:00:24Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
+{"ts":"2026-07-26T11:14:38Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated"}

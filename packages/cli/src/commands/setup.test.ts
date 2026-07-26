@@ -37,6 +37,7 @@ function spyEnv(over: Partial<SetupEnv> = {}, exec?: ExecStub, confirmAns = true
   const calls: SpyCalls = { mkdirp: [], writeText: [], exec: [] }
   const env: SetupEnv = {
     homeDir: () => '/home/test',
+    runtimeEnv: () => ({}),
     pluginRoot: () => '/plugin',
   selfPath: () => '/plugin/packages/cli/dist/tenon.mjs',
   mkdirp: (d) => { calls.mkdirp.push(d) },
@@ -74,9 +75,9 @@ function fakeRuntimeInstaller(
   const calls: RuntimeCalls = { activations: [], reverts: [] }
   const releaseId = `sha256-${'a'.repeat(64)}`
   const installer: RuntimeInstaller = {
-    withManagedTransaction: async (homeDir, operation) => operation({
+    withManagedTransaction: async (scope, operation) => operation({
       activate: async (candidateRoot, host) => {
-        calls.activations.push([candidateRoot, host, homeDir])
+        calls.activations.push([candidateRoot, host, scope.homeDir])
         if (fail) throw new Error('candidate rejected')
         return {
           release: {
@@ -97,7 +98,7 @@ function fakeRuntimeInstaller(
         }
       },
       revertActivation: async (activation) => {
-        calls.reverts.push([homeDir, activation.release.releaseId])
+        calls.reverts.push([scope.homeDir, activation.release.releaseId])
       },
     }),
     inspect: async () => ({
@@ -202,10 +203,10 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
 
     expect(await cmdSetupHost(deps, 'codex', { codex: true, autoUpdate: true }, env, runtime.installer, dashboard.starter)).toBe(0)
     expect(calls.writeText).toEqual([[
-      join(resolveRuntimePaths({ homeDir: '/home/test' }).configRoot, 'auto-update.conf'),
+      join(resolveRuntimePaths({ homeDir: '/home/test', env: {} }).configRoot, 'auto-update.conf'),
       'host=codex\nenabled=true\n',
     ]])
-    expect(calls.mkdirp).toContain(resolveRuntimePaths({ homeDir: '/home/test' }).configRoot)
+    expect(calls.mkdirp).toContain(resolveRuntimePaths({ homeDir: '/home/test', env: {} }).configRoot)
     expect(calls.exec.map(([cmd, args]) => [cmd, args.join(' ')])).toEqual([
       ['codex', 'plugin list --json'],
       ['bash', '/installed/tenon/tools/verify-skills.sh --quiet --root /installed/tenon'],

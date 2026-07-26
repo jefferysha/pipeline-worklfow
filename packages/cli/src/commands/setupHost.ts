@@ -182,7 +182,10 @@ function publishManagedRuntime(
     {
       candidateRoot,
       source,
-      homeDir: env.homeDir(),
+      runtime: {
+        homeDir: env.homeDir(),
+        env: env.runtimeEnv(),
+      },
       openBrowser: openDashboard,
     },
     installer,
@@ -251,7 +254,7 @@ export function cmdSetupHost(
       const migrated = await migrateProjectRegistry({
         homeDir: env.homeDir(),
         platform: process.platform,
-        env: process.env,
+        env: env.runtimeEnv(),
         readText: env.readText,
         pathExists: env.pathExists,
       })

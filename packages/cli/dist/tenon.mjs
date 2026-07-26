@@ -3034,7 +3034,7 @@ import { execFile as execFile4 } from "node:child_process";
 import { createHash as createHash31 } from "node:crypto";
 import { accessSync as accessSync5, constants as fsConstants5, readdirSync as readdirSync9, readFileSync as readFileSync27, statSync as statSync8 } from "node:fs";
 import { readFile as readFile36, rm as rm13, stat as stat13, writeFile as writeFile15 } from "node:fs/promises";
-import { homedir as homedir21 } from "node:os";
+import { homedir as homedir20 } from "node:os";
 import { dirname as dirname21, join as join78 } from "node:path";
 import { fileURLToPath as fileURLToPath3 } from "node:url";
 
@@ -43069,11 +43069,10 @@ async function cmdDashboard(deps, opts, runtime = REAL_DASHBOARD_RUNTIME) {
 }
 
 // packages/cli/src/commands/runtime.ts
-import { homedir as homedir18 } from "node:os";
+import { homedir as homedir17 } from "node:os";
 
 // packages/cli/src/runtime/installer.ts
 import { mkdir as mkdir25 } from "node:fs/promises";
-import { homedir as homedir17 } from "node:os";
 
 // packages/cli/src/runtime/launchers.ts
 import { chmod as chmod2, lstat as lstat30, mkdir as mkdir23, readFile as readFile32, rm as rm10 } from "node:fs/promises";
@@ -43813,8 +43812,15 @@ var ManagedRuntimeIndeterminateError = class extends Error {
     this.name = "ManagedRuntimeIndeterminateError";
   }
 };
-function storeFor(homeDir) {
-  return new RuntimeReleaseStore({ paths: resolveRuntimePaths({ homeDir }) });
+function pathsFor(scope) {
+  return resolveRuntimePaths({
+    homeDir: scope.homeDir,
+    env: scope.env,
+    ...scope.platform === void 0 ? {} : { platform: scope.platform }
+  });
+}
+function storeFor(scope) {
+  return new RuntimeReleaseStore({ paths: pathsFor(scope) });
 }
 async function activateWithinTransaction(paths, homeDir, candidateRoot, host) {
   const store2 = new RuntimeReleaseStore({ paths });
@@ -43883,35 +43889,36 @@ async function rollbackWithinTransaction(paths, homeDir) {
     throw new Error(`runtime repair \u7684 launcher \u63D0\u4EA4\u5931\u8D25\uFF0C\u5DF2\u6062\u590D repair \u524D\u72B6\u6001\uFF1A${String(error)}`);
   }
 }
-async function withExclusiveRuntimeTransaction(homeDir, operation) {
-  const paths = resolveRuntimePaths({ homeDir });
+async function withExclusiveRuntimeTransaction(scope, operation) {
+  const paths = pathsFor(scope);
   await mkdir25(paths.managedTransactionRoot, { recursive: true });
   return withLock(paths.managedTransactionRoot, () => operation({
-    activate: (candidateRoot, host) => activateWithinTransaction(paths, homeDir, candidateRoot, host),
-    revertActivation: (activation) => revertWithinTransaction(paths, homeDir, activation)
+    activate: (candidateRoot, host) => activateWithinTransaction(paths, scope.homeDir, candidateRoot, host),
+    revertActivation: (activation) => revertWithinTransaction(paths, scope.homeDir, activation)
   }));
 }
 var REAL_RUNTIME_INSTALLER = {
-  async withManagedTransaction(homeDir = homedir17(), operation) {
-    return withExclusiveRuntimeTransaction(homeDir, operation);
+  async withManagedTransaction(scope, operation) {
+    return withExclusiveRuntimeTransaction(scope, operation);
   },
-  inspect(homeDir = homedir17()) {
-    return storeFor(homeDir).inspect();
+  inspect(scope) {
+    return storeFor(scope).inspect();
   },
-  async rollback(homeDir = homedir17()) {
-    return withExclusiveRuntimeTransaction(homeDir, async () => {
-      const paths = resolveRuntimePaths({ homeDir });
-      return rollbackWithinTransaction(paths, homeDir);
+  async rollback(scope) {
+    return withExclusiveRuntimeTransaction(scope, async () => {
+      const paths = pathsFor(scope);
+      return rollbackWithinTransaction(paths, scope.homeDir);
     });
   },
-  recordUpdateFailure(homeDir = homedir17(), detail) {
-    return storeFor(homeDir).recordUpdateFailure(detail);
+  recordUpdateFailure(scope, detail) {
+    return storeFor(scope).recordUpdateFailure(detail);
   }
 };
 
 // packages/cli/src/commands/runtime.ts
 var REAL_RUNTIME_COMMAND_ENV = {
-  homeDir: () => homedir18()
+  homeDir: () => homedir17(),
+  runtimeEnv: () => process.env
 };
 function statusPayload(inspection) {
   return {
@@ -43939,9 +43946,10 @@ function renderStatus(deps, inspection, asJson) {
   }
 }
 async function cmdRuntime(deps, sub, opts, env = REAL_RUNTIME_COMMAND_ENV, installer = REAL_RUNTIME_INSTALLER) {
+  const scope = { homeDir: env.homeDir(), env: env.runtimeEnv() };
   if (sub === "status") {
     try {
-      renderStatus(deps, await installer.inspect(env.homeDir()), opts.json === true);
+      renderStatus(deps, await installer.inspect(scope), opts.json === true);
       return 0;
     } catch (error) {
       deps.io.err(`ERROR: \u65E0\u6CD5\u8BFB\u53D6 managed runtime \u72B6\u6001\uFF1A${error instanceof Error ? error.message : String(error)}`);
@@ -43954,7 +43962,7 @@ async function cmdRuntime(deps, sub, opts, env = REAL_RUNTIME_COMMAND_ENV, insta
       return 1;
     }
     try {
-      const activation = await installer.rollback(env.homeDir());
+      const activation = await installer.rollback(scope);
       const payload = {
         ok: true,
         selection: activation.selection,
@@ -44067,9 +44075,10 @@ import {
   realpathSync as realpathSync3,
   writeFileSync as writeFileSync5
 } from "node:fs";
-import { homedir as homedir19 } from "node:os";
+import { homedir as homedir18 } from "node:os";
 var REAL_SETUP_ENV = {
-  homeDir: () => homedir19(),
+  homeDir: () => homedir18(),
+  runtimeEnv: () => process.env,
   pluginRoot: () => {
     const r = process.env.PLUGIN_ROOT ?? process.env.CLAUDE_PLUGIN_ROOT;
     return r !== void 0 && r.trim() !== "" ? r : null;
@@ -44161,7 +44170,10 @@ function printPlanSkeleton(deps, opts, host) {
   if (opts.dryRun) deps.io.out("  \uFF08--dry-run:\u4EC5\u6253\u5370\u8BA1\u5212,\u4E0D\u53D1\u5E03 runtime\u3001\u4E0D\u5199\u4EFB\u4F55\u6587\u4EF6\uFF09");
 }
 function autoUpdateConfigPath(env) {
-  return join69(resolveRuntimePaths({ homeDir: env.homeDir() }).configRoot, "auto-update.conf");
+  return join69(resolveRuntimePaths({
+    homeDir: env.homeDir(),
+    env: env.runtimeEnv()
+  }).configRoot, "auto-update.conf");
 }
 function configureAutoUpdate(deps, env, host, enabled) {
   if (!enabled) return 0;
@@ -44261,7 +44273,7 @@ import { join as join70 } from "node:path";
 async function publishManagedRelease(deps, request, installer, dashboardStarter) {
   try {
     return await installer.withManagedTransaction(
-      request.homeDir,
+      request.runtime,
       (transaction) => publishWithinManagedTransaction(
         deps,
         request,
@@ -44419,7 +44431,7 @@ async function migrateLegacyProjectRegistry(input) {
   const productPaths = resolveProductPaths({
     homeDir: input.homeDir,
     ...input.platform === void 0 ? {} : { platform: input.platform },
-    ...input.env === void 0 ? {} : { env: input.env }
+    env: input.env
   });
   const migrationRoot = join71(productPaths.migrationsRoot, MIGRATION_ID);
   const receiptPath = join71(migrationRoot, "receipt.json");
@@ -44604,7 +44616,10 @@ function publishManagedRuntime(deps, env, installer, candidateRoot, host, dashbo
     {
       candidateRoot,
       source,
-      homeDir: env.homeDir(),
+      runtime: {
+        homeDir: env.homeDir(),
+        env: env.runtimeEnv()
+      },
       openBrowser: openDashboard
     },
     installer,
@@ -44660,7 +44675,7 @@ function cmdSetupHost(deps, host, opts, env = REAL_SETUP_ENV, installer = REAL_R
       const migrated = await migrateProjectRegistry({
         homeDir: env.homeDir(),
         platform: process.platform,
-        env: process.env,
+        env: env.runtimeEnv(),
         readText: env.readText,
         pathExists: env.pathExists
       });
@@ -45058,11 +45073,11 @@ function cmdSetupSkills(deps, opts, env = REAL_SETUP_ENV, sources, loadSources =
 // packages/cli/src/commands/setupRuntime.ts
 import { join as join74 } from "node:path";
 import { accessSync as accessSync4, constants as fsConstants4 } from "node:fs";
-import { homedir as homedir20 } from "node:os";
+import { homedir as homedir19 } from "node:os";
 var REAL_RUNTIME_ENV = {
   exec: nodeExecDocker,
   hostEnv: process.env,
-  defaultCodexHome: join74(homedir20(), ".codex"),
+  defaultCodexHome: join74(homedir19(), ".codex"),
   canReadFile: (path9) => {
     try {
       accessSync4(path9, fsConstants4.R_OK);
@@ -45200,7 +45215,10 @@ function verifyUpdatedRoot(deps, env, root) {
   return false;
 }
 function rejectUpdate(installer, env, detail) {
-  const record2 = installer.recordUpdateFailure?.(env.homeDir(), detail);
+  const record2 = installer.recordUpdateFailure?.({
+    homeDir: env.homeDir(),
+    env: env.runtimeEnv()
+  }, detail);
   if (record2 === void 0) return 1;
   return record2.then(() => 1).catch(() => 1);
 }
@@ -45280,7 +45298,10 @@ function cmdUpdate(deps, opts, env = REAL_SETUP_ENV, installer = REAL_RUNTIME_IN
     {
       candidateRoot: root,
       source: host,
-      homeDir: env.homeDir(),
+      runtime: {
+        homeDir: env.homeDir(),
+        env: env.runtimeEnv()
+      },
       openBrowser: opts.auto !== true
     },
     installer,
@@ -45311,7 +45332,10 @@ function shellQuote2(value) {
 function reportRegisteredProjects(deps, env, pluginVersion) {
   let registry;
   try {
-    registry = env.readText(resolveRuntimePaths({ homeDir: env.homeDir() }).registryPath);
+    registry = env.readText(resolveRuntimePaths({
+      homeDir: env.homeDir(),
+      env: env.runtimeEnv()
+    }).registryPath);
   } catch {
     deps.io.err("[update] WARN: \u9879\u76EE\u6CE8\u518C\u8868\u65E0\u6CD5\u8BFB\u53D6\uFF1B\u672A\u4FEE\u6539\u4EFB\u4F55\u5DE5\u4F5C\u533A\u3002");
     return;
@@ -46096,7 +46120,7 @@ function safeReaddirDirs(dir) {
 function readDisabledPluginKeys() {
   const disabled = /* @__PURE__ */ new Set();
   try {
-    const raw = readFileSync27(join78(homedir21(), ".claude", "settings.json"), "utf8");
+    const raw = readFileSync27(join78(homedir20(), ".claude", "settings.json"), "utf8");
     const parsed = JSON.parse(raw);
     const ep = typeof parsed === "object" && parsed !== null && "enabledPlugins" in parsed ? parsed.enabledPlugins : void 0;
     if (ep !== null && typeof ep === "object") {
@@ -46107,7 +46131,7 @@ function readDisabledPluginKeys() {
   return disabled;
 }
 function scanInstalledSkillNames() {
-  const home = homedir21();
+  const home = homedir20();
   const names = /* @__PURE__ */ new Set();
   for (const n of safeReaddirDirs(join78(home, ".claude", "skills"))) names.add(n);
   for (const n of safeReaddirDirs(join78(home, ".agents", "skills"))) names.add(n);
@@ -46189,13 +46213,16 @@ function makeDoctorProbes(runtimePaths) {
     // 接入判定与 statusline.sh 头注释的接入方式同口径：settings.json 里引用了该脚本即算接入
     statuslineConfigured: () => {
       try {
-        return readFileSync27(join78(homedir21(), ".claude", "settings.json"), "utf8").includes("statusline.sh");
+        return readFileSync27(join78(homedir20(), ".claude", "settings.json"), "utf8").includes("statusline.sh");
       } catch {
         return false;
       }
     },
     nativeRuntimeHost: async () => {
-      const host = (await REAL_RUNTIME_INSTALLER.inspect(homedir21())).active?.source.host;
+      const host = (await REAL_RUNTIME_INSTALLER.inspect({
+        homeDir: homedir20(),
+        env: process.env
+      })).active?.source.host;
       return host === "codex" || host === "claude" ? host : null;
     },
     runVerifySkills: () => new Promise((resolve36) => {
@@ -46240,12 +46267,12 @@ function makeDoctorProbes(runtimePaths) {
       image: readAutomationJson(process.cwd()).image ?? "sandcastle:local",
       secretsEnv: readSecrets(runtimePaths.secretsPath).keys,
       hostEnv: process.env,
-      defaultCodexHome: join78(homedir21(), ".codex")
+      defaultCodexHome: join78(homedir20(), ".codex")
     })
   };
 }
 async function main() {
-  const runtimePaths = resolveRuntimePaths({ env: process.env, homeDir: homedir21() });
+  const runtimePaths = resolveRuntimePaths({ env: process.env, homeDir: homedir20() });
   const manifest = loadManifest(manifestPath());
   const { toParse, passthrough } = splitPassthroughArgv(process.argv);
   const store2 = createStateStore();

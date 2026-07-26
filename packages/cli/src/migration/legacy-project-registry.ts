@@ -15,7 +15,8 @@ const MIGRATION_ID = 'host-project-registry-v1'
 export interface LegacyProjectRegistryMigrationInput {
   readonly homeDir: string
   readonly platform?: NodeJS.Platform
-  readonly env?: ProductPathInput['env']
+  /** 调用边界必须明确选择真实环境或隔离环境，应用服务不得隐式读取 process.env。 */
+  readonly env: NonNullable<ProductPathInput['env']>
   readonly readText: (path: string) => string | undefined
   readonly pathExists: (path: string) => boolean
   readonly pathIsDirectory?: (path: string) => boolean
@@ -153,7 +154,7 @@ export async function migrateLegacyProjectRegistry(
   const productPaths = resolveProductPaths({
     homeDir: input.homeDir,
     ...(input.platform === undefined ? {} : { platform: input.platform }),
-    ...(input.env === undefined ? {} : { env: input.env }),
+    env: input.env,
   })
   const migrationRoot = join(productPaths.migrationsRoot, MIGRATION_ID)
   const receiptPath = join(migrationRoot, 'receipt.json')

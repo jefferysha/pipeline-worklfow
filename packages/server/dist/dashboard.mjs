@@ -19490,7 +19490,7 @@ function createDashboardServer(options = {}) {
   const releaseId = options.releaseId;
   const token = options.token ?? generateToken();
   const clock = options.clock ?? isoNow;
-  const paths = resolveServerPaths({ home: options.home });
+  const paths = options.paths ?? resolveServerPaths();
   const stateScopeId = machineStateScopeId(paths.stateRoot);
   const registry = options.registry ?? (() => readProjectRegistry(paths.registryPath));
   const store = options.store ?? createStateStore();
@@ -20034,6 +20034,7 @@ async function main() {
   const srv = createDashboardServer({
     version,
     releaseId,
+    paths,
     home: paths.homeDir,
     token,
     manifestPath: manifestPath(),

@@ -54,6 +54,8 @@ function pathsFor(root: string) {
 }
 
 describe('RuntimeReleaseStore', () => {
+  const isolatedScope = (homeDir: string) => ({ homeDir, env: {} })
+
   it('holds one product-scoped transaction lock across the caller-defined managed release lifecycle', async () => {
     const root = await freshRoot('managed-transaction-lock')
     const home = join(root, 'home')
@@ -61,13 +63,13 @@ describe('RuntimeReleaseStore', () => {
     let releaseFirst!: () => void
     const firstGate = new Promise<void>((resolve) => { releaseFirst = resolve })
 
-    const first = REAL_RUNTIME_INSTALLER.withManagedTransaction(home, async () => {
+    const first = REAL_RUNTIME_INSTALLER.withManagedTransaction(isolatedScope(home), async () => {
       events.push('first:start')
       await firstGate
       events.push('first:end')
     })
     await new Promise((resolve) => setTimeout(resolve, 20))
-    const second = REAL_RUNTIME_INSTALLER.withManagedTransaction(home, async () => {
+    const second = REAL_RUNTIME_INSTALLER.withManagedTransaction(isolatedScope(home), async () => {
       events.push('second:start')
       events.push('second:end')
     })
@@ -234,13 +236,13 @@ describe('RuntimeReleaseStore', () => {
     await chmod(hook, 0o700)
 
     const activation = await REAL_RUNTIME_INSTALLER.withManagedTransaction(
-      home,
+      isolatedScope(home),
       (transaction) => transaction.activate(candidate, 'codex'),
     )
     expect(await readFile(tenon, 'utf8')).toContain('TENON_RUNTIME_DATA_ROOT')
 
     await REAL_RUNTIME_INSTALLER.withManagedTransaction(
-      home,
+      isolatedScope(home),
       (transaction) => transaction.revertActivation(activation),
     )
 
@@ -248,7 +250,7 @@ describe('RuntimeReleaseStore', () => {
     expect(await readFile(hook, 'utf8')).toBe('#!/bin/sh\necho previous-hook\n')
     expect((await stat(tenon)).mode & 0o777).toBe(0o750)
     expect((await stat(hook)).mode & 0o777).toBe(0o700)
-    expect((await REAL_RUNTIME_INSTALLER.inspect(home)).selection.activeRelease).toBeNull()
+    expect((await REAL_RUNTIME_INSTALLER.inspect(isolatedScope(home))).selection.activeRelease).toBeNull()
   }, 30_000)
 
   it('never restores an old launcher snapshot after selection CAS proves another activation owns the runtime', async () => {
@@ -261,9 +263,9 @@ describe('RuntimeReleaseStore', () => {
       `${await readFile(join(secondCandidate, 'runtime', 'tenon-bootstrap.mjs'), 'utf8')}\n// concurrent-owner\n`,
       'utf8',
     )
-    const paths = resolveRuntimePaths({ homeDir: home })
+    const paths = resolveRuntimePaths({ homeDir: home, env: {} })
     const first = await REAL_RUNTIME_INSTALLER.withManagedTransaction(
-      home,
+      isolatedScope(home),
       (transaction) => transaction.activate(firstCandidate, 'codex'),
     )
     const second = await new RuntimeReleaseStore({ paths }).stageAndActivate(secondCandidate, 'codex')
@@ -271,11 +273,11 @@ describe('RuntimeReleaseStore', () => {
     await writeFile(tenon, '#!/bin/sh\necho concurrent-owner\n', 'utf8')
 
     await expect(REAL_RUNTIME_INSTALLER.withManagedTransaction(
-      home,
+      isolatedScope(home),
       (transaction) => transaction.revertActivation(first),
     )).rejects.toThrow(/拒绝回滚非当前 activation/)
 
-    expect((await REAL_RUNTIME_INSTALLER.inspect(home)).selection.activeRelease).toBe(second.release.releaseId)
+    expect((await REAL_RUNTIME_INSTALLER.inspect(isolatedScope(home))).selection.activeRelease).toBe(second.release.releaseId)
     expect(await readFile(tenon, 'utf8')).toBe('#!/bin/sh\necho concurrent-owner\n')
   }, 60_000)
 })

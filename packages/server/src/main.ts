@@ -103,6 +103,7 @@ async function main(): Promise<void> {
   const srv = createDashboardServer({
     version,
     releaseId,
+    paths,
     home: paths.homeDir,
     token,
     manifestPath: manifestPath(),

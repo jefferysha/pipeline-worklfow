@@ -88,7 +88,7 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
   const releaseId = options.releaseId
   const token = options.token ?? generateToken()
   const clock = options.clock ?? isoNow
-  const paths = resolveServerPaths({ home: options.home })
+  const paths = options.paths ?? resolveServerPaths()
   const stateScopeId = machineStateScopeId(paths.stateRoot)
   const registry: () => string[] = options.registry ?? (() => readRegistry(paths.registryPath))
   const store: StateStore = options.store ?? createStateStore()

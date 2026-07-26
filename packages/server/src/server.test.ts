@@ -8,7 +8,7 @@ import { appendFile, mkdir, readFile, readdir, stat, unlink, writeFile } from 'n
 import { dirname, join } from 'node:path'
 import { createDashboardServer } from './server.js'
 import { resolveServerPaths } from './paths.js'
-import type { DashboardServer } from './types.js'
+import type { DashboardServer, ServerPaths } from './types.js'
 import {
   initChange, makeProject, makeTempHome, makeTempManifest, makeWorktreeDir, newStore, openSSE, repoManifestPath, reqDelete, reqGet,
   reqPatch, reqPost, testFlow,
@@ -61,6 +61,7 @@ async function start(opts?: {
   version?: string
   releaseId?: string
   home?: string
+  paths?: ServerPaths
   token?: string
   pollIntervalMs?: number
   execDocker?: import('./dockerImages.js').ExecDockerFn
@@ -89,6 +90,9 @@ async function start(opts?: {
     version: opts?.version ?? '9.9.9',
     releaseId: opts?.releaseId,
     home: opts?.home,
+    paths: opts?.paths ?? (opts?.home === undefined
+      ? undefined
+      : resolveServerPaths({ home: opts.home, env: {} })),
     token: opts?.token ?? 'secret-token-abc',
     registry: () => [root],
     store,
@@ -123,7 +127,8 @@ describe('GET /api/health —— 存活探针 + 本 server 版本（B4）', () =
   it('回显 ok/scope/version/releaseId/stateScopeId 且不泄露 state home', async () => {
     const releaseId = `sha256-${'a'.repeat(64)}`
     const stateHome = '/tmp/private-dashboard-state-home'
-    const h = await start({ version: '3.1.4', releaseId, home: stateHome })
+    const paths = resolveServerPaths({ home: stateHome, env: {} })
+    const h = await start({ version: '3.1.4', releaseId, home: stateHome, paths })
     const r = await reqGet(h.port, '/api/health')
     expect(r.status).toBe(200)
     const body = r.json<{
@@ -137,7 +142,7 @@ describe('GET /api/health —— 存活探针 + 本 server 版本（B4）', () =
     expect(body.scope).toBe('global')
     expect(body.version).toBe('3.1.4')
     expect(body.releaseId).toBe(releaseId)
-    expect(body.stateScopeId).toBe(machineStateScopeId(resolveServerPaths({ home: stateHome }).stateRoot))
+    expect(body.stateScopeId).toBe(machineStateScopeId(paths.stateRoot))
     expect(JSON.stringify(body)).not.toContain(stateHome)
   })
 })
@@ -3758,13 +3763,16 @@ async function startWithHome(opts?: { runPipelineCli?: PipelineCliRunner }): Pro
   home: string
   store: StateStore
   registryPath: string
+  secretsPath: string
 }> {
   const home = await makeTempHome()
   const store = newStore()
+  const paths = resolveServerPaths({ home, env: {} })
   const srv = createDashboardServer({
     version: '9.9.9',
     token: 'secret-token-abc',
     home,
+    paths,
     store,
     flow: testFlow(),
     clock: () => '2026-07-09T00:00:00Z',
@@ -3773,7 +3781,15 @@ async function startWithHome(opts?: { runPipelineCli?: PipelineCliRunner }): Pro
   })
   openServers.push(srv)
   const { port } = await srv.listen(0, '127.0.0.1')
-  return { srv, port, token: srv.token, home, store, registryPath: resolveServerPaths({ home }).registryPath }
+  return {
+    srv,
+    port,
+    token: srv.token,
+    home,
+    store,
+    registryPath: paths.registryPath,
+    secretsPath: paths.secretsPath,
+  }
 }
 
 describe('POST /api/projects —— 注册项目进机器级注册表（G18）', () => {
@@ -4410,7 +4426,7 @@ describe('②round-trip：POST 写入 → GET 读回 masked 且不含明文 → 
     expect(body1.keys.OPENAI_API_KEY).toEqual({ set: false })
 
     // 真落盘 0600 + tmp+rename（验收判据同款：stat mode 恰 0o600）
-    const secretsFile = resolveServerPaths({ home: h.home }).secretsPath
+    const secretsFile = h.secretsPath
     const st = await stat(secretsFile)
     expect(st.mode & 0o777).toBe(0o600)
     const onDisk = JSON.parse(await readFile(secretsFile, 'utf8')) as { keys: Record<string, string> }

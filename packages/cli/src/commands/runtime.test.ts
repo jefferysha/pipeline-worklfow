@@ -60,7 +60,7 @@ function fakeInstaller(): { installer: RuntimeInstaller; calls: string[] } {
   return { installer, calls }
 }
 
-const env = { homeDir: () => '/runtime-test-home' }
+const env = { homeDir: () => '/runtime-test-home', runtimeEnv: () => ({}) }
 
 describe('tenon runtime', () => {
   test('status exposes active and previous verification state without mutating the runtime', async () => {

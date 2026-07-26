@@ -29,9 +29,9 @@ function fakeRuntimeInstaller(
   const calls: RuntimeCalls = { activations: [], failures: [], reverts: [] }
   const releaseId = `sha256-${'b'.repeat(64)}`
   const installer: RuntimeInstaller = {
-    withManagedTransaction: async (homeDir, operation) => operation({
+    withManagedTransaction: async (scope, operation) => operation({
       activate: async (candidateRoot, host) => {
-        calls.activations.push([candidateRoot, host, homeDir])
+        calls.activations.push([candidateRoot, host, scope.homeDir])
         if (fail) throw new Error('candidate rejected')
         return {
           release: { version: 1, releaseId, payloadDigest: 'b'.repeat(64), createdAt: '2026-07-24T00:00:00Z', source: { host, pluginVersion: '1.0.0' } },
@@ -40,7 +40,7 @@ function fakeRuntimeInstaller(
         }
       },
       revertActivation: async (activation) => {
-        calls.reverts.push([homeDir, activation.release.releaseId])
+        calls.reverts.push([scope.homeDir, activation.release.releaseId])
       },
     }),
     inspect: async () => ({
@@ -52,8 +52,8 @@ function fakeRuntimeInstaller(
       lastAudit: null,
     }),
     rollback: async () => { throw new Error('not used') },
-    recordUpdateFailure: async (homeDir, detail) => {
-      calls.failures.push([homeDir, detail])
+    recordUpdateFailure: async (scope, detail) => {
+      calls.failures.push([scope.homeDir, detail])
     },
   }
   return { installer, calls }
@@ -80,6 +80,7 @@ function updateEnv(
   const calls: Calls = { exec: [], writes: [] }
   const env: SetupEnv = {
     homeDir: () => '/home/update-test',
+    runtimeEnv: () => ({}),
     pluginRoot: () => '/old/tenon',
     selfPath: () => '/old/tenon/packages/cli/dist/tenon.mjs',
     mkdirp: () => undefined,
@@ -206,7 +207,7 @@ describe('tenon update', () => {
       return { code: 0, stdout: '', stderr: '' }
     })
     env.readText = (path) => {
-      if (path === resolveRuntimePaths({ homeDir: '/home/update-test' }).registryPath) {
+      if (path === resolveRuntimePaths({ homeDir: '/home/update-test', env: {} }).registryPath) {
         return JSON.stringify(['/repo/current', "/repo/it's $HOME", "/repo/it's $HOME", 'relative/project'])
       }
       if (path === '/repo/current/.pipeline-version') return '1.0.0\n'

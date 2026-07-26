@@ -289,3 +289,4 @@
 {"ts":"2026-07-26T10:21:22Z","kind":"tool","raw":"CodexSkillRead: openspec-archive-change"}
 {"ts":"2026-07-26T10:21:28Z","kind":"tool","raw":"CodexSkillRead: finishing-a-development-branch"}
 {"ts":"2026-07-26T10:25:53Z","kind":"set","field":"pr_url","to":"https://github.com/jefferysha/tenon/pull/3"}
+{"ts":"2026-07-26T10:36:02Z","kind":"set","field":"depends_on","to":"isolate-runtime-state-dependencies"}

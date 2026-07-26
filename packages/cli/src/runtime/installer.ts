@@ -1,5 +1,4 @@
 import { mkdir } from 'node:fs/promises'
-import { homedir } from 'node:os'
 import { withLock } from '@tenon/kernel'
 import {
   captureStableLaunchers,
@@ -8,6 +7,7 @@ import {
   writeStableLaunchers,
 } from './launchers.js'
 import { resolveRuntimePaths } from './paths.js'
+import type { RuntimePathInput } from './paths.js'
 import { RuntimeReleaseStore } from './release-store.js'
 import type {
   RuntimeActivation,
@@ -28,14 +28,20 @@ export interface ManagedRuntimeTransaction {
   revertActivation(activation: RuntimeActivation): Promise<void>
 }
 
+export interface RuntimeInstallerScope {
+  readonly homeDir: string
+  readonly env: NonNullable<RuntimePathInput['env']>
+  readonly platform?: NodeJS.Platform
+}
+
 export interface RuntimeInstaller {
   withManagedTransaction<T>(
-    homeDir: string,
+    scope: RuntimeInstallerScope,
     operation: (transaction: ManagedRuntimeTransaction) => Promise<T>,
   ): Promise<T>
-  inspect(homeDir: string): Promise<RuntimeInspection>
-  rollback(homeDir: string): Promise<RuntimeActivation>
-  recordUpdateFailure?(homeDir: string, detail: string): Promise<void>
+  inspect(scope: RuntimeInstallerScope): Promise<RuntimeInspection>
+  rollback(scope: RuntimeInstallerScope): Promise<RuntimeActivation>
+  recordUpdateFailure?(scope: RuntimeInstallerScope, detail: string): Promise<void>
 }
 
 export class ManagedRuntimeIndeterminateError extends Error {
@@ -45,8 +51,16 @@ export class ManagedRuntimeIndeterminateError extends Error {
   }
 }
 
-function storeFor(homeDir: string): RuntimeReleaseStore {
-  return new RuntimeReleaseStore({ paths: resolveRuntimePaths({ homeDir }) })
+function pathsFor(scope: RuntimeInstallerScope): RuntimePaths {
+  return resolveRuntimePaths({
+    homeDir: scope.homeDir,
+    env: scope.env,
+    ...(scope.platform === undefined ? {} : { platform: scope.platform }),
+  })
+}
+
+function storeFor(scope: RuntimeInstallerScope): RuntimeReleaseStore {
+  return new RuntimeReleaseStore({ paths: pathsFor(scope) })
 }
 
 async function activateWithinTransaction(
@@ -136,33 +150,33 @@ async function rollbackWithinTransaction(
 }
 
 async function withExclusiveRuntimeTransaction<T>(
-  homeDir: string,
+  scope: RuntimeInstallerScope,
   operation: (transaction: ManagedRuntimeTransaction) => Promise<T>,
 ): Promise<T> {
-  const paths = resolveRuntimePaths({ homeDir })
+  const paths = pathsFor(scope)
   await mkdir(paths.managedTransactionRoot, { recursive: true })
   return withLock(paths.managedTransactionRoot, () => operation({
     activate: (candidateRoot, host) =>
-      activateWithinTransaction(paths, homeDir, candidateRoot, host),
+      activateWithinTransaction(paths, scope.homeDir, candidateRoot, host),
     revertActivation: (activation) =>
-      revertWithinTransaction(paths, homeDir, activation),
+      revertWithinTransaction(paths, scope.homeDir, activation),
   }))
 }
 
 export const REAL_RUNTIME_INSTALLER: RuntimeInstaller = {
-  async withManagedTransaction(homeDir = homedir(), operation) {
-    return withExclusiveRuntimeTransaction(homeDir, operation)
+  async withManagedTransaction(scope, operation) {
+    return withExclusiveRuntimeTransaction(scope, operation)
   },
-  inspect(homeDir = homedir()) {
-    return storeFor(homeDir).inspect()
+  inspect(scope) {
+    return storeFor(scope).inspect()
   },
-  async rollback(homeDir = homedir()) {
-    return withExclusiveRuntimeTransaction(homeDir, async () => {
-      const paths = resolveRuntimePaths({ homeDir })
-      return rollbackWithinTransaction(paths, homeDir)
+  async rollback(scope) {
+    return withExclusiveRuntimeTransaction(scope, async () => {
+      const paths = pathsFor(scope)
+      return rollbackWithinTransaction(paths, scope.homeDir)
     })
   },
-  recordUpdateFailure(homeDir = homedir(), detail) {
-    return storeFor(homeDir).recordUpdateFailure(detail)
+  recordUpdateFailure(scope, detail) {
+    return storeFor(scope).recordUpdateFailure(detail)
   },
 }

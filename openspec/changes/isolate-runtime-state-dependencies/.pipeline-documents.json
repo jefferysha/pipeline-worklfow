@@ -1,0 +1,178 @@
+{
+  "version": 1,
+  "contract": "openspec-v1",
+  "createdAt": "2026-07-26T10:36:02Z",
+  "records": [
+    {
+      "kind": "proposal",
+      "path": "openspec/changes/isolate-runtime-state-dependencies/proposal.md",
+      "sha256": "a5a6072611b61a4949a7f053c5e55bc2dbbb0235c4138d64fffda2b38139750a",
+      "producer": "openspec-propose",
+      "recordedAt": "2026-07-26T10:39:10Z",
+      "reads": [
+        {
+          "phase": "explore",
+          "sha256": "a5a6072611b61a4949a7f053c5e55bc2dbbb0235c4138d64fffda2b38139750a",
+          "readAt": "2026-07-26T10:49:46Z",
+          "visitId": "[\"7f8bb635-9992-4c64-8158-2112e467fe03\",1]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "a5a6072611b61a4949a7f053c5e55bc2dbbb0235c4138d64fffda2b38139750a",
+          "readAt": "2026-07-26T10:56:00Z",
+          "visitId": "[\"7f8bb635-9992-4c64-8158-2112e467fe03\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "a5a6072611b61a4949a7f053c5e55bc2dbbb0235c4138d64fffda2b38139750a",
+          "readAt": "2026-07-26T10:56:45Z",
+          "visitId": "[\"7f8bb635-9992-4c64-8158-2112e467fe03\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "openspec-design",
+      "path": "openspec/changes/isolate-runtime-state-dependencies/design.md",
+      "sha256": "c035f09e96abc5c5ae64798e305c36c0eb9e519bac6f8feaac812b594410882d",
+      "producer": "tenon-explore",
+      "recordedAt": "2026-07-26T10:46:41Z",
+      "reads": [
+        {
+          "phase": "explore",
+          "sha256": "c035f09e96abc5c5ae64798e305c36c0eb9e519bac6f8feaac812b594410882d",
+          "readAt": "2026-07-26T10:49:46Z",
+          "visitId": "[\"7f8bb635-9992-4c64-8158-2112e467fe03\",1]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "c035f09e96abc5c5ae64798e305c36c0eb9e519bac6f8feaac812b594410882d",
+          "readAt": "2026-07-26T10:56:00Z",
+          "visitId": "[\"7f8bb635-9992-4c64-8158-2112e467fe03\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "c035f09e96abc5c5ae64798e305c36c0eb9e519bac6f8feaac812b594410882d",
+          "readAt": "2026-07-26T10:56:45Z",
+          "visitId": "[\"7f8bb635-9992-4c64-8158-2112e467fe03\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "adr",
+      "path": "docs/adr/isolate-runtime-state-dependencies.md",
+      "sha256": "30596c44e72412fb18c26f89fe51e55aec399bc36c305ce142501de0cdac846e",
+      "producer": "brainstorming",
+      "recordedAt": "2026-07-26T10:49:46Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "30596c44e72412fb18c26f89fe51e55aec399bc36c305ce142501de0cdac846e",
+          "readAt": "2026-07-26T10:56:00Z",
+          "visitId": "[\"7f8bb635-9992-4c64-8158-2112e467fe03\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "30596c44e72412fb18c26f89fe51e55aec399bc36c305ce142501de0cdac846e",
+          "readAt": "2026-07-26T10:56:45Z",
+          "visitId": "[\"7f8bb635-9992-4c64-8158-2112e467fe03\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "delta-spec",
+      "path": "openspec/changes/isolate-runtime-state-dependencies/specs/plugin-distribution/spec.md",
+      "sha256": "fa580fdcedcb725694eb9a3fd375164492e665f71fb77af0029391515e5e2dff",
+      "producer": "openspec-propose",
+      "recordedAt": "2026-07-26T10:53:56Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "fa580fdcedcb725694eb9a3fd375164492e665f71fb77af0029391515e5e2dff",
+          "readAt": "2026-07-26T10:56:45Z",
+          "visitId": "[\"7f8bb635-9992-4c64-8158-2112e467fe03\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "delta-spec",
+      "path": "openspec/changes/isolate-runtime-state-dependencies/specs/repository-architecture-compliance/spec.md",
+      "sha256": "750652fa72e9336a3009a1709cc224a2014a7161afc1e7d70384c435d417a16c",
+      "producer": "openspec-propose",
+      "recordedAt": "2026-07-26T10:53:56Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "750652fa72e9336a3009a1709cc224a2014a7161afc1e7d70384c435d417a16c",
+          "readAt": "2026-07-26T10:56:45Z",
+          "visitId": "[\"7f8bb635-9992-4c64-8158-2112e467fe03\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "superpower-plan",
+      "path": "docs/superpowers/plans/isolate-runtime-state-dependencies.md",
+      "sha256": "82da7e0b4abb910716321bfe51bfbc533117e046950190774da2d6e3210ea7b7",
+      "producer": "writing-plans",
+      "recordedAt": "2026-07-26T10:53:57Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "82da7e0b4abb910716321bfe51bfbc533117e046950190774da2d6e3210ea7b7",
+          "readAt": "2026-07-26T10:56:45Z",
+          "visitId": "[\"7f8bb635-9992-4c64-8158-2112e467fe03\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "plan",
+      "path": "docs/superpowers/plans/isolate-runtime-state-dependencies.md",
+      "sha256": "82da7e0b4abb910716321bfe51bfbc533117e046950190774da2d6e3210ea7b7",
+      "producer": "writing-plans",
+      "recordedAt": "2026-07-26T10:53:57Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "82da7e0b4abb910716321bfe51bfbc533117e046950190774da2d6e3210ea7b7",
+          "readAt": "2026-07-26T10:56:45Z",
+          "visitId": "[\"7f8bb635-9992-4c64-8158-2112e467fe03\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "superpower-design",
+      "path": "docs/superpowers/specs/isolate-runtime-state-dependencies-design.md",
+      "sha256": "a280cad20543fdb247d595b629b9a1a8e5565932d224ba058d5f8886c3fc763a",
+      "producer": "tenon-spec",
+      "recordedAt": "2026-07-26T10:55:59Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "a280cad20543fdb247d595b629b9a1a8e5565932d224ba058d5f8886c3fc763a",
+          "readAt": "2026-07-26T10:56:00Z",
+          "visitId": "[\"7f8bb635-9992-4c64-8158-2112e467fe03\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "a280cad20543fdb247d595b629b9a1a8e5565932d224ba058d5f8886c3fc763a",
+          "readAt": "2026-07-26T10:56:45Z",
+          "visitId": "[\"7f8bb635-9992-4c64-8158-2112e467fe03\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "tasks",
+      "path": "openspec/changes/isolate-runtime-state-dependencies/tasks.md",
+      "sha256": "b2c771db4a9bac243e353fddca394b1a01a74f43c7560cbc0b33b943056be480",
+      "producer": "tenon-build",
+      "recordedAt": "2026-07-26T11:14:38Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "b2c771db4a9bac243e353fddca394b1a01a74f43c7560cbc0b33b943056be480",
+          "readAt": "2026-07-26T11:14:38Z",
+          "visitId": "[\"7f8bb635-9992-4c64-8158-2112e467fe03\",3]"
+        }
+      ]
+    }
+  ]
+}

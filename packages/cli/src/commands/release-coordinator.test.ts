@@ -37,7 +37,7 @@ function serializedInstaller(events: string[]): RuntimeInstaller {
   let tail = Promise.resolve()
   return {
     withManagedTransaction: async <T>(
-      _homeDir: string,
+      _scope,
       operation: (transaction: ManagedRuntimeTransaction) => Promise<T>,
     ): Promise<T> => {
       const previous = tail
@@ -73,7 +73,7 @@ function request(candidateRoot: string) {
   return {
     candidateRoot,
     source: 'codex' as const,
-    homeDir: '/home/test',
+    runtime: { homeDir: '/home/test', env: {} },
     openBrowser: false,
   }
 }

@@ -29,7 +29,8 @@ base_branch: main
 scope: null
 related_files: null
 spec_scope: null
-depends_on: null
+depends_on:
+  - isolate-runtime-state-dependencies
 created_at: 2026-07-26T02:49:37Z
 updated_at: 2026-07-26T10:21:00Z
 verified_at: 2026-07-26T10:21:00Z
@@ -41,6 +42,6 @@ automation_cause: ""
 pipeline_run_id: fe162c6c-0981-44e1-92b0-ba600b80d41c
 pipeline_transition_sequence: 31
 pipeline_transition_head: e17c2614-dfc1-44a6-a153-66c4846a4e0c
-pipeline_state_revision: 84
-pipeline_state_revision_id: 57538884-0105-4507-80cf-e4dafed78f27
-pipeline_state_digest: 673bb86da31c5ed75cfa5091ee17644ecb476bf9936ed22736d62086905356d9
+pipeline_state_revision: 85
+pipeline_state_revision_id: 716c0480-6a7a-439a-8ab7-64af4da5231f
+pipeline_state_digest: f7af044ae154f3b3cd42e9bf4daead3c2b357d9f1280e8bce184d6148aebe065

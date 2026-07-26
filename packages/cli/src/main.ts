@@ -266,7 +266,10 @@ function makeDoctorProbes(runtimePaths: ReturnType<typeof resolveRuntimePaths>):
       }
     },
     nativeRuntimeHost: async () => {
-      const host = (await REAL_RUNTIME_INSTALLER.inspect(homedir())).active?.source.host
+      const host = (await REAL_RUNTIME_INSTALLER.inspect({
+        homeDir: homedir(),
+        env: process.env,
+      })).active?.source.host
       return host === 'codex' || host === 'claude' ? host : null
     },
     runVerifySkills: () =>

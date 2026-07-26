@@ -82,7 +82,10 @@ function rejectUpdate(
   env: SetupEnv,
   detail: string,
 ): number | Promise<number> {
-  const record = installer.recordUpdateFailure?.(env.homeDir(), detail)
+  const record = installer.recordUpdateFailure?.({
+    homeDir: env.homeDir(),
+    env: env.runtimeEnv(),
+  }, detail)
   if (record === undefined) return 1
   return record.then(() => 1).catch(() => 1)
 }
@@ -188,7 +191,10 @@ export function cmdUpdate(
     {
       candidateRoot: root,
       source: host,
-      homeDir: env.homeDir(),
+      runtime: {
+        homeDir: env.homeDir(),
+        env: env.runtimeEnv(),
+      },
       openBrowser: opts.auto !== true,
     },
     installer,
@@ -221,7 +227,10 @@ function shellQuote(value: string): string {
 function reportRegisteredProjects(deps: CliDeps, env: SetupEnv, pluginVersion: string): void {
   let registry: string | undefined
   try {
-    registry = env.readText(resolveRuntimePaths({ homeDir: env.homeDir() }).registryPath)
+    registry = env.readText(resolveRuntimePaths({
+      homeDir: env.homeDir(),
+      env: env.runtimeEnv(),
+    }).registryPath)
   } catch {
     deps.io.err('[update] WARN: 项目注册表无法读取；未修改任何工作区。')
     return

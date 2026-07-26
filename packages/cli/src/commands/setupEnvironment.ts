@@ -1,6 +1,6 @@
 import { dirname, join, resolve } from 'node:path'
 import { readAutomationJson } from '@tenon/automation'
-import { PREREQ_HINTS } from '@tenon/kernel'
+import { PREREQ_HINTS, type ProductPathInput } from '@tenon/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
 import { nodeExecDocker, probeAfkReadiness, type AfkReadiness, type CredLight, type ExecDockerFn } from '../afkReadiness.js'
 import { REAL_RUNTIME_INSTALLER, type RuntimeInstaller } from '../runtime/installer.js'
@@ -27,6 +27,8 @@ import type {
 export interface SetupEnv {
   /** 用户 home（真实现 os.homedir();managed runtime 与稳定启动器定位锚）。 */
   homeDir(): string
+  /** adapter 边界显式提供的进程环境；应用服务不得自行读取 process.env。 */
+  runtimeEnv(): NonNullable<ProductPathInput['env']>
   /** $PLUGIN_ROOT / $CLAUDE_PLUGIN_ROOT（插件安装根）;未设 → null（dev 回退 selfPath）。 */
   pluginRoot(): string | null
   /** 本 CLI bundle 自身路径（真实现 resolve(process.argv[1]);pluginRoot 缺失时的 dev 回退源）。 */
@@ -64,6 +66,7 @@ export interface SetupEnv {
 
 export const REAL_SETUP_ENV: SetupEnv = {
   homeDir: () => homedir(),
+  runtimeEnv: () => process.env,
   pluginRoot: () => {
     const r = process.env.PLUGIN_ROOT ?? process.env.CLAUDE_PLUGIN_ROOT
     return r !== undefined && r.trim() !== '' ? r : null
@@ -180,7 +183,10 @@ export function printPlanSkeleton(deps: CliDeps, opts: SetupOpts, host: Pipeline
 }
 
 function autoUpdateConfigPath(env: SetupEnv): string {
-  return join(resolveRuntimePaths({ homeDir: env.homeDir() }).configRoot, 'auto-update.conf')
+  return join(resolveRuntimePaths({
+    homeDir: env.homeDir(),
+    env: env.runtimeEnv(),
+  }).configRoot, 'auto-update.conf')
 }
 
 /** Native host only: write a tiny explicit preference consumed by hooks/auto-update.sh. */

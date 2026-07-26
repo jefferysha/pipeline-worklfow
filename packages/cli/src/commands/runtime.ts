@@ -1,4 +1,5 @@
 import { homedir } from 'node:os'
+import type { ProductPathInput } from '@tenon/kernel'
 import type { CliDeps } from '../deps.js'
 import { REAL_RUNTIME_INSTALLER, type RuntimeInstaller } from '../runtime/installer.js'
 import type { RuntimeInspection } from '../runtime/types.js'
@@ -10,10 +11,12 @@ export interface RuntimeCommandOpts {
 
 export interface RuntimeCommandEnv {
   homeDir(): string
+  runtimeEnv(): NonNullable<ProductPathInput['env']>
 }
 
 export const REAL_RUNTIME_COMMAND_ENV: RuntimeCommandEnv = {
   homeDir: () => homedir(),
+  runtimeEnv: () => process.env,
 }
 
 function statusPayload(inspection: RuntimeInspection): Record<string, unknown> {
@@ -50,9 +53,10 @@ export async function cmdRuntime(
   env: RuntimeCommandEnv = REAL_RUNTIME_COMMAND_ENV,
   installer: RuntimeInstaller = REAL_RUNTIME_INSTALLER,
 ): Promise<number> {
+  const scope = { homeDir: env.homeDir(), env: env.runtimeEnv() }
   if (sub === 'status') {
     try {
-      renderStatus(deps, await installer.inspect(env.homeDir()), opts.json === true)
+      renderStatus(deps, await installer.inspect(scope), opts.json === true)
       return 0
     } catch (error) {
       deps.io.err(`ERROR: 无法读取 managed runtime 状态：${error instanceof Error ? error.message : String(error)}`)
@@ -65,7 +69,7 @@ export async function cmdRuntime(
       return 1
     }
     try {
-      const activation = await installer.rollback(env.homeDir())
+      const activation = await installer.rollback(scope)
       const payload = {
         ok: true,
         selection: activation.selection,

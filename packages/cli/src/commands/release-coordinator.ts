@@ -4,6 +4,7 @@ import {
   ManagedRuntimeIndeterminateError,
   type ManagedRuntimeTransaction,
   type RuntimeInstaller,
+  type RuntimeInstallerScope,
 } from '../runtime/installer.js'
 import type { NativeRuntimeHost, RuntimeActivation } from '../runtime/types.js'
 import {
@@ -28,7 +29,7 @@ export type ManagedReleaseOutcome =
 export interface ManagedReleaseRequest {
   readonly candidateRoot: string
   readonly source: NativeRuntimeHost | 'adapter'
-  readonly homeDir: string
+  readonly runtime: RuntimeInstallerScope
   readonly openBrowser: boolean
 }
 
@@ -47,7 +48,7 @@ export async function publishManagedRelease(
 ): Promise<ManagedReleaseOutcome> {
   try {
     return await installer.withManagedTransaction(
-      request.homeDir,
+      request.runtime,
       (transaction) => publishWithinManagedTransaction(
         deps,
         request,
