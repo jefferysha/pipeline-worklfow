@@ -2,7 +2,12 @@ import { chmod, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs
 import { tmpdir } from 'node:os'
 import { join, resolve as resolvePath } from 'node:path'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
-import { readProjectRegistry, registerProjectRoot, writeProjectRegistry } from './projectRegistry.js'
+import {
+  readProjectRegistry,
+  registerProjectRoot,
+  unregisterProjectRoot,
+  writeProjectRegistry,
+} from './projectRegistry.js'
 
 describe('projectRegistry —— Tenon 配置域项目注册表读写', () => {
   let configRoot: string
@@ -149,6 +154,30 @@ describe('projectRegistry —— Tenon 配置域项目注册表读写', () => {
       const data = JSON.parse(await readFile(registry, 'utf8')) as string[]
       expect(new Set(data)).toEqual(new Set([resolvePath('/repo/x'), resolvePath('/repo/y'), resolvePath('/repo/z')]))
       expect(data).toHaveLength(3)
+    })
+  })
+
+  describe('unregisterProjectRoot —— 与 register 共用唯一锁内事务', () => {
+    test('删除存在的规范化 root 返回 true；不存在时返回 false', async () => {
+      await writeProjectRegistry(registry, ['/repo/keep', '/repo/remove'])
+      expect(await unregisterProjectRoot(registry, '/repo/remove/')).toBe(true)
+      expect(await unregisterProjectRoot(registry, '/repo/remove')).toBe(false)
+      expect(readProjectRegistry(registry)).toEqual(['/repo/keep'])
+    })
+
+    test('并发新增与删除不会丢新增或复活已删除 root', async () => {
+      const oldRoots = Array.from({ length: 20 }, (_, index) => `/repo/old-${index}`)
+      const newRoots = Array.from({ length: 20 }, (_, index) => `/repo/new-${index}`)
+      await writeProjectRegistry(registry, oldRoots)
+
+      await Promise.all([
+        ...oldRoots.map((root) => unregisterProjectRoot(registry, root)),
+        ...newRoots.map((root) => registerProjectRoot(registry, root)),
+      ])
+
+      expect(new Set(readProjectRegistry(registry))).toEqual(
+        new Set(newRoots.map((root) => resolvePath(root))),
+      )
     })
   })
 })

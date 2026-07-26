@@ -10,9 +10,7 @@
  */
 import { statSync } from 'node:fs'
 import { resolve as resolvePath } from 'node:path'
-import { writeProjectRegistry } from '@tenon/kernel'
-import { readRegistry } from './registry.js'
-import { dedupeRoots } from './snapshot.js'
+import { registerProjectRoot, unregisterProjectRoot } from '@tenon/kernel'
 
 export type ProjectWriteResult =
   | { ok: true; root: string }
@@ -32,12 +30,9 @@ export async function addProjectToRegistry(registryPath: string, rawRoot: unknow
     return { ok: false, code: 404, error: `路径不是目录：${rawRoot}` }
   }
   const normalized = resolvePath(rawRoot)
-  const existing = readRegistry(registryPath)
-  if (dedupeRoots(existing).includes(normalized)) {
+  if (!await registerProjectRoot(registryPath, normalized)) {
     return { ok: false, code: 409, error: `项目已注册：${normalized}` }
   }
-  const next = [...existing, normalized]
-  await writeProjectRegistry(registryPath, next)
   return { ok: true, root: normalized }
 }
 
@@ -50,11 +45,8 @@ export async function removeProjectFromRegistry(registryPath: string, rawRoot: u
     return { ok: false, code: 400, error: '缺 root 查询参数' }
   }
   const normalized = resolvePath(rawRoot)
-  const existing = readRegistry(registryPath)
-  const next = existing.filter((e) => !e || resolvePath(e) !== normalized)
-  if (next.length === existing.length) {
+  if (!await unregisterProjectRoot(registryPath, normalized)) {
     return { ok: false, code: 404, error: `项目未注册：${normalized}` }
   }
-  await writeProjectRegistry(registryPath, next)
   return { ok: true }
 }

@@ -36,7 +36,7 @@ interface ProjectRegistryMigrationReceipt {
   readonly completedAt: string
   readonly discovered: number
   readonly imported: number
-  readonly ensured?: number
+  readonly ensured: number
   readonly rejected: number
 }
 
@@ -80,6 +80,7 @@ async function readMigrationReceipt(path: string): Promise<ProjectRegistryMigrat
     throw new Error(`host project registry migration receipt 非法：${path}`)
   }
   const record = value as Record<string, unknown>
+  const ensured = record.ensured === undefined ? record.discovered : record.ensured
   if (
     record.version !== 1
     || record.migration !== MIGRATION_ID
@@ -87,7 +88,9 @@ async function readMigrationReceipt(path: string): Promise<ProjectRegistryMigrat
     || record.completedAt === ''
     || !nonNegativeInteger(record.discovered)
     || !nonNegativeInteger(record.imported)
-    || (record.ensured !== undefined && !nonNegativeInteger(record.ensured))
+    || !nonNegativeInteger(ensured)
+    || record.imported > ensured
+    || ensured > record.discovered
     || !nonNegativeInteger(record.rejected)
   ) {
     throw new Error(`host project registry migration receipt 非法：${path}`)
@@ -98,7 +101,7 @@ async function readMigrationReceipt(path: string): Promise<ProjectRegistryMigrat
     completedAt: record.completedAt,
     discovered: record.discovered,
     imported: record.imported,
-    ...(record.ensured === undefined ? {} : { ensured: record.ensured }),
+    ensured,
     rejected: record.rejected,
   }
 }

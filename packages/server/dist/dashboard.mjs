@@ -6913,12 +6913,38 @@ function readProjectRegistry(registryPath) {
   }
 }
 var tmpSeq = 0;
-async function writeProjectRegistry(registryPath, roots) {
+async function writeProjectRegistryUnlocked(registryPath, roots) {
   await mkdir6(dirname2(registryPath), { recursive: true });
   const tmp = `${registryPath}.tmp.${process.pid}.${tmpSeq++}`;
   await writeFile5(tmp, `${JSON.stringify(roots, null, 2)}
 `, "utf8");
   await rename3(tmp, registryPath);
+}
+async function withProjectRegistryLock(registryPath, operation) {
+  const dir = dirname2(registryPath);
+  await mkdir6(dir, { recursive: true });
+  return withLock(dir, operation);
+}
+async function registerProjectRoot(registryPath, rawRoot) {
+  const normalized2 = resolvePath(rawRoot);
+  return withProjectRegistryLock(registryPath, async () => {
+    const existing = readProjectRegistry(registryPath);
+    if (existing.some((e) => e && resolvePath(e) === normalized2))
+      return false;
+    await writeProjectRegistryUnlocked(registryPath, [...existing, normalized2]);
+    return true;
+  });
+}
+async function unregisterProjectRoot(registryPath, rawRoot) {
+  const normalized2 = resolvePath(rawRoot);
+  return withProjectRegistryLock(registryPath, async () => {
+    const existing = readProjectRegistry(registryPath);
+    const next = existing.filter((entry) => !entry || resolvePath(entry) !== normalized2);
+    if (next.length === existing.length)
+      return false;
+    await writeProjectRegistryUnlocked(registryPath, next);
+    return true;
+  });
 }
 
 // packages/kernel/dist/state/secrets.js
@@ -17738,12 +17764,9 @@ async function addProjectToRegistry(registryPath, rawRoot) {
     return { ok: false, code: 404, error: `\u8DEF\u5F84\u4E0D\u662F\u76EE\u5F55\uFF1A${rawRoot}` };
   }
   const normalized2 = resolvePath6(rawRoot);
-  const existing = readProjectRegistry(registryPath);
-  if (dedupeRoots(existing).includes(normalized2)) {
+  if (!await registerProjectRoot(registryPath, normalized2)) {
     return { ok: false, code: 409, error: `\u9879\u76EE\u5DF2\u6CE8\u518C\uFF1A${normalized2}` };
   }
-  const next = [...existing, normalized2];
-  await writeProjectRegistry(registryPath, next);
   return { ok: true, root: normalized2 };
 }
 async function removeProjectFromRegistry(registryPath, rawRoot) {
@@ -17751,12 +17774,9 @@ async function removeProjectFromRegistry(registryPath, rawRoot) {
     return { ok: false, code: 400, error: "\u7F3A root \u67E5\u8BE2\u53C2\u6570" };
   }
   const normalized2 = resolvePath6(rawRoot);
-  const existing = readProjectRegistry(registryPath);
-  const next = existing.filter((e) => !e || resolvePath6(e) !== normalized2);
-  if (next.length === existing.length) {
+  if (!await unregisterProjectRoot(registryPath, normalized2)) {
     return { ok: false, code: 404, error: `\u9879\u76EE\u672A\u6CE8\u518C\uFF1A${normalized2}` };
   }
-  await writeProjectRegistry(registryPath, next);
   return { ok: true };
 }
 

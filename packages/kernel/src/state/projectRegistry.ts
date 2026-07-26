@@ -27,15 +27,32 @@ export function readProjectRegistry(registryPath: string): string[] {
 let tmpSeq = 0
 
 /**
- * 原子写注册表原语：mkdir -p + 同目录 tmp+rename（写入原子可见——崩溃不留半截 JSON）。
+ * 锁内原子写注册表原语：mkdir -p + 同目录 tmp+rename（写入原子可见——崩溃不留半截 JSON）。
  * 序列化格式：JSON 数组 + 2 空格缩进 + 尾换行（保持人工可编辑；server projects.ts 复用同款，
- * 逐字节一致）。写失败抛错（fail-loud）。registerProjectRoot 与 server add/remove 共用本原语。
+ * 逐字节一致）。写失败抛错（fail-loud）。所有公开 writer 共用 config-dir 锁；锁内 RMW 使用
+ * 私有 unlocked writer，避免嵌套抢同一把锁。
  */
-export async function writeProjectRegistry(registryPath: string, roots: string[]): Promise<void> {
+async function writeProjectRegistryUnlocked(registryPath: string, roots: readonly string[]): Promise<void> {
   await mkdir(dirname(registryPath), { recursive: true })
   const tmp = `${registryPath}.tmp.${process.pid}.${tmpSeq++}`
   await writeFile(tmp, `${JSON.stringify(roots, null, 2)}\n`, 'utf8')
   await rename(tmp, registryPath)
+}
+
+async function withProjectRegistryLock<T>(
+  registryPath: string,
+  operation: () => Promise<T>,
+): Promise<T> {
+  const dir = dirname(registryPath)
+  await mkdir(dir, { recursive: true })
+  return withLock(dir, operation)
+}
+
+export async function writeProjectRegistry(registryPath: string, roots: string[]): Promise<void> {
+  await withProjectRegistryLock(
+    registryPath,
+    async () => writeProjectRegistryUnlocked(registryPath, roots),
+  )
 }
 
 /**
@@ -48,12 +65,25 @@ export async function writeProjectRegistry(registryPath: string, roots: string[]
  */
 export async function registerProjectRoot(registryPath: string, rawRoot: string): Promise<boolean> {
   const normalized = resolvePath(rawRoot)
-  const dir = dirname(registryPath)
-  await mkdir(dir, { recursive: true })
-  return withLock(dir, async () => {
+  return withProjectRegistryLock(registryPath, async () => {
     const existing = readProjectRegistry(registryPath)
     if (existing.some((e) => e && resolvePath(e) === normalized)) return false
-    await writeProjectRegistry(registryPath, [...existing, normalized])
+    await writeProjectRegistryUnlocked(registryPath, [...existing, normalized])
+    return true
+  })
+}
+
+/**
+ * 注销 repoRoot（resolve 后比较）：存在时在同一 config-dir 锁内删除并返回 true；不存在返回 false。
+ * 与 registerProjectRoot 共用唯一事务边界，Dashboard、CLI 与迁移并发时不会发生无锁 last-write-wins。
+ */
+export async function unregisterProjectRoot(registryPath: string, rawRoot: string): Promise<boolean> {
+  const normalized = resolvePath(rawRoot)
+  return withProjectRegistryLock(registryPath, async () => {
+    const existing = readProjectRegistry(registryPath)
+    const next = existing.filter((entry) => !entry || resolvePath(entry) !== normalized)
+    if (next.length === existing.length) return false
+    await writeProjectRegistryUnlocked(registryPath, next)
     return true
   })
 }

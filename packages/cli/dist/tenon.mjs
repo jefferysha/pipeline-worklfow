@@ -9947,22 +9947,25 @@ function readProjectRegistry(registryPath) {
   }
 }
 var tmpSeq = 0;
-async function writeProjectRegistry(registryPath, roots) {
+async function writeProjectRegistryUnlocked(registryPath, roots) {
   await mkdir6(dirname(registryPath), { recursive: true });
   const tmp = `${registryPath}.tmp.${process.pid}.${tmpSeq++}`;
   await writeFile4(tmp, `${JSON.stringify(roots, null, 2)}
 `, "utf8");
   await rename3(tmp, registryPath);
 }
-async function registerProjectRoot(registryPath, rawRoot) {
-  const normalized2 = resolvePath(rawRoot);
+async function withProjectRegistryLock(registryPath, operation) {
   const dir = dirname(registryPath);
   await mkdir6(dir, { recursive: true });
-  return withLock(dir, async () => {
+  return withLock(dir, operation);
+}
+async function registerProjectRoot(registryPath, rawRoot) {
+  const normalized2 = resolvePath(rawRoot);
+  return withProjectRegistryLock(registryPath, async () => {
     const existing = readProjectRegistry(registryPath);
     if (existing.some((e) => e && resolvePath(e) === normalized2))
       return false;
-    await writeProjectRegistry(registryPath, [...existing, normalized2]);
+    await writeProjectRegistryUnlocked(registryPath, [...existing, normalized2]);
     return true;
   });
 }
@@ -44370,7 +44373,8 @@ async function readMigrationReceipt(path9) {
     throw new Error(`host project registry migration receipt \u975E\u6CD5\uFF1A${path9}`);
   }
   const record2 = value;
-  if (record2.version !== 1 || record2.migration !== MIGRATION_ID || typeof record2.completedAt !== "string" || record2.completedAt === "" || !nonNegativeInteger(record2.discovered) || !nonNegativeInteger(record2.imported) || record2.ensured !== void 0 && !nonNegativeInteger(record2.ensured) || !nonNegativeInteger(record2.rejected)) {
+  const ensured = record2.ensured === void 0 ? record2.discovered : record2.ensured;
+  if (record2.version !== 1 || record2.migration !== MIGRATION_ID || typeof record2.completedAt !== "string" || record2.completedAt === "" || !nonNegativeInteger(record2.discovered) || !nonNegativeInteger(record2.imported) || !nonNegativeInteger(ensured) || record2.imported > ensured || ensured > record2.discovered || !nonNegativeInteger(record2.rejected)) {
     throw new Error(`host project registry migration receipt \u975E\u6CD5\uFF1A${path9}`);
   }
   return {
@@ -44379,7 +44383,7 @@ async function readMigrationReceipt(path9) {
     completedAt: record2.completedAt,
     discovered: record2.discovered,
     imported: record2.imported,
-    ...record2.ensured === void 0 ? {} : { ensured: record2.ensured },
+    ensured,
     rejected: record2.rejected
   };
 }

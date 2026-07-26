@@ -161,4 +161,60 @@ describe('legacy project registry migration', () => {
     })).rejects.toThrow(/migration receipt/)
     expect(readProjectRegistry(paths.registryPath)).toEqual([])
   })
+
+  test('fails closed when a receipt contains impossible imported and ensured counts', async () => {
+    const homeDir = await mkdtemp(join(tmpdir(), 'tenon-project-migration-invalid-counts-'))
+    const paths = resolveProductPaths({ homeDir, platform: 'linux' })
+    const receiptPath = join(paths.migrationsRoot, 'host-project-registry-v1', 'receipt.json')
+    await mkdir(join(paths.migrationsRoot, 'host-project-registry-v1'), { recursive: true })
+    await writeFile(receiptPath, JSON.stringify({
+      version: 1,
+      migration: 'host-project-registry-v1',
+      completedAt: '2026-07-26T00:00:00.000Z',
+      discovered: 1,
+      imported: 99,
+      ensured: 0,
+      rejected: 0,
+    }), 'utf8')
+
+    await expect(migrateLegacyProjectRegistry({
+      homeDir,
+      platform: 'linux',
+      readText: () => {
+        throw new Error('an invalid receipt must fail before reading host data')
+      },
+      pathExists: () => true,
+      pathIsDirectory: () => true,
+    })).rejects.toThrow(/migration receipt/)
+  })
+
+  test('accepts a valid v1 receipt written before the ensured field was introduced', async () => {
+    const homeDir = await mkdtemp(join(tmpdir(), 'tenon-project-migration-old-receipt-'))
+    const paths = resolveProductPaths({ homeDir, platform: 'linux' })
+    const receiptPath = join(paths.migrationsRoot, 'host-project-registry-v1', 'receipt.json')
+    await mkdir(join(paths.migrationsRoot, 'host-project-registry-v1'), { recursive: true })
+    await writeFile(receiptPath, JSON.stringify({
+      version: 1,
+      migration: 'host-project-registry-v1',
+      completedAt: '2026-07-26T00:00:00.000Z',
+      discovered: 2,
+      imported: 2,
+      rejected: 0,
+    }), 'utf8')
+
+    await expect(migrateLegacyProjectRegistry({
+      homeDir,
+      platform: 'linux',
+      readText: () => {
+        throw new Error('a valid completed receipt must suppress host reads')
+      },
+      pathExists: () => true,
+      pathIsDirectory: () => true,
+    })).resolves.toEqual({
+      status: 'already-complete',
+      discovered: 0,
+      imported: 0,
+      rejected: 0,
+    })
+  })
 })

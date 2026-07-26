@@ -66,7 +66,12 @@ export {
 } from './run-revision-store.js'
 export type { RunHookState, RunRevision, RunRevisionTextReader, RunStateMutation } from './run-revision-store.js'
 // 机器级项目注册表（v5 T2 决策 D）——init 自动登记 + server 项目发现同源
-export { readProjectRegistry, registerProjectRoot, writeProjectRegistry } from './projectRegistry.js'
+export {
+  readProjectRegistry,
+  registerProjectRoot,
+  unregisterProjectRoot,
+  writeProjectRegistry,
+} from './projectRegistry.js'
 // 机器级凭证存储（v6 T1，proposal C 节）——CLAUDE_CODE_OAUTH_TOKEN/OPENAI_API_KEY 白名单，0600+原子写
 export { readSecrets, writeSecretKey, deleteSecretKey, SECRET_KEYS } from './secrets.js'
 export type { SecretKey, SecretsStore } from './secrets.js'
