@@ -19,10 +19,13 @@ Immediate native-host update:
 tenon update --codex
 # or
 tenon update --claude
-
-# Recommended after a managed runtime exists: infer the native host from its frozen source.
-tenon update --self-update
 ```
+
+The selected host updates the one complete Tenon plugin. There is no separate CLI self-update
+channel; Skills, hooks, CLI, workflows, Dashboard, and adapters share one release transaction.
+The native host exclusively owns its cache. Tenon commits only its immutable runtime, launchers,
+and Dashboard boundary, then read-only scans the Tenon project registry and prints explicit
+`tenon sync` commands without mutating project workspaces.
 
 Inspect without mutation:
 

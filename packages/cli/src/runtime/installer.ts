@@ -1,5 +1,10 @@
 import { homedir } from 'node:os'
-import { writeStableLaunchers } from './launchers.js'
+import {
+  captureStableLaunchers,
+  expectedStableLaunchers,
+  restoreStableLaunchers,
+  writeStableLaunchers,
+} from './launchers.js'
 import { resolveRuntimePaths } from './paths.js'
 import { RuntimeReleaseStore } from './release-store.js'
 import type { RuntimeActivation, RuntimeInspection, RuntimeReleaseSource } from './types.js'
@@ -27,16 +32,25 @@ export const REAL_RUNTIME_INSTALLER: RuntimeInstaller = {
   async activate(candidateRoot, host, homeDir = homedir()) {
     const paths = resolveRuntimePaths({ homeDir })
     const store = new RuntimeReleaseStore({ paths })
+    const launcherSnapshot = await captureStableLaunchers(paths, homeDir)
+    const launcherCommitted = expectedStableLaunchers(paths, homeDir)
     const activation = await store.stageAndActivate(candidateRoot, host)
     try {
       await writeStableLaunchers(paths, homeDir)
-      return activation
+      return { ...activation, launcherSnapshot, launcherCommitted }
     } catch (error) {
+      const rollbackErrors: string[] = []
       await store.revertActivation(activation.selection).catch((rollbackError: unknown) => {
-        throw new Error(
-          `稳定 launcher 写入失败且 activation 补偿失败：${String(error)}；rollback=${String(rollbackError)}`,
-        )
+        rollbackErrors.push(`selection=${String(rollbackError)}`)
       })
+      await restoreStableLaunchers(launcherSnapshot, launcherCommitted).catch((rollbackError: unknown) => {
+        rollbackErrors.push(`launcher=${String(rollbackError)}`)
+      })
+      if (rollbackErrors.length > 0) {
+        throw new Error(
+          `稳定 launcher 写入失败且 activation 补偿失败：${String(error)}；rollback=${rollbackErrors.join('；')}`,
+        )
+      }
       throw new Error(`稳定 launcher 写入失败，已恢复 activation 前 runtime：${String(error)}`)
     }
   },
@@ -52,6 +66,10 @@ export const REAL_RUNTIME_INSTALLER: RuntimeInstaller = {
   async revertActivation(homeDir = homedir(), activation) {
     const paths = resolveRuntimePaths({ homeDir })
     await new RuntimeReleaseStore({ paths }).revertActivation(activation.selection)
+    if (activation.launcherSnapshot !== undefined) {
+      await restoreStableLaunchers(activation.launcherSnapshot, activation.launcherCommitted)
+      return
+    }
     const inspection = await new RuntimeReleaseStore({ paths }).inspect()
     if (inspection.selection.activeRelease !== null) await writeStableLaunchers(paths, homeDir)
   },

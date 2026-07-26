@@ -87,7 +87,7 @@ curl -fsSL https://raw.githubusercontent.com/jefferysha/tenon/main/install.sh | 
 
 The bootstrap registers the Tenon Marketplace, installs and verifies the same
 complete release payload, and runs `tenon setup --<host>`. After installation,
-use `tenon setup --codex`, `tenon update --self-update`, and
+use `tenon setup --codex`, `tenon update --codex`, and
 `tenon runtime status` for lifecycle operations.
 
 Enable the opt-in daily release check with:

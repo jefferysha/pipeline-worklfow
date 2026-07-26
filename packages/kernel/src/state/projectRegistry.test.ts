@@ -2,28 +2,28 @@ import { chmod, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs
 import { tmpdir } from 'node:os'
 import { join, resolve as resolvePath } from 'node:path'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
-import { projectRegistryPath, readProjectRegistry, registerProjectRoot, writeProjectRegistry } from './projectRegistry.js'
+import { readProjectRegistry, registerProjectRoot, writeProjectRegistry } from './projectRegistry.js'
 
-describe('projectRegistry —— 机器级项目注册表读写（v5 T2 决策 D，hermetic 临时 HOME）', () => {
-  let home: string
+describe('projectRegistry —— Tenon 配置域项目注册表读写', () => {
+  let configRoot: string
   let registry: string
   beforeEach(async () => {
-    home = await mkdtemp(join(tmpdir(), 'lite-projreg-'))
-    registry = projectRegistryPath(home)
+    configRoot = await mkdtemp(join(tmpdir(), 'tenon-projreg-'))
+    registry = join(configRoot, 'projects.json')
   })
   afterEach(async () => {
     // 不可写用例会把目录改成只读，先恢复权限再删
-    await chmod(join(home, '.claude'), 0o755).catch(() => {})
-    await rm(home, { recursive: true, force: true })
+    await chmod(configRoot, 0o755).catch(() => {})
+    await rm(configRoot, { recursive: true, force: true })
   })
 
-  test('projectRegistryPath = <home>/.claude/pipeline-projects.json（老仓 project_model 同址）', () => {
-    expect(registry).toBe(join(home, '.claude', 'pipeline-projects.json'))
+  test('projectRegistryPath = <Tenon config root>/projects.json', () => {
+    expect(registry).toBe(join(configRoot, 'projects.json'))
   })
 
   describe('readProjectRegistry —— 容错语义与 server registry.ts 逐条对位', () => {
     test('合法 JSON 字符串数组 → 原样返回', async () => {
-      await mkdir(join(home, '.claude'), { recursive: true })
+      await mkdir(configRoot, { recursive: true })
       await writeFile(registry, JSON.stringify(['/a', '/b']), 'utf8')
       expect(readProjectRegistry(registry)).toEqual(['/a', '/b'])
     })
@@ -31,17 +31,17 @@ describe('projectRegistry —— 机器级项目注册表读写（v5 T2 决策 D
       expect(readProjectRegistry(registry)).toEqual([])
     })
     test('损坏 JSON → []', async () => {
-      await mkdir(join(home, '.claude'), { recursive: true })
+      await mkdir(configRoot, { recursive: true })
       await writeFile(registry, '{oops', 'utf8')
       expect(readProjectRegistry(registry)).toEqual([])
     })
     test('非数组 JSON → []', async () => {
-      await mkdir(join(home, '.claude'), { recursive: true })
+      await mkdir(configRoot, { recursive: true })
       await writeFile(registry, '{"a":1}', 'utf8')
       expect(readProjectRegistry(registry)).toEqual([])
     })
     test('数组内非字符串条目 → String 强转（老实现同款）', async () => {
-      await mkdir(join(home, '.claude'), { recursive: true })
+      await mkdir(configRoot, { recursive: true })
       await writeFile(registry, '["/a", 42]', 'utf8')
       expect(readProjectRegistry(registry)).toEqual(['/a', '42'])
     })
@@ -54,7 +54,7 @@ describe('projectRegistry —— 机器级项目注册表读写（v5 T2 决策 D
       expect(raw).toBe(`${JSON.stringify(['/a', '/b'], null, 2)}\n`)
     })
 
-    test('mkdir -p：目标 .claude 目录不存在时自动创建（beforeEach 只建了临时 home）', async () => {
+    test('mkdir -p：目标配置目录不存在时自动创建', async () => {
       await writeProjectRegistry(registry, ['/x'])
       expect(JSON.parse(await readFile(registry, 'utf8'))).toEqual(['/x'])
     })
@@ -67,13 +67,13 @@ describe('projectRegistry —— 机器级项目注册表读写（v5 T2 决策 D
     test('原子写：写后同目录无 *.tmp* 残留（tmp+rename 同目录）', async () => {
       await writeProjectRegistry(registry, ['/a'])
       await writeProjectRegistry(registry, ['/a', '/b'])
-      const entries = await readdir(join(home, '.claude'))
-      expect(entries).toEqual(['pipeline-projects.json'])
+      const entries = await readdir(configRoot)
+      expect(entries).toEqual(['projects.json'])
     })
   })
 
   describe('registerProjectRoot —— resolve 去重 + 原子写', () => {
-    test('首次登记：自动建 .claude 目录，JSON 含 resolve 后 root，返回 true', async () => {
+    test('首次登记：自动建配置目录，JSON 含 resolve 后 root，返回 true', async () => {
       const root = await mkdtemp(join(tmpdir(), 'lite-projroot-'))
       try {
         expect(await registerProjectRoot(registry, root)).toBe(true)
@@ -100,7 +100,7 @@ describe('projectRegistry —— 机器级项目注册表读写（v5 T2 决策 D
     })
 
     test('注册表损坏 → 按空表处理（读容错），登记后文件恢复为合法 JSON', async () => {
-      await mkdir(join(home, '.claude'), { recursive: true })
+      await mkdir(configRoot, { recursive: true })
       await writeFile(registry, '{oops', 'utf8')
       expect(await registerProjectRoot(registry, '/repo/demo')).toBe(true)
       const data = JSON.parse(await readFile(registry, 'utf8')) as string[]
@@ -108,7 +108,7 @@ describe('projectRegistry —— 机器级项目注册表读写（v5 T2 决策 D
     })
 
     test('既有条目保留：追加不覆盖别的项目', async () => {
-      await mkdir(join(home, '.claude'), { recursive: true })
+      await mkdir(configRoot, { recursive: true })
       await writeFile(registry, JSON.stringify(['/existing']), 'utf8')
       await registerProjectRoot(registry, '/repo/new')
       const data = JSON.parse(await readFile(registry, 'utf8')) as string[]
@@ -118,13 +118,13 @@ describe('projectRegistry —— 机器级项目注册表读写（v5 T2 决策 D
     test('原子写：写后目录里无 *.tmp* 残留（tmp+rename 同目录）', async () => {
       await registerProjectRoot(registry, '/repo/a')
       await registerProjectRoot(registry, '/repo/b')
-      const entries = await readdir(join(home, '.claude'))
-      expect(entries).toEqual(['pipeline-projects.json'])
+      const entries = await readdir(configRoot)
+      expect(entries).toEqual(['projects.json'])
     })
 
     test('目录不可写 → 抛错（fail-loud；best-effort 由 CLI 调用方兜，对齐 history.ts 职责切分）', async () => {
-      await mkdir(join(home, '.claude'), { recursive: true })
-      await chmod(join(home, '.claude'), 0o555)
+      await mkdir(configRoot, { recursive: true })
+      await chmod(configRoot, 0o555)
       await expect(registerProjectRoot(registry, '/repo/x')).rejects.toThrow()
     })
 

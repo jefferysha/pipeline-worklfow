@@ -193,6 +193,71 @@ bash tools/prepare-n-minus-one-release.sh
 
 **回滚：** migration 失败保留旧 active；Tenon 激活失败恢复 previous verified release。
 
+### Task 3.3：重构整包更新事务
+
+**文件：**
+
+- `packages/cli/src/commands/update.ts`
+- `packages/cli/src/runtime/{installer,launchers,types}.ts`
+- `packages/cli/src/commands/dashboard.ts`
+- `hooks/auto-update.sh`
+- `packages/cli/src/program-install.ts`
+- 对应单元、失败注入和真实进程测试
+
+**实现：**
+
+- 删除 `--self-update`，手动/自动更新统一走 `tenon update --<native-host>`。
+- 将宿主 inventory 提交与 Tenon managed 提交建模为两个明确边界，不直接读写宿主私有 cache。
+- launcher 写前捕获存在性、内容和 mode；首装、部分写入、Dashboard readiness 失败均做 CAS 安全的精确补偿。
+- Dashboard coordinator 持有候选 child，失败时终止候选并恢复 previous release 的唯一 18765 服务。
+- update 只读扫描项目注册表并报告显式 `tenon sync`，后台更新不修改用户工作区。
+- CI 的 N−1 路径从 fixture `cliEntry` 派生，不再硬编码当前 CLI 名。
+
+**验证：**
+
+```bash
+npx vitest run packages/cli/src/commands/update.test.ts \
+  packages/cli/src/runtime/launchers.test.ts packages/cli/src/commands/dashboard.test.ts
+bash tools/prepare-n-minus-one-release.sh <tmp>
+TENON_N_MINUS_ONE_PAYLOAD=<tmp>/payload bash tools/test-bundle.sh
+```
+
+**此处建议 `/clear`。**
+
+### Task 3.4：收敛产品机器状态与跨进程 root contract
+
+**文件：**
+
+- 新增 `packages/kernel/src/product-paths.ts` 及平台矩阵测试
+- 修改 `packages/kernel/src/state/{projectRegistry,secrets}.ts`
+- 修改 `packages/cli/src/runtime/{paths,installer,launchers}.ts`
+- 修改 `runtime/tenon-bootstrap.mjs`
+- 修改 `packages/server/src/{paths,main,server}.ts`
+- 修改 `tools/check-architecture.mjs`
+
+**实现：**
+
+- 由 kernel 唯一解析 macOS、Linux、Windows 的 Tenon data/state/config roots 和所有产品状态文件。
+- 取消 `~/.claude` 产品状态与 Dashboard 专属 Home；宿主目录仅用于宿主资产发现。
+- 安装器解析一次并序列化版本化 `TENON_RUNTIME_ROOTS`，launcher、bootstrap、CLI、Dashboard
+  消费相同元组；单 root 变量只作为 N−1 bootstrap 与 shell hook 的输出投影。
+- 架构门禁禁止其他 production 文件拥有产品状态文件名、解释 `TENON_RUNTIME_HOME`、读取
+  `TENON_DASHBOARD_HOME` 或把单 root 投影重新当输入。
+
+**验证：**
+
+```bash
+npx vitest run packages/kernel/src/product-paths.test.ts \
+  packages/kernel/src/state/projectRegistry.test.ts packages/kernel/src/state/secrets.test.ts \
+  packages/cli/src/runtime/paths.test.ts packages/cli/src/runtime/launchers.test.ts \
+  packages/cli/src/runtime/bootstrap.test.ts packages/server/src/paths.test.ts
+npm run check:architecture
+bash tools/test-bundle.sh
+```
+
+**回滚：** 只允许恢复 previous verified release 与其已记录 root contract；不得回退到宿主目录或
+重新启用第二路径解析器。
+
 **此处建议 `/clear`。**
 
 ## Build 子阶段 4：一步安装与 npx 发布包
@@ -224,23 +289,23 @@ bash tools/test-adapters.sh
 
 **文件：**
 
-- 新增 `packages/bootstrap/package.json`
-- 新增 `packages/bootstrap/bin/tenon.mjs`
-- 新增 `packages/bootstrap/README.md`
-- 新增 `tools/check-npm-package.mjs`
+- 新增私有模板 workspace `packages/npm-bootstrap/`
+- 新增 `packages/npm-bootstrap/bin/tenon-bootstrap.mjs`
+- 新增 `tools/build-npx-package.mjs`
+- 新增 npx pack/内容审计测试
 - 新增 npm publish workflow（不内置 secret）
 
 **实现：**
 
 - package basename 固定 `tenon`，publisher scope 由发布配置显式注入，不在源码猜测。
-- bin 复用 Marketplace bootstrap/release manifest；不打入 monorepo 私有内容。
+- bin 固定下载 release tag 对应的 installer，并校验内嵌 SHA-256；installer 复用 Marketplace
+  `main` 稳定通道和同一 managed transaction，不打入 monorepo 私有内容。
 - workflow 使用 npm provenance/受保护 environment；没有凭据时只 pack/audit，不发布。
 
 **验证：**
 
 ```bash
-npm pack --dry-run -w packages/bootstrap
-node tools/check-npm-package.mjs
+npm run check:npx-package
 # 对生成 tarball 使用临时 HOME 运行 npx --package <tarball> tenon setup --codex --dry-run
 ```
 

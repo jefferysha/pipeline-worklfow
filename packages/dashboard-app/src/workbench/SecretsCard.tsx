@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
 /**
- * SecretsCard(v6 T8)——独立「凭证」卡:机器级 ~/.claude/pipeline-secrets.json 的审阅/写入面,
+ * SecretsCard(v6 T8)——独立「凭证」卡：Tenon 配置域 secrets.json 的审阅/写入面，
  * 跟在 AFK 执行卡之后(决策 C.5:不并入 AutomationCard——那张卡是 per-root dirty→保存语义,
  * 凭证是机器级逐键即时写,两种保存语义混在一卡会互相污染)。
  *

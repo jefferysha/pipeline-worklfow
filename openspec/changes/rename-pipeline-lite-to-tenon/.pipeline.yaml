@@ -3,7 +3,7 @@ preset: full
 created_by: unknown
 assignee: null
 phase: build
-phase_status: in_progress
+phase_status: pending
 design_doc: docs/superpowers/specs/2026-07-26-tenon-product-identity-design.md
 plan: docs/superpowers/plans/2026-07-26-tenon-global-rename.md
 verification_report: docs/superpowers/reports/2026-07-26-rename-pipeline-lite-to-tenon-verify.md
@@ -31,7 +31,7 @@ related_files: null
 spec_scope: null
 depends_on: null
 created_at: 2026-07-26T02:49:37Z
-updated_at: 2026-07-26T05:44:54Z
+updated_at: 2026-07-26T06:59:35Z
 verified_at: null
 archived_at: null
 archived: false
@@ -39,8 +39,8 @@ workflow: default
 automation_current_phase: ""
 automation_cause: ""
 pipeline_run_id: fe162c6c-0981-44e1-92b0-ba600b80d41c
-pipeline_transition_sequence: 9
-pipeline_transition_head: d280aecf-ec53-416d-9c97-1dd505ad99a2
-pipeline_state_revision: 26
-pipeline_state_revision_id: 77c2d83e-bb11-434a-9ed5-1f1f1137d0cd
-pipeline_state_digest: 9d4851f3387a63e9038b279a94ce83aaa618214fc71ea85650c451e51c264dc0
+pipeline_transition_sequence: 15
+pipeline_transition_head: d030bf11-af6f-4da2-9aa3-0560ea39476c
+pipeline_state_revision: 41
+pipeline_state_revision_id: 699bb375-7c6b-4046-befa-c0d2904f2527
+pipeline_state_digest: 2d0dc1bd1d26edaed6a22947a69296f3218c717171918d1258314e8fa53f1e24

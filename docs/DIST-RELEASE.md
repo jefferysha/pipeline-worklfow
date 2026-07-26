@@ -78,15 +78,36 @@ tenon update --codex
 tenon setup --codex --auto-update
 ```
 
-更新实现先让宿主刷新 marketplace/插件，再用宿主 `plugin list --json` 返回的安装根运行资产校验；只有
-校验通过才会 stage → 完整验证 → 原子切换 managed release。稳定 `~/.local/bin/tenon` / `tenon-hook`
-本身不改指向；失败必须保留当前 active release 与启动器。selection、audit、bootstrap slot 都放在平台标准
-runtime 目录，且仅保留 active/previous 为恢复候选。`tenon runtime repair --rollback` 会再次校验 previous
-release digest 后才切换，绝不把任意 marketplace checkout 当作恢复源。自动更新是用户 opt-in，当前会话不热替换
-skills/hooks，新会话才加载新版本。每次成功 setup 会从刚发布的不可变 payload 启动受管 dashboard，健康检查
-通过后自动打开本机页面；后台自动更新只刷新同一受管服务，不会打断或主动打开浏览器。Codex 的第三方 hook 必须由用户在
-`/hooks` 完成一次性信任；新发布物改变 hook hash 时，宿主可能要求重新信任，不能用安装脚本绕过这一安全边界。完整工作台
-固定通过 `tenon dashboard` 启动，默认端口 18765；其他端口需显式 `tenon dashboard --port <port>`。
+更新实现先让宿主刷新 marketplace/插件，再用宿主 `plugin list --json` 返回的安装根运行资产校验。
+宿主插件缓存与 Tenon managed runtime 是两个明确边界：Codex/Claude CLI 是宿主登记/cache 的唯一
+writer，Tenon 不读取、复制或恢复其私有缓存；只有候选校验通过，Tenon 才通过唯一
+`release-coordinator` stage → 完整验证 → 原子切换 managed release。
+
+稳定 `~/.local/bin/tenon` / `tenon-hook` 在写入前捕获存在性、字节与 mode，失败时只在当前内容仍属于
+本次事务时做 CAS 精确补偿。Dashboard readiness 属于同一 managed transaction：失败先终止候选 child，
+恢复 activation 前 selection/launcher，再从 previous immutable payload 恢复唯一 18765 服务。审计必须
+分别报告 `host=in-progress|committed` 与 `managed=unchanged|restored|indeterminate`，不得把 managed
+补偿描述成“宿主插件已整体回滚”。
+
+selection、audit、bootstrap slot 都放在平台标准 runtime 目录，且仅保留 active/previous 为恢复候选。
+kernel 的 `resolveProductPaths` 是产品机器路径的唯一真相源：项目注册表与凭证位于 config root，
+Dashboard token/pid 与 selection/audit 位于 state root；`~/.claude`、`~/.codex` 仅用于发现对应
+宿主资产，Tenon 不在其中保存自己的状态。`TENON_RUNTIME_HOME` 是完整产品域唯一允许的显式隔离覆盖。
+稳定 launcher 把已解析 root 元组编码为版本化 `TENON_RUNTIME_ROOTS`，bootstrap 和当前 CLI 只消费
+该契约，不各自重算平台路径；单 root 变量仅作为 shell hook 与冻结 N−1 bootstrap 的只读输出投影。
+`tenon runtime repair --rollback` 会再次校验 previous release digest 后才切换，绝不把任意 marketplace
+checkout 当作恢复源。自动更新是用户 opt-in，当前会话不热替换 skills/hooks，新会话才加载新版本。
+每次成功 setup 会从刚发布的不可变 payload 启动受管 dashboard，健康检查通过后自动打开本机页面；
+后台自动更新只刷新同一受管服务，不会主动打开浏览器。项目工作区永远在更新事务外；update 只读扫描
+注册表并显示显式 `tenon sync`。
+
+Codex 的第三方 hook 必须由用户在 `/hooks` 完成一次性信任；新发布物改变 hook hash 时，宿主可能要求
+重新信任，不能用安装脚本绕过这一安全边界。完整工作台固定通过 `tenon dashboard` 启动，默认端口
+18765；其他端口需显式 `tenon dashboard --port <port>`。
+
+可选 npx 包固定下载自身 release tag 对应的 `install.sh`，并验证构建时内嵌的 SHA-256；该安装脚本仍
+注册 `main` 稳定发行通道，使 npx 与 Marketplace 在执行时消费相同候选 digest，又不把后续 update
+锁死在旧 tag。
 
 每次发布至少执行：
 

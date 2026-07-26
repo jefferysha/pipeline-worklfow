@@ -149,7 +149,7 @@ export function bannerNudge(projectVersion: string, cliVersion: string): BannerN
   const direction = comparison > 0 ? 'update' : 'upgrade'
   const message = comparison > 0
     ? `Tenon assets are out of date: ${projectVersion} -> ${cliVersion}. Run: tenon sync`
-    : `Your Tenon plugin (${cliVersion}) is older than this project (${projectVersion}). Run: tenon update --self-update`
+    : `Your Tenon plugin (${cliVersion}) is older than this project (${projectVersion}). Run: tenon update --codex (or --claude)`
   return { direction, projectVersion, cliVersion, message }
 }
 

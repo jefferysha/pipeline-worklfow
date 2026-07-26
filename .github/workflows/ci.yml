@@ -139,7 +139,7 @@ jobs:
           release="$(node -p "require('./$meta').releaseId + ' plugin@' + require('./$meta').pluginVersion")"
           output="$RUNNER_TEMP/pipeline-n-minus-one"
           bash tools/prepare-n-minus-one-release.sh "$output"
-          echo "TENON_N_MINUS_ONE_CLI=$output/payload/packages/cli/dist/tenon.mjs" >> "$GITHUB_ENV"
+          echo "TENON_N_MINUS_ONE_PAYLOAD=$output/payload" >> "$GITHUB_ENV"
           echo "TENON_N_MINUS_ONE_RELEASE=$release" >> "$GITHUB_ENV"
 
       - name: bundle smoke test

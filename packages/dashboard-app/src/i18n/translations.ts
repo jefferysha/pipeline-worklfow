@@ -1062,7 +1062,7 @@ export const zh: Dict = {
     // v6 T8：凭证卡(机器级,write-only)。
     sc_title: '凭证',
     sc_scope: '机器级',
-    sc_head_sub: '存 ~/.claude/pipeline-secrets.json(0600),永不进仓库',
+    sc_head_sub: '存于 Tenon 配置目录的 secrets.json（0600），永不进入项目仓库',
     sc_load_error: '凭证状态加载失败:{msg}',
     sc_runner_CLAUDE_CODE_OAUTH_TOKEN: 'claude-code 路径用',
     sc_runner_OPENAI_API_KEY: 'codex 路径用',
@@ -2278,7 +2278,7 @@ export const en: Dict = {
     afk_rd_docker_howto: 'How to install: install OrbStack (orbstack.dev) or Docker Desktop (docker.com)',
     sc_title: 'Credentials',
     sc_scope: 'machine-level',
-    sc_head_sub: 'Stored in ~/.claude/pipeline-secrets.json (0600), never enters the repo',
+    sc_head_sub: 'Stored in Tenon config as secrets.json (0600), never enters a project repository',
     sc_load_error: 'Failed to load credential status: {msg}',
     sc_runner_CLAUDE_CODE_OAUTH_TOKEN: 'used by the claude-code path',
     sc_runner_OPENAI_API_KEY: 'used by the codex path',

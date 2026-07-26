@@ -44,8 +44,9 @@ creates stable `tenon` and `tenon-hook` launchers, starts the packaged
 Dashboard, and opens it after its health check succeeds.
 
 After installation, use `tenon setup --codex` to repair host wiring and
-`tenon update --self-update` to infer the native host from the active managed release, validate
-the candidate in isolation, check Dashboard readiness, and compensate the exact activation on failure.
+`tenon update --codex` (or `--claude`) to update the one complete host plugin. Manual and
+opt-in automatic updates use the same candidate validation, managed release, launcher, and
+Dashboard transaction; there is no second CLI self-update channel.
 
 ### Codex hook trust
 
@@ -123,7 +124,12 @@ Payload, state, and configuration use OS-standard application-data locations:
 
 - macOS: `~/Library/Application Support/tenon/`
 - Linux: XDG data/state/config locations
-- Windows: Local AppData locations
+- Windows: Local AppData for data/state and Roaming AppData for configuration
+
+Tenon-owned files never use `~/.claude` or `~/.codex` as storage. The project registry and
+credentials live in the Tenon config root; runtime selection, audit, Dashboard token, and pidfile
+live in the Tenon state root. `TENON_RUNTIME_HOME` redirects the complete product domain for
+isolated testing or operations.
 
 The stable command launcher is normally `~/.local/bin/tenon`. Treat the
 host-owned marketplace/cache directory as private implementation detail.

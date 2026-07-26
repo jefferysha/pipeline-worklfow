@@ -226,6 +226,20 @@ const DOMAIN_INFRASTRUCTURE = new Set([
   'packages/kernel/src/workflow/stepGuard.ts',
 ])
 
+const PRODUCT_PATH_OWNER = 'packages/kernel/src/product-paths.ts'
+const PRODUCT_ROOT_CONTRACT_SITES = new Set([
+  PRODUCT_PATH_OWNER,
+  'packages/cli/src/runtime/launchers.ts',
+  'runtime/tenon-bootstrap.mjs',
+])
+const LEGACY_ROOT_PROJECTION_SITES = new Set([
+  'packages/cli/src/runtime/launchers.ts',
+  'runtime/tenon-bootstrap.mjs',
+  'packages/cli/src/codexSkillTrust.ts',
+  'hooks/auto-update.sh',
+  'hooks/session-start.sh',
+])
+
 function walk(dir) {
   const files = []
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -341,6 +355,24 @@ for (const path of production) {
   }
   if (/as unknown as WorkflowDef/.test(code)) {
     failures.push(`${rel}: workflow request DTO must pass through decodeWorkflowDef`)
+  }
+
+  if (rel !== PRODUCT_PATH_OWNER
+    && /['"](?:projects|secrets|dashboard-token|dashboard-server)\.json['"]/.test(code)) {
+    failures.push(`${rel}: Tenon product file locations must come from kernel resolveProductPaths`)
+  }
+  if (rel !== PRODUCT_PATH_OWNER && /\bTENON_RUNTIME_HOME\b/.test(code)) {
+    failures.push(`${rel}: TENON_RUNTIME_HOME may only be interpreted by kernel resolveProductPaths`)
+  }
+  if (/\bTENON_DASHBOARD_HOME\b/.test(code)) {
+    failures.push(`${rel}: Dashboard-only machine home creates a forbidden second product-state root`)
+  }
+  if (/\bTENON_RUNTIME_ROOTS\b/.test(code) && !PRODUCT_ROOT_CONTRACT_SITES.has(rel)) {
+    failures.push(`${rel}: versioned runtime root contract may only be resolved, projected, or consumed at its boundary`)
+  }
+  if (/\bTENON_RUNTIME_(?:DATA|STATE|CONFIG)_ROOT\b/.test(code)
+    && !LEGACY_ROOT_PROJECTION_SITES.has(rel)) {
+    failures.push(`${rel}: individual runtime roots are read-only shell/N-1 projections, not path inputs`)
   }
 
   const allowedIdentitySites = WORKFLOW_IDENTITY_COMPAT.get(rel) ?? []

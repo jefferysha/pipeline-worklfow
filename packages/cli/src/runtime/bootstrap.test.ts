@@ -79,7 +79,15 @@ async function installBootstrap(runtimeHome: string): Promise<string> {
 async function runBootstrap(runtimeHome: string, bootstrap: string, args: string[], input = ''): Promise<{ stdout: string; stderr: string; code: number }> {
   return new Promise((resolveResult) => {
     const child = spawn(process.execPath, [bootstrap, ...args], {
-      env: { ...process.env, TENON_RUNTIME_HOME: runtimeHome },
+      env: {
+        ...process.env,
+        TENON_RUNTIME_ROOTS: JSON.stringify({
+          version: 1,
+          dataRoot: join(runtimeHome, 'data'),
+          stateRoot: join(runtimeHome, 'state'),
+          configRoot: join(runtimeHome, 'config'),
+        }),
+      },
     })
     let stdout = ''
     let stderr = ''

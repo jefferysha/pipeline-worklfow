@@ -170,7 +170,7 @@ export interface CliDeps {
   /** lite 历史 .pipeline-history.jsonl appender（CONTRACT §1）。best-effort。 */
   history?: HistoryWriter
   /**
-   * init 成功后把 repoRoot 登记进机器级项目注册表 ~/.claude/pipeline-projects.json
+   * init 成功后把 repoRoot 登记进 Tenon config root 的 projects.json
    * （v5 T2 决策 D：dashboard 项目自动发现）。best-effort：任何注册表故障（损坏/不可写）
    * 只 WARN，绝不影响 init exit 0。main.ts 用 kernel registerProjectRoot 落地。
    */
@@ -187,10 +187,10 @@ export interface CliDeps {
    */
   readGateMarkers?: () => Promise<GateMarkerInfo[]>
   /**
-   * v6 T2：机器级 secrets 存储（~/.claude/pipeline-secrets.json）读成 env 形状，喂 afk run 的
+   * v6 T2：Tenon config root 的 secrets.json 读成 env 形状，喂 afk run 的
    * hostEnv 合并（宿主 env 显式非空 > 文件值，沿用 sdk「显式>文件」装配惯例；空串 env 视同缺席，
    * 不吃掉文件值）。best-effort：未注入/读失败 → {}，行为与接线前完全一致（fail-open，不阻断 run）。
-   * main.ts 用 kernel secretsPath(homedir())+readSecrets 落地；值不进日志（同 dockerRunChange 纪律）。
+   * main.ts 用 resolveRuntimePaths().secretsPath + readSecrets 落地；值不进日志。
    */
   readSecretsEnv?: () => Promise<Record<string, string>>
   /**

@@ -61,14 +61,77 @@ release manifest、候选验证、content-addressed publication、active/previou
 - **AND** 失败原因进入持久诊断
 - **AND** 不产生半迁移的 Tenon active 状态。
 
-### Requirement: Tenon 更新 SHALL 使用单一用户入口
+### Requirement: Tenon 更新 SHALL 只有一个整包事务
 
-Tenon SHALL 使用 `tenon update` 更新受管资产和已登记项目；CLI 包自更新必须通过明确
-`--self-update` 开启。候选 SHALL 在隔离位置验证，替换失败 SHALL 恢复精确旧版本及 active selection。
+Tenon SHALL 使用 `tenon update --<native-host>` 更新唯一的完整插件，不得再把 CLI/runtime
+拆成第二套 `--self-update` 通道。手动更新与用户明确启用的定时更新 SHALL 调用同一个事务协调器；
+Skills、hooks、CLI、Dashboard、workflow 与 adapters SHALL 来自同一候选 payload 和 release digest。
 
-#### Scenario: 自更新被明确请求
+宿主 Marketplace/plugin manager SHALL 是宿主插件登记与 cache 的唯一写入者；Tenon 不得直接改写、
+备份或恢复宿主私有 cache 目录。Tenon SHALL 在自己的所有权边界内对 content-addressed runtime、
+active/previous selection、bootstrap、stable launchers 与 Dashboard 服务执行可审计事务，并明确报告
+宿主提交与 Tenon 提交两个边界，不得把只回滚 managed selection 描述成“整个宿主插件已恢复”。
 
-- **WHEN** 用户运行 `tenon update --self-update`
-- **THEN** 新包先完成隔离安装与 CLI/workflow/release contract smoke
-- **AND** 只有验证成功才替换当前安装
-- **AND** 失败时恢复精确旧版本并报告各子步骤结果。
+项目 canonical Change、OpenSpec 与任务文件不属于插件更新事务。更新 SHALL 只读取机器级项目注册表，
+报告需要显式 `tenon sync` 的项目，不得在后台或 `--auto` 模式中静默修改工作区。
+
+#### Scenario: 用户更新完整 Codex 插件
+
+- **WHEN** 用户运行 `tenon update --codex`
+- **THEN** 只有 Codex Marketplace/plugin manager 更新 `tenon@tenon`
+- **AND** 宿主 inventory 返回的候选先完成 payload、CLI、workflow、hook、Skill 与 Dashboard smoke
+- **AND** Tenon 再把同一 digest 发布为 content-addressed managed release
+- **AND** active selection、bootstrap、两个 stable launchers 与 18765 Dashboard 共同提交。
+
+#### Scenario: 自动更新已明确启用
+
+- **WHEN** `tenon setup --codex --auto-update` 已写入用户偏好且每日检查到期
+- **THEN** 后台任务调用与手动更新相同的 `tenon update --codex --auto`
+- **AND** 不存在第二套下载器、selection、Skill root、CLI 自更新或项目写入逻辑。
+
+#### Scenario: launcher 或 Dashboard 提交失败
+
+- **WHEN** managed release 已验证，但任一 launcher 写入或新 Dashboard readiness 失败
+- **THEN** Tenon SHALL 以 activation 前快照精确恢复 selection、bootstrap、launcher 的存在性/内容/mode
+- **AND** 终止本次候选 Dashboard child，并重新验证或恢复 previous release 的 18765 服务
+- **AND** 持久诊断分别说明宿主提交状态与 Tenon managed transaction 的补偿结果。
+
+#### Scenario: 已登记项目需要新投影
+
+- **WHEN** 更新后的 runtime 扫描机器级项目注册表并发现某项目版本落后
+- **THEN** 更新结果列出项目及显式 `tenon sync` 命令
+- **AND** 自动更新不得写该项目的 OpenSpec、Change、rules 或 owned manifest。
+
+### Requirement: Tenon 产品机器状态 SHALL 只有一个路径所有者
+
+Tenon 自有的 release、staging、selection、audit、项目注册表、凭证、Dashboard token 与 pid
+SHALL 全部由 kernel 的单一平台路径解析器定位。macOS SHALL 使用
+`~/Library/Application Support/tenon`，Linux SHALL 使用带 `tenon` 命名空间的 XDG
+data/state/config roots，Windows SHALL 将本机 data/state 与 roaming config 分开。
+Tenon 不得借用 `.claude`、`.codex` 或其他宿主目录保存产品状态。
+
+`TENON_RUNTIME_HOME` SHALL 是测试与运维隔离的唯一用户覆盖。安装器 SHALL 只解析一次实际 roots，
+并通过版本化 `TENON_RUNTIME_ROOTS` 契约把精确 root 元组传给 stable launcher、bootstrap、CLI 与
+Dashboard；bootstrap、server 和各领域 store 不得各自复制平台路径算法。单 root 环境变量 MAY
+作为冻结 N−1 bootstrap 与 shell hook 的只读投影，但当前路径解析器不得把它们作为第二输入源。
+
+#### Scenario: 新安装在不同平台解析产品状态
+
+- **WHEN** Tenon 在 macOS、Linux 或 Windows 上首次安装
+- **THEN** kernel 返回该平台标准目录下、带 `tenon` 命名空间的 data/state/config roots
+- **AND** release、selection、registry、secrets、Dashboard token 与 pid 均位于约定的产品域
+- **AND** `.claude` 与 `.codex` 只用于宿主资产发现，不成为 Tenon 产品状态根。
+
+#### Scenario: launcher 启动不同进程
+
+- **WHEN** stable launcher 启动当前 bootstrap、冻结 N−1 bootstrap、CLI 或 Dashboard
+- **THEN** 所有进程消费同一个带版本的 `TENON_RUNTIME_ROOTS` 元组
+- **AND** current runtime 不会因单 root 投影变量或 Dashboard 专属 Home 得到第二套状态目录
+- **AND** Dashboard 单例 scope 绑定 canonical `stateRoot`。
+
+#### Scenario: 运维隔离运行时
+
+- **WHEN** 测试或运维显式设置 `TENON_RUNTIME_HOME`
+- **THEN** kernel 在该根下确定性派生 data/state/config
+- **AND** 子进程接收相同 root contract
+- **AND** 未设置该变量时不会从任一旧产品或宿主目录隐式回退。

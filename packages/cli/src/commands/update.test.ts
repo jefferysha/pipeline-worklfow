@@ -3,6 +3,7 @@ import { makeDeps } from '../test-support.js'
 import { installedPipelineRoot, nativeInstallPlan } from './plugin-host.js'
 import { type SetupEnv } from './setup.js'
 import { cmdUpdate, nativeUpdatePlan } from './update.js'
+import { resolveRuntimePaths } from '../runtime/paths.js'
 import type { RuntimeInstaller } from '../runtime/installer.js'
 import type { ReleasedDashboardStarter } from './dashboard.js'
 
@@ -21,7 +22,10 @@ interface DashboardCalls {
   readonly starts: Array<readonly [string, { readonly openBrowser?: boolean }]>
 }
 
-function fakeRuntimeInstaller(fail = false): { installer: RuntimeInstaller; calls: RuntimeCalls } {
+function fakeRuntimeInstaller(
+  fail = false,
+  previousRelease: string | null = null,
+): { installer: RuntimeInstaller; calls: RuntimeCalls } {
   const calls: RuntimeCalls = { activations: [], failures: [], reverts: [] }
   const releaseId = `sha256-${'b'.repeat(64)}`
   const installer: RuntimeInstaller = {
@@ -30,7 +34,7 @@ function fakeRuntimeInstaller(fail = false): { installer: RuntimeInstaller; call
       if (fail) throw new Error('candidate rejected')
       return {
         release: { version: 1, releaseId, payloadDigest: 'b'.repeat(64), createdAt: '2026-07-24T00:00:00Z', source: { host, pluginVersion: '1.0.0' } },
-        selection: { version: 1, revision: 2, activeRelease: releaseId, previousRelease: null, updatedAt: '2026-07-24T00:00:00Z' },
+        selection: { version: 1, revision: 2, activeRelease: releaseId, previousRelease, updatedAt: '2026-07-24T00:00:00Z' },
         releaseRoot: `/runtime/releases/${releaseId}`,
       }
     },
@@ -53,13 +57,13 @@ function fakeRuntimeInstaller(fail = false): { installer: RuntimeInstaller; call
   return { installer, calls }
 }
 
-function fakeDashboardStarter(fail = false): { starter: ReleasedDashboardStarter; calls: DashboardCalls } {
+function fakeDashboardStarter(failures: readonly boolean[] = []): { starter: ReleasedDashboardStarter; calls: DashboardCalls } {
   const calls: DashboardCalls = { starts: [] }
   return {
     starter: {
       start: async (_deps, payloadRoot, opts) => {
         calls.starts.push([payloadRoot, opts])
-        return fail ? 1 : 0
+        return failures[calls.starts.length - 1] === true ? 1 : 0
       },
     },
     calls,
@@ -173,18 +177,23 @@ describe('tenon update', () => {
       }
       return { code: 0, stdout: '', stderr: '' }
     })
-    const runtime = fakeRuntimeInstaller()
-    const dashboard = fakeDashboardStarter(true)
+    const previousRelease = `sha256-${'a'.repeat(64)}`
+    const runtime = fakeRuntimeInstaller(false, previousRelease)
+    const dashboard = fakeDashboardStarter([true, false])
 
     expect(await cmdUpdate(deps, { codex: true }, env, runtime.installer, dashboard.starter)).toBe(1)
     expect(runtime.calls.reverts).toEqual([[
       '/home/update-test',
       `sha256-${'b'.repeat(64)}`,
     ]])
-    expect(runtime.calls.failures[0]?.[1]).toContain('已恢复上一 active selection')
+    expect(dashboard.calls.starts.map(([payload]) => payload)).toEqual([
+      `/runtime/releases/sha256-${'b'.repeat(64)}/payload`,
+      `/runtime/releases/${previousRelease}/payload`,
+    ])
+    expect(runtime.calls.failures[0]?.[1]).toContain('已恢复 managed transaction 与 previous Dashboard')
   })
 
-  test('--self-update infers the native host from the active verified runtime', async () => {
+  test('successful update reports registered projects that need an explicit sync without writing them', async () => {
     const deps = makeDeps()
     const { env, calls } = updateEnv((cmd, args) => {
       if (cmd === 'codex' && args.join(' ') === 'plugin list --json') {
@@ -192,18 +201,21 @@ describe('tenon update', () => {
       }
       return { code: 0, stdout: '', stderr: '' }
     })
-    const runtime = fakeRuntimeInstaller()
-    runtime.installer.inspect = async () => ({
-      selection: { version: 1, revision: 1, activeRelease: `sha256-${'a'.repeat(64)}`, previousRelease: null, updatedAt: '2026-07-24T00:00:00Z' },
-      active: { version: 1, releaseId: `sha256-${'a'.repeat(64)}`, payloadDigest: 'a'.repeat(64), createdAt: '2026-07-24T00:00:00Z', source: { host: 'codex', pluginVersion: '1.0.0' } },
-      previous: null,
-      activeValid: true,
-      previousValid: false,
-      lastAudit: null,
-    })
+    env.readText = (path) => {
+      if (path === resolveRuntimePaths({ homeDir: '/home/update-test' }).registryPath) {
+        return JSON.stringify(['/repo/current', "/repo/it's $HOME", "/repo/it's $HOME", 'relative/project'])
+      }
+      if (path === '/repo/current/.pipeline-version') return '1.0.0\n'
+      if (path === "/repo/it's $HOME/.pipeline-version") return '0.2.0\n'
+      return undefined
+    }
 
-    expect(await cmdUpdate(deps, { selfUpdate: true }, env, runtime.installer, fakeDashboardStarter().starter)).toBe(0)
-    expect(calls.exec[0]).toEqual(['codex', ['plugin', 'marketplace', 'upgrade', 'tenon', '--json']])
+    expect(await cmdUpdate(deps, { codex: true }, env, fakeRuntimeInstaller().installer, fakeDashboardStarter().starter)).toBe(0)
+    expect(deps.outLines.join('\n')).toContain(`cd '/repo/it'"'"'s $HOME' && tenon sync`)
+    expect(deps.outLines.filter((line) => line.includes('tenon sync'))).toHaveLength(1)
+    expect(deps.outLines.join('\n')).not.toContain('relative/project')
+    expect(deps.outLines.join('\n')).not.toContain('/repo/current')
+    expect(calls.writes).toEqual([])
   })
 
   test('a local Codex marketplace skips the unsupported Git fetch but still reinstalls the plugin cache', async () => {
@@ -247,9 +259,28 @@ describe('tenon update', () => {
     expect(runtime.calls.activations).toEqual([])
     expect(runtime.calls.failures).toEqual([[
       '/home/update-test',
-      '宿主刷新后的 tenon 候选未通过打包资产校验',
+      'host=committed; managed=unchanged; 宿主刷新后的 tenon 候选未通过打包资产校验',
     ]])
-    expect(deps.errLines.join('\n')).toContain('保持原 launcher')
+    expect(deps.errLines.join('\n')).toContain('宿主插件缓存已由 Codex 更新')
+    expect(deps.errLines.join('\n')).toContain('Tenon 未回滚宿主私有缓存')
+  })
+
+  test('managed activation failure is audited without pretending to roll back the host cache', async () => {
+    const deps = makeDeps()
+    const { env } = updateEnv((cmd, args) => {
+      if (cmd === 'codex' && args.join(' ') === 'plugin list --json') return { code: 0, stdout: CODEX_INVENTORY, stderr: '' }
+      if (cmd === 'bash') return { code: 0, stdout: '', stderr: '' }
+      return { code: 0, stdout: '', stderr: '' }
+    })
+    const runtime = fakeRuntimeInstaller(true)
+
+    expect(await cmdUpdate(deps, { codex: true }, env, runtime.installer, fakeDashboardStarter().starter)).toBe(1)
+    expect(runtime.calls.failures).toEqual([[
+      '/home/update-test',
+      expect.stringContaining('host=committed; managed=unchanged'),
+    ]])
+    expect(deps.errLines.join('\n')).toContain('宿主插件缓存已由 Codex 更新')
+    expect(deps.errLines.join('\n')).toContain('当前已验证 runtime 保持不变')
   })
 
   test('an idempotent already-installed response still verifies the host inventory before publishing the managed runtime', async () => {

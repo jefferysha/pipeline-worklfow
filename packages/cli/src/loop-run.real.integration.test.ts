@@ -597,7 +597,7 @@ describe('H14 loop run · sandcastle:local real-Codex dist black-box integration
 
     const root = await mkdtemp(join(tmpdir(), 'pipeline-h14-real-'))
     roots.push(root)
-    cliEnv = { ...cliEnv, TENON_DASHBOARD_HOME: join(root, '.tenon-dashboard-home') }
+    cliEnv = { ...cliEnv, TENON_RUNTIME_HOME: join(root, '.tenon-runtime-home') }
     await git(root, ['init', '-q', '-b', 'main'])
     await git(root, ['config', 'user.email', 'h14@pipeline.local'])
     await git(root, ['config', 'user.name', 'H14 Real Integration'])
@@ -619,7 +619,7 @@ describe('H14 loop run · sandcastle:local real-Codex dist black-box integration
       '.pipeline/loops/*.lock',
       '.pipeline/loops/ledger.jsonl',
       '.pipeline/loops/skill-snapshots/',
-      '.tenon-dashboard-home/',
+      '.tenon-runtime-home/',
       '',
     ].join('\n'), 'utf8')
 

@@ -15,6 +15,8 @@
 | **真 fs 集成** | `packages/cli/src/integration.test.ts` | 🟢 真 | `buildProgram` + 真 `createStateStore/createFlowEngine/loadManifest/createHistoryWriter` + 真临时目录，断言真实落盘的 .pipeline.yaml/JSONL/marker 字节；真子进程跑 dist bundle --help |
 | **golden-oracle 双跑** | `tools/oracle/run.sh` | 🟢 真 | 真跑老内核 `pipeline-state.sh`(bash) vs 新 CLI(node)，stdout+exit+落盘三面逐字 diff |
 | **bundle 冒烟** | `tools/test-bundle.sh` | 🟢 真 | 真起子进程跑编译产物 init→get→transition→history 全程 |
+| **managed release 事务** | `packages/cli/src/runtime/release-store.integration.test.ts` | 🟢 真 | 真复制完整候选、发布 immutable release，并验证 selection 与稳定 launcher 字节/mode 的精确补偿 |
+| **安装入口与 npx 包** | `tools/install-bootstrap.node-test.mjs`、`tools/build-npx-package.node-test.mjs` | 🟢 真 | 真 bash 跑 Codex/Claude 一步安装计划；真生成发布包并验证 release installer SHA-256 |
 | **hook 脚本** | `tools/test-hooks.sh` | 🟢 真 | 真 bash 跑 gate/breadcrumb/session-start/statusline，真 marker 文件三态 |
 | **kernel 单元** | `kernel/src/state/*.test.ts`、`flow/*.test.ts` | 🟢 真 | 真解析/真 mkdir 锁/真 base64/真 fixture 往返——本就无 mock |
 
@@ -282,13 +284,10 @@ iteration-35）**：
     见 progress.md）；AFK 工作台（不依赖 `phase` 值，只看 `automation` 字段）与
     Loop 设置面板（loops registry 有自己独立的 `phases` 声明，不复用 dashboard 的
     固定 `PHASES` 常量）经真机验证不受此缺口影响，可以正常通过 dashboard 点击驱动。
-- **G18**：项目要出现在 dashboard 里，目前没有任何 CLI 命令或界面入口可以把一个
-  项目根目录注册进 `~/.claude/pipeline-projects.json`（机器级注册表，
-  `packages/server/src/registry.ts` 只有 `readRegistry`，全仓找不到任何写入它的代码
-  路径）——唯一方法是手改这个 JSON 文件。已在 README.md「Dashboard 工作台」一节如实
-  写明操作步骤，不算阻断性 bug（本机单用户场景下手改一次 JSON 成本很低），但确实是
-  当前唯一入口，值得后续补一个 `pipeline project register [--root]` 之类的命令或者
-  dashboard 设置页里的一个小表单。
+- **G18（历史记录，现已关闭）**：当时项目注册表只有读路径，必须手改宿主目录中的 JSON。
+  后续 `tenon init` 与 Dashboard 项目端点已经复用 kernel 原子 store；当前注册表由
+  `resolveProductPaths().registryPath` 定位在 Tenon config root 的 `projects.json`，不再借用
+  `~/.claude`，update 也只读该同一注册表并输出显式 `tenon sync`。
 
 ### 2026-07-09 · iteration-38 dashboard 全量重构 —— 改判追记
 

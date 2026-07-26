@@ -1,11 +1,9 @@
 /**
- * 机器级凭证存储 —— ~/.claude/pipeline-secrets.json（v6 T1，proposal C 节：存储 schema/掩码规则/
- * 端点鉴权）读写模块。对齐 projectRegistry.ts 的 injectable-home 模式：路径由调用方注入
- * （server main.ts 传 homedir()、cli main.ts 同样传 homedir()、hermetic 测试传临时目录），
- * kernel 不直接碰真实 HOME。
+ * Tenon 配置域凭证存储。路径由 resolveProductPaths().secretsPath 统一给出；调用方仅注入
+ * 已解析绝对路径，本模块不自行推断宿主目录。
  *
  * 红线复述（proposal C 节，违反=方案作废）：
- *   · key 绝不落仓库内文件——本文件固定写到 `<home>/.claude/`，不是 `.pipeline/`（仓库内）。
+ *   · key 绝不落仓库内文件——本文件固定写到 Tenon config root，不是 `.pipeline/`。
  *   · 凭证值不进日志——本模块任何 throw 分支只拼接 key 名/白名单文案，绝不把 value 拼进
  *     Error message（见 assertWhitelisted）。
  *
@@ -27,10 +25,8 @@
  */
 import { existsSync, readFileSync } from 'node:fs'
 import { mkdir, rename, writeFile } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
+import { dirname } from 'node:path'
 import { withLock } from './lock.js'
-
-export const SECRETS_FILE_NAME = 'pipeline-secrets.json'
 
 /** 白名单：真正的密钥字符串（不是任意 key-value）。 */
 export const SECRET_KEYS = ['CLAUDE_CODE_OAUTH_TOKEN', 'OPENAI_API_KEY'] as const
@@ -52,10 +48,6 @@ function assertSecretKey(key: string): asserts key is SecretKey {
   }
 }
 
-/** 存储缺省路径：<home>/.claude/pipeline-secrets.json（与 pipeline-projects.json/.tenon-dashboard-token 同目录）。 */
-export function secretsPath(home: string): string {
-  return join(home, '.claude', SECRETS_FILE_NAME)
-}
 
 /** 读存储：缺失/损坏/形状不对 → { version:1, keys:{} }（fail-open，不抛错，绝不阻断消费方）。 */
 export function readSecrets(path: string): SecretsStore {
@@ -90,7 +82,7 @@ async function atomicWriteSecrets(path: string, store: SecretsStore): Promise<vo
  * 各自「读旧态 → 改 → 原子写」，两个并发调用（如 dashboard 同时逐键即时写 CLAUDE_CODE_OAUTH_TOKEN 与
  * OPENAI_API_KEY 的两个 POST）若不串行会各读同一旧态、后 rename 覆盖前者 → **丢更新**（codex CLI review
  * 实锤 P1）。withLock 进程内 FIFO + 跨进程 mkdir 锁双层互斥，彻底关掉该窗口。锁在 secrets 文件所在目录
- * （~/.claude）上；withLock 的 acquire 用非递归 mkdir，故先确保该父目录存在（首次写盘前 .claude 可能不存在）。
+ * （Tenon config root）上；withLock 的 acquire 用非递归 mkdir，故先确保该父目录存在。
  */
 async function withSecretsLock<T>(path: string, fn: () => Promise<T>): Promise<T> {
   const dir = dirname(path)

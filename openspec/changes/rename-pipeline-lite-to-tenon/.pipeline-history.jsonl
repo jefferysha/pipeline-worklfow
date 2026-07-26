@@ -82,3 +82,47 @@
 {"ts":"2026-07-26T05:45:37Z","kind":"tool","raw":"CodexSkillRead: frontend-design"}
 {"ts":"2026-07-26T05:45:37Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
 {"ts":"2026-07-26T05:45:37Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-26T05:46:01Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"bce919a9-7fbe-478e-b1ec-aa9d22087373"}
+{"ts":"2026-07-26T05:46:34Z","kind":"tool","raw":"CodexSkillRead: code-review"}
+{"ts":"2026-07-26T05:46:44Z","kind":"tool","raw":"CodexSkillRead: pipeline-verify"}
+{"ts":"2026-07-26T05:46:44Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-07-26T05:46:44Z","kind":"tool","raw":"CodexSkillRead: browser-qa"}
+{"ts":"2026-07-26T05:46:44Z","kind":"tool","raw":"CodexSkillRead: e2e-testing"}
+{"ts":"2026-07-26T05:46:44Z","kind":"tool","raw":"CodexSkillRead: verify"}
+{"ts":"2026-07-26T05:46:44Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-26T05:46:44Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-26T05:46:44Z","kind":"tool","raw":"CodexSkillRead: finishing-a-development-branch"}
+{"ts":"2026-07-26T05:47:01Z","kind":"tool","raw":"CodexSkillRead: e2e-testing"}
+{"ts":"2026-07-26T05:47:01Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-07-26T05:47:01Z","kind":"tool","raw":"CodexSkillRead: deployment-patterns"}
+{"ts":"2026-07-26T05:54:08Z","kind":"set","field":"verify_result","to":"fail"}
+{"ts":"2026-07-26T05:54:09Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-07-26-rename-pipeline-lite-to-tenon-verify.md"}
+{"ts":"2026-07-26T05:54:09Z","kind":"tool","raw":"review:request phase=verify event=verify-fail"}
+{"ts":"2026-07-26T05:54:10Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-07-26T02:54:33Z"}
+{"ts":"2026-07-26T05:54:10Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"23e703bd-17fc-4ba8-a8c6-34235cfa6a2e"}
+{"ts":"2026-07-26T06:02:18Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-26T06:02:18Z","kind":"tool","raw":"CodexSkillRead: frontend-design"}
+{"ts":"2026-07-26T06:02:18Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-26T06:02:18Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-26T06:02:27Z","kind":"transition","from":"build","to":"spec","raw":"requirements-changed","transitionRecordId":"c2b5ea42-1d6b-4963-9497-16df93345ceb"}
+{"ts":"2026-07-26T06:05:13Z","kind":"tool","raw":"CodexSkillRead: pipeline-spec"}
+{"ts":"2026-07-26T06:05:13Z","kind":"tool","raw":"CodexSkillRead: openspec-propose"}
+{"ts":"2026-07-26T06:05:13Z","kind":"tool","raw":"CodexSkillRead: brainstorming"}
+{"ts":"2026-07-26T06:05:13Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-07-26T06:05:47Z","kind":"set","field":"plan","to":"docs/superpowers/plans/2026-07-26-tenon-global-rename.md"}
+{"ts":"2026-07-26T06:05:50Z","kind":"tool","raw":"review:request phase=spec event=spec-complete"}
+{"ts":"2026-07-26T06:05:51Z","kind":"tool","raw":"review:delegated-ack phase=spec event=spec-complete authority_issued_at=2026-07-26T02:54:33Z"}
+{"ts":"2026-07-26T06:05:51Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"fd1d6308-4543-46d4-b000-b5ecfc53f315"}
+{"ts":"2026-07-26T06:13:55Z","kind":"tool","raw":"CodexSkillRead: pipeline"}
+{"ts":"2026-07-26T06:14:12Z","kind":"tool","raw":"CodexSkillRead: pipeline-build"}
+{"ts":"2026-07-26T06:55:43Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-26T06:55:43Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-26T06:55:43Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-26T06:55:43Z","kind":"tool","raw":"CodexSkillRead: frontend-design"}
+{"ts":"2026-07-26T06:57:24Z","kind":"transition","from":"build","to":"spec","raw":"requirements-changed","transitionRecordId":"68c529be-7049-4f01-b967-f9eea4e827dd"}
+{"ts":"2026-07-26T06:58:07Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-07-26T06:58:07Z","kind":"tool","raw":"CodexSkillRead: pipeline-spec"}
+{"ts":"2026-07-26T06:58:07Z","kind":"tool","raw":"CodexSkillRead: openspec-propose"}
+{"ts":"2026-07-26T06:59:34Z","kind":"tool","raw":"review:request phase=spec event=spec-complete"}
+{"ts":"2026-07-26T06:59:35Z","kind":"tool","raw":"review:delegated-ack phase=spec event=spec-complete authority_issued_at=2026-07-26T02:54:33Z"}
+{"ts":"2026-07-26T06:59:35Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"d030bf11-af6f-4da2-9aa3-0560ea39476c"}

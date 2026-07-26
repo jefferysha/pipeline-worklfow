@@ -1,9 +1,10 @@
-import { cp, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
+import { chmod, cp, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import { resolveRuntimePaths } from './paths.js'
+import { REAL_RUNTIME_INSTALLER } from './installer.js'
 import { RuntimeReleaseStore } from './release-store.js'
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..')
@@ -193,4 +194,29 @@ describe('RuntimeReleaseStore', () => {
       detail: 'host marketplace refresh failed',
     })
   })
+
+  it('compensates a real installer activation across selection and exact stable launchers', async () => {
+    const root = await freshRoot('installer-transaction')
+    const home = join(root, 'home')
+    const candidate = await candidateCopy(root)
+    const bin = join(home, '.local', 'bin')
+    const tenon = join(bin, 'tenon')
+    const hook = join(bin, 'tenon-hook')
+    await mkdir(bin, { recursive: true })
+    await writeFile(tenon, '#!/bin/sh\necho previous-tenon\n', 'utf8')
+    await writeFile(hook, '#!/bin/sh\necho previous-hook\n', 'utf8')
+    await chmod(tenon, 0o750)
+    await chmod(hook, 0o700)
+
+    const activation = await REAL_RUNTIME_INSTALLER.activate(candidate, 'codex', home)
+    expect(await readFile(tenon, 'utf8')).toContain('TENON_RUNTIME_DATA_ROOT')
+
+    await REAL_RUNTIME_INSTALLER.revertActivation?.(home, activation)
+
+    expect(await readFile(tenon, 'utf8')).toBe('#!/bin/sh\necho previous-tenon\n')
+    expect(await readFile(hook, 'utf8')).toBe('#!/bin/sh\necho previous-hook\n')
+    expect((await stat(tenon)).mode & 0o777).toBe(0o750)
+    expect((await stat(hook)).mode & 0o777).toBe(0o700)
+    expect((await REAL_RUNTIME_INSTALLER.inspect(home)).selection.activeRelease).toBeNull()
+  }, 30_000)
 })

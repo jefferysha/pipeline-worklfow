@@ -1,15 +1,8 @@
+import type { ProductPaths } from '@tenon/kernel'
+
 export type NativeRuntimeHost = 'codex' | 'claude'
 
-export interface RuntimePaths {
-  readonly dataRoot: string
-  readonly stateRoot: string
-  readonly configRoot: string
-  readonly releasesRoot: string
-  readonly stagingRoot: string
-  readonly bootstrapRoot: string
-  readonly selectionPath: string
-  readonly auditPath: string
-}
+export type RuntimePaths = ProductPaths
 
 export interface RuntimeReleaseSource {
   readonly host: NativeRuntimeHost | 'adapter' | 'manual'
@@ -32,6 +25,18 @@ export interface RuntimeSelection {
   readonly updatedAt: string
 }
 
+export interface RuntimeLauncherFileSnapshot {
+  readonly path: string
+  readonly state:
+    | { readonly kind: 'missing' }
+    | { readonly kind: 'file'; readonly content: string; readonly mode: number }
+}
+
+export interface RuntimeLauncherSnapshot {
+  readonly tenon: RuntimeLauncherFileSnapshot
+  readonly hook: RuntimeLauncherFileSnapshot
+}
+
 export interface RuntimeAuditEntry {
   readonly version: 1
   readonly at: string
@@ -51,6 +56,10 @@ export interface RuntimeActivation {
   readonly selection: RuntimeSelection
   readonly release: RuntimeReleaseManifest
   readonly releaseRoot: string
+  /** Exact pre-activation launcher state used by the installer-owned compensation transaction. */
+  readonly launcherSnapshot?: RuntimeLauncherSnapshot
+  /** Exact launcher state written by this activation; compensation uses it as a CAS ownership proof. */
+  readonly launcherCommitted?: RuntimeLauncherSnapshot
 }
 
 export interface RuntimeInspection {

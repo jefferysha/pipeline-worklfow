@@ -51,33 +51,18 @@ async function codexPluginCacheRoot(payload) {
 }
 
 function runtimePaths() {
-  const override = safeRoot(process.env.TENON_RUNTIME_HOME)
-  const home = homedir()
-  const platform = process.platform
-  const dataRoot = safeRoot(process.env.TENON_RUNTIME_DATA_ROOT)
-    ?? (override !== null
-      ? join(override, 'data')
-      : platform === 'darwin'
-        ? join(home, 'Library', 'Application Support', 'tenon')
-        : platform === 'win32'
-          ? join(safeRoot(process.env.LOCALAPPDATA) ?? join(home, 'AppData', 'Local'), 'tenon')
-        : join(safeRoot(process.env.XDG_DATA_HOME) ?? join(home, '.local', 'share'), 'tenon'))
-  const stateRoot = safeRoot(process.env.TENON_RUNTIME_STATE_ROOT)
-    ?? (override !== null
-      ? join(override, 'state')
-      : platform === 'darwin'
-        ? join(home, 'Library', 'Application Support', 'tenon', 'state')
-        : platform === 'win32'
-          ? join(safeRoot(process.env.LOCALAPPDATA) ?? join(home, 'AppData', 'Local'), 'tenon', 'state')
-        : join(safeRoot(process.env.XDG_STATE_HOME) ?? join(home, '.local', 'state'), 'tenon'))
-  const configRoot = safeRoot(process.env.TENON_RUNTIME_CONFIG_ROOT)
-    ?? (override !== null
-      ? join(override, 'config')
-      : platform === 'darwin'
-        ? join(home, 'Library', 'Application Support', 'tenon', 'config')
-        : platform === 'win32'
-          ? join(safeRoot(process.env.LOCALAPPDATA) ?? join(home, 'AppData', 'Local'), 'tenon', 'config')
-          : join(safeRoot(process.env.XDG_CONFIG_HOME) ?? join(home, '.config'), 'tenon'))
+  let contract
+  try {
+    contract = JSON.parse(process.env.TENON_RUNTIME_ROOTS ?? '')
+  } catch {
+    throw new Error('TENON_RUNTIME_ROOTS is missing or invalid; reinstall the Tenon stable launcher')
+  }
+  const dataRoot = isRecord(contract) && contract.version === 1 ? safeRoot(contract.dataRoot) : null
+  const stateRoot = isRecord(contract) && contract.version === 1 ? safeRoot(contract.stateRoot) : null
+  const configRoot = isRecord(contract) && contract.version === 1 ? safeRoot(contract.configRoot) : null
+  if (dataRoot === null || stateRoot === null || configRoot === null) {
+    throw new Error('TENON_RUNTIME_ROOTS does not contain absolute version-1 roots')
+  }
   return {
     dataRoot,
     stateRoot,
@@ -350,6 +335,14 @@ async function childEnv(release, paths) {
     ...process.env,
     PLUGIN_ROOT: payload,
     CLAUDE_PLUGIN_ROOT: payload,
+    TENON_RUNTIME_ROOTS: JSON.stringify({
+      version: 1,
+      dataRoot: paths.dataRoot,
+      stateRoot: paths.stateRoot,
+      configRoot: paths.configRoot,
+    }),
+    // Read-only projections for shell hooks and the N-1 bootstrap ABI. They are derived from the
+    // versioned root contract above; current runtime path resolution never treats them as inputs.
     TENON_RUNTIME_DATA_ROOT: paths.dataRoot,
     TENON_RUNTIME_STATE_ROOT: paths.stateRoot,
     TENON_RUNTIME_CONFIG_ROOT: paths.configRoot,

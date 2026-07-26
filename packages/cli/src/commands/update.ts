@@ -6,7 +6,7 @@
  * marketplaces; for them `update` deliberately re-applies the adapter from the already updated
  * package instead of falsely claiming to fetch a release from that host.
  */
-import { join } from 'node:path'
+import { isAbsolute, join } from 'node:path'
 import type { CliDeps } from '../deps.js'
 import { REAL_RUNTIME_INSTALLER, type RuntimeInstaller } from '../runtime/installer.js'
 import { REAL_RELEASED_DASHBOARD_STARTER, type ReleasedDashboardStarter } from './dashboard.js'
@@ -22,13 +22,14 @@ import {
   type PipelineHostFlags,
 } from './plugin-host.js'
 import { cmdSetupHost, type SetupEnv, REAL_SETUP_ENV } from './setup.js'
+import { publishManagedRelease } from './release-coordinator.js'
+import { resolveRuntimePaths } from '../runtime/paths.js'
 
 export interface UpdateOpts extends PipelineHostFlags {
   dryRun?: boolean
   yes?: boolean
   auto?: boolean
   target?: string
-  selfUpdate?: boolean
 }
 
 export function nativeUpdatePlan(host: Extract<PipelineHost, 'codex' | 'claude'>): readonly HostCommandPlanItem[] {
@@ -86,6 +87,31 @@ function rejectUpdate(
   return record.then(() => 1).catch(() => 1)
 }
 
+type HostBoundaryState = 'in-progress' | 'committed'
+type ManagedBoundaryState = 'unchanged' | 'restored' | 'indeterminate'
+
+function boundaryDetail(
+  hostState: HostBoundaryState,
+  managedState: ManagedBoundaryState,
+  detail: string,
+): string {
+  return `host=${hostState}; managed=${managedState}; ${detail}`
+}
+
+function reportHostBoundary(deps: CliDeps, host: PipelineHost, state: HostBoundaryState): void {
+  if (state === 'committed') {
+    deps.io.err(
+      `[update] 宿主插件缓存已由 ${host === 'codex' ? 'Codex' : 'Claude'} 更新；` +
+      'Tenon 未回滚宿主私有缓存，当前会话仍使用其已加载版本。',
+    )
+    return
+  }
+  deps.io.err(
+    `[update] ${hostFlag(host)} 宿主更新在 inventory 提交确认前失败；` +
+    '宿主私有缓存状态由宿主 CLI 管理，Tenon 未直接写入或恢复该缓存。',
+  )
+}
+
 export function cmdUpdate(
   deps: CliDeps,
   opts: UpdateOpts,
@@ -93,28 +119,6 @@ export function cmdUpdate(
   installer: RuntimeInstaller = REAL_RUNTIME_INSTALLER,
   dashboardStarter: ReleasedDashboardStarter = REAL_RELEASED_DASHBOARD_STARTER,
 ): number | Promise<number> {
-  if (opts.selfUpdate === true
-    && !Object.entries(opts).some(([key, value]) => key !== 'selfUpdate'
-      && ['codex', 'claude', 'cursor', 'gemini', 'copilot', 'pi', 'devin', 'zed', 'aider', 'continue', 'cline', 'amp']
-        .includes(key) && value === true)) {
-    return installer.inspect(env.homeDir()).then((inspection) => {
-      const runtimeHost = inspection.active?.source.host
-      if (runtimeHost !== 'codex' && runtimeHost !== 'claude') {
-        deps.io.err('ERROR: --self-update 无法从 active runtime 推断原生宿主；请先运行 tenon setup --codex 或 --claude。')
-        return 1
-      }
-      return cmdUpdate(
-        deps,
-        { ...opts, [runtimeHost]: true },
-        env,
-        installer,
-        dashboardStarter,
-      )
-    }).catch((error: unknown) => {
-      deps.io.err(`ERROR: --self-update 读取 active runtime 失败：${error instanceof Error ? error.message : String(error)}`)
-      return 1
-    })
-  }
   const selection = selectPipelineHost(opts)
   if (selection.host === null) {
     deps.io.err(`ERROR: ${selection.error}。示例：tenon update --codex`)
@@ -134,6 +138,7 @@ export function cmdUpdate(
   }
 
   let inventory = ''
+  let hostBoundary: HostBoundaryState = 'in-progress'
   for (let index = 0; index < plan.length; index += 1) {
     const item = plan[index]!
     const result = env.runCommand(item.cmd, [...item.args])
@@ -160,7 +165,8 @@ export function cmdUpdate(
       }
       const detail = `${item.cmd} ${item.args.join(' ')} 失败：${result.stderr.trim() || `退出码 ${result.code}`}`
       deps.io.err(`ERROR: ${detail}`)
-      return rejectUpdate(installer, env, detail)
+      reportHostBoundary(deps, host, hostBoundary)
+      return rejectUpdate(installer, env, boundaryDetail(hostBoundary, 'unchanged', detail))
     }
     inventory = result.stdout
   }
@@ -168,31 +174,33 @@ export function cmdUpdate(
   if (root === null) {
     const detail = `${hostFlag(host)} 更新后未在宿主插件清单中找到 tenon；未切换 launcher。`
     deps.io.err(`ERROR: ${detail}`)
-    return rejectUpdate(installer, env, detail)
+    reportHostBoundary(deps, host, hostBoundary)
+    return rejectUpdate(installer, env, boundaryDetail(hostBoundary, 'unchanged', detail))
   }
+  hostBoundary = 'committed'
   if (!verifyUpdatedRoot(deps, env, root)) {
-    return rejectUpdate(installer, env, '宿主刷新后的 tenon 候选未通过打包资产校验')
+    const detail = '宿主刷新后的 tenon 候选未通过打包资产校验'
+    reportHostBoundary(deps, host, hostBoundary)
+    return rejectUpdate(installer, env, boundaryDetail(hostBoundary, 'unchanged', detail))
   }
-  return installer.activate(root, host, env.homeDir())
-    .then(async (activation) => {
-      deps.io.out(`[update] 已原子切换至已验证 runtime: ${activation.release.releaseId}（revision ${activation.selection.revision}）。`)
-      const dashboardCode = await dashboardStarter.start(
-        deps,
-        join(activation.releaseRoot, 'payload'),
-        { openBrowser: opts.auto !== true },
-      )
-      if (dashboardCode !== 0) {
-        const detail = '新 runtime 的 dashboard readiness 失败'
-        try {
-          if (installer.revertActivation === undefined) throw new Error('runtime installer 不支持精确 activation 补偿')
-          await installer.revertActivation(env.homeDir(), activation)
-        } catch (rollbackError) {
-          deps.io.err(`ERROR: ${detail}，且精确回滚失败：${rollbackError instanceof Error ? rollbackError.message : String(rollbackError)}`)
-          return rejectUpdate(installer, env, `${detail}；rollback failed`)
-        }
-        deps.io.err(`ERROR: ${detail}`)
-        return rejectUpdate(installer, env, `${detail}；已恢复上一 active selection`)
+  return publishManagedRelease(
+    deps,
+    {
+      candidateRoot: root,
+      source: host,
+      homeDir: env.homeDir(),
+      openBrowser: opts.auto !== true,
+    },
+    installer,
+    dashboardStarter,
+  ).then(async (outcome) => {
+      if (!outcome.ok) {
+        deps.io.err(`ERROR: ${outcome.detail}`)
+        reportHostBoundary(deps, host, hostBoundary)
+        return rejectUpdate(installer, env, boundaryDetail(hostBoundary, outcome.state, outcome.detail))
       }
+      const { activation } = outcome
+      deps.io.out(`[update] 已原子切换至已验证 runtime: ${activation.release.releaseId}（revision ${activation.selection.revision}）。`)
       if (opts.auto) {
         deps.io.out(`[update] ${hostFlag(host)} 已在后台刷新；当前会话继续使用已加载版本，新会话将加载新 skills/hooks。`)
       } else {
@@ -201,10 +209,43 @@ export function cmdUpdate(
       if (host === 'codex') {
         deps.io.out('[update] 若 Codex 将新版本 Tenon hook 标为未信任或已变更，请在 Codex 输入 /hooks 后重新信任；这是宿主的安全边界。')
       }
+      reportRegisteredProjects(deps, env, activation.release.source.pluginVersion)
       return 0
     })
-    .catch((error: unknown) => {
-      deps.io.err(`ERROR: 新版本 runtime 校验/发布失败，保留当前已验证 release：${error instanceof Error ? error.message : String(error)}`)
-      return 1
-    })
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, `'"'"'`)}'`
+}
+
+function reportRegisteredProjects(deps: CliDeps, env: SetupEnv, pluginVersion: string): void {
+  let registry: string | undefined
+  try {
+    registry = env.readText(resolveRuntimePaths({ homeDir: env.homeDir() }).registryPath)
+  } catch {
+    deps.io.err('[update] WARN: 项目注册表无法读取；未修改任何工作区。')
+    return
+  }
+  if (registry === undefined) return
+  let roots: unknown
+  try {
+    roots = JSON.parse(registry)
+  } catch {
+    deps.io.err('[update] WARN: 项目注册表无法解析；未修改任何工作区。')
+    return
+  }
+  if (!Array.isArray(roots)) return
+  const registeredRoots = [...new Set(
+    roots.filter((root): root is string => typeof root === 'string' && isAbsolute(root)),
+  )]
+  const outdated = registeredRoots.filter((root) => {
+    try {
+      return env.readText(join(root, '.pipeline-version'))?.trim() !== pluginVersion
+    } catch {
+      return true
+    }
+  })
+  if (outdated.length === 0) return
+  deps.io.out(`[update] ${outdated.length} 个已登记项目需要显式同步（本次更新未写工作区）：`)
+  for (const root of outdated) deps.io.out(`  cd ${shellQuote(root)} && tenon sync`)
 }

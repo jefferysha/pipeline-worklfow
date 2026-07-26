@@ -36,7 +36,7 @@
 | 项目运行时根 | `.trellis/` | `.comet/`；Native 产物默认 `docs/comet/` | `.tenon/`；产物位置可配置，但所有权元数据仍归 `.tenon/` |
 | 配置/环境前缀 | `.trellis/config.yaml`、`TRELLIS_*` | `.comet/config.yaml`、`COMET_*` | `.tenon/config.yaml`、`TENON_*` |
 | 宿主目录 | 由 Cursor/Codex/Claude 等适配器决定 | 由平台注册表决定 | 保留 `.codex`、`.agents` 等业界宿主目录，不能改成 `.tenon` |
-| CLI 与项目资产升级 | `trellis upgrade` + `trellis update` 两入口 | `comet update` 单入口，CLI 自升级需显式 `--self-update` | 采用 Comet 型单入口：`tenon update [--self-update]` |
+| CLI 与项目资产升级 | `trellis upgrade` + `trellis update` 两入口 | `comet update` 单入口，CLI 自升级需显式 `--self-update` | 只采用“单入口”原则：`tenon update --<native-host>` 更新完整插件，不复制 Comet 的第二 self-update 状态 |
 | 路径重命名 | 有版本化 `rename`/`rename-dir` manifest | 有 canonical/legacy 目录发现与精确清理 | 采用所有权校验、候选验证、失败回滚；不长期保留旧命令 |
 
 关键判断：
@@ -265,31 +265,28 @@ Tenon 的迁移应组合 Trellis 与 Comet 的长处：
 
 ### 6.4 单一更新入口
 
-推荐命令契约：
+早期调研曾考虑复制 Comet 的 `--self-update`，但后续所有权审查确认 Tenon 的 CLI、Skills、hooks、
+Dashboard、workflow 与 adapters 本来就是一个插件 release。最终命令契约收敛为：
 
 ```bash
-# 刷新当前项目已安装的 Tenon 资产，不隐式变更 npm 包
-tenon update
-
-# 先安全升级 Tenon 包，再刷新当前项目资产
-tenon update --self-update
-
-# 刷新安装登记中的所有项目
-tenon update --all-projects
+# 由一个原生宿主更新完整 Tenon 插件
+tenon update --codex
+tenon update --claude
 
 # 新安装按宿主显式选择
 tenon setup --codex
 tenon setup --claude
 ```
 
-自动更新服务可以调用同一应用服务，但必须把两个结果分开建模：
+自动更新调用同一命令的 `--auto` 非交互形态。状态按宿主与 Tenon managed 边界建模：
 
 ```text
-package_update: updated | skipped | failed
-project_assets: updated | partial | failed
+host: in-progress | committed
+managed: unchanged | restored | indeterminate | ready
 ```
 
-UI 只有在二者均完成时才能显示“已更新”；不能把包更新成功等同于 Skills/hooks/Dashboard 已刷新。
+项目工作区不属于更新事务；只读扫描后输出显式 `tenon sync`，不得提供隐式
+`--all-projects` 后台写入。
 
 ## 7. 采纳与不采纳清单
 
@@ -307,6 +304,7 @@ UI 只有在二者均完成时才能显示“已更新”；不能把包更新�
 
 - 不采用 Trellis 的 `tl` 短别名；
 - 不采用 `update`/`upgrade` 双入口；
+- 不采用 Comet 的 `--self-update` 第二版本状态；
 - 不在 Tenon 包中保留旧 `pipeline` 命令或 `pipeline-lite` plugin/Skill id；
 - 不把 npm 包名、运行时根、环境变量等身份字符串散落硬编码；
 - 不用全局文本替换修改历史归档、已发布迁移清单或审计 ledger；
@@ -321,7 +319,8 @@ UI 只有在二者均完成时才能显示“已更新”；不能把包更新�
 2. CLI、npm basename、plugin id、Skills、Dashboard、README/文档站、配置根和环境前缀均为 Tenon identity；
 3. `.codex`、`.agents`、`.claude` 等宿主标准目录保持不变；
 4. 一个 identity manifest 能生成/校验 CLI、包、模板、测试和 Dashboard 品牌常量；
-5. `tenon update --self-update` 具备候选验证、失败回滚和项目资产独立状态；
+5. `tenon update --codex|--claude` 通过唯一 managed-release coordinator 完成候选验证、
+   launcher/Dashboard 精确补偿，并只读报告项目同步；
 6. 旧用户的跨包升级由旧分发通道的一次性迁移桥完成；
 7. Tenon 最终包不携带旧命令别名；
 8. 当前产品源码和生成分发物无旧 identity；历史 archive/ledger 的旧词仅作为不可变审计事实保留。

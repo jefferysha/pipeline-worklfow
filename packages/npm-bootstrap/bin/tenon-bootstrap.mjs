@@ -1,8 +1,13 @@
 #!/usr/bin/env node
 import { spawn } from 'node:child_process'
+import { createHash } from 'node:crypto'
+import { realpathSync } from 'node:fs'
+import { resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 const repository = '__TENON_REPOSITORY__'
 const releaseRef = '__TENON_RELEASE_REF__'
+const installerSha256 = '__TENON_INSTALLER_SHA256__'
 const allowedHosts = new Set(['--codex', '--claude'])
 
 function usage() {
@@ -54,7 +59,17 @@ async function downloadInstaller(url) {
   }
   const script = await response.text()
   if (Buffer.byteLength(script) > 256 * 1024) throw new Error('installer exceeds the 256 KiB bootstrap limit')
-  if (!script.startsWith('#!/usr/bin/env bash')) throw new Error('downloaded installer is not the Tenon bash bootstrap')
+  return verifyInstaller(script)
+}
+
+export async function verifyInstaller(script) {
+  if (!script.startsWith('#!/usr/bin/env bash')) {
+    throw new Error('downloaded installer is not the Tenon bash bootstrap')
+  }
+  const digest = createHash('sha256').update(script).digest('hex')
+  if (digest !== installerSha256) {
+    throw new Error(`installer digest mismatch: expected ${installerSha256}, got ${digest}`)
+  }
   return script
 }
 
@@ -83,7 +98,12 @@ async function main() {
   process.exitCode = await runInstaller(script, parsed.installerArgs)
 }
 
-main().catch((error) => {
-  process.stderr.write(`tenon bootstrap: ${error instanceof Error ? error.message : String(error)}\n`)
-  process.exitCode = 1
-})
+const invokedPath = process.argv[1] === undefined ? null : resolve(process.argv[1])
+const isDirectInvocation = invokedPath !== null
+  && realpathSync(invokedPath) === realpathSync(fileURLToPath(import.meta.url))
+if (isDirectInvocation) {
+  main().catch((error) => {
+    process.stderr.write(`tenon bootstrap: ${error instanceof Error ? error.message : String(error)}\n`)
+    process.exitCode = 1
+  })
+}

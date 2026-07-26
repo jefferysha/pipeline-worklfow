@@ -74,7 +74,7 @@ curl -fsSL https://raw.githubusercontent.com/jefferysha/tenon/main/install.sh | 
 ```
 
 Bootstrap 注册 Tenon Marketplace、安装同一个完整插件、校验发行 payload，并执行
-`tenon setup --<host>`。已经安装后的维护入口仍是 `tenon setup --codex`、`tenon update --self-update`
+`tenon setup --<host>`。已经安装后的维护入口仍是 `tenon setup --codex`、`tenon update --codex`
 与 `tenon runtime status`。
 
 需要自动跟随后续发行版时显式启用每日检查：

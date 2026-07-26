@@ -169,7 +169,7 @@ describe('listener PID parsing', () => {
 describe('preemptOldServer —— 真读 pidfile + 真 SIGTERM 干掉旧进程', () => {
   it('kill 旧 pid → 子进程真退出、端口空出 → 返回 true', async () => {
     const home = await makeTempHome()
-    const pidfile = join(home, '.tenon-dashboard.server')
+    const pidfile = join(home, 'dashboard-server.json')
     const port = await freePort()
     // 真起一个 TCP listener。抢占路径必须验证 pid 的确拥有目标端口，不能只信 pidfile。
     const child = await listenerChild(port)
@@ -189,7 +189,7 @@ describe('preemptOldServer —— 真读 pidfile + 真 SIGTERM 干掉旧进程',
 
   it('legacy server 无 pidfile 时，仅在 health pid 与实际 listener 一致才接管', async () => {
     const home = await makeTempHome()
-    const pidfile = join(home, '.tenon-dashboard.server')
+    const pidfile = join(home, 'dashboard-server.json')
     const port = await freePort()
     const child = await listenerChild(port)
     children.push(child)
@@ -203,7 +203,7 @@ describe('preemptOldServer —— 真读 pidfile + 真 SIGTERM 干掉旧进程',
 
   it('legacy health 报错 pid 不拥有 listener → fail-closed，绝不误杀', async () => {
     const home = await makeTempHome()
-    const pidfile = join(home, '.tenon-dashboard.server')
+    const pidfile = join(home, 'dashboard-server.json')
     const port = await freePort()
     const child = await listenerChild(port)
     children.push(child)

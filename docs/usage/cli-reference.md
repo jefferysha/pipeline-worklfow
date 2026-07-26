@@ -17,7 +17,6 @@ Canonical first-host examples:
 ```bash
 tenon setup --codex
 tenon update --codex
-tenon update --self-update
 tenon runtime status
 tenon runtime repair --rollback
 tenon dashboard --open
@@ -26,7 +25,6 @@ tenon dashboard --open
 ```text
 tenon setup --<one-host> [--target <dir>] [--auto-update] [--dry-run] [-y]
 tenon update --<one-host> [--target <dir>] [--dry-run] [-y] [--auto]
-tenon update --self-update [--dry-run] [-y]
 tenon runtime status [--json]
 tenon runtime repair --rollback [--json]
 tenon dashboard [--port <port>] [--background] [--open] [--dry-run]

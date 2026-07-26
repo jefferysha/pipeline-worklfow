@@ -314,7 +314,7 @@ say ""
 
 run_new_cli() {
   local dir="$1"; shift
-  (cd "$dir" && TENON_DASHBOARD_HOME="$MACHINE_HOME" "${NEW_CMD[@]}" "$@")
+  (cd "$dir" && TENON_RUNTIME_HOME="$MACHINE_HOME" "${NEW_CMD[@]}" "$@")
 }
 
 install_post_init_fixture() {
@@ -634,7 +634,7 @@ run_step_degraded() {
   local change="${args[0]}"
   local new_rc f_out f_exit f_yaml label
 
-  (cd "$base/new" && TENON_DASHBOARD_HOME="$MACHINE_HOME" "${NEW_CMD[@]}" "${NEW_ARGS[@]}") \
+  (cd "$base/new" && TENON_RUNTIME_HOME="$MACHINE_HOME" "${NEW_CMD[@]}" "${NEW_ARGS[@]}") \
     > "$step_dir/new.out" 2> "$step_dir/new.err"
   new_rc=$?
 
@@ -752,7 +752,7 @@ run_step_seed() {
     fi
   done
   if [ "$ok" = PASS ]; then
-    if ! (cd "$base/new" && TENON_DASHBOARD_HOME="$MACHINE_HOME" "${NEW_CMD[@]}" state import-legacy "$change") \
+    if ! (cd "$base/new" && TENON_RUNTIME_HOME="$MACHINE_HOME" "${NEW_CMD[@]}" state import-legacy "$change") \
       > "$step_dir/new.import.out" 2> "$step_dir/new.import.err"; then
       ok=FAIL
     fi

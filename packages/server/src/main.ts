@@ -3,7 +3,7 @@
  * bin 入口：全机唯一 Global dashboard server 的启动装配（B4 版本抢占 + B5 token 握手）。
  *
  * 启动序（对位老仓 dashboard-server.py main，但补上版本抢占与 token）：
- *   1. 解析机器级路径（~/.claude/...，可经 TENON_DASHBOARD_HOME 覆盖）。
+ *   1. 从 kernel 单一模型解析宿主 home 与 Tenon data/state/config 路径。
  *   2. 探测既有 :port 的 /api/health（含 version）→ decidePreemption：
  *        bind → 直接监听；reuse → 让位退出 0；preempt → SIGTERM 旧实例后监听。
  *   3. listen 固定端口（TENON_DASHBOARD_PORT ?? 18765，绑 127.0.0.1）。
@@ -11,7 +11,7 @@
  *   5. SIGTERM/SIGINT 优雅停：关 server + 清 pidfile。
  */
 import { execFile } from 'node:child_process'
-import { unlinkSync, writeFileSync } from 'node:fs'
+import { mkdirSync, unlinkSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createTraceStore } from '@tenon/tap'
@@ -56,7 +56,11 @@ async function main(): Promise<void> {
   const root = pluginRoot()
   const version = resolveReleaseVersion(root)
   const releaseId = resolvePayloadReleaseId(root)
-  const stateScopeId = machineStateScopeId(paths.home)
+  const stateScopeId = machineStateScopeId(paths.stateRoot)
+
+  // Product state must exist before token/pid publication. Failure is fatal: a server without
+  // durable ownership metadata must never bind the singleton port.
+  mkdirSync(paths.stateRoot, { recursive: true, mode: 0o700 })
 
   // ── B4 版本抢占 ──
   const existing = await probeHealth(port, host, 400)
@@ -85,7 +89,7 @@ async function main(): Promise<void> {
   const srv = createDashboardServer({
     version,
     releaseId,
-    home: paths.home,
+    home: paths.homeDir,
     token,
     manifestPath: manifestPath(),
     gitHeadSha,

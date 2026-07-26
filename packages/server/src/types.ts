@@ -9,26 +9,19 @@ import type {
   MemFs,
   Phase,
   PipelineTodoProjection,
+  ProductPaths,
   StateStore,
 } from '@tenon/kernel'
 import type { TraceStoreReader } from './traces.js'
 import type { LoopActivationValidator } from './loops.js'
 
-/** 机器级路径锚（可经 TENON_DASHBOARD_HOME 覆盖——仅供 hermetic 测试隔离）。 */
-export interface ServerPaths {
-  home: string
+/** 宿主资产发现路径 + Tenon 产品自有路径。产品路径由 kernel 的单一模型解析。 */
+export interface ServerPaths extends ProductPaths {
   claudeDir: string
-  /** ~/.claude/pipeline-projects.json —— 机器级项目注册表（老仓 project_model 同址）。 */
-  registryPath: string
-  /** ~/.claude/.tenon-dashboard-token —— B5 一次性 token 握手文件（0600）。 */
+  /** Tenon state root 下的一次性 token 握手文件（0600）。 */
   tokenPath: string
-  /** ~/.claude/.tenon-dashboard.server —— pidfile（pid/port/version，B4 版本抢占用）。 */
+  /** Tenon state root 下的 pidfile（pid/port/version，B4 版本抢占用）。 */
   pidfilePath: string
-  /**
-   * ~/.claude/pipeline-secrets.json —— 机器级凭证存储（v6 T1，0600+原子写，白名单仅
-   * CLAUDE_CODE_OAUTH_TOKEN/OPENAI_API_KEY，见 @tenon/kernel 的 secretsPath）。
-   */
-  secretsPath: string
 }
 
 /** snapshot 里单个 change 的投影（.pipeline.yaml 全字段 + 常读字段提升到顶层）。 */

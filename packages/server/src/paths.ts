@@ -1,21 +1,21 @@
-/**
- * 机器级路径锚。默认 home = ~ ；可经 TENON_DASHBOARD_HOME 覆盖（仅供 hermetic 测试隔离，
- * 生产不设即原行为——对齐老仓 dashboard-server.py 的 TENON_DASHBOARD_HOME 语义）。
- */
-import { homedir } from 'node:os'
 import { join } from 'node:path'
-import { canonicalMachineStateHome } from '@tenon/kernel'
+import { resolveProductPaths, type ProductPathInput } from '@tenon/kernel'
 import type { ServerPaths } from './types.js'
 
-export function resolveServerPaths(opts?: { home?: string }): ServerPaths {
-  const home = canonicalMachineStateHome(opts?.home ?? process.env.TENON_DASHBOARD_HOME ?? homedir())
-  const claudeDir = join(home, '.claude')
+export function resolveServerPaths(opts: {
+  readonly home?: string
+  readonly env?: ProductPathInput['env']
+  readonly platform?: NodeJS.Platform
+} = {}): ServerPaths {
+  const product = resolveProductPaths({
+    ...(opts.home === undefined ? {} : { homeDir: opts.home }),
+    ...(opts.env === undefined ? {} : { env: opts.env }),
+    ...(opts.platform === undefined ? {} : { platform: opts.platform }),
+  })
   return {
-    home,
-    claudeDir,
-    registryPath: join(claudeDir, 'pipeline-projects.json'),
-    tokenPath: join(claudeDir, '.tenon-dashboard-token'),
-    pidfilePath: join(claudeDir, '.tenon-dashboard.server'),
-    secretsPath: join(claudeDir, 'pipeline-secrets.json'),
+    ...product,
+    claudeDir: join(product.homeDir, '.claude'),
+    tokenPath: product.dashboardTokenPath,
+    pidfilePath: product.dashboardPidfilePath,
   }
 }

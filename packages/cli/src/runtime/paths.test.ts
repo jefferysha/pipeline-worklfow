@@ -33,4 +33,17 @@ describe('resolveRuntimePaths', () => {
       platform: 'linux', homeDir: '/home/pipeline', env: { XDG_DATA_HOME: 'relative' },
     }).dataRoot).toBe('/home/pipeline/.local/share/tenon')
   })
+
+  it('delegates all product-owned paths to the shared kernel model', () => {
+    expect(resolveRuntimePaths({
+      platform: 'linux',
+      homeDir: '/home/pipeline',
+      env: { TENON_RUNTIME_HOME: '/tmp/tenon-runtime' },
+    })).toMatchObject({
+      registryPath: '/tmp/tenon-runtime/config/projects.json',
+      secretsPath: '/tmp/tenon-runtime/config/secrets.json',
+      dashboardTokenPath: '/tmp/tenon-runtime/state/dashboard-token.json',
+      dashboardPidfilePath: '/tmp/tenon-runtime/state/dashboard-server.json',
+    })
+  })
 })

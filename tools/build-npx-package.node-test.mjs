@@ -3,7 +3,7 @@ import { execFile } from 'node:child_process'
 import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import test from 'node:test'
 import { promisify } from 'node:util'
 
@@ -25,7 +25,14 @@ test('builds a release-pinned thin package without repository or test payload', 
     const bootstrap = await readFile(join(output, 'bin', 'tenon-bootstrap.mjs'), 'utf8')
     assert.match(bootstrap, /jefferysha\/tenon/)
     assert.match(bootstrap, /v1\.0\.0/)
+    assert.match(bootstrap, /[a-f0-9]{64}/)
+    assert.match(bootstrap, /createHash/)
     assert.doesNotMatch(bootstrap, /__TENON_/)
+    const generated = await import(`${pathToFileURL(join(output, 'bin', 'tenon-bootstrap.mjs')).href}?test=${Date.now()}`)
+    await assert.rejects(
+      generated.verifyInstaller('#!/usr/bin/env bash\necho tampered\n'),
+      /digest mismatch/,
+    )
     assert.deepEqual((await readdir(output)).sort(), ['LICENSE', 'README.md', 'bin', 'package.json', 'product'])
     const help = await exec(process.execPath, [join(output, 'bin', 'tenon-bootstrap.mjs'), '--help'])
     assert.match(help.stdout, /tenon setup --codex/)

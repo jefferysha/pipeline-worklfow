@@ -5,8 +5,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { existsSync } from 'node:fs'
 import { appendFile, mkdir, readFile, readdir, stat, unlink, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { createDashboardServer } from './server.js'
+import { resolveServerPaths } from './paths.js'
 import type { DashboardServer } from './types.js'
 import {
   initChange, makeProject, makeTempHome, makeTempManifest, makeWorktreeDir, newStore, openSSE, repoManifestPath, reqDelete, reqGet,
@@ -17,7 +18,7 @@ import {
 import type { FlowEngine, StateStore } from '@tenon/kernel'
 import {
   createLoopLedgerStore, effectiveWorkflowPlanBinding, loadEffectiveWorkflowPlan, loadManifest,
-  machineStateScopeId, secretsPath,
+  machineStateScopeId,
   registerProjectRoot, TRANSITION_EVENTS as KERNEL_EVENTS, eventEdge as kernelEventEdge,
 } from '@tenon/kernel'
 import { TRANSITION_EVENTS, eventEdge } from './transition.js'
@@ -136,7 +137,7 @@ describe('GET /api/health —— 存活探针 + 本 server 版本（B4）', () =
     expect(body.scope).toBe('global')
     expect(body.version).toBe('3.1.4')
     expect(body.releaseId).toBe(releaseId)
-    expect(body.stateScopeId).toBe(machineStateScopeId(stateHome))
+    expect(body.stateScopeId).toBe(machineStateScopeId(resolveServerPaths({ home: stateHome }).stateRoot))
     expect(JSON.stringify(body)).not.toContain(stateHome)
   })
 })
@@ -3749,7 +3750,7 @@ describe('未知 HTTP 方法（非 GET/POST/DELETE）仍 405（既有兜底不�
 
 // ═══════════ G18：项目注册端点（spec §3.1，dashboard 闭环第一环）═══════════
 
-/** G18 端点专用 harness：不注入 registry（走真 <home>/.claude/pipeline-projects.json 文件读写）。 */
+/** G18 端点专用 harness：不注入 registry，走 Tenon 平台配置域的真实文件读写。 */
 async function startWithHome(opts?: { runPipelineCli?: PipelineCliRunner }): Promise<{
   srv: DashboardServer
   port: number
@@ -3772,7 +3773,7 @@ async function startWithHome(opts?: { runPipelineCli?: PipelineCliRunner }): Pro
   })
   openServers.push(srv)
   const { port } = await srv.listen(0, '127.0.0.1')
-  return { srv, port, token: srv.token, home, store, registryPath: join(home, '.claude', 'pipeline-projects.json') }
+  return { srv, port, token: srv.token, home, store, registryPath: resolveServerPaths({ home }).registryPath }
 }
 
 describe('POST /api/projects —— 注册项目进机器级注册表（G18）', () => {
@@ -3842,7 +3843,7 @@ describe('POST /api/projects —— 注册项目进机器级注册表（G18）',
     // 逐字节：与旧 writeFileSync 现状格式完全一致（tmp+rename 原子写不改字节）
     expect(await readFile(h.registryPath, 'utf8')).toBe(`${JSON.stringify([proj], null, 2)}\n`)
     // tmp+rename 原子写：完成后同目录只剩正式文件，无中途 .tmp 残留
-    expect(await readdir(join(h.home, '.claude'))).toEqual(['pipeline-projects.json'])
+    expect(await readdir(dirname(h.registryPath))).toEqual(['projects.json'])
   })
 
   it('409：重复注册（含尾斜杠等非规范写法，两侧规范化后判重）', async () => {
@@ -3938,7 +3939,7 @@ describe('DELETE /api/projects —— 注销项目（G18 对称操作）', () =>
     expect(r.status).toBe(200)
     // 逐字节：删掉 A 后剩 B，格式与现状一致
     expect(await readFile(h.registryPath, 'utf8')).toBe(`${JSON.stringify([projB], null, 2)}\n`)
-    expect(await readdir(join(h.home, '.claude'))).toEqual(['pipeline-projects.json'])
+    expect(await readdir(dirname(h.registryPath))).toEqual(['projects.json'])
   })
 
   it('404 未注册；400 缺 root query；401 无 token', async () => {
@@ -4409,7 +4410,7 @@ describe('②round-trip：POST 写入 → GET 读回 masked 且不含明文 → 
     expect(body1.keys.OPENAI_API_KEY).toEqual({ set: false })
 
     // 真落盘 0600 + tmp+rename（验收判据同款：stat mode 恰 0o600）
-    const secretsFile = secretsPath(h.home)
+    const secretsFile = resolveServerPaths({ home: h.home }).secretsPath
     const st = await stat(secretsFile)
     expect(st.mode & 0o777).toBe(0o600)
     const onDisk = JSON.parse(await readFile(secretsFile, 'utf8')) as { keys: Record<string, string> }

@@ -26,12 +26,13 @@ tenon update --codex
 
 ```bash
 tenon update --claude
-
-# 已有 active runtime 时推荐：从冻结的 release source 推断原生宿主
-tenon update --self-update
 ```
 
-自动更新必须保留版本、失败原因和回滚路径。新模板只影响之后创建或明确缺失的文档。
+更新的是所选宿主中的一个完整 Tenon 插件；没有第二套 CLI 自更新通道。自动更新与手动更新使用
+同一事务，并保留版本、失败原因和 managed runtime 回滚路径。新模板只影响之后创建或明确缺失的文档。
+宿主 cache 由宿主 CLI 独占，Tenon 只提交自己的不可变 runtime、launcher 和 Dashboard 边界。
+更新完成后只读扫描 Tenon config root 的项目注册表；发现旧项目时输出显式 `tenon sync` 命令，
+不会后台改写工作区、OpenSpec 或未提交文件。
 
 启用每天最多一次的宿主级自动检查：
 
@@ -109,6 +110,7 @@ tenon uninstall --codex
 - 更新失败时旧 release 仍可运行；
 - rollback 后旧 runtime 能读取原 canonical state；
 - 已有 Change 文档字节和 digest 不变；
+- Tenon 自有机器状态只位于平台标准 Tenon data/state/config，不落入宿主目录；
 - 新会话加载新的 skills/hooks，旧会话不被误报为已热更新；
 - 卸载后用户仓库证据仍在。
 

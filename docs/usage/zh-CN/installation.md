@@ -40,8 +40,8 @@ curl -fsSL https://raw.githubusercontent.com/jefferysha/tenon/main/install.sh | 
 
 脚本只负责注册 Tenon Marketplace、安装并验证完整 payload，然后调用包内
 `tenon setup --<host>`。已经安装的用户可以直接再次运行 `tenon setup --codex`
-修复宿主接线；已存在 active runtime 后可运行 `tenon update --self-update`，由受管发行记录推断
-Codex 或 Claude 宿主并在隔离目录完成校验、Dashboard readiness 和精确回滚。
+修复宿主接线；更新时运行 `tenon update --codex`（或 `--claude`）。手动更新和显式启用的
+自动更新复用同一个整包事务，不再拆出第二套 CLI 自更新通道。
 
 Marketplace bootstrap 是当前可用且推荐的一步安装入口。仓库同时构建一个薄 npx 发布包，但只有
 维护者配置了 npm publisher scope 并完成公开发布后，文档才会展示真实的
@@ -79,6 +79,20 @@ tenon dashboard --open
 - `tenon dashboard --open` 打开 Tenon，而不是其他占用端口的应用；
 - 新建 Change 时治理文档默认使用中文；
 - 显式 `--document-locale en` 的新 Change 固定使用英文模板。
+
+## 受管运行时位置
+
+payload、状态与配置使用操作系统标准应用目录：
+
+- macOS：`~/Library/Application Support/tenon/`；
+- Linux：带 `tenon` 命名空间的 XDG data/state/config；
+- Windows：Local AppData 保存 data/state，Roaming AppData 保存 config。
+
+Tenon 不把自有状态写进 `~/.claude` 或 `~/.codex`。项目注册表和凭证位于 Tenon config root，
+runtime selection、audit、Dashboard token 与 pidfile 位于 state root。隔离测试或运维需要改根目录时，
+只使用 `TENON_RUNTIME_HOME`；它会整体重定向 data/state/config，不存在 Dashboard 专属第二套 Home。
+
+稳定命令 launcher 通常位于 `~/.local/bin/tenon`。宿主 Marketplace/cache 目录属于宿主私有实现。
 
 ## 验证
 

@@ -1,16 +1,14 @@
-# Tenon npm bootstrap template
+# Tenon npm bootstrap 模板
 
-This workspace is the reviewed source for Tenon's optional public npx entry. It
-is intentionally private and is not the public package.
+这个 workspace 是 Tenon 可选公开 npx 入口的受审源文件。它本身保持 private，不是最终发布到
+npm 的公共包。
 
-Release automation must run `tools/build-npx-package.mjs` with the npm package
-name owned by the publisher. The generated package contains only this thin
-entrypoint, the product identity, license, and this explanation. It delegates
-to the release-pinned Marketplace installer, so Marketplace and npx activate
-the same verified runtime and Skill root.
+发布自动化必须使用发布者实际拥有的 npm 包名运行 `tools/build-npx-package.mjs`。生成包只包含
+这个薄入口、产品身份、许可证和本说明。入口会下载对应 release tag 的 Marketplace 安装脚本，
+并校验内嵌 SHA-256；脚本随后使用 Tenon 的 `main` 稳定发行通道。因此 Marketplace 与 npx
+会激活同一个已验证候选 digest，又不会把未来宿主更新永久锁在旧 tag。
 
-Until a publisher scope and npm credentials are configured, use the documented
-Marketplace bootstrap:
+在 publisher scope 与 npm 凭据尚未配置前，请使用已公开的 Marketplace bootstrap：
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/jefferysha/tenon/main/install.sh | bash -s -- --codex

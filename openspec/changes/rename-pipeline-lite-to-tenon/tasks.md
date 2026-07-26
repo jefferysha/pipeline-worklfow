@@ -19,14 +19,14 @@
 
 - [x] 编写 `tenon-product-identity` OpenSpec delta spec，覆盖新装、升级、运行、展示与残留扫描。 (spec)
 - [x] 规定 Dashboard 统一执行来源模型与跨页面一致性场景。 (spec)
-- [x] 规定 Marketplace/npx 共用安装事务、仓库卫生与发布包 allowlist 场景。 (spec)
+- [x] 规定 Marketplace/npx 共用安装事务、唯一整包 update、所有权边界、仓库卫生与发布包 allowlist 场景。 (spec)
 - [x] 编写中文 Superpowers 实施计划并把可验证工作拆入本任务清单。 (spec)
 
 ## 实现
 
 - [x] 建立产品身份真相源、确定性投影、v1→v2 Workflow 快照迁移读取与 freshness 检查，并完成 CLI→manifest→Dashboard→README tracer bullet。 (build)
 - [x] 把 workspace、CLI/bundle、插件/Marketplace、Skill、command、hook 和环境前缀迁移为 Tenon。 (build)
-- [x] 迁移 managed runtime 路径、稳定 launcher、`--self-update`、readiness 精确补偿与绑定 host/release 的旧通道迁移桥。 (build)
+- [x] 迁移 managed runtime 路径、稳定 launcher、readiness 精确补偿与绑定 host/release 的旧通道迁移桥。 (build)
 - [x] 实现 Marketplace bootstrap 与可发布 npx 薄包，确保新用户无需 clone。 (build)
 - [x] 建立 neutral execution provenance，让自动运行列表与计数同源过滤，并补模型/组件/live 回归测试。 (build)
 - [x] 迁移 Dashboard 品牌、README、中文文档站、CI、测试和 Pages 配置。 (build)
@@ -34,6 +34,8 @@
 - [x] 删除可再生截图，补 `.gitignore`、发布内容清单和 repository hygiene 门禁。 (build)
 - [x] 分类清理现行旧身份残留，修复 N-1 固定夹具与 release tag checkout，并重建所有受控生成物。 (build)
 - [x] 修复既有仓库架构主规格的 OpenSpec 1.6 Purpose 结构，使隔离应用演练可严格重建。 (build)
+- [x] 重构唯一整包 update 事务：移除第二套 self-update，补 launcher/Dashboard 精确补偿、
+  项目只读同步报告、Tenon 产品状态单一所有权/路径契约与 fixture 驱动的 N-1 CI 接线。 (build)
 
 ## 验证
 

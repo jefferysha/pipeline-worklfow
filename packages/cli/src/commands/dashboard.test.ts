@@ -9,6 +9,7 @@ interface Calls {
   expectedReleaseIds: Array<string | undefined>
   expectedStateScopeIds: string[]
   openedUrls: string[]
+  terminated: number
 }
 
 function runtime(overrides: Partial<DashboardRuntime> = {}): { runtime: DashboardRuntime; calls: Calls } {
@@ -19,6 +20,7 @@ function runtime(overrides: Partial<DashboardRuntime> = {}): { runtime: Dashboar
     expectedReleaseIds: [],
     expectedStateScopeIds: [],
     openedUrls: [],
+    terminated: 0,
   }
   return {
     runtime: {
@@ -30,7 +32,11 @@ function runtime(overrides: Partial<DashboardRuntime> = {}): { runtime: Dashboar
       },
       launchDetached: async (serverBundle, env) => {
         calls.detached.push({ serverBundle, env })
-        return true
+        return {
+          terminate: async () => {
+            calls.terminated += 1
+          },
+        }
       },
       resolveStateScopeId: () => `sha256-v1-${'1'.repeat(64)}`,
       waitForHealthyServer: async (port, expectedReleaseId, expectedStateScopeId) => {
@@ -117,6 +123,7 @@ describe('tenon dashboard', () => {
 
     expect(await cmdDashboard(deps, { background: true, open: true }, dashboard)).toBe(1)
     expect(calls.openedUrls).toEqual([])
+    expect(calls.terminated).toBe(1)
     expect(deps.errLines.join('\n')).toContain('未通过健康检查')
   })
 

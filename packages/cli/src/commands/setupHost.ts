@@ -6,7 +6,10 @@ import { nodeExecDocker, probeAfkReadiness, type AfkReadiness, type CredLight, t
 import { REAL_RUNTIME_INSTALLER, type RuntimeInstaller } from '../runtime/installer.js'
 import { resolveRuntimePaths } from '../runtime/paths.js'
 import { loadSkillSources, type SkillSource, type SkillSourcesResult, type SkillTier } from '../skillSources.js'
-import { REAL_RELEASED_DASHBOARD_STARTER, type ReleasedDashboardStarter } from './dashboard.js'
+import {
+  REAL_RELEASED_DASHBOARD_STARTER,
+  type ReleasedDashboardStarter,
+} from './dashboard.js'
 import {
   hostFlag,
   installedPipelineRoot,
@@ -17,6 +20,7 @@ import {
   type PipelineHost,
   type PipelineHostFlags,
 } from './plugin-host.js'
+import { publishManagedRelease } from './release-coordinator.js'
 
 // ── 注入面（测试注入临时 HOME / spy;真实现 = node:fs + os.homedir）──────────────────
 
@@ -172,29 +176,32 @@ function publishManagedRuntime(
   openDashboard: boolean,
 ): Promise<number> {
   const source = isNativePipelineHost(host) ? host : 'adapter'
-  return installer.activate(candidateRoot, source, env.homeDir())
-    .then(async (activation) => {
-      deps.io.out(`[setup] 已发布已验证 runtime: ${activation.release.releaseId}（revision ${activation.selection.revision}）。`)
-      deps.io.out('[setup] 稳定入口已就绪：~/.local/bin/tenon 与 ~/.local/bin/tenon-hook 不再直连 marketplace checkout。')
-      if (dashboardStarter !== undefined) {
-        const dashboardCode = await dashboardStarter.start(deps, join(activation.releaseRoot, 'payload'), { openBrowser: openDashboard })
-        if (dashboardCode !== 0) {
-          try {
-            if (installer.revertActivation === undefined) throw new Error('runtime installer 不支持精确 activation 补偿')
-            await installer.revertActivation(env.homeDir(), activation)
-            deps.io.err('ERROR: 新 runtime 的 dashboard readiness 失败；已恢复 activation 前 active selection。')
-          } catch (rollbackError) {
-            deps.io.err(`ERROR: 新 runtime 的 dashboard readiness 失败，且精确回滚失败：${errMsg(rollbackError)}`)
-          }
-          return 1
-        }
+  return publishManagedRelease(
+    deps,
+    {
+      candidateRoot,
+      source,
+      homeDir: env.homeDir(),
+      openBrowser: openDashboard,
+    },
+    installer,
+    dashboardStarter,
+  ).then((outcome) => {
+    if (!outcome.ok) {
+      deps.io.err(`ERROR: ${outcome.detail}`)
+      if (isNativePipelineHost(host)) {
+        deps.io.err(
+          `[setup] ${hostFlag(host)} 宿主插件登记由宿主 CLI 独立管理；` +
+          'Tenon 未读取、复制或回滚宿主私有缓存，仅补偿自己的 managed transaction。',
+        )
       }
-      return 0
-    })
-    .catch((error: unknown) => {
-      deps.io.err(`ERROR: managed runtime 发布失败；保留当前已验证 release，未切换入口：${errMsg(error)}`)
       return 1
-    })
+    }
+    const { activation } = outcome
+    deps.io.out(`[setup] 已发布已验证 runtime: ${activation.release.releaseId}（revision ${activation.selection.revision}）。`)
+    deps.io.out('[setup] 稳定入口已就绪：~/.local/bin/tenon 与 ~/.local/bin/tenon-hook 不再直连 marketplace checkout。')
+    return 0
+  })
 }
 
 /** Host-specific installation that keeps native marketplaces and non-native adapters separate. */

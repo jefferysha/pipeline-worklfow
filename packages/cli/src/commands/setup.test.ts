@@ -61,7 +61,10 @@ interface DashboardCalls {
   readonly starts: Array<readonly [string, { readonly openBrowser?: boolean }]>
 }
 
-function fakeRuntimeInstaller(fail = false): { installer: RuntimeInstaller; calls: RuntimeCalls } {
+function fakeRuntimeInstaller(
+  fail = false,
+  previousRelease: string | null = null,
+): { installer: RuntimeInstaller; calls: RuntimeCalls } {
   const calls: RuntimeCalls = { activations: [], reverts: [] }
   const releaseId = `sha256-${'a'.repeat(64)}`
   const installer: RuntimeInstaller = {
@@ -80,7 +83,7 @@ function fakeRuntimeInstaller(fail = false): { installer: RuntimeInstaller; call
           version: 1,
           revision: 1,
           activeRelease: releaseId,
-          previousRelease: null,
+          previousRelease,
           updatedAt: '2026-07-24T00:00:00Z',
         },
         releaseRoot: `/runtime/releases/${releaseId}`,
@@ -356,8 +359,38 @@ describe('②managed runtime 发布边界', () => {
 
     expect(await cmdSetupHost(deps, 'codex', { codex: true }, env, runtime.installer)).toBe(1)
     expect(runtime.calls.activations).toEqual([['/installed/tenon', 'codex', '/home/test']])
-    expect(deps.errLines.join('\n')).toContain('保留当前已验证 release')
+    expect(deps.errLines.join('\n')).toContain('当前已验证 runtime 保持不变')
+    expect(deps.errLines.join('\n')).toContain('宿主插件登记由宿主 CLI 独立管理')
+    expect(deps.errLines.join('\n')).toContain('仅补偿自己的 managed transaction')
     expect(deps.outLines.join('\n')).not.toContain('已把 pipeline 软链')
+  })
+
+  test('Dashboard starter 抛错时仍补偿精确 activation 并恢复 previous 服务', async () => {
+    const deps = makeDeps()
+    const { env } = spyEnv({ pathExists: () => true }, codexInstallExec)
+    const previousRelease = `sha256-${'c'.repeat(64)}`
+    const runtime = fakeRuntimeInstaller(false, previousRelease)
+    const starts: string[] = []
+    const dashboard: ReleasedDashboardStarter = {
+      start: async (_deps, payloadRoot) => {
+        starts.push(payloadRoot)
+        if (starts.length === 1) throw new Error('spawn failed')
+        return 0
+      },
+    }
+
+    expect(await cmdSetupHost(deps, 'codex', { codex: true }, env, runtime.installer, dashboard)).toBe(1)
+    expect(runtime.calls.reverts).toEqual([[
+      '/home/test',
+      `sha256-${'a'.repeat(64)}`,
+    ]])
+    expect(starts).toEqual([
+      `/runtime/releases/sha256-${'a'.repeat(64)}/payload`,
+      `/runtime/releases/${previousRelease}/payload`,
+    ])
+    expect(deps.errLines.join('\n')).toContain('宿主插件登记由宿主 CLI 独立管理')
+    expect(deps.errLines.join('\n')).toContain('仅补偿自己的 managed transaction')
+    expect(deps.errLines.join('\n')).toContain('previous Dashboard')
   })
 })
 

@@ -166,8 +166,30 @@ shell/JSON/VitePress 等无法直接 import TypeScript 的边界使用由同一�
 host selector 与可选 auto-update 标志。Dashboard HTTP `/api` 路径保持稳定，但 health 与 runtime status
 必须继续返回可比较的 `releaseId`/`stateScopeId`，不得暴露本机 state Home。
 
+`tenon update --codex|--claude` 是完整插件的唯一更新入口；删除 `--self-update`，因为 CLI、Skills、
+hooks、workflow、Dashboard 和 adapters 本来就是一个发布单元。自动更新只是在用户已显式 opt-in 后
+调用同一命令的非交互形态，不拥有第二套下载、选择或回滚状态。项目 canonical state 不随插件后台更新；
+update 只读项目注册表并报告需要显式 `tenon sync` 的项目。
+
 产品身份数据由版本化 `product/identity.json` 定义，生成 TS、JSON 和 shell-safe 投影。执行来源使用
 独立联合类型 `automation|terminal|none`，不得写回 canonical Change，也不得复用 UI 的 progress state。
+
+### 更新事务与所有权边界
+
+更新不是跨 Codex/Claude 私有 cache、Tenon runtime 和用户项目的“大事务”。它由两个明确提交边界组成：
+
+1. Codex/Claude 的 Marketplace/plugin manager 是宿主登记和 cache 的唯一 writer，Tenon 只消费其
+   inventory，不猜测或回写私有目录；
+2. Tenon coordinator 对自己拥有的 staging/release store、selection、bootstrap、stable launcher 和
+   Dashboard supervisor 执行原子提交与精确补偿。
+
+Tenon managed 提交前先复制并验证候选；launcher 写入前捕获其存在性、普通文件 bytes 与 mode，
+补偿时做所有权/CAS 校验后精确恢复。Dashboard 切换必须保留本次 child 句柄；readiness 失败先终止
+候选 child，再恢复 previous payload 的 18765 服务并重新做 releaseId/stateScopeId 健康检查。
+
+宿主 manager 已成功提交后，Tenon 不得声称能够“恢复宿主精确旧 cache”；宿主不提供该 API。相反，
+发布门以 N−1 runtime ABI、候选完整性和 host inventory digest 约束跨边界一致性，并把两个提交结果
+分别写入诊断。用户工作区始终在事务外，只通过显式 `tenon sync` 更新。
 
 ### Dashboard provenance 模型
 

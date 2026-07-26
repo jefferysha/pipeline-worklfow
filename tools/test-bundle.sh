@@ -56,7 +56,7 @@ fi
 if [ -f "$BUNDLE" ]; then
   TMP="$(mktemp -d)"
   trap 'rm -rf "$TMP"' EXIT
-  ( cd "$TMP" && TENON_DASHBOARD_HOME="$TMP/.tenon-dashboard-home" node "$BUNDLE" init t8-smoke --track backend --preset full --user smoke ) 2>/dev/null
+  ( cd "$TMP" && TENON_RUNTIME_HOME="$TMP/.tenon-runtime-home" node "$BUNDLE" init t8-smoke --track backend --preset full --user smoke ) 2>/dev/null
   [ -f "$TMP/openspec/changes/t8-smoke/.pipeline.yaml" ] \
     && ok "bundle: init 落盘 .pipeline.yaml" || bad "bundle: init 落盘 .pipeline.yaml" "文件缺失"
   grep -q '"locale":"zh-CN"' "$TMP/openspec/changes/t8-smoke/.pipeline-document-locale.json" \
@@ -114,6 +114,27 @@ if [ -f "$BUNDLE" ]; then
     || bad "bundle: 冻结 N-1 严格读取器可读当前 canonical Change" "$n_minus_phase"
 
   explicit_n_minus_cli="${TENON_N_MINUS_ONE_CLI:-}"
+  explicit_n_minus_payload="${TENON_N_MINUS_ONE_PAYLOAD:-}"
+  if [ -n "$explicit_n_minus_cli" ] && [ -n "$explicit_n_minus_payload" ]; then
+    bad "bundle: N-1 显式入口唯一" "TENON_N_MINUS_ONE_CLI 与 TENON_N_MINUS_ONE_PAYLOAD 不得同时设置"
+  elif [ -n "$explicit_n_minus_payload" ]; then
+    n_minus_cli_entry="$(node -e '
+      const value = require(process.argv[1])
+      const entry = value.cliEntry
+      if (
+        typeof entry !== "string" ||
+        entry === "" ||
+        entry.startsWith("/") ||
+        entry.split("/").includes("..")
+      ) process.exit(2)
+      process.stdout.write(entry)
+    ' "$ROOT/tools/fixtures/n-minus-one-release.json" 2>/dev/null || true)"
+    if [ -z "$n_minus_cli_entry" ]; then
+      bad "bundle: N-1 fixture CLI 入口合法" "$ROOT/tools/fixtures/n-minus-one-release.json"
+    else
+      explicit_n_minus_cli="$explicit_n_minus_payload/$n_minus_cli_entry"
+    fi
+  fi
   N_MINUS_CLI="$explicit_n_minus_cli"
   if [ -z "$N_MINUS_CLI" ]; then
     managed_home="${TENON_MANAGED_HOME:-$HOME/Library/Application Support/tenon}"

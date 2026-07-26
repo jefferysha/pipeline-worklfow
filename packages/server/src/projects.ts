@@ -1,5 +1,5 @@
 /**
- * 机器级项目注册表写模块（G18，spec §3.1）—— ~/.claude/pipeline-projects.json 的
+ * Tenon 配置域项目注册表写模块（G18，spec §3.1）—— projects.json 的
  * add/remove。读沿用 registry.ts::readRegistry（容错语义不变），写走 kernel
  * writeProjectRegistry 原子原语（tmp+rename，崩溃不留半截 JSON——v5 T2 偏离登记的 backlog
  * 收口）。序列化格式逐字节不变：JSON 数组 + 2 空格缩进 + 尾换行，保持人工可编辑。
