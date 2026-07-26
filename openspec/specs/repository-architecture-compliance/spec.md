@@ -1,5 +1,10 @@
 # Repository Architecture Compliance Specification
 
+## Purpose
+
+Define the enforceable repository architecture, package boundaries, generated-asset consistency,
+and CI checks that keep Tenon aligned with its project rules as the codebase evolves.
+
 ## Requirements
 
 ### Requirement: Objective Agent Rules SHALL be checked in CI

@@ -33,6 +33,7 @@
 - [x] 生成并压缩正式 Tenon Dashboard 图，为 README 与中文文档站完成响应式图文排版。 (build)
 - [x] 删除可再生截图，补 `.gitignore`、发布内容清单和 repository hygiene 门禁。 (build)
 - [x] 分类清理现行旧身份残留，修复 N-1 固定夹具与 release tag checkout，并重建所有受控生成物。 (build)
+- [x] 修复既有仓库架构主规格的 OpenSpec 1.6 Purpose 结构，使隔离应用演练可严格重建。 (build)
 
 ## 验证
 

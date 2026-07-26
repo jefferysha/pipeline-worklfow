@@ -60,3 +60,25 @@
 {"ts":"2026-07-26T04:59:26Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-07-26T02:54:33Z"}
 {"ts":"2026-07-26T04:59:26Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"4c3147a8-64eb-4f4d-a3bb-2141ae518b0d"}
 {"ts":"2026-07-26T05:25:52Z","kind":"tool","raw":"CodexSkillRead: pipeline-build"}
+{"ts":"2026-07-26T05:41:36Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-26T05:41:36Z","kind":"tool","raw":"CodexSkillRead: frontend-design"}
+{"ts":"2026-07-26T05:41:36Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-26T05:41:36Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-26T05:41:47Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"0e807306-8010-489e-a671-0369251470e3"}
+{"ts":"2026-07-26T05:42:07Z","kind":"tool","raw":"CodexSkillRead: pipeline-verify"}
+{"ts":"2026-07-26T05:42:17Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-07-26T05:42:17Z","kind":"tool","raw":"CodexSkillRead: browser-qa"}
+{"ts":"2026-07-26T05:42:17Z","kind":"tool","raw":"CodexSkillRead: e2e-testing"}
+{"ts":"2026-07-26T05:42:17Z","kind":"tool","raw":"CodexSkillRead: verify"}
+{"ts":"2026-07-26T05:42:17Z","kind":"tool","raw":"CodexSkillRead: finishing-a-development-branch"}
+{"ts":"2026-07-26T05:44:31Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-07-26-rename-pipeline-lite-to-tenon-verify.md"}
+{"ts":"2026-07-26T05:44:31Z","kind":"tool","raw":"review:request phase=verify event=verify-fail"}
+{"ts":"2026-07-26T05:44:32Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-07-26T02:54:33Z"}
+{"ts":"2026-07-26T05:44:47Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-26T05:44:47Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-26T05:44:54Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"d280aecf-ec53-416d-9c97-1dd505ad99a2"}
+{"ts":"2026-07-26T05:45:10Z","kind":"tool","raw":"CodexSkillRead: pipeline-build"}
+{"ts":"2026-07-26T05:45:37Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-26T05:45:37Z","kind":"tool","raw":"CodexSkillRead: frontend-design"}
+{"ts":"2026-07-26T05:45:37Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-26T05:45:37Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
