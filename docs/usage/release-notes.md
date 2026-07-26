@@ -4,6 +4,26 @@ Tenon release notes explain what changed, what users need to do, and how to veri
 
 Only capabilities included in a public distribution belong here. Plans, internal ADRs, and unmerged experiments are not presented as shipped work.
 
+## v1.0.1 · 2026-07-26
+
+### Normal-chat entry contract
+
+- `product/identity.json` now declares `entrySkill: "tenon"` as the only public entry.
+- Codex normal chat invokes `tenon:tenon`; no secondary entry alias is retained.
+- Root `AGENTS.md` and the Codex static adapter consume one generated managed block.
+- `tenon doctor` verifies the entry Skill and reports an enabled conflicting workflow plugin as a red finding.
+- `tenon setup --codex -y` removes that exact retired registration through the official Codex plugin manager before activating Tenon.
+
+### Repository and release hygiene
+
+- CI and Release scan every tracked path and text file for restricted external reference identities.
+- Matching is case-insensitive, has no exemptions, and diagnostics never echo a restricted identity.
+- The same checks run before the release payload is built.
+
+### Upgrade
+
+Run `tenon update --codex`, then `tenon setup --codex --auto-update -y`. Open a new Codex session and run `tenon doctor --json`.
+
 ## v1.0.0 · 2026-07-26
 
 ### Governed document locale

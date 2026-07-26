@@ -80,6 +80,24 @@ test('rejects reference identities in both tracked paths and text without exempt
   }
 })
 
+test('reference identity matching is case-insensitive and diagnostics never echo the identity', async () => {
+  const root = await fixture()
+  const identity = String.fromCharCode(116, 114, 101, 108, 108, 105, 115)
+  const mixedCase = identity
+    .split('')
+    .map((character, index) => index % 2 === 0 ? character.toUpperCase() : character)
+    .join('')
+  const path = `docs/${mixedCase}-notes.md`
+  await writeFile(join(root, path), `${mixedCase}\n`)
+  try {
+    const failures = checkReferenceIdentities(root, [path])
+    assert.equal(failures.length, 2)
+    assert.ok(failures.every((failure) => !failure.toLowerCase().includes(identity)))
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
 test('rejects historical test-project identities from tracked paths', async () => {
   const root = await fixture()
   const testProjectIdentity = String.fromCharCode(

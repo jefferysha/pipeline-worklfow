@@ -40,7 +40,7 @@ export function dashboardSearch(search: string, state: DashboardLocationState): 
 }
 
 /**
- * 把 URL/localStorage 的项目偏好解析成 snapshot 里真实登记的 root。
+ * 把 URL 中的显式项目选择解析成 snapshot 里真实登记的 root。
  * macOS 会把 `/tmp`、`/var` 通过系统 symlink canonicalize 为 `/private/tmp`、`/private/var`；
  * 深链常来自 shell 的逻辑路径，而 server registry 会记录 realpath。精确值永远优先，仅在精确
  * 值不存在时尝试这两组系统别名，避免把合法的同名字面路径误覆盖。
@@ -59,5 +59,5 @@ export function resolveDashboardRoot(roots: readonly string[], preferred: string
     }
     for (const alias of aliases) if (roots.includes(alias)) return alias
   }
-  return roots[0] ?? ''
+  return ''
 }

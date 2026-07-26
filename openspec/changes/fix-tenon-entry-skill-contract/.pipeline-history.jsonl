@@ -1,0 +1,58 @@
+{"ts":"2026-07-26T13:54:15Z","kind":"init"}
+{"ts":"2026-07-26T13:54:15Z","kind":"set","field":"depends_on","to":"align-tenon-entry-skill-contract"}
+{"ts":"2026-07-26T13:54:16Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated"}
+{"ts":"2026-07-26T14:03:19Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated"}
+{"ts":"2026-07-26T14:03:53Z","kind":"tool","raw":"CodexSkillRead: openspec-propose"}
+{"ts":"2026-07-26T14:04:19Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated"}
+{"ts":"2026-07-26T14:04:20Z","kind":"transition","from":"open","to":"explore","raw":"open-complete","transitionRecordId":"7c5f66a8-ca88-45a6-8ada-9c4f82f5683e"}
+{"ts":"2026-07-26T14:08:31Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated"}
+{"ts":"2026-07-26T14:10:32Z","kind":"set","field":"design_doc","to":"docs/superpowers/specs/fix-tenon-entry-skill-contract-design.md"}
+{"ts":"2026-07-26T14:18:37Z","kind":"tool","raw":"CodexSkillRead: tenon"}
+{"ts":"2026-07-26T14:18:43Z","kind":"tool","raw":"CodexSkillRead: tenon"}
+{"ts":"2026-07-26T14:18:48Z","kind":"tool","raw":"CodexSkillRead: tenon-explore"}
+{"ts":"2026-07-26T14:19:06Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated"}
+{"ts":"2026-07-26T14:25:46Z","kind":"tool","raw":"CodexSkillRead: openspec-explore"}
+{"ts":"2026-07-26T14:25:53Z","kind":"tool","raw":"CodexSkillRead: brainstorming"}
+{"ts":"2026-07-26T14:25:58Z","kind":"tool","raw":"CodexSkillRead: grill-with-docs"}
+{"ts":"2026-07-26T14:26:07Z","kind":"tool","raw":"CodexSkillRead: improve-codebase-architecture"}
+{"ts":"2026-07-26T14:26:13Z","kind":"tool","raw":"CodexSkillRead: search-first"}
+{"ts":"2026-07-26T14:26:59Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated"}
+{"ts":"2026-07-26T14:26:59Z","kind":"tool","raw":"review:request phase=explore event=explore-complete"}
+{"ts":"2026-07-26T14:26:59Z","kind":"tool","raw":"review:delegated-ack phase=explore event=explore-complete authority_issued_at=2026-07-26T14:26:59Z"}
+{"ts":"2026-07-26T14:26:59Z","kind":"transition","from":"explore","to":"spec","raw":"explore-complete","transitionRecordId":"b44bf7bc-4d06-463c-8c54-1e3577dad573"}
+{"ts":"2026-07-26T14:29:44Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated"}
+{"ts":"2026-07-26T14:29:49Z","kind":"tool","raw":"CodexSkillRead: tenon-spec"}
+{"ts":"2026-07-26T14:29:56Z","kind":"tool","raw":"CodexSkillRead: openspec-propose"}
+{"ts":"2026-07-26T14:30:01Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-07-26T14:30:32Z","kind":"set","field":"plan","to":"docs/superpowers/plans/fix-tenon-entry-skill-contract.md"}
+{"ts":"2026-07-26T14:31:34Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated"}
+{"ts":"2026-07-26T14:31:35Z","kind":"tool","raw":"review:request phase=spec event=spec-complete"}
+{"ts":"2026-07-26T14:31:35Z","kind":"tool","raw":"review:delegated-ack phase=spec event=spec-complete authority_issued_at=2026-07-26T14:31:34Z"}
+{"ts":"2026-07-26T14:31:35Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"ad258b27-e7d5-4e83-a671-d53587340d64"}
+{"ts":"2026-07-26T14:32:04Z","kind":"set","field":"build_mode","to":"direct"}
+{"ts":"2026-07-26T14:32:05Z","kind":"set","field":"isolation","to":"in-place"}
+{"ts":"2026-07-26T14:32:05Z","kind":"set","field":"direct_override","to":"true"}
+{"ts":"2026-07-26T14:41:57Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
+{"ts":"2026-07-26T14:42:31Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-07-26T14:43:04Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-26T14:49:23Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"365edc89-65f6-4a59-9998-09dd1b9c99a2"}
+{"ts":"2026-07-26T14:50:14Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-07-26T14:57:16Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-07-26-fix-tenon-entry-skill-contract-verify.md"}
+{"ts":"2026-07-26T14:58:44Z","kind":"tool","raw":"CodexSkillRead: tenon-verify"}
+{"ts":"2026-07-26T14:59:04Z","kind":"tool","raw":"review:request phase=verify event=verify-fail"}
+{"ts":"2026-07-26T14:59:04Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-07-26T14:31:34Z"}
+{"ts":"2026-07-26T14:59:04Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"c29a0f1d-61cf-4684-9ce4-df52776763a8"}
+{"ts":"2026-07-26T14:59:30Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
+{"ts":"2026-07-26T15:00:02Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-07-26T15:00:28Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-26T15:10:53Z","kind":"transition","from":"build","to":"spec","raw":"requirements-changed","transitionRecordId":"b506d8b4-cca4-46ed-bfe6-8f528c66ed2a"}
+{"ts":"2026-07-26T15:14:20Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated"}
+{"ts":"2026-07-26T15:14:36Z","kind":"tool","raw":"CodexSkillRead: tenon-spec"}
+{"ts":"2026-07-26T15:15:13Z","kind":"tool","raw":"CodexSkillRead: openspec-propose"}
+{"ts":"2026-07-26T15:18:31Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-07-26T15:19:33Z","kind":"tool","raw":"review:request phase=spec event=spec-complete"}
+{"ts":"2026-07-26T15:19:33Z","kind":"tool","raw":"review:delegated-ack phase=spec event=spec-complete authority_issued_at=2026-07-26T15:14:20Z"}
+{"ts":"2026-07-26T15:19:33Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"d797be6e-e44e-454f-bec4-0854ba69e5ba"}
+{"ts":"2026-07-26T15:20:02Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
+{"ts":"2026-07-26T15:20:37Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-07-26T15:21:16Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}

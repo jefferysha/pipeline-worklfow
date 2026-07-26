@@ -7,6 +7,7 @@ export const PRODUCT_IDENTITY = {
   dashboardLauncher: "tenon-dashboard",
   plugin: "tenon",
   marketplace: "tenon",
+  entrySkill: "tenon",
   skillPrefix: "tenon-",
   runtimeApp: "tenon",
   environmentPrefix: "TENON_",

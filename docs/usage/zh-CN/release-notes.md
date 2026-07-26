@@ -12,6 +12,27 @@ Tenon 的发布说明用于回答三个问题：这一版改变了什么、用�
 
 面向用户的解释、影响与操作步骤默认使用中文。
 
+## v1.0.1 · 2026-07-26
+
+### 正常对话入口契约
+
+- `product/identity.json` 新增 `entrySkill: "tenon"`，它是唯一公开入口。
+- Codex 正常对话统一调用 `tenon:tenon`，不保留第二入口别名。
+- 根 `AGENTS.md` 与 Codex 静态 adapter 消费同一份生成 managed block。
+- `tenon doctor` 会验证入口 Skill，并把仍启用的冲突工作流插件报告为红灯。
+- `tenon setup --codex -y` 会先通过 Codex 官方插件管理器移除该精确旧登记，再激活 Tenon。
+
+### 仓库与发布卫生
+
+- CI 与 Release 对所有受版本控制路径和文本执行外部参考项目身份扫描。
+- 扫描不区分大小写、没有豁免，诊断信息也不会回显受限名称。
+- Release payload 构建前执行同一门禁，避免源码干净但发行包污染。
+
+### 升级动作
+
+运行 `tenon update --codex`，随后运行 `tenon setup --codex --auto-update -y`。新开 Codex 会话后执行
+`tenon doctor --json`。
+
 ## v1.0.0 · 2026-07-26
 
 ### 中文治理文档

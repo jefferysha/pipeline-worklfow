@@ -12,9 +12,9 @@ import {
 } from './dashboard.js'
 import {
   hostFlag,
-  installedPipelineRoot,
   isNativePipelineHost,
   nativeInstallPlan,
+  parseHostPluginInventory,
   selectPipelineHost,
   type NativePipelineHost,
   type PipelineHost,
@@ -22,6 +22,11 @@ import {
 } from './plugin-host.js'
 import { publishManagedRelease } from './release-coordinator.js'
 import { migrateLegacyProjectRegistry } from '../migration/legacy-project-registry.js'
+import {
+  finalizePendingHostPluginConflict,
+  readHostPluginConvergenceReceipt,
+  recordPendingHostPluginConflict,
+} from './host-plugin-convergence.js'
 
 // ── 注入面（测试注入临时 HOME / spy;真实现 = node:fs + os.homedir）──────────────────
 
@@ -81,6 +86,12 @@ interface NativePluginCandidate {
   readonly root: string
   /** Existing host inventory was fully verified before reuse. */
   readonly verified: boolean
+  /** Authoritative enabled ids from the same inventory snapshot that resolved `root`. */
+  readonly enabledIds: ReadonlySet<string>
+}
+
+class NativePluginInventoryError extends Error {
+  override readonly name = 'NativePluginInventoryError'
 }
 
 /**
@@ -99,14 +110,16 @@ function verifiedInstalledNativePlugin(
   deps.io.out(`[setup] $ ${commandText(inventoryCommand.cmd, inventoryCommand.args)}`)
   const inventory = env.runCommand(inventoryCommand.cmd, [...inventoryCommand.args])
   if (inventory.code !== 0) return null
-  const root = installedPipelineRoot(host, inventory.stdout)
+  const parsed = parseHostPluginInventory(host, inventory.stdout)
+  if (parsed === null) throw new NativePluginInventoryError('宿主 plugin inventory 响应畸形')
+  const root = parsed.tenonRoot
   if (root === null) return null
   if (verifyPackagedAssets(deps, env, root, false, true) !== 0) {
     deps.io.out(`[setup] ${hostFlag(host)} 已登记的 tenon 不完整或未通过校验；将重新安装正式 release。`)
     return null
   }
   deps.io.out(`[setup] ${hostFlag(host)} 已有完整且已验证的 tenon；复用宿主登记的安装。`)
-  return { root, verified: true }
+  return { root, verified: true, enabledIds: parsed.enabledIds }
 }
 
 function installNativePlugin(
@@ -114,7 +127,16 @@ function installNativePlugin(
   env: SetupEnv,
   host: NativePipelineHost,
 ): NativePluginCandidate | null {
-  const existing = verifiedInstalledNativePlugin(deps, env, host)
+  let existing: NativePluginCandidate | null
+  try {
+    existing = verifiedInstalledNativePlugin(deps, env, host)
+  } catch (error) {
+    if (error instanceof NativePluginInventoryError) {
+      deps.io.err(`ERROR: ${error.message}；未执行安装或清理。`)
+      return null
+    }
+    throw error
+  }
   if (existing !== null) return existing
   const plan = nativeInstallPlan(host)
   let inventory = ''
@@ -145,12 +167,12 @@ function installNativePlugin(
         return null
       }
       const inventoryResult = env.runCommand(inventoryCommand.cmd, [...inventoryCommand.args])
-      const existingRoot = inventoryResult.code === 0
-        ? installedPipelineRoot(host, inventoryResult.stdout)
+      const parsed = inventoryResult.code === 0
+        ? parseHostPluginInventory(host, inventoryResult.stdout)
         : null
-      if (existingRoot !== null) {
+      if (parsed?.tenonRoot !== null && parsed?.tenonRoot !== undefined) {
         deps.io.out(`[setup] ${hostFlag(host)} 已有 tenon，复用宿主登记的安装。`)
-        return { root: existingRoot, verified: false }
+        return { root: parsed.tenonRoot, verified: false, enabledIds: parsed.enabledIds }
       }
     }
 
@@ -159,12 +181,16 @@ function installNativePlugin(
     )
     return null
   }
-  const root = installedPipelineRoot(host, inventory)
-  if (root === null) {
+  const parsed = parseHostPluginInventory(host, inventory)
+  if (parsed === null) {
+    deps.io.err(`ERROR: ${hostFlag(host)} 插件清单响应畸形；未切换 launcher。`)
+    return null
+  }
+  if (parsed.tenonRoot === null) {
     deps.io.err(`ERROR: ${hostFlag(host)} 插件清单中没有 tenon；未切换 launcher。`)
     return null
   }
-  return { root, verified: false }
+  return { root: parsed.tenonRoot, verified: false, enabledIds: parsed.enabledIds }
 }
 
 function publishManagedRuntime(
@@ -175,6 +201,7 @@ function publishManagedRuntime(
   host: PipelineHost,
   dashboardStarter: ReleasedDashboardStarter | undefined,
   openDashboard: boolean,
+  afterReady?: (activation: import('../runtime/types.js').RuntimeActivation) => boolean,
 ): Promise<number> {
   const source = isNativePipelineHost(host) ? host : 'adapter'
   return publishManagedRelease(
@@ -202,6 +229,7 @@ function publishManagedRuntime(
       return 1
     }
     const { activation } = outcome
+    if (afterReady && !afterReady(activation)) return 1
     deps.io.out(`[setup] 已发布已验证 runtime: ${activation.release.releaseId}（revision ${activation.selection.revision}）。`)
     deps.io.out('[setup] 稳定入口已就绪：~/.local/bin/tenon 与 ~/.local/bin/tenon-hook 不再直连 marketplace checkout。')
     return 0
@@ -240,15 +268,47 @@ export function cmdSetupHost(
   }
 
   if (isNativePipelineHost(host)) {
-    const candidate = installNativePlugin(deps, env, host)
-    if (candidate === null) return 1
-    const assetCode = candidate.verified ? 0 : verifyPackagedAssets(deps, env, candidate.root, false)
-    if (assetCode !== 0) return assetCode
-    if (host === 'codex') {
-      const migrationCode = migrateLegacyCodexHooks(deps, env)
-      if (migrationCode !== 0) return migrationCode
-    }
-    return publishManagedRuntime(deps, env, installer, candidate.root, host, dashboardStarter, openDashboard).then(async (runtimeCode) => {
+    return (async () => {
+      const convergence = readHostPluginConvergenceReceipt(env, host)
+      if (convergence.state === 'invalid') {
+        deps.io.err(`ERROR: ${convergence.detail}；未执行新的 marketplace/runtime 变更。`)
+        return 1
+      }
+      if (convergence.state === 'receipt' && convergence.receipt.state === 'cleanup-pending') {
+        const finalized = await finalizePendingHostPluginConflict(deps, env, installer, host, convergence.receipt)
+        if (finalized.state === 'failed') {
+          deps.io.err(`ERROR: 冲突插件官方清理失败：${finalized.detail}`)
+          return 1
+        }
+        // waiting/completed 都是本次 setup 的完整动作；不要在同一调用继续刷新或再发布候选。
+        return 0
+      }
+
+      const candidate = installNativePlugin(deps, env, host)
+      if (candidate === null) return 1
+      const assetCode = candidate.verified ? 0 : verifyPackagedAssets(deps, env, candidate.root, false)
+      if (assetCode !== 0) return assetCode
+      if (host === 'codex') {
+        const migrationCode = migrateLegacyCodexHooks(deps, env)
+        if (migrationCode !== 0) return migrationCode
+      }
+      const runtimeCode = await publishManagedRuntime(
+        deps,
+        env,
+        installer,
+        candidate.root,
+        host,
+        dashboardStarter,
+        openDashboard,
+        (activation) => recordPendingHostPluginConflict(
+          deps,
+          env,
+          host,
+          candidate.enabledIds,
+          activation,
+          candidate.root,
+        ),
+      )
       if (runtimeCode !== 0) return runtimeCode
       const migrateProjectRegistry = env.migrateProjectRegistry ?? migrateLegacyProjectRegistry
       const migrated = await migrateProjectRegistry({
@@ -266,7 +326,7 @@ export function cmdSetupHost(
       }
       if (host === 'codex') printCodexHookTrust(deps)
       return configureAutoUpdate(deps, env, host, opts.autoUpdate === true)
-    })
+    })()
   } else {
     const root = resolvePipelineRoot(env)
     const assetCode = verifyPackagedAssets(deps, env, root, false)

@@ -336,12 +336,13 @@ export function mockDoctorProbes(overrides: Partial<DoctorProbes> = {}): DoctorP
     installedSkillNames: () => new Set(),
     // Codex normal-chat 就绪面：缺省 fixture 代表安装器已投递完整 contract skills。
     codexProjectSkillNames: () => new Set([
-      'pipeline', 'tenon-open', 'tenon-explore', 'tenon-spec', 'tenon-build', 'tenon-verify',
+      'tenon', 'tenon-open', 'tenon-explore', 'tenon-spec', 'tenon-build', 'tenon-verify',
       'tenon-ship', 'tenon-archive', 'openspec-propose', 'openspec-explore', 'openspec-apply-change',
       'openspec-archive-change', 'brainstorming', 'grill-with-docs', 'improve-codebase-architecture',
       'writing-plans', 'test-driven-development', 'verification-before-completion',
       'finishing-a-development-branch', 'browser-qa', 'e2e-testing',
     ]),
+    codexHostPluginIds: () => new Set(['tenon@tenon']),
     manifestSkills: () => DEFAULT_MANIFEST_SKILLS,
     // AFK 就绪四检（R1）：缺省全就绪（docker 可用 / 镜像在位 / 两 runner 凭证已配）→ afk:* 四绿基线；
     // 单测按需覆写 afkReadiness 制造 docker 缺 / 镜像缺 / 凭证缺 各态。

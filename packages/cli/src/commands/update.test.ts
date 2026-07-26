@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest'
+import { join } from 'node:path'
 import { makeDeps } from '../test-support.js'
-import { installedPipelineRoot, nativeInstallPlan } from './plugin-host.js'
+import { enabledHostPluginIds, installedPipelineRoot, nativeInstallPlan } from './plugin-host.js'
 import { type SetupEnv } from './setup.js'
 import { cmdUpdate, nativeUpdatePlan } from './update.js'
 import { resolveRuntimePaths } from '../runtime/paths.js'
@@ -25,6 +26,7 @@ interface DashboardCalls {
 function fakeRuntimeInstaller(
   fail = false,
   previousRelease: string | null = null,
+  activeRelease: string | null = null,
 ): { installer: RuntimeInstaller; calls: RuntimeCalls } {
   const calls: RuntimeCalls = { activations: [], failures: [], reverts: [] }
   const releaseId = `sha256-${'b'.repeat(64)}`
@@ -44,10 +46,16 @@ function fakeRuntimeInstaller(
       },
     }),
     inspect: async () => ({
-      selection: { version: 1, revision: 0, activeRelease: null, previousRelease: null, updatedAt: '1970-01-01T00:00:00Z' },
-      active: null,
+      selection: { version: 1, revision: 0, activeRelease, previousRelease: null, updatedAt: '1970-01-01T00:00:00Z' },
+      active: activeRelease === null ? null : {
+        version: 1,
+        releaseId: activeRelease,
+        payloadDigest: activeRelease.replace(/^sha256-/, ''),
+        createdAt: '2026-07-24T00:00:00Z',
+        source: { host: 'codex', pluginVersion: '1.0.1' },
+      },
       previous: null,
-      activeValid: false,
+      activeValid: activeRelease !== null,
       previousValid: false,
       lastAudit: null,
     }),
@@ -125,6 +133,19 @@ describe('native plugin update plans', () => {
     expect(installedPipelineRoot('codex', JSON.stringify({ installed: [] }))).toBeNull()
     expect(installedPipelineRoot('claude', 'not json')).toBeNull()
   })
+
+  test('parses only enabled plugin ids from host inventory', () => {
+    const ids = enabledHostPluginIds('codex', JSON.stringify({
+      installed: [
+        { pluginId: 'tenon@tenon', enabled: true },
+        { pluginId: 'disabled@source', enabled: false },
+      ],
+    }))
+    expect(ids === null ? null : [...ids]).toEqual(['tenon@tenon'])
+    expect(enabledHostPluginIds('codex', 'not json')).toBeNull()
+    expect(enabledHostPluginIds('codex', JSON.stringify({ installed: 'not-an-array' }))).toBeNull()
+    expect(enabledHostPluginIds('codex', JSON.stringify({ installed: [] }))).toEqual(new Set())
+  })
 })
 
 describe('tenon update', () => {
@@ -172,6 +193,87 @@ describe('tenon update', () => {
     ]])
     expect(deps.outLines.join('\n')).toContain('稳定 tenon launcher 已保持不变')
     expect(deps.outLines.join('\n')).toContain('输入 /hooks')
+  })
+
+  test('update 发现冲突登记时只记录 cleanup-pending，当前会话不提前删除旧入口', async () => {
+    const deps = makeDeps()
+    const inventory = JSON.stringify({
+      installed: [
+        { pluginId: 'pipeline-lite@pipeline-lite', enabled: true, source: { path: '/old/workflow' } },
+        { pluginId: 'tenon@tenon', name: 'tenon', marketplaceName: 'tenon', enabled: true, source: { path: '/new/tenon' } },
+      ],
+    })
+    const { env, calls } = updateEnv((cmd, args) => {
+      if (cmd === 'codex' && args.join(' ') === 'plugin list --json') {
+        return { code: 0, stdout: inventory, stderr: '' }
+      }
+      if (cmd === 'bash') return { code: 0, stdout: '', stderr: '' }
+      return { code: 0, stdout: '', stderr: '' }
+    })
+    const runtime = fakeRuntimeInstaller()
+
+    expect(await cmdUpdate(deps, { codex: true }, env, runtime.installer, fakeDashboardStarter().starter)).toBe(0)
+    expect(calls.exec.some(([cmd, args]) =>
+      cmd === 'codex' && args.join(' ') === 'plugin remove pipeline-lite@pipeline-lite --json')).toBe(false)
+    const receiptPath = join(
+      resolveRuntimePaths({ homeDir: '/home/update-test', env: {} }).migrationsRoot,
+      'host-plugin-convergence',
+      'codex.json',
+    )
+    const receiptWrite = calls.writes.find(([path]) => path === receiptPath)
+    expect(JSON.parse(receiptWrite?.[1] ?? '{}')).toMatchObject({
+      state: 'cleanup-pending',
+      releaseId: `sha256-${'b'.repeat(64)}`,
+    })
+    expect(deps.outLines.join('\n')).toContain('新宿主会话')
+  })
+
+  test('update 在 cleanup finalize 的官方 remove 失败时不刷新 marketplace、不发布 runtime', async () => {
+    const deps = makeDeps()
+    const releaseId = `sha256-${'b'.repeat(64)}`
+    const paths = resolveRuntimePaths({ homeDir: '/home/update-test', env: {} })
+    const receiptPath = join(paths.migrationsRoot, 'host-plugin-convergence', 'codex.json')
+    const proofPath = join(paths.stateRoot, 'migration', 'tenon-session-loaded')
+    const inventory = JSON.stringify({
+      installed: [
+        { pluginId: 'pipeline-lite@pipeline-lite', enabled: true, source: { path: '/old/workflow' } },
+        { pluginId: 'tenon@tenon', enabled: true, source: { path: '/new/tenon' } },
+      ],
+    })
+    const { env, calls } = updateEnv((cmd, args) => {
+      if (cmd === 'codex' && args.join(' ') === 'plugin list --json') {
+        return { code: 0, stdout: inventory, stderr: '' }
+      }
+      if (cmd === 'codex' && args.join(' ') === 'plugin remove pipeline-lite@pipeline-lite --json') {
+        return { code: 7, stdout: '', stderr: 'remove blocked' }
+      }
+      return { code: 0, stdout: '', stderr: '' }
+    })
+    env.readText = (path) => {
+      if (path === receiptPath) {
+        return JSON.stringify({
+          version: 1,
+          state: 'cleanup-pending',
+          host: 'codex',
+          conflictPluginId: 'pipeline-lite@pipeline-lite',
+          releaseId,
+          candidateRoot: '/new/tenon',
+          updatedAt: '2026-07-26T00:00:00Z',
+        })
+      }
+      if (path === proofPath) {
+        return `version=2\nloaded_at_epoch=1\nhost=codex\nrelease_id=${releaseId}\nrelease_root=/runtime/releases/${releaseId}/payload\n`
+      }
+      return undefined
+    }
+    const runtime = fakeRuntimeInstaller(false, null, releaseId)
+
+    expect(await cmdUpdate(deps, { codex: true }, env, runtime.installer, fakeDashboardStarter().starter)).toBe(1)
+    expect(runtime.calls.activations).toEqual([])
+    expect(calls.exec.map(([cmd, args]) => [cmd, args.join(' ')])).toEqual([
+      ['codex', 'plugin list --json'],
+      ['codex', 'plugin remove pipeline-lite@pipeline-lite --json'],
+    ])
   })
 
   test('dashboard readiness failure compensates the exact published activation', async () => {

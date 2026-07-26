@@ -254,7 +254,7 @@ describe('doctor —— 统一健康面（BACKLOG #26b，GOAL B8 降级可见 / 
   })
 
   test('Codex skills 黄灯：只在 cache 不能替代原生插件或项目 adapter 的实际发现', async () => {
-    const deps = makeDeps({ doctor: { codexProjectSkillNames: () => new Set(['pipeline']) } })
+    const deps = makeDeps({ doctor: { codexProjectSkillNames: () => new Set(['tenon']) } })
     const { code, payload } = await runJson(deps)
     expect(code).toBe(0)
     const c = byId(payload, 'integration:codex-project-skills')
@@ -282,6 +282,42 @@ describe('doctor —— 统一健康面（BACKLOG #26b，GOAL B8 降级可见 / 
     expect(c.detail).toContain('/native/tenon')
   })
 
+  test('Codex 旧工作流插件仍启用时红灯，修复只走宿主插件管理器', async () => {
+    const deps = makeDeps({ doctor: {
+      codexHostPluginIds: () => new Set(['pipeline-lite@pipeline-lite', 'tenon@tenon']),
+    } })
+    const { code, payload } = await runJson(deps)
+    expect(code).toBe(1)
+    const c = byId(payload, 'integration:codex-project-skills')
+    expect(c.status).toBe('red')
+    expect(c.detail).toContain('旧工作流插件')
+    expect(c.hint).toContain('tenon setup --codex')
+    expect(c.hint).not.toContain('.codex/.tmp')
+  })
+
+  test('Codex 宿主 inventory 不可用或畸形时红灯，不得跳过唯一身份检查后误报 green', async () => {
+    const deps = makeDeps({ doctor: {
+      codexHostPluginIds: () => null,
+    } })
+    const { code, payload } = await runJson(deps)
+    expect(code).toBe(1)
+    const c = byId(payload, 'integration:codex-project-skills')
+    expect(c.status).toBe('red')
+    expect(c.detail).toContain('inventory')
+    expect(c.hint).toContain('codex plugin list --json')
+  })
+
+  test('Codex inventory 可读但没有 Tenon 登记时红灯，不以磁盘 Skill 根替代宿主登记', async () => {
+    const deps = makeDeps({ doctor: {
+      codexHostPluginIds: () => new Set(),
+    } })
+    const { code, payload } = await runJson(deps)
+    expect(code).toBe(1)
+    const c = byId(payload, 'integration:codex-project-skills')
+    expect(c.status).toBe('red')
+    expect(c.detail).toContain('tenon@tenon')
+  })
+
   test('Codex 同摘要多根报告 duplicate-projection，不误称 healthy', async () => {
     const contract = mockDoctorProbes().codexProjectSkillNames?.() ?? new Set<string>()
     const selected = new Map([...contract].map((id) => [id, `digest-${id}`]))
@@ -290,7 +326,7 @@ describe('doctor —— 统一健康面（BACKLOG #26b，GOAL B8 降级可见 / 
         selectedRoot: '/native/tenon',
         projectRoot: '/repo/.agents/skills',
         selected,
-        project: new Map([['pipeline', 'digest-pipeline']]),
+        project: new Map([['tenon', 'digest-tenon']]),
       }),
     } })
     const { code, payload } = await runJson(deps)
@@ -298,7 +334,7 @@ describe('doctor —— 统一健康面（BACKLOG #26b，GOAL B8 降级可见 / 
     const c = byId(payload, 'integration:codex-project-skills')
     expect(c.status).toBe('yellow')
     expect(c.detail).toContain('duplicate-projection')
-    expect(c.detail).toContain('pipeline')
+    expect(c.detail).toContain('tenon')
   })
 
   test('Codex 同 ID 不同摘要报告 shadow-conflict 并 fail closed', async () => {
@@ -309,7 +345,7 @@ describe('doctor —— 统一健康面（BACKLOG #26b，GOAL B8 降级可见 / 
         selectedRoot: '/native/tenon',
         projectRoot: '/repo/.agents/skills',
         selected,
-        project: new Map([['pipeline', 'user-digest']]),
+        project: new Map([['tenon', 'user-digest']]),
       }),
     } })
     const { code, payload } = await runJson(deps)
@@ -317,7 +353,7 @@ describe('doctor —— 统一健康面（BACKLOG #26b，GOAL B8 降级可见 / 
     const c = byId(payload, 'integration:codex-project-skills')
     expect(c.status).toBe('red')
     expect(c.detail).toContain('shadow-conflict')
-    expect(c.detail).toContain('pipeline')
+    expect(c.detail).toContain('tenon')
   })
 
   test('探针自身异常不炸命令：该项折算 red（fail-loud 可见），其余检查照常', async () => {

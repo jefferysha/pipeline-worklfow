@@ -12,8 +12,8 @@ import { REAL_RUNTIME_INSTALLER, type RuntimeInstaller } from '../runtime/instal
 import { REAL_RELEASED_DASHBOARD_STARTER, type ReleasedDashboardStarter } from './dashboard.js'
 import {
   hostFlag,
-  installedPipelineRoot,
   isNativePipelineHost,
+  parseHostPluginInventory,
   TENON_MARKETPLACE_NAME,
   TENON_PLUGIN_NAME,
   selectPipelineHost,
@@ -24,6 +24,11 @@ import {
 import { cmdSetupHost, type SetupEnv, REAL_SETUP_ENV } from './setup.js'
 import { publishManagedRelease } from './release-coordinator.js'
 import { resolveRuntimePaths } from '../runtime/paths.js'
+import {
+  finalizePendingHostPluginConflict,
+  readHostPluginConvergenceReceipt,
+  recordPendingHostPluginConflict,
+} from './host-plugin-convergence.js'
 
 export interface UpdateOpts extends PipelineHostFlags {
   dryRun?: boolean
@@ -140,6 +145,22 @@ export function cmdUpdate(
     return 0
   }
 
+  return (async () => {
+  const convergence = readHostPluginConvergenceReceipt(env, host)
+  if (convergence.state === 'invalid') {
+    deps.io.err(`ERROR: ${convergence.detail}；未执行新的 marketplace/runtime 变更。`)
+    return 1
+  }
+  if (convergence.state === 'receipt' && convergence.receipt.state === 'cleanup-pending') {
+    const finalized = await finalizePendingHostPluginConflict(deps, env, installer, host, convergence.receipt)
+    if (finalized.state === 'failed') {
+      deps.io.err(`ERROR: 冲突插件官方清理失败：${finalized.detail}`)
+      return 1
+    }
+    // waiting/completed 都终止本次 update，避免同一调用继续刷新或发布另一个候选。
+    return 0
+  }
+
   let inventory = ''
   let hostBoundary: HostBoundaryState = 'in-progress'
   for (let index = 0; index < plan.length; index += 1) {
@@ -158,10 +179,10 @@ export function cmdUpdate(
       if (index === 1 && isAlreadyInstalledResult(result)) {
         const inventoryItem = plan[plan.length - 1]!
         const inventoryResult = env.runCommand(inventoryItem.cmd, [...inventoryItem.args])
-        const installedRoot = inventoryResult.code === 0
-          ? installedPipelineRoot(host, inventoryResult.stdout)
+        const parsedInventory = inventoryResult.code === 0
+          ? parseHostPluginInventory(host, inventoryResult.stdout)
           : null
-        if (installedRoot !== null) {
+        if (parsedInventory?.tenonRoot !== null && parsedInventory?.tenonRoot !== undefined) {
           inventory = inventoryResult.stdout
           break
         }
@@ -173,7 +194,14 @@ export function cmdUpdate(
     }
     inventory = result.stdout
   }
-  const root = installedPipelineRoot(host, inventory)
+  const parsedInventory = parseHostPluginInventory(host, inventory)
+  if (parsedInventory === null) {
+    const detail = `${hostFlag(host)} 更新后的宿主插件清单响应畸形；未切换 launcher。`
+    deps.io.err(`ERROR: ${detail}`)
+    reportHostBoundary(deps, host, hostBoundary)
+    return await rejectUpdate(installer, env, boundaryDetail(hostBoundary, 'unchanged', detail))
+  }
+  const root = parsedInventory.tenonRoot
   if (root === null) {
     const detail = `${hostFlag(host)} 更新后未在宿主插件清单中找到 tenon；未切换 launcher。`
     deps.io.err(`ERROR: ${detail}`)
@@ -186,7 +214,7 @@ export function cmdUpdate(
     reportHostBoundary(deps, host, hostBoundary)
     return rejectUpdate(installer, env, boundaryDetail(hostBoundary, 'unchanged', detail))
   }
-  return publishManagedRelease(
+  const outcome = await publishManagedRelease(
     deps,
     {
       candidateRoot: root,
@@ -199,25 +227,33 @@ export function cmdUpdate(
     },
     installer,
     dashboardStarter,
-  ).then(async (outcome) => {
-      if (!outcome.ok) {
-        deps.io.err(`ERROR: ${outcome.detail}`)
-        reportHostBoundary(deps, host, hostBoundary)
-        return rejectUpdate(installer, env, boundaryDetail(hostBoundary, outcome.state, outcome.detail))
-      }
-      const { activation } = outcome
-      deps.io.out(`[update] 已原子切换至已验证 runtime: ${activation.release.releaseId}（revision ${activation.selection.revision}）。`)
-      if (opts.auto) {
-        deps.io.out(`[update] ${hostFlag(host)} 已在后台刷新；当前会话继续使用已加载版本，新会话将加载新 skills/hooks。`)
-      } else {
-        deps.io.out(`[update] ${hostFlag(host)} 已更新；稳定 tenon launcher 已保持不变，新会话将加载新 skills/hooks。`)
-      }
-      if (host === 'codex') {
-        deps.io.out('[update] 若 Codex 将新版本 Tenon hook 标为未信任或已变更，请在 Codex 输入 /hooks 后重新信任；这是宿主的安全边界。')
-      }
-      reportRegisteredProjects(deps, env, activation.release.source.pluginVersion)
-      return 0
-    })
+  )
+  if (!outcome.ok) {
+    deps.io.err(`ERROR: ${outcome.detail}`)
+    reportHostBoundary(deps, host, hostBoundary)
+    return await rejectUpdate(installer, env, boundaryDetail(hostBoundary, outcome.state, outcome.detail))
+  }
+  const { activation } = outcome
+  if (!recordPendingHostPluginConflict(
+    deps,
+    env,
+    host,
+    parsedInventory.enabledIds,
+    activation,
+    root,
+  )) return 1
+  deps.io.out(`[update] 已原子切换至已验证 runtime: ${activation.release.releaseId}（revision ${activation.selection.revision}）。`)
+  if (opts.auto) {
+    deps.io.out(`[update] ${hostFlag(host)} 已在后台刷新；当前会话继续使用已加载版本，新会话将加载新 skills/hooks。`)
+  } else {
+    deps.io.out(`[update] ${hostFlag(host)} 已更新；稳定 tenon launcher 已保持不变，新会话将加载新 skills/hooks。`)
+  }
+  if (host === 'codex') {
+    deps.io.out('[update] 若 Codex 将新版本 Tenon hook 标为未信任或已变更，请在 Codex 输入 /hooks 后重新信任；这是宿主的安全边界。')
+  }
+  reportRegisteredProjects(deps, env, activation.release.source.pluginVersion)
+  return 0
+  })()
 }
 
 function shellQuote(value: string): string {

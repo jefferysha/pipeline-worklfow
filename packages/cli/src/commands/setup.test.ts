@@ -42,7 +42,7 @@ function spyEnv(over: Partial<SetupEnv> = {}, exec?: ExecStub, confirmAns = true
   selfPath: () => '/plugin/packages/cli/dist/tenon.mjs',
   mkdirp: (d) => { calls.mkdirp.push(d) },
   pathExists: () => false,
-  readText: () => '{}\n',
+  readText: () => undefined,
   commandExists: () => false,
     listDir: () => [],
     writeText: (p, text) => { calls.writeText.push([p, text]) },
@@ -59,6 +59,15 @@ function spyEnv(over: Partial<SetupEnv> = {}, exec?: ExecStub, confirmAns = true
   return { env, calls }
 }
 
+function setupPathExists(path: string): boolean {
+  return !path.includes('/host-plugin-convergence/')
+}
+
+function setupReadText(path: string): string | undefined {
+  if (path.endsWith('/.codex/hooks.json')) return '{}\n'
+  return undefined
+}
+
 interface RuntimeCalls {
   readonly activations: Array<readonly [string, string, string]>
   readonly reverts: Array<readonly [string, string]>
@@ -71,6 +80,7 @@ interface DashboardCalls {
 function fakeRuntimeInstaller(
   fail = false,
   previousRelease: string | null = null,
+  activeRelease: string | null = null,
 ): { installer: RuntimeInstaller; calls: RuntimeCalls } {
   const calls: RuntimeCalls = { activations: [], reverts: [] }
   const releaseId = `sha256-${'a'.repeat(64)}`
@@ -102,10 +112,16 @@ function fakeRuntimeInstaller(
       },
     }),
     inspect: async () => ({
-      selection: { version: 1, revision: 0, activeRelease: null, previousRelease: null, updatedAt: '1970-01-01T00:00:00Z' },
-      active: null,
+      selection: { version: 1, revision: 0, activeRelease, previousRelease: null, updatedAt: '1970-01-01T00:00:00Z' },
+      active: activeRelease === null ? null : {
+        version: 1,
+        releaseId: activeRelease,
+        payloadDigest: activeRelease.replace(/^sha256-/, ''),
+        createdAt: '2026-07-24T00:00:00Z',
+        source: { host: 'codex', pluginVersion: '1.0.1' },
+      },
       previous: null,
-      activeValid: false,
+      activeValid: activeRelease !== null,
       previousValid: false,
       lastAudit: null,
     }),
@@ -197,7 +213,7 @@ describe('①--dry-run —— 按宿主打印计划且零写、零发布', () =>
 describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校验后写入用户配置', () => {
   test('Codex 已有完整已验证插件时复用宿主清单根，--auto-update 写入精确每日更新偏好', async () => {
     const deps = makeDeps()
-    const { env, calls } = spyEnv({ pathExists: () => true }, codexInstallExec)
+    const { env, calls } = spyEnv({ pathExists: setupPathExists, readText: setupReadText }, codexInstallExec)
     const runtime = fakeRuntimeInstaller()
     const dashboard = fakeDashboardStarter()
 
@@ -238,7 +254,7 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
       }
       return { code: 0, stdout: '', stderr: '' }
     }
-    const { env, calls } = spyEnv({ pathExists: () => true }, exec)
+    const { env, calls } = spyEnv({ pathExists: setupPathExists, readText: setupReadText }, exec)
     const runtime = fakeRuntimeInstaller()
 
     expect(await cmdSetupHost(deps, 'codex', { codex: true }, env, runtime.installer)).toBe(0)
@@ -250,6 +266,113 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
       ['bash', '/installed/tenon/tools/verify-skills.sh --quiet --root /installed/tenon'],
     ])
     expect(runtime.calls.activations).toEqual([['/installed/tenon', 'codex', '/home/test']])
+  })
+
+  test('Codex 冲突登记先发布并验证 Tenon，再写 cleanup-pending；同一会话绝不提前删除旧入口', async () => {
+    const deps = makeDeps()
+    const exec: ExecStub = (cmd, args) => {
+      if (cmd === 'codex' && args.join(' ') === 'plugin list --json') {
+        return {
+          code: 0,
+          stdout: JSON.stringify({
+            installed: [
+              {
+                pluginId: 'pipeline-lite@pipeline-lite',
+                name: 'pipeline-lite',
+                marketplaceName: 'pipeline-lite',
+                enabled: true,
+                source: { path: '/old/workflow' },
+              },
+              {
+                pluginId: 'tenon@tenon',
+                name: 'tenon',
+                marketplaceName: 'tenon',
+                enabled: true,
+                source: { path: '/installed/tenon' },
+              },
+            ],
+          }),
+          stderr: '',
+        }
+      }
+      return { code: 0, stdout: '', stderr: '' }
+    }
+    const { env, calls } = spyEnv({
+      pathExists: setupPathExists,
+      readText: setupReadText,
+    }, exec)
+    const runtime = fakeRuntimeInstaller()
+
+    expect(await cmdSetupHost(deps, 'codex', { codex: true }, env, runtime.installer)).toBe(0)
+    expect(calls.exec.map(([cmd, args]) => [cmd, args.join(' ')])).toEqual([
+      ['codex', 'plugin list --json'],
+      ['bash', '/installed/tenon/tools/verify-skills.sh --quiet --root /installed/tenon'],
+    ])
+    expect(runtime.calls.activations).toEqual([['/installed/tenon', 'codex', '/home/test']])
+    const receiptPath = join(
+      resolveRuntimePaths({ homeDir: '/home/test', env: {} }).migrationsRoot,
+      'host-plugin-convergence',
+      'codex.json',
+    )
+    const receiptWrite = calls.writeText.find(([path]) => path === receiptPath)
+    expect(receiptWrite).toBeDefined()
+    expect(JSON.parse(receiptWrite?.[1] ?? '{}')).toMatchObject({
+      version: 1,
+      state: 'cleanup-pending',
+      host: 'codex',
+      releaseId: `sha256-${'a'.repeat(64)}`,
+    })
+    expect(deps.outLines.join('\n')).toContain('新宿主会话')
+  })
+
+  test('cleanup-pending 的官方 remove 失败时先失败关闭，不安装候选也不发布新 runtime', async () => {
+    const deps = makeDeps()
+    const releaseId = `sha256-${'a'.repeat(64)}`
+    const paths = resolveRuntimePaths({ homeDir: '/home/test', env: {} })
+    const receiptPath = join(paths.migrationsRoot, 'host-plugin-convergence', 'codex.json')
+    const proofPath = join(paths.stateRoot, 'migration', 'tenon-session-loaded')
+    const receipt = JSON.stringify({
+      version: 1,
+      state: 'cleanup-pending',
+      host: 'codex',
+      conflictPluginId: 'pipeline-lite@pipeline-lite',
+      releaseId,
+      candidateRoot: '/installed/tenon',
+      updatedAt: '2026-07-26T00:00:00Z',
+    })
+    const inventory = JSON.stringify({
+      installed: [
+        { pluginId: 'pipeline-lite@pipeline-lite', enabled: true, source: { path: '/old/workflow' } },
+        { pluginId: 'tenon@tenon', enabled: true, source: { path: '/installed/tenon' } },
+      ],
+    })
+    const { env, calls } = spyEnv({
+      pathExists: () => true,
+      readText: (path) => {
+        if (path === receiptPath) return receipt
+        if (path === proofPath) {
+          return `version=2\nloaded_at_epoch=1\nhost=codex\nrelease_id=${releaseId}\nrelease_root=/runtime/releases/${releaseId}/payload\n`
+        }
+        return undefined
+      },
+    }, (cmd, args) => {
+      if (cmd === 'codex' && args.join(' ') === 'plugin list --json') {
+        return { code: 0, stdout: inventory, stderr: '' }
+      }
+      if (cmd === 'codex' && args.join(' ') === 'plugin remove pipeline-lite@pipeline-lite --json') {
+        return { code: 9, stdout: '', stderr: 'permission denied' }
+      }
+      return { code: 0, stdout: '', stderr: '' }
+    })
+    const runtime = fakeRuntimeInstaller(false, null, releaseId)
+
+    expect(await cmdSetupHost(deps, 'codex', { codex: true }, env, runtime.installer)).toBe(1)
+    expect(runtime.calls.activations).toEqual([])
+    expect(calls.exec.map(([cmd, args]) => [cmd, args.join(' ')])).toEqual([
+      ['codex', 'plugin list --json'],
+      ['codex', 'plugin remove pipeline-lite@pipeline-lite --json'],
+    ])
+    expect(deps.errLines.join('\n')).toContain('permission denied')
   })
 
   test('Codex 已登记但缺 runtime bootstrap 时拒绝复用，并回到正式安装计划', async () => {
@@ -271,7 +394,11 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
       }
       return { code: 0, stdout: '', stderr: '' }
     }
-    const { env, calls } = spyEnv({ pathExists: (path) => path !== '/stale/tenon/runtime/tenon-bootstrap.mjs' }, exec)
+    const { env, calls } = spyEnv({
+      pathExists: (path) =>
+        setupPathExists(path) && path !== '/stale/tenon/runtime/tenon-bootstrap.mjs',
+      readText: setupReadText,
+    }, exec)
     const runtime = fakeRuntimeInstaller()
 
     expect(await cmdSetupHost(deps, 'codex', { codex: true }, env, runtime.installer)).toBe(0)
@@ -365,7 +492,7 @@ describe('①b Codex 旧 hook 迁移 —— 插件是唯一 hook 所有者', () 
 describe('②managed runtime 发布边界', () => {
   test('候选 release 校验/发布失败时，不把宿主 checkout 伪装为可运行入口', async () => {
     const deps = makeDeps()
-    const { env } = spyEnv({ pathExists: () => true }, codexInstallExec)
+    const { env } = spyEnv({ pathExists: setupPathExists, readText: setupReadText }, codexInstallExec)
     const runtime = fakeRuntimeInstaller(true)
 
     expect(await cmdSetupHost(deps, 'codex', { codex: true }, env, runtime.installer)).toBe(1)
@@ -378,7 +505,7 @@ describe('②managed runtime 发布边界', () => {
 
   test('Dashboard starter 抛错时仍补偿精确 activation 并恢复 previous 服务', async () => {
     const deps = makeDeps()
-    const { env } = spyEnv({ pathExists: () => true }, codexInstallExec)
+    const { env } = spyEnv({ pathExists: setupPathExists, readText: setupReadText }, codexInstallExec)
     const previousRelease = `sha256-${'c'.repeat(64)}`
     const runtime = fakeRuntimeInstaller(false, previousRelease)
     const starts: string[] = []
@@ -437,7 +564,7 @@ describe('⑨空 sub 全流程 —— 技能段后接运行时就绪清单（dry
   test('非 dry-run:技能段之后真跑运行时就绪清单（注入 fakeRt,零真 docker）→ 出清单 + exit 0', async () => {
     const deps = makeDeps()
     // 全部已装 → 技能段几乎空跑；fake installer 只记录已校验候选发布，聚焦「运行时段确实被接上」。
-    const { env } = spyEnv({ pathExists: () => true }, codexInstallExec)
+    const { env } = spyEnv({ pathExists: setupPathExists, readText: setupReadText }, codexInstallExec)
     const runtime = fakeRuntimeInstaller()
     const rt = fakeRt({ hostEnv: { CLAUDE_CODE_OAUTH_TOKEN: 'a', OPENAI_API_KEY: 'b' } })
     const dashboard = fakeDashboardStarter()

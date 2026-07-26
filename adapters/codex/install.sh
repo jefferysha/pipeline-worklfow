@@ -46,42 +46,38 @@ confirm() { # prompt → 0 同意
   case "$ans" in y|Y|yes|YES) return 0 ;; *) return 1 ;; esac
 }
 
-# ── 静态上下文层（三档共用）：AGENTS.md 哨兵 managed-block，幂等可重刷 ──
+# ── 静态上下文层（三档共用）：消费身份生成的 AGENTS.md managed block ──
 install_static() {
   local dest="$1"
   mkdir -p "$dest" || { err "无法创建目标目录: $dest"; exit 1; }
   local START="<!-- PIPELINE:CODEX:START -->" END="<!-- PIPELINE:CODEX:END -->"
-  local block; block="$(cat <<'EOF'
-## Pipeline Workflow（Codex 静态层）
-
-7-phase 流水线：open → explore → spec → build ⇄ verify → ship → archive。状态操作一律走 `pipeline` CLI
-（status / get / set / transition / check），勿手改 canonical state 或 `.pipeline.yaml` 投影。
-
-正常开发对话默认走 default workflow：先调用 `pipeline`，由入口 skill 创建/恢复 Change、
-初始化 OpenSpec 并分派当前 phase skill；Todo 的一级项必须是七个 pipeline phase，任务来自该 Change 的
-`tasks.md`，不得先生成脱离 phase 的通用 Todo。
-
-离开 review phase（explore / spec / verify）须对确切 transition event 取得人类显式确认：先运行
-`tenon review request <change> --event <event>`，再由用户确认触发 `tenon review acknowledge <change>`。
-档 A/B 的普通对话中，用户下一条明确回复“确认继续”或“继续执行”会写入该 receipt；档 C 必须保留确认事实并
-显式 acknowledge，不能删除 marker 绕过 review-gate。verify-fail 与 verify-pass 的确认不可互用。
-EOF
-)"
+  local template="$ADAPTER_DIR/../../templates/generated/codex-agents-block.md"
+  [ -f "$template" ] || { err "缺少生成的 Codex managed block: $template"; exit 1; }
   local f="$dest/AGENTS.md"
-  if [ -f "$f" ] && grep -qF "$START" "$f" 2>/dev/null; then
+  if [ -f "$f" ]; then
+    local start_count end_count
+    start_count="$(grep -cFx "$START" "$f" 2>/dev/null || true)"
+    end_count="$(grep -cFx "$END" "$f" 2>/dev/null || true)"
+    case "$start_count:$end_count" in
+      0:0|1:1) ;;
+      *)
+        err "AGENTS.md 的 Tenon 哨兵块必须成对且唯一，拒绝改写用户内容: $f"
+        exit 1
+        ;;
+    esac
+  fi
+  if [ -f "$f" ] && [ "$start_count" = 1 ]; then
     # 哨兵块精确替换（块内重刷、块外用户内容原样保留）
     # macOS/BSD awk 不接受带换行的 -v 值。把新块放进受控临时文件，再由 awk 逐行读取，
     # 才能既保留块外内容又保证第二次安装真幂等。
     local tmp block_tmp
     tmp="$(mktemp)"
     block_tmp="$(mktemp)"
-    printf '%s\n' "$block" > "$block_tmp"
+    cp "$template" "$block_tmp"
     if awk -v s="$START" -v e="$END" -v b="$block_tmp" '
       $0==s {
-        print s
         while ((getline line < b) > 0) print line
         close(b)
-        print e
         skip=1
         next
       }
@@ -97,7 +93,7 @@ EOF
     fi
     rm -f "$block_tmp"
   else
-    { printf '\n%s\n' "$START"; printf '%s\n' "$block"; printf '%s\n' "$END"; } >> "$f"
+    { printf '\n'; cat "$template"; } >> "$f"
   fi
   info "AGENTS.md 静态层 → ${f}（哨兵块幂等）"
 }

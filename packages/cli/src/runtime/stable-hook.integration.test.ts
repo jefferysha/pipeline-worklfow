@@ -148,7 +148,10 @@ describe('stable host-hook ABI', () => {
     await mkdir(project, { recursive: true })
     const paths = resolveRuntimePaths({ env: { TENON_RUNTIME_HOME: join(root, 'runtime') }, homeDir: home, platform: 'linux' })
     const candidate = await candidateCopy(root)
-    const hostCache = join(home, '.codex', 'plugins', 'cache', 'tenon', 'tenon', '1.0.0')
+    const pluginManifest = JSON.parse(
+      await readFile(join(candidate, '.codex-plugin', 'plugin.json'), 'utf8'),
+    ) as { version: string }
+    const hostCache = join(home, '.codex', 'plugins', 'cache', 'tenon', 'tenon', pluginManifest.version)
     await cp(candidate, hostCache, { recursive: true, preserveTimestamps: false })
     const activation = await new RuntimeReleaseStore({ paths }).stageAndActivate(candidate, 'codex')
     const launchers = await writeStableLaunchers(paths, home)

@@ -1,6 +1,10 @@
 import { join } from 'node:path'
-import type { SkillTable } from '@tenon/kernel'
+import { PRODUCT_IDENTITY, type SkillTable } from '@tenon/kernel'
 import type { DoctorProbes } from '../deps.js'
+import {
+  LEGACY_PLUGIN_IDENTITY,
+  TENON_PLUGIN_IDENTITY,
+} from '../migration/legacy-tenon-migration.js'
 import { readSkillSources, type SkillSource } from '../skillSources.js'
 import { green, yellow, red, type DoctorCheck } from './doctor-check.js'
 
@@ -101,7 +105,7 @@ export function checkSkills(p: DoctorProbes): [DoctorCheck, DoctorCheck] {
 }
 
 const CODEX_PROJECT_CONTRACT_SKILLS = [
-  'pipeline',
+  PRODUCT_IDENTITY.entrySkill,
   'tenon-open',
   'tenon-explore',
   'tenon-spec',
@@ -125,6 +129,30 @@ const CODEX_PROJECT_CONTRACT_SKILLS = [
 ] as const
 
 export function checkCodexProjectSkills(p: DoctorProbes): DoctorCheck {
+  if (p.codexHostPluginIds !== undefined) {
+    const hostPluginIds = p.codexHostPluginIds()
+    if (hostPluginIds === null) {
+      return red(
+        'integration:codex-project-skills',
+        'Codex plugin inventory 不可用或响应畸形，无法证明唯一工作流插件身份',
+        '先运行 codex plugin list --json 修复宿主 inventory，再运行 tenon setup --codex -y',
+      )
+    }
+    if (hostPluginIds.has(LEGACY_PLUGIN_IDENTITY)) {
+      return red(
+        'integration:codex-project-skills',
+        'Codex 仍启用了会争用正常对话路由和 hooks 的旧工作流插件',
+        '运行 tenon setup --codex -y；安装器会在 Tenon 新会话证明后通过 Codex 官方插件管理器清理冲突登记',
+      )
+    }
+    if (!hostPluginIds.has(TENON_PLUGIN_IDENTITY)) {
+      return red(
+        'integration:codex-project-skills',
+        `Codex plugin inventory 中没有唯一 Tenon 登记 ${TENON_PLUGIN_IDENTITY}`,
+        '运行 tenon setup --codex -y，并新开会话加载当前 Tenon skills/hooks',
+      )
+    }
+  }
   if (p.codexSkillDiscovery !== undefined) {
     const discovery = p.codexSkillDiscovery()
     const native = discovery.selectedRoot !== undefined
@@ -152,7 +180,7 @@ export function checkCodexProjectSkills(p: DoctorProbes): DoctorCheck {
       const source = native ? `Selected Skill Root=${discovery.selectedRoot}` : `static root=${discovery.projectRoot}`
       return yellow(
         'integration:codex-project-skills',
-        `Codex 唯一发现根缺 ${missing.length} 个 pipeline skills：${missing.join('、')}（${source}；历史 cache 不算）`,
+        `Codex 唯一发现根缺 ${missing.length} 个 Tenon Skills：${missing.join('、')}（${source}；历史 cache 不算）`,
         native
           ? '运行 tenon setup --codex 重新校验完整插件'
           : '在无原生插件的宿主中重跑 static adapter；不要同时启用 native 与项目投影',
@@ -168,11 +196,11 @@ export function checkCodexProjectSkills(p: DoctorProbes): DoctorCheck {
     return native
       ? green(
           'integration:codex-project-skills',
-          `Codex contract skills 完整；Selected Skill Root=${discovery.selectedRoot}，无项目重复投影`,
+          `Codex contract Skills 完整；Selected Skill Root=${discovery.selectedRoot}，无项目重复投影`,
         )
       : green(
           'integration:codex-project-skills',
-          `Codex contract skills 完整；static-only Skill root=${discovery.projectRoot}`,
+          `Codex contract Skills 完整；static-only Skill root=${discovery.projectRoot}`,
         )
   }
 
@@ -188,12 +216,12 @@ export function checkCodexProjectSkills(p: DoctorProbes): DoctorCheck {
   if (missing.length === 0) {
     return green(
       'integration:codex-project-skills',
-      'Codex 可发现 pipeline/OpenSpec/设计/验证 contract skills 全部来自当前插件（normal-chat 可实际调用）',
+      'Codex 可发现的 Tenon/OpenSpec/设计/验证 contract Skills 全部来自当前插件（normal-chat 可实际调用）',
     )
   }
   return yellow(
     'integration:codex-project-skills',
-    `Codex 可发现的 pipeline skills 缺 ${missing.length} 个：${missing.join('、')}（全局 cache 不算）`,
+    `Codex 可发现的 Tenon Skills 缺 ${missing.length} 个：${missing.join('、')}（全局 cache 不算）`,
     '运行 tenon setup --codex 重新安装并校验完整插件；若使用非原生 adapter，再加 --target <项目目录>',
   )
 }

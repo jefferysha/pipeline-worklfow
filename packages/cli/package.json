@@ -1,9 +1,13 @@
 {
   "name": "@tenon/cli",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "module",
-  "bin": { "tenon": "dist/tenon.mjs" },
-  "engines": { "node": ">=22" },
+  "bin": {
+    "tenon": "dist/tenon.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  },
   "dependencies": {
     "@tenon/automation": "*",
     "@tenon/channel": "*",

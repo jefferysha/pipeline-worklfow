@@ -69,6 +69,8 @@ export interface DoctorProbes {
    * 缺省 undefined 时 doctor 把 Codex 就绪面标为 yellow，而不是把缓存误报为可调用。
    */
   codexProjectSkillNames?: () => ReadonlySet<string>
+  /** Enabled Codex plugin ids from `codex plugin list --json`; null means inventory unavailable. */
+  codexHostPluginIds?: () => ReadonlySet<string> | null
   /** Selected-root aware discovery used to diagnose duplicate projections and shadow conflicts. */
   codexSkillDiscovery?: () => CodexSkillDiscovery
   /**

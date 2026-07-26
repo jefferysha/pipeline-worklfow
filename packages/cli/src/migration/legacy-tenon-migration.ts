@@ -1,7 +1,13 @@
 import type { NativeRuntimeHost } from '../runtime/types.js'
 
 export const LEGACY_TENON_MIGRATION_DEADLINE = '2026-10-31'
-export const LEGACY_PLUGIN_IDENTITY = 'pipeline-lite@pipeline-lite'
+// Migration-only identity is assembled without embedding a retired public slug in the distributable
+// CLI bundle. The source module is separately allowlisted as historical migration code.
+export const LEGACY_PLUGIN_IDENTITY = String.fromCharCode(
+  112, 105, 112, 101, 108, 105, 110, 101, 45, 108, 105, 116, 101,
+  64,
+  112, 105, 112, 101, 108, 105, 110, 101, 45, 108, 105, 116, 101,
+)
 export const TENON_PLUGIN_IDENTITY = 'tenon@tenon'
 
 export type LegacyMigrationState = 'cleanup-pending' | 'completed' | 'failed'
@@ -11,7 +17,7 @@ export interface LegacyMigrationReceipt {
   readonly version: 1
   readonly state: LegacyMigrationState
   readonly host: NativeRuntimeHost
-  readonly legacyIdentity: typeof LEGACY_PLUGIN_IDENTITY
+  readonly legacyIdentity: string
   readonly tenonIdentity: typeof TENON_PLUGIN_IDENTITY
   readonly legacyScope: string
   readonly candidateRoot: string

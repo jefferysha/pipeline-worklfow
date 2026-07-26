@@ -1,0 +1,4 @@
+{"ts":"2026-07-26T13:53:31Z","kind":"init"}
+{"ts":"2026-07-26T13:53:31Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated"}
+{"ts":"2026-07-26T13:53:32Z","kind":"tool","raw":"CodexSkillRead: simple-task"}
+{"ts":"2026-07-26T13:53:51Z","kind":"transition","from":"change","to":"escalated","raw":"scope-expanded","transitionRecordId":"aebd31d5-7352-458b-95bf-4cce9cf5d923"}

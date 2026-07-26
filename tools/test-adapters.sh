@@ -305,6 +305,12 @@ cx_inst="$ADAPTERS/codex/install.sh"
 if [ -f "$cx_inst" ]; then
   cx_target="$TMP/codex-static-skills"
   if bash "$cx_inst" --static --target "$cx_target" --codex-home "$TMP/codex-static-home" --yes >/dev/null 2>&1; then
+    assert_contains "codex static install: managed block 调用唯一 Tenon 入口" \
+      "$(cat "$cx_target/AGENTS.md" 2>/dev/null)" 'tenon:tenon'
+    assert_not_contains "codex static install: managed block 不保留旧入口命令" \
+      "$(cat "$cx_target/AGENTS.md" 2>/dev/null)" 'tenon:pipeline'
+    assert_contains "codex static install: managed block 使用唯一 Tenon CLI" \
+      "$(cat "$cx_target/AGENTS.md" 2>/dev/null)" 'tenon status'
     for skill in tenon tenon-open tenon-explore tenon-spec tenon-build tenon-verify tenon-ship tenon-archive simple-task brainstorming writing-plans verification-before-completion openspec-propose openspec-apply-change; do
       assert_file "codex static install: 投递 $skill skill" "$cx_target/.agents/skills/$skill/SKILL.md"
     done
@@ -323,6 +329,19 @@ if [ -f "$cx_inst" ]; then
     fi
   else
     bad "codex static install: 完成 AGENTS 与项目 skills 投递" "安装命令失败"
+  fi
+
+  # malformed marker topology must fail closed before awk can consume user-owned content.
+  cx_bad_marker="$TMP/codex-bad-marker"
+  mkdir -p "$cx_bad_marker"
+  printf '%s\n%s\n' '<!-- PIPELINE:CODEX:START -->' 'user content after unmatched marker' > "$cx_bad_marker/AGENTS.md"
+  cx_bad_before="$(cat "$cx_bad_marker/AGENTS.md")"
+  if bash "$cx_inst" --static --target "$cx_bad_marker" --codex-home "$TMP/codex-bad-marker-home" --yes >/dev/null 2>&1; then
+    bad "codex static install: 缺失 END marker 时失败关闭" "安装器错误接受了不完整哨兵块"
+  else
+    [ "$(cat "$cx_bad_marker/AGENTS.md")" = "$cx_bad_before" ] \
+      && ok "codex static install: 缺失 END marker 时保留全部用户内容" \
+      || bad "codex static install: 缺失 END marker 时保留全部用户内容" "用户内容被改写"
   fi
 
   # 原生插件和 static project projection 必须互斥。selected root 由宿主/稳定 launcher

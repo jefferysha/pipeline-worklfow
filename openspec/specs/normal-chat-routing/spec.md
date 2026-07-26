@@ -1,5 +1,9 @@
 # Normal-chat workflow routing
 
+## Purpose
+
+定义正常对话如何区分讨论与执行、如何选择 Track/Workflow，以及如何在不复用旧 Change 或隐式默认项目的前提下创建受治理的流水线现场。
+
 ## Requirements
 
 ### Requirement: normal chat preserves effective Track workflow bindings
@@ -31,10 +35,24 @@ Track/workflow pairs.
 A project whose effective routable Tracks are all built-in and bound to `default` SHALL continue
 to dispatch the winning Track and default workflow without a selection question.
 
+#### Scenario: built-in Track routes directly
+
+- **GIVEN** a project only exposes built-in routable Tracks bound to `default`
+- **WHEN** a new executable prompt has one highest-scoring Track
+- **THEN** the router selects that Track with workflow `default`
+- **AND** Change creation does not ask the user to choose an equivalent Track/workflow pair.
+
 ### Requirement: cache incompatibility fails closed
 
 The hook SHALL reject a cache that lacks the workflow binding required by its current schema and
 regenerate it on the cold path; it SHALL not guess or silently fall back to an old value.
+
+#### Scenario: stale routing cache is regenerated
+
+- **GIVEN** the cached Track payload predates the schema that requires a workflow binding
+- **WHEN** the normal-chat hook reads that cache
+- **THEN** the hook rejects the incompatible payload and regenerates it from canonical project data
+- **AND** it does not substitute workflow `default` for the missing field.
 
 ### Requirement: Every Workflow SHALL have a neutral executable entry
 

@@ -3030,12 +3030,12 @@ var require_commander = __commonJS({
 });
 
 // packages/cli/src/main.ts
-import { execFile as execFile4 } from "node:child_process";
+import { execFile as execFile4, execFileSync as execFileSync2 } from "node:child_process";
 import { createHash as createHash31 } from "node:crypto";
 import { accessSync as accessSync5, constants as fsConstants5, readdirSync as readdirSync9, readFileSync as readFileSync27, statSync as statSync8 } from "node:fs";
 import { readFile as readFile36, rm as rm13, stat as stat13, writeFile as writeFile15 } from "node:fs/promises";
 import { homedir as homedir20 } from "node:os";
-import { dirname as dirname21, join as join78 } from "node:path";
+import { dirname as dirname22, join as join79 } from "node:path";
 import { fileURLToPath as fileURLToPath3 } from "node:url";
 
 // node_modules/commander/esm.mjs
@@ -3176,6 +3176,7 @@ var PRODUCT_IDENTITY = {
   dashboardLauncher: "tenon-dashboard",
   plugin: "tenon",
   marketplace: "tenon",
+  entrySkill: "tenon",
   skillPrefix: "tenon-",
   runtimeApp: "tenon",
   environmentPrefix: "TENON_",
@@ -31527,6 +31528,38 @@ var red = (id, detail, hint) => ({
 // packages/cli/src/commands/doctor-skills.ts
 import { join as join45 } from "node:path";
 
+// packages/cli/src/migration/legacy-tenon-migration.ts
+var LEGACY_PLUGIN_IDENTITY = String.fromCharCode(
+  112,
+  105,
+  112,
+  101,
+  108,
+  105,
+  110,
+  101,
+  45,
+  108,
+  105,
+  116,
+  101,
+  64,
+  112,
+  105,
+  112,
+  101,
+  108,
+  105,
+  110,
+  101,
+  45,
+  108,
+  105,
+  116,
+  101
+);
+var TENON_PLUGIN_IDENTITY = "tenon@tenon";
+
 // packages/cli/src/skillSources.ts
 import { readFileSync as readFileSync18 } from "node:fs";
 import { dirname as dirname8, join as join44 } from "node:path";
@@ -31637,7 +31670,7 @@ function checkSkills(p) {
   return [mandatory, recommended];
 }
 var CODEX_PROJECT_CONTRACT_SKILLS = [
-  "pipeline",
+  PRODUCT_IDENTITY.entrySkill,
   "tenon-open",
   "tenon-explore",
   "tenon-spec",
@@ -31660,6 +31693,30 @@ var CODEX_PROJECT_CONTRACT_SKILLS = [
   "e2e-testing"
 ];
 function checkCodexProjectSkills(p) {
+  if (p.codexHostPluginIds !== void 0) {
+    const hostPluginIds = p.codexHostPluginIds();
+    if (hostPluginIds === null) {
+      return red(
+        "integration:codex-project-skills",
+        "Codex plugin inventory \u4E0D\u53EF\u7528\u6216\u54CD\u5E94\u7578\u5F62\uFF0C\u65E0\u6CD5\u8BC1\u660E\u552F\u4E00\u5DE5\u4F5C\u6D41\u63D2\u4EF6\u8EAB\u4EFD",
+        "\u5148\u8FD0\u884C codex plugin list --json \u4FEE\u590D\u5BBF\u4E3B inventory\uFF0C\u518D\u8FD0\u884C tenon setup --codex -y"
+      );
+    }
+    if (hostPluginIds.has(LEGACY_PLUGIN_IDENTITY)) {
+      return red(
+        "integration:codex-project-skills",
+        "Codex \u4ECD\u542F\u7528\u4E86\u4F1A\u4E89\u7528\u6B63\u5E38\u5BF9\u8BDD\u8DEF\u7531\u548C hooks \u7684\u65E7\u5DE5\u4F5C\u6D41\u63D2\u4EF6",
+        "\u8FD0\u884C tenon setup --codex -y\uFF1B\u5B89\u88C5\u5668\u4F1A\u5728 Tenon \u65B0\u4F1A\u8BDD\u8BC1\u660E\u540E\u901A\u8FC7 Codex \u5B98\u65B9\u63D2\u4EF6\u7BA1\u7406\u5668\u6E05\u7406\u51B2\u7A81\u767B\u8BB0"
+      );
+    }
+    if (!hostPluginIds.has(TENON_PLUGIN_IDENTITY)) {
+      return red(
+        "integration:codex-project-skills",
+        `Codex plugin inventory \u4E2D\u6CA1\u6709\u552F\u4E00 Tenon \u767B\u8BB0 ${TENON_PLUGIN_IDENTITY}`,
+        "\u8FD0\u884C tenon setup --codex -y\uFF0C\u5E76\u65B0\u5F00\u4F1A\u8BDD\u52A0\u8F7D\u5F53\u524D Tenon skills/hooks"
+      );
+    }
+  }
   if (p.codexSkillDiscovery !== void 0) {
     const discovery = p.codexSkillDiscovery();
     const native = discovery.selectedRoot !== void 0;
@@ -31686,7 +31743,7 @@ function checkCodexProjectSkills(p) {
       const source = native ? `Selected Skill Root=${discovery.selectedRoot}` : `static root=${discovery.projectRoot}`;
       return yellow(
         "integration:codex-project-skills",
-        `Codex \u552F\u4E00\u53D1\u73B0\u6839\u7F3A ${missing4.length} \u4E2A pipeline skills\uFF1A${missing4.join("\u3001")}\uFF08${source}\uFF1B\u5386\u53F2 cache \u4E0D\u7B97\uFF09`,
+        `Codex \u552F\u4E00\u53D1\u73B0\u6839\u7F3A ${missing4.length} \u4E2A Tenon Skills\uFF1A${missing4.join("\u3001")}\uFF08${source}\uFF1B\u5386\u53F2 cache \u4E0D\u7B97\uFF09`,
         native ? "\u8FD0\u884C tenon setup --codex \u91CD\u65B0\u6821\u9A8C\u5B8C\u6574\u63D2\u4EF6" : "\u5728\u65E0\u539F\u751F\u63D2\u4EF6\u7684\u5BBF\u4E3B\u4E2D\u91CD\u8DD1 static adapter\uFF1B\u4E0D\u8981\u540C\u65F6\u542F\u7528 native \u4E0E\u9879\u76EE\u6295\u5F71"
       );
     }
@@ -31699,10 +31756,10 @@ function checkCodexProjectSkills(p) {
     }
     return native ? green(
       "integration:codex-project-skills",
-      `Codex contract skills \u5B8C\u6574\uFF1BSelected Skill Root=${discovery.selectedRoot}\uFF0C\u65E0\u9879\u76EE\u91CD\u590D\u6295\u5F71`
+      `Codex contract Skills \u5B8C\u6574\uFF1BSelected Skill Root=${discovery.selectedRoot}\uFF0C\u65E0\u9879\u76EE\u91CD\u590D\u6295\u5F71`
     ) : green(
       "integration:codex-project-skills",
-      `Codex contract skills \u5B8C\u6574\uFF1Bstatic-only Skill root=${discovery.projectRoot}`
+      `Codex contract Skills \u5B8C\u6574\uFF1Bstatic-only Skill root=${discovery.projectRoot}`
     );
   }
   if (p.codexProjectSkillNames === void 0) {
@@ -31717,12 +31774,12 @@ function checkCodexProjectSkills(p) {
   if (missing3.length === 0) {
     return green(
       "integration:codex-project-skills",
-      "Codex \u53EF\u53D1\u73B0 pipeline/OpenSpec/\u8BBE\u8BA1/\u9A8C\u8BC1 contract skills \u5168\u90E8\u6765\u81EA\u5F53\u524D\u63D2\u4EF6\uFF08normal-chat \u53EF\u5B9E\u9645\u8C03\u7528\uFF09"
+      "Codex \u53EF\u53D1\u73B0\u7684 Tenon/OpenSpec/\u8BBE\u8BA1/\u9A8C\u8BC1 contract Skills \u5168\u90E8\u6765\u81EA\u5F53\u524D\u63D2\u4EF6\uFF08normal-chat \u53EF\u5B9E\u9645\u8C03\u7528\uFF09"
     );
   }
   return yellow(
     "integration:codex-project-skills",
-    `Codex \u53EF\u53D1\u73B0\u7684 pipeline skills \u7F3A ${missing3.length} \u4E2A\uFF1A${missing3.join("\u3001")}\uFF08\u5168\u5C40 cache \u4E0D\u7B97\uFF09`,
+    `Codex \u53EF\u53D1\u73B0\u7684 Tenon Skills \u7F3A ${missing3.length} \u4E2A\uFF1A${missing3.join("\u3001")}\uFF08\u5168\u5C40 cache \u4E0D\u7B97\uFF09`,
     "\u8FD0\u884C tenon setup --codex \u91CD\u65B0\u5B89\u88C5\u5E76\u6821\u9A8C\u5B8C\u6574\u63D2\u4EF6\uFF1B\u82E5\u4F7F\u7528\u975E\u539F\u751F adapter\uFF0C\u518D\u52A0 --target <\u9879\u76EE\u76EE\u5F55>"
   );
 }
@@ -44002,6 +44059,38 @@ var TENON_HOSTS = [
 var TENON_MARKETPLACE_SOURCE = "jefferysha/tenon";
 var TENON_MARKETPLACE_NAME = "tenon";
 var TENON_PLUGIN_NAME = "tenon";
+function parseHostPluginInventory(host, stdout) {
+  let parsed;
+  try {
+    parsed = JSON.parse(stdout);
+  } catch {
+    return null;
+  }
+  const entries = host === "codex" ? typeof parsed === "object" && parsed !== null && !Array.isArray(parsed) && Array.isArray(parsed.installed) ? parsed.installed : null : Array.isArray(parsed) ? parsed : null;
+  if (entries === null) return null;
+  const ids = /* @__PURE__ */ new Set();
+  let tenonRoot = null;
+  for (const entry of entries) {
+    if (typeof entry !== "object" || entry === null || Array.isArray(entry)) return null;
+    const item2 = entry;
+    const id = host === "codex" ? typeof item2.pluginId === "string" ? item2.pluginId : typeof item2.name === "string" && typeof item2.marketplaceName === "string" ? `${item2.name}@${item2.marketplaceName}` : null : typeof item2.id === "string" ? item2.id : null;
+    if (id === null) return null;
+    if (item2.enabled !== false) ids.add(id);
+    if (host === "codex" && item2.name === TENON_PLUGIN_NAME && item2.marketplaceName === TENON_MARKETPLACE_NAME && typeof item2.source?.path === "string") {
+      tenonRoot = item2.source.path;
+    }
+    if (host === "claude" && id === `${TENON_PLUGIN_NAME}@${TENON_MARKETPLACE_NAME}` && typeof item2.installPath === "string") {
+      tenonRoot = item2.installPath;
+    }
+  }
+  return { enabledIds: ids, tenonRoot };
+}
+function enabledHostPluginIds(host, stdout) {
+  return parseHostPluginInventory(host, stdout)?.enabledIds ?? null;
+}
+function nativePluginRemovalPlan(host, pluginId) {
+  return host === "codex" ? [{ cmd: "codex", args: ["plugin", "remove", pluginId, "--json"] }] : [{ cmd: "claude", args: ["plugin", "uninstall", pluginId, "--scope", "user"] }];
+}
 function selectPipelineHost(flags) {
   const selected = TENON_HOSTS.filter((host2) => flags[host2] === true);
   const host = selected[0];
@@ -44036,33 +44125,6 @@ function nativeInstallPlan(host) {
     { cmd: "claude", args: ["plugin", "install", `${TENON_PLUGIN_NAME}@${TENON_MARKETPLACE_NAME}`] },
     { cmd: "claude", args: ["plugin", "list", "--json"] }
   ];
-}
-function installedPipelineRoot(host, stdout) {
-  let parsed;
-  try {
-    parsed = JSON.parse(stdout);
-  } catch {
-    return null;
-  }
-  if (host === "codex") {
-    const installed = typeof parsed === "object" && parsed !== null && !Array.isArray(parsed) ? parsed.installed : void 0;
-    if (!Array.isArray(installed)) return null;
-    for (const entry of installed) {
-      if (typeof entry !== "object" || entry === null || Array.isArray(entry)) continue;
-      const item2 = entry;
-      if (item2.name === TENON_PLUGIN_NAME && item2.marketplaceName === TENON_MARKETPLACE_NAME && typeof item2.source?.path === "string") return item2.source.path;
-    }
-    return null;
-  }
-  if (!Array.isArray(parsed)) return null;
-  for (const entry of parsed) {
-    if (typeof entry !== "object" || entry === null || Array.isArray(entry)) continue;
-    const item2 = entry;
-    if (item2.id === `${TENON_PLUGIN_NAME}@${TENON_MARKETPLACE_NAME}` && typeof item2.installPath === "string") {
-      return item2.installPath;
-    }
-  }
-  return null;
 }
 
 // packages/cli/src/commands/setupEnvironment.ts
@@ -44270,7 +44332,7 @@ function migrateLegacyCodexHooks(deps, env) {
 }
 
 // packages/cli/src/commands/setupHost.ts
-import { join as join72 } from "node:path";
+import { join as join73 } from "node:path";
 
 // packages/cli/src/commands/release-coordinator.ts
 import { join as join70 } from "node:path";
@@ -44530,12 +44592,154 @@ async function migrateLegacyProjectRegistry(input) {
   });
 }
 
+// packages/cli/src/commands/host-plugin-convergence.ts
+import { dirname as dirname18, join as join72 } from "node:path";
+function hostPluginConvergencePaths(env, host) {
+  const paths = resolveRuntimePaths({ homeDir: env.homeDir(), env: env.runtimeEnv() });
+  return {
+    receiptPath: join72(paths.migrationsRoot, "host-plugin-convergence", `${host}.json`),
+    sessionProofPath: join72(paths.stateRoot, "migration", "tenon-session-loaded")
+  };
+}
+function isReleaseId(value) {
+  return typeof value === "string" && /^sha256-[a-f0-9]{64}$/.test(value);
+}
+function parseReceipt3(raw, host) {
+  let value;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
+  const receipt = value;
+  if (receipt.version !== 1 || receipt.state !== "cleanup-pending" && receipt.state !== "completed" || receipt.host !== host || receipt.conflictPluginId !== LEGACY_PLUGIN_IDENTITY || !isReleaseId(receipt.releaseId) || typeof receipt.candidateRoot !== "string" || receipt.candidateRoot === "" || typeof receipt.updatedAt !== "string" || receipt.updatedAt === "") return null;
+  return receipt;
+}
+function readHostPluginConvergenceReceipt(env, host) {
+  const { receiptPath } = hostPluginConvergencePaths(env, host);
+  const raw = env.readText(receiptPath);
+  if (raw === void 0) return { state: "none" };
+  const receipt = parseReceipt3(raw, host);
+  return receipt === null ? { state: "invalid", detail: `\u8FC1\u79FB receipt \u975E\u6CD5\uFF1A${receiptPath}` } : { state: "receipt", receipt };
+}
+function parseSessionProof(raw) {
+  if (raw === void 0) return null;
+  const fields = /* @__PURE__ */ new Map();
+  for (const line of raw.split("\n")) {
+    if (line === "") continue;
+    const separator = line.indexOf("=");
+    if (separator <= 0 || fields.has(line.slice(0, separator))) return null;
+    fields.set(line.slice(0, separator), line.slice(separator + 1));
+  }
+  const host = fields.get("host");
+  const releaseId = fields.get("release_id");
+  if (fields.get("version") !== "2" || host !== "codex" && host !== "claude" || !isReleaseId(releaseId)) return null;
+  return { host, releaseId };
+}
+function writeReceipt(deps, env, receipt) {
+  const { receiptPath } = hostPluginConvergencePaths(env, receipt.host);
+  try {
+    env.mkdirp(dirname18(receiptPath));
+    env.writeText(receiptPath, `${JSON.stringify(receipt, null, 2)}
+`);
+    return true;
+  } catch (error) {
+    deps.io.err(
+      `ERROR: \u65E0\u6CD5\u6301\u4E45\u5316\u5BBF\u4E3B\u63D2\u4EF6\u6536\u655B receipt\uFF1B\u4E3A\u907F\u514D\u65E0\u8BC1\u636E\u6E05\u7406\uFF0C\u51B2\u7A81\u767B\u8BB0\u4FDD\u6301\u4E0D\u53D8\uFF1A${error instanceof Error ? error.message : String(error)}`
+    );
+    return false;
+  }
+}
+function recordPendingHostPluginConflict(deps, env, host, conflictPluginIds, activation, candidateRoot) {
+  if (!conflictPluginIds.has(LEGACY_PLUGIN_IDENTITY)) return true;
+  const receipt = {
+    version: 1,
+    state: "cleanup-pending",
+    host,
+    conflictPluginId: LEGACY_PLUGIN_IDENTITY,
+    releaseId: activation.release.releaseId,
+    candidateRoot,
+    updatedAt: deps.clock()
+  };
+  if (!writeReceipt(deps, env, receipt)) return false;
+  deps.io.out(
+    "[setup] Tenon \u5019\u9009\u4E0E managed runtime \u5DF2\u9A8C\u8BC1\uFF1B\u65E7\u767B\u8BB0\u6682\u65F6\u4FDD\u7559\u3002\u8BF7\u542F\u52A8\u65B0\u5BBF\u4E3B\u4F1A\u8BDD\uFF0C\u8BA9\u5F53\u524D release \u7684 SessionStart \u5199\u5165\u8BC1\u660E\u540E\u518D\u6B21\u8FD0\u884C setup/update \u5B8C\u6210\u5B98\u65B9\u6E05\u7406\u3002"
+  );
+  return true;
+}
+function inventoryCommand(host) {
+  return nativeInstallPlan(host).at(-1);
+}
+function commandText(cmd, args) {
+  return [cmd, ...args].join(" ");
+}
+async function finalizePendingHostPluginConflict(deps, env, installer, host, receipt) {
+  if (receipt.state === "completed") return { state: "none" };
+  const inspection = await installer.inspect({
+    homeDir: env.homeDir(),
+    env: env.runtimeEnv()
+  });
+  if (!inspection.activeValid || inspection.selection.activeRelease !== receipt.releaseId || inspection.active?.releaseId !== receipt.releaseId) {
+    return {
+      state: "failed",
+      detail: "cleanup-pending receipt \u4E0E\u5F53\u524D\u5DF2\u9A8C\u8BC1 managed runtime \u4E0D\u4E00\u81F4\uFF1B\u4FDD\u7559\u51B2\u7A81\u767B\u8BB0"
+    };
+  }
+  const { sessionProofPath } = hostPluginConvergencePaths(env, host);
+  const proof = parseSessionProof(env.readText(sessionProofPath));
+  if (proof === null || proof.host !== host || proof.releaseId !== receipt.releaseId) {
+    deps.io.out("[setup] \u7B49\u5F85\u65B0\u5BBF\u4E3B\u4F1A\u8BDD\u52A0\u8F7D\u5F53\u524D Tenon release\uFF1B\u51B2\u7A81\u767B\u8BB0\u5C1A\u672A\u6E05\u7406\u3002");
+    return { state: "waiting" };
+  }
+  const list = inventoryCommand(host);
+  if (list === void 0) return { state: "failed", detail: "\u5BBF\u4E3B\u5B89\u88C5\u8BA1\u5212\u7F3A\u5C11 inventory \u547D\u4EE4" };
+  const beforeResult = env.runCommand(list.cmd, [...list.args]);
+  const before = beforeResult.code === 0 ? parseHostPluginInventory(host, beforeResult.stdout) : null;
+  if (before === null) {
+    return { state: "failed", detail: "\u5BBF\u4E3B plugin inventory \u4E0D\u53EF\u7528\u6216\u54CD\u5E94\u7578\u5F62\uFF1B\u672A\u6267\u884C\u6E05\u7406" };
+  }
+  if (!before.enabledIds.has(TENON_PLUGIN_IDENTITY)) {
+    return { state: "failed", detail: "\u5BBF\u4E3B inventory \u672A\u8BC1\u660E Tenon \u767B\u8BB0\u4ECD\u542F\u7528\uFF1B\u672A\u6267\u884C\u6E05\u7406" };
+  }
+  if (before.enabledIds.has(receipt.conflictPluginId)) {
+    for (const item2 of nativePluginRemovalPlan(host, receipt.conflictPluginId)) {
+      deps.io.out(`[setup] \u65B0\u4F1A\u8BDD\u5DF2\u8BC1\u660E Tenon \u53EF\u7528\uFF1B\u901A\u8FC7\u5BBF\u4E3B\u63D2\u4EF6\u7BA1\u7406\u5668\u6E05\u7406\uFF1A$ ${commandText(item2.cmd, item2.args)}`);
+      const result = env.runCommand(item2.cmd, [...item2.args]);
+      if (result.code !== 0) {
+        return {
+          state: "failed",
+          detail: result.stderr.trim() || result.stdout.trim() || `\u9000\u51FA\u7801 ${result.code}`
+        };
+      }
+    }
+  }
+  const afterResult = env.runCommand(list.cmd, [...list.args]);
+  const after = afterResult.code === 0 ? parseHostPluginInventory(host, afterResult.stdout) : null;
+  if (after === null || after.enabledIds.has(receipt.conflictPluginId) || !after.enabledIds.has(TENON_PLUGIN_IDENTITY)) {
+    return {
+      state: "failed",
+      detail: "\u5B98\u65B9\u6E05\u7406\u540E\u7684\u5BBF\u4E3B inventory \u672A\u6536\u655B\u4E3A\u552F\u4E00 Tenon \u767B\u8BB0"
+    };
+  }
+  const completed = {
+    ...receipt,
+    state: "completed",
+    updatedAt: deps.clock()
+  };
+  if (!writeReceipt(deps, env, completed)) {
+    return { state: "failed", detail: "\u5BBF\u4E3B\u5DF2\u6E05\u7406\u4F46 completed receipt \u6301\u4E45\u5316\u5931\u8D25" };
+  }
+  deps.io.out("[setup] \u5BBF\u4E3B\u63D2\u4EF6 inventory \u5DF2\u6536\u655B\u4E3A\u552F\u4E00 Tenon \u5DE5\u4F5C\u6D41\u8EAB\u4EFD\u3002");
+  return { state: "completed" };
+}
+
 // packages/cli/src/commands/setupHost.ts
 function verifyPackagedAssets(deps, env, root, dryRun, silent = false) {
-  const command = [join72(root, "tools", "verify-skills.sh"), "--quiet", "--root", root];
+  const command = [join73(root, "tools", "verify-skills.sh"), "--quiet", "--root", root];
   if (!silent) deps.io.out(`[setup] \u63D2\u4EF6\u8D44\u4EA7\u6821\u9A8C: bash ${command.join(" ")}`);
   if (dryRun) return 0;
-  if (!env.pathExists(join72(root, "runtime", "tenon-bootstrap.mjs"))) {
+  if (!env.pathExists(join73(root, "runtime", "tenon-bootstrap.mjs"))) {
     if (!silent) deps.io.err("ERROR: \u63D2\u4EF6\u8D44\u4EA7\u6821\u9A8C\u5931\u8D25\uFF1A\u7F3A\u5C11 runtime/tenon-bootstrap.mjs\uFF08\u8BE5 marketplace release \u4E0D\u662F\u5B8C\u6574\u53EF\u5B89\u88C5\u5305\uFF09");
     return 1;
   }
@@ -44547,37 +44751,51 @@ function verifyPackagedAssets(deps, env, root, dryRun, silent = false) {
   if (!silent) deps.io.err(`ERROR: \u63D2\u4EF6\u8D44\u4EA7\u6821\u9A8C\u5931\u8D25\uFF1A${result.stderr.trim() || result.stdout.trim() || `\u9000\u51FA\u7801 ${result.code}`}`);
   return 1;
 }
-function commandText(cmd, args) {
+function commandText2(cmd, args) {
   return [cmd, ...args].join(" ");
 }
 function isDuplicateMarketplaceResult(result) {
   return /already|exists|registered|duplicate/i.test(`${result.stdout}
 ${result.stderr}`);
 }
+var NativePluginInventoryError = class extends Error {
+  name = "NativePluginInventoryError";
+};
 function verifiedInstalledNativePlugin(deps, env, host) {
-  const inventoryCommand = nativeInstallPlan(host).at(-1);
-  if (inventoryCommand === void 0) return null;
-  deps.io.out(`[setup] $ ${commandText(inventoryCommand.cmd, inventoryCommand.args)}`);
-  const inventory = env.runCommand(inventoryCommand.cmd, [...inventoryCommand.args]);
+  const inventoryCommand2 = nativeInstallPlan(host).at(-1);
+  if (inventoryCommand2 === void 0) return null;
+  deps.io.out(`[setup] $ ${commandText2(inventoryCommand2.cmd, inventoryCommand2.args)}`);
+  const inventory = env.runCommand(inventoryCommand2.cmd, [...inventoryCommand2.args]);
   if (inventory.code !== 0) return null;
-  const root = installedPipelineRoot(host, inventory.stdout);
+  const parsed = parseHostPluginInventory(host, inventory.stdout);
+  if (parsed === null) throw new NativePluginInventoryError("\u5BBF\u4E3B plugin inventory \u54CD\u5E94\u7578\u5F62");
+  const root = parsed.tenonRoot;
   if (root === null) return null;
   if (verifyPackagedAssets(deps, env, root, false, true) !== 0) {
     deps.io.out(`[setup] ${hostFlag(host)} \u5DF2\u767B\u8BB0\u7684 tenon \u4E0D\u5B8C\u6574\u6216\u672A\u901A\u8FC7\u6821\u9A8C\uFF1B\u5C06\u91CD\u65B0\u5B89\u88C5\u6B63\u5F0F release\u3002`);
     return null;
   }
   deps.io.out(`[setup] ${hostFlag(host)} \u5DF2\u6709\u5B8C\u6574\u4E14\u5DF2\u9A8C\u8BC1\u7684 tenon\uFF1B\u590D\u7528\u5BBF\u4E3B\u767B\u8BB0\u7684\u5B89\u88C5\u3002`);
-  return { root, verified: true };
+  return { root, verified: true, enabledIds: parsed.enabledIds };
 }
 function installNativePlugin(deps, env, host) {
-  const existing = verifiedInstalledNativePlugin(deps, env, host);
+  let existing;
+  try {
+    existing = verifiedInstalledNativePlugin(deps, env, host);
+  } catch (error) {
+    if (error instanceof NativePluginInventoryError) {
+      deps.io.err(`ERROR: ${error.message}\uFF1B\u672A\u6267\u884C\u5B89\u88C5\u6216\u6E05\u7406\u3002`);
+      return null;
+    }
+    throw error;
+  }
   if (existing !== null) return existing;
   const plan = nativeInstallPlan(host);
   let inventory = "";
   for (let index = 0; index < plan.length; index += 1) {
     const item2 = plan[index];
     if (!item2) continue;
-    deps.io.out(`[setup] $ ${commandText(item2.cmd, item2.args)}`);
+    deps.io.out(`[setup] $ ${commandText2(item2.cmd, item2.args)}`);
     const result = env.runCommand(item2.cmd, [...item2.args]);
     if (result.stdout.trim() !== "") deps.io.out(result.stdout.trimEnd());
     if (result.code === 0) {
@@ -44589,31 +44807,35 @@ function installNativePlugin(deps, env, host) {
       continue;
     }
     if (index === 1) {
-      const inventoryCommand = plan.at(-1);
-      if (!inventoryCommand) {
+      const inventoryCommand2 = plan.at(-1);
+      if (!inventoryCommand2) {
         deps.io.err(`[setup] ${hostFlag(host)} \u5B89\u88C5\u8BA1\u5212\u7F3A\u5C11 inventory \u547D\u4EE4\u3002`);
         return null;
       }
-      const inventoryResult = env.runCommand(inventoryCommand.cmd, [...inventoryCommand.args]);
-      const existingRoot = inventoryResult.code === 0 ? installedPipelineRoot(host, inventoryResult.stdout) : null;
-      if (existingRoot !== null) {
+      const inventoryResult = env.runCommand(inventoryCommand2.cmd, [...inventoryCommand2.args]);
+      const parsed2 = inventoryResult.code === 0 ? parseHostPluginInventory(host, inventoryResult.stdout) : null;
+      if (parsed2?.tenonRoot !== null && parsed2?.tenonRoot !== void 0) {
         deps.io.out(`[setup] ${hostFlag(host)} \u5DF2\u6709 tenon\uFF0C\u590D\u7528\u5BBF\u4E3B\u767B\u8BB0\u7684\u5B89\u88C5\u3002`);
-        return { root: existingRoot, verified: false };
+        return { root: parsed2.tenonRoot, verified: false, enabledIds: parsed2.enabledIds };
       }
     }
     deps.io.err(
-      `ERROR: ${commandText(item2.cmd, item2.args)} \u5931\u8D25\uFF1A${result.stderr.trim() || result.stdout.trim() || `\u9000\u51FA\u7801 ${result.code}`}`
+      `ERROR: ${commandText2(item2.cmd, item2.args)} \u5931\u8D25\uFF1A${result.stderr.trim() || result.stdout.trim() || `\u9000\u51FA\u7801 ${result.code}`}`
     );
     return null;
   }
-  const root = installedPipelineRoot(host, inventory);
-  if (root === null) {
+  const parsed = parseHostPluginInventory(host, inventory);
+  if (parsed === null) {
+    deps.io.err(`ERROR: ${hostFlag(host)} \u63D2\u4EF6\u6E05\u5355\u54CD\u5E94\u7578\u5F62\uFF1B\u672A\u5207\u6362 launcher\u3002`);
+    return null;
+  }
+  if (parsed.tenonRoot === null) {
     deps.io.err(`ERROR: ${hostFlag(host)} \u63D2\u4EF6\u6E05\u5355\u4E2D\u6CA1\u6709 tenon\uFF1B\u672A\u5207\u6362 launcher\u3002`);
     return null;
   }
-  return { root, verified: false };
+  return { root: parsed.tenonRoot, verified: false, enabledIds: parsed.enabledIds };
 }
-function publishManagedRuntime(deps, env, installer, candidateRoot, host, dashboardStarter, openDashboard) {
+function publishManagedRuntime(deps, env, installer, candidateRoot, host, dashboardStarter, openDashboard, afterReady) {
   const source = isNativePipelineHost(host) ? host : "adapter";
   return publishManagedRelease(
     deps,
@@ -44639,6 +44861,7 @@ function publishManagedRuntime(deps, env, installer, candidateRoot, host, dashbo
       return 1;
     }
     const { activation } = outcome;
+    if (afterReady && !afterReady(activation)) return 1;
     deps.io.out(`[setup] \u5DF2\u53D1\u5E03\u5DF2\u9A8C\u8BC1 runtime: ${activation.release.releaseId}\uFF08revision ${activation.selection.revision}\uFF09\u3002`);
     deps.io.out("[setup] \u7A33\u5B9A\u5165\u53E3\u5DF2\u5C31\u7EEA\uFF1A~/.local/bin/tenon \u4E0E ~/.local/bin/tenon-hook \u4E0D\u518D\u76F4\u8FDE marketplace checkout\u3002");
     return 0;
@@ -44652,7 +44875,7 @@ function cmdSetupHost(deps, host, opts, env = REAL_SETUP_ENV, installer = REAL_R
   if (opts.dryRun) {
     if (isNativePipelineHost(host)) {
       deps.io.out(`[setup] ${hostFlag(host)}:\u5C06\u5B89\u88C5\u672C\u4ED3 marketplace \u4E2D\u7684\u552F\u4E00 tenon \u63D2\u4EF6\u3002`);
-      for (const item2 of nativeInstallPlan(host)) deps.io.out(`[setup] $ ${commandText(item2.cmd, item2.args)}`);
+      for (const item2 of nativeInstallPlan(host)) deps.io.out(`[setup] $ ${commandText2(item2.cmd, item2.args)}`);
       deps.io.out("[setup] \u5C06\u7528\u5BBF\u4E3B\u63D2\u4EF6\u6E05\u5355\u89E3\u6790\u5019\u9009\u6839\uFF0C\u6821\u9A8C\u5E76\u539F\u5B50\u53D1\u5E03 managed runtime\uFF1B\u4E0D\u4F1A\u76F4\u8FDE\u53EF\u53D8 checkout\u3002");
       if (host === "codex") deps.io.out("[setup] \u5B89\u88C5\u540E\u9700\u5728 Codex \u8F93\u5165 /hooks \u5E76\u4FE1\u4EFB tenon\uFF0C\u6B63\u5E38\u5BF9\u8BDD\u8DEF\u7531\u624D\u4F1A\u542F\u7528\u3002");
     } else {
@@ -44665,15 +44888,45 @@ function cmdSetupHost(deps, host, opts, env = REAL_SETUP_ENV, installer = REAL_R
     return 0;
   }
   if (isNativePipelineHost(host)) {
-    const candidate = installNativePlugin(deps, env, host);
-    if (candidate === null) return 1;
-    const assetCode = candidate.verified ? 0 : verifyPackagedAssets(deps, env, candidate.root, false);
-    if (assetCode !== 0) return assetCode;
-    if (host === "codex") {
-      const migrationCode = migrateLegacyCodexHooks(deps, env);
-      if (migrationCode !== 0) return migrationCode;
-    }
-    return publishManagedRuntime(deps, env, installer, candidate.root, host, dashboardStarter, openDashboard).then(async (runtimeCode) => {
+    return (async () => {
+      const convergence = readHostPluginConvergenceReceipt(env, host);
+      if (convergence.state === "invalid") {
+        deps.io.err(`ERROR: ${convergence.detail}\uFF1B\u672A\u6267\u884C\u65B0\u7684 marketplace/runtime \u53D8\u66F4\u3002`);
+        return 1;
+      }
+      if (convergence.state === "receipt" && convergence.receipt.state === "cleanup-pending") {
+        const finalized = await finalizePendingHostPluginConflict(deps, env, installer, host, convergence.receipt);
+        if (finalized.state === "failed") {
+          deps.io.err(`ERROR: \u51B2\u7A81\u63D2\u4EF6\u5B98\u65B9\u6E05\u7406\u5931\u8D25\uFF1A${finalized.detail}`);
+          return 1;
+        }
+        return 0;
+      }
+      const candidate = installNativePlugin(deps, env, host);
+      if (candidate === null) return 1;
+      const assetCode = candidate.verified ? 0 : verifyPackagedAssets(deps, env, candidate.root, false);
+      if (assetCode !== 0) return assetCode;
+      if (host === "codex") {
+        const migrationCode = migrateLegacyCodexHooks(deps, env);
+        if (migrationCode !== 0) return migrationCode;
+      }
+      const runtimeCode = await publishManagedRuntime(
+        deps,
+        env,
+        installer,
+        candidate.root,
+        host,
+        dashboardStarter,
+        openDashboard,
+        (activation) => recordPendingHostPluginConflict(
+          deps,
+          env,
+          host,
+          candidate.enabledIds,
+          activation,
+          candidate.root
+        )
+      );
       if (runtimeCode !== 0) return runtimeCode;
       const migrateProjectRegistry = env.migrateProjectRegistry ?? migrateLegacyProjectRegistry;
       const migrated = await migrateProjectRegistry({
@@ -44690,14 +44943,14 @@ function cmdSetupHost(deps, host, opts, env = REAL_SETUP_ENV, installer = REAL_R
       }
       if (host === "codex") printCodexHookTrust(deps);
       return configureAutoUpdate(deps, env, host, opts.autoUpdate === true);
-    });
+    })();
   } else {
     const root = resolvePipelineRoot(env);
     const assetCode = verifyPackagedAssets(deps, env, root, false);
     if (assetCode !== 0) return assetCode;
     return publishManagedRuntime(deps, env, installer, root, host, dashboardStarter, openDashboard).then((runtimeCode) => {
       if (runtimeCode !== 0) return runtimeCode;
-      const adapter = join72(root, "adapters", "install.sh");
+      const adapter = join73(root, "adapters", "install.sh");
       const args = [adapter, hostFlag(host), "--target", opts.target ?? deps.cwd, "--yes"];
       deps.io.out(`[setup] $ bash ${args.join(" ")}`);
       const result = env.runCommand("bash", args);
@@ -44712,7 +44965,7 @@ function cmdSetupHost(deps, host, opts, env = REAL_SETUP_ENV, installer = REAL_R
 }
 
 // packages/cli/src/commands/setupSkillsPlan.ts
-import { join as join73 } from "node:path";
+import { join as join74 } from "node:path";
 var REGISTERED_MARKETPLACES = /* @__PURE__ */ new Set(["claude-plugins-official"]);
 var TIER_RANK = { mandatory: 3, recommended: 2, conditional: 1, optional: 0 };
 var higherTier = (a, b) => TIER_RANK[a] >= TIER_RANK[b] ? a : b;
@@ -44721,26 +44974,26 @@ function marketplaceRepo(source) {
 }
 function skillInstalled(env, name2) {
   const home = env.homeDir();
-  if (env.pathExists(join73(home, ".codex", "skills", name2))) return true;
-  if (env.pathExists(join73(home, ".claude", "skills", name2))) return true;
-  if (env.pathExists(join73(home, ".agents", "skills", name2))) return true;
-  const cache2 = join73(home, ".claude", "plugins", "cache");
+  if (env.pathExists(join74(home, ".codex", "skills", name2))) return true;
+  if (env.pathExists(join74(home, ".claude", "skills", name2))) return true;
+  if (env.pathExists(join74(home, ".agents", "skills", name2))) return true;
+  const cache2 = join74(home, ".claude", "plugins", "cache");
   for (const marketplace of env.listDir(cache2)) {
-    if (env.pathExists(join73(cache2, marketplace, name2))) return true;
+    if (env.pathExists(join74(cache2, marketplace, name2))) return true;
   }
   return false;
 }
 function pluginInstalled(env, runner, source, id) {
   const base = runner === "codex" ? ".codex" : ".claude";
-  return env.pathExists(join73(env.homeDir(), base, "plugins", "cache", source, id));
+  return env.pathExists(join74(env.homeDir(), base, "plugins", "cache", source, id));
 }
 function marketplaceInstalled(env, runner, source) {
   if (REGISTERED_MARKETPLACES.has(source)) return true;
   const home = env.homeDir();
   if (runner === "codex") {
-    return env.pathExists(join73(home, ".codex", ".tmp", "marketplaces", source)) || env.pathExists(join73(home, ".codex", "plugins", "cache", source));
+    return env.pathExists(join74(home, ".codex", ".tmp", "marketplaces", source)) || env.pathExists(join74(home, ".codex", "plugins", "cache", source));
   }
-  return env.pathExists(join73(home, ".claude", "plugins", "marketplaces", source)) || env.pathExists(join73(home, ".claude", "plugins", "cache", source));
+  return env.pathExists(join74(home, ".claude", "plugins", "marketplaces", source)) || env.pathExists(join74(home, ".claude", "plugins", "cache", source));
 }
 function cmdStr(c) {
   return [c.cmd, ...c.args].join(" ");
@@ -45075,13 +45328,13 @@ function cmdSetupSkills(deps, opts, env = REAL_SETUP_ENV, sources, loadSources =
 }
 
 // packages/cli/src/commands/setupRuntime.ts
-import { join as join74 } from "node:path";
+import { join as join75 } from "node:path";
 import { accessSync as accessSync4, constants as fsConstants4 } from "node:fs";
 import { homedir as homedir19 } from "node:os";
 var REAL_RUNTIME_ENV = {
   exec: nodeExecDocker,
   hostEnv: process.env,
-  defaultCodexHome: join74(homedir19(), ".codex"),
+  defaultCodexHome: join75(homedir19(), ".codex"),
   canReadFile: (path9) => {
     try {
       accessSync4(path9, fsConstants4.R_OK);
@@ -45185,7 +45438,7 @@ function cmdSetup(deps, sub, opts, env = REAL_SETUP_ENV, rt = REAL_RUNTIME_ENV, 
 }
 
 // packages/cli/src/commands/update.ts
-import { isAbsolute as isAbsolute20, join as join75 } from "node:path";
+import { isAbsolute as isAbsolute20, join as join76 } from "node:path";
 function nativeUpdatePlan(host) {
   if (host === "codex") {
     return [
@@ -45213,7 +45466,7 @@ function isLocalCodexMarketplaceUpgradeNoop(result) {
 ${result.stderr}`);
 }
 function verifyUpdatedRoot(deps, env, root) {
-  const result = env.runCommand("bash", [join75(root, "tools", "verify-skills.sh"), "--quiet", "--root", root]);
+  const result = env.runCommand("bash", [join76(root, "tools", "verify-skills.sh"), "--quiet", "--root", root]);
   if (result.code === 0) return true;
   deps.io.err(`ERROR: \u65B0\u63D2\u4EF6\u8D44\u4EA7\u6821\u9A8C\u5931\u8D25\uFF0C\u4FDD\u6301\u539F launcher\uFF1A${result.stderr.trim() || result.stdout.trim() || `\u9000\u51FA\u7801 ${result.code}`}`);
   return false;
@@ -45257,66 +45510,95 @@ function cmdUpdate(deps, opts, env = REAL_SETUP_ENV, installer = REAL_RUNTIME_IN
     deps.io.out("[update] --dry-run:\u672A\u5237\u65B0 marketplace\u3001\u672A\u91CD\u88C5\u63D2\u4EF6\u3001\u672A\u5207\u6362 launcher\u3002");
     return 0;
   }
-  let inventory = "";
-  let hostBoundary = "in-progress";
-  for (let index = 0; index < plan.length; index += 1) {
-    const item2 = plan[index];
-    const result = env.runCommand(item2.cmd, [...item2.args]);
-    if (result.stdout.trim() !== "" && !opts.auto) deps.io.out(result.stdout.trimEnd());
-    if (result.code !== 0) {
-      if (host === "codex" && index === 0 && isLocalCodexMarketplaceUpgradeNoop(result)) {
-        deps.io.out("[update] Codex \u672C\u5730 marketplace \u4E0D\u9700\u8981 Git fetch\uFF1B\u7EE7\u7EED\u5237\u65B0 tenon \u63D2\u4EF6\u7F13\u5B58\u3002");
-        continue;
+  return (async () => {
+    const convergence = readHostPluginConvergenceReceipt(env, host);
+    if (convergence.state === "invalid") {
+      deps.io.err(`ERROR: ${convergence.detail}\uFF1B\u672A\u6267\u884C\u65B0\u7684 marketplace/runtime \u53D8\u66F4\u3002`);
+      return 1;
+    }
+    if (convergence.state === "receipt" && convergence.receipt.state === "cleanup-pending") {
+      const finalized = await finalizePendingHostPluginConflict(deps, env, installer, host, convergence.receipt);
+      if (finalized.state === "failed") {
+        deps.io.err(`ERROR: \u51B2\u7A81\u63D2\u4EF6\u5B98\u65B9\u6E05\u7406\u5931\u8D25\uFF1A${finalized.detail}`);
+        return 1;
       }
-      if (index === 1 && isAlreadyInstalledResult(result)) {
-        const inventoryItem = plan[plan.length - 1];
-        const inventoryResult = env.runCommand(inventoryItem.cmd, [...inventoryItem.args]);
-        const installedRoot = inventoryResult.code === 0 ? installedPipelineRoot(host, inventoryResult.stdout) : null;
-        if (installedRoot !== null) {
-          inventory = inventoryResult.stdout;
-          break;
+      return 0;
+    }
+    let inventory = "";
+    let hostBoundary = "in-progress";
+    for (let index = 0; index < plan.length; index += 1) {
+      const item2 = plan[index];
+      const result = env.runCommand(item2.cmd, [...item2.args]);
+      if (result.stdout.trim() !== "" && !opts.auto) deps.io.out(result.stdout.trimEnd());
+      if (result.code !== 0) {
+        if (host === "codex" && index === 0 && isLocalCodexMarketplaceUpgradeNoop(result)) {
+          deps.io.out("[update] Codex \u672C\u5730 marketplace \u4E0D\u9700\u8981 Git fetch\uFF1B\u7EE7\u7EED\u5237\u65B0 tenon \u63D2\u4EF6\u7F13\u5B58\u3002");
+          continue;
         }
+        if (index === 1 && isAlreadyInstalledResult(result)) {
+          const inventoryItem = plan[plan.length - 1];
+          const inventoryResult = env.runCommand(inventoryItem.cmd, [...inventoryItem.args]);
+          const parsedInventory2 = inventoryResult.code === 0 ? parseHostPluginInventory(host, inventoryResult.stdout) : null;
+          if (parsedInventory2?.tenonRoot !== null && parsedInventory2?.tenonRoot !== void 0) {
+            inventory = inventoryResult.stdout;
+            break;
+          }
+        }
+        const detail = `${item2.cmd} ${item2.args.join(" ")} \u5931\u8D25\uFF1A${result.stderr.trim() || `\u9000\u51FA\u7801 ${result.code}`}`;
+        deps.io.err(`ERROR: ${detail}`);
+        reportHostBoundary(deps, host, hostBoundary);
+        return rejectUpdate(installer, env, boundaryDetail(hostBoundary, "unchanged", detail));
       }
-      const detail = `${item2.cmd} ${item2.args.join(" ")} \u5931\u8D25\uFF1A${result.stderr.trim() || `\u9000\u51FA\u7801 ${result.code}`}`;
+      inventory = result.stdout;
+    }
+    const parsedInventory = parseHostPluginInventory(host, inventory);
+    if (parsedInventory === null) {
+      const detail = `${hostFlag(host)} \u66F4\u65B0\u540E\u7684\u5BBF\u4E3B\u63D2\u4EF6\u6E05\u5355\u54CD\u5E94\u7578\u5F62\uFF1B\u672A\u5207\u6362 launcher\u3002`;
+      deps.io.err(`ERROR: ${detail}`);
+      reportHostBoundary(deps, host, hostBoundary);
+      return await rejectUpdate(installer, env, boundaryDetail(hostBoundary, "unchanged", detail));
+    }
+    const root = parsedInventory.tenonRoot;
+    if (root === null) {
+      const detail = `${hostFlag(host)} \u66F4\u65B0\u540E\u672A\u5728\u5BBF\u4E3B\u63D2\u4EF6\u6E05\u5355\u4E2D\u627E\u5230 tenon\uFF1B\u672A\u5207\u6362 launcher\u3002`;
       deps.io.err(`ERROR: ${detail}`);
       reportHostBoundary(deps, host, hostBoundary);
       return rejectUpdate(installer, env, boundaryDetail(hostBoundary, "unchanged", detail));
     }
-    inventory = result.stdout;
-  }
-  const root = installedPipelineRoot(host, inventory);
-  if (root === null) {
-    const detail = `${hostFlag(host)} \u66F4\u65B0\u540E\u672A\u5728\u5BBF\u4E3B\u63D2\u4EF6\u6E05\u5355\u4E2D\u627E\u5230 tenon\uFF1B\u672A\u5207\u6362 launcher\u3002`;
-    deps.io.err(`ERROR: ${detail}`);
-    reportHostBoundary(deps, host, hostBoundary);
-    return rejectUpdate(installer, env, boundaryDetail(hostBoundary, "unchanged", detail));
-  }
-  hostBoundary = "committed";
-  if (!verifyUpdatedRoot(deps, env, root)) {
-    const detail = "\u5BBF\u4E3B\u5237\u65B0\u540E\u7684 tenon \u5019\u9009\u672A\u901A\u8FC7\u6253\u5305\u8D44\u4EA7\u6821\u9A8C";
-    reportHostBoundary(deps, host, hostBoundary);
-    return rejectUpdate(installer, env, boundaryDetail(hostBoundary, "unchanged", detail));
-  }
-  return publishManagedRelease(
-    deps,
-    {
-      candidateRoot: root,
-      source: host,
-      runtime: {
-        homeDir: env.homeDir(),
-        env: env.runtimeEnv()
+    hostBoundary = "committed";
+    if (!verifyUpdatedRoot(deps, env, root)) {
+      const detail = "\u5BBF\u4E3B\u5237\u65B0\u540E\u7684 tenon \u5019\u9009\u672A\u901A\u8FC7\u6253\u5305\u8D44\u4EA7\u6821\u9A8C";
+      reportHostBoundary(deps, host, hostBoundary);
+      return rejectUpdate(installer, env, boundaryDetail(hostBoundary, "unchanged", detail));
+    }
+    const outcome = await publishManagedRelease(
+      deps,
+      {
+        candidateRoot: root,
+        source: host,
+        runtime: {
+          homeDir: env.homeDir(),
+          env: env.runtimeEnv()
+        },
+        openBrowser: opts.auto !== true
       },
-      openBrowser: opts.auto !== true
-    },
-    installer,
-    dashboardStarter
-  ).then(async (outcome) => {
+      installer,
+      dashboardStarter
+    );
     if (!outcome.ok) {
       deps.io.err(`ERROR: ${outcome.detail}`);
       reportHostBoundary(deps, host, hostBoundary);
-      return rejectUpdate(installer, env, boundaryDetail(hostBoundary, outcome.state, outcome.detail));
+      return await rejectUpdate(installer, env, boundaryDetail(hostBoundary, outcome.state, outcome.detail));
     }
     const { activation } = outcome;
+    if (!recordPendingHostPluginConflict(
+      deps,
+      env,
+      host,
+      parsedInventory.enabledIds,
+      activation,
+      root
+    )) return 1;
     deps.io.out(`[update] \u5DF2\u539F\u5B50\u5207\u6362\u81F3\u5DF2\u9A8C\u8BC1 runtime: ${activation.release.releaseId}\uFF08revision ${activation.selection.revision}\uFF09\u3002`);
     if (opts.auto) {
       deps.io.out(`[update] ${hostFlag(host)} \u5DF2\u5728\u540E\u53F0\u5237\u65B0\uFF1B\u5F53\u524D\u4F1A\u8BDD\u7EE7\u7EED\u4F7F\u7528\u5DF2\u52A0\u8F7D\u7248\u672C\uFF0C\u65B0\u4F1A\u8BDD\u5C06\u52A0\u8F7D\u65B0 skills/hooks\u3002`);
@@ -45328,7 +45610,7 @@ function cmdUpdate(deps, opts, env = REAL_SETUP_ENV, installer = REAL_RUNTIME_IN
     }
     reportRegisteredProjects(deps, env, activation.release.source.pluginVersion);
     return 0;
-  });
+  })();
 }
 function shellQuote2(value) {
   return `'${value.replace(/'/g, `'"'"'`)}'`;
@@ -45358,7 +45640,7 @@ function reportRegisteredProjects(deps, env, pluginVersion) {
   )];
   const outdated = registeredRoots.filter((root) => {
     try {
-      return env.readText(join75(root, ".pipeline-version"))?.trim() !== pluginVersion;
+      return env.readText(join76(root, ".pipeline-version"))?.trim() !== pluginVersion;
     } catch {
       return true;
     }
@@ -45626,7 +45908,7 @@ function registerTrackCommands(program2, deps) {
 
 // packages/cli/src/commands/handoff.ts
 import { createHash as createHash30 } from "node:crypto";
-import { join as join76 } from "node:path";
+import { join as join77 } from "node:path";
 function scalarField4(v) {
   if (v === void 0) return "";
   return Array.isArray(v) ? v.join(",") : v;
@@ -45706,7 +45988,7 @@ async function compileBundle(deps, name2, from, target, budgetBytes, fs) {
       );
     }
     for (const record2 of records) {
-      const text2 = fs.readText(join76(deps.cwd, record2.path));
+      const text2 = fs.readText(join77(deps.cwd, record2.path));
       if (text2 === void 0) {
         throw new Error(`Context Bundle missing document '${kind}': ${record2.path}; restore or re-record it`);
       }
@@ -45974,7 +46256,7 @@ function buildProgram(deps, runtimes = {}) {
 // packages/cli/src/guardContext.ts
 import { readdirSync as readdirSync8, readFileSync as readFileSync26, statSync as statSync7 } from "node:fs";
 import { readdir as readdir14 } from "node:fs/promises";
-import { join as join77 } from "node:path";
+import { join as join78 } from "node:path";
 async function listChanges(changesRoot2) {
   let entries;
   try {
@@ -45982,7 +46264,7 @@ async function listChanges(changesRoot2) {
   } catch {
     return [];
   }
-  return entries.filter((entry) => entry.isDirectory() && entry.name !== "archive").filter((entry) => stateStorageExistsSync(join77(changesRoot2, entry.name))).map((entry) => entry.name).sort();
+  return entries.filter((entry) => entry.isDirectory() && entry.name !== "archive").filter((entry) => stateStorageExistsSync(join78(changesRoot2, entry.name))).map((entry) => entry.name).sort();
 }
 async function listChangeDirs(changesRoot2) {
   let entries;
@@ -45995,7 +46277,7 @@ async function listChangeDirs(changesRoot2) {
 }
 function activeCanonicalArchived(cwd, dep) {
   try {
-    const current = readCurrentRunRevisionSync(join77(cwd, "openspec", "changes", dep));
+    const current = readCurrentRunRevisionSync(join78(cwd, "openspec", "changes", dep));
     return current?.state.fields.archived === "true";
   } catch {
     return false;
@@ -46003,13 +46285,13 @@ function activeCanonicalArchived(cwd, dep) {
 }
 function physicallyArchived(cwd, dep) {
   try {
-    return readdirSync8(join77(cwd, "openspec", "changes", "archive"), { withFileTypes: true }).some((entry) => entry.isDirectory() && entry.name.endsWith(`-${dep}`));
+    return readdirSync8(join78(cwd, "openspec", "changes", "archive"), { withFileTypes: true }).some((entry) => entry.isDirectory() && entry.name.endsWith(`-${dep}`));
   } catch {
     return false;
   }
 }
 function makeGuardCtx(cwd) {
-  const abs = (relativePath) => join77(cwd, relativePath);
+  const abs = (relativePath) => join78(cwd, relativePath);
   return (name2) => ({
     changeDirRel: `openspec/changes/${name2}`,
     stateExists: (changeDirRel) => stateStorageExistsSync(abs(changeDirRel)),
@@ -46080,7 +46362,7 @@ async function readGateMarkers(cwd) {
   const out = [];
   for (const kind of ["confirm", "review", "interaction"]) {
     try {
-      const p = join78(cwd, `.pipeline-pending-${kind}`);
+      const p = join79(cwd, `.pipeline-pending-${kind}`);
       const st = await stat13(p);
       out.push({ kind, ageMs: Date.now() - st.mtimeMs, raw: await readFile36(p, "utf8") });
     } catch {
@@ -46089,10 +46371,10 @@ async function readGateMarkers(cwd) {
   return out;
 }
 function pluginRoot() {
-  return join78(dirname21(fileURLToPath3(import.meta.url)), "..", "..", "..");
+  return join79(dirname22(fileURLToPath3(import.meta.url)), "..", "..", "..");
 }
 function manifestPath() {
-  return join78(pluginRoot(), "templates", "manifest.yaml");
+  return join79(pluginRoot(), "templates", "manifest.yaml");
 }
 function trackValidationContext(repoRoot, manifest) {
   const skillProfiles = /* @__PURE__ */ new Set();
@@ -46122,7 +46404,7 @@ function readPluginVersion() {
     [".claude-plugin", "plugin.json"]
   ]) {
     try {
-      const raw = readFileSync27(join78(pluginRoot(), ...rel), "utf8");
+      const raw = readFileSync27(join79(pluginRoot(), ...rel), "utf8");
       const parsed = JSON.parse(raw);
       const version = typeof parsed === "object" && parsed !== null && "version" in parsed ? parsed.version : void 0;
       if (typeof version === "string" && version.trim() !== "") return version;
@@ -46141,7 +46423,7 @@ function safeReaddirDirs(dir) {
 function readDisabledPluginKeys() {
   const disabled = /* @__PURE__ */ new Set();
   try {
-    const raw = readFileSync27(join78(homedir20(), ".claude", "settings.json"), "utf8");
+    const raw = readFileSync27(join79(homedir20(), ".claude", "settings.json"), "utf8");
     const parsed = JSON.parse(raw);
     const ep = typeof parsed === "object" && parsed !== null && "enabledPlugins" in parsed ? parsed.enabledPlugins : void 0;
     if (ep !== null && typeof ep === "object") {
@@ -46154,26 +46436,26 @@ function readDisabledPluginKeys() {
 function scanInstalledSkillNames() {
   const home = homedir20();
   const names = /* @__PURE__ */ new Set();
-  for (const n of safeReaddirDirs(join78(home, ".claude", "skills"))) names.add(n);
-  for (const n of safeReaddirDirs(join78(home, ".agents", "skills"))) names.add(n);
-  const cache2 = join78(home, ".claude", "plugins", "cache");
+  for (const n of safeReaddirDirs(join79(home, ".claude", "skills"))) names.add(n);
+  for (const n of safeReaddirDirs(join79(home, ".agents", "skills"))) names.add(n);
+  const cache2 = join79(home, ".claude", "plugins", "cache");
   const disabledPlugins = readDisabledPluginKeys();
   for (const marketplace of safeReaddirDirs(cache2)) {
-    const mktDir = join78(cache2, marketplace);
+    const mktDir = join79(cache2, marketplace);
     for (const plugin of safeReaddirDirs(mktDir)) {
       if (disabledPlugins.has(`${plugin}@${marketplace}`)) continue;
       names.add(plugin);
-      for (const skill of safeReaddirDirs(join78(mktDir, plugin, "skills"))) names.add(skill);
+      for (const skill of safeReaddirDirs(join79(mktDir, plugin, "skills"))) names.add(skill);
     }
   }
   return names;
 }
 function scanCodexProjectSkillNames(cwd, root) {
   const names = /* @__PURE__ */ new Set();
-  for (const skillsRoot of [join78(root, "skills"), join78(cwd, ".agents", "skills")]) {
+  for (const skillsRoot of [join79(root, "skills"), join79(cwd, ".agents", "skills")]) {
     for (const name2 of safeReaddirDirs(skillsRoot)) {
       try {
-        if (statSync8(join78(skillsRoot, name2, "SKILL.md")).isFile()) names.add(name2);
+        if (statSync8(join79(skillsRoot, name2, "SKILL.md")).isFile()) names.add(name2);
       } catch {
       }
     }
@@ -46184,13 +46466,25 @@ function scanSkillDigests(skillsRoot) {
   const digests = /* @__PURE__ */ new Map();
   for (const name2 of safeReaddirDirs(skillsRoot)) {
     try {
-      const skillPath = join78(skillsRoot, name2, "SKILL.md");
+      const skillPath = join79(skillsRoot, name2, "SKILL.md");
       if (!statSync8(skillPath).isFile()) continue;
       digests.set(name2, createHash31("sha256").update(readFileSync27(skillPath)).digest("hex"));
     } catch {
     }
   }
   return digests;
+}
+function codexHostPluginIds() {
+  try {
+    const stdout = execFileSync2("codex", ["plugin", "list", "--json"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: 5e3
+    });
+    return enabledHostPluginIds("codex", stdout);
+  } catch {
+    return null;
+  }
 }
 function makeDoctorProbes(runtimeScope2) {
   const root = pluginRoot();
@@ -46234,7 +46528,7 @@ function makeDoctorProbes(runtimeScope2) {
     // 接入判定与 statusline.sh 头注释的接入方式同口径：settings.json 里引用了该脚本即算接入
     statuslineConfigured: () => {
       try {
-        return readFileSync27(join78(homedir20(), ".claude", "settings.json"), "utf8").includes("statusline.sh");
+        return readFileSync27(join79(homedir20(), ".claude", "settings.json"), "utf8").includes("statusline.sh");
       } catch {
         return false;
       }
@@ -46250,7 +46544,7 @@ function makeDoctorProbes(runtimeScope2) {
     runVerifySkills: () => new Promise((resolve36) => {
       execFile4(
         "bash",
-        [join78(root, "tools", "verify-skills.sh"), "--quiet"],
+        [join79(root, "tools", "verify-skills.sh"), "--quiet"],
         { timeout: 3e4 },
         (err, stdout, stderr) => {
           const errCode = err?.code;
@@ -46267,11 +46561,12 @@ function makeDoctorProbes(runtimeScope2) {
     // 缺技能检测（批2 A1）：本机安装位扫描 + manifest 两表派生（bundle 里正确路径锚在此）
     installedSkillNames: () => scanInstalledSkillNames(),
     codexProjectSkillNames: () => scanCodexProjectSkillNames(process.cwd(), root),
+    codexHostPluginIds,
     codexSkillDiscovery: () => ({
       selectedRoot: root,
-      projectRoot: join78(process.cwd(), ".agents", "skills"),
-      selected: scanSkillDigests(join78(root, "skills")),
-      project: scanSkillDigests(join78(process.cwd(), ".agents", "skills"))
+      projectRoot: join79(process.cwd(), ".agents", "skills"),
+      selected: scanSkillDigests(join79(root, "skills")),
+      project: scanSkillDigests(join79(process.cwd(), ".agents", "skills"))
     }),
     manifestSkills: () => {
       try {
@@ -46291,7 +46586,7 @@ function makeDoctorProbes(runtimeScope2) {
         image: readAutomationJson(process.cwd()).image ?? "sandcastle:local",
         secretsEnv: readSecrets(scope.paths.secretsPath).keys,
         hostEnv: scope.env,
-        defaultCodexHome: join78(scope.homeDir, ".codex")
+        defaultCodexHome: join79(scope.homeDir, ".codex")
       });
     }
   };
@@ -46344,7 +46639,7 @@ async function main() {
     guardCtx: makeGuardCtx(process.cwd()),
     doctor: makeDoctorProbes(runtimeScope2),
     readGateMarkers: () => readGateMarkers(process.cwd()),
-    writeBreadcrumb: (dir, content) => writeFile15(join78(dir, ".breadcrumb"), content, "utf8"),
+    writeBreadcrumb: (dir, content) => writeFile15(join79(dir, ".breadcrumb"), content, "utf8"),
     history: createHistoryWriter(),
     // init 成功后 best-effort 登记项目根到 Tenon config root 的 projects.json
     registerProject: async (repoRoot) => {
@@ -46355,18 +46650,18 @@ async function main() {
     readSecretsEnv: async () => readSecrets(runtimePaths().secretsPath).keys,
     readHistoryRaw: async (dir) => {
       try {
-        return await readFile36(join78(dir, ".pipeline-history.jsonl"), "utf8");
+        return await readFile36(join79(dir, ".pipeline-history.jsonl"), "utf8");
       } catch {
         return "";
       }
     },
     gitHeadSha: () => gitHeadSha(process.cwd()),
     workspaceFingerprint: () => fingerprintWorkspace(process.cwd()),
-    writeReviewMarker: (content) => writeFile15(join78(process.cwd(), ".pipeline-pending-review"), content, "utf8"),
-    clearReviewMarker: () => rm13(join78(process.cwd(), ".pipeline-pending-review"), { force: true }),
+    writeReviewMarker: (content) => writeFile15(join79(process.cwd(), ".pipeline-pending-review"), content, "utf8"),
+    clearReviewMarker: () => rm13(join79(process.cwd(), ".pipeline-pending-review"), { force: true }),
     pluginVersion: readPluginVersion(),
     readInstalledPlugins: async () => {
-      for (const p of [join78(pluginRoot(), "..", "installed_plugins.json"), join78(process.env.HOME ?? "", ".claude", "installed_plugins.json")]) {
+      for (const p of [join79(pluginRoot(), "..", "installed_plugins.json"), join79(process.env.HOME ?? "", ".claude", "installed_plugins.json")]) {
         try {
           return await readFile36(p, "utf8");
         } catch {

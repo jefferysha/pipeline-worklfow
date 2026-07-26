@@ -1,15 +1,38 @@
-import { readFile, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { pathToFileURL } from 'node:url'
 
 const root = new URL('../', import.meta.url)
 const sourceUrl = new URL('product/identity.json', root)
 const targetUrl = new URL('packages/kernel/src/product-identity.generated.ts', root)
+const codexTemplateUrl = new URL('templates/generated/codex-agents-block.md', root)
+
+export function validateProductIdentity(identity) {
+  if (typeof identity !== 'object' || identity === null || Array.isArray(identity)) {
+    throw new TypeError('product identity must be an object')
+  }
+  for (const field of ['displayName', 'cli', 'plugin', 'entrySkill']) {
+    if (typeof identity[field] !== 'string' || identity[field] === '') {
+      throw new TypeError(`product identity ${field} must be a non-empty string`)
+    }
+  }
+  if (!/^[a-z0-9][a-z0-9-]*$/.test(identity.entrySkill)) {
+    throw new TypeError('product identity entrySkill must be a safe lowercase slug')
+  }
+  if (!/^[a-z0-9][a-z0-9-]*$/.test(identity.plugin)) {
+    throw new TypeError('product identity plugin must be a safe lowercase slug')
+  }
+  if (!/^[a-z0-9][a-z0-9-]*$/.test(identity.cli)) {
+    throw new TypeError('product identity cli must be a safe lowercase slug')
+  }
+  return identity
+}
 
 export async function readProductIdentity() {
-  return JSON.parse(await readFile(sourceUrl, 'utf8'))
+  return validateProductIdentity(JSON.parse(await readFile(sourceUrl, 'utf8')))
 }
 
 export function renderProductIdentity(identity) {
+  validateProductIdentity(identity)
   const entries = Object.entries(identity)
     .map(([key, value]) => `  ${key}: ${JSON.stringify(value)},`)
     .join('\n')
@@ -19,9 +42,38 @@ export function renderProductIdentity(identity) {
     `export type ProductIdentity = typeof PRODUCT_IDENTITY\n`
 }
 
+export function renderCodexAgentsBlock(identity) {
+  validateProductIdentity(identity)
+  const entry = `${identity.plugin}:${identity.entrySkill}`
+  return `<!-- PIPELINE:CODEX:START -->
+## ${identity.displayName} Workflow（Codex 静态层）
+
+7-phase 流水线：open → explore → spec ⇄ build ⇄ verify → ship → archive。状态操作一律走
+\`${identity.cli} status\` / \`${identity.cli} get\` / \`${identity.cli} set\` /
+\`${identity.cli} transition\` / \`${identity.cli} check\`，勿手改 canonical state 或
+\`.pipeline.yaml\` 投影。
+
+正常开发对话默认走 default workflow：先调用 \`${entry}\`，由入口 Skill 创建或恢复 Change、
+初始化 OpenSpec 并分派当前 phase Skill；Todo 的一级项必须是七个 pipeline phase，任务来自该 Change 的
+\`tasks.md\`，不得先生成脱离 phase 的通用 Todo。
+\`tasks.md\` 出口检查只计算截至当前 phase 的任务；未来 phase 必须保留在 Todo 中但不得提前阻塞。
+若 build 发现 proposal/design 的需求语义已变化，必须以 \`requirements-changed\` 回退 spec，重新登记、
+读取并复核修订证据，禁止在 build 中覆盖旧 SHA 或绕过 spec review。
+
+离开 review phase（explore / spec / verify）须对**确切 transition event**取得人类显式确认；先运行
+\`${identity.cli} review request <change> --event <event>\`，再由用户确认触发
+\`${identity.cli} review acknowledge <change>\`。档 A/B 的普通对话中，用户下一条明确回复“确认继续”或
+“继续执行”会写入该 receipt；档 C 必须保留确认事实并显式 acknowledge，不能删除 marker 绕过
+review-gate。verify-fail 与 verify-pass 的确认不可互用。
+<!-- PIPELINE:CODEX:END -->
+`
+}
+
 export async function generateProductIdentity() {
   const identity = await readProductIdentity()
+  await mkdir(new URL('.', codexTemplateUrl), { recursive: true })
   await writeFile(targetUrl, renderProductIdentity(identity), 'utf8')
+  await writeFile(codexTemplateUrl, renderCodexAgentsBlock(identity), 'utf8')
 }
 
 const invokedPath = process.argv[1] ? pathToFileURL(process.argv[1]).href : ''

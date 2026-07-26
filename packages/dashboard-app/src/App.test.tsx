@@ -19,7 +19,8 @@ import { makeChange, makeProject, makeSnapshot } from './testkit'
 beforeEach(() => {
   localStorage.clear()
   resetEventSources()
-  window.history.replaceState({}, '', '/')
+  // 大多数既有 App 用例关注已选项目内行为，统一从显式 root 深链进入；无选择契约用例会覆盖 URL。
+  window.history.replaceState({}, '', '/?root=%2Frepo')
   try {
     delete document.documentElement.dataset.theme
   } catch {
@@ -87,6 +88,59 @@ describe('App 默认落地 = 进度（v9-flowdeck：收件箱退役，进度=唯
 })
 
 describe('App URL 深链路（可复制的视图 / 项目 / Change 现场）', () => {
+  it('有已注册项目但 URL 无 root：保持未选择、进入项目总览且不调用 per-root API', async () => {
+    window.history.replaceState({}, '', '/?debug=1&view=progress')
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === '/api/snapshot') {
+        return { ok: true, json: async () => makeSnapshot([makeProject('/repo-a', [makeChange('a1', 'build')])]) }
+      }
+      throw new Error(`unexpected per-root fetch ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<App />)
+
+    expect(await screen.findByTestId('projects-view')).toBeInTheDocument()
+    const params = new URLSearchParams(window.location.search)
+    expect(params.get('root')).toBeNull()
+    expect(params.get('change')).toBeNull()
+    expect(params.get('debug')).toBe('1')
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(['/api/snapshot'])
+  })
+
+  it('失效 root 深链：清除 root/change 并保持无选择，不重定向首个项目', async () => {
+    window.history.replaceState({}, '', '/?debug=1&view=progress&root=%2Fmissing&change=ghost')
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === '/api/snapshot') {
+        return { ok: true, json: async () => makeSnapshot([makeProject('/repo-a', [makeChange('a1', 'build')])]) }
+      }
+      throw new Error(`unexpected per-root fetch ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<App />)
+
+    expect(await screen.findByTestId('projects-view')).toBeInTheDocument()
+    const params = new URLSearchParams(window.location.search)
+    expect(params.get('root')).toBeNull()
+    expect(params.get('change')).toBeNull()
+    expect(params.get('debug')).toBe('1')
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(['/api/snapshot'])
+  })
+
+  it('浏览器返回到无 root URL：经同一选择模型回到项目总览', async () => {
+    render(<App />)
+    await screen.findByTestId('progress-view')
+
+    window.history.replaceState({}, '', '/?debug=1&view=progress')
+    act(() => window.dispatchEvent(new PopStateEvent('popstate')))
+
+    expect(await screen.findByTestId('projects-view')).toBeInTheDocument()
+    const params = new URLSearchParams(window.location.search)
+    expect(params.get('root')).toBeNull()
+    expect(params.get('debug')).toBe('1')
+  })
+
   it('零项目也能通过 view=overview 打开完整概览，不被 onboarding 替换', async () => {
     window.history.replaceState({}, '', '/?view=overview')
     ;(global.fetch as ReturnType<typeof vi.fn>).mockImplementation(async (url: string) => {
@@ -149,13 +203,13 @@ describe('App URL 深链路（可复制的视图 / 项目 / Change 现场）', (
     expect(new URLSearchParams(window.location.search).get('root')).toBe('/private/tmp/pipeline-ui-project.V60AOf')
   })
 
-  it('切换一级视图会更新可复制 URL，且不丢当前项目 root', async () => {
+  it('进入项目总览会更新可复制 URL，并显式清除项目 root', async () => {
     render(<App />)
     await screen.findByTestId('progress-view')
     fireEvent.click(screen.getByTestId('nav-projects'))
     const params = new URLSearchParams(window.location.search)
     expect(params.get('view')).toBe('projects')
-    expect(params.get('root')).toBe('/repo')
+    expect(params.get('root')).toBeNull()
   })
 })
 
@@ -259,6 +313,22 @@ describe('App SSE 实时更新（真 EventSource stub → 组件真更新，非 
     await waitFor(() => expect(screen.getByTestId('progress-badge').textContent).toBe('1'))
     expect(screen.getAllByText('needs-review').length).toBeGreaterThan(0)
   })
+
+  it('已选项目从注册快照移除：清除上下文，不把后续请求切到其他项目', async () => {
+    render(<App />)
+    await screen.findByTestId('progress-view')
+    const es = lastEventSource()
+
+    act(() => {
+      es!.emit('snapshot', JSON.stringify(makeSnapshot([makeProject('/repo-b', [makeChange('b1', 'build')])])))
+    })
+
+    expect(await screen.findByTestId('projects-view')).toBeInTheDocument()
+    const params = new URLSearchParams(window.location.search)
+    expect(params.get('root')).toBeNull()
+    expect(screen.getByTestId('project-row-repo-b')).toBeInTheDocument()
+    expect(screen.queryByTestId('progress-view')).toBeNull()
+  })
 })
 
 describe('App 深浅色自适应 + i18n', () => {
@@ -322,11 +392,9 @@ describe('App G18 教学空状态（T17 起纯教学态）', () => {
   })
 })
 
-describe('App currentRoot 语义（D5：吃掉 G14，多项目默认取第一个）', () => {
-  it('双项目快照：进度徽标只计第一个项目的 gate 卡', async () => {
-    render(<App />)
-    await screen.findByTestId('progress-view')
-    const es = lastEventSource()
+describe('App currentRoot 语义（只消费显式选择）', () => {
+  it('双项目快照：进度徽标只计显式选择项目的 gate 卡', async () => {
+    window.history.replaceState({}, '', '/?view=progress&root=%2Frepo-a')
     // T7 准入修订：证据齐的 gate 卡才计入徽标（判据在 inbox.test.tsx 钉，这里只验 currentRoot 过滤）。
     const evidenceOk = { verify_result: 'pass', agent_review_result: 'pass', codex_review_result: 'pass' }
     const next = makeSnapshot([
@@ -336,12 +404,15 @@ describe('App currentRoot 语义（D5：吃掉 G14，多项目默认取第一个
         makeChange('b-spec', 'spec', { fields: { design_doc: 'docs/d.md', plan: 'docs/p.md' } }),
       ]),
     ])
-    act(() => {
-      es!.emit('snapshot', JSON.stringify(next))
-    })
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url === '/api/snapshot') return { ok: true, json: async () => next }
+      throw new Error(`unexpected fetch ${url}`)
+    }))
+    render(<App />)
+    await screen.findByTestId('progress-view')
     await waitFor(() => expect(screen.getByTestId('progress-badge').textContent).toBe('1'))
     // a-verify 可能同时出现在行与详情等多处，getAllByText 断言"至少一处"
-    //（意图不变：currentRoot 过滤后只看得到第一个项目的卡）。
+    //（意图不变：currentRoot 过滤后只看得到显式选择项目的卡）。
     expect(screen.getAllByText('a-verify').length).toBeGreaterThan(0)
     expect(screen.queryByText('b-verify')).toBeNull()
   })
@@ -351,6 +422,7 @@ describe('App v10c 契约护栏（旧聚合偏好 root=\'\' + 进度视图 → �
   it("旧聚合偏好（root='')停在 progress → 自动落项目总览页，两项目卡都在，不出聚合进度行", async () => {
     localStorage.setItem('tenon-dashboard-root', '') // 旧聚合偏好（本次重构退役）
     localStorage.setItem('tenon-dashboard-view', 'progress')
+    window.history.replaceState({}, '', '/?view=progress')
     vi.stubGlobal(
       'fetch',
       vi.fn(async (url: string) => {

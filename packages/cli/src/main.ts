@@ -7,7 +7,7 @@
  * 若 kernel 侧签名不同（如 loadManifest 需要 manifest.yaml 路径参数），仅调整此处装配，
  * 命令模块与测试不受影响。
  */
-import { execFile } from 'node:child_process'
+import { execFile, execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { accessSync, constants as fsConstants, readdirSync, readFileSync, statSync } from 'node:fs'
 import { readFile, rm, stat, writeFile } from 'node:fs/promises'
@@ -32,6 +32,7 @@ import { createProductionTriageRuntime } from './commands/triage.js'
 import { listChangeDirs, listChanges, makeGuardCtx } from './guardContext.js'
 import { REAL_RUNTIME_INSTALLER } from './runtime/installer.js'
 import { createRuntimeScopeResolver, type RuntimeScopeSnapshot } from './runtime/scope.js'
+import { enabledHostPluginIds } from './commands/plugin-host.js'
 
 /** ISO8601 UTC 秒级（对齐老内核 date -u +%Y-%m-%dT%H:%M:%SZ 口径） */
 function isoNow(): string {
@@ -226,6 +227,19 @@ function scanSkillDigests(skillsRoot: string): Map<string, string> {
   return digests
 }
 
+function codexHostPluginIds(): ReadonlySet<string> | null {
+  try {
+    const stdout = execFileSync('codex', ['plugin', 'list', '--json'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: 5_000,
+    })
+    return enabledHostPluginIds('codex', stdout)
+  } catch {
+    return null
+  }
+}
+
 /**
  * doctor 探针（BACKLOG #26b）：环境/fs 事实采集的 node 落地，裁决归 cmdDoctor。
  * 各探针独立 fail-safe（fs 异常按「不存在/不可执行」处理）——doctor 要能在坏环境里跑完。
@@ -294,6 +308,7 @@ function makeDoctorProbes(runtimeScope: () => RuntimeScopeSnapshot): DoctorProbe
     // 缺技能检测（批2 A1）：本机安装位扫描 + manifest 两表派生（bundle 里正确路径锚在此）
     installedSkillNames: () => scanInstalledSkillNames(),
     codexProjectSkillNames: () => scanCodexProjectSkillNames(process.cwd(), root),
+    codexHostPluginIds,
     codexSkillDiscovery: () => ({
       selectedRoot: root,
       projectRoot: join(process.cwd(), '.agents', 'skills'),

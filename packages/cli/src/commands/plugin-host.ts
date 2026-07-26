@@ -33,6 +33,93 @@ export interface HostCommandPlanItem {
   readonly args: readonly string[]
 }
 
+export interface ParsedHostPluginInventory {
+  readonly enabledIds: ReadonlySet<string>
+  readonly tenonRoot: string | null
+}
+
+/**
+ * Parse one host-owned inventory snapshot once. A valid empty inventory is distinct from malformed
+ * JSON or an unknown schema; `null` tells every caller to fail closed.
+ */
+export function parseHostPluginInventory(
+  host: NativePipelineHost,
+  stdout: string,
+): ParsedHostPluginInventory | null {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(stdout)
+  } catch {
+    return null
+  }
+  const entries = host === 'codex'
+    ? (typeof parsed === 'object'
+        && parsed !== null
+        && !Array.isArray(parsed)
+        && Array.isArray((parsed as { installed?: unknown }).installed)
+      ? (parsed as { installed: unknown[] }).installed
+      : null)
+    : (Array.isArray(parsed) ? parsed : null)
+  if (entries === null) return null
+
+  const ids = new Set<string>()
+  let tenonRoot: string | null = null
+  for (const entry of entries) {
+    if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) return null
+    const item = entry as {
+      pluginId?: unknown
+      id?: unknown
+      name?: unknown
+      marketplaceName?: unknown
+      enabled?: unknown
+      source?: { path?: unknown }
+      installPath?: unknown
+    }
+    const id = host === 'codex'
+      ? (typeof item.pluginId === 'string'
+          ? item.pluginId
+          : typeof item.name === 'string' && typeof item.marketplaceName === 'string'
+            ? `${item.name}@${item.marketplaceName}`
+            : null)
+      : (typeof item.id === 'string' ? item.id : null)
+    if (id === null) return null
+    if (item.enabled !== false) ids.add(id)
+    if (
+      host === 'codex'
+      && item.name === TENON_PLUGIN_NAME
+      && item.marketplaceName === TENON_MARKETPLACE_NAME
+      && typeof item.source?.path === 'string'
+    ) {
+      tenonRoot = item.source.path
+    }
+    if (
+      host === 'claude'
+      && id === `${TENON_PLUGIN_NAME}@${TENON_MARKETPLACE_NAME}`
+      && typeof item.installPath === 'string'
+    ) {
+      tenonRoot = item.installPath
+    }
+  }
+  return { enabledIds: ids, tenonRoot }
+}
+
+/** Enabled plugin ids as reported by the host-owned inventory. Invalid inventory is not trusted. */
+export function enabledHostPluginIds(
+  host: NativePipelineHost,
+  stdout: string,
+): ReadonlySet<string> | null {
+  return parseHostPluginInventory(host, stdout)?.enabledIds ?? null
+}
+
+export function nativePluginRemovalPlan(
+  host: NativePipelineHost,
+  pluginId: string,
+): readonly HostCommandPlanItem[] {
+  return host === 'codex'
+    ? [{ cmd: 'codex', args: ['plugin', 'remove', pluginId, '--json'] }]
+    : [{ cmd: 'claude', args: ['plugin', 'uninstall', pluginId, '--scope', 'user'] }]
+}
+
 export type PipelineHostFlags = Partial<Record<PipelineHost, boolean | undefined>>
 
 export interface HostSelection {
@@ -87,35 +174,5 @@ export function nativeInstallPlan(host: NativePipelineHost): readonly HostComman
 
 /** Parse the host-owned plugin inventory without assuming its cache directory layout. */
 export function installedPipelineRoot(host: NativePipelineHost, stdout: string): string | null {
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(stdout)
-  } catch {
-    return null
-  }
-  if (host === 'codex') {
-    const installed = typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)
-      ? (parsed as { installed?: unknown }).installed
-      : undefined
-    if (!Array.isArray(installed)) return null
-    for (const entry of installed) {
-      if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) continue
-      const item = entry as { name?: unknown; marketplaceName?: unknown; source?: { path?: unknown } }
-      if (
-        item.name === TENON_PLUGIN_NAME
-        && item.marketplaceName === TENON_MARKETPLACE_NAME
-        && typeof item.source?.path === 'string'
-      ) return item.source.path
-    }
-    return null
-  }
-  if (!Array.isArray(parsed)) return null
-  for (const entry of parsed) {
-    if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) continue
-    const item = entry as { id?: unknown; installPath?: unknown }
-    if (item.id === `${TENON_PLUGIN_NAME}@${TENON_MARKETPLACE_NAME}` && typeof item.installPath === 'string') {
-      return item.installPath
-    }
-  }
-  return null
+  return parseHostPluginInventory(host, stdout)?.tenonRoot ?? null
 }

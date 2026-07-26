@@ -22,7 +22,6 @@ export { ErrorBoundary } from './AppErrorBoundary'
 
 type Theme = 'light' | 'dark'
 const THEME_KEY = 'tenon-dashboard-theme'
-const ROOT_KEY = 'tenon-dashboard-root'
 // 视图记忆。旧值（inbox/board/settings/loops/workflows）随历次 IA 收敛退役——initialView
 // 以 KNOWN_VIEWS 白名单校验，不认识的一律兜底回 progress（收件箱退役，默认落地=进度，v9-flowdeck 口径）。
 const VIEW_KEY = 'tenon-dashboard-view'
@@ -100,9 +99,8 @@ function AppShell(): JSX.Element {
     if (flash && flashRef.current) toastIn(flashRef.current)
   }, [flash])
   const { snapshot, loading, error, connected, refresh, reconnect } = useSnapshot()
-  // D5（吃掉 G14）+ v10c 进度重构：currentRoot 恒为真实单项目 root——localStorage 记忆的偏好
-  // 命中现存 root 则用之，否则回退第一个已注册项目。聚合语境（rootPref==='' 旧偏好）退役：
-  // 空串/失效由下方 useEffect 落到「项目」总览页（不再渲染聚合，契约保证 ProgressView 拿非空 root）。
+  // 项目注册表只提供候选；当前项目必须来自 URL 或用户点击这一显式选择事实。
+  // 无 root、失效 root 和项目被移除都保持未选择，不能由注册顺序或历史偏好推导。
   const [rootPref, setRootPref] = useState<string | null>(() => {
     try {
       const linked = parseDashboardLocation(window.location.search).root
@@ -110,11 +108,7 @@ function AppShell(): JSX.Element {
     } catch {
       /* ignore */
     }
-    try {
-      return localStorage.getItem(ROOT_KEY)
-    } catch {
-      return null
-    }
+    return null
   })
   const currentRoot = useMemo(() => {
     const roots = snapshot?.projects.map((p) => p.root) ?? []
@@ -123,20 +117,19 @@ function AppShell(): JSX.Element {
   const setCurrentRoot = useCallback((root: string) => {
     setRootPref(root)
     setSelectedChange(null)
-    try {
-      localStorage.setItem(ROOT_KEY, root)
-    } catch {
-      /* ignore */
-    }
   }, [])
   const currentProject = snapshot?.projects.find((p) => p.root === currentRoot)
 
   // 视图状态随时可复制。首帧 snapshot 尚未到时保留 URL 传入的 rootPref，避免把深链 root
-  // 过早擦掉；快照落地后改用已校验的 currentRoot（失效 root 会诚实回退到首个注册项目）。
+  // 过早擦掉；快照落地后只投影经注册表校验的显式选择。
   useEffect(() => {
     try {
       const root = snapshot ? currentRoot : (rootPref ?? '')
-      const search = dashboardSearch(window.location.search, { view, root, change: view === 'progress' ? selectedChange : null })
+      const search = dashboardSearch(window.location.search, {
+        view,
+        root,
+        change: view === 'progress' && root !== '' ? selectedChange : null,
+      })
       const next = `${window.location.pathname}${search}${window.location.hash}`
       const now = `${window.location.pathname}${window.location.search}${window.location.hash}`
       if (next !== now) window.history.replaceState(window.history.state, '', next)
@@ -145,12 +138,23 @@ function AppShell(): JSX.Element {
     }
   }, [currentRoot, rootPref, selectedChange, snapshot, view])
 
+  // 项目总览表示无项目上下文；失效深链同样 fail closed。两者都原子清除依赖 root 的 Change。
+  useEffect(() => {
+    if (!snapshot) return
+    if (view === 'projects' || (rootPref !== null && currentRoot === '')) {
+      if (rootPref !== null) setRootPref(null)
+      if (selectedChange !== null) setSelectedChange(null)
+    }
+  }, [currentRoot, rootPref, selectedChange, snapshot, view])
+
   // 浏览器前进/后退同样能恢复视图、项目和 Change；不经 setView，避免改写这次历史导航。
   useEffect(() => {
     const onPopState = (): void => {
       const linked = parseDashboardLocation(window.location.search)
       if (linked.view !== undefined) setViewState(linked.view)
-      if (linked.root !== undefined) setRootPref(linked.root)
+      // popstate 描述的是完整 URL 现场：root 缺席本身就是“未选择项目”，不能保留
+      // 上一个历史条目的 root，否则地址栏和内容区会指向两个不同项目上下文。
+      setRootPref(linked.root ?? null)
       setSelectedChange(linked.change ?? null)
     }
     window.addEventListener('popstate', onPopState)
@@ -162,8 +166,12 @@ function AppShell(): JSX.Element {
   // 「项目」总览页要给每张卡算 gate/running，需全部 ok 项目的规则——故恒收集全部 ok 项目的 (root,wf)
   // 对（default 零网络直接投影 DEFAULT_RULES，自定义走 fetchRules 模块级 cache/inflight 去重）。
   const rulesPairs = useMemo(
-    () => (snapshot?.projects ?? []).filter((p) => p.ok).map((p) => ({ root: p.root, names: wfNamesFor(p.changes) })),
-    [snapshot],
+    () => {
+      if (currentRoot === '') return []
+      const project = snapshot?.projects.find((p) => p.ok && p.root === currentRoot)
+      return project ? [{ root: project.root, names: wfNamesFor(project.changes) }] : []
+    },
+    [snapshot, currentRoot],
   )
   const { rules: rulesByKey } = useWorkflowRulesMulti(rulesPairs)
 
@@ -199,21 +207,18 @@ function AppShell(): JSX.Element {
     [snapshot, currentRoot, rulesByKey],
   )
 
-  // T17：工作台是 per-root 配置面（workflow 定义/hooks/loops 都挂在具体项目上）——须挂一个可达
-  // （ok）的项目 root。当前项目可达则用之，否则回落第一个可达项目；回落也落空（项目非零但全部
-  // ok=false）时保持空串，渲染处以诚实空态短路，不拿空/不可达 root 打端点得一屏报错（T17 评审收口）。
+  // 工作台是 per-root 配置面，只能消费显式选择且仍可达的项目，绝不回落首个可达项目。
   const workbenchRoot = useMemo(() => {
     const okRoots = snapshot?.projects.filter((p) => p.ok).map((p) => p.root) ?? []
     if (currentRoot !== '' && okRoots.includes(currentRoot)) return currentRoot
-    return okRoots[0] ?? ''
+    return ''
   }, [snapshot, currentRoot])
 
-  // v10c 契约护栏：进度页/AFK 页恒为单项目。停在 progress/afk 但没有有效的单项目选择（rootPref===''
-  // 旧聚合偏好、或解析不出真实 root）→ 落「项目」总览页，不再渲染聚合，也保证不给单项目视图传空 root。
+  // 进度、AFK 和工作台都是单项目视图；没有显式有效选择时统一进入项目总览。
   useEffect(() => {
-    if ((view !== 'progress' && view !== 'afk') || !snapshot || snapshot.project_count === 0) return
-    if (rootPref === '' || currentRoot === '') setView('projects')
-  }, [view, snapshot, rootPref, currentRoot, setView])
+    if (!['progress', 'afk', 'workbench'].includes(view) || !snapshot || snapshot.project_count === 0) return
+    if (currentRoot === '') setView('projects')
+  }, [view, snapshot, currentRoot, setView])
 
   const showFlash = useCallback((kind: Flash['kind'], msg: string) => {
     setFlash({ kind, msg })
