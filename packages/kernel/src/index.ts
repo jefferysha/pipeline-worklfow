@@ -6,7 +6,6 @@ export * from './documents/index.js'
 export * from './flow/index.js'
 export { canonicalMachineStateRoot, machineStateScopeId } from './machine-state-scope.js'
 export {
-  resolveHostProjectRegistryCandidates,
   resolveProductPaths,
   serializeProductRootContract,
 } from './product-paths.js'
@@ -29,9 +28,9 @@ export * from './tracks/index.js'
 export * from './mem/index.js'
 // loop 治理子系统（BACKLOG #35，loop-engineering 内建）
 export * from './loops/index.js'
-// 上下文压缩（BACKLOG #30，对标 Comet CONTEXT-COMPRESSION）
+// 上下文压缩（BACKLOG #30，对标 Tenon runtime CONTEXT-COMPRESSION）
 export * from './compress/index.js'
-// Trellis parity 收尾：spec-scaffold / workflow-resolution / allowlist（BACKLOG #33）
+// Tenon contract parity 收尾：spec-scaffold / workflow-resolution / allowlist（BACKLOG #33）
 export * from './scaffold/index.js'
 // H7 verifier（GOAL 清单 H）：结构化 verification 结果契约 + 手写窄校验 + merge 授权谓词。
 // verification/ 子 barrel 自做具名导出，符号与其它子 barrel 无碰撞，故整体 re-export。

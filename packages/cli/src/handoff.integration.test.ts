@@ -4,7 +4,7 @@
  * 零 mock：freshHarness 真临时项目 + 真 `init`/`set`/`transition`（走 buildProgram 真路径达到
  * build/verify 相位）+ 真建长 design_doc/plan/verification_report 文档 + realDeps 真 kernel deps +
  * 真调 cmdHandoff（默认 nodeHandoffFs 真读磁盘字节）。断言真实压缩摘要内容（关键决策/约束/待办
- * 保留、样板正文去除）+ 真实压缩率达标（≥25%，对齐 Comet CONTEXT-COMPRESSION 25-30%）。
+ * 保留、样板正文去除）+ 真实压缩率达标（≥25%，对齐 Tenon runtime CONTEXT-COMPRESSION 25-30%）。
  *
  * 覆盖（C10）：build handoff（design→build 真转换链）happy + 压缩率门 + JSON 信封；
  * verify handoff（--phase 覆写 + change 目录 changefile 解析）；边界（无文档 / 非法名 / 缺 change）；
@@ -224,7 +224,7 @@ describe('真实 e2e —— build handoff（design→build 真转换链 + 压缩
     expect(out).not.toContain('hypothetical failure modes')
   })
 
-  test('真实压缩率达标：聚合 ≥ 25%（对齐 Comet 25-30%）', async () => {
+  test('真实压缩率达标：聚合 ≥ 25%（对齐 Tenon runtime 25-30%）', async () => {
     const r = await handoff(h, name, { json: true })
     expect(r.code).toBe(0)
     const env = JSON.parse(r.out.join('\n'))

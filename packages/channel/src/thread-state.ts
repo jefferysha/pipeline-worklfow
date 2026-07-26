@@ -42,7 +42,7 @@ interface ContextEntry {
   raw?: string
 }
 
-/** 兼容两种 context 形：{type:file,path}/{type:raw,text}（Trellis）与 {file}/{raw}（本仓）。 */
+/** 兼容两种 context 形：{type:file,path}/{type:raw,text}（Tenon contract）与 {file}/{raw}（本仓）。 */
 function asContextEntries(value: unknown): ContextEntry[] | undefined {
   if (!Array.isArray(value)) return undefined
   const out: ContextEntry[] = []

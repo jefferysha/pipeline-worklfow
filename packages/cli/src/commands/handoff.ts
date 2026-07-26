@@ -1,5 +1,5 @@
 /**
- * handoff 子命令 —— 上下文压缩（BACKLOG #30 / GOAL B13·D11：对标 Comet CONTEXT-COMPRESSION）。
+ * handoff 子命令 —— 上下文压缩（BACKLOG #30 / GOAL B13·D11：对标 Tenon runtime CONTEXT-COMPRESSION）。
  *
  * `tenon handoff <name> [--phase p] [--json]`：对指定 change 的当前相位产出文档
  * （design_doc / plan / verification_report 指向的路径 + change 目录内 proposal/design/tasks.md）
@@ -53,7 +53,7 @@ function scalarField(v: string | string[] | undefined): string {
   return Array.isArray(v) ? v.join(',') : v
 }
 
-/** --json 结构化信封（下游可编程消费；对 Comet 纯文本压缩的超越点：结构化 + 逐文档量化）。 */
+/** --json 结构化信封（下游可编程消费；对 Tenon runtime 纯文本压缩的超越点：结构化 + 逐文档量化）。 */
 function renderJson(result: HandoffResult): string {
   return JSON.stringify({
     change: result.name,

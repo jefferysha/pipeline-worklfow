@@ -1,11 +1,8 @@
 /**
  * paths —— channel scope + Project 桶解析（纯逻辑，env 注入）。
- * 老仓真相源：skills/pipeline/scripts/channel/paths.py（channel_root:27 / project_key:35
- *   / _sanitize:48 / bucket_for:55 / channel_dir:62 / worker_file:97）。
- *
  * 存储模型：每个 channel 是一个目录
  *   <root>/<bucket>/<channel>/{events.jsonl, .seq, <name>.lock}
- *   · root   = $TRELLIS_CHANNEL_ROOT 或 ~/.trellis/channels（resolveRoot）
+ *   · root   = Tenon 平台状态根下的 channels，$TENON_CHANNEL_ROOT 可显式覆盖
  *   · bucket = project 桶 key（cwd sanitize，仿 Claude Code）；TENON_CHANNEL_PROJECT 可覆盖
  *   · scope  = project（默认，绑 cwd 桶）/ global（_global 桶）
  *
@@ -29,20 +26,20 @@ export interface ChannelEnv {
   projectOverride?: string
 }
 
-/** channel 根：$TRELLIS_CHANNEL_ROOT（非空）或 ~/.trellis/channels（paths.py:27）。 */
-export function resolveRoot(home: string, envRoot: string | undefined): string {
+/** channel 根：显式覆盖优先，否则直接使用产品路径模型提供的标准根。 */
+export function resolveRoot(defaultRoot: string, envRoot: string | undefined): string {
   const env = (envRoot ?? '').trim()
   if (env) return env
-  return join(home, '.trellis', 'channels')
+  return defaultRoot
 }
 
-/** [\\/_]→'-' → 非 [A-Za-z0-9.-]→'-'（仿 Claude Code 约定，paths.py:48）。空 → '-'。 */
+/** [\\/_]→'-' → 非 [A-Za-z0-9.-]→'-'。空 → '-'。 */
 export function sanitizeBucket(s: string): string {
   const folded = s.replace(/[\\/_]/g, '-').replace(/[^A-Za-z0-9.-]/g, '-')
   return folded || '-'
 }
 
-/** Project 桶 key：projectOverride 覆盖（也 sanitize，防注入）否则 abspath(cwd) sanitize（paths.py:35）。 */
+/** Project 桶 key：projectOverride 覆盖（也 sanitize，防注入）否则 abspath(cwd) sanitize。 */
 export function projectKey(env: ChannelEnv): string {
   const override = (env.projectOverride ?? '').trim()
   if (override) return sanitizeBucket(override)
@@ -50,12 +47,12 @@ export function projectKey(env: ChannelEnv): string {
   return sanitizeBucket(base)
 }
 
-/** scope → 桶名。project=cwd 桶；global=_global（paths.py:55）。 */
+/** scope → 桶名。project=cwd 桶；global=_global。 */
 export function bucketFor(env: ChannelEnv, scope: Scope): string {
   return scope === 'global' ? GLOBAL_BUCKET : projectKey(env)
 }
 
-/** 某 channel 的目录绝对路径（不创建，paths.py:62）。 */
+/** 某 channel 的目录绝对路径（不创建）。 */
 export function channelDir(env: ChannelEnv, name: string, scope: Scope = 'project'): string {
   return join(env.root, bucketFor(env, scope), name)
 }
@@ -77,7 +74,7 @@ export function lockPath(env: ChannelEnv, name: string, scope: Scope = 'project'
 }
 
 /**
- * 某 worker 的 supervisor 运行时件路径（paths.py:97）。
+ * 某 worker 的 supervisor 运行时件路径。
  * 形如 <channel-dir>/<worker>.<suffix>，suffix ∈ pid/worker-pid/config/inbox-cursor/shutdown-reason/...
  * （纯运行时件、gitignore 不入库）。不创建，仅解析。
  */

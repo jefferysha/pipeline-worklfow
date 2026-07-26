@@ -1,7 +1,6 @@
 /**
- * 共享 SVG 图标 sprite（OpenAI 配色 × Trellis 重塑，Task 2；视觉真相源
- * `design-demos/v4-openai-trellis.html` 的 `<symbol id="i-*">` 集，造型借用后重绘到
- * 16 网格）。单文件 path 表，零外部资源、零 emoji；全 dashboard 后续任务统一消费。
+ * 共享 SVG 图标 sprite。所有图标在 16 网格内维护为单文件 path 表，
+ * 零外部资源、零 emoji；全 dashboard 统一消费。
  *
  * 尺寸纪律：viewBox 固定 0 0 16 16，`size` 只改 width/height，形状本身不跟着重排——
  * 保证同一 name 在不同调用点缩放一致。颜色恒为 currentColor，由调用方外层元素的

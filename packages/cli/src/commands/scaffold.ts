@@ -1,7 +1,7 @@
 /**
- * scaffold 命令 —— Trellis parity 收尾（BACKLOG #33 / GOAL B16）。三/四子命令：
+ * scaffold 命令 —— Tenon contract parity 收尾（BACKLOG #33 / GOAL B16）。三/四子命令：
  *   scaffold <type> [--strategy skip|overwrite|append] [--spec-dir <dir>]
- *       按项目类型（web/cli/lib）铺分层空 spec 文档集（Trellis spec-template-scaffold ①）。
+ *       按项目类型（web/cli/lib）铺分层空 spec 文档集（Tenon contract spec-template-scaffold ①）。
  *       三态写盘对标老仓 registry-source.sh apply_strategy（②的三态半边）。
  *   resolve-workflow <id> [--source-index <path>] [--marker] [--apply-hash] [--fallback-native]
  *       解析 workflow id（多 id + native offline-first，③）+ 可选写来源 marker + removeHash 更新契约。

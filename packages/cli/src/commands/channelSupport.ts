@@ -16,7 +16,6 @@
  *   （见 kernel guard.ts 顶注）；注入面见下方 ChannelHost 的 proc/fs/launchSupervisor。
  */
 import { rmSync } from 'node:fs'
-import { homedir } from 'node:os'
 import {
   bucketDir,
   classifyDelivery,
@@ -52,6 +51,7 @@ import {
   type SupervisorConfig,
   type WorkerGuardPolicy,
 } from '@tenon/channel'
+import { resolveProductPaths } from '@tenon/kernel'
 import { splitFlags } from '../argv.js'
 import type { CliDeps } from '../deps.js'
 
@@ -96,9 +96,9 @@ export interface ChannelHost {
   launchSupervisor?: SupervisorLauncher
 }
 
-/** 真 host：$TRELLIS_CHANNEL_ROOT 或 ~/.trellis/channels + $TENON_CHANNEL_PROJECT 覆盖桶。 */
+/** 真 host：统一产品路径模型 + $TENON_CHANNEL_ROOT 覆盖 + $TENON_CHANNEL_PROJECT 覆盖桶。 */
 export function nodeChannelHost(cwd: string, clock?: Clock): ChannelHost {
-  const root = resolveRoot(homedir(), process.env.TRELLIS_CHANNEL_ROOT)
+  const root = resolveRoot(resolveProductPaths().channelsRoot, process.env.TENON_CHANNEL_ROOT)
   const override = process.env.TENON_CHANNEL_PROJECT
   const env: ChannelEnv = { root, cwd, ...(override ? { projectOverride: override } : {}) }
   return { store: createChannelStore(env, undefined, clock), env }
@@ -150,7 +150,7 @@ export function defaultLauncher(host: ChannelHost): SupervisorLauncher {
     fs.writeText(cfgPath, JSON.stringify(config))
     const entry = process.argv[1] ?? ''
     const childEnv: Record<string, string> = {
-      TRELLIS_CHANNEL_ROOT: host.env.root,
+      TENON_CHANNEL_ROOT: host.env.root,
       TENON_CHANNEL_PROJECT: projectKey(host.env),
     }
     const pid = proc.spawnDetached(process.execPath, [entry, 'channel', '__supervisor', channel, worker, cfgPath], {
@@ -178,8 +178,8 @@ function intOrUndef(v: string | undefined): number | undefined {
 /** spawn/idle 预算 policy（CLI>env>default 三级链；manifest 四级由主线 barrier 侧管，进程层不碰）。 */
 export function resolvePolicy(host: ChannelHost, flags: Record<string, string | true>): WorkerGuardPolicy {
   const envVar = hostEnvVar(host)
-  const max = intFlag(flags, 'max-live-workers') ?? intOrUndef(envVar('TRELLIS_CHANNEL_MAX_LIVE_WORKERS')) ?? 0
-  const idle = intFlag(flags, 'idle-timeout') ?? intOrUndef(envVar('TRELLIS_CHANNEL_WORKER_IDLE_TIMEOUT')) ?? 0
+  const max = intFlag(flags, 'max-live-workers') ?? intOrUndef(envVar('TENON_CHANNEL_MAX_LIVE_WORKERS')) ?? 0
+  const idle = intFlag(flags, 'idle-timeout') ?? intOrUndef(envVar('TENON_CHANNEL_WORKER_IDLE_TIMEOUT')) ?? 0
   return { idleTimeoutMs: idle, maxLiveWorkers: max }
 }
 

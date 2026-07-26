@@ -1,6 +1,6 @@
 /**
  * living spec 库 —— 细粒度 spec 路由（capability 枚举）+ spec_scope 写值归一 +
- * per-agent jsonl 清单注入（GOAL A1 内核深度 / D2 超越 Trellis 的规范库，BACKLOG #16）。
+ * per-agent jsonl 清单注入（GOAL A1 内核深度 / D2 超越 Tenon contract 的规范库，BACKLOG #16）。
  *
  * 老仓真相源：skills/pipeline/scripts/state-spec.sh（被 pipeline-state.sh source，无 main）。
  * 逐子命令行号（dispatch = pipeline-state.sh 行）：
@@ -11,7 +11,7 @@
  *
  * 语义对位（逐条锚定老仓行为）：
  *  1. specs（cmd_specs :32-67）：扁平单 repo capability 模型——capability = openspec/specs/<name>/，
- *     spec.md 是其 main spec（无 package/layer 子树，Trellis get-context-mode-packages 的投影）。
+ *     spec.md 是其 main spec（无 package/layer 子树，Tenon contract get-context-mode-packages 的投影）。
  *     目录回退：openspec/specs 优先；仅当 .openspec/specs 在且 openspec/specs 不在时用 .openspec/specs
  *     （老仓 :36 `[ -d ".openspec/specs" ] && [ ! -d "$sdir" ]`）。specs 目录缺 → exists false。
  *     每 capability：spec.md 存在 → specPath 相对路径 + hasSpec true；不存在 → specPath ""（老仓
@@ -42,7 +42,7 @@ const SPECS_DIR = 'openspec/specs'
 const DOT_SPECS_DIR = '.openspec/specs'
 /** jsonl directory entry 读取上限（老仓 _JSONL_DIR_MAXFILES:28，防目录爆炸塞满 context） */
 const JSONL_DIR_MAXFILES = 20
-/** per-agent curated manifest（老仓 _jsonl_path:185，对标 Trellis implement/check.jsonl） */
+/** per-agent curated manifest（老仓 _jsonl_path:185，对标 Tenon contract implement/check.jsonl） */
 const VALID_AGENTS: ReadonlySet<string> = new Set(['implement', 'check'])
 
 async function isDirAbs(p: string): Promise<boolean> {

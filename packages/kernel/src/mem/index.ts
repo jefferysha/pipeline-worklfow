@@ -1,5 +1,5 @@
 /**
- * mem —— 跨 runtime 会话历史检索子系统（BACKLOG #28 / GOAL A4 M4 / D3 超越 Trellis workspace journal）。
+ * mem —— 跨 runtime 会话历史检索子系统（BACKLOG #28 / GOAL A4 M4 / D3 超越 Tenon contract workspace journal）。
  *
  * 只读、零第三方依赖、注入 fs 面（绝不写用户 session 历史）。可复用的检索 + 对话上下文抽取，
  * 覆盖持久化的 Claude Code / Codex / OpenCode / Pi 会话。CLI 薄壳在 packages/cli/src/commands/mem.ts。

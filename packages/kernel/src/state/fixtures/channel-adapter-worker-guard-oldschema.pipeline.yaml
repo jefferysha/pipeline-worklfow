@@ -18,7 +18,7 @@ direct_override: false
 prd_path: null
 pr_url: null
 branch: null
-base_branch: feat/trellis-parity
+base_branch: feat/scaffold-contract
 scope: null
 related_files: null
 spec_scope: null

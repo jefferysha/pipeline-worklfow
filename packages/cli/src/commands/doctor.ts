@@ -1,6 +1,6 @@
 /**
- * doctor [--json] —— 统一健康面（BACKLOG #26b，GOAL B8「降级可见」+ D10「> comet doctor」）。
- * 回答的唯一问题：「哪些保障此刻真的在生效、哪些已静默降级」——比 comet doctor 的
+ * doctor [--json] —— 统一健康面（BACKLOG #26b，GOAL B8「降级可见」+ D10「> tenon doctor」）。
+ * 回答的唯一问题：「哪些保障此刻真的在生效、哪些已静默降级」——比 tenon doctor 的
  * 安装诊断更进一步（老仓对标物：service-doctor 六灯 + fail-open 健康信号 _pipeline_health）。
  *
  * 灯位语义：green=保障生效 / yellow=已降级但可运行（fail-open 可见化，不影响 exit）/

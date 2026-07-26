@@ -7689,6 +7689,8 @@ function resolveProductPaths(input = {}) {
     releasesRoot: paths.join(dataRoot, "releases"),
     stagingRoot: paths.join(dataRoot, ".staging"),
     bootstrapRoot: paths.join(dataRoot, "bootstrap"),
+    migrationsRoot: paths.join(stateRoot, "migrations"),
+    channelsRoot: paths.join(stateRoot, "channels"),
     selectionPath: paths.join(stateRoot, "selection.json"),
     auditPath: paths.join(stateRoot, "audit.jsonl"),
     registryPath: paths.join(configRoot, "projects.json"),
@@ -19970,12 +19972,13 @@ async function main() {
   const argumentMode = parseDashboardServerArgs(process.argv.slice(2));
   if (argumentMode.mode === "help") {
     process.stdout.write(
-      "Tenon Dashboard server is an internal managed-runtime entrypoint.\\nUse `tenon dashboard` to start or inspect the product.\\n"
+      "Tenon Dashboard server is an internal managed-runtime entrypoint.\nUse `tenon dashboard` to start or inspect the product.\n"
     );
     return;
   }
   if (argumentMode.mode === "invalid") {
-    process.stderr.write(`[dashboard-server] ${argumentMode.detail}\\n`);
+    process.stderr.write(`[dashboard-server] ${argumentMode.detail}
+`);
     process.exitCode = 2;
     return;
   }

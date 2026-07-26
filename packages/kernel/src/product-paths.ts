@@ -19,6 +19,8 @@ export interface ProductPaths {
   readonly releasesRoot: string
   readonly stagingRoot: string
   readonly bootstrapRoot: string
+  readonly migrationsRoot: string
+  readonly channelsRoot: string
   readonly selectionPath: string
   readonly auditPath: string
   readonly registryPath: string
@@ -27,24 +29,6 @@ export interface ProductPaths {
   readonly dashboardPidfilePath: string
   /** Outer lock root for the complete managed release transaction. */
   readonly managedTransactionRoot: string
-}
-
-/**
- * Resolve host-owned project registry protocols accepted by the one-way setup import.
- * These paths are deliberately separate from ProductPaths: no Tenon runtime reader may use
- * them as fallback storage after setup has imported their contents. Product-specific retired
- * storage belongs exclusively to the frozen legacy distribution channel.
- */
-export function resolveHostProjectRegistryCandidates(
-  input: ProductPathInput = {},
-): readonly string[] {
-  const platform = input.platform ?? process.platform
-  const paths = pathApi(platform)
-  const homeDir = paths.resolve(input.homeDir ?? homedir())
-  return [
-    paths.join(homeDir, '.claude', 'pipeline-projects.json'),
-    paths.join(homeDir, '.codex', 'pipeline-projects.json'),
-  ]
 }
 
 interface ProductRootContract {
@@ -161,6 +145,8 @@ export function resolveProductPaths(input: ProductPathInput = {}): ProductPaths 
     releasesRoot: paths.join(dataRoot, 'releases'),
     stagingRoot: paths.join(dataRoot, '.staging'),
     bootstrapRoot: paths.join(dataRoot, 'bootstrap'),
+    migrationsRoot: paths.join(stateRoot, 'migrations'),
+    channelsRoot: paths.join(stateRoot, 'channels'),
     selectionPath: paths.join(stateRoot, 'selection.json'),
     auditPath: paths.join(stateRoot, 'audit.jsonl'),
     registryPath: paths.join(configRoot, 'projects.json'),

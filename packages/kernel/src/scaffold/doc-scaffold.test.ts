@@ -1,5 +1,5 @@
 /**
- * spec-template-scaffold 纯逻辑单测（BACKLOG #33，Trellis parity 收尾 ①）。
+ * spec-template-scaffold 纯逻辑单测（BACKLOG #33，Tenon contract parity 收尾 ①）。
  * 覆盖：项目类型分层空文档集构建 + 三态 skip/overwrite/append 计划（对标老仓 apply_strategy）。
  */
 import { describe, expect, test } from 'vitest'

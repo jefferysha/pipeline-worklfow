@@ -159,7 +159,7 @@ describe('cascade —— BFS 传递闭包（老仓 cmd_cascade）', () => {
   })
 })
 
-describe('canonical —— Trellis 24 字段投影（老仓 cmd_canonical）', () => {
+describe('canonical —— Tenon contract 24 字段投影（老仓 cmd_canonical）', () => {
   const tree: ChangeNode[] = [
     { name: 'foo', archived: false, deps: ['dep-a'] },
     { name: 'kid', archived: false, deps: ['foo'] },

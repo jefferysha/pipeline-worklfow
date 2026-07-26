@@ -1,6 +1,6 @@
 # TEST-REALITY — 测试真实性审计（GOAL C9/C10）
 
-> 向 Trellis 学习：`trellis-check` 跑真实工具链而非自评。本仓每条功能的收编门以**真实证据**为准。
+> 向 Tenon contract 学习：`tenon-check` 跑真实工具链而非自评。本仓每条功能的收编门以**真实证据**为准。
 > 本文件登记每层测试「真 or mock」与覆盖缺口，缺口显式登记、不静默留白（2026-07-07 起维护）。
 
 > **当前任务口径（2026-07-20）**：本文件是追加式历史审计账，不是当前 todolist。当前任务唯一真相源为
@@ -63,7 +63,7 @@
 | 适配器 conformance | ✅ tools/test-adapters.sh 58 断言（真跑各适配器归一 canonical 决策 + 反例哨兵 + **真适配器变异测试**：改坏 codex veto 立即抓红、还原回绿）；claude/codex(A)/cursor(B) active | ✅ 判别力自证 | — |
 | loop 预算/熔断 | ✅ loops-budget.integration.test.ts 16 例（真建 run-log → 真熔断 ok/warn/tripped + 成本估算 within/over）+ 真 bundle e2e | ✅ 超阈值 tripped exit2 | ✅ budget→cost |
 | loop 漂移/审计 | ✅ loops-drift.integration.test.ts 20 例（7 维漂移各一 + loop-ready 评分 ready/not-ready + --json/--loop）| ✅ 漂移 warn exit1 | ✅ list→drift→audit |
-| Trellis scaffold | ✅ scaffold.integration.test.ts 14 例（真铺分层空文档集 + 三态 skip/overwrite/append 真删真补真保留 + resolve-workflow 真读源 + removeHash 真改 .pipeline-owned.json）| ✅ spec-dir 冲突 exit2 | ✅ scaffold web/cli/lib |
+| Tenon contract scaffold | ✅ scaffold.integration.test.ts 14 例（真铺分层空文档集 + 三态 skip/overwrite/append 真删真补真保留 + resolve-workflow 真读源 + removeHash 真改 .pipeline-owned.json）| ✅ spec-dir 冲突 exit2 | ✅ scaffold web/cli/lib |
 | transition 单源 | ✅ transition-table.test.ts 40 例（kernel 单源事件表/前置/副作用全量）+ cli/server 接线断言（引用同一对象）；**oracle 双跑 0 不一致=行为逐字保持铁证** | ✅ | ✅ cli+server 共消费 |
 | loop 毕业制 | ✅ loops-graduation.integration.test.ts 16 例（真建不同就绪/漂移/熔断态 → 真升降档裁决 + 跨级拒 + --confirm 真改 autonomy_level）| ✅ 跨级 exit2 | ✅ graduate→level set |
 | channel 进程层 | ✅ channel-process.integration.test.ts 11 例（真 fork cat 桥接 + 真 spawn 预算 + 真 SIGTERM kill + 真 OS-liveness 判活判死 + 真 prune）+ process.test.ts 4 真 fork node；**架构红线**：跑完零 openspec/门 marker 不变 | ✅ | ✅ spawn→run→kill→prune |
@@ -373,8 +373,7 @@ iteration-35）**：
 ### 2026-07-10 · 视觉重塑+交互深化收口追记
 
 （对照评审快照 `.impeccable/critique/2026-07-09T07-42-21Z__packages-dashboard-app-src.md`
-—— `docs/superpowers/plans/2026-07-09-openai-trellis-restyle.md`〔19 任务〕+ 计划落地前
-3 项独立速修，逐条改判。P0/P1 编号沿用该评审在计划与提交历史里实际使用的标签——P0 与
+——19 个实现任务 + 计划落地前 3 项独立速修，逐条改判。P0/P1 编号沿用该评审在计划与提交历史里实际使用的标签——P0 与
 评审原文 1:1；P1 标签 5/6/8/9/10/11 对应评审原文 P1 列表第 6/7/8/9/10/11 条，P1-7 不是
 评审 P1 列表的独立条目，而是 Design Health Score 启发式表格第 1 行「AFK/Loops 静止快照
 无刷新」分句与 P0-3 的重复引用，随 P0-3 同一次修复一并处置，非另一个缺口。）
@@ -428,8 +427,7 @@ iteration-35）**：
   静默——dragStart 按 `plannedTransition` 逐列判 legal/illegal 类，非法 drop
   shake 300ms + toast 一句解释。
 
-**本轮未处置（P2/P3，spec `docs/superpowers/specs/2026-07-09-openai-trellis-restyle-
-design.md` §5 已登记 YAGNI，非缺口，不重复挂 G 号）**：零过滤/搜索/批量/撤销重做
+**本轮未处置（P2/P3，已登记 YAGNI，非缺口，不重复挂 G 号）**：零过滤/搜索/批量/撤销重做
 （spec 明确非目标）；键盘数字键触发出边（P2 尾巴，plan self-review 已登记未排）；
 跨项目合并同名 workflow 列集（语义不可行，spec 明确判定）。
 

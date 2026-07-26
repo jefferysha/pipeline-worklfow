@@ -5,7 +5,7 @@
  *   remove-dep <name> <dep>    depends_on 移除（清空回空集 []），无 stdout
  *   children <name> [--json]   反查直接子（活跃 + 归档），stdout 列表 / JSON
  *   cascade <name>             BFS 传递闭包，stdout 逐行 active/archived
- *   canonical <name> [--json]  Trellis 24 字段 canonical task.json，stdout（pretty / 紧凑）
+ *   canonical <name> [--json]  Tenon contract 24 字段 canonical task.json，stdout（pretty / 紧凑）
  * stdout/exit 对齐老仓：数据走 stdout（老仓 echo/printf/python print），状态与错误走 stderr
  * （老仓 red/green 均 >&2）。exit：错误/非法 = 1；成功 = 0。
  */

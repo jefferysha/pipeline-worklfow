@@ -170,3 +170,45 @@
 {"ts":"2026-07-26T07:48:39Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
 {"ts":"2026-07-26T07:48:39Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
 {"ts":"2026-07-26T07:48:46Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"c4690b93-5e49-42dd-ba3a-db1b90701d01"}
+{"ts":"2026-07-26T08:20:49Z","kind":"set","field":"build_sha","to":"e9153eeca887a0f97870443dc26ec755e88dac3e"}
+{"ts":"2026-07-26T08:21:39Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-26T08:21:44Z","kind":"tool","raw":"CodexSkillRead: frontend-design"}
+{"ts":"2026-07-26T08:21:50Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-26T08:21:57Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-26T08:22:03Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"6cc0c4d9-8aaa-4577-a0b0-0e906632c8b0"}
+{"ts":"2026-07-26T08:23:52Z","kind":"tool","raw":"CodexSkillRead: code-review"}
+{"ts":"2026-07-26T08:24:31Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-07-26T08:24:31Z","kind":"tool","raw":"CodexSkillRead: deployment-patterns"}
+{"ts":"2026-07-26T08:24:31Z","kind":"tool","raw":"CodexSkillRead: e2e-testing"}
+{"ts":"2026-07-26T08:25:48Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-07-26T08:25:53Z","kind":"tool","raw":"CodexSkillRead: browser-qa"}
+{"ts":"2026-07-26T08:26:00Z","kind":"tool","raw":"CodexSkillRead: code-review"}
+{"ts":"2026-07-26T08:26:05Z","kind":"tool","raw":"CodexSkillRead: e2e-testing"}
+{"ts":"2026-07-26T08:32:24Z","kind":"set","field":"agent_review_result","to":"fail"}
+{"ts":"2026-07-26T08:32:24Z","kind":"set","field":"codex_review_result","to":"fail"}
+{"ts":"2026-07-26T08:32:24Z","kind":"set","field":"verify_result","to":"fail"}
+{"ts":"2026-07-26T08:32:24Z","kind":"set","field":"branch_status","to":"pending"}
+{"ts":"2026-07-26T08:32:24Z","kind":"tool","raw":"review:request phase=verify event=verify-fail"}
+{"ts":"2026-07-26T08:32:24Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-07-26T07:20:50Z"}
+{"ts":"2026-07-26T08:32:41Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-26T08:32:48Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-26T08:32:56Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"aa50dc34-7ddd-4e99-b215-084d88271a04"}
+{"ts":"2026-07-26T08:39:27Z","kind":"tool","raw":"CodexSkillRead: pipeline-build"}
+{"ts":"2026-07-26T08:39:40Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated"}
+{"ts":"2026-07-26T08:42:20Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-26T08:42:20Z","kind":"tool","raw":"CodexSkillRead: frontend-design"}
+{"ts":"2026-07-26T08:42:20Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-26T08:42:20Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-26T08:42:32Z","kind":"transition","from":"build","to":"spec","raw":"requirements-changed","transitionRecordId":"67aa0662-169e-4565-8eb0-3b6fe136dff5"}
+{"ts":"2026-07-26T08:42:45Z","kind":"tool","raw":"CodexSkillRead: pipeline-spec"}
+{"ts":"2026-07-26T08:42:45Z","kind":"tool","raw":"CodexSkillRead: openspec-propose"}
+{"ts":"2026-07-26T08:42:45Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-07-26T08:46:12Z","kind":"tool","raw":"review:request phase=spec event=spec-complete"}
+{"ts":"2026-07-26T08:46:12Z","kind":"tool","raw":"review:delegated-ack phase=spec event=spec-complete authority_issued_at=2026-07-26T08:39:40Z"}
+{"ts":"2026-07-26T08:46:12Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"9c44368b-b63a-4f2a-925e-a2c54c723a45"}
+{"ts":"2026-07-26T08:46:23Z","kind":"tool","raw":"CodexSkillRead: pipeline-build"}
+{"ts":"2026-07-26T08:46:23Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-26T08:46:23Z","kind":"tool","raw":"CodexSkillRead: frontend-design"}
+{"ts":"2026-07-26T08:46:23Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-26T08:46:23Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-26T09:13:18Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated"}

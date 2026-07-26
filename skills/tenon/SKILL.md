@@ -425,7 +425,7 @@ phase **内部**步骤可连续做（产物靠 Edit/Write 落盘）；常规模�
 - **状态唯一入口 = Tenon CLI**：`init / get / set / set-many / cas / transition / check /
   status / list / inbox / import`（CONTRACT §3）。禁止直接 Edit `.pipeline.yaml`。
 - **收件箱**：`tenon inbox`（`--html` 出静态单页）回答"现在哪个 change 在等我做什么决定"。
-- **不依赖 comet npm 包**：本 skill 完全独立。
+- **不依赖 tenon npm 包**：本 skill 完全独立。
 
 ---
 

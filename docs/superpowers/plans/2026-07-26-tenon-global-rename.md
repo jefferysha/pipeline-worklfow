@@ -16,7 +16,7 @@ design-doc: docs/superpowers/specs/2026-07-26-tenon-product-identity-design.md
 - 最终 Tenon 包只暴露 `tenon`，不保留旧命令 alias。
 - 宿主目录 `.codex`、`.agents`、`.claude` 不改名。
 - 端口固定为 `127.0.0.1:18765`。
-- 历史 OpenSpec/ledger/Git 不全文改写。
+- Git 提交历史不改写；当前树不保留外部参考项目身份或相关调研、演示、归档产物。
 - Marketplace 是首装主入口；npx 是同一 payload 的薄入口。
 - B3 原型决策采用“执行”：在正式大规模改名之前，用隔离 HOME 和本地发行 tarball 打通一条
   tracer bullet；这是用户已授权“按推荐走完全流程”后的保守选择。
@@ -130,7 +130,7 @@ npm run check:identity
 - 插件/Marketplace 使用 `tenon`，phase Skill 目录和逻辑 id 使用 `tenon-*`，入口 Skill 为 `tenon`。
 - 所有 hook 命令通过 `tenon-hook` 稳定 ABI；环境与浏览器注入改为 `TENON_*`/`__TENON_*`。
 - 重新生成 router/manifest 投影；同步 DAG producer、文档 contract 和测试 fixture。
-- 历史 archive 与 ledger 不改；迁移 fixture 中旧名必须带明确 legacy 分类。
+- 当前树中的 archive、ledger 与 fixture 同样受外部参考身份零残留约束；Git 既有提交对象不改写。
 
 **验证：**
 
@@ -466,7 +466,7 @@ git ls-files | rg 'design-demos/shots|workflow-governance-.*\\.png' && exit 1 ||
 **实现：**
 
 - 运行旧身份扫描；现行产品类必须为零。
-- 历史/迁移允许项采用精确路径/结构分类，不以宽泛 grep 排除。
+- 旧产品迁移允许项采用精确路径/结构分类；外部参考身份不设置路径或内容排除。
 - 运行 build 重新生成 CLI/server/SPA；验证 freshness。
 
 **验证：**
@@ -476,6 +476,30 @@ npm run build
 npm run check:identity
 bash tools/test-bundle.sh
 bash tools/verify-skills.sh
+```
+
+**此处建议 `/clear`。**
+
+### Task 7.4：外部参考身份零残留
+
+**文件：**
+
+- 删除路径名含受禁参考身份的设计 demo、研究、报告和 OpenSpec archive
+- 改写仍有价值的代码、规范、测试与文档为 Tenon 自有中性表述
+- 修改 `tools/check-repository-hygiene.mjs` 及其测试
+
+**实现：**
+
+- 同时扫描 `git ls-files` 的路径与受管理文本内容，不为 archive、ledger、fixture 或检查器自身开例外。
+- 门禁使用非明文的策略 token 构造受禁身份，避免检查器自身成为残留；报告只输出命中路径，不回显名称。
+- 只改变当前树；不运行 history rewrite。
+
+**验证：**
+
+```bash
+npm run check:repository-hygiene
+git ls-files | rg -i '<external-reference-identities>' && exit 1 || true
+git grep -n -i -E '<external-reference-identities>' && exit 1 || true
 ```
 
 **此处建议 `/clear`。**

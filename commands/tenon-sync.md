@@ -8,7 +8,7 @@ tags: [workflow, pipeline, versioning, migration, upgrade]
 # /pipeline-sync — 版本化资产同步
 
 把跟随插件版本演进的 **in-project 资产**（`.pipeline-version` 戳、所有权清单、迁移）同步到当前 CLI 版本，
-带冲突协商 + 降级守卫 + `--migrate` opt-in 硬闸。对标 Trellis `trellis update` / `trellis upgrade`。
+带冲突协商 + 降级守卫 + `--migrate` opt-in 硬闸。对标 Tenon contract `tenon update` / `tenon upgrade`。
 
 实现真相源（已落地 · BACKLOG #24）：版本协调纯逻辑在 `packages/kernel/src/state/ownership.ts`；
 同步命令在 `packages/cli/src/commands/sync.ts`（`cmdSync(deps, opts, fs?)`）；真实 e2e 证据在

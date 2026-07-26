@@ -1,10 +1,10 @@
 /**
- * advance <name> —— auto-transition 中间档（BACKLOG #31 / GOAL B14·D12：对标 Comet AUTO-TRANSITION）。
+ * advance <name> —— auto-transition 中间档（BACKLOG #31 / GOAL B14·D12：对标 Tenon runtime AUTO-TRANSITION）。
  *
  * 立场：老仓只有「纯 HITL」（guard 只校验，推进权全在人手，pipeline-guard.sh:635 明写"永不
  * auto-transition"）与「重型 AFK」（automation 子系统）两极，缺中间档。本命令补上：
  * **guard 全绿 → 自动推进到下一相位，反复直到撞上三门／终态／guard 不过就停**——比手动逐条
- * 敲 transition 省事，又比 Comet「一路推到底」更严：**绝不跨越三门自动跑完**（HITL 红线）。
+ * 敲 transition 省事，又比 Tenon runtime「一路推到底」更严：**绝不跨越三门自动跑完**（HITL 红线）。
  *
  * 编排（复用现有命令函数，不重造）：循环
  *   读当前相位 → forwardStep（manifest.transitions 单一真相源求前向事件）

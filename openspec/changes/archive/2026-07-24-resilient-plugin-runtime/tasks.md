@@ -9,7 +9,7 @@
 ## Explore
 
 - [x] Map current installation, update, launcher, hook, router, persistence, and package contracts.
-- [x] Validate the runtime-manager trust boundary against Trellis and Comet patterns; record an
+- [x] Validate the runtime-manager trust boundary against Tenon contract and Tenon runtime patterns; record an
   ADR with the explicit policy-deny versus runtime-degraded semantics.
 - [x] Produce the reviewed Superpowers design with storage layout, transactions, migration,
   workflow ownership, and failure modes.

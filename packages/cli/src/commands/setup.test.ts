@@ -45,6 +45,12 @@ function spyEnv(over: Partial<SetupEnv> = {}, exec?: ExecStub, confirmAns = true
   commandExists: () => false,
     listDir: () => [],
     writeText: (p, text) => { calls.writeText.push([p, text]) },
+    migrateProjectRegistry: async () => ({
+      status: 'completed',
+      discovered: 0,
+      imported: 0,
+      rejected: 0,
+    }),
     runCommand: (cmd, args) => { calls.exec.push([cmd, args]); return exec ? exec(cmd, args) : { code: 0, stdout: '', stderr: '' } },
     confirm: () => confirmAns,
     ...over,

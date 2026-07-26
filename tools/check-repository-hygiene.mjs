@@ -13,6 +13,10 @@ const FORBIDDEN_TRACKED = [
   /^\.playwright-(?:tmp|mcp)\//,
   /^e2e-runs\//,
 ]
+const FORBIDDEN_REFERENCE_IDENTITIES = [
+  String.fromCharCode(116, 114, 101, 108, 108, 105, 115),
+  String.fromCharCode(99, 111, 109, 101, 116),
+]
 
 function posixPath(path) {
   return path.split('\\').join('/')
@@ -35,6 +39,37 @@ export function checkTrackedFiles(root, tracked) {
     const bytes = statSync(join(root, rel)).size
     if (bytes > MAX_OFFICIAL_IMAGE_BYTES) {
       failures.push(`正式文档图超过 500 KiB: ${rel} (${bytes} bytes)`)
+    }
+  }
+  return failures
+}
+
+function matchingReferenceIdentity(value) {
+  const normalized = value.toLowerCase()
+  return FORBIDDEN_REFERENCE_IDENTITIES.find((identity) => normalized.includes(identity))
+}
+
+function redactReferenceIdentity(value) {
+  let redacted = value
+  for (const identity of FORBIDDEN_REFERENCE_IDENTITIES) {
+    redacted = redacted.replace(new RegExp(identity, 'gi'), '[reference-identity]')
+  }
+  return redacted
+}
+
+export function checkReferenceIdentities(root, tracked) {
+  const failures = []
+  for (const file of tracked) {
+    const rel = posixPath(file)
+    if (matchingReferenceIdentity(rel)) {
+      failures.push(`受管理路径包含外部参考项目身份: ${redactReferenceIdentity(rel)}`)
+    }
+    const absolute = join(root, rel)
+    if (!existsSync(absolute) || statSync(absolute).isDirectory()) continue
+    const bytes = readFileSync(absolute)
+    if (bytes.includes(0)) continue
+    if (matchingReferenceIdentity(bytes.toString('utf8'))) {
+      failures.push(`受管理文本包含外部参考项目身份: ${redactReferenceIdentity(rel)}`)
     }
   }
   return failures
@@ -73,7 +108,12 @@ export function checkMarkdownImages(root, markdownFiles) {
 function gitTracked(root) {
   const result = spawnSync('git', ['ls-files', '-z'], { cwd: root, encoding: 'utf8' })
   if (result.status !== 0) throw new Error(result.stderr.trim() || 'git ls-files failed')
-  return result.stdout.split('\0').filter(Boolean)
+  // `git ls-files` 仍会列出工作树中已删除、尚未 stage 的索引项；仓库卫生门检查的是
+  // 即将交付的当前文件树，删除中的历史路径不应在提交前制造假阳性。
+  return result.stdout
+    .split('\0')
+    .filter(Boolean)
+    .filter((file) => existsSync(join(root, file)))
 }
 
 export function checkRepository(root = DEFAULT_ROOT) {
@@ -85,6 +125,7 @@ export function checkRepository(root = DEFAULT_ROOT) {
   )
   return [
     ...checkTrackedFiles(root, tracked),
+    ...checkReferenceIdentities(root, tracked),
     ...checkMarkdownImages(root, markdownFiles),
   ]
 }

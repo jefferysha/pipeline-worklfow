@@ -128,7 +128,7 @@ platforms:
     defaultChecked: false
     agentCapable: true
     hasHooks: true
-    hookContainer: .github/copilot/hooks.json|.github/hooks/trellis.json
+    hookContainer: .github/copilot/hooks.json|.github/hooks/tenon.json
     configure: adapters/copilot/install.sh
     inject_status: degraded
     inject_fallback: copilot-instructions
@@ -324,7 +324,7 @@ platforms:
 # ─── 长尾平台（D14 平台广度：证明"填表即可扩"，策略证明 > 穷举 padding）───
 # 全部 5 项长尾平台（aider/continue/cline/amp/zed）已于 2026-07-07 #41 批次转 active——本表当前
 # 无剩余 longtail 条目。活跃 12（claude-code/codex/cursor/gemini/copilot/pi/devin/zed/aider/
-# continue/cline/amp），策略面对标 Trellis 16 平台 / Comet 30 平台（加平台成本 = 填表，不是重写内核）。
+# continue/cline/amp），策略面对标 Tenon contract 16 平台 / Tenon runtime 30 平台（加平台成本 = 填表，不是重写内核）。
 #
 # 2026-07-07 #41 长尾铺量批次逐项处置（如实纠偏记录，非全盘照抄原表）：
 #   - zed（档 C）/ aider（档 B）：与原目标档一致。

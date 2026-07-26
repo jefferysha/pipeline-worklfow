@@ -361,6 +361,10 @@ for (const path of production) {
     && /['"](?:projects|secrets|dashboard-token|dashboard-server)\.json['"]/.test(code)) {
     failures.push(`${rel}: Tenon product file locations must come from kernel resolveProductPaths`)
   }
+  if (rel.startsWith('packages/kernel/src/')
+    && /['"]pipeline-projects\.json['"]/.test(code)) {
+    failures.push(`${rel}: vendor-neutral kernel must not own host-specific migration paths`)
+  }
   if (rel !== PRODUCT_PATH_OWNER && /\bTENON_RUNTIME_HOME\b/.test(code)) {
     failures.push(`${rel}: TENON_RUNTIME_HOME may only be interpreted by kernel resolveProductPaths`)
   }

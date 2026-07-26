@@ -29,7 +29,7 @@ build_sha**；worker 不 commit，主线仍 owns commits。channel 只读地为 
 ## event-sourced 核心语义
 
 - **存储模型**：每个 channel 一个目录 `<root>/<bucket>/<channel>/{events.jsonl, .seq, <name>.lock}`。
-  `root = $TRELLIS_CHANNEL_ROOT 或 ~/.trellis/channels`；`bucket = cwd sanitize`（`$TENON_CHANNEL_PROJECT`
+  `root = $TENON_CHANNEL_ROOT 或 ~/.tenon/channels`；`bucket = cwd sanitize`（`$TENON_CHANNEL_PROJECT`
   可覆盖）；`--scope global` → `_global` 桶。
 - **append-only 事件日志**：每 channel 一条 `events.jsonl`（每行一事件）。所有派生状态（worker
   registry / thread / inbox 计数）都是**从事件流纯函数投影**——磁盘不存派生态，可在任意机器一致重放。

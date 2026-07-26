@@ -36,6 +36,10 @@
 - [x] 修复既有仓库架构主规格的 OpenSpec 1.6 Purpose 结构，使隔离应用演练可严格重建。 (build)
 - [x] 重构唯一整包 update 事务：移除第二套 self-update，补 launcher/Dashboard 精确补偿、
   项目只读同步报告、Tenon 产品状态单一所有权/路径契约与 fixture 驱动的 N-1 CI 接线。 (build)
+- [x] 删除当前树中的外部参考项目调研、演示和归档产物，清理剩余路径/文本身份，并增加零例外
+  仓库门禁。 (build)
+- [x] 为宿主项目注册表迁移增加一次性持久 receipt，保证用户清理后的项目不会在后续 setup 中复活，
+  同时修复 server 参数输出和 AFK 空队列契约。 (build)
 
 ## 验证
 
@@ -46,6 +50,7 @@
 - [ ] 在隔离 HOME 验证 Marketplace 一步首装、npx tarball 首装及发布包内容。 (verify)
 - [ ] 验证当前树无受禁图片、无悬空图片链接且 Git 历史未被改写。 (verify)
 - [ ] 验证旧安装迁移、失败注入、previous rollback、单 Skill root 与唯一 18765 listener。 (verify)
+- [ ] 验证受 Git 管理的路径和文本不存在外部参考项目身份，且门禁对路径/内容注入均 fail-closed。 (verify)
 
 ## 交付
 

@@ -17,13 +17,14 @@ import {
   workerFile,
 } from './paths.js'
 
-describe('resolveRoot（paths.py:27：TRELLIS_CHANNEL_ROOT 或 ~/.trellis/channels）', () => {
+describe('resolveRoot（产品状态根或显式 TENON_CHANNEL_ROOT）', () => {
   test('env 覆盖优先', () => {
-    expect(resolveRoot('/home/u', '/custom/root')).toBe('/custom/root')
+    expect(resolveRoot('/platform/state/tenon/channels', '/custom/root')).toBe('/custom/root')
   })
-  test('缺省 = ~/.trellis/channels', () => {
-    expect(resolveRoot('/home/u', undefined)).toBe(join('/home/u', '.trellis', 'channels'))
-    expect(resolveRoot('/home/u', '  ')).toBe(join('/home/u', '.trellis', 'channels'))
+  test('缺省使用 kernel 提供的平台标准 channel 根', () => {
+    const canonical = join('/platform', 'state', 'tenon', 'channels')
+    expect(resolveRoot(canonical, undefined)).toBe(canonical)
+    expect(resolveRoot(canonical, '  ')).toBe(canonical)
   })
 })
 

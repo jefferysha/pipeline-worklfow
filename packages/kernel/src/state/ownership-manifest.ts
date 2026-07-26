@@ -4,7 +4,7 @@
  *
  * ═══ 老仓语义盘点（真相源逐处，行号为老仓 workflow-plugin/skills/pipeline/scripts/*）═══
  *
- * A. 所有权清单 .pipeline-owned.json（state-write-record.sh，命名对齐 Trellis .template-hashes.json）
+ * A. 所有权清单 .pipeline-owned.json（state-write-record.sh，命名对齐 Tenon contract .template-hashes.json）
  *   ⓪ 清单是 path→contentHash **对象**（非裸路径数组，§0 承重半边，state-write-record.sh:14-19）——
  *      hash 是 uninstall「用户是否改过」判定的承重半边；丢 hash 即丢「保留用户改动」能力。
  *   ① key = POSIX 相对路径；越界（.. 开头 / 绝对）一律丢（record_write ②③，:162-165）。
@@ -33,7 +33,7 @@
  *   · 受管目录守卫 is_managed_path/is_managed_root_dir（:391-405）；ALL_MANAGED_DIRS（:65）。
  *
  *   ★lite 改进（诚实标注 · 对老仓的偏离）：老仓 uninstall「清单内文件一律删」（不看 hash，:11）；
- *     hash 仅用于 AGENTS.md prune + scrubber 展示。lite 把 hash **升格为删除决策**（对齐 Trellis
+ *     hash 仅用于 AGENTS.md prune + scrubber 展示。lite 把 hash **升格为删除决策**（对齐 Tenon contract
  *     isTemplateModified 的本意、state-write-record.sh §0 的承重半边宣称、BACKLOG #24「用户改过的保留」）：
  *     不透明文件 unmodified→删、modified→保留。这是 GOAL「迁移≠平移」的改进承诺，非阉割。
  *

@@ -1,8 +1,8 @@
 # Tenon 全局迁移验证报告
 
 > Change：`rename-pipeline-lite-to-tenon`
-> 上一冻结构建：`4752a95c1611a9fa99eec5d6be8e78587ba3d0b7`
-> 当前结论：Build 根因修复及本地全量门禁通过，等待新冻结提交的独立 Verify
+> 冻结构建：`e9153eeca887a0f97870443dc26ec755e88dac3e`
+> 当前结论：失败，退回 Build 修复迁移生命周期与进程输出契约
 
 ## 已执行验证
 
@@ -35,9 +35,29 @@
   路径解析归 kernel 单一所有者；退役产品专属目录只属于隔离的 legacy distribution channel，不进入
   当前 Tenon runtime 或 bundle。
 
-## 下一步验证边界
+## 冻结复核结果
 
-- 冻结新的 Build SHA 后，由独立代码审查、隔离安装 E2E 与真实浏览器三路复核同一提交。
-- 浏览器必须验证受管 18765、20 个迁移项目、Progress 的终端来源与 Auto Run 的 automation 来源不混淆，
-  以及 README/中文 Pages 的桌面与移动图片版式。
-- 独立复核通过前不把本报告升级为最终 PASS，也不推进 Ship。
+- 代码审查验证上一轮两个 P1 与 CAS P2 已修复，定向 9 个文件、111/111 通过。
+- 真实浏览器验收通过：受管 18765 精确匹配 release `sha256-411676fa…`、PID `34846`、
+  state scope `sha256-v1-89b139…` 和 20 个项目；Progress 显示终端来源，Auto Run 不含
+  `automation=off` 的目标 Change；Dashboard、中文 Docs、README 的桌面/375px 无 overflow、
+  无 4xx/5xx、无 console error/warn。
+- 用户清理 19 条测试项目注册后，canonical Tenon registry 已只剩当前项目；进一步复核发现现有迁移
+  会在下次 setup 再读取旧宿主注册表，可能把这些项目重新导入。
+
+## 新阻断问题
+
+- `packages/server/src/main.ts` 的 help 与 invalid-argv 输出使用 `\\n`，真实 stdout/stderr 出现字面量
+  反斜杠+n；parser 单测无法覆盖进程输出字节。
+- `packages/kernel/src/product-paths.ts` 直接拥有 `.claude/.codex` 路径知识，违反 vendor-neutral kernel
+  边界；宿主协议解析应属于 CLI migration/host adapter。
+- 项目注册表“一次性迁移”没有版本化 receipt；每次 native setup 都重新扫描宿主文件，会复活用户已从
+  Tenon 删除的旧项目。
+
+## 处理决定
+
+- 走 `verify-fail` 返回 Build，不把三项 P2 降级成发布后处理。
+- 把宿主候选路径解析移回 CLI migration owner；kernel 只保留 Tenon 产品路径与通用原子原语。
+- 在 Tenon state 域加入版本化 migration receipt，使用跨进程锁与原子发布；完成后永不再读取旧宿主来源，
+  损坏 receipt 必须 fail-closed。
+- 增加迁移二次执行/用户删除后不复活/并发执行，以及 server bundle stdout/stderr 精确字节测试。

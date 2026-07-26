@@ -9,8 +9,8 @@ tags: [workflow, pipeline, uninstall, cleanup]
 
 把当前项目里 pipeline 装入的资产安全移除：**只删所有权清单（`.pipeline-owned.json`）里登记、且
 未被用户改动的文件**，**绝不盲扫** `.codex/` `.claude/` `.opencode/` 等用户运行时数据目录。
-对标 Trellis `trellis uninstall`（命名对齐：`.template-hashes.json` ↔ `.pipeline-owned.json`、
-`TRELLIS:START/END` ↔ `PIPELINE:START/END`）。
+对标 Tenon contract `tenon uninstall`（命名对齐：`.template-hashes.json` ↔ `.pipeline-owned.json`、
+`TENON:START/END` ↔ `PIPELINE:START/END`）。
 
 实现真相源（已落地 · BACKLOG #24）：所有权 hash 追踪纯逻辑在
 `packages/kernel/src/state/ownership.ts`；卸载命令在 `packages/cli/src/commands/uninstall.ts`

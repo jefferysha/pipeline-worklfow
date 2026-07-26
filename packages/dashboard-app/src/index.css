@@ -1,7 +1,6 @@
 /*
  * Tailwind v4 + shadcn 基座（全量迁移的真相源入口）。
- * 配色 token 三段式逐字搬运自 src/styles.ts GLOBAL_CSS（v8「Trellis 惊艳版」，
- * token 上游 design-demos/v8-trellis-encore.html :root 三段）——一个色值都不许改：
+ * 配色 token 三段式与 src/styles.ts GLOBAL_CSS 保持等值——一个色值都不许改：
  *   · 默认浅色（:root）；
  *   · @media (prefers-color-scheme: dark) 跟随系统（:root:not([data-theme="light"]) 令显式亮色仍胜系统暗色）；
  *   · :root[data-theme="light"] / :root[data-theme="dark"] 用户显式切换覆盖系统（两向皆胜）。

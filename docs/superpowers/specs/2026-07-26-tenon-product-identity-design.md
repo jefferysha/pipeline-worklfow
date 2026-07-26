@@ -22,7 +22,8 @@
 - Codex/Claude 安装继续要求精确宿主选择；默认 Dashboard 继续使用单端口 `127.0.0.1:18765`。
 - managed runtime 的内容寻址、原子 active/previous 选择、稳定 bootstrap 和失败回滚能力不得弱化。
 - 现有自动更新用户需要可审计的一次性身份迁移；迁移完成后不保留旧运行入口。
-- 已归档 Change、ledger、Git 历史和已接受 ADR 是历史事实，不做破坏性全文改写。
+- Git 既有提交对象是历史恢复边界，不做破坏性重写；当前树不为归档 Change、ledger、ADR 或 fixture
+  提供外部参考项目身份豁免。
 
 ### 非目标
 
@@ -100,8 +101,8 @@ BUG: automation=off terminal task is rendered in 自动运行
 - 复用现有 Codex/Claude Marketplace 作为首选一步安装通道；`install.sh` 只做 bootstrap，
   新用户不需要 clone 或 build。
 - npx 只作为同一发行事务的薄入口；npm scope 与凭据未验证前不得把“可发布”描述成“已发布”。
-- 仓库只删除可再生截图与未引用根图片；保留仍被实现引用的文本设计真相源、审计历史，以及少量
-  经压缩和隐私检查的正式 Tenon Dashboard 文档图。
+- 仓库删除可再生截图、未引用根图片以及包含外部参考项目身份的调研、演示和归档产物；保留不含
+  受禁身份的 Tenon 设计真相源，以及少量经压缩和隐私检查的正式 Dashboard 文档图。
 
 ## 术语与身份边界
 
@@ -237,8 +238,9 @@ scope 与认证；本 Change 在凭据缺失时只交付可复现 pack 与发布
 3–4 张稳定命名的 WebP 正式图，存入 `docs-site/public/images/`：README 展示核心图，中文文档站按
 项目、进度、自动运行和工作台组织响应式图文版式。
 
-新增 repository hygiene 门禁，检查受禁截图、正式图片 allowlist/尺寸/隐私、发布包内容和悬空链接。
-不执行历史重写：旧提交中的图片、OpenSpec archive 与 ledger 保留为审计事实。
+新增 repository hygiene 门禁，检查受禁截图、正式图片 allowlist/尺寸/隐私、发布包内容、悬空链接，
+以及受管理路径/文本中的外部参考项目身份。当前树不设 archive/ledger 例外；不执行历史重写，
+恢复能力由 Git 既有提交对象提供。
 
 ### 错误与恢复语义
 
@@ -270,7 +272,7 @@ scope 与认证；本 Change 在凭据缺失时只交付可复现 pack 与发布
 
 ## 验收策略
 
-- 静态：旧品牌/旧命令扫描按“现行产品、历史证据、迁移专用”分类；现行产品必须为零。
+- 静态：旧品牌/旧命令按现行产品与迁移专用分类；外部参考项目身份在当前树的路径和文本中必须为零。
 - 单元：identity projections、provenance、AfkView 准入、Progress label。
 - 集成：Codex/Claude install plan、inventory parsing、runtime activation、launcher、auto-update、
   update reject/rollback、bundle freshness。
@@ -289,7 +291,7 @@ scope 与认证；本 Change 在凭据缺失时只交付可复现 pack 与发布
 - 用户的“不需要兼容”解释为不保留长期 alias；允许满足自动更新所必需、最终会删除的一次性迁移事务。
 - 远程仓库目标名采用 `tenon`，npm scope 采用 `@tenon`，不再引入第二个产品词。
 - 默认端口 18765、七阶段协议和 OpenSpec evidence contract 不因品牌迁移变化。
-- 历史证据中的旧名称不计为现行品牌残留，但公开站不会发布这些内部历史文件。
+- Git 提交历史中的既有内容不属于当前树扫描范围；检出的 archive、ledger、fixture 同样不得含受禁参考身份。
 - Marketplace 是首发主入口；npm publisher scope 在凭据可用前保持占位符，不猜测所有权。
 
 ## Decision Log
@@ -302,6 +304,7 @@ scope 与认证；本 Change 在凭据缺失时只交付可复现 pack 与发布
 6. GitHub 仓库和 Pages base 同步迁移到 `tenon`，避免源码仍把旧仓库名当发布真相。
 7. 新用户使用 Marketplace bootstrap 一步安装，不需要手动 clone；npx 是同一 payload 的第二入口。
 8. 删除当前树的可再生截图并建立卫生门禁，但保留少量当前 Dashboard 正式图且不重写 Git 历史。
+9. 删除当前树中的外部参考项目调研、演示和归档产物；通用结论只以 Tenon 自有中性表述保留。
 
 ```coverage
 touches:

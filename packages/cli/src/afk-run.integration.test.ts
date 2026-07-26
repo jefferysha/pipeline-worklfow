@@ -274,6 +274,9 @@ describe('afk run —— 无 docker 环境诚实降级（不依赖 IMAGE 探针�
     const h2 = makeHarness(await mkdtemp(join(tmpdir(), 'afk-run-nodocker-')))
     try {
       await h2.run(['init', 'c1', '--track', 'backend', '--preset', 'full'])
+      await h2.run(['set', 'c1', 'phase', 'build'])
+      await seedLoops(h2.cwd)
+      expect(await h2.run(['afk', 'enqueue', 'c1', '--loop', 'afkloop'])).toBe(0)
       expect(await h2.run(['afk', 'run'])).toBe(0)
       expect(h2.err.join('\n')).toMatch(/docker/i)
     } finally {

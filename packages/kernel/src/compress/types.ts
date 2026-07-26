@@ -1,12 +1,12 @@
 /**
- * compress —— 上下文压缩类型契约（BACKLOG #30 / GOAL B13·D11：对标 Comet CONTEXT-COMPRESSION）。
+ * compress —— 上下文压缩类型契约（BACKLOG #30 / GOAL B13·D11：对标 Tenon runtime CONTEXT-COMPRESSION）。
  *
  * 思想：phase handoff（design→build / build→verify / verify→ship）时，把上游产出的长文档
  * （design_doc / plan / verification_report）**确定性**压缩为结构化摘要传给下游——保留关键
  * 决策 / 约束 / 待办 / 结构骨架，去除叙述正文 / 代码体 / 样板。零 LLM（纯规则，可测可 oracle），
  * 压缩率可量化（原字符 → 压缩字符，字符数是确定性 token 代理，不引 tokenizer 依赖）。
  *
- * 超越判据（D11 vs Comet）：① 确定性（同输入同输出，可回归 oracle）；② 结构化产出（headings/
+ * 超越判据（D11 vs Tenon runtime）：① 确定性（同输入同输出，可回归 oracle）；② 结构化产出（headings/
  * decisions/constraints/openTodos/keyFields 分桶，非纯文本 blob）；③ 压缩率逐文档 + 聚合量化。
  */
 import type { DocumentLocale } from '../types.js'

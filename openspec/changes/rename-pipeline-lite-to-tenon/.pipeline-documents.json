@@ -105,111 +105,95 @@
           "sha256": "036a9dca1bdba766abd18af506a2dc525078750dd49b0bd6180728370897debe",
           "readAt": "2026-07-26T08:20:14Z",
           "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",19]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "036a9dca1bdba766abd18af506a2dc525078750dd49b0bd6180728370897debe",
+          "readAt": "2026-07-26T08:27:26Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",20]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "036a9dca1bdba766abd18af506a2dc525078750dd49b0bd6180728370897debe",
+          "readAt": "2026-07-26T08:46:02Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",22]"
+        },
+        {
+          "phase": "build",
+          "sha256": "036a9dca1bdba766abd18af506a2dc525078750dd49b0bd6180728370897debe",
+          "readAt": "2026-07-26T08:46:33Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",23]"
         }
       ]
     },
     {
+      "kind": "verification-report",
+      "path": "docs/superpowers/reports/2026-07-26-rename-pipeline-lite-to-tenon-verify.md",
+      "sha256": "10c3deef58812b4da5f51e887acda1528bbc90d108b663f13c600f69217696fa",
+      "producer": "verification-before-completion",
+      "recordedAt": "2026-07-26T08:32:23Z",
+      "reads": []
+    },
+    {
       "kind": "proposal",
       "path": "openspec/changes/rename-pipeline-lite-to-tenon/proposal.md",
-      "sha256": "a37bc90c676345a4f444e9878114d5d0cf590ef8731668d09c046c09c238073f",
+      "sha256": "7cded5c180a5d06ef7d99037ca28994612a299a2626c52b738ad8f5494107826",
       "producer": "pipeline-spec",
-      "recordedAt": "2026-07-26T03:26:05Z",
+      "recordedAt": "2026-07-26T08:45:59Z",
       "reads": [
         {
           "phase": "spec",
-          "sha256": "a37bc90c676345a4f444e9878114d5d0cf590ef8731668d09c046c09c238073f",
-          "readAt": "2026-07-26T03:26:30Z",
-          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",2]"
+          "sha256": "7cded5c180a5d06ef7d99037ca28994612a299a2626c52b738ad8f5494107826",
+          "readAt": "2026-07-26T08:46:02Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",22]"
         },
         {
           "phase": "build",
-          "sha256": "a37bc90c676345a4f444e9878114d5d0cf590ef8731668d09c046c09c238073f",
-          "readAt": "2026-07-26T03:27:25Z",
-          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",3]"
-        },
+          "sha256": "7cded5c180a5d06ef7d99037ca28994612a299a2626c52b738ad8f5494107826",
+          "readAt": "2026-07-26T08:46:33Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",23]"
+        }
+      ]
+    },
+    {
+      "kind": "openspec-design",
+      "path": "openspec/changes/rename-pipeline-lite-to-tenon/design.md",
+      "sha256": "925769ad9970eaeb2815e77989ef9f66b0b4990854220df6898ff22675366b3b",
+      "producer": "pipeline-spec",
+      "recordedAt": "2026-07-26T08:46:00Z",
+      "reads": [
         {
           "phase": "spec",
-          "sha256": "a37bc90c676345a4f444e9878114d5d0cf590ef8731668d09c046c09c238073f",
-          "readAt": "2026-07-26T04:51:14Z",
-          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",4]"
+          "sha256": "925769ad9970eaeb2815e77989ef9f66b0b4990854220df6898ff22675366b3b",
+          "readAt": "2026-07-26T08:46:02Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",22]"
         },
         {
           "phase": "build",
-          "sha256": "a37bc90c676345a4f444e9878114d5d0cf590ef8731668d09c046c09c238073f",
-          "readAt": "2026-07-26T04:51:44Z",
-          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",5]"
-        },
-        {
-          "phase": "verify",
-          "sha256": "a37bc90c676345a4f444e9878114d5d0cf590ef8731668d09c046c09c238073f",
-          "readAt": "2026-07-26T04:59:25Z",
-          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",6]"
-        },
-        {
-          "phase": "build",
-          "sha256": "a37bc90c676345a4f444e9878114d5d0cf590ef8731668d09c046c09c238073f",
-          "readAt": "2026-07-26T05:26:02Z",
-          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",7]"
-        },
-        {
-          "phase": "verify",
-          "sha256": "a37bc90c676345a4f444e9878114d5d0cf590ef8731668d09c046c09c238073f",
-          "readAt": "2026-07-26T05:44:31Z",
-          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",8]"
-        },
-        {
-          "phase": "build",
-          "sha256": "a37bc90c676345a4f444e9878114d5d0cf590ef8731668d09c046c09c238073f",
-          "readAt": "2026-07-26T05:45:45Z",
-          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",9]"
-        },
-        {
-          "phase": "verify",
-          "sha256": "a37bc90c676345a4f444e9878114d5d0cf590ef8731668d09c046c09c238073f",
-          "readAt": "2026-07-26T05:54:09Z",
-          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",10]"
-        },
+          "sha256": "925769ad9970eaeb2815e77989ef9f66b0b4990854220df6898ff22675366b3b",
+          "readAt": "2026-07-26T08:46:33Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",23]"
+        }
+      ]
+    },
+    {
+      "kind": "superpower-design",
+      "path": "docs/superpowers/specs/2026-07-26-tenon-product-identity-design.md",
+      "sha256": "30c4ab52dad420f8892437065ad1dc19e59699065fb5d1ff813c67df7cc0db18",
+      "producer": "pipeline-spec",
+      "recordedAt": "2026-07-26T08:46:00Z",
+      "reads": [
         {
           "phase": "spec",
-          "sha256": "a37bc90c676345a4f444e9878114d5d0cf590ef8731668d09c046c09c238073f",
-          "readAt": "2026-07-26T06:05:50Z",
-          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",12]"
-        },
-        {
-          "phase": "spec",
-          "sha256": "a37bc90c676345a4f444e9878114d5d0cf590ef8731668d09c046c09c238073f",
-          "readAt": "2026-07-26T06:59:22Z",
-          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",14]"
+          "sha256": "30c4ab52dad420f8892437065ad1dc19e59699065fb5d1ff813c67df7cc0db18",
+          "readAt": "2026-07-26T08:46:02Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",22]"
         },
         {
           "phase": "build",
-          "sha256": "a37bc90c676345a4f444e9878114d5d0cf590ef8731668d09c046c09c238073f",
-          "readAt": "2026-07-26T06:59:35Z",
-          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",15]"
-        },
-        {
-          "phase": "verify",
-          "sha256": "a37bc90c676345a4f444e9878114d5d0cf590ef8731668d09c046c09c238073f",
-          "readAt": "2026-07-26T07:15:41Z",
-          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",16]"
-        },
-        {
-          "phase": "build",
-          "sha256": "a37bc90c676345a4f444e9878114d5d0cf590ef8731668d09c046c09c238073f",
-          "readAt": "2026-07-26T07:20:51Z",
-          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",17]"
-        },
-        {
-          "phase": "verify",
-          "sha256": "a37bc90c676345a4f444e9878114d5d0cf590ef8731668d09c046c09c238073f",
-          "readAt": "2026-07-26T07:40:49Z",
-          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",18]"
-        },
-        {
-          "phase": "build",
-          "sha256": "a37bc90c676345a4f444e9878114d5d0cf590ef8731668d09c046c09c238073f",
-          "readAt": "2026-07-26T08:20:14Z",
-          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",19]"
+          "sha256": "30c4ab52dad420f8892437065ad1dc19e59699065fb5d1ff813c67df7cc0db18",
+          "readAt": "2026-07-26T08:46:33Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",23]"
         }
       ]
     },
@@ -218,7 +202,7 @@
       "path": "openspec/changes/rename-pipeline-lite-to-tenon/specs/dashboard-execution-provenance/spec.md",
       "sha256": "619908fbe517beaa391c26c5a7911024e4e7ba40bfa06bfd85b445d648b88b5d",
       "producer": "openspec-propose",
-      "recordedAt": "2026-07-26T06:05:48Z",
+      "recordedAt": "2026-07-26T08:46:00Z",
       "reads": [
         {
           "phase": "build",
@@ -291,6 +275,18 @@
           "sha256": "619908fbe517beaa391c26c5a7911024e4e7ba40bfa06bfd85b445d648b88b5d",
           "readAt": "2026-07-26T08:20:14Z",
           "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",19]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "619908fbe517beaa391c26c5a7911024e4e7ba40bfa06bfd85b445d648b88b5d",
+          "readAt": "2026-07-26T08:27:26Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",20]"
+        },
+        {
+          "phase": "build",
+          "sha256": "619908fbe517beaa391c26c5a7911024e4e7ba40bfa06bfd85b445d648b88b5d",
+          "readAt": "2026-07-26T08:46:33Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",23]"
         }
       ]
     },
@@ -299,7 +295,7 @@
       "path": "openspec/changes/rename-pipeline-lite-to-tenon/specs/open-source-documentation-experience/spec.md",
       "sha256": "97e79511d1005b10b263f6201c11fd4c6f7c743e5e1ad3d0a4e919834c4a6bbf",
       "producer": "openspec-propose",
-      "recordedAt": "2026-07-26T06:05:48Z",
+      "recordedAt": "2026-07-26T08:46:00Z",
       "reads": [
         {
           "phase": "build",
@@ -372,219 +368,18 @@
           "sha256": "97e79511d1005b10b263f6201c11fd4c6f7c743e5e1ad3d0a4e919834c4a6bbf",
           "readAt": "2026-07-26T08:20:14Z",
           "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",19]"
-        }
-      ]
-    },
-    {
-      "kind": "delta-spec",
-      "path": "openspec/changes/rename-pipeline-lite-to-tenon/specs/repository-architecture-compliance/spec.md",
-      "sha256": "49cfb34dfe83f4b488e48195f86deb0d599859b2459f71c98594e41a973f4b93",
-      "producer": "openspec-propose",
-      "recordedAt": "2026-07-26T06:05:48Z",
-      "reads": [
-        {
-          "phase": "build",
-          "sha256": "49cfb34dfe83f4b488e48195f86deb0d599859b2459f71c98594e41a973f4b93",
-          "readAt": "2026-07-26T03:27:25Z",
-          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",3]"
-        },
-        {
-          "phase": "build",
-          "sha256": "49cfb34dfe83f4b488e48195f86deb0d599859b2459f71c98594e41a973f4b93",
-          "readAt": "2026-07-26T04:51:44Z",
-          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",5]"
         },
         {
           "phase": "verify",
-          "sha256": "49cfb34dfe83f4b488e48195f86deb0d599859b2459f71c98594e41a973f4b93",
-          "readAt": "2026-07-26T04:59:25Z",
-          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",6]"
+          "sha256": "97e79511d1005b10b263f6201c11fd4c6f7c743e5e1ad3d0a4e919834c4a6bbf",
+          "readAt": "2026-07-26T08:27:26Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",20]"
         },
         {
           "phase": "build",
-          "sha256": "49cfb34dfe83f4b488e48195f86deb0d599859b2459f71c98594e41a973f4b93",
-          "readAt": "2026-07-26T05:26:02Z",
-          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",7]"
-        },
-        {
-          "phase": "verify",
-          "sha256": "49cfb34dfe83f4b488e48195f86deb0d599859b2459f71c98594e41a973f4b93",
-          "readAt": "2026-07-26T05:44:31Z",
-          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",8]"
-        },
-        {
-          "phase": "build",
-          "sha256": "49cfb34dfe83f4b488e48195f86deb0d599859b2459f71c98594e41a973f4b93",
-          "readAt": "2026-07-26T05:45:45Z",
-          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",9]"
-        },
-        {
-          "phase": "verify",
-          "sha256": "49cfb34dfe83f4b488e48195f86deb0d599859b2459f71c98594e41a973f4b93",
-          "readAt": "2026-07-26T05:54:09Z",
-          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",10]"
-        },
-        {
-          "phase": "build",
-          "sha256": "49cfb34dfe83f4b488e48195f86deb0d599859b2459f71c98594e41a973f4b93",
-          "readAt": "2026-07-26T06:59:35Z",
-          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",15]"
-        },
-        {
-          "phase": "verify",
-          "sha256": "49cfb34dfe83f4b488e48195f86deb0d599859b2459f71c98594e41a973f4b93",
-          "readAt": "2026-07-26T07:15:41Z",
-          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",16]"
-        },
-        {
-          "phase": "build",
-          "sha256": "49cfb34dfe83f4b488e48195f86deb0d599859b2459f71c98594e41a973f4b93",
-          "readAt": "2026-07-26T07:20:51Z",
-          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",17]"
-        },
-        {
-          "phase": "verify",
-          "sha256": "49cfb34dfe83f4b488e48195f86deb0d599859b2459f71c98594e41a973f4b93",
-          "readAt": "2026-07-26T07:40:49Z",
-          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",18]"
-        },
-        {
-          "phase": "build",
-          "sha256": "49cfb34dfe83f4b488e48195f86deb0d599859b2459f71c98594e41a973f4b93",
-          "readAt": "2026-07-26T08:20:14Z",
-          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",19]"
-        }
-      ]
-    },
-    {
-      "kind": "delta-spec",
-      "path": "openspec/changes/rename-pipeline-lite-to-tenon/specs/tenon-product-identity/spec.md",
-      "sha256": "723c47284a1e79a6e44af1a5fd6a185bcf89b3d724675260114375bbc9f3d723",
-      "producer": "openspec-propose",
-      "recordedAt": "2026-07-26T06:05:49Z",
-      "reads": [
-        {
-          "phase": "build",
-          "sha256": "723c47284a1e79a6e44af1a5fd6a185bcf89b3d724675260114375bbc9f3d723",
-          "readAt": "2026-07-26T03:27:25Z",
-          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",3]"
-        },
-        {
-          "phase": "build",
-          "sha256": "723c47284a1e79a6e44af1a5fd6a185bcf89b3d724675260114375bbc9f3d723",
-          "readAt": "2026-07-26T04:51:44Z",
-          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",5]"
-        },
-        {
-          "phase": "verify",
-          "sha256": "723c47284a1e79a6e44af1a5fd6a185bcf89b3d724675260114375bbc9f3d723",
-          "readAt": "2026-07-26T04:59:25Z",
-          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",6]"
-        },
-        {
-          "phase": "build",
-          "sha256": "723c47284a1e79a6e44af1a5fd6a185bcf89b3d724675260114375bbc9f3d723",
-          "readAt": "2026-07-26T05:26:02Z",
-          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",7]"
-        },
-        {
-          "phase": "verify",
-          "sha256": "723c47284a1e79a6e44af1a5fd6a185bcf89b3d724675260114375bbc9f3d723",
-          "readAt": "2026-07-26T05:44:31Z",
-          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",8]"
-        },
-        {
-          "phase": "build",
-          "sha256": "723c47284a1e79a6e44af1a5fd6a185bcf89b3d724675260114375bbc9f3d723",
-          "readAt": "2026-07-26T05:45:45Z",
-          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",9]"
-        },
-        {
-          "phase": "verify",
-          "sha256": "723c47284a1e79a6e44af1a5fd6a185bcf89b3d724675260114375bbc9f3d723",
-          "readAt": "2026-07-26T05:54:09Z",
-          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",10]"
-        },
-        {
-          "phase": "build",
-          "sha256": "723c47284a1e79a6e44af1a5fd6a185bcf89b3d724675260114375bbc9f3d723",
-          "readAt": "2026-07-26T06:59:35Z",
-          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",15]"
-        },
-        {
-          "phase": "verify",
-          "sha256": "723c47284a1e79a6e44af1a5fd6a185bcf89b3d724675260114375bbc9f3d723",
-          "readAt": "2026-07-26T07:15:41Z",
-          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",16]"
-        },
-        {
-          "phase": "build",
-          "sha256": "723c47284a1e79a6e44af1a5fd6a185bcf89b3d724675260114375bbc9f3d723",
-          "readAt": "2026-07-26T07:20:51Z",
-          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",17]"
-        },
-        {
-          "phase": "verify",
-          "sha256": "723c47284a1e79a6e44af1a5fd6a185bcf89b3d724675260114375bbc9f3d723",
-          "readAt": "2026-07-26T07:40:49Z",
-          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",18]"
-        },
-        {
-          "phase": "build",
-          "sha256": "723c47284a1e79a6e44af1a5fd6a185bcf89b3d724675260114375bbc9f3d723",
-          "readAt": "2026-07-26T08:20:14Z",
-          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",19]"
-        }
-      ]
-    },
-    {
-      "kind": "superpower-design",
-      "path": "docs/superpowers/specs/2026-07-26-tenon-product-identity-design.md",
-      "sha256": "1fc4e967e43d11aec04967ae188cf0e78ef248bbd17b255170274a2f2e28ab69",
-      "producer": "pipeline-spec",
-      "recordedAt": "2026-07-26T06:05:50Z",
-      "reads": [
-        {
-          "phase": "spec",
-          "sha256": "1fc4e967e43d11aec04967ae188cf0e78ef248bbd17b255170274a2f2e28ab69",
-          "readAt": "2026-07-26T06:05:50Z",
-          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",12]"
-        },
-        {
-          "phase": "spec",
-          "sha256": "1fc4e967e43d11aec04967ae188cf0e78ef248bbd17b255170274a2f2e28ab69",
-          "readAt": "2026-07-26T06:59:22Z",
-          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",14]"
-        },
-        {
-          "phase": "build",
-          "sha256": "1fc4e967e43d11aec04967ae188cf0e78ef248bbd17b255170274a2f2e28ab69",
-          "readAt": "2026-07-26T06:59:35Z",
-          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",15]"
-        },
-        {
-          "phase": "verify",
-          "sha256": "1fc4e967e43d11aec04967ae188cf0e78ef248bbd17b255170274a2f2e28ab69",
-          "readAt": "2026-07-26T07:15:41Z",
-          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",16]"
-        },
-        {
-          "phase": "build",
-          "sha256": "1fc4e967e43d11aec04967ae188cf0e78ef248bbd17b255170274a2f2e28ab69",
-          "readAt": "2026-07-26T07:20:51Z",
-          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",17]"
-        },
-        {
-          "phase": "verify",
-          "sha256": "1fc4e967e43d11aec04967ae188cf0e78ef248bbd17b255170274a2f2e28ab69",
-          "readAt": "2026-07-26T07:40:49Z",
-          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",18]"
-        },
-        {
-          "phase": "build",
-          "sha256": "1fc4e967e43d11aec04967ae188cf0e78ef248bbd17b255170274a2f2e28ab69",
-          "readAt": "2026-07-26T08:20:14Z",
-          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",19]"
+          "sha256": "97e79511d1005b10b263f6201c11fd4c6f7c743e5e1ad3d0a4e919834c4a6bbf",
+          "readAt": "2026-07-26T08:46:33Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",23]"
         }
       ]
     },
@@ -593,7 +388,7 @@
       "path": "openspec/changes/rename-pipeline-lite-to-tenon/specs/plugin-distribution/spec.md",
       "sha256": "7b0fc0f7a34f323d9fb4bd18324622bdb892d16604c487761851255baa00b276",
       "producer": "openspec-propose",
-      "recordedAt": "2026-07-26T06:59:21Z",
+      "recordedAt": "2026-07-26T08:46:01Z",
       "reads": [
         {
           "phase": "build",
@@ -624,184 +419,173 @@
           "sha256": "7b0fc0f7a34f323d9fb4bd18324622bdb892d16604c487761851255baa00b276",
           "readAt": "2026-07-26T08:20:14Z",
           "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",19]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "7b0fc0f7a34f323d9fb4bd18324622bdb892d16604c487761851255baa00b276",
+          "readAt": "2026-07-26T08:27:26Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",20]"
+        },
+        {
+          "phase": "build",
+          "sha256": "7b0fc0f7a34f323d9fb4bd18324622bdb892d16604c487761851255baa00b276",
+          "readAt": "2026-07-26T08:46:33Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",23]"
+        }
+      ]
+    },
+    {
+      "kind": "delta-spec",
+      "path": "openspec/changes/rename-pipeline-lite-to-tenon/specs/repository-architecture-compliance/spec.md",
+      "sha256": "ed24cc402e8b13520ffbb8fbdbd7307cc2a7bdf020c8180b923a02eb082b2520",
+      "producer": "openspec-propose",
+      "recordedAt": "2026-07-26T08:46:01Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "ed24cc402e8b13520ffbb8fbdbd7307cc2a7bdf020c8180b923a02eb082b2520",
+          "readAt": "2026-07-26T08:46:33Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",23]"
+        }
+      ]
+    },
+    {
+      "kind": "delta-spec",
+      "path": "openspec/changes/rename-pipeline-lite-to-tenon/specs/tenon-product-identity/spec.md",
+      "sha256": "723c47284a1e79a6e44af1a5fd6a185bcf89b3d724675260114375bbc9f3d723",
+      "producer": "openspec-propose",
+      "recordedAt": "2026-07-26T08:46:01Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "723c47284a1e79a6e44af1a5fd6a185bcf89b3d724675260114375bbc9f3d723",
+          "readAt": "2026-07-26T03:27:25Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",3]"
+        },
+        {
+          "phase": "build",
+          "sha256": "723c47284a1e79a6e44af1a5fd6a185bcf89b3d724675260114375bbc9f3d723",
+          "readAt": "2026-07-26T04:51:44Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",5]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "723c47284a1e79a6e44af1a5fd6a185bcf89b3d724675260114375bbc9f3d723",
+          "readAt": "2026-07-26T04:59:25Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",6]"
+        },
+        {
+          "phase": "build",
+          "sha256": "723c47284a1e79a6e44af1a5fd6a185bcf89b3d724675260114375bbc9f3d723",
+          "readAt": "2026-07-26T05:26:02Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",7]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "723c47284a1e79a6e44af1a5fd6a185bcf89b3d724675260114375bbc9f3d723",
+          "readAt": "2026-07-26T05:44:31Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",8]"
+        },
+        {
+          "phase": "build",
+          "sha256": "723c47284a1e79a6e44af1a5fd6a185bcf89b3d724675260114375bbc9f3d723",
+          "readAt": "2026-07-26T05:45:45Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",9]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "723c47284a1e79a6e44af1a5fd6a185bcf89b3d724675260114375bbc9f3d723",
+          "readAt": "2026-07-26T05:54:09Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",10]"
+        },
+        {
+          "phase": "build",
+          "sha256": "723c47284a1e79a6e44af1a5fd6a185bcf89b3d724675260114375bbc9f3d723",
+          "readAt": "2026-07-26T06:59:35Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",15]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "723c47284a1e79a6e44af1a5fd6a185bcf89b3d724675260114375bbc9f3d723",
+          "readAt": "2026-07-26T07:15:41Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",16]"
+        },
+        {
+          "phase": "build",
+          "sha256": "723c47284a1e79a6e44af1a5fd6a185bcf89b3d724675260114375bbc9f3d723",
+          "readAt": "2026-07-26T07:20:51Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",17]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "723c47284a1e79a6e44af1a5fd6a185bcf89b3d724675260114375bbc9f3d723",
+          "readAt": "2026-07-26T07:40:49Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",18]"
+        },
+        {
+          "phase": "build",
+          "sha256": "723c47284a1e79a6e44af1a5fd6a185bcf89b3d724675260114375bbc9f3d723",
+          "readAt": "2026-07-26T08:20:14Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",19]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "723c47284a1e79a6e44af1a5fd6a185bcf89b3d724675260114375bbc9f3d723",
+          "readAt": "2026-07-26T08:27:26Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",20]"
+        },
+        {
+          "phase": "build",
+          "sha256": "723c47284a1e79a6e44af1a5fd6a185bcf89b3d724675260114375bbc9f3d723",
+          "readAt": "2026-07-26T08:46:33Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",23]"
         }
       ]
     },
     {
       "kind": "superpower-plan",
       "path": "docs/superpowers/plans/2026-07-26-tenon-global-rename.md",
-      "sha256": "447ae4f01d8b75aeb2550410e808116f602d65cd3974c57860f263a8e6b5f2ea",
+      "sha256": "52b237d479d769730972d5f3576c5c52c15f2b58b12ff6230f4e6fc4a128390e",
       "producer": "writing-plans",
-      "recordedAt": "2026-07-26T06:59:21Z",
+      "recordedAt": "2026-07-26T08:46:01Z",
       "reads": [
         {
           "phase": "build",
-          "sha256": "447ae4f01d8b75aeb2550410e808116f602d65cd3974c57860f263a8e6b5f2ea",
-          "readAt": "2026-07-26T06:59:35Z",
-          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",15]"
-        },
-        {
-          "phase": "verify",
-          "sha256": "447ae4f01d8b75aeb2550410e808116f602d65cd3974c57860f263a8e6b5f2ea",
-          "readAt": "2026-07-26T07:15:41Z",
-          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",16]"
-        },
-        {
-          "phase": "build",
-          "sha256": "447ae4f01d8b75aeb2550410e808116f602d65cd3974c57860f263a8e6b5f2ea",
-          "readAt": "2026-07-26T07:20:51Z",
-          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",17]"
-        },
-        {
-          "phase": "verify",
-          "sha256": "447ae4f01d8b75aeb2550410e808116f602d65cd3974c57860f263a8e6b5f2ea",
-          "readAt": "2026-07-26T07:40:49Z",
-          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",18]"
-        },
-        {
-          "phase": "build",
-          "sha256": "447ae4f01d8b75aeb2550410e808116f602d65cd3974c57860f263a8e6b5f2ea",
-          "readAt": "2026-07-26T08:20:14Z",
-          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",19]"
+          "sha256": "52b237d479d769730972d5f3576c5c52c15f2b58b12ff6230f4e6fc4a128390e",
+          "readAt": "2026-07-26T08:46:33Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",23]"
         }
       ]
     },
     {
       "kind": "plan",
       "path": "docs/superpowers/plans/2026-07-26-tenon-global-rename.md",
-      "sha256": "447ae4f01d8b75aeb2550410e808116f602d65cd3974c57860f263a8e6b5f2ea",
+      "sha256": "52b237d479d769730972d5f3576c5c52c15f2b58b12ff6230f4e6fc4a128390e",
       "producer": "writing-plans",
-      "recordedAt": "2026-07-26T06:59:21Z",
+      "recordedAt": "2026-07-26T08:46:01Z",
       "reads": [
         {
           "phase": "build",
-          "sha256": "447ae4f01d8b75aeb2550410e808116f602d65cd3974c57860f263a8e6b5f2ea",
-          "readAt": "2026-07-26T06:59:35Z",
-          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",15]"
-        },
-        {
-          "phase": "verify",
-          "sha256": "447ae4f01d8b75aeb2550410e808116f602d65cd3974c57860f263a8e6b5f2ea",
-          "readAt": "2026-07-26T07:15:41Z",
-          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",16]"
-        },
-        {
-          "phase": "build",
-          "sha256": "447ae4f01d8b75aeb2550410e808116f602d65cd3974c57860f263a8e6b5f2ea",
-          "readAt": "2026-07-26T07:20:51Z",
-          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",17]"
-        },
-        {
-          "phase": "verify",
-          "sha256": "447ae4f01d8b75aeb2550410e808116f602d65cd3974c57860f263a8e6b5f2ea",
-          "readAt": "2026-07-26T07:40:49Z",
-          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",18]"
-        },
-        {
-          "phase": "build",
-          "sha256": "447ae4f01d8b75aeb2550410e808116f602d65cd3974c57860f263a8e6b5f2ea",
-          "readAt": "2026-07-26T08:20:14Z",
-          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",19]"
+          "sha256": "52b237d479d769730972d5f3576c5c52c15f2b58b12ff6230f4e6fc4a128390e",
+          "readAt": "2026-07-26T08:46:33Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",23]"
         }
       ]
     },
     {
       "kind": "tasks",
       "path": "openspec/changes/rename-pipeline-lite-to-tenon/tasks.md",
-      "sha256": "88e618c83d51ad65f7dac1b7eaddc0d961cb4b753d0e9e3d41e88eecc58fed44",
-      "producer": "pipeline-spec",
-      "recordedAt": "2026-07-26T06:59:21Z",
+      "sha256": "123d474af23d37588b5b98c562b87731bba46df3035e5feec055ce2e6b7d124e",
+      "producer": "pipeline-build",
+      "recordedAt": "2026-07-26T09:06:21Z",
       "reads": [
         {
-          "phase": "spec",
-          "sha256": "88e618c83d51ad65f7dac1b7eaddc0d961cb4b753d0e9e3d41e88eecc58fed44",
-          "readAt": "2026-07-26T06:59:22Z",
-          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",14]"
-        },
-        {
           "phase": "build",
-          "sha256": "88e618c83d51ad65f7dac1b7eaddc0d961cb4b753d0e9e3d41e88eecc58fed44",
-          "readAt": "2026-07-26T06:59:35Z",
-          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",15]"
-        },
-        {
-          "phase": "verify",
-          "sha256": "88e618c83d51ad65f7dac1b7eaddc0d961cb4b753d0e9e3d41e88eecc58fed44",
-          "readAt": "2026-07-26T07:15:41Z",
-          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",16]"
-        },
-        {
-          "phase": "build",
-          "sha256": "88e618c83d51ad65f7dac1b7eaddc0d961cb4b753d0e9e3d41e88eecc58fed44",
-          "readAt": "2026-07-26T07:20:51Z",
-          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",17]"
-        },
-        {
-          "phase": "verify",
-          "sha256": "88e618c83d51ad65f7dac1b7eaddc0d961cb4b753d0e9e3d41e88eecc58fed44",
-          "readAt": "2026-07-26T07:40:49Z",
-          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",18]"
-        },
-        {
-          "phase": "build",
-          "sha256": "88e618c83d51ad65f7dac1b7eaddc0d961cb4b753d0e9e3d41e88eecc58fed44",
-          "readAt": "2026-07-26T08:20:14Z",
-          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",19]"
+          "sha256": "123d474af23d37588b5b98c562b87731bba46df3035e5feec055ce2e6b7d124e",
+          "readAt": "2026-07-26T09:06:22Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",23]"
         }
       ]
-    },
-    {
-      "kind": "openspec-design",
-      "path": "openspec/changes/rename-pipeline-lite-to-tenon/design.md",
-      "sha256": "1f53c186621b58c3b01d9a68d4ccf8faf3f1932fb0191b4912f36cec5e1b78e5",
-      "producer": "pipeline-spec",
-      "recordedAt": "2026-07-26T06:59:21Z",
-      "reads": [
-        {
-          "phase": "spec",
-          "sha256": "1f53c186621b58c3b01d9a68d4ccf8faf3f1932fb0191b4912f36cec5e1b78e5",
-          "readAt": "2026-07-26T06:59:22Z",
-          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",14]"
-        },
-        {
-          "phase": "build",
-          "sha256": "1f53c186621b58c3b01d9a68d4ccf8faf3f1932fb0191b4912f36cec5e1b78e5",
-          "readAt": "2026-07-26T06:59:35Z",
-          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",15]"
-        },
-        {
-          "phase": "verify",
-          "sha256": "1f53c186621b58c3b01d9a68d4ccf8faf3f1932fb0191b4912f36cec5e1b78e5",
-          "readAt": "2026-07-26T07:15:41Z",
-          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",16]"
-        },
-        {
-          "phase": "build",
-          "sha256": "1f53c186621b58c3b01d9a68d4ccf8faf3f1932fb0191b4912f36cec5e1b78e5",
-          "readAt": "2026-07-26T07:20:51Z",
-          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",17]"
-        },
-        {
-          "phase": "verify",
-          "sha256": "1f53c186621b58c3b01d9a68d4ccf8faf3f1932fb0191b4912f36cec5e1b78e5",
-          "readAt": "2026-07-26T07:40:49Z",
-          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",18]"
-        },
-        {
-          "phase": "build",
-          "sha256": "1f53c186621b58c3b01d9a68d4ccf8faf3f1932fb0191b4912f36cec5e1b78e5",
-          "readAt": "2026-07-26T08:20:14Z",
-          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",19]"
-        }
-      ]
-    },
-    {
-      "kind": "verification-report",
-      "path": "docs/superpowers/reports/2026-07-26-rename-pipeline-lite-to-tenon-verify.md",
-      "sha256": "3610c1c2ab55409f8651dd3dfa11d21281d76fddd753130a1be53e1483ea29fd",
-      "producer": "verification-before-completion",
-      "recordedAt": "2026-07-26T07:47:34Z",
-      "reads": []
     }
   ]
 }

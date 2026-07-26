@@ -168,7 +168,7 @@ describe('真实 e2e —— children / cascade 真反查（含真归档区）', 
   })
 })
 
-describe('真实 e2e —— canonical 真投影（Trellis 24 字段）+ 跨命令串联', () => {
+describe('真实 e2e —— canonical 真投影（Tenon contract 24 字段）+ 跨命令串联', () => {
   let h: Harness
   beforeEach(async () => {
     h = await freshHarness()

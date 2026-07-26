@@ -17,6 +17,10 @@ import {
   type PipelineHost,
   type PipelineHostFlags,
 } from './plugin-host.js'
+import type {
+  LegacyProjectRegistryMigrationInput,
+  LegacyProjectRegistryMigrationResult,
+} from '../migration/legacy-project-registry.js'
 
 // ── 注入面（测试注入临时 HOME / spy;真实现 = node:fs + os.homedir）──────────────────
 
@@ -39,6 +43,13 @@ export interface SetupEnv {
   listDir(dir: string): string[]
   /** 写入受控的用户级 Tenon 配置（自动更新 opt-in）。 */
   writeText(path: string, text: string): void
+  /**
+   * setup 完成后执行一次性宿主注册表迁移。生产环境缺省走真实迁移器；
+   * 测试环境必须显式注入，避免绕过 SetupEnv 的文件系统边界。
+   */
+  migrateProjectRegistry?(
+    input: LegacyProjectRegistryMigrationInput,
+  ): Promise<LegacyProjectRegistryMigrationResult>
   /**
    * 跑一条命令（技能安装 / `--list` 核 id）——真实现 execFileSync 捕获退出码+stdout+stderr（不抛,非零折算 code）;
    * 测试注入 spy（记录调用、伪造成功/失败），不起真装。dry-run 路径**绝不调用**（零执行不变量）。

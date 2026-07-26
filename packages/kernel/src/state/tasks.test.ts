@@ -127,7 +127,7 @@ describe('cascadeDependents —— BFS 传递闭包防环（老仓 cmd_cascade s
   })
 })
 
-describe('projectCanonical —— Trellis 24 字段投影（老仓 cmd_canonical state-task.sh:341-422）', () => {
+describe('projectCanonical —— Tenon contract 24 字段投影（老仓 cmd_canonical state-task.sh:341-422）', () => {
   test('全字段映射 + nz 空/null 归一', () => {
     const fields = emptyFields()
     fields.phase = 'build'

@@ -206,7 +206,7 @@ tenon set "$TENON_CHANGE_NAME" branch_status handled
 
 ⚡ **HARD RULE**：spec/stack 规范的注入是**软的**；本步用 `git diff --name-only` 把改动
 **逐文件**对照对应 capability `spec.md` **回读勾选**，作为 verify 通过的**硬门**——未逐项勾选
-不得 verify-pass。对标 Trellis check agent 强制 `git diff --name-only` + `git diff` 逐条对 spec。
+不得 verify-pass。对标 Tenon contract check agent 强制 `git diff --name-only` + `git diff` 逐条对 spec。
 
 ```bash
 # 1) Git 基线时列出冻结靶引入的改动文件；in-place 基线没有 Git 区间，逐文件审当前工作区并保持其不变。

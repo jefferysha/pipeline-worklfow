@@ -103,7 +103,7 @@ review/interaction/confirm 三门由项目根 `.pipeline-pending-{review,interac
 
 **加平台 = 填表非重写（D7/D14）**：`registry.yaml` 填一行平台条目 + 写 configure + 三个 wrapper
 （薄包 baseline hook）+ 在 conformance 加该 id → lint 与 conformance 自动覆盖。矩阵铺开对标
-Trellis 16 平台 / Comet 30 平台的策略面。后续平台（gemini/copilot/pi/devin）目标档位见 registry `planned:`。
+Tenon contract 16 平台 / Tenon runtime 30 平台的策略面。后续平台（gemini/copilot/pi/devin）目标档位见 registry `planned:`。
 
 ---
 

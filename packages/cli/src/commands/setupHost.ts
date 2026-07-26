@@ -247,7 +247,8 @@ export function cmdSetupHost(
     }
     return publishManagedRuntime(deps, env, installer, candidate.root, host, dashboardStarter, openDashboard).then(async (runtimeCode) => {
       if (runtimeCode !== 0) return runtimeCode
-      const migrated = await migrateLegacyProjectRegistry({
+      const migrateProjectRegistry = env.migrateProjectRegistry ?? migrateLegacyProjectRegistry
+      const migrated = await migrateProjectRegistry({
         homeDir: env.homeDir(),
         platform: process.platform,
         env: process.env,

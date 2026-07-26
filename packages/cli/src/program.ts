@@ -181,7 +181,7 @@ export function buildProgram(deps: CliDeps, runtimes: ProgramRuntimes = {}): Com
 
   program
     .command('advance <name>')
-    .description('auto-transition 中间档：guard 全绿自动推进，撞三门/终态/guard 不过即停（HITL，D12>Comet）')
+    .description('auto-transition 中间档：guard 全绿自动推进，撞三门/终态/guard 不过即停（HITL，D12>Tenon runtime）')
     .option('--max-steps <n>', '防失控保险丝（默认 12）', (v: string) => parseInt(v, 10))
     .option('--dry-run', '只报计划不推进')
     .option('--through-gates', '放行复核相位（confirm/interaction 硬门仍不跨越）')
@@ -211,7 +211,7 @@ export function buildProgram(deps: CliDeps, runtimes: ProgramRuntimes = {}): Com
 
   program
     .command('scaffold <sub> [args...]')
-    .description('Trellis parity：scaffold 按类型铺分层空文档集 · resolve-workflow 多 id 解析（D2/B16）')
+    .description('Tenon contract parity：scaffold 按类型铺分层空文档集 · resolve-workflow 多 id 解析（D2/B16）')
     .allowUnknownOption()
     .action(async (sub: string, args: string[]) => bail(await cmdScaffold(deps, sub, args)))
 

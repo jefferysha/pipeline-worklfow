@@ -153,9 +153,9 @@ export async function startSupervisor(
   const view: AdapterView = { resume: config.resume, model: config.model, systemPrompt: config.systemPrompt, cwd: config.cwd }
   const args = adapter.buildArgs(view)
   const childEnv: Record<string, string> = { ...(config.env ?? {}) }
-  childEnv.TRELLIS_HOOKS = '0'
-  childEnv.TRELLIS_CHANNEL = channelName
-  childEnv.TRELLIS_CHANNEL_AS = workerName
+  childEnv.TENON_HOOKS = '0'
+  childEnv.TENON_CHANNEL = channelName
+  childEnv.TENON_CHANNEL_AS = workerName
 
   log(`[supervisor] starting ${adapter.provider} ${args.join(' ')}\n`)
 

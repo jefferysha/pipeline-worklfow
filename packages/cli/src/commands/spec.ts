@@ -1,6 +1,6 @@
 /**
  * spec 子命令 —— living spec 库（specs 列表 / set-spec-scope / inject-jsonl；GOAL A1 内核深度 /
- * D2 超越 Trellis 的规范库，BACKLOG #16）。
+ * D2 超越 Tenon contract 的规范库，BACKLOG #16）。
  * 老仓真相源：skills/pipeline/scripts/state-spec.sh（语义盘点见 kernel/src/state/spec.ts 顶注）。
  *   specs [--json]              列出 main capability + spec.md 路径（stdout 文本表 / JSON 数组）
  *   set-spec-scope <c> [scope]  写 spec_scope（空/清空 归一 null 哨兵；否则 list CSV / all 原样），无 stdout

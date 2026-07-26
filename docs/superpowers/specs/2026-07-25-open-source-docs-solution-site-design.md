@@ -241,7 +241,7 @@ current operational destinations.
 
 ### README-only documentation
 
-Rejected. It reproduces Comet's overloading problem, makes reference drift more
+Rejected. It reproduces Tenon runtime's overloading problem, makes reference drift more
 likely, and gives operators no task-shaped path through advanced features.
 
 ### Separate Markdown renderer inside the Dashboard

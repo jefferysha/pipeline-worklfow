@@ -52,13 +52,13 @@ async function main(): Promise<void> {
   const argumentMode = parseDashboardServerArgs(process.argv.slice(2))
   if (argumentMode.mode === 'help') {
     process.stdout.write(
-      'Tenon Dashboard server is an internal managed-runtime entrypoint.\\n'
-      + 'Use `tenon dashboard` to start or inspect the product.\\n',
+      'Tenon Dashboard server is an internal managed-runtime entrypoint.\n'
+      + 'Use `tenon dashboard` to start or inspect the product.\n',
     )
     return
   }
   if (argumentMode.mode === 'invalid') {
-    process.stderr.write(`[dashboard-server] ${argumentMode.detail}\\n`)
+    process.stderr.write(`[dashboard-server] ${argumentMode.detail}\n`)
     process.exitCode = 2
     return
   }

@@ -63,12 +63,12 @@ registry 待仓库所有者决定（非代码缺口，是运维决策）。
 | 2026-07-07 | #35 loop 治理（iteration-19） | 收编：registry schema + R1-R11 裁决 + L1-L3 分级放权 + 15 真 fs 例，vitest 994 |
 | 2026-07-07 | #34 tap 核心+护栏（iteration-20） | 收编：MITM 守护+trace_store+安全护栏三条 + 13 真 socket |
 | 2026-07-07 | #29 AFK Sandcastle（iteration-20） | 收编：队列状态机+scheduler+L1→L3 + 72 例 + docker honest-skip |
-| 2026-07-07 | #30 上下文压缩（iteration-21） | 收编：确定性压缩 45.4%>Comet + 7 真 fs 例，D11 |
+| 2026-07-07 | #30 上下文压缩（iteration-21） | 收编：确定性压缩 45.4% + 7 真 fs 例，D11 |
 | 2026-07-07 | #31 auto-transition 中间档（iteration-21） | 收编：advance guard 自动推进+HITL 三重证明，D12 |
 | 2026-07-07 | #39 适配器框架+Cursor 转正（iteration-22） | 收编：58 conformance 断言+变异测试，claude/codex/cursor active，D7 |
 | 2026-07-07 | #36 loop 预算与熔断（iteration-22） | 收编：token budget+circuit breaker+成本估算 + 16 真 fs 例，D16 |
-| 2026-07-07 | #41 超越矩阵 + #32 Cursor（iteration-22） | 收编：docs/superiority-matrix.md D1-D16 证据表；#32 已由 #39 完成 |
-| 2026-07-07 | #33 Trellis parity 收尾（iteration-23） | 收编：8 partial+1 missing 全处置 + 14 真 fs 例，B16 |
+| 2026-07-07 | #41 核心能力矩阵 + #32 Cursor（iteration-22） | 收编：GOAL D1-D16 验收判据；#32 已由 #39 完成 |
+| 2026-07-07 | #33 scaffold 契约收尾（iteration-23） | 收编：8 partial+1 missing 全处置 + 14 真 fs 例，B16 |
 | 2026-07-07 | #37 漂移检测+审计（iteration-23） | 收编：7 维 drift + loop-ready 评分 + 20 真 fs 例，B21 |
 | 2026-07-07 | #25b transition 单源（iteration-24） | 收编：事件表上提 kernel，cli+server 删 303 行镜像，oracle 0 不一致 |
 | 2026-07-07 | #38 L1→L3 毕业制（iteration-24） | 收编：升降档裁决+consume #36/#37 + 16 真 fs 例，D16 闭环 |

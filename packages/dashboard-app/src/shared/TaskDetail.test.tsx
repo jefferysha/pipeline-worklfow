@@ -502,8 +502,8 @@ describe('TaskDetail 动作条 props 化 + 任务一句话 + 头部', () => {
 })
 
 /**
- * v8-C 意见④（design-demos/v8-trellis-encore.html #drawer 对位）：动作置顶 + 人话报错卡
- * （原文折叠）+「自己上手修」连接命令卡 + 流程级历史。props 接口零增改——宿主（B/D）不动也编译。
+ * 失败详情契约：动作置顶 + 人话报错卡（原文折叠）+
+ * 「自己上手修」连接命令卡 + 流程级历史。props 接口零增改——宿主（B/D）不动也编译。
  */
 describe('TaskDetail v8-C 意见④：人话报错卡（dt-diag）', () => {
   const fz = zh.failure as Record<string, string>

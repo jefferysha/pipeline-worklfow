@@ -1,5 +1,5 @@
 /**
- * known-untracked-template-allowlist 纯逻辑单测（BACKLOG #33，Trellis parity 收尾 ④，🔴 唯一 missing）。
+ * known-untracked-template-allowlist 纯逻辑单测（BACKLOG #33，Tenon contract parity 收尾 ④，🔴 唯一 missing）。
  * 老仓自标 N/A（无「无 hash→hash-track」迁移期），但留占位入口（migrations.py 空常量 +
  * apply 钩子原样返回）。本移植忠实补齐同款占位：空白名单常量 + pass-through 应用 + 判定函数。
  * 空白名单下所有函数无副作用——待将来真经历该迁移期时填 {rel:[hash,...]}，classify 主路径不必改。

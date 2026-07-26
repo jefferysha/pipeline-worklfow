@@ -556,11 +556,11 @@ brainstorming（`/goal` 仪式，AskUserQuestion 拍板 3 处分歧）。原始�
 > `--dangerously-skip-permissions` 会挂死）。**tap 代理真实拦截+记录+转发了 4 条完整请求到真
 > `api.anthropic.com`**（含真实 claude-cli User-Agent/系统提示词/Bearer 头，证明"走代理不直连"
 > 约束真实成立）；该 token 被 Anthropic 真服务端拒绝（401，非本仓代码问题，未耗真实额度）——
-> **agent 编码这一步本身仍待有效凭证验证**，如实登记不虚报为通过。详见 docs/superiority-matrix.md
-> （逐维证据）+ docs/TEST-REALITY.md（真测审计）+ progress.md。
+> **agent 编码这一步本身仍待有效凭证验证**，如实登记不虚报为通过。详见
+> docs/TEST-REALITY.md（真测审计）+ progress.md。
 >
 > **✅ iteration-32（G6 闭环：full CC-in-sandbox「agent 真编码成功」真跑验证通过）**：拿到有效
-> `sk-ant-oat01-...` token 后真跑到底——agent 真读 design_doc、真建文件、真 git commit，`git show`
+> 有效测试凭证后真跑到底——agent 真读 design_doc、真建文件、真 git commit，`git show`
 > 独立核验（非只信 agent 自报）；tap 记录 8 条真请求逐字确认 `upstream_base_url:
 > https://api.anthropic.com` + 真 `anthropic-beta: oauth-2025-04-20` + `response.status: 200`。
 > 真跑过程中抓出并修复 2 个此前从未被有效凭证触发过的沙箱环境真缺口（alpine 缺 bash/SHELL 未设
@@ -595,7 +595,7 @@ brainstorming（`/goal` 仪式，AskUserQuestion 拍板 3 处分歧）。原始�
       改由 A5 automation/AFK 承担。详见「终态 v3.0」清单 G4、非目标。这不是篡改历史：GOAL 本身
       已说明进入新阶段后"与老仓行为等价"不再是新功能验收约束，A4 原记录原样保留。
 - [x] **A5 automation / AFK Sandcastle（M5）✅**：队列+scheduler+lifecycle+L1→L3(#29) + server afk 数据端(#29d) + docker 全链真实现+真 git worktree/merge-back 冲突留现场(#29c) + **#29-wire 部署接线真跑**（iteration-30：`tenon afk run` 真调 automation.runRound(createDockerRunChange) + 真容器 + 真 merge-back，sandcastle:test 镜像 e2e 验证）；full agent-in-sandbox 支线（含 CLAUDE_CODE_OAUTH_TOKEN 门控）已用有效凭证真跑验证通过（iteration-32）
-- [x] **A6 竞品缺口（M6）✅**：上下文压缩(B13)+auto-transition(B14)+Cursor 转正(B15)+Trellis parity(B16)+npx 上手(B17) 全收编
+- [x] **A6 工作流能力补强（M6）✅**：上下文压缩(B13)+auto-transition(B14)+Cursor 转正(B15)+scaffold 契约收尾(B16)+npx 上手(B17) 全收编
 - [x] **A7 tap 流量代理（M8）✅**：daemon+proxy+trace_store+护栏(#34) + traffic 数据端(#34d) + ws 重组/bedrock/本地 CA·TLS MITM(#34b，node v24 真跑) + 13 runtime clients(#34c) + **#34-wire 部署接线真跑**（iteration-30：daemon 接 CertificateAuthority.fromDir、launch.ts 真装配 detectTarget+env 注入、record 路径真接 bedrock 解码 + 全新 ws-proxy.ts 中继首次接活 ws-reconstruct、`tenon tap start` 全新 CLI 入口）
 - [x] **A0 7-phase 状态机 + 三门 + CLI + 单文件分发 + 导入工具**（v0.1，iteration-0~9，oracle 0 不一致）
 
@@ -617,12 +617,12 @@ brainstorming（`/goal` 仪式，AskUserQuestion 拍板 3 处分歧）。原始�
 - [x] B11 statusline：终端内零开销状态（iteration-7）
 - [x] B12 操作与配置分离 + debug 降级（#26）：收件箱/看板/设置三视图 + Advanced 折叠，一级导航恰 3 项
 
-**竞品缺口（Comet / Trellis 对标分析的全部遗留）**
-- [x] B13 上下文压缩（#30 iteration-21）：phase handoff 确定性压缩（实测 45.4% > Comet 25-30%），零 LLM 可 oracle
-- [x] B14 auto-transition 中间档（#31 iteration-21）：`tenon advance` guard 全绿自动推进、复核相位+三门必停（HITL 红线三重证明，> Comet AUTO-TRANSITION）
+**工作流能力补强**
+- [x] B13 上下文压缩（#30 iteration-21）：phase handoff 确定性压缩（实测 45.4%，门槛 ≥25%），零 LLM 可 oracle
+- [x] B14 auto-transition 中间档（#31 iteration-21）：`tenon advance` guard 全绿自动推进、复核相位+三门必停（HITL 红线三重证明）
 - [x] B15 Cursor 适配器转正（#39 iteration-22）：spike→可发布，veto/track native + inject 降级 .cursor/rules，修「声明 track 却不写 history」病灶
-- [x] B16 Trellis parity 收尾（#33 iteration-23）：8 partial + 1 missing 全处置（3 实现 + 1 忠实占位 + 5 诚实 N-A）
-- [x] B17 npx 一行上手：5 分钟心智模型路径（iteration-4，Trellis 简单性教训的落实）
+- [x] B16 scaffold 契约收尾（#33 iteration-23）：8 partial + 1 missing 全处置（3 实现 + 1 忠实占位 + 5 诚实 N-A）
+- [x] B17 npx 一行上手：5 分钟心智模型路径（iteration-4）
 
 **loop-engineering 思想内建（2026-07-06 用户指令，对标 cobusgreyling/loop-engineering + 老仓 loops 子系统）**
 - [x] B18 loop 治理子系统（#35 iteration-19）：loops registry（schema 校验的登记表）+ enforce 裁决
@@ -632,27 +632,26 @@ brainstorming（`/goal` 仪式，AskUserQuestion 拍板 3 处分歧）。原始�
       + 成本估算（cadence×pattern），扩展 #35 loops、enforce 零改动
 - [x] B21 漂移检测与就绪审计（#37）：7 维 drift 对账 + 0-100 loop-ready 评分
 
-## 清单 D · 竞争超越判据（2026-07-06 用户指令：任何方面都超过 Trellis 与 Comet）
+## 清单 D · 核心能力验收判据
 
-对两个对标项目的每个核心维度，本仓必须做到"≥ 且核心维度 >"。勾选需给出逐维对比证据
-（docs/superiority-matrix.md，随里程碑更新）：
+每个核心维度都必须有可复现的实现、契约与验证证据：
 
-**vs Trellis（11.8k★）**
-- [x] D1 规范持久化与自动注入（#20/#18）：SessionStart 三注入 + manifest 单源 ≥ Trellis
-- [x] D2 任务/状态结构化：`.pipeline.yaml` 37 字段 + 7 相位 > Trellis task PRD 三态（v0.1）
-- [x] D3 会话记忆/journal（#28/#7）：mem 跨 3 runtime 检索 + history JSONL ≥ Trellis workspace journal
-- [x] D4 真实工具链验证（#12/#29c）：check/guard 46 规则全量面 + automation docker 沙箱 verify > trellis-check
-- [x] D5 学习回写闭环（#22）：learn-record 三层回写 ≥ trellis-update-spec
-- [x] D6 简单性：npx 一行上手 + 5 分钟心智模型 ≥ trellis init（iteration-4）
-- [x] D7 多平台策略面（#39/#40/iteration-33）：适配器框架 + 224 conformance 断言 + 分档降级 A/B/C，active 12（claude/codex/cursor/gemini/copilot/pi/devin/aider/continue/cline/amp/zed，longtail 已清零）（conformance 机器校验 > Trellis 手工投影）
-**vs Comet（2k★）**
-- [x] D8 脚本守门状态机：三门 hook 硬拦 + guard 46 规则 + CAS/锁 > comet-guard（#12）
-- [x] D9 dashboard（#25/#26/#26c）：全局 server + 收件箱默认视图 + token 鉴权 + 版本抢占 > comet 只读面板
-- [x] D10 doctor 健康面（#26b/#34e）：11 项保障生效清单 + tap 敏感能力明示 > comet doctor 安装诊断
-- [x] D11 上下文压缩（#30）：确定性压缩 45.4% > Comet 25-30%（且可 oracle）
-- [x] D12 auto-transition（#31）：中间档 + HITL 红线三重证明 > Comet AUTO-TRANSITION
+**规范与交付**
+- [x] D1 规范持久化与自动注入（#20/#18）：SessionStart 三注入 + manifest 单源
+- [x] D2 任务/状态结构化：`.pipeline.yaml` 37 字段 + 7 相位（v0.1）
+- [x] D3 会话记忆/journal（#28/#7）：mem 跨 3 runtime 检索 + history JSONL
+- [x] D4 真实工具链验证（#12/#29c）：check/guard 46 规则全量面 + automation docker 沙箱 verify
+- [x] D5 学习回写闭环（#22）：learn-record 三层回写
+- [x] D6 简单性：npx 一行上手 + 5 分钟心智模型（iteration-4）
+- [x] D7 多平台策略面（#39/#40/iteration-33）：适配器框架 + 224 conformance 断言 + 分档降级 A/B/C，active 12（claude/codex/cursor/gemini/copilot/pi/devin/aider/continue/cline/amp/zed，longtail 已清零）
+**运行与运维**
+- [x] D8 脚本守门状态机：三门 hook 硬拦 + guard 46 规则 + CAS/锁（#12）
+- [x] D9 dashboard（#25/#26/#26c）：全局 server + 收件箱默认视图 + token 鉴权 + 版本抢占
+- [x] D10 doctor 健康面（#26b/#34e）：11 项保障生效清单 + tap 敏感能力明示
+- [x] D11 上下文压缩（#30）：确定性压缩 45.4%（且可 oracle）
+- [x] D12 auto-transition（#31）：中间档 + HITL 红线三重证明
 - [x] D13 可恢复工作流：断点恢复不依赖对话历史（.pipeline.yaml 真相源，v0.1 oracle 验证）
-- [x] D14 平台广度（#39/#40/iteration-33）：可移植内核 + 填表式扩展经 9 平台实证（一次转 active 跨 A/B/C 档，含长尾 5 平台真实现，2 项经查证由目标档升级）；策略面 > Comet 手工 30（本仓 conformance 保证等价性）
+- [x] D14 平台广度（#39/#40/iteration-33）：可移植内核 + 填表式扩展经 9 平台实证（一次转 active 跨 A/B/C 档，含长尾 5 平台真实现，2 项经查证由目标档升级）；conformance 保证等价性
 **vs 两者皆无（差异化护城河）**
 - [x] D15 golden-oracle 行为等价迁移法（双跑逐字 diff——两家都没有的质量证据链）
 - [x] D16 loop-engineering 治理（#35/#36/#37/#38）✅闭环：registry+enforce R1-R11+L1→L3 毕业制+budget/circuit-breaker+drift/loop-ready 审计+graduation 执行面——两竞品都无此面（独有护城河）
@@ -667,7 +666,7 @@ brainstorming（`/goal` 仪式，AskUserQuestion 拍板 3 处分歧）。原始�
 - [x] C6 **复杂度预算**：核心 kernel+cli 独立 workspace 包，channel/mem/automation/tap/server/dashboard 各自独立可选装（npm workspaces 分包）；npx 一行上手路径全程保持
 - [x] C7 **契约实测回写**：文档口径与实测冲突时以实测为准并回写 CONTRACT，留审计记录
 - [x] C8 **流水可审计**：每轮 progress.md 记录证据（测试计数/oracle 结果/commit hash），诚实记录瑕疵
-- [x] **C9 无伪测试 · 真实且全量（2026-07-07 用户指令，向 Trellis 学习）✅**：任何功能不得
+- [x] **C9 无伪测试 · 真实且全量（2026-07-07 用户指令）✅**：任何功能不得
       仅以 mock 单测收编——每条 CLI 命令 / 每个子系统必须有**驱动真实实现、真实文件系统、
       真实子进程**的端到端测试（真跑 kernel createStateStore/createFlowEngine、真跑编译产物、
       真跑 hooks 脚本）。mock 单测可留作快速回归，但**收编门以真实 e2e 绿为准**。
@@ -690,5 +689,5 @@ oracle 双跑 0 不一致；lite 写 → 老内核读交叉验证通过；vitest
 
 1. 老内核 bash 7.2 万行已过维护经济性拐点，python3 已是关键路径硬依赖——"纯 bash 可移植"前提不再成立。
 2. 三读取器契约靠纪律防漂移，单语言构造性消灭。
-3. 竞品对照（comet 2k★ / Trellis 11.8k★）：赢用户靠"5 分钟建立心智模型"，不是功能面。
+3. 赢用户靠"5 分钟建立心智模型"，不是功能数量。
 4. base64 历史塞 YAML 的存储变形 → JSONL 侧文件。

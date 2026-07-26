@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import {
-  resolveHostProjectRegistryCandidates,
   resolveProductPaths,
   serializeProductRootContract,
 } from './product-paths.js'
@@ -24,6 +23,8 @@ describe('resolveProductPaths —— Tenon 自有机器状态的唯一平台路�
       dashboardTokenPath: '/var/demo/state/tenon/dashboard-token.json',
       dashboardPidfilePath: '/var/demo/state/tenon/dashboard-server.json',
       managedTransactionRoot: '/var/demo/state/tenon/managed-release-transaction',
+      migrationsRoot: '/var/demo/state/tenon/migrations',
+      channelsRoot: '/var/demo/state/tenon/channels',
     })
   })
 
@@ -73,6 +74,8 @@ describe('resolveProductPaths —— Tenon 自有机器状态的唯一平台路�
       dashboardTokenPath: '/tmp/tenon-runtime/state/dashboard-token.json',
       dashboardPidfilePath: '/tmp/tenon-runtime/state/dashboard-server.json',
       managedTransactionRoot: '/tmp/tenon-runtime/state/managed-release-transaction',
+      migrationsRoot: '/tmp/tenon-runtime/state/migrations',
+      channelsRoot: '/tmp/tenon-runtime/state/channels',
     })
   })
 
@@ -118,40 +121,5 @@ describe('resolveProductPaths —— Tenon 自有机器状态的唯一平台路�
         }),
       },
     })).toThrow(/TENON_RUNTIME_ROOTS/)
-  })
-})
-
-describe('resolveHostProjectRegistryCandidates —— 宿主注册表只读导入投影', () => {
-  it('macOS 返回两个宿主协议入口，不读取任何退役产品目录', () => {
-    expect(resolveHostProjectRegistryCandidates({
-      platform: 'darwin',
-      homeDir: '/Users/demo',
-      env: {},
-    })).toEqual([
-      '/Users/demo/.claude/pipeline-projects.json',
-      '/Users/demo/.codex/pipeline-projects.json',
-    ])
-  })
-
-  it('Linux 只使用 home 下的宿主协议路径', () => {
-    expect(resolveHostProjectRegistryCandidates({
-      platform: 'linux',
-      homeDir: '/home/demo',
-      env: { XDG_CONFIG_HOME: '/var/demo/config' },
-    })).toEqual([
-      '/home/demo/.claude/pipeline-projects.json',
-      '/home/demo/.codex/pipeline-projects.json',
-    ])
-  })
-
-  it('Windows 使用 win32 路径语义解析宿主入口', () => {
-    expect(resolveHostProjectRegistryCandidates({
-      platform: 'win32',
-      homeDir: 'C:\\Users\\demo',
-      env: { APPDATA: 'C:\\Users\\demo\\AppData\\Roaming' },
-    })).toEqual([
-      'C:\\Users\\demo\\.claude\\pipeline-projects.json',
-      'C:\\Users\\demo\\.codex\\pipeline-projects.json',
-    ])
   })
 })
