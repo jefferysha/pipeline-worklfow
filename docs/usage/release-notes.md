@@ -4,7 +4,7 @@ Tenon release notes explain what changed, what users need to do, and how to veri
 
 Only capabilities included in a public distribution belong here. Plans, internal ADRs, and unmerged experiments are not presented as shipped work.
 
-## Current development line
+## v1.0.0 · 2026-07-26
 
 ### Governed document locale
 
@@ -54,7 +54,7 @@ Only capabilities included in a public distribution belong here. Plans, internal
 
 ## Verification
 
-- `pipeline --help` lists the command families.
+- `tenon --help` lists the command families.
 - `tenon runtime status` reports the active runtime.
 - `tenon doctor` reports no missing bundled Skills.
 - Repeated `tenon setup --codex` remains idempotent.

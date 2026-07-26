@@ -12,7 +12,7 @@ Tenon 的发布说明用于回答三个问题：这一版改变了什么、用�
 
 面向用户的解释、影响与操作步骤默认使用中文。
 
-## 当前开发线
+## v1.0.0 · 2026-07-26
 
 ### 中文治理文档
 
@@ -62,7 +62,7 @@ Tenon 的发布说明用于回答三个问题：这一版改变了什么、用�
 
 ## 验证
 
-- `pipeline --help` 能显示命令族。
+- `tenon --help` 能显示命令族。
 - `tenon runtime status` 能显示活动 runtime。
 - `tenon doctor` 不报告缺失的内建 Skill。
 - `tenon setup --codex` 重复运行保持幂等。
