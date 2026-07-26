@@ -45,14 +45,14 @@
 
 ## 验证
 
-- [ ] 运行契约、单元、集成、安装升级、hook、适配器、文档与残留扫描测试。 (verify)
-- [ ] 在真实浏览器验收 Tenon Dashboard、中文文档页面以及终端/自动运行来源一致性。 (verify)
-- [ ] 在 GitHub Markdown 与 Pages production base 下验收正式 Dashboard 图片的桌面/移动版式。 (verify)
-- [ ] 核验最终分发物不存在旧命令、旧包、旧插件或旧现行品牌入口。 (verify)
-- [ ] 在隔离 HOME 验证 Marketplace 一步首装、npx tarball 首装及发布包内容。 (verify)
-- [ ] 验证当前树无受禁图片、无悬空图片链接且 Git 历史未被改写。 (verify)
-- [ ] 验证旧安装迁移、失败注入、previous rollback、单 Skill root 与唯一 18765 listener。 (verify)
-- [ ] 验证受 Git 管理的路径和文本不存在外部参考项目身份，且门禁对路径/内容注入均 fail-closed。 (verify)
+- [x] 运行契约、单元、集成、安装升级、hook、适配器、文档与残留扫描测试。 (verify)
+- [x] 在真实浏览器验收 Tenon Dashboard、中文文档页面以及终端/自动运行来源一致性。 (verify)
+- [x] 在 GitHub Markdown 与 Pages production base 下验收正式 Dashboard 图片的桌面/移动版式。 (verify)
+- [x] 核验最终分发物不存在旧命令、旧包、旧插件或旧现行品牌入口。 (verify)
+- [x] 在隔离 HOME 验证 Marketplace 一步首装、npx tarball 首装及发布包内容。 (verify)
+- [x] 验证当前树无受禁图片、无悬空图片链接且 Git 历史未被改写。 (verify)
+- [x] 验证旧安装迁移、失败注入、previous rollback、单 Skill root 与唯一 18765 listener。 (verify)
+- [x] 验证受 Git 管理的路径和文本不存在外部参考项目身份，且门禁对路径/内容注入均 fail-closed。 (verify)
 
 ## 交付
 

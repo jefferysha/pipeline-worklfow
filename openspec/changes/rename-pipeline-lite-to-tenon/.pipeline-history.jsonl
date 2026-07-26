@@ -262,3 +262,29 @@
 {"ts":"2026-07-26T09:55:33Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
 {"ts":"2026-07-26T09:55:39Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"40e725c4-77fb-47e0-939f-7fad3774427d"}
 {"ts":"2026-07-26T10:01:27Z","kind":"tool","raw":"CodexSkillRead: pipeline-build"}
+{"ts":"2026-07-26T10:06:58Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-26T10:07:03Z","kind":"tool","raw":"CodexSkillRead: frontend-design"}
+{"ts":"2026-07-26T10:07:06Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-26T10:07:14Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-26T10:07:18Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"80814b94-f92c-4d9a-b184-3d17aed1101c"}
+{"ts":"2026-07-26T10:07:41Z","kind":"tool","raw":"CodexSkillRead: code-review"}
+{"ts":"2026-07-26T10:07:44Z","kind":"tool","raw":"CodexSkillRead: e2e-testing"}
+{"ts":"2026-07-26T10:07:44Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-07-26T10:07:44Z","kind":"tool","raw":"CodexSkillRead: deployment-patterns"}
+{"ts":"2026-07-26T10:19:59Z","kind":"tool","raw":"CodexSkillRead: pipeline-verify"}
+{"ts":"2026-07-26T10:20:03Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-07-26T10:20:11Z","kind":"tool","raw":"CodexSkillRead: e2e-testing"}
+{"ts":"2026-07-26T10:20:16Z","kind":"tool","raw":"CodexSkillRead: browser-qa"}
+{"ts":"2026-07-26T10:20:21Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-26T10:20:29Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-26T10:20:36Z","kind":"tool","raw":"CodexSkillRead: verify"}
+{"ts":"2026-07-26T10:20:50Z","kind":"set","field":"agent_review_result","to":"pass"}
+{"ts":"2026-07-26T10:20:50Z","kind":"set","field":"codex_review_result","to":"pass"}
+{"ts":"2026-07-26T10:20:50Z","kind":"set","field":"branch_status","to":"handled"}
+{"ts":"2026-07-26T10:21:00Z","kind":"tool","raw":"review:request phase=verify event=verify-pass"}
+{"ts":"2026-07-26T10:21:00Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-pass authority_issued_at=2026-07-26T09:13:18Z"}
+{"ts":"2026-07-26T10:21:00Z","kind":"transition","from":"verify","to":"ship","raw":"verify-pass","transitionRecordId":"e17c2614-dfc1-44a6-a153-66c4846a4e0c"}
+{"ts":"2026-07-26T10:21:13Z","kind":"tool","raw":"CodexSkillRead: pipeline-ship"}
+{"ts":"2026-07-26T10:21:17Z","kind":"tool","raw":"CodexSkillRead: openspec-apply-change"}
+{"ts":"2026-07-26T10:21:22Z","kind":"tool","raw":"CodexSkillRead: openspec-archive-change"}
+{"ts":"2026-07-26T10:21:28Z","kind":"tool","raw":"CodexSkillRead: finishing-a-development-branch"}
