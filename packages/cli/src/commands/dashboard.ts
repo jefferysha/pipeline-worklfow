@@ -7,7 +7,6 @@
  */
 import { spawn } from 'node:child_process'
 import { accessSync, constants as fsConstants, realpathSync } from 'node:fs'
-import { get as httpGet } from 'node:http'
 import { homedir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
 import { machineStateScopeId } from '@tenon/kernel'
@@ -18,6 +17,7 @@ import {
   launchDetachedDashboardProcess,
   type DashboardProcessHandle,
 } from './dashboard-process.js'
+import { waitForHealthyServer } from './dashboard-health.js'
 
 export {
   DashboardTerminationUnconfirmedError,
@@ -65,75 +65,6 @@ function launch(serverBundle: string, env: NodeJS.ProcessEnv): Promise<number> {
     child.once('error', () => resolveCode(1))
     child.once('exit', (code) => resolveCode(code ?? 1))
   })
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolveWait) => setTimeout(resolveWait, ms))
-}
-
-function isHealthyDashboard(
-  value: unknown,
-  expectedReleaseId: string | undefined,
-  expectedStateScopeId: string,
-): boolean {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false
-  const body = value as Record<string, unknown>
-  return body.ok === true
-    && body.scope === 'global'
-    && typeof body.version === 'string'
-    && body.version !== ''
-    && (expectedReleaseId === undefined || body.releaseId === expectedReleaseId)
-    && body.stateScopeId === expectedStateScopeId
-}
-
-function probeHealthyDashboard(
-  port: number,
-  expectedReleaseId: string | undefined,
-  expectedStateScopeId: string,
-): Promise<boolean> {
-  return new Promise((resolveProbe) => {
-    let settled = false
-    const finish = (healthy: boolean): void => {
-      if (settled) return
-      settled = true
-      resolveProbe(healthy)
-    }
-    const request = httpGet({ host: '127.0.0.1', port, path: '/api/health', timeout: 350 }, (response) => {
-      let text = ''
-      response.setEncoding('utf8')
-      response.on('data', (chunk) => { text += chunk })
-      response.on('end', () => {
-        if (response.statusCode !== 200) {
-          finish(false)
-          return
-        }
-        try {
-          finish(isHealthyDashboard(JSON.parse(text), expectedReleaseId, expectedStateScopeId))
-        } catch {
-          finish(false)
-        }
-      })
-    })
-    request.once('timeout', () => {
-      request.destroy()
-      finish(false)
-    })
-    request.once('error', () => finish(false))
-  })
-}
-
-async function waitForHealthyServer(
-  port: number,
-  expectedReleaseId: string | undefined,
-  expectedStateScopeId: string,
-): Promise<boolean> {
-  // A release can first have to gracefully preempt a previous dashboard.  Keep the readiness
-  // budget longer than that server's four-second handoff, without making setup block indefinitely.
-  for (let attempt = 0; attempt < 65; attempt += 1) {
-    if (await probeHealthyDashboard(port, expectedReleaseId, expectedStateScopeId)) return true
-    await sleep(100)
-  }
-  return false
 }
 
 /** Opens a URL through the platform's registered browser without shell interpolation. */
@@ -229,6 +160,27 @@ export type ReleasedDashboardStartOutcome =
   | { readonly state: 'failed'; readonly detail: string }
   | { readonly state: 'indeterminate'; readonly detail: string }
 
+async function stopFailedCandidate(
+  deps: CliDeps,
+  child: DashboardProcessHandle,
+  detail: string,
+): Promise<ReleasedDashboardStartOutcome> {
+  try {
+    await child.terminate()
+  } catch (error) {
+    const terminationDetail = error instanceof Error ? error.message : String(error)
+    deps.io.err(`[dashboard] ${detail}，且终止状态无法确认：${terminationDetail}`)
+    return {
+      state: 'indeterminate',
+      detail: error instanceof DashboardTerminationUnconfirmedError
+        ? error.message
+        : new DashboardTerminationUnconfirmedError(terminationDetail).message,
+    }
+  }
+  deps.io.err(`[dashboard] ${detail}；候选进程已确认退出，未打开浏览器。`)
+  return { state: 'failed', detail: `${detail}; candidate exit confirmed` }
+}
+
 async function startManagedDashboard(
   deps: CliDeps,
   payloadRoot: string,
@@ -245,31 +197,45 @@ async function startManagedDashboard(
     )
     return { state: 'failed', detail: 'released Dashboard assets are incomplete' }
   }
-  const child = await runtime.launchDetached(assets.serverBundle, dashboardEnvironment(port))
+  let child: DashboardProcessHandle | null
+  try {
+    child = await runtime.launchDetached(assets.serverBundle, dashboardEnvironment(port))
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error)
+    deps.io.err(`[dashboard] 候选 server 启动结果无法确认：${detail}`)
+    return { state: 'indeterminate', detail: `candidate Dashboard spawn state is unknown: ${detail}` }
+  }
   if (child === null) {
     deps.io.err('[dashboard] 受管 server 进程无法启动；runtime 已保留，可运行 tenon dashboard 诊断。')
     return { state: 'failed', detail: 'candidate Dashboard process could not be spawned' }
   }
-  const expectedStateScopeId = runtime.resolveStateScopeId()
-  if (!(await runtime.waitForHealthyServer(port, expectedReleaseId, expectedStateScopeId))) {
-    try {
-      await child.terminate()
-    } catch (error) {
-      const detail = error instanceof Error ? error.message : String(error)
-      deps.io.err(`[dashboard] 候选 server 未通过健康检查，且终止状态无法确认：${detail}`)
-      return {
-        state: 'indeterminate',
-        detail: error instanceof DashboardTerminationUnconfirmedError
-          ? error.message
-          : new DashboardTerminationUnconfirmedError(detail).message,
-      }
-    }
-    deps.io.err(`[dashboard] 受管 server 在 http://127.0.0.1:${port}/ 未通过健康检查；未打开浏览器。`)
-    return { state: 'failed', detail: 'candidate Dashboard failed readiness after confirmed termination' }
+  let healthy: boolean
+  try {
+    const expectedStateScopeId = runtime.resolveStateScopeId()
+    healthy = await runtime.waitForHealthyServer(port, expectedReleaseId, expectedStateScopeId)
+  } catch (error) {
+    return stopFailedCandidate(
+      deps,
+      child,
+      `候选 server readiness 抛出异常：${error instanceof Error ? error.message : String(error)}`,
+    )
+  }
+  if (!healthy) {
+    return stopFailedCandidate(
+      deps,
+      child,
+      `受管 server 在 http://127.0.0.1:${port}/ 未通过健康检查`,
+    )
   }
   const url = `http://127.0.0.1:${port}/`
   deps.io.out(`[dashboard] 受管服务健康检查通过：${url}`)
-  if (opts.openBrowser === true && !(await runtime.openBrowser(url))) {
+  let browserOpened = true
+  try {
+    if (opts.openBrowser === true) browserOpened = await runtime.openBrowser(url)
+  } catch {
+    browserOpened = false
+  }
+  if (!browserOpened) {
     // Browser policy/headless hosts can reject an OS open request even though the product is up.
     // The validated URL remains actionable, so do not roll back a healthy immutable runtime.
     deps.io.err(`[dashboard] 无法自动打开浏览器；请在浏览器访问 ${url}`)

@@ -250,4 +250,32 @@ describe('RuntimeReleaseStore', () => {
     expect((await stat(hook)).mode & 0o777).toBe(0o700)
     expect((await REAL_RUNTIME_INSTALLER.inspect(home)).selection.activeRelease).toBeNull()
   }, 30_000)
+
+  it('never restores an old launcher snapshot after selection CAS proves another activation owns the runtime', async () => {
+    const root = await freshRoot('installer-cas-ownership')
+    const home = join(root, 'home')
+    const firstCandidate = await candidateCopy(root, '-one')
+    const secondCandidate = await candidateCopy(root, '-two')
+    await writeFile(
+      join(secondCandidate, 'runtime', 'tenon-bootstrap.mjs'),
+      `${await readFile(join(secondCandidate, 'runtime', 'tenon-bootstrap.mjs'), 'utf8')}\n// concurrent-owner\n`,
+      'utf8',
+    )
+    const paths = resolveRuntimePaths({ homeDir: home })
+    const first = await REAL_RUNTIME_INSTALLER.withManagedTransaction(
+      home,
+      (transaction) => transaction.activate(firstCandidate, 'codex'),
+    )
+    const second = await new RuntimeReleaseStore({ paths }).stageAndActivate(secondCandidate, 'codex')
+    const tenon = join(home, '.local', 'bin', 'tenon')
+    await writeFile(tenon, '#!/bin/sh\necho concurrent-owner\n', 'utf8')
+
+    await expect(REAL_RUNTIME_INSTALLER.withManagedTransaction(
+      home,
+      (transaction) => transaction.revertActivation(first),
+    )).rejects.toThrow(/拒绝回滚非当前 activation/)
+
+    expect((await REAL_RUNTIME_INSTALLER.inspect(home)).selection.activeRelease).toBe(second.release.releaseId)
+    expect(await readFile(tenon, 'utf8')).toBe('#!/bin/sh\necho concurrent-owner\n')
+  }, 60_000)
 })

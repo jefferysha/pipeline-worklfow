@@ -29,6 +29,24 @@ export interface ProductPaths {
   readonly managedTransactionRoot: string
 }
 
+/**
+ * Resolve host-owned project registry protocols accepted by the one-way setup import.
+ * These paths are deliberately separate from ProductPaths: no Tenon runtime reader may use
+ * them as fallback storage after setup has imported their contents. Product-specific retired
+ * storage belongs exclusively to the frozen legacy distribution channel.
+ */
+export function resolveHostProjectRegistryCandidates(
+  input: ProductPathInput = {},
+): readonly string[] {
+  const platform = input.platform ?? process.platform
+  const paths = pathApi(platform)
+  const homeDir = paths.resolve(input.homeDir ?? homedir())
+  return [
+    paths.join(homeDir, '.claude', 'pipeline-projects.json'),
+    paths.join(homeDir, '.codex', 'pipeline-projects.json'),
+  ]
+}
+
 interface ProductRootContract {
   readonly version: 1
   readonly dataRoot: string

@@ -10,7 +10,7 @@ verification_report: docs/superpowers/reports/2026-07-26-rename-pipeline-lite-to
 build_mode: direct
 isolation: branch
 build_sha: null
-agent_review_result: pending
+agent_review_result: fail
 codex_review_result: pending
 verify_result: fail
 branch_status: pending
@@ -31,7 +31,7 @@ related_files: null
 spec_scope: null
 depends_on: null
 created_at: 2026-07-26T02:49:37Z
-updated_at: 2026-07-26T07:16:11Z
+updated_at: 2026-07-26T07:48:46Z
 verified_at: null
 archived_at: null
 archived: false
@@ -39,8 +39,8 @@ workflow: default
 automation_current_phase: ""
 automation_cause: ""
 pipeline_run_id: fe162c6c-0981-44e1-92b0-ba600b80d41c
-pipeline_transition_sequence: 17
-pipeline_transition_head: c8c63f88-44f9-4de9-be87-3c03f87094c8
-pipeline_state_revision: 45
-pipeline_state_revision_id: bb91b4e7-076c-4b3a-9ba9-2085094a29cc
-pipeline_state_digest: 2ab5a86720bc047c0c06c2ecb075dc0bee8e95df214dbf67478cf1575bd7d58c
+pipeline_transition_sequence: 19
+pipeline_transition_head: c4690b93-5e49-42dd-ba3a-db1b90701d01
+pipeline_state_revision: 51
+pipeline_state_revision_id: 6c5401ca-27f9-4e05-a222-c0fe1796583f
+pipeline_state_digest: 83380be0977be6b71ada60e7f0a2b1c97595057cf0bb5d522cfe78a632686a27

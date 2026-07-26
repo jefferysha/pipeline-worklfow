@@ -160,6 +160,48 @@ describe('tenon dashboard', () => {
     })
   })
 
+  test('terminates the spawned candidate when state-scope resolution throws', async () => {
+    const deps = makeDeps()
+    const releaseId = `sha256-${'a'.repeat(64)}`
+    const { runtime: dashboard, calls } = runtime({
+      resolveStateScopeId: () => {
+        throw new Error('state root contract unavailable')
+      },
+    })
+
+    expect(await startReleasedDashboard(
+      deps,
+      `/runtime/releases/${releaseId}/payload`,
+      {},
+      dashboard,
+    )).toMatchObject({
+      state: 'failed',
+      detail: expect.stringContaining('state root contract unavailable'),
+    })
+    expect(calls.terminated).toBe(1)
+  })
+
+  test('terminates the spawned candidate when the health probe throws', async () => {
+    const deps = makeDeps()
+    const releaseId = `sha256-${'a'.repeat(64)}`
+    const { runtime: dashboard, calls } = runtime({
+      waitForHealthyServer: async () => {
+        throw new Error('health transport failed')
+      },
+    })
+
+    expect(await startReleasedDashboard(
+      deps,
+      `/runtime/releases/${releaseId}/payload`,
+      {},
+      dashboard,
+    )).toMatchObject({
+      state: 'failed',
+      detail: expect.stringContaining('health transport failed'),
+    })
+    expect(calls.terminated).toBe(1)
+  })
+
   test('real detached termination resolves only after a SIGTERM-resistant process has exited', async () => {
     const root = await mkdtemp(join(tmpdir(), 'tenon-dashboard-termination-'))
     const pidPath = join(root, 'pid')

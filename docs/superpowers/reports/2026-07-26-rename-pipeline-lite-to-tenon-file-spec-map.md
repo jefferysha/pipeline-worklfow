@@ -1,9 +1,9 @@
 # Tenon 冻结构建逐文件 Spec 回读清单
 
 > Change：`rename-pipeline-lite-to-tenon`
-> 冻结构建：`f450a87a5bb6ae69e843815315748b9906cd24e1`
+> 冻结构建：`4752a95c1611a9fa99eec5d6be8e78587ba3d0b7`
 > 比对基线：`6c874963`
-> 文件数：821
+> 文件数：844
 
 每一行均已回读对应 capability 主规格，并将冻结 diff 与其 requirement/scenario 逐项比对。重命名行同时覆盖旧路径删除与新路径新增；删除文件按替代后的现行能力契约核对。
 
@@ -537,7 +537,6 @@
 | M | `packages/cli/src/transition-custom-workflow.integration.test.ts` | `openspec/specs/tenon-product-identity/spec.md` | ☑ |
 | M | `packages/cli/src/workflow-skill-orchestration.integration.test.ts` | `openspec/specs/tenon-product-identity/spec.md` | ☑ |
 | D | `packages/dashboard-app/dist/assets/index-KnBr1lWp.js` | `openspec/specs/dashboard-execution-provenance/spec.md` | ☑ |
-| A | `packages/dashboard-app/dist/assets/index-xUSqs6sw.js` | `openspec/specs/dashboard-execution-provenance/spec.md` | ☑ |
 | M | `packages/dashboard-app/dist/index.html` | `openspec/specs/dashboard-execution-provenance/spec.md` | ☑ |
 | M | `packages/dashboard-app/index.html` | `openspec/specs/dashboard-execution-provenance/spec.md` | ☑ |
 | M | `packages/dashboard-app/package.json` | `openspec/specs/dashboard-execution-provenance/spec.md` | ☑ |
@@ -831,3 +830,26 @@
 | M | `packages/kernel/src/state/projectRegistry.ts` | `openspec/specs/plugin-distribution/spec.md` | ☑ |
 | M | `packages/server/src/afkReadiness.test.ts` | `openspec/specs/plugin-distribution/spec.md` | ☑ |
 | A | `packages/server/src/paths.test.ts` | `openspec/specs/plugin-distribution/spec.md` | ☑ |
+| A | `openspec/changes/rename-pipeline-lite-to-tenon/.pipeline-run/revisions/000042-6fff1f95-ea9f-42f9-a2fe-e3a7ecebc792.json` | `openspec/specs/tenon-product-identity/spec.md` | ☑ |
+| A | `openspec/changes/rename-pipeline-lite-to-tenon/.pipeline-run/revisions/000043-4e16a34e-5299-4de7-a937-467ddee3fa22.json` | `openspec/specs/tenon-product-identity/spec.md` | ☑ |
+| A | `openspec/changes/rename-pipeline-lite-to-tenon/.pipeline-run/revisions/000044-ea1b0d8e-88d3-4990-a852-35057066cf03.json` | `openspec/specs/tenon-product-identity/spec.md` | ☑ |
+| A | `openspec/changes/rename-pipeline-lite-to-tenon/.pipeline-run/revisions/000045-bb91b4e7-076c-4b3a-9ba9-2085094a29cc.json` | `openspec/specs/tenon-product-identity/spec.md` | ☑ |
+| A | `openspec/changes/rename-pipeline-lite-to-tenon/.pipeline-transitions/000016-65dec100-a629-45a3-9e92-157f747b69ef.json` | `openspec/specs/tenon-product-identity/spec.md` | ☑ |
+| A | `openspec/changes/rename-pipeline-lite-to-tenon/.pipeline-transitions/000017-c8c63f88-44f9-4de9-be87-3c03f87094c8.json` | `openspec/specs/tenon-product-identity/spec.md` | ☑ |
+| A | `packages/cli/src/commands/dashboard-process.ts` | `openspec/specs/plugin-distribution/spec.md` | ☑ |
+| A | `packages/cli/src/commands/release-coordinator.test.ts` | `openspec/specs/plugin-distribution/spec.md` | ☑ |
+| A | `openspec/changes/rename-pipeline-lite-to-tenon/.pipeline-run/revisions/000046-0f332835-8232-4273-9b59-77aefdd8d17c.json` | `openspec/specs/tenon-product-identity/spec.md` | ☑ |
+| A | `openspec/changes/rename-pipeline-lite-to-tenon/.pipeline-run/revisions/000047-d9511ad9-ffc2-4784-8271-ea8a90cf32d1.json` | `openspec/specs/tenon-product-identity/spec.md` | ☑ |
+| A | `openspec/changes/rename-pipeline-lite-to-tenon/.pipeline-run/revisions/000048-5d2c4cf4-6951-4c9b-aa13-5bf2e78c7c34.json` | `openspec/specs/tenon-product-identity/spec.md` | ☑ |
+| A | `openspec/changes/rename-pipeline-lite-to-tenon/.pipeline-run/revisions/000049-f05c3758-e2f3-499e-b867-266da8518381.json` | `openspec/specs/tenon-product-identity/spec.md` | ☑ |
+| A | `openspec/changes/rename-pipeline-lite-to-tenon/.pipeline-run/revisions/000050-c320cef1-756b-4588-a0ff-ce74b74341b3.json` | `openspec/specs/tenon-product-identity/spec.md` | ☑ |
+| A | `openspec/changes/rename-pipeline-lite-to-tenon/.pipeline-run/revisions/000051-6c5401ca-27f9-4e05-a222-c0fe1796583f.json` | `openspec/specs/tenon-product-identity/spec.md` | ☑ |
+| A | `openspec/changes/rename-pipeline-lite-to-tenon/.pipeline-transitions/000018-78c02aa6-1d18-4ec3-a6d8-0fbcac3bf819.json` | `openspec/specs/tenon-product-identity/spec.md` | ☑ |
+| A | `openspec/changes/rename-pipeline-lite-to-tenon/.pipeline-transitions/000019-c4690b93-5e49-42dd-ba3a-db1b90701d01.json` | `openspec/specs/tenon-product-identity/spec.md` | ☑ |
+| A | `packages/cli/src/commands/dashboard-health.test.ts` | `openspec/specs/plugin-distribution/spec.md` | ☑ |
+| A | `packages/cli/src/commands/dashboard-health.ts` | `openspec/specs/plugin-distribution/spec.md` | ☑ |
+| A | `packages/cli/src/migration/legacy-project-registry.test.ts` | `openspec/specs/plugin-distribution/spec.md` | ☑ |
+| A | `packages/cli/src/migration/legacy-project-registry.ts` | `openspec/specs/plugin-distribution/spec.md` | ☑ |
+| M | `packages/server/src/preempt.ts` | `openspec/specs/tenon-product-identity/spec.md` | ☑ |
+| A | `packages/server/src/server-args.test.ts` | `openspec/specs/plugin-distribution/spec.md` | ☑ |
+| A | `packages/server/src/server-args.ts` | `openspec/specs/plugin-distribution/spec.md` | ☑ |

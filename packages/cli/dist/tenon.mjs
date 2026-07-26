@@ -3032,7 +3032,7 @@ var require_commander = __commonJS({
 // packages/cli/src/main.ts
 import { execFile as execFile4 } from "node:child_process";
 import { createHash as createHash31 } from "node:crypto";
-import { accessSync as accessSync5, constants as fsConstants5, readdirSync as readdirSync9, readFileSync as readFileSync27, statSync as statSync7 } from "node:fs";
+import { accessSync as accessSync5, constants as fsConstants5, readdirSync as readdirSync9, readFileSync as readFileSync27, statSync as statSync8 } from "node:fs";
 import { readFile as readFile35, rm as rm13, stat as stat13, writeFile as writeFile15 } from "node:fs/promises";
 import { homedir as homedir22 } from "node:os";
 import { dirname as dirname21, join as join77 } from "node:path";
@@ -11667,6 +11667,15 @@ function machineStateScopeId(stateRoot) {
 // packages/kernel/dist/product-paths.js
 import { homedir as homedir2 } from "node:os";
 import { posix, win32 } from "node:path";
+function resolveHostProjectRegistryCandidates(input = {}) {
+  const platform = input.platform ?? process.platform;
+  const paths = pathApi(platform);
+  const homeDir = paths.resolve(input.homeDir ?? homedir2());
+  return [
+    paths.join(homeDir, ".claude", "pipeline-projects.json"),
+    paths.join(homeDir, ".codex", "pipeline-projects.json")
+  ];
+}
 function pathApi(platform) {
   return platform === "win32" ? win32 : posix;
 }
@@ -21041,7 +21050,7 @@ function codexOnlyProcessEnv(...layers) {
   }
   return result;
 }
-var nodeCodexTriageExec = (file, args, options) => new Promise((resolve35) => {
+var nodeCodexTriageExec = (file, args, options) => new Promise((resolve36) => {
   const detached = process.platform !== "win32";
   const child = spawn(file, args, {
     cwd: options.cwd,
@@ -21061,7 +21070,7 @@ var nodeCodexTriageExec = (file, args, options) => new Promise((resolve35) => {
     options.signal.removeEventListener("abort", onAbort);
     if (forceKillTimer !== void 0)
       clearTimeout(forceKillTimer);
-    resolve35(result);
+    resolve36(result);
   };
   const killProcessTree = (signal) => {
     if (detached && child.pid !== void 0) {
@@ -21163,7 +21172,7 @@ function abortReason(signal) {
 function awaitExecWithAbort(execution, signal) {
   if (signal.aborted)
     return Promise.reject(abortReason(signal));
-  return new Promise((resolve35, reject3) => {
+  return new Promise((resolve36, reject3) => {
     let settled = false;
     const finish = (complete) => {
       if (settled)
@@ -21174,7 +21183,7 @@ function awaitExecWithAbort(execution, signal) {
     };
     const onAbort = () => finish(() => reject3(abortReason(signal)));
     signal.addEventListener("abort", onAbort, { once: true });
-    execution.then((result) => finish(() => resolve35(result)), (error) => finish(() => reject3(error)));
+    execution.then((result) => finish(() => resolve36(result)), (error) => finish(() => reject3(error)));
   });
 }
 function createCodexTriageProvider(options = {}) {
@@ -21299,7 +21308,7 @@ import { createHash as createHash15 } from "node:crypto";
 import { execFile, spawn as spawn2 } from "node:child_process";
 import { createInterface } from "node:readline";
 var mergedEnv = (env) => env ? { ...process.env, ...env } : process.env;
-var spawnStreaming = (file, args, opts) => new Promise((resolve35) => {
+var spawnStreaming = (file, args, opts) => new Promise((resolve36) => {
   const maxTail = opts.maxTailChars ?? MAX_TAIL_CHARS;
   const proc = spawn2(file, args, {
     cwd: opts.cwd,
@@ -21332,19 +21341,19 @@ var spawnStreaming = (file, args, opts) => new Promise((resolve35) => {
   }
   proc.on("error", (err) => {
     stderrTail.push(String(err.message ?? err));
-    resolve35({ stdout: stdoutTail.toString(), stderr: stderrTail.toString(), exitCode: 127 });
+    resolve36({ stdout: stdoutTail.toString(), stderr: stderrTail.toString(), exitCode: 127 });
   });
   proc.on("close", (code) => {
-    resolve35({ stdout: stdoutTail.toString(), stderr: stderrTail.toString(), exitCode: code ?? 0 });
+    resolve36({ stdout: stdoutTail.toString(), stderr: stderrTail.toString(), exitCode: code ?? 0 });
   });
 });
 var nodeExec = (file, args, opts) => {
   if (opts?.onLine || opts?.input !== void 0)
     return spawnStreaming(file, args, opts);
-  return new Promise((resolve35) => {
+  return new Promise((resolve36) => {
     execFile(file, args, { cwd: opts?.cwd, env: mergedEnv(opts?.env), maxBuffer: 64 * 1024 * 1024, encoding: "utf-8" }, (error, stdout, stderr) => {
       const code = error && typeof error.code === "number" ? error.code : error ? 1 : 0;
-      resolve35({ stdout: String(stdout), stderr: String(stderr), exitCode: code });
+      resolve36({ stdout: String(stdout), stderr: String(stderr), exitCode: code });
     });
   });
 };
@@ -23109,7 +23118,7 @@ var createSemaphore = (maxParallel) => {
       running++;
       return Promise.resolve();
     }
-    return new Promise((resolve35) => queue.push(resolve35));
+    return new Promise((resolve36) => queue.push(resolve36));
   };
   const release2 = () => {
     if (running <= 0)
@@ -25441,7 +25450,7 @@ async function withDigestPublishLock(casRoot, digest2, publish) {
       if (Date.now() >= deadline) {
         throw new SkillSnapshotIoError(`CAS \u53D1\u5E03\u9501\u7B49\u5F85\u8D85\u65F6\uFF08digest ${digest2}\uFF09\uFF0C\u62D2\u7EDD\u8BFB\u53D6\u53EF\u80FD\u672A\u63D0\u4EA4\u7684\u76EE\u6807\u76EE\u5F55`);
       }
-      await new Promise((resolve35) => setTimeout(resolve35, PUBLISH_LOCK_RETRY_MS));
+      await new Promise((resolve36) => setTimeout(resolve36, PUBLISH_LOCK_RETRY_MS));
     }
   }
   try {
@@ -27478,7 +27487,7 @@ var AgentIdleTimeoutError = class extends Error {
 };
 var detectsCompletion = (accumulated, signals) => signals.some((sig) => accumulated.includes(sig));
 var armDecision = (completionDetected, idleMs, graceMs) => completionDetected ? { ms: graceMs, onExpiry: "resolve" } : { ms: idleMs, onExpiry: "reject-idle" };
-var invokeWithRace = (runExec, opts) => new Promise((resolve35, reject3) => {
+var invokeWithRace = (runExec, opts) => new Promise((resolve36, reject3) => {
   const { idleMs, graceMs, completionSignals, signal } = opts;
   let settled = false;
   let accumulated = "";
@@ -27500,7 +27509,7 @@ var invokeWithRace = (runExec, opts) => new Promise((resolve35, reject3) => {
       return;
     settled = true;
     cleanup2();
-    resolve35(v);
+    resolve36(v);
   };
   const settleReject = (e) => {
     if (settled)
@@ -29294,13 +29303,13 @@ function serve(opts) {
       }
     }
   });
-  return new Promise((resolve35, reject3) => {
+  return new Promise((resolve36, reject3) => {
     server.once("error", reject3);
     server.listen(opts.port ?? 0, host, () => {
       server.removeAllListeners("error");
       const boundPort = server.address().port;
       const unregister = registerIntercept({ kind: "reverse", port: boundPort, client, target: opts.target });
-      resolve35({
+      resolve36({
         port: boundPort,
         host,
         target: opts.target,
@@ -30366,13 +30375,13 @@ function serveForward(opts = {}) {
     upstream.on("close", cleanup2);
     clientSocket.on("close", cleanup2);
   });
-  return new Promise((resolve35, reject3) => {
+  return new Promise((resolve36, reject3) => {
     server.once("error", reject3);
     server.listen(opts.port ?? 0, host, () => {
       server.removeAllListeners("error");
       const boundPort = server.address().port;
       const unregister = registerIntercept({ kind: "forward", port: boundPort, client, tls: !!ca });
-      resolve35({
+      resolve36({
         port: boundPort,
         host,
         client,
@@ -31231,11 +31240,11 @@ async function launchTap(opts) {
 import { execFile as execFile2 } from "node:child_process";
 import { accessSync, constants as fsConstants } from "node:fs";
 import { join as join42 } from "node:path";
-var nodeExecDocker = (args) => new Promise((resolve35) => {
+var nodeExecDocker = (args) => new Promise((resolve36) => {
   execFile2("docker", [...args], (err, stdout, stderr) => {
     const code = err?.code;
     const exitCode = err === null ? 0 : typeof code === "number" ? code : 1;
-    resolve35({ stdout: String(stdout ?? ""), stderr: String(stderr ?? ""), exitCode });
+    resolve36({ stdout: String(stdout ?? ""), stderr: String(stderr ?? ""), exitCode });
   });
 });
 async function execDocker(args, opts) {
@@ -31243,8 +31252,8 @@ async function execDocker(args, opts) {
   const timeoutMs = opts?.timeoutMs ?? 5e3;
   let timer;
   try {
-    const timeout = new Promise((resolve35) => {
-      timer = setTimeout(() => resolve35(null), timeoutMs);
+    const timeout = new Promise((resolve36) => {
+      timer = setTimeout(() => resolve36(null), timeoutMs);
     });
     return await Promise.race([exec(args).catch(() => null), timeout]);
   } finally {
@@ -36591,8 +36600,8 @@ function readNewEvents(fs, path9, state) {
   return parseEventsText(lines.join("\n"));
 }
 function defaultSleep(ms) {
-  return new Promise((resolve35) => {
-    const t = setTimeout(resolve35, ms);
+  return new Promise((resolve36) => {
+    const t = setTimeout(resolve36, ms);
     if (typeof t.unref === "function")
       t.unref();
   });
@@ -36812,7 +36821,7 @@ var ShutdownController = class {
   awaitKilled() {
     if (this.killedDone || !this.killedStarted)
       return Promise.resolve();
-    return new Promise((resolve35) => this.killedWaiters.push(resolve35));
+    return new Promise((resolve36) => this.killedWaiters.push(resolve36));
   }
   startKillLadder() {
     const child = this.deps.child();
@@ -37048,12 +37057,12 @@ async function startSupervisor(channelName, workerName, config, deps) {
   log(`[supervisor] starting ${adapter.provider} ${args.join(" ")}
 `);
   const child = proc.spawn(adapter.provider, args, { cwd: config.cwd, env: childEnv });
-  const settled = new Promise((resolve35) => {
-    child.onSpawn(() => resolve35(true));
+  const settled = new Promise((resolve36) => {
+    child.onSpawn(() => resolve36(true));
     child.onError((err) => {
       log(`[supervisor] worker error: ${err.message}
 `);
-      resolve35(false);
+      resolve36(false);
     });
   });
   child.onStderr((chunk) => log(chunk));
@@ -41424,21 +41433,21 @@ async function cmdTap(deps, sub, args) {
         }
         const merged = {};
         for (const c of result.clients) Object.assign(merged, c.env);
-        const code = await new Promise((resolve35) => {
+        const code = await new Promise((resolve36) => {
           const child = spawn4(executable, command.slice(1), {
             stdio: "inherit",
             env: { ...process.env, ...merged }
           });
-          child.on("exit", (exitCode, signal) => resolve35(exitCode ?? (signal ? 1 : 0)));
-          child.on("error", () => resolve35(1));
+          child.on("exit", (exitCode, signal) => resolve36(exitCode ?? (signal ? 1 : 0)));
+          child.on("error", () => resolve36(1));
         });
         await result.daemon.stop();
         return code;
       }
       for (const line of envLines(result.clients)) deps.io.out(line);
-      await new Promise((resolve35) => {
+      await new Promise((resolve36) => {
         const stop = () => {
-          void result.daemon.stop().then(resolve35);
+          void result.daemon.stop().then(resolve36);
         };
         process.once("SIGINT", stop);
         process.once("SIGTERM", stop);
@@ -42705,7 +42714,6 @@ var stripNl = (value) => value.replace(/\n$/, "");
 // packages/cli/src/commands/dashboard.ts
 import { spawn as spawn6 } from "node:child_process";
 import { accessSync as accessSync2, constants as fsConstants2, realpathSync as realpathSync2 } from "node:fs";
-import { get as httpGet } from "node:http";
 import { homedir as homedir16 } from "node:os";
 import { basename as basename6, dirname as dirname14, join as join64, resolve as resolve29 } from "node:path";
 
@@ -42797,6 +42805,84 @@ function launchDetachedDashboardProcess(serverBundle, env) {
   });
 }
 
+// packages/cli/src/commands/dashboard-health.ts
+import { get as httpGet } from "node:http";
+var DEFAULT_SOCKET_TIMEOUT_MS = 350;
+var DEFAULT_WALL_CLOCK_TIMEOUT_MS = 500;
+var DEFAULT_MAX_RESPONSE_BYTES = 16 * 1024;
+function isHealthyDashboard(value, expectedReleaseId, expectedStateScopeId) {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
+  const body = value;
+  return body.ok === true && body.scope === "global" && typeof body.version === "string" && body.version !== "" && (expectedReleaseId === void 0 || body.releaseId === expectedReleaseId) && body.stateScopeId === expectedStateScopeId;
+}
+function probeHealthyDashboard(port, expectedReleaseId, expectedStateScopeId, options = {}) {
+  const socketTimeoutMs = options.socketTimeoutMs ?? DEFAULT_SOCKET_TIMEOUT_MS;
+  const wallClockTimeoutMs = options.wallClockTimeoutMs ?? DEFAULT_WALL_CLOCK_TIMEOUT_MS;
+  const maxResponseBytes = options.maxResponseBytes ?? DEFAULT_MAX_RESPONSE_BYTES;
+  return new Promise((resolveProbe) => {
+    let settled = false;
+    let wallClockTimer;
+    const finish = (healthy) => {
+      if (settled) return;
+      settled = true;
+      if (wallClockTimer !== void 0) clearTimeout(wallClockTimer);
+      resolveProbe(healthy);
+    };
+    const request = httpGet(
+      { host: "127.0.0.1", port, path: "/api/health", timeout: socketTimeoutMs },
+      (response) => {
+        let text2 = "";
+        let receivedBytes = 0;
+        const failResponse = () => {
+          response.destroy();
+          finish(false);
+        };
+        response.setEncoding("utf8");
+        response.on("data", (chunk) => {
+          receivedBytes += Buffer.byteLength(chunk);
+          if (receivedBytes > maxResponseBytes) {
+            failResponse();
+            return;
+          }
+          text2 += chunk;
+        });
+        response.once("aborted", () => finish(false));
+        response.once("error", () => finish(false));
+        response.once("end", () => {
+          if (response.statusCode !== 200 || receivedBytes > maxResponseBytes) {
+            finish(false);
+            return;
+          }
+          try {
+            finish(isHealthyDashboard(JSON.parse(text2), expectedReleaseId, expectedStateScopeId));
+          } catch {
+            finish(false);
+          }
+        });
+      }
+    );
+    wallClockTimer = setTimeout(() => {
+      request.destroy();
+      finish(false);
+    }, wallClockTimeoutMs);
+    request.once("timeout", () => {
+      request.destroy();
+      finish(false);
+    });
+    request.once("error", () => finish(false));
+  });
+}
+function sleep3(ms) {
+  return new Promise((resolveWait) => setTimeout(resolveWait, ms));
+}
+async function waitForHealthyServer(port, expectedReleaseId, expectedStateScopeId) {
+  for (let attempt = 0; attempt < 65; attempt += 1) {
+    if (await probeHealthyDashboard(port, expectedReleaseId, expectedStateScopeId)) return true;
+    await sleep3(100);
+  }
+  return false;
+}
+
 // packages/cli/src/commands/dashboard.ts
 var DEFAULT_DASHBOARD_PORT = 18765;
 function fileExists(path9) {
@@ -42813,54 +42899,6 @@ function launch(serverBundle, env) {
     child.once("error", () => resolveCode(1));
     child.once("exit", (code) => resolveCode(code ?? 1));
   });
-}
-function sleep3(ms) {
-  return new Promise((resolveWait) => setTimeout(resolveWait, ms));
-}
-function isHealthyDashboard(value, expectedReleaseId, expectedStateScopeId) {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
-  const body = value;
-  return body.ok === true && body.scope === "global" && typeof body.version === "string" && body.version !== "" && (expectedReleaseId === void 0 || body.releaseId === expectedReleaseId) && body.stateScopeId === expectedStateScopeId;
-}
-function probeHealthyDashboard(port, expectedReleaseId, expectedStateScopeId) {
-  return new Promise((resolveProbe) => {
-    let settled = false;
-    const finish = (healthy) => {
-      if (settled) return;
-      settled = true;
-      resolveProbe(healthy);
-    };
-    const request = httpGet({ host: "127.0.0.1", port, path: "/api/health", timeout: 350 }, (response) => {
-      let text2 = "";
-      response.setEncoding("utf8");
-      response.on("data", (chunk) => {
-        text2 += chunk;
-      });
-      response.on("end", () => {
-        if (response.statusCode !== 200) {
-          finish(false);
-          return;
-        }
-        try {
-          finish(isHealthyDashboard(JSON.parse(text2), expectedReleaseId, expectedStateScopeId));
-        } catch {
-          finish(false);
-        }
-      });
-    });
-    request.once("timeout", () => {
-      request.destroy();
-      finish(false);
-    });
-    request.once("error", () => finish(false));
-  });
-}
-async function waitForHealthyServer(port, expectedReleaseId, expectedStateScopeId) {
-  for (let attempt = 0; attempt < 65; attempt += 1) {
-    if (await probeHealthyDashboard(port, expectedReleaseId, expectedStateScopeId)) return true;
-    await sleep3(100);
-  }
-  return false;
 }
 function openBrowser(url) {
   const command = process.platform === "darwin" ? { file: "open", args: [url] } : process.platform === "win32" ? { file: "cmd.exe", args: ["/c", "start", "", url] } : { file: "xdg-open", args: [url] };
@@ -42916,6 +42954,20 @@ function isDashboardAssets(value) {
 function dashboardEnvironment(port) {
   return { ...process.env, TENON_DASHBOARD_PORT: String(port) };
 }
+async function stopFailedCandidate(deps, child, detail) {
+  try {
+    await child.terminate();
+  } catch (error) {
+    const terminationDetail = error instanceof Error ? error.message : String(error);
+    deps.io.err(`[dashboard] ${detail}\uFF0C\u4E14\u7EC8\u6B62\u72B6\u6001\u65E0\u6CD5\u786E\u8BA4\uFF1A${terminationDetail}`);
+    return {
+      state: "indeterminate",
+      detail: error instanceof DashboardTerminationUnconfirmedError ? error.message : new DashboardTerminationUnconfirmedError(terminationDetail).message
+    };
+  }
+  deps.io.err(`[dashboard] ${detail}\uFF1B\u5019\u9009\u8FDB\u7A0B\u5DF2\u786E\u8BA4\u9000\u51FA\uFF0C\u672A\u6253\u5F00\u6D4F\u89C8\u5668\u3002`);
+  return { state: "failed", detail: `${detail}; candidate exit confirmed` };
+}
 async function startManagedDashboard(deps, payloadRoot, opts, runtime, expectedReleaseId) {
   const port = opts.port ?? DEFAULT_DASHBOARD_PORT;
   const assets = packagedAssets(runtime, payloadRoot);
@@ -42925,29 +42977,45 @@ async function startManagedDashboard(deps, payloadRoot, opts, runtime, expectedR
     );
     return { state: "failed", detail: "released Dashboard assets are incomplete" };
   }
-  const child = await runtime.launchDetached(assets.serverBundle, dashboardEnvironment(port));
+  let child;
+  try {
+    child = await runtime.launchDetached(assets.serverBundle, dashboardEnvironment(port));
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    deps.io.err(`[dashboard] \u5019\u9009 server \u542F\u52A8\u7ED3\u679C\u65E0\u6CD5\u786E\u8BA4\uFF1A${detail}`);
+    return { state: "indeterminate", detail: `candidate Dashboard spawn state is unknown: ${detail}` };
+  }
   if (child === null) {
     deps.io.err("[dashboard] \u53D7\u7BA1 server \u8FDB\u7A0B\u65E0\u6CD5\u542F\u52A8\uFF1Bruntime \u5DF2\u4FDD\u7559\uFF0C\u53EF\u8FD0\u884C tenon dashboard \u8BCA\u65AD\u3002");
     return { state: "failed", detail: "candidate Dashboard process could not be spawned" };
   }
-  const expectedStateScopeId = runtime.resolveStateScopeId();
-  if (!await runtime.waitForHealthyServer(port, expectedReleaseId, expectedStateScopeId)) {
-    try {
-      await child.terminate();
-    } catch (error) {
-      const detail = error instanceof Error ? error.message : String(error);
-      deps.io.err(`[dashboard] \u5019\u9009 server \u672A\u901A\u8FC7\u5065\u5EB7\u68C0\u67E5\uFF0C\u4E14\u7EC8\u6B62\u72B6\u6001\u65E0\u6CD5\u786E\u8BA4\uFF1A${detail}`);
-      return {
-        state: "indeterminate",
-        detail: error instanceof DashboardTerminationUnconfirmedError ? error.message : new DashboardTerminationUnconfirmedError(detail).message
-      };
-    }
-    deps.io.err(`[dashboard] \u53D7\u7BA1 server \u5728 http://127.0.0.1:${port}/ \u672A\u901A\u8FC7\u5065\u5EB7\u68C0\u67E5\uFF1B\u672A\u6253\u5F00\u6D4F\u89C8\u5668\u3002`);
-    return { state: "failed", detail: "candidate Dashboard failed readiness after confirmed termination" };
+  let healthy;
+  try {
+    const expectedStateScopeId = runtime.resolveStateScopeId();
+    healthy = await runtime.waitForHealthyServer(port, expectedReleaseId, expectedStateScopeId);
+  } catch (error) {
+    return stopFailedCandidate(
+      deps,
+      child,
+      `\u5019\u9009 server readiness \u629B\u51FA\u5F02\u5E38\uFF1A${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+  if (!healthy) {
+    return stopFailedCandidate(
+      deps,
+      child,
+      `\u53D7\u7BA1 server \u5728 http://127.0.0.1:${port}/ \u672A\u901A\u8FC7\u5065\u5EB7\u68C0\u67E5`
+    );
   }
   const url = `http://127.0.0.1:${port}/`;
   deps.io.out(`[dashboard] \u53D7\u7BA1\u670D\u52A1\u5065\u5EB7\u68C0\u67E5\u901A\u8FC7\uFF1A${url}`);
-  if (opts.openBrowser === true && !await runtime.openBrowser(url)) {
+  let browserOpened = true;
+  try {
+    if (opts.openBrowser === true) browserOpened = await runtime.openBrowser(url);
+  } catch {
+    browserOpened = false;
+  }
+  if (!browserOpened) {
     deps.io.err(`[dashboard] \u65E0\u6CD5\u81EA\u52A8\u6253\u5F00\u6D4F\u89C8\u5668\uFF1B\u8BF7\u5728\u6D4F\u89C8\u5668\u8BBF\u95EE ${url}`);
   }
   return { state: "ready" };
@@ -44275,6 +44343,66 @@ async function publishWithinManagedTransaction(deps, request, transaction, dashb
   }
 }
 
+// packages/cli/src/migration/legacy-project-registry.ts
+import { isAbsolute as isAbsolute19, resolve as resolve32 } from "node:path";
+import { statSync as statSync6 } from "node:fs";
+var MAX_LEGACY_REGISTRY_BYTES = 1048576;
+async function migrateLegacyProjectRegistry(input) {
+  const discovered = /* @__PURE__ */ new Set();
+  let rejected = 0;
+  for (const path9 of resolveHostProjectRegistryCandidates({
+    homeDir: input.homeDir,
+    ...input.platform === void 0 ? {} : { platform: input.platform },
+    ...input.env === void 0 ? {} : { env: input.env }
+  })) {
+    const text2 = input.readText(path9);
+    if (text2 === void 0) continue;
+    if (Buffer.byteLength(text2) > MAX_LEGACY_REGISTRY_BYTES) {
+      rejected += 1;
+      continue;
+    }
+    let value;
+    try {
+      value = JSON.parse(text2);
+    } catch {
+      rejected += 1;
+      continue;
+    }
+    if (!Array.isArray(value)) {
+      rejected += 1;
+      continue;
+    }
+    for (const item2 of value) {
+      const isDirectory = typeof item2 === "string" && (input.pathIsDirectory?.(item2) ?? (() => {
+        try {
+          return statSync6(item2).isDirectory();
+        } catch {
+          return false;
+        }
+      })());
+      if (typeof item2 !== "string" || !isAbsolute19(item2) || !input.pathExists(item2) || !isDirectory) {
+        rejected += 1;
+        continue;
+      }
+      discovered.add(resolve32(item2));
+    }
+  }
+  const registryPath = resolveProductPaths({
+    homeDir: input.homeDir,
+    ...input.platform === void 0 ? {} : { platform: input.platform },
+    ...input.env === void 0 ? {} : { env: input.env }
+  }).registryPath;
+  let imported = 0;
+  for (const root of discovered) {
+    try {
+      if (await registerProjectRoot(registryPath, root)) imported += 1;
+    } catch {
+      rejected += 1;
+    }
+  }
+  return { discovered: discovered.size, imported, rejected };
+}
+
 // packages/cli/src/commands/setupHost.ts
 function verifyPackagedAssets(deps, env, root, dryRun, silent = false) {
   const command = [join71(root, "tools", "verify-skills.sh"), "--quiet", "--root", root];
@@ -44415,8 +44543,20 @@ function cmdSetupHost(deps, host, opts, env = REAL_SETUP_ENV, installer = REAL_R
       const migrationCode = migrateLegacyCodexHooks(deps, env);
       if (migrationCode !== 0) return migrationCode;
     }
-    return publishManagedRuntime(deps, env, installer, candidate.root, host, dashboardStarter, openDashboard).then((runtimeCode) => {
+    return publishManagedRuntime(deps, env, installer, candidate.root, host, dashboardStarter, openDashboard).then(async (runtimeCode) => {
       if (runtimeCode !== 0) return runtimeCode;
+      const migrated = await migrateLegacyProjectRegistry({
+        homeDir: env.homeDir(),
+        platform: process.platform,
+        env: process.env,
+        readText: env.readText,
+        pathExists: env.pathExists
+      });
+      if (migrated.discovered > 0 || migrated.rejected > 0) {
+        deps.io.out(
+          `[setup] \u65E7\u9879\u76EE\u6CE8\u518C\u8868\u8FC1\u79FB\uFF1A\u53D1\u73B0 ${migrated.discovered}\uFF0C\u65B0\u589E ${migrated.imported}\uFF0C\u62D2\u7EDD ${migrated.rejected}\uFF1B\u540E\u7EED\u53EA\u8BFB\u53D6 Tenon \u4EA7\u54C1\u57DF\u3002`
+        );
+      }
       if (host === "codex") printCodexHookTrust(deps);
       return configureAutoUpdate(deps, env, host, opts.autoUpdate === true);
     });
@@ -44914,7 +45054,7 @@ function cmdSetup(deps, sub, opts, env = REAL_SETUP_ENV, rt = REAL_RUNTIME_ENV, 
 }
 
 // packages/cli/src/commands/update.ts
-import { isAbsolute as isAbsolute19, join as join74 } from "node:path";
+import { isAbsolute as isAbsolute20, join as join74 } from "node:path";
 function nativeUpdatePlan(host) {
   if (host === "codex") {
     return [
@@ -45074,7 +45214,7 @@ function reportRegisteredProjects(deps, env, pluginVersion) {
   }
   if (!Array.isArray(roots)) return;
   const registeredRoots = [...new Set(
-    roots.filter((root) => typeof root === "string" && isAbsolute19(root))
+    roots.filter((root) => typeof root === "string" && isAbsolute20(root))
   )];
   const outdated = registeredRoots.filter((root) => {
     try {
@@ -45692,7 +45832,7 @@ function buildProgram(deps, runtimes = {}) {
 }
 
 // packages/cli/src/guardContext.ts
-import { readdirSync as readdirSync8, readFileSync as readFileSync26, statSync as statSync6 } from "node:fs";
+import { readdirSync as readdirSync8, readFileSync as readFileSync26, statSync as statSync7 } from "node:fs";
 import { readdir as readdir14 } from "node:fs/promises";
 import { join as join76 } from "node:path";
 async function listChanges(changesRoot2) {
@@ -45735,14 +45875,14 @@ function makeGuardCtx(cwd) {
     stateExists: (changeDirRel) => stateStorageExistsSync(abs(changeDirRel)),
     fileExists: (path9) => {
       try {
-        return statSync6(abs(path9)).isFile();
+        return statSync7(abs(path9)).isFile();
       } catch {
         return false;
       }
     },
     fileNonempty: (path9) => {
       try {
-        const state = statSync6(abs(path9));
+        const state = statSync7(abs(path9));
         return state.isFile() && state.size > 0;
       } catch {
         return false;
@@ -45757,7 +45897,7 @@ function makeGuardCtx(cwd) {
     },
     dirExists: (path9) => {
       try {
-        return statSync6(abs(path9)).isDirectory();
+        return statSync7(abs(path9)).isDirectory();
       } catch {
         return false;
       }
@@ -45773,9 +45913,9 @@ function isoNow() {
   return (/* @__PURE__ */ new Date()).toISOString().replace(/\.\d{3}Z$/, "Z");
 }
 function gitHeadSha(cwd) {
-  return new Promise((resolve35) => {
+  return new Promise((resolve36) => {
     execFile4("git", ["rev-parse", "HEAD"], { cwd }, (_err, stdout) => {
-      resolve35((stdout ?? "").trim());
+      resolve36((stdout ?? "").trim());
     });
   });
 }
@@ -45876,7 +46016,7 @@ function scanCodexProjectSkillNames(cwd, root) {
   for (const skillsRoot of [join77(root, "skills"), join77(cwd, ".agents", "skills")]) {
     for (const name2 of safeReaddirDirs(skillsRoot)) {
       try {
-        if (statSync7(join77(skillsRoot, name2, "SKILL.md")).isFile()) names.add(name2);
+        if (statSync8(join77(skillsRoot, name2, "SKILL.md")).isFile()) names.add(name2);
       } catch {
       }
     }
@@ -45888,7 +46028,7 @@ function scanSkillDigests(skillsRoot) {
   for (const name2 of safeReaddirDirs(skillsRoot)) {
     try {
       const skillPath = join77(skillsRoot, name2, "SKILL.md");
-      if (!statSync7(skillPath).isFile()) continue;
+      if (!statSync8(skillPath).isFile()) continue;
       digests.set(name2, createHash31("sha256").update(readFileSync27(skillPath)).digest("hex"));
     } catch {
     }
@@ -45899,8 +46039,8 @@ function makeDoctorProbes(runtimePaths) {
   const root = pluginRoot();
   return {
     nodeVersion: () => process.version,
-    gitAvailable: () => new Promise((resolve35) => {
-      execFile4("git", ["--version"], (err) => resolve35(!err));
+    gitAvailable: () => new Promise((resolve36) => {
+      execFile4("git", ["--version"], (err) => resolve36(!err));
     }),
     pluginRoot: root,
     manifestError: () => {
@@ -45913,7 +46053,7 @@ function makeDoctorProbes(runtimePaths) {
     },
     fileExists: (p) => {
       try {
-        return statSync7(p).isFile();
+        return statSync8(p).isFile();
       } catch {
         return false;
       }
@@ -45928,7 +46068,7 @@ function makeDoctorProbes(runtimePaths) {
     },
     dirExists: (p) => {
       try {
-        return statSync7(p).isDirectory();
+        return statSync8(p).isDirectory();
       } catch {
         return false;
       }
@@ -45946,7 +46086,7 @@ function makeDoctorProbes(runtimePaths) {
       const host = (await REAL_RUNTIME_INSTALLER.inspect(homedir22())).active?.source.host;
       return host === "codex" || host === "claude" ? host : null;
     },
-    runVerifySkills: () => new Promise((resolve35) => {
+    runVerifySkills: () => new Promise((resolve36) => {
       execFile4(
         "bash",
         [join77(root, "tools", "verify-skills.sh"), "--quiet"],
@@ -45954,7 +46094,7 @@ function makeDoctorProbes(runtimePaths) {
         (err, stdout, stderr) => {
           const errCode = err?.code;
           const code = err ? typeof errCode === "number" ? errCode : 1 : 0;
-          resolve35({ code, output: `${stdout ?? ""}${stderr ?? ""}` });
+          resolve36({ code, output: `${stdout ?? ""}${stderr ?? ""}` });
         }
       );
     }),

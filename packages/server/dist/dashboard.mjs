@@ -19806,16 +19806,33 @@ function readPidfile(pidfilePath) {
 function probeHealth(port, host = "127.0.0.1", timeoutMs = 500) {
   return new Promise((resolve12) => {
     let done = false;
+    let wallClockTimer;
     const finish = (v) => {
       if (done) return;
       done = true;
+      if (wallClockTimer !== void 0) clearTimeout(wallClockTimer);
       resolve12(v);
     };
     const req = httpGet({ host, port, path: "/api/health", timeout: timeoutMs }, (res) => {
       let body = "";
+      let receivedBytes = 0;
       res.setEncoding("utf8");
-      res.on("data", (c) => body += c);
+      res.on("data", (chunk) => {
+        receivedBytes += Buffer.byteLength(chunk);
+        if (receivedBytes > 16 * 1024) {
+          res.destroy();
+          finish(null);
+          return;
+        }
+        body += chunk;
+      });
+      res.once("aborted", () => finish(null));
+      res.once("error", () => finish(null));
       res.on("end", () => {
+        if (receivedBytes > 16 * 1024) {
+          finish(null);
+          return;
+        }
         try {
           finish(decodeHealthInfo(JSON.parse(body)));
         } catch {
@@ -19823,6 +19840,10 @@ function probeHealth(port, host = "127.0.0.1", timeoutMs = 500) {
         }
       });
     });
+    wallClockTimer = setTimeout(() => {
+      req.destroy();
+      finish(null);
+    }, timeoutMs);
     req.on("timeout", () => {
       req.destroy();
       finish(null);
@@ -19832,7 +19853,8 @@ function probeHealth(port, host = "127.0.0.1", timeoutMs = 500) {
 }
 function decidePreemption(existing, myVersion, myReleaseId, myStateScopeId) {
   if (!existing) return "bind";
-  if (existing.stateScopeId !== myStateScopeId) return "preempt";
+  if (myReleaseId === void 0 && existing.releaseId !== void 0) return "reuse";
+  if (existing.stateScopeId !== myStateScopeId) return myReleaseId === void 0 ? "reuse" : "preempt";
   const versionOrder = compareVersions(myVersion, existing.version);
   if (versionOrder !== 0) return versionOrder > 0 ? "preempt" : "reuse";
   if (myReleaseId !== void 0) return myReleaseId === existing.releaseId ? "reuse" : "preempt";
@@ -19915,6 +19937,16 @@ function resolveDashboardPort(raw) {
   return Number.isInteger(parsed) && parsed >= 1 && parsed <= 65535 ? parsed : DEFAULT_DASHBOARD_PORT;
 }
 
+// packages/server/src/server-args.ts
+function parseDashboardServerArgs(args) {
+  if (args.length === 0) return { mode: "run" };
+  if (args.length === 1 && (args[0] === "--help" || args[0] === "-h")) return { mode: "help" };
+  return {
+    mode: "invalid",
+    detail: `unsupported direct server arguments: ${args.join(" ")}`
+  };
+}
+
 // packages/server/src/main.ts
 function serverPort() {
   return resolveDashboardPort(process.env.TENON_DASHBOARD_PORT);
@@ -19935,6 +19967,18 @@ function gitHeadSha(cwd) {
   });
 }
 async function main() {
+  const argumentMode = parseDashboardServerArgs(process.argv.slice(2));
+  if (argumentMode.mode === "help") {
+    process.stdout.write(
+      "Tenon Dashboard server is an internal managed-runtime entrypoint.\\nUse `tenon dashboard` to start or inspect the product.\\n"
+    );
+    return;
+  }
+  if (argumentMode.mode === "invalid") {
+    process.stderr.write(`[dashboard-server] ${argumentMode.detail}\\n`);
+    process.exitCode = 2;
+    return;
+  }
   const paths = resolveServerPaths();
   const host = "127.0.0.1";
   const port = serverPort();

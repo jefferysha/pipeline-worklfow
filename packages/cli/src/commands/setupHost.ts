@@ -21,6 +21,7 @@ import {
   type PipelineHostFlags,
 } from './plugin-host.js'
 import { publishManagedRelease } from './release-coordinator.js'
+import { migrateLegacyProjectRegistry } from '../migration/legacy-project-registry.js'
 
 // ── 注入面（测试注入临时 HOME / spy;真实现 = node:fs + os.homedir）──────────────────
 
@@ -244,8 +245,21 @@ export function cmdSetupHost(
       const migrationCode = migrateLegacyCodexHooks(deps, env)
       if (migrationCode !== 0) return migrationCode
     }
-    return publishManagedRuntime(deps, env, installer, candidate.root, host, dashboardStarter, openDashboard).then((runtimeCode) => {
+    return publishManagedRuntime(deps, env, installer, candidate.root, host, dashboardStarter, openDashboard).then(async (runtimeCode) => {
       if (runtimeCode !== 0) return runtimeCode
+      const migrated = await migrateLegacyProjectRegistry({
+        homeDir: env.homeDir(),
+        platform: process.platform,
+        env: process.env,
+        readText: env.readText,
+        pathExists: env.pathExists,
+      })
+      if (migrated.discovered > 0 || migrated.rejected > 0) {
+        deps.io.out(
+          `[setup] 旧项目注册表迁移：发现 ${migrated.discovered}，新增 ${migrated.imported}，`
+          + `拒绝 ${migrated.rejected}；后续只读取 Tenon 产品域。`,
+        )
+      }
       if (host === 'codex') printCodexHookTrust(deps)
       return configureAutoUpdate(deps, env, host, opts.autoUpdate === true)
     })

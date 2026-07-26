@@ -22,6 +22,7 @@ import { decidePreemption, preemptOldServer, probeHealth } from './preempt.js'
 import { generateToken, writeTokenHandshake } from './token.js'
 import { resolvePayloadReleaseId, resolveReleaseVersion } from './version.js'
 import { resolveDashboardPort } from './port.js'
+import { parseDashboardServerArgs } from './server-args.js'
 
 function serverPort(): number {
   return resolveDashboardPort(process.env.TENON_DASHBOARD_PORT)
@@ -48,6 +49,19 @@ function gitHeadSha(cwd: string): Promise<string> {
 }
 
 async function main(): Promise<void> {
+  const argumentMode = parseDashboardServerArgs(process.argv.slice(2))
+  if (argumentMode.mode === 'help') {
+    process.stdout.write(
+      'Tenon Dashboard server is an internal managed-runtime entrypoint.\\n'
+      + 'Use `tenon dashboard` to start or inspect the product.\\n',
+    )
+    return
+  }
+  if (argumentMode.mode === 'invalid') {
+    process.stderr.write(`[dashboard-server] ${argumentMode.detail}\\n`)
+    process.exitCode = 2
+    return
+  }
   const paths = resolveServerPaths()
   const host = '127.0.0.1'
   const port = serverPort()

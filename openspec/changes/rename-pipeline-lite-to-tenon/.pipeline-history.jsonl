@@ -152,3 +152,21 @@
 {"ts":"2026-07-26T07:20:50Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated"}
 {"ts":"2026-07-26T07:38:43Z","kind":"tool","raw":"CodexSkillRead: frontend-design"}
 {"ts":"2026-07-26T07:38:43Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-26T07:39:48Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-26T07:39:48Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-26T07:39:49Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"78c02aa6-1d18-4ec3-a6d8-0fbcac3bf819"}
+{"ts":"2026-07-26T07:40:13Z","kind":"tool","raw":"CodexSkillRead: e2e-testing"}
+{"ts":"2026-07-26T07:40:13Z","kind":"tool","raw":"CodexSkillRead: verify"}
+{"ts":"2026-07-26T07:40:34Z","kind":"tool","raw":"CodexSkillRead: code-review"}
+{"ts":"2026-07-26T07:40:51Z","kind":"tool","raw":"CodexSkillRead: e2e-testing"}
+{"ts":"2026-07-26T07:40:51Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-07-26T07:40:51Z","kind":"tool","raw":"CodexSkillRead: deployment-patterns"}
+{"ts":"2026-07-26T07:43:05Z","kind":"tool","raw":"CodexSkillRead: code-review"}
+{"ts":"2026-07-26T07:47:34Z","kind":"set","field":"agent_review_result","to":"fail"}
+{"ts":"2026-07-26T07:47:35Z","kind":"set","field":"verify_result","to":"fail"}
+{"ts":"2026-07-26T07:48:09Z","kind":"tool","raw":"review:request phase=verify event=verify-fail"}
+{"ts":"2026-07-26T07:48:09Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-07-26T07:20:50Z"}
+{"ts":"2026-07-26T07:48:09Z","kind":"tool","raw":"CodexSkillRead: browser-qa"}
+{"ts":"2026-07-26T07:48:39Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-26T07:48:39Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-26T07:48:46Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"c4690b93-5e49-42dd-ba3a-db1b90701d01"}

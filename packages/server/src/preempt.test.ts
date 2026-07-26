@@ -5,7 +5,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { spawn, type ChildProcess } from 'node:child_process'
 import { writeFile } from 'node:fs/promises'
-import { createServer } from 'node:net'
+import { createServer, type Server } from 'node:net'
 import { join } from 'node:path'
 import {
   compareVersions, decidePreemption, parseListenerPids, preemptOldServer, probeHealth, probePortOpen, readPidfile,
@@ -15,9 +15,14 @@ import type { DashboardServer } from './types.js'
 import { makeTempHome, testFlow } from './test-support.js'
 
 const servers: DashboardServer[] = []
+const rawServers: Server[] = []
 const children: ChildProcess[] = []
 afterEach(async () => {
   while (servers.length) await servers.pop()!.close()
+  while (rawServers.length) {
+    const server = rawServers.pop()!
+    await new Promise<void>((resolve) => server.close(() => resolve()))
+  }
   for (const c of children.splice(0)) { try { c.kill('SIGKILL') } catch { /* already gone */ } }
 })
 
@@ -55,11 +60,33 @@ describe('decidePreemption —— bind / reuse / preempt', () => {
       otherStateScopeId,
     )).toBe('preempt')
   })
-  it('legacy health 缺 machine-state scope → preempt 一次完成迁移', () => {
+  it('未绑定 immutable release 的直接 bundle 不得跨 state scope 抢占现有服务', () => {
+    expect(decidePreemption(
+      { ok: true, scope: 'global', version: '0.2.0', stateScopeId },
+      '0.2.0',
+      undefined,
+      otherStateScopeId,
+    )).toBe('reuse')
+  })
+  it('未绑定 immutable release 的直接 bundle 不得覆盖现有 managed release', () => {
+    expect(decidePreemption(
+      {
+        ok: true,
+        scope: 'global',
+        version: '0.2.0',
+        releaseId: `sha256-${'a'.repeat(64)}`,
+        stateScopeId,
+      },
+      '9.0.0',
+      undefined,
+      stateScopeId,
+    )).toBe('reuse')
+  })
+  it('managed release 遇到 legacy health 缺 machine-state scope → preempt 一次完成迁移', () => {
     expect(decidePreemption(
       { ok: true, scope: 'global', version: '0.2.0' },
       '0.2.0',
-      undefined,
+      `sha256-${'a'.repeat(64)}`,
       stateScopeId,
     )).toBe('preempt')
   })
@@ -118,6 +145,19 @@ describe('probeHealth —— 真 HTTP 探测既有 server', () => {
     servers.pop()
     const dead = await probeHealth(port, '127.0.0.1', 300)
     expect(dead).toBeNull()
+  })
+
+  it('200 partial body 被对端中断时在墙钟期限内返回 null', async () => {
+    const server = createServer((socket) => {
+      socket.write('HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 999\r\n\r\n{"ok":')
+      setImmediate(() => socket.destroy())
+    })
+    rawServers.push(server)
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+    const address = server.address()
+    if (address === null || typeof address === 'string') throw new Error('missing raw server address')
+
+    await expect(probeHealth(address.port, '127.0.0.1', 200)).resolves.toBeNull()
   })
 })
 

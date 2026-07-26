@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { resolveProductPaths, serializeProductRootContract } from './product-paths.js'
+import {
+  resolveHostProjectRegistryCandidates,
+  resolveProductPaths,
+  serializeProductRootContract,
+} from './product-paths.js'
 
 describe('resolveProductPaths —— Tenon 自有机器状态的唯一平台路径模型', () => {
   it('Linux 遵守 XDG，并始终在标准根下使用 tenon 命名空间', () => {
@@ -114,5 +118,40 @@ describe('resolveProductPaths —— Tenon 自有机器状态的唯一平台路�
         }),
       },
     })).toThrow(/TENON_RUNTIME_ROOTS/)
+  })
+})
+
+describe('resolveHostProjectRegistryCandidates —— 宿主注册表只读导入投影', () => {
+  it('macOS 返回两个宿主协议入口，不读取任何退役产品目录', () => {
+    expect(resolveHostProjectRegistryCandidates({
+      platform: 'darwin',
+      homeDir: '/Users/demo',
+      env: {},
+    })).toEqual([
+      '/Users/demo/.claude/pipeline-projects.json',
+      '/Users/demo/.codex/pipeline-projects.json',
+    ])
+  })
+
+  it('Linux 只使用 home 下的宿主协议路径', () => {
+    expect(resolveHostProjectRegistryCandidates({
+      platform: 'linux',
+      homeDir: '/home/demo',
+      env: { XDG_CONFIG_HOME: '/var/demo/config' },
+    })).toEqual([
+      '/home/demo/.claude/pipeline-projects.json',
+      '/home/demo/.codex/pipeline-projects.json',
+    ])
+  })
+
+  it('Windows 使用 win32 路径语义解析宿主入口', () => {
+    expect(resolveHostProjectRegistryCandidates({
+      platform: 'win32',
+      homeDir: 'C:\\Users\\demo',
+      env: { APPDATA: 'C:\\Users\\demo\\AppData\\Roaming' },
+    })).toEqual([
+      'C:\\Users\\demo\\.claude\\pipeline-projects.json',
+      'C:\\Users\\demo\\.codex\\pipeline-projects.json',
+    ])
   })
 })
