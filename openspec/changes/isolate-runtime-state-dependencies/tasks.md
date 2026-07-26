@@ -14,6 +14,8 @@
 
 - [x] 定义运行时路径单一解析和应用层显式依赖的验收场景。
 - [x] 形成实现计划与回归测试矩阵。
+- [x] 补全两个 `MODIFIED Requirement` 的既有场景，确保官方归档不会丢失主规格行为。
+- [x] 统一 `hostHome` 与产品 `ServerPaths` 的设计、ADR、计划和验收场景。
 
 ## 实现
 
@@ -24,6 +26,7 @@
 - [x] 让 runtime rollback 在锁内复用单一路径快照，并把环境解析错误映射回 CLI 契约。
 - [x] 新增共享运行目录与 XDG 环境下的隔离回归测试。
 - [x] 补齐 Server 漏传路径、rollback 动态环境和 runtime scope 解析失败的回归测试。
+- [x] 让真实 CLI 入口延迟解析 runtime paths，并覆盖损坏环境与无效子命令的进程级回归。
 - [x] 重建 CLI、Server 与 Dashboard 发布资产。
 
 ## 验证

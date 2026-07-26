@@ -4,7 +4,7 @@ import { createRequire as __cr } from 'node:module'; const require = __cr(import
 // packages/server/src/main.ts
 import { execFile as execFile5 } from "node:child_process";
 import { mkdirSync as mkdirSync6, unlinkSync as unlinkSync3, writeFileSync as writeFileSync6 } from "node:fs";
-import { dirname as dirname13, join as join51 } from "node:path";
+import { dirname as dirname13, join as join50 } from "node:path";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
 
 // packages/tap/dist/paths.js
@@ -15499,7 +15499,6 @@ function createCadenceScheduler(options) {
 
 // packages/server/src/serverGetRoutes.ts
 import { lstatSync as lstatSync5 } from "node:fs";
-import { homedir as homedir4 } from "node:os";
 import { dirname as dirname9, join as join40 } from "node:path";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
 
@@ -17489,6 +17488,7 @@ async function handleGet(req, res, path7, deps) {
     trackRegistryBody,
     manifestPath: manifestPath2,
     paths,
+    hostHome,
     options,
     resolveSessionLink,
     errMsg: errMsg2
@@ -17573,7 +17573,7 @@ async function handleGet(req, res, path7, deps) {
   }
   if (path7 === "/api/skills/registry") {
     try {
-      return sendJson(res, 200, { skills: listAllSkillsDetailed(repoRootForSkills(), paths.claudeDir) });
+      return sendJson(res, 200, { skills: listAllSkillsDetailed(repoRootForSkills(), join40(hostHome, ".claude")) });
     } catch (e) {
       return sendJson(res, 500, { ok: false, error: errMsg2(e) });
     }
@@ -17682,7 +17682,7 @@ async function handleGet(req, res, path7, deps) {
       image,
       secretsPath: paths.secretsPath,
       exec: options.execDocker,
-      defaultCodexHome: join40(homedir4(), ".codex")
+      defaultCodexHome: join40(hostHome, ".codex")
     });
     return sendJson(res, 200, r);
   }
@@ -19650,6 +19650,7 @@ function createDashboardServer(options) {
     trackRegistryBody,
     manifestPath: manifestPath2,
     paths,
+    hostHome,
     options,
     resolveSessionLink,
     errMsg
@@ -19760,7 +19761,6 @@ function createDashboardServer(options) {
 }
 
 // packages/server/src/paths.ts
-import { join as join50 } from "node:path";
 function resolveServerPaths(opts = {}) {
   const product = resolveProductPaths({
     ...opts.home === void 0 ? {} : { homeDir: opts.home },
@@ -19769,7 +19769,6 @@ function resolveServerPaths(opts = {}) {
   });
   return {
     ...product,
-    claudeDir: join50(product.homeDir, ".claude"),
     tokenPath: product.dashboardTokenPath,
     pidfilePath: product.dashboardPidfilePath
   };
@@ -19978,10 +19977,10 @@ function cadencePollInterval() {
   return Number.isSafeInteger(raw) && raw >= 100 ? raw : 3e4;
 }
 function pluginRoot() {
-  return join51(dirname13(fileURLToPath4(import.meta.url)), "..", "..", "..");
+  return join50(dirname13(fileURLToPath4(import.meta.url)), "..", "..", "..");
 }
 function manifestPath() {
-  return join51(pluginRoot(), "templates", "manifest.yaml");
+  return join50(pluginRoot(), "templates", "manifest.yaml");
 }
 function gitHeadSha(cwd) {
   return new Promise((resolve12) => {
@@ -20041,7 +20040,7 @@ async function main() {
     gitHeadSha,
     workspaceFingerprint: (cwd) => fingerprintWorkspace(cwd),
     // dashboard-app 构建产物（BACKLOG #26c）：存在则服务真 SPA，否则回退最小落地页
-    webRoot: join51(dirname13(fileURLToPath4(import.meta.url)), "..", "..", "dashboard-app", "dist"),
+    webRoot: join50(dirname13(fileURLToPath4(import.meta.url)), "..", "..", "dashboard-app", "dist"),
     // tap 流量查看器数据源（BACKLOG #34d）：只读 listSessions/readRecords，capabilities.traffic=true。
     // tap capture 默认 OFF，无捕获时返回空会话——数据端仍在线（#34e：只读本地、不外发）
     traceStore: createTraceStore(),

@@ -230,7 +230,7 @@ function scanSkillDigests(skillsRoot: string): Map<string, string> {
  * doctor 探针（BACKLOG #26b）：环境/fs 事实采集的 node 落地，裁决归 cmdDoctor。
  * 各探针独立 fail-safe（fs 异常按「不存在/不可执行」处理）——doctor 要能在坏环境里跑完。
  */
-function makeDoctorProbes(runtimePaths: ReturnType<typeof resolveRuntimePaths>): DoctorProbes {
+function makeDoctorProbes(runtimePaths: () => ReturnType<typeof resolveRuntimePaths>): DoctorProbes {
   const root = pluginRoot()
   return {
     nodeVersion: () => process.version,
@@ -314,7 +314,7 @@ function makeDoctorProbes(runtimePaths: ReturnType<typeof resolveRuntimePaths>):
     afkReadiness: () =>
       probeAfkReadiness({
         image: readAutomationJson(process.cwd()).image ?? 'sandcastle:local',
-        secretsEnv: readSecrets(runtimePaths.secretsPath).keys,
+        secretsEnv: readSecrets(runtimePaths().secretsPath).keys,
         hostEnv: process.env,
         defaultCodexHome: join(homedir(), '.codex'),
       }),
@@ -322,7 +322,14 @@ function makeDoctorProbes(runtimePaths: ReturnType<typeof resolveRuntimePaths>):
 }
 
 async function main(): Promise<void> {
-  const runtimePaths = resolveRuntimePaths({ env: process.env, homeDir: homedir() })
+  let resolvedRuntimePaths: ReturnType<typeof resolveRuntimePaths> | undefined
+  const runtimePaths = () => {
+    resolvedRuntimePaths ??= resolveRuntimePaths({
+      env: { ...process.env },
+      homeDir: homedir(),
+    })
+    return resolvedRuntimePaths
+  }
   const manifest = loadManifest(manifestPath())
   const { toParse, passthrough } = splitPassthroughArgv(process.argv)
   const store = createStateStore()
@@ -370,11 +377,11 @@ async function main(): Promise<void> {
     history: createHistoryWriter(),
     // init 成功后 best-effort 登记项目根到 Tenon config root 的 projects.json
     registerProject: async (repoRoot) => {
-      await registerProjectRoot(runtimePaths.registryPath, repoRoot)
+      await registerProjectRoot(runtimePaths().registryPath, repoRoot)
     },
     // v6 T2：afk run 凭证注入——机器级 secrets 读成 env 形状（kernel readSecrets 自身 fail-open，
     // 缺失/损坏 → 空 keys）；值不落日志。
-    readSecretsEnv: async () => readSecrets(runtimePaths.secretsPath).keys,
+    readSecretsEnv: async () => readSecrets(runtimePaths().secretsPath).keys,
     readHistoryRaw: async (dir) => {
       try {
         return await readFile(join(dir, '.pipeline-history.jsonl'), 'utf8')

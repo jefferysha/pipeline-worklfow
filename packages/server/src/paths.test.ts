@@ -8,7 +8,7 @@ describe('resolveServerPaths —— 宿主发现与 Tenon 产品状态分域', (
       platform: 'darwin',
       env: {},
     })
-    expect(paths.claudeDir).toBe('/Users/demo/.claude')
+    expect(paths).not.toHaveProperty('claudeDir')
     expect(paths.registryPath).toBe('/Users/demo/Library/Application Support/tenon/config/projects.json')
     expect(paths.secretsPath).toBe('/Users/demo/Library/Application Support/tenon/config/secrets.json')
     expect(paths.tokenPath).toBe('/Users/demo/Library/Application Support/tenon/state/dashboard-token.json')
@@ -18,7 +18,7 @@ describe('resolveServerPaths —— 宿主发现与 Tenon 产品状态分域', (
       paths.secretsPath,
       paths.tokenPath,
       paths.pidfilePath,
-    ].some((path) => path.startsWith(paths.claudeDir))).toBe(false)
+    ].some((path) => path.startsWith('/Users/demo/.claude'))).toBe(false)
   })
 
   it('TENON_RUNTIME_HOME 只重定向产品域，不劫持宿主 home', () => {
@@ -28,7 +28,7 @@ describe('resolveServerPaths —— 宿主发现与 Tenon 产品状态分域', (
       env: { TENON_RUNTIME_HOME: '/tmp/tenon-runtime' },
     })
     expect(paths.homeDir).toBe('/home/demo')
-    expect(paths.claudeDir).toBe('/home/demo/.claude')
+    expect(paths).not.toHaveProperty('claudeDir')
     expect(paths.registryPath).toBe('/tmp/tenon-runtime/config/projects.json')
     expect(paths.stateRoot).toBe('/tmp/tenon-runtime/state')
   })

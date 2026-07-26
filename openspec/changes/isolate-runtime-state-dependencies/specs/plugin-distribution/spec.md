@@ -9,6 +9,37 @@
 `ServerPaths` 值对象作为必填依赖注入 Server；Server SHALL NOT 从宿主 home 或进程环境再次推导
 产品状态路径。
 健康响应 SHALL 暴露不透明且确定性的 `stateScopeId`，并 SHALL NOT 暴露机器状态目录。
+该标识只用于身份比较，SHALL NOT 被接受为授权凭据。
+
+#### Scenario: Same release starts for a different state Home
+
+- **GIVEN** a healthy Dashboard is listening on the configured port for state scope A
+- **WHEN** the same immutable release is explicitly started with state scope B
+- **THEN** the existing process is not reused
+- **AND** takeover may proceed only after the reported PID is verified as the real loopback
+  listener owner
+- **AND** the new health response carries state scope B's identifier.
+
+#### Scenario: Same release starts for the same state Home
+
+- **GIVEN** a healthy Dashboard is listening for the requested state scope and release
+- **WHEN** the managed launcher starts again
+- **THEN** it reuses the existing process
+- **AND** does not replace or duplicate the singleton.
+
+#### Scenario: Legacy health has no state-scope identity
+
+- **GIVEN** a prior Dashboard health response has no `stateScopeId`
+- **WHEN** a scope-aware managed Dashboard starts
+- **THEN** the legacy process is treated as a one-time migration takeover candidate
+- **AND** listener ownership verification remains mandatory before signalling it.
+
+#### Scenario: Managed startup waits for the exact intended process
+
+- **WHEN** setup or update starts a Dashboard from an immutable release
+- **THEN** readiness succeeds only when both `releaseId` and `stateScopeId` match the launcher
+  expectation
+- **AND** a browser is not opened for a process with a mismatched state scope.
 
 #### Scenario: 生产入口装配 Dashboard
 
@@ -24,6 +55,14 @@
 - **WHEN** Server 启动并读写机器状态
 - **THEN** 它只使用显式注入的路径
 - **AND** 不读写共享环境所指向的目录。
+
+#### Scenario: 宿主发现目录与产品状态目录不同
+
+- **GIVEN** 调用方提供的 `hostHome` 与 `ServerPaths.homeDir` 不同
+- **WHEN** Server 检查 skills、runner 资产或默认 Codex 凭证
+- **THEN** `.claude`、`.codex` 与其他宿主资产只从 `hostHome` 派生
+- **AND** 注册表、密钥、token、pidfile 与状态作用域仍只使用 `ServerPaths`
+- **AND** Server 不读取 OS 全局 home 作为第三个隐式来源。
 
 #### Scenario: Server 调用方省略路径依赖
 

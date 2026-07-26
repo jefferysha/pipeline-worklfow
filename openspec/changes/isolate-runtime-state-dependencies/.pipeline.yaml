@@ -31,7 +31,7 @@ related_files: null
 spec_scope: null
 depends_on: null
 created_at: 2026-07-26T10:36:02Z
-updated_at: 2026-07-26T11:33:35Z
+updated_at: 2026-07-26T11:56:35Z
 verified_at: null
 archived_at: null
 archived: false
@@ -39,8 +39,8 @@ workflow: default
 automation_current_phase: ""
 automation_cause: ""
 pipeline_run_id: 7f8bb635-9992-4c64-8158-2112e467fe03
-pipeline_transition_sequence: 7
-pipeline_transition_head: 0f92f38e-a0c9-4149-851c-de77fe7184d8
-pipeline_state_revision: 25
-pipeline_state_revision_id: 4298fcc1-c9b1-4d1e-a3d3-a52a3c79470b
-pipeline_state_digest: d768e02c67f14b37da924f65f9af3b6c893c5d10eae90d15f3c5e009bf5bc7cf
+pipeline_transition_sequence: 13
+pipeline_transition_head: 23c2e389-97bc-485b-83cb-57a47f9b82b2
+pipeline_state_revision: 41
+pipeline_state_revision_id: aa07e0a9-f7b5-4165-8a63-5522806580cd
+pipeline_state_digest: 7bd67ecb9c8d894bd1be6e305576b6f4e5a8b14748376bf821407d8aeeec520e

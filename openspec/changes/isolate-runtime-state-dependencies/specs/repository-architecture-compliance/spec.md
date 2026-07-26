@@ -8,6 +8,20 @@ HTTP、CLI 与 hooks SHALL 只负责输入及授权校验、DTO 转换、应用�
 产品路径、平台与环境映射 SHALL 在进程装配或 adapter 边界解析并显式注入应用服务。
 已经接收路径或环境依赖的应用服务 SHALL NOT 再读取 `process.env`、重建平台优先级或从
 宿主 home 推导机器状态目录。外部值 SHALL 以 `unknown` 进入并在状态变更前完成收窄。
+Adapter SHALL NOT 实现私有持久化解析器或跨聚合写协议。
+
+#### Scenario: Malformed Workflow request reaches the server
+
+- **WHEN** a request body is not a valid Workflow DTO
+- **THEN** a boundary decoder rejects it using the existing compatible client
+  error shape
+- **AND** no domain compile/save or state write occurs.
+
+#### Scenario: Loop command reads Change state
+
+- **WHEN** a loop command needs a Change-state projection
+- **THEN** it uses the kernel/application repository or codec contract
+- **AND** it does not parse `.pipeline.yaml` privately.
 
 #### Scenario: 迁移服务在共享运行环境中执行
 

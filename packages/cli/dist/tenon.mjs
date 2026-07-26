@@ -46269,14 +46269,21 @@ function makeDoctorProbes(runtimePaths) {
     // 值永不回显（探针只回 set+source）。docker 缺是常态：doctor checkAfk 据 available 出 yellow 非 red。
     afkReadiness: () => probeAfkReadiness({
       image: readAutomationJson(process.cwd()).image ?? "sandcastle:local",
-      secretsEnv: readSecrets(runtimePaths.secretsPath).keys,
+      secretsEnv: readSecrets(runtimePaths().secretsPath).keys,
       hostEnv: process.env,
       defaultCodexHome: join78(homedir20(), ".codex")
     })
   };
 }
 async function main() {
-  const runtimePaths = resolveRuntimePaths({ env: process.env, homeDir: homedir20() });
+  let resolvedRuntimePaths;
+  const runtimePaths = () => {
+    resolvedRuntimePaths ??= resolveRuntimePaths({
+      env: { ...process.env },
+      homeDir: homedir20()
+    });
+    return resolvedRuntimePaths;
+  };
   const manifest = loadManifest(manifestPath());
   const { toParse, passthrough } = splitPassthroughArgv(process.argv);
   const store2 = createStateStore();
@@ -46323,11 +46330,11 @@ async function main() {
     history: createHistoryWriter(),
     // init 成功后 best-effort 登记项目根到 Tenon config root 的 projects.json
     registerProject: async (repoRoot) => {
-      await registerProjectRoot(runtimePaths.registryPath, repoRoot);
+      await registerProjectRoot(runtimePaths().registryPath, repoRoot);
     },
     // v6 T2：afk run 凭证注入——机器级 secrets 读成 env 形状（kernel readSecrets 自身 fail-open，
     // 缺失/损坏 → 空 keys）；值不落日志。
-    readSecretsEnv: async () => readSecrets(runtimePaths.secretsPath).keys,
+    readSecretsEnv: async () => readSecrets(runtimePaths().secretsPath).keys,
     readHistoryRaw: async (dir) => {
       try {
         return await readFile36(join78(dir, ".pipeline-history.jsonl"), "utf8");

@@ -1,4 +1,3 @@
-import { join } from 'node:path'
 import { resolveProductPaths, type ProductPathInput } from '@tenon/kernel'
 import type { ServerPaths } from './types.js'
 
@@ -14,7 +13,6 @@ export function resolveServerPaths(opts: {
   })
   return {
     ...product,
-    claudeDir: join(product.homeDir, '.claude'),
     tokenPath: product.dashboardTokenPath,
     pidfilePath: product.dashboardPidfilePath,
   }

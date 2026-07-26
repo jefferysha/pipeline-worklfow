@@ -57,3 +57,36 @@
 {"ts":"2026-07-26T11:33:53Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
 {"ts":"2026-07-26T11:33:53Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
 {"ts":"2026-07-26T11:38:36Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
+{"ts":"2026-07-26T11:38:48Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"272bf8ad-a265-4db1-a8b8-6593ad059e24"}
+{"ts":"2026-07-26T11:41:54Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-07-26T11:41:54Z","kind":"tool","raw":"CodexSkillRead: code-review"}
+{"ts":"2026-07-26T11:41:54Z","kind":"tool","raw":"CodexSkillRead: e2e-testing"}
+{"ts":"2026-07-26T11:42:46Z","kind":"tool","raw":"CodexSkillRead: code-review"}
+{"ts":"2026-07-26T11:43:16Z","kind":"tool","raw":"CodexSkillRead: code-review"}
+{"ts":"2026-07-26T11:45:02Z","kind":"set","field":"verify_result","to":"fail"}
+{"ts":"2026-07-26T11:45:03Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/isolate-runtime-state-dependencies-verify.md"}
+{"ts":"2026-07-26T11:45:03Z","kind":"tool","raw":"review:request phase=verify event=verify-fail"}
+{"ts":"2026-07-26T11:45:04Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-07-26T11:14:38Z"}
+{"ts":"2026-07-26T11:45:04Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"5e70b46d-2928-4377-89ef-036b7b5192b4"}
+{"ts":"2026-07-26T11:45:38Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-07-26T11:45:38Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-26T11:45:53Z","kind":"transition","from":"build","to":"spec","raw":"requirements-changed","transitionRecordId":"95cf4cb8-ef93-47af-a6fe-2b9b7ff7ce27"}
+{"ts":"2026-07-26T11:46:07Z","kind":"tool","raw":"CodexSkillRead: openspec-propose"}
+{"ts":"2026-07-26T11:46:07Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-07-26T11:48:04Z","kind":"set","field":"plan","to":"docs/superpowers/plans/isolate-runtime-state-dependencies.md"}
+{"ts":"2026-07-26T11:48:26Z","kind":"tool","raw":"CodexSkillRead: tenon-spec"}
+{"ts":"2026-07-26T11:48:29Z","kind":"tool","raw":"review:request phase=spec event=spec-complete"}
+{"ts":"2026-07-26T11:48:29Z","kind":"tool","raw":"review:delegated-ack phase=spec event=spec-complete authority_issued_at=2026-07-26T11:14:38Z"}
+{"ts":"2026-07-26T11:48:29Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"6d584f5d-5dd1-4d0c-a102-83aadbcb6270"}
+{"ts":"2026-07-26T11:49:08Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-07-26T11:49:08Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-26T11:52:35Z","kind":"transition","from":"build","to":"spec","raw":"requirements-changed","transitionRecordId":"3705458b-4f56-4c6e-9751-4ce1869b783a"}
+{"ts":"2026-07-26T11:52:45Z","kind":"tool","raw":"CodexSkillRead: openspec-propose"}
+{"ts":"2026-07-26T11:52:45Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-07-26T11:56:05Z","kind":"tool","raw":"CodexSkillRead: tenon-spec"}
+{"ts":"2026-07-26T11:56:33Z","kind":"set","field":"plan","to":"docs/superpowers/plans/isolate-runtime-state-dependencies.md"}
+{"ts":"2026-07-26T11:56:34Z","kind":"tool","raw":"review:request phase=spec event=spec-complete"}
+{"ts":"2026-07-26T11:56:34Z","kind":"tool","raw":"review:delegated-ack phase=spec event=spec-complete authority_issued_at=2026-07-26T11:14:38Z"}
+{"ts":"2026-07-26T11:56:35Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"23c2e389-97bc-485b-83cb-57a47f9b82b2"}
+{"ts":"2026-07-26T11:56:44Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-07-26T11:56:44Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}

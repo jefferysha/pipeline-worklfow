@@ -15,9 +15,8 @@ import type {
 import type { TraceStoreReader } from './traces.js'
 import type { LoopActivationValidator } from './loops.js'
 
-/** 宿主资产发现路径 + Tenon 产品自有路径。产品路径由 kernel 的单一模型解析。 */
+/** Tenon 产品自有路径。宿主资产发现由 DashboardServerOptions.hostHome 独立表达。 */
 export interface ServerPaths extends ProductPaths {
-  claudeDir: string
   /** Tenon state root 下的一次性 token 握手文件（0600）。 */
   tokenPath: string
   /** Tenon state root 下的 pidfile（pid/port/version，B4 版本抢占用）。 */
@@ -116,7 +115,7 @@ export interface DashboardServerOptions {
    * 进程装配层已经解析并冻结的产品路径。注入后 Server 不再解释进程环境或从 home 推导状态目录。
    */
   paths: ServerPaths
-  /** 仅用于宿主资产发现；省略时复用 paths.homeDir，绝不参与产品状态路径解析。 */
+  /** 仅用于宿主资产发现；省略时复用 paths.homeDir，绝不进入 ServerPaths 或产品状态解析。 */
   hostHome?: string
   /** 覆盖注册表读取（默认读 registryPath 的 JSON 字符串数组）。 */
   registry?: () => string[]

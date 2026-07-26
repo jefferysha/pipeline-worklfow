@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test, vi } from 'vitest'
 import { readProjectRegistry, resolveProductPaths, writeProjectRegistry } from '@tenon/kernel'
 import {
   migrateLegacyProjectRegistry,
@@ -60,6 +60,50 @@ describe('legacy project registry migration', () => {
     })
     expect(second).toEqual({ status: 'already-complete', discovered: 0, imported: 0, rejected: 0 })
     expect(readProjectRegistry(current)).toEqual([projectOne])
+  })
+
+  test.each([
+    ['TENON_RUNTIME_HOME', (root: string) => ({ TENON_RUNTIME_HOME: root })],
+    ['XDG roots', (root: string) => ({
+      XDG_DATA_HOME: join(root, 'data'),
+      XDG_STATE_HOME: join(root, 'state'),
+      XDG_CONFIG_HOME: join(root, 'config'),
+    })],
+  ])('explicit empty env ignores conflicting process %s and leaves its registry untouched', async (_label, conflictEnv) => {
+    const homeDir = await mkdtemp(join(tmpdir(), 'tenon-project-migration-isolated-'))
+    const sharedRoot = await mkdtemp(join(tmpdir(), 'tenon-project-migration-shared-'))
+    const importedProject = join(homeDir, 'imported')
+    const sharedProject = join(sharedRoot, 'shared')
+    await mkdir(importedProject, { recursive: true })
+    await mkdir(sharedProject, { recursive: true })
+    const conflict = conflictEnv(sharedRoot)
+    const sharedRegistry = resolveProductPaths({
+      homeDir,
+      platform: 'linux',
+      env: conflict,
+    }).registryPath
+    await writeProjectRegistry(sharedRegistry, [sharedProject])
+    for (const [key, value] of Object.entries(conflict)) vi.stubEnv(key, value)
+
+    try {
+      const result = await migrateLegacyProjectRegistry({
+        homeDir,
+        platform: 'linux',
+        env: {},
+        readText: (path) => path === join(homeDir, '.claude', 'pipeline-projects.json')
+          ? JSON.stringify([importedProject])
+          : undefined,
+        pathExists: (path) => path === importedProject,
+        pathIsDirectory: (path) => path === importedProject,
+      })
+      const isolatedRegistry = resolveProductPaths({ homeDir, platform: 'linux', env: {} }).registryPath
+
+      expect(result).toEqual({ status: 'completed', discovered: 1, imported: 1, rejected: 0 })
+      expect(readProjectRegistry(isolatedRegistry)).toEqual([importedProject])
+      expect(readProjectRegistry(sharedRegistry)).toEqual([sharedProject])
+    } finally {
+      vi.unstubAllEnvs()
+    }
   })
 
   test('drops non-absolute, missing, non-string and oversized legacy entries', async () => {

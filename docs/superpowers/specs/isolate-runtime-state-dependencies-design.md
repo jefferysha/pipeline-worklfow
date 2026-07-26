@@ -52,7 +52,8 @@ resolveServerPaths()  ──唯一解释──► immutable ServerPaths
 
 ### 状态与失败模式
 
-- 路径解析失败在进程装配阶段 fail-closed，Server 不绑定端口。
+- Server 启动所需的产品路径解析失败在进程装配阶段 fail-closed，Server 不绑定端口；CLI 子命令
+  只在命令分派后的所属错误边界内按需解析，非法或不完整子命令不得读取产品路径。
 - 迁移收到损坏 root contract 时在创建迁移目录前失败。
 - 并发迁移仍由既有目录锁串行化；此次改动只确保每个迁移实例锁定自己的目录。
 - 路径对象注入不改变持久化格式、锁、原子 rename 或恢复协议。
@@ -67,7 +68,8 @@ resolveServerPaths()  ──唯一解释──► immutable ServerPaths
 
 ## 风险
 
-- `DashboardServerOptions` 是包内公共类型；新增可选 `paths` 保持源码兼容，生产入口立即改用它。
+- `DashboardServerOptions` 是公共类型；`paths` 改为必填以在编译期拒绝隐式产品路径，
+  `hostHome` 独立承载 `.claude`、`.codex` 等宿主资产发现。
 - 迁移输入的 `env` 改为必填会产生编译期迁移成本，但当前生产树没有调用方，测试调用点可一次性收敛。
 - 若未来新增应用服务绕过装配边界，可能重现问题；架构检查与定向测试应固定该依赖方向。
 

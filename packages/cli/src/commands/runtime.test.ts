@@ -112,6 +112,21 @@ describe('tenon runtime', () => {
     expect(deps.errLines.join('\n')).toContain('home lookup failed')
   })
 
+  test.each([
+    ['status', { json: true }],
+    ['repair', { rollback: true }],
+  ] as const)('%s maps runtime environment provider failures to the command error contract', async (sub, opts) => {
+    const deps = makeDeps()
+    const runtime = fakeInstaller()
+    const brokenEnv = {
+      homeDir: () => '/runtime-test-home',
+      runtimeEnv: () => { throw new Error('environment lookup failed') },
+    }
+
+    expect(await cmdRuntime(deps, sub, opts, brokenEnv, runtime.installer)).toBe(1)
+    expect(deps.errLines.join('\n')).toContain('environment lookup failed')
+  })
+
   test('invalid and incomplete commands do not read runtime scope', async () => {
     const deps = makeDeps()
     const runtime = fakeInstaller()

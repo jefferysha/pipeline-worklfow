@@ -38,9 +38,9 @@ describe('接线 —— server 事件表 = kernel 单源（无本地镜像）', 
   })
 })
 
-// @ts-expect-error 产品状态路径与宿主发现目录必须使用不同的显式字段，禁止含糊的 home-only 公共调用。
-const ambiguousHomeOnlyOptions: DashboardServerOptions = { home: '/tmp/ambiguous-dashboard-home' }
-void ambiguousHomeOnlyOptions
+// @ts-expect-error 产品状态路径是必填依赖；其他可选字段不能让无 paths 的调用重新通过编译。
+const missingPathsOptions: DashboardServerOptions = {}
+void missingPathsOptions
 
 const openServers: DashboardServer[] = []
 afterEach(async () => {
@@ -64,7 +64,7 @@ interface Harness {
 async function start(opts?: {
   version?: string
   releaseId?: string
-  home?: string
+  hostHome?: string
   paths?: ServerPaths
   token?: string
   pollIntervalMs?: number
@@ -90,7 +90,7 @@ async function start(opts?: {
     await seedGovernedDocumentEvidence(root, changeDir, name)
   }
   const worktreeDir = await makeWorktreeDir()
-  const hostHome = opts?.home ?? await makeTempHome()
+  const hostHome = opts?.hostHome ?? await makeTempHome()
   const paths = opts?.paths ?? resolveServerPaths({ home: hostHome, env: {} })
   const srv = createDashboardServer({
     version: opts?.version ?? '9.9.9',
@@ -132,7 +132,7 @@ describe('GET /api/health —— 存活探针 + 本 server 版本（B4）', () =
     const releaseId = `sha256-${'a'.repeat(64)}`
     const stateHome = '/tmp/private-dashboard-state-home'
     const paths = resolveServerPaths({ home: stateHome, env: {} })
-    const h = await start({ version: '3.1.4', releaseId, home: stateHome, paths })
+    const h = await start({ version: '3.1.4', releaseId, hostHome: stateHome, paths })
     const r = await reqGet(h.port, '/api/health')
     expect(r.status).toBe(200)
     const body = r.json<{
@@ -4561,6 +4561,28 @@ describe('GET /api/afk/readiness —— AFK 就绪三灯(v6 T4)', () => {
     expect(body.docker.available).toBe(true)
     expect(body.image).toEqual({ configured: 'sandcastle:local', present: true, build_hint: 'bash tools/sandcastle/build.sh' })
     expect(Object.keys(body.credentials).sort()).toEqual(['claude-code', 'codex'])
+  })
+
+  it('hostHome 与产品 paths 分离时只从 hostHome 探测默认 Codex 凭证', async () => {
+    const hostHome = await makeTempHome()
+    const productHome = await makeTempHome()
+    await mkdir(join(hostHome, '.codex'), { recursive: true })
+    await writeFile(join(hostHome, '.codex', 'auth.json'), '{}\n', 'utf8')
+    const paths = resolveServerPaths({ home: productHome, env: {} })
+    const h = await start({
+      hostHome,
+      paths,
+      execDocker: async () => ({ stdout: '', stderr: '', exitCode: 1 }),
+    })
+
+    const response = await reqGet(h.port, `/api/afk/readiness?root=${encodeURIComponent(h.root)}`)
+    const body = response.json<{
+      credentials: { codex: { CODEX_HOME: { set: boolean; source?: string } } }
+    }>()
+
+    expect(response.status).toBe(200)
+    expect(body.credentials.codex.CODEX_HOME).toEqual({ set: true, source: 'default-home' })
+    expect(existsSync(join(productHome, '.codex', 'auth.json'))).toBe(false)
   })
 
   it('伪造 Host 头 → 403', async () => {
