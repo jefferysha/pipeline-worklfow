@@ -89,13 +89,13 @@ fi
 # ─────────────── 0. 共享 JSON 字符串解码：带引号的 Codex command / 正常对话 prompt 不截断 ───────────────
 # shellcheck source=../hooks/json-input.sh
 . "$JSON_INPUT"
-JSON_EVENT='{"command":"/bin/zsh -lc \"sed -n 1p /tmp/SKILL.md\"","prompt":"做一个\"宠物\"领养页面"}'
+JSON_EVENT='{"command":"/bin/zsh -lc \"sed -n 1p /tmp/SKILL.md\"","prompt":"做一个\"商品\"目录页面"}'
 JSON_COMMAND="$(pipeline_json_get_string "$JSON_EVENT" command || true)"
 [ "$JSON_COMMAND" = '/bin/zsh -lc "sed -n 1p /tmp/SKILL.md"' ] \
   && ok "json-input: Codex command 的转义引号完整解码" \
   || bad "json-input: Codex command 的转义引号完整解码" "得到 <$JSON_COMMAND>"
 JSON_PROMPT="$(pipeline_json_get_string "$JSON_EVENT" prompt || true)"
-[ "$JSON_PROMPT" = '做一个"宠物"领养页面' ] \
+[ "$JSON_PROMPT" = '做一个"商品"目录页面' ] \
   && ok "json-input: 正常对话 prompt 的转义引号完整解码" \
   || bad "json-input: 正常对话 prompt 的转义引号完整解码" "得到 <$JSON_PROMPT>"
 
@@ -376,7 +376,7 @@ case "$out" in
   *) ok "breadcrumb: 当前会话任务不漂移到更晚 Change 的 breadcrumb" ;;
 esac
 
-out="$(printf '{"prompt":"我现在想要调研一个 SkillHub 项目","cwd":"%s"}' "$proj" | bash "$BC" 2>/dev/null)"
+out="$(printf '{"prompt":"我现在想要调研一个新的工具项目","cwd":"%s"}' "$proj" | bash "$BC" 2>/dev/null)"
 assert_empty "breadcrumb: 独立新主题不泄漏 repo 级旧任务" "$out"
 
 # 宿主提供 session_id 时，只有精确 session binding 或显式 change 名能恢复。未绑定的新会话
@@ -386,7 +386,7 @@ assert_empty "breadcrumb: 未绑定的新会话泛化继续不借 repo 级 activ
 
 # router 提示的 `track / workflow` 选择回复本身不是恢复旧 Change。真实选择句常同时含
 # “上一步/继续”；若这里泄漏 selected 的 breadcrumb，新 custom workflow 会被旧任务污染。
-out="$(printf '{"prompt":"选择 pet-adoption / pet-adoption-launch，作为上一步所要求的路线选择；继续执行。","cwd":"%s"}' "$proj" | bash "$BC" 2>/dev/null)"
+out="$(printf '{"prompt":"选择 catalog-flow / catalog-flow-launch，作为上一步所要求的路线选择；继续执行。","cwd":"%s"}' "$proj" | bash "$BC" 2>/dev/null)"
 assert_empty "breadcrumb: workflow 选择回复不误续接 repo 级旧 Change" "$out"
 
 proj="$TMP/bc-ambiguous-resume"
@@ -401,13 +401,13 @@ assert_empty "breadcrumb: 多个候选的泛化继续不按 mtime 猜测" "$out"
 # 与 router 的正常对话选择保持一致：本轮完整点名的 change 必须覆盖另一个 repo 级
 # 指针，避免 breadcrumb 把旧任务正文注入到已选的新任务中。
 proj="$TMP/bc-explicit-change-name"
-mkdir -p "$proj/openspec/changes/pet-adoption-page" "$proj/openspec/changes/pet-adoption-listing-application"
-printf 'track: frontend\nphase: build\narchived: \n' > "$proj/openspec/changes/pet-adoption-page/.pipeline.yaml"
-printf 'track: backend\nphase: verify\narchived: \n' > "$proj/openspec/changes/pet-adoption-listing-application/.pipeline.yaml"
-printf 'PAGE-CRUMB\n' > "$proj/openspec/changes/pet-adoption-page/.breadcrumb"
-printf 'LISTING-CRUMB\n' > "$proj/openspec/changes/pet-adoption-listing-application/.breadcrumb"
-printf 'pet-adoption-listing-application\n' > "$proj/.pipeline-active"
-out="$(printf '{"prompt":"继续 pet-adoption-page，并按当前 workflow 完成。","cwd":"%s"}' "$proj" | bash "$BC" 2>/dev/null)"
+mkdir -p "$proj/openspec/changes/catalog-flow-page" "$proj/openspec/changes/catalog-flow-listing-application"
+printf 'track: frontend\nphase: build\narchived: \n' > "$proj/openspec/changes/catalog-flow-page/.pipeline.yaml"
+printf 'track: backend\nphase: verify\narchived: \n' > "$proj/openspec/changes/catalog-flow-listing-application/.pipeline.yaml"
+printf 'PAGE-CRUMB\n' > "$proj/openspec/changes/catalog-flow-page/.breadcrumb"
+printf 'LISTING-CRUMB\n' > "$proj/openspec/changes/catalog-flow-listing-application/.breadcrumb"
+printf 'catalog-flow-listing-application\n' > "$proj/.pipeline-active"
+out="$(printf '{"prompt":"继续 catalog-flow-page，并按当前 workflow 完成。","cwd":"%s"}' "$proj" | bash "$BC" 2>/dev/null)"
 assert_contains "breadcrumb: 多候选中精确点名 change → 目标 breadcrumb" "$out" "PAGE-CRUMB"
 assert_not_contains "breadcrumb: 精确点名不注入另一个指针 breadcrumb" "$out" "LISTING-CRUMB"
 
@@ -733,13 +733,13 @@ if command -v node >/dev/null 2>&1; then
   # → dispatch contract 的闭环；不是手写 cache fixture。
   selectproj="$TMP/router-workflow-selection"; selectcache="$TMP/router-workflow-selection.v5.data"
   mkdir -p "$selectproj/.pipeline/workflows" "$selectproj/openspec/changes"
-  sed -e 's/^name: default$/name: pet-adoption/' -e 's/effective-phase-skills/effective-step-skills/g' "$ROOT/templates/workflows/default.yaml" > "$selectproj/.pipeline/workflows/pet-adoption.yaml"
-  printf "version: 1\ntracks:\n  - id: adoption\n    label: Pet Adoption\n    workflow:\n      default: pet-adoption\n      allowed:\n        - pet-adoption\n    policy_profile:\n      review_seed: pending\n      automation_eligible: true\n      coverage_profile: frontend\n      routing:\n        enabled: true\n        pattern: '(宠物|领养|pet adoption)'\n        priority: 980\n      skills:\n        matrix: true\n        profile: frontend\n" > "$selectproj/.pipeline/tracks.yaml"
-  run_router "{\"prompt\":\"请实现宠物领养 React HTML 页面\",\"cwd\":\"$selectproj\"}" "$selectcache"
-  assert_contains "router: custom Track 选中 adoption" "$ROUT" "track: adoption"
+  sed -e 's/^name: default$/name: catalog-flow/' -e 's/effective-phase-skills/effective-step-skills/g' "$ROOT/templates/workflows/default.yaml" > "$selectproj/.pipeline/workflows/catalog-flow.yaml"
+  printf "version: 1\ntracks:\n  - id: catalog\n    label: Catalog Flow\n    workflow:\n      default: catalog-flow\n      allowed:\n        - catalog-flow\n    policy_profile:\n      review_seed: pending\n      automation_eligible: true\n      coverage_profile: frontend\n      routing:\n        enabled: true\n        pattern: '(目录|检索|catalog flow)'\n        priority: 980\n      skills:\n        matrix: true\n        profile: frontend\n" > "$selectproj/.pipeline/tracks.yaml"
+  run_router "{\"prompt\":\"请实现商品目录 React HTML 页面\",\"cwd\":\"$selectproj\"}" "$selectcache"
+  assert_contains "router: custom Track 选中 catalog" "$ROUT" "track: catalog"
   assert_contains "router: custom workflow 触发选择契约" "$ROUT" "workflow: select"
-  assert_contains "router: custom workflow 不被替换成 default" "$ROUT" "suggested_workflow: pet-adoption"
-  assert_contains "router: custom pair 进入候选" "$ROUT" "candidate: track=adoption;workflow=pet-adoption"
+  assert_contains "router: custom workflow 不被替换成 default" "$ROUT" "suggested_workflow: catalog-flow"
+  assert_contains "router: custom pair 进入候选" "$ROUT" "candidate: track=catalog;workflow=catalog-flow"
   assert_contains "router: custom pair 在创建 Change 前要求用户选择" "$ROUT" "selection_required: true"
   assert_contains "router: custom pair 选择前明确尚未绑定 workflow" "$ROUT" "尚未选定自定义 workflow"
   assert_not_contains "router: custom pair 选择前不伪造空 workflow 绑定" "$ROUT" "当前 Change 绑定自定义 workflow ''"
@@ -749,13 +749,13 @@ if command -v node >/dev/null 2>&1; then
   # 必须和额外 Track 一样在创建 Change 前确认，不能因 builtin 身份静默直达 custom workflow。
   builtinselectproj="$TMP/router-builtin-workflow-selection"; builtinselectcache="$TMP/router-builtin-workflow-selection.v5.data"
   mkdir -p "$builtinselectproj/.pipeline/workflows" "$builtinselectproj/openspec/changes"
-  sed -e 's/^name: default$/name: pet-adoption/' -e 's/effective-phase-skills/effective-step-skills/g' "$ROOT/templates/workflows/default.yaml" > "$builtinselectproj/.pipeline/workflows/pet-adoption.yaml"
-  printf "version: 1\nbuiltins:\n  frontend:\n    workflow:\n      default: pet-adoption\n      allowed:\n        - pet-adoption\n" > "$builtinselectproj/.pipeline/tracks.yaml"
-  run_router "{\"prompt\":\"请实现宠物领养 React HTML 页面\",\"cwd\":\"$builtinselectproj\"}" "$builtinselectcache"
+  sed -e 's/^name: default$/name: catalog-flow/' -e 's/effective-phase-skills/effective-step-skills/g' "$ROOT/templates/workflows/default.yaml" > "$builtinselectproj/.pipeline/workflows/catalog-flow.yaml"
+  printf "version: 1\nbuiltins:\n  frontend:\n    workflow:\n      default: catalog-flow\n      allowed:\n        - catalog-flow\n" > "$builtinselectproj/.pipeline/tracks.yaml"
+  run_router "{\"prompt\":\"请实现商品目录 React HTML 页面\",\"cwd\":\"$builtinselectproj\"}" "$builtinselectcache"
   assert_contains "router: builtin Track 非 default workflow 触发选择契约" "$ROUT" "workflow: select"
-  assert_contains "router: builtin Track 覆写进入候选" "$ROUT" "candidate: track=frontend;workflow=pet-adoption"
+  assert_contains "router: builtin Track 覆写进入候选" "$ROUT" "candidate: track=frontend;workflow=catalog-flow"
   assert_contains "router: builtin Track 覆写在 Change 创建前要求选择" "$ROUT" "selection_required: true"
-  assert_contains "router: builtin Track 覆写保留推荐 workflow" "$ROUT" "suggested_workflow: pet-adoption"
+  assert_contains "router: builtin Track 覆写保留推荐 workflow" "$ROUT" "suggested_workflow: catalog-flow"
 
   # 根隔离回归：/tmp 父目录恰好有另一个 OpenSpec 时，非 Git 子目录必须把自己当 bootstrap
   # 根，正常对话仍走 default dispatch，但绝不能借用父项目的 change/phase/tasks。
@@ -780,11 +780,11 @@ if command -v node >/dev/null 2>&1; then
   assert_contains "router: 注入含 build.frontend 推荐 skill token（react-patterns）" "$ROUT" "react-patterns"
 
   # repo 级 `.pipeline-active` 只是恢复候选，不能劫持另一会话中的明确新主题。
-  # 回归用户真实场景：旧 change 是 normal-chat 编排修复，新输入则是独立的 SkillHub 调研。
+  # 回归用户真实场景：旧 change 是 normal-chat 编排修复，新输入则是独立的新工具项目调研。
   rc_new_topic="$TMP/router-new-topic"; mkdir -p "$rc_new_topic/openspec/changes/normal-chat-default-orchestration"
   printf 'track: backend\nphase: spec\narchived: \n' > "$rc_new_topic/openspec/changes/normal-chat-default-orchestration/.pipeline.yaml"
   printf 'normal-chat-default-orchestration\n' > "$rc_new_topic/.pipeline-active"
-  run_router "{\"prompt\":\"我现在想要调研一个 SkillHub 项目\",\"cwd\":\"$rc_new_topic\"}"
+  run_router "{\"prompt\":\"我现在想要调研一个新的工具项目\",\"cwd\":\"$rc_new_topic\"}"
   assert_contains "router: 明确新调研主题仍选 pm Track" "$ROUT" "track: pm"
   assert_contains "router: 明确新调研主题从 open 分派" "$ROUT" "phase: open"
   assert_contains "router: 明确新调研主题标记 new intent" "$ROUT" "intent: new"
@@ -804,7 +804,7 @@ if command -v node >/dev/null 2>&1; then
   run_router "{\"prompt\":\"继续实现登录页面的 React 组件\",\"cwd\":\"$rc_active\"}"
   assert_contains "router: session 指针覆盖 mtime，注入选中的 change" "$ROUT" "change=selected"
   assert_contains "router: session 指针保留选中 change 的 phase" "$ROUT" "phase=build"
-  run_router "{\"prompt\":\"选择 pet-adoption / pet-adoption-launch，作为上一步所要求的路线选择；继续执行。\",\"cwd\":\"$rc_active\"}"
+  run_router "{\"prompt\":\"选择 catalog-flow / catalog-flow-launch，作为上一步所要求的路线选择；继续执行。\",\"cwd\":\"$rc_active\"}"
   assert_empty "router: workflow 选择回复不把旧 session 指针注入新流程" "$ROUT"
 
   rc_ambiguous="$TMP/router-ambiguous-resume"
@@ -822,17 +822,17 @@ if command -v node >/dev/null 2>&1; then
   # 被清空而退化为 select。`.pipeline-active` 若指向另一个 change，也不能覆盖用户本轮
   # 的显式名称；这是 dashboard 启动多个 workflow 后仍可恢复指定目标的关键回归。
   rc_named="$TMP/router-explicit-change-name"
-  mkdir -p "$rc_named/openspec/changes/pet-adoption-page" "$rc_named/openspec/changes/pet-adoption-listing-application"
-  printf 'track: frontend\nphase: build\nworkflow: pet-adoption-openspec\narchived: \n' > "$rc_named/openspec/changes/pet-adoption-page/.pipeline.yaml"
-  printf 'track: backend\nphase: verify\nworkflow: default\narchived: \n' > "$rc_named/openspec/changes/pet-adoption-listing-application/.pipeline.yaml"
-  printf 'pet-adoption-listing-application\n' > "$rc_named/.pipeline-active"
-  run_router "{\"prompt\":\"继续 pet-adoption-page，并按当前 workflow 完成。\",\"cwd\":\"$rc_named\"}"
+  mkdir -p "$rc_named/openspec/changes/catalog-flow-page" "$rc_named/openspec/changes/catalog-flow-listing-application"
+  printf 'track: frontend\nphase: build\nworkflow: catalog-flow-openspec\narchived: \n' > "$rc_named/openspec/changes/catalog-flow-page/.pipeline.yaml"
+  printf 'track: backend\nphase: verify\nworkflow: default\narchived: \n' > "$rc_named/openspec/changes/catalog-flow-listing-application/.pipeline.yaml"
+  printf 'catalog-flow-listing-application\n' > "$rc_named/.pipeline-active"
+  run_router "{\"prompt\":\"继续 catalog-flow-page，并按当前 workflow 完成。\",\"cwd\":\"$rc_named\"}"
   assert_contains "router: 多候选中精确点名 change → resume" "$ROUT" "intent: resume"
-  assert_contains "router: 精确点名覆盖另一个 repo 级指针" "$ROUT" "change: pet-adoption-page"
+  assert_contains "router: 精确点名覆盖另一个 repo 级指针" "$ROUT" "change: catalog-flow-page"
   assert_contains "router: 精确点名保留目标自身 phase" "$ROUT" "phase: build"
-  assert_contains "router: 恢复 custom change 时保留其 workflow" "$ROUT" "workflow: pet-adoption-openspec"
+  assert_contains "router: 恢复 custom change 时保留其 workflow" "$ROUT" "workflow: catalog-flow-openspec"
   assert_not_contains "router: 精确点名不退化为恢复目标选择" "$ROUT" "恢复目标未选择"
-  assert_not_contains "router: 精确点名不误绑另一个 change" "$ROUT" "change: pet-adoption-listing-application"
+  assert_not_contains "router: 精确点名不误绑另一个 change" "$ROUT" "change: catalog-flow-listing-application"
   # custom workflow 的 step 图不能被 default manifest 的 profile 矩阵冒充：router 只做
   # canonical dispatch，具体 DAG 必须由 tenon 读取该 workflow 后分派。
   assert_contains "router: custom resume 明示由 tenon 加载真实 workflow 图" "$ROUT" "自定义 workflow"
@@ -1093,7 +1093,7 @@ FAKE_TENON_BIN="$TMP/fake-tenon-bin"; FAKE_TENON_LOG="$TMP/fake-tenon.log"
 mkdir -p "$FAKE_TENON_BIN"
 printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$*" >> "$TENON_HOOK_LOG"\n' > "$FAKE_TENON_BIN/tenon"
 chmod +x "$FAKE_TENON_BIN/tenon"
-printf '%s' "{\"cwd\":\"$proj\",\"prompt\":\"确认继续，全部执行\"}" | PATH="$FAKE_TENON_BIN:$PATH" TENON_HOOK_LOG="$FAKE_TENON_LOG" bash "$CP" >/dev/null 2>&1
+printf '%s' "{\"cwd\":\"$proj\",\"prompt\":\"确认继续，全部执行\"}" | PATH="$FAKE_TENON_BIN:/usr/bin:/bin" TENON_HOOK_LOG="$FAKE_TENON_LOG" bash "$CP" >/dev/null 2>&1
 [ -f "$proj/.pipeline-pending-review" ] && ok "confirm-clear-prompt: 明确确认不直接删除 review marker" || bad "confirm-clear-prompt: 明确确认不直接删除 review marker" "marker 被错误删除"
 grep -Fq 'review acknowledge review-demo' "$FAKE_TENON_LOG" 2>/dev/null \
   && ok "confirm-clear-prompt: 明确确认调用 tenon review acknowledge" \
@@ -1137,7 +1137,7 @@ printf 'track: pm\nphase: explore\nworkflow: default\narchived: false\n' > "$pro
 printf 'track: pm\nphase: explore\nworkflow: default\narchived: false\n' > "$proj/openspec/changes/other-live/.pipeline.yaml"
 printf 'autonomy-live\n' > "$proj/.pipeline-active"
 write_v2_review_marker "$proj" autonomy-live explore
-printf '%s' "{\"cwd\":\"$proj\",\"prompt\":\"确认。后续不用问我，自己执行完成\"}" | PATH="$FAKE_TENON_BIN:$PATH" TENON_HOOK_LOG="$FAKE_TENON_LOG" bash "$CP" >/dev/null 2>&1
+printf '%s' "{\"cwd\":\"$proj\",\"prompt\":\"确认。后续不用问我，自己执行完成\"}" | PATH="$FAKE_TENON_BIN:/usr/bin:/bin" TENON_HOOK_LOG="$FAKE_TENON_LOG" bash "$CP" >/dev/null 2>&1
 [ -f "$proj/.pipeline-interaction-authority" ] \
   && ok "持续自主执行: 明确授权投影绑定当前 Change" \
   || bad "持续自主执行: 明确授权投影绑定当前 Change" "缺少 authority projection"

@@ -130,7 +130,7 @@ tenon handoff "$TENON_CHANGE_NAME" --bundle --target build --json
 2. **变体个数 N（用户定，禁止写死 4）**：问用户要几个变体（可建议合理默认如 3-4，但以用户答为准）。
 3. **设计来源（决定 N 个变体怎么分配）**：
    - **hue 设计语言**：用 `hue` 据目标页/参考调性生成专属设计语言（落成设计语言 skill 或 `DESIGN.md`）。走 hue 就**不另写 design.md**，在该语言下出 N 个变体（结构/排版/层次各异、同一视觉语言）。
-   - **design.md**：来自 awesome-design-md 品牌（`github.com/voltagent/awesome-design-md` 取品牌 `DESIGN.md`，照其 9 段实现）或手写——严格照它。
+   - **design.md**：来自用户自有 `DESIGN.md`、Tenon 设计规范或本 Change 手写设计稿——严格按已登记版本实现。
    - **自由发挥**：不绑 design.md，由引擎给出结构/风格截然不同的方案。
    - **可混搭**：如 N=4 → 2 个基于 design.md + 2 个自由；huashu 路径可"跨 N 个不同流派各一个"。
 

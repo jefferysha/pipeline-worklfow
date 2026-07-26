@@ -63,7 +63,7 @@ pipeline_acknowledge_active_review() { # $1=verified project root $2=hook direct
   [ -n "$expected" ] || return 1
   active="$(pipeline_review_active_change_name "$root" "$hook_dir" || true)"
   [ -n "$active" ] && [ "$active" = "$expected" ] || return 1
-  command -v pipeline >/dev/null 2>&1 || return 1
+  command -v tenon >/dev/null 2>&1 || return 1
   case "$mode" in
     delegated) ( cd "$root" && command tenon review acknowledge "$active" --delegated ) >/dev/null 2>&1 ;;
     manual) ( cd "$root" && command tenon review acknowledge "$active" ) >/dev/null 2>&1 ;;

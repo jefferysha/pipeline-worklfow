@@ -27,11 +27,11 @@ describe('reviewHint —— review 相位的 marker 指引文案（老内核 sta
 describe('review marker v2 —— canonical review request 的短时 hook projection', () => {
   test('格式化与解析保留 exact phase / Change identity / request timestamp', () => {
     const raw = formatReviewMarker({
-      phase: 'custom-review', event: 'accept', changeName: 'pet-adoption', requestedAt: '2026-07-24T12:00:00Z',
+      phase: 'custom-review', event: 'accept', changeName: 'catalog-flow', requestedAt: '2026-07-24T12:00:00Z',
     })
     expect(raw).toMatch(new RegExp(`^${REVIEW_MARKER_PROTOCOL}\\n`))
     expect(parseReviewMarker(raw)).toEqual({
-      phase: 'custom-review', event: 'accept', changeName: 'pet-adoption', requestedAt: '2026-07-24T12:00:00Z',
+      phase: 'custom-review', event: 'accept', changeName: 'catalog-flow', requestedAt: '2026-07-24T12:00:00Z',
     })
   })
 

@@ -55,18 +55,43 @@ test('rejects reference identities in both tracked paths and text without exempt
   const root = await fixture()
   const firstIdentity = String.fromCharCode(116, 114, 101, 108, 108, 105, 115)
   const secondIdentity = String.fromCharCode(99, 111, 109, 101, 116)
+  const thirdIdentity = String.fromCharCode(
+    97, 119, 101, 115, 111, 109, 101, 45, 100, 101, 115, 105, 103, 110, 45, 109, 100,
+  )
   const contentPath = 'docs/reference.md'
+  const additionalContentPath = 'docs/additional-reference.md'
   await writeFile(join(root, contentPath), `derived from ${secondIdentity}\n`)
+  await writeFile(join(root, additionalContentPath), `derived from ${thirdIdentity}\n`)
   try {
     const failures = checkReferenceIdentities(root, [
       `docs/${firstIdentity}-layout.md`,
       contentPath,
+      additionalContentPath,
     ])
-    assert.equal(failures.length, 2)
+    assert.equal(failures.length, 3)
     assert.ok(failures.every((failure) => !failure.toLowerCase().includes(firstIdentity)))
     assert.ok(failures.every((failure) => !failure.toLowerCase().includes(secondIdentity)))
+    assert.ok(failures.every((failure) => !failure.toLowerCase().includes(thirdIdentity)))
     assert.match(failures[0], /路径/)
     assert.match(failures[1], /文本/)
+    assert.match(failures[2], /文本/)
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+test('rejects historical test-project identities from tracked paths', async () => {
+  const root = await fixture()
+  const testProjectIdentity = String.fromCharCode(
+    112, 101, 116, 45, 97, 100, 111, 112, 116, 105, 111, 110, 45, 99, 101, 110, 116, 101, 114,
+  )
+  try {
+    const failures = checkTrackedFiles(root, [
+      `design-demos/${testProjectIdentity}.html`,
+    ])
+    assert.equal(failures.length, 1)
+    assert.match(failures[0], /历史测试项目/)
+    assert.ok(!failures[0].toLowerCase().includes(testProjectIdentity))
   } finally {
     await rm(root, { recursive: true, force: true })
   }

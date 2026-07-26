@@ -61,7 +61,7 @@ const EXCLUDED_BASENAMES = new Set([
 const EXCLUDED_RELATIVE_ROOTS = ['.github/hooks'] as const
 const EXCLUDED_ROOT_ARTIFACTS = [
   /^dashboard-progress-custom-spec\.png$/,
-  /^pet-adoption-.*-tested\.png$/,
+  /^dashboard-acceptance-.*\.png$/,
   /^workbench-.*\.png$/,
 ] as const
 

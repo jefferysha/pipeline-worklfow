@@ -125,7 +125,7 @@ describe('stable host-hook ABI', () => {
     const candidate = await candidateCopy(root)
     await new RuntimeReleaseStore({ paths }).stageAndActivate(candidate, 'codex')
     const launchers = await writeStableLaunchers(paths, home)
-    const input = JSON.stringify({ prompt: '我现在想要调研一个 SkillHub 项目', cwd: project })
+    const input = JSON.stringify({ prompt: '我现在想要调研一个新的工具项目', cwd: project })
 
     const result = await run('bash', [launchers.hook, 'router'], input, {
       ...process.env,

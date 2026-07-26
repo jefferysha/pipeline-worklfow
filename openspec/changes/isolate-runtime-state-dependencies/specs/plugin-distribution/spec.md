@@ -59,8 +59,8 @@
 #### Scenario: 宿主发现目录与产品状态目录不同
 
 - **GIVEN** 调用方提供的 `hostHome` 与 `ServerPaths.homeDir` 不同
-- **WHEN** Server 检查 skills、runner 资产或默认 Codex 凭证
-- **THEN** `.claude`、`.codex` 与其他宿主资产只从 `hostHome` 派生
+- **WHEN** Server 检查 skills、runner 资产、默认 Codex 凭证或 mem session
+- **THEN** `.claude`、`.codex`、宿主会话与其他宿主资产只从 `hostHome` 派生
 - **AND** 注册表、密钥、token、pidfile 与状态作用域仍只使用 `ServerPaths`
 - **AND** Server 不读取 OS 全局 home 作为第三个隐式来源。
 
@@ -75,3 +75,26 @@
 - **WHEN** 进程装配层收到损坏或不可接受的运行目录契约
 - **THEN** 启动在绑定端口之前 fail-closed
 - **AND** 不创建部分注册表、密钥或 pidfile 状态。
+
+## ADDED Requirements
+
+### Requirement: Tenon 命令 SHALL 共享单一产品身份与作用域快照
+
+当前 runtime、hooks、CLI、Dashboard 和诊断命令 SHALL 只发现并调用 Tenon 稳定启动器，不得用
+已废弃产品命令的存在性决定当前功能是否可用。一次 CLI 命令需要多个运行时探针时，adapter SHALL
+只解析一份不可变 runtime scope，并把该快照注入全部探针；子探针 SHALL NOT 再读取实时 home 或环境。
+旧用户迁移只由独立、有期限且所有权安全的 migration bridge 承担，不进入当前命令兼容面。
+
+#### Scenario: 新用户确认 review
+
+- **GIVEN** 新用户环境只安装当前 `tenon` 稳定启动器
+- **WHEN** review hook 处理普通确认或已授权的 delegated confirmation
+- **THEN** hook 使用同一个 `tenon` 启动器完成可用性检查和 `review acknowledge`
+- **AND** 不要求任何已废弃 CLI 命令存在。
+
+#### Scenario: doctor 环境在探针之间变化
+
+- **GIVEN** `tenon doctor` 已在 adapter 边界解析 runtime scope
+- **WHEN** native runtime 与 AFK readiness 探针依次执行且实时环境在中途变化
+- **THEN** 两个探针仍消费命令开始时的同一不可变作用域快照
+- **AND** provider 读取次数不会随子探针数量增加。

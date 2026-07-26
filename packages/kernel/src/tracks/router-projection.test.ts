@@ -118,9 +118,9 @@ describe('dynamic track router projection', () => {
 
   it('preserves the validated Track default workflow for normal-chat selection', () => {
     const p = buildRouterProjection(registry([
-      track({ id: 'adoption', workflow: { default: 'pet-adoption', allowed: ['pet-adoption'] } }),
+      track({ id: 'catalog', workflow: { default: 'catalog-flow', allowed: ['catalog-flow'] } }),
     ]), manifest())
-    expect(p.tracks[0]).toMatchObject({ id: 'adoption', workflowDefault: 'pet-adoption' })
+    expect(p.tracks[0]).toMatchObject({ id: 'catalog', workflowDefault: 'catalog-flow' })
   })
 })
 

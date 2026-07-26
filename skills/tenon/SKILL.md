@@ -365,7 +365,7 @@ acknowledge，**不得**删除 marker 绕过。被拦的那次操作已丢弃，
 其余决策节点（默认必须暂停）：
 1. **brainstorming 确认设计方案**（explore phase 内）
 2. **build_mode / isolation 选择**（build phase 入口）
-3. **设计方向选择**（build phase，PM/前端原型）：借鉴 awesome-design-md 品牌 DESIGN.md，还是用 hue 自定义 —— 见 `tenon-build`
+3. **设计方向选择**（build phase，PM/前端原型）：使用用户自有 `DESIGN.md`、Tenon 设计规范或 hue 自定义 —— 见 `tenon-build`
 4. **verify-fail 决策**（修复 vs 接受偏差）
 5. **finishing-branch 分支处理方式**（ship phase 内）
 6. **preset 升级条件触发**（hotfix/tweak → full）

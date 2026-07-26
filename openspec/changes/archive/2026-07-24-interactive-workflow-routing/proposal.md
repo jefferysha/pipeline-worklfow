@@ -33,7 +33,7 @@ The recommendation remains deterministic and is shown first; stale Changes must 
 
 ## Acceptance signals
 
-1. A custom `adoption` Track bound to `pet-adoption` produces a normal-chat dispatch with a
+1. A custom `catalog` Track bound to `catalog-flow` produces a normal-chat dispatch with a
    recommended pair and `selection_required: true`, rather than `workflow: default`.
 2. A plain project with no custom Track/workflow continues to dispatch deterministically to the
    winning built-in Track and `workflow: default` without an unnecessary selection prompt.

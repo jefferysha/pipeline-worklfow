@@ -189,7 +189,7 @@ if [ -r "$INTENT_HELPER" ]; then
   # repository candidate just because the answer also says “继续/上一步”.
   pipeline_prompt_is_workflow_selection "$PROMPT" && exit 0
   # 用户在正常对话中完整点名某个活跃 change 时，它比 repo 级指针和泛化“继续”
-  # 都更强。此前多 candidate 会先清空 CHANGE_NAME，导致 `继续 pet-adoption-page`
+  # 都更强。此前多 candidate 会先清空 CHANGE_NAME，导致 `继续 catalog-flow-page`
   # 退化为 ambiguous select；这里保留候选表并只接受唯一的精确命中。
   EXPLICIT_CHANGE_COUNT=0
   EXPLICIT_CHANGE_NAME="" EXPLICIT_CHANGE_PHASE="" EXPLICIT_CHANGE_TRACK="" EXPLICIT_CHANGE_WORKFLOW=""
@@ -605,7 +605,7 @@ if [ "$DISPATCH_INTENT" = "new" ] && [ "$EXPLICIT_FREE_MODE" = "true" ]; then
 fi
 
 # 新任务由本轮文本评分选择 track；恢复已有 Change 时则反过来，以持久化状态中的
-# track 为权威。否则用户只说“继续 pet-adoption-page”而未复述领域关键词，会在这里
+# track 为权威。否则用户只说“继续 catalog-flow-page”而未复述领域关键词，会在这里
 # 被评分 0 静默吞掉，或被错误重算到另一个 track。仅接受当前 effective registry 中
 # 的 id，既得到对应的 skill profile，也不把手改 state 原文透传到宿主上下文。
 RESUME_TRACK_BOUND=0

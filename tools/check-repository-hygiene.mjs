@@ -16,6 +16,14 @@ const FORBIDDEN_TRACKED = [
 const FORBIDDEN_REFERENCE_IDENTITIES = [
   String.fromCharCode(116, 114, 101, 108, 108, 105, 115),
   String.fromCharCode(99, 111, 109, 101, 116),
+  String.fromCharCode(
+    97, 119, 101, 115, 111, 109, 101, 45, 100, 101, 115, 105, 103, 110, 45, 109, 100,
+  ),
+]
+const FORBIDDEN_TEST_PROJECT_IDENTITIES = [
+  String.fromCharCode(
+    112, 101, 116, 45, 97, 100, 111, 112, 116, 105, 111, 110,
+  ),
 ]
 
 function posixPath(path) {
@@ -26,6 +34,10 @@ export function checkTrackedFiles(root, tracked) {
   const failures = []
   for (const file of tracked) {
     const rel = posixPath(file)
+    if (matchingIdentity(rel, FORBIDDEN_TEST_PROJECT_IDENTITIES)) {
+      failures.push(`受管理路径包含历史测试项目身份: ${redactIdentities(rel, FORBIDDEN_TEST_PROJECT_IDENTITIES)}`)
+      continue
+    }
     if (FORBIDDEN_TRACKED.some((pattern) => pattern.test(rel))) {
       failures.push(`禁止跟踪可再生或本机运行资产: ${rel}`)
       continue
@@ -44,15 +56,15 @@ export function checkTrackedFiles(root, tracked) {
   return failures
 }
 
-function matchingReferenceIdentity(value) {
+function matchingIdentity(value, identities) {
   const normalized = value.toLowerCase()
-  return FORBIDDEN_REFERENCE_IDENTITIES.find((identity) => normalized.includes(identity))
+  return identities.find((identity) => normalized.includes(identity))
 }
 
-function redactReferenceIdentity(value) {
+function redactIdentities(value, identities) {
   let redacted = value
-  for (const identity of FORBIDDEN_REFERENCE_IDENTITIES) {
-    redacted = redacted.replace(new RegExp(identity, 'gi'), '[reference-identity]')
+  for (const identity of identities) {
+    redacted = redacted.replace(new RegExp(identity, 'gi'), '[restricted-identity]')
   }
   return redacted
 }
@@ -61,15 +73,30 @@ export function checkReferenceIdentities(root, tracked) {
   const failures = []
   for (const file of tracked) {
     const rel = posixPath(file)
-    if (matchingReferenceIdentity(rel)) {
-      failures.push(`受管理路径包含外部参考项目身份: ${redactReferenceIdentity(rel)}`)
+    if (matchingIdentity(rel, FORBIDDEN_REFERENCE_IDENTITIES)) {
+      failures.push(`受管理路径包含外部参考项目身份: ${redactIdentities(rel, FORBIDDEN_REFERENCE_IDENTITIES)}`)
     }
     const absolute = join(root, rel)
     if (!existsSync(absolute) || statSync(absolute).isDirectory()) continue
     const bytes = readFileSync(absolute)
     if (bytes.includes(0)) continue
-    if (matchingReferenceIdentity(bytes.toString('utf8'))) {
-      failures.push(`受管理文本包含外部参考项目身份: ${redactReferenceIdentity(rel)}`)
+    if (matchingIdentity(bytes.toString('utf8'), FORBIDDEN_REFERENCE_IDENTITIES)) {
+      failures.push(`受管理文本包含外部参考项目身份: ${redactIdentities(rel, FORBIDDEN_REFERENCE_IDENTITIES)}`)
+    }
+  }
+  return failures
+}
+
+export function checkHistoricalTestProjectIdentities(root, tracked) {
+  const failures = []
+  for (const file of tracked) {
+    const rel = posixPath(file)
+    const absolute = join(root, rel)
+    if (!existsSync(absolute) || statSync(absolute).isDirectory()) continue
+    const bytes = readFileSync(absolute)
+    if (bytes.includes(0)) continue
+    if (matchingIdentity(bytes.toString('utf8'), FORBIDDEN_TEST_PROJECT_IDENTITIES)) {
+      failures.push(`受管理文本包含历史测试项目身份: ${redactIdentities(rel, FORBIDDEN_TEST_PROJECT_IDENTITIES)}`)
     }
   }
   return failures
@@ -126,6 +153,7 @@ export function checkRepository(root = DEFAULT_ROOT) {
   return [
     ...checkTrackedFiles(root, tracked),
     ...checkReferenceIdentities(root, tracked),
+    ...checkHistoricalTestProjectIdentities(root, tracked),
     ...checkMarkdownImages(root, markdownFiles),
   ]
 }

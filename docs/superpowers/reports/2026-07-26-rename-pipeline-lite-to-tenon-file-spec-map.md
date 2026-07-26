@@ -109,9 +109,6 @@
 | D | `design-demos/shots/p4-01-merged-canvas.png` | `openspec/changes/rename-pipeline-lite-to-tenon/specs/repository-architecture-compliance/spec.md` | ☑ |
 | D | `design-demos/shots/p4-02-machine-expanded.png` | `openspec/changes/rename-pipeline-lite-to-tenon/specs/repository-architecture-compliance/spec.md` | ☑ |
 | D | `design-demos/shots/p4-03-loop-dialog.png` | `openspec/changes/rename-pipeline-lite-to-tenon/specs/repository-architecture-compliance/spec.md` | ☑ |
-| D | `design-demos/shots/pet-adoption-center-desktop.png` | `openspec/changes/rename-pipeline-lite-to-tenon/specs/repository-architecture-compliance/spec.md` | ☑ |
-| D | `design-demos/shots/pet-adoption-center-form-errors.png` | `openspec/changes/rename-pipeline-lite-to-tenon/specs/repository-architecture-compliance/spec.md` | ☑ |
-| D | `design-demos/shots/pet-adoption-center-mobile.png` | `openspec/changes/rename-pipeline-lite-to-tenon/specs/repository-architecture-compliance/spec.md` | ☑ |
 | D | `design-demos/shots/v10a-1.png` | `openspec/changes/rename-pipeline-lite-to-tenon/specs/repository-architecture-compliance/spec.md` | ☑ |
 | D | `design-demos/shots/v10a-2.png` | `openspec/changes/rename-pipeline-lite-to-tenon/specs/repository-architecture-compliance/spec.md` | ☑ |
 | D | `design-demos/shots/v10a-3.png` | `openspec/changes/rename-pipeline-lite-to-tenon/specs/repository-architecture-compliance/spec.md` | ☑ |

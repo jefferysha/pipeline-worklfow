@@ -140,8 +140,8 @@ therefore do not need a fake cycle merely to leave the active recovery set.
 - Server/dashboard: preview shows free; unmatched create dialog falls back to
   free; selecting free lists default plus project Workflows.
 - Distribution: skills, hooks, bundle, first-install/update acceptance.
-- End to end: resume `pet-adoption-center`, freeze a fresh in-place baseline,
-  write Verify receipts, and pass Verify/Ship/Archive.
+- End to end: resume a fixture-backed custom Change, freeze a fresh in-place
+  baseline, write Verify receipts, and pass Verify/Ship/Archive.
 
 ## Decision Log
 

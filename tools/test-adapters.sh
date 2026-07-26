@@ -257,9 +257,9 @@ if [ -f "$cx_prompt" ]; then
   assert_contains "route/codex: 真注入已保存任务提示词" "$out" "实现登录页，并完成浏览器验收。"
   assert_contains "route/codex: 同轮保留真实 workflow-state" "$out" "workflow-state"
 
-  # 回归跨会话劫持：repo 级 `.pipeline-active` 仅是明确恢复候选。一个新的 SkillHub
+  # 回归跨会话劫持：repo 级 `.pipeline-active` 仅是明确恢复候选。一个新的工具项目
   # 调研目标必须从 open 派发独立 change，不能继承 demo-change 的 phase / 任务文本。
-  out="$(printf '{\"prompt\":\"我现在想要调研一个 SkillHub 项目\",\"cwd\":\"%s\"}' "$p" | TENON_ROUTER_CACHE="$TMP/codex-prompt-new-topic.cache" CLAUDE_PLUGIN_ROOT="$ROOT" bash "$cx_prompt" UserPromptSubmit 2>/dev/null)"
+  out="$(printf '{\"prompt\":\"我现在想要调研一个新的工具项目\",\"cwd\":\"%s\"}' "$p" | TENON_ROUTER_CACHE="$TMP/codex-prompt-new-topic.cache" CLAUDE_PLUGIN_ROOT="$ROOT" bash "$cx_prompt" UserPromptSubmit 2>/dev/null)"
   assert_contains "route/codex: 新主题显式派发 new intent" "$out" "intent: new"
   assert_contains "route/codex: 新主题从 open 开始" "$out" "phase: open"
   assert_not_contains "route/codex: 新主题不绑定旧 change" "$out" "change: demo-change"

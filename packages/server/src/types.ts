@@ -152,8 +152,8 @@ export interface DashboardServerOptions {
    */
   traceStore?: TraceStoreReader
   /**
-   * v9-I：kernel mem 会话检索的 fs 注入面（GET /api/mem/session-link 用；缺省 nodeMemFs() 读真
-   * ~/.claude / ~/.codex 等会话根）。测试注入 nodeMemFs(fakeHome) 指向 fixture 树（hermetic）。
+   * v9-I：kernel mem 会话检索的 fs 注入面（GET /api/mem/session-link 用）；缺省由 Server 以
+   * 显式 hostHome 构造 nodeMemFs(hostHome)，不重新读取 OS home。测试可注入 fixture adapter。
    */
   memFs?: MemFs
   /** H11：starter 激活候选的完整运行接线校验；缺省由 manifest + runner roots 生产装配。 */

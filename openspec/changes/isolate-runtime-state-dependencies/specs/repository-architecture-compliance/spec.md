@@ -55,3 +55,53 @@ Adapter SHALL NOT 实现私有持久化解析器或跨聚合写协议。
 - **WHEN** runtime adapter 的 home 或环境提供器失败
 - **THEN** CLI 将失败映射为稳定的非零退出码和命令错误
 - **AND** 无效或不完整子命令不读取运行时作用域。
+
+### Requirement: 仓库 SHALL 区分正式资产与可再生验收产物
+
+Git 当前树 SHALL 不跟踪 `design-demos/shots/`、根目录 QA 截图、Playwright 临时目录、E2E 运行态，
+或不属于 Tenon 产品的历史测试项目、demo、OpenSpec 主规格、Change archive 和配套文档。
+正式 Dashboard 文档图片 SHALL 只位于固定目录、使用稳定文件名，并进入显式 allowlist。
+通用架构结论只有在改写为 Tenon 自有、中性表述且仍被现行规范引用时才可保留。
+
+#### Scenario: 开发者生成浏览器验收截图
+
+- **WHEN** Playwright 或人工验收把图片写入受禁截图目录
+- **THEN** `.gitignore` 阻止其作为普通新文件进入提交
+- **AND** repository hygiene 检查在文件已被强制跟踪时 fail-loud。
+
+#### Scenario: 正式 Dashboard 图片更新
+
+- **WHEN** 维护者更新 README/文档站引用的 allowlisted 图片
+- **THEN** 检查验证格式、尺寸上限、引用和隐私扫描
+- **AND** 不允许借 allowlist 提交同目录中的任意额外截图。
+
+#### Scenario: 历史测试项目仍在当前树
+
+- **WHEN** 当前 Git 树包含已完成验收后不再属于 Tenon 产品的测试项目资产
+- **THEN** repository hygiene 检查失败并列出相对路径
+- **AND** 对应 demo、文档、OpenSpec 主规格与 archive 必须作为一个完整资产族删除。
+
+### Requirement: 当前树 SHALL 不包含外部参考项目身份
+
+受 Git 管理的当前树 SHALL 在路径名和文本内容两个维度对外部参考项目身份保持零明文。相关调研、
+演示、报告、Skill 说明和 OpenSpec 归档 SHALL 从当前树删除；仍有产品价值的通用结论 SHALL 改写为
+Tenon 自有的中性架构表述。检查 SHALL 使用一份集中式禁止身份表、无路径豁免、无归档豁免，并在
+CI、Marketplace、npm 与 Pages 发布前运行。Git 既有提交对象 SHALL 保留，不执行历史重写。
+
+#### Scenario: 历史调研产物仍在当前树
+
+- **WHEN** 受 Git 管理的任一路径或文本包含受禁参考身份
+- **THEN** repository hygiene 检查失败并报告脱敏后的相对路径
+- **AND** 构建、打包或发布不得继续。
+
+#### Scenario: 维护者需要恢复被删除资料
+
+- **WHEN** 维护者需要审计或恢复被清理的历史调研产物
+- **THEN** 从 Git 既有提交对象中显式恢复
+- **AND** 恢复内容在重新进入当前树前仍须通过参考身份门禁。
+
+#### Scenario: 检查器自身保存禁止身份
+
+- **WHEN** 维护者扩展禁止身份表
+- **THEN** 禁止值以机器构造方式集中保存，检查器源码和测试不重新引入受禁明文
+- **AND** 失败消息对命中身份脱敏。

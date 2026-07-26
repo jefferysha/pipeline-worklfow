@@ -17,7 +17,7 @@ pipeline_prompt_rejects_resume() { # $1=prompt；0=明确要求新主题，不�
 }
 
 # 仅当用户把一个安全的 change 名作为完整 token 点名时返回成功。这里不用简单的
-# `*"$change"*` 子串匹配：`pet` 不能误命中 `pet-adoption-page`，而中文标点和
+# `*"$change"*` 子串匹配：`catalog` 不能误命中 `catalog-flow-page`，而中文标点和
 # 空白仍然可以作为名称边界。所有调用方借此在多 change 项目中复用同一选择语义。
 pipeline_prompt_names_change() { # $1=prompt $2=候选 change 名；0=明确点名且允许恢复
   local prompt="${1:-}" change="${2:-}" regex

@@ -29,7 +29,7 @@ usual.  No selection is shown for a project that exposes only built-in/default p
 
 - A V2 cache is not accepted as V3.
 - A hostile workflow value cannot escape the emitted dispatch contract.
-- A custom adoption Track bound to a pet-adoption flow produces an interaction requirement.
+- A custom catalog Track bound to a catalog-flow flow produces an interaction requirement.
 - Built-in frontend/default routing preserves the prior no-picker behavior in a clean project.
 
 ## Coverage

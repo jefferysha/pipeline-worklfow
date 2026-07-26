@@ -157,8 +157,9 @@ export function createDashboardServer(options: DashboardServerOptions): Dashboar
   const gitHeadSha = options.gitHeadSha
   const workspaceFingerprint = options.workspaceFingerprint
   const traceStore = options.traceStore
-  // v9-I：mem 会话检索 fs（只读用户会话历史根，绝不写）；测试注 nodeMemFs(fakeHome) 指 fixture 树。
-  const memFs: MemFs = options.memFs ?? nodeMemFs()
+  // v9-I：mem 会话检索 fs（只读宿主会话历史根，绝不写）。默认值必须绑定显式 hostHome；
+  // 无参数 nodeMemFs() 会重新读取 OS home，形成 paths.homeDir/hostHome 之外的第三作用域。
+  const memFs: MemFs = options.memFs ?? nodeMemFs(hostHome)
   // config 写端点（M3 可选增量）数据源：manifest.yaml 路径。未注入（如测试只传 flow 而非
   // manifestPath）→ capabilities.config=false，GET/POST config 端点降级 404（不谎报，同 traffic 手法）。
   const manifestPath = options.manifestPath

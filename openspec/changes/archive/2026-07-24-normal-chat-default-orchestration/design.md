@@ -204,4 +204,4 @@ L10_terms:   filled -> 本设计中的 dispatch、effective skill、Todo project
 3. default 初始化后具备 OpenSpec 骨架；OpenSpec skill 分派和每个 phase 的有效 skill 可观测。
 4. Todo 投影显示七阶段和 `tasks.md` 子项，而非 `REAL_AGENT_TASK.md` 的通用计划。
 5. 18765 默认与 8765 override 都能通过 server/client 端口契约测试；setup/update 只能在受管服务健康检查成功后报告可用或打开页面。
-6. 旧 `spec` change 存在时，另一 Codex 会话输入“调研一个 SkillHub 项目”必须派发 `intent: new` / `phase: open`，不得注入旧 change、旧 tasks 或 `REAL_AGENT_TASK.md`；明确“继续 <change>”仍恢复同一 change。
+6. 旧 `spec` change 存在时，另一 Codex 会话输入“调研一个新的工具项目”必须派发 `intent: new` / `phase: open`，不得注入旧 change、旧 tasks 或 `REAL_AGENT_TASK.md`；明确“继续 <change>”仍恢复同一 change。

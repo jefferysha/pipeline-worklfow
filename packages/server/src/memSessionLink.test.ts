@@ -123,6 +123,33 @@ async function startWith(changes: Record<string, { worktree?: string }>): Promis
   return { port, root, home }
 }
 
+/** 生产默认 wiring：不注入 memFs，且宿主 home 与 Tenon 产品状态 home 刻意分离。 */
+async function startWithDefaultMemFs(name: string, worktree: string): Promise<Harness> {
+  const store = newStore()
+  const root = await makeProject()
+  const hostHome = await makeTempHome()
+  const productHome = await makeTempHome()
+  await initChange(store, root, name)
+  await store.set(
+    join(root, 'openspec', 'changes', name),
+    'automation_worktree' as never,
+    worktree,
+  )
+  const srv = createDashboardServer({
+    paths: resolveServerPaths({ home: productHome, env: {} }),
+    hostHome,
+    version: '9.9.9',
+    token: 't',
+    registry: () => [root],
+    store,
+    flow: testFlow(),
+    clock: () => '2026-07-13T00:00:00Z',
+  })
+  openServers.push(srv)
+  const { port } = await srv.listen(0, '127.0.0.1')
+  return { port, root, home: hostHome }
+}
+
 function linkPath(root: string, name: string): string {
   return `/api/mem/session-link?root=${encodeURIComponent(root)}&name=${encodeURIComponent(name)}`
 }
@@ -138,6 +165,20 @@ function linksPath(pairs: Array<{ root: string; name: string }>): string {
 }
 
 describe('GET /api/mem/session-link —— found 三态', () => {
+  it('默认 memFs 只从显式 hostHome 读取会话，不借用产品 home 或 OS home', async () => {
+    const wt = await makeWorktreeDir()
+    const h = await startWithDefaultMemFs('host-bound', wt)
+    await writeCodexSession(h.home, 'host-bound-session', wt)
+
+    const j = (await reqGet(h.port, linkPath(h.root, 'host-bound'))).json<any>()
+    expect(j).toMatchObject({
+      found: true,
+      platform: 'codex',
+      sessionId: 'host-bound-session',
+      dir: wt,
+    })
+  })
+
   it('claude 会话命中 worktree：found:true + `claude --resume` 恢复命令', async () => {
     const wt = await makeWorktreeDir()
     const h = await startWith({ hotfix: { worktree: wt } })

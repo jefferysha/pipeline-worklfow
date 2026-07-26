@@ -6338,7 +6338,7 @@ var EXCLUDED_BASENAMES = /* @__PURE__ */ new Set([
 var EXCLUDED_RELATIVE_ROOTS = [".github/hooks"];
 var EXCLUDED_ROOT_ARTIFACTS = [
   /^dashboard-progress-custom-spec\.png$/,
-  /^pet-adoption-.*-tested\.png$/,
+  /^dashboard-acceptance-.*\.png$/,
   /^workbench-.*\.png$/
 ];
 function sortNames(names) {
@@ -19533,7 +19533,7 @@ function createDashboardServer(options) {
   const gitHeadSha2 = options.gitHeadSha;
   const workspaceFingerprint = options.workspaceFingerprint;
   const traceStore = options.traceStore;
-  const memFs = options.memFs ?? nodeMemFs();
+  const memFs = options.memFs ?? nodeMemFs(hostHome);
   const manifestPath2 = options.manifestPath;
   const operationRunner = options.runPipelineCli ?? runPipelineCli;
   const operationsAvailable = options.runPipelineCli !== void 0 || pipelineCliAvailable();

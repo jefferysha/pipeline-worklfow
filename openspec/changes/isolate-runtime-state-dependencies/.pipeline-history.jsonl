@@ -92,3 +92,31 @@
 {"ts":"2026-07-26T11:56:44Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
 {"ts":"2026-07-26T12:09:45Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated"}
 {"ts":"2026-07-26T12:10:38Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
+{"ts":"2026-07-26T12:11:09Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"967e517b-1c79-4578-8292-af9c02b898c8"}
+{"ts":"2026-07-26T12:11:41Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-07-26T12:11:41Z","kind":"tool","raw":"CodexSkillRead: code-review"}
+{"ts":"2026-07-26T12:11:41Z","kind":"tool","raw":"CodexSkillRead: e2e-testing"}
+{"ts":"2026-07-26T12:13:08Z","kind":"tool","raw":"CodexSkillRead: pipeline"}
+{"ts":"2026-07-26T12:13:08Z","kind":"tool","raw":"CodexSkillRead: code-review"}
+{"ts":"2026-07-26T12:13:08Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-07-26T12:14:38Z","kind":"tool","raw":"CodexSkillRead: code-review"}
+{"ts":"2026-07-26T12:24:36Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated"}
+{"ts":"2026-07-26T12:24:37Z","kind":"tool","raw":"review:request phase=verify event=verify-fail"}
+{"ts":"2026-07-26T12:24:37Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-07-26T12:24:36Z"}
+{"ts":"2026-07-26T12:24:37Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"7c2ccc31-446e-4a0d-9714-148a27cbf518"}
+{"ts":"2026-07-26T12:24:47Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-07-26T12:24:47Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-26T12:24:56Z","kind":"transition","from":"build","to":"spec","raw":"requirements-changed","transitionRecordId":"a72c2a9e-4093-4328-9def-c3ce0a87bfda"}
+{"ts":"2026-07-26T12:29:41Z","kind":"set","field":"plan","to":"docs/superpowers/plans/isolate-runtime-state-dependencies.md"}
+{"ts":"2026-07-26T12:30:12Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated"}
+{"ts":"2026-07-26T12:32:42Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated"}
+{"ts":"2026-07-26T12:33:27Z","kind":"tool","raw":"CodexSkillRead: tenon-spec"}
+{"ts":"2026-07-26T12:33:29Z","kind":"tool","raw":"CodexSkillRead: openspec-propose"}
+{"ts":"2026-07-26T12:33:30Z","kind":"set","field":"plan","to":"docs/superpowers/plans/isolate-runtime-state-dependencies.md"}
+{"ts":"2026-07-26T12:33:30Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-07-26T12:33:39Z","kind":"tool","raw":"review:request phase=spec event=spec-complete"}
+{"ts":"2026-07-26T12:33:39Z","kind":"tool","raw":"review:delegated-ack phase=spec event=spec-complete authority_issued_at=2026-07-26T12:32:42Z"}
+{"ts":"2026-07-26T12:33:39Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"af259abe-ec38-41b5-b70b-2d4df48af03a"}
+{"ts":"2026-07-26T12:34:08Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated"}
+{"ts":"2026-07-26T12:56:11Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated"}
+{"ts":"2026-07-26T12:56:18Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}

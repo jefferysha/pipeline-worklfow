@@ -49,7 +49,7 @@ e2e-runs/
 # 可再生浏览器验收快照不入库；正式产品图只允许放在
 # docs-site/public/images/dashboard-*.webp，并由 repository hygiene 门禁限制体积与链接。
 /dashboard-progress-custom-spec.png
-/pet-adoption-*-tested.png
+/dashboard-acceptance-*.png
 /workbench-*.png
 /workflow-governance-*.png
 design-demos/shots/

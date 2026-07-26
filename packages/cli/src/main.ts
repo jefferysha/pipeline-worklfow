@@ -31,7 +31,7 @@ import { buildProgram, CliExit } from './program.js'
 import { createProductionTriageRuntime } from './commands/triage.js'
 import { listChangeDirs, listChanges, makeGuardCtx } from './guardContext.js'
 import { REAL_RUNTIME_INSTALLER } from './runtime/installer.js'
-import { resolveRuntimePaths } from './runtime/paths.js'
+import { createRuntimeScopeResolver, type RuntimeScopeSnapshot } from './runtime/scope.js'
 
 /** ISO8601 UTC 秒级（对齐老内核 date -u +%Y-%m-%dT%H:%M:%SZ 口径） */
 function isoNow(): string {
@@ -230,7 +230,7 @@ function scanSkillDigests(skillsRoot: string): Map<string, string> {
  * doctor 探针（BACKLOG #26b）：环境/fs 事实采集的 node 落地，裁决归 cmdDoctor。
  * 各探针独立 fail-safe（fs 异常按「不存在/不可执行」处理）——doctor 要能在坏环境里跑完。
  */
-function makeDoctorProbes(runtimePaths: () => ReturnType<typeof resolveRuntimePaths>): DoctorProbes {
+function makeDoctorProbes(runtimeScope: () => RuntimeScopeSnapshot): DoctorProbes {
   const root = pluginRoot()
   return {
     nodeVersion: () => process.version,
@@ -266,9 +266,10 @@ function makeDoctorProbes(runtimePaths: () => ReturnType<typeof resolveRuntimePa
       }
     },
     nativeRuntimeHost: async () => {
+      const scope = runtimeScope()
       const host = (await REAL_RUNTIME_INSTALLER.inspect({
-        homeDir: homedir(),
-        env: process.env,
+        homeDir: scope.homeDir,
+        env: scope.env,
       })).active?.source.host
       return host === 'codex' || host === 'claude' ? host : null
     },
@@ -311,25 +312,24 @@ function makeDoctorProbes(runtimePaths: () => ReturnType<typeof resolveRuntimePa
     // 镜像同 afk run 口径（.pipeline/automation.json 的 image ?? sandcastle:local，读 process.cwd()）；
     // 凭证 secretsEnv 走机器级 secrets（readSecrets 自身 fail-open），hostEnv 走 process.env（宿主>文件）；
     // 值永不回显（探针只回 set+source）。docker 缺是常态：doctor checkAfk 据 available 出 yellow 非 red。
-    afkReadiness: () =>
-      probeAfkReadiness({
+    afkReadiness: () => {
+      const scope = runtimeScope()
+      return probeAfkReadiness({
         image: readAutomationJson(process.cwd()).image ?? 'sandcastle:local',
-        secretsEnv: readSecrets(runtimePaths().secretsPath).keys,
-        hostEnv: process.env,
-        defaultCodexHome: join(homedir(), '.codex'),
-      }),
+        secretsEnv: readSecrets(scope.paths.secretsPath).keys,
+        hostEnv: scope.env,
+        defaultCodexHome: join(scope.homeDir, '.codex'),
+      })
+    },
   }
 }
 
 async function main(): Promise<void> {
-  let resolvedRuntimePaths: ReturnType<typeof resolveRuntimePaths> | undefined
-  const runtimePaths = () => {
-    resolvedRuntimePaths ??= resolveRuntimePaths({
-      env: { ...process.env },
-      homeDir: homedir(),
-    })
-    return resolvedRuntimePaths
-  }
+  const runtimeScope = createRuntimeScopeResolver({
+    env: () => process.env,
+    homeDir: homedir,
+  })
+  const runtimePaths = () => runtimeScope().paths
   const manifest = loadManifest(manifestPath())
   const { toParse, passthrough } = splitPassthroughArgv(process.argv)
   const store = createStateStore()
@@ -371,7 +371,7 @@ async function main(): Promise<void> {
     listChanges,
     listChangeDirs,
     guardCtx: makeGuardCtx(process.cwd()),
-    doctor: makeDoctorProbes(runtimePaths),
+    doctor: makeDoctorProbes(runtimeScope),
     readGateMarkers: () => readGateMarkers(process.cwd()),
     writeBreadcrumb: (dir, content) => writeFile(join(dir, '.breadcrumb'), content, 'utf8'),
     history: createHistoryWriter(),

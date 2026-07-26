@@ -9369,7 +9369,7 @@ var EXCLUDED_BASENAMES = /* @__PURE__ */ new Set([
 var EXCLUDED_RELATIVE_ROOTS = [".github/hooks"];
 var EXCLUDED_ROOT_ARTIFACTS = [
   /^dashboard-progress-custom-spec\.png$/,
-  /^pet-adoption-.*-tested\.png$/,
+  /^dashboard-acceptance-.*\.png$/,
   /^workbench-.*\.png$/
 ];
 function sortNames(names) {
@@ -46048,6 +46048,23 @@ function makeGuardCtx(cwd) {
   });
 }
 
+// packages/cli/src/runtime/scope.ts
+function createRuntimeScopeResolver(providers) {
+  let snapshot;
+  return () => {
+    if (snapshot !== void 0) return snapshot;
+    const homeDir = providers.homeDir();
+    const env = Object.freeze({ ...providers.env() });
+    const paths = resolveRuntimePaths({
+      homeDir,
+      env,
+      ...providers.platform === void 0 ? {} : { platform: providers.platform }
+    });
+    snapshot = Object.freeze({ homeDir, env, paths });
+    return snapshot;
+  };
+}
+
 // packages/cli/src/main.ts
 function isoNow() {
   return (/* @__PURE__ */ new Date()).toISOString().replace(/\.\d{3}Z$/, "Z");
@@ -46175,7 +46192,7 @@ function scanSkillDigests(skillsRoot) {
   }
   return digests;
 }
-function makeDoctorProbes(runtimePaths) {
+function makeDoctorProbes(runtimeScope2) {
   const root = pluginRoot();
   return {
     nodeVersion: () => process.version,
@@ -46223,9 +46240,10 @@ function makeDoctorProbes(runtimePaths) {
       }
     },
     nativeRuntimeHost: async () => {
+      const scope = runtimeScope2();
       const host = (await REAL_RUNTIME_INSTALLER.inspect({
-        homeDir: homedir20(),
-        env: process.env
+        homeDir: scope.homeDir,
+        env: scope.env
       })).active?.source.host;
       return host === "codex" || host === "claude" ? host : null;
     },
@@ -46267,23 +46285,23 @@ function makeDoctorProbes(runtimePaths) {
     // 镜像同 afk run 口径（.pipeline/automation.json 的 image ?? sandcastle:local，读 process.cwd()）；
     // 凭证 secretsEnv 走机器级 secrets（readSecrets 自身 fail-open），hostEnv 走 process.env（宿主>文件）；
     // 值永不回显（探针只回 set+source）。docker 缺是常态：doctor checkAfk 据 available 出 yellow 非 red。
-    afkReadiness: () => probeAfkReadiness({
-      image: readAutomationJson(process.cwd()).image ?? "sandcastle:local",
-      secretsEnv: readSecrets(runtimePaths().secretsPath).keys,
-      hostEnv: process.env,
-      defaultCodexHome: join78(homedir20(), ".codex")
-    })
+    afkReadiness: () => {
+      const scope = runtimeScope2();
+      return probeAfkReadiness({
+        image: readAutomationJson(process.cwd()).image ?? "sandcastle:local",
+        secretsEnv: readSecrets(scope.paths.secretsPath).keys,
+        hostEnv: scope.env,
+        defaultCodexHome: join78(scope.homeDir, ".codex")
+      });
+    }
   };
 }
 async function main() {
-  let resolvedRuntimePaths;
-  const runtimePaths = () => {
-    resolvedRuntimePaths ??= resolveRuntimePaths({
-      env: { ...process.env },
-      homeDir: homedir20()
-    });
-    return resolvedRuntimePaths;
-  };
+  const runtimeScope2 = createRuntimeScopeResolver({
+    env: () => process.env,
+    homeDir: homedir20
+  });
+  const runtimePaths = () => runtimeScope2().paths;
   const manifest = loadManifest(manifestPath());
   const { toParse, passthrough } = splitPassthroughArgv(process.argv);
   const store2 = createStateStore();
@@ -46324,7 +46342,7 @@ async function main() {
     listChanges,
     listChangeDirs,
     guardCtx: makeGuardCtx(process.cwd()),
-    doctor: makeDoctorProbes(runtimePaths),
+    doctor: makeDoctorProbes(runtimeScope2),
     readGateMarkers: () => readGateMarkers(process.cwd()),
     writeBreadcrumb: (dir, content) => writeFile15(join78(dir, ".breadcrumb"), content, "utf8"),
     history: createHistoryWriter(),

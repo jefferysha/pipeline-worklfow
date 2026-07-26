@@ -22,7 +22,7 @@ function customTrack(pattern = "'$(touch /tmp/router-owned)`printf pwn`|mobile-r
     id: 'designer-mobile',
     label: 'Designer $(inert)',
     builtin: false,
-    workflow: { default: 'pet-adoption', allowed: ['pet-adoption'] },
+    workflow: { default: 'catalog-flow', allowed: ['catalog-flow'] },
     policyProfile: {
       reviewSeed: 'pending',
       automationEligible: true,
@@ -111,7 +111,7 @@ describe('_gen-router-sh project data-cache command', () => {
     expect(Buffer.from(route[6] ?? '', 'hex').toString('utf8')).toBe('')
     expect(Buffer.from(route[7] ?? '', 'hex').toString('utf8')).toBe('frontend')
     expect(route.slice(8, 10)).toEqual(['0', '0']) // matrix=false 仍进入 router；custom 不是 builtin
-    expect(Buffer.from(route[11] ?? '', 'hex').toString('utf8')).toBe('pet-adoption')
+    expect(Buffer.from(route[11] ?? '', 'hex').toString('utf8')).toBe('catalog-flow')
     expect(cache).not.toContain('FE_PATTERN=')
     expect(cache).not.toContain('$(')
     expect(cache).not.toContain('`')
