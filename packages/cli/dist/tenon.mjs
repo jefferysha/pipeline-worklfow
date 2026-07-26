@@ -44382,6 +44382,34 @@ async function readMigrationReceipt(path9) {
     rejected: record2.rejected
   };
 }
+async function readPendingMigration(path9) {
+  let text2;
+  try {
+    text2 = await readFile35(path9, "utf8");
+  } catch (error) {
+    if (error.code === "ENOENT") return null;
+    throw error;
+  }
+  let value;
+  try {
+    value = JSON.parse(text2);
+  } catch {
+    throw new Error(`host project registry migration pending snapshot \u975E\u6CD5\uFF1A${path9}`);
+  }
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new Error(`host project registry migration pending snapshot \u975E\u6CD5\uFF1A${path9}`);
+  }
+  const record2 = value;
+  if (record2.version !== 1 || record2.migration !== MIGRATION_ID || !Array.isArray(record2.roots) || !record2.roots.every((root) => typeof root === "string" && isAbsolute19(root)) || new Set(record2.roots).size !== record2.roots.length || !nonNegativeInteger(record2.rejected)) {
+    throw new Error(`host project registry migration pending snapshot \u975E\u6CD5\uFF1A${path9}`);
+  }
+  return {
+    version: 1,
+    migration: MIGRATION_ID,
+    roots: record2.roots.map((root) => resolve32(root)),
+    rejected: record2.rejected
+  };
+}
 async function migrateLegacyProjectRegistry(input) {
   const productPaths = resolveProductPaths({
     homeDir: input.homeDir,
@@ -44390,14 +44418,29 @@ async function migrateLegacyProjectRegistry(input) {
   });
   const migrationRoot = join71(productPaths.migrationsRoot, MIGRATION_ID);
   const receiptPath = join71(migrationRoot, "receipt.json");
+  const pendingPath = join71(migrationRoot, "pending.json");
   await mkdir26(migrationRoot, { recursive: true });
   return withLock(migrationRoot, async () => {
     if (await readMigrationReceipt(receiptPath) !== null) {
       return { status: "already-complete", discovered: 0, imported: 0, rejected: 0 };
     }
-    const discovered = /* @__PURE__ */ new Set();
-    let rejected = 0;
-    if (!input.pathExists(productPaths.registryPath)) {
+    let pending = await readPendingMigration(pendingPath);
+    if (pending === null && input.pathExists(productPaths.registryPath)) {
+      const completedAt = (input.now ?? (() => (/* @__PURE__ */ new Date()).toISOString()))();
+      await atomicReplaceFile(receiptPath, `${JSON.stringify({
+        version: 1,
+        migration: MIGRATION_ID,
+        completedAt,
+        discovered: 0,
+        imported: 0,
+        rejected: 0
+      }, null, 2)}
+`);
+      return { status: "completed", discovered: 0, imported: 0, rejected: 0 };
+    }
+    if (pending === null) {
+      const discovered = /* @__PURE__ */ new Set();
+      let rejected = 0;
       for (const path9 of resolveHostProjectRegistryCandidates(input)) {
         const text2 = input.readText(path9);
         if (text2 === void 0) continue;
@@ -44431,22 +44474,35 @@ async function migrateLegacyProjectRegistry(input) {
           discovered.add(resolve32(item2));
         }
       }
+      pending = {
+        version: 1,
+        migration: MIGRATION_ID,
+        roots: [...discovered],
+        rejected
+      };
+      await atomicReplaceFile(pendingPath, `${JSON.stringify(pending, null, 2)}
+`);
     }
-    let imported = 0;
-    for (const root of discovered) {
-      if (await registerProjectRoot(productPaths.registryPath, root)) imported += 1;
+    const register = input.registerProject ?? registerProjectRoot;
+    for (const root of pending.roots) {
+      await register(productPaths.registryPath, root);
     }
     const receipt = {
       version: 1,
       migration: MIGRATION_ID,
       completedAt: (input.now ?? (() => (/* @__PURE__ */ new Date()).toISOString()))(),
-      discovered: discovered.size,
-      imported,
-      rejected
+      discovered: pending.roots.length,
+      imported: pending.roots.length,
+      rejected: pending.rejected
     };
     await atomicReplaceFile(receiptPath, `${JSON.stringify(receipt, null, 2)}
 `);
-    return { status: "completed", discovered: discovered.size, imported, rejected };
+    return {
+      status: "completed",
+      discovered: pending.roots.length,
+      imported: pending.roots.length,
+      rejected: pending.rejected
+    };
   });
 }
 

@@ -20,6 +20,7 @@ export interface LegacyProjectRegistryMigrationInput {
   readonly pathExists: (path: string) => boolean
   readonly pathIsDirectory?: (path: string) => boolean
   readonly now?: () => string
+  readonly registerProject?: (registryPath: string, root: string) => Promise<boolean>
 }
 
 export interface LegacyProjectRegistryMigrationResult {
@@ -35,6 +36,13 @@ interface ProjectRegistryMigrationReceipt {
   readonly completedAt: string
   readonly discovered: number
   readonly imported: number
+  readonly rejected: number
+}
+
+interface ProjectRegistryMigrationPending {
+  readonly version: 1
+  readonly migration: typeof MIGRATION_ID
+  readonly roots: readonly string[]
   readonly rejected: number
 }
 
@@ -92,6 +100,42 @@ async function readMigrationReceipt(path: string): Promise<ProjectRegistryMigrat
   }
 }
 
+async function readPendingMigration(path: string): Promise<ProjectRegistryMigrationPending | null> {
+  let text: string
+  try {
+    text = await readFile(path, 'utf8')
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null
+    throw error
+  }
+  let value: unknown
+  try {
+    value = JSON.parse(text)
+  } catch {
+    throw new Error(`host project registry migration pending snapshot 非法：${path}`)
+  }
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new Error(`host project registry migration pending snapshot 非法：${path}`)
+  }
+  const record = value as Record<string, unknown>
+  if (
+    record.version !== 1
+    || record.migration !== MIGRATION_ID
+    || !Array.isArray(record.roots)
+    || !record.roots.every((root) => typeof root === 'string' && isAbsolute(root))
+    || new Set(record.roots).size !== record.roots.length
+    || !nonNegativeInteger(record.rejected)
+  ) {
+    throw new Error(`host project registry migration pending snapshot 非法：${path}`)
+  }
+  return {
+    version: 1,
+    migration: MIGRATION_ID,
+    roots: record.roots.map((root) => resolve(root)),
+    rejected: record.rejected,
+  }
+}
+
 /**
  * One-way migration into the Tenon-owned registry. Legacy files remain read-only and are never a
  * runtime fallback; setup imports only absolute roots that still exist, then all readers use the
@@ -107,6 +151,7 @@ export async function migrateLegacyProjectRegistry(
   })
   const migrationRoot = join(productPaths.migrationsRoot, MIGRATION_ID)
   const receiptPath = join(migrationRoot, 'receipt.json')
+  const pendingPath = join(migrationRoot, 'pending.json')
   await mkdir(migrationRoot, { recursive: true })
 
   return withLock(migrationRoot, async () => {
@@ -114,11 +159,25 @@ export async function migrateLegacyProjectRegistry(
       return { status: 'already-complete', discovered: 0, imported: 0, rejected: 0 }
     }
 
-    // An existing canonical registry is already user-owned truth. Mark migration complete without
-    // reading host files, so a later setup can never resurrect entries the user removed from Tenon.
-    const discovered = new Set<string>()
-    let rejected = 0
-    if (!input.pathExists(productPaths.registryPath)) {
+    let pending = await readPendingMigration(pendingPath)
+    if (pending === null && input.pathExists(productPaths.registryPath)) {
+      // A registry that predates this migration transaction is already user-owned truth. Mark the
+      // migration complete without reading host files, so a later setup cannot resurrect deletions.
+      const completedAt = (input.now ?? (() => new Date().toISOString()))()
+      await atomicReplaceFile(receiptPath, `${JSON.stringify({
+        version: 1,
+        migration: MIGRATION_ID,
+        completedAt,
+        discovered: 0,
+        imported: 0,
+        rejected: 0,
+      } satisfies ProjectRegistryMigrationReceipt, null, 2)}\n`)
+      return { status: 'completed', discovered: 0, imported: 0, rejected: 0 }
+    }
+
+    if (pending === null) {
+      const discovered = new Set<string>()
+      let rejected = 0
       for (const path of resolveHostProjectRegistryCandidates(input)) {
         const text = input.readText(path)
         if (text === undefined) continue
@@ -152,21 +211,36 @@ export async function migrateLegacyProjectRegistry(
           discovered.add(resolve(item))
         }
       }
+      pending = {
+        version: 1,
+        migration: MIGRATION_ID,
+        roots: [...discovered],
+        rejected,
+      }
+      // Publish the immutable recovery input before touching the canonical registry. If any
+      // subsequent project write fails, the next setup resumes from this snapshot instead of
+      // treating the partially created registry as pre-existing user truth.
+      await atomicReplaceFile(pendingPath, `${JSON.stringify(pending, null, 2)}\n`)
     }
 
-    let imported = 0
-    for (const root of discovered) {
-      if (await registerProjectRoot(productPaths.registryPath, root)) imported += 1
+    const register = input.registerProject ?? registerProjectRoot
+    for (const root of pending.roots) {
+      await register(productPaths.registryPath, root)
     }
     const receipt: ProjectRegistryMigrationReceipt = {
       version: 1,
       migration: MIGRATION_ID,
       completedAt: (input.now ?? (() => new Date().toISOString()))(),
-      discovered: discovered.size,
-      imported,
-      rejected,
+      discovered: pending.roots.length,
+      imported: pending.roots.length,
+      rejected: pending.rejected,
     }
     await atomicReplaceFile(receiptPath, `${JSON.stringify(receipt, null, 2)}\n`)
-    return { status: 'completed', discovered: discovered.size, imported, rejected }
+    return {
+      status: 'completed',
+      discovered: pending.roots.length,
+      imported: pending.roots.length,
+      rejected: pending.rejected,
+    }
   })
 }

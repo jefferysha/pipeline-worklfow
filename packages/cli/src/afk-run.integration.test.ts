@@ -264,7 +264,7 @@ describe('afk run —— 真调 docker 执行接线（#29-wire 落地到 CLI）'
 })
 
 describe('afk run —— 无 docker 环境诚实降级（不依赖 IMAGE 探针，真跑 docker info）', () => {
-  it('docker 不可用 → 报告就绪队列 + 明示不执行容器，exit 0', async (ctx) => {
+  it('docker 不可用 → 报告就绪队列 + 明示不执行容器，exit 1', async (ctx) => {
     // 只有在这台机器确实没有 docker 时才有意义；有 docker 时这个分支在别的机器上验证，本地不強跑。
     try {
       await execFileAsync('docker', ['info'])
@@ -277,7 +277,7 @@ describe('afk run —— 无 docker 环境诚实降级（不依赖 IMAGE 探针�
       await h2.run(['set', 'c1', 'phase', 'build'])
       await seedLoops(h2.cwd)
       expect(await h2.run(['afk', 'enqueue', 'c1', '--loop', 'afkloop'])).toBe(0)
-      expect(await h2.run(['afk', 'run'])).toBe(0)
+      expect(await h2.run(['afk', 'run'])).toBe(1)
       expect(h2.err.join('\n')).toMatch(/docker/i)
     } finally {
       await rm(h2.cwd, { recursive: true, force: true })

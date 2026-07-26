@@ -212,3 +212,19 @@
 {"ts":"2026-07-26T08:46:23Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
 {"ts":"2026-07-26T08:46:23Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
 {"ts":"2026-07-26T09:13:18Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated"}
+{"ts":"2026-07-26T09:15:01Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"8e822326-98b3-4327-8e9b-69e1bc2a97a6"}
+{"ts":"2026-07-26T09:15:32Z","kind":"tool","raw":"CodexSkillRead: code-review"}
+{"ts":"2026-07-26T09:15:45Z","kind":"tool","raw":"CodexSkillRead: deployment-patterns"}
+{"ts":"2026-07-26T09:15:45Z","kind":"tool","raw":"CodexSkillRead: e2e-testing"}
+{"ts":"2026-07-26T09:15:45Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-07-26T09:17:19Z","kind":"tool","raw":"CodexSkillRead: pipeline"}
+{"ts":"2026-07-26T09:17:19Z","kind":"tool","raw":"CodexSkillRead: code-review"}
+{"ts":"2026-07-26T09:17:19Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-07-26T09:25:21Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-07-26-rename-pipeline-lite-to-tenon-verify.md"}
+{"ts":"2026-07-26T09:25:21Z","kind":"tool","raw":"review:request phase=verify event=verify-fail"}
+{"ts":"2026-07-26T09:25:21Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-07-26T09:13:18Z"}
+{"ts":"2026-07-26T09:25:41Z","kind":"tool","raw":"CodexSkillRead: browser-qa"}
+{"ts":"2026-07-26T09:25:41Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-26T09:25:41Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-26T09:25:48Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"bd960a77-1379-4017-8edd-cf13d37eb166"}
+{"ts":"2026-07-26T09:29:53Z","kind":"tool","raw":"CodexSkillRead: pipeline-build"}

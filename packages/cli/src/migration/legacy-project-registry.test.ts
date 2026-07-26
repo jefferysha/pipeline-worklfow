@@ -97,6 +97,45 @@ describe('legacy project registry migration', () => {
     expect(readProjectRegistry(resolveProductPaths({ homeDir, platform: 'linux' }).registryPath)).toEqual([project])
   })
 
+  test('resumes an interrupted partial import from its durable snapshot without rereading host files', async () => {
+    const homeDir = await mkdtemp(join(tmpdir(), 'tenon-project-migration-resume-'))
+    const projectOne = join(homeDir, 'project-one')
+    const projectTwo = join(homeDir, 'project-two')
+    const paths = resolveProductPaths({ homeDir, platform: 'linux' })
+    let writes = 0
+
+    await expect(migrateLegacyProjectRegistry({
+      homeDir,
+      platform: 'linux',
+      readText: (path) => path.endsWith('pipeline-projects.json')
+        ? JSON.stringify([projectOne, projectTwo])
+        : undefined,
+      pathExists: (path) => path === projectOne || path === projectTwo,
+      pathIsDirectory: (path) => path === projectOne || path === projectTwo,
+      registerProject: async (registryPath, root) => {
+        writes += 1
+        if (writes === 2) throw new Error('injected second project failure')
+        const current = readProjectRegistry(registryPath)
+        await writeProjectRegistry(registryPath, [...current, root])
+        return true
+      },
+    })).rejects.toThrow(/injected second project failure/)
+    expect(readProjectRegistry(paths.registryPath)).toEqual([projectOne])
+
+    const resumed = await migrateLegacyProjectRegistry({
+      homeDir,
+      platform: 'linux',
+      readText: () => {
+        throw new Error('resume must use the durable pending snapshot')
+      },
+      pathExists: () => true,
+      pathIsDirectory: () => true,
+    })
+
+    expect(resumed).toEqual({ status: 'completed', discovered: 2, imported: 2, rejected: 0 })
+    expect(readProjectRegistry(paths.registryPath)).toEqual([projectOne, projectTwo])
+  })
+
   test('fails closed when the versioned receipt is corrupt instead of re-importing host data', async () => {
     const homeDir = await mkdtemp(join(tmpdir(), 'tenon-project-migration-corrupt-'))
     const paths = resolveProductPaths({ homeDir, platform: 'linux' })
