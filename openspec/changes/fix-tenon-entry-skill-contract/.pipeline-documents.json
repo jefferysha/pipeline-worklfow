@@ -39,6 +39,18 @@
           "sha256": "e71822f9e4cfbc4b0bea56dc8170e0d0e955c87c4c376a8fc303fbfa17163add",
           "readAt": "2026-07-26T15:21:25Z",
           "visitId": "[\"e6b57669-b1a9-4a5d-9f68-855a9e067e27\",7]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "e71822f9e4cfbc4b0bea56dc8170e0d0e955c87c4c376a8fc303fbfa17163add",
+          "readAt": "2026-07-26T15:41:20Z",
+          "visitId": "[\"e6b57669-b1a9-4a5d-9f68-855a9e067e27\",8]"
+        },
+        {
+          "phase": "build",
+          "sha256": "e71822f9e4cfbc4b0bea56dc8170e0d0e955c87c4c376a8fc303fbfa17163add",
+          "readAt": "2026-07-26T15:54:17Z",
+          "visitId": "[\"e6b57669-b1a9-4a5d-9f68-855a9e067e27\",9]"
         }
       ]
     },
@@ -66,6 +78,18 @@
           "sha256": "095d3b261b0be4be23820217262194ea7002af0cb95889a9211367c1a49bd4ef",
           "readAt": "2026-07-26T15:21:25Z",
           "visitId": "[\"e6b57669-b1a9-4a5d-9f68-855a9e067e27\",7]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "095d3b261b0be4be23820217262194ea7002af0cb95889a9211367c1a49bd4ef",
+          "readAt": "2026-07-26T15:41:20Z",
+          "visitId": "[\"e6b57669-b1a9-4a5d-9f68-855a9e067e27\",8]"
+        },
+        {
+          "phase": "build",
+          "sha256": "095d3b261b0be4be23820217262194ea7002af0cb95889a9211367c1a49bd4ef",
+          "readAt": "2026-07-26T15:54:17Z",
+          "visitId": "[\"e6b57669-b1a9-4a5d-9f68-855a9e067e27\",9]"
         }
       ]
     },
@@ -93,6 +117,18 @@
           "sha256": "17dea7dab57741dbb2b5efe684a3707c43e2c27067ec3c14f8ff7588cd5911c6",
           "readAt": "2026-07-26T15:21:25Z",
           "visitId": "[\"e6b57669-b1a9-4a5d-9f68-855a9e067e27\",7]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "17dea7dab57741dbb2b5efe684a3707c43e2c27067ec3c14f8ff7588cd5911c6",
+          "readAt": "2026-07-26T15:41:20Z",
+          "visitId": "[\"e6b57669-b1a9-4a5d-9f68-855a9e067e27\",8]"
+        },
+        {
+          "phase": "build",
+          "sha256": "17dea7dab57741dbb2b5efe684a3707c43e2c27067ec3c14f8ff7588cd5911c6",
+          "readAt": "2026-07-26T15:54:17Z",
+          "visitId": "[\"e6b57669-b1a9-4a5d-9f68-855a9e067e27\",9]"
         }
       ]
     },
@@ -120,16 +156,20 @@
           "sha256": "e3e89aaf29d7e78f2d947f0b380cb3f63c1f6e76d7338d12ce3994d884d1b35f",
           "readAt": "2026-07-26T15:21:25Z",
           "visitId": "[\"e6b57669-b1a9-4a5d-9f68-855a9e067e27\",7]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "e3e89aaf29d7e78f2d947f0b380cb3f63c1f6e76d7338d12ce3994d884d1b35f",
+          "readAt": "2026-07-26T15:41:20Z",
+          "visitId": "[\"e6b57669-b1a9-4a5d-9f68-855a9e067e27\",8]"
+        },
+        {
+          "phase": "build",
+          "sha256": "e3e89aaf29d7e78f2d947f0b380cb3f63c1f6e76d7338d12ce3994d884d1b35f",
+          "readAt": "2026-07-26T15:54:17Z",
+          "visitId": "[\"e6b57669-b1a9-4a5d-9f68-855a9e067e27\",9]"
         }
       ]
-    },
-    {
-      "kind": "verification-report",
-      "path": "docs/superpowers/reports/2026-07-26-fix-tenon-entry-skill-contract-verify.md",
-      "sha256": "7ee51d88456caba11ee394c67cceef282defb422b96d99d3588dc4c0e7a77037",
-      "producer": "verification-before-completion",
-      "recordedAt": "2026-07-26T14:57:16Z",
-      "reads": []
     },
     {
       "kind": "delta-spec",
@@ -143,6 +183,18 @@
           "sha256": "b065f7cd8e2bf5ee49ade571ecfdc57d4864d0f2bd80a0e686aea54bb343b5f7",
           "readAt": "2026-07-26T15:21:25Z",
           "visitId": "[\"e6b57669-b1a9-4a5d-9f68-855a9e067e27\",7]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "b065f7cd8e2bf5ee49ade571ecfdc57d4864d0f2bd80a0e686aea54bb343b5f7",
+          "readAt": "2026-07-26T15:41:20Z",
+          "visitId": "[\"e6b57669-b1a9-4a5d-9f68-855a9e067e27\",8]"
+        },
+        {
+          "phase": "build",
+          "sha256": "b065f7cd8e2bf5ee49ade571ecfdc57d4864d0f2bd80a0e686aea54bb343b5f7",
+          "readAt": "2026-07-26T15:54:17Z",
+          "visitId": "[\"e6b57669-b1a9-4a5d-9f68-855a9e067e27\",9]"
         }
       ]
     },
@@ -164,6 +216,18 @@
           "sha256": "1a84283e6ad0d0f76d1cd8ae39386785d1941e51c958ccb46136478b30e3181d",
           "readAt": "2026-07-26T15:21:25Z",
           "visitId": "[\"e6b57669-b1a9-4a5d-9f68-855a9e067e27\",7]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "1a84283e6ad0d0f76d1cd8ae39386785d1941e51c958ccb46136478b30e3181d",
+          "readAt": "2026-07-26T15:41:20Z",
+          "visitId": "[\"e6b57669-b1a9-4a5d-9f68-855a9e067e27\",8]"
+        },
+        {
+          "phase": "build",
+          "sha256": "1a84283e6ad0d0f76d1cd8ae39386785d1941e51c958ccb46136478b30e3181d",
+          "readAt": "2026-07-26T15:54:17Z",
+          "visitId": "[\"e6b57669-b1a9-4a5d-9f68-855a9e067e27\",9]"
         }
       ]
     },
@@ -185,6 +249,18 @@
           "sha256": "47de74f5c4dbc2f3ba360ba7df66d324a929aeac1a3ac1219b823fd7b080b5c8",
           "readAt": "2026-07-26T15:21:25Z",
           "visitId": "[\"e6b57669-b1a9-4a5d-9f68-855a9e067e27\",7]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "47de74f5c4dbc2f3ba360ba7df66d324a929aeac1a3ac1219b823fd7b080b5c8",
+          "readAt": "2026-07-26T15:41:20Z",
+          "visitId": "[\"e6b57669-b1a9-4a5d-9f68-855a9e067e27\",8]"
+        },
+        {
+          "phase": "build",
+          "sha256": "47de74f5c4dbc2f3ba360ba7df66d324a929aeac1a3ac1219b823fd7b080b5c8",
+          "readAt": "2026-07-26T15:54:17Z",
+          "visitId": "[\"e6b57669-b1a9-4a5d-9f68-855a9e067e27\",9]"
         }
       ]
     },
@@ -206,6 +282,18 @@
           "sha256": "7ed98b285c0d11efef20901e9d0dcc10b3834e8e9773f31a7f99064d33c9a921",
           "readAt": "2026-07-26T15:21:25Z",
           "visitId": "[\"e6b57669-b1a9-4a5d-9f68-855a9e067e27\",7]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "7ed98b285c0d11efef20901e9d0dcc10b3834e8e9773f31a7f99064d33c9a921",
+          "readAt": "2026-07-26T15:41:20Z",
+          "visitId": "[\"e6b57669-b1a9-4a5d-9f68-855a9e067e27\",8]"
+        },
+        {
+          "phase": "build",
+          "sha256": "7ed98b285c0d11efef20901e9d0dcc10b3834e8e9773f31a7f99064d33c9a921",
+          "readAt": "2026-07-26T15:54:17Z",
+          "visitId": "[\"e6b57669-b1a9-4a5d-9f68-855a9e067e27\",9]"
         }
       ]
     },
@@ -221,6 +309,18 @@
           "sha256": "d7b120dd289e4fbbdac55bd097fb6f82e09629e88597bab90de92f9ab16f9dcf",
           "readAt": "2026-07-26T15:21:25Z",
           "visitId": "[\"e6b57669-b1a9-4a5d-9f68-855a9e067e27\",7]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "d7b120dd289e4fbbdac55bd097fb6f82e09629e88597bab90de92f9ab16f9dcf",
+          "readAt": "2026-07-26T15:41:20Z",
+          "visitId": "[\"e6b57669-b1a9-4a5d-9f68-855a9e067e27\",8]"
+        },
+        {
+          "phase": "build",
+          "sha256": "d7b120dd289e4fbbdac55bd097fb6f82e09629e88597bab90de92f9ab16f9dcf",
+          "readAt": "2026-07-26T15:54:17Z",
+          "visitId": "[\"e6b57669-b1a9-4a5d-9f68-855a9e067e27\",9]"
         }
       ]
     },
@@ -236,21 +336,41 @@
           "sha256": "d7b120dd289e4fbbdac55bd097fb6f82e09629e88597bab90de92f9ab16f9dcf",
           "readAt": "2026-07-26T15:21:25Z",
           "visitId": "[\"e6b57669-b1a9-4a5d-9f68-855a9e067e27\",7]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "d7b120dd289e4fbbdac55bd097fb6f82e09629e88597bab90de92f9ab16f9dcf",
+          "readAt": "2026-07-26T15:41:20Z",
+          "visitId": "[\"e6b57669-b1a9-4a5d-9f68-855a9e067e27\",8]"
+        },
+        {
+          "phase": "build",
+          "sha256": "d7b120dd289e4fbbdac55bd097fb6f82e09629e88597bab90de92f9ab16f9dcf",
+          "readAt": "2026-07-26T15:54:17Z",
+          "visitId": "[\"e6b57669-b1a9-4a5d-9f68-855a9e067e27\",9]"
         }
       ]
     },
     {
+      "kind": "verification-report",
+      "path": "docs/superpowers/reports/2026-07-26-fix-tenon-entry-skill-contract-verify.md",
+      "sha256": "ffbc7cba223f31a2568925d29ee7e7e5ae64d4a0ce35321a7ff208019a9fa51a",
+      "producer": "verification-before-completion",
+      "recordedAt": "2026-07-26T15:53:32Z",
+      "reads": []
+    },
+    {
       "kind": "tasks",
       "path": "openspec/changes/fix-tenon-entry-skill-contract/tasks.md",
-      "sha256": "2ab872806ec21a43f16b58ebdbb7344fbcdf6677cf5b1c9230462ed50e2b8377",
+      "sha256": "767d0ebe35dc143bf4ec5b4213dea7cc9f72591875d75f05ce20259cfc341c8a",
       "producer": "tenon-build",
-      "recordedAt": "2026-07-26T15:38:44Z",
+      "recordedAt": "2026-07-26T16:24:36Z",
       "reads": [
         {
           "phase": "build",
-          "sha256": "2ab872806ec21a43f16b58ebdbb7344fbcdf6677cf5b1c9230462ed50e2b8377",
-          "readAt": "2026-07-26T15:38:44Z",
-          "visitId": "[\"e6b57669-b1a9-4a5d-9f68-855a9e067e27\",7]"
+          "sha256": "767d0ebe35dc143bf4ec5b4213dea7cc9f72591875d75f05ce20259cfc341c8a",
+          "readAt": "2026-07-26T16:24:36Z",
+          "visitId": "[\"e6b57669-b1a9-4a5d-9f68-855a9e067e27\",9]"
         }
       ]
     }

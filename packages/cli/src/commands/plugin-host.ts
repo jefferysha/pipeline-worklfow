@@ -22,6 +22,7 @@ export const TENON_HOSTS = [
 
 export type PipelineHost = (typeof TENON_HOSTS)[number]
 export type NativePipelineHost = Extract<PipelineHost, 'codex' | 'claude'>
+export type HostPluginScope = 'user' | 'project' | 'local'
 
 /** The release marketplace is the distribution channel for the one packaged plugin. */
 export const TENON_MARKETPLACE_SOURCE = 'jefferysha/tenon'
@@ -35,6 +36,7 @@ export interface HostCommandPlanItem {
 
 export interface ParsedHostPluginInventory {
   readonly enabledIds: ReadonlySet<string>
+  readonly enabledScopes: ReadonlyMap<string, ReadonlySet<HostPluginScope>>
   readonly tenonRoot: string | null
 }
 
@@ -63,6 +65,8 @@ export function parseHostPluginInventory(
   if (entries === null) return null
 
   const ids = new Set<string>()
+  const scopes = new Map<string, Set<HostPluginScope>>()
+  const seenRegistrations = new Set<string>()
   let tenonRoot: string | null = null
   for (const entry of entries) {
     if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) return null
@@ -72,6 +76,7 @@ export function parseHostPluginInventory(
       name?: unknown
       marketplaceName?: unknown
       enabled?: unknown
+      scope?: unknown
       source?: { path?: unknown }
       installPath?: unknown
     }
@@ -83,24 +88,51 @@ export function parseHostPluginInventory(
             : null)
       : (typeof item.id === 'string' ? item.id : null)
     if (id === null) return null
-    if (item.enabled !== false) ids.add(id)
+    if (item.enabled !== undefined && typeof item.enabled !== 'boolean') return null
+    const enabled = item.enabled !== false
+    const scope = item.scope === undefined
+      ? 'user'
+      : item.scope === 'user' || item.scope === 'project' || item.scope === 'local'
+        ? item.scope
+        : null
+    if (scope === null) return null
+    const registrationKey = host === 'codex' ? id : `${id}\u0000${scope}`
+    if (seenRegistrations.has(registrationKey)) return null
+    seenRegistrations.add(registrationKey)
+    if (enabled) {
+      ids.add(id)
+      const registeredScopes = scopes.get(id) ?? new Set<HostPluginScope>()
+      registeredScopes.add(scope)
+      scopes.set(id, registeredScopes)
+    }
+    const candidateRoot = host === 'codex' ? item.source?.path : item.installPath
     if (
-      host === 'codex'
+      candidateRoot !== undefined
+      && (typeof candidateRoot !== 'string'
+        || !isAbsolute(candidateRoot)
+        || normalize(candidateRoot) !== candidateRoot)
+    ) return null
+    if (
+      enabled
+      && host === 'codex'
       && item.name === TENON_PLUGIN_NAME
       && item.marketplaceName === TENON_MARKETPLACE_NAME
       && typeof item.source?.path === 'string'
     ) {
+      if (tenonRoot !== null) return null
       tenonRoot = item.source.path
     }
     if (
-      host === 'claude'
+      enabled
+      && host === 'claude'
       && id === `${TENON_PLUGIN_NAME}@${TENON_MARKETPLACE_NAME}`
       && typeof item.installPath === 'string'
     ) {
+      if (tenonRoot !== null) return null
       tenonRoot = item.installPath
     }
   }
-  return { enabledIds: ids, tenonRoot }
+  return { enabledIds: ids, enabledScopes: scopes, tenonRoot }
 }
 
 /** Enabled plugin ids as reported by the host-owned inventory. Invalid inventory is not trusted. */
@@ -114,10 +146,11 @@ export function enabledHostPluginIds(
 export function nativePluginRemovalPlan(
   host: NativePipelineHost,
   pluginId: string,
+  scope: HostPluginScope = 'user',
 ): readonly HostCommandPlanItem[] {
   return host === 'codex'
     ? [{ cmd: 'codex', args: ['plugin', 'remove', pluginId, '--json'] }]
-    : [{ cmd: 'claude', args: ['plugin', 'uninstall', pluginId, '--scope', 'user'] }]
+    : [{ cmd: 'claude', args: ['plugin', 'uninstall', pluginId, '--scope', scope] }]
 }
 
 export type PipelineHostFlags = Partial<Record<PipelineHost, boolean | undefined>>
@@ -176,3 +209,4 @@ export function nativeInstallPlan(host: NativePipelineHost): readonly HostComman
 export function installedPipelineRoot(host: NativePipelineHost, stdout: string): string | null {
   return parseHostPluginInventory(host, stdout)?.tenonRoot ?? null
 }
+import { isAbsolute, normalize } from 'node:path'

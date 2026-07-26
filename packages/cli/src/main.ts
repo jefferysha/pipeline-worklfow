@@ -227,19 +227,6 @@ function scanSkillDigests(skillsRoot: string): Map<string, string> {
   return digests
 }
 
-function codexHostPluginIds(): ReadonlySet<string> | null {
-  try {
-    const stdout = execFileSync('codex', ['plugin', 'list', '--json'], {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-      timeout: 5_000,
-    })
-    return enabledHostPluginIds('codex', stdout)
-  } catch {
-    return null
-  }
-}
-
 /**
  * doctor 探针（BACKLOG #26b）：环境/fs 事实采集的 node 落地，裁决归 cmdDoctor。
  * 各探针独立 fail-safe（fs 异常按「不存在/不可执行」处理）——doctor 要能在坏环境里跑完。
@@ -308,7 +295,26 @@ function makeDoctorProbes(runtimeScope: () => RuntimeScopeSnapshot): DoctorProbe
     // 缺技能检测（批2 A1）：本机安装位扫描 + manifest 两表派生（bundle 里正确路径锚在此）
     installedSkillNames: () => scanInstalledSkillNames(),
     codexProjectSkillNames: () => scanCodexProjectSkillNames(process.cwd(), root),
-    codexHostPluginIds,
+    nativeHostPluginIds: async () => {
+      const scope = runtimeScope()
+      const active = (await REAL_RUNTIME_INSTALLER.inspect({
+        homeDir: scope.homeDir,
+        env: scope.env,
+      })).active
+      const host = active?.source.host
+      if (host !== 'codex' && host !== 'claude') return null
+      try {
+        const stdout = execFileSync(host, ['plugin', 'list', '--json'], {
+          encoding: 'utf8',
+          stdio: ['ignore', 'pipe', 'pipe'],
+          timeout: 5_000,
+        })
+        const enabledIds = enabledHostPluginIds(host, stdout)
+        return enabledIds === null ? null : { host, enabledIds }
+      } catch {
+        return null
+      }
+    },
     codexSkillDiscovery: () => ({
       selectedRoot: root,
       projectRoot: join(process.cwd(), '.agents', 'skills'),

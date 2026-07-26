@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { I18nProvider, useT } from './i18n'
 import type { Lang } from './i18n/translations'
-import { changeWorkflow, selectInbox } from './inbox/inbox'
-import { useWorkflowRulesMulti } from './model/workflowModel'
+import { selectInbox } from './inbox/inbox'
+import { workflowRulesFromSnapshot } from './model/workflowModel'
 import { schedulerHealth, selectProgress } from './model/progressModel'
 import { ProgressView } from './progress/ProgressView'
 import { AfkView } from './afk/AfkView'
@@ -10,13 +10,13 @@ import { Nav, PRIMARY_VIEWS, type View } from './shell/Nav'
 import { Onboarding } from './shell/Onboarding'
 import { ProjectsView } from './shell/ProjectsView'
 import { useSnapshot } from './state/useSnapshot'
-import type { ChangeSnapshot } from './types'
 import { WorkbenchView } from './workbench/WorkbenchView'
 import { toastIn } from './shared/motion'
 import { MachineView } from './machine/MachineView'
-import { dashboardSearch, parseDashboardLocation, resolveDashboardRoot } from './shell/dashboardLocation'
+import { parseDashboardLocation } from './shell/dashboardLocation'
 import { ErrorBoundary } from './AppErrorBoundary'
 import { SolutionView } from './solution/SolutionView'
+import { useProjectSelection } from './state/useProjectSelection'
 
 export { ErrorBoundary } from './AppErrorBoundary'
 
@@ -65,14 +65,6 @@ interface Flash {
   msg: string
 }
 
-/** 一批 change 涉及的全部 workflow 名（'default' 恒在集合内）。单项目/聚合两条路径共用，
- *  避免各自平行维护同一段收集逻辑（Task 8，G19③）。 */
-function wfNamesFor(changes: readonly ChangeSnapshot[]): string[] {
-  const names = new Set<string>(['default'])
-  for (const c of changes) names.add(changeWorkflow(c))
-  return [...names]
-}
-
 function AppShell(): JSX.Element {
   const { t, lang, setLang } = useT()
   const [view, setViewState] = useState<View>(initialView)
@@ -99,81 +91,18 @@ function AppShell(): JSX.Element {
     if (flash && flashRef.current) toastIn(flashRef.current)
   }, [flash])
   const { snapshot, loading, error, connected, refresh, reconnect } = useSnapshot()
-  // 项目注册表只提供候选；当前项目必须来自 URL 或用户点击这一显式选择事实。
-  // 无 root、失效 root 和项目被移除都保持未选择，不能由注册顺序或历史偏好推导。
-  const [rootPref, setRootPref] = useState<string | null>(() => {
-    try {
-      const linked = parseDashboardLocation(window.location.search).root
-      if (linked !== undefined) return linked
-    } catch {
-      /* ignore */
-    }
-    return null
+  const { currentRoot, setCurrentRoot } = useProjectSelection({
+    snapshot,
+    view,
+    selectedChange,
+    onPopView: setViewState,
+    onSelectedChange: setSelectedChange,
   })
-  const currentRoot = useMemo(() => {
-    const roots = snapshot?.projects.map((p) => p.root) ?? []
-    return resolveDashboardRoot(roots, rootPref)
-  }, [snapshot, rootPref])
-  const setCurrentRoot = useCallback((root: string) => {
-    setRootPref(root)
-    setSelectedChange(null)
-  }, [])
   const currentProject = snapshot?.projects.find((p) => p.root === currentRoot)
 
-  // 视图状态随时可复制。首帧 snapshot 尚未到时保留 URL 传入的 rootPref，避免把深链 root
-  // 过早擦掉；快照落地后只投影经注册表校验的显式选择。
-  useEffect(() => {
-    try {
-      const root = snapshot ? currentRoot : (rootPref ?? '')
-      const search = dashboardSearch(window.location.search, {
-        view,
-        root,
-        change: view === 'progress' && root !== '' ? selectedChange : null,
-      })
-      const next = `${window.location.pathname}${search}${window.location.hash}`
-      const now = `${window.location.pathname}${window.location.search}${window.location.hash}`
-      if (next !== now) window.history.replaceState(window.history.state, '', next)
-    } catch {
-      /* 非浏览器/禁用 history 环境只失去可复制 URL，不影响主功能 */
-    }
-  }, [currentRoot, rootPref, selectedChange, snapshot, view])
-
-  // 项目总览表示无项目上下文；失效深链同样 fail closed。两者都原子清除依赖 root 的 Change。
-  useEffect(() => {
-    if (!snapshot) return
-    if (view === 'projects' || (rootPref !== null && currentRoot === '')) {
-      if (rootPref !== null) setRootPref(null)
-      if (selectedChange !== null) setSelectedChange(null)
-    }
-  }, [currentRoot, rootPref, selectedChange, snapshot, view])
-
-  // 浏览器前进/后退同样能恢复视图、项目和 Change；不经 setView，避免改写这次历史导航。
-  useEffect(() => {
-    const onPopState = (): void => {
-      const linked = parseDashboardLocation(window.location.search)
-      if (linked.view !== undefined) setViewState(linked.view)
-      // popstate 描述的是完整 URL 现场：root 缺席本身就是“未选择项目”，不能保留
-      // 上一个历史条目的 root，否则地址栏和内容区会指向两个不同项目上下文。
-      setRootPref(linked.root ?? null)
-      setSelectedChange(linked.change ?? null)
-    }
-    window.addEventListener('popstate', onPopState)
-    return () => window.removeEventListener('popstate', onPopState)
-  }, [])
-
-  // G19③（Task 8）/ T17 + v10c：全应用 workflow 规则统一走 useWorkflowRulesMulti，键=rulesKey(root,wf)。
-  // 消费方：进度徽标(selectInbox)、ProgressView（当前项目）、ProjectsView（全部项目卡的 stat 口径）。
-  // 「项目」总览页要给每张卡算 gate/running，需全部 ok 项目的规则——故恒收集全部 ok 项目的 (root,wf)
-  // 对（default 零网络直接投影 DEFAULT_RULES，自定义走 fetchRules 模块级 cache/inflight 去重）。
-  const rulesPairs = useMemo(
-    () => {
-      if (currentRoot === '') return []
-      const project = snapshot?.projects.find((p) => p.ok && p.root === currentRoot)
-      return project ? [{ root: project.root, names: wfNamesFor(project.changes) }] : []
-    },
-    [snapshot, currentRoot],
-  )
-  const { rules: rulesByKey } = useWorkflowRulesMulti(rulesPairs)
+  // 跨项目 snapshot 已携带每个 change 冻结绑定的 workflow 摘要。项目总览与单项目视图消费同一
+  // 聚合事实，无选择时不需要、也不允许发起任何 per-root workflow 请求。
+  const rulesByKey = useMemo(() => workflowRulesFromSnapshot(snapshot), [snapshot])
 
   useEffect(() => {
     try {

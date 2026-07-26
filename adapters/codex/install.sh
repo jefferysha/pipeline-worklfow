@@ -55,7 +55,7 @@ install_static() {
   [ -f "$template" ] || { err "缺少生成的 Codex managed block: $template"; exit 1; }
   local f="$dest/AGENTS.md"
   if [ -f "$f" ]; then
-    local start_count end_count
+    local start_count end_count marker_order
     start_count="$(grep -cFx "$START" "$f" 2>/dev/null || true)"
     end_count="$(grep -cFx "$END" "$f" 2>/dev/null || true)"
     case "$start_count:$end_count" in
@@ -65,6 +65,17 @@ install_static() {
         exit 1
         ;;
     esac
+    if [ "$start_count" = 1 ]; then
+      marker_order="$(awk -v s="$START" -v e="$END" '
+        $0==s { if (seen_end || seen_start) exit 2; seen_start=1; next }
+        $0==e { if (!seen_start || seen_end) exit 2; seen_end=1; next }
+        END { if (!seen_start || !seen_end) exit 2 }
+      ' "$f" 2>/dev/null; printf '%s' "$?")"
+      if [ "$marker_order" != 0 ]; then
+        err "AGENTS.md 的 Tenon 哨兵块顺序非法，拒绝改写用户内容: $f"
+        exit 1
+      fi
+    fi
   fi
   if [ -f "$f" ] && [ "$start_count" = 1 ]; then
     # 哨兵块精确替换（块内重刷、块外用户内容原样保留）

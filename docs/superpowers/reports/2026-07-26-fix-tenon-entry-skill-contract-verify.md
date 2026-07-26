@@ -1,5 +1,58 @@
 # `fix-tenon-entry-skill-contract` 验证报告
 
+## 第 2 轮 Verify（冻结提交 `6604ff4`）
+
+### 结论
+
+`FAIL`。冻结工作区
+`workspace:sha256:7fa425a620a33a49197abda705fb282092cfbc5a0d04ae71b743b9fba994ab05`
+已修复第 1 轮六项阻断，并通过全量自动化与真实浏览器主路径验收；但独立代码审查发现新的状态模型、
+宿主库存和迁移事务反例，必须经 `verify-fail` 返回 Build，不能进入 Ship。
+
+### 已确认通过
+
+- `npm test`：310 个文件，5280 项通过，5 项按环境诚实跳过。
+- `npm run test:web`：50 个文件，945 项通过。
+- setup/update/doctor 聚焦测试：106/106 通过。
+- Dashboard URL、项目选择、进度与自动运行聚焦测试：90/90 通过。
+- hooks：457/457；adapters：271/271；Skill 引用：65/65，62 个 Skill 与 62 个 token 完整。
+- 产品身份：6/6；仓库卫生：5/5；npx 薄包：4/4。
+- `npm run build`、CLI TypeScript、Dashboard 生产构建、文档站构建和全部架构门禁通过。
+- OpenSpec 1.6 严格校验通过；隔离目录
+  `/private/tmp/tenon-openspec-archive.Ee8z4s` 完成真实 archive/apply 演练，主规格未被演练污染。
+- 隔离 1.0.1 Dashboard（18766）真实 Chromium 验收通过：无 `root` 时停留项目总览且不请求
+  per-root API；显式选择后才写入精确 `root`；终端任务只显示在进度页，不进入自动运行队列。
+
+### 独立审查阻断
+
+1. doctor 将宿主库存硬编码为 Codex，Claude managed runtime 可能被误报或漏报冲突；库存非零退出也
+   不能被解释为“未安装”后继续变更。
+2. inventory 解析会从 `enabled:false` 项提取 Tenon 根，并接受非布尔 `enabled`；Claude 冲突清理
+   固定 `user` scope，不能清理 inventory 报告的 `project/local` scope。
+3. 收敛 receipt 的“缺失”和“I/O 不可读”未区分，写入也不是原子、受锁事务；同 release 的旧
+   session proof 可被复用，未证明 proof 新于 receipt 且 release root 精确匹配。
+4. Codex adapter 只检查 START/END 数量，反序 marker 会让 awk 删除 END 后的用户内容。
+5. `entrySkill` 门禁没有枚举全部 first-party Skill frontmatter，未机械证明只有一个 `name: tenon`。
+6. Dashboard 使用全部注册 root 校验 URL，未排除 `ok=false` 的不可达项目。
+7. 无项目选择时不加载 workflow 规则，项目总览会丢失 default/custom review gate 的真实摘要；
+   正确边界应由跨项目 snapshot/聚合契约提供摘要，而不是由项目总览发 per-root 请求或降级猜测。
+8. 项目选择状态仍分散在 `App.tsx` 的 URL、effect 和视图装配中，应抽成独立状态模型，避免再次出现
+   隐式选择和失效迁移分叉。
+
+### 独立验证轨
+
+- E2E Agent：`PASS`，主路径、动态移除项目、浏览器返回、来源隔离及控制台均通过；未修改仓库。
+- Reviewer Agent：`FAIL`，确认上述 receipt、proof、inventory、adapter、身份唯一性和 Dashboard
+  状态/摘要缺口；未修改仓库。
+- Codex Review：`FAIL`，独立确认 active-host doctor、项目总览规则、不可达 root 和 Claude scope
+  四项行为问题。
+
+### 第 2 轮返工范围
+
+本次回退只修复上述反例，不改变已评审需求语义：建立 host-aware inventory/doctor 契约、原子且带
+新鲜 session proof 的收敛事务、结构化 marker/Skill 唯一性校验，以及 Dashboard 独立选择模型和
+跨项目 workflow 摘要契约。修复后重新冻结并完整执行三轨 Verify。
+
 ## 结论
 
 `FAIL`。冻结工作区基线

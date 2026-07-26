@@ -125,11 +125,56 @@ function decodeChange(value: unknown): ChangeSnapshot | null {
   }
 }
 
+function decodeWorkflowRules(value: unknown): ProjectSnapshot['workflowRules'] | null {
+  if (!isRecord(value)) return null
+  const decoded: NonNullable<ProjectSnapshot['workflowRules']> = {}
+  for (const [name, rules] of Object.entries(value)) {
+    if (!isRecord(rules)
+      || !Array.isArray(rules.steps)
+      || !rules.steps.every((step) => typeof step === 'string')
+      || !isRecord(rules.transitions)
+      || !isRecord(rules.gateByStep)
+      || !isRecord(rules.labelByStep)
+      || !isRecord(rules.outputsByStep)
+      || !isRecord(rules.nonemptyOutputByStep)) return null
+    const transitions: Record<string, Array<{ event: string; to: string }>> = {}
+    for (const [step, edges] of Object.entries(rules.transitions)) {
+      if (!Array.isArray(edges)) return null
+      const decodedEdges: Array<{ event: string; to: string }> = []
+      for (const edge of edges) {
+        if (!isRecord(edge) || typeof edge.event !== 'string' || typeof edge.to !== 'string') return null
+        decodedEdges.push({ event: edge.event, to: edge.to })
+      }
+      transitions[step] = decodedEdges
+    }
+    if (!Object.values(rules.gateByStep).every(
+      (gate) => gate === null || gate === 'review' || gate === 'confirm',
+    )
+      || !Object.values(rules.labelByStep).every((label) => typeof label === 'string')
+      || !Object.values(rules.outputsByStep).every(
+        (outputs) => Array.isArray(outputs) && outputs.every((output) => typeof output === 'string'),
+      )
+      || !Object.values(rules.nonemptyOutputByStep).every((required) => typeof required === 'boolean')) {
+      return null
+    }
+    decoded[name] = {
+      steps: [...rules.steps],
+      transitions,
+      gateByStep: rules.gateByStep as Record<string, 'review' | 'confirm' | null>,
+      labelByStep: rules.labelByStep as Record<string, string>,
+      outputsByStep: rules.outputsByStep as Record<string, string[]>,
+      nonemptyOutputByStep: rules.nonemptyOutputByStep as Record<string, boolean>,
+    }
+  }
+  return decoded
+}
+
 function decodeProject(value: unknown): ProjectSnapshot | null {
   if (!isRecord(value)
     || typeof value.root !== 'string'
     || typeof value.ok !== 'boolean'
     || !optionalString(value.error)
+    || !isRecord(value.workflowRules)
     || !Array.isArray(value.changes)) return null
   const changes: ChangeSnapshot[] = []
   for (const change of value.changes) {
@@ -137,10 +182,13 @@ function decodeProject(value: unknown): ProjectSnapshot | null {
     if (!decoded) return null
     changes.push(decoded)
   }
+  const workflowRules = decodeWorkflowRules(value.workflowRules)
+  if (workflowRules === null) return null
   return {
     root: value.root,
     ok: value.ok,
     changes,
+    workflowRules,
     ...(value.error === undefined ? {} : { error: value.error }),
   }
 }

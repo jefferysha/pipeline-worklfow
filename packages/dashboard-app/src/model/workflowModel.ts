@@ -12,6 +12,7 @@
  */
 import { useEffect, useMemo, useState } from 'react'
 import { fetchWorkflow } from '../api/client'
+import type { Snapshot } from '../types'
 import { EVENT_BY_EDGE, PHASES, REVIEW_PHASES, TRANSITIONS } from '../types'
 
 // ── kernel WorkflowDef/StepDef 的 JSON 形状（跨 HTTP 边界手抄，不 import kernel 类型只为了
@@ -71,6 +72,21 @@ function buildDefaultRules(): WorkflowRules {
 }
 
 export const DEFAULT_RULES: WorkflowRules = buildDefaultRules()
+
+export function workflowRulesFromSnapshot(
+  snapshot: Snapshot | null,
+): ReadonlyMap<string, WorkflowRules> {
+  const rules = new Map<string, WorkflowRules>()
+  for (const project of snapshot?.projects ?? []) {
+    if (!project.ok) continue
+    for (const [name, projected] of Object.entries(project.workflowRules)) {
+      rules.set(rulesKey(project.root, name), projected)
+    }
+    // default 的语义特判依赖稳定对象身份；聚合摘要只提供数据，前端仍使用已审计的本地常量。
+    rules.set(rulesKey(project.root, 'default'), DEFAULT_RULES)
+  }
+  return rules
+}
 
 export function rulesFromDef(def: { name: string; steps: StepDef[] }): WorkflowRules & StepOutputRules {
   const transitions: Record<string, { event: string; to: string }[]> = {}

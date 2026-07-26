@@ -31,6 +31,8 @@ export interface ManagedReleaseRequest {
   readonly source: NativeRuntimeHost | 'adapter'
   readonly runtime: RuntimeInstallerScope
   readonly openBrowser: boolean
+  /** 在同一 managed transaction 锁内持久化与 activation 绑定的外部证据。抛错会精确回滚。 */
+  readonly afterActivate?: (activation: RuntimeActivation) => void | Promise<void>
 }
 
 /**
@@ -85,6 +87,28 @@ async function publishWithinManagedTransaction(
       detail: indeterminate
         ? `managed runtime 发布后的补偿状态无法证明：${error.message}`
         : `managed runtime 校验/发布失败，当前已验证 runtime 保持不变：${error instanceof Error ? error.message : String(error)}`,
+    }
+  }
+
+  if (request.afterActivate !== undefined) {
+    try {
+      await request.afterActivate(activation)
+    } catch (error) {
+      try {
+        await transaction.revertActivation(activation)
+        return {
+          ok: false,
+          state: 'restored',
+          detail: `managed runtime 激活后证据提交失败，已精确回滚：${error instanceof Error ? error.message : String(error)}`,
+        }
+      } catch (rollbackError) {
+        return {
+          ok: false,
+          state: 'indeterminate',
+          detail: `managed runtime 激活后证据提交失败，且精确回滚失败：`
+            + `${rollbackError instanceof Error ? rollbackError.message : String(rollbackError)}`,
+        }
+      }
     }
   }
 

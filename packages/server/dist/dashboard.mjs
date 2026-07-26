@@ -16485,6 +16485,27 @@ function todoStages(plan, phase) {
   }
   return phase === "" ? [] : [{ id: phase, label: phase }];
 }
+function workflowRulesSnapshot(plan) {
+  return {
+    steps: plan.workflow.steps.map((step) => step.id),
+    transitions: Object.fromEntries(plan.workflow.steps.map((step) => [
+      step.id,
+      step.transitions.map((transition) => ({ event: transition.event, to: transition.to }))
+    ])),
+    gateByStep: Object.fromEntries(plan.workflow.steps.map((step) => [step.id, step.gate])),
+    labelByStep: Object.fromEntries(
+      plan.workflow.steps.filter((step) => step.label !== "").map((step) => [step.id, step.label])
+    ),
+    outputsByStep: Object.fromEntries(plan.workflow.steps.map((step) => [
+      step.id,
+      step.outputs.map((output) => output.field)
+    ])),
+    nonemptyOutputByStep: Object.fromEntries(plan.workflow.steps.map((step) => [
+      step.id,
+      step.guards.some((guard) => guard.type === "output-present")
+    ]))
+  };
+}
 async function documentEvidence(root, changeDir, plan, phase) {
   const policy = plan?.capabilities.documents.policy;
   if (!policy) return { governed: false, blockers: [], items: [] };
@@ -16545,15 +16566,16 @@ async function scanProject(store, root, nowMs) {
   } catch {
     isDir = false;
   }
-  if (!isDir) return { root, ok: false, changes: [], error: "root \u4E0D\u5B58\u5728\u6216\u4E0D\u53EF\u8FBE" };
+  if (!isDir) return { root, ok: false, changes: [], workflowRules: {}, error: "root \u4E0D\u5B58\u5728\u6216\u4E0D\u53EF\u8FBE" };
   const changesRoot = join35(root, "openspec", "changes");
   let entries;
   try {
     entries = await readdir4(changesRoot, { withFileTypes: true });
   } catch {
-    return { root, ok: true, changes: [] };
+    return { root, ok: true, changes: [], workflowRules: {} };
   }
   const changes = [];
+  const workflowRules = {};
   const errors = [];
   for (const e of entries) {
     if (!e.isDirectory() || e.name === "archive") continue;
@@ -16584,6 +16606,7 @@ async function scanProject(store, root, nowMs) {
         workflowPlanFingerprint: state.runMetadata?.workflowPlanFingerprint,
         workflowPlanSnapshot: state.runMetadata?.workflowPlanSnapshot
       });
+      workflowRules[workflowName] ??= workflowRulesSnapshot(plan);
       const [documents, terminalActivity] = await Promise.all([
         documentEvidence(root, changeDir, plan, phase),
         readTerminalActivity(changeDir, e.name, nowMs)
@@ -16619,6 +16642,7 @@ async function scanProject(store, root, nowMs) {
     root,
     ok: errors.length === 0,
     changes,
+    workflowRules,
     ...errors.length === 0 ? {} : { error: errors.join("; ") }
   };
 }

@@ -28,6 +28,7 @@ import type {
   ProjectSnapshot,
   Snapshot,
   TerminalActivitySnapshot,
+  WorkflowRulesSnapshot,
 } from './types.js'
 
 export interface SnapshotDeps {
@@ -120,6 +121,28 @@ function todoStages(plan: EffectiveWorkflowPlan | undefined, phase: string): rea
   return phase === '' ? [] : [{ id: phase, label: phase }]
 }
 
+function workflowRulesSnapshot(plan: EffectiveWorkflowPlan): WorkflowRulesSnapshot {
+  return {
+    steps: plan.workflow.steps.map((step) => step.id),
+    transitions: Object.fromEntries(plan.workflow.steps.map((step) => [
+      step.id,
+      step.transitions.map((transition) => ({ event: transition.event, to: transition.to })),
+    ])),
+    gateByStep: Object.fromEntries(plan.workflow.steps.map((step) => [step.id, step.gate])),
+    labelByStep: Object.fromEntries(
+      plan.workflow.steps.filter((step) => step.label !== '').map((step) => [step.id, step.label]),
+    ),
+    outputsByStep: Object.fromEntries(plan.workflow.steps.map((step) => [
+      step.id,
+      step.outputs.map((output) => output.field),
+    ])),
+    nonemptyOutputByStep: Object.fromEntries(plan.workflow.steps.map((step) => [
+      step.id,
+      step.guards.some((guard) => guard.type === 'output-present'),
+    ])),
+  }
+}
+
 async function documentEvidence(
   root: string,
   changeDir: string,
@@ -192,7 +215,7 @@ async function scanProject(store: StateStore, root: string, nowMs: number): Prom
   } catch {
     isDir = false
   }
-  if (!isDir) return { root, ok: false, changes: [], error: 'root 不存在或不可达' }
+  if (!isDir) return { root, ok: false, changes: [], workflowRules: {}, error: 'root 不存在或不可达' }
 
   const changesRoot = join(root, 'openspec', 'changes')
   let entries
@@ -200,10 +223,11 @@ async function scanProject(store: StateStore, root: string, nowMs: number): Prom
     entries = await readdir(changesRoot, { withFileTypes: true })
   } catch {
     // 已注册但尚无 openspec/changes —— 合法空项目
-    return { root, ok: true, changes: [] }
+    return { root, ok: true, changes: [], workflowRules: {} }
   }
 
   const changes: ChangeSnapshot[] = []
+  const workflowRules: Record<string, WorkflowRulesSnapshot> = {}
   const errors: string[] = []
   for (const e of entries) {
     if (!e.isDirectory() || e.name === 'archive') continue
@@ -238,6 +262,7 @@ async function scanProject(store: StateStore, root: string, nowMs: number): Prom
         workflowPlanFingerprint: state.runMetadata?.workflowPlanFingerprint,
         workflowPlanSnapshot: state.runMetadata?.workflowPlanSnapshot,
       })
+      workflowRules[workflowName] ??= workflowRulesSnapshot(plan)
       const [documents, terminalActivity] = await Promise.all([
         documentEvidence(root, changeDir, plan, phase),
         readTerminalActivity(changeDir, e.name, nowMs),
@@ -273,6 +298,7 @@ async function scanProject(store: StateStore, root: string, nowMs: number): Prom
     root,
     ok: errors.length === 0,
     changes,
+    workflowRules,
     ...(errors.length === 0 ? {} : { error: errors.join('; ') }),
   }
 }

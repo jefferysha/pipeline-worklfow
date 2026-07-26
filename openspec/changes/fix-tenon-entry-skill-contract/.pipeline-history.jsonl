@@ -56,3 +56,14 @@
 {"ts":"2026-07-26T15:20:02Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
 {"ts":"2026-07-26T15:20:37Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
 {"ts":"2026-07-26T15:21:16Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-26T15:39:24Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"18987707-c5c2-4ec8-b86d-0b84bc921ba7"}
+{"ts":"2026-07-26T15:42:53Z","kind":"tool","raw":"CodexSkillRead: code-review"}
+{"ts":"2026-07-26T15:53:32Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-07-26T15:53:33Z","kind":"set","field":"agent_review_result","to":"fail"}
+{"ts":"2026-07-26T15:53:33Z","kind":"set","field":"codex_review_result","to":"fail"}
+{"ts":"2026-07-26T15:53:33Z","kind":"set","field":"branch_status","to":"handled"}
+{"ts":"2026-07-26T15:53:41Z","kind":"tool","raw":"review:request phase=verify event=verify-fail"}
+{"ts":"2026-07-26T15:53:41Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-07-26T15:14:20Z"}
+{"ts":"2026-07-26T15:53:41Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"49b0dbcc-287b-48ea-94c9-787bef054eb3"}
+{"ts":"2026-07-26T15:54:56Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-07-26T15:55:14Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}

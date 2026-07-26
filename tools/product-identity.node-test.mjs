@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { readFile } from 'node:fs/promises'
+import { readFile, readdir } from 'node:fs/promises'
 import { test } from 'node:test'
 import { renderCodexAgentsBlock } from './generate-product-identity.mjs'
 
@@ -50,6 +50,13 @@ test('Codex managed block 与根规则由同一身份模板生成，且入口 Sk
   const agents = await readFile(new URL('AGENTS.md', root), 'utf8')
   const adapter = await readFile(new URL('adapters/codex/install.sh', root), 'utf8')
   const skill = await readFile(new URL(`skills/${identity.entrySkill}/SKILL.md`, root), 'utf8')
+  const skillDirs = await readdir(new URL('skills/', root), { withFileTypes: true })
+  const entryDeclarations = []
+  for (const entry of skillDirs) {
+    if (!entry.isDirectory() && !entry.isSymbolicLink()) continue
+    const source = await readFile(new URL(`skills/${entry.name}/SKILL.md`, root), 'utf8')
+    if (new RegExp(`^name: ${identity.entrySkill}$`, 'm').test(source)) entryDeclarations.push(entry.name)
+  }
 
   assert.match(template, new RegExp(`${identity.plugin}:${identity.entrySkill}`))
   assert.match(template, new RegExp(`\\b${identity.cli} (?:status|get|set|transition|check)\\b`))
@@ -61,6 +68,7 @@ test('Codex managed block 与根规则由同一身份模板生成，且入口 Sk
   assert.match(adapter, /templates\/generated\/codex-agents-block\.md/)
   assert.doesNotMatch(adapter, /block=.*cat <<'EOF'/)
   assert.match(skill, new RegExp(`^name: ${identity.entrySkill}$`, 'm'))
+  assert.deepEqual(entryDeclarations, [identity.entrySkill])
 })
 
 test('Tenon 公开插件与 workspace 使用同一发行版本', async () => {

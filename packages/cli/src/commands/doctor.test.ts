@@ -284,7 +284,10 @@ describe('doctor —— 统一健康面（BACKLOG #26b，GOAL B8 降级可见 / 
 
   test('Codex 旧工作流插件仍启用时红灯，修复只走宿主插件管理器', async () => {
     const deps = makeDeps({ doctor: {
-      codexHostPluginIds: () => new Set(['pipeline-lite@pipeline-lite', 'tenon@tenon']),
+      nativeHostPluginIds: async () => ({
+        host: 'codex',
+        enabledIds: new Set(['pipeline-lite@pipeline-lite', 'tenon@tenon']),
+      }),
     } })
     const { code, payload } = await runJson(deps)
     expect(code).toBe(1)
@@ -297,7 +300,8 @@ describe('doctor —— 统一健康面（BACKLOG #26b，GOAL B8 降级可见 / 
 
   test('Codex 宿主 inventory 不可用或畸形时红灯，不得跳过唯一身份检查后误报 green', async () => {
     const deps = makeDeps({ doctor: {
-      codexHostPluginIds: () => null,
+      nativeRuntimeHost: async () => 'codex',
+      nativeHostPluginIds: async () => null,
     } })
     const { code, payload } = await runJson(deps)
     expect(code).toBe(1)
@@ -309,13 +313,26 @@ describe('doctor —— 统一健康面（BACKLOG #26b，GOAL B8 降级可见 / 
 
   test('Codex inventory 可读但没有 Tenon 登记时红灯，不以磁盘 Skill 根替代宿主登记', async () => {
     const deps = makeDeps({ doctor: {
-      codexHostPluginIds: () => new Set(),
+      nativeHostPluginIds: async () => ({ host: 'codex', enabledIds: new Set() }),
     } })
     const { code, payload } = await runJson(deps)
     expect(code).toBe(1)
     const c = byId(payload, 'integration:codex-project-skills')
     expect(c.status).toBe('red')
     expect(c.detail).toContain('tenon@tenon')
+  })
+
+  test('doctor 以 active Claude runtime 的 inventory 为准并给出 Claude 修复命令', async () => {
+    const deps = makeDeps({ doctor: {
+      nativeRuntimeHost: async () => 'claude',
+      nativeHostPluginIds: async () => ({ host: 'claude', enabledIds: new Set() }),
+    } })
+    const { code, payload } = await runJson(deps)
+    expect(code).toBe(1)
+    const c = byId(payload, 'integration:codex-project-skills')
+    expect(c.detail).toContain('Claude')
+    expect(c.hint).toContain('tenon setup --claude')
+    expect(c.hint).not.toContain('setup --codex')
   })
 
   test('Codex 同摘要多根报告 duplicate-projection，不误称 healthy', async () => {

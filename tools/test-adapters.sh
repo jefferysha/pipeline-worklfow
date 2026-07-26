@@ -344,6 +344,18 @@ if [ -f "$cx_inst" ]; then
       || bad "codex static install: 缺失 END marker 时保留全部用户内容" "用户内容被改写"
   fi
 
+  cx_reversed_marker="$TMP/codex-reversed-marker"
+  mkdir -p "$cx_reversed_marker"
+  printf '%s\n%s\n%s\n' '<!-- PIPELINE:CODEX:END -->' 'user content between reversed markers' '<!-- PIPELINE:CODEX:START -->' > "$cx_reversed_marker/AGENTS.md"
+  cx_reversed_before="$(cat "$cx_reversed_marker/AGENTS.md")"
+  if bash "$cx_inst" --static --target "$cx_reversed_marker" --codex-home "$TMP/codex-reversed-marker-home" --yes >/dev/null 2>&1; then
+    bad "codex static install: 反序 marker 时失败关闭" "安装器错误接受了反序哨兵块"
+  else
+    [ "$(cat "$cx_reversed_marker/AGENTS.md")" = "$cx_reversed_before" ] \
+      && ok "codex static install: 反序 marker 时保留全部用户内容" \
+      || bad "codex static install: 反序 marker 时保留全部用户内容" "用户内容被改写"
+  fi
+
   # 原生插件和 static project projection 必须互斥。selected root 由宿主/稳定 launcher
   # 显式传入；adapter 不扫描历史 cache 猜版本。
   cx_native_target="$TMP/codex-native-skills"

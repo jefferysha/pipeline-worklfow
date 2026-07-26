@@ -1,4 +1,4 @@
-import { readFile, realpath } from 'node:fs/promises'
+import { readFile, readdir, realpath } from 'node:fs/promises'
 import { dirname, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
@@ -64,7 +64,28 @@ const entrySkill = escapedSkillsRoot ? '' : await readFile(entryPath, 'utf8')
 const frontmatterEnd = entrySkill.startsWith('---\n') ? entrySkill.indexOf('\n---\n', 4) : -1
 const frontmatter = frontmatterEnd === -1 ? '' : entrySkill.slice(4, frontmatterEnd)
 const nameLines = frontmatter.split('\n').filter((line) => line.startsWith('name:'))
-if (escapedSkillsRoot || nameLines.length !== 1 || nameLines[0] !== `name: ${identity.entrySkill}`) {
+const matchingEntrySkills = []
+const unreadableEntrySkills = []
+for (const entry of await readdir(skillsRoot, { withFileTypes: true })) {
+  if (!entry.isDirectory() && !entry.isSymbolicLink()) continue
+  try {
+    const source = await readFile(resolve(skillsRoot, entry.name, 'SKILL.md'), 'utf8')
+    const end = source.startsWith('---\n') ? source.indexOf('\n---\n', 4) : -1
+    if (end === -1) continue
+    const names = source.slice(4, end).split('\n').filter((line) => line.startsWith('name:'))
+    if (names.length === 1 && names[0] === `name: ${identity.entrySkill}`) {
+      matchingEntrySkills.push(entry.name)
+    }
+  } catch {
+    unreadableEntrySkills.push(entry.name)
+  }
+}
+if (escapedSkillsRoot
+  || nameLines.length !== 1
+  || nameLines[0] !== `name: ${identity.entrySkill}`
+  || unreadableEntrySkills.length !== 0
+  || matchingEntrySkills.length !== 1
+  || matchingEntrySkills[0] !== identity.entrySkill) {
   console.error('product entry Skill is missing or its frontmatter name does not match product identity')
   process.exitCode = 1
 }

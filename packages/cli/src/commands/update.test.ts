@@ -1,7 +1,13 @@
 import { describe, expect, test } from 'vitest'
 import { join } from 'node:path'
 import { makeDeps } from '../test-support.js'
-import { enabledHostPluginIds, installedPipelineRoot, nativeInstallPlan } from './plugin-host.js'
+import {
+  enabledHostPluginIds,
+  installedPipelineRoot,
+  nativeInstallPlan,
+  nativePluginRemovalPlan,
+  parseHostPluginInventory,
+} from './plugin-host.js'
 import { type SetupEnv } from './setup.js'
 import { cmdUpdate, nativeUpdatePlan } from './update.js'
 import { resolveRuntimePaths } from '../runtime/paths.js'
@@ -94,9 +100,14 @@ function updateEnv(
     mkdirp: () => undefined,
     pathExists: () => false,
     readText: () => undefined,
+    readTextState: (path) => {
+      const text = env.readText(path)
+      return text === undefined ? { state: 'missing' } : { state: 'ok', text }
+    },
     commandExists: () => false,
     listDir: () => [],
     writeText: (path, text) => { calls.writes.push([path, text]) },
+    writeTextAtomic: (path, text) => { calls.writes.push([path, text]) },
     runCommand: (cmd, args) => {
       calls.exec.push([cmd, args])
       return run(cmd, args)
@@ -145,6 +156,49 @@ describe('native plugin update plans', () => {
     expect(enabledHostPluginIds('codex', 'not json')).toBeNull()
     expect(enabledHostPluginIds('codex', JSON.stringify({ installed: 'not-an-array' }))).toBeNull()
     expect(enabledHostPluginIds('codex', JSON.stringify({ installed: [] }))).toEqual(new Set())
+  })
+
+  test('inventory decoder 对禁用根、畸形 enabled、重复登记和非绝对路径全部失败关闭', () => {
+    expect(parseHostPluginInventory('codex', JSON.stringify({
+      installed: [{
+        pluginId: 'tenon@tenon',
+        name: 'tenon',
+        marketplaceName: 'tenon',
+        enabled: false,
+        source: { path: '/disabled/tenon' },
+      }],
+    }))).toMatchObject({ enabledIds: new Set(), tenonRoot: null })
+    expect(parseHostPluginInventory('codex', JSON.stringify({
+      installed: [{ pluginId: 'tenon@tenon', enabled: 'false' }],
+    }))).toBeNull()
+    expect(parseHostPluginInventory('codex', JSON.stringify({
+      installed: [
+        { pluginId: 'tenon@tenon', enabled: true },
+        { pluginId: 'tenon@tenon', enabled: true },
+      ],
+    }))).toBeNull()
+    expect(parseHostPluginInventory('codex', JSON.stringify({
+      installed: [{
+        pluginId: 'tenon@tenon',
+        name: 'tenon',
+        marketplaceName: 'tenon',
+        enabled: true,
+        source: { path: 'relative/tenon' },
+      }],
+    }))).toBeNull()
+  })
+
+  test('Claude 清理计划保留 inventory 报告的精确 scope', () => {
+    expect(nativePluginRemovalPlan('claude', 'conflict@source', 'project')).toEqual([{
+      cmd: 'claude',
+      args: ['plugin', 'uninstall', 'conflict@source', '--scope', 'project'],
+    }])
+    const inventory = parseHostPluginInventory('claude', JSON.stringify([
+      { id: 'conflict@source', enabled: true, scope: 'project' },
+      { id: 'conflict@source', enabled: true, scope: 'local' },
+      { id: 'tenon@tenon', enabled: true, scope: 'user', installPath: '/installed/tenon' },
+    ]))
+    expect([...(inventory?.enabledScopes.get('conflict@source') ?? [])]).toEqual(['project', 'local'])
   })
 })
 
@@ -252,17 +306,20 @@ describe('tenon update', () => {
     env.readText = (path) => {
       if (path === receiptPath) {
         return JSON.stringify({
-          version: 1,
+          version: 2,
           state: 'cleanup-pending',
           host: 'codex',
           conflictPluginId: 'pipeline-lite@pipeline-lite',
+          conflictScopes: ['user'],
           releaseId,
+          releaseRoot: `/runtime/releases/${releaseId}/payload`,
           candidateRoot: '/new/tenon',
+          createdAtEpoch: 1_700_000_000,
           updatedAt: '2026-07-26T00:00:00Z',
         })
       }
       if (path === proofPath) {
-        return `version=2\nloaded_at_epoch=1\nhost=codex\nrelease_id=${releaseId}\nrelease_root=/runtime/releases/${releaseId}/payload\n`
+        return `version=2\nloaded_at_epoch=1800000000\nhost=codex\nrelease_id=${releaseId}\nrelease_root=/runtime/releases/${releaseId}/payload\n`
       }
       return undefined
     }

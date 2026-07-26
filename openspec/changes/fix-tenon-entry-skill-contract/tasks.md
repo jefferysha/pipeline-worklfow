@@ -31,18 +31,23 @@
 - [x] 消除公开发行 bundle 中的退役身份文本并补全发行资产零残留门禁。 (build)
 - [x] 重构 Dashboard 项目上下文为 `none | selected(root)` 单一真相源，删除首项目、可达项目和
   localStorage 的隐式选择；以失败优先回归覆盖 URL、视图与 per-root API。 (build)
+- [x] 收紧 active-host inventory/doctor、Claude scope 与原子收敛 receipt，使用新鲜 session proof
+  和严格 decoder 对所有外部失败关闭。 (build)
+- [x] 加固 adapter marker 顺序与 first-party entry Skill 唯一性门禁。 (build)
+- [x] 将 Dashboard 项目选择迁入独立 model，并由跨项目 snapshot 提供准确 workflow 摘要，覆盖
+  不可达 root 与无选择项目总览。 (build)
 
 ## 验证
 
 - [ ] 运行聚焦测试、身份/仓库卫生门禁、完整构建和全量测试。
-- [ ] 从最终插件更新本机 managed runtime，确认 doctor 无入口 Skill 红黄项。
-- [ ] 在 18765 复验未选项目时 URL 无 `root` 且不访问 per-root API；显式选择后才进入对应项目。
-- [ ] 在 18765 复验唯一项目、进度与自动运行来源隔离。
+- [ ] 在独立候选端口复验未选项目时 URL 无 `root` 且不访问 per-root API；显式选择后才进入对应项目。
+- [ ] 在独立候选端口复验唯一项目、进度与自动运行来源隔离。
 
 ## 交付
 
 - [ ] 提交并推送修复，通过远端 CI。
 - [ ] 发布并验证 `v1.0.1` GitHub Release 与 Pages。
+- [ ] 从最终插件更新本机 managed runtime，在 18765 复验 URL、项目来源隔离并确认 doctor 无入口 Skill 红黄项。
 
 ## 归档
 

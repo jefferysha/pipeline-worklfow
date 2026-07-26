@@ -224,6 +224,16 @@ export function cmdUpdate(
         env: env.runtimeEnv(),
       },
       openBrowser: opts.auto !== true,
+      afterActivate: (activation) => {
+        if (!recordPendingHostPluginConflict(
+          deps,
+          env,
+          host,
+          parsedInventory,
+          activation,
+          root,
+        )) throw new Error('宿主插件收敛 receipt 未能持久化')
+      },
     },
     installer,
     dashboardStarter,
@@ -234,14 +244,6 @@ export function cmdUpdate(
     return await rejectUpdate(installer, env, boundaryDetail(hostBoundary, outcome.state, outcome.detail))
   }
   const { activation } = outcome
-  if (!recordPendingHostPluginConflict(
-    deps,
-    env,
-    host,
-    parsedInventory.enabledIds,
-    activation,
-    root,
-  )) return 1
   deps.io.out(`[update] 已原子切换至已验证 runtime: ${activation.release.releaseId}（revision ${activation.selection.revision}）。`)
   if (opts.auto) {
     deps.io.out(`[update] ${hostFlag(host)} 已在后台刷新；当前会话继续使用已加载版本，新会话将加载新 skills/hooks。`)

@@ -128,6 +128,69 @@ describe('App URL 深链路（可复制的视图 / 项目 / Change 现场）', (
     expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(['/api/snapshot'])
   })
 
+  it('已登记但不可达的 root 深链也必须清除，不能挂载 per-root 视图', async () => {
+    window.history.replaceState({}, '', '/?view=progress&root=%2Foffline&change=stale')
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === '/api/snapshot') {
+        return {
+          ok: true,
+          json: async () => makeSnapshot([
+            makeProject('/offline', [makeChange('stale', 'verify')], {
+              ok: false,
+              error: 'root 不可达',
+            }),
+          ]),
+        }
+      }
+      throw new Error(`unexpected per-root fetch ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<App />)
+
+    expect(await screen.findByTestId('projects-view')).toBeInTheDocument()
+    const params = new URLSearchParams(window.location.search)
+    expect(params.get('root')).toBeNull()
+    expect(params.get('change')).toBeNull()
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(['/api/snapshot'])
+  })
+
+  it('无项目选择时从跨项目 snapshot 读取自定义 workflow gate，不发 per-root 请求也不误报', async () => {
+    window.history.replaceState({}, '', '/?view=projects')
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === '/api/snapshot') {
+        return {
+          ok: true,
+          json: async () => makeSnapshot([
+            makeProject('/repo-custom', [
+              makeChange('review-me', 'review', { fields: { workflow: 'compact' } }),
+            ], {
+              workflowRules: {
+                compact: {
+                  steps: ['review', 'done'],
+                  transitions: { review: [{ event: 'approve', to: 'done' }], done: [] },
+                  gateByStep: { review: 'review', done: null },
+                  labelByStep: { review: '复核', done: '完成' },
+                  outputsByStep: { review: [], done: [] },
+                  nonemptyOutputByStep: { review: false, done: false },
+                },
+              },
+            }),
+          ]),
+        }
+      }
+      throw new Error(`unexpected per-root fetch ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<App />)
+
+    const row = await screen.findByTestId('project-row-repo-custom')
+    expect(row).toHaveAttribute('data-need', 'true')
+    expect(within(row).getByTestId('project-row-repo-custom-stat-need')).toHaveAttribute('data-value', '1')
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(['/api/snapshot'])
+  })
+
   it('浏览器返回到无 root URL：经同一选择模型回到项目总览', async () => {
     render(<App />)
     await screen.findByTestId('progress-view')

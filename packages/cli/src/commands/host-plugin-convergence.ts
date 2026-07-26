@@ -1,4 +1,4 @@
-import { dirname, join } from 'node:path'
+import { dirname, isAbsolute, join, normalize } from 'node:path'
 import type { CliDeps } from '../deps.js'
 import { LEGACY_PLUGIN_IDENTITY, TENON_PLUGIN_IDENTITY } from '../migration/legacy-tenon-migration.js'
 import type { RuntimeInstaller } from '../runtime/installer.js'
@@ -9,16 +9,21 @@ import {
   nativeInstallPlan,
   nativePluginRemovalPlan,
   parseHostPluginInventory,
+  type HostPluginScope,
   type NativePipelineHost,
+  type ParsedHostPluginInventory,
 } from './plugin-host.js'
 
 export interface HostPluginConvergenceReceipt {
-  readonly version: 1
+  readonly version: 2
   readonly state: 'cleanup-pending' | 'completed'
   readonly host: NativePipelineHost
   readonly conflictPluginId: string
+  readonly conflictScopes: readonly HostPluginScope[]
   readonly releaseId: string
+  readonly releaseRoot: string
   readonly candidateRoot: string
+  readonly createdAtEpoch: number
   readonly updatedAt: string
 }
 
@@ -61,13 +66,26 @@ function parseReceipt(raw: string, host: NativePipelineHost): HostPluginConverge
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return null
   const receipt = value as Partial<HostPluginConvergenceReceipt>
   if (
-    receipt.version !== 1
+    receipt.version !== 2
     || (receipt.state !== 'cleanup-pending' && receipt.state !== 'completed')
     || receipt.host !== host
     || receipt.conflictPluginId !== LEGACY_PLUGIN_IDENTITY
+    || !Array.isArray(receipt.conflictScopes)
+    || receipt.conflictScopes.length === 0
+    || receipt.conflictScopes.some(
+      (scope) => scope !== 'user' && scope !== 'project' && scope !== 'local',
+    )
+    || new Set(receipt.conflictScopes).size !== receipt.conflictScopes.length
     || !isReleaseId(receipt.releaseId)
+    || typeof receipt.releaseRoot !== 'string'
+    || !isAbsolute(receipt.releaseRoot)
+    || normalize(receipt.releaseRoot) !== receipt.releaseRoot
     || typeof receipt.candidateRoot !== 'string'
-    || receipt.candidateRoot === ''
+    || !isAbsolute(receipt.candidateRoot)
+    || normalize(receipt.candidateRoot) !== receipt.candidateRoot
+    || typeof receipt.createdAtEpoch !== 'number'
+    || !Number.isSafeInteger(receipt.createdAtEpoch)
+    || receipt.createdAtEpoch < 0
     || typeof receipt.updatedAt !== 'string'
     || receipt.updatedAt === ''
   ) return null
@@ -79,9 +97,12 @@ export function readHostPluginConvergenceReceipt(
   host: NativePipelineHost,
 ): ConvergenceRead {
   const { receiptPath } = hostPluginConvergencePaths(env, host)
-  const raw = env.readText(receiptPath)
-  if (raw === undefined) return { state: 'none' }
-  const receipt = parseReceipt(raw, host)
+  const read = env.readTextState(receiptPath)
+  if (read.state === 'missing') return { state: 'none' }
+  if (read.state === 'error') {
+    return { state: 'invalid', detail: `迁移 receipt 读取失败：${receiptPath}（${read.detail}）` }
+  }
+  const receipt = parseReceipt(read.text, host)
   return receipt === null
     ? { state: 'invalid', detail: `迁移 receipt 非法：${receiptPath}` }
     : { state: 'receipt', receipt }
@@ -90,6 +111,8 @@ export function readHostPluginConvergenceReceipt(
 function parseSessionProof(raw: string | undefined): {
   readonly host: string
   readonly releaseId: string
+  readonly releaseRoot: string
+  readonly loadedAtEpoch: number
 } | null {
   if (raw === undefined) return null
   const fields = new Map<string, string>()
@@ -101,9 +124,15 @@ function parseSessionProof(raw: string | undefined): {
   }
   const host = fields.get('host')
   const releaseId = fields.get('release_id')
+  const releaseRoot = fields.get('release_root')
+  const loadedAtEpoch = Number(fields.get('loaded_at_epoch'))
   if (fields.get('version') !== '2' || (host !== 'codex' && host !== 'claude')
-    || !isReleaseId(releaseId)) return null
-  return { host, releaseId }
+    || !isReleaseId(releaseId)
+    || typeof releaseRoot !== 'string'
+    || releaseRoot === ''
+    || !Number.isSafeInteger(loadedAtEpoch)
+    || loadedAtEpoch < 0) return null
+  return { host, releaseId, releaseRoot, loadedAtEpoch }
 }
 
 function writeReceipt(
@@ -114,7 +143,7 @@ function writeReceipt(
   const { receiptPath } = hostPluginConvergencePaths(env, receipt.host)
   try {
     env.mkdirp(dirname(receiptPath))
-    env.writeText(receiptPath, `${JSON.stringify(receipt, null, 2)}\n`)
+    env.writeTextAtomic(receiptPath, `${JSON.stringify(receipt, null, 2)}\n`)
     return true
   } catch (error) {
     deps.io.err(
@@ -129,19 +158,33 @@ export function recordPendingHostPluginConflict(
   deps: CliDeps,
   env: SetupEnv,
   host: NativePipelineHost,
-  conflictPluginIds: ReadonlySet<string>,
+  inventory: ParsedHostPluginInventory,
   activation: RuntimeActivation,
   candidateRoot: string,
 ): boolean {
-  if (!conflictPluginIds.has(LEGACY_PLUGIN_IDENTITY)) return true
+  if (!inventory.enabledIds.has(LEGACY_PLUGIN_IDENTITY)) return true
+  const conflictScopes = [...(inventory.enabledScopes.get(LEGACY_PLUGIN_IDENTITY) ?? [])]
+  if (conflictScopes.length === 0) {
+    deps.io.err('ERROR: 冲突插件登记缺少可验证 scope；未创建清理事务。')
+    return false
+  }
+  const updatedAt = deps.clock()
+  const createdAtEpoch = Math.floor(Date.parse(updatedAt) / 1000)
+  if (!Number.isSafeInteger(createdAtEpoch) || createdAtEpoch < 0) {
+    deps.io.err('ERROR: 当前时钟无法生成迁移 receipt；冲突登记保持不变。')
+    return false
+  }
   const receipt: HostPluginConvergenceReceipt = {
-    version: 1,
+    version: 2,
     state: 'cleanup-pending',
     host,
     conflictPluginId: LEGACY_PLUGIN_IDENTITY,
+    conflictScopes,
     releaseId: activation.release.releaseId,
+    releaseRoot: join(activation.releaseRoot, 'payload'),
     candidateRoot,
-    updatedAt: deps.clock(),
+    createdAtEpoch,
+    updatedAt,
   }
   if (!writeReceipt(deps, env, receipt)) return false
   deps.io.out(
@@ -187,7 +230,13 @@ export async function finalizePendingHostPluginConflict(
   }
   const { sessionProofPath } = hostPluginConvergencePaths(env, host)
   const proof = parseSessionProof(env.readText(sessionProofPath))
-  if (proof === null || proof.host !== host || proof.releaseId !== receipt.releaseId) {
+  if (
+    proof === null
+    || proof.host !== host
+    || proof.releaseId !== receipt.releaseId
+    || proof.releaseRoot !== receipt.releaseRoot
+    || proof.loadedAtEpoch <= receipt.createdAtEpoch
+  ) {
     deps.io.out('[setup] 等待新宿主会话加载当前 Tenon release；冲突登记尚未清理。')
     return { state: 'waiting' }
   }
@@ -205,13 +254,22 @@ export async function finalizePendingHostPluginConflict(
     return { state: 'failed', detail: '宿主 inventory 未证明 Tenon 登记仍启用；未执行清理' }
   }
   if (before.enabledIds.has(receipt.conflictPluginId)) {
-    for (const item of nativePluginRemovalPlan(host, receipt.conflictPluginId)) {
-      deps.io.out(`[setup] 新会话已证明 Tenon 可用；通过宿主插件管理器清理：$ ${commandText(item.cmd, item.args)}`)
-      const result = env.runCommand(item.cmd, [...item.args])
-      if (result.code !== 0) {
-        return {
-          state: 'failed',
-          detail: result.stderr.trim() || result.stdout.trim() || `退出码 ${result.code}`,
+    const liveScopes = before.enabledScopes.get(receipt.conflictPluginId) ?? new Set<HostPluginScope>()
+    if (
+      liveScopes.size !== receipt.conflictScopes.length
+      || receipt.conflictScopes.some((scope) => !liveScopes.has(scope))
+    ) {
+      return { state: 'failed', detail: '冲突登记 scope 已变化；拒绝按陈旧 receipt 执行清理' }
+    }
+    for (const scope of receipt.conflictScopes) {
+      for (const item of nativePluginRemovalPlan(host, receipt.conflictPluginId, scope)) {
+        deps.io.out(`[setup] 新会话已证明 Tenon 可用；通过宿主插件管理器清理：$ ${commandText(item.cmd, item.args)}`)
+        const result = env.runCommand(item.cmd, [...item.args])
+        if (result.code !== 0) {
+          return {
+            state: 'failed',
+            detail: result.stderr.trim() || result.stdout.trim() || `退出码 ${result.code}`,
+          }
         }
       }
     }

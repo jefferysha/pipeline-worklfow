@@ -1,4 +1,5 @@
 import { dirname, join, resolve } from 'node:path'
+import { randomUUID } from 'node:crypto'
 import { readAutomationJson } from '@tenon/automation'
 import { PREREQ_HINTS, type ProductPathInput } from '@tenon/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
@@ -37,6 +38,11 @@ export interface SetupEnv {
   pathExists(path: string): boolean
   /** 读取用户级配置；缺失或不可读时返回 undefined，调用方不得猜测或覆盖其内容。 */
   readText(path: string): string | undefined
+  /** 原子地区分“缺失”和“I/O 失败”；迁移事务不得从 readText 的 undefined 猜状态。 */
+  readTextState(path: string):
+    | { readonly state: 'ok'; readonly text: string }
+    | { readonly state: 'missing' }
+    | { readonly state: 'error'; readonly detail: string }
   /** mkdir -p。 */
   mkdirp(dir: string): void
   /** PATH 中是否已有可执行命令；只读探测，用于全局 npm 工具的幂等差集。 */
@@ -45,6 +51,8 @@ export interface SetupEnv {
   listDir(dir: string): string[]
   /** 写入受控的用户级 Tenon 配置（自动更新 opt-in）。 */
   writeText(path: string, text: string): void
+  /** 同目录临时文件 + rename，并以独占锁串行化受控事务 receipt。 */
+  writeTextAtomic(path: string, text: string): void
   /**
    * setup 完成后执行一次性宿主注册表迁移。生产环境缺省走真实迁移器；
    * 测试环境必须显式注入，避免绕过 SetupEnv 的文件系统边界。
@@ -97,6 +105,16 @@ export const REAL_SETUP_ENV: SetupEnv = {
       return undefined
     }
   },
+  readTextState: (path) => {
+    try {
+      return { state: 'ok', text: readFileSync(path, 'utf8') }
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code
+      return code === 'ENOENT'
+        ? { state: 'missing' }
+        : { state: 'error', detail: errMsg(error) }
+    }
+  },
   mkdirp: (dir) => { mkdirSync(dir, { recursive: true }) },
   commandExists: (name) => {
     for (const dir of (process.env.PATH ?? '').split(':')) {
@@ -120,6 +138,22 @@ export const REAL_SETUP_ENV: SetupEnv = {
     }
   },
   writeText: (path, text) => { writeFileSync(path, text, 'utf8') },
+  writeTextAtomic: (path, text) => {
+    const lockPath = `${path}.lock`
+    const tempPath = `${path}.tmp-${process.pid}-${randomUUID()}`
+    let lockFd: number | undefined
+    try {
+      lockFd = openSync(lockPath, 'wx', 0o600)
+      writeFileSync(tempPath, text, { encoding: 'utf8', mode: 0o600, flag: 'wx' })
+      renameSync(tempPath, path)
+    } finally {
+      try { unlinkSync(tempPath) } catch { /* rename 已消费或写入未开始 */ }
+      if (lockFd !== undefined) {
+        closeSync(lockFd)
+        try { unlinkSync(lockPath) } catch { /* 锁已经由持有者完成清理 */ }
+      }
+    }
+  },
   runCommand: (cmd, args) => {
     try {
       const stdout = execFileSync(cmd, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
@@ -318,7 +352,7 @@ export function migrateLegacyCodexHooks(deps: CliDeps, env: SetupEnv): number {
 /** Verify a resolved plugin root before publishing it as a managed runtime or mutating an adapter target. */
 import { execFileSync } from 'node:child_process'
 import {
-  accessSync, constants as fsConstants, lstatSync, mkdirSync, readFileSync, readdirSync,
-  readSync, realpathSync, writeFileSync,
+  accessSync, closeSync, constants as fsConstants, lstatSync, mkdirSync, openSync, readFileSync,
+  readdirSync, readSync, realpathSync, renameSync, unlinkSync, writeFileSync,
 } from 'node:fs'
 import { homedir } from 'node:os'

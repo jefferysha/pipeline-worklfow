@@ -74,6 +74,10 @@ describe('buildSnapshot —— 真读多项目 .pipeline.yaml', () => {
     expect(beta.name).toBe('beta')
     expect(beta.phase).toBe('open')
     expect(beta.track).toBe('pm')
+    expect(snap.projects.find((p) => p.root === b)?.workflowRules.default).toMatchObject({
+      steps: ['open', 'explore', 'spec', 'build', 'verify', 'ship', 'archive'],
+      gateByStep: { explore: 'review', spec: 'review', verify: 'review' },
+    })
   })
 
   it('automation_current_phase 经 fields 全量透传（T4 决策 G：进度详情「沙箱内阶段」数据源）', async () => {

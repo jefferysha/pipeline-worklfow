@@ -128,28 +128,37 @@ const CODEX_PROJECT_CONTRACT_SKILLS = [
   'e2e-testing',
 ] as const
 
-export function checkCodexProjectSkills(p: DoctorProbes): DoctorCheck {
-  if (p.codexHostPluginIds !== undefined) {
-    const hostPluginIds = p.codexHostPluginIds()
-    if (hostPluginIds === null) {
+export function checkCodexProjectSkills(
+  p: DoctorProbes,
+  hostInventory: {
+    readonly host: 'codex' | 'claude'
+    readonly enabledIds: ReadonlySet<string>
+  } | null | undefined,
+  activeHost: 'codex' | 'claude' | null,
+): DoctorCheck {
+  if (p.nativeHostPluginIds !== undefined) {
+    if (hostInventory === null || hostInventory === undefined) {
       return red(
         'integration:codex-project-skills',
-        'Codex plugin inventory 不可用或响应畸形，无法证明唯一工作流插件身份',
-        '先运行 codex plugin list --json 修复宿主 inventory，再运行 tenon setup --codex -y',
+        '当前 managed runtime 的宿主 plugin inventory 不可用或响应畸形，无法证明唯一工作流插件身份',
+        activeHost === null
+          ? '先确认 managed runtime 宿主，再修复其 plugin inventory 并重新运行 tenon setup'
+          : `先运行 ${activeHost} plugin list --json 修复宿主 inventory，再运行 tenon setup --${activeHost}`,
       )
     }
+    const { host, enabledIds: hostPluginIds } = hostInventory
     if (hostPluginIds.has(LEGACY_PLUGIN_IDENTITY)) {
       return red(
         'integration:codex-project-skills',
-        'Codex 仍启用了会争用正常对话路由和 hooks 的旧工作流插件',
-        '运行 tenon setup --codex -y；安装器会在 Tenon 新会话证明后通过 Codex 官方插件管理器清理冲突登记',
+        `${host === 'codex' ? 'Codex' : 'Claude'} 仍启用了会争用正常对话路由和 hooks 的旧工作流插件`,
+        `运行 tenon setup --${host} -y；安装器会在 Tenon 新会话证明后通过宿主官方插件管理器清理冲突登记`,
       )
     }
     if (!hostPluginIds.has(TENON_PLUGIN_IDENTITY)) {
       return red(
         'integration:codex-project-skills',
-        `Codex plugin inventory 中没有唯一 Tenon 登记 ${TENON_PLUGIN_IDENTITY}`,
-        '运行 tenon setup --codex -y，并新开会话加载当前 Tenon skills/hooks',
+        `${host === 'codex' ? 'Codex' : 'Claude'} plugin inventory 中没有唯一 Tenon 登记 ${TENON_PLUGIN_IDENTITY}`,
+        `运行 tenon setup --${host} -y，并新开会话加载当前 Tenon skills/hooks`,
       )
     }
   }

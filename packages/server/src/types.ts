@@ -67,11 +67,21 @@ export interface DocumentEvidenceSnapshot {
   }>
 }
 
+export interface WorkflowRulesSnapshot {
+  steps: string[]
+  transitions: Record<string, Array<{ event: string; to: string }>>
+  gateByStep: Record<string, 'review' | 'confirm' | null>
+  labelByStep: Record<string, string>
+  outputsByStep: Record<string, string[]>
+  nonemptyOutputByStep: Record<string, boolean>
+}
+
 /** 单个已注册 Project 的聚合（openspec/changes/* 下所有活跃 change）。 */
 export interface ProjectSnapshot {
   root: string
   ok: boolean
   changes: ChangeSnapshot[]
+  workflowRules: Record<string, WorkflowRulesSnapshot>
   error?: string
 }
 

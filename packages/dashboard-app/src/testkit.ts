@@ -17,7 +17,7 @@ export function makeChange(name: string, phase: string, over: Partial<ChangeSnap
 }
 
 export function makeProject(root: string, changes: ChangeSnapshot[], over: Partial<ProjectSnapshot> = {}): ProjectSnapshot {
-  return { root, ok: true, changes, ...over }
+  return { root, ok: true, changes, workflowRules: {}, ...over }
 }
 
 export function makeSnapshot(projects: ProjectSnapshot[], over: Partial<Snapshot> = {}): Snapshot {

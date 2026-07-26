@@ -43,9 +43,17 @@ function spyEnv(over: Partial<SetupEnv> = {}, exec?: ExecStub, confirmAns = true
   mkdirp: (d) => { calls.mkdirp.push(d) },
   pathExists: () => false,
   readText: () => undefined,
+  readTextState: (path) => {
+    const read = over.readText?.(path)
+    if (read !== undefined) return { state: 'ok', text: read }
+    return over.pathExists?.(path) === true
+      ? { state: 'error', detail: 'injected unreadable path' }
+      : { state: 'missing' }
+  },
   commandExists: () => false,
     listDir: () => [],
     writeText: (p, text) => { calls.writeText.push([p, text]) },
+    writeTextAtomic: (p, text) => { calls.writeText.push([p, text]) },
     migrateProjectRegistry: async () => ({
       status: 'completed',
       discovered: 0,
@@ -268,6 +276,38 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
     expect(runtime.calls.activations).toEqual([['/installed/tenon', 'codex', '/home/test']])
   })
 
+  test('初始宿主 inventory 命令失败时 fail closed，不继续 marketplace 或 runtime mutation', async () => {
+    const deps = makeDeps()
+    const { env, calls } = spyEnv(
+      { pathExists: setupPathExists, readText: setupReadText },
+      (cmd, args) => cmd === 'codex' && args.join(' ') === 'plugin list --json'
+        ? { code: 9, stdout: '', stderr: 'inventory unavailable' }
+        : { code: 0, stdout: '', stderr: '' },
+    )
+    const runtime = fakeRuntimeInstaller()
+
+    expect(await cmdSetupHost(deps, 'codex', { codex: true }, env, runtime.installer)).toBe(1)
+    expect(calls.exec).toEqual([['codex', ['plugin', 'list', '--json']]])
+    expect(runtime.calls.activations).toEqual([])
+    expect(deps.errLines.join('\n')).toContain('inventory')
+  })
+
+  test('receipt 路径存在但不可读时 fail closed，不继续宿主或 runtime mutation', async () => {
+    const deps = makeDeps()
+    const paths = resolveRuntimePaths({ homeDir: '/home/test', env: {} })
+    const receiptPath = join(paths.migrationsRoot, 'host-plugin-convergence', 'codex.json')
+    const { env, calls } = spyEnv({
+      pathExists: (path) => path === receiptPath || setupPathExists(path),
+      readText: (path) => path === receiptPath ? undefined : setupReadText(path),
+    })
+    const runtime = fakeRuntimeInstaller()
+
+    expect(await cmdSetupHost(deps, 'codex', { codex: true }, env, runtime.installer)).toBe(1)
+    expect(calls.exec).toEqual([])
+    expect(runtime.calls.activations).toEqual([])
+    expect(deps.errLines.join('\n')).toContain('receipt')
+  })
+
   test('Codex 冲突登记先发布并验证 Tenon，再写 cleanup-pending；同一会话绝不提前删除旧入口', async () => {
     const deps = makeDeps()
     const exec: ExecStub = (cmd, args) => {
@@ -317,7 +357,7 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
     const receiptWrite = calls.writeText.find(([path]) => path === receiptPath)
     expect(receiptWrite).toBeDefined()
     expect(JSON.parse(receiptWrite?.[1] ?? '{}')).toMatchObject({
-      version: 1,
+      version: 2,
       state: 'cleanup-pending',
       host: 'codex',
       releaseId: `sha256-${'a'.repeat(64)}`,
@@ -332,12 +372,15 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
     const receiptPath = join(paths.migrationsRoot, 'host-plugin-convergence', 'codex.json')
     const proofPath = join(paths.stateRoot, 'migration', 'tenon-session-loaded')
     const receipt = JSON.stringify({
-      version: 1,
+      version: 2,
       state: 'cleanup-pending',
       host: 'codex',
       conflictPluginId: 'pipeline-lite@pipeline-lite',
+      conflictScopes: ['user'],
       releaseId,
+      releaseRoot: `/runtime/releases/${releaseId}/payload`,
       candidateRoot: '/installed/tenon',
+      createdAtEpoch: 1_700_000_000,
       updatedAt: '2026-07-26T00:00:00Z',
     })
     const inventory = JSON.stringify({
@@ -351,7 +394,7 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
       readText: (path) => {
         if (path === receiptPath) return receipt
         if (path === proofPath) {
-          return `version=2\nloaded_at_epoch=1\nhost=codex\nrelease_id=${releaseId}\nrelease_root=/runtime/releases/${releaseId}/payload\n`
+          return `version=2\nloaded_at_epoch=1800000000\nhost=codex\nrelease_id=${releaseId}\nrelease_root=/runtime/releases/${releaseId}/payload\n`
         }
         return undefined
       },
@@ -373,6 +416,147 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
       ['codex', 'plugin remove pipeline-lite@pipeline-lite --json'],
     ])
     expect(deps.errLines.join('\n')).toContain('permission denied')
+  })
+
+  test('同 release 的旧 session proof 不得冒用为本次 receipt 之后的新会话', async () => {
+    const deps = makeDeps()
+    const releaseId = `sha256-${'a'.repeat(64)}`
+    const paths = resolveRuntimePaths({ homeDir: '/home/test', env: {} })
+    const receiptPath = join(paths.migrationsRoot, 'host-plugin-convergence', 'codex.json')
+    const proofPath = join(paths.stateRoot, 'migration', 'tenon-session-loaded')
+    const receipt = JSON.stringify({
+      version: 2,
+      state: 'cleanup-pending',
+      host: 'codex',
+      conflictPluginId: 'pipeline-lite@pipeline-lite',
+      conflictScopes: ['user'],
+      releaseId,
+      releaseRoot: `/runtime/releases/${releaseId}/payload`,
+      candidateRoot: '/installed/tenon',
+      createdAtEpoch: 1_800_000_000,
+      updatedAt: '2027-01-15T08:00:00Z',
+    })
+    const { env, calls } = spyEnv({
+      pathExists: () => true,
+      readText: (path) => {
+        if (path === receiptPath) return receipt
+        if (path === proofPath) {
+          return `version=2\nloaded_at_epoch=1800000000\nhost=codex\nrelease_id=${releaseId}\nrelease_root=/runtime/releases/${releaseId}/payload\n`
+        }
+        return undefined
+      },
+    })
+    const runtime = fakeRuntimeInstaller(false, null, releaseId)
+
+    expect(await cmdSetupHost(deps, 'codex', { codex: true }, env, runtime.installer)).toBe(0)
+    expect(calls.exec).toEqual([])
+    expect(runtime.calls.activations).toEqual([])
+    expect(deps.outLines.join('\n')).toContain('等待新宿主会话')
+  })
+
+  test('Claude 按 inventory 报告的 project/local scope 分别清理冲突登记', async () => {
+    const deps = makeDeps()
+    const releaseId = `sha256-${'a'.repeat(64)}`
+    const legacyId = String.fromCharCode(
+      112, 105, 112, 101, 108, 105, 110, 101, 45, 108, 105, 116, 101,
+      64,
+      112, 105, 112, 101, 108, 105, 110, 101, 45, 108, 105, 116, 101,
+    )
+    const paths = resolveRuntimePaths({ homeDir: '/home/test', env: {} })
+    const receiptPath = join(paths.migrationsRoot, 'host-plugin-convergence', 'claude.json')
+    const proofPath = join(paths.stateRoot, 'migration', 'tenon-session-loaded')
+    const receipt = JSON.stringify({
+      version: 2,
+      state: 'cleanup-pending',
+      host: 'claude',
+      conflictPluginId: legacyId,
+      conflictScopes: ['project', 'local'],
+      releaseId,
+      releaseRoot: `/runtime/releases/${releaseId}/payload`,
+      candidateRoot: '/installed/tenon',
+      createdAtEpoch: 1_700_000_000,
+      updatedAt: '2026-07-26T00:00:00Z',
+    })
+    let removedScopes = 0
+    const { env, calls } = spyEnv({
+      pathExists: () => true,
+      readText: (path) => {
+        if (path === receiptPath) return receipt
+        if (path === proofPath) {
+          return `version=2\nloaded_at_epoch=1800000000\nhost=claude\nrelease_id=${releaseId}\nrelease_root=/runtime/releases/${releaseId}/payload\n`
+        }
+        return undefined
+      },
+    }, (cmd, args) => {
+      if (cmd === 'claude' && args.join(' ') === 'plugin list --json') {
+        return {
+          code: 0,
+          stdout: JSON.stringify([
+            ...(removedScopes < 2
+              ? [
+                  { id: legacyId, enabled: true, scope: 'project' },
+                  { id: legacyId, enabled: true, scope: 'local' },
+                ]
+              : []),
+            { id: 'tenon@tenon', enabled: true, scope: 'user', installPath: '/installed/tenon' },
+          ]),
+          stderr: '',
+        }
+      }
+      if (cmd === 'claude' && args[0] === 'plugin' && args[1] === 'uninstall') {
+        removedScopes += 1
+        return { code: 0, stdout: '', stderr: '' }
+      }
+      return { code: 0, stdout: '', stderr: '' }
+    })
+    const runtime = fakeRuntimeInstaller(false, null, releaseId)
+
+    expect(await cmdSetupHost(deps, 'claude', { claude: true }, env, runtime.installer)).toBe(0)
+    expect(calls.exec.map(([cmd, args]) => [cmd, args.join(' ')])).toEqual([
+      ['claude', 'plugin list --json'],
+      ['claude', `plugin uninstall ${legacyId} --scope project`],
+      ['claude', `plugin uninstall ${legacyId} --scope local`],
+      ['claude', 'plugin list --json'],
+    ])
+  })
+
+  test('activation 后 receipt 原子写失败会在同一 managed transaction 精确回滚', async () => {
+    const deps = makeDeps()
+    const legacyId = String.fromCharCode(
+      112, 105, 112, 101, 108, 105, 110, 101, 45, 108, 105, 116, 101,
+      64,
+      112, 105, 112, 101, 108, 105, 110, 101, 45, 108, 105, 116, 101,
+    )
+    const { env } = spyEnv({
+      pathExists: setupPathExists,
+      readText: setupReadText,
+      writeTextAtomic: () => { throw new Error('disk full') },
+    }, (cmd, args) => {
+      if (cmd === 'codex' && args.join(' ') === 'plugin list --json') {
+        return {
+          code: 0,
+          stdout: JSON.stringify({
+            installed: [
+              { pluginId: legacyId, enabled: true, source: { path: '/old/workflow' } },
+              {
+                pluginId: 'tenon@tenon',
+                name: 'tenon',
+                marketplaceName: 'tenon',
+                enabled: true,
+                source: { path: '/installed/tenon' },
+              },
+            ],
+          }),
+          stderr: '',
+        }
+      }
+      return { code: 0, stdout: '', stderr: '' }
+    })
+    const runtime = fakeRuntimeInstaller()
+
+    expect(await cmdSetupHost(deps, 'codex', { codex: true }, env, runtime.installer)).toBe(1)
+    expect(runtime.calls.reverts).toEqual([['/home/test', `sha256-${'a'.repeat(64)}`]])
+    expect(deps.errLines.join('\n')).toContain('disk full')
   })
 
   test('Codex 已登记但缺 runtime bootstrap 时拒绝复用，并回到正式安装计划', async () => {
@@ -475,7 +659,10 @@ describe('①b Codex 旧 hook 迁移 —— 插件是唯一 hook 所有者', () 
       },
     })
     const deps = makeDeps()
-    const { env, calls } = spyEnv({ pathExists: () => true, readText: (path) => path === codexHooks ? legacy : undefined }, codexInstallExec)
+    const { env, calls } = spyEnv({
+      pathExists: (path) => setupPathExists(path),
+      readText: (path) => path === codexHooks ? legacy : undefined,
+    }, codexInstallExec)
     const runtime = fakeRuntimeInstaller()
 
     expect(await cmdSetupHost(deps, 'codex', { codex: true }, env, runtime.installer)).toBe(0)

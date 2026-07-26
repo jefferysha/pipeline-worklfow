@@ -17,6 +17,7 @@ import {
   parseHostPluginInventory,
   selectPipelineHost,
   type NativePipelineHost,
+  type ParsedHostPluginInventory,
   type PipelineHost,
   type PipelineHostFlags,
 } from './plugin-host.js'
@@ -87,7 +88,7 @@ interface NativePluginCandidate {
   /** Existing host inventory was fully verified before reuse. */
   readonly verified: boolean
   /** Authoritative enabled ids from the same inventory snapshot that resolved `root`. */
-  readonly enabledIds: ReadonlySet<string>
+  readonly inventory: ParsedHostPluginInventory
 }
 
 class NativePluginInventoryError extends Error {
@@ -109,7 +110,11 @@ function verifiedInstalledNativePlugin(
   if (inventoryCommand === undefined) return null
   deps.io.out(`[setup] $ ${commandText(inventoryCommand.cmd, inventoryCommand.args)}`)
   const inventory = env.runCommand(inventoryCommand.cmd, [...inventoryCommand.args])
-  if (inventory.code !== 0) return null
+  if (inventory.code !== 0) {
+    throw new NativePluginInventoryError(
+      `宿主 plugin inventory 读取失败：${inventory.stderr.trim() || inventory.stdout.trim() || `退出码 ${inventory.code}`}`,
+    )
+  }
   const parsed = parseHostPluginInventory(host, inventory.stdout)
   if (parsed === null) throw new NativePluginInventoryError('宿主 plugin inventory 响应畸形')
   const root = parsed.tenonRoot
@@ -119,7 +124,7 @@ function verifiedInstalledNativePlugin(
     return null
   }
   deps.io.out(`[setup] ${hostFlag(host)} 已有完整且已验证的 tenon；复用宿主登记的安装。`)
-  return { root, verified: true, enabledIds: parsed.enabledIds }
+  return { root, verified: true, inventory: parsed }
 }
 
 function installNativePlugin(
@@ -172,7 +177,7 @@ function installNativePlugin(
         : null
       if (parsed?.tenonRoot !== null && parsed?.tenonRoot !== undefined) {
         deps.io.out(`[setup] ${hostFlag(host)} 已有 tenon，复用宿主登记的安装。`)
-        return { root: parsed.tenonRoot, verified: false, enabledIds: parsed.enabledIds }
+        return { root: parsed.tenonRoot, verified: false, inventory: parsed }
       }
     }
 
@@ -190,7 +195,7 @@ function installNativePlugin(
     deps.io.err(`ERROR: ${hostFlag(host)} 插件清单中没有 tenon；未切换 launcher。`)
     return null
   }
-  return { root: parsed.tenonRoot, verified: false, enabledIds: parsed.enabledIds }
+  return { root: parsed.tenonRoot, verified: false, inventory: parsed }
 }
 
 function publishManagedRuntime(
@@ -214,6 +219,13 @@ function publishManagedRuntime(
         env: env.runtimeEnv(),
       },
       openBrowser: openDashboard,
+      ...(afterReady === undefined
+        ? {}
+        : {
+            afterActivate: (activation: import('../runtime/types.js').RuntimeActivation) => {
+              if (!afterReady(activation)) throw new Error('宿主插件收敛 receipt 未能持久化')
+            },
+          }),
     },
     installer,
     dashboardStarter,
@@ -229,7 +241,6 @@ function publishManagedRuntime(
       return 1
     }
     const { activation } = outcome
-    if (afterReady && !afterReady(activation)) return 1
     deps.io.out(`[setup] 已发布已验证 runtime: ${activation.release.releaseId}（revision ${activation.selection.revision}）。`)
     deps.io.out('[setup] 稳定入口已就绪：~/.local/bin/tenon 与 ~/.local/bin/tenon-hook 不再直连 marketplace checkout。')
     return 0
@@ -304,7 +315,7 @@ export function cmdSetupHost(
           deps,
           env,
           host,
-          candidate.enabledIds,
+          candidate.inventory,
           activation,
           candidate.root,
         ),
