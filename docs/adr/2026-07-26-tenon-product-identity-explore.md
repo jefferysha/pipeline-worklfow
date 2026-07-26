@@ -64,3 +64,4 @@
 - npm 首发在凭据可用前保持“已构建、已验证、未发布”状态。
 - 现行产品残留扫描应为零，但历史归档与 migration manifest 中允许出现旧名称。
 - CI 增加仓库卫生、发布包 allowlist、两类首装和 provenance 回归测试。
+

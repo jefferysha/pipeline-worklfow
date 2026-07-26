@@ -1,0 +1,2 @@
+# OpenSpec ADRs are hash-pinned evidence. Preserve their exact final newline shape.
+docs/adr/*.md whitespace=-blank-at-eof

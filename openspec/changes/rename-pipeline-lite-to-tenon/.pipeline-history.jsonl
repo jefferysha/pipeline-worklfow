@@ -32,3 +32,12 @@
 {"ts":"2026-07-26T03:28:03Z","kind":"tool","raw":"CodexSkillRead: react-patterns"}
 {"ts":"2026-07-26T03:28:09Z","kind":"tool","raw":"CodexSkillRead: react-best-practices"}
 {"ts":"2026-07-26T03:28:13Z","kind":"tool","raw":"CodexSkillRead: prototype"}
+{"ts":"2026-07-26T04:48:43Z","kind":"transition","from":"build","to":"spec","raw":"requirements-changed","transitionRecordId":"87ae467e-7d84-48da-9d4e-f8277ec1c169"}
+{"ts":"2026-07-26T04:50:09Z","kind":"tool","raw":"CodexSkillRead: pipeline-spec"}
+{"ts":"2026-07-26T04:50:21Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-07-26T04:50:21Z","kind":"tool","raw":"CodexSkillRead: brainstorming"}
+{"ts":"2026-07-26T04:51:24Z","kind":"tool","raw":"review:request phase=spec event=spec-complete"}
+{"ts":"2026-07-26T04:51:24Z","kind":"tool","raw":"review:delegated-ack phase=spec event=spec-complete authority_issued_at=2026-07-26T02:54:33Z"}
+{"ts":"2026-07-26T04:51:35Z","kind":"tool","raw":"CodexSkillRead: openspec-propose"}
+{"ts":"2026-07-26T04:51:43Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"b03483a9-362f-49d3-8db3-0ef5ce168c27"}
+{"ts":"2026-07-26T04:51:58Z","kind":"tool","raw":"CodexSkillRead: pipeline-build"}
