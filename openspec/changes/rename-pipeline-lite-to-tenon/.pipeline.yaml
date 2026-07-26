@@ -16,7 +16,7 @@ verify_result: pass
 branch_status: handled
 direct_override: true
 prd_path: null
-pr_url: null
+pr_url: https://github.com/jefferysha/tenon/pull/3
 automation: off
 automation_queued_at: ""
 automation_sandbox: ""
@@ -41,6 +41,6 @@ automation_cause: ""
 pipeline_run_id: fe162c6c-0981-44e1-92b0-ba600b80d41c
 pipeline_transition_sequence: 31
 pipeline_transition_head: e17c2614-dfc1-44a6-a153-66c4846a4e0c
-pipeline_state_revision: 83
-pipeline_state_revision_id: 45a61166-f530-4fa2-9dc7-bfa633a8c50d
-pipeline_state_digest: 222502ca796ee5f024c7f908961d0758e4b09366f81a77ad25a31f1b91b7543f
+pipeline_state_revision: 84
+pipeline_state_revision_id: 57538884-0105-4507-80cf-e4dafed78f27
+pipeline_state_digest: 673bb86da31c5ed75cfa5091ee17644ecb476bf9936ed22736d62086905356d9
