@@ -57,6 +57,7 @@ export function registerInstallCommands(
     .option('--dry-run', '仅打印升级计划，不执行 marketplace 或 adapter 操作')
     .option('-y, --yes', '供自动更新调用的非交互确认')
     .option('--auto', '由已明确启用的自动更新任务调用（不改变用户的 opt-in 状态）')
+    .option('--self-update', '从当前 active runtime 推断宿主，隔离验证并更新 Tenon CLI/runtime')
     .action(async (opts: UpdateOpts) => {
       bail(await cmdUpdate(deps, opts))
     })

@@ -5,7 +5,7 @@
 # selected Change, so a normal-dialogue confirmation must call `tenon review acknowledge`
 # instead of deleting the marker itself.  Keeping this tiny policy here lets UserPromptSubmit,
 # PostToolUse and PreToolUse agree on marker ownership without teaching any hot-path hook how to
-# mutate pipeline state directly.
+# mutate Tenon state directly.
 
 TENON_REVIEW_MARKER_PROTOCOL='pipeline-review-v2'
 

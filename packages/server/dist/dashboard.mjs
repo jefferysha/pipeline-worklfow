@@ -2866,6 +2866,123 @@ function shouldEnforceDocumentPolicyOnTransition(policy, from, to) {
   return !(fromIndex >= 0 && toIndex >= 0 && toIndex < fromIndex);
 }
 
+// packages/kernel/dist/workflow/migrations/pre-tenon-v1-document-policy.js
+var STEPS = ["open", "explore", "spec", "build", "verify", "ship", "archive"];
+var RETIRED_SKILL_NAMESPACE = ["pipeline", "lite"].join("-");
+var retiredQualifiedSkill = (id) => `${RETIRED_SKILL_NAMESPACE}:${id}`;
+var PRE_TENON_DEFAULT_DOCUMENT_POLICY = {
+  id: "openspec-v1",
+  steps: STEPS,
+  outputsByStep: {
+    open: [
+      { kind: "proposal", producerCandidates: ["openspec-propose", "opsx:propose"] },
+      { kind: "openspec-design", producerCandidates: ["openspec-propose", "opsx:propose"] },
+      { kind: "tasks", producerCandidates: ["openspec-propose", "opsx:propose"] }
+    ],
+    explore: [
+      { kind: "superpower-design", producerCandidates: ["brainstorming", "superpowers:brainstorming"] },
+      {
+        kind: "adr",
+        producerCandidates: [
+          "pipeline-explore",
+          retiredQualifiedSkill("pipeline-explore"),
+          "brainstorming",
+          "superpowers:brainstorming"
+        ]
+      }
+    ],
+    spec: [
+      { kind: "delta-spec", producerCandidates: ["openspec-propose", "opsx:propose"] },
+      { kind: "superpower-plan", producerCandidates: ["writing-plans", "superpowers:writing-plans"] },
+      { kind: "plan", producerCandidates: ["writing-plans", "superpowers:writing-plans"] }
+    ],
+    build: [],
+    verify: [{
+      kind: "verification-report",
+      producerCandidates: [
+        "verification-before-completion",
+        "superpowers:verification-before-completion",
+        "pipeline-verify",
+        retiredQualifiedSkill("pipeline-verify")
+      ]
+    }],
+    ship: [{ kind: "applied-spec", producerCandidates: ["openspec-apply-change", "opsx:apply"] }],
+    archive: []
+  },
+  mutableByStep: {
+    open: [],
+    explore: [
+      { kind: "proposal", producerCandidates: ["pipeline-explore", retiredQualifiedSkill("pipeline-explore")] },
+      { kind: "openspec-design", producerCandidates: ["pipeline-explore", retiredQualifiedSkill("pipeline-explore")] },
+      { kind: "tasks", producerCandidates: ["pipeline-explore", retiredQualifiedSkill("pipeline-explore")] }
+    ],
+    spec: [
+      { kind: "proposal", producerCandidates: ["pipeline-spec", retiredQualifiedSkill("pipeline-spec")] },
+      { kind: "openspec-design", producerCandidates: ["pipeline-spec", retiredQualifiedSkill("pipeline-spec")] },
+      { kind: "tasks", producerCandidates: ["pipeline-spec", retiredQualifiedSkill("pipeline-spec")] },
+      { kind: "superpower-design", producerCandidates: ["pipeline-spec", retiredQualifiedSkill("pipeline-spec")] }
+    ],
+    build: [{ kind: "tasks", producerCandidates: ["pipeline-build", retiredQualifiedSkill("pipeline-build")] }],
+    verify: [{ kind: "tasks", producerCandidates: ["pipeline-verify", retiredQualifiedSkill("pipeline-verify")] }],
+    ship: [{ kind: "tasks", producerCandidates: ["pipeline-ship", retiredQualifiedSkill("pipeline-ship")] }],
+    archive: [{ kind: "tasks", producerCandidates: ["pipeline-archive", retiredQualifiedSkill("pipeline-archive")] }]
+  },
+  readsByStep: {
+    open: [],
+    explore: ["proposal", "openspec-design", "tasks"],
+    spec: ["proposal", "openspec-design", "tasks", "superpower-design", "adr"],
+    build: [
+      "proposal",
+      "openspec-design",
+      "tasks",
+      "superpower-design",
+      "adr",
+      "delta-spec",
+      "superpower-plan",
+      "plan"
+    ],
+    verify: [
+      "proposal",
+      "openspec-design",
+      "tasks",
+      "superpower-design",
+      "adr",
+      "delta-spec",
+      "superpower-plan",
+      "plan"
+    ],
+    ship: [
+      "proposal",
+      "openspec-design",
+      "tasks",
+      "superpower-design",
+      "adr",
+      "delta-spec",
+      "superpower-plan",
+      "plan",
+      "verification-report"
+    ],
+    archive: [
+      "proposal",
+      "openspec-design",
+      "tasks",
+      "superpower-design",
+      "adr",
+      "delta-spec",
+      "superpower-plan",
+      "plan",
+      "verification-report",
+      "applied-spec"
+    ]
+  }
+};
+var PRE_TENON_DEFAULT_WORKFLOW_FINGERPRINT = "c9a829b12b12138522532a9127efb8b93a551b1f28922a53dc174ad13e35b7dd";
+function preTenonV1DocumentPolicy(workflowId, workflowFingerprint) {
+  if (workflowId !== "default" || workflowFingerprint !== PRE_TENON_DEFAULT_WORKFLOW_FINGERPRINT)
+    return void 0;
+  return PRE_TENON_DEFAULT_DOCUMENT_POLICY;
+}
+
 // packages/kernel/dist/workflow/loadWorkflow.js
 import { existsSync as existsSync2, readFileSync as readFileSync3 } from "node:fs";
 import { join as join7 } from "node:path";
@@ -3701,8 +3818,8 @@ function assertValid(definition, origin) {
     throw new Error(`effective workflow \u65E0\u6548\uFF1A
 ${errors.map((error) => `  - ${error}`).join("\n")}`);
 }
-function planFromIr(id, executionModel, workflow, track) {
-  const documentPolicy = documentGovernancePolicy(id, workflow);
+function planFromIr(id, executionModel, workflow, track, frozenDocumentPolicy) {
+  const documentPolicy = frozenDocumentPolicy === void 0 ? documentGovernancePolicy(id, workflow) : frozenDocumentPolicy ?? void 0;
   const skillPolicy = executionModel === "phase-manifest" ? "manifest-overlay" : "step-declared";
   const reviewSteps = workflow.steps.filter((step) => step.gate === "review").map((step) => step.id);
   const projectionSteps = workflow.steps.map((step) => ({ id: step.id, label: step.label }));
@@ -3771,22 +3888,32 @@ function planFromIr(id, executionModel, workflow, track) {
 }
 function workflowPlanSnapshot(plan) {
   return freeze({
-    version: 1,
+    version: 2,
     workflowId: plan.id,
     executionModel: plan.executionModel,
     workflow: structuredClone(plan.workflow),
+    documentPolicy: structuredClone(plan.documentPolicy ?? null),
     workflowFingerprint: plan.workflowFingerprint
   });
 }
 function effectiveWorkflowPlanFromSnapshot(snapshot, track) {
-  if (snapshot.version !== 1 || snapshot.workflowId === "" || snapshot.executionModel !== "phase-manifest" && snapshot.executionModel !== "step-graph" || !/^[0-9a-f]{64}$/.test(snapshot.workflowFingerprint)) {
+  if (snapshot.version !== 1 && snapshot.version !== 2 || snapshot.workflowId === "" || snapshot.executionModel !== "phase-manifest" && snapshot.executionModel !== "step-graph" || !/^[0-9a-f]{64}$/.test(snapshot.workflowFingerprint)) {
     throw new DocumentGovernanceBindingError("workflow plan snapshot \u5F62\u72B6\u975E\u6CD5");
   }
-  const plan = planFromIr(snapshot.workflowId, snapshot.executionModel, structuredClone(snapshot.workflow), track);
-  if (plan.workflowFingerprint !== snapshot.workflowFingerprint) {
-    throw new DocumentGovernanceBindingError("workflow plan snapshot \u5185\u5BB9\u4E0E fingerprint \u4E0D\u4E00\u81F4");
+  const plan = planFromIr(snapshot.workflowId, snapshot.executionModel, structuredClone(snapshot.workflow), track, snapshot.version === 2 ? structuredClone(snapshot.documentPolicy) : void 0);
+  if (plan.workflowFingerprint === snapshot.workflowFingerprint)
+    return plan;
+  let legacyFingerprint;
+  if (snapshot.version === 1) {
+    const legacyPolicy = preTenonV1DocumentPolicy(snapshot.workflowId, snapshot.workflowFingerprint);
+    if (legacyPolicy !== void 0) {
+      const legacyPlan = planFromIr(snapshot.workflowId, snapshot.executionModel, structuredClone(snapshot.workflow), track, legacyPolicy);
+      legacyFingerprint = legacyPlan.workflowFingerprint;
+      if (legacyPlan.workflowFingerprint === snapshot.workflowFingerprint)
+        return legacyPlan;
+    }
   }
-  return plan;
+  throw new DocumentGovernanceBindingError(`workflow plan snapshot \u5185\u5BB9\u4E0E fingerprint \u4E0D\u4E00\u81F4\uFF08expected=${snapshot.workflowFingerprint}, current=${plan.workflowFingerprint}${legacyFingerprint === void 0 ? "" : `, legacy=${legacyFingerprint}`}\uFF09`);
 }
 function compileEffectiveWorkflowPlan(id, provided, track) {
   if (id === "default") {
@@ -4083,20 +4210,24 @@ function parseEnvelope(raw) {
   }
   const envelope = ownRecord3(value);
   const plan = ownRecord3(envelope?.plan);
-  if (!envelope || Object.keys(envelope).some((key) => !["version", "run_id", "plan"].includes(key)) || envelope.version !== 1 || typeof envelope.run_id !== "string" || envelope.run_id === "" || !plan || Object.keys(plan).some((key) => ![
-    "version",
-    "workflowId",
-    "executionModel",
-    "workflow",
-    "workflowFingerprint"
-  ].includes(key)) || plan.version !== 1 || typeof plan.workflowId !== "string" || plan.executionModel !== "phase-manifest" && plan.executionModel !== "step-graph" || typeof plan.workflowFingerprint !== "string" || !/^[0-9a-f]{64}$/.test(plan.workflowFingerprint) || !isWorkflowIr(plan.workflow)) {
+  const planVersion = plan?.version;
+  const allowedPlanKeys = planVersion === 2 ? ["version", "workflowId", "executionModel", "workflow", "documentPolicy", "workflowFingerprint"] : ["version", "workflowId", "executionModel", "workflow", "workflowFingerprint"];
+  const documentPolicy = plan?.documentPolicy;
+  if (!envelope || Object.keys(envelope).some((key) => !["version", "run_id", "plan"].includes(key)) || envelope.version !== 1 || typeof envelope.run_id !== "string" || envelope.run_id === "" || !plan || Object.keys(plan).some((key) => !allowedPlanKeys.includes(key)) || planVersion !== 1 && planVersion !== 2 || typeof plan.workflowId !== "string" || plan.executionModel !== "phase-manifest" && plan.executionModel !== "step-graph" || planVersion === 2 && documentPolicy !== null && ownRecord3(documentPolicy) === void 0 || typeof plan.workflowFingerprint !== "string" || !/^[0-9a-f]{64}$/.test(plan.workflowFingerprint) || !isWorkflowIr(plan.workflow)) {
     throw new Error("workflow plan snapshot \u5F62\u72B6\u975E\u6CD5");
   }
-  const snapshot = {
+  const snapshot = planVersion === 1 ? {
     version: 1,
     workflowId: plan.workflowId,
     executionModel: plan.executionModel,
     workflow: plan.workflow,
+    workflowFingerprint: plan.workflowFingerprint
+  } : {
+    version: 2,
+    workflowId: plan.workflowId,
+    executionModel: plan.executionModel,
+    workflow: plan.workflow,
+    documentPolicy,
     workflowFingerprint: plan.workflowFingerprint
   };
   effectiveWorkflowPlanFromSnapshot(snapshot);

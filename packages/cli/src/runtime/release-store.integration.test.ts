@@ -127,6 +127,21 @@ describe('RuntimeReleaseStore', () => {
     expect(rolledBack.selection.previousRelease).toBe(second.release.releaseId)
   }, 30_000)
 
+  it('compensates only the exact activation, including a failed first-install readiness gate', async () => {
+    const root = await freshRoot('revert-activation')
+    const candidate = await candidateCopy(root)
+    const store = storeFor(root)
+    const activated = await store.stageAndActivate(candidate, 'codex')
+
+    await store.revertActivation(activated.selection)
+
+    const inspection = await store.inspect()
+    expect(inspection.selection.activeRelease).toBeNull()
+    expect(inspection.selection.previousRelease).toBe(activated.release.releaseId)
+    expect(inspection.activeValid).toBe(false)
+    await expect(store.revertActivation(activated.selection)).rejects.toThrow(/拒绝回滚非当前 activation/)
+  }, 30_000)
+
   it('rejects symbolic links in a candidate payload', async () => {
     const root = await freshRoot('symlink')
     const candidate = await candidateCopy(root)

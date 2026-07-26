@@ -520,13 +520,17 @@ mkdir -p "$SS_PROOF_RELEASE"
 printf '{"cwd":"%s"}' "$ROOT" |
   TENON_RUNTIME_STATE_ROOT="$SS_PROOF_STATE" \
   TENON_ACTIVE_RELEASE_ROOT="$SS_PROOF_RELEASE" \
+  TENON_ACTIVE_RELEASE_ID="sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" \
+  TENON_RUNTIME_HOST="codex" \
   bash "$SS" >/dev/null 2>&1
 SS_PROOF="$SS_PROOF_STATE/migration/tenon-session-loaded"
 [ -f "$SS_PROOF" ] \
   && ok "session-start: 写入新 Tenon release 加载证明" \
   || bad "session-start: 写入新 Tenon release 加载证明" "proof 不存在"
-assert_contains "session-start: 加载证明有 schema 版本" "$(cat "$SS_PROOF" 2>/dev/null || true)" "version=1"
+assert_contains "session-start: 加载证明有 schema 版本" "$(cat "$SS_PROOF" 2>/dev/null || true)" "version=2"
 assert_contains "session-start: 加载证明绑定 release root" "$(cat "$SS_PROOF" 2>/dev/null || true)" "release_root=$SS_PROOF_RELEASE"
+assert_contains "session-start: 加载证明绑定 host" "$(cat "$SS_PROOF" 2>/dev/null || true)" "host=codex"
+assert_contains "session-start: 加载证明绑定 release id" "$(cat "$SS_PROOF" 2>/dev/null || true)" "release_id=sha256-aaaaaaaa"
 assert_contains "session-start: 加载证明带时间戳" "$(cat "$SS_PROOF" 2>/dev/null || true)" "loaded_at_epoch="
 
 # SessionStart 只能列恢复候选；它没有用户 prompt，绝不能把 repo 级 `.pipeline-active`

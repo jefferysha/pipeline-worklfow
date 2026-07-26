@@ -88,7 +88,7 @@ export async function cmdStateProjection(
         return 0
       }
       default:
-        deps.io.err('用法：pipeline state <status|repair-projection|import-legacy|pin-workflow-snapshot> <change>')
+        deps.io.err('用法：tenon state <status|repair-projection|import-legacy|pin-workflow-snapshot> <change>')
         return 1
     }
   } catch (error) {

@@ -19,6 +19,9 @@ Immediate native-host update:
 tenon update --codex
 # or
 tenon update --claude
+
+# Recommended after a managed runtime exists: infer the native host from its frozen source.
+tenon update --self-update
 ```
 
 Inspect without mutation:

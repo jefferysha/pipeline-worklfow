@@ -23,6 +23,7 @@ import type {
   RuntimeSelection,
 } from './types.js'
 import { RuntimeFailure } from './types.js'
+import { compensateActivation } from './activation-compensation.js'
 import {
   isExistingReleaseCollision,
   isRecord,
@@ -55,8 +56,6 @@ export interface RuntimeReleaseStoreOptions {
   readonly retainedReleases?: number
   readonly auditWriter?: RuntimeAuditWriter
 }
-
-
 function isWithin(root: string, candidate: string): boolean {
   const rel = relative(root, candidate)
   return rel === '' || (!rel.startsWith(`..${sep}`) && rel !== '..' && !rel.includes(`${sep}..${sep}`))
@@ -67,7 +66,6 @@ function candidatePath(root: string, entry: string): string {
   if (!isWithin(resolve(root), path)) throw new RuntimeFailure('candidate-invalid', `候选发布路径越界: ${entry}`)
   return path
 }
-
 async function copyEntry(source: string, target: string): Promise<void> {
   const sourceStat = await lstat(source)
   if (sourceStat.isSymbolicLink()) throw new RuntimeFailure('candidate-invalid', `候选发布包含符号链接: ${source}`)
@@ -83,7 +81,6 @@ async function copyEntry(source: string, target: string): Promise<void> {
   await copyFile(source, target)
   await chmod(target, sourceStat.mode & 0o777)
 }
-
 async function copyPayload(candidateRoot: string, payloadRoot: string): Promise<void> {
   for (const entry of PAYLOAD_ENTRIES) {
     const source = candidatePath(candidateRoot, entry)
@@ -120,7 +117,6 @@ async function hashTree(root: string): Promise<string> {
   await visit(root, '')
   return hash.digest('hex')
 }
-
 function commandRunner(): RuntimeCommandRunner {
   return {
     run: (file, args, cwd) => new Promise<CommandResult>((resolveResult) => {
@@ -327,6 +323,21 @@ export class RuntimeReleaseStore {
         }).catch(() => {})
         throw error
       }
+    })
+  }
+
+  async revertActivation(activated: RuntimeSelection): Promise<void> {
+    await this.prepareRoots()
+    await withLock(this.paths.stateRoot, async () => {
+      await compensateActivation({
+        paths: this.paths,
+        activated,
+        current: await readSelection(this.paths),
+        now: this.now,
+        audit: (entry) => this.auditWriter(this.paths, entry),
+        validateRelease: (releaseId) => this.validateStoredRelease(releaseId),
+        installBootstrap: (releaseId) => this.installBootstrap(this.releaseRoot(releaseId)),
+      })
     })
   }
 

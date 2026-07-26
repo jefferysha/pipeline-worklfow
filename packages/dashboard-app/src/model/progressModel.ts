@@ -163,6 +163,13 @@ function emptyCounts(): ProgressCounts {
   return { gate: 0, agent: 0, running: 0, queued: 0, failed: 0 }
 }
 
+/** Recount an already-filtered row set so list ownership and summary badges cannot diverge. */
+export function progressCountsForRows(rows: readonly ProgressRow[]): ProgressCounts {
+  const counts = emptyCounts()
+  for (const row of rows) counts[row.state] += 1
+  return counts
+}
+
 /** 行序比较：updated_at 倒序，并列 name 升序（同 inbox selectInbox 的时间轴口径）。 */
 function compareRows(a: ProgressRow, b: ProgressRow): number {
   const ua = a.change.updated_at

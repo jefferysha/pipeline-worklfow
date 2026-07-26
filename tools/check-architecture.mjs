@@ -28,6 +28,9 @@ const WORKFLOW_IDENTITY_COMPAT = new Map([
     { code: "const definition = id === 'default' ? undefined", reason: 'central compatibility loader dispatch' },
     { code: "if (id === 'default') return compileEffectiveWorkflowPlan(id, undefined, track)", reason: 'central compatibility resolver dispatch' },
   ]],
+  ['packages/kernel/src/workflow/migrations/pre-tenon-v1-document-policy.ts', [
+    { code: "workflowId !== 'default'", reason: 'exact immutable v1 persistence compatibility fingerprint reader' },
+  ]],
   ['packages/kernel/src/workflow/document-contract.ts', [
     { code: "workflowName === 'default' || workflow?.openspecContract === 'required'", reason: 'legacy OpenSpec profile compatibility alias' },
     { code: "if (workflowName === 'default') return true", reason: 'legacy OpenSpec profile compatibility alias' },

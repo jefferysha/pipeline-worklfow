@@ -1,9 +1,11 @@
 /** snapshot.test —— 真 fs：注册表读取 / 聚合 build / 指纹变化检测。 */
 import { describe, expect, it } from 'vitest'
-import { mkdir, readdir, symlink, unlink, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, readdir, symlink, unlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import {
   builtinTrack,
+  compileEffectiveWorkflowPlan,
+  effectiveWorkflowPlanFromSnapshot,
   effectiveWorkflowPlanBinding,
   ensureDocumentLedger,
   loadEffectiveWorkflowPlan,
@@ -269,6 +271,57 @@ steps:
     expect(snapshot.projects[0]?.changes[0]?.todo?.stages.map((stage) => stage.id)).toEqual(['shape'])
     expect(snapshot.projects[0]?.changes[0]?.documents?.governed).toBe(true)
     expect(snapshot.change_count).toBe(1)
+  })
+
+  it('Tenon server 继续投影身份迁移前冻结的 default v1 workflow snapshot', async () => {
+    const store = newStore()
+    const root = await makeProject()
+    const legacyWorkflow = compileEffectiveWorkflowPlan('default').workflow
+    const legacyChangeDir = await store.init({
+      repoRoot: root,
+      name: 'legacy-v1-live',
+      track: 'frontend',
+      reviewSeed: builtinTrack('frontend').policyProfile.reviewSeed,
+      preset: 'full',
+      runId: 'legacy-v1-run',
+      clock: () => '2026-07-26T00:00:00Z',
+      initialWorkflow: {
+        workflow: 'default',
+        phase: 'verify',
+        documentProfile: 'legacy-full',
+        documentGovernanceFingerprint:
+          '9238b11b7f0c0e7102eceddb5cb688c030e1a919fb5aef93ed5ba33ab7c2ec68',
+        workflowPlanFingerprint:
+          'c9a829b12b12138522532a9127efb8b93a551b1f28922a53dc174ad13e35b7dd',
+        workflowPlanSnapshot: {
+          version: 1,
+          workflowId: 'default',
+          executionModel: 'phase-manifest',
+          workflow: legacyWorkflow,
+          workflowFingerprint:
+            'c9a829b12b12138522532a9127efb8b93a551b1f28922a53dc174ad13e35b7dd',
+        },
+      },
+    })
+    const legacyState = await store.read(legacyChangeDir)
+    expect(legacyState.runMetadata?.workflowPlanSnapshot).toBeDefined()
+    expect(effectiveWorkflowPlanFromSnapshot(legacyState.runMetadata!.workflowPlanSnapshot!)
+      .workflowFingerprint).toBe(
+      'c9a829b12b12138522532a9127efb8b93a551b1f28922a53dc174ad13e35b7dd',
+    )
+
+    const snapshot = await buildSnapshot({
+      registry: () => [root],
+      store,
+      version: '1.0.0',
+      clock: () => '2026-07-26T00:00:00Z',
+    })
+
+    expect(snapshot.projects[0]?.ok, snapshot.projects[0]?.error).toBe(true)
+    expect(snapshot.projects[0]?.changes[0]).toMatchObject({
+      name: 'legacy-v1-live',
+      phase: 'verify',
+    })
   })
 
   it('simple workflow 投影自己的 change→verify→done/escalated 骨架，不伪造七阶段或 OpenSpec 文档', async () => {

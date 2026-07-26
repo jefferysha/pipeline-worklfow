@@ -3033,9 +3033,9 @@ var require_commander = __commonJS({
 import { execFile as execFile4 } from "node:child_process";
 import { createHash as createHash31 } from "node:crypto";
 import { accessSync as accessSync5, constants as fsConstants5, readdirSync as readdirSync9, readFileSync as readFileSync27, statSync as statSync7 } from "node:fs";
-import { readFile as readFile34, rm as rm11, stat as stat13, writeFile as writeFile15 } from "node:fs/promises";
+import { readFile as readFile34, rm as rm12, stat as stat13, writeFile as writeFile15 } from "node:fs/promises";
 import { homedir as homedir22 } from "node:os";
-import { dirname as dirname21, join as join78 } from "node:path";
+import { dirname as dirname21, join as join79 } from "node:path";
 import { fileURLToPath as fileURLToPath3 } from "node:url";
 
 // node_modules/commander/esm.mjs
@@ -5629,6 +5629,123 @@ function shouldEnforceDocumentPolicyOnTransition(policy, from, to) {
   return !(fromIndex >= 0 && toIndex >= 0 && toIndex < fromIndex);
 }
 
+// packages/kernel/dist/workflow/migrations/pre-tenon-v1-document-policy.js
+var STEPS = ["open", "explore", "spec", "build", "verify", "ship", "archive"];
+var RETIRED_SKILL_NAMESPACE = ["pipeline", "lite"].join("-");
+var retiredQualifiedSkill = (id) => `${RETIRED_SKILL_NAMESPACE}:${id}`;
+var PRE_TENON_DEFAULT_DOCUMENT_POLICY = {
+  id: "openspec-v1",
+  steps: STEPS,
+  outputsByStep: {
+    open: [
+      { kind: "proposal", producerCandidates: ["openspec-propose", "opsx:propose"] },
+      { kind: "openspec-design", producerCandidates: ["openspec-propose", "opsx:propose"] },
+      { kind: "tasks", producerCandidates: ["openspec-propose", "opsx:propose"] }
+    ],
+    explore: [
+      { kind: "superpower-design", producerCandidates: ["brainstorming", "superpowers:brainstorming"] },
+      {
+        kind: "adr",
+        producerCandidates: [
+          "pipeline-explore",
+          retiredQualifiedSkill("pipeline-explore"),
+          "brainstorming",
+          "superpowers:brainstorming"
+        ]
+      }
+    ],
+    spec: [
+      { kind: "delta-spec", producerCandidates: ["openspec-propose", "opsx:propose"] },
+      { kind: "superpower-plan", producerCandidates: ["writing-plans", "superpowers:writing-plans"] },
+      { kind: "plan", producerCandidates: ["writing-plans", "superpowers:writing-plans"] }
+    ],
+    build: [],
+    verify: [{
+      kind: "verification-report",
+      producerCandidates: [
+        "verification-before-completion",
+        "superpowers:verification-before-completion",
+        "pipeline-verify",
+        retiredQualifiedSkill("pipeline-verify")
+      ]
+    }],
+    ship: [{ kind: "applied-spec", producerCandidates: ["openspec-apply-change", "opsx:apply"] }],
+    archive: []
+  },
+  mutableByStep: {
+    open: [],
+    explore: [
+      { kind: "proposal", producerCandidates: ["pipeline-explore", retiredQualifiedSkill("pipeline-explore")] },
+      { kind: "openspec-design", producerCandidates: ["pipeline-explore", retiredQualifiedSkill("pipeline-explore")] },
+      { kind: "tasks", producerCandidates: ["pipeline-explore", retiredQualifiedSkill("pipeline-explore")] }
+    ],
+    spec: [
+      { kind: "proposal", producerCandidates: ["pipeline-spec", retiredQualifiedSkill("pipeline-spec")] },
+      { kind: "openspec-design", producerCandidates: ["pipeline-spec", retiredQualifiedSkill("pipeline-spec")] },
+      { kind: "tasks", producerCandidates: ["pipeline-spec", retiredQualifiedSkill("pipeline-spec")] },
+      { kind: "superpower-design", producerCandidates: ["pipeline-spec", retiredQualifiedSkill("pipeline-spec")] }
+    ],
+    build: [{ kind: "tasks", producerCandidates: ["pipeline-build", retiredQualifiedSkill("pipeline-build")] }],
+    verify: [{ kind: "tasks", producerCandidates: ["pipeline-verify", retiredQualifiedSkill("pipeline-verify")] }],
+    ship: [{ kind: "tasks", producerCandidates: ["pipeline-ship", retiredQualifiedSkill("pipeline-ship")] }],
+    archive: [{ kind: "tasks", producerCandidates: ["pipeline-archive", retiredQualifiedSkill("pipeline-archive")] }]
+  },
+  readsByStep: {
+    open: [],
+    explore: ["proposal", "openspec-design", "tasks"],
+    spec: ["proposal", "openspec-design", "tasks", "superpower-design", "adr"],
+    build: [
+      "proposal",
+      "openspec-design",
+      "tasks",
+      "superpower-design",
+      "adr",
+      "delta-spec",
+      "superpower-plan",
+      "plan"
+    ],
+    verify: [
+      "proposal",
+      "openspec-design",
+      "tasks",
+      "superpower-design",
+      "adr",
+      "delta-spec",
+      "superpower-plan",
+      "plan"
+    ],
+    ship: [
+      "proposal",
+      "openspec-design",
+      "tasks",
+      "superpower-design",
+      "adr",
+      "delta-spec",
+      "superpower-plan",
+      "plan",
+      "verification-report"
+    ],
+    archive: [
+      "proposal",
+      "openspec-design",
+      "tasks",
+      "superpower-design",
+      "adr",
+      "delta-spec",
+      "superpower-plan",
+      "plan",
+      "verification-report",
+      "applied-spec"
+    ]
+  }
+};
+var PRE_TENON_DEFAULT_WORKFLOW_FINGERPRINT = "c9a829b12b12138522532a9127efb8b93a551b1f28922a53dc174ad13e35b7dd";
+function preTenonV1DocumentPolicy(workflowId, workflowFingerprint) {
+  if (workflowId !== "default" || workflowFingerprint !== PRE_TENON_DEFAULT_WORKFLOW_FINGERPRINT)
+    return void 0;
+  return PRE_TENON_DEFAULT_DOCUMENT_POLICY;
+}
+
 // packages/kernel/dist/workflow/loadWorkflow.js
 import { existsSync, readFileSync as readFileSync2 } from "node:fs";
 import { join as join5 } from "node:path";
@@ -6464,8 +6581,8 @@ function assertValid(definition, origin) {
     throw new Error(`effective workflow \u65E0\u6548\uFF1A
 ${errors.map((error) => `  - ${error}`).join("\n")}`);
 }
-function planFromIr(id, executionModel, workflow, track) {
-  const documentPolicy = documentGovernancePolicy(id, workflow);
+function planFromIr(id, executionModel, workflow, track, frozenDocumentPolicy) {
+  const documentPolicy = frozenDocumentPolicy === void 0 ? documentGovernancePolicy(id, workflow) : frozenDocumentPolicy ?? void 0;
   const skillPolicy = executionModel === "phase-manifest" ? "manifest-overlay" : "step-declared";
   const reviewSteps = workflow.steps.filter((step) => step.gate === "review").map((step) => step.id);
   const projectionSteps = workflow.steps.map((step) => ({ id: step.id, label: step.label }));
@@ -6534,22 +6651,32 @@ function planFromIr(id, executionModel, workflow, track) {
 }
 function workflowPlanSnapshot(plan) {
   return freeze({
-    version: 1,
+    version: 2,
     workflowId: plan.id,
     executionModel: plan.executionModel,
     workflow: structuredClone(plan.workflow),
+    documentPolicy: structuredClone(plan.documentPolicy ?? null),
     workflowFingerprint: plan.workflowFingerprint
   });
 }
 function effectiveWorkflowPlanFromSnapshot(snapshot, track) {
-  if (snapshot.version !== 1 || snapshot.workflowId === "" || snapshot.executionModel !== "phase-manifest" && snapshot.executionModel !== "step-graph" || !/^[0-9a-f]{64}$/.test(snapshot.workflowFingerprint)) {
+  if (snapshot.version !== 1 && snapshot.version !== 2 || snapshot.workflowId === "" || snapshot.executionModel !== "phase-manifest" && snapshot.executionModel !== "step-graph" || !/^[0-9a-f]{64}$/.test(snapshot.workflowFingerprint)) {
     throw new DocumentGovernanceBindingError("workflow plan snapshot \u5F62\u72B6\u975E\u6CD5");
   }
-  const plan = planFromIr(snapshot.workflowId, snapshot.executionModel, structuredClone(snapshot.workflow), track);
-  if (plan.workflowFingerprint !== snapshot.workflowFingerprint) {
-    throw new DocumentGovernanceBindingError("workflow plan snapshot \u5185\u5BB9\u4E0E fingerprint \u4E0D\u4E00\u81F4");
+  const plan = planFromIr(snapshot.workflowId, snapshot.executionModel, structuredClone(snapshot.workflow), track, snapshot.version === 2 ? structuredClone(snapshot.documentPolicy) : void 0);
+  if (plan.workflowFingerprint === snapshot.workflowFingerprint)
+    return plan;
+  let legacyFingerprint;
+  if (snapshot.version === 1) {
+    const legacyPolicy = preTenonV1DocumentPolicy(snapshot.workflowId, snapshot.workflowFingerprint);
+    if (legacyPolicy !== void 0) {
+      const legacyPlan = planFromIr(snapshot.workflowId, snapshot.executionModel, structuredClone(snapshot.workflow), track, legacyPolicy);
+      legacyFingerprint = legacyPlan.workflowFingerprint;
+      if (legacyPlan.workflowFingerprint === snapshot.workflowFingerprint)
+        return legacyPlan;
+    }
   }
-  return plan;
+  throw new DocumentGovernanceBindingError(`workflow plan snapshot \u5185\u5BB9\u4E0E fingerprint \u4E0D\u4E00\u81F4\uFF08expected=${snapshot.workflowFingerprint}, current=${plan.workflowFingerprint}${legacyFingerprint === void 0 ? "" : `, legacy=${legacyFingerprint}`}\uFF09`);
 }
 function compileEffectiveWorkflowPlan(id, provided, track) {
   if (id === "default") {
@@ -6846,20 +6973,24 @@ function parseEnvelope(raw) {
   }
   const envelope = ownRecord3(value);
   const plan = ownRecord3(envelope?.plan);
-  if (!envelope || Object.keys(envelope).some((key) => !["version", "run_id", "plan"].includes(key)) || envelope.version !== 1 || typeof envelope.run_id !== "string" || envelope.run_id === "" || !plan || Object.keys(plan).some((key) => ![
-    "version",
-    "workflowId",
-    "executionModel",
-    "workflow",
-    "workflowFingerprint"
-  ].includes(key)) || plan.version !== 1 || typeof plan.workflowId !== "string" || plan.executionModel !== "phase-manifest" && plan.executionModel !== "step-graph" || typeof plan.workflowFingerprint !== "string" || !/^[0-9a-f]{64}$/.test(plan.workflowFingerprint) || !isWorkflowIr(plan.workflow)) {
+  const planVersion = plan?.version;
+  const allowedPlanKeys = planVersion === 2 ? ["version", "workflowId", "executionModel", "workflow", "documentPolicy", "workflowFingerprint"] : ["version", "workflowId", "executionModel", "workflow", "workflowFingerprint"];
+  const documentPolicy = plan?.documentPolicy;
+  if (!envelope || Object.keys(envelope).some((key) => !["version", "run_id", "plan"].includes(key)) || envelope.version !== 1 || typeof envelope.run_id !== "string" || envelope.run_id === "" || !plan || Object.keys(plan).some((key) => !allowedPlanKeys.includes(key)) || planVersion !== 1 && planVersion !== 2 || typeof plan.workflowId !== "string" || plan.executionModel !== "phase-manifest" && plan.executionModel !== "step-graph" || planVersion === 2 && documentPolicy !== null && ownRecord3(documentPolicy) === void 0 || typeof plan.workflowFingerprint !== "string" || !/^[0-9a-f]{64}$/.test(plan.workflowFingerprint) || !isWorkflowIr(plan.workflow)) {
     throw new Error("workflow plan snapshot \u5F62\u72B6\u975E\u6CD5");
   }
-  const snapshot = {
+  const snapshot = planVersion === 1 ? {
     version: 1,
     workflowId: plan.workflowId,
     executionModel: plan.executionModel,
     workflow: plan.workflow,
+    workflowFingerprint: plan.workflowFingerprint
+  } : {
+    version: 2,
+    workflowId: plan.workflowId,
+    executionModel: plan.executionModel,
+    workflow: plan.workflow,
+    documentPolicy,
     workflowFingerprint: plan.workflowFingerprint
   };
   effectiveWorkflowPlanFromSnapshot(snapshot);
@@ -10797,7 +10928,7 @@ function bannerNudge(projectVersion, cliVersion) {
   if (comparison === 0)
     return null;
   const direction = comparison > 0 ? "update" : "upgrade";
-  const message2 = comparison > 0 ? `pipeline assets are out of date: ${projectVersion} -> ${cliVersion}. Run: tenon sync` : `Your pipeline plugin (${cliVersion}) is older than this project (${projectVersion}). Run: pipeline upgrade`;
+  const message2 = comparison > 0 ? `Tenon assets are out of date: ${projectVersion} -> ${cliVersion}. Run: tenon sync` : `Your Tenon plugin (${cliVersion}) is older than this project (${projectVersion}). Run: tenon update --self-update`;
   return { direction, projectVersion, cliVersion, message: message2 };
 }
 function deriveUpgradeChannel(currentVersion, requestedTag) {
@@ -14940,11 +15071,11 @@ function parseProgress(text2, loopIds, now) {
     if (!known.has(loopCol))
       continue;
     const rowText = cols.join("|");
-    const rm12 = rowText.match(RESULT_RE);
+    const rm13 = rowText.match(RESULT_RE);
     const dm = rowText.match(DRY_COUNT_RE);
     required(rowsByLoop.get(loopCol)).push({
       ts: parseTimestamp(required(cols[0]), now),
-      result: rm12 ? rm12[1] : null,
+      result: rm13 ? rm13[1] : null,
       dryCount: dm ? Number(dm[1]) : null
     });
   }
@@ -15641,8 +15772,8 @@ function parseRunHistory(text2, loopId) {
       continue;
     if (!HIST_TS_RE.test(required(cols[0])))
       continue;
-    const rm12 = line.match(HIST_RESULT_RE);
-    results.push(rm12 ? rm12[1] : null);
+    const rm13 = line.match(HIST_RESULT_RE);
+    results.push(rm13 ? rm13[1] : null);
   }
   let failStreak = 0;
   for (let i = results.length - 1; i >= 0; i--) {
@@ -42219,7 +42350,7 @@ async function cmdStateProjection(deps, sub, name2, opts = {}) {
         return 0;
       }
       default:
-        deps.io.err("\u7528\u6CD5\uFF1Apipeline state <status|repair-projection|import-legacy|pin-workflow-snapshot> <change>");
+        deps.io.err("\u7528\u6CD5\uFF1Atenon state <status|repair-projection|import-legacy|pin-workflow-snapshot> <change>");
         return 1;
     }
   } catch (error) {
@@ -42798,10 +42929,10 @@ import {
   readFile as readFile33,
   readdir as readdir13,
   rename as rename10,
-  rm as rm10,
+  rm as rm11,
   stat as stat12
 } from "node:fs/promises";
-import { basename as basename7, dirname as dirname16, join as join70, relative as relative14, resolve as resolve31, sep as sep13 } from "node:path";
+import { basename as basename7, dirname as dirname16, join as join71, relative as relative14, resolve as resolve31, sep as sep13 } from "node:path";
 
 // packages/cli/src/runtime/types.ts
 var RuntimeFailure = class extends Error {
@@ -42812,6 +42943,10 @@ var RuntimeFailure = class extends Error {
     this.code = code;
   }
 };
+
+// packages/cli/src/runtime/activation-compensation.ts
+import { rm as rm10 } from "node:fs/promises";
+import { join as join70 } from "node:path";
 
 // packages/cli/src/runtime/release-store-codecs.ts
 import { appendFile as appendFile4, readFile as readFile32 } from "node:fs/promises";
@@ -42955,6 +43090,43 @@ async function writeAudit(paths, entry) {
 `, "utf8");
 }
 
+// packages/cli/src/runtime/activation-compensation.ts
+async function compensateActivation(input) {
+  const { activated, current } = input;
+  if (current.revision !== activated.revision || current.activeRelease !== activated.activeRelease || current.previousRelease !== activated.previousRelease) {
+    throw new RuntimeFailure(
+      "runtime-corrupt",
+      "runtime selection \u5DF2\u88AB\u5176\u4ED6\u66F4\u65B0\u63A8\u8FDB\uFF1B\u62D2\u7EDD\u56DE\u6EDA\u975E\u5F53\u524D activation"
+    );
+  }
+  const restoredRelease = activated.previousRelease;
+  const restored = {
+    version: 1,
+    revision: current.revision + 1,
+    activeRelease: restoredRelease,
+    previousRelease: current.activeRelease,
+    updatedAt: input.now()
+  };
+  await input.audit({
+    version: 1,
+    at: input.now(),
+    kind: "rolled-back",
+    ...restoredRelease === null ? {} : { releaseId: restoredRelease },
+    previousRelease: current.activeRelease,
+    detail: "post-activation readiness failed; exact current activation was compensated"
+  });
+  if (restoredRelease === null) {
+    await rm10(join70(input.paths.bootstrapRoot, "active.mjs"), { force: true });
+  } else {
+    const manifest = await input.validateRelease(restoredRelease);
+    if (manifest === null) {
+      throw new RuntimeFailure("no-recovery-release", "activation \u7684 previous runtime \u65E0\u6CD5\u901A\u8FC7\u5B8C\u6574\u6027\u6821\u9A8C");
+    }
+    await input.installBootstrap(restoredRelease);
+  }
+  await atomicWriteFile(input.paths.selectionPath, stableJson(restored));
+}
+
 // packages/cli/src/runtime/release-store.ts
 function isWithin(root, candidate) {
   const rel = relative14(root, candidate);
@@ -42972,7 +43144,7 @@ async function copyEntry(source, target) {
     await mkdir24(target, { recursive: true, mode: sourceStat.mode & 511 });
     const entries = await readdir13(source, { withFileTypes: true });
     entries.sort((left, right) => left.name.localeCompare(right.name));
-    for (const entry of entries) await copyEntry(join70(source, entry.name), join70(target, entry.name));
+    for (const entry of entries) await copyEntry(join71(source, entry.name), join71(target, entry.name));
     return;
   }
   if (!sourceStat.isFile()) throw new RuntimeFailure("candidate-invalid", `\u5019\u9009\u53D1\u5E03\u5305\u542B\u975E\u666E\u901A\u6587\u4EF6: ${source}`);
@@ -42984,7 +43156,7 @@ async function copyPayload(candidateRoot, payloadRoot) {
   for (const entry of PAYLOAD_ENTRIES) {
     const source = candidatePath(candidateRoot, entry);
     try {
-      await copyEntry(source, join70(payloadRoot, entry));
+      await copyEntry(source, join71(payloadRoot, entry));
     } catch (error) {
       if (error instanceof RuntimeFailure) throw error;
       throw new RuntimeFailure("candidate-invalid", `\u5019\u9009\u53D1\u5E03\u7F3A\u5C11\u6216\u65E0\u6CD5\u8BFB\u53D6 ${entry}: ${String(error)}`);
@@ -42997,7 +43169,7 @@ async function hashTree(root) {
     const entries = await readdir13(dir, { withFileTypes: true });
     entries.sort((left, right) => left.name.localeCompare(right.name));
     for (const entry of entries) {
-      const child = join70(dir, entry.name);
+      const child = join71(dir, entry.name);
       const childRel = rel === "" ? entry.name : `${rel}/${entry.name}`;
       const item2 = await lstat30(child);
       if (item2.isSymbolicLink()) throw new RuntimeFailure("runtime-corrupt", `\u53D1\u5E03 payload \u5305\u542B\u7B26\u53F7\u94FE\u63A5: ${childRel}`);
@@ -43031,7 +43203,7 @@ async function shellFiles(root) {
     const entries = await readdir13(dir, { withFileTypes: true });
     entries.sort((left, right) => left.name.localeCompare(right.name));
     for (const entry of entries) {
-      const path9 = join70(dir, entry.name);
+      const path9 = join71(dir, entry.name);
       const item2 = await lstat30(path9);
       if (item2.isSymbolicLink()) throw new RuntimeFailure("candidate-invalid", `shell \u8D44\u4EA7\u4E0D\u5F97\u662F\u7B26\u53F7\u94FE\u63A5: ${path9}`);
       if (item2.isDirectory()) await visit(path9);
@@ -43052,7 +43224,7 @@ function hookCommands(value, output) {
   for (const item2 of Object.values(value)) hookCommands(item2, output);
 }
 async function verifyHookAbi(payloadRoot) {
-  const manifestPath2 = join70(payloadRoot, "hooks", "hooks.json");
+  const manifestPath2 = join71(payloadRoot, "hooks", "hooks.json");
   let parsed;
   try {
     parsed = JSON.parse(await readFile33(manifestPath2, "utf8"));
@@ -43086,20 +43258,20 @@ async function runChecked(runner, file, args, cwd, label) {
   throw new RuntimeFailure("candidate-invalid", `${label} \u5931\u8D25: ${detail}`);
 }
 async function verifyPayload(payloadRoot, runner) {
-  const verifier = join70(payloadRoot, "tools", "verify-skills.sh");
-  const cli = join70(payloadRoot, "packages", "cli", "dist", "tenon.mjs");
-  const server = join70(payloadRoot, "packages", "server", "dist", "dashboard.mjs");
-  const bootstrap = join70(payloadRoot, "runtime", "tenon-bootstrap.mjs");
+  const verifier = join71(payloadRoot, "tools", "verify-skills.sh");
+  const cli = join71(payloadRoot, "packages", "cli", "dist", "tenon.mjs");
+  const server = join71(payloadRoot, "packages", "server", "dist", "dashboard.mjs");
+  const bootstrap = join71(payloadRoot, "runtime", "tenon-bootstrap.mjs");
   await assertFile(verifier, "verify-skills");
   await assertFile(cli, "CLI bundle");
   await assertFile(server, "dashboard server bundle");
   await assertFile(bootstrap, "runtime bootstrap");
   await verifyHookAbi(payloadRoot);
   await runChecked(runner, "bash", [verifier, "--quiet", "--root", payloadRoot], payloadRoot, "\u63D2\u4EF6\u8D44\u4EA7\u6821\u9A8C");
-  for (const file of await shellFiles(join70(payloadRoot, "hooks"))) {
+  for (const file of await shellFiles(join71(payloadRoot, "hooks"))) {
     await runChecked(runner, "bash", ["-n", file], payloadRoot, `hook \u8BED\u6CD5 ${basename7(file)}`);
   }
-  for (const file of await shellFiles(join70(payloadRoot, "adapters"))) {
+  for (const file of await shellFiles(join71(payloadRoot, "adapters"))) {
     await runChecked(runner, "bash", ["-n", file], payloadRoot, `adapter \u8BED\u6CD5 ${basename7(file)}`);
   }
   for (const file of [cli, server, bootstrap]) {
@@ -43110,7 +43282,7 @@ async function verifyPayload(payloadRoot, runner) {
 async function candidateVersion(candidateRoot) {
   for (const manifest of [".codex-plugin/plugin.json", ".claude-plugin/plugin.json"]) {
     try {
-      const parsed = JSON.parse(await readFile33(join70(candidateRoot, manifest), "utf8"));
+      const parsed = JSON.parse(await readFile33(join71(candidateRoot, manifest), "utf8"));
       const version = isRecord13(parsed) ? nonEmptyString(parsed.version) : null;
       if (version !== null) return version;
     } catch {
@@ -43200,6 +43372,20 @@ var RuntimeReleaseStore = class {
       }
     });
   }
+  async revertActivation(activated) {
+    await this.prepareRoots();
+    await withLock(this.paths.stateRoot, async () => {
+      await compensateActivation({
+        paths: this.paths,
+        activated,
+        current: await readSelection(this.paths),
+        now: this.now,
+        audit: (entry) => this.auditWriter(this.paths, entry),
+        validateRelease: (releaseId) => this.validateStoredRelease(releaseId),
+        installBootstrap: (releaseId) => this.installBootstrap(this.releaseRoot(releaseId))
+      });
+    });
+  }
   async recordUpdateFailure(detail) {
     await this.prepareRoots();
     await withLock(this.paths.stateRoot, async () => {
@@ -43212,8 +43398,8 @@ var RuntimeReleaseStore = class {
     });
   }
   async stageAndActivateUnderLock(candidateRoot, host) {
-    const stageRoot = join70(this.paths.stagingRoot, `release-${randomUUID10()}`);
-    const payloadRoot = join70(stageRoot, "payload");
+    const stageRoot = join71(this.paths.stagingRoot, `release-${randomUUID10()}`);
+    const payloadRoot = join71(stageRoot, "payload");
     let releaseId = null;
     try {
       await mkdir24(payloadRoot, { recursive: true });
@@ -43229,7 +43415,7 @@ var RuntimeReleaseStore = class {
         createdAt: this.now(),
         source
       };
-      await atomicWriteFile(join70(stageRoot, "release.json"), stableJson(manifest));
+      await atomicWriteFile(join71(stageRoot, "release.json"), stableJson(manifest));
       const finalRoot = this.releaseRoot(releaseId);
       let effectiveManifest = manifest;
       try {
@@ -43273,7 +43459,7 @@ var RuntimeReleaseStore = class {
       });
       throw error;
     } finally {
-      await rm10(stageRoot, { recursive: true, force: true }).catch(() => {
+      await rm11(stageRoot, { recursive: true, force: true }).catch(() => {
       });
     }
   }
@@ -43289,14 +43475,14 @@ var RuntimeReleaseStore = class {
   }
   releaseRoot(releaseId) {
     if (!validReleaseId(releaseId)) throw new RuntimeFailure("runtime-corrupt", `\u975E\u6CD5 runtime release id: ${releaseId}`);
-    return join70(this.paths.releasesRoot, releaseId);
+    return join71(this.paths.releasesRoot, releaseId);
   }
   async validateStoredRelease(releaseId) {
     if (!validReleaseId(releaseId)) return null;
     const root = this.releaseRoot(releaseId);
     const manifest = await readReleaseManifest(root);
     if (manifest === null || manifest.releaseId !== releaseId) return null;
-    const payloadRoot = join70(root, "payload");
+    const payloadRoot = join71(root, "payload");
     try {
       if (await hashTree(payloadRoot) !== manifest.payloadDigest) return null;
       await verifyPayload(payloadRoot, this.runner);
@@ -43306,11 +43492,11 @@ var RuntimeReleaseStore = class {
     }
   }
   async installBootstrap(releaseRoot) {
-    const source = join70(releaseRoot, "payload", "runtime", "tenon-bootstrap.mjs");
+    const source = join71(releaseRoot, "payload", "runtime", "tenon-bootstrap.mjs");
     await assertFile(source, "runtime bootstrap");
     await runChecked(this.runner, process.execPath, ["--check", source], releaseRoot, "runtime bootstrap syntax");
-    const active = join70(this.paths.bootstrapRoot, "active.mjs");
-    const previous = join70(this.paths.bootstrapRoot, "previous.mjs");
+    const active = join71(this.paths.bootstrapRoot, "active.mjs");
+    const previous = join71(this.paths.bootstrapRoot, "previous.mjs");
     try {
       await stat12(active);
       await atomicWriteFile(previous, await readFile33(active, "utf8"));
@@ -43328,14 +43514,14 @@ var RuntimeReleaseStore = class {
     for (const entry of entries) {
       if (!entry.isDirectory() || !validReleaseId(entry.name) || protectedIds.has(entry.name)) continue;
       try {
-        candidates.push({ id: entry.name, modifiedAt: (await stat12(join70(this.paths.releasesRoot, entry.name))).mtimeMs });
+        candidates.push({ id: entry.name, modifiedAt: (await stat12(join71(this.paths.releasesRoot, entry.name))).mtimeMs });
       } catch {
       }
     }
     candidates.sort((left, right) => right.modifiedAt - left.modifiedAt);
     const keep = Math.max(0, this.retainedReleases - protectedIds.size);
     for (const candidate of candidates.slice(keep)) {
-      await rm10(this.releaseRoot(candidate.id), { recursive: true, force: true });
+      await rm11(this.releaseRoot(candidate.id), { recursive: true, force: true });
       await this.auditWriter(this.paths, {
         version: 1,
         at: this.now(),
@@ -43354,9 +43540,19 @@ function storeFor(homeDir) {
 var REAL_RUNTIME_INSTALLER = {
   async activate(candidateRoot, host, homeDir = homedir18()) {
     const paths = resolveRuntimePaths({ homeDir });
-    const activation = await new RuntimeReleaseStore({ paths }).stageAndActivate(candidateRoot, host);
-    await writeStableLaunchers(paths, homeDir);
-    return activation;
+    const store2 = new RuntimeReleaseStore({ paths });
+    const activation = await store2.stageAndActivate(candidateRoot, host);
+    try {
+      await writeStableLaunchers(paths, homeDir);
+      return activation;
+    } catch (error) {
+      await store2.revertActivation(activation.selection).catch((rollbackError) => {
+        throw new Error(
+          `\u7A33\u5B9A launcher \u5199\u5165\u5931\u8D25\u4E14 activation \u8865\u507F\u5931\u8D25\uFF1A${String(error)}\uFF1Brollback=${String(rollbackError)}`
+        );
+      });
+      throw new Error(`\u7A33\u5B9A launcher \u5199\u5165\u5931\u8D25\uFF0C\u5DF2\u6062\u590D activation \u524D runtime\uFF1A${String(error)}`);
+    }
   },
   inspect(homeDir = homedir18()) {
     return storeFor(homeDir).inspect();
@@ -43366,6 +43562,12 @@ var REAL_RUNTIME_INSTALLER = {
     const activation = await new RuntimeReleaseStore({ paths }).rollbackToPrevious();
     await writeStableLaunchers(paths, homeDir);
     return activation;
+  },
+  async revertActivation(homeDir = homedir18(), activation) {
+    const paths = resolveRuntimePaths({ homeDir });
+    await new RuntimeReleaseStore({ paths }).revertActivation(activation.selection);
+    const inspection = await new RuntimeReleaseStore({ paths }).inspect();
+    if (inspection.selection.activeRelease !== null) await writeStableLaunchers(paths, homeDir);
   },
   recordUpdateFailure(homeDir = homedir18(), detail) {
     return storeFor(homeDir).recordUpdateFailure(detail);
@@ -43517,7 +43719,7 @@ function installedPipelineRoot(host, stdout) {
 }
 
 // packages/cli/src/commands/setupEnvironment.ts
-import { dirname as dirname17, join as join71, resolve as resolve32 } from "node:path";
+import { dirname as dirname17, join as join72, resolve as resolve32 } from "node:path";
 import { execFileSync } from "node:child_process";
 import {
   accessSync as accessSync3,
@@ -43567,7 +43769,7 @@ var REAL_SETUP_ENV = {
     for (const dir of (process.env.PATH ?? "").split(":")) {
       if (dir === "") continue;
       try {
-        accessSync3(join71(dir, name2), fsConstants3.X_OK);
+        accessSync3(join72(dir, name2), fsConstants3.X_OK);
         return true;
       } catch {
       }
@@ -43624,7 +43826,7 @@ function printPlanSkeleton(deps, opts, host) {
   if (opts.dryRun) deps.io.out("  \uFF08--dry-run:\u4EC5\u6253\u5370\u8BA1\u5212,\u4E0D\u53D1\u5E03 runtime\u3001\u4E0D\u5199\u4EFB\u4F55\u6587\u4EF6\uFF09");
 }
 function autoUpdateConfigPath(env) {
-  return join71(resolveRuntimePaths({ homeDir: env.homeDir() }).configRoot, "auto-update.conf");
+  return join72(resolveRuntimePaths({ homeDir: env.homeDir() }).configRoot, "auto-update.conf");
 }
 function configureAutoUpdate(deps, env, host, enabled) {
   if (!enabled) return 0;
@@ -43697,7 +43899,7 @@ function scrubLegacyCodexAdapterHooks(content) {
 `, removed };
 }
 function migrateLegacyCodexHooks(deps, env) {
-  const configPath = join71(env.homeDir(), ".codex", "hooks.json");
+  const configPath = join72(env.homeDir(), ".codex", "hooks.json");
   if (!env.pathExists(configPath)) return 0;
   const current = env.readText(configPath);
   if (current === void 0) {
@@ -43717,12 +43919,12 @@ function migrateLegacyCodexHooks(deps, env) {
 }
 
 // packages/cli/src/commands/setupHost.ts
-import { join as join72 } from "node:path";
+import { join as join73 } from "node:path";
 function verifyPackagedAssets(deps, env, root, dryRun, silent = false) {
-  const command = [join72(root, "tools", "verify-skills.sh"), "--quiet", "--root", root];
+  const command = [join73(root, "tools", "verify-skills.sh"), "--quiet", "--root", root];
   if (!silent) deps.io.out(`[setup] \u63D2\u4EF6\u8D44\u4EA7\u6821\u9A8C: bash ${command.join(" ")}`);
   if (dryRun) return 0;
-  if (!env.pathExists(join72(root, "runtime", "tenon-bootstrap.mjs"))) {
+  if (!env.pathExists(join73(root, "runtime", "tenon-bootstrap.mjs"))) {
     if (!silent) deps.io.err("ERROR: \u63D2\u4EF6\u8D44\u4EA7\u6821\u9A8C\u5931\u8D25\uFF1A\u7F3A\u5C11 runtime/tenon-bootstrap.mjs\uFF08\u8BE5 marketplace release \u4E0D\u662F\u5B8C\u6574\u53EF\u5B89\u88C5\u5305\uFF09");
     return 1;
   }
@@ -43806,9 +44008,15 @@ function publishManagedRuntime(deps, env, installer, candidateRoot, host, dashbo
     deps.io.out(`[setup] \u5DF2\u53D1\u5E03\u5DF2\u9A8C\u8BC1 runtime: ${activation.release.releaseId}\uFF08revision ${activation.selection.revision}\uFF09\u3002`);
     deps.io.out("[setup] \u7A33\u5B9A\u5165\u53E3\u5DF2\u5C31\u7EEA\uFF1A~/.local/bin/tenon \u4E0E ~/.local/bin/tenon-hook \u4E0D\u518D\u76F4\u8FDE marketplace checkout\u3002");
     if (dashboardStarter !== void 0) {
-      const dashboardCode = await dashboardStarter.start(deps, join72(activation.releaseRoot, "payload"), { openBrowser: openDashboard });
+      const dashboardCode = await dashboardStarter.start(deps, join73(activation.releaseRoot, "payload"), { openBrowser: openDashboard });
       if (dashboardCode !== 0) {
-        deps.io.err("ERROR: runtime \u5DF2\u53D1\u5E03\uFF0C\u4F46 dashboard \u672A\u80FD\u5B8C\u6210\u53D7\u7BA1\u542F\u52A8\uFF1B\u8BF7\u8FD0\u884C tenon dashboard --background \u8BCA\u65AD\u3002");
+        try {
+          if (installer.revertActivation === void 0) throw new Error("runtime installer \u4E0D\u652F\u6301\u7CBE\u786E activation \u8865\u507F");
+          await installer.revertActivation(env.homeDir(), activation);
+          deps.io.err("ERROR: \u65B0 runtime \u7684 dashboard readiness \u5931\u8D25\uFF1B\u5DF2\u6062\u590D activation \u524D active selection\u3002");
+        } catch (rollbackError) {
+          deps.io.err(`ERROR: \u65B0 runtime \u7684 dashboard readiness \u5931\u8D25\uFF0C\u4E14\u7CBE\u786E\u56DE\u6EDA\u5931\u8D25\uFF1A${errMsg(rollbackError)}`);
+        }
         return 1;
       }
     }
@@ -43858,7 +44066,7 @@ function cmdSetupHost(deps, host, opts, env = REAL_SETUP_ENV, installer = REAL_R
     if (assetCode !== 0) return assetCode;
     return publishManagedRuntime(deps, env, installer, root, host, dashboardStarter, openDashboard).then((runtimeCode) => {
       if (runtimeCode !== 0) return runtimeCode;
-      const adapter = join72(root, "adapters", "install.sh");
+      const adapter = join73(root, "adapters", "install.sh");
       const args = [adapter, hostFlag(host), "--target", opts.target ?? deps.cwd, "--yes"];
       deps.io.out(`[setup] $ bash ${args.join(" ")}`);
       const result = env.runCommand("bash", args);
@@ -43873,7 +44081,7 @@ function cmdSetupHost(deps, host, opts, env = REAL_SETUP_ENV, installer = REAL_R
 }
 
 // packages/cli/src/commands/setupSkillsPlan.ts
-import { join as join73 } from "node:path";
+import { join as join74 } from "node:path";
 var REGISTERED_MARKETPLACES = /* @__PURE__ */ new Set(["claude-plugins-official"]);
 var TIER_RANK = { mandatory: 3, recommended: 2, conditional: 1, optional: 0 };
 var higherTier = (a, b) => TIER_RANK[a] >= TIER_RANK[b] ? a : b;
@@ -43882,26 +44090,26 @@ function marketplaceRepo(source) {
 }
 function skillInstalled(env, name2) {
   const home = env.homeDir();
-  if (env.pathExists(join73(home, ".codex", "skills", name2))) return true;
-  if (env.pathExists(join73(home, ".claude", "skills", name2))) return true;
-  if (env.pathExists(join73(home, ".agents", "skills", name2))) return true;
-  const cache2 = join73(home, ".claude", "plugins", "cache");
+  if (env.pathExists(join74(home, ".codex", "skills", name2))) return true;
+  if (env.pathExists(join74(home, ".claude", "skills", name2))) return true;
+  if (env.pathExists(join74(home, ".agents", "skills", name2))) return true;
+  const cache2 = join74(home, ".claude", "plugins", "cache");
   for (const marketplace of env.listDir(cache2)) {
-    if (env.pathExists(join73(cache2, marketplace, name2))) return true;
+    if (env.pathExists(join74(cache2, marketplace, name2))) return true;
   }
   return false;
 }
 function pluginInstalled(env, runner, source, id) {
   const base = runner === "codex" ? ".codex" : ".claude";
-  return env.pathExists(join73(env.homeDir(), base, "plugins", "cache", source, id));
+  return env.pathExists(join74(env.homeDir(), base, "plugins", "cache", source, id));
 }
 function marketplaceInstalled(env, runner, source) {
   if (REGISTERED_MARKETPLACES.has(source)) return true;
   const home = env.homeDir();
   if (runner === "codex") {
-    return env.pathExists(join73(home, ".codex", ".tmp", "marketplaces", source)) || env.pathExists(join73(home, ".codex", "plugins", "cache", source));
+    return env.pathExists(join74(home, ".codex", ".tmp", "marketplaces", source)) || env.pathExists(join74(home, ".codex", "plugins", "cache", source));
   }
-  return env.pathExists(join73(home, ".claude", "plugins", "marketplaces", source)) || env.pathExists(join73(home, ".claude", "plugins", "cache", source));
+  return env.pathExists(join74(home, ".claude", "plugins", "marketplaces", source)) || env.pathExists(join74(home, ".claude", "plugins", "cache", source));
 }
 function cmdStr(c) {
   return [c.cmd, ...c.args].join(" ");
@@ -44236,13 +44444,13 @@ function cmdSetupSkills(deps, opts, env = REAL_SETUP_ENV, sources, loadSources =
 }
 
 // packages/cli/src/commands/setupRuntime.ts
-import { join as join74 } from "node:path";
+import { join as join75 } from "node:path";
 import { accessSync as accessSync4, constants as fsConstants4 } from "node:fs";
 import { homedir as homedir21 } from "node:os";
 var REAL_RUNTIME_ENV = {
   exec: nodeExecDocker,
   hostEnv: process.env,
-  defaultCodexHome: join74(homedir21(), ".codex"),
+  defaultCodexHome: join75(homedir21(), ".codex"),
   canReadFile: (path9) => {
     try {
       accessSync4(path9, fsConstants4.R_OK);
@@ -44346,7 +44554,7 @@ function cmdSetup(deps, sub, opts, env = REAL_SETUP_ENV, rt = REAL_RUNTIME_ENV, 
 }
 
 // packages/cli/src/commands/update.ts
-import { join as join75 } from "node:path";
+import { join as join76 } from "node:path";
 function nativeUpdatePlan(host) {
   if (host === "codex") {
     return [
@@ -44374,7 +44582,7 @@ function isLocalCodexMarketplaceUpgradeNoop(result) {
 ${result.stderr}`);
 }
 function verifyUpdatedRoot(deps, env, root) {
-  const result = env.runCommand("bash", [join75(root, "tools", "verify-skills.sh"), "--quiet", "--root", root]);
+  const result = env.runCommand("bash", [join76(root, "tools", "verify-skills.sh"), "--quiet", "--root", root]);
   if (result.code === 0) return true;
   deps.io.err(`ERROR: \u65B0\u63D2\u4EF6\u8D44\u4EA7\u6821\u9A8C\u5931\u8D25\uFF0C\u4FDD\u6301\u539F launcher\uFF1A${result.stderr.trim() || result.stdout.trim() || `\u9000\u51FA\u7801 ${result.code}`}`);
   return false;
@@ -44385,6 +44593,25 @@ function rejectUpdate(installer, env, detail) {
   return record2.then(() => 1).catch(() => 1);
 }
 function cmdUpdate(deps, opts, env = REAL_SETUP_ENV, installer = REAL_RUNTIME_INSTALLER, dashboardStarter = REAL_RELEASED_DASHBOARD_STARTER) {
+  if (opts.selfUpdate === true && !Object.entries(opts).some(([key, value]) => key !== "selfUpdate" && ["codex", "claude", "cursor", "gemini", "copilot", "pi", "devin", "zed", "aider", "continue", "cline", "amp"].includes(key) && value === true)) {
+    return installer.inspect(env.homeDir()).then((inspection) => {
+      const runtimeHost = inspection.active?.source.host;
+      if (runtimeHost !== "codex" && runtimeHost !== "claude") {
+        deps.io.err("ERROR: --self-update \u65E0\u6CD5\u4ECE active runtime \u63A8\u65AD\u539F\u751F\u5BBF\u4E3B\uFF1B\u8BF7\u5148\u8FD0\u884C tenon setup --codex \u6216 --claude\u3002");
+        return 1;
+      }
+      return cmdUpdate(
+        deps,
+        { ...opts, [runtimeHost]: true },
+        env,
+        installer,
+        dashboardStarter
+      );
+    }).catch((error) => {
+      deps.io.err(`ERROR: --self-update \u8BFB\u53D6 active runtime \u5931\u8D25\uFF1A${error instanceof Error ? error.message : String(error)}`);
+      return 1;
+    });
+  }
   const selection = selectPipelineHost(opts);
   if (selection.host === null) {
     deps.io.err(`ERROR: ${selection.error}\u3002\u793A\u4F8B\uFF1Atenon update --codex`);
@@ -44439,13 +44666,20 @@ function cmdUpdate(deps, opts, env = REAL_SETUP_ENV, installer = REAL_RUNTIME_IN
     deps.io.out(`[update] \u5DF2\u539F\u5B50\u5207\u6362\u81F3\u5DF2\u9A8C\u8BC1 runtime: ${activation.release.releaseId}\uFF08revision ${activation.selection.revision}\uFF09\u3002`);
     const dashboardCode = await dashboardStarter.start(
       deps,
-      join75(activation.releaseRoot, "payload"),
+      join76(activation.releaseRoot, "payload"),
       { openBrowser: opts.auto !== true }
     );
     if (dashboardCode !== 0) {
-      const detail = "runtime \u5DF2\u5207\u6362\uFF0C\u4F46 dashboard \u672A\u80FD\u5B8C\u6210\u53D7\u7BA1\u5237\u65B0\uFF1B\u8BF7\u8FD0\u884C tenon dashboard --background \u8BCA\u65AD\u3002";
+      const detail = "\u65B0 runtime \u7684 dashboard readiness \u5931\u8D25";
+      try {
+        if (installer.revertActivation === void 0) throw new Error("runtime installer \u4E0D\u652F\u6301\u7CBE\u786E activation \u8865\u507F");
+        await installer.revertActivation(env.homeDir(), activation);
+      } catch (rollbackError) {
+        deps.io.err(`ERROR: ${detail}\uFF0C\u4E14\u7CBE\u786E\u56DE\u6EDA\u5931\u8D25\uFF1A${rollbackError instanceof Error ? rollbackError.message : String(rollbackError)}`);
+        return rejectUpdate(installer, env, `${detail}\uFF1Brollback failed`);
+      }
       deps.io.err(`ERROR: ${detail}`);
-      return rejectUpdate(installer, env, detail);
+      return rejectUpdate(installer, env, `${detail}\uFF1B\u5DF2\u6062\u590D\u4E0A\u4E00 active selection`);
     }
     if (opts.auto) {
       deps.io.out(`[update] ${hostFlag(host)} \u5DF2\u5728\u540E\u53F0\u5237\u65B0\uFF1B\u5F53\u524D\u4F1A\u8BDD\u7EE7\u7EED\u4F7F\u7528\u5DF2\u52A0\u8F7D\u7248\u672C\uFF0C\u65B0\u4F1A\u8BDD\u5C06\u52A0\u8F7D\u65B0 skills/hooks\u3002`);
@@ -44467,7 +44701,7 @@ function registerInstallCommands(program2, deps, dashboardRuntime) {
   program2.command("setup [sub]").description("\u5B89\u88C5\u5B8C\u6574 Tenon\uFF1A\u5FC5\u987B\u9009\u62E9\u4E00\u4E2A\u5BBF\u4E3B\uFF08\u5982 --codex\uFF09\uFF1B\u4E0D\u4F1A\u540C\u65F6\u4FEE\u6539 Codex \u4E0E Claude").option("--codex", "\u5B89\u88C5/\u9A8C\u8BC1 Codex \u539F\u751F\u63D2\u4EF6").option("--claude", "\u5B89\u88C5/\u9A8C\u8BC1 Claude \u539F\u751F\u63D2\u4EF6").option("--cursor", "\u90E8\u7F72 Cursor adapter").option("--gemini", "\u90E8\u7F72 Gemini adapter").option("--copilot", "\u90E8\u7F72 Copilot adapter").option("--pi", "\u90E8\u7F72 Pi adapter").option("--devin", "\u90E8\u7F72 Devin adapter").option("--zed", "\u90E8\u7F72 Zed adapter").option("--aider", "\u90E8\u7F72 Aider adapter").option("--continue", "\u90E8\u7F72 Continue adapter").option("--cline", "\u90E8\u7F72 Cline adapter").option("--amp", "\u90E8\u7F72 Amp adapter").option("--target <dir>", "\u975E\u539F\u751F adapter \u7684\u9879\u76EE\u76EE\u6807\u76EE\u5F55\uFF08\u7F3A\u7701\u5F53\u524D\u76EE\u5F55\uFF09").option("--auto-update", "\u4E3A\u6240\u9009\u539F\u751F\u5BBF\u4E3B\u542F\u7528\u6BCF\u65E5\u4E00\u6B21\u7684\u81EA\u52A8\u5347\u7EA7\u68C0\u67E5").option("--dry-run", "\u4EC5\u6253\u5370\u6240\u9009\u5BBF\u4E3B\u5B89\u88C5\u8BA1\u5212\uFF0C\u4E0D\u5199\u6587\u4EF6\u3001\u4E0D\u6267\u884C adapter \u6216 marketplace \u64CD\u4F5C").option("-y, --yes", "\u8DF3\u8FC7\u517C\u5BB9 skills/setup \u7684 y/N \u786E\u8BA4\u4F4D").action(async (sub, opts) => {
     bail(await cmdSetup(deps, sub, opts));
   });
-  program2.command("update").description("\u5237\u65B0\u4E00\u4E2A\u5DF2\u5B89\u88C5\u7684\u539F\u751F Tenon \u63D2\u4EF6\uFF1B\u5347\u7EA7\u540E\u8BF7\u65B0\u5F00\u4F1A\u8BDD\u52A0\u8F7D skills \u548C hooks").option("--codex", "\u66F4\u65B0 Codex marketplace \u4E2D\u7684 tenon").option("--claude", "\u66F4\u65B0 Claude marketplace \u4E2D\u7684 tenon").option("--cursor", "\u4ECE\u5F53\u524D\u5DF2\u66F4\u65B0\u7684\u5305\u91CD\u65B0\u90E8\u7F72 Cursor adapter").option("--gemini", "\u4ECE\u5F53\u524D\u5DF2\u66F4\u65B0\u7684\u5305\u91CD\u65B0\u90E8\u7F72 Gemini adapter").option("--copilot", "\u4ECE\u5F53\u524D\u5DF2\u66F4\u65B0\u7684\u5305\u91CD\u65B0\u90E8\u7F72 Copilot adapter").option("--pi", "\u4ECE\u5F53\u524D\u5DF2\u66F4\u65B0\u7684\u5305\u91CD\u65B0\u90E8\u7F72 Pi adapter").option("--devin", "\u4ECE\u5F53\u524D\u5DF2\u66F4\u65B0\u7684\u5305\u91CD\u65B0\u90E8\u7F72 Devin adapter").option("--zed", "\u4ECE\u5F53\u524D\u5DF2\u66F4\u65B0\u7684\u5305\u91CD\u65B0\u90E8\u7F72 Zed adapter").option("--aider", "\u4ECE\u5F53\u524D\u5DF2\u66F4\u65B0\u7684\u5305\u91CD\u65B0\u90E8\u7F72 Aider adapter").option("--continue", "\u4ECE\u5F53\u524D\u5DF2\u66F4\u65B0\u7684\u5305\u91CD\u65B0\u90E8\u7F72 Continue adapter").option("--cline", "\u4ECE\u5F53\u524D\u5DF2\u66F4\u65B0\u7684\u5305\u91CD\u65B0\u90E8\u7F72 Cline adapter").option("--amp", "\u4ECE\u5F53\u524D\u5DF2\u66F4\u65B0\u7684\u5305\u91CD\u65B0\u90E8\u7F72 Amp adapter").option("--target <dir>", "\u975E\u539F\u751F adapter \u7684\u9879\u76EE\u76EE\u6807\u76EE\u5F55\uFF08\u7F3A\u7701\u5F53\u524D\u76EE\u5F55\uFF09").option("--dry-run", "\u4EC5\u6253\u5370\u5347\u7EA7\u8BA1\u5212\uFF0C\u4E0D\u6267\u884C marketplace \u6216 adapter \u64CD\u4F5C").option("-y, --yes", "\u4F9B\u81EA\u52A8\u66F4\u65B0\u8C03\u7528\u7684\u975E\u4EA4\u4E92\u786E\u8BA4").option("--auto", "\u7531\u5DF2\u660E\u786E\u542F\u7528\u7684\u81EA\u52A8\u66F4\u65B0\u4EFB\u52A1\u8C03\u7528\uFF08\u4E0D\u6539\u53D8\u7528\u6237\u7684 opt-in \u72B6\u6001\uFF09").action(async (opts) => {
+  program2.command("update").description("\u5237\u65B0\u4E00\u4E2A\u5DF2\u5B89\u88C5\u7684\u539F\u751F Tenon \u63D2\u4EF6\uFF1B\u5347\u7EA7\u540E\u8BF7\u65B0\u5F00\u4F1A\u8BDD\u52A0\u8F7D skills \u548C hooks").option("--codex", "\u66F4\u65B0 Codex marketplace \u4E2D\u7684 tenon").option("--claude", "\u66F4\u65B0 Claude marketplace \u4E2D\u7684 tenon").option("--cursor", "\u4ECE\u5F53\u524D\u5DF2\u66F4\u65B0\u7684\u5305\u91CD\u65B0\u90E8\u7F72 Cursor adapter").option("--gemini", "\u4ECE\u5F53\u524D\u5DF2\u66F4\u65B0\u7684\u5305\u91CD\u65B0\u90E8\u7F72 Gemini adapter").option("--copilot", "\u4ECE\u5F53\u524D\u5DF2\u66F4\u65B0\u7684\u5305\u91CD\u65B0\u90E8\u7F72 Copilot adapter").option("--pi", "\u4ECE\u5F53\u524D\u5DF2\u66F4\u65B0\u7684\u5305\u91CD\u65B0\u90E8\u7F72 Pi adapter").option("--devin", "\u4ECE\u5F53\u524D\u5DF2\u66F4\u65B0\u7684\u5305\u91CD\u65B0\u90E8\u7F72 Devin adapter").option("--zed", "\u4ECE\u5F53\u524D\u5DF2\u66F4\u65B0\u7684\u5305\u91CD\u65B0\u90E8\u7F72 Zed adapter").option("--aider", "\u4ECE\u5F53\u524D\u5DF2\u66F4\u65B0\u7684\u5305\u91CD\u65B0\u90E8\u7F72 Aider adapter").option("--continue", "\u4ECE\u5F53\u524D\u5DF2\u66F4\u65B0\u7684\u5305\u91CD\u65B0\u90E8\u7F72 Continue adapter").option("--cline", "\u4ECE\u5F53\u524D\u5DF2\u66F4\u65B0\u7684\u5305\u91CD\u65B0\u90E8\u7F72 Cline adapter").option("--amp", "\u4ECE\u5F53\u524D\u5DF2\u66F4\u65B0\u7684\u5305\u91CD\u65B0\u90E8\u7F72 Amp adapter").option("--target <dir>", "\u975E\u539F\u751F adapter \u7684\u9879\u76EE\u76EE\u6807\u76EE\u5F55\uFF08\u7F3A\u7701\u5F53\u524D\u76EE\u5F55\uFF09").option("--dry-run", "\u4EC5\u6253\u5370\u5347\u7EA7\u8BA1\u5212\uFF0C\u4E0D\u6267\u884C marketplace \u6216 adapter \u64CD\u4F5C").option("-y, --yes", "\u4F9B\u81EA\u52A8\u66F4\u65B0\u8C03\u7528\u7684\u975E\u4EA4\u4E92\u786E\u8BA4").option("--auto", "\u7531\u5DF2\u660E\u786E\u542F\u7528\u7684\u81EA\u52A8\u66F4\u65B0\u4EFB\u52A1\u8C03\u7528\uFF08\u4E0D\u6539\u53D8\u7528\u6237\u7684 opt-in \u72B6\u6001\uFF09").option("--self-update", "\u4ECE\u5F53\u524D active runtime \u63A8\u65AD\u5BBF\u4E3B\uFF0C\u9694\u79BB\u9A8C\u8BC1\u5E76\u66F4\u65B0 Tenon CLI/runtime").action(async (opts) => {
     bail(await cmdUpdate(deps, opts));
   });
   program2.command("runtime <sub>").description("\u67E5\u770B managed runtime\uFF0C\u6216\u4EC5\u56DE\u6EDA\u5230\u4E0A\u4E00\u4EFD\u5B8C\u6574\u6821\u9A8C\u901A\u8FC7\u7684 release").option("--rollback", "\u4EC5 runtime repair \u4F7F\u7528\uFF1A\u5207\u6362\u5230\u4E0A\u4E00\u4EFD\u5DF2\u9A8C\u8BC1 release").option("--json", "\u673A\u5668\u53EF\u8BFB\u8F93\u51FA").action(async (sub, opts) => {
@@ -44720,7 +44954,7 @@ function registerTrackCommands(program2, deps) {
 
 // packages/cli/src/commands/handoff.ts
 import { createHash as createHash30 } from "node:crypto";
-import { join as join76 } from "node:path";
+import { join as join77 } from "node:path";
 function scalarField4(v) {
   if (v === void 0) return "";
   return Array.isArray(v) ? v.join(",") : v;
@@ -44800,7 +45034,7 @@ async function compileBundle(deps, name2, from, target, budgetBytes, fs) {
       );
     }
     for (const record2 of records) {
-      const text2 = fs.readText(join76(deps.cwd, record2.path));
+      const text2 = fs.readText(join77(deps.cwd, record2.path));
       if (text2 === void 0) {
         throw new Error(`Context Bundle missing document '${kind}': ${record2.path}; restore or re-record it`);
       }
@@ -45068,7 +45302,7 @@ function buildProgram(deps, runtimes = {}) {
 // packages/cli/src/guardContext.ts
 import { readdirSync as readdirSync8, readFileSync as readFileSync26, statSync as statSync6 } from "node:fs";
 import { readdir as readdir14 } from "node:fs/promises";
-import { join as join77 } from "node:path";
+import { join as join78 } from "node:path";
 async function listChanges(changesRoot2) {
   let entries;
   try {
@@ -45076,7 +45310,7 @@ async function listChanges(changesRoot2) {
   } catch {
     return [];
   }
-  return entries.filter((entry) => entry.isDirectory() && entry.name !== "archive").filter((entry) => stateStorageExistsSync(join77(changesRoot2, entry.name))).map((entry) => entry.name).sort();
+  return entries.filter((entry) => entry.isDirectory() && entry.name !== "archive").filter((entry) => stateStorageExistsSync(join78(changesRoot2, entry.name))).map((entry) => entry.name).sort();
 }
 async function listChangeDirs(changesRoot2) {
   let entries;
@@ -45089,7 +45323,7 @@ async function listChangeDirs(changesRoot2) {
 }
 function activeCanonicalArchived(cwd, dep) {
   try {
-    const current = readCurrentRunRevisionSync(join77(cwd, "openspec", "changes", dep));
+    const current = readCurrentRunRevisionSync(join78(cwd, "openspec", "changes", dep));
     return current?.state.fields.archived === "true";
   } catch {
     return false;
@@ -45097,13 +45331,13 @@ function activeCanonicalArchived(cwd, dep) {
 }
 function physicallyArchived(cwd, dep) {
   try {
-    return readdirSync8(join77(cwd, "openspec", "changes", "archive"), { withFileTypes: true }).some((entry) => entry.isDirectory() && entry.name.endsWith(`-${dep}`));
+    return readdirSync8(join78(cwd, "openspec", "changes", "archive"), { withFileTypes: true }).some((entry) => entry.isDirectory() && entry.name.endsWith(`-${dep}`));
   } catch {
     return false;
   }
 }
 function makeGuardCtx(cwd) {
-  const abs = (relativePath) => join77(cwd, relativePath);
+  const abs = (relativePath) => join78(cwd, relativePath);
   return (name2) => ({
     changeDirRel: `openspec/changes/${name2}`,
     stateExists: (changeDirRel) => stateStorageExistsSync(abs(changeDirRel)),
@@ -45157,7 +45391,7 @@ async function readGateMarkers(cwd) {
   const out = [];
   for (const kind of ["confirm", "review", "interaction"]) {
     try {
-      const p = join78(cwd, `.pipeline-pending-${kind}`);
+      const p = join79(cwd, `.pipeline-pending-${kind}`);
       const st = await stat13(p);
       out.push({ kind, ageMs: Date.now() - st.mtimeMs, raw: await readFile34(p, "utf8") });
     } catch {
@@ -45166,10 +45400,10 @@ async function readGateMarkers(cwd) {
   return out;
 }
 function pluginRoot() {
-  return join78(dirname21(fileURLToPath3(import.meta.url)), "..", "..", "..");
+  return join79(dirname21(fileURLToPath3(import.meta.url)), "..", "..", "..");
 }
 function manifestPath() {
-  return join78(pluginRoot(), "templates", "manifest.yaml");
+  return join79(pluginRoot(), "templates", "manifest.yaml");
 }
 function trackValidationContext(repoRoot, manifest) {
   const skillProfiles = /* @__PURE__ */ new Set();
@@ -45199,7 +45433,7 @@ function readPluginVersion() {
     [".claude-plugin", "plugin.json"]
   ]) {
     try {
-      const raw = readFileSync27(join78(pluginRoot(), ...rel), "utf8");
+      const raw = readFileSync27(join79(pluginRoot(), ...rel), "utf8");
       const parsed = JSON.parse(raw);
       const version = typeof parsed === "object" && parsed !== null && "version" in parsed ? parsed.version : void 0;
       if (typeof version === "string" && version.trim() !== "") return version;
@@ -45218,7 +45452,7 @@ function safeReaddirDirs(dir) {
 function readDisabledPluginKeys() {
   const disabled = /* @__PURE__ */ new Set();
   try {
-    const raw = readFileSync27(join78(homedir22(), ".claude", "settings.json"), "utf8");
+    const raw = readFileSync27(join79(homedir22(), ".claude", "settings.json"), "utf8");
     const parsed = JSON.parse(raw);
     const ep = typeof parsed === "object" && parsed !== null && "enabledPlugins" in parsed ? parsed.enabledPlugins : void 0;
     if (ep !== null && typeof ep === "object") {
@@ -45231,26 +45465,26 @@ function readDisabledPluginKeys() {
 function scanInstalledSkillNames() {
   const home = homedir22();
   const names = /* @__PURE__ */ new Set();
-  for (const n of safeReaddirDirs(join78(home, ".claude", "skills"))) names.add(n);
-  for (const n of safeReaddirDirs(join78(home, ".agents", "skills"))) names.add(n);
-  const cache2 = join78(home, ".claude", "plugins", "cache");
+  for (const n of safeReaddirDirs(join79(home, ".claude", "skills"))) names.add(n);
+  for (const n of safeReaddirDirs(join79(home, ".agents", "skills"))) names.add(n);
+  const cache2 = join79(home, ".claude", "plugins", "cache");
   const disabledPlugins = readDisabledPluginKeys();
   for (const marketplace of safeReaddirDirs(cache2)) {
-    const mktDir = join78(cache2, marketplace);
+    const mktDir = join79(cache2, marketplace);
     for (const plugin of safeReaddirDirs(mktDir)) {
       if (disabledPlugins.has(`${plugin}@${marketplace}`)) continue;
       names.add(plugin);
-      for (const skill of safeReaddirDirs(join78(mktDir, plugin, "skills"))) names.add(skill);
+      for (const skill of safeReaddirDirs(join79(mktDir, plugin, "skills"))) names.add(skill);
     }
   }
   return names;
 }
 function scanCodexProjectSkillNames(cwd, root) {
   const names = /* @__PURE__ */ new Set();
-  for (const skillsRoot of [join78(root, "skills"), join78(cwd, ".agents", "skills")]) {
+  for (const skillsRoot of [join79(root, "skills"), join79(cwd, ".agents", "skills")]) {
     for (const name2 of safeReaddirDirs(skillsRoot)) {
       try {
-        if (statSync7(join78(skillsRoot, name2, "SKILL.md")).isFile()) names.add(name2);
+        if (statSync7(join79(skillsRoot, name2, "SKILL.md")).isFile()) names.add(name2);
       } catch {
       }
     }
@@ -45261,7 +45495,7 @@ function scanSkillDigests(skillsRoot) {
   const digests = /* @__PURE__ */ new Map();
   for (const name2 of safeReaddirDirs(skillsRoot)) {
     try {
-      const skillPath = join78(skillsRoot, name2, "SKILL.md");
+      const skillPath = join79(skillsRoot, name2, "SKILL.md");
       if (!statSync7(skillPath).isFile()) continue;
       digests.set(name2, createHash31("sha256").update(readFileSync27(skillPath)).digest("hex"));
     } catch {
@@ -45311,7 +45545,7 @@ function makeDoctorProbes(machineStateHome) {
     // 接入判定与 statusline.sh 头注释的接入方式同口径：settings.json 里引用了该脚本即算接入
     statuslineConfigured: () => {
       try {
-        return readFileSync27(join78(homedir22(), ".claude", "settings.json"), "utf8").includes("statusline.sh");
+        return readFileSync27(join79(homedir22(), ".claude", "settings.json"), "utf8").includes("statusline.sh");
       } catch {
         return false;
       }
@@ -45323,7 +45557,7 @@ function makeDoctorProbes(machineStateHome) {
     runVerifySkills: () => new Promise((resolve36) => {
       execFile4(
         "bash",
-        [join78(root, "tools", "verify-skills.sh"), "--quiet"],
+        [join79(root, "tools", "verify-skills.sh"), "--quiet"],
         { timeout: 3e4 },
         (err, stdout, stderr) => {
           const errCode = err?.code;
@@ -45342,9 +45576,9 @@ function makeDoctorProbes(machineStateHome) {
     codexProjectSkillNames: () => scanCodexProjectSkillNames(process.cwd(), root),
     codexSkillDiscovery: () => ({
       selectedRoot: root,
-      projectRoot: join78(process.cwd(), ".agents", "skills"),
-      selected: scanSkillDigests(join78(root, "skills")),
-      project: scanSkillDigests(join78(process.cwd(), ".agents", "skills"))
+      projectRoot: join79(process.cwd(), ".agents", "skills"),
+      selected: scanSkillDigests(join79(root, "skills")),
+      project: scanSkillDigests(join79(process.cwd(), ".agents", "skills"))
     }),
     manifestSkills: () => {
       try {
@@ -45362,7 +45596,7 @@ function makeDoctorProbes(machineStateHome) {
       image: readAutomationJson(process.cwd()).image ?? "sandcastle:local",
       secretsEnv: readSecrets(secretsPath(machineStateHome)).keys,
       hostEnv: process.env,
-      defaultCodexHome: join78(homedir22(), ".codex")
+      defaultCodexHome: join79(homedir22(), ".codex")
     })
   };
 }
@@ -45410,7 +45644,7 @@ async function main() {
     guardCtx: makeGuardCtx(process.cwd()),
     doctor: makeDoctorProbes(machineStateHome),
     readGateMarkers: () => readGateMarkers(process.cwd()),
-    writeBreadcrumb: (dir, content) => writeFile15(join78(dir, ".breadcrumb"), content, "utf8"),
+    writeBreadcrumb: (dir, content) => writeFile15(join79(dir, ".breadcrumb"), content, "utf8"),
     history: createHistoryWriter(),
     // 决策 D（v5 T2）：init 成功后 best-effort 登记项目根到 ~/.claude/pipeline-projects.json
     registerProject: async (repoRoot) => {
@@ -45421,18 +45655,18 @@ async function main() {
     readSecretsEnv: async () => readSecrets(secretsPath(machineStateHome)).keys,
     readHistoryRaw: async (dir) => {
       try {
-        return await readFile34(join78(dir, ".pipeline-history.jsonl"), "utf8");
+        return await readFile34(join79(dir, ".pipeline-history.jsonl"), "utf8");
       } catch {
         return "";
       }
     },
     gitHeadSha: () => gitHeadSha(process.cwd()),
     workspaceFingerprint: () => fingerprintWorkspace(process.cwd()),
-    writeReviewMarker: (content) => writeFile15(join78(process.cwd(), ".pipeline-pending-review"), content, "utf8"),
-    clearReviewMarker: () => rm11(join78(process.cwd(), ".pipeline-pending-review"), { force: true }),
+    writeReviewMarker: (content) => writeFile15(join79(process.cwd(), ".pipeline-pending-review"), content, "utf8"),
+    clearReviewMarker: () => rm12(join79(process.cwd(), ".pipeline-pending-review"), { force: true }),
     pluginVersion: readPluginVersion(),
     readInstalledPlugins: async () => {
-      for (const p of [join78(pluginRoot(), "..", "installed_plugins.json"), join78(process.env.HOME ?? "", ".claude", "installed_plugins.json")]) {
+      for (const p of [join79(pluginRoot(), "..", "installed_plugins.json"), join79(process.env.HOME ?? "", ".claude", "installed_plugins.json")]) {
         try {
           return await readFile34(p, "utf8");
         } catch {

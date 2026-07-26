@@ -54,6 +54,7 @@ function spyEnv(over: Partial<SetupEnv> = {}, exec?: ExecStub, confirmAns = true
 
 interface RuntimeCalls {
   readonly activations: Array<readonly [string, string, string]>
+  readonly reverts: Array<readonly [string, string]>
 }
 
 interface DashboardCalls {
@@ -61,7 +62,7 @@ interface DashboardCalls {
 }
 
 function fakeRuntimeInstaller(fail = false): { installer: RuntimeInstaller; calls: RuntimeCalls } {
-  const calls: RuntimeCalls = { activations: [] }
+  const calls: RuntimeCalls = { activations: [], reverts: [] }
   const releaseId = `sha256-${'a'.repeat(64)}`
   const installer: RuntimeInstaller = {
     activate: async (candidateRoot, host, homeDir) => {
@@ -94,6 +95,9 @@ function fakeRuntimeInstaller(fail = false): { installer: RuntimeInstaller; call
       lastAudit: null,
     }),
     rollback: async () => { throw new Error('not used') },
+    revertActivation: async (homeDir, activation) => {
+      calls.reverts.push([homeDir, activation.release.releaseId])
+    },
   }
   return { installer, calls }
 }

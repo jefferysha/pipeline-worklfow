@@ -2,7 +2,7 @@
 
 Dashboard 是本地控制面，不是公共文档托管服务。它显示项目、Change、阶段、Todo、review、AFK、loop 和证据，但不会取代 CLI 的 canonical 状态操作。
 
-![Tenon Dashboard 项目总览](../../../docs-site/public/images/dashboard-overview.webp)
+<img src="../../../docs-site/public/images/dashboard-overview.webp" alt="Tenon Dashboard 项目总览" width="1440" height="900">
 
 项目页先汇总真正需要协助的工作，再进入具体 Workflow。正式截图使用脱敏演示项目，不包含用户目录、凭据或真实业务数据。
 
@@ -68,7 +68,7 @@ Dashboard `zh/en` 存在浏览器 `localStorage`，只控制 UI。治理文档 l
 
 如果 CLI 显示 `in_progress` 而页面仍显示等待，先刷新 snapshot/SSE，再确认浏览器打开的是当前 Dashboard，而不是旧 preview。
 
-![Tenon Dashboard 流程进度](../../../docs-site/public/images/dashboard-progress.webp)
+<img src="../../../docs-site/public/images/dashboard-progress.webp" alt="Tenon Dashboard 流程进度" width="1440" height="900" loading="lazy">
 
 进度页沿真实 Workflow 展示阶段与 Change。`running` 是显示状态，执行来源则独立标记为终端或自动化，避免同一个任务在不同页面出现互相矛盾的身份。
 
@@ -90,13 +90,13 @@ projects → progress → afk → workbench → machine
 
 ### 自动运行
 
-![Tenon Dashboard 自动运行](../../../docs-site/public/images/dashboard-automation.webp)
+<img src="../../../docs-site/public/images/dashboard-automation.webp" alt="Tenon Dashboard 自动运行" width="1440" height="900" loading="lazy">
 
 自动运行页只接受 execution provenance 为 automation 的任务，并按需要处理、运行中和等待中组织。正常 Codex 对话产生的新鲜终端心跳仍会让进度页显示“运行中”，但不会进入这里。
 
 ### Workflow 工作台
 
-![Tenon Dashboard Workflow 工作台](../../../docs-site/public/images/dashboard-workbench.webp)
+<img src="../../../docs-site/public/images/dashboard-workbench.webp" alt="Tenon Dashboard Workflow 工作台" width="1440" height="900" loading="lazy">
 
 工作台把 Track、七阶段 DAG、阶段 Skill、Hook 与运行前事实放在同一页面。Default 只读基线、自定义 Workflow 和每个 Workflow 的 Free Track 都从同一份有效计划投影。
 
@@ -106,7 +106,7 @@ mutation 端点必须经过 CLI 相同的 schema、CAS、review 和 guard。前�
 
 ```bash
 lsof -nP -iTCP:18765 -sTCP:LISTEN
-curl -I http://127.0.0.1:18765/
+curl -fsS -o /dev/null http://127.0.0.1:18765/
 ```
 
 页面标题、项目 root 和 Change 必须与目标一致；端口可访问不等于页面就是当前插件。

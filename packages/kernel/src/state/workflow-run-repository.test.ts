@@ -121,7 +121,7 @@ describe('WorkflowRunRepository.initChange —— 新 change 的唯一创建入�
         effectiveWorkflowPlanBinding(compileEffectiveWorkflowPlan('default')).documentGovernanceFingerprint,
       workflowPlanFingerprint: compileEffectiveWorkflowPlan('default').workflowFingerprint,
       workflowPlanSnapshot: {
-        version: 1,
+        version: 2,
         workflowId: 'default',
         workflowFingerprint: compileEffectiveWorkflowPlan('default').workflowFingerprint,
       },
@@ -527,7 +527,7 @@ describe('WorkflowRunRepository.transact —— commit() 真提交', () => {
       .toBe(plan.workflowFingerprint)
     expect((await store.read(changeDir)).runMetadata?.workflowPlanSnapshot)
       .toMatchObject({
-        version: 1,
+        version: 2,
         workflowId: 'default',
         workflowFingerprint: plan.workflowFingerprint,
       })

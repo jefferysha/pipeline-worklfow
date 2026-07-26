@@ -20,6 +20,7 @@ import type { View } from '../shell/Nav'
 import { DEFAULT_RULES, type WorkflowRules } from '../model/workflowModel'
 import {
   executionProvenance,
+  progressCountsForRows,
   schedulerHealth,
   selectProgress,
   type ProgressRow,
@@ -175,7 +176,10 @@ export function AfkView({ snapshot, currentRoot, rulesByKey, onView, onOpenChang
     return out
   }, [sel, rulesByKey])
 
-  const health = schedulerHealth(sel.counts)
+  const health = useMemo(
+    () => schedulerHealth(progressCountsForRows(rows.map(({ row }) => row))),
+    [rows],
+  )
   const enqueueCandidates = useMemo(() => {
     const project = snapshot?.projects.find((item) => item.root === currentRoot && item.ok)
     return (project?.changes ?? []).filter((change) => {

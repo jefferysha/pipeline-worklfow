@@ -137,6 +137,9 @@ describe('AfkView 两栏自动运行工作区', () => {
     expect(screen.queryByTestId('afk-row-gate-d')).toBeNull()
     // 正常对话的终端心跳虽然在进度页属于“运行中”，但不是自动运行任务。
     expect(screen.queryByTestId('afk-row-terminal-live')).toBeNull()
+    expect(screen.getByTestId('afk-health')).toHaveTextContent('运行中 1')
+    expect(screen.getByTestId('afk-health')).toHaveTextContent('等待中 1')
+    expect(screen.getByTestId('afk-health')).toHaveTextContent('需要处理 1')
   })
 
   it('选择运行中的任务后详情同步切换，不残留失败任务的重试动作', () => {

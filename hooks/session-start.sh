@@ -18,16 +18,23 @@ INPUT="$(cat 2>/dev/null || printf '{}')"
 # never blocks SessionStart.
 record_tenon_session_proof() {
   local state_root="${TENON_RUNTIME_STATE_ROOT:-}" release_root="${TENON_ACTIVE_RELEASE_ROOT:-}"
+  local release_id="${TENON_ACTIVE_RELEASE_ID:-}" runtime_host="${TENON_RUNTIME_HOST:-}"
   local proof_dir tmp
   [ -n "$state_root" ] && [ -n "$release_root" ] || return 0
+  case "$release_id" in sha256-*) ;; *) return 0 ;; esac
+  case "${release_id#sha256-}" in *[!0-9a-f]*) return 0 ;; esac
+  [ "${#release_id}" -eq 71 ] || return 0
+  case "$runtime_host" in codex|claude|adapter|manual) ;; *) return 0 ;; esac
   [ -d "$release_root" ] || return 0
   proof_dir="$state_root/migration"
   umask 077
   mkdir -p "$proof_dir" 2>/dev/null || return 0
   tmp="$proof_dir/.tenon-session-loaded.$$"
   {
-    printf 'version=1\n'
+    printf 'version=2\n'
     printf 'loaded_at_epoch=%s\n' "$(date +%s 2>/dev/null || printf '0')"
+    printf 'host=%s\n' "$runtime_host"
+    printf 'release_id=%s\n' "$release_id"
     printf 'release_root=%s\n' "$release_root"
   } > "$tmp" 2>/dev/null || { rm -f "$tmp" 2>/dev/null || true; return 0; }
   mv "$tmp" "$proof_dir/tenon-session-loaded" 2>/dev/null || rm -f "$tmp" 2>/dev/null || true

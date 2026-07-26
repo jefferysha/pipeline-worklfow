@@ -10,7 +10,7 @@ Tenon 是一个完整打包的插件，不是“CLI 加一份需要手工安装�
 
 它解决 agent 工作中常见的错位：对话说了一套，任务状态、Todo、文档和实际工具执行却是另一套。Tenon 让这些界面共享同一份 Effective Workflow Plan，并拒绝无效转换，而不是从对话文本猜测进度。
 
-![Tenon Dashboard 项目总览](docs-site/public/images/dashboard-overview.webp)
+<img src="docs-site/public/images/dashboard-overview.webp" alt="Tenon Dashboard 项目总览" width="1440" height="900">
 
 <p align="center"><sub>一个本地控制面，统一查看项目、真实流程和需要人工处理的事项。</sub></p>
 
@@ -42,12 +42,12 @@ Simple 路由刻意保持严格。API 或公共契约、schema 和 migration、�
 
 | 流程进度 | 自动运行 |
 | --- | --- |
-| ![Tenon Dashboard 流程进度](docs-site/public/images/dashboard-progress.webp) | ![Tenon Dashboard 自动运行](docs-site/public/images/dashboard-automation.webp) |
+| <img src="docs-site/public/images/dashboard-progress.webp" alt="Tenon Dashboard 流程进度" width="1440" height="900" loading="lazy"> | <img src="docs-site/public/images/dashboard-automation.webp" alt="Tenon Dashboard 自动运行" width="1440" height="900" loading="lazy"> |
 | Todo、阶段、门禁和执行来源保持同源。 | 只收录真正的自动化任务，终端会话不会混入。 |
 
 | Workflow 工作台 |
 | --- |
-| ![Tenon Dashboard Workflow 工作台](docs-site/public/images/dashboard-workbench.webp) |
+| <img src="docs-site/public/images/dashboard-workbench.webp" alt="Tenon Dashboard Workflow 工作台" width="1440" height="900" loading="lazy"> |
 | 默认、自定义与自由模式共享同一套可检查编排。 |
 
 [查看 Dashboard 完整图文指南 →](docs/usage/zh-CN/dashboard-and-local-api.md)
@@ -74,7 +74,7 @@ curl -fsSL https://raw.githubusercontent.com/jefferysha/tenon/main/install.sh | 
 ```
 
 Bootstrap 注册 Tenon Marketplace、安装同一个完整插件、校验发行 payload，并执行
-`tenon setup --<host>`。已经安装后的维护入口仍是 `tenon setup --codex`、`tenon update --codex`
+`tenon setup --<host>`。已经安装后的维护入口仍是 `tenon setup --codex`、`tenon update --self-update`
 与 `tenon runtime status`。
 
 需要自动跟随后续发行版时显式启用每日检查：
@@ -185,7 +185,7 @@ Tenon 提供 12 个宿主目标，并显式标注执行保真度：
 | Hooks 与 adapters | 上下文注入、工具调用前阻断、Skill 留痕和宿主安装 |
 | Dashboard | 在同一 loopback server 上提供项目、进度、AFK、配置和机器诊断 |
 | AFK 与 loops | 可选沙箱工作、准入、预算、并发和 L1/L2/L3 升档 |
-| Channel | 高级 event-sourced worker 通信；不修改 canonical pipeline state |
+| Channel | 高级 event-sourced worker 通信；不修改 canonical Tenon state |
 | Memory bridge | 只读本地会话发现和上下文提取 |
 | Tap | 显式 opt-in 的本地流量诊断；捕获的 prompt、header 和 token 属敏感数据 |
 

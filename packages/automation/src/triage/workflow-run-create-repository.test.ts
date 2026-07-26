@@ -148,7 +148,7 @@ describe('WorkflowRunCreateIfAbsentRepository production adapter', () => {
       transitionSequence: 0,
       workflowPlanFingerprint: expect.stringMatching(/^[0-9a-f]{64}$/),
       workflowPlanSnapshot: {
-        version: 1,
+        version: 2,
         workflowId: 'incident-response',
         workflowFingerprint: expect.stringMatching(/^[0-9a-f]{64}$/),
       },

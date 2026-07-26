@@ -14,6 +14,7 @@ interface Calls {
 interface RuntimeCalls {
   readonly activations: Array<readonly [string, string, string]>
   readonly failures: Array<readonly [string, string]>
+  readonly reverts: Array<readonly [string, string]>
 }
 
 interface DashboardCalls {
@@ -21,7 +22,7 @@ interface DashboardCalls {
 }
 
 function fakeRuntimeInstaller(fail = false): { installer: RuntimeInstaller; calls: RuntimeCalls } {
-  const calls: RuntimeCalls = { activations: [], failures: [] }
+  const calls: RuntimeCalls = { activations: [], failures: [], reverts: [] }
   const releaseId = `sha256-${'b'.repeat(64)}`
   const installer: RuntimeInstaller = {
     activate: async (candidateRoot, host, homeDir) => {
@@ -42,6 +43,9 @@ function fakeRuntimeInstaller(fail = false): { installer: RuntimeInstaller; call
       lastAudit: null,
     }),
     rollback: async () => { throw new Error('not used') },
+    revertActivation: async (homeDir, activation) => {
+      calls.reverts.push([homeDir, activation.release.releaseId])
+    },
     recordUpdateFailure: async (homeDir, detail) => {
       calls.failures.push([homeDir, detail])
     },
@@ -159,6 +163,47 @@ describe('tenon update', () => {
     ]])
     expect(deps.outLines.join('\n')).toContain('稳定 tenon launcher 已保持不变')
     expect(deps.outLines.join('\n')).toContain('输入 /hooks')
+  })
+
+  test('dashboard readiness failure compensates the exact published activation', async () => {
+    const deps = makeDeps()
+    const { env } = updateEnv((cmd, args) => {
+      if (cmd === 'codex' && args.join(' ') === 'plugin list --json') {
+        return { code: 0, stdout: CODEX_INVENTORY, stderr: '' }
+      }
+      return { code: 0, stdout: '', stderr: '' }
+    })
+    const runtime = fakeRuntimeInstaller()
+    const dashboard = fakeDashboardStarter(true)
+
+    expect(await cmdUpdate(deps, { codex: true }, env, runtime.installer, dashboard.starter)).toBe(1)
+    expect(runtime.calls.reverts).toEqual([[
+      '/home/update-test',
+      `sha256-${'b'.repeat(64)}`,
+    ]])
+    expect(runtime.calls.failures[0]?.[1]).toContain('已恢复上一 active selection')
+  })
+
+  test('--self-update infers the native host from the active verified runtime', async () => {
+    const deps = makeDeps()
+    const { env, calls } = updateEnv((cmd, args) => {
+      if (cmd === 'codex' && args.join(' ') === 'plugin list --json') {
+        return { code: 0, stdout: CODEX_INVENTORY, stderr: '' }
+      }
+      return { code: 0, stdout: '', stderr: '' }
+    })
+    const runtime = fakeRuntimeInstaller()
+    runtime.installer.inspect = async () => ({
+      selection: { version: 1, revision: 1, activeRelease: `sha256-${'a'.repeat(64)}`, previousRelease: null, updatedAt: '2026-07-24T00:00:00Z' },
+      active: { version: 1, releaseId: `sha256-${'a'.repeat(64)}`, payloadDigest: 'a'.repeat(64), createdAt: '2026-07-24T00:00:00Z', source: { host: 'codex', pluginVersion: '1.0.0' } },
+      previous: null,
+      activeValid: true,
+      previousValid: false,
+      lastAudit: null,
+    })
+
+    expect(await cmdUpdate(deps, { selfUpdate: true }, env, runtime.installer, fakeDashboardStarter().starter)).toBe(0)
+    expect(calls.exec[0]).toEqual(['codex', ['plugin', 'marketplace', 'upgrade', 'tenon', '--json']])
   })
 
   test('a local Codex marketplace skips the unsupported Git fetch but still reinstalls the plugin cache', async () => {

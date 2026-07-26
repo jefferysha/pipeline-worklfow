@@ -26,6 +26,9 @@ tenon update --codex
 
 ```bash
 tenon update --claude
+
+# 已有 active runtime 时推荐：从冻结的 release source 推断原生宿主
+tenon update --self-update
 ```
 
 自动更新必须保留版本、失败原因和回滚路径。新模板只影响之后创建或明确缺失的文档。

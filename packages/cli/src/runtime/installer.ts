@@ -15,6 +15,7 @@ export interface RuntimeInstaller {
   activate(candidateRoot: string, host: RuntimeReleaseSource['host'], homeDir: string): Promise<RuntimeActivation>
   inspect(homeDir: string): Promise<RuntimeInspection>
   rollback(homeDir: string): Promise<RuntimeActivation>
+  revertActivation?(homeDir: string, activation: RuntimeActivation): Promise<void>
   recordUpdateFailure?(homeDir: string, detail: string): Promise<void>
 }
 
@@ -25,9 +26,19 @@ function storeFor(homeDir: string): RuntimeReleaseStore {
 export const REAL_RUNTIME_INSTALLER: RuntimeInstaller = {
   async activate(candidateRoot, host, homeDir = homedir()) {
     const paths = resolveRuntimePaths({ homeDir })
-    const activation = await new RuntimeReleaseStore({ paths }).stageAndActivate(candidateRoot, host)
-    await writeStableLaunchers(paths, homeDir)
-    return activation
+    const store = new RuntimeReleaseStore({ paths })
+    const activation = await store.stageAndActivate(candidateRoot, host)
+    try {
+      await writeStableLaunchers(paths, homeDir)
+      return activation
+    } catch (error) {
+      await store.revertActivation(activation.selection).catch((rollbackError: unknown) => {
+        throw new Error(
+          `稳定 launcher 写入失败且 activation 补偿失败：${String(error)}；rollback=${String(rollbackError)}`,
+        )
+      })
+      throw new Error(`稳定 launcher 写入失败，已恢复 activation 前 runtime：${String(error)}`)
+    }
   },
   inspect(homeDir = homedir()) {
     return storeFor(homeDir).inspect()
@@ -37,6 +48,12 @@ export const REAL_RUNTIME_INSTALLER: RuntimeInstaller = {
     const activation = await new RuntimeReleaseStore({ paths }).rollbackToPrevious()
     await writeStableLaunchers(paths, homeDir)
     return activation
+  },
+  async revertActivation(homeDir = homedir(), activation) {
+    const paths = resolveRuntimePaths({ homeDir })
+    await new RuntimeReleaseStore({ paths }).revertActivation(activation.selection)
+    const inspection = await new RuntimeReleaseStore({ paths }).inspect()
+    if (inspection.selection.activeRelease !== null) await writeStableLaunchers(paths, homeDir)
   },
   recordUpdateFailure(homeDir = homedir(), detail) {
     return storeFor(homeDir).recordUpdateFailure(detail)

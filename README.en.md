@@ -18,7 +18,7 @@ thing while the task state, Todo list, documents, and actual tool execution say
 another. Tenon keeps those surfaces on one effective workflow plan and
 refuses invalid transitions instead of reconstructing progress from prose.
 
-![Tenon Dashboard project overview](docs-site/public/images/dashboard-overview.webp)
+<img src="docs-site/public/images/dashboard-overview.webp" alt="Tenon Dashboard project overview" width="1440" height="900">
 
 <p align="center"><sub>One local control plane for projects, real workflows, and items that need attention.</sub></p>
 
@@ -53,12 +53,12 @@ be one line.
 
 | Workflow progress | Unattended automation |
 | --- | --- |
-| ![Tenon Dashboard workflow progress](docs-site/public/images/dashboard-progress.webp) | ![Tenon Dashboard unattended automation](docs-site/public/images/dashboard-automation.webp) |
+| <img src="docs-site/public/images/dashboard-progress.webp" alt="Tenon Dashboard workflow progress" width="1440" height="900" loading="lazy"> | <img src="docs-site/public/images/dashboard-automation.webp" alt="Tenon Dashboard unattended automation" width="1440" height="900" loading="lazy"> |
 | Todo, phases, gates, and execution source stay aligned. | Only real automation is listed; normal terminal sessions do not leak in. |
 
 | Workflow workbench |
 | --- |
-| ![Tenon Dashboard workflow workbench](docs-site/public/images/dashboard-workbench.webp) |
+| <img src="docs-site/public/images/dashboard-workbench.webp" alt="Tenon Dashboard workflow workbench" width="1440" height="900" loading="lazy"> |
 | Default, custom, and free modes share one inspectable orchestration model. |
 
 [Read the complete Dashboard guide →](docs/usage/dashboard-and-local-api.md)
@@ -87,7 +87,7 @@ curl -fsSL https://raw.githubusercontent.com/jefferysha/tenon/main/install.sh | 
 
 The bootstrap registers the Tenon Marketplace, installs and verifies the same
 complete release payload, and runs `tenon setup --<host>`. After installation,
-use `tenon setup --codex`, `tenon update --codex`, and
+use `tenon setup --codex`, `tenon update --self-update`, and
 `tenon runtime status` for lifecycle operations.
 
 Enable the opt-in daily release check with:
@@ -215,7 +215,7 @@ Important boundaries:
 | Hooks and adapters | Context injection, pre-tool veto, Skill tracking, and host-specific installation |
 | Dashboard | Projects, workflow progress, AFK, configuration, and machine diagnostics on one loopback server |
 | AFK and loops | Optional sandboxed work, admission, budgets, concurrency, and L1/L2/L3 graduation |
-| Channel | Advanced event-sourced worker communication; it does not mutate canonical pipeline state |
+| Channel | Advanced event-sourced worker communication; it does not mutate canonical Tenon state |
 | Memory bridge | Read-only local session discovery and context extraction |
 | Tap | Explicit opt-in local traffic diagnostics; captured prompts, headers, and tokens are sensitive |
 

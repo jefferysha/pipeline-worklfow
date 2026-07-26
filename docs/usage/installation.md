@@ -44,7 +44,8 @@ creates stable `tenon` and `tenon-hook` launchers, starts the packaged
 Dashboard, and opens it after its health check succeeds.
 
 After installation, use `tenon setup --codex` to repair host wiring and
-`tenon update --codex` to refresh the installed release.
+`tenon update --self-update` to infer the native host from the active managed release, validate
+the candidate in isolation, check Dashboard readiness, and compensate the exact activation on failure.
 
 ### Codex hook trust
 

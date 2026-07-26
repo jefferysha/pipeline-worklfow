@@ -3,7 +3,7 @@ name: tenon
 description: "主编排 skill（Decision Core）。chat 纯对话；simple 走轻量图；free 显式绑定任意 Workflow 且不叠加领域 Track；其余任务识别 pm/frontend/backend。状态一律经 Tenon CLI 读写；支持断点恢复。"
 ---
 
-# /pipeline — 主编排入口（Decision Core）
+# /tenon — 主编排入口（Decision Core）
 
 ## 文档语言契约
 
@@ -15,7 +15,7 @@ description: "主编排 skill（Decision Core）。chat 纯对话；simple 走�
 
 > 移植来源：老仓 workflow-plugin `skills/pipeline/SKILL.md`。老仓 bash 脚本面
 > （pipeline-state.sh / pipeline-guard.sh / tenon-archive.sh）已全部改写为本仓
-> `pipeline` CLI（命令契约见 `docs/CONTRACT.md` §3）。快速入口版见 `tenon`。
+> `tenon` CLI（命令契约见 `docs/CONTRACT.md` §3）。快速入口版见 `tenon`。
 
 ## Codex 打包 Skill 身份（硬规则）
 
@@ -31,8 +31,8 @@ CLI `--producer` 使用的**逻辑 id**。在 Codex 中实际加载时，必须�
 用户输入以下任一情况触发本 skill：
 - 含开发关键词（"加个功能 / 改 bug / 重构 / 实现 ..."）
 - 含 PM 关键词（"调研 / 竞品 / PRD / 需求 ..."）
-- 显式 `/pipeline` 命令
-- 显式 `/pipeline 继续` 进行断点恢复
+- 显式 `/tenon` 命令
+- 显式 `/tenon 继续` 进行断点恢复
 - 显式“自由模式 / free mode”，以不叠加领域 Track 的方式执行所选 Workflow
 
 **Chat 类输入（"问 / 解释 / how / what"）不应触发本 skill** — 直接对话即可。
@@ -177,7 +177,7 @@ skill 冒充为活文档当前 hash 的 producer。活文档更新只能由当�
 
 ### Step 0: CLI 可用性预检（必做）
 
-老仓的"定位脚本 + 握手文件"整段已废——本仓状态操作只有一个入口：`pipeline` CLI。
+老仓的"定位脚本 + 握手文件"整段已废——本仓状态操作只有一个入口：`tenon` CLI。
 
 ```bash
 # Tenon CLI 可用性检查（插件随包的单文件 bundle）
@@ -218,7 +218,7 @@ fi
 **Track=chat 时**：直接回答用户问题，不进入后续步骤。**禁止**为 chat 类输入创建 change。
 
 > Track 评分与 default 分发由 UserPromptSubmit router 注入；当注入已有 track 时以它为准，只有
-> 没有注入上下文的手动 `/pipeline` 调用才按本表重新判定。
+> 没有注入上下文的手动 `/tenon` 调用才按本表重新判定。
 
 ### Step 2: 扫描活跃 change
 
@@ -334,7 +334,7 @@ Todo。进入 build 前，spec skill 必须将实际实现任务同步到 `## Bu
 ## 阶段衔接规则
 
 <IMPORTANT>
-单次 `/pipeline` 调用从检测到的 phase 开始。**常规模式**每个 phase 产出后必须停下、把刚产出的
+单次 `/tenon` 调用从检测到的 phase 开始。**常规模式**每个 phase 产出后必须停下、把刚产出的
 文档/产物交用户过目并收反馈，用户说"继续"才手动 `tenon transition`。**持续授权模式**可在同一
 Change 连续处理无 confirm/外部副作用的出边，但绝不跳过检查或伪造证据。
 （双重保障：① `tenon check <name>` **只校验、绝不自动 transition**；② 决策 phase
@@ -407,7 +407,7 @@ phase **内部**步骤可连续做（产物靠 Edit/Write 落盘）；常规模�
 
 | 场景 | 处理 |
 |------|------|
-| `pipeline` CLI 未找到 | Step 0 的 HARD STOP 提示（从本插件发布包运行 `./install.sh --codex` 或 `--claude`，不安装外部 CLI） |
+| `tenon` CLI 未找到 | Step 0 的 HARD STOP 提示（从本插件发布包运行 `./install.sh --codex` 或 `--claude`，不安装外部 CLI） |
 | `openspec/` 尚不存在 | 用本插件 `tenon init <name> --track <t> --preset <p>` 创建 default change 骨架 |
 | `.pipeline.yaml` 格式异常 | 以文件状态为准，用 `tenon set <name> <field> <value>` 修正后继续 |
 | 子 skill 不可用 | 停止流程，运行 `tenon setup --<host>` 或 `tenon update --<host>` 修复同一个打包插件；**不要用普通对话替代** |

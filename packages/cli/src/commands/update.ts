@@ -28,6 +28,7 @@ export interface UpdateOpts extends PipelineHostFlags {
   yes?: boolean
   auto?: boolean
   target?: string
+  selfUpdate?: boolean
 }
 
 export function nativeUpdatePlan(host: Extract<PipelineHost, 'codex' | 'claude'>): readonly HostCommandPlanItem[] {
@@ -92,6 +93,28 @@ export function cmdUpdate(
   installer: RuntimeInstaller = REAL_RUNTIME_INSTALLER,
   dashboardStarter: ReleasedDashboardStarter = REAL_RELEASED_DASHBOARD_STARTER,
 ): number | Promise<number> {
+  if (opts.selfUpdate === true
+    && !Object.entries(opts).some(([key, value]) => key !== 'selfUpdate'
+      && ['codex', 'claude', 'cursor', 'gemini', 'copilot', 'pi', 'devin', 'zed', 'aider', 'continue', 'cline', 'amp']
+        .includes(key) && value === true)) {
+    return installer.inspect(env.homeDir()).then((inspection) => {
+      const runtimeHost = inspection.active?.source.host
+      if (runtimeHost !== 'codex' && runtimeHost !== 'claude') {
+        deps.io.err('ERROR: --self-update 无法从 active runtime 推断原生宿主；请先运行 tenon setup --codex 或 --claude。')
+        return 1
+      }
+      return cmdUpdate(
+        deps,
+        { ...opts, [runtimeHost]: true },
+        env,
+        installer,
+        dashboardStarter,
+      )
+    }).catch((error: unknown) => {
+      deps.io.err(`ERROR: --self-update 读取 active runtime 失败：${error instanceof Error ? error.message : String(error)}`)
+      return 1
+    })
+  }
   const selection = selectPipelineHost(opts)
   if (selection.host === null) {
     deps.io.err(`ERROR: ${selection.error}。示例：tenon update --codex`)
@@ -159,9 +182,16 @@ export function cmdUpdate(
         { openBrowser: opts.auto !== true },
       )
       if (dashboardCode !== 0) {
-        const detail = 'runtime 已切换，但 dashboard 未能完成受管刷新；请运行 tenon dashboard --background 诊断。'
+        const detail = '新 runtime 的 dashboard readiness 失败'
+        try {
+          if (installer.revertActivation === undefined) throw new Error('runtime installer 不支持精确 activation 补偿')
+          await installer.revertActivation(env.homeDir(), activation)
+        } catch (rollbackError) {
+          deps.io.err(`ERROR: ${detail}，且精确回滚失败：${rollbackError instanceof Error ? rollbackError.message : String(rollbackError)}`)
+          return rejectUpdate(installer, env, `${detail}；rollback failed`)
+        }
         deps.io.err(`ERROR: ${detail}`)
-        return rejectUpdate(installer, env, detail)
+        return rejectUpdate(installer, env, `${detail}；已恢复上一 active selection`)
       }
       if (opts.auto) {
         deps.io.out(`[update] ${hostFlag(host)} 已在后台刷新；当前会话继续使用已加载版本，新会话将加载新 skills/hooks。`)

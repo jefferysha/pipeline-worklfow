@@ -149,8 +149,8 @@ If no verified previous release exists, rerun host-scoped setup.
 ### YAML projection drift
 
 ```bash
-pipeline state status <change-name> --json
-pipeline state repair-projection <change-name>
+tenon state status <change-name> --json
+tenon state repair-projection <change-name>
 ```
 
 Use force only after reviewing unknown drift.

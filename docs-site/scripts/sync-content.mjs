@@ -32,10 +32,15 @@ function publicLinks(body, locale) {
 }
 
 function publicImages(body) {
-  return body.replace(
-    /\((?:\.\.\/){2,3}docs-site\/public\/images\//g,
-    '(/images/',
-  )
+  return body
+    .replace(
+      /\((?:\.\.\/){2,3}docs-site\/public\/images\//g,
+      '(/images/',
+    )
+    .replace(
+      /src="(?:\.\.\/){2,3}docs-site\/public\/images\//g,
+      'src="/images/',
+    )
 }
 
 function pageBody(body, entry) {

@@ -40,7 +40,8 @@ curl -fsSL https://raw.githubusercontent.com/jefferysha/tenon/main/install.sh | 
 
 脚本只负责注册 Tenon Marketplace、安装并验证完整 payload，然后调用包内
 `tenon setup --<host>`。已经安装的用户可以直接再次运行 `tenon setup --codex`
-修复宿主接线，或运行 `tenon update --codex` 更新。
+修复宿主接线；已存在 active runtime 后可运行 `tenon update --self-update`，由受管发行记录推断
+Codex 或 Claude 宿主并在隔离目录完成校验、Dashboard readiness 和精确回滚。
 
 Marketplace bootstrap 是当前可用且推荐的一步安装入口。仓库同时构建一个薄 npx 发布包，但只有
 维护者配置了 npm publisher scope 并完成公开发布后，文档才会展示真实的

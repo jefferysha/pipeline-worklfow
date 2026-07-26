@@ -14,7 +14,7 @@ canonical Workflow state or exposing sensitive local data.
 ## Channel
 
 Channel is an event-sourced worker communication bus. It is orthogonal to the
-pipeline state machine: it does not change barriers, review gates, `build_sha`,
+Tenon state machine: it does not change barriers, review gates, `build_sha`,
 Git state, or canonical Change fields.
 
 Discover commands:
@@ -119,7 +119,7 @@ asset or telemetry destination is involved.
 
 ### Channel event did not advance a Change
 
-That is by design. Use pipeline state/review/transition commands for canonical
+That is by design. Use Tenon state/review/transition commands for canonical
 Workflow operations.
 
 ### OpenCode sessions are missing
@@ -134,4 +134,3 @@ Use explicit `--forward --ca` in a controlled environment.
 
 Read [security model](security-model.md) and
 [troubleshooting](troubleshooting.md).
-

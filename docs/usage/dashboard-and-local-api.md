@@ -12,7 +12,7 @@ use the local API within its security boundary.
 - at least one project for operational views; the bundled Overview remains
   readable without one
 
-![Tenon Dashboard project overview](../../docs-site/public/images/dashboard-overview.webp)
+<img src="../../docs-site/public/images/dashboard-overview.webp" alt="Tenon Dashboard project overview" width="1440" height="900">
 
 The project view prioritizes work that actually needs help. Official screenshots
 use a sanitized showcase project and contain no user directory, credential, or
@@ -61,7 +61,7 @@ view, not a sixth operational destination and not the installed default.
 Optional surfaces are advertised by snapshot capability flags. A disabled
 capability is not an empty success state.
 
-![Tenon Dashboard workflow progress](../../docs-site/public/images/dashboard-progress.webp)
+<img src="../../docs-site/public/images/dashboard-progress.webp" alt="Tenon Dashboard workflow progress" width="1440" height="900" loading="lazy">
 
 Progress follows the effective Workflow. Display state and execution provenance
 are separate, so a task can be running in a terminal without being presented as
@@ -69,7 +69,7 @@ unattended automation.
 
 ### Unattended automation
 
-![Tenon Dashboard unattended automation](../../docs-site/public/images/dashboard-automation.webp)
+<img src="../../docs-site/public/images/dashboard-automation.webp" alt="Tenon Dashboard unattended automation" width="1440" height="900" loading="lazy">
 
 This page admits only tasks whose execution provenance is automation. A fresh
 normal-chat terminal heartbeat may still make Progress show “running,” but it
@@ -77,7 +77,7 @@ does not leak into this queue.
 
 ### Workflow workbench
 
-![Tenon Dashboard workflow workbench](../../docs-site/public/images/dashboard-workbench.webp)
+<img src="../../docs-site/public/images/dashboard-workbench.webp" alt="Tenon Dashboard workflow workbench" width="1440" height="900" loading="lazy">
 
 The workbench places Tracks, the seven-phase DAG, phase Skills, hooks, and
 pre-run facts on one page. The read-only default baseline, custom Workflows,

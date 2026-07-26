@@ -127,7 +127,9 @@ async function releasePayload(paths, releaseId) {
   try {
     const manifest = JSON.parse(await readFile(manifestPath, 'utf8'))
     if (!isRecord(manifest) || manifest.version !== 1 || manifest.releaseId !== releaseId
-      || typeof manifest.payloadDigest !== 'string' || !/^[a-f0-9]{64}$/.test(manifest.payloadDigest)) return null
+      || typeof manifest.payloadDigest !== 'string' || !/^[a-f0-9]{64}$/.test(manifest.payloadDigest)
+      || !isRecord(manifest.source)
+      || !['codex', 'claude', 'adapter', 'manual'].includes(manifest.source.host)) return null
     const payload = join(releaseRoot, 'payload')
     const cli = join(payload, 'packages', 'cli', 'dist', 'tenon.mjs')
     const bootstrap = join(payload, 'runtime', 'tenon-bootstrap.mjs')
@@ -135,7 +137,7 @@ async function releasePayload(paths, releaseId) {
     // Selection and manifest shape are not integrity proof. Recompute the immutable tree before
     // every execution boundary so a locally forged active payload enters recovery-only mode.
     if (await hashPayload(payload) !== manifest.payloadDigest) return null
-    return { releaseRoot, payload }
+    return { releaseRoot, payload, releaseId, host: manifest.source.host }
   } catch {
     return null
   }
@@ -342,7 +344,8 @@ function recoveryCommand(input) {
   return parsed.command.trim() === 'tenon runtime repair --rollback'
 }
 
-async function childEnv(payload, paths) {
+async function childEnv(release, paths) {
+  const { payload } = release
   const env = {
     ...process.env,
     PLUGIN_ROOT: payload,
@@ -354,6 +357,8 @@ async function childEnv(payload, paths) {
     // that exact immutable execution identity so Codex Skill provenance can accept the active
     // managed release without trusting an arbitrary PLUGIN_ROOT supplied by the caller.
     TENON_ACTIVE_RELEASE_ROOT: payload,
+    TENON_ACTIVE_RELEASE_ID: release.releaseId,
+    TENON_RUNTIME_HOST: release.host,
   }
   if (HOST_PLUGIN_ROOT === null) delete env.TENON_HOST_PLUGIN_ROOT
   else env.TENON_HOST_PLUGIN_ROOT = HOST_PLUGIN_ROOT
@@ -416,7 +421,7 @@ async function runCli(paths, args) {
   }
   const result = spawnSync(process.execPath, [join(active.payload, 'packages', 'cli', 'dist', 'tenon.mjs'), ...args], {
     cwd: process.cwd(),
-    env: await childEnv(active.payload, paths),
+    env: await childEnv(active, paths),
     stdio: 'inherit',
   })
   return exitFor(result)
@@ -445,7 +450,7 @@ async function runHook(paths, hookId) {
   }
   const result = spawnSync('bash', [hook], {
     cwd: process.cwd(),
-    env: await childEnv(active.payload, paths),
+    env: await childEnv(active, paths),
     input,
     stdio: ['pipe', 'inherit', 'inherit'],
   })

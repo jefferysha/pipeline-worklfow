@@ -8,6 +8,7 @@
 tenon setup --codex
 tenon setup --claude
 tenon update --codex
+tenon update --self-update
 tenon doctor --json
 tenon runtime status
 tenon runtime repair --rollback

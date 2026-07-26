@@ -179,7 +179,13 @@ function publishManagedRuntime(
       if (dashboardStarter !== undefined) {
         const dashboardCode = await dashboardStarter.start(deps, join(activation.releaseRoot, 'payload'), { openBrowser: openDashboard })
         if (dashboardCode !== 0) {
-          deps.io.err('ERROR: runtime 已发布，但 dashboard 未能完成受管启动；请运行 tenon dashboard --background 诊断。')
+          try {
+            if (installer.revertActivation === undefined) throw new Error('runtime installer 不支持精确 activation 补偿')
+            await installer.revertActivation(env.homeDir(), activation)
+            deps.io.err('ERROR: 新 runtime 的 dashboard readiness 失败；已恢复 activation 前 active selection。')
+          } catch (rollbackError) {
+            deps.io.err(`ERROR: 新 runtime 的 dashboard readiness 失败，且精确回滚失败：${errMsg(rollbackError)}`)
+          }
           return 1
         }
       }

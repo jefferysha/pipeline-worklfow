@@ -4,6 +4,7 @@
   "pluginVersion": "0.2.0",
   "createdAt": "2026-07-24T17:22:41Z",
   "gitCommit": "570d37801edb731ae417775b3d3713a448bffe79",
+  "cliEntry": "packages/cli/dist/pipeline.mjs",
   "cliSha256": "e0e2b5bacdebf8115eb0f19b234d7052adf4a782c2d2d5635e33bcc569a60a60",
   "payloadEntries": [
     ".agents/plugins/marketplace.json",
@@ -12,7 +13,7 @@
     ".codex-plugin/plugin.json",
     "adapters",
     "hooks",
-    "packages/cli/dist/tenon.mjs",
+    "packages/cli/dist/pipeline.mjs",
     "packages/dashboard-app/dist",
     "packages/server/dist/dashboard.mjs",
     "runtime/pipeline-bootstrap.mjs",

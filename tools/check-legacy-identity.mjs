@@ -43,6 +43,9 @@ const skippedPrefixes = [
   'tools/fixtures/',
 ]
 const skippedFiles = new Set([
+  // Exact, fail-closed reader for an immutable pre-Tenon persistence fingerprint. It has no
+  // command, package, Skill, hook, or documentation surface.
+  'packages/kernel/src/workflow/migrations/pre-tenon-v1-document-policy.ts',
   'tools/build-legacy-bridge.mjs',
   'tools/build-legacy-bridge.node-test.mjs',
   'tools/check-legacy-identity.mjs',
@@ -59,7 +62,7 @@ const forbidden = [
   { label: 'retired CLI bundle', pattern: /(?:dist\/pipeline\.mjs|runtime\/pipeline-bootstrap\.mjs)/ },
   {
     label: 'retired CLI command',
-    pattern: /\bpipeline (?=(?:init|list|status|get|set|set-many|cas|check|transition|review|document|workflow|session|handoff|internal-skill-gate|inbox|import|setup|update|doctor|runtime|dashboard|uninstall|sync|task|spec|afk|loop|loops|mem|channel|artifact|advance|cancel|pass|reject|retry)\b)/,
+    pattern: /\bpipeline (?=(?:init|list|status|state|upgrade|get|set|set-many|cas|check|transition|review|document|workflow|session|handoff|internal-skill-gate|inbox|import|setup|update|doctor|runtime|dashboard|uninstall|sync|task|spec|afk|loop|loops|mem|channel|artifact|advance|cancel|pass|reject|retry)\b)/,
   },
   {
     label: 'retired public environment prefix',

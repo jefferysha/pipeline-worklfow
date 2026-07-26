@@ -24,15 +24,15 @@
 
 ## 实现
 
-- [x] 建立产品身份真相源、确定性投影与 freshness 检查，并完成 CLI→manifest→Dashboard→README tracer bullet。 (build)
+- [x] 建立产品身份真相源、确定性投影、v1→v2 Workflow 快照迁移读取与 freshness 检查，并完成 CLI→manifest→Dashboard→README tracer bullet。 (build)
 - [x] 把 workspace、CLI/bundle、插件/Marketplace、Skill、command、hook 和环境前缀迁移为 Tenon。 (build)
-- [x] 迁移 managed runtime 路径、稳定 launcher、安装更新与有期限的旧通道迁移桥。 (build)
+- [x] 迁移 managed runtime 路径、稳定 launcher、`--self-update`、readiness 精确补偿与绑定 host/release 的旧通道迁移桥。 (build)
 - [x] 实现 Marketplace bootstrap 与可发布 npx 薄包，确保新用户无需 clone。 (build)
-- [x] 建立 neutral execution provenance，修复自动运行队列并补模型/组件回归测试。 (build)
+- [x] 建立 neutral execution provenance，让自动运行列表与计数同源过滤，并补模型/组件/live 回归测试。 (build)
 - [x] 迁移 Dashboard 品牌、README、中文文档站、CI、测试和 Pages 配置。 (build)
 - [x] 生成并压缩正式 Tenon Dashboard 图，为 README 与中文文档站完成响应式图文排版。 (build)
 - [x] 删除可再生截图，补 `.gitignore`、发布内容清单和 repository hygiene 门禁。 (build)
-- [x] 分类清理现行旧身份残留并重建所有受控生成物，不手改生成产物。 (build)
+- [x] 分类清理现行旧身份残留，修复 N-1 固定夹具与 release tag checkout，并重建所有受控生成物。 (build)
 
 ## 验证
 

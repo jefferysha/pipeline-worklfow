@@ -41,3 +41,22 @@
 {"ts":"2026-07-26T04:51:35Z","kind":"tool","raw":"CodexSkillRead: openspec-propose"}
 {"ts":"2026-07-26T04:51:43Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"b03483a9-362f-49d3-8db3-0ef5ce168c27"}
 {"ts":"2026-07-26T04:51:58Z","kind":"tool","raw":"CodexSkillRead: pipeline-build"}
+{"ts":"2026-07-26T04:52:55Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-26T04:52:55Z","kind":"tool","raw":"CodexSkillRead: frontend-design"}
+{"ts":"2026-07-26T04:52:55Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-26T04:52:55Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-26T04:53:11Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"f6e42715-0f78-4fb3-b4c7-f080a4e7e8db"}
+{"ts":"2026-07-26T04:53:27Z","kind":"tool","raw":"CodexSkillRead: pipeline-verify"}
+{"ts":"2026-07-26T04:53:27Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-07-26T04:53:27Z","kind":"tool","raw":"CodexSkillRead: browser-qa"}
+{"ts":"2026-07-26T04:53:27Z","kind":"tool","raw":"CodexSkillRead: e2e-testing"}
+{"ts":"2026-07-26T04:53:50Z","kind":"tool","raw":"CodexSkillRead: verify"}
+{"ts":"2026-07-26T04:53:50Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-26T04:53:50Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-26T04:53:50Z","kind":"tool","raw":"CodexSkillRead: finishing-a-development-branch"}
+{"ts":"2026-07-26T04:55:26Z","kind":"tool","raw":"CodexSkillRead: code-review"}
+{"ts":"2026-07-26T04:59:25Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-07-26-rename-pipeline-lite-to-tenon-verify.md"}
+{"ts":"2026-07-26T04:59:26Z","kind":"tool","raw":"review:request phase=verify event=verify-fail"}
+{"ts":"2026-07-26T04:59:26Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-07-26T02:54:33Z"}
+{"ts":"2026-07-26T04:59:26Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"4c3147a8-64eb-4f4d-a3bb-2141ae518b0d"}
+{"ts":"2026-07-26T05:25:52Z","kind":"tool","raw":"CodexSkillRead: pipeline-build"}
