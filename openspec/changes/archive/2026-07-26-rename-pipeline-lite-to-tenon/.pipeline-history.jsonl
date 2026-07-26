@@ -291,3 +291,9 @@
 {"ts":"2026-07-26T10:25:53Z","kind":"set","field":"pr_url","to":"https://github.com/jefferysha/tenon/pull/3"}
 {"ts":"2026-07-26T10:36:02Z","kind":"set","field":"depends_on","to":"isolate-runtime-state-dependencies"}
 {"ts":"2026-07-26T13:25:53Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated"}
+{"ts":"2026-07-26T13:37:26Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated"}
+{"ts":"2026-07-26T13:37:46Z","kind":"tool","raw":"CodexSkillRead: tenon-ship"}
+{"ts":"2026-07-26T13:38:11Z","kind":"transition","from":"ship","to":"archive","raw":"ship-complete","transitionRecordId":"faa6dc8b-f3e9-4e5d-b679-777f3ea9a2c3"}
+{"ts":"2026-07-26T13:39:02Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated"}
+{"ts":"2026-07-26T13:39:56Z","kind":"tool","raw":"CodexSkillRead: pipeline-archive"}
+{"ts":"2026-07-26T13:40:22Z","kind":"transition","from":"archive","to":"archive","raw":"archived","transitionRecordId":"201c5074-817f-406b-b013-c2f9eba0e41c"}
