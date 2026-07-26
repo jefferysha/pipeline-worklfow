@@ -36,6 +36,7 @@ interface ProjectRegistryMigrationReceipt {
   readonly completedAt: string
   readonly discovered: number
   readonly imported: number
+  readonly ensured?: number
   readonly rejected: number
 }
 
@@ -86,6 +87,7 @@ async function readMigrationReceipt(path: string): Promise<ProjectRegistryMigrat
     || record.completedAt === ''
     || !nonNegativeInteger(record.discovered)
     || !nonNegativeInteger(record.imported)
+    || (record.ensured !== undefined && !nonNegativeInteger(record.ensured))
     || !nonNegativeInteger(record.rejected)
   ) {
     throw new Error(`host project registry migration receipt 非法：${path}`)
@@ -96,6 +98,7 @@ async function readMigrationReceipt(path: string): Promise<ProjectRegistryMigrat
     completedAt: record.completedAt,
     discovered: record.discovered,
     imported: record.imported,
+    ...(record.ensured === undefined ? {} : { ensured: record.ensured }),
     rejected: record.rejected,
   }
 }
@@ -170,6 +173,7 @@ export async function migrateLegacyProjectRegistry(
         completedAt,
         discovered: 0,
         imported: 0,
+        ensured: 0,
         rejected: 0,
       } satisfies ProjectRegistryMigrationReceipt, null, 2)}\n`)
       return { status: 'completed', discovered: 0, imported: 0, rejected: 0 }
@@ -224,22 +228,24 @@ export async function migrateLegacyProjectRegistry(
     }
 
     const register = input.registerProject ?? registerProjectRoot
+    let imported = 0
     for (const root of pending.roots) {
-      await register(productPaths.registryPath, root)
+      if (await register(productPaths.registryPath, root)) imported += 1
     }
     const receipt: ProjectRegistryMigrationReceipt = {
       version: 1,
       migration: MIGRATION_ID,
       completedAt: (input.now ?? (() => new Date().toISOString()))(),
       discovered: pending.roots.length,
-      imported: pending.roots.length,
+      imported,
+      ensured: pending.roots.length,
       rejected: pending.rejected,
     }
     await atomicReplaceFile(receiptPath, `${JSON.stringify(receipt, null, 2)}\n`)
     return {
       status: 'completed',
       discovered: pending.roots.length,
-      imported: pending.roots.length,
+      imported,
       rejected: pending.rejected,
     }
   })

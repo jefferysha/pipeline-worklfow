@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, test } from 'vitest'
@@ -132,8 +132,17 @@ describe('legacy project registry migration', () => {
       pathIsDirectory: () => true,
     })
 
-    expect(resumed).toEqual({ status: 'completed', discovered: 2, imported: 2, rejected: 0 })
+    expect(resumed).toEqual({ status: 'completed', discovered: 2, imported: 1, rejected: 0 })
     expect(readProjectRegistry(paths.registryPath)).toEqual([projectOne, projectTwo])
+    await expect(readFile(
+      join(paths.migrationsRoot, 'host-project-registry-v1', 'receipt.json'),
+      'utf8',
+    ).then((text) => JSON.parse(text))).resolves.toMatchObject({
+      discovered: 2,
+      imported: 1,
+      ensured: 2,
+      rejected: 0,
+    })
   })
 
   test('fails closed when the versioned receipt is corrupt instead of re-importing host data', async () => {

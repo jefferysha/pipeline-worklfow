@@ -44370,7 +44370,7 @@ async function readMigrationReceipt(path9) {
     throw new Error(`host project registry migration receipt \u975E\u6CD5\uFF1A${path9}`);
   }
   const record2 = value;
-  if (record2.version !== 1 || record2.migration !== MIGRATION_ID || typeof record2.completedAt !== "string" || record2.completedAt === "" || !nonNegativeInteger(record2.discovered) || !nonNegativeInteger(record2.imported) || !nonNegativeInteger(record2.rejected)) {
+  if (record2.version !== 1 || record2.migration !== MIGRATION_ID || typeof record2.completedAt !== "string" || record2.completedAt === "" || !nonNegativeInteger(record2.discovered) || !nonNegativeInteger(record2.imported) || record2.ensured !== void 0 && !nonNegativeInteger(record2.ensured) || !nonNegativeInteger(record2.rejected)) {
     throw new Error(`host project registry migration receipt \u975E\u6CD5\uFF1A${path9}`);
   }
   return {
@@ -44379,6 +44379,7 @@ async function readMigrationReceipt(path9) {
     completedAt: record2.completedAt,
     discovered: record2.discovered,
     imported: record2.imported,
+    ...record2.ensured === void 0 ? {} : { ensured: record2.ensured },
     rejected: record2.rejected
   };
 }
@@ -44433,6 +44434,7 @@ async function migrateLegacyProjectRegistry(input) {
         completedAt,
         discovered: 0,
         imported: 0,
+        ensured: 0,
         rejected: 0
       }, null, 2)}
 `);
@@ -44484,15 +44486,17 @@ async function migrateLegacyProjectRegistry(input) {
 `);
     }
     const register = input.registerProject ?? registerProjectRoot;
+    let imported = 0;
     for (const root of pending.roots) {
-      await register(productPaths.registryPath, root);
+      if (await register(productPaths.registryPath, root)) imported += 1;
     }
     const receipt = {
       version: 1,
       migration: MIGRATION_ID,
       completedAt: (input.now ?? (() => (/* @__PURE__ */ new Date()).toISOString()))(),
       discovered: pending.roots.length,
-      imported: pending.roots.length,
+      imported,
+      ensured: pending.roots.length,
       rejected: pending.rejected
     };
     await atomicReplaceFile(receiptPath, `${JSON.stringify(receipt, null, 2)}
@@ -44500,7 +44504,7 @@ async function migrateLegacyProjectRegistry(input) {
     return {
       status: "completed",
       discovered: pending.roots.length,
-      imported: pending.roots.length,
+      imported,
       rejected: pending.rejected
     };
   });

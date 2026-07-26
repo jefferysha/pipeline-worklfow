@@ -228,3 +228,20 @@
 {"ts":"2026-07-26T09:25:41Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
 {"ts":"2026-07-26T09:25:48Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"bd960a77-1379-4017-8edd-cf13d37eb166"}
 {"ts":"2026-07-26T09:29:53Z","kind":"tool","raw":"CodexSkillRead: pipeline-build"}
+{"ts":"2026-07-26T09:31:10Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-26T09:31:10Z","kind":"tool","raw":"CodexSkillRead: frontend-design"}
+{"ts":"2026-07-26T09:31:10Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-26T09:31:10Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-26T09:31:16Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"bc8614e1-43e1-413b-b69a-de31fb7362fa"}
+{"ts":"2026-07-26T09:31:50Z","kind":"tool","raw":"CodexSkillRead: deployment-patterns"}
+{"ts":"2026-07-26T09:31:50Z","kind":"tool","raw":"CodexSkillRead: e2e-testing"}
+{"ts":"2026-07-26T09:31:50Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-07-26T09:31:52Z","kind":"tool","raw":"CodexSkillRead: code-review"}
+{"ts":"2026-07-26T09:40:58Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-07-26-rename-pipeline-lite-to-tenon-verify.md"}
+{"ts":"2026-07-26T09:41:18Z","kind":"tool","raw":"review:request phase=verify event=verify-fail"}
+{"ts":"2026-07-26T09:41:18Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-07-26T09:13:18Z"}
+{"ts":"2026-07-26T09:41:27Z","kind":"tool","raw":"CodexSkillRead: browser-qa"}
+{"ts":"2026-07-26T09:41:27Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-07-26T09:41:28Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-07-26T09:41:33Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"7ec42982-e695-4c78-9c9f-bd325d3cc090"}
+{"ts":"2026-07-26T09:44:17Z","kind":"tool","raw":"CodexSkillRead: pipeline-build"}

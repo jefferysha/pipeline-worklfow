@@ -1,8 +1,8 @@
 # Tenon 全局迁移验证报告
 
 > Change：`rename-pipeline-lite-to-tenon`
-> 冻结构建：`df7837bfb51f53119a36ce49087f2ad19fc0ac50`
-> 当前结论：失败，返回 Build 修复三项发布门禁
+> 冻结构建：`e16e12f3add85e6fce2c4079619e46486541eb9d`
+> 当前结论：失败，返回 Build 修复迁移计数审计语义
 
 ## 验证范围与新鲜证据
 
@@ -37,15 +37,17 @@
 - Codex CLI 轨：宿主仍加载旧插件并要求为只读审查创建新 workflow，未产生有效冻结 diff 结论；
   本轮按降级处理，不把它记为通过。
 
-## 阻断问题
+## 已关闭的上一轮阻断
 
-1. `.github/workflows/docs-pages.yml` 的独立 Pages 发布链没有执行
-   `npm run check:repository-hygiene`。主 CI 与 Pages workflow 并行，主 CI 失败不能阻止 Pages 部署，
-   因而不满足“Pages 发布前零参考身份”契约。
-2. `legacy-project-registry` 逐项写 registry、最后写 receipt；若中途失败，下一次 setup 会因 registry
-   已存在而跳过宿主来源，并可能把不完整迁移记为完成。一次性迁移尚未形成失败可重试事务。
-3. `afk-run.integration.test.ts` 的无 Docker 用例仍断言 exit 0；生产契约明确“有候选但 Docker 不可用”
-   返回非零。测试标题和断言落后于真实 fail-loud 契约。
+1. Pages build job 已在上传和 deploy 前执行 repository hygiene；deploy 只依赖该已受门禁的 build。
+2. legacy registry 已在首次写入前原子发布 pending snapshot，部分失败后从 snapshot 幂等恢复且不重读
+   host；completed receipt 仍保证用户后续删除不复活。
+3. 无 Docker 集成测试已按生产 fail-loud 契约断言 exit 1；隔离无 Docker 环境通过。
+
+## 新阻断问题
+
+- 部分失败恢复时，`registerProjectRoot()` 的布尔结果被忽略，`imported` 固定写成候选总数。例如首轮
+  已落 1/2、恢复时只新增第 2 个项目，setup 却报告“新增 2”。数据完整但用户诊断和 receipt 审计失真。
 
 ## 已确认修复
 
@@ -57,8 +59,6 @@
 ## 处理决定
 
 - 走 `verify-fail` 返回 Build。
-- 将 repository hygiene 接入 Pages build 的发布依赖链。
-- 把项目注册表迁移改为可恢复的 staged transaction：持久化候选快照与进度，逐项幂等提交，只有全部
-  成功后写 completed receipt；失败重跑继续未完成项，canonical registry 的用户后续删除仍保持权威。
-- 将无 Docker 集成测试改为断言非零与明确诊断，不改变正确的生产行为。
+- `imported` 只累计本次 `registerProjectRoot() === true` 的真实写入；setup 输出使用该值。
+- receipt 另设 `ensured`，记录本次迁移最终保证存在的候选总数，避免把完整性证据塞回 `imported`。
 - 修复后重新提交、冻结 SHA，并重跑核心、三轨与正式 `18765` 验收。

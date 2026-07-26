@@ -135,6 +135,18 @@
           "sha256": "036a9dca1bdba766abd18af506a2dc525078750dd49b0bd6180728370897debe",
           "readAt": "2026-07-26T09:30:01Z",
           "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",25]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "036a9dca1bdba766abd18af506a2dc525078750dd49b0bd6180728370897debe",
+          "readAt": "2026-07-26T09:40:58Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",26]"
+        },
+        {
+          "phase": "build",
+          "sha256": "036a9dca1bdba766abd18af506a2dc525078750dd49b0bd6180728370897debe",
+          "readAt": "2026-07-26T09:44:25Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",27]"
         }
       ]
     },
@@ -168,6 +180,18 @@
           "sha256": "7cded5c180a5d06ef7d99037ca28994612a299a2626c52b738ad8f5494107826",
           "readAt": "2026-07-26T09:30:01Z",
           "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",25]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "7cded5c180a5d06ef7d99037ca28994612a299a2626c52b738ad8f5494107826",
+          "readAt": "2026-07-26T09:40:58Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",26]"
+        },
+        {
+          "phase": "build",
+          "sha256": "7cded5c180a5d06ef7d99037ca28994612a299a2626c52b738ad8f5494107826",
+          "readAt": "2026-07-26T09:44:25Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",27]"
         }
       ]
     },
@@ -201,6 +225,18 @@
           "sha256": "925769ad9970eaeb2815e77989ef9f66b0b4990854220df6898ff22675366b3b",
           "readAt": "2026-07-26T09:30:01Z",
           "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",25]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "925769ad9970eaeb2815e77989ef9f66b0b4990854220df6898ff22675366b3b",
+          "readAt": "2026-07-26T09:40:58Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",26]"
+        },
+        {
+          "phase": "build",
+          "sha256": "925769ad9970eaeb2815e77989ef9f66b0b4990854220df6898ff22675366b3b",
+          "readAt": "2026-07-26T09:44:25Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",27]"
         }
       ]
     },
@@ -234,6 +270,18 @@
           "sha256": "30c4ab52dad420f8892437065ad1dc19e59699065fb5d1ff813c67df7cc0db18",
           "readAt": "2026-07-26T09:30:01Z",
           "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",25]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "30c4ab52dad420f8892437065ad1dc19e59699065fb5d1ff813c67df7cc0db18",
+          "readAt": "2026-07-26T09:40:58Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",26]"
+        },
+        {
+          "phase": "build",
+          "sha256": "30c4ab52dad420f8892437065ad1dc19e59699065fb5d1ff813c67df7cc0db18",
+          "readAt": "2026-07-26T09:44:25Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",27]"
         }
       ]
     },
@@ -339,6 +387,18 @@
           "sha256": "619908fbe517beaa391c26c5a7911024e4e7ba40bfa06bfd85b445d648b88b5d",
           "readAt": "2026-07-26T09:30:01Z",
           "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",25]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "619908fbe517beaa391c26c5a7911024e4e7ba40bfa06bfd85b445d648b88b5d",
+          "readAt": "2026-07-26T09:40:58Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",26]"
+        },
+        {
+          "phase": "build",
+          "sha256": "619908fbe517beaa391c26c5a7911024e4e7ba40bfa06bfd85b445d648b88b5d",
+          "readAt": "2026-07-26T09:44:25Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",27]"
         }
       ]
     },
@@ -444,6 +504,18 @@
           "sha256": "97e79511d1005b10b263f6201c11fd4c6f7c743e5e1ad3d0a4e919834c4a6bbf",
           "readAt": "2026-07-26T09:30:01Z",
           "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",25]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "97e79511d1005b10b263f6201c11fd4c6f7c743e5e1ad3d0a4e919834c4a6bbf",
+          "readAt": "2026-07-26T09:40:58Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",26]"
+        },
+        {
+          "phase": "build",
+          "sha256": "97e79511d1005b10b263f6201c11fd4c6f7c743e5e1ad3d0a4e919834c4a6bbf",
+          "readAt": "2026-07-26T09:44:25Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",27]"
         }
       ]
     },
@@ -507,6 +579,18 @@
           "sha256": "7b0fc0f7a34f323d9fb4bd18324622bdb892d16604c487761851255baa00b276",
           "readAt": "2026-07-26T09:30:01Z",
           "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",25]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "7b0fc0f7a34f323d9fb4bd18324622bdb892d16604c487761851255baa00b276",
+          "readAt": "2026-07-26T09:40:58Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",26]"
+        },
+        {
+          "phase": "build",
+          "sha256": "7b0fc0f7a34f323d9fb4bd18324622bdb892d16604c487761851255baa00b276",
+          "readAt": "2026-07-26T09:44:25Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",27]"
         }
       ]
     },
@@ -534,6 +618,18 @@
           "sha256": "ed24cc402e8b13520ffbb8fbdbd7307cc2a7bdf020c8180b923a02eb082b2520",
           "readAt": "2026-07-26T09:30:01Z",
           "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",25]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "ed24cc402e8b13520ffbb8fbdbd7307cc2a7bdf020c8180b923a02eb082b2520",
+          "readAt": "2026-07-26T09:40:58Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",26]"
+        },
+        {
+          "phase": "build",
+          "sha256": "ed24cc402e8b13520ffbb8fbdbd7307cc2a7bdf020c8180b923a02eb082b2520",
+          "readAt": "2026-07-26T09:44:25Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",27]"
         }
       ]
     },
@@ -639,6 +735,18 @@
           "sha256": "723c47284a1e79a6e44af1a5fd6a185bcf89b3d724675260114375bbc9f3d723",
           "readAt": "2026-07-26T09:30:01Z",
           "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",25]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "723c47284a1e79a6e44af1a5fd6a185bcf89b3d724675260114375bbc9f3d723",
+          "readAt": "2026-07-26T09:40:58Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",26]"
+        },
+        {
+          "phase": "build",
+          "sha256": "723c47284a1e79a6e44af1a5fd6a185bcf89b3d724675260114375bbc9f3d723",
+          "readAt": "2026-07-26T09:44:25Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",27]"
         }
       ]
     },
@@ -666,6 +774,18 @@
           "sha256": "52b237d479d769730972d5f3576c5c52c15f2b58b12ff6230f4e6fc4a128390e",
           "readAt": "2026-07-26T09:30:01Z",
           "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",25]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "52b237d479d769730972d5f3576c5c52c15f2b58b12ff6230f4e6fc4a128390e",
+          "readAt": "2026-07-26T09:40:58Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",26]"
+        },
+        {
+          "phase": "build",
+          "sha256": "52b237d479d769730972d5f3576c5c52c15f2b58b12ff6230f4e6fc4a128390e",
+          "readAt": "2026-07-26T09:44:25Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",27]"
         }
       ]
     },
@@ -693,41 +813,41 @@
           "sha256": "52b237d479d769730972d5f3576c5c52c15f2b58b12ff6230f4e6fc4a128390e",
           "readAt": "2026-07-26T09:30:01Z",
           "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",25]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "52b237d479d769730972d5f3576c5c52c15f2b58b12ff6230f4e6fc4a128390e",
+          "readAt": "2026-07-26T09:40:58Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",26]"
+        },
+        {
+          "phase": "build",
+          "sha256": "52b237d479d769730972d5f3576c5c52c15f2b58b12ff6230f4e6fc4a128390e",
+          "readAt": "2026-07-26T09:44:25Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",27]"
         }
       ]
     },
     {
       "kind": "verification-report",
       "path": "docs/superpowers/reports/2026-07-26-rename-pipeline-lite-to-tenon-verify.md",
-      "sha256": "5d625f39eee2356fe0fc11171a0c9dd927b7b6b093cc472698d347027e4c6171",
+      "sha256": "08b7c5fa37d5e60ee27356b7c1255917c7e567add6ecee91c3342f036294b9c0",
       "producer": "verification-before-completion",
-      "recordedAt": "2026-07-26T09:25:21Z",
+      "recordedAt": "2026-07-26T09:40:58Z",
       "reads": []
     },
     {
       "kind": "tasks",
       "path": "openspec/changes/rename-pipeline-lite-to-tenon/tasks.md",
-      "sha256": "123d474af23d37588b5b98c562b87731bba46df3035e5feec055ce2e6b7d124e",
+      "sha256": "ef7a1544891ad91821b834b79a4c0171c236cd4eb0af478cb9358114bc9ce2d0",
       "producer": "pipeline-build",
-      "recordedAt": "2026-07-26T09:30:01Z",
+      "recordedAt": "2026-07-26T09:44:25Z",
       "reads": [
         {
           "phase": "build",
-          "sha256": "123d474af23d37588b5b98c562b87731bba46df3035e5feec055ce2e6b7d124e",
-          "readAt": "2026-07-26T09:06:22Z",
-          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",23]"
-        },
-        {
-          "phase": "verify",
-          "sha256": "123d474af23d37588b5b98c562b87731bba46df3035e5feec055ce2e6b7d124e",
-          "readAt": "2026-07-26T09:25:21Z",
-          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",24]"
-        },
-        {
-          "phase": "build",
-          "sha256": "123d474af23d37588b5b98c562b87731bba46df3035e5feec055ce2e6b7d124e",
-          "readAt": "2026-07-26T09:30:01Z",
-          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",25]"
+          "sha256": "ef7a1544891ad91821b834b79a4c0171c236cd4eb0af478cb9358114bc9ce2d0",
+          "readAt": "2026-07-26T09:44:25Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",27]"
         }
       ]
     }
