@@ -120,3 +120,25 @@
 {"ts":"2026-07-26T12:34:08Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated"}
 {"ts":"2026-07-26T12:56:11Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated"}
 {"ts":"2026-07-26T12:56:18Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
+{"ts":"2026-07-26T13:02:20Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated"}
+{"ts":"2026-07-26T13:03:11Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated"}
+{"ts":"2026-07-26T13:04:16Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-07-26T13:04:16Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-26T13:04:25Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"459da92c-eee8-4f32-a3d8-dab90d5be7a4"}
+{"ts":"2026-07-26T13:05:18Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated"}
+{"ts":"2026-07-26T13:05:18Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-07-26T13:06:16Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-07-26T13:06:49Z","kind":"tool","raw":"CodexSkillRead: code-review"}
+{"ts":"2026-07-26T13:17:28Z","kind":"tool","raw":"CodexSkillRead: tenon-verify"}
+{"ts":"2026-07-26T13:17:39Z","kind":"set","field":"agent_review_result","to":"pass"}
+{"ts":"2026-07-26T13:17:39Z","kind":"set","field":"codex_review_result","to":"pass"}
+{"ts":"2026-07-26T13:17:39Z","kind":"set","field":"branch_status","to":"handled"}
+{"ts":"2026-07-26T13:17:39Z","kind":"set","field":"verify_result","to":"pass"}
+{"ts":"2026-07-26T13:17:46Z","kind":"tool","raw":"review:request phase=verify event=verify-pass"}
+{"ts":"2026-07-26T13:17:46Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-pass authority_issued_at=2026-07-26T13:05:18Z"}
+{"ts":"2026-07-26T13:17:46Z","kind":"transition","from":"verify","to":"ship","raw":"verify-pass","transitionRecordId":"4cadf118-ad34-4b1f-bbf5-fe27b28bde95"}
+{"ts":"2026-07-26T13:18:55Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated"}
+{"ts":"2026-07-26T13:18:55Z","kind":"tool","raw":"CodexSkillRead: openspec-apply-change"}
+{"ts":"2026-07-26T13:18:55Z","kind":"tool","raw":"CodexSkillRead: finishing-a-development-branch"}
+{"ts":"2026-07-26T13:23:12Z","kind":"set","field":"pr_url","to":"https://github.com/jefferysha/tenon/pull/3"}
+{"ts":"2026-07-26T13:23:12Z","kind":"tool","raw":"CodexSkillRead: tenon-ship"}

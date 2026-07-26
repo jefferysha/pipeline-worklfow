@@ -133,3 +133,79 @@ Hook 级回归。
 `verify-fail → build → requirements-changed → spec`
 受控回退，把作用域单一真相源、Tenon CLI 唯一身份、外部参考身份零残留和历史测试项目清理纳入同一
 架构规格，再用 TDD 修复并重新冻结验证。
+
+## 第四轮冻结基线
+
+冻结基线 `29c36ef7f2f25af7527475f519e0459381996c5a` 完成第三轮全部阻断项：
+
+- Server 默认 `memFs` 由显式 `hostHome` 构造，不再回读操作系统 home；
+- `tenon doctor` 的 native runtime 与 AFK 探针共享同一个冻结 runtime scope；
+- review acknowledge hook 的可用性检查与执行都只依赖 `tenon` launcher；
+- 当前树、生成 bundle 与分发资产中的外部参考身份及历史测试项目身份均为零；
+- 历史测试项目的 demo、研究/ADR、OpenSpec 主规格与 archive 已从当前树删除，Git 历史仍作为恢复边界。
+
+## 第四轮新鲜验证
+
+- 定向回归：7 个文件、82 项通过；清理后的路由、指纹、稳定 hook 回归另有 4 个文件、17 项通过；
+- 后端/共享全量：310 个文件、5272 项通过，5 项因真实凭证缺失按既有策略明确跳过；
+- Dashboard：50 个文件、939 项通过；
+- hook：457/457；adapter：267/267；bundle：23/23；
+- `npm run build`、`check:architecture`、`check:identity`、`check:comments`、
+  `check:repository-hygiene`、default workflow freshness、文档、文档模板、npx package、
+  legacy bridge 和迁移 CAS 全部通过；
+- Golden oracle 的 5 组 fixture 双跑为 0 处不一致；
+- 双语文档站共 32 个唯一路由，确定性检查、构建和 smoke 全部通过；
+- `openspec validate isolate-runtime-state-dependencies --strict` 通过；
+- 隔离副本 `/tmp/tenon-openspec-current.6yhoOL` 的官方 archive/apply 演练成功，
+  `plugin-distribution` 与 `repository-architecture-compliance` 主规格 strict validate 通过；
+  演练后临时副本已删除，真实工作区主规格未被写入；
+- 当前树含隐藏本地运行态和生成 bundle 的受禁身份扫描为零；仓库卫生门禁对外部身份文本、
+  历史测试项目路径/文本和错误脱敏输出均有红灯回归。
+
+## 第四轮三轨结果
+
+### Reviewer Agent
+
+`PASS`。独立隔离 clone 审查
+`c8bb2916ae798e573862bf573063d84dcba3e517..29c36ef7f2f25af7527475f519e0459381996c5a`，
+P0/P1/P2 均无发现。Reviewer 重跑 363 项定向测试、5272 项全量测试、939 项 Dashboard 测试、
+hook、adapter、bundle 及全部架构/身份/卫生门禁，结论与主线一致。
+
+### E2E Agent
+
+`PASS`。独立 clone `/private/tmp/tenon-verify-29c36e.ofvCsY/repo` 完成：
+
+- 不注入 `memFs` 的真实 HTTP hostHome 隔离；
+- 冲突 `HOME` / `TENON_RUNTIME_HOME` / `XDG_*` 下真实 dist `tenon doctor --json`；
+- 只提供 `tenon` launcher 的 manual/delegated review acknowledge；
+- 外部身份和历史测试项目路径/文本 fail-closed；
+- 仅 5 个文件的本地 npx tarball 离线黑盒 `tenon --help` 与 fake-host Marketplace 安装事务。
+
+失败清单为 0，最终 clone 的 `git status` 与 `git diff` 为空。
+
+### Codex CLI
+
+第三轨启动后被本机尚未刷新会话的旧插件 hook 强制读取错误的历史技能副本，且未产生最终审查结论；
+主流程立即终止该进程并按规范记为降级，不把错误宿主证据计作通过。独立 Reviewer、独立 E2E、
+主线全量验证与远端 CI 仍全部审查精确冻结 SHA。
+
+## PR CI
+
+PR `#3` 对冻结提交的最新检查全部收敛：
+
+- `build`：通过；
+- `verify`：通过（5 分 54 秒）；
+- Pages `deploy` 在 PR 事件按 workflow 设计跳过，合并 `main` 后执行。
+
+CI 内架构、产品身份、仓库卫生、npx、迁移桥、构建产物新鲜度、双语文档、全量 Vitest、
+Dashboard、hook、adapter、bundle 和 Golden oracle 均通过。仓库未配置真实 Codex 凭证，
+对应 H14 步骤按 CI 的诚实 skip 契约明确跳过。
+
+## 第四轮结论与剩余风险
+
+`PASS`，允许进入 Ship。已知剩余风险：
+
+- `npm ci` 报告 7 个第三方依赖告警（5 moderate、1 high、1 critical），本 Change 不包含依赖升级，
+  后续应单独建立安全审计 Change；
+- 公网 npm scope 尚未配置仓库变量与 token，因此本轮只证明 npx 可发布包和离线执行，不宣称已发布；
+- 正式 Dashboard 与 Pages 只能在合并 `main` 并部署后做最终公网/正式端口验收。
