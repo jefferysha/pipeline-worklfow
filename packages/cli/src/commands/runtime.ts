@@ -16,7 +16,11 @@ export interface RuntimeCommandEnv {
 
 export const REAL_RUNTIME_COMMAND_ENV: RuntimeCommandEnv = {
   homeDir: () => homedir(),
-  runtimeEnv: () => process.env,
+  runtimeEnv: () => ({ ...process.env }),
+}
+
+function runtimeScope(env: RuntimeCommandEnv) {
+  return { homeDir: env.homeDir(), env: env.runtimeEnv() }
 }
 
 function statusPayload(inspection: RuntimeInspection): Record<string, unknown> {
@@ -53,10 +57,9 @@ export async function cmdRuntime(
   env: RuntimeCommandEnv = REAL_RUNTIME_COMMAND_ENV,
   installer: RuntimeInstaller = REAL_RUNTIME_INSTALLER,
 ): Promise<number> {
-  const scope = { homeDir: env.homeDir(), env: env.runtimeEnv() }
   if (sub === 'status') {
     try {
-      renderStatus(deps, await installer.inspect(scope), opts.json === true)
+      renderStatus(deps, await installer.inspect(runtimeScope(env)), opts.json === true)
       return 0
     } catch (error) {
       deps.io.err(`ERROR: 无法读取 managed runtime 状态：${error instanceof Error ? error.message : String(error)}`)
@@ -69,7 +72,7 @@ export async function cmdRuntime(
       return 1
     }
     try {
-      const activation = await installer.rollback(scope)
+      const activation = await installer.rollback(runtimeScope(env))
       const payload = {
         ok: true,
         selection: activation.selection,

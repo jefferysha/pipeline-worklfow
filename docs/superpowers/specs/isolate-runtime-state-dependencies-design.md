@@ -20,11 +20,13 @@
 采用“解析一次、值对象传递、应用服务显式依赖”的结构：
 
 - kernel 继续唯一解释平台目录和环境覆盖，保持既有优先级与磁盘布局。
-- 进程入口调用 `resolveServerPaths()` 一次，并把完整 `ServerPaths` 注入
-  `createDashboardServer`；Server 不重新解释环境。
-- `DashboardServerOptions.home` 只表示宿主资产发现目录；产品状态路径通过 `paths` 值对象表达。
+- 进程入口调用 `resolveServerPaths()` 一次，并把完整、必填的 `ServerPaths` 注入
+  `createDashboardServer`；Server 不重新解释环境，也不提供隐式 fallback。
+- `DashboardServerOptions.hostHome` 只表示宿主资产发现目录；产品状态路径通过必填的 `paths`
+  值对象表达。省略 `hostHome` 时只复用 `paths.homeDir`。
 - 项目注册表迁移的 `env` 改为必填依赖。生产调用方明确传入真实环境，测试明确传入空环境或测试环境。
 - 测试夹具构造一次路径对象并同时交给被测 Server 与断言，防止被测路径和断言路径分别解析。
+- managed runtime transaction 在加锁前解析一次 `RuntimePaths`，锁内回滚与补偿只消费该快照。
 
 ```text
 process.env + OS home

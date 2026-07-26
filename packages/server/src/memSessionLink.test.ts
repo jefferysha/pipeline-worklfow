@@ -23,6 +23,7 @@ import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import { nodeMemFs } from '@tenon/kernel'
 import { createDashboardServer } from './server.js'
+import { resolveServerPaths } from './paths.js'
 import type { DashboardServer } from './types.js'
 import { initChange, makeProject, makeTempHome, makeWorktreeDir, newStore, reqGet, testFlow } from './test-support.js'
 
@@ -109,6 +110,8 @@ async function startWith(changes: Record<string, { worktree?: string }>): Promis
     }
   }
   const srv = createDashboardServer({
+    paths: resolveServerPaths({ home, env: {} }),
+    hostHome: home,
     version: '9.9.9', token: 't', registry: () => [root], store, flow: testFlow(),
     // env 全 undefined——不让真跑这套测试的宿主 shell 里可能设置的 XDG_DATA_HOME 泄进来，
     // 否则 opencode fixture（写在 <home>/.local/share/...）可能被真实 XDG_DATA_HOME 覆盖路径

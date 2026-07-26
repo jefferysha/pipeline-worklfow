@@ -43905,10 +43905,12 @@ var REAL_RUNTIME_INSTALLER = {
     return storeFor(scope).inspect();
   },
   async rollback(scope) {
-    return withExclusiveRuntimeTransaction(scope, async () => {
-      const paths = pathsFor(scope);
-      return rollbackWithinTransaction(paths, scope.homeDir);
-    });
+    const paths = pathsFor(scope);
+    await mkdir25(paths.managedTransactionRoot, { recursive: true });
+    return withLock(
+      paths.managedTransactionRoot,
+      () => rollbackWithinTransaction(paths, scope.homeDir)
+    );
   },
   recordUpdateFailure(scope, detail) {
     return storeFor(scope).recordUpdateFailure(detail);
@@ -43918,8 +43920,11 @@ var REAL_RUNTIME_INSTALLER = {
 // packages/cli/src/commands/runtime.ts
 var REAL_RUNTIME_COMMAND_ENV = {
   homeDir: () => homedir17(),
-  runtimeEnv: () => process.env
+  runtimeEnv: () => ({ ...process.env })
 };
+function runtimeScope(env) {
+  return { homeDir: env.homeDir(), env: env.runtimeEnv() };
+}
 function statusPayload(inspection) {
   return {
     selection: inspection.selection,
@@ -43946,10 +43951,9 @@ function renderStatus(deps, inspection, asJson) {
   }
 }
 async function cmdRuntime(deps, sub, opts, env = REAL_RUNTIME_COMMAND_ENV, installer = REAL_RUNTIME_INSTALLER) {
-  const scope = { homeDir: env.homeDir(), env: env.runtimeEnv() };
   if (sub === "status") {
     try {
-      renderStatus(deps, await installer.inspect(scope), opts.json === true);
+      renderStatus(deps, await installer.inspect(runtimeScope(env)), opts.json === true);
       return 0;
     } catch (error) {
       deps.io.err(`ERROR: \u65E0\u6CD5\u8BFB\u53D6 managed runtime \u72B6\u6001\uFF1A${error instanceof Error ? error.message : String(error)}`);
@@ -43962,7 +43966,7 @@ async function cmdRuntime(deps, sub, opts, env = REAL_RUNTIME_COMMAND_ENV, insta
       return 1;
     }
     try {
-      const activation = await installer.rollback(scope);
+      const activation = await installer.rollback(runtimeScope(env));
       const payload = {
         ok: true,
         selection: activation.selection,
@@ -44078,7 +44082,7 @@ import {
 import { homedir as homedir18 } from "node:os";
 var REAL_SETUP_ENV = {
   homeDir: () => homedir18(),
-  runtimeEnv: () => process.env,
+  runtimeEnv: () => ({ ...process.env }),
   pluginRoot: () => {
     const r = process.env.PLUGIN_ROOT ?? process.env.CLAUDE_PLUGIN_ROOT;
     return r !== void 0 && r.trim() !== "" ? r : null;

@@ -6,9 +6,10 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { join } from 'node:path'
 import { createDashboardServer } from './server.js'
+import { resolveServerPaths } from './paths.js'
 import { buildAfkSnapshot } from './afk.js'
 import type { DashboardServer, Snapshot } from './types.js'
-import { initChange, makeProject, newStore, reqGet, testFlow } from './test-support.js'
+import { initChange, makeProject, makeTempHome, newStore, reqGet, testFlow } from './test-support.js'
 import type { StateStore } from '@tenon/kernel'
 
 const openServers: DashboardServer[] = []
@@ -43,6 +44,7 @@ async function startWith(states: Record<string, Partial<Record<string, string>>>
     await store.setMany(dir, buildAutomationKv(fields) as never)
   }
   const srv = createDashboardServer({
+    paths: resolveServerPaths({ home: await makeTempHome(), env: {} }),
     version: '9.9.9', token: 't', registry: () => [root], store, flow: testFlow(),
     clock: () => '2026-07-07T00:00:00Z',
   })

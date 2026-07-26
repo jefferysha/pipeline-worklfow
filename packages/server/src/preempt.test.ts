@@ -13,6 +13,7 @@ import {
 import { createDashboardServer } from './server.js'
 import type { DashboardServer } from './types.js'
 import { makeTempHome, testFlow } from './test-support.js'
+import { resolveServerPaths } from './paths.js'
 
 const servers: DashboardServer[] = []
 const rawServers: Server[] = []
@@ -135,7 +136,13 @@ describe('decidePreemption —— bind / reuse / preempt', () => {
 
 describe('probeHealth —— 真 HTTP 探测既有 server', () => {
   it('活着 → 回 health（含 version）；关掉 → null', async () => {
-    const srv = createDashboardServer({ version: '5.5.5', token: 't', registry: () => [], flow: testFlow() })
+    const srv = createDashboardServer({
+      paths: resolveServerPaths({ home: await makeTempHome(), env: {} }),
+      version: '5.5.5',
+      token: 't',
+      registry: () => [],
+      flow: testFlow(),
+    })
     servers.push(srv)
     const { port } = await srv.listen(0, '127.0.0.1')
     const alive = await probeHealth(port, '127.0.0.1', 500)

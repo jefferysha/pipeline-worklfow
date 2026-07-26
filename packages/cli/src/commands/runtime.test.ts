@@ -96,4 +96,33 @@ describe('tenon runtime', () => {
       selection: { activeRelease: previousRelease, previousRelease: activeRelease, revision: 8 },
     })
   })
+
+  test.each([
+    ['status', { json: true }],
+    ['repair', { rollback: true }],
+  ] as const)('%s maps runtime scope resolution failures to the command error contract', async (sub, opts) => {
+    const deps = makeDeps()
+    const runtime = fakeInstaller()
+    const brokenEnv = {
+      homeDir: () => { throw new Error('home lookup failed') },
+      runtimeEnv: () => ({}),
+    }
+
+    expect(await cmdRuntime(deps, sub, opts, brokenEnv, runtime.installer)).toBe(1)
+    expect(deps.errLines.join('\n')).toContain('home lookup failed')
+  })
+
+  test('invalid and incomplete commands do not read runtime scope', async () => {
+    const deps = makeDeps()
+    const runtime = fakeInstaller()
+    let reads = 0
+    const countingEnv = {
+      homeDir: () => { reads += 1; return '/unused' },
+      runtimeEnv: () => { reads += 1; return {} },
+    }
+
+    expect(await cmdRuntime(deps, 'repair', {}, countingEnv, runtime.installer)).toBe(1)
+    expect(await cmdRuntime(deps, 'unknown', {}, countingEnv, runtime.installer)).toBe(1)
+    expect(reads).toBe(0)
+  })
 })

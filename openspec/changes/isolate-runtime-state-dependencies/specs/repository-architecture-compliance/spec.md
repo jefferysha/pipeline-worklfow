@@ -28,3 +28,16 @@ HTTP、CLI 与 hooks SHALL 只负责输入及授权校验、DTO 转换、应用�
 - **WHEN** 调用方显式传入与当前进程等价的环境、home 与 platform
 - **THEN** `TENON_RUNTIME_HOME`、`TENON_RUNTIME_ROOTS` 和 XDG 的优先级保持不变
 - **AND** 注册表、密钥、回执与锁文件格式保持不变。
+
+#### Scenario: managed runtime 回滚等待事务锁
+
+- **GIVEN** runtime adapter 已提供 home、环境和平台作用域
+- **WHEN** 回滚事务解析路径并等待作用域锁
+- **THEN** 锁目录和锁内全部读写复用同一个不可变路径快照
+- **AND** 后续环境变化不能让事务跨到另一个状态根。
+
+#### Scenario: runtime 命令无法解析作用域
+
+- **WHEN** runtime adapter 的 home 或环境提供器失败
+- **THEN** CLI 将失败映射为稳定的非零退出码和命令错误
+- **AND** 无效或不完整子命令不读取运行时作用域。

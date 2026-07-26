@@ -115,9 +115,9 @@ export interface DashboardServerOptions {
   /**
    * 进程装配层已经解析并冻结的产品路径。注入后 Server 不再解释进程环境或从 home 推导状态目录。
    */
-  paths?: ServerPaths
-  /** 仅用于宿主资产发现；产品状态路径必须通过 paths 表达。 */
-  home?: string
+  paths: ServerPaths
+  /** 仅用于宿主资产发现；省略时复用 paths.homeDir，绝不参与产品状态路径解析。 */
+  hostHome?: string
   /** 覆盖注册表读取（默认读 registryPath 的 JSON 字符串数组）。 */
   registry?: () => string[]
   /** 覆盖 token（默认启动生成一次性随机 token）。 */

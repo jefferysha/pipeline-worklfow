@@ -171,10 +171,12 @@ export const REAL_RUNTIME_INSTALLER: RuntimeInstaller = {
     return storeFor(scope).inspect()
   },
   async rollback(scope) {
-    return withExclusiveRuntimeTransaction(scope, async () => {
-      const paths = pathsFor(scope)
-      return rollbackWithinTransaction(paths, scope.homeDir)
-    })
+    const paths = pathsFor(scope)
+    await mkdir(paths.managedTransactionRoot, { recursive: true })
+    return withLock(
+      paths.managedTransactionRoot,
+      () => rollbackWithinTransaction(paths, scope.homeDir),
+    )
   },
   recordUpdateFailure(scope, detail) {
     return storeFor(scope).recordUpdateFailure(detail)

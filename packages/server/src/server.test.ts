@@ -8,7 +8,7 @@ import { appendFile, mkdir, readFile, readdir, stat, unlink, writeFile } from 'n
 import { dirname, join } from 'node:path'
 import { createDashboardServer } from './server.js'
 import { resolveServerPaths } from './paths.js'
-import type { DashboardServer, ServerPaths } from './types.js'
+import type { DashboardServer, DashboardServerOptions, ServerPaths } from './types.js'
 import {
   initChange, makeProject, makeTempHome, makeTempManifest, makeWorktreeDir, newStore, openSSE, repoManifestPath, reqDelete, reqGet,
   reqPatch, reqPost, testFlow,
@@ -37,6 +37,10 @@ describe('接线 —— server 事件表 = kernel 单源（无本地镜像）', 
     expect(eventEdge).toBe(kernelEventEdge)
   })
 })
+
+// @ts-expect-error 产品状态路径与宿主发现目录必须使用不同的显式字段，禁止含糊的 home-only 公共调用。
+const ambiguousHomeOnlyOptions: DashboardServerOptions = { home: '/tmp/ambiguous-dashboard-home' }
+void ambiguousHomeOnlyOptions
 
 const openServers: DashboardServer[] = []
 afterEach(async () => {
@@ -86,13 +90,13 @@ async function start(opts?: {
     await seedGovernedDocumentEvidence(root, changeDir, name)
   }
   const worktreeDir = await makeWorktreeDir()
+  const hostHome = opts?.home ?? await makeTempHome()
+  const paths = opts?.paths ?? resolveServerPaths({ home: hostHome, env: {} })
   const srv = createDashboardServer({
     version: opts?.version ?? '9.9.9',
     releaseId: opts?.releaseId,
-    home: opts?.home,
-    paths: opts?.paths ?? (opts?.home === undefined
-      ? undefined
-      : resolveServerPaths({ home: opts.home, env: {} })),
+    hostHome,
+    paths,
     token: opts?.token ?? 'secret-token-abc',
     registry: () => [root],
     store,
@@ -407,6 +411,7 @@ describe('GET /api/snapshot —— 聚合注册 Project 的真 .pipeline.yaml', 
     await initChange(store, a, 'alpha')
     await initChange(store, b, 'beta')
     const srv = createDashboardServer({
+      paths: resolveServerPaths({ home: await makeTempHome(), env: {} }),
       version: '9.9.9', token: 't', registry: () => [a, b], store, flow: testFlow(),
     })
     openServers.push(srv)
@@ -598,6 +603,7 @@ describe('GET / + /assets/* —— webRoot 存在时服务真 SPA（BACKLOG #26c
     const root = await makeProject()
     await initChange(store, root, 'c1')
     const srv = createDashboardServer({
+      paths: resolveServerPaths({ home: await makeTempHome(), env: {} }),
       token: 'spa-token', registry: () => [root], store, flow: testFlow(),
       clock: () => '2026-07-07T00:00:00Z', webRoot: web,
     })
@@ -2261,7 +2267,13 @@ describe('GET /api/workflows —— 列出自定义 workflow（GOAL E8）', () =
     const store = newStore()
     const root = await makeProject()
     const roots: string[] = []
-    const srv = createDashboardServer({ token: 'dynamic-registry-token', registry: () => roots, store, flow: testFlow() })
+    const srv = createDashboardServer({
+      paths: resolveServerPaths({ home: await makeTempHome(), env: {} }),
+      token: 'dynamic-registry-token',
+      registry: () => roots,
+      store,
+      flow: testFlow(),
+    })
     openServers.push(srv)
     const { port } = await srv.listen(0, '127.0.0.1')
     roots.push(root)
@@ -3771,7 +3783,7 @@ async function startWithHome(opts?: { runPipelineCli?: PipelineCliRunner }): Pro
   const srv = createDashboardServer({
     version: '9.9.9',
     token: 'secret-token-abc',
-    home,
+    hostHome: home,
     paths,
     store,
     flow: testFlow(),

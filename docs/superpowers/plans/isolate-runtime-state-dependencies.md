@@ -15,11 +15,12 @@ locale: zh-CN
 
 1. 先在 `packages/server/src/server.test.ts` 增加失败用例：进程拥有共享运行环境时，显式注入的
    `ServerPaths` 仍决定健康检查、注册表与密钥路径。
-2. 在 `packages/server/src/types.ts` 为 `DashboardServerOptions` 增加完整 `paths` 值对象依赖，
-   在 `packages/server/src/server.ts` 优先消费该值对象。
-3. 在 `packages/server/src/main.ts` 把已经解析的同一个 `ServerPaths` 交给 Server，消除生产入口的
+2. 在 `packages/server/src/types.ts` 将完整 `paths` 值对象定义为 `DashboardServerOptions`
+   的必填依赖；宿主发现目录改用正交的 `hostHome`。
+3. 在 `packages/server/src/server.ts` 只消费该路径对象，不提供环境解析 fallback。
+4. 在 `packages/server/src/main.ts` 把已经解析的同一个 `ServerPaths` 交给 Server，消除生产入口的
    第二次解析。
-4. 运行：
+5. 运行：
    `npx vitest run packages/server/src/server.test.ts packages/server/src/paths.test.ts`。
 
 验收：测试夹具、健康响应和真实 Server 状态读写使用同一对象；共享环境无法覆盖显式路径。
@@ -43,8 +44,10 @@ locale: zh-CN
 ## 阶段 3：统一测试夹具并重建发布资产
 
 1. 让 Server 测试夹具只构造一次 `ServerPaths`，被测对象和断言复用同一快照。
-2. 执行 `npm run build` 重建 CLI、Server 和 Dashboard 的受控 bundle 与类型声明。
-3. 运行架构与发布新鲜度检查，确认源码、dist 和 immutable payload 一致。
+2. 让 `RuntimeInstaller.rollback` 在加锁前解析一次路径并在锁内复用，增加动态环境回归测试。
+3. 把 `cmdRuntime` 的作用域解析移入对应子命令错误边界；无效或不完整命令不得读取环境。
+4. 执行 `npm run build` 重建 CLI、Server 和 Dashboard 的受控 bundle 与类型声明。
+5. 运行架构与发布新鲜度检查，确认源码、dist 和 immutable payload 一致。
 
 验收：不再存在“被测路径”和“断言路径”分别读取全局环境的测试结构；受控 bundle 无陈旧实现。
 
@@ -69,7 +72,10 @@ locale: zh-CN
 | 风险 | 证据 |
 | --- | --- |
 | Server 重新读取环境 | 显式 `paths` 与冲突环境并存的定向测试 |
+| Server 漏传路径 | 编译期拒绝 `createDashboardServer` 的缺失 `paths` 调用 |
 | 迁移状态串扰 | 共享 `TENON_RUNTIME_HOME` 和 XDG 的多实例测试 |
+| runtime 锁与写入跨根 | 动态环境探针证明 rollback 只读取一次并复用路径快照 |
+| CLI 环境解析失败 | status/repair 映射稳定错误；无效子命令环境读取次数为零 |
 | 生产入口双重解析 | `main.ts` 只解析一次并注入；bundle 检查 |
 | 路径协议漂移 | kernel 路径测试与现有环境优先级测试 |
 | 凭据跨作用域 | secrets、token、registry、pidfile 同源断言 |

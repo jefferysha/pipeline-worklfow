@@ -280,4 +280,42 @@ describe('RuntimeReleaseStore', () => {
     expect((await REAL_RUNTIME_INSTALLER.inspect(isolatedScope(home))).selection.activeRelease).toBe(second.release.releaseId)
     expect(await readFile(tenon, 'utf8')).toBe('#!/bin/sh\necho concurrent-owner\n')
   }, 60_000)
+
+  it('resolves one immutable path snapshot before locking a rollback transaction', async () => {
+    const root = await freshRoot('installer-rollback-path-snapshot')
+    const home = join(root, 'home')
+    const runtimeA = join(root, 'runtime-a')
+    const runtimeB = join(root, 'runtime-b')
+    const firstCandidate = await candidateCopy(root, '-one')
+    const secondCandidate = await candidateCopy(root, '-two')
+    await writeFile(
+      join(secondCandidate, 'runtime', 'tenon-bootstrap.mjs'),
+      `${await readFile(join(secondCandidate, 'runtime', 'tenon-bootstrap.mjs'), 'utf8')}\n// second\n`,
+      'utf8',
+    )
+    const stableScope = { homeDir: home, env: { TENON_RUNTIME_HOME: runtimeA } }
+    await REAL_RUNTIME_INSTALLER.withManagedTransaction(
+      stableScope,
+      (transaction) => transaction.activate(firstCandidate, 'codex'),
+    )
+    await REAL_RUNTIME_INSTALLER.withManagedTransaction(
+      stableScope,
+      (transaction) => transaction.activate(secondCandidate, 'codex'),
+    )
+
+    let runtimeRootReads = 0
+    const changingEnv = new Proxy<Record<string, string | undefined>>({}, {
+      get: (_target, property) => {
+        if (property !== 'TENON_RUNTIME_HOME') return undefined
+        runtimeRootReads += 1
+        return runtimeRootReads === 1 ? runtimeA : runtimeB
+      },
+    })
+    const rolledBack = await REAL_RUNTIME_INSTALLER.rollback({ homeDir: home, env: changingEnv })
+
+    expect(rolledBack.release.releaseId).toBe(
+      (await REAL_RUNTIME_INSTALLER.inspect(stableScope)).selection.activeRelease,
+    )
+    expect(runtimeRootReads).toBe(1)
+  }, 60_000)
 })

@@ -3,7 +3,6 @@ import { existsSync, lstatSync, readFileSync, statSync } from 'node:fs'
 import { readdir } from 'node:fs/promises'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import type { AddressInfo } from 'node:net'
-import { homedir } from 'node:os'
 import { dirname, join, resolve as resolvePath } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
@@ -28,7 +27,6 @@ import { applyLoopsUpdate, buildLoopsSnapshot, type LoopActivationValidator } fr
 import { readConfigSnapshot, validateMandatorySkillsBody, writeMandatorySkills } from './config.js'
 import { readAutomationSettings, validateAutomationSettingsBody, writeAutomationSettings } from './automationConfig.js'
 import { HOOK_METAS, readHooksMatrix, validateHookToggleBody, writeHookToggle } from './hooksConfig.js'
-import { resolveServerPaths } from './paths.js'
 import { addProjectToRegistry, removeProjectFromRegistry } from './projects.js'
 import {
   assertWorkflowRootAnchor, captureWorkflowDeletePermit, captureWorkflowRootAnchor, closeWorkflowRootAnchor,
@@ -83,12 +81,13 @@ function isWorkflowName(name: string): boolean {
 
 export { isLocalHost } from './serverSupport.js'
 
-export function createDashboardServer(options: DashboardServerOptions = {}): DashboardServer {
+export function createDashboardServer(options: DashboardServerOptions): DashboardServer {
   const version = options.version ?? SERVER_VERSION
   const releaseId = options.releaseId
   const token = options.token ?? generateToken()
   const clock = options.clock ?? isoNow
-  const paths = options.paths ?? resolveServerPaths()
+  const paths = options.paths
+  const hostHome = options.hostHome ?? paths.homeDir
   const stateScopeId = machineStateScopeId(paths.stateRoot)
   const registry: () => string[] = options.registry ?? (() => readRegistry(paths.registryPath))
   const store: StateStore = options.store ?? createStateStore()
@@ -139,7 +138,7 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
             resolver,
             locator: createRunnerSkillContentLocator({
               runner,
-              home: options.home ?? homedir(),
+              home: hostHome,
               bundledRoot: join(repoRootForSkills(), 'skills'),
             }),
             isSkillProfileKnown: (profileId: string) => profileId === '_all' || trackSkillProfiles.has(profileId),

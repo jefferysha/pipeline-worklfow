@@ -3,9 +3,10 @@
 ## 架构结论
 
 - `resolveProductPaths` 继续作为平台目录与环境覆盖规则的唯一解释器。
-- Dashboard 进程入口只解析一次完整 `ServerPaths`，并把该值对象注入 Server。
+- Dashboard 进程入口只解析一次完整 `ServerPaths`，并把该必填值对象注入 Server。
 - Server 的宿主 home 与产品状态路径是两个独立依赖，不能互相推导。
 - 项目注册表迁移必须显式接收环境映射；测试使用空环境表达隔离，生产传入真实环境。
+- managed runtime 事务在加锁前只解析一次路径，并在锁内复用同一不可变快照。
 - 注册表、密钥、token、pidfile 和状态作用域必须共享同一个路径快照。
 
 ## 风险
@@ -20,6 +21,7 @@
 - 当前源码中迁移服务只有测试调用方；把 `env` 改为必填可由编译器保证未来调用显式选择。
 - 共享 `TENON_RUNTIME_HOME` 可稳定复现注册表、迁移回执与密钥串扰。
 - `ServerPaths` 注入覆盖注册表、密钥、token、pidfile 与 `stateScopeId`。
+- 首轮冻结审查发现并消除了可选 `paths`、rollback 双重解析和 CLI 环境错误逃逸。
 
 ## 决策记录
 

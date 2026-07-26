@@ -6,7 +6,8 @@
 
 受管 Dashboard 单例 SHALL 同时标识当前不可变 release 与项目注册表、token、密钥和 pidfile
 共同使用的机器状态作用域。进程装配层 SHALL 只调用一次产品路径解析器，并把同一个不可变
-`ServerPaths` 值对象注入 Server；Server SHALL NOT 从 `home` 或进程环境再次推导产品状态路径。
+`ServerPaths` 值对象作为必填依赖注入 Server；Server SHALL NOT 从宿主 home 或进程环境再次推导
+产品状态路径。
 健康响应 SHALL 暴露不透明且确定性的 `stateScopeId`，并 SHALL NOT 暴露机器状态目录。
 
 #### Scenario: 生产入口装配 Dashboard
@@ -23,6 +24,12 @@
 - **WHEN** Server 启动并读写机器状态
 - **THEN** 它只使用显式注入的路径
 - **AND** 不读写共享环境所指向的目录。
+
+#### Scenario: Server 调用方省略路径依赖
+
+- **WHEN** 代码尝试在未提供 `ServerPaths` 的情况下创建 Dashboard Server
+- **THEN** TypeScript 契约在编译期拒绝该调用
+- **AND** Server 不提供读取 `process.env` 的隐式 fallback。
 
 #### Scenario: 路径解析失败
 

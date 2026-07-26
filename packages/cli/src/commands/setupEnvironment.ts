@@ -66,7 +66,7 @@ export interface SetupEnv {
 
 export const REAL_SETUP_ENV: SetupEnv = {
   homeDir: () => homedir(),
-  runtimeEnv: () => process.env,
+  runtimeEnv: () => ({ ...process.env }),
   pluginRoot: () => {
     const r = process.env.PLUGIN_ROOT ?? process.env.CLAUDE_PLUGIN_ROOT
     return r !== undefined && r.trim() !== '' ? r : null

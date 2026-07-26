@@ -4,60 +4,6 @@
   "createdAt": "2026-07-26T10:36:02Z",
   "records": [
     {
-      "kind": "proposal",
-      "path": "openspec/changes/isolate-runtime-state-dependencies/proposal.md",
-      "sha256": "a5a6072611b61a4949a7f053c5e55bc2dbbb0235c4138d64fffda2b38139750a",
-      "producer": "openspec-propose",
-      "recordedAt": "2026-07-26T10:39:10Z",
-      "reads": [
-        {
-          "phase": "explore",
-          "sha256": "a5a6072611b61a4949a7f053c5e55bc2dbbb0235c4138d64fffda2b38139750a",
-          "readAt": "2026-07-26T10:49:46Z",
-          "visitId": "[\"7f8bb635-9992-4c64-8158-2112e467fe03\",1]"
-        },
-        {
-          "phase": "spec",
-          "sha256": "a5a6072611b61a4949a7f053c5e55bc2dbbb0235c4138d64fffda2b38139750a",
-          "readAt": "2026-07-26T10:56:00Z",
-          "visitId": "[\"7f8bb635-9992-4c64-8158-2112e467fe03\",2]"
-        },
-        {
-          "phase": "build",
-          "sha256": "a5a6072611b61a4949a7f053c5e55bc2dbbb0235c4138d64fffda2b38139750a",
-          "readAt": "2026-07-26T10:56:45Z",
-          "visitId": "[\"7f8bb635-9992-4c64-8158-2112e467fe03\",3]"
-        }
-      ]
-    },
-    {
-      "kind": "openspec-design",
-      "path": "openspec/changes/isolate-runtime-state-dependencies/design.md",
-      "sha256": "c035f09e96abc5c5ae64798e305c36c0eb9e519bac6f8feaac812b594410882d",
-      "producer": "tenon-explore",
-      "recordedAt": "2026-07-26T10:46:41Z",
-      "reads": [
-        {
-          "phase": "explore",
-          "sha256": "c035f09e96abc5c5ae64798e305c36c0eb9e519bac6f8feaac812b594410882d",
-          "readAt": "2026-07-26T10:49:46Z",
-          "visitId": "[\"7f8bb635-9992-4c64-8158-2112e467fe03\",1]"
-        },
-        {
-          "phase": "spec",
-          "sha256": "c035f09e96abc5c5ae64798e305c36c0eb9e519bac6f8feaac812b594410882d",
-          "readAt": "2026-07-26T10:56:00Z",
-          "visitId": "[\"7f8bb635-9992-4c64-8158-2112e467fe03\",2]"
-        },
-        {
-          "phase": "build",
-          "sha256": "c035f09e96abc5c5ae64798e305c36c0eb9e519bac6f8feaac812b594410882d",
-          "readAt": "2026-07-26T10:56:45Z",
-          "visitId": "[\"7f8bb635-9992-4c64-8158-2112e467fe03\",3]"
-        }
-      ]
-    },
-    {
       "kind": "adr",
       "path": "docs/adr/isolate-runtime-state-dependencies.md",
       "sha256": "30596c44e72412fb18c26f89fe51e55aec399bc36c305ce142501de0cdac846e",
@@ -75,102 +21,176 @@
           "sha256": "30596c44e72412fb18c26f89fe51e55aec399bc36c305ce142501de0cdac846e",
           "readAt": "2026-07-26T10:56:45Z",
           "visitId": "[\"7f8bb635-9992-4c64-8158-2112e467fe03\",3]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "30596c44e72412fb18c26f89fe51e55aec399bc36c305ce142501de0cdac846e",
+          "readAt": "2026-07-26T11:23:38Z",
+          "visitId": "[\"7f8bb635-9992-4c64-8158-2112e467fe03\",4]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "30596c44e72412fb18c26f89fe51e55aec399bc36c305ce142501de0cdac846e",
+          "readAt": "2026-07-26T11:33:34Z",
+          "visitId": "[\"7f8bb635-9992-4c64-8158-2112e467fe03\",6]"
+        },
+        {
+          "phase": "build",
+          "sha256": "30596c44e72412fb18c26f89fe51e55aec399bc36c305ce142501de0cdac846e",
+          "readAt": "2026-07-26T11:38:37Z",
+          "visitId": "[\"7f8bb635-9992-4c64-8158-2112e467fe03\",7]"
+        }
+      ]
+    },
+    {
+      "kind": "verification-report",
+      "path": "docs/superpowers/reports/isolate-runtime-state-dependencies-verify.md",
+      "sha256": "e1968961e1b928c79c0f1e91387db2782c77100e18537c1a4835278e4cda43fc",
+      "producer": "verification-before-completion",
+      "recordedAt": "2026-07-26T11:23:38Z",
+      "reads": []
+    },
+    {
+      "kind": "delta-spec",
+      "path": "openspec/changes/isolate-runtime-state-dependencies/specs/repository-architecture-compliance/spec.md",
+      "sha256": "ace59ad6b0cbfe657857467c5cb4d4a4e078da49aaee71249dcddd0e6ce46a5e",
+      "producer": "openspec-propose",
+      "recordedAt": "2026-07-26T11:33:07Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "ace59ad6b0cbfe657857467c5cb4d4a4e078da49aaee71249dcddd0e6ce46a5e",
+          "readAt": "2026-07-26T11:38:37Z",
+          "visitId": "[\"7f8bb635-9992-4c64-8158-2112e467fe03\",7]"
         }
       ]
     },
     {
       "kind": "delta-spec",
       "path": "openspec/changes/isolate-runtime-state-dependencies/specs/plugin-distribution/spec.md",
-      "sha256": "fa580fdcedcb725694eb9a3fd375164492e665f71fb77af0029391515e5e2dff",
+      "sha256": "c422043917511cb6c34c7daaacd38ca5bc244de9d444effdfd2191bc7a86dcd1",
       "producer": "openspec-propose",
-      "recordedAt": "2026-07-26T10:53:56Z",
+      "recordedAt": "2026-07-26T11:33:07Z",
       "reads": [
         {
           "phase": "build",
-          "sha256": "fa580fdcedcb725694eb9a3fd375164492e665f71fb77af0029391515e5e2dff",
-          "readAt": "2026-07-26T10:56:45Z",
-          "visitId": "[\"7f8bb635-9992-4c64-8158-2112e467fe03\",3]"
-        }
-      ]
-    },
-    {
-      "kind": "delta-spec",
-      "path": "openspec/changes/isolate-runtime-state-dependencies/specs/repository-architecture-compliance/spec.md",
-      "sha256": "750652fa72e9336a3009a1709cc224a2014a7161afc1e7d70384c435d417a16c",
-      "producer": "openspec-propose",
-      "recordedAt": "2026-07-26T10:53:56Z",
-      "reads": [
-        {
-          "phase": "build",
-          "sha256": "750652fa72e9336a3009a1709cc224a2014a7161afc1e7d70384c435d417a16c",
-          "readAt": "2026-07-26T10:56:45Z",
-          "visitId": "[\"7f8bb635-9992-4c64-8158-2112e467fe03\",3]"
+          "sha256": "c422043917511cb6c34c7daaacd38ca5bc244de9d444effdfd2191bc7a86dcd1",
+          "readAt": "2026-07-26T11:38:37Z",
+          "visitId": "[\"7f8bb635-9992-4c64-8158-2112e467fe03\",7]"
         }
       ]
     },
     {
       "kind": "superpower-plan",
       "path": "docs/superpowers/plans/isolate-runtime-state-dependencies.md",
-      "sha256": "82da7e0b4abb910716321bfe51bfbc533117e046950190774da2d6e3210ea7b7",
+      "sha256": "f92d3b10fb1e6fab6d6b910bef0205fba3980d69d845bda048224c58cb9ca488",
       "producer": "writing-plans",
-      "recordedAt": "2026-07-26T10:53:57Z",
+      "recordedAt": "2026-07-26T11:33:07Z",
       "reads": [
         {
           "phase": "build",
-          "sha256": "82da7e0b4abb910716321bfe51bfbc533117e046950190774da2d6e3210ea7b7",
-          "readAt": "2026-07-26T10:56:45Z",
-          "visitId": "[\"7f8bb635-9992-4c64-8158-2112e467fe03\",3]"
+          "sha256": "f92d3b10fb1e6fab6d6b910bef0205fba3980d69d845bda048224c58cb9ca488",
+          "readAt": "2026-07-26T11:38:37Z",
+          "visitId": "[\"7f8bb635-9992-4c64-8158-2112e467fe03\",7]"
         }
       ]
     },
     {
       "kind": "plan",
       "path": "docs/superpowers/plans/isolate-runtime-state-dependencies.md",
-      "sha256": "82da7e0b4abb910716321bfe51bfbc533117e046950190774da2d6e3210ea7b7",
+      "sha256": "f92d3b10fb1e6fab6d6b910bef0205fba3980d69d845bda048224c58cb9ca488",
       "producer": "writing-plans",
-      "recordedAt": "2026-07-26T10:53:57Z",
+      "recordedAt": "2026-07-26T11:33:07Z",
       "reads": [
         {
           "phase": "build",
-          "sha256": "82da7e0b4abb910716321bfe51bfbc533117e046950190774da2d6e3210ea7b7",
-          "readAt": "2026-07-26T10:56:45Z",
-          "visitId": "[\"7f8bb635-9992-4c64-8158-2112e467fe03\",3]"
+          "sha256": "f92d3b10fb1e6fab6d6b910bef0205fba3980d69d845bda048224c58cb9ca488",
+          "readAt": "2026-07-26T11:38:37Z",
+          "visitId": "[\"7f8bb635-9992-4c64-8158-2112e467fe03\",7]"
+        }
+      ]
+    },
+    {
+      "kind": "proposal",
+      "path": "openspec/changes/isolate-runtime-state-dependencies/proposal.md",
+      "sha256": "1dc2f9698569135737a3e6de5aefbe9c2fbe6fd7551b56c92a494750db121660",
+      "producer": "tenon-spec",
+      "recordedAt": "2026-07-26T11:33:33Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "1dc2f9698569135737a3e6de5aefbe9c2fbe6fd7551b56c92a494750db121660",
+          "readAt": "2026-07-26T11:33:34Z",
+          "visitId": "[\"7f8bb635-9992-4c64-8158-2112e467fe03\",6]"
+        },
+        {
+          "phase": "build",
+          "sha256": "1dc2f9698569135737a3e6de5aefbe9c2fbe6fd7551b56c92a494750db121660",
+          "readAt": "2026-07-26T11:38:37Z",
+          "visitId": "[\"7f8bb635-9992-4c64-8158-2112e467fe03\",7]"
+        }
+      ]
+    },
+    {
+      "kind": "openspec-design",
+      "path": "openspec/changes/isolate-runtime-state-dependencies/design.md",
+      "sha256": "fa2506e6ac323cfb54665a9d3f8bf812f97957364f724069feb4d842e41140cf",
+      "producer": "tenon-spec",
+      "recordedAt": "2026-07-26T11:33:34Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "fa2506e6ac323cfb54665a9d3f8bf812f97957364f724069feb4d842e41140cf",
+          "readAt": "2026-07-26T11:33:34Z",
+          "visitId": "[\"7f8bb635-9992-4c64-8158-2112e467fe03\",6]"
+        },
+        {
+          "phase": "build",
+          "sha256": "fa2506e6ac323cfb54665a9d3f8bf812f97957364f724069feb4d842e41140cf",
+          "readAt": "2026-07-26T11:38:37Z",
+          "visitId": "[\"7f8bb635-9992-4c64-8158-2112e467fe03\",7]"
         }
       ]
     },
     {
       "kind": "superpower-design",
       "path": "docs/superpowers/specs/isolate-runtime-state-dependencies-design.md",
-      "sha256": "a280cad20543fdb247d595b629b9a1a8e5565932d224ba058d5f8886c3fc763a",
+      "sha256": "aacc49e092d29d85c0c2219d78db3f1dcfaa6f08a8470af4f866e814b46349ea",
       "producer": "tenon-spec",
-      "recordedAt": "2026-07-26T10:55:59Z",
+      "recordedAt": "2026-07-26T11:33:34Z",
       "reads": [
         {
           "phase": "spec",
-          "sha256": "a280cad20543fdb247d595b629b9a1a8e5565932d224ba058d5f8886c3fc763a",
-          "readAt": "2026-07-26T10:56:00Z",
-          "visitId": "[\"7f8bb635-9992-4c64-8158-2112e467fe03\",2]"
+          "sha256": "aacc49e092d29d85c0c2219d78db3f1dcfaa6f08a8470af4f866e814b46349ea",
+          "readAt": "2026-07-26T11:33:34Z",
+          "visitId": "[\"7f8bb635-9992-4c64-8158-2112e467fe03\",6]"
         },
         {
           "phase": "build",
-          "sha256": "a280cad20543fdb247d595b629b9a1a8e5565932d224ba058d5f8886c3fc763a",
-          "readAt": "2026-07-26T10:56:45Z",
-          "visitId": "[\"7f8bb635-9992-4c64-8158-2112e467fe03\",3]"
+          "sha256": "aacc49e092d29d85c0c2219d78db3f1dcfaa6f08a8470af4f866e814b46349ea",
+          "readAt": "2026-07-26T11:38:37Z",
+          "visitId": "[\"7f8bb635-9992-4c64-8158-2112e467fe03\",7]"
         }
       ]
     },
     {
       "kind": "tasks",
       "path": "openspec/changes/isolate-runtime-state-dependencies/tasks.md",
-      "sha256": "b2c771db4a9bac243e353fddca394b1a01a74f43c7560cbc0b33b943056be480",
+      "sha256": "dd77c6bbd7c677711446e7838385cd88766f7603250546eceb8cec6d708016ba",
       "producer": "tenon-build",
-      "recordedAt": "2026-07-26T11:14:38Z",
+      "recordedAt": "2026-07-26T11:38:37Z",
       "reads": [
         {
+          "phase": "spec",
+          "sha256": "dd77c6bbd7c677711446e7838385cd88766f7603250546eceb8cec6d708016ba",
+          "readAt": "2026-07-26T11:33:34Z",
+          "visitId": "[\"7f8bb635-9992-4c64-8158-2112e467fe03\",6]"
+        },
+        {
           "phase": "build",
-          "sha256": "b2c771db4a9bac243e353fddca394b1a01a74f43c7560cbc0b33b943056be480",
-          "readAt": "2026-07-26T11:14:38Z",
-          "visitId": "[\"7f8bb635-9992-4c64-8158-2112e467fe03\",3]"
+          "sha256": "dd77c6bbd7c677711446e7838385cd88766f7603250546eceb8cec6d708016ba",
+          "readAt": "2026-07-26T11:38:37Z",
+          "visitId": "[\"7f8bb635-9992-4c64-8158-2112e467fe03\",7]"
         }
       ]
     }

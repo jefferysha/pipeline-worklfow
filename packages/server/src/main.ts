@@ -104,7 +104,7 @@ async function main(): Promise<void> {
     version,
     releaseId,
     paths,
-    home: paths.homeDir,
+    hostHome: paths.homeDir,
     token,
     manifestPath: manifestPath(),
     gitHeadSha,

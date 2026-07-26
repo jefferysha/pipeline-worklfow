@@ -20,7 +20,10 @@
 - [x] 为 Server 增加完整路径值对象注入并让生产入口复用同一解析结果。
 - [x] 让迁移服务显式接收环境依赖并更新所有调用方。
 - [x] 让 RuntimeInstaller 显式接收运行环境作用域，消除安装事务中的同类隐式状态根。
+- [x] 将 ServerPaths 收紧为 Server 必填依赖，并把宿主发现目录改为独立的 hostHome。
+- [x] 让 runtime rollback 在锁内复用单一路径快照，并把环境解析错误映射回 CLI 契约。
 - [x] 新增共享运行目录与 XDG 环境下的隔离回归测试。
+- [x] 补齐 Server 漏传路径、rollback 动态环境和 runtime scope 解析失败的回归测试。
 - [x] 重建 CLI、Server 与 Dashboard 发布资产。
 
 ## 验证
