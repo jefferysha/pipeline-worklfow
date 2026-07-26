@@ -90,3 +90,5 @@
 {"ts":"2026-07-26T11:56:35Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"23c2e389-97bc-485b-83cb-57a47f9b82b2"}
 {"ts":"2026-07-26T11:56:44Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
 {"ts":"2026-07-26T11:56:44Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-07-26T12:09:45Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated"}
+{"ts":"2026-07-26T12:10:38Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}

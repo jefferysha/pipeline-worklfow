@@ -236,20 +236,14 @@
     {
       "kind": "tasks",
       "path": "openspec/changes/isolate-runtime-state-dependencies/tasks.md",
-      "sha256": "57f8db57c404163de76ad8012767ae647fe68ece42a256ceaf50ba770dbddb28",
-      "producer": "tenon-spec",
-      "recordedAt": "2026-07-26T11:56:33Z",
+      "sha256": "fcb51e6bf158e41cfc25b3adf18a991348b341e60f0ad8c2ab4fdec6f22b7158",
+      "producer": "tenon-build",
+      "recordedAt": "2026-07-26T12:10:39Z",
       "reads": [
         {
-          "phase": "spec",
-          "sha256": "57f8db57c404163de76ad8012767ae647fe68ece42a256ceaf50ba770dbddb28",
-          "readAt": "2026-07-26T11:56:33Z",
-          "visitId": "[\"7f8bb635-9992-4c64-8158-2112e467fe03\",12]"
-        },
-        {
           "phase": "build",
-          "sha256": "57f8db57c404163de76ad8012767ae647fe68ece42a256ceaf50ba770dbddb28",
-          "readAt": "2026-07-26T11:56:43Z",
+          "sha256": "fcb51e6bf158e41cfc25b3adf18a991348b341e60f0ad8c2ab4fdec6f22b7158",
+          "readAt": "2026-07-26T12:10:39Z",
           "visitId": "[\"7f8bb635-9992-4c64-8158-2112e467fe03\",13]"
         }
       ]
