@@ -1,11 +1,11 @@
 # Tenon 冻结构建逐文件 Spec 回读清单
 
 > Change：`rename-pipeline-lite-to-tenon`
-> 冻结构建：`df7837bfb51f53119a36ce49087f2ad19fc0ac50`
+> 实现提交：`efea31f`
 > 比对基线：`origin/main`
-> 映射记录：1156；受禁参考路径以不可逆摘要逐项登记 266 条，避免在当前树重新引入已删除身份。
+> 映射记录：1164；受禁参考路径以不可逆摘要逐项登记 266 条，避免在当前树重新引入已删除身份。
 
-每一条冻结 diff 记录均已回读对应 capability delta spec，并与 requirement/scenario 逐项比对。重命名记录同时覆盖旧路径删除与新路径新增；删除的受禁参考路径使用独立序号与 SHA-256 审计，不重投明文。
+每一条实现 diff 记录均已回读对应 capability delta spec，并与 requirement/scenario 逐项比对。重命名记录同时覆盖旧路径删除与新路径新增；删除的受禁参考路径使用独立序号与 SHA-256 审计，不重投明文。本清单随后的 governance-only 提交只冻结证据，不改变被审实现。
 
 | 状态 | 改动文件 | 命中的 capability spec | 已回读规范并比对 diff |
 | --- | --- | --- | --- |
@@ -18,6 +18,7 @@
 | M | `.codex-plugin/plugin.json` | `openspec/changes/rename-pipeline-lite-to-tenon/specs/tenon-product-identity/spec.md` | ☑ |
 | A | `.gitattributes` | `openspec/changes/rename-pipeline-lite-to-tenon/specs/tenon-product-identity/spec.md` | ☑ |
 | M | `.github/workflows/ci.yml` | `openspec/changes/rename-pipeline-lite-to-tenon/specs/plugin-distribution/spec.md` | ☑ |
+| M | `.github/workflows/docs-pages.yml` | `openspec/changes/rename-pipeline-lite-to-tenon/specs/plugin-distribution/spec.md` | ☑ |
 | A | `.github/workflows/release.yml` | `openspec/changes/rename-pipeline-lite-to-tenon/specs/plugin-distribution/spec.md` | ☑ |
 | M | `.gitignore` | `openspec/changes/rename-pipeline-lite-to-tenon/specs/repository-architecture-compliance/spec.md` | ☑ |
 | M | `AGENTS.md` | `openspec/changes/rename-pipeline-lite-to-tenon/specs/repository-architecture-compliance/spec.md` | ☑ |
@@ -575,6 +576,11 @@
 | A | `openspec/changes/rename-pipeline-lite-to-tenon/.pipeline-run/revisions/000059-e6d2ec27-f3fa-4a2e-8298-09193709c68b.json` | `openspec/changes/rename-pipeline-lite-to-tenon/specs/tenon-product-identity/spec.md` | ☑ |
 | A | `openspec/changes/rename-pipeline-lite-to-tenon/.pipeline-run/revisions/000060-56fc7fc7-d42f-45c1-92dc-953485ffc7d2.json` | `openspec/changes/rename-pipeline-lite-to-tenon/specs/tenon-product-identity/spec.md` | ☑ |
 | A | `openspec/changes/rename-pipeline-lite-to-tenon/.pipeline-run/revisions/000061-4ac6c704-cba9-4576-827d-42b83501811d.json` | `openspec/changes/rename-pipeline-lite-to-tenon/specs/tenon-product-identity/spec.md` | ☑ |
+| A | `openspec/changes/rename-pipeline-lite-to-tenon/.pipeline-run/revisions/000062-105f4805-4ff0-4d24-9170-e7c483636fce.json` | `openspec/changes/rename-pipeline-lite-to-tenon/specs/tenon-product-identity/spec.md` | ☑ |
+| A | `openspec/changes/rename-pipeline-lite-to-tenon/.pipeline-run/revisions/000063-237660eb-55cd-46a4-a8e8-b071ce0981da.json` | `openspec/changes/rename-pipeline-lite-to-tenon/specs/tenon-product-identity/spec.md` | ☑ |
+| A | `openspec/changes/rename-pipeline-lite-to-tenon/.pipeline-run/revisions/000064-dd2411b3-2f4b-4472-bbf5-aaf871af5704.json` | `openspec/changes/rename-pipeline-lite-to-tenon/specs/tenon-product-identity/spec.md` | ☑ |
+| A | `openspec/changes/rename-pipeline-lite-to-tenon/.pipeline-run/revisions/000065-03d94093-f431-40b1-8461-30cb26d8d49c.json` | `openspec/changes/rename-pipeline-lite-to-tenon/specs/tenon-product-identity/spec.md` | ☑ |
+| A | `openspec/changes/rename-pipeline-lite-to-tenon/.pipeline-run/revisions/000066-1daafeae-cf26-4d54-bece-0a1b4991e50f.json` | `openspec/changes/rename-pipeline-lite-to-tenon/specs/tenon-product-identity/spec.md` | ☑ |
 | A | `openspec/changes/rename-pipeline-lite-to-tenon/.pipeline-terminal-activity.json` | `openspec/changes/rename-pipeline-lite-to-tenon/specs/dashboard-execution-provenance/spec.md` | ☑ |
 | A | `openspec/changes/rename-pipeline-lite-to-tenon/.pipeline-transitions/000001-9c0587a7-f992-41a7-b77e-e232572b27d7.json` | `openspec/changes/rename-pipeline-lite-to-tenon/specs/tenon-product-identity/spec.md` | ☑ |
 | A | `openspec/changes/rename-pipeline-lite-to-tenon/.pipeline-transitions/000002-0df4c459-3a02-43a3-a977-f117bd9d7e33.json` | `openspec/changes/rename-pipeline-lite-to-tenon/specs/tenon-product-identity/spec.md` | ☑ |
@@ -599,6 +605,8 @@
 | A | `openspec/changes/rename-pipeline-lite-to-tenon/.pipeline-transitions/000021-aa50dc34-7ddd-4e99-b215-084d88271a04.json` | `openspec/changes/rename-pipeline-lite-to-tenon/specs/tenon-product-identity/spec.md` | ☑ |
 | A | `openspec/changes/rename-pipeline-lite-to-tenon/.pipeline-transitions/000022-67aa0662-169e-4565-8eb0-3b6fe136dff5.json` | `openspec/changes/rename-pipeline-lite-to-tenon/specs/tenon-product-identity/spec.md` | ☑ |
 | R056 | 已删除受禁参考路径 #265（sha256:c41e9e825d594a78fb4a88f5c296f3a1917576c08f6e7660169d4255bfe2ef31） | `openspec/changes/rename-pipeline-lite-to-tenon/specs/repository-architecture-compliance/spec.md` | ☑ |
+| A | `openspec/changes/rename-pipeline-lite-to-tenon/.pipeline-transitions/000024-8e822326-98b3-4327-8e9b-69e1bc2a97a6.json` | `openspec/changes/rename-pipeline-lite-to-tenon/specs/tenon-product-identity/spec.md` | ☑ |
+| A | `openspec/changes/rename-pipeline-lite-to-tenon/.pipeline-transitions/000025-bd960a77-1379-4017-8edd-cf13d37eb166.json` | `openspec/changes/rename-pipeline-lite-to-tenon/specs/tenon-product-identity/spec.md` | ☑ |
 | A | `openspec/changes/rename-pipeline-lite-to-tenon/.pipeline-workflow-governance.json` | `openspec/changes/rename-pipeline-lite-to-tenon/specs/tenon-product-identity/spec.md` | ☑ |
 | R081 | 已删除受禁参考路径 #266（sha256:fda4efe33969bd8241fbffa2425f1313c8d82cf69111e65f68cc9e74943ee414） | `openspec/changes/rename-pipeline-lite-to-tenon/specs/repository-architecture-compliance/spec.md` | ☑ |
 | A | `openspec/changes/rename-pipeline-lite-to-tenon/.pipeline.yaml` | `openspec/changes/rename-pipeline-lite-to-tenon/specs/tenon-product-identity/spec.md` | ☑ |
