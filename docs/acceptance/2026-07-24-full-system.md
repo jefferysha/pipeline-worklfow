@@ -38,7 +38,7 @@ the previously selected release active.
 | Frontend/UI | `frontend + default` | frontend profile | full workflow, dashboard, browser-state suites |
 | Backend/shared runtime | `backend + default` | backend profile | archived `bundled-skill-authority` Change |
 | Explicit free mode | `free + <workflow>` | none | free Track has `allowed='*'` |
-| Custom workflow | exact selected Track/Workflow pair | only its declared profile | `pet-adoption-live` and custom-workflow integration suites |
+| Custom workflow | exact selected Track/Workflow pair | only its declared profile | `catalog-flow-live` and custom-workflow integration suites |
 
 `free` is a single orthogonal built-in Track rather than copied configuration
 inside every workflow. Because its workflow binding is `allowed='*'`, every

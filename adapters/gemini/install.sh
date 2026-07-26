@@ -53,6 +53,6 @@ if [ "$WITH_HOOKS" = 1 ]; then
   install_hooks_settings
   info "档 A 全保真完成：三能力全 native（settings.json#hooks，无 trust，落盘即生效）。"
 else
-  warn "--no-hooks：跳过 hook 安装（无自动强制；review 仍须走 pipeline review request/acknowledge）。"
+  warn "--no-hooks：跳过 hook 安装（无自动强制；review 仍须走 tenon review request/acknowledge）。"
 fi
 exit 0

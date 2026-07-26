@@ -13,6 +13,7 @@ fi
 
 commit="$(node -p "require('$META').gitCommit")"
 expected_cli="$(node -p "require('$META').cliSha256")"
+cli_entry="$(node -p "require('$META').cliEntry")"
 release="$(node -p "require('$META').releaseId + ' plugin@' + require('$META').pluginVersion")"
 entries=()
 while IFS= read -r entry; do
@@ -26,6 +27,17 @@ done < <(node -e '
   }
 ' "$META")
 
+case "$cli_entry" in
+  ""|/*|*".."*)
+    printf 'N-1 CLI 入口非法: %s\n' "$cli_entry" >&2
+    exit 1
+    ;;
+esac
+printf '%s\n' "${entries[@]}" | grep -Fxq "$cli_entry" || {
+  printf 'N-1 CLI 入口未包含在 payload 闭集: %s\n' "$cli_entry" >&2
+  exit 1
+}
+
 git -C "$ROOT" cat-file -e "$commit^{commit}"
 mkdir -p "$PAYLOAD"
 git -C "$ROOT" archive "$commit" -- "${entries[@]}" | tar -x -C "$PAYLOAD"
@@ -37,7 +49,7 @@ for entry in "${entries[@]}"; do
   }
 done
 
-cli="$PAYLOAD/packages/cli/dist/pipeline.mjs"
+cli="$PAYLOAD/$cli_entry"
 actual_cli="$(node -e '
   const { createHash } = require("node:crypto")
   const { readFileSync } = require("node:fs")

@@ -12,7 +12,7 @@
  * 坏 change 跳过 + WARN（fail-open）；exit 恒 0。
  */
 import { join } from 'node:path'
-import { GATE_TTL_MS, parseReviewMarker, reviewGatePendingFor } from '@pipeline-lite/kernel'
+import { GATE_TTL_MS, parseReviewMarker, reviewGatePendingFor } from '@tenon/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
 import { str } from '../render.js'
 

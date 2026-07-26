@@ -44,7 +44,7 @@ install_rules() {
 
 > Pi 无原生 pre-tool 硬拦 hook——本规则文件是 veto 能力的降级 advisory 层（契约 §1）。
 > inject/track 由 .pi/settings.json#hooks 原生实现；enforcement（veto）为 advisory：
-> 写类工具遇新鲜门 marker 时**应自我暂停**；review 的确认由 `pipeline review acknowledge` 写入 canonical receipt，
+> 写类工具遇新鲜门 marker 时**应自我暂停**；review 的确认由 `tenon review acknowledge` 写入 canonical receipt，
 > 不能通过删除 marker 伪造放行。
 
 7-phase 流水线：open → explore → spec → build ⇄ verify → ship → archive。
@@ -52,9 +52,9 @@ install_rules() {
 
 离开 review phase（explore / spec / verify）须对确切 event 取得人类显式确认：
 
-    pipeline review request <change> --event <event>
+    tenon review request <change> --event <event>
     # 人类确认后：
-    pipeline review acknowledge <change>
+    tenon review acknowledge <change>
 
 不得删除 `.pipeline-pending-review` 绕过 review-gate（会产生 solo 推进）。
 EOF
@@ -80,6 +80,6 @@ if [ "$WITH_HOOKS" = 1 ]; then
   install_hooks_settings
   info "档 B 完成：inject/track native + veto 降级 advisory（无 trust，落盘即生效）。"
 else
-  warn "--no-hooks：跳过 settings.json#hooks（无 inject/track；review 仍须走 pipeline review request/acknowledge）。"
+  warn "--no-hooks：跳过 settings.json#hooks（无 inject/track；review 仍须走 tenon review request/acknowledge）。"
 fi
 exit 0

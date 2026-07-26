@@ -3,9 +3,9 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
-const apiPort = Number(process.env.PIPELINE_DASHBOARD_PORT)
+const apiPort = Number(process.env.TENON_DASHBOARD_PORT)
 const dashboardApiPort = Number.isInteger(apiPort) && apiPort >= 1 && apiPort <= 65_535 ? apiPort : 18765
-const configuredDevPort = Number(process.env.PIPELINE_DASHBOARD_DEV_PORT)
+const configuredDevPort = Number(process.env.TENON_DASHBOARD_DEV_PORT)
 const dashboardDevPort = Number.isInteger(configuredDevPort) && configuredDevPort >= 1 && configuredDevPort <= 65_535
   ? configuredDevPort
   : 5173
@@ -27,7 +27,7 @@ export default defineConfig({
     emptyOutDir: true,
   },
   server: {
-    // 本地 dev 独立在 5173（可用 PIPELINE_DASHBOARD_DEV_PORT 覆盖）；/api 代理到生产 API
+    // 本地 dev 独立在 5173（可用 TENON_DASHBOARD_DEV_PORT 覆盖）；/api 代理到生产 API
     // 监听端口。生产由 server 同源提供 SPA，不会起第二个前端端口。
     port: dashboardDevPort,
     strictPort: true,

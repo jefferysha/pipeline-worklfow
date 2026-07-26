@@ -7,8 +7,8 @@
  *     · overwrite: dst 存在 → 先 rm -rf 再全量拷。
  *     · append:    cp -Rn / _copy_missing —— 只补不存在的文件（含嵌套），保留既有。
  *
- * Trellis 语义（parity 收尾 ①「Blank spec doc scaffold (backend/frontend/guides)」）：
- *   Trellis init 时按项目类型铺一套**分层空 spec 文档**（前端/后端/指南）。老仓 partial：spec 骨架
+ * Tenon contract 语义（parity 收尾 ①「Blank spec doc scaffold (backend/frontend/guides)」）：
+ *   Tenon contract init 时按项目类型铺一套**分层空 spec 文档**（前端/后端/指南）。老仓 partial：spec 骨架
  *   靠 openspec + CONTEXT.md + docs/superpowers/specs 目录，无按类型预写的分层空文档集。本模块补齐
  *   构造性等价物：SPEC_DOC_LAYOUTS 按 web/cli/lib 声明分层文档清单，buildSpecScaffold 渲染成
  *   带 marker 的空 stub（explore 阶段填充的骨架），planDocScaffold 复刻 apply_strategy 三态写盘决策。
@@ -51,7 +51,7 @@ export interface DocFile {
 }
 
 /**
- * 各项目类型的分层空文档集（对标 Trellis backend/frontend/guides，按 pipeline 类型分化）：
+ * 各项目类型的分层空文档集（对标 Tenon contract backend/frontend/guides，按 pipeline 类型分化）：
  *  · web —— frontend + backend + guides（全栈）
  *  · cli —— commands + guides（命令行工具）
  *  · lib —— api + guides（库）

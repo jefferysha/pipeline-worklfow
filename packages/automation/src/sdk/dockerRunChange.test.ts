@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { createStateStore } from '@pipeline-lite/kernel'
+import { createStateStore } from '@tenon/kernel'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { markLoopPrepared, markNonLoopPrepared, type ExecutionContext, type PreparedExecutionContext } from '../admission/execution-context.js'
 import { worktreePathFor } from '../lifecycle/worktree.js'
@@ -122,12 +122,12 @@ describe('createDockerRunChange · extraEnv 真流到 docker run argv', () => {
     expect(joined).toContain('CLAUDE_CODE_OAUTH_TOKEN=tok-secret')
   })
 
-  it('未传 extraEnv 时不炸（缺省行为不变，仍只有 PIPELINE_AFK=1）', async () => {
+  it('未传 extraEnv 时不炸（缺省行为不变，仍只有 TENON_AFK=1）', async () => {
     const { exec, calls } = makeFakeExec()
     const runChange = createDockerRunChange({ hostRepoDir: repo, base: 'main', level: 'L1', image: 'sandcastle:local', exec })
     await runChange(mkCtx('x'), new AbortController().signal)
     const dockerRun = calls.find((c) => c[0] === 'docker' && c[1] === 'run')
-    expect(dockerRun!.join(' ')).toContain('PIPELINE_AFK=1')
+    expect(dockerRun!.join(' ')).toContain('TENON_AFK=1')
   })
 })
 
@@ -153,11 +153,11 @@ describe('createDockerRunChange · H14 CLI bundle imageExpectation 全链透传'
     const runWorkExec = calls.find((call) =>
       call[0] === 'docker'
       && call[1] === 'exec'
-      && call.join(' ').includes('pipeline-afk-run digest-case'))
+      && call.join(' ').includes('tenon-afk-run digest-case'))
     expect(runWorkExec).toBeDefined()
     const command = runWorkExec!.join(' ')
     expect(command).toContain(cliDigest)
-    expect(command).toContain('/opt/pipeline/packages/cli/dist/pipeline.mjs')
+    expect(command).toContain('/opt/pipeline/packages/cli/dist/tenon.mjs')
     expect(command).toContain('pipeline_cli_dist_sha256=')
   })
 })
@@ -331,7 +331,7 @@ describe('createDockerRunChange · automation_worktree 深路径不截断（真�
 
 /**
  * v5 T20：runner 由 ExecutionContext 权威携带（admission 从 context.loop_id → loop.runner 派生）。
- * 'codex' → 沙箱命令构造点注入 PIPELINE_RUNNER=codex；'claude-code' → 缺省 Claude 路径；
+ * 'codex' → 沙箱命令构造点注入 TENON_RUNNER=codex；'claude-code' → 缺省 Claude 路径；
  * 历史/未知值（cron 等）必须 fail-closed，不能悄悄换 runner 执行。
  */
 describe('createDockerRunChange · runner 由 context 派生（v5 T20）', () => {
@@ -339,21 +339,21 @@ describe('createDockerRunChange · runner 由 context 派生（v5 T20）', () =>
   beforeEach(async () => { repo = await mkdtemp(join(tmpdir(), 'dockerrc-runner-')) })
   afterEach(async () => { await rm(repo, { recursive: true, force: true }) })
 
-  it('context.runner=codex → docker exec 命令含 PIPELINE_RUNNER=codex', async () => {
+  it('context.runner=codex → docker exec 命令含 TENON_RUNNER=codex', async () => {
     const { exec, calls } = makeFakeExec()
     const runChange = createDockerRunChange({ hostRepoDir: repo, base: 'main', level: 'L1', image: 'sandcastle:local', exec })
     await runChange(mkCtx('loop-a-fix', { runner: 'codex' }), new AbortController().signal)
     const dockerExec = calls.find((c) => c[0] === 'docker' && c[1] === 'exec')
     expect(dockerExec).toBeDefined()
-    expect(dockerExec!.join(' ')).toContain('PIPELINE_RUNNER=codex')
+    expect(dockerExec!.join(' ')).toContain('TENON_RUNNER=codex')
   })
 
-  it('context.runner=claude-code → 命令不含 PIPELINE_RUNNER（显式 Claude 兼容路径）', async () => {
+  it('context.runner=claude-code → 命令不含 TENON_RUNNER（显式 Claude 兼容路径）', async () => {
     const { exec, calls } = makeFakeExec()
     const runChange = createDockerRunChange({ hostRepoDir: repo, base: 'main', level: 'L1', image: 'sandcastle:local', exec })
     await runChange(mkCtx('x', { runner: 'claude-code' }), new AbortController().signal)
     const dockerExec = calls.find((c) => c[0] === 'docker' && c[1] === 'exec')
-    expect(dockerExec!.join(' ')).not.toContain('PIPELINE_RUNNER')
+    expect(dockerExec!.join(' ')).not.toContain('TENON_RUNNER')
   })
 
   it('context.runner=历史/未知值 cron → fail-closed，不隐式降级到 Claude', async () => {
@@ -645,10 +645,10 @@ describe('createDockerRunChange · H10 r5：context.skillBundle 端到端流到 
     const volumeValues = dockerRun!.flatMap((arg, index) => arg === '-v' ? [dockerRun![index + 1]!] : [])
     expect(volumeValues.some((volume) => volume.startsWith(`${join(repo, casRelativePath)}:`))).toBe(false)
     expect(volumeValues.some((volume) => volume.includes(':/opt/pipeline-run/skill-bundle:'))).toBe(false)
-    expect(joined).toContain('PIPELINE_SKILL_BUNDLE_DIR=/opt/pipeline-run/skill-bundle')
-    expect(joined).toContain(`PIPELINE_SKILL_BUNDLE_SHA256=${publish.digest}`)
-    expect(joined).toContain('PIPELINE_SKILL_BUNDLE_ID=profile-a')
-    expect(joined).toContain(`PIPELINE_WORKFLOW_STEP_PROMPT_B64=${Buffer.from('Run release browser E2E.\nDo not skip WebKit.', 'utf8').toString('base64url')}`)
+    expect(joined).toContain('TENON_SKILL_BUNDLE_DIR=/opt/pipeline-run/skill-bundle')
+    expect(joined).toContain(`TENON_SKILL_BUNDLE_SHA256=${publish.digest}`)
+    expect(joined).toContain('TENON_SKILL_BUNDLE_ID=profile-a')
+    expect(joined).toContain(`TENON_WORKFLOW_STEP_PROMPT_B64=${Buffer.from('Run release browser E2E.\nDo not skip WebKit.', 'utf8').toString('base64url')}`)
     expect(bindings).toEqual([{
       kind: 'workflow-transition', workflow_digest: 'd'.repeat(64), workflow: 'release-flow', step: 'verify', event: 'verify-pass',
     }])
@@ -668,7 +668,7 @@ describe('createDockerRunChange · H10 r5：context.skillBundle 端到端流到 
     const dockerRun = calls.find((c) => c[0] === 'docker' && c[1] === 'run')
     const joined = dockerRun!.join(' ')
     expect(joined).not.toContain('/opt/pipeline-run/skill-bundle')
-    expect(joined).not.toContain('PIPELINE_SKILL_BUNDLE')
+    expect(joined).not.toContain('TENON_SKILL_BUNDLE')
     expect(calls.some((c) => c[0] === 'docker' && c[1] === 'cp')).toBe(false)
   })
 })

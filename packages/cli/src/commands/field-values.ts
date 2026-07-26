@@ -4,7 +4,7 @@ import {
   type FieldName,
   type PipelineState,
   type TrackRegistry,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
 
 const REVIEWISH = ['pending', 'pass', 'fail', 'handled', 'skipped'] as const

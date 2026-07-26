@@ -7,7 +7,7 @@
  * build_hint 走 kernel 单一真相源常量（防漂移，断言逐字等于 server 同源值）。
  */
 import { describe, expect, it } from 'vitest'
-import { SANDCASTLE_BUILD_HINT } from '@pipeline-lite/kernel'
+import { SANDCASTLE_BUILD_HINT } from '@tenon/kernel'
 import { probeAfkReadiness, type ExecDockerFn } from './afkReadiness.js'
 
 /** docker info 恒成功；image inspect 命中 presentImages → 0，否则 1（同 server 测试 fake 口径）。 */

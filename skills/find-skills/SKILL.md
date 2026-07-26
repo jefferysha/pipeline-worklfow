@@ -3,7 +3,7 @@ name: find-skills
 description: First-party inventory process for selecting already packaged pipeline skills.
 license: MIT
 metadata:
-  author: pipeline-lite
+  author: tenon
 ---
 
 # Find Skills

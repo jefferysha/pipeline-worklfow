@@ -12,7 +12,7 @@ tags: [workflow, pipeline, channel, worker, event-sourced]
 `packages/cli/src/commands/channel.ts`（`cmdChannel(deps, sub, args, host?)`）。
 
 > **定位（GOAL G4(b)，2026-07-16 codex 方案 D）**：channel 已从 kernel 提取为独立包
-> `@pipeline-lite/channel`，CLI 是唯一依赖者，标记为**历史迁移能力 / experimental 兼容面**——保留
+> `@tenon/channel`，CLI 是唯一依赖者，标记为**历史迁移能力 / experimental 兼容面**——保留
 > echo 能力与全部既有测试/事件格式/兼容入口，但**不是 v3 默认 agent runtime**：不移植 Claude/Codex
 > adapter、不新增 server endpoint、不新增 dashboard 页面。重开投资需满足 GOAL G4 的全部条件。
 
@@ -29,7 +29,7 @@ build_sha**；worker 不 commit，主线仍 owns commits。channel 只读地为 
 ## event-sourced 核心语义
 
 - **存储模型**：每个 channel 一个目录 `<root>/<bucket>/<channel>/{events.jsonl, .seq, <name>.lock}`。
-  `root = $TRELLIS_CHANNEL_ROOT 或 ~/.trellis/channels`；`bucket = cwd sanitize`（`$PIPELINE_CHANNEL_PROJECT`
+  `root = $TENON_CHANNEL_ROOT 或 ~/.tenon/channels`；`bucket = cwd sanitize`（`$TENON_CHANNEL_PROJECT`
   可覆盖）；`--scope global` → `_global` 桶。
 - **append-only 事件日志**：每 channel 一条 `events.jsonl`（每行一事件）。所有派生状态（worker
   registry / thread / inbox 计数）都是**从事件流纯函数投影**——磁盘不存派生态，可在任意机器一致重放。
@@ -45,23 +45,23 @@ build_sha**；worker 不 commit，主线仍 owns commits。channel 只读地为 
 ## 已落地子命令（事件面）
 
 结构
-- `pipeline channel create <name> --task T [--type chat|forum] [--scope project|global] [--description D]`
-- `pipeline channel title <name> (--set <title> | --clear) [--scope ...]`
-- `pipeline channel context <name> --add|--delete (--file <ABS> | --raw <text>) [--thread K] [--scope ...]`
-- `pipeline channel dir <name> [--scope project|global]` — 打印 channel 目录绝对路径
+- `tenon channel create <name> --task T [--type chat|forum] [--scope project|global] [--description D]`
+- `tenon channel title <name> (--set <title> | --clear) [--scope ...]`
+- `tenon channel context <name> --add|--delete (--file <ABS> | --raw <text>) [--thread K] [--scope ...]`
+- `tenon channel dir <name> [--scope project|global]` — 打印 channel 目录绝对路径
 
 消息 / 中断 / 读
-- `pipeline channel send <name> <text> --as <by> [--to CSV] [--delivery-mode appendOnly|requireKnownWorker|requireRunningWorker]`
-- `pipeline channel wait <name> --as <self> [--from CSV] [--kind K] [--to T] [--since SEQ] [--all]`（无匹配 exit 124）
-- `pipeline channel messages <name> [--last N] [--since SEQ] [--kind K] [--from CSV] [--to T]`
-- `pipeline channel interrupt <name> --as <by> --to <worker> <text>`（只写事件，supervisor 执行）
-- `pipeline channel registry <name>` — worker 注册表投影（JSON）
+- `tenon channel send <name> <text> --as <by> [--to CSV] [--delivery-mode appendOnly|requireKnownWorker|requireRunningWorker]`
+- `tenon channel wait <name> --as <self> [--from CSV] [--kind K] [--to T] [--since SEQ] [--all]`（无匹配 exit 124）
+- `tenon channel messages <name> [--last N] [--since SEQ] [--kind K] [--from CSV] [--to T]`
+- `tenon channel interrupt <name> --as <by> --to <worker> <text>`（只写事件，supervisor 执行）
+- `tenon channel registry <name>` — worker 注册表投影（JSON）
 
 forum
-- `pipeline channel thread post <name> --as <by> --action opened|comment|status|labels|assignees|summary|processed [--thread K] [...]`
-- `pipeline channel thread rename <name> --as <by> --thread OLD --new-thread NEW`
-- `pipeline channel forum list <name> [--json]`
-- `pipeline channel list [--json] [--all] [--all-projects]`
+- `tenon channel thread post <name> --as <by> --action opened|comment|status|labels|assignees|summary|processed [--thread K] [...]`
+- `tenon channel thread rename <name> --as <by> --thread OLD --new-thread NEW`
+- `tenon channel forum list <name> [--json]`
+- `tenon channel list [--json] [--all] [--all-projects]`
 
 ## 不可阉割语义（删一条视为 critical 阉割）
 

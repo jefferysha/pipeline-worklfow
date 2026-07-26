@@ -11,7 +11,7 @@ import {
   type TrackRegistry,
   type TrackValidationContext,
   type UpdateTrackPatch,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import { removeProjectFromRegistry } from './projects.js'
 import { isValidSecretKey, removeSecret, SECRET_KEY_LIST } from './secrets.js'
 import { tokenFromHeaders, tokensMatch } from './token.js'

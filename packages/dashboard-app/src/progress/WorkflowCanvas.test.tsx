@@ -62,7 +62,7 @@ function renderCanvas(groups: CanvasGroup[], onOpen = vi.fn()): ReturnType<typeo
 }
 
 function renderCanvasInEnglish(groups: CanvasGroup[]): void {
-  localStorage.setItem('pipeline-dashboard-lang', 'en')
+  localStorage.setItem('tenon-dashboard-lang', 'en')
   render(
     <I18nProvider>
       <WorkflowCanvas groups={groups} onOpen={vi.fn()} />
@@ -70,7 +70,7 @@ function renderCanvasInEnglish(groups: CanvasGroup[]): void {
   )
 }
 
-afterEach(() => localStorage.removeItem('pipeline-dashboard-lang'))
+afterEach(() => localStorage.removeItem('tenon-dashboard-lang'))
 
 describe('WorkflowCanvas 组与站点（单项目）', () => {
   it('空 groups → 不渲染画布容器', () => {

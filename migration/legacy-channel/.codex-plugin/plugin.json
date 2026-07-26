@@ -1,0 +1,11 @@
+{
+  "name": "pipeline-lite",
+  "version": "0.2.1",
+  "description": "Migration-only bridge from the retired Pipeline Lite identity to Tenon.",
+  "license": "MIT",
+  "hooks": "./hooks/hooks.json",
+  "interface": {
+    "displayName": "Pipeline Lite → Tenon Migration",
+    "shortDescription": "One-time, ownership-safe migration bridge to Tenon."
+  }
+}

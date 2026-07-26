@@ -37,7 +37,7 @@ import {
   type ExtendedManifestData,
   type FieldName,
   type TrackValidationContext,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import type { CliDeps, GuardFileContext } from './deps.js'
 import { buildProgram, CliExit } from './program.js'
 

@@ -8,7 +8,7 @@ import type {
   SourceCheckpoint,
   TriageRoute,
   WorkflowRun,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import type { SourceConnector } from './source.js'
 import type { TriageProvider } from './provider.js'
 import {

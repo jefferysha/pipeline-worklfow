@@ -463,7 +463,7 @@ describe('canonicalizeTriageResult', () => {
   it('TriageRoute 自身是 host-only 闭集，拒绝 command/path 与重复 routeId', () => {
     expect(validateTriageRoutes(routes)).toMatchObject({ ok: true })
     expectInvalid(
-      validateTriageRoutes([{ ...routes[0], command: 'pipeline transition' }]),
+      validateTriageRoutes([{ ...routes[0], command: 'tenon transition' }]),
       /unknown key 'command'/,
     )
     expectInvalid(

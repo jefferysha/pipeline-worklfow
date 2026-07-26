@@ -29,9 +29,9 @@ result: pass
 - A real `pipeline setup --codex --auto-update -y` followed by
   `pipeline update --codex -y` produced a valid managed release whose stable
   launcher exposed the bundled `free` Track.
-- The real `pet-adoption-center` custom Workflow completed its skill DAG,
-  browser evidence, Verify, Ship, canonical terminal Archive transition, and
-  retained OpenSpec/Superpowers/ADR artifacts.
+- A real fixture-backed custom Workflow completed its skill DAG, browser
+  evidence, Verify, Ship, canonical terminal Archive transition, and retained
+  OpenSpec/Superpowers/ADR artifacts.
 - Independent review re-ran free/default lifecycle, custom terminal archive,
   routing hooks, dashboard selection, and fingerprint checks. It found no
   current-baseline defects. A separate reviewer report that named release

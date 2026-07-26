@@ -8,7 +8,7 @@ import {
   withLock,
   type ObserveActionKind,
   type SourceCheckpoint,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 
 export interface TriageCheckpointKey {
   readonly sourceId: string

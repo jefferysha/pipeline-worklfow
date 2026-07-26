@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest'
 import { splitFlags, splitPassthroughArgv } from './argv.js'
 
 // argv[0]=node、argv[1]=脚本路径（splitPassthroughArgv 从 index 2 起找 `--`）
-const A = ['node', '/x/pipeline.mjs']
+const A = ['node', '/x/tenon.mjs']
 
 describe('splitPassthroughArgv —— 仅 tap 切 passthrough，其余 `--` 尾段还给 commander', () => {
   test('无 `--` → 原样 toParse、无 passthrough', () => {

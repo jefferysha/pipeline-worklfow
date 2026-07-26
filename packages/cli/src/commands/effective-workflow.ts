@@ -6,7 +6,7 @@ import {
   resolveWorkflowName,
   type EffectiveWorkflowPlan,
   type PipelineState,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import type { CliDeps } from '../deps.js'
 
 /**

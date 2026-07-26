@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { GATE_TTL_MS } from '@pipeline-lite/kernel'
+import { GATE_TTL_MS } from '@tenon/kernel'
 import { cmdDoctor, type DoctorCheck } from './doctor.js'
 import { buildProgram, CliExit } from '../program.js'
 import { makeDeps, mockDoctorProbes, mockState, type TestDeps } from '../test-support.js'
@@ -43,7 +43,7 @@ function byId(payload: DoctorJson, id: string): DoctorCheck {
   return c
 }
 
-describe('doctor —— 统一健康面（BACKLOG #26b，GOAL B8 降级可见 / D10 > comet doctor）', () => {
+describe('doctor —— 统一健康面（BACKLOG #26b，GOAL B8 降级可见 / D10 > tenon doctor）', () => {
   test('全绿基线：18 项检查全 green，exit 0，人读输出含汇总行、无 WARN/FAIL', async () => {
     const deps = makeDeps()
     const code = await cmdDoctor(deps, {})
@@ -123,9 +123,9 @@ describe('doctor —— 统一健康面（BACKLOG #26b，GOAL B8 降级可见 / 
     expect(c.detail).toContain('hooks.json')
   })
 
-  test('guard:gate 黄灯：PIPELINE_AFK=1 → 三门旁路中（资产完好也降级可见），exit 0', async () => {
+  test('guard:gate 黄灯：TENON_AFK=1 → 三门旁路中（资产完好也降级可见），exit 0', async () => {
     const deps = makeDeps({
-      doctor: { env: (n) => (n === 'PIPELINE_AFK' ? '1' : undefined) },
+      doctor: { env: (n) => (n === 'TENON_AFK' ? '1' : undefined) },
     })
     const { code, payload } = await runJson(deps)
     expect(code).toBe(0)
@@ -186,7 +186,7 @@ describe('doctor —— 统一健康面（BACKLOG #26b，GOAL B8 降级可见 / 
     expect(code).toBe(0)
     const c = byId(payload, 'project:cwd')
     expect(c.status).toBe('yellow')
-    expect(c.hint).toContain('pipeline init')
+    expect(c.hint).toContain('tenon init')
   })
 
   test('project:changes 绿灯：活跃 change 计数进 detail', async () => {
@@ -261,7 +261,7 @@ describe('doctor —— 统一健康面（BACKLOG #26b，GOAL B8 降级可见 / 
     expect(c.status).toBe('yellow')
     expect(c.detail).toContain('openspec-propose')
     expect(c.detail).toContain('全局 cache 不算')
-    expect(c.hint).toContain('pipeline setup --codex')
+    expect(c.hint).toContain('tenon setup --codex')
   })
 
   test('Codex native selected root 单独满足 contract，不要求项目 Skill 投影', async () => {
@@ -269,7 +269,7 @@ describe('doctor —— 统一健康面（BACKLOG #26b，GOAL B8 降级可见 / 
     const selected = new Map([...contract].map((id) => [id, `digest-${id}`]))
     const deps = makeDeps({ doctor: {
       codexSkillDiscovery: () => ({
-        selectedRoot: '/native/pipeline-lite',
+        selectedRoot: '/native/tenon',
         projectRoot: '/repo/.agents/skills',
         selected,
         project: new Map(),
@@ -279,7 +279,7 @@ describe('doctor —— 统一健康面（BACKLOG #26b，GOAL B8 降级可见 / 
     const c = byId(payload, 'integration:codex-project-skills')
     expect(c.status).toBe('green')
     expect(c.detail).toContain('Selected Skill Root')
-    expect(c.detail).toContain('/native/pipeline-lite')
+    expect(c.detail).toContain('/native/tenon')
   })
 
   test('Codex 同摘要多根报告 duplicate-projection，不误称 healthy', async () => {
@@ -287,7 +287,7 @@ describe('doctor —— 统一健康面（BACKLOG #26b，GOAL B8 降级可见 / 
     const selected = new Map([...contract].map((id) => [id, `digest-${id}`]))
     const deps = makeDeps({ doctor: {
       codexSkillDiscovery: () => ({
-        selectedRoot: '/native/pipeline-lite',
+        selectedRoot: '/native/tenon',
         projectRoot: '/repo/.agents/skills',
         selected,
         project: new Map([['pipeline', 'digest-pipeline']]),
@@ -306,7 +306,7 @@ describe('doctor —— 统一健康面（BACKLOG #26b，GOAL B8 降级可见 / 
     const selected = new Map([...contract].map((id) => [id, `digest-${id}`]))
     const deps = makeDeps({ doctor: {
       codexSkillDiscovery: () => ({
-        selectedRoot: '/native/pipeline-lite',
+        selectedRoot: '/native/tenon',
         projectRoot: '/repo/.agents/skills',
         selected,
         project: new Map([['pipeline', 'user-digest']]),
@@ -358,7 +358,7 @@ describe('doctor —— 统一健康面（BACKLOG #26b，GOAL B8 降级可见 / 
     expect(deps.errLines.join('\n')).toContain('探针未装配')
   })
 
-  test('program 路由：pipeline doctor --json 注册可达', async () => {
+  test('program 路由：tenon doctor --json 注册可达', async () => {
     const deps = makeDeps()
     let code = 0
     try {

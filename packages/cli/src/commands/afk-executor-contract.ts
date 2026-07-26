@@ -12,18 +12,18 @@ import {
   type LoopExecutionGuardResult,
   type RoundReport,
   type TargetedRunCandidate,
-} from '@pipeline-lite/automation'
+} from '@tenon/automation'
 import type { CliDeps } from '../deps.js'
 
 const SHA256_HEX = /^[0-9a-f]{64}$/
-const BUNDLED_CLI_SUFFIX = '/packages/cli/dist/pipeline.mjs'
+const BUNDLED_CLI_SUFFIX = '/packages/cli/dist/tenon.mjs'
 
 export class BundledCliDigestUnavailableError extends Error {
   override readonly name = 'BundledCliDigestUnavailableError'
   readonly _tag = 'BundledCliDigestUnavailableError'
 
-  constructor(path: string, detail = '运行文件不是可确认的 packages/cli/dist/pipeline.mjs') {
-    super(`无法取得可信 pipeline CLI bundle digest（${path}）：${detail}`)
+  constructor(path: string, detail = '运行文件不是可确认的 packages/cli/dist/tenon.mjs') {
+    super(`无法取得可信 Tenon CLI bundle digest（${path}）：${detail}`)
   }
 }
 

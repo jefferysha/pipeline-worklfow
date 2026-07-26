@@ -3,7 +3,7 @@
 #
 # 旧实现会从任意 cwd 向上扫描 openspec/changes；当多个临时项目共用 /tmp 时，会把父目录的
 # Change 误绑定到无关会话。这里把「存在 OpenSpec」与「这是当前项目的根」分开：只接受当前目录、
-# 显式 PIPELINE_PROJECT_ROOT，或当前 Git worktree 根。非 Git 的嵌套调用需要显式传根，绝不
+# 显式 TENON_PROJECT_ROOT，或当前 Git worktree 根。非 Git 的嵌套调用需要显式传根，绝不
 # 越过边界借用祖先项目。
 #
 # 所有函数保持 Bash 3.2 兼容，且不 spawn git/node/python，供热路径 hook 直接 source。
@@ -50,8 +50,8 @@ pipeline_project_root() {
   cwd="$(pipeline_physical_dir "$cwd_raw")" || return 1
 
   # Launcher 明示的根优先，但 cwd 必须实际位于其内，避免环境变量把另一个项目注入本会话。
-  if [ -n "${PIPELINE_PROJECT_ROOT:-}" ]; then
-    root="$(pipeline_physical_dir "$PIPELINE_PROJECT_ROOT")" || return 1
+  if [ -n "${TENON_PROJECT_ROOT:-}" ]; then
+    root="$(pipeline_physical_dir "$TENON_PROJECT_ROOT")" || return 1
     pipeline_path_within "$cwd" "$root" || return 1
     if [ "$mode" = "bootstrap" ] || [ -d "$root/$marker" ]; then
       printf '%s' "$root"

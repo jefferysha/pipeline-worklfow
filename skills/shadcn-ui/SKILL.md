@@ -3,7 +3,7 @@ name: shadcn-ui
 description: First-party guidance for integrating shadcn-style components without losing product semantics.
 license: MIT
 metadata:
-  author: pipeline-lite
+  author: tenon
 ---
 
 # Shadcn UI

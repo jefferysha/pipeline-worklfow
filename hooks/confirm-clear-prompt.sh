@@ -4,7 +4,7 @@
 # `confirm-clear.sh` is retained for hosts which expose AskUserQuestion responses.  Codex desktop's
 # normal conversation path does not expose that tool, however, so clearing only on PostToolUse made a
 # review marker self-lock every subsequent tool call.  This hook receives the user's next prompt and
-# turns an explicit approval phrase into the canonical `pipeline review acknowledge` receipt before
+# turns an explicit approval phrase into the canonical `tenon review acknowledge` receipt before
 # the next PreToolUse gate runs.  It never deletes a v2 review marker by itself.
 #
 # It intentionally recognises a narrow, auditable set of affirmative phrases.  Questions such as

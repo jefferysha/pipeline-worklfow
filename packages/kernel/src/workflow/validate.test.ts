@@ -8,13 +8,13 @@ function wf(overrides: Partial<WorkflowDef>): WorkflowDef {
 }
 
 const CONTRACT_SKILLS: Readonly<Record<string, readonly string[]>> = {
-  open: ['pipeline-open', 'openspec-propose'],
-  explore: ['pipeline-explore', 'brainstorming'],
-  spec: ['pipeline-spec', 'openspec-propose', 'writing-plans'],
-  build: ['pipeline-build'],
-  verify: ['pipeline-verify', 'verification-before-completion'],
-  ship: ['pipeline-ship', 'openspec-apply-change'],
-  archive: ['pipeline-archive'],
+  open: ['tenon-open', 'openspec-propose'],
+  explore: ['tenon-explore', 'brainstorming'],
+  spec: ['tenon-spec', 'openspec-propose', 'writing-plans'],
+  build: ['tenon-build'],
+  verify: ['tenon-verify', 'verification-before-completion'],
+  ship: ['tenon-ship', 'openspec-apply-change'],
+  archive: ['tenon-archive'],
 }
 
 function governedWorkflow(overrides: Partial<WorkflowDef> = {}): WorkflowDef {

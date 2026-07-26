@@ -125,7 +125,7 @@ export const PREREQ_HINTS = {
 
 /**
  * .pipeline.yaml 内部提交元数据（W1 第二增量：WorkflowRun 持久化接缝）——不进 FIELD_ORDER，
- * 不可被 `pipeline set` 改写。序列化在 FIELD_ORDER 字段之后、opaqueTail 之前；老版本窄解析器
+ * 不可被 `tenon set` 改写。序列化在 FIELD_ORDER 字段之后、opaqueTail 之前；老版本窄解析器
  * 遇到首个未知 key（`pipeline_run_id`）起整段当 opaqueTail 逐字保留，混版本读写无损（同
  * workflow/automation_current_phase 等既有「新字段必须追加在末尾」先例）。
  */
@@ -352,7 +352,7 @@ export interface GuardContext {
   activeChangeArchived?: (dep: string) => boolean
   /** 当前 change 目录相对项目根（openspec/changes/<name>）；change 内产物检查的路径锚点 */
   changeDirRel?: string
-  /** PIPELINE_AUTOMATION_RUNNER=1 调度器旁路（build 相位 automation=queued 闸的逃生口） */
+  /** TENON_AUTOMATION_RUNNER=1 调度器旁路（build 相位 automation=queued 闸的逃生口） */
   automationRunner?: boolean
 }
 

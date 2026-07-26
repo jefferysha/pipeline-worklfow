@@ -12,7 +12,7 @@
 import { mkdir, readFile, rm as rmfs, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
-import { computeContentHash, serializeOwnedManifest } from '@pipeline-lite/kernel'
+import { computeContentHash, serializeOwnedManifest } from '@tenon/kernel'
 import { cmdSync, type SyncMigrationProvider } from './commands/sync.js'
 import { cmdUninstall } from './commands/uninstall.js'
 import { freshHarness, realDeps, rm, type Harness } from './integration-harness.js'

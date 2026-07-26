@@ -11,7 +11,7 @@ import {
   type TriageCandidateIdentity,
   type TriageResult,
   type TriageRoute,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import type {
   TriageCheckpointKey,
   TriageCheckpointSnapshot,

@@ -3,7 +3,7 @@
 #
 # 投影产物：
 #   .github/copilot/hooks.json      veto(preToolUse) + track(postToolUse)   ┐ dual hookContainer：
-#   .github/hooks/trellis.json      同源第二份（漏一份 copilot 引擎不生效）  ┘ 两份都写
+#   .github/hooks/tenon.json      同源第二份（漏一份 copilot 引擎不生效）  ┘ 两份都写
 #   .github/copilot-instructions.md inject 降级静态层（copilot session-start 平台私有不可控，contract §1）
 #
 # 三能力：veto/track native、inject **降级**（不伪装会话级 inject）。__ADAPTER_DIR__ 定死为
@@ -50,9 +50,9 @@ install_instructions() {
 
 离开 review phase（explore / spec / verify）须对确切 event 取得人类显式确认：
 
-    pipeline review request <change> --event <event>
+    tenon review request <change> --event <event>
     # 人类确认后：
-    pipeline review acknowledge <change>
+    tenon review acknowledge <change>
 
 不得删除 `.pipeline-pending-review` 绕过 review-gate（会产生 solo 推进）。
 EOF
@@ -70,12 +70,12 @@ EOF
   info "copilot-instructions.md 静态层 → ${f}（inject 降级，哨兵块幂等）"
 }
 
-# ── dual hookContainer：同源写 .github/copilot/hooks.json + .github/hooks/trellis.json ──
+# ── dual hookContainer：同源写 .github/copilot/hooks.json + .github/hooks/tenon.json ──
 install_hooks_dual() {
   local d1="$TARGET/.github/copilot" d2="$TARGET/.github/hooks"
   mkdir -p "$d1" "$d2"
   local dst
-  for dst in "$d1/hooks.json" "$d2/trellis.json"; do
+  for dst in "$d1/hooks.json" "$d2/tenon.json"; do
     if [ -f "$dst" ] && ! grep -q "pipeline 适配器 hook 注册" "$dst" 2>/dev/null; then
       warn "$dst 已存在（疑似你既有 hook）——不覆盖，替换版写到 $dst.pipeline-adapter 供合并。"
       sed "s#__ADAPTER_DIR__#$ADAPTER_DIR#g" "$ADAPTER_DIR/hooks.json" > "$dst.pipeline-adapter"
@@ -93,6 +93,6 @@ if [ "$WITH_HOOKS" = 1 ]; then
   install_hooks_dual
   info "档 B 完成：veto/track native（dual hookContainer）+ inject 降级静态层。"
 else
-  warn "--no-hooks：跳过 hooks（无自动强制；review 仍须走 pipeline review request/acknowledge）。"
+  warn "--no-hooks：跳过 hooks（无自动强制；review 仍须走 tenon review request/acknowledge）。"
 fi
 exit 0

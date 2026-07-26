@@ -29,8 +29,8 @@
 import { readFileSync } from 'node:fs'
 import { readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
-import { loadManifest, loadTrackRegistry, PHASES, withLock } from '@pipeline-lite/kernel'
-import type { ExtendedManifestData, Phase, TrackDefinition, TrackValidationContext } from '@pipeline-lite/kernel'
+import { loadManifest, loadTrackRegistry, PHASES, withLock } from '@tenon/kernel'
+import type { ExtendedManifestData, Phase, TrackDefinition, TrackValidationContext } from '@tenon/kernel'
 
 export class ConfigError extends Error {
   constructor(message: string) {

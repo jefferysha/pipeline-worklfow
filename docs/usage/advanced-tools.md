@@ -14,22 +14,22 @@ canonical Workflow state or exposing sensitive local data.
 ## Channel
 
 Channel is an event-sourced worker communication bus. It is orthogonal to the
-pipeline state machine: it does not change barriers, review gates, `build_sha`,
+Tenon state machine: it does not change barriers, review gates, `build_sha`,
 Git state, or canonical Change fields.
 
 Discover commands:
 
 ```bash
-pipeline channel help
+tenon channel help
 ```
 
 Basic local flow:
 
 ```bash
-pipeline channel create research --task "Compare adapters"
-pipeline channel send research "Start the comparison" --as coordinator
-pipeline channel messages research --last 20
-pipeline channel wait research --as coordinator --since 0
+tenon channel create research --task "Compare adapters"
+tenon channel send research "Start the comparison" --as coordinator
+tenon channel messages research --last 20
+tenon channel wait research --as coordinator --since 0
 ```
 
 `wait` exits `124` when no matching event arrives. Process-level
@@ -40,15 +40,15 @@ Treat Channel as advanced/compatibility tooling, not the default agent runtime.
 
 ## Memory bridge
 
-`pipeline mem` reads supported local runtime sessions. It does not write or
+`tenon mem` reads supported local runtime sessions. It does not write or
 synchronize another runtime's memory.
 
 ```bash
-pipeline mem list
-pipeline mem search "workflow"
-pipeline mem context <session-id>
-pipeline mem extract <session-id>
-pipeline mem projects
+tenon mem list
+tenon mem search "workflow"
+tenon mem context <session-id>
+tenon mem extract <session-id>
+tenon mem projects
 ```
 
 Useful filters include platform, date, cwd/global scope, and JSON output; inspect
@@ -66,13 +66,13 @@ Tap is explicit opt-in local traffic diagnostics. Capture is off by default.
 Run a command through a reverse-mode client configuration:
 
 ```bash
-pipeline tap start codex -- codex
+tenon tap start codex -- codex
 ```
 
 Forward interception requires a local CA:
 
 ```bash
-pipeline tap start codex --forward --ca -- codex
+tenon tap start codex --forward --ca -- codex
 ```
 
 For ChatGPT OAuth-based Codex traffic, reverse environment variables may be
@@ -94,7 +94,7 @@ Use it only on a trusted workstation and test account, keep trace/CA paths
 private, and remove retained diagnostics when no longer needed. Never attach raw
 traces to a public Issue.
 
-Tap's active-intercept registration is process-local. A `pipeline doctor`
+Tap's active-intercept registration is process-local. A `tenon doctor`
 process in another terminal cannot prove whether a separate Tap process is
 currently intercepting.
 
@@ -107,9 +107,9 @@ currently intercepting.
 ## Verification
 
 ```bash
-pipeline channel list --json
-pipeline mem list --global --limit 5
-pipeline doctor --json
+tenon channel list --json
+tenon mem list --global --limit 5
+tenon doctor --json
 ```
 
 For Tap, inspect only a sanitized local trace and confirm no unexpected external
@@ -119,7 +119,7 @@ asset or telemetry destination is involved.
 
 ### Channel event did not advance a Change
 
-That is by design. Use pipeline state/review/transition commands for canonical
+That is by design. Use Tenon state/review/transition commands for canonical
 Workflow operations.
 
 ### OpenCode sessions are missing
@@ -134,4 +134,3 @@ Use explicit `--forward --ca` in a controlled environment.
 
 Read [security model](security-model.md) and
 [troubleshooting](troubleshooting.md).
-

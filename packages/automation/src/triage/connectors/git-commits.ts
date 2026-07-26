@@ -3,7 +3,7 @@ import type {
   Observation,
   ObservationPage,
   SourceCheckpoint,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import { nodeExec, type ExecResult } from '../../runner/exec.js'
 import {
   CursorStaleError,

@@ -28,6 +28,16 @@ import { gateEvidence, VERIFY_STATUS_FIELDS } from './evidence'
 /** 五态字典（顺序即筛选条 chips 顺序，键对齐 demo v5 的 data-f-state）。 */
 export const PROGRESS_STATES = ['gate', 'agent', 'running', 'queued', 'failed'] as const
 export type ProgressState = (typeof PROGRESS_STATES)[number]
+export type ExecutionProvenance = 'automation' | 'terminal' | 'none'
+
+const AUTOMATION_PROVENANCE_STATES = new Set([
+  'running',
+  'scheduled',
+  'queued',
+  'failed',
+  'conflict',
+  'paused',
+])
 
 /**
  * WorkflowRules 的可选产出扩展面——「自定义 workflow 的 nonempty-output guard」判定所需的
@@ -55,6 +65,17 @@ function fieldStr(c: ChangeSnapshot, key: string): string {
 export function changeWorkflowName(c: ChangeSnapshot): string {
   const wf = c.fields['workflow']
   return typeof wf === 'string' && wf ? wf : 'default'
+}
+
+/**
+ * A display state such as `running` does not identify who is doing the work.
+ * Keep execution ownership separate so a live normal-chat terminal session
+ * cannot leak into the unattended automation workspace.
+ */
+export function executionProvenance(c: ChangeSnapshot): ExecutionProvenance {
+  if (AUTOMATION_PROVENANCE_STATES.has(fieldStr(c, 'automation'))) return 'automation'
+  if (c.terminalActivity !== undefined) return 'terminal'
+  return 'none'
 }
 
 /**
@@ -140,6 +161,13 @@ export interface ProgressSelection {
 
 function emptyCounts(): ProgressCounts {
   return { gate: 0, agent: 0, running: 0, queued: 0, failed: 0 }
+}
+
+/** Recount an already-filtered row set so list ownership and summary badges cannot diverge. */
+export function progressCountsForRows(rows: readonly ProgressRow[]): ProgressCounts {
+  const counts = emptyCounts()
+  for (const row of rows) counts[row.state] += 1
+  return counts
 }
 
 /** 行序比较：updated_at 倒序，并列 name 升序（同 inbox selectInbox 的时间轴口径）。 */

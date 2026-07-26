@@ -3,7 +3,7 @@ name: e2e-testing
 description: First-party end-to-end test design and execution guidance.
 license: MIT
 metadata:
-  author: pipeline-lite
+  author: tenon
 ---
 
 # End-to-end Testing

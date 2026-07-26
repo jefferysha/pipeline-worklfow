@@ -17,7 +17,7 @@ describe('generateToken', () => {
 describe('writeTokenHandshake —— 0600 握手文件', () => {
   it('真写文件、权限 0600、内容含 token', async () => {
     const home = await makeTempHome()
-    const p = join(home, '.pipeline-dashboard-token')
+    const p = join(home, 'dashboard-token.json')
     await writeTokenHandshake(p, 'tok-123', { pid: 4242, port: 8765 })
     const st = await stat(p)
     expect(st.mode & 0o777).toBe(0o600)

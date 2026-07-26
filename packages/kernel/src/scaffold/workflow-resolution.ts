@@ -7,8 +7,8 @@
  *     apply_hash_contract（非对称 hash 契约，见下）。
  *   template-hash.py update-entry / remove-entry —— 记 hash / 删条目 单文件 CLI。
  *
- * Trellis 语义（parity 收尾 ③「--workflow / --workflow-source resolution」）：
- *   Trellis init 支持按 workflow id 从 source 解析多个 workflow 变体，并在写盘后跑 hash 契约让升级
+ * Tenon contract 语义（parity 收尾 ③「--workflow / --workflow-source resolution」）：
+ *   Tenon contract init 支持按 workflow id 从 source 解析多个 workflow 变体，并在写盘后跑 hash 契约让升级
  *   不还原用户选择。老仓 partial：workflow.md 是插件单一权威文件（SessionStart 注入）+ preset 强度变体，
  *   无「多 workflow id 解析 + removeHash 更新契约」。本模块补齐纯逻辑：
  *     · parseWorkflowIds  —— 解析 source 索引成多 id（跳 native 去重、保序）。

@@ -4,7 +4,7 @@
 
 ## 项目概览
 
-`pipeline-worklfow` 是面向本地开发者和 coding agent 的 TypeScript 单语言开发流水线：以可验证的状态机、复核门和 guard 驱动 change/workflow，提供 CLI、dashboard、AFK 自动化、loop 治理、channel 兼容总线和 tap 诊断。项目采用 npm workspace；核心运行时要求 Node.js 22，Docker 仅用于隔离执行与部分真实验收。
+`tenon` 是面向本地开发者和 coding agent 的 TypeScript 单语言开发流水线：以可验证的状态机、复核门和 guard 驱动 change/workflow，提供 CLI、dashboard、AFK 自动化、loop 治理、channel 兼容总线和 tap 诊断。项目采用 npm workspace；核心运行时要求 Node.js 22，Docker 仅用于隔离执行与部分真实验收。
 
 核心维护目标是保持 CLI、YAML/JSON/JSONL、hook、adapter、技能包和 dashboard API 的既有兼容性，同时继续演进 workflow/automation 能力。当前属于功能成熟但持续演进阶段；公共契约、tracked bundle、生成 workflow artifact 与分发资产必须同步，不能只让源码测试通过。
 
@@ -20,7 +20,7 @@
 | `packages/kernel/` | 状态机、workflow、track、loop、state、verification、codec 与持久化原语 | 领域层不得依赖协议/供应商；生成的 `default-workflow.generated.ts` 由模板生成，不得手改 |
 | `packages/channel/` | 历史迁移/experimental worker event bus 兼容面 | 非默认 agent runtime；不得在无明确目标时扩建或重新并入 kernel |
 | `packages/automation/` | AFK 队列、调度、admission、runner、lifecycle、triage、verifier 与技能快照 | 修改执行/合并/凭证通道时覆盖 Docker、Git、冲突保留和取消/恢复路径 |
-| `packages/cli/` | Commander CLI、命令、装配与单文件分发 | `src/` 是源码；tracked `dist/pipeline.mjs` 必须由 `npm run bundle` 生成并通过 freshness/smoke，禁止手改 dist |
+| `packages/cli/` | Commander CLI、命令、装配与单文件分发 | `src/` 是源码；tracked `dist/tenon.mjs` 必须由 `npm run bundle` 生成并通过 freshness/smoke，禁止手改 dist |
 | `packages/server/` | 本机 dashboard HTTP/SSE server、鉴权与跨包应用编排 | 保持 loopback/Host/token/root 安全模型；构建产物在 `dist/`，不得手改 |
 | `packages/dashboard-app/` | React dashboard SPA | 前端详细边界见 `FRONTEND.md`；`dist/` 为 Vite 生成物，源码/样式/交互改动需真实浏览器验证 |
 | `packages/tap/` | 本地 LLM 流量代理、TLS/WS、trace store 与诊断 | 证书、header、prompt 和凭证按敏感数据处理；capture 默认与降级语义不得被弱化 |
@@ -84,7 +84,7 @@
 | 定向测试 | `npx vitest run <test-file...>`；前端使用 `npx vitest run --config packages/dashboard-app/vitest.config.ts <test-file...>` |
 | 静态/生成物门禁 | `npm run check:comments`；`npm run check:default-workflow-freshness` |
 | 分发与兼容验收 | `bash tools/test-hooks.sh`；`bash tools/test-adapters.sh`；`bash tools/verify-skills.sh`；`bash tools/test-bundle.sh`；`npm run oracle` |
-| 浏览器/API smoke | `npm run build:web && npm run build:server` 后按 README 启动 `npx pipeline-dashboard`，检查受影响真实流程 |
+| 浏览器/API smoke | `npm run build:web && npm run build:server` 后按 README 启动 `npx tenon-dashboard`，检查受影响真实流程 |
 | Docker/真实 agent | `bash tools/sandcastle/build.sh local`；需要凭证时按 `BACKEND.md` 的 real-Codex 命令运行 |
 
 仓库当前没有独立 lint、format 或通用 E2E npm script；不得编造命令或声称已执行。格式与静态正确性依靠 TypeScript 构建、现有门禁和相邻代码风格；新增工具必须属于当前任务授权范围，并同步根 scripts、CI 和本节。

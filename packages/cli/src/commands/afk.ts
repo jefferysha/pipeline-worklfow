@@ -6,7 +6,7 @@
  * sandcastle:local）。有候选但无 docker → 诚实报告并返回非零，绝不以成功退出伪装已执行；只有
  * ready 队列确实为空的 `empty` 才返回 0（诚实门）。
  * 有 docker → 真调 automation.runRound(createDockerRunChange(...))：真 git worktree、真容器、
- * 真 pipeline-afk-run 握手回读、真 barrier build_sha 派生、L3 真 merge-back（L1/L2 report-only
+ * 真 tenon-afk-run 握手回读、真 barrier build_sha 派生、L3 真 merge-back（L1/L2 report-only
  * 安全默认，成功也只停 paused）。createDockerRunChange 传 deps.store，运行期真写回
  * automation_sandbox/automation_worktree（Task 1 收尾缺口修复：此前只有 lifecycle 编排层写这
  * 两个字段的能力，没有一条真调用链把真 StateStore 接进来，见
@@ -20,8 +20,8 @@ import { join } from 'node:path'
 import {
   AUTOMATION_STATES, CANCEL_MARKER_FILE, createAutomation, dockerAvailable, makeIdGen, nodeExec,
   AUTOMATION_LEVELS, type AutomationLevel,
-} from '@pipeline-lite/automation'
-import { createLoopLedgerStore, loadRegistry, requireTrack } from '@pipeline-lite/kernel'
+} from '@tenon/automation'
+import { createLoopLedgerStore, loadRegistry, requireTrack } from '@tenon/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
 import { changeDir, changesRoot, isValidChangeName } from '../paths.js'
 import { str } from '../render.js'
@@ -41,7 +41,7 @@ export async function cmdAfk(deps: CliDeps, sub: string, name: string | undefine
     deps.io.err(`ERROR: --level 需 L1|L2|L3，收到 '${opts.level}'`)
     return 1
   }
-  // `pipeline afk ...` is an explicit operator entrypoint. It alone opts this invocation into
+  // `tenon afk ...` is an explicit operator entrypoint. It alone opts this invocation into
   // queue mutation; lifecycle callbacks that omit these flags remain fail-safe OFF.
   const auto = createAutomation({
     repoRoot: deps.cwd,

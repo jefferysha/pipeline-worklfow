@@ -1,5 +1,5 @@
 /**
- * @pipeline-lite/automation 公共出口（BACKLOG #29/#29b, GOAL A5/M5）。
+ * @tenon/automation 公共出口（BACKLOG #29/#29b, GOAL A5/M5）。
  * 5 包语义盘点 + 队列生命周期状态机见 ./types.ts 顶注。默认 L1 report-only（不自动 merge）。
  */
 export * from './types.js'

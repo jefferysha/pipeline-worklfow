@@ -1,22 +1,24 @@
 #!/usr/bin/env bash
-# install.sh — bootstrap the one pipeline plugin for a selected host.
+# install.sh — bootstrap the complete Tenon plugin for one selected host.
 #
 # This script is part of the same repository release, not a second package manager.  Once the
-# native plugin is installed, all routine setup is the normal `pipeline setup --<host>` interface.
+# native plugin is installed, all routine setup is the normal `tenon setup --<host>` interface.
 set -euo pipefail
 
-MARKETPLACE_SOURCE="jefferysha/pipeline-worklfow"
-MARKETPLACE_NAME="pipeline-lite"
+MARKETPLACE_SOURCE="jefferysha/tenon"
+MARKETPLACE_NAME="tenon"
 HOST=""
 AUTO_UPDATE=0
+DRY_RUN=0
 
 usage() {
   cat <<'USAGE'
-Usage: install.sh --codex|--claude [--auto-update]
+Usage: install.sh --codex|--claude [--auto-update] [--dry-run]
 
-Installs the single pipeline-lite plugin into the selected native marketplace, then runs the
-packaged `pipeline setup --<host>`.  Other hosts are adapters and should be deployed from an
-already installed Codex or Claude package with `pipeline setup --cursor` (and similar flags).
+Installs the complete Tenon plugin into the selected native marketplace, then runs the packaged
+`tenon setup --<host>`. Other hosts are adapters and should be deployed from an
+already installed Codex or Claude package with `tenon setup --cursor` (and similar flags).
+`--dry-run` prints the complete host and packaged setup plan without invoking either host.
 USAGE
 }
 
@@ -27,6 +29,7 @@ while [ $# -gt 0 ]; do
       HOST="${1#--}"
       ;;
     --auto-update) AUTO_UPDATE=1 ;;
+    --dry-run) DRY_RUN=1 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "install.sh: unsupported argument $1" >&2; usage >&2; exit 2 ;;
   esac
@@ -34,12 +37,33 @@ while [ $# -gt 0 ]; do
 done
 [ -n "$HOST" ] || { usage >&2; exit 2; }
 
+if [ "$DRY_RUN" = 1 ]; then
+  echo "[dry-run] Tenon --${HOST} 一步安装计划："
+  case "$HOST" in
+    codex)
+      echo "  codex plugin marketplace add ${MARKETPLACE_SOURCE} --ref main"
+      echo "  codex plugin add tenon@${MARKETPLACE_NAME} --json"
+      echo "  codex plugin list --json"
+      ;;
+    claude)
+      echo "  claude plugin marketplace add ${MARKETPLACE_SOURCE}"
+      echo "  claude plugin install tenon@${MARKETPLACE_NAME}"
+      echo "  claude plugin list --json"
+      ;;
+  esac
+  SETUP_PLAN="tenon setup --${HOST} --yes --dry-run"
+  [ "$AUTO_UPDATE" = 1 ] && SETUP_PLAN="${SETUP_PLAN} --auto-update"
+  echo "  ${SETUP_PLAN}"
+  echo "[dry-run] 未调用宿主命令，未写入 Tenon 或项目状态。"
+  exit 0
+fi
+
 find_codex_root() {
   codex plugin list --json | node -e '
     let text=""; process.stdin.on("data", c => { text += c }); process.stdin.on("end", () => {
       try {
         const entries = JSON.parse(text).installed ?? [];
-        const hit = entries.find((x) => x?.name === "pipeline-lite" && x?.marketplaceName === "pipeline-lite");
+        const hit = entries.find((x) => x?.name === "tenon" && x?.marketplaceName === "tenon");
         if (typeof hit?.source?.path === "string") process.stdout.write(hit.source.path);
       } catch {}
     });'
@@ -50,7 +74,7 @@ find_claude_root() {
     let text=""; process.stdin.on("data", c => { text += c }); process.stdin.on("end", () => {
       try {
         const entries = JSON.parse(text);
-        const hit = entries.find((x) => x?.id === "pipeline-lite@pipeline-lite");
+        const hit = entries.find((x) => x?.id === "tenon@tenon");
         if (typeof hit?.installPath === "string") process.stdout.write(hit.installPath);
       } catch {}
     });'
@@ -73,10 +97,10 @@ add_marketplace() {
 case "$HOST" in
   codex)
     add_marketplace codex plugin marketplace add "$MARKETPLACE_SOURCE" --ref main
-    if ! codex plugin add "pipeline-lite@${MARKETPLACE_NAME}" --json; then
+    if ! codex plugin add "tenon@${MARKETPLACE_NAME}" --json; then
       ROOT="$(find_codex_root)"
       [ -n "$ROOT" ] || {
-        echo "install.sh: Codex could not install pipeline-lite and no existing installation was found." >&2
+        echo "install.sh: Codex could not install tenon and no existing installation was found." >&2
         exit 1
       }
     fi
@@ -84,10 +108,10 @@ case "$HOST" in
     ;;
   claude)
     add_marketplace claude plugin marketplace add "$MARKETPLACE_SOURCE"
-    if ! claude plugin install "pipeline-lite@${MARKETPLACE_NAME}"; then
+    if ! claude plugin install "tenon@${MARKETPLACE_NAME}"; then
       ROOT="$(find_claude_root)"
       [ -n "$ROOT" ] || {
-        echo "install.sh: Claude could not install pipeline-lite and no existing installation was found." >&2
+        echo "install.sh: Claude could not install tenon and no existing installation was found." >&2
         exit 1
       }
     fi
@@ -95,15 +119,15 @@ case "$HOST" in
     ;;
 esac
 
-[ -n "${ROOT:-}" ] && [ -f "$ROOT/packages/cli/dist/pipeline.mjs" ] || {
+[ -n "${ROOT:-}" ] && [ -f "$ROOT/packages/cli/dist/tenon.mjs" ] || {
   echo "install.sh: plugin installed but its CLI bundle could not be resolved; run the host's plugin list and retry." >&2
   exit 1
 }
 
 ARGS=(setup "--${HOST}" --yes)
 [ "$AUTO_UPDATE" = 1 ] && ARGS+=(--auto-update)
-node "$ROOT/packages/cli/dist/pipeline.mjs" "${ARGS[@]}"
+node "$ROOT/packages/cli/dist/tenon.mjs" "${ARGS[@]}"
 if [ "$HOST" = "codex" ]; then
-  echo "Codex requires one local hook trust: open Codex, run /hooks, and trust pipeline-lite to enable normal-chat routing."
+  echo "Codex requires one local hook trust: open Codex, run /hooks, and trust tenon to enable normal-chat routing."
 fi
-echo "Pipeline installed for --${HOST}. Open a new host session to load its packaged skills and hooks."
+echo "Tenon installed for --${HOST}. Open a new host session to load its packaged skills and hooks."

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
-import { BUILTIN_TRACK_DEFINITIONS, QuoteGateError } from '@pipeline-lite/kernel'
-import type { FieldName, PipelineState, TrackDefinition, TrackRegistry } from '@pipeline-lite/kernel'
+import { BUILTIN_TRACK_DEFINITIONS, QuoteGateError } from '@tenon/kernel'
+import type { FieldName, PipelineState, TrackDefinition, TrackRegistry } from '@tenon/kernel'
 import { cmdCas, cmdGet, cmdSet, cmdSetMany } from './fields.js'
 import { FIXED_CLOCK, makeDeps, mockState, spy } from '../test-support.js'
 
@@ -501,7 +501,7 @@ describe('track/workflow 写入 —— 校验与落盘同锁（R2 · TOCTOU 锚�
 })
 
 /**
- * P6 —— set/set-many/cas 对「当前有效 artifact 字段」cutover：旧写入口拒、改走 pipeline artifact
+ * P6 —— set/set-many/cas 对「当前有效 artifact 字段」cutover：旧写入口拒、改走 tenon artifact
  * register（default 轨判定源 defaultArtifactsForStep，与 register 同口径 effectiveArtifactFields）。
  * custom 轨拒写 + fail-loud 在 artifact.integration.test.ts 端到端覆盖。
  */

@@ -3,7 +3,7 @@
 ## Goal
 
 Update one host, recover from a damaged managed release, and uninstall only
-Pipeline Lite-owned project files.
+Tenon-owned project files.
 
 ## Prerequisites
 
@@ -16,21 +16,27 @@ Pipeline Lite-owned project files.
 Immediate native-host update:
 
 ```bash
-pipeline update --codex
+tenon update --codex
 # or
-pipeline update --claude
+tenon update --claude
 ```
+
+The selected host updates the one complete Tenon plugin. There is no separate CLI self-update
+channel; Skills, hooks, CLI, workflows, Dashboard, and adapters share one release transaction.
+The native host exclusively owns its cache. Tenon commits only its immutable runtime, launchers,
+and Dashboard boundary, then read-only scans the Tenon project registry and prints explicit
+`tenon sync` commands without mutating project workspaces.
 
 Inspect without mutation:
 
 ```bash
-pipeline update --codex --dry-run
+tenon update --codex --dry-run
 ```
 
 Enable the native daily background check explicitly:
 
 ```bash
-pipeline setup --codex --auto-update
+tenon setup --codex --auto-update
 ```
 
 Auto-update is opt-in and host-scoped. The updater verifies the complete
@@ -38,10 +44,20 @@ candidate, atomically activates it, and refreshes the managed Dashboard. A
 running coding-agent session keeps the Skills/hooks already loaded; start a new
 session. Codex may ask you to trust changed hooks again.
 
+## Migration from the retired identity
+
+Plugin IDs cannot be renamed by an ordinary same-identity update. The retired
+repository is therefore a frozen, migration-only channel: it installs and
+verifies `tenon@tenon`, atomically activates the Tenon runtime, waits for a real
+new-session proof, and only then removes the old plugin, marketplace, and
+byte-matching owned launchers. Any failed verification preserves a retryable
+state. The active migration window ends on 2026-10-31; the Tenon product does
+not expose an old CLI alias.
+
 Redeploy a non-native adapter from the current release:
 
 ```bash
-pipeline update --cursor --target /absolute/path/to/project
+tenon update --cursor --target /absolute/path/to/project
 ```
 
 The adapter does not own an independent marketplace auto-updater.
@@ -51,14 +67,14 @@ The adapter does not own an independent marketplace auto-updater.
 Read-only status:
 
 ```bash
-pipeline runtime status
-pipeline runtime status --json
+tenon runtime status
+tenon runtime status --json
 ```
 
 Exact rollback:
 
 ```bash
-pipeline runtime repair --rollback
+tenon runtime repair --rollback
 ```
 
 Repair can select only the previous complete verified release. It is not a
@@ -67,7 +83,7 @@ general unsigned path or a bypass around project Workflow gates.
 If no valid previous release exists, reinstall the selected host:
 
 ```bash
-pipeline setup --codex
+tenon setup --codex
 ```
 
 ## Canonical project-state recovery
@@ -75,14 +91,14 @@ pipeline setup --codex
 Inspect before repair:
 
 ```bash
-pipeline state status <change-name> --json
-pipeline status <change-name> --json
+tenon state status <change-name> --json
+tenon status <change-name> --json
 ```
 
 If only the YAML projection drifted from canonical state:
 
 ```bash
-pipeline state repair-projection <change-name>
+tenon state repair-projection <change-name>
 ```
 
 `--force-canonical` is an explicit destructive preference when unknown YAML
@@ -96,18 +112,18 @@ Never hand-edit canonical state or manufacture review/document receipts.
 Preview from the project root:
 
 ```bash
-pipeline uninstall --dry-run
+tenon uninstall --dry-run
 ```
 
 Then explicitly confirm:
 
 ```bash
-pipeline uninstall --yes
+tenon uninstall --yes
 ```
 
 The uninstaller uses `.pipeline-owned.json`:
 
-- unchanged opaque files owned by Pipeline Lite may be deleted;
+- unchanged opaque files owned by Tenon may be deleted;
 - structured host files are scrubbed while user fields are preserved;
 - user-modified opaque files are preserved;
 - missing files are skipped;
@@ -129,9 +145,9 @@ marketplace caches or user data outside its ownership manifest.
 After update:
 
 ```bash
-pipeline runtime status --json
-pipeline doctor --json
-pipeline dashboard --dry-run
+tenon runtime status --json
+tenon doctor --json
+tenon dashboard --dry-run
 ```
 
 After uninstall, inspect the printed preserved/stub list and repository diff.
@@ -160,4 +176,3 @@ Review it manually; do not force-delete unrelated host configuration.
 
 Read [troubleshooting](troubleshooting.md) or
 [security model](security-model.md).
-

@@ -36,8 +36,8 @@ gsap.registerPlugin(useGSAP)
  * 出现一次；悬空依赖（指向 step 外/未参与首链）以幽灵 chip 呈现在链头。这只是展示投影——
  * 解锁判定的唯一权威在 kernel skillDag.ts::isSkillUnlocked，前端不复刻其语义。
  *
- * v8-E（用户点名，设计真相源 design-demos/v8-trellis-encore.html #skChain/animChain）：
- * 链 chips → 编号节点（紫圆 mono 序号）+ 紫色流动虚线连接件 + GSAP 逐节点弹入/连线生长；
+ * 技能链展示契约：链 chips → 编号节点（紫圆 mono 序号）+
+ * 紫色流动虚线连接件 + GSAP 逐节点弹入/连线生长；
  * 依赖链语义、添加面板、default 轨道 tab 全部不动，纯展示升级；reduced-motion 直显。
  */
 

@@ -64,7 +64,7 @@ import {
   type LoopRegistry,
   type LoopRisk,
   type NewLoopEntryInput,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
 import { createProductionSkillContentLocator } from '../skillBundleAssembly.js'
 import { admissionProbe, buildAdmissionJson, ledgerProjections } from './loop-admission-view.js'
@@ -83,7 +83,7 @@ import {
 } from './loop-starter-wiring.js'
 
 // 供 mock/集成测试构造 fake fs / 类型断言
-export type { LoopEntry, LoopRegistry, DriftFs, GraduationFs } from '@pipeline-lite/kernel'
+export type { LoopEntry, LoopRegistry, DriftFs, GraduationFs } from '@tenon/kernel'
 /** cli 层的 loops fs 注入面（= kernel EnforceFs：登记载入 + progress/在途/沙箱读）。 */
 export type LoopsFs = EnforceFs
 

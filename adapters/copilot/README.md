@@ -14,7 +14,7 @@
 
 ## dual hookContainer（Copilot 特有约束）
 
-Copilot 引擎从 `.github/copilot/hooks.json` **与** `.github/hooks/trellis.json` 两处读 hook——
+Copilot 引擎从 `.github/copilot/hooks.json` **与** `.github/hooks/tenon.json` 两处读 hook——
 `install.sh` 同源写两份，**漏一份则 hook 不生效**。
 
 ## 安装
@@ -36,7 +36,7 @@ inject:
 veto:
   status: native
   format: exit2-stderr                        # 命中新鲜 marker → exit 2 + stderr 指引
-  container: dual (.github/copilot/hooks.json | .github/hooks/trellis.json)
+  container: dual (.github/copilot/hooks.json | .github/hooks/tenon.json)
 track:
   status: native
   format: history-append                      # 真 append .pipeline-history.jsonl
@@ -44,5 +44,5 @@ track:
 
 ## 人工确认（HITL）
 
-完成产物并选择 event 后运行 `pipeline review request <change> --event <event>`；人类明确确认后运行
-`pipeline review acknowledge <change>`。不得手动删除 `.pipeline-pending-review`，它只是投影而非授权。
+完成产物并选择 event 后运行 `tenon review request <change> --event <event>`；人类明确确认后运行
+`tenon review acknowledge <change>`。不得手动删除 `.pipeline-pending-review`，它只是投影而非授权。

@@ -21,17 +21,18 @@ import { applyFileCas } from './spec-migration-cas.mjs'
 const exec = promisify(execFile)
 const APPLY = process.argv.includes('--apply')
 const ROOT = resolve(process.cwd())
-const changeIndex = process.argv.indexOf('--change')
-const CHANGE = changeIndex === -1
-  ? 'trellis-style-documentation-site'
-  : process.argv[changeIndex + 1]
-if (typeof CHANGE !== 'string' || !/^[a-z0-9][a-z0-9-]{0,63}$/.test(CHANGE)) {
-  throw new Error('migration --change 必须是合法 Change 名称')
+function requiredChangeArg() {
+  const changeIndex = process.argv.indexOf('--change')
+  const change = changeIndex === -1 ? undefined : process.argv[changeIndex + 1]
+  if (typeof change !== 'string' || !/^[a-z0-9][a-z0-9-]{0,63}$/.test(change)) {
+    throw new Error('migration --change 必须是合法 Change 名称')
+  }
+  return change
 }
-const RECEIPT_PATH = resolve(
-  ROOT,
-  `openspec/changes/${CHANGE}/migration/spec-application.json`,
-)
+
+function receiptPath(change) {
+  return resolve(ROOT, `openspec/changes/${change}/migration/spec-application.json`)
+}
 
 function digest(content) {
   return createHash('sha256').update(content).digest('hex')
@@ -144,7 +145,7 @@ async function buildExpected(receipt) {
   const delta = await readFile(deltaPath)
   if (digest(delta) !== receipt.deltaDigest) throw new Error('migration delta 摘要漂移')
 
-  const sandbox = await mkdtemp(join(tmpdir(), 'pipeline-spec-migration-'))
+  const sandbox = await mkdtemp(join(tmpdir(), 'tenon-spec-migration-'))
   try {
     const target = resolve(sandbox, receipt.mainSpecPath)
     await mkdir(dirname(target), { recursive: true })
@@ -183,10 +184,11 @@ async function buildExpected(receipt) {
 }
 
 async function main() {
+  const change = requiredChangeArg()
   const receiptRaw = await readFile(
-    await assertTrustedPath(ROOT, RECEIPT_PATH, 'file'),
+    await assertTrustedPath(ROOT, receiptPath(change), 'file'),
   )
-  const receipt = validateReceipt(JSON.parse(receiptRaw.toString('utf8')), CHANGE)
+  const receipt = validateReceipt(JSON.parse(receiptRaw.toString('utf8')), change)
   const receiptDigest = digest(receiptRaw)
   const currentPath = await assertTrustedPath(
     ROOT,
@@ -207,7 +209,7 @@ async function main() {
     const result = await applyFileCas({
       repoRoot: ROOT,
       targetPath: currentPath,
-      recoveryDirectory: resolve(ROOT, `openspec/changes/${CHANGE}/migration/recovery`),
+      recoveryDirectory: resolve(ROOT, `openspec/changes/${change}/migration/recovery`),
       observedDigest: receipt.observedCurrentDigest,
       expectedBytes: expected,
       expectedDigest: receipt.expectedAfterDigest,

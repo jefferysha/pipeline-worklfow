@@ -6,7 +6,7 @@ import { SkillHealthPanel } from './SkillHealthPanel'
 /**
  * W4（full-install 批 2 Wave B）：dashboard 只读「技能齐全度」面 + 去终端 setup 引导。
  * 消费既有 GET /api/skills/registry（{skills: WbSkillEntry[]}，每条含 installed 布尔）。
- * 前端只读不装——装在终端（pipeline setup），本面只呈现齐全度 + 引导回终端。
+ * 前端只读不装——装在终端（tenon setup），本面只呈现齐全度 + 引导回终端。
  * fail-soft 纪律：fetch 失败/registry 空都不谎报「已装齐」。
  */
 
@@ -39,7 +39,7 @@ afterEach(() => {
 })
 
 describe('SkillHealthPanel（full-install W4）：技能齐全度只读面', () => {
-  it('① 有未装项 → 「已装 N / 未装 M」计数 + 未装名列表 + 可复制「pipeline setup」引导', async () => {
+  it('① 有未装项 → 「已装 N / 未装 M」计数 + 未装名列表 + 可复制「tenon setup」引导', async () => {
     const writeText = stubClipboard()
     mockRegistry([
       { name: 'superpowers', installed: true, source: 'local-plugin' },
@@ -61,9 +61,9 @@ describe('SkillHealthPanel（full-install W4）：技能齐全度只读面', () 
 
     // 去终端引导：命令真实、可复制。
     const btn = screen.getByTestId('skh-copy-setup')
-    expect(btn).toHaveTextContent('pipeline setup')
+    expect(btn).toHaveTextContent('tenon setup')
     fireEvent.click(btn)
-    await waitFor(() => expect(writeText).toHaveBeenCalledWith('pipeline setup'))
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('tenon setup'))
   })
 
   it('② 全装 → 「已装齐」态，无未装名列表、无 setup 引导按钮', async () => {
@@ -93,7 +93,7 @@ describe('SkillHealthPanel（full-install W4）：技能齐全度只读面', () 
     expect(screen.queryByTestId('skh-installed-n')).toBeNull()
   })
 
-  it('④ registry 空/未就绪 → 「未就绪，跑 pipeline doctor 查」不谎报全绿，doctor 可复制', async () => {
+  it('④ registry 空/未就绪 → 「未就绪，跑 tenon doctor 查」不谎报全绿，doctor 可复制', async () => {
     const writeText = stubClipboard()
     mockRegistry([])
     renderPanel()
@@ -104,10 +104,10 @@ describe('SkillHealthPanel（full-install W4）：技能齐全度只读面', () 
     expect(screen.queryByTestId('skh-installed-n')).toBeNull()
     // 导向 doctor（与终端同源），命令可复制。
     fireEvent.click(screen.getByTestId('skh-copy-doctor'))
-    await waitFor(() => expect(writeText).toHaveBeenCalledWith('pipeline doctor'))
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('tenon doctor'))
   })
 
-  it('⑤ 复制命令写入剪贴板的正是真实命令「pipeline setup」（与终端同源，不漂移）', async () => {
+  it('⑤ 复制命令写入剪贴板的正是真实命令「tenon setup」（与终端同源，不漂移）', async () => {
     const writeText = stubClipboard()
     mockRegistry([{ name: 'zoom-out', installed: false, source: 'user' }])
     renderPanel()
@@ -115,7 +115,7 @@ describe('SkillHealthPanel（full-install W4）：技能齐全度只读面', () 
     // setup 引导在「▸ 高级设置」折叠区内——先展开（未装计数亮红后折叠区才在）。
     fireEvent.click(await screen.findByTestId('skh-adv'))
     fireEvent.click(screen.getByTestId('skh-copy-setup'))
-    await waitFor(() => expect(writeText).toHaveBeenCalledWith('pipeline setup'))
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('tenon setup'))
     // 不漂移成别的安装命令。
     expect(writeText).not.toHaveBeenCalledWith(expect.stringContaining('npm'))
   })

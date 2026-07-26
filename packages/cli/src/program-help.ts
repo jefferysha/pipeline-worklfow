@@ -21,6 +21,6 @@ starter:
   dependency-sweeper | changelog-drafter | issue-triage
 
 示例:
-  pipeline loops init
-  pipeline loops init --id nightly-fix --goal "夜间修 flaky 测试" --runner codex --yes
-  pipeline loops init --id ci-loop --template ci-sweeper --skill-bundle backend --yes`
+  tenon loops init
+  tenon loops init --id nightly-fix --goal "夜间修 flaky 测试" --runner codex --yes
+  tenon loops init --id ci-loop --template ci-sweeper --skill-bundle backend --yes`

@@ -1,6 +1,6 @@
 /** Host-owned bridge from `codex exec --json` JSONL to trusted runner facts. */
 import { readFileSync } from 'node:fs'
-import { parseCodexJsonlUsage } from '@pipeline-lite/automation'
+import { parseCodexJsonlUsage } from '@tenon/automation'
 import type { CliDeps } from '../deps.js'
 
 const visitStrings = (value: unknown, emit: (value: string) => void): void => {

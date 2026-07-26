@@ -1,4 +1,4 @@
-# GOAL — pipeline-worklfow
+# GOAL — tenon
 
 ## 终态 v3.0（重画核心 + loop-engineering 完整整合，2026-07-16 三轮 codex review + brainstorming 定稿）
 
@@ -50,7 +50,7 @@ brainstorming（`/goal` 仪式，AskUserQuestion 拍板 3 处分歧）。原始�
 > transition-table，G2 先立 typed guard/action 边界，tracks 的 policyProfile 建在其上，
 > 避免先改旧表再被 G2 重写）；**loop 主线（清单 H）与内核主线并行**，内部顺序 = H1 ledger →
 > ExecutionContext/loop_id/admission/budget-reservation/kill-switch → H4-H6、H8-H11 →
-> H7（等 G2 verifier/action ID 稳定后接线）→ H2 → H14 `pipeline loop run` 收口 → H15 只做
+> H7（等 G2 verifier/action ID 稳定后接线）→ H2 → H14 `tenon loop run` 收口 → H15 只做
 > 阶段性真跑不勾终验。G3 的 registry/UI 只读部分可先做，G4 channel 提包是低冲突并行包，
 > G3 的"hooks 从 YAML 切 canonical"必须与 projection 迁移同批。projection 落地前 G1 不勾满、
 > 不宣称 v3.0 完成；最后是 H15+全系统 burn-in。projection 的将来设计已给全（.pipeline-run/
@@ -75,10 +75,10 @@ brainstorming（`/goal` 仪式，AskUserQuestion 拍板 3 处分歧）。原始�
       > 首条时间戳切分 JSONL"改成"逐条 `transitionRecordId` 来源标记 + 两指针合并保序"，
       > CLI/server 两侧收尾统一走 `runRepo.transact()`（锁覆盖整个 callback，消灭 G1 验收锚点
       > 点名的那个 P1 bug 本身——两入口现在共用同一收尾，breadcrumb/history/marker 顺序一致）。
-      > 过程中发现并修复的非架构性但真实的问题：`packages/cli/dist/pipeline.mjs`（hooks 与
+      > 过程中发现并修复的非架构性但真实的问题：`packages/cli/dist/tenon.mjs`（hooks 与
       > 已发布插件实际执行的 tracked bundle）全程未随本增量的源码改动重新构建，直到 review
       > 第 8 轮才被抓到——已重建 + 在 `.github/workflows/ci.yml` 加了 Build 后的逐字节新鲜度门
-      > （`git diff --exit-code -- packages/cli/dist/pipeline.mjs`），`docs/DIST-RELEASE.md`
+      > （`git diff --exit-code -- packages/cli/dist/tenon.mjs`），`docs/DIST-RELEASE.md`
       > 同步更新（这是仓库第二次犯这类 source/dist 脱节，`d34b5f7 → ef84644` 是第一次）。
       > codex 对下一步（唯一 TransitionApplication + 降 YAML 为 projection）的风险提示：
       > 当前 `.pipeline.yaml` 的 rename 是唯一提交点、canonical head/sequence 存在其中——降成
@@ -165,7 +165,7 @@ brainstorming（`/goal` 仪式，AskUserQuestion 拍板 3 处分歧）。原始�
       1500 / cli 901 passed[1 failed=afk-run L3 docker 属 Stage B 四返并行区非 P5] / 真 bin E2E works；
       2 偏离待裁：loadWorkflow 拒 default.yaml 作 custom[A 契约必然，default 走 codegen 表不走 loadWorkflow]、
       matchesTrackPredicate barrel 导出[cycle-safe]。设计定稿 scratchpad/codex/p5-impl-brief.txt：artifact register CLI
-      `pipeline artifact register <change> <field> <path> --producer <skill-id>` + 最小 EffectiveSkillResolver
+      `tenon artifact register <change> <field> <path> --producer <skill-id>` + 最小 EffectiveSkillResolver
       [default=manifest skillsFor·a|b 拆 slot / custom=step.skills] + A 契约钉死[拆 compileWorkflow：通用=custom
       契约拒 effective-phase-skills、新 compileDefaultWorkflow 允许、**非 name 猜 origin**]；P6 才切 set/cas、
       T-R6 才升级 resolver 到 Registry profile；与 loop/tracks 零交叉可并行）→ **P6 收官·codex 三轮复审通过
@@ -187,7 +187,7 @@ brainstorming（`/goal` 仪式，AskUserQuestion 拍板 3 处分歧）。原始�
       > guard/action 分两个联合（guard=判定，action=状态变换，不许并）；TrackPredicate
       > track-not-in:['pm'] 取代 `tr!=='pm'` 与 `tracks:['backend','frontend']` 两种写法；
       > handler 注册表 = exhaustive mapped type 静态闭集（无运行时插件）；错误文案留 renderer
-      > 不进 YAML。`pipeline artifact register <change> <field> <path> --producer <skill-id>`，
+      > 不进 YAML。`tenon artifact register <change> <field> <path> --producer <skill-id>`，
       > producer 值域=当前 phase×track 的 manifest skills（default 轨）/step.skills（custom
       > 轨），经 EffectiveSkillResolver 接缝注入。分阶段 P0 TrackPredicate 前置小 PR（修
       > guardCheck 对 chat/未知 track 与 transition 层的不一致）→ P1 IR/编译器/handler →
@@ -198,25 +198,25 @@ brainstorming（`/goal` 仪式，AskUserQuestion 拍板 3 处分歧）。原始�
       barrier/archive 从 switch 变 action）；`default.yaml` 成为 artifact declaration 真相源
       ——**不是收敛成一张表**：transition 放行政策 / handoff 选档政策 / dashboard 展示政策继续
       独立（codex 裁决：`plan` 仅对非 PM track 强制、`PHASE_DOCS` 的 build 条目是选上游上下文
-      而非声明产出，不能从 outputs 机械投影）；`pipeline artifact register` 结构化 CLI 取代
-      agent 手打 `pipeline set`，不接受 `--producer-skill <任意字符串>`
+      而非声明产出，不能从 outputs 机械投影）；`tenon artifact register` 结构化 CLI 取代
+      agent 手打 `tenon set`，不接受 `--producer-skill <任意字符串>`
 - [x] **G3 W3 hook 控制面**（2026-07-19 完成，当前会话复验）：顺序 = 修 G1 的 P1 bug → 冷路径 projection（default 轨行为等价
       验证）→ 补 custom breadcrumb/skills 数据源 → 矩阵并入视图 → 只读 registry →
       **最后才**开放 settings 写入。CC 硬限制：native hook 只能添加/移除/撤销移除，
       不能伪装成开关（`HookMeta.configurable: boolean` → `policy: 'toggleable'|'required'|
       'unsupported'`）
 - [x] **G4 W4 provider protocol（2026-07-16 按 codex 方案 D 改写，不再是"移植前作 adapter"）**：
-      〔2026-07-17 收官：a) 提包完成——29 文件迁 `packages/channel`（`@pipeline-lite/channel`），
+      〔2026-07-17 收官：a) 提包完成——29 文件迁 `packages/channel`（`@tenon/channel`），
       kernel 不再导出 channel、CLI 4 文件重连、bundle 内联无残留 kernel 引用、包零依赖零 tsconfig
       references；b) 兼容面定位已标注（`channel/src/index.ts` + `commands/channel.md` + `README.md`
       均标"历史迁移 / experimental 兼容面，非 v3 默认 agent runtime"）；c) `loop run` 归 H14
       （AFK 实现、不依赖 channel）。codex round1 判"文档定位缺失 + channel.md 失效路径"不通过，
       修正两项后为 conditional pass——代码提包六项技术接线无运行时阻断，收官。〕
       a) channel 子系统从 `kernel` 提取为独立 workspace 包（如 `packages/channel`），kernel 不
-      再导出 channel，CLI 是唯一依赖者，保留全部测试/事件格式/`pipeline channel` 兼容入口；
+      再导出 channel，CLI 是唯一依赖者，保留全部测试/事件格式/`tenon channel` 兼容入口；
       b) channel 标记"历史迁移能力"：保留 echo 能力，**不移植 Claude/Codex adapter、不新增
       server endpoint、不新增 dashboard 页面、不声称是 v3 默认 agent runtime**；
-      c) `pipeline loop run` 用 AFK 实现（见 H14），不依赖 channel。
+      c) `tenon loop run` 用 AFK 实现（见 H14），不依赖 channel。
       **重开 channel 投资的条件**（同时满足才重开）：出现具名产品场景确实需要运行中多轮输入/
       interrupt-resume/跨进程事件重放/多长驻 worker 协作 + 已证明 AFK 批处理沙箱与 Claude/Codex
       原生能力无法满足 + 有真实调用方（不只是 CLI demo）+ 先完成真实 provider 的 headless e2e +
@@ -271,7 +271,7 @@ brainstorming（`/goal` 仪式，AskUserQuestion 拍板 3 处分歧）。原始�
       routing 默认关）；server GET/POST/PATCH/DELETE /api/tracks（Host/token 防线+revision
       409）；删除引用扫描；doctor orphan 报告。零 G2 依赖。
       〔设计定稿 2026-07-17，codex 全文 scratchpad/codex/r3-design-decisions.txt，实施任务书
-      r3-impl-brief.md〕命名改 Commander 真子命令树 `pipeline tracks list/show/create/update/delete`
+      r3-impl-brief.md〕命名改 Commander 真子命令树 `tenon tracks list/show/create/update/delete`
       （--policy <chat|pm|frontend|backend> 深拷贝 builtin policy 作模板、--workflow-any 表 '*'）；
       kernel 新增 **mutate-under-lock 原语**（mutateTrackRegistry：仓级锁内 read→引用扫描→构造 next→
       全量校验→atomic rename，不嵌套 writeTrackRegistry）；补跨锁 TOCTOU **共同锁序 `registry 锁 →
@@ -413,7 +413,7 @@ brainstorming（`/goal` 仪式，AskUserQuestion 拍板 3 处分歧）。原始�
       绝不留一个假的 `--auto-fix` 兼容旗）
 
 **loop run 命令（★硬需求，W5 收口动作，不是起点）**
-- [x] **H14**（2026-07-19 完成；强制真实 Codex/Docker 验收 10/10、零 skip） `pipeline loop run <loop-id|pattern> [--dry-run] [--level] [--commit]`：
+- [x] **H14**（2026-07-19 完成；强制真实 Codex/Docker 验收 10/10、零 skip） `tenon loop run <loop-id|pattern> [--dry-run] [--level] [--commit]`：
       命令行显式指定归属（`loop_id` 写进 `RunRecord`，不靠名字前缀猜）+ 真执行（不是打印计划）
       + 产出被提交。**用 AFK 实现**（对齐 codex 方案 D 与 G4）：
       - selector 真正把 `<loop-id|pattern>` 限定到对应 change；
@@ -472,7 +472,7 @@ brainstorming（`/goal` 仪式，AskUserQuestion 拍板 3 处分歧）。原始�
       字段消歧，功能等价但字面上不是"新增 current_step 字段取代 phase"。**2026-07-08
       whole-branch review 补**：11 个任务原本没有留下任何支持的命令把一个 change 摆到自定义
       workflow 的首个 step 上（`set phase` 被 manifest 枚举挡下、`migrate-workflow` 只处理
-      已存在的 change）——已补 `pipeline init --workflow <name>`（真加载校验后种
+      已存在的 change）——已补 `tenon init --workflow <name>`（真加载校验后种
       `phase=steps[0].id`），见 `docs/TEST-REALITY.md` init 行。
 - [x] E2 skill DAG 依赖：`depends_on` 声明（同 step 内，`skillDag.ts`/Task 6），取代已否决的
       parallel/serial 分组方案；无依赖 skill 天然并行，多依赖精确表达交叉依赖关系
@@ -499,7 +499,7 @@ brainstorming（`/goal` 仪式，AskUserQuestion 拍板 3 处分歧）。原始�
       做真实 DAG 判定（自定义 workflow 依赖图不值得在 bash 里重新实现一遍）——已作为 CONTRACT
       §5.4 的显式披露例外回写，`tools/test-hooks.sh` 把 `gate.sh` 从"零 node"红线清单里
       单独摘出并改断言"仅此一处合法引用"，非静默破例
-- [x] E7 旧格式迁移工具：`pipeline migrate-workflow`（Task 10），类比现有 `pipeline import`，
+- [x] E7 旧格式迁移工具：`tenon migrate-workflow`（Task 10），类比现有 `tenon import`，
       一次性迁移，不做运行时双格式兼容
 - [x] E8 workflow 编辑器 UI：真画布节点连线图（`@xyflow/react`，两层：顶层 step 拓扑 +
       钥入某 step 看 skill DAG，同画布切数据源）。已知简化点（非阻塞，登记见
@@ -546,8 +546,8 @@ brainstorming（`/goal` 仪式，AskUserQuestion 拍板 3 处分歧）。原始�
 > golden-oracle 每轮 0 不一致、零伪测试。
 >
 > **✅ #29-wire / #34-wire 部署接线双双翻真跑（2026-07-07 iteration-30）**：拿到 docker 环境后，
-> AFK docker 执行（`pipeline afk run` 真调 automation.runRound + 真容器 + 真 git worktree/merge-back
-> + 真 barrier build_sha）与 tap daemon 启动器（`pipeline tap start` 真绑端口 + CA/TLS MITM +
+> AFK docker 执行（`tenon afk run` 真调 automation.runRound + 真容器 + 真 git worktree/merge-back
+> + 真 barrier build_sha）与 tap daemon 启动器（`tenon tap start` 真绑端口 + CA/TLS MITM +
 > bedrock/ws 记录路径真接活）均已真跑验证，不再是 report-only 占位。
 >
 > **iteration-31（真 token 验证 full CC-in-sandbox）**：用户提供真 CLAUDE_CODE_OAUTH_TOKEN 并要求
@@ -556,11 +556,11 @@ brainstorming（`/goal` 仪式，AskUserQuestion 拍板 3 处分歧）。原始�
 > `--dangerously-skip-permissions` 会挂死）。**tap 代理真实拦截+记录+转发了 4 条完整请求到真
 > `api.anthropic.com`**（含真实 claude-cli User-Agent/系统提示词/Bearer 头，证明"走代理不直连"
 > 约束真实成立）；该 token 被 Anthropic 真服务端拒绝（401，非本仓代码问题，未耗真实额度）——
-> **agent 编码这一步本身仍待有效凭证验证**，如实登记不虚报为通过。详见 docs/superiority-matrix.md
-> （逐维证据）+ docs/TEST-REALITY.md（真测审计）+ progress.md。
+> **agent 编码这一步本身仍待有效凭证验证**，如实登记不虚报为通过。详见
+> docs/TEST-REALITY.md（真测审计）+ progress.md。
 >
 > **✅ iteration-32（G6 闭环：full CC-in-sandbox「agent 真编码成功」真跑验证通过）**：拿到有效
-> `sk-ant-oat01-...` token 后真跑到底——agent 真读 design_doc、真建文件、真 git commit，`git show`
+> 有效测试凭证后真跑到底——agent 真读 design_doc、真建文件、真 git commit，`git show`
 > 独立核验（非只信 agent 自报）；tap 记录 8 条真请求逐字确认 `upstream_base_url:
 > https://api.anthropic.com` + 真 `anthropic-beta: oauth-2025-04-20` + `response.status: 200`。
 > 真跑过程中抓出并修复 2 个此前从未被有效凭证触发过的沙箱环境真缺口（alpine 缺 bash/SHELL 未设
@@ -594,9 +594,9 @@ brainstorming（`/goal` 仪式，AskUserQuestion 拍板 3 处分歧）。原始�
       提取为非核心兼容包（`packages/channel`）并冻结 adapter/dashboard 扩建；loop 执行主链
       改由 A5 automation/AFK 承担。详见「终态 v3.0」清单 G4、非目标。这不是篡改历史：GOAL 本身
       已说明进入新阶段后"与老仓行为等价"不再是新功能验收约束，A4 原记录原样保留。
-- [x] **A5 automation / AFK Sandcastle（M5）✅**：队列+scheduler+lifecycle+L1→L3(#29) + server afk 数据端(#29d) + docker 全链真实现+真 git worktree/merge-back 冲突留现场(#29c) + **#29-wire 部署接线真跑**（iteration-30：`pipeline afk run` 真调 automation.runRound(createDockerRunChange) + 真容器 + 真 merge-back，sandcastle:test 镜像 e2e 验证）；full agent-in-sandbox 支线（含 CLAUDE_CODE_OAUTH_TOKEN 门控）已用有效凭证真跑验证通过（iteration-32）
-- [x] **A6 竞品缺口（M6）✅**：上下文压缩(B13)+auto-transition(B14)+Cursor 转正(B15)+Trellis parity(B16)+npx 上手(B17) 全收编
-- [x] **A7 tap 流量代理（M8）✅**：daemon+proxy+trace_store+护栏(#34) + traffic 数据端(#34d) + ws 重组/bedrock/本地 CA·TLS MITM(#34b，node v24 真跑) + 13 runtime clients(#34c) + **#34-wire 部署接线真跑**（iteration-30：daemon 接 CertificateAuthority.fromDir、launch.ts 真装配 detectTarget+env 注入、record 路径真接 bedrock 解码 + 全新 ws-proxy.ts 中继首次接活 ws-reconstruct、`pipeline tap start` 全新 CLI 入口）
+- [x] **A5 automation / AFK Sandcastle（M5）✅**：队列+scheduler+lifecycle+L1→L3(#29) + server afk 数据端(#29d) + docker 全链真实现+真 git worktree/merge-back 冲突留现场(#29c) + **#29-wire 部署接线真跑**（iteration-30：`tenon afk run` 真调 automation.runRound(createDockerRunChange) + 真容器 + 真 merge-back，sandcastle:test 镜像 e2e 验证）；full agent-in-sandbox 支线（含 CLAUDE_CODE_OAUTH_TOKEN 门控）已用有效凭证真跑验证通过（iteration-32）
+- [x] **A6 工作流能力补强（M6）✅**：上下文压缩(B13)+auto-transition(B14)+Cursor 转正(B15)+scaffold 契约收尾(B16)+npx 上手(B17) 全收编
+- [x] **A7 tap 流量代理（M8）✅**：daemon+proxy+trace_store+护栏(#34) + traffic 数据端(#34d) + ws 重组/bedrock/本地 CA·TLS MITM(#34b，node v24 真跑) + 13 runtime clients(#34c) + **#34-wire 部署接线真跑**（iteration-30：daemon 接 CertificateAuthority.fromDir、launch.ts 真装配 detectTarget+env 注入、record 路径真接 bedrock 解码 + 全新 ws-proxy.ts 中继首次接活 ws-reconstruct、`tenon tap start` 全新 CLI 入口）
 - [x] **A0 7-phase 状态机 + 三门 + CLI + 单文件分发 + 导入工具**（v0.1，iteration-0~9，oracle 0 不一致）
 
 ## 清单 B · 修改与优化点（迁移 ≠ 平移——每条都是对老仓的改进承诺）
@@ -604,25 +604,25 @@ brainstorming（`/goal` 仪式，AskUserQuestion 拍板 3 处分歧）。原始�
 **架构**
 - [x] B1 单语言 TS 内核：三读取器契约构造性消灭（iteration-1）
 - [x] B2 manifest 单一真相源：引擎真读 review_phases，修老仓半接线欠账（flow.test 回归锚）
-- [x] B3 历史存储去变形：JSONL 侧文件替代 base64 塞 YAML + `pipeline import` 迁移（iteration-2/8）
+- [x] B3 历史存储去变形：JSONL 侧文件替代 base64 塞 YAML + `tenon import` 迁移（iteration-2/8）
 - [x] B4 全局 server 版本抢占（#25）：旧版本 SIGTERM 让位，真进程 e2e（修老仓欠账 #3）
 - [x] B5 dashboard 写端点 token 鉴权（#25）：crypto 256-bit + 0600 握手 + 常量时间比较，POST 无 token 401（修老仓欠账 #4）
 - [x] B6 构造级模块化（#25~#39）：kernel/server/dashboard/tap/automation 独立 workspace 包 + snapshot capability 声明、前端按声明渲染
 - [x] B7 hook 热路径纯 bash 红线：制度化为测试自证（grep -c node = 0，iteration-1/7）
-- [x] B8 降级可见（#26b/#34e）：`pipeline doctor` 11 项保障生效清单 + tap 敏感能力明示（补老仓 _pipeline_health 无统一面）
+- [x] B8 降级可见（#26b/#34e）：`tenon doctor` 11 项保障生效清单 + tap 敏感能力明示（补老仓 _pipeline_health 无统一面）
 - [x] B9 注释考古不入代码：历史入 docs/进度流水，代码只留当前约束（全仓执行中）
 
 **UI（老仓四病灶的解法）**
-- [x] B10 收件箱：`pipeline inbox`/`--html`——默认回答"在等我什么决定"（iteration-5/6）；M3 里升级为 dashboard 默认落地页
+- [x] B10 收件箱：`tenon inbox`/`--html`——默认回答"在等我什么决定"（iteration-5/6）；M3 里升级为 dashboard 默认落地页
 - [x] B11 statusline：终端内零开销状态（iteration-7）
 - [x] B12 操作与配置分离 + debug 降级（#26）：收件箱/看板/设置三视图 + Advanced 折叠，一级导航恰 3 项
 
-**竞品缺口（Comet / Trellis 对标分析的全部遗留）**
-- [x] B13 上下文压缩（#30 iteration-21）：phase handoff 确定性压缩（实测 45.4% > Comet 25-30%），零 LLM 可 oracle
-- [x] B14 auto-transition 中间档（#31 iteration-21）：`pipeline advance` guard 全绿自动推进、复核相位+三门必停（HITL 红线三重证明，> Comet AUTO-TRANSITION）
+**工作流能力补强**
+- [x] B13 上下文压缩（#30 iteration-21）：phase handoff 确定性压缩（实测 45.4%，门槛 ≥25%），零 LLM 可 oracle
+- [x] B14 auto-transition 中间档（#31 iteration-21）：`tenon advance` guard 全绿自动推进、复核相位+三门必停（HITL 红线三重证明）
 - [x] B15 Cursor 适配器转正（#39 iteration-22）：spike→可发布，veto/track native + inject 降级 .cursor/rules，修「声明 track 却不写 history」病灶
-- [x] B16 Trellis parity 收尾（#33 iteration-23）：8 partial + 1 missing 全处置（3 实现 + 1 忠实占位 + 5 诚实 N-A）
-- [x] B17 npx 一行上手：5 分钟心智模型路径（iteration-4，Trellis 简单性教训的落实）
+- [x] B16 scaffold 契约收尾（#33 iteration-23）：8 partial + 1 missing 全处置（3 实现 + 1 忠实占位 + 5 诚实 N-A）
+- [x] B17 npx 一行上手：5 分钟心智模型路径（iteration-4）
 
 **loop-engineering 思想内建（2026-07-06 用户指令，对标 cobusgreyling/loop-engineering + 老仓 loops 子系统）**
 - [x] B18 loop 治理子系统（#35 iteration-19）：loops registry（schema 校验的登记表）+ enforce 裁决
@@ -632,27 +632,26 @@ brainstorming（`/goal` 仪式，AskUserQuestion 拍板 3 处分歧）。原始�
       + 成本估算（cadence×pattern），扩展 #35 loops、enforce 零改动
 - [x] B21 漂移检测与就绪审计（#37）：7 维 drift 对账 + 0-100 loop-ready 评分
 
-## 清单 D · 竞争超越判据（2026-07-06 用户指令：任何方面都超过 Trellis 与 Comet）
+## 清单 D · 核心能力验收判据
 
-对两个对标项目的每个核心维度，本仓必须做到"≥ 且核心维度 >"。勾选需给出逐维对比证据
-（docs/superiority-matrix.md，随里程碑更新）：
+每个核心维度都必须有可复现的实现、契约与验证证据：
 
-**vs Trellis（11.8k★）**
-- [x] D1 规范持久化与自动注入（#20/#18）：SessionStart 三注入 + manifest 单源 ≥ Trellis
-- [x] D2 任务/状态结构化：`.pipeline.yaml` 37 字段 + 7 相位 > Trellis task PRD 三态（v0.1）
-- [x] D3 会话记忆/journal（#28/#7）：mem 跨 3 runtime 检索 + history JSONL ≥ Trellis workspace journal
-- [x] D4 真实工具链验证（#12/#29c）：check/guard 46 规则全量面 + automation docker 沙箱 verify > trellis-check
-- [x] D5 学习回写闭环（#22）：learn-record 三层回写 ≥ trellis-update-spec
-- [x] D6 简单性：npx 一行上手 + 5 分钟心智模型 ≥ trellis init（iteration-4）
-- [x] D7 多平台策略面（#39/#40/iteration-33）：适配器框架 + 224 conformance 断言 + 分档降级 A/B/C，active 12（claude/codex/cursor/gemini/copilot/pi/devin/aider/continue/cline/amp/zed，longtail 已清零）（conformance 机器校验 > Trellis 手工投影）
-**vs Comet（2k★）**
-- [x] D8 脚本守门状态机：三门 hook 硬拦 + guard 46 规则 + CAS/锁 > comet-guard（#12）
-- [x] D9 dashboard（#25/#26/#26c）：全局 server + 收件箱默认视图 + token 鉴权 + 版本抢占 > comet 只读面板
-- [x] D10 doctor 健康面（#26b/#34e）：11 项保障生效清单 + tap 敏感能力明示 > comet doctor 安装诊断
-- [x] D11 上下文压缩（#30）：确定性压缩 45.4% > Comet 25-30%（且可 oracle）
-- [x] D12 auto-transition（#31）：中间档 + HITL 红线三重证明 > Comet AUTO-TRANSITION
+**规范与交付**
+- [x] D1 规范持久化与自动注入（#20/#18）：SessionStart 三注入 + manifest 单源
+- [x] D2 任务/状态结构化：`.pipeline.yaml` 37 字段 + 7 相位（v0.1）
+- [x] D3 会话记忆/journal（#28/#7）：mem 跨 3 runtime 检索 + history JSONL
+- [x] D4 真实工具链验证（#12/#29c）：check/guard 46 规则全量面 + automation docker 沙箱 verify
+- [x] D5 学习回写闭环（#22）：learn-record 三层回写
+- [x] D6 简单性：npx 一行上手 + 5 分钟心智模型（iteration-4）
+- [x] D7 多平台策略面（#39/#40/iteration-33）：适配器框架 + 224 conformance 断言 + 分档降级 A/B/C，active 12（claude/codex/cursor/gemini/copilot/pi/devin/aider/continue/cline/amp/zed，longtail 已清零）
+**运行与运维**
+- [x] D8 脚本守门状态机：三门 hook 硬拦 + guard 46 规则 + CAS/锁（#12）
+- [x] D9 dashboard（#25/#26/#26c）：全局 server + 收件箱默认视图 + token 鉴权 + 版本抢占
+- [x] D10 doctor 健康面（#26b/#34e）：11 项保障生效清单 + tap 敏感能力明示
+- [x] D11 上下文压缩（#30）：确定性压缩 45.4%（且可 oracle）
+- [x] D12 auto-transition（#31）：中间档 + HITL 红线三重证明
 - [x] D13 可恢复工作流：断点恢复不依赖对话历史（.pipeline.yaml 真相源，v0.1 oracle 验证）
-- [x] D14 平台广度（#39/#40/iteration-33）：可移植内核 + 填表式扩展经 9 平台实证（一次转 active 跨 A/B/C 档，含长尾 5 平台真实现，2 项经查证由目标档升级）；策略面 > Comet 手工 30（本仓 conformance 保证等价性）
+- [x] D14 平台广度（#39/#40/iteration-33）：可移植内核 + 填表式扩展经 9 平台实证（一次转 active 跨 A/B/C 档，含长尾 5 平台真实现，2 项经查证由目标档升级）；conformance 保证等价性
 **vs 两者皆无（差异化护城河）**
 - [x] D15 golden-oracle 行为等价迁移法（双跑逐字 diff——两家都没有的质量证据链）
 - [x] D16 loop-engineering 治理（#35/#36/#37/#38）✅闭环：registry+enforce R1-R11+L1→L3 毕业制+budget/circuit-breaker+drift/loop-ready 审计+graduation 执行面——两竞品都无此面（独有护城河）
@@ -667,7 +666,7 @@ brainstorming（`/goal` 仪式，AskUserQuestion 拍板 3 处分歧）。原始�
 - [x] C6 **复杂度预算**：核心 kernel+cli 独立 workspace 包，channel/mem/automation/tap/server/dashboard 各自独立可选装（npm workspaces 分包）；npx 一行上手路径全程保持
 - [x] C7 **契约实测回写**：文档口径与实测冲突时以实测为准并回写 CONTRACT，留审计记录
 - [x] C8 **流水可审计**：每轮 progress.md 记录证据（测试计数/oracle 结果/commit hash），诚实记录瑕疵
-- [x] **C9 无伪测试 · 真实且全量（2026-07-07 用户指令，向 Trellis 学习）✅**：任何功能不得
+- [x] **C9 无伪测试 · 真实且全量（2026-07-07 用户指令）✅**：任何功能不得
       仅以 mock 单测收编——每条 CLI 命令 / 每个子系统必须有**驱动真实实现、真实文件系统、
       真实子进程**的端到端测试（真跑 kernel createStateStore/createFlowEngine、真跑编译产物、
       真跑 hooks 脚本）。mock 单测可留作快速回归，但**收编门以真实 e2e 绿为准**。
@@ -690,5 +689,5 @@ oracle 双跑 0 不一致；lite 写 → 老内核读交叉验证通过；vitest
 
 1. 老内核 bash 7.2 万行已过维护经济性拐点，python3 已是关键路径硬依赖——"纯 bash 可移植"前提不再成立。
 2. 三读取器契约靠纪律防漂移，单语言构造性消灭。
-3. 竞品对照（comet 2k★ / Trellis 11.8k★）：赢用户靠"5 分钟建立心智模型"，不是功能面。
+3. 赢用户靠"5 分钟建立心智模型"，不是功能数量。
 4. base64 历史塞 YAML 的存储变形 → JSONL 侧文件。

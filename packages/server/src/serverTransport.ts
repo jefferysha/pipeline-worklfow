@@ -146,7 +146,7 @@ function serveIndexWithToken(res: ServerResponse): boolean {
   try {
     let html = readFileSync(join(webRoot, 'index.html'), 'utf8')
     const jsToken = JSON.stringify(token).replace(/</g, '\\u003c')
-    const inject = `<script>window.__PIPELINE_DASHBOARD_TOKEN__ = ${jsToken};</script>`
+    const inject = `<script>window.__TENON_DASHBOARD_TOKEN__ = ${jsToken};</script>`
     html = html.includes('</head>') ? html.replace('</head>', `${inject}</head>`) : `${inject}${html}`
     sendHtml(res, 200, html)
     return true

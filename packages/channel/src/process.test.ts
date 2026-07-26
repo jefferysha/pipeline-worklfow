@@ -67,7 +67,7 @@ describe('nodeProcessFace 真 fork + 真信号（非 mock）', () => {
 
   test('spawn 不存在的二进制 → onError（pre-spawn 失败，ENOENT）', async () => {
     const proc = nodeProcessFace()
-    const child = proc.spawn('trellis-no-such-binary-xyz-123', [])
+    const child = proc.spawn('tenon-no-such-binary-xyz-123', [])
     const err = await new Promise<Error>((resolve) => {
       child.onError(resolve)
       child.onSpawn(() => resolve(new Error('unexpected spawn')))

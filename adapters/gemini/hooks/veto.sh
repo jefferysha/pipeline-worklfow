@@ -19,7 +19,7 @@ if [ -z "$_ROOT" ] || [ ! -d "$_ROOT/hooks" ]; then
 fi
 export CLAUDE_PLUGIN_ROOT="$_ROOT"
 
-CC_GATE="${PIPELINE_CC_GATE:-$_ROOT/hooks/gate.sh}"
+CC_GATE="${TENON_CC_GATE:-$_ROOT/hooks/gate.sh}"
 [ -f "$CC_GATE" ] || exit 0
 
 printf '%s' "$INPUT" | bash "$CC_GATE"

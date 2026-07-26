@@ -66,7 +66,7 @@ export function SolutionView(): JSX.Element {
           <div className="mt-8 flex min-w-0 max-w-full flex-wrap gap-3">
             <Button asChild size="lg" className="min-w-0 max-w-full whitespace-normal bg-(--btn-hover) text-(--btn-fg) transition-colors motion-reduce:transition-none hover:bg-(--btn-hover)/90">
               <a
-                href="https://github.com/jefferysha/pipeline-worklfow/blob/main/docs/usage/README.md"
+                href="https://github.com/jefferysha/tenon/blob/main/docs/usage/README.md"
                 target="_blank"
                 rel="noreferrer noopener"
               >
@@ -76,7 +76,7 @@ export function SolutionView(): JSX.Element {
             </Button>
             <Button asChild size="lg" variant="outline" className="min-w-0 max-w-full whitespace-normal transition-colors motion-reduce:transition-none">
               <a
-                href="https://github.com/jefferysha/pipeline-worklfow"
+                href="https://github.com/jefferysha/tenon"
                 target="_blank"
                 rel="noreferrer noopener"
               >
@@ -227,11 +227,11 @@ export function SolutionView(): JSX.Element {
             <div className="mt-6 space-y-5">
               <div>
                 <h3 className="mb-2 font-semibold text-text">{t('solution.install.codex_title')}</h3>
-                <pre className="overflow-x-auto rounded-xl border border-code-border bg-code-bg p-4 text-sm text-text"><code>pipeline setup --codex</code></pre>
+                <pre className="overflow-x-auto rounded-xl border border-code-border bg-code-bg p-4 text-sm text-text"><code>tenon setup --codex</code></pre>
               </div>
               <div>
                 <h3 className="mb-2 font-semibold text-text">{t('solution.install.claude_title')}</h3>
-                <pre className="overflow-x-auto rounded-xl border border-code-border bg-code-bg p-4 text-sm text-text"><code>pipeline setup --claude</code></pre>
+                <pre className="overflow-x-auto rounded-xl border border-code-border bg-code-bg p-4 text-sm text-text"><code>tenon setup --claude</code></pre>
               </div>
             </div>
             <p className="mt-5 text-sm leading-6 text-muted-foreground">{t('solution.install.endpoint')}</p>

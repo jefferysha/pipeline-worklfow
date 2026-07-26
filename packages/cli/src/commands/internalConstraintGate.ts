@@ -1,7 +1,7 @@
 /** Container-private H5 constraint gate. The parent wrapper supplies immutable policy env after the agent exits. */
 import { readFileSync } from 'node:fs'
-import { evaluateConstraintPolicy, validateAutomationPolicySnapshot } from '@pipeline-lite/kernel'
-import { matchesPathGlob } from '@pipeline-lite/automation'
+import { evaluateConstraintPolicy, validateAutomationPolicySnapshot } from '@tenon/kernel'
+import { matchesPathGlob } from '@tenon/automation'
 import type { CliDeps } from '../deps.js'
 
 export async function cmdInternalConstraintGate(
@@ -14,8 +14,8 @@ export async function cmdInternalConstraintGate(
     return 1
   }
   try {
-    const encoded = deps.env?.('PIPELINE_AUTOMATION_POLICY_B64')
-    if (!encoded) throw new Error('PIPELINE_AUTOMATION_POLICY_B64 missing')
+    const encoded = deps.env?.('TENON_AUTOMATION_POLICY_B64')
+    if (!encoded) throw new Error('TENON_AUTOMATION_POLICY_B64 missing')
     const policy = validateAutomationPolicySnapshot(JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8')))
     const rawPaths = readFileSync(nulPathsFile)
     const decodedPaths = rawPaths.toString('utf8')

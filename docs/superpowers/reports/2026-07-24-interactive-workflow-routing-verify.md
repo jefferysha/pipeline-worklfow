@@ -39,9 +39,9 @@ remaining issue.
 ### Independent reviewer
 
 - Initial cycle: FAIL, HIGH. `hooks/router.sh` classified a candidate as custom only when
-  `builtin=0`, so an allowed built-in `frontend → pet-adoption` override skipped selection.
+  `builtin=0`, so an allowed built-in `frontend → catalog-flow` override skipped selection.
 - Corrected cycle: PASS, no findings.
-  - Built-in `frontend → pet-adoption` now emits `workflow: select`, candidate pairs,
+  - Built-in `frontend → catalog-flow` now emits `workflow: select`, candidate pairs,
     `selection_required: true`, and the correct recommendation.
   - Canonical plugin policy `simple → simple` still emits `workflow: simple`, `phase: change`, and
     no selection gate.

@@ -3,7 +3,7 @@ name: openspec-apply-change
 description: First-party application of a change delta spec into durable main OpenSpec evidence.
 license: MIT
 metadata:
-  author: pipeline-lite
+  author: tenon
   version: "2.0.0"
 ---
 
@@ -12,7 +12,7 @@ metadata:
 ## Document language
 
 The applied specification follows the Change-pinned locale and defaults to Chinese. Use
-`pipeline document scaffold <change> applied-spec` for a missing structure, then replace every
+`tenon document scaffold <change> applied-spec` for a missing structure, then replace every
 placeholder with truthful delivery content in that pinned locale. Keep paths, document kinds, producer ids,
 commands, hashes, and OpenSpec machine tokens in English. A scaffold is not evidence that this
 Skill ran.
@@ -20,11 +20,11 @@ Skill ran.
 Apply approved delta specifications using the files already owned by the pipeline. This is normally
 called in ship after verification, and it does not invoke an external OpenSpec CLI.
 
-1. Resolve the active change using `pipeline status <change>` and confirm `phase=ship` plus
+1. Resolve the active change using `tenon status <change>` and confirm `phase=ship` plus
    `verify_result=pass`. Read the governed inputs first:
 
    ```bash
-   pipeline document read "<change>" all
+   tenon document read "<change>" all
    ```
 
 2. For every `openspec/changes/<change>/specs/<capability>/spec.md`, read the delta and its target
@@ -42,9 +42,9 @@ called in ship after verification, and it does not invoke an external OpenSpec C
 
    ```bash
    CHANGE="<change>"
-   pipeline document record "$CHANGE" applied-spec \
+   tenon document record "$CHANGE" applied-spec \
      "openspec/changes/$CHANGE/applied-spec.md" --producer openspec-apply-change
-   pipeline document status "$CHANGE"
+   tenon document status "$CHANGE"
    ```
 
 5. Report the applied paths and remaining release work. Do not push, create a pull request, or

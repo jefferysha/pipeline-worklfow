@@ -4,7 +4,7 @@
  * #29 的 runChangeInSandbox 是纯编排 + 注入 port；本工厂提供**真实现**（不改 lifecycle 编排核心）：
  *   worktree      → 真 git worktree add/remove（worktree.ts）
  *   createSandbox → 真 docker 容器 + git 双挂载（container.ts + gitMounts.ts）
- *   runWork       → 沙箱内 pipeline-afk-run + 三路 race（idle/grace/abort）+ 结构化握手解析（race.ts + runner.ts）
+ *   runWork       → 沙箱内 tenon-afk-run + 三路 race（idle/grace/abort）+ 结构化握手解析（race.ts + runner.ts）
  *                   + 结算（成功/失败）落盘完整 stdout+stderr 到 host 侧
  *                   openspec/changes/<name>/.sandcastle-run.log（afk-workbench Task 2；不是
  *                   automation_last_error 里那 200 字符截断片段——teardown 现场缺口修复见
@@ -16,14 +16,14 @@
  *   mergeToBase   → 真 git merge DELIVERY + 冲突留现场（mergeback.ts）—— 仅 L3 调
  *   git           → 真 git rev-parse（barrier build_sha 派生）
  *
- * 真部署调用链：packages/cli/src/commands/afk.ts::cmdAfk（`pipeline afk run`）→
+ * 真部署调用链：packages/cli/src/commands/afk.ts::cmdAfk（`tenon afk run`）→
  * createDockerRunChange（sdk/dockerRunChange.ts，在此装配本工厂）→ automation.runRound。默认
  * L1 report-only（autoMerge=false → 不调 mergeToBase），仅 L3 真 merge-back。
  */
 import { constants } from 'node:fs'
 import { lstat, mkdir, open, readFile, readdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { assertLoopRunner } from '@pipeline-lite/kernel'
+import { assertLoopRunner } from '@tenon/kernel'
 import type { PreparedSkillBundle } from '../admission/execution-context.js'
 import { BoundedTail, MAX_TAIL_CHARS } from '../runner/boundedTail.js'
 import {
@@ -218,8 +218,8 @@ async function assertCommittedCasSnapshot(hostCasDir: string, digest: string): P
  * 本核验发生在 createDockerSandbox 之前，能更早拦截已损坏快照；它与容器入口复核职责不同：
  * host 校验后到 docker cp 完成之间仍有真实 TOCTOU 窗口。ports 随后起无 CAS bind mount 的容器，
  * docker cp 后以 root 封存；真正不可跳过、发生在 agent 启动前的权威复核在容器执行链内部：
- * `tools/sandcastle/pipeline-afk-run.sh`（Claude/Codex 两条 agent 分派分支起 agent
- * 前都会先重算聚合 digest 并与 `PIPELINE_SKILL_BUNDLE_SHA256` 比对），不一致时以
+ * `tools/sandcastle/tenon-afk-run.sh`（Claude/Codex 两条 agent 分派分支起 agent
+ * 前都会先重算聚合 digest 并与 `TENON_SKILL_BUNDLE_SHA256` 比对），不一致时以
  * `container.ts::SKILL_BUNDLE_VERIFY_FAIL_EXIT_CODE` 退出，见下方 `runWork` 对该退出码的识别。
  */
 async function verifySkillBundleSnapshot(hostCasDir: string, bundle: PreparedSkillBundle): Promise<void> {
@@ -335,7 +335,7 @@ export const createLifecyclePorts = (deps: LifecyclePortsDeps): LifecyclePorts =
       const env = filterRunnerEnvironment(runner, untrustedEnv)
       // git 双挂载：worktree 的 .git 是 gitdir: 指针 → 需父 .git 目录在同一绝对路径可解析。
       const gitMounts = await resolveGitMounts(join(worktreePath, '.git')).catch(() => [])
-      // 沙箱内工具（pipeline-afk-run 的 git commit / pipeline get）要看得见 worktree 的**工作文件**，
+      // 沙箱内工具（tenon-afk-run 的 git commit / tenon get）要看得见 worktree 的**工作文件**，
       // 故挂 worktree 目录本身（host==sandbox）；它已含 .git 指针文件，故丢掉 resolveGitMounts 里那条
       // 冗余的 .git 文件挂载，只保留父 .git 目录挂载（gitdir: 绝对路径经它解析）。
       const dotGit = join(worktreePath, '.git')
@@ -384,8 +384,8 @@ export const createLifecyclePorts = (deps: LifecyclePortsDeps): LifecyclePorts =
     },
 
     async runWork(sandboxExec, name, signal, runner) {
-      // v5 T20：runner 分派在命令构造点完成——'codex' → PIPELINE_RUNNER=codex 前缀，沙箱脚本
-      // （tools/sandcastle/pipeline-afk-run.sh）据此起 codex exec 无头会话；CLI 缺失时脚本打
+      // v5 T20：runner 分派在命令构造点完成——'codex' → TENON_RUNNER=codex 前缀，沙箱脚本
+      // （tools/sandcastle/tenon-afk-run.sh）据此起 codex exec 无头会话；CLI 缺失时脚本打
       // 清晰错误并非零退出，经下方 exitCode!==0 throw 流进 scheduler 写 automation_last_error。
       const cmd = buildAfkRunCommand(name, runner, deps.imageExpectation)
       // afk-workbench Task 2 teardown 修复：落盘位置是 host 侧 openspec/changes/<name>/，不是
@@ -416,7 +416,7 @@ export const createLifecyclePorts = (deps: LifecyclePortsDeps): LifecyclePorts =
 
       let res: ExecResult
       try {
-        // 三路 race：沙箱内 pipeline-afk-run 跑 build→verify→ship，idle/grace/abort 收口。
+        // 三路 race：沙箱内 tenon-afk-run 跑 build→verify→ship，idle/grace/abort 收口。
         res = await invokeWithRace(
           (onLine) =>
             sandboxExec(cmd, {
@@ -440,15 +440,15 @@ export const createLifecyclePorts = (deps: LifecyclePortsDeps): LifecyclePorts =
       const fullLog = [res.stdout, res.stderr].filter((s) => s.length > 0).join('\n')
       await persistLog(fullLog)
 
-      // H10 r1 复审阻断5（任务C1）：容器内 pipeline-afk-run.sh 在起 agent 前重算 skill bundle 聚合
-      // digest，与 PIPELINE_SKILL_BUNDLE_SHA256 不一致时以 container.ts::
+      // H10 r1 复审阻断5（任务C1）：容器内 tenon-afk-run.sh 在起 agent 前重算 skill bundle 聚合
+      // digest，与 TENON_SKILL_BUNDLE_SHA256 不一致时以 container.ts::
       // SKILL_BUNDLE_VERIFY_FAIL_EXIT_CODE 退出（此时脚本从未到达任何 agent 分派分支，agent 从未
       // 启动）。必须先于下方通用非零退出分支识别——抛与 host 侧 verifySkillBundleSnapshot 同一个
       // SkillBundleSnapshotMismatchError（同一 `_tag`），令 classify.ts 既有的 tag 分类（H10 任务
       // B1 已接线）自动把这条运行期路径也判成 cause:'skill-bundle-snapshot-corrupt'——
       // kind:'conflict'（绝不重试，也绝不会走到 runChangeInSandbox 后续的 mergeToBase）+
       // scheduler.ts::settlementFor 据此 charge:'none'（agent 从未启动，不按 reserved-estimate
-      // 收费）。缺 skill bundle 绑定的 run（PIPELINE_SKILL_BUNDLE_DIR 未注入）在脚本内直接跳过
+      // 收费）。缺 skill bundle 绑定的 run（TENON_SKILL_BUNDLE_DIR 未注入）在脚本内直接跳过
       // 校验整段，exitCode 不可能等于本保留码，这条分支对它们零影响。
       if (res.exitCode === SKILL_BUNDLE_VERIFY_FAIL_EXIT_CODE) {
         throw new SkillBundleSnapshotMismatchError(
@@ -456,7 +456,7 @@ export const createLifecyclePorts = (deps: LifecyclePortsDeps): LifecyclePorts =
         )
       }
       if (res.exitCode !== 0) {
-        throw new Error(`pipeline afk-run failed (exit ${res.exitCode}): ${res.stderr.slice(0, 200)}`)
+        throw new Error(`tenon afk-run failed (exit ${res.exitCode}): ${res.stderr.slice(0, 200)}`)
       }
       return parseSandboxReport(res.stdout) // 非零/畸形握手真抛错，绝不伪造 pass
     },

@@ -1,4 +1,4 @@
-import { canonicalizeTriageResult, validateObservationPage, validateObserveAction, validateTriageRoutes, type SourceCheckpoint } from '@pipeline-lite/kernel'
+import { canonicalizeTriageResult, validateObservationPage, validateObserveAction, validateTriageRoutes, type SourceCheckpoint } from '@tenon/kernel'
 import type { TriageCheckpointKey, TriageCheckpointSnapshot } from './checkpoint-store.js'
 import type { TriageProviderInvocation } from './provider.js'
 import type { WorkflowRunMaterialization } from './workflow-run-materializer.js'

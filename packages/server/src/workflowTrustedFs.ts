@@ -14,8 +14,8 @@ import {
   parseTrackRegistry, parseWorkflow, readCurrentRunRevisionFromSync, resolveWorkflowName,
   serializeWorkflow, unquoteScalar,
   validateTrackConfigStructure, validateWorkflow, validateWorkflowTrackReferences,
-} from '@pipeline-lite/kernel'
-import type { TrackDefinition, TrackRegistry, WorkflowDef } from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
+import type { TrackDefinition, TrackRegistry, WorkflowDef } from '@tenon/kernel'
 import {
   assertWorkflowRootAnchor,
   captureWorkflowRootAnchor,

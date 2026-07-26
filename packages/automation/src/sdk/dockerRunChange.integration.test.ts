@@ -2,7 +2,7 @@ import { mkdtemp, rm, readFile, access } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { builtinTrack, createStateStore, type VerificationResult } from '@pipeline-lite/kernel'
+import { builtinTrack, createStateStore, type VerificationResult } from '@tenon/kernel'
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { worktreePathFor } from '../lifecycle/worktree.js'
 import { dockerAvailable } from '../runner/docker.js'
@@ -71,11 +71,11 @@ const passAdmission = (level: 'L1' | 'L3'): LoopAdmission => ({
 
 /**
  * #29-wire 全链 e2e（诚实门，翻 automation docker honest-skip 的执行接线）：
- *   真 build sandcastle 镜像 → 真 docker 容器 → 真 git worktree（挂载）→ 沙箱内 pipeline-afk-run
+ *   真 build sandcastle 镜像 → 真 docker 容器 → 真 git worktree（挂载）→ 沙箱内 tenon-afk-run
  *   确定性 build commit → 回读 <output> 握手 → host collectCommits + barrier build_sha → L3 真 merge-back。
  *
  *   · 无 docker daemon → honest skip（ctx.skip，vitest 计 skipped）+ 打印缺什么，绝不伪绿。
- *   · 缺编译产物 packages/cli/dist/pipeline.mjs（先 npm run build）→ honest skip。
+ *   · 缺编译产物 packages/cli/dist/tenon.mjs（先 npm run build）→ honest skip。
  *   · full CC-in-sandbox（真 agent 编码）→ 需 CLAUDE_CODE_OAUTH_TOKEN + WITH_CLAUDE_CODE 镜像 → honest skip。
  *   · 任何路径都不为绿伪造 pass（非零退出真抛错、noop 真判、merge 冲突真留现场）。
  */
@@ -86,7 +86,7 @@ const testMergeJournal = {
 }
 const here = dirname(fileURLToPath(import.meta.url))
 const repoRoot = resolve(here, '..', '..', '..', '..') // sdk → src → automation → packages → root
-const bundlePath = join(repoRoot, 'packages', 'cli', 'dist', 'pipeline.mjs')
+const bundlePath = join(repoRoot, 'packages', 'cli', 'dist', 'tenon.mjs')
 const dockerfile = join(repoRoot, 'tools', 'sandcastle', 'Dockerfile')
 
 let hasDocker = false
@@ -112,7 +112,7 @@ describe('createDockerRunChange · 真 docker 全链执行（#29-wire）', () =>
     try {
       await access(bundlePath)
     } catch {
-      skipReason = '缺 packages/cli/dist/pipeline.mjs（先 npm run build）'
+      skipReason = '缺 packages/cli/dist/tenon.mjs（先 npm run build）'
       console.warn(`[HONEST SKIP] ${skipReason} → #29-wire 全链 IT 跳过`)
       return
     }
@@ -120,7 +120,7 @@ describe('createDockerRunChange · 真 docker 全链执行（#29-wire）', () =>
     const r = await nodeExec('docker', [
       'build', '-f', dockerfile, '-t', IMAGE,
       '--build-arg', 'WITH_CLAUDE_CODE=false',
-      '--build-arg', 'PIPELINE_TEST_ALLOW_DETERMINISTIC_FALLBACK=1',
+      '--build-arg', 'TENON_TEST_ALLOW_DETERMINISTIC_FALLBACK=1',
       repoRoot,
     ])
     if (r.exitCode !== 0) {
@@ -156,7 +156,7 @@ describe('createDockerRunChange · 真 docker 全链执行（#29-wire）', () =>
     return dir
   }
 
-  it('L3：真容器跑 pipeline-afk-run → 回读握手 → 真 merge-back 落 host base（automation=merged）', async (ctx) => {
+  it('L3：真容器跑 tenon-afk-run → 回读握手 → 真 merge-back 落 host base（automation=merged）', async (ctx) => {
     if (!imageReady) {
       ctx.skip()
       return

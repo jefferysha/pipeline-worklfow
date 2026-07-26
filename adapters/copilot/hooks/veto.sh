@@ -6,7 +6,7 @@
 #
 # 只做：argv($2)+stdin 双吃 → 归一 stdin JSON → 设 CLAUDE_PLUGIN_ROOT → 原样透传退出码与 stderr。
 # fail-safe：找不到 gate.sh → 放行（不因 wrapper 缺失卡死；contract §1 不伪装硬门）。
-# dual hookContainer 注意：本 wrapper 须由 .github/copilot/hooks.json 与 .github/hooks/trellis.json
+# dual hookContainer 注意：本 wrapper 须由 .github/copilot/hooks.json 与 .github/hooks/tenon.json
 #   两份都注册才生效（漏一份 copilot 引擎读不到 hook）——install.sh 同源写两份。
 # 用法：command = "<adapter>/hooks/veto.sh preToolUse"
 set -uo pipefail
@@ -20,7 +20,7 @@ if [ -z "$_ROOT" ] || [ ! -d "$_ROOT/hooks" ]; then
 fi
 export CLAUDE_PLUGIN_ROOT="$_ROOT"
 
-CC_GATE="${PIPELINE_CC_GATE:-$_ROOT/hooks/gate.sh}"
+CC_GATE="${TENON_CC_GATE:-$_ROOT/hooks/gate.sh}"
 [ -f "$CC_GATE" ] || exit 0
 
 printf '%s' "$INPUT" | bash "$CC_GATE"

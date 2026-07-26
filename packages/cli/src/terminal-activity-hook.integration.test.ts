@@ -37,13 +37,13 @@ describe('真实 e2e —— terminal-activity host hook', () => {
     expect(await h.run(['init', 'current', '--track', 'frontend', '--preset', 'full'])).toBe(0)
     const routed = runHook('router.sh', {
       prompt: '帮我实现一个响应式 React 页面', cwd: h.cwd, session_id: SESSION_ID,
-    }, { PIPELINE_ROUTER_CACHE: join(h.cwd, '.router-cache') })
+    }, { TENON_ROUTER_CACHE: join(h.cwd, '.router-cache') })
     expect(routed.code).toBe(0)
     expect(routed.stdout).toContain(`host_session_id: ${SESSION_ID}`)
 
     expect(await h.run(['session', 'activate', 'current', '--host-session', SESSION_ID])).toBe(0)
     const activity = runHook('terminal-activity.sh', {
-      cwd: h.cwd, tool_name: 'command_execution', session_id: SESSION_ID, turn_id: 'turn-current', command: 'pipeline status current',
+      cwd: h.cwd, tool_name: 'command_execution', session_id: SESSION_ID, turn_id: 'turn-current', command: 'tenon status current',
     })
     expect(activity.code, activity.stderr).toBe(0)
     const projection = JSON.parse(await readFile(join(h.cwd, 'openspec/changes/current/.pipeline-terminal-activity.json'), 'utf8')) as {
@@ -71,27 +71,28 @@ describe('真实 e2e —— terminal-activity host hook', () => {
   })
 
   test('同仓多会话恢复优先使用 host session 精确绑定，不受另一个会话覆盖 repo 指针影响', async () => {
-    expect(await h.run(['init', 'trellis-docs', '--track', 'frontend', '--preset', 'full'])).toBe(0)
-    expect(await h.run(['session', 'activate', 'trellis-docs', '--host-session', SESSION_ID])).toBe(0)
-    expect(await h.run(['init', 'comet-research', '--track', 'pm', '--preset', 'full'])).toBe(0)
-    expect(await h.run(['session', 'activate', 'comet-research'])).toBe(0)
+    expect(await h.run(['init', 'frontend-docs', '--track', 'frontend', '--preset', 'full'])).toBe(0)
+    expect(await h.run(['session', 'activate', 'frontend-docs', '--host-session', SESSION_ID])).toBe(0)
+    expect(await h.run(['init', 'market-research', '--track', 'pm', '--preset', 'full'])).toBe(0)
+    expect(await h.run(['session', 'activate', 'market-research'])).toBe(0)
 
-    const trellisDir = join(h.cwd, 'openspec/changes/trellis-docs')
-    const cometDir = join(h.cwd, 'openspec/changes/comet-research')
-    await mkdir(trellisDir, { recursive: true })
-    await writeFile(join(trellisDir, '.breadcrumb'), 'TRELLIS_BREADCRUMB\n', 'utf8')
-    await writeFile(join(cometDir, '.breadcrumb'), 'COMET_BREADCRUMB\n', 'utf8')
+    const frontendDocsDir = join(h.cwd, 'openspec/changes/frontend-docs')
+    const marketResearchDir = join(h.cwd, 'openspec/changes/market-research')
+    await mkdir(frontendDocsDir, { recursive: true })
+    await mkdir(marketResearchDir, { recursive: true })
+    await writeFile(join(frontendDocsDir, '.breadcrumb'), 'FRONTEND_BREADCRUMB\n', 'utf8')
+    await writeFile(join(marketResearchDir, '.breadcrumb'), 'RESEARCH_BREADCRUMB\n', 'utf8')
 
     const payload = { prompt: '继续执行', cwd: h.cwd, session_id: SESSION_ID }
-    const routed = runHook('router.sh', payload, { PIPELINE_ROUTER_CACHE: join(h.cwd, '.router-cache') })
+    const routed = runHook('router.sh', payload, { TENON_ROUTER_CACHE: join(h.cwd, '.router-cache') })
     expect(routed.code, routed.stderr).toBe(0)
     expect(routed.stdout).toContain('intent: resume')
-    expect(routed.stdout).toContain('change: trellis-docs')
-    expect(routed.stdout).not.toContain('change: comet-research')
+    expect(routed.stdout).toContain('change: frontend-docs')
+    expect(routed.stdout).not.toContain('change: market-research')
 
     const breadcrumb = runHook('breadcrumb.sh', payload)
     expect(breadcrumb.code, breadcrumb.stderr).toBe(0)
-    expect(breadcrumb.stdout).toContain('TRELLIS_BREADCRUMB')
-    expect(breadcrumb.stdout).not.toContain('COMET_BREADCRUMB')
+    expect(breadcrumb.stdout).toContain('FRONTEND_BREADCRUMB')
+    expect(breadcrumb.stdout).not.toContain('RESEARCH_BREADCRUMB')
   })
 })

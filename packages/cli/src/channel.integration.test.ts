@@ -12,7 +12,7 @@ import { existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
-import { createChannelStore } from '@pipeline-lite/channel'
+import { createChannelStore } from '@tenon/channel'
 import { cmdChannel, type ChannelHost } from './commands/channel.js'
 import { realDeps } from './integration-harness.js'
 

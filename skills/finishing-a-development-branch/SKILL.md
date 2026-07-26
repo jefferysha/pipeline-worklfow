@@ -3,7 +3,7 @@ name: finishing-a-development-branch
 description: First-party release handoff and branch-finish checklist.
 license: MIT
 metadata:
-  author: pipeline-lite
+  author: tenon
 ---
 
 # Finishing a Development Branch

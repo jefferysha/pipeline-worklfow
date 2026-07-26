@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, test } from 'vitest'
-import { createLoopsYamlText, type FieldName, type GuardResult, type PipelineState } from '@pipeline-lite/kernel'
+import { createLoopsYamlText, type FieldName, type GuardResult, type PipelineState } from '@tenon/kernel'
 import { buildProgram, CliExit } from './program.js'
 import type { TriageCommandRuntime } from './commands/triage.js'
 import { makeDeps, mockState, spy, type TestDeps } from './test-support.js'
@@ -29,8 +29,14 @@ describe('program —— commander 装配与 exit code 逐格对齐', () => {
     const deps = makeDeps()
     expect(await run(deps, ['update', '--codex', '--dry-run'])).toBe(0)
     const out = deps.outLines.join('\n')
-    expect(out).toContain('codex plugin marketplace upgrade pipeline-lite --json')
+    expect(out).toContain('codex plugin marketplace upgrade tenon --json')
     expect(out).toContain('未刷新 marketplace')
+  })
+
+  test('完整插件只有一个 update 入口，不再暴露第二套 --self-update', () => {
+    const deps = makeDeps()
+    const update = buildProgram(deps).commands.find((command) => command.name() === 'update')
+    expect(update?.options.some((option) => option.long === '--self-update')).toBe(false)
   })
 
   test('runtime 是稳定启动器的可诊断和精确恢复入口', () => {

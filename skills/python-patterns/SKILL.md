@@ -3,7 +3,7 @@ name: python-patterns
 description: First-party Python design and reliability practices.
 license: MIT
 metadata:
-  author: pipeline-lite
+  author: tenon
 ---
 
 # Python Patterns

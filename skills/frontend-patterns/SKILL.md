@@ -3,7 +3,7 @@ name: frontend-patterns
 description: First-party frontend boundary, state, and component organization patterns.
 license: MIT
 metadata:
-  author: pipeline-lite
+  author: tenon
 ---
 
 # Frontend Patterns

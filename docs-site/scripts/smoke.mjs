@@ -21,6 +21,10 @@ const expectedTopLevel = new Set([
   'llms.txt',
   'logo.svg',
   'vp-icons.css',
+  'images/dashboard-overview.webp',
+  'images/dashboard-progress.webp',
+  'images/dashboard-automation.webp',
+  'images/dashboard-workbench.webp',
 ])
 errors.push(...await auditArtifactFileSet(dist, expectedTopLevel))
 
@@ -39,6 +43,7 @@ for (const file of builtFiles) {
   const info = await stat(resolve(dist, rel))
   if (!info.isFile()) continue
   if (rel.endsWith('.woff2')) continue
+  if (rel.endsWith('.webp')) continue
   if (!/\.(?:html|js|css|json|txt|svg)$/u.test(rel)) {
     errors.push(`${rel}: 未知公开文件类型`)
     continue
@@ -46,8 +51,8 @@ for (const file of builtFiles) {
   const body = await readFile(resolve(dist, rel), 'utf8')
   textAssets.push({ rel, body })
   if (rel.endsWith('.html')) {
-    const rootAsset = /(?:src|href)="\/(?!pipeline-worklfow\/|\/)/.exec(body)
-    if (rootAsset) errors.push(`${rel}: 发现绕过 /pipeline-worklfow/ 的站内绝对路径 ${rootAsset[0]}`)
+    const rootAsset = /(?:src|href)="\/(?!tenon\/|\/)/.exec(body)
+    if (rootAsset) errors.push(`${rel}: 发现绕过 /tenon/ 的站内绝对路径 ${rootAsset[0]}`)
   }
   if (body.includes('/Users/')) {
     errors.push(`${rel}: 发现用户目录绝对路径`)
@@ -73,25 +78,25 @@ for (const route of expectedHtml) {
 }
 
 const homeHtml = await readFile(resolve(dist, 'index.html'), 'utf8').catch(() => '')
-if (!/<main[^>]*class="[^"]*pl-home-main/u.test(homeHtml)) {
+if (!/<main[^>]*class="[^"]*tenon-home-main/u.test(homeHtml)) {
   errors.push('中文首页缺少 main landmark')
 }
-if (!/<header[\s\S]*<main[^>]*class="[^"]*pl-home-main[\s\S]*<\/main>[\s\S]*<footer/u.test(homeHtml)) {
+if (!/<header[\s\S]*<main[^>]*class="[^"]*tenon-home-main[\s\S]*<\/main>[\s\S]*<footer/u.test(homeHtml)) {
   errors.push('中文首页 main 必须位于全局 header 与 footer 之间，不能包裹全局导航')
 }
 const englishHomeHtml = await readFile(resolve(dist, 'en/index.html'), 'utf8').catch(() => '')
-if (!/<main[^>]*class="[^"]*pl-home-main/u.test(englishHomeHtml)) {
+if (!/<main[^>]*class="[^"]*tenon-home-main/u.test(englishHomeHtml)) {
   errors.push('英文首页缺少 main landmark')
 }
 const artifactCorpus = textAssets.map(({ body }) => body).join('\n')
-for (const expected of ['pl-not-found', '页面未找到', '返回文档首页']) {
+for (const expected of ['tenon-not-found', '页面未找到', '返回文档首页']) {
   if (!artifactCorpus.includes(expected)) {
     errors.push(`客户端编译产物缺少中文 404 标识: ${expected}`)
   }
 }
 for (const route of ['installation.html', 'en/installation.html']) {
   const body = await readFile(resolve(dist, route), 'utf8').catch(() => '')
-  if (!body.includes('pl-breadcrumb')) errors.push(`${route}: 缺少 breadcrumb`)
+  if (!body.includes('tenon-breadcrumb')) errors.push(`${route}: 缺少 breadcrumb`)
   const expectedGroup = route.startsWith('en/') ? 'Get started' : '开始使用'
   if (!body.includes(expectedGroup)) errors.push(`${route}: breadcrumb 缺少内容分组 ${expectedGroup}`)
 }

@@ -73,11 +73,11 @@ describe('scaffold —— 类型守卫 + 三态', () => {
     expect(fs.writes).toEqual([]) // 未写
   })
 
-  test('PIPELINE_SPEC_STRATEGY=append 信号（上层注入）→ 冲突下只补缺失', async () => {
+  test('TENON_SPEC_STRATEGY=append 信号（上层注入）→ 冲突下只补缺失', async () => {
     const deps = makeDeps()
     const fs = fakeFs({
       files: { [P('openspec/specs/backend/api.md')]: 'keep me' },
-      env: { PIPELINE_SPEC_STRATEGY: 'append' },
+      env: { TENON_SPEC_STRATEGY: 'append' },
     })
     expect(await cmdScaffold(deps, 'scaffold', ['web'], fs)).toBe(0)
     expect(fs.map.get(P('openspec/specs/backend/api.md'))).toBe('keep me') // 既有保留

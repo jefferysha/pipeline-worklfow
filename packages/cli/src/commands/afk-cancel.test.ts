@@ -1,5 +1,5 @@
 /**
- * cmdAfk('cancel') —— `pipeline afk cancel <name>` 是 server POST /api/afk/:name/cancel
+ * cmdAfk('cancel') —— `tenon afk cancel <name>` 是 server POST /api/afk/:name/cancel
  * （packages/server/src/afk.ts::cancelAfkRun）的 CLI 终端等价：前置校验（change 存在 →
  * automation==running → worktree/sandbox 非空）→ 先落取消标记文件（worktree 根，复用 automation
  * 单一常量 CANCEL_MARKER_FILE）→ 再 docker kill 容器。docker 不可用/非 running 走诚实门降级。
@@ -18,8 +18,8 @@ import { cmdAfk } from './afk.js'
 /** hoisted 可变引用：docker 探针开关 + docker argv 录（vi.mock 工厂被 hoist，必须走 vi.hoisted）。 */
 const h = vi.hoisted(() => ({ dockerOk: true, calls: [] as string[][] }))
 
-vi.mock('@pipeline-lite/automation', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@pipeline-lite/automation')>()
+vi.mock('@tenon/automation', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@tenon/automation')>()
   const fakeExec: typeof actual.nodeExec = async (file, args) => {
     h.calls.push([file, ...args])
     return { stdout: '', stderr: '', exitCode: 0 }

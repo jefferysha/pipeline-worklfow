@@ -11,7 +11,7 @@
 import { rm, utimes, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
-import { REVIEW_MARKER_PROTOCOL } from '@pipeline-lite/kernel'
+import { REVIEW_MARKER_PROTOCOL } from '@tenon/kernel'
 import { freshHarness, type Harness } from './integration-harness.js'
 
 type Kind = 'confirm' | 'review' | 'interaction'

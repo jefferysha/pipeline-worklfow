@@ -19,9 +19,9 @@ should appear as visible degradation, not invalidate the core installation.
 ## Check readiness
 
 ```bash
-pipeline doctor --json
-pipeline afk status --json
-pipeline loops status --json
+tenon doctor --json
+tenon afk status --json
+tenon loops status --json
 ```
 
 Doctor never prints credential values. It reports whether each supported runner
@@ -30,13 +30,13 @@ has a usable source.
 ## Enqueue a Change
 
 ```bash
-pipeline afk enqueue <change-name>
+tenon afk enqueue <change-name>
 ```
 
 Bind it explicitly to a loop:
 
 ```bash
-pipeline afk enqueue <change-name> --loop <loop-id>
+tenon afk enqueue <change-name> --loop <loop-id>
 ```
 
 PM's built-in policy can enqueue after Spec completes. Enqueueing does not
@@ -47,19 +47,19 @@ automatically start Docker or a runner.
 L1 is the default report-only level:
 
 ```bash
-pipeline afk run <change-name> --level L1
+tenon afk run <change-name> --level L1
 ```
 
 Use another image only when it is trusted and prepared:
 
 ```bash
-pipeline afk run <change-name> --level L1 --image sandcastle:local
+tenon afk run <change-name> --level L1 --image sandcastle:local
 ```
 
 Cancel an active job:
 
 ```bash
-pipeline afk cancel <change-name>
+tenon afk cancel <change-name>
 ```
 
 Cancellation records intent and terminates the owned container. Inspect final
@@ -70,7 +70,7 @@ status and preserved artifacts before retrying.
 Create a paused draft:
 
 ```bash
-pipeline loops init \
+tenon loops init \
   --id nightly-fix \
   --goal "Repair flaky tests" \
   --runner codex \
@@ -80,7 +80,7 @@ pipeline loops init \
 Or use a starter template:
 
 ```bash
-pipeline loops init \
+tenon loops init \
   --id ci-loop \
   --template ci-sweeper \
   --skill-bundle backend \
@@ -90,10 +90,10 @@ pipeline loops init \
 Inspect policy:
 
 ```bash
-pipeline loops list --json
-pipeline loops status --json
-pipeline loops enforce --loop <loop-id>
-pipeline loops budget <loop-id>
+tenon loops list --json
+tenon loops status --json
+tenon loops enforce --loop <loop-id>
+tenon loops budget <loop-id>
 ```
 
 Autonomy levels:
@@ -107,13 +107,13 @@ Autonomy levels:
 Changing level requires admission and explicit confirmation:
 
 ```bash
-pipeline loops level <loop-id> set L2 --confirm
+tenon loops level <loop-id> set L2 --confirm
 ```
 
 Directed loop execution:
 
 ```bash
-pipeline loops run <loop-id> --dry-run --level L1 --json
+tenon loops run <loop-id> --dry-run --level L1 --json
 ```
 
 Do not use `--commit` or L3 until sandbox, allowlists, verification/review
@@ -133,9 +133,9 @@ worker action is bounded by the selected loop/autonomy policy.
 ## Verification
 
 ```bash
-pipeline afk status <change-name> --json
-pipeline loops enforce --loop <loop-id>
-pipeline loops status --json
+tenon afk status <change-name> --json
+tenon loops enforce --loop <loop-id>
+tenon loops status --json
 ```
 
 ## Common failures

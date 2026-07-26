@@ -67,6 +67,6 @@ export function createOwnedFs(): OwnedFs {
       try { return await readdir(abs) } catch { return [] }
     },
     homeDir: () => homedir(),
-    homedirBypass: () => process.env.PIPELINE_ALLOW_HOMEDIR === '1',
+    homedirBypass: () => process.env.TENON_ALLOW_HOMEDIR === '1',
   }
 }

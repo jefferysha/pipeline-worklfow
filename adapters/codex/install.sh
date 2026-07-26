@@ -62,7 +62,7 @@ install_static() {
 `tasks.md`，不得先生成脱离 phase 的通用 Todo。
 
 离开 review phase（explore / spec / verify）须对确切 transition event 取得人类显式确认：先运行
-`pipeline review request <change> --event <event>`，再由用户确认触发 `pipeline review acknowledge <change>`。
+`tenon review request <change> --event <event>`，再由用户确认触发 `tenon review acknowledge <change>`。
 档 A/B 的普通对话中，用户下一条明确回复“确认继续”或“继续执行”会写入该 receipt；档 C 必须保留确认事实并
 显式 acknowledge，不能删除 marker 绕过 review-gate。verify-fail 与 verify-pass 的确认不可互用。
 EOF
@@ -103,7 +103,7 @@ EOF
 }
 
 # ── 项目技能部署（native/static 互斥）─────────────────────────────────────
-# 这是非原生 adapter 的兼容投影：`pipeline setup --codex` 走 Codex marketplace 原生插件，
+# 这是非原生 adapter 的兼容投影：`tenon setup --codex` 走 Codex marketplace 原生插件，
 # 不会调用本脚本。仅当用户明确需要把 pipeline 投递到某个项目时，才软链**本插件完整自带**的
 # skills 到目标 `.agents/skills/`。不读取 Claude/Codex 的第三方 cache，也不安装任何外部 skill。
 # 已有用户目录或非同源链接一律报错而不覆盖。
@@ -153,13 +153,13 @@ install_project_skills() {
 # directories here: an old cache is rollback material, not evidence that its Skills are active.
 selected_native_plugin_root() {
   local candidate physical manifest
-  for candidate in "${PIPELINE_CODEX_PLUGIN_ROOT:-}" "${PIPELINE_HOST_PLUGIN_ROOT:-}"; do
+  for candidate in "${TENON_CODEX_PLUGIN_ROOT:-}" "${TENON_HOST_PLUGIN_ROOT:-}"; do
     [ -n "$candidate" ] || continue
     physical="$(cd -P "$candidate" 2>/dev/null && pwd -P)" || continue
     manifest="$physical/.codex-plugin/plugin.json"
     [ -f "$manifest" ] || continue
     [ -d "$physical/skills" ] || continue
-    grep -Eq '"name"[[:space:]]*:[[:space:]]*"pipeline-lite"' "$manifest" 2>/dev/null || continue
+    grep -Eq '"name"[[:space:]]*:[[:space:]]*"tenon"' "$manifest" 2>/dev/null || continue
     printf '%s' "$physical"
     return 0
   done
@@ -196,7 +196,7 @@ converge_project_skills_to_native() { # $1=project $2=selected native root
       if [ "$linked" = "$source" ]; then
         owned_targets+=("$target")
       else
-        err "shadow-conflict: 保留非 pipeline-lite 所有的项目 Skill 链接: $target → $linked"
+        err "shadow-conflict: 保留非 tenon 所有的项目 Skill 链接: $target → $linked"
         conflicts=$((conflicts + 1))
       fi
     elif [ -e "$target" ]; then

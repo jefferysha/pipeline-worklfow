@@ -1,6 +1,6 @@
 /**
  * traces.test —— #34d traffic 查看器数据端真 HTTP 端到端（GOAL C9 / A7）。
- * 真起 http server + 真建 @pipeline-lite/tap 的 TraceStore（真落盘 sessions/*.json + records/*.jsonl）
+ * 真起 http server + 真建 @tenon/tap 的 TraceStore（真落盘 sessions/*.json + records/*.jsonl）
  * → 真 node:http GET /api/traces/sessions、/api/traces/records?session=<id> → 断言真捕获数据。零 mock。
  *
  * #34e 护栏延续：traces 只读本地捕获、GET-only、不外发（server 绑 127.0.0.1，响应带 outbound=local-only）。
@@ -11,10 +11,11 @@ import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createDashboardServer } from './server.js'
+import { resolveServerPaths } from './paths.js'
 import type { DashboardServer } from './types.js'
-import { makeProject, newStore, initChange, reqGet, reqPost, testFlow } from './test-support.js'
+import { makeProject, makeTempHome, newStore, initChange, reqGet, reqPost, testFlow } from './test-support.js'
 // tap 是 workspace 包（root node_modules 符号链接）——测试文件不入 tsc build，可直接 import 真 API。
-import { createTraceStore } from '@pipeline-lite/tap'
+import { createTraceStore } from '@tenon/tap'
 
 const openServers: DashboardServer[] = []
 afterEach(async () => {
@@ -39,6 +40,7 @@ async function startServer(traceStore?: ReturnType<typeof createTraceStore>): Pr
   const root = await makeProject()
   await initChange(store, root, 'demo')
   const srv = createDashboardServer({
+    paths: resolveServerPaths({ home: await makeTempHome(), env: {} }),
     version: '9.9.9', token: 't', registry: () => [root], store, flow: testFlow(),
     clock: () => '2026-07-07T00:00:00Z', traceStore,
   })

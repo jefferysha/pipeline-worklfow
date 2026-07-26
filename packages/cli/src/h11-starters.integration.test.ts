@@ -53,7 +53,7 @@ describe('H11 real pipeline binary wiring', () => {
 
   beforeAll(async () => {
     bundleRoot = await mkdtemp(join(tmpdir(), 'pipeline-h11-bundle-'))
-    binary = join(bundleRoot, 'packages', 'cli', 'dist', 'pipeline.mjs')
+    binary = join(bundleRoot, 'packages', 'cli', 'dist', 'tenon.mjs')
     await mkdir(dirname(binary), { recursive: true })
     await symlink(join(repoRoot, 'templates'), join(bundleRoot, 'templates'), 'dir')
     await build({

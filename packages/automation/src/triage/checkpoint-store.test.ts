@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { SourceCheckpoint } from '@pipeline-lite/kernel'
+import type { SourceCheckpoint } from '@tenon/kernel'
 import {
   createTriageCheckpointStore,
   triageCheckpointFilePath,

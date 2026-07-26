@@ -5,21 +5,22 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { existsSync } from 'node:fs'
 import { appendFile, mkdir, readFile, readdir, stat, unlink, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { createDashboardServer } from './server.js'
-import type { DashboardServer } from './types.js'
+import { resolveServerPaths } from './paths.js'
+import type { DashboardServer, DashboardServerOptions, ServerPaths } from './types.js'
 import {
   initChange, makeProject, makeTempHome, makeTempManifest, makeWorktreeDir, newStore, openSSE, repoManifestPath, reqDelete, reqGet,
   reqPatch, reqPost, testFlow,
   readGovernedDocumentsForCurrentVisit,
   seedGovernedDocumentEvidence,
 } from './test-support.js'
-import type { FlowEngine, StateStore } from '@pipeline-lite/kernel'
+import type { FlowEngine, StateStore } from '@tenon/kernel'
 import {
   createLoopLedgerStore, effectiveWorkflowPlanBinding, loadEffectiveWorkflowPlan, loadManifest,
-  machineStateScopeId, secretsPath,
+  machineStateScopeId,
   registerProjectRoot, TRANSITION_EVENTS as KERNEL_EVENTS, eventEdge as kernelEventEdge,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import { TRANSITION_EVENTS, eventEdge } from './transition.js'
 import type { LoopActivationValidator } from './loops.js'
 import type { PipelineCliRunner } from './operations.js'
@@ -36,6 +37,10 @@ describe('接线 —— server 事件表 = kernel 单源（无本地镜像）', 
     expect(eventEdge).toBe(kernelEventEdge)
   })
 })
+
+// @ts-expect-error 产品状态路径是必填依赖；其他可选字段不能让无 paths 的调用重新通过编译。
+const missingPathsOptions: DashboardServerOptions = {}
+void missingPathsOptions
 
 const openServers: DashboardServer[] = []
 afterEach(async () => {
@@ -59,7 +64,8 @@ interface Harness {
 async function start(opts?: {
   version?: string
   releaseId?: string
-  home?: string
+  hostHome?: string
+  paths?: ServerPaths
   token?: string
   pollIntervalMs?: number
   execDocker?: import('./dockerImages.js').ExecDockerFn
@@ -84,10 +90,13 @@ async function start(opts?: {
     await seedGovernedDocumentEvidence(root, changeDir, name)
   }
   const worktreeDir = await makeWorktreeDir()
+  const hostHome = opts?.hostHome ?? await makeTempHome()
+  const paths = opts?.paths ?? resolveServerPaths({ home: hostHome, env: {} })
   const srv = createDashboardServer({
     version: opts?.version ?? '9.9.9',
     releaseId: opts?.releaseId,
-    home: opts?.home,
+    hostHome,
+    paths,
     token: opts?.token ?? 'secret-token-abc',
     registry: () => [root],
     store,
@@ -122,7 +131,8 @@ describe('GET /api/health —— 存活探针 + 本 server 版本（B4）', () =
   it('回显 ok/scope/version/releaseId/stateScopeId 且不泄露 state home', async () => {
     const releaseId = `sha256-${'a'.repeat(64)}`
     const stateHome = '/tmp/private-dashboard-state-home'
-    const h = await start({ version: '3.1.4', releaseId, home: stateHome })
+    const paths = resolveServerPaths({ home: stateHome, env: {} })
+    const h = await start({ version: '3.1.4', releaseId, hostHome: stateHome, paths })
     const r = await reqGet(h.port, '/api/health')
     expect(r.status).toBe(200)
     const body = r.json<{
@@ -136,7 +146,7 @@ describe('GET /api/health —— 存活探针 + 本 server 版本（B4）', () =
     expect(body.scope).toBe('global')
     expect(body.version).toBe('3.1.4')
     expect(body.releaseId).toBe(releaseId)
-    expect(body.stateScopeId).toBe(machineStateScopeId(stateHome))
+    expect(body.stateScopeId).toBe(machineStateScopeId(paths.stateRoot))
     expect(JSON.stringify(body)).not.toContain(stateHome)
   })
 })
@@ -401,6 +411,7 @@ describe('GET /api/snapshot —— 聚合注册 Project 的真 .pipeline.yaml', 
     await initChange(store, a, 'alpha')
     await initChange(store, b, 'beta')
     const srv = createDashboardServer({
+      paths: resolveServerPaths({ home: await makeTempHome(), env: {} }),
       version: '9.9.9', token: 't', registry: () => [a, b], store, flow: testFlow(),
     })
     openServers.push(srv)
@@ -592,6 +603,7 @@ describe('GET / + /assets/* —— webRoot 存在时服务真 SPA（BACKLOG #26c
     const root = await makeProject()
     await initChange(store, root, 'c1')
     const srv = createDashboardServer({
+      paths: resolveServerPaths({ home: await makeTempHome(), env: {} }),
       token: 'spa-token', registry: () => [root], store, flow: testFlow(),
       clock: () => '2026-07-07T00:00:00Z', webRoot: web,
     })
@@ -601,7 +613,7 @@ describe('GET / + /assets/* —— webRoot 存在时服务真 SPA（BACKLOG #26c
     const idx = await reqGet(port, '/')
     expect(idx.status).toBe(200)
     expect(idx.body).toContain('<div id=app>')
-    expect(idx.body).toContain('window.__PIPELINE_DASHBOARD_TOKEN__')
+    expect(idx.body).toContain('window.__TENON_DASHBOARD_TOKEN__')
     expect(idx.body).toContain('spa-token')
     // GET /assets/app.js → 真静态供给 + js content-type
     const asset = await reqGet(port, '/assets/app.js')
@@ -684,7 +696,7 @@ describe('POST /api/change/<name>/transition —— G1 default 轨收尾（bread
     expect(existsSync(breadcrumbPath)).toBe(true)
     expect(await readFile(breadcrumbPath, 'utf8')).toBe(`pipeline:${h.name} phase=explore\n`)
 
-    // review marker 只由 `pipeline review request` 在产物准备好后写入 canonical receipt 的 hook
+    // review marker 只由 `tenon review request` 在产物准备好后写入 canonical receipt 的 hook
     // projection；进入 review phase 时写它会把该 phase 的实际工作自身锁死。
     const markerPath = join(h.root, '.pipeline-pending-review')
     expect(existsSync(markerPath)).toBe(false)
@@ -958,7 +970,7 @@ describe('GET /api/change/:name/history —— 阶段时间线读端点（G21 / 
  * W1 第二增量收尾：history 合并边界从「canonical 链首条记录 observedAt vs JSONL ts 字符串比较」
  * 改成「transitionRecordId 是否存在」的逐条来源标记（见 transition.ts::readChangeHistory 头部
  * 注释）。这里覆盖 codex 架构评估点名的原方案不可靠场景：同秒冲突 / 时钟回拨 / head 文件缺失
- * 误清空遗留记录 / 晚于链建立才执行的 pipeline import，以及未被上面既有测试单独覆盖的边界。
+ * 误清空遗留记录 / 晚于链建立才执行的 tenon import，以及未被上面既有测试单独覆盖的边界。
  */
 describe('GET /api/change/:name/history —— transitionRecordId 来源判定（不比较任何时间戳）', () => {
   it('canonical 记录与遗留 JSONL 条目时间戳完全相同 → 两者都保留、不重复、不误删（原方案的头号 bug：' +
@@ -1065,7 +1077,7 @@ describe('GET /api/change/:name/history —— transitionRecordId 来源判定�
   })
 
   it('晚于 canonical 链建立之后才写入的、不带 transitionRecordId 的 JSONL transition 条目（模拟迟到的' +
-    ' pipeline import）→ 必须保留，即使它在文件里的物理位置排在 canonical 投影之后', async () => {
+    ' tenon import）→ 必须保留，即使它在文件里的物理位置排在 canonical 投影之后', async () => {
     const h = await start()
     const w = await reqPost(h.port, `/api/change/${h.name}/transition`, { root: h.root, event: 'open-complete' }, {
       headers: { Authorization: `Bearer ${h.token}` },
@@ -1073,7 +1085,7 @@ describe('GET /api/change/:name/history —— transitionRecordId 来源判定�
     expect(w.status).toBe(200)
     const { appendFile } = await import('node:fs/promises')
     // 追加（不是覆盖）在 canonical 投影行之后——模拟老 transitions_history 迟于链建立才被
-    // `pipeline import` 追加进 JSONL 的场景。
+    // `tenon import` 追加进 JSONL 的场景。
     const lateImport = { ts: '2026-07-07T00:00:00Z', kind: 'transition', from: 'archive', to: 'archive', raw: 'legacy-import-transitions_history' }
     await appendFile(join(h.changeDir, '.pipeline-history.jsonl'), `${JSON.stringify(lateImport)}\n`, 'utf8')
     const r = await reqGet(h.port, `/api/change/${h.name}/history?root=${encodeURIComponent(h.root)}`)
@@ -1483,7 +1495,7 @@ describe('GET /api/skills/registry —— 全部已注册 skill 明细(T6 升级
     expect(r.status).toBe(200)
     const body = r.json<{ skills: Array<{ name: string; installed: boolean; source: string; tier: string; available: boolean; description?: string; installCmd?: string }> }>()
     const names = body.skills.map((s) => s.name)
-    expect(names).toContain('pipeline-open') // 本仓真实存在的本地 skill 目录
+    expect(names).toContain('tenon-open') // 本仓真实存在的本地 skill 目录
     expect(names.length).toBeGreaterThan(14) // 必须包含外部登记，不能只有本地 14 个
     for (const e of body.skills) {
       expect(typeof e.name).toBe('string')
@@ -1493,7 +1505,7 @@ describe('GET /api/skills/registry —— 全部已注册 skill 明细(T6 升级
       expect(typeof e.available).toBe('boolean')
     }
     expect(body.skills.some((entry) => typeof entry.description === 'string' && entry.description.length > 0)).toBe(true)
-    const local = body.skills.find((s) => s.name === 'pipeline-open')!
+    const local = body.skills.find((s) => s.name === 'tenon-open')!
     expect(local.source).toBe('local-plugin')
     // builtin 四件套恒已装(写死短名单,不依赖测试机环境)
     for (const b of ['verify', 'run', 'code-review', 'security-review']) {
@@ -2255,7 +2267,13 @@ describe('GET /api/workflows —— 列出自定义 workflow（GOAL E8）', () =
     const store = newStore()
     const root = await makeProject()
     const roots: string[] = []
-    const srv = createDashboardServer({ token: 'dynamic-registry-token', registry: () => roots, store, flow: testFlow() })
+    const srv = createDashboardServer({
+      paths: resolveServerPaths({ home: await makeTempHome(), env: {} }),
+      token: 'dynamic-registry-token',
+      registry: () => roots,
+      store,
+      flow: testFlow(),
+    })
     openServers.push(srv)
     const { port } = await srv.listen(0, '127.0.0.1')
     roots.push(root)
@@ -3749,7 +3767,7 @@ describe('未知 HTTP 方法（非 GET/POST/DELETE）仍 405（既有兜底不�
 
 // ═══════════ G18：项目注册端点（spec §3.1，dashboard 闭环第一环）═══════════
 
-/** G18 端点专用 harness：不注入 registry（走真 <home>/.claude/pipeline-projects.json 文件读写）。 */
+/** G18 端点专用 harness：不注入 registry，走 Tenon 平台配置域的真实文件读写。 */
 async function startWithHome(opts?: { runPipelineCli?: PipelineCliRunner }): Promise<{
   srv: DashboardServer
   port: number
@@ -3757,13 +3775,16 @@ async function startWithHome(opts?: { runPipelineCli?: PipelineCliRunner }): Pro
   home: string
   store: StateStore
   registryPath: string
+  secretsPath: string
 }> {
   const home = await makeTempHome()
   const store = newStore()
+  const paths = resolveServerPaths({ home, env: {} })
   const srv = createDashboardServer({
     version: '9.9.9',
     token: 'secret-token-abc',
-    home,
+    hostHome: home,
+    paths,
     store,
     flow: testFlow(),
     clock: () => '2026-07-09T00:00:00Z',
@@ -3772,7 +3793,15 @@ async function startWithHome(opts?: { runPipelineCli?: PipelineCliRunner }): Pro
   })
   openServers.push(srv)
   const { port } = await srv.listen(0, '127.0.0.1')
-  return { srv, port, token: srv.token, home, store, registryPath: join(home, '.claude', 'pipeline-projects.json') }
+  return {
+    srv,
+    port,
+    token: srv.token,
+    home,
+    store,
+    registryPath: paths.registryPath,
+    secretsPath: paths.secretsPath,
+  }
 }
 
 describe('POST /api/projects —— 注册项目进机器级注册表（G18）', () => {
@@ -3811,7 +3840,7 @@ describe('POST /api/projects —— 注册项目进机器级注册表（G18）',
     const proj = await makeProject()
     const auth = { headers: { Authorization: `Bearer ${h.token}` } }
 
-    // 同 `pipeline init` 的真实写路径：CLI 直接更新机器级 registry，不会经 dashboard HTTP 端点。
+    // 同 `tenon init` 的真实写路径：CLI 直接更新机器级 registry，不会经 dashboard HTTP 端点。
     expect(await registerProjectRoot(h.registryPath, proj)).toBe(true)
     const listed = await reqGet(h.port, `/api/workflows?root=${encodeURIComponent(proj)}`)
     expect(listed.status).toBe(200)
@@ -3842,7 +3871,7 @@ describe('POST /api/projects —— 注册项目进机器级注册表（G18）',
     // 逐字节：与旧 writeFileSync 现状格式完全一致（tmp+rename 原子写不改字节）
     expect(await readFile(h.registryPath, 'utf8')).toBe(`${JSON.stringify([proj], null, 2)}\n`)
     // tmp+rename 原子写：完成后同目录只剩正式文件，无中途 .tmp 残留
-    expect(await readdir(join(h.home, '.claude'))).toEqual(['pipeline-projects.json'])
+    expect(await readdir(dirname(h.registryPath))).toEqual(['projects.json'])
   })
 
   it('409：重复注册（含尾斜杠等非规范写法，两侧规范化后判重）', async () => {
@@ -3938,7 +3967,7 @@ describe('DELETE /api/projects —— 注销项目（G18 对称操作）', () =>
     expect(r.status).toBe(200)
     // 逐字节：删掉 A 后剩 B，格式与现状一致
     expect(await readFile(h.registryPath, 'utf8')).toBe(`${JSON.stringify([projB], null, 2)}\n`)
-    expect(await readdir(join(h.home, '.claude'))).toEqual(['pipeline-projects.json'])
+    expect(await readdir(dirname(h.registryPath))).toEqual(['projects.json'])
   })
 
   it('404 未注册；400 缺 root query；401 无 token', async () => {
@@ -3952,7 +3981,7 @@ describe('DELETE /api/projects —— 注销项目（G18 对称操作）', () =>
   })
 })
 
-describe('POST /api/changes —— pipeline init 的 HTTP 化（G18）', () => {
+describe('POST /api/changes —— tenon init 的 HTTP 化（G18）', () => {
   /** 先经真端点注册项目（G18 闭环语义），返回可用的 proj root。 */
   async function withRegisteredProject(h: Awaited<ReturnType<typeof startWithHome>>): Promise<string> {
     const proj = await makeProject()
@@ -4409,7 +4438,7 @@ describe('②round-trip：POST 写入 → GET 读回 masked 且不含明文 → 
     expect(body1.keys.OPENAI_API_KEY).toEqual({ set: false })
 
     // 真落盘 0600 + tmp+rename（验收判据同款：stat mode 恰 0o600）
-    const secretsFile = secretsPath(h.home)
+    const secretsFile = h.secretsPath
     const st = await stat(secretsFile)
     expect(st.mode & 0o777).toBe(0o600)
     const onDisk = JSON.parse(await readFile(secretsFile, 'utf8')) as { keys: Record<string, string> }
@@ -4532,6 +4561,28 @@ describe('GET /api/afk/readiness —— AFK 就绪三灯(v6 T4)', () => {
     expect(body.docker.available).toBe(true)
     expect(body.image).toEqual({ configured: 'sandcastle:local', present: true, build_hint: 'bash tools/sandcastle/build.sh' })
     expect(Object.keys(body.credentials).sort()).toEqual(['claude-code', 'codex'])
+  })
+
+  it('hostHome 与产品 paths 分离时只从 hostHome 探测默认 Codex 凭证', async () => {
+    const hostHome = await makeTempHome()
+    const productHome = await makeTempHome()
+    await mkdir(join(hostHome, '.codex'), { recursive: true })
+    await writeFile(join(hostHome, '.codex', 'auth.json'), '{}\n', 'utf8')
+    const paths = resolveServerPaths({ home: productHome, env: {} })
+    const h = await start({
+      hostHome,
+      paths,
+      execDocker: async () => ({ stdout: '', stderr: '', exitCode: 1 }),
+    })
+
+    const response = await reqGet(h.port, `/api/afk/readiness?root=${encodeURIComponent(h.root)}`)
+    const body = response.json<{
+      credentials: { codex: { CODEX_HOME: { set: boolean; source?: string } } }
+    }>()
+
+    expect(response.status).toBe(200)
+    expect(body.credentials.codex.CODEX_HOME).toEqual({ set: true, source: 'default-home' })
+    expect(existsSync(join(productHome, '.codex', 'auth.json'))).toBe(false)
   })
 
   it('伪造 Host 头 → 403', async () => {

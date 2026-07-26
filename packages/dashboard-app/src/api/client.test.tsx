@@ -5,14 +5,14 @@ import { makeSnapshot } from '../testkit'
 
 beforeEach(() => {
   resetEventSources()
-  ;(window as unknown as { __PIPELINE_DASHBOARD_TOKEN__?: string }).__PIPELINE_DASHBOARD_TOKEN__ = 'tok-abc'
+  ;(window as unknown as { __TENON_DASHBOARD_TOKEN__?: string }).__TENON_DASHBOARD_TOKEN__ = 'tok-abc'
 })
 afterEach(() => {
   vi.restoreAllMocks()
 })
 
 describe('getToken（同源注入的 window token）', () => {
-  it('读取 window.__PIPELINE_DASHBOARD_TOKEN__', () => {
+  it('读取 window.__TENON_DASHBOARD_TOKEN__', () => {
     expect(getToken()).toBe('tok-abc')
   })
 })

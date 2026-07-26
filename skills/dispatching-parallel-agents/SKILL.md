@@ -3,7 +3,7 @@ name: dispatching-parallel-agents
 description: First-party protocol for parallel research or verification lanes.
 license: MIT
 metadata:
-  author: pipeline-lite
+  author: tenon
 ---
 
 # Dispatching Parallel Agents

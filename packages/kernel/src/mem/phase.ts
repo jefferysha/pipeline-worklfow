@@ -2,8 +2,8 @@
  * mem/phase —— phase 转换信号解析 + brainstorm 窗切片（纯逻辑）。
  * 对位老仓 skills/pipeline/scripts/mem/phase.py。
  *
- * 边界信号从 raw shell-call 字符串恢复。与 Trellis 差异：信号是 `task.py create|start`
- * （pipeline 的 phase 入口）；slug 前缀剥用 pipeline 的 YYYY-MM-DD-（≠ trellis MM-DD）。
+ * 边界信号从 raw shell-call 字符串恢复。与 Tenon contract 差异：信号是 `task.py create|start`
+ * （pipeline 的 phase 入口）；slug 前缀剥用 pipeline 的 YYYY-MM-DD-（≠ tenon MM-DD）。
  */
 import type { BrainstormWindow, ParsedTaskCmd, PhaseEvent } from './types.js'
 

@@ -108,9 +108,9 @@ export function formatBudgetOverflowError(
     .join('\n')
   const hint = [
     'Free a slot before spawning, e.g.:',
-    '  pipeline channel kill <channel> --as <worker>',
+    '  tenon channel kill <channel> --as <worker>',
     'Or override per spawn:',
-    `  pipeline channel spawn ... --max-live-workers ${live.length + 1}`,
+    `  tenon channel spawn ... --max-live-workers ${live.length + 1}`,
     'Or raise the default in .pipeline/manifest.yaml under channel.worker_guard.max_live_workers.',
   ].join('\n')
   const parts = [header]

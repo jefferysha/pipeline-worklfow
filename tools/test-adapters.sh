@@ -82,7 +82,7 @@ assert_file "adapters/contract.md 存在" "$CONTRACT"
 assert_file "adapters/registry.yaml 存在" "$REG"
 # 契约必须把三能力 + A/B/C 分档 + conformance 写清
 if [ -f "$CONTRACT" ]; then
-  for kw in inject veto track "档 A" "档 B" "档 C" conformance "pipeline review acknowledge"; do
+  for kw in inject veto track "档 A" "档 B" "档 C" conformance "tenon review acknowledge"; do
     assert_contains "contract.md 覆盖 [${kw}]" "$(cat "$CONTRACT")" "$kw"
   done
   assert_not_contains "contract.md 不再把删 marker 当作解封" "$(cat "$CONTRACT")" "Unlock sentinel"
@@ -224,7 +224,7 @@ run_veto_scenario "V4-nested-cwd" "{\"cwd\":\"$p/sub/deep\",\"tool_name\":\"Writ
 mk_change_proj() { # <名> -> echo 项目路径（含显式选择的 change）
   local d="$TMP/$1"; mkdir -p "$d/openspec/changes/demo-change"
   printf 'phase: explore\ntrack: backend\narchived: false\n' > "$d/openspec/changes/demo-change/.pipeline.yaml"
-  # Runtime evidence never chooses a most-recent Change.  Model-side `pipeline session activate`
+  # Runtime evidence never chooses a most-recent Change.  Model-side `tenon session activate`
   # creates this pointer in production; fixtures model that explicit binding before they exercise
   # native adapter tracking.
   printf 'demo-change\n' > "$d/.pipeline-active"
@@ -239,7 +239,7 @@ if [ -f "$cx_inj" ]; then
   out="$(printf '{"cwd":"%s"}' "$p" | CLAUDE_PLUGIN_ROOT="$ROOT" bash "$cx_inj" SessionStart 2>/dev/null)"
   assert_contains "inject/codex: 产出 hookSpecificOutput（codex JSON 格式）" "$out" "hookSpecificOutput"
   assert_contains "inject/codex: 含 additionalContext 字段" "$out" "additionalContext"
-  assert_contains "inject/codex: additionalContext 真包 baseline 宪法（pipeline-lite）" "$out" "pipeline-lite"
+  assert_contains "inject/codex: additionalContext 真包 baseline 宪法（tenon）" "$out" "tenon"
 else
   bad "inject/codex: wrapper 存在" "缺失：$cx_inj"
 fi
@@ -251,15 +251,15 @@ if [ -f "$cx_prompt" ]; then
   p="$(mk_change_proj codex-prompt-active)"
   printf 'demo-change\n' > "$p/.pipeline-active"
   printf '实现登录页，并完成浏览器验收。\n' > "$p/openspec/changes/demo-change/REAL_AGENT_TASK.md"
-  out="$(printf '{\"prompt\":\"继续实现登录页面的 React 组件\",\"cwd\":\"%s\"}' "$p" | PIPELINE_ROUTER_CACHE="$TMP/codex-prompt-active.cache" CLAUDE_PLUGIN_ROOT="$ROOT" bash "$cx_prompt" UserPromptSubmit 2>/dev/null)"
+  out="$(printf '{\"prompt\":\"继续实现登录页面的 React 组件\",\"cwd\":\"%s\"}' "$p" | TENON_ROUTER_CACHE="$TMP/codex-prompt-active.cache" CLAUDE_PLUGIN_ROOT="$ROOT" bash "$cx_prompt" UserPromptSubmit 2>/dev/null)"
   assert_contains "route/codex: 产出 UserPromptSubmit hookSpecificOutput" "$out" "\"hookEventName\":\"UserPromptSubmit\""
   assert_contains "route/codex: 真注入已激活 Change" "$out" "change: demo-change"
   assert_contains "route/codex: 真注入已保存任务提示词" "$out" "实现登录页，并完成浏览器验收。"
   assert_contains "route/codex: 同轮保留真实 workflow-state" "$out" "workflow-state"
 
-  # 回归跨会话劫持：repo 级 `.pipeline-active` 仅是明确恢复候选。一个新的 SkillHub
+  # 回归跨会话劫持：repo 级 `.pipeline-active` 仅是明确恢复候选。一个新的工具项目
   # 调研目标必须从 open 派发独立 change，不能继承 demo-change 的 phase / 任务文本。
-  out="$(printf '{\"prompt\":\"我现在想要调研一个 SkillHub 项目\",\"cwd\":\"%s\"}' "$p" | PIPELINE_ROUTER_CACHE="$TMP/codex-prompt-new-topic.cache" CLAUDE_PLUGIN_ROOT="$ROOT" bash "$cx_prompt" UserPromptSubmit 2>/dev/null)"
+  out="$(printf '{\"prompt\":\"我现在想要调研一个新的工具项目\",\"cwd\":\"%s\"}' "$p" | TENON_ROUTER_CACHE="$TMP/codex-prompt-new-topic.cache" CLAUDE_PLUGIN_ROOT="$ROOT" bash "$cx_prompt" UserPromptSubmit 2>/dev/null)"
   assert_contains "route/codex: 新主题显式派发 new intent" "$out" "intent: new"
   assert_contains "route/codex: 新主题从 open 开始" "$out" "phase: open"
   assert_not_contains "route/codex: 新主题不绑定旧 change" "$out" "change: demo-change"
@@ -268,29 +268,29 @@ if [ -f "$cx_prompt" ]; then
   # Codex 会为别的插件注入 CLAUDE_PLUGIN_ROOT。适配器必须确认其中实际有
   # pipeline 的 baseline 脚本，不能只因存在 hooks/ 目录就误取外来插件根。
   foreign_root="$TMP/codex-foreign-plugin"; mkdir -p "$foreign_root/hooks"
-  out="$(printf '{\"prompt\":\"继续实现登录页面的 React 组件\",\"cwd\":\"%s\"}' "$p" | PIPELINE_ROUTER_CACHE="$TMP/codex-prompt-foreign.cache" CLAUDE_PLUGIN_ROOT="$foreign_root" bash "$cx_prompt" UserPromptSubmit 2>/dev/null)"
+  out="$(printf '{\"prompt\":\"继续实现登录页面的 React 组件\",\"cwd\":\"%s\"}' "$p" | TENON_ROUTER_CACHE="$TMP/codex-prompt-foreign.cache" CLAUDE_PLUGIN_ROOT="$foreign_root" bash "$cx_prompt" UserPromptSubmit 2>/dev/null)"
   assert_contains "route/codex: 外来 CLAUDE_PLUGIN_ROOT 不劫持 adapter 根" "$out" "workflow-state"
 
   p="$TMP/codex-prompt-unrouted"; mkdir -p "$p/openspec/changes"
   mkdir -p "$p/.pipeline/workflows"
   printf 'name: landing\nsteps:\n  - id: open\n    title: Start\n    transitions: []\n' > "$p/.pipeline/workflows/landing.yaml"
-  out="$(printf '{\"prompt\":\"请实现一个响应式 React 页面\",\"cwd\":\"%s\"}' "$p" | PIPELINE_ROUTER_CACHE="$TMP/codex-prompt-unrouted.cache" CLAUDE_PLUGIN_ROOT="$ROOT" bash "$cx_prompt" UserPromptSubmit 2>/dev/null)"
-  assert_contains "route/codex: 无当前任务时要求入口 pipeline skill" "$out" "skill: pipeline"
+  out="$(printf '{\"prompt\":\"请实现一个响应式 React 页面\",\"cwd\":\"%s\"}' "$p" | TENON_ROUTER_CACHE="$TMP/codex-prompt-unrouted.cache" CLAUDE_PLUGIN_ROOT="$ROOT" bash "$cx_prompt" UserPromptSubmit 2>/dev/null)"
+  assert_contains "route/codex: 无当前任务时要求入口 tenon skill" "$out" "skill: tenon"
   assert_contains "route/codex: 无当前任务时派发 default workflow" "$out" "workflow: default"
-  assert_contains "route/codex: 无当前任务时输出结构化 pipeline dispatch" "$out" "pipeline-dispatch"
+  assert_contains "route/codex: 无当前任务时输出结构化 tenon dispatch" "$out" "tenon-dispatch"
   assert_not_contains "route/codex: 正常对话不再先问是否走 workflow" "$out" "要走哪个工作流"
   assert_not_contains "route/codex: 正常对话不列自定义 workflow 供选择" "$out" "landing"
 
   # Codex 正常对话没有 AskUserQuestion 工具。明确确认必须在 UserPromptSubmit 阶段调用
-  # `pipeline review acknowledge`；hook 本身不得删除 v2 marker 伪造批准。
+  # `tenon review acknowledge`；hook 本身不得删除 v2 marker 伪造批准。
   p="$(mk_proj codex-prompt-confirm)"
   write_v2_review_marker "$p"
   printf '{"prompt":"为什么需要确认？","cwd":"%s"}' "$p" | CLAUDE_PLUGIN_ROOT="$ROOT" bash "$cx_prompt" UserPromptSubmit >/dev/null 2>&1
   [ -f "$p/.pipeline-pending-review" ] && ok "route/codex: 普通询问不误清 review marker" || bad "route/codex: 普通询问不误清 review marker" "marker 被错误清除"
   fake_bin="$TMP/codex-prompt-fake-bin"; fake_log="$TMP/codex-prompt-fake.log"; mkdir -p "$fake_bin"
-  printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$*" >> "$PIPELINE_HOOK_LOG"\n' > "$fake_bin/pipeline"
-  chmod +x "$fake_bin/pipeline"
-  printf '{"prompt":"确认继续，全部执行","cwd":"%s"}' "$p" | PATH="$fake_bin:$PATH" PIPELINE_HOOK_LOG="$fake_log" CLAUDE_PLUGIN_ROOT="$ROOT" bash "$cx_prompt" UserPromptSubmit >/dev/null 2>&1
+  printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$*" >> "$TENON_HOOK_LOG"\n' > "$fake_bin/tenon"
+  chmod +x "$fake_bin/tenon"
+  printf '{"prompt":"确认继续，全部执行","cwd":"%s"}' "$p" | PATH="$fake_bin:$PATH" TENON_HOOK_LOG="$fake_log" CLAUDE_PLUGIN_ROOT="$ROOT" bash "$cx_prompt" UserPromptSubmit >/dev/null 2>&1
   [ -f "$p/.pipeline-pending-review" ] && ok "route/codex: 明确确认不直接删除 review marker" || bad "route/codex: 明确确认不直接删除 review marker" "marker 被错误删除"
   grep -Fq 'review acknowledge demo-change' "$fake_log" 2>/dev/null \
     && ok "route/codex: 明确确认调用 canonical acknowledge" \
@@ -300,17 +300,17 @@ else
 fi
 
 # Codex 的项目级 skill 发现依赖 .agents/skills；仅注册 hook/写 AGENTS 无法让宿主实际调用
-# pipeline。静态安装也必须完整投递入口和七个 phase skill，并且重跑幂等。
+# Tenon。静态安装也必须完整投递入口和七个 phase skill，并且重跑幂等。
 cx_inst="$ADAPTERS/codex/install.sh"
 if [ -f "$cx_inst" ]; then
   cx_target="$TMP/codex-static-skills"
   if bash "$cx_inst" --static --target "$cx_target" --codex-home "$TMP/codex-static-home" --yes >/dev/null 2>&1; then
-    for skill in pipeline pipeline-open pipeline-explore pipeline-spec pipeline-build pipeline-verify pipeline-ship pipeline-archive simple-task brainstorming writing-plans verification-before-completion openspec-propose openspec-apply-change; do
+    for skill in tenon tenon-open tenon-explore tenon-spec tenon-build tenon-verify tenon-ship tenon-archive simple-task brainstorming writing-plans verification-before-completion openspec-propose openspec-apply-change; do
       assert_file "codex static install: 投递 $skill skill" "$cx_target/.agents/skills/$skill/SKILL.md"
     done
-    [ -L "$cx_target/.agents/skills/pipeline" ] \
-      && ok "codex static install: pipeline skill 使用同源软链" \
-      || bad "codex static install: pipeline skill 使用同源软链" "未创建软链"
+    [ -L "$cx_target/.agents/skills/tenon" ] \
+      && ok "codex static install: tenon skill 使用同源软链" \
+      || bad "codex static install: tenon skill 使用同源软链" "未创建软链"
     for skill in brainstorming writing-plans verification-before-completion; do
       [ -L "$cx_target/.agents/skills/$skill" ] \
         && ok "codex static install: $skill 使用插件内置同源软链" \
@@ -328,9 +328,9 @@ if [ -f "$cx_inst" ]; then
   # 原生插件和 static project projection 必须互斥。selected root 由宿主/稳定 launcher
   # 显式传入；adapter 不扫描历史 cache 猜版本。
   cx_native_target="$TMP/codex-native-skills"
-  if PIPELINE_CODEX_PLUGIN_ROOT="$ROOT" bash "$cx_inst" --static --target "$cx_native_target" \
+  if TENON_CODEX_PLUGIN_ROOT="$ROOT" bash "$cx_inst" --static --target "$cx_native_target" \
     --codex-home "$TMP/codex-native-home" --yes >/dev/null 2>&1; then
-    [ ! -e "$cx_native_target/.agents/skills/pipeline" ] \
+    [ ! -e "$cx_native_target/.agents/skills/tenon" ] \
       && ok "codex native install: selected plugin root 存在时不创建项目 Skill 重复投影" \
       || bad "codex native install: selected plugin root 存在时不创建项目 Skill 重复投影" "发现重复 pipeline Skill"
   else
@@ -339,12 +339,12 @@ if [ -f "$cx_inst" ]; then
 
   cx_migrate_target="$TMP/codex-native-migrate"
   bash "$cx_inst" --static --target "$cx_migrate_target" --codex-home "$TMP/codex-migrate-home" --yes >/dev/null 2>&1
-  [ -L "$cx_migrate_target/.agents/skills/pipeline" ] \
+  [ -L "$cx_migrate_target/.agents/skills/tenon" ] \
     && ok "codex native migrate: 夹具先有 adapter-owned legacy link" \
     || bad "codex native migrate: 夹具先有 adapter-owned legacy link" "旧链接未建立"
-  if PIPELINE_CODEX_PLUGIN_ROOT="$ROOT" bash "$cx_inst" --static --target "$cx_migrate_target" \
+  if TENON_CODEX_PLUGIN_ROOT="$ROOT" bash "$cx_inst" --static --target "$cx_migrate_target" \
     --codex-home "$TMP/codex-migrate-home" --yes >/dev/null 2>&1; then
-    [ ! -e "$cx_migrate_target/.agents/skills/pipeline" ] \
+    [ ! -e "$cx_migrate_target/.agents/skills/tenon" ] \
       && ok "codex native migrate: 只清理同源 adapter-owned legacy link" \
       || bad "codex native migrate: 只清理同源 adapter-owned legacy link" "旧链接仍可发现"
   else
@@ -352,16 +352,16 @@ if [ -f "$cx_inst" ]; then
   fi
 
   cx_foreign_target="$TMP/codex-native-foreign"
-  mkdir -p "$cx_foreign_target/.agents/skills/pipeline"
-  printf '%s\n' '# user-owned pipeline skill' > "$cx_foreign_target/.agents/skills/pipeline/SKILL.md"
-  if PIPELINE_CODEX_PLUGIN_ROOT="$ROOT" bash "$cx_inst" --static --target "$cx_foreign_target" \
+  mkdir -p "$cx_foreign_target/.agents/skills/tenon"
+  printf '%s\n' '# user-owned tenon skill' > "$cx_foreign_target/.agents/skills/tenon/SKILL.md"
+  if TENON_CODEX_PLUGIN_ROOT="$ROOT" bash "$cx_inst" --static --target "$cx_foreign_target" \
     --codex-home "$TMP/codex-foreign-home" --yes >/dev/null 2>&1; then
     bad "codex native migrate: 用户目录产生 shadow-conflict 并拒绝" "命令意外成功"
   else
     ok "codex native migrate: 用户目录产生 shadow-conflict 并拒绝"
   fi
   assert_file "codex native migrate: shadow-conflict 保留用户 SKILL.md" \
-    "$cx_foreign_target/.agents/skills/pipeline/SKILL.md"
+    "$cx_foreign_target/.agents/skills/tenon/SKILL.md"
 else
   bad "codex static install.sh 存在" "缺失：$cx_inst"
 fi
@@ -382,14 +382,14 @@ fi
 # ════════════════════════════════════════════════════════════════════════════
 # ⑤ track conformance（真 append history，与 baseline 逐字对齐）
 # ════════════════════════════════════════════════════════════════════════════
-TRACK_JSON_TMPL='{"cwd":"%s","tool_name":"Skill","skill":"pipeline-explore"}'
+TRACK_JSON_TMPL='{"cwd":"%s","tool_name":"Skill","skill":"tenon-explore"}'
 HIST="openspec/changes/demo-change/.pipeline-history.jsonl"
 
-# baseline：skill-tracker.sh 直跑 → history 记 raw="Skill: pipeline-explore"
+# baseline：skill-tracker.sh 直跑 → history 记 raw="Skill: tenon-explore"
 p="$(mk_change_proj track-baseline)"
 printf "$TRACK_JSON_TMPL" "$p" | bash "$TRACKER" >/dev/null 2>&1 || true
 if [ -f "$p/$HIST" ]; then
-  assert_contains "track/baseline: history 记 Skill: pipeline-explore" "$(cat "$p/$HIST")" '"raw":"Skill: pipeline-explore"'
+  assert_contains "track/baseline: history 记 Skill: tenon-explore" "$(cat "$p/$HIST")" '"raw":"Skill: tenon-explore"'
 else
   bad "track/baseline: history 文件生成" "缺 $p/$HIST"
 fi
@@ -408,7 +408,7 @@ drive_track() { # <id> -> 在独立项目跑该适配器 track，echo 最后一�
 }
 for id in $ADAPTER_IDS; do
   line="$(drive_track "$id")"
-  assert_contains "track/$id: 真 append history（与 baseline 记录等价）" "$line" '"raw":"Skill: pipeline-explore"'
+  assert_contains "track/$id: 真 append history（与 baseline 记录等价）" "$line" '"raw":"Skill: tenon-explore"'
 done
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -539,7 +539,7 @@ for id in gemini pi; do
     out="$(printf '{"cwd":"%s"}' "$p" | CLAUDE_PLUGIN_ROOT="$ROOT" bash "$w" SessionStart 2>/dev/null)"
     assert_contains "inject/$id: 产出 hookSpecificOutput（CC 同构 JSON）" "$out" "hookSpecificOutput"
     assert_contains "inject/$id: 含 additionalContext 字段" "$out" "additionalContext"
-    assert_contains "inject/$id: additionalContext 真包 baseline 宪法（pipeline-lite）" "$out" "pipeline-lite"
+    assert_contains "inject/$id: additionalContext 真包 baseline 宪法（tenon）" "$out" "tenon"
   else
     bad "inject/$id: wrapper 存在" "缺失：$w"
   fi
@@ -569,7 +569,7 @@ fi
 # ⑧.4 track conformance — native（gemini/copilot/pi 真 append history）/ degraded（devin 无自动留痕不伪装）
 for id in gemini copilot pi; do
   line="$(drive_track "$id")"
-  assert_contains "track/$id: 真 append history（与 baseline 记录等价）" "$line" '"raw":"Skill: pipeline-explore"'
+  assert_contains "track/$id: 真 append history（与 baseline 记录等价）" "$line" '"raw":"Skill: tenon-explore"'
 done
 assert_eq "track/devin: registry 声明 degraded（tier C 无 hook 自动留痕）" degraded "$(reg_field devin track_status)"
 assert_ne "track/devin: track_fallback 非空" "" "$(reg_field devin track_fallback)"
@@ -687,10 +687,10 @@ run_veto_new "continue-V4-nested-cwd" "{\"cwd\":\"$p/sub/deep\",\"tool_name\":\"
 p="$(mk_change_proj s9-continue-inject)"
 out="$(printf '{"cwd":"%s"}' "$p" | CLAUDE_PLUGIN_ROOT="$ROOT" bash "$ADAPTERS/continue/hooks/inject.sh" SessionStart 2>/dev/null)"
 assert_contains "inject/continue: 产出 hookSpecificOutput" "$out" "hookSpecificOutput"
-assert_contains "inject/continue: additionalContext 真包 baseline 宪法" "$out" "pipeline-lite"
+assert_contains "inject/continue: additionalContext 真包 baseline 宪法" "$out" "tenon"
 
 line="$(drive_track continue)"
-assert_contains "track/continue: 真 append history（与 baseline 记录等价）" "$line" '"raw":"Skill: pipeline-explore"'
+assert_contains "track/continue: 真 append history（与 baseline 记录等价）" "$line" '"raw":"Skill: tenon-explore"'
 
 # ════════════════════════════════════════════════════════════════════════════
 # ⑨.3 aider（档 B：veto 降级 commit-gate·inject/track native）
@@ -713,7 +713,7 @@ run_veto_new "aider-V3-stale" "{\"cwd\":\"$p\",\"tool_name\":\"Edit\"}" ALLOW ai
 # inject：aider read: 文件是纯文本（非 JSON 包装，contract §3 不串格式）——断言纯文本含 baseline 宪法。
 p="$(mk_change_proj s9-aider-inject)"
 out="$(printf '{"cwd":"%s"}' "$p" | CLAUDE_PLUGIN_ROOT="$ROOT" bash "$ADAPTERS/aider/hooks/inject.sh" SessionStart 2>/dev/null)"
-assert_contains "inject/aider: 纯文本含 baseline 宪法（无 JSON 包装，不串格式）" "$out" "pipeline-lite"
+assert_contains "inject/aider: 纯文本含 baseline 宪法（无 JSON 包装，不串格式）" "$out" "tenon"
 case "$out" in *hookSpecificOutput*) bad "inject/aider: 未误用 JSON 包装" "纯文本输出里不该出现 hookSpecificOutput" ;; *) ok "inject/aider: 未误用 JSON 包装（纯文本，如实对应 read: 文件形态）" ;; esac
 
 # track：aider 把 commit 当工作单元，skill 字段固定 "aider-edit"（诚实再解释，非伪造）。
@@ -735,7 +735,7 @@ printf 'demo-change\n' > "$AIDER_IT/.pipeline-active"
 CLAUDE_PLUGIN_ROOT="$ROOT" bash "$ADAPTERS/aider/install.sh" --target "$AIDER_IT" --yes >/dev/null 2>&1
 assert_file "aider install: .aider.conf.yml 落地" "$AIDER_IT/.aider.conf.yml"
 assert_file "aider install: 上下文文件落地且含宪法" "$AIDER_IT/.aider-pipeline-context.md"
-assert_contains "aider install: 上下文文件真含 baseline 宪法" "$(cat "$AIDER_IT/.aider-pipeline-context.md" 2>/dev/null)" "pipeline-lite"
+assert_contains "aider install: 上下文文件真含 baseline 宪法" "$(cat "$AIDER_IT/.aider-pipeline-context.md" 2>/dev/null)" "tenon"
 assert_exec "aider install: .git/hooks/pre-commit 真落地可执行"  "$AIDER_IT/.git/hooks/pre-commit"
 assert_exec "aider install: .git/hooks/post-commit 真落地可执行" "$AIDER_IT/.git/hooks/post-commit"
 ( cd "$AIDER_IT" && echo hi > f1.txt && git add f1.txt && git commit -q -m t1 </dev/null ) 2>/dev/null
@@ -783,16 +783,16 @@ p="$(mk_change_proj s9-cline-inject)"
 json="$(printf '{"hookName":"TaskStart","workspaceRoots":["%s"],"taskStart":{"taskMetadata":{"taskId":"t1","ulid":"u1","initialTask":"x"}}}' "$p")"
 out="$(printf '%s' "$json" | CLAUDE_PLUGIN_ROOT="$ROOT" bash "$ADAPTERS/cline/hooks/TaskStart" 2>/dev/null)"
 assert_contains "inject/cline(TaskStart): 产出 contextModification 字段" "$out" "contextModification"
-assert_contains "inject/cline(TaskStart): 真含 baseline 宪法" "$out" "pipeline-lite"
+assert_contains "inject/cline(TaskStart): 真含 baseline 宪法" "$out" "tenon"
 json2="$(printf '{"hookName":"TaskResume","workspaceRoots":["%s"],"taskResume":{"taskMetadata":{"taskId":"t1","ulid":"u1"},"previousState":{}}}' "$p")"
 out2="$(printf '%s' "$json2" | CLAUDE_PLUGIN_ROOT="$ROOT" bash "$ADAPTERS/cline/hooks/TaskResume" 2>/dev/null)"
 assert_contains "inject/cline(TaskResume): 委托 TaskStart 同款注入" "$out2" "contextModification"
 
 p="$(mk_change_proj s9-cline-track)"
-json3="$(printf '{"hookName":"PostToolUse","workspaceRoots":["%s"],"postToolUse":{"toolName":"pipeline-explore","parameters":{},"result":"ok","success":true,"executionTimeMs":1}}' "$p")"
+json3="$(printf '{"hookName":"PostToolUse","workspaceRoots":["%s"],"postToolUse":{"toolName":"tenon-explore","parameters":{},"result":"ok","success":true,"executionTimeMs":1}}' "$p")"
 printf '%s' "$json3" | CLAUDE_PLUGIN_ROOT="$ROOT" bash "$ADAPTERS/cline/hooks/PostToolUse" >/dev/null 2>&1 || true
 if [ -f "$p/$HIST" ]; then
-  assert_contains "track/cline: 真 append history（真实工具名强制映射，与 baseline 等价记录）" "$(cat "$p/$HIST")" '"raw":"Skill: pipeline-explore"'
+  assert_contains "track/cline: 真 append history（真实工具名强制映射，与 baseline 等价记录）" "$(cat "$p/$HIST")" '"raw":"Skill: tenon-explore"'
 else
   bad "track/cline: history 文件生成" "缺 $p/$HIST"
 fi
@@ -835,12 +835,12 @@ if [ "$HAVE_NODE" = 1 ]; then
 
   p="$(mk_change_proj s9-amp-inject)"
   out="$(CLAUDE_PLUGIN_ROOT="$ROOT" node "$AMP_PLUGIN" __test buildInjectContext "$p" 2>/dev/null)"
-  assert_contains "inject/amp: buildInjectContext 真含 baseline 宪法" "$out" "pipeline-lite"
+  assert_contains "inject/amp: buildInjectContext 真含 baseline 宪法" "$out" "tenon"
 
   p="$(mk_change_proj s9-amp-track)"
-  CLAUDE_PLUGIN_ROOT="$ROOT" node "$AMP_PLUGIN" __test recordToolResult "$p" pipeline-explore >/dev/null 2>&1 || true
+  CLAUDE_PLUGIN_ROOT="$ROOT" node "$AMP_PLUGIN" __test recordToolResult "$p" tenon-explore >/dev/null 2>&1 || true
   if [ -f "$p/$HIST" ]; then
-    assert_contains "track/amp: 真 append history（真实工具名强制映射，与 baseline 等价记录）" "$(cat "$p/$HIST")" '"raw":"Skill: pipeline-explore"'
+    assert_contains "track/amp: 真 append history（真实工具名强制映射，与 baseline 等价记录）" "$(cat "$p/$HIST")" '"raw":"Skill: tenon-explore"'
   else
     bad "track/amp: history 文件生成" "缺 $p/$HIST"
   fi
@@ -867,10 +867,10 @@ fi
 AMP_IT="$TMP/amp-it"; mkdir -p "$AMP_IT"
 bash "$ADAPTERS/amp/install.sh" --target "$AMP_IT" --yes >/dev/null 2>&1
 assert_file "amp install: .amp/plugins/pipeline.js 落地" "$AMP_IT/.amp/plugins/pipeline.js"
-assert_contains "amp install: PIPELINE_ROOT 占位符已替换为绝对路径" \
+assert_contains "amp install: TENON_ROOT 占位符已替换为绝对路径" \
   "$(cat "$AMP_IT/.amp/plugins/pipeline.js" 2>/dev/null)" "$ROOT"
 case "$(cat "$AMP_IT/.amp/plugins/pipeline.js" 2>/dev/null)" in
-  *__PIPELINE_ROOT__*) bad "amp install: 占位符不残留" "__PIPELINE_ROOT__ 字面量仍在文件里，替换失败" ;;
+  *__TENON_ROOT__*) bad "amp install: 占位符不残留" "__TENON_ROOT__ 字面量仍在文件里，替换失败" ;;
   *) ok "amp install: 占位符不残留（sed 替换真生效）" ;;
 esac
 

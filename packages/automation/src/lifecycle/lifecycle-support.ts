@@ -7,7 +7,7 @@
  * 本模块是**纯编排 + 注入面**：worktree / sandbox / runWork / collectCommits / mergeToBase / git
  * 全是注入 port（真 docker/git 走 IT + #29c，单测用 fake 驱动全链）。不阉割的守卫（DESIGN §7）以
  * 注入契约表达：
- *   - 沙箱注入 PIPELINE_AFK=1（headless 放行三门，老仓 runChange env）。
+ *   - 沙箱注入 TENON_AFK=1（headless 放行三门，老仓 runChange env）。
  *   - build_sha barrier 全链同源（deriveBarrierSha，命名分支 HEAD，不信沙箱自报）。
  *   - abort → **保留 worktree**（不 remove）+ AbortedRunError（DESIGN §7-item4：失败/abort 绝不清沙箱）。
  *   - 分级放权：autoMerge=false（L1/L2 report-only）→ 收集 commits + 派生 build_sha 供人工复核，
@@ -42,14 +42,14 @@
  *     scheduler，settlement 消费点用同一套判定，绝不出现"物理已 merge 但结算判 custom 坐标未解析"
  *     的分裂。
  */
-import { PIPELINE_AFK_ENV } from '../queue/gate.js'
+import { TENON_AFK_ENV } from '../queue/gate.js'
 import { type RunOutcome } from '../types.js'
 import { filterRunnerEnvironment, type SandboxReport } from '../runner/runner.js'
 import { markNonLoopPrepared, type PreparedExecutionContext, type PreparedSkillBundle } from '../admission/execution-context.js'
 import {
   assertLoopRunner, evaluateConstraintPolicy,
   type ConstraintDecision, type VerificationBinding, type VerificationIssuer,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import {
   DEFAULT_VERIFIER_ISSUER_IDENTITY, enforceVerificationBoundary, evaluateVerificationGate, freezeVerifierInput,
   type VerificationIssuerIdentity, type VerifierPort,
@@ -73,9 +73,9 @@ export const NAMED_BRANCH_PREFIX = 'sandcastle-pipeline/'
  * 属于每个容器自己的私有层，host 后续修改 CAS 无法影响运行中的 agent。
  */
 export const SKILL_BUNDLE_CONTAINER_DIR = '/opt/pipeline-run/skill-bundle'
-export const PIPELINE_AUTOMATION_POLICY_ENV = 'PIPELINE_AUTOMATION_POLICY_B64'
-export const PIPELINE_ATTEMPT_CONTEXT_B64_ENV = 'PIPELINE_ATTEMPT_CONTEXT_B64'
-export const PIPELINE_WORKFLOW_STEP_PROMPT_B64_ENV = 'PIPELINE_WORKFLOW_STEP_PROMPT_B64'
+export const TENON_AUTOMATION_POLICY_ENV = 'TENON_AUTOMATION_POLICY_B64'
+export const TENON_ATTEMPT_CONTEXT_B64_ENV = 'TENON_ATTEMPT_CONTEXT_B64'
+export const TENON_WORKFLOW_STEP_PROMPT_B64_ENV = 'TENON_WORKFLOW_STEP_PROMPT_B64'
 
 /** 沙箱句柄注入面（exec + env 可见 + close 杀容器 + containerName 供运行期写回 automation_sandbox）。 */
 export interface SandboxHandle {
@@ -117,7 +117,7 @@ export type RunWork = (
   exec: SandboxHandle['exec'],
   name: string,
   signal: AbortSignal,
-  /** v5 T20：loop 声明的 runner（'codex' → 真实现在命令构造点注入 PIPELINE_RUNNER=codex；
+  /** v5 T20：loop 声明的 runner（'codex' → 真实现在命令构造点注入 TENON_RUNNER=codex；
    * 缺省走 codex，'claude-code' 仅显式兼容，其余值 fail-loud）。可选参数保留 fake API 兼容。 */
   runner?: string,
 ) => Promise<SandboxReport>
@@ -241,7 +241,7 @@ export interface RunChangeConfig {
   readonly autoMerge: boolean
   /**
    * 额外注入沙箱的 env。普通代理/业务键原样透传，同 runner 凭证允许透传；对侧 runner 的
-   * 凭证在 lifecycle 与真实 Docker port 两层剔除。PIPELINE_AFK_ENV 放最后，不能被覆盖。
+   * 凭证在 lifecycle 与真实 Docker port 两层剔除。TENON_AFK_ENV 放最后，不能被覆盖。
    */
   readonly extraEnv?: Readonly<Record<string, string>>
   /**
@@ -446,7 +446,7 @@ export const finalizeRunOutcome = (o: Omit<RunOutcome, 'noop' | 'killSwitched'>,
 }
 
 /**
- * [AGENT_EXIT] 标记行格式（观察项③/决议 #14②）：沙箱脚本（tools/sandcastle/pipeline-afk-run.sh）
+ * [AGENT_EXIT] 标记行格式（观察项③/决议 #14②）：沙箱脚本（tools/sandcastle/tenon-afk-run.sh）
  * codex 分支在 agent 非零退出（认证失效 / codex 自身报错）时向 stdout 回放
  * `[AGENT_EXIT] codex <exit>`——此前该失败只写进 worktree 内 agent 日志，脚本继续确定性兜底
  * commit 且 0 退出，host 侧完全不可见。行尾容忍空白/\r（同 TRANSITION_LINE_RE 口径）。

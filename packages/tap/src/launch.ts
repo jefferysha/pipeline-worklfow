@@ -44,7 +44,7 @@ export interface PlanResult {
  * forceForward 存在的理由：codex 默认 reverse（OPENAI_BASE_URL），但 ChatGPT OAuth 登录态
  * 的 codex 会**静默无视** OPENAI_BASE_URL 直连 chatgpt.com/backend-api/codex（实测坐实），
  * reverse 对它是假捕获；唯一能真拦的是 forward-MITM（HTTPS_PROXY + CA）。调用方（如沙箱 codex
- * 分支 / `pipeline tap start codex --forward`）据此把 codex 抬成 forward。
+ * 分支 / `tenon tap start codex --forward`）据此把 codex 抬成 forward。
  */
 function clientConfig(client: string) {
   const config = CLIENT_CONFIGS[client]

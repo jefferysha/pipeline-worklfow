@@ -2,7 +2,7 @@
  * cli 依赖注入面 —— 命令逻辑全部是接受 CliDeps 的纯函数（CONTRACT §4 agent:cli）。
  * store/flow 按 types.ts 契约注入；测试全 mock，绝不 import kernel 实现。
  */
-import type { DocumentContractPhase, DocumentEvidenceReport, EffectiveSkillResolver, FlowEngine, GuardContext, HistoryWriter, MutationOutcome, ProjectTrackConfig, RegistrySnapshot, SkillTable, StateStore, TrackRegistry, WorkflowRunRepository } from '@pipeline-lite/kernel'
+import type { DocumentContractPhase, DocumentEvidenceReport, EffectiveSkillResolver, FlowEngine, GuardContext, HistoryWriter, MutationOutcome, ProjectTrackConfig, RegistrySnapshot, SkillTable, StateStore, TrackRegistry, WorkflowRunRepository } from '@tenon/kernel'
 import type { AfkReadiness } from './afkReadiness.js'
 
 /** fs/env 探针半成品；cmdCheck 必须再注入 effective policy 才能组成 kernel GuardContext。 */
@@ -41,7 +41,7 @@ export interface DoctorProbes {
   fileExists: (absPath: string) => boolean
   fileExecutable: (absPath: string) => boolean
   dirExists: (absPath: string) => boolean
-  /** 环境变量读取（PIPELINE_AFK 旁路检测用） */
+  /** 环境变量读取（TENON_AFK 旁路检测用） */
   env: (name: string) => string | undefined
   /** 用户 settings 是否已把 statusline.sh 接入 statusLine */
   statuslineConfigured: () => boolean
@@ -53,7 +53,7 @@ export interface DoctorProbes {
   nativeRuntimeHost: () => Promise<'codex' | 'claude' | null>
   /** 子进程跑 tools/verify-skills.sh；spawn 失败也折算为非 0 code */
   runVerifySkills: () => Promise<{ code: number; output: string }>
-  /** tap 流量代理状态（BACKLOG #34e：敏感能力 doctor 明示）。main.ts 注入 @pipeline-lite/tap tapStatus */
+  /** tap 流量代理状态（BACKLOG #34e：敏感能力 doctor 明示）。main.ts 注入 @tenon/tap tapStatus */
   tapStatus?: () => { intercepting: boolean; captureEnabled: boolean; message: string }
   /**
    * 本机已安装技能/插件的「能力名」集合（full-install 批2 A1，缺技能检测）。
@@ -74,7 +74,7 @@ export interface DoctorProbes {
   /**
    * manifest 强制/推荐 skill 两表（full-install 批2 A1）。main.ts 用 loadManifest(manifestPath())
    * 派生落地（它持有 bundle 里唯一正确的模板路径锚，故两表走探针注入而非 doctor 侧自读——
-   * doctor 被打进 dist/pipeline.mjs 后 import.meta.url 深度与 src 不同，自读会错锚）；测试 mock fixture。
+   * doctor 被打进 dist/tenon.mjs 后 import.meta.url 深度与 src 不同，自读会错锚）；测试 mock fixture。
    * manifest 解析失败 → null，checkSkills 据此出 yellow「无法核技能」而**非**误报 green。
    */
   manifestSkills: () => { mandatory: SkillTable; recommended: SkillTable } | null
@@ -139,14 +139,14 @@ export interface CliDeps {
    */
   withRegistryLock: <T>(cb: (snap: RegistrySnapshot) => Promise<T>) => Promise<T>
   /**
-   * mutate-under-lock（`pipeline tracks` CRUD 专用，R3 D4）：`.pipeline` 仓级锁内 read 最新 raw
+   * mutate-under-lock（`tenon tracks` CRUD 专用，R3 D4）：`.pipeline` 仓级锁内 read 最新 raw
    * config → cb（锁内构造 next + 引用扫描）→ 完整 next 校验 → 同锁原子写。不嵌套 writeTrackRegistry、
    * 不隐式 repairCorrupt。main.ts/harness 用 kernel mutateTrackRegistry 落地。
    */
   mutateRegistry: <T>(cb: (snap: RegistrySnapshot) => Promise<{ next: ProjectTrackConfig; result: T }>) => Promise<MutationOutcome<T>>
   /** 项目根：change 定位在 <cwd>/openspec/changes/<name>/ */
   cwd: string
-  /** Process environment read boundary; automation transition gates consume PIPELINE_AFK without global reads. */
+  /** Process environment read boundary; automation transition gates consume TENON_AFK without global reads. */
   env?: (name: string) => string | undefined
   io: CliIO
   /** ISO8601 UTC 注入时钟（CONTRACT §5.6：业务码禁止散落 new Date()） */
@@ -170,7 +170,7 @@ export interface CliDeps {
   /** lite 历史 .pipeline-history.jsonl appender（CONTRACT §1）。best-effort。 */
   history?: HistoryWriter
   /**
-   * init 成功后把 repoRoot 登记进机器级项目注册表 ~/.claude/pipeline-projects.json
+   * init 成功后把 repoRoot 登记进 Tenon config root 的 projects.json
    * （v5 T2 决策 D：dashboard 项目自动发现）。best-effort：任何注册表故障（损坏/不可写）
    * 只 WARN，绝不影响 init exit 0。main.ts 用 kernel registerProjectRoot 落地。
    */
@@ -187,10 +187,10 @@ export interface CliDeps {
    */
   readGateMarkers?: () => Promise<GateMarkerInfo[]>
   /**
-   * v6 T2：机器级 secrets 存储（~/.claude/pipeline-secrets.json）读成 env 形状，喂 afk run 的
+   * v6 T2：Tenon config root 的 secrets.json 读成 env 形状，喂 afk run 的
    * hostEnv 合并（宿主 env 显式非空 > 文件值，沿用 sdk「显式>文件」装配惯例；空串 env 视同缺席，
    * 不吃掉文件值）。best-effort：未注入/读失败 → {}，行为与接线前完全一致（fail-open，不阻断 run）。
-   * main.ts 用 kernel secretsPath(homedir())+readSecrets 落地；值不进日志（同 dockerRunChange 纪律）。
+   * main.ts 用 resolveRuntimePaths().secretsPath + readSecrets 落地；值不进日志。
    */
   readSecretsEnv?: () => Promise<Record<string, string>>
   /**
@@ -204,24 +204,24 @@ export interface CliDeps {
    * 当前 change 的控制面；production 由 kernel fingerprintWorkspace 落地。
    */
   workspaceFingerprint?: (changeName: string) => Promise<string>
-  /** `pipeline review request` 成功后写 versioned <cwd>/.pipeline-pending-review hook 投影。 */
+  /** `tenon review request` 成功后写 versioned <cwd>/.pipeline-pending-review hook 投影。 */
   writeReviewMarker?: (content: string) => Promise<void>
-  /** `pipeline review acknowledge` 在 canonical approval receipt 成功后移除 hook 投影。 */
+  /** `tenon review acknowledge` 在 canonical approval receipt 成功后移除 hook 投影。 */
   clearReviewMarker?: () => Promise<void>
   /**
    * check 命令的 guard 文件面注入（BACKLOG #12 guard 全量校验面）：按 change 名构造
    * GuardFileContext——fileExists/fileNonempty/readFile/dirExists/changeArchived 相对 cwd 解析，
-   * changeDirRel=openspec/changes/<name>，automationRunner 读 PIPELINE_AUTOMATION_RUNNER。
+   * changeDirRel=openspec/changes/<name>，automationRunner 读 TENON_AUTOMATION_RUNNER。
    * coverageProfile 不允许由 fs 工厂猜测；cmdCheck 用 requireTrack 的 effective policy 合成。
    */
   guardCtx?: (name: string) => GuardFileContext
   /**
-   * `pipeline doctor` 健康面探针（BACKLOG #26b）。缺省 undefined = 未装配，
+   * `tenon doctor` 健康面探针（BACKLOG #26b）。缺省 undefined = 未装配，
    * doctor 命令直接报错 exit 1（doctor 本身不允许静默降级——它就是降级的观测者）。
    */
   doctor?: DoctorProbes
   /**
-   * `-- <command...>` 透传参数（BACKLOG #34-wire，`pipeline tap start`用）。main.ts 在调用
+   * `-- <command...>` 透传参数（BACKLOG #34-wire，`tenon tap start`用）。main.ts 在调用
    * commander 之前从原始 process.argv 里手工切出，绕开 commander 自身的一个真实 bug：
    * variadic `[args...]` 捕获里的裸 `--`，若前一个 token 是普通位置参数（不以 - 开头），会被
    * commander 静默吞掉；若前一个 token 是形如 `--foo` 的选项样 token 则保留——这是 commander

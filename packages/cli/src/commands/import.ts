@@ -5,7 +5,7 @@
  *   → --strip 时写回清空历史节的 state（其余尾内容 kernel 保证逐字保留）。
  * append 在此 fail-loud（显式导入命令，不同于 set/transition 的 best-effort 记账）。
  */
-import { parseLegacyHistory, stripLegacyHistory, type HistoryWriter } from '@pipeline-lite/kernel'
+import { parseLegacyHistory, stripLegacyHistory, type HistoryWriter } from '@tenon/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
 import { changeDir, isValidChangeName } from '../paths.js'
 

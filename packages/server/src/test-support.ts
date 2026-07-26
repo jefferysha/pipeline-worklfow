@@ -17,8 +17,8 @@ import {
   loadManifest,
   recordDocument,
   recordDocumentReads,
-} from '@pipeline-lite/kernel'
-import type { FlowEngine, InitOptions, StateStore } from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
+import type { FlowEngine, InitOptions, StateStore } from '@tenon/kernel'
 
 /** 新仓根 templates/manifest.yaml（src 下运行时：src → server → packages → 根）。 */
 export function repoManifestPath(): string {

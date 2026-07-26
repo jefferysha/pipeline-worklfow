@@ -1,5 +1,5 @@
 /**
- * loop-run（`pipeline loop run <loop-id|pattern>`）—— 纯只读 dry-run 预览的 mock 层回归
+ * loop-run（`tenon loop run <loop-id|pattern>`）—— 纯只读 dry-run 预览的 mock 层回归
  * （H14 硬需求收口起点：唯一不被 H7 verifier / H10 skill-bundle 阻塞的部分）。
  *
  * 覆盖：selector（精确 id / glob 多命中 / 零命中 exit1）· admission allowed 与 blocked:<各维度>
@@ -11,8 +11,8 @@
  * ledger 投影经注入 projectLedger（LedgerProjector）全 mock——测试绝不碰真 fs/ledger IO。
  */
 import { describe, expect, test, vi } from 'vitest'
-import type { EffectiveSkillResolver, EffectiveSkillSlot, LedgerRecord, LoopLedgerProjection } from '@pipeline-lite/kernel'
-import type { AutomationLevel, RoundReport } from '@pipeline-lite/automation'
+import type { EffectiveSkillResolver, EffectiveSkillSlot, LedgerRecord, LoopLedgerProjection } from '@tenon/kernel'
+import type { AutomationLevel, RoundReport } from '@tenon/automation'
 import type { AfkRoundExecutionResult } from './afk-executor.js'
 import { makeDeps } from '../test-support.js'
 import { cmdLoopRun } from './loop-run.js'

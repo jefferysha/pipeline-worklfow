@@ -3,7 +3,7 @@ name: brainstorming
 description: First-party structured discovery for a pipeline explore or spec phase.
 license: MIT
 metadata:
-  author: pipeline-lite
+  author: tenon
 ---
 
 # Brainstorming

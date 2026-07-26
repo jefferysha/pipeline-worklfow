@@ -36,7 +36,7 @@ import {
   validateChangeName,
   isTerminalSessionId,
   type PackageDecl,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
 import { changeDir } from '../paths.js'
 import {
@@ -196,7 +196,7 @@ async function ensureState(deps: CliDeps, name: string): Promise<string | null> 
     return dir
   } catch {
     deps.io.err(`ERROR: 状态文件不存在: openspec/changes/${name}/.pipeline-run/current.json（或未迁移 .pipeline.yaml）`)
-    deps.io.err(`  先执行: pipeline init ${name} --track <track> --preset <preset>`)
+    deps.io.err(`  先执行: tenon init ${name} --track <track> --preset <preset>`)
     return null
   }
 }
@@ -236,7 +236,7 @@ async function cmdActivate(deps: CliDeps, args: string[], fs: SessionFs): Promis
   const [name, ...flags] = args
   const options = parseActivateOptions(flags)
   if (options === null) {
-    deps.io.err('ERROR: session activate 用法: pipeline session activate <change> [--continuous] [--host-session <session-id>]')
+    deps.io.err('ERROR: session activate 用法: tenon session activate <change> [--continuous] [--host-session <session-id>]')
     return 1
   }
   if (!checkName(deps, name)) return 1

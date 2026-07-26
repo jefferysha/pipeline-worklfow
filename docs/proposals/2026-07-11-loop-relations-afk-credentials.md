@@ -55,7 +55,7 @@
 
 #### 方案 A(推荐)—— 卡头徽章 + 内嵌关系条
 
-在 `LoopCard.tsx` 现有卡头(`wb-editor-head lp-head`,含标题/dirty 态/保存钮,:118-128)与编辑区之间,插入一条新的横向"关系条"(浅底色,类比 Trellis 卡片的 meta/breadcrumb 行,不是新组件类型,是现有卡片内的一个新分组,复用 `lp-policy`/`wb-ed-sec` 一类既有分组样式纪律):
+在 `LoopCard.tsx` 现有卡头(`wb-editor-head lp-head`,含标题/dirty 态/保存钮,:118-128)与编辑区之间,插入一条新的横向"关系条"(浅底色,类比 Tenon contract 卡片的 meta/breadcrumb 行,不是新组件类型,是现有卡片内的一个新分组,复用 `lp-policy`/`wb-ed-sec` 一类既有分组样式纪律):
 
 ```
 [root: pipeline-worklfow]  ·  change_prefix "rl-" → 命中 3 个 change(点开清单)  ·  阶段: [build] [verify]

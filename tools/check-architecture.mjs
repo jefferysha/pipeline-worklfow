@@ -28,6 +28,9 @@ const WORKFLOW_IDENTITY_COMPAT = new Map([
     { code: "const definition = id === 'default' ? undefined", reason: 'central compatibility loader dispatch' },
     { code: "if (id === 'default') return compileEffectiveWorkflowPlan(id, undefined, track)", reason: 'central compatibility resolver dispatch' },
   ]],
+  ['packages/kernel/src/workflow/migrations/pre-tenon-v1-document-policy.ts', [
+    { code: "workflowId !== 'default'", reason: 'exact immutable v1 persistence compatibility fingerprint reader' },
+  ]],
   ['packages/kernel/src/workflow/document-contract.ts', [
     { code: "workflowName === 'default' || workflow?.openspecContract === 'required'", reason: 'legacy OpenSpec profile compatibility alias' },
     { code: "if (workflowName === 'default') return true", reason: 'legacy OpenSpec profile compatibility alias' },
@@ -223,6 +226,20 @@ const DOMAIN_INFRASTRUCTURE = new Set([
   'packages/kernel/src/workflow/stepGuard.ts',
 ])
 
+const PRODUCT_PATH_OWNER = 'packages/kernel/src/product-paths.ts'
+const PRODUCT_ROOT_CONTRACT_SITES = new Set([
+  PRODUCT_PATH_OWNER,
+  'packages/cli/src/runtime/launchers.ts',
+  'runtime/tenon-bootstrap.mjs',
+])
+const LEGACY_ROOT_PROJECTION_SITES = new Set([
+  'packages/cli/src/runtime/launchers.ts',
+  'runtime/tenon-bootstrap.mjs',
+  'packages/cli/src/codexSkillTrust.ts',
+  'hooks/auto-update.sh',
+  'hooks/session-start.sh',
+])
+
 function walk(dir) {
   const files = []
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -298,7 +315,7 @@ for (const path of production) {
       `${rel}: ${size.kind} ${lineCount(text)} lines exceeds ${size.limit} (${size.citation})`,
     )
   }
-  if (/from ['"]@pipeline-lite\/[^/'"]+\//.test(code)) {
+  if (/from ['"]@tenon\/[^/'"]+\//.test(code)) {
     failures.push(`${rel}: cross-workspace deep import bypasses public package export (.agent-rules/BACKEND.md)`)
   }
 
@@ -328,16 +345,38 @@ for (const path of production) {
   }
 
   if (rel !== 'packages/automation/src/types.ts' && /const AUTOMATION_STATES\s*=/.test(code)) {
-    failures.push(`${rel}: AUTOMATION_STATES must come from @pipeline-lite/automation`)
+    failures.push(`${rel}: AUTOMATION_STATES must come from @tenon/automation`)
   }
   if (rel !== 'packages/automation/src/lifecycle/worktree.ts' && /const CANCEL_MARKER_FILE\s*=/.test(code)) {
-    failures.push(`${rel}: CANCEL_MARKER_FILE must come from @pipeline-lite/automation`)
+    failures.push(`${rel}: CANCEL_MARKER_FILE must come from @tenon/automation`)
   }
   if (/function readTopLevelScalars\s*\(/.test(code)) {
     failures.push(`${rel}: pipeline YAML must be decoded by the kernel codec`)
   }
   if (/as unknown as WorkflowDef/.test(code)) {
     failures.push(`${rel}: workflow request DTO must pass through decodeWorkflowDef`)
+  }
+
+  if (rel !== PRODUCT_PATH_OWNER
+    && /['"](?:projects|secrets|dashboard-token|dashboard-server)\.json['"]/.test(code)) {
+    failures.push(`${rel}: Tenon product file locations must come from kernel resolveProductPaths`)
+  }
+  if (rel.startsWith('packages/kernel/src/')
+    && /['"]pipeline-projects\.json['"]/.test(code)) {
+    failures.push(`${rel}: vendor-neutral kernel must not own host-specific migration paths`)
+  }
+  if (rel !== PRODUCT_PATH_OWNER && /\bTENON_RUNTIME_HOME\b/.test(code)) {
+    failures.push(`${rel}: TENON_RUNTIME_HOME may only be interpreted by kernel resolveProductPaths`)
+  }
+  if (/\bTENON_DASHBOARD_HOME\b/.test(code)) {
+    failures.push(`${rel}: Dashboard-only machine home creates a forbidden second product-state root`)
+  }
+  if (/\bTENON_RUNTIME_ROOTS\b/.test(code) && !PRODUCT_ROOT_CONTRACT_SITES.has(rel)) {
+    failures.push(`${rel}: versioned runtime root contract may only be resolved, projected, or consumed at its boundary`)
+  }
+  if (/\bTENON_RUNTIME_(?:DATA|STATE|CONFIG)_ROOT\b/.test(code)
+    && !LEGACY_ROOT_PROJECTION_SITES.has(rel)) {
+    failures.push(`${rel}: individual runtime roots are read-only shell/N-1 projections, not path inputs`)
   }
 
   const allowedIdentitySites = WORKFLOW_IDENTITY_COMPAT.get(rel) ?? []

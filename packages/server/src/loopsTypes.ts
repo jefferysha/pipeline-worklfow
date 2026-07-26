@@ -6,7 +6,7 @@ import type {
   LoopRisk,
   ReadinessScore,
   RunResult,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 
 export interface LoopRow {
   root: string

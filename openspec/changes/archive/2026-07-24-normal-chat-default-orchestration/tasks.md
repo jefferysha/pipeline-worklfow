@@ -34,7 +34,7 @@
 ## Verify
 
 - [x] 运行 kernel / CLI / server / Dashboard / hook / adapter / bundle 验证，并验证缺文档、改文档、漏回读和错误 review event 均被拒绝。
-- [x] 通过真实稳定安装路径验证：新 SkillHub 调研主题为 `intent: new` / `phase: open`，不会读取本 change 的旧任务。
+- [x] 通过真实稳定安装路径验证：新的工具项目调研主题为 `intent: new` / `phase: open`，不会读取本 change 的旧任务。
 - [x] 验证全局 Dashboard 在 `127.0.0.1:18765` 健康可用，并且 doctor 不再把 Codex 安装误报为 Claude statusLine 缺失。
 - [x] 验证局部 typo/文案命中 simple 且不生成完整文档链；API/schema/auth/多模块等否决项稳定升级到完整 Track。
 

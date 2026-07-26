@@ -28,7 +28,7 @@ import {
   type TrackValidationContext,
   type WorkflowDef,
   type WorkflowRunRepository,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import {
   cancelAfkRun,
   dismissAfkRun,

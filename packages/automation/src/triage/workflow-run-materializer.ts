@@ -1,10 +1,10 @@
 import { createHash } from 'node:crypto'
-import { validateObservationPage } from '@pipeline-lite/kernel'
+import { validateObservationPage } from '@tenon/kernel'
 import type {
   ObservationPage,
   ObserveActionKind,
   WorkflowRun,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 
 /**
  * A narrow host-owned request. Repository location, track, preset, loop/policy bindings, and

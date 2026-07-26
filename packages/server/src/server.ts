@@ -3,7 +3,6 @@ import { existsSync, lstatSync, readFileSync, statSync } from 'node:fs'
 import { readdir } from 'node:fs/promises'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import type { AddressInfo } from 'node:net'
-import { homedir } from 'node:os'
 import { dirname, join, resolve as resolvePath } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
@@ -17,18 +16,17 @@ import {
   validateWorkflow,
   stateStorageExistsSync, validateWorkflowTrackReferences, withRegistryGovernanceLock, withTrackRegistryLock,
   writeRegistryWithGovernance,
-} from '@pipeline-lite/kernel'
-import { createRunnerSkillContentLocator, evaluateLoopExecutionWiring } from '@pipeline-lite/automation'
+} from '@tenon/kernel'
+import { createRunnerSkillContentLocator, evaluateLoopExecutionWiring } from '@tenon/automation'
 import type {
   ChangeRefScan, CreateTrackSpec, ExtendedManifestData, FlowEngine, GraduationFs, MemFs, StateStore, TrackDefinition,
   ProjectTrackConfig, TrackRegistry, TrackValidationContext, UpdateTrackPatch, WorkflowDef,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import { buildAfkLog, buildAfkSnapshot, cancelAfkRun, dismissAfkRun, enqueueAfkRun, readAfkRunLog, retryAfkRun } from './afk.js'
 import { applyLoopsUpdate, buildLoopsSnapshot, type LoopActivationValidator } from './loops.js'
 import { readConfigSnapshot, validateMandatorySkillsBody, writeMandatorySkills } from './config.js'
 import { readAutomationSettings, validateAutomationSettingsBody, writeAutomationSettings } from './automationConfig.js'
 import { HOOK_METAS, readHooksMatrix, validateHookToggleBody, writeHookToggle } from './hooksConfig.js'
-import { resolveServerPaths } from './paths.js'
 import { addProjectToRegistry, removeProjectFromRegistry } from './projects.js'
 import {
   assertWorkflowRootAnchor, captureWorkflowDeletePermit, captureWorkflowRootAnchor, closeWorkflowRootAnchor,
@@ -83,13 +81,14 @@ function isWorkflowName(name: string): boolean {
 
 export { isLocalHost } from './serverSupport.js'
 
-export function createDashboardServer(options: DashboardServerOptions = {}): DashboardServer {
+export function createDashboardServer(options: DashboardServerOptions): DashboardServer {
   const version = options.version ?? SERVER_VERSION
   const releaseId = options.releaseId
   const token = options.token ?? generateToken()
   const clock = options.clock ?? isoNow
-  const paths = resolveServerPaths({ home: options.home })
-  const stateScopeId = machineStateScopeId(paths.home)
+  const paths = options.paths
+  const hostHome = options.hostHome ?? paths.homeDir
+  const stateScopeId = machineStateScopeId(paths.stateRoot)
   const registry: () => string[] = options.registry ?? (() => readRegistry(paths.registryPath))
   const store: StateStore = options.store ?? createStateStore()
   const recordStore = createTransitionRecordStore()
@@ -139,7 +138,7 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
             resolver,
             locator: createRunnerSkillContentLocator({
               runner,
-              home: options.home ?? homedir(),
+              home: hostHome,
               bundledRoot: join(repoRootForSkills(), 'skills'),
             }),
             isSkillProfileKnown: (profileId: string) => profileId === '_all' || trackSkillProfiles.has(profileId),
@@ -158,8 +157,9 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
   const gitHeadSha = options.gitHeadSha
   const workspaceFingerprint = options.workspaceFingerprint
   const traceStore = options.traceStore
-  // v9-I：mem 会话检索 fs（只读用户会话历史根，绝不写）；测试注 nodeMemFs(fakeHome) 指 fixture 树。
-  const memFs: MemFs = options.memFs ?? nodeMemFs()
+  // v9-I：mem 会话检索 fs（只读宿主会话历史根，绝不写）。默认值必须绑定显式 hostHome；
+  // 无参数 nodeMemFs() 会重新读取 OS home，形成 paths.homeDir/hostHome 之外的第三作用域。
+  const memFs: MemFs = options.memFs ?? nodeMemFs(hostHome)
   // config 写端点（M3 可选增量）数据源：manifest.yaml 路径。未注入（如测试只传 flow 而非
   // manifestPath）→ capabilities.config=false，GET/POST config 端点降级 404（不谎报，同 traffic 手法）。
   const manifestPath = options.manifestPath
@@ -305,7 +305,7 @@ export function createDashboardServer(options: DashboardServerOptions = {}): Das
       version, releaseId, stateScopeId, isLocalHost, boundPort: () => boundPort, snapshotDeps,
       handleStream, isRegisteredRoot, clock, store, recordStore, loopLedger, registry, traceStore,
       workflowRootForRequest, trackValidationContextFor, trackRegistryBody, manifestPath, paths,
-      options, resolveSessionLink, errMsg,
+      hostHome, options, resolveSessionLink, errMsg,
     })
   const handlePost = (req: IncomingMessage, res: ServerResponse, path: string): Promise<void> =>
     handlePostRoute(req, res, path, {

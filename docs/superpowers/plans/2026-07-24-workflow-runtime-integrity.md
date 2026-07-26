@@ -74,11 +74,12 @@ while all implementation files remain content-addressed.
 
 1. Run kernel, CLI, server, dashboard, hook, adapter, skill, bundle, oracle, and
    complete build/test gates.
-2. Resume `pet-adoption-center`, execute its real custom Workflow from Build,
-   and confirm a Verify receipt no longer changes the frozen baseline.
-3. Complete pet Verify/Ship/Archive and inspect the Dashboard status projection.
-4. Exercise a fresh `free / pet-adoption-live` Change and a bounded simple task
-   to prove the three execution choices remain distinct.
+2. Resume a fixture-backed custom Workflow from Build and confirm a Verify
+   receipt no longer changes the frozen baseline.
+3. Complete its Verify/Ship/Archive lifecycle and inspect the Dashboard status
+   projection.
+4. Exercise a fresh `free` custom Workflow Change and a bounded simple task to
+   prove the three execution choices remain distinct.
 5. Update the verification report with exact commands, results, screenshots,
    review receipts, and residual limitations.
 

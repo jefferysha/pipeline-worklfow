@@ -1,6 +1,6 @@
 # templates/skill-sources.yaml — packaged default-workflow skill inventory
 #
-# This is the single source of truth for the skills a new pipeline user receives.  Every default
+# This is the single source of truth for the skills a new Tenon user receives.  Every default
 # requirement is first-party and lives under this plugin's `skills/` tree; setup therefore never
 # downloads a mandatory skill from npm, a third-party marketplace, or another host's cache.
 #
@@ -10,71 +10,70 @@
 version: 2
 
 skills:
-  pipeline:                         { tool: bundled, source: pipeline-lite, content_skill: pipeline, tier: mandatory, official: true }
-  pipeline-lite:                    { tool: bundled, source: pipeline-lite, content_skill: pipeline-lite, tier: mandatory, official: true }
-  pipeline-open:                    { tool: bundled, source: pipeline-lite, content_skill: pipeline-open, tier: mandatory, official: true }
-  pipeline-explore:                 { tool: bundled, source: pipeline-lite, content_skill: pipeline-explore, tier: mandatory, official: true }
-  pipeline-spec:                    { tool: bundled, source: pipeline-lite, content_skill: pipeline-spec, tier: mandatory, official: true }
-  pipeline-build:                   { tool: bundled, source: pipeline-lite, content_skill: pipeline-build, tier: mandatory, official: true }
-  pipeline-verify:                  { tool: bundled, source: pipeline-lite, content_skill: pipeline-verify, tier: mandatory, official: true }
-  pipeline-ship:                    { tool: bundled, source: pipeline-lite, content_skill: pipeline-ship, tier: mandatory, official: true }
-  pipeline-archive:                 { tool: bundled, source: pipeline-lite, content_skill: pipeline-archive, tier: mandatory, official: true }
-  simple-task:                      { tool: bundled, source: pipeline-lite, content_skill: simple-task, tier: mandatory, official: true }
-  pipeline-researcher:              { tool: bundled, source: pipeline-lite, content_skill: pipeline-researcher, tier: recommended, official: true }
-  learn-record:                     { tool: bundled, source: pipeline-lite, content_skill: learn-record, tier: optional, official: true }
+  tenon:                          { tool: bundled, source: tenon, content_skill: tenon, tier: mandatory, official: true }
+  tenon-open:                    { tool: bundled, source: tenon, content_skill: tenon-open, tier: mandatory, official: true }
+  tenon-explore:                 { tool: bundled, source: tenon, content_skill: tenon-explore, tier: mandatory, official: true }
+  tenon-spec:                    { tool: bundled, source: tenon, content_skill: tenon-spec, tier: mandatory, official: true }
+  tenon-build:                   { tool: bundled, source: tenon, content_skill: tenon-build, tier: mandatory, official: true }
+  tenon-verify:                  { tool: bundled, source: tenon, content_skill: tenon-verify, tier: mandatory, official: true }
+  tenon-ship:                    { tool: bundled, source: tenon, content_skill: tenon-ship, tier: mandatory, official: true }
+  tenon-archive:                 { tool: bundled, source: tenon, content_skill: tenon-archive, tier: mandatory, official: true }
+  simple-task:                      { tool: bundled, source: tenon, content_skill: simple-task, tier: mandatory, official: true }
+  tenon-researcher:              { tool: bundled, source: tenon, content_skill: tenon-researcher, tier: recommended, official: true }
+  learn-record:                     { tool: bundled, source: tenon, content_skill: learn-record, tier: optional, official: true }
 
-  openspec-propose:                 { tool: bundled, source: pipeline-lite, content_skill: openspec-propose, tier: mandatory, official: true }
-  openspec-explore:                 { tool: bundled, source: pipeline-lite, content_skill: openspec-explore, tier: mandatory, official: true }
-  openspec-apply-change:            { tool: bundled, source: pipeline-lite, content_skill: openspec-apply-change, tier: mandatory, official: true }
-  openspec-archive-change:          { tool: bundled, source: pipeline-lite, content_skill: openspec-archive-change, tier: mandatory, official: true }
+  openspec-propose:                 { tool: bundled, source: tenon, content_skill: openspec-propose, tier: mandatory, official: true }
+  openspec-explore:                 { tool: bundled, source: tenon, content_skill: openspec-explore, tier: mandatory, official: true }
+  openspec-apply-change:            { tool: bundled, source: tenon, content_skill: openspec-apply-change, tier: mandatory, official: true }
+  openspec-archive-change:          { tool: bundled, source: tenon, content_skill: openspec-archive-change, tier: mandatory, official: true }
 
-  brainstorming:                    { tool: bundled, source: pipeline-lite, content_skill: brainstorming, tier: mandatory, official: true }
-  writing-plans:                    { tool: bundled, source: pipeline-lite, content_skill: writing-plans, tier: mandatory, official: true }
-  test-driven-development:          { tool: bundled, source: pipeline-lite, content_skill: test-driven-development, tier: mandatory, official: true }
-  subagent-driven-development:      { tool: bundled, source: pipeline-lite, content_skill: subagent-driven-development, tier: conditional, official: true }
-  dispatching-parallel-agents:      { tool: bundled, source: pipeline-lite, content_skill: dispatching-parallel-agents, tier: conditional, official: true }
-  verification-before-completion:   { tool: bundled, source: pipeline-lite, content_skill: verification-before-completion, tier: mandatory, official: true }
-  finishing-a-development-branch:   { tool: bundled, source: pipeline-lite, content_skill: finishing-a-development-branch, tier: mandatory, official: true }
+  brainstorming:                    { tool: bundled, source: tenon, content_skill: brainstorming, tier: mandatory, official: true }
+  writing-plans:                    { tool: bundled, source: tenon, content_skill: writing-plans, tier: mandatory, official: true }
+  test-driven-development:          { tool: bundled, source: tenon, content_skill: test-driven-development, tier: mandatory, official: true }
+  subagent-driven-development:      { tool: bundled, source: tenon, content_skill: subagent-driven-development, tier: conditional, official: true }
+  dispatching-parallel-agents:      { tool: bundled, source: tenon, content_skill: dispatching-parallel-agents, tier: conditional, official: true }
+  verification-before-completion:   { tool: bundled, source: tenon, content_skill: verification-before-completion, tier: mandatory, official: true }
+  finishing-a-development-branch:   { tool: bundled, source: tenon, content_skill: finishing-a-development-branch, tier: mandatory, official: true }
 
-  grill-with-docs:                  { tool: bundled, source: pipeline-lite, content_skill: grill-with-docs, tier: mandatory, official: true }
-  improve-codebase-architecture:    { tool: bundled, source: pipeline-lite, content_skill: improve-codebase-architecture, tier: mandatory, official: true }
-  prototype:                        { tool: bundled, source: pipeline-lite, content_skill: prototype, tier: mandatory, official: true }
-  frontend-design:                  { tool: bundled, source: pipeline-lite, content_skill: frontend-design, tier: mandatory, official: true }
-  web-design-guidelines:            { tool: bundled, source: pipeline-lite, content_skill: web-design-guidelines, tier: mandatory, official: true }
-  design-taste-frontend:            { tool: bundled, source: pipeline-lite, content_skill: design-taste-frontend, tier: mandatory, official: true }
-  browser-qa:                       { tool: bundled, source: pipeline-lite, content_skill: browser-qa, tier: mandatory, official: true }
-  e2e-testing:                      { tool: bundled, source: pipeline-lite, content_skill: e2e-testing, tier: mandatory, official: true }
-  handoff:                          { tool: bundled, source: pipeline-lite, content_skill: handoff, tier: recommended, official: true }
-  to-spec:                          { tool: bundled, source: pipeline-lite, content_skill: to-spec, tier: mandatory, official: true }
-  to-tickets:                       { tool: bundled, source: pipeline-lite, content_skill: to-tickets, tier: mandatory, official: true }
+  grill-with-docs:                  { tool: bundled, source: tenon, content_skill: grill-with-docs, tier: mandatory, official: true }
+  improve-codebase-architecture:    { tool: bundled, source: tenon, content_skill: improve-codebase-architecture, tier: mandatory, official: true }
+  prototype:                        { tool: bundled, source: tenon, content_skill: prototype, tier: mandatory, official: true }
+  frontend-design:                  { tool: bundled, source: tenon, content_skill: frontend-design, tier: mandatory, official: true }
+  web-design-guidelines:            { tool: bundled, source: tenon, content_skill: web-design-guidelines, tier: mandatory, official: true }
+  design-taste-frontend:            { tool: bundled, source: tenon, content_skill: design-taste-frontend, tier: mandatory, official: true }
+  browser-qa:                       { tool: bundled, source: tenon, content_skill: browser-qa, tier: mandatory, official: true }
+  e2e-testing:                      { tool: bundled, source: tenon, content_skill: e2e-testing, tier: mandatory, official: true }
+  handoff:                          { tool: bundled, source: tenon, content_skill: handoff, tier: recommended, official: true }
+  to-spec:                          { tool: bundled, source: tenon, content_skill: to-spec, tier: mandatory, official: true }
+  to-tickets:                       { tool: bundled, source: tenon, content_skill: to-tickets, tier: mandatory, official: true }
 
-  search-first:                     { tool: bundled, source: pipeline-lite, content_skill: search-first, tier: recommended, official: true }
-  hallmark:                         { tool: bundled, source: pipeline-lite, content_skill: hallmark, tier: recommended, official: true }
-  react-patterns:                   { tool: bundled, source: pipeline-lite, content_skill: react-patterns, tier: recommended, official: true }
+  search-first:                     { tool: bundled, source: tenon, content_skill: search-first, tier: recommended, official: true }
+  hallmark:                         { tool: bundled, source: tenon, content_skill: hallmark, tier: recommended, official: true }
+  react-patterns:                   { tool: bundled, source: tenon, content_skill: react-patterns, tier: recommended, official: true }
 
-  triage:                           { tool: bundled, source: pipeline-lite, content_skill: triage, tier: conditional, official: true }
-  deep-research:                    { tool: bundled, source: pipeline-lite, content_skill: deep-research, tier: recommended, official: true }
-  market-research:                  { tool: bundled, source: pipeline-lite, content_skill: market-research, tier: recommended, official: true }
-  zoom-out:                         { tool: bundled, source: pipeline-lite, content_skill: zoom-out, tier: optional, official: true }
-  find-skills:                      { tool: bundled, source: pipeline-lite, content_skill: find-skills, tier: optional, official: true }
-  huashu-design:                    { tool: bundled, source: pipeline-lite, content_skill: huashu-design, tier: recommended, official: true }
-  hue:                              { tool: bundled, source: pipeline-lite, content_skill: hue, tier: conditional, official: true }
-  shadcn-ui:                        { tool: bundled, source: pipeline-lite, content_skill: shadcn-ui, tier: conditional, official: true }
-  tailwind-css-patterns:            { tool: bundled, source: pipeline-lite, content_skill: tailwind-css-patterns, tier: conditional, official: true }
-  web-artifacts-builder:            { tool: bundled, source: pipeline-lite, content_skill: web-artifacts-builder, tier: optional, official: true }
-  uiuxdesign-pro:                   { tool: bundled, source: pipeline-lite, content_skill: uiuxdesign-pro, tier: optional, official: true }
-  react-best-practices:             { tool: bundled, source: pipeline-lite, content_skill: react-best-practices, tier: conditional, official: true }
-  frontend-patterns:                { tool: bundled, source: pipeline-lite, content_skill: frontend-patterns, tier: optional, official: true }
-  nestjs-patterns:                  { tool: bundled, source: pipeline-lite, content_skill: nestjs-patterns, tier: conditional, official: true }
-  postgres-patterns:                { tool: bundled, source: pipeline-lite, content_skill: postgres-patterns, tier: conditional, official: true }
-  python-patterns:                  { tool: bundled, source: pipeline-lite, content_skill: python-patterns, tier: conditional, official: true }
-  python-testing:                   { tool: bundled, source: pipeline-lite, content_skill: python-testing, tier: conditional, official: true }
-  docker-patterns:                  { tool: bundled, source: pipeline-lite, content_skill: docker-patterns, tier: conditional, official: true }
-  deployment-patterns:              { tool: bundled, source: pipeline-lite, content_skill: deployment-patterns, tier: recommended, official: true }
-  verify:                           { tool: bundled, source: pipeline-lite, content_skill: verify, tier: recommended, official: true }
-  run:                              { tool: bundled, source: pipeline-lite, content_skill: run, tier: optional, official: true }
-  security-review:                  { tool: bundled, source: pipeline-lite, content_skill: security-review, tier: optional, official: true }
-  code-review:                      { tool: bundled, source: pipeline-lite, content_skill: code-review, tier: optional, official: true }
-  code-tour:                        { tool: bundled, source: pipeline-lite, content_skill: code-tour, tier: optional, official: true }
-  github-ops:                       { tool: bundled, source: pipeline-lite, content_skill: github-ops, tier: optional, official: true }
-  skill-creator:                    { tool: bundled, source: pipeline-lite, content_skill: skill-creator, tier: optional, official: true }
+  triage:                           { tool: bundled, source: tenon, content_skill: triage, tier: conditional, official: true }
+  deep-research:                    { tool: bundled, source: tenon, content_skill: deep-research, tier: recommended, official: true }
+  market-research:                  { tool: bundled, source: tenon, content_skill: market-research, tier: recommended, official: true }
+  zoom-out:                         { tool: bundled, source: tenon, content_skill: zoom-out, tier: optional, official: true }
+  find-skills:                      { tool: bundled, source: tenon, content_skill: find-skills, tier: optional, official: true }
+  huashu-design:                    { tool: bundled, source: tenon, content_skill: huashu-design, tier: recommended, official: true }
+  hue:                              { tool: bundled, source: tenon, content_skill: hue, tier: conditional, official: true }
+  shadcn-ui:                        { tool: bundled, source: tenon, content_skill: shadcn-ui, tier: conditional, official: true }
+  tailwind-css-patterns:            { tool: bundled, source: tenon, content_skill: tailwind-css-patterns, tier: conditional, official: true }
+  web-artifacts-builder:            { tool: bundled, source: tenon, content_skill: web-artifacts-builder, tier: optional, official: true }
+  uiuxdesign-pro:                   { tool: bundled, source: tenon, content_skill: uiuxdesign-pro, tier: optional, official: true }
+  react-best-practices:             { tool: bundled, source: tenon, content_skill: react-best-practices, tier: conditional, official: true }
+  frontend-patterns:                { tool: bundled, source: tenon, content_skill: frontend-patterns, tier: optional, official: true }
+  nestjs-patterns:                  { tool: bundled, source: tenon, content_skill: nestjs-patterns, tier: conditional, official: true }
+  postgres-patterns:                { tool: bundled, source: tenon, content_skill: postgres-patterns, tier: conditional, official: true }
+  python-patterns:                  { tool: bundled, source: tenon, content_skill: python-patterns, tier: conditional, official: true }
+  python-testing:                   { tool: bundled, source: tenon, content_skill: python-testing, tier: conditional, official: true }
+  docker-patterns:                  { tool: bundled, source: tenon, content_skill: docker-patterns, tier: conditional, official: true }
+  deployment-patterns:              { tool: bundled, source: tenon, content_skill: deployment-patterns, tier: recommended, official: true }
+  verify:                           { tool: bundled, source: tenon, content_skill: verify, tier: recommended, official: true }
+  run:                              { tool: bundled, source: tenon, content_skill: run, tier: optional, official: true }
+  security-review:                  { tool: bundled, source: tenon, content_skill: security-review, tier: optional, official: true }
+  code-review:                      { tool: bundled, source: tenon, content_skill: code-review, tier: optional, official: true }
+  code-tour:                        { tool: bundled, source: tenon, content_skill: code-tour, tier: optional, official: true }
+  github-ops:                       { tool: bundled, source: tenon, content_skill: github-ops, tier: optional, official: true }
+  skill-creator:                    { tool: bundled, source: tenon, content_skill: skill-creator, tier: optional, official: true }

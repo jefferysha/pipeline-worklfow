@@ -18,7 +18,7 @@ import {
   type ReconciliationApplyResult,
   type ReconciliationPlan,
   type ReconciliationSnapshot,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
 
 const decoder = new TextDecoder('utf-8', { fatal: true })

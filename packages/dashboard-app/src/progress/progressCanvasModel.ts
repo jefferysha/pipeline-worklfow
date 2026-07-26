@@ -4,6 +4,7 @@ import type {
   ProgressRules,
   ProgressSelection,
 } from '../model/progressModel'
+import { executionProvenance } from '../model/progressModel'
 import type {
   CanvasArchivedChange,
   CanvasChange,
@@ -105,9 +106,7 @@ export function buildCanvasGroups({
         state: dot.state,
         tone: dot.tone,
         running: row.state === 'running',
-        executionSource: inSandbox(flat)
-          ? 'automation'
-          : row.change.terminalActivity === undefined ? 'none' : 'terminal',
+        executionSource: executionProvenance(row.change),
         sandbox: inSandbox(flat),
         dimmed: deckTab !== 'all' && !deckMatch(flat, deckTab),
         selected: selectedKey === flat.key,

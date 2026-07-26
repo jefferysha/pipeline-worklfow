@@ -47,7 +47,7 @@ function okJson(value: unknown): Response {
 
 beforeEach(() => {
   localStorage.clear()
-  window.__PIPELINE_DASHBOARD_TOKEN__ = 'ui-token'
+  window.__TENON_DASHBOARD_TOKEN__ = 'ui-token'
 })
 
 afterEach(() => {

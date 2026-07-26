@@ -7,7 +7,7 @@ import {
   type HistoryEntry,
   type StateStore,
   type TransitionRecordStore,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 
 export interface ChangeHistoryDeps {
   store: StateStore

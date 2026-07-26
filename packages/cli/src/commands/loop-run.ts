@@ -1,5 +1,5 @@
 /**
- * `pipeline loop run <loop-id|pattern>` —— H14 loop 定向发起（★硬需求收口起点）。
+ * `tenon loop run <loop-id|pattern>` —— H14 loop 定向发起（★硬需求收口起点）。
  *
  * `--dry-run` 只读预览：零状态写 / 零 docker / 零 git / 零 ledger 写。real-run 每次 fresh 扫描
  * ready FIFO、现读 durable loop ledger，以「最新显式 binding → 最长前缀」解析自然归属，再只把命中
@@ -27,12 +27,12 @@ import {
   createLoopLedgerStore,
   type LedgerReadResult,
   type LoopEntry,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import {
   createAutomation,
   type AutomationLevel,
   type LoopExecutionGuardResult,
-} from '@pipeline-lite/automation'
+} from '@tenon/automation'
 import type { CliDeps } from '../deps.js'
 import { createProductionSkillContentLocator } from '../skillBundleAssembly.js'
 import {
@@ -113,7 +113,7 @@ export type SkillBundleWiringProvider =
   | ((loop: LoopEntry) => SkillBundleWiringDeps)
 
 /**
- * `pipeline loop run <loop-id|pattern>` 分派体（cmdLoops 'run' 分派目标）。
+ * `tenon loop run <loop-id|pattern>` 分派体（cmdLoops 'run' 分派目标）。
  * fs 由 cmdLoops 注入（缺省 REAL_LOOPS_FS）；projectLedger 缺省真 ledger 投影，测试注入 fake（不碰真 IO）。
  * wiringDeps 缺省真装配（defaultSkillBundleWiringDeps，H10 §8任务7），测试注入 fake resolver/locator。
  */
@@ -134,7 +134,7 @@ export async function cmdLoopRun(
 
   // selector 必填（缺 → 用法错误）
   if (p.selector === null || p.selector === '') {
-    deps.io.err('ERROR: loops run 需要 <loop-id|pattern>——用法: pipeline loop run <loop-id|pattern> [--dry-run] [--level L1|L2|L3] [--commit] [--json]')
+    deps.io.err('ERROR: loops run 需要 <loop-id|pattern>——用法: tenon loop run <loop-id|pattern> [--dry-run] [--level L1|L2|L3] [--commit] [--json]')
     return 1
   }
 
@@ -155,7 +155,7 @@ export async function cmdLoopRun(
     return 1
   }
   if (reg === null) {
-    deps.io.err('ERROR: .pipeline/loops.yaml 未找到——无 loop 登记表可预览（先 pipeline loops init 起草一个 loop）')
+    deps.io.err('ERROR: .pipeline/loops.yaml 未找到——无 loop 登记表可预览（先 tenon loops init 起草一个 loop）')
     return 1
   }
 

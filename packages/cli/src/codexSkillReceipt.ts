@@ -13,8 +13,8 @@
 import { appendFile, lstat, mkdir, readdir, readFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { basename, isAbsolute, join, relative, resolve, sep } from 'node:path'
-import { HISTORY_FILE, TERMINAL_SESSION_BINDINGS_DIR, TERMINAL_SESSION_PROTOCOL, withLock } from '@pipeline-lite/kernel'
-import type { HistoryWriter } from '@pipeline-lite/kernel'
+import { HISTORY_FILE, TERMINAL_SESSION_BINDINGS_DIR, TERMINAL_SESSION_PROTOCOL, withLock } from '@tenon/kernel'
+import type { HistoryWriter } from '@tenon/kernel'
 import { errMsg, type CliDeps } from './deps.js'
 import { isValidChangeName } from './paths.js'
 import { discoverCompletedCodexSkillReads, transcriptConfirmsReceipt } from './codexTranscriptEvidence.js'
@@ -80,7 +80,7 @@ export interface CodexSkillReceiptCommandEnv {
 export const REAL_CODEX_SKILL_RECEIPT_ENV: CodexSkillReceiptCommandEnv = {
   homeDir: () => homedir(),
   codexHomeDir: () => process.env.CODEX_HOME,
-  selectedPluginRoot: () => process.env.PIPELINE_CODEX_PLUGIN_ROOT,
+  selectedPluginRoot: () => process.env.TENON_CODEX_PLUGIN_ROOT,
   trustRoots: productionCodexSkillTrustRoots,
 }
 
@@ -208,7 +208,7 @@ async function loadReceipts(repoRoot: string): Promise<readonly CodexSkillReceip
 
 function skillAliases(id: string): readonly string[] {
   const aliases = new Set<string>([id])
-  if (id.startsWith('pipeline-lite:')) aliases.add(id.slice('pipeline-lite:'.length))
+  if (id.startsWith('tenon:')) aliases.add(id.slice('tenon:'.length))
   if (id.startsWith('superpowers:')) aliases.add(id.slice('superpowers:'.length))
   if (id === 'opsx:propose') aliases.add('openspec-propose')
   if (id === 'openspec-propose') aliases.add('opsx:propose')
@@ -331,7 +331,7 @@ export async function reconcileCodexSkillEvidence(input: CodexSkillEvidenceInput
   if (!input.history) return { confirmedSkillIds: [] }
   const homeDir = input.homeDir ?? homedir()
   const codexHomeDir = input.codexHomeDir
-  const selectedPluginRoot = input.selectedPluginRoot ?? process.env.PIPELINE_CODEX_PLUGIN_ROOT
+  const selectedPluginRoot = input.selectedPluginRoot ?? process.env.TENON_CODEX_PLUGIN_ROOT
   const trustRoots = input.trustRoots
     ?? (selectedPluginRoot ? { selectedCacheRoot: selectedPluginRoot } : productionCodexSkillTrustRoots())
   const visitEvidence = currentVisitEvidence(await readHistory(input.changeDir), input.evidenceScope)
@@ -426,7 +426,7 @@ export async function cmdInternalCodexSkillReceipt(
       turnId,
       toolUseId,
     })
-    const selectedPluginRoot = env.selectedPluginRoot?.() ?? process.env.PIPELINE_CODEX_PLUGIN_ROOT
+    const selectedPluginRoot = env.selectedPluginRoot?.() ?? process.env.TENON_CODEX_PLUGIN_ROOT
     const trustRoots = env.trustRoots?.()
       ?? (selectedPluginRoot ? { selectedCacheRoot: selectedPluginRoot } : productionCodexSkillTrustRoots())
     const receipt = parsed

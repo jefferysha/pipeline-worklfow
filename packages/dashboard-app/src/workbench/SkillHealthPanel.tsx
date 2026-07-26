@@ -8,24 +8,24 @@ import { WbAdvanced } from './LoopCard'
  * SkillHealthPanel（full-install W4，计划 2026-07-12-full-install-experience 批 2 Wave B，
  * 闭 P1-F3/BF10）—— dashboard 右栏只读「技能齐全度」面：消费既有 GET /api/skills/registry
  * （v6 T6，返回 {skills: WbSkillEntry[]}，每条含 installed 布尔）→ 展示「已装 N / 未装 M」计数
- * + 未装技能名 +「去终端跑 pipeline setup 装齐」可复制引导。
+ * + 未装技能名 +「去终端跑 tenon setup 装齐」可复制引导。
  *
- * 边界纪律（决议边界）：前端只读不装——装技能是终端 pipeline setup 的事，本面只做齐全度呈现
- * + 引导回终端，不提供任何前端安装按钮。命令真实（pipeline setup / pipeline doctor 都是仓库
+ * 边界纪律（决议边界）：前端只读不装——装技能是终端 tenon setup 的事，本面只做齐全度呈现
+ * + 引导回终端，不提供任何前端安装按钮。命令真实（tenon setup / tenon doctor 都是仓库
  * 真命令，非 i18n 文案，硬编码为常量避免翻译层漂移），与终端同源（BF11：文案/命令与 setup/
  * doctor 一致）。
  *
  * fail-soft（不谎报全绿）：
  *   · registry fetch 失败 → 行内错误提示，不阻塞、不崩、绝不落「已装齐」；
- *   · registry 空/未就绪（skills 长度 0）→「未就绪，跑 pipeline doctor 查」，不谎报全绿——
+ *   · registry 空/未就绪（skills 长度 0）→「未就绪，跑 tenon doctor 查」，不谎报全绿——
  *     对齐 cli doctor.ts「registry 未就绪…不误报 green」的既有口径。
  *
  * 数据面走 client.fetchSkillsRegistry 接缝（dashboard-client-seam 收拢；错误文案仍在本站点）。
  */
 
 // 真命令常量（BF11 与终端同源，不进 i18n——命令本体不随语言变，翻译层不得改写）。
-const SETUP_CMD = 'pipeline setup'
-const DOCTOR_CMD = 'pipeline doctor'
+const SETUP_CMD = 'tenon setup'
+const DOCTOR_CMD = 'tenon doctor'
 
 // ── W3 tailwind 迁移：原 styles.ts 规则的等值原子类串（颜色全走 token）。──
 /** 原 .wb-note。 */

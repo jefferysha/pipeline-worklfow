@@ -1,18 +1,22 @@
-# Pipeline Lite
+# Tenon
 
 面向 coding agent 的本地优先工作流治理：显式状态、真实 Skill 来源证据、精确复核收据，以及始终展示实际 Workflow 的 Dashboard。
 
-[在线中文文档](https://jefferysha.github.io/pipeline-worklfow/) · [English](README.en.md) ·
+[在线中文文档](https://jefferysha.github.io/tenon/) · [English](README.en.md) ·
 [仓库内中文文档](docs/usage/zh-CN/index.md) · [English guide](docs/usage/README.md) ·
 [安全](SECURITY.md) · [参与贡献](CONTRIBUTING.md) · [MIT License](LICENSE)
 
-Pipeline Lite 是一个完整打包的插件，不是“CLI 加一份需要手工安装的 Skills 清单”。发布包包含声明式 Workflow、OpenSpec 证据规则、分阶段 Skills、hooks、CLI、本地 Dashboard、自动化控制和多宿主 adapters。
+Tenon 是一个完整打包的插件，不是“CLI 加一份需要手工安装的 Skills 清单”。发布包包含声明式 Workflow、OpenSpec 证据规则、分阶段 Skills、hooks、CLI、本地 Dashboard、自动化控制和多宿主 adapters。
 
-它解决 agent 工作中常见的错位：对话说了一套，任务状态、Todo、文档和实际工具执行却是另一套。Pipeline Lite 让这些界面共享同一份 Effective Workflow Plan，并拒绝无效转换，而不是从对话文本猜测进度。
+它解决 agent 工作中常见的错位：对话说了一套，任务状态、Todo、文档和实际工具执行却是另一套。Tenon 让这些界面共享同一份 Effective Workflow Plan，并拒绝无效转换，而不是从对话文本猜测进度。
+
+<img src="docs-site/public/images/dashboard-overview.webp" alt="Tenon Dashboard 项目总览" width="1440" height="900">
+
+<p align="center"><sub>一个本地控制面，统一查看项目、真实流程和需要人工处理的事项。</sub></p>
 
 ## 它改变了什么
 
-| 没有工作流治理 | 使用 Pipeline Lite |
+| 没有工作流治理 | 使用 Tenon |
 | --- | --- |
 | 旧任务可能仅因为“最近”而被恢复。 | 只有请求明确标识或要求恢复某个 Change 时才恢复它。 |
 | 通用 Todo 可能与真实流程漂移。 | Todo 和 Dashboard 步骤来自所选 Workflow。 |
@@ -34,6 +38,20 @@ Simple 路由刻意保持严格。API 或公共契约、schema 和 migration、�
 
 [了解路由与 Workflow →](docs/usage/zh-CN/routing-and-workflows.md)
 
+## Dashboard 一览
+
+| 流程进度 | 自动运行 |
+| --- | --- |
+| <img src="docs-site/public/images/dashboard-progress.webp" alt="Tenon Dashboard 流程进度" width="1440" height="900" loading="lazy"> | <img src="docs-site/public/images/dashboard-automation.webp" alt="Tenon Dashboard 自动运行" width="1440" height="900" loading="lazy"> |
+| Todo、阶段、门禁和执行来源保持同源。 | 只收录真正的自动化任务，终端会话不会混入。 |
+
+| Workflow 工作台 |
+| --- |
+| <img src="docs-site/public/images/dashboard-workbench.webp" alt="Tenon Dashboard Workflow 工作台" width="1440" height="900" loading="lazy"> |
+| 默认、自定义与自由模式共享同一套可检查编排。 |
+
+[查看 Dashboard 完整图文指南 →](docs/usage/zh-CN/dashboard-and-local-api.md)
+
 ## 安装
 
 ### 前置要求
@@ -43,26 +61,43 @@ Simple 路由刻意保持严格。API 或公共契约、schema 和 migration、�
 - 一个明确选择的宿主 CLI
 - 只有使用 AFK 容器执行时才需要 Docker
 
-Setup 每次必须且只能选择一个宿主：
+新用户无需 clone 仓库。一次安装完整 Codex 插件：
 
 ```bash
-pipeline setup --codex
+curl -fsSL https://raw.githubusercontent.com/jefferysha/tenon/main/install.sh | bash -s -- --codex
 ```
 
-如果机器上还没有 `pipeline` 启动器，从检出或下载的 Pipeline Lite release 运行 bootstrap：
+Claude Code 用户只替换宿主参数：
 
 ```bash
-./install.sh --codex
+curl -fsSL https://raw.githubusercontent.com/jefferysha/tenon/main/install.sh | bash -s -- --claude
 ```
 
-Bootstrap 安装同一个完整插件，随后执行同一条 `pipeline setup --codex` 契约。Claude 用户把 `--codex` 替换为 `--claude`。
-
-Codex setup 完成后，在 Codex 中运行 `/hooks` 并信任一次 `pipeline-lite`。然后新开宿主会话，使打包的 hooks 和 Skills 被加载。
+先预览 Codex 的完整 Marketplace 与包内 setup 计划、且不调用宿主或写入用户目录：
 
 ```bash
-pipeline runtime status
-pipeline doctor
-pipeline dashboard --open
+curl -fsSL https://raw.githubusercontent.com/jefferysha/tenon/main/install.sh | bash -s -- --codex --dry-run
+```
+
+Bootstrap 注册 Tenon Marketplace、安装同一个完整插件、校验发行 payload，并执行
+`tenon setup --<host>`。已经安装后的维护入口仍是 `tenon setup --codex`、`tenon update --codex`
+与 `tenon runtime status`。
+
+需要自动跟随后续发行版时显式启用每日检查：
+
+```bash
+tenon setup --codex --auto-update
+```
+
+Marketplace 是当前公开的一步安装入口；薄 npx 包已经纳入发布流水线，但只有拥有的 npm scope
+真正发布后才会公布准确包名。旧身份用户由独立的 migration-only 仓库迁移，Tenon 主包不保留旧命令。
+
+Codex setup 完成后，在 Codex 中运行 `/hooks` 并信任一次 `tenon`。然后新开宿主会话，使打包的 hooks 和 Skills 被加载。
+
+```bash
+tenon runtime status
+tenon doctor
+tenon dashboard --open
 ```
 
 生产 Dashboard 是位于 `http://127.0.0.1:18765/` 的单一本地 SPA 和 API。另一个 Vite 端口只用于前端开发。
@@ -82,16 +117,16 @@ pipeline dashboard --open
 检查结果：
 
 ```bash
-pipeline list --json
-pipeline status <change-name> --json
-pipeline document status <change-name>
-pipeline dashboard --open
+tenon list --json
+tenon status <change-name> --json
+tenon document status <change-name>
+tenon dashboard --open
 ```
 
 要恢复已知 Change，请在对话中明确说出它，或显式激活：
 
 ```bash
-pipeline session activate <change-name>
+tenon session activate <change-name>
 ```
 
 [完整五分钟教程 →](docs/usage/zh-CN/quickstart.md)
@@ -118,9 +153,9 @@ Default Workflow 治理以下文档：
 Review 出口与确切 transition event 绑定：
 
 ```bash
-pipeline review request <change-name> --event <event>
-pipeline review acknowledge <change-name>
-pipeline transition <change-name> <event>
+tenon review request <change-name> --event <event>
+tenon review acknowledge <change-name>
+tenon transition <change-name> <event>
 ```
 
 持续委托可以被记录，但不会豁免文档、Skills、guards、复核证据、安全边界、发布权限、费用或外部副作用。
@@ -130,7 +165,7 @@ pipeline transition <change-name> <event>
 
 ## 宿主 Adapter 保真度
 
-Pipeline Lite 提供 12 个宿主目标，并显式标注执行保真度：
+Tenon 提供 12 个宿主目标，并显式标注执行保真度：
 
 | 档位 | 宿主 | 含义 |
 | --- | --- | --- |
@@ -156,7 +191,7 @@ Pipeline Lite 提供 12 个宿主目标，并显式标注执行保真度：
 | Hooks 与 adapters | 上下文注入、工具调用前阻断、Skill 留痕和宿主安装 |
 | Dashboard | 在同一 loopback server 上提供项目、进度、AFK、配置和机器诊断 |
 | AFK 与 loops | 可选沙箱工作、准入、预算、并发和 L1/L2/L3 升档 |
-| Channel | 高级 event-sourced worker 通信；不修改 canonical pipeline state |
+| Channel | 高级 event-sourced worker 通信；不修改 canonical Tenon state |
 | Memory bridge | 只读本地会话发现和上下文提取 |
 | Tap | 显式 opt-in 的本地流量诊断；捕获的 prompt、header 和 token 属敏感数据 |
 
@@ -192,8 +227,8 @@ Dashboard 绑定 loopback、校验本地 Host header、为 mutation 使用随机
 仓库是 npm workspace，不对外声称已发布全局 npm CLI。
 
 ```bash
-git clone https://github.com/jefferysha/pipeline-worklfow.git
-cd pipeline-worklfow
+git clone https://github.com/jefferysha/tenon.git
+cd tenon
 npm ci
 npm run build
 npm test
@@ -208,7 +243,8 @@ bash tools/test-bundle.sh
 
 ## 项目状态与社区
 
-用户可见插件 manifest 与 workspace packages 当前使用不同版本号，因此 README 不展示误导性的统一 release badge 或兼容性承诺。文档描述当前仓库分支上已验证的行为，不承诺发布节奏、托管服务、SLA 或语义化版本政策。
+Tenon 1.0 起，用户可见插件 manifest、workspace packages、Git tag 与可选 npx 发布包使用同一版本号。
+文档描述当前 release 上已验证的行为；本地 Dashboard 不是托管服务，也不承诺远程 SLA。
 
 - 问题和非敏感故障：[支持](SUPPORT.md)
 - Patch 与设计修改：[参与贡献](CONTRIBUTING.md)

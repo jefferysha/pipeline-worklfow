@@ -3,7 +3,7 @@
 2026-07-14 拍板（用户决策）：
 1. **一次性全量迁移** `packages/dashboard-app` 到 shadcn/ui + tailwind v4，删除 `src/styles.ts` 手写全局 CSS。
 2. **进度页布局改为 `design-demos/v10b-railway-canvas.html` 的 `#progress` 视图**（画布 + 分组列表），其余视图保持现有布局、只换样式实现。
-3. **配色沿用现有 v8 Trellis token**（styles.ts :root 三段原值，一个色值不改）；不采用 demo 的 Railway 紫黑。
+3. **配色沿用现有 v8 Tenon contract token**（styles.ts :root 三段原值，一个色值不改）；不采用 demo 的 Railway 紫黑。
 4. **文案精简**：无信息量的教学句/长导语退出 UI（细则见 §4.5）。
 5. app 外壳保持现有**顶部导航**；demo 的左侧图标 rail 不在本轮范围。
 

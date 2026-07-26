@@ -17,7 +17,7 @@ export function registerInstallCommands(
 ): void {
   program
     .command('setup [sub]')
-    .description('安装完整 pipeline：必须选择一个宿主（如 --codex）；不会同时修改 Codex 与 Claude')
+    .description('安装完整 Tenon：必须选择一个宿主（如 --codex）；不会同时修改 Codex 与 Claude')
     .option('--codex', '安装/验证 Codex 原生插件')
     .option('--claude', '安装/验证 Claude 原生插件')
     .option('--cursor', '部署 Cursor adapter')
@@ -40,9 +40,9 @@ export function registerInstallCommands(
 
   program
     .command('update')
-    .description('刷新一个已安装的原生 pipeline 插件；升级后请新开会话加载 skills 和 hooks')
-    .option('--codex', '更新 Codex marketplace 中的 pipeline-lite')
-    .option('--claude', '更新 Claude marketplace 中的 pipeline-lite')
+    .description('刷新一个已安装的原生 Tenon 插件；升级后请新开会话加载 skills 和 hooks')
+    .option('--codex', '更新 Codex marketplace 中的 tenon')
+    .option('--claude', '更新 Claude marketplace 中的 tenon')
     .option('--cursor', '从当前已更新的包重新部署 Cursor adapter')
     .option('--gemini', '从当前已更新的包重新部署 Gemini adapter')
     .option('--copilot', '从当前已更新的包重新部署 Copilot adapter')

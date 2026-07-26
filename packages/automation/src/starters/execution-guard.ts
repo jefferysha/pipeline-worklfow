@@ -8,7 +8,7 @@ import {
   updateLoopInYaml,
   writeRegistryWithGovernance,
   type LoopRegistrySnapshot,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import {
   evaluateLoopExecutionWiring,
   type LoopExecutionWiringResult,

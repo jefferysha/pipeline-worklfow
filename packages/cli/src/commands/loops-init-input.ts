@@ -1,10 +1,10 @@
 import {
   compileAutomationPolicyTemplate, LOOP_RUNNERS, PHASES, type AutomationPolicyTemplate,
   type LoopBudget, type LoopKind, type LoopRisk, type NewLoopEntryInput,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import { errMsg } from '../deps.js'
 
-// ── loop-init：`pipeline loops init` 向导 + 非交互结构化通道（L3）─────────────────────
+// ── loop-init：`tenon loops init` 向导 + 非交互结构化通道（L3）─────────────────────
 //
 // 「agent 起草 → dashboard 审阅」协议的终端生产侧（计划拍板 P1/P3/P4/P5/P6）：
 //   · 人在 TTY 下走三组交互问答（目标/边界/节奏），每问展示推导默认值，回车即收；

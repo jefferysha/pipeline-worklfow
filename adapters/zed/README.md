@@ -45,5 +45,5 @@ adapters/zed/install.sh --target <项目目录>   # 默认 $PWD
 ## 人工确认（HITL）
 
 Zed 无 hook、无 `AskUserQuestion` 等价物；仍须在完成产物并选择 event 后运行
-`pipeline review request <change> --event <event>`，把用户的明确确认保留为事实后运行
-`pipeline review acknowledge <change>`。不得以删除 marker 替代确认。
+`tenon review request <change> --event <event>`，把用户的明确确认保留为事实后运行
+`tenon review acknowledge <change>`。不得以删除 marker 替代确认。

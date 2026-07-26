@@ -16,12 +16,12 @@ problems with read-only checks before applying a bounded repair.
 Run:
 
 ```bash
-pipeline doctor --json
-pipeline runtime status --json
-pipeline list --json
-pipeline status <change-name> --json
-pipeline document status <change-name> --json
-pipeline afk status <change-name> --json
+tenon doctor --json
+tenon runtime status --json
+tenon list --json
+tenon status <change-name> --json
+tenon document status <change-name> --json
+tenon afk status <change-name> --json
 ```
 
 If Dashboard is involved:
@@ -41,7 +41,7 @@ content before sharing.
 Check:
 
 1. whether the request was only discussion/system/slash-command input;
-2. `pipeline doctor`;
+2. `tenon doctor`;
 3. Codex `/hooks` trust;
 4. whether a new host session was opened after setup/update;
 5. project root and hook installation.
@@ -50,11 +50,11 @@ Do not force a Change merely to make every conversation governed.
 
 ### An unrelated old Change is selected
 
-Run `pipeline list --json` and inspect the prompt for an explicit resume. Recent
+Run `tenon list --json` and inspect the prompt for an explicit resume. Recent
 mtime is not selection authority. Explicitly activate the intended Change:
 
 ```bash
-pipeline session activate <change-name>
+tenon session activate <change-name>
 ```
 
 When the host provides a session id, a generic “continue” from an unbound new
@@ -95,8 +95,8 @@ after the health endpoint proves the Dashboard release is stale.
 ### Document exists but transition fails
 
 ```bash
-pipeline document status <change-name>
-pipeline check <change-name>
+tenon document status <change-name>
+tenon check <change-name>
 ```
 
 Confirm producer Skill, current phase visit, digest, and required read receipt.
@@ -123,14 +123,14 @@ Check `/api/health` and release/state-scope identity. Stop the unrelated process
 or choose another explicit port:
 
 ```bash
-pipeline dashboard --port 19765 --open
+tenon dashboard --port 19765 --open
 ```
 
 Do not accept a page solely because the port responds.
 
 ### Dashboard mutations return 401
 
-Use the packaged same-origin `pipeline dashboard`. Vite dev does not own the
+Use the packaged same-origin `tenon dashboard`. Vite dev does not own the
 production handshake token.
 
 ### AFK is queued but not running
@@ -141,7 +141,7 @@ autonomy level. PM auto-enqueue does not start a worker.
 ### Managed runtime is damaged
 
 ```bash
-pipeline runtime repair --rollback
+tenon runtime repair --rollback
 ```
 
 If no verified previous release exists, rerun host-scoped setup.
@@ -149,8 +149,8 @@ If no verified previous release exists, rerun host-scoped setup.
 ### YAML projection drift
 
 ```bash
-pipeline state status <change-name> --json
-pipeline state repair-projection <change-name>
+tenon state status <change-name> --json
+tenon state repair-projection <change-name>
 ```
 
 Use force only after reviewing unknown drift.

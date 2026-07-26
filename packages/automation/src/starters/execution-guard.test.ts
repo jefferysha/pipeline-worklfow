@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { LoopEntry, LoopRegistrySnapshot, WorkflowDef, WorkflowIR } from '@pipeline-lite/kernel'
+import type { LoopEntry, LoopRegistrySnapshot, WorkflowDef, WorkflowIR } from '@tenon/kernel'
 import {
   enforceActiveLoopExecutionWiring,
   type LoopExecutionGuardDeps,

@@ -3,7 +3,7 @@ name: github-ops
 description: First-party GitHub release and pull-request operations checklist.
 license: MIT
 metadata:
-  author: pipeline-lite
+  author: tenon
 ---
 
 # GitHub Operations

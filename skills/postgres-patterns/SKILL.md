@@ -3,7 +3,7 @@ name: postgres-patterns
 description: First-party PostgreSQL schema, migration, and query review.
 license: MIT
 metadata:
-  author: pipeline-lite
+  author: tenon
 ---
 
 # PostgreSQL Patterns

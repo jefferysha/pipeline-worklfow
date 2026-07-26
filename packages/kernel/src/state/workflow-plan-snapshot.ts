@@ -5,6 +5,7 @@ import {
   effectiveWorkflowPlanFromSnapshot,
   type WorkflowPlanSnapshot,
 } from '../workflow/effective-plan.js'
+import type { DocumentGovernancePolicy } from '../workflow/document-contract.js'
 import type { WorkflowIR } from '../workflow/ir.js'
 import { atomicLinkPublish } from './atomic-publish.js'
 
@@ -43,30 +44,45 @@ function parseEnvelope(raw: string): WorkflowPlanSnapshotEnvelope {
   }
   const envelope = ownRecord(value)
   const plan = ownRecord(envelope?.plan)
+  const planVersion = plan?.version
+  const allowedPlanKeys = planVersion === 2
+    ? ['version', 'workflowId', 'executionModel', 'workflow', 'documentPolicy', 'workflowFingerprint']
+    : ['version', 'workflowId', 'executionModel', 'workflow', 'workflowFingerprint']
+  const documentPolicy = plan?.documentPolicy
   if (!envelope
     || Object.keys(envelope).some((key) => !['version', 'run_id', 'plan'].includes(key))
     || envelope.version !== 1
     || typeof envelope.run_id !== 'string'
     || envelope.run_id === ''
     || !plan
-    || Object.keys(plan).some((key) => ![
-      'version', 'workflowId', 'executionModel', 'workflow', 'workflowFingerprint',
-    ].includes(key))
-    || plan.version !== 1
+    || Object.keys(plan).some((key) => !allowedPlanKeys.includes(key))
+    || (planVersion !== 1 && planVersion !== 2)
     || typeof plan.workflowId !== 'string'
     || (plan.executionModel !== 'phase-manifest' && plan.executionModel !== 'step-graph')
+    || (planVersion === 2
+      && documentPolicy !== null
+      && ownRecord(documentPolicy) === undefined)
     || typeof plan.workflowFingerprint !== 'string'
     || !/^[0-9a-f]{64}$/.test(plan.workflowFingerprint)
     || !isWorkflowIr(plan.workflow)) {
     throw new Error('workflow plan snapshot 形状非法')
   }
-  const snapshot: WorkflowPlanSnapshot = {
-    version: 1,
-    workflowId: plan.workflowId,
-    executionModel: plan.executionModel,
-    workflow: plan.workflow,
-    workflowFingerprint: plan.workflowFingerprint,
-  }
+  const snapshot: WorkflowPlanSnapshot = planVersion === 1
+    ? {
+        version: 1,
+        workflowId: plan.workflowId,
+        executionModel: plan.executionModel,
+        workflow: plan.workflow,
+        workflowFingerprint: plan.workflowFingerprint,
+      }
+    : {
+        version: 2,
+        workflowId: plan.workflowId,
+        executionModel: plan.executionModel,
+        workflow: plan.workflow,
+        documentPolicy: documentPolicy as DocumentGovernancePolicy | null,
+        workflowFingerprint: plan.workflowFingerprint,
+      }
   effectiveWorkflowPlanFromSnapshot(snapshot)
   return { version: 1, run_id: envelope.run_id, plan: snapshot }
 }

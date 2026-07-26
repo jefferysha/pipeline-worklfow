@@ -1,12 +1,15 @@
 import { dirname, join, resolve } from 'node:path'
-import { readAutomationJson } from '@pipeline-lite/automation'
-import { PREREQ_HINTS } from '@pipeline-lite/kernel'
+import { readAutomationJson } from '@tenon/automation'
+import { PREREQ_HINTS } from '@tenon/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
 import { nodeExecDocker, probeAfkReadiness, type AfkReadiness, type CredLight, type ExecDockerFn } from '../afkReadiness.js'
 import { REAL_RUNTIME_INSTALLER, type RuntimeInstaller } from '../runtime/installer.js'
 import { resolveRuntimePaths } from '../runtime/paths.js'
 import { loadSkillSources, type SkillSource, type SkillSourcesResult, type SkillTier } from '../skillSources.js'
-import { REAL_RELEASED_DASHBOARD_STARTER, type ReleasedDashboardStarter } from './dashboard.js'
+import {
+  REAL_RELEASED_DASHBOARD_STARTER,
+  type ReleasedDashboardStarter,
+} from './dashboard.js'
 import {
   hostFlag,
   installedPipelineRoot,
@@ -17,6 +20,8 @@ import {
   type PipelineHost,
   type PipelineHostFlags,
 } from './plugin-host.js'
+import { publishManagedRelease } from './release-coordinator.js'
+import { migrateLegacyProjectRegistry } from '../migration/legacy-project-registry.js'
 
 // ── 注入面（测试注入临时 HOME / spy;真实现 = node:fs + os.homedir）──────────────────
 
@@ -46,8 +51,8 @@ export function verifyPackagedAssets(
   // contains skills/hooks.  Detect the release bootstrap before publishing so
   // setup never reports an installed plugin and then fails after mutating user
   // state with a partial runtime.
-  if (!env.pathExists(join(root, 'runtime', 'pipeline-bootstrap.mjs'))) {
-    if (!silent) deps.io.err('ERROR: 插件资产校验失败：缺少 runtime/pipeline-bootstrap.mjs（该 marketplace release 不是完整可安装包）')
+  if (!env.pathExists(join(root, 'runtime', 'tenon-bootstrap.mjs'))) {
+    if (!silent) deps.io.err('ERROR: 插件资产校验失败：缺少 runtime/tenon-bootstrap.mjs（该 marketplace release 不是完整可安装包）')
     return 1
   }
   const result = env.runCommand('bash', command)
@@ -80,7 +85,7 @@ interface NativePluginCandidate {
 
 /**
  * `setup` is idempotent: if the host already owns a complete, verified package,
- * reuse that exact host-resolved root.  `pipeline update --<host>` remains the
+ * reuse that exact host-resolved root.  `tenon update --<host>` remains the
  * explicit release-refresh operation.  An incomplete/corrupt existing package
  * is never trusted; setup falls through to the release marketplace plan.
  */
@@ -97,10 +102,10 @@ function verifiedInstalledNativePlugin(
   const root = installedPipelineRoot(host, inventory.stdout)
   if (root === null) return null
   if (verifyPackagedAssets(deps, env, root, false, true) !== 0) {
-    deps.io.out(`[setup] ${hostFlag(host)} 已登记的 pipeline-lite 不完整或未通过校验；将重新安装正式 release。`)
+    deps.io.out(`[setup] ${hostFlag(host)} 已登记的 tenon 不完整或未通过校验；将重新安装正式 release。`)
     return null
   }
-  deps.io.out(`[setup] ${hostFlag(host)} 已有完整且已验证的 pipeline-lite；复用宿主登记的安装。`)
+  deps.io.out(`[setup] ${hostFlag(host)} 已有完整且已验证的 tenon；复用宿主登记的安装。`)
   return { root, verified: true }
 }
 
@@ -144,7 +149,7 @@ function installNativePlugin(
         ? installedPipelineRoot(host, inventoryResult.stdout)
         : null
       if (existingRoot !== null) {
-        deps.io.out(`[setup] ${hostFlag(host)} 已有 pipeline-lite，复用宿主登记的安装。`)
+        deps.io.out(`[setup] ${hostFlag(host)} 已有 tenon，复用宿主登记的安装。`)
         return { root: existingRoot, verified: false }
       }
     }
@@ -156,7 +161,7 @@ function installNativePlugin(
   }
   const root = installedPipelineRoot(host, inventory)
   if (root === null) {
-    deps.io.err(`ERROR: ${hostFlag(host)} 插件清单中没有 pipeline-lite；未切换 launcher。`)
+    deps.io.err(`ERROR: ${hostFlag(host)} 插件清单中没有 tenon；未切换 launcher。`)
     return null
   }
   return { root, verified: false }
@@ -172,23 +177,35 @@ function publishManagedRuntime(
   openDashboard: boolean,
 ): Promise<number> {
   const source = isNativePipelineHost(host) ? host : 'adapter'
-  return installer.activate(candidateRoot, source, env.homeDir())
-    .then(async (activation) => {
-      deps.io.out(`[setup] 已发布已验证 runtime: ${activation.release.releaseId}（revision ${activation.selection.revision}）。`)
-      deps.io.out('[setup] 稳定入口已就绪：~/.local/bin/pipeline 与 ~/.local/bin/pipeline-hook 不再直连 marketplace checkout。')
-      if (dashboardStarter !== undefined) {
-        const dashboardCode = await dashboardStarter.start(deps, join(activation.releaseRoot, 'payload'), { openBrowser: openDashboard })
-        if (dashboardCode !== 0) {
-          deps.io.err('ERROR: runtime 已发布，但 dashboard 未能完成受管启动；请运行 pipeline dashboard --background 诊断。')
-          return 1
-        }
+  return publishManagedRelease(
+    deps,
+    {
+      candidateRoot,
+      source,
+      runtime: {
+        homeDir: env.homeDir(),
+        env: env.runtimeEnv(),
+      },
+      openBrowser: openDashboard,
+    },
+    installer,
+    dashboardStarter,
+  ).then((outcome) => {
+    if (!outcome.ok) {
+      deps.io.err(`ERROR: ${outcome.detail}`)
+      if (isNativePipelineHost(host)) {
+        deps.io.err(
+          `[setup] ${hostFlag(host)} 宿主插件登记由宿主 CLI 独立管理；` +
+          'Tenon 未读取、复制或回滚宿主私有缓存，仅补偿自己的 managed transaction。',
+        )
       }
-      return 0
-    })
-    .catch((error: unknown) => {
-      deps.io.err(`ERROR: managed runtime 发布失败；保留当前已验证 release，未切换入口：${errMsg(error)}`)
       return 1
-    })
+    }
+    const { activation } = outcome
+    deps.io.out(`[setup] 已发布已验证 runtime: ${activation.release.releaseId}（revision ${activation.selection.revision}）。`)
+    deps.io.out('[setup] 稳定入口已就绪：~/.local/bin/tenon 与 ~/.local/bin/tenon-hook 不再直连 marketplace checkout。')
+    return 0
+  })
 }
 
 /** Host-specific installation that keeps native marketplaces and non-native adapters separate. */
@@ -202,16 +219,16 @@ export function cmdSetupHost(
   openDashboard = true,
 ): number | Promise<number> {
   if (opts.autoUpdate && !isNativePipelineHost(host)) {
-    deps.io.err(`ERROR: ${hostFlag(host)} 是 adapter，自动更新由承载它的 Codex 或 Claude 插件负责；请改用 pipeline setup --codex --auto-update 或 --claude --auto-update。`)
+    deps.io.err(`ERROR: ${hostFlag(host)} 是 adapter，自动更新由承载它的 Codex 或 Claude 插件负责；请改用 tenon setup --codex --auto-update 或 --claude --auto-update。`)
     return 1
   }
 
   if (opts.dryRun) {
     if (isNativePipelineHost(host)) {
-      deps.io.out(`[setup] ${hostFlag(host)}:将安装本仓 marketplace 中的唯一 pipeline-lite 插件。`)
+      deps.io.out(`[setup] ${hostFlag(host)}:将安装本仓 marketplace 中的唯一 tenon 插件。`)
       for (const item of nativeInstallPlan(host)) deps.io.out(`[setup] $ ${commandText(item.cmd, item.args)}`)
       deps.io.out('[setup] 将用宿主插件清单解析候选根，校验并原子发布 managed runtime；不会直连可变 checkout。')
-      if (host === 'codex') deps.io.out('[setup] 安装后需在 Codex 输入 /hooks 并信任 pipeline-lite，正常对话路由才会启用。')
+      if (host === 'codex') deps.io.out('[setup] 安装后需在 Codex 输入 /hooks 并信任 tenon，正常对话路由才会启用。')
     } else {
       const root = resolvePipelineRoot(env)
       const assetCode = verifyPackagedAssets(deps, env, root, true)
@@ -231,8 +248,22 @@ export function cmdSetupHost(
       const migrationCode = migrateLegacyCodexHooks(deps, env)
       if (migrationCode !== 0) return migrationCode
     }
-    return publishManagedRuntime(deps, env, installer, candidate.root, host, dashboardStarter, openDashboard).then((runtimeCode) => {
+    return publishManagedRuntime(deps, env, installer, candidate.root, host, dashboardStarter, openDashboard).then(async (runtimeCode) => {
       if (runtimeCode !== 0) return runtimeCode
+      const migrateProjectRegistry = env.migrateProjectRegistry ?? migrateLegacyProjectRegistry
+      const migrated = await migrateProjectRegistry({
+        homeDir: env.homeDir(),
+        platform: process.platform,
+        env: env.runtimeEnv(),
+        readText: env.readText,
+        pathExists: env.pathExists,
+      })
+      if (migrated.discovered > 0 || migrated.rejected > 0) {
+        deps.io.out(
+          `[setup] 旧项目注册表迁移：发现 ${migrated.discovered}，新增 ${migrated.imported}，`
+          + `拒绝 ${migrated.rejected}；后续只读取 Tenon 产品域。`,
+        )
+      }
       if (host === 'codex') printCodexHookTrust(deps)
       return configureAutoUpdate(deps, env, host, opts.autoUpdate === true)
     })

@@ -1,10 +1,10 @@
 /**
- * advance <name> —— auto-transition 中间档（BACKLOG #31 / GOAL B14·D12：对标 Comet AUTO-TRANSITION）。
+ * advance <name> —— auto-transition 中间档（BACKLOG #31 / GOAL B14·D12：对标 Tenon runtime AUTO-TRANSITION）。
  *
  * 立场：老仓只有「纯 HITL」（guard 只校验，推进权全在人手，pipeline-guard.sh:635 明写"永不
  * auto-transition"）与「重型 AFK」（automation 子系统）两极，缺中间档。本命令补上：
  * **guard 全绿 → 自动推进到下一相位，反复直到撞上三门／终态／guard 不过就停**——比手动逐条
- * 敲 transition 省事，又比 Comet「一路推到底」更严：**绝不跨越三门自动跑完**（HITL 红线）。
+ * 敲 transition 省事，又比 Tenon runtime「一路推到底」更严：**绝不跨越三门自动跑完**（HITL 红线）。
  *
  * 编排（复用现有命令函数，不重造）：循环
  *   读当前相位 → forwardStep（manifest.transitions 单一真相源求前向事件）
@@ -17,7 +17,7 @@
  *      **三门是硬门，--through-gates 也绝不放行**（HITL 红线；review 门经 reviewPhases 判定）。
  *   3. 复核相位（manifest.reviewPhases 单一真相源）：默认停（不自动离开 explore/spec/verify）；
  *      `--through-gates` 仅在已有 exact-phase-and-event approval receipt 时才可继续，绝不伪造或跳过
- *      `pipeline review request → acknowledge`（仍受 2 的硬门约束）。
+ *      `tenon review request → acknowledge`（仍受 2 的硬门约束）。
  *   4. guard 不过（cmdCheck exit≠0）→ 停（exit 2 沿用 check 口径）。
  *   5. --max-steps 封顶：防失控保险丝（默认 12，足够 open→archive 六步）。
  * `--dry-run`：只报计划、只读不写盘（当前相位 guard 真判，后续步运行时 live-guard）。
@@ -29,8 +29,8 @@
  * 的 step-transitions 图推进（cmdAdvanceCustom，停点规则见该函数头）——此前 advance 只认 default
  * manifest，自定义 workflow 的 change 会被 forwardStep 误判成"终态"而永远无法 auto-advance。
  */
-import { resolveStep, resolveWorkflowName } from '@pipeline-lite/kernel'
-import type { EffectiveWorkflowPlan, WorkflowIR } from '@pipeline-lite/kernel'
+import { resolveStep, resolveWorkflowName } from '@tenon/kernel'
+import type { EffectiveWorkflowPlan, WorkflowIR } from '@tenon/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
 import { changeDir, isValidChangeName } from '../paths.js'
 import { str } from '../render.js'

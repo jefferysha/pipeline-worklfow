@@ -5,7 +5,7 @@
 export {
   buildLoopStarterWiringReport,
   evaluateLoopExecutionWiring,
-} from '@pipeline-lite/automation'
+} from '@tenon/automation'
 export type {
   CustomWorkflowRuntimeWiring,
   LoopExecutionWiringResult,
@@ -14,4 +14,4 @@ export type {
   LoopStarterWiringDeps,
   LoopStarterWiringReport,
   WorkflowWiring,
-} from '@pipeline-lite/automation'
+} from '@tenon/automation'

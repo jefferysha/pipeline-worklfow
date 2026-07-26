@@ -2,7 +2,7 @@
  * Global dashboard cadence scheduler.
  *
  * The clock only decides *when* an existing governed loop is due. Execution is
- * delegated to the production CLI (`pipeline loops run <id> --json`), so
+ * delegated to the production CLI (`tenon loops run <id> --json`), so
  * admission, reservation, Docker, verification and settlement stay single-
  * sourced in automation/CLI. Durable ledger facts decide last finish and
  * in-flight state; a degraded ledger is fail-closed.
@@ -15,7 +15,7 @@ import {
   projectLoopLedger,
   type LedgerReadResult,
   type LoopRegistry,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import type { PipelineCliResult, PipelineCliRunner } from './operations.js'
 
 export type CadenceLoopState =
@@ -82,7 +82,7 @@ function errorMessage(error: unknown): string {
 }
 
 function resultError(result: PipelineCliResult): string {
-  return result.stderr.trim() || result.stdout.trim() || `pipeline CLI exit ${result.exitCode}`
+  return result.stderr.trim() || result.stdout.trim() || `Tenon CLI exit ${result.exitCode}`
 }
 
 function keyOf(root: string, loopId: string): string {

@@ -3,7 +3,7 @@ name: code-review
 description: First-party change review for correctness, regressions, and maintainability.
 license: MIT
 metadata:
-  author: pipeline-lite
+  author: tenon
 ---
 
 # Code Review

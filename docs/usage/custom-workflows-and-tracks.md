@@ -7,7 +7,7 @@ match the work, then bind it to a routing/policy Track.
 
 ## Prerequisites
 
-- an initialized Pipeline Lite project
+- an initialized Tenon project
 - a unique Workflow name other than reserved `default` or `simple`
 - known step IDs, transition events, Skill IDs, and document ownership
 
@@ -68,7 +68,7 @@ document_contract:
       kinds: [proposal]
 ```
 
-The contract is optional. Without it, Pipeline Lite does not infer documents
+The contract is optional. Without it, Tenon does not infer documents
 from the number or names of steps.
 
 `openspec_contract: required` is the legacy complete seven-phase OpenSpec
@@ -81,7 +81,7 @@ not the drawing alone, is the project definition.
 ## Use the Workflow
 
 ```bash
-pipeline init release-note-2026-07 \
+tenon init release-note-2026-07 \
   --track backend \
   --preset full \
   --workflow release-note
@@ -95,7 +95,7 @@ default seven phase names.
 Tracks overlay routing/coverage/automation/Skill policy on a Workflow:
 
 ```bash
-pipeline tracks create docs \
+tenon tracks create docs \
   --label "Documentation" \
   --workflow-default release-note \
   --workflow-allowed release-note \
@@ -106,7 +106,7 @@ pipeline tracks create docs \
 Allow any Workflow with `--workflow-any`:
 
 ```bash
-pipeline tracks create neutral \
+tenon tracks create neutral \
   --label "Neutral" \
   --workflow-default default \
   --workflow-any \
@@ -116,9 +116,9 @@ pipeline tracks create neutral \
 Inspect and update:
 
 ```bash
-pipeline tracks list --json
-pipeline tracks show docs --json
-pipeline tracks update docs --set-label "Documentation delivery" --json
+tenon tracks list --json
+tenon tracks show docs --json
+tenon tracks update docs --set-label "Documentation delivery" --json
 ```
 
 Built-in policy identity is protected. Built-in Tracks cannot be deleted, and
@@ -141,11 +141,11 @@ conditions rather than duplicate agent instructions.
 ## Verification
 
 ```bash
-pipeline status <change-name> --json
-pipeline workflow plan <change-name> --json
-pipeline tracks show <track-id> --json
-pipeline document status <change-name> --json
-pipeline check <change-name>
+tenon status <change-name> --json
+tenon workflow plan <change-name> --json
+tenon tracks show <track-id> --json
+tenon document status <change-name> --json
+tenon check <change-name>
 ```
 
 ## Common failures

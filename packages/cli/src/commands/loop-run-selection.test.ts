@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import type { LedgerRecord, LoopEntry } from '@pipeline-lite/kernel'
+import type { LedgerRecord, LoopEntry } from '@tenon/kernel'
 import { selectTargetedRunCandidates } from './loop-run-selection.js'
 
 function loop(id: string, changePrefix: string | null): LoopEntry {

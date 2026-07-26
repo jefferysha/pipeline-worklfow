@@ -296,7 +296,7 @@ function transcriptInputReadsTrustedSkill(input: string, skillPath: string): boo
 
 function skillAliases(id: string): readonly string[] {
   const aliases = new Set<string>([id])
-  if (id.startsWith('pipeline-lite:')) aliases.add(id.slice('pipeline-lite:'.length))
+  if (id.startsWith('tenon:')) aliases.add(id.slice('tenon:'.length))
   if (id.startsWith('superpowers:')) aliases.add(id.slice('superpowers:'.length))
   if (id === 'opsx:propose') aliases.add('openspec-propose')
   if (id === 'openspec-propose') aliases.add('opsx:propose')
@@ -378,7 +378,7 @@ function confirmsEveryCandidate(confirmed: ReadonlySet<string>, candidates: read
 /**
  * ABI-compatibility proof for Codex hosts that omit transcript identifiers.  The caller supplies
  * only skill ids that the current phase allows; this function still requires the same physical
- * project root and an actual successful read from pipeline-lite's host cache.
+ * project root and an actual successful read from tenon's host cache.
  */
 export async function discoverCompletedCodexSkillReads(
   repoRoot: string,

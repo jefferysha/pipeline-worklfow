@@ -4,7 +4,7 @@ import { dirname, isAbsolute, relative, resolve, sep } from 'node:path'
 import {
   atomicReplaceFile,
   ensureTrustedProjectDirectory,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import {
   copyOrdinaryTree,
   ordinaryDirectoryIdentity,

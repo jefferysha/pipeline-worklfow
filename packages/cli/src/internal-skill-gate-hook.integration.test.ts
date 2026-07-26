@@ -6,7 +6,7 @@
  * isSkillUnlocked 判定细节（依赖 DAG 各种组合、"最近一次进入 step" 扫描语义等）——这里只关心
  * "gate.sh 在正确的时机委托、在错误的时机绝不委托，且退出码正确传导"。
  *
- * 依赖 packages/cli/dist/pipeline.mjs 是最新构建（gate.sh 生产路径 spawn 的就是这个 bundle）；
+ * 依赖 packages/cli/dist/tenon.mjs 是最新构建（gate.sh 生产路径 spawn 的就是这个 bundle）；
  * 本文件不负责触发构建，运行前需先 `npm run build`（同 tools/test-hooks.sh 对 dist 的既有假设，
  * 见该文件 §3 红线自证段的说明）。
  */
@@ -25,11 +25,11 @@ interface HookResult { code: number; stdout: string; stderr: string }
  *  显式钉死 CLAUDE_PLUGIN_ROOT=REPO_ROOT（而非依赖 gate.sh 内 BASH_SOURCE 兜底）：本文件新增
  *  的分支第一次让 gate.sh 依赖 PLUGIN_ROOT 定位 dist bundle，若测试运行环境恰好残留了别的
  *  CLAUDE_PLUGIN_ROOT（例如本文件本身就跑在一个真实 Claude Code 会话里），不钉死会让 gate.sh
- *  误往其它安装位置找 bundle，产生环境相关的假红/假绿。强制清 PIPELINE_AFK（同款理由：AFK
+ *  误往其它安装位置找 bundle，产生环境相关的假红/假绿。强制清 TENON_AFK（同款理由：AFK
  *  逃生门会让 gate.sh 无条件放行，不能依赖外层 shell 干净）。 */
 function runHook(script: string, payload: unknown, extraEnv: Record<string, string> = {}): HookResult {
   const env = { ...process.env, CLAUDE_PLUGIN_ROOT: REPO_ROOT, ...extraEnv }
-  delete env.PIPELINE_AFK
+  delete env.TENON_AFK
   const res = spawnSync('bash', [join(REPO_ROOT, 'hooks', script)], {
     input: JSON.stringify(payload),
     encoding: 'utf8',
@@ -72,9 +72,9 @@ steps:
     label: codex-step-one
     gate: null
     skills:
-      - id: pipeline-open
+      - id: tenon-open
       - id: browser-qa
-        depends_on: [pipeline-open]
+        depends_on: [tenon-open]
     inputs: []
     outputs: []
     guards: []
@@ -186,23 +186,23 @@ describe('真实 e2e —— hooks/gate.sh 委托 internal-skill-gate（Task 9）
     await setupCodexCustomChange()
     expect(await h.run(['session', 'activate', CHANGE])).toBe(0)
     const home = join(h.cwd, 'fake-home')
-    const hostCache = join(home, '.codex', 'plugins', 'cache', 'pipeline-lite', 'pipeline-lite', '0.2.0')
+    const hostCache = join(home, '.codex', 'plugins', 'cache', 'tenon', 'tenon', '0.2.0')
     await cp(join(REPO_ROOT, 'skills'), join(hostCache, 'skills'), { recursive: true, preserveTimestamps: false })
     await cp(join(REPO_ROOT, 'templates'), join(hostCache, 'templates'), { recursive: true, preserveTimestamps: false })
-    const cacheBundle = join(hostCache, 'packages', 'cli', 'dist', 'pipeline.mjs')
+    const cacheBundle = join(hostCache, 'packages', 'cli', 'dist', 'tenon.mjs')
     await mkdir(dirname(cacheBundle), { recursive: true })
-    await cp(join(REPO_ROOT, 'packages', 'cli', 'dist', 'pipeline.mjs'), cacheBundle, { preserveTimestamps: false })
+    await cp(join(REPO_ROOT, 'packages', 'cli', 'dist', 'tenon.mjs'), cacheBundle, { preserveTimestamps: false })
 
-    const commonEnv = { HOME: home, PIPELINE_CODEX_PLUGIN_ROOT: hostCache, PLUGIN_ROOT: REPO_ROOT }
-    const orchestrationRead = `/bin/zsh -lc "sed -n '1,40p' ${hostCache}/skills/pipeline/SKILL.md"`
+    const commonEnv = { HOME: home, TENON_CODEX_PLUGIN_ROOT: hostCache, PLUGIN_ROOT: REPO_ROOT }
+    const orchestrationRead = `/bin/zsh -lc "sed -n '1,40p' ${hostCache}/skills/tenon/SKILL.md"`
     // 当前 Codex host 将 shell tool 统一上报成 /bin/zsh -lc 包装；不能只用理想化的
     // 直接 `sed …` 形态覆盖，否则真实会话的 SKILL.md read 不会被识别和记账。
-    const pipelineOpenRead = `/bin/zsh -lc "sed -n '1,40p' ${hostCache}/skills/pipeline-open/SKILL.md"`
+    const pipelineOpenRead = `/bin/zsh -lc "sed -n '1,40p' ${hostCache}/skills/tenon-open/SKILL.md"`
     const browserQaRead = `/bin/zsh -lc "sed -n '1,40p' ${hostCache}/skills/browser-qa/SKILL.md"`
-    const batchedLockedRead = `/bin/zsh -lc "sed -n '1,40p' ${hostCache}/skills/pipeline-open/SKILL.md && sed -n '1,40p' ${hostCache}/skills/browser-qa/SKILL.md"`
-    const batchedReceiptRead = `/bin/zsh -lc "sed -n '1,40p' ${hostCache}/skills/pipeline-open/SKILL.md && sed -n '1,40p' ${hostCache}/skills/pipeline/SKILL.md"`
+    const batchedLockedRead = `/bin/zsh -lc "sed -n '1,40p' ${hostCache}/skills/tenon-open/SKILL.md && sed -n '1,40p' ${hostCache}/skills/browser-qa/SKILL.md"`
+    const batchedReceiptRead = `/bin/zsh -lc "sed -n '1,40p' ${hostCache}/skills/tenon-open/SKILL.md && sed -n '1,40p' ${hostCache}/skills/tenon/SKILL.md"`
 
-    // `pipeline` 是正常对话进入 custom workflow 前必经的编排入口，不是该 step 的工作
+    // `tenon` 是正常对话进入 custom workflow 前必经的编排入口，不是该 step 的工作
     // 节点；DAG 只能约束阶段实际 skill，不能因此把入口本身锁死。
     const orchestrationGate = runHook(
       'gate.sh', { cwd: h.cwd, tool_name: 'exec', tool_input: { cmd: orchestrationRead } }, commonEnv,
@@ -218,7 +218,7 @@ describe('真实 e2e —— hooks/gate.sh 委托 internal-skill-gate（Task 9）
 
     // One Codex exec can load multiple skills.  The first root node is available, but the second
     // serial node is not; gate.sh must inspect both rather than allowing the whole batch merely
-    // because pipeline-open appeared first.
+    // because tenon-open appeared first.
     const batchedGate = runHook(
       'gate.sh', { cwd: h.cwd, tool_name: 'exec', tool_input: { cmd: batchedLockedRead } }, commonEnv,
     )
@@ -249,7 +249,7 @@ describe('真实 e2e —— hooks/gate.sh 委托 internal-skill-gate（Task 9）
         payload: {
           type: 'custom_tool_call',
           status: 'completed',
-          call_id: 'call-pipeline-open',
+          call_id: 'call-tenon-open',
           name: 'exec',
           input: `const r = await tools.exec_command(${JSON.stringify({ cmd: batchedReceiptRead })});`,
           internal_chat_message_metadata_passthrough: { turn_id: 'turn-dag-1' },
@@ -260,7 +260,7 @@ describe('真实 e2e —— hooks/gate.sh 委托 internal-skill-gate（Task 9）
         timestamp: transcriptTimestamp,
         payload: {
           type: 'custom_tool_call_output',
-          call_id: 'call-pipeline-open',
+          call_id: 'call-tenon-open',
           output: 'Process exited with code 0\\nWall time 0.1 seconds\\nOutput:\\n',
           internal_chat_message_metadata_passthrough: { turn_id: 'turn-dag-1' },
         },
@@ -273,15 +273,15 @@ describe('真实 e2e —— hooks/gate.sh 委托 internal-skill-gate（Task 9）
       transcript_path: transcript,
       session_id: 'session-dag-1',
       turn_id: 'turn-dag-1',
-      tool_use_id: 'call-pipeline-open',
+      tool_use_id: 'call-tenon-open',
     }, commonEnv)
     expect(receipt.code, `stderr=${receipt.stderr}`).toBe(0)
     const receiptJournal = join(h.cwd, '.pipeline', 'codex-skill-receipts.jsonl')
-    expect(await readFile(receiptJournal, 'utf8')).toContain('pipeline-open')
-    expect(await readFile(receiptJournal, 'utf8')).toContain('"skillId":"pipeline"')
+    expect(await readFile(receiptJournal, 'utf8')).toContain('tenon-open')
+    expect(await readFile(receiptJournal, 'utf8')).toContain('"skillId":"tenon"')
 
     const histPath = join(h.cwd, 'openspec', 'changes', CHANGE, '.pipeline-history.jsonl')
-    expect(await readFile(histPath, 'utf8')).not.toContain('CodexSkillRead: pipeline-open')
+    expect(await readFile(histPath, 'utf8')).not.toContain('CodexSkillRead: tenon-open')
 
     // 浏览器验收 skill 是串行节点；下一次 PreToolUse 的 gate 在同一 change lock 内先完成
     // transcript 核验，再读取 DAG，所以无需依赖缺失的 PostToolUse 或让用户重试。
@@ -289,23 +289,23 @@ describe('真实 e2e —— hooks/gate.sh 委托 internal-skill-gate（Task 9）
       'gate.sh', { cwd: h.cwd, tool_name: 'exec', tool_input: { cmd: browserQaRead } }, commonEnv,
     )
     expect(secondGate.code, `stderr=${secondGate.stderr}`).toBe(0)
-    expect(await readFile(histPath, 'utf8')).toContain('"raw":"CodexSkillRead: pipeline-open"')
+    expect(await readFile(histPath, 'utf8')).toContain('"raw":"CodexSkillRead: tenon-open"')
   })
 
   test('Codex 省略 PreToolUse transcript 标识时，当前项目的完成会话仍可解锁串行 skill', async () => {
     await setupCodexCustomChange()
     expect(await h.run(['session', 'activate', CHANGE])).toBe(0)
     const home = join(h.cwd, 'abi-omitted-home')
-    const hostCache = join(home, '.codex', 'plugins', 'cache', 'pipeline-lite', 'pipeline-lite', '0.2.0')
+    const hostCache = join(home, '.codex', 'plugins', 'cache', 'tenon', 'tenon', '0.2.0')
     await cp(join(REPO_ROOT, 'skills'), join(hostCache, 'skills'), { recursive: true, preserveTimestamps: false })
-    const cacheBundle = join(hostCache, 'packages', 'cli', 'dist', 'pipeline.mjs')
+    const cacheBundle = join(hostCache, 'packages', 'cli', 'dist', 'tenon.mjs')
     await mkdir(dirname(cacheBundle), { recursive: true })
-    await cp(join(REPO_ROOT, 'packages', 'cli', 'dist', 'pipeline.mjs'), cacheBundle, { preserveTimestamps: false })
+    await cp(join(REPO_ROOT, 'packages', 'cli', 'dist', 'tenon.mjs'), cacheBundle, { preserveTimestamps: false })
 
     const commonEnv = {
       HOME: home,
       CODEX_HOME: join(home, '.codex'),
-      PIPELINE_CODEX_PLUGIN_ROOT: hostCache,
+      TENON_CODEX_PLUGIN_ROOT: hostCache,
       PLUGIN_ROOT: REPO_ROOT,
     }
     const browserQaRead = `/bin/zsh -lc "sed -n '1,40p' ${hostCache}/skills/browser-qa/SKILL.md"`
@@ -324,9 +324,9 @@ describe('真实 e2e —— hooks/gate.sh 委托 internal-skill-gate（Task 9）
         payload: {
           type: 'custom_tool_call',
           status: 'completed',
-          call_id: 'call-pipeline-open',
+          call_id: 'call-tenon-open',
           name: 'exec',
-          input: `const r = await tools.exec_command({"cmd":"sed -n '1,40p' ${hostCache}/skills/pipeline-open/SKILL.md"});`,
+          input: `const r = await tools.exec_command({"cmd":"sed -n '1,40p' ${hostCache}/skills/tenon-open/SKILL.md"});`,
         },
       }),
       JSON.stringify({
@@ -334,7 +334,7 @@ describe('真实 e2e —— hooks/gate.sh 委托 internal-skill-gate（Task 9）
         timestamp: transcriptTimestamp,
         payload: {
           type: 'custom_tool_call_output',
-          call_id: 'call-pipeline-open',
+          call_id: 'call-tenon-open',
           output: 'Process exited with code 0\\nWall time 0.1 seconds\\nOutput:\\n',
         },
       }),
@@ -356,16 +356,16 @@ describe('真实 e2e —— hooks/gate.sh 委托 internal-skill-gate（Task 9）
     )
     expect(gate.code, `stderr=${gate.stderr}`).toBe(0)
     const histPath = join(h.cwd, 'openspec', 'changes', CHANGE, '.pipeline-history.jsonl')
-    expect(await readFile(histPath, 'utf8')).toContain('"raw":"CodexSkillRead: pipeline-open"')
+    expect(await readFile(histPath, 'utf8')).toContain('"raw":"CodexSkillRead: tenon-open"')
   })
 
-  test('已激活 Change 时，同名全局 SKILL.md 不能抢占 pipeline-lite 打包 skill', async () => {
+  test('已激活 Change 时，同名全局 SKILL.md 不能抢占 tenon 打包 skill', async () => {
     await setupCodexCustomChange()
     expect(await h.run(['session', 'activate', CHANGE])).toBe(0)
     const home = join(h.cwd, 'shadowed-skill-home')
-    const foreignSkill = join(home, '.agents', 'skills', 'pipeline-open', 'SKILL.md')
+    const foreignSkill = join(home, '.agents', 'skills', 'tenon-open', 'SKILL.md')
     await mkdir(dirname(foreignSkill), { recursive: true })
-    await writeFile(foreignSkill, '# foreign pipeline-open\n', 'utf8')
+    await writeFile(foreignSkill, '# foreign tenon-open\n', 'utf8')
 
     const shadowedRead = `/bin/zsh -lc "sed -n '1,40p' ${foreignSkill}"`
     const gate = runHook(
@@ -375,7 +375,7 @@ describe('真实 e2e —— hooks/gate.sh 委托 internal-skill-gate（Task 9）
     )
 
     expect(gate.code, `stderr=${gate.stderr}`).toBe(2)
-    expect(gate.stderr).toContain("skill 'pipeline-open'")
-    expect(gate.stderr).toContain('pipeline-lite:pipeline-open')
+    expect(gate.stderr).toContain("skill 'tenon-open'")
+    expect(gate.stderr).toContain('tenon:tenon-open')
   })
 })

@@ -2,8 +2,8 @@
  * channel —— event-sourced worker 总线（BACKLOG #27 / GOAL A4 M4）。
  *
  * 【定位：历史迁移能力 / experimental 兼容面（GOAL G4(b)，2026-07-16 codex 方案 D）】
- * 本包是从 kernel 提取的独立 workspace 包（@pipeline-lite/channel），CLI 是唯一依赖者，
- * 保留 echo 能力与全部既有测试 / 事件格式 / `pipeline channel` 兼容入口。它**不是 v3 默认
+ * 本包是从 kernel 提取的独立 workspace 包（@tenon/channel），CLI 是唯一依赖者，
+ * 保留 echo 能力与全部既有测试 / 事件格式 / `tenon channel` 兼容入口。它**不是 v3 默认
  * agent runtime**：不移植 Claude/Codex adapter、不新增 server endpoint、不新增 dashboard 页面。
  * 重开 channel 投资需同时满足 GOAL G4 列出的全部条件（具名产品场景需要运行中多轮输入 /
  * interrupt-resume / 跨进程事件重放 / 多长驻 worker 协作 + 已证明 AFK 沙箱不足 + 真实调用方 +

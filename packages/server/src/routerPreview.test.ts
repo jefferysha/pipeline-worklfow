@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { BUILTIN_TRACK_DEFINITIONS, type TrackDefinition } from '@pipeline-lite/kernel'
+import { BUILTIN_TRACK_DEFINITIONS, type TrackDefinition } from '@tenon/kernel'
 import { applyRouterDraft, previewTrackRouting, scoreRouterPatternWithGrep } from './routerPreview.js'
 
 function track(input: {

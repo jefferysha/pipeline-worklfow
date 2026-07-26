@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { LedgerRecord, LoopEntry, LoopRegistry } from '@pipeline-lite/kernel'
+import type { LedgerRecord, LoopEntry, LoopRegistry } from '@tenon/kernel'
 import { createCadenceScheduler } from './cadence.js'
 
 const NOW = '2026-07-20T12:00:00Z'

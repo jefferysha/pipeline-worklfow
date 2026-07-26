@@ -21,7 +21,7 @@ import {
   type PipelineTodoStageDefinition,
   type StateStore,
   type WorkflowPlanSnapshot,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import type {
   ChangeSnapshot,
   DocumentEvidenceSnapshot,

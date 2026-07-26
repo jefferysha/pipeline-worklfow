@@ -3,7 +3,7 @@ name: react-patterns
 description: First-party React implementation and interaction testing patterns.
 license: MIT
 metadata:
-  author: pipeline-lite
+  author: tenon
 ---
 
 # React Patterns

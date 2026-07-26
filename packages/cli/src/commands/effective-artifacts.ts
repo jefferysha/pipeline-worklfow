@@ -15,8 +15,8 @@
 import {
   matchesTrackPredicate,
   resolveStep,
-} from '@pipeline-lite/kernel'
-import type { FieldName, PipelineState } from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
+import type { FieldName, PipelineState } from '@tenon/kernel'
 import type { CliDeps } from '../deps.js'
 import { effectiveWorkflowForState } from './effective-workflow.js'
 

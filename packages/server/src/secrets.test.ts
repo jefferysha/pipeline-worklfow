@@ -8,7 +8,7 @@ import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { readSecrets, secretsPath } from '@pipeline-lite/kernel'
+import { readSecrets } from '@tenon/kernel'
 import {
   buildSecretsResponse, isValidSecretKey, maskSecret, removeSecret, SECRET_KEY_LIST, validateSecretWriteBody, writeSecret,
 } from './secrets.js'
@@ -87,7 +87,7 @@ describe('validateSecretWriteBody —— POST /api/secrets 请求体校验（fai
 describe('buildSecretsResponse / writeSecret / removeSecret —— 真落盘 + 响应体不含明文', () => {
   it('未设置任何 key → 两键皆 set:false，不带 masked 字段', async () => {
     const home = await tempHome()
-    const path = secretsPath(home)
+    const path = join(home, 'secrets.json')
     const resp = buildSecretsResponse(path)
     expect(resp).toEqual({
       ok: true,
@@ -97,7 +97,7 @@ describe('buildSecretsResponse / writeSecret / removeSecret —— 真落盘 + �
 
   it('写入后响应体含 masked 值，不含原始 value 子串；真落盘可被 kernel 层回读出真值', async () => {
     const home = await tempHome()
-    const path = secretsPath(home)
+    const path = join(home, 'secrets.json')
     const secretValue = 'sk-ant-oat01-realvaluesecretxyz789'
 
     const info = await writeSecret(path, 'CLAUDE_CODE_OAUTH_TOKEN', secretValue)
@@ -117,7 +117,7 @@ describe('buildSecretsResponse / writeSecret / removeSecret —— 真落盘 + �
 
   it('删除后 set:false', async () => {
     const home = await tempHome()
-    const path = secretsPath(home)
+    const path = join(home, 'secrets.json')
     await writeSecret(path, 'OPENAI_API_KEY', 'sk-proj-abcdefghij')
     await removeSecret(path, 'OPENAI_API_KEY')
     const resp = buildSecretsResponse(path)
@@ -126,7 +126,7 @@ describe('buildSecretsResponse / writeSecret / removeSecret —— 真落盘 + �
 
   it('写一个键不影响另一个键的 set/masked 值', async () => {
     const home = await tempHome()
-    const path = secretsPath(home)
+    const path = join(home, 'secrets.json')
     await writeSecret(path, 'CLAUDE_CODE_OAUTH_TOKEN', 'claude-secret-value-1')
     await writeSecret(path, 'OPENAI_API_KEY', 'openai-secret-value-2')
     const resp = buildSecretsResponse(path)

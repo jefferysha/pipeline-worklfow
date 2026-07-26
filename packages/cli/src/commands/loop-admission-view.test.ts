@@ -11,7 +11,7 @@
  * 只测判定纯逻辑：resolver/locator 全 fake（零真 fs/manifest I/O，符合本模块「纯读面」定位）。
  */
 import { describe, expect, it, vi } from 'vitest'
-import type { EffectiveSkillResolver, EffectiveSkillSlot, LoopEntry } from '@pipeline-lite/kernel'
+import type { EffectiveSkillResolver, EffectiveSkillSlot, LoopEntry } from '@tenon/kernel'
 import { evaluateSkillBundleWiring, type SkillBundleWiringDeps } from './loop-admission-view.js'
 
 function loop(over: Partial<LoopEntry> = {}): LoopEntry {

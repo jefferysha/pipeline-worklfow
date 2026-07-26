@@ -3,7 +3,7 @@ name: uiuxdesign-pro
 description: First-party advanced UX review for workflows, information architecture, and recovery states.
 license: MIT
 metadata:
-  author: pipeline-lite
+  author: tenon
 ---
 
 # UI UX Design Pro

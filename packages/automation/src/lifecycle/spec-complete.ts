@@ -10,7 +10,7 @@
  * capability，多个普通轨道都可能为 true；自动接管必须由更窄的策略位显式授权。
  */
 import { join } from 'node:path'
-import type { StateStore, TrackPolicyProfile } from '@pipeline-lite/kernel'
+import type { StateStore, TrackPolicyProfile } from '@tenon/kernel'
 import type { AutomationJsonFs } from '../config/automationJson.js'
 import { shouldAutoEnqueueOnSpecComplete } from '../queue/gate.js'
 import type { AutomationConfig } from '../types.js'

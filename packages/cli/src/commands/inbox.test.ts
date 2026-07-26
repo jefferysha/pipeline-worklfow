@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { GATE_TTL_MS, REVIEW_MARKER_PROTOCOL } from '@pipeline-lite/kernel'
+import { GATE_TTL_MS, REVIEW_MARKER_PROTOCOL } from '@tenon/kernel'
 import { cmdInbox } from './inbox.js'
 import { makeDeps, mockState } from '../test-support.js'
 

@@ -43,7 +43,7 @@ locale 不进入 contract。呈现由 Document Presentation Registry 决定，�
 delta spec 是 capability 文档，创建时必须显式提供真实 capability：
 
 ```bash
-pipeline document scaffold <change> delta-spec --capability <capability>
+tenon document scaffold <change> delta-spec --capability <capability>
 ```
 
 Change 名和 capability 名不是同一个概念，多 capability Change 也不能靠目录猜测。
@@ -51,9 +51,9 @@ Change 名和 capability 名不是同一个概念，多 capability Change 也不
 ### 4. 创建并使用
 
 ```bash
-pipeline init <change> --track <track> --workflow <workflow> --preset full
-pipeline status <change> --json
-pipeline workflow plan <change> --json
+tenon init <change> --track <track> --workflow <workflow> --preset full
+tenon status <change> --json
+tenon workflow plan <change> --json
 ```
 
 新 Change 会固定 workflow identity 和文档语言；之后修改 YAML 不会静默重写正在运行的 Change。
@@ -64,7 +64,7 @@ pipeline workflow plan <change> --json
 draft → approve → done
 ```
 
-如果合同只声明 proposal、plan、verification-report，Pipeline Lite 只生成这三种结构。它不会因为步骤叫 `approve` 或使用中文 label 就补齐 default 十类文档。
+如果合同只声明 proposal、plan、verification-report，Tenon 只生成这三种结构。它不会因为步骤叫 `approve` 或使用中文 label 就补齐 default 十类文档。
 
 ## 预期结果
 
@@ -78,9 +78,9 @@ draft → approve → done
 ## 验证
 
 ```bash
-pipeline tracks list
-pipeline status <change> --json
-pipeline document status <change>
+tenon tracks list
+tenon status <change> --json
+tenon document status <change>
 ```
 
 非法 step、未知 producer、未声明 kind、未来阶段文档或缺失读取收据必须 fail-loud。提交 Workflow 前还应执行项目的 workflow freshness、skills、bundle 和 oracle 检查。

@@ -1,6 +1,6 @@
 /**
  * 测试基座：StateStore / FlowEngine 的 mock 工厂 + 依赖装配 helper。
- * 只依赖 types 契约（@pipeline-lite/kernel 目前仅 re-export types），零 vitest 依赖，
+ * 只依赖 types 契约（@tenon/kernel 目前仅 re-export types），零 vitest 依赖，
  * 因此可被 tsc 正常编译（不进任何运行时路径）。
  */
 import {
@@ -11,7 +11,7 @@ import {
   loadTrackRegistry,
   PHASES,
   resolveWorkflowName,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import type {
   CommitResult,
   DocumentContractPhase,
@@ -36,7 +36,7 @@ import type {
   WorkflowRun,
   WorkflowRunRepository,
   WorkflowRunTransaction,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import type { CliDeps, DoctorProbes, GateMarkerInfo, GuardFileContext } from './deps.js'
 
 // === 调用记录 spy（不引 vitest，纯手写） ===
@@ -336,8 +336,8 @@ export function mockDoctorProbes(overrides: Partial<DoctorProbes> = {}): DoctorP
     installedSkillNames: () => new Set(),
     // Codex normal-chat 就绪面：缺省 fixture 代表安装器已投递完整 contract skills。
     codexProjectSkillNames: () => new Set([
-      'pipeline', 'pipeline-open', 'pipeline-explore', 'pipeline-spec', 'pipeline-build', 'pipeline-verify',
-      'pipeline-ship', 'pipeline-archive', 'openspec-propose', 'openspec-explore', 'openspec-apply-change',
+      'pipeline', 'tenon-open', 'tenon-explore', 'tenon-spec', 'tenon-build', 'tenon-verify',
+      'tenon-ship', 'tenon-archive', 'openspec-propose', 'openspec-explore', 'openspec-apply-change',
       'openspec-archive-change', 'brainstorming', 'grill-with-docs', 'improve-codebase-architecture',
       'writing-plans', 'test-driven-development', 'verification-before-completion',
       'finishing-a-development-branch', 'browser-qa', 'e2e-testing',

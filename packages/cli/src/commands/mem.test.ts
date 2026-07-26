@@ -3,7 +3,7 @@
  * fake MemFs 仅替换磁盘字节源，dispatch/格式/flag 解析/错误路径穷举；真解析真检索走 kernel。
  */
 import { basename, dirname } from 'node:path'
-import { opencodeSqliteAvailable } from '@pipeline-lite/kernel'
+import { opencodeSqliteAvailable } from '@tenon/kernel'
 import { describe, expect, test } from 'vitest'
 import { makeDeps } from '../test-support.js'
 import { cmdMem, type MemDirent, type MemFs } from './mem.js'
@@ -185,7 +185,7 @@ describe('dispatch / help / opencode warning', () => {
   test('help → 用法 exit 0', async () => {
     const deps = makeDeps()
     expect(await cmdMem(deps, 'help', [], tree())).toBe(0)
-    expect(deps.outLines.join('\n')).toContain('pipeline mem —')
+    expect(deps.outLines.join('\n')).toContain('tenon mem —')
   })
 
   test('未知子命令 → exit 2', async () => {

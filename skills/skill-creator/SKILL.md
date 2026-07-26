@@ -3,7 +3,7 @@ name: skill-creator
 description: First-party process for adding a reusable packaged pipeline skill.
 license: MIT
 metadata:
-  author: pipeline-lite
+  author: tenon
 ---
 
 # Skill Creator

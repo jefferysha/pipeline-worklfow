@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
 import { translations, type Dict, type Lang } from './translations'
 
-const STORAGE_KEY = 'pipeline-dashboard-lang'
+const STORAGE_KEY = 'tenon-dashboard-lang'
 
 function getInitialLang(): Lang {
   try {

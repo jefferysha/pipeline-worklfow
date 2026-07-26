@@ -5,7 +5,7 @@
  *   list   --json        {"changes":[{name,track,phase,phase_status,assignee}]}
  * 活跃 = openspec/changes/ 下有 .pipeline.yaml 且 archived != true；坏 change 跳过 + WARN。
  */
-import type { PipelineState } from '@pipeline-lite/kernel'
+import type { PipelineState } from '@tenon/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
 import { changeDir, changesRoot, isValidChangeName } from '../paths.js'
 import { display, renderKV, renderTable, str } from '../render.js'

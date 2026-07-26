@@ -100,8 +100,8 @@ describe('certs —— 持久化 + 安全护栏（#34e：私钥不外发）', ()
     expect(opts.cert).toContain('CERTIFICATE')
   })
 
-  it('resolveCaDir：PIPELINE_TAP_CA_DIR 覆盖优先，否则 ~/.pipeline-tap', () => {
-    expect(resolveCaDir({ env: { PIPELINE_TAP_CA_DIR: '/x/ca' } })).toBe('/x/ca')
+  it('resolveCaDir：TENON_TAP_CA_DIR 覆盖优先，否则 ~/.pipeline-tap', () => {
+    expect(resolveCaDir({ env: { TENON_TAP_CA_DIR: '/x/ca' } })).toBe('/x/ca')
     expect(resolveCaDir({ env: {}, home: '/home/u' })).toBe('/home/u/.pipeline-tap')
   })
 

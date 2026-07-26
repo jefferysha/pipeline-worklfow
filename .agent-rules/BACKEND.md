@@ -124,8 +124,8 @@ HTTP API 保持现有 `/api` 前缀和端点契约，不统一增加 `/v1`，也
 | hook / adapter / skill / bundle | `bash tools/test-hooks.sh`；`bash tools/test-adapters.sh`；`bash tools/verify-skills.sh`；`bash tools/test-bundle.sh` | 对应分发资产、hook、adapter、skill 与 CLI bundle 改动 |
 | golden oracle | `npm run oracle` | 状态机、guard、转换、历史兼容或模板契约改动 |
 | Docker sandcastle | `bash tools/sandcastle/build.sh local` | runner、镜像、挂载、凭证传递或真实隔离执行改动；要求本机 Docker |
-| real-Codex 验收 | `PIPELINE_REQUIRE_REAL_CODEX=1 npx vitest run packages/cli/src/loop-run.real.integration.test.ts` | Codex runner/AFK 真实路径；仅在可安全使用凭证和网络的环境运行，不得输出密钥 |
-| API smoke | 先执行 `npm run build:web && npm run build:server`，按 README 启动 `npx pipeline-dashboard`，检查 `/api/health`、受影响读端点及带同源 token 的真实写流程 | server 路由、鉴权、静态托管、SSE 或 client/server contract 改动 |
+| real-Codex 验收 | `TENON_REQUIRE_REAL_CODEX=1 npx vitest run packages/cli/src/loop-run.real.integration.test.ts` | Codex runner/AFK 真实路径；仅在可安全使用凭证和网络的环境运行，不得输出密钥 |
+| API smoke | 先执行 `npm run build:web && npm run build:server`，按 README 启动 `npx tenon-dashboard`，检查 `/api/health`、受影响读端点及带同源 token 的真实写流程 | server 路由、鉴权、静态托管、SSE 或 client/server contract 改动 |
 
 项目没有数据库迁移命令；持久化 schema/codec 变更必须用旧 fixture、幂等迁移测试、跨进程 repository 测试和恢复场景代替。仓库当前没有独立 lint/format npm script，不得声称运行过；除非任务明确授权，不得为满足规则临时编造或引入工具。
 

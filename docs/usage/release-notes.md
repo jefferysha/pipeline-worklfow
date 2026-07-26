@@ -1,15 +1,15 @@
 # Release notes
 
-Pipeline Lite release notes explain what changed, what users need to do, and how to verify an upgrade.
+Tenon release notes explain what changed, what users need to do, and how to verify an upgrade.
 
 Only capabilities included in a public distribution belong here. Plans, internal ADRs, and unmerged experiments are not presented as shipped work.
 
-## Current development line
+## v1.0.0 · 2026-07-26
 
 ### Governed document locale
 
 - New Changes pin governed documents to `zh-CN` by default.
-- `pipeline init`, `pipeline document scaffold`, and the default OpenSpec fallback share one Document Presentation Registry.
+- `tenon init`, `tenon document scaffold`, and the default OpenSpec fallback share one Document Presentation Registry.
 - Users can explicitly select `--document-locale en`.
 - A pinned Change cannot silently switch locale.
 - Historical Changes infer locale from the writing system used by existing H1 headings.
@@ -36,28 +36,28 @@ Only capabilities included in a public distribution belong here. Plans, internal
 
 ### Installation and updates
 
-- Install for Codex with `pipeline setup --codex`.
-- Install for Claude with `pipeline setup --claude`.
-- Update with the matching `pipeline update --codex` or `pipeline update --claude`.
+- Install for Codex with `tenon setup --codex`.
+- Install for Claude with `tenon setup --claude`.
+- Update with the matching `tenon update --codex` or `tenon update --claude`.
 - The managed runtime is content-addressed and the stable launcher targets a verified release.
-- A failed update preserves the previous release for `pipeline runtime repair --rollback`.
+- A failed update preserves the previous release for `tenon runtime repair --rollback`.
 - Dashboard listens on `127.0.0.1:18765` by default.
 
 ## Upgrade checklist
 
 1. Inspect the repository working tree.
 2. Run the update command for the selected host.
-3. Run `pipeline runtime status`.
-4. Run `pipeline doctor`.
-5. Run `pipeline list --json` in the project.
+3. Run `tenon runtime status`.
+4. Run `tenon doctor`.
+5. Run `tenon list --json` in the project.
 6. Confirm Dashboard uses `127.0.0.1:18765`.
 
 ## Verification
 
-- `pipeline --help` lists the command families.
-- `pipeline runtime status` reports the active runtime.
-- `pipeline doctor` reports no missing bundled Skills.
-- Repeated `pipeline setup --codex` remains idempotent.
+- `tenon --help` lists the command families.
+- `tenon runtime status` reports the active runtime.
+- `tenon doctor` reports no missing bundled Skills.
+- Repeated `tenon setup --codex` remains idempotent.
 - Updating does not rewrite canonical Change state.
 - A new test Change creates Chinese proposal, design, and tasks files.
 - An explicitly English Change keeps newly scaffolded documents in English.
@@ -68,7 +68,7 @@ The canonical Change codec does not gain a locale field. Locale lives in the rol
 
 ## Rollback
 
-Run `pipeline runtime status`, then use `pipeline runtime repair --rollback` to return to the previous verified content-addressed release.
+Run `tenon runtime status`, then use `tenon runtime repair --rollback` to return to the previous verified content-addressed release.
 
 Runtime rollback does not remove project Changes, OpenSpec documents, or evidence ledgers.
 

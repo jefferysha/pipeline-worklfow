@@ -37,7 +37,7 @@ describe('docker 全链 · 真容器生命周期集成', () => {
     const handle = await createDockerSandbox(nodeExec, {
       image: 'alpine',
       worktreePath: '/tmp',
-      env: { PIPELINE_AFK: '1' },
+      env: { TENON_AFK: '1' },
     })
     try {
       // 真 docker exec：打印一个结构化握手，证明 exec 回读链路真跑（用 runner 的真解析器）。
@@ -118,8 +118,8 @@ describe('docker 全链 · 真容器生命周期集成', () => {
       handle = await ports.createSandbox({
         worktreePath: '/work',
         env: {
-          PIPELINE_SKILL_BUNDLE_DIR: SKILL_BUNDLE_CONTAINER_DIR,
-          PIPELINE_SKILL_BUNDLE_SHA256: published.digest,
+          TENON_SKILL_BUNDLE_DIR: SKILL_BUNDLE_CONTAINER_DIR,
+          TENON_SKILL_BUNDLE_SHA256: published.digest,
         },
         skillBundle: bundle,
       })
@@ -189,10 +189,10 @@ if [ "\${1:-}" = tap ]; then
 fi
 exit 93
 `)
-      const scriptPath = join(workDir, 'pipeline-afk-run.sh')
+      const scriptPath = join(workDir, 'tenon-afk-run.sh')
       await writeFile(
         scriptPath,
-        await readFile(join(process.cwd(), 'tools', 'sandcastle', 'pipeline-afk-run.sh'), 'utf8'),
+        await readFile(join(process.cwd(), 'tools', 'sandcastle', 'tenon-afk-run.sh'), 'utf8'),
         'utf8',
       )
       await chmod(scriptPath, 0o755)
@@ -217,9 +217,9 @@ exit 93
         worktreePath: workDir,
         env: {
           PATH: `${fakeBin}:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`,
-          PIPELINE_RUNNER: 'codex',
-          PIPELINE_SKILL_BUNDLE_DIR: SKILL_BUNDLE_CONTAINER_DIR,
-          PIPELINE_SKILL_BUNDLE_SHA256: published.digest,
+          TENON_RUNNER: 'codex',
+          TENON_SKILL_BUNDLE_DIR: SKILL_BUNDLE_CONTAINER_DIR,
+          TENON_SKILL_BUNDLE_SHA256: published.digest,
           AGENT_SENTINEL: agentSentinel,
         },
         skillBundle: bundle,

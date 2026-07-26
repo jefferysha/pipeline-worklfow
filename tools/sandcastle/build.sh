@@ -7,7 +7,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$REPO_ROOT"
 
-BUNDLE="packages/cli/dist/pipeline.mjs"
+BUNDLE="packages/cli/dist/tenon.mjs"
 if [ ! -f "$BUNDLE" ]; then
   echo "缺 $BUNDLE —— 先跑 npm run build" >&2
   exit 1
@@ -20,7 +20,7 @@ case "$VARIANT" in
     TAG="sandcastle:local"
     BUILD_ARGS=(
       --build-arg "WITH_CLAUDE_CODE=true"
-      --build-arg "PIPELINE_TEST_ALLOW_DETERMINISTIC_FALLBACK=0"
+      --build-arg "TENON_TEST_ALLOW_DETERMINISTIC_FALLBACK=0"
     )
     ;;
   test)
@@ -28,7 +28,7 @@ case "$VARIANT" in
     TAG="sandcastle:test"
     BUILD_ARGS=(
       --build-arg "WITH_CLAUDE_CODE=false"
-      --build-arg "PIPELINE_TEST_ALLOW_DETERMINISTIC_FALLBACK=1"
+      --build-arg "TENON_TEST_ALLOW_DETERMINISTIC_FALLBACK=1"
     )
     ;;
   *)
@@ -42,12 +42,12 @@ docker build -f tools/sandcastle/Dockerfile -t "${TAG}" "${BUILD_ARGS[@]}" "$REP
 
 # 镜像 ↔ 仓库脚本版本对账（真机验收 P1，2026-07-11）：host 侧 runner
 # （packages/automation/src/runner/runner.ts 的 AFK_RUN_SCRIPT_SHA256 + buildAfkRunCommand 前置守卫）
-# 在每次 run 前核对镜像内 /usr/local/bin/pipeline-afk-run 的 sha256，不符则 exit 95 硬错误。
+# 在每次 run 前核对镜像内 /usr/local/bin/tenon-afk-run 的 sha256，不符则 exit 95 硬错误。
 # 这里构建完当场自验一次，陈旧层缓存/错构建当场可见，而不是留到 run 时才炸。
-REPO_AFK_SHA="$( (sha256sum tools/sandcastle/pipeline-afk-run.sh 2>/dev/null || shasum -a 256 tools/sandcastle/pipeline-afk-run.sh) | awk '{print $1}')"
+REPO_AFK_SHA="$( (sha256sum tools/sandcastle/tenon-afk-run.sh 2>/dev/null || shasum -a 256 tools/sandcastle/tenon-afk-run.sh) | awk '{print $1}')"
 REPO_CLI_SHA="$( (sha256sum "$BUNDLE" 2>/dev/null || shasum -a 256 "$BUNDLE") | awk '{print $1}')"
-IMAGE_AFK_SHA="$(docker run --rm --entrypoint sha256sum "${TAG}" /usr/local/bin/pipeline-afk-run | awk '{print $1}')"
-IMAGE_CLI_SHA="$(docker run --rm --entrypoint sha256sum "${TAG}" /opt/pipeline/packages/cli/dist/pipeline.mjs | awk '{print $1}')"
+IMAGE_AFK_SHA="$(docker run --rm --entrypoint sha256sum "${TAG}" /usr/local/bin/tenon-afk-run | awk '{print $1}')"
+IMAGE_CLI_SHA="$(docker run --rm --entrypoint sha256sum "${TAG}" /opt/pipeline/packages/cli/dist/tenon.mjs | awk '{print $1}')"
 IMAGE_ATTESTATION="$(docker run --rm --entrypoint cat "${TAG}" /opt/pipeline/image-attestation.env)"
 
 if [ "${REPO_AFK_SHA}" != "${IMAGE_AFK_SHA}" ] || [ "${REPO_CLI_SHA}" != "${IMAGE_CLI_SHA}" ]; then

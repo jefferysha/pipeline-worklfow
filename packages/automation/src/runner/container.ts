@@ -19,10 +19,10 @@ export const KEEPALIVE_CMD: readonly string[] = ['sleep', '2147483647']
 
 /**
  * H10 r1 复审阻断5（任务C1）：容器内、agent 启动前的 skill bundle 完整校验保留退出码。
- * `tools/sandcastle/pipeline-afk-run.sh` 内嵌的 node 校验脚本（Claude 与 Codex 两条 agent 分派
+ * `tools/sandcastle/tenon-afk-run.sh` 内嵌的 node 校验脚本（Claude 与 Codex 两条 agent 分派
  * 分支之前，脚本头部统一执行）直接对 host 已用 `docker cp` 放入并 root-seal 的容器私有固定目录
  * 重算 canonical manifest + 聚合 digest。结果与宿主经
- * `docker run -e` 注入的 `PIPELINE_SKILL_BUNDLE_SHA256`（out-of-band——不是从即将被校验的目录本身
+ * `docker run -e` 注入的 `TENON_SKILL_BUNDLE_SHA256`（out-of-band——不是从即将被校验的目录本身
  * 读出来的）不一致时，以本退出码终止整个脚本——绝不继续到任何 agent 分派。通过后 env 与 prompt
  * 始终指向该固定私有目录；host CAS 没有挂载进容器，后续修改不可能影响 agent 读取的内容。
  *
@@ -45,7 +45,7 @@ export const KEEPALIVE_CMD: readonly string[] = ['sleep', '2147483647']
  *
  * 保留退出码需避开脚本内已占用位：95 = 脚本版本对账漂移
  * （`runner.ts::AFK_RUN_DRIFT_EXIT_CODE`）、96 = codex CLI 缺失、97 = tap proxy 未起（均见脚本内
- * 联注释）。skillBundle 缺席（none-bundle 直通/非 loop AFK 直跑，`PIPELINE_SKILL_BUNDLE_DIR` 未
+ * 联注释）。skillBundle 缺席（none-bundle 直通/非 loop AFK 直跑，`TENON_SKILL_BUNDLE_DIR` 未
  * 注入）时脚本内直接跳过整段校验，exitCode 不可能等于本保留码，对这类 run 零行为影响。
  */
 export const SKILL_BUNDLE_VERIFY_FAIL_EXIT_CODE = 94

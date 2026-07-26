@@ -3,7 +3,7 @@ name: frontend-design
 description: First-party frontend design review focused on hierarchy, states, and accessibility.
 license: MIT
 metadata:
-  author: pipeline-lite
+  author: tenon
 ---
 
 # Frontend Design

@@ -12,7 +12,7 @@
 | 运行时 | Node.js 22 开发/构建；浏览器中运行客户端 SPA |
 | 框架 | React 18 客户端渲染 SPA；Vite 5 构建 |
 | 包管理工具 | 根目录 npm workspace 与 `package-lock.json`；不得混用其他包管理器 |
-| UI/样式 | Radix UI、Tailwind CSS 4、CVA、Lucide；GSAP 负责动效；遵循现有 OpenAI 配色 × Trellis 布局、主题 token 与共享组件 |
+| UI/样式 | Radix UI、Tailwind CSS 4、CVA、Lucide；GSAP 负责动效；遵循 Tenon 现有主题 token、布局契约与共享组件 |
 | 状态管理 | 优先使用现有 React 本地状态、Context 和自定义 hooks；不得仅为单一功能新增全局状态库 |
 | 数据请求 | 通过 `src/api/client.ts` 等既有边界使用 `fetch` 与 SSE；组件不得自行复制协议解析、鉴权 token 或错误映射逻辑 |
 | 测试/验证 | Vitest、jsdom、Testing Library；Vite 真实构建与风险匹配的浏览器 smoke check |
@@ -92,7 +92,7 @@
 | 定向 Vitest | `npx vitest run --config packages/dashboard-app/vitest.config.ts <test-file>` | 低风险局部改动的快速反馈；交付时列出实际文件 |
 | 前端生产构建 | `npm run build:web` | 依赖、资源、样式、Vite 配置或准备交付的前端改动 |
 | 跨端构建 | `npm run build` | 共享类型、server/client 契约或全栈改动 |
-| 真实浏览器 smoke | 先执行 `npm run build:web && npm run build:server`，再按 README 启动 `npx pipeline-dashboard`，检查真实同源页面 | 布局、交互、主题、响应式、SSE、写端点或鉴权行为；至少覆盖受影响的桌面/移动视口与明/暗主题 |
+| 真实浏览器 smoke | 先执行 `npm run build:web && npm run build:server`，再按 README 启动 `npx tenon-dashboard`，检查真实同源页面 | 布局、交互、主题、响应式、SSE、写端点或鉴权行为；至少覆盖受影响的桌面/移动视口与明/暗主题 |
 
 仓库当前没有专用 lint、format 或独立前端 E2E npm script；不得声称已运行。只有当前任务明确要求并授权新增工具时，才可引入相应配置，并同时更新本节和 CI/文档。
 

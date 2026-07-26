@@ -11,8 +11,8 @@ runtime trust anchor.  A small stable bootstrap installed in the user's executab
 selects an immutable, verified local release.  Host hooks call that bootstrap rather than a path
 inside the marketplace checkout.
 
-The implementation deliberately combines the strongest relevant patterns from Trellis and Comet:
-Trellis-style managed-content validation and backup discipline, and Comet-style single workflow
+The implementation deliberately combines the strongest relevant patterns from Tenon contract and Tenon runtime:
+Tenon contract-style managed-content validation and backup discipline, and Tenon runtime-style single workflow
 ownership plus staged candidate validation.  It adds the missing release-level atomic activation
 and an independent bootstrap boundary.
 
@@ -140,7 +140,7 @@ payload router has a separate, deterministic responsibility:
 - `.pipeline-active` is a recovery candidate, not a cross-conversation binding;
 - a current-change record identifies one workflow owner at a time and is validated before use.
 
-This adopts Comet's single-router principle without making the router itself the host bootstrap
+This adopts Tenon runtime's single-router principle without making the router itself the host bootstrap
 root of trust.
 
 ## Migration and retention

@@ -171,7 +171,7 @@ describe('App 视图切换（v9-flowdeck 两视图接线）', () => {
   })
 
   it('项目非零但全部不可达（ok=false）：工作台渲染诚实空态，不拿不可达 root 挂 WorkbenchView（v10c：不再经聚合语境）', async () => {
-    localStorage.setItem('pipeline-dashboard-view', 'workbench') // 直接落工作台，回落链此时全落空
+    localStorage.setItem('tenon-dashboard-view', 'workbench') // 直接落工作台，回落链此时全落空
     ;(global.fetch as ReturnType<typeof vi.fn>).mockImplementation(async (url: string) => {
       if (url === '/api/snapshot') {
         return { ok: true, json: async () => makeSnapshot([makeProject('/repo', [], { ok: false })]) }
@@ -187,20 +187,20 @@ describe('App 视图切换（v9-flowdeck 两视图接线）', () => {
 
 describe('App 视图记忆（localStorage 旧值兜底回 progress，收件箱退役）', () => {
   it('记忆值是退役视图（board）→ 落地进度而非崩溃/空渲染', async () => {
-    localStorage.setItem('pipeline-dashboard-view', 'board')
+    localStorage.setItem('tenon-dashboard-view', 'board')
     render(<App />)
     expect(await screen.findByTestId('progress-view')).toBeInTheDocument()
   })
 
   it('记忆值是刚退役的 inbox → 同样兜底回进度，不渲染收件箱', async () => {
-    localStorage.setItem('pipeline-dashboard-view', 'inbox')
+    localStorage.setItem('tenon-dashboard-view', 'inbox')
     render(<App />)
     expect(await screen.findByTestId('progress-view')).toBeInTheDocument()
     expect(screen.queryByTestId('inbox-view')).toBeNull()
   })
 
   it('记忆值是合法视图（workbench）→ 直接落地工作台', async () => {
-    localStorage.setItem('pipeline-dashboard-view', 'workbench')
+    localStorage.setItem('tenon-dashboard-view', 'workbench')
     render(<App />)
     expect(await screen.findByTestId('workbench-view')).toBeInTheDocument()
   })
@@ -209,22 +209,22 @@ describe('App 视图记忆（localStorage 旧值兜底回 progress，收件箱�
     render(<App />)
     await screen.findByTestId('progress-view')
     fireEvent.click(screen.getByTestId('nav-workbench'))
-    expect(localStorage.getItem('pipeline-dashboard-view')).toBe('workbench')
+    expect(localStorage.getItem('tenon-dashboard-view')).toBe('workbench')
   })
 
   it('品牌 Overview 不覆盖上一次运营视图记忆', async () => {
     render(<App />)
     await screen.findByTestId('progress-view')
     fireEvent.click(screen.getByTestId('nav-projects'))
-    expect(localStorage.getItem('pipeline-dashboard-view')).toBe('projects')
+    expect(localStorage.getItem('tenon-dashboard-view')).toBe('projects')
 
     fireEvent.click(screen.getByTestId('nav-overview'))
     expect(await screen.findByTestId('solution-view')).toBeInTheDocument()
-    expect(localStorage.getItem('pipeline-dashboard-view')).toBe('projects')
+    expect(localStorage.getItem('tenon-dashboard-view')).toBe('projects')
   })
 })
 
-describe('App 注册 UI 退役（T17 决议#7：pipeline init 自动登记，注册入口全删）', () => {
+describe('App 注册 UI 退役（T17 决议#7：tenon init 自动登记，注册入口全删）', () => {
   it('单项目语境无 ＋ 注册按钮、无注册对话框入口', async () => {
     render(<App />)
     await screen.findByTestId('progress-view')
@@ -285,7 +285,7 @@ describe('App 深浅色自适应 + i18n', () => {
 })
 
 describe('App G18 教学空状态（T17 起纯教学态）', () => {
-  it('零项目快照 → 全视图替换为教学 onboarding：无注册表单、CLI 是 pipeline init、无幽灵命令', async () => {
+  it('零项目快照 → 全视图替换为教学 onboarding：无注册表单、CLI 是 tenon init、无幽灵命令', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async (url: string) => {
@@ -297,11 +297,11 @@ describe('App G18 教学空状态（T17 起纯教学态）', () => {
     render(<App />)
     const ob = await screen.findByTestId('onboard-no-project')
     expect(screen.queryByTestId('progress-view')).toBeNull()
-    // 决议#7 + T2：注册表单退役，教学 CLI 为 pipeline init（自动登记），幽灵命令清除
+    // 决议#7 + T2：注册表单退役，教学 CLI 为 tenon init（自动登记），幽灵命令清除
     expect(screen.queryByTestId('project-register-form')).toBeNull()
     expect(screen.queryByTestId('project-register-path')).toBeNull()
     expect(screen.queryByTestId('project-register-submit')).toBeNull()
-    expect(screen.getByTestId('onboard-cli').textContent).toContain('pipeline init')
+    expect(screen.getByTestId('onboard-cli').textContent).toContain('tenon init')
     expect(ob.textContent).not.toContain('projects add')
   })
 
@@ -316,7 +316,7 @@ describe('App G18 教学空状态（T17 起纯教学态）', () => {
     )
     render(<App />)
     expect(await screen.findByTestId('onboard-no-change')).toBeInTheDocument()
-    expect(screen.getByTestId('onboard-cli').textContent).toContain('pipeline init')
+    expect(screen.getByTestId('onboard-cli').textContent).toContain('tenon init')
     fireEvent.click(screen.getByTestId('onboard-new-change'))
     expect(await screen.findByTestId('create-change-dialog')).toBeInTheDocument()
   })
@@ -349,8 +349,8 @@ describe('App currentRoot 语义（D5：吃掉 G14，多项目默认取第一个
 
 describe('App v10c 契约护栏（旧聚合偏好 root=\'\' + 进度视图 → 落「项目」总览页，不渲染聚合）', () => {
   it("旧聚合偏好（root='')停在 progress → 自动落项目总览页，两项目卡都在，不出聚合进度行", async () => {
-    localStorage.setItem('pipeline-dashboard-root', '') // 旧聚合偏好（本次重构退役）
-    localStorage.setItem('pipeline-dashboard-view', 'progress')
+    localStorage.setItem('tenon-dashboard-root', '') // 旧聚合偏好（本次重构退役）
+    localStorage.setItem('tenon-dashboard-view', 'progress')
     vi.stubGlobal(
       'fetch',
       vi.fn(async (url: string) => {
@@ -378,7 +378,7 @@ describe('App v10c 契约护栏（旧聚合偏好 root=\'\' + 进度视图 → �
   })
 
   it('点项目卡钻进单项目进度页：setCurrentRoot + 切 progress，只看该项目', async () => {
-    localStorage.setItem('pipeline-dashboard-view', 'projects')
+    localStorage.setItem('tenon-dashboard-view', 'projects')
     vi.stubGlobal(
       'fetch',
       vi.fn(async (url: string) => {

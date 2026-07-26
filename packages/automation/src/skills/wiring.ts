@@ -10,7 +10,7 @@ import {
   type EffectiveSkillResolver,
   type LoopEntry,
   type StepIR,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import type { SkillContentLocator } from './content-locator.js'
 
 export type SkillBundleWiringStatus = 'unwired' | 'invalid' | 'ready'

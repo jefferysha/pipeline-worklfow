@@ -1,9 +1,10 @@
-import { cp, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
+import { chmod, cp, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import { resolveRuntimePaths } from './paths.js'
+import { REAL_RUNTIME_INSTALLER } from './installer.js'
 import { RuntimeReleaseStore } from './release-store.js'
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..')
@@ -26,10 +27,10 @@ async function candidateCopy(root: string, suffix = ''): Promise<string> {
     '.codex-plugin/plugin.json',
     'adapters',
     'hooks',
-    'packages/cli/dist/pipeline.mjs',
+    'packages/cli/dist/tenon.mjs',
     'packages/dashboard-app/dist',
     'packages/server/dist/dashboard.mjs',
-    'runtime/pipeline-bootstrap.mjs',
+    'runtime/tenon-bootstrap.mjs',
     'skills',
     'templates',
     'tools/verify-skills.sh',
@@ -42,17 +43,44 @@ async function candidateCopy(root: string, suffix = ''): Promise<string> {
 
 function storeFor(root: string): RuntimeReleaseStore {
   return new RuntimeReleaseStore({
-    paths: resolveRuntimePaths({ env: { PIPELINE_RUNTIME_HOME: join(root, 'runtime') }, homeDir: root, platform: 'linux' }),
+    paths: resolveRuntimePaths({ env: { TENON_RUNTIME_HOME: join(root, 'runtime') }, homeDir: root, platform: 'linux' }),
     now: () => '2026-07-24T00:00:00Z',
     retainedReleases: 3,
   })
 }
 
 function pathsFor(root: string) {
-  return resolveRuntimePaths({ env: { PIPELINE_RUNTIME_HOME: join(root, 'runtime') }, homeDir: root, platform: 'linux' })
+  return resolveRuntimePaths({ env: { TENON_RUNTIME_HOME: join(root, 'runtime') }, homeDir: root, platform: 'linux' })
 }
 
 describe('RuntimeReleaseStore', () => {
+  const isolatedScope = (homeDir: string) => ({ homeDir, env: {} })
+
+  it('holds one product-scoped transaction lock across the caller-defined managed release lifecycle', async () => {
+    const root = await freshRoot('managed-transaction-lock')
+    const home = join(root, 'home')
+    const events: string[] = []
+    let releaseFirst!: () => void
+    const firstGate = new Promise<void>((resolve) => { releaseFirst = resolve })
+
+    const first = REAL_RUNTIME_INSTALLER.withManagedTransaction(isolatedScope(home), async () => {
+      events.push('first:start')
+      await firstGate
+      events.push('first:end')
+    })
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    const second = REAL_RUNTIME_INSTALLER.withManagedTransaction(isolatedScope(home), async () => {
+      events.push('second:start')
+      events.push('second:end')
+    })
+    await new Promise((resolve) => setTimeout(resolve, 20))
+
+    expect(events).toEqual(['first:start'])
+    releaseFirst()
+    await Promise.all([first, second])
+    expect(events).toEqual(['first:start', 'first:end', 'second:start', 'second:end'])
+  })
+
   it('stages, verifies, and atomically selects a complete candidate release', async () => {
     const root = await freshRoot('activate')
     const candidate = await candidateCopy(root)
@@ -112,8 +140,8 @@ describe('RuntimeReleaseStore', () => {
     const firstCandidate = await candidateCopy(root, '-one')
     const secondCandidate = await candidateCopy(root, '-two')
     await writeFile(
-      join(secondCandidate, 'runtime', 'pipeline-bootstrap.mjs'),
-      `${await readFile(join(secondCandidate, 'runtime', 'pipeline-bootstrap.mjs'), 'utf8')}\n// release-two\n`,
+      join(secondCandidate, 'runtime', 'tenon-bootstrap.mjs'),
+      `${await readFile(join(secondCandidate, 'runtime', 'tenon-bootstrap.mjs'), 'utf8')}\n// release-two\n`,
       'utf8',
     )
     const store = storeFor(root)
@@ -127,11 +155,26 @@ describe('RuntimeReleaseStore', () => {
     expect(rolledBack.selection.previousRelease).toBe(second.release.releaseId)
   }, 30_000)
 
+  it('compensates only the exact activation, including a failed first-install readiness gate', async () => {
+    const root = await freshRoot('revert-activation')
+    const candidate = await candidateCopy(root)
+    const store = storeFor(root)
+    const activated = await store.stageAndActivate(candidate, 'codex')
+
+    await store.revertActivation(activated.selection)
+
+    const inspection = await store.inspect()
+    expect(inspection.selection.activeRelease).toBeNull()
+    expect(inspection.selection.previousRelease).toBe(activated.release.releaseId)
+    expect(inspection.activeValid).toBe(false)
+    await expect(store.revertActivation(activated.selection)).rejects.toThrow(/拒绝回滚非当前 activation/)
+  }, 30_000)
+
   it('rejects symbolic links in a candidate payload', async () => {
     const root = await freshRoot('symlink')
     const candidate = await candidateCopy(root)
-    await rm(join(candidate, 'packages', 'cli', 'dist', 'pipeline.mjs'))
-    await symlink('/tmp/not-a-pipeline', join(candidate, 'packages', 'cli', 'dist', 'pipeline.mjs'))
+    await rm(join(candidate, 'packages', 'cli', 'dist', 'tenon.mjs'))
+    await symlink('/tmp/not-a-pipeline', join(candidate, 'packages', 'cli', 'dist', 'tenon.mjs'))
 
     await expect(storeFor(root).stageAndActivate(candidate, 'codex')).rejects.toThrow(/符号链接/i)
   }, 30_000)
@@ -141,8 +184,8 @@ describe('RuntimeReleaseStore', () => {
     const firstCandidate = await candidateCopy(root, '-one')
     const secondCandidate = await candidateCopy(root, '-two')
     await writeFile(
-      join(secondCandidate, 'runtime', 'pipeline-bootstrap.mjs'),
-      `${await readFile(join(secondCandidate, 'runtime', 'pipeline-bootstrap.mjs'), 'utf8')}\n// second\n`,
+      join(secondCandidate, 'runtime', 'tenon-bootstrap.mjs'),
+      `${await readFile(join(secondCandidate, 'runtime', 'tenon-bootstrap.mjs'), 'utf8')}\n// second\n`,
       'utf8',
     )
     const healthy = storeFor(root)
@@ -158,8 +201,8 @@ describe('RuntimeReleaseStore', () => {
 
     const thirdCandidate = await candidateCopy(root, '-three')
     await writeFile(
-      join(thirdCandidate, 'runtime', 'pipeline-bootstrap.mjs'),
-      `${await readFile(join(thirdCandidate, 'runtime', 'pipeline-bootstrap.mjs'), 'utf8')}\n// third\n`,
+      join(thirdCandidate, 'runtime', 'tenon-bootstrap.mjs'),
+      `${await readFile(join(thirdCandidate, 'runtime', 'tenon-bootstrap.mjs'), 'utf8')}\n// third\n`,
       'utf8',
     )
     await expect(failingAudit.stageAndActivate(thirdCandidate, 'codex')).rejects.toThrow(/audit append failure/)
@@ -178,4 +221,101 @@ describe('RuntimeReleaseStore', () => {
       detail: 'host marketplace refresh failed',
     })
   })
+
+  it('compensates a real installer activation across selection and exact stable launchers', async () => {
+    const root = await freshRoot('installer-transaction')
+    const home = join(root, 'home')
+    const candidate = await candidateCopy(root)
+    const bin = join(home, '.local', 'bin')
+    const tenon = join(bin, 'tenon')
+    const hook = join(bin, 'tenon-hook')
+    await mkdir(bin, { recursive: true })
+    await writeFile(tenon, '#!/bin/sh\necho previous-tenon\n', 'utf8')
+    await writeFile(hook, '#!/bin/sh\necho previous-hook\n', 'utf8')
+    await chmod(tenon, 0o750)
+    await chmod(hook, 0o700)
+
+    const activation = await REAL_RUNTIME_INSTALLER.withManagedTransaction(
+      isolatedScope(home),
+      (transaction) => transaction.activate(candidate, 'codex'),
+    )
+    expect(await readFile(tenon, 'utf8')).toContain('TENON_RUNTIME_DATA_ROOT')
+
+    await REAL_RUNTIME_INSTALLER.withManagedTransaction(
+      isolatedScope(home),
+      (transaction) => transaction.revertActivation(activation),
+    )
+
+    expect(await readFile(tenon, 'utf8')).toBe('#!/bin/sh\necho previous-tenon\n')
+    expect(await readFile(hook, 'utf8')).toBe('#!/bin/sh\necho previous-hook\n')
+    expect((await stat(tenon)).mode & 0o777).toBe(0o750)
+    expect((await stat(hook)).mode & 0o777).toBe(0o700)
+    expect((await REAL_RUNTIME_INSTALLER.inspect(isolatedScope(home))).selection.activeRelease).toBeNull()
+  }, 30_000)
+
+  it('never restores an old launcher snapshot after selection CAS proves another activation owns the runtime', async () => {
+    const root = await freshRoot('installer-cas-ownership')
+    const home = join(root, 'home')
+    const firstCandidate = await candidateCopy(root, '-one')
+    const secondCandidate = await candidateCopy(root, '-two')
+    await writeFile(
+      join(secondCandidate, 'runtime', 'tenon-bootstrap.mjs'),
+      `${await readFile(join(secondCandidate, 'runtime', 'tenon-bootstrap.mjs'), 'utf8')}\n// concurrent-owner\n`,
+      'utf8',
+    )
+    const paths = resolveRuntimePaths({ homeDir: home, env: {} })
+    const first = await REAL_RUNTIME_INSTALLER.withManagedTransaction(
+      isolatedScope(home),
+      (transaction) => transaction.activate(firstCandidate, 'codex'),
+    )
+    const second = await new RuntimeReleaseStore({ paths }).stageAndActivate(secondCandidate, 'codex')
+    const tenon = join(home, '.local', 'bin', 'tenon')
+    await writeFile(tenon, '#!/bin/sh\necho concurrent-owner\n', 'utf8')
+
+    await expect(REAL_RUNTIME_INSTALLER.withManagedTransaction(
+      isolatedScope(home),
+      (transaction) => transaction.revertActivation(first),
+    )).rejects.toThrow(/拒绝回滚非当前 activation/)
+
+    expect((await REAL_RUNTIME_INSTALLER.inspect(isolatedScope(home))).selection.activeRelease).toBe(second.release.releaseId)
+    expect(await readFile(tenon, 'utf8')).toBe('#!/bin/sh\necho concurrent-owner\n')
+  }, 60_000)
+
+  it('resolves one immutable path snapshot before locking a rollback transaction', async () => {
+    const root = await freshRoot('installer-rollback-path-snapshot')
+    const home = join(root, 'home')
+    const runtimeA = join(root, 'runtime-a')
+    const runtimeB = join(root, 'runtime-b')
+    const firstCandidate = await candidateCopy(root, '-one')
+    const secondCandidate = await candidateCopy(root, '-two')
+    await writeFile(
+      join(secondCandidate, 'runtime', 'tenon-bootstrap.mjs'),
+      `${await readFile(join(secondCandidate, 'runtime', 'tenon-bootstrap.mjs'), 'utf8')}\n// second\n`,
+      'utf8',
+    )
+    const stableScope = { homeDir: home, env: { TENON_RUNTIME_HOME: runtimeA } }
+    await REAL_RUNTIME_INSTALLER.withManagedTransaction(
+      stableScope,
+      (transaction) => transaction.activate(firstCandidate, 'codex'),
+    )
+    await REAL_RUNTIME_INSTALLER.withManagedTransaction(
+      stableScope,
+      (transaction) => transaction.activate(secondCandidate, 'codex'),
+    )
+
+    let runtimeRootReads = 0
+    const changingEnv = new Proxy<Record<string, string | undefined>>({}, {
+      get: (_target, property) => {
+        if (property !== 'TENON_RUNTIME_HOME') return undefined
+        runtimeRootReads += 1
+        return runtimeRootReads === 1 ? runtimeA : runtimeB
+      },
+    })
+    const rolledBack = await REAL_RUNTIME_INSTALLER.rollback({ homeDir: home, env: changingEnv })
+
+    expect(rolledBack.release.releaseId).toBe(
+      (await REAL_RUNTIME_INSTALLER.inspect(stableScope)).selection.activeRelease,
+    )
+    expect(runtimeRootReads).toBe(1)
+  }, 60_000)
 })

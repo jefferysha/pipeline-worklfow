@@ -32,7 +32,7 @@ export function TaskConnectionCard({
   const sandbox = typeof sandboxValue === 'string' ? sandboxValue : ''
   const worktreeCommand = `cd ${shellQuote(worktree)}`
   const sandboxCommand = `docker exec -it ${shellQuote(sandbox)} bash`
-  const rerunCommand = `pipeline afk enqueue ${shellQuote(change.name)}`
+  const rerunCommand = `tenon afk enqueue ${shellQuote(change.name)}`
   const row = (testId: string, label: string, command: string, note?: string): JSX.Element => (
     <div className={connRowCls} data-testid={testId}>
       <span className={connKeyCls}>{label}</span>

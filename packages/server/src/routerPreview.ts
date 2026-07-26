@@ -6,7 +6,7 @@
  * 不用 JavaScript RegExp 另造一套 ERE 方言。UI 与测试可注入 scorer，但同一决策函数不分叉。
  */
 import { spawn } from 'node:child_process'
-import type { TrackDefinition } from '@pipeline-lite/kernel'
+import type { TrackDefinition } from '@tenon/kernel'
 
 export type RouterPatternScorer = (pattern: string, prompt: string) => Promise<number>
 

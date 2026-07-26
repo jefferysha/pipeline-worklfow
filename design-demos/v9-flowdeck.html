@@ -5,15 +5,15 @@
   ■ 相对 v8 的两条用户新指令
     A. 收件箱整体退役,功能并入「进度」:单列表看所有在制(不分组、同一行体),
        需要动手的行高亮(绿 ring)+行内动作(放行/打回/重试/放弃;running 仅终止),
-       导航徽标=待拍板数,详情统一右滑抽屉(动作置顶/人话报错卡/命令卡/流程级历史,同 v8 ④)。
+       导航徽标=待拍板数,详情统一右滑抽屉(动作置顶/人话报错卡/命令卡/流程级历史)。
     B. 相位进度条=「列车轨」(已拍板):release-train 隐喻,轨道生长+列车头进站+流光沿轨,
        动效=状态语义(在跑才流动;停在门=红闸;失败=断轨;取消=琥珀;排队=幽灵轨);
        R2 液态 / R3 星轨两备选已退役(CSS 留档,切换器撤下)。
-    其余继承 v8:①下拉收窄 ②无新建入口 ④详情内件 ⑥工作台 sheet + 技能链动态。
-  ■ 基调:v1-trellis 全套 token + GSAP(本地 bundle 零 CDN);动效全部 transform/opacity 主导,
+    其余约束:①下拉收窄 ②无新建入口 ④详情内件 ⑥工作台 sheet + 技能链动态。
+  ■ 基调:Tenon 产品 token + GSAP(本地 bundle 零 CDN);动效全部 transform/opacity 主导,
     循环层 will-change 点名;prefers-reduced-motion 全量降级(循环不启动、入场直达终态)。
-  ■ 基调:v1-trellis-faithful 全套 token(#f8f9fc 底/白卡 13px/#e5e8ec 细边/四色 accent solid+tint/
-    mono 只给机器串/流动虚线连接线签名),演进点=动效体系 GSAP(本地 gsap.min.js,零 CDN)、
+  ■ token:#f8f9fc 底/白卡 13px/#e5e8ec 细边/四色 accent solid+tint，
+    mono 只给机器串/流动虚线连接线签名；动效体系 GSAP(本地 gsap.min.js,零 CDN)、
     层级更利落的阴影/圆环、tabular-nums、拍板即时反馈编排。
   ■ 数据:与 v7 同一套真实形状(evidence 三字段/PATH 四字段/automation_cause 枚举/
     automation_worktree+automation_sandbox 已透传字段),内容为演示数据。
@@ -558,8 +558,8 @@ main{padding-bottom:64px}
 :root[data-theme="dark"] [data-rail="r3"] .st-done .rl-node::before{color:var(--solid-fg)}
 [data-rail="r3"] .st-done .rl-track{background:var(--green-b);overflow:visible}
 [data-rail="r3"] .st-done .rl-track::after{width:6px;height:6px;top:-2.5px;left:0;border-radius:999px;background:var(--blue);opacity:0;transform:none}
-[data-rail="r3"] .rail[data-mode="run"] .st-done .rl-track::after{animation:comet 3.2s linear infinite;animation-delay:calc(var(--i) * .4s)}
-@keyframes comet{0%{opacity:0;transform:translateX(0)}12%{opacity:1}55%{opacity:1}70%{opacity:0;transform:translateX(72px)}100%{opacity:0}}
+[data-rail="r3"] .rail[data-mode="run"] .st-done .rl-track::after{animation:tenon 3.2s linear infinite;animation-delay:calc(var(--i) * .4s)}
+@keyframes tenon{0%{opacity:0;transform:translateX(0)}12%{opacity:1}55%{opacity:1}70%{opacity:0;transform:translateX(72px)}100%{opacity:0}}
 [data-rail="r3"] .st-cur .rl-node{box-shadow:0 0 0 3px var(--ring-blue),0 0 0 8px color-mix(in srgb,var(--blue) 7%,transparent)}
 /* reduced-motion:全部循环停 */
 @media (prefers-reduced-motion:reduce){

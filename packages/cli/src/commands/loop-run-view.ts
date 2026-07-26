@@ -3,12 +3,12 @@ import {
   type AutonomyLevel,
   type LoopEntry,
   type LoopStatus,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import {
   AUTOMATION_LEVELS,
   settleSuccess,
   type AutomationLevel,
-} from '@pipeline-lite/automation'
+} from '@tenon/automation'
 import type { CliDeps } from '../deps.js'
 import type { SkillBundleWiringResult } from './loop-admission-view.js'
 import type { AfkRoundExecutionResult } from './afk-executor.js'

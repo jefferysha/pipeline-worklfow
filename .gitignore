@@ -1,11 +1,11 @@
 node_modules/
 dist/
-# 分发例外:CLI bundle 随插件 git clone 入包（hooks 直接引用 $CLAUDE_PLUGIN_ROOT/packages/cli/dist/pipeline.mjs）。
+# 分发例外：CLI bundle 随 Marketplace 插件入包。
 # 三行缺一不可：dist/ 忽略了父目录后 git 不再下探，须先放行该目录、再重新忽略目录内全部内容、最后单独放行这一个 bundle。
 # 其余 tsc 产物（main.js/commands/ 等）仍被忽略。改 cli src 后须 npm run build 重构并提交此 bundle，详见 docs/DIST-RELEASE.md。
 !packages/cli/dist/
 packages/cli/dist/*
-!packages/cli/dist/pipeline.mjs
+!packages/cli/dist/tenon.mjs
 # 分发面还包括 dashboard 的单文件 server bundle 与已构建 SPA。Marketplace 安装不带 node_modules，
 # 因此不能只发布源码或让新用户再跑 npm/vite；完整插件必须直接包含这两组运行时产物。
 !packages/server/dist/
@@ -14,6 +14,7 @@ packages/server/dist/*
 !packages/dashboard-app/dist/
 !packages/dashboard-app/dist/**
 coverage/
+.release/
 *.tsbuildinfo
 .DS_Store
 # 运行时产物（session 指针 / 项目包声明 / 门 marker / 历史）
@@ -45,10 +46,13 @@ e2e-runs/
 .impeccable/
 .github/hooks/
 
-# 根目录真机验收快照；长期设计证据只保留在 design-demos/shots/。
+# 可再生浏览器验收快照不入库；正式产品图只允许放在
+# docs-site/public/images/dashboard-*.webp，并由 repository hygiene 门禁限制体积与链接。
 /dashboard-progress-custom-spec.png
-/pet-adoption-*-tested.png
+/dashboard-acceptance-*.png
 /workbench-*.png
+/workflow-governance-*.png
+design-demos/shots/
 
 # 正式文档站的确定性构建产物；源内容、manifest、主题与脚本入库。
 docs-site/.generated/

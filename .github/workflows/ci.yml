@@ -37,6 +37,18 @@ jobs:
       - name: 架构边界门禁 (architecture boundaries)
         run: npm run check:architecture
 
+      - name: Tenon 产品身份与旧身份分类门禁
+        run: npm run check:identity
+
+      - name: 仓库与正式图片卫生门禁 (repository and image hygiene)
+        run: npm run check:repository-hygiene
+
+      - name: npx 薄入口可发布包门禁 (publishable npx bootstrap)
+        run: npm run check:npx-package
+
+      - name: 旧通道迁移桥门禁 (migration-only legacy bridge)
+        run: npm run check:legacy-bridge
+
       # default workflow artifact declaration 真相源 codegen 新鲜度门（G2 P4）——纯 Node 从
       # templates/workflows/default.yaml 重新生成 default-workflow.generated.ts，再**只 diff 生成文件**
       # （不裸 git diff：工作树存在并行改动，裸 diff 会误报）。放在 comment gate 后、build 前：codegen
@@ -51,7 +63,7 @@ jobs:
       # 完整插件 runtime 新鲜度门：marketplace 安装没有本机 node_modules/build 步，因此 CLI、dashboard
       # server 和 SPA 都必须与当前源码逐字节一致。后面的 smoke 只测行为，不能证明提交资产是最新构建。
       - name: 校验入库完整插件 runtime 与当前 src 一致 (release freshness)
-        run: git diff --exit-code -- packages/cli/dist/pipeline.mjs packages/server/dist/dashboard.mjs packages/dashboard-app/dist
+        run: git diff --exit-code -- packages/cli/dist/tenon.mjs packages/server/dist/dashboard.mjs packages/dashboard-app/dist
 
       - name: 文档链接与产品声明门禁 (documentation drift)
         run: npm run check:docs
@@ -91,7 +103,7 @@ jobs:
       - name: Required real-Codex H14 acceptance
         if: steps.real-codex-credential.outputs.available == 'true'
         env:
-          PIPELINE_REQUIRE_REAL_CODEX: '1'
+          TENON_REQUIRE_REAL_CODEX: '1'
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: npx vitest run packages/cli/src/loop-run.real.integration.test.ts
 
@@ -100,7 +112,7 @@ jobs:
         run: echo "[HONEST SKIP] OPENAI_API_KEY 未配置；真实 Codex H14 未执行，未声明通过。"
 
       # 普通 npm test 里的 real-Codex 文件仍允许 honest-skip；配置 secret 的 canonical verify
-      # 已在上方以 PIPELINE_REQUIRE_REAL_CODEX=1 定向执行 fail-closed 验收。
+      # 已在上方以 TENON_REQUIRE_REAL_CODEX=1 定向执行 fail-closed 验收。
       - name: vitest (kernel/cli/server/automation/tap)
         run: npm test
 
@@ -127,8 +139,8 @@ jobs:
           release="$(node -p "require('./$meta').releaseId + ' plugin@' + require('./$meta').pluginVersion")"
           output="$RUNNER_TEMP/pipeline-n-minus-one"
           bash tools/prepare-n-minus-one-release.sh "$output"
-          echo "PIPELINE_N_MINUS_ONE_CLI=$output/payload/packages/cli/dist/pipeline.mjs" >> "$GITHUB_ENV"
-          echo "PIPELINE_N_MINUS_ONE_RELEASE=$release" >> "$GITHUB_ENV"
+          echo "TENON_N_MINUS_ONE_PAYLOAD=$output/payload" >> "$GITHUB_ENV"
+          echo "TENON_N_MINUS_ONE_RELEASE=$release" >> "$GITHUB_ENV"
 
       - name: bundle smoke test
         run: bash tools/test-bundle.sh

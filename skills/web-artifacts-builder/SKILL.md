@@ -3,7 +3,7 @@ name: web-artifacts-builder
 description: First-party workflow for assembling multi-screen web prototype artifacts.
 license: MIT
 metadata:
-  author: pipeline-lite
+  author: tenon
 ---
 
 # Web Artifacts Builder

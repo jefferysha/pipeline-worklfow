@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
-import { createStateStore } from '@pipeline-lite/kernel'
+import { createStateStore } from '@tenon/kernel'
 import { makeGuardCtx } from './guardContext.js'
 
 describe('guard context dependency archive sources', () => {

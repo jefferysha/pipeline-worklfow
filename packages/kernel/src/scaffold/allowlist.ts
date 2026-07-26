@@ -4,8 +4,8 @@
  * 老仓真相源（严格只读参考）：skills/pipeline/scripts/migrations.py:61-83
  *   KNOWN_UNTRACKED_ALLOWLIST = {}（空常量）+ apply_known_untracked_allowlist(cwd, hashes)（原样返回）。
  *
- * Trellis 语义（parity 收尾 ④）：Trellis 有「无 hash→hash-track」迁移期的历史包袱——旧项目里 pristine
- *   的 untracked 模板（如早期 AGENTS.md）无存储 hash，为让它们能走 auto-update 而非保守 changed，Trellis
+ * Tenon contract 语义（parity 收尾 ④）：Tenon contract 有「无 hash→hash-track」迁移期的历史包袱——旧项目里 pristine
+ *   的 untracked 模板（如早期 AGENTS.md）无存储 hash，为让它们能走 auto-update 而非保守 changed，Tenon contract
  *   维护一份 hash 白名单在 classify 之前并入 stored hashes。
  *
  * ★诚实标注（GOAL C 精神，老仓自标 N/A，本移植如实沿用——不硬凑）：

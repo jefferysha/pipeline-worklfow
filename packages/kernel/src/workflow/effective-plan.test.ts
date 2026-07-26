@@ -3,6 +3,7 @@ import {
   compileEffectiveWorkflowPlan,
   documentGovernanceFingerprint,
   DocumentGovernanceBindingError,
+  effectiveWorkflowPlanFromSnapshot,
   effectiveWorkflowPlanBinding,
   resolveBoundEffectiveWorkflowPlan,
   workflowPlanSnapshot,
@@ -39,6 +40,41 @@ describe('compileEffectiveWorkflowPlan', () => {
     expect(Object.isFrozen(plan)).toBe(true)
     expect(Object.isFrozen(plan.capabilities.skills.steps)).toBe(true)
     expect(Object.isFrozen(plan.workflow.steps)).toBe(true)
+  })
+
+  it('keeps pre-identity-migration v1 default snapshots executable', () => {
+    const current = compileEffectiveWorkflowPlan('default')
+    const restored = effectiveWorkflowPlanFromSnapshot({
+      version: 1,
+      workflowId: 'default',
+      executionModel: 'phase-manifest',
+      workflow: current.workflow,
+      workflowFingerprint: 'c9a829b12b12138522532a9127efb8b93a551b1f28922a53dc174ad13e35b7dd',
+    }, builtinTrack('frontend'))
+    const roundTripped = effectiveWorkflowPlanFromSnapshot(JSON.parse(JSON.stringify({
+      version: 1,
+      workflowId: 'default',
+      executionModel: 'phase-manifest',
+      workflow: current.workflow,
+      workflowFingerprint: 'c9a829b12b12138522532a9127efb8b93a551b1f28922a53dc174ad13e35b7dd',
+    })))
+
+    expect(restored.workflowFingerprint)
+      .toBe('c9a829b12b12138522532a9127efb8b93a551b1f28922a53dc174ad13e35b7dd')
+    expect(restored.documentPolicy?.mutableByStep.verify?.[0]?.producerCandidates)
+      .toContain('pipeline-verify')
+    expect(roundTripped.workflowFingerprint).toBe(restored.workflowFingerprint)
+  })
+
+  it('writes self-contained v2 snapshots with their frozen document policy', () => {
+    const plan = compileEffectiveWorkflowPlan('default')
+    const snapshot = workflowPlanSnapshot(plan)
+
+    expect(snapshot.version).toBe(2)
+    if (snapshot.version !== 2) throw new Error('expected v2 workflow snapshot')
+    expect(snapshot.documentPolicy).toEqual(plan.documentPolicy)
+    expect(effectiveWorkflowPlanFromSnapshot(snapshot).workflowFingerprint)
+      .toBe(plan.workflowFingerprint)
   })
 
   it('free is an explicit neutral overlay and never removes workflow-owned policy', () => {

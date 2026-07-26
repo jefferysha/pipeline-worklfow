@@ -1,5 +1,5 @@
 /**
- * afk run —— #29-wire 真接线 e2e（GOAL C9）：`pipeline afk run` 不再只 report，真调
+ * afk run —— #29-wire 真接线 e2e（GOAL C9）：`tenon afk run` 不再只 report，真调
  * automation.runRound(createDockerRunChange(...)) 跑真容器 + 真 git worktree + 真 merge-back。
  *
  * 镜像同 dockerRunChange.integration.test.ts 用 `sandcastle:test`（同名同 Dockerfile，docker build
@@ -81,7 +81,7 @@ const execFileAsync = promisify(execFile)
 const IMAGE = 'sandcastle:test' // 与 dockerRunChange.integration.test.ts 同名同 Dockerfile，build 天然去重
 const here = dirname(fileURLToPath(import.meta.url))
 const repoRoot = resolve(here, '..', '..', '..') // src → cli → packages → 根
-const bundlePath = join(repoRoot, 'packages', 'cli', 'dist', 'pipeline.mjs')
+const bundlePath = join(repoRoot, 'packages', 'cli', 'dist', 'tenon.mjs')
 const dockerfile = join(repoRoot, 'tools', 'sandcastle', 'Dockerfile')
 
 async function git(cwd: string, args: string[]): Promise<void> {
@@ -124,14 +124,14 @@ describe('afk run —— 真调 docker 执行接线（#29-wire 落地到 CLI）'
     try {
       await access(bundlePath)
     } catch {
-      console.warn('[HONEST SKIP] 缺 packages/cli/dist/pipeline.mjs（先 npm run build）→ afk run CLI e2e 跳过')
+      console.warn('[HONEST SKIP] 缺 packages/cli/dist/tenon.mjs（先 npm run build）→ afk run CLI e2e 跳过')
       return
     }
     // docker build 对同 tag 天然幂等去重：若 dockerRunChange.integration.test.ts 已建过，这里秒过。
     await execFileAsync('docker', [
       'build', '-f', dockerfile, '-t', IMAGE,
       '--build-arg', 'WITH_CLAUDE_CODE=false',
-      '--build-arg', 'PIPELINE_TEST_ALLOW_DETERMINISTIC_FALLBACK=1',
+      '--build-arg', 'TENON_TEST_ALLOW_DETERMINISTIC_FALLBACK=1',
       repoRoot,
     ]).catch(() => { /* 构建失败：下面 image inspect 会证实并 honest-skip */ })
     try {
@@ -184,7 +184,7 @@ describe('afk run —— 真调 docker 执行接线（#29-wire 落地到 CLI）'
   }, 120_000)
 
   /**
-   * H7+H10：custom workflow change 走真实 `pipeline afk run` 全链（生产装配，非 SDK 直调）——
+   * H7+H10：custom workflow change 走真实 `tenon afk run` 全链（生产装配，非 SDK 直调）——
    * admission preparation 冻结 workflow/step/coordinate digest，Git verifier 必须把同一坐标签进
    * workflow-transition binding；只有该 binding 经 lifecycle 与 scheduler 双门复核后才可 merge。
    * 通过受支持的 `init --workflow` 原子绑定真实定义；运行中再用通用 field setter 把 default
@@ -264,7 +264,7 @@ describe('afk run —— 真调 docker 执行接线（#29-wire 落地到 CLI）'
 })
 
 describe('afk run —— 无 docker 环境诚实降级（不依赖 IMAGE 探针，真跑 docker info）', () => {
-  it('docker 不可用 → 报告就绪队列 + 明示不执行容器，exit 0', async (ctx) => {
+  it('docker 不可用 → 报告就绪队列 + 明示不执行容器，exit 1', async (ctx) => {
     // 只有在这台机器确实没有 docker 时才有意义；有 docker 时这个分支在别的机器上验证，本地不強跑。
     try {
       await execFileAsync('docker', ['info'])
@@ -274,7 +274,10 @@ describe('afk run —— 无 docker 环境诚实降级（不依赖 IMAGE 探针�
     const h2 = makeHarness(await mkdtemp(join(tmpdir(), 'afk-run-nodocker-')))
     try {
       await h2.run(['init', 'c1', '--track', 'backend', '--preset', 'full'])
-      expect(await h2.run(['afk', 'run'])).toBe(0)
+      await h2.run(['set', 'c1', 'phase', 'build'])
+      await seedLoops(h2.cwd)
+      expect(await h2.run(['afk', 'enqueue', 'c1', '--loop', 'afkloop'])).toBe(0)
+      expect(await h2.run(['afk', 'run'])).toBe(1)
       expect(h2.err.join('\n')).toMatch(/docker/i)
     } finally {
       await rm(h2.cwd, { recursive: true, force: true })

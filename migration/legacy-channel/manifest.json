@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "migrationOnly": true,
+  "legacyMarketplace": "pipeline-lite",
+  "legacyPlugin": "pipeline-lite",
+  "tenonMarketplace": "tenon",
+  "tenonPlugin": "tenon",
+  "tenonRepository": "jefferysha/tenon",
+  "activeMigrationDeadline": "2026-10-31",
+  "frozenSupportEnds": "2027-10-31",
+  "cleanupOrder": [
+    "verify-tenon-inventory",
+    "verify-tenon-runtime",
+    "verify-tenon-launcher",
+    "verify-new-session-proof",
+    "preflight-owned-legacy-launchers",
+    "remove-legacy-plugin",
+    "remove-legacy-marketplace",
+    "remove-owned-legacy-launchers"
+  ],
+  "ownedLauncherNames": [
+    "pipeline",
+    "pipeline-hook"
+  ]
+}

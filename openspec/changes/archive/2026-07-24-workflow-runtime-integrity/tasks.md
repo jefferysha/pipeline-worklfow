@@ -44,7 +44,7 @@
 
 - [x] Run focused kernel, CLI, server, dashboard, hook, adapter, bundle, and
   install tests.
-- [x] Re-run the real pet-adoption Change through Verify using the repaired
+- [x] Re-run the real catalog-flow Change through Verify using the repaired
   in-place baseline.
 - [x] Record independent review and verification evidence.
 

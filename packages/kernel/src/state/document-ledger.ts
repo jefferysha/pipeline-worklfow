@@ -205,7 +205,7 @@ async function writeDocumentLedger(changeDir: string, ledger: DocumentLedger): P
 function skillsEquivalent(left: string, right: string): boolean {
   const aliases = (id: string): readonly string[] => {
     const values = new Set<string>([id])
-    if (id.startsWith('pipeline-lite:')) values.add(id.slice('pipeline-lite:'.length))
+    if (id.startsWith('tenon:')) values.add(id.slice('tenon:'.length))
     if (id.startsWith('superpowers:')) values.add(id.slice('superpowers:'.length))
     if (id === 'opsx:propose') values.add('openspec-propose')
     if (id === 'openspec-propose') values.add('opsx:propose')
@@ -299,7 +299,7 @@ export async function recordDocument(input: RecordDocumentInput): Promise<Docume
     throw new DocumentLedgerError(`document '${input.kind}' 未声明所属 phase`)
   }
   const current = await readDocumentLedger(input.changeDir)
-  if (!current) throw new DocumentLedgerError(`document ledger 缺失；先执行 pipeline document init`)
+  if (!current) throw new DocumentLedgerError(`document ledger 缺失；先执行 tenon document init`)
   const resolved = await resolveDocument(input.repoRoot, input.path)
   const slot = documentSlot(input.kind, resolved.relativePath, input.changeDir)
   const oldCandidates = current.records.filter((record) => {
@@ -398,7 +398,7 @@ export async function migrateLegacyDeltaDocument(
   input: MigrateLegacyDeltaDocumentInput,
 ): Promise<DocumentLedger> {
   const current = await readDocumentLedger(input.changeDir)
-  if (!current) throw new DocumentLedgerError('document ledger 缺失；先执行 pipeline document init')
+  if (!current) throw new DocumentLedgerError('document ledger 缺失；先执行 tenon document init')
   const canonical = await resolveDocument(input.repoRoot, input.canonicalPath)
   const slot = documentSlot('delta-spec', canonical.relativePath, input.changeDir)
   const source = current.records.find((record) =>
@@ -451,7 +451,7 @@ export interface ReadDocumentsInput {
 
 export async function recordDocumentReads(input: ReadDocumentsInput): Promise<DocumentLedger> {
   const current = await readDocumentLedger(input.changeDir)
-  if (!current) throw new DocumentLedgerError(`document ledger 缺失；先执行 pipeline document init`)
+  if (!current) throw new DocumentLedgerError(`document ledger 缺失；先执行 tenon document init`)
   const visitId = await currentDocumentStepVisitId(input.changeDir)
   const requiredKinds = input.policy
     ? readsRequiredForPolicyStep(input.policy, input.phase)
@@ -472,7 +472,7 @@ export async function recordDocumentReads(input: ReadDocumentsInput): Promise<Do
     record.kind === 'delta-spec' && deltaSpecSlot(record.path, input.changeDir) === undefined)
   if (legacyDelta.length > 0) {
     throw new DocumentLedgerError(
-      `存在旧 delta-spec 记录，必须用 pipeline document migrate-delta 显式迁移: ${legacyDelta.map((record) => record.path).join(', ')}`,
+      `存在旧 delta-spec 记录，必须用 tenon document migrate-delta 显式迁移: ${legacyDelta.map((record) => record.path).join(', ')}`,
     )
   }
   const updated: DocumentRecord[] = []

@@ -1,6 +1,6 @@
 /**
  * spec 子命令 —— living spec 库（specs 列表 / set-spec-scope / inject-jsonl；GOAL A1 内核深度 /
- * D2 超越 Trellis 的规范库，BACKLOG #16）。
+ * D2 超越 Tenon contract 的规范库，BACKLOG #16）。
  * 老仓真相源：skills/pipeline/scripts/state-spec.sh（语义盘点见 kernel/src/state/spec.ts 顶注）。
  *   specs [--json]              列出 main capability + spec.md 路径（stdout 文本表 / JSON 数组）
  *   set-spec-scope <c> [scope]  写 spec_scope（空/清空 归一 null 哨兵；否则 list CSV / all 原样），无 stdout
@@ -9,7 +9,7 @@
  * stderr（老仓 green >&2）；inject header/内容走 stdout，WARN 走 stderr。exit：错误/非法名 = 1；
  * inject 内容问题（bad agent / 缺文件 / 坏行）恒 rc0（老仓注入期 fail-open，绝不非零退出）。
  */
-import type { HistoryEntry } from '@pipeline-lite/kernel'
+import type { HistoryEntry } from '@tenon/kernel'
 import {
   injectJsonl,
   listSpecEntries,
@@ -17,11 +17,11 @@ import {
   type InjectOutcome,
   type SpecEntry,
   type SpecListing,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
 import { changeDir, isValidChangeName } from '../paths.js'
 
-export type { InjectOutcome, InjectChunk, SpecEntry, SpecListing } from '@pipeline-lite/kernel'
+export type { InjectOutcome, InjectChunk, SpecEntry, SpecListing } from '@tenon/kernel'
 
 /** living spec 库 fs 注入面（默认真 fs；mock 层注入 fake，见 spec.test.ts）。 */
 export interface SpecFs {

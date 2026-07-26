@@ -70,16 +70,33 @@ export function readPidfile(pidfilePath: string): Pidfile | null {
 export function probeHealth(port: number, host = '127.0.0.1', timeoutMs = 500): Promise<HealthInfo | null> {
   return new Promise((resolve) => {
     let done = false
+    let wallClockTimer: NodeJS.Timeout | undefined
     const finish = (v: HealthInfo | null): void => {
       if (done) return
       done = true
+      if (wallClockTimer !== undefined) clearTimeout(wallClockTimer)
       resolve(v)
     }
     const req = httpGet({ host, port, path: '/api/health', timeout: timeoutMs }, (res) => {
       let body = ''
+      let receivedBytes = 0
       res.setEncoding('utf8')
-      res.on('data', (c) => (body += c))
+      res.on('data', (chunk: string) => {
+        receivedBytes += Buffer.byteLength(chunk)
+        if (receivedBytes > 16 * 1_024) {
+          res.destroy()
+          finish(null)
+          return
+        }
+        body += chunk
+      })
+      res.once('aborted', () => finish(null))
+      res.once('error', () => finish(null))
       res.on('end', () => {
+        if (receivedBytes > 16 * 1_024) {
+          finish(null)
+          return
+        }
         try {
           finish(decodeHealthInfo(JSON.parse(body) as unknown))
         } catch {
@@ -87,6 +104,10 @@ export function probeHealth(port: number, host = '127.0.0.1', timeoutMs = 500): 
         }
       })
     })
+    wallClockTimer = setTimeout(() => {
+      req.destroy()
+      finish(null)
+    }, timeoutMs)
     req.on('timeout', () => {
       req.destroy()
       finish(null)
@@ -102,10 +123,14 @@ export function decidePreemption(
   myStateScopeId: string,
 ): PreemptDecision {
   if (!existing) return 'bind'
+  // Only a content-addressed managed release owns the right to replace a service from another
+  // state domain or an already managed release. A direct source/dist invocation has no immutable
+  // ownership identity, so it may observe/reuse but must never hijack the production singleton.
+  if (myReleaseId === undefined && existing.releaseId !== undefined) return 'reuse'
   // Code identity cannot prove registry/secrets identity. A legacy response without the field is
-  // intentionally taken over once; a mismatched field must never be reused, even if its code is
-  // newer, because it serves a different machine-state domain.
-  if (existing.stateScopeId !== myStateScopeId) return 'preempt'
+  // intentionally taken over once by a managed release. An unmanaged direct bundle cannot prove
+  // that it owns another machine-state domain and therefore yields instead of preempting it.
+  if (existing.stateScopeId !== myStateScopeId) return myReleaseId === undefined ? 'reuse' : 'preempt'
   const versionOrder = compareVersions(myVersion, existing.version)
   if (versionOrder !== 0) return versionOrder > 0 ? 'preempt' : 'reuse'
   // A semantic plugin version can legitimately contain a new runtime payload. The selected

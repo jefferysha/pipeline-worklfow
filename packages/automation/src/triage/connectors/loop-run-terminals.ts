@@ -6,7 +6,7 @@ import {
   type ObserveAction,
   type RunRecord,
   type SourceCheckpoint,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import type { SourceConnector } from '../source.js'
 
 export type LoopRunTerminalsAction = Extract<ObserveAction, { readonly kind: 'loop-run-terminals' }>

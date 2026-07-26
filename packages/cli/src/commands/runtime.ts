@@ -1,4 +1,5 @@
 import { homedir } from 'node:os'
+import type { ProductPathInput } from '@tenon/kernel'
 import type { CliDeps } from '../deps.js'
 import { REAL_RUNTIME_INSTALLER, type RuntimeInstaller } from '../runtime/installer.js'
 import type { RuntimeInspection } from '../runtime/types.js'
@@ -10,10 +11,16 @@ export interface RuntimeCommandOpts {
 
 export interface RuntimeCommandEnv {
   homeDir(): string
+  runtimeEnv(): NonNullable<ProductPathInput['env']>
 }
 
 export const REAL_RUNTIME_COMMAND_ENV: RuntimeCommandEnv = {
   homeDir: () => homedir(),
+  runtimeEnv: () => ({ ...process.env }),
+}
+
+function runtimeScope(env: RuntimeCommandEnv) {
+  return { homeDir: env.homeDir(), env: env.runtimeEnv() }
 }
 
 function statusPayload(inspection: RuntimeInspection): Record<string, unknown> {
@@ -39,7 +46,7 @@ function renderStatus(deps: CliDeps, inspection: RuntimeInspection, asJson: bool
   deps.io.out(`[runtime] previous=${previous} valid=${inspection.previousValid ? 'yes' : 'no'} revision=${inspection.selection.revision}`)
   if (inspection.lastAudit !== null) deps.io.out(`[runtime] last=${inspection.lastAudit.kind} at=${inspection.lastAudit.at}`)
   if (!inspection.activeValid) {
-    deps.io.out('[runtime] 修复：pipeline runtime repair --rollback；若没有上一份已验证 release，运行 pipeline setup --codex 或 pipeline setup --claude。')
+    deps.io.out('[runtime] 修复：tenon runtime repair --rollback；若没有上一份已验证 release，运行 tenon setup --codex 或 tenon setup --claude。')
   }
 }
 
@@ -52,7 +59,7 @@ export async function cmdRuntime(
 ): Promise<number> {
   if (sub === 'status') {
     try {
-      renderStatus(deps, await installer.inspect(env.homeDir()), opts.json === true)
+      renderStatus(deps, await installer.inspect(runtimeScope(env)), opts.json === true)
       return 0
     } catch (error) {
       deps.io.err(`ERROR: 无法读取 managed runtime 状态：${error instanceof Error ? error.message : String(error)}`)
@@ -61,11 +68,11 @@ export async function cmdRuntime(
   }
   if (sub === 'repair') {
     if (opts.rollback !== true) {
-      deps.io.err('ERROR: runtime repair 只接受精确恢复动作：pipeline runtime repair --rollback')
+      deps.io.err('ERROR: runtime repair 只接受精确恢复动作：tenon runtime repair --rollback')
       return 1
     }
     try {
-      const activation = await installer.rollback(env.homeDir())
+      const activation = await installer.rollback(runtimeScope(env))
       const payload = {
         ok: true,
         selection: activation.selection,

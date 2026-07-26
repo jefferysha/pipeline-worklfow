@@ -3,7 +3,7 @@ name: improve-codebase-architecture
 description: First-party architecture review for backend and cross-cutting pipeline changes.
 license: MIT
 metadata:
-  author: pipeline-lite
+  author: tenon
 ---
 
 # Improve Codebase Architecture

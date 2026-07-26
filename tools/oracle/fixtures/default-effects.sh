@@ -60,7 +60,7 @@ printf '# verification report\n' > "$target/docs/verify.md"
 # 声明本 fixture 走 stderr 逐字口径（run.sh 据此在 transition 拒绝路径逐字比 stderr——barrier 双行）。
 : > "$target/.oracle-stderr-check"
 
-# P6 起 set/cas 对「当前有效 artifact 相位」的 artifact 字段拒写（改走 pipeline artifact register）：
+# P6 起 set/cas 对「当前有效 artifact 相位」的 artifact 字段拒写（改走 tenon artifact register）：
 # plan（spec 相位）、verification_report（verify 相位）改用 seed 双侧直接注同值，隔离 legacy
 # transition 等价面（design_doc 在 open 相位 set 时非有效 artifact、照常双跑）。
 # 竖线转 TAB（计划值不含竖线）

@@ -4,6 +4,7 @@
  * （commander 自身的 usage error 经 exitOverride 也抛出，main 统一映射 exit 1）。
  */
 import { Command } from 'commander'
+import { PRODUCT_IDENTITY } from '@tenon/kernel'
 import type { CliDeps } from './deps.js'
 import { cmdCheck } from './commands/check.js'
 import type { DashboardRuntime } from './commands/dashboard.js'
@@ -58,9 +59,9 @@ export interface ProgramRuntimes {
 }
 
 export function buildProgram(deps: CliDeps, runtimes: ProgramRuntimes = {}): Command {
-  const program = new Command('pipeline')
+  const program = new Command(PRODUCT_IDENTITY.cli)
   program
-    .description('pipeline-lite 状态机 CLI（CONTRACT §3）')
+    .description(`${PRODUCT_IDENTITY.displayName} 状态机 CLI（CONTRACT §3）`)
     .exitOverride()
     .configureOutput({
       writeOut: (s) => deps.io.out(stripNl(s)),
@@ -109,7 +110,7 @@ export function buildProgram(deps: CliDeps, runtimes: ProgramRuntimes = {}): Com
     .command('artifact')
     .description('artifact 登记：register <change> <field> <path> --producer <skill-id>（受 declaration+producer 校验约束的单字段写）')
     .action(() => {
-      deps.io.err('用法：pipeline artifact register <change> <field> <path> --producer <skill-id>')
+      deps.io.err('用法：tenon artifact register <change> <field> <path> --producer <skill-id>')
       bail(1)
     })
   artifact
@@ -123,7 +124,7 @@ export function buildProgram(deps: CliDeps, runtimes: ProgramRuntimes = {}): Com
     .command('document')
     .description('OpenSpec 文档证据：init / scaffold / record / migrate-delta / read / status')
     .action(() => {
-      deps.io.err('用法：pipeline document init|record|migrate-delta|read|status <change> ...')
+      deps.io.err('用法：tenon document init|record|migrate-delta|read|status <change> ...')
       bail(1)
     })
   document
@@ -180,7 +181,7 @@ export function buildProgram(deps: CliDeps, runtimes: ProgramRuntimes = {}): Com
 
   program
     .command('advance <name>')
-    .description('auto-transition 中间档：guard 全绿自动推进，撞三门/终态/guard 不过即停（HITL，D12>Comet）')
+    .description('auto-transition 中间档：guard 全绿自动推进，撞三门/终态/guard 不过即停（HITL，D12>Tenon runtime）')
     .option('--max-steps <n>', '防失控保险丝（默认 12）', (v: string) => parseInt(v, 10))
     .option('--dry-run', '只报计划不推进')
     .option('--through-gates', '放行复核相位（confirm/interaction 硬门仍不跨越）')
@@ -210,7 +211,7 @@ export function buildProgram(deps: CliDeps, runtimes: ProgramRuntimes = {}): Com
 
   program
     .command('scaffold <sub> [args...]')
-    .description('Trellis parity：scaffold 按类型铺分层空文档集 · resolve-workflow 多 id 解析（D2/B16）')
+    .description('Tenon contract parity：scaffold 按类型铺分层空文档集 · resolve-workflow 多 id 解析（D2/B16）')
     .allowUnknownOption()
     .action(async (sub: string, args: string[]) => bail(await cmdScaffold(deps, sub, args)))
 
@@ -385,7 +386,7 @@ export function buildProgram(deps: CliDeps, runtimes: ProgramRuntimes = {}): Com
 
   program.addHelpText(
     'after',
-    '\n首次安装：pipeline setup --codex（或 --claude；安装完整打包插件并配就绪）——随后再用 init 起 change。',
+    '\n首次安装：tenon setup --codex（或 --claude；安装完整打包插件并配就绪）——随后再用 init 起 change。',
   )
 
   return program

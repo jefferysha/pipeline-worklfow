@@ -1,12 +1,12 @@
 /**
- * @pipeline-lite/automation —— AFK Sandcastle 无人监管自动化路径（BACKLOG #29/#29b, GOAL A5/M5）。
+ * @tenon/automation —— AFK Sandcastle 无人监管自动化路径（BACKLOG #29/#29b, GOAL A5/M5）。
  *
  * ════════════════════════════════════════════════════════════════════════════
  * 老仓 5 个 TS 包语义盘点（严格只读源：workflow-plugin/skills/pipeline/automation/）
  * ════════════════════════════════════════════════════════════════════════════
  * 老仓把 @ai-hero/sandcastle v0.11.0 的沙箱编排移植成 5 个 npm 包 + 一层 bash 队列。
  * 本 lite 包把其**队列语义 + 生命周期状态机 + 分级放权**收编为单一 workspace 包（node
- * stdlib + @pipeline-lite/kernel），把 docker 全链执行抽象到注入面（真 docker 走 IT）。
+ * stdlib + @tenon/kernel），把 docker 全链执行抽象到注入面（真 docker 走 IT）。
  *
  *  1) runner/   （老仓 runner/src/*.ts）—— 沙箱运行时抽象：Docker/Podman/Apple-container/
  *     daytona/vercel provider（sandboxes/*.ts）、ContainerLifecycle/DockerLifecycle 起关容器、
@@ -27,7 +27,7 @@
  *     → lite: scheduler/{semaphore,classify,scheduler}.ts（逐字/等价移植 + L1→L3 分级合体）。
  *  4) cli/    （老仓 cli/src/*.ts）—— sandcastle 自身 CLI（init/run/交互式镜像选择），非 pipeline
  *     队列面。→ lite: 未收编——本包不含 CLI 层，只出 sdk 编排面；pipeline 侧的队列命令面在
- *     packages/cli 的 `pipeline afk`（program.ts::afk <sub>，commands/afk.ts：enqueue/scan/
+ *     packages/cli 的 `tenon afk`（program.ts::afk <sub>，commands/afk.ts：enqueue/scan/
  *     status/run/cancel），由它调本包的 sdk。
  *  5) sdk/    （老仓 sdk/src/*.ts）—— createSandbox/createWorktree/run 编排 + output/
  *     extractStructuredOutput（取最后 tag + fence 剥离 + 重试）+ prompt/PromptPreprocessor
@@ -39,7 +39,7 @@
  *     由当前 Track Policy 决定，默认 PM 轨已明确允许显式 AFK（→ queue/gate.ts）。
  *   - state-transition.sh:229-237 —— spec-complete 挂队注入点（→ sdk enqueue + queue/gate.ts）。
  *   - pipeline-guard.sh:147-162 —— build 相位 automation=queued 双执行守卫（→ queue/gate.ts）。
- *   - hooks/pipeline-gate.sh:16-25 —— PIPELINE_AFK=1 沙箱放行三门（→ queue/gate.ts）。
+ *   - hooks/pipeline-gate.sh:16-25 —— TENON_AFK=1 沙箱放行三门（→ queue/gate.ts）。
  *   - state-fields.sh:110/154 —— automation 8 态枚举校验（→ queue/state-machine.ts）。
  *
  * ════════════════════════════════════════════════════════════════════════════
@@ -53,10 +53,10 @@
  *   merged ─▶ off（回归正常, 进 archive）；failed/conflict ─▶ queued（人工重跑, attempts 清零）
  *   queued/scheduled/running ─▶ paused（运维暂停）；paused ─▶ queued（resume）| merged（L2 放行）
  *
- * kernel 契约（只 import 不改）：@pipeline-lite/kernel 的 StateStore 读写 change 的 automation_*
+ * kernel 契约（只 import 不改）：@tenon/kernel 的 StateStore 读写 change 的 automation_*
  * 字段（types.ts::FIELD_ORDER 已含 7 个 automation_* 字段）；cas 提供并发闸（compare-and-set）。
  */
-import type { VerificationResult } from '@pipeline-lite/kernel'
+import type { VerificationResult } from '@tenon/kernel'
 
 /** automation 字段的 8 个合法态（老仓 state-fields.sh:110/154 validate_enum）。 */
 export const AUTOMATION_STATES = [

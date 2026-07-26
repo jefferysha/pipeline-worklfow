@@ -1,4 +1,4 @@
-# Pipeline Lite usage guide
+# Tenon usage guide
 
 This manual is the canonical task-oriented guide for the current repository
 behavior. Start with installation and quickstart, then open the guide that
@@ -33,7 +33,7 @@ matches the operation you need.
 
 ## Product boundaries
 
-- Pipeline Lite is a local plugin and workstation service, not a hosted SaaS.
+- Tenon is a local plugin and workstation service, not a hosted SaaS.
 - Setup and update always target exactly one host.
 - A discussion creates no Change.
 - The packaged simple Workflow does not use the default OpenSpec contract.

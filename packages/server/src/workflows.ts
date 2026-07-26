@@ -6,8 +6,8 @@ import {
   constants, fstatSync, fsyncSync, lstatSync, openSync, readFileSync,
   readdirSync, renameSync, unlinkSync, writeFileSync,
 } from 'node:fs'
-import { validateWorkflow, parseWorkflow, serializeWorkflow, validateWorkflowTrackReferences } from '@pipeline-lite/kernel'
-import type { WorkflowDef } from '@pipeline-lite/kernel'
+import { validateWorkflow, parseWorkflow, serializeWorkflow, validateWorkflowTrackReferences } from '@tenon/kernel'
+import type { WorkflowDef } from '@tenon/kernel'
 import {
   assertEntryMatches,
   assertTargetUnchanged,

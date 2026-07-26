@@ -3,7 +3,7 @@ name: docker-patterns
 description: First-party container build, runtime, and supply-chain checklist.
 license: MIT
 metadata:
-  author: pipeline-lite
+  author: tenon
 ---
 
 # Docker Patterns

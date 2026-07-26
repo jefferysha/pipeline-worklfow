@@ -1,4 +1,4 @@
-import type { AutomationPolicySnapshot, EffectiveSkillResolver, LoopEntry, LoopLedgerStore, LoopRegistry, SkillBundleResolutionInput } from '@pipeline-lite/kernel'
+import type { AutomationPolicySnapshot, EffectiveSkillResolver, LoopEntry, LoopLedgerStore, LoopRegistry, SkillBundleResolutionInput } from '@tenon/kernel'
 import {
   admissionDecision, budgetDayOf, buildAttemptContext, compileAutomationPolicySnapshot, compileConstraintPolicy, evaluateConstraintPolicy,
   indexMergeFactsByAttempt, LedgerDegradedError, loopMaterialUnchanged,
@@ -7,7 +7,7 @@ import {
   type AdmissionBlock, type AttemptContextLedgerSnapshot, type BudgetExceedAction, type BudgetReservationRecord,
   type ChangeLoopBindingRecord, type LedgerRecord, type MergeIntentRecord, type MergeLandedRecord,
   type ReservationActivatedRecord, type RunRecord, type SkillBundleSnapshotRecord, type UsageRecord, type VerificationResult,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import type { AutomationLevel } from '../types.js'
 import type { ProviderStructuredUsage } from '../runner/runner.js'
 import type { SkillContentLocator } from '../skills/content-locator.js'

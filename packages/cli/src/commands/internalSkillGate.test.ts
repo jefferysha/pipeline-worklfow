@@ -100,10 +100,10 @@ steps:
       expect(await cmdInternalSkillGate(deps, 'demo', 'b')).toBe(0)
     })
 
-    it('正常对话的 pipeline 编排入口不受 phase 内 skill DAG 误拦', async () => {
+    it('正常对话的 Tenon 编排入口不受 phase 内 skill DAG 误拦', async () => {
       const deps = makeDeps({ cwd: root, state: mockState({ workflow: 'custom1', phase: 's1' }) })
-      expect(await cmdInternalSkillGate(deps, 'demo', 'pipeline')).toBe(0)
-      expect(await cmdInternalSkillGate(deps, 'demo', 'pipeline-lite:pipeline')).toBe(0)
+      expect(await cmdInternalSkillGate(deps, 'demo', 'tenon')).toBe(0)
+      expect(await cmdInternalSkillGate(deps, 'demo', 'tenon:tenon')).toBe(0)
     })
 
     it('有依赖但一个都没完成 → exit 2 + stderr 点名缺哪些', async () => {
@@ -113,15 +113,15 @@ steps:
       expect(deps.errLines.join('\n')).toContain('还需先完成 a, b')
     })
 
-    it('Codex 的 pipeline-lite namespace 与 workflow bare id 共用同一 DAG 身份', async () => {
+    it('Codex 的 tenon namespace 与 workflow bare id 共用同一 DAG 身份', async () => {
       const historyRaw =
         [
           JSON.stringify({ ts: 't', kind: 'transition', from: 'open', to: 's1' }),
-          JSON.stringify({ ts: 't', kind: 'tool', raw: 'Skill: pipeline-lite:a' }),
-          JSON.stringify({ ts: 't', kind: 'tool', raw: 'Skill: pipeline-lite:b' }),
+          JSON.stringify({ ts: 't', kind: 'tool', raw: 'Skill: tenon:a' }),
+          JSON.stringify({ ts: 't', kind: 'tool', raw: 'Skill: tenon:b' }),
         ].join('\n') + '\n'
       const deps = makeDeps({ cwd: root, state: mockState({ workflow: 'custom1', phase: 's1' }), historyRaw })
-      expect(await cmdInternalSkillGate(deps, 'demo', 'pipeline-lite:c')).toBe(0)
+      expect(await cmdInternalSkillGate(deps, 'demo', 'tenon:c')).toBe(0)
     })
 
     it('依赖部分完成（history 里只有 a 的 tool 记录）→ 仍锁定，stderr 只点名缺的那个 (b)', async () => {

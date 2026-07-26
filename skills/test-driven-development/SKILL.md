@@ -3,7 +3,7 @@ name: test-driven-development
 description: First-party red-green-refactor discipline for pipeline build work.
 license: MIT
 metadata:
-  author: pipeline-lite
+  author: tenon
 ---
 
 # Test-driven Development

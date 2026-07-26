@@ -28,8 +28,8 @@ import './workbench.css'
  *
  * 决议 #1 红线：无画布库——转换事件名连接件用普通文本 chip，不引入任何 SVG DAG/graph 渲染库。
  *
- * v8-E（意见⑥，设计真相源 design-demos/v8-trellis-encore.html #view-workbench .stages 段）：
- * 阶段卡横排。卡=序号圆(绿 tint mono)+阶段名 mono+技能 chips+◇/⚙/▤ 微元信息+复核门红徽章；
+ * 阶段带展示契约：阶段卡横排。卡=序号圆(绿 tint mono)+阶段名 mono+
+ * 技能 chips+◇/⚙/▤ 微元信息+复核门红徽章；
  * 选中卡=绿 ring+tint 底（aria-current=step 承载选中态）。段间连接件=CSS
  * repeating-linear-gradient 流动虚线+clip-path 箭头（motion-safe: 变体在 reduced-motion 下停
  * 动画，keyframes 见 ./workbench.css）；demo 语义：gated 连接件跟在门阶段**之后**（复核门拦的

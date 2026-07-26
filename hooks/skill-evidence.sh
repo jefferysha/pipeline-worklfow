@@ -5,9 +5,9 @@
 # executing a read-only command against `<plugin-root>/skills/<id>/SKILL.md` instead. We must not
 # claim the latter is a `Skill` event, but it is still host-observed evidence that the packaged
 # skill asset was loaded. Stable runtime hooks execute from a verified payload, while Codex reads
-# the asset from its host plugin cache; `PIPELINE_HOST_PLUGIN_ROOT` is provenance captured by the
+# the asset from its host plugin cache; `TENON_HOST_PLUGIN_ROOT` is provenance captured by the
 # stable bootstrap before it pins the executable roots to that payload, and
-# `PIPELINE_CODEX_PLUGIN_ROOT` is the active payload's verified Codex cache identity. These helpers
+# `TENON_CODEX_PLUGIN_ROOT` is the active payload's verified Codex cache identity. These helpers
 # deliberately accept only a readable SKILL.md below one of those process-provided roots, never an
 # arbitrary project path or a caller-supplied skill id.
 #
@@ -19,7 +19,7 @@ pipeline_plugin_roots() {
   # First choice is the host cache captured by the bootstrap. The remaining roots are the
   # executable managed payload / direct-development hook roots. Each candidate must really
   # contain the packaged skills tree; no command payload path participates in this decision.
-  for root in "${PIPELINE_HOST_PLUGIN_ROOT:-}" "${PIPELINE_CODEX_PLUGIN_ROOT:-}" "${PLUGIN_ROOT:-}" "${CLAUDE_PLUGIN_ROOT:-}"; do
+  for root in "${TENON_HOST_PLUGIN_ROOT:-}" "${TENON_CODEX_PLUGIN_ROOT:-}" "${PLUGIN_ROOT:-}" "${CLAUDE_PLUGIN_ROOT:-}"; do
     [ -n "$root" ] && [ -d "$root/skills" ] && printf '%s\n' "$root"
   done
 

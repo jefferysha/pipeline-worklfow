@@ -1,10 +1,10 @@
 import { describe, expect, test, vi } from 'vitest'
-import type { EffectiveSkillResolver, LoopEntry, WorkflowDef, WorkflowIR } from '@pipeline-lite/kernel'
+import type { EffectiveSkillResolver, LoopEntry, WorkflowDef, WorkflowIR } from '@tenon/kernel'
 import {
   buildLoopStarterWiringReport,
   type LoopStarterWiringDeps,
 } from './loop-starter-wiring.js'
-import { SkillContentNotFoundError } from '@pipeline-lite/automation'
+import { SkillContentNotFoundError } from '@tenon/automation'
 import type { SkillBundleWiringResult } from './loop-admission-view.js'
 
 function loop(overrides: Partial<LoopEntry> = {}): LoopEntry {

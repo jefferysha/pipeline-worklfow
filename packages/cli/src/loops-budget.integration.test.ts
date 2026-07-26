@@ -13,7 +13,7 @@
 import { appendFile, mkdir, mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { createLoopLedgerStore, ledgerFilePath } from '@pipeline-lite/kernel'
+import { createLoopLedgerStore, ledgerFilePath } from '@tenon/kernel'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
 import { realDeps, rm } from './integration-harness.js'
 import { cmdLoops, REAL_LOOPS_FS } from './commands/loops.js'

@@ -37,19 +37,19 @@ describe('createFsSkillContentLocator', () => {
 
   it('单根命中 → 返回该目录（已穿过 realpath）', async () => {
     const rootA = join(root, 'root-a')
-    const dir = await makeSkillDir(rootA, 'pipeline-build', '# build')
+    const dir = await makeSkillDir(rootA, 'tenon-build', '# build')
     const locator = createFsSkillContentLocator([rootA])
-    const located = await locator.locate('pipeline-build')
-    expect(located.skillId).toBe('pipeline-build')
+    const located = await locator.locate('tenon-build')
+    expect(located.skillId).toBe('tenon-build')
     expect(located.contentDir).toBe(await realpath(dir))
   })
 
   it('多根仅一根命中 → 返回命中的那个；不存在的根（缺目录）不报错，只是跳过', async () => {
     const rootA = join(root, 'root-a')
     const rootB = join(root, 'root-b-does-not-exist') // 故意不建
-    const dir = await makeSkillDir(rootA, 'pipeline-build', '# build')
+    const dir = await makeSkillDir(rootA, 'tenon-build', '# build')
     const locator = createFsSkillContentLocator([rootB, rootA])
-    const located = await locator.locate('pipeline-build')
+    const located = await locator.locate('tenon-build')
     expect(located.contentDir).toBe(await realpath(dir))
   })
 
@@ -61,15 +61,15 @@ describe('createFsSkillContentLocator', () => {
   })
 
   it('顶层安装位是 symlink → 仍定位到真实目录（不是可能悬空的链接本身）', async () => {
-    const realStore = join(root, 'real-store', 'pipeline-build')
+    const realStore = join(root, 'real-store', 'tenon-build')
     await mkdir(realStore, { recursive: true })
     await writeFile(join(realStore, 'SKILL.md'), '# build', 'utf8')
     const installedRoot = join(root, 'installed')
     await mkdir(installedRoot, { recursive: true })
-    await symlink(realStore, join(installedRoot, 'pipeline-build'))
+    await symlink(realStore, join(installedRoot, 'tenon-build'))
 
     const locator = createFsSkillContentLocator([installedRoot])
-    const located = await locator.locate('pipeline-build')
+    const located = await locator.locate('tenon-build')
     expect(located.contentDir).toBe(await realpath(realStore))
   })
 
@@ -85,15 +85,15 @@ describe('createFsSkillContentLocator', () => {
   })
 
   it('skill id 含路径分隔符/`..` → SkillContentInvalidError（防 join(root, id) 逃出给定根之外读取）', async () => {
-    // base/roots/root-a 是声明的根；base/secret/pipeline-build 是根之外、包含真实 SKILL.md 的目录。
-    // 若 locate() 不校验 id 形状，`../../secret/pipeline-build` 会被 join(root-a, id) 解析到
-    // base/secret/pipeline-build，让调用方"定位"到根之外的内容——必须在触碰文件系统前就拒绝。
+    // base/roots/root-a 是声明的根；base/secret/tenon-build 是根之外、包含真实 SKILL.md 的目录。
+    // 若 locate() 不校验 id 形状，`../../secret/tenon-build` 会被 join(root-a, id) 解析到
+    // base/secret/tenon-build，让调用方"定位"到根之外的内容——必须在触碰文件系统前就拒绝。
     const rootA = join(root, 'roots', 'root-a')
     await mkdir(rootA, { recursive: true })
-    await makeSkillDir(join(root, 'secret'), 'pipeline-build', '# should not be reachable')
+    await makeSkillDir(join(root, 'secret'), 'tenon-build', '# should not be reachable')
 
     const locator = createFsSkillContentLocator([rootA])
-    await expect(locator.locate('../../secret/pipeline-build')).rejects.toBeInstanceOf(SkillContentInvalidError)
+    await expect(locator.locate('../../secret/tenon-build')).rejects.toBeInstanceOf(SkillContentInvalidError)
     await expect(locator.locate('a/b')).rejects.toBeInstanceOf(SkillContentInvalidError)
     await expect(locator.locate('')).rejects.toBeInstanceOf(SkillContentInvalidError)
   })
@@ -151,10 +151,10 @@ describe('createFsSkillContentLocator', () => {
   it('候选根真不存在（ENOENT）→ 仍是唯一允许 fail-soft 继续试下一根的情形（回归锚：区别于上面几个 fail-loud 用例）', async () => {
     const rootMissing = join(root, 'root-does-not-exist-at-all')
     const rootA = join(root, 'root-a')
-    const dir = await makeSkillDir(rootA, 'pipeline-build', '# build')
+    const dir = await makeSkillDir(rootA, 'tenon-build', '# build')
 
     const locator = createFsSkillContentLocator([rootMissing, rootA])
-    const located = await locator.locate('pipeline-build')
+    const located = await locator.locate('tenon-build')
     expect(located.contentDir).toBe(await realpath(dir))
   })
 
@@ -171,14 +171,14 @@ describe('createFsSkillContentLocator', () => {
 
   it('端到端：locate 的结果可直接喂给 materializeSkillSnapshot 产出快照', async () => {
     const rootA = join(root, 'root-a')
-    await makeSkillDir(rootA, 'pipeline-build', '# build\n')
+    await makeSkillDir(rootA, 'tenon-build', '# build\n')
     const locator = createFsSkillContentLocator([rootA])
-    const located = await locator.locate('pipeline-build')
+    const located = await locator.locate('tenon-build')
 
     const projectRoot = join(root, 'project')
     await mkdir(projectRoot, { recursive: true })
     const result = await materializeSkillSnapshot([located], { projectRoot })
     expect(result.manifests).toHaveLength(1)
-    expect(result.manifests[0]?.skillId).toBe('pipeline-build')
+    expect(result.manifests[0]?.skillId).toBe('tenon-build')
   })
 })

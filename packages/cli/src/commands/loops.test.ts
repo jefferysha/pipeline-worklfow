@@ -13,7 +13,7 @@ import {
   createStateStore,
   loadRegistry,
   type WorkflowIR,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import { makeDeps } from '../test-support.js'
 import {
   cmdInit, cmdLoops, derivePrefix, REAL_INIT_ENV, REAL_LOOPS_FS,
@@ -576,7 +576,7 @@ describe('level —— 查看 + set 逐级毕业写回', () => {
   })
 })
 
-// ── loop-init：`pipeline loops init` 向导 + 非交互结构化通道（L3，真 fs 临时目录）──────────
+// ── loop-init：`tenon loops init` 向导 + 非交互结构化通道（L3，真 fs 临时目录）──────────
 // 本区块用真 fs 临时目录（区别于上方 mock 层分支回归）——init 的核心契约是「落真盘 + loadRegistry
 // 读回」，唯有真 fs 能钉住写盘/CAS/草稿标记；CAS 并发与坏路径注入两例用内存 fake env（无法真并发）。
 

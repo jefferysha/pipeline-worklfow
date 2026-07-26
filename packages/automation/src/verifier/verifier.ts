@@ -54,7 +54,7 @@ import { createHash } from 'node:crypto'
 import {
   isTrustedPass, validateAutomationPolicySnapshot, validateVerificationResult,
   type AutomationPolicySnapshot, type VerificationBinding, type VerificationIssuer, type VerificationResult,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import type { ExecutionContext } from '../admission/execution-context.js'
 
 /** 装配层持有的完整 issuer 身份；trusted 仍由 kernel 的 issuer kind 字面量不变式派生。 */

@@ -1,5 +1,5 @@
 /**
- * 真实 e2e —— `pipeline artifact register`（G2 P5）。零 mock：freshHarness 真临时项目 + 真 buildProgram
+ * 真实 e2e —— `tenon artifact register`（G2 P5）。零 mock：freshHarness 真临时项目 + 真 buildProgram
  * 解析 + 真 kernel store/loadWorkflow/compileWorkflow + 真 manifest EffectiveSkillResolver。
  *
  * 覆盖：default 轨真 state register（真 manifest producer 校验）、a|b token 拒、custom 轨 register、

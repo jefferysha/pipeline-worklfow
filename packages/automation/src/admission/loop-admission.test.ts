@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import {
   createLoopLedgerStore, loadRegistry, nodeLoopIoStrict, registryContentEpoch,
   type EffectiveSkillResolver, type LoopEntry, type LoopLedgerStore, type LoopRegistry, type StepIR, type VerificationResult,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createFsSkillContentLocator, SkillContentInvalidError } from '../skills/content-locator.js'
 import { materializeSkillSnapshot, SkillSnapshotIoError } from '../skills/snapshot-store.js'

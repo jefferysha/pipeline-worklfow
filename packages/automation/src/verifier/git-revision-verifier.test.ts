@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { compileAutomationPolicySnapshot, type LoopEntry } from '@pipeline-lite/kernel'
+import { compileAutomationPolicySnapshot, type LoopEntry } from '@tenon/kernel'
 import type { ExecutionContext } from '../admission/execution-context.js'
 import { nodeExec, type ExecFn, type ExecResult } from '../runner/exec.js'
 import {

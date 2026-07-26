@@ -30,7 +30,7 @@ import {
   type TrackValidationContext,
   type WorkflowDef,
   type WorkflowRunRepository,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import {
   cancelAfkRun,
   dismissAfkRun,
@@ -133,7 +133,7 @@ export async function handlePostChangesRoutes(
       return sendJson(res, 200, { ok: true, root: result.root })
     }
 
-    // ── G18：POST /api/changes —— pipeline init 的 HTTP 化 ──
+    // ── G18：POST /api/changes —— tenon init 的 HTTP 化 ──
     //    校验序全部先于任何落盘（同 cli/commands/init.ts 的"先校验后写"纪律）：body 形状 →
     //    root 信任锚（本端点要求已注册）→ name 字符集 → track 枚举 → workflow 真加载校验。
     //    preset 固定 'full'（dashboard 语境无 preset 选择需求，YAGNI）；history 记账对齐

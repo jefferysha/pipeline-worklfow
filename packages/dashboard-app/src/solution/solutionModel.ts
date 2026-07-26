@@ -46,7 +46,7 @@ export const solutionModules: readonly SolutionModule[] = [
 
 export const hostTiers: readonly HostTier[] = ['a', 'b', 'c']
 
-const repository = 'https://github.com/jefferysha/pipeline-worklfow'
+const repository = 'https://github.com/jefferysha/tenon'
 
 export const communityLinks: readonly CommunityLink[] = [
   { id: 'repository', href: repository },

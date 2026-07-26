@@ -46,11 +46,11 @@ install_rules() {
 
 离开 review phase（explore / spec / verify）须对确切 event 取得人类显式确认：
 
-    pipeline review request <change> --event <event>
+    tenon review request <change> --event <event>
     # 人类确认后：
-    pipeline review acknowledge <change>
+    tenon review acknowledge <change>
 
-不得删除 `.pipeline-pending-review` 绕过 review-gate（会产生 solo 推进）。命令前缀为 /pipeline-（如 /pipeline-explore）。
+不得删除 `.pipeline-pending-review` 绕过 review-gate（会产生 solo 推进）。命令前缀为 /pipeline-（如 /tenon-explore）。
 EOF
   info "rules/pipeline.md → $rdir/pipeline.md（inject 降级静态层）"
 }
@@ -76,7 +76,7 @@ install_rules
 if [ "$WITH_HOOKS" = 1 ]; then
   install_hooks
 else
-  warn "--no-hooks：跳过 hooks.json（无自动强制；review 仍须走 pipeline review request/acknowledge）。"
+  warn "--no-hooks：跳过 hooks.json（无自动强制；review 仍须走 tenon review request/acknowledge）。"
 fi
 info "Cursor 适配器安装完成（无 trust 机制，落盘即生效）。"
 exit 0

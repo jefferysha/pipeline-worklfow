@@ -8,12 +8,12 @@ import {
   type PipelineState,
   type StateStore,
   type StepIR,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import type {
   CapturedExecutionCoordinate,
   ExecutionContext,
   ExecutionCoordinatePort,
-} from '@pipeline-lite/automation'
+} from '@tenon/automation'
 import { changeDir } from './paths.js'
 
 function scalarField(state: PipelineState, field: FieldName): string {

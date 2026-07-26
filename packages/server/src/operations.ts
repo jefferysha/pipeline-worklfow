@@ -25,7 +25,7 @@ export type PipelineCliRunner = (
 
 /** Works from both `src/operations.ts` and the bundled `dist/dashboard.mjs`. */
 export function pipelineCliBundlePath(): string {
-  return join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'cli', 'dist', 'pipeline.mjs')
+  return join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'cli', 'dist', 'tenon.mjs')
 }
 
 export function pipelineCliAvailable(): boolean {
@@ -36,7 +36,7 @@ export const runPipelineCli: PipelineCliRunner = (repoRoot, args) =>
   new Promise((resolve, reject) => {
     const bundle = pipelineCliBundlePath()
     if (!existsSync(bundle)) {
-      reject(new Error(`pipeline CLI bundle 不存在：${bundle}；请先执行 npm run bundle`))
+      reject(new Error(`Tenon CLI bundle 不存在：${bundle}；请先执行 npm run bundle`))
       return
     }
     execFile(

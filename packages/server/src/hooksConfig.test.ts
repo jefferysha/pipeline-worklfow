@@ -51,7 +51,7 @@ describe('HOOK_METAS —— hook 元数据（时机/开关粒度单一真相源�
   })
 
   it('时机归类逐条核实自插件 hooks/hooks.json 的稳定 hook-id ABI（T15 风险项：不得凭名字猜）', () => {
-    // 真读插件清单：host 不再直连可变 payload 中的脚本，而是调用稳定 pipeline-hook
+    // 真读插件清单：host 不再直连可变 payload 中的脚本，而是调用稳定 tenon-hook
     // 启动器并传入逻辑 hook id；bootstrap 只会进入已验证 release 再解析 meta.script。
     const pluginHooksPath = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'hooks', 'hooks.json')
     const plugin = JSON.parse(readFileSync(pluginHooksPath, 'utf8')) as {
@@ -59,7 +59,7 @@ describe('HOOK_METAS —— hook 元数据（时机/开关粒度单一真相源�
     }
     for (const meta of HOOK_METAS) {
       const entries = plugin.hooks[meta.event] ?? []
-      const entry = entries.find((e) => e.hooks.some((h) => h.command.includes(`pipeline-hook\" ${meta.id}`)))
+      const entry = entries.find((e) => e.hooks.some((h) => h.command.includes(`tenon-hook\" ${meta.id}`)))
       expect(entry, `${meta.id} 应挂在 ${meta.event}`).toBeDefined()
       expect(entry?.matcher, `${meta.id} 的 UI 元数据必须与 hooks.json 同步`).toBe(meta.matcher)
     }

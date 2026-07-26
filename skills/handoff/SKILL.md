@@ -3,7 +3,7 @@ name: handoff
 description: First-party implementation and operations handoff document workflow.
 license: MIT
 metadata:
-  author: pipeline-lite
+  author: tenon
 ---
 
 # Handoff

@@ -52,15 +52,15 @@
 import {
   compileWorkflow, completedWorkflowSkillsSinceStepEntry, createTransitionApplication,
   loadRegistry, loadWorkflow, nodeLoopIoStrict, requireTrack, resolveRequiredSkillSlots,
-} from '@pipeline-lite/kernel'
-import { evaluateSpecMigrationEvidence, type TransitionContext } from '@pipeline-lite/kernel'
-import { enqueueAfterSpecComplete } from '@pipeline-lite/automation'
+} from '@tenon/kernel'
+import { evaluateSpecMigrationEvidence, type TransitionContext } from '@tenon/kernel'
+import { enqueueAfterSpecComplete } from '@tenon/automation'
 import { errMsg, type CliDeps } from '../deps.js'
 import { changeDir, isValidChangeName } from '../paths.js'
 import { reconcileCodexSkillEvidence } from '../codexSkillReceipt.js'
 
 function canonicalPipelineSkillId(skillId: string): string {
-  return skillId.startsWith('pipeline-lite:') ? skillId.slice('pipeline-lite:'.length) : skillId
+  return skillId.startsWith('tenon:') ? skillId.slice('tenon:'.length) : skillId
 }
 
 export async function cmdTransition(deps: CliDeps, name: string, event: string): Promise<number> {
@@ -85,7 +85,7 @@ export async function cmdTransition(deps: CliDeps, name: string, event: string):
   }
 
   // breadcrumb 收尾由 TransitionApplication 统一编排；review marker 不再在“进入”时由
-  // transition 写入，而由 phase 完成后的 `pipeline review request` 专职写入。
+  // transition 写入，而由 phase 完成后的 `tenon review request` 专职写入。
   const app = createTransitionApplication({
     runRepository: deps.runRepo,
     flow: deps.flow,
@@ -117,7 +117,7 @@ export async function cmdTransition(deps: CliDeps, name: string, event: string):
       const registry = loadRegistry(deps.cwd, nodeLoopIoStrict)
       if (registry.data === null) throw new Error(`loops registry 无法校验：${registry.errors.join('；')}`)
       const loop = registry.data.loops.find((candidate) => candidate.id === policy.loop_id)
-      return { active: loop?.status === 'active', humanGateSatisfied: deps.env?.('PIPELINE_AFK') !== '1' }
+      return { active: loop?.status === 'active', humanGateSatisfied: deps.env?.('TENON_AFK') !== '1' }
     },
   })
 
@@ -225,7 +225,7 @@ export async function cmdTransition(deps: CliDeps, name: string, event: string):
       case 'review-approval-required':
         deps.io.err(
           `ERROR: phase '${result.phase}' 的 event '${result.event}' 尚未取得人工确认；先运行 ` +
-          `pipeline review request ${name} --event ${result.event}，` +
+          `tenon review request ${name} --event ${result.event}，` +
           '展示产物并等待用户“确认继续”，再重发本次 transition',
         )
         return 2

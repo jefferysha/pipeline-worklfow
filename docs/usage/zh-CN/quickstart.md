@@ -26,8 +26,8 @@
 ### 2. 确认 Change
 
 ```bash
-pipeline list --json
-pipeline status <change> --json
+tenon list --json
+tenon status <change> --json
 ```
 
 `tasks.md` 的一级结构来自真实 workflow。default 展示七阶段；custom 只展示自己的 DAG，不会被硬套 PM、前端或后端步骤。
@@ -38,7 +38,7 @@ pipeline status <change> --json
 - Explore：调研、方案比较、设计和 ADR；
 - Spec：增量需求、场景和文件级计划。
 
-后续 phase 会通过 `pipeline document read <change> all` 对当前 digest 留下读取收据，不能只说“已经看过”。
+后续 phase 会通过 `tenon document read <change> all` 对当前 digest 留下读取收据，不能只说“已经看过”。
 
 在每个 review 出口，先完成产物和检查，再请求精确事件的 review。进入 Explore 本身不代表“等待确认”；只有产物完成并执行 `review request` 后，状态才应显示等待。
 
@@ -53,10 +53,10 @@ Verify 期间不要修改实现文件。若审查发现缺陷，先写失败报�
 review phase 的正确顺序：
 
 ```bash
-pipeline check <change>
-pipeline review request <change> --event <event>
-pipeline review acknowledge <change>
-pipeline transition <change> <event>
+tenon check <change>
+tenon review request <change> --event <event>
+tenon review acknowledge <change>
+tenon transition <change> <event>
 ```
 
 持续授权可以记录 delegated acknowledgement，但不会跳过文档、读取、guard 或验证。
@@ -64,8 +64,8 @@ pipeline transition <change> <event>
 ### 6. 检查最终状态
 
 ```bash
-pipeline status <change> --json
-pipeline document status <change>
+tenon status <change> --json
+tenon document status <change>
 ```
 
 归档前，任务清单应没有当前及更早阶段的未完成项；applied spec 应对应已经验证的 delta；Archive 应重读验证报告和已应用规格。
@@ -82,9 +82,9 @@ pipeline document status <change>
 ## 验证
 
 ```bash
-pipeline list --json
-pipeline status <change> --json
-pipeline document status <change> --json
+tenon list --json
+tenon status <change> --json
+tenon document status <change> --json
 ```
 
 对含 UI 的任务还要打开真实页面，检查桌面、窄屏、键盘、主题和控制台。对安装/更新任务要在干净临时目录验证，不用当前开发工作区冒充新用户环境。

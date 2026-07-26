@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # router.sh — UserPromptSubmit：项目级动态 Track 路由 + workflow breadcrumb/skill 注入。
 #
-# 冷路径从 effective Track Registry + manifest profile skills 生成 PIPELINE_ROUTER_V5；默认 cache
+# 冷路径从 effective Track Registry + manifest profile skills 生成 TENON_ROUTER_V5；默认 cache
 # 位于 <canonical-project-root>/.pipeline/cache/router.v5.data。cache 是严格字段化的 hex 数据，
 # 本脚本只逐行校验和 builtin 解码，绝不把项目 cache 当 shell 程序执行。
 #
@@ -37,9 +37,9 @@ case "$HOST_SESSION_ID" in ''|*[!A-Za-z0-9_-]*) HOST_SESSION_ID='' ;; esac
 [ "${#HOST_SESSION_ID}" -le 128 ] || HOST_SESSION_ID=''
 
 # 系统通知、自身回显、显式命令、纯讨论均不触发路由。局部快速修复交给 simple 风险轨，
-# 不再作为绕过 pipeline 的 L5 口子。
+# 不再作为绕过 Tenon 的 L5 口子。
 case "$PROMPT" in
-  *"<task-notification>"*|*"<task-id>"*|*"<output-file>"*|*"<workflow-state>"*|*"<pipeline-router"*|*"<pipeline-dispatch>"*) exit 0 ;;
+  *"<task-notification>"*|*"<task-id>"*|*"<output-file>"*|*"<workflow-state>"*|*"<tenon-router"*|*"<tenon-dispatch>"*) exit 0 ;;
 esac
 case "$PROMPT" in /*) exit 0 ;; esac
 
@@ -60,9 +60,9 @@ if [ "$EXPLICIT_FREE_MODE" != "true" ]; then
 fi
 
 # Carry a strong, explicit continuous-execution authorisation through the normal-chat dispatch.
-# The router does not itself create authority (there may be no Change yet); the pipeline root skill
+# The router does not itself create authority (there may be no Change yet); the Tenon root skill
 # consumes this exact flag only after it has created or re-selected an exact Change and uses
-# `pipeline session activate --continuous` to bind the resulting projection safely.
+# `tenon session activate --continuous` to bind the resulting projection safely.
 CONTINUOUS_EXECUTION='false'
 case "$PROMPT" in
   *后续不用问*|*后续无需询问*|*后续不需要确认*|*后续自行执行*|*后续自己执行*|*后续自主执行*|*自主执行完成*|*自己执行完成*) CONTINUOUS_EXECUTION='true' ;;
@@ -189,7 +189,7 @@ if [ -r "$INTENT_HELPER" ]; then
   # repository candidate just because the answer also says “继续/上一步”.
   pipeline_prompt_is_workflow_selection "$PROMPT" && exit 0
   # 用户在正常对话中完整点名某个活跃 change 时，它比 repo 级指针和泛化“继续”
-  # 都更强。此前多 candidate 会先清空 CHANGE_NAME，导致 `继续 pet-adoption-page`
+  # 都更强。此前多 candidate 会先清空 CHANGE_NAME，导致 `继续 catalog-flow-page`
   # 退化为 ambiguous select；这里保留候选表并只接受唯一的精确命中。
   EXPLICIT_CHANGE_COUNT=0
   EXPLICIT_CHANGE_NAME="" EXPLICIT_CHANGE_PHASE="" EXPLICIT_CHANGE_TRACK="" EXPLICIT_CHANGE_WORKFLOW=""
@@ -260,13 +260,13 @@ PLUGIN_ROOT="${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE
 MANIFEST="$PLUGIN_ROOT/templates/manifest.yaml"
 TRACKS_FILE="$PROOT/.pipeline/tracks.yaml"
 if [ -f "$TRACKS_FILE" ]; then TRACKS_PRESENT=1; else TRACKS_PRESENT=0; fi
-CACHE="${PIPELINE_ROUTER_CACHE:-$PROOT/.pipeline/cache/router.v5.data}"
-_CLI_BUNDLE="$PLUGIN_ROOT/packages/cli/dist/pipeline.mjs"
+CACHE="${TENON_ROUTER_CACHE:-$PROOT/.pipeline/cache/router.v5.data}"
+_CLI_BUNDLE="$PLUGIN_ROOT/packages/cli/dist/tenon.mjs"
 _GEN_MJS="$PLUGIN_ROOT/hooks/router-gen.mjs"
 # This release-owned digest is checked on every cache hit with bash builtins only. A unit test
 # pins it to kernel.routerContractRevision(manifest), so builtin/skill/breadcrumb changes cannot
 # silently retain a prior project cache even when plugin mtimes are older than that cache.
-ROUTER_CONTRACT_REV="4b8190276ba1f8098faf729a6303ce64a5443a5efec7f0314278ed036b1951b9"
+ROUTER_CONTRACT_REV="c22e1dcd60fa8419350307c49afd6b8b0f9f88ae5492ac7f2a8531a7b268d55b"
 
 # Bash 3.2-compatible parallel arrays（不使用 associative array 或动态变量名）。
 _router_clear_cache() {
@@ -337,9 +337,9 @@ _workflow_default_ok() {
 # PARTS 最后一格永远是 sentinel，因此尾部空字段也不会被 read 吞掉。
 _split_cache_line() {
   PARTS=()
-  IFS='|' read -r -a PARTS <<< "${1}|__PIPELINE_END__"
+  IFS='|' read -r -a PARTS <<< "${1}|__TENON_END__"
   local last=$(( ${#PARTS[@]} - 1 ))
-  [ "$last" -ge 0 ] && [ "${PARTS[$last]}" = "__PIPELINE_END__" ]
+  [ "$last" -ge 0 ] && [ "${PARTS[$last]}" = "__TENON_END__" ]
 }
 
 _router_load_cache() { # file expected-root expected-tracks-present expected-contract-revision
@@ -352,7 +352,7 @@ _router_load_cache() { # file expected-root expected-tracks-present expected-con
   while IFS= read -r line || [ -n "$line" ]; do
     line_no=$((line_no + 1))
     if [ "$line_no" -eq 1 ]; then
-      [ "$line" = "PIPELINE_ROUTER_V5" ] || { _router_clear_cache; return 1; }
+      [ "$line" = "TENON_ROUTER_V5" ] || { _router_clear_cache; return 1; }
       continue
     fi
     [ -n "$line" ] || { _router_clear_cache; return 1; }
@@ -605,7 +605,7 @@ if [ "$DISPATCH_INTENT" = "new" ] && [ "$EXPLICIT_FREE_MODE" = "true" ]; then
 fi
 
 # 新任务由本轮文本评分选择 track；恢复已有 Change 时则反过来，以持久化状态中的
-# track 为权威。否则用户只说“继续 pet-adoption-page”而未复述领域关键词，会在这里
+# track 为权威。否则用户只说“继续 catalog-flow-page”而未复述领域关键词，会在这里
 # 被评分 0 静默吞掉，或被错误重算到另一个 track。仅接受当前 effective registry 中
 # 的 id，既得到对应的 skill profile，也不把手改 state 原文透传到宿主上下文。
 RESUME_TRACK_BOUND=0
@@ -664,7 +664,7 @@ esac
 
 # Default manifest 的 breadcrumb / profile skill matrix 只描述 default workflow。恢复一个
 # custom workflow 时若仍注入它们，宿主会看到一套与真实 DAG 不一致的“强制 skill”，并可能
-# 先尝试错误的 skill；custom 图必须由 pipeline 入口用 CLI/受控读取加载后再分派。
+# 先尝试错误的 skill；custom 图必须由 tenon 入口用 CLI/受控读取加载后再分派。
 # router 热路径不解析项目 YAML，因此在这里宁可不臆造，保留 canonical workflow identity。
 NON_DEFAULT_WORKFLOW_DISPATCH=0
 if { [ "$DISPATCH_INTENT" = "resume" ] && [ -n "$CHANGE_NAME" ] \
@@ -677,7 +677,7 @@ fi
 # A selection dispatch has no canonical workflow yet.  It must suppress the default matrix just
 # like a bound custom workflow, but it must not claim that an empty or suggested workflow is
 # already the Change's immutable identity.  Keep those two states distinct in the user-facing
-# contract: pipeline owns the selection, then subsequent resume turns own the bound workflow.
+# contract: Tenon owns the selection, then subsequent resume turns own the bound workflow.
 SUPPRESS_DEFAULT_MATRIX="$NON_DEFAULT_WORKFLOW_DISPATCH"
 if [ "$SELECTION_REQUIRED" = "1" ]; then
   SUPPRESS_DEFAULT_MATRIX=1
@@ -710,43 +710,43 @@ fi
 if [ "$DISPATCH_INTENT" = "resume" ] && [ -n "$CHANGE_NAME" ]; then
   HDR="change=${CHANGE_NAME} · phase=${EFF_PHASE} · track=${TRACK}（状态绑定）"
   if [ "$CHANGE_WORKFLOW" = "simple" ]; then
-    TAIL="已恢复 simple Change。必须立即调用 pipeline，并只按内建 simple DAG 的当前 step 分派 skill；Todo 来自 change/verify/done/escalated，不读取 default tasks.md 或 OpenSpec 文档链。"
+    TAIL="已恢复 simple Change。必须立即调用 tenon，并只按内建 simple DAG 的当前 step 分派 skill；Todo 来自 change/verify/done/escalated，不读取 default tasks.md 或 OpenSpec 文档链。"
   elif [ "$TRACK" = "free" ]; then
-    TAIL="已恢复自由模式 Change。必须立即调用 pipeline，并只按绑定 Workflow '${CHANGE_WORKFLOW}' 的真实 DAG、skills、gates 与 OpenSpec contract 推进；不得叠加 PM/frontend/backend 的 profile 或技能矩阵。"
+    TAIL="已恢复自由模式 Change。必须立即调用 tenon，并只按绑定 Workflow '${CHANGE_WORKFLOW}' 的真实 DAG、skills、gates 与 OpenSpec contract 推进；不得叠加 PM/frontend/backend 的 profile 或技能矩阵。"
   else
-    TAIL="已恢复 ${TRACK} Change。必须立即调用 Skill 工具的 pipeline，由它分派当前相位的 OpenSpec 与阶段 skill；先按 tasks.md 的阶段任务建立/更新 Todo，勿先生成通用 Todo、勿绕过 pipeline 直接实现。按 ${EFF_PHASE} 相位纪律推进，勿自动 transition，产出交用户确认后再推进。"
+    TAIL="已恢复 ${TRACK} Change。必须立即调用 Skill 工具的 tenon，由它分派当前相位的 OpenSpec 与阶段 skill；先按 tasks.md 的阶段任务建立/更新 Todo，勿先生成通用 Todo、勿绕过 Tenon 直接实现。按 ${EFF_PHASE} 相位纪律推进，勿自动 transition，产出交用户确认后再推进。"
   fi
 elif [ "$DISPATCH_INTENT" = "select" ]; then
   HDR="疑似 track=${TRACK}（评分 ${BEST_SCORE}）· 恢复目标未选择"
-  TAIL="用户明确要继续，但项目中有多个未选择的活跃 change。必须立即调用 Skill 工具的 pipeline，让入口 skill 用 pipeline list/status 列出候选并要求用户点名；严禁按 mtime 猜测，也严禁把它当作新任务创建。"
+  TAIL="用户明确要继续，但项目中有多个未选择的活跃 change。必须立即调用 Skill 工具的 tenon，让入口 skill 用 tenon list/status 列出候选并要求用户点名；严禁按 mtime 猜测，也严禁把它当作新任务创建。"
 else
   if [ "$SELECTION_REQUIRED" = "1" ]; then
-    HDR="疑似 track=${TRACK}（评分 ${BEST_SCORE}）· 独立新任务 · 发现项目自定义 pipeline/track"
-    TAIL="疑似 ${TRACK} Track 新任务。项目内已有 change 仅是显式恢复时的候选，严禁把它们绑定到本轮或复用其 phase/tasks。项目已声明自定义 routable Track：必须立即调用 Skill 工具的 pipeline，由入口 skill 先根据下方推荐 pair 与候选 pair 询问用户选择 Track/workflow；在用户选择前严禁创建 Change、严禁假定 default。选定后才创建并激活独立 Change。"
+    HDR="疑似 track=${TRACK}（评分 ${BEST_SCORE}）· 独立新任务 · 发现项目自定义 Tenon workflow/track"
+    TAIL="疑似 ${TRACK} Track 新任务。项目内已有 change 仅是显式恢复时的候选，严禁把它们绑定到本轮或复用其 phase/tasks。项目已声明自定义 routable Track：必须立即调用 Skill 工具的 tenon，由入口 skill 先根据下方推荐 pair 与候选 pair 询问用户选择 Track/workflow；在用户选择前严禁创建 Change、严禁假定 default。选定后才创建并激活独立 Change。"
   else
     HDR="疑似 track=${TRACK}（评分 ${BEST_SCORE}）· 独立新任务"
     if [ "$BEST_WORKFLOW" = "simple" ]; then
-      TAIL="已命中严格边界内的 simple 任务。必须立即调用 pipeline，创建并激活独立 simple Change，按 change → verify → done 的轻量 DAG 执行；不得生成 default 的 PM/前后端/OpenSpec 文档链。若执行中边界扩大，必须走 scope-expanded 并升级为新的 default Change。"
+      TAIL="已命中严格边界内的 simple 任务。必须立即调用 tenon，创建并激活独立 simple Change，按 change → verify → done 的轻量 DAG 执行；不得生成 default 的 PM/前后端/OpenSpec 文档链。若执行中边界扩大，必须走 scope-expanded 并升级为新的 default Change。"
     elif [ "$TRACK" = "free" ]; then
-      TAIL="用户已显式选择自由模式。必须立即调用 pipeline，先复核 free Track 与精确 Workflow 的 allowed 关系，再创建独立 Change；只执行所选 Workflow 自己的 DAG、skills、gates 与 OpenSpec contract，不叠加 PM/frontend/backend profile，也不得把自由模式解释为跳过 Workflow。"
+      TAIL="用户已显式选择自由模式。必须立即调用 tenon，先复核 free Track 与精确 Workflow 的 allowed 关系，再创建独立 Change；只执行所选 Workflow 自己的 DAG、skills、gates 与 OpenSpec contract，不叠加 PM/frontend/backend profile，也不得把自由模式解释为跳过 Workflow。"
     else
-      TAIL="疑似 ${TRACK} Track 新任务。项目内已有 change 仅是显式恢复时的候选，严禁把它们绑定到本轮或复用其 phase/tasks。默认选择 default workflow：必须立即调用 Skill 工具的 pipeline，让入口 skill 创建并激活独立 Change、初始化 OpenSpec，并按 open 相位开始；不要先询问是否走工作流，也不要直接执行某个阶段 skill。仅当用户明确指定自定义 workflow 时才改用该 workflow。"
+      TAIL="疑似 ${TRACK} Track 新任务。项目内已有 change 仅是显式恢复时的候选，严禁把它们绑定到本轮或复用其 phase/tasks。默认选择 default workflow：必须立即调用 Skill 工具的 tenon，让入口 skill 创建并激活独立 Change、初始化 OpenSpec，并按 open 相位开始；不要先询问是否走工作流，也不要直接执行某个阶段 skill。仅当用户明确指定自定义 workflow 时才改用该 workflow。"
     fi
   fi
 fi
 
 if [ "$SELECTION_REQUIRED" = "1" ]; then
-  TAIL="$TAIL 尚未选定自定义 workflow：不得把推荐 pair、空值或 default 当作已绑定身份，也不得注入 default 的 breadcrumb 或 skill matrix；必须先由 pipeline 完成明确选择，再按所选图解析真实 DAG、OpenSpec 约束和依赖顺序。"
+  TAIL="$TAIL 尚未选定自定义 workflow：不得把推荐 pair、空值或 default 当作已绑定身份，也不得注入 default 的 breadcrumb 或 skill matrix；必须先由 tenon 完成明确选择，再按所选图解析真实 DAG、OpenSpec 约束和依赖顺序。"
 elif [ "$NON_DEFAULT_WORKFLOW_DISPATCH" = "1" ]; then
   if { [ "$DISPATCH_INTENT" = "new" ] && [ "$BEST_WORKFLOW" = "simple" ]; } \
     || { [ "$DISPATCH_INTENT" = "resume" ] && [ "$CHANGE_WORKFLOW" = "simple" ]; }; then
     TAIL="$TAIL simple workflow 是插件内建只读图；项目同名文件不可覆盖，router 不注入 default breadcrumb 或 skill matrix。"
   else
-    TAIL="$TAIL 当前 Change 绑定自定义 workflow '${CHANGE_WORKFLOW}'：此路由器不会用 default 的 breadcrumb 或 skill 矩阵伪造该阶段要求；必须先调用 pipeline，由它以 canonical state 与项目 workflow 图解析本阶段的真实 DAG、OpenSpec 约束和依赖顺序后再分派。"
+    TAIL="$TAIL 当前 Change 绑定自定义 workflow '${CHANGE_WORKFLOW}'：此路由器不会用 default 的 breadcrumb 或 skill 矩阵伪造该阶段要求；必须先调用 tenon，由它以 canonical state 与项目 workflow 图解析本阶段的真实 DAG、OpenSpec 约束和依赖顺序后再分派。"
   fi
 fi
 if [ "$CONTINUOUS_EXECUTION" = 'true' ]; then
-  TAIL="$TAIL 用户已在本轮明确授权后续连续执行。创建或精确恢复 Change 后，入口必须用 pipeline session activate <change> --continuous 绑定授权；每个 phase 仍须完成真实 OpenSpec/skill/guard 证据，review 出口只能用 --delegated 写审计化确认，绝不跳过验证、发布或外部副作用边界。"
+  TAIL="$TAIL 用户已在本轮明确授权后续连续执行。创建或精确恢复 Change 后，入口必须用 tenon session activate <change> --continuous 绑定授权；每个 phase 仍须完成真实 OpenSpec/skill/guard 证据，review 出口只能用 --delegated 写审计化确认，绝不跳过验证、发布或外部副作用边界。"
 fi
 
 printf '\n<workflow-state>\nrouter: %s\n' "$HDR"
@@ -764,7 +764,7 @@ elif [ "$SELECTION_REQUIRED" = "1" ]; then
 elif [ "$DISPATCH_INTENT" = "new" ] && _workflow_default_ok "$BEST_WORKFLOW"; then
   DISPATCH_WORKFLOW="$BEST_WORKFLOW"
 fi
-printf '<pipeline-dispatch>\naction: invoke-skill\nskill: pipeline\nworkflow: %s\ntrack: %s\nintent: %s\ncontinuous_execution: %s\n' "$DISPATCH_WORKFLOW" "$TRACK" "$DISPATCH_INTENT" "$CONTINUOUS_EXECUTION"
+printf '<tenon-dispatch>\naction: invoke-skill\nskill: tenon\nworkflow: %s\ntrack: %s\nintent: %s\ncontinuous_execution: %s\n' "$DISPATCH_WORKFLOW" "$TRACK" "$DISPATCH_INTENT" "$CONTINUOUS_EXECUTION"
 [ -n "$HOST_SESSION_ID" ] && printf 'host_session_id: %s\n' "$HOST_SESSION_ID"
 if [ "$SELECTION_REQUIRED" = "1" ]; then
   i=0
@@ -779,13 +779,13 @@ fi
 if [ "$DISPATCH_INTENT" = "resume" ] && [ -n "$CHANGE_NAME" ]; then
   printf 'change: %s\nphase: %s\ntodo_source: openspec/changes/%s/tasks.md\n' "$CHANGE_NAME" "$EFF_PHASE" "$CHANGE_NAME"
 elif [ "$DISPATCH_INTENT" = "select" ]; then
-  printf 'phase: select\ntodo_source: pipeline-active-change-selection\n'
+  printf 'phase: select\ntodo_source: tenon-active-change-selection\n'
 else
   if [ "$DISPATCH_WORKFLOW" = "simple" ]; then
     printf 'phase: change\ntodo_source: builtin-workflow:simple\n'
   else
-    printf 'phase: open\ntodo_source: pipeline-phase-template\n'
+    printf 'phase: open\ntodo_source: tenon-phase-template\n'
   fi
 fi
-printf 'required: true\n</pipeline-dispatch>\n'
+printf 'required: true\n</tenon-dispatch>\n'
 exit 0

@@ -3,7 +3,7 @@
  * bin 入口：装配 kernel 实现 + fs 副作用，交给 buildProgram。
  *
  * ⚠️ 集成接缝（T7）：createStateStore / createFlowEngine / loadManifest 由 T2/T3 落地后
- * 从 '@pipeline-lite/kernel' re-export——在那之前本文件编译失败是预期的（plan T4 明示）。
+ * 从 '@tenon/kernel' re-export——在那之前本文件编译失败是预期的（plan T4 明示）。
  * 若 kernel 侧签名不同（如 loadManifest 需要 manifest.yaml 路径参数），仅调整此处装配，
  * 命令模块与测试不受影响。
  */
@@ -18,20 +18,20 @@ import { CommanderError } from 'commander'
 import {
   BUILTIN_TRACK_DEFINITIONS, createEffectiveSkillResolver, createFlowEngine, createHistoryWriter, createStateStore,
   createTransitionRecordStore, createWorkflowRunRepository, loadManifest, loadTrackRegistry, loadWorkflow,
-  fingerprintWorkspace, mutateTrackRegistry, projectRegistryPath, readSecrets, registerProjectRoot, secretsPath,
+  fingerprintWorkspace, mutateTrackRegistry, readSecrets, registerProjectRoot,
   withTrackRegistryLock,
-} from '@pipeline-lite/kernel'
-import { readAutomationJson } from '@pipeline-lite/automation'
-import { tapStatus } from '@pipeline-lite/tap'
-import type { ExtendedManifestData, TrackRegistry, TrackValidationContext } from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
+import { readAutomationJson } from '@tenon/automation'
+import { tapStatus } from '@tenon/tap'
+import type { ExtendedManifestData, TrackRegistry, TrackValidationContext } from '@tenon/kernel'
 import type { CliDeps, DoctorProbes, GateMarkerInfo } from './deps.js'
 import { probeAfkReadiness } from './afkReadiness.js'
 import { splitPassthroughArgv } from './argv.js'
 import { buildProgram, CliExit } from './program.js'
 import { createProductionTriageRuntime } from './commands/triage.js'
 import { listChangeDirs, listChanges, makeGuardCtx } from './guardContext.js'
-import { resolveMachineStateHome } from './machineHome.js'
 import { REAL_RUNTIME_INSTALLER } from './runtime/installer.js'
+import { createRuntimeScopeResolver, type RuntimeScopeSnapshot } from './runtime/scope.js'
 
 /** ISO8601 UTC 秒级（对齐老内核 date -u +%Y-%m-%dT%H:%M:%SZ 口径） */
 function isoNow(): string {
@@ -230,7 +230,7 @@ function scanSkillDigests(skillsRoot: string): Map<string, string> {
  * doctor 探针（BACKLOG #26b）：环境/fs 事实采集的 node 落地，裁决归 cmdDoctor。
  * 各探针独立 fail-safe（fs 异常按「不存在/不可执行」处理）——doctor 要能在坏环境里跑完。
  */
-function makeDoctorProbes(machineStateHome: string): DoctorProbes {
+function makeDoctorProbes(runtimeScope: () => RuntimeScopeSnapshot): DoctorProbes {
   const root = pluginRoot()
   return {
     nodeVersion: () => process.version,
@@ -266,7 +266,11 @@ function makeDoctorProbes(machineStateHome: string): DoctorProbes {
       }
     },
     nativeRuntimeHost: async () => {
-      const host = (await REAL_RUNTIME_INSTALLER.inspect(homedir())).active?.source.host
+      const scope = runtimeScope()
+      const host = (await REAL_RUNTIME_INSTALLER.inspect({
+        homeDir: scope.homeDir,
+        env: scope.env,
+      })).active?.source.host
       return host === 'codex' || host === 'claude' ? host : null
     },
     runVerifySkills: () =>
@@ -308,18 +312,24 @@ function makeDoctorProbes(machineStateHome: string): DoctorProbes {
     // 镜像同 afk run 口径（.pipeline/automation.json 的 image ?? sandcastle:local，读 process.cwd()）；
     // 凭证 secretsEnv 走机器级 secrets（readSecrets 自身 fail-open），hostEnv 走 process.env（宿主>文件）；
     // 值永不回显（探针只回 set+source）。docker 缺是常态：doctor checkAfk 据 available 出 yellow 非 red。
-    afkReadiness: () =>
-      probeAfkReadiness({
+    afkReadiness: () => {
+      const scope = runtimeScope()
+      return probeAfkReadiness({
         image: readAutomationJson(process.cwd()).image ?? 'sandcastle:local',
-        secretsEnv: readSecrets(secretsPath(machineStateHome)).keys,
-        hostEnv: process.env,
-        defaultCodexHome: join(homedir(), '.codex'),
-      }),
+        secretsEnv: readSecrets(scope.paths.secretsPath).keys,
+        hostEnv: scope.env,
+        defaultCodexHome: join(scope.homeDir, '.codex'),
+      })
+    },
   }
 }
 
 async function main(): Promise<void> {
-  const machineStateHome = resolveMachineStateHome(process.env, homedir())
+  const runtimeScope = createRuntimeScopeResolver({
+    env: () => process.env,
+    homeDir: homedir,
+  })
+  const runtimePaths = () => runtimeScope().paths
   const manifest = loadManifest(manifestPath())
   const { toParse, passthrough } = splitPassthroughArgv(process.argv)
   const store = createStateStore()
@@ -361,17 +371,17 @@ async function main(): Promise<void> {
     listChanges,
     listChangeDirs,
     guardCtx: makeGuardCtx(process.cwd()),
-    doctor: makeDoctorProbes(machineStateHome),
+    doctor: makeDoctorProbes(runtimeScope),
     readGateMarkers: () => readGateMarkers(process.cwd()),
     writeBreadcrumb: (dir, content) => writeFile(join(dir, '.breadcrumb'), content, 'utf8'),
     history: createHistoryWriter(),
-    // 决策 D（v5 T2）：init 成功后 best-effort 登记项目根到 ~/.claude/pipeline-projects.json
+    // init 成功后 best-effort 登记项目根到 Tenon config root 的 projects.json
     registerProject: async (repoRoot) => {
-      await registerProjectRoot(projectRegistryPath(machineStateHome), repoRoot)
+      await registerProjectRoot(runtimePaths().registryPath, repoRoot)
     },
     // v6 T2：afk run 凭证注入——机器级 secrets 读成 env 形状（kernel readSecrets 自身 fail-open，
     // 缺失/损坏 → 空 keys）；值不落日志。
-    readSecretsEnv: async () => readSecrets(secretsPath(machineStateHome)).keys,
+    readSecretsEnv: async () => readSecrets(runtimePaths().secretsPath).keys,
     readHistoryRaw: async (dir) => {
       try {
         return await readFile(join(dir, '.pipeline-history.jsonl'), 'utf8')

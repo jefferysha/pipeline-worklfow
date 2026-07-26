@@ -7,7 +7,7 @@ hooks, automation, credentials, and diagnostics.
 
 ## Scope
 
-Pipeline Lite targets a local, single-user developer workstation. It is not a
+Tenon targets a local, single-user developer workstation. It is not a
 remote multi-tenant service and should not be exposed directly to an untrusted
 network.
 
@@ -88,8 +88,8 @@ an unpatched vulnerability or secrets in a public Issue.
 ## Verification
 
 ```bash
-pipeline doctor --json
-pipeline runtime status --json
+tenon doctor --json
+tenon runtime status --json
 curl --fail http://127.0.0.1:18765/api/health
 ```
 

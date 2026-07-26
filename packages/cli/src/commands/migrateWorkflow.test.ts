@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import type { FieldName } from '@pipeline-lite/kernel'
+import type { FieldName } from '@tenon/kernel'
 import { cmdMigrateWorkflow } from './migrateWorkflow.js'
 import { makeDeps, mockState, spy } from '../test-support.js'
 
@@ -66,7 +66,7 @@ describe('migrate-workflow —— 老格式 workflow 字段一次性迁移（Tas
 
   test('TOCTOU 防护：cas 落败（get 之后、写入之前被并发改写）→ 优雅跳过，绝不无条件覆写', async () => {
     const deps = makeDeps({ state: mockState({ phase: 'build' }) })
-    // 模拟并发：本命令 get 读到 'default' 之后、真正落盘之前，另一个合法 `pipeline set` 已把
+    // 模拟并发：本命令 get 读到 'default' 之后、真正落盘之前，另一个合法 `tenon set` 已把
     // workflow 改成了真实自定义值——store.cas 的 expect 比对在锁内失败，返回 false。
     deps.store.cas = spy(async (_d: string, _f: FieldName, _e: string, _n: string) => false)
     const code = await cmdMigrateWorkflow(deps, 'legacy-change')

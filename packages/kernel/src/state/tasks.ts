@@ -23,7 +23,7 @@
  *  5. 名匹配宽松（:233-241）：兼容 NN-NN-slug 目录名 vs slug 短名——相等 / target 尾 -dep /
  *     dep 尾 -target。
  *  6. cascade（:299-325）：BFS 传递闭包，visited 防环，逐节点标 active/archived（无 --json）。
- *  7. canonical（:341-422）：投影 Trellis 24 字段 canonical task.json（字段顺序即 schema）；
+ *  7. canonical（:341-422）：投影 Tenon contract 24 字段 canonical task.json（字段顺序即 schema）；
  *     nz 空 / "null" 哨兵 → null；subtasks←depends_on、children←反查、relatedFiles←related_files。
  *
  * kernel 零第三方依赖（仅 node:fs 内建，同 store.ts / lock.ts）。
@@ -131,7 +131,7 @@ export function cascadeDependents(nodes: readonly ChangeNode[], target: string):
   return result
 }
 
-/** Trellis canonical task.json shape（24 字段，字段顺序即 schema，老仓 cmd_canonical:393-418）。 */
+/** Tenon contract canonical task.json shape（24 字段，字段顺序即 schema，老仓 cmd_canonical:393-418）。 */
 export interface CanonicalTask {
   id: string
   name: string
@@ -177,7 +177,7 @@ function nz(value: string | string[] | undefined): string | null {
 }
 
 /**
- * 投影为 Trellis 24 字段 canonical task.json（老仓 cmd_canonical:393-418）。
+ * 投影为 Tenon contract 24 字段 canonical task.json（老仓 cmd_canonical:393-418）。
  * status/creator/assignee/createdAt 用 `nz(...) ?? ''`（老仓 `nz() or ""`）；
  * 其余可空字段直接 nz（None → JSON null）。
  */

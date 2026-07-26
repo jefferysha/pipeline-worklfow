@@ -3,12 +3,12 @@
  *
  * 老仓真相源：scheduler/runChange.ts:447-545（parseSandboxReport / findLastOutputTag /
  * unwrapFences）+ sdk/output/extractStructuredOutput.ts（取最后 tag + fence 剥离）+
- * runner/docker/pipeline-afk-run.sh（沙箱内 /pipeline-build → /pipeline-verify → ship）。
+ * runner/docker/tenon-afk-run.sh（沙箱内 /tenon-build → /tenon-verify → ship）。
  *
  * exec 是注入面：production 绑真 docker exec（IT），单测绑 fake。缺 docker → honest skip（见
  * docker.integration.test.ts）；任何路径不为绿伪造 pass——非零退出真抛错。
  */
-import { assertLoopRunner, type LoopRunner } from '@pipeline-lite/kernel'
+import { assertLoopRunner, type LoopRunner } from '@tenon/kernel'
 import { type PhaseEvent, PHASE_EVENTS } from '../types.js'
 
 export const EXECUTION_MODES = ['agent/codex', 'agent/claude-code', 'deterministic-test-fallback'] as const
@@ -209,8 +209,8 @@ export const parseSandboxReport = (stdout: string): SandboxReport => {
 }
 
 /**
- * 仓库 tools/sandcastle/pipeline-afk-run.sh 现内容的 sha256 —— 镜像 ↔ 仓库脚本的版本对账锚点
- * （真机验收 P1，2026-07-11：现役 sandcastle:local 镜像内置的旧版脚本无 codex/PIPELINE_RUNNER
+ * 仓库 tools/sandcastle/tenon-afk-run.sh 现内容的 sha256 —— 镜像 ↔ 仓库脚本的版本对账锚点
+ * （真机验收 P1，2026-07-11：现役 sandcastle:local 镜像内置的旧版脚本无 codex/TENON_RUNNER
  * 分支，runner: codex 被静默降级走确定性路径并「成功」结算 paused，exit 96 诚实报错路径不可达，
  * 而镜像与仓库脚本此前没有任何对账机制，漂移完全不可见）。
  *
@@ -218,20 +218,20 @@ export const parseSandboxReport = (stdout: string): SandboxReport => {
  *   ① runner.test.ts 的 sha 同步测试把本常量与仓库脚本现内容钉死——改脚本不 bump 常量 → 单测红；
  *   ② buildAfkRunCommand 把本常量嵌进 run 前置守卫——镜像内脚本 sha 不符 → exit 95 + 重建指引，
  *      经 ports.ts runWork 非零退出 throw 流进 automation_last_error，绝不带陈旧脚本静默跑。
- * bump 方式：shasum -a 256 tools/sandcastle/pipeline-afk-run.sh。bump 后旧镜像自动 fail-loud，
+ * bump 方式：shasum -a 256 tools/sandcastle/tenon-afk-run.sh。bump 后旧镜像自动 fail-loud，
  * 重建入口 tools/sandcastle/build.sh（构建完自验镜像内 sha，见该脚本）。
  */
-export const AFK_RUN_SCRIPT_SHA256 = '4d884ad7a24b32c6600003a6d321f4385411257dbd792b0e6bc0301a084e9577'
+export const AFK_RUN_SCRIPT_SHA256 = '993067db8ccb4c3b48c54ff2410907fd4dc72a5df3d0dc8946f6913594a0a619'
 
 /** 对账失败的沙箱退出码（与脚本内 96=codex CLI 缺失、97=tap proxy 未起同段的硬错误码位）。 */
 export const AFK_RUN_DRIFT_EXIT_CODE = 95
-export const IMAGE_AFK_RUN_PATH = '/usr/local/bin/pipeline-afk-run'
-export const IMAGE_CLI_DIST_PATH = '/opt/pipeline/packages/cli/dist/pipeline.mjs'
+export const IMAGE_AFK_RUN_PATH = '/usr/local/bin/tenon-afk-run'
+export const IMAGE_CLI_DIST_PATH = '/opt/pipeline/packages/cli/dist/tenon.mjs'
 export const IMAGE_ATTESTATION_PATH = '/opt/pipeline/image-attestation.env'
 
 /**
  * H10 r6：host 装配可传入当前实际运行的 CLI bundle 摘要。该值在运行时算出/传入，不写成
- * pipeline.mjs 内常量，避免“文件包含自己的摘要”这一不可解自引用。
+ * tenon.mjs 内常量，避免“文件包含自己的摘要”这一不可解自引用。
  */
 export interface ImageRunExpectation {
   readonly cliDistSha256?: string
@@ -262,21 +262,21 @@ const checksumGuard = (path: string, digest: string, attestationKey: string, lab
 
 /**
  * run 前置对账守卫（沙箱内执行，busybox sha256sum/grep 皆为 alpine 自带 applet）：镜像内
- * /usr/local/bin/pipeline-afk-run 的 sha256 必须等于 AFK_RUN_SCRIPT_SHA256，否则打清晰 stderr
+ * /usr/local/bin/tenon-afk-run 的 sha256 必须等于 AFK_RUN_SCRIPT_SHA256，否则打清晰 stderr
  * 并 exit 95——绝不让陈旧脚本静默跑（sha256sum 输出格式 "<hash>  <path>"，锚 "^<hash> " 两端皆容）。
  */
 const AFK_RUN_DRIFT_GUARD = checksumGuard(
   IMAGE_AFK_RUN_PATH,
   AFK_RUN_SCRIPT_SHA256,
   'pipeline_afk_run_sha256',
-  'pipeline-afk-run',
+  'tenon-afk-run',
 )
 
 /**
- * 沙箱内 afk-run 命令（老仓 runner/docker/pipeline-afk-run.sh，全链 #29c）。整条经
+ * 沙箱内 afk-run 命令（老仓 runner/docker/tenon-afk-run.sh，全链 #29c）。整条经
  * container.ts::buildExecArgs 的 `sh -c` 单参执行，故守卫与真命令可用 `;` 串接，守卫恒在前。
  *
- * v5 T20 runner 分派：runner === 'codex' → 注入 PIPELINE_RUNNER=codex，沙箱脚本据此改起
+ * v5 T20 runner 分派：runner === 'codex' → 注入 TENON_RUNNER=codex，沙箱脚本据此改起
  * codex exec 无头会话（codex CLI 惯例；脚本内 CLI 缺失时打清晰错误并非零退出——错误经
  * ports.ts runWork 的 throw 流进 scheduler 写 automation_last_error，绝不静默）。缺省走 codex；
  * claude-code 只保留为显式兼容选择；显式未知值先经 kernel 闭集 guard fail-loud。
@@ -289,10 +289,10 @@ export const buildAfkRunCommand = (
   const selected = assertLoopRunner(runner ?? 'codex')
   const cliGuard = expectation.cliDistSha256 === undefined
     ? ''
-    : `; ${checksumGuard(IMAGE_CLI_DIST_PATH, expectation.cliDistSha256, 'pipeline_cli_dist_sha256', 'pipeline CLI dist')}`
+    : `; ${checksumGuard(IMAGE_CLI_DIST_PATH, expectation.cliDistSha256, 'pipeline_cli_dist_sha256', 'Tenon CLI dist')}`
   const command = selected === 'codex'
-    ? `PIPELINE_AFK=1 PIPELINE_RUNNER=codex pipeline-afk-run ${name}`
-    : `PIPELINE_AFK=1 pipeline-afk-run ${name}`
+    ? `TENON_AFK=1 TENON_RUNNER=codex tenon-afk-run ${name}`
+    : `TENON_AFK=1 tenon-afk-run ${name}`
   return `${AFK_RUN_DRIFT_GUARD}${cliGuard}; ${command}`
 }
 
@@ -303,7 +303,7 @@ export const buildAfkRunCommand = (
 export const runPipeline = async (exec: SandboxExec, name: string, _signal: AbortSignal): Promise<SandboxReport> => {
   const { stdout, stderr, exitCode } = await exec(buildAfkRunCommand(name))
   if (exitCode !== 0) {
-    throw new Error(`pipeline afk-run failed (exit ${exitCode}): ${stderr.slice(0, 200)}`)
+    throw new Error(`tenon afk-run failed (exit ${exitCode}): ${stderr.slice(0, 200)}`)
   }
   return parseSandboxReport(stdout)
 }

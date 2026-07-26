@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "classes": {
+    "immutable-protocol": {
+      "description": "Existing .pipeline paths, persisted pipeline_* keys, phase ids and historical ledger bytes remain readable protocol facts.",
+      "examples": [
+        ".pipeline.yaml",
+        ".pipeline-run/current.json",
+        "pipeline_state_revision"
+      ]
+    },
+    "historical-evidence": {
+      "description": "Archived OpenSpec changes, approved ADR/research/plan evidence and Git history are not rewritten.",
+      "pathPrefixes": [
+        "openspec/changes/archive/",
+        "docs/adr/",
+        "docs/research/",
+        "docs/superpowers/",
+        "docs/acceptance/",
+        "docs/proposals/",
+        "docs/ux/",
+        "design-demos/"
+      ]
+    },
+    "migration-only": {
+      "description": "The frozen old distribution channel may name the retired identity solely to migrate existing installations.",
+      "pathPrefixes": [
+        "migration/legacy-channel/",
+        "packages/cli/src/migration/"
+      ],
+      "activeUntil": "2026-10-31",
+      "supportEnds": "2027-10-31"
+    },
+    "compatibility-fixture": {
+      "description": "N-1 and explicit legacy fixtures may retain exact historical bytes for compatibility verification.",
+      "pathPrefixes": [
+        "tools/fixtures/",
+        "packages/kernel/src/state/fixtures/"
+      ]
+    },
+    "forbidden-current-product": {
+      "description": "Current commands, manifests, launchers, package names, docs, Dashboard copy and generated release assets must expose only Tenon."
+    }
+  }
+}

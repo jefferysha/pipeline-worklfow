@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://pipeline-lite.local/schemas/document-presentation-registry.v1.json",
-  "title": "Pipeline Lite Document Presentation Registry v1",
+  "$id": "https://tenon.local/schemas/document-presentation-registry.v1.json",
+  "title": "Tenon Document Presentation Registry v1",
   "type": "object",
   "additionalProperties": false,
   "required": ["version", "default_locale", "locales", "workflow_steps", "templates"],

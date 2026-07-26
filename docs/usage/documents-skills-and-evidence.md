@@ -43,7 +43,7 @@ of the same path is not equivalent to the recorded content.
 ## Record an output
 
 ```bash
-pipeline document record <change-name> <kind> <path> \
+tenon document record <change-name> <kind> <path> \
   --producer <skill-id>
 ```
 
@@ -57,8 +57,8 @@ that phase. Re-record the new digest and then read it for the phase.
 ## Record reads
 
 ```bash
-pipeline document read <change-name> <kind>
-pipeline document read <change-name> all
+tenon document read <change-name> <kind>
+tenon document read <change-name> all
 ```
 
 `all` records the current phase's declared required reads; it is not permission
@@ -67,8 +67,8 @@ to invent documents.
 Inspect:
 
 ```bash
-pipeline document status <change-name>
-pipeline document status <change-name> --json
+tenon document status <change-name>
+tenon document status <change-name> --json
 ```
 
 Incomplete required evidence exits with code `2`.
@@ -89,8 +89,8 @@ Documents and Skill receipts do not replace human review. Review is a separate,
 exact event receipt:
 
 ```bash
-pipeline review request <change-name> --event <event>
-pipeline review acknowledge <change-name>
+tenon review request <change-name> --event <event>
+tenon review acknowledge <change-name>
 ```
 
 Deleting a pending marker does not create approval.
@@ -108,15 +108,15 @@ applied-spec documents.
 
 ## Expected result
 
-`pipeline document status` shows current records and the reads required for the
+`tenon document status` shows current records and the reads required for the
 current phase; transition checks reject missing, stale, or unauthorized
 evidence.
 
 ## Verification
 
 ```bash
-pipeline document status <change-name> --json
-pipeline check <change-name>
+tenon document status <change-name> --json
+tenon check <change-name>
 ```
 
 ## Common failures

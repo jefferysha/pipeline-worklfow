@@ -3,16 +3,26 @@
  *
  * This deliberately does not use `npx`, a workspace package install, or source TypeScript. A
  * marketplace installation contains the pre-built server bundle and SPA, so a freshly installed
- * user can start the complete product through the same `pipeline` launcher.
+ * user can start the complete product through the same `tenon` launcher.
  */
 import { spawn } from 'node:child_process'
 import { accessSync, constants as fsConstants, realpathSync } from 'node:fs'
-import { get as httpGet } from 'node:http'
 import { homedir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
-import { machineStateScopeId } from '@pipeline-lite/kernel'
+import { machineStateScopeId } from '@tenon/kernel'
 import type { CliDeps } from '../deps.js'
-import { resolveMachineStateHome } from '../machineHome.js'
+import { resolveRuntimePaths } from '../runtime/paths.js'
+import {
+  DashboardTerminationUnconfirmedError,
+  launchDetachedDashboardProcess,
+  type DashboardProcessHandle,
+} from './dashboard-process.js'
+import { waitForHealthyServer } from './dashboard-health.js'
+
+export {
+  DashboardTerminationUnconfirmedError,
+  type DashboardProcessHandle,
+} from './dashboard-process.js'
 
 /** One production endpoint for the bundled SPA and its API. */
 export const DEFAULT_DASHBOARD_PORT = 18765
@@ -30,7 +40,7 @@ export interface DashboardRuntime {
   resolveRoot(): string
   fileExists(path: string): boolean
   launch(serverBundle: string, env: NodeJS.ProcessEnv): Promise<number>
-  launchDetached(serverBundle: string, env: NodeJS.ProcessEnv): Promise<boolean>
+  launchDetached(serverBundle: string, env: NodeJS.ProcessEnv): Promise<DashboardProcessHandle | null>
   resolveStateScopeId(): string
   waitForHealthyServer(
     port: number,
@@ -55,96 +65,6 @@ function launch(serverBundle: string, env: NodeJS.ProcessEnv): Promise<number> {
     child.once('error', () => resolveCode(1))
     child.once('exit', (code) => resolveCode(code ?? 1))
   })
-}
-
-/**
- * The server itself owns singleton reuse/preemption. This process only detaches a release-bound
- * child and then proves the expected loopback health endpoint came up before declaring success.
- */
-function launchDetached(serverBundle: string, env: NodeJS.ProcessEnv): Promise<boolean> {
-  return new Promise((resolveStarted) => {
-    let settled = false
-    const finish = (started: boolean): void => {
-      if (settled) return
-      settled = true
-      resolveStarted(started)
-    }
-    const child = spawn(process.execPath, [serverBundle], { detached: true, stdio: 'ignore', env })
-    child.once('error', () => finish(false))
-    child.once('spawn', () => {
-      child.unref()
-      finish(true)
-    })
-  })
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolveWait) => setTimeout(resolveWait, ms))
-}
-
-function isHealthyDashboard(
-  value: unknown,
-  expectedReleaseId: string | undefined,
-  expectedStateScopeId: string,
-): boolean {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false
-  const body = value as Record<string, unknown>
-  return body.ok === true
-    && body.scope === 'global'
-    && typeof body.version === 'string'
-    && body.version !== ''
-    && (expectedReleaseId === undefined || body.releaseId === expectedReleaseId)
-    && body.stateScopeId === expectedStateScopeId
-}
-
-function probeHealthyDashboard(
-  port: number,
-  expectedReleaseId: string | undefined,
-  expectedStateScopeId: string,
-): Promise<boolean> {
-  return new Promise((resolveProbe) => {
-    let settled = false
-    const finish = (healthy: boolean): void => {
-      if (settled) return
-      settled = true
-      resolveProbe(healthy)
-    }
-    const request = httpGet({ host: '127.0.0.1', port, path: '/api/health', timeout: 350 }, (response) => {
-      let text = ''
-      response.setEncoding('utf8')
-      response.on('data', (chunk) => { text += chunk })
-      response.on('end', () => {
-        if (response.statusCode !== 200) {
-          finish(false)
-          return
-        }
-        try {
-          finish(isHealthyDashboard(JSON.parse(text), expectedReleaseId, expectedStateScopeId))
-        } catch {
-          finish(false)
-        }
-      })
-    })
-    request.once('timeout', () => {
-      request.destroy()
-      finish(false)
-    })
-    request.once('error', () => finish(false))
-  })
-}
-
-async function waitForHealthyServer(
-  port: number,
-  expectedReleaseId: string | undefined,
-  expectedStateScopeId: string,
-): Promise<boolean> {
-  // A release can first have to gracefully preempt a previous dashboard.  Keep the readiness
-  // budget longer than that server's four-second handoff, without making setup block indefinitely.
-  for (let attempt = 0; attempt < 65; attempt += 1) {
-    if (await probeHealthyDashboard(port, expectedReleaseId, expectedStateScopeId)) return true
-    await sleep(100)
-  }
-  return false
 }
 
 /** Opens a URL through the platform's registered browser without shell interpolation. */
@@ -186,9 +106,9 @@ export const REAL_DASHBOARD_RUNTIME: DashboardRuntime = {
   resolveRoot: resolveDashboardRoot,
   fileExists,
   launch,
-  launchDetached,
+  launchDetached: launchDetachedDashboardProcess,
   resolveStateScopeId: () =>
-    machineStateScopeId(resolveMachineStateHome(process.env, homedir())),
+    machineStateScopeId(resolveRuntimePaths({ env: process.env, homeDir: homedir() }).stateRoot),
   waitForHealthyServer,
   openBrowser,
 }
@@ -217,7 +137,7 @@ function isDashboardAssets(value: DashboardAssets | string[]): value is Dashboar
 }
 
 function dashboardEnvironment(port: number): NodeJS.ProcessEnv {
-  return { ...process.env, PIPELINE_DASHBOARD_PORT: String(port) }
+  return { ...process.env, TENON_DASHBOARD_PORT: String(port) }
 }
 
 export interface ReleasedDashboardOptions {
@@ -228,7 +148,37 @@ export interface ReleasedDashboardOptions {
 }
 
 export interface ReleasedDashboardStarter {
-  start(deps: CliDeps, payloadRoot: string, opts: ReleasedDashboardOptions): Promise<number>
+  start(
+    deps: CliDeps,
+    payloadRoot: string,
+    opts: ReleasedDashboardOptions,
+  ): Promise<ReleasedDashboardStartOutcome>
+}
+
+export type ReleasedDashboardStartOutcome =
+  | { readonly state: 'ready' }
+  | { readonly state: 'failed'; readonly detail: string }
+  | { readonly state: 'indeterminate'; readonly detail: string }
+
+async function stopFailedCandidate(
+  deps: CliDeps,
+  child: DashboardProcessHandle,
+  detail: string,
+): Promise<ReleasedDashboardStartOutcome> {
+  try {
+    await child.terminate()
+  } catch (error) {
+    const terminationDetail = error instanceof Error ? error.message : String(error)
+    deps.io.err(`[dashboard] ${detail}，且终止状态无法确认：${terminationDetail}`)
+    return {
+      state: 'indeterminate',
+      detail: error instanceof DashboardTerminationUnconfirmedError
+        ? error.message
+        : new DashboardTerminationUnconfirmedError(terminationDetail).message,
+    }
+  }
+  deps.io.err(`[dashboard] ${detail}；候选进程已确认退出，未打开浏览器。`)
+  return { state: 'failed', detail: `${detail}; candidate exit confirmed` }
 }
 
 async function startManagedDashboard(
@@ -237,33 +187,60 @@ async function startManagedDashboard(
   opts: ReleasedDashboardOptions,
   runtime: DashboardRuntime,
   expectedReleaseId?: string,
-): Promise<number> {
+): Promise<ReleasedDashboardStartOutcome> {
   const port = opts.port ?? DEFAULT_DASHBOARD_PORT
   const assets = packagedAssets(runtime, payloadRoot)
   if (!isDashboardAssets(assets)) {
     deps.io.err(
-      `ERROR: 当前 pipeline 插件缺少已发布 dashboard 资产：${assets.join('、')}。` +
-      '请运行 pipeline update --codex（或 --claude）恢复完整插件包。',
+      `ERROR: 当前 Tenon 插件缺少已发布 dashboard 资产：${assets.join('、')}。` +
+      '请运行 tenon update --codex（或 --claude）恢复完整插件包。',
     )
-    return 1
+    return { state: 'failed', detail: 'released Dashboard assets are incomplete' }
   }
-  if (!(await runtime.launchDetached(assets.serverBundle, dashboardEnvironment(port)))) {
-    deps.io.err('[dashboard] 受管 server 进程无法启动；runtime 已保留，可运行 pipeline dashboard 诊断。')
-    return 1
+  let child: DashboardProcessHandle | null
+  try {
+    child = await runtime.launchDetached(assets.serverBundle, dashboardEnvironment(port))
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error)
+    deps.io.err(`[dashboard] 候选 server 启动结果无法确认：${detail}`)
+    return { state: 'indeterminate', detail: `candidate Dashboard spawn state is unknown: ${detail}` }
   }
-  const expectedStateScopeId = runtime.resolveStateScopeId()
-  if (!(await runtime.waitForHealthyServer(port, expectedReleaseId, expectedStateScopeId))) {
-    deps.io.err(`[dashboard] 受管 server 在 http://127.0.0.1:${port}/ 未通过健康检查；未打开浏览器。`)
-    return 1
+  if (child === null) {
+    deps.io.err('[dashboard] 受管 server 进程无法启动；runtime 已保留，可运行 tenon dashboard 诊断。')
+    return { state: 'failed', detail: 'candidate Dashboard process could not be spawned' }
+  }
+  let healthy: boolean
+  try {
+    const expectedStateScopeId = runtime.resolveStateScopeId()
+    healthy = await runtime.waitForHealthyServer(port, expectedReleaseId, expectedStateScopeId)
+  } catch (error) {
+    return stopFailedCandidate(
+      deps,
+      child,
+      `候选 server readiness 抛出异常：${error instanceof Error ? error.message : String(error)}`,
+    )
+  }
+  if (!healthy) {
+    return stopFailedCandidate(
+      deps,
+      child,
+      `受管 server 在 http://127.0.0.1:${port}/ 未通过健康检查`,
+    )
   }
   const url = `http://127.0.0.1:${port}/`
   deps.io.out(`[dashboard] 受管服务健康检查通过：${url}`)
-  if (opts.openBrowser === true && !(await runtime.openBrowser(url))) {
+  let browserOpened = true
+  try {
+    if (opts.openBrowser === true) browserOpened = await runtime.openBrowser(url)
+  } catch {
+    browserOpened = false
+  }
+  if (!browserOpened) {
     // Browser policy/headless hosts can reject an OS open request even though the product is up.
     // The validated URL remains actionable, so do not roll back a healthy immutable runtime.
     deps.io.err(`[dashboard] 无法自动打开浏览器；请在浏览器访问 ${url}`)
   }
-  return 0
+  return { state: 'ready' }
 }
 
 /**
@@ -275,17 +252,29 @@ export async function startReleasedDashboard(
   payloadRoot: string,
   opts: ReleasedDashboardOptions,
   runtime: DashboardRuntime = REAL_DASHBOARD_RUNTIME,
-): Promise<number> {
+): Promise<ReleasedDashboardStartOutcome> {
   const expectedReleaseId = basename(payloadRoot) === 'payload' ? basename(dirname(payloadRoot)) : ''
   if (!/^sha256-[a-f0-9]{64}$/.test(expectedReleaseId)) {
     deps.io.err('[dashboard] 受管 payload 缺少合法 content-addressed release identity；拒绝启动。')
-    return 1
+    return { state: 'failed', detail: 'managed payload has no content-addressed release identity' }
   }
   return startManagedDashboard(deps, payloadRoot, opts, runtime, expectedReleaseId)
 }
 
 export const REAL_RELEASED_DASHBOARD_STARTER: ReleasedDashboardStarter = {
   start: (deps, payloadRoot, opts) => startReleasedDashboard(deps, payloadRoot, opts),
+}
+
+/** Restore the previous immutable Dashboard after managed activation compensation. */
+export async function restorePreviousReleasedDashboard(
+  deps: CliDeps,
+  activation: import('../runtime/types.js').RuntimeActivation,
+  starter: ReleasedDashboardStarter,
+): Promise<ReleasedDashboardStartOutcome> {
+  const previousRelease = activation.selection.previousRelease
+  if (previousRelease === null) return { state: 'ready' }
+  const payloadRoot = join(dirname(activation.releaseRoot), previousRelease, 'payload')
+  return starter.start(deps, payloadRoot, { openBrowser: false })
 }
 
 /** Start the released single-entry dashboard, or print its exact packaged plan in dry-run mode. */
@@ -304,13 +293,13 @@ export async function cmdDashboard(
   const assets = packagedAssets(runtime, root)
   if (!isDashboardAssets(assets)) {
     deps.io.err(
-      `ERROR: 当前 pipeline 插件缺少已发布 dashboard 资产：${assets.join('、')}。` +
-      '请运行 pipeline update --codex（或 --claude）恢复完整插件包。',
+      `ERROR: 当前 Tenon 插件缺少已发布 dashboard 资产：${assets.join('、')}。` +
+      '请运行 tenon update --codex（或 --claude）恢复完整插件包。',
     )
     return 1
   }
 
-  const inheritedPort = parsePort(process.env.PIPELINE_DASHBOARD_PORT)
+  const inheritedPort = parsePort(process.env.TENON_DASHBOARD_PORT)
   const port = explicitPort ?? inheritedPort ?? DEFAULT_DASHBOARD_PORT
   deps.io.out(`[dashboard] 使用插件内置 SPA + server bundle 启动单一入口：http://127.0.0.1:${port}/`)
   deps.io.out(`[dashboard] server: ${assets.serverBundle}`)
@@ -323,7 +312,12 @@ export async function cmdDashboard(
   // Browser opening is meaningful only after readiness; make `--open` imply the safe managed
   // background mode rather than racing a foreground server startup.
   if (opts.background === true || opts.open === true) {
-    return startManagedDashboard(deps, root, { port, openBrowser: opts.open === true }, runtime)
+    return (await startManagedDashboard(
+      deps,
+      root,
+      { port, openBrowser: opts.open === true },
+      runtime,
+    )).state === 'ready' ? 0 : 1
   }
 
   const code = await runtime.launch(assets.serverBundle, dashboardEnvironment(port))

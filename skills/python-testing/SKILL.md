@@ -3,7 +3,7 @@ name: python-testing
 description: First-party Python test design for unit, integration, and failure cases.
 license: MIT
 metadata:
-  author: pipeline-lite
+  author: tenon
 ---
 
 # Python Testing

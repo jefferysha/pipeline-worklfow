@@ -1,0 +1,18 @@
+{
+  "name": "@tenon-internal/npm-bootstrap",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "bin": {
+    "tenon": "bin/tenon-bootstrap.mjs"
+  },
+  "files": [
+    "bin/tenon-bootstrap.mjs",
+    "product/identity.json",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22"
+  }
+}

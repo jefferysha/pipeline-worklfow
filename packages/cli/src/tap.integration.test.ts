@@ -1,12 +1,12 @@
 /**
  * tap 命令 —— 真实 e2e（GOAL C9，#34-wire：daemon 启动器此前零 CLI 可达性）。零 mock：真
  * launchTap（真绑端口 + 真 detectTarget + 真 reverseEnvMap/forwardEnvMap）+ 真 spawn 子进程验证
- * 注入的 env 真被子进程看到 + 真上游收到请求。PIPELINE_TAP_DIR 重定向到临时目录，不碰用户真 ~/.pipeline-tap。
+ * 注入的 env 真被子进程看到 + 真上游收到请求。TENON_TAP_DIR 重定向到临时目录，不碰用户真 ~/.pipeline-tap。
  *
  * `-- <command>` 透传场景用真子进程跑已构建的 dist bundle（同 tools/test-bundle.sh 手法）而非
  * in-process harness：commander 的 `parseAsync(args, {from:'user'})`（harness 用的模式）在特定
  * 前置 token 组合下会吞掉裸 `--`，是该测试模式自身的怪癖——真实用户走 main.ts 默认
- * `parseAsync(process.argv)` 路径不受影响（已手工验证：`node dist/pipeline.mjs tap start claude
+ * `parseAsync(process.argv)` 路径不受影响（已手工验证：`node dist/tenon.mjs tap start claude
  * -- node -e ...` 正确透传）。真子进程调用忠实复现生产路径，顺带比 in-process 更贴近真实使用。
  */
 import { spawn, type ChildProcess } from 'node:child_process'
@@ -18,7 +18,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { freshHarness, rm as rmHarness, REPO_ROOT, type Harness } from './integration-harness.js'
 
-const BUNDLE = join(REPO_ROOT, 'packages', 'cli', 'dist', 'pipeline.mjs')
+const BUNDLE = join(REPO_ROOT, 'packages', 'cli', 'dist', 'tenon.mjs')
 
 /** 真子进程跑已构建 bundle（main.ts 默认 parseAsync(process.argv) 路径，忠实复现生产调用）。 */
 function runBundle(args: string[], env: Record<string, string>): Promise<{ code: number; stdout: string; stderr: string }> {
@@ -62,16 +62,16 @@ describe('tap 真 e2e —— daemon 启动器 CLI 可达性（#34-wire）', () =
   beforeEach(async () => {
     h = await freshHarness()
     tapDir = await mkdtemp(join(tmpdir(), 'tap-cli-e2e-'))
-    prevTapDir = process.env.PIPELINE_TAP_DIR
-    process.env.PIPELINE_TAP_DIR = tapDir // 不碰用户真 ~/.pipeline-tap
+    prevTapDir = process.env.TENON_TAP_DIR
+    process.env.TENON_TAP_DIR = tapDir // 不碰用户真 ~/.pipeline-tap
     upstream = await startFakeUpstream()
     prevAnthropicBaseUrl = process.env.ANTHROPIC_BASE_URL
     process.env.ANTHROPIC_BASE_URL = `http://127.0.0.1:${upstream.port}` // hermetic：detectTarget 不打真网
   })
   afterEach(async () => {
     await upstream.close()
-    if (prevTapDir === undefined) delete process.env.PIPELINE_TAP_DIR
-    else process.env.PIPELINE_TAP_DIR = prevTapDir
+    if (prevTapDir === undefined) delete process.env.TENON_TAP_DIR
+    else process.env.TENON_TAP_DIR = prevTapDir
     if (prevAnthropicBaseUrl === undefined) delete process.env.ANTHROPIC_BASE_URL
     else process.env.ANTHROPIC_BASE_URL = prevAnthropicBaseUrl
     await rm(tapDir, { recursive: true, force: true })
@@ -83,7 +83,7 @@ describe('tap 真 e2e —— daemon 启动器 CLI 可达性（#34-wire）', () =
     const script = `require('fs').writeFileSync(${JSON.stringify(outFile)}, JSON.stringify({url: process.env.ANTHROPIC_BASE_URL}))`
     const { code, stdout } = await runBundle(
       ['tap', 'start', 'claude', '--json', '--', process.execPath, '-e', script],
-      { PIPELINE_TAP_DIR: tapDir, ANTHROPIC_BASE_URL: `http://127.0.0.1:${upstream.port}` },
+      { TENON_TAP_DIR: tapDir, ANTHROPIC_BASE_URL: `http://127.0.0.1:${upstream.port}` },
     )
     expect(code).toBe(0)
 
@@ -114,7 +114,7 @@ describe('tap 真 e2e —— daemon 启动器 CLI 可达性（#34-wire）', () =
     `
     const { code } = await runBundle(
       ['tap', 'start', 'claude', '--', process.execPath, '-e', script],
-      { PIPELINE_TAP_DIR: tapDir, ANTHROPIC_BASE_URL: `http://127.0.0.1:${upstream.port}` },
+      { TENON_TAP_DIR: tapDir, ANTHROPIC_BASE_URL: `http://127.0.0.1:${upstream.port}` },
     )
     expect(code).toBe(0)
     const diag = JSON.parse(await readFile(diagFile, 'utf8')) as { status?: number; body?: string; error?: string }
@@ -126,7 +126,7 @@ describe('tap 真 e2e —— daemon 启动器 CLI 可达性（#34-wire）', () =
   it('daemon 模式（无 -- 命令）：真打印可 source 的 export 行，SIGINT 后真关 daemon 干净退出', async () => {
     const child = spawn(process.execPath, [
       BUNDLE, 'tap', 'start', 'claude',
-    ], { env: { ...process.env, PIPELINE_TAP_DIR: tapDir, ANTHROPIC_BASE_URL: `http://127.0.0.1:${upstream.port}` } })
+    ], { env: { ...process.env, TENON_TAP_DIR: tapDir, ANTHROPIC_BASE_URL: `http://127.0.0.1:${upstream.port}` } })
     let stdout = ''
     child.stdout?.on('data', (c: Buffer) => { stdout += c.toString('utf8') })
 

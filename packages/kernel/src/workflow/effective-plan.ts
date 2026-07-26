@@ -5,6 +5,7 @@ import type { CoverageProfile, TrackDefinition } from '../tracks/types.js'
 import { builtinWorkflow } from './builtin-workflows.js'
 import { compileDefaultWorkflow, compileWorkflow } from './compile.js'
 import { documentGovernancePolicy, type DocumentGovernancePolicy } from './document-contract.js'
+import { preTenonV1DocumentPolicy } from './migrations/pre-tenon-v1-document-policy.js'
 import { loadWorkflow } from './loadWorkflow.js'
 import type { WorkflowIR } from './ir.js'
 import { parseWorkflow } from './parse.js'
@@ -71,13 +72,24 @@ export interface EffectiveWorkflowPlan {
  * upgrade. Persisting the compiled IR lets old runs continue with their original semantics while
  * newly initialized runs adopt the new workflow definition.
  */
-export interface WorkflowPlanSnapshot {
+export interface WorkflowPlanSnapshotV1 {
   readonly version: 1
   readonly workflowId: string
   readonly executionModel: EffectiveWorkflowPlan['executionModel']
   readonly workflow: WorkflowIR
   readonly workflowFingerprint: string
 }
+
+export interface WorkflowPlanSnapshotV2 {
+  readonly version: 2
+  readonly workflowId: string
+  readonly executionModel: EffectiveWorkflowPlan['executionModel']
+  readonly workflow: WorkflowIR
+  readonly documentPolicy: DocumentGovernancePolicy | null
+  readonly workflowFingerprint: string
+}
+
+export type WorkflowPlanSnapshot = WorkflowPlanSnapshotV1 | WorkflowPlanSnapshotV2
 
 export interface PersistedDocumentGovernanceBinding {
   readonly documentProfile?: DocumentProfileId
@@ -148,8 +160,11 @@ function planFromIr(
   executionModel: EffectiveWorkflowPlan['executionModel'],
   workflow: WorkflowIR,
   track?: TrackDefinition,
+  frozenDocumentPolicy?: DocumentGovernancePolicy | null,
 ): EffectiveWorkflowPlan {
-  const documentPolicy = documentGovernancePolicy(id, workflow)
+  const documentPolicy = frozenDocumentPolicy === undefined
+    ? documentGovernancePolicy(id, workflow)
+    : frozenDocumentPolicy ?? undefined
   const skillPolicy = executionModel === 'phase-manifest' ? 'manifest-overlay' : 'step-declared'
   const reviewSteps = workflow.steps.filter((step) => step.gate === 'review').map((step) => step.id)
   const projectionSteps = workflow.steps.map((step) => ({ id: step.id, label: step.label }))
@@ -221,10 +236,11 @@ function planFromIr(
 
 export function workflowPlanSnapshot(plan: EffectiveWorkflowPlan): WorkflowPlanSnapshot {
   return freeze({
-    version: 1,
+    version: 2,
     workflowId: plan.id,
     executionModel: plan.executionModel,
     workflow: structuredClone(plan.workflow),
+    documentPolicy: structuredClone(plan.documentPolicy ?? null),
     workflowFingerprint: plan.workflowFingerprint,
   })
 }
@@ -233,7 +249,7 @@ export function effectiveWorkflowPlanFromSnapshot(
   snapshot: WorkflowPlanSnapshot,
   track?: TrackDefinition,
 ): EffectiveWorkflowPlan {
-  if (snapshot.version !== 1
+  if ((snapshot.version !== 1 && snapshot.version !== 2)
     || snapshot.workflowId === ''
     || (snapshot.executionModel !== 'phase-manifest' && snapshot.executionModel !== 'step-graph')
     || !/^[0-9a-f]{64}$/.test(snapshot.workflowFingerprint)) {
@@ -244,11 +260,34 @@ export function effectiveWorkflowPlanFromSnapshot(
     snapshot.executionModel,
     structuredClone(snapshot.workflow),
     track,
+    snapshot.version === 2 ? structuredClone(snapshot.documentPolicy) : undefined,
   )
-  if (plan.workflowFingerprint !== snapshot.workflowFingerprint) {
-    throw new DocumentGovernanceBindingError('workflow plan snapshot 内容与 fingerprint 不一致')
+  if (plan.workflowFingerprint === snapshot.workflowFingerprint) return plan
+
+  let legacyFingerprint: string | undefined
+  if (snapshot.version === 1) {
+    const legacyPolicy = preTenonV1DocumentPolicy(
+      snapshot.workflowId,
+      snapshot.workflowFingerprint,
+    )
+    if (legacyPolicy !== undefined) {
+      const legacyPlan = planFromIr(
+        snapshot.workflowId,
+        snapshot.executionModel,
+        structuredClone(snapshot.workflow),
+        track,
+        legacyPolicy,
+      )
+      legacyFingerprint = legacyPlan.workflowFingerprint
+      if (legacyPlan.workflowFingerprint === snapshot.workflowFingerprint) return legacyPlan
+    }
   }
-  return plan
+
+  throw new DocumentGovernanceBindingError(
+    `workflow plan snapshot 内容与 fingerprint 不一致`
+    + `（expected=${snapshot.workflowFingerprint}, current=${plan.workflowFingerprint}`
+    + `${legacyFingerprint === undefined ? '' : `, legacy=${legacyFingerprint}`}）`,
+  )
 }
 
 /** Compile a built-in or project Workflow into the single runtime capability model. */

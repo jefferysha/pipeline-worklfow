@@ -3,7 +3,7 @@ name: react-best-practices
 description: First-party React performance and maintainability review.
 license: MIT
 metadata:
-  author: pipeline-lite
+  author: tenon
 ---
 
 # React Best Practices

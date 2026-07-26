@@ -10,7 +10,7 @@ import {
   routerContractRevision,
   type TrackDefinition,
   type TrackRegistry,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import type { CliDeps } from '../deps.js'
 import { cmdGenRouterSh } from './gen-router.js'
 
@@ -22,7 +22,7 @@ function customTrack(pattern = "'$(touch /tmp/router-owned)`printf pwn`|mobile-r
     id: 'designer-mobile',
     label: 'Designer $(inert)',
     builtin: false,
-    workflow: { default: 'pet-adoption', allowed: ['pet-adoption'] },
+    workflow: { default: 'catalog-flow', allowed: ['catalog-flow'] },
     policyProfile: {
       reviewSeed: 'pending',
       automationEligible: true,
@@ -69,7 +69,7 @@ describe('_gen-router-sh project data-cache command', () => {
     expect(pinned).toBe(routerContractRevision(loadManifest(MANIFEST.pathname)))
   })
 
-  test('emits PIPELINE_ROUTER_V5 from the effective registry with canonical identity and inert hex data', async () => {
+  test('emits TENON_ROUTER_V5 from the effective registry with canonical identity and inert hex data', async () => {
     const out: string[] = []
     const err: string[] = []
     const loadCalls: number[] = []
@@ -91,7 +91,7 @@ describe('_gen-router-sh project data-cache command', () => {
 
     const cache = `${out[0]}\n`
     const lines = cache.trimEnd().split('\n')
-    expect(lines[0]).toBe('PIPELINE_ROUTER_V5')
+    expect(lines[0]).toBe('TENON_ROUTER_V5')
     const metadata = lines[1]?.split('|') ?? []
     expect(metadata).toEqual([
       'M',
@@ -111,7 +111,7 @@ describe('_gen-router-sh project data-cache command', () => {
     expect(Buffer.from(route[6] ?? '', 'hex').toString('utf8')).toBe('')
     expect(Buffer.from(route[7] ?? '', 'hex').toString('utf8')).toBe('frontend')
     expect(route.slice(8, 10)).toEqual(['0', '0']) // matrix=false 仍进入 router；custom 不是 builtin
-    expect(Buffer.from(route[11] ?? '', 'hex').toString('utf8')).toBe('pet-adoption')
+    expect(Buffer.from(route[11] ?? '', 'hex').toString('utf8')).toBe('catalog-flow')
     expect(cache).not.toContain('FE_PATTERN=')
     expect(cache).not.toContain('$(')
     expect(cache).not.toContain('`')

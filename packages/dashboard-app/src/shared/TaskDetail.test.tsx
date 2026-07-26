@@ -281,7 +281,7 @@ describe('TaskDetail 失败诊断（W3：成因徽章 + 可复制修复命令）
   /** zh.failure 命名空间取值（Dict 联合收窄为字符串表，供断言证明成因人话走 i18n 非硬编码）。 */
   const fz = zh.failure as Record<string, string>
 
-  it('②凭证类失败 → 成因徽章（经 i18n）+ 可复制修复命令 pipeline setup；last_error 原文仍在', async () => {
+  it('②凭证类失败 → 成因徽章（经 i18n）+ 可复制修复命令 tenon setup；last_error 原文仍在', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined)
     vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } })
     await renderDetail({
@@ -296,18 +296,18 @@ describe('TaskDetail 失败诊断（W3：成因徽章 + 可复制修复命令）
     // ⑤成因徽章文案取自 zh.failure（组件走 t('failure.cause_*')，不硬编码）
     expect(screen.getByTestId('dt-diag-cause').textContent).toBe(fz['cause_missing-credential'])
     // 可复制修复命令
-    expect(screen.getByTestId('detail-fix-cmd').textContent).toBe('pipeline setup')
+    expect(screen.getByTestId('detail-fix-cmd').textContent).toBe('tenon setup')
     const copyBtn = screen.getByTestId('detail-fix-copy')
-    expect(copyBtn.getAttribute('data-copy')).toBe('pipeline setup')
+    expect(copyBtn.getAttribute('data-copy')).toBe('tenon setup')
     fireEvent.click(copyBtn)
-    await waitFor(() => expect(writeText).toHaveBeenCalledWith('pipeline setup'))
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('tenon setup'))
     // 原文保留（v8-C 后收进 rawfold 折叠，人话结论是补充不是替换）
     expect(screen.getByTestId('dt8-raw-pre').textContent).toContain('OPENAI_API_KEY')
     // 前进转换命令区（detail-cmd）失败态仍不渲染——与修复命令区（detail-fix-cmd）互不相干
     expect(screen.queryByTestId('detail-cmd')).toBeNull()
   })
 
-  it('②agent 非零退出：lifecycle 落盘的真实改写句（含「凭证」）→ 成因徽章 missing-credential + 修复命令 pipeline setup（生产主路径，非 agent-nonzero）', async () => {
+  it('②agent 非零退出：lifecycle 落盘的真实改写句（含「凭证」）→ 成因徽章 missing-credential + 修复命令 tenon setup（生产主路径，非 agent-nonzero）', async () => {
     await renderDetail({
       change: makeChange('hotfix', 'build', {
         fields: {
@@ -319,7 +319,7 @@ describe('TaskDetail 失败诊断（W3：成因徽章 + 可复制修复命令）
       }),
     })
     expect(screen.getByTestId('dt-diag-cause').textContent).toBe(fz['cause_missing-credential'])
-    expect(screen.getByTestId('detail-fix-cmd').textContent).toBe('pipeline setup')
+    expect(screen.getByTestId('detail-fix-cmd').textContent).toBe('tenon setup')
   })
 
   it('②null fixCommand 成因（docker daemon 未起，真实落盘串）→ 成因徽章在，但无 fixCommand → 不渲染修复命令区', async () => {
@@ -362,7 +362,7 @@ describe('TaskDetail F-b：automation_cause 直判优先，空串回落 regex', 
       }),
     })
     expect(screen.getByTestId('dt-diag-cause').textContent).toBe(fz.cause_cancelled)
-    // cancelled 非故障：无修复命令区（尤其不再建议 pipeline doctor）
+    // cancelled 非故障：无修复命令区（尤其不再建议 tenon doctor）
     expect(screen.queryByTestId('detail-fix-cmd')).toBeNull()
     // last_error 原文照渲染（v8-C 后在 rawfold 折叠内，人话结论是补充不是替换，与 W3 既有口径一致）
     expect(screen.getByTestId('dt8-raw-pre').textContent).toContain('任务被人工终止')
@@ -384,7 +384,7 @@ describe('TaskDetail F-b：automation_cause 直判优先，空串回落 regex', 
     expect(screen.queryByTestId('detail-fix-cmd')).toBeNull()
   })
 
-  it('cause 空串（老数据/写入端未落）→ 回落 regex：凭证原文仍判 missing-credential + pipeline setup', async () => {
+  it('cause 空串（老数据/写入端未落）→ 回落 regex：凭证原文仍判 missing-credential + tenon setup', async () => {
     await renderDetail({
       change: makeChange('hotfix', 'build', {
         fields: {
@@ -395,11 +395,11 @@ describe('TaskDetail F-b：automation_cause 直判优先，空串回落 regex', 
       }),
     })
     expect(screen.getByTestId('dt-diag-cause').textContent).toBe(fz['cause_missing-credential'])
-    expect(screen.getByTestId('detail-fix-cmd').textContent).toBe('pipeline setup')
+    expect(screen.getByTestId('detail-fix-cmd').textContent).toBe('tenon setup')
   })
 })
 
-// #7（2026-07-15）：门行「在终端继续 pipeline transition」命令区退役（与抽屉内联动作按钮等价，
+// #7（2026-07-15）：门行「在终端继续 tenon transition」命令区退役（与抽屉内联动作按钮等价，
 // 冗余）——原本这里的两条「命令文案/自定义 event」用例随之删除。失败态本就不渲染该区（见上方
 // 「失败态不渲染 detail-cmd」用例，保留），门行现在也一律不渲染 detail-cmd（下方断言锁死）。
 describe('TaskDetail #7：门行不再渲染「在终端继续」命令区（退役）', () => {
@@ -502,8 +502,8 @@ describe('TaskDetail 动作条 props 化 + 任务一句话 + 头部', () => {
 })
 
 /**
- * v8-C 意见④（design-demos/v8-trellis-encore.html #drawer 对位）：动作置顶 + 人话报错卡
- * （原文折叠）+「自己上手修」连接命令卡 + 流程级历史。props 接口零增改——宿主（B/D）不动也编译。
+ * 失败详情契约：动作置顶 + 人话报错卡（原文折叠）+
+ * 「自己上手修」连接命令卡 + 流程级历史。props 接口零增改——宿主（B/D）不动也编译。
  */
 describe('TaskDetail v8-C 意见④：人话报错卡（dt-diag）', () => {
   const fz = zh.failure as Record<string, string>
@@ -532,7 +532,7 @@ describe('TaskDetail v8-C 意见④：人话报错卡（dt-diag）', () => {
     expect(screen.getByTestId('dt-diag').getAttribute('data-tone')).toBe('red')
   })
 
-  it('fixCommand 可拷 chip 保留且在报错卡内（凭证类 → pipeline setup）', async () => {
+  it('fixCommand 可拷 chip 保留且在报错卡内（凭证类 → tenon setup）', async () => {
     await renderDetail({
       change: makeChange('hotfix', 'build', {
         fields: { automation: 'failed', automation_last_error: '未检测到 codex 凭证：宿主机需设 OPENAI_API_KEY' },
@@ -541,8 +541,8 @@ describe('TaskDetail v8-C 意见④：人话报错卡（dt-diag）', () => {
     const card = screen.getByTestId('dt-diag')
     const chip = screen.getByTestId('detail-fix-cmd')
     expect(card.contains(chip)).toBe(true)
-    expect(chip.textContent).toBe('pipeline setup')
-    expect(screen.getByTestId('detail-fix-copy').getAttribute('data-copy')).toBe('pipeline setup')
+    expect(chip.textContent).toBe('tenon setup')
+    expect(screen.getByTestId('detail-fix-copy').getAttribute('data-copy')).toBe('tenon setup')
   })
 
   it('last_error 空串 → 不渲染 rawfold（不给空折叠）；meta 行仍给 cause', async () => {
@@ -581,8 +581,8 @@ describe('TaskDetail v8-C 意见④：「自己上手修」连接命令卡（dt8
     )
     const rr = screen.getByTestId('dt8-conn-rerun')
     // #6（2026-07-15）：按名重跑正确命令是 afk enqueue（afk run 忽略 name、跑整轮）
-    expect(rr.textContent).toContain('pipeline afk enqueue hotfix')
-    expect(screen.getByTestId('dt8-conn-rerun-copy').getAttribute('data-copy')).toBe('pipeline afk enqueue hotfix')
+    expect(rr.textContent).toContain('tenon afk enqueue hotfix')
+    expect(screen.getByTestId('dt8-conn-rerun-copy').getAttribute('data-copy')).toBe('tenon afk enqueue hotfix')
     expect(screen.getByTestId('dt8-conn').textContent).toContain('automation_worktree')
   })
 

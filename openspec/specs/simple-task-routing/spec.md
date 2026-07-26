@@ -5,7 +5,7 @@
 ### Requirement: The router SHALL provide a first-party simple task track
 The system SHALL expose a built-in `simple` Track for clearly bounded, low-risk local changes. The
 Track SHALL bind to a packaged lightweight workflow and SHALL remain available after
-`pipeline setup --codex` without requiring a project-authored workflow file or an external skill.
+`tenon setup --codex` without requiring a project-authored workflow file or an external skill.
 
 #### Scenario: A bounded text correction uses the lightweight workflow
 - **WHEN** a user asks to correct a typo, comment, copy string, unused import, or other explicitly

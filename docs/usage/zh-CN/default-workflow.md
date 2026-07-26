@@ -1,6 +1,6 @@
 # Default 七阶段工作流
 
-Default workflow 是 Pipeline Lite 的完整治理路径。每个阶段都有明确输入、产出、允许的回边和出口条件。
+Default workflow 是 Tenon 的完整治理路径。每个阶段都有明确输入、产出、允许的回边和出口条件。
 
 ## Open
 
@@ -25,7 +25,7 @@ Default workflow 是 Pipeline Lite 的完整治理路径。每个阶段都有明
 ## Ship
 
 应用已经验证的 delta spec，形成 applied spec，准备真实交付。若 Change 带主规格迁移 receipt，
-必须先生成身份和摘要绑定的机器应用结果；`pipeline check` 与 `ship-complete` 的运行时 typed guard
+必须先生成身份和摘要绑定的机器应用结果；`tenon check` 与 `ship-complete` 的运行时 typed guard
 都会复核它。代码合并、push、Pages 上线等外部动作必须以实际成功为准。
 
 ## Archive
@@ -84,9 +84,9 @@ check → review request --event <event> → acknowledge → transition
 ## 查看当前事实
 
 ```bash
-pipeline status <change> --json
-pipeline document status <change>
-pipeline check <change>
+tenon status <change> --json
+tenon document status <change>
+tenon check <change>
 ```
 
 三条命令分别回答状态、文档证据和出口 guard；任何一条通过都不等于自动推进。

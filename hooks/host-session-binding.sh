@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # host-session-binding.sh — source-only exact host-session → live Change resolver.
 #
-# `pipeline session activate <change> --host-session <id>` creates the binding.  Unlike the
+# `tenon session activate <change> --host-session <id>` creates the binding.  Unlike the
 # repository-wide `.pipeline-active` recovery candidate, this projection has conversation
 # identity and is therefore safe to use when a normal-dialogue prompt explicitly asks to resume.
 # Callers must source json-input.sh and canonical-state.sh first.

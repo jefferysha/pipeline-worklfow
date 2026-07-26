@@ -7,8 +7,8 @@ marketplace checkout.  A failed update or malformed hook could therefore prevent
 running the same command needed to repair the installation.  The project must remain a single,
 host-selectable plugin with all bundled skills, normal-chat workflow routing, and automatic updates.
 
-Trellis protects managed project files with hashes and backups, but its hooks execute project-local
-scripts and its upgrade path does not use a local active-release pointer.  Comet is closer: it has
+Tenon contract protects managed project files with hashes and backups, but its hooks execute project-local
+scripts and its upgrade path does not use a local active-release pointer.  Tenon runtime is closer: it has
 one workflow router, validates an npm candidate in a temporary prefix, attempts exact-version
 rollback, and repairs hooks with `doctor`.  However, its host hook still directly executes the
 mutable installed router and its router errors fail closed; a broken router can still block the
@@ -39,13 +39,13 @@ Rejected.  A pre-install verifier reduces bad candidates but cannot prevent a ho
 broken in-place payload after a partial replacement, nor does it retain an executable previous
 release.
 
-### Trellis-style project snapshot and direct hook repair
+### Tenon contract-style project snapshot and direct hook repair
 
 Rejected as the primary solution.  File-level backup is useful for project-managed content but
 does not establish a stable host runtime boundary.  It cannot recover when the hook entry itself is
 the defective object.
 
-### Comet-style one router plus update-and-reinstall rollback
+### Tenon runtime-style one router plus update-and-reinstall rollback
 
 Rejected as the primary runtime boundary, adopted for workflow ownership and candidate validation.
 One router resolves multiple guard competition, but a mutable router is still a single point of

@@ -12,7 +12,7 @@ export interface OnboardingProps {
 }
 
 /** 建 change 的教学命令（字面终端命令，非 i18n——命令本身不翻译）。 */
-const INIT_CMD = 'pipeline init my-change --track chat'
+const INIT_CMD = 'tenon init my-change --track chat'
 
 // ── tailwind 类串（v10b 迁移：.empty/.ob-* 全局类退役，样式全由原子类承载）──
 /** 教学空态卡片基底（max-width 按形态各自补：no-change 460px / no-project 520px）。 */
@@ -58,12 +58,12 @@ function CmdRow({ cmd, testid, copyTestid }: { cmd: string; testid: string; copy
  * 教会界面怎么用。
  *
  * full-install W2（旅程 P0 断点）：纯 dashboard 新用户曾撞死胡同——无注册入口、切换器 >1 才现、
- * 空收件箱 CTA「去进度」也空成死循环。no-project 态从「单条 pipeline init」升级为「诚实两步
+ * 空收件箱 CTA「去进度」也空成死循环。no-project 态从「单条 tenon init」升级为「诚实两步
  * checklist」：能看到 Dashboard 说明 setup 已完成，这里只引导创建 Change 并运行 doctor 校验
- * （pipeline init → doctor），做完刷新本页即可。决议#7 不反悔加注册 UI：不做假注册/假安装
+ * （tenon init → doctor），做完刷新本页即可。决议#7 不反悔加注册 UI：不做假注册/假安装
  * 按钮，前端只把命令导回终端，也不猜测宿主是 Codex 还是 Claude。
  *
- * T17（决议#7 + T2）：pipeline init best-effort 自动登记项目（kernel projectRegistry），注册表单
+ * T17（决议#7 + T2）：tenon init best-effort 自动登记项目（kernel projectRegistry），注册表单
  * 与 POST /api/projects 调用退役（端点仅兼容保留），幽灵命令 `pipeline projects add` 一并清除。
  */
 export function Onboarding({ kind, root, onCreated, onToast }: OnboardingProps): JSX.Element {
@@ -99,7 +99,7 @@ export function Onboarding({ kind, root, onCreated, onToast }: OnboardingProps):
     )
   }
 
-  // no-project：pipeline init 会自动登记项目；界面只保留可复制的真实终端步骤，不再要求用户
+  // no-project：tenon init 会自动登记项目；界面只保留可复制的真实终端步骤，不再要求用户
   // 暴露本机绝对路径或理解项目注册表。
   return (
     <div className={`${EMPTY_CLS} max-w-[620px]`} data-testid="onboard-no-project">
@@ -118,7 +118,7 @@ export function Onboarding({ kind, root, onCreated, onToast }: OnboardingProps):
           <span className={STEP_N_CLS} aria-hidden="true">2</span>
           <div className="flex min-w-0 flex-1 flex-col gap-[7px]">
             <div className={STEP_LABEL_CLS}>{t('onboard.step_doctor')}</div>
-            <CmdRow cmd="pipeline doctor" testid="onboard-cmd-doctor" copyTestid="onboard-copy-doctor" />
+            <CmdRow cmd="tenon doctor" testid="onboard-cmd-doctor" copyTestid="onboard-copy-doctor" />
           </div>
         </li>
       </ol>

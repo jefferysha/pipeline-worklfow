@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { join, resolve as resolvePath } from 'node:path'
-import { listAutomationPolicyTemplates, stateStorageExistsSync } from '@pipeline-lite/kernel'
+import { listAutomationPolicyTemplates, stateStorageExistsSync } from '@tenon/kernel'
 import { buildAfkLog, buildAfkSnapshot, readAfkRunLog } from './afk.js'
 import { buildRunDetail } from './runDetail.js'
 import { buildSnapshot } from './snapshot.js'

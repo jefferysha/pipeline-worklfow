@@ -9,7 +9,7 @@ const previousRelease = `sha256-${'d'.repeat(64)}`
 function fakeInstaller(): { installer: RuntimeInstaller; calls: string[] } {
   const calls: string[] = []
   const installer: RuntimeInstaller = {
-    activate: async () => { throw new Error('not used') },
+    withManagedTransaction: async () => { throw new Error('not used') },
     inspect: async () => ({
       selection: {
         version: 1,
@@ -60,9 +60,9 @@ function fakeInstaller(): { installer: RuntimeInstaller; calls: string[] } {
   return { installer, calls }
 }
 
-const env = { homeDir: () => '/runtime-test-home' }
+const env = { homeDir: () => '/runtime-test-home', runtimeEnv: () => ({}) }
 
-describe('pipeline runtime', () => {
+describe('tenon runtime', () => {
   test('status exposes active and previous verification state without mutating the runtime', async () => {
     const deps = makeDeps()
     const runtime = fakeInstaller()
@@ -95,5 +95,49 @@ describe('pipeline runtime', () => {
       ok: true,
       selection: { activeRelease: previousRelease, previousRelease: activeRelease, revision: 8 },
     })
+  })
+
+  test.each([
+    ['status', { json: true }],
+    ['repair', { rollback: true }],
+  ] as const)('%s maps runtime scope resolution failures to the command error contract', async (sub, opts) => {
+    const deps = makeDeps()
+    const runtime = fakeInstaller()
+    const brokenEnv = {
+      homeDir: () => { throw new Error('home lookup failed') },
+      runtimeEnv: () => ({}),
+    }
+
+    expect(await cmdRuntime(deps, sub, opts, brokenEnv, runtime.installer)).toBe(1)
+    expect(deps.errLines.join('\n')).toContain('home lookup failed')
+  })
+
+  test.each([
+    ['status', { json: true }],
+    ['repair', { rollback: true }],
+  ] as const)('%s maps runtime environment provider failures to the command error contract', async (sub, opts) => {
+    const deps = makeDeps()
+    const runtime = fakeInstaller()
+    const brokenEnv = {
+      homeDir: () => '/runtime-test-home',
+      runtimeEnv: () => { throw new Error('environment lookup failed') },
+    }
+
+    expect(await cmdRuntime(deps, sub, opts, brokenEnv, runtime.installer)).toBe(1)
+    expect(deps.errLines.join('\n')).toContain('environment lookup failed')
+  })
+
+  test('invalid and incomplete commands do not read runtime scope', async () => {
+    const deps = makeDeps()
+    const runtime = fakeInstaller()
+    let reads = 0
+    const countingEnv = {
+      homeDir: () => { reads += 1; return '/unused' },
+      runtimeEnv: () => { reads += 1; return {} },
+    }
+
+    expect(await cmdRuntime(deps, 'repair', {}, countingEnv, runtime.installer)).toBe(1)
+    expect(await cmdRuntime(deps, 'unknown', {}, countingEnv, runtime.installer)).toBe(1)
+    expect(reads).toBe(0)
   })
 })

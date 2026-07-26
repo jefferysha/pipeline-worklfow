@@ -1,5 +1,5 @@
 /**
- * cli 侧 AFK 就绪探测（full-install R1）——`pipeline setup runtime` 与 `pipeline doctor afk:*` 共用。
+ * cli 侧 AFK 就绪探测（full-install R1）——`tenon setup runtime` 与 `tenon doctor afk:*` 共用。
  *
  * 与 server `afkReadiness.ts` 逐字段对称（同响应形状、docker info→image inspect 短路、
  * 「没装 docker / 没建镜像 / 没配凭证」皆常态不抛），差别只在凭证来源:
@@ -14,7 +14,7 @@
 import { execFile } from 'node:child_process'
 import { accessSync, constants as fsConstants } from 'node:fs'
 import { join } from 'node:path'
-import { SANDCASTLE_BUILD_HINT } from '@pipeline-lite/kernel'
+import { SANDCASTLE_BUILD_HINT } from '@tenon/kernel'
 
 export interface ExecResult {
   stdout: string

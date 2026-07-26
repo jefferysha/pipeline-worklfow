@@ -47,11 +47,11 @@ install_rules() {
 
 离开 review phase（explore / spec / verify）须对确切 event 取得人类显式确认。Zed 无 hook 硬拦时仍须：
 
-    pipeline review request <change> --event <event>
+    tenon review request <change> --event <event>
     # 人类确认后：
-    pipeline review acknowledge <change>
+    tenon review acknowledge <change>
 
-不得删除 `.pipeline-pending-review` 绕过 review-gate（会产生 solo 推进）。命令前缀 /pipeline-（如 /pipeline-explore）。
+不得删除 `.pipeline-pending-review` 绕过 review-gate（会产生 solo 推进）。命令前缀 /pipeline-（如 /tenon-explore）。
 EOF
 )"
   # 哨兵块替换用 head/tail 按行号切片（不用 awk -v 传多行字符串——BSD awk（macOS 自带

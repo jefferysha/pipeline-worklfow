@@ -142,7 +142,7 @@ contains no redirection, substitution, backgrounding, or unclassified segment.
 #### Scenario: Repository inspection continues while a decision is pending
 
 - **GIVEN** a fresh pending interaction marker
-- **WHEN** the agent runs `rg`, `git diff`, `pipeline status`, or another
+- **WHEN** the agent runs `rg`, `git diff`, `tenon status`, or another
   declared read-only inspection
 - **THEN** the gate allows the inspection without clearing the marker.
 

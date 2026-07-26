@@ -7,14 +7,14 @@ security-response SLA. Security fixes are evaluated against the current
 repository branch and the affected distributed plugin/runtime identity.
 
 When reporting, include the exact plugin manifest version, CLI/runtime version,
-host, operating system, and `pipeline runtime status --json` output after
+host, operating system, and `tenon runtime status --json` output after
 removing local paths or identifiers you do not want to share.
 
 ## Report a vulnerability privately
 
 Use GitHub's private vulnerability reporting for this repository:
 
-[Open a private security advisory](https://github.com/jefferysha/pipeline-worklfow/security/advisories/new)
+[Open a private security advisory](https://github.com/jefferysha/tenon/security/advisories/new)
 
 Do not open a public Issue for an unpatched vulnerability. Do not include
 tokens, credentials, private keys, CA material, raw prompts, real user data, or
@@ -45,7 +45,7 @@ Examples include:
 - unsafe release activation, rollback, or adapter installation;
 - command/shell injection or unsafe deserialization;
 - cross-project or cross-Change state corruption;
-- container/runner escape caused by Pipeline Lite configuration;
+- container/runner escape caused by Tenon configuration;
 - a host adapter claiming a hard veto that can be bypassed under its documented
   supported conditions.
 
@@ -55,7 +55,7 @@ Examples include:
 - missing Docker or optional runner credentials;
 - a user explicitly exposing the loopback service through an external proxy;
 - a malicious same-UID process reading resources already available to that OS
-  account, unless Pipeline Lite creates an additional unintended exposure;
+  account, unless Tenon creates an additional unintended exposure;
 - unsupported modification of canonical state or managed release files;
 - availability problems without a security impact.
 

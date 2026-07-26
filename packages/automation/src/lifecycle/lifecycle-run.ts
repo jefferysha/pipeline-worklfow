@@ -1,11 +1,11 @@
-import { PIPELINE_AFK_ENV } from '../queue/gate.js'
+import { TENON_AFK_ENV } from '../queue/gate.js'
 import { type RunOutcome } from '../types.js'
 import { filterRunnerEnvironment, type SandboxReport } from '../runner/runner.js'
 import { markNonLoopPrepared, type PreparedExecutionContext, type PreparedSkillBundle } from '../admission/execution-context.js'
 import {
   assertLoopRunner, evaluateConstraintPolicy,
   type ConstraintDecision, type VerificationBinding, type VerificationIssuer,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import {
   DEFAULT_VERIFIER_ISSUER_IDENTITY, enforceVerificationBoundary, evaluateVerificationGate, freezeVerifierInput,
   type VerificationIssuerIdentity, type VerifierPort,
@@ -24,9 +24,9 @@ import {
   CancelledRunError,
   LifecycleContainerCleanupError,
   NAMED_BRANCH_PREFIX,
-  PIPELINE_ATTEMPT_CONTEXT_B64_ENV,
-  PIPELINE_AUTOMATION_POLICY_ENV,
-  PIPELINE_WORKFLOW_STEP_PROMPT_B64_ENV,
+  TENON_ATTEMPT_CONTEXT_B64_ENV,
+  TENON_AUTOMATION_POLICY_ENV,
+  TENON_WORKFLOW_STEP_PROMPT_B64_ENV,
   RunAndCleanupError,
   SKILL_BUNDLE_CONTAINER_DIR,
   createAgentExitWatch,
@@ -106,34 +106,34 @@ export const runChangeInSandbox = async (ports: LifecyclePorts, cfg: RunChangeCo
     const skillBundle = executionContext.preparedKind === 'loop-bundle' ? executionContext.skillBundle : undefined
     const skillBundleEnv: Record<string, string> = skillBundle
       ? {
-          PIPELINE_SKILL_BUNDLE_DIR: SKILL_BUNDLE_CONTAINER_DIR,
-          PIPELINE_SKILL_BUNDLE_SHA256: skillBundle.snapshotSha256,
+          TENON_SKILL_BUNDLE_DIR: SKILL_BUNDLE_CONTAINER_DIR,
+          TENON_SKILL_BUNDLE_SHA256: skillBundle.snapshotSha256,
           // skillBundle 存在时 skill_bundle_id 理应恒为非空 profile 字符串（prepareSkillBundle 只在
           // ctx.skill_bundle_id 有值时才产出 skillBundle，见 execution-context.ts/loop-admission.ts
           // 头注）；`?? ''` 只是防御性兜底，不掩盖上游不变量被打破时的诊断（诚实空串而非编造值）。
-          PIPELINE_SKILL_BUNDLE_ID: executionContext.skill_bundle_id ?? '',
+          TENON_SKILL_BUNDLE_ID: executionContext.skill_bundle_id ?? '',
         }
       : {}
     const automationPolicyEnv: Record<string, string> = executionContext.automation_policy === undefined
       ? {}
       : {
-          [PIPELINE_AUTOMATION_POLICY_ENV]: Buffer.from(
+          [TENON_AUTOMATION_POLICY_ENV]: Buffer.from(
             JSON.stringify(executionContext.automation_policy), 'utf8',
           ).toString('base64url'),
         }
     const attemptContextEnv: Record<string, string> = executionContext.attempt_context === undefined
       ? {}
       : {
-          [PIPELINE_ATTEMPT_CONTEXT_B64_ENV]: Buffer.from(
+          [TENON_ATTEMPT_CONTEXT_B64_ENV]: Buffer.from(
             JSON.stringify(executionContext.attempt_context), 'utf8',
           ).toString('base64url'),
         }
     const workflowStepPromptEnv: Record<string, string> = cfg.workflowStepPrompt === undefined
       ? {}
       : {
-          [PIPELINE_WORKFLOW_STEP_PROMPT_B64_ENV]: Buffer.from(cfg.workflowStepPrompt, 'utf8').toString('base64url'),
+          [TENON_WORKFLOW_STEP_PROMPT_B64_ENV]: Buffer.from(cfg.workflowStepPrompt, 'utf8').toString('base64url'),
         }
-    // 沙箱 env 注入 PIPELINE_AFK=1 + runner-scoped extraEnv + skill bundle 元数据。硬护栏与冻结事实
+    // 沙箱 env 注入 TENON_AFK=1 + runner-scoped extraEnv + skill bundle 元数据。硬护栏与冻结事实
     // 放后，调用方不能覆盖；真实 Docker port 会用同一纯函数再过滤一次，封住公共 port 直调旁路。
     const env: Record<string, string> = {
       ...filterRunnerEnvironment(runner, cfg.extraEnv),
@@ -141,7 +141,7 @@ export const runChangeInSandbox = async (ports: LifecyclePorts, cfg: RunChangeCo
       ...automationPolicyEnv,
       ...attemptContextEnv,
       ...workflowStepPromptEnv,
-      [PIPELINE_AFK_ENV]: '1',
+      [TENON_AFK_ENV]: '1',
     }
     // Stage B 返工 #3：docker create/start 置于 start permit（governance 锁内现读 active → 启动）。loop 在
     // 这一刻已 paused → LoopNotActiveError → 不启动容器，返回 killSwitched no-op（finally 清 worktree）。

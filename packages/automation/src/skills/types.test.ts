@@ -8,7 +8,7 @@ import { isPathSafeSkillId } from './types.js'
 
 describe('isPathSafeSkillId', () => {
   it('合法 id（含连字符/下划线/点号非单独出现）→ true', () => {
-    expect(isPathSafeSkillId('pipeline-build')).toBe(true)
+    expect(isPathSafeSkillId('tenon-build')).toBe(true)
     expect(isPathSafeSkillId('pipeline_build')).toBe(true)
     expect(isPathSafeSkillId('a.b.c')).toBe(true)
     expect(isPathSafeSkillId('superpowers:brainstorming')).toBe(true)

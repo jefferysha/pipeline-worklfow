@@ -14,7 +14,7 @@
  * reservation，不可能同时读到旧预算都通过。reservation 的 ledger 写入**严格早于** queued→scheduled
  * CAS（reserve 在 claim 之前）。
  */
-import type { AutomationPolicySnapshot, EffectiveSkillResolver, LoopEntry, LoopLedgerStore, LoopRegistry, SkillBundleResolutionInput } from '@pipeline-lite/kernel'
+import type { AutomationPolicySnapshot, EffectiveSkillResolver, LoopEntry, LoopLedgerStore, LoopRegistry, SkillBundleResolutionInput } from '@tenon/kernel'
 import {
   admissionDecision, budgetDayOf, buildAttemptContext, compileAutomationPolicySnapshot, compileConstraintPolicy, evaluateConstraintPolicy,
   indexMergeFactsByAttempt, LedgerDegradedError, loopMaterialUnchanged,
@@ -23,7 +23,7 @@ import {
   type AdmissionBlock, type AttemptContextLedgerSnapshot, type BudgetExceedAction, type BudgetReservationRecord,
   type ChangeLoopBindingRecord, type LedgerRecord, type MergeIntentRecord, type MergeLandedRecord,
   type ReservationActivatedRecord, type RunRecord, type SkillBundleSnapshotRecord, type UsageRecord, type VerificationResult,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import type { AutomationLevel } from '../types.js'
 import type { ProviderStructuredUsage } from '../runner/runner.js'
 import type { SkillContentLocator } from '../skills/content-locator.js'

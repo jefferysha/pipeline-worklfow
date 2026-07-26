@@ -1,12 +1,12 @@
 /**
- * Release update command for the one packaged pipeline plugin.
+ * Release update command for the one packaged Tenon plugin.
  *
  * Codex and Claude own their marketplace/cache lifecycles, so this command only asks the selected
  * host to refresh and reinstall its own plugin.  Other supported runtimes are adapters rather than
  * marketplaces; for them `update` deliberately re-applies the adapter from the already updated
  * package instead of falsely claiming to fetch a release from that host.
  */
-import { join } from 'node:path'
+import { isAbsolute, join } from 'node:path'
 import type { CliDeps } from '../deps.js'
 import { REAL_RUNTIME_INSTALLER, type RuntimeInstaller } from '../runtime/installer.js'
 import { REAL_RELEASED_DASHBOARD_STARTER, type ReleasedDashboardStarter } from './dashboard.js'
@@ -14,14 +14,16 @@ import {
   hostFlag,
   installedPipelineRoot,
   isNativePipelineHost,
-  PIPELINE_MARKETPLACE_NAME,
-  PIPELINE_PLUGIN_NAME,
+  TENON_MARKETPLACE_NAME,
+  TENON_PLUGIN_NAME,
   selectPipelineHost,
   type HostCommandPlanItem,
   type PipelineHost,
   type PipelineHostFlags,
 } from './plugin-host.js'
 import { cmdSetupHost, type SetupEnv, REAL_SETUP_ENV } from './setup.js'
+import { publishManagedRelease } from './release-coordinator.js'
+import { resolveRuntimePaths } from '../runtime/paths.js'
 
 export interface UpdateOpts extends PipelineHostFlags {
   dryRun?: boolean
@@ -33,14 +35,14 @@ export interface UpdateOpts extends PipelineHostFlags {
 export function nativeUpdatePlan(host: Extract<PipelineHost, 'codex' | 'claude'>): readonly HostCommandPlanItem[] {
   if (host === 'codex') {
     return [
-      { cmd: 'codex', args: ['plugin', 'marketplace', 'upgrade', PIPELINE_MARKETPLACE_NAME, '--json'] },
-      { cmd: 'codex', args: ['plugin', 'add', `${PIPELINE_PLUGIN_NAME}@${PIPELINE_MARKETPLACE_NAME}`, '--json'] },
+      { cmd: 'codex', args: ['plugin', 'marketplace', 'upgrade', TENON_MARKETPLACE_NAME, '--json'] },
+      { cmd: 'codex', args: ['plugin', 'add', `${TENON_PLUGIN_NAME}@${TENON_MARKETPLACE_NAME}`, '--json'] },
       { cmd: 'codex', args: ['plugin', 'list', '--json'] },
     ]
   }
   return [
-    { cmd: 'claude', args: ['plugin', 'marketplace', 'update', PIPELINE_MARKETPLACE_NAME] },
-    { cmd: 'claude', args: ['plugin', 'update', `${PIPELINE_PLUGIN_NAME}@${PIPELINE_MARKETPLACE_NAME}`] },
+    { cmd: 'claude', args: ['plugin', 'marketplace', 'update', TENON_MARKETPLACE_NAME] },
+    { cmd: 'claude', args: ['plugin', 'update', `${TENON_PLUGIN_NAME}@${TENON_MARKETPLACE_NAME}`] },
     { cmd: 'claude', args: ['plugin', 'list', '--json'] },
   ]
 }
@@ -67,7 +69,7 @@ function isLocalCodexMarketplaceUpgradeNoop(result: { readonly stdout: string; r
 }
 
 function verifyUpdatedRoot(deps: CliDeps, env: SetupEnv, root: string): boolean {
-  // `pipeline` is a user-level launcher and its cwd is normally the target project, not the
+  // `tenon` is a user-level launcher and its cwd is normally the target project, not the
   // plugin checkout.  Verify the freshly installed package using its own absolute asset path.
   const result = env.runCommand('bash', [join(root, 'tools', 'verify-skills.sh'), '--quiet', '--root', root])
   if (result.code === 0) return true
@@ -80,9 +82,37 @@ function rejectUpdate(
   env: SetupEnv,
   detail: string,
 ): number | Promise<number> {
-  const record = installer.recordUpdateFailure?.(env.homeDir(), detail)
+  const record = installer.recordUpdateFailure?.({
+    homeDir: env.homeDir(),
+    env: env.runtimeEnv(),
+  }, detail)
   if (record === undefined) return 1
   return record.then(() => 1).catch(() => 1)
+}
+
+type HostBoundaryState = 'in-progress' | 'committed'
+type ManagedBoundaryState = 'unchanged' | 'restored' | 'indeterminate'
+
+function boundaryDetail(
+  hostState: HostBoundaryState,
+  managedState: ManagedBoundaryState,
+  detail: string,
+): string {
+  return `host=${hostState}; managed=${managedState}; ${detail}`
+}
+
+function reportHostBoundary(deps: CliDeps, host: PipelineHost, state: HostBoundaryState): void {
+  if (state === 'committed') {
+    deps.io.err(
+      `[update] 宿主插件缓存已由 ${host === 'codex' ? 'Codex' : 'Claude'} 更新；` +
+      'Tenon 未回滚宿主私有缓存，当前会话仍使用其已加载版本。',
+    )
+    return
+  }
+  deps.io.err(
+    `[update] ${hostFlag(host)} 宿主更新在 inventory 提交确认前失败；` +
+    '宿主私有缓存状态由宿主 CLI 管理，Tenon 未直接写入或恢复该缓存。',
+  )
 }
 
 export function cmdUpdate(
@@ -94,12 +124,12 @@ export function cmdUpdate(
 ): number | Promise<number> {
   const selection = selectPipelineHost(opts)
   if (selection.host === null) {
-    deps.io.err(`ERROR: ${selection.error}。示例：pipeline update --codex`)
+    deps.io.err(`ERROR: ${selection.error}。示例：tenon update --codex`)
     return 1
   }
   const host = selection.host
   if (!isNativePipelineHost(host)) {
-    deps.io.out(`[update] ${hostFlag(host)} 没有独立 marketplace；从当前已更新的 pipeline 包重新部署 adapter。`)
+    deps.io.out(`[update] ${hostFlag(host)} 没有独立 marketplace；从当前已更新的 Tenon 包重新部署 adapter。`)
     return cmdSetupHost(deps, host, { ...opts, autoUpdate: false }, env, installer, dashboardStarter, opts.auto !== true)
   }
 
@@ -111,13 +141,14 @@ export function cmdUpdate(
   }
 
   let inventory = ''
+  let hostBoundary: HostBoundaryState = 'in-progress'
   for (let index = 0; index < plan.length; index += 1) {
     const item = plan[index]!
     const result = env.runCommand(item.cmd, [...item.args])
     if (result.stdout.trim() !== '' && !opts.auto) deps.io.out(result.stdout.trimEnd())
     if (result.code !== 0) {
       if (host === 'codex' && index === 0 && isLocalCodexMarketplaceUpgradeNoop(result)) {
-        deps.io.out('[update] Codex 本地 marketplace 不需要 Git fetch；继续刷新 pipeline-lite 插件缓存。')
+        deps.io.out('[update] Codex 本地 marketplace 不需要 Git fetch；继续刷新 tenon 插件缓存。')
         continue
       }
       // `plugin add` is the host's only cross-version reinstall primitive.  Some host releases
@@ -137,44 +168,93 @@ export function cmdUpdate(
       }
       const detail = `${item.cmd} ${item.args.join(' ')} 失败：${result.stderr.trim() || `退出码 ${result.code}`}`
       deps.io.err(`ERROR: ${detail}`)
-      return rejectUpdate(installer, env, detail)
+      reportHostBoundary(deps, host, hostBoundary)
+      return rejectUpdate(installer, env, boundaryDetail(hostBoundary, 'unchanged', detail))
     }
     inventory = result.stdout
   }
   const root = installedPipelineRoot(host, inventory)
   if (root === null) {
-    const detail = `${hostFlag(host)} 更新后未在宿主插件清单中找到 pipeline-lite；未切换 launcher。`
+    const detail = `${hostFlag(host)} 更新后未在宿主插件清单中找到 tenon；未切换 launcher。`
     deps.io.err(`ERROR: ${detail}`)
-    return rejectUpdate(installer, env, detail)
+    reportHostBoundary(deps, host, hostBoundary)
+    return rejectUpdate(installer, env, boundaryDetail(hostBoundary, 'unchanged', detail))
   }
+  hostBoundary = 'committed'
   if (!verifyUpdatedRoot(deps, env, root)) {
-    return rejectUpdate(installer, env, '宿主刷新后的 pipeline-lite 候选未通过打包资产校验')
+    const detail = '宿主刷新后的 tenon 候选未通过打包资产校验'
+    reportHostBoundary(deps, host, hostBoundary)
+    return rejectUpdate(installer, env, boundaryDetail(hostBoundary, 'unchanged', detail))
   }
-  return installer.activate(root, host, env.homeDir())
-    .then(async (activation) => {
-      deps.io.out(`[update] 已原子切换至已验证 runtime: ${activation.release.releaseId}（revision ${activation.selection.revision}）。`)
-      const dashboardCode = await dashboardStarter.start(
-        deps,
-        join(activation.releaseRoot, 'payload'),
-        { openBrowser: opts.auto !== true },
-      )
-      if (dashboardCode !== 0) {
-        const detail = 'runtime 已切换，但 dashboard 未能完成受管刷新；请运行 pipeline dashboard --background 诊断。'
-        deps.io.err(`ERROR: ${detail}`)
-        return rejectUpdate(installer, env, detail)
+  return publishManagedRelease(
+    deps,
+    {
+      candidateRoot: root,
+      source: host,
+      runtime: {
+        homeDir: env.homeDir(),
+        env: env.runtimeEnv(),
+      },
+      openBrowser: opts.auto !== true,
+    },
+    installer,
+    dashboardStarter,
+  ).then(async (outcome) => {
+      if (!outcome.ok) {
+        deps.io.err(`ERROR: ${outcome.detail}`)
+        reportHostBoundary(deps, host, hostBoundary)
+        return rejectUpdate(installer, env, boundaryDetail(hostBoundary, outcome.state, outcome.detail))
       }
+      const { activation } = outcome
+      deps.io.out(`[update] 已原子切换至已验证 runtime: ${activation.release.releaseId}（revision ${activation.selection.revision}）。`)
       if (opts.auto) {
         deps.io.out(`[update] ${hostFlag(host)} 已在后台刷新；当前会话继续使用已加载版本，新会话将加载新 skills/hooks。`)
       } else {
-        deps.io.out(`[update] ${hostFlag(host)} 已更新；稳定 pipeline launcher 已保持不变，新会话将加载新 skills/hooks。`)
+        deps.io.out(`[update] ${hostFlag(host)} 已更新；稳定 tenon launcher 已保持不变，新会话将加载新 skills/hooks。`)
       }
       if (host === 'codex') {
-        deps.io.out('[update] 若 Codex 将新版本 pipeline hook 标为未信任或已变更，请在 Codex 输入 /hooks 后重新信任；这是宿主的安全边界。')
+        deps.io.out('[update] 若 Codex 将新版本 Tenon hook 标为未信任或已变更，请在 Codex 输入 /hooks 后重新信任；这是宿主的安全边界。')
       }
+      reportRegisteredProjects(deps, env, activation.release.source.pluginVersion)
       return 0
     })
-    .catch((error: unknown) => {
-      deps.io.err(`ERROR: 新版本 runtime 校验/发布失败，保留当前已验证 release：${error instanceof Error ? error.message : String(error)}`)
-      return 1
-    })
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, `'"'"'`)}'`
+}
+
+function reportRegisteredProjects(deps: CliDeps, env: SetupEnv, pluginVersion: string): void {
+  let registry: string | undefined
+  try {
+    registry = env.readText(resolveRuntimePaths({
+      homeDir: env.homeDir(),
+      env: env.runtimeEnv(),
+    }).registryPath)
+  } catch {
+    deps.io.err('[update] WARN: 项目注册表无法读取；未修改任何工作区。')
+    return
+  }
+  if (registry === undefined) return
+  let roots: unknown
+  try {
+    roots = JSON.parse(registry)
+  } catch {
+    deps.io.err('[update] WARN: 项目注册表无法解析；未修改任何工作区。')
+    return
+  }
+  if (!Array.isArray(roots)) return
+  const registeredRoots = [...new Set(
+    roots.filter((root): root is string => typeof root === 'string' && isAbsolute(root)),
+  )]
+  const outdated = registeredRoots.filter((root) => {
+    try {
+      return env.readText(join(root, '.pipeline-version'))?.trim() !== pluginVersion
+    } catch {
+      return true
+    }
+  })
+  if (outdated.length === 0) return
+  deps.io.out(`[update] ${outdated.length} 个已登记项目需要显式同步（本次更新未写工作区）：`)
+  for (const root of outdated) deps.io.out(`  cd ${shellQuote(root)} && tenon sync`)
 }

@@ -6,7 +6,7 @@
 import { describe, expect, test } from 'vitest'
 import { makeDeps, mockState, spy } from '../test-support.js'
 import { cmdSession, type SessionFs } from './session.js'
-import type { PackageDecl } from '@pipeline-lite/kernel'
+import type { PackageDecl } from '@tenon/kernel'
 
 const MONO: PackageDecl[] = [
   { name: 'web', path: 'apps/web' },

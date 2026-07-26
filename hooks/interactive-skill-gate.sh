@@ -121,7 +121,7 @@ if [ "$AUTONOMOUS" -eq 1 ]; then
 当前用户已明确授权当前 Change 连续执行。请完整执行刚加载的交互式 skill「${MATCHED_DISPLAY}」，采用保守、
 可撤销、可审计的默认；把所有非硬性假设及其理由写入本阶段产物的 Assumptions/Decision Log。
 这项授权允许在 review 产物、OpenSpec 文档读取收据和 phase guard 都真实通过后，使用
-`pipeline review acknowledge <change> --delegated` 留下可审计的委托确认；它不可跳过任何证据、
+`tenon review acknowledge <change> --delegated` 留下可审计的委托确认；它不可跳过任何证据、
 guard、验证、发布确认或任何外部副作用的独立边界。遇到会改变范围、安全、成本或外部状态的实质性
 不确定性，暂停并明确报告；其余低风险细节按项目现状和既有规范推进。
 EOF

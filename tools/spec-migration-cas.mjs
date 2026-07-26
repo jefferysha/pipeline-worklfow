@@ -305,8 +305,8 @@ export async function applyFileCas({
   const snapshotName = `original-${suffix}.md`
   const quarantineName = `quarantined-${suffix}.tmp`
   const backupPath = join(recovery, snapshotName)
-  const helperDirectory = await mkdtemp(join(tmpdir(), 'pipeline-spec-cas-helper-'))
-  const contentDirectory = await mkdtemp(join(tmpdir(), 'pipeline-spec-cas-content-'))
+  const helperDirectory = await mkdtemp(join(tmpdir(), 'tenon-spec-cas-helper-'))
+  const contentDirectory = await mkdtemp(join(tmpdir(), 'tenon-spec-cas-content-'))
   let rootHandle
   let expectedHandle
   let observedHandle

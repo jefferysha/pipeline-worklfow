@@ -7,7 +7,7 @@ import type { ActivateResult, AdmissionDenial, ReserveResult, RunSettlement } fr
 import { classifyFailure } from './classify.js'
 import { createSemaphore } from './semaphore.js'
 import { evaluateVerificationGate, isBoundaryVerifiedResult, type VerificationGateResult } from '../verifier/verifier.js'
-import { validateVerificationResult } from '@pipeline-lite/kernel'
+import { validateVerificationResult } from '@tenon/kernel'
 import { certifyLifecycleOutcome, isCertifiedLifecycleOutcome } from '../lifecycle/outcome.js'
 import { isSettled } from '../queue/claim.js'
 import { settleSuccess } from '../queue/state-machine.js'

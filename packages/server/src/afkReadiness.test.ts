@@ -12,8 +12,8 @@ let secretsPath: string
 
 beforeEach(() => {
   base = mkdtempSync(join(tmpdir(), 'afkready-'))
-  secretsPath = join(base, '.claude', 'pipeline-secrets.json')
-  mkdirSync(join(base, '.claude'), { recursive: true })
+  secretsPath = join(base, 'config', 'secrets.json')
+  mkdirSync(join(base, 'config'), { recursive: true })
 })
 afterEach(() => rmSync(base, { recursive: true, force: true }))
 

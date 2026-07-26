@@ -1,6 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { lstatSync } from 'node:fs'
-import { homedir } from 'node:os'
 import { dirname, join, resolve as resolvePath } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
@@ -14,7 +13,7 @@ import {
   type TrackRegistry,
   type TrackValidationContext,
   type TransitionRecordStore,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import { buildAfkLog, buildAfkSnapshot, readAfkRunLog } from './afk.js'
 import { buildAfkReadiness } from './afkReadiness.js'
 import { readAutomationSettings } from './automationConfig.js'
@@ -71,6 +70,7 @@ export interface GetRouteDeps {
   trackRegistryBody: (registry: TrackRegistry) => Record<string, unknown>
   manifestPath?: string
   paths: ServerPaths
+  hostHome: string
   options: DashboardServerOptions
   resolveSessionLink: (root: string, name: string) => Promise<Record<string, unknown>>
   errMsg: (error: unknown) => string
@@ -94,7 +94,7 @@ export async function handleGet(
     cadenceScheduler, sendJson, sendHtml, serveIndexWithToken, serveAsset, indexHtml, token,
     version, releaseId, stateScopeId, isLocalHost, snapshotDeps, handleStream, isRegisteredRoot,
     clock, store, recordStore, loopLedger, registry, traceStore, workflowRootForRequest,
-    trackValidationContextFor, trackRegistryBody, manifestPath, paths, options, resolveSessionLink,
+    trackValidationContextFor, trackRegistryBody, manifestPath, paths, hostHome, options, resolveSessionLink,
     errMsg,
   } = deps
   const boundPort = deps.boundPort()
@@ -181,10 +181,10 @@ export async function handleGet(
     }
     // ── skills registry 数据端：本仓 skills 目录 + EXTERNAL-SKILLS.md 合并明细（GET 只读，本机回环不鉴权）。
     //    T6：响应体从 {skills:string[]} 破坏性升级为 {skills:SkillEntry[]}（研究报告 §4.2 方案 a，
-    //    仓内两个消费方同批改，无仓外第三方）；「已装」三源检测按 paths.claudeDir（hermetic 可覆盖）。──
+    //    仓内两个消费方同批改，无仓外第三方）；「已装」三源检测只按显式 hostHome（hermetic 可覆盖）。──
     if (path === '/api/skills/registry') {
       try {
-        return sendJson(res, 200, { skills: listAllSkillsDetailed(repoRootForSkills(), paths.claudeDir) })
+        return sendJson(res, 200, { skills: listAllSkillsDetailed(repoRootForSkills(), join(hostHome, '.claude')) })
       } catch (e) {
         return sendJson(res, 500, { ok: false, error: errMsg(e) })
       }
@@ -324,7 +324,7 @@ export async function handleGet(
         image,
         secretsPath: paths.secretsPath,
         exec: options.execDocker,
-        defaultCodexHome: join(homedir(), '.codex'),
+        defaultCodexHome: join(hostHome, '.codex'),
       })
       return sendJson(res, 200, r)
     }

@@ -1,6 +1,6 @@
 /**
  * server 契约类型 —— dashboard server 的公共形状。
- * server 是 @pipeline-lite/kernel 的消费方（只 import 不改）+ node stdlib http，零第三方运行时依赖。
+ * server 是 @tenon/kernel 的消费方（只 import 不改）+ node stdlib http，零第三方运行时依赖。
  */
 import type {
   DocumentEvidenceItemStatus,
@@ -9,26 +9,18 @@ import type {
   MemFs,
   Phase,
   PipelineTodoProjection,
+  ProductPaths,
   StateStore,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import type { TraceStoreReader } from './traces.js'
 import type { LoopActivationValidator } from './loops.js'
 
-/** 机器级路径锚（可经 PIPELINE_DASHBOARD_HOME 覆盖——仅供 hermetic 测试隔离）。 */
-export interface ServerPaths {
-  home: string
-  claudeDir: string
-  /** ~/.claude/pipeline-projects.json —— 机器级项目注册表（老仓 project_model 同址）。 */
-  registryPath: string
-  /** ~/.claude/.pipeline-dashboard-token —— B5 一次性 token 握手文件（0600）。 */
+/** Tenon 产品自有路径。宿主资产发现由 DashboardServerOptions.hostHome 独立表达。 */
+export interface ServerPaths extends ProductPaths {
+  /** Tenon state root 下的一次性 token 握手文件（0600）。 */
   tokenPath: string
-  /** ~/.claude/.pipeline-dashboard.server —— pidfile（pid/port/version，B4 版本抢占用）。 */
+  /** Tenon state root 下的 pidfile（pid/port/version，B4 版本抢占用）。 */
   pidfilePath: string
-  /**
-   * ~/.claude/pipeline-secrets.json —— 机器级凭证存储（v6 T1，0600+原子写，白名单仅
-   * CLAUDE_CODE_OAUTH_TOKEN/OPENAI_API_KEY，见 @pipeline-lite/kernel 的 secretsPath）。
-   */
-  secretsPath: string
 }
 
 /** snapshot 里单个 change 的投影（.pipeline.yaml 全字段 + 常读字段提升到顶层）。 */
@@ -119,7 +111,12 @@ export interface DashboardServerOptions {
   version?: string
   /** Immutable managed-release identity used to refresh a same-semver dashboard safely. */
   releaseId?: string
-  home?: string
+  /**
+   * 进程装配层已经解析并冻结的产品路径。注入后 Server 不再解释进程环境或从 home 推导状态目录。
+   */
+  paths: ServerPaths
+  /** 仅用于宿主资产发现；省略时复用 paths.homeDir，绝不进入 ServerPaths 或产品状态解析。 */
+  hostHome?: string
   /** 覆盖注册表读取（默认读 registryPath 的 JSON 字符串数组）。 */
   registry?: () => string[]
   /** 覆盖 token（默认启动生成一次性随机 token）。 */
@@ -149,21 +146,21 @@ export interface DashboardServerOptions {
    */
   webRoot?: string
   /**
-   * tap 流量查看器数据源（BACKLOG #34d）：注入 @pipeline-lite/tap 的 TraceStore（只读 listSessions/
+   * tap 流量查看器数据源（BACKLOG #34d）：注入 @tenon/tap 的 TraceStore（只读 listSessions/
    * readRecords）则 GET /api/traces/* 供给本地捕获 + capabilities.traffic=true；未注入则占位（不谎报）。
    * 结构化注入面（不 import tap，守 server 零第三方 + 构建不耦合）；bin 装配见主会话接线清单。
    */
   traceStore?: TraceStoreReader
   /**
-   * v9-I：kernel mem 会话检索的 fs 注入面（GET /api/mem/session-link 用；缺省 nodeMemFs() 读真
-   * ~/.claude / ~/.codex 等会话根）。测试注入 nodeMemFs(fakeHome) 指向 fixture 树（hermetic）。
+   * v9-I：kernel mem 会话检索的 fs 注入面（GET /api/mem/session-link 用）；缺省由 Server 以
+   * 显式 hostHome 构造 nodeMemFs(hostHome)，不重新读取 OS home。测试可注入 fixture adapter。
    */
   memFs?: MemFs
   /** H11：starter 激活候选的完整运行接线校验；缺省由 manifest + runner roots 生产装配。 */
   validateLoopActivation?: LoopActivationValidator
   /**
    * H11-H14/G1/G2 Operations 生产 CLI 接缝。缺省执行当前仓已构建的真实
-   * `packages/cli/dist/pipeline.mjs`；测试注入 fake 只核 HTTP/argv 映射。
+   * `packages/cli/dist/tenon.mjs`；测试注入 fake 只核 HTTP/argv 映射。
    */
   runPipelineCli?: import('./operations.js').PipelineCliRunner
   /**

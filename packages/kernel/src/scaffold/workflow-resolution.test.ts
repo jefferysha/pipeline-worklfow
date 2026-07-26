@@ -1,5 +1,5 @@
 /**
- * workflow-template-resolution 纯逻辑单测（BACKLOG #33，Trellis parity 收尾 ③）。
+ * workflow-template-resolution 纯逻辑单测（BACKLOG #33，Tenon contract parity 收尾 ③）。
  * 覆盖：多 workflow id 解析（parseWorkflowIds + resolveWorkflow）+ removeHash 更新契约
  * （applyWorkflowHashContract：native 记 hash / 非 native 删条目——非对称防升级还原 native）。
  */

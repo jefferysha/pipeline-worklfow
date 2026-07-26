@@ -1,28 +1,26 @@
 /**
- * secrets.test —— 机器级凭证存储 ~/.claude/pipeline-secrets.json 读写（T1，hermetic 临时 HOME，
- * 对齐 projectRegistry.test.ts 基座：真 fs、mkdtemp 隔离，绝不碰真实 HOME）。
+ * secrets.test —— Tenon 配置域凭证存储读写（真 fs、mkdtemp 隔离）。
  */
 import { chmod, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
-import { deleteSecretKey, readSecrets, SECRET_KEYS, secretsPath, writeSecretKey } from './secrets.js'
+import { deleteSecretKey, readSecrets, SECRET_KEYS, writeSecretKey } from './secrets.js'
 
 describe('secrets —— 机器级凭证存储读写（T1，proposal C 节）', () => {
-  let home: string
+  let configRoot: string
   let path: string
   beforeEach(async () => {
-    home = await mkdtemp(join(tmpdir(), 'lite-secrets-'))
-    path = secretsPath(home)
+    configRoot = await mkdtemp(join(tmpdir(), 'tenon-secrets-'))
+    path = join(configRoot, 'secrets.json')
   })
   afterEach(async () => {
-    // 不可写用例会把目录改成只读，先恢复权限再删（对齐 projectRegistry.test.ts 收尾）
-    await chmod(join(home, '.claude'), 0o755).catch(() => {})
-    await rm(home, { recursive: true, force: true })
+    await chmod(configRoot, 0o755).catch(() => {})
+    await rm(configRoot, { recursive: true, force: true })
   })
 
-  test('secretsPath = <home>/.claude/pipeline-secrets.json（同 pipeline-projects.json/.pipeline-dashboard-token 目录）', () => {
-    expect(path).toBe(join(home, '.claude', 'pipeline-secrets.json'))
+  test('secretsPath = <Tenon config root>/secrets.json', () => {
+    expect(path).toBe(join(configRoot, 'secrets.json'))
   })
 
   test('SECRET_KEYS 白名单恰为两项：CLAUDE_CODE_OAUTH_TOKEN / OPENAI_API_KEY（不含 CODEX_HOME/ANTHROPIC_API_KEY，见决策 C2b/C2c）', () => {
@@ -35,13 +33,13 @@ describe('secrets —— 机器级凭证存储读写（T1，proposal C 节）', 
     })
 
     test('损坏 JSON → 空 keys', async () => {
-      await mkdir(join(home, '.claude'), { recursive: true })
+      await mkdir(configRoot, { recursive: true })
       await writeFile(path, '{oops', 'utf8')
       expect(readSecrets(path)).toEqual({ version: 1, keys: {} })
     })
 
     test('非对象顶层 JSON（数组/字符串）→ 空 keys', async () => {
-      await mkdir(join(home, '.claude'), { recursive: true })
+      await mkdir(configRoot, { recursive: true })
       await writeFile(path, '[1,2,3]', 'utf8')
       expect(readSecrets(path)).toEqual({ version: 1, keys: {} })
       await writeFile(path, '"just-a-string"', 'utf8')
@@ -49,19 +47,19 @@ describe('secrets —— 机器级凭证存储读写（T1，proposal C 节）', 
     })
 
     test('keys 字段非对象（数组/字符串）→ 空 keys', async () => {
-      await mkdir(join(home, '.claude'), { recursive: true })
+      await mkdir(configRoot, { recursive: true })
       await writeFile(path, JSON.stringify({ version: 1, keys: ['a', 'b'] }), 'utf8')
       expect(readSecrets(path)).toEqual({ version: 1, keys: {} })
     })
 
     test('合法内容原样读出', async () => {
-      await mkdir(join(home, '.claude'), { recursive: true })
+      await mkdir(configRoot, { recursive: true })
       await writeFile(path, JSON.stringify({ version: 1, keys: { CLAUDE_CODE_OAUTH_TOKEN: 'sk-abc1234567' } }), 'utf8')
       expect(readSecrets(path)).toEqual({ version: 1, keys: { CLAUDE_CODE_OAUTH_TOKEN: 'sk-abc1234567' } })
     })
 
     test('手塞非白名单 key（如 ANTHROPIC_API_KEY/CODEX_HOME）→ 读侧过滤，不出现在结果里', async () => {
-      await mkdir(join(home, '.claude'), { recursive: true })
+      await mkdir(configRoot, { recursive: true })
       await writeFile(
         path,
         JSON.stringify({ version: 1, keys: { CLAUDE_CODE_OAUTH_TOKEN: 'tok', ANTHROPIC_API_KEY: 'sneaky', CODEX_HOME: '/x' } }),
@@ -81,8 +79,8 @@ describe('secrets —— 机器级凭证存储读写（T1，proposal C 节）', 
     test('②tmp+rename 原子写：同目录内写后只剩最终文件，无 *.tmp* 残留', async () => {
       await writeSecretKey(path, 'CLAUDE_CODE_OAUTH_TOKEN', 'v1')
       await writeSecretKey(path, 'OPENAI_API_KEY', 'v2')
-      const entries = await readdir(join(home, '.claude'))
-      expect(entries).toEqual(['pipeline-secrets.json'])
+      const entries = await readdir(configRoot)
+      expect(entries).toEqual(['secrets.json'])
     })
 
     test('③非白名单 key 写入抛错，且不落盘（fail-loud，防线不是唯一防线——HTTP 契约层另有一道）', async () => {
@@ -135,8 +133,8 @@ describe('secrets —— 机器级凭证存储读写（T1，proposal C 节）', 
     })
 
     test('目录不可写 → 抛错（fail-loud；best-effort 由调用方兜，对齐 projectRegistry.ts 职责切分）', async () => {
-      await mkdir(join(home, '.claude'), { recursive: true })
-      await chmod(join(home, '.claude'), 0o555)
+      await mkdir(configRoot, { recursive: true })
+      await chmod(configRoot, 0o555)
       await expect(writeSecretKey(path, 'OPENAI_API_KEY', 'x')).rejects.toThrow()
     })
   })
@@ -168,8 +166,8 @@ describe('secrets —— 机器级凭证存储读写（T1，proposal C 节）', 
   })
 
   test('⑤文件缺失时读取返回空 keys 集合（fail-open，不抛错——同上方 readSecrets 首个用例，交叉核对 TDD 判据编号）', () => {
-    expect(() => readSecrets(join(home, '.claude', 'never-written.json'))).not.toThrow()
-    expect(readSecrets(join(home, '.claude', 'never-written.json'))).toEqual({ version: 1, keys: {} })
+    expect(() => readSecrets(join(configRoot, 'never-written.json'))).not.toThrow()
+    expect(readSecrets(join(configRoot, 'never-written.json'))).toEqual({ version: 1, keys: {} })
   })
 
   test('凭证值不进异常消息：非白名单 key 的错误文案不包含调用方传入的 value', async () => {

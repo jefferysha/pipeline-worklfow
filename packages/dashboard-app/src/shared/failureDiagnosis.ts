@@ -37,7 +37,7 @@
  *   8 agent-nonzero —— 裸 `[AGENT_EXIT]` 标记 / "agent … exit"。**防御性兜底**：生产主路径不经此——
  *     真实 agent 非零退出已被 lifecycle 改写成含「凭证」句、于优先级6 归 missing-credential（见上）；本分支
  *     只兜住裸标记（万一改写逻辑变动或有其它裸标记来源），保留不删以防未来回归。
- *   9 unknown —— 其余（含空串）→ pipeline doctor 兜底（诚实：没识别出成因，先跑就绪诊断）。
+ *   9 unknown —— 其余（含空串）→ tenon doctor 兜底（诚实：没识别出成因，先跑就绪诊断）。
  *
  * F-b 成因结构化落盘（读取端）起，上述 regex 层降级为 **fallback**：写入端（automation 结算处）
  * 随失败落结构化 `automation_cause` 枚举，视图统一改走 diagnoseFailureWithCause——有 cause 直判
@@ -109,10 +109,10 @@ export function diagnoseFailure(lastError: string): FailureDiagnosis {
   if (TIMEOUT_RE.test(s)) return { cause: 'timeout', fixCommand: null }
   if (DOCKER_DAEMON_RE.test(s)) return { cause: 'missing-docker', fixCommand: null }
   if (IMAGE_RE.test(s)) return { cause: 'missing-image', fixCommand: 'bash tools/sandcastle/build.sh' }
-  if (CREDENTIAL_RE.test(s)) return { cause: 'missing-credential', fixCommand: 'pipeline setup' }
+  if (CREDENTIAL_RE.test(s)) return { cause: 'missing-credential', fixCommand: 'tenon setup' }
   if (DOCKER_RE.test(s)) return { cause: 'missing-docker', fixCommand: null }
   if (AGENT_EXIT_RE.test(s)) return { cause: 'agent-nonzero', fixCommand: null }
-  return { cause: 'unknown', fixCommand: 'pipeline doctor' }
+  return { cause: 'unknown', fixCommand: 'tenon doctor' }
 }
 
 // ── F-b：automation_cause 直判映射表（契约值域，开放集）。写入端现落 6 值：cancelled /

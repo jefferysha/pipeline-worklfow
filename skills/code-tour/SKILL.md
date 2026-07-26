@@ -3,7 +3,7 @@ name: code-tour
 description: First-party guided code walkthrough for a changed subsystem.
 license: MIT
 metadata:
-  author: pipeline-lite
+  author: tenon
 ---
 
 # Code Tour

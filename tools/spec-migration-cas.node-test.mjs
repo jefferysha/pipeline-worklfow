@@ -21,7 +21,7 @@ function digest(content) {
 }
 
 test('migration CAS 拒绝锁内检查后的并发漂移且保留竞争方内容', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'pipeline-spec-migration-cas-'))
+  const root = await mkdtemp(join(tmpdir(), 'tenon-spec-migration-cas-'))
   const target = join(root, 'spec.md')
   const recoveryDirectory = join(root, 'recovery')
   await writeFile(target, 'observed\n', 'utf8')
@@ -47,7 +47,7 @@ test('migration CAS 拒绝锁内检查后的并发漂移且保留竞争方内容
 })
 
 test('migration CAS 第一次 changed、重复执行 no-op，并返回结构化摘要', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'pipeline-spec-migration-cas-'))
+  const root = await mkdtemp(join(tmpdir(), 'tenon-spec-migration-cas-'))
   const target = join(root, 'spec.md')
   const recoveryDirectory = join(root, 'recovery')
   await writeFile(target, 'observed\n', 'utf8')
@@ -77,7 +77,7 @@ test('migration CAS 第一次 changed、重复执行 no-op，并返回结构化�
 })
 
 test('migration CAS 的无覆盖发布拒绝 original move 后抢占并保留竞争内容和原始 inode', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'pipeline-spec-migration-cas-'))
+  const root = await mkdtemp(join(tmpdir(), 'tenon-spec-migration-cas-'))
   const target = join(root, 'spec.md')
   const recoveryDirectory = join(root, 'recovery')
   await writeFile(target, 'observed\n', 'utf8')
@@ -102,7 +102,7 @@ test('migration CAS 的无覆盖发布拒绝 original move 后抢占并保留竞
 })
 
 test('migration CAS 在最后内容检查与 rename 之间拒绝同 inode 写入并保留稳定 observed 快照', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'pipeline-spec-migration-cas-'))
+  const root = await mkdtemp(join(tmpdir(), 'tenon-spec-migration-cas-'))
   const target = join(root, 'spec.md')
   const recoveryDirectory = join(root, 'recovery')
   await writeFile(target, 'observed\n', 'utf8')
@@ -127,8 +127,8 @@ test('migration CAS 在最后内容检查与 rename 之间拒绝同 inode 写入
 })
 
 test('migration CAS 拒绝仓库内 symlink 父路径且不写仓库外', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'pipeline-spec-migration-cas-'))
-  const outside = await mkdtemp(join(tmpdir(), 'pipeline-spec-migration-outside-'))
+  const root = await mkdtemp(join(tmpdir(), 'tenon-spec-migration-cas-'))
+  const outside = await mkdtemp(join(tmpdir(), 'tenon-spec-migration-outside-'))
   await mkdir(join(root, 'openspec'))
   await symlink(outside, join(root, 'openspec', 'specs'))
   const target = join(root, 'openspec', 'specs', 'capability', 'spec.md')
@@ -149,8 +149,8 @@ test('migration CAS 拒绝仓库内 symlink 父路径且不写仓库外', async 
 })
 
 test('migration CAS 拒绝锁内父目录换成仓库外 symlink，即使外部文件摘要相同也不触碰外部内容', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'pipeline-spec-migration-cas-'))
-  const outside = await mkdtemp(join(tmpdir(), 'pipeline-spec-migration-outside-'))
+  const root = await mkdtemp(join(tmpdir(), 'tenon-spec-migration-cas-'))
+  const outside = await mkdtemp(join(tmpdir(), 'tenon-spec-migration-outside-'))
   const parent = join(root, 'openspec', 'specs', 'capability')
   const detachedParent = join(root, 'openspec', 'specs', 'capability.detached')
   const target = join(parent, 'spec.md')
@@ -181,8 +181,8 @@ test('migration CAS 拒绝锁内父目录换成仓库外 symlink，即使外部�
 })
 
 test('migration CAS 在原文件移入恢复区后检测父目录漂移，保留原始恢复证据且不写仓库外', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'pipeline-spec-migration-cas-'))
-  const outside = await mkdtemp(join(tmpdir(), 'pipeline-spec-migration-outside-'))
+  const root = await mkdtemp(join(tmpdir(), 'tenon-spec-migration-cas-'))
+  const outside = await mkdtemp(join(tmpdir(), 'tenon-spec-migration-outside-'))
   const parent = join(root, 'openspec', 'specs', 'capability')
   const detachedParent = join(root, 'openspec', 'specs', 'capability.detached')
   const target = join(parent, 'spec.md')
@@ -216,8 +216,8 @@ test('migration CAS 在原文件移入恢复区后检测父目录漂移，保留
 })
 
 test('migration CAS 在最后一次目录检查与 linkat 发布之间换成仓库外 symlink 仍零外部写入', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'pipeline-spec-migration-cas-'))
-  const outside = await mkdtemp(join(tmpdir(), 'pipeline-spec-migration-outside-'))
+  const root = await mkdtemp(join(tmpdir(), 'tenon-spec-migration-cas-'))
+  const outside = await mkdtemp(join(tmpdir(), 'tenon-spec-migration-outside-'))
   const parent = join(root, 'openspec', 'specs', 'capability')
   const detachedParent = join(root, 'openspec', 'specs', 'capability.detached')
   const target = join(parent, 'spec.md')
@@ -252,7 +252,7 @@ test('migration CAS 在最后一次目录检查与 linkat 发布之间换成仓�
 })
 
 test('migration CAS 不自动抢占已有 owner 锁', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'pipeline-spec-migration-cas-'))
+  const root = await mkdtemp(join(tmpdir(), 'tenon-spec-migration-cas-'))
   const target = join(root, 'spec.md')
   const recoveryDirectory = join(root, 'recovery')
   await writeFile(target, 'observed\n', 'utf8')
@@ -278,7 +278,7 @@ test('migration CAS 不自动抢占已有 owner 锁', async () => {
 })
 
 test('migration CAS 释放 owner lock 前按 inode 校验并保留竞争方替换的新锁', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'pipeline-spec-migration-cas-'))
+  const root = await mkdtemp(join(tmpdir(), 'tenon-spec-migration-cas-'))
   const target = join(root, 'spec.md')
   const recoveryDirectory = join(root, 'recovery')
   const lockPath = join(recoveryDirectory, 'spec-application.lock')

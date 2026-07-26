@@ -8,12 +8,12 @@
 # TTL 分级（BACKLOG #13，对齐老内核 pipeline-gate.sh，勿改回统一值）：
 #   - confirm 300s：正常流程同轮 AskUserQuestion 即清（秒级），300s 只是「漏确认」安全网。
 #   - review / interaction 1800s：跨整个决策 phase（常 >5min），缩短会中途误清 → 绕过强制复核。
-# marker 只从当前项目根读取：Git worktree / 显式 PIPELINE_PROJECT_ROOT / 当前 cwd 三者之一。
+# marker 只从当前项目根读取：Git worktree / 显式 TENON_PROJECT_ROOT / 当前 cwd 三者之一。
 #   绝不从普通父目录猜测项目根，避免共享 /tmp 下的外部 Change 拦截无关会话。
 # 纯 bash 热路径（CONTRACT §5.4）：不 spawn 任何解释器/外部 JSON 解析器，
 #   stdin JSON 只用 bash 字符串提取所需两键（cwd / tool_name）。
 # 例外（Task 9，GOAL 清单 E）：非 default workflow 的 change 调用 Claude Skill 工具，或 Codex
-#   读取当前插件内 SKILL.md 时，文件尾段委托 `node .../pipeline.mjs internal-skill-gate` 做 skill DAG
+#   读取当前插件内 SKILL.md 时，文件尾段委托 `node .../tenon.mjs internal-skill-gate` 做 skill DAG
 #   解锁判定——这是本文件唯一会 spawn 解释器的分支。默认 workflow / 无活跃 change / 非技能读取
 #   三者任一成立就直接跳过 node；Codex 读取证据与 Claude Skill 事件保持语义等价但记账类型不同。
 # fail-open（绝不死锁）：stdin 解析失败 / cwd 不存在 / 任何异常 → 放行 exit 0。
@@ -24,9 +24,9 @@
 set -uo pipefail
 
 # AFK 逃生门（BACKLOG #7b，对齐老内核沙箱放行语义）：headless 自动化（Docker/CI）里
-# 无人应答 AskUserQuestion，三门必死锁——显式 PIPELINE_AFK=1 时整门放行；
+# 无人应答 AskUserQuestion，三门必死锁——显式 TENON_AFK=1 时整门放行；
 # 不清 marker（人回来时门还在）。仅字面 "1" 生效，其它值一律不放行。
-[ "${PIPELINE_AFK:-}" = "1" ] && exit 0
+[ "${TENON_AFK:-}" = "1" ] && exit 0
 
 INPUT="$(cat 2>/dev/null || printf '{}')"
 
@@ -48,11 +48,11 @@ TOOL="$(json_get tool_name || true)"
 # Marker 与 active Change 都只能落在当前 Git/显式项目根。marker 可能在 OpenSpec Change
 # 创建前就存在，因此这里用 bootstrap 根；该模式只返回 Git 根或 cwd 自身，绝不扫描普通父目录。
 ROOT_HELPER="$(dirname "${BASH_SOURCE[0]:-$0}")/project-root.sh"
-PIPELINE_ROOT=""
+TENON_ROOT=""
 if [ -r "$ROOT_HELPER" ]; then
   # shellcheck source=project-root.sh
   . "$ROOT_HELPER"
-  PIPELINE_ROOT="$(pipeline_project_root "$CWD" bootstrap changes || true)"
+  TENON_ROOT="$(pipeline_project_root "$CWD" bootstrap changes || true)"
 fi
 
 # yget：读 canonical hookState；current 从未出现时才兼容 YAML 顶层 key——逐字复用
@@ -89,8 +89,8 @@ fresh() {
 # marker 只从已验证项目根读取，返回找到的路径（stdout），找不到返回 1。
 resolve_marker() {
   local base="$1"
-  [ -n "$PIPELINE_ROOT" ] && [ -f "$PIPELINE_ROOT/$base" ] || return 1
-  printf '%s' "$PIPELINE_ROOT/$base"
+  [ -n "$TENON_ROOT" ] && [ -f "$TENON_ROOT/$base" ] || return 1
+  printf '%s' "$TENON_ROOT/$base"
 }
 
 HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || true)"
@@ -117,14 +117,14 @@ review_marker_relevant_to_active_change() { # $1=marker → 0=blockable v2 marke
     rm -f "$marker" 2>/dev/null || true
     return 1
   fi
-  active_change="$(pipeline_review_active_change_name "$PIPELINE_ROOT" "$HOOK_DIR" || true)"
+  active_change="$(pipeline_review_active_change_name "$TENON_ROOT" "$HOOK_DIR" || true)"
   [ -n "$active_change" ] && [ "$active_change" = "$marked_change" ]
 }
 
 is_review_control_command() {
   local command="$1"
   case "$command" in
-    *"pipeline review acknowledge"*|*"pipeline review request"*) return 0 ;;
+    *"tenon review acknowledge"*|*"tenon review request"*) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -158,8 +158,8 @@ pipeline_command_is_strict_read_only() { # $1=decoded command
     git\ status|git\ status\ *|git\ diff|git\ diff\ *|git\ log|git\ log\ *|git\ show|git\ show\ *|\
     git\ rev-parse\ *|git\ branch\ --show-current|git\ worktree\ list|git\ worktree\ list\ *)
       return 0 ;;
-    pipeline\ list|pipeline\ list\ *|pipeline\ status\ *|pipeline\ get\ *|pipeline\ inbox|\
-    pipeline\ inbox\ *|pipeline\ document\ status\ *)
+    tenon\ list|tenon\ list\ *|tenon\ status\ *|tenon\ get\ *|tenon\ inbox|\
+    tenon\ inbox\ *|tenon\ document\ status\ *)
       return 0 ;;
   esac
   return 1
@@ -201,7 +201,7 @@ for kind in confirm review interaction; do
     # 读取不会扩大权限，也不清 marker。允许它能让 Agent 在等待决定时继续核对事实，
     # 同时 state transition、外部副作用和任何未知动作仍 fail closed。
     pipeline_tool_is_read_only "$TOOL" && continue
-    printf '【pipeline 门】检测到待处理交互标记 %s（%s 已被拦截）：请先把当前决策/产出交用户确认。支持 AskUserQuestion 的宿主可在该交互后解封；Codex 用户可用自然语言明确同意当前问题，系统会绑定当前待办并解封，再重发本次操作。\n' "$base" "$TOOL" >&2
+    printf '【Tenon 门】检测到待处理交互标记 %s（%s 已被拦截）：请先把当前决策/产出交用户确认。支持 AskUserQuestion 的宿主可在该交互后解封；Codex 用户可用自然语言明确同意当前问题，系统会绑定当前待办并解封，再重发本次操作。\n' "$base" "$TOOL" >&2
     exit 2
   fi
 done
@@ -210,7 +210,7 @@ done
 # Claude 的 Skill tool 与 Codex 对当前插件 `<root>/skills/<id>/SKILL.md` 的受控读取都走这条
 # 判定；普通 Bash 命令不会命中 helper，因此不被 custom workflow 的 skill DAG 误拦。若 Codex
 # 读取了与本插件 bundled id 同名、但位于全局/项目目录的 SKILL.md，先标为 shadowed：这不是
-# evidence，也不能绕过 DAG；已激活 Change 时必须明确拦下，迫使宿主加载 pipeline-lite 包内版本。
+# evidence，也不能绕过 DAG；已激活 Change 时必须明确拦下，迫使宿主加载 tenon 包内版本。
 # Process one resolved skill without making the surrounding command a single-skill bottleneck.
 # A batched Codex read must be blocked if *any* bundled dependency is still locked or any bundled
 # id is loaded from an untrusted global/project path.
@@ -221,7 +221,7 @@ pipeline_enforce_skill_gate() {
 
   # 与其它 hook 共用已验证的项目根和显式选择，避免跨项目或按 mtime 把 Skill DAG
   # 错绑到旧 Change。没有已选择 target 时不猜测，入口 skill 会在选定/创建后先 activate。
-  sg_proot="$PIPELINE_ROOT"
+  sg_proot="$TENON_ROOT"
   [ -n "$sg_proot" ] || return 0
   active_helper="$(dirname "${BASH_SOURCE[0]:-$0}")/active-change.sh"
   if [ -r "$active_helper" ]; then
@@ -237,16 +237,16 @@ pipeline_enforce_skill_gate() {
   sg_workflow="$(yget "$sg_state_source" workflow)"
   # The same packaged skill may also exist in ~/.agents or another plugin. A normal Codex command
   # read from that foreign path is neither a safe completion receipt nor an acceptable substitute
-  # for pipeline-lite's version. Refuse it before the default/custom split so default workflow is
+  # for tenon's version. Refuse it before the default/custom split so default workflow is
   # protected too; no active Change means no interception.
   if [ "$skill_origin" = "shadowed-read" ]; then
-    printf "【pipeline 门】skill '%s' 必须从已安装的 pipeline-lite 插件加载；检测到同名非插件 SKILL.md。Codex 请调用 'pipeline-lite:%s'，不要读取全局或项目副本。\n" "$skill_id" "$skill_id" >&2
+    printf "【pipeline 门】skill '%s' 必须从已安装的 tenon 插件加载；检测到同名非插件 SKILL.md。Codex 请调用 'tenon:%s'，不要读取全局或项目副本。\n" "$skill_id" "$skill_id" >&2
     return 2
   fi
 
   [ -n "$sg_workflow" ] || return 0
   sg_plugin_root="${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." 2>/dev/null && pwd)}}"
-  sg_bundle="$sg_plugin_root/packages/cli/dist/pipeline.mjs"
+  sg_bundle="$sg_plugin_root/packages/cli/dist/tenon.mjs"
   [ -f "$sg_bundle" ] && command -v node >/dev/null 2>&1 || return 0
   sg_change_name="$(basename "$sg_change_dir")"
   # 子 shell 里先 cd 到项目根（sg_proot）再 spawn：CLI 的 deps.cwd = process.cwd()

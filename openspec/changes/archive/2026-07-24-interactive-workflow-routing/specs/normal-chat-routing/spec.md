@@ -9,9 +9,9 @@ validated default workflow along with its id, label, priority, and routing patte
 
 #### Scenario: custom Track is routed
 
-- **WHEN** a project contains a routable custom Track whose default workflow is `pet-adoption`
+- **WHEN** a project contains a routable custom Track whose default workflow is `catalog-flow`
 - **AND WHEN** a new user prompt routes to that project
-- **THEN** the normal-chat dispatch exposes `pet-adoption` as the recommended workflow for that
+- **THEN** the normal-chat dispatch exposes `catalog-flow` as the recommended workflow for that
   Track rather than substituting `default`.
 
 ### Requirement: custom choices require explicit selection before Change creation
