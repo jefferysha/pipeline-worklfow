@@ -22,13 +22,13 @@ export const contentEntries = [
   locales: {
     'zh-CN': {
       title: zhTitle,
-      description: `Pipeline Lite ${zhTitle}：基于当前仓库行为的可验证指南。`,
+      description: `Tenon ${zhTitle}：基于当前仓库行为的可验证指南。`,
       source: `docs/usage/zh-CN/${slug}.md`,
       target: slug === 'index' ? 'index.md' : `${slug}.md`,
     },
     en: {
       title: enTitle,
-      description: `Pipeline Lite ${enTitle}: a verifiable guide based on current repository behavior.`,
+      description: `Tenon ${enTitle}: a verifiable guide based on current repository behavior.`,
       source: slug === 'index' ? 'docs/usage/README.md' : `docs/usage/${slug}.md`,
       target: slug === 'index' ? 'en/index.md' : `en/${slug}.md`,
     },

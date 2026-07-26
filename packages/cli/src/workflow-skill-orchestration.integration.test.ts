@@ -34,7 +34,7 @@
  *     confirm-clear.sh 清它）——是"是否进 pipeline"这一更早决策点的钩子，本流程从 init 之后即
  *     有活跃 change，天然不会触发它；tools/test-hooks.sh 已用手搭 marker 验证 gate.sh 对它的
  *     处理，无需在此重复。
- *   · `pipeline transition/set` 等 CLI 子命令调用本身不经过 PreToolUse gate.sh——那是 Claude
+ *   · `tenon transition/set` 等 CLI 子命令调用本身不经过 PreToolUse gate.sh——那是 Claude
  *     Code 包住 Bash/Edit/Write/Skill/MultiEdit 等"agent 工具调用"的钩子，不包 pipeline 二进制
  *     的内部子命令分派；既有 integration.test.ts 全部用例均按此边界处理，本文件保持一致。
  */
@@ -43,7 +43,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { mkdir, readFile, stat, utimes, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
-import { loadManifest, skillsFor, type Phase } from '@pipeline-lite/kernel'
+import { loadManifest, skillsFor, type Phase } from '@tenon/kernel'
 import { freshHarness, MANIFEST, REPO_ROOT, rm, type Harness } from './integration-harness.js'
 
 const TRACK = 'backend' as const
@@ -53,11 +53,11 @@ interface HookResult { code: number; stdout: string; stderr: string }
 interface HistLine { ts: string; kind: string; to?: string; raw?: string; field?: string }
 
 /** 真调用一个 hooks/*.sh（同 tools/test-hooks.sh 的驱动方式：bash 显式解释器 + stdin JSON）。
- *  强制清 PIPELINE_AFK（AFK 逃生门会让 gate.sh 无条件放行——若外层环境意外带了这个变量，
+ *  强制清 TENON_AFK（AFK 逃生门会让 gate.sh 无条件放行——若外层环境意外带了这个变量，
  *  会让本文件的门禁断言假绿，不能依赖外层 shell 干净，必须显式清空）。 */
 function runHook(script: string, payload: unknown, extraEnv: Record<string, string> = {}): HookResult {
   const env = { ...process.env, ...extraEnv }
-  delete env.PIPELINE_AFK
+  delete env.TENON_AFK
   const res = spawnSync('bash', [join(REPO_ROOT, 'hooks', script)], {
     input: JSON.stringify(payload),
     encoding: 'utf8',
@@ -139,15 +139,15 @@ describe('真实 e2e —— 完整多相位 workflow × skill 编排一体化闭
   }
 
   function runRouter(prompt: string): HookResult {
-    return runHook('router.sh', { prompt, cwd: h.cwd }, { CLAUDE_PLUGIN_ROOT: REPO_ROOT, PIPELINE_ROUTER_CACHE: routerCache })
+    return runHook('router.sh', { prompt, cwd: h.cwd }, { CLAUDE_PLUGIN_ROOT: REPO_ROOT, TENON_ROUTER_CACHE: routerCache })
   }
 
   /** Router does not execute a host Skill tool itself; it must nevertheless emit the exact required
    * dispatch and the manifest-derived required slots that the root pipeline skill will execute. */
   function expectPhaseDispatch(result: HookResult, phase: Phase): void {
     expect(result.code).toBe(0)
-    expect(result.stdout).toContain('<pipeline-dispatch>')
-    expect(result.stdout).toContain('skill: pipeline')
+    expect(result.stdout).toContain('<tenon-dispatch>')
+    expect(result.stdout).toContain('skill: tenon')
     expect(result.stdout).toContain('workflow: default')
     for (const skill of skillsFor(manifest.mandatorySkills, phase, TRACK)) {
       expect(result.stdout, `${phase} dispatch should retain mandatory skill ${skill}`).toContain(skill)
@@ -360,12 +360,12 @@ describe('真实 e2e —— 完整多相位 workflow × skill 编排一体化闭
     expect(reviewOps).toHaveLength(6) // explore/spec/verify 各 request + acknowledge
     expect(prompts).toHaveLength(unlockCount)
     // Ship 契约分两层：manifest 只列可由 Skill 工具加载的 mandatory skill；commit/push/PR 是
-    // pipeline-ship 里的必做交付动作，不能伪装成 command token 塞进 skill bundle。
+    // tenon-ship 里的必做交付动作，不能伪装成 command token 塞进 skill bundle。
     expect(skillsFor(manifest.mandatorySkills, 'ship', TRACK)).toEqual([
       'openspec-apply-change',
       'finishing-a-development-branch',
     ])
-    const pipelineShip = readFileSync(join(REPO_ROOT, 'skills', 'pipeline-ship', 'SKILL.md'), 'utf8')
+    const pipelineShip = readFileSync(join(REPO_ROOT, 'skills', 'tenon-ship', 'SKILL.md'), 'utf8')
     expect(pipelineShip).toContain('完成 commit + push + 创建 PR。**这是必做交付动作，不是 Skill。**')
     expect(pipelineShip).toContain('/commit-commands:commit-push-pr` 仅是可选命令加速器，不进入 skill bundle。')
 

@@ -8,9 +8,9 @@ import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
-import { createLoopsYamlText } from '@pipeline-lite/kernel'
+import { createLoopsYamlText } from '@tenon/kernel'
 
-const DIST_BINARY = fileURLToPath(new URL('../dist/pipeline.mjs', import.meta.url))
+const DIST_BINARY = fileURLToPath(new URL('../dist/tenon.mjs', import.meta.url))
 
 let repoRoot: string
 
@@ -45,7 +45,7 @@ afterEach(async () => {
 })
 
 describe('H13 local binary', () => {
-  test('dist/pipeline.mjs loops sync --dry-run 真执行、输出计划且零写入', async () => {
+  test('dist/tenon.mjs loops sync --dry-run 真执行、输出计划且零写入', async () => {
     const before = await readFile(join(repoRoot, 'LOOP.md'), 'utf8')
 
     const result = spawnSync(process.execPath, [

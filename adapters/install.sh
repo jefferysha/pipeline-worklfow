@@ -12,7 +12,7 @@ set -u
 
 ADAPTERS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 REPO_ROOT="$(cd "$ADAPTERS_DIR/.." && pwd)"
-REG="${PIPELINE_REGISTRY:-$ADAPTERS_DIR/registry.yaml}"
+REG="${TENON_REGISTRY:-$ADAPTERS_DIR/registry.yaml}"
 
 G='\033[32m'; Y='\033[33m'; R='\033[31m'; Z='\033[0m'
 info() { printf "${G}[install]${Z} %b\n" "$1"; }

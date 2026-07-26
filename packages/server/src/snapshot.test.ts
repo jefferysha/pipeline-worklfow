@@ -9,7 +9,7 @@ import {
   loadEffectiveWorkflowPlan,
   TERMINAL_ACTIVITY_TTL_MS,
   workflowPlanSnapshot,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import { buildSnapshot, computeFingerprint } from './snapshot.js'
 import { readRegistry } from './registry.js'
 import { initChange, makeProject, makeTempHome, newStore, sleep } from './test-support.js'

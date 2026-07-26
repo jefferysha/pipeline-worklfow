@@ -18,7 +18,7 @@ set -u
 
 ADAPTERS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 REPO_ROOT="$(cd "$ADAPTERS_DIR/.." && pwd)"
-REG="${PIPELINE_REGISTRY:-$ADAPTERS_DIR/registry.yaml}"
+REG="${TENON_REGISTRY:-$ADAPTERS_DIR/registry.yaml}"
 R='\033[31m'; G='\033[32m'; Z='\033[0m'
 
 # platforms: 块内平台 id 列举（止于下一顶层 key，避免混入 planned:）

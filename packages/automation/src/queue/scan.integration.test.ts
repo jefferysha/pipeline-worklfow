@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { createStateStore } from '@pipeline-lite/kernel'
+import { createStateStore } from '@tenon/kernel'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { scanReadyFromFs } from './scan.js'
 

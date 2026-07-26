@@ -3,10 +3,10 @@
  * bin 入口：全机唯一 Global dashboard server 的启动装配（B4 版本抢占 + B5 token 握手）。
  *
  * 启动序（对位老仓 dashboard-server.py main，但补上版本抢占与 token）：
- *   1. 解析机器级路径（~/.claude/...，可经 PIPELINE_DASHBOARD_HOME 覆盖）。
+ *   1. 解析机器级路径（~/.claude/...，可经 TENON_DASHBOARD_HOME 覆盖）。
  *   2. 探测既有 :port 的 /api/health（含 version）→ decidePreemption：
  *        bind → 直接监听；reuse → 让位退出 0；preempt → SIGTERM 旧实例后监听。
- *   3. listen 固定端口（PIPELINE_DASHBOARD_PORT ?? 18765，绑 127.0.0.1）。
+ *   3. listen 固定端口（TENON_DASHBOARD_PORT ?? 18765，绑 127.0.0.1）。
  *   4. 写 0600 token 握手文件（B5）+ pidfile（pid/port/version，供后来者抢占判定）。
  *   5. SIGTERM/SIGINT 优雅停：关 server + 清 pidfile。
  */
@@ -14,8 +14,8 @@ import { execFile } from 'node:child_process'
 import { unlinkSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { createTraceStore } from '@pipeline-lite/tap'
-import { fingerprintWorkspace, machineStateScopeId } from '@pipeline-lite/kernel'
+import { createTraceStore } from '@tenon/tap'
+import { fingerprintWorkspace, machineStateScopeId } from '@tenon/kernel'
 import { createDashboardServer } from './server.js'
 import { resolveServerPaths } from './paths.js'
 import { decidePreemption, preemptOldServer, probeHealth } from './preempt.js'
@@ -24,11 +24,11 @@ import { resolvePayloadReleaseId, resolveReleaseVersion } from './version.js'
 import { resolveDashboardPort } from './port.js'
 
 function serverPort(): number {
-  return resolveDashboardPort(process.env.PIPELINE_DASHBOARD_PORT)
+  return resolveDashboardPort(process.env.TENON_DASHBOARD_PORT)
 }
 
 function cadencePollInterval(): number {
-  const raw = Number.parseInt(process.env.PIPELINE_CADENCE_POLL_MS ?? '', 10)
+  const raw = Number.parseInt(process.env.TENON_CADENCE_POLL_MS ?? '', 10)
   return Number.isSafeInteger(raw) && raw >= 100 ? raw : 30_000
 }
 

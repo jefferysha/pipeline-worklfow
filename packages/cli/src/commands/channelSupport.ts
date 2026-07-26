@@ -51,7 +51,7 @@ import {
   type ShutdownReason,
   type SupervisorConfig,
   type WorkerGuardPolicy,
-} from '@pipeline-lite/channel'
+} from '@tenon/channel'
 import { splitFlags } from '../argv.js'
 import type { CliDeps } from '../deps.js'
 
@@ -96,10 +96,10 @@ export interface ChannelHost {
   launchSupervisor?: SupervisorLauncher
 }
 
-/** 真 host：$TRELLIS_CHANNEL_ROOT 或 ~/.trellis/channels + $PIPELINE_CHANNEL_PROJECT 覆盖桶。 */
+/** 真 host：$TRELLIS_CHANNEL_ROOT 或 ~/.trellis/channels + $TENON_CHANNEL_PROJECT 覆盖桶。 */
 export function nodeChannelHost(cwd: string, clock?: Clock): ChannelHost {
   const root = resolveRoot(homedir(), process.env.TRELLIS_CHANNEL_ROOT)
-  const override = process.env.PIPELINE_CHANNEL_PROJECT
+  const override = process.env.TENON_CHANNEL_PROJECT
   const env: ChannelEnv = { root, cwd, ...(override ? { projectOverride: override } : {}) }
   return { store: createChannelStore(env, undefined, clock), env }
 }
@@ -151,7 +151,7 @@ export function defaultLauncher(host: ChannelHost): SupervisorLauncher {
     const entry = process.argv[1] ?? ''
     const childEnv: Record<string, string> = {
       TRELLIS_CHANNEL_ROOT: host.env.root,
-      PIPELINE_CHANNEL_PROJECT: projectKey(host.env),
+      TENON_CHANNEL_PROJECT: projectKey(host.env),
     }
     const pid = proc.spawnDetached(process.execPath, [entry, 'channel', '__supervisor', channel, worker, cfgPath], {
       env: childEnv,

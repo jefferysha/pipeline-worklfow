@@ -5,7 +5,7 @@
  * Codex must never also mutate Claude (and vice versa).  Keep the list aligned with
  * adapters/registry.yaml; native plugin hosts are the two runtimes that own a marketplace.
  */
-export const PIPELINE_HOSTS = [
+export const TENON_HOSTS = [
   'codex',
   'claude',
   'cursor',
@@ -20,13 +20,13 @@ export const PIPELINE_HOSTS = [
   'amp',
 ] as const
 
-export type PipelineHost = (typeof PIPELINE_HOSTS)[number]
+export type PipelineHost = (typeof TENON_HOSTS)[number]
 export type NativePipelineHost = Extract<PipelineHost, 'codex' | 'claude'>
 
 /** The release marketplace is the distribution channel for the one packaged plugin. */
-export const PIPELINE_MARKETPLACE_SOURCE = 'jefferysha/pipeline-worklfow'
-export const PIPELINE_MARKETPLACE_NAME = 'pipeline-lite'
-export const PIPELINE_PLUGIN_NAME = 'pipeline-lite'
+export const TENON_MARKETPLACE_SOURCE = 'jefferysha/tenon'
+export const TENON_MARKETPLACE_NAME = 'tenon'
+export const TENON_PLUGIN_NAME = 'tenon'
 
 export interface HostCommandPlanItem {
   readonly cmd: string
@@ -42,13 +42,13 @@ export interface HostSelection {
 
 /** Exactly one host is required for a mutating setup/update action. */
 export function selectPipelineHost(flags: PipelineHostFlags): HostSelection {
-  const selected = PIPELINE_HOSTS.filter((host) => flags[host] === true)
+  const selected = TENON_HOSTS.filter((host) => flags[host] === true)
   const host = selected[0]
   if (selected.length === 1 && host) return { host, error: null }
   if (selected.length === 0) {
     return {
       host: null,
-      error: `必须指定一个宿主：${PIPELINE_HOSTS.map((host) => `--${host}`).join(' | ')}`,
+      error: `必须指定一个宿主：${TENON_HOSTS.map((host) => `--${host}`).join(' | ')}`,
     }
   }
   return {
@@ -73,14 +73,14 @@ export function hostFlag(host: PipelineHost): `--${PipelineHost}` {
 export function nativeInstallPlan(host: NativePipelineHost): readonly HostCommandPlanItem[] {
   if (host === 'codex') {
     return [
-      { cmd: 'codex', args: ['plugin', 'marketplace', 'add', PIPELINE_MARKETPLACE_SOURCE, '--ref', 'main'] },
-      { cmd: 'codex', args: ['plugin', 'add', `${PIPELINE_PLUGIN_NAME}@${PIPELINE_MARKETPLACE_NAME}`, '--json'] },
+      { cmd: 'codex', args: ['plugin', 'marketplace', 'add', TENON_MARKETPLACE_SOURCE, '--ref', 'main'] },
+      { cmd: 'codex', args: ['plugin', 'add', `${TENON_PLUGIN_NAME}@${TENON_MARKETPLACE_NAME}`, '--json'] },
       { cmd: 'codex', args: ['plugin', 'list', '--json'] },
     ]
   }
   return [
-    { cmd: 'claude', args: ['plugin', 'marketplace', 'add', PIPELINE_MARKETPLACE_SOURCE] },
-    { cmd: 'claude', args: ['plugin', 'install', `${PIPELINE_PLUGIN_NAME}@${PIPELINE_MARKETPLACE_NAME}`] },
+    { cmd: 'claude', args: ['plugin', 'marketplace', 'add', TENON_MARKETPLACE_SOURCE] },
+    { cmd: 'claude', args: ['plugin', 'install', `${TENON_PLUGIN_NAME}@${TENON_MARKETPLACE_NAME}`] },
     { cmd: 'claude', args: ['plugin', 'list', '--json'] },
   ]
 }
@@ -102,8 +102,8 @@ export function installedPipelineRoot(host: NativePipelineHost, stdout: string):
       if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) continue
       const item = entry as { name?: unknown; marketplaceName?: unknown; source?: { path?: unknown } }
       if (
-        item.name === PIPELINE_PLUGIN_NAME
-        && item.marketplaceName === PIPELINE_MARKETPLACE_NAME
+        item.name === TENON_PLUGIN_NAME
+        && item.marketplaceName === TENON_MARKETPLACE_NAME
         && typeof item.source?.path === 'string'
       ) return item.source.path
     }
@@ -113,7 +113,7 @@ export function installedPipelineRoot(host: NativePipelineHost, stdout: string):
   for (const entry of parsed) {
     if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) continue
     const item = entry as { id?: unknown; installPath?: unknown }
-    if (item.id === `${PIPELINE_PLUGIN_NAME}@${PIPELINE_MARKETPLACE_NAME}` && typeof item.installPath === 'string') {
+    if (item.id === `${TENON_PLUGIN_NAME}@${TENON_MARKETPLACE_NAME}` && typeof item.installPath === 'string') {
       return item.installPath
     }
   }

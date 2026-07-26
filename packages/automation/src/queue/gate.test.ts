@@ -1,19 +1,19 @@
 import { describe, expect, it } from 'vitest'
 import {
   AUTOMATION_RUNNER_ENV,
-  PIPELINE_AFK_ENV,
+  TENON_AFK_ENV,
   afkGateBypasses,
   buildQueuedGuardBlocks,
   optedIn,
   shouldEnqueueOnSpecComplete,
 } from './gate.js'
 
-describe('PIPELINE_AFK 沙箱放行门（老仓 pipeline-gate.sh:16-25）', () => {
-  it('仅 PIPELINE_AFK=1 放行三门；host 端恒未设 → 不放行', () => {
-    expect(afkGateBypasses({ [PIPELINE_AFK_ENV]: '1' })).toBe(true)
-    expect(afkGateBypasses({ [PIPELINE_AFK_ENV]: '0' })).toBe(false)
+describe('TENON_AFK 沙箱放行门（老仓 pipeline-gate.sh:16-25）', () => {
+  it('仅 TENON_AFK=1 放行三门；host 端恒未设 → 不放行', () => {
+    expect(afkGateBypasses({ [TENON_AFK_ENV]: '1' })).toBe(true)
+    expect(afkGateBypasses({ [TENON_AFK_ENV]: '0' })).toBe(false)
     expect(afkGateBypasses({})).toBe(false)
-    expect(afkGateBypasses({ [PIPELINE_AFK_ENV]: 'true' })).toBe(false) // 严格 =1
+    expect(afkGateBypasses({ [TENON_AFK_ENV]: 'true' })).toBe(false) // 严格 =1
   })
 })
 
@@ -21,9 +21,9 @@ describe('build 相位 automation=queued 双执行守卫（老仓 pipeline-guard
   it('phase=build && automation=queued && 非 runner → 拦主线 build（HARD STOP）', () => {
     expect(buildQueuedGuardBlocks({ phase: 'build', automation: 'queued', isRunner: false })).toBe(true)
   })
-  it('调度器旁路 PIPELINE_AUTOMATION_RUNNER=1 → 放行', () => {
+  it('调度器旁路 TENON_AUTOMATION_RUNNER=1 → 放行', () => {
     expect(buildQueuedGuardBlocks({ phase: 'build', automation: 'queued', isRunner: true })).toBe(false)
-    expect(AUTOMATION_RUNNER_ENV).toBe('PIPELINE_AUTOMATION_RUNNER')
+    expect(AUTOMATION_RUNNER_ENV).toBe('TENON_AUTOMATION_RUNNER')
   })
   it('非 queued / 非 build → 不拦（人工路径不受影响）', () => {
     expect(buildQueuedGuardBlocks({ phase: 'build', automation: 'scheduled', isRunner: false })).toBe(false)

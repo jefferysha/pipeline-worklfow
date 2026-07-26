@@ -20,7 +20,7 @@ if [ -z "$_ROOT" ] || [ ! -f "$_ROOT/hooks/gate.sh" ]; then
 fi
 export CLAUDE_PLUGIN_ROOT="$_ROOT"
 
-CC_GATE="${PIPELINE_CC_GATE:-$_ROOT/hooks/gate.sh}"
+CC_GATE="${TENON_CC_GATE:-$_ROOT/hooks/gate.sh}"
 [ -f "$CC_GATE" ] || exit 0
 
 # 透传：gate.sh 命中 marker → 它自己 printf reason 到 stderr 并 exit 2；否则 exit 0。退出码原样传播。

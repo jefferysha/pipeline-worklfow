@@ -11,8 +11,8 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, test } from 'vitest'
-import { BUILTIN_TRACK_DEFINITIONS, GATE_TTL_MS } from '@pipeline-lite/kernel'
-import type { FieldName, GuardResult, HistoryEntry, Phase, PipelineState, TrackRegistry } from '@pipeline-lite/kernel'
+import { BUILTIN_TRACK_DEFINITIONS, GATE_TTL_MS } from '@tenon/kernel'
+import type { FieldName, GuardResult, HistoryEntry, Phase, PipelineState, TrackRegistry } from '@tenon/kernel'
 import type { CliDeps, GateMarkerInfo } from '../deps.js'
 import {
   FIXED_CLOCK,

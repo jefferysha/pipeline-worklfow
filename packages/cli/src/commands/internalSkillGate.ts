@@ -1,5 +1,5 @@
 /**
- * pipeline internal-skill-gate <name> <skillId> —— 隐藏命令，所有 workflow 的 effective Skill
+ * tenon internal-skill-gate <name> <skillId> —— 隐藏命令，所有 workflow 的 effective Skill
  * DAG 解锁判定，从 hooks/gate.sh 委托过来（GOAL 清单 E Task 9）。default 的 manifest overlay
  * 与 custom 的 step graph 都先编译为 EffectiveWorkflowPlan capability，再在本入口统一判定。
  *
@@ -8,7 +8,7 @@
  * fail-open 放行，呼应 hooks/gate.sh 文件头总纲："fail-open（绝不死锁）：... 任何异常 → 放行
  * exit 0"——这条硬承诺对本命令同样成立，不因为判定逻辑挪进了 CLI 就打折扣。
  */
-import { isSkillUnlocked, resolveAvailableSkillSlots } from '@pipeline-lite/kernel'
+import { isSkillUnlocked, resolveAvailableSkillSlots } from '@tenon/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
 import { changeDir, isValidChangeName } from '../paths.js'
 import { str } from '../render.js'
@@ -59,20 +59,20 @@ function skillIdFromToolRaw(raw: string): string | null {
   return m?.[1] ?? null
 }
 
-/** Pipeline-owned skills are presented by Codex as `pipeline-lite:<id>`, while workflow YAML and
+/** Pipeline-owned skills are presented by Codex as `tenon:<id>`, while workflow YAML and
  * immutable cache receipts use their bare id. Canonicalize this one plugin namespace before DAG
  * membership and prior-completion comparisons; leave third-party namespaces intact so custom
  * workflows can still model them explicitly. */
-function canonicalPipelineLiteSkillId(skillId: string): string {
-  return skillId.startsWith('pipeline-lite:') ? skillId.slice('pipeline-lite:'.length) : skillId
+function canonicalTenonSkillId(skillId: string): string {
+  return skillId.startsWith('tenon:') ? skillId.slice('tenon:'.length) : skillId
 }
 
-/** `pipeline` is the normal-chat orchestration entrypoint, not a phase work item.  Every custom
+/** `tenon` is the normal-chat orchestration entrypoint, not a phase work item. Every custom
  * workflow reaches it before the selected step's own DAG can run, so enforcing per-step membership
  * here would prevent the workflow from starting. Keep this allowlist deliberately exact: phase
- * skills such as `pipeline-open` remain subject to the declared DAG. */
-function isPipelineOrchestratorSkill(skillId: string): boolean {
-  return canonicalPipelineLiteSkillId(skillId) === 'pipeline'
+ * skills such as `tenon-open` remain subject to the declared DAG. */
+function isTenonOrchestratorSkill(skillId: string): boolean {
+  return canonicalTenonSkillId(skillId) === 'tenon'
 }
 
 /**
@@ -97,7 +97,7 @@ function completedSkillsSinceStepEntry(lines: readonly HistLine[], currentStepId
   for (const line of lines.slice(enteredAt + 1)) {
     if (line.kind !== 'tool') continue
     const id = skillIdFromToolRaw(line.raw ?? '')
-    if (id) completed.add(canonicalPipelineLiteSkillId(id))
+    if (id) completed.add(canonicalTenonSkillId(id))
   }
   return completed
 }
@@ -108,8 +108,8 @@ export async function cmdInternalSkillGate(deps: CliDeps, name: string, skillId:
       deps.io.err(`WARN: internal-skill-gate 收到非法 change 名 '${name}'，fail-open 放行`)
       return 0
     }
-    if (isPipelineOrchestratorSkill(skillId)) return 0
-    const canonicalSkillId = canonicalPipelineLiteSkillId(skillId)
+    if (isTenonOrchestratorSkill(skillId)) return 0
+    const canonicalSkillId = canonicalTenonSkillId(skillId)
 
     const dir = changeDir(deps.cwd, name)
     // Reconciliation is deliberately synchronous and under the same change lock as this DAG
@@ -136,7 +136,7 @@ export async function cmdInternalSkillGate(deps: CliDeps, name: string, skillId:
         const slots = resolveAvailableSkillSlots(deps.resolver, skillCapability, currentStepId)
         const canonicalSlots = slots.map((slot) => ({
           token: slot.token,
-          alternatives: slot.alternatives.map(canonicalPipelineLiteSkillId),
+          alternatives: slot.alternatives.map(canonicalTenonSkillId),
         }))
         const slotIndex = canonicalSlots.findIndex((slot) => slot.alternatives.includes(canonicalSkillId))
         // Default profiles enumerate mandatory/recommended orchestration Skills, not every useful
@@ -158,7 +158,7 @@ export async function cmdInternalSkillGate(deps: CliDeps, name: string, skillId:
           .map((slot) => slot.token)
         if (missing.length === 0) return 0
         deps.io.err(
-          `【pipeline 门】skill '${skillId}' 在 default step '${currentStepId}' 未解锁：` +
+          `【Tenon 门】skill '${skillId}' 在 default step '${currentStepId}' 未解锁：` +
           `还需先完成 ${missing.join(', ')}（本次进入该 step 之后）`,
         )
         return 2
@@ -170,7 +170,7 @@ export async function cmdInternalSkillGate(deps: CliDeps, name: string, skillId:
         // A missing Codex PostToolUse callback must not force a user retry: reconcile every
         // declared node in this exact step before checking the next node's dependencies.  The
         // transcript bridge remains bounded to trusted plugin paths and this physical project.
-          candidateSkillIds: capabilityStep.declared.map((ref) => canonicalPipelineLiteSkillId(ref.id)),
+          candidateSkillIds: capabilityStep.declared.map((ref) => canonicalTenonSkillId(ref.id)),
         recordedAt: deps.clock(),
         history: deps.history,
         evidenceScope: currentStepId,
@@ -182,12 +182,12 @@ export async function cmdInternalSkillGate(deps: CliDeps, name: string, skillId:
       const historyRaw = (await deps.readHistoryRaw?.(dir)) ?? ''
       const lines = parseHistoryLines(historyRaw)
       const completedSinceEntry = completedSkillsSinceStepEntry(lines, currentStepId)
-      // Workflow YAML may retain the historical `pipeline-lite:<id>` spelling while Codex uses
+      // Workflow YAML may retain the historical `tenon:<id>` spelling while Codex uses
       // its namespace at invocation time and cache receipts use bare ids. Normalize only our own
       // namespace, including dependencies, before delegating to the single kernel DAG predicate.
       const canonicalStepSkills = capabilityStep.declared.map((ref) => ({
-        id: canonicalPipelineLiteSkillId(ref.id),
-        depends_on: ref.dependsOn.map(canonicalPipelineLiteSkillId),
+        id: canonicalTenonSkillId(ref.id),
+        depends_on: ref.dependsOn.map(canonicalTenonSkillId),
       }))
 
       if (isSkillUnlocked(canonicalSkillId, canonicalStepSkills, completedSinceEntry)) return 0
@@ -196,12 +196,12 @@ export async function cmdInternalSkillGate(deps: CliDeps, name: string, skillId:
       const ref = canonicalStepSkills.find((s) => s.id === canonicalSkillId)
       if (!ref) {
         deps.io.err(
-          `【pipeline 门】skill '${skillId}' 不在 step '${currentStepId}'（workflow '${plan.id}'）声明的 skills 列表里，暂不可用`,
+          `【Tenon 门】skill '${skillId}' 不在 step '${currentStepId}'（workflow '${plan.id}'）声明的 skills 列表里，暂不可用`,
         )
       } else {
         const missing = (ref.depends_on ?? []).filter((d) => !completedSinceEntry.has(d))
         deps.io.err(
-          `【pipeline 门】skill '${skillId}' 在 step '${currentStepId}'（workflow '${plan.id}'）未解锁：` +
+          `【Tenon 门】skill '${skillId}' 在 step '${currentStepId}'（workflow '${plan.id}'）未解锁：` +
             `还需先完成 ${missing.join(', ')}（本次进入该 step 之后）`,
         )
       }

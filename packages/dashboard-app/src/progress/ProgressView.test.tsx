@@ -637,7 +637,7 @@ describe('ProgressView 失败/取消行：回终端命令 chip（抽屉内）', 
     return writeText
   }
 
-  it('失败行（无 worktree）抽屉 chip=「重跑命令」pipeline afk enqueue，点击拷贝 + toast，不打 afk 端点；无重试/放弃钮', async () => {
+  it('失败行（无 worktree）抽屉 chip=「重跑命令」tenon afk enqueue，点击拷贝 + toast，不打 afk 端点；无重试/放弃钮', async () => {
     const writeText = stubClipboard()
     const { onToast } = renderView()
     await openDrawer('hotfix-login')
@@ -645,12 +645,12 @@ describe('ProgressView 失败/取消行：回终端命令 chip（抽屉内）', 
     expect(screen.queryByTestId('prg9-dw-dismiss-hotfix-login')).toBeNull()
     const chip = screen.getByTestId('prg9-dw-cmd-hotfix-login')
     expect(chip.textContent).toContain('重跑命令')
-    expect(chip.textContent).toContain('pipeline afk enqueue hotfix-login')
-    expect(chip.getAttribute('title')).toBe('pipeline afk enqueue hotfix-login')
+    expect(chip.textContent).toContain('tenon afk enqueue hotfix-login')
+    expect(chip.getAttribute('title')).toBe('tenon afk enqueue hotfix-login')
     fireEvent.click(chip)
-    expect(writeText).toHaveBeenCalledWith('pipeline afk enqueue hotfix-login')
+    expect(writeText).toHaveBeenCalledWith('tenon afk enqueue hotfix-login')
     await waitFor(() => {
-      expect(onToast).toHaveBeenCalledWith(expect.stringContaining('pipeline afk enqueue hotfix-login'))
+      expect(onToast).toHaveBeenCalledWith(expect.stringContaining('tenon afk enqueue hotfix-login'))
     })
     expect(fetchLog.some((l) => l.includes('/api/afk/hotfix-login/'))).toBe(false)
   })
@@ -674,7 +674,7 @@ describe('ProgressView 失败/取消行：回终端命令 chip（抽屉内）', 
     expect(writeText).toHaveBeenCalledWith('cd /tmp/wt/wt-fail')
   })
 
-  it('取消行（cause=cancelled）抽屉 chip=「重新跑的命令」pipeline afk enqueue（worktree 现场不参与）', async () => {
+  it('取消行（cause=cancelled）抽屉 chip=「重新跑的命令」tenon afk enqueue（worktree 现场不参与）', async () => {
     const writeText = stubClipboard()
     renderView({
       snapshot: makeSnapshot([
@@ -692,10 +692,10 @@ describe('ProgressView 失败/取消行：回终端命令 chip（抽屉内）', 
     const chip = screen.getByTestId('prg9-dw-cmd-cancel-me')
     expect(chip.textContent).toContain('重新跑的命令')
     fireEvent.click(chip)
-    expect(writeText).toHaveBeenCalledWith('pipeline afk enqueue cancel-me')
+    expect(writeText).toHaveBeenCalledWith('tenon afk enqueue cancel-me')
   })
 
-  it('v9-J：session-link 批量命中真恢复命令 → 抽屉 chip 显示/拷贝真命令，不是 pipeline afk enqueue 兜底', async () => {
+  it('v9-J：session-link 批量命中真恢复命令 → 抽屉 chip 显示/拷贝真命令，不是 tenon afk enqueue 兜底', async () => {
     const writeText = stubClipboard()
     const resumeCmd = 'cd /tmp/wt/hotfix-login && claude --resume abcd-1234'
     sessionLinksResponse = {
@@ -709,7 +709,7 @@ describe('ProgressView 失败/取消行：回终端命令 chip（抽屉内）', 
     const chip = screen.getByTestId('prg9-dw-cmd-hotfix-login')
     await waitFor(() => expect(chip.textContent).toContain(resumeCmd))
     expect(chip.textContent).toContain('恢复会话')
-    expect(chip.textContent).not.toContain('pipeline afk enqueue hotfix-login')
+    expect(chip.textContent).not.toContain('tenon afk enqueue hotfix-login')
     fireEvent.click(chip)
     expect(writeText).toHaveBeenCalledWith(resumeCmd)
   })
@@ -723,7 +723,7 @@ describe('ProgressView 失败/取消行：回终端命令 chip（抽屉内）', 
     await openDrawer('hotfix-login')
     const chip = screen.getByTestId('prg9-dw-cmd-hotfix-login')
     expect(chip.textContent).toContain('重跑命令')
-    expect(chip.textContent).toContain('pipeline afk enqueue hotfix-login')
+    expect(chip.textContent).toContain('tenon afk enqueue hotfix-login')
   })
 
   it('v9-J：session-links 端点整体失败（非 2xx）→ fail-open，chip 仍落回静态命令（不炸视图）', async () => {
@@ -732,7 +732,7 @@ describe('ProgressView 失败/取消行：回终端命令 chip（抽屉内）', 
     await openDrawer('hotfix-login')
     const chip = screen.getByTestId('prg9-dw-cmd-hotfix-login')
     expect(chip.textContent).toContain('重跑命令')
-    expect(chip.textContent).toContain('pipeline afk enqueue hotfix-login')
+    expect(chip.textContent).toContain('tenon afk enqueue hotfix-login')
   })
 })
 
@@ -949,9 +949,9 @@ describe('ProgressView Bug4：乐观 patch 按 change 落地清除，不被无�
 })
 
 describe('ProgressView 空态', () => {
-  it('无在制任务 → 主入口可打开 Route Lock，同时保留 pipeline init 退路', async () => {
+  it('无在制任务 → 主入口可打开 Route Lock，同时保留 tenon init 退路', async () => {
     renderView({ snapshot: makeSnapshot([makeProject(ROOT_A, [])]) })
-    expect(screen.getByTestId('prg-empty').textContent).toContain('pipeline init')
+    expect(screen.getByTestId('prg-empty').textContent).toContain('tenon init')
     fireEvent.click(screen.getByTestId('progress-new-change'))
     expect(await screen.findByTestId('create-change-dialog')).toBeInTheDocument()
     await act(async () => {})

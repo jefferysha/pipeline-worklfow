@@ -117,7 +117,7 @@ export function parseRunMetadataLines(lines: readonly string[]): ParseRunMetadat
     : matchLine(fingerprintLine, DOCUMENT_GOVERNANCE_FINGERPRINT_KEY)
   if (fingerprintRaw !== undefined) {
     if (metadata.documentProfile === undefined || !/^[0-9a-f]{64}$/.test(fingerprintRaw)) {
-      throw new Error('pipeline document governance fingerprint 损坏')
+      throw new Error('tenon document governance fingerprint 损坏')
     }
     metadata.documentGovernanceFingerprint = fingerprintRaw
     consumedLines += 1
@@ -128,7 +128,7 @@ export function parseRunMetadataLines(lines: readonly string[]): ParseRunMetadat
     : matchLine(workflowFingerprintLine, WORKFLOW_PLAN_FINGERPRINT_KEY)
   if (workflowFingerprintRaw !== undefined) {
     if (!/^[0-9a-f]{64}$/.test(workflowFingerprintRaw)) {
-      throw new Error('pipeline workflow plan fingerprint 损坏')
+      throw new Error('tenon workflow plan fingerprint 损坏')
     }
     metadata.workflowPlanFingerprint = workflowFingerprintRaw
     consumedLines += 1

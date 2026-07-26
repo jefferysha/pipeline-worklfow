@@ -34,7 +34,7 @@ import {
   type ShutdownReason,
   type SupervisorConfig,
   type WorkerGuardPolicy,
-} from '@pipeline-lite/channel'
+} from '@tenon/channel'
 import { splitFlags } from '../argv.js'
 import type { CliDeps } from '../deps.js'
 
@@ -48,7 +48,7 @@ import {
 } from './channelMessaging.js'
 import { cmdKill, cmdPrune, cmdRun, cmdSpawn, cmdSupervisor } from './channelSupervisor.js'
 
-const USAGE = `pipeline channel — event-sourced worker 总线（正交持久层，绝不触 barrier/三门/build_sha）
+const USAGE = `tenon channel — event-sourced worker 总线（正交持久层，绝不触 barrier/三门/build_sha）
 
 结构:
   create  <name> --task T [--type chat|forum] [--scope project|global] [--description D]

@@ -18,7 +18,7 @@ import {
   renderDocumentTemplate,
   documentPathForKind,
   documentTemplateIdForKind,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import type {
   DocumentContractPhase,
   DocumentEvidenceReport,
@@ -26,7 +26,7 @@ import type {
   DocumentKind,
   PipelineState,
   DocumentLocale,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import { lstat } from 'node:fs/promises'
 import { relative, resolve } from 'node:path'
 import { errMsg, type CliDeps } from '../deps.js'
@@ -167,7 +167,7 @@ function assertGoverned(context: GovernedDocumentContext): {
   return { phase: context.phase, policy: context.policy }
 }
 
-/** `pipeline document init <change>`: create the ledger for a governed existing change (migration-safe). */
+/** `tenon document init <change>`: create the ledger for a governed existing change (migration-safe). */
 export async function cmdDocumentInit(deps: CliDeps, name: string): Promise<number> {
   const dir = assertChangeName(deps, name)
   if (!dir) return 1
@@ -191,7 +191,7 @@ export async function cmdDocumentInit(deps: CliDeps, name: string): Promise<numb
 }
 
 /**
- * `pipeline document record`: bind a real document plus actual Skill invocation evidence.
+ * `tenon document record`: bind a real document plus actual Skill invocation evidence.
  *
  * `backfill` is deliberately explicit for an installed-plugin upgrade: an older Change may already
  * have passed the phase that originally owns an unrecorded document. It cannot overwrite an existing
@@ -272,7 +272,7 @@ export async function cmdDocumentMigrateDelta(
   }
 }
 
-/** `pipeline document read`: store a digest-bound receipt that the current phase consumed its inputs. */
+/** `tenon document read`: store a digest-bound receipt that the current phase consumed its inputs. */
 export async function cmdDocumentRead(
   deps: CliDeps,
   name: string,

@@ -25,9 +25,9 @@ if [ -z "$_ROOT" ] || [ ! -f "$_ROOT/hooks/breadcrumb.sh" ] || [ ! -f "$_ROOT/ho
 fi
 export CLAUDE_PLUGIN_ROOT="$_ROOT"
 
-BREADCRUMB="${PIPELINE_CC_BREADCRUMB:-$_ROOT/hooks/breadcrumb.sh}"
-ROUTER="${PIPELINE_CC_ROUTER:-$_ROOT/hooks/router.sh}"
-CONFIRM_CLEAR="${PIPELINE_CC_CONFIRM_CLEAR:-$_ROOT/hooks/confirm-clear-prompt.sh}"
+BREADCRUMB="${TENON_CC_BREADCRUMB:-$_ROOT/hooks/breadcrumb.sh}"
+ROUTER="${TENON_CC_ROUTER:-$_ROOT/hooks/router.sh}"
+CONFIRM_CLEAR="${TENON_CC_CONFIRM_CLEAR:-$_ROOT/hooks/confirm-clear-prompt.sh}"
 CONTEXT=""
 
 append_context() {

@@ -317,7 +317,7 @@ describe('真实 e2e —— 全命令驱动真 kernel + 真 fs（GOAL C9）', ()
     await h.run(['init', 'e2e', '--track', 'backend', '--preset', 'full', '--user', 'conv'])
     await h.seedGovernedDocumentEvidence('e2e')
     const clearGates = async () => {
-      // review projection must only be consumed by `pipeline review acknowledge`, never deleted by a test bypass.
+      // review projection must only be consumed by `tenon review acknowledge`, never deleted by a test bypass.
       for (const k of ['confirm', 'interaction']) await rm(join(h.cwd, `.pipeline-pending-${k}`), { force: true })
     }
     const step = async (ev: string) => {
@@ -396,8 +396,8 @@ describe('真实 e2e —— 全命令驱动真 kernel + 真 fs（GOAL C9）', ()
 })
 
 describe('真实构建产物 —— tsc + esbuild bundle 存在且可执行（GOAL C9 证据链）', () => {
-  test('dist/pipeline.mjs 真存在、真跑 --help 不炸', () => {
-    const bundle = join(REPO_ROOT, 'packages/cli/dist/pipeline.mjs')
+  test('dist/tenon.mjs 真存在、真跑 --help 不炸', () => {
+    const bundle = join(REPO_ROOT, 'packages/cli/dist/tenon.mjs')
     expect(statSync(bundle).isFile()).toBe(true)
     // 真起子进程跑真产物（与 test-bundle.sh 同源，vitest 内也钉一道）
     const help = execFileSync('node', [bundle, '--help'], { encoding: 'utf8' })

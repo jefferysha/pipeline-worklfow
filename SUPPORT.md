@@ -1,6 +1,6 @@
 # Support
 
-Pipeline Lite is an open-source local developer tool. The project does not
+Tenon is an open-source local developer tool. The project does not
 currently promise a support SLA, hosted service, release cadence, or
 compatibility window.
 
@@ -17,11 +17,11 @@ Read:
 Run the read-only diagnostic bundle:
 
 ```bash
-pipeline doctor --json
-pipeline runtime status --json
-pipeline list --json
-pipeline status <change-name> --json
-pipeline document status <change-name> --json
+tenon doctor --json
+tenon runtime status --json
+tenon list --json
+tenon status <change-name> --json
+tenon document status <change-name> --json
 ```
 
 For Dashboard problems:
@@ -33,7 +33,7 @@ curl --fail http://127.0.0.1:18765/api/health
 ## Questions and non-sensitive bugs
 
 Search or open a
-[GitHub Issue](https://github.com/jefferysha/pipeline-worklfow/issues).
+[GitHub Issue](https://github.com/jefferysha/tenon/issues).
 
 Include:
 

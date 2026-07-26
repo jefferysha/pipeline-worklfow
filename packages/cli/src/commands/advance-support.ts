@@ -3,7 +3,7 @@ import {
   reviewGateApprovedFor,
   type GateKind,
   type Phase,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
 import { EVENTS } from '../events.js'
 import { changeDir } from '../paths.js'
@@ -109,7 +109,7 @@ export function reviewReceiptStop(
   const prefix = dryRun ? '  预计停在' : '[STOP]'
   deps.io.out(
     `${prefix} ${target}: review 出口 event '${event}' 尚无人工确认回执；先完成 check 并运行 ` +
-      `pipeline review request ${name} --event ${event}，` +
-      `待用户确认后运行 pipeline review acknowledge ${name}`,
+      `tenon review request ${name} --event ${event}，` +
+      `待用户确认后运行 tenon review acknowledge ${name}`,
   )
 }

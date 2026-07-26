@@ -3,7 +3,7 @@ name: to-tickets
 description: First-party decomposition of an approved plan into traceable work items.
 license: MIT
 metadata:
-  author: pipeline-lite
+  author: tenon
 ---
 
 # To Tickets

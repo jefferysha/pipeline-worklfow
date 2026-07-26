@@ -38,7 +38,7 @@ function spyEnv(over: Partial<SetupEnv> = {}, exec?: ExecStub, confirmAns = true
   const env: SetupEnv = {
     homeDir: () => '/home/test',
     pluginRoot: () => '/plugin',
-  selfPath: () => '/plugin/packages/cli/dist/pipeline.mjs',
+  selfPath: () => '/plugin/packages/cli/dist/tenon.mjs',
   mkdirp: (d) => { calls.mkdirp.push(d) },
   pathExists: () => false,
   readText: () => '{}\n',
@@ -143,7 +143,7 @@ const codexInstallExec: ExecStub = (cmd, args) => {
     return {
       code: 0,
       stdout: JSON.stringify({
-        installed: [{ name: 'pipeline-lite', marketplaceName: 'pipeline-lite', source: { path: '/installed/pipeline-lite' } }],
+        installed: [{ name: 'tenon', marketplaceName: 'tenon', source: { path: '/installed/tenon' } }],
       }),
       stderr: '',
     }
@@ -158,7 +158,7 @@ describe('①--dry-run —— 按宿主打印计划且零写、零发布', () =>
     expect(cmdSetup(deps, undefined, { codex: true, dryRun: true }, env)).toBe(0)
     const out = deps.outLines.join('\n')
     expect(out).toContain('计划骨架')
-    expect(out).toContain('唯一 pipeline-lite 插件')
+    expect(out).toContain('唯一 tenon 插件')
     expect(out).toContain('内置技能')
     expect(out).toContain('技能安装计划')
     expect(out).toContain('运行时就绪检查')
@@ -191,11 +191,11 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
     expect(calls.mkdirp).toContain(resolveRuntimePaths({ homeDir: '/home/test' }).configRoot)
     expect(calls.exec.map(([cmd, args]) => [cmd, args.join(' ')])).toEqual([
       ['codex', 'plugin list --json'],
-      ['bash', '/installed/pipeline-lite/tools/verify-skills.sh --quiet --root /installed/pipeline-lite'],
+      ['bash', '/installed/tenon/tools/verify-skills.sh --quiet --root /installed/tenon'],
     ])
     expect(deps.outLines.join('\n')).toContain('已启用 --codex 自动更新')
     expect(deps.outLines.join('\n')).toContain('输入 /hooks')
-    expect(runtime.calls.activations).toEqual([['/installed/pipeline-lite', 'codex', '/home/test']])
+    expect(runtime.calls.activations).toEqual([['/installed/tenon', 'codex', '/home/test']])
     expect(dashboard.calls.starts).toEqual([[
       `/runtime/releases/sha256-${'a'.repeat(64)}/payload`,
       { openBrowser: true },
@@ -213,7 +213,7 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
           stdout: JSON.stringify({
             installed: inventoryReads === 1
               ? []
-              : [{ name: 'pipeline-lite', marketplaceName: 'pipeline-lite', source: { path: '/installed/pipeline-lite' } }],
+              : [{ name: 'tenon', marketplaceName: 'tenon', source: { path: '/installed/tenon' } }],
           }),
           stderr: '',
         }
@@ -226,12 +226,12 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
     expect(await cmdSetupHost(deps, 'codex', { codex: true }, env, runtime.installer)).toBe(0)
     expect(calls.exec.map(([cmd, args]) => [cmd, args.join(' ')])).toEqual([
       ['codex', 'plugin list --json'],
-      ['codex', 'plugin marketplace add jefferysha/pipeline-worklfow --ref main'],
-      ['codex', 'plugin add pipeline-lite@pipeline-lite --json'],
+      ['codex', 'plugin marketplace add jefferysha/tenon --ref main'],
+      ['codex', 'plugin add tenon@tenon --json'],
       ['codex', 'plugin list --json'],
-      ['bash', '/installed/pipeline-lite/tools/verify-skills.sh --quiet --root /installed/pipeline-lite'],
+      ['bash', '/installed/tenon/tools/verify-skills.sh --quiet --root /installed/tenon'],
     ])
-    expect(runtime.calls.activations).toEqual([['/installed/pipeline-lite', 'codex', '/home/test']])
+    expect(runtime.calls.activations).toEqual([['/installed/tenon', 'codex', '/home/test']])
   })
 
   test('Codex 已登记但缺 runtime bootstrap 时拒绝复用，并回到正式安装计划', async () => {
@@ -244,8 +244,8 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
           code: 0,
           stdout: JSON.stringify({
             installed: [{
-              name: 'pipeline-lite', marketplaceName: 'pipeline-lite',
-              source: { path: inventoryReads === 1 ? '/stale/pipeline-lite' : '/installed/pipeline-lite' },
+              name: 'tenon', marketplaceName: 'tenon',
+              source: { path: inventoryReads === 1 ? '/stale/tenon' : '/installed/tenon' },
             }],
           }),
           stderr: '',
@@ -253,16 +253,16 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
       }
       return { code: 0, stdout: '', stderr: '' }
     }
-    const { env, calls } = spyEnv({ pathExists: (path) => path !== '/stale/pipeline-lite/runtime/pipeline-bootstrap.mjs' }, exec)
+    const { env, calls } = spyEnv({ pathExists: (path) => path !== '/stale/tenon/runtime/tenon-bootstrap.mjs' }, exec)
     const runtime = fakeRuntimeInstaller()
 
     expect(await cmdSetupHost(deps, 'codex', { codex: true }, env, runtime.installer)).toBe(0)
     expect(calls.exec.map(([cmd, args]) => [cmd, args.join(' ')])).toEqual([
       ['codex', 'plugin list --json'],
-      ['codex', 'plugin marketplace add jefferysha/pipeline-worklfow --ref main'],
-      ['codex', 'plugin add pipeline-lite@pipeline-lite --json'],
+      ['codex', 'plugin marketplace add jefferysha/tenon --ref main'],
+      ['codex', 'plugin add tenon@tenon --json'],
       ['codex', 'plugin list --json'],
-      ['bash', '/installed/pipeline-lite/tools/verify-skills.sh --quiet --root /installed/pipeline-lite'],
+      ['bash', '/installed/tenon/tools/verify-skills.sh --quiet --root /installed/tenon'],
     ])
     expect(deps.outLines.join('\n')).toContain('不完整或未通过校验')
   })
@@ -339,7 +339,7 @@ describe('①b Codex 旧 hook 迁移 —— 插件是唯一 hook 所有者', () 
     const migrated = JSON.parse(calls.writeText[0]?.[1] ?? '{}') as { hooks?: Record<string, unknown> }
     expect(migrated.hooks?.SessionStart).toBeUndefined()
     expect(migrated.hooks?.PreToolUse).toBeDefined()
-    expect(runtime.calls.activations).toEqual([['/installed/pipeline-lite', 'codex', '/home/test']])
+    expect(runtime.calls.activations).toEqual([['/installed/tenon', 'codex', '/home/test']])
     expect(deps.outLines.join('\n')).toContain('已迁移 1 个旧版 Codex hook')
   })
 })
@@ -351,7 +351,7 @@ describe('②managed runtime 发布边界', () => {
     const runtime = fakeRuntimeInstaller(true)
 
     expect(await cmdSetupHost(deps, 'codex', { codex: true }, env, runtime.installer)).toBe(1)
-    expect(runtime.calls.activations).toEqual([['/installed/pipeline-lite', 'codex', '/home/test']])
+    expect(runtime.calls.activations).toEqual([['/installed/tenon', 'codex', '/home/test']])
     expect(deps.errLines.join('\n')).toContain('保留当前已验证 release')
     expect(deps.outLines.join('\n')).not.toContain('已把 pipeline 软链')
   })
@@ -399,14 +399,14 @@ describe('⑨空 sub 全流程 —— 技能段后接运行时就绪清单（dry
     expect(out).toContain('技能安装计划') // 技能段跑了
     expect(out).toContain('就绪清单') // 运行时段也跑了（一屏）
     expect(out).toContain('docker daemon 可用')
-    expect(runtime.calls.activations).toEqual([['/installed/pipeline-lite', 'codex', '/home/test']])
+    expect(runtime.calls.activations).toEqual([['/installed/tenon', 'codex', '/home/test']])
     expect(dashboard.calls.starts).toEqual([[
       `/runtime/releases/sha256-${'a'.repeat(64)}/payload`,
       { openBrowser: true },
     ]])
   })
 
-  test('--dry-run:运行时段只提示见 pipeline setup runtime,绝不真探测 docker（同步返 number,不碰 rt）', () => {
+  test('--dry-run:运行时段只提示见 tenon setup runtime,绝不真探测 docker（同步返 number,不碰 rt）', () => {
     const deps = makeDeps()
     const { env, calls } = spyEnv()
     // 关键:不传 rt（用真实 REAL_RUNTIME_ENV 缺省）——dry-run 仍绝不起真 docker;同步返 number 即证未 await 探测。
@@ -414,7 +414,7 @@ describe('⑨空 sub 全流程 —— 技能段后接运行时就绪清单（dry
     expect(code).toBe(0) // 同步 number（非 Promise）——dry-run 不进异步运行时探测
     const out = deps.outLines.join('\n')
     expect(out).toContain('运行时就绪检查')
-    expect(out).toContain('pipeline setup runtime') // 指引去独立子命令看真清单
+    expect(out).toContain('tenon setup runtime') // 指引去独立子命令看真清单
     expect(out).toContain('--dry-run')
     expect(calls.exec).toHaveLength(0) // 零 exec（技能段 dry-run 零执行 + 运行时段未探测）
   })
@@ -587,7 +587,7 @@ describe('⑤技能安装段 S2 —— 命令生成 / 标注 / 幂等 / dry-run 
       { token: 'tailwind-css-patterns', tool: 'claude-plugin', source: 'agents-inc', skill: 'web-styling-tailwind', tier: 'recommended', official: false },
       { token: 'opsx', tool: 'npm', source: '@fission-ai/openspec', tier: 'mandatory', official: false },
       { token: 'verify', tool: 'builtin', source: 'claude-code', tier: 'mandatory', official: true },
-      { token: 'openspec-propose', tool: 'bundled', source: 'pipeline-lite', tier: 'mandatory', official: false },
+      { token: 'openspec-propose', tool: 'bundled', source: 'tenon', tier: 'mandatory', official: false },
     ]
     const plan = buildSkillsPlan(src, spyEnv().env)
     const texts = plan.commands.map(cmdText)

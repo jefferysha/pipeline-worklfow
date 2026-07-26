@@ -12,7 +12,7 @@ import {
   stat,
 } from 'node:fs/promises'
 import { basename, dirname, join, relative, resolve, sep } from 'node:path'
-import { atomicWriteFile, withLock } from '@pipeline-lite/kernel'
+import { atomicWriteFile, withLock } from '@tenon/kernel'
 import type {
   RuntimeActivation,
   RuntimeAuditEntry,
@@ -179,8 +179,8 @@ async function verifyHookAbi(payloadRoot: string): Promise<void> {
     if (command.includes('${PLUGIN_ROOT') || command.includes('${CLAUDE_PLUGIN_ROOT')) {
       throw new RuntimeFailure('candidate-invalid', 'host hook 不得直接执行可变 PLUGIN_ROOT payload')
     }
-    if (!command.includes('pipeline-hook')) {
-      throw new RuntimeFailure('candidate-invalid', `host hook 未调用稳定 pipeline-hook ABI: ${command}`)
+    if (!command.includes('tenon-hook')) {
+      throw new RuntimeFailure('candidate-invalid', `host hook 未调用稳定 tenon-hook ABI: ${command}`)
     }
   }
 }
@@ -209,9 +209,9 @@ async function runChecked(
 
 async function verifyPayload(payloadRoot: string, runner: RuntimeCommandRunner): Promise<void> {
   const verifier = join(payloadRoot, 'tools', 'verify-skills.sh')
-  const cli = join(payloadRoot, 'packages', 'cli', 'dist', 'pipeline.mjs')
+  const cli = join(payloadRoot, 'packages', 'cli', 'dist', 'tenon.mjs')
   const server = join(payloadRoot, 'packages', 'server', 'dist', 'dashboard.mjs')
-  const bootstrap = join(payloadRoot, 'runtime', 'pipeline-bootstrap.mjs')
+  const bootstrap = join(payloadRoot, 'runtime', 'tenon-bootstrap.mjs')
   await assertFile(verifier, 'verify-skills')
   await assertFile(cli, 'CLI bundle')
   await assertFile(server, 'dashboard server bundle')
@@ -289,11 +289,11 @@ export class RuntimeReleaseStore {
     return withLock(this.paths.stateRoot, async () => {
       const selection = await readSelection(this.paths)
       if (selection.previousRelease === null) {
-        throw new RuntimeFailure('no-recovery-release', '没有可回滚的已验证 runtime release；请重新运行 pipeline setup --<host>')
+        throw new RuntimeFailure('no-recovery-release', '没有可回滚的已验证 runtime release；请重新运行 tenon setup --<host>')
       }
       const manifest = await this.validateStoredRelease(selection.previousRelease)
       if (manifest === null) {
-        throw new RuntimeFailure('no-recovery-release', 'previous runtime release 无法通过完整性校验；请重新运行 pipeline setup --<host>')
+        throw new RuntimeFailure('no-recovery-release', 'previous runtime release 无法通过完整性校验；请重新运行 tenon setup --<host>')
       }
       const previousRoot = this.releaseRoot(manifest.releaseId)
       const next: RuntimeSelection = {
@@ -443,7 +443,7 @@ export class RuntimeReleaseStore {
   }
 
   private async installBootstrap(releaseRoot: string): Promise<void> {
-    const source = join(releaseRoot, 'payload', 'runtime', 'pipeline-bootstrap.mjs')
+    const source = join(releaseRoot, 'payload', 'runtime', 'tenon-bootstrap.mjs')
     await assertFile(source, 'runtime bootstrap')
     await runChecked(this.runner, process.execPath, ['--check', source], releaseRoot, 'runtime bootstrap syntax')
     const active = join(this.paths.bootstrapRoot, 'active.mjs')

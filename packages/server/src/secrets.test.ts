@@ -8,7 +8,7 @@ import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { readSecrets, secretsPath } from '@pipeline-lite/kernel'
+import { readSecrets, secretsPath } from '@tenon/kernel'
 import {
   buildSecretsResponse, isValidSecretKey, maskSecret, removeSecret, SECRET_KEY_LIST, validateSecretWriteBody, writeSecret,
 } from './secrets.js'

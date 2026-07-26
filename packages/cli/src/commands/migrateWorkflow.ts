@@ -26,7 +26,7 @@
  *
  * TOCTOU 修复（task review Important finding）：上面这次"无条件写一次"原先是 store.get 读一次
  * 、判定完再 store.set 落盘——check-then-act 两步之间隔着锁获取的窄窗口，若一个真实合法的
- * 并发写手（例如某个正在执行的 `pipeline set <name> workflow <custom>`）恰好落在这个窗口里，
+ * 并发写手（例如某个正在执行的 `tenon set <name> workflow <custom>`）恰好落在这个窗口里，
  * 会被本命令的无条件 set 悄悄冲回 default，等价于本文件开头详述的"覆写真实定制"数据损坏
  * bug——只是触发条件从"静态已是自定义值"变成了"落盘瞬间被并发改成自定义值"，本质是同一类问题
  * 换了个时序面。修复：把落盘那一步换成 store.cas(dir,'workflow',current,'default')——expect

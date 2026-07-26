@@ -12,7 +12,7 @@ import {
   type LoopEntry,
   type WorkflowDef,
   type WorkflowIR,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import {
   evaluateSkillBundleWiring as evaluateSkillBundleWiringDefault,
   type SkillBundleWiringDeps,

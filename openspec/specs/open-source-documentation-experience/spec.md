@@ -2,20 +2,20 @@
 
 ## Purpose
 
-定义 Pipeline Lite 的开源入口、公开文档、Dashboard 概览、双语可访问性、事实校验与社区维护要求。
+定义 Tenon 的开源入口、公开文档、Dashboard 概览、双语可访问性、事实校验与社区维护要求。
 ## Requirements
 ### Requirement: The repository SHALL provide a truthful open-source entry
 
 以下开源入口行为 MUST 全部满足。
 
-根 `README.md` 必须以中文介绍 Pipeline Lite，并链接到结构与行为说明完整对应的 `README.en.md`。两份 README 必须覆盖产品结果、前置条件、宿主选择安装、第一次受治理任务、执行模式、证据与 review 模型、adapter fidelity、Dashboard、架构模块、正式文档、支持、安全、贡献和许可证。
+根 `README.md` 必须以中文介绍 Tenon，并链接到结构与行为说明完整对应的 `README.en.md`。两份 README 必须覆盖产品结果、前置条件、宿主选择安装、第一次受治理任务、执行模式、证据与 review 模型、adapter fidelity、Dashboard、架构模块、正式文档、支持、安全、贡献和许可证。
 
-README 必须区分 `pipeline-lite` 产品名和真实仓库标识 `pipeline-worklfow`，不得宣称不存在的统一版本、未发布的 npm 全局安装、所有宿主具有相同强制能力、未成功部署的公共站点、未经验证的平台保证或永久有效的测试数量。
+README 必须区分 `tenon` 产品名和真实仓库标识 `tenon`，不得宣称不存在的统一版本、未发布的 npm 全局安装、所有宿主具有相同强制能力、未成功部署的公共站点、未经验证的平台保证或永久有效的测试数量。
 
 #### Scenario: 新 Codex 用户从中文首页开始
 
 - **WHEN** 新用户打开根 README
-- **THEN** 首选安装路径明确使用 `pipeline setup --codex`
+- **THEN** 首选安装路径明确使用 `tenon setup --codex`
 - **AND** 解释一次性 hook 信任边界和新会话生效行为
 - **AND** 提供真实的运行时验证命令和本地 Dashboard 默认 loopback 端口
 - **AND** 链接到中文正式文档的安装与首个任务页面。
@@ -36,7 +36,7 @@ README 必须区分 `pipeline-lite` 产品名和真实仓库标识 `pipeline-wor
 #### Scenario: New Codex user follows the quickstart
 
 - **WHEN** 新 Codex 用户打开根 README
-- **THEN** 首选安装路径明确使用 `pipeline setup --codex`
+- **THEN** 首选安装路径明确使用 `tenon setup --codex`
 - **AND** 说明一次性 hook 信任边界、新会话行为、真实验证命令和默认 Dashboard 端口。
 
 #### Scenario: User needs Chinese documentation
@@ -144,7 +144,7 @@ event stream. It SHALL not call mutation endpoints or require project state.
 
 The overview SHALL present:
 
-- Pipeline Lite's local-first value and exact setup command;
+- Tenon's local-first value and exact setup command;
 - discussion/simple/default/free/custom execution outcomes;
 - the seven-phase default graph including return edges and review exits;
 - the evidence chain from Skill visit through document digest/read receipt,
@@ -269,7 +269,7 @@ documentation renderer.
 
 #### Scenario: Pages base path 出现根路径资源
 
-- **WHEN** 生产 artifact 中的内部资源或导航绕过 `/pipeline-worklfow/` base
+- **WHEN** 生产 artifact 中的内部资源或导航绕过 `/tenon/` base
 - **THEN** smoke 检查失败
 - **AND** artifact 不得上传部署。
 
@@ -349,7 +349,7 @@ in public Issues, and avoid an invented response SLA.
 
 - **WHEN** 读者进入首页之外的任意公开页面
 - **THEN** 页面展示可访问的面包屑并反映 locale、内容分组和当前页
-- **AND** 面包屑链接保留 `/pipeline-worklfow/` base 与当前语言。
+- **AND** 面包屑链接保留 `/tenon/` base 与当前语言。
 
 ### Requirement: Documentation search SHALL be local and locale-aware
 
@@ -483,7 +483,7 @@ document contract 和 ledger 继续治理 kind、owner、producer、path、diges
 
 #### Scenario: 用户创建项目规格骨架
 
-- **WHEN** 用户运行 `pipeline scaffold spec web` 且没有显式 locale
+- **WHEN** 用户运行 `tenon scaffold spec web` 且没有显式 locale
 - **THEN** frontend、backend 与 guides 的可见标题、摘要和待填写提示使用中文
 - **AND** 路径、project type、scaffold marker 与冲突策略 token 保持稳定
 - **AND** `--document-locale en` 生成结构等价的英文版本。
@@ -568,20 +568,20 @@ document contract 和 ledger 继续治理 kind、owner、producer、path、diges
 #### Scenario: Change 根目录是 symlink 或在检查后被替换
 
 - **WHEN** `openspec/changes/<name>`、`--spec-dir` 或任一父组件是 symlink，越过项目根，或在安全检查与发布之间发生替换
-- **THEN** `pipeline init`、`pipeline scaffold spec` 和 `pipeline document scaffold` 在 locale pin、mkdir、write、rename、link 或 remove 前 fail-loud
+- **THEN** `tenon init`、`tenon scaffold spec` 和 `tenon document scaffold` 在 locale pin、mkdir、write、rename、link 或 remove 前 fail-loud
 - **AND** 不得在仓库外创建、覆盖或删除任何文件
 - **AND** overwrite 也必须使用同一可信根与普通文件约束。
 
 #### Scenario: init 遇到预先存在的 Change symlink
 
-- **WHEN** 攻击者在运行 `pipeline init <name>` 前把 `openspec/changes/<name>` 建为指向仓库外目录的 symlink
+- **WHEN** 攻击者在运行 `tenon init <name>` 前把 `openspec/changes/<name>` 建为指向仓库外目录的 symlink
 - **THEN** init 在创建任何 locale、文档、canonical state 或 YAML projection 前失败
 - **AND** 外部目录的文件清单与内容逐字不变
 - **AND** 不留下一个可被后续恢复为活跃 Change 的半初始化状态。
 
 #### Scenario: overwrite 在发布途中失败或竞争
 
-- **WHEN** `pipeline scaffold spec --strategy overwrite` 在暂存、验证或提交阶段失败，或目标路径在检查后被替换
+- **WHEN** `tenon scaffold spec --strategy overwrite` 在暂存、验证或提交阶段失败，或目标路径在检查后被替换
 - **THEN** 原文件集保持完整，或者一次性切换为经过完整验证的新文件集
 - **AND** 不出现新旧文件混合、缺失文件或仓库外删除
 - **AND** 临时目录可以安全识别和清理，不会被当作正式规格
@@ -668,7 +668,7 @@ phase Skills 必须引用共享 Registry/幂等 scaffold 入口，并在当前 C
 
 #### Scenario: Verify phase writes report
 
-- **WHEN** `pipeline-verify` 完成验证
+- **WHEN** `tenon-verify` 完成验证
 - **THEN** verification report 的可见章节、结果解释、失败和剩余风险使用中文
 - **AND** 命令、路径、测试名称和退出码保持原样
 - **AND** 未运行的验证不得被写成通过。
@@ -676,7 +676,7 @@ phase Skills 必须引用共享 Registry/幂等 scaffold 入口，并在当前 C
 #### Scenario: 后续阶段读取前序文档
 
 - **WHEN** 当前 phase 需要读取已登记的中文文档
-- **THEN** `pipeline document read` 为当前 digest 写入 read receipt
+- **THEN** `tenon document read` 为当前 digest 写入 read receipt
 - **AND** locale 不改变 digest、producer、review 或 transition guard 语义。
 
 #### Scenario: Codex 内容块报告 Skill 调用完成态
@@ -709,7 +709,7 @@ Agent 可读索引 MUST 只列出公开 manifest 中的真实 canonical 页面�
 
 #### Scenario: Agent discovers documentation
 
-- **WHEN** agent 请求 `/pipeline-worklfow/llms.txt`
+- **WHEN** agent 请求 `/tenon/llms.txt`
 - **THEN** 返回按 locale 和内容类型组织的公开页面清单
 - **AND** 每个条目指向构建中存在的 canonical 页面。
 

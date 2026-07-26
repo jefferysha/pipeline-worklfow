@@ -12,7 +12,7 @@ import {
   type BindingDenyReason,
   type LedgerRecord,
   type LoopEntry,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 
 export interface TargetedRunCandidate {
   readonly change: string

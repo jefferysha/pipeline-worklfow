@@ -1,11 +1,11 @@
 {
-  "name": "pipeline-lite",
+  "name": "tenon",
   "interface": {
-    "displayName": "Pipeline Lite"
+    "displayName": "Tenon"
   },
   "plugins": [
     {
-      "name": "pipeline-lite",
+      "name": "tenon",
       "source": {
         "source": "local",
         "path": "./"

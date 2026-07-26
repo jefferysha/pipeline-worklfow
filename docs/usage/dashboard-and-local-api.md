@@ -12,10 +12,16 @@ use the local API within its security boundary.
 - at least one project for operational views; the bundled Overview remains
   readable without one
 
+![Tenon Dashboard project overview](../../docs-site/public/images/dashboard-overview.webp)
+
+The project view prioritizes work that actually needs help. Official screenshots
+use a sanitized showcase project and contain no user directory, credential, or
+private business data.
+
 ## Start the Dashboard
 
 ```bash
-pipeline dashboard --open
+tenon dashboard --open
 ```
 
 `--open` implies a managed background start and waits for a compatible health
@@ -24,10 +30,10 @@ response before opening the browser.
 Other supported forms:
 
 ```bash
-pipeline dashboard
-pipeline dashboard --background
-pipeline dashboard --port 19765 --open
-pipeline dashboard --dry-run
+tenon dashboard
+tenon dashboard --background
+tenon dashboard --port 19765 --open
+tenon dashboard --dry-run
 ```
 
 The default production entry is:
@@ -55,6 +61,28 @@ view, not a sixth operational destination and not the installed default.
 Optional surfaces are advertised by snapshot capability flags. A disabled
 capability is not an empty success state.
 
+![Tenon Dashboard workflow progress](../../docs-site/public/images/dashboard-progress.webp)
+
+Progress follows the effective Workflow. Display state and execution provenance
+are separate, so a task can be running in a terminal without being presented as
+unattended automation.
+
+### Unattended automation
+
+![Tenon Dashboard unattended automation](../../docs-site/public/images/dashboard-automation.webp)
+
+This page admits only tasks whose execution provenance is automation. A fresh
+normal-chat terminal heartbeat may still make Progress show “running,” but it
+does not leak into this queue.
+
+### Workflow workbench
+
+![Tenon Dashboard workflow workbench](../../docs-site/public/images/dashboard-workbench.webp)
+
+The workbench places Tracks, the seven-phase DAG, phase Skills, hooks, and
+pre-run facts on one page. The read-only default baseline, custom Workflows,
+and each Workflow's free Track come from the same effective plan.
+
 ## Status semantics
 
 | State | Meaning | First check |
@@ -71,10 +99,10 @@ from an unfinished Todo.
 ## Read-only diagnostics
 
 ```bash
-pipeline status <change-name> --json
-pipeline document status <change-name> --json
-pipeline afk status <change-name> --json
-pipeline doctor --json
+tenon status <change-name> --json
+tenon document status <change-name> --json
+tenon afk status <change-name> --json
+tenon doctor --json
 ```
 
 HTTP checks:
@@ -114,7 +142,7 @@ steps.
 ## Verification
 
 ```bash
-pipeline dashboard --dry-run
+tenon dashboard --dry-run
 curl --fail http://127.0.0.1:18765/api/health
 ```
 
@@ -129,13 +157,13 @@ Run the health check first. A compatible managed instance may be reused; an old
 managed release may be preempted. For an intentional alternate port:
 
 ```bash
-pipeline dashboard --port 19765 --open
+tenon dashboard --port 19765 --open
 ```
 
 ### Vite loads but writes return 401
 
 The development server does not own the production token handshake. Use the
-packaged `pipeline dashboard`.
+packaged `tenon dashboard`.
 
 ### UI is waiting forever
 
@@ -146,4 +174,3 @@ AFK status. Do not delete markers or edit canonical state by hand.
 
 Read [troubleshooting](troubleshooting.md) or
 [security model](security-model.md).
-

@@ -1,0 +1,7 @@
+{
+  "name": "pipeline-lite",
+  "version": "0.2.1",
+  "description": "Migration-only bridge from the retired Pipeline Lite identity to Tenon.",
+  "license": "MIT",
+  "hooks": "./hooks/hooks.json"
+}

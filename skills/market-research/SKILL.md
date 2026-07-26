@@ -3,7 +3,7 @@ name: market-research
 description: First-party market and competitive research workflow.
 license: MIT
 metadata:
-  author: pipeline-lite
+  author: tenon
 ---
 
 # Market Research

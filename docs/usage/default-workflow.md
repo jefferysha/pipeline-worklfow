@@ -8,7 +8,7 @@ exact review receipts.
 ## Prerequisites
 
 - an active Change using `workflow=default`
-- the phase Skill dispatched by the Pipeline Lite entrypoint
+- the phase Skill dispatched by the Tenon entrypoint
 - current document evidence for the phase
 
 ## Workflow graph
@@ -35,16 +35,16 @@ Explore, Spec, and Verify are review-gated.
 
 Ship also has a machine-enforced migration guard. When the Change contains
 `migration/spec-application.json`, the managed apply tool must produce a result bound to the
-Change, input receipt, delta, target path, and final digest. Both `pipeline check` and
-`pipeline transition ... ship-complete` revalidate that evidence and fail closed on drift.
+Change, input receipt, delta, target path, and final digest. Both `tenon check` and
+`tenon transition ... ship-complete` revalidate that evidence and fail closed on drift.
 
 ## Phase operation
 
 ### 1. Inspect current truth
 
 ```bash
-pipeline status <change-name> --json
-pipeline document status <change-name>
+tenon status <change-name> --json
+tenon document status <change-name>
 ```
 
 ### 2. Run the dispatched phase Skill
@@ -56,7 +56,7 @@ replace real Skill execution with a claim in prose.
 ### 3. Check the exit
 
 ```bash
-pipeline check <change-name>
+tenon check <change-name>
 ```
 
 Exit `0` means current guard checks pass. Exit `2` means the report contains
@@ -67,21 +67,21 @@ unmet guards. Check does not transition.
 Bind the request to the exact event:
 
 ```bash
-pipeline review request <change-name> --event <event>
+tenon review request <change-name> --event <event>
 ```
 
 After the user reviews and confirms:
 
 ```bash
-pipeline review acknowledge <change-name>
-pipeline transition <change-name> <event>
+tenon review acknowledge <change-name>
+tenon transition <change-name> <event>
 ```
 
 Use `--delegated` only when the user has already granted continuous authority
 for this exact Change:
 
 ```bash
-pipeline review acknowledge <change-name> --delegated
+tenon review acknowledge <change-name> --delegated
 ```
 
 Delegation records the confirmation fact. It does not remove evidence, guards,
@@ -92,7 +92,7 @@ or authority boundaries.
 If approved requirements/design meaning changes during Build:
 
 ```bash
-pipeline transition <change-name> requirements-changed
+tenon transition <change-name> requirements-changed
 ```
 
 Revise and review in Spec. Do not overwrite an old digest in Build.
@@ -100,9 +100,9 @@ Revise and review in Spec. Do not overwrite an old digest in Build.
 If verification fails:
 
 ```bash
-pipeline review request <change-name> --event verify-fail
-pipeline review acknowledge <change-name>
-pipeline transition <change-name> verify-fail
+tenon review request <change-name> --event verify-fail
+tenon review acknowledge <change-name>
+tenon transition <change-name> verify-fail
 ```
 
 Fix in Build, freeze a new baseline, and verify again. A `verify-pass` receipt
@@ -116,9 +116,9 @@ documents/reads, and exact review receipt where required.
 ## Verification
 
 ```bash
-pipeline status <change-name> --json
-pipeline document status <change-name> --json
-pipeline check <change-name>
+tenon status <change-name> --json
+tenon document status <change-name> --json
+tenon check <change-name>
 ```
 
 At Build completion, status contains the frozen `build_sha` or in-place

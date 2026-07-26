@@ -10,7 +10,7 @@
  */
 import { accessSync, constants as fsConstants } from 'node:fs'
 import { join } from 'node:path'
-import { readSecrets, SANDCASTLE_BUILD_HINT } from '@pipeline-lite/kernel'
+import { readSecrets, SANDCASTLE_BUILD_HINT } from '@tenon/kernel'
 import { execDocker, type ExecDockerFn } from './dockerImages.js'
 
 // P1-X1 防漂移：build_hint 单一真相源迁至 kernel（见 kernel types.ts SANDCASTLE_BUILD_HINT）。

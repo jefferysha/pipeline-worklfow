@@ -1,6 +1,6 @@
 # 文档、Skill 与证据链
 
-Pipeline Lite 不把“生成了 Markdown”当成流程完成。可信链条必须同时证明谁生成、生成了哪一版、后续谁读取以及哪个 review 授权了出边。
+Tenon 不把“生成了 Markdown”当成流程完成。可信链条必须同时证明谁生成、生成了哪一版、后续谁读取以及哪个 review 授权了出边。
 
 ## Default 文档链
 
@@ -20,11 +20,11 @@ tasks 是持续演进的 Todo 真相源；后续阶段只勾选自己的任务�
 
 ## Digest 与读取收据
 
-`pipeline document record` 记录路径和 SHA-256。文件变化后旧读取收据失效；后续 phase 必须重新执行：
+`tenon document record` 记录路径和 SHA-256。文件变化后旧读取收据失效；后续 phase 必须重新执行：
 
 ```bash
-pipeline document read <change> all
-pipeline document status <change>
+tenon document read <change> all
+tenon document status <change>
 ```
 
 摘要绑定精确字节，不受中文或英文语义解释影响。
@@ -46,8 +46,8 @@ setup、repair、update 和切换全局 locale 不改写已有 Change/Archive。
 ## 检查
 
 ```bash
-pipeline document status <change>
-pipeline check <change>
+tenon document status <change>
+tenon check <change>
 ```
 
 两者分别解释证据状态和阶段出口 guard；一个通过不等于另一个自动推进。
@@ -63,8 +63,8 @@ pipeline check <change>
 ## 幂等脚手架
 
 ```bash
-pipeline document scaffold <change> <kind>
-pipeline document scaffold <change> delta-spec --capability <capability>
+tenon document scaffold <change> <kind>
+tenon document scaffold <change> delta-spec --capability <capability>
 ```
 
 脚手架只创建缺失结构，不覆盖已有普通文件，不登记 producer，也不自动勾选任务。`delta-spec` 必须显式传入真实 capability，不能用 Change 名或默认 scope 猜测。
@@ -97,7 +97,7 @@ Document contract 声明 workflow 需要哪些 kind、各自路径、创建阶�
 还可以用：
 
 ```bash
-pipeline document list <change> --json
+tenon document list <change> --json
 pipeline history <change> --json
 ```
 

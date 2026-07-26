@@ -10,7 +10,7 @@
  * ExecFn 抛错或返回畸形结果统一折成非零执行结果，因此 verifier 不会因执行层异常伪绿。
  */
 import { createHash } from 'node:crypto'
-import type { EvidenceRef, VerificationResult } from '@pipeline-lite/kernel'
+import type { EvidenceRef, VerificationResult } from '@tenon/kernel'
 import type { ExecFn, ExecResult } from '../runner/exec.js'
 import {
   automationPolicySubjectFor,

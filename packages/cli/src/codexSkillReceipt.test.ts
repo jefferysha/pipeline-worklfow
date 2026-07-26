@@ -2,7 +2,7 @@ import { appendFile, mkdir, mkdtemp, readFile, rm, symlink, truncate, writeFile 
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import type { HistoryWriter } from '@pipeline-lite/kernel'
+import type { HistoryWriter } from '@tenon/kernel'
 import {
   cmdInternalCodexSkillReceipt,
   reconcileCodexSkillEvidence as reconcileCodexSkillEvidenceRaw,
@@ -242,7 +242,7 @@ describe('Codex transcript skill receipt', () => {
     root = await mkdtemp(join(tmpdir(), 'codex-skill-receipt-'))
     home = join(root, 'home')
     changeDir = join(root, 'openspec', 'changes', 'receipt-proof')
-    selectedPluginRoot = join(home, '.codex', 'plugins', 'cache', 'pipeline-lite', 'pipeline-lite', '0.2.0')
+    selectedPluginRoot = join(home, '.codex', 'plugins', 'cache', 'tenon', 'tenon', '0.2.0')
     skillPath = join(selectedPluginRoot, 'skills', 'openspec-propose', 'SKILL.md')
     writingPlansPath = join(selectedPluginRoot, 'skills', 'writing-plans', 'SKILL.md')
     transcript = join(home, '.codex', 'sessions', '2026', '07', '24', 'receipt.jsonl')
@@ -301,13 +301,13 @@ describe('Codex transcript skill receipt', () => {
         for (const required of [
           join(pluginRoot, '.codex-plugin', 'plugin.json'),
           join(pluginRoot, 'hooks', 'codex-skill-receipt.sh'),
-          join(pluginRoot, 'packages', 'cli', 'dist', 'pipeline.mjs'),
+          join(pluginRoot, 'packages', 'cli', 'dist', 'tenon.mjs'),
         ]) {
           await mkdir(dirname(required), { recursive: true })
           await writeFile(
             required,
             required.endsWith(join('.codex-plugin', 'plugin.json'))
-              ? `${JSON.stringify({ name: 'pipeline-lite', version: '0.2.0' })}\n`
+              ? `${JSON.stringify({ name: 'tenon', version: '0.2.0' })}\n`
               : '{}\n',
             'utf8',
           )
@@ -792,7 +792,7 @@ describe('Codex transcript skill receipt', () => {
   })
 
   it('rejects a selected plugin whose skills parent is a symlink escaping CODEX_HOME', async () => {
-    const escapedPluginRoot = join(home, '.codex', 'plugins', 'cache', 'pipeline-lite', 'pipeline-lite', '0.3.0')
+    const escapedPluginRoot = join(home, '.codex', 'plugins', 'cache', 'tenon', 'tenon', '0.3.0')
     const foreignSkills = join(root, 'outside-codex-home', 'skills')
     const escapedSkill = join(escapedPluginRoot, 'skills', 'openspec-propose', 'SKILL.md')
     await mkdir(join(foreignSkills, 'openspec-propose'), { recursive: true })
@@ -837,7 +837,7 @@ describe('Codex transcript skill receipt', () => {
   })
 
   it('does not discover a completed read from an unselected old plugin cache version', async () => {
-    const oldPluginRoot = join(home, '.codex', 'plugins', 'cache', 'pipeline-lite', 'pipeline-lite', '0.1.0')
+    const oldPluginRoot = join(home, '.codex', 'plugins', 'cache', 'tenon', 'tenon', '0.1.0')
     const oldSkillPath = join(oldPluginRoot, 'skills', 'openspec-propose', 'SKILL.md')
     await mkdir(dirname(oldSkillPath), { recursive: true })
     await writeFile(oldSkillPath, '# stale cache\n', 'utf8')

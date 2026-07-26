@@ -1,36 +1,36 @@
-# Pipeline Lite documentation
+# Tenon documentation
 
 > Public, versioned documentation index. Internal ADRs, plans, receipts, and local control-plane data are excluded.
 
-- [zh-CN] 首页: /pipeline-worklfow/
-- [en] Home: /pipeline-worklfow/en/
-- [zh-CN] 安装与宿主配置: /pipeline-worklfow/installation.html
-- [en] Installation and host setup: /pipeline-worklfow/en/installation.html
-- [zh-CN] 第一个受治理任务: /pipeline-worklfow/quickstart.html
-- [en] First governed task: /pipeline-worklfow/en/quickstart.html
-- [zh-CN] 选择执行模式: /pipeline-worklfow/routing-and-workflows.html
-- [en] Choose an execution mode: /pipeline-worklfow/en/routing-and-workflows.html
-- [zh-CN] Default 七阶段工作流: /pipeline-worklfow/default-workflow.html
-- [en] The seven-phase default workflow: /pipeline-worklfow/en/default-workflow.html
-- [zh-CN] 自定义 Workflow 与 Track: /pipeline-worklfow/custom-workflows-and-tracks.html
-- [en] Custom Workflows and Tracks: /pipeline-worklfow/en/custom-workflows-and-tracks.html
-- [zh-CN] 文档、Skill 与证据链: /pipeline-worklfow/documents-skills-and-evidence.html
-- [en] Documents, Skills, and evidence: /pipeline-worklfow/en/documents-skills-and-evidence.html
-- [zh-CN] Dashboard 与本地 API: /pipeline-worklfow/dashboard-and-local-api.html
-- [en] Dashboard and local API: /pipeline-worklfow/en/dashboard-and-local-api.html
-- [zh-CN] 自动化、AFK 与 Loops: /pipeline-worklfow/automation-and-loops.html
-- [en] Automation, AFK, and loops: /pipeline-worklfow/en/automation-and-loops.html
-- [zh-CN] CLI 参考: /pipeline-worklfow/cli-reference.html
-- [en] CLI reference: /pipeline-worklfow/en/cli-reference.html
-- [zh-CN] 更新、恢复与卸载: /pipeline-worklfow/updates-recovery-and-uninstall.html
-- [en] Updates, recovery, and uninstall: /pipeline-worklfow/en/updates-recovery-and-uninstall.html
-- [zh-CN] 故障排查: /pipeline-worklfow/troubleshooting.html
-- [en] Troubleshooting: /pipeline-worklfow/en/troubleshooting.html
-- [zh-CN] 安全模型: /pipeline-worklfow/security-model.html
-- [en] Security model: /pipeline-worklfow/en/security-model.html
-- [zh-CN] 发布说明: /pipeline-worklfow/release-notes.html
-- [en] Release notes: /pipeline-worklfow/en/release-notes.html
-- [zh-CN] 高级工具: /pipeline-worklfow/advanced-tools.html
-- [en] Advanced tools: /pipeline-worklfow/en/advanced-tools.html
-- [zh-CN] 贡献者开发指南: /pipeline-worklfow/contributor-development.html
-- [en] Contributor development: /pipeline-worklfow/en/contributor-development.html
+- [zh-CN] 首页: /tenon/
+- [en] Home: /tenon/en/
+- [zh-CN] 安装与宿主配置: /tenon/installation.html
+- [en] Installation and host setup: /tenon/en/installation.html
+- [zh-CN] 第一个受治理任务: /tenon/quickstart.html
+- [en] First governed task: /tenon/en/quickstart.html
+- [zh-CN] 选择执行模式: /tenon/routing-and-workflows.html
+- [en] Choose an execution mode: /tenon/en/routing-and-workflows.html
+- [zh-CN] Default 七阶段工作流: /tenon/default-workflow.html
+- [en] The seven-phase default workflow: /tenon/en/default-workflow.html
+- [zh-CN] 自定义 Workflow 与 Track: /tenon/custom-workflows-and-tracks.html
+- [en] Custom Workflows and Tracks: /tenon/en/custom-workflows-and-tracks.html
+- [zh-CN] 文档、Skill 与证据链: /tenon/documents-skills-and-evidence.html
+- [en] Documents, Skills, and evidence: /tenon/en/documents-skills-and-evidence.html
+- [zh-CN] Dashboard 与本地 API: /tenon/dashboard-and-local-api.html
+- [en] Dashboard and local API: /tenon/en/dashboard-and-local-api.html
+- [zh-CN] 自动化、AFK 与 Loops: /tenon/automation-and-loops.html
+- [en] Automation, AFK, and loops: /tenon/en/automation-and-loops.html
+- [zh-CN] CLI 参考: /tenon/cli-reference.html
+- [en] CLI reference: /tenon/en/cli-reference.html
+- [zh-CN] 更新、恢复与卸载: /tenon/updates-recovery-and-uninstall.html
+- [en] Updates, recovery, and uninstall: /tenon/en/updates-recovery-and-uninstall.html
+- [zh-CN] 故障排查: /tenon/troubleshooting.html
+- [en] Troubleshooting: /tenon/en/troubleshooting.html
+- [zh-CN] 安全模型: /tenon/security-model.html
+- [en] Security model: /tenon/en/security-model.html
+- [zh-CN] 发布说明: /tenon/release-notes.html
+- [en] Release notes: /tenon/en/release-notes.html
+- [zh-CN] 高级工具: /tenon/advanced-tools.html
+- [en] Advanced tools: /tenon/en/advanced-tools.html
+- [zh-CN] 贡献者开发指南: /tenon/contributor-development.html
+- [en] Contributor development: /tenon/en/contributor-development.html

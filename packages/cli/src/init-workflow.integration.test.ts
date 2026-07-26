@@ -1,12 +1,12 @@
 /**
- * 真实 e2e —— `pipeline init --workflow <name>`（whole-branch review 补：此前没有任何
+ * 真实 e2e —— `tenon init --workflow <name>`（whole-branch review 补：此前没有任何
  * 支持的命令能把一个 change 摆到自定义 workflow 的首个 step 上，除非该 step 恰好叫
- * `open`——`pipeline set <name> phase <custom-id>` 被 manifest 派生的 7 相位枚举挡下，
+ * `open`——`tenon set <name> phase <custom-id>` 被 manifest 派生的 7 相位枚举挡下，
  * `transition-custom-workflow.integration.test.ts` / `internal-skill-gate-hook.integration.
  * test.ts` 都不得不用手改 .pipeline.yaml 的 phase 行来搭测试夹具）。
  *
  * 零 mock：真 harness（真 buildProgram + 真临时项目 + 真 kernel store）+ 真在磁盘落一份
- * `.pipeline/workflows/<name>.yaml` + 真跑 `pipeline init --workflow <name>`，断言真落盘的
+ * `.pipeline/workflows/<name>.yaml` + 真跑 `tenon init --workflow <name>`，断言真落盘的
  * workflow/phase 字段，并链式验证创建出的 change 立即可被其它真实命令（internal-skill-gate/
  * transition）消费，不需要任何手工改写状态文件。
  */
@@ -202,7 +202,7 @@ describe('真实 e2e —— init --workflow 落地自定义 workflow 的首个 s
     }
   })
 
-  test('pipeline init 在预置 Change symlink 时零外部写入且不留下半状态', async () => {
+  test('tenon init 在预置 Change symlink 时零外部写入且不留下半状态', async () => {
     const outside = `${h.cwd}-init-outside`
     await mkdir(outside, { recursive: true })
     await writeFile(join(outside, 'marker.txt'), 'unchanged\n', 'utf8')

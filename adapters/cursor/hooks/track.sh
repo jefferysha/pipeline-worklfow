@@ -22,16 +22,16 @@ fi
 export CLAUDE_PLUGIN_ROOT="$_ROOT"
 
 # ── ① 真 track：透传 baseline tracker，真 append history（转正核心，不再空声明）──
-CC_TRACKER="${PIPELINE_CC_TRACKER:-$_ROOT/hooks/skill-tracker.sh}"
+CC_TRACKER="${TENON_CC_TRACKER:-$_ROOT/hooks/skill-tracker.sh}"
 if [ -f "$CC_TRACKER" ]; then
   printf '%s' "$INPUT" | bash "$CC_TRACKER" >/dev/null 2>&1 || true
 fi
 
 # ── ② inject 补偿：复用 baseline session-start 上下文 → 包成 Cursor additional_context ──
-CC_INJECTOR="${PIPELINE_CC_INJECTOR:-$_ROOT/hooks/session-start.sh}"
+CC_INJECTOR="${TENON_CC_INJECTOR:-$_ROOT/hooks/session-start.sh}"
 ctx=""
 if [ -f "$CC_INJECTOR" ]; then
-  ctx="$(printf '%s' "$INPUT" | PIPELINE_SESSION_START_FORMAT=plain bash "$CC_INJECTOR" 2>/dev/null || true)"
+  ctx="$(printf '%s' "$INPUT" | TENON_SESSION_START_FORMAT=plain bash "$CC_INJECTOR" 2>/dev/null || true)"
 fi
 
 if [ -n "$ctx" ]; then

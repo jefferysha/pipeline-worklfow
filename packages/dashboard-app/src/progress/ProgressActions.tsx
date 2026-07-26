@@ -75,7 +75,7 @@ export function ProgressActions({
     )
   }
   if (row.row.state === 'failed') {
-    const rerun = `pipeline afk enqueue ${shellQuote(name)}`
+    const rerun = `tenon afk enqueue ${shellQuote(name)}`
     const worktree = fieldStr(row.row.change, 'automation_worktree')
     const chip = sessionLink?.found && sessionLink.resumeCmd
       ? { label: t('progress.cmd_resume'), command: sessionLink.resumeCmd }

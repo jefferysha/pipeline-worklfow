@@ -163,17 +163,17 @@ describe('runPipeline（注入 exec 面驱动 build→verify→ship）', () => {
   })
 })
 
-/** v5 T20：runner 分派——命令构造点按 runner 注入 PIPELINE_RUNNER（沙箱脚本据此选 agent CLI）。 */
+/** v5 T20：runner 分派——命令构造点按 runner 注入 TENON_RUNNER（沙箱脚本据此选 agent CLI）。 */
 describe('buildAfkRunCommand · runner 分派（v5 T20 双 runner）', () => {
   it('缺省 → Codex-first；claude-code 只有显式选择才走兼容路径', () => {
-    expect(buildAfkRunCommand('x').endsWith('PIPELINE_AFK=1 PIPELINE_RUNNER=codex pipeline-afk-run x')).toBe(true)
-    expect(buildAfkRunCommand('x', 'claude-code').endsWith('PIPELINE_AFK=1 pipeline-afk-run x')).toBe(true)
-    expect(buildAfkRunCommand('x', 'claude-code')).not.toContain('PIPELINE_RUNNER')
+    expect(buildAfkRunCommand('x').endsWith('TENON_AFK=1 TENON_RUNNER=codex tenon-afk-run x')).toBe(true)
+    expect(buildAfkRunCommand('x', 'claude-code').endsWith('TENON_AFK=1 tenon-afk-run x')).toBe(true)
+    expect(buildAfkRunCommand('x', 'claude-code')).not.toContain('TENON_RUNNER')
     expect(buildAfkRunCommand('x', 'claude-code')).not.toBe(buildAfkRunCommand('x'))
   })
 
-  it('codex → 注入 PIPELINE_RUNNER=codex（沙箱内 pipeline-afk-run 据此起 codex exec 无头会话）', () => {
-    expect(buildAfkRunCommand('x', 'codex').endsWith('PIPELINE_AFK=1 PIPELINE_RUNNER=codex pipeline-afk-run x')).toBe(true)
+  it('codex → 注入 TENON_RUNNER=codex（沙箱内 tenon-afk-run 据此起 codex exec 无头会话）', () => {
+    expect(buildAfkRunCommand('x', 'codex').endsWith('TENON_AFK=1 TENON_RUNNER=codex tenon-afk-run x')).toBe(true)
   })
 
   it('未知 runner fail-loud，绝不隐式降级到 Claude 缺省路径', () => {
@@ -183,8 +183,8 @@ describe('buildAfkRunCommand · runner 分派（v5 T20 双 runner）', () => {
 })
 
 /**
- * 真机验收 P1（2026-07-11）：现役 sandcastle:local 镜像内 /usr/local/bin/pipeline-afk-run 是旧版
- * （无 codex/PIPELINE_RUNNER 分支），runner: codex 被静默降级走确定性路径并「成功」结算 paused——
+ * 真机验收 P1（2026-07-11）：现役 sandcastle:local 镜像内 /usr/local/bin/tenon-afk-run 是旧版
+ * （无 codex/TENON_RUNNER 分支），runner: codex 被静默降级走确定性路径并「成功」结算 paused——
  * exit 96 诚实报错路径在陈旧镜像里不可达。镜像与仓库脚本此前无任何版本对账机制。
  * 机制（两道闸）：
  *   ① 本文件的 sha 同步测试：仓库脚本一改，AFK_RUN_SCRIPT_SHA256 不 bump 就红——常量永远钉住脚本现内容；
@@ -193,11 +193,11 @@ describe('buildAfkRunCommand · runner 分派（v5 T20 双 runner）', () => {
  */
 describe('镜像 ↔ 仓库脚本版本对账（真机 P1：sandcastle 镜像漂移不可见）', () => {
   const here = dirname(fileURLToPath(import.meta.url))
-  const scriptPath = join(here, '..', '..', '..', '..', 'tools', 'sandcastle', 'pipeline-afk-run.sh')
+  const scriptPath = join(here, '..', '..', '..', '..', 'tools', 'sandcastle', 'tenon-afk-run.sh')
   const dockerfilePath = join(here, '..', '..', '..', '..', 'tools', 'sandcastle', 'Dockerfile')
   const buildScriptPath = join(here, '..', '..', '..', '..', 'tools', 'sandcastle', 'build.sh')
 
-  it('AFK_RUN_SCRIPT_SHA256 与仓库 tools/sandcastle/pipeline-afk-run.sh 现内容逐字一致（改脚本必须同步 bump 常量）', () => {
+  it('AFK_RUN_SCRIPT_SHA256 与仓库 tools/sandcastle/tenon-afk-run.sh 现内容逐字一致（改脚本必须同步 bump 常量）', () => {
     const actual = createHash('sha256').update(readFileSync(scriptPath)).digest('hex')
     expect(AFK_RUN_SCRIPT_SHA256).toBe(actual)
   })
@@ -206,23 +206,23 @@ describe('镜像 ↔ 仓库脚本版本对账（真机 P1：sandcastle 镜像漂
     const script = readFileSync(scriptPath, 'utf8')
     expect(script).toContain('First read AGENTS.md and openspec/changes/$1/REAL_AGENT_TASK.md')
     expect(script).toContain('You must edit the business tree to complete that task; do not only describe or inspect')
-    expect(script).toContain('Do not run pipeline transitions and do not commit')
+    expect(script).toContain('Do not run Tenon transitions and do not commit')
   })
 
   it('custom workflow step prompt：入口解码 host 冻结的 base64url 指令并同时注入 Codex/Claude，固定安全约束仍位于其后', () => {
     const script = readFileSync(scriptPath, 'utf8')
-    expect(script).toContain('PIPELINE_WORKFLOW_STEP_PROMPT_B64')
+    expect(script).toContain('TENON_WORKFLOW_STEP_PROMPT_B64')
     expect(script).toContain("Buffer.from(raw, 'base64url').toString('utf8')")
     expect(script.match(/\$\{step_prompt_suffix\}/g)).toHaveLength(2)
-    expect(script.indexOf('${step_prompt_suffix}')).toBeLessThan(script.indexOf('Do not run pipeline transitions and do not commit'))
+    expect(script.indexOf('${step_prompt_suffix}')).toBeLessThan(script.indexOf('Do not run Tenon transitions and do not commit'))
   })
 
   it('H2：入口在 Codex/Claude 两条 prompt 中注入 durable attempt context 与 stagnation 提示', () => {
     const script = readFileSync(scriptPath, 'utf8')
-    expect(script).toContain('PIPELINE_ATTEMPT_CONTEXT_B64')
+    expect(script).toContain('TENON_ATTEMPT_CONTEXT_B64')
     expect(script.match(/\$\{attempt_context_prompt_suffix\}/g)).toHaveLength(2)
     expect(script).toContain('Repeated failure stagnation')
-    expect(script.indexOf('${attempt_context_prompt_suffix}')).toBeLessThan(script.indexOf('Do not run pipeline transitions and do not commit'))
+    expect(script.indexOf('${attempt_context_prompt_suffix}')).toBeLessThan(script.indexOf('Do not run Tenon transitions and do not commit'))
   })
 
   it('H14 Codex-first：容器认证只走 CODEX_HOME，不在 /tmp workspace 父目录制造 .codex 冲突', () => {
@@ -233,11 +233,11 @@ describe('镜像 ↔ 仓库脚本版本对账（真机 P1：sandcastle 镜像漂
 
   it('buildAfkRunCommand 含 sha256 对账守卫：不符 → exit 95 + 重建指引，且守卫先于真命令执行', () => {
     const cmd = buildAfkRunCommand('x')
-    expect(cmd).toContain('sha256sum /usr/local/bin/pipeline-afk-run')
+    expect(cmd).toContain('sha256sum /usr/local/bin/tenon-afk-run')
     expect(cmd).toContain(AFK_RUN_SCRIPT_SHA256)
     expect(cmd).toContain('exit 95')
     expect(cmd).toContain('tools/sandcastle/build.sh') // 报错文案给出重建入口
-    expect(cmd.indexOf('sha256sum')).toBeLessThan(cmd.indexOf('pipeline-afk-run x')) // 守卫在前
+    expect(cmd.indexOf('sha256sum')).toBeLessThan(cmd.indexOf('tenon-afk-run x')) // 守卫在前
   })
 
   it('codex 路径同样带对账守卫（正是漂移受害路径）', () => {
@@ -247,33 +247,33 @@ describe('镜像 ↔ 仓库脚本版本对账（真机 P1：sandcastle 镜像漂
   it('H10 r6：调用方传 host CLI digest 后，运行守卫同时核 AFK 脚本、CLI dist 与镜像 attestation', () => {
     const cliDigest = 'd'.repeat(64)
     const cmd = buildAfkRunCommand('x', 'codex', { cliDistSha256: cliDigest })
-    expect(cmd).toContain('/usr/local/bin/pipeline-afk-run')
+    expect(cmd).toContain('/usr/local/bin/tenon-afk-run')
     expect(cmd).toContain(AFK_RUN_SCRIPT_SHA256)
-    expect(cmd).toContain('/opt/pipeline/packages/cli/dist/pipeline.mjs')
+    expect(cmd).toContain('/opt/pipeline/packages/cli/dist/tenon.mjs')
     expect(cmd).toContain(cliDigest)
     expect(cmd).toContain('/opt/pipeline/image-attestation.env')
     expect(cmd).toContain('pipeline_afk_run_sha256=')
     expect(cmd).toContain('pipeline_cli_dist_sha256=')
     expect(cmd).toContain('exit 95')
-    expect(cmd.indexOf('/opt/pipeline/packages/cli/dist/pipeline.mjs'))
-      .toBeLessThan(cmd.lastIndexOf('pipeline-afk-run x'))
+    expect(cmd.indexOf('/opt/pipeline/packages/cli/dist/tenon.mjs'))
+      .toBeLessThan(cmd.lastIndexOf('tenon-afk-run x'))
   })
 
   it('H10 r6：镜像在两份 COPY 完成后写入 AFK+CLI 实际 sha attestation，测试 fallback build arg 默认关闭', () => {
     const dockerfile = readFileSync(dockerfilePath, 'utf8')
     const attestation = dockerfile.indexOf('/opt/pipeline/image-attestation.env')
-    expect(attestation).toBeGreaterThan(dockerfile.indexOf('COPY packages/cli/dist/pipeline.mjs'))
-    expect(attestation).toBeGreaterThan(dockerfile.indexOf('COPY tools/sandcastle/pipeline-afk-run.sh'))
+    expect(attestation).toBeGreaterThan(dockerfile.indexOf('COPY packages/cli/dist/tenon.mjs'))
+    expect(attestation).toBeGreaterThan(dockerfile.indexOf('COPY tools/sandcastle/tenon-afk-run.sh'))
     expect(dockerfile).toContain('pipeline_afk_run_sha256=')
     expect(dockerfile).toContain('pipeline_cli_dist_sha256=')
-    expect(dockerfile).toContain('ARG PIPELINE_TEST_ALLOW_DETERMINISTIC_FALLBACK=0')
-    expect(dockerfile).toContain('ENV PIPELINE_TEST_ALLOW_DETERMINISTIC_FALLBACK=${PIPELINE_TEST_ALLOW_DETERMINISTIC_FALLBACK}')
+    expect(dockerfile).toContain('ARG TENON_TEST_ALLOW_DETERMINISTIC_FALLBACK=0')
+    expect(dockerfile).toContain('ENV TENON_TEST_ALLOW_DETERMINISTIC_FALLBACK=${TENON_TEST_ALLOW_DETERMINISTIC_FALLBACK}')
   })
 
   it('H10 r6：build.sh 仅 test variant 显式开 fallback，并对账仓库/镜像 AFK+CLI 两份真实 sha', () => {
     const build = readFileSync(buildScriptPath, 'utf8')
-    expect(build).toContain('PIPELINE_TEST_ALLOW_DETERMINISTIC_FALLBACK=0')
-    expect(build).toContain('PIPELINE_TEST_ALLOW_DETERMINISTIC_FALLBACK=1')
+    expect(build).toContain('TENON_TEST_ALLOW_DETERMINISTIC_FALLBACK=0')
+    expect(build).toContain('TENON_TEST_ALLOW_DETERMINISTIC_FALLBACK=1')
     expect(build).toContain('REPO_CLI_SHA=')
     expect(build).toContain('IMAGE_CLI_SHA=')
     expect(build).toContain('/opt/pipeline/image-attestation.env')
@@ -281,9 +281,9 @@ describe('镜像 ↔ 仓库脚本版本对账（真机 P1：sandcastle 镜像漂
   })
 })
 
-describe('pipeline-afk-run.sh 真实入口 · skill bundle fail-closed exit 94', () => {
+describe('tenon-afk-run.sh 真实入口 · skill bundle fail-closed exit 94', () => {
   const here = dirname(fileURLToPath(import.meta.url))
-  const scriptPath = join(here, '..', '..', '..', '..', 'tools', 'sandcastle', 'pipeline-afk-run.sh')
+  const scriptPath = join(here, '..', '..', '..', '..', 'tools', 'sandcastle', 'tenon-afk-run.sh')
 
   it('H10 r5：直接校验调用方已复制/封存的容器私有目录，Codex env 与 prompt 始终指向同一路径', async () => {
     const root = await mkdtemp(join(tmpdir(), 'afk-private-bundle-'))
@@ -324,12 +324,12 @@ esac
 `)
       await writeExecutable('timeout', '#!/bin/sh\nshift\nexec "$@"\n')
       await writeExecutable('codex', `#!/bin/sh
-printf '%s\\n' "\${PIPELINE_SKILL_BUNDLE_DIR:-}" > "\${SENTINEL_DIR}/bundle-dir"
+printf '%s\\n' "\${TENON_SKILL_BUNDLE_DIR:-}" > "\${SENTINEL_DIR}/bundle-dir"
 printf '%s\\n' "$*" > "\${SENTINEL_DIR}/prompt"
-cat "\${PIPELINE_SKILL_BUNDLE_DIR}/skills/demo-skill/SKILL.md" > "\${SENTINEL_DIR}/skill-read"
+cat "\${TENON_SKILL_BUNDLE_DIR}/skills/demo-skill/SKILL.md" > "\${SENTINEL_DIR}/skill-read"
 printf 'committed\\n' > "\${SENTINEL_DIR}/agent-committed"
 `)
-      await writeExecutable('pipeline', `#!/bin/sh
+      await writeExecutable('tenon', `#!/bin/sh
 if [ "\${1:-}" = get ]; then printf 'build\\n'; exit 0; fi
 if [ "\${1:-}" = tap ]; then
   while [ "$#" -gt 0 ] && [ "$1" != -- ]; do shift; done
@@ -347,9 +347,9 @@ exit 93
           timeout: 8_000,
           env: {
             PATH: binDir,
-            PIPELINE_RUNNER: 'codex',
-            PIPELINE_SKILL_BUNDLE_DIR: published.casDir,
-            PIPELINE_SKILL_BUNDLE_SHA256: published.digest,
+            TENON_RUNNER: 'codex',
+            TENON_SKILL_BUNDLE_DIR: published.casDir,
+            TENON_SKILL_BUNDLE_SHA256: published.digest,
             SENTINEL_DIR: sentinelDir,
             OPENAI_API_KEY: 'test-only-key',
           },
@@ -372,8 +372,8 @@ exit 93
 
   it('H10 r5：入口源码不再从 bind source 二次复制，也不创建随机 bundle 路径', () => {
     const script = readFileSync(scriptPath, 'utf8')
-    expect(script).not.toContain('PIPELINE_SKILL_BUNDLE_SOURCE_DIR')
-    expect(script).not.toContain('PIPELINE_SKILL_BUNDLE_PRIVATE_DIR')
+    expect(script).not.toContain('TENON_SKILL_BUNDLE_SOURCE_DIR')
+    expect(script).not.toContain('TENON_SKILL_BUNDLE_PRIVATE_DIR')
     expect(script).not.toContain('copyBundleTree')
     expect(script).not.toContain('.pipeline-skill-bundle-')
   })
@@ -404,11 +404,11 @@ esac
 `)
       await writeExecutable('timeout', '#!/bin/sh\nshift\nexec "$@"\n')
       await writeExecutable('codex', `#!/bin/sh
-printf '%s\\n' "\${PIPELINE_SKILL_BUNDLE_DIR-unset}" > "\${SENTINEL_DIR}/bundle-dir"
+printf '%s\\n' "\${TENON_SKILL_BUNDLE_DIR-unset}" > "\${SENTINEL_DIR}/bundle-dir"
 printf '%s\\n' "$*" > "\${SENTINEL_DIR}/prompt"
 printf 'committed\\n' > "\${SENTINEL_DIR}/agent-committed"
 `)
-      await writeExecutable('pipeline', `#!/bin/sh
+      await writeExecutable('tenon', `#!/bin/sh
 if [ "\${1:-}" = get ]; then printf 'build\\n'; exit 0; fi
 if [ "\${1:-}" = tap ]; then
   while [ "$#" -gt 0 ] && [ "$1" != -- ]; do shift; done
@@ -426,7 +426,7 @@ exit 93
           timeout: 8_000,
           env: {
             PATH: `${binDir}:${process.env.PATH ?? ''}`,
-            PIPELINE_RUNNER: 'codex',
+            TENON_RUNNER: 'codex',
             SENTINEL_DIR: sentinelDir,
             OPENAI_API_KEY: 'test-only-key',
           },
@@ -490,7 +490,7 @@ exit 93
       const fakeCodex = join(binDir, 'codex')
       await writeFile(fakeCodex, '#!/bin/sh\nprintf "agent-ran\\n" > "$AGENT_SENTINEL"\n', 'utf8')
       await chmod(fakeCodex, 0o755)
-      const fakePipeline = join(binDir, 'pipeline')
+      const fakePipeline = join(binDir, 'tenon')
       await writeFile(fakePipeline, `#!/bin/sh
 if [ "\${1:-}" = get ]; then printf 'build\\n'; exit 0; fi
 if [ "\${1:-}" = tap ]; then
@@ -511,8 +511,8 @@ exit 93
             timeout: 5_000,
             env: {
               PATH: binDir,
-              PIPELINE_SKILL_BUNDLE_DIR: published.casDir,
-              PIPELINE_SKILL_BUNDLE_SHA256: published.digest,
+              TENON_SKILL_BUNDLE_DIR: published.casDir,
+              TENON_SKILL_BUNDLE_SHA256: published.digest,
               AGENT_SENTINEL: agentSentinel,
               ...branchEnv,
             },
@@ -523,7 +523,7 @@ exit 93
         })
 
       const results = [
-        await invoke({ PIPELINE_RUNNER: 'codex' }),
+        await invoke({ TENON_RUNNER: 'codex' }),
         await invoke({ CLAUDE_CODE_OAUTH_TOKEN: 'present-for-branch-selection' }),
       ]
       expect(results.map((result) => result.exitCode)).toEqual([94, 94])
@@ -534,7 +534,7 @@ exit 93
       await writeFile(manifestPath, JSON.stringify(manifest), 'utf8')
       await writeFile(join(published.casDir, 'instructions.md'), 'undeclared root entry', 'utf8')
       await writeFile(join(published.casDir, 'skills', 'undeclared.txt'), 'undeclared skills entry', 'utf8')
-      const undeclaredResults = [await invoke({ PIPELINE_RUNNER: 'codex' })]
+      const undeclaredResults = [await invoke({ TENON_RUNNER: 'codex' })]
       expect(undeclaredResults.map((result) => result.exitCode)).toEqual([94])
       for (const result of undeclaredResults) expect(result.stderr).toContain('未声明条目')
       await expect(readFile(agentSentinel, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
@@ -555,7 +555,7 @@ exit 93
  */
 describe('脚本 codex 分支 · agent 非零退出标记行（观察项③）', () => {
   const here = dirname(fileURLToPath(import.meta.url))
-  const script = readFileSync(join(here, '..', '..', '..', '..', 'tools', 'sandcastle', 'pipeline-afk-run.sh'), 'utf8')
+  const script = readFileSync(join(here, '..', '..', '..', '..', 'tools', 'sandcastle', 'tenon-afk-run.sh'), 'utf8')
 
   it('agent_exit≠0 → stdout 回放 [AGENT_EXIT] codex <exit> 标记行（exit=0 不输出）', () => {
     expect(script).toContain('if [ "$agent_exit" -ne 0 ]')
@@ -564,7 +564,7 @@ describe('脚本 codex 分支 · agent 非零退出标记行（观察项③）',
 
   it('标记行输出位于 codex 分支内（claude-code 分支不动，决议 #14② 范围仅 codex）', () => {
     const markerIdx = script.indexOf(`printf '[AGENT_EXIT] codex %s\\n'`)
-    const codexBranchIdx = script.indexOf('PIPELINE_RUNNER:-')
+    const codexBranchIdx = script.indexOf('TENON_RUNNER:-')
     const claudeBranchIdx = script.indexOf('elif [ -n "${CLAUDE_CODE_OAUTH_TOKEN')
     expect(markerIdx).toBeGreaterThan(codexBranchIdx) // codex 分支入口之后
     expect(markerIdx).toBeLessThan(claudeBranchIdx) // claude 分支入口之前
@@ -592,7 +592,7 @@ describe('脚本 codex 分支 · agent 非零退出标记行（观察项③）',
  */
 describe('脚本 claude 分支 · agent 非零退出标记行 + 凭证缺失诚实 else（P1-T1，批 3 R2）', () => {
   const here = dirname(fileURLToPath(import.meta.url))
-  const script = readFileSync(join(here, '..', '..', '..', '..', 'tools', 'sandcastle', 'pipeline-afk-run.sh'), 'utf8')
+  const script = readFileSync(join(here, '..', '..', '..', '..', 'tools', 'sandcastle', 'tenon-afk-run.sh'), 'utf8')
 
   it('claude 分支 agent_exit≠0 → stdout 回放 [AGENT_EXIT] claude <exit>（对齐 codex，exit=0 不输出）', () => {
     expect(script).toContain(`printf '[AGENT_EXIT] claude %s\\n' "$agent_exit"`)
@@ -631,9 +631,9 @@ describe('脚本 claude 分支 · agent 非零退出标记行 + 凭证缺失诚�
   })
 })
 
-describe('pipeline-afk-run.sh · H10 r6 生产 agent 诚实门（真实 shell）', () => {
+describe('tenon-afk-run.sh · H10 r6 生产 agent 诚实门（真实 shell）', () => {
   const here = dirname(fileURLToPath(import.meta.url))
-  const scriptPath = join(here, '..', '..', '..', '..', 'tools', 'sandcastle', 'pipeline-afk-run.sh')
+  const scriptPath = join(here, '..', '..', '..', '..', 'tools', 'sandcastle', 'tenon-afk-run.sh')
 
   it('默认关闭 fallback：claude-code CLI/认证均缺失时非零退出，不 commit、不产 pass 握手', async () => {
     const root = await mkdtemp(join(tmpdir(), 'afk-r6-no-agent-'))
@@ -649,7 +649,7 @@ describe('pipeline-afk-run.sh · H10 r6 生产 agent 诚实门（真实 shell）
         await chmod(path, 0o755)
       }
       await executable('id', '#!/bin/sh\ncase "${1:-}" in -u|-g) printf "0\\n" ;; *) exit 2 ;; esac\n')
-      await executable('pipeline', '#!/bin/sh\n[ "${1:-}" = get ] && { printf "build\\n"; exit 0; }\nexit 91\n')
+      await executable('tenon', '#!/bin/sh\n[ "${1:-}" = get ] && { printf "build\\n"; exit 0; }\nexit 91\n')
       await executable('git', `#!/bin/sh
 printf '%s\n' "$*" >> "$GIT_CALLS"
 case "\${1:-}" in
@@ -696,7 +696,7 @@ esac
         await chmod(path, 0o755)
       }
       await executable('id', '#!/bin/sh\ncase "${1:-}" in -u|-g) printf "0\\n" ;; *) exit 2 ;; esac\n')
-      await executable('pipeline', '#!/bin/sh\n[ "${1:-}" = get ] && { printf "build\\n"; exit 0; }\nexit 91\n')
+      await executable('tenon', '#!/bin/sh\n[ "${1:-}" = get ] && { printf "build\\n"; exit 0; }\nexit 91\n')
       await executable('git', `#!/bin/sh
 printf '%s\n' "$*" >> "$GIT_CALLS"
 case "\${1:-}" in
@@ -718,7 +718,7 @@ esac
           env: {
             PATH: binDir,
             GIT_CALLS: gitCalls,
-            PIPELINE_TEST_ALLOW_DETERMINISTIC_FALLBACK: '1',
+            TENON_TEST_ALLOW_DETERMINISTIC_FALLBACK: '1',
           },
         }, (error, stdout, stderr) => {
           if (error && typeof (error as { code?: unknown }).code !== 'number') return reject(error)
@@ -755,7 +755,7 @@ esac
       await runGit(['add', 'seed.txt'])
       await runGit(['commit', '-q', '-m', 'seed'])
 
-      const pipeline = join(binDir, 'pipeline')
+      const pipeline = join(binDir, 'tenon')
       await writeFile(pipeline, `#!/bin/sh
 if [ "\${1:-}" = get ]; then printf 'build\\n'; exit 0; fi
 if [ "\${1:-}" = internal-constraint-gate ]; then tr '\\0' '\\n' <"$3" >"$GATED_PATHS"; exit 0; fi
@@ -772,8 +772,8 @@ exit 91
             ...process.env,
             PATH: `${binDir}:${process.env.PATH ?? ''}`,
             GATED_PATHS: gatedPaths,
-            PIPELINE_AUTOMATION_POLICY_B64: 'e30',
-            PIPELINE_TEST_ALLOW_DETERMINISTIC_FALLBACK: '1',
+            TENON_AUTOMATION_POLICY_B64: 'e30',
+            TENON_TEST_ALLOW_DETERMINISTIC_FALLBACK: '1',
           },
         }, (error, stdout, stderr) => {
           if (error && typeof (error as { code?: unknown }).code !== 'number') return reject(error)
@@ -811,7 +811,7 @@ exit 91
       await executable('id', '#!/bin/sh\ncase "${1:-}" in -u|-g) printf "0\\n" ;; *) exit 2 ;; esac\n')
       await executable('timeout', '#!/bin/sh\nshift\nexec "$@"\n')
       await executable('codex', '#!/bin/sh\nprintf "ran\\n" > "$AGENT_SENTINEL"\n')
-      await executable('pipeline', `#!/bin/sh
+      await executable('tenon', `#!/bin/sh
 if [ "\${1:-}" = get ]; then printf 'build\n'; exit 0; fi
 if [ "\${1:-}" = tap ]; then
   while [ "$#" -gt 0 ] && [ "$1" != -- ]; do shift; done
@@ -834,7 +834,7 @@ esac
           cwd: root,
           encoding: 'utf8',
           timeout: 5_000,
-          env: { PATH: binDir, GIT_CALLS: gitCalls, AGENT_SENTINEL: agentSentinel, PIPELINE_RUNNER: 'codex' },
+          env: { PATH: binDir, GIT_CALLS: gitCalls, AGENT_SENTINEL: agentSentinel, TENON_RUNNER: 'codex' },
         }, (error, stdout, stderr) => {
           if (error && typeof (error as { code?: unknown }).code !== 'number') return reject(error)
           resolve({ exitCode: error ? (error as unknown as { code: number }).code : 0, stdout, stderr })
@@ -879,7 +879,7 @@ esac
 printf 'real codex output\n' > agent-output.txt
 printf '%s\n' '{"type":"thread.started","thread_id":"fake-thread"}' '{"type":"turn.completed","usage":{"input_tokens":12,"cached_input_tokens":3,"output_tokens":4,"reasoning_output_tokens":1}}'
 `)
-      await executable('pipeline', `#!/bin/sh
+      await executable('tenon', `#!/bin/sh
 if [ "\${1:-}" = get ]; then printf 'build\n'; exit 0; fi
 if [ "\${1:-}" = internal-codex-jsonl ]; then
   [ "\${2:-}" = usage ] && printf '%s\n' '{"provider":"openai-codex","request_id":"fake-thread","tokens":{"input":12,"cached_input":3,"output":4,"reasoning":1,"total":16}}'
@@ -898,7 +898,7 @@ exit 91
           cwd: root,
           encoding: 'utf8',
           timeout: 20_000,
-          env: { PATH: binDir, PIPELINE_RUNNER: 'codex', OPENAI_API_KEY: 'test-key' },
+          env: { PATH: binDir, TENON_RUNNER: 'codex', OPENAI_API_KEY: 'test-key' },
         }, (error, stdout, stderr) => {
           if (error && typeof (error as { code?: unknown }).code !== 'number') return reject(error)
           resolve({ exitCode: error ? (error as unknown as { code: number }).code : 0, stdout, stderr })
@@ -962,7 +962,7 @@ done
 printf 'policy governed\n' > agent-output.txt
 printf '%s\n' '{"type":"thread.started","thread_id":"fake-policy-thread"}' '{"type":"turn.completed","usage":{"input_tokens":6,"cached_input_tokens":0,"output_tokens":2,"reasoning_output_tokens":0}}'
 `)
-      await executable('pipeline', `#!/bin/sh
+      await executable('tenon', `#!/bin/sh
 if [ "\${1:-}" = get ]; then printf 'build\n'; exit 0; fi
 if [ "\${1:-}" = internal-constraint-gate ]; then [ "\${GATE_MODE:-}" = allow ] && exit 0; exit 2; fi
 if [ "\${1:-}" = internal-codex-jsonl ]; then
@@ -980,8 +980,8 @@ exit 91
       const baseEnv = {
         ...process.env,
         PATH: `${binDir}:${process.env.PATH ?? ''}`,
-        PIPELINE_RUNNER: 'codex', OPENAI_API_KEY: 'test-key',
-        PIPELINE_AUTOMATION_POLICY_B64: 'e30',
+        TENON_RUNNER: 'codex', OPENAI_API_KEY: 'test-key',
+        TENON_AUTOMATION_POLICY_B64: 'e30',
       }
       const invoke = (mode: string) => new Promise<{ exitCode: number; stdout: string; stderr: string }>((resolve, reject) => {
         execFile('/bin/sh', [scriptPath, 'demo-change'], {
@@ -1038,7 +1038,7 @@ exit 91
       await executable('id', '#!/bin/sh\ncase "${1:-}" in -u|-g) printf "0\\n" ;; *) exit 2 ;; esac\n')
       await executable('timeout', '#!/bin/sh\nshift\nexec "$@"\n')
       await executable('codex', '#!/bin/sh\nexit 0\n')
-      await executable('pipeline', `#!/bin/sh
+      await executable('tenon', `#!/bin/sh
 if [ "\${1:-}" = get ]; then printf 'build\n'; exit 0; fi
 if [ "\${1:-}" = tap ]; then
   while [ "$#" -gt 0 ] && [ "$1" != -- ]; do shift; done
@@ -1053,7 +1053,7 @@ exit 91
           cwd: root,
           encoding: 'utf8',
           timeout: 5_000,
-          env: { PATH: binDir, PIPELINE_RUNNER: 'codex', OPENAI_API_KEY: 'test-key' },
+          env: { PATH: binDir, TENON_RUNNER: 'codex', OPENAI_API_KEY: 'test-key' },
         }, (error, stdout, stderr) => {
           if (error && typeof (error as { code?: unknown }).code !== 'number') return reject(error)
           resolve({ exitCode: error ? (error as unknown as { code: number }).code : 0, stdout, stderr })

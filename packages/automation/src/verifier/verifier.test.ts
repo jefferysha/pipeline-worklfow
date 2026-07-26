@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
-import { compileAutomationPolicySnapshot, validateVerificationResult, type LoopEntry, type VerificationResult } from '@pipeline-lite/kernel'
+import { compileAutomationPolicySnapshot, validateVerificationResult, type LoopEntry, type VerificationResult } from '@tenon/kernel'
 import type { ExecutionContext } from '../admission/execution-context.js'
 import {
   createDefaultVerifierPort, DEFAULT_VERIFIER_ISSUER_IDENTITY, enforceVerificationBoundary, evaluateVerificationGate, freezeVerifierInput,

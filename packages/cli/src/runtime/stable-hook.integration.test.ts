@@ -28,10 +28,10 @@ async function candidateCopy(root: string): Promise<string> {
     '.codex-plugin/plugin.json',
     'adapters',
     'hooks',
-    'packages/cli/dist/pipeline.mjs',
+    'packages/cli/dist/tenon.mjs',
     'packages/dashboard-app/dist',
     'packages/server/dist/dashboard.mjs',
-    'runtime/pipeline-bootstrap.mjs',
+    'runtime/tenon-bootstrap.mjs',
     'skills',
     'templates',
     'tools/verify-skills.sh',
@@ -116,12 +116,12 @@ describe('stable host-hook ABI', () => {
     ])
   })
 
-  it('routes a normal conversation through pipeline-hook into the selected verified payload', async () => {
+  it('routes a normal conversation through tenon-hook into the selected verified payload', async () => {
     const root = await freshRoot('router')
     const home = join(root, 'home')
     const project = join(root, 'project')
     await mkdir(project, { recursive: true })
-    const paths = resolveRuntimePaths({ env: { PIPELINE_RUNTIME_HOME: join(root, 'runtime') }, homeDir: home, platform: 'linux' })
+    const paths = resolveRuntimePaths({ env: { TENON_RUNTIME_HOME: join(root, 'runtime') }, homeDir: home, platform: 'linux' })
     const candidate = await candidateCopy(root)
     await new RuntimeReleaseStore({ paths }).stageAndActivate(candidate, 'codex')
     const launchers = await writeStableLaunchers(paths, home)
@@ -130,12 +130,12 @@ describe('stable host-hook ABI', () => {
     const result = await run('bash', [launchers.hook, 'router'], input, {
       ...process.env,
       HOME: home,
-      PIPELINE_ROUTER_CACHE: join(project, '.pipeline-router-cache'),
+      TENON_ROUTER_CACHE: join(project, '.pipeline-router-cache'),
     })
 
     expect(result.code).toBe(0)
     expect(result.stderr).toBe('')
-    expect(result.stdout).toContain('<pipeline-dispatch>')
+    expect(result.stdout).toContain('<tenon-dispatch>')
     expect(result.stdout).toContain('workflow: default')
     expect(result.stdout).toContain('intent: new')
     expect(result.stdout).toContain('phase: open')
@@ -146,9 +146,9 @@ describe('stable host-hook ABI', () => {
     const home = join(root, 'home')
     const project = join(root, 'project')
     await mkdir(project, { recursive: true })
-    const paths = resolveRuntimePaths({ env: { PIPELINE_RUNTIME_HOME: join(root, 'runtime') }, homeDir: home, platform: 'linux' })
+    const paths = resolveRuntimePaths({ env: { TENON_RUNTIME_HOME: join(root, 'runtime') }, homeDir: home, platform: 'linux' })
     const candidate = await candidateCopy(root)
-    const hostCache = join(home, '.codex', 'plugins', 'cache', 'pipeline-lite', 'pipeline-lite', '0.2.0')
+    const hostCache = join(home, '.codex', 'plugins', 'cache', 'tenon', 'tenon', '1.0.0')
     await cp(candidate, hostCache, { recursive: true, preserveTimestamps: false })
     const activation = await new RuntimeReleaseStore({ paths }).stageAndActivate(candidate, 'codex')
     const launchers = await writeStableLaunchers(paths, home)
@@ -158,16 +158,16 @@ describe('stable host-hook ABI', () => {
     const env = { ...process.env, HOME: home }
     delete env.PLUGIN_ROOT
     delete env.CLAUDE_PLUGIN_ROOT
-    delete env.PIPELINE_HOST_PLUGIN_ROOT
+    delete env.TENON_HOST_PLUGIN_ROOT
     const change = 'document-proof'
     const proposal = `openspec/changes/${change}/proposal.md`
     const design = `openspec/changes/${change}/design.md`
     const tasks = `openspec/changes/${change}/tasks.md`
 
-    expect((await run('bash', [launchers.pipeline, 'init', change, '--track', 'backend', '--preset', 'full'], '', env, project)).code).toBe(0)
-    expect((await run('bash', [launchers.pipeline, 'session', 'activate', change], '', env, project)).code).toBe(0)
+    expect((await run('bash', [launchers.tenon, 'init', change, '--track', 'backend', '--preset', 'full'], '', env, project)).code).toBe(0)
+    expect((await run('bash', [launchers.tenon, 'session', 'activate', change], '', env, project)).code).toBe(0)
     const beforeEvidence = await run(
-      'bash', [launchers.pipeline, 'document', 'record', change, 'proposal', proposal, '--producer', 'openspec-propose'], '', env, project,
+      'bash', [launchers.tenon, 'document', 'record', change, 'proposal', proposal, '--producer', 'openspec-propose'], '', env, project,
     )
     expect(beforeEvidence.code).toBe(1)
     expect(beforeEvidence.stderr).toContain('Skill 调用证据')
@@ -223,10 +223,10 @@ describe('stable host-hook ABI', () => {
     expect((await run('bash', [launchers.hook, 'codex-skill-receipt'], skillEvent, env, project)).code).toBe(0)
     for (const [kind, path] of [['proposal', proposal], ['openspec-design', design], ['tasks', tasks]] as const) {
       expect((await run(
-        'bash', [launchers.pipeline, 'document', 'record', change, kind, path, '--producer', 'openspec-propose'], '', env, project,
+        'bash', [launchers.tenon, 'document', 'record', change, kind, path, '--producer', 'openspec-propose'], '', env, project,
       )).code).toBe(0)
     }
-    const status = await run('bash', [launchers.pipeline, 'document', 'status', change, '--json'], '', env, project)
+    const status = await run('bash', [launchers.tenon, 'document', 'status', change, '--json'], '', env, project)
     expect(status.code).toBe(0)
     expect(JSON.parse(status.stdout)).toMatchObject({ governed: true, pass: true })
   }, 30_000)

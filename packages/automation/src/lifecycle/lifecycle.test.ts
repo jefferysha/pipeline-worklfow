@@ -2,16 +2,16 @@ import { describe, expect, it } from 'vitest'
 import {
   compileAutomationPolicySnapshot, encodeLedgerRecord, validateVerificationResult,
   type LoopEntry, type VerificationResult,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import { markLoopPrepared, markNonLoopPrepared, type PreparedSkillBundle } from '../admission/execution-context.js'
-import { PIPELINE_AFK_ENV } from '../queue/gate.js'
+import { TENON_AFK_ENV } from '../queue/gate.js'
 import { classifyFailure } from '../scheduler/classify.js'
 import {
   createDefaultVerifierPort, DEFAULT_VERIFIER_ISSUER_IDENTITY, evaluateVerificationGate, type VerifierPort,
 } from '../verifier/verifier.js'
 import {
-  AbortedRunError, BaseAdvancedError, CancelledRunError, PIPELINE_AUTOMATION_POLICY_ENV,
-  PIPELINE_ATTEMPT_CONTEXT_B64_ENV, PIPELINE_WORKFLOW_STEP_PROMPT_B64_ENV, SKILL_BUNDLE_CONTAINER_DIR, type LifecyclePorts, runChangeInSandbox,
+  AbortedRunError, BaseAdvancedError, CancelledRunError, TENON_AUTOMATION_POLICY_ENV,
+  TENON_ATTEMPT_CONTEXT_B64_ENV, TENON_WORKFLOW_STEP_PROMPT_B64_ENV, SKILL_BUNDLE_CONTAINER_DIR, type LifecyclePorts, runChangeInSandbox,
 } from './lifecycle.js'
 import { SyncError } from './mergeback.js'
 
@@ -171,9 +171,9 @@ describe('runChangeInSandbox（沙箱生命周期纯编排 + 注入面）', () =
     const { ports, env } = makePorts()
     await runChangeInSandbox(ports, {
       hostRepoDir: '/repo', name: 'x', base: 'main', autoMerge: false, context: policyContext(),
-      extraEnv: { [PIPELINE_AUTOMATION_POLICY_ENV]: 'attacker' },
+      extraEnv: { [TENON_AUTOMATION_POLICY_ENV]: 'attacker' },
     }, new AbortController().signal)
-    expect(JSON.parse(Buffer.from(env()[PIPELINE_AUTOMATION_POLICY_ENV]!, 'base64url').toString('utf8')))
+    expect(JSON.parse(Buffer.from(env()[TENON_AUTOMATION_POLICY_ENV]!, 'base64url').toString('utf8')))
       .toEqual(constrainedPolicy())
   })
 
@@ -190,16 +190,16 @@ describe('runChangeInSandbox（沙箱生命周期纯编排 + 注入面）', () =
     const { ports, env } = makePorts()
     await runChangeInSandbox(ports, {
       hostRepoDir: '/repo', name: 'x', base: 'main', autoMerge: false, context,
-      extraEnv: { [PIPELINE_ATTEMPT_CONTEXT_B64_ENV]: 'attacker' },
+      extraEnv: { [TENON_ATTEMPT_CONTEXT_B64_ENV]: 'attacker' },
     }, new AbortController().signal)
-    expect(JSON.parse(Buffer.from(env()[PIPELINE_ATTEMPT_CONTEXT_B64_ENV]!, 'base64url').toString('utf8')))
+    expect(JSON.parse(Buffer.from(env()[TENON_ATTEMPT_CONTEXT_B64_ENV]!, 'base64url').toString('utf8')))
       .toEqual(context.attempt_context)
   })
 
-  it('沙箱注入 PIPELINE_AFK=1（headless 放行三门）', async () => {
+  it('沙箱注入 TENON_AFK=1（headless 放行三门）', async () => {
     const { ports, env } = makePorts()
     await runChangeInSandbox(ports, { hostRepoDir: '/repo', name: 'x', base: 'main', autoMerge: true, allowlist: ['**'] }, new AbortController().signal)
-    expect(env()[PIPELINE_AFK_ENV]).toBe('1')
+    expect(env()[TENON_AFK_ENV]).toBe('1')
   })
 
   it('Codex-first 合成入口：普通/本 runner env 透传，对侧 Claude 凭证在 lifecycle 边界剔除', async () => {
@@ -220,7 +220,7 @@ describe('runChangeInSandbox（沙箱生命周期纯编排 + 注入面）', () =
     expect(env().OPENAI_API_KEY).toBe('sk-codex')
     expect(env().CODEX_HOME).toBe('/home/u/.codex')
     expect(env().CLAUDE_CODE_OAUTH_TOKEN).toBeUndefined()
-    expect(env()[PIPELINE_AFK_ENV]).toBe('1') // extraEnv 不挤掉既有硬护栏 env
+    expect(env()[TENON_AFK_ENV]).toBe('1') // extraEnv 不挤掉既有硬护栏 env
   })
 
   it('显式 Claude 入口：Claude token 透传，Codex key/home 在 lifecycle 边界剔除', async () => {
@@ -375,7 +375,7 @@ describe('runChangeInSandbox（沙箱生命周期纯编排 + 注入面）', () =
     const { ports, log } = makePorts({
       async runWork() {
         log.push('runWork')
-        throw new Error('pipeline afk-run failed (exit 137): container killed')
+        throw new Error('tenon afk-run failed (exit 137): container killed')
       },
       worktree: {
         async create(_repoDir, branch) {
@@ -1296,7 +1296,7 @@ describe('runChangeInSandbox · 沙箱内阶段回写（automation_current_phase
       }
     },
     async runWork(exec) {
-      await exec('PIPELINE_AFK=1 pipeline-afk-run x', {})
+      await exec('TENON_AFK=1 tenon-afk-run x', {})
       if (runWorkTail) await runWorkTail()
       return { verify_result: 'pass', build_sha: SHA, phase_event: 'verify-pass' }
     },
@@ -1521,7 +1521,7 @@ describe('runChangeInSandbox · codex agent 非零退出可见度（automation_l
       }
     },
     async runWork(exec) {
-      await exec('PIPELINE_AFK=1 PIPELINE_RUNNER=codex pipeline-afk-run x', {})
+      await exec('TENON_AFK=1 TENON_RUNNER=codex tenon-afk-run x', {})
       return { verify_result: 'pass', build_sha: SHA, phase_event: 'verify-pass' }
     },
   })
@@ -1667,7 +1667,7 @@ describe('runChangeInSandbox · cfg.runner 透传（v5 T20 双 runner）', () =>
  * **lifecycle 一行不改**。此测钉住这条「runner 无关」链路不被后续回改破坏（与 codex 侧同款断言）。
  */
 describe('runChangeInSandbox · claude agent 非零退出可见度（runner 无关，批 3 R2 · P1-T1）', () => {
-  /** fake 沙箱 exec 逐行吐 script；runWork 走 claude 缺省命令形态（不带 PIPELINE_RUNNER）。 */
+  /** fake 沙箱 exec 逐行吐 script；runWork 走 claude 缺省命令形态（不带 TENON_RUNNER）。 */
   const claudeStreamingOver = (script: string[]): Partial<LifecyclePorts> => ({
     async createSandbox(opts) {
       return {
@@ -1681,7 +1681,7 @@ describe('runChangeInSandbox · claude agent 非零退出可见度（runner 无�
       }
     },
     async runWork(exec) {
-      await exec('PIPELINE_AFK=1 pipeline-afk-run x', {})
+      await exec('TENON_AFK=1 tenon-afk-run x', {})
       return { verify_result: 'pass', build_sha: SHA, phase_event: 'verify-pass' }
     },
   })
@@ -1823,7 +1823,7 @@ describe('runChangeInSandbox · claude agent 非零退出可见度（runner 无�
 
 /**
  * H10 §4/§8任务6：容器只读消费面——cfg.context.skillBundle 存在时，本层注入三条元数据 env
- * （PIPELINE_SKILL_BUNDLE_DIR/SHA256/ID，绝不放正文）并把 skillBundle 原样透传给
+ * （TENON_SKILL_BUNDLE_DIR/SHA256/ID，绝不放正文）并把 skillBundle 原样透传给
  * ports.createSandbox（挂载 + 容器前重新核验由 ports.ts 真实现负责，见 ports.test.ts）。skillBundle
  * 缺席（none-bundle 直通/非 loop AFK 直跑）→ 两者皆不发生，行为与本字段引入前完全一致。
  */
@@ -1848,9 +1848,9 @@ describe('runChangeInSandbox · skill bundle 元数据 env + mount 透传（H10 
   it('cfg.context.skillBundle 存在 → env 含三条元数据键，ports.createSandbox 收到同一 skillBundle 引用', async () => {
     const { ports, env, skillBundleSeen } = makePorts()
     await runChangeInSandbox(ports, { hostRepoDir: '/repo', name: 'x', base: 'main', autoMerge: false, context: ctxWithBundle }, new AbortController().signal)
-    expect(env().PIPELINE_SKILL_BUNDLE_DIR).toBe(SKILL_BUNDLE_CONTAINER_DIR)
-    expect(env().PIPELINE_SKILL_BUNDLE_SHA256).toBe('bundle-sha-abc')
-    expect(env().PIPELINE_SKILL_BUNDLE_ID).toBe('profile-a')
+    expect(env().TENON_SKILL_BUNDLE_DIR).toBe(SKILL_BUNDLE_CONTAINER_DIR)
+    expect(env().TENON_SKILL_BUNDLE_SHA256).toBe('bundle-sha-abc')
+    expect(env().TENON_SKILL_BUNDLE_ID).toBe('profile-a')
     expect(skillBundleSeen()).toEqual(bundle)
   })
 
@@ -1862,15 +1862,15 @@ describe('runChangeInSandbox · skill bundle 元数据 env + mount 透传（H10 
       { hostRepoDir: '/repo', name: 'x', base: 'main', autoMerge: false, workflowStepPrompt: prompt },
       new AbortController().signal,
     )
-    const encoded = env()[PIPELINE_WORKFLOW_STEP_PROMPT_B64_ENV]
+    const encoded = env()[TENON_WORKFLOW_STEP_PROMPT_B64_ENV]
     expect(encoded).toBe(Buffer.from(prompt, 'utf8').toString('base64url'))
     expect(Buffer.from(encoded!, 'base64url').toString('utf8')).toBe(prompt)
   })
 
-  it('cfg.context 未传（无 skillBundle）→ env 不含任何 PIPELINE_SKILL_BUNDLE_* 键，ports.createSandbox 收到 skillBundle=undefined（现状完全一致）', async () => {
+  it('cfg.context 未传（无 skillBundle）→ env 不含任何 TENON_SKILL_BUNDLE_* 键，ports.createSandbox 收到 skillBundle=undefined（现状完全一致）', async () => {
     const { ports, env, skillBundleSeen } = makePorts()
     await runChangeInSandbox(ports, { hostRepoDir: '/repo', name: 'x', base: 'main', autoMerge: false }, new AbortController().signal)
-    expect(Object.keys(env()).some((k) => k.startsWith('PIPELINE_SKILL_BUNDLE_'))).toBe(false)
+    expect(Object.keys(env()).some((k) => k.startsWith('TENON_SKILL_BUNDLE_'))).toBe(false)
     expect(skillBundleSeen()).toBeUndefined()
   })
 
@@ -1881,24 +1881,24 @@ describe('runChangeInSandbox · skill bundle 元数据 env + mount 透传（H10 
     // 唯一诚实的表达是判别联合的 non-loop 分支，经 markNonLoopPrepared() 产出。
     const ctxNoBundle = markNonLoopPrepared(baseCtx)
     await runChangeInSandbox(ports, { hostRepoDir: '/repo', name: 'x', base: 'main', autoMerge: false, context: ctxNoBundle }, new AbortController().signal)
-    expect(Object.keys(env()).some((k) => k.startsWith('PIPELINE_SKILL_BUNDLE_'))).toBe(false)
+    expect(Object.keys(env()).some((k) => k.startsWith('TENON_SKILL_BUNDLE_'))).toBe(false)
     expect(skillBundleSeen()).toBeUndefined()
   })
 
-  it('cfg.extraEnv 试图覆盖 PIPELINE_SKILL_BUNDLE_SHA256 → 不生效（硬护栏优先，同 PIPELINE_AFK_ENV 既有纪律）', async () => {
+  it('cfg.extraEnv 试图覆盖 TENON_SKILL_BUNDLE_SHA256 → 不生效（硬护栏优先，同 TENON_AFK_ENV 既有纪律）', async () => {
     const { ports, env } = makePorts()
     await runChangeInSandbox(
       ports,
-      { hostRepoDir: '/repo', name: 'x', base: 'main', autoMerge: false, context: ctxWithBundle, extraEnv: { PIPELINE_SKILL_BUNDLE_SHA256: 'attacker-supplied' } },
+      { hostRepoDir: '/repo', name: 'x', base: 'main', autoMerge: false, context: ctxWithBundle, extraEnv: { TENON_SKILL_BUNDLE_SHA256: 'attacker-supplied' } },
       new AbortController().signal,
     )
-    expect(env().PIPELINE_SKILL_BUNDLE_SHA256).toBe('bundle-sha-abc')
+    expect(env().TENON_SKILL_BUNDLE_SHA256).toBe('bundle-sha-abc')
   })
 
-  it('skillBundle 存在但 skill_bundle_id 缺席（不应发生的组合）→ PIPELINE_SKILL_BUNDLE_ID 诚实回退空串（不炸、不编造）', async () => {
+  it('skillBundle 存在但 skill_bundle_id 缺席（不应发生的组合）→ TENON_SKILL_BUNDLE_ID 诚实回退空串（不炸、不编造）', async () => {
     const { ports, env } = makePorts()
     const ctxNoId = { ...ctxWithBundle, skill_bundle_id: undefined }
     await runChangeInSandbox(ports, { hostRepoDir: '/repo', name: 'x', base: 'main', autoMerge: false, context: ctxNoId }, new AbortController().signal)
-    expect(env().PIPELINE_SKILL_BUNDLE_ID).toBe('')
+    expect(env().TENON_SKILL_BUNDLE_ID).toBe('')
   })
 })

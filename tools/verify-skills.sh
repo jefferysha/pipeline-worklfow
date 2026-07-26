@@ -3,7 +3,7 @@
 #
 # 校验面：
 #   1. Codex/Claude manifests、两套 marketplace、hooks/hooks.json、CLI/dashboard 发布产物与 canonical helpers 存在；
-#   2. hook command 必须调用用户级稳定 pipeline-hook ABI，不能直连可变 marketplace checkout；
+#   2. hook command 必须调用用户级稳定 tenon-hook ABI，不能直连可变 marketplace checkout；
 #   3. skills/ 下每个 skill 目录都含 SKILL.md；
 #   4. skills/**/SKILL.md、hooks/hooks.json、templates/manifest.yaml（若有）中形如
 #      `external-skill: <名字>` 的可选集成引用，必须在 skills/EXTERNAL-SKILLS.md 中说明。
@@ -62,8 +62,8 @@ CANONICAL_STATE_HELPER="$ROOT/hooks/canonical-state.sh"
 JSON_INPUT_HELPER="$ROOT/hooks/json-input.sh"
 PROMPT_INTENT_HELPER="$ROOT/hooks/prompt-intent.sh"
 AUTO_UPDATE_HELPER="$ROOT/hooks/auto-update.sh"
-RUNTIME_BOOTSTRAP="$ROOT/runtime/pipeline-bootstrap.mjs"
-CLI_BUNDLE="$ROOT/packages/cli/dist/pipeline.mjs"
+RUNTIME_BOOTSTRAP="$ROOT/runtime/tenon-bootstrap.mjs"
+CLI_BUNDLE="$ROOT/packages/cli/dist/tenon.mjs"
 DASHBOARD_SERVER_BUNDLE="$ROOT/packages/server/dist/dashboard.mjs"
 DASHBOARD_WEB_INDEX="$ROOT/packages/dashboard-app/dist/index.html"
 SIMPLE_WORKFLOW_TEMPLATE="$ROOT/templates/workflows/simple.yaml"
@@ -82,28 +82,28 @@ else
     || add_fail "Claude plugin.json 未声明 canonical skills 根" ".claude-plugin/plugin.json" "把 skills 设为 ./skills/，与 Codex 共用同一份 Skill"
 fi
 [ -f "$CLAUDE_MARKETPLACE_JSON" ] \
-  || add_fail "缺失 Claude marketplace .claude-plugin/marketplace.json" "Claude marketplace 规范（远程安装必需）" "创建 marketplace.json 并登记 pipeline-lite"
+  || add_fail "缺失 Claude marketplace .claude-plugin/marketplace.json" "Claude marketplace 规范（远程安装必需）" "创建 marketplace.json 并登记 tenon"
 if [ -f "$CLAUDE_MARKETPLACE_JSON" ]; then
-  grep -q '"name"[[:space:]]*:[[:space:]]*"pipeline-lite"' "$CLAUDE_MARKETPLACE_JSON" \
-    || add_fail "Claude marketplace 未登记 pipeline-lite" ".claude-plugin/marketplace.json" "补充 pipeline-lite 插件条目"
+  grep -q '"name"[[:space:]]*:[[:space:]]*"tenon"' "$CLAUDE_MARKETPLACE_JSON" \
+    || add_fail "Claude marketplace 未登记 tenon" ".claude-plugin/marketplace.json" "补充 tenon 插件条目"
   grep -q '"source"[[:space:]]*:[[:space:]]*"\./"' "$CLAUDE_MARKETPLACE_JSON" \
     || add_fail "Claude marketplace 未指向插件仓根" ".claude-plugin/marketplace.json" "把 source 设为 ./"
 fi
 [ -f "$CODEX_PLUGIN_JSON" ] \
   || add_fail "缺失 Codex 插件清单 .codex-plugin/plugin.json" "Codex 插件规范（原生插件必需）" "在 $ROOT/.codex-plugin/ 下创建 plugin.json，并声明 skills/hooks"
 if [ -f "$CODEX_PLUGIN_JSON" ]; then
-  grep -q '"name"[[:space:]]*:[[:space:]]*"pipeline-lite"' "$CODEX_PLUGIN_JSON" \
-    || add_fail "Codex plugin.json 缺 pipeline-lite name" ".codex-plugin/plugin.json" "补充 name: pipeline-lite"
+  grep -q '"name"[[:space:]]*:[[:space:]]*"tenon"' "$CODEX_PLUGIN_JSON" \
+    || add_fail "Codex plugin.json 缺 tenon name" ".codex-plugin/plugin.json" "补充 name: tenon"
   grep -q '"skills"[[:space:]]*:[[:space:]]*"\./skills/"' "$CODEX_PLUGIN_JSON" \
     || add_fail "Codex plugin.json 未声明打包 skills" ".codex-plugin/plugin.json" "补充 skills: ./skills/"
   grep -q '"hooks"[[:space:]]*:[[:space:]]*"\./hooks/hooks.json"' "$CODEX_PLUGIN_JSON" \
     || add_fail "Codex plugin.json 未声明共享 hooks" ".codex-plugin/plugin.json" "补充 hooks: ./hooks/hooks.json"
 fi
 [ -f "$CODEX_MARKETPLACE_JSON" ] \
-  || add_fail "缺失 Codex marketplace .agents/plugins/marketplace.json" "Codex marketplace 规范（远程安装必需）" "创建 marketplace.json 并登记 pipeline-lite"
+  || add_fail "缺失 Codex marketplace .agents/plugins/marketplace.json" "Codex marketplace 规范（远程安装必需）" "创建 marketplace.json 并登记 tenon"
 if [ -f "$CODEX_MARKETPLACE_JSON" ]; then
-  grep -q '"name"[[:space:]]*:[[:space:]]*"pipeline-lite"' "$CODEX_MARKETPLACE_JSON" \
-    || add_fail "Codex marketplace 未登记 pipeline-lite" ".agents/plugins/marketplace.json" "补充 pipeline-lite 插件条目"
+  grep -q '"name"[[:space:]]*:[[:space:]]*"tenon"' "$CODEX_MARKETPLACE_JSON" \
+    || add_fail "Codex marketplace 未登记 tenon" ".agents/plugins/marketplace.json" "补充 tenon 插件条目"
   grep -q '"path"[[:space:]]*:[[:space:]]*"\./"' "$CODEX_MARKETPLACE_JSON" \
     || add_fail "Codex marketplace 未指向插件仓根" ".agents/plugins/marketplace.json" "把 source.path 设为 ./"
 fi
@@ -124,9 +124,9 @@ fi
 [ -f "$AUTO_UPDATE_HELPER" ] && [ -x "$AUTO_UPDATE_HELPER" ] \
   || add_fail "缺失或不可执行 hooks/auto-update.sh" "原生宿主 opt-in 自动升级" "把 hooks/auto-update.sh 纳入插件资产并 chmod +x"
 [ -f "$RUNTIME_BOOTSTRAP" ] && [ -r "$RUNTIME_BOOTSTRAP" ] \
-  || add_fail "缺失 runtime/pipeline-bootstrap.mjs" "稳定 launcher / host hook ABI" "把 runtime/pipeline-bootstrap.mjs 纳入发布包"
+  || add_fail "缺失 runtime/tenon-bootstrap.mjs" "稳定 launcher / host hook ABI" "把 runtime/tenon-bootstrap.mjs 纳入发布包"
 [ -f "$CLI_BUNDLE" ] && [ -x "$CLI_BUNDLE" ] \
-  || add_fail "缺失或不可执行 packages/cli/dist/pipeline.mjs" "完整插件 CLI runtime" "运行 npm run build，并提交 packages/cli/dist/pipeline.mjs"
+  || add_fail "缺失或不可执行 packages/cli/dist/tenon.mjs" "完整插件 CLI runtime" "运行 npm run build，并提交 packages/cli/dist/tenon.mjs"
 [ -f "$DASHBOARD_SERVER_BUNDLE" ] && [ -r "$DASHBOARD_SERVER_BUNDLE" ] \
   || add_fail "缺失 dashboard server bundle: packages/server/dist/dashboard.mjs" "完整插件 dashboard runtime" "运行 npm run build，并提交 packages/server/dist/dashboard.mjs"
 [ -f "$DASHBOARD_WEB_INDEX" ] && [ -r "$DASHBOARD_WEB_INDEX" ] \
@@ -163,12 +163,12 @@ fi
 
 # ── 2. 稳定 host hook ABI + payload shell 语法 ──
 # Native host cache 是更新时可变的候选输入。host manifest 只准调用 setup 写入的
-# ~/.local/bin/pipeline-hook；它再进入已验证的 managed release，不能直接跑 PLUGIN_ROOT。
+# ~/.local/bin/tenon-hook；它再进入已验证的 managed release，不能直接跑 PLUGIN_ROOT。
 if [ -f "$HOOKS_JSON" ]; then
-  grep -Fq 'pipeline-hook' "$HOOKS_JSON" \
-    || add_fail "hooks 未调用稳定 pipeline-hook launcher" "hooks/hooks.json" "所有 host hook command 使用 bash \"\${HOME}/.local/bin/pipeline-hook\" <hook-id>"
+  grep -Fq 'tenon-hook' "$HOOKS_JSON" \
+    || add_fail "hooks 未调用稳定 tenon-hook launcher" "hooks/hooks.json" "所有 host hook command 使用 bash \"\${HOME}/.local/bin/tenon-hook\" <hook-id>"
   if grep -Fq '${PLUGIN_ROOT' "$HOOKS_JSON" || grep -Fq '${CLAUDE_PLUGIN_ROOT' "$HOOKS_JSON"; then
-    add_fail "hooks 直接引用可变 plugin root" "hooks/hooks.json" "host manifest 不得直连 PLUGIN_ROOT；改为稳定 pipeline-hook ABI"
+    add_fail "hooks 直接引用可变 plugin root" "hooks/hooks.json" "host manifest 不得直连 PLUGIN_ROOT；改为稳定 tenon-hook ABI"
   fi
   for rel in \
     hooks/session-start.sh \
@@ -328,25 +328,25 @@ fi
 # ── 6. OpenSpec Ship/Archive 收据语义 ──
 # 主 spec 是应用结果；ledger 的 applied-spec kind 必须绑定 Change 自己的审计 receipt。若这里
 # 漂移回 openspec/specs/**，Archive 就失去 changed/no-op 与 digest 证据。
-PIPELINE_SHIP_SKILL="$ROOT/skills/pipeline-ship/SKILL.md"
-if [ -f "$PIPELINE_SHIP_SKILL" ]; then
-  grep -Fq 'APPLIED_RECEIPT="openspec/changes/$PIPELINE_CHANGE_NAME/applied-spec.md"' "$PIPELINE_SHIP_SKILL" \
-    || add_fail "pipeline-ship 未登记 Change applied-spec receipt" \
-                "skills/pipeline-ship/SKILL.md" \
+TENON_SHIP_SKILL="$ROOT/skills/tenon-ship/SKILL.md"
+if [ -f "$TENON_SHIP_SKILL" ]; then
+  grep -Fq 'APPLIED_RECEIPT="openspec/changes/$TENON_CHANGE_NAME/applied-spec.md"' "$TENON_SHIP_SKILL" \
+    || add_fail "tenon-ship 未登记 Change applied-spec receipt" \
+                "skills/tenon-ship/SKILL.md" \
                 "把 applied-spec document record 固定到 openspec/changes/<change>/applied-spec.md"
-  if grep -Fq 'applied="openspec/specs/' "$PIPELINE_SHIP_SKILL"; then
-    add_fail "pipeline-ship 把主 spec 冒充 applied-spec receipt" \
-             "skills/pipeline-ship/SKILL.md" \
+  if grep -Fq 'applied="openspec/specs/' "$TENON_SHIP_SKILL"; then
+    add_fail "tenon-ship 把主 spec 冒充 applied-spec receipt" \
+             "skills/tenon-ship/SKILL.md" \
              "主 spec 只作为应用结果；ledger 登记 Change applied-spec.md 收据"
   fi
-  if grep -Fq 'node tools/reconcile-spec-application.mjs' "$PIPELINE_SHIP_SKILL"; then
-    add_fail "pipeline-ship 引用了 managed release 未分发的一次性仓库迁移工具" \
-             "skills/pipeline-ship/SKILL.md" \
+  if grep -Fq 'node tools/reconcile-spec-application.mjs' "$TENON_SHIP_SKILL"; then
+    add_fail "tenon-ship 引用了 managed release 未分发的一次性仓库迁移工具" \
+             "skills/tenon-ship/SKILL.md" \
              "打包 Skill 只消费 spec-migration-applied typed evidence；仓库维护工具不得成为用户运行时依赖"
   fi
-  grep -Fq '`spec-migration-applied` typed guard' "$PIPELINE_SHIP_SKILL" \
-    || add_fail "pipeline-ship 未声明主规格迁移 typed evidence 门" \
-                "skills/pipeline-ship/SKILL.md" \
+  grep -Fq '`spec-migration-applied` typed guard' "$TENON_SHIP_SKILL" \
+    || add_fail "tenon-ship 未声明主规格迁移 typed evidence 门" \
+                "skills/tenon-ship/SKILL.md" \
                 "存在 migration receipt 时必须由 spec-migration-applied guard 复核 result 与 after digest"
 fi
 

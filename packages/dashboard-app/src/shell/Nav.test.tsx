@@ -33,7 +33,7 @@ function renderNav(over: Partial<Parameters<typeof Nav>[0]> = {}) {
 describe('Nav 一级导航（rail 五视图：项目 / 进度 / AFK / 工作台 / 机器）', () => {
   it('品牌是独立的可访问 Overview 入口，不计入五个运营导航项', () => {
     const props = renderNav()
-    const brand = screen.getByRole('button', { name: 'Pipeline Lite 概览' })
+    const brand = screen.getByRole('button', { name: 'Tenon 概览' })
     expect(brand).toHaveAttribute('data-testid', 'nav-overview')
     expect(brand).toHaveClass('motion-reduce:transition-none')
     expect(brand).not.toHaveAttribute('aria-current')
@@ -213,7 +213,7 @@ describe('Nav rail 底部：连接、主题与语言收进设置浮层', () => {
   })
 
   it('英文模式的设置入口、浮层、主题和语言控件不混入中文', () => {
-    localStorage.setItem('pipeline-dashboard-lang', 'en')
+    localStorage.setItem('tenon-dashboard-lang', 'en')
     renderNav({ lang: 'en', theme: 'dark' })
     fireEvent.click(screen.getByTestId('nav-settings'))
     const panel = screen.getByTestId('nav-settings-panel')

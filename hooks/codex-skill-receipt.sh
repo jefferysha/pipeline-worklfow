@@ -78,7 +78,7 @@ while IFS= read -r SKILL_PATH; do
   # Bind to the same verified plugin root that supplied this exact SKILL.md path.  Do not use a
   # mutable marketplace root guessed from cwd or an arbitrary user-provided environment variable.
   PLUGIN_ROOT="${SKILL_PATH%/skills/$SKILL_ID/SKILL.md}"
-  BUNDLE="$PLUGIN_ROOT/packages/cli/dist/pipeline.mjs"
+  BUNDLE="$PLUGIN_ROOT/packages/cli/dist/tenon.mjs"
   [ -f "$BUNDLE" ] || continue
   (
     cd "$PROOT" || exit 0

@@ -28,9 +28,9 @@ function sidebar(locale: 'zh-CN' | 'en') {
 }
 
 export default defineConfig({
-  title: 'Pipeline Lite',
+  title: 'Tenon',
   description: '面向多宿主 Agent 的本地优先、证据驱动交付工作流',
-  base: '/pipeline-worklfow/',
+  base: '/tenon/',
   srcDir: '.generated',
   outDir: 'dist',
   vite: {
@@ -58,13 +58,13 @@ export default defineConfig({
     root: {
       label: '简体中文',
       lang: 'zh-CN',
-      title: 'Pipeline Lite',
+      title: 'Tenon',
       link: '/',
       themeConfig: {
         nav: [
           { text: '文档', link: '/quickstart' },
           { text: 'CLI', link: '/cli-reference' },
-          { text: 'GitHub', link: 'https://github.com/jefferysha/pipeline-worklfow' },
+          { text: 'GitHub', link: 'https://github.com/jefferysha/tenon' },
         ],
         outline: { level: [2, 3], label: '本页内容' },
         darkModeSwitchLabel: '外观',
@@ -84,13 +84,13 @@ export default defineConfig({
     en: {
       label: 'English',
       lang: 'en',
-      title: 'Pipeline Lite',
+      title: 'Tenon',
       link: '/en/',
       themeConfig: {
         nav: [
           { text: 'Documentation', link: '/en/quickstart' },
           { text: 'CLI', link: '/en/cli-reference' },
-          { text: 'GitHub', link: 'https://github.com/jefferysha/pipeline-worklfow' },
+          { text: 'GitHub', link: 'https://github.com/jefferysha/tenon' },
         ],
         outline: { level: [2, 3], label: 'On this page' },
         darkModeSwitchLabel: 'Appearance',
@@ -109,12 +109,12 @@ export default defineConfig({
     },
   },
   head: [
-    ['link', { rel: 'icon', type: 'image/svg+xml', href: '/pipeline-worklfow/logo.svg' }],
+    ['link', { rel: 'icon', type: 'image/svg+xml', href: '/tenon/logo.svg' }],
     ['meta', { name: 'theme-color', content: '#0d7f68' }],
     ['meta', { name: 'color-scheme', content: 'light dark' }],
   ],
   themeConfig: {
-    logo: { src: '/logo.svg', alt: 'Pipeline Lite' },
+    logo: { src: '/logo.svg', alt: 'Tenon' },
     sidebar: {
       '/en/': sidebar('en'),
       '/': sidebar('zh-CN'),
@@ -156,6 +156,6 @@ export default defineConfig({
         },
       },
     },
-    socialLinks: [{ icon: 'github', link: 'https://github.com/jefferysha/pipeline-worklfow' }],
+    socialLinks: [{ icon: 'github', link: 'https://github.com/jefferysha/tenon' }],
   },
 })

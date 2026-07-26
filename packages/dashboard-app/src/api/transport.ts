@@ -1,12 +1,12 @@
 declare global {
   interface Window {
-    __PIPELINE_DASHBOARD_TOKEN__?: string
+    __TENON_DASHBOARD_TOKEN__?: string
   }
 }
 
 export function getToken(): string {
   if (typeof window === 'undefined') return ''
-  return window.__PIPELINE_DASHBOARD_TOKEN__ ?? ''
+  return window.__TENON_DASHBOARD_TOKEN__ ?? ''
 }
 
 export class ApiError extends Error {

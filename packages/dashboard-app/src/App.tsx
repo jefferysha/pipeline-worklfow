@@ -21,11 +21,11 @@ import { SolutionView } from './solution/SolutionView'
 export { ErrorBoundary } from './AppErrorBoundary'
 
 type Theme = 'light' | 'dark'
-const THEME_KEY = 'pipeline-dashboard-theme'
-const ROOT_KEY = 'pipeline-dashboard-root'
+const THEME_KEY = 'tenon-dashboard-theme'
+const ROOT_KEY = 'tenon-dashboard-root'
 // 视图记忆。旧值（inbox/board/settings/loops/workflows）随历次 IA 收敛退役——initialView
 // 以 KNOWN_VIEWS 白名单校验，不认识的一律兜底回 progress（收件箱退役，默认落地=进度，v9-flowdeck 口径）。
-const VIEW_KEY = 'pipeline-dashboard-view'
+const VIEW_KEY = 'tenon-dashboard-view'
 // 可路由的全部视图 = rail 五项（PRIMARY_VIEWS：项目/进度/AFK/工作台/机器）。「项目」是 rail
 // 首枚入口，内容区直接承担自动发现与项目选择，视图记忆据此恢复。
 const KNOWN_VIEWS: View[] = [...PRIMARY_VIEWS]
@@ -275,7 +275,7 @@ function AppShell(): JSX.Element {
 
       {/* 修点5：内容左对齐紧挨 rail——去掉 mx-auto/max-w 造成的居中大空隙，全宽 + 合理 padding。 */}
       <main className="w-full flex-1 px-5 pb-5 pt-2 max-[720px]:px-3.5 max-[720px]:pb-3.5">
-        {/* G18 教学空状态（T17 起纯教学态：pipeline init 自动登记，无注册表单）：
+        {/* G18 教学空状态（T17 起纯教学态：tenon init 自动登记，无注册表单）：
             零项目 → 全视图 onboarding；有项目零 change → 进度替换为新建引导
             （工作台不替换——它是配置面，零 change 也有事可做）。 */}
         {view === 'overview' ? (

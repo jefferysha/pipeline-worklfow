@@ -66,7 +66,7 @@ describe('fingerprintWorkspace', () => {
     await mkdir(join(root, '.github', 'hooks'), { recursive: true })
     await writeFile(join(root, 'openspec', 'changes', 'pet-adoption', '.pipeline.yaml'), 'phase: verify\n')
     await writeFile(join(root, 'docs', 'superpowers', 'reports', 'pet-adoption.md'), '# verification\n')
-    await writeFile(join(root, '.pipeline', 'codex-skill-receipts.jsonl'), '{"skill":"pipeline-verify"}\n')
+    await writeFile(join(root, '.pipeline', 'codex-skill-receipts.jsonl'), '{"skill":"tenon-verify"}\n')
     await writeFile(join(root, '.pipeline', 'cache', 'router.v5.data'), 'control cache\n')
     await writeFile(join(root, '.agents', 'plugins', 'marketplace.json'), '{}\n')
     await writeFile(join(root, '.codex', 'config.toml'), 'approval_policy = "never"\n')

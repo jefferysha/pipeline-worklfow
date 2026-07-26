@@ -88,21 +88,21 @@ async function fixture() {
   await write(
     root,
     'README.md',
-    `# Pipeline Lite\n\n${communityLinks}\n\nRequires Node.js 22+. Dashboard: 127.0.0.1:18765.\n\n\`pipeline setup --codex\`\n\n\`pipeline dashboard --open\`\n`,
+    `# Tenon\n\n${communityLinks}\n\nRequires Node.js 22+. Dashboard: 127.0.0.1:18765.\n\n\`tenon setup --codex\`\n\n\`tenon dashboard --open\`\n`,
   )
   await write(
     root,
     'README.en.md',
     [
-      '# Pipeline Lite',
+      '# Tenon',
       '',
       '[中文](README.md) · [Usage](docs/usage/README.md) · [Contributing](CONTRIBUTING.md) · [Code of Conduct](CODE_OF_CONDUCT.md) · [Security](SECURITY.md) · [Support](SUPPORT.md) · [License](LICENSE)',
       '',
       '需要 Node.js 22+。Dashboard：127.0.0.1:18765。',
       '',
-      '`pipeline setup --codex`',
+      '`tenon setup --codex`',
       '',
-      '`pipeline dashboard --open`',
+      '`tenon dashboard --open`',
     ].join('\n'),
   )
   await write(root, 'README.zh-CN.md', '# 中文说明\n\n[README](README.md)\n')
@@ -134,11 +134,11 @@ async function fixture() {
     [
       '# Installation',
       'Requires Node.js 22+.',
-      '`pipeline setup --codex`',
-      '`pipeline update --codex`',
-      '`pipeline runtime status`',
-      '`pipeline runtime repair --rollback`',
-      '`pipeline dashboard --open`',
+      '`tenon setup --codex`',
+      '`tenon update --codex`',
+      '`tenon runtime status`',
+      '`tenon runtime repair --rollback`',
+      '`tenon dashboard --open`',
     ].join('\n\n'),
   )
   await write(
@@ -154,23 +154,23 @@ async function fixture() {
   await write(
     root,
     'docs/usage/dashboard-and-local-api.md',
-    '# Dashboard\n\nProjects → Progress → AFK → Workbench → Machine are the five operational views. Overview is separate. Use 127.0.0.1:18765 and `pipeline dashboard --open`.\n',
+    '# Dashboard\n\nProjects → Progress → AFK → Workbench → Machine are the five operational views. Overview is separate. Use 127.0.0.1:18765 and `tenon dashboard --open`.\n',
   )
   await write(
     root,
     'docs/usage/updates-recovery-and-uninstall.md',
-    '# Updates\n\n`pipeline update --codex`\n\n`pipeline runtime status`\n\n`pipeline runtime repair --rollback`\n',
+    '# Updates\n\n`tenon update --codex`\n\n`tenon runtime status`\n\n`tenon runtime repair --rollback`\n',
   )
   await write(
     root,
     'docs/usage/cli-reference.md',
     [
       '# CLI',
-      '`pipeline setup --codex`',
-      '`pipeline update --codex`',
-      '`pipeline runtime status`',
-      '`pipeline runtime repair --rollback`',
-      '`pipeline dashboard --open`',
+      '`tenon setup --codex`',
+      '`tenon update --codex`',
+      '`tenon runtime status`',
+      '`tenon runtime repair --rollback`',
+      '`tenon dashboard --open`',
     ].join('\n\n'),
   )
   await write(
@@ -179,11 +179,11 @@ async function fixture() {
     [
       '# 安装',
       '需要 Node.js 22+。',
-      '`pipeline setup --codex`',
-      '`pipeline update --codex`',
-      '`pipeline runtime status`',
-      '`pipeline runtime repair --rollback`',
-      '`pipeline dashboard --open`',
+      '`tenon setup --codex`',
+      '`tenon update --codex`',
+      '`tenon runtime status`',
+      '`tenon runtime repair --rollback`',
+      '`tenon dashboard --open`',
     ].join('\n\n'),
   )
   await write(
@@ -199,23 +199,23 @@ async function fixture() {
   await write(
     root,
     'docs/usage/zh-CN/dashboard-and-local-api.md',
-    '# Dashboard\n\nProjects → Progress → AFK → Workbench → Machine 是五个操作视图，Overview 独立。使用 127.0.0.1:18765 和 `pipeline dashboard --open`。\n',
+    '# Dashboard\n\nProjects → Progress → AFK → Workbench → Machine 是五个操作视图，Overview 独立。使用 127.0.0.1:18765 和 `tenon dashboard --open`。\n',
   )
   await write(
     root,
     'docs/usage/zh-CN/updates-recovery-and-uninstall.md',
-    '# 更新\n\n`pipeline update --codex`\n\n`pipeline runtime status`\n\n`pipeline runtime repair --rollback`\n',
+    '# 更新\n\n`tenon update --codex`\n\n`tenon runtime status`\n\n`tenon runtime repair --rollback`\n',
   )
   await write(
     root,
     'docs/usage/zh-CN/cli-reference.md',
     [
       '# CLI',
-      '`pipeline setup --codex`',
-      '`pipeline update --codex`',
-      '`pipeline runtime status`',
-      '`pipeline runtime repair --rollback`',
-      '`pipeline dashboard --open`',
+      '`tenon setup --codex`',
+      '`tenon update --codex`',
+      '`tenon runtime status`',
+      '`tenon runtime repair --rollback`',
+      '`tenon dashboard --open`',
     ].join('\n\n'),
   )
   return root
@@ -294,7 +294,7 @@ test('keeps exactly five operational views and Overview outside PRIMARY_VIEWS', 
 test('requires README language and community links', async (t) => {
   const root = await fixture()
   t.after(() => rm(root, { recursive: true, force: true }))
-  await write(root, 'README.md', '# Pipeline Lite\n\nRequires Node.js 22+. Dashboard: 127.0.0.1:18765.\n')
+  await write(root, 'README.md', '# Tenon\n\nRequires Node.js 22+. Dashboard: 127.0.0.1:18765.\n')
   const failures = checkRepository(root).join('\n')
   assert.match(failures, /README\.md.*README\.en\.md/)
   assert.match(failures, /README\.md.*SECURITY\.md/)

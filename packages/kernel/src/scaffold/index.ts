@@ -14,8 +14,8 @@
  *     Trellis：template strategy(skip/overwrite/append) + spec-dir 冲突 AskUserQuestion prompt。
  *     老仓状态：apply_strategy 三态已齐（ROUND-13）；仍缺缺省冲突的 AskUserQuestion 交互 prompt。
  *     lite 落地：三态 = doc-scaffold.ts planDocScaffold（纯决策，对标 apply_strategy）；冲突交互 =
- *       CLI scaffold.ts 用「信号/指引」替代 picker（PIPELINE_SPEC_STRATEGY 信号 + 三选一指引 + exit 2，
- *       对齐 reinit-fast-path 的 PIPELINE_REINIT 风格——shell/子-agent 语境不弹无可靠 TTY 的 picker）。
+ *       CLI scaffold.ts 用「信号/指引」替代 picker（TENON_SPEC_STRATEGY 信号 + 三选一指引 + exit 2，
+ *       对齐 reinit-fast-path 的 TENON_REINIT 风格——shell/子-agent 语境不弹无可靠 TTY 的 picker）。
  *
  *  ③ 🟡 workflow-template-resolution（CLI init）
  *     Trellis：--workflow / --workflow-source 解析（多 workflow id）+ removeHash 更新契约。
@@ -33,8 +33,8 @@
  *       接进去是纯恒等变换，故只导出入口。填表后的接法说明在 allowlist.ts 顶注。
  *
  *  ── 非本模块（其余 5 partial，主会话/他模块归属，此处仅诚实转述其处置，不重复实现）──────
- *  ⑤ 🟡 init-command-registration（CLI init）——架构差异 N/A：pipeline init 面 = track×preset×template
- *       + SessionStart hook + pipeline-open SKILL，非 17 平台单条 init CLI。归属：init 命令/adapters。
+ *  ⑤ 🟡 init-command-registration（CLI init）——架构差异 N/A：tenon init 面 = track×preset×template
+ *       + SessionStart hook + tenon-open SKILL，非 17 平台单条 init CLI。归属：init 命令/adapters。
  *  ⑥ 🟡 hardcoded-traces-journal-rename（versioning）——N/A-with-entry：老仓 migrations.py 空占位
  *       HARDCODED_RENAMES + expand_hardcoded_renames（返 []）。sibling of ④，属**版本/迁移模块**
  *       （本仓无 migrations 子系统）——不在 scaffold 范围。
@@ -46,7 +46,7 @@
  *       属 living-spec 子系统（kernel state/spec.ts + verify/ship 步骤），不在 scaffold 范围。
  *
  * kernel 零第三方依赖（纯字符串/集合逻辑；hash 经同包 ownership.ts 间接用 node:crypto 内建）。
- * 消费方：CLI packages/cli/src/commands/scaffold.ts（经 '@pipeline-lite/kernel' 包名导入，
+ * 消费方：CLI packages/cli/src/commands/scaffold.ts（经 '@tenon/kernel' 包名导入，
  *   命令注册在 program.ts）。
  */
 export * from './doc-scaffold.js'

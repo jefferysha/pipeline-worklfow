@@ -38,18 +38,18 @@
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 
-// __PIPELINE_ROOT__ 由 install.sh 用 sed 替换为绝对路径（本仓库根目录，hooks/*.sh 所在处）。
+// __TENON_ROOT__ 由 install.sh 用 sed 替换为绝对路径（本仓库根目录，hooks/*.sh 所在处）。
 // 与其它适配器的 __ADAPTER_DIR__ 占位符同一约定，只是这里指向仓库根而非 adapters/<id>。
 // CLAUDE_PLUGIN_ROOT 环境变量优先于烘焙占位符——与其余全部适配器 wrapper（bash 版）的
 // 自定位约定保持一致，也让本文件*不装*就能被 conformance 直接指向本仓库测试（见文件尾 __test）。
-const BAKED_ROOT = "__PIPELINE_ROOT__";
-const PIPELINE_ROOT =
+const BAKED_ROOT = "__TENON_ROOT__";
+const TENON_ROOT =
   process.env.CLAUDE_PLUGIN_ROOT && existsSync(`${process.env.CLAUDE_PLUGIN_ROOT}/hooks`)
     ? process.env.CLAUDE_PLUGIN_ROOT
     : BAKED_ROOT;
-const GATE = `${PIPELINE_ROOT}/hooks/gate.sh`;
-const SESSION_START = `${PIPELINE_ROOT}/hooks/session-start.sh`;
-const SKILL_TRACKER = `${PIPELINE_ROOT}/hooks/skill-tracker.sh`;
+const GATE = `${TENON_ROOT}/hooks/gate.sh`;
+const SESSION_START = `${TENON_ROOT}/hooks/session-start.sh`;
+const SKILL_TRACKER = `${TENON_ROOT}/hooks/skill-tracker.sh`;
 
 /** 跑 baseline bash 脚本，喂 JSON 到 stdin，取 {status,stdout,stderr}；脚本缺失时视作放行。 */
 function runBaseline(scriptPath, inputJson, extraEnv = {}) {
@@ -102,7 +102,7 @@ export function decideToolCall(cwd, toolName) {
 export function buildInjectContext(cwd) {
   try {
     const input = JSON.stringify({ cwd });
-    const r = runBaseline(SESSION_START, input, { PIPELINE_SESSION_START_FORMAT: "plain" });
+    const r = runBaseline(SESSION_START, input, { TENON_SESSION_START_FORMAT: "plain" });
     const text = (r.stdout || "").trim();
     return text.length > 0 ? r.stdout : null;
   } catch {

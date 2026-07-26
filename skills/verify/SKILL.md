@@ -3,7 +3,7 @@ name: verify
 description: First-party runtime behavior verification protocol.
 license: MIT
 metadata:
-  author: pipeline-lite
+  author: tenon
 ---
 
 # Verify

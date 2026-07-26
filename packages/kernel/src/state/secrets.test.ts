@@ -21,7 +21,7 @@ describe('secrets —— 机器级凭证存储读写（T1，proposal C 节）', 
     await rm(home, { recursive: true, force: true })
   })
 
-  test('secretsPath = <home>/.claude/pipeline-secrets.json（同 pipeline-projects.json/.pipeline-dashboard-token 目录）', () => {
+  test('secretsPath = <home>/.claude/pipeline-secrets.json（同 pipeline-projects.json/.tenon-dashboard-token 目录）', () => {
     expect(path).toBe(join(home, '.claude', 'pipeline-secrets.json'))
   })
 

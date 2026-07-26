@@ -3,7 +3,7 @@ name: huashu-design
 description: First-party high-fidelity product prototype direction and visual exploration.
 license: MIT
 metadata:
-  author: pipeline-lite
+  author: tenon
 ---
 
 # Huashu Design

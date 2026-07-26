@@ -1,6 +1,6 @@
-# Pipeline Lite 文档
+# Tenon 文档
 
-Pipeline Lite 是面向 Codex、Claude Code 等 Agent 宿主的本地优先交付工作流插件。它把正常对话里的开发请求路由到合适的执行模式，并用状态机、OpenSpec、Skill 证据、文档摘要和 review receipt 约束“做了什么、为什么能推进、后续读了哪一版”。
+Tenon 是面向 Codex、Claude Code 等 Agent 宿主的本地优先交付工作流插件。它把正常对话里的开发请求路由到合适的执行模式，并用状态机、OpenSpec、Skill 证据、文档摘要和 review receipt 约束“做了什么、为什么能推进、后续读了哪一版”。
 
 ## 从这里开始
 

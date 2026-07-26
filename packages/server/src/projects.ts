@@ -10,7 +10,7 @@
  */
 import { statSync } from 'node:fs'
 import { resolve as resolvePath } from 'node:path'
-import { writeProjectRegistry } from '@pipeline-lite/kernel'
+import { writeProjectRegistry } from '@tenon/kernel'
 import { readRegistry } from './registry.js'
 import { dedupeRoots } from './snapshot.js'
 

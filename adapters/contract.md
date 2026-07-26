@@ -58,14 +58,14 @@ review/interaction/confirm 三门由项目根 `.pipeline-pending-{review,interac
 
 | 场景 | 正确机制 |
 |------|------|
-| review 出口 | `pipeline review request <change> --event <event>` → 人类确认 → `pipeline review acknowledge <change>`；CLI 原子写 canonical approval receipt 后清 review marker |
+| review 出口 | `tenon review request <change> --event <event>` → 人类确认 → `tenon review acknowledge <change>`；CLI 原子写 canonical approval receipt 后清 review marker |
 | confirm / interaction | 宿主的真实问答完成 hook 记录确认事实并清对应投影；无该能力的静态宿主必须保留确认事实、重新发起操作，不得把删除 marker 当作确认 |
 
 - `verify-fail` 与 `verify-pass` 是不同的人类决定；receipt 必须绑定 exact event，不能互相复用。
-- 不得绕过 review-gate（会产生 solo 推进）。review marker 只由 `pipeline review request` 在产物完成后
+- 不得绕过 review-gate（会产生 solo 推进）。review marker 只由 `tenon review request` 在产物完成后
   写入；**不得**直接删除 v2 marker 或直接编辑 `.pipeline.yaml` 状态。
 
-> lite 现实：内核是 TS CLI（`pipeline` 命令），review 的唯一解封写路径是 `pipeline review acknowledge`；
+> lite 现实：内核是 TS CLI（`pipeline` 命令），review 的唯一解封写路径是 `tenon review acknowledge`；
 > 状态写一律走 `pipeline` CLI。
 
 ---
@@ -97,7 +97,7 @@ review/interaction/confirm 三门由项目根 `.pipeline-pending-{review,interac
 - [ ] `configure` 脚本（install 入口）存在
 - [ ] inject/veto/track 各实现或声明降级（wrapper 薄包 baseline 三 hook，或降级落静态层）
 - [ ] stdout/exit 格式与目标工具匹配（不串格式）
-- [ ] Adapter README 已说明 `pipeline review request --event` → 人工确认 → `pipeline review acknowledge` 的 HITL 路径
+- [ ] Adapter README 已说明 `tenon review request --event` → 人工确认 → `tenon review acknowledge` 的 HITL 路径
 - [ ] **进 conformance**：`tools/test-adapters.sh` 里对该平台跑同一组输入场景，断言等价/如实降级
 - [ ] 状态写一律经 `pipeline` CLI（不直接编辑 `.pipeline.yaml`）
 

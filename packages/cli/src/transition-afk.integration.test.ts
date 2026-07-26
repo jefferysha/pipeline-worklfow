@@ -1,5 +1,5 @@
 /**
- * 真实 e2e —— PM 默认流程在正常 `pipeline transition` 完成 spec 后自动交给 AFK 队列。
+ * 真实 e2e —— PM 默认流程在正常 `tenon transition` 完成 spec 后自动交给 AFK 队列。
  *
  * 这不是 scheduler 测试：断言的是 CLI adapter 真调用 post-commit 编排、真实 canonical state
  * 写入 queued，且默认 L1 只挂队不自行启动 Docker/runner。

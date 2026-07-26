@@ -1,6 +1,6 @@
 /**
  * afk 命令 —— 真实 e2e（GOAL C9）：零 mock，真 kernel createStateStore + 真临时 fs +
- * 真 @pipeline-lite/automation SDK。断言真实落盘的 automation_* 字段变化。
+ * 真 @tenon/automation SDK。断言真实落盘的 automation_* 字段变化。
  */
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
 import { freshHarness, rm, type Harness } from './integration-harness.js'

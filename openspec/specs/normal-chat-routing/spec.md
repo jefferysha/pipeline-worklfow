@@ -23,7 +23,7 @@ Track/workflow pairs.
 #### Scenario: user chooses between default and custom paths
 
 - **WHEN** a prompt can be served by the recommended custom path and a built-in/default path
-- **THEN** the root pipeline skill asks the user which pair to use before running `pipeline init`
+- **THEN** the root pipeline skill asks the user which pair to use before running `tenon init`
 - **AND THEN** the new Change stores the selected pair through the canonical CLI/API path.
 
 ### Requirement: clean projects preserve default routing
@@ -103,7 +103,7 @@ before Change creation.
 
 - **WHEN** a user explicitly says to use free mode for a new objective
 - **THEN** the dispatch recommends `track=free`
-- **AND** the root skill validates the selected Workflow before `pipeline init`.
+- **AND** the root skill validates the selected Workflow before `tenon init`.
 
 ### Requirement: Router schema migration SHALL fail closed
 
@@ -138,5 +138,5 @@ the user-authored Workflow graph.
 
 - **WHEN** a custom Workflow reaches `archive` with `transitions: []`
 - **AND** its declared archive skills, guards, and document reads are complete
-- **THEN** `pipeline transition <change> archived` completes the canonical run
+- **THEN** `tenon transition <change> archived` completes the canonical run
 - **AND** the Change is no longer returned as an active recovery candidate.

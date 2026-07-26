@@ -91,7 +91,7 @@ export function validateWorkflow(
     for (const output of step.outputs) producedByEarlierStep.add(output.field)
 
     // 每条 transition 的 to 必须指向同一 workflow 里真实存在的 step id——否则
-    // pipeline transition 在真运行时才会发现走不到，属于本该在保存时就拦下的错误。
+    // tenon transition 在真运行时才会发现走不到，属于本该在保存时就拦下的错误。
     for (const t of step.transitions) {
       if (!allStepIds.has(t.to)) {
         errors.push(`step '${step.id}' 的 transitions 里 event '${t.event}' 的 to '${t.to}' 不存在`)

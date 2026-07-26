@@ -10,15 +10,15 @@ afterEach(async () => Promise.all(roots.splice(0).map((root) => rm(root, { recur
 
 describe('writeStableLaunchers', () => {
   it('writes stable scripts rather than a marketplace bundle symlink', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'pipeline-launcher-'))
+    const root = await mkdtemp(join(tmpdir(), 'tenon-launcher-'))
     roots.push(root)
-    const paths = resolveRuntimePaths({ env: { PIPELINE_RUNTIME_HOME: join(root, 'runtime') }, homeDir: root, platform: 'linux' })
+    const paths = resolveRuntimePaths({ env: { TENON_RUNTIME_HOME: join(root, 'runtime') }, homeDir: root, platform: 'linux' })
     const written = await writeStableLaunchers(paths, root)
-    const pipeline = await readFile(written.pipeline, 'utf8')
+    const tenon = await readFile(written.tenon, 'utf8')
     const hook = await readFile(written.hook, 'utf8')
-    expect(pipeline).toContain('PIPELINE_RUNTIME_DATA_ROOT')
-    expect(pipeline).toContain('PIPELINE_RUNTIME_CONFIG_ROOT')
-    expect(pipeline).not.toContain('PLUGIN_ROOT')
+    expect(tenon).toContain('TENON_RUNTIME_DATA_ROOT')
+    expect(tenon).toContain('TENON_RUNTIME_CONFIG_ROOT')
+    expect(tenon).not.toContain('PLUGIN_ROOT')
     expect(hook).toContain(' hook "$@"')
   })
 })

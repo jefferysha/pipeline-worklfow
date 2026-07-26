@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..')
-const bootstrapSource = join(repoRoot, 'runtime', 'pipeline-bootstrap.mjs')
+const bootstrapSource = join(repoRoot, 'runtime', 'tenon-bootstrap.mjs')
 const roots: string[] = []
 
 afterEach(async () => Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))))
@@ -47,17 +47,17 @@ async function createRelease(runtimeHome: string, marker: string): Promise<strin
   const stagingPayload = join(runtimeHome, 'fixture', marker, 'payload')
   await mkdir(join(stagingPayload, 'packages', 'cli', 'dist'), { recursive: true })
   await mkdir(join(stagingPayload, 'runtime'), { recursive: true })
-  await writeFile(join(stagingPayload, 'packages', 'cli', 'dist', 'pipeline.mjs'), `process.stdout.write(${JSON.stringify(marker)})\n`, 'utf8')
-  await copyFile(bootstrapSource, join(stagingPayload, 'runtime', 'pipeline-bootstrap.mjs'))
-  await chmod(join(stagingPayload, 'runtime', 'pipeline-bootstrap.mjs'), 0o755)
+  await writeFile(join(stagingPayload, 'packages', 'cli', 'dist', 'tenon.mjs'), `process.stdout.write(${JSON.stringify(marker)})\n`, 'utf8')
+  await copyFile(bootstrapSource, join(stagingPayload, 'runtime', 'tenon-bootstrap.mjs'))
+  await chmod(join(stagingPayload, 'runtime', 'tenon-bootstrap.mjs'), 0o755)
   const digest = await payloadDigest(stagingPayload)
   const releaseId = `sha256-${digest}`
   const releaseRoot = join(runtimeHome, 'data', 'releases', releaseId)
   await mkdir(join(releaseRoot, 'payload', 'packages', 'cli', 'dist'), { recursive: true })
   await mkdir(join(releaseRoot, 'payload', 'runtime'), { recursive: true })
-  await copyFile(join(stagingPayload, 'packages', 'cli', 'dist', 'pipeline.mjs'), join(releaseRoot, 'payload', 'packages', 'cli', 'dist', 'pipeline.mjs'))
-  await copyFile(join(stagingPayload, 'runtime', 'pipeline-bootstrap.mjs'), join(releaseRoot, 'payload', 'runtime', 'pipeline-bootstrap.mjs'))
-  await chmod(join(releaseRoot, 'payload', 'runtime', 'pipeline-bootstrap.mjs'), 0o755)
+  await copyFile(join(stagingPayload, 'packages', 'cli', 'dist', 'tenon.mjs'), join(releaseRoot, 'payload', 'packages', 'cli', 'dist', 'tenon.mjs'))
+  await copyFile(join(stagingPayload, 'runtime', 'tenon-bootstrap.mjs'), join(releaseRoot, 'payload', 'runtime', 'tenon-bootstrap.mjs'))
+  await chmod(join(releaseRoot, 'payload', 'runtime', 'tenon-bootstrap.mjs'), 0o755)
   await writeFile(join(releaseRoot, 'release.json'), `${JSON.stringify({
     version: 1,
     releaseId,
@@ -79,7 +79,7 @@ async function installBootstrap(runtimeHome: string): Promise<string> {
 async function runBootstrap(runtimeHome: string, bootstrap: string, args: string[], input = ''): Promise<{ stdout: string; stderr: string; code: number }> {
   return new Promise((resolveResult) => {
     const child = spawn(process.execPath, [bootstrap, ...args], {
-      env: { ...process.env, PIPELINE_RUNTIME_HOME: runtimeHome },
+      env: { ...process.env, TENON_RUNTIME_HOME: runtimeHome },
     })
     let stdout = ''
     let stderr = ''
@@ -135,7 +135,7 @@ describe('stable runtime bootstrap', () => {
       previousRelease,
       updatedAt: '2026-07-24T00:00:00Z',
     })}\n`, 'utf8')
-    await writeFile(join(root, 'data', 'releases', previousRelease, 'payload', 'packages', 'cli', 'dist', 'pipeline.mjs'), 'tampered\n', 'utf8')
+    await writeFile(join(root, 'data', 'releases', previousRelease, 'payload', 'packages', 'cli', 'dist', 'tenon.mjs'), 'tampered\n', 'utf8')
 
     const result = await runBootstrap(root, bootstrap, ['cli', 'runtime', 'repair', '--rollback'])
 
@@ -164,7 +164,7 @@ describe('stable runtime bootstrap', () => {
       detail: 'host refresh failed',
     })}\n`, 'utf8')
     await writeFile(
-      join(root, 'data', 'releases', activeRelease, 'payload', 'packages', 'cli', 'dist', 'pipeline.mjs'),
+      join(root, 'data', 'releases', activeRelease, 'payload', 'packages', 'cli', 'dist', 'tenon.mjs'),
       'process.stdout.write("UNVERIFIED_ACTIVE_EXECUTED")\n',
       'utf8',
     )
@@ -185,8 +185,8 @@ describe('stable runtime bootstrap', () => {
     const root = await freshRoot('gate')
     const bootstrap = await installBootstrap(root)
     const mutation = JSON.stringify({ tool_name: 'Bash', command: 'touch src/app.ts' })
-    const recovery = JSON.stringify({ tool_name: 'Bash', command: 'pipeline runtime repair --rollback' })
-    const attacker = JSON.stringify({ tool_name: 'Bash', command: '/tmp/evil/pipeline runtime repair --rollback' })
+    const recovery = JSON.stringify({ tool_name: 'Bash', command: 'tenon runtime repair --rollback' })
+    const attacker = JSON.stringify({ tool_name: 'Bash', command: '/tmp/evil/tenon runtime repair --rollback' })
 
     expect((await runBootstrap(root, bootstrap, ['hook', 'gate'], mutation)).code).toBe(2)
     expect((await runBootstrap(root, bootstrap, ['hook', 'gate'], recovery)).code).toBe(0)

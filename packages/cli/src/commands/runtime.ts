@@ -39,7 +39,7 @@ function renderStatus(deps: CliDeps, inspection: RuntimeInspection, asJson: bool
   deps.io.out(`[runtime] previous=${previous} valid=${inspection.previousValid ? 'yes' : 'no'} revision=${inspection.selection.revision}`)
   if (inspection.lastAudit !== null) deps.io.out(`[runtime] last=${inspection.lastAudit.kind} at=${inspection.lastAudit.at}`)
   if (!inspection.activeValid) {
-    deps.io.out('[runtime] 修复：pipeline runtime repair --rollback；若没有上一份已验证 release，运行 pipeline setup --codex 或 pipeline setup --claude。')
+    deps.io.out('[runtime] 修复：tenon runtime repair --rollback；若没有上一份已验证 release，运行 tenon setup --codex 或 tenon setup --claude。')
   }
 }
 
@@ -61,7 +61,7 @@ export async function cmdRuntime(
   }
   if (sub === 'repair') {
     if (opts.rollback !== true) {
-      deps.io.err('ERROR: runtime repair 只接受精确恢复动作：pipeline runtime repair --rollback')
+      deps.io.err('ERROR: runtime repair 只接受精确恢复动作：tenon runtime repair --rollback')
       return 1
     }
     try {

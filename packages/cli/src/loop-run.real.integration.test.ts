@@ -8,12 +8,12 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const repoRoot = resolve(here, '..', '..', '..')
-const bundlePath = join(repoRoot, 'packages', 'cli', 'dist', 'pipeline.mjs')
+const bundlePath = join(repoRoot, 'packages', 'cli', 'dist', 'tenon.mjs')
 // `sandcastle:test` 固定 WITH_CODEX=false，只服务 deterministic fallback；真 agent 只能跑生产镜像。
 const image = 'sandcastle:local'
 
 function isRealCodexRequired(env: NodeJS.ProcessEnv): boolean {
-  return env.PIPELINE_REQUIRE_REAL_CODEX === '1'
+  return env.TENON_REQUIRE_REAL_CODEX === '1'
 }
 
 const requireRealCodex = isRealCodexRequired(process.env)
@@ -175,7 +175,7 @@ for a change, read \`openspec/changes/<change>/REAL_AGENT_TASK.md\` and perform 
 
 - Create only the requested file under \`deliverables/\`.
 - Do not edit \`.pipeline/\`, \`openspec/\`, \`AGENTS.md\`, or existing files.
-- Do not run pipeline transitions and do not invent extra work.
+- Do not run Tenon transitions and do not invent extra work.
 - Stop after the requested file exists. The surrounding real AFK wrapper owns Git commit creation.
 `
 
@@ -208,9 +208,9 @@ function topLevelWorkflowJob(workflow: string, jobId: string): string | undefine
 }
 
 describe('H14 required real-Codex prerequisite policy', () => {
-  it('activates fail-closed mode only for PIPELINE_REQUIRE_REAL_CODEX=1', () => {
-    expect(isRealCodexRequired({ PIPELINE_REQUIRE_REAL_CODEX: '1' })).toBe(true)
-    expect(isRealCodexRequired({ PIPELINE_REQUIRE_REAL_CODEX: '0' })).toBe(false)
+  it('activates fail-closed mode only for TENON_REQUIRE_REAL_CODEX=1', () => {
+    expect(isRealCodexRequired({ TENON_REQUIRE_REAL_CODEX: '1' })).toBe(true)
+    expect(isRealCodexRequired({ TENON_REQUIRE_REAL_CODEX: '0' })).toBe(false)
     expect(isRealCodexRequired({})).toBe(false)
   })
 
@@ -272,7 +272,7 @@ describe('H14 required real-Codex prerequisite policy', () => {
     const requiredCondition = verify.indexOf(
       "if: steps.real-codex-credential.outputs.available == 'true'",
     )
-    const requiredMode = verify.indexOf("PIPELINE_REQUIRE_REAL_CODEX: '1'")
+    const requiredMode = verify.indexOf("TENON_REQUIRE_REAL_CODEX: '1'")
     const secretEnv = verify.indexOf('OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}')
     const acceptanceStep = verify.indexOf(
       'npx vitest run packages/cli/src/loop-run.real.integration.test.ts',
@@ -302,7 +302,7 @@ describe('H14 required real-Codex prerequisite policy', () => {
 })
 
 let dockerReady = false
-let cliEnv: NodeJS.ProcessEnv = { ...process.env, PIPELINE_TEST_ALLOW_DETERMINISTIC_FALLBACK: '0' }
+let cliEnv: NodeJS.ProcessEnv = { ...process.env, TENON_TEST_ALLOW_DETERMINISTIC_FALLBACK: '0' }
 
 async function readable(path: string): Promise<boolean> {
   try {
@@ -348,7 +348,7 @@ async function prepareRealCodexEnvironment(): Promise<string | undefined> {
 
   await runSuccessfully('docker', [
     'run', '--rm', '--entrypoint', 'sh', image, '-c',
-    'test "${PIPELINE_TEST_ALLOW_DETERMINISTIC_FALLBACK:-}" = "0"',
+    'test "${TENON_TEST_ALLOW_DETERMINISTIC_FALLBACK:-}" = "0"',
   ], { cwd: repoRoot, timeoutMs: 60_000 }, 'verify sandcastle:local deterministic fallback is disabled')
 
   const attestationProbe = await runProcess('docker', [
@@ -369,7 +369,7 @@ async function prepareRealCodexEnvironment(): Promise<string | undefined> {
   }
   cliEnv = {
     ...process.env,
-    PIPELINE_TEST_ALLOW_DETERMINISTIC_FALLBACK: '0',
+    TENON_TEST_ALLOW_DETERMINISTIC_FALLBACK: '0',
     NO_COLOR: '1',
   }
   if (codexHome === undefined) delete cliEnv.CODEX_HOME
@@ -575,12 +575,12 @@ describe('H14 loop run · sandcastle:local real-Codex dist black-box integration
   })
 
   it('selector preserves natural ownership; real L1 pauses with a Git-derived commit, real L3 verifies and merges, then budget blocks before Docker', async (ctx) => {
-    // 真 agent 验收由 CI 以 PIPELINE_REQUIRE_REAL_CODEX=1 + 专用凭证强制执行。
+    // 真 agent 验收由 CI 以 TENON_REQUIRE_REAL_CODEX=1 + 专用凭证强制执行。
     // 本地 `npm test` 不得仅因用户恰好登录了 Codex 就消耗其额度；在非 required
     // 模式下诚实跳过，既不把外部 provider 状态伪造成测试绿，也不掩盖 CI 的硬门。
     if (!requireRealCodex) {
       console.warn(
-        '[HONEST SKIP] PIPELINE_REQUIRE_REAL_CODEX!=1; H14 real-Codex acceptance is enforced by the canonical CI job',
+        '[HONEST SKIP] TENON_REQUIRE_REAL_CODEX!=1; H14 real-Codex acceptance is enforced by the canonical CI job',
       )
       ctx.skip()
       return
@@ -597,7 +597,7 @@ describe('H14 loop run · sandcastle:local real-Codex dist black-box integration
 
     const root = await mkdtemp(join(tmpdir(), 'pipeline-h14-real-'))
     roots.push(root)
-    cliEnv = { ...cliEnv, PIPELINE_DASHBOARD_HOME: join(root, '.pipeline-dashboard-home') }
+    cliEnv = { ...cliEnv, TENON_DASHBOARD_HOME: join(root, '.tenon-dashboard-home') }
     await git(root, ['init', '-q', '-b', 'main'])
     await git(root, ['config', 'user.email', 'h14@pipeline.local'])
     await git(root, ['config', 'user.name', 'H14 Real Integration'])
@@ -619,7 +619,7 @@ describe('H14 loop run · sandcastle:local real-Codex dist black-box integration
       '.pipeline/loops/*.lock',
       '.pipeline/loops/ledger.jsonl',
       '.pipeline/loops/skill-snapshots/',
-      '.pipeline-dashboard-home/',
+      '.tenon-dashboard-home/',
       '',
     ].join('\n'), 'utf8')
 

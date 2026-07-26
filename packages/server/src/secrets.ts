@@ -12,8 +12,8 @@
  * C2b：路径不是密钥，现有 host env 透传已工作）；ANTHROPIC_API_KEY 刻意不进（决策点 C2c：
  * 全链零消费者，加了是摆设字段）。
  */
-import { deleteSecretKey, readSecrets, SECRET_KEYS, writeSecretKey } from '@pipeline-lite/kernel'
-import type { SecretKey } from '@pipeline-lite/kernel'
+import { deleteSecretKey, readSecrets, SECRET_KEYS, writeSecretKey } from '@tenon/kernel'
+import type { SecretKey } from '@tenon/kernel'
 
 /** 4KB，纯防御（防误粘贴大段文本膨胀文件），不对值本身做格式假设（不同 provider token 形状不同）。 */
 const MAX_VALUE_LENGTH = 4096

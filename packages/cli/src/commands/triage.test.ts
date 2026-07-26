@@ -7,12 +7,12 @@ import {
   createStateStore,
   createTransitionRecordStore,
   createWorkflowRunRepository,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import {
   TriageOrchestrationError,
   triageCheckpointFilePath,
   type ProductionTriageProvider,
-} from '@pipeline-lite/automation'
+} from '@tenon/automation'
 import { describe, expect, it, vi } from 'vitest'
 import {
   cmdTriage,

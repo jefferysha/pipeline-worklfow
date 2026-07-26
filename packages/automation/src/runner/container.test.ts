@@ -20,7 +20,7 @@ describe('buildContainerRunArgs（gitMounts / env / user / cpus 组装）', () =
   const base = {
     name: 'sandcastle-abc',
     image: 'sandcastle:local',
-    env: { PIPELINE_AFK: '1', HOME: '/home/agent' },
+    env: { TENON_AFK: '1', HOME: '/home/agent' },
     gitMounts: [
       { hostPath: '/wt/.git', sandboxPath: '/wt/.git' },
       { hostPath: '/repo/.git', sandboxPath: '/repo/.git' },
@@ -39,10 +39,10 @@ describe('buildContainerRunArgs（gitMounts / env / user / cpus 组装）', () =
     expect(a[a.length - 1]).toBe('sandcastle:local')
   })
 
-  it('env → -e K=V（含 PIPELINE_AFK=1 放行三门）', () => {
+  it('env → -e K=V（含 TENON_AFK=1 放行三门）', () => {
     const a = buildContainerRunArgs(base)
     expect(a).toContain('-e')
-    expect(a.join(' ')).toContain('PIPELINE_AFK=1')
+    expect(a.join(' ')).toContain('TENON_AFK=1')
   })
 
   it('gitMounts → -v host:sandbox（双挂载各 host==sandbox）', () => {
@@ -99,10 +99,10 @@ describe('createDockerSandbox（fake ExecFn 驱动 create→exec→close 全链�
     const handle = await createDockerSandbox(exec, {
       image: 'sandcastle:local',
       worktreePath: '/wt',
-      env: { PIPELINE_AFK: '1' },
+      env: { TENON_AFK: '1' },
       gitMounts: [{ hostPath: '/wt/.git', sandboxPath: '/wt/.git' }],
     })
-    expect(handle.env.PIPELINE_AFK).toBe('1')
+    expect(handle.env.TENON_AFK).toBe('1')
     expect(handle.containerName).toMatch(/^sandcastle-/) // 真容器名透传（供 lifecycle 写回 automation_sandbox）
     expect(calls[0][1]).toBe('run') // docker run -d ...
 
@@ -232,9 +232,9 @@ describe('copyAndSealDirectoryInContainer（H10 r5）', () => {
  *      那是 node 脚本自身的通用失败码，被 shell 侧翻译成保留码之前的中间态，不是本测试要钉的
  *      对外契约值，故用行首 `exit ` + 数字这个更精确的模式，不误配内嵌 JS 里的 `process.exit(1)`）。
  */
-describe('SKILL_BUNDLE_VERIFY_FAIL_EXIT_CODE（H10 r1 阻断5/任务C1）：与 pipeline-afk-run.sh 保持同步', () => {
+describe('SKILL_BUNDLE_VERIFY_FAIL_EXIT_CODE（H10 r1 阻断5/任务C1）：与 tenon-afk-run.sh 保持同步', () => {
   const here = dirname(fileURLToPath(import.meta.url))
-  const scriptPath = join(here, '..', '..', '..', '..', 'tools', 'sandcastle', 'pipeline-afk-run.sh')
+  const scriptPath = join(here, '..', '..', '..', '..', 'tools', 'sandcastle', 'tenon-afk-run.sh')
 
   it('保留退出码不与既有 95（脚本对账漂移）/96（codex 缺失）/97（tap 未起）冲突', () => {
     expect(SKILL_BUNDLE_VERIFY_FAIL_EXIT_CODE).not.toBe(95)

@@ -1,6 +1,6 @@
 # 发布说明
 
-Pipeline Lite 的发布说明用于回答三个问题：这一版改变了什么、用户需要做什么、如何确认升级成功。
+Tenon 的发布说明用于回答三个问题：这一版改变了什么、用户需要做什么、如何确认升级成功。
 
 本页只记录已经进入公开发行包的能力，不把规划、内部 ADR 或尚未合并的实验写成已交付事实。
 
@@ -17,7 +17,7 @@ Pipeline Lite 的发布说明用于回答三个问题：这一版改变了什么
 ### 中文治理文档
 
 - 新 Change 的治理文档默认固定为 `zh-CN`。
-- `pipeline init`、`pipeline document scaffold` 与 default OpenSpec fallback 使用同一 Document Presentation Registry。
+- `tenon init`、`tenon document scaffold` 与 default OpenSpec fallback 使用同一 Document Presentation Registry。
 - 用户可以在创建时显式选择 `--document-locale en`。
 - 已固定 locale 的 Change 不允许在中途静默切换语言。
 - 历史 Change 会从现有 H1 文字信号推断语言。
@@ -44,29 +44,29 @@ Pipeline Lite 的发布说明用于回答三个问题：这一版改变了什么
 
 ### 安装与更新
 
-- Codex 使用 `pipeline setup --codex`。
-- Claude 使用 `pipeline setup --claude`。
-- 更新使用对应宿主的 `pipeline update --codex` 或 `pipeline update --claude`。
+- Codex 使用 `tenon setup --codex`。
+- Claude 使用 `tenon setup --claude`。
+- 更新使用对应宿主的 `tenon update --codex` 或 `tenon update --claude`。
 - 托管 runtime 以内容摘要发布，稳定 launcher 指向已验证版本。
-- 更新失败时保留上一版，可用 `pipeline runtime repair --rollback` 恢复。
+- 更新失败时保留上一版，可用 `tenon runtime repair --rollback` 恢复。
 - Dashboard 默认监听 `127.0.0.1:18765`。
 
 ## 升级动作
 
 1. 在现有仓库确认工作区状态。
-2. 运行对应宿主的 `pipeline update` 命令。
-3. 运行 `pipeline runtime status` 查看活动版本。
-4. 运行 `pipeline doctor` 检查安装、Skill 与宿主适配。
-5. 在项目中运行 `pipeline list --json` 验证 CLI 可读状态。
+2. 运行对应宿主的 `tenon update` 命令。
+3. 运行 `tenon runtime status` 查看活动版本。
+4. 运行 `tenon doctor` 检查安装、Skill 与宿主适配。
+5. 在项目中运行 `tenon list --json` 验证 CLI 可读状态。
 6. 打开 Dashboard 时确认地址为 `127.0.0.1:18765`。
 
 ## 验证
 
 - `pipeline --help` 能显示命令族。
-- `pipeline runtime status` 能显示活动 runtime。
-- `pipeline doctor` 不报告缺失的内建 Skill。
-- `pipeline setup --codex` 重复运行保持幂等。
-- `pipeline update --codex` 不修改项目的 canonical Change 状态。
+- `tenon runtime status` 能显示活动 runtime。
+- `tenon doctor` 不报告缺失的内建 Skill。
+- `tenon setup --codex` 重复运行保持幂等。
+- `tenon update --codex` 不修改项目的 canonical Change 状态。
 - 新建测试 Change 时 proposal、design 与 tasks 默认中文。
 - 显式英文 Change 的新文档保持英文。
 
@@ -88,9 +88,9 @@ Dashboard 的界面语言与治理文档 locale 是两个独立边界，不互�
 
 ## 回滚
 
-如果升级后的 runtime 无法启动，先运行 `pipeline runtime status` 收集版本信息。
+如果升级后的 runtime 无法启动，先运行 `tenon runtime status` 收集版本信息。
 
-随后运行 `pipeline runtime repair --rollback` 切回上一份已验证内容摘要。
+随后运行 `tenon runtime repair --rollback` 切回上一份已验证内容摘要。
 
 回滚 runtime 不会删除项目中的 Change、OpenSpec 文档或证据账本。
 

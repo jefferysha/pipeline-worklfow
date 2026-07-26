@@ -487,7 +487,7 @@ describe('ship 出口（P3）与 archive 出口（A1）', () => {
 })
 
 // ──────────── advisory/enforcement 一致性矩阵（2026-07-17 P0 撕裂修复的验收）────────────
-// 同一 track 问两层同一个问题：「plan / 双 review 是否被要求？」guard（pipeline check/doctor
+// 同一 track 问两层同一个问题：「plan / 双 review 是否被要求？」guard（tenon check/doctor
 // 的 advisory 预览）与 transition（事件强制层）必须同判。修复前 guard 层用 tracks= 白名单，
 // chat/未知 track 被豁免，而 transition 层按 !=pm 拒绝——本矩阵在那两格是红的；统一走
 // workflow/predicates.ts 的 NON_PM 后全绿。legacy `plan` artifact 与双 review 都对 PM 豁免；

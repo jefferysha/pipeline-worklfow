@@ -1,6 +1,6 @@
 import { dirname, join, resolve } from 'node:path'
-import { readAutomationJson } from '@pipeline-lite/automation'
-import { PREREQ_HINTS } from '@pipeline-lite/kernel'
+import { readAutomationJson } from '@tenon/automation'
+import { PREREQ_HINTS } from '@tenon/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
 import { nodeExecDocker, probeAfkReadiness, type AfkReadiness, type CredLight, type ExecDockerFn } from '../afkReadiness.js'
 import { REAL_RUNTIME_INSTALLER, type RuntimeInstaller } from '../runtime/installer.js'
@@ -42,7 +42,7 @@ export function cmdSetup(
     case '': {
       const selection = selectPipelineHost(o)
       if (selection.host === null) {
-        deps.io.err(`ERROR: ${selection.error}。示例：pipeline setup --codex`)
+        deps.io.err(`ERROR: ${selection.error}。示例：tenon setup --codex`)
         return 1
       }
       const host = selection.host
@@ -55,7 +55,7 @@ export function cmdSetup(
         const skillsCode = cmdSetupSkills(deps, o, env)
         if (o.dryRun) {
           deps.io.out(
-            '[setup] 运行时就绪检查:--dry-run 跳过真探测（不起 docker）——跑 pipeline setup runtime ' +
+            '[setup] 运行时就绪检查:--dry-run 跳过真探测（不起 docker）——跑 tenon setup runtime ' +
               '看真实 docker/镜像/两 runner 凭证就绪清单',
           )
           return skillsCode

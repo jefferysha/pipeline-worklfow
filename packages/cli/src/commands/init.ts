@@ -4,14 +4,14 @@
  * stdout：无；exit 0/1。
  *
  * --workflow（GOAL E，whole-branch review 补：此前没有任何支持的命令能把一个 change 摆到
- * 自定义 workflow 的首个 step 上，除非该 step 恰好叫 open——`pipeline set phase <custom-id>`
+ * 自定义 workflow 的首个 step 上，除非该 step 恰好叫 open——`tenon set phase <custom-id>`
  * 被 manifest 派生的 7 相位枚举挡下，`migrate-workflow` 只处理已存在的 change。此处新增的
  * `--workflow` 选项省略/传 'default' 时行为与此前完全一致（未提供本选项的既有调用零回归）；
  * 显式传非 default 名字时，真加载 + 校验该 workflow（复用 loadWorkflow，Fix E5 已经接的
  * validateWorkflow 在这里同样生效——非法 workflow 文件在 init 这一步就 fail-loud，不会让
  * 一个引用了坏 workflow 的 change 先被创建出来），再把 workflow 字段设成该名字、phase 字段
  * 种到它 steps[0] 的 id（而不是硬编码的 'open'）。这里故意绕开 CLI `set` 子命令那层的
- * enumOk（对齐 manifest.phases 的老内核枚举校验，仅对 `pipeline set phase ...` 这一入口生效）
+ * enumOk（对齐 manifest.phases 的老内核枚举校验，仅对 `tenon set phase ...` 这一入口生效）
  * ——workflow/phase 首态随 `runRepo.initChange()` 的 `initialWorkflow` 参数，进 kernel
  * `StateStore.init()` 独占创建那唯一一次原子写入（第 7 轮 codex review P1：此前是 initChange
  * 之后再补一次 StateStore.setMany，两次写之间有竞态窗口，见 store.ts init() 头部注释），
@@ -26,9 +26,9 @@ import {
   loadEffectiveWorkflowPlan,
   requireTrack,
   workflowPlanSnapshot,
-} from '@pipeline-lite/kernel'
-import type { TrackDefinition, TrackRegistry } from '@pipeline-lite/kernel'
-import type { DocumentLocale } from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
+import type { TrackDefinition, TrackRegistry } from '@tenon/kernel'
+import type { DocumentLocale } from '@tenon/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
 import { recordHistory } from './fields.js'
 import { isValidChangeName } from '../paths.js'

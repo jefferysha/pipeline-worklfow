@@ -12,12 +12,34 @@ set -uo pipefail
 
 INPUT="$(cat 2>/dev/null || printf '{}')"
 
+# A successful write here is host evidence that this exact Tenon release actually executed in a
+# new SessionStart. The migration-only legacy bridge requires this marker before it removes an old
+# plugin registration. It is deliberately user-local, contains no prompt or credential data, and
+# never blocks SessionStart.
+record_tenon_session_proof() {
+  local state_root="${TENON_RUNTIME_STATE_ROOT:-}" release_root="${TENON_ACTIVE_RELEASE_ROOT:-}"
+  local proof_dir tmp
+  [ -n "$state_root" ] && [ -n "$release_root" ] || return 0
+  [ -d "$release_root" ] || return 0
+  proof_dir="$state_root/migration"
+  umask 077
+  mkdir -p "$proof_dir" 2>/dev/null || return 0
+  tmp="$proof_dir/.tenon-session-loaded.$$"
+  {
+    printf 'version=1\n'
+    printf 'loaded_at_epoch=%s\n' "$(date +%s 2>/dev/null || printf '0')"
+    printf 'release_root=%s\n' "$release_root"
+  } > "$tmp" 2>/dev/null || { rm -f "$tmp" 2>/dev/null || true; return 0; }
+  mv "$tmp" "$proof_dir/tenon-session-loaded" 2>/dev/null || rm -f "$tmp" 2>/dev/null || true
+}
+record_tenon_session_proof
+
 # Codex treats stdout beginning with `[` or `{` as hook JSON.  The injected workflow context
 # intentionally uses bracketed headings, so emitting it as plain stdout makes the host attempt to
 # parse a Markdown heading as JSON and fail the whole SessionStart event.  Accumulate the context
 # and publish the documented SessionStart envelope exactly once at the end instead.
 SESSION_CONTEXT=""
-SESSION_START_FORMAT="${PIPELINE_SESSION_START_FORMAT:-codex-json}"
+SESSION_START_FORMAT="${TENON_SESSION_START_FORMAT:-codex-json}"
 
 append_context() {
   SESSION_CONTEXT="${SESSION_CONTEXT}${1:-}"
@@ -74,7 +96,7 @@ PLUGIN_ROOT="${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$0")/.." && p
 CWD="$(json_get cwd || true)"
 [ -z "$CWD" ] && CWD="$PWD"
 
-# Release updates are opt-in (`pipeline setup --codex|--claude --auto-update`).  Keep SessionStart
+# Release updates are opt-in (`tenon setup --codex|--claude --auto-update`).  Keep SessionStart
 # non-blocking: the helper only claims a once-per-day slot and backgrounds the host marketplace
 # refresh; failure remains invisible to the workflow hook and is written to the user-owned log.
 AUTO_UPDATE="$PLUGIN_ROOT/hooks/auto-update.sh"
@@ -162,7 +184,7 @@ if [ -n "$OS_ROOT" ]; then
 fi
 
 # ── 简短引导（一行相位图 + 项目 GOAL.md 头两行，若有）──
-append_context $'pipeline-lite: 7-phase 流水线已加载：open → explore → spec → build ⇄ verify → ship → archive。状态操作一律走 pipeline CLI（status / get / set / transition / check），编排入口 skill：pipeline。\n'
+append_context $'Tenon：7-phase 流水线已加载：open → explore → spec → build ⇄ verify → ship → archive。状态操作一律走 tenon CLI（status / get / set / transition / check），编排入口 skill：tenon。\n'
 if [ -f "$CWD/GOAL.md" ]; then
   append_file "$CWD/GOAL.md" 2
 fi
@@ -170,7 +192,7 @@ fi
 # ── 注入①：工作流宪法（templates/workflow.md，相对插件根；缺文件静默跳过）──
 WF="$PLUGIN_ROOT/templates/workflow.md"
 if [ -f "$WF" ]; then
-  append_context $'\n[pipeline-lite 宪法 — '
+  append_context $'\n[tenon 宪法 — '
   append_context "$WF"
   append_context $']\n'
   append_file "$WF"
@@ -211,7 +233,7 @@ if [ -n "$OS_ROOT" ] && [ -d "$OS_ROOT/openspec/changes" ]; then
     [ $((now - mt)) -le "$ttl" ] && GATES="$GATES 等:$kind"
   done
   if [ -n "$CTX" ]; then
-    append_context $'\n[pipeline 上下文 — '
+    append_context $'\n[Tenon 上下文 — '
     append_context "$OS_ROOT"
     append_context $'] 活跃 change：\n'
     append_context "$CTX"
@@ -226,25 +248,25 @@ fi
 
 # ── 注入③：openspec 使用提示（openspec 目录存在才输出）──
 if [ -n "$OS_ROOT" ]; then
-  append_context $'\n[openspec 提示] 本项目使用 openspec：change 唯一状态在 openspec/changes/<name>/.pipeline-run/current.json，.pipeline.yaml 仅兼容投影（两者均勿手改，走 pipeline CLI）；主 spec 在 openspec/specs/<capability>/spec.md，动某能力前先 Read 对应 spec；归档产物沉在 openspec/changes/archive/。\n'
+  append_context $'\n[openspec 提示] 本项目使用 openspec：change 唯一状态在 openspec/changes/<name>/.pipeline-run/current.json，.pipeline.yaml 仅兼容投影（两者均勿手改，走 tenon CLI）；主 spec 在 openspec/specs/<capability>/spec.md，动某能力前先 Read 对应 spec；归档产物沉在 openspec/changes/archive/。\n'
 fi
 
 # ── v6 T5 / full-install 批2 P2-T2：AFK 首跑 + 技能就绪提示（轻量静态提示，不做真探测）──
 #    SS_AFK_HIT 已在文件头「当前阶段」循环里顺手判定（.pipeline/automation.json 存在，或活跃 change 的
 #    automation 字段非 off/空）；此处只管输出。刻意不做任何 docker/凭证/技能真探测——SessionStart
 #    零阻断纪律下探测可能挂起（守零 spawn，只改文案不加探测）。指向 dashboard 就绪三灯（GET
-#    /api/afk/readiness，v6 T4）**并**指向 `pipeline doctor`——批2 A1 已给 doctor 补上缺技能检测与
+#    /api/afk/readiness，v6 T4）**并**指向 `tenon doctor`——批2 A1 已给 doctor 补上缺技能检测与
 #    保障生效面，v6 计划附录矛盾登记 1 的取舍在本批已消解，故回改指向该命令。
-[ -n "$SS_AFK_HIT" ] && append_context $'\n[pipeline-lite] 检测到 AFK 自动化配置：AFK 就绪状态见 dashboard（就绪三灯）；技能齐全度/保障生效面跑 pipeline doctor 核对。\n'
+[ -n "$SS_AFK_HIT" ] && append_context $'\n[tenon] 检测到 AFK 自动化配置：AFK 就绪状态见 dashboard（就绪三灯）；技能齐全度/保障生效面跑 tenon doctor 核对。\n'
 
 # ── 插件资产校验（fail-open：失败仅警告）──
 VS="$PLUGIN_ROOT/tools/verify-skills.sh"
 if [ -f "$VS" ]; then
   if ! bash "$VS" --quiet --root "$PLUGIN_ROOT" 1>&2; then
-    printf '[pipeline-lite] 警告：插件资产校验未通过（存在悬空引用，明细见上；复跑：bash %s）。会话不阻断，但请尽快修复。\n' "$VS" >&2
+    printf '[tenon] 警告：插件资产校验未通过（存在悬空引用，明细见上；复跑：bash %s）。会话不阻断，但请尽快修复。\n' "$VS" >&2
   fi
 else
-  printf '[pipeline-lite] 警告：未找到 %s，跳过插件资产校验（CONTRACT §5.7 要求安装期校验）。\n' "$VS" >&2
+  printf '[tenon] 警告：未找到 %s，跳过插件资产校验（CONTRACT §5.7 要求安装期校验）。\n' "$VS" >&2
 fi
 
 emit_context

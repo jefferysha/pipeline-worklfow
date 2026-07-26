@@ -1,7 +1,7 @@
 /**
  * traces 域 —— tap 流量查看器数据端（BACKLOG #34d / GOAL A7）。
  *
- * 消费 @pipeline-lite/tap 的 TraceStore（listSessions / readRecords）——但为守两条硬约束：
+ * 消费 @tenon/tap 的 TraceStore（listSessions / readRecords）——但为守两条硬约束：
  *   ① server 零第三方运行时依赖 + tsc 构建不耦合 tap 构建顺序（tap 在 server 之后 build）；
  *   ② 只读 import tap 的 API（绝不改 tap）。
  * 故此处只定义**结构化 port**（TraceStoreReader），真 TraceStore 由上层注入（bin 装配 / 测试）。

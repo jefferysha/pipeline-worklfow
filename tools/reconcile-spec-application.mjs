@@ -144,7 +144,7 @@ async function buildExpected(receipt) {
   const delta = await readFile(deltaPath)
   if (digest(delta) !== receipt.deltaDigest) throw new Error('migration delta 摘要漂移')
 
-  const sandbox = await mkdtemp(join(tmpdir(), 'pipeline-spec-migration-'))
+  const sandbox = await mkdtemp(join(tmpdir(), 'tenon-spec-migration-'))
   try {
     const target = resolve(sandbox, receipt.mainSpecPath)
     await mkdir(dirname(target), { recursive: true })

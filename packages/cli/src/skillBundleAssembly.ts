@@ -30,11 +30,11 @@
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { isAbsolute, join } from 'node:path'
-import { parseSkillSources } from '@pipeline-lite/kernel'
+import { parseSkillSources } from '@tenon/kernel'
 import {
   createFsSkillContentLocator, createRunnerSkillContentLocator, SkillContentNotFoundError,
   type SkillContentLocator,
-} from '@pipeline-lite/automation'
+} from '@tenon/automation'
 export {
   createExecutionCoordinatePort,
   type ExecutionCoordinatePortDeps,

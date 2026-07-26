@@ -19,9 +19,9 @@
 ### 1. 检查就绪度
 
 ```bash
-pipeline doctor --json
-pipeline status <change> --json
-pipeline inbox --json
+tenon doctor --json
+tenon status <change> --json
+tenon inbox --json
 ```
 
 就绪检查应区分 Docker 缺失、镜像缺失、provider 凭证缺失、Workflow 不允许自动化和 pending human gate。不要把所有失败折叠成“无法运行”。
@@ -29,8 +29,8 @@ pipeline inbox --json
 ### 2. 加入 AFK 队列
 
 ```bash
-pipeline afk enqueue <change>
-pipeline afk status <change> --json
+tenon afk enqueue <change>
+tenon afk status <change> --json
 ```
 
 queued 只表示已进入调度队列，不表示 Agent 正在执行。Dashboard 只有在存在真实 executor、session 和运行态证据时才应显示 running。
@@ -38,7 +38,7 @@ queued 只表示已进入调度队列，不表示 Agent 正在执行。Dashboard
 ### 3. 选择权限档位并运行
 
 ```bash
-pipeline afk run <change> --level L1
+tenon afk run <change> --level L1
 ```
 
 从最小权限开始。L1 是 report-only 安全默认；更高档位必须仍受 Workflow、allowlist、denylist、review gate 和外部副作用边界约束。
@@ -48,8 +48,8 @@ pipeline afk run <change> --level L1
 Loop 声明目标、provider、Workflow、最大迭代、预算、成功/停止条件和 inbox policy。每个 iteration 绑定不可变 policy snapshot，避免运行中配置漂移。
 
 ```bash
-pipeline loops list
-pipeline afk enqueue <change> --loop <loop-id>
+tenon loops list
+tenon afk enqueue <change> --loop <loop-id>
 ```
 
 显式绑定优于按 Change 前缀猜测归属。iteration 可以前进，但历史 transition record 保留当时真实使用的 policy/iteration 身份。
@@ -57,9 +57,9 @@ pipeline afk enqueue <change> --loop <loop-id>
 ### 5. 监控和安全停止
 
 ```bash
-pipeline afk status <change> --json
-pipeline inbox --json
-pipeline afk cancel <change>
+tenon afk status <change> --json
+tenon inbox --json
+tenon afk cancel <change>
 ```
 
 预算耗尽、凭证缺失、Workflow 漂移、review 待确认和不可恢复配置错误都应停止，不应通过无限重试掩盖。
@@ -75,11 +75,11 @@ pipeline afk cancel <change>
 ## 验证
 
 ```bash
-pipeline loops list
-pipeline inbox --json
-pipeline doctor --json
-pipeline status <change> --json
-pipeline afk status <change> --json
+tenon loops list
+tenon inbox --json
+tenon doctor --json
+tenon status <change> --json
+tenon afk status <change> --json
 ```
 
 结构化 cause 应优先于错误字符串正则。取消、超时、冲突、`verify-fail` 和 provider exit 需要不同恢复动作。

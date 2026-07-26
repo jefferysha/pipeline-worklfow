@@ -3,7 +3,7 @@ name: browser-qa
 description: First-party browser acceptance testing for user-visible flows.
 license: MIT
 metadata:
-  author: pipeline-lite
+  author: tenon
 ---
 
 # Browser QA

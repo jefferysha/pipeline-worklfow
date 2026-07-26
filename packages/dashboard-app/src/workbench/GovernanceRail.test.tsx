@@ -5,7 +5,7 @@ import {
   MIN_L2_RUNS_FOR_L3 as KERNEL_MIN_L2_RUNS_FOR_L3,
   READY_STRONG as KERNEL_READY_STRONG,
   READY_THRESHOLD as KERNEL_READY_THRESHOLD,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import { I18nProvider } from '../i18n'
 import { BUDGET_WARN_RATIO, GovernanceRail, MIN_L2_RUNS_FOR_L3, READY_STRONG, READY_THRESHOLD } from './GovernanceRail'
 import { useLoops } from './LoopCard'

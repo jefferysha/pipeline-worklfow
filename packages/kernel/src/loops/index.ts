@@ -5,7 +5,7 @@
  *   · 全部类型（LoopEntry/LoopRegistry/LoopVerdict/RunFacts/EnforceFs/…）
  *
  * 本子 barrel 由根 kernel src/index.ts re-export；消费方（cli/commands/loops.ts、server/loops.ts）
- * 一律经 '@pipeline-lite/kernel' 包名导入。
+ * 一律经 '@tenon/kernel' 包名导入。
  */
 export {
   loadRegistry, parseLoopsYaml, validateSchema, LOOPS_SCHEMA, nodeLoopIo, nodeLoopIoStrict, RegistryReadError,

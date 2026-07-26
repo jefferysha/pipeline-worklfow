@@ -3,7 +3,7 @@
 #
 # This script deliberately does not infer a Change from `.pipeline-active`: that pointer is a
 # repository-level recovery candidate and was the reason an unrelated normal conversation could
-# make an old Change appear live. It writes only when `pipeline session activate <change>
+# make an old Change appear live. It writes only when `tenon session activate <change>
 # --host-session <id>` previously created an exact session-to-Change binding. The output is
 # dashboard-only observability; canonical workflow state, guards, and transitions never read it.
 set -uo pipefail

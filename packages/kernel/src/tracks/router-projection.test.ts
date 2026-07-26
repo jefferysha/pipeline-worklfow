@@ -143,7 +143,7 @@ describe('router v5 data cache encoding', () => {
       projection,
     })
 
-    expect(cache).toMatch(/^PIPELINE_ROUTER_V5\nM\|/)
+    expect(cache).toMatch(/^TENON_ROUTER_V5\nM\|/)
     expect(cache).not.toContain('$(')
     expect(cache).not.toContain('`')
     expect(cache).not.toContain('/tmp/router-owned')

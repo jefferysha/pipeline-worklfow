@@ -26,10 +26,10 @@ async function candidateCopy(root: string, suffix = ''): Promise<string> {
     '.codex-plugin/plugin.json',
     'adapters',
     'hooks',
-    'packages/cli/dist/pipeline.mjs',
+    'packages/cli/dist/tenon.mjs',
     'packages/dashboard-app/dist',
     'packages/server/dist/dashboard.mjs',
-    'runtime/pipeline-bootstrap.mjs',
+    'runtime/tenon-bootstrap.mjs',
     'skills',
     'templates',
     'tools/verify-skills.sh',
@@ -42,14 +42,14 @@ async function candidateCopy(root: string, suffix = ''): Promise<string> {
 
 function storeFor(root: string): RuntimeReleaseStore {
   return new RuntimeReleaseStore({
-    paths: resolveRuntimePaths({ env: { PIPELINE_RUNTIME_HOME: join(root, 'runtime') }, homeDir: root, platform: 'linux' }),
+    paths: resolveRuntimePaths({ env: { TENON_RUNTIME_HOME: join(root, 'runtime') }, homeDir: root, platform: 'linux' }),
     now: () => '2026-07-24T00:00:00Z',
     retainedReleases: 3,
   })
 }
 
 function pathsFor(root: string) {
-  return resolveRuntimePaths({ env: { PIPELINE_RUNTIME_HOME: join(root, 'runtime') }, homeDir: root, platform: 'linux' })
+  return resolveRuntimePaths({ env: { TENON_RUNTIME_HOME: join(root, 'runtime') }, homeDir: root, platform: 'linux' })
 }
 
 describe('RuntimeReleaseStore', () => {
@@ -112,8 +112,8 @@ describe('RuntimeReleaseStore', () => {
     const firstCandidate = await candidateCopy(root, '-one')
     const secondCandidate = await candidateCopy(root, '-two')
     await writeFile(
-      join(secondCandidate, 'runtime', 'pipeline-bootstrap.mjs'),
-      `${await readFile(join(secondCandidate, 'runtime', 'pipeline-bootstrap.mjs'), 'utf8')}\n// release-two\n`,
+      join(secondCandidate, 'runtime', 'tenon-bootstrap.mjs'),
+      `${await readFile(join(secondCandidate, 'runtime', 'tenon-bootstrap.mjs'), 'utf8')}\n// release-two\n`,
       'utf8',
     )
     const store = storeFor(root)
@@ -130,8 +130,8 @@ describe('RuntimeReleaseStore', () => {
   it('rejects symbolic links in a candidate payload', async () => {
     const root = await freshRoot('symlink')
     const candidate = await candidateCopy(root)
-    await rm(join(candidate, 'packages', 'cli', 'dist', 'pipeline.mjs'))
-    await symlink('/tmp/not-a-pipeline', join(candidate, 'packages', 'cli', 'dist', 'pipeline.mjs'))
+    await rm(join(candidate, 'packages', 'cli', 'dist', 'tenon.mjs'))
+    await symlink('/tmp/not-a-pipeline', join(candidate, 'packages', 'cli', 'dist', 'tenon.mjs'))
 
     await expect(storeFor(root).stageAndActivate(candidate, 'codex')).rejects.toThrow(/符号链接/i)
   }, 30_000)
@@ -141,8 +141,8 @@ describe('RuntimeReleaseStore', () => {
     const firstCandidate = await candidateCopy(root, '-one')
     const secondCandidate = await candidateCopy(root, '-two')
     await writeFile(
-      join(secondCandidate, 'runtime', 'pipeline-bootstrap.mjs'),
-      `${await readFile(join(secondCandidate, 'runtime', 'pipeline-bootstrap.mjs'), 'utf8')}\n// second\n`,
+      join(secondCandidate, 'runtime', 'tenon-bootstrap.mjs'),
+      `${await readFile(join(secondCandidate, 'runtime', 'tenon-bootstrap.mjs'), 'utf8')}\n// second\n`,
       'utf8',
     )
     const healthy = storeFor(root)
@@ -158,8 +158,8 @@ describe('RuntimeReleaseStore', () => {
 
     const thirdCandidate = await candidateCopy(root, '-three')
     await writeFile(
-      join(thirdCandidate, 'runtime', 'pipeline-bootstrap.mjs'),
-      `${await readFile(join(thirdCandidate, 'runtime', 'pipeline-bootstrap.mjs'), 'utf8')}\n// third\n`,
+      join(thirdCandidate, 'runtime', 'tenon-bootstrap.mjs'),
+      `${await readFile(join(thirdCandidate, 'runtime', 'tenon-bootstrap.mjs'), 'utf8')}\n// third\n`,
       'utf8',
     )
     await expect(failingAudit.stageAndActivate(thirdCandidate, 'codex')).rejects.toThrow(/audit append failure/)

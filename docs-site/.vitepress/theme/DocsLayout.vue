@@ -160,7 +160,7 @@ onBeforeUnmount(() => {
       <template #sidebar-nav-after><slot name="sidebar-nav-after" /></template>
     </VPSidebar>
 
-    <main v-if="isHome" id="VPContent" class="VPContent is-home pl-home-main">
+    <main v-if="isHome" id="VPContent" class="VPContent is-home tenon-home-main">
       <VPHome>
         <template #home-hero-before><slot name="home-hero-before" /></template>
         <template #home-hero-info-before><slot name="home-hero-info-before" /></template>
@@ -177,12 +177,12 @@ onBeforeUnmount(() => {
     <main
       v-else-if="isNotFound"
       id="VPContent"
-      class="VPContent pl-not-found"
-      aria-labelledby="pl-not-found-title"
+      class="VPContent tenon-not-found"
+      aria-labelledby="tenon-not-found-title"
     >
-      <section class="pl-not-found-card">
-        <p class="pl-not-found-code" aria-hidden="true">404</p>
-        <h1 id="pl-not-found-title">{{ isChinese ? '页面未找到' : 'Page not found' }}</h1>
+      <section class="tenon-not-found-card">
+        <p class="tenon-not-found-code" aria-hidden="true">404</p>
+        <h1 id="tenon-not-found-title">{{ isChinese ? '页面未找到' : 'Page not found' }}</h1>
         <p>
           {{
             isChinese
@@ -190,7 +190,7 @@ onBeforeUnmount(() => {
               : 'This address does not exist, or the page has moved. Return to the documentation home to continue.'
           }}
         </p>
-        <a class="pl-not-found-action" :href="homeHref">
+        <a class="tenon-not-found-action" :href="homeHref">
           {{ isChinese ? '返回文档首页' : 'Return to documentation home' }}
         </a>
       </section>
@@ -202,10 +202,10 @@ onBeforeUnmount(() => {
       <template #not-found><slot name="not-found" /></template>
       <template #doc-footer-before><slot name="doc-footer-before" /></template>
       <template #doc-before>
-        <nav class="pl-breadcrumb" :aria-label="isChinese ? '面包屑' : 'Breadcrumb'">
+        <nav class="tenon-breadcrumb" :aria-label="isChinese ? '面包屑' : 'Breadcrumb'">
           <a :href="homeHref">{{ isChinese ? '文档首页' : 'Documentation home' }}</a>
           <span aria-hidden="true">/</span>
-          <span class="pl-breadcrumb-group">{{ groupLabel }}</span>
+          <span class="tenon-breadcrumb-group">{{ groupLabel }}</span>
           <span aria-hidden="true">/</span>
           <span aria-current="page">{{ page.title }}</span>
         </nav>
@@ -242,7 +242,7 @@ onBeforeUnmount(() => {
   max-width: 100%;
 }
 
-.pl-not-found {
+.tenon-not-found {
   align-items: center;
   display: flex;
   justify-content: center;
@@ -250,12 +250,12 @@ onBeforeUnmount(() => {
   padding: 96px 24px 64px;
 }
 
-.pl-not-found-card {
+.tenon-not-found-card {
   max-width: 640px;
   text-align: center;
 }
 
-.pl-not-found-code {
+.tenon-not-found-code {
   color: var(--vp-c-brand-1);
   font-size: clamp(3rem, 10vw, 6rem);
   font-weight: 750;
@@ -264,21 +264,21 @@ onBeforeUnmount(() => {
   margin: 0 0 24px;
 }
 
-.pl-not-found-card h1 {
+.tenon-not-found-card h1 {
   font-size: clamp(2rem, 5vw, 3.25rem);
   letter-spacing: -0.035em;
   line-height: 1.1;
   margin: 0;
 }
 
-.pl-not-found-card p:not(.pl-not-found-code) {
+.tenon-not-found-card p:not(.tenon-not-found-code) {
   color: var(--vp-c-text-2);
   font-size: 1.05rem;
   line-height: 1.75;
   margin: 20px auto 32px;
 }
 
-.pl-not-found-action {
+.tenon-not-found-action {
   background: var(--vp-c-brand-1);
   border-radius: 999px;
   color: var(--vp-c-bg);
@@ -287,11 +287,11 @@ onBeforeUnmount(() => {
   padding: 12px 22px;
 }
 
-.pl-not-found-action:hover {
+.tenon-not-found-action:hover {
   background: var(--vp-c-brand-2);
 }
 
-.pl-not-found-action:focus-visible {
+.tenon-not-found-action:focus-visible {
   outline: 3px solid var(--vp-c-brand-1);
   outline-offset: 4px;
 }

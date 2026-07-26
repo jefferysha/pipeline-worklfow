@@ -3,7 +3,7 @@ name: run
 description: First-party safe local runtime launch checklist for verification.
 license: MIT
 metadata:
-  author: pipeline-lite
+  author: tenon
 ---
 
 # Run

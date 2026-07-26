@@ -47,7 +47,7 @@ import type { ActivateResult, AdmissionDenial, ReserveResult, RunSettlement } fr
 import { classifyFailure } from './classify.js'
 import { createSemaphore } from './semaphore.js'
 import { evaluateVerificationGate, isBoundaryVerifiedResult, type VerificationGateResult } from '../verifier/verifier.js'
-import { validateVerificationResult } from '@pipeline-lite/kernel'
+import { validateVerificationResult } from '@tenon/kernel'
 import { certifyLifecycleOutcome, isCertifiedLifecycleOutcome } from '../lifecycle/outcome.js'
 
 /** ledger store 抛出的 typed 错误 _tag 集（Stage B 返工 #2：据此归 kind=ledger-io，绝不被 allSettled 吞成 ok=true）。 */

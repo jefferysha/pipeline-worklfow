@@ -1,0 +1,96 @@
+name: Release Tenon
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing v-prefixed tag to package
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          registry-url: https://registry.npmjs.org
+
+      - name: Resolve and validate release tag
+        id: release
+        env:
+          DISPATCH_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then tag="$DISPATCH_TAG"; fi
+          case "$tag" in v[0-9]*.[0-9]*.[0-9]*) ;; *) echo "invalid release tag: $tag" >&2; exit 1 ;; esac
+          version="${tag#v}"
+          plugin_version="$(node -p "require('./.codex-plugin/plugin.json').version")"
+          claude_version="$(node -p "require('./.claude-plugin/plugin.json').version")"
+          [ "$version" = "$plugin_version" ] && [ "$version" = "$claude_version" ] || {
+            echo "tag/plugin version mismatch: $version / $plugin_version / $claude_version" >&2
+            exit 1
+          }
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - run: npm ci
+      - run: npm run check:identity
+      - run: npm run check:repository-hygiene
+      - run: npm run check:legacy-bridge
+      - run: npm run check:npx-package
+      - run: npm run build
+      - run: bash tools/verify-skills.sh
+      - run: bash tools/test-bundle.sh
+
+      - name: Package migration-only legacy bridge
+        run: |
+          npm run build:legacy-bridge
+          tar -C .release -czf ".release/tenon-legacy-bridge-${{ steps.release.outputs.version }}.tar.gz" legacy-bridge
+
+      - name: Build optional npx package
+        if: vars.TENON_NPM_PACKAGE != ''
+        env:
+          TENON_NPM_PACKAGE: ${{ vars.TENON_NPM_PACKAGE }}
+        run: |
+          node tools/build-npx-package.mjs \
+            --package-name "$TENON_NPM_PACKAGE" \
+            --ref "${{ steps.release.outputs.tag }}" \
+            --output .release/npx-package
+          npm pack .release/npx-package --pack-destination .release
+
+      - name: Publish optional npx package
+        if: vars.TENON_NPM_PACKAGE != ''
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -n "${NODE_AUTH_TOKEN:-}" ]; then
+            npm publish .release/npx-package --access public
+          else
+            echo "[HONEST SKIP] NPM_TOKEN 未配置；GitHub release 和 Marketplace 仍照常发布。"
+          fi
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          assets=(".release/tenon-legacy-bridge-${{ steps.release.outputs.version }}.tar.gz")
+          for archive in .release/*.tgz; do
+            [ -e "$archive" ] && assets+=("$archive")
+          done
+          gh release create "${{ steps.release.outputs.tag }}" "${assets[@]}" \
+            --generate-notes \
+            --title "Tenon ${{ steps.release.outputs.version }}"

@@ -1,6 +1,6 @@
 import { dirname, join, resolve } from 'node:path'
-import { readAutomationJson } from '@pipeline-lite/automation'
-import { PREREQ_HINTS } from '@pipeline-lite/kernel'
+import { readAutomationJson } from '@tenon/automation'
+import { PREREQ_HINTS } from '@tenon/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
 import { nodeExecDocker, probeAfkReadiness, type AfkReadiness, type CredLight, type ExecDockerFn } from '../afkReadiness.js'
 import { REAL_RUNTIME_INSTALLER, type RuntimeInstaller } from '../runtime/installer.js'
@@ -141,7 +141,7 @@ export async function cmdSetupRuntime(
 }
 
 /**
- * `pipeline setup [sub]` —— 安装后全功能就绪引导。
+ * `tenon setup [sub]` —— 安装后全功能就绪引导。
  *   空 sub:必须显式指定一个 host（如 `--codex`）。先验证/部署该 host（绝不双装）→ PATH/adapter →
  *          内置技能完整性 → 运行时就绪清单。`setup skills`/`setup runtime` 仍保留为兼容诊断子命令。
  *   sub=skills:仅技能安装段;sub=runtime:仅运行时就绪清单（真 docker/镜像/凭证探测）。

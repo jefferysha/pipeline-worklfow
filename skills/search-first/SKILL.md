@@ -3,7 +3,7 @@ name: search-first
 description: First-party research-before-coding practice.
 license: MIT
 metadata:
-  author: pipeline-lite
+  author: tenon
 ---
 
 # Search First

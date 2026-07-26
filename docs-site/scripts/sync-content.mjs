@@ -7,6 +7,12 @@ const docsSiteRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const repoRoot = resolve(docsSiteRoot, '..')
 const outputRoot = resolve(docsSiteRoot, '.generated')
 const repositoryFiles = ['CONTRIBUTING', 'SECURITY', 'SUPPORT', 'CODE_OF_CONDUCT', 'README', 'README.zh-CN']
+const publicDashboardImages = [
+  'dashboard-overview.webp',
+  'dashboard-progress.webp',
+  'dashboard-automation.webp',
+  'dashboard-workbench.webp',
+]
 
 function publicLinks(body, locale) {
   let next = body
@@ -15,7 +21,7 @@ function publicLinks(body, locale) {
       ? (locale === 'en' ? '/en/' : '/')
       : name === 'README.zh-CN'
         ? '/'
-        : `https://github.com/jefferysha/pipeline-worklfow/blob/main/${name}.md`
+        : `https://github.com/jefferysha/tenon/blob/main/${name}.md`
     const escaped = name.replace('.', '\\.')
     next = next.replace(
       new RegExp(`\\((?:\\.\\/)?(?:\\.\\.\\/){0,3}${escaped}(?:\\.md)?\\)`, 'g'),
@@ -23,6 +29,13 @@ function publicLinks(body, locale) {
     )
   }
   return next
+}
+
+function publicImages(body) {
+  return body.replace(
+    /\((?:\.\.\/){2,3}docs-site\/public\/images\//g,
+    '(/images/',
+  )
 }
 
 function pageBody(body, entry) {
@@ -41,7 +54,7 @@ function frontmatter(entry, locale) {
       ? [
           'layout: home',
           'hero:',
-          '  name: Pipeline Lite',
+          '  name: Tenon',
           '  text: 让 Agent 交付过程可解释、可复验、可恢复',
           '  tagline: 从正常对话自动选择流程，用 OpenSpec、Skill 证据和 review receipt 串联真实工作。',
           '  actions:',
@@ -62,7 +75,7 @@ function frontmatter(entry, locale) {
       : [
           'layout: home',
           'hero:',
-          '  name: Pipeline Lite',
+          '  name: Tenon',
           '  text: Explainable, repeatable, recoverable agent delivery',
           '  tagline: Route normal conversations into the right workflow and connect real work with OpenSpec, Skill evidence, and review receipts.',
           '  actions:',
@@ -109,20 +122,20 @@ for (const entry of contentEntries) {
     const item = entry.locales[locale]
     const source = resolve(repoRoot, item.source)
     const target = resolve(outputRoot, item.target)
-    const body = pageBody(publicLinks(await readFile(source, 'utf8'), locale), entry)
+    const body = pageBody(publicImages(publicLinks(await readFile(source, 'utf8'), locale)), entry)
     await mkdir(dirname(target), { recursive: true })
     await writeFile(target, `${frontmatter(entry, locale)}${body.trim()}\n`, 'utf8')
   }
 }
 
 const llms = [
-  '# Pipeline Lite documentation',
+  '# Tenon documentation',
   '',
   '> Public, versioned documentation index. Internal ADRs, plans, receipts, and local control-plane data are excluded.',
   '',
   ...contentEntries.flatMap((entry) => [
-    `- [zh-CN] ${entry.locales['zh-CN'].title}: /pipeline-worklfow/${entry.locales['zh-CN'].target.replace(/\.md$/, '.html').replace(/index\.html$/, '')}`,
-    `- [en] ${entry.locales.en.title}: /pipeline-worklfow/${entry.locales.en.target.replace(/\.md$/, '.html').replace(/index\.html$/, '')}`,
+    `- [zh-CN] ${entry.locales['zh-CN'].title}: /tenon/${entry.locales['zh-CN'].target.replace(/\.md$/, '.html').replace(/index\.html$/, '')}`,
+    `- [en] ${entry.locales.en.title}: /tenon/${entry.locales.en.target.replace(/\.md$/, '.html').replace(/index\.html$/, '')}`,
   ]),
   '',
 ].join('\n')
@@ -131,3 +144,10 @@ await writeFile(resolve(docsSiteRoot, 'public', 'llms.txt'), llms, 'utf8')
 await mkdir(resolve(outputRoot, 'public'), { recursive: true })
 await writeFile(resolve(outputRoot, 'public', 'llms.txt'), llms, 'utf8')
 await copyFile(resolve(docsSiteRoot, 'public', 'logo.svg'), resolve(outputRoot, 'public', 'logo.svg'))
+await mkdir(resolve(outputRoot, 'public', 'images'), { recursive: true })
+for (const image of publicDashboardImages) {
+  await copyFile(
+    resolve(docsSiteRoot, 'public', 'images', image),
+    resolve(outputRoot, 'public', 'images', image),
+  )
+}

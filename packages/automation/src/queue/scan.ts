@@ -12,7 +12,7 @@
  */
 import { readdir } from 'node:fs/promises'
 import { join } from 'node:path'
-import { type StateStore, normalizeDeps } from '@pipeline-lite/kernel'
+import { type StateStore, normalizeDeps } from '@tenon/kernel'
 
 /** 空/null queued_at 的兜底排序键（高位字符，字典序排最后）。 */
 const QUEUED_AT_LAST = '~'

@@ -17,8 +17,8 @@
 import { execFile } from 'node:child_process'
 import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { AUTOMATION_STATES, CANCEL_MARKER_FILE, type AutomationState } from '@pipeline-lite/automation'
-import { stateStorageExistsSync, type StateStore } from '@pipeline-lite/kernel'
+import { AUTOMATION_STATES, CANCEL_MARKER_FILE, type AutomationState } from '@tenon/automation'
+import { stateStorageExistsSync, type StateStore } from '@tenon/kernel'
 import type { Snapshot } from './types.js'
 
 /** AFK 泳道（对位 automation AUTOMATION_STATES 的活跃子集；off 不入板，scheduled 归 running，见 laneOf）。 */
@@ -315,10 +315,10 @@ export async function dismissAfkRun(store: StateStore, changeDir: string): Promi
 
 /**
  * afk-workbench 缺口修复（2026-07-09，本轮真机验证发现）：AfkWorkbench.tsx 此前只有
- * 查看快照/取消/重试三个入口，没有"挂队"——`pipeline afk enqueue <name>` 是唯一能把一个
+ * 查看快照/取消/重试三个入口，没有"挂队"——`tenon afk enqueue <name>` 是唯一能把一个
  * change 摆进 AFK 队列的路径，dashboard 侧没有对应端点/按钮，用户点不到。
  *
- * 镜像 `@pipeline-lite/automation` sdk.ts::enqueue 消费的判定逻辑（server 对 automation 包
+ * 镜像 `@tenon/automation` sdk.ts::enqueue 消费的判定逻辑（server 对 automation 包
  * 坚持零运行时依赖，同本文件 CANCEL_MARKER_FILE 的字面量对位先例，不 import）：
  *   · effective registry 的 automationEligible=false 永不入队；能力位由 HTTP 路由跨信任边界显式传入。
  *   · automationEligible=true：SDK 默认构造 `defaultOptIn=true` 且 CLI 走的正是这条默认路径（未暴露

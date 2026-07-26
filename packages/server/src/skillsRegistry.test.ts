@@ -7,10 +7,10 @@ import { detectInstalled, listAllSkills, listAllSkillsDetailed } from './skillsR
 
 async function makeRepo(): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), 'skills-reg-'))
-  await mkdir(join(root, 'skills', 'pipeline-open'), { recursive: true })
-  await writeFile(join(root, 'skills', 'pipeline-open', 'SKILL.md'), '# pipeline-open\n', 'utf8')
-  await mkdir(join(root, 'skills', 'pipeline-build'), { recursive: true })
-  await writeFile(join(root, 'skills', 'pipeline-build', 'SKILL.md'), '# pipeline-build\n', 'utf8')
+  await mkdir(join(root, 'skills', 'tenon-open'), { recursive: true })
+  await writeFile(join(root, 'skills', 'tenon-open', 'SKILL.md'), '# tenon-open\n', 'utf8')
+  await mkdir(join(root, 'skills', 'tenon-build'), { recursive: true })
+  await writeFile(join(root, 'skills', 'tenon-build', 'SKILL.md'), '# tenon-build\n', 'utf8')
   await writeFile(
     join(root, 'skills', 'EXTERNAL-SKILLS.md'),
     '# External\n\n## 已声明依赖\n\n- superpowers:brainstorming\n- grill-with-docs\n',
@@ -23,14 +23,14 @@ describe('listAllSkills', () => {
   it('合并本地 skills/*/SKILL.md 目录名 + EXTERNAL-SKILLS.md 已声明依赖列表，去重排序', async () => {
     const root = await makeRepo()
     const result = listAllSkills(root)
-    expect(result).toEqual(['grill-with-docs', 'pipeline-build', 'pipeline-open', 'superpowers:brainstorming'])
+    expect(result).toEqual(['grill-with-docs', 'superpowers:brainstorming', 'tenon-build', 'tenon-open'])
   })
 
   it('EXTERNAL-SKILLS.md 不存在时不报错，只返回本地目录', async () => {
     const root = await mkdtemp(join(tmpdir(), 'skills-reg-nolocal-'))
-    await mkdir(join(root, 'skills', 'pipeline-open'), { recursive: true })
-    await writeFile(join(root, 'skills', 'pipeline-open', 'SKILL.md'), '# x\n', 'utf8')
-    expect(listAllSkills(root)).toEqual(['pipeline-open'])
+    await mkdir(join(root, 'skills', 'tenon-open'), { recursive: true })
+    await writeFile(join(root, 'skills', 'tenon-open', 'SKILL.md'), '# x\n', 'utf8')
+    expect(listAllSkills(root)).toEqual(['tenon-open'])
   })
 })
 
@@ -48,7 +48,7 @@ let repoRoot: string
 let claudeDir: string
 
 function seedRepoSync(): void {
-  for (const name of ['pipeline-open', 'openspec-propose']) {
+  for (const name of ['tenon-open', 'openspec-propose']) {
     mkdirSync(join(repoRoot, 'skills', name), { recursive: true })
     writeFileSync(join(repoRoot, 'skills', name, 'SKILL.md'), '# skill\n')
   }
@@ -162,16 +162,16 @@ describe('detectInstalled —— 三源探测', () => {
 
 describe('listAllSkillsDetailed —— SkillEntry 明细', () => {
   it('本仓 skills/ 目录 → local-plugin 且随当前 pluginRoot 直接可用，不要求重复安装', () => {
-    writeFileSync(join(repoRoot, 'skills', 'pipeline-open', 'SKILL.md'), [
+    writeFileSync(join(repoRoot, 'skills', 'tenon-open', 'SKILL.md'), [
       '---',
-      'name: pipeline-open',
+      'name: tenon-open',
       'description: Open a pipeline change and prepare its execution context.',
       '---',
       '',
       '# Pipeline Open',
     ].join('\n'))
     const entries = listAllSkillsDetailed(repoRoot, claudeDir)
-    const e = entries.find((x) => x.name === 'pipeline-open')!
+    const e = entries.find((x) => x.name === 'tenon-open')!
     expect(e.source).toBe('local-plugin')
     expect(e.installed).toBe(true)
     expect(e.description).toBe('Open a pipeline change and prepare its execution context.')
@@ -241,7 +241,7 @@ describe('listAllSkillsDetailed —— SkillEntry 明细', () => {
       'skills:',
       '  browser-qa: { tool: skills-cli, source: affaan-m/ECC, skill: browser-qa, tier: mandatory, official: false }',
       '  taste-skill: { tool: skills-cli, source: Leonxlnx/taste-skill, skill: design-taste-frontend, tier: mandatory, official: false }',
-      '  pipeline-open: { tool: bundled, source: pipeline-lite, tier: mandatory, official: false }',
+      '  tenon-open: { tool: bundled, source: tenon, tier: mandatory, official: false }',
       '  zoom-out: { tool: skills-cli, source: mattpocock/skills, skill: zoom-out, unavailable: true, tier: optional, official: false }',
       '',
     ].join('\n'))
@@ -254,7 +254,7 @@ describe('listAllSkillsDetailed —— SkillEntry 明细', () => {
     const entries = listAllSkillsDetailed(repoRoot, claudeDir)
     expect(entries.find((x) => x.name === 'browser-qa')).toMatchObject({ installed: true, tier: 'mandatory', available: true })
     expect(entries.find((x) => x.name === 'taste-skill')).toMatchObject({ installed: true, tier: 'mandatory', available: true })
-    expect(entries.find((x) => x.name === 'pipeline-open')).toMatchObject({ installed: true, tier: 'mandatory', available: true })
+    expect(entries.find((x) => x.name === 'tenon-open')).toMatchObject({ installed: true, tier: 'mandatory', available: true })
     expect(entries.find((x) => x.name === 'zoom-out')).toMatchObject({ installed: false, tier: 'optional', available: false })
   })
 

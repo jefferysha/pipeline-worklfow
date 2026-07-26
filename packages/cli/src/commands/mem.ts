@@ -27,7 +27,7 @@ import {
   type MemFs,
   type MemPhase,
   type MemPlatformFilter,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import { splitFlags } from '../argv.js'
 import type { CliDeps } from '../deps.js'
 import {
@@ -41,8 +41,8 @@ import {
 } from './mem-render.js'
 
 // 供 mock/集成测试构造 fake 树 / 真 fs 指向 fixture home
-export type { MemDirent, MemFs } from '@pipeline-lite/kernel'
-export { nodeMemFs } from '@pipeline-lite/kernel'
+export type { MemDirent, MemFs } from '@tenon/kernel'
+export { nodeMemFs } from '@tenon/kernel'
 
 const VALID_PLATFORMS = ['claude', 'codex', 'opencode', 'pi', 'all']
 
@@ -316,7 +316,7 @@ function cmdExtract(deps: CliDeps, p: ParsedArgs, fs: MemFs): number {
 }
 
 function cmdHelp(deps: CliDeps): void {
-  deps.io.out(`pipeline mem — list/search Claude/Codex/OpenCode/Pi sessions
+  deps.io.out(`tenon mem — list/search Claude/Codex/OpenCode/Pi sessions
 
 commands:
   list                          list sessions (default if no command)

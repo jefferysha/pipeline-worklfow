@@ -15,21 +15,21 @@ Provide a navigable command-family map while keeping `pipeline <command>
 Canonical first-host examples:
 
 ```bash
-pipeline setup --codex
-pipeline update --codex
-pipeline runtime status
-pipeline runtime repair --rollback
-pipeline dashboard --open
+tenon setup --codex
+tenon update --codex
+tenon runtime status
+tenon runtime repair --rollback
+tenon dashboard --open
 ```
 
 ```text
-pipeline setup --<one-host> [--target <dir>] [--auto-update] [--dry-run] [-y]
-pipeline update --<one-host> [--target <dir>] [--dry-run] [-y] [--auto]
-pipeline runtime status [--json]
-pipeline runtime repair --rollback [--json]
-pipeline dashboard [--port <port>] [--background] [--open] [--dry-run]
-pipeline doctor [--json]
-pipeline uninstall [--dry-run] [-y]
+tenon setup --<one-host> [--target <dir>] [--auto-update] [--dry-run] [-y]
+tenon update --<one-host> [--target <dir>] [--dry-run] [-y] [--auto]
+tenon runtime status [--json]
+tenon runtime repair --rollback [--json]
+tenon dashboard [--port <port>] [--background] [--open] [--dry-run]
+tenon doctor [--json]
+tenon uninstall [--dry-run] [-y]
 ```
 
 Host flags:
@@ -42,22 +42,22 @@ Host flags:
 ## Changes and state
 
 ```text
-pipeline init <name> --track <track> --preset <preset> [--workflow <name>]
-pipeline list [--json]
-pipeline status [name] [--json]
-pipeline workflow plan <name> [--json]
-pipeline get <name> <field>
-pipeline set <name> <field> <value>
-pipeline set-many <name> <key=value...>
-pipeline cas <name> <field> <expect> <next>
-pipeline transition <name> <event>
-pipeline check <name>
-pipeline advance <name>
-pipeline handoff <name> [--phase <phase>] [--json]
-pipeline handoff <name> --bundle --target <phase> \
+tenon init <name> --track <track> --preset <preset> [--workflow <name>]
+tenon list [--json]
+tenon status [name] [--json]
+tenon workflow plan <name> [--json]
+tenon get <name> <field>
+tenon set <name> <field> <value>
+tenon set-many <name> <key=value...>
+tenon cas <name> <field> <expect> <next>
+tenon transition <name> <event>
+tenon check <name>
+tenon advance <name>
+tenon handoff <name> [--phase <phase>] [--json]
+tenon handoff <name> --bundle --target <phase> \
   [--budget-bytes <bytes>] [--json]
-pipeline session activate <name> [--continuous] [--host-session <id>]
-pipeline session route-context <name> [--json]
+tenon session activate <name> [--continuous] [--host-session <id>]
+tenon session route-context <name> [--json]
 pipeline state status|repair-projection|import-legacy <name> [--json]
 ```
 
@@ -66,7 +66,7 @@ mismatch exits `3`; failed guard check exits `2`; invalid transitions exit `1`.
 Use command help and machine-readable output before scripting additional
 assumptions.
 
-`pipeline workflow plan <name> --json` is the Agent-facing orchestration source
+`tenon workflow plan <name> --json` is the Agent-facing orchestration source
 for an in-flight Change. It returns the immutable plan captured when the
 WorkflowRun started, including steps, Skills, gates, guards, artifacts, and
 transitions. Editing or deleting `.pipeline/workflows/<workflow>.yaml` affects
@@ -78,29 +78,29 @@ document kind, path, recorded SHA-256, materialization mode, and policy reason;
 the bundle itself carries an aggregate SHA-256. Missing files, digest drift,
 duplicate slots, or an exceeded UTF-8 byte budget fail closed. The bundle is a
 derived handoff artifact, not a replacement canonical document; repair stale
-inputs with `pipeline document record` under an allowed producer and then
+inputs with `tenon document record` under an allowed producer and then
 re-run the handoff.
 
 ## Documents, artifacts, and review
 
 ```text
-pipeline document init <change>
-pipeline document record <change> <kind> <path> --producer <skill-id>
-pipeline document read <change> <kind|all>
-pipeline document status <change> [--json]
-pipeline artifact register <change> <field> <path> --producer <skill-id>
-pipeline review request <change> --event <event>
-pipeline review acknowledge <change> [--delegated]
+tenon document init <change>
+tenon document record <change> <kind> <path> --producer <skill-id>
+tenon document read <change> <kind|all>
+tenon document status <change> [--json]
+tenon artifact register <change> <field> <path> --producer <skill-id>
+tenon review request <change> --event <event>
+tenon review acknowledge <change> [--delegated]
 ```
 
 Document structures and project-level spec scaffolds default to Chinese. English
 is explicit:
 
 ```text
-pipeline init <name> ... --document-locale en
-pipeline document scaffold <change> <kind>
-pipeline document scaffold <change> delta-spec --capability <capability>
-pipeline scaffold spec web [--document-locale zh-CN|en] [--strategy skip|overwrite|append]
+tenon init <name> ... --document-locale en
+tenon document scaffold <change> <kind>
+tenon document scaffold <change> delta-spec --capability <capability>
+tenon scaffold spec web [--document-locale zh-CN|en] [--strategy skip|overwrite|append]
 ```
 
 The Change locale is pinned in `.pipeline-document-locale.json`, outside the
@@ -113,45 +113,45 @@ envelope moved, causes a fail-closed error while preserving recovery evidence.
 ## Tracks and custom workflow use
 
 ```text
-pipeline tracks list [--json]
-pipeline tracks show <id> [--json]
-pipeline tracks create <id> --label <text> --workflow-default <id> \
+tenon tracks list [--json]
+tenon tracks show <id> [--json]
+tenon tracks create <id> --label <text> --workflow-default <id> \
   (--workflow-allowed <ids...> | --workflow-any) --policy <preset>
-pipeline tracks update <id> <set-options...>
-pipeline tracks delete <id>
-pipeline init <change> --workflow <workflow> --track <track> --preset <preset>
+tenon tracks update <id> <set-options...>
+tenon tracks delete <id>
+tenon init <change> --workflow <workflow> --track <track> --preset <preset>
 ```
 
 Custom Workflow authoring is file/Dashboard based; there is no public
-`pipeline workflow create` command in the current CLI. `pipeline workflow plan`
+`tenon workflow create` command in the current CLI. `tenon workflow plan`
 is a read-only runtime introspection command, not a workflow authoring command.
 
 ## AFK and loops
 
 ```text
-pipeline afk enqueue <change> [--loop <id>]
-pipeline afk scan [--json]
-pipeline afk status [change] [--json]
-pipeline afk run <change> [--level L1|L2|L3] [--image <image>]
-pipeline afk cancel <change>
+tenon afk enqueue <change> [--loop <id>]
+tenon afk scan [--json]
+tenon afk status [change] [--json]
+tenon afk run <change> [--level L1|L2|L3] [--image <image>]
+tenon afk cancel <change>
 
-pipeline loops init <options>
-pipeline loops list [--json]
-pipeline loops status [--json]
-pipeline loops enforce [--loop <id>]
-pipeline loops budget|cost [loop]
-pipeline loops graduate [loop]
-pipeline loops level <loop> [set <L1|L2|L3>] [--confirm]
-pipeline loops run <loop|pattern> [--dry-run] [--level <level>] [--commit] [--json]
-pipeline loops sync <loop> <--dry-run|--apply> [...]
+tenon loops init <options>
+tenon loops list [--json]
+tenon loops status [--json]
+tenon loops enforce [--loop <id>]
+tenon loops budget|cost [loop]
+tenon loops graduate [loop]
+tenon loops level <loop> [set <L1|L2|L3>] [--confirm]
+tenon loops run <loop|pattern> [--dry-run] [--level <level>] [--commit] [--json]
+tenon loops sync <loop> <--dry-run|--apply> [...]
 ```
 
 ## Advanced
 
 ```text
-pipeline channel help
-pipeline mem list|search|context|extract|projects
-pipeline tap start <client...> [--ca [dir]] [--forward] [--json] \
+tenon channel help
+tenon mem list|search|context|extract|projects
+tenon tap start <client...> [--ca [dir]] [--forward] [--json] \
   [-- <command> ...]
 ```
 
@@ -164,11 +164,11 @@ Use the installed command as exact authority:
 
 ```bash
 pipeline --help
-pipeline setup --help
-pipeline tracks create --help
-pipeline afk --help
-pipeline loops --help
-pipeline channel help
+tenon setup --help
+tenon tracks create --help
+tenon afk --help
+tenon loops --help
+tenon channel help
 ```
 
 ## Common failures

@@ -7,7 +7,7 @@ import { I18nProvider } from '../i18n'
 import { SolutionView } from './SolutionView'
 
 function renderSolution(lang: 'zh' | 'en' = 'zh'): void {
-  localStorage.setItem('pipeline-dashboard-lang', lang)
+  localStorage.setItem('tenon-dashboard-lang', lang)
   render(
     <I18nProvider>
       <SolutionView />
@@ -73,8 +73,8 @@ describe('SolutionView 开源产品概览', () => {
 
     const install = screen.getByTestId('solution-install')
     expect(install).toHaveTextContent('Node.js 22+')
-    expect(install).toHaveTextContent('pipeline setup --codex')
-    expect(install).toHaveTextContent('pipeline setup --claude')
+    expect(install).toHaveTextContent('tenon setup --codex')
+    expect(install).toHaveTextContent('tenon setup --claude')
     expect(install).toHaveTextContent('127.0.0.1:18765')
     expect(install).toHaveTextContent('Codex hooks 需要一次显式信任')
     expect(screen.getByTestId('solution-tier-a')).toHaveTextContent('原生注入、阻断和追踪')
@@ -100,7 +100,7 @@ describe('SolutionView 开源产品概览', () => {
       expect(link).toHaveAttribute('target', '_blank')
       expect(link).toHaveAttribute('rel', expect.stringContaining('noreferrer'))
       expect(link).toHaveAttribute('rel', expect.stringContaining('noopener'))
-      expect(link.getAttribute('href')).toMatch(/^https:\/\/github\.com\/jefferysha\/pipeline-worklfow/)
+      expect(link.getAttribute('href')).toMatch(/^https:\/\/github\.com\/jefferysha\/tenon/)
     }
   })
 

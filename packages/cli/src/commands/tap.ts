@@ -1,13 +1,13 @@
 /**
  * tap <sub> [args...] —— tap 流量代理的 CLI 入口（BACKLOG #34-wire：daemon 启动器，此前 tap 包
- * 零 CLI 可达性——只有测试直接 import @pipeline-lite/tap，没有真实用户能启动它）。
+ * 零 CLI 可达性——只有测试直接 import @tenon/tap，没有真实用户能启动它）。
  *
- * `pipeline tap start <client...> [--ca [dir]] [--forward] [--json] [-- <command> [args...]]`：
+ * `tenon tap start <client...> [--ca [dir]] [--forward] [--json] [-- <command> [args...]]`：
  *   `--forward`：把列出的 client 强制抬成 forward-MITM（覆盖 defaultProxyMode）。codex 默认 reverse
  *   （OPENAI_BASE_URL），但 ChatGPT OAuth 态 codex 静默无视该 env（reverse 假捕获，实测坐实）——唯
- *   forward（HTTPS_PROXY + CA）能真拦，故 `pipeline tap start codex --forward --ca` 是 OAuth codex
+ *   forward（HTTPS_PROXY + CA）能真拦，故 `tenon tap start codex --forward --ca` 是 OAuth codex
  *   的唯一真捕获路径（sandcastle codex 分支即用此）。--forward 下须配 --ca（forward 硬门）。
- *   真装配 @pipeline-lite/tap 的 launchTap（detectTarget 定位真实上游 + reverseEnvMap/
+ *   真装配 @tenon/tap 的 launchTap（detectTarget 定位真实上游 + reverseEnvMap/
  *   forwardEnvMap 组装注入 env + 可选 CertificateAuthority.fromDir 真 TLS MITM）。
  *   · 带 `-- <command>`：把组装好的 env 合并进当前 env，前台 spawn 该命令（stdio 继承），
  *     子进程退出后真关 daemon，以子进程 exit code 收尾——一条命令跑完全程，无需手动 eval。
@@ -19,11 +19,11 @@
  * 静默吞掉那个 `--`，是其内部真实缺陷，穷举 argv 验证过），本命令经 deps.passthroughArgv 读取。
  *
  * 跨进程可见性诚实说明：tap 的 intercept 登记（security.ts activeIntercepts）只在当前进程内存，
- * 不落盘——`pipeline doctor` 的 security:tap 灯只反映**运行 doctor 那个进程**里的状态，看不到
+ * 不落盘——`tenon doctor` 的 security:tap 灯只反映**运行 doctor 那个进程**里的状态，看不到
  * 另一个终端里 `tap start` 常驻进程的登记（这是 tap 模块自 #34e 起的既有特性，非本命令引入的缺口）。
  */
 import { spawn } from 'node:child_process'
-import { createTraceStore, launchTap, type ClientLaunchInfo } from '@pipeline-lite/tap'
+import { createTraceStore, launchTap, type ClientLaunchInfo } from '@tenon/tap'
 import { errMsg, type CliDeps } from '../deps.js'
 
 interface ParsedStart {
@@ -73,7 +73,7 @@ export async function cmdTap(deps: CliDeps, sub: string, args: string[]): Promis
       const command = deps.passthroughArgv ?? []
       const { clients, caDir, json, forward } = parseStartArgs(args)
       if (clients.length === 0) {
-        deps.io.err('ERROR: tap start 需至少一个 client（如 pipeline tap start claude）')
+        deps.io.err('ERROR: tap start 需至少一个 client（如 tenon tap start claude）')
         return 1
       }
 

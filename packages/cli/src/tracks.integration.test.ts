@@ -1,5 +1,5 @@
 /**
- * `pipeline tracks list/show/create/update/delete` e2e —— 真 kernel + 真临时 fs（GOAL.md T-R3）。
+ * `tenon tracks list/show/create/update/delete` e2e —— 真 kernel + 真临时 fs（GOAL.md T-R3）。
  * 覆盖：list builtin-only 顺序 / show 三 source / create·update·delete 人读+JSON / option 互斥·
  * 无 patch·未知 id·builtin 禁改删 exit 1 / 引用完整性（有引用拒·fail-closed·缩 allowed 拒·改 label
  * 放行·archive 排除）/ CRUD 后同进程下次 init 看到新 registry（防 memoization 回归）/ 首次 create
@@ -45,7 +45,7 @@ async function writeWorkflow(cwd: string, id: string): Promise<void> {
 
 const CREATE_DATA = ['tracks', 'create', 'data', '--label', 'Data', '--workflow-default', 'default', '--workflow-any', '--policy', 'chat']
 
-describe('pipeline tracks —— list/show（只读）', () => {
+describe('tenon tracks —— list/show（只读）', () => {
   let h: Harness
   beforeEach(async () => { h = await freshHarness() })
   afterEach(async () => { await rm(h.cwd, { recursive: true, force: true }) })
@@ -83,11 +83,11 @@ describe('pipeline tracks —— list/show（只读）', () => {
 
   test('bare tracks（无子命令）→ usage exit 1', async () => {
     expect(await h.run(['tracks'])).toBe(1)
-    expect(h.err.join('\n')).toContain('用法：pipeline tracks')
+    expect(h.err.join('\n')).toContain('用法：tenon tracks')
   })
 })
 
-describe('pipeline tracks —— create', () => {
+describe('tenon tracks —— create', () => {
   let h: Harness
   beforeEach(async () => { h = await freshHarness() })
   afterEach(async () => { await rm(h.cwd, { recursive: true, force: true }) })
@@ -137,7 +137,7 @@ describe('pipeline tracks —— create', () => {
   })
 })
 
-describe('pipeline tracks —— update（builtin 可变面 + 归一化）', () => {
+describe('tenon tracks —— update（builtin 可变面 + 归一化）', () => {
   let h: Harness
   beforeEach(async () => { h = await freshHarness() })
   afterEach(async () => { await rm(h.cwd, { recursive: true, force: true }) })
@@ -171,7 +171,7 @@ describe('pipeline tracks —— update（builtin 可变面 + 归一化）', () 
   })
 })
 
-describe('pipeline tracks —— delete + 引用完整性', () => {
+describe('tenon tracks —— delete + 引用完整性', () => {
   let h: Harness
   beforeEach(async () => { h = await freshHarness() })
   afterEach(async () => { await rm(h.cwd, { recursive: true, force: true }) })
@@ -230,7 +230,7 @@ describe('pipeline tracks —— delete + 引用完整性', () => {
   })
 })
 
-describe('pipeline tracks —— update 缩 allowed 引用完整性', () => {
+describe('tenon tracks —— update 缩 allowed 引用完整性', () => {
   let h: Harness
   beforeEach(async () => { h = await freshHarness() })
   afterEach(async () => { await rm(h.cwd, { recursive: true, force: true }) })
@@ -262,7 +262,7 @@ describe('pipeline tracks —— update 缩 allowed 引用完整性', () => {
   })
 })
 
-describe('pipeline tracks —— 防 memoization 回归（同进程 CRUD 后 init 见新 registry）', () => {
+describe('tenon tracks —— 防 memoization 回归（同进程 CRUD 后 init 见新 registry）', () => {
   test('同一 deps 实例：create data 后 init --track data 成功（无跨命令记忆化）', async () => {
     const cwd = await mkdtemp(join(tmpdir(), 'lite-tracks-memo-'))
     try {

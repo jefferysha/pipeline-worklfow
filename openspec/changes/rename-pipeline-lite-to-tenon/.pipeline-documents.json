@@ -1,0 +1,211 @@
+{
+  "version": 1,
+  "contract": "openspec-v1",
+  "createdAt": "2026-07-26T02:49:37Z",
+  "records": [
+    {
+      "kind": "adr",
+      "path": "docs/adr/2026-07-26-tenon-product-identity-explore.md",
+      "sha256": "036a9dca1bdba766abd18af506a2dc525078750dd49b0bd6180728370897debe",
+      "producer": "brainstorming",
+      "recordedAt": "2026-07-26T03:16:31Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "036a9dca1bdba766abd18af506a2dc525078750dd49b0bd6180728370897debe",
+          "readAt": "2026-07-26T03:26:30Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "036a9dca1bdba766abd18af506a2dc525078750dd49b0bd6180728370897debe",
+          "readAt": "2026-07-26T03:27:25Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "delta-spec",
+      "path": "openspec/changes/rename-pipeline-lite-to-tenon/specs/dashboard-execution-provenance/spec.md",
+      "sha256": "619908fbe517beaa391c26c5a7911024e4e7ba40bfa06bfd85b445d648b88b5d",
+      "producer": "openspec-propose",
+      "recordedAt": "2026-07-26T03:26:03Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "619908fbe517beaa391c26c5a7911024e4e7ba40bfa06bfd85b445d648b88b5d",
+          "readAt": "2026-07-26T03:27:25Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "delta-spec",
+      "path": "openspec/changes/rename-pipeline-lite-to-tenon/specs/open-source-documentation-experience/spec.md",
+      "sha256": "97e79511d1005b10b263f6201c11fd4c6f7c743e5e1ad3d0a4e919834c4a6bbf",
+      "producer": "openspec-propose",
+      "recordedAt": "2026-07-26T03:26:03Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "97e79511d1005b10b263f6201c11fd4c6f7c743e5e1ad3d0a4e919834c4a6bbf",
+          "readAt": "2026-07-26T03:27:25Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "delta-spec",
+      "path": "openspec/changes/rename-pipeline-lite-to-tenon/specs/plugin-distribution/spec.md",
+      "sha256": "8c7b154fd9b5ef89fb0d10a23c58962d0544f297806425c7cd09525f2cc9841e",
+      "producer": "openspec-propose",
+      "recordedAt": "2026-07-26T03:26:04Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "8c7b154fd9b5ef89fb0d10a23c58962d0544f297806425c7cd09525f2cc9841e",
+          "readAt": "2026-07-26T03:27:25Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "delta-spec",
+      "path": "openspec/changes/rename-pipeline-lite-to-tenon/specs/repository-architecture-compliance/spec.md",
+      "sha256": "49cfb34dfe83f4b488e48195f86deb0d599859b2459f71c98594e41a973f4b93",
+      "producer": "openspec-propose",
+      "recordedAt": "2026-07-26T03:26:04Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "49cfb34dfe83f4b488e48195f86deb0d599859b2459f71c98594e41a973f4b93",
+          "readAt": "2026-07-26T03:27:25Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "delta-spec",
+      "path": "openspec/changes/rename-pipeline-lite-to-tenon/specs/tenon-product-identity/spec.md",
+      "sha256": "723c47284a1e79a6e44af1a5fd6a185bcf89b3d724675260114375bbc9f3d723",
+      "producer": "openspec-propose",
+      "recordedAt": "2026-07-26T03:26:04Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "723c47284a1e79a6e44af1a5fd6a185bcf89b3d724675260114375bbc9f3d723",
+          "readAt": "2026-07-26T03:27:25Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "superpower-plan",
+      "path": "docs/superpowers/plans/2026-07-26-tenon-global-rename.md",
+      "sha256": "7d4e96b022b01e56bfa7d243a7df6ff9a2a3acc6f4e1c6fca4c6831f8794a574",
+      "producer": "writing-plans",
+      "recordedAt": "2026-07-26T03:26:04Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "7d4e96b022b01e56bfa7d243a7df6ff9a2a3acc6f4e1c6fca4c6831f8794a574",
+          "readAt": "2026-07-26T03:27:25Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "plan",
+      "path": "docs/superpowers/plans/2026-07-26-tenon-global-rename.md",
+      "sha256": "7d4e96b022b01e56bfa7d243a7df6ff9a2a3acc6f4e1c6fca4c6831f8794a574",
+      "producer": "writing-plans",
+      "recordedAt": "2026-07-26T03:26:04Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "7d4e96b022b01e56bfa7d243a7df6ff9a2a3acc6f4e1c6fca4c6831f8794a574",
+          "readAt": "2026-07-26T03:27:25Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "proposal",
+      "path": "openspec/changes/rename-pipeline-lite-to-tenon/proposal.md",
+      "sha256": "a37bc90c676345a4f444e9878114d5d0cf590ef8731668d09c046c09c238073f",
+      "producer": "pipeline-spec",
+      "recordedAt": "2026-07-26T03:26:05Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "a37bc90c676345a4f444e9878114d5d0cf590ef8731668d09c046c09c238073f",
+          "readAt": "2026-07-26T03:26:30Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "a37bc90c676345a4f444e9878114d5d0cf590ef8731668d09c046c09c238073f",
+          "readAt": "2026-07-26T03:27:25Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "openspec-design",
+      "path": "openspec/changes/rename-pipeline-lite-to-tenon/design.md",
+      "sha256": "6ba38877b38d237022354952fbfc4d777eb7d28f37aa5e1530b0d473d88fa375",
+      "producer": "pipeline-spec",
+      "recordedAt": "2026-07-26T03:26:05Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "6ba38877b38d237022354952fbfc4d777eb7d28f37aa5e1530b0d473d88fa375",
+          "readAt": "2026-07-26T03:26:30Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "6ba38877b38d237022354952fbfc4d777eb7d28f37aa5e1530b0d473d88fa375",
+          "readAt": "2026-07-26T03:27:25Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "superpower-design",
+      "path": "docs/superpowers/specs/2026-07-26-tenon-product-identity-design.md",
+      "sha256": "7826be36db1d718fff5c30baf674eb7f5f706c0bf8686a055e9bfec7ae97df54",
+      "producer": "pipeline-spec",
+      "recordedAt": "2026-07-26T03:26:05Z",
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "7826be36db1d718fff5c30baf674eb7f5f706c0bf8686a055e9bfec7ae97df54",
+          "readAt": "2026-07-26T03:26:30Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "7826be36db1d718fff5c30baf674eb7f5f706c0bf8686a055e9bfec7ae97df54",
+          "readAt": "2026-07-26T03:27:25Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "tasks",
+      "path": "openspec/changes/rename-pipeline-lite-to-tenon/tasks.md",
+      "sha256": "98e37f5388a175a35fadc2221f595a934a7b8fb51b4bdcd40dbcb7759a70ade9",
+      "producer": "pipeline-build",
+      "recordedAt": "2026-07-26T04:40:28Z",
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "98e37f5388a175a35fadc2221f595a934a7b8fb51b4bdcd40dbcb7759a70ade9",
+          "readAt": "2026-07-26T04:40:28Z",
+          "visitId": "[\"fe162c6c-0981-44e1-92b0-ba600b80d41c\",3]"
+        }
+      ]
+    }
+  ]
+}

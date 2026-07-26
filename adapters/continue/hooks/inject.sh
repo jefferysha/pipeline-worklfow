@@ -21,10 +21,10 @@ if [ -z "$_ROOT" ] || [ ! -d "$_ROOT/hooks" ]; then
 fi
 export CLAUDE_PLUGIN_ROOT="$_ROOT"
 
-CC_INJECTOR="${PIPELINE_CC_INJECTOR:-$_ROOT/hooks/session-start.sh}"
+CC_INJECTOR="${TENON_CC_INJECTOR:-$_ROOT/hooks/session-start.sh}"
 [ -f "$CC_INJECTOR" ] || exit 0
 
-CONTEXT="$(printf '%s' "$INPUT" | PIPELINE_SESSION_START_FORMAT=plain bash "$CC_INJECTOR" 2>/dev/null || true)"
+CONTEXT="$(printf '%s' "$INPUT" | TENON_SESSION_START_FORMAT=plain bash "$CC_INJECTOR" 2>/dev/null || true)"
 [ -z "$CONTEXT" ] && exit 0
 
 json_escape() {

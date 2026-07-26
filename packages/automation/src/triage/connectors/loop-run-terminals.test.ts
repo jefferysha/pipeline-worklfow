@@ -7,7 +7,7 @@ import {
   validateObservationPage,
   type ChangeLoopBindingRecord,
   type RunRecord,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   createLoopRunTerminalsConnector,

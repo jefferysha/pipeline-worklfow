@@ -1,4 +1,6 @@
 export * from './types.js'
+export { PRODUCT_IDENTITY } from './product-identity.generated.js'
+export type { ProductIdentity } from './product-identity.generated.js'
 export * from './state/index.js'
 export * from './documents/index.js'
 export * from './flow/index.js'

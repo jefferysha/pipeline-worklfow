@@ -1,7 +1,7 @@
 /**
  * Hook-facing projections: <changeDir>/.breadcrumb is a current-phase cache; the root-level
  * review marker is a versioned projection of a canonical review request.  Transition never writes
- * the latter — only `pipeline review request` does — so work inside explore/spec/verify cannot be
+ * the latter — only `tenon review request` does — so work inside explore/spec/verify cannot be
  * blocked merely because the phase was entered.
  *
  * REVIEW_MARKER_FILE 的字面量与 types.ts::GATE_MARKERS[1] 相同但并非派生自它——GATE_MARKERS
@@ -49,7 +49,7 @@ export function reviewHint(phase: string): string {
 }
 
 /**
- * Review request 的版本化 marker：只由 `pipeline review request` 在 canonical pending state 成功
+ * Review request 的版本化 marker：只由 `tenon review request` 在 canonical pending state 成功
  * 后写入。它是 hook 的即时拦截投影；真正的 approval receipt 保存在 canonical state。
  */
 export function formatReviewMarker(receipt: ReviewMarkerReceipt): string {

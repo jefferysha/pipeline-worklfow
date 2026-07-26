@@ -28,7 +28,7 @@ export interface CaDirOptions {
 export function resolveCaDir(opts: CaDirOptions = {}): string {
   if (opts.dir) return opts.dir
   const env = opts.env ?? process.env
-  const override = (env.PIPELINE_TAP_CA_DIR ?? '').trim()
+  const override = (env.TENON_TAP_CA_DIR ?? '').trim()
   if (override) return override
   return join(opts.home ?? homedir(), '.pipeline-tap')
 }

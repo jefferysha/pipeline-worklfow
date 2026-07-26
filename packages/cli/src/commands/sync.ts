@@ -30,7 +30,7 @@ import {
   saveOwnedManifest,
   shouldInjectConfigSections,
   type OwnedFs,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
 
 /**

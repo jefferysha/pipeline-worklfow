@@ -10,7 +10,7 @@ import {
   type InitOptions,
   type StateStore,
   type WorkflowRunRepository,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { WorkflowRunCreateRequest } from './workflow-run-materializer.js'
 import {

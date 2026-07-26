@@ -14,7 +14,7 @@
  *     `createExecutionPreparation(...).prepare()`，从不经过 `createScheduler` 的
  *     claim/activate/settle 编排层。本文件把 registry/manifest/resolver/locator/coordinates/
  *     ledger/CAS/state 全换成真实实现，且真跑完整 scheduler 编排（唯一 fake 是 runChange 本身）。
- *   · packages/cli/src/afk-run.integration.test.ts —— 真 docker + 真 `pipeline afk run` CLI，但
+ *   · packages/cli/src/afk-run.integration.test.ts —— 真 docker + 真 `tenon afk run` CLI，但
  *     其 loops.yaml 恒 `skill_bundle_id: _all`，而该文件驱动的相位在真实 `templates/manifest.yaml`
  *     里从未声明 `_all` 键，三级回退空 slots——从未验证过“真实非空 skill 内容”的挂载/篡改路径。
  *     下方「可选真 docker e2e」补上这条路径（真实非空 `skill_bundle_id` + 真实 CAS 物化产物）。
@@ -35,7 +35,7 @@ import {
   ledgerDirPath, ledgerFilePath, loadManifest, loadRegistry, nodeLoopIoStrict,
   readRegistrySnapshot, updateLoopInYaml, writeRegistryWithGovernance,
   type ExtendedManifestData, type LoopLedgerStore, type NewLoopEntryInput, type StateStore, type VerificationResult,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import {
   createExecutionPreparation, createFsSkillContentLocator, createLifecyclePorts, createLoopAdmission,
   createScheduler, dockerAvailable, evaluateLoopExecutionWiring, getAutomation, materializeSkillSnapshot,
@@ -44,7 +44,7 @@ import {
   type ExecFn, type ExecutionPreparationDeps, type ExecutionPreparationPort, type LoopAdmission,
   type MaterializeSkillSnapshotOptions, type PreparedExecutionContext, type RunChange,
   type SkillContentLocator, type SkillSnapshotInput, type SkillSnapshotPublishResult,
-} from '@pipeline-lite/automation'
+} from '@tenon/automation'
 import { changeDir } from './paths.js'
 import { createExecutionCoordinatePort } from './skillBundleAssembly.js'
 
@@ -638,7 +638,7 @@ describe('旧 ledger JSONL fixture 回归 —— 手写历史行与新真实 res
 describe('可选真 docker e2e —— 容器真读到冻结 skill 内容；篡改 CAS 后容器不创建/agent 不执行（缺 docker → 诚实 skip）', () => {
   let hasDocker = false
   /**
-   * `@pipeline-lite/automation` 的 package.json `exports` 指向本地构建产物 `dist/index.js`
+   * `@tenon/automation` 的 package.json `exports` 指向本地构建产物 `dist/index.js`
    * （gitignore，不入库；见 packages/automation/package.json）——本进程解析到的可能是落后于当前
    * source 的旧构建（尤其在多 agent 并行改动 packages/automation/src/lifecycle 期间）。若
    * `SKILL_BUNDLE_CONTAINER_DIR`/`SkillBundleSnapshotMismatchError` 尚未出现在当前解析到的构建里，
@@ -655,7 +655,7 @@ describe('可选真 docker e2e —— 容器真读到冻结 skill 内容；篡�
     hasSkillBundleMountSupport = typeof SKILL_BUNDLE_CONTAINER_DIR === 'string' && typeof SkillBundleSnapshotMismatchError === 'function'
     if (hasDocker && !hasSkillBundleMountSupport) {
       console.warn(
-        '[HONEST SKIP] 当前进程解析到的 @pipeline-lite/automation 构建（packages/automation/dist，本地 gitignore 产物）'
+        '[HONEST SKIP] 当前进程解析到的 @tenon/automation 构建（packages/automation/dist，本地 gitignore 产物）'
         + '缺 SKILL_BUNDLE_CONTAINER_DIR/SkillBundleSnapshotMismatchError——落后于最新 lifecycle/ports 源码，尚未经构建刷新。'
         + 'H10 skill bundle 容器消费 e2e 诚实跳过，不拿旧构建冒充已验证；刷新构建（如 `tsc -b`）后重跑本文件即可恢复真跑。',
       )

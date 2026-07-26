@@ -4,7 +4,7 @@
  * 老仓真相源：sdk/src/{createSandbox,run}.ts（编排入口）+ scheduler/main.ts（daemon 装配）。
  * lite 把队列面收敛成 3 个动词：enqueue（挂队）/ scanReady（就绪扫描）/ runRound（跑一轮）。
  *
- * 全部经 @pipeline-lite/kernel StateStore 真读写 change 的 automation_* 字段（只 import 不改 kernel）。
+ * 全部经 @tenon/kernel StateStore 真读写 change 的 automation_* 字段（只 import 不改 kernel）。
  * 默认 L1 report-only（成功停 paused，不自动 merge）——GOAL A5 安全默认。
  */
 import { join } from 'node:path'
@@ -13,7 +13,7 @@ import {
   loadRegistry,
   type StateStore,
   type TrackPolicyProfile,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import { readAutomationJson, type AutomationJsonFs } from '../config/automationJson.js'
 import { createLoopAdmission, type LoopAdmission } from '../admission/loop-admission.js'
 import { markNonLoopPrepared, type ExecutionContext, type ExecutionPreparationPort, type PrepareOutcome } from '../admission/execution-context.js'

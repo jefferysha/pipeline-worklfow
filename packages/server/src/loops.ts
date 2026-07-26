@@ -32,7 +32,7 @@ import {
   type LedgerRecord,
   type LoopEntry,
   type LoopRegistry,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import type { LedgerSnapshot, LoopRow, LoopsSnapshot, LoopsSnapshotDeps } from './loopsTypes.js'
 export type {
   LedgerSnapshot, LoopRow, LoopsSnapshot, LoopsSnapshotDeps,

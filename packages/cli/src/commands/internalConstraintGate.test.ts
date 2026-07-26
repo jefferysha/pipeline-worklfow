@@ -2,7 +2,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { compileAutomationPolicySnapshot, type LoopEntry } from '@pipeline-lite/kernel'
+import { compileAutomationPolicySnapshot, type LoopEntry } from '@tenon/kernel'
 import { makeDeps } from '../test-support.js'
 import { cmdInternalConstraintGate } from './internalConstraintGate.js'
 
@@ -22,7 +22,7 @@ async function run(paths: string[], policyText = JSON.stringify(policy)): Promis
   const pathsFile = join(root, 'paths.z')
   await writeFile(pathsFile, Buffer.from(`${paths.join('\0')}\0`))
   const deps = makeDeps()
-  deps.env = (name) => name === 'PIPELINE_AUTOMATION_POLICY_B64'
+  deps.env = (name) => name === 'TENON_AUTOMATION_POLICY_B64'
     ? Buffer.from(policyText).toString('base64url')
     : undefined
   return { code: await cmdInternalConstraintGate(deps, 'write', pathsFile), errors: deps.errLines }

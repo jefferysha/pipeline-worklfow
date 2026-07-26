@@ -9,14 +9,14 @@
 正常用户安装完整插件时，优先使用唯一的原生入口：
 
 ```bash
-pipeline setup --codex
+tenon setup --codex
 # 可选：每天最多一次后台检查官方 marketplace 更新
-pipeline setup --codex --auto-update
+tenon setup --codex --auto-update
 ```
 
-它让 Codex 安装同一个 `pipeline-lite` marketplace 插件，包含 hooks、默认 workflow、所有 skill、CLI、
-dashboard/AFK 工具和其他宿主 adapter。升级使用 `pipeline update --codex`；自动更新只在新会话加载新的
-skills 和 hooks。安装后必须在 Codex 输入 `/hooks` 并信任 `pipeline-lite` 一次；这是 Codex 的安全确认，未
+它让 Codex 安装同一个 `tenon` marketplace 插件，包含 hooks、默认 workflow、所有 skill、CLI、
+dashboard/AFK 工具和其他宿主 adapter。升级使用 `tenon update --codex`；自动更新只在新会话加载新的
+skills 和 hooks。安装后必须在 Codex 输入 `/hooks` 并信任 `tenon` 一次；这是 Codex 的安全确认，未
 信任时 package/skills 仍可见，但正常对话不会执行 SessionStart/UserPromptSubmit 路由。
 
 下面的脚本是**项目级兼容 adapter**，只在需要将已安装插件投递进特定项目、受管设备或静态降级环境时使用：
@@ -70,9 +70,9 @@ hook 投影。普通提问（如
 “为什么需要确认？”）不会误放行。
 
 档 C 没有 hook，因而不能自动确认；它也**不允许**通过删除 `.pipeline-pending-*` marker 绕过
-review。必须保留用户已明确确认的对话事实，再执行 `pipeline review acknowledge <change>` 与对应
+review。必须保留用户已明确确认的对话事实，再执行 `tenon review acknowledge <change>` 与对应
 transition。自动化/CI 只有在显式
-`PIPELINE_AFK=1` 的受控 AFK 路径才会旁路交互门。
+`TENON_AFK=1` 的受控 AFK 路径才会旁路交互门。
 
 ## 打包 skills 的项目级投递
 

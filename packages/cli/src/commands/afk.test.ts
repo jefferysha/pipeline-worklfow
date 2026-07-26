@@ -19,7 +19,7 @@
  * H10 §1/§5 + 二次任务（queued 卡死回归修复）交叉边界：下方 W_LOOPS_YAML 的 loop 现须携带
  * `skill_bundle_id: '_all'` 才能过 admission 的「unwired」硬闸（该闸与本文件测的 image/凭证
  * 链路无关，是更早的 H10 §1 既有行为）。但 `_all` 意味着 context 是「bundle 绑定」，按
- * sdk.ts::createDefaultExecutionPreparation 的诚实处置，真实生产 `pipeline afk run` 此刻会对
+ * sdk.ts::createDefaultExecutionPreparation 的诚实处置，真实生产 `tenon afk run` 此刻会对
  * 它 fail-loud（本包尚无真实 resolver/locator/coordinates 装配，H10 生产装配见任务7——cli/afk.ts
  * 的 cmdAfk 生产路径未变，仍会 fail-loud，这不是本文件绕过的对象）。本文件只关心「image/凭证是否
  * 真进 docker argv」这条与 skill bundle 完全正交的链路，故在 vi.mock 里为 createAutomation 包一层
@@ -32,7 +32,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createLoopLedgerStore, loadRegistry } from '@pipeline-lite/kernel'
+import { createLoopLedgerStore, loadRegistry } from '@tenon/kernel'
 import { makeDeps, mockState } from '../test-support.js'
 import { buildProgram, CliExit } from '../program.js'
 import { cmdAfk, probeGitCommitAncestry } from './afk.js'
@@ -43,8 +43,8 @@ const SHA = 'a'.repeat(40)
 /** fake exec 的 argv 记录（vi.mock 工厂被 hoist，必须用 vi.hoisted 共享可变引用）。 */
 const h = vi.hoisted(() => ({ calls: [] as string[][], executorCalls: 0, dockerAvailable: true }))
 
-vi.mock('@pipeline-lite/automation', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@pipeline-lite/automation')>()
+vi.mock('@tenon/automation', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@tenon/automation')>()
   // 同 dockerRunChange.test.ts::makeFakeExec：docker exec 回合法握手让全程真跑完，
   // git rev-list / rev-parse 借同一 SHA——不起任何真容器/真 git 子进程。
   const fakeExec: typeof actual.nodeExec = async (file, args) => {
@@ -172,7 +172,7 @@ loops:
       - no-change-3
 `
 
-describe("pipeline afk run · H14 r1 P1-2 Docker 不可用退出码", () => {
+describe("tenon afk run · H14 r1 P1-2 Docker 不可用退出码", () => {
   let cwd: string
 
   beforeEach(async () => {

@@ -1,4 +1,4 @@
-import type { MemFs, MemSession, SearchMatch } from '@pipeline-lite/kernel'
+import type { MemFs, MemSession, SearchMatch } from '@tenon/kernel'
 import type { CliDeps } from '../deps.js'
 
 export const memIsoDate = (ms: number): string => new Date(ms).toISOString().slice(0, 10)

@@ -20,8 +20,8 @@ import {
   type RunChange,
   type TargetedRunCandidate,
   type VerifierPort,
-} from '@pipeline-lite/automation'
-import { createLoopLedgerStore } from '@pipeline-lite/kernel'
+} from '@tenon/automation'
+import { createLoopLedgerStore } from '@tenon/kernel'
 import { makeDeps } from '../test-support.js'
 import {
   BundledCliDigestUnavailableError,
@@ -286,16 +286,16 @@ describe('runAfkRound · H14 shared executor', () => {
   })
 })
 
-describe('resolveBundledCliDistSha256 · 只认运行中的 dist/pipeline.mjs', () => {
+describe('resolveBundledCliDistSha256 · 只认运行中的 dist/tenon.mjs', () => {
   const roots: string[] = []
   afterEach(async () => {
     await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })))
   })
 
-  it('确认 packages/cli/dist/pipeline.mjs 后按真实字节计算 sha256', async () => {
+  it('确认 packages/cli/dist/tenon.mjs 后按真实字节计算 sha256', async () => {
     const root = await mkdtemp(join(tmpdir(), 'afk-cli-digest-'))
     roots.push(root)
-    const path = join(root, 'packages', 'cli', 'dist', 'pipeline.mjs')
+    const path = join(root, 'packages', 'cli', 'dist', 'tenon.mjs')
     await mkdir(join(root, 'packages', 'cli', 'dist'), { recursive: true })
     await writeFile(path, 'bundled-cli-bytes\n')
 

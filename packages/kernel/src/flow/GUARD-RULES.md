@@ -24,7 +24,7 @@
 |---|---|---|---|---|
 | GG1 | change-name 非空 / `^[a-zA-Z0-9_-]+$` / 禁 `..` | G31-45 | HARD STOP exit 1 | CLI 层 `paths.isValidChangeName`（cmdCheck 已有，exit 1）|
 | GG2 | phase 必须在 manifest.phases 枚举内 | G127-135 | HARD STOP exit 1 | `evaluateGuard` 返回「未知 phase」failure（cmdCheck exit **2**，差异见 §7）|
-| GG3 | phase=build 且 `automation=queued` 且非调度器（`PIPELINE_AUTOMATION_RUNNER!=1`）→ 拦下主线 build | G154-162 | HARD STOP exit 1 | ✅ 纯字段规则，无条件评估；`ctx.automationRunner=true` 旁路 |
+| GG3 | phase=build 且 `automation=queued` 且非调度器（`TENON_AUTOMATION_RUNNER!=1`）→ 拦下主线 build | G154-162 | HARD STOP exit 1 | ✅ 纯字段规则，无条件评估；`ctx.automationRunner=true` 旁路 |
 | GG4 | phase=archive 且 change 目录不在活跃区 → 到 `archive/YYYY-MM-DD-<name>` 找 | G141-145 | 静默改道 | ❌ 未移植（lite check 只读活跃目录；归档态 check 需求归 #15/#24）|
 
 ## 1. open 出口（G489-495；M146-151）

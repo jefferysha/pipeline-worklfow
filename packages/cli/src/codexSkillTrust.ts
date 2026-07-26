@@ -31,21 +31,21 @@ export function codexHomeRoot(homeDir = homedir(), configured?: string): string 
 
 export function executingPluginRoot(argvEntry = process.argv[1]): string | undefined {
   const entry = safeAbsolute(argvEntry)
-  if (!entry || !entry.endsWith(join('packages', 'cli', 'dist', 'pipeline.mjs'))) return undefined
+  if (!entry || !entry.endsWith(join('packages', 'cli', 'dist', 'tenon.mjs'))) return undefined
   return resolve(dirname(entry), '..', '..', '..')
 }
 
 export function productionCodexSkillTrustRoots(): CodexSkillTrustRoots {
   const executing = executingPluginRoot()
-  const active = safeAbsolute(process.env.PIPELINE_ACTIVE_RELEASE_ROOT)
+  const active = safeAbsolute(process.env.TENON_ACTIVE_RELEASE_ROOT)
   return {
-    selectedCacheRoot: safeAbsolute(process.env.PIPELINE_CODEX_PLUGIN_ROOT)
-      ?? safeAbsolute(process.env.PIPELINE_HOST_PLUGIN_ROOT),
+    selectedCacheRoot: safeAbsolute(process.env.TENON_CODEX_PLUGIN_ROOT)
+      ?? safeAbsolute(process.env.TENON_HOST_PLUGIN_ROOT),
     activeReleaseRoot: active,
     directDevelopmentRoot: active === undefined ? safeAbsolute(process.env.PLUGIN_ROOT) : undefined,
     executingPluginRoot: executing,
-    runtimeDataRoot: safeAbsolute(process.env.PIPELINE_RUNTIME_DATA_ROOT),
-    runtimeStateRoot: safeAbsolute(process.env.PIPELINE_RUNTIME_STATE_ROOT),
+    runtimeDataRoot: safeAbsolute(process.env.TENON_RUNTIME_DATA_ROOT),
+    runtimeStateRoot: safeAbsolute(process.env.TENON_RUNTIME_STATE_ROOT),
   }
 }
 
@@ -81,7 +81,7 @@ async function selectedCacheRoot(
 ): Promise<TrustedSkillRoot | undefined> {
   const logical = safeAbsolute(roots.selectedCacheRoot)
   if (!logical) return undefined
-  const cacheBase = join(codexHomeRoot(homeDir, configured), 'plugins', 'cache', 'pipeline-lite', 'pipeline-lite')
+  const cacheBase = join(codexHomeRoot(homeDir, configured), 'plugins', 'cache', 'tenon', 'tenon')
   const rel = relative(cacheBase, logical)
   if (rel === '' || rel.startsWith('..') || rel.split(sep).length !== 1) return undefined
   if (!await ordinaryDirectoryChain(codexHomeRoot(homeDir, configured), logical)) return undefined
@@ -134,7 +134,7 @@ async function directDevelopmentRoot(roots: CodexSkillTrustRoots): Promise<Trust
   for (const required of [
     join(logical, '.codex-plugin', 'plugin.json'),
     join(logical, 'hooks', 'codex-skill-receipt.sh'),
-    join(logical, 'packages', 'cli', 'dist', 'pipeline.mjs'),
+    join(logical, 'packages', 'cli', 'dist', 'tenon.mjs'),
   ]) {
     try {
       const info = await lstat(required)
@@ -149,7 +149,7 @@ async function directDevelopmentRoot(roots: CodexSkillTrustRoots): Promise<Trust
       typeof plugin !== 'object'
       || plugin === null
       || Array.isArray(plugin)
-      || (plugin as Record<string, unknown>).name !== 'pipeline-lite'
+      || (plugin as Record<string, unknown>).name !== 'tenon'
       || typeof (plugin as Record<string, unknown>).version !== 'string'
     ) return undefined
     return { logical, physical: await realpath(logical) }

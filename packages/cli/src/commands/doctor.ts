@@ -12,7 +12,7 @@
  * 探针自身异常 → 该项折算 red（doctor 是降级的观测者，自己不许静默降级）。
  */
 import { join } from 'node:path'
-import { GATE_TTL_MS, PREREQ_HINTS } from '@pipeline-lite/kernel'
+import { GATE_TTL_MS, PREREQ_HINTS } from '@tenon/kernel'
 import { errMsg, type CliDeps, type DoctorProbes } from '../deps.js'
 import { changesRoot } from '../paths.js'
 import {
@@ -94,11 +94,11 @@ function checkGateEffective(p: DoctorProbes): DoctorCheck {
       '修复上述资产后 gate 才会拦截（试算依据：hooks.json 注册 + gate.sh 可执行）',
     )
   }
-  if (p.env('PIPELINE_AFK') === '1') {
+  if (p.env('TENON_AFK') === '1') {
     return yellow(
       'guard:gate',
-      'PIPELINE_AFK=1——三门旁路中（gate.sh 整门放行，marker 不拦不清）',
-      '退出 AFK 模式：unset PIPELINE_AFK 恢复三门拦截',
+      'TENON_AFK=1——三门旁路中（gate.sh 整门放行，marker 不拦不清）',
+      '退出 AFK 模式：unset TENON_AFK 恢复三门拦截',
     )
   }
   return green('guard:gate', 'PreToolUse 三门会真拦（hooks.json 注册 + gate.sh 可执行）')
@@ -132,7 +132,7 @@ function checkCwd(deps: CliDeps, p: DoctorProbes): DoctorCheck {
   return yellow(
     'project:cwd',
     `${deps.cwd} 不是 pipeline 项目（openspec/changes 不存在）`,
-    '在项目根运行 doctor，或用 pipeline init <name> --track --preset 初始化',
+    '在项目根运行 doctor，或用 tenon init <name> --track --preset 初始化',
   )
 }
 
@@ -169,7 +169,7 @@ async function checkMarkers(deps: CliDeps): Promise<DoctorCheck> {
       `陈旧门 marker（已过各自分级 TTL，不再拦截）: ${stale
         .map((m) => `.pipeline-pending-${m.kind}（${Math.round(GATE_TTL_MS[m.kind] / 60_000)}min）`)
         .join('、')}`,
-      '重新发起对应 pipeline 操作即可自动清理陈旧投影；review 若仍待决，重新执行 pipeline review request <change> --event <event>，不要手动删除 marker',
+      '重新发起对应 pipeline 操作即可自动清理陈旧投影；review 若仍待决，重新执行 tenon review request <change> --event <event>，不要手动删除 marker',
     )
   }
   if (markers.length > 0) return green('project:markers', `${markers.length} 个新鲜门 marker（三门拦截生效中）`)
@@ -207,7 +207,7 @@ function credDesc(light: { set: boolean; source?: 'host-env' | 'secrets-file' | 
 async function checkAfk(p: DoctorProbes): Promise<[DoctorCheck, DoctorCheck, DoctorCheck, DoctorCheck]> {
   if (!p.afkReadiness) {
     const miss = (id: string): DoctorCheck =>
-      red(id, 'AFK 就绪探针未装配（main.ts 集成缺口，无法评估 AFK 运行时就绪）', '排除探针环境问题后重跑 pipeline doctor')
+      red(id, 'AFK 就绪探针未装配（main.ts 集成缺口，无法评估 AFK 运行时就绪）', '排除探针环境问题后重跑 tenon doctor')
     return [miss('afk:docker'), miss('afk:image'), miss('afk:credential-claude-code'), miss('afk:credential-codex')]
   }
   const r = await p.afkReadiness()
@@ -287,7 +287,7 @@ export async function cmdDoctor(deps: CliDeps, opts: { json?: boolean }): Promis
     try {
       checks.push(await run())
     } catch (e) {
-      checks.push(red(id, `检查自身异常: ${errMsg(e)}`, '排除探针环境问题后重跑 pipeline doctor'))
+      checks.push(red(id, `检查自身异常: ${errMsg(e)}`, '排除探针环境问题后重跑 tenon doctor'))
     }
   }
 
@@ -298,8 +298,8 @@ export async function cmdDoctor(deps: CliDeps, opts: { json?: boolean }): Promis
   } catch (e) {
     const m = errMsg(e)
     checks.push(
-      red('skills:mandatory', `检查自身异常: ${m}`, '排除探针环境问题后重跑 pipeline doctor'),
-      red('skills:recommended', `检查自身异常: ${m}`, '排除探针环境问题后重跑 pipeline doctor'),
+      red('skills:mandatory', `检查自身异常: ${m}`, '排除探针环境问题后重跑 tenon doctor'),
+      red('skills:recommended', `检查自身异常: ${m}`, '排除探针环境问题后重跑 tenon doctor'),
     )
   }
 
@@ -309,7 +309,7 @@ export async function cmdDoctor(deps: CliDeps, opts: { json?: boolean }): Promis
     checks.push(red(
       'integration:codex-project-skills',
       `检查自身异常: ${errMsg(e)}`,
-      '排除探针环境问题后重跑 pipeline doctor',
+      '排除探针环境问题后重跑 tenon doctor',
     ))
   }
 
@@ -320,7 +320,7 @@ export async function cmdDoctor(deps: CliDeps, opts: { json?: boolean }): Promis
   } catch (e) {
     const m = errMsg(e)
     for (const id of ['afk:docker', 'afk:image', 'afk:credential-claude-code', 'afk:credential-codex']) {
-      checks.push(red(id, `检查自身异常: ${m}`, '排除探针环境问题后重跑 pipeline doctor'))
+      checks.push(red(id, `检查自身异常: ${m}`, '排除探针环境问题后重跑 tenon doctor'))
     }
   }
 

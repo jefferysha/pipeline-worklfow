@@ -24,11 +24,11 @@ if [ -z "$_ROOT" ] || [ ! -f "$_ROOT/hooks/session-start.sh" ]; then
 fi
 export CLAUDE_PLUGIN_ROOT="$_ROOT"
 
-CC_INJECTOR="${PIPELINE_CC_INJECTOR:-$_ROOT/hooks/session-start.sh}"
+CC_INJECTOR="${TENON_CC_INJECTOR:-$_ROOT/hooks/session-start.sh}"
 [ -f "$CC_INJECTOR" ] || exit 0   # 找不到 baseline inject → fail-safe 静默
 
 # 复用 baseline：它从 stdin 读 .cwd，输出宪法 + 活跃 change 上下文到 stdout（stderr 是校验噪声，弃之）。
-CONTEXT="$(printf '%s' "$INPUT" | PIPELINE_SESSION_START_FORMAT=plain bash "$CC_INJECTOR" 2>/dev/null || true)"
+CONTEXT="$(printf '%s' "$INPUT" | TENON_SESSION_START_FORMAT=plain bash "$CC_INJECTOR" 2>/dev/null || true)"
 [ -z "$CONTEXT" ] && exit 0   # 无内容不注入伪上下文
 
 # 纯 bash JSON 字符串体转义（对齐 hooks/skill-tracker.sh json_escape，不引 jq 硬依赖）。

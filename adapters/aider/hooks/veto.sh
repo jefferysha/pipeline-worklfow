@@ -59,13 +59,13 @@ if [ -z "$_ROOT" ] || [ ! -d "$_ROOT/hooks" ]; then
 fi
 export CLAUDE_PLUGIN_ROOT="$_ROOT"
 
-CC_GATE="${PIPELINE_CC_GATE:-$_ROOT/hooks/gate.sh}"
+CC_GATE="${TENON_CC_GATE:-$_ROOT/hooks/gate.sh}"
 [ -f "$CC_GATE" ] || exit 0
 
 reason="$(printf '{"cwd":"%s","tool_name":"git-commit"}' "$CWD" | bash "$CC_GATE" 2>&1 1>/dev/null)"; rc=$?
 if [ "$rc" -ne 0 ]; then
   printf '【pipeline commit-gate（降级 veto，commit 粒度）】检测到待处理交互标记，本次 commit 已被阻止：%s\n' "$reason" >&2
-  printf '完成对应的人类确认后，review 请运行 pipeline review acknowledge <change>；不要删除 marker。随后重新 commit。\n' >&2
+  printf '完成对应的人类确认后，review 请运行 tenon review acknowledge <change>；不要删除 marker。随后重新 commit。\n' >&2
   exit 1
 fi
 exit 0

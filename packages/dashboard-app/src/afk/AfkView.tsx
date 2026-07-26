@@ -18,7 +18,13 @@ import type { ChangeSnapshot, Snapshot } from '../types'
 import { isPhase } from '../types'
 import type { View } from '../shell/Nav'
 import { DEFAULT_RULES, type WorkflowRules } from '../model/workflowModel'
-import { schedulerHealth, selectProgress, type ProgressRow, type ProgressState } from '../model/progressModel'
+import {
+  executionProvenance,
+  schedulerHealth,
+  selectProgress,
+  type ProgressRow,
+  type ProgressState,
+} from '../model/progressModel'
 import { fetchAutomationSettings, postAfkEnqueue, postAfkRetry, postAutomationSettings, type WbAutomationSettings } from '../api/client'
 import { shellQuote } from '../shared/shellQuote'
 import { shortTime } from '../model/time'
@@ -160,7 +166,11 @@ export function AfkView({ snapshot, currentRoot, rulesByKey, onView, onOpenChang
     const out: AfkRow[] = []
     for (const g of sel.groups) {
       const rules = rulesByKey.get(g.key)
-      for (const r of g.rows) if (inSandbox(r.state)) out.push({ row: r, rules })
+      for (const r of g.rows) {
+        if (executionProvenance(r.change) === 'automation' && inSandbox(r.state)) {
+          out.push({ row: r, rules })
+        }
+      }
     }
     return out
   }, [sel, rulesByKey])

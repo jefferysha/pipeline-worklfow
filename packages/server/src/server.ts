@@ -17,12 +17,12 @@ import {
   validateWorkflow,
   stateStorageExistsSync, validateWorkflowTrackReferences, withRegistryGovernanceLock, withTrackRegistryLock,
   writeRegistryWithGovernance,
-} from '@pipeline-lite/kernel'
-import { createRunnerSkillContentLocator, evaluateLoopExecutionWiring } from '@pipeline-lite/automation'
+} from '@tenon/kernel'
+import { createRunnerSkillContentLocator, evaluateLoopExecutionWiring } from '@tenon/automation'
 import type {
   ChangeRefScan, CreateTrackSpec, ExtendedManifestData, FlowEngine, GraduationFs, MemFs, StateStore, TrackDefinition,
   ProjectTrackConfig, TrackRegistry, TrackValidationContext, UpdateTrackPatch, WorkflowDef,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import { buildAfkLog, buildAfkSnapshot, cancelAfkRun, dismissAfkRun, enqueueAfkRun, readAfkRunLog, retryAfkRun } from './afk.js'
 import { applyLoopsUpdate, buildLoopsSnapshot, type LoopActivationValidator } from './loops.js'
 import { readConfigSnapshot, validateMandatorySkillsBody, writeMandatorySkills } from './config.js'

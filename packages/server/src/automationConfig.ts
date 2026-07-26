@@ -18,7 +18,7 @@ import {
   AUTOMATION_JSON_LIMITS,
   isValidImageRef,
   readAutomationJson,
-} from '@pipeline-lite/automation'
+} from '@tenon/automation'
 
 /** AFK 执行参数（HTTP 信封形状 = 落盘形状，snake_case）。image 空串 = 用内置 sandcastle:local。 */
 export interface AutomationSettings {

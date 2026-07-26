@@ -12,7 +12,7 @@
     ".codex-plugin/plugin.json",
     "adapters",
     "hooks",
-    "packages/cli/dist/pipeline.mjs",
+    "packages/cli/dist/tenon.mjs",
     "packages/dashboard-app/dist",
     "packages/server/dist/dashboard.mjs",
     "runtime/pipeline-bootstrap.mjs",

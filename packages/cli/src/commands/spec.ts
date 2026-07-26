@@ -9,7 +9,7 @@
  * stderr（老仓 green >&2）；inject header/内容走 stdout，WARN 走 stderr。exit：错误/非法名 = 1；
  * inject 内容问题（bad agent / 缺文件 / 坏行）恒 rc0（老仓注入期 fail-open，绝不非零退出）。
  */
-import type { HistoryEntry } from '@pipeline-lite/kernel'
+import type { HistoryEntry } from '@tenon/kernel'
 import {
   injectJsonl,
   listSpecEntries,
@@ -17,11 +17,11 @@ import {
   type InjectOutcome,
   type SpecEntry,
   type SpecListing,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
 import { changeDir, isValidChangeName } from '../paths.js'
 
-export type { InjectOutcome, InjectChunk, SpecEntry, SpecListing } from '@pipeline-lite/kernel'
+export type { InjectOutcome, InjectChunk, SpecEntry, SpecListing } from '@tenon/kernel'
 
 /** living spec 库 fs 注入面（默认真 fs；mock 层注入 fake，见 spec.test.ts）。 */
 export interface SpecFs {

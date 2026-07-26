@@ -29,14 +29,14 @@ import { parseTrackRegistry } from './parse.js'
 import { serializeTrackRegistry } from './serialize.js'
 import { validateTrackRegistry } from './validate.js'
 
-const PIPELINE_DIR = '.pipeline'
+const TENON_DIR = '.pipeline'
 const TRACKS_FILE = 'tracks.yaml'
 
 /** 缺文件时的隐式配置（builtin-only revision 的哈希输入）。 */
 const EMPTY_PROJECT_CONFIG: ProjectTrackConfig = { version: 1 }
 
 export function trackRegistryPath(repoRoot: string): string {
-  return path.join(repoRoot, PIPELINE_DIR, TRACKS_FILE)
+  return path.join(repoRoot, TENON_DIR, TRACKS_FILE)
 }
 
 /** 规范化内容 hash：serializeTrackRegistry(config) 的 sha256 前 16 hex。 */

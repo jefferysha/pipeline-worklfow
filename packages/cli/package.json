@@ -1,14 +1,14 @@
 {
-  "name": "@pipeline-lite/cli",
-  "version": "0.1.0",
+  "name": "@tenon/cli",
+  "version": "1.0.0",
   "type": "module",
-  "bin": { "pipeline": "dist/pipeline.mjs" },
+  "bin": { "tenon": "dist/tenon.mjs" },
   "engines": { "node": ">=22" },
   "dependencies": {
-    "@pipeline-lite/automation": "*",
-    "@pipeline-lite/channel": "*",
-    "@pipeline-lite/kernel": "*",
-    "@pipeline-lite/tap": "*",
+    "@tenon/automation": "*",
+    "@tenon/channel": "*",
+    "@tenon/kernel": "*",
+    "@tenon/tap": "*",
     "commander": "^12.1.0"
   }
 }

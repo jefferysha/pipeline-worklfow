@@ -3,7 +3,7 @@ name: to-spec
 description: First-party conversion of validated requirements into a durable specification.
 license: MIT
 metadata:
-  author: pipeline-lite
+  author: tenon
 ---
 
 # To Spec

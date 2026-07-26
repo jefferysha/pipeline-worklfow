@@ -291,11 +291,11 @@ function checkSourceBoundedClaims(root, contents, failures) {
   if (commandSource !== undefined) {
     const families = extractCommandFamilies(commandSource)
     const commands = new Map([
-      ['setup', 'pipeline setup --codex'],
-      ['update', 'pipeline update --codex'],
-      ['runtime', 'pipeline runtime status'],
-      ['runtime-repair', 'pipeline runtime repair --rollback'],
-      ['dashboard', 'pipeline dashboard --open'],
+      ['setup', 'tenon setup --codex'],
+      ['update', 'tenon update --codex'],
+      ['runtime', 'tenon runtime status'],
+      ['runtime-repair', 'tenon runtime repair --rollback'],
+      ['dashboard', 'tenon dashboard --open'],
     ])
     for (const family of ['setup', 'update', 'runtime', 'dashboard']) {
       if (!families.has(family)) {

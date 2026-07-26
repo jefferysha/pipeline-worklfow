@@ -22,7 +22,7 @@
  *
  * track 条件（2026-07-17 P0 advisory/enforcement 对齐）：规则的 when= 是 TrackPredicate
  * （workflow/predicates.ts），老仓 tracks=backend,frontend 白名单已统一改为 NON_PM 谓词——
- * guard 的 advisory 预览（pipeline check/doctor）与 transition 强制层（flow/transition-table.ts）
+ * guard 的 advisory 预览（tenon check/doctor）与 transition 强制层（flow/transition-table.ts）
  * 对 chat/未知 track 同判（都要求 plan/review 等）。PM 对 legacy `plan` state artifact 保持
  * 原流程豁免；它仍须通过 OpenSpec 文档账本提交 plan 文档，二者不可混为一谈。
  *
@@ -294,7 +294,7 @@ export function evaluateGuard(state: PipelineState, ctx?: GuardContext): GuardRe
         break
       }
       case 'automation-queued': {
-        // guard.sh:154-162：主线 build 路径拦截；调度器（PIPELINE_AUTOMATION_RUNNER=1）旁路
+        // guard.sh:154-162：主线 build 路径拦截；调度器（TENON_AUTOMATION_RUNNER=1）旁路
         if (ctx?.automationRunner === true) break
         if (scalar(state.fields.automation) === 'queued') {
           failures.push(

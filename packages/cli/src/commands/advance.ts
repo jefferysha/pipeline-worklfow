@@ -17,7 +17,7 @@
  *      **三门是硬门，--through-gates 也绝不放行**（HITL 红线；review 门经 reviewPhases 判定）。
  *   3. 复核相位（manifest.reviewPhases 单一真相源）：默认停（不自动离开 explore/spec/verify）；
  *      `--through-gates` 仅在已有 exact-phase-and-event approval receipt 时才可继续，绝不伪造或跳过
- *      `pipeline review request → acknowledge`（仍受 2 的硬门约束）。
+ *      `tenon review request → acknowledge`（仍受 2 的硬门约束）。
  *   4. guard 不过（cmdCheck exit≠0）→ 停（exit 2 沿用 check 口径）。
  *   5. --max-steps 封顶：防失控保险丝（默认 12，足够 open→archive 六步）。
  * `--dry-run`：只报计划、只读不写盘（当前相位 guard 真判，后续步运行时 live-guard）。
@@ -29,8 +29,8 @@
  * 的 step-transitions 图推进（cmdAdvanceCustom，停点规则见该函数头）——此前 advance 只认 default
  * manifest，自定义 workflow 的 change 会被 forwardStep 误判成"终态"而永远无法 auto-advance。
  */
-import { resolveStep, resolveWorkflowName } from '@pipeline-lite/kernel'
-import type { EffectiveWorkflowPlan, WorkflowIR } from '@pipeline-lite/kernel'
+import { resolveStep, resolveWorkflowName } from '@tenon/kernel'
+import type { EffectiveWorkflowPlan, WorkflowIR } from '@tenon/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
 import { changeDir, isValidChangeName } from '../paths.js'
 import { str } from '../render.js'

@@ -4,7 +4,7 @@
 # 捕获每次 AskUserQuestion / Codex request_user_input 的「问 + 答」，append 进已明确选择的 change 的
 #   openspec/changes/<name>/.pipeline-history.jsonl（一行一个 JSON，CONTRACT §1）。
 # lite 用 JSONL 侧文件（非老仓 base64 塞 YAML），kind=prompt、raw="Q: <q> | A: <a>"——
-# 逐字对齐 pipeline import 老仓历史迁移的 prompt kind 形态（kernel legacy.ts），live 与 import 同构。
+# 逐字对齐 tenon import 老仓历史迁移的 prompt kind 形态（kernel legacy.ts），live 与 import 同构。
 # 修复断档：自由文本 prompt 有 recorder，但用户对 AskUserQuestion 的硬取舍决策以前不入库，这里补齐。
 #
 # 纯 bash 热路径（CONTRACT §5.4：PostToolUse 每次工具后触发）：零解释器 / 外部 JSON 解析器 spawn，

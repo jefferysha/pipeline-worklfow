@@ -14,7 +14,7 @@ import {
   validateWorkflowTrackReferences,
   type TrackDefinition,
   type TrackRegistry,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import {
   assertDirectoryStillTrusted,
   assertEntryMatches,

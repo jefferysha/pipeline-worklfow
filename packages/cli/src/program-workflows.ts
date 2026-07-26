@@ -28,7 +28,7 @@ export function registerWorkflowCommands(program: Command, deps: CliDeps): void 
     .command('workflow')
     .description('Workflow 运行计划：从 Change 的冻结快照读取步骤、Skill、门禁和转换')
     .action(() => {
-      deps.io.err('用法：pipeline workflow plan <change> [--json]')
+      deps.io.err('用法：tenon workflow plan <change> [--json]')
       bail(1)
     })
   workflow

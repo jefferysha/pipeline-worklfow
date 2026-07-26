@@ -2,7 +2,7 @@ import type {
   ObservationPage,
   ObserveAction,
   SourceCheckpoint,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import type { ExecFn } from '../../runner/exec.js'
 import type { SourceConnector } from '../source.js'
 

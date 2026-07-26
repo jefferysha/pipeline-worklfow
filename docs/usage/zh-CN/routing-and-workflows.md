@@ -1,6 +1,6 @@
 # 选择执行模式
 
-Pipeline Lite 的目标不是让所有请求都走最长流程，而是让任务复杂度、风险和证据成本匹配。
+Tenon 的目标不是让所有请求都走最长流程，而是让任务复杂度、风险和证据成本匹配。
 
 ## Discussion
 
@@ -38,7 +38,7 @@ Custom workflow 由项目 `.pipeline/workflows/*.yaml` 定义 DAG、skills、gua
 
 只有用户明确说“继续/恢复”或点名 Change 时才恢复。多个候选时必须选择，不能按修改时间猜测。独立新目标从新 Open 或相应 short workflow 开始。
 
-`pipeline session activate <change> --host-session <id>` 会把当前宿主会话精确绑定到一个
+`tenon session activate <change> --host-session <id>` 会把当前宿主会话精确绑定到一个
 Change。后续在该对话中说“继续执行”时，路由器先读取这条会话绑定，再考虑仓库级
 `.pipeline-active` 候选；因此另一个会话切换任务不会把当前对话串到旧 Change。用户完整点名
 Change 的指令优先级仍然最高。绑定文件只负责会话身份和运行态观察，不参与 canonical guard
@@ -96,9 +96,9 @@ UI 中的“等待”也必须解释真实状态：未开始、等待 review、�
 ## 验证当前路由
 
 ```bash
-pipeline list --json
-pipeline status <change> --json
-pipeline document status <change>
+tenon list --json
+tenon status <change> --json
+tenon document status <change>
 ```
 
 核对 Change 名、workflow、track、当前 phase 和文档合同。若新目标意外命中旧 Change，应停止写入并创建独立 Change，不能继续污染旧证据。

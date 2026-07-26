@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { validateVerificationResult, type VerificationIssuer, type VerificationResult } from '@pipeline-lite/kernel'
+import { validateVerificationResult, type VerificationIssuer, type VerificationResult } from '@tenon/kernel'
 import type { RunOutcome } from '../types.js'
 import {
   markLoopPrepared, markNonLoopPrepared,

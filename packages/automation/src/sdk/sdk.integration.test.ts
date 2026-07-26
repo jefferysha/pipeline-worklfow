@@ -8,7 +8,7 @@ import {
   type LoopEntry,
   type TrackPolicyProfile,
   type VerificationResult,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { RunOutcome } from '../types.js'
 import type { ExecutionContext } from '../admission/execution-context.js'

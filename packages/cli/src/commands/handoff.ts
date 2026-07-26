@@ -1,12 +1,12 @@
 /**
  * handoff 子命令 —— 上下文压缩（BACKLOG #30 / GOAL B13·D11：对标 Comet CONTEXT-COMPRESSION）。
  *
- * `pipeline handoff <name> [--phase p] [--json]`：对指定 change 的当前相位产出文档
+ * `tenon handoff <name> [--phase p] [--json]`：对指定 change 的当前相位产出文档
  * （design_doc / plan / verification_report 指向的路径 + change 目录内 proposal/design/tasks.md）
  * 做**确定性**结构化压缩，输出下游 handoff 摘要 + 压缩率。零 LLM（纯规则，可测可 oracle）。
  * stdout：压缩摘要（下游消费的产物）+ 压缩率行；--json 结构化信封。exit：非法名/状态缺失=1，否则 0。
  *
- * 触发面：handoff 只在用户显式敲 `pipeline handoff` 时跑——相位转换不自动产出 handoff
+ * 触发面：handoff 只在用户显式敲 `tenon handoff` 时跑——相位转换不自动产出 handoff
  * 摘要（transition.ts 的进相位副作用里没有 buildHandoff 调用）。注意 transition 仍会写
  * `.breadcrumb`，但那只是一行 `pipeline:<name> phase=<to>` 的相位标记，与 handoff 摘要无关。
  */
@@ -24,16 +24,16 @@ import {
   type DocumentKind,
   type HandoffFs,
   type HandoffResult,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import { createHash } from 'node:crypto'
 import { join } from 'node:path'
-import type { PipelineState } from '@pipeline-lite/kernel'
-import type { DocumentLocale } from '@pipeline-lite/kernel'
+import type { PipelineState } from '@tenon/kernel'
+import type { DocumentLocale } from '@tenon/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
 import { resolveChangeDocumentLocale } from '../documentLocale.js'
 import { changeDir, isValidChangeName } from '../paths.js'
 
-export type { HandoffFs } from '@pipeline-lite/kernel'
+export type { HandoffFs } from '@tenon/kernel'
 
 export interface HandoffOpts {
   json?: boolean
@@ -139,7 +139,7 @@ async function compileBundle(
   }
   const dir = changeDir(deps.cwd, name)
   const ledger = await readDocumentLedger(dir)
-  if (ledger === undefined) throw new Error('Context Bundle missing document ledger; run pipeline document init')
+  if (ledger === undefined) throw new Error('Context Bundle missing document ledger; run tenon document init')
 
   const bundleInputs: ContextBundleInputV1[] = []
   const materializedPaths = new Set<string>()
@@ -149,7 +149,7 @@ async function compileBundle(
       .sort((left, right) => left.path.localeCompare(right.path, 'en'))
     if (records.length === 0) {
       throw new Error(
-        `Context Bundle missing document '${kind}'; run pipeline document record ${name} ${kind} <path> --producer <skill>`,
+        `Context Bundle missing document '${kind}'; run tenon document record ${name} ${kind} <path> --producer <skill>`,
       )
     }
     for (const record of records) {
@@ -160,7 +160,7 @@ async function compileBundle(
       const actual = sourceDigest(text)
       if (actual !== record.sha256) {
         throw new Error(
-          `Context Bundle stale document '${kind}': ${record.path}; run pipeline document record ${name} ${kind} ${record.path} --producer <skill>, then pipeline document read ${name} all`,
+          `Context Bundle stale document '${kind}': ${record.path}; run tenon document record ${name} ${kind} ${record.path} --producer <skill>, then tenon document read ${name} all`,
         )
       }
 

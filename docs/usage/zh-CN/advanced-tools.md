@@ -17,7 +17,7 @@ Tap 是显式 opt-in 的本地诊断工具，可能捕获 prompt、header、toke
 ## Handoff
 
 ```bash
-pipeline handoff <change> --json
+tenon handoff <change> --json
 ```
 
 Handoff 压缩当前阶段的状态、计划和证据路径，帮助新上下文恢复。它不创建新事实，也不能用摘要替代需要全文读取的受治理文档。
@@ -32,7 +32,7 @@ Handoff 压缩当前阶段的状态、计划和证据路径，帮助新上下文
 
 ## 排查
 
-先用 `pipeline doctor --json` 查看能力是否真实启用，再检查 provider、文件权限和敏感数据边界。未知状态应 fail-loud，而不是静默降级后声称成功。
+先用 `tenon doctor --json` 查看能力是否真实启用，再检查 provider、文件权限和敏感数据边界。未知状态应 fail-loud，而不是静默降级后声称成功。
 
 ## 适用性矩阵
 
@@ -49,7 +49,7 @@ Channel 消息仍然是不可信输入，进入 CLI、文件路径或 shell 前�
 
 Tap 不应在 CI、共享终端或公开演示中默认启用。诊断完成后停止捕获并清理敏感副本，报告只保留脱敏结论。
 
-Handoff 会沿用 Change 固定语言，但 phase id、路径和 digest 不翻译。接收方仍需运行 `pipeline document read <change> all`。
+Handoff 会沿用 Change 固定语言，但 phase id、路径和 digest 不翻译。接收方仍需运行 `tenon document read <change> all`。
 
 ## 配置边界
 
@@ -66,10 +66,10 @@ provider、预算、并发、超时和数据目录应显式声明。缺失配置
 ## 排查顺序
 
 ```bash
-pipeline runtime status
-pipeline doctor --json
-pipeline status <change> --json
-pipeline handoff <change> --json
+tenon runtime status
+tenon doctor --json
+tenon status <change> --json
+tenon handoff <change> --json
 ```
 
 Handoff 与文件冲突时，以当前仓库和 document ledger 为准。Tap 体积异常时立即停止捕获。Channel 堵塞时检查 inbox policy 和 timeout，不能用无限并发掩盖背压。

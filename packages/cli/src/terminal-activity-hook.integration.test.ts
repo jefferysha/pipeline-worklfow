@@ -37,13 +37,13 @@ describe('真实 e2e —— terminal-activity host hook', () => {
     expect(await h.run(['init', 'current', '--track', 'frontend', '--preset', 'full'])).toBe(0)
     const routed = runHook('router.sh', {
       prompt: '帮我实现一个响应式 React 页面', cwd: h.cwd, session_id: SESSION_ID,
-    }, { PIPELINE_ROUTER_CACHE: join(h.cwd, '.router-cache') })
+    }, { TENON_ROUTER_CACHE: join(h.cwd, '.router-cache') })
     expect(routed.code).toBe(0)
     expect(routed.stdout).toContain(`host_session_id: ${SESSION_ID}`)
 
     expect(await h.run(['session', 'activate', 'current', '--host-session', SESSION_ID])).toBe(0)
     const activity = runHook('terminal-activity.sh', {
-      cwd: h.cwd, tool_name: 'command_execution', session_id: SESSION_ID, turn_id: 'turn-current', command: 'pipeline status current',
+      cwd: h.cwd, tool_name: 'command_execution', session_id: SESSION_ID, turn_id: 'turn-current', command: 'tenon status current',
     })
     expect(activity.code, activity.stderr).toBe(0)
     const projection = JSON.parse(await readFile(join(h.cwd, 'openspec/changes/current/.pipeline-terminal-activity.json'), 'utf8')) as {
@@ -83,7 +83,7 @@ describe('真实 e2e —— terminal-activity host hook', () => {
     await writeFile(join(cometDir, '.breadcrumb'), 'COMET_BREADCRUMB\n', 'utf8')
 
     const payload = { prompt: '继续执行', cwd: h.cwd, session_id: SESSION_ID }
-    const routed = runHook('router.sh', payload, { PIPELINE_ROUTER_CACHE: join(h.cwd, '.router-cache') })
+    const routed = runHook('router.sh', payload, { TENON_ROUTER_CACHE: join(h.cwd, '.router-cache') })
     expect(routed.code, routed.stderr).toBe(0)
     expect(routed.stdout).toContain('intent: resume')
     expect(routed.stdout).toContain('change: trellis-docs')

@@ -101,7 +101,7 @@ export function notRequestedSessionActivation(): ChangeSessionActivation {
 /**
  * Invoke the same built CLI used by dashboard operations and then read the
  * pointer it actually published.  A zero process exit is not sufficient:
- * `pipeline session activate` deliberately reports degraded pointer writes as
+ * `tenon session activate` deliberately reports degraded pointer writes as
  * success so an interactive terminal session can continue.
  */
 export async function activateChangeSession(input: {

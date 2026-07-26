@@ -1,5 +1,5 @@
 /**
- * afk run —— #29-wire 真接线 e2e（GOAL C9）：`pipeline afk run` 不再只 report，真调
+ * afk run —— #29-wire 真接线 e2e（GOAL C9）：`tenon afk run` 不再只 report，真调
  * automation.runRound(createDockerRunChange(...)) 跑真容器 + 真 git worktree + 真 merge-back。
  *
  * 镜像同 dockerRunChange.integration.test.ts 用 `sandcastle:test`（同名同 Dockerfile，docker build
@@ -81,7 +81,7 @@ const execFileAsync = promisify(execFile)
 const IMAGE = 'sandcastle:test' // 与 dockerRunChange.integration.test.ts 同名同 Dockerfile，build 天然去重
 const here = dirname(fileURLToPath(import.meta.url))
 const repoRoot = resolve(here, '..', '..', '..') // src → cli → packages → 根
-const bundlePath = join(repoRoot, 'packages', 'cli', 'dist', 'pipeline.mjs')
+const bundlePath = join(repoRoot, 'packages', 'cli', 'dist', 'tenon.mjs')
 const dockerfile = join(repoRoot, 'tools', 'sandcastle', 'Dockerfile')
 
 async function git(cwd: string, args: string[]): Promise<void> {
@@ -124,14 +124,14 @@ describe('afk run —— 真调 docker 执行接线（#29-wire 落地到 CLI）'
     try {
       await access(bundlePath)
     } catch {
-      console.warn('[HONEST SKIP] 缺 packages/cli/dist/pipeline.mjs（先 npm run build）→ afk run CLI e2e 跳过')
+      console.warn('[HONEST SKIP] 缺 packages/cli/dist/tenon.mjs（先 npm run build）→ afk run CLI e2e 跳过')
       return
     }
     // docker build 对同 tag 天然幂等去重：若 dockerRunChange.integration.test.ts 已建过，这里秒过。
     await execFileAsync('docker', [
       'build', '-f', dockerfile, '-t', IMAGE,
       '--build-arg', 'WITH_CLAUDE_CODE=false',
-      '--build-arg', 'PIPELINE_TEST_ALLOW_DETERMINISTIC_FALLBACK=1',
+      '--build-arg', 'TENON_TEST_ALLOW_DETERMINISTIC_FALLBACK=1',
       repoRoot,
     ]).catch(() => { /* 构建失败：下面 image inspect 会证实并 honest-skip */ })
     try {
@@ -184,7 +184,7 @@ describe('afk run —— 真调 docker 执行接线（#29-wire 落地到 CLI）'
   }, 120_000)
 
   /**
-   * H7+H10：custom workflow change 走真实 `pipeline afk run` 全链（生产装配，非 SDK 直调）——
+   * H7+H10：custom workflow change 走真实 `tenon afk run` 全链（生产装配，非 SDK 直调）——
    * admission preparation 冻结 workflow/step/coordinate digest，Git verifier 必须把同一坐标签进
    * workflow-transition binding；只有该 binding 经 lifecycle 与 scheduler 双门复核后才可 merge。
    * 通过受支持的 `init --workflow` 原子绑定真实定义；运行中再用通用 field setter 把 default

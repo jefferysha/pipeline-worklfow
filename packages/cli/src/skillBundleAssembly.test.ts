@@ -14,8 +14,8 @@ import { chmod, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } fro
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { SkillContentNotFoundError } from '@pipeline-lite/automation'
-import { createEffectiveSkillResolver, loadManifest, resolveSkillBundle } from '@pipeline-lite/kernel'
+import { SkillContentNotFoundError } from '@tenon/automation'
+import { createEffectiveSkillResolver, loadManifest, resolveSkillBundle } from '@tenon/kernel'
 import { mockState, mockStore } from './test-support.js'
 import {
   createExecutionCoordinatePort, createProductionSkillContentLocator,
@@ -577,9 +577,9 @@ describe('default skill bundle 资产真实性', () => {
     }
   })
 
-  it('pipeline-ship 如实把 commit-push-pr 标为可选外部命令，默认 bundled registry 不再依赖它', async () => {
+  it('tenon-ship 如实把 commit-push-pr 标为可选外部命令，默认 bundled registry 不再依赖它', async () => {
     const sources = await readFile(join(process.cwd(), 'templates', 'skill-sources.yaml'), 'utf8')
-    const ship = await readFile(join(process.cwd(), 'skills', 'pipeline-ship', 'SKILL.md'), 'utf8')
+    const ship = await readFile(join(process.cwd(), 'skills', 'tenon-ship', 'SKILL.md'), 'utf8')
     const sourceLine = sources.split('\n').find((line) => line.trimStart().startsWith('commit-commands:commit-push-pr:'))
 
     expect(sourceLine).toBeUndefined()

@@ -50,9 +50,9 @@ install_instructions() {
 
 离开 review phase（explore / spec / verify）须对确切 event 取得人类显式确认：
 
-    pipeline review request <change> --event <event>
+    tenon review request <change> --event <event>
     # 人类确认后：
-    pipeline review acknowledge <change>
+    tenon review acknowledge <change>
 
 不得删除 `.pipeline-pending-review` 绕过 review-gate（会产生 solo 推进）。
 EOF
@@ -93,6 +93,6 @@ if [ "$WITH_HOOKS" = 1 ]; then
   install_hooks_dual
   info "档 B 完成：veto/track native（dual hookContainer）+ inject 降级静态层。"
 else
-  warn "--no-hooks：跳过 hooks（无自动强制；review 仍须走 pipeline review request/acknowledge）。"
+  warn "--no-hooks：跳过 hooks（无自动强制；review 仍须走 tenon review request/acknowledge）。"
 fi
 exit 0

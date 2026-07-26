@@ -30,7 +30,7 @@ The workflow schema SHALL accept the optional top-level field `openspec_contract
 - **THEN** validation rejects it and identifies the missing or invalid phase/transition
 
 ### Requirement: Document records SHALL prove production provenance and current content
-The `pipeline document record` command SHALL register a named document slot only when the target is a nonempty regular file within `openspec/` or `docs/`, the caller supplies a phase-appropriate producer, and the invocation history contains the required skill evidence. Each record SHALL contain its document kind, safe relative path, SHA-256 digest, producer, and registration timestamp.
+The `tenon document record` command SHALL register a named document slot only when the target is a nonempty regular file within `openspec/` or `docs/`, the caller supplies a phase-appropriate producer, and the invocation history contains the required skill evidence. Each record SHALL contain its document kind, safe relative path, SHA-256 digest, producer, and registration timestamp.
 
 Singleton kinds SHALL have one slot per kind, so re-registering changed or moved content replaces the prior path/digest and invalidates stale read receipts. `delta-spec` SHALL have one stable slot per capability derived from the governed path `openspec/changes/<change>/specs/<capability>/spec.md`. Different capabilities SHALL coexist and each SHALL require its own exact-hash read receipt; rewriting one capability SHALL replace only that capability's slot.
 
@@ -69,7 +69,7 @@ Singleton kinds SHALL have one slot per kind, so re-registering changed or moved
 - **AND** provenance or same-phase receipt conflicts fail before publication
 
 ### Requirement: Later phases SHALL record exact-hash document reads
-The `pipeline document read` command SHALL re-hash recorded documents and persist a receipt for the current phase only when the file still matches the recorded digest. Required phase exits SHALL reject missing, stale, or incomplete receipts. A changed document SHALL require re-registration and re-reading before a later phase can pass.
+The `tenon document read` command SHALL re-hash recorded documents and persist a receipt for the current phase only when the file still matches the recorded digest. Required phase exits SHALL reject missing, stale, or incomplete receipts. A changed document SHALL require re-registration and re-reading before a later phase can pass.
 
 #### Scenario: Build receives its complete specification context
 - **WHEN** a governed change enters the build exit check
@@ -80,7 +80,7 @@ The `pipeline document read` command SHALL re-hash recorded documents and persis
 - **THEN** the next check or transition fails until the ADR is re-recorded and re-read at its new digest
 
 ### Requirement: Check and transition SHALL enforce the phase evidence matrix
-For governed changes, both `pipeline check` and transition application SHALL enforce the documented output and input matrix for open, explore, spec, build, verify, ship, and archive. The failure response SHALL identify the missing document kind, required producer/read phase, and the command needed to repair it. The enforcement SHALL run in both CLI and dashboard server paths.
+For governed changes, both `tenon check` and transition application SHALL enforce the documented output and input matrix for open, explore, spec, build, verify, ship, and archive. The failure response SHALL identify the missing document kind, required producer/read phase, and the command needed to repair it. The enforcement SHALL run in both CLI and dashboard server paths.
 
 #### Scenario: Spec cannot advance without delta spec and plan evidence
 - **WHEN** a governed change runs `spec-complete` without registered delta spec, Superpowers plan, or plan
@@ -111,14 +111,14 @@ native plugin discovery is authoritative.
 
 #### Scenario: Native Codex discovery is sufficient
 
-- **GIVEN** Codex has one verified native pipeline-lite Selected Skill Root
+- **GIVEN** Codex has one verified native tenon Selected Skill Root
 - **WHEN** doctor evaluates mandatory Skill discoverability
 - **THEN** it reports the mandatory Skills discoverable from that root
 - **AND** it does not require or create project `.agents/skills` links.
 
 #### Scenario: Static adapter is the only available discovery mechanism
 
-- **GIVEN** no native pipeline-lite Selected Skill Root exists
+- **GIVEN** no native tenon Selected Skill Root exists
 - **WHEN** an explicitly selected static adapter exposes conflict-safe project
   links
 - **THEN** doctor reports the project projection as the sole active Skill root.
@@ -141,7 +141,7 @@ effect.
 - **AND** ordinary free-Track Skill orchestration remains disabled.
 
 ### Requirement: Review confirmation SHALL persist an exact event receipt and never self-lock
-The review gate SHALL represent a pending review as a canonical, project-scoped receipt containing the exact current phase and requested transition event. After the user has seen the artifacts and explicitly confirms, `pipeline review acknowledge` SHALL persist an approval receipt and clear only its matching short-lived marker projection. `pipeline transition` SHALL consume only that exact approved receipt. It SHALL not require an unavailable host-specific question event, shall not treat read-only inspection as a blocked write, and shall fail closed for unrelated or unconfirmed prompts. Direct marker deletion SHALL never be an approval mechanism.
+The review gate SHALL represent a pending review as a canonical, project-scoped receipt containing the exact current phase and requested transition event. After the user has seen the artifacts and explicitly confirms, `tenon review acknowledge` SHALL persist an approval receipt and clear only its matching short-lived marker projection. `tenon transition` SHALL consume only that exact approved receipt. It SHALL not require an unavailable host-specific question event, shall not treat read-only inspection as a blocked write, and shall fail closed for unrelated or unconfirmed prompts. Direct marker deletion SHALL never be an approval mechanism.
 
 #### Scenario: Explicit confirmation unlocks only the requested transition
 - **WHEN** a review receipt for `verify-pass` is pending and the user explicitly confirms it

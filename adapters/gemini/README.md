@@ -41,8 +41,8 @@ sub-agent 层无 `inject-subagent-context`（Gemini #18128：BeforeTool 链路�
 
 ## 人工确认（HITL）
 
-完成产物并选择 event 后运行 `pipeline review request <change> --event <event>`；人类明确确认后运行
-`pipeline review acknowledge <change>`。不得手动删除 `.pipeline-pending-review`，它只是投影而非授权。
+完成产物并选择 event 后运行 `tenon review request <change> --event <event>`；人类明确确认后运行
+`tenon review acknowledge <change>`。不得手动删除 `.pipeline-pending-review`，它只是投影而非授权。
 
 ## stdout 格式（不串格式）
 

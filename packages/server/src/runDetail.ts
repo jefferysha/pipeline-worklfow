@@ -15,7 +15,7 @@ import {
   type StateStore,
   type TransitionRecord,
   type TransitionRecordStore,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 
 export interface RunDetailDeps {
   readonly store: StateStore

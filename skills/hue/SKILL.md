@@ -3,7 +3,7 @@ name: hue
 description: First-party visual language and design-token exploration for prototypes.
 license: MIT
 metadata:
-  author: pipeline-lite
+  author: tenon
 ---
 
 # Hue

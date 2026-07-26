@@ -9,7 +9,7 @@ import { createDashboardServer } from './server.js'
 import { buildAfkSnapshot } from './afk.js'
 import type { DashboardServer, Snapshot } from './types.js'
 import { initChange, makeProject, newStore, reqGet, testFlow } from './test-support.js'
-import type { StateStore } from '@pipeline-lite/kernel'
+import type { StateStore } from '@tenon/kernel'
 
 const openServers: DashboardServer[] = []
 afterEach(async () => {

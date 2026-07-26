@@ -21,7 +21,7 @@ function Subject(): JSX.Element {
 }
 
 describe('ProgressToolbar 响应式与国际化', () => {
-  afterEach(() => localStorage.removeItem('pipeline-dashboard-lang'))
+  afterEach(() => localStorage.removeItem('tenon-dashboard-lang'))
   it('状态页签在窄屏只在自身容器横向滚动，按钮不压成竖排文字', () => {
     render(<I18nProvider><Subject /></I18nProvider>)
     const tabs = screen.getByTestId('prg9t-tabs')
@@ -33,7 +33,7 @@ describe('ProgressToolbar 响应式与国际化', () => {
   })
 
   it('英文模式的标题、副标题和 workflow 筛选标签不混入中文', () => {
-    localStorage.setItem('pipeline-dashboard-lang', 'en')
+    localStorage.setItem('tenon-dashboard-lang', 'en')
     render(<I18nProvider><Subject /></I18nProvider>)
     expect(screen.getByRole('heading', { name: 'Progress' })).toBeInTheDocument()
     expect(screen.getByText(/Follow each task through its workflow/)).toBeInTheDocument()

@@ -186,7 +186,7 @@ function sourceCode(source: RouterSkillSource): 'P' | 'A' | 'E' {
 export function encodeRouterDataCache(input: RouterDataCacheInput): string {
   assertCacheMetadata(input)
   const lines = [
-    'PIPELINE_ROUTER_V5',
+    'TENON_ROUTER_V5',
     `M|${hex(input.projectRoot)}|${input.manifestSha256}|${input.registryRevision}|${input.tracksPresent ? '1' : '0'}|${input.contractRevision}`,
   ]
   for (const track of input.projection.tracks) {

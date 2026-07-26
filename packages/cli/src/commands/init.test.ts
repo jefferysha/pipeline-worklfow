@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, test } from 'vitest'
-import type { InitOptions } from '@pipeline-lite/kernel'
+import type { InitOptions } from '@tenon/kernel'
 import { cmdInit, type InitPrompter, type InitWizardEnv } from './init.js'
 import { makeDeps, spy } from '../test-support.js'
 

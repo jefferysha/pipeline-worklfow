@@ -1,7 +1,7 @@
 /**
  * artifact register —— 受 artifact 契约约束的单字段写（G2 P5，codex 定稿 D2/D5）。
  *
- *   pipeline artifact register <change> <field> <path> --producer <skill-id>
+ *   tenon artifact register <change> <field> <path> --producer <skill-id>
  *
  * 语义上是「受 artifact declaration + producer 校验约束的单字段 set」，但**不**先校验再调
  * deps.store.set：校验依赖当前 phase/track/workflow，锁外校验后再写会被并发推进 phase/改 track/
@@ -23,8 +23,8 @@ import {
   matchesTrackPredicate,
   resolveAvailableSkillSlots,
   resolveStep,
-} from '@pipeline-lite/kernel'
-import type { EffectiveSkillSlot, FieldName, PipelineState } from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
+import type { EffectiveSkillSlot, FieldName, PipelineState } from '@tenon/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
 import { recordHistory } from './fields.js'
 import { changeDir, isValidChangeName } from '../paths.js'

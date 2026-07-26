@@ -4,7 +4,7 @@
 // skill folders and plugin caches are observed only to describe optional legacy/custom entries;
 // they are never an installation prerequisite for the packaged default flow. Every probe is
 // fail-open: missing or malformed host data merely yields "not detected", never a registry 500.
-import { parseSkillSources, type SkillSourceDefinition, type SkillTier } from '@pipeline-lite/kernel'
+import { parseSkillSources, type SkillSourceDefinition, type SkillTier } from '@tenon/kernel'
 import { accessSync, constants, existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { delimiter, dirname, join } from 'node:path'
 

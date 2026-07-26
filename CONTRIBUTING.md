@@ -1,6 +1,6 @@
-# Contributing to Pipeline Lite
+# Contributing to Tenon
 
-Thank you for improving Pipeline Lite. Contributions are welcome when they keep
+Thank you for improving Tenon. Contributions are welcome when they keep
 the workflow, evidence, distribution, and documentation surfaces aligned.
 
 By participating, you agree to follow the
@@ -9,7 +9,7 @@ By participating, you agree to follow the
 ## Before you start
 
 1. Search existing
-   [Issues](https://github.com/jefferysha/pipeline-worklfow/issues) and current
+   [Issues](https://github.com/jefferysha/tenon/issues) and current
    repository work.
 2. Use an Issue for non-sensitive bugs or a proposal when a change affects
    public behavior, contracts, state, security, distribution, or multiple
@@ -33,8 +33,8 @@ Requirements:
 - real host credentials only for explicitly selected credentialed tests
 
 ```bash
-git clone https://github.com/jefferysha/pipeline-worklfow.git
-cd pipeline-worklfow
+git clone https://github.com/jefferysha/tenon.git
+cd tenon
 npm ci
 npm run build
 ```

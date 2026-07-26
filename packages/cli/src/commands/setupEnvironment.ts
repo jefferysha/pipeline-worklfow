@@ -1,6 +1,6 @@
 import { dirname, join, resolve } from 'node:path'
-import { readAutomationJson } from '@pipeline-lite/automation'
-import { PREREQ_HINTS } from '@pipeline-lite/kernel'
+import { readAutomationJson } from '@tenon/automation'
+import { PREREQ_HINTS } from '@tenon/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
 import { nodeExecDocker, probeAfkReadiness, type AfkReadiness, type CredLight, type ExecDockerFn } from '../afkReadiness.js'
 import { REAL_RUNTIME_INSTALLER, type RuntimeInstaller } from '../runtime/installer.js'
@@ -37,7 +37,7 @@ export interface SetupEnv {
   commandExists(name: string): boolean
   /** 列目录直接子项名（仅目录/软链，缺目录/无权限 → []，fail-safe）——plugin-cache 双层扫用。 */
   listDir(dir: string): string[]
-  /** 写入受控的用户级 pipeline 配置（自动更新 opt-in）。 */
+  /** 写入受控的用户级 Tenon 配置（自动更新 opt-in）。 */
   writeText(path: string, text: string): void
   /**
    * 跑一条命令（技能安装 / `--list` 核 id）——真实现 execFileSync 捕获退出码+stdout+stderr（不抛,非零折算 code）;
@@ -60,7 +60,7 @@ export const REAL_SETUP_ENV: SetupEnv = {
   selfPath: () => {
     const candidate = resolve(process.argv[1] ?? '')
     // The user-facing launcher is a stable script under ~/.local/bin.  Follow the active process
-    // path before deriving a dev fallback so `pipeline dashboard` / `pipeline update` never
+    // path before deriving a dev fallback so `tenon dashboard` / `tenon update` never
     // mistake ~/.local for a marketplace candidate root.
     try {
       return realpathSync(candidate)
@@ -125,7 +125,7 @@ export const REAL_SETUP_ENV: SetupEnv = {
     try {
       const buf = Buffer.alloc(64)
       // 同步读 fd 0 一次。**不检查 isTTY**：判据是「读到了什么」而非「是不是终端」——
-      // 故 `echo y | pipeline setup` 这类管道输入同样会放行（非 TTY 不等于自动判 No）。
+      // 故 `echo y | tenon setup` 这类管道输入同样会放行（非 TTY 不等于自动判 No）。
       const n = readSync(0, buf, 0, 64, null)
       const ans = buf.toString('utf8', 0, n).trim().toLowerCase()
       return ans === 'y' || ans === 'yes'
@@ -136,8 +136,8 @@ export const REAL_SETUP_ENV: SetupEnv = {
 }
 
 /**
- * 插件根优先取宿主注入；终端直接执行 bundle 时，从 dist/pipeline.mjs 反推仓根。
- * 这样 `pipeline update` 在宿主重新安装后可用刚解析出的候选根发布 managed runtime，
+ * 插件根优先取宿主注入；终端直接执行 bundle 时，从 dist/tenon.mjs 反推仓根。
+ * 这样 `tenon update` 在宿主重新安装后可用刚解析出的候选根发布 managed runtime，
  * 而不依赖旧 hook env 或可变 marketplace checkout。
  */
 export function resolvePipelineRoot(env: SetupEnv): string {
@@ -161,10 +161,10 @@ export interface SetupOpts extends PipelineHostFlags {
 export function printPlanSkeleton(deps: CliDeps, opts: SetupOpts, host: PipelineHost): void {
   deps.io.out(`[setup] ${hostFlag(host)} 全功能就绪引导 —— 计划骨架`)
   deps.io.out('  1. 宿主安装:只验证/部署所选宿主，不会同时改动其他宿主。')
-  deps.io.out('  2. 稳定入口:把已校验 release 原子发布到本机 runtime，再写 pipeline / pipeline-hook 启动器。')
+  deps.io.out('  2. 稳定入口:把已校验 release 原子发布到本机 runtime，再写 tenon / tenon-hook 启动器。')
   deps.io.out('  3. 内置技能:验证本插件随包的 default workflow skills；不拉第三方 marketplace。')
-  deps.io.out('  4. 运行时检查:docker/镜像/两 runner 凭证就绪清单（本流程末尾直接跑;--dry-run 只提示见 pipeline setup runtime）。')
-  deps.io.out('  5. 全功能红黄绿汇总:安装后运行 pipeline doctor --json 获取全机汇总。')
+  deps.io.out('  4. 运行时检查:docker/镜像/两 runner 凭证就绪清单（本流程末尾直接跑;--dry-run 只提示见 tenon setup runtime）。')
+  deps.io.out('  5. 全功能红黄绿汇总:安装后运行 tenon doctor --json 获取全机汇总。')
   if (opts.dryRun) deps.io.out('  （--dry-run:仅打印计划,不发布 runtime、不写任何文件）')
 }
 
@@ -193,7 +193,7 @@ export function configureAutoUpdate(deps: CliDeps, env: SetupEnv, host: Pipeline
 
 /** Codex intentionally keeps third-party hook execution behind one explicit local trust decision. */
 export function printCodexHookTrust(deps: CliDeps): void {
-  deps.io.out('[setup] Codex 已安装 pipeline hooks；为启用正常对话自动路由，请在 Codex 输入 /hooks，并信任 pipeline-lite。')
+  deps.io.out('[setup] Codex 已安装 Tenon hooks；为启用正常对话自动路由，请在 Codex 输入 /hooks，并信任 tenon。')
   deps.io.out('        这是 Codex 的一次性本机安全确认；未信任时 skills 仍可用，但 SessionStart/UserPromptSubmit hooks 不会执行。')
 }
 
@@ -294,7 +294,7 @@ export function migrateLegacyCodexHooks(deps: CliDeps, env: SetupEnv): number {
     deps.io.err(`ERROR: 无法迁移旧版 Codex hooks；为避免新旧 hooks 重复执行，未发布 runtime：${errMsg(error)}`)
     return 1
   }
-  deps.io.out(`[setup] 已迁移 ${migration.removed} 个旧版 Codex hook；保留其余用户 hooks，由 pipeline-lite 插件统一接管。`)
+  deps.io.out(`[setup] 已迁移 ${migration.removed} 个旧版 Codex hook；保留其余用户 hooks，由 tenon 插件统一接管。`)
   return 0
 }
 

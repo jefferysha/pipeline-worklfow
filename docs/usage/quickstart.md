@@ -2,7 +2,7 @@
 
 ## Goal
 
-Trigger Pipeline Lite from normal conversation, identify the new Change, and
+Trigger Tenon from normal conversation, identify the new Change, and
 inspect its real Workflow and evidence without accidentally reviving old work.
 
 ## Prerequisites
@@ -29,14 +29,14 @@ to simple, and otherwise creates a new Change with the selected Track/Workflow.
 ### 2. Identify the Change
 
 ```bash
-pipeline list --json
-pipeline status --json
+tenon list --json
+tenon status --json
 ```
 
 Use the returned Change name for subsequent commands:
 
 ```bash
-pipeline status <change-name> --json
+tenon status <change-name> --json
 ```
 
 ### 3. Inspect evidence
@@ -44,16 +44,16 @@ pipeline status <change-name> --json
 For a governed Workflow:
 
 ```bash
-pipeline document status <change-name>
-pipeline check <change-name>
+tenon document status <change-name>
+tenon check <change-name>
 ```
 
-`pipeline check` is a guard report. It does not advance the state.
+`tenon check` is a guard report. It does not advance the state.
 
 ### 4. Open the workbench
 
 ```bash
-pipeline dashboard --open
+tenon dashboard --open
 ```
 
 Progress and Todo use the effective steps of this Change. Default shows seven
@@ -71,13 +71,13 @@ Resume change <change-name> and continue its current phase.
 Or activate it for the current session:
 
 ```bash
-pipeline session activate <change-name>
+tenon session activate <change-name>
 ```
 
 Continuous delegated interaction can be recorded explicitly:
 
 ```bash
-pipeline session activate <change-name> --continuous
+tenon session activate <change-name> --continuous
 ```
 
 This does not waive Skills, documents, review receipts, guards, publication
@@ -93,8 +93,8 @@ authority, security, cost, or external-side-effect boundaries.
 ## Verification
 
 ```bash
-pipeline status <change-name> --json
-pipeline document status <change-name> --json
+tenon status <change-name> --json
+tenon document status <change-name> --json
 ```
 
 For simple, document status may correctly report that no default document
@@ -105,12 +105,12 @@ contract applies.
 ### An old Change appears
 
 Confirm whether the prompt explicitly named/resumed it. Do not repair state
-until you have run `pipeline list --json` and `pipeline status <name> --json`.
+until you have run `tenon list --json` and `tenon status <name> --json`.
 
 ### Nothing was created
 
 The request may be pure discussion, a slash command, or a system message. If it
-was implementation work, run `pipeline doctor`, confirm hook trust, and open a
+was implementation work, run `tenon doctor`, confirm hook trust, and open a
 new host session.
 
 ### The task is waiting

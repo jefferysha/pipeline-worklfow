@@ -81,7 +81,7 @@ describe('createLifecyclePorts', () => {
     await ports.createSandbox({
       runner: 'claude-code', worktreePath: '/wt',
       env: {
-        PIPELINE_AFK: '1', CLAUDE_CODE_OAUTH_TOKEN: 'tok-ok',
+        TENON_AFK: '1', CLAUDE_CODE_OAUTH_TOKEN: 'tok-ok',
         OPENAI_API_KEY: 'must-not-leak', CODEX_HOME: '/tmp/must-not-mount',
         ANTHROPIC_BASE_URL: 'http://host.docker.internal:9',
       },
@@ -100,7 +100,7 @@ describe('createLifecyclePorts', () => {
     const { exec, calls } = makeExec()
     const ports = createLifecyclePorts({ exec, hostRepoDir: '/repo', image: 'sandcastle:local' })
     await ports.createSandbox({
-      runner: 'codex', worktreePath: '/wt', env: { PIPELINE_AFK: '1', OPENAI_API_KEY: 'test-key' },
+      runner: 'codex', worktreePath: '/wt', env: { TENON_AFK: '1', OPENAI_API_KEY: 'test-key' },
     })
     const dockerRun = calls.find((call) => call[0] === 'docker' && call[1] === 'run')!.join(' ')
     expect(dockerRun).toContain('--cap-add SYS_ADMIN')
@@ -178,7 +178,7 @@ describe('createLifecyclePorts().runWork · 结算落盘完整日志到 host 侧
 
     await expect(
       ports.runWork(sandboxExec, 'y', new AbortController().signal),
-    ).rejects.toThrow(/pipeline afk-run failed/)
+    ).rejects.toThrow(/tenon afk-run failed/)
 
     const logContent = await readFile(logPath('y'), 'utf8')
     expect(logContent.length).toBeGreaterThan(200)
@@ -216,7 +216,7 @@ describe('createLifecyclePorts().runWork · 结算落盘完整日志到 host 侧
 })
 
 /**
- * H10 r1 复审阻断5（任务C1）：容器内 pipeline-afk-run.sh 校验失败时以
+ * H10 r1 复审阻断5（任务C1）：容器内 tenon-afk-run.sh 校验失败时以
  * container.ts::SKILL_BUNDLE_VERIFY_FAIL_EXIT_CODE 退出——`ports.ts::runWork` 必须把这个特定
  * exitCode 识别出来、抛与 host 侧预检同一个 `SkillBundleSnapshotMismatchError`（同一 `_tag`），
  * 而不是落进下方通用非零退出分支的裸 `Error`。真 docker 跑通"容器内校验真的拦住篡改内容、
@@ -240,7 +240,7 @@ describe('createLifecyclePorts().runWork · 容器内 skill bundle 校验失败�
     const ports = createLifecyclePorts({ exec, hostRepoDir, image: 'sandcastle:local' })
     const sandboxExec = async (): Promise<{ stdout: string; stderr: string; exitCode: number }> => ({
       stdout: '',
-      stderr: 'skill bundle 容器内校验失败：重算聚合 digest（aaa）与宿主注入的 PIPELINE_SKILL_BUNDLE_SHA256（bbb）不一致',
+      stderr: 'skill bundle 容器内校验失败：重算聚合 digest（aaa）与宿主注入的 TENON_SKILL_BUNDLE_SHA256（bbb）不一致',
       exitCode: SKILL_BUNDLE_VERIFY_FAIL_EXIT_CODE,
     })
 
@@ -288,7 +288,7 @@ describe('createLifecyclePorts().runWork · 容器内 skill bundle 校验失败�
       thrown = e
     }
     expect(thrown).not.toBeInstanceOf(SkillBundleSnapshotMismatchError)
-    expect((thrown as Error).message).toContain('pipeline afk-run failed')
+    expect((thrown as Error).message).toContain('tenon afk-run failed')
     // 回归对照：喂进同一个 classifyFailure，普通失败落 retry（不是 conflict/skill-bundle-snapshot-corrupt）。
     expect(classifyFailure(thrown).kind).toBe('retry')
   })
@@ -340,9 +340,9 @@ describe('runChangeInSandbox × createLifecyclePorts 全链：日志跨三类结
     await ports.runWork(sandboxExec, 'digest-case', new AbortController().signal, 'codex')
 
     expect(command).toContain(cliDigest)
-    expect(command).toContain('/opt/pipeline/packages/cli/dist/pipeline.mjs')
+    expect(command).toContain('/opt/pipeline/packages/cli/dist/tenon.mjs')
     expect(command).toContain('pipeline_cli_dist_sha256=')
-    expect(command).toContain('PIPELINE_RUNNER=codex')
+    expect(command).toContain('TENON_RUNNER=codex')
   })
 
   const durableLogPath = (name: string): string =>
@@ -435,7 +435,7 @@ describe('runChangeInSandbox × createLifecyclePorts 全链：日志跨三类结
         { hostRepoDir, name: 'fail', base: 'main', autoMerge: false },
         new AbortController().signal,
       ),
-    ).rejects.toThrow(/pipeline afk-run failed/)
+    ).rejects.toThrow(/tenon afk-run failed/)
 
     // 普通（非 conflict）失败：worktree 照清（下轮重建，不误留现场——同 lifecycle-preserve.test.ts
     // 既有断言）。
@@ -549,7 +549,7 @@ describe('createLifecyclePorts().createSandbox · skill bundle docker cp 私有�
   it('skillBundle 缺席（undefined）→ 不挂载，docker run argv 与本字段引入前完全一致（回归）', async () => {
     const { exec, calls } = makeExec()
     const ports = createLifecyclePorts({ exec, hostRepoDir, image: 'sandcastle:local' })
-    await ports.createSandbox({ env: { PIPELINE_AFK: '1' }, worktreePath: '/wt' })
+    await ports.createSandbox({ env: { TENON_AFK: '1' }, worktreePath: '/wt' })
     const dockerRun = calls.find((c) => c[0] === 'docker' && c[1] === 'run')
     expect(dockerRun).toBeDefined()
     expect(dockerRun!.join(' ')).not.toContain('/opt/pipeline-run/skill-bundle')
@@ -565,9 +565,9 @@ describe('createLifecyclePorts().createSandbox · skill bundle docker cp 私有�
     }
     const sandbox = await ports.createSandbox({
       env: {
-        PIPELINE_AFK: '1',
-        PIPELINE_SKILL_BUNDLE_DIR: '/opt/pipeline-run/skill-bundle',
-        PIPELINE_SKILL_BUNDLE_SHA256: digest,
+        TENON_AFK: '1',
+        TENON_SKILL_BUNDLE_DIR: '/opt/pipeline-run/skill-bundle',
+        TENON_SKILL_BUNDLE_SHA256: digest,
       },
       worktreePath: '/wt',
       skillBundle,

@@ -1,6 +1,6 @@
 import { dirname, join, resolve } from 'node:path'
-import { readAutomationJson } from '@pipeline-lite/automation'
-import { PREREQ_HINTS } from '@pipeline-lite/kernel'
+import { readAutomationJson } from '@tenon/automation'
+import { PREREQ_HINTS } from '@tenon/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
 import { nodeExecDocker, probeAfkReadiness, type AfkReadiness, type CredLight, type ExecDockerFn } from '../afkReadiness.js'
 import { REAL_RUNTIME_INSTALLER, type RuntimeInstaller } from '../runtime/installer.js'

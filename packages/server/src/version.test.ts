@@ -28,7 +28,7 @@ describe('resolvePayloadReleaseId', () => {
   test('recognizes only the immutable managed payload parent directory', () => {
     expect(resolvePayloadReleaseId(`/runtime/releases/sha256-${'a'.repeat(64)}/payload`))
       .toBe(`sha256-${'a'.repeat(64)}`)
-    expect(resolvePayloadReleaseId('/workspace/pipeline-lite')).toBeUndefined()
+    expect(resolvePayloadReleaseId('/workspace/tenon')).toBeUndefined()
     expect(resolvePayloadReleaseId('/runtime/releases/not-a-release/payload')).toBeUndefined()
   })
 })

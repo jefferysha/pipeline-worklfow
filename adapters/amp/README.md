@@ -136,5 +136,5 @@ adapters/amp/install.sh --global              # 改装 ~/.config/amp/plugins/（
 ## 人工确认（HITL）
 
 review marker 仅是 hook 投影。完成产物并选择 event 后，运行
-`pipeline review request <change> --event <event>`；人类明确确认后运行
-`pipeline review acknowledge <change>`。不得手动删除 `.pipeline-pending-review` 绕过 gate。
+`tenon review request <change> --event <event>`；人类明确确认后运行
+`tenon review acknowledge <change>`。不得手动删除 `.pipeline-pending-review` 绕过 gate。

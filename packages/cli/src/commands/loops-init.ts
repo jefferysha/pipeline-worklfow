@@ -4,7 +4,7 @@ import {
   ABSENT_REGISTRY_EPOCH, addDraftMark, appendLoopToYamlText, createLoopsYamlText, draftMarksPath,
   loadRegistry as kernelLoadRegistry, loopsYamlPath, PHASES,
   readRegistrySnapshot as kernelReadRegistrySnapshot, writeRegistryWithGovernance, type LoopRisk,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
 import { createProductionSkillContentLocator } from '../skillBundleAssembly.js'
 import { buildLoopStarterWiringReport, type LoopStarterWiringDeps, type LoopStarterWiringReport } from './loop-starter-wiring.js'
@@ -186,7 +186,7 @@ function printStarterInitReport(
 }
 
 /**
- * `pipeline loops init`：起草一个 status:paused 的草稿 loop（向导 or 非交互结构化通道）。
+ * `tenon loops init`：起草一个 status:paused 的草稿 loop（向导 or 非交互结构化通道）。
  * 写盘一律走 governance 锁 + 字节 epoch-CAS + atomic writer（env.writeGoverned）：缺文件 →
  * createLoopsYamlText（epoch=ABSENT 防并发首建）；已存在 → appendLoopToYamlText（初读 epoch CAS）。
  * 成功后 best-effort 登记草稿标记；输出登记结果 + 「去 dashboard 审阅批准」指引（--json 走信封）。

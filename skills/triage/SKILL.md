@@ -3,7 +3,7 @@ name: triage
 description: First-party issue classification and routing for an existing project.
 license: MIT
 metadata:
-  author: pipeline-lite
+  author: tenon
 ---
 
 # Triage

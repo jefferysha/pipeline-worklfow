@@ -186,17 +186,17 @@ describe('真实 e2e —— scaffold 三态冲突（真删/真补/真保留）',
     expect(await exists(join(h.cwd, 'openspec/specs/frontend/README.md'))).toBe(false)
   })
 
-  test('PIPELINE_SPEC_STRATEGY=append 信号（真读 process.env）→ 冲突下只补缺失', async () => {
-    const prev = process.env.PIPELINE_SPEC_STRATEGY
-    process.env.PIPELINE_SPEC_STRATEGY = 'append'
+  test('TENON_SPEC_STRATEGY=append 信号（真读 process.env）→ 冲突下只补缺失', async () => {
+    const prev = process.env.TENON_SPEC_STRATEGY
+    process.env.TENON_SPEC_STRATEGY = 'append'
     try {
       const r = await scaffold(h, 'scaffold', ['web'])
       expect(r.code).toBe(0)
       expect(await readFile(join(h.cwd, CONFLICT), 'utf8')).toBe('USER OWNED CONTENT')
       expect(await exists(join(h.cwd, 'openspec/specs/frontend/README.md'))).toBe(true)
     } finally {
-      if (prev === undefined) delete process.env.PIPELINE_SPEC_STRATEGY
-      else process.env.PIPELINE_SPEC_STRATEGY = prev
+      if (prev === undefined) delete process.env.TENON_SPEC_STRATEGY
+      else process.env.TENON_SPEC_STRATEGY = prev
     }
   })
 })

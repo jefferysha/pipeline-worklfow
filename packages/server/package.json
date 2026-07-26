@@ -1,15 +1,15 @@
 {
-  "name": "@pipeline-lite/server",
-  "version": "0.1.0",
+  "name": "@tenon/server",
+  "version": "1.0.0",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": { ".": "./dist/index.js" },
-  "bin": { "pipeline-dashboard": "dist/main.js" },
+  "bin": { "tenon-dashboard": "dist/main.js" },
   "engines": { "node": ">=22" },
   "dependencies": {
-    "@pipeline-lite/automation": "*",
-    "@pipeline-lite/kernel": "*",
-    "@pipeline-lite/tap": "*"
+    "@tenon/automation": "*",
+    "@tenon/kernel": "*",
+    "@tenon/tap": "*"
   }
 }

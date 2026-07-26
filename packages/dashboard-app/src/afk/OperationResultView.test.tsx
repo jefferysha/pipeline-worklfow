@@ -4,7 +4,7 @@ import { I18nProvider } from '../i18n'
 import type { OperationResponse } from '../api/client'
 import { OperationResultView } from './OperationResultView'
 
-function renderResult(result: unknown, command = ['pipeline', 'triage'], onOpenChange?: (name: string) => void): void {
+function renderResult(result: unknown, command = ['tenon', 'triage'], onOpenChange?: (name: string) => void): void {
   const response: OperationResponse = { ok: true, exit_code: 0, command, result, stdout: JSON.stringify(result), stderr: '' }
   render(<I18nProvider><OperationResultView response={response} onOpenChange={onOpenChange} /></I18nProvider>)
 }
@@ -34,7 +34,7 @@ describe('OperationResultView 结构化生产结果', () => {
         operations: [{ kind: 'ensure-managed-loop-section', target: 'LOOP.md', loop_id: 'ci-loop' }],
         blockers: [{ reason: 'runtime-remediation-required', next_step: 'repair ledger', drift: { dimension: 'run_log' } }],
       },
-    }, ['pipeline', 'loops', 'sync'])
+    }, ['tenon', 'loops', 'sync'])
     const card = screen.getByTestId('ops-result-sync')
     expect(card).toHaveTextContent('plan-7')
     expect(card).toHaveTextContent('ensure-managed-loop-section')
@@ -46,7 +46,7 @@ describe('OperationResultView 结构化生产结果', () => {
     renderResult({
       dry_run: true, selector: 'ci-loop', matched: 1,
       previews: [{ loop_id: 'ci-loop', status: 'active', admission: 'allowed', level: 'L2', runner: 'codex', settlement: 'paused', reserved_tokens: { tokens: 8000, basis: 'budget.tokens_per_run' }, ledger_health: 'ok', skill_bundle: { status: 'ready', bundle_id: 'backend', blocking_reason: null } }],
-    }, ['pipeline', 'loops', 'run'])
+    }, ['tenon', 'loops', 'run'])
     const card = screen.getByTestId('ops-result-run')
     expect(card).toHaveTextContent('ci-loop')
     expect(card).toHaveTextContent('规则 ci-loop')
@@ -64,14 +64,14 @@ describe('OperationResultView 结构化生产结果', () => {
     expect(card).not.toHaveTextContent('ledger')
     expect(card).not.toHaveTextContent('skill bundle')
     expect(screen.getByTestId('ops-result')).toHaveTextContent('操作成功')
-    expect(screen.getByTestId('ops-result-raw')).toHaveTextContent('pipeline loops run')
+    expect(screen.getByTestId('ops-result-raw')).toHaveTextContent('tenon loops run')
   })
 
   it('阻止原因在摘要中转成用户可理解的中文，原始枚举只留在诊断区', () => {
     renderResult({
       dry_run: true, selector: 'paused-loop', matched: 1,
       previews: [{ loop_id: 'paused-loop', admission: 'blocked:loop-inactive', level: 'L1', runner: 'codex', settlement: 'paused', reserved_tokens: { tokens: 2000 }, ledger_health: 'ok', skill_bundle: { status: 'ready', bundle_id: 'frontend', blocking_reason: null } }],
-    }, ['pipeline', 'loops', 'run'])
+    }, ['tenon', 'loops', 'run'])
 
     const card = screen.getByTestId('ops-result-run')
     expect(card).toHaveTextContent('被阻止 · 规则未启用')
@@ -85,7 +85,7 @@ describe('OperationResultView 结构化生产结果', () => {
       command: 'triage', pagesProcessed: 1, observationsProcessed: 1,
       workflowRuns: { created: 1, existing: 0, runs: [{ status: 'created', changeName: 'fix-ci', runId: 'run-1', workflowId: 'default', currentStep: 'open' }] },
       checkpoint: { commit: 'committed' },
-    }, ['pipeline', 'triage'], onOpenChange)
+    }, ['tenon', 'triage'], onOpenChange)
 
     fireEvent.click(screen.getByTestId('ops-open-change-fix-ci'))
     expect(onOpenChange).toHaveBeenCalledWith('fix-ci')
@@ -100,7 +100,7 @@ describe('OperationResultView 结构化生产结果', () => {
         targets: [{ change: 'release-api', expectedLoopId: 'ci-loop', expectedAutonomyLevel: 'L3' }],
         result: { status: 'completed', report: { ok: true, entries: [{ change: 'release-api', disposition: 'settled', result: 'merged' }] } },
       }],
-    }, ['pipeline', 'loops', 'run'], onOpenChange)
+    }, ['tenon', 'loops', 'run'], onOpenChange)
 
     fireEvent.click(screen.getByTestId('ops-open-change-release-api'))
     expect(onOpenChange).toHaveBeenCalledWith('release-api')

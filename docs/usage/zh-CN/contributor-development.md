@@ -1,6 +1,6 @@
 # 贡献者开发指南
 
-Pipeline Lite 是 npm workspace 项目，包含 Kernel、CLI、Server、Dashboard、hooks、skills、templates 和发布工具。修改前先读 `AGENTS.md` 与任务范围对应的 `.agent-rules`。
+Tenon 是 npm workspace 项目，包含 Kernel、CLI、Server、Dashboard、hooks、skills、templates 和发布工具。修改前先读 `AGENTS.md` 与任务范围对应的 `.agent-rules`。
 
 ## 目标
 

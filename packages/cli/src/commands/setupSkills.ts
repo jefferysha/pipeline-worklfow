@@ -1,6 +1,6 @@
 import { dirname, join, resolve } from 'node:path'
-import { readAutomationJson } from '@pipeline-lite/automation'
-import { PREREQ_HINTS } from '@pipeline-lite/kernel'
+import { readAutomationJson } from '@tenon/automation'
+import { PREREQ_HINTS } from '@tenon/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
 import { nodeExecDocker, probeAfkReadiness, type AfkReadiness, type CredLight, type ExecDockerFn } from '../afkReadiness.js'
 import { REAL_RUNTIME_INSTALLER, type RuntimeInstaller } from '../runtime/installer.js'
@@ -121,7 +121,7 @@ export function cmdSetupSkills(
     if (!loaded.ok) {
       deps.io.err(
         `ERROR: 技能 registry 未就绪（${loaded.error}）——无法生成安装计划，` +
-          '请修复 templates/skill-sources.yaml 后重试 pipeline setup skills。',
+          '请修复 templates/skill-sources.yaml 后重试 tenon setup skills。',
       )
       return 1
     }

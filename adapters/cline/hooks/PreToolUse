@@ -74,7 +74,7 @@ if [ -z "$_ROOT" ] || [ ! -d "$_ROOT/hooks" ]; then
 fi
 export CLAUDE_PLUGIN_ROOT="$_ROOT"
 
-CC_GATE="${PIPELINE_CC_GATE:-$_ROOT/hooks/gate.sh}"
+CC_GATE="${TENON_CC_GATE:-$_ROOT/hooks/gate.sh}"
 [ -f "$CC_GATE" ] || fail_open
 
 reason="$(printf '{"cwd":"%s","tool_name":"%s"}' "$CWD" "$TOOL" | bash "$CC_GATE" 2>&1 1>/dev/null)"; rc=$?

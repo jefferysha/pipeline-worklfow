@@ -3,7 +3,7 @@ name: openspec-propose
 description: First-party OpenSpec proposal and default-change artifact authoring.
 license: MIT
 metadata:
-  author: pipeline-lite
+  author: tenon
   version: "2.0.0"
 ---
 
@@ -12,7 +12,7 @@ metadata:
 ## Document language
 
 New Changes default to `zh-CN`. Before authoring a missing governed file, use
-`pipeline document scaffold <change> <kind>` so the shared presentation registry supplies the
+`tenon document scaffold <change> <kind>` so the shared presentation registry supplies the
 Change-pinned structure. Write reader-facing headings, requirements, scenarios, tasks, and
 explanations in that pinned locale (`zh-CN` by default; English when explicitly pinned to `en`).
 Keep file names, phase/event ids, document kinds, producers,
@@ -22,7 +22,7 @@ machine tokens.
 For a delta spec, always pass the real capability explicitly:
 
 ```bash
-pipeline document scaffold <change> delta-spec --capability <capability>
+tenon document scaffold <change> delta-spec --capability <capability>
 ```
 
 Never infer the capability from the Change name or a default scope.
@@ -40,7 +40,7 @@ packaged workflow skill; it never requires the separately distributed `openspec`
 - The selected `change`, `track`, and `preset` from `<pipeline-dispatch>` or the `pipeline` CLI.
 
 If the request cannot safely produce a kebab-case change name, ask the user. If several active
-changes exist and the user asked to resume without naming one, use `pipeline list --json` and ask
+changes exist and the user asked to resume without naming one, use `tenon list --json` and ask
 them to select; never guess based on modification time.
 
 ## Procedure
@@ -48,10 +48,10 @@ them to select; never guess based on modification time.
 1. Create the canonical change when it does not already exist:
 
    ```bash
-   pipeline init "<change>" --track "<pm|frontend|backend>" --preset "<full|tweak|hotfix>"
+   tenon init "<change>" --track "<pm|frontend|backend>" --preset "<full|tweak|hotfix>"
    ```
 
-   `pipeline init` creates the OpenSpec change directory, default document skeleton, document
+   `tenon init` creates the OpenSpec change directory, default document skeleton, document
    ledger, and canonical state atomically. Do not call `openspec new`, `openspec init`, or install
    a global dependency.
 
@@ -59,7 +59,7 @@ them to select; never guess based on modification time.
    before loading `openspec-propose`; this repeated command makes a direct recovery deterministic:
 
    ```bash
-   pipeline session activate "<change>"
+   tenon session activate "<change>"
    ```
 
    Never infer a target from a pre-existing `.pipeline-active` file or its modification time.
@@ -80,10 +80,10 @@ them to select; never guess based on modification time.
 
    ```bash
    CHANGE="<change>"
-   pipeline document record "$CHANGE" proposal "openspec/changes/$CHANGE/proposal.md" --producer openspec-propose
-   pipeline document record "$CHANGE" openspec-design "openspec/changes/$CHANGE/design.md" --producer openspec-propose
-   pipeline document record "$CHANGE" tasks "openspec/changes/$CHANGE/tasks.md" --producer openspec-propose
-   pipeline document status "$CHANGE"
+   tenon document record "$CHANGE" proposal "openspec/changes/$CHANGE/proposal.md" --producer openspec-propose
+   tenon document record "$CHANGE" openspec-design "openspec/changes/$CHANGE/design.md" --producer openspec-propose
+   tenon document record "$CHANGE" tasks "openspec/changes/$CHANGE/tasks.md" --producer openspec-propose
+   tenon document status "$CHANGE"
    ```
 
    A record can succeed only after this Skill has a completion-state host evidence record.  On a

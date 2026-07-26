@@ -2,7 +2,7 @@ import {
   canonicalizeTriageResult,
   type ProviderTriageDecision,
   type TriageResult,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import { describe, expect, it } from 'vitest'
 import {
   createWorkflowRunMaterializer,

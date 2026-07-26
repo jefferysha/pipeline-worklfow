@@ -13,7 +13,7 @@ import {
   type BudgetReservationRecord,
   type ReservationActivatedRecord,
   type RunRecord,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import { applyLoopsUpdate, buildLoopsSnapshot } from './loops.js'
 
 /**
@@ -23,8 +23,8 @@ import { applyLoopsUpdate, buildLoopsSnapshot } from './loops.js'
  * 真 IO 无法确定性注入）。两处 mock 均 passthrough，不动既有 15 测（既有测无 status patch、不断言这两个 spy）。
  * 打桩口径同 packages/cli/src/commands/afk.test.ts 的 importOriginal 先例。
  */
-vi.mock('@pipeline-lite/kernel', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@pipeline-lite/kernel')>()
+vi.mock('@tenon/kernel', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@tenon/kernel')>()
   return { ...actual, clearDraftMark: vi.fn(actual.clearDraftMark) }
 })
 vi.mock('node:fs/promises', async (importOriginal) => {

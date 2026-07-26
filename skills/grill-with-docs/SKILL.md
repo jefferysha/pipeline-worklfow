@@ -3,7 +3,7 @@ name: grill-with-docs
 description: First-party evidence interview that exposes undocumented assumptions.
 license: MIT
 metadata:
-  author: pipeline-lite
+  author: tenon
 ---
 
 # Grill With Docs

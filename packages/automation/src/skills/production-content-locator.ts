@@ -1,7 +1,7 @@
 /** Runner-aware production skill roots. Codex never enumerates or reads any ~/.claude path. */
 import { readdirSync, readFileSync } from 'node:fs'
 import { isAbsolute, join } from 'node:path'
-import { assertLoopRunner, type LoopRunner } from '@pipeline-lite/kernel'
+import { assertLoopRunner, type LoopRunner } from '@tenon/kernel'
 import {
   createFsSkillContentLocator,
   SkillContentNotFoundError,

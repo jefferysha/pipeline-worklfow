@@ -7,7 +7,7 @@
 # Bun 运行时加载，`export default function(amp){ amp.on(event, handler) }`。
 #
 # 投影产物：
-#   .amp/plugins/pipeline.js   三能力插件（__PIPELINE_ROOT__ 烘焙为本仓库绝对路径，
+#   .amp/plugins/pipeline.js   三能力插件（__TENON_ROOT__ 烘焙为本仓库绝对路径，
 #                              插件内部 spawnSync bash 调 hooks/gate.sh · session-start.sh ·
 #                              skill-tracker.sh，与其余适配器同一"薄包 baseline"原则，
 #                              只是载体是 JS 插件而非 bash wrapper）。
@@ -17,7 +17,7 @@
 set -uo pipefail
 
 ADAPTER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
-PIPELINE_ROOT="$(cd "$ADAPTER_DIR/../.." && pwd)"
+TENON_ROOT="$(cd "$ADAPTER_DIR/../.." && pwd)"
 SIGNATURE="pipeline-adapter:amp"
 
 G='\033[32m'; Y='\033[33m'; R='\033[31m'; B='\033[1m'; Z='\033[0m'
@@ -50,11 +50,11 @@ install_plugin() {
   local dst="$PLUGINS_DIR/pipeline.js"
   if [ -f "$dst" ] && ! grep -qF "$SIGNATURE" "$dst" 2>/dev/null; then
     warn "$dst 已存在（非本适配器管理，疑似你既有插件）——不覆盖，写建议文件 ${dst}.pipeline-adapter 供手动合并。"
-    sed "s#__PIPELINE_ROOT__#$PIPELINE_ROOT#g" "$ADAPTER_DIR/plugins/pipeline.js" > "$dst.pipeline-adapter"
+    sed "s#__TENON_ROOT__#$TENON_ROOT#g" "$ADAPTER_DIR/plugins/pipeline.js" > "$dst.pipeline-adapter"
     return 0
   fi
-  sed "s#__PIPELINE_ROOT__#$PIPELINE_ROOT#g" "$ADAPTER_DIR/plugins/pipeline.js" > "$dst"
-  info "插件 → ${dst}（绝对路径已绑定 ${PIPELINE_ROOT}）"
+  sed "s#__TENON_ROOT__#$TENON_ROOT#g" "$ADAPTER_DIR/plugins/pipeline.js" > "$dst"
+  info "插件 → ${dst}（绝对路径已绑定 ${TENON_ROOT}）"
 }
 
 note "${B}Amp pipeline 适配器安装${Z}  target=${TARGET}  plugins-dir=${PLUGINS_DIR}"

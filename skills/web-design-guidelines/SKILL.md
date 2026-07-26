@@ -3,7 +3,7 @@ name: web-design-guidelines
 description: First-party web UI quality and accessibility checklist.
 license: MIT
 metadata:
-  author: pipeline-lite
+  author: tenon
 ---
 
 # Web Design Guidelines

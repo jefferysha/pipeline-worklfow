@@ -15,7 +15,7 @@
 #      零副作用；缺失/损坏 fail-open 到启用；gate/interactive-skill-gate 强制常开忽略配置
 #  12. v6 T5 / 批2 P2-T2：session-start.sh AFK 首跑 + 技能就绪提示——.pipeline/automation.json 存在或
 #      活跃 change 命中 automation 字段（非 off）时追加静态提示行；archived 排除；阶段×hook 开关优先；
-#      纯静态提示（不做真探测）；批2 A1 已扩展 doctor，故提示回改指向 `pipeline doctor`
+#      纯静态提示（不做真探测）；批2 A1 已扩展 doctor，故提示回改指向 `tenon doctor`
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -142,8 +142,8 @@ done
 for command in \
   'rg -n pipeline .' \
   'git diff --check' \
-  'pipeline status demo' \
-  'pipeline document status demo'; do
+  'tenon status demo' \
+  'tenon document status demo'; do
   run_gate "{\"cwd\":\"$proj\",\"tool_name\":\"command_execution\",\"command\":\"$command\"}"
   assert_exit "gate: interaction marker 放行只读命令（${command}）" 0 "$RC"
 done
@@ -153,7 +153,7 @@ done
 for command in \
   'rg -n pipeline . > report.txt' \
   'rg -n pipeline .; touch changed' \
-  'pipeline transition demo build-complete' \
+  'tenon transition demo build-complete' \
   'unknown-inspector --dry-run'; do
   run_gate "{\"cwd\":\"$proj\",\"tool_name\":\"command_execution\",\"command\":\"$command\"}"
   assert_exit "gate: interaction marker 阻断非只读/未知命令（${command}）" 2 "$RC"
@@ -215,17 +215,17 @@ run_gate "{\"cwd\":\"$proj\",\"tool_name\":\"Write\"}"
 assert_exit "gate: interaction marker 1801s → 陈旧 exit 0" 0 "$RC"
 rm -f "$proj/.pipeline-pending-interaction"
 
-# ─────────── 1b. PIPELINE_AFK=1 逃生门（BACKLOG #7b，老内核沙箱放行语义） ───────────
+# ─────────── 1b. TENON_AFK=1 逃生门（BACKLOG #7b，老内核沙箱放行语义） ───────────
 proj="$TMP/gate-afk"
 mkdir -p "$proj"
 touch "$proj/.pipeline-pending-confirm"
-printf '%s' "{\"cwd\":\"$proj\",\"tool_name\":\"Write\"}" | PIPELINE_AFK=1 bash "$GATE" >/dev/null 2>&1
-assert_exit "gate: PIPELINE_AFK=1 + 新鲜 marker → 放行 exit 0" 0 "$?"
+printf '%s' "{\"cwd\":\"$proj\",\"tool_name\":\"Write\"}" | TENON_AFK=1 bash "$GATE" >/dev/null 2>&1
+assert_exit "gate: TENON_AFK=1 + 新鲜 marker → 放行 exit 0" 0 "$?"
 [ -f "$proj/.pipeline-pending-confirm" ] \
   && ok "gate: AFK 放行不清 marker（人回来门还在）" \
   || bad "gate: AFK 放行不清 marker（人回来门还在）" "marker 被误删"
-printf '%s' "{\"cwd\":\"$proj\",\"tool_name\":\"Write\"}" | PIPELINE_AFK=true bash "$GATE" >/dev/null 2>&1
-assert_exit "gate: PIPELINE_AFK=true（非 \"1\"）不放行 → exit 2" 2 "$?"
+printf '%s' "{\"cwd\":\"$proj\",\"tool_name\":\"Write\"}" | TENON_AFK=true bash "$GATE" >/dev/null 2>&1
+assert_exit "gate: TENON_AFK=true（非 \"1\"）不放行 → exit 2" 2 "$?"
 
 # ─────────────── 1c. statusline.sh（BACKLOG #10，热路径纯 bash） ───────────────
 SL="$ROOT/hooks/statusline.sh"
@@ -486,7 +486,7 @@ if command -v node >/dev/null 2>&1; then
           if (h.type !== "command" || !h.command) process.exit(1);
   ' "$ROOT/hooks/hooks.json" 2>/dev/null
   assert_exit "hooks.json 结构对齐老仓（hooks.<Event>[].hooks[].command）" 0 "$?"
-  assert_contains "hooks.json: 只调用稳定 pipeline-hook ABI" "$(cat "$ROOT/hooks/hooks.json")" 'pipeline-hook'
+  assert_contains "hooks.json: 只调用稳定 tenon-hook ABI" "$(cat "$ROOT/hooks/hooks.json")" 'tenon-hook'
   assert_not_contains "hooks.json: 不直连可变 PLUGIN_ROOT payload" "$(cat "$ROOT/hooks/hooks.json")" '${PLUGIN_ROOT'
 else
   printf 'skip - node 不可用，跳过 JSON 语法校验\n'
@@ -497,21 +497,37 @@ out="$(printf '{"cwd":"%s"}' "$ROOT" | bash "$SS" 2>"$TMP/ss.err")"
 rc=$?
 assert_exit "session-start: 正常 → exit 0" 0 "$rc"
 [ -n "$out" ] && ok "session-start: 输出简短引导" || bad "session-start: 输出简短引导" "stdout 为空"
-assert_contains "session-start: 引导提到 7 相位/pipeline" "$out" "pipeline"
+assert_contains "session-start: 引导提到 7 相位/pipeline" "$out" "Tenon"
 if command -v node >/dev/null 2>&1; then
   printf '%s' "$out" | node -e '
     const text=require("fs").readFileSync(0,"utf8");
     const parsed=JSON.parse(text);
     const result=parsed.hookSpecificOutput;
-    if (!result || result.hookEventName !== "SessionStart" || typeof result.additionalContext !== "string" || !result.additionalContext.includes("pipeline")) process.exit(1);
+    if (!result || result.hookEventName !== "SessionStart" || typeof result.additionalContext !== "string" || !result.additionalContext.includes("Tenon")) process.exit(1);
   ' 2>/dev/null
   assert_exit "session-start: 输出为 Codex SessionStart JSON envelope" 0 "$?"
 fi
-plain_out="$(printf '{"cwd":"%s"}' "$ROOT" | PIPELINE_SESSION_START_FORMAT=plain bash "$SS" 2>/dev/null)"
-assert_contains "session-start: adapter plain 模式保留上下文正文" "$plain_out" "pipeline-lite"
+plain_out="$(printf '{"cwd":"%s"}' "$ROOT" | TENON_SESSION_START_FORMAT=plain bash "$SS" 2>/dev/null)"
+assert_contains "session-start: adapter plain 模式保留上下文正文" "$plain_out" "tenon"
 assert_not_contains "session-start: adapter plain 模式不嵌套 Codex JSON" "$plain_out" "hookSpecificOutput"
 err="$(cat "$TMP/ss.err")"
 assert_empty "session-start: 真实清单绿 → 无警告" "$err"
+
+# 旧渠道迁移只能在新 Tenon release 已被真实 SessionStart 加载后清理旧注册。
+SS_PROOF_STATE="$TMP/session-proof-state"
+SS_PROOF_RELEASE="$TMP/session-proof-release"
+mkdir -p "$SS_PROOF_RELEASE"
+printf '{"cwd":"%s"}' "$ROOT" |
+  TENON_RUNTIME_STATE_ROOT="$SS_PROOF_STATE" \
+  TENON_ACTIVE_RELEASE_ROOT="$SS_PROOF_RELEASE" \
+  bash "$SS" >/dev/null 2>&1
+SS_PROOF="$SS_PROOF_STATE/migration/tenon-session-loaded"
+[ -f "$SS_PROOF" ] \
+  && ok "session-start: 写入新 Tenon release 加载证明" \
+  || bad "session-start: 写入新 Tenon release 加载证明" "proof 不存在"
+assert_contains "session-start: 加载证明有 schema 版本" "$(cat "$SS_PROOF" 2>/dev/null || true)" "version=1"
+assert_contains "session-start: 加载证明绑定 release root" "$(cat "$SS_PROOF" 2>/dev/null || true)" "release_root=$SS_PROOF_RELEASE"
+assert_contains "session-start: 加载证明带时间戳" "$(cat "$SS_PROOF" 2>/dev/null || true)" "loaded_at_epoch="
 
 # SessionStart 只能列恢复候选；它没有用户 prompt，绝不能把 repo 级 `.pipeline-active`
 # 与任务内容自动注入一个新 Codex 会话。
@@ -554,7 +570,7 @@ assert_contains "三注入: 宪法含 7 相位链" "$out" "open → explore → 
 assert_contains "三注入: 宪法含三门语义" "$out" "三门"
 assert_contains "三注入: 宪法含 HITL（AskUserQuestion）" "$out" "AskUserQuestion"
 assert_contains "三注入: 宪法含 breadcrumb 约定" "$out" "breadcrumb"
-assert_contains "三注入: 宪法引用新 CLI（pipeline transition）" "$out" "pipeline transition"
+assert_contains "三注入: 宪法引用新 CLI（tenon transition）" "$out" "tenon transition"
 
 # 8b. pipeline 上下文注入：有活跃 change → 输出含 change 名 + 相位；archived 不列；新鲜门 marker 列出
 proj="$TMP/ss-ctx"; mkdir -p "$proj/openspec/changes/demo-ss" "$proj/openspec/changes/done-ss"
@@ -570,7 +586,7 @@ assert_not_contains "三注入: archived change 不列出" "$out" "done-ss"
 assert_contains "三注入: 新鲜门 marker 列出（review）" "$out" "等:review"
 rm -f "$proj/.pipeline-pending-review"
 
-# 8b'. Git 项目子目录定位到项目根；非 Git 的嵌套目录必须显式 PIPELINE_PROJECT_ROOT，
+# 8b'. Git 项目子目录定位到项目根；非 Git 的嵌套目录必须显式 TENON_PROJECT_ROOT，
 # 不能借共同父目录的 OpenSpec。
 mkdir -p "$proj/.git" "$proj/sub/deep"
 out="$(printf '{"cwd":"%s/sub/deep"}' "$proj" | bash "$SS" 2>/dev/null)"
@@ -594,11 +610,11 @@ out="$(printf '{"cwd":"%s/proj"}' "$SB2" | CLAUDE_PLUGIN_ROOT="$SB2" bash "$SB2/
 rc=$?
 chmod 644 "$SB2/proj/openspec/changes/broken/.pipeline.yaml" 2>/dev/null || true
 assert_exit "三注入: 缺模板+烂 yaml → 全 fail-open exit 0" 0 "$rc"
-assert_contains "三注入: fail-open 时基础引导仍输出" "$out" "pipeline"
+assert_contains "三注入: fail-open 时基础引导仍输出" "$out" "Tenon"
 
 # ═══════════════ 9. router.sh（T-R5：动态 registry + 项目级 data-only cache） ═══════════════
 # 真实 e2e：真跑 router.sh 喂真 stdin JSON + 真 manifest/effective registry 派生
-# PIPELINE_ROUTER_V5；覆盖动态排序、手选候选、profile、失效、项目隔离与不执行项目 cache。
+# TENON_ROUTER_V5；覆盖动态排序、手选候选、profile、失效、项目隔离与不执行项目 cache。
 R="$ROOT/hooks/router.sh"
 RGEN="$ROOT/hooks/router-gen.mjs"
 [ -f "$R" ]    && ok "router: hooks/router.sh 存在"          || bad "router: hooks/router.sh 存在" "缺文件"
@@ -609,7 +625,7 @@ RGEN="$ROOT/hooks/router-gen.mjs"
 RCACHE="$TMP/router-cache.v5.data"
 run_router() { # $1=stdin-json [$2=cache-override] → 设 ROUT / RRC
   local cache="${2:-$RCACHE}"
-  ROUT="$(printf '%s' "$1" | PIPELINE_ROUTER_CACHE="$cache" CLAUDE_PLUGIN_ROOT="$ROOT" bash "$R" 2>/dev/null)"
+  ROUT="$(printf '%s' "$1" | TENON_ROUTER_CACHE="$cache" CLAUDE_PLUGIN_ROOT="$ROOT" bash "$R" 2>/dev/null)"
   RRC=$?
 }
 
@@ -628,7 +644,7 @@ n="$(printf '%s' "$below_exec" | grep -c 'jq' || true)"
 
 # ── 9b. 跳过规则：/命令 / 讨论 / 自身回显跳过；快速修复进入 simple 轻量轨 ──
 rproj="$TMP/router-skip"; mkdir -p "$rproj/openspec/changes"
-run_router "{\"prompt\":\"/pipeline status\",\"cwd\":\"$rproj\"}"
+run_router "{\"prompt\":\"/tenon status\",\"cwd\":\"$rproj\"}"
 assert_exit "router: /命令 → exit 0" 0 "$RRC"; assert_empty "router: /命令 不注入" "$ROUT"
 run_router "{\"prompt\":\"快速修复一下这个 React 组件的样式\",\"cwd\":\"$rproj\"}"
 assert_contains "router: 快速修复命中 simple Track" "$ROUT" "track: simple"
@@ -640,14 +656,14 @@ run_router "{\"prompt\":\"<workflow-state>\nchange=x\n</workflow-state>\",\"cwd\
 assert_empty "router: 自身回显 <workflow-state> 不再触发" "$ROUT"
 run_router "{\"prompt\":\"\",\"cwd\":\"$rproj\"}"
 assert_exit "router: 空 prompt → fail-safe exit 0" 0 "$RRC"; assert_empty "router: 空 prompt 无输出" "$ROUT"
-( cd "$rproj" && printf 'not json at all' | PIPELINE_ROUTER_CACHE="$RCACHE" CLAUDE_PLUGIN_ROOT="$ROOT" bash "$R" >/dev/null 2>&1 )
+( cd "$rproj" && printf 'not json at all' | TENON_ROUTER_CACHE="$RCACHE" CLAUDE_PLUGIN_ROOT="$ROOT" bash "$R" >/dev/null 2>&1 )
 assert_exit "router: 非 JSON stdin → fail-open exit 0" 0 "$?"
 
 # ── 9c. fail-safe：畸形 cache + manifest/generator 都不可用 → 不消费 cache、非阻断 exit 0 ──
 EMPTY_CACHE="$TMP/router-empty.v5.data"
-printf 'PIPELINE_ROUTER_V5\n# malformed\n' > "$EMPTY_CACHE"
+printf 'TENON_ROUTER_V5\n# malformed\n' > "$EMPTY_CACHE"
 BROKEN_PLUGIN="$TMP/router-broken-plugin"; mkdir -p "$BROKEN_PLUGIN/templates"
-ROUT="$(printf '%s' "{\"prompt\":\"帮我写个 React 组件响应式页面 UI\",\"cwd\":\"$rproj\"}" | PIPELINE_ROUTER_CACHE="$EMPTY_CACHE" CLAUDE_PLUGIN_ROOT="$BROKEN_PLUGIN" bash "$R" 2>/dev/null)"
+ROUT="$(printf '%s' "{\"prompt\":\"帮我写个 React 组件响应式页面 UI\",\"cwd\":\"$rproj\"}" | TENON_ROUTER_CACHE="$EMPTY_CACHE" CLAUDE_PLUGIN_ROOT="$BROKEN_PLUGIN" bash "$R" 2>/dev/null)"
 RRC=$?
 assert_exit "router: 畸形 cache + 生成不可用 → fail-safe exit 0（非阻断）" 0 "$RRC"
 assert_empty "router: 畸形 cache + 生成不可用 → 不路由" "$ROUT"
@@ -664,7 +680,7 @@ if command -v node >/dev/null 2>&1; then
   run_router "{\"prompt\":\"用户已明确授权后续自主执行；请实现一个 React 响应式页面\",\"cwd\":\"$rproj\"}"
   assert_contains "router: 常用措辞后续自主执行同样透传持续授权" "$ROUT" "continuous_execution: true"
   [ -f "$RCACHE" ] && ok "router: 首轮无缓存 → 派生缓存已生成" || bad "router: 首轮无缓存 → 派生缓存已生成" "缓存未生成"
-  assert_contains "router: 缓存 schema 为 PIPELINE_ROUTER_V5" "$(cat "$RCACHE" 2>/dev/null)" "PIPELINE_ROUTER_V5"
+  assert_contains "router: 缓存 schema 为 TENON_ROUTER_V5" "$(cat "$RCACHE" 2>/dev/null)" "TENON_ROUTER_V5"
   assert_not_contains "router: data cache 不含可 source 的 FE_PATTERN 赋值" "$(cat "$RCACHE" 2>/dev/null)" "FE_PATTERN="
   assert_not_contains "router: 自由字符串 hex 编码，缓存不裸露 manifest token" "$(cat "$RCACHE" 2>/dev/null)" "响应式"
   # 插件 release 的 builtin/skill/breadcrumb contract 必须按内容失效，不能依赖 mtime。
@@ -681,10 +697,10 @@ if command -v node >/dev/null 2>&1; then
     || bad "router: 重生成写回当前 release contract" "cache 仍保留旧 contract"
   # 稳定 bootstrap 会将 active payload 作为 PLUGIN_ROOT 注入；在 payload 级验证该契约，
   # 同时避免测试直接把 host manifest 绑回可变 marketplace checkout。
-  ROUT="$(printf '%s' "{\"prompt\":\"帮我实现一个 React 组件，做个响应式页面 UI\",\"cwd\":\"$rproj\"}" | PIPELINE_ROUTER_CACHE="$RCACHE" PLUGIN_ROOT="$ROOT" CLAUDE_PLUGIN_ROOT='' bash -c 'bash "${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-}}/hooks/router.sh"' 2>/dev/null)"
+  ROUT="$(printf '%s' "{\"prompt\":\"帮我实现一个 React 组件，做个响应式页面 UI\",\"cwd\":\"$rproj\"}" | TENON_ROUTER_CACHE="$RCACHE" PLUGIN_ROOT="$ROOT" CLAUDE_PLUGIN_ROOT='' bash -c 'bash "${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-}}/hooks/router.sh"' 2>/dev/null)"
   RRC=$?
   assert_exit "router: Codex PLUGIN_ROOT-only hook → exit 0" 0 "$RRC"
-  assert_contains "router: Codex PLUGIN_ROOT-only hook → default dispatch" "$ROUT" "<pipeline-dispatch>"
+  assert_contains "router: Codex PLUGIN_ROOT-only hook → default dispatch" "$ROUT" "<tenon-dispatch>"
   assert_contains "router: Codex PLUGIN_ROOT-only hook → frontend track" "$ROUT" "track=frontend"
   # BE / PM 特征 prompt
   run_router "{\"prompt\":\"设计一个后端 API 接口，接 Postgres 数据库，写 service 层\",\"cwd\":\"$rproj\"}"
@@ -744,7 +760,7 @@ if command -v node >/dev/null 2>&1; then
   mkdir -p "$foreign_root/openspec/changes/foreign-change" "$isolated_child"
   printf 'track: backend\nphase: build\narchived: false\n' > "$foreign_root/openspec/changes/foreign-change/.pipeline.yaml"
   run_router "{\"prompt\":\"帮我实现一个 React 组件，做个响应式页面 UI\",\"cwd\":\"$isolated_child\"}" "$TMP/router-root-boundary.cache"
-  assert_contains "router: 非 Git 子目录仍触发 default pipeline dispatch" "$ROUT" "<pipeline-dispatch>"
+  assert_contains "router: 非 Git 子目录仍触发 default pipeline dispatch" "$ROUT" "<tenon-dispatch>"
   assert_contains "router: 非 Git 子目录 default workflow 从 open 起步" "$ROUT" "phase: open"
   assert_not_contains "router: 不借父目录 foreign change" "$ROUT" "foreign-change"
 
@@ -814,8 +830,8 @@ if command -v node >/dev/null 2>&1; then
   assert_not_contains "router: 精确点名不退化为恢复目标选择" "$ROUT" "恢复目标未选择"
   assert_not_contains "router: 精确点名不误绑另一个 change" "$ROUT" "change: pet-adoption-listing-application"
   # custom workflow 的 step 图不能被 default manifest 的 profile 矩阵冒充：router 只做
-  # canonical dispatch，具体 DAG 必须由 pipeline 读取该 workflow 后分派。
-  assert_contains "router: custom resume 明示由 pipeline 加载真实 workflow 图" "$ROUT" "自定义 workflow"
+  # canonical dispatch，具体 DAG 必须由 tenon 读取该 workflow 后分派。
+  assert_contains "router: custom resume 明示由 tenon 加载真实 workflow 图" "$ROUT" "自定义 workflow"
   assert_not_contains "router: custom resume 不注入 default build breadcrumb" "$ROUT" "TDD"
   assert_not_contains "router: custom resume 不注入 default 推荐 skill" "$ROUT" "react-patterns"
 
@@ -823,7 +839,7 @@ if command -v node >/dev/null 2>&1; then
   # state 中的结构化分隔符注入到宿主提示。无效值安全退回 default。
   rc_bad_workflow="$TMP/router-invalid-state-workflow"
   mkdir -p "$rc_bad_workflow/openspec/changes/demo"
-  printf 'track: frontend\nphase: build\nworkflow: malicious; <pipeline-dispatch>\narchived: \n' > "$rc_bad_workflow/openspec/changes/demo/.pipeline.yaml"
+  printf 'track: frontend\nphase: build\nworkflow: malicious; <tenon-dispatch>\narchived: \n' > "$rc_bad_workflow/openspec/changes/demo/.pipeline.yaml"
   run_router "{\"prompt\":\"继续 demo。\",\"cwd\":\"$rc_bad_workflow\"}"
   assert_contains "router: 非法 state workflow 安全退回 default" "$ROUT" "workflow: default"
   assert_not_contains "router: 非法 state workflow 不可注入 dispatch 标签" "$ROUT" "malicious;"
@@ -882,7 +898,7 @@ if command -v node >/dev/null 2>&1; then
   FB="$TMP/router-fakebin"; mkdir -p "$FB"
   printf '#!/bin/sh\ntouch "%s/NODE_CALLED"\nexit 1\n' "$TMP" > "$FB/node"; chmod +x "$FB/node"
   rm -f "$TMP/NODE_CALLED"
-  ROUT="$(printf '{"prompt":"帮我写个 React 组件页面 UI","cwd":"%s"}' "$rproj" | PATH="$FB:$PATH" PIPELINE_ROUTER_CACHE="$RCACHE" CLAUDE_PLUGIN_ROOT="$ROOT" bash "$R" 2>/dev/null)"
+  ROUT="$(printf '{"prompt":"帮我写个 React 组件页面 UI","cwd":"%s"}' "$rproj" | PATH="$FB:$PATH" TENON_ROUTER_CACHE="$RCACHE" CLAUDE_PLUGIN_ROOT="$ROOT" bash "$R" 2>/dev/null)"
   [ ! -f "$TMP/NODE_CALLED" ] && ok "router 红线: 命中缓存时零 node spawn（假 node sentinel 未落）" || bad "router 红线: 命中缓存时零 node spawn（假 node sentinel 未落）" "cache-hit 竟 spawn 了 node"
   assert_contains "router: 命中缓存（无 node）仍纯 bash 正确评分 frontend" "$ROUT" "track=frontend"
 
@@ -930,7 +946,7 @@ if command -v node >/dev/null 2>&1; then
   STALE_FB="$TMP/router-stale-fakebin"; mkdir -p "$STALE_FB"
   printf '#!/bin/sh\ntouch "%s/STALE_NODE_CALLED"\nexit 1\n' "$TMP" > "$STALE_FB/node"; chmod +x "$STALE_FB/node"
   rm -f "$TMP/STALE_NODE_CALLED"
-  ROUT="$(printf '{"prompt":"stale-route-token","cwd":"%s"}' "$staleproj" | PATH="$STALE_FB:$PATH" PIPELINE_ROUTER_CACHE="$stalecache" CLAUDE_PLUGIN_ROOT="$ROOT" bash "$R" 2>/dev/null)"
+  ROUT="$(printf '{"prompt":"stale-route-token","cwd":"%s"}' "$staleproj" | PATH="$STALE_FB:$PATH" TENON_ROUTER_CACHE="$stalecache" CLAUDE_PLUGIN_ROOT="$ROOT" bash "$R" 2>/dev/null)"
   [ -f "$TMP/STALE_NODE_CALLED" ] && ok "router: tracks 更新使 cache stale，真尝试冷生成" || bad "router: tracks 更新使 cache stale，真尝试冷生成" "node sentinel 未调用"
   assert_empty "router: stale 生成失败本轮绝不消费旧 cache" "$ROUT"
   [ -f "$stalecache" ] && ok "router: 失败后旧 cache 可留盘诊断" || bad "router: 失败后旧 cache 可留盘诊断" "旧 cache 被破坏性删除"
@@ -951,10 +967,10 @@ if command -v node >/dev/null 2>&1; then
   aproj="$TMP/router-project-a"; bproj="$TMP/router-project-b"
   write_router_track "$aproj" security-lane '(security-route-token)' 970 backend true
   mkdir -p "$bproj/openspec/changes" "$TMP/router-home"
-  ROUT="$(printf '{"prompt":"security-route-token","cwd":"%s"}' "$aproj" | (unset PIPELINE_ROUTER_CACHE; HOME="$TMP/router-home" CLAUDE_PLUGIN_ROOT="$ROOT" bash "$R") 2>/dev/null)"
+  ROUT="$(printf '{"prompt":"security-route-token","cwd":"%s"}' "$aproj" | (unset TENON_ROUTER_CACHE; HOME="$TMP/router-home" CLAUDE_PLUGIN_ROOT="$ROOT" bash "$R") 2>/dev/null)"
   assert_contains "router: 项目 A custom route 可命中" "$ROUT" "track=security-lane"
   [ -f "$aproj/.pipeline/cache/router.v5.data" ] && ok "router: 默认 cache 落项目 A 内" || bad "router: 默认 cache 落项目 A 内" "项目 cache 缺失"
-  ROUT="$(printf '{"prompt":"security-route-token","cwd":"%s"}' "$bproj" | (unset PIPELINE_ROUTER_CACHE; HOME="$TMP/router-home" CLAUDE_PLUGIN_ROOT="$ROOT" bash "$R") 2>/dev/null)"
+  ROUT="$(printf '{"prompt":"security-route-token","cwd":"%s"}' "$bproj" | (unset TENON_ROUTER_CACHE; HOME="$TMP/router-home" CLAUDE_PLUGIN_ROOT="$ROOT" bash "$R") 2>/dev/null)"
   assert_empty "router: 项目 B 从未消费项目 A custom cache" "$ROUT"
   [ -f "$bproj/.pipeline/cache/router.v5.data" ] && ok "router: 项目 B 有独立 cache" || bad "router: 项目 B 有独立 cache" "B cache 缺失"
 
@@ -977,7 +993,7 @@ if command -v node >/dev/null 2>&1; then
   # 直接篡改项目 cache 放 command substitution：只能成为畸形数据，不得执行。
   injectproj="$TMP/router-cache-injection"; injectcache="$TMP/router-injection.v5.data"
   mkdir -p "$injectproj/openspec/changes"
-  printf 'PIPELINE_ROUTER_V5\nM|00|%064d|0123456789abcdef|0\n$(touch "%s")\n' 0 "$TMP/CACHE_PWNED" > "$injectcache"
+  printf 'TENON_ROUTER_V5\nM|00|%064d|0123456789abcdef|0\n$(touch "%s")\n' 0 "$TMP/CACHE_PWNED" > "$injectcache"
   touch "$injectcache"
   INTERP_FB="$TMP/router-interpreter-fakebin"; mkdir -p "$INTERP_FB"
   for interp in node python python3 jq; do
@@ -985,7 +1001,7 @@ if command -v node >/dev/null 2>&1; then
     chmod +x "$INTERP_FB/$interp"
   done
   rm -f "$TMP/CACHE_PWNED" "$TMP/INTERPRETER_CALLED"
-  ROUT="$(printf '{"prompt":"React 页面组件","cwd":"%s"}' "$injectproj" | PATH="$INTERP_FB:$PATH" PIPELINE_ROUTER_CACHE="$injectcache" CLAUDE_PLUGIN_ROOT="$ROOT" bash "$R" 2>/dev/null)"
+  ROUT="$(printf '{"prompt":"React 页面组件","cwd":"%s"}' "$injectproj" | PATH="$INTERP_FB:$PATH" TENON_ROUTER_CACHE="$injectcache" CLAUDE_PLUGIN_ROOT="$ROOT" bash "$R" 2>/dev/null)"
   [ ! -f "$TMP/CACHE_PWNED" ] && ok "router 安全: 篡改 cache 的 \$() 从不执行" || bad "router 安全: 篡改 cache 的 \$() 从不执行" "CACHE_PWNED sentinel 被创建"
   assert_empty "router 安全: 畸形 cache 且重生成失败时零注入" "$ROUT"
 
@@ -995,7 +1011,7 @@ if command -v node >/dev/null 2>&1; then
   run_router "{\"prompt\":\"React 页面组件\",\"cwd\":\"$hitproj\"}" "$hitcache"
   assert_contains "router: interpreter sentinel 前置 cache 已生成" "$ROUT" "track=frontend"
   rm -f "$TMP/INTERPRETER_CALLED"
-  ROUT="$(printf '{"prompt":"React 页面组件","cwd":"%s"}' "$hitproj" | PATH="$INTERP_FB:$PATH" PIPELINE_ROUTER_CACHE="$hitcache" CLAUDE_PLUGIN_ROOT="$ROOT" bash "$R" 2>/dev/null)"
+  ROUT="$(printf '{"prompt":"React 页面组件","cwd":"%s"}' "$hitproj" | PATH="$INTERP_FB:$PATH" TENON_ROUTER_CACHE="$hitcache" CLAUDE_PLUGIN_ROOT="$ROOT" bash "$R" 2>/dev/null)"
   [ ! -f "$TMP/INTERPRETER_CALLED" ] && ok "router 红线: cache-hit 零 node/python/python3/jq" || bad "router 红线: cache-hit 零 node/python/python3/jq" "解释器 sentinel 被调用"
   assert_contains "router: cache-hit 无解释器仍正确路由" "$ROUT" "track=frontend"
 else
@@ -1069,23 +1085,23 @@ printf '%s' "{\"cwd\":\"$proj/sub/deep\",\"tool_name\":\"AskUserQuestion\"}" | b
 # ── 10a'. UserPromptSubmit 真确认：普通询问不得解锁；明确确认必须调用 acknowledge，hook 自己不删 marker。──
 printf '%s' "{\"cwd\":\"$proj\",\"prompt\":\"为什么需要确认？\"}" | bash "$CP" >/dev/null 2>&1
 [ -f "$proj/.pipeline-pending-review" ] && ok "confirm-clear-prompt: 询问不误清 review marker" || bad "confirm-clear-prompt: 询问不误清 review marker" "marker 被错误清除"
-FAKE_PIPELINE_BIN="$TMP/fake-pipeline-bin"; FAKE_PIPELINE_LOG="$TMP/fake-pipeline.log"
-mkdir -p "$FAKE_PIPELINE_BIN"
-printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$*" >> "$PIPELINE_HOOK_LOG"\n' > "$FAKE_PIPELINE_BIN/pipeline"
-chmod +x "$FAKE_PIPELINE_BIN/pipeline"
-printf '%s' "{\"cwd\":\"$proj\",\"prompt\":\"确认继续，全部执行\"}" | PATH="$FAKE_PIPELINE_BIN:$PATH" PIPELINE_HOOK_LOG="$FAKE_PIPELINE_LOG" bash "$CP" >/dev/null 2>&1
+FAKE_TENON_BIN="$TMP/fake-tenon-bin"; FAKE_TENON_LOG="$TMP/fake-tenon.log"
+mkdir -p "$FAKE_TENON_BIN"
+printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$*" >> "$TENON_HOOK_LOG"\n' > "$FAKE_TENON_BIN/tenon"
+chmod +x "$FAKE_TENON_BIN/tenon"
+printf '%s' "{\"cwd\":\"$proj\",\"prompt\":\"确认继续，全部执行\"}" | PATH="$FAKE_TENON_BIN:$PATH" TENON_HOOK_LOG="$FAKE_TENON_LOG" bash "$CP" >/dev/null 2>&1
 [ -f "$proj/.pipeline-pending-review" ] && ok "confirm-clear-prompt: 明确确认不直接删除 review marker" || bad "confirm-clear-prompt: 明确确认不直接删除 review marker" "marker 被错误删除"
-grep -Fq 'review acknowledge review-demo' "$FAKE_PIPELINE_LOG" 2>/dev/null \
-  && ok "confirm-clear-prompt: 明确确认调用 pipeline review acknowledge" \
-  || bad "confirm-clear-prompt: 明确确认调用 pipeline review acknowledge" "未记录 acknowledge 调用"
+grep -Fq 'review acknowledge review-demo' "$FAKE_TENON_LOG" 2>/dev/null \
+  && ok "confirm-clear-prompt: 明确确认调用 tenon review acknowledge" \
+  || bad "confirm-clear-prompt: 明确确认调用 tenon review acknowledge" "未记录 acknowledge 调用"
 # Bare “继续” only unlocks when this exact project has a pending marker; this is the normal-chat
 # regression that previously resumed the Change while leaving the interaction gate self-locked.
 touch "$proj/.pipeline-pending-interaction"
-printf '%s' "{\"cwd\":\"$proj\",\"prompt\":\"继续\"}" | PATH="$FAKE_PIPELINE_BIN:$PATH" PIPELINE_HOOK_LOG="$FAKE_PIPELINE_LOG" bash "$CP" >/dev/null 2>&1
+printf '%s' "{\"cwd\":\"$proj\",\"prompt\":\"继续\"}" | PATH="$FAKE_TENON_BIN:$PATH" TENON_HOOK_LOG="$FAKE_TENON_LOG" bash "$CP" >/dev/null 2>&1
 [ ! -f "$proj/.pipeline-pending-interaction" ] \
   && ok "confirm-clear-prompt: bare 继续清 exact pending interaction" \
   || bad "confirm-clear-prompt: bare 继续清 exact pending interaction" "interaction marker 仍在"
-printf '%s' "{\"cwd\":\"$proj\",\"prompt\":\"继续\"}" | PATH="$FAKE_PIPELINE_BIN:$PATH" PIPELINE_HOOK_LOG="$FAKE_PIPELINE_LOG" bash "$CP" >/dev/null 2>&1
+printf '%s' "{\"cwd\":\"$proj\",\"prompt\":\"继续\"}" | PATH="$FAKE_TENON_BIN:$PATH" TENON_HOOK_LOG="$FAKE_TENON_LOG" bash "$CP" >/dev/null 2>&1
 [ ! -f "$proj/.pipeline-pending-confirm" ] \
   && ok "confirm-clear-prompt: 无 pending 时 bare 继续不制造副作用" \
   || bad "confirm-clear-prompt: 无 pending 时 bare 继续不制造副作用" "出现意外 marker"
@@ -1094,7 +1110,7 @@ printf '%s' "{\"cwd\":\"$proj\",\"prompt\":\"继续\"}" | PATH="$FAKE_PIPELINE_B
 for prompt in 可以 同意 按推荐 '继续，按照你的推荐'; do
   touch "$proj/.pipeline-pending-interaction"
   printf '%s' "{\"cwd\":\"$proj\",\"prompt\":\"$prompt\"}" \
-    | PATH="$FAKE_PIPELINE_BIN:$PATH" PIPELINE_HOOK_LOG="$FAKE_PIPELINE_LOG" bash "$CP" >/dev/null 2>&1
+    | PATH="$FAKE_TENON_BIN:$PATH" TENON_HOOK_LOG="$FAKE_TENON_LOG" bash "$CP" >/dev/null 2>&1
   [ ! -f "$proj/.pipeline-pending-interaction" ] \
     && ok "confirm-clear-prompt: 自然确认「${prompt}」清 exact pending interaction" \
     || bad "confirm-clear-prompt: 自然确认「${prompt}」清 exact pending interaction" "marker 仍在"
@@ -1102,7 +1118,7 @@ done
 for prompt in 不可以 不同意 '继续，但先别改代码'; do
   touch "$proj/.pipeline-pending-interaction"
   printf '%s' "{\"cwd\":\"$proj\",\"prompt\":\"$prompt\"}" \
-    | PATH="$FAKE_PIPELINE_BIN:$PATH" PIPELINE_HOOK_LOG="$FAKE_PIPELINE_LOG" bash "$CP" >/dev/null 2>&1
+    | PATH="$FAKE_TENON_BIN:$PATH" TENON_HOOK_LOG="$FAKE_TENON_LOG" bash "$CP" >/dev/null 2>&1
   [ -f "$proj/.pipeline-pending-interaction" ] \
     && ok "confirm-clear-prompt: 拒绝/约束「${prompt}」保留 pending interaction" \
     || bad "confirm-clear-prompt: 拒绝/约束「${prompt}」保留 pending interaction" "marker 被错误清除"
@@ -1117,14 +1133,14 @@ printf 'track: pm\nphase: explore\nworkflow: default\narchived: false\n' > "$pro
 printf 'track: pm\nphase: explore\nworkflow: default\narchived: false\n' > "$proj/openspec/changes/other-live/.pipeline.yaml"
 printf 'autonomy-live\n' > "$proj/.pipeline-active"
 write_v2_review_marker "$proj" autonomy-live explore
-printf '%s' "{\"cwd\":\"$proj\",\"prompt\":\"确认。后续不用问我，自己执行完成\"}" | PATH="$FAKE_PIPELINE_BIN:$PATH" PIPELINE_HOOK_LOG="$FAKE_PIPELINE_LOG" bash "$CP" >/dev/null 2>&1
+printf '%s' "{\"cwd\":\"$proj\",\"prompt\":\"确认。后续不用问我，自己执行完成\"}" | PATH="$FAKE_TENON_BIN:$PATH" TENON_HOOK_LOG="$FAKE_TENON_LOG" bash "$CP" >/dev/null 2>&1
 [ -f "$proj/.pipeline-interaction-authority" ] \
   && ok "持续自主执行: 明确授权投影绑定当前 Change" \
   || bad "持续自主执行: 明确授权投影绑定当前 Change" "缺少 authority projection"
 [ -f "$proj/.pipeline-pending-review" ] \
   && ok "持续自主执行: 不直接清 review marker" \
   || bad "持续自主执行: 不直接清 review marker" "错误绕过 review receipt"
-grep -Fq 'review acknowledge autonomy-live --delegated' "$FAKE_PIPELINE_LOG" 2>/dev/null \
+grep -Fq 'review acknowledge autonomy-live --delegated' "$FAKE_TENON_LOG" 2>/dev/null \
   && ok "持续自主执行: 通过 delegated review acknowledgement 留痕" \
   || bad "持续自主执行: 通过 delegated review acknowledgement 留痕" "未记录 --delegated acknowledge"
 grep -Fq 'review=delegated' "$proj/.pipeline-interaction-authority" 2>/dev/null \
@@ -1161,15 +1177,15 @@ printf 'track: backend\nphase: build\narchived: \n' > "$proj/openspec/changes/de
 printf 'demo\n' > "$proj/.pipeline-active"
 JL="$proj/openspec/changes/demo/.pipeline-history.jsonl"
 before="$(count_lines "$JL")"
-DRIN="{\"cwd\":\"$proj\",\"tool_name\":\"AskUserQuestion\",\"tool_input\":{\"questions\":[{\"question\":\"走 pipeline 还是直接改？\",\"header\":\"路由\"}]},\"tool_response\":{\"answers\":{\"路由\":\"pipeline\"}}}"
+DRIN="{\"cwd\":\"$proj\",\"tool_name\":\"AskUserQuestion\",\"tool_input\":{\"questions\":[{\"question\":\"走 Tenon 还是直接改？\",\"header\":\"路由\"}]},\"tool_response\":{\"answers\":{\"路由\":\"tenon\"}}}"
 RC="$(printf '%s' "$DRIN" | bash "$DR" >/dev/null 2>&1; echo $?)"
 assert_exit "decision-recorder: exit 0" 0 "$RC"
 after="$(count_lines "$JL")"
 [ "$after" = "$((before + 1))" ] && ok "decision-recorder: JSONL 真 append 恰一行" || bad "decision-recorder: JSONL 真 append 恰一行" "before=$before after=$after"
 line="$(tail -1 "$JL" 2>/dev/null)"
 assert_contains "decision-recorder: kind=prompt" "$line" '"kind":"prompt"'
-assert_contains "decision-recorder: raw 含问题文本" "$line" "走 pipeline"
-assert_contains "decision-recorder: raw 含答案文本" "$line" "pipeline"
+assert_contains "decision-recorder: raw 含问题文本" "$line" "走 Tenon"
+assert_contains "decision-recorder: raw 含答案文本" "$line" "tenon"
 assert_contains "decision-recorder: raw 含 Q/A 结构（对齐 import）" "$line" "Q: "
 jsonl_valid "$JL"; vrc=$?
 case "$vrc" in 0) ok "decision-recorder: JSONL 全行合法 JSON（node 校验）" ;; 2) printf 'skip - node 不可用，跳过 decision-recorder JSONL 合法性\n' ;; *) bad "decision-recorder: JSONL 全行合法 JSON（node 校验）" "解析失败：$line" ;; esac
@@ -1240,36 +1256,36 @@ assert_contains "skill-tracker: Codex exec/cmd 证据含 skill id" "$line" "open
 # Codex 通常把同一 phase 的多份 SKILL.md 合并为一条 `exec`。每一个受信任的最终读取都必须
 # 记账，不能只保留第一个并在后续 document/DAG check 时误报缺少 skill 证据。
 before="$(count_lines "$JL")"
-CODEX_MULTI_SKILL_READ="{\"cwd\":\"$proj\",\"tool_name\":\"exec\",\"tool_input\":{\"cmd\":\"/bin/zsh -lc \\\"sed -n '1,120p' $ROOT/skills/pipeline-spec/SKILL.md && sed -n '1,120p' $ROOT/skills/openspec-propose/SKILL.md && sed -n '1,120p' $ROOT/skills/writing-plans/SKILL.md\\\"\"}}"
+CODEX_MULTI_SKILL_READ="{\"cwd\":\"$proj\",\"tool_name\":\"exec\",\"tool_input\":{\"cmd\":\"/bin/zsh -lc \\\"sed -n '1,120p' $ROOT/skills/tenon-spec/SKILL.md && sed -n '1,120p' $ROOT/skills/openspec-propose/SKILL.md && sed -n '1,120p' $ROOT/skills/writing-plans/SKILL.md\\\"\"}}"
 printf '%s' "$CODEX_MULTI_SKILL_READ" | CLAUDE_PLUGIN_ROOT="$ROOT" bash "$ST" >/dev/null 2>&1
 [ "$(count_lines "$JL")" = "$((before + 3))" ] && ok "skill-tracker: Codex 同一 exec 的多个 bundled SKILL.md → 全部留证" || bad "skill-tracker: Codex 同一 exec 的多个 bundled SKILL.md → 全部留证" "行数=$(count_lines "$JL")"
 multi_lines="$(tail -3 "$JL" 2>/dev/null)"
-assert_contains "skill-tracker: 多 skill 证据含 pipeline-spec" "$multi_lines" "pipeline-spec"
+assert_contains "skill-tracker: 多 skill 证据含 tenon-spec" "$multi_lines" "tenon-spec"
 assert_contains "skill-tracker: 多 skill 证据含 openspec-propose" "$multi_lines" "openspec-propose"
 assert_contains "skill-tracker: 多 skill 证据含 writing-plans" "$multi_lines" "writing-plans"
 # 只有每段的最终 read 参数才可形成证据。后续 printf 提到另一个路径不能伪造第二个 skill 调用。
 before="$(count_lines "$JL")"
-CODEX_READ_WITH_PATH_MENTION="{\"cwd\":\"$proj\",\"tool_name\":\"exec\",\"tool_input\":{\"cmd\":\"/bin/zsh -lc \\\"sed -n '1,120p' $ROOT/skills/pipeline-spec/SKILL.md && printf $ROOT/skills/openspec-propose/SKILL.md\\\"\"}}"
+CODEX_READ_WITH_PATH_MENTION="{\"cwd\":\"$proj\",\"tool_name\":\"exec\",\"tool_input\":{\"cmd\":\"/bin/zsh -lc \\\"sed -n '1,120p' $ROOT/skills/tenon-spec/SKILL.md && printf $ROOT/skills/openspec-propose/SKILL.md\\\"\"}}"
 printf '%s' "$CODEX_READ_WITH_PATH_MENTION" | CLAUDE_PLUGIN_ROOT="$ROOT" bash "$ST" >/dev/null 2>&1
 [ "$(count_lines "$JL")" = "$((before + 1))" ] && ok "skill-tracker: 非 read 段提及 SKILL.md 不伪造证据" || bad "skill-tracker: 非 read 段提及 SKILL.md 不伪造证据" "行数=$(count_lines "$JL")"
 line="$(tail -1 "$JL" 2>/dev/null)"
-assert_contains "skill-tracker: 最终 read 段仍保留真实 skill" "$line" "pipeline-spec"
+assert_contains "skill-tracker: 最终 read 段仍保留真实 skill" "$line" "tenon-spec"
 assert_not_contains "skill-tracker: 非 read 路径不被误记" "$line" "openspec-propose"
 # Codex command hook 未传 exact selected plugin root 时，不得枚举历史 cache 猜当前版本。
-# 同一 host-owned cache 只有被 bootstrap 明确传为 PIPELINE_HOST_PLUGIN_ROOT 后才可留证。
+# 同一 host-owned cache 只有被 bootstrap 明确传为 TENON_HOST_PLUGIN_ROOT 后才可留证。
 codex_home="$TMP/ptu-codex-home"
-codex_skill="$codex_home/.codex/plugins/cache/pipeline-lite/pipeline-lite/0.2.0/skills/openspec-propose"
+codex_skill="$codex_home/.codex/plugins/cache/tenon/tenon/0.2.0/skills/openspec-propose"
 mkdir -p "$codex_skill"
 cp "$ROOT/skills/openspec-propose/SKILL.md" "$codex_skill/SKILL.md"
 CODEX_CACHE_SKILL_READ="{\"cwd\":\"$proj\",\"tool_name\":\"exec\",\"tool_input\":{\"cmd\":\"/bin/zsh -lc \\\"sed -n '1,120p' $codex_skill/SKILL.md\\\"\"}}"
 before="$(count_lines "$JL")"
-printf '%s' "$CODEX_CACHE_SKILL_READ" | HOME="$codex_home" CODEX_HOME='' PIPELINE_HOST_PLUGIN_ROOT='' PIPELINE_CODEX_PLUGIN_ROOT='' PLUGIN_ROOT='' CLAUDE_PLUGIN_ROOT='' bash "$ST" >/dev/null 2>&1
+printf '%s' "$CODEX_CACHE_SKILL_READ" | HOME="$codex_home" CODEX_HOME='' TENON_HOST_PLUGIN_ROOT='' TENON_CODEX_PLUGIN_ROOT='' PLUGIN_ROOT='' CLAUDE_PLUGIN_ROOT='' bash "$ST" >/dev/null 2>&1
 [ "$(count_lines "$JL")" = "$before" ] && ok "skill-tracker: 缺 selected root 时拒绝历史 cache" || bad "skill-tracker: 缺 selected root 时拒绝历史 cache" "错误写入了未选择 cache 的 Skill 证据"
-printf '%s' "$CODEX_CACHE_SKILL_READ" | HOME="$codex_home" CODEX_HOME='' PIPELINE_HOST_PLUGIN_ROOT="${codex_skill%/skills/openspec-propose}" PIPELINE_CODEX_PLUGIN_ROOT='' PLUGIN_ROOT='' CLAUDE_PLUGIN_ROOT='' bash "$ST" >/dev/null 2>&1
+printf '%s' "$CODEX_CACHE_SKILL_READ" | HOME="$codex_home" CODEX_HOME='' TENON_HOST_PLUGIN_ROOT="${codex_skill%/skills/openspec-propose}" TENON_CODEX_PLUGIN_ROOT='' PLUGIN_ROOT='' CLAUDE_PLUGIN_ROOT='' bash "$ST" >/dev/null 2>&1
 [ "$(count_lines "$JL")" = "$((before + 1))" ] && ok "skill-tracker: exact selected Codex root 可留证" || bad "skill-tracker: exact selected Codex root 可留证" "没有写入 selected-root Skill 证据"
 line="$(tail -1 "$JL" 2>/dev/null)"
 assert_contains "skill-tracker: selected cache 证据含 skill id" "$line" "openspec-propose"
-GATE_ERR="$(printf '%s' "$CODEX_CACHE_SKILL_READ" | HOME="$codex_home" CODEX_HOME='' PIPELINE_HOST_PLUGIN_ROOT="${codex_skill%/skills/openspec-propose}" PIPELINE_CODEX_PLUGIN_ROOT='' PLUGIN_ROOT='' CLAUDE_PLUGIN_ROOT='' bash "$GATE" 2>&1 >/dev/null)"
+GATE_ERR="$(printf '%s' "$CODEX_CACHE_SKILL_READ" | HOME="$codex_home" CODEX_HOME='' TENON_HOST_PLUGIN_ROOT="${codex_skill%/skills/openspec-propose}" TENON_CODEX_PLUGIN_ROOT='' PLUGIN_ROOT='' CLAUDE_PLUGIN_ROOT='' bash "$GATE" 2>&1 >/dev/null)"
 GATE_RC=$?
 assert_exit "gate: exact selected Codex root 不误判为 shadowed" 0 "$GATE_RC"
 assert_not_contains "gate: selected cache 读取不报 shadowed" "$GATE_ERR" "同名非插件 SKILL.md"
@@ -1286,7 +1302,7 @@ printf '%s' "{\"cwd\":\"$proj\",\"tool_name\":\"Read\",\"tool_input\":{\"file_pa
 [ "$(count_lines "$JL")" = "$before" ] && ok "skill-tracker: 非 Skill 工具 → 不写" || bad "skill-tracker: 非 Skill 工具 → 不写" "误写"
 # 无活跃 change → exit 0 不写
 proj2="$TMP/ptu-st-nochange"; mkdir -p "$proj2"
-RC="$(printf '%s' "{\"cwd\":\"$proj2\",\"tool_name\":\"Skill\",\"tool_input\":{\"skill\":\"pipeline-build\"}}" | bash "$ST" >/dev/null 2>&1; echo $?)"
+RC="$(printf '%s' "{\"cwd\":\"$proj2\",\"tool_name\":\"Skill\",\"tool_input\":{\"skill\":\"tenon-build\"}}" | bash "$ST" >/dev/null 2>&1; echo $?)"
 assert_exit "skill-tracker: 无活跃 change → exit 0" 0 "$RC"
 
 # ── 10d. interactive-skill-gate：交互式 skill 加载后注入交互硬姿态 + 落 interaction 硬门 ──
@@ -1329,13 +1345,13 @@ assert_contains "interactive-skill-gate: Codex exec/cmd 包装的 interaction sk
 # 同一个 Codex exec 先读普通 phase skill 再读交互式 skill 时，也必须落 interaction 门；此前
 # 只取第一个 id 会让 brainstorming 被静默忽略。
 proj_codex_multi="$TMP/ptu-ig-codex-multi"; mkdir -p "$proj_codex_multi"
-OUT="$(printf '%s' "{\"cwd\":\"$proj_codex_multi\",\"tool_name\":\"exec\",\"tool_input\":{\"cmd\":\"/bin/zsh -lc \\\"sed -n '1,120p' $ROOT/skills/pipeline-spec/SKILL.md && sed -n '1,120p' $ROOT/skills/brainstorming/SKILL.md\\\"\"}}" | CLAUDE_PLUGIN_ROOT="$ROOT" bash "$IG" 2>/dev/null)"
+OUT="$(printf '%s' "{\"cwd\":\"$proj_codex_multi\",\"tool_name\":\"exec\",\"tool_input\":{\"cmd\":\"/bin/zsh -lc \\\"sed -n '1,120p' $ROOT/skills/tenon-spec/SKILL.md && sed -n '1,120p' $ROOT/skills/brainstorming/SKILL.md\\\"\"}}" | CLAUDE_PLUGIN_ROOT="$ROOT" bash "$IG" 2>/dev/null)"
 assert_contains "interactive-skill-gate: 多 skill 读取仍识别后置 interaction skill" "$OUT" "AskUserQuestion"
 assert_contains "interactive-skill-gate: 多 skill 姿态点名 brainstorming" "$OUT" "brainstorming"
 [ -f "$proj_codex_multi/.pipeline-pending-interaction" ] && ok "interactive-skill-gate: 多 skill 读取也落 interaction 硬门" || bad "interactive-skill-gate: 多 skill 读取未落硬门" "marker 未落"
-# 非交互式 skill（pipeline-build）→ 不注入、不落门
+# 非交互式 skill（tenon-build）→ 不注入、不落门
 proj3="$TMP/ptu-ig-noninteractive"; mkdir -p "$proj3"
-OUT="$(printf '%s' "{\"cwd\":\"$proj3\",\"tool_name\":\"Skill\",\"tool_input\":{\"skill\":\"pipeline-build\"}}" | bash "$IG" 2>/dev/null)"
+OUT="$(printf '%s' "{\"cwd\":\"$proj3\",\"tool_name\":\"Skill\",\"tool_input\":{\"skill\":\"tenon-build\"}}" | bash "$IG" 2>/dev/null)"
 RC=$?
 assert_exit "interactive-skill-gate: 非交互式 skill → exit 0" 0 "$RC"
 assert_empty "interactive-skill-gate: 非交互式 skill → 不注入姿态" "$OUT"
@@ -1358,7 +1374,7 @@ done
 # ── 10f. hooks.json 注册 PostToolUse 生命周期 hook（各自 matcher）──
 HJ="$ROOT/hooks/hooks.json"
 hjson="$(cat "$HJ" 2>/dev/null)"
-assert_contains "hooks.json: 注册稳定 pipeline-hook 启动器" "$hjson" "pipeline-hook"
+assert_contains "hooks.json: 注册稳定 tenon-hook 启动器" "$hjson" "tenon-hook"
 assert_contains "hooks.json: 注册 confirm-clear hook id" "$hjson" "confirm-clear"
 assert_contains "hooks.json: 注册 confirm-clear-prompt hook id" "$hjson" "confirm-clear-prompt"
 assert_contains "hooks.json: 注册 decision-recorder hook id" "$hjson" "decision-recorder"
@@ -1396,16 +1412,16 @@ printf 'track: backend\nphase: build\narchived: \n' > "$proj/openspec/changes/de
 printf 'demo\n' > "$proj/.pipeline-active"
 JL="$proj/openspec/changes/demo/.pipeline-history.jsonl"
 write_hooks_cfg "$proj" "skill-tracker.build"
-RC="$(printf '%s' "{\"cwd\":\"$proj\",\"tool_name\":\"Skill\",\"tool_input\":{\"skill\":\"pipeline-build\"}}" | bash "$ST" >/dev/null 2>&1; echo $?)"
+RC="$(printf '%s' "{\"cwd\":\"$proj\",\"tool_name\":\"Skill\",\"tool_input\":{\"skill\":\"tenon-build\"}}" | bash "$ST" >/dev/null 2>&1; echo $?)"
 assert_exit "开关: skill-tracker 当前阶段（build）被禁用 → exit 0" 0 "$RC"
 [ "$(count_lines "$JL")" = "0" ] && ok "开关: 禁用的 skill-tracker 零副作用（JSONL 不 append）" || bad "开关: 禁用的 skill-tracker 零副作用（JSONL 不 append）" "行数=$(count_lines "$JL")"
 # 只关别的阶段（verify）→ 本阶段（build）照常写（阶段×hook 精准粒度，非全局开关）
 write_hooks_cfg "$proj" "skill-tracker.verify"
-printf '%s' "{\"cwd\":\"$proj\",\"tool_name\":\"Skill\",\"tool_input\":{\"skill\":\"pipeline-build\"}}" | bash "$ST" >/dev/null 2>&1
+printf '%s' "{\"cwd\":\"$proj\",\"tool_name\":\"Skill\",\"tool_input\":{\"skill\":\"tenon-build\"}}" | bash "$ST" >/dev/null 2>&1
 [ "$(count_lines "$JL")" = "1" ] && ok "开关: skill-tracker 仅它阶段被禁 → 本阶段照常 append" || bad "开关: skill-tracker 仅它阶段被禁 → 本阶段照常 append" "行数=$(count_lines "$JL")"
 # 损坏配置 → fail-open 到启用（行为与今天完全一致）
 printf 'not json {{{' > "$proj/.pipeline/hooks.json"
-printf '%s' "{\"cwd\":\"$proj\",\"tool_name\":\"Skill\",\"tool_input\":{\"skill\":\"pipeline-build\"}}" | bash "$ST" >/dev/null 2>&1
+printf '%s' "{\"cwd\":\"$proj\",\"tool_name\":\"Skill\",\"tool_input\":{\"skill\":\"tenon-build\"}}" | bash "$ST" >/dev/null 2>&1
 [ "$(count_lines "$JL")" = "2" ] && ok "开关: skill-tracker 配置损坏 → fail-open 照常 append" || bad "开关: skill-tracker 配置损坏 → fail-open 照常 append" "行数=$(count_lines "$JL")"
 
 # ── 11b. breadcrumb：newest change 的阶段被禁用 → 静默 exit 0；别的阶段被禁 → 照常 cat ──
@@ -1434,10 +1450,10 @@ assert_exit "开关: session-start 当前阶段被禁用 → exit 0" 0 "$rc"
 assert_empty "开关: 禁用的 session-start 零输出（宪法/上下文全不注入）" "$out"
 write_hooks_cfg "$proj" "session-start.open"
 out="$(printf '{"cwd":"%s"}' "$proj" | bash "$SS" 2>/dev/null)"
-assert_contains "开关: session-start 仅它阶段被禁 → 本阶段照常注入" "$out" "pipeline"
+assert_contains "开关: session-start 仅它阶段被禁 → 本阶段照常注入" "$out" "Tenon"
 printf 'garbage!!' > "$proj/.pipeline/hooks.json"
 out="$(printf '{"cwd":"%s"}' "$proj" | bash "$SS" 2>/dev/null)"
-assert_contains "开关: session-start 配置损坏 → fail-open 照常注入" "$out" "pipeline"
+assert_contains "开关: session-start 配置损坏 → fail-open 照常注入" "$out" "Tenon"
 
 # ── 11d. router：当前阶段被禁用 → exit 0 零注入（判定在缓存重生成之前，禁用连 node 都不 spawn）──
 rproj2="$TMP/hm-router"; mkdir -p "$rproj2/openspec/changes/demo"
@@ -1450,7 +1466,7 @@ assert_empty "开关: 禁用的 router 零注入" "$ROUT"
 FB2="$TMP/hm-router-fakebin"; mkdir -p "$FB2"
 printf '#!/bin/sh\ntouch "%s/HM_NODE_CALLED"\nexit 1\n' "$TMP" > "$FB2/node"; chmod +x "$FB2/node"
 rm -f "$TMP/HM_NODE_CALLED"
-printf '{"prompt":"继续帮我写个 React 页面 UI","cwd":"%s"}' "$rproj2" | PATH="$FB2:$PATH" PIPELINE_ROUTER_CACHE="$TMP/hm-router-cache.sh" CLAUDE_PLUGIN_ROOT="$ROOT" bash "$R" >/dev/null 2>&1
+printf '{"prompt":"继续帮我写个 React 页面 UI","cwd":"%s"}' "$rproj2" | PATH="$FB2:$PATH" TENON_ROUTER_CACHE="$TMP/hm-router-cache.sh" CLAUDE_PLUGIN_ROOT="$ROOT" bash "$R" >/dev/null 2>&1
 [ ! -f "$TMP/HM_NODE_CALLED" ] && ok "开关红线: 禁用的 router 零 node spawn（判定先于缓存重生成）" || bad "开关红线: 禁用的 router 零 node spawn（判定先于缓存重生成）" "禁用路径竟 spawn 了 node"
 if command -v node >/dev/null 2>&1; then
   rm -f "$rproj2/.pipeline/hooks.json"
@@ -1480,11 +1496,11 @@ assert_contains "开关: 安全门配置禁用无效，姿态照注入" "$out" "
 # ═══════════════ 12. v6 T5 / full-install 批2 P2-T2：AFK 首跑 + 技能就绪提示（session-start.sh，.pipeline/automation.json 或活跃 change 命中 automation 字段） ═══════════════
 # 一句话目标：检测到 .pipeline/automation.json 存在，或活跃（非 archived）change 命中 automation
 # 字段（值非 off/空）时，追加一行静态文案「AFK 就绪状态见 dashboard（就绪三灯）；技能齐全度…跑
-# pipeline doctor 核对」——纯静态提示，不做任何 docker/凭证/技能真探测。批2 A1 已给 doctor 补上缺技能
-# 检测（矛盾登记 1 取舍消解），故本提示回改指向 `pipeline doctor`（守零 spawn：只改文案不加探测）。
+# tenon doctor 核对」——纯静态提示，不做任何 docker/凭证/技能真探测。批2 A1 已给 doctor 补上缺技能
+# 检测（矛盾登记 1 取舍消解），故本提示回改指向 `tenon doctor`（守零 spawn：只改文案不加探测）。
 AFK_HINT="AFK 就绪状态见 dashboard"
 
-# ── 12a. .pipeline/automation.json 存在（即便无任何 change）→ 提示行出现，且指向 pipeline doctor（P2-T2 回改） ──
+# ── 12a. .pipeline/automation.json 存在（即便无任何 change）→ 提示行出现，且指向 tenon doctor（P2-T2 回改） ──
 proj="$TMP/afk-hint-json"; mkdir -p "$proj/openspec" "$proj/.pipeline"
 printf '{}\n' > "$proj/.pipeline/automation.json"
 out="$(printf '{"cwd":"%s"}' "$proj" | bash "$SS" 2>/dev/null)"
@@ -1492,7 +1508,7 @@ rc=$?
 assert_exit "v6T5: automation.json 存在 → exit 0" 0 "$rc"
 assert_contains "v6T5: automation.json 存在 → 提示含「${AFK_HINT}」" "$out" "$AFK_HINT"
 assert_contains "v6T5: 提示含「就绪三灯」措辞" "$out" "就绪三灯"
-assert_contains "P2-T2: 提示回改指向 pipeline doctor（批2 A1 已扩展该命令）" "$out" "pipeline doctor"
+assert_contains "P2-T2: 提示回改指向 tenon doctor（批2 A1 已扩展该命令）" "$out" "tenon doctor"
 
 # ── 12b. 完全非 pipeline 目录（无 openspec）→ 新逻辑不报错、不追加提示 ──
 proj="$TMP/afk-hint-nonpipeline"; mkdir -p "$proj"
@@ -1505,7 +1521,7 @@ assert_not_contains "v6T5: 非 pipeline 目录 → 不追加提示" "$out" "$AFK
 proj="$TMP/afk-hint-bare"; mkdir -p "$proj/openspec"
 out="$(printf '{"cwd":"%s"}' "$proj" | bash "$SS" 2>/dev/null)"
 assert_not_contains "v6T5: 无 automation.json 且无活跃 change → 不追加提示" "$out" "$AFK_HINT"
-assert_contains "v6T5: 无回归——普通项目引导照常输出" "$out" "pipeline-lite"
+assert_contains "v6T5: 无回归——普通项目引导照常输出" "$out" "tenon"
 
 # ── 12d. 无 automation.json + 活跃 change automation=off（默认值）→ 不追加 ──
 proj="$TMP/afk-hint-off"; mkdir -p "$proj/openspec/changes/demo-off"
@@ -1549,10 +1565,10 @@ AU_ROOT="$TMP/auto-update-plugin"
 AU_CFG="$TMP/auto-update-config"
 AU_BIN="$TMP/auto-update-bin"
 AU_TRACE="$TMP/auto-update.trace"
-mkdir -p "$AU_ROOT/packages/cli/dist" "$AU_CFG/pipeline-lite" "$AU_BIN"
-printf '# fake bundled CLI\n' > "$AU_ROOT/packages/cli/dist/pipeline.mjs"
-printf '#!/usr/bin/env bash\nexit 0\n' > "$AU_BIN/pipeline"
-chmod +x "$AU_BIN/pipeline"
+mkdir -p "$AU_ROOT/packages/cli/dist" "$AU_CFG/tenon" "$AU_BIN"
+printf '# fake bundled CLI\n' > "$AU_ROOT/packages/cli/dist/tenon.mjs"
+printf '#!/usr/bin/env bash\nexit 0\n' > "$AU_BIN/tenon"
+chmod +x "$AU_BIN/tenon"
 cat > "$AU_BIN/nohup" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$AUTO_UPDATE_TRACE"
@@ -1560,20 +1576,20 @@ EOF
 chmod +x "$AU_BIN/nohup"
 
 # No explicit preference is a no-op: session-start must never create surprise network traffic.
-PATH="$AU_BIN:$PATH" PIPELINE_STABLE_BIN="$AU_BIN/pipeline" PIPELINE_RUNTIME_CONFIG_ROOT="$AU_CFG/pipeline-lite" AUTO_UPDATE_TRACE="$AU_TRACE" bash "$AU" "$AU_ROOT" >/dev/null 2>&1
+PATH="$AU_BIN:$PATH" TENON_STABLE_BIN="$AU_BIN/tenon" TENON_RUNTIME_CONFIG_ROOT="$AU_CFG/tenon" AUTO_UPDATE_TRACE="$AU_TRACE" bash "$AU" "$AU_ROOT" >/dev/null 2>&1
 assert_exit "auto-update: 未 opt-in → exit 0" 0 "$?"
 [ ! -f "$AU_TRACE" ] && ok "auto-update: 未 opt-in 不启动后台更新" || bad "auto-update: 未 opt-in 不启动后台更新" "意外调用了 nohup"
 
 # An unsupported adapter cannot be smuggled through the preference file.
-printf 'host=cursor\nenabled=true\n' > "$AU_CFG/pipeline-lite/auto-update.conf"
-PATH="$AU_BIN:$PATH" PIPELINE_STABLE_BIN="$AU_BIN/pipeline" PIPELINE_RUNTIME_CONFIG_ROOT="$AU_CFG/pipeline-lite" AUTO_UPDATE_TRACE="$AU_TRACE" bash "$AU" "$AU_ROOT" >/dev/null 2>&1
+printf 'host=cursor\nenabled=true\n' > "$AU_CFG/tenon/auto-update.conf"
+PATH="$AU_BIN:$PATH" TENON_STABLE_BIN="$AU_BIN/tenon" TENON_RUNTIME_CONFIG_ROOT="$AU_CFG/tenon" AUTO_UPDATE_TRACE="$AU_TRACE" bash "$AU" "$AU_ROOT" >/dev/null 2>&1
 assert_exit "auto-update: 非原生宿主配置 → exit 0" 0 "$?"
 [ ! -f "$AU_TRACE" ] && ok "auto-update: 非原生宿主不启动更新" || bad "auto-update: 非原生宿主不启动更新" "意外调用了 nohup"
 
 # Valid Codex opt-in launches the exact non-interactive update command once, then the daily stamp
 # suppresses an immediate duplicate SessionStart invocation.
-printf 'host=codex\nenabled=true\n' > "$AU_CFG/pipeline-lite/auto-update.conf"
-PATH="$AU_BIN:$PATH" PIPELINE_STABLE_BIN="$AU_BIN/pipeline" PIPELINE_RUNTIME_CONFIG_ROOT="$AU_CFG/pipeline-lite" AUTO_UPDATE_TRACE="$AU_TRACE" bash "$AU" "$AU_ROOT" >/dev/null 2>&1
+printf 'host=codex\nenabled=true\n' > "$AU_CFG/tenon/auto-update.conf"
+PATH="$AU_BIN:$PATH" TENON_STABLE_BIN="$AU_BIN/tenon" TENON_RUNTIME_CONFIG_ROOT="$AU_CFG/tenon" AUTO_UPDATE_TRACE="$AU_TRACE" bash "$AU" "$AU_ROOT" >/dev/null 2>&1
 assert_exit "auto-update: Codex opt-in → exit 0" 0 "$?"
 # `nohup … &` is deliberately asynchronous.  Under a saturated local test run the child can be
 # scheduled after the former 0.5s probe window even though the parent successfully launched it;
@@ -1581,8 +1597,8 @@ assert_exit "auto-update: Codex opt-in → exit 0" 0 "$?"
 for _i in {1..40}; do [ -f "$AU_TRACE" ] && break; sleep 0.05; done
 trace="$(cat "$AU_TRACE" 2>/dev/null || true)"
 assert_contains "auto-update: 后台命令带 --codex --yes --auto" "$trace" "update --codex --yes --auto"
-assert_contains "auto-update: 后台命令设置内部标记" "$trace" "PIPELINE_AUTO_UPDATE=1"
-PATH="$AU_BIN:$PATH" PIPELINE_STABLE_BIN="$AU_BIN/pipeline" PIPELINE_RUNTIME_CONFIG_ROOT="$AU_CFG/pipeline-lite" AUTO_UPDATE_TRACE="$AU_TRACE" bash "$AU" "$AU_ROOT" >/dev/null 2>&1
+assert_contains "auto-update: 后台命令设置内部标记" "$trace" "TENON_AUTO_UPDATE=1"
+PATH="$AU_BIN:$PATH" TENON_STABLE_BIN="$AU_BIN/tenon" TENON_RUNTIME_CONFIG_ROOT="$AU_CFG/tenon" AUTO_UPDATE_TRACE="$AU_TRACE" bash "$AU" "$AU_ROOT" >/dev/null 2>&1
 assert_exit "auto-update: 当日重复 SessionStart → exit 0" 0 "$?"
 trace_lines="$(wc -l < "$AU_TRACE" 2>/dev/null | tr -d ' ' || true)"
 [ -n "$trace_lines" ] || trace_lines=0

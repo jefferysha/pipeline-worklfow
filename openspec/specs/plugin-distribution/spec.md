@@ -9,14 +9,14 @@ canonical Skill content root and ownership-safe installation behavior.
 
 ### Requirement: One release contains the complete pipeline product
 
-Every published Pipeline Lite plugin release SHALL contain its CLI, seven-phase workflow, OpenSpec
+Every published Tenon plugin release SHALL contain its CLI, seven-phase workflow, OpenSpec
 document contract, mandatory skills, hooks, dashboard, AFK/tap/channel subsystems, templates, and
 registered adapters. Selecting a host SHALL select installation ownership and SHALL NOT remove
 other packaged product capabilities.
 
 #### Scenario: A clean Codex user installs the plugin
 
-- **WHEN** the user installs the release and runs `pipeline setup --codex`
+- **WHEN** the user installs the release and runs `tenon setup --codex`
 - **THEN** the selected Codex installation exposes the complete default pipeline and bundled skills
 - **AND** it does not require a separate workflow or mandatory-skill installation.
 
@@ -29,12 +29,12 @@ apply only the selected adapter and SHALL NOT claim native automatic-update owne
 #### Scenario: Host selection is ambiguous
 
 - **WHEN** setup receives zero selectors or more than one selector
-- **THEN** it exits non-zero with examples such as `pipeline setup --codex`
+- **THEN** it exits non-zero with examples such as `tenon setup --codex`
 - **AND** it does not modify any host or active runtime selection.
 
 #### Scenario: One native host is selected
 
-- **WHEN** the user runs `pipeline setup --codex`
+- **WHEN** the user runs `tenon setup --codex`
 - **THEN** setup resolves and activates only the Codex-reported package
 - **AND** it does not configure Claude merely because Claude metadata is included in the release.
 
@@ -59,7 +59,7 @@ verified releases before installing stable launchers.
 
 ### Requirement: Releases support bounded host-owned updates
 
-Native releases SHALL support `pipeline update --codex` and `pipeline update --claude`. Automatic
+Native releases SHALL support `tenon update --codex` and `tenon update --claude`. Automatic
 update SHALL be explicit opt-in, scoped to the selected host, bounded to once daily, executed
 through the stable launcher, and visible through durable diagnostics. A successful update SHALL be
 observed by a new host session.
@@ -92,7 +92,7 @@ than duplicate Skill content.
 
 #### Scenario: Native Codex setup is repeated
 
-- **WHEN** `pipeline setup --codex` or its idempotent update path is run more
+- **WHEN** `tenon setup --codex` or its idempotent update path is run more
   than once
 - **THEN** exactly one immutable selected payload Skill root is discoverable
 - **AND** no same-name project or user projection is added.
@@ -106,28 +106,28 @@ than duplicate Skill content.
 ### Requirement: Native and static Skill projections SHALL be mutually exclusive
 
 The Codex compatibility adapter MAY create project `.agents/skills` links only
-for a host that cannot discover the native pipeline-lite plugin. When a verified
+for a host that cannot discover the native tenon plugin. When a verified
 native Selected Skill Root exists, the adapter SHALL skip project Skill
 projection. Switching modes SHALL not leave both roots discoverable.
 
 #### Scenario: Adapter detects a native installation
 
-- **GIVEN** a verified native pipeline-lite Selected Skill Root
+- **GIVEN** a verified native tenon Selected Skill Root
 - **WHEN** the compatibility adapter runs for the project
-- **THEN** it installs no pipeline-lite project Skill links
+- **THEN** it installs no tenon project Skill links
 - **AND** diagnostics report the native selected root as authoritative.
 
 #### Scenario: Static-only host needs compatibility discovery
 
-- **GIVEN** no native pipeline-lite plugin capability or selected root exists
+- **GIVEN** no native tenon plugin capability or selected root exists
 - **WHEN** static adapter installation is explicitly selected
-- **THEN** the project projection is the sole pipeline-lite discovery root
+- **THEN** the project projection is the sole tenon discovery root
 - **AND** rerunning installation remains idempotent.
 
 ### Requirement: Legacy duplicate migration SHALL be ownership-safe
 
 A migration from static projection to native discovery SHALL remove only
-pipeline-lite-owned symlinks whose lexical target and resolved target match the
+tenon-owned symlinks whose lexical target and resolved target match the
 adapter's expected source Skill. It SHALL never delete a real directory, a user
 file, or a foreign symlink. Ambiguous ownership SHALL fail closed with an
 actionable diagnostic.

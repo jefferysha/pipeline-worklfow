@@ -34,7 +34,7 @@ import {
   scrubStructured,
   structuredKindForKey,
   type OwnedFs,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
 
 export interface UninstallOpts {
@@ -201,7 +201,7 @@ export async function cmdUninstall(deps: CliDeps, opts: UninstallOpts, fs: Owned
 
   // 前置0：homedir 守卫（先于任何写删）。
   if (norm(cwd) === norm(fs.homeDir()) && !fs.homedirBypass()) {
-    deps.io.err('[uninstall] HARD STOP: 拒绝在 $HOME 根卸载（会牵连 ~ 的运行时数据）。PIPELINE_ALLOW_HOMEDIR=1 严格旁路。')
+    deps.io.err('[uninstall] HARD STOP: 拒绝在 $HOME 根卸载（会牵连 ~ 的运行时数据）。TENON_ALLOW_HOMEDIR=1 严格旁路。')
     return 1
   }
 

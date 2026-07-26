@@ -3,7 +3,7 @@ name: design-taste-frontend
 description: First-party visual quality review that avoids generic AI-produced UI.
 license: MIT
 metadata:
-  author: pipeline-lite
+  author: tenon
 ---
 
 # Design Taste Frontend

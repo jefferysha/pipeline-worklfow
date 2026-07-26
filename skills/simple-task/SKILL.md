@@ -24,14 +24,14 @@ of these are true:
 If any condition is false, do not stretch this workflow. Run:
 
 ```bash
-pipeline transition "$PIPELINE_CHANGE_NAME" scope-expanded
+tenon transition "$TENON_CHANGE_NAME" scope-expanded
 ```
 
 Then hand the original request and the simple Change name back to the root `pipeline` skill. It
 must create a new default Change from `open` and immediately record the escalation edge:
 
 ```bash
-pipeline set "<new-default-change>" depends_on "$PIPELINE_CHANGE_NAME"
+tenon set "<new-default-change>" depends_on "$TENON_CHANGE_NAME"
 ```
 
 The old Change remains terminal `escalated`, and the new Change's `depends_on` field is the
@@ -46,7 +46,7 @@ machine-readable audit link. Never mutate the simple Change into a default workf
 5. If the boundary still holds, run:
 
 ```bash
-pipeline transition "$PIPELINE_CHANGE_NAME" change-complete
+tenon transition "$TENON_CHANGE_NAME" change-complete
 ```
 
 The next step is `verify`; load only its declared `verification-before-completion` skill. On a

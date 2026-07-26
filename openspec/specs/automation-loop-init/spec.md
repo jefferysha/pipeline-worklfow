@@ -4,7 +4,7 @@
 
 ### Requirement: Explicit manual loop bindings SHALL be preserved
 
-When `pipeline loops init` is invoked without a starter template, every
+When `tenon loops init` is invoked without a starter template, every
 explicit `--workflow` and `--skill-bundle` value SHALL be written into the
 canonical loop registry entry.
 

@@ -1,6 +1,6 @@
 /**
  * Transition's only hook-facing tail is changeDir/.breadcrumb.  A review marker is intentionally
- * absent from this module: it is written after output/check by `pipeline review request`, not on
+ * absent from this module: it is written after output/check by `tenon review request`, not on
  * entry to a review phase.  That separation prevents an entry-time self-lock and makes canonical
  * review receipts the single transition authority.
  *

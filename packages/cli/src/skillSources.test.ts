@@ -136,21 +136,21 @@ describe('④ 真读 templates/skill-sources.yaml', () => {
     expect(rows.length).toBeGreaterThan(30)
     for (const entry of rows) {
       expect(entry.tool, `${entry.token} tool`).toBe('bundled')
-      expect(entry.source, `${entry.token} source`).toBe('pipeline-lite')
+      expect(entry.source, `${entry.token} source`).toBe('tenon')
       const physical = entry.contentSkill ?? entry.token
       expect(existsSync(join(REPO_ROOT, 'skills', physical, 'SKILL.md')), `${entry.token} physical skill`).toBe(true)
     }
   })
 
   it('④b browser-qa 也是包内 skill，不需要额外的 MCP/plugin 安装', () => {
-    expect(by.get('browser-qa')).toMatchObject({ tool: 'bundled', source: 'pipeline-lite', contentSkill: 'browser-qa' })
+    expect(by.get('browser-qa')).toMatchObject({ tool: 'bundled', source: 'tenon', contentSkill: 'browser-qa' })
     expect(by.get('browser-qa')!.engine).toBeUndefined()
   })
 
   it('④b2 simple-task 是新用户安装清单中的 mandatory 包内能力', () => {
     expect(by.get('simple-task')).toMatchObject({
       tool: 'bundled',
-      source: 'pipeline-lite',
+      source: 'tenon',
       contentSkill: 'simple-task',
       tier: 'mandatory',
     })
@@ -162,7 +162,7 @@ describe('④ 真读 templates/skill-sources.yaml', () => {
     expect(by.get('to-tickets')).toBeDefined()
     expect(by.get('to-prd')).toBeUndefined()
     expect(by.get('to-issues')).toBeUndefined()
-    expect(by.get('to-spec')).toMatchObject({ tool: 'bundled', source: 'pipeline-lite', tier: 'mandatory' })
+    expect(by.get('to-spec')).toMatchObject({ tool: 'bundled', source: 'tenon', tier: 'mandatory' })
   })
 
   it('④d uiforge 不进 registry（无 uiforge 条目；头注可保留“已删”说明）', () => {
@@ -177,7 +177,7 @@ describe('④ 真读 templates/skill-sources.yaml', () => {
       expect(['mandatory', 'recommended', 'conditional', 'optional'], `${r.token} tier`).toContain(r.tier)
       expect(typeof r.official, `${r.token} official`).toBe('boolean')
       expect(r.tool, `${r.token} tool`).toBe('bundled')
-      expect(r.source, `${r.token} source`).toBe('pipeline-lite')
+      expect(r.source, `${r.token} source`).toBe('tenon')
     }
   })
 })

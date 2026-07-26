@@ -10,7 +10,7 @@ import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { createDashboardServer } from '@pipeline-lite/server'
+import { createDashboardServer } from '@tenon/server'
 import {
   createFlowEngine,
   createStateStore,
@@ -21,7 +21,7 @@ import {
   recordDocument,
   recordDocumentReads,
   type StateStore,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import { selectInbox } from '../inbox/inbox'
 import { DEFAULT_RULES, rulesKey } from '../model/workflowModel'
 import type { Snapshot } from '../types'

@@ -298,7 +298,7 @@ for (const path of production) {
       `${rel}: ${size.kind} ${lineCount(text)} lines exceeds ${size.limit} (${size.citation})`,
     )
   }
-  if (/from ['"]@pipeline-lite\/[^/'"]+\//.test(code)) {
+  if (/from ['"]@tenon\/[^/'"]+\//.test(code)) {
     failures.push(`${rel}: cross-workspace deep import bypasses public package export (.agent-rules/BACKEND.md)`)
   }
 
@@ -328,10 +328,10 @@ for (const path of production) {
   }
 
   if (rel !== 'packages/automation/src/types.ts' && /const AUTOMATION_STATES\s*=/.test(code)) {
-    failures.push(`${rel}: AUTOMATION_STATES must come from @pipeline-lite/automation`)
+    failures.push(`${rel}: AUTOMATION_STATES must come from @tenon/automation`)
   }
   if (rel !== 'packages/automation/src/lifecycle/worktree.ts' && /const CANCEL_MARKER_FILE\s*=/.test(code)) {
-    failures.push(`${rel}: CANCEL_MARKER_FILE must come from @pipeline-lite/automation`)
+    failures.push(`${rel}: CANCEL_MARKER_FILE must come from @tenon/automation`)
   }
   if (/function readTopLevelScalars\s*\(/.test(code)) {
     failures.push(`${rel}: pipeline YAML must be decoded by the kernel codec`)

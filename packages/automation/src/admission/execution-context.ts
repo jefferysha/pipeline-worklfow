@@ -20,7 +20,7 @@
  * 详见下方 `PREPARED_EXECUTION_BRAND`/`markLoopPrepared`/`markNonLoopPrepared` 头注。
  */
 import { randomBytes } from 'node:crypto'
-import type { AttemptContextLedgerSnapshot, AutomationPolicySnapshot, StepIR } from '@pipeline-lite/kernel'
+import type { AttemptContextLedgerSnapshot, AutomationPolicySnapshot, StepIR } from '@tenon/kernel'
 import type { AutomationLevel } from '../types.js'
 
 export interface ExecutionContext {

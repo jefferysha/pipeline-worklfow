@@ -1,6 +1,6 @@
 /**
  * server 契约类型 —— dashboard server 的公共形状。
- * server 是 @pipeline-lite/kernel 的消费方（只 import 不改）+ node stdlib http，零第三方运行时依赖。
+ * server 是 @tenon/kernel 的消费方（只 import 不改）+ node stdlib http，零第三方运行时依赖。
  */
 import type {
   DocumentEvidenceItemStatus,
@@ -10,23 +10,23 @@ import type {
   Phase,
   PipelineTodoProjection,
   StateStore,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import type { TraceStoreReader } from './traces.js'
 import type { LoopActivationValidator } from './loops.js'
 
-/** 机器级路径锚（可经 PIPELINE_DASHBOARD_HOME 覆盖——仅供 hermetic 测试隔离）。 */
+/** 机器级路径锚（可经 TENON_DASHBOARD_HOME 覆盖——仅供 hermetic 测试隔离）。 */
 export interface ServerPaths {
   home: string
   claudeDir: string
   /** ~/.claude/pipeline-projects.json —— 机器级项目注册表（老仓 project_model 同址）。 */
   registryPath: string
-  /** ~/.claude/.pipeline-dashboard-token —— B5 一次性 token 握手文件（0600）。 */
+  /** ~/.claude/.tenon-dashboard-token —— B5 一次性 token 握手文件（0600）。 */
   tokenPath: string
-  /** ~/.claude/.pipeline-dashboard.server —— pidfile（pid/port/version，B4 版本抢占用）。 */
+  /** ~/.claude/.tenon-dashboard.server —— pidfile（pid/port/version，B4 版本抢占用）。 */
   pidfilePath: string
   /**
    * ~/.claude/pipeline-secrets.json —— 机器级凭证存储（v6 T1，0600+原子写，白名单仅
-   * CLAUDE_CODE_OAUTH_TOKEN/OPENAI_API_KEY，见 @pipeline-lite/kernel 的 secretsPath）。
+   * CLAUDE_CODE_OAUTH_TOKEN/OPENAI_API_KEY，见 @tenon/kernel 的 secretsPath）。
    */
   secretsPath: string
 }
@@ -149,7 +149,7 @@ export interface DashboardServerOptions {
    */
   webRoot?: string
   /**
-   * tap 流量查看器数据源（BACKLOG #34d）：注入 @pipeline-lite/tap 的 TraceStore（只读 listSessions/
+   * tap 流量查看器数据源（BACKLOG #34d）：注入 @tenon/tap 的 TraceStore（只读 listSessions/
    * readRecords）则 GET /api/traces/* 供给本地捕获 + capabilities.traffic=true；未注入则占位（不谎报）。
    * 结构化注入面（不 import tap，守 server 零第三方 + 构建不耦合）；bin 装配见主会话接线清单。
    */
@@ -163,7 +163,7 @@ export interface DashboardServerOptions {
   validateLoopActivation?: LoopActivationValidator
   /**
    * H11-H14/G1/G2 Operations 生产 CLI 接缝。缺省执行当前仓已构建的真实
-   * `packages/cli/dist/pipeline.mjs`；测试注入 fake 只核 HTTP/argv 映射。
+   * `packages/cli/dist/tenon.mjs`；测试注入 fake 只核 HTTP/argv 映射。
    */
   runPipelineCli?: import('./operations.js').PipelineCliRunner
   /**

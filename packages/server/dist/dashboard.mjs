@@ -16,7 +16,7 @@ function safeHome() {
   if (h && h.length > 0)
     return h;
   const uid = typeof process.getuid === "function" ? String(process.getuid()) : "nouid";
-  const base = join(tmpdir(), `pipeline-tap-${uid}`);
+  const base = join(tmpdir(), `tenon-tap-${uid}`);
   try {
     mkdirSync(base, { recursive: true, mode: 448 });
   } catch {
@@ -27,16 +27,16 @@ function resolveTapDir(opts = {}) {
   if (opts.dir)
     return resolve(opts.dir);
   const env = opts.env ?? process.env;
-  const explicit = (env.PIPELINE_TAP_DIR ?? "").trim();
+  const explicit = (env.TENON_TAP_DIR ?? "").trim();
   if (explicit)
     return resolve(explicit);
-  const db = (env.PIPELINE_TAP_DB ?? "").trim();
+  const db = (env.TENON_TAP_DB ?? "").trim();
   if (db)
     return resolve(dirname(resolve(db)));
   const xdg = (env.XDG_DATA_HOME ?? "").trim();
   if (xdg)
-    return resolve(join(xdg, "pipeline-tap"));
-  return resolve(join(safeHome(), ".local", "share", "pipeline-tap"));
+    return resolve(join(xdg, "tenon-tap"));
+  return resolve(join(safeHome(), ".local", "share", "tenon-tap"));
 }
 
 // packages/tap/dist/record.js
@@ -921,7 +921,7 @@ function parseRunMetadataLines(lines) {
   const fingerprintRaw = fingerprintLine === void 0 ? void 0 : matchLine(fingerprintLine, DOCUMENT_GOVERNANCE_FINGERPRINT_KEY);
   if (fingerprintRaw !== void 0) {
     if (metadata.documentProfile === void 0 || !/^[0-9a-f]{64}$/.test(fingerprintRaw)) {
-      throw new Error("pipeline document governance fingerprint \u635F\u574F");
+      throw new Error("tenon document governance fingerprint \u635F\u574F");
     }
     metadata.documentGovernanceFingerprint = fingerprintRaw;
     consumedLines += 1;
@@ -930,7 +930,7 @@ function parseRunMetadataLines(lines) {
   const workflowFingerprintRaw = workflowFingerprintLine === void 0 ? void 0 : matchLine(workflowFingerprintLine, WORKFLOW_PLAN_FINGERPRINT_KEY);
   if (workflowFingerprintRaw !== void 0) {
     if (!/^[0-9a-f]{64}$/.test(workflowFingerprintRaw)) {
-      throw new Error("pipeline workflow plan fingerprint \u635F\u574F");
+      throw new Error("tenon workflow plan fingerprint \u635F\u574F");
     }
     metadata.workflowPlanFingerprint = workflowFingerprintRaw;
     consumedLines += 1;
@@ -2421,35 +2421,35 @@ var REQUIRED_RUNTIME_REFS = {
 var REQUIRED_SKILL_GROUPS = {
   open: [
     { label: "OpenSpec proposal", alternatives: ["openspec-propose", "opsx:propose"] },
-    { label: "pipeline open", alternatives: ["pipeline-open", "pipeline-lite:pipeline-open"] }
+    { label: "pipeline open", alternatives: ["tenon-open", "tenon:tenon-open"] }
   ],
   explore: [
-    { label: "pipeline explore", alternatives: ["pipeline-explore", "pipeline-lite:pipeline-explore"] },
+    { label: "pipeline explore", alternatives: ["tenon-explore", "tenon:tenon-explore"] },
     { label: "Superpower brainstorming", alternatives: ["brainstorming", "superpowers:brainstorming"] }
   ],
   spec: [
-    { label: "pipeline spec", alternatives: ["pipeline-spec", "pipeline-lite:pipeline-spec"] },
+    { label: "tenon spec", alternatives: ["tenon-spec", "tenon:tenon-spec"] },
     { label: "OpenSpec delta proposal", alternatives: ["openspec-propose", "opsx:propose"] },
     { label: "Superpower plan", alternatives: ["writing-plans", "superpowers:writing-plans"] }
   ],
-  build: [{ label: "pipeline build", alternatives: ["pipeline-build", "pipeline-lite:pipeline-build"] }],
+  build: [{ label: "pipeline build", alternatives: ["tenon-build", "tenon:tenon-build"] }],
   verify: [
-    { label: "pipeline verify", alternatives: ["pipeline-verify", "pipeline-lite:pipeline-verify"] },
+    { label: "pipeline verify", alternatives: ["tenon-verify", "tenon:tenon-verify"] },
     {
       label: "Superpower verification",
       alternatives: ["verification-before-completion", "superpowers:verification-before-completion"]
     }
   ],
   ship: [
-    { label: "pipeline ship", alternatives: ["pipeline-ship", "pipeline-lite:pipeline-ship"] },
+    { label: "pipeline ship", alternatives: ["tenon-ship", "tenon:tenon-ship"] },
     { label: "OpenSpec apply", alternatives: ["openspec-apply-change", "opsx:apply"] }
   ],
-  archive: [{ label: "pipeline archive", alternatives: ["pipeline-archive", "pipeline-lite:pipeline-archive"] }]
+  archive: [{ label: "pipeline archive", alternatives: ["tenon-archive", "tenon:tenon-archive"] }]
 };
 function aliasesForSkill(id) {
   const aliases = /* @__PURE__ */ new Set([id]);
-  if (id.startsWith("pipeline-lite:"))
-    aliases.add(id.slice("pipeline-lite:".length));
+  if (id.startsWith("tenon:"))
+    aliases.add(id.slice("tenon:".length));
   if (id.startsWith("superpowers:"))
     aliases.add(id.slice("superpowers:".length));
   if (id === "opsx:propose")
@@ -2627,7 +2627,7 @@ var OUTPUTS_BY_PHASE = {
   ],
   explore: [
     { kind: "superpower-design", producerCandidates: ["brainstorming", "superpowers:brainstorming"] },
-    { kind: "adr", producerCandidates: ["pipeline-explore", "pipeline-lite:pipeline-explore", "brainstorming", "superpowers:brainstorming"] }
+    { kind: "adr", producerCandidates: ["tenon-explore", "tenon:tenon-explore", "brainstorming", "superpowers:brainstorming"] }
   ],
   spec: [
     { kind: "delta-spec", producerCandidates: ["openspec-propose", "opsx:propose"] },
@@ -2638,7 +2638,7 @@ var OUTPUTS_BY_PHASE = {
   verify: [
     {
       kind: "verification-report",
-      producerCandidates: ["verification-before-completion", "superpowers:verification-before-completion", "pipeline-verify", "pipeline-lite:pipeline-verify"]
+      producerCandidates: ["verification-before-completion", "superpowers:verification-before-completion", "tenon-verify", "tenon:tenon-verify"]
     }
   ],
   ship: [
@@ -2653,27 +2653,27 @@ var MUTABLE_RECORDS_BY_PHASE = {
     // validated problem framing and initial design hypothesis into those living documents; the
     // resulting digest must therefore be attributed to the phase driver, not left under the
     // now-stale open-phase openspec-propose receipt.
-    { kind: "proposal", producerCandidates: ["pipeline-explore", "pipeline-lite:pipeline-explore"] },
-    { kind: "openspec-design", producerCandidates: ["pipeline-explore", "pipeline-lite:pipeline-explore"] },
-    { kind: "tasks", producerCandidates: ["pipeline-explore", "pipeline-lite:pipeline-explore"] }
+    { kind: "proposal", producerCandidates: ["tenon-explore", "tenon:tenon-explore"] },
+    { kind: "openspec-design", producerCandidates: ["tenon-explore", "tenon:tenon-explore"] },
+    { kind: "tasks", producerCandidates: ["tenon-explore", "tenon:tenon-explore"] }
   ],
   spec: [
-    { kind: "proposal", producerCandidates: ["pipeline-spec", "pipeline-lite:pipeline-spec"] },
-    { kind: "openspec-design", producerCandidates: ["pipeline-spec", "pipeline-lite:pipeline-spec"] },
-    { kind: "tasks", producerCandidates: ["pipeline-spec", "pipeline-lite:pipeline-spec"] },
-    { kind: "superpower-design", producerCandidates: ["pipeline-spec", "pipeline-lite:pipeline-spec"] }
+    { kind: "proposal", producerCandidates: ["tenon-spec", "tenon:tenon-spec"] },
+    { kind: "openspec-design", producerCandidates: ["tenon-spec", "tenon:tenon-spec"] },
+    { kind: "tasks", producerCandidates: ["tenon-spec", "tenon:tenon-spec"] },
+    { kind: "superpower-design", producerCandidates: ["tenon-spec", "tenon:tenon-spec"] }
   ],
   build: [
-    { kind: "tasks", producerCandidates: ["pipeline-build", "pipeline-lite:pipeline-build"] }
+    { kind: "tasks", producerCandidates: ["tenon-build", "tenon:tenon-build"] }
   ],
   verify: [
-    { kind: "tasks", producerCandidates: ["pipeline-verify", "pipeline-lite:pipeline-verify"] }
+    { kind: "tasks", producerCandidates: ["tenon-verify", "tenon:tenon-verify"] }
   ],
   ship: [
-    { kind: "tasks", producerCandidates: ["pipeline-ship", "pipeline-lite:pipeline-ship"] }
+    { kind: "tasks", producerCandidates: ["tenon-ship", "tenon:tenon-ship"] }
   ],
   archive: [
-    { kind: "tasks", producerCandidates: ["pipeline-archive", "pipeline-lite:pipeline-archive"] }
+    { kind: "tasks", producerCandidates: ["tenon-archive", "tenon:tenon-archive"] }
   ]
 };
 var READS_BY_PHASE = {
@@ -2827,8 +2827,8 @@ function outputRequirementFor(kind) {
 }
 function aliasesForSkill2(id) {
   const aliases = /* @__PURE__ */ new Set([id]);
-  if (id.startsWith("pipeline-lite:"))
-    aliases.add(id.slice("pipeline-lite:".length));
+  if (id.startsWith("tenon:"))
+    aliases.add(id.slice("tenon:".length));
   if (id.startsWith("superpowers:"))
     aliases.add(id.slice("superpowers:".length));
   if (id === "opsx:propose")
@@ -5456,7 +5456,7 @@ async function evaluateDocumentEvidence(repoRoot, changeDir, phase, scope = {}, 
       phase,
       hasLedger: false,
       pass: false,
-      blockers: ["\u7F3A\u5C11 .pipeline-documents.json\uFF1B\u6267\u884C pipeline document init \u540E\u6309 phase \u91CD\u65B0\u767B\u8BB0\u4EA7\u7269"],
+      blockers: ["\u7F3A\u5C11 .pipeline-documents.json\uFF1B\u6267\u884C tenon document init \u540E\u6309 phase \u91CD\u65B0\u767B\u8BB0\u4EA7\u7269"],
       items: []
     };
   }
@@ -5478,7 +5478,7 @@ async function evaluateDocumentEvidence(repoRoot, changeDir, phase, scope = {}, 
     const records = ledger.records.filter((record2) => record2.kind === kind);
     const requiredRead = readRequirements.has(kind);
     if (records.length === 0) {
-      blockers.push(`\u7F3A\u5C11 document '${kind}'\uFF1B\u6267\u884C pipeline document record <change> ${kind} <path> --producer <skill>`);
+      blockers.push(`\u7F3A\u5C11 document '${kind}'\uFF1B\u6267\u884C tenon document record <change> ${kind} <path> --producer <skill>`);
       items.push(item(kind, "missing", requiredRead, records));
       continue;
     }
@@ -5491,19 +5491,19 @@ async function evaluateDocumentEvidence(repoRoot, changeDir, phase, scope = {}, 
     }
     const legacyDelta = kind === "delta-spec" ? records.filter((record2) => deltaSpecSlot(record2.path, changeDir) === void 0) : [];
     if (legacyDelta.length > 0) {
-      blockers.push(`\u5B58\u5728\u65E7 delta-spec \u8BB0\u5F55\uFF0C\u5FC5\u987B\u7528 pipeline document migrate-delta \u663E\u5F0F\u8FC1\u79FB: ${legacyDelta.map((record2) => record2.path).join(", ")}`);
+      blockers.push(`\u5B58\u5728\u65E7 delta-spec \u8BB0\u5F55\uFF0C\u5FC5\u987B\u7528 tenon document migrate-delta \u663E\u5F0F\u8FC1\u79FB: ${legacyDelta.map((record2) => record2.path).join(", ")}`);
       items.push(item(kind, "stale", requiredRead, records));
       continue;
     }
     const digests = await Promise.all(records.map((record2) => currentRecordDigest(repoRoot, record2)));
     if (records.some((record2, index) => digests[index] !== record2.sha256)) {
-      blockers.push(`document '${kind}' \u5DF2\u7F3A\u5931\u6216\u5185\u5BB9\u53D8\u5316\uFF1B\u91CD\u65B0\u6267\u884C pipeline document record \u540E\u518D\u7EE7\u7EED`);
+      blockers.push(`document '${kind}' \u5DF2\u7F3A\u5931\u6216\u5185\u5BB9\u53D8\u5316\uFF1B\u91CD\u65B0\u6267\u884C tenon document record \u540E\u518D\u7EE7\u7EED`);
       items.push(item(kind, "stale", requiredRead, records));
       continue;
     }
     if (requiredRead && (currentVisitId === void 0 || records.some((record2) => !record2.reads.some((receipt) => receiptMatchesVisit(receipt, phase, record2.sha256, currentVisitId))))) {
       if (currentVisitId !== void 0) {
-        blockers.push(`document '${kind}' \u5C1A\u672A\u7531 ${phase} \u7684\u5F53\u524D step visit \u8BFB\u53D6\uFF1B\u6267\u884C pipeline document read <change> ${kind}`);
+        blockers.push(`document '${kind}' \u5C1A\u672A\u7531 ${phase} \u7684\u5F53\u524D step visit \u8BFB\u53D6\uFF1B\u6267\u884C tenon document read <change> ${kind}`);
       }
       items.push(item(kind, "unread", requiredRead, records));
       continue;
@@ -7473,7 +7473,7 @@ async function checkDefaultEventPreconditions(event, state, ctx) {
 // packages/kernel/dist/machine-state-scope.js
 import { createHash as createHash7 } from "node:crypto";
 import { resolve as resolve5 } from "node:path";
-var STATE_SCOPE_NAMESPACE = "pipeline-lite:machine-state-scope:v1\0";
+var STATE_SCOPE_NAMESPACE = "tenon:machine-state-scope:v1\0";
 function canonicalMachineStateHome(home) {
   return resolve5(home);
 }
@@ -8416,11 +8416,11 @@ import { createHash as createHash8 } from "node:crypto";
 import { readFileSync as readFileSync8 } from "node:fs";
 import { mkdir as mkdir8, readFile as readFile13 } from "node:fs/promises";
 import path6 from "node:path";
-var PIPELINE_DIR = ".pipeline";
+var TENON_DIR = ".pipeline";
 var TRACKS_FILE = "tracks.yaml";
 var EMPTY_PROJECT_CONFIG = { version: 1 };
 function trackRegistryPath(repoRoot) {
-  return path6.join(repoRoot, PIPELINE_DIR, TRACKS_FILE);
+  return path6.join(repoRoot, TENON_DIR, TRACKS_FILE);
 }
 function registryRevision(config) {
   return createHash8("sha256").update(serializeTrackRegistry(config), "utf8").digest("hex").slice(0, 16);
@@ -12442,7 +12442,7 @@ function decodeHistoryLine(value) {
   };
 }
 function canonicalWorkflowSkillId(skillId) {
-  return skillId.startsWith("pipeline-lite:") ? skillId.slice("pipeline-lite:".length) : skillId;
+  return skillId.startsWith("tenon:") ? skillId.slice("tenon:".length) : skillId;
 }
 function skillIdFromHistory(raw) {
   const match = /^(?:Skill|CodexSkillRead): (.+)$/.exec(raw);
@@ -13391,12 +13391,12 @@ async function buildCanonicalManifest(skillId, sourceDir, hooks = {}) {
 }
 
 // packages/automation/dist/runner/runner.js
-var AFK_RUN_SCRIPT_SHA256 = "4d884ad7a24b32c6600003a6d321f4385411257dbd792b0e6bc0301a084e9577";
+var AFK_RUN_SCRIPT_SHA256 = "993067db8ccb4c3b48c54ff2410907fd4dc72a5df3d0dc8946f6913594a0a619";
 var AFK_RUN_DRIFT_EXIT_CODE = 95;
-var IMAGE_AFK_RUN_PATH = "/usr/local/bin/pipeline-afk-run";
+var IMAGE_AFK_RUN_PATH = "/usr/local/bin/tenon-afk-run";
 var IMAGE_ATTESTATION_PATH = "/opt/pipeline/image-attestation.env";
 var checksumGuard = (path7, digest2, attestationKey, label) => `actual_sha="$(sha256sum ${path7} 2>/dev/null | awk '{print $1}')"; [ "$actual_sha" = "${digest2}" ] && grep -qx "${attestationKey}=${digest2}" ${IMAGE_ATTESTATION_PATH} 2>/dev/null || { echo "sandcastle \u955C\u50CF\u5185 ${label} \u4E0E host \u671F\u671B\u6216\u955C\u50CF attestation \u4E0D\u4E00\u81F4\u2014\u2014\u8BF7\u91CD\u5EFA\u955C\u50CF\uFF1Atools/sandcastle/build.sh" >&2; exit ${AFK_RUN_DRIFT_EXIT_CODE}; }`;
-var AFK_RUN_DRIFT_GUARD = checksumGuard(IMAGE_AFK_RUN_PATH, AFK_RUN_SCRIPT_SHA256, "pipeline_afk_run_sha256", "pipeline-afk-run");
+var AFK_RUN_DRIFT_GUARD = checksumGuard(IMAGE_AFK_RUN_PATH, AFK_RUN_SCRIPT_SHA256, "pipeline_afk_run_sha256", "tenon-afk-run");
 
 // packages/automation/dist/lifecycle/worktree.js
 var CANCEL_MARKER_FILE = ".cancel-requested";
@@ -14068,14 +14068,14 @@ async function evaluateLoopExecutionWiring(loop, loops, deps) {
 import { homedir as homedir3 } from "node:os";
 import { join as join29 } from "node:path";
 function resolveServerPaths(opts) {
-  const home = canonicalMachineStateHome(opts?.home ?? process.env.PIPELINE_DASHBOARD_HOME ?? homedir3());
+  const home = canonicalMachineStateHome(opts?.home ?? process.env.TENON_DASHBOARD_HOME ?? homedir3());
   const claudeDir = join29(home, ".claude");
   return {
     home,
     claudeDir,
     registryPath: join29(claudeDir, "pipeline-projects.json"),
-    tokenPath: join29(claudeDir, ".pipeline-dashboard-token"),
-    pidfilePath: join29(claudeDir, ".pipeline-dashboard.server"),
+    tokenPath: join29(claudeDir, ".tenon-dashboard-token"),
+    pidfilePath: join29(claudeDir, ".tenon-dashboard.server"),
     secretsPath: join29(claudeDir, "pipeline-secrets.json")
   };
 }
@@ -14873,7 +14873,7 @@ import { existsSync as existsSync5 } from "node:fs";
 import { dirname as dirname6, join as join32 } from "node:path";
 import { fileURLToPath } from "node:url";
 function pipelineCliBundlePath() {
-  return join32(dirname6(fileURLToPath(import.meta.url)), "..", "..", "cli", "dist", "pipeline.mjs");
+  return join32(dirname6(fileURLToPath(import.meta.url)), "..", "..", "cli", "dist", "tenon.mjs");
 }
 function pipelineCliAvailable() {
   return existsSync5(pipelineCliBundlePath());
@@ -14881,7 +14881,7 @@ function pipelineCliAvailable() {
 var runPipelineCli = (repoRoot, args) => new Promise((resolve12, reject) => {
   const bundle = pipelineCliBundlePath();
   if (!existsSync5(bundle)) {
-    reject(new Error(`pipeline CLI bundle \u4E0D\u5B58\u5728\uFF1A${bundle}\uFF1B\u8BF7\u5148\u6267\u884C npm run bundle`));
+    reject(new Error(`Tenon CLI bundle \u4E0D\u5B58\u5728\uFF1A${bundle}\uFF1B\u8BF7\u5148\u6267\u884C npm run bundle`));
     return;
   }
   execFile(
@@ -15119,7 +15119,7 @@ function errorMessage3(error) {
   return error instanceof Error ? error.message : String(error);
 }
 function resultError(result) {
-  return result.stderr.trim() || result.stdout.trim() || `pipeline CLI exit ${result.exitCode}`;
+  return result.stderr.trim() || result.stdout.trim() || `Tenon CLI exit ${result.exitCode}`;
 }
 function keyOf(root, loopId) {
   return `${root}\0${loopId}`;
@@ -18839,11 +18839,11 @@ function isLocalHost(host, port) {
 }
 function indexHtml(token) {
   const jsToken = JSON.stringify(token).replace(/</g, "\\u003c");
-  return `<!doctype html><meta charset="utf-8"><title>Pipeline Dashboard</title>
+  return `<!doctype html><meta charset="utf-8"><title>Tenon Dashboard</title>
 <h1>Pipeline Global Dashboard</h1>
 <p>TS \u5168\u5C40 server \u5DF2\u5C31\u7EEA\u3002\u53EA\u8BFB\u6570\u636E\u89C1 <code>/api/snapshot</code> / <code>/api/stream</code>\uFF1B\u5065\u5EB7\u63A2\u9488 <code>/api/health</code>\u3002</p>
 <p>\u5199\u7AEF\u70B9\u9700\u5E26\u4E00\u6B21\u6027 token\uFF08B5\uFF09\u3002\u524D\u7AEF\u4FE1\u606F\u67B6\u6784\u91CD\u6784\uFF1ABACKLOG #26\u3002</p>
-<script>window.__PIPELINE_DASHBOARD_TOKEN__ = ${jsToken};</script>`;
+<script>window.__TENON_DASHBOARD_TOKEN__ = ${jsToken};</script>`;
 }
 
 // packages/server/src/serverTransport.ts
@@ -18999,7 +18999,7 @@ data: ${JSON.stringify(await buildSnapshot(snapshotDeps(nowMs)))}
     try {
       let html = readFileSync23(join49(webRoot, "index.html"), "utf8");
       const jsToken = JSON.stringify(token).replace(/</g, "\\u003c");
-      const inject = `<script>window.__PIPELINE_DASHBOARD_TOKEN__ = ${jsToken};</script>`;
+      const inject = `<script>window.__TENON_DASHBOARD_TOKEN__ = ${jsToken};</script>`;
       html = html.includes("</head>") ? html.replace("</head>", `${inject}</head>`) : `${inject}${html}`;
       sendHtml(res, 200, html);
       return true;
@@ -19135,7 +19135,7 @@ function createServerGovernance(options) {
   const isRegisteredRoot = (root) => dedupeRoots(registry()).includes(resolvePath11(root));
   async function executeOperation(res, root, args) {
     if (!operationsAvailable) {
-      return sendJson(res, 503, { ok: false, error: "Operations \u672A\u63A5\u7EBF\uFF1Apipeline CLI bundle \u4E0D\u5B58\u5728" });
+      return sendJson(res, 503, { ok: false, error: "Operations \u672A\u63A5\u7EBF\uFF1ATenon CLI bundle \u4E0D\u5B58\u5728" });
     }
     if (!root || !isRegisteredRoot(root)) {
       return sendJson(res, 404, { ok: false, error: "root \u672A\u5728\u673A\u5668\u7EA7\u9879\u76EE\u6CE8\u518C\u8868\u4E2D" });
@@ -19700,10 +19700,10 @@ function resolveDashboardPort(raw) {
 
 // packages/server/src/main.ts
 function serverPort() {
-  return resolveDashboardPort(process.env.PIPELINE_DASHBOARD_PORT);
+  return resolveDashboardPort(process.env.TENON_DASHBOARD_PORT);
 }
 function cadencePollInterval() {
-  const raw = Number.parseInt(process.env.PIPELINE_CADENCE_POLL_MS ?? "", 10);
+  const raw = Number.parseInt(process.env.TENON_CADENCE_POLL_MS ?? "", 10);
   return Number.isSafeInteger(raw) && raw >= 100 ? raw : 3e4;
 }
 function pluginRoot() {

@@ -52,7 +52,7 @@ function assertSecretKey(key: string): asserts key is SecretKey {
   }
 }
 
-/** 存储缺省路径：<home>/.claude/pipeline-secrets.json（与 pipeline-projects.json/.pipeline-dashboard-token 同目录）。 */
+/** 存储缺省路径：<home>/.claude/pipeline-secrets.json（与 pipeline-projects.json/.tenon-dashboard-token 同目录）。 */
 export function secretsPath(home: string): string {
   return join(home, '.claude', SECRETS_FILE_NAME)
 }

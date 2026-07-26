@@ -418,7 +418,7 @@ beforeEach(() => {
   }) as unknown as typeof fetch
 })
 afterEach(() => {
-  delete window.__PIPELINE_DASHBOARD_TOKEN__
+  delete window.__TENON_DASHBOARD_TOKEN__
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
 })
@@ -570,7 +570,7 @@ describe('WorkbenchView v3 Workflow 生命周期', () => {
   })
 
   it('删除：确认后走带 token 的 DELETE，成功后从列表移除并切回 default', async () => {
-    window.__PIPELINE_DASHBOARD_TOKEN__ = 'studio-token'
+    window.__TENON_DASHBOARD_TOKEN__ = 'studio-token'
     renderView()
     await screen.findByTestId('wb-step-draft')
 

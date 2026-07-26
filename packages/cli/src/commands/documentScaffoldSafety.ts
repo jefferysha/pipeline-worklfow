@@ -1,6 +1,6 @@
 import { lstat, realpath } from 'node:fs/promises'
 import { dirname, isAbsolute, relative, resolve, sep } from 'node:path'
-import { ensureTrustedProjectDirectory } from '@pipeline-lite/kernel'
+import { ensureTrustedProjectDirectory } from '@tenon/kernel'
 
 export function ordinaryDocumentFile(info: Awaited<ReturnType<typeof lstat>>): boolean {
   return info.isFile() && !info.isSymbolicLink()

@@ -10,7 +10,7 @@ import {
   type SkillSourceDefinition,
   type SkillTier,
   type SkillTool,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'

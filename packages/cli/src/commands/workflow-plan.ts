@@ -1,4 +1,4 @@
-import type { EffectiveWorkflowPlan, PipelineState } from '@pipeline-lite/kernel'
+import type { EffectiveWorkflowPlan, PipelineState } from '@tenon/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
 import { changeDir, isValidChangeName } from '../paths.js'
 import { effectiveWorkflowForState } from './effective-workflow.js'

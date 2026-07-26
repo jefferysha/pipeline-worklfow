@@ -94,7 +94,7 @@ esac
 
 WORKDIR="${ORACLE_WORKDIR:-$(mktemp -d "${TMPDIR:-/tmp}/pipeline-oracle.XXXXXX")}"
 mkdir -p "$WORKDIR"
-MACHINE_HOME="$WORKDIR/.pipeline-dashboard-home"
+MACHINE_HOME="$WORKDIR/.tenon-dashboard-home"
 REPORT="$WORKDIR/report.txt"
 ROWS="$WORKDIR/rows.tsv"
 : > "$REPORT"
@@ -255,11 +255,11 @@ probe_oracle() {
   local pd="$WORKDIR/.probe" out phase
   rm -rf "$pd"
   mkdir -p "$pd/openspec/changes"
-  if ! out=$(cd "$pd" && PIPELINE_ASSUME_YES=1 bash "$OLD_SCRIPT" init oracle-probe backend full --user oracle 2>&1); then
+  if ! out=$(cd "$pd" && TENON_ASSUME_YES=1 bash "$OLD_SCRIPT" init oracle-probe backend full --user oracle 2>&1); then
     DEGRADED_REASON="老脚本 init 探针失败: $(printf '%s' "$out" | tail -n 3 | tr '\n' ' ')"
     return 1
   fi
-  phase=$(cd "$pd" && PIPELINE_ASSUME_YES=1 bash "$OLD_SCRIPT" get oracle-probe phase 2>/dev/null)
+  phase=$(cd "$pd" && TENON_ASSUME_YES=1 bash "$OLD_SCRIPT" get oracle-probe phase 2>/dev/null)
   if [ "$phase" != "open" ]; then
     DEGRADED_REASON="老脚本 get 探针异常（phase='$phase'，期望 open）"
     return 1
@@ -306,7 +306,7 @@ say ""
 #
 # Oracle fixtures 起源于文档账本出现之前，重点是历史状态机 guard/effect；现在真实 default workflow
 # 会在每次 transition 前验证 document ledger。这里不绕过该验证：它在 new 侧逐个执行产品的
-# `pipeline document init|record|read` 命令，并通过同包 PostToolUse tracker 写入所需的 Skill audit。
+# `tenon document init|record|read` 命令，并通过同包 PostToolUse tracker 写入所需的 Skill audit。
 #
 # 对 pm-history 这类“升级前已在 spec”的 fixture，前序已有文档用 `--backfill` 显式登记。该选项也在
 # 产品 CLI 中受到约束：只能补当前 phase 之前的文档，仍需要真实 skill evidence + path/digest 校验，
@@ -314,7 +314,7 @@ say ""
 
 run_new_cli() {
   local dir="$1"; shift
-  (cd "$dir" && PIPELINE_DASHBOARD_HOME="$MACHINE_HOME" "${NEW_CMD[@]}" "$@")
+  (cd "$dir" && TENON_DASHBOARD_HOME="$MACHINE_HOME" "${NEW_CMD[@]}" "$@")
 }
 
 install_post_init_fixture() {
@@ -484,7 +484,7 @@ run_step_dual() {
       > "$step_dir/new.skill-bootstrap.out" 2> "$step_dir/new.skill-bootstrap.err" || bootstrap_rc=$?
   fi
 
-  (cd "$base/old" && PIPELINE_ASSUME_YES=1 bash "$OLD_SCRIPT" "${OLD_ARGS[@]}") \
+  (cd "$base/old" && TENON_ASSUME_YES=1 bash "$OLD_SCRIPT" "${OLD_ARGS[@]}") \
     > "$step_dir/old.out" 2> "$step_dir/old.err"
   old_rc=$?
   review_bootstrap_rc=0
@@ -634,7 +634,7 @@ run_step_degraded() {
   local change="${args[0]}"
   local new_rc f_out f_exit f_yaml label
 
-  (cd "$base/new" && PIPELINE_DASHBOARD_HOME="$MACHINE_HOME" "${NEW_CMD[@]}" "${NEW_ARGS[@]}") \
+  (cd "$base/new" && TENON_DASHBOARD_HOME="$MACHINE_HOME" "${NEW_CMD[@]}" "${NEW_ARGS[@]}") \
     > "$step_dir/new.out" 2> "$step_dir/new.err"
   new_rc=$?
 
@@ -752,7 +752,7 @@ run_step_seed() {
     fi
   done
   if [ "$ok" = PASS ]; then
-    if ! (cd "$base/new" && PIPELINE_DASHBOARD_HOME="$MACHINE_HOME" "${NEW_CMD[@]}" state import-legacy "$change") \
+    if ! (cd "$base/new" && TENON_DASHBOARD_HOME="$MACHINE_HOME" "${NEW_CMD[@]}" state import-legacy "$change") \
       > "$step_dir/new.import.out" 2> "$step_dir/new.import.err"; then
       ok=FAIL
     fi

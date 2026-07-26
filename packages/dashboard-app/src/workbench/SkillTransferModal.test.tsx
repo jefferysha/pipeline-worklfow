@@ -74,7 +74,7 @@ describe('SkillTransferModal', () => {
   })
 
   it('中英切换：英文下渲染英文占位符/按钮（此前本组件完全不走 t()，且 error 文案硬编码英文、其余硬编码中文，混杂不一致）', async () => {
-    localStorage.setItem('pipeline-dashboard-lang', 'en')
+    localStorage.setItem('tenon-dashboard-lang', 'en')
     renderModal({ selected: [], onSave: vi.fn(), onCancel: vi.fn() })
     await waitFor(() => expect(screen.getByPlaceholderText('Search…')).toBeInTheDocument())
     expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument()

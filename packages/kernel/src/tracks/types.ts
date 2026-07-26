@@ -44,7 +44,7 @@ export interface TrackPolicyProfile {
   readonly reviewSeed: ReviewSeed
   /**
    * 真正的「spec-complete 后交给 AFK」策略位。它与 automationEligible 分离：后者只表示
-   * 用户显式执行 `pipeline afk enqueue` 是否被允许，不能因为默认值为 true 就劫持正常 Build。
+   * 用户显式执行 `tenon afk enqueue` 是否被允许，不能因为默认值为 true 就劫持正常 Build。
    * 缺席等价于 false，兼容已存在的项目 track registry。
    */
   readonly autoEnqueueOnSpecComplete?: boolean

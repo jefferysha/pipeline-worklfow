@@ -98,7 +98,7 @@ export async function evaluateDocumentEvidence(
       phase,
       hasLedger: false,
       pass: false,
-      blockers: ['缺少 .pipeline-documents.json；执行 pipeline document init 后按 phase 重新登记产物'],
+      blockers: ['缺少 .pipeline-documents.json；执行 tenon document init 后按 phase 重新登记产物'],
       items: [],
     }
   }
@@ -130,7 +130,7 @@ export async function evaluateDocumentEvidence(
     const records = ledger.records.filter((record) => record.kind === kind)
     const requiredRead = readRequirements.has(kind)
     if (records.length === 0) {
-      blockers.push(`缺少 document '${kind}'；执行 pipeline document record <change> ${kind} <path> --producer <skill>`)
+      blockers.push(`缺少 document '${kind}'；执行 tenon document record <change> ${kind} <path> --producer <skill>`)
       items.push(item(kind, 'missing', requiredRead, records))
       continue
     }
@@ -148,14 +148,14 @@ export async function evaluateDocumentEvidence(
       : []
     if (legacyDelta.length > 0) {
       blockers.push(
-        `存在旧 delta-spec 记录，必须用 pipeline document migrate-delta 显式迁移: ${legacyDelta.map((record) => record.path).join(', ')}`,
+        `存在旧 delta-spec 记录，必须用 tenon document migrate-delta 显式迁移: ${legacyDelta.map((record) => record.path).join(', ')}`,
       )
       items.push(item(kind, 'stale', requiredRead, records))
       continue
     }
     const digests = await Promise.all(records.map((record) => currentRecordDigest(repoRoot, record)))
     if (records.some((record, index) => digests[index] !== record.sha256)) {
-      blockers.push(`document '${kind}' 已缺失或内容变化；重新执行 pipeline document record 后再继续`)
+      blockers.push(`document '${kind}' 已缺失或内容变化；重新执行 tenon document record 后再继续`)
       items.push(item(kind, 'stale', requiredRead, records))
       continue
     }
@@ -167,7 +167,7 @@ export async function evaluateDocumentEvidence(
     )) {
       if (currentVisitId !== undefined) {
         blockers.push(
-          `document '${kind}' 尚未由 ${phase} 的当前 step visit 读取；执行 pipeline document read <change> ${kind}`,
+          `document '${kind}' 尚未由 ${phase} 的当前 step visit 读取；执行 tenon document read <change> ${kind}`,
         )
       }
       items.push(item(kind, 'unread', requiredRead, records))

@@ -3,7 +3,7 @@ name: prototype
 description: First-party lightweight prototype workflow for validating product direction.
 license: MIT
 metadata:
-  author: pipeline-lite
+  author: tenon
 ---
 
 # Prototype

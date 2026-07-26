@@ -13,8 +13,8 @@ import { join } from 'node:path'
 import { describe, expect, test } from 'vitest'
 import {
   createBreadcrumbWriter, createTransitionRecordStore, createWorkflowRunRepository,
-} from '@pipeline-lite/kernel'
-import type { BreadcrumbWriter } from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
+import type { BreadcrumbWriter } from '@tenon/kernel'
 import { performTransition, type TransitionDeps } from './transition.js'
 import {
   initChange,

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import type { PipelineState } from '@pipeline-lite/kernel'
+import type { PipelineState } from '@tenon/kernel'
 import { cmdImport } from './import.js'
 import { FIXED_CLOCK, makeDeps, mockState } from '../test-support.js'
 

@@ -1,6 +1,6 @@
 import { lstat, readFile, rename, rm } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, relative, resolve, sep } from 'node:path'
-import { atomicLinkPublish } from '@pipeline-lite/kernel'
+import { atomicLinkPublish } from '@tenon/kernel'
 import { ordinaryPathKey } from './specScaffoldTree.js'
 
 export type TransactionState = 'preparing' | 'prepared' | 'original-moved' | 'promoted'
@@ -210,7 +210,7 @@ export async function acquireTransaction(
 ): Promise<{ readonly lockFile: string; readonly recoveryFile: string }> {
   const lockFile = resolve(
     anchor,
-    `.pipeline-spec-transaction-${ordinaryPathKey(specDirectory)}.json`,
+    `.tenon-spec-transaction-${ordinaryPathKey(specDirectory)}.json`,
   )
   const recoveryFile = `${lockFile}.recovering`
   for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -220,7 +220,7 @@ export async function acquireTransaction(
     try {
       await atomicLinkPublish(
         anchor,
-        '.pipeline-spec-transaction.tmp',
+        '.tenon-spec-transaction.tmp',
         lockFile,
         receiptContent(receipt),
       )

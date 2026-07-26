@@ -2,7 +2,7 @@
 
 ## Goal
 
-Build and verify Pipeline Lite from source without drifting tracked bundles,
+Build and verify Tenon from source without drifting tracked bundles,
 generated workflow assets, public contracts, or documentation.
 
 ## Prerequisites
@@ -16,8 +16,8 @@ generated workflow assets, public contracts, or documentation.
 ## Setup
 
 ```bash
-git clone https://github.com/jefferysha/pipeline-worklfow.git
-cd pipeline-worklfow
+git clone https://github.com/jefferysha/tenon.git
+cd tenon
 npm ci
 npm run build
 ```
@@ -39,7 +39,7 @@ installation path.
 | `hooks` | thin host hook shims |
 | `adapters` | host capability/install adapters |
 | `templates` | manifest, Skill sources, built-in Workflows |
-| `skills` | distributed Pipeline Lite Skills |
+| `skills` | distributed Tenon Skills |
 
 Read [CONTRIBUTING.md](../../CONTRIBUTING.md), `AGENTS.md`, and the relevant
 `.agent-rules/` files before editing.

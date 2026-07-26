@@ -8,7 +8,7 @@ import { chmod, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs
 import { tmpdir } from 'node:os'
 import { join, resolve as resolvePath } from 'node:path'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
-import { projectRegistryPath, registerProjectRoot } from '@pipeline-lite/kernel'
+import { projectRegistryPath, registerProjectRoot } from '@tenon/kernel'
 import { buildProgram, CliExit } from './program.js'
 import { realDeps } from './integration-harness.js'
 

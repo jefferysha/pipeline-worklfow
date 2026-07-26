@@ -10,7 +10,7 @@ import { accessSync, constants as fsConstants, realpathSync } from 'node:fs'
 import { get as httpGet } from 'node:http'
 import { homedir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
-import { machineStateScopeId } from '@pipeline-lite/kernel'
+import { machineStateScopeId } from '@tenon/kernel'
 import type { CliDeps } from '../deps.js'
 import { resolveMachineStateHome } from '../machineHome.js'
 
@@ -217,7 +217,7 @@ function isDashboardAssets(value: DashboardAssets | string[]): value is Dashboar
 }
 
 function dashboardEnvironment(port: number): NodeJS.ProcessEnv {
-  return { ...process.env, PIPELINE_DASHBOARD_PORT: String(port) }
+  return { ...process.env, TENON_DASHBOARD_PORT: String(port) }
 }
 
 export interface ReleasedDashboardOptions {
@@ -243,12 +243,12 @@ async function startManagedDashboard(
   if (!isDashboardAssets(assets)) {
     deps.io.err(
       `ERROR: 当前 pipeline 插件缺少已发布 dashboard 资产：${assets.join('、')}。` +
-      '请运行 pipeline update --codex（或 --claude）恢复完整插件包。',
+      '请运行 tenon update --codex（或 --claude）恢复完整插件包。',
     )
     return 1
   }
   if (!(await runtime.launchDetached(assets.serverBundle, dashboardEnvironment(port)))) {
-    deps.io.err('[dashboard] 受管 server 进程无法启动；runtime 已保留，可运行 pipeline dashboard 诊断。')
+    deps.io.err('[dashboard] 受管 server 进程无法启动；runtime 已保留，可运行 tenon dashboard 诊断。')
     return 1
   }
   const expectedStateScopeId = runtime.resolveStateScopeId()
@@ -305,12 +305,12 @@ export async function cmdDashboard(
   if (!isDashboardAssets(assets)) {
     deps.io.err(
       `ERROR: 当前 pipeline 插件缺少已发布 dashboard 资产：${assets.join('、')}。` +
-      '请运行 pipeline update --codex（或 --claude）恢复完整插件包。',
+      '请运行 tenon update --codex（或 --claude）恢复完整插件包。',
     )
     return 1
   }
 
-  const inheritedPort = parsePort(process.env.PIPELINE_DASHBOARD_PORT)
+  const inheritedPort = parsePort(process.env.TENON_DASHBOARD_PORT)
   const port = explicitPort ?? inheritedPort ?? DEFAULT_DASHBOARD_PORT
   deps.io.out(`[dashboard] 使用插件内置 SPA + server bundle 启动单一入口：http://127.0.0.1:${port}/`)
   deps.io.out(`[dashboard] server: ${assets.serverBundle}`)

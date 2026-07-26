@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { LOOP_RUNNERS as KERNEL_LOOP_RUNNERS } from '@pipeline-lite/kernel'
+import { LOOP_RUNNERS as KERNEL_LOOP_RUNNERS } from '@tenon/kernel'
 import { I18nProvider } from '../i18n'
 import { LOOP_RUNNERS, LoopCard, useLoops } from './LoopCard'
 
@@ -681,11 +681,11 @@ describe('LoopCard 草稿审阅（loop-init L5：徽章 + 批准/驳回动作行
     await waitFor(() => expect(screen.queryByTestId('lp-draft-badge')).toBeNull())
   })
 
-  it('⑥空态文案提 pipeline loop init（zh）——保留 agent 手写 .pipeline/loops.yaml 既有措辞', async () => {
+  it('⑥空态文案提 tenon loop init（zh）——保留 agent 手写 .pipeline/loops.yaml 既有措辞', async () => {
     rows = []
     renderCard()
     const empty = await screen.findByTestId('lp-empty')
-    expect(empty).toHaveTextContent('pipeline loop init')
+    expect(empty).toHaveTextContent('tenon loop init')
     // 既有「agent 直接写 .pipeline/loops.yaml」措辞不被替换
     expect(empty).toHaveTextContent('.pipeline/loops.yaml')
   })

@@ -39,7 +39,7 @@ describe('sanitizeBucket（paths.py:48：[/\\_]→- 再非白名单→-）', () 
   })
 })
 
-describe('projectKey / bucketFor（PIPELINE_CHANNEL_PROJECT 覆盖；global → _global）', () => {
+describe('projectKey / bucketFor（TENON_CHANNEL_PROJECT 覆盖；global → _global）', () => {
   test('据 cwd sanitize', () => {
     expect(projectKey({ root: '/r', cwd: '/Users/a/proj' })).toBe('-Users-a-proj')
   })

@@ -4,7 +4,7 @@
  * 老仓真相源：scheduler/types.ts:98-146（StateWriter.claim / setAutomationOwned / attempts）+
  * scheduler/scheduler.ts:287-289（handleOne 的 claim gate）。
  *
- * 全部走 @pipeline-lite/kernel 的 StateStore（cas / withLock）——**automation 零 kernel 修改，
+ * 全部走 @tenon/kernel 的 StateStore（cas / withLock）——**automation 零 kernel 修改，
  * 只 import**。cas 提供 compare-and-set 的原子闸（kernel 内 mkdir 锁串行 + 读比对写）。
  *
  * 关键并发不变量：
@@ -17,7 +17,7 @@
  *     所有权已丢失时零写入，避免先耗 retry budget 再发现终态不能提交。
  *   - incrAttempts：保留给低层兼容调用；scheduler 失败终态不得单独调用它。
  */
-import type { StateStore } from '@pipeline-lite/kernel'
+import type { StateStore } from '@tenon/kernel'
 import { settleFailure } from './state-machine.js'
 
 /** daemon 拥有的两个态：只有它们能被 setAutomationOwned 翻成终态。 */
@@ -67,7 +67,7 @@ export function setAutomationOwnedWithFields(
   fields: Readonly<Record<string, string>>,
 ): Promise<boolean> {
   return store.casMany(changeDir, 'automation', DAEMON_OWNED, {
-    ...(fields as Partial<Record<import('@pipeline-lite/kernel').FieldName, string>>),
+    ...(fields as Partial<Record<import('@tenon/kernel').FieldName, string>>),
     automation: next,
   })
 }

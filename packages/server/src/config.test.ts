@@ -7,8 +7,8 @@ import { describe, expect, it } from 'vitest'
 import { mkdir, mkdtemp, readdir, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { loadManifest } from '@pipeline-lite/kernel'
-import type { ExtendedManifestData, TrackValidationContext } from '@pipeline-lite/kernel'
+import { loadManifest } from '@tenon/kernel'
+import type { ExtendedManifestData, TrackValidationContext } from '@tenon/kernel'
 import {
   ConfigError,
   flattenMandatorySkills,

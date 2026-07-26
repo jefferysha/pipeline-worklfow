@@ -1,5 +1,5 @@
 /**
- * `pipeline tracks list/show/create/update/delete` —— 动态 Track Registry 的 CRUD 控制面
+ * `tenon tracks list/show/create/update/delete` —— 动态 Track Registry 的 CRUD 控制面
  * （GOAL.md 清单 T · T-R3，codex D5）。参数→kernel patch 转换、活跃 change 引用扫描、人读/JSON
  * 输出、错误→exit 1 统一映射、policy preset 展开都在本文件；纯配置变换/引用策略/锁在 kernel。
  *
@@ -16,7 +16,7 @@ import {
   deleteTrack,
   isBuiltinTrackId,
   updateTrack,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import type {
   ActiveChangeRef,
   BuiltinTrackId,
@@ -27,7 +27,7 @@ import type {
   TrackRegistry,
   TrackWorkflowBinding,
   UpdateTrackPatch,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
 import { changeDir, changesRoot } from '../paths.js'
 

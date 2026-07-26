@@ -33,7 +33,7 @@
  * 诚实缺席并由 H7-S2 custom gate fail-closed，不从可变 state 二次拼接半份坐标。
  */
 import { join } from 'node:path'
-import { assertLoopRunner, resolveWorkflowName, type StateStore } from '@pipeline-lite/kernel'
+import { assertLoopRunner, resolveWorkflowName, type StateStore } from '@tenon/kernel'
 import { runChangeInSandbox, type RunChangeConfig } from '../lifecycle/lifecycle.js'
 import type { LoopPathPolicy } from '../lifecycle/denylist.js'
 import { createLifecyclePorts } from '../lifecycle/ports.js'

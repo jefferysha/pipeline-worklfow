@@ -5,7 +5,7 @@ import {
   compileEffectiveWorkflowPlan,
   workflowPlanSnapshot,
   type PipelineState,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import { afterEach, describe, expect, test } from 'vitest'
 import { makeDeps, mockState } from '../test-support.js'
 import { cmdWorkflowPlan } from './workflow-plan.js'

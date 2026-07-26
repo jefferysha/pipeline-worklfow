@@ -8,9 +8,9 @@
  *
  * ★template-strategy-and-spec-conflict 的 AskUserQuestion 交互（②的交互半边）——lite 无交互 picker：
  *   缺省冲突（spec 目录已有文件且未显式传 strategy）→ 不弹 picker，改「信号 + 三选一指引」：
- *   读 PIPELINE_SPEC_STRATEGY 信号（上层 AskUserQuestion 决策后注入）或 --strategy；两者皆缺且有冲突
+ *   读 TENON_SPEC_STRATEGY 信号（上层 AskUserQuestion 决策后注入）或 --strategy；两者皆缺且有冲突
  *   → 呈现 skip/overwrite/append 三选一指引到 stderr 后 return exit 2（对齐 reinit-fast-path 的
- *   PIPELINE_REINIT 信号风格：shell/子-agent 语境不弹无可靠 TTY 的 picker）。
+ *   TENON_REINIT 信号风格：shell/子-agent 语境不弹无可靠 TTY 的 picker）。
  *
  * stdout/exit 对齐仓内风格（session.ts）：数据（写入清单/解析结果）走 stdout；状态/指引/错误走 stderr。
  *   exit：成功=0；非法参数/未知 id（无 --fallback-native）/未知子命令=1；缺省冲突需决策=2（信号）。
@@ -22,8 +22,8 @@ import {
   OWNED_MANIFEST,
   parseOwnedManifest,
   serializeOwnedManifest,
-} from '@pipeline-lite/kernel'
-import type { DocumentLocale } from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
+import type { DocumentLocale } from '@tenon/kernel'
 import {
   DEFAULT_SPEC_DIR,
   DOC_STRATEGIES,
@@ -40,7 +40,7 @@ import {
   workflowHashAction,
   workflowSourceMarkerContent,
   type DocStrategy,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import { splitFlags } from '../argv.js'
 import { errMsg, type CliDeps } from '../deps.js'
 import { ensureSafeDocumentParent, ordinaryDocumentFile } from './documentScaffoldSafety.js'
@@ -48,7 +48,7 @@ import { publishSpecScaffoldTransaction } from './specScaffoldTransaction.js'
 
 /**
  * scaffold fs 注入面（默认真 fs；mock 层注入 fake，见 scaffold.test.ts）。
- * env 读信号（PIPELINE_SPEC_STRATEGY）；exists/readText/writeText/rmrf 真副作用。
+ * env 读信号（TENON_SPEC_STRATEGY）；exists/readText/writeText/rmrf 真副作用。
  */
 export interface ScaffoldFs {
   exists: (abs: string) => Promise<boolean>
@@ -87,7 +87,7 @@ export const REAL_FS: ScaffoldFs = {
 // flag 解析共享 argv.ts splitFlags。哨兵变更：旧本地 parseFlags 裸 --flag → ''（falsy），splitFlags
 // 裸 → true（truthy）——凡「带值取值、否则回落默认」的消费点必须 typeof 守卫，不能再靠 || 的 falsy 回落。
 
-const SPEC_STRATEGY_SIGNAL = 'PIPELINE_SPEC_STRATEGY'
+const SPEC_STRATEGY_SIGNAL = 'TENON_SPEC_STRATEGY'
 
 function safeSpecDir(cwd: string, specDir: string): boolean {
   if (isAbsolute(specDir)) return false
@@ -132,7 +132,7 @@ async function removeScaffoldFile(cwd: string, target: string): Promise<void> {
 
 async function publishScaffoldFile(cwd: string, target: string, content: string): Promise<void> {
   const parent = await ensureSafeDocumentParent(cwd, target)
-  await atomicLinkPublish(parent, '.pipeline-spec-scaffold.tmp', target, content)
+  await atomicLinkPublish(parent, '.tenon-spec-scaffold.tmp', target, content)
 }
 
 /** 三选一指引（对标 reinit-fast-path 的三选一指引，替代 AskUserQuestion picker）。 */
@@ -169,7 +169,7 @@ async function cmdScaffoldSpec(deps: CliDeps, args: string[], fs: ScaffoldFs): P
     deps.io.err(`ERROR: document locale 非法: '${locale}'（允许: zh-CN | en）`)
     return 1
   }
-  // 策略信号：--strategy > PIPELINE_SPEC_STRATEGY env > 未定（裸 --strategy 视同未给，回落 env——同旧行为）
+  // 策略信号：--strategy > TENON_SPEC_STRATEGY env > 未定（裸 --strategy 视同未给，回落 env——同旧行为）
   const rawStrategy =
     typeof flags['strategy'] === 'string' && flags['strategy'] !== '' ? flags['strategy'] : fs.env(SPEC_STRATEGY_SIGNAL) || ''
   const files = buildSpecScaffold(type, specDir, locale as DocumentLocale)

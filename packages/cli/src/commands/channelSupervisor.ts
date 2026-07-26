@@ -34,7 +34,7 @@ import {
   type ShutdownReason,
   type SupervisorConfig,
   type WorkerGuardPolicy,
-} from '@pipeline-lite/channel'
+} from '@tenon/channel'
 import { splitFlags } from '../argv.js'
 import type { CliDeps } from '../deps.js'
 

@@ -4,8 +4,8 @@ import type {
   ObserveAction,
   SourceCheckpoint,
   TriageRoute,
-} from '@pipeline-lite/kernel'
-import type { SourceConnector, TriageProvider } from '@pipeline-lite/automation'
+} from '@tenon/kernel'
+import type { SourceConnector, TriageProvider } from '@tenon/automation'
 
 type GitCommitsAction = Extract<ObserveAction, { readonly kind: 'git-commits' }>
 
@@ -76,8 +76,8 @@ const provider: TriageProvider<'test'> = {
 describe('H12 Wave 0 public triage contracts', () => {
   it('composes the two package roots over a closed-set sample without undefined exports', async () => {
     const [kernel, automation] = await Promise.all([
-      import('@pipeline-lite/kernel'),
-      import('@pipeline-lite/automation'),
+      import('@tenon/kernel'),
+      import('@tenon/automation'),
     ])
 
     expect({

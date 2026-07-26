@@ -2,7 +2,12 @@ import { isPhase, type ChangeSnapshot } from '../types'
 import { changeWorkflow, decisionKind } from '../model/changeModel'
 import { VERIFY_STATUS_FIELDS, type EvidenceChip } from '../model/evidence'
 import { diagnoseFailureWithCause } from '../shared/failureDiagnosis'
-import type { ProgressRow, ProgressRules, ProgressState } from '../model/progressModel'
+import {
+  executionProvenance,
+  type ProgressRow,
+  type ProgressRules,
+  type ProgressState,
+} from '../model/progressModel'
 
 export type Tr = (key: string, vars?: Record<string, string | number>) => string
 
@@ -156,8 +161,7 @@ export function deckMatch(row: FlatRow, tab: DeckTab): boolean {
 }
 
 export function inSandbox(row: FlatRow): boolean {
-  const automation = fieldStr(row.row.change, 'automation')
-  return ['running', 'scheduled', 'queued', 'failed', 'conflict'].includes(automation)
+  return executionProvenance(row.row.change) === 'automation'
 }
 
 export const DRAWER_FOCUSABLE_SEL =

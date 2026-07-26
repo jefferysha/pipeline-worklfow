@@ -1,6 +1,6 @@
 # 安全模型
 
-Pipeline Lite 默认本地优先，但“在本机运行”不等于没有风险。插件能够读取项目、执行命令、记录证据并启动本地服务，因此必须保持最小权限和清晰信任边界。
+Tenon 默认本地优先，但“在本机运行”不等于没有风险。插件能够读取项目、执行命令、记录证据并启动本地服务，因此必须保持最小权限和清晰信任边界。
 
 ## 信任边界
 
@@ -13,7 +13,7 @@ Pipeline Lite 默认本地优先，但“在本机运行”不等于没有风险
 
 ## 状态与路径
 
-canonical state 只由 pipeline CLI 写。路径必须落在项目允许范围，拒绝 symlink、目录目标、遍历和绝对路径注入。文档 ledger 记录安全相对路径和摘要。
+canonical state 只由 Tenon CLI 写。路径必须落在项目允许范围，拒绝 symlink、目录目标、遍历和绝对路径注入。文档 ledger 记录安全相对路径和摘要。
 
 ## Secrets
 
@@ -60,7 +60,7 @@ Pages workflow 可在 pull request 或手动分支上执行构建检查，但只
 
 ## 安装与更新
 
-`pipeline setup --codex`、`pipeline setup --claude` 等入口必须显式选择宿主，不猜测环境。运行时安装到用户级标准数据目录，项目只保留必要 adapter 与规则投影。
+`tenon setup --codex`、`tenon setup --claude` 等入口必须显式选择宿主，不猜测环境。运行时安装到用户级标准数据目录，项目只保留必要 adapter 与规则投影。
 
 release 使用内容寻址或不可变版本目录，更新通过指针切换；失败时回滚到已验证版本。setup/update 不能重写历史 Change 与 Archive。
 

@@ -3,7 +3,7 @@ name: zoom-out
 description: First-party reset for reframing an over-focused implementation or design discussion.
 license: MIT
 metadata:
-  author: pipeline-lite
+  author: tenon
 ---
 
 # Zoom Out

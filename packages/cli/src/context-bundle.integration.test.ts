@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
-import type { DocumentKind } from '@pipeline-lite/kernel'
+import type { DocumentKind } from '@tenon/kernel'
 import { cmdHandoff } from './commands/handoff.js'
 import { freshHarness, realDeps, rm, type Harness } from './integration-harness.js'
 

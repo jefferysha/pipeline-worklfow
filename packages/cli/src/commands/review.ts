@@ -1,5 +1,5 @@
 /**
- * `pipeline review request|acknowledge` —— review 出口的显式两阶段协议。
+ * `tenon review request|acknowledge` —— review 出口的显式两阶段协议。
  *
  * request 只能在当前 workflow 声明为 review 的 step 调用：先将 pending receipt 原子写入
  * canonical state，再落 versioned hook marker。acknowledge 由 Codex UserPromptSubmit 或用户显式
@@ -19,8 +19,8 @@ import {
   reviewGatePendingFor,
   reviewGateRequestPatch,
   reviewGateStatus,
-} from '@pipeline-lite/kernel'
-import type { PipelineState } from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
+import type { PipelineState } from '@tenon/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
 import { changeDir, isValidChangeName } from '../paths.js'
 import { readDelegatedReviewAuthority, type ContinuousAuthority } from '../continuousAuthority.js'
@@ -99,7 +99,7 @@ async function writeMarker(
 
 /**
  * `verify-fail` is an intentional rollback, not the successful verify exit. Its transition policy
- * deliberately has no success guards, so running `pipeline check` here would make a failure path
+ * deliberately has no success guards, so running `tenon check` here would make a failure path
  * impossible to review. We still require a real report and its governed OpenSpec evidence before
  * asking a human to select the rollback.
  */
@@ -183,7 +183,7 @@ export async function cmdReview(
   opts: ReviewOpts = {},
 ): Promise<number> {
   if (sub !== 'request' && sub !== 'acknowledge') {
-    deps.io.err('ERROR: 用法：pipeline review request <change> [--event <event>] | acknowledge <change> [--delegated]')
+    deps.io.err('ERROR: 用法：tenon review request <change> [--event <event>] | acknowledge <change> [--delegated]')
     return 1
   }
   if (!name || !isValidChangeName(name)) {
@@ -274,7 +274,7 @@ export async function cmdReview(
       const step = resolveReviewStep(deps, state)
       const event = reviewGateEvent(state)
       if (event === '') {
-        throw new Error(`phase '${step.phase}' 的旧 review receipt 未绑定 event；请重新运行 pipeline review request ${name} --event <event>`)
+        throw new Error(`phase '${step.phase}' 的旧 review receipt 未绑定 event；请重新运行 tenon review request ${name} --event <event>`)
       }
       if (!step.events.includes(event)) {
         throw new Error(`phase '${step.phase}' 的 receipt event '${event}' 已不在当前 workflow 出口中；请重新 request`)
@@ -299,7 +299,7 @@ export async function cmdReview(
         return
       }
       if (!reviewGatePendingFor(state, step.phase, event)) {
-        throw new Error(`phase '${step.phase}' 尚未为 event '${event}' request review；先完成产物并运行 pipeline review request ${name} --event ${event}`)
+        throw new Error(`phase '${step.phase}' 尚未为 event '${event}' request review；先完成产物并运行 tenon review request ${name} --event ${event}`)
       }
       const acknowledgedAt = deps.clock()
       await deps.store.writeUnderLock(dir, {

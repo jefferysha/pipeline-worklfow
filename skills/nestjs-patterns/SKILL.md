@@ -3,7 +3,7 @@ name: nestjs-patterns
 description: First-party NestJS layering and test guidance.
 license: MIT
 metadata:
-  author: pipeline-lite
+  author: tenon
 ---
 
 # NestJS Patterns

@@ -21,7 +21,7 @@ function decodeHistoryLine(value: unknown): WorkflowHistoryLine | undefined {
 
 /** Pipeline-owned skills may be presented by Codex with the plugin namespace. */
 export function canonicalWorkflowSkillId(skillId: string): string {
-  return skillId.startsWith('pipeline-lite:') ? skillId.slice('pipeline-lite:'.length) : skillId
+  return skillId.startsWith('tenon:') ? skillId.slice('tenon:'.length) : skillId
 }
 
 function skillIdFromHistory(raw: string): string | null {

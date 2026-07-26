@@ -16,7 +16,7 @@ export function registerTrackCommands(program: Command, deps: CliDeps): void {
     .command('tracks')
     .description('动态 Track Registry：list / show <id> / create <id> / update <id> / delete <id>（--json 稳定输出）')
     .action(() => {
-      deps.io.err('用法：pipeline tracks <list|show|create|update|delete> …（详见 pipeline tracks --help）')
+      deps.io.err('用法：tenon tracks <list|show|create|update|delete> …（详见 tenon tracks --help）')
       bail(1)
     })
   tracks

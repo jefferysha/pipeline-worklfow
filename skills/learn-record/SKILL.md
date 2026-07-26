@@ -1,6 +1,6 @@
 ---
 name: learn-record
-description: "学习沉淀聚合 skill（替代 ECC 的 /learn）：提取本次会话经验 → 写 ~/.claude/skills/learned/ + 落到当前 OpenSpec spec + 同步到 shadoc wiki 知识库（分类自动归到 ai/backend/frontend 等子目录）。Pipeline phase=archive 时由 /pipeline-archive 触发，也可手动调用。"
+description: "学习沉淀聚合 skill（替代 ECC 的 /learn）：提取本次会话经验 → 写 ~/.claude/skills/learned/ + 落到当前 OpenSpec spec + 同步到 shadoc wiki 知识库（分类自动归到 ai/backend/frontend 等子目录）。Pipeline phase=archive 时由 /tenon-archive 触发，也可手动调用。"
 ---
 
 # /learn-record — 学习沉淀（三重落地）
@@ -36,7 +36,7 @@ description: "学习沉淀聚合 skill（替代 ECC 的 /learn）：提取本次
 
 | 场景 | 说明 |
 |------|------|
-| pipeline phase=archive 时 | `pipeline-archive` 内部条件触发（debug ≥2 轮 / 比较 ≥2 方案 / 用户要求"沉淀"） |
+| pipeline phase=archive 时 | `tenon-archive` 内部条件触发（debug ≥2 轮 / 比较 ≥2 方案 / 用户要求"沉淀"） |
 | 用户手动调用 | "学习一下 / 沉淀这次经验 / /learn-record" |
 | Pipeline 不在运行时 | 仍可用：跳过 OpenSpec spec 步骤，仅写 ~/.claude/skills/learned + shadoc |
 
@@ -145,7 +145,7 @@ created_at: <ISO date>
 #### Layer 2: OpenSpec spec lessons-learned 段（条件；= D5 的 spec 回写闭环）
 
 仅当 `openspec/changes/<name>/.pipeline.yaml` 存在且 `archived != true` 时
-（`pipeline get <name> archived`）：
+（`tenon get <name> archived`）：
 
 在 `openspec/changes/<name>/design.md` 末尾追加（或在 specs/<cap>/spec.md）：
 

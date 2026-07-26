@@ -4,7 +4,7 @@
  */
 import { readFileSync } from 'node:fs'
 import { describe, expect, test } from 'vitest'
-import type { OwnedFs } from '@pipeline-lite/kernel'
+import type { OwnedFs } from '@tenon/kernel'
 import type { CliDeps } from '../deps.js'
 import { cmdSync, type SyncMigrationProvider } from './sync.js'
 
@@ -73,7 +73,7 @@ describe('cmdSync — downgrade 守卫（默认拒不写）', () => {
  * sync.ts 的 SyncMigrationProvider 缺省 = STUB_MIGRATIONS（空 pending + 无 breaking 元数据）。
  * 下方「--migrate 硬闸」那组测试全都**显式注入** migrations() 才能把闸门推到 required——
  * 也就是说：闸门逻辑本身是真的、可测的，但**缺省注入下它永不触发**。真实后果：
- * 用户敲 `pipeline sync`（无人注入注册表）时，迁移相关分支恒走空集路径，`--migrate` 是死闸。
+ * 用户敲 `tenon sync`（无人注入注册表）时，迁移相关分支恒走空集路径，`--migrate` 是死闸。
  *
  * ⚠ 本 describe 直接调 cmdSync 走 fallback，只钉得住「**缺省**是 STUB」这一半。缺口能被补上的
  * 路径有两条，只钉 fallback 会漏掉第二条（生产注入了真 provider → 缺口已补而本测试仍绿）：

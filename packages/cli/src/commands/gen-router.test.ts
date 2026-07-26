@@ -10,7 +10,7 @@ import {
   routerContractRevision,
   type TrackDefinition,
   type TrackRegistry,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import type { CliDeps } from '../deps.js'
 import { cmdGenRouterSh } from './gen-router.js'
 
@@ -69,7 +69,7 @@ describe('_gen-router-sh project data-cache command', () => {
     expect(pinned).toBe(routerContractRevision(loadManifest(MANIFEST.pathname)))
   })
 
-  test('emits PIPELINE_ROUTER_V5 from the effective registry with canonical identity and inert hex data', async () => {
+  test('emits TENON_ROUTER_V5 from the effective registry with canonical identity and inert hex data', async () => {
     const out: string[] = []
     const err: string[] = []
     const loadCalls: number[] = []
@@ -91,7 +91,7 @@ describe('_gen-router-sh project data-cache command', () => {
 
     const cache = `${out[0]}\n`
     const lines = cache.trimEnd().split('\n')
-    expect(lines[0]).toBe('PIPELINE_ROUTER_V5')
+    expect(lines[0]).toBe('TENON_ROUTER_V5')
     const metadata = lines[1]?.split('|') ?? []
     expect(metadata).toEqual([
       'M',

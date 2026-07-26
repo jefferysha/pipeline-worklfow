@@ -8,12 +8,12 @@
 # delegated the review acknowledgement after the review evidence has been produced.  It never
 # skips evidence, guards, verification, or external/publication authority.
 
-PIPELINE_INTERACTION_AUTHORITY_PROTOCOL='pipeline-interaction-authority-v1'
-PIPELINE_INTERACTION_AUTHORITY_FILE='.pipeline-interaction-authority'
+TENON_INTERACTION_AUTHORITY_PROTOCOL='pipeline-interaction-authority-v1'
+TENON_INTERACTION_AUTHORITY_FILE='.pipeline-interaction-authority'
 
 pipeline_interaction_authority_path() { # $1=verified project root
   [ -n "$1" ] || return 1
-  printf '%s/%s' "$1" "$PIPELINE_INTERACTION_AUTHORITY_FILE"
+  printf '%s/%s' "$1" "$TENON_INTERACTION_AUTHORITY_FILE"
 }
 
 pipeline_interaction_authority_valid_name() { # $1=Change name
@@ -30,7 +30,7 @@ pipeline_interaction_authority_change() { # $1=authority marker path
     line_number=$((line_number + 1))
     if [ "$line_number" -eq 1 ]; then
       first="$line"
-      [ "$first" = "$PIPELINE_INTERACTION_AUTHORITY_PROTOCOL" ] || return 1
+      [ "$first" = "$TENON_INTERACTION_AUTHORITY_PROTOCOL" ] || return 1
       continue
     fi
     case "$line" in
@@ -91,7 +91,7 @@ pipeline_write_interaction_authority() { # $1=root $2=live Change name
   [ ! -e "$tmp" ] && [ ! -L "$tmp" ] || return 1
   (
     umask 077
-    printf '%s\n' "$PIPELINE_INTERACTION_AUTHORITY_PROTOCOL"
+    printf '%s\n' "$TENON_INTERACTION_AUTHORITY_PROTOCOL"
     printf 'change=%s\n' "$change"
     printf 'scope=interactive-skills\n'
     printf 'review=delegated\n'

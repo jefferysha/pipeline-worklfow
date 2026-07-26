@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { resolve } from 'node:path'
 
-const STATE_SCOPE_NAMESPACE = 'pipeline-lite:machine-state-scope:v1\0'
+const STATE_SCOPE_NAMESPACE = 'tenon:machine-state-scope:v1\0'
 
 /** Canonical lexical root used by every machine-state path and identity consumer. */
 export function canonicalMachineStateHome(home: string): string {

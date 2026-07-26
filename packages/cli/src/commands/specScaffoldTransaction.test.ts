@@ -9,7 +9,7 @@ describe('spec scaffold overwrite 事务', () => {
   let root: string
 
   beforeEach(async () => {
-    root = await mkdtemp(join(tmpdir(), 'pipeline-spec-transaction-'))
+    root = await mkdtemp(join(tmpdir(), 'tenon-spec-transaction-'))
     await mkdir(join(root, 'docs', 'specs'), { recursive: true })
     await writeFile(join(root, 'docs', 'specs', 'api.md'), 'old\n', 'utf8')
     await writeFile(join(root, 'docs', 'specs', 'unrelated.md'), 'keep\n', 'utf8')
@@ -63,7 +63,7 @@ describe('spec scaffold overwrite 事务', () => {
     await rename(specDirectory, backup)
     const lockKey = createHash('sha256').update(specDirectory).digest('hex').slice(0, 16)
     await writeFile(
-      join(root, `.pipeline-spec-transaction-${lockKey}.json`),
+      join(root, `.tenon-spec-transaction-${lockKey}.json`),
       `${JSON.stringify({
         version: 1,
         pid: 99_999_999,
@@ -82,7 +82,7 @@ describe('spec scaffold overwrite 事务', () => {
 
     expect(await readFile(join(specDirectory, 'api.md'), 'utf8')).toBe('newest\n')
     expect(await readFile(join(specDirectory, 'unrelated.md'), 'utf8')).toBe('keep\n')
-    await expect(readFile(join(root, `.pipeline-spec-transaction-${lockKey}.json`), 'utf8'))
+    await expect(readFile(join(root, `.tenon-spec-transaction-${lockKey}.json`), 'utf8'))
       .rejects.toMatchObject({ code: 'ENOENT' })
     await expect(readFile(join(stage, 'api.md'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
     await expect(readFile(join(backup, 'api.md'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
@@ -92,7 +92,7 @@ describe('spec scaffold overwrite 事务', () => {
     const specDirectory = join(root, 'docs', 'specs')
     const lockKey = createHash('sha256').update(specDirectory).digest('hex').slice(0, 16)
     await writeFile(
-      join(root, `.pipeline-spec-transaction-${lockKey}.json`),
+      join(root, `.tenon-spec-transaction-${lockKey}.json`),
       `${JSON.stringify({
         version: 1,
         pid: process.pid,
@@ -234,7 +234,7 @@ describe('spec scaffold overwrite 事务', () => {
 
     await expect(readFile(join(root, 'docs', 'specs', 'raced.txt'), 'utf8')).resolves.toBe('do-not-overwrite\n')
     const rootEntries = await readdir(root)
-    expect(rootEntries.some((name) => name.startsWith('.pipeline-spec-transaction-'))).toBe(true)
+    expect(rootEntries.some((name) => name.startsWith('.tenon-spec-transaction-'))).toBe(true)
     expect(rootEntries.some((name) => name.startsWith('specs.pipeline-stage-'))).toBe(true)
     expect(rootEntries.some((name) => name.startsWith('specs.pipeline-backup-'))).toBe(true)
   })

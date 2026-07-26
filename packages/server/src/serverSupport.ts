@@ -7,7 +7,7 @@ import {
   readRegistrySnapshot,
   writeRegistryWithGovernance,
   type GraduationFs,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 
 export const REAL_GRADUATION_FS: GraduationFs = {
   loadRegistry: (repoRoot) => loadRegistry(repoRoot),
@@ -69,9 +69,9 @@ export function isLocalHost(host: string | undefined, port: number): boolean {
 
 export function indexHtml(token: string): string {
   const jsToken = JSON.stringify(token).replace(/</g, '\\u003c')
-  return `<!doctype html><meta charset="utf-8"><title>Pipeline Dashboard</title>
+  return `<!doctype html><meta charset="utf-8"><title>Tenon Dashboard</title>
 <h1>Pipeline Global Dashboard</h1>
 <p>TS 全局 server 已就绪。只读数据见 <code>/api/snapshot</code> / <code>/api/stream</code>；健康探针 <code>/api/health</code>。</p>
 <p>写端点需带一次性 token（B5）。前端信息架构重构：BACKLOG #26。</p>
-<script>window.__PIPELINE_DASHBOARD_TOKEN__ = ${jsToken};</script>`
+<script>window.__TENON_DASHBOARD_TOKEN__ = ${jsToken};</script>`
 }

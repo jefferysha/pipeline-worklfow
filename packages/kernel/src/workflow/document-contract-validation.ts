@@ -35,35 +35,35 @@ const REQUIRED_SKILL_GROUPS: Readonly<Record<DocumentContractPhase, readonly {
 }[]>> = {
   open: [
     { label: 'OpenSpec proposal', alternatives: ['openspec-propose', 'opsx:propose'] },
-    { label: 'pipeline open', alternatives: ['pipeline-open', 'pipeline-lite:pipeline-open'] },
+    { label: 'pipeline open', alternatives: ['tenon-open', 'tenon:tenon-open'] },
   ],
   explore: [
-    { label: 'pipeline explore', alternatives: ['pipeline-explore', 'pipeline-lite:pipeline-explore'] },
+    { label: 'pipeline explore', alternatives: ['tenon-explore', 'tenon:tenon-explore'] },
     { label: 'Superpower brainstorming', alternatives: ['brainstorming', 'superpowers:brainstorming'] },
   ],
   spec: [
-    { label: 'pipeline spec', alternatives: ['pipeline-spec', 'pipeline-lite:pipeline-spec'] },
+    { label: 'tenon spec', alternatives: ['tenon-spec', 'tenon:tenon-spec'] },
     { label: 'OpenSpec delta proposal', alternatives: ['openspec-propose', 'opsx:propose'] },
     { label: 'Superpower plan', alternatives: ['writing-plans', 'superpowers:writing-plans'] },
   ],
-  build: [{ label: 'pipeline build', alternatives: ['pipeline-build', 'pipeline-lite:pipeline-build'] }],
+  build: [{ label: 'pipeline build', alternatives: ['tenon-build', 'tenon:tenon-build'] }],
   verify: [
-    { label: 'pipeline verify', alternatives: ['pipeline-verify', 'pipeline-lite:pipeline-verify'] },
+    { label: 'pipeline verify', alternatives: ['tenon-verify', 'tenon:tenon-verify'] },
     {
       label: 'Superpower verification',
       alternatives: ['verification-before-completion', 'superpowers:verification-before-completion'],
     },
   ],
   ship: [
-    { label: 'pipeline ship', alternatives: ['pipeline-ship', 'pipeline-lite:pipeline-ship'] },
+    { label: 'pipeline ship', alternatives: ['tenon-ship', 'tenon:tenon-ship'] },
     { label: 'OpenSpec apply', alternatives: ['openspec-apply-change', 'opsx:apply'] },
   ],
-  archive: [{ label: 'pipeline archive', alternatives: ['pipeline-archive', 'pipeline-lite:pipeline-archive'] }],
+  archive: [{ label: 'pipeline archive', alternatives: ['tenon-archive', 'tenon:tenon-archive'] }],
 }
 
 function aliasesForSkill(id: string): readonly string[] {
   const aliases = new Set<string>([id])
-  if (id.startsWith('pipeline-lite:')) aliases.add(id.slice('pipeline-lite:'.length))
+  if (id.startsWith('tenon:')) aliases.add(id.slice('tenon:'.length))
   if (id.startsWith('superpowers:')) aliases.add(id.slice('superpowers:'.length))
   if (id === 'opsx:propose') aliases.add('openspec-propose')
   if (id === 'openspec-propose') aliases.add('opsx:propose')

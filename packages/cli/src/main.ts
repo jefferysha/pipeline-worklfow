@@ -3,7 +3,7 @@
  * bin 入口：装配 kernel 实现 + fs 副作用，交给 buildProgram。
  *
  * ⚠️ 集成接缝（T7）：createStateStore / createFlowEngine / loadManifest 由 T2/T3 落地后
- * 从 '@pipeline-lite/kernel' re-export——在那之前本文件编译失败是预期的（plan T4 明示）。
+ * 从 '@tenon/kernel' re-export——在那之前本文件编译失败是预期的（plan T4 明示）。
  * 若 kernel 侧签名不同（如 loadManifest 需要 manifest.yaml 路径参数），仅调整此处装配，
  * 命令模块与测试不受影响。
  */
@@ -20,10 +20,10 @@ import {
   createTransitionRecordStore, createWorkflowRunRepository, loadManifest, loadTrackRegistry, loadWorkflow,
   fingerprintWorkspace, mutateTrackRegistry, projectRegistryPath, readSecrets, registerProjectRoot, secretsPath,
   withTrackRegistryLock,
-} from '@pipeline-lite/kernel'
-import { readAutomationJson } from '@pipeline-lite/automation'
-import { tapStatus } from '@pipeline-lite/tap'
-import type { ExtendedManifestData, TrackRegistry, TrackValidationContext } from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
+import { readAutomationJson } from '@tenon/automation'
+import { tapStatus } from '@tenon/tap'
+import type { ExtendedManifestData, TrackRegistry, TrackValidationContext } from '@tenon/kernel'
 import type { CliDeps, DoctorProbes, GateMarkerInfo } from './deps.js'
 import { probeAfkReadiness } from './afkReadiness.js'
 import { splitPassthroughArgv } from './argv.js'

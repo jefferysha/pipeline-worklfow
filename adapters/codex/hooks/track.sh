@@ -19,7 +19,7 @@ if [ -z "$_ROOT" ] || [ ! -f "$_ROOT/hooks/skill-tracker.sh" ]; then
 fi
 export CLAUDE_PLUGIN_ROOT="$_ROOT"
 
-CC_TRACKER="${PIPELINE_CC_TRACKER:-$_ROOT/hooks/skill-tracker.sh}"
+CC_TRACKER="${TENON_CC_TRACKER:-$_ROOT/hooks/skill-tracker.sh}"
 [ -f "$CC_TRACKER" ] || exit 0
 
 printf '%s' "$INPUT" | bash "$CC_TRACKER" >/dev/null 2>&1 || true

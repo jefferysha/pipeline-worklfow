@@ -3,7 +3,7 @@ name: deployment-patterns
 description: First-party deployment planning, rollout, and rollback discipline.
 license: MIT
 metadata:
-  author: pipeline-lite
+  author: tenon
 ---
 
 # Deployment Patterns

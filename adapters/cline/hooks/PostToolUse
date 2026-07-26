@@ -57,7 +57,7 @@ if [ -n "$CWD" ] && [ -n "$TOOL" ]; then
     _ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../../.." 2>/dev/null && pwd || printf '%s' "$HOME/.claude")"
   fi
   export CLAUDE_PLUGIN_ROOT="$_ROOT"
-  CC_TRACKER="${PIPELINE_CC_TRACKER:-$_ROOT/hooks/skill-tracker.sh}"
+  CC_TRACKER="${TENON_CC_TRACKER:-$_ROOT/hooks/skill-tracker.sh}"
   if [ -f "$CC_TRACKER" ]; then
     # 强制 tool_name="Skill"、真实 cline 工具名放进 skill 字段——baseline skill-tracker.sh
     # 只在 tool_name ∈ {Skill,Agent,Task} 时才记账；Cline 自身工具名（write_to_file/

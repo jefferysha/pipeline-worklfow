@@ -10,16 +10,16 @@ export const zh: Dict = {
   // phase/track/updated 全仓零消费（HEAD 存量孤儿），随本次修剪删除。
   app: { title: 'Pipeline 控制台' },
   solution: {
-    nav_label: 'Pipeline Lite 概览',
+    nav_label: 'Tenon 概览',
     eyebrow: '本地优先的 Agent 交付控制面',
     hero_title: '让 coding agents 按可验证流程交付',
     hero_desc: '把任务路由、OpenSpec、Skill、人工复核和可追溯证据放进同一套可安装的工作流，而不接管你的代码宿主。',
-    hero_note: '先选择宿主，再由 Pipeline Lite 安装匹配的适配器与完整 Skill 包。',
+    hero_note: '先选择宿主，再由 Tenon 安装匹配的适配器与完整 Skill 包。',
     document_language_note: 'Dashboard 的语言只影响本地界面；新治理文档默认使用中文，并在创建 Change 时固定语言。',
     cta_docs: '阅读使用文档',
     cta_repo: '查看开源仓库',
     setup_label: 'Codex 快速开始',
-    setup_cmd: 'pipeline setup --codex',
+    setup_cmd: 'tenon setup --codex',
     trust: {
       local_title: '本地优先',
       local_desc: '状态、文档和证据保留在你的项目与本机控制面。',
@@ -111,7 +111,7 @@ export const zh: Dict = {
   },
   // v9-flowdeck 收件箱退役：一级导航只剩 进度/工作台（nav.inbox 随 InboxView.tsx 删除，待拍板
   // 红徽标改挂「进度」项）；更早 board/settings/loops/afk/workflows 入口键随 T17 下拉分组退役
-  // 删除；注册项目入口删除（决议#7，pipeline init 自动登记）。
+  // 删除；注册项目入口删除（决议#7，tenon init 自动登记）。
   nav: {
     // v10c 进度重构：一级导航加「项目」总览页项（rail 竖排首项，lucide FolderKanban）——
     // 进度页从此恒为单项目，「项目」页是选项目的主入口（聚合语境退役）。
@@ -482,7 +482,7 @@ export const zh: Dict = {
   },
   onboard: {
     no_project_title: '还没有注册任何项目',
-    // T17 纯教学态（决议#7 + T2）：pipeline init 自动登记项目，注册表单/幽灵命令全部退役。
+    // T17 纯教学态（决议#7 + T2）：tenon init 自动登记项目，注册表单/幽灵命令全部退役。
     // full-install W2：no-project 改「诚实两步 checklist」——setup 已把 Dashboard 带到这里，
     // 不再猜测 Codex/Claude 宿主；只给 init 与 doctor 的可复制真命令。
     no_project_desc: '已初始化的 Pipeline 项目会自动出现在这里；若还没有项目，请按下面两步从终端开始。',
@@ -494,7 +494,7 @@ export const zh: Dict = {
     registering: '注册中…',
     registered: '项目已注册',
     or_initialize: '或者初始化一个新项目',
-    step_init: '建一个 change（pipeline init 会把项目自动登记进来，不用单独注册）',
+    step_init: '建一个 change（tenon init 会把项目自动登记进来，不用单独注册）',
     step_doctor: '确认环境就绪，然后刷新本页',
     copy: '复制',
     copied: '已复制 ✓',
@@ -997,12 +997,12 @@ export const zh: Dict = {
     // ── T7（loop 卡审阅面重构）：空态「去终端」引导 + 字段生产者徽章 + 三方关系条。
     //    交互真相源 design-demos/v6-config-copilot.html 方案 A；字段分类逐字对齐
     //    docs/ux/2026-07-11-config-experience-analysis.md §2.1（见 LoopCard.tsx FIELD_PROV 注释）。──
-    lp_empty_go: '不用在这里手填 15 个字段。打开终端，把目标告诉 agent——它知道你在盯什么、边界在哪，会直接写好 .pipeline/loops.yaml。也可以直接跑 pipeline loop init 向导登记草稿。',
+    lp_empty_go: '不用在这里手填 15 个字段。打开终端，把目标告诉 agent——它知道你在盯什么、边界在哪，会直接写好 .pipeline/loops.yaml。也可以直接跑 tenon loop init 向导登记草稿。',
     lp_empty_prompt: '帮我建一个 loop：盯着<你想让它盯的目录或改动范围>，每 2 小时跑一轮；连续 3 次没有改动，或者预算触顶，就停下来找我确认。',
     lp_empty_copy: '复制示例',
     lp_empty_copied: '已复制',
     lp_empty_copy_aria: '复制示例提示词',
-    lp_empty_note: '写完刷新本页就能看到——然后可以在这里继续调节奏、预算、自主级别与安全范围。用 pipeline loop init 登记的草稿会以「待你审阅」态出现，批准后才启用。',
+    lp_empty_note: '写完刷新本页就能看到——然后可以在这里继续调节奏、预算、自主级别与安全范围。用 tenon loop init 登记的草稿会以「待你审阅」态出现，批准后才启用。',
     lp_prov_agent: 'agent 生成',
     lp_prov_sys: '系统推导',
     lp_prov_human: '人拍板',
@@ -1055,7 +1055,7 @@ export const zh: Dict = {
     // full-install W1：凭证 per-runner 双灯——codex 与 claude-code 同等可见(去「(claude-code)」硬编码);
     // caveat 诚实标注凭证灯是服务进程视角,终端 doctor/setup 为凭证权威(docker/镜像灯保持权威,凭证灯标参考)。
     afk_rd_cred_codex: '凭证·codex',
-    afk_rd_cred_caveat: '凭证灯为服务进程视角，终端 pipeline doctor 为准',
+    afk_rd_cred_caveat: '凭证灯为服务进程视角，终端 tenon doctor 为准',
     // G2:前置缺失时引导「怎么装」——docker 灯不可用不光报缺,补一句安装路径。
     //     单源见 kernel PREREQ_HINTS(dashboard 不依赖 kernel,此处镜像同字符串;命令/URL 稳定不翻译)。
     afk_rd_docker_howto: '怎么装:装 OrbStack(orbstack.dev)或 Docker Desktop(docker.com)',
@@ -1090,18 +1090,18 @@ export const zh: Dict = {
     lp_draft_approve: '批准并启用',
     lp_draft_reject: '驳回(转暂停，现场保留)',
     // ── full-install W4：右栏只读「技能齐全度」面（闭 P1-F3/BF10）。前端只读不装——命令本体
-    //    (pipeline setup / pipeline doctor) 不进 i18n（BF11 与终端同源，翻译层不得改写命令），
+    //    (tenon setup / tenon doctor) 不进 i18n（BF11 与终端同源，翻译层不得改写命令），
     //    此处只存说明文案。skh_unready 措辞对齐 cli doctor「registry 未就绪…不误报 green」口径。──
     skh_title: '技能齐全度',
     skh_installed: '已装',
     skh_missing: '未装',
-    skh_all_installed: '技能已装齐（运行时就绪另见 pipeline doctor）',
+    skh_all_installed: '技能已装齐（运行时就绪另见 tenon doctor）',
     skh_missing_names: '未装：{names}',
     skh_guide: '去终端一条命令装齐（已装的自动跳过）：',
-    skh_unready: '技能库未就绪——跑 pipeline doctor 查（不误报「已装齐」）',
+    skh_unready: '技能库未就绪——跑 tenon doctor 查（不误报「已装齐」）',
     skh_error: '技能库获取失败：{msg}',
     skh_copy_hint: '点击复制到剪贴板',
-    skh_readonly_note: '只读面：装技能在终端（pipeline setup），此处只看齐全度、不代装。',
+    skh_readonly_note: '只读面：装技能在终端（tenon setup），此处只看齐全度、不代装。',
     // ── v8-E（意见⑥）：工作台 sheet 页签化——五页签 + tablist aria 标签。──
     tabs_label: '工作台分区',
     tab_stage: '阶段编辑',
@@ -1135,7 +1135,7 @@ export const zh: Dict = {
     state_agent_hint: '任务停在某阶段，等 agent 补产出或推进——agent 在终端工作',
     state_queued: '排队',
     act_kill: '终止',
-    empty: '没有在制的任务——使用右上角“创建并锁定”开始，或在终端 pipeline init',
+    empty: '没有在制的任务——使用右上角“创建并锁定”开始，或在终端 tenon init',
     // T18 孤儿键清理登记：progress.hk_* 28 键系并行 worktree 合并误落本命名空间的副本
     // （HookTimeline 唯一消费 workbench.hk_*，T16 已归位），随本次修剪删除。
     // ── T11：行展开详情 + 动作接线（终止=cancel / 放行·打回=transition）+ running 行日志区。
@@ -1255,7 +1255,7 @@ export const zh: Dict = {
     //    zh/en 对称追加（completeness 测试守）。──
     'hint_missing-credential': '跑一次修复命令配好凭证，配完回来点重试',
     'hint_missing-image': '先构建沙箱镜像（拷下方修复命令），构建完成后重试',
-    'hint_missing-docker': '先把 Docker 起起来再重试；拿不准就在终端跑 pipeline doctor 体检',
+    'hint_missing-docker': '先把 Docker 起起来再重试；拿不准就在终端跑 tenon doctor 体检',
     hint_conflict: '进 worktree 手工解完冲突再重试——自动重试解不了冲突',
     hint_timeout: '多为瞬态，稍等片刻直接重试；反复超时再查网络与负载',
     hint_network: '检查本机网络、代理与 DNS，恢复后重试',
@@ -1270,16 +1270,16 @@ export const zh: Dict = {
 export const en: Dict = {
   app: { title: 'Pipeline Console' },
   solution: {
-    nav_label: 'Pipeline Lite overview',
+    nav_label: 'Tenon overview',
     eyebrow: 'A local-first delivery control plane for agents',
     hero_title: 'Ship with coding agents through a verifiable workflow',
     hero_desc: 'Bring task routing, OpenSpec, Skills, human review, and traceable evidence into one installable workflow without replacing your coding host.',
-    hero_note: 'Choose a host first; Pipeline Lite then installs its adapter and the complete Skill bundle.',
+    hero_note: 'Choose a host first; Tenon then installs its adapter and the complete Skill bundle.',
     document_language_note: 'Dashboard language affects only this local UI. New governance documents default to Chinese and pin their locale when the Change is created.',
     cta_docs: 'Read the usage guide',
     cta_repo: 'View the repository',
     setup_label: 'Quick start for Codex',
-    setup_cmd: 'pipeline setup --codex',
+    setup_cmd: 'tenon setup --codex',
     trust: {
       local_title: 'Local first',
       local_desc: 'State, documents, and evidence stay with your project and local control plane.',
@@ -1724,7 +1724,7 @@ export const en: Dict = {
     registering: 'Registering…',
     registered: 'Project registered',
     or_initialize: 'Or initialize a new project',
-    step_init: 'Create a change (pipeline init auto-registers the project — no separate registration needed)',
+    step_init: 'Create a change (tenon init auto-registers the project — no separate registration needed)',
     step_doctor: 'Confirm the environment is ready, then refresh this page',
     copy: 'Copy',
     copied: 'Copied ✓',
@@ -2222,12 +2222,12 @@ export const en: Dict = {
     afk_save_ok: 'Saved',
     afk_load_error: 'Failed to load AFK execution config: {msg}',
     // ── T7: empty-state "go to terminal" guide + field producer badges + relation bar ──
-    lp_empty_go: "No need to hand-fill 15 fields here. Open a terminal and tell the agent your goal — it already knows what you're watching and where the boundaries are, and will write .pipeline/loops.yaml directly. You can also run pipeline loop init to register a draft through the wizard.",
+    lp_empty_go: "No need to hand-fill 15 fields here. Open a terminal and tell the agent your goal — it already knows what you're watching and where the boundaries are, and will write .pipeline/loops.yaml directly. You can also run tenon loop init to register a draft through the wizard.",
     lp_empty_prompt: "Help me set up a loop: watch <the directory or scope you want it to track>, run every 2 hours; stop and ask me if there are 3 runs in a row with no changes, or the budget is hit.",
     lp_empty_copy: 'Copy example',
     lp_empty_copied: 'Copied',
     lp_empty_copy_aria: 'Copy example prompt',
-    lp_empty_note: 'Refresh this page once it is written — then you can keep tuning cadence, budget, autonomy level and safety scope right here. A draft registered via pipeline loop init shows up here as "pending your review", and only goes live once you approve it.',
+    lp_empty_note: 'Refresh this page once it is written — then you can keep tuning cadence, budget, autonomy level and safety scope right here. A draft registered via tenon loop init shows up here as "pending your review", and only goes live once you approve it.',
     lp_prov_agent: 'Agent-generated',
     lp_prov_sys: 'System-derived',
     lp_prov_human: 'Human decision',
@@ -2273,7 +2273,7 @@ export const en: Dict = {
     afk_rd_codex_hint: 'codex path: OPENAI_API_KEY {o} · CODEX_HOME {c}',
     // full-install W1: per-runner credential lights (codex equally visible) + honest service-process caveat.
     afk_rd_cred_codex: 'credential · codex',
-    afk_rd_cred_caveat: 'Credential lights reflect the service process; run `pipeline doctor` in your terminal for the authoritative check',
+    afk_rd_cred_caveat: 'Credential lights reflect the service process; run `tenon doctor` in your terminal for the authoritative check',
     // G2: guide "how to install" when a prerequisite is missing — mirror of kernel PREREQ_HINTS (commands/URLs kept literal).
     afk_rd_docker_howto: 'How to install: install OrbStack (orbstack.dev) or Docker Desktop (docker.com)',
     sc_title: 'Credentials',
@@ -2306,19 +2306,19 @@ export const en: Dict = {
     lp_draft_approve: 'Approve & enable',
     lp_draft_reject: 'Reject (pause, keep as-is)',
     // ── full-install W4: read-only "Skill readiness" side panel (closes P1-F3/BF10). Read-only —
-    //    the commands themselves (pipeline setup / pipeline doctor) stay out of i18n (BF11: same
+    //    the commands themselves (tenon setup / tenon doctor) stay out of i18n (BF11: same
     //    source as the terminal, the translation layer must not rewrite commands). skh_unready
     //    wording mirrors the cli doctor "registry not ready … no false green" stance. ──
     skh_title: 'Skill readiness',
     skh_installed: 'Installed',
     skh_missing: 'Missing',
-    skh_all_installed: 'All skills installed (see pipeline doctor for runtime readiness)',
+    skh_all_installed: 'All skills installed (see tenon doctor for runtime readiness)',
     skh_missing_names: 'Missing: {names}',
     skh_guide: 'Install them all with one terminal command (already-installed are skipped):',
-    skh_unready: 'Skill registry not ready — run pipeline doctor to check (no false “all installed”)',
+    skh_unready: 'Skill registry not ready — run tenon doctor to check (no false “all installed”)',
     skh_error: 'Failed to load skill registry: {msg}',
     skh_copy_hint: 'Click to copy to clipboard',
-    skh_readonly_note: 'Read-only: skills are installed in the terminal (pipeline setup); this panel only shows readiness, it does not install.',
+    skh_readonly_note: 'Read-only: skills are installed in the terminal (tenon setup); this panel only shows readiness, it does not install.',
     // ── v8-E (note ⑥): workbench sheet tabs — five panes + tablist aria label. ──
     tabs_label: 'Workbench sections',
     tab_stage: 'Stage editor',
@@ -2343,7 +2343,7 @@ export const en: Dict = {
     state_agent_hint: 'Parked at a stage, waiting on the agent to produce output or move it forward — the agent works in the terminal',
     state_queued: 'Queued',
     act_kill: 'Stop',
-    empty: 'Nothing in flight — use “Create and lock” above, or run pipeline init in your terminal',
+    empty: 'Nothing in flight — use “Create and lock” above, or run tenon init in your terminal',
     // ── T11: row detail + action wiring + running-row log tail. Acceptance-G retirement:
     //    act_retry/act_dismiss removed with "retry/dismiss go back to the terminal" (zero refs). ──
     act_pass: 'Approve',
@@ -2459,7 +2459,7 @@ export const en: Dict = {
     //    the conclusion, hint_* the next action; cancelled/no-op are not faults — no doctor push). ──
     'hint_missing-credential': 'Run the fix command to configure the credential, then come back and retry',
     'hint_missing-image': 'Build the sandbox image first (copy the fix command below), then retry',
-    'hint_missing-docker': 'Start Docker first, then retry; unsure — run pipeline doctor in your terminal',
+    'hint_missing-docker': 'Start Docker first, then retry; unsure — run tenon doctor in your terminal',
     hint_conflict: 'Enter the worktree and resolve the conflict by hand, then retry — auto-retry cannot resolve conflicts',
     hint_timeout: 'Usually transient — wait a moment and retry; if it keeps timing out, check network and load',
     hint_network: 'Check your machine’s network, proxy and DNS, then retry once connectivity is back',

@@ -37,7 +37,7 @@ for entry in "${entries[@]}"; do
   }
 done
 
-cli="$PAYLOAD/packages/cli/dist/pipeline.mjs"
+cli="$PAYLOAD/packages/cli/dist/tenon.mjs"
 actual_cli="$(node -e '
   const { createHash } = require("node:crypto")
   const { readFileSync } = require("node:fs")

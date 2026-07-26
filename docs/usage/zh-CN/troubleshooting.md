@@ -1,6 +1,6 @@
 # 故障排查
 
-先确定事实面，再采取修复。Pipeline Lite 的状态、文档、session、runtime 和 UI 是不同层，单看一个“等待”标签不足以判断根因。
+先确定事实面，再采取修复。Tenon 的状态、文档、session、runtime 和 UI 是不同层，单看一个“等待”标签不足以判断根因。
 
 ## 目标
 
@@ -18,11 +18,11 @@
 ### 1. 采集基础事实
 
 ```bash
-pipeline status <change> --json
-pipeline document status <change> --json
-pipeline inbox --json
-pipeline doctor --json
-pipeline runtime status
+tenon status <change> --json
+tenon document status <change> --json
+tenon inbox --json
+tenon doctor --json
+tenon runtime status
 ```
 
 ### 2. 对照症状
@@ -57,7 +57,7 @@ openspec/changes/<change>/.pipeline-document-locale.json
 
 #### Pages 或本地预览 404
 
-本仓是 project site，base 必须为 `/pipeline-worklfow/`：
+本仓是 project site，base 必须为 `/tenon/`：
 
 ```bash
 npm run docs:sync
@@ -71,7 +71,7 @@ npm run docs:smoke
 
 - 实现缺陷：Verify 写失败报告，走 `verify-fail` 返回 Build；
 - 需求或设计变化：Build 走 `requirements-changed` 返回 Spec；
-- runtime 损坏：使用 `pipeline runtime repair`，不改项目证据；
+- runtime 损坏：使用 `tenon runtime repair`，不改项目证据；
 - review 待确认：完成产物后处理准确 receipt；
 - AFK queued：检查 scheduler、预算、依赖与 gate；
 - projection drift：使用受控 inspect/repair，不手改 canonical current。

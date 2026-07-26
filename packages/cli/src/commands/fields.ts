@@ -7,8 +7,8 @@
  *   set-many 无输出，同 set
  *   cas      无输出，0；不匹配=3；错误=1
  */
-import { FIELD_ORDER, LIST_FIELDS, resolveWorkflowName } from '@pipeline-lite/kernel'
-import type { FieldName, HistoryEntry, PipelineState, TrackRegistry } from '@pipeline-lite/kernel'
+import { FIELD_ORDER, LIST_FIELDS, resolveWorkflowName } from '@tenon/kernel'
+import type { FieldName, HistoryEntry, PipelineState, TrackRegistry } from '@tenon/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
 import { effectiveArtifactFields } from './effective-artifacts.js'
 import { changeDir, isValidChangeName } from '../paths.js'
@@ -43,7 +43,7 @@ type ComboPlan =
 
 /** P6 · artifact 字段被旧写入口拒绝时的统一 stderr 文案（含改用指引）。 */
 function artifactRejectMsg(field: FieldName, ctx: PipelineState): string {
-  return `ERROR: 字段 '${field}' 是当前 workflow '${resolveWorkflowName(ctx)}' / step '${scalarField(ctx, 'phase')}' / track '${scalarField(ctx, 'track')}' 的 artifact，禁止通过 set/set-many/cas 写入；请改用 pipeline artifact register`
+  return `ERROR: 字段 '${field}' 是当前 workflow '${resolveWorkflowName(ctx)}' / step '${scalarField(ctx, 'phase')}' / track '${scalarField(ctx, 'track')}' 的 artifact，禁止通过 set/set-many/cas 写入；请改用 tenon artifact register`
 }
 
 /**
@@ -206,7 +206,7 @@ function asField(deps: CliDeps, field: string): FieldName | undefined {
 /** Review receipt 是 transition 安全边界，不能经通用状态写入口伪造。 */
 function rejectReviewGateField(deps: CliDeps, field: FieldName): boolean {
   if (!REVIEW_GATE_FIELDS.has(field)) return false
-  deps.io.err(`ERROR: 字段 '${field}' 由 pipeline review request|acknowledge 管理，禁止通过 set/set-many/cas 写入`)
+  deps.io.err(`ERROR: 字段 '${field}' 由 tenon review request|acknowledge 管理，禁止通过 set/set-many/cas 写入`)
   return true
 }
 

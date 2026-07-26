@@ -1,5 +1,5 @@
 /**
- * Release update command for the one packaged pipeline plugin.
+ * Release update command for the one packaged Tenon plugin.
  *
  * Codex and Claude own their marketplace/cache lifecycles, so this command only asks the selected
  * host to refresh and reinstall its own plugin.  Other supported runtimes are adapters rather than
@@ -14,8 +14,8 @@ import {
   hostFlag,
   installedPipelineRoot,
   isNativePipelineHost,
-  PIPELINE_MARKETPLACE_NAME,
-  PIPELINE_PLUGIN_NAME,
+  TENON_MARKETPLACE_NAME,
+  TENON_PLUGIN_NAME,
   selectPipelineHost,
   type HostCommandPlanItem,
   type PipelineHost,
@@ -33,14 +33,14 @@ export interface UpdateOpts extends PipelineHostFlags {
 export function nativeUpdatePlan(host: Extract<PipelineHost, 'codex' | 'claude'>): readonly HostCommandPlanItem[] {
   if (host === 'codex') {
     return [
-      { cmd: 'codex', args: ['plugin', 'marketplace', 'upgrade', PIPELINE_MARKETPLACE_NAME, '--json'] },
-      { cmd: 'codex', args: ['plugin', 'add', `${PIPELINE_PLUGIN_NAME}@${PIPELINE_MARKETPLACE_NAME}`, '--json'] },
+      { cmd: 'codex', args: ['plugin', 'marketplace', 'upgrade', TENON_MARKETPLACE_NAME, '--json'] },
+      { cmd: 'codex', args: ['plugin', 'add', `${TENON_PLUGIN_NAME}@${TENON_MARKETPLACE_NAME}`, '--json'] },
       { cmd: 'codex', args: ['plugin', 'list', '--json'] },
     ]
   }
   return [
-    { cmd: 'claude', args: ['plugin', 'marketplace', 'update', PIPELINE_MARKETPLACE_NAME] },
-    { cmd: 'claude', args: ['plugin', 'update', `${PIPELINE_PLUGIN_NAME}@${PIPELINE_MARKETPLACE_NAME}`] },
+    { cmd: 'claude', args: ['plugin', 'marketplace', 'update', TENON_MARKETPLACE_NAME] },
+    { cmd: 'claude', args: ['plugin', 'update', `${TENON_PLUGIN_NAME}@${TENON_MARKETPLACE_NAME}`] },
     { cmd: 'claude', args: ['plugin', 'list', '--json'] },
   ]
 }
@@ -67,7 +67,7 @@ function isLocalCodexMarketplaceUpgradeNoop(result: { readonly stdout: string; r
 }
 
 function verifyUpdatedRoot(deps: CliDeps, env: SetupEnv, root: string): boolean {
-  // `pipeline` is a user-level launcher and its cwd is normally the target project, not the
+  // `tenon` is a user-level launcher and its cwd is normally the target project, not the
   // plugin checkout.  Verify the freshly installed package using its own absolute asset path.
   const result = env.runCommand('bash', [join(root, 'tools', 'verify-skills.sh'), '--quiet', '--root', root])
   if (result.code === 0) return true
@@ -94,12 +94,12 @@ export function cmdUpdate(
 ): number | Promise<number> {
   const selection = selectPipelineHost(opts)
   if (selection.host === null) {
-    deps.io.err(`ERROR: ${selection.error}。示例：pipeline update --codex`)
+    deps.io.err(`ERROR: ${selection.error}。示例：tenon update --codex`)
     return 1
   }
   const host = selection.host
   if (!isNativePipelineHost(host)) {
-    deps.io.out(`[update] ${hostFlag(host)} 没有独立 marketplace；从当前已更新的 pipeline 包重新部署 adapter。`)
+    deps.io.out(`[update] ${hostFlag(host)} 没有独立 marketplace；从当前已更新的 Tenon 包重新部署 adapter。`)
     return cmdSetupHost(deps, host, { ...opts, autoUpdate: false }, env, installer, dashboardStarter, opts.auto !== true)
   }
 
@@ -117,7 +117,7 @@ export function cmdUpdate(
     if (result.stdout.trim() !== '' && !opts.auto) deps.io.out(result.stdout.trimEnd())
     if (result.code !== 0) {
       if (host === 'codex' && index === 0 && isLocalCodexMarketplaceUpgradeNoop(result)) {
-        deps.io.out('[update] Codex 本地 marketplace 不需要 Git fetch；继续刷新 pipeline-lite 插件缓存。')
+        deps.io.out('[update] Codex 本地 marketplace 不需要 Git fetch；继续刷新 tenon 插件缓存。')
         continue
       }
       // `plugin add` is the host's only cross-version reinstall primitive.  Some host releases
@@ -143,12 +143,12 @@ export function cmdUpdate(
   }
   const root = installedPipelineRoot(host, inventory)
   if (root === null) {
-    const detail = `${hostFlag(host)} 更新后未在宿主插件清单中找到 pipeline-lite；未切换 launcher。`
+    const detail = `${hostFlag(host)} 更新后未在宿主插件清单中找到 tenon；未切换 launcher。`
     deps.io.err(`ERROR: ${detail}`)
     return rejectUpdate(installer, env, detail)
   }
   if (!verifyUpdatedRoot(deps, env, root)) {
-    return rejectUpdate(installer, env, '宿主刷新后的 pipeline-lite 候选未通过打包资产校验')
+    return rejectUpdate(installer, env, '宿主刷新后的 tenon 候选未通过打包资产校验')
   }
   return installer.activate(root, host, env.homeDir())
     .then(async (activation) => {
@@ -159,17 +159,17 @@ export function cmdUpdate(
         { openBrowser: opts.auto !== true },
       )
       if (dashboardCode !== 0) {
-        const detail = 'runtime 已切换，但 dashboard 未能完成受管刷新；请运行 pipeline dashboard --background 诊断。'
+        const detail = 'runtime 已切换，但 dashboard 未能完成受管刷新；请运行 tenon dashboard --background 诊断。'
         deps.io.err(`ERROR: ${detail}`)
         return rejectUpdate(installer, env, detail)
       }
       if (opts.auto) {
         deps.io.out(`[update] ${hostFlag(host)} 已在后台刷新；当前会话继续使用已加载版本，新会话将加载新 skills/hooks。`)
       } else {
-        deps.io.out(`[update] ${hostFlag(host)} 已更新；稳定 pipeline launcher 已保持不变，新会话将加载新 skills/hooks。`)
+        deps.io.out(`[update] ${hostFlag(host)} 已更新；稳定 tenon launcher 已保持不变，新会话将加载新 skills/hooks。`)
       }
       if (host === 'codex') {
-        deps.io.out('[update] 若 Codex 将新版本 pipeline hook 标为未信任或已变更，请在 Codex 输入 /hooks 后重新信任；这是宿主的安全边界。')
+        deps.io.out('[update] 若 Codex 将新版本 Tenon hook 标为未信任或已变更，请在 Codex 输入 /hooks 后重新信任；这是宿主的安全边界。')
       }
       return 0
     })

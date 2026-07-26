@@ -261,7 +261,7 @@ done
 # transition.test.ts 全程注入 mock deps（无真 fs），断言「没产出 handoff 产物」在 mock 下恒真，
 # 即便真接了线也未必变红——那是自欺。故此处用 grep 断言**源码事实**：
 #   packages/cli/src/commands/transition.ts 里零 handoff 引用；
-#   buildHandoff 只在用户显式敲 `pipeline handoff` 时跑（handoff.ts）。
+#   buildHandoff 只在用户显式敲 `tenon handoff` 时跑（handoff.ts）。
 # 这条**同时是 handoff.ts:10 那句注释的绊线**——那句注释声称「transition 里没有 buildHandoff
 # 调用」。哪天真接了线，本检查变红，逼实现者回来改掉那句注释，而不是留一句假描述。
 TRANSITION_TS='packages/cli/src/commands/transition.ts'

@@ -3,7 +3,7 @@ import {
   buildGraduationReport, enforcementFor, remainingTokens, type AuditReport, type BudgetFs,
   type BudgetReport, type CostReport, type DriftFs, type DriftReport, type EnforceFs,
   type GraduationFs, type GraduationReport, type GraduationVerdict,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import type { CliDeps } from '../deps.js'
 import { buildAdmissionJson, ledgerProjections } from './loop-admission-view.js'
 
@@ -207,7 +207,7 @@ function printGraduationTable(deps: CliDeps, report: GraduationReport): void {
     deps.io.out(`    loop-ready=${v.readinessScore}/${v.readinessBand}  drift=${v.driftCount}  breaker=${v.breaker}  fail_streak=${v.failStreak}  runs=${v.runs}`)
     if (v.demotionReason !== null) deps.io.out(`    ⚠ 降档信号：${v.demotionReason}`)
     for (const b of v.blockers) deps.io.out(`    · blocker: ${b}`)
-    if (v.canGraduate) deps.io.out(`    → 可升 ${v.recommended}：pipeline loops level ${v.id} set ${v.recommended} --confirm`)
+    if (v.canGraduate) deps.io.out(`    → 可升 ${v.recommended}：tenon loops level ${v.id} set ${v.recommended} --confirm`)
   }
 }
 
@@ -237,7 +237,7 @@ function printLevelView(deps: CliDeps, v: GraduationVerdict): void {
   deps.io.out(`  loop-ready=${v.readinessScore}/${v.readinessBand}  drift=${v.driftCount}  breaker=${v.breaker}  fail_streak=${v.failStreak}  runs=${v.runs}`)
   if (v.demotionReason !== null) deps.io.out(`  ⚠ 降档信号：${v.demotionReason} → 建议降 ${v.recommended}`)
   for (const b of v.blockers) deps.io.out(`  · blocker: ${b}`)
-  if (v.canGraduate) deps.io.out(`  → 可升 ${v.recommended}：pipeline loops level ${v.id} set ${v.recommended} --confirm`)
+  if (v.canGraduate) deps.io.out(`  → 可升 ${v.recommended}：tenon loops level ${v.id} set ${v.recommended} --confirm`)
 }
 
 /** level <loop> [set <L1|L2|L3>] [--confirm|--yes] [--json]：查看/建议档位 or 显式确认改档。 */
@@ -302,7 +302,7 @@ export async function cmdLevel(deps: CliDeps, args: string[], fs: GraduationFs):
   // allowed 但未 --confirm = dry-run（默认不自动改档）
   deps.io.out(
     `[LOOPS level set] ${plan.id} ${plan.from} → ${plan.to}（${plan.kind}）准入通过 —— dry-run（未落盘）。` +
-    `加 --confirm 落盘：pipeline loops level ${plan.id} set ${plan.to} --confirm`,
+    `加 --confirm 落盘：tenon loops level ${plan.id} set ${plan.to} --confirm`,
   )
   return 0
 }

@@ -3,7 +3,7 @@ name: tailwind-css-patterns
 description: First-party Tailwind-oriented layout and token discipline.
 license: MIT
 metadata:
-  author: pipeline-lite
+  author: tenon
 ---
 
 # Tailwind CSS Patterns

@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "displayName": "Tenon",
+  "cli": "tenon",
+  "hookLauncher": "tenon-hook",
+  "dashboardLauncher": "tenon-dashboard",
+  "plugin": "tenon",
+  "marketplace": "tenon",
+  "skillPrefix": "tenon-",
+  "runtimeApp": "tenon",
+  "environmentPrefix": "TENON_",
+  "browserPrefix": "__TENON_",
+  "repository": "jefferysha/tenon",
+  "repositoryUrl": "https://github.com/jefferysha/tenon",
+  "pagesBase": "/tenon/",
+  "dashboardHost": "127.0.0.1",
+  "dashboardPort": 18765
+}

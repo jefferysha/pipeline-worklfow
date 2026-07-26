@@ -17,13 +17,13 @@ import {
   isDocumentPolicyStep,
   resolveStep,
   resolveWorkflowName,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import type {
   DocumentEvidenceReport,
   DocumentGovernancePolicy,
   EffectiveWorkflowPlan,
   PipelineState,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
 import { changeDir, isValidChangeName } from '../paths.js'
 import { display, str } from '../render.js'

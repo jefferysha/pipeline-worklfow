@@ -10,7 +10,7 @@ import {
   type StateStore,
   type WorkflowRun,
   type WorkflowRunRepository,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import type {
   WorkflowRunCreateIfAbsentRepository,
   WorkflowRunCreateIfAbsentResult,

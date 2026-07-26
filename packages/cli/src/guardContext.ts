@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import {
   readCurrentRunRevisionSync,
   stateStorageExistsSync,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import type { GuardFileContext } from './deps.js'
 
 export async function listChanges(changesRoot: string): Promise<string[]> {
@@ -80,6 +80,6 @@ export function makeGuardCtx(cwd: string): (name: string) => GuardFileContext {
     },
     activeChangeArchived: (dep) => activeCanonicalArchived(cwd, dep),
     changeArchived: (dep) => physicallyArchived(cwd, dep),
-    automationRunner: process.env.PIPELINE_AUTOMATION_RUNNER === '1',
+    automationRunner: process.env.TENON_AUTOMATION_RUNNER === '1',
   })
 }

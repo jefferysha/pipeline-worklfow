@@ -5,7 +5,7 @@ import { dirname, join, resolve } from 'node:path'
 import { promisify } from 'node:util'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { BUILTIN_TRACK_DEFINITIONS, type TrackRegistry, type WorkflowDef } from '@pipeline-lite/kernel'
+import { BUILTIN_TRACK_DEFINITIONS, type TrackRegistry, type WorkflowDef } from '@tenon/kernel'
 import {
   captureWorkflowDeletePermit, captureWorkflowRootAnchor, closeWorkflowRootAnchor, deleteWorkflowForApi,
   listWorkflowNames, readWorkflowForApi, scanWorkflowReferencesForApi, writeWorkflowForApi,

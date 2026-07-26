@@ -42,7 +42,7 @@ if [ -z "$_ROOT" ] || [ ! -d "$_ROOT/hooks" ]; then
 fi
 export CLAUDE_PLUGIN_ROOT="$_ROOT"
 
-CC_INJECTOR="${PIPELINE_CC_INJECTOR:-$_ROOT/hooks/session-start.sh}"
+CC_INJECTOR="${TENON_CC_INJECTOR:-$_ROOT/hooks/session-start.sh}"
 [ -f "$CC_INJECTOR" ] || { printf '{"cancel":false}\n'; exit 0; }
 
 CONTEXT="$(printf '{"cwd":"%s"}' "$CWD" | bash "$CC_INJECTOR" 2>/dev/null || true)"

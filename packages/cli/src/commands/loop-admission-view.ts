@@ -27,13 +27,13 @@ import {
   reservedTokensFor,
   type LoopEntry,
   type LoopLedgerProjection,
-} from '@pipeline-lite/kernel'
-export { evaluateSkillBundleWiring } from '@pipeline-lite/automation'
+} from '@tenon/kernel'
+export { evaluateSkillBundleWiring } from '@tenon/automation'
 export type {
   SkillBundleWiringDeps,
   SkillBundleWiringResult,
   SkillBundleWiringStatus,
-} from '@pipeline-lite/automation'
+} from '@tenon/automation'
 
 /**
  * GOAL H · Stage C 读面：durable ledger → typed 投影（与 admission 硬判定**同源**——`loops budget/

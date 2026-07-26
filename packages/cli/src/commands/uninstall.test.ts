@@ -3,7 +3,7 @@
  * cli/src/sync-uninstall.integration.test.ts）。这里用内存 fake OwnedFs 穷举决策分支/退出码。
  */
 import { describe, expect, test } from 'vitest'
-import { computeContentHash, type OwnedFs } from '@pipeline-lite/kernel'
+import { computeContentHash, type OwnedFs } from '@tenon/kernel'
 import type { CliDeps } from '../deps.js'
 import { cmdUninstall } from './uninstall.js'
 

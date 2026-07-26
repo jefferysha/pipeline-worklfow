@@ -6,11 +6,11 @@
 #   .pipeline-pending-confirm     解封 confirm 门（走不走 pipeline 的确认）
 #   .pipeline-pending-interaction 解封 interaction 门（交互式 skill 加载后先问用户）
 # review v2 marker 不可由这个 hook 直接删除：它对应 canonical receipt，只有用户答复中包含
-# 显式批准语义时才调用 `pipeline review acknowledge`。这样“要修改”这类回答不会误放行离开
+# 显式批准语义时才调用 `tenon review acknowledge`。这样“要修改”这类回答不会误放行离开
 # review phase。
 #
 # 清除范围与 gate/router 共用项目根定位：只接受 Git worktree、显式
-# PIPELINE_PROJECT_ROOT 或当前 cwd。这样子目录中的确认仍能解封当前 Git 项目，且绝不会清到
+# TENON_PROJECT_ROOT 或当前 cwd。这样子目录中的确认仍能解封当前 Git 项目，且绝不会清到
 # 共享临时父目录的另一项目 marker。
 #
 # 纯 bash 热路径（CONTRACT §5.4：PostToolUse 每次工具后触发）：零解释器 / 外部 JSON 解析器 spawn，

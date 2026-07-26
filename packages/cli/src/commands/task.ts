@@ -9,7 +9,7 @@
  * stdout/exit 对齐老仓：数据走 stdout（老仓 echo/printf/python print），状态与错误走 stderr
  * （老仓 red/green 均 >&2）。exit：错误/非法 = 1；成功 = 0。
  */
-import type { ChangeNode, HistoryEntry, PipelineState, StateStore } from '@pipeline-lite/kernel'
+import type { ChangeNode, HistoryEntry, PipelineState, StateStore } from '@tenon/kernel'
 import {
   addDependency,
   canonicalChildNames,
@@ -23,11 +23,11 @@ import {
   stateRelatedFiles,
   stateSubtasks,
   type ChildRef,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
 import { changeDir, isValidChangeName } from '../paths.js'
 
-export type { ChangeNode } from '@pipeline-lite/kernel'
+export type { ChangeNode } from '@tenon/kernel'
 
 /** 树枚举 / 目录定位注入面（默认真 fs；mock 层注入 fake，见 task.test.ts）。 */
 export interface TaskFs {

@@ -52,7 +52,7 @@ const OUTPUTS_BY_PHASE: Readonly<Record<DocumentContractPhase, readonly Document
   ],
   explore: [
     { kind: 'superpower-design', producerCandidates: ['brainstorming', 'superpowers:brainstorming'] },
-    { kind: 'adr', producerCandidates: ['pipeline-explore', 'pipeline-lite:pipeline-explore', 'brainstorming', 'superpowers:brainstorming'] },
+    { kind: 'adr', producerCandidates: ['tenon-explore', 'tenon:tenon-explore', 'brainstorming', 'superpowers:brainstorming'] },
   ],
   spec: [
     { kind: 'delta-spec', producerCandidates: ['openspec-propose', 'opsx:propose'] },
@@ -63,7 +63,7 @@ const OUTPUTS_BY_PHASE: Readonly<Record<DocumentContractPhase, readonly Document
   verify: [
     {
       kind: 'verification-report',
-      producerCandidates: ['verification-before-completion', 'superpowers:verification-before-completion', 'pipeline-verify', 'pipeline-lite:pipeline-verify'],
+      producerCandidates: ['verification-before-completion', 'superpowers:verification-before-completion', 'tenon-verify', 'tenon:tenon-verify'],
     },
   ],
   ship: [
@@ -87,27 +87,27 @@ const MUTABLE_RECORDS_BY_PHASE: Readonly<Record<DocumentContractPhase, readonly 
     // validated problem framing and initial design hypothesis into those living documents; the
     // resulting digest must therefore be attributed to the phase driver, not left under the
     // now-stale open-phase openspec-propose receipt.
-    { kind: 'proposal', producerCandidates: ['pipeline-explore', 'pipeline-lite:pipeline-explore'] },
-    { kind: 'openspec-design', producerCandidates: ['pipeline-explore', 'pipeline-lite:pipeline-explore'] },
-    { kind: 'tasks', producerCandidates: ['pipeline-explore', 'pipeline-lite:pipeline-explore'] },
+    { kind: 'proposal', producerCandidates: ['tenon-explore', 'tenon:tenon-explore'] },
+    { kind: 'openspec-design', producerCandidates: ['tenon-explore', 'tenon:tenon-explore'] },
+    { kind: 'tasks', producerCandidates: ['tenon-explore', 'tenon:tenon-explore'] },
   ],
   spec: [
-    { kind: 'proposal', producerCandidates: ['pipeline-spec', 'pipeline-lite:pipeline-spec'] },
-    { kind: 'openspec-design', producerCandidates: ['pipeline-spec', 'pipeline-lite:pipeline-spec'] },
-    { kind: 'tasks', producerCandidates: ['pipeline-spec', 'pipeline-lite:pipeline-spec'] },
-    { kind: 'superpower-design', producerCandidates: ['pipeline-spec', 'pipeline-lite:pipeline-spec'] },
+    { kind: 'proposal', producerCandidates: ['tenon-spec', 'tenon:tenon-spec'] },
+    { kind: 'openspec-design', producerCandidates: ['tenon-spec', 'tenon:tenon-spec'] },
+    { kind: 'tasks', producerCandidates: ['tenon-spec', 'tenon:tenon-spec'] },
+    { kind: 'superpower-design', producerCandidates: ['tenon-spec', 'tenon:tenon-spec'] },
   ],
   build: [
-    { kind: 'tasks', producerCandidates: ['pipeline-build', 'pipeline-lite:pipeline-build'] },
+    { kind: 'tasks', producerCandidates: ['tenon-build', 'tenon:tenon-build'] },
   ],
   verify: [
-    { kind: 'tasks', producerCandidates: ['pipeline-verify', 'pipeline-lite:pipeline-verify'] },
+    { kind: 'tasks', producerCandidates: ['tenon-verify', 'tenon:tenon-verify'] },
   ],
   ship: [
-    { kind: 'tasks', producerCandidates: ['pipeline-ship', 'pipeline-lite:pipeline-ship'] },
+    { kind: 'tasks', producerCandidates: ['tenon-ship', 'tenon:tenon-ship'] },
   ],
   archive: [
-    { kind: 'tasks', producerCandidates: ['pipeline-archive', 'pipeline-lite:pipeline-archive'] },
+    { kind: 'tasks', producerCandidates: ['tenon-archive', 'tenon:tenon-archive'] },
   ],
 }
 
@@ -320,7 +320,7 @@ function recordRequirementFor(kind: DocumentKind, phase: DocumentContractPhase):
 
 function aliasesForSkill(id: string): readonly string[] {
   const aliases = new Set<string>([id])
-  if (id.startsWith('pipeline-lite:')) aliases.add(id.slice('pipeline-lite:'.length))
+  if (id.startsWith('tenon:')) aliases.add(id.slice('tenon:'.length))
   if (id.startsWith('superpowers:')) aliases.add(id.slice('superpowers:'.length))
   if (id === 'opsx:propose') aliases.add('openspec-propose')
   if (id === 'openspec-propose') aliases.add('opsx:propose')

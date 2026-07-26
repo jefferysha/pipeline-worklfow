@@ -2,7 +2,7 @@ import {
   ensureDocumentLocalePin,
   readDocumentLocalePin,
   type DocumentLocale,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 

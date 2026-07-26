@@ -2,7 +2,7 @@
 
 ## Goal
 
-Install one complete Pipeline Lite release for exactly one coding-agent host,
+Install one complete Tenon release for exactly one coding-agent host,
 verify the managed runtime, and load its packaged hooks and Skills.
 
 ## Prerequisites
@@ -10,50 +10,49 @@ verify the managed runtime, and load its packaged hooks and Skills.
 - Node.js 22 or later
 - Git
 - the selected host CLI available on `PATH`
-- a checked-out/downloaded Pipeline Lite release only when the stable
-  `pipeline` launcher does not exist yet
 - Docker only for later AFK container execution
 
-Pipeline Lite does not require users to install mandatory Skills one by one.
+Tenon does not require users to install mandatory Skills one by one.
 
 ## Native host setup
 
-If the `pipeline` launcher is already available:
+New users install the complete Codex plugin without cloning the repository:
 
 ```bash
-pipeline setup --codex
+curl -fsSL https://raw.githubusercontent.com/jefferysha/tenon/main/install.sh | bash -s -- --codex
 ```
 
 For Claude:
 
 ```bash
-pipeline setup --claude
-```
-
-If the launcher does not exist yet, run the release bootstrap:
-
-```bash
-./install.sh --codex
-# or
-./install.sh --claude
+curl -fsSL https://raw.githubusercontent.com/jefferysha/tenon/main/install.sh | bash -s -- --claude
 ```
 
 The bootstrap adds the selected native marketplace plugin, resolves the install
 root from the host's own inventory, and invokes the same
-`pipeline setup --<host>` operation. Pipeline Lite does not guess private host
+`tenon setup --<host>` operation. Tenon does not guess private host
 cache locations.
 
+This Marketplace bootstrap is the currently available one-command install.
+The repository also builds a thin npx package, but documentation will publish
+the final `npx --yes @<publisher>/tenon setup --codex` command only after an
+owned npm scope is configured and the package is publicly released. It is not
+a second runtime or installer transaction.
+
 Setup validates the complete package, publishes an immutable managed release,
-creates stable `pipeline` and `pipeline-hook` launchers, starts the packaged
+creates stable `tenon` and `tenon-hook` launchers, starts the packaged
 Dashboard, and opens it after its health check succeeds.
+
+After installation, use `tenon setup --codex` to repair host wiring and
+`tenon update --codex` to refresh the installed release.
 
 ### Codex hook trust
 
 Codex keeps a one-time local trust boundary for third-party hooks:
 
-1. finish `pipeline setup --codex`;
+1. finish `tenon setup --codex`;
 2. open Codex and run `/hooks`;
-3. trust `pipeline-lite`;
+3. trust `tenon`;
 4. start a new Codex session.
 
 Until trust is granted, the plugin and Skills can be installed while
@@ -71,8 +70,8 @@ the Skills and hooks it already loaded.
 An installed release can deploy a non-native adapter into a project:
 
 ```bash
-pipeline setup --cursor --target /absolute/path/to/project
-pipeline setup --gemini --target /absolute/path/to/project
+tenon setup --cursor --target /absolute/path/to/project
+tenon setup --gemini --target /absolute/path/to/project
 ```
 
 Supported flags:
@@ -86,7 +85,7 @@ Exactly one flag is accepted. `--target` defaults to the current directory for
 non-native adapters. Use `--dry-run` to inspect the plan:
 
 ```bash
-pipeline setup --cline --target /absolute/path/to/project --dry-run
+tenon setup --cline --target /absolute/path/to/project --dry-run
 ```
 
 Native Codex/Claude marketplace releases own automatic refresh. Other adapters
@@ -121,18 +120,18 @@ Boundaries:
 
 Payload, state, and configuration use OS-standard application-data locations:
 
-- macOS: `~/Library/Application Support/pipeline-lite/`
+- macOS: `~/Library/Application Support/tenon/`
 - Linux: XDG data/state/config locations
 - Windows: Local AppData locations
 
-The stable command launcher is normally `~/.local/bin/pipeline`. Treat the
+The stable command launcher is normally `~/.local/bin/tenon`. Treat the
 host-owned marketplace/cache directory as private implementation detail.
 
 ## Expected result
 
 ```bash
-pipeline runtime status --json
-pipeline doctor --json
+tenon runtime status --json
+tenon doctor --json
 ```
 
 The runtime reports an active verified release. Doctor reports the effective
@@ -142,7 +141,7 @@ credentials not being configured.
 ## Verification
 
 ```bash
-pipeline dashboard --open
+tenon dashboard --open
 ```
 
 The packaged SPA and API become healthy on
@@ -150,9 +149,9 @@ The packaged SPA and API become healthy on
 
 ## Common failures
 
-### `pipeline: command not found`
+### `tenon: command not found`
 
-Run `./install.sh --codex` or `./install.sh --claude` from the release, then
+Run the one-line Marketplace installer again, then
 ensure `~/.local/bin` is on `PATH`.
 
 ### Setup accepts neither zero nor multiple hosts
@@ -161,7 +160,7 @@ This is intentional. Choose one host per operation.
 
 ### Codex is installed but normal conversation does not route
 
-Run `/hooks`, trust `pipeline-lite`, and open a new session.
+Run `/hooks`, trust `tenon`, and open a new session.
 
 ### Adapter has weaker enforcement than Codex
 
@@ -177,4 +176,3 @@ AFK with the corresponding runner.
 
 Continue with the [first governed task](quickstart.md), or read
 [updates and recovery](updates-recovery-and-uninstall.md).
-

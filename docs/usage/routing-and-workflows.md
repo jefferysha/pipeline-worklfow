@@ -82,7 +82,7 @@ Create or save a valid project Workflow at:
 Then initialize a Change explicitly:
 
 ```bash
-pipeline init <change-name> \
+tenon init <change-name> \
   --track backend \
   --preset full \
   --workflow <name>
@@ -97,12 +97,12 @@ Recent modification time is not a routing authority. Resume a known Change by
 name in the request or:
 
 ```bash
-pipeline session activate <change-name>
+tenon session activate <change-name>
 ```
 
 When multiple candidates exist and none was selected, do not guess.
 
-`pipeline session activate <change-name> --host-session <id>` creates an exact
+`tenon session activate <change-name> --host-session <id>` creates an exact
 host-session binding. A later “continue” in that conversation resolves this
 binding before the repository-wide `.pipeline-active` candidate, so another
 conversation cannot hijack the resume target. If a host supplies a session id
@@ -120,8 +120,8 @@ its steps from the same effective plan.
 ## Verification
 
 ```bash
-pipeline status <change-name> --json
-pipeline tracks show <track-id> --json
+tenon status <change-name> --json
+tenon tracks show <track-id> --json
 ```
 
 Inspect the Dashboard Progress view to confirm its step graph matches status.

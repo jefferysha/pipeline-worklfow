@@ -14,12 +14,12 @@ import {
   readGovernedDocumentsForCurrentVisit,
   seedGovernedDocumentEvidence,
 } from './test-support.js'
-import type { FlowEngine, StateStore } from '@pipeline-lite/kernel'
+import type { FlowEngine, StateStore } from '@tenon/kernel'
 import {
   createLoopLedgerStore, effectiveWorkflowPlanBinding, loadEffectiveWorkflowPlan, loadManifest,
   machineStateScopeId, secretsPath,
   registerProjectRoot, TRANSITION_EVENTS as KERNEL_EVENTS, eventEdge as kernelEventEdge,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import { TRANSITION_EVENTS, eventEdge } from './transition.js'
 import type { LoopActivationValidator } from './loops.js'
 import type { PipelineCliRunner } from './operations.js'
@@ -601,7 +601,7 @@ describe('GET / + /assets/* —— webRoot 存在时服务真 SPA（BACKLOG #26c
     const idx = await reqGet(port, '/')
     expect(idx.status).toBe(200)
     expect(idx.body).toContain('<div id=app>')
-    expect(idx.body).toContain('window.__PIPELINE_DASHBOARD_TOKEN__')
+    expect(idx.body).toContain('window.__TENON_DASHBOARD_TOKEN__')
     expect(idx.body).toContain('spa-token')
     // GET /assets/app.js → 真静态供给 + js content-type
     const asset = await reqGet(port, '/assets/app.js')
@@ -684,7 +684,7 @@ describe('POST /api/change/<name>/transition —— G1 default 轨收尾（bread
     expect(existsSync(breadcrumbPath)).toBe(true)
     expect(await readFile(breadcrumbPath, 'utf8')).toBe(`pipeline:${h.name} phase=explore\n`)
 
-    // review marker 只由 `pipeline review request` 在产物准备好后写入 canonical receipt 的 hook
+    // review marker 只由 `tenon review request` 在产物准备好后写入 canonical receipt 的 hook
     // projection；进入 review phase 时写它会把该 phase 的实际工作自身锁死。
     const markerPath = join(h.root, '.pipeline-pending-review')
     expect(existsSync(markerPath)).toBe(false)
@@ -958,7 +958,7 @@ describe('GET /api/change/:name/history —— 阶段时间线读端点（G21 / 
  * W1 第二增量收尾：history 合并边界从「canonical 链首条记录 observedAt vs JSONL ts 字符串比较」
  * 改成「transitionRecordId 是否存在」的逐条来源标记（见 transition.ts::readChangeHistory 头部
  * 注释）。这里覆盖 codex 架构评估点名的原方案不可靠场景：同秒冲突 / 时钟回拨 / head 文件缺失
- * 误清空遗留记录 / 晚于链建立才执行的 pipeline import，以及未被上面既有测试单独覆盖的边界。
+ * 误清空遗留记录 / 晚于链建立才执行的 tenon import，以及未被上面既有测试单独覆盖的边界。
  */
 describe('GET /api/change/:name/history —— transitionRecordId 来源判定（不比较任何时间戳）', () => {
   it('canonical 记录与遗留 JSONL 条目时间戳完全相同 → 两者都保留、不重复、不误删（原方案的头号 bug：' +
@@ -1065,7 +1065,7 @@ describe('GET /api/change/:name/history —— transitionRecordId 来源判定�
   })
 
   it('晚于 canonical 链建立之后才写入的、不带 transitionRecordId 的 JSONL transition 条目（模拟迟到的' +
-    ' pipeline import）→ 必须保留，即使它在文件里的物理位置排在 canonical 投影之后', async () => {
+    ' tenon import）→ 必须保留，即使它在文件里的物理位置排在 canonical 投影之后', async () => {
     const h = await start()
     const w = await reqPost(h.port, `/api/change/${h.name}/transition`, { root: h.root, event: 'open-complete' }, {
       headers: { Authorization: `Bearer ${h.token}` },
@@ -1073,7 +1073,7 @@ describe('GET /api/change/:name/history —— transitionRecordId 来源判定�
     expect(w.status).toBe(200)
     const { appendFile } = await import('node:fs/promises')
     // 追加（不是覆盖）在 canonical 投影行之后——模拟老 transitions_history 迟于链建立才被
-    // `pipeline import` 追加进 JSONL 的场景。
+    // `tenon import` 追加进 JSONL 的场景。
     const lateImport = { ts: '2026-07-07T00:00:00Z', kind: 'transition', from: 'archive', to: 'archive', raw: 'legacy-import-transitions_history' }
     await appendFile(join(h.changeDir, '.pipeline-history.jsonl'), `${JSON.stringify(lateImport)}\n`, 'utf8')
     const r = await reqGet(h.port, `/api/change/${h.name}/history?root=${encodeURIComponent(h.root)}`)
@@ -1483,7 +1483,7 @@ describe('GET /api/skills/registry —— 全部已注册 skill 明细(T6 升级
     expect(r.status).toBe(200)
     const body = r.json<{ skills: Array<{ name: string; installed: boolean; source: string; tier: string; available: boolean; description?: string; installCmd?: string }> }>()
     const names = body.skills.map((s) => s.name)
-    expect(names).toContain('pipeline-open') // 本仓真实存在的本地 skill 目录
+    expect(names).toContain('tenon-open') // 本仓真实存在的本地 skill 目录
     expect(names.length).toBeGreaterThan(14) // 必须包含外部登记，不能只有本地 14 个
     for (const e of body.skills) {
       expect(typeof e.name).toBe('string')
@@ -1493,7 +1493,7 @@ describe('GET /api/skills/registry —— 全部已注册 skill 明细(T6 升级
       expect(typeof e.available).toBe('boolean')
     }
     expect(body.skills.some((entry) => typeof entry.description === 'string' && entry.description.length > 0)).toBe(true)
-    const local = body.skills.find((s) => s.name === 'pipeline-open')!
+    const local = body.skills.find((s) => s.name === 'tenon-open')!
     expect(local.source).toBe('local-plugin')
     // builtin 四件套恒已装(写死短名单,不依赖测试机环境)
     for (const b of ['verify', 'run', 'code-review', 'security-review']) {
@@ -3811,7 +3811,7 @@ describe('POST /api/projects —— 注册项目进机器级注册表（G18）',
     const proj = await makeProject()
     const auth = { headers: { Authorization: `Bearer ${h.token}` } }
 
-    // 同 `pipeline init` 的真实写路径：CLI 直接更新机器级 registry，不会经 dashboard HTTP 端点。
+    // 同 `tenon init` 的真实写路径：CLI 直接更新机器级 registry，不会经 dashboard HTTP 端点。
     expect(await registerProjectRoot(h.registryPath, proj)).toBe(true)
     const listed = await reqGet(h.port, `/api/workflows?root=${encodeURIComponent(proj)}`)
     expect(listed.status).toBe(200)
@@ -3952,7 +3952,7 @@ describe('DELETE /api/projects —— 注销项目（G18 对称操作）', () =>
   })
 })
 
-describe('POST /api/changes —— pipeline init 的 HTTP 化（G18）', () => {
+describe('POST /api/changes —— tenon init 的 HTTP 化（G18）', () => {
   /** 先经真端点注册项目（G18 闭环语义），返回可用的 proj root。 */
   async function withRegisteredProject(h: Awaited<ReturnType<typeof startWithHome>>): Promise<string> {
     const proj = await makeProject()

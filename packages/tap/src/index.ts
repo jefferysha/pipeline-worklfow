@@ -1,5 +1,5 @@
 /**
- * @pipeline-lite/tap —— tap 流量代理核心（GOAL A7 / BACKLOG #34 + #34e）。
+ * @tenon/tap —— tap 流量代理核心（GOAL A7 / BACKLOG #34 + #34e）。
  *
  * 老仓真相源（严格只读移植）: skills/pipeline/scripts/tap/*.py
  *   tap_daemon.py（单进程多端口）· capture_proxy.py（reverse 抓转发）· forward_proxy.py（forward/MITM）

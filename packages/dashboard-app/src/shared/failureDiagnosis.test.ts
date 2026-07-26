@@ -6,14 +6,14 @@ import { diagnoseFailure, diagnoseFailureWithCause } from './failureDiagnosis'
 //    映射成稳定成因枚举 + 可复制修复命令。断言只钉 { cause, fixCommand }，人话经 i18n（不在此层）。──
 
 describe('diagnoseFailure 成因分类（W3 ①）', () => {
-  it('凭证类：含 OPENAI_API_KEY / CLAUDE_CODE_OAUTH / 凭证 / authentication → missing-credential + pipeline setup', () => {
+  it('凭证类：含 OPENAI_API_KEY / CLAUDE_CODE_OAUTH / 凭证 / authentication → missing-credential + tenon setup', () => {
     for (const s of [
       'codex 认证失败：请设置 OPENAI_API_KEY 后重试',
       '未检测到 codex 凭证：宿主机需设 OPENAI_API_KEY 或挂载 CODEX_HOME',
       '未检测到 CLAUDE_CODE_OAUTH_TOKEN 或 claude CLI：本轮走确定性兜底',
       'authentication failed: token expired (401)',
     ]) {
-      expect(diagnoseFailure(s)).toEqual({ cause: 'missing-credential', fixCommand: 'pipeline setup' })
+      expect(diagnoseFailure(s)).toEqual({ cause: 'missing-credential', fixCommand: 'tenon setup' })
     }
   })
 
@@ -43,7 +43,7 @@ describe('diagnoseFailure 成因分类（W3 ①）', () => {
     ).toBe('missing-docker')
   })
 
-  it('agent 非零退出（生产主路径）：lifecycle 改写的真实落盘句（含「凭证」）→ missing-credential + pipeline setup（非 agent-nonzero）', () => {
+  it('agent 非零退出（生产主路径）：lifecycle 改写的真实落盘句（含「凭证」）→ missing-credential + tenon setup（非 agent-nonzero）', () => {
     // 真实落盘串逐字对齐 lifecycle.ts:211 createAgentExitWatch——沙箱 `[AGENT_EXIT] <runner> <exit>` 行
     // 被改写成含「凭证」的中文句再落 automation_last_error（生产**不落**裸标记）。含「凭证」→ CREDENTIAL_RE
     // (优先级1)截获 → missing-credential（凭证为主因，原文保留可续诊）。此前 fixture 喂裸标记=假信心。
@@ -51,7 +51,7 @@ describe('diagnoseFailure 成因分类（W3 ①）', () => {
       'codex agent 非零退出（exit 96）：可能凭证失效或 codex 自身报错，详见 agent 日志',
       'claude agent 非零退出（exit 1）：可能凭证失效或 claude 自身报错，详见 agent 日志',
     ]) {
-      expect(diagnoseFailure(s)).toEqual({ cause: 'missing-credential', fixCommand: 'pipeline setup' })
+      expect(diagnoseFailure(s)).toEqual({ cause: 'missing-credential', fixCommand: 'tenon setup' })
     }
   })
 
@@ -60,11 +60,11 @@ describe('diagnoseFailure 成因分类（W3 ①）', () => {
     expect(diagnoseFailure('[AGENT_EXIT] codex 1')).toEqual({ cause: 'agent-nonzero', fixCommand: null })
   })
 
-  it('空串 / 无法识别 → unknown + pipeline doctor 兜底', () => {
-    expect(diagnoseFailure('')).toEqual({ cause: 'unknown', fixCommand: 'pipeline doctor' })
+  it('空串 / 无法识别 → unknown + tenon doctor 兜底', () => {
+    expect(diagnoseFailure('')).toEqual({ cause: 'unknown', fixCommand: 'tenon doctor' })
     expect(diagnoseFailure('some weird failure nobody predicted')).toEqual({
       cause: 'unknown',
-      fixCommand: 'pipeline doctor',
+      fixCommand: 'tenon doctor',
     })
   })
 
@@ -146,9 +146,9 @@ describe('F-b diagnoseFailureWithCause：结构化成因直判 + regex fallback'
     expect(diagnoseFailureWithCause('', 'getaddrinfo ENOTFOUND registry-1.docker.io')).toEqual({ cause: 'network', fixCommand: null })
     expect(diagnoseFailureWithCause('', '未检测到 codex 凭证：宿主机需设 OPENAI_API_KEY')).toEqual({
       cause: 'missing-credential',
-      fixCommand: 'pipeline setup',
+      fixCommand: 'tenon setup',
     })
-    expect(diagnoseFailureWithCause('', '')).toEqual({ cause: 'unknown', fixCommand: 'pipeline doctor' })
+    expect(diagnoseFailureWithCause('', '')).toEqual({ cause: 'unknown', fixCommand: 'tenon doctor' })
   })
 
   it('未识别 cause 值（开放集：写入端未来新增值/脏数据）→ 不 throw，回落 regex', () => {
@@ -156,12 +156,12 @@ describe('F-b diagnoseFailureWithCause：结构化成因直判 + regex fallback'
       cause: 'missing-image',
       fixCommand: 'bash tools/sandcastle/build.sh',
     })
-    expect(diagnoseFailureWithCause('some-future-cause', '')).toEqual({ cause: 'unknown', fixCommand: 'pipeline doctor' })
+    expect(diagnoseFailureWithCause('some-future-cause', '')).toEqual({ cause: 'unknown', fixCommand: 'tenon doctor' })
   })
 
   it('回归钉死：取消场景 regex 只能 unknown+误建议 doctor；有 cause 后 cancelled 不再建议任何命令', () => {
     const msg = '任务被人工终止'
-    expect(diagnoseFailure(msg)).toEqual({ cause: 'unknown', fixCommand: 'pipeline doctor' })
+    expect(diagnoseFailure(msg)).toEqual({ cause: 'unknown', fixCommand: 'tenon doctor' })
     expect(diagnoseFailureWithCause('cancelled', msg)).toEqual({ cause: 'cancelled', fixCommand: null })
   })
 
@@ -181,7 +181,7 @@ describe('F-b diagnoseFailureWithCause：结构化成因直判 + regex fallback'
   it('回归钉死：no-op 写入端 last_error 原文 regex 只能 unknown+误建议 doctor；有 cause 后直判 no-op', () => {
     // 逐字对齐 scheduler.ts:140 落盘句——regex 8 类无一命中(「未合并」不含冲突关键词、无 agent 词)。
     const msg = 'no-op run：零 commit / 空构建（build_sha 缺失）——未合并、未解锁下游，停给人工复核'
-    expect(diagnoseFailure(msg)).toEqual({ cause: 'unknown', fixCommand: 'pipeline doctor' })
+    expect(diagnoseFailure(msg)).toEqual({ cause: 'unknown', fixCommand: 'tenon doctor' })
     expect(diagnoseFailureWithCause('no-op', msg)).toEqual({ cause: 'no-op', fixCommand: null })
   })
 

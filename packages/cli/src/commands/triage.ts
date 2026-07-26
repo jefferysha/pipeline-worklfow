@@ -17,14 +17,14 @@ import {
   type CodexTriageModel,
   type ProductionTriageProvider,
   type RunTriageResult,
-} from '@pipeline-lite/automation'
+} from '@tenon/automation'
 import type {
   ObserveAction,
   StateStore,
   TriageRoute,
   WorkflowRunRepository,
-} from '@pipeline-lite/kernel'
-import { loadEffectiveWorkflowPlan } from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
+import { loadEffectiveWorkflowPlan } from '@tenon/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
 
 export type TriageSourceKind = 'git-commits' | 'loop-run-terminals'

@@ -16,7 +16,7 @@ import {
   type StateStore,
   type TrackRegistry,
   type TrackValidationContext,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import { cliExitHttpStatus, parsePipelineCliJson, type PipelineCliRunner } from './operations.js'
 import { dedupeRoots } from './snapshot.js'
 import {
@@ -150,7 +150,7 @@ async function executeOperation(
   args: readonly string[],
 ): Promise<void> {
   if (!operationsAvailable) {
-    return sendJson(res, 503, { ok: false, error: 'Operations 未接线：pipeline CLI bundle 不存在' })
+    return sendJson(res, 503, { ok: false, error: 'Operations 未接线：Tenon CLI bundle 不存在' })
   }
   if (!root || !isRegisteredRoot(root)) {
     return sendJson(res, 404, { ok: false, error: 'root 未在机器级项目注册表中' })
@@ -171,7 +171,7 @@ async function executeOperation(
 }
 
 // workflow CRUD 的注册根是能力锚，不是每请求可重新学习的 pathname。启动时先捕获当下已注册、
-// 且确为非 symlink 目录的 inode。CLI `pipeline init` 会直接原子更新同一机器级注册表，因而
+// 且确为非 symlink 目录的 inode。CLI `tenon init` 会直接原子更新同一机器级注册表，因而
 // server 也允许一个*尚未有锚的、当前仍在可信注册表中的*根在首个 workflow 请求时作一次 TOFU
 // 捕获；捕获成功后永不重建锚。这样既支持运行中 dashboard 发现 CLI 新建项目，也不会在已经
 // 绑定的 root 被换位后把新 pathname 重新认作可信。

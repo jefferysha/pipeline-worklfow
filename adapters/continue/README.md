@@ -69,9 +69,9 @@ adapters/continue/install.sh --no-hooks                     # 只提示（无 ho
 review marker 只是 hook 投影，绝不是授权来源。完成本相位产物并选择 event 后，必须运行：
 
 ```bash
-pipeline review request <change> --event <event>
+tenon review request <change> --event <event>
 # 人类明确确认后：
-pipeline review acknowledge <change>
+tenon review acknowledge <change>
 ```
 
 不得手动删除 `.pipeline-pending-review`；删除不会记录确认事实，也不能授权 transition。

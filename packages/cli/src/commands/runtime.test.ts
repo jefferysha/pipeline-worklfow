@@ -62,7 +62,7 @@ function fakeInstaller(): { installer: RuntimeInstaller; calls: string[] } {
 
 const env = { homeDir: () => '/runtime-test-home' }
 
-describe('pipeline runtime', () => {
+describe('tenon runtime', () => {
   test('status exposes active and previous verification state without mutating the runtime', async () => {
     const deps = makeDeps()
     const runtime = fakeInstaller()

@@ -64,7 +64,7 @@ describe('派生面 · mandatory / recommended skills（evidence 派生，对齐
 
   it('真读 templates：per phase×track 推荐 skill 表逐字派生', () => {
     const m = loadManifest(TEMPLATE_MANIFEST)
-    expect(m.recommendedSkills.explore.pm).toEqual(['pipeline-researcher'])
+    expect(m.recommendedSkills.explore.pm).toEqual(['tenon-researcher'])
     expect(m.recommendedSkills.build.frontend).toEqual([
       'react-patterns',
       'web-design-guidelines',

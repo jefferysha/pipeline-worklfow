@@ -2,7 +2,7 @@
  * transition 域 —— 看板写回端点 POST /api/change/<name>/transition 的转换执行。
  *
  * G1 单一 TransitionApplication 用例（2026-07-17）：CLI（cli/commands/transition.ts）与 server
- * 现在共调同一个 kernel 用例——@pipeline-lite/kernel 的 createTransitionApplication。default/
+ * 现在共调同一个 kernel 用例——@tenon/kernel 的 createTransitionApplication。default/
  * custom 双轨分流、前置校验、flow.transition/planStepTransition、副作用、
  * runRepository.transact() 原子提交、breadcrumb→history 收尾，全部下沉进
  * kernel/workflow/transition-application.ts 单一实现（GOAL.md G1 验收目标：消灭 cli/server 两处
@@ -34,16 +34,16 @@ import {
   nodeLoopIoStrict,
   resolveRequiredSkillSlots,
   stateStorageExistsSync,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import type {
   BreadcrumbWriter, EffectiveSkillResolver, FlowEngine, HistoryWriter, StateStore, TrackDefinition,
   TrackPolicyProfile, TransitionApplicationResult, TransitionContext, TransitionRecordStore, WorkflowRunRepository,
-} from '@pipeline-lite/kernel'
-import { enqueueAfterSpecComplete } from '@pipeline-lite/automation'
+} from '@tenon/kernel'
+import { enqueueAfterSpecComplete } from '@tenon/automation'
 
 // 事件 → 转移边表：re-export kernel 单一真相源（server/index.ts 对外沿用同名）。
-export { TRANSITION_EVENTS, eventEdge } from '@pipeline-lite/kernel'
-export type { EventEdge } from '@pipeline-lite/kernel'
+export { TRANSITION_EVENTS, eventEdge } from '@tenon/kernel'
+export type { EventEdge } from '@tenon/kernel'
 export { readChangeHistory } from './transitionHistory.js'
 export type { ChangeHistoryDeps } from './transitionHistory.js'
 
@@ -74,7 +74,7 @@ export interface TransitionDeps {
   history?: HistoryWriter
   /**
    * default/governed custom 的 breadcrumb 收尾。review marker 不属于 transition：相位完成后
-   * 由 `pipeline review request` 写入 versioned hook projection，避免刚进入 review phase 就锁住
+   * 由 `tenon review request` 写入 versioned hook projection，避免刚进入 review phase 就锁住
    * 该 phase 的实际工作。best-effort：写失败仅 WARN，不影响主写已成功的 200。
    */
   breadcrumb?: BreadcrumbWriter

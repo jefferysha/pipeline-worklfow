@@ -3,7 +3,7 @@ name: subagent-driven-development
 description: First-party guidance for safely splitting independent implementation work.
 license: MIT
 metadata:
-  author: pipeline-lite
+  author: tenon
 ---
 
 # Subagent-driven Development

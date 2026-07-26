@@ -34,7 +34,7 @@ import {
   type RunChange,
   type TargetedRunCandidate,
   type VerifierPort,
-} from '@pipeline-lite/automation'
+} from '@tenon/automation'
 import {
   createLoopLedgerStore,
   loadRegistry,
@@ -44,7 +44,7 @@ import {
   withLoopMergePermit,
   withLoopStartPermit,
   writeRegistryWithGovernance,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import type { CliDeps } from '../deps.js'
 import { changeDir } from '../paths.js'
 import { str } from '../render.js'

@@ -1,0 +1,22 @@
+{
+  "name": "pipeline-lite",
+  "owner": {
+    "name": "bigdata_storage_compute_engine"
+  },
+  "metadata": {
+    "description": "Migration-only bridge to Tenon.",
+    "version": "0.2.1"
+  },
+  "plugins": [
+    {
+      "name": "pipeline-lite",
+      "source": "./",
+      "description": "One-time migration bridge to tenon@tenon.",
+      "category": "workflow",
+      "tags": [
+        "migration",
+        "tenon"
+      ]
+    }
+  ]
+}

@@ -29,7 +29,7 @@
  * （FlowEngine/eventEdge）与 custom 轨（WorkflowIR/planStepTransition）内部本就不同的两套
  * 模型；change 名合法性/server root 信任校验/canonical-or-legacy state 是否存在这些
  * "transition 域拒绝"之外的前置校验留在 adapter 层，不下沉进本模块；不改变项目根
- * review marker 是 `pipeline review request` 的根级短时投影；transition 本身只消费 canonical
+ * review marker 是 `tenon review request` 的根级短时投影；transition 本身只消费 canonical
  * exact-phase-and-event approval receipt。StateStore 已以 canonical current 为真相并把 `.pipeline.yaml`
  * 作为兼容投影，本用例只消费该抽象，不自行读任一格式。
  */
@@ -347,7 +347,7 @@ export function createTransitionApplication(deps: TransitionApplicationDeps): Tr
 
         // Review 的判定点是“离开当前 review phase”，不是“刚进入就锁住”。所有自动 guards
         // / 文档证据先通过，才允许 request/ack receipt 成为下一步的人类复核证据。CLI/agent
-        // 只能消费 `pipeline review acknowledge` 写入的 exact-phase-and-event receipt；dashboard
+        // 只能消费 `tenon review acknowledge` 写入的 exact-phase-and-event receipt；dashboard
         // 则把真实的、已选中 event 的显式放行点击作为同一语义的 host-bound acknowledgement。
         if (
           prepared.requiresReviewApproval
@@ -369,7 +369,7 @@ export function createTransitionApplication(deps: TransitionApplicationDeps): Tr
         }
 
         // 收尾顺序 breadcrumb → history：breadcrumb 是 hook 热路径的当前相位缓存，history 是
-        // durable transition audit。review marker 已移到 `pipeline review request`，不能在进入
+        // durable transition audit。review marker 已移到 `tenon review request`，不能在进入
         // review phase 时写，否则会把该 phase 的实现/验证工作本身锁死。
         // （history 延迟/中断时先落 breadcrumb，缩短 hook 热路径读到的相位缓存过期窗口——此前
         // 一次 REFACTOR 曾把这个顺序悄悄改乱，顺序本身是可观测行为，不是实现细节）。custom 轨

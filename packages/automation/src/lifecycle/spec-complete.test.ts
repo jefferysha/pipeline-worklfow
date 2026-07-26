@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, test } from 'vitest'
-import { builtinTrack, createStateStore } from '@pipeline-lite/kernel'
+import { builtinTrack, createStateStore } from '@tenon/kernel'
 import { enqueueAfterSpecComplete } from './spec-complete.js'
 
 const CLOCK = '2026-07-24T06:30:00Z'
@@ -13,7 +13,7 @@ afterEach(async () => {
 })
 
 async function project(track: string): Promise<{ root: string; dir: string; store: ReturnType<typeof createStateStore> }> {
-  const root = await mkdtemp(join(tmpdir(), 'pipeline-spec-complete-'))
+  const root = await mkdtemp(join(tmpdir(), 'tenon-spec-complete-'))
   roots.push(root)
   await mkdir(join(root, 'openspec', 'changes'), { recursive: true })
   const store = createStateStore()

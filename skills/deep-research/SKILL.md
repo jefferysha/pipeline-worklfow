@@ -3,7 +3,7 @@ name: deep-research
 description: First-party multi-source research protocol for consequential pipeline decisions.
 license: MIT
 metadata:
-  author: pipeline-lite
+  author: tenon
 ---
 
 # Deep Research

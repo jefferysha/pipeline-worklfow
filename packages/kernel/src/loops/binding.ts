@@ -3,7 +3,7 @@
  * loop_id 的语义核心）。
  *
  * 权威归属口径（codex 第 2 节裁决，优先级固定，不再「无 loop 语境静默跑」）：
- *   ① 调用方显式指定的 loop_id（如 H14 `pipeline loop run <loop-id>`，或 admission 显式入参）
+ *   ① 调用方显式指定的 loop_id（如 H14 `tenon loop run <loop-id>`，或 admission 显式入参）
  *   ② ledger 最新 change-loop-binding（`afk enqueue --loop` 落的 explicit 绑定 / 首次前缀发现物化）
  *   ③ 对尚未绑定的 legacy change 做**最长** change_prefix 发现（发现后由调用方立即 append binding）
  *   ④ 等长多命中 → fail-closed（歧义不猜）

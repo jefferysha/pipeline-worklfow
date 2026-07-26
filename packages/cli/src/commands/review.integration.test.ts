@@ -1,7 +1,7 @@
 import { readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
-import { REVIEW_MARKER_PROTOCOL } from '@pipeline-lite/kernel'
+import { REVIEW_MARKER_PROTOCOL } from '@tenon/kernel'
 import { freshHarness, type Harness } from '../integration-harness.js'
 
 describe('真实 e2e —— review exit receipt（default workflow）', () => {
@@ -36,7 +36,7 @@ describe('真实 e2e —— review exit receipt（default workflow）', () => {
 
     // The protected fields cannot be forged through generic mutation commands.
     expect(await h.run(['set', 'demo', 'review_gate_status', 'approved'])).toBe(1)
-    expect(h.err.join('\n')).toContain('由 pipeline review')
+    expect(h.err.join('\n')).toContain('由 tenon review')
 
     // Pending receipt is not permission: repeat transition only after the explicit acknowledgement.
     expect(await h.run(['transition', 'demo', 'explore-complete'])).toBe(2)

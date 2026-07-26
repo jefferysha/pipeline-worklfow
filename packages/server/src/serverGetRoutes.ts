@@ -14,7 +14,7 @@ import {
   type TrackRegistry,
   type TrackValidationContext,
   type TransitionRecordStore,
-} from '@pipeline-lite/kernel'
+} from '@tenon/kernel'
 import { buildAfkLog, buildAfkSnapshot, readAfkRunLog } from './afk.js'
 import { buildAfkReadiness } from './afkReadiness.js'
 import { readAutomationSettings } from './automationConfig.js'

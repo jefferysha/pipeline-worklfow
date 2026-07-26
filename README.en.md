@@ -1,26 +1,30 @@
-# Pipeline Lite
+# Tenon
 
 Local-first workflow governance for coding agents: explicit state, real Skill
 provenance, review receipts, and a dashboard that reflects the workflow actually
 being run.
 
-[Online documentation](https://jefferysha.github.io/pipeline-worklfow/en/) ·
+[Online documentation](https://jefferysha.github.io/tenon/en/) ·
 [简体中文](README.md) · [Repository guide](docs/usage/README.md) ·
 [Security](SECURITY.md) · [Contributing](CONTRIBUTING.md) · [MIT License](LICENSE)
 
-Pipeline Lite is one packaged plugin, not a CLI plus a list of Skills to install
+Tenon is one packaged plugin, not a CLI plus a list of Skills to install
 by hand. The release contains declarative workflows, OpenSpec evidence rules,
 phase Skills, hooks, the CLI, the local Dashboard, automation controls, and
 multi-host adapters.
 
 It is built for a common failure mode in agent work: the conversation says one
 thing while the task state, Todo list, documents, and actual tool execution say
-another. Pipeline Lite keeps those surfaces on one effective workflow plan and
+another. Tenon keeps those surfaces on one effective workflow plan and
 refuses invalid transitions instead of reconstructing progress from prose.
+
+![Tenon Dashboard project overview](docs-site/public/images/dashboard-overview.webp)
+
+<p align="center"><sub>One local control plane for projects, real workflows, and items that need attention.</sub></p>
 
 ## What changes
 
-| Without workflow governance | With Pipeline Lite |
+| Without workflow governance | With Tenon |
 | --- | --- |
 | An old task can be resumed because it happens to be recent. | A Change is resumed only when the request identifies or explicitly resumes it. |
 | A generic Todo can drift from the real process. | Todo and Dashboard steps come from the selected Workflow. |
@@ -45,6 +49,20 @@ be one line.
 
 [Understand routing and workflows →](docs/usage/routing-and-workflows.md)
 
+## Dashboard at a glance
+
+| Workflow progress | Unattended automation |
+| --- | --- |
+| ![Tenon Dashboard workflow progress](docs-site/public/images/dashboard-progress.webp) | ![Tenon Dashboard unattended automation](docs-site/public/images/dashboard-automation.webp) |
+| Todo, phases, gates, and execution source stay aligned. | Only real automation is listed; normal terminal sessions do not leak in. |
+
+| Workflow workbench |
+| --- |
+| ![Tenon Dashboard workflow workbench](docs-site/public/images/dashboard-workbench.webp) |
+| Default, custom, and free modes share one inspectable orchestration model. |
+
+[Read the complete Dashboard guide →](docs/usage/dashboard-and-local-api.md)
+
 ## Install
 
 ### Requirements
@@ -54,30 +72,43 @@ be one line.
 - one selected host CLI
 - Docker only when you want AFK container execution
 
-Setup always targets exactly one host:
+New users do not need to clone the repository. Install the complete Codex
+plugin in one command:
 
 ```bash
-pipeline setup --codex
+curl -fsSL https://raw.githubusercontent.com/jefferysha/tenon/main/install.sh | bash -s -- --codex
 ```
 
-For a machine that does not yet have the `pipeline` launcher, run the bootstrap
-from a checked-out or downloaded Pipeline Lite release:
+For Claude Code, change only the host flag:
 
 ```bash
-./install.sh --codex
+curl -fsSL https://raw.githubusercontent.com/jefferysha/tenon/main/install.sh | bash -s -- --claude
 ```
 
-The bootstrap installs the same complete plugin and then executes the same
-`pipeline setup --codex` contract. For Claude, replace `--codex` with
-`--claude`.
+The bootstrap registers the Tenon Marketplace, installs and verifies the same
+complete release payload, and runs `tenon setup --<host>`. After installation,
+use `tenon setup --codex`, `tenon update --codex`, and
+`tenon runtime status` for lifecycle operations.
 
-After Codex setup, open Codex, run `/hooks`, and trust `pipeline-lite` once.
+Enable the opt-in daily release check with:
+
+```bash
+tenon setup --codex --auto-update
+```
+
+Marketplace is the currently public one-command install. A thin npx package is
+part of the release pipeline, but its exact package name is documented only
+after an owned npm scope is actually published. Existing retired-identity
+installations migrate through a separate migration-only repository; the Tenon
+product has no old command alias.
+
+After Codex setup, open Codex, run `/hooks`, and trust `tenon` once.
 Then start a new host session so its packaged hooks and Skills are loaded.
 
 ```bash
-pipeline runtime status
-pipeline doctor
-pipeline dashboard --open
+tenon runtime status
+tenon doctor
+tenon dashboard --open
 ```
 
 The production Dashboard is a single local SPA and API at
@@ -101,17 +132,17 @@ not silently resume an unrelated old Change.
 Inspect the result:
 
 ```bash
-pipeline list --json
-pipeline status <change-name> --json
-pipeline document status <change-name>
-pipeline dashboard --open
+tenon list --json
+tenon status <change-name> --json
+tenon document status <change-name>
+tenon dashboard --open
 ```
 
 To resume a known Change, identify it explicitly in the conversation or activate
 it:
 
 ```bash
-pipeline session activate <change-name>
+tenon session activate <change-name>
 ```
 
 [Complete five-minute tutorial →](docs/usage/quickstart.md)
@@ -143,9 +174,9 @@ later reads.
 Review exits are bound to an exact transition event:
 
 ```bash
-pipeline review request <change-name> --event <event>
-pipeline review acknowledge <change-name>
-pipeline transition <change-name> <event>
+tenon review request <change-name> --event <event>
+tenon review acknowledge <change-name>
+tenon transition <change-name> <event>
 ```
 
 Continuous delegation can be recorded, but it does not waive documents, Skills,
@@ -157,7 +188,7 @@ external side effects.
 
 ## Host adapter fidelity
 
-Pipeline Lite exposes 12 host targets, with explicit enforcement fidelity:
+Tenon exposes 12 host targets, with explicit enforcement fidelity:
 
 | Tier | Hosts | Meaning |
 | --- | --- | --- |
@@ -226,8 +257,8 @@ The repository is an npm workspace and is not advertised as a published global
 npm CLI.
 
 ```bash
-git clone https://github.com/jefferysha/pipeline-worklfow.git
-cd pipeline-worklfow
+git clone https://github.com/jefferysha/tenon.git
+cd tenon
 npm ci
 npm run build
 npm test
@@ -243,11 +274,10 @@ assets, adapters, hooks, or distribution files.
 
 ## Project status and community
 
-The user-facing plugin manifest and workspace packages currently carry
-different version numbers, so this README does not present a misleading unified
-release badge or compatibility promise. Documentation describes the verified
-behavior on the current repository branch; it does not promise a release
-cadence, hosted service, SLA, or semantic-version policy.
+Starting with Tenon 1.0, user-facing plugin manifests, workspace packages, Git
+tags, and the optional npx package use one release version. Documentation
+describes behavior verified for the current release; the local Dashboard is not
+a hosted service and carries no remote-service SLA.
 
 - Questions and non-sensitive problems: [Support](SUPPORT.md)
 - Patches and design changes: [Contributing](CONTRIBUTING.md)

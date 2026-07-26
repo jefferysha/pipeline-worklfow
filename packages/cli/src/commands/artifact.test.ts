@@ -4,7 +4,7 @@
  * custom 轨（loadWorkflow 真 fs）与 program 装配 / --producer 缺失 usage 在 artifact.integration.test.ts。
  */
 import { describe, expect, test } from 'vitest'
-import type { PipelineState } from '@pipeline-lite/kernel'
+import type { PipelineState } from '@tenon/kernel'
 import { cmdArtifactRegister } from './artifact.js'
 import { cmdCas, cmdSet, cmdSetMany } from './fields.js'
 import { makeDeps, mockState, spy } from '../test-support.js'

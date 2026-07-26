@@ -6,7 +6,7 @@
  * 存储模型：每个 channel 是一个目录
  *   <root>/<bucket>/<channel>/{events.jsonl, .seq, <name>.lock}
  *   · root   = $TRELLIS_CHANNEL_ROOT 或 ~/.trellis/channels（resolveRoot）
- *   · bucket = project 桶 key（cwd sanitize，仿 Claude Code）；PIPELINE_CHANNEL_PROJECT 可覆盖
+ *   · bucket = project 桶 key（cwd sanitize，仿 Claude Code）；TENON_CHANNEL_PROJECT 可覆盖
  *   · scope  = project（默认，绑 cwd 桶）/ global（_global 桶）
  *
  * 零第三方依赖（仅 node:path）。env 注入而非直读 process.env——纯逻辑、可测、可跨机重放。
@@ -18,14 +18,14 @@ export const GLOBAL_BUCKET = '_global'
 
 /**
  * 桶/env 解析上下文。root/cwd 已解析好传入（store 从 process.env/homedir 装配，测试注入 fake）；
- * projectOverride 对应 $PIPELINE_CHANNEL_PROJECT（supervisor 传桶，最高优先）。
+ * projectOverride 对应 $TENON_CHANNEL_PROJECT（supervisor 传桶，最高优先）。
  */
 export interface ChannelEnv {
   /** 已解析的 channel 根目录（见 resolveRoot）。 */
   root: string
   /** project 桶来源的 cwd（绝对或相对，projectKey 内 resolve）。 */
   cwd: string
-  /** $PIPELINE_CHANNEL_PROJECT 覆盖桶（可选）。 */
+  /** $TENON_CHANNEL_PROJECT 覆盖桶（可选）。 */
   projectOverride?: string
 }
 

@@ -3,7 +3,7 @@ name: verification-before-completion
 description: First-party completion gate requiring fresh evidence rather than assertion.
 license: MIT
 metadata:
-  author: pipeline-lite
+  author: tenon
 ---
 
 # Verification Before Completion

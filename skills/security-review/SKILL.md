@@ -3,7 +3,7 @@ name: security-review
 description: First-party application security review for changed attack surfaces.
 license: MIT
 metadata:
-  author: pipeline-lite
+  author: tenon
 ---
 
 # Security Review

@@ -3,7 +3,7 @@ name: hallmark
 description: First-party quality pass against generic, misleading, or unfinished output.
 license: MIT
 metadata:
-  author: pipeline-lite
+  author: tenon
 ---
 
 # Hallmark

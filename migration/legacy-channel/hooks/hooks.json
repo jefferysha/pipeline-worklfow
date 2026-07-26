@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${PLUGIN_ROOT}/bridge.sh\" --auto",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -28,7 +28,7 @@ for (const entry of contentEntries) {
     try {
       const body = await readFile(resolve(repoRoot, item.source), 'utf8')
       if (!/^#\s+\S/m.test(body)) errors.push(`${item.source}: 缺少 H1`)
-      if (!/pipeline/i.test(body)) errors.push(`${item.source}: 缺少 Pipeline 产品上下文`)
+      if (!/\bTenon\b/i.test(body)) errors.push(`${item.source}: 缺少 Tenon 产品上下文`)
       if (entry.contentType === 'how-to' || entry.contentType === 'tutorial') {
         for (const heading of requiredHowToHeadings[locale]) {
           if (!body.includes(`## ${heading}`)) {

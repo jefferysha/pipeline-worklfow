@@ -1,5 +1,5 @@
 /**
- * 真实 e2e —— `pipeline transition` 对非 default workflow 的真实 step 间转换（Task 8）。
+ * 真实 e2e —— `tenon transition` 对非 default workflow 的真实 step 间转换（Task 8）。
  *
  * 与 transition.test.ts（mock 单测，直调 cmdTransition）的根本区别：本文件零 mock，走
  * integration-harness.ts 的 freshHarness（真临时项目 + 真 buildProgram 解析路径 + 真 fs +
@@ -12,7 +12,7 @@
  *   3. 非 default workflow：event 名不在当前 step 的 transitions 里 → 真拒绝，报错点名该 step 实际支持的 event。
  *
  * 起始 step 的落点（whole-branch review 补的 `init --workflow`，见
- * init-workflow.integration.test.ts）：本文件改用真 `pipeline init --workflow` 把 change 摆到
+ * init-workflow.integration.test.ts）：本文件改用真 `tenon init --workflow` 把 change 摆到
  * 自定义 workflow 的首个 step 上（此前这里手改 .pipeline.yaml 的 phase 行来绕开 `set phase`
  * 只认 manifest 7 相位枚举这道坎——那道坎本身没变，只是现在有了一条不必绕开它的路：init 直接
  * 调 kernel StateStore.setMany 落 phase，不经过 CLI `set` 子命令那层枚举校验），本文件从起点

@@ -2,8 +2,8 @@ import { homedir } from 'node:os'
 import {
   enforceActiveLoopExecutionWiring,
   type LoopExecutionGuardResult,
-} from '@pipeline-lite/automation'
-import { readRegistrySnapshot } from '@pipeline-lite/kernel'
+} from '@tenon/automation'
+import { readRegistrySnapshot } from '@tenon/kernel'
 import type { CliDeps } from '../deps.js'
 import { createProductionSkillContentLocator } from '../skillBundleAssembly.js'
 
